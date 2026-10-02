@@ -59,7 +59,8 @@ const CROWD = Number(process.env.BENCH_CROWD ?? 0);
 const CROWD_SPACING = Number(process.env.BENCH_CROWD_SPACING ?? 1.2);
 // The distance scene packs 24 bodies into a 3.5 x 7 m strip, which needs the
 // tighter 0.9 m pitch (the room scene's 1.2 m default caps at 18 there). This
-// is the ``BENCH_CROWD_SPACING ?? 0.9`` the distance-task spec names.
+// is the ``BENCH_CROWD_SPACING ?? 0.9`` the distance-task spec names. The
+// doorway scene uses the same pitch (doorwayPrelude's own default is also 0.9).
 const DIST_CROWD_SPACING = Number(process.env.BENCH_CROWD_SPACING ?? 0.9);
 // BENCH_SCENE — the scene the crowd prelude builds. Default = the 7f room
 // grid (bodies spread from the room's spawn point). `distance` (perf task,
@@ -76,6 +77,10 @@ const DIST_CROWD_SPACING = Number(process.env.BENCH_CROWD_SPACING ?? 0.9);
 // Both staged scenes ignore the firefight's room: run them with BENCH_ROOMS=1.
 const SCENE = process.env.BENCH_SCENE ?? '';
 const HOLD_SCENE = SCENE === 'distance' || SCENE === 'doorway';
+if (HOLD_SCENE && CROWD > 0 && !(ROOM_IDS.length === 1 && ROOM_IDS[0] === 1)) {
+  console.warn(`WARN BENCH_SCENE=${SCENE} stages and holds the player in room 1; BENCH_ROOMS=${ROOM_IDS.join(',')} `
+    + 'repeats that one scene per room. Use BENCH_ROOMS=1.');
+}
 /** The distance scene, evaluated in-page after the leg overrides (spawn must
  *  come after a rebuild-inducing setCrowd — see the prelude comment below).
  *
@@ -121,7 +126,7 @@ const CROWD_PRELUDE = CROWD > 0
     : SCENE === 'doorway'
       // Early-Z (2026-10-01): through the first tunnel touching room 1; with
       // BENCH_QUERY=level=night-train that is the guards-van -> third-class door.
-      ? doorwayPrelude(CROWD)
+      ? doorwayPrelude(CROWD, DIST_CROWD_SPACING)
       : `__sdfGame.spawnCrowd('zombie', ${CROWD}, { spacing: ${CROWD_SPACING} })`)
   : '';
 // BENCH_CROWD_MAX — hard ceiling on BENCH_CROWD. The 24-body crowd path hung
@@ -419,6 +424,12 @@ function legUrl(name) {
  * gate and for both jobs to settle, and a `failed` job fails the leg: it would
  * be measuring the fallback. A boot without crowd types never starts the crowd
  * job, so its `pending` is accepted there.
+ *
+ * BENCH_WARM_WAIT_MS (default 180 s) bounds the wait. A cold first boot of a
+ * flag-on page has taken up to 46 s. The leg watchdog (BENCH_LEG_TIMEOUT_MS,
+ * 420 s) covers boot + this wait + probe + run together, so a cold boot in front
+ * of a heavy scene (a 280 ms native frame runs ~250 s of probe + run) can trip
+ * the watchdog first: raise BENCH_LEG_TIMEOUT_MS with this.
  */
 const WARM_WAIT_MS = Number(process.env.BENCH_WARM_WAIT_MS ?? 180_000);
 async function awaitWarmBackground(legName) {
@@ -697,10 +708,12 @@ const ALL_LEGS = {
   // pass on, slim tail, boot-default medium band.
   'probe-reference-ship': { setProbeOptimization: false, setUpscale: { trained: 't16-rgb-v32' }, setUpscaleSharpen: 0.5 },
   'upscale-ship': { setUpscale: { trained: 't16-rgb-v32' }, setUpscaleSharpen: 0.5 },
-  // EARLY-Z stage 1 (plan 2026-10-01). `earlyz` runs the harness's pinned native/field
-  // state (seed OFF there: field style), so it measures body-behind-body only; its control
-  // is `baseline`. `earlyz-upscale-ship` is the shipped upscaler boot with the seed ON;
-  // its control is `upscale-ship`.
+  // EARLY-Z stage 1 (plan 2026-10-01). `earlyz` runs the harness's pinned native state:
+  // march scale 1.0, upscale stage off. Its control is `baseline`. The plan expected the seed
+  // to be refused there for field style, but the seed was ON in every `earlyz` leg of the
+  // 2026-10-02 cost run: ship-defaults' setUpscale(null) leaves field style 'off' (inferred
+  // from the seed gate), so `earlyz` vs `baseline` is native scale WITH the seed.
+  // `earlyz-upscale-ship` is the shipped upscaler boot, seed on; its control is `upscale-ship`.
   earlyz: { _query: 'earlyz=1' },
   'earlyz-upscale-ship': { _query: 'earlyz=1', setUpscale: { trained: 't16-rgb-v32' }, setUpscaleSharpen: 0.5 },
   'upscale-ship-high': { setRefine: true, setRefineTail: 'slim', setUpscale: { trained: 'r5b-s32-rgbn-headr-drop-int2' }, setUpscaleSharpen: 0.5 },
@@ -861,6 +874,10 @@ const CHUNK = Number(process.env.BENCH_CHUNK ?? 10);
  * runs did not (the race is timing-dependent). So every bench()
  * call first waits, bounded, for the loop to be running again: that is the
  * pending precompile settling. A loop still paused at the bound fails the leg.
+ *
+ * WORKAROUND, NOT A FIX: the bug is the page's (applyUpscaleAbMode resumes the
+ * loop in an unawaited `finally`; tracked separately). Remove this wait once the
+ * page awaits its precompile or respects the bench's loop intent.
  */
 const LOOP_WAIT_MS = Number(process.env.BENCH_LOOP_WAIT_MS ?? 60_000);
 async function awaitLoopResumed(label) {
@@ -876,6 +893,27 @@ async function awaitLoopResumed(label) {
   }
   const ms = Date.now() - t0;
   if (paused) console.log(`  [${label}] waited ${(ms / 1000).toFixed(1)} s for the rAF loop to resume (a background precompile) before bench()`);
+}
+
+/**
+ * EARLY-Z STATE GUARD. A leg that boots `earlyz=1` must really run the path:
+ * `earlyzInfo().on` true (flag read, patch detected, not refused for the
+ * deferred route). Every other leg must run with the flag OFF. Otherwise a
+ * BENCH_QUERY=earlyz=0/1, a deferred boot or a failed detection would silently
+ * measure the wrong configuration under the leg's name. Fails the leg.
+ */
+async function checkEarlyzState(name) {
+  const wants = String((LEGS[name] ?? ALL_LEGS[name] ?? {})._query ?? '').includes('earlyz=1');
+  const info = JSON.parse(await evaluate('JSON.stringify(__sdfGame.earlyzInfo ? __sdfGame.earlyzInfo() : null)'));
+  if (wants) {
+    console.log(`  [${name}] earlyzInfo=${JSON.stringify(info)}`);
+    if (!info || info.on !== true) {
+      throw new Error(`early-Z leg ${name}: earlyzInfo().on is ${info ? info.on : 'absent'} `
+        + `(flag ${info ? info.flag : '-'}, reason ${info ? JSON.stringify(info.reason) : '-'}) — not measuring the flag`);
+    }
+  } else if (info && info.flag) {
+    throw new Error(`leg ${name} booted with the early-Z flag on (earlyzInfo().flag true) — check BENCH_QUERY`);
+  }
 }
 
 async function runLeg(name, room, mode) {
@@ -896,9 +934,7 @@ async function runLeg(name, room, mode) {
     `refine: __sdfGame.refineInfo ? __sdfGame.refineInfo().on : null })`,
   );
   console.log(`  [${name}] upscaleInfo().on=${JSON.parse(infoNote).up} refineInfo().on=${JSON.parse(infoNote).refine}`);
-  if (String((LEGS[name] ?? ALL_LEGS[name] ?? {})._query ?? '').includes('earlyz=1')) {
-    console.log(`  [${name}] earlyzInfo=${await evaluate('JSON.stringify(__sdfGame.earlyzInfo ? __sdfGame.earlyzInfo() : null)')}`);
-  }
+  await checkEarlyzState(name);
   // run 5b: bodies-refined count + band, for legs that touch setRefineBand/setRefineTail.
   const legOverrides = LEGS[name] ?? ALL_LEGS[name] ?? {};
   if (/refine/i.test(name) || legOverrides.setRefine || legOverrides.setRefineBand || legOverrides.setRefineTail) {
@@ -959,6 +995,7 @@ async function runLeg(name, room, mode) {
     progress.phase = 'demo-reset';
     await bootPage(2500, name);
     await applyLeg(name);
+    await checkEarlyzState(name);
     if (DEMO_PRE_JSON) await applyDemoPrelude();
   }
   // warmup 0 for a demo: the bench's warmup advances the sim through frame 0's
@@ -1103,7 +1140,8 @@ for (let rep = 0; rep < REPEATS; rep++) {
       process.stdout.write(`  rep${rep} ${leg} room${room}: median ${r.overall.p50.toFixed(2)} ms (max chunk ${r.overall.max.toFixed(2)})\n`);
       if (PASSES && r.passes) {
         if (!r.passes.available) console.warn(`  WARN ${leg}/room${room}: no pass samples — timestamp tracking absent?`);
-        const top = Object.values(r.passes.overall.labels).slice(0, 4).map((l) => `${l.name} ${l.p50.toFixed(2)}`).join(', ');
+        const top = Object.values(r.passes.overall.labels).slice(0, 4)
+          .map((l) => `${l.name} ${l.p50.toFixed(2)} (n ${l.n}/${r.passes.overall.frames}, pf mean ${(r.passes.overall.frames > 0 ? (l.n * l.mean) / r.passes.overall.frames : 0).toFixed(2)})`).join(', ');
         process.stdout.write(`      passes: ${top}\n`);
       }
     }
@@ -1391,9 +1429,15 @@ function writePassReport() {
       + aborts.map((a) => `rep${a.rep} ${a.leg}/room${a.room} (probe p50 ${a.probeP50 ?? 'n/a'} ms)`).join(', '));
     out.push('');
   }
-  out.push('Pass ms = median over repeats of the per-frame GPU pass time p50 (overall,');
-  out.push('all segments). Share = of the labelled total. Gap = fenced frame p50 minus');
-  out.push('the labelled total: CPU submit, inter-pass bubbles, unlabelled work.');
+  out.push('p50 = median over repeats of the GPU pass time p50 (overall, all segments),');
+  out.push('taken over the frames where the pass RAN: n of F frames. A pass that is');
+  out.push('skipped on some frames (an empty march) has n < F, so two legs\' p50s compare');
+  out.push('only when their n match. pf mean = n x mean / F, the pass cost per stepped');
+  out.push('frame with skipped frames counted as 0: it adds across passes and compares');
+  out.push('across legs whatever n is (2026-10-02: a demo p50 "saving" of 44 % was 2081');
+  out.push('control samples against 3368 early-Z ones; the pf means were equal). Share =');
+  out.push('of the summed pf means. Gap = fenced frame p50 minus the GPU span p50: CPU');
+  out.push('submit, inter-pass bubbles, unlabelled work.');
   out.push('');
   const perSeg = {};
   for (const leg of Object.keys(LEGS)) {
@@ -1402,25 +1446,41 @@ function writePassReport() {
     const allLabels = [...new Set(rs.flatMap((r) => Object.keys(r.passes.overall.labels)))];
     const labels = allLabels.filter((l) => !l.startsWith('cpu:'));
     const cpuLabels = allLabels.filter((l) => l.startsWith('cpu:'));
+    const legRoom = (room) => results.filter((r) => r.leg === leg && r.room === room && r.passes?.available);
     const cell = (room, label) => {
-      const xs = results.filter((r) => r.leg === leg && r.room === room && r.passes?.available)
-        .map((r) => r.passes.overall.labels[label]?.p50 ?? 0);
+      const xs = legRoom(room).map((r) => r.passes.overall.labels[label]?.p50 ?? 0);
       return xs.length ? med(xs) : 0;
     };
+    // Per-frame mean (n x mean / F) and the sample count behind the p50.
+    const pfOf = (r, label) => {
+      const L = r.passes.overall.labels[label];
+      return L && r.passes.overall.frames > 0 ? (L.n * L.mean) / r.passes.overall.frames : 0;
+    };
+    const pf = (room, label) => { const xs = legRoom(room).map((r) => pfOf(r, label)); return xs.length ? med(xs) : 0; };
+    const nOf = (room, label) => {
+      const rs = legRoom(room);
+      if (!rs.length) return '-';
+      return `${med(rs.map((r) => r.passes.overall.labels[label]?.n ?? 0))}/${med(rs.map((r) => r.passes.overall.frames))}`;
+    };
     const totals = Object.fromEntries(ROOM_IDS.map((room) => [room, labels.reduce((n, l) => n + cell(room, l), 0)]));
+    const pfTotals = Object.fromEntries(ROOM_IDS.map((room) => [room, labels.reduce((n, l) => n + pf(room, l), 0)]));
+    const frameMean = Object.fromEntries(ROOM_IDS.map((room) => {
+      const xs = results.filter((r) => r.leg === leg && r.room === room).map((r) => r.overall.mean);
+      return [room, xs.length ? med(xs) : 0];
+    }));
     const frameP50 = Object.fromEntries(ROOM_IDS.map((room) => {
       const xs = results.filter((r) => r.leg === leg && r.room === room).map((r) => r.overall.p50);
       return [room, xs.length ? med(xs) : 0];
     }));
     // Order labels by their cost in the LAST room (the busiest), largest first.
     const last = ROOM_IDS[ROOM_IDS.length - 1];
-    labels.sort((a, b) => cell(last, b) - cell(last, a));
+    labels.sort((a, b) => pf(last, b) - pf(last, a));
     out.push(`## ${leg}`);
     out.push('');
-    out.push(`| pass | ${ROOM_IDS.map((r) => `room ${r} ms | share`).join(' | ')} |`);
-    out.push(`| --- | ${ROOM_IDS.map(() => '---: | ---:').join(' | ')} |`);
+    out.push(`| pass | ${ROOM_IDS.map((r) => `room ${r} p50 ms | n/F | pf mean ms | share`).join(' | ')} |`);
+    out.push(`| --- | ${ROOM_IDS.map(() => '---: | ---: | ---: | ---:').join(' | ')} |`);
     for (const l of labels) {
-      out.push(`| ${l} | ${ROOM_IDS.map((room) => { const v = cell(room, l); const t = totals[room]; return `${v.toFixed(2)} | ${t > 0 ? (100 * v / t).toFixed(0) : '0'}%`; }).join(' | ')} |`);
+      out.push(`| ${l} | ${ROOM_IDS.map((room) => { const v = pf(room, l); const t = pfTotals[room]; return `${cell(room, l).toFixed(2)} | ${nOf(room, l)} | ${v.toFixed(2)} | ${t > 0 ? (100 * v / t).toFixed(0) : '0'}%`; }).join(' | ')} |`);
     }
     // Per-label medians do not add: the "labelled total" is the sum of
     // medians (a share denominator), while the GPU SPAN row is the median of
@@ -1429,10 +1489,14 @@ function writePassReport() {
       const xs = results.filter((r) => r.leg === leg && r.room === room && r.passes?.available).map((r) => r.passes.overall.span.p50);
       return [room, xs.length ? med(xs) : 0];
     }));
-    out.push(`| **labelled total (sum of medians)** | ${ROOM_IDS.map((room) => `**${totals[room].toFixed(2)}** | 100%`).join(' | ')} |`);
-    out.push(`| GPU span p50 (first start → last end) | ${ROOM_IDS.map((room) => `${spanP50[room].toFixed(2)} | `).join(' | ')} |`);
-    out.push(`| fenced frame p50 | ${ROOM_IDS.map((room) => `${frameP50[room].toFixed(2)} | `).join(' | ')} |`);
-    out.push(`| gap (frame − span) | ${ROOM_IDS.map((room) => `${(frameP50[room] - spanP50[room]).toFixed(2)} | ${frameP50[room] > 0 ? (100 * (frameP50[room] - spanP50[room]) / frameP50[room]).toFixed(0) : '0'}% of frame`).join(' | ')} |`);
+    const spanMean = Object.fromEntries(ROOM_IDS.map((room) => {
+      const xs = legRoom(room).map((r) => r.passes.overall.span.mean);
+      return [room, xs.length ? med(xs) : 0];
+    }));
+    out.push(`| **labelled total** (sum of p50s / -, sum of pf means) | ${ROOM_IDS.map((room) => `**${totals[room].toFixed(2)}** | | **${pfTotals[room].toFixed(2)}** | 100%`).join(' | ')} |`);
+    out.push(`| GPU span (first start → last end): p50 / mean | ${ROOM_IDS.map((room) => `${spanP50[room].toFixed(2)} | | ${spanMean[room].toFixed(2)} | `).join(' | ')} |`);
+    out.push(`| fenced frame: p50 / mean | ${ROOM_IDS.map((room) => `${frameP50[room].toFixed(2)} | | ${frameMean[room].toFixed(2)} | `).join(' | ')} |`);
+    out.push(`| gap (frame − span), p50 | ${ROOM_IDS.map((room) => `${(frameP50[room] - spanP50[room]).toFixed(2)} | | | ${frameP50[room] > 0 ? (100 * (frameP50[room] - spanP50[room]) / frameP50[room]).toFixed(0) : '0'}% of frame`).join(' | ')} |`);
     out.push('');
     if (cpuLabels.length) {
       // CPU side, per stepped frame: tick (sim) and draw (encode + submit)
@@ -1455,25 +1519,28 @@ function writePassReport() {
       if (!rows.length) continue;
       const segLabels = [...new Set(rows.flatMap((s) => Object.keys(s.labels)))];
       const segCell = (l) => med(rows.map((s) => s.labels[l]?.p50 ?? 0));
+      const segPf = (l) => med(rows.map((s) => (s.labels[l] && s.frames > 0 ? (s.labels[l].n * s.labels[l].mean) / s.frames : 0)));
+      const segN = (l) => `${med(rows.map((s) => s.labels[l]?.n ?? 0))}/${med(rows.map((s) => s.frames))}`;
       const ranked = segLabels.map((l) => [l, segCell(l)]).sort((a, b) => b[1] - a[1]);
       const tot = ranked.reduce((n, [, v]) => n + v, 0);
       perSeg[`${leg}/${segName}`] = ranked;
       const cen = results.find((r) => r.leg === leg && r.room === last)?.segments.find((s) => s.name === segName)?.census;
       const cenTxt = cen ? ` — droplets ${cen.first.droplets ?? '-'}→${cen.last.droplets ?? '-'}, goo quads ${cen.first.gooQuads ?? '-'}→${cen.last.gooQuads ?? '-'}` : '';
-      out.push(`- **${segName}** (${tot.toFixed(2)} ms labelled${cenTxt}): ${ranked.slice(0, 5).map(([l, v]) => `${l} ${v.toFixed(2)}`).join(', ')}`);
+      out.push(`- **${segName}** (${tot.toFixed(2)} ms labelled${cenTxt}): ${ranked.slice(0, 5).map(([l, v]) => `${l} ${v.toFixed(2)} (n ${segN(l)}, pf mean ${segPf(l).toFixed(2)})`).join(', ')}`);
     }
     out.push('');
   }
-  out.push('## Repeatability (fenced frame p50 across repeats)');
+  out.push('## Repeatability (fenced frame across repeats)');
   out.push('');
-  out.push('| leg | room | reps | spread % of min |');
-  out.push('| --- | ---: | --- | ---: |');
+  out.push('| leg | room | reps p50 | spread % of min | reps mean |');
+  out.push('| --- | ---: | --- | ---: | --- |');
   for (const leg of Object.keys(LEGS)) {
     for (const room of ROOM_IDS) {
-      const xs = results.filter((r) => r.leg === leg && r.room === room).map((r) => r.overall.p50);
+      const rs = results.filter((r) => r.leg === leg && r.room === room);
+      const xs = rs.map((r) => r.overall.p50);
       if (!xs.length) continue;
       const mn = Math.min(...xs), mx = Math.max(...xs);
-      out.push(`| ${leg} | ${room} | ${xs.map((x) => x.toFixed(2)).join(' / ')} | ${mn > 0 ? (100 * (mx - mn) / mn).toFixed(0) : '0'}% |`);
+      out.push(`| ${leg} | ${room} | ${xs.map((x) => x.toFixed(2)).join(' / ')} | ${mn > 0 ? (100 * (mx - mn) / mn).toFixed(0) : '0'}% | ${rs.map((r) => r.overall.mean.toFixed(2)).join(' / ')} |`);
     }
   }
   out.push('');
