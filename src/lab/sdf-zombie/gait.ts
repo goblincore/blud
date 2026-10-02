@@ -316,6 +316,13 @@ export const GLIDE: GaitProfile = {
  *  so a gunner needs a carry-style gait. */
 export const GLIDE_CARRY: GaitProfile = { ...GLIDE, name: 'glide-carry', armStyle: 'carry', armSwing: 0.03 };
 
+/** The zombie SHAMBLE with the arms on a HELD GUN: the goblin's INTERIM gait while it carries the player's shotgun
+ *  (goblin refinement phase 3, 2026-10-02). Phase 4 gives the goblin its own gait; until then the legs are still the
+ *  zombie's shamble and only the arms change. motion.ts takes the arm style from the GAIT (pickArmStyle), never from
+ *  MotionProfile.armStyle (see GLIDE_CARRY), so a gun carrier needs a carry-style gait. armSwing 0.03: the carry table
+ *  owns the arms and the swing is only the sway the hands pick up from the body. */
+export const SHAMBLE_CARRY: GaitProfile = { ...SHAMBLE, name: 'shamble-carry', armStyle: 'carry', armSwing: 0.03 };
+
 /** The bride's STALK: the soldier's march clip slowed and lengthened for her
  *  long legs, with a hip sway the `hem` pendulum picks up and a slight
  *  forward lean. Carry-style arms (the sword owns them). */

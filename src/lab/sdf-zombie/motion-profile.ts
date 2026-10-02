@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, type ArmStyle, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, type ArmStyle, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { Vec3 } from './types';
@@ -309,8 +309,33 @@ export const BRIDE_PROFILE: MotionProfile = {
   melee: { kind: 'sword' },
 };
 
+/** The goblin, carrying the PLAYER'S shotgun (goblin refinement phase 3, owner decision 2 of 2026-10-01: "it holds the
+ *  player's weapons"; THIN FIRST PASS, 2026-10-02: one weapon, one stance, on the zombie's legs). Everything here is
+ *  the soldier's held-gun machinery (carry.ts, held-prop.ts) pointed at the goblin's rig; phase 4 replaces the gait.
+ *
+ *  THE PROP. `shorty-double.glb` is the first-person shotgun, and it already carries `Grip_Hand` (0, -0.074, -0.074)
+ *  and `Fore_Hand` (0, -0.045, 0.155) at exactly carry.ts's GUN_GRIP locators, so no third-person model is needed.
+ *  Its muzzle nodes sit at z 0.318 against GUN_GRIP.muzzle 0.41 (the soldier's longer gun); `muzzle()` reads the
+ *  constant, which only matters for gas and flash and nothing fires from the goblin yet.
+ *
+ *  `gripReach` 0.0396: the goblin's fist is an ORB centred 55% along its 0.072 m hand bone (goblin.blob `blob arm on
+ *  hand at=0.55 r=0.046`), and the rig's hand joint is the WRIST, so the grip seats 0.0396 m past it, in the middle of
+ *  the orb: the handle passes through the orb, the PS1 way (refinement spec decision 3). Same reasoning as the
+ *  ogre's 0.075 for his 0.15 m hand. */
+export const GOBLIN_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'goblin',
+  gait: { walk: SHAMBLE_CARRY, run: SHAMBLE_CARRY },
+  armStyle: 'carry',
+  // The soldier's carries; the goblin's arms are long (0.235 + 0.235 m on a 1.3 m body) and may want their own
+  // solve: the carry angles are relative to the authored hang. Judge in the lab turntable before tuning.
+  carries: { walk: 'low', run: 'low', fire: 'aim' },
+  prop: { url: '/assets/lab/shorty-double.glb', scale: 1, gripReach: 0.0396 },
+};
+
 const BY_NAME: Record<string, MotionProfile> = {
   zombie: ZOMBIE_PROFILE,
+  goblin: GOBLIN_PROFILE,
   soldier: SOLDIER_PROFILE,
   juggernaut: JUGGERNAUT_PROFILE,
   ogre: OGRE_PROFILE,
