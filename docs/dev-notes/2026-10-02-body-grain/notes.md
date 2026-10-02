@@ -53,3 +53,15 @@ n06 = grain on with `surfaceNoiseAmp` 0.06.
 ![1.35 m, grain off](frames/full-off-yaw000.png) ![1.35 m, grain on](frames/full-on-yaw000.png)
 
 - Task 7 done: lab frames and speckle numbers recorded.
+
+## Cost and the pixel gate (Task 8)
+
+- Load at start: 1:47 up 6 days, 13:34, 2 users, load averages: 3.45 4.42 4.25.
+- GPU, lab, `BLOB_DIST=0.65` (both octaves drawn, 14 hashes per pixel), `benchGpu` alternating on/off x3:
+  on 32.61 / 32.1 / 31.98 ms, off 32.55 / 32.39 / 32.21 ms; delta -0.153 ms, noise 0.34 ms, hidden 0 -> PASS.
+- `march-hash` room 1 (Chrome 154.0.8037.93): MATCH (base d7392d5234c98ddc1babb3b29860abc3a02ced84, head
+  d7392d5234c98ddc1babb3b29860abc3a02ced84; room1-repeat and room1-wounded also matched the base).
+- Cold boot `drawOnce`: base 1663.1 / 1654.4 ms, head 1980.1 / 2272.7 ms, ratio 1.282 -> FAIL (first pair
+  2052.6 / 2324.0 ms, ratio 1.319; both head runs rerun once per the step, still fails; warmMs 2901-3438, no
+  Vite pre-bundle).
+- Task 8 done: GATE FAILED (cold boot drawOnce ratio).
