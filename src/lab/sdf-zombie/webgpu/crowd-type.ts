@@ -145,6 +145,13 @@ export interface CrowdType {
   readonly frontMesh: THREE.Mesh | null;
   /** The last sync's batch counts and nearest distances (zeros/Infinity without earlyz). */
   earlyzBatches(): EarlyzBatches;
+  /** Why the front batch was switched off (see disableEarlyzFront), or null while it draws. */
+  earlyzFrontDisabled(): string | null;
+  /** GRACEFUL DEGRADATION (final review, Important 2): the front material's pipeline failed to
+   *  build, so three skips its draws and every front-batch body would vanish. Hides `frontMesh`
+   *  and routes ALL instances to the back (shipped) batch from the next sync on. One-way and
+   *  idempotent; a no-op on a type created without early-Z. */
+  disableEarlyzFront(reason: string): void;
   /** The level-shadow TextureNode the shared material binds, for the game's
    *  per-frame `value = map` rebind (same mechanism as the per-body view). */
   readonly levelShadowTex: ReturnType<typeof texture>;
@@ -322,6 +329,8 @@ export function createCrowdType(
     frontMesh.visible = dispatch === 'boxes'; // a quad-dispatch type never draws front faces
   }
   let lastBatches: EarlyzBatches = { front: 0, back: 0, nearestFront: Infinity, nearestBack: Infinity };
+  /** Set by disableEarlyzFront: the reason the front batch no longer draws. */
+  let frontDisabled: string | null = null;
 
   const free = new Set<number>();
   for (let i = 0; i < MAX_CROWD_INSTANCES; i++) free.add(i);
@@ -550,7 +559,7 @@ export function createCrowdType(
       } else {
         mesh.visible = true;
         depthPreMesh.visible = true;
-        if (frontMesh) frontMesh.visible = true;
+        if (frontMesh) frontMesh.visible = frontDisabled === null;
         lastRect = null;
         lastRectFrac = 0;
       }
@@ -560,7 +569,7 @@ export function createCrowdType(
       // so there is no attribute pack and no instanceCount — but keep the box
       // buffer at 0 so a later setDispatch('boxes') cannot draw stale rows
       // before its own sync repacks them.
-      if (dispatch === 'boxes' && front) {
+      if (dispatch === 'boxes' && front && frontDisabled === null) {
         // EARLY-Z (spec D5): camera-inside instances keep the shipped back-face batch;
         // the rest draw front faces with conservative depth. Order is kept, so both
         // packs stay nearest-first.
@@ -577,6 +586,11 @@ export function createCrowdType(
         const n = packInstanceAttrs(list, instOut);
         geo.instanceCount = n;
         ib.needsUpdate = true;
+        if (front) {
+          // Front batch disabled: every instance draws through the shipped back-face batch.
+          front.geo.instanceCount = 0;
+          lastBatches = { back: n, front: 0, nearestBack: nearestVisible(list, cam), nearestFront: Infinity };
+        }
       } else {
         geo.instanceCount = 0;
         if (front) {
@@ -662,6 +676,16 @@ export function createCrowdType(
     binInputs() { return { groups: lastBinGroups, maxBlendK: lastBinMaxBlendK }; },
 
     earlyzBatches() { return { ...lastBatches }; },
+
+    earlyzFrontDisabled() { return frontDisabled; },
+
+    disableEarlyzFront(reason) {
+      if (!front || !frontMesh || frontDisabled !== null) return;
+      frontDisabled = reason;
+      frontMesh.visible = false;
+      front.geo.instanceCount = 0;
+      lastBatches = { ...lastBatches, front: 0, nearestFront: Infinity };
+    },
 
     info() {
       let attached = 0;

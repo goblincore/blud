@@ -306,7 +306,7 @@ import { createDynamiteSeams } from './game-seams-dynamite';
 import { createMarchDebugSeams } from './game-seams-march-debug';
 import { createEarlyzSeams } from './game-seams-earlyz';
 import { EARLYZ_FLAG } from './earlyz/flag';
-import { bootEarlyz, applyEarlyzRenderOrder } from './earlyz/earlyz-boot';
+import { bootEarlyz, applyEarlyzRenderOrder, degradeFailedEarlyzFronts } from './earlyz/earlyz-boot';
 import { ensureImpactSplashLayer } from './game-vfx-leaves';
 import { laySpriteBench, sizeSdfLayer } from './game-render-leaves';
 import { withCtx } from './game-context';
@@ -2266,6 +2266,10 @@ async function main() {
         tilesY: Math.ceil(Math.max(1, csize.height) / TILE_SIZE_PX),
         tilePx: TILE_SIZE_PX,
       };
+      // EARLY-Z: a front pipeline three marked errored (first draw with no precompile, ?warm=0, or a
+      // late failure) is switched off BEFORE this frame's sync, so the same frame already routes
+      // that type's bodies through the back batch.
+      if (ctx.crowd.earlyz.on) degradeFailedEarlyzFronts(ctx.crowd.types, ctx.crowd.earlyz);
       const crowdTiming = ctx.telemetry.telemetry.begin();
       // The level-shadow depth texture the type rebinds (same expression the
       // per-body loop's `map` uses; `flashlight.levelShadow.shadow.map` is
@@ -4734,7 +4738,13 @@ async function main() {
     let ok = true;
     for (const t of ctx.crowd.types.values()) {
       // EARLY-Z: the front-face twin is a second program per type; it compiles in the
-      // same job so the crowd stays on the fallback until BOTH are ready.
+      // same job, so the crowd stays on the fallback until BOTH have SETTLED. Settled is not
+      // built: a pipeline CREATION ERROR neither rejects nor times out compileAsync (three marks
+      // the pipeline errored, logs, and resolves; its draw then skips it), so `r` below is true
+      // for a front twin that will never draw. degradeFailedEarlyzFronts reads that mark right
+      // after each front compile and routes the type's bodies through the shipped back-face batch
+      // instead. `r` false (a throw or the bounded wait timing out) is the other failure: the
+      // crowd stays on the per-body fallback.
       for (const m of [t.mesh, t.frontMesh]) {
         if (!m) continue;
         m.visible = true;
@@ -4747,9 +4757,13 @@ async function main() {
         m.visible = false;
         const r = await p;
         ok = ok && r;
-        if (!r && m === t.frontMesh) {
-          ctx.crowd.earlyz.reason = `front compile failed for ${t.name}`;
-          console.warn(`[earlyz] ${ctx.crowd.earlyz.reason}; the crowd stays on the per-body fallback`);
+        if (m === t.frontMesh) {
+          if (!r) {
+            ctx.crowd.earlyz.reason = `front compile failed for ${t.name}`;
+            console.warn(`[earlyz] ${ctx.crowd.earlyz.reason}; the crowd stays on the per-body fallback`);
+          } else {
+            degradeFailedEarlyzFronts(ctx.crowd.types, ctx.crowd.earlyz);
+          }
         }
         if (!ok) break;
       }

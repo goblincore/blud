@@ -463,4 +463,79 @@ describe('crowd type early-Z batches (earlyz stage 1)', () => {
     only.sync(cam(-4.2), grid, new Set([0, 1]));
     expect(only.earlyzBatches()).toEqual({ back: 1, front: 0, nearestBack: expect.closeTo(0.2, 6), nearestFront: Infinity });
   });
+
+  // GRACEFUL DEGRADATION (final review, Important 2): three skips a failed pipeline's draws, so a
+  // type whose FRONT pipeline failed must route every instance to the shipped back batch.
+  describe('disableEarlyzFront', () => {
+    it('hides the front mesh now and sends every instance to the back batch from the next sync', () => {
+      const t = twoSlotType();
+      t.sync(cam(-4.2), grid, both);
+      expect(frontCount(t)).toBe(1);
+      expect(t.earlyzFrontDisabled()).toBeNull();
+
+      t.disableEarlyzFront('front pipeline failed for zombie: boom');
+      expect(t.earlyzFrontDisabled()).toBe('front pipeline failed for zombie: boom');
+      // Immediately: nothing of the front batch can draw before the next sync.
+      expect(t.frontMesh!.visible).toBe(false);
+      expect(frontCount(t)).toBe(0);
+      expect(t.earlyzBatches().front).toBe(0);
+
+      t.sync(cam(-4.2), grid, both);
+      expect(t.frontMesh!.visible).toBe(false);
+      expect(frontCount(t)).toBe(0);
+      expect(backCount(t)).toBe(2); // slot 0 (camera inside) AND slot 1 (would have been a front body)
+      expect([slotOf(t.mesh, 0), slotOf(t.mesh, 1)]).toEqual([0, 1]); // nearest-first, as ever
+      expect(t.earlyzBatches()).toEqual({ back: 2, front: 0, nearestBack: expect.closeTo(0.2, 6), nearestFront: Infinity });
+      // The shared draw state is the shipped one: both bodies march, entry mode 1 (boxes).
+      expect((t.instCfg.value as THREE.Vector4).x).toBe(2);
+      expect((t.instCfg.value as THREE.Vector4).y).toBe(1);
+    });
+
+    it('draws exactly what a type without early-Z draws', () => {
+      const plain = createCrowdType(renderer, 'zombie', defaultUniforms(blankFaceTexture()), 256, 256);
+      plain.attach(stubView(0, [groupFor(0)]));
+      plain.attach(stubView(1, [groupFor(1)]));
+      plain.sync(cam(-4.2), grid, both);
+      const t = twoSlotType();
+      t.disableEarlyzFront('x');
+      t.sync(cam(-4.2), grid, both);
+      expect(backCount(t)).toBe(backCount(plain));
+      expect([slotOf(t.mesh, 0), slotOf(t.mesh, 1)]).toEqual([slotOf(plain.mesh, 0), slotOf(plain.mesh, 1)]);
+    });
+
+    it('is idempotent: the first reason stays', () => {
+      const t = twoSlotType();
+      t.disableEarlyzFront('first');
+      t.disableEarlyzFront('second');
+      expect(t.earlyzFrontDisabled()).toBe('first');
+    });
+
+    it('stays off across an idle sync and a boxes -> quad -> boxes round trip', () => {
+      const t = twoSlotType();
+      t.disableEarlyzFront('x');
+      t.sync(cam(-4.2), grid, new Set());
+      expect(t.frontMesh!.visible).toBe(false);
+      expect(t.earlyzBatches()).toEqual(EMPTY);
+
+      t.setDispatch('quad');
+      t.sync(cam(-4.2), grid, both);
+      expect(t.frontMesh!.visible).toBe(false);
+      t.setDispatch('boxes');
+      t.sync(cam(-4.2), grid, both);
+      expect(t.frontMesh!.visible).toBe(false);
+      expect(frontCount(t)).toBe(0);
+      expect(backCount(t)).toBe(2);
+      expect(t.earlyzFrontDisabled()).toBe('x');
+    });
+
+    it('is a no-op on a type created without early-Z', () => {
+      const t = createCrowdType(renderer, 'zombie', defaultUniforms(blankFaceTexture()), 256, 256);
+      t.attach(stubView(0, [groupFor(0)]));
+      t.disableEarlyzFront('x');
+      expect(t.earlyzFrontDisabled()).toBeNull();
+      t.sync(cam(0), grid, new Set([0]));
+      expect(t.frontMesh).toBeNull();
+      expect(backCount(t)).toBe(1);
+    });
+  });
 });

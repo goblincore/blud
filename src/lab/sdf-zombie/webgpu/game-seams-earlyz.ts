@@ -7,10 +7,11 @@ import { conservativeDepthPatchHits } from './earlyz/conservative-depth-patch';
 export function createEarlyzSeams(ctx: GameContext) {
   return {
     earlyzInfo() {
-      const batches: Record<string, { front: number; back: number }> = {};
+      const batches: Record<string, { front: number; back: number; frontDisabled: string | null }> = {};
       for (const [key, t] of ctx.crowd.types) {
         const b = t.earlyzBatches();
-        batches[key] = { front: b.front, back: b.back };
+        // frontDisabled: why the type's front batch was switched off (its front pipeline failed), or null.
+        batches[key] = { front: b.front, back: b.back, frontDisabled: t.earlyzFrontDisabled() };
       }
       return {
         ...ctx.crowd.earlyz,

@@ -270,6 +270,10 @@ async function runPhase(p) {
       ['patched + detected', info.on === true],
       ['patch emitted frag_depth greater', info.patchHits > 0],
       ['seed drew', info.seed.on === true],
+      // three skips a failed pipeline's draws and compileAsync still resolves: a type whose front
+      // pipeline failed is switched to the back batch (graceful, but not what this run is for).
+      ['no type had its front batch disabled (every front pipeline built)',
+        Object.values(info.batches).every((b) => b.frontDisabled === null)],
       [`the pack drew as front batches (${PACK_TYPE} front === ${staged.spawned}, back === 0)`,
         pack.front === staged.spawned && pack.back === 0],
       packVisible,

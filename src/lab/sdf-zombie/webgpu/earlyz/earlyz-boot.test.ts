@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { applyEarlyzRenderOrder, bootEarlyz } from './earlyz-boot';
+import { applyEarlyzRenderOrder, bootEarlyz, degradeFailedEarlyzFronts } from './earlyz-boot';
 import { BACK_BATCH_BASE, FRONT_BATCH_BASE } from './type-order';
 import { installConservativeDepthPatch, detectConservativeDepth } from './conservative-depth-patch';
+import { installPipelineWatch } from './pipeline-watch';
 import type { GameContext } from '../game-context';
 
 // The patch module touches three's builder prototype and the GPU; the boot glue only needs
@@ -10,6 +11,14 @@ import type { GameContext } from '../game-context';
 vi.mock('./conservative-depth-patch', () => ({
   installConservativeDepthPatch: vi.fn(),
   detectConservativeDepth: vi.fn(),
+}));
+
+// Same for the pipeline watch: it wraps backend.createRenderPipeline (its own tests are in
+// pipeline-watch.test.ts); here only whether the boot got a watch matters.
+vi.mock('./pipeline-watch', () => ({
+  installPipelineWatch: vi.fn(),
+  currentPipelineWatch: vi.fn(() => null),
+  PIPELINE_FAILED_REASON: 'pipeline errored',
 }));
 
 const fake = (nearestBack: number, nearestFront: number, front = true) => ({
@@ -45,6 +54,7 @@ describe('bootEarlyz', () => {
   type Listener = (e: { error: { message: string } }) => void;
   const install = vi.mocked(installConservativeDepthPatch);
   const detect = vi.mocked(detectConservativeDepth);
+  const watchInstall = vi.mocked(installPipelineWatch);
   let warn: ReturnType<typeof vi.spyOn>;
   let info: ReturnType<typeof vi.spyOn>;
 
@@ -64,6 +74,8 @@ describe('bootEarlyz', () => {
   beforeEach(() => {
     install.mockReset();
     detect.mockReset();
+    watchInstall.mockReset();
+    watchInstall.mockReturnValue({ failure: () => null });
     warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     info = vi.spyOn(console, 'info').mockImplementation(() => {});
   });
@@ -100,6 +112,20 @@ describe('bootEarlyz', () => {
     await bootEarlyz(ctx);
     expect(earlyz).toMatchObject({ flag: true, on: false, reason: 'compile: unknown builtin' });
     expect(detect).toHaveBeenCalledWith(device);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(info).not.toHaveBeenCalled();
+  });
+
+  it('stays off when the backend cannot be observed for failed pipelines (never run early-Z blind)', async () => {
+    install.mockReturnValue({ installed: true, reason: null });
+    detect.mockResolvedValue({ ok: true, reason: null });
+    watchInstall.mockReturnValue(null);
+    const { device } = makeDevice();
+    const backend = { device };
+    const { ctx, earlyz } = makeCtx(backend);
+    await bootEarlyz(ctx);
+    expect(watchInstall).toHaveBeenCalledWith(ctx.boot.handle.renderer);
+    expect(earlyz).toMatchObject({ flag: true, on: false, reason: 'cannot observe pipeline creation on this backend' });
     expect(warn).toHaveBeenCalledTimes(1);
     expect(info).not.toHaveBeenCalled();
   });
@@ -149,5 +175,68 @@ describe('bootEarlyz', () => {
     expect(earlyz.gpuErrors).toHaveLength(20);
     expect(earlyz.gpuErrors[0]).toBe('err 0');
     expect(earlyz.gpuErrors[19]).toBe('err 19');
+  });
+});
+
+describe('degradeFailedEarlyzFronts (front pipeline failure -> back batch)', () => {
+  let warn: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => { warn = vi.spyOn(console, 'warn').mockImplementation(() => {}); });
+  afterEach(() => vi.restoreAllMocks());
+
+  /** A type double with the three CrowdType members the glue touches. */
+  function fakeType(name: string, front = true) {
+    const frontMesh = front ? new THREE.Mesh() : null;
+    let disabled: string | null = null;
+    return {
+      name, frontMesh,
+      earlyzFrontDisabled: () => disabled,
+      disableEarlyzFront: vi.fn((r: string) => { if (disabled === null) disabled = r; }),
+    };
+  }
+  const failing = (...meshes: (THREE.Mesh | null)[]) => ({
+    failure: vi.fn((m: object) => (meshes.some((x) => x && x.material === m) ? 'pipeline errored' : null)),
+  });
+
+  it('disables only the type whose front pipeline failed, records the reason and warns once', () => {
+    const a = fakeType('zombie'), b = fakeType('imp');
+    const state = { reason: null as string | null };
+    const out = degradeFailedEarlyzFronts(new Map([['z@1', a], ['i@1', b]]) as never, state, failing(a.frontMesh));
+    expect(out).toEqual(['zombie']);
+    expect(a.disableEarlyzFront).toHaveBeenCalledWith('front pipeline failed for zombie: pipeline errored');
+    expect(b.disableEarlyzFront).not.toHaveBeenCalled();
+    expect(state.reason).toBe('front pipeline failed for zombie: pipeline errored');
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]![0])).toMatch(/^\[earlyz\] front pipeline failed for zombie/);
+  });
+
+  it('is quiet on later calls: an already-disabled type is not re-reported', () => {
+    const a = fakeType('zombie');
+    const state = { reason: null as string | null };
+    const types = new Map([['z@1', a]]) as never;
+    const watch = failing(a.frontMesh);
+    degradeFailedEarlyzFronts(types, state, watch);
+    warn.mockClear();
+    expect(degradeFailedEarlyzFronts(types, state, watch)).toEqual([]);
+    expect(a.disableEarlyzFront).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('leaves healthy types, types without a front mesh and a missing watch alone', () => {
+    const healthy = fakeType('zombie'), quad = fakeType('imp', false);
+    const state = { reason: null as string | null };
+    const types = new Map([['z@1', healthy], ['i@1', quad]]) as never;
+    expect(degradeFailedEarlyzFronts(types, state, failing())).toEqual([]);
+    expect(degradeFailedEarlyzFronts(types, state, null)).toEqual([]);
+    expect(healthy.disableEarlyzFront).not.toHaveBeenCalled();
+    expect(quad.disableEarlyzFront).not.toHaveBeenCalled();
+    expect(state.reason).toBeNull();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('asks the watch about the FRONT material of each type', () => {
+    const a = fakeType('zombie');
+    const watch = failing();
+    degradeFailedEarlyzFronts(new Map([['z@1', a]]) as never, { reason: null }, watch);
+    expect(watch.failure).toHaveBeenCalledWith(a.frontMesh!.material);
   });
 });

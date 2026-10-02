@@ -55,3 +55,22 @@ describe('early-Z boot order in game-main.ts (source pins)', () => {
     expect(line.indexOf('ctx.crowd.earlyz.on')).toBeLessThan(line.indexOf('setEarlyzSeed('));
   });
 });
+
+describe('front-pipeline degradation wiring in game-main.ts (source pins)', () => {
+  const calls: number[] = [];
+  for (let i = source.indexOf('degradeFailedEarlyzFronts('); i >= 0; i = source.indexOf('degradeFailedEarlyzFronts(', i + 1)) calls.push(i);
+
+  it('checks twice: right after each front compile, and every frame before the types sync', () => {
+    expect(calls).toHaveLength(2);
+    // The per-frame draw fn comes first in the file, the background compile job last.
+    const [perFrame, afterCompile] = [calls[0]!, calls[1]!];
+    // The first sits inside compileCrowdInBackground, after its precompile await and for the front mesh only.
+    const compileFn = source.indexOf('const compileCrowdInBackground');
+    expect(afterCompile).toBeGreaterThan(compileFn);
+    expect(source.indexOf('m === t.frontMesh', compileFn)).toBeLessThan(afterCompile);
+    // The second is gated on early-Z and precedes the first t.sync of the frame.
+    const sync = source.indexOf('t.sync(camera, grid, vis)');
+    expect(perFrame).toBeLessThan(sync);
+    expect(source.slice(source.lastIndexOf('\n', perFrame) + 1, perFrame)).toContain('if (ctx.crowd.earlyz.on)');
+  });
+});
