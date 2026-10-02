@@ -569,9 +569,9 @@ export function wetLipWound(wound: Wound, wetLip: number): Wound {
   return wound;
 }
 
-/** Head craters (Wound.headSlot) a body keeps at most — melee head damage, head-damage.ts: six regions
- *  and the brain cavity. */
-export const MAX_HEAD_WOUNDS = 7;
+/** Head craters (Wound.headSlot) a body keeps at most — melee head damage, head-damage.ts: six regions,
+ *  the brain cavity and the slug burst's exit crater. */
+export const MAX_HEAD_WOUNDS = 8;
 
 /** Ring buffer append. A wound with a headRegion replaces an earlier wound of the same region, in that
  *  one's index. Head craters keep their own MAX_HEAD_WOUNDS slots (oldest 'face' crater evicted first),
