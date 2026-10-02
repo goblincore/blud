@@ -386,3 +386,161 @@ Every sheet now carries its numbers in a strip along the top.
 
 The face blobs (doorway, the mesh eyes) are the case most worth a look at full size: `look/doorway-zoom.png` and
 `look/doorway-seed-overlay-half.png`.
+
+## Cost (Task 13)
+
+`scripts/sdf-game-bench.sh` (headless Chrome 154, Metal, 1280 x 800, `BENCH_PASSES=1`, `BENCH_REPEATS=3`), 2026-10-02.
+Legs alternate inside each repeat (A B A B A B). Each control is the leg the plan names: `upscale-ship` for
+`earlyz-upscale-ship`, `baseline` for `earlyz`. `sdf:march` is the GPU pass timer's p50 over all frames of a leg-run;
+"frame" is the fenced frame p50. Each cell is the median of the 3 repeats, with the min-max over the repeats in brackets.
+A delta counts as real only when the two legs' repeat ranges do not overlap.
+
+### How it was run
+
+- **Rooms.** The harness runs rooms 1-5 by default. The cast run (no crowd) keeps all five. Every crowd, scene and
+  demo run uses `BENCH_ROOMS=1`: the staged scenes hold the player in room 1, so rooms 2-5 would repeat the same scene,
+  and the demo ignores the room.
+- **Seed pinned: `BENCH_QUERY=seed=7`** (`level=night-train&seed=7` on the train). Without `?seed=` every boot draws a
+  random demo seed, so the scripted firefight is a different fight on every boot. The first cast run without the seed
+  reported 102 drifted census fields: the legs fought different fights. With the seed, in every run below the census
+  is identical across repeats and across legs, and the frame hash across the repeats of each leg. The demo run uses its
+  recording's own seed.
+- **Night Train.** Train speed is not pinned. The train clock is advanced by the sim's fixed dt, so both legs see the
+  same roll, bob and lamp swing (the frame hashes agree across repeats). The motion is in the picture, not a confound.
+- **Model store.** This worktree has no `.upscale-models/`, so `setUpscale({ trained: 't16-rgb-v32' })` gets a 404.
+  The runs set `UPSCALE_MODELS_DIR` to a scratch store whose `t16-rgb-v32/model.json` is a copy of the tracked
+  `public/assets/lab/upscale/t16-rgb-v32.json`, the shipped default. `upscaleInfo().on` was true in every upscale leg.
+- **`BENCH_PROBE_TIMEOUT_MS=150000`** in every run (the default stays 30 s). The probe runs the whole 364-frame
+  firefight, so 30 s caps the frame at about 80 ms. The 12-16 body scenes render at 35-105 ms, under the 250 ms cap.
+- **`BENCH_FRAME_CAP_MS=400` for the native crowd only.** At 250 both of its legs aborted: probe p50 277 ms
+  (`baseline`) and 265 ms (`earlyz`).
+- **Load.** `uptime` was recorded before every run, and a run started only at a 1-min load of 4 or less. The load was
+  also sampled every 30 s during each run. Other sessions on this machine drove short spikes during some runs, to
+  10-19 within a minute. Rows whose repeats overlapped a spike are marked below. The march timer is the steadier number
+  under those spikes; the fenced frame moves with CPU load.
+- **Cold compile.** No leg was measured during a compile. Every boot waited for the loader gate and for the background
+  gib and crowd jobs to settle (harness change 2 below). The waits were 3-9 s, so the shader cache was warm throughout.
+  No leg was aborted or failed in any run of record.
+
+### Harness changes (`scripts/sdf-game-bench.mjs`)
+
+The plan's steps, as written:
+- the `doorwayPrelude` import;
+- the per-leg `_query` in `legUrl`, which `applyLeg` skips;
+- the `earlyz` and `earlyz-upscale-ship` legs;
+- the `earlyzInfo` line after the `upscaleInfo` line (that line is in `runLeg`, not `applyLeg`);
+- the `BENCH_SCENE=doorway` prelude.
+
+Beyond the plan, each needed to get a valid number:
+1. **The doorway scene is held like `distance`.** The probe and the run get `holdPlayer: true`, and the probe is
+   unarmed. Without the hold, the firefight's frame-0 teleport and `freeze: false` undo the staged pose and the frozen
+   crowd.
+2. **Boots wait for the background compiles.** Until the crowd job is `ready`, the game draws the crowd on the
+   per-body fallback (`crowdPath()`). A cold front-face program (22-46 s) would therefore be timed as per-body. Every
+   boot now waits, up to 180 s, for the loader gate and for the gib and crowd jobs to settle. A `failed` job fails the
+   leg.
+3. **`bench()` waits for the rAF loop to resume.** `setUpscale()` on a booted page pauses the loop, precompiles the
+   stage and resumes the loop in a `finally` that nothing awaits. When that `finally` lands after `bench()` has paused
+   the loop, the loop runs alongside the stepped frames and `bench()` never returns.
+   - Before the fix, the 16-body probes did not return. In the first room-grid run all three attempted probes, in
+     both legs, hit the 180 s bound. Single-repeat 16-body room and distance checks missed the 60 s bound the same way.
+   - In a diagnostic, `loopRunning()` was true 3 s into the probe, and the probe was still running at 120 s.
+   - Started after the loop came back, the same probe took 41 s.
+   - The precompile was still pending at the first `bench()` call of every upscale leg: the new wait fired, for
+     0.1 s, on all 30 cast probes and on every scene probe. In the demo it also fired before the measured run, which
+     follows a fresh boot.
+   - Lighter scenes returned anyway, with the rAF loop ticking the sim during the probe. That may be part of the drift
+     in the first, unseeded cast run.
+   - The fix: before every `bench()` call, wait (up to 60 s) for `loopRunning()`.
+   - This is a page-side race (`applyUpscaleAbMode`). It is left in src.
+4. **`BENCH_PROBE_TIMEOUT_MS`**, default 30 s.
+5. **Per row:** `earlyzInfo` at the end of the run, `startedAt`/`endedAt` (added before the last three runs), and
+   scene, crowd and demo in the `passes.md` header and the `passes.json` meta.
+
+### Results
+
+`seed` and `batches` are the `earlyzInfo` read at the end of each measured run. In every earlyz leg of every run:
+`on: true`, `reason: null`, `gpuErrors` empty, `patchHits` 18-24, and the seed was **on** (`seed.reason` null). The
+batches were the same in every repeat. † in the load column: the 1-min load passed 6 during the run.
+
+| scene (run) | control frame | earlyz frame | Δ frame | control march | earlyz march | Δ march | earlyz batches (F front, B back) | load at start / max during |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| doorway, ring, 12 bodies | 50.03 [49.81-50.86] | 36.53 [36.14-37.72] | **-13.50** | 46.08 [46.03-46.40] | 31.24 [30.61-32.18] | **-14.84** | zombie@1 9F, zombie@2 2F | 3.31 / 3.51 |
+| train doorway, 12 spawned | 18.14 [16.01-22.89] | 21.30 [16.49-25.21] | +3.2 (noise) | 8.94 [8.62-9.30] | 8.55 [8.46-8.86] | -0.39 (noise) | zombie@1 2F 1B (`van-guard`), zombie@2 1F | 2.29 / 3.58 |
+| distance, 16 bodies | 104.89 [103.62-105.34] | 83.71 [83.39-84.10] | **-21.18** | 97.58 [97.54-98.14] | 76.88 [76.68-77.18] | **-20.70** | zombie@1 16F, soldier@1 1F, zombie@2 1F, zombie@4 1F | 2.56 / 2.83 |
+| room grid, 16 bodies (run a) | 93.81 [92.01-95.17] | 92.93 [90.55-93.86] | -0.9 (noise) | 84.01 [83.47-89.17] | 82.20 [81.10-82.61] | -1.8 (noise) | zombie@1 10F 3B, zombie@4 4F | 3.94 / 6.27 † |
+| room grid, 16 bodies (run b) | 86.62 [84.93-104.55] | 88.11 [87.28-89.70] | +1.5 (noise) | 77.60 [77.12-95.65] | 73.72 [72.60-83.57] | -3.9 (noise) | zombie@1 10F 3B, zombie@4 4F | 1.59 / 3.25 |
+| room-1 demo (3368 frames) | 12.94 [12.12-14.56] | 13.76 [12.88-16.48] | +0.8 (noise) | 9.16 [8.54-9.40] | 5.13 [5.02-5.35] | **-4.03** | none drawn at the end | 2.95 / 6.51 † |
+| room grid, 16 bodies, native (`baseline` vs `earlyz`) | 280.78 [273.25-283.77] | 271.37 [246.86-275.76] | -9.4 (noise) | 267.80 [259.02-271.61] | 265.09 [239.89-267.24] | -2.7 (noise) | zombie@1 10F 3B, zombie@4 4F | 3.89 / 5.16 |
+
+Cast firefight, rooms 1-5, no crowd. These are 9 repeats per cell, pooled from three seed-pinned runs. The census was
+identical in all 9 repeats of both legs in every room, so the pooled repeats are the same workload.
+- Start loads were 2.34, 2.17 and 2.16.
+- The load spiked during all three runs, to max 10.2, 18.7 and 6.4. The later repeats of the first two runs fell in the
+  spikes: their frame p50s are the high ones.
+
+| room | control frame | earlyz frame | Δ | control march | earlyz march | Δ march | per-run Δ march | earlyz batches |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| 1 | 23.26 [17.71-28.44] | 24.63 [17.62-36.01] | +1.4 | 14.83 [13.44-15.80] | 14.37 [13.47-14.89] | -0.46 | -0.36 / -0.70 / +0.38 | soldier@1 1F, zombie@2 1F, zombie@4 4F |
+| 2 | 27.42 [23.51-40.91] | 32.88 [24.68-43.18] | +5.5 | 20.66 [18.62-24.02] | 21.74 [19.78-25.41] | +1.09 | +4.47 / +0.73 / +2.90 | zombie@2 2F, zombie@6 1F, soldier@5 2F, zombie@5 2F |
+| 3 | 54.48 [48.32-67.71] | 56.04 [51.44-60.17] | +1.6 | 40.79 [35.75-54.90] | 39.58 [34.28-43.40] | -1.20 | -5.29 / -2.65 / +0.26 | zombie@2 2F, zombie@3 3F, zombie@4 1F |
+| 4 | 16.09 [13.71-20.39] | 17.03 [14.56-19.10] | +0.9 | 10.32 [10.01-11.16] | 11.15 [10.68-11.34] | **+0.83** | +1.01 / +0.51 / +0.89 | zombie@4 4F |
+| 5 | 25.26 [20.00-30.69] | 23.09 [21.09-30.41] | -2.2 | 16.11 [14.97-17.27] | 16.86 [16.32-17.50] | **+0.75** | +0.57 / +0.80 / +1.62 | zombie@6 1F, soldier@5 3F, zombie@5 2F |
+
+Per-segment `sdf:march` (median of 3 repeats, ms, control -> earlyz):
+- **doorway:** walk 45.9 -> 29.7, fire 47.1 -> 32.7, gib 46.1 -> 30.8. No shot landed: the census has 0 wounds, so the
+  scene is static.
+- **distance:** walk 96.9 -> 76.7, fire 98.1 -> 76.0, gib 97.9 -> 77.3.
+- **room grid, 16 bodies:**
+  - walk: control 177/148/151 and 178/150/146 against earlyz 141/137/136 and 139/134/133. That is -14 and -16 ms on
+    the medians, with the ranges apart, in both runs. The first control repeat of each run is high.
+  - fire and gib: about -3 ms, within the spread.
+- **native, 16 bodies:** walk 409/435/469 -> 356/390/399 (-44 to -70 ms paired by repeat). Fire and gib are within the
+  spread.
+- **demo:** t0 8.2 -> 8.4, t1 10.7 -> 9.4, t2 4.5 -> **0.06**. In t2 no body is on screen.
+
+### Reading
+
+- **Real, large wins where a body sits behind something.**
+  - Doorway (body behind the wall and jamb): -14.8 ms march, -13.5 ms frame (-27 %).
+  - Distance (16 front batches, body behind body): -20.7 ms march, -21.2 ms frame (-20 %).
+  - Both have tight repeats and ranges far apart. The doorway was also run without the pinned seed (3 repeats,
+    -15.1 ms march / -12.5 ms frame) and agreed.
+- **The demo: real on the GPU, invisible in the frame.**
+  - March -4.0 ms (-44 %). The largest change is in t2: the march still ran there with nothing on screen, at 4.5 ms,
+    and the seed removes it (0.06 ms).
+  - The fenced frame does not move (+0.8, inside the spread). That frame looks CPU-bound: `cpu:tick` 6.8 + `cpu:draw`
+    5.1 ms against a 12-13 ms frame, and the GPU span did not shrink (12.2 / 12.5 ms).
+- **A small real cost where there is nothing to cull.** Cast rooms 4 and 5 are bodies in the open, every one a front
+  batch. March is +0.8 ms (+8 %) and +0.75 ms (+5 %): positive in all three runs, and in two of the three the repeat
+  ranges do not overlap. Room 2 leans the same way (+1.1 pooled) but overlaps. Rooms 1 and 3 are mixed in sign. **No
+  cast room shows a frame delta beyond the noise** (frame spreads of 5-20 ms under the load spikes).
+- **Room grid, 16 close bodies (3 back batches): no overall change.** Two 3-repeat runs give -0.9 and +1.5 ms frame,
+  -1.8 and -3.9 ms march, all inside the spread. The walk segment alone gains 14-16 ms in both runs; the wounded
+  fire/gib segments do not move.
+- **Native (`earlyz` vs `baseline`, 16 bodies): unresolved overall** (-9.4 ms frame on a 281 ms frame, inside a 29 ms
+  spread). The walk segment gains 44-70 ms, paired by repeat.
+- **Train doorway: nothing to measure.** The march is 9 ms: only 3 of the 12 spawned bodies plus `van-guard` are
+  drawn. The frame is noisy (16-25 ms) for reasons outside the march.
+
+**Surprises.**
+1. **The seed was ON in the native `earlyz` leg as well.** The plan expected it refused for field style.
+   - The bench's ship-defaults call `setUpscale(null)`. That returns the march to scale 1.0 but leaves field style
+     `'off'`: the boot's shipped stage forced the fields off, and nothing restores `'bodies'`.
+   - The seed gate refuses only a field style other than `'off'` (`seed-gate.ts`).
+   - So in this harness `earlyz` vs `baseline` is the native-scale march with the seed on. It is not the field-style
+     case. Inferred from `seed.on: true, reason: null` and the gate code. `fieldStyle` was not read directly.
+2. **One unreproduced outlier.** A single-repeat validation run of the room grid (seed 7, same harness, load 2.1-3.2)
+   read control 80.58 against earlyz 125.98 ms frame (march 72.86 against 116.34).
+   - Its earlyz fire/gib march was 99 / 108 ms; the six matched repeats read 62-68 / 63-72.
+   - The two 3-repeat runs above do not reproduce it. Cause not found. It is not part of the table.
+3. **The harness race (change 3) is worth fixing in the page.** Any harness leg that calls `setUpscale` can hang
+   `bench()` when the precompile's `finally` lands late.
+
+**Not covered.** Boot time with the flag (the cold compile is in the Smoke section). A field-style (`'bodies'`) boot.
+The `?graphics=high` stage. Nothing here suggests a correctness or crash problem under the flag: 0 GPU errors in every
+earlyz leg, no failed or aborted leg in the runs of record, the census identical between legs and repeats, and the frame
+hash identical between repeats.
+
+**Raw outputs are not committed.** Each run wrote `passes.md`, `passes.json`, `bench.md`, `bench.json`, the logs and
+the load samples to a scratch `BENCH_OUT` outside the repository.

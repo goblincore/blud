@@ -28,6 +28,7 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { reportCensusDrift, reportFrameHashDrift } from './census-diff.mjs';
+import { doorwayPrelude } from './lib/earlyz-scenes.mjs';
 
 const VITE = Number(process.argv[2] ?? 5277);
 const CDP = Number(process.argv[3] ?? 9277);
@@ -68,7 +69,13 @@ const DIST_CROWD_SPACING = Number(process.env.BENCH_CROWD_SPACING ?? 0.9);
 // many bodies at distance, not a screen-filling stack. It also pins the
 // player (`holdPlayer`) so the firefight's frame-0 teleport cannot overwrite
 // the placed pose and the walk input cannot drift the camera mid-leg.
+// `doorway` (early-Z, 2026-10-01) is scripts/lib/earlyz-scenes.mjs's
+// doorwayPrelude: the player in room 1 looking through the first tunnel that
+// touches room 1 at BENCH_CROWD bodies in the far room (body-behind-wall). It
+// teleports, places and freezes like `distance`, so it is held the same way.
+// Both staged scenes ignore the firefight's room: run them with BENCH_ROOMS=1.
 const SCENE = process.env.BENCH_SCENE ?? '';
+const HOLD_SCENE = SCENE === 'distance' || SCENE === 'doorway';
 /** The distance scene, evaluated in-page after the leg overrides (spawn must
  *  come after a rebuild-inducing setCrowd — see the prelude comment below).
  *
@@ -111,7 +118,11 @@ function buildDistancePrelude() {
 const CROWD_PRELUDE = CROWD > 0
   ? (SCENE === 'distance'
     ? buildDistancePrelude()
-    : `__sdfGame.spawnCrowd('zombie', ${CROWD}, { spacing: ${CROWD_SPACING} })`)
+    : SCENE === 'doorway'
+      // Early-Z (2026-10-01): through the first tunnel touching room 1; with
+      // BENCH_QUERY=level=night-train that is the guards-van -> third-class door.
+      ? doorwayPrelude(CROWD)
+      : `__sdfGame.spawnCrowd('zombie', ${CROWD}, { spacing: ${CROWD_SPACING} })`)
   : '';
 // BENCH_CROWD_MAX — hard ceiling on BENCH_CROWD. The 24-body crowd path hung
 // the GPU for 330 s and corrupted the owner's display on 2026-09-14; this
@@ -122,6 +133,13 @@ const CROWD_MAX = Number(process.env.BENCH_CROWD_MAX ?? 24);
 // a 30 s evaluate timeout) the leg is ABORTED without the long run. A too-slow
 // scene must fail fast and visibly, never hold the GPU.
 const FRAME_CAP_MS = Number(process.env.BENCH_FRAME_CAP_MS ?? 250);
+// BENCH_PROBE_TIMEOUT_MS — the scripted probe's evaluate bound (default 30 s,
+// unchanged). The probe runs the whole 364-frame firefight, so 30 s is itself a
+// cap of ~80 ms a frame: a 12-16 body crowd that renders at ~95 ms (well under
+// BENCH_FRAME_CAP_MS) is aborted by the clock, not by the guard (measured
+// 2026-10-02: room-1 crowd 16 probe finished in 35 s at p50 94 ms). The early-Z
+// cost run raises it so the frame cap is the guard again. Demo probes keep 30 min.
+const PROBE_TIMEOUT_MS = Number(process.env.BENCH_PROBE_TIMEOUT_MS ?? 30_000);
 // BENCH_PASSES=1 — per-pass GPU timestamp attribution (gpu-pass-timing.ts).
 // Runs the matrix in the harness's 'passes' mode: the same fence-per-chunk
 // frame timing as throughput, PLUS every render/compute pass summed by its
@@ -381,8 +399,57 @@ console.log(`bench ${url}  (${W}x${H}, repeats=${REPEATS}, rooms=${ROOM_IDS.join
  * historical leg's boot changes.
  */
 function legUrl(name) {
-  const on = (LEGS[name] ?? ALL_LEGS[name] ?? {}).setCrowd;
-  return on === undefined ? url : `${url}&crowd=${on ? 1 : 0}`;
+  const leg = LEGS[name] ?? ALL_LEGS[name] ?? {};
+  let u = leg.setCrowd === undefined ? url : `${url}&crowd=${leg.setCrowd ? 1 : 0}`;
+  // `_query` (early-Z, 2026-10-01): a COMPILE-TIME page flag the leg needs at boot.
+  // Underscore keys are never called as __sdfGame setters (applyLeg skips them).
+  if (leg._query) u += `&${leg._query}`;
+  return u;
+}
+
+/**
+ * WAIT FOR THE BACKGROUND COMPILES (early-Z cost run, 2026-10-02). Since the
+ * defer-compile work (2026-09-19) the crowd march program and the gib variants
+ * compile AFTER the loader gate, and until the crowd job is `ready` the game
+ * draws the crowd on the PER-BODY fallback (game-main `crowdPath()`). A warm
+ * shader cache settles that in ~4 s, inside the old 2.5 s settle plus the boot
+ * poll; a COLD one (a new program, e.g. a compile-time flag's, or Metal cache
+ * churn) takes 22-46 s, and a leg timed in that window measures the per-body
+ * march while its row says crowd. So every boot waits, bounded, for the loader
+ * gate and for both jobs to settle, and a `failed` job fails the leg: it would
+ * be measuring the fallback. A boot without crowd types never starts the crowd
+ * job, so its `pending` is accepted there.
+ */
+const WARM_WAIT_MS = Number(process.env.BENCH_WARM_WAIT_MS ?? 180_000);
+async function awaitWarmBackground(legName) {
+  progress.phase = 'boot:warm-background';
+  const t0 = Date.now();
+  let s = null;
+  for (;;) {
+    s = JSON.parse(await evaluate(`JSON.stringify({
+      gate: window.__warmGate ? window.__warmGate.phase : null,
+      bg: typeof __sdfGame.warmBackground === 'function' ? __sdfGame.warmBackground() : null,
+      crowd: typeof __sdfGame.crowdInfo === 'function'
+        ? (() => { const c = __sdfGame.crowdInfo(); return { on: !!c.on, types: (c.types || []).length }; })()
+        : null,
+    })`));
+    // No tracker on this page (an older build): nothing to wait for.
+    if (!s.bg) return;
+    if (s.gate !== null && s.gate !== 'ready') {
+      throw new Error(`loader gate settled '${s.gate}', not 'ready' — the background compiles never start`);
+    }
+    if (s.bg.gib === 'failed' || s.bg.crowd === 'failed') {
+      throw new Error(`background compile failed (${JSON.stringify(s.bg)}) — the leg would measure the fallback`);
+    }
+    const crowdApplies = !s.crowd || (s.crowd.on && s.crowd.types > 0);
+    if (s.gate === 'ready' && s.bg.gib === 'ready' && (s.bg.crowd === 'ready' || !crowdApplies)) break;
+    if (Date.now() - t0 > WARM_WAIT_MS) {
+      throw new Error(`background compiles not settled after ${(WARM_WAIT_MS / 1000).toFixed(0)} s: ${JSON.stringify(s)}`);
+    }
+    await sleep(500);
+  }
+  const waited = (Date.now() - t0) / 1000;
+  if (legName) console.log(`  [${legName}] warm: gate ${s.gate}, gib ${s.bg.gib}, crowd ${s.bg.crowd} (waited ${waited.toFixed(1)} s after __sdfGame)`);
 }
 
 /**
@@ -420,6 +487,7 @@ async function bootPage(settleMs = 5000, legName = null) {
     throw new Error('game page never booted (__sdfGame absent after 120s)');
   }
   if (backend !== 'webgpu') fail(`backend is ${backend}, not webgpu — a WebGL fallback bench means nothing here`);
+  await awaitWarmBackground(legName);
   // Settle: let the boot loop render and the shaders finish compiling before
   // anything is timed. First-use pipeline stalls are real.
   progress.phase = 'boot:settle';
@@ -629,6 +697,12 @@ const ALL_LEGS = {
   // pass on, slim tail, boot-default medium band.
   'probe-reference-ship': { setProbeOptimization: false, setUpscale: { trained: 't16-rgb-v32' }, setUpscaleSharpen: 0.5 },
   'upscale-ship': { setUpscale: { trained: 't16-rgb-v32' }, setUpscaleSharpen: 0.5 },
+  // EARLY-Z stage 1 (plan 2026-10-01). `earlyz` runs the harness's pinned native/field
+  // state (seed OFF there: field style), so it measures body-behind-body only; its control
+  // is `baseline`. `earlyz-upscale-ship` is the shipped upscaler boot with the seed ON;
+  // its control is `upscale-ship`.
+  earlyz: { _query: 'earlyz=1' },
+  'earlyz-upscale-ship': { _query: 'earlyz=1', setUpscale: { trained: 't16-rgb-v32' }, setUpscaleSharpen: 0.5 },
   'upscale-ship-high': { setRefine: true, setRefineTail: 'slim', setUpscale: { trained: 'r5b-s32-rgbn-headr-drop-int2' }, setUpscaleSharpen: 0.5 },
   'upscale-t16-rgb': { setUpscale: { trained: 't16-rgb-v32' } },
   'upscale-r5b-headr': { setRefine: true, setRefineTail: 'slim', setUpscale: { trained: 'r5b-s32-rgbn-headr-drop-int2' } },          // band = boot default (medium)
@@ -735,6 +809,7 @@ async function applyLeg(name) {
   // (setCrowd) settles before the crowd prelude below. The crowd seam is
   // present since Task 6; the guard remains for a page without it.
   for (const [fn, arg] of Object.entries(overrides)) {
+    if (fn.startsWith('_')) continue;
     if (fn === 'setCrowd' && !(await evaluate('typeof __sdfGame.setCrowd === "function"'))) continue;
     await evaluate(`__sdfGame.${fn}(${JSON.stringify(arg)})`);
   }
@@ -772,8 +847,41 @@ const WARMUP = Number(process.env.BENCH_WARMUP ?? 120);
 // index landed on the last element, i.e. it WAS the max.
 const CHUNK = Number(process.env.BENCH_CHUNK ?? 10);
 
+/**
+ * THE PRECOMPILE / BENCH LOOP RACE (early-Z cost run, 2026-10-02). `setUpscale()`
+ * on a booted page pauses the rAF loop, precompiles the stage's passes and
+ * RESUMES the loop in a `finally` nothing awaits (game-render-leaves
+ * applyUpscaleAbMode). `bench()` pauses the loop for its own stepping; when that
+ * `finally` lands after bench() has started, the rAF loop runs alongside the
+ * stepped frames and the bench does not return (180 s probe bound hit on every
+ * leg). Measured with 16 bodies spawned after `upscale-ship`'s setUpscale: the
+ * probe was still running at 120 s with `loopRunning()` true; started after the
+ * loop came back, the same probe finished in 41 s (p50 110 ms). The 16-body
+ * room and distance runs hit it on every leg; the no-crowd and 12-body doorway
+ * runs did not (the race is timing-dependent). So every bench()
+ * call first waits, bounded, for the loop to be running again: that is the
+ * pending precompile settling. A loop still paused at the bound fails the leg.
+ */
+const LOOP_WAIT_MS = Number(process.env.BENCH_LOOP_WAIT_MS ?? 60_000);
+async function awaitLoopResumed(label) {
+  if (!(await evaluate('typeof __sdfGame.loopRunning === "function"'))) return;
+  const t0 = Date.now();
+  let paused = false;
+  while (!(await evaluate('__sdfGame.loopRunning()'))) {
+    paused = true;
+    if (Date.now() - t0 > LOOP_WAIT_MS) {
+      throw new Error(`rAF loop still paused ${(LOOP_WAIT_MS / 1000).toFixed(0)} s before bench() — a precompile never settled`);
+    }
+    await sleep(100);
+  }
+  const ms = Date.now() - t0;
+  if (paused) console.log(`  [${label}] waited ${(ms / 1000).toFixed(1)} s for the rAF loop to resume (a background precompile) before bench()`);
+}
+
 async function runLeg(name, room, mode) {
   progress.leg = name; progress.room = room; progress.mode = mode;
+  // Wall-clock bounds of the leg-run, so a row can be matched to the machine's load at the time.
+  const startedAt = new Date().toISOString();
   // Fresh page per run — see bootPage. Damage does not survive a reload,
   // which is the entire point. The leg name selects the crowd BOOT flag (see
   // legUrl): booting the leg's own dispatch keeps its setCrowd() override a
@@ -788,6 +896,9 @@ async function runLeg(name, room, mode) {
     `refine: __sdfGame.refineInfo ? __sdfGame.refineInfo().on : null })`,
   );
   console.log(`  [${name}] upscaleInfo().on=${JSON.parse(infoNote).up} refineInfo().on=${JSON.parse(infoNote).refine}`);
+  if (String((LEGS[name] ?? ALL_LEGS[name] ?? {})._query ?? '').includes('earlyz=1')) {
+    console.log(`  [${name}] earlyzInfo=${await evaluate('JSON.stringify(__sdfGame.earlyzInfo ? __sdfGame.earlyzInfo() : null)')}`);
+  }
   // run 5b: bodies-refined count + band, for legs that touch setRefineBand/setRefineTail.
   const legOverrides = LEGS[name] ?? ALL_LEGS[name] ?? {};
   if (/refine/i.test(name) || legOverrides.setRefine || legOverrides.setRefineBand || legOverrides.setRefineTail) {
@@ -806,6 +917,8 @@ async function runLeg(name, room, mode) {
   // fenced frame p50 decides whether the scene is safe to bench at all. A
   // probe that times out or reads over BENCH_FRAME_CAP_MS aborts the leg and
   // SKIPS the long run — the honest early-out for the 24-body hang class.
+  progress.phase = 'probe:await-loop';
+  await awaitLoopResumed(`${label}-probe`);
   progress.phase = 'probe';
   // The distance scene freezes the placed pose for the whole leg; the probe
   // must too, or it would teleport the player and measure a different scene
@@ -813,8 +926,9 @@ async function runLeg(name, room, mode) {
   // scenario first, and its shots kill the crowd (at n=20 the measured run
   // then started with 2 of 21 bodies). The guard only needs the walk scene's
   // frame cost, which does not fire.
-  const holdOpt = SCENE === 'distance' ? ', holdPlayer: true' : '';
-  const probeNoShots = SCENE === 'distance' ? ', noShots: true' : '';
+  // The doorway scene (early-Z) is staged the same way and held the same way.
+  const holdOpt = HOLD_SCENE ? ', holdPlayer: true' : '';
+  const probeNoShots = HOLD_SCENE ? ', noShots: true' : '';
   // The recording replaces the scenario for the probe AND the measured run, so
   // the frame guard prices the fight that will actually be measured.
   const demoOpt = DEMO ? `, demo: ${DEMO_JSON}` : '';
@@ -824,7 +938,7 @@ async function runLeg(name, room, mode) {
       `__sdfGame.bench({ room: ${room}, mode: "passes", warmup: 4, chunkFrames: 2, label: ${JSON.stringify(`${label}-probe`)}${holdOpt}${probeNoShots}${demoOpt} })`,
       // A demo probe replays the whole recording, not a 6-frame smoke test, so
       // the 30 s scripted guard is far too tight.
-      DEMO ? 30 * 60_000 : 30_000,
+      DEMO ? 30 * 60_000 : PROBE_TIMEOUT_MS,
     );
   } catch (e) {
     return { aborted: 'frame-cap', probeP50: null, error: `probe evaluate failed: ${e?.message ?? e}` };
@@ -854,6 +968,8 @@ async function runLeg(name, room, mode) {
   const opts = mode === 'spike'
     ? `{ room: ${room}, mode: "spike", warmup: ${runWarmup}, label: ${JSON.stringify(label)}${holdOpt}${demoOpt} }`
     : `{ room: ${room}, mode: ${JSON.stringify(mode)}, warmup: ${runWarmup}, chunkFrames: ${CHUNK}, label: ${JSON.stringify(label)}${holdOpt}${demoOpt} }`;
+  progress.phase = 'bench:await-loop';
+  await awaitLoopResumed(label);
   progress.phase = 'bench';
   await evaluate(`__sdfGame.bench(${opts})`, DEMO ? 30 * 60_000 : undefined);
   progress.phase = 'collect';
@@ -876,6 +992,14 @@ async function runLeg(name, room, mode) {
   r.perBodyTilesOn = await evaluate('typeof __sdfGame.tiles === "function" ? __sdfGame.tiles().enabled : null');
   r.crowdTilesOn = r.crowdInfo && r.crowdInfo.on === true ? !!r.crowdInfo.tilesOn : null;
   r.tilesOn = r.crowdInfo && r.crowdInfo.on === true ? r.crowdTilesOn : r.perBodyTilesOn;
+  // Early-Z legs: the state at the END of the measured run (seed on/off and the
+  // front/back batches of the last sync), next to the boot-time line above.
+  if (String(legOverrides._query ?? '').includes('earlyz=1')) {
+    r.earlyzInfo = JSON.parse(await evaluate('JSON.stringify(__sdfGame.earlyzInfo ? __sdfGame.earlyzInfo() : null)'));
+    console.log(`  [${name}] earlyzInfo(end of run)=${JSON.stringify(r.earlyzInfo)}`);
+  }
+  r.startedAt = startedAt;
+  r.endedAt = new Date().toISOString();
   return r;
 }
 
@@ -1257,7 +1381,7 @@ function writePassReport() {
   const out = [];
   out.push('# Per-pass GPU attribution');
   out.push('');
-  out.push(`${W}x${H}, repeats=${REPEATS}, rooms=${ROOM_IDS.join(',')}${PRELUDE ? `, prelude: ${PRELUDE}` : ''}${QUERY ? `, query: ${QUERY}` : ''}`);
+  out.push(`${W}x${H}, repeats=${REPEATS}, rooms=${ROOM_IDS.join(',')}${PRELUDE ? `, prelude: ${PRELUDE}` : ''}${QUERY ? `, query: ${QUERY}` : ''}${CROWD ? `, crowd: ${CROWD}${SCENE ? ` (scene ${SCENE})` : ''}` : ''}${DEMO_PATH ? `, demo: ${DEMO_PATH}` : ''}`);
   out.push('');
   if (failures.length || abandoned || aborts.length) {
     if (abandoned) out.push(`**MATRIX ABANDONED EARLY: ${abandoned} — later legs were never attempted.**`);
@@ -1357,7 +1481,7 @@ function writePassReport() {
   console.log(text);
   writeFileSync(`${OUT}/passes.md`, text);
   writeFileSync(`${OUT}/passes.json`, JSON.stringify({
-    meta: { url, W, H, repeats: REPEATS, rooms: ROOM_IDS, backend, prelude: PRELUDE, when: new Date().toISOString() },
+    meta: { url, W, H, repeats: REPEATS, rooms: ROOM_IDS, backend, prelude: PRELUDE, crowd: CROWD, scene: SCENE, demo: DEMO_PATH, when: new Date().toISOString() },
     results, perSeg,
   }, null, 2));
   console.log(`wrote ${OUT}/passes.md and ${OUT}/passes.json`);
