@@ -71,3 +71,32 @@ n06 = grain on with `surfaceNoiseAmp` 0.06.
 - Task 8 done: cost PASS, march-hash MATCH, cold boot PASS on the controller's A/B re-check (the in-run ratio of 1.28
   was session drift).
 - Task 9 done: directory suite 463 files, 6638 tests, all pass (6637 passed, 1 pre-existing skip in game-actor-soldier).
+
+## Owner gate (Task 10)
+
+The frames above (kit hidden) and the numbers in Tasks 7–8. Questions for the owner:
+
+1. **Up close, does the body read like the face?** `torso-off` vs `torso-on`, and `head-on` for the face-to-neck
+   crossing (fine octave, 3.5 mm cells).
+2. **At your usual 1.35 m framing:** `full-off` vs `full-on`. The coarse octave (1.2 cm cells, about 2.3 SDF px) is at
+   full strength there. Does it read as the same grain?
+3. **How far it reaches.** With `GRAIN_CELL_COARSE = 0.012` the lab is full to 1.48 m, half at 1.97 m, and gone
+   beyond 2.96 m. The game estimate is about 1.6 / 2.2 / 3.25 m. To be textured at 3–4 m, the options are:
+   - `0.016`: lab 1.97 / 2.63 / 3.94 m, with chunkier 3.1 px cells at 1.35 m. One constant in `body-grain.ts`.
+   - A third octave at about 0.04 m: plus 7 hashes, drawn only in its own band.
+
+   Keep 0.012, or which?
+4. **`surfaceNoiseAmp`:** keep the 2026-10-01 preview's 0.22, or go back toward 0.06 now that the grain carries the
+   texture? Compare `torso-on` with `torso-on-n06`.
+5. **Two optional fades** (beyond the spec): the grain is off on painted (`color=`) prims and inside wounds. Keep them?
+6. **Motion:** stills cannot show crawl. To look live, run `npx vite`, open `/sdf-lab-webgpu.html?character=goblin`,
+   and use the material panel's `grain` slider; "save skin → repo" writes it.
+
+Each answer becomes an edit with a number behind it:
+- the coarse cell is `GRAIN_CELL_COARSE` in `body-grain.ts` (the tests read the constant);
+- the noise is `surfaceNoiseAmp` in `goblin.blob`, with its comment rewritten to the owner's verdict;
+- the fades are `grainMask` in `body-grain.ts` and the `grainMask` line in `body-grain.wgsl.ts`, with their tests.
+
+Re-shoot only the frames an edit affects.
+
+- Task 10 done: task board, reference and gate questions written; awaiting the owner.
