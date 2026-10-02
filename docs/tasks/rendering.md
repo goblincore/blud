@@ -23,6 +23,17 @@ The march, temporal work, the upscaler, post, perf sessions. Part of the task wi
   it; the bench harness waits as a workaround). `game-context-coverage` bindings (`actorFill`, `fleshSpawnRng`) are fixed on
   main (`d24a953d`); they clear when main is merged into this branch.
 
+- [ ] **Before any default flip** (final review 2026-10-02; none blocks merging with the flag OFF):
+  - N1: `earlyz/flag-off-node-ids.test.ts` is order-dependent; fold it into one sequential `it`, or `vi.resetModules()` and assert deltas.
+  - N2: three's synchronous pipeline path opens only a validation scope, so a GPU internal error (e.g. a Metal compile
+    failure) on a front pipeline created at first draw (`?warm=0`, a runtime `setDispatch('boxes')`, crowd types created
+    after the background job) is invisible to `pipeline-watch`. Treat `gpuErrors` growth after a front mesh's first draw
+    as a failure, or background-compile runtime-created types.
+  - N3: `scripts/sdf-game-bench.mjs` `checkEarlyzState` must fail a leg with any `batches[*].frontDisabled`.
+  - N4: read the pipeline from `getForRender`'s return value, not `renderObject.pipeline`.
+  - N5: install the watch after the deferred, accum and crowd-off guards.
+  - N6: fix the stale mock comment in `earlyz-boot.test.ts`.
+
 ## Shared light list, Part 3 plan 1 — done, pending owner sign-off 2026-09-27
 
 - [x] Spec written: [`docs/superpowers/specs/2026-09-26-shared-light-list-design.md`](../superpowers/specs/2026-09-26-shared-light-list-design.md);
