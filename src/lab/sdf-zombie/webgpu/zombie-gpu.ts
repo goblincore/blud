@@ -1770,6 +1770,7 @@ export function createCrowdMaterial(
   sharedLevelShadowTex?: ReturnType<typeof texture>,
   // EARLY-Z (spec 2026-10-01 D2-D4), POSITIONALLY LAST. `front: true` builds the
   // front-face, conservative-depth twin of the boxes material. Omitted: unchanged.
+  // With dispatch 'quad' it is silently ignored (the quad has no front face to proxy).
   earlyz?: { front: boolean },
 ): CrowdMaterialHandles {
   const quad = dispatch === 'quad';
@@ -1792,6 +1793,7 @@ export function createCrowdMaterial(
   // worldPos, so ray-window's tMaxBox = length(worldPos - camPos) is the exit the back
   // face used to give it (the hull-refine-view.ts pattern). startT 0 and the type's own
   // marchCfg are exactly what the boxes path passes when `rays` is undefined (no cone).
+  // Do NOT add `rayDir` here: `rays?.rayDir !== undefined && tiles` (createMarchMaterial) switches to the quad empty-tile gate path.
   const frontRays: MarchRayOverride | undefined = earlyzFront
     ? {
         worldPos: earlyzBoxExitPoint({

@@ -2,8 +2,10 @@
 //
 // D3: a `frag_depth, greater` shader PROMISES the written depth is at or beyond the
 // fragment's raster depth; breaking it is undefined behaviour. The written depth is
-// therefore max(marched, raster). `depth` is three's interpolated perspective depth of
-// the FRONT face (ViewportDepthNode.DEPTH). The proxy box is padded by maxBlendK*4 + 5 cm
+// therefore max(marched, reconstructed raster depth). `depth` is three's
+// viewZToPerspectiveDepth(positionView.z) of the FRONT face (ViewportDepthNode.DEPTH): a
+// reconstruction within a few ulps of the hardware raster depth, not the hardware value
+// itself. The proxy box is padded by maxBlendK*4 + 5 cm
 // per side, so a real hit sits centimetres behind it and the clamp bites only on rounding.
 //
 // `depth` reconstructs the raster depth from positionView.z, which equals the rasterised
