@@ -16,6 +16,9 @@
   optimization pass (torn-wound cost, first-swing hitch, grey gib-blur smears). Gate `scripts/flail-gate.mjs`.
 - [~] **Melee head damage model v2 built; owner playtest pending** — regions, 3D eyes that pop, brain gib, jelly
   wobble, the skull deforms with the flesh. Gate `scripts/head-damage-gate.mjs`.
+- [~] **Slug head burst built; owner playtest pending** — a slug through the head's centre bursts it (lethal, head stays
+  on, torn scalp flaps); off-centre it ruptures one side and the zombie lives. Gate `scripts/head-burst-gate.mjs`.
+  [Spec](docs/superpowers/specs/2026-10-02-slug-head-burst-design.md) · [notes](docs/dev-notes/2026-10-02-head-burst/NOTES.md).
 
 **Night Train (level 1)** — [levels](docs/tasks/levels.md) (items 4a–4k)
 - [x] **Body lighting settled** (owner, 2026-09-28): LIGHT LAYERS panel (`light-layers.ts`) — every body-lighting

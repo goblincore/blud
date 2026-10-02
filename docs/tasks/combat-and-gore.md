@@ -4,9 +4,12 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
 
 ## Slug head burst — designed 2026-10-02
 
-- [ ] **Slug on the head: lethal burst (dead-centre) and glancing rupture (off-centre).** Jelly rupture deform, skull
-  shards, brain, blood and hinged torn scalp flaps; the head stays on the body. Spec approved, plan next:
-  [spec](../../docs/superpowers/specs/2026-10-02-slug-head-burst-design.md).
+- [~] **Slug on the head: lethal burst (dead-centre) and glancing rupture (off-centre). Built 2026-10-02; owner playtest
+  pending.** Jelly rupture deform, skull shards, brain, blood and hinged torn scalp flaps (one draw); the head stays on
+  the body. Plain zombie only. [Spec](../../docs/superpowers/specs/2026-10-02-slug-head-burst-design.md) ·
+  [plan](../../docs/superpowers/plans/2026-10-02-slug-head-burst.md) ·
+  [notes](../../docs/dev-notes/2026-10-02-head-burst/NOTES.md) · gate `scripts/head-burst-gate.mjs`. Tune live with
+  `__sdfGame.head.burstTune({ centreFrac, swell, shardScale, flapCount, on })`.
 - [ ] **Spike (separate, not started): shader-side burst/peel displacement field** (approach C of the same spec) for
   truer jelly peeling flesh. New march WGSL, shared march cost, and a Rust port to carry; only after the composed
   version has been played.

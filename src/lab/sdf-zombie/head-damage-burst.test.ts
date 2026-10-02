@@ -37,6 +37,20 @@ describe('burstHit', () => {
     expect(b.events.some(e => e.kind === 'kill')).toBe(true);
     expect(b.state.dead).toBe(true);
   });
+  it('a SECOND glancing slug on the same region kills (the first cracked it; a slug is itself a head hit)', () => {
+    const a = burstHit(makeHeadDamage(), { hs: crownHs, lethal: false }).state;
+    const b = burstHit(a, { hs: crownHs, lethal: false });
+    expect(b.state.dead).toBe(true);
+    expect(b.state.skull.crown).toBeCloseTo(REGION_TUNING.glanceSkull + REGION_TUNING.skullPerHit, 9);
+    expect(b.events.some(e => e.kind === 'kill')).toBe(true);
+  });
+  it('glancing slugs on DIFFERENT regions each crack their own region and do not kill', () => {
+    const a = burstHit(makeHeadDamage(), { hs: crownHs, lethal: false }).state;
+    const b = burstHit(a, { hs: [...HEAD_REGIONS.cheekR], lethal: false });
+    expect(b.state.dead).toBe(false);
+    expect(b.state.skull.crown).toBeCloseTo(REGION_TUNING.glanceSkull, 9);
+    expect(b.state.skull.cheekR).toBeCloseTo(REGION_TUNING.glanceSkull, 9);
+  });
   it('headHit keeps brainLeak (state is spread, not rebuilt)', () => {
     const a = burstHit(makeHeadDamage(), { hs: crownHs, lethal: false }).state;
     const b = headHit(a, { hs: [...HEAD_REGIONS.cheekR], strip: 0.4 }, mid);

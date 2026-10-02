@@ -11,7 +11,7 @@ import type { Primitive, Vec3 } from './types';
 export const FLAP = {
   nodes: 3,
   /** Chain length, m. */
-  len: 0.09,
+  len: 0.1,
   stepHz: 120,
   damping: 4,
   gravity: 9.81,
@@ -19,13 +19,17 @@ export const FLAP = {
   stiff: 400,
   iterations: 4,
   /** Flesh capsule radius at the hinge and at the tip, m. */
-  r0: 0.02,
-  r1: 0.011,
+  r0: 0.014,
+  r1: 0.008,
   /** The underside strip's radius share and its offset toward the head (m). */
   under: 0.55,
   underOffset: 0.006,
   kickSpeed: 1.8,
 } as const;
+
+/** Torn scalp: raw meat, darker than the thrown flesh bits' MEAT (their bright red read as orange tubes on the head
+ *  capture, look loop 2026-10-02). */
+const FLAP_FLESH: Vec3 = [0.52, 0.07, 0.05];
 
 export interface FlapState { p: Vec3[]; prev: Vec3[]; acc: number }
 
@@ -94,7 +98,7 @@ export function flapPrims(s: FlapState, inward: Vec3): Primitive[] {
   const n = s.p.length, out: Primitive[] = [];
   for (let k = 0; k < n - 1; k++) {
     const t0 = k / (n - 1), t1 = (k + 1) / (n - 1);
-    out.push(prim(s.p[k]!, s.p[k + 1]!, FLAP.r0 + (FLAP.r1 - FLAP.r0) * t0, GORE_COLORS.meat,
+    out.push(prim(s.p[k]!, s.p[k + 1]!, FLAP.r0 + (FLAP.r1 - FLAP.r0) * t0, FLAP_FLESH,
       { radiusB: FLAP.r0 + (FLAP.r1 - FLAP.r0) * t1, gloss: 0.55, blendK: 0.004, op: 'add' }));
   }
   const off: Vec3 = [inward[0] * FLAP.underOffset, inward[1] * FLAP.underOffset, inward[2] * FLAP.underOffset];

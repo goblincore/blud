@@ -217,7 +217,8 @@ export function headHit(
 
 /** A SLUG BURST (slug head burst, spec §5). `hs`: the hit, head-local ÷ half-extents. Lethal: the nearest skull region is
  *  bare and fully cracked and the head dies. Glancing: it is bare and cracked to glanceSkull with brainLeak, and the
- *  zombie lives (a follow-up hit there finishes it by the ordinary skullPerHit rule). Dangling eyes snap either way.
+ *  zombie lives (a follow-up hit there finishes it by the ordinary skullPerHit rule; a second glancing slug on the same region
+ *  escalates by skullPerHit too). Dangling eyes snap either way.
  *  Deterministic: draws nothing from a random stream. */
 export function burstHit(
   s: HeadDamageState, hit: { hs: HS; lethal: boolean },
@@ -240,7 +241,14 @@ export function burstHit(
     return { state: { ...s, hits: s.hits + 1, flesh, skull, eyes, anchor, dead: true }, events };
   }
   flesh[region] = Math.min(flesh[region], REGION_TUNING.skullExposed * 0.5);
-  skull[region] = Math.max(skull[region], REGION_TUNING.glanceSkull);
+  // A region the skull of which is ALREADY cracked this far takes a second slug as a plain skull hit: it escalates, so
+  // two glancing slugs on one spot kill (0.8 + skullPerHit ≥ 1). Otherwise the first one cracks it to glanceSkull.
+  const repeat = skull[region] >= REGION_TUNING.glanceSkull;
+  skull[region] = repeat ? skull[region] + REGION_TUNING.skullPerHit : REGION_TUNING.glanceSkull;
+  if (skull[region] >= 1) {
+    events.push({ kind: 'kill' });
+    return { state: { ...s, hits: s.hits + 1, flesh, skull, eyes, anchor, brainLeak: true, dead: true }, events };
+  }
   return { state: { ...s, hits: s.hits + 1, flesh, skull, eyes, anchor, brainLeak: true }, events };
 }
 

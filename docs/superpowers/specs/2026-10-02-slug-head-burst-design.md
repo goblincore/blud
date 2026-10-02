@@ -191,3 +191,24 @@ Pure modules stay renderer-free per the repo's plan rules. Hand-written WGSL is 
 3. Whether the skeleton-mesh skull needs any extra handling for the lasting rupture beyond `headAffineMatrix`.
 4. Flap count and sharing under the draw budget, set by measurement.
 5. Which other characters' head frames resolve through `headShape` (goblin, bride, minotaur, warbull).
+
+## 11. As built (deviations from §1–10)
+
+Built 2026-10-02 from [the plan](../plans/2026-10-02-slug-head-burst.md); what was and was not verified is in
+[the build notes](../../dev-notes/2026-10-02-head-burst/NOTES.md).
+
+1. **Debug surface** is console seams, `__sdfGame.head.burstTune({ on, centreFrac, swell, shardScale, flapCount })` and
+   `burstTuning()`, not a UI panel. The game's convention is seams (`setFleshBits`); sliders exist only in the lab pages.
+2. **Finishing a glancing rupture.** The next hit nearest the cracked region finishes it (the existing `skullPerHit` rule),
+   and so does a second *glancing slug* on the same region (it escalates by `skullPerHit`; found by the gate: it used to
+   stay at 0.8 forever). A follow-up on a different region follows the ordinary ladder.
+3. **Eyes on a glancing hit** are not popped by the burst; only dangling eyes snap. Later hits pop them via the existing events.
+4. **Shards are flattened plates**, not curved. Curvature is unproven on the gib view's capsules.
+5. **Eligibility is `a.profileName() === 'zombie'`**, which excludes soldiers, armoured characters and every other character
+   in one test (the plan had proposed a new `armored` accessor; the existing profile name is simpler and stricter). Other
+   characters keep today's slug behaviour. Whether any of them resolves a usable head frame is still unmeasured.
+6. **Head crater slots** went 7 → 8 (`MAX_HEAD_WOUNDS`) for the exit crater.
+7. **A slug on the neck or shoulder** (hit point beyond `BURST.maxHs` = 1.35 head-ellipsoid units from the head centre)
+   takes the ordinary path, which still severs through `severRadius`.
+8. **Slug on a corpse's head** still ruptures it (the model reports `burst` without changing a dead head's state).
+9. **Frame cost is unmeasured** (see the notes): the gate checks that all flaps share one draw, not milliseconds.

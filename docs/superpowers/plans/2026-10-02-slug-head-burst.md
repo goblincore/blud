@@ -1660,3 +1660,21 @@ git commit -m "docs: slug head burst as built, task wiki" -m "Co-Authored-By: Cl
 ```
 Expected: `tsc` clean, the listed suites PASS. State in the commit/hand-off exactly what ran: pure tests and the capture gate
 (with its `N checks, 0 failed` line), and that boot-time was not measured because no shader or material changed.
+
+---
+
+## As executed (2026-10-02)
+
+All eleven tasks were executed in this branch; the commits follow the plan's task order. Where reality differed from the
+plan (also in spec §11):
+
+- **Task 7:** the baseline `head-damage-gate.mjs` already failed 2 of 47 checks before any leaf edit (the plan said to stop
+  in that case). The comparison was made on the *shape* of the results instead: after the refactor, 47 checks and the same
+  glow-drop failure, with the cost check flipping to pass (timer noise).
+- **Task 8a** (the `armored` accessor on `ZombieActor`) was dropped: eligibility is `a.profileName() === 'zombie'`.
+- **Task 3** gained a rule found by the Task 10 gate: a second glancing slug on an already-cracked region escalates by
+  `skullPerHit` and kills (with its unit tests).
+- **Task 10:** the gate shoots from 2 m with a solved stance (the muzzle is ~0.6 m off-axis and the slug drops), and its
+  cost check became "all flaps share one draw" with the frame time reported ungated (see the build notes).
+- **Look loop:** one pass on the flaps (`FLAP.r0/r1/len`, a darker flesh colour); they remain bright and tube-like, left
+  for the owner's playtest.
