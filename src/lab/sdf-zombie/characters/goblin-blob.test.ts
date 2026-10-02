@@ -194,6 +194,21 @@ describe('goblin.blob', () => {
     expect(gut(lowSpine)).toBeGreaterThan(0.008);
   });
 
+  // THE CLOTHES ARE PAINT (owner, 2026-10-02). Pants on the hips and legs, a dark shirt on the trunk, so the kit has no
+  // trousers or skirt to clip. If one of these loses its `color=` the goblin quietly goes bare there, and the render is
+  // the only other thing that would say so. Neck, arms, head, hands, the ankle knob and the feet stay flesh.
+  it('wears painted pants and a painted undershirt', () => {
+    const painted = (limb: string, bone: string) =>
+      doc.parts.filter(p => p.limb === limb && p.bone === bone && p.color != null);
+    expect(painted('leg', 'thigh').length, 'thigh pants').toBeGreaterThan(0);
+    expect(painted('leg', 'shin').length, 'shin pants').toBeGreaterThan(0);
+    expect(painted('torso', 'pelvis').length, 'pelvis trousers').toBeGreaterThan(0);
+    expect(painted('torso', 'spine1').length, 'undershirt').toBeGreaterThan(0);
+    expect(painted('torso', 'chest').length, 'undershirt chest').toBeGreaterThan(0);
+    for (const l of ['arm', 'head'])
+      expect(doc.parts.filter(p => p.limb === l && p.color != null).length, `${l} stays flesh`).toBe(0);
+  });
+
   // No ball joints on the limbs. The orbs that stay are a style the owner kept (early 3D): the hands, the shoulder
   // round (which is also the arm's `core`), the ankle knob and the toe pad. Any other point-blob on an arm or a leg
   // is a joint orb coming back.

@@ -101,7 +101,7 @@ describe('goblin-kit.gltf fits goblin.blob', () => {
   it('decodes the compiled kit', () => {
     // Named explicitly so a material vanishing from the .wam is a failure
     // rather than a silently smaller test. `cloth` was here until the kilt
-    // became a plate fauld.
+    // became a plate fauld, which is itself gone (the trousers are paint).
     expect([...groups.keys()].sort()).toEqual(['band', 'brass', 'glass', 'iron', 'leather', 'screen']);
     // >=, not >: WAM's `kind=box` emits exactly 8 corner vertices
     // (mesh.py:1170-1176), which is what the watch body/screen are.
