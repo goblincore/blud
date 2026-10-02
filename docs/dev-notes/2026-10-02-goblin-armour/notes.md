@@ -25,3 +25,13 @@
   the old fat boots stood proud of the flesh outline; the new kit hugs the flesh by design. The pauldrons will
   protrude again, so re-check it after Task 5 and re-aim the test at the shoulder band if needed.
 - Frame: `task3-walk.png` (the walk gait is still the zombie shamble: arms out is phase 4's problem, not the kit's).
+
+## Task 4: utility belt (2026-10-02)
+
+- Belt on the hips bone only (a loft spanning the hips->spine1 bend folded: WAM warned "doubles back"), y 0.669-0.705 m,
+  ending on the pants/shirt paint seam. Brass buckle, two front-corner pouches (mirrored), one back pouch.
+- **Measure trap, recorded in measure.md:** at belt height the whole body is 0.209 m wide (thigh tops), the torso cluster
+  alone 0.162 m. The first belt used the torso number and had side vertices 12 mm inside the thighs; the pin now measures
+  against the whole body. Same trap as the soldier kit's header warns about for arms.
+- The old breastplate's bottom rings were trimmed so the belt is visible; the piece is replaced in Task 5.
+- Frames: `task4-front.png`, `task4-back.png`.

@@ -192,6 +192,36 @@ describe('goblin-kit.gltf fits goblin.blob', () => {
   // Measured 2026-10-02: shaft 6.4-7.9 mm off the flesh (the whole height), cuff 10.6-14.1 mm (it flares over the boot
   // top on purpose). The bounds sit ~2 mm above those, so a ring that goes loose by one table-row fails and the next
   // body change has to re-measure rather than pass quietly.
+  // THE BELT SIZED FROM THE WRONG FLESH, once. At belt height the widest flesh is the tops of the thighs (hip joints at
+  // x 0.058, r 0.046), so the whole body is 0.209 m wide there while the torso alone is 0.162 m; a belt sized from the
+  // torso cluster had side vertices 12 mm inside the thighs. The belt and its pouches are measured here against the
+  // WHOLE body. The window excludes the forearm bracers (they are leather too, and hang at x >= 0.10 m).
+  // Measured 2026-10-02: tightest vertex 1.5 mm off the flesh (a pouch's inner face), farthest 46.8 mm (the back pouch's
+  // outer face); buckle 10.5-37.7 mm off.
+  it('belt, pouches and buckle sit on the waist', () => {
+    const near = groups.get('leather')!.filter(v => v[1] > 0.64 && v[1] < 0.74 && Math.abs(v[0]) < 0.095);
+    expect(near.length, 'belt vertices found').toBeGreaterThan(30);
+    const d = near.map(v => sdBody(v, body));
+    expect(Math.min(...d), 'no belt vertex inside the flesh').toBeGreaterThan(0);
+    expect(Math.max(...d), 'nothing hangs more than 55 mm off').toBeLessThan(0.055);
+    const bk = groups.get('brass')!.map(v => sdBody(v, body));
+    expect(Math.min(...bk), 'buckle is clear of the flesh').toBeGreaterThan(0.005);
+    expect(Math.max(...bk), 'buckle is not floating').toBeLessThan(0.045);
+  });
+
+  // Measured 2026-10-02: shaft 6.4-7.9 mm off the flesh (the whole height), cuff 10.6-14.1 mm (it flares over the boot
+  // top on purpose). The bounds sit ~2 mm above those, so a ring that goes loose by one table-row fails and the next
+  // body change has to re-measure rather than pass quietly.
+  it('PROBE belt', () => {
+    const belt = groups.get('leather')!.filter(v => v[1] > 0.64 && v[1] < 0.74 && Math.abs(v[0]) < 0.095);
+    const ds = belt.map(v => sdBody(v, body));
+    console.log('belt', belt.length, Math.min(...ds).toFixed(4), Math.max(...ds).toFixed(4));
+    belt.map((v, i) => ({ v, d: ds[i]! })).sort((a, b) => a.d - b.d).slice(0, 4)
+      .forEach(o => console.log('low', o.v.map(n => n.toFixed(3)).join(','), o.d.toFixed(4)));
+    const bk = groups.get('brass')!.map(v => sdBody(v, body));
+    console.log('brass', Math.min(...bk).toFixed(4), Math.max(...bk).toFixed(4));
+  });
+
   it('boot shaft and cuff hug the leg without floating', () => {
     const shaft = standoff('boot');
     expect(shaft.n, 'shaft vertices measured').toBeGreaterThan(20);

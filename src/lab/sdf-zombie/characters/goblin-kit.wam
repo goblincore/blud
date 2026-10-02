@@ -259,8 +259,8 @@ parts
     # fit test cannot see this: it asks whether armour is inside flesh, and
     # this is flesh outside armour. Coverage, not containment — the same
     # distinction that hid the pauldron bug.
-    ring 0.20 w=0.156 d=0.208
-    ring 0.40 w=0.150 d=0.192
+    # TRIMMED 2026-10-02 so the new belt is visible; this whole piece is replaced
+    # by the shallow chest plate in goblin armour Task 5.
     ring 0.60 w=0.130 d=0.156
     ring 0.76 w=0.136 d=0.154
     ring 0.90 w=0.128 d=0.136
@@ -296,21 +296,60 @@ parts
     ring 1.00 w=0.016 d=0.024 tip
     cap start=point end=point
 
-  # BELT — around the pelvis, above the widest part of the gut. Deliberately
-  # not at the fattest ring: a belt there reads as a stripe painted on the
-  # stomach, whereas one above it reads as something the stomach hangs over,
-  # which is the goblin note.
+  # UTILITY BELT — rebuilt 2026-10-02 against the phase-1 body (owner: "some
+  # kind of utility belt around the waist"; the old belt was sized for a gut
+  # 11% wider and 27% deeper, and its buckle floated 5 cm off the new belly).
+  #
+  # It sits ON THE PAINT SEAM: the pants end and the shirt starts where the
+  # pelvis and spine1 bars meet (y 0.705 m at rest, see goblin.blob), so the belt
+  # is what a viewer reads as the join. Lofted along the hips..spine1 chain
+  # (0.105 + 0.135 = 0.240 m, root at y 0.60), rings at y 0.679 / 0.701 / 0.722.
+  # WAM FOLDED THAT: a loft spanning the hips->spine1 bend (13 deg) with rings this
+  # wide doubles back ("missing faces"). So the belt is lofted on the hips bone alone,
+  # rings at hips t0.66 / 0.84 / 1.00 = y 0.669 / 0.688 / 0.705 m: a 36 mm belt that
+  # ends exactly on the paint seam. Ring sizes are the same flesh x 1.10 numbers.
+  #
+  # Flesh there (metres, measure.md): pelvis t0.75 w 0.1573 d 0.1761 with the
+  # section's centre 0.0137 forward of the bone axis (the gut is in front, the
+  # back is flat); pelvis t1.0 / spine1 t0 w 0.1618 d 0.1807, centre +0.0131;
+  # spine1 t0.15 w ~0.158 d ~0.178, centre +0.006. THE WIDTH IS NOT THE TORSO'S: at belt
+  # height the widest flesh is the TOPS OF THE THIGHS (hip joints at x 0.058, r 0.046),
+  # so the whole-body width is 0.2088-0.2101 m (measure.md, "WHOLE BODY"), not the
+  # torso cluster's 0.1618. The first belt used the torso number and its side vertices
+  # sat 12 mm inside the thigh tops. Width = 0.209 x 1.10 / 1.30 = 0.1775; depth is
+  # still the torso's (nothing else reaches front or back). Every ring is flesh x 1.10 / 1.30
+  # with `fwd` carrying the centre offset: 10% is the facet margin for `style
+  # chunky` plus a hair of belt thickness (facet midpoints land ~1-2 mm proud,
+  # the vertices ~8 mm), thin on purpose, because a belt that stands off the
+  # body reads as a hoop. The asymmetry matters: centred on the bone axis the
+  # belt would float at the back and cut into the gut.
   loft belt bones=hips..hips material=leather
-    ring 0.32 w=0.122 d=0.156
-    ring 0.54 w=0.134 d=0.182
-    ring 0.68 w=0.140 d=0.190
+    ring 0.66 w=0.1775 d=0.1490 fwd=0.0105
+    ring 0.84 w=0.1775 d=0.1529 fwd=0.0101
+    ring 1.00 w=0.1775 d=0.1529 fwd=0.0101
     cap start=none end=none
 
-  # BUCKLE — brass on the front of the belt. NOT `on=belt`: that snaps the
-  # origin to the belt's surface and then sinks it in by an inset, which buried
-  # this so far that even its FRONT face measured 1 mm inside the goblin. It is
-  # placed by hand and checked by the fit test instead.
-  attach buckle bone=hips kind=box at=0.52 offset=(0,0,0.135) size=0.030 w=0.044 d=0.020 material=brass
+  # BUCKLE — brass, front centre. NOT `on=belt` (it sinks the origin in by an
+  # inset and buried the old buckle). Hand-placed: hips t0.95 is y 0.70 m, and the
+  # belt's front vertex is 0.1117 m forward there, so the box (0.026 m deep)
+  # is centred at z 0.1227 m = 0.0944 of height, its front face standing 11 mm
+  # proud of the belt and its back face 2 mm inside it.
+  attach buckle bone=hips kind=box at=0.95 offset=(0,0,0.0944) size=0.030 w=0.044 d=0.020 material=brass
+
+  # POUCHES — at the belt's FRONT CORNERS, not at the hip: the hanging forearm
+  # owns the flank (the soldier kit's measured lesson; the goblin's forearm is at
+  # x 0.14-0.16 m and the hand at 0.144), so anything at x >= 0.10 m is swallowed
+  # or collides in the swing. The corner is where the belt ellipse passes
+  # x 0.070 m, z 0.090 m (0.0131 + 0.0969 * sqrt(1 - (0.070/0.1152)^2), the belt ellipse is
+  # now 0.230 m wide); a box is centred 7 mm outside that so 2 mm of it is tucked into
+  # the belt, hanging from the belt line (hips t0.81 = y 0.685 m). Boxes are 8 vertices each.
+  mirror
+    attach pouch bone=hips kind=box at=0.81 offset=(0.0538,0,0.0747) size=0.034 w=0.030 d=0.018 material=leather
+  end
+
+  # BACK POUCH — one, centred, on the flat back. The belt's back vertex is at
+  # z -0.0863 m (0.0131 - 0.0994); the box is centred 11 mm behind that.
+  attach backpouch bone=hips kind=box at=0.81 offset=(0,0,-0.0746) size=0.032 w=0.038 d=0.018 material=leather
 
   # NO FAULD, CLEAVER OR BUCKLER (owner, 2026-10-02). The pelvic skirt clipped
   # both thighs and the gut and is gone; the trousers are paint in goblin.blob.

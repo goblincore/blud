@@ -79,3 +79,10 @@ tunic. `goblin-kit.test.ts` could not see it (it bounds armour *inside* flesh, n
   z +0.146, width 0.052 (arch) to 0.074 (ball). That is the known "8-10 cm foot stretch" (refinement spec, phase 4):
   build the boot around the flesh where it is, from the bones, not from the ground plane.
 - Ankle knob: shin t1.0 w 0.0665, d 0.0618.
+--- WHOLE BODY at belt height (thigh tops widen the hips: cluster-isolated torso numbers under-measure here) ---
+ALL pelvis t0.50  c=(0.000,0.652,0.000)  w=0.2101 (+x 0.1050 / -x 0.1050)  d=0.1648 (+z 0.0962 / -z 0.0685)  up=  --   dn=0.1196
+ALL pelvis t0.66  c=(0.000,0.669,0.000)  w=0.2100 (+x 0.1050 / -x 0.1050)  d=0.1726 (+z 0.1002 / -z 0.0724)  up=  --   dn=0.1364
+ALL pelvis t0.84  c=(0.000,0.688,0.000)  w=0.2096 (+x 0.1048 / -x 0.1048)  d=0.1787 (+z 0.1027 / -z 0.0759)  up=  --   dn=0.1553
+ALL pelvis t1.00  c=(0.000,0.705,0.000)  w=0.2088 (+x 0.1044 / -x 0.1044)  d=0.1807 (+z 0.1034 / -z 0.0773)  up=  --   dn=0.1721
+ALL spine1 t0.10  c=(0.000,0.718,0.003)  w=0.2050 (+x 0.1025 / -x 0.1025)  d=0.1826 (+z 0.0999 / -z 0.0827)  up=  --   dn=0.1857
+ALL spine1 t0.25  c=(0.000,0.738,0.008)  w=0.1847 (+x 0.0923 / -x 0.0923)  d=0.1748 (+z 0.0938 / -z 0.0810)  up=  --   dn=0.2058
