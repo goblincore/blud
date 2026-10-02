@@ -123,6 +123,10 @@ describe('front-face crowd material, generated WGSL (spec D2-D4)', () => {
   it('front: the march gets the analytic box EXIT as worldPos', () => {
     const args = callArgs(front.fs, 'marchBody');
     expect(args[0]).toMatch(/^earlyzBoxExitPoint\(/);
+    // the exact call: camera, a NORMALISED camera-to-fragment ray (not flipped, not scaled), then the
+    // instance centre and half extent varyings in that order
+    const exact = callArgs(canonicalIds(front.fs), 'marchBody')[0]!.replace(/\s+/g, ' ');
+    expect(exact).toBe('earlyzBoxExitPoint( render.cameraPosition, normalize( ( v_positionWorld - render.cameraPosition ) ), nodeVarying#0, nodeVarying#1 )');
     // the exit is computed from the camera and the fragment's world position (the ray), nothing else
     expect(args[0]).toContain('render.cameraPosition');
     expect(args[0]).toContain('v_positionWorld');
@@ -130,7 +134,10 @@ describe('front-face crowd material, generated WGSL (spec D2-D4)', () => {
     expect(callArgs(shipped.fs, 'marchBody')[0]).toBe('v_positionWorld');
   });
 
-  it('front: every marchBody argument after worldPos matches the shipped one (startT and marchCfg included)', () => {
+  // Text-level: it pins the literals (startT), the argument count and order, and which arguments alias
+  // one another. It cannot tell two same-typed, same-group uniforms apart, so marchCfg's identity is
+  // NOT pinned here.
+  it('front: every marchBody argument after worldPos reads the same as the shipped one (literals, order, aliasing)', () => {
     const f = callArgs(canonicalIds(front.fs), 'marchBody');
     const s = callArgs(canonicalIds(shipped.fs), 'marchBody');
     expect(f.length).toBe(s.length);
