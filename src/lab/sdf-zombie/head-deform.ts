@@ -35,6 +35,24 @@ export const HEAD_DEFORM = {
   restV: 1e-2,
 } as const;
 
+/** THE BURST SPRING (slug head burst, spec §6.1). `swell` is the peak stretch along the shot axis; the spring then
+ *  rings (hz, zeta) toward a lasting `rest` = swell · restFrac (the exit side stays bulged), while `across` widens the
+ *  head across the shot in proportion to how far b is above rest (the transient inflate only). */
+export const BURST_DEFORM = {
+  swell: 0.32,
+  rest: 0.35,
+  hz: 9,
+  zeta: 0.3,
+  across: 0.45,
+  maxB: 0.6,
+  /** The entry-side dent depth (addDent, capped by HEAD_DEFORM.maxDent), scaled by 0.5 + 0.5·severity. */
+  cave: 0.03,
+  restB: 1e-4,
+  restV: 1e-2,
+} as const;
+
+export interface BurstSpring { b: number; v: number; rest: number; axis: 0 | 1 | 2; sign: 1 | -1 }
+
 export interface HeadDeformState {
   /** Wobble displacement and velocity (s, ds/dt). */
   s: number;
@@ -45,6 +63,8 @@ export interface HeadDeformState {
   dir: Vec3;
   /** Dent depth per side, metres: [x+, x−, y+, y−, z+, z−]. */
   flat: [number, number, number, number, number, number];
+  /** The slug burst's spring (absent: no burst has hit this head). */
+  bu?: BurstSpring;
 }
 
 export function makeHeadDeform(): HeadDeformState {
@@ -72,6 +92,26 @@ export function stepWobble(st: HeadDeformState, dt: number): HeadDeformState {
   // Settled: snap to exactly 0 so deformHead returns the body untouched (and a frozen re-pose stops).
   if (Math.abs(s) < HEAD_DEFORM.restS && Math.abs(v) < HEAD_DEFORM.restV) { s = 0; v = 0; }
   return { ...st, s: Math.min(HEAD_DEFORM.maxSquash, Math.max(-HEAD_DEFORM.maxSquash, s)), v };
+}
+
+/** A slug burst: swell to the peak along the shot axis (head-local `axisLocal`), then ring toward the lasting rest. */
+export function kickBurst(st: HeadDeformState, axisLocal: Vec3, severity: number, swell: number = BURST_DEFORM.swell): HeadDeformState {
+  const axis = argmaxAbs(axisLocal);
+  const sign: 1 | -1 = axisLocal[axis]! >= 0 ? 1 : -1;
+  const sev = Math.min(1, Math.max(0, severity));
+  const peak = Math.min(BURST_DEFORM.maxB, swell * (0.5 + 0.5 * sev));
+  return { ...st, bu: { b: peak, v: 0, rest: peak * BURST_DEFORM.rest, axis, sign } };
+}
+
+/** Advance the burst spring (semi-implicit Euler, sub-stepped like stepWobble); snaps to rest when settled. */
+export function stepBurst(st: HeadDeformState, dt: number): HeadDeformState {
+  const bu = st.bu;
+  if (!bu) return st;
+  const w = 2 * Math.PI * BURST_DEFORM.hz, n = Math.max(1, Math.ceil(dt / (1 / 240))), h = dt / n;
+  let { b, v } = bu;
+  for (let i = 0; i < n; i++) { v += (-w * w * (b - bu.rest) - 2 * BURST_DEFORM.zeta * w * v) * h; b += v * h; }
+  if (Math.abs(b - bu.rest) < BURST_DEFORM.restB && Math.abs(v) < BURST_DEFORM.restV) { b = bu.rest; v = 0; }
+  return { ...st, bu: { ...bu, b: Math.min(BURST_DEFORM.maxB, Math.max(-BURST_DEFORM.maxB, b)), v } };
 }
 
 export const wobbleValue = (st: HeadDeformState): number => st.s;
@@ -107,7 +147,8 @@ const isHeadBone = (p: Primitive) => p.limb === 'head' && !p.dead && (p.op === '
 export interface HeadAffine { centre: Vec3; e: [Vec3, Vec3, Vec3]; mul: Vec3; shift: Vec3; lean: Vec3; pivot: number }
 
 export function headAffine(st: HeadDeformState, f: HeadFrame): HeadAffine | null {
-  if (st.s === 0 && st.flat.every(x => x === 0)) return null;
+  const bu = st.bu && st.bu.b !== 0 ? st.bu : null;
+  if (st.s === 0 && st.flat.every(x => x === 0) && !bu) return null;
   const e: [Vec3, Vec3, Vec3] = [rotate(f.quat, [1, 0, 0]), rotate(f.quat, [0, 1, 0]), rotate(f.quat, [0, 0, 1])];
   const mul: M3 = [1, 1, 1], shift: M3 = [0, 0, 0];
   for (const k of [0, 1, 2] as const) {
@@ -117,6 +158,15 @@ export function headAffine(st: HeadDeformState, f: HeadFrame): HeadAffine | null
   }
   const s = st.s;
   for (const k of [0, 1, 2] as const) mul[k] *= k === st.axis ? 1 - s : 1 + s / 2;
+  if (bu) {
+    // Stretch along the shot axis with the ENTRY side pinned (shift = sign·b·axis), so only the exit side bulges;
+    // the transient part of b (above rest) also widens the head across the shot.
+    const transient = Math.max(0, bu.b - bu.rest);
+    for (const k of [0, 1, 2] as const) {
+      if (k === bu.axis) { mul[k] *= 1 + bu.b; shift[k] += bu.sign * bu.b * f.axes[k]; }
+      else mul[k] *= 1 + BURST_DEFORM.across * transient;
+    }
+  }
   // The shear leans along the blow's across-the-neck (head x/z) part only: a blow from above does not lean.
   const k = HEAD_DEFORM.shear * s;
   const lean: M3 = [st.dir[0] * k, 0, st.dir[2] * k];
