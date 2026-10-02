@@ -74,6 +74,8 @@ n06 = grain on with `surfaceNoiseAmp` 0.06.
 
 ## Owner gate (Task 10)
 
+![Grain off vs on: close-up, head and neck, 1.35 m, and with surfaceNoiseAmp 0.06](frames/grain-sheet.jpg)
+
 The frames above (kit hidden) and the numbers in Tasks 7–8. Questions for the owner:
 
 1. **Up close, does the body read like the face?** `torso-off` vs `torso-on`, and `head-on` for the face-to-neck
