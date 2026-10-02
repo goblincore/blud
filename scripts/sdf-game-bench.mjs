@@ -875,9 +875,10 @@ const CHUNK = Number(process.env.BENCH_CHUNK ?? 10);
  * call first waits, bounded, for the loop to be running again: that is the
  * pending precompile settling. A loop still paused at the bound fails the leg.
  *
- * WORKAROUND, NOT A FIX: the bug is the page's (applyUpscaleAbMode resumes the
- * loop in an unawaited `finally`; tracked separately). Remove this wait once the
- * page awaits its precompile or respects the bench's loop intent.
+ * WORKAROUND, NOT A FIX: the bug is the page's. applyUpscaleAbMode resumes the
+ * loop in an unawaited `finally`; that is spun off as a separate task (setUpscale
+ * loop-resume race). Remove this wait once the page awaits its precompile or
+ * respects the bench's loop intent.
  */
 const LOOP_WAIT_MS = Number(process.env.BENCH_LOOP_WAIT_MS ?? 60_000);
 async function awaitLoopResumed(label) {

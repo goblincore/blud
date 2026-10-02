@@ -415,6 +415,23 @@ Legs alternate inside each repeat (A B A B A B). Each control is the leg the pla
 
 Where n differs between the legs (the demo), the p50 is not compared and the rule uses the pf mean alone.
 
+**Summary** (details in Results and Reading):
+- **Real wins where a body is hidden.**
+  - Doorway (behind a wall): -13.5 ms frame p50 (-27 %).
+  - Distance (16 bodies behind each other): -21.2 ms (-20 %).
+- **Room grid (16 close bodies).**
+  - Frame p50: noise.
+  - Frame mean: lower in all 6 pairs, about -8 ms, from the walk frames.
+  - March: suggestive (-7 to -8 ms per frame).
+- **Native 16 bodies:** suggestive (-15 ms of about 300, one run).
+- **Demo:** no saving. March +0.26 ms per frame, suggestive (+).
+- **Cast rooms (bodies in the open): no established delta.**
+  - Rooms 1 and 2 lean slower on the frame (suggestive, under load spikes).
+  - Rooms 2 and 4 lean slower on the march.
+  - The flag's cost where nothing is culled is plausibly small but not zero.
+- **Train doorway:** small and mixed (march suggestive (-), frame suggestive (+)).
+- **A wiring bug was found and fixed** (f084c597): the passes-mode split chunk pass marched the front batch twice.
+
 ### How it was run
 
 - **Rooms.** The harness runs rooms 1-5 by default. The cast run (no crowd) keeps all five. Every crowd, scene and
@@ -501,10 +518,20 @@ were the same in every repeat. † in the load column: the 1-min load passed 6 d
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | doorway, ring, 12 bodies | 360/360, 360/360 | 50.03 [49.81-50.86] → 36.53 [36.14-37.72] (**-13.5**) | 50.85 [50.63-50.99] → 37.15 [37.08-38.14] (**-13.7**) | **real** | 46.08 [46.03-46.40] → 31.24 [30.61-32.18] (**-14.8**) | 46.50 [46.42-46.65] → 33.21 [33.01-33.77] (**-13.3**) | **real** | zombie@1 9F, zombie@2 2F | 3.31 / 3.51 |
 | distance, 16 bodies | 360/360, 360/360 | 104.89 [103.62-105.34] → 83.71 [83.39-84.10] (**-21.2**) | 104.46 [103.84-104.93] → 83.68 [83.66-83.99] (**-20.8**) | **real** | 97.58 [97.54-98.14] → 76.88 [76.68-77.18] (**-20.7**) | 98.95 [98.32-99.83] → 78.34 [78.22-78.36] (**-20.6**) | **real** | zombie@1 16F, soldier@1 1F, zombie@2 1F, zombie@4 1F | 2.56 / 2.83 |
-| room grid, 16 bodies, 2 runs (6 pairs) | 360/360, 360/360 | 93.81 [84.93-104.55] → 90.55 [87.28-93.86] (-3.3) | 109.02 [101.03-123.78] → 101.46 [93.17-101.85] (**-7.6**) | p50 noise; mean lower in all 6 pairs | 84.01 [77.12-95.65] → 82.20 [72.60-83.57] (-1.8) | 101.58 [95.08-115.75] → 94.61 [87.04-94.90] (**-7.0**) | **suggestive** (p50 ranges disjoint in run a, not in run b; pf mean ranges disjoint in both) | zombie@1 10F 3B, zombie@4 4F | a 3.94 / 6.27 †; b 1.59 / 3.25 |
+| room grid, 16 bodies, 2 runs (6 pairs) | 360/360, 360/360 | 93.81 [84.93-104.55] → 90.55 [87.28-93.86] (-3.3) | 109.02 [101.03-123.78] → 101.46 [93.17-101.85] (**-7.6**) | noise (p50 sign differs between runs); mean lower in all 6 pairs | 84.01 [77.12-95.65] → 82.20 [72.60-83.57] (-1.8) | 101.58 [95.08-115.75] → 94.61 [87.04-94.90] (**-7.0**) | **suggestive** (p50 ranges disjoint in run a, not in run b; pf mean ranges disjoint in both) | zombie@1 10F 3B, zombie@4 4F | a 3.94 / 6.27 †; b 1.59 / 3.25 |
 | native grid, 16 (`baseline` vs `earlyz`) | 360/360, 360/360 | 280.78 [273.25-283.77] → 271.37 [246.86-275.76] (-9.4) | 315.49 [292.49-333.96] → 300.27 [274.48-304.29] (-15.2) | suggestive (lower in all 3 pairs) | 267.80 [259.02-271.61] → 265.09 [239.89-267.24] (-2.7) | 308.98 [286.41-327.30] → 293.75 [268.08-297.58] (-15.2) | suggestive (lower in all 3 pairs) | zombie@1 10F 3B, zombie@4 4F | 3.89 / 5.16 |
-| demo, room 1 (3368 frames) | **2081/3368, 3368/3368** | 12.94 [12.12-14.56] → 13.76 [12.88-16.48] (+0.8) | 15.90 [13.43-17.56] → 16.30 [16.18-18.42] (+0.4) | noise (+) | (not comparable: n differs) | 5.69 [5.35-5.92] → 5.94 [5.73-6.17] (+0.26) | **no saving**; +0.26 ms, ranges overlap | none drawn at the end | 2.95 / 6.51 † |
-| train doorway, 12 spawned | 360/360, 360/360 | 18.14 [16.01-22.89] → 21.30 [16.49-25.21] (+3.2) | 20.10 [16.11-22.81] → 22.31 [17.06-25.21] (+2.2) | noise | 8.94 [8.62-9.30] → 8.55 [8.46-8.86] (-0.4) | 9.12 [8.76-10.13] → 8.58 [8.40-8.93] (-0.5) | noise | zombie@1 2F 1B (`van-guard`), zombie@2 1F | 2.29 / 3.58 |
+| demo, room 1 (3368 frames) | **2081/3368, 3368/3368** | 12.94 [12.12-14.56] → 13.76 [12.88-16.48] (+0.8) | 15.90 [13.43-17.56] → 16.30 [16.18-18.42] (+0.4) | suggestive (+) | (not comparable: n differs) | 5.69 [5.35-5.92] → 5.94 [5.73-6.17] (+0.26) | suggestive (+), +0.26 ms per-frame, **no saving** | none drawn at the end | 2.95 / 6.51 † |
+| train doorway, 12 spawned | 360/360, 360/360 | 18.14 [16.01-22.89] → 21.30 [16.49-25.21] (+3.2) | 20.10 [16.11-22.81] → 22.31 [17.06-25.21] (+2.2) | suggestive (+), inside a 16-25 ms spread | 8.94 [8.62-9.30] → 8.55 [8.46-8.86] (-0.4) | 9.12 [8.76-10.13] → 8.58 [8.40-8.93] (-0.5) | suggestive (-): p50 and pf mean lower in all 3 pairs, ranges overlap | zombie@1 2F 1B (`van-guard`), zombie@2 1F | 2.29 / 3.58 |
+
+**Pooled medians are upper medians.** The harness's `med` (and these tables) takes `sorted[n >> 1]`, which for an
+even count is the upper of the two middle values. Only the room grid pools an even count (6 per leg). Its true-median
+deltas are:
+- frame p50 -2.8 (table -3.3);
+- frame mean -8.6 (-7.6);
+- march p50 -2.1 (-1.8);
+- march pf mean -8.0 (-7.0).
+
+No verdict changes. The cast pools 9 (odd), and single runs have 3.
 
 **Cast firefight, rooms 1-5, no crowd.**
 - 9 repeats per cell, pooled from three seed-pinned runs; the verdict is taken per run. The census was identical in all
@@ -515,7 +542,7 @@ were the same in every repeat. † in the load column: the 1-min load passed 6 d
 
 | room | frame p50 ctl → ez | frame mean ctl → ez | frame verdict | march p50 ctl → ez | march pf mean ctl → ez | march verdict | earlyz batches |
 | ---: | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 23.26 → 24.63 (+1.4) | 24.87 → 25.80 (+0.9) | noise | 14.83 [13.44-15.80] → 14.37 [13.47-14.89] (-0.5) | 15.65 → 14.82 (-0.8) | noise | soldier@1 1F, zombie@2 1F, zombie@4 4F |
+| 1 | 23.26 → 24.63 (+1.4) | 24.87 → 25.80 (+0.9) | suggestive (+): per run p50 +1.05 / +0.04 / +1.53, mean +2.25 / +0.93 / +4.97 | 14.83 [13.44-15.80] → 14.37 [13.47-14.89] (-0.5) | 15.65 → 14.82 (-0.8) | noise | soldier@1 1F, zombie@2 1F, zombie@4 4F |
 | 2 | 27.42 → 32.88 (+5.5) | 27.59 → 32.17 (+4.6) | suggestive (+), ranges 23-43 ms | 20.66 [18.62-24.02] → 21.74 [19.78-25.41] (+1.1) | 20.41 → 20.90 (+0.5) | suggestive (+) | zombie@2 2F, zombie@6 1F, soldier@5 2F, zombie@5 2F |
 | 3 ‡ (re-run after the fix, 1 run of 3) | 60.16 [59.10-60.82] → 60.53 [59.18-61.53] (+0.4) | 55.11 [54.05-56.15] → 53.29 [53.13-53.34] (-1.8) | noise (p50 and mean disagree) | 40.01 [39.72-40.18] → 39.30 [38.92-39.82] (-0.7) | 37.87 [37.42-38.61] → 36.43 [36.00-36.68] (-1.4) | suggestive (one run) | zombie@2 2F, zombie@3 3F, zombie@4 1F |
 | 3 (pooled, before the fix) | 54.48 → 56.04 (+1.6) | 49.33 → 61.72 (+12.4): the split-chunk bug | invalid | 40.79 [35.75-54.90] → 39.58 [34.28-43.40] (-1.2) | 37.74 → 35.49 (-2.3) | noise | |
@@ -545,8 +572,10 @@ were the same in every repeat. † in the load column: the 1-min load passed 6 d
   - The seed quad still draws again in the chunk pass. It is depth-only and costs nothing measurable there.
   - A source pin in `earlyz-wiring.test.ts` keeps the front mesh in the list.
 - **After the fix**, cast room 3 in passes mode (3 repeats, seed 7, load 3.83 at start, max 3.96):
-  - `sdf:march-chunks` with the flag on: fire p50 0.12-0.15 ms (n 117 per repeat), gib 0.32-3.61 ms (n 6), per-frame
-    mean 0.17-0.21 ms. The control reads 0.13-0.14, 0.08-0.13 and 0.14-0.20. Back to the control's level.
+  - `sdf:march-chunks` with the flag on: fire p50 0.12-0.15 ms (n 117 per repeat) against the control's 0.13-0.14,
+    and per-frame mean 0.17-0.21 against 0.14-0.20. The fire segment and the per-frame mean match the control.
+  - The gib segment cannot establish equality: it has n = 6 frames per repeat, and reads 3.61 / 0.54 / 0.32 ms
+    against the control's 0.13 or less. It is far below the 32-46 ms before the fix.
   - The fenced fire segment mean is 72.6-73.6 ms against the control's 73.9-76.9.
   - The census is identical, with no drift.
 - **The shipped merged pass was never affected.** It draws bodies and chunks in one render, so nothing is drawn
@@ -591,18 +620,24 @@ Per-segment `sdf:march` pf mean (median of repeats, ms, control → earlyz):
     walk frames, which a p50 over all three segments does not see.
 - **Native grid (`earlyz` vs `baseline`): suggestive.** Frame and march means are lower in all 3 pairs (about -15
   ms of 300), but the ranges overlap, and this is one run.
-- **No saving in the demo.** The march pf mean is +0.26 ms (ranges overlap) and the frame does not move. The flag makes
+- **No saving in the demo.** The march is suggestive (+): +0.26 ms per frame, ranges overlapping. The frame is
+  suggestive (+) too (+0.8 p50 / +0.4 mean). The flag makes
   the march pass run on every frame, so the frames with no body cost slightly more, not less. This is consistent with
   the unchanged GPU span.
 - **Cast rooms (bodies in the open): nothing established.**
-  - Room 4's march is +0.45 ms pf mean (+5 %), up in all three runs, but the p50 ranges overlap in one of them:
-    suggestive, not established.
+  - **No cast room shows an established frame delta.** Rooms 1 and 2 lean slower on the frame (suggestive, measured
+    under load spikes).
+  - **Rooms 2 and 4 lean slower on the march.**
+    - Room 4: +0.45 ms pf mean (+5 %), up in all three runs, but the p50 ranges overlap in one of them.
+    - Room 2: +0.5 pf mean, suggestive.
+  - So the flag's cost where nothing is culled is plausibly small but not zero.
   - Room 5's pf mean changes sign across the runs, so its +0.75 p50 is noise.
-  - Room 2 leans the same way as room 4 (suggestive).
-  - No cast room shows a frame delta beyond the noise. Room 3 (re-run after the split-chunk fix) is -1.8 ms on the
-    frame mean, against +0.4 on the p50 (noise), and its march is suggestive (-1.4 pf mean, one run).
-- **Train doorway: nothing to measure.** The march is about 9 ms with 3 of the 12 spawned bodies drawn, plus
+  - Room 3 (re-run after the split-chunk fix): -1.8 ms on the frame mean against +0.4 on the p50, so noise. Its march
+    is suggestive (-1.4 pf mean, one run).
+- **Train doorway: small either way.** The march is about 9 ms with 3 of the 12 spawned bodies drawn, plus
   `van-guard`.
+  - March: suggestive (-0.4 p50 / -0.5 pf mean, lower in all 3 pairs).
+  - Frame: suggestive (+), inside a 16-25 ms spread.
 
 **Surprises.**
 1. **The seed was ON in the native `earlyz` leg as well.** The plan expected it refused for field style.
