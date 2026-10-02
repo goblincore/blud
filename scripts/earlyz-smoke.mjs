@@ -7,8 +7,9 @@
 //                            (device not lost, uncaptured-error count) the flag-on boot is held to.
 //   on   ?frozen=1&earlyz=1  the plan checks (flag, patch + detection, patch hits, seed, the pack in
 //                            the front batch, no uncaptured GPU errors), the same GPU baseline, then
-//                            the melee scene: the near body's type must draw a back batch (the
-//                            camera-inside fallback) with no new GPU errors.
+//                            the melee scene: the camera inside the near body's proxy box, that
+//                            body's type moving front -> back (the camera-inside fallback), no new
+//                            GPU errors. A melee staging failure is a failed check, not an abort.
 // `--on` / `--off` runs one phase only (`--on` alone holds the uncaptured count to 0). Exit 0 only
 // when every check of every phase run passes.
 //
@@ -39,7 +40,7 @@ mkdirSync(TMP, { recursive: true });
  *  keys types `${name}@${roomId}`: the pack is spawned with the player in room 1, so it is `zombie@1`
  *  (the ring's room 1 has no zombie of its own, so this type holds exactly the pack). */
 const PACK_TYPE = 'zombie@1';
-const WATCHDOG_MIN = 35;
+const WATCHDOG_MIN = 45;
 
 // ---- console collector state (the watchdog dumps it, so it exists before anything can hang) ----
 let phase = 'connect';
@@ -136,7 +137,7 @@ const settle = async () => { await evaluate('(() => { __sdfGame.step(6); return 
  *  itself throws unless all 6 landed. */
 async function stagePack() {
   await applyShipDefaults(evaluate);
-  const staged = await STAGES.pack.stage(evaluate, die);
+  const staged = await STAGES.pack.stage(evaluate);
   console.log('staged', JSON.stringify(staged));
   await settle();
   return staged;
@@ -162,7 +163,13 @@ async function readCrowd() {
 }
 const visibleOf = (crowd, key) => crowd.types.find((t) => t.name === key)?.visible ?? 0;
 
-/** Melee scene on the current page: returns the near body, its crowd type and the batches. */
+/** The crowd split's camera-inside guard (earlyz/batch-split.ts NEAR_GUARD_M). */
+const NEAR_GUARD_M = 0.25;
+
+/** Melee scene on the current page: returns the near body, its crowd type, its proxy box, the
+ *  camera, and the batches. The box is the one the split tests: centre = the view object's
+ *  position (actorDump, rounded to 1 cm), half = the view's bodyHalf (__sdfGameDebug's
+ *  normalCaptureState, which also carries the camera matrix). */
 async function stageMelee() {
   const staged = await STAGES.melee.stage(evaluate, die);
   console.log('melee staged', JSON.stringify(staged));
@@ -171,11 +178,49 @@ async function stageMelee() {
     const id = ${JSON.stringify(staged.body)};
     const hit = Object.entries(__sdfGame.crowdSlotDump()).find(([, rows]) => rows.some(r => r.actor === id));
     const z = __sdfGame.zombies().find(q => q.id === id);
-    return { body: id, type: hit ? hit[0] : null, bodyPos: z ? z.pos : null, pose: __sdfGame.pose() };
+    const a = __sdfGame.actorDump().find(r => r.id === id);
+    const cap = __sdfGameDebug.normalCaptureState();
+    const piece = cap.pieces.find(q => q.key === 'body:' + id);
+    const m = cap.camera;
+    return { body: id, type: hit ? hit[0] : null, bodyPos: z ? z.pos : null, pose: __sdfGame.pose(),
+      box: a && piece ? { centre: a.pos, half: piece.uniforms.bodyHalf } : null, camera: [m[12], m[13], m[14]] };
   })())`));
   const info = await readEarlyz();
   const gpu = await readGpu();
   return { staged, near, info, gpu };
+}
+
+/** The melee checks, against the pack reading taken just before it on the same page. A staging
+ *  failure becomes one failed check, so the flag-on checks above it still report. */
+async function meleeChecks(packInfo, packGpu) {
+  let melee;
+  try {
+    melee = await stageMelee();
+  } catch (e) {
+    const msg = String(e?.message ?? e);
+    console.log(`melee staging failed: ${msg}`);
+    return [[`melee staged (${msg.slice(0, 200)})`, false]];
+  }
+  const { near, info, gpu } = melee;
+  const before = near.type ? packInfo.batches[near.type] ?? null : null;
+  const after = near.type ? info.batches[near.type] ?? null : null;
+  // Per axis, exactly the split's test: |camera - centre| < half + guard on x, y and z.
+  const margins = near.box
+    ? near.camera.map((c, i) => +(near.box.half[i] + NEAR_GUARD_M - Math.abs(c - near.box.centre[i])).toFixed(3))
+    : null;
+  const flat = near.bodyPos ? +Math.hypot(near.pose.pos[0] - near.bodyPos[0], near.pose.pos[2] - near.bodyPos[2]).toFixed(3) : null;
+  console.log('melee near', JSON.stringify({ ...near, before, after, insideMargins: margins, floorDistance: flat }));
+  console.log('melee earlyzInfo', JSON.stringify(info));
+  console.log('melee gpuDiagnostics', JSON.stringify(gpu));
+  return [
+    ['melee staged', true],
+    [`melee: camera inside the near body's proxy box + ${NEAR_GUARD_M} m guard (margins ${JSON.stringify(margins)})`,
+      !!margins && margins.every((x) => x > 0)],
+    [`melee: the near body's type (${near.type}) moved front -> back (front ${before?.front} -> ${after?.front}, back ${before?.back} -> ${after?.back})`,
+      !!before && !!after && before.front - after.front >= 1 && after.back - before.back >= 1],
+    ['melee: no new GPU errors, device not lost',
+      gpu.uncapturedCount === packGpu.uncapturedCount && gpu.lost === null && info.gpuErrors.length === 0],
+  ];
 }
 
 function report(name, checks) {
@@ -220,11 +265,6 @@ async function runPhase(p) {
     ];
   } else {
     const bar = gpuBaseline ?? 0;
-    const melee = await stageMelee();
-    const nearB = melee.near.type ? melee.info.batches[melee.near.type] : null;
-    console.log('melee near', JSON.stringify({ ...melee.near, batches: nearB }));
-    console.log('melee earlyzInfo', JSON.stringify(melee.info));
-    console.log('melee gpuDiagnostics', JSON.stringify(melee.gpu));
     checks = [
       ['flag on', info.flag === true],
       ['patched + detected', info.on === true],
@@ -237,9 +277,7 @@ async function runPhase(p) {
       ['GPU device not lost', gpu.lost === null],
       [`uncaptured GPU error count ${gpu.uncapturedCount} <= flag-off baseline ${bar}${gpuBaseline === null ? ' (off did not run)' : ''}`,
         gpu.uncapturedCount <= bar],
-      [`melee: the near body's type (${melee.near.type}) drew a back batch (back >= 1)`, !!nearB && nearB.back >= 1],
-      ['melee: no new GPU errors, device not lost',
-        melee.gpu.uncapturedCount === gpu.uncapturedCount && melee.gpu.lost === null && melee.info.gpuErrors.length === 0],
+      ...(await meleeChecks(info, gpu)),
     ];
   }
   const ex = exceptionsIn(p);

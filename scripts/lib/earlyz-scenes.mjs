@@ -63,7 +63,9 @@ const json = async (ev, prelude) => JSON.parse(await ev(`JSON.stringify(${prelud
 /** The default `fail` for a stage: throw, never exit, so the caller keeps its own failure path. */
 const throwFail = (msg) => { throw new Error(msg); };
 
-/** Every stage is `stage(evaluate, fail?)` and resolves to its staging record. */
+/** Every stage is `stage(evaluate)` and resolves to its staging record. The prelude stages fail by
+ *  throwing in-page, so evaluate() rejects. Only `melee` also takes `fail` (stageCloseUp reports
+ *  through it); its default throws, never exits. */
 export const STAGES = {
   /** 6 bodies packed 0.7 m apart, ~3 m ahead: body-behind-body. Ring testbed only. */
   pack: { query: '', stage: (ev) => json(ev, cornerPrelude(6, '(b) => ({ minX: b.minX + 2.2, maxX: b.minX + 3.6, minZ: b.minZ + 2.2, maxZ: b.minZ + 3.6 })')) },

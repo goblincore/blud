@@ -31,12 +31,13 @@ pack staged in each (`STAGES.pack`: 6 zombies 0.7 m apart, mean 3.46 m ahead, fr
 
 - **off first** (`?frozen=1`): the shipped boot. It also records the GPU baseline that the flag-on boot is held to.
 - **then on** (`?frozen=1&earlyz=1`): the plan's checks, the same GPU baseline, then `STAGES.melee` on the same page.
+  A melee staging failure is recorded as a failed `melee staged` check, and the flag-on checks still report.
 
 A second CDP client on the tab collects the console (`$LAB_TMP/earlyz-smoke-<phase>.console.log`). The run is bounded:
-a 35-minute watchdog, `fail()` waits at most 10 s for its diagnostic read, and `connectGame`'s `send` now rejects at
+a 45-minute watchdog, `fail()` waits at most 10 s for its diagnostic read, and `connectGame`'s `send` now rejects at
 once on a closed socket (it used to hang forever). `--on` / `--off` runs one phase.
 
-**Result of record (review follow-up of `97c9bfa5`, `uptime` load 4.41 5.09 4.23 at start): every check PASS, exit 0.**
+**Result of record (second review follow-up, `uptime` load 2.51 3.58 3.93 at start): every check PASS, exit 0.**
 No game-code fix was needed. The pack is crowd type `zombie@1`: spawnDebugCharacter files a body under the PLAYER's room, and
 the ring's room 1 has no zombie of its own.
 
@@ -59,7 +60,9 @@ PASS  [on] the pack is visible (zombie@1 visible >= 6)
 PASS  [on] no uncaptured GPU errors (earlyz listener)
 PASS  [on] GPU device not lost
 PASS  [on] uncaptured GPU error count 0 <= flag-off baseline 0
-PASS  [on] melee: the near body's type (soldier@1) drew a back batch (back >= 1)
+PASS  [on] melee staged
+PASS  [on] melee: camera inside the near body's proxy box + 0.25 m guard (margins [1.129,0.775,0.366])
+PASS  [on] melee: the near body's type (soldier@1) moved front -> back (front 1 -> 0, back 0 -> 1)
 PASS  [on] melee: no new GPU errors, device not lost
 PASS  [on] no page exceptions (0)
 ```
@@ -76,8 +79,12 @@ every type `{"front":0,"back":0}`, `gpuDiagnostics` `{"lost":null,"uncaptured":[
 
 **Melee (camera-inside fallback).** `STAGES.melee` stages room 1's first body, which on the ring is the soldier (body 1,
 type `soldier@1`, at `[-4.8, 0, -4.8]`). The ladder asks for 0.4 m. After `step` the camera stood at `[-4.8, 0, -4.13]`,
-which is 0.67 m away, pitch -1.0 rad: the player collision resolved the overlap. At 0.67 m the camera is still inside
-the box plus the 0.25 m near guard. Coverage was 0.336. `soldier@1` moved from `{front 1, back 0}` (pack) to **`{front 0, back 1}`**.
+which is 0.67 m away on the floor, pitch -1.0 rad: the player collision resolved the overlap. Coverage was 0.336.
+- The proxy box the split tests has centre `[-4.8, 1.08, -4.8]` and half `[0.879, 1.065, 0.786]`. The centre is the view
+  object's position and the half is the view's `bodyHalf`.
+- The camera sat at `[-4.8, 1.62, -4.13]`. Inside margins (half + 0.25 - |camera - centre| per axis) were
+  **`[1.129, 0.775, 0.366]` m**, all positive.
+- `soldier@1` moved from `{front 1, back 0}` (pack) to **`{front 0, back 1}`**.
 The pack behind the camera stayed `zombie@1 {front 6, back 0}`. `patchHits` stayed 20, `gpuErrors` stayed `[]`, and
 `uncapturedCount` stayed 0.
 
@@ -109,14 +116,17 @@ The pack behind the camera stayed `zombie@1 {front 6, back 0}`. `patchHits` stay
 | 3 | off, on | 7.33 3.77 3.53 | 5.4 s / 3.6 s | **27.0 s / 25.6 s** (cold) |
 | 4 | on | 9.77 5.81 4.36 | — | 6.5 s / 4.6 s |
 | 5 | on | 8.97 5.77 4.36 | — | 5.9 s / 4.3 s |
-| 6 (of record) | off, on | 4.41 5.09 4.23 | 5.5 s / 3.6 s | 6.0 s / 4.5 s |
+| 6 | off, on | 4.41 5.09 4.23 | 5.5 s / 3.6 s | 6.0 s / 4.5 s |
+| 7 (of record) | off, on | 2.51 3.58 3.93 | **47.8 s / 46.0 s** (cold) | **36.1 s / 34.0 s** (cold) |
 
-- **The cold compile.** The front-face crowd program's cold compile is **~22 s, paid in the background crowd job after
-  `ready`**, not behind the loader. `drawOnce` stays 1.6-1.8 s in every boot, flag on or off.
-- **Run 3 was cold again**, 22 minutes after the warm run 2, with no source change. Runs 4-6 were warm straight after it,
-  in both phase orders, so the order is not the cause. The front program fell out of the shader cache in between. The
-  shipped crowd program stayed warm (off phase 3.6 s). Cause not found. Load was high on the machine (7-10) during that
-  window.
+- **The cold compile.** The front-face crowd program's cold compile is **~22-30 s, paid in the background crowd job after
+  `ready`**, not behind the loader. `drawOnce` stays 1.6-2.3 s in every boot, flag on or off.
+- **Cold runs.** Run 3 came 22 minutes after the warm run 2, with no source change, and its front program was cold
+  again. Runs 4-6 were warm straight after it, in both phase orders, so the order is not the cause.
+- **Run 7 went cold for the shipped crowd program as well** (off-phase crowd job 46 s, layer precompile 3.3 s instead
+  of ~0.1 s). So the shader cache loses entries between runs for both programs, not only the flag's. That is
+  consistent with machine-level cache churn (other sessions share the machine) rather than something the flag does.
+  Cause not traced further.
 - **Not the boot-time gate.** These are smoke observations, not the gate against the base branch.
 
 **Scene preludes, checked once outside the smoke.** This was a scratch run, flag on.
@@ -125,5 +135,8 @@ The pack behind the camera stayed `zombie@1 {front 6, back 0}`. `patchHits` stay
 - `far` (ring): 16 spawned, `zombie@1 {front 16}`.
 - `pack` on `level=night-train`: refused by the ring-only guard, as intended.
 - `train-doorway`: `tunnel-1-2`, player `[1.2, -13.5]` in `guards-van`, mouth `[0, -16]`, 12 spawned. Batches:
-  `zombie@1 {front 4, back 1}`, so one body already has the camera inside its box at that pose.
+  `zombie@1 {front 4, back 1}`.
+  - The `back 1` is the level's own zombie `van-guard`, at `(0.6, 0, -13.8)` in `night-train.level.json`, 0.67 m from
+    the camera.
+  - It is kept deliberately as a realistic close-body case for parity and the bench.
 - No GPU errors in any of these.
