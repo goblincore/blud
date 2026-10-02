@@ -49,7 +49,7 @@ export function crowdTypeFor(ctx: GameContext, name: string, roomId: number, str
     },
     // `stride` (validate.ts primStride of the first body) fixes the atlas
     // width for the type's life; the caller checks later bodies fit.
-    { dispatch: ctx.crowd.dispatch, telemetry: ctx.telemetry.telemetry, stride },
+    { dispatch: ctx.crowd.dispatch, telemetry: ctx.telemetry.telemetry, stride, earlyz: ctx.crowd.earlyz.on },
   );
   t.mesh.layers.set(SDF_LAYER);
   t.depthPreMesh.layers.set(DEPTH_PREPASS_LAYER);
@@ -57,6 +57,11 @@ export function crowdTypeFor(ctx: GameContext, name: string, roomId: number, str
   ctx.boot.handle.scene.add(t.depthPreMesh);
   ctx.boot.deferredApi?.router.register(t.mesh, 'sdf');
   ctx.boot.deferredApi?.router.register(t.depthPreMesh, 'exclude');
+  if (t.frontMesh) {
+    t.frontMesh.layers.set(SDF_LAYER);
+    ctx.boot.handle.scene.add(t.frontMesh);
+    ctx.boot.deferredApi?.router.register(t.frontMesh, 'sdf');
+  }
   ctx.crowd.types.set(key, t);
   return t;
 }

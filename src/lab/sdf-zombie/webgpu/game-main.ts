@@ -304,6 +304,9 @@ import { createFlailSeams } from './game-seams-flail';
 import { createSkeletonSeams } from './game-seams-skeleton';
 import { createDynamiteSeams } from './game-seams-dynamite';
 import { createMarchDebugSeams } from './game-seams-march-debug';
+import { createEarlyzSeams } from './game-seams-earlyz';
+import { EARLYZ_FLAG } from './earlyz/flag';
+import { bootEarlyz, applyEarlyzRenderOrder } from './earlyz/earlyz-boot';
 import { ensureImpactSplashLayer } from './game-vfx-leaves';
 import { laySpriteBench, sizeSdfLayer } from './game-render-leaves';
 import { withCtx } from './game-context';
@@ -457,6 +460,9 @@ async function main() {
   if (!ctx.boot.mount) throw new Error('#app not found');
   ctx.boot.resKey = resRungFromUrl(ctx.vfx.boundedWoundPreview ? '640' : DEFAULT_RES);
   ctx.boot.handle = await createLabRenderer(ctx.boot.mount, RES_RUNGS[ctx.boot.resKey]);
+  // EARLY-Z (spec 2026-10-01): patch + detect BEFORE any crowd material is built.
+  // Flag off: nothing runs; the boot is byte-for-byte the shipped boot.
+  if (EARLYZ_FLAG) await bootEarlyz(ctx);
   // Per-pass GPU timestamps (gpu-pass-timing.ts). Wraps the backend's uid
   // builder once; costs a string concat per pass. Read through
   // __sdfGame.bench({ mode: 'passes' }) or __sdfGame.passTimings().
@@ -1269,6 +1275,7 @@ async function main() {
   // Motion vectors step 2: `?accum=1` also allocates the object-motion attachment accumulation v2
   // reprojects with (boot-time: the attachment count is fixed with the march target).
   ctx.render.sdfLayer = createSdfLayer(ctx.boot.handle.renderer, { marchNormals: ctx.boot.marchNormalsWanted, refine: ctx.render.refineWanted, marchMotion: isAccumBoot() && new URLSearchParams(location.search).get('accummotion') !== '0' });
+  if (ctx.crowd.earlyz.on) ctx.render.sdfLayer.setEarlyzSeed(ctx.boot.handle.scene);
   adoptLateFx(ctx);
   adoptLightFx(ctx);
   adoptDiscoFx(ctx);
@@ -2298,6 +2305,7 @@ async function main() {
         t.sync(camera, grid, vis);
       }
       ctx.telemetry.telemetry.end('crowd-sync', crowdTiming);
+      if (ctx.crowd.earlyz.on) applyEarlyzRenderOrder(ctx.crowd.types);
       // DEGRADE, NEVER STALL (defer-compile task). While the crowd program is
       // not ready, keep the type meshes invisible so the boot precompile and
       // the live draw cannot reach them; the actors are drawn instead through
@@ -2306,7 +2314,10 @@ async function main() {
       // on an UNCACHED mesh builds the 48 s pipeline SYNCHRONOUSLY — so the
       // exclusion has to be the draw list (and visibility for the boot pass).
       if (!crowdMarch) {
-        for (const t of ctx.crowd.types.values()) { t.mesh.visible = false; t.depthPreMesh.visible = false; }
+        for (const t of ctx.crowd.types.values()) {
+          t.mesh.visible = false; t.depthPreMesh.visible = false;
+          if (t.frontMesh) t.frontMesh.visible = false;
+        }
       }
       // THE FALLBACK HAS TO SHOW THE PROXIES ITSELF (cold-cache flesh bug,
       // 2026-09-20). Attached views are spawned hidden, and only sdf-layer's
@@ -4523,7 +4534,10 @@ async function main() {
       // compile back behind the loader. The background crowd job flips a mesh
       // visible only across its own compileAsync prologue, then hides it again.
       if (ctx.boot.backgroundMode && ctx.crowd.on) {
-        for (const t of ctx.crowd.types.values()) { t.mesh.visible = false; t.depthPreMesh.visible = false; }
+        for (const t of ctx.crowd.types.values()) {
+          t.mesh.visible = false; t.depthPreMesh.visible = false;
+          if (t.frontMesh) t.frontMesh.visible = false;
+        }
       }
       // THE GIB / CHUNK MARCH VARIANT (2026-09-18) now compiles in the
       // BACKGROUND set (2026-09-19): detached pieces march through the SHARED
@@ -4705,16 +4719,22 @@ async function main() {
   const compileCrowdInBackground = async (): Promise<boolean> => {
     let ok = true;
     for (const t of ctx.crowd.types.values()) {
-      t.mesh.visible = true;
-      const p = ctx.render.sdfLayer.precompileInBackground(
-        t.mesh, scene, camera, { timeoutMs: PRECOMPILE_COLD_PASS_TIMEOUT_MS },
-      );
-      // The prologue (which projects the object into the render context) has
-      // already run synchronously; visibility no longer matters, and keeping it
-      // hidden is what lets the live draw skip the pending pipeline safely.
-      t.mesh.visible = false;
-      const r = await p;
-      ok = ok && r;
+      // EARLY-Z: the front-face twin is a second program per type; it compiles in the
+      // same job so the crowd stays on the fallback until BOTH are ready.
+      for (const m of [t.mesh, t.frontMesh]) {
+        if (!m) continue;
+        m.visible = true;
+        const p = ctx.render.sdfLayer.precompileInBackground(
+          m, scene, camera, { timeoutMs: PRECOMPILE_COLD_PASS_TIMEOUT_MS },
+        );
+        // The prologue (which projects the object into the render context) has
+        // already run synchronously; visibility no longer matters, and keeping it
+        // hidden is what lets the live draw skip the pending pipeline safely.
+        m.visible = false;
+        const r = await p;
+        ok = ok && r;
+        if (!ok) break;
+      }
       if (!ok) break;
     }
     return ok;
@@ -8664,6 +8684,7 @@ async function main() {
     createSkeletonSeams(ctx),
     createDynamiteSeams(ctx),
     createMarchDebugSeams(ctx),
+    createEarlyzSeams(ctx),
     createMiscSeams(ctx),
     createFxSeams(ctx),
     createWeaponPlayerSeams(ctx),

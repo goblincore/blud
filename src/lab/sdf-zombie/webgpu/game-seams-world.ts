@@ -669,6 +669,10 @@ export function createWorldSeams(ctx: GameContext) {
       bounds: { minX: r.minX, maxX: r.maxX, minZ: r.minZ, maxZ: r.maxZ },
     })),
     tunnels: ctx.world.level.tunnels.map(t => t.name),
+    /** Tunnel rects + axis (early-Z doorway scene, 2026-10-01). */
+    tunnelDefs: ctx.world.level.tunnels.map(t => ({
+      name: t.name, a: t.a, b: t.b, minX: t.minX, maxX: t.maxX, minZ: t.minZ, maxZ: t.maxZ, axis: t.axis,
+    })),
     furniture: ctx.world.level.furniture,
     /** Accent lights per room — capture/measurement seam (pair-shot framing). */
     accents: ctx.world.level.rooms.flatMap(r => r.accents.map(a => ({ room: r.id, ...a })))

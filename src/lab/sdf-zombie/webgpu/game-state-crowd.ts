@@ -19,6 +19,18 @@
 import type { CrowdDispatch, CrowdType } from './crowd-type';
 import type { ZombieGpuView } from './zombie-gpu';
 
+/** EARLY-Z state for the boot (spec 2026-10-01). All false/empty with the flag off. */
+export interface EarlyzState {
+  /** `?earlyz=1` was on the URL (compile-time, D1). */
+  flag: boolean;
+  /** The r186 patch installed AND the browser compiled `frag_depth, greater` (D8). */
+  on: boolean;
+  /** Why it is off; null when on or not requested. */
+  reason: string | null;
+  /** Uncaptured WebGPU errors seen since boot under the flag (first 20). */
+  gpuErrors: string[];
+}
+
 export interface CrowdState {
   /** Raw `?crowd` value; `'0'` opts out to the per-body path. */
   param: string | null;
@@ -40,6 +52,8 @@ export interface CrowdState {
   segMetaWarned: boolean;
   /** True once the unsupported-refine warning has been logged, so it is logged once. */
   refineWarned: boolean;
+  /** Early-Z (spec 2026-10-01): set once at boot by bootEarlyz. */
+  earlyz: EarlyzState;
 }
 
 /** Every call returns a fresh object, maps and set included. */
@@ -55,6 +69,7 @@ export function makeCrowdState(): CrowdState {
     volumeBound: new Set<CrowdType>(),
     segMetaWarned: false,
     refineWarned: false,
+    earlyz: { flag: false, on: false, reason: null, gpuErrors: [] },
   };
 }
 
