@@ -54,7 +54,7 @@ import { makeRng, headingDir, type Rng, type WanderBounds } from '../wander';
 import { rotateYaw } from '../gait';
 import type { BrainPlayer } from '../brain';
 import { makeZombieMind, type EnemyMind } from './enemy-mind';
-import { isSoldierFamily, type MotionProfile } from '../motion-profile';
+import { isSoldierFamily, wantsTorsoGuards, type MotionProfile } from '../motion-profile';
 import { BARREL_REST, INDEX_REST, barrelsDriven, stepBarrelIndex, stepBarrelSpin, type BarrelIndex, type BarrelSpin } from '../barrel-spin';
 import { lightsModeFor, statusLights, type StatusLights } from '../status-lights';
 import type { MotionFrame } from '../motion';
@@ -1476,7 +1476,8 @@ export function createZombieActor(opts: {
         if (!propReleaseRequested) { propReleaseRequested = true; opts.character?.releaseProp([hv[0], hv[1] + 0.8, hv[2]], opts.seed); }
       }
       let points = stepRig(
-        { ...bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw, posePins: f.posePins }, sdt,
+        { ...bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw, posePins: f.posePins,
+          torsoGuards: wantsTorsoGuards(opts.profile) ? bound.rig.torsoGuards : undefined }, sdt,
         {
           gravity: f.gravity,
           damping: 0.06,

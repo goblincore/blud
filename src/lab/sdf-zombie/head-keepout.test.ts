@@ -11,23 +11,35 @@ import { len, sub } from './vec';
 import { buildCharacterBody } from './webgpu/character-view';
 
 describe('head keep-out at rest', () => {
-  it.each(characterNames())('%s: holding the rest pose, the keep-out changes nothing', name => {
+  it.each(characterNames())('%s: holding the rest pose, the head and torso keep-outs change nothing', name => {
     const body = buildCharacterBody(characterEntry(name), [0, 0, 0], []);
     const bound = bindRig(body);
     const rest = bound.rig.points.map(p => p.pos);
     const run = (keepOut: boolean) => {
-      let s = { ...bound.rig, restPose: rest, ...(keepOut ? {} : { headKeepOut: undefined }) };
+      let s = { ...bound.rig, restPose: rest, ...(keepOut ? {} : { headKeepOut: undefined, torsoGuards: undefined }) };
       for (let i = 0; i < 30; i++) {
         s = stepRig(s, 1 / 60, { gravity: [0, 0, 0], damping: 0.06, iterations: 4, restStiffness: 0.3 });
       }
       return s.points;
     };
-    // The solver itself drifts a little from some authored rest poses (jaw, lone
-    // pins), so the claim is a DIFFERENCE: the keep-out adds nothing at rest.
+    // The solver itself drifts from some authored rest poses (jaw, lone pins; the
+    // cyclops moves ~14 cm), so the claim is a DIFFERENCE. For a rest pose the
+    // solver holds, the keep-outs add exactly nothing. For one that drifts on its
+    // own, the guards may correct an arm drifting into the torso, but only a
+    // fraction of that drift -- never a new pose.
     const withKo = run(true), without = run(false);
-    let worst = 0;
-    withKo.forEach((p, i) => { worst = Math.max(worst, len(sub(p.pos, without[i]!.pos))); });
-    expect(worst).toBeLessThan(1e-6);
+    let worst = 0, drift = 0;
+    withKo.forEach((p, i) => {
+      worst = Math.max(worst, len(sub(p.pos, without[i]!.pos)));
+      drift = Math.max(drift, len(sub(without[i]!.pos, rest[i]!)));
+    });
+    expect(worst).toBeLessThan(drift > 0.01 ? Math.max(1e-6, drift * 0.3) : 1e-6);
+  });
+
+  it('the zombie gets a guard sphere per torso ellipsoid, each watching both arms', () => {
+    const bound = bindRig(buildCharacterBody(characterEntry('zombie'), [0, 0, 0], []));
+    expect(bound.rig.torsoGuards).toHaveLength(4);
+    for (const g of bound.rig.torsoGuards!) expect(g.limbs).toHaveLength(4);   // upper + fore, both sides
   });
 
   it('the zombie gets a keep-out on both arms, upper and fore', () => {
