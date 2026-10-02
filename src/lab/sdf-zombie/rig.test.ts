@@ -145,3 +145,40 @@ describe('head keep-out', () => {
     for (const p of s1.points) expect(p.pos.every(Number.isFinite)).toBe(true);
   });
 });
+
+describe('torso guard spheres', () => {
+  // A trunk point (0, centred at the origin), a shoulder (1) and an elbow (2) that
+  // hangs beside it. The guard sphere sits on point 0 with a 0.2 m reach.
+  const rig = (elbow: [number, number, number]): RigState => {
+    const s = makeRig(
+      [{ pos: [0, 1.3, 0], pinned: true }, { pos: [0.3, 1.4, 0], pinned: false }, { pos: elbow, pinned: false }],
+      [{ a: 1, b: 2, rest: 0.3, stiffness: 1 }],
+    );
+    return { ...s, torsoGuards: [{ point: 0, offset: [0, 0, 0], limbs: [
+      { a: 1, b: 2, samples: [{ s: 0.5, clearance: 0.25 }, { s: 1, clearance: 0.25 }] },
+    ] }] };
+  };
+
+  it('an elbow driven into the guard by its rest target is held outside it', () => {
+    let s = rig([0.3, 1.1, 0]);
+    s = { ...s, restPose: [s.restPose[0]!, s.restPose[1]!, [0.05, 1.3, 0]] };
+    for (let i = 0; i < 60; i++) s = stepRig(s, 1 / 60, { ...OPTS, restStiffness: 0.3 });
+    expect(len(sub(s.points[2]!.pos, s.points[0]!.pos))).toBeGreaterThan(0.25 - 0.02);
+  });
+
+  it('does nothing to a limb that is already clear', () => {
+    const s0 = rig([0.3, 1.1, 0]);
+    const s1 = stepRig(s0, 1 / 60, OPTS);
+    expect(s1.points[2]!.pos).toEqual(s0.points[2]!.pos);
+  });
+
+  it('the guard follows its point and turns with the body yaw', () => {
+    // offset (0.2, 0, 0) at yaw 90 deg lands on -z (rotation about +Y): an elbow parked
+    // there is inside the guard, one parked on the other side is not.
+    let s = rig([0.3, 1.1, 0]);
+    s = { ...s, bodyYaw: Math.PI / 2, torsoGuards: [{ point: 0, offset: [0.2, 0, 0], limbs: [
+      { a: 1, b: 2, samples: [{ s: 1, clearance: 0.15 }] }] }] };
+    const moved = stepRig({ ...s, points: s.points.map((p, i) => i === 2 ? { ...p, pos: [0, 1.3, -0.2], prev: [0, 1.3, -0.2] } : p) }, 1 / 60, OPTS);
+    expect(len(sub(moved.points[2]!.pos, [0, 1.3, -0.2]))).toBeGreaterThan(0.01);   // pushed
+  });
+});

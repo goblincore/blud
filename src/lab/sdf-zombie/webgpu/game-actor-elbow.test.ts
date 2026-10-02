@@ -59,7 +59,12 @@ describe('projectile elbow upload', () => {
         // −0.021 dot). The regression this pins is a construction bug that
         // ignored the moving frame — that read ~−1, whole-plane flipped.
         expect(dot(cross(sub(a.b, a.a), sub(b.b, b.a)), movingNormal))
-          .toBeGreaterThanOrEqual(-0.05);
+          // -0.07 (was -0.05): the torso guards (rig.ts RigGuardSphere, 2026-10-02) shove
+          // an elbow a few centimetres out of the ribs after a slug hit, which tilts
+          // this coarse oracle plane by ~0.6 degrees more (measured -0.0633 on the one
+          // case that moves). The elbow STOP still runs last and the 150-degree check
+          // above is untouched; the bug this pins reads ~-1.
+          .toBeGreaterThanOrEqual(-0.07);
       };
       for (let f = 0; f < c.warm; f++) actor.step(1 / 60);
       const wound = c.kind === 'slug' ? actor.hitSlug(c.hit, c.dir) : actor.hit(c.hit, c.dir);

@@ -72,6 +72,30 @@ export interface RigState {
   clothForce?: Vec3;
   /** Arms stay out of the head (absent = no collision). */
   headKeepOut?: RigHeadKeepOut;
+  /** Arms stay out of the torso: one guard sphere per torso ellipsoid, each
+   *  riding the joint and offset its prim is bound to. A hit moves the lower torso
+   *  at full strength and the arms at a share of it, and a swing can carry an arm
+   *  across the body; nothing stopped either. */
+  torsoGuards?: RigGuardSphere[];
+}
+
+/** A sphere that follows a rig point (`offset` is in the rest frame and turns with
+ *  the body yaw, exactly as a bound prim's endpoint offset does) and keeps limb
+ *  segments out. Each limb's `clearance` is centre-to-axis distance for THIS sphere. */
+export interface RigGuardSphere {
+  point: number;
+  offset: Vec3;
+  limbs: RigGuardLimb[];
+}
+
+/** A limb segment guarded at several points along its length. A single
+ *  closest-point test cannot ask for more clearance mid-arm than at the shoulder
+ *  end (which sits at the torso by design), so each sample carries its own. */
+export interface RigGuardLimb {
+  a: number;
+  b: number;
+  /** Fractions along a -> b, each with the centre distance it must keep. */
+  samples: { s: number; clearance: number }[];
 }
 
 /**
@@ -227,6 +251,46 @@ export function applyHeadKeepOut(points: RigPoint[], ko: RigHeadKeepOut | undefi
   return out;
 }
 
+/** Push limb segments out of the guard spheres. Same position-based scheme as the
+ *  head capsule (applyHeadKeepOut): ends move by their share, `prev` moves with
+ *  them so no velocity is injected, pinned ends stay. */
+export function applyGuardSpheres(points: RigPoint[], guards: readonly RigGuardSphere[] | undefined, bodyYaw = 0): RigPoint[] {
+  if (!guards || guards.length === 0) return points;
+  const cy = Math.cos(bodyYaw), sy = Math.sin(bodyYaw);
+  let out = points;
+  for (const g of guards) {
+    const base = out[g.point]!.pos;
+    // Rotation about +Y by bodyYaw, the convention bound prim offsets use.
+    const c: Vec3 = [
+      base[0] + g.offset[0] * cy + g.offset[2] * sy,
+      base[1] + g.offset[1],
+      base[2] - g.offset[0] * sy + g.offset[2] * cy,
+    ];
+    for (const limb of g.limbs) {
+      for (const smp of limb.samples) {
+        const A = out[limb.a]!, B = out[limb.b]!;
+        const s = smp.s;
+        const P = add(A.pos, scale(sub(B.pos, A.pos), s));
+        const delta = sub(P, c);
+        const dist = len(delta);
+        if (dist >= smp.clearance) continue;
+        const n: Vec3 = dist > 1e-6 ? scale(delta, 1 / dist) : [c[0] >= base[0] ? 1 : -1, 0, 0];
+        const push = smp.clearance - dist;
+        let wA = !A.pinned ? 1 - s : 0;
+        let wB = !B.pinned ? s : 0;
+        if (wA > 0) wA = Math.max(wA, 0.25);
+        if (wB > 0) wB = Math.max(wB, 0.25);
+        const denom = wA * wA + wB * wB;
+        if (denom < 1e-9) continue;
+        if (out === points) out = points.slice();
+        if (wA > 0) { const d = scale(n, (push * wA) / denom); out[limb.a] = { ...A, pos: add(A.pos, d), prev: add(A.prev, d) }; }
+        if (wB > 0) { const d = scale(n, (push * wB) / denom); out[limb.b] = { ...B, pos: add(B.pos, d), prev: add(B.prev, d) }; }
+      }
+    }
+  }
+  return out;
+}
+
 export interface StepOpts {
   gravity: Vec3;
   /** Velocity bleed per step, 0..1. */
@@ -287,13 +351,19 @@ export function stepRig(state: RigState, dt: number, opts: StepOpts): RigState {
       if (!pa.pinned) pa.pos = add(pa.pos, correction);
       if (!pb.pinned) pb.pos = sub(pb.pos, correction);
     }
-    points = applyHeadKeepOut(points, state.headKeepOut);
+    points = applyGuardSpheres(applyHeadKeepOut(points, state.headKeepOut), state.torsoGuards, state.bodyYaw ?? 0);
     points = constrainRigBends({ ...state, points }).points;
   }
 
-  const bent = constrainRigBends({ ...state, points });
-  // Last word: whatever the bend stop moved, an arm is never left in the head.
-  const result = state.headKeepOut ? { ...bent, points: applyHeadKeepOut(bent.points, state.headKeepOut) } : bent;
+  // One more keep-out pass, THEN the elbow stop as the last word: the anatomical
+  // limit outranks the clearance (the keep-outs are 1.5 cm generous, so the stop's
+  // sub-millimetre correction cannot put an arm back inside).
+  const result = constrainRigBends({
+    ...state,
+    points: state.headKeepOut || state.torsoGuards
+      ? applyGuardSpheres(applyHeadKeepOut(points, state.headKeepOut), state.torsoGuards, state.bodyYaw ?? 0)
+      : points,
+  });
   if (!state.posePins?.length) return result;
   return { ...result, points: result.points.map((p, i) => state.posePins!.includes(i)
     ? { ...p, pinned: state.points[i]!.pinned } : p) };
