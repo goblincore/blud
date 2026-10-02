@@ -206,7 +206,9 @@ describe('goblin-kit.gltf fits goblin.blob', () => {
     const d = near.map(v => sdBody(v, body));
     expect(Math.min(...d), 'no belt vertex inside the flesh').toBeGreaterThan(0);
     expect(Math.max(...d), 'nothing hangs more than 55 mm off').toBeLessThan(0.055);
+    // The only brass in the kit is the buckle (the bandoliers' cartridges were removed 2026-10-02), one 8-vertex box.
     const bk = groups.get('brass')!.map(v => sdBody(v, body));
+    expect(bk.length, 'buckle vertices found').toBe(8);
     expect(Math.min(...bk), 'buckle is clear of the flesh').toBeGreaterThan(0.005);
     expect(Math.max(...bk), 'buckle is not floating').toBeLessThan(0.045);
   });

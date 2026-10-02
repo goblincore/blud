@@ -313,12 +313,70 @@ parts
   # millimetre or two deep and z-fought with a plate that close), x1.18 fixed that and read
   # as a tight tee, this is the loose version.
   loft yoke bones=chest..chest frame=fwd material=iron
-    ring 0.00 w=0.1399 d=0.1849 fwd=0.004
-    ring 0.25 w=0.1319 d=0.1688 fwd=0.003
-    ring 0.50 w=0.1221 d=0.1486 fwd=0.002
-    ring 0.75 w=0.1193 d=0.1431
-    ring 0.97 w=0.1176 d=0.1391
+    ring 0.30 w=0.1262 d=0.1425
+    ring 0.50 w=0.1126 d=0.1380
+    ring 0.70 w=0.1085 d=0.1400
+    ring 0.85 w=0.1058 d=0.1450
+    ring 0.94 w=0.1060 d=0.1560
+    ring 1.00 w=0.1010 d=0.1440
     cap start=none end=none
+
+  # COLLAR AND NECK-LINE (owner, 2026-10-02, looking at the render: "the chestplate should be
+  # extended up to the neck and have like a collar"; the first yoke stopped 0.1 m short and the
+  # shirt showed as a white block between its top edge and the neck). Three parts:
+  #   * the yoke now reaches the chest bone's tail, y 0.985 m, which is the neck's head at
+  #     (0, 0.985, 0.054). A first pass tapered the top rings in to the neck's width (0.0910 x
+  #     0.1010) and the painted shirt poked through the plate as white patches: the chest flesh is
+  #     still 0.1124 wide x 0.131 deep at t0.95 (measure.md), so the plate must stay >= 1.2x that
+  #     right up to the top (0.1060 x 0.1300, /1.30 of 0.1124 x 1.22 and 0.131 x 1.29) and narrow
+  #     only in the last ring. A second pass CLOSED THE TOP WITH `cap end=flat` and the fit test
+  #     caught it: that disc's centre vertex sits 52.8 mm inside the neck, and it would poke out
+  #     whenever the head moves against the chest (the goblin-kit header's rule: nothing
+  #     limb-wrapping is capped flat). It is not needed: the collar's base ring equals the
+  #     yoke's top ring, so the two lofts are one continuous shell.
+  #   * a stand-up COLLAR on the neck bone, a separate loft because a chain loft across the
+  #     chest->neck bend (26 degrees) with rings this wide folds in WAM (the belt did the same).
+  #     Neck flesh (measure.md "NECK", head-limb cluster): w 0.0800 d 0.0812 at the base (y 0.985),
+  #     0.0768 / 0.0840 at t0.25, 0.0732 / 0.0768 at t0.5 (y 1.052); the jaw starts at t~0.8, so the
+  #     collar tops out at t0.5. Its base ring matches the yoke's top ring (0.1010 x 0.1200) so the
+  #     two are one surface, then it drops to a LOOSE neck fit (x1.40) and FLARES to x1.70 at the rim
+  #     so it reads as a turned-out collar. /1.30: 0.1010 x 0.1200, 0.0900 x 0.1090, 0.0860 x 0.1010,
+  #     0.0957 x 0.1005. THE WAIST IS DEEPER THAN THE NECK on purpose: the chest flesh's rounded top
+  #     bulges forward to z 0.112-0.116 m at y 0.985-1.0 and 0.099 at y 1.02 (probed 2026-10-02, the
+  #     neck itself only reaches 0.094), so a neck-shaped waist (d 0.0900) left 0-4 mm of cover and
+  #     the shirt showed through as a white patch under the collar. d 0.1090 / 0.1010 puts the front
+  #     ~12 mm over that bulge.
+  #   THEN DEEPER STILL (same session): a probe of iron front z against flesh front z at x=0 gave
+  #     only 6-15 mm of cover over y 0.90-1.0 and, after the 7.6% an 8-sided ring loses at a facet
+  #     midpoint and the body grain's surface noise, the shirt still flashed through as a white
+  #     strip under the collar. The owner wants it oversized anyway, so the UPPER front now stands
+  #     off like the hem does (~35 mm): yoke d 0.1380 / 0.1400 / 0.1450 / 0.1560 / 0.1440 at t0.50 /
+  #     0.70 / 0.85 / 0.94 / 1.00, collar d 0.1440 / 0.1300 / 0.1180 / 0.1005 (base / 0.12 / 0.28 /
+  #     rim). Widths are unchanged: the hanging arms limit those, depth is free.
+  loft collar bone=neck at=0.0 offset=(0,-0.022,0) dir=up pitch=5 len=0.0778 frame=fwd material=iron
+    ring 0.000 w=0.0960 d=0.1380
+    ring 0.283 w=0.0990 d=0.1420
+    ring 0.443 w=0.0900 d=0.1300
+    ring 0.752 w=0.0860 d=0.1180
+    ring 1.000 w=0.0957 d=0.1005
+    cap start=none end=none
+
+  # THE COLLAR OVERLAPS THE YOKE (found by the render, same session): the yoke rides the chest
+  # bone and the collar the neck bone, whose axes differ by ~26 degrees (chest +9, neck -17 in
+  # the kit skeleton), so two lofts whose end rings are the same size still meet at an ANGLE and
+  # leave a wedge-shaped gap at the front, which showed as a clean white rectangle of shirt. So
+  # the collar is a FREE RAY starting 0.022 of height (29 mm) BELOW the neck base, along the
+  # neck's world axis (`dir=up pitch=5`: a ray's pitch is world-referenced, and the spine1 +13,
+  # chest +9, neck -17 chain nets to +5), its first ring smaller than the yoke's top ring
+  # (0.0960 x 0.1380 against 0.1010 x 0.1440) so that part is buried inside the yoke, not
+  # fighting it. Length 0.0778 = 0.022 + the 0.0538 to neck t0.5. Ring t = (0.022 + neck-t x
+  # 0.1077) / 0.0778 for the neck rings above (neck base 0.283, t0.12 0.443, t0.28 0.752).
+
+  # NO BANDOLIERS (owner, 2026-10-02, after seeing them: "its too busy"). They were two crossed
+  # leather straps (4 lofts) with 26 brass cartridges (box attaches), generated into this file;
+  # the X read clearly but crowded the chest. The generated lines are saved verbatim in
+  # docs/dev-notes/2026-10-02-goblin-armour/bandoliers-removed.wam.txt: paste them back in before
+  # the SHADES block to restore them (the derivation is in that folder's notes.md).
 
   # SHADES — ROUND LENSES WITH EAR HOOKS (owner, 2026-10-02: "round lens sunglasses and give them
   # ear hooks that go up to his ears"). They replace the single wrap-around bar the first

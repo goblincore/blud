@@ -67,3 +67,18 @@
   no explicit `dir=(x,y,z)` (that is bones only). Frame material `black` (LOOK already had it); the watch strap keeps
   `band`, which the test pins to the left wrist.
 - Frames: `shades-front.png`, `shades-spikes-side.png`.
+
+## Collar, bandoliers (2026-10-02)
+
+- **Collar and neck-line** (owner: "extended up to the neck, like a collar"). The yoke now reaches the neck base and a
+  flared stand-up collar tops out at neck t0.5 (y 1.052, the jaw starts ~t0.8). Four rounds of render findings, all in
+  the `.wam` comments: (1) tapering the top rings in let the painted shirt poke through as white patches (flesh is still
+  0.1124 x 0.131 at the chest top); (2) a `cap end=flat` closing the top put a vertex 52.8 mm inside the neck, caught by
+  the fit test, and was removed; (3) a probe of iron-front-z vs flesh-front-z gave only 6-15 mm of cover at the front
+  centre, so the upper front was deepened to stand ~35 mm off like the hem; (4) the yoke rides the chest bone and the
+  collar the neck bone, 26 degrees apart in the kit skeleton, so equal end rings still left a wedge gap at the front:
+  the collar is now a free ray starting 29 mm below the neck base, overlapping inside the yoke.
+- **Bandoliers built, then removed** (owner: "its too busy"). Two crossed leather straps with 26 brass cartridges read
+  clearly as an X but crowded the chest. The generated lines are kept in `bandoliers-removed.wam.txt`. The strap path:
+  P0 (+/-0.060, 0.980, 0.150) -> P1 (-/+0.006, 0.840, 0.161, over the yoke hem) -> P2 (-/+0.072, 0.705, 0.122), the second
+  strap 5 mm further forward where they cross; each half a straight loft aimed with `dir=down tilt= pitch=`.
