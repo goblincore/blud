@@ -2,6 +2,15 @@
 
 Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Slug head burst — designed 2026-10-02
+
+- [ ] **Slug on the head: lethal burst (dead-centre) and glancing rupture (off-centre).** Jelly rupture deform, skull
+  shards, brain, blood and hinged torn scalp flaps; the head stays on the body. Spec approved, plan next:
+  [spec](../../docs/superpowers/specs/2026-10-02-slug-head-burst-design.md).
+- [ ] **Spike (separate, not started): shader-side burst/peel displacement field** (approach C of the same spec) for
+  truer jelly peeling flesh. New march WGSL, shared march cost, and a Rust port to carry; only after the composed
+  version has been played.
+
 ## Player melee: spike flail — designed 2026-09-26 (replaces the censer)
 
 **Hand-off (2026-09-30):** [what exists, traps, and the to-do list](../dev-notes/2026-09-30-flail-handoff/HANDOFF.md). PR #22 is merged.
