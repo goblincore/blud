@@ -203,7 +203,15 @@ call" below).
     end. Every failed check must be one of the plan's parity gate checks; pack and far failing the gate is the result
     the owner has to see, so it does not block the copy.
   - Subset, A/B and aborted runs never touch `look/`. The copy removes the old committed files first.
+  - Hardening (follow-up commit):
+    - every scene's sheet and overlay, and `parity.json`, must copy; only a missing zoom (ENOENT) is tolerated;
+    - any other copy error is a failed check, with `committedCopy.done` false;
+    - the reason for not copying is written to `parity.json` as well;
+    - `look/` and a relative `LAB_TMP` resolve against the repo root (from the script's own path), not the cwd;
+    - recorded paths are repo-relative.
   - `EARLYZ_EXTRA_QUERY` appends a query to every boot, for A/B diagnostics (used below with `skeleton=procedural`).
+    With `EARLYZ_AB_OUT=<path>` as well, each scene runs as a baseline arm and a variant arm, and a small comparison
+    JSON is written to `<path>`.
 
 ### Numbers of record
 
@@ -211,13 +219,13 @@ Noise floor: `pack` off vs off2 **0 px** (max diff 1), so the gate is max(2 x 0,
 Within each scene, two boots with the same flag gave a **bit-identical march target** (all 120000 texels, both flag
 states).
 
-| scene | diff px (masked noise) | % | max | noise off/off2, on/on2 | seed | batches (types drawn) | march seededOut / changedHit / big / newHit | seeded components (largest sizes) | fringe <=6 / <=24 px | march change / unexplained | diff in seeded interior | gate |
+| scene | diff px counted (masked noise; raw) | % | max | noise off/off2, on/on2 | seed | batches (types drawn) | march seededOut / changedHit / big / newHit | seeded components (largest sizes) | fringe <=6 / <=24 px | march change / unexplained | diff in seeded interior | gate |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| pack | **1071** (0) | 0.105 | 115 | 0, 0 | on, reason null | zombie@1 6F, soldier@1 1F, zombie@2 1F, zombie@4 1F | 5897 / 15097 / 4 / 0 | 5 (5216, 495, 164, 20, 2) | 923 / 1010 | 30 / 31 | **0** | **FAIL** |
-| doorway | 1168 (0) | 0.114 | 84 | 0, 0 | on, reason null | zombie@1 9F, zombie@2 2F | 2527 / 2641 / 4 / 0 | 7 (1546, 945, 26, 4, 3, 2, 1) | 1023 / 1145 | 23 / 0 | **0** | reported |
-| train-doorway | 1221 (27) | 0.119 | 85 | 126 (max 28), 157 (max 22) | on, reason null | zombie@1 2F 1B, zombie@2 1F | 899 / 1032 / 0 / 0 | 5 (659, 158, 51, 25, 6) | 1063 / 1153 | 0 / 68 | **0** | reported |
-| melee | 152 (0) | 0.015 | 60 | 0, 0 | on, reason null | soldier@1 **1B** | 163 / 163 / 0 / 0 | 1 (163) | 152 / 152 | 0 / 0 | **0** | PASS |
-| far | **1118** (0) | 0.109 | 103 | 0, 0 | on, reason null | zombie@1 16F, soldier@1 1F, zombie@2 1F, zombie@4 1F | 1077 / 11933 / 9 / 0 | 11 (897, 162, 3, 3, 3, 2, 2, 2, 1, 1, 1) | 875 / 926 | 164 / 28 | **0** | **FAIL** |
+| pack | **1071** (0; 1071) | 0.105 | 115 | 0, 0 | on, reason null | zombie@1 6F, soldier@1 1F, zombie@2 1F, zombie@4 1F | 5897 / 15097 / 4 / 0 | 5 (5216, 495, 164, 20, 2) | 923 / 1010 | 30 / 31 | **0** | **FAIL** |
+| doorway | 1168 (0; 1168) | 0.114 | 84 | 0, 0 | on, reason null | zombie@1 9F, zombie@2 2F | 2527 / 2641 / 4 / 0 | 7 (1546, 945, 26, 4, 3, 2, 1) | 1023 / 1145 | 23 / 0 | **0** | reported |
+| train-doorway | 1221 (27; 1248) | 0.119 | 85 | 126 (max 28), 157 (max 22) | on, reason null | zombie@1 2F 1B, zombie@2 1F | 899 / 1032 / 0 / 0 | 5 (659, 158, 51, 25, 6) | 1063 / 1153 | 0 / 68 | **0** | reported |
+| melee | 152 (0; 152) | 0.015 | 60 | 0, 0 | on, reason null | soldier@1 **1B** | 163 / 163 / 0 / 0 | 1 (163) | 152 / 152 | 0 / 0 | **0** | PASS |
+| far | **1118** (0; 1118) | 0.109 | 103 | 0, 0 | on, reason null | zombie@1 16F, soldier@1 1F, zombie@2 1F, zombie@4 1F | 1077 / 11933 / 9 / 0 | 11 (897, 162, 3, 3, 3, 2, 2, 2, 1, 1, 1) | 875 / 926 | 164 / 28 | **0** | **FAIL** |
 
 (F = front batch, B = back batch.)
 
@@ -268,8 +276,12 @@ hit) are behind the **polygon eyes of the mesh skeleton**.
     because by design the eyes show through intact flesh.
   - `sdf-layer.ts` pass 1 renders `FIELD_MESH_LAYER` into post-aa's capture. That capture's depth is the seed's source
     (spec D6), so wherever an eyeball covers a whole march texel, the seed removes the flesh texel behind it.
-- **The A/B.** `EARLYZ_SCENES=doorway EARLYZ_EXTRA_QUERY=skeleton=procedural` (procedural bones in the field; no mesh
-  eyes), same staging.
+- **The A/B, committed as evidence:** [`ab-skeleton-procedural.json`](ab-skeleton-procedural.json), from
+  `EARLYZ_SCENES=doorway EARLYZ_EXTRA_QUERY=skeleton=procedural EARLYZ_AB_OUT=docs/dev-notes/2026-10-01-earlyz-stage-1/ab-skeleton-procedural.json scripts/earlyz-run.sh parity <scratch dir>`.
+  - It boots the doorway twice, with the same staging: baseline (mesh skeleton) and variant (procedural bones in the
+    field, no mesh eyes).
+  - For each it records the diff, the red pixels inside the head crop [760, 370, 120, 50] (screen px), and the seeded
+    components. That re-run reproduced every number below.
   - The seeded components are identical except that **exactly those two head components are gone**: 5 components
     (1546, 945, 26, 4, 1) instead of 7.
   - The diff falls from 1168 to **979 px**, and the face blobs are gone: 197 diff px in a 120 x 50 crop round the heads
@@ -319,8 +331,11 @@ hit) are behind the **polygon eyes of the mesh skeleton**.
       volume, the flame tongues and SSCS; none should be active here (no fire; SSCS ships off), so this is unlikely;
     - FXAA's along-edge search.
   - Until one is shown, these pixels are an open question, not fringe.
-  - The train's 68 unexplained px sit in the region where its own boots differ (posts in the dark carriage); 27 more
-    were masked as noise.
+  - The train's 68 unexplained px (27 more were masked as exact boot-noise pixels):
+    - 54 lie within 24 px of a pixel that differed between two boots of the same flag, and 34 within 8 px. That is a
+      proxy, recomputed from the run-of-record captures; the script now reports it as `unexplainedNearNoise`.
+    - So most are plausibly boot noise the exact-pixel mask missed. 14 are not near any noise pixel.
+    - Not proven either way.
 
 ### What I saw in each sheet
 
@@ -353,9 +368,18 @@ Every sheet now carries its numbers in a strip along the top.
 
 ### Owner's call (not decided here)
 
-1. **Accept the fringe.** Treat the pixel count as a report, and gate instead on the evidence above: no miss -> hit,
-   no diff in a seeded interior (0 in every scene), the seeded components accounted for by occluding polygons. The
-   unexplained pixels are not part of that gate and should be explained first.
+1. **Accept the fringe.** Treat the pixel count as a report, and gate instead on the evidence above:
+   - no miss -> hit;
+   - no diff in a seeded interior (0 in every scene);
+   - the seeded components accounted for by occluding polygons. **That last part is a manual review, not a check.**
+     The components reviewed are the bboxes in "What the seed took" above:
+     - pack: [166-245, 189-299], [134-162, 247-278], [292-304, 152-183], [250-252, 239-247], [79-80, 191];
+     - doorway: [301-327, 143-229], [281-298, 144-218], [260-261, 177-196], [248-251, 207], [252-253, 148-149],
+       [244, 148-149], [244, 214];
+     - train-doorway: [262-284, 146-189], [205-219, 184-217], [206-211, 200-208], [206-211, 193-197], [198-203, 183];
+     - melee: [208-227, 189-201];
+     - far: [188-222, 189-237], [293-304, 152-183], and nine 1-3-texel feet components at y 213-238.
+   The unexplained pixels are not part of that gate and should be explained first.
 2. **Keep non-level polygons out of the seed's depth**: the viewmodel, and the mesh skeleton's eyes. That would remove
    the gun fringe in every scene and the face blobs, at the cost of no early-Z under the gun or behind an eye.
 3. **Leave it as is:** the plan's gate stays red on `pack` and `far` until 1 or 2 is chosen.

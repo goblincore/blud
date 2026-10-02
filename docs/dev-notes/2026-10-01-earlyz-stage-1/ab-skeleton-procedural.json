@@ -1,0 +1,177 @@
+{
+  "when": "2026-10-02T07:33:38.727Z",
+  "load": [
+    1.59,
+    1.69,
+    1.86
+  ],
+  "diffLevel": 8,
+  "settleFrames": 180,
+  "variantQuery": "skeleton=procedural",
+  "crop": {
+    "rect": [
+      760,
+      370,
+      120,
+      50
+    ],
+    "units": "screen px of the 1280 x 800 capture: x, y, w, h",
+    "counts": "red (counted) diff px inside it"
+  },
+  "scenes": {
+    "doorway": {
+      "baseline": {
+        "query": "frozen=1&vhs=off&seed=20260918&earlyz=1",
+        "diff": {
+          "counted": 1168,
+          "masked": 0,
+          "raw": 1168,
+          "max": 84
+        },
+        "cropPx": 197,
+        "seeded": {
+          "count": 7,
+          "interiorTexels": 2044,
+          "components": [
+            {
+              "size": 1546,
+              "bbox": [
+                301,
+                143,
+                327,
+                229
+              ],
+              "interior": 1296
+            },
+            {
+              "size": 945,
+              "bbox": [
+                281,
+                144,
+                298,
+                218
+              ],
+              "interior": 748
+            },
+            {
+              "size": 26,
+              "bbox": [
+                260,
+                177,
+                261,
+                196
+              ],
+              "interior": 0
+            },
+            {
+              "size": 4,
+              "bbox": [
+                248,
+                207,
+                251,
+                207
+              ],
+              "interior": 0
+            },
+            {
+              "size": 3,
+              "bbox": [
+                252,
+                148,
+                253,
+                149
+              ],
+              "interior": 0
+            },
+            {
+              "size": 2,
+              "bbox": [
+                244,
+                148,
+                244,
+                149
+              ],
+              "interior": 0
+            },
+            {
+              "size": 1,
+              "bbox": [
+                244,
+                214,
+                244,
+                214
+              ],
+              "interior": 0
+            }
+          ]
+        }
+      },
+      "variant": {
+        "query": "frozen=1&vhs=off&seed=20260918&skeleton=procedural&earlyz=1",
+        "diff": {
+          "counted": 979,
+          "masked": 0,
+          "raw": 979,
+          "max": 84
+        },
+        "cropPx": 11,
+        "seeded": {
+          "count": 5,
+          "interiorTexels": 2044,
+          "components": [
+            {
+              "size": 1546,
+              "bbox": [
+                301,
+                143,
+                327,
+                229
+              ],
+              "interior": 1296
+            },
+            {
+              "size": 945,
+              "bbox": [
+                281,
+                144,
+                298,
+                218
+              ],
+              "interior": 748
+            },
+            {
+              "size": 26,
+              "bbox": [
+                260,
+                177,
+                261,
+                196
+              ],
+              "interior": 0
+            },
+            {
+              "size": 4,
+              "bbox": [
+                248,
+                207,
+                251,
+                207
+              ],
+              "interior": 0
+            },
+            {
+              "size": 1,
+              "bbox": [
+                244,
+                214,
+                244,
+                214
+              ],
+              "interior": 0
+            }
+          ]
+        }
+      }
+    }
+  }
+}

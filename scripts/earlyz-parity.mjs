@@ -9,7 +9,7 @@
 //   on2   the same as on (EARLYZ_ON_NOISE=0 skips it)           the flag-on path's noise
 // on vs off is the parity diff and the owner sheet (off | on | red diff). Pixels that differ in
 // off vs off2 OR on vs on2 (boot noise) are MASKED out of it and counted apart (cyan in the
-// sheets). The gate floor is the plan's: the PACK scene's off-vs-off2 pixel count (pack runs
+// sheets); the raw (unmasked) count is reported next to it. The gate floor is the plan's: the PACK scene's off-vs-off2 pixel count (pack runs
 // first, for the floor, even when not listed).
 //
 // GATE (plan Task 12, spec §7), unchanged from the plan: every scene but the two doorways within
@@ -53,9 +53,12 @@
 // shotgun that 180 frames removed). The screenshot is taken only once two consecutive screenshots
 // 250 ms apart are byte-identical (a deferred render landing late cannot be captured).
 // EARLYZ_EXTRA_QUERY (e.g. `skeleton=procedural`) is appended to EVERY boot's query: an A/B
-// diagnostic; such a run never touches the committed directory.
+// diagnostic; such a run never touches the committed directory. With EARLYZ_AB_OUT=<path> as well,
+// every scene runs as a baseline arm (no extra query) AND a variant arm (with it), and a small JSON
+// comparing the two (diff counts, red px inside EARLYZ_AB_CROP, seeded components) goes to <path>.
 //
-// OUTPUT. Everything goes to workDir (default $LAB_TMP/earlyz-parity, disposable):
+// OUTPUT. Everything goes to workDir (default $LAB_TMP/earlyz-parity, disposable; a relative LAB_TMP
+// and the committed directory resolve against the repo root, found from this file, not the cwd):
 //   <scene>-off-on-diff-half.png  the sheet at half size (1920 x 400 + a text strip with the pixel
 //                                 count, max diff, masked noise and fringe counts): off and on 2x2
 //                                 box-averaged, the diff panel 2x2 MAX-pooled so a 1 px fringe
@@ -73,27 +76,35 @@
 // the plan's parity GATE checks (today pack and far fail it on the seed fringe; that is the result
 // the owner has to see, so it does not block the copy). Any other failed check, any subset or A/B
 // run, and any aborted run leaves the committed directory untouched. The copy first removes the
-// committed sheets/zooms/overlays/parity.json, so a stale file cannot survive.
+// committed sheets/zooms/overlays/parity.json, so a stale file cannot survive. A copy error other
+// than a missing zoom (a scene with no red has none) is a failed check with committedCopy.done
+// false, and the directory may then be partial; the reason is in parity.json either way.
 //
 // BOUNDED (the earlyz-smoke patterns): a watchdog (EARLYZ_WATCHDOG_MIN, default 75) ends the run
 // whatever hangs, a loader gate that settles anything but 'ready' fails at once, and fail() gives
 // the page 10 s to answer its diagnostic read. A second CDP client collects the console per boot
 // into workDir/raw/<scene>-<boot>.console.log.
 import { copyFileSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadavg } from 'node:os';
 import { connectGame, bootCloseupPage, applyShipDefaults, sleep } from './lib/sdf-closeup-stage.mjs';
 import { decodePng } from './lib/demo-presented.mjs';
 import { writePng } from './lib/png-write.mjs';
 import { STAGES } from './lib/earlyz-scenes.mjs';
 
+/** The repo root, from this file's own location (never the cwd): the committed directory and a
+ *  relative LAB_TMP resolve against it, so the script can be run from anywhere. */
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+/** Paths as they go into the report: relative to the repo root, so no machine path is committed. */
+const rel = (p) => relative(ROOT, p) || '.';
 const [, , VITE, CDP, WORK_ARG] = process.argv;
-const TMP = process.env.LAB_TMP ?? '/tmp';
-const WORK = WORK_ARG ?? join(TMP, 'earlyz-parity');
+const TMP = resolve(ROOT, process.env.LAB_TMP ?? '/tmp');
+const WORK = WORK_ARG ? resolve(WORK_ARG) : join(TMP, 'earlyz-parity');
 const RAW = join(WORK, 'raw');
-const LOOK_DIR = 'docs/dev-notes/2026-10-01-earlyz-stage-1/look';
-if (resolve(WORK) === resolve(LOOK_DIR)) {
-  console.error(`earlyz-parity: workDir must not be the committed ${LOOK_DIR} (a run writes there only by the copy rule)`);
+const LOOK_DIR = join(ROOT, 'docs/dev-notes/2026-10-01-earlyz-stage-1/look');
+if (WORK === LOOK_DIR) {
+  console.error(`earlyz-parity: workDir must not be the committed ${rel(LOOK_DIR)} (a run writes there only by the copy rule)`);
   process.exit(2);
 }
 mkdirSync(RAW, { recursive: true });
@@ -107,6 +118,16 @@ const DEFAULT_SETTLE = 180;
 const SETTLE_FRAMES = Number(process.env.EARLYZ_SETTLE_FRAMES ?? DEFAULT_SETTLE);
 const EXTRA_QUERY = process.env.EARLYZ_EXTRA_QUERY ?? '';
 const ON_NOISE = process.env.EARLYZ_ON_NOISE !== '0';
+/** A/B EVIDENCE MODE. EARLYZ_AB_OUT=<path> (with EARLYZ_EXTRA_QUERY): every scene runs twice, the
+ *  BASELINE arm with no extra query and the VARIANT arm with it, and a small JSON comparing them is
+ *  written to <path> (relative paths against the repo root): per arm the diff (counted / masked /
+ *  raw / max), the red pixels inside EARLYZ_AB_CROP (x,y,w,h screen px; default the doorway's two
+ *  nearest heads) and the seeded components. Never a run of record. */
+const AB_OUT = process.env.EARLYZ_AB_OUT ? resolve(ROOT, process.env.EARLYZ_AB_OUT) : null;
+const AB_CROP = (process.env.EARLYZ_AB_CROP ?? '760,370,120,50').split(',').map(Number);
+const AB_TAG = '.variant';
+if (AB_OUT && !EXTRA_QUERY) { console.error('earlyz-parity: EARLYZ_AB_OUT needs EARLYZ_EXTRA_QUERY (the variant arm)'); process.exit(2); }
+if (AB_CROP.length !== 4 || AB_CROP.some((v) => !Number.isFinite(v))) { console.error(`earlyz-parity: bad EARLYZ_AB_CROP ${process.env.EARLYZ_AB_CROP}`); process.exit(2); }
 /** Why this run may NOT update the committed look/ (null = it may, if its checks allow). */
 const notOfRecord = SCENES.join(',') !== DEFAULT_SCENES.join(',') ? `scene subset ${SCENES.join(',')}`
   : EXTRA_QUERY ? `EARLYZ_EXTRA_QUERY=${EXTRA_QUERY}`
@@ -129,17 +150,17 @@ function dumpConsole(p, quiet = false) {
     const k = `${l.level}\t${l.text.slice(0, 400)}`;
     loud.set(k, (loud.get(k) ?? 0) + 1);
   }
-  if (quiet) return { file, lines: lines.length, loud: loud.size };
-  console.log(`console[${p}] ${lines.length} lines -> ${file}; ${loud.size} distinct earlyz/warn/error:`);
+  if (quiet) return { file: rel(file), lines: lines.length, loud: loud.size };
+  console.log(`console[${p}] ${lines.length} lines -> ${rel(file)}; ${loud.size} distinct earlyz/warn/error:`);
   for (const [k, n] of [...loud].slice(0, 40)) console.log(`  ${n > 1 ? `x${n} ` : ''}${k}`);
-  return { file, lines: lines.length, loud: loud.size };
+  return { file: rel(file), lines: lines.length, loud: loud.size };
 }
 const exceptionsIn = (p) => (logs[p] ?? []).filter((l) => l.level === 'exception');
 
 const report = {
   when: new Date().toISOString(), load: loadavg().map((x) => +x.toFixed(2)), diffLevel: DIFF_LEVEL,
   settleFrames: SETTLE_FRAMES, seed: SEED, viewport: [W, H], extraQuery: EXTRA_QUERY || null, onNoise: ON_NOISE,
-  workDir: WORK, ofRecord: notOfRecord === null, scenes: {}, checks: [],
+  workDir: rel(WORK), ofRecord: notOfRecord === null, abOut: AB_OUT ? rel(AB_OUT) : null, scenes: {}, checks: [],
 };
 const writeReport = () => writeFileSync(join(WORK, 'parity.json'), JSON.stringify(report, null, 2));
 
@@ -249,11 +270,11 @@ async function stableShot() {
 }
 
 /** Boot `scene` with the flag on or off, pin, stage, settle, capture. `boot` names the boot. */
-async function capture(scene, flagOn, boot) {
-  phase = `${scene}-${boot}`;
+async function capture(scene, flagOn, boot, extra = EXTRA_QUERY, tag = '') {
+  phase = `${scene}${tag}-${boot}`;
   logs[phase] = [];
   const s = STAGES[scene];
-  const q = ['frozen=1', 'vhs=off', `seed=${SEED}`, s.query, EXTRA_QUERY, flagOn ? 'earlyz=1' : ''].filter(Boolean).join('&');
+  const q = ['frozen=1', 'vhs=off', `seed=${SEED}`, s.query, extra, flagOn ? 'earlyz=1' : ''].filter(Boolean).join('&');
   const t0 = Date.now();
   const load = +loadavg()[0].toFixed(2);
   await bootCloseupPage({ send, evaluate, url: `http://localhost:${VITE}/sdf-game.html?${q}`, fail: die });
@@ -267,7 +288,7 @@ async function capture(scene, flagOn, boot) {
   await sleep(300);
   const shot = await stableShot();
   const img = decodePng(Buffer.from(shot.b64, 'base64'));
-  writeFileSync(join(RAW, `${scene}-${boot}.png`), Buffer.from(shot.b64, 'base64'));
+  writeFileSync(join(RAW, `${scene}${tag}-${boot}.png`), Buffer.from(shot.b64, 'base64'));
   const info = JSON.parse(await evaluate('JSON.stringify(__sdfGame.earlyzInfo())'));
   const gpu = JSON.parse(await evaluate('JSON.stringify(__sdfGame.gpuDiagnostics())'));
   const march = await evaluate('__sdfGameDebug.hashMarchTarget()');
@@ -292,7 +313,7 @@ async function capture(scene, flagOn, boot) {
   // The exact march target, AFTER the screenshot (readMarchTarget draws one dt-0 frame itself).
   const mt = await evaluate('__sdfGameDebug.readMarchTarget()');
   const mb = Buffer.from(mt.rgba32f, 'base64');
-  writeFileSync(join(RAW, `${scene}-${boot}.march.f32`), mb);
+  writeFileSync(join(RAW, `${scene}${tag}-${boot}.march.f32`), mb);
   const marchF32 = { w: mt.w, h: mt.h, f: new Float32Array(mb.buffer.slice(mb.byteOffset, mb.byteOffset + mb.length)) };
   const ex = exceptionsIn(phase);
   const con = dumpConsole(phase, true);
@@ -392,6 +413,23 @@ function screenDistance(mask, mw, mh, rect, lens, W, H, CAP = 255) {
 }
 
 
+/** Chebyshev distance (px, capped) from every screen pixel to the nearest set pixel of `mask`
+ *  (same W x H). Two-pass chamfer, as screenDistance. */
+function pixelDistance(mask, CAP = 255) {
+  const dist = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) dist[i] = mask[i] ? 0 : CAP;
+  const at = (x, y) => (x < 0 || y < 0 || x >= W || y >= H ? CAP : dist[y * W + x]);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x;
+    dist[i] = Math.min(dist[i], at(x - 1, y) + 1, at(x, y - 1) + 1, at(x - 1, y - 1) + 1, at(x + 1, y - 1) + 1, CAP);
+  }
+  for (let y = H - 1; y >= 0; y--) for (let x = W - 1; x >= 0; x--) {
+    const i = y * W + x;
+    dist[i] = Math.min(dist[i], at(x + 1, y) + 1, at(x, y + 1) + 1, at(x + 1, y + 1) + 1, at(x - 1, y + 1) + 1, CAP);
+  }
+  return dist;
+}
+
 /** The seeded-out texels as 8-connected components (the "what did the seed take" inventory), and
  *  the INTERIOR mask: a seeded texel whose 8 neighbours are all seeded (off-target neighbours count
  *  as not seeded). Components are sorted largest first; `top` keeps the 40 largest with size, bbox
@@ -453,17 +491,21 @@ function seededComponents(march) {
  *    a later pass that reads the capture DEPTH (which the composite writes from the march, so it
  *    changes along the fringe) over a wide footprint, or FXAA's along-edge search. Red there is what
  *    to inspect first (spec: red inside an open doorway or on a fully visible body is a bug).
+ *  - `unexplainedNearNoise`: of those, how many lie within FRINGE_PX of a boot-noise pixel (a proxy).
  *  - `insideInterior`: diff pixels whose march texel is an INTERIOR seeded texel (must be 0).
  *  `seedDistHist` bins the seed-fringe pixels by their distance to the nearest seeded-out pixel. */
 const FRINGE_PX = 24;
 const TIGHT_PX = 6;
-function classify(d, march, comps, rect, lens) {
+function classify(d, march, comps, rect, lens, noiseMask) {
   const sd = screenDistance(march.masks.seededMask, march.w, march.h, rect, lens, W, H);
   const od = screenDistance(march.masks.otherMask, march.w, march.h, rect, lens, W, H);
+  // A proxy for "is this unexplained red boot noise the mask missed": within FRINGE_PX of a pixel
+  // that differed between two boots of the same flag.
+  const nd = pixelDistance(noiseMask);
   const BINS = [0, 1, 2, 3, 4, TIGHT_PX, 10, FRINGE_PX];
   const hist = Object.fromEntries(BINS.map((b) => [`<=${b}`, 0]));
   const r = { fringePx: FRINGE_PX, tightPx: TIGHT_PX, seedFringe: 0, seedFringe6: 0, marchChange: 0, unexplained: 0,
-    insideInterior: 0, insideInteriorAt: [], seedDistHist: hist, unexplainedBbox: null };
+    unexplainedNearNoise: 0, insideInterior: 0, insideInteriorAt: [], seedDistHist: hist, unexplainedBbox: null };
   const cls = new Uint8Array(W * H); // 1 seed fringe, 2 march change, 3 unexplained
   Object.defineProperty(r, 'cls', { value: cls, enumerable: false });
   let ux0 = W, uy0 = H, ux1 = -1, uy1 = -1;
@@ -479,6 +521,7 @@ function classify(d, march, comps, rect, lens) {
     }
     if (od[i] <= FRINGE_PX) { r.marchChange++; cls[i] = 2; continue; }
     r.unexplained++; cls[i] = 3;
+    if (nd[i] <= FRINGE_PX) r.unexplainedNearNoise++;
     if (x < ux0) ux0 = x; if (x > ux1) ux1 = x; if (y < uy0) uy0 = y; if (y > uy1) uy1 = y;
   }
   if (r.unexplained) r.unexplainedBbox = [ux0, uy0, ux1, uy1];
@@ -500,7 +543,8 @@ function pixelDiff(a, b) {
 }
 
 /** Summarise a pixel diff against `a`. `mask` (optional, Uint8Array) marks boot-noise pixels: a hot
- *  pixel under it is counted in `maskedPx`, drawn CYAN, and left out of px / max / bbox / grid. The
+ *  pixel under it is counted in `maskedPx`, drawn CYAN, and left out of px / max / bbox / grid
+ *  (`rawPx` = px + maskedPx, the count before masking). The
  *  image: RED unmasked hot, CYAN masked hot, dim grey (a's red channel) elsewhere. `hot` is the
  *  unmasked hot mask. Also the diff's bbox and an 8 x 5 grid of counts. */
 const RED = [255, 0, 0, 255], CYAN = [0, 170, 170, 255];
@@ -530,12 +574,18 @@ function summarize(a, d, mask = null) {
       out[i * 4] = g; out[i * 4 + 1] = g; out[i * 4 + 2] = g; out[i * 4 + 3] = 255;
     }
   }
-  const r = { px, maskedPx, frac: px / (w * h), max, meanAbs: +(sum / (w * h)).toFixed(4),
+  const r = { px, maskedPx, rawPx: px + maskedPx, frac: px / (w * h), max, meanAbs: +(sum / (w * h)).toFixed(4),
     bbox: px ? [bx0, by0, bx1, by1] : null, grid };
   Object.defineProperty(r, 'image', { value: out, enumerable: false });
   Object.defineProperty(r, 'hot', { value: hot, enumerable: false });
   return r;
 }
+/** Set pixels of a W x H mask inside the screen rect [x, y, w, h]. */
+const countIn = (mask, [x0, y0, w, h]) => {
+  let n = 0;
+  for (let y = Math.max(0, y0); y < Math.min(H, y0 + h); y++) for (let x = Math.max(0, x0); x < Math.min(W, x0 + w); x++) n += mask[y * W + x];
+  return n;
+};
 const hotMask = (d) => { const m = new Uint8Array(d.length); for (let i = 0; i < d.length; i++) m[i] = d[i] > DIFF_LEVEL ? 1 : 0; return m; };
 const isRed = (src, s) => src[s] === 255 && src[s + 1] === 0 && src[s + 2] === 0;
 const isCyan = (src, s) => src[s] === CYAN[0] && src[s + 1] === CYAN[1] && src[s + 2] === CYAN[2];
@@ -707,16 +757,18 @@ function seedOverlayHalf(a, d, where, march, rect, lens, scene) {
 const check = (name, ok, opts = {}) => { report.checks.push({ name, ok, ...(opts.gate ? { gate: true } : {}) }); return ok; };
 const samePose = (p, q) => p && q && p.pos.every((v, i) => Math.abs(v - q.pos[i]) < 1e-4)
   && Math.abs(p.yaw - q.yaw) < 1e-5 && Math.abs(p.pitch - q.pitch) < 1e-5;
-/** The files of one scene that the committed look/ carries. */
-const lookFiles = (scene) => [`${scene}-off-on-diff-half.png`, `${scene}-zoom.png`, `${scene}-seed-overlay-half.png`];
 
-/** One scene: off, on, off2, on2; the noise mask; the sheets; the per-boot checks. */
-async function runScene(scene, { floorOnly = false } = {}) {
-  console.log(`--- ${scene}${floorOnly ? ' (noise floor only)' : ''} ---`);
-  const off = await capture(scene, false, 'off');
-  const on = floorOnly ? null : await capture(scene, true, 'on');
-  const off2 = await capture(scene, false, 'off2');
-  const on2 = !floorOnly && ON_NOISE ? await capture(scene, true, 'on2') : null;
+/** One scene: off, on, off2, on2; the noise mask; the sheets; the per-boot checks. `extra` is the
+ *  extra query of this arm and `tag` names it (A/B mode: '' = baseline, AB_TAG = variant); the
+ *  row lands in report.scenes[scene + tag] and every file carries the tag. */
+async function runScene(scene0, { floorOnly = false, extra = EXTRA_QUERY, tag = '' } = {}) {
+  const scene = `${scene0}${tag}`;
+  console.log(`--- ${scene}${floorOnly ? ' (noise floor only)' : ''}${extra ? ` [${extra}]` : ''} ---`);
+  const cap = (flagOn, boot) => capture(scene0, flagOn, boot, extra, tag);
+  const off = await cap(false, 'off');
+  const on = floorOnly ? null : await cap(true, 'on');
+  const off2 = await cap(false, 'off2');
+  const on2 = !floorOnly && ON_NOISE ? await cap(true, 'on2') : null;
   const dOff = pixelDiff(off.img, off2.img);
   const floor = summarize(off.img, dOff);
   writeFileSync(join(RAW, `${scene}-noise-sheet.png`), sheetFull(off.img, off2.img, floor));
@@ -751,7 +803,8 @@ async function runScene(scene, { floorOnly = false } = {}) {
     row.march = marchDiff(off.march, on.march, join(RAW, `${scene}-off-on-march.png`));
     const comps = seededComponents(row.march);
     row.seeded = comps;
-    row.where = classify(d, row.march, comps, off.rec.canvas.rect, off.rec.lens);
+    row.where = classify(d, row.march, comps, off.rec.canvas.rect, off.rec.lens, noiseMask);
+    row.cropPx = AB_OUT ? countIn(d.hot, AB_CROP) : undefined;
     writeFileSync(join(WORK, `${scene}-seed-overlay-half.png`), seedOverlayHalf(off.img, d, row.where, row.march, off.rec.canvas.rect, off.rec.lens, scene));
     console.log(`  march off vs on: ${JSON.stringify(row.march)}`);
     console.log(`  seeded components: ${comps.count} (interior texels ${comps.interiorTexels}), sizes ${JSON.stringify(comps.sizeHist)}, largest ${JSON.stringify(comps.top.slice(0, 6))}`);
@@ -773,45 +826,87 @@ async function runScene(scene, { floorOnly = false } = {}) {
     const e = on.rec.earlyz;
     check(`[${scene}/on] flag on, patched + detected`, e.flag === true && e.on === true && e.patchHits > 0);
     check(`[${scene}/on] seed drew (seed.on ${e.seed.on}, reason ${JSON.stringify(e.seed.reason)})`, e.seed.on === true);
-    if (scene === 'melee') {
+    if (scene0 === 'melee') {
       const b = on.rec.nearType ? e.batches[on.rec.nearType] : null;
       check(`[melee/on] the near body's type (${on.rec.nearType}) is in the back batch (${JSON.stringify(b)})`, !!b && b.back >= 1);
     }
-    console.log(`  ${scene.padEnd(14)} diff px ${d.px} (${(d.frac * 100).toFixed(3)} %) max ${d.max} masked ${d.maskedPx} bbox ${JSON.stringify(d.bbox)}`
+    console.log(`  ${scene.padEnd(14)} diff px ${d.px} counted, ${d.maskedPx} masked, ${d.rawPx} raw (${(d.frac * 100).toFixed(3)} %) max ${d.max} bbox ${JSON.stringify(d.bbox)}`
       + ` seed ${e.seed.on} ${e.seed.reason ?? ''} batches ${JSON.stringify(e.batches)}`);
   }
   report.scenes[scene] = row;
   writeReport();
 }
 
-/** The copy rule (header): only a complete run of record whose only failures are gate checks. */
+/** The copy rule (header): only a complete run of record whose only failures are gate checks.
+ *  Every scene's sheet and overlay and parity.json are REQUIRED; a zoom is optional (none is
+ *  written when a scene has no red), and only its absence (ENOENT) is tolerated. Any other copy
+ *  error, or an incomplete list, is a failed check and leaves committedCopy.done false. */
 function copyToLook() {
   const failed = report.checks.filter((c) => !c.ok);
   const blocking = failed.filter((c) => !c.gate);
   const why = notOfRecord ?? (blocking.length ? `${blocking.length} non-gate check(s) failed` : null);
   if (why) {
     report.committedCopy = { done: false, reason: why };
-    console.log(`committed ${LOOK_DIR}/ NOT touched: ${why}`);
+    writeReport();
+    console.log(`committed ${rel(LOOK_DIR)}/ NOT touched: ${why}`);
     return;
   }
-  mkdirSync(LOOK_DIR, { recursive: true });
-  const owned = /(-off-on-diff-half|-zoom|-seed-overlay-half)\.png$|^parity\.json$/;
-  for (const f of readdirSync(LOOK_DIR)) if (owned.test(f)) rmSync(join(LOOK_DIR, f));
+  const required = SCENES.flatMap((sc) => [`${sc}-off-on-diff-half.png`, `${sc}-seed-overlay-half.png`]);
+  const optional = SCENES.map((sc) => `${sc}-zoom.png`);
   const files = [];
-  for (const scene of SCENES) for (const f of lookFiles(scene)) {
-    try { copyFileSync(join(WORK, f), join(LOOK_DIR, f)); files.push(f); } catch { /* no zoom: no diff */ }
+  try {
+    mkdirSync(LOOK_DIR, { recursive: true });
+    const owned = /(-off-on-diff-half|-zoom|-seed-overlay-half)\.png$|^parity\.json$/;
+    for (const f of readdirSync(LOOK_DIR)) if (owned.test(f)) rmSync(join(LOOK_DIR, f));
+    for (const f of required) { copyFileSync(join(WORK, f), join(LOOK_DIR, f)); files.push(f); }
+    for (const f of optional) {
+      try { copyFileSync(join(WORK, f), join(LOOK_DIR, f)); files.push(f); } catch (e) { if (e?.code !== 'ENOENT') throw e; }
+    }
+    const missing = required.filter((f) => !files.includes(f));
+    if (missing.length) throw new Error(`incomplete copy, missing ${missing.join(', ')}`);
+    report.committedCopy = { done: true, to: rel(LOOK_DIR), files: [...files, 'parity.json'], gateFailures: failed.map((c) => c.name) };
+    check(`committed copy: ${files.length} sheets/overlays/zooms + parity.json into ${rel(LOOK_DIR)}/`, true);
+    writeReport();
+    copyFileSync(join(WORK, 'parity.json'), join(LOOK_DIR, 'parity.json'));
+    console.log(`committed ${rel(LOOK_DIR)}/ updated: ${files.length + 1} files`);
+  } catch (e) {
+    const msg = String(e?.message ?? e).slice(0, 300);
+    report.committedCopy = { done: false, reason: `copy failed: ${msg}`, copied: files, partial: true };
+    check(`committed copy into ${rel(LOOK_DIR)}/ (${msg}; the directory may be partial)`, false);
+    writeReport();
+    console.log(`committed ${rel(LOOK_DIR)}/ copy FAILED: ${msg}`);
   }
-  report.committedCopy = { done: true, to: LOOK_DIR, files: [...files, 'parity.json'], gateFailures: failed.map((c) => c.name) };
-  writeReport();
-  copyFileSync(join(WORK, 'parity.json'), join(LOOK_DIR, 'parity.json'));
-  console.log(`committed ${LOOK_DIR}/ updated: ${files.length + 1} files`);
+}
+
+/** A/B evidence (EARLYZ_AB_OUT): baseline vs variant, per scene. */
+function writeAb() {
+  const arm = (row) => row && row.parity ? {
+    query: row.boots.on.query,
+    diff: { counted: row.parity.px, masked: row.parity.maskedPx, raw: row.parity.rawPx, max: row.parity.max },
+    cropPx: row.cropPx,
+    seeded: { count: row.seeded.count, interiorTexels: row.seeded.interiorTexels, components: row.seeded.top },
+  } : null;
+  const ab = {
+    when: report.when, load: report.load, diffLevel: DIFF_LEVEL, settleFrames: SETTLE_FRAMES, variantQuery: EXTRA_QUERY,
+    crop: { rect: AB_CROP, units: `screen px of the ${W} x ${H} capture: x, y, w, h`, counts: 'red (counted) diff px inside it' },
+    scenes: Object.fromEntries(SCENES.map((sc) => [sc, { baseline: arm(report.scenes[sc]), variant: arm(report.scenes[sc + AB_TAG]) }])),
+  };
+  mkdirSync(dirname(AB_OUT), { recursive: true });
+  writeFileSync(AB_OUT, JSON.stringify(ab, null, 2) + '\n');
+  console.log(`A/B evidence -> ${rel(AB_OUT)}`);
 }
 
 try {
   console.log(`earlyz-parity: scenes ${SCENES.join(',')}, settle ${SETTLE_FRAMES} frames, on2 ${ON_NOISE}, extra query '${EXTRA_QUERY}', load ${report.load.join(' ')}`);
-  console.log(notOfRecord ? `not a run of record (${notOfRecord}): ${LOOK_DIR}/ will not be touched` : `run of record: ${LOOK_DIR}/ is updated at the end if only gate checks fail`);
-  if (!SCENES.includes(FLOOR_SCENE)) await runScene(FLOOR_SCENE, { floorOnly: true });
-  for (const scene of SCENES) await runScene(scene);
+  console.log(notOfRecord ? `not a run of record (${notOfRecord}): ${rel(LOOK_DIR)}/ will not be touched` : `run of record: ${rel(LOOK_DIR)}/ is updated at the end if only gate checks fail`);
+  // The gate floor is always the baseline arm's pack (no extra query in A/B mode).
+  if (!SCENES.includes(FLOOR_SCENE)) await runScene(FLOOR_SCENE, { floorOnly: true, extra: AB_OUT ? '' : EXTRA_QUERY });
+  for (const scene of SCENES) {
+    if (AB_OUT) {
+      await runScene(scene, { extra: '' });
+      await runScene(scene, { extra: EXTRA_QUERY, tag: AB_TAG });
+    } else await runScene(scene);
+  }
 } catch (e) {
   await fail(e?.message ?? String(e));
 }
@@ -828,14 +923,16 @@ for (const [scene, r] of Object.entries(report.scenes)) {
   const gated = !scene.includes('doorway');
   const ok = !gated || r.parity.px <= floor;
   if (gated) check(`[${scene}] parity: ${r.parity.px} px <= ${floor} px`, ok, { gate: true });
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${scene}${gated ? '' : ' (reported only)'}  ${r.parity.px} px vs floor ${floor}  (masked noise ${r.parity.maskedPx} px;`
-    + ` seed fringe ${r.where.seedFringe6} @${TIGHT_PX} / ${r.where.seedFringe} @${FRINGE_PX}, march change ${r.where.marchChange}, unexplained ${r.where.unexplained},`
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${scene}${gated ? '' : ' (reported only)'}  ${r.parity.px} px vs floor ${floor}  (raw ${r.parity.rawPx}, masked noise ${r.parity.maskedPx} px;`
+    + ` seed fringe ${r.where.seedFringe6} @${TIGHT_PX} / ${r.where.seedFringe} @${FRINGE_PX}, march change ${r.where.marchChange}, unexplained ${r.where.unexplained} (${r.where.unexplainedNearNoise} near noise),`
     + ` inside seeded interior ${r.where.insideInterior}; seeded components ${r.seeded.count})`);
 }
+writeReport();
+if (AB_OUT) writeAb();
+copyToLook();
 let bad = 0;
 for (const c of report.checks) { if (!c.ok) { bad++; console.log(`FAIL  ${c.name}${c.gate ? ' (gate)' : ''}`); } }
 console.log(`${report.checks.length - bad}/${report.checks.length} checks pass`);
 writeReport();
-copyToLook();
 cws.close();
 process.exit(bad ? 1 : 0);
