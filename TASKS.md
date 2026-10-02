@@ -59,6 +59,7 @@
 - [ ] Owner tuning: lightning (rate, peak, rim, grade), lamp moods, game-loop defaults.
 
 **Elsewhere** (see the area pages for the full lists)
+- [x] **Playtest fixes** (2026-10-02, branch `claude/shotgun-flail-weapon-bugs-4626b5`): the double-shotgun reload plays again on finite levels (two ammo initialisers raced; `resolveInfiniteAmmo`); flail hits no longer pull the torso off the thighs (stagger root offset now carries the hip sockets); zombie arms can no longer pass through the head (verlet `headKeepOut` in `rig.ts`); the shotgun fires per-barrel flame jets (`muzzle-flash.ts`, `game-muzzle-flash.ts`) with a heavy visible recoil (`RECOIL`, curve normalised so the tuned numbers are the real peaks). Owner look pending on the flash and recoil strength.
 - [~] **Grenade launcher** (2026-09-29): owner accepted the original M79-inspired gothic FPV model, fire/recoil and break-action reload with forestock grip (`?launcher=1` / slot 4). Next pass: arcing projectile, bounces, explosive/fragment damage and embedding in fleshy actors. [Source, controls and gates](docs/dev-notes/2026-09-29-grenade-launcher/notes.md).
 - [ ] Characters: the **Warbull** (cyber-minotaur: rockets, charge, disarm; second draft from the owner's reference plate) is in the arena, awaiting a local WAM kit build and playtest; the **Juggernaut** is playable
   (arena; owner playtest: works), armour aesthetic pass next;

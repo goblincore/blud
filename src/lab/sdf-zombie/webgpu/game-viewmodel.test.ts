@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-viewmodel.test.ts
 import { describe, expect, it } from 'vitest';
 import {
-  CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell,
+  CHAMBER_DEPTH_M, FLASH, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell,
   extractStage, extractorOffset, fireRecoil, flashEnvelope, hingeOpenFraction,
   insertStage, loadCarry, loadHold, magazineAfterFire, reloadPhaseAt, reloadPose,
   stagedShellCenter, supportHandPose, topLeverAngle,
@@ -17,14 +17,14 @@ const FRAME = { out: [0, 0, 1] as const, side: [1, 0, 0] as const };
 describe('flashEnvelope', () => {
   it('is zero before the shot and after the window', () => {
     expect(flashEnvelope(-0.01)).toBe(0);
-    expect(flashEnvelope(0.071)).toBe(0);
+    expect(flashEnvelope(FLASH.windowSec + 0.001)).toBe(0);
   });
   it('peaks at 1 immediately at the shot', () => {
     expect(flashEnvelope(0)).toBeCloseTo(1, 5);
   });
   it('decays monotonically across the window', () => {
     let prev = Infinity;
-    for (let t = 0; t <= 0.07; t += 0.005) {
+    for (let t = 0; t <= FLASH.windowSec; t += 0.005) {
       const v = flashEnvelope(t);
       expect(v).toBeLessThanOrEqual(prev + 1e-9);
       prev = v;
@@ -301,6 +301,38 @@ describe('fireRecoil', () => {
       if (fireRecoil(t).dz < -1e-4) { sawNegative = true; break; }
     }
     expect(sawNegative).toBe(true);
+  });
+});
+
+describe('fireRecoil — HEAVY (owner 2026-10-02: the gun should visibly climb with the force)', () => {
+  const peak = (barrels: 1 | 2, key: 'dy' | 'dz' | 'pitch' | 'roll') => {
+    let best = 0;
+    for (let t = 0; t < RECOIL.durationSec; t += 0.002) {
+      const v = fireRecoil(t, barrels)[key];
+      if (Math.abs(v) > Math.abs(best)) best = v;
+    }
+    return best;
+  };
+  it('a double shot lifts the gun ~7 cm and the muzzle 16-20 degrees', () => {
+    expect(peak(2, 'dy')).toBeGreaterThan(0.06);
+    expect(-peak(2, 'pitch')).toBeGreaterThan(16);
+    expect(-peak(2, 'pitch')).toBeLessThan(20);
+  });
+  it('a single barrel is still a clear kick, not a nudge', () => {
+    expect(peak(1, 'dy')).toBeGreaterThan(0.04);
+    expect(-peak(1, 'pitch')).toBeGreaterThan(10);
+  });
+  it('peaks within three frames: a snap, not a push', () => {
+    let tPeak = 0, best = 0;
+    for (let t = 0; t < RECOIL.durationSec; t += 0.002) {
+      const v = Math.abs(fireRecoil(t, 2).pitch);
+      if (v > best) { best = v; tPeak = t; }
+    }
+    expect(tPeak).toBeLessThan(0.05);
+  });
+  it('is back at rest by the end of its duration, and the gun is not still raised halfway through the next shot cooldown', () => {
+    expect(Math.abs(fireRecoil(RECOIL.durationSec * 0.99, 2).pitch)).toBeLessThan(1.5);
+    expect(RECOIL.durationSec).toBeLessThan(0.45);   // GRAPESHOT.fireCooldownSec
   });
 });
 

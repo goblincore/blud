@@ -51,8 +51,9 @@ export const GRAPESHOT = {
   /** Minimum time between trigger pulls, seconds — two barrels is a
    *  hand-laid zip gun, not a semi-auto. */
   fireCooldownSec: 0.45,
-  /** Instant camera pitch kick per barrel, radians. Decays in game-main. */
-  kickRadPerBarrel: 0.035,
+  /** Instant camera pitch kick per barrel, radians. Decays in game-main. Up from
+   *  0.035 with the heavy gun recoil (2026-10-02): the camera follows the gun a little. */
+  kickRadPerBarrel: 0.05,
   /** Hit epsilon for the pellet trace, metres (surface within this = hit). */
   hitEps: 0.01,
   /** Max travel per trace sample, metres — under half a limb girth so a

@@ -107,6 +107,7 @@ import { applyBodyLights, lightListOn, pickBodyFor, scratchPickBody, setLightLis
 import { adoptLightFx, applyRoomFill, applySelfShadow, roomFillFactor, applyStormBodyKey, applyWindowKey, releaseWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light-leaves';
 import { VITALS, segmentHitsCapsule } from './player-vitals';
 import { applyDeathCamera, createLoop, createLoopSeams, damagePlayer, loopBlocksInput, ownsSlot, refillMagazine, stepLoop } from './game-loop-leaves';
+import { resolveInfiniteAmmo } from './pickups';
 import type { LevelPlane, LevelRoom } from './level-def';
 import { SKY_PRESETS } from './outdoor-presets';
 import { crowdGridPoints, REGION_INSET_M, type FloorRect } from './crowd-spawn';
@@ -346,7 +347,8 @@ import { spawnCarvedPiece } from './game-gibs-leaves';
 import { throwBundle } from './game-dynamite-leaves';
 import { predictSlugHitNow } from './game-world-leaves';
 import { TracerView, hideTracer, newTracerView, placeTracer } from './game-weapon-leaves';
-import { MUZZLE_VIEW, fire } from './game-weapon-leaves';
+import { MUZZLE_VIEW, MUZZLE_VIEW_SIDES, fire } from './game-weapon-leaves';
+import { buildMuzzleFlash, stepFlashLight, stepMuzzleFlash } from './game-muzzle-flash';
 import { BakedChunk, ChunkTemplate, freeBaked } from './game-bake-leaves';
 import { GIB_ATLAS_URL, GIB_SHEET_URL, ensureGibAtlas } from './game-gibs-leaves';
 import { applyInputFrame } from './game-player-leaves';
@@ -4256,6 +4258,7 @@ async function main() {
       const mL = new THREE.Vector3(), mR = new THREE.Vector3();
       if (locatorInView(ctx, gltf.scene, 'Muzzle_L', mL) && locatorInView(ctx, gltf.scene, 'Muzzle_R', mR)) {
         MUZZLE_VIEW.copy(mL).add(mR).multiplyScalar(0.5);
+        MUZZLE_VIEW_SIDES[0].copy(mL); MUZZLE_VIEW_SIDES[1].copy(mR);
       }
       const nL = gltf.scene.getObjectByName('Muzzle_L');
       const nR = gltf.scene.getObjectByName('Muzzle_R');
@@ -4340,29 +4343,13 @@ async function main() {
       tex.needsUpdate = true;
       ctx.weapon.flashTextures.push(tex);
     }
-    const flashMat = new THREE.MeshBasicMaterial({
-      map: ctx.weapon.flashTextures[0], color: 0xffe6bf, transparent: true, opacity: 0,
-      blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false,
-      side: THREE.DoubleSide,
-    });
-    ctx.weapon.flashGroup = new THREE.Group();
-    ctx.weapon.flashGroup.visible = false;
-    // Two crossed cards so the star has volume from off-axis, plus a wider,
-    // fainter one for the outer glow.
-    for (const [roll, scale] of [[0, 1], [Math.PI / 2, 1], [Math.PI / 4, 1.7]] as const) {
-      const q = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34), flashMat);
-      q.rotation.z = roll;
-      q.scale.setScalar(scale);
-      ctx.weapon.flashGroup.add(q);
-    }
-    // Just CLEAR of the bores: centred exactly on them, half the card sits
-    // inside the barrel volume. And depthTest:false does not control draw
-    // ORDER -- without a renderOrder the gun still paints over the flash.
-    ctx.weapon.flashGroup.position.set(MUZZLE_VIEW.x, MUZZLE_VIEW.y, MUZZLE_VIEW.z - 0.035);
-    ctx.weapon.flashGroup.renderOrder = 999;
-    for (const c of ctx.weapon.flashGroup.children) c.renderOrder = 999;
+    // PER-BARREL FLAME JETS (game-muzzle-flash.ts): core, flame tongue, fireball
+    // and sparks at EACH bore, placed every frame from the live muzzle nodes so
+    // they ride the recoil. The group is overlay-sorted on top of the gun and
+    // draws with depthTest off, like the single star it replaces.
+    ctx.weapon.flashGroup = buildMuzzleFlash(ctx.weapon.flashTextures);
     ctx.weapon.gunRig.add(ctx.weapon.flashGroup);
-    ctx.weapon.flashMaterial = flashMat;
+    ctx.weapon.flashMaterial = null;
 
     // SMOKE. A small pool of soft puffs released at the muzzle, drifting up and
     // out while they expand and fade. No particle system exists on this page;
@@ -4938,7 +4925,8 @@ async function main() {
    *  AMMO, not an unlimited rate of fire. The dynamite needs nothing: its prop
    *  pool refills the hand after each throw's recovery beat, so it was already
    *  unlimited. */
-  ctx.weapon.infiniteAmmo = new URLSearchParams(location.search).get('ammo') !== 'finite';
+  ctx.weapon.infiniteAmmo = resolveInfiniteAmmo(
+    ctx.world.loop?.finite ?? false, new URLSearchParams(location.search).get('ammo'));
   /** Seconds into the reload, or Infinity when not reloading. */
   ctx.weapon.reloadAge = Infinity;
   /** Varies the eject arc per reload (owner: "they always eject the same").
@@ -7588,14 +7576,8 @@ async function main() {
 
     ctx.weapon.flashAge += dt;
     ctx.weapon.fireAge += dt;
-    const flashV = flashEnvelope(ctx.weapon.flashAge);
-    if (ctx.weapon.flashGroup && ctx.weapon.flashMaterial) {
-      ctx.weapon.flashGroup.visible = flashV > 0;
-      ctx.weapon.flashMaterial.opacity = flashV;
-      // Expand as it dies rather than shrinking -- burning gas pushes outward.
-      ctx.weapon.flashGroup.scale.setScalar(0.85 + 0.75 * (1 - flashV));
-    }
-    if (ctx.weapon.flashLight) ctx.weapon.flashLight.intensity = 55 * flashV;
+    // The flame jets are posed below, after the view-model matrices are current.
+    stepFlashLight(ctx);
 
     // SMOKE. Each live puff drifts, expands and fades; dead ones stay hidden.
     for (const p of ctx.vfx.smokePuffs) {
@@ -7633,6 +7615,7 @@ async function main() {
     // hinge pivot that was just rotated. Without this the eject would trail the
     // barrels by exactly one frame.
     if (ctx.weapon.gunGroup) ctx.weapon.viewModelAnchor.updateMatrixWorld(true);
+    stepMuzzleFlash(ctx);   // the jets follow the barrels through the kick
     if (ctx.weapon.topLeverNode) ctx.weapon.topLeverNode.rotation.y = topLeverAngle(reloading ? ctx.weapon.reloadAge : 0);
 
     if (reloading) {

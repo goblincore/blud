@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/webgpu/pickups.test.ts
 import { describe, expect, it } from 'vitest';
 import type { PickupDef } from './level-def';
-import { PICKUP, collectPickups, makeInventory, reloadFromReserve } from './pickups';
+import { PICKUP, collectPickups, makeInventory, reloadFromReserve, resolveInfiniteAmmo } from './pickups';
 import { VITALS, applyDamage, makeVitals } from './player-vitals';
 
 const at = (id: string, item: PickupDef['item'], x: number, z: number): PickupDef => ({ id, item, pos: [x, 0.2, z] });
@@ -79,4 +79,16 @@ describe('the flashlight pickup (dynamic light §2.1)', () => {
     expect(again.collected).toEqual([]);
   });
   it('starts false', () => { expect(makeInventory().flashlight).toBe(false); });
+});
+
+describe('resolveInfiniteAmmo', () => {
+  it('is unlimited on the bare testbed unless ?ammo=finite asks for the magazine', () => {
+    expect(resolveInfiniteAmmo(false, null)).toBe(true);
+    expect(resolveInfiniteAmmo(false, 'finite')).toBe(false);
+  });
+
+  it('stays finite on a finite level whatever the boot default says (the reload never played when the later init clobbered the loop)', () => {
+    expect(resolveInfiniteAmmo(true, null)).toBe(false);
+    expect(resolveInfiniteAmmo(true, 'finite')).toBe(false);
+  });
 });

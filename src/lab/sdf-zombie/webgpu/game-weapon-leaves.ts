@@ -6,7 +6,7 @@
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
 
-import { loopBlocksInput, ownsSlot, reloadBlocked } from './game-loop-leaves';
+import { loopBlocksInput, ownsSlot, reloadBlocked, updateStatus } from './game-loop-leaves';
 import { type GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { rngStreams, seedFromUnit } from './rng';
@@ -21,6 +21,7 @@ import { type Projectile, GRAPESHOT, spawnPellets, spawnSlug } from './game-weap
 import { updateHud } from './game-panels-leaves';
 import { RELOAD, magazineAfterFire } from './game-viewmodel';
 import { predictSlugHitNow } from './game-world-leaves';
+import { firedSides, triggerMuzzleFlash } from './game-muzzle-flash';
 import { type BenchAction } from './game-bench-scenario';
 
 /** A view-space point, expressed in the aim rig's space RIGHT NOW. Refresh
@@ -419,6 +420,9 @@ export function hideTracer(ctx: GameContext, v: TracerView): void {
  *  real muzzle -- so it burned halfway down the barrel instead of at the
  *  bores, which is a good part of why it read wrong. */
 export const MUZZLE_VIEW = new THREE.Vector3(0.125, -0.105, -0.600);
+/** The two bores separately, view space: [left, right]. Filled from the GLB's
+ *  Muzzle_L / Muzzle_R when it loads; until then both sit at the midpoint. */
+export const MUZZLE_VIEW_SIDES: [THREE.Vector3, THREE.Vector3] = [MUZZLE_VIEW.clone(), MUZZLE_VIEW.clone()];
 
 export function fire(ctx: GameContext, barrels: 1 | 2): boolean {
   // SLOT GATE. The grapeshot only speaks while it is the live weapon and the
@@ -440,31 +444,30 @@ export function fire(ctx: GameContext, barrels: 1 | 2): boolean {
   if (!ctx.weapon.infiniteAmmo) {
     ctx.weapon.shells = magazineAfterFire(ctx.weapon.shells, barrels);
     if (ctx.weapon.shells <= 0) startReload(ctx);
+    updateStatus(ctx);   // the SHELLS n | reserve readout, or it keeps showing the full magazine
   }
   updateHud(ctx);
   ctx.weapon.flashAge = 0;
   ctx.weapon.fireAge = 0;
   ctx.weapon.fireBarrels = barrels;
-  if (ctx.weapon.flashGroup && ctx.weapon.flashMaterial) {
-    // Fresh roll AND a fresh star per shot, so repeat fire never strobes an
-    // identical silhouette.
-    ctx.weapon.flashGroup.rotation.z = rngStreams.fx() * Math.PI * 2;
-    const tex = ctx.weapon.flashTextures[Math.floor(rngStreams.fx() * ctx.weapon.flashTextures.length)];
-    if (tex) { ctx.weapon.flashMaterial.map = tex; ctx.weapon.flashMaterial.needsUpdate = true; }
-  }
-  // Release a few smoke puffs at the muzzle. Both barrels make more smoke.
+  // The flame jets: which barrels, and a fresh look for each (game-muzzle-flash.ts).
+  triggerMuzzleFlash(ctx, barrels);
+  // Release a few smoke puffs, from the bore(s) that flamed. Both barrels make more smoke.
   {
     let released = 0;
     const want = barrels === 2 ? 5 : 3;
+    const sides = firedSides(ctx);
+    const bores = ([0, 1] as const).filter(k => sides[k]);
     for (const puff of ctx.vfx.smokePuffs) {
       if (released >= want) break;
       if (puff.age !== Infinity) continue;
       puff.age = 0;
       puff.roll = rngStreams.fx() * Math.PI * 2;
+      const bore = MUZZLE_VIEW_SIDES[bores[released % bores.length] ?? 0];
       puff.mesh.position.set(
-        MUZZLE_VIEW.x + (rngStreams.fx() - 0.5) * 0.03,
-        MUZZLE_VIEW.y + (rngStreams.fx() - 0.5) * 0.03,
-        MUZZLE_VIEW.z - 0.02 - rngStreams.fx() * 0.05,
+        bore.x + (rngStreams.fx() - 0.5) * 0.03,
+        bore.y + (rngStreams.fx() - 0.5) * 0.03,
+        bore.z - 0.02 - rngStreams.fx() * 0.05,
       );
       puff.vel.set(
         (rngStreams.fx() - 0.5) * 0.25,

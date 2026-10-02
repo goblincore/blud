@@ -3,7 +3,7 @@ import type { BuildResult } from './build-body';
 import type { ClusterInfo, Primitive, Vec3 } from './types';
 import type { Quat } from './vec';
 import { boxReach, shellReach, strandReach } from './extent';
-import { constrainRigBends, makeRig, type RigPoint, type RigState } from './rig';
+import { closestSegmentPoints, constrainRigBends, makeRig, type RigHeadKeepOut, type RigPoint, type RigState } from './rig';
 import { IK_TUNING, clampDir } from './ik';
 import { jointForBoneEnd, rotateYaw } from './gait';
 import { segmentQuat } from './rig-frames';
@@ -417,6 +417,10 @@ export function bindRig(body: BuildResult): BoundRig {
       }
     }
   }
+
+  // THE HEAD KEEP-OUT (rig.ts RigHeadKeepOut): a capsule along the skull axis,
+  // sized from the head's own big spheres, that the arm segments may not enter.
+  if (head) rig.headKeepOut = buildHeadKeepOut(body, positions, head, indexOf, armBoneName);
 
   const bindPrim = (p: Primitive): PrimBind => {
     // `rigid`: both ends ride the DECLARED bone as one piece — offsets from
@@ -853,4 +857,81 @@ export function impulseAt(bound: BoundRig, world: Vec3, delta: Vec3): BoundRig {
       points: bound.rig.points.map((p, i) => i === best ? { ...p, pos: add(p.pos, delta) } : p),
     }),
   };
+}
+
+
+/**
+ * Size the head capsule and list the arm segments that must stay out of it.
+ *
+ * The capsule comes from the head's CORE spheres (any whose effective radius is
+ * at least half the biggest: cranium and jaw, not the nose, brows or ears --
+ * those are small features an arm may brush). Each sphere is an ellipsoid
+ * (radius x its per-axis scale) and the skull axis is taken as the body's
+ * vertical: its horizontal reach is the capsule radius, its vertical reach sets
+ * how far up and down the end caps sit.
+ *
+ * A limb's required clearance is the head radius plus the limb's own, but never
+ * more than it ALREADY has at rest: a body authored with an arm touching its
+ * head must keep that pose, and a keep-out that pushed it would move every
+ * baseline for that character.
+ */
+function buildHeadKeepOut(
+  body: BuildResult,
+  positions: Vec3[],
+  head: HeadRigid,
+  indexOf: (p: Vec3) => number,
+  armBone: (b: BuildResult, part: 'upper' | 'fore', side: 'l' | 'r') => string | null,
+): RigHeadKeepOut | undefined {
+  const pv = positions[head.pivot]!;
+  const axis = head.restDir;
+  type Core = { t: number; perp: number; rp: number; ra: number };
+  const all: Core[] = [];
+  for (const i of head.prims.keys()) {
+    const p = body.prims[i]!;
+    if (p.dead || (p.op !== undefined && p.op !== 'add')) continue;
+    const sc = p.scale ?? [1, 1, 1];
+    const rp = p.radius * Math.max(Math.abs(sc[0]), Math.abs(sc[2]));
+    const ra = p.radius * Math.abs(sc[1]);
+    for (const e of [p.a, p.b]) {
+      const c = sub(e, pv), t = dot(c, axis);
+      all.push({ t, perp: len(sub(c, vscale(axis, t))), rp, ra });
+    }
+  }
+  if (all.length === 0) return undefined;
+  const biggest = Math.max(...all.map(c => c.rp));
+  const core = all.filter(c => c.rp >= biggest * 0.5);
+  const radius = Math.max(...core.map(c => c.perp + c.rp));
+  const lo = Math.min(...core.map(c => c.t - c.ra)), hi = Math.max(...core.map(c => c.t + c.ra));
+  let t0 = lo + radius, t1 = hi - radius;
+  if (t0 > t1) t0 = t1 = (lo + hi) / 2;
+  const capA = add(pv, vscale(axis, t0)), capB = add(pv, vscale(axis, t1));
+
+  const limbs: RigHeadKeepOut['limbs'] = [];
+  const radiusOf = (bone: string): number => {
+    let r = 0;
+    for (const p of body.prims) if (p.bone === bone && !p.dead && (p.op === undefined || p.op === 'add')) r = Math.max(r, p.radius);
+    return r;
+  };
+  const add1 = (boneName: string | null): void => {
+    const bone = boneName ? body.bones.get(boneName) : undefined;
+    if (!bone || !boneName) return;
+    const r = radiusOf(boneName);
+    const live = body.prims.some(p => p.bone === boneName && !p.dead && body.clusters[p.cluster]?.alive);
+    if (r <= 0 || !live) return;
+    const a = indexOf(bone.head), b = indexOf(bone.tail);
+    if (a === b) return;
+    const { s, t } = closestSegmentPoints(positions[a]!, positions[b]!, capA, capB);
+    const rest = len(sub(
+      add(positions[a]!, vscale(sub(positions[b]!, positions[a]!), s)),
+      add(capA, vscale(sub(capB, capA), t))));
+    // 3 mm under the rest distance: a limb sitting AT its authored distance
+    // must not be touched by float noise or the solver's own settling.
+    limbs.push({ a, b, clearance: Math.max(0, Math.min(radius + r, rest - 0.003)) });
+  };
+  for (const side of ['l', 'r'] as const) {
+    add1(armBone(body, 'upper', side));
+    add1(armBone(body, 'fore', side));
+    if (body.bones.has(`hand.${side}`)) add1(`hand.${side}`);
+  }
+  return limbs.length > 0 ? { pivot: head.pivot, tip: head.tip, t0, t1, radius, limbs } : undefined;
 }

@@ -95,3 +95,12 @@ export function reloadFromReserve(shells: number, capacity: number, inv: Invento
   const take = Math.min(Math.max(0, capacity - shells), inv.shellsReserve);
   return { shells: shells + take, inventory: { ...inv, shellsReserve: inv.shellsReserve - take } };
 }
+
+/** Whether the shotgun's magazine is unlimited. ONE decision for both inputs:
+ *  a finite level (the game loop's `finite`) always runs the magazine down, and
+ *  the bare testbed does only when `?ammo=finite` asks. Two separate writers of
+ *  this flag is how the later one clobbered the loop's `false` and the reload
+ *  never played on a finite level. */
+export function resolveInfiniteAmmo(levelFinite: boolean, ammoParam: string | null): boolean {
+  return !levelFinite && ammoParam !== 'finite';
+}

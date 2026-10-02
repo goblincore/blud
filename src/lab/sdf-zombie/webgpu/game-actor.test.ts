@@ -932,6 +932,126 @@ describe('blast reaction — the body must not tear in half', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// The flail's recoil: the pelvis block must stay on the thighs.
+//
+// OWNER REPORT (2026-10-02): "when you hit a zombie with the flail the body torso
+// moves back independently of the upper leg parts, such that the upper legs
+// appear disconnected from the torso."
+//
+// THE MECHANISM: stagger.ts's lurch writes a ROOT offset (0.26 m x gain) and
+// motion.ts added it to the `pelvis` target alone -- `hips`, `hipL` and `hipR`
+// got nothing -- so the pelvis and belly were shoved away from the tops of the
+// thighs. The flail reacts at 1.3 x the slug gain (flail-impact.ts reactionGain
+// x game-actor SLUG_GAIN), the biggest root offset in the game: MEASURED, the
+// torso-bottom to thigh-top gap grew 0.115 m -> 0.59 m in six frames.
+// ---------------------------------------------------------------------------
+describe('flail recoil — the torso stays attached to the upper legs', () => {
+  const extreme = (a: ReturnType<typeof makeTestActor>, limb: 'torso' | 'legL' | 'legR', top: boolean): Vec3 => {
+    let best: Vec3 = [0, top ? -Infinity : Infinity, 0];
+    for (const p of a.posed().prims) {
+      if (p.limb !== limb) continue;
+      for (const e of [p.a, p.b]) if (top ? e[1] > best[1] : e[1] < best[1]) best = [e[0], e[1], e[2]];
+    }
+    return best;
+  };
+  const dist = (p: Vec3, q: Vec3) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+  /** Torso-bottom to the nearer-worse thigh-top. */
+  const pelvisGap = (a: ReturnType<typeof makeTestActor>) =>
+    Math.max(dist(extreme(a, 'torso', false), extreme(a, 'legL', true)), dist(extreme(a, 'torso', false), extreme(a, 'legR', true)));
+
+  for (const [label, vel] of [['forward', [0, 0, 6]], ['sideways', [6, 0, 0]]] as const) {
+    it(`a flail-strength hit ${label} does not open a gap between torso and thighs`, () => {
+      const a = makeTestActor({ start: [0, 0, 0] });
+      for (let f = 0; f < 30; f++) a.step(1 / 60);
+      const before = pelvisGap(a);
+      const c = a.posed().clusters.find(c => c.limb === 'torso')!.center;
+      // The flail's reaction: a 'blast' signal at 1.3 x gain (flail-impact.ts).
+      a.blast({ wounds: [], meterCredit: 0, impulse: { at: [c[0], c[1], c[2]], vel: [...vel] }, reaction: 'blast', gain: 1.3 });
+      let worst = 0;
+      for (let f = 0; f < 40; f++) { a.step(1 / 60); worst = Math.max(worst, pelvisGap(a) - before); }
+      expect(worst).toBeLessThan(0.2);   // the bug measured 0.45-0.48 m
+    });
+  }
+
+  it('still REACTS: the shove is not removed, only the tear', () => {
+    const hit = makeTestActor({ start: [0, 0, 0] });
+    const control = makeTestActor({ start: [0, 0, 0] });
+    for (let f = 0; f < 30; f++) { hit.step(1 / 60); control.step(1 / 60); }
+    const c = hit.posed().clusters.find(c => c.limb === 'torso')!.center;
+    hit.blast({ wounds: [], meterCredit: 0, impulse: { at: [c[0], c[1], c[2]], vel: [0, 0, 6] }, reaction: 'blast', gain: 1.3 });
+    let worst = 0;
+    for (let f = 0; f < 12; f++) {
+      hit.step(1 / 60); control.step(1 / 60);
+      worst = Math.max(worst, dist(extreme(hit, 'torso', true), extreme(control, 'torso', true)));
+    }
+    expect(worst).toBeGreaterThan(0.1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Arms do not pass through the head.
+//
+// OWNER REPORT (2026-10-02): "when a zombie swings its arms (or other arm
+// movements in general) it's possible for the arm to clip through the head."
+// MEASURED: the zombie's `hook` and `sweep` swings drove the arm surface 7-9 cm
+// INTO the head ellipsoids. Nothing in the verlet rig collided limbs with the
+// head -- only distance constraints and the elbow stop existed.
+// ---------------------------------------------------------------------------
+describe('arms never clip through the head', () => {
+  /** Deepest penetration (m; > 0 = inside) of any arm prim sample, radius
+   *  included, into any head ellipsoid (sphere prim x its per-axis scale). */
+  const armIntoHead = (a: ReturnType<typeof makeTestActor>): number => {
+    const prims = a.posed().prims;
+    let worst = -Infinity;
+    for (const h of prims) {
+      if (h.limb !== 'head' || h.a[0] !== h.b[0] || h.a[1] !== h.b[1] || h.a[2] !== h.b[2]) continue;
+      const sc = h.scale ?? [1, 1, 1];
+      const rad = [h.radius * sc[0], h.radius * sc[1], h.radius * sc[2]];
+      for (const p of prims) {
+        if ((p.limb !== 'armL' && p.limb !== 'armR') || /clavicle/.test(p.bone ?? '')) continue;
+        for (let k = 0; k <= 8; k++) {
+          const q = [0, 1, 2].map(i => p.a[i]! + (p.b[i]! - p.a[i]!) * (k / 8));
+          // First-order ellipsoid distance (k0 (k0 - 1) / k1): accurate near the
+          // surface even for the long thin nose, where (f - 1) x min radius is not.
+          const e = [q[0]! - h.a[0], q[1]! - h.a[1], q[2]! - h.a[2]];
+          const k0 = Math.hypot(e[0]! / rad[0]!, e[1]! / rad[1]!, e[2]! / rad[2]!);
+          const k1 = Math.hypot(e[0]! / rad[0]! ** 2, e[1]! / rad[1]! ** 2, e[2]! / rad[2]! ** 2);
+          const d = k1 > 1e-9 ? (k0 * (k0 - 1)) / k1 : -Math.min(...rad);
+          worst = Math.max(worst, -(d - p.radius));
+        }
+      }
+    }
+    return worst;
+  };
+
+  for (const variant of ['hook', 'overhead', 'shove', 'cleave', 'sweep', 'lunge'] as const) {
+    for (const side of ['L', 'R'] as const) {
+      it(`a ${variant} swing (${side}) keeps the arm out of the head`, () => {
+        const a = makeTestActor({ start: [0, 0, 0] });
+        for (let f = 0; f < 20; f++) a.step(1 / 60);
+        let worst = -Infinity;
+        for (let i = 0; i <= 40; i++) {
+          a.forceSwing(i / 40, side, variant);
+          a.step(1 / 60);
+          worst = Math.max(worst, armIntoHead(a));
+        }
+        expect(worst).toBeLessThan(0.01);   // the bug measured 0.068-0.089 m
+      });
+    }
+  }
+
+  it('a flail hit (stagger shoves the hands up) does not push an arm into the head either', () => {
+    const a = makeTestActor({ start: [0, 0, 0] });
+    for (let f = 0; f < 30; f++) a.step(1 / 60);
+    const c = a.posed().clusters.find(c => c.limb === 'torso')!.center;
+    a.blast({ wounds: [], meterCredit: 0, impulse: { at: [c[0], c[1], c[2]], vel: [0, 0, 6] }, reaction: 'blast', gain: 1.3 });
+    let worst = -Infinity;
+    for (let f = 0; f < 40; f++) { a.step(1 / 60); worst = Math.max(worst, armIntoHead(a)); }
+    expect(worst).toBeLessThan(0.01);
+  });
+});
+
 describe('blast() reaction option (melee)', () => {
   const chestOf = (a: ReturnType<typeof makeTestActor>): Vec3 =>
     [...a.posed().clusters.find(c => c.limb === 'torso')!.center] as Vec3;

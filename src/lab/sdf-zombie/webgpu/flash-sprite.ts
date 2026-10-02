@@ -97,3 +97,38 @@ export function smokePixels(size: number, seed = 3): Uint8Array {
   }
   return px;
 }
+
+
+/**
+ * A flame TONGUE, RGBA `size` x `size`, for the muzzle jet: a teardrop whose
+ * base is at v = 0 (bottom row) and whose tip is at v = 1. The texture's v
+ * runs along the bore, u across it. White-hot at the base, grading through
+ * yellow and orange to a dark red tip, with the edge licked ragged by `seed`
+ * so two jets never match. Additive-blend ready: colour is premultiplied by
+ * the alpha it carries.
+ */
+export function flamePixels(size: number, seed: number): Uint8Array {
+  const px = new Uint8Array(size * size * 4);
+  const lick = hash1(5, seed) * Math.PI * 2;
+  for (let y = 0; y < size; y++) {
+    // Row 0 of a DataTexture is v = 0 (the base) -- see the flipY note in game-main.
+    const v = (y + 0.5) / size;
+    for (let x = 0; x < size; x++) {
+      const u = (x + 0.5) / size * 2 - 1;
+      // Half-width: widest a little above the base, closing to a point at the tip.
+      const bulge = Math.sin(Math.min(1, v * 1.15) * Math.PI * 0.62);
+      const ragged = 1 + 0.22 * Math.sin(v * 17 + lick) * v + 0.12 * Math.sin(v * 41 + lick * 2) * v;
+      const half = Math.max(0.0001, (1 - v) * 0.85 * bulge * ragged + 0.06 * (1 - v));
+      const d = Math.abs(u) / half;
+      let a = d < 1 ? Math.pow(1 - d * d, 1.4) : 0;
+      a *= Math.pow(1 - v, 0.55);
+      const heat = Math.max(0, 1 - v * 1.15) * (1 - Math.min(1, d * 0.9));   // 1 = white-hot
+      const i = (y * size + x) * 4;
+      px[i]     = Math.round(255 * Math.min(1, (0.95 + 0.05 * heat) * a));
+      px[i + 1] = Math.round(255 * Math.min(1, (0.28 + 0.62 * heat) * a));
+      px[i + 2] = Math.round(255 * Math.min(1, (0.04 + 0.70 * heat * heat) * a));
+      px[i + 3] = Math.round(255 * a);
+    }
+  }
+  return px;
+}
