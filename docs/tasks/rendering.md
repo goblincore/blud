@@ -19,8 +19,9 @@ The march, temporal work, the upscaler, post, perf sessions. Part of the task wi
   time in the crowd scenes, `sdf:shell-hull` is small (0.1-0.3 ms; its label trades with `sdf:polys`), and empty-box pixels
   are unmeasured. Open it only after the occupancy reader is fixed (post-discard hit flag, PASSOFF-2 section 2.1) and shows
   a large empty-box share.
-- [ ] Spun off: the page-side `setUpscale()` loop race (its un-awaited `finally` resumes the rAF loop after `bench()` paused
-  it; the bench harness waits as a workaround). `game-context-coverage` bindings (`actorFill`, `fleshSpawnRng`) are fixed on
+- [x] 2026-10-02 Spun off and fixed: the page-side `setUpscale()` loop race (its un-awaited `finally` resumed the rAF loop
+  after `bench()` paused it). The stage precompile now suspends the loop through `loopControl` and `setUpscale({ trained })`
+  awaits it (`7be4785d`, test `game-render-leaves.test.ts`); the harness wait is removed. `game-context-coverage` bindings (`actorFill`, `fleshSpawnRng`) are fixed on
   main (`d24a953d`); they clear when main is merged into this branch.
 
 - [ ] **Before any default flip** (final review 2026-10-02; none blocks merging with the flag OFF):

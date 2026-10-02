@@ -491,6 +491,9 @@ Beyond the plan, each needed to get a valid number:
    - The fix: before every `bench()` call, wait (up to 60 s) for `loopRunning()`.
    - This is a page-side race (`applyUpscaleAbMode`). It is left in src, and the harness wait is marked as a
      workaround to remove once the page is fixed.
+   - **Update 2026-10-02:** fixed in the page (`7be4785d`). The precompile suspends the loop through `loopControl`
+     instead of writing its intent, and `setUpscale({ trained })` resolves only after the precompile. The harness wait
+     (`awaitLoopResumed`) is removed.
    - **Comparability:** every upscale leg benched before 4b520325 ran with this race (the precompile was pending at the
      first `bench()` call of every such leg). Older upscale-leg numbers are not strictly comparable with these.
 4. **`BENCH_PROBE_TIMEOUT_MS`**, default 30 s. `BENCH_WARM_WAIT_MS` (default 180 s) bounds change 2. Both count
