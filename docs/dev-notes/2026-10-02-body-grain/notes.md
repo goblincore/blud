@@ -70,3 +70,4 @@ n06 = grain on with `surfaceNoiseAmp` 0.06.
   (mean 1643.6), head 1597.8 / 1686.2 / 1716.2 ms (mean 1666.7). Ratio 1.014 -> PASS (gate 1.10).
 - Task 8 done: cost PASS, march-hash MATCH, cold boot PASS on the controller's A/B re-check (the in-run ratio of 1.28
   was session drift).
+- Task 9 done: directory suite 463 files, 6638 tests, all pass (6637 passed, 1 pre-existing skip in game-actor-soldier).
