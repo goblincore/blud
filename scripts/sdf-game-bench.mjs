@@ -860,41 +860,11 @@ const WARMUP = Number(process.env.BENCH_WARMUP ?? 120);
 // index landed on the last element, i.e. it WAS the max.
 const CHUNK = Number(process.env.BENCH_CHUNK ?? 10);
 
-/**
- * THE PRECOMPILE / BENCH LOOP RACE (early-Z cost run, 2026-10-02). `setUpscale()`
- * on a booted page pauses the rAF loop, precompiles the stage's passes and
- * RESUMES the loop in a `finally` nothing awaits (game-render-leaves
- * applyUpscaleAbMode). `bench()` pauses the loop for its own stepping; when that
- * `finally` lands after bench() has started, the rAF loop runs alongside the
- * stepped frames and the bench does not return (180 s probe bound hit on every
- * leg). Measured with 16 bodies spawned after `upscale-ship`'s setUpscale: the
- * probe was still running at 120 s with `loopRunning()` true; started after the
- * loop came back, the same probe finished in 41 s (p50 110 ms). The 16-body
- * room and distance runs hit it on every leg; the no-crowd and 12-body doorway
- * runs did not (the race is timing-dependent). So every bench()
- * call first waits, bounded, for the loop to be running again: that is the
- * pending precompile settling. A loop still paused at the bound fails the leg.
- *
- * WORKAROUND, NOT A FIX: the bug is the page's. applyUpscaleAbMode resumes the
- * loop in an unawaited `finally`; that is spun off as a separate task (setUpscale
- * loop-resume race). Remove this wait once the page awaits its precompile or
- * respects the bench's loop intent.
- */
-const LOOP_WAIT_MS = Number(process.env.BENCH_LOOP_WAIT_MS ?? 60_000);
-async function awaitLoopResumed(label) {
-  if (!(await evaluate('typeof __sdfGame.loopRunning === "function"'))) return;
-  const t0 = Date.now();
-  let paused = false;
-  while (!(await evaluate('__sdfGame.loopRunning()'))) {
-    paused = true;
-    if (Date.now() - t0 > LOOP_WAIT_MS) {
-      throw new Error(`rAF loop still paused ${(LOOP_WAIT_MS / 1000).toFixed(0)} s before bench() — a precompile never settled`);
-    }
-    await sleep(100);
-  }
-  const ms = Date.now() - t0;
-  if (paused) console.log(`  [${label}] waited ${(ms / 1000).toFixed(1)} s for the rAF loop to resume (a background precompile) before bench()`);
-}
+// THE PRECOMPILE / BENCH LOOP RACE (early-Z cost run, 2026-10-02) is fixed in the
+// page: `setUpscale({ trained })` resolves only after its stage precompile, which
+// now suspends the loop instead of rewriting bench()'s loop intent
+// (game-render-leaves applyUpscaleAbMode). applyLeg awaits every override, so the
+// `awaitLoopResumed()` wait that stood here before each bench() call is gone.
 
 /**
  * EARLY-Z STATE GUARD. A leg that boots `earlyz=1` must really run the path:
@@ -954,8 +924,6 @@ async function runLeg(name, room, mode) {
   // fenced frame p50 decides whether the scene is safe to bench at all. A
   // probe that times out or reads over BENCH_FRAME_CAP_MS aborts the leg and
   // SKIPS the long run — the honest early-out for the 24-body hang class.
-  progress.phase = 'probe:await-loop';
-  await awaitLoopResumed(`${label}-probe`);
   progress.phase = 'probe';
   // The distance scene freezes the placed pose for the whole leg; the probe
   // must too, or it would teleport the player and measure a different scene
@@ -1006,8 +974,6 @@ async function runLeg(name, room, mode) {
   const opts = mode === 'spike'
     ? `{ room: ${room}, mode: "spike", warmup: ${runWarmup}, label: ${JSON.stringify(label)}${holdOpt}${demoOpt} }`
     : `{ room: ${room}, mode: ${JSON.stringify(mode)}, warmup: ${runWarmup}, chunkFrames: ${CHUNK}, label: ${JSON.stringify(label)}${holdOpt}${demoOpt} }`;
-  progress.phase = 'bench:await-loop';
-  await awaitLoopResumed(label);
   progress.phase = 'bench';
   await evaluate(`__sdfGame.bench(${opts})`, DEMO ? 30 * 60_000 : undefined);
   progress.phase = 'collect';

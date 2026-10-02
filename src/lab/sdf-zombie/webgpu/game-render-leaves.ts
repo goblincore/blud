@@ -389,6 +389,14 @@ export function tickAdaptive(ctx: GameContext, nowMs: number): void {
 
 /** `booted` = false during main()'s boot, which sets the scale the way the ?accum block does. */
 export function applyUpscaleAbMode(ctx: GameContext, mode: 'native' | 'nearest' | 'model', booted = true): UpscaleInfo {
+  return applyUpscaleAbModeWarmed(ctx, mode, booted).info;
+}
+
+/** applyUpscaleAbMode, plus `warmed`: settles (never rejects) once a post-boot stage's pass
+ *  precompile is done AND the loop's suspension is released; already settled when nothing compiled. */
+function applyUpscaleAbModeWarmed(
+  ctx: GameContext, mode: 'native' | 'nearest' | 'model', booted: boolean,
+): { info: UpscaleInfo; warmed: Promise<void> } {
   const c = ctx.render.upscaleAb.config;
   if (!c) throw new Error('upscale A/B: no upscale config is active');
   const scaleTo = (v: number) => {
@@ -417,15 +425,20 @@ export function applyUpscaleAbMode(ctx: GameContext, mode: 'native' | 'nearest' 
   // A stage built AFTER boot carries brand-new per-pass pipelines the boot
   // warm-up never saw; without this they compile on the first frame the new
   // stage runs, which is the same multi-second stall in miniature. Loop
-  // paused for the duration, exactly as warmPipelines does it.
+  // SUSPENDED for the duration, exactly as warmPipelines does it: suspend()
+  // leaves the loop's intent alone and release() re-applies the latest one.
+  // This used setLoopRunning(false)/(true), which WRITE the intent, so a
+  // bench() that paused the loop while this was in flight had it restarted
+  // under its stepped frames and never returned (early-Z cost run, 2026-10-02).
+  let warmed = Promise.resolve();
   if (booted && info.on) {
-    ctx.boot.handle.setLoopRunning(false);
-    void ctx.render.sdfLayer.precompilePasses(ctx.boot.handle.scene, ctx.boot.handle.camera)
+    ctx.boot.loopControl.suspend();
+    warmed = ctx.render.sdfLayer.precompilePasses(ctx.boot.handle.scene, ctx.boot.handle.camera)
       .then((n) => console.log(`[warm] upscale stage passes compiled (${n})`))
       .catch((err) => console.warn('[warm] upscale stage precompile failed', err))
-      .finally(() => ctx.boot.handle.setLoopRunning(true));
+      .finally(() => { ctx.boot.loopControl.release(); });
   }
-  return info;
+  return { info, warmed };
 }
 
 export async function enableTrainedUpscale(ctx: GameContext, name: string, layout?: string, booted = true, url?: string): Promise<UpscaleInfo> {
@@ -436,5 +449,10 @@ export async function enableTrainedUpscale(ctx: GameContext, name: string, layou
   ctx.render.upscaleAb.config = config;
   ctx.render.upscaleAb.model = model;
   ctx.render.upscaleAb.modelName = name;
-  return applyUpscaleAbMode(ctx, 'model', booted);
+  // Resolve only once the stage's passes are compiled and the loop is back in its
+  // intended state, so a caller that awaits this and then bench()es or step()s never
+  // overlaps the precompile (which also moves the shared camera's layer mask).
+  const { info, warmed } = applyUpscaleAbModeWarmed(ctx, 'model', booted);
+  await warmed;
+  return info;
 }
