@@ -26,6 +26,12 @@ export const FACE_LAYER_WGSL = /* wgsl */ `  // Emissive mask from the face shee
   // the torn treatment belongs on the cut and the rest of the piece, not over
   // the exterior skin (2026-09-16 playtest follow-ups task 2).
   var faceCover = 0.0;
+  // The face SHEET's own coverage: facing * alpha, set only where the sheet is
+  // actually sampled (0 off the sheet, and on a head with no face). The body
+  // grain runs after this layer and fades out by it, so the head is not
+  // grained twice (body-grain.ts). faceCover above is the gore's protection
+  // and also counts the whole head region, so it cannot stand in for this.
+  var faceSheetCover = 0.0;
 
   // Face texture, before wounds and char so damage still paints over it.
   if (faceCfg.x > 0.5) {
@@ -114,6 +120,7 @@ export const FACE_LAYER_WGSL = /* wgsl */ `  // Emissive mask from the face shee
       // is actually sampled (a decal's transparent background must not shield
       // the gore). A sheet with no alpha channel reads 1 and is unchanged.
       faceCover = faceCover * tex.a;
+      faceSheetCover = facing * tex.a;
       let W = vec3<f32>(0.2126, 0.7152, 0.0722);
       // DECAL mode (faceCfg.x == 2): the sheet is a colour image baked off a
       // reference mesh and pasted on as albedo where its alpha is set, the way

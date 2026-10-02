@@ -8,6 +8,11 @@ import { BODY_GRAIN_BLOCK } from './body-grain.wgsl';
 import {
   GRAIN_BASE_TONE, GRAIN_CELL_COARSE, GRAIN_CELL_FINE, GRAIN_COARSE_LATTICE_OFFSET, GRAIN_FADE_PX, GRAIN_RELIEF,
 } from '../../../../../body-grain';
+import {
+  MARCH_BODY, REFINE_BODY, MARCH_TRACE_POST, MARCH_TRACE_LOOP, MARCH_TRACE_SETUP,
+  MAP_BODY, CALC_NORMAL, CONE_MARCH, DEPTH_PREPASS_MARCH, WOUND_SHADOW,
+} from '../../../../march.wgsl';
+import { MARCH_SURFACE } from '../../../../deferred-sdf';
 
 const f = (v: number) => (Number.isInteger(v) ? `${v}.0` : `${v}`);
 const LO = f(GRAIN_FADE_PX.LO);
@@ -101,5 +106,30 @@ describe('body grain plumbing (palette -> meltCfg.w -> record -> gInstMelt.w)', 
     const apply = gpu.slice(start, gpu.indexOf('dispose() {', start));
     expect(apply).toContain('u.meltCfg.value.w = m.grain;');
     expect(apply).toContain('syncRecord();');
+  });
+});
+
+describe('body grain in the post-hit chain', () => {
+  const entries: Record<string, string> = { MARCH_BODY, REFINE_BODY, MARCH_SURFACE };
+
+  it('is spliced once into the shared post-hit section, so all three entries run it', () => {
+    expect(MARCH_TRACE_POST.split(BODY_GRAIN_BLOCK)).toHaveLength(2);
+    for (const [name, src] of Object.entries(entries)) expect(src.split(BODY_GRAIN_BLOCK), name).toHaveLength(2);
+  });
+
+  it('runs after the face layer leaves its coverage (and after the micro-detail and mottle), before gore and paint', () => {
+    for (const src of Object.values(entries)) {
+      const grain = at(src, 'let grainAmt = gInstMelt.w;');
+      expect(at(src, 'faceSheetCover = facing * tex.a;')).toBeLessThan(grain);
+      expect(at(src, 'mix(albedo, mottleColor')).toBeLessThan(grain);
+      expect(at(src, 'let detailAmp = surfCfg2.y')).toBeLessThan(grain);
+      expect(grain).toBeLessThan(at(src, 'let goreStrength = max(lodCfg.w, gInstGore)'));
+      expect(grain).toBeLessThan(at(src, 'if (painted > 0.0) {'));
+    }
+  });
+
+  it('stays out of the walk, the field and the pre-passes', () => {
+    for (const src of [MARCH_TRACE_SETUP, MARCH_TRACE_LOOP, MAP_BODY, CALC_NORMAL, CONE_MARCH, DEPTH_PREPASS_MARCH, WOUND_SHADOW])
+      expect(src).not.toContain('grainAmt');
   });
 });

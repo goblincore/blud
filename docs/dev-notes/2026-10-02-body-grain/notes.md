@@ -22,3 +22,6 @@ Spec: ../../superpowers/specs/2026-10-02-body-grain-design.md. Plan: ../../super
 - Task 2 done: body-grain.ts (two octaves: fine 3.5 mm, coarse 12 mm; summed deviations; 13 tests pass).
 - Task 3 done: BODY_GRAIN_BLOCK written and pinned (10 tests), not spliced yet.
 - Task 4 done: applyMaterial writes grain to meltCfg.w and syncs the record; lane comments updated; lab slider (0..0.3).
+- Task 5 done: BODY_GRAIN_BLOCK spliced between the face layer and gore in MARCH_TRACE_POST (marchBody, refineBody,
+  marchSurface); the face layer leaves faceSheetCover = facing * tex.a; march golden re-pinned on exactly
+  FACE_LAYER_WGSL, MARCH_BODY, MARCH_BODY_TRACE, MARCH_TRACE_POST, REFINE_BODY; GPU compile smoke passed (goblin, grain 0).
