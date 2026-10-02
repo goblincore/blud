@@ -141,7 +141,9 @@ describe('goblin-kit.gltf fits goblin.blob', () => {
   // Re-derive it, do not raise it: the deepest legitimate tuck is a property
   // of how far the widest joint sits from the body axis, and if a redesign
   // needs more room than this, the plate has probably stopped being plate.
-  const TUCK_MAX = 0.045;
+  // RE-DERIVED 2026-10-02 for the rebuilt pad (0.045 -> 0.036): the deepest vertex is now the pad's inner rim, 31.3 mm in,
+  // because the shoulder round is r 0.0405 and the shell R 0.060 about it (see the .wam). It was 0.045 for the old pad.
+  const TUCK_MAX = 0.036;
 
   it.each([...groups.keys()])('no %s vertex passes through the body', name => {
     const vs = groups.get(name)!;
@@ -230,5 +232,17 @@ describe('goblin-kit.gltf fits goblin.blob', () => {
     const cuff = standoff('webbing');
     expect(cuff.min, 'cuff is clear of the flesh').toBeGreaterThan(0.005);
     expect(cuff.max, 'cuff stays within 16 mm').toBeLessThan(0.016);
+  });
+
+  // PLATE FIT, measured 2026-10-02 on the pads, lame, yoke and knee plate (material `iron`). The chest plate and pads are
+  // OVERSIZED ON PURPOSE (owner: "like an XL, not a small t-shirt"), so this is a loose-fit bound, not a hugging one:
+  // deepest vertex 31.3 mm inside the flesh (the pauldron's inner rim in the chest, the forced tuck above), farthest
+  // 35.3 mm off it (the yoke's front at the hem, depth x1.38, and the pad dome's 25 mm over the shoulder round). Pinned
+  // 2-5 mm outside both, so a plate that drifts bigger, or a body that moves under it, fails instead of passing quietly.
+  // The first, tight pass measured 23.9 mm; if that number is ever wanted back, the yoke rings are the dial.
+  it('plate fits loose by design but does not float', () => {
+    const d = groups.get('iron')!.map(v => sdBody(v, body));
+    expect(Math.min(...d), 'deepest tuck').toBeGreaterThan(-0.036);
+    expect(Math.max(...d), 'farthest standoff').toBeLessThan(0.040);
   });
 });

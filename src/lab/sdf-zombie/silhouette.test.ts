@@ -510,13 +510,16 @@ body
   });
 
   it('says "kit" when the outline there is clothing rather than flesh', () => {
-    // The goblin's shoes: the plate's widest point at the ankles is polygon,
-    // and there is no primitive to blame for it.
+    // The goblin's kit: somewhere on the outline the widest point is polygon, and there is no primitive to blame for it.
+    // RE-AIMED 2026-10-02 (goblin armour phase 2). This used to count 6 bands and find the old fat boots at the ankles;
+    // the rebuilt kit hugs the flesh by design (boots 6-8 mm off, pads 20 mm), and a band only says "kit" when the
+    // polygon is more than ~15 mm outside the field's outline at its sample row, so at 6 bands none does. At 12 bands
+    // band 7 (the belt and pouch level) does, measured 2026-10-02.
     const doc2 = parseBlob(readFileSync('src/lab/sdf-zombie/characters/goblin.blob', 'utf8'));
     const goblin = buildBody(compileBlob(doc2, compileFace(doc2)));
     const k = gltfTriangles(
       JSON.parse(new TextDecoder().decode(readFileSync('public/assets/lab/goblin-kit.gltf'))));
-    const dressed = bandOwners(goblin, { bands: 6, kit: k });
+    const dressed = bandOwners(goblin, { bands: 12, kit: k });
     expect(dressed.some(o => o.limb === 'kit')).toBe(true);
     for (const o of dressed) if (o.limb === 'kit') { expect(o.index).toBe(-1); expect(o.line).toBeNull(); }
     // Bare flesh can never be kit-owned, whatever the geometry does.

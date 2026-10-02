@@ -35,3 +35,19 @@
   against the whole body. Same trap as the soldier kit's header warns about for arms.
 - The old breastplate's bottom rings were trimmed so the belt is visible; the piece is replaced in Task 5.
 - Frames: `task4-front.png`, `task4-back.png`.
+
+## Task 5: pauldrons, lame, chest yoke (2026-10-02)
+
+- Pad = bulbous dome shell around the r 0.0405 shoulder round (R 0.066 after the owner's "slightly oversized"), a lame
+  band overlapping under it, and a short yoke on the chest bone. The old full-length breastplate (a metal tube from belt
+  to collar) is gone: it was what read as a metal shirt.
+- **Owner feedback, mid-task: "reads as a tight fit, like a small t-shirt, I want it slightly oversized, XL".** The
+  first fit was flesh x1.10-1.18. Now the yoke is x1.20 wide at the hem (capped by the hanging upper arm: inner edge
+  x 0.0915 at y 0.878), x1.28-1.36 wide higher (hidden under the pads), x1.38 DEEP, hem at the bottom of the chest
+  bone; the pad R 0.060 -> 0.066. Pinned loose: farthest standoff 35.3 mm (was 23.9 tight).
+- First yoke pass (x1.10) had a scalloped lower edge and hairlines: the body grain's surface noise (1-2 mm) z-fights with
+  plate that close. Keep >= ~8 mm clear at facet midpoints.
+- Tuck bound re-derived 0.045 -> 0.036 (deepest vertex is the pad's inner rim, 31.3 mm).
+- `silhouette.test.ts` "kit band" re-aimed at 12 bands (the hugging kit is no longer >15 mm outside the flesh outline at
+  any of 6 sample rows).
+- Frames: `task5-three-quarter.png`, `task5-side.png`.
