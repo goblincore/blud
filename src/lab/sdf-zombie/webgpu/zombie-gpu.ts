@@ -247,8 +247,12 @@ export { marchNormalRead, marchAnchorRead, marchMotionRead };
  *  declared in the FOLD_GROUP helper chunk every march chain carries; the include keeps the same
  *  lineage (and eval order after the march output) as the anchor read. */
 export const marchBurnRead = wgslFn(MARCH_BURN_OUT, [marchAnchorRead] as never);
-/** EARLY-Z (spec 2026-10-01 D4): the analytic proxy exit the front material hands the march as worldPos. */
-const earlyzBoxExitPoint = wgslFn(EARLYZ_BOX_EXIT_WGSL);
+/** EARLY-Z (spec 2026-10-01 D4): the analytic proxy exit the front material hands the march as worldPos.
+ *  LAZY on purpose: every wgslFn consumes a global three node id, and those ids spell the
+ *  `NodeBuffer_<id>` names of every program built later. Creating this at import would renumber
+ *  the shipped (flag-off) crowd shaders; first use is the front material, which only exists under
+ *  ?earlyz=1. */
+let earlyzBoxExitFn: ReturnType<typeof wgslFn> | null = null;
 /** Run 4: the output-res detail field (DETAIL_FIELD) on the march's own hash/noise/fbm chain. */
 export const detailFieldFn = (() => {
   const chain = [HASH13, NOISE3, FBM].reduce<ReturnType<typeof wgslFn>[]>((acc, src) => [...acc, wgslFn(src, acc.slice(-1))], []);
@@ -1797,7 +1801,7 @@ export function createCrowdMaterial(
   // switches to the quad empty-tile gate path.
   const frontRays: MarchRayOverride | undefined = earlyzFront
     ? {
-        worldPos: earlyzBoxExitPoint({
+        worldPos: (earlyzBoxExitFn ??= wgslFn(EARLYZ_BOX_EXIT_WGSL))({
           camPos: cameraPosition,
           rd: normalize(sub(positionWorld, cameraPosition)),
           centre: instCentre,
