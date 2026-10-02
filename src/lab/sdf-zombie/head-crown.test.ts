@@ -1,7 +1,8 @@
 // src/lab/sdf-zombie/head-crown.test.ts
 //
 import { describe, expect, it } from 'vitest';
-import { BRAIN_MESH, brainLaunch, brainLumps } from './head-crown';
+import { BRAIN_MESH, SHARDS, brainLaunch, brainLumps, skullShards } from './head-crown';
+import { mulberry32 } from './melt-bones';
 import { GORE_COLORS } from './head-pop';
 import type { Vec3 } from './types';
 
@@ -38,5 +39,30 @@ describe('the brain mesh gib (spec §14 decision 3)', () => {
       expect(p.prims[0]!.color).toEqual(GORE_COLORS.brain);
       expect(p.vel![1]).toBeGreaterThan(1);
     }
+  });
+});
+
+describe('skullShards', () => {
+  const origin: [number, number, number] = [0, 1.6, 0];
+  const out: [number, number, number] = [0, 0, -1];
+  it('returns `count` bone-coloured gob pieces, deterministic for a seed', () => {
+    const a = skullShards(origin, out, 12, mulberry32(5));
+    expect(a).toHaveLength(12);
+    for (const p of a) { expect(p.kind).toBe('gob'); expect(p.prims).toHaveLength(1); }
+    expect(skullShards(origin, out, 12, mulberry32(5))).toEqual(a);
+  });
+  it('they fly out in a cone along outDir at SHARDS.speed', () => {
+    const s = skullShards(origin, out, 40, mulberry32(9));
+    let along = 0;
+    for (const p of s) {
+      const sp = Math.hypot(p.vel[0], p.vel[1], p.vel[2]);
+      expect(sp).toBeGreaterThanOrEqual(SHARDS.speed[0] - 1e-9);
+      expect(sp).toBeLessThanOrEqual(SHARDS.speed[1] + 1e-9);
+      along += (p.vel[0] * out[0] + p.vel[1] * out[1] + p.vel[2] * out[2]) / sp;
+    }
+    expect(along / s.length).toBeGreaterThan(0.6);
+  });
+  it('count 0 throws nothing', () => {
+    expect(skullShards(origin, out, 0, mulberry32(1))).toEqual([]);
   });
 });
