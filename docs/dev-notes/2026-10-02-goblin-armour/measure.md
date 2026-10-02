@@ -86,3 +86,29 @@ ALL pelvis t0.84  c=(0.000,0.688,0.000)  w=0.2096 (+x 0.1048 / -x 0.1048)  d=0.1
 ALL pelvis t1.00  c=(0.000,0.705,0.000)  w=0.2088 (+x 0.1044 / -x 0.1044)  d=0.1807 (+z 0.1034 / -z 0.0773)  up=  --   dn=0.1721
 ALL spine1 t0.10  c=(0.000,0.718,0.003)  w=0.2050 (+x 0.1025 / -x 0.1025)  d=0.1826 (+z 0.0999 / -z 0.0827)  up=  --   dn=0.1857
 ALL spine1 t0.25  c=(0.000,0.738,0.008)  w=0.1847 (+x 0.0923 / -x 0.0923)  d=0.1748 (+z 0.0938 / -z 0.0810)  up=  --   dn=0.2058
+--- HEAD (whole body field), x half-width and front surface by height and z ---
+skull t0.45 = 0.0000,1.2239,0.0037
+y=1.20 z=0.09  x half-width=0.0494
+y=1.20 z=0.06  x half-width=0.0742
+y=1.20 z=0.03  x half-width=0.0854
+y=1.20 z=0.00  x half-width=0.0883
+y=1.20 z=-0.03  x half-width=0.0835
+y=1.20 x=0.000  front z=0.1391
+y=1.20 x=0.045  front z=0.0935
+y=1.20 x=0.070  front z=0.0670
+y=1.24 z=0.09  x half-width=0.0505
+y=1.24 z=0.06  x half-width=0.0751
+y=1.24 z=0.03  x half-width=0.0862
+y=1.24 z=0.00  x half-width=0.1080
+y=1.24 z=-0.03  x half-width=0.0844
+y=1.24 x=0.000  front z=0.1128
+y=1.24 x=0.045  front z=0.0941
+y=1.24 x=0.070  front z=0.0685
+y=1.28 z=0.09  x half-width=0.0487
+y=1.28 z=0.06  x half-width=0.0669
+y=1.28 z=0.03  x half-width=0.0787
+y=1.28 z=0.00  x half-width=0.1196
+y=1.28 z=-0.03  x half-width=0.0767
+y=1.28 x=0.000  front z=0.1101
+y=1.28 x=0.045  front z=0.0939
+y=1.28 x=0.070  front z=0.0537

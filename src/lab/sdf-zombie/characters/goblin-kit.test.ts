@@ -102,8 +102,8 @@ describe('goblin-kit.gltf fits goblin.blob', () => {
     // Named explicitly so a material vanishing from the .wam is a failure
     // rather than a silently smaller test. `cloth` was here until the kilt
     // became a plate fauld, which is itself gone (the trousers are paint).
-    // `boot` and `webbing` (the gaiter cuff) arrived with the phase-2 rebuild.
-    expect([...groups.keys()].sort()).toEqual(['band', 'boot', 'brass', 'glass', 'iron', 'leather', 'screen', 'webbing']);
+    // `boot` and `webbing` (the gaiter cuff) arrived with the phase-2 rebuild, `plate` with the pauldron spikes, `black` with the sunglass frame.
+    expect([...groups.keys()].sort()).toEqual(['band', 'black', 'boot', 'brass', 'glass', 'iron', 'leather', 'plate', 'screen', 'webbing']);
     // >=, not >: WAM's `kind=box` emits exactly 8 corner vertices
     // (mesh.py:1170-1176), which is what the watch body/screen are.
     for (const [name, vs] of groups) expect(vs.length, name).toBeGreaterThanOrEqual(8);

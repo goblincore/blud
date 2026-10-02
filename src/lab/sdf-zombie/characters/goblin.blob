@@ -170,22 +170,27 @@ body
   # was flattened on purpose, by up to about 28 mm): pelvis r2 0.078 -> 0.074
   # and deep 1.28 -> 1.10; spine r 0.076 -> 0.072 and deep 1.20 -> 1.08; chest
   # deep 1.06 -> 1.12 and wide 1.06 -> 1.00; the gut blob is new.
-  # CLOTHES ARE PAINT (owner, 2026-10-02: dark fatigue-grey pants and a dark
-  # shirt under the armour, after the reference photo's soldier). `color=`
-  # replaces the flesh albedo wherever that prim is the nearest, so the pelvis
-  # (bar + gut blob) is the trousers and the spine1/chest bars and the six
-  # vertebra beads are the shirt: nothing to clip, wounds and gibbing still
-  # work because the flesh underneath is the same SDF, and removing the paint
-  # restores a bare goblin. The boundary sits where the pelvis and spine1
-  # bars meet (y 0.705 at rest), which the utility belt covers. Hexes are
-  # eyeballed in the turntable (frame 00): pants 7a7e82 a shade lighter than the shirt 585c60
-  # so the belt line reads. The beads take the shirt colour so they read as
-  # ridges under cloth, not green bumps through it. Neck, arms, head, hands,
-  # ankle knob and feet stay flesh (the boot covers the feet).
+  # CLOTHES ARE PAINT (owner, 2026-10-02: dark fatigue-grey pants and, under the armour, "a
+  # dirty wife-beater undershirt", after the reference photo's soldier). `color=` replaces the
+  # flesh albedo wherever that prim is the nearest, so the pelvis (bar + gut blob) is the
+  # trousers and the spine1/chest bars and the six vertebra beads are the tank top: nothing to
+  # clip, wounds and gibbing still work because the flesh underneath is the same SDF, and
+  # removing the paint restores a bare goblin. The boundary sits where the pelvis and spine1
+  # bars meet (y 0.705 at rest), which the utility belt covers. Arms are bare, which is what
+  # makes it a tank top: the shoulder round and neck stay flesh.
+  #
+  # DIRT is tone, because paint is one colour per primitive: the chest bar is a dingy off-white
+  # (e9e7dd), the spine1 bar below it (the belly, where it would be sweated through and
+  # stained) is grimier (cfcab8), and the spine beads darker again (bab5a2) so they read as
+  # ridges under cloth, not green bumps through it. The body grain's mottle still rides
+  # over paint, so it is not flat. Hexes are eyeballed in the turntable, not measured: the
+  # renderer darkens low sRGB values hard (a first 4a4d50 pant read near black), so these are
+  # chosen to land on dingy white and fatigue grey on screen (the first cream ddd3b4 rendered as tan skin: the key is warm, so the source is kept NEUTRAL and the light does the yellowing), not to match a paint chip.
+  # Pants 7a7e82. Neck, arms, head, hands, ankle knob and feet stay flesh (boots cover the feet).
   bar  torso on pelvis from=0.00 to=1.00 r=0.068 r2=0.074 deep=1.10 offset=(0,0,0.012) blend=0.014 color=7a7e82
   blob torso on pelvis at=0.80 r=0.060 tall=1.05 offset=(0,0,0.030) blend=0.016 color=7a7e82
-  bar  torso on spine1 from=0.00 to=1.00 r=0.072 r2=0.068 deep=1.08 offset=(0,0,0.010) blend=0.016 color=585c60
-  bar  torso on chest  from=0.00 to=0.95 r=0.068 r2=0.056 wide=1.00 deep=1.12 blend=0.016 color=585c60
+  bar  torso on spine1 from=0.00 to=1.00 r=0.072 r2=0.068 deep=1.08 offset=(0,0,0.010) blend=0.016 color=cfcab8
+  bar  torso on chest  from=0.00 to=0.95 r=0.068 r2=0.056 wide=1.00 deep=1.12 blend=0.016 color=e9e7dd
 
   # Spine: vertebrae knuckling through the flat back (offsets are world axes;
   # -z is the back), small and tightly blended so each reads as a bump under
@@ -195,12 +200,12 @@ body
   # -0.084, -0.080). Each stands about 5-6 mm proud of the bare back at its
   # height, except the one at the waist (spine1 at=0.55, 8.6 mm), where the
   # back curves in and the spine should show.
-  blob torso on spine1 at=0.15 r=0.012 offset=(0,0,-0.072) blend=0.005 color=585c60
-  blob torso on spine1 at=0.55 r=0.012 offset=(0,0,-0.066) blend=0.005 color=585c60
-  blob torso on spine1 at=0.95 r=0.012 offset=(0,0,-0.072) blend=0.005 color=585c60
-  blob torso on chest  at=0.30 r=0.012 offset=(0,0,-0.068) blend=0.005 color=585c60
-  blob torso on chest  at=0.65 r=0.012 offset=(0,0,-0.062) blend=0.005 color=585c60
-  blob torso on chest  at=0.98 r=0.012 offset=(0,0,-0.056) blend=0.005 color=585c60
+  blob torso on spine1 at=0.15 r=0.012 offset=(0,0,-0.072) blend=0.005 color=bab5a2
+  blob torso on spine1 at=0.55 r=0.012 offset=(0,0,-0.066) blend=0.005 color=bab5a2
+  blob torso on spine1 at=0.95 r=0.012 offset=(0,0,-0.072) blend=0.005 color=bab5a2
+  blob torso on chest  at=0.30 r=0.012 offset=(0,0,-0.068) blend=0.005 color=bab5a2
+  blob torso on chest  at=0.65 r=0.012 offset=(0,0,-0.062) blend=0.005 color=bab5a2
+  blob torso on chest  at=0.98 r=0.012 offset=(0,0,-0.056) blend=0.005 color=bab5a2
 
   # Neck: one tapered column (0.040 at the collar to 0.033 under the skull), a
   # pair of cords from the collarbone notch up the front of the neck to the

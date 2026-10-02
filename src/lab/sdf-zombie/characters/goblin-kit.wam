@@ -70,8 +70,13 @@ palette
   # lowest roughness and the highest env intensity of anything in the kit.
   # Dark waxed leather for the boots, and a cloth grey for the gaiter cuffs.
   boot    #2c2a28
+  # Same steel as `iron`; a separate name so the spikes have their own fit pin and (Task 7) their own wear.
+  plate   #6e7378
   webbing #3b3f42
   glass   #14161a
+  # Glossy black plastic for the sunglass bridge and temple arms (LOOK `black` in kit-overlay.ts); its own
+  # name because `band` is the watch strap and the test pins that to the left wrist.
+  black   #17181a
   band    #1c1c20
   screen  #22282e
 
@@ -247,6 +252,29 @@ parts
       cap start=none end=none
   end
 
+  # PAULDRON SPIKES — LEFT PAD ONLY (owner, 2026-10-02: "kind of curious in adding some spikes
+  # on one or both of the pauldrons"). One side on purpose: it is a mismatched, scavenged look,
+  # and it is easy to mirror if the owner wants both (move these into the `mirror` block and
+  # use `on=pauldron`). They are outside the mirror block like the watch, pinned to upperarm.l.
+  #
+  # `on=pauldron.l` snaps each base to the pad's surface and sinks it in, so the spikes are flush
+  # by construction (WAM SPEC, "on="). The offsets are only rough aims, as that section says:
+  # points on the R 0.066 dome about the orb centre, in height fractions (metres / 1.30), toward
+  # (0.45, 0.86, 0) for the tall one and (0.50, 0.72, +/-0.47) for the front and back ones.
+  # `dir=side` starts each outward and `up=` bends it skyward, which gives a curved horn-like
+  # spike and sidesteps WAM's sweep taking no outward tilt of its own. Radii are height
+  # fractions: base ~21 mm radius on the tall one, tall spike, 0.075 f long, flankers 0.056 f. First pass was r 0.011/0.007 with up=35 per segment and rendered as thin flat blades; the second is chunkier and bends further up (55 + 40 degrees) so the tips stand upright like spikes.
+  # `plate` (not `iron`) so goblin-kit.test.ts's plate-fit pin does not have to cover the tips.
+  sweep spike_a bone=upperarm.l at=0.0 offset=(0.0235,0.045,0) dir=side on=pauldron.l material=plate
+    seg len=0.030 r=0.016 up=55
+    seg len=0.045 r=0.009 up=40 tip
+  sweep spike_b bone=upperarm.l at=0.0 offset=(0.0255,0.0367,0.024) dir=side on=pauldron.l material=plate
+    seg len=0.024 r=0.012 up=50
+    seg len=0.032 r=0.007 up=40 tip
+  sweep spike_c bone=upperarm.l at=0.0 offset=(0.0255,0.0367,-0.024) dir=side on=pauldron.l material=plate
+    seg len=0.024 r=0.012 up=50
+    seg len=0.032 r=0.007 up=40 tip
+
   # SMARTWATCH — LEFT WRIST ONLY, matching the FPV arm asset (goblin-arm.glb,
   # F-arm.1). Outside the mirror block and pinned to forearm.l so no .r copy
   # is emitted. The band is a ring just above the wrist, proud of the flesh
@@ -292,34 +320,48 @@ parts
     ring 0.97 w=0.1176 d=0.1391
     cap start=none end=none
 
-  # SHADES — one bar across both eyes, NOT a mirrored pair.
+  # SHADES — ROUND LENSES WITH EAR HOOKS (owner, 2026-10-02: "round lens sunglasses and give them
+  # ear hooks that go up to his ears"). They replace the single wrap-around bar the first
+  # version was; that read as a blindfold, and its justification (one sweep across both eyes, a
+  # mirror pair would leave a gap over the nose) is answered here by an explicit nose bridge.
   #
-  # A mirror block would author two lenses and leave a gap over the nose; real
-  # sleek shades are a single sweep. Lofted along a free ray running `side`
-  # from a point offset to the goblin's right and forward of the face, so it
-  # crosses at eye height. That height is not a guess: the face sheet puts the
-  # eyes at eyeRise 0.44, which over a face spanning y 1.096..1.354 m lands at
-  # y=1.240 — skull t 0.51.
+  # Where things are (metres, measure.md "HEAD"): the skull bone at t0.45 is (0, 1.2239, 0.0037).
+  # The painted eyes sit at about x +/-0.045 and y 1.229 (the old bar's height, eyeballed in the
+  # lab because the face sheet's v does not run linearly down the skull). At y 1.24 the face's
+  # front surface is z 0.094 at x 0.045 and falls away to 0.0685 at x 0.07, while the nose
+  # bridge on the centreline is z 0.113: so a FLAT lens at z 0.122 clears the nose bridge by
+  # 9 mm and floats 28 mm off the cheek, which is what sunglasses on a hooked nose do. The head's
+  # half-width at y 1.24 is 0.0505 at z 0.09, 0.075 at z 0.06, 0.086 at z 0.03.
   #
-  # `frame=up` pins the ring's axes so `d` is the lens HEIGHT and `w` the
-  # front-to-back thickness. Without it the frame flips somewhere along a
-  # near-horizontal path and half the bar stands at right angles to the rest.
-  # Thin in w, tall in d, pinched at the bridge and flared at the temples, with
-  # both ends drawn to a point — that pinch-flare-point profile is the whole
-  # difference between shades and a blindfold.
-  # t=0.45, not the 0.51 the eyeRise arithmetic gave. That put the bar on the
-  # BROW with both eyes glowing underneath it, which reads as a headband. The
-  # discrepancy is the face projection: the sheet's v runs over the projected
-  # ellipsoid, not linearly down the skull bone, so the painted eyes sit lower
-  # on the actual geometry than their uv suggests. Trust the render here.
-  loft shades bone=skull at=0.45 offset=(-0.094,0.004,0.086) dir=side len=0.188 frame=up material=glass
-    ring 0.00 w=0.016 d=0.024 tip
-    ring 0.10 w=0.023 d=0.046
-    ring 0.40 w=0.020 d=0.036
-    ring 0.60 w=0.020 d=0.036
-    ring 0.90 w=0.023 d=0.046
-    ring 1.00 w=0.016 d=0.024 tip
-    cap start=point end=point
+  # LENS: a 16-sided disc (`sides=16`; the kit's `style chunky` is 8-sided, which would be a
+  # stop sign), 56 mm across (0.0431 of height) and 8 mm thick, a free ray along +z from
+  # (0.045, 1.229, 0.122): offset from skull t0.45 = (0.045, 0.0052, 0.1183) m /1.30 = (0.0346,
+  # 0.004, 0.091). Material `glass`, so kit-overlay's emissive keeps the goblin's red eyes
+  # reading through the lens (see its docstring). Mirrored, so both lenses.
+  #
+  # TEMPLE ARM: a sweep from the lens's outer edge (x 0.073) aimed back and OUTWARD, because
+  # the head is 0.075-0.086 half-wide behind the cheek and a straight-back arm would run
+  # into it. `dir=back yaw=-16` (a sweep takes no explicit vector, and a NEGATIVE yaw turns a
+  # back-pointing sweep toward +x; WAM flips yaw under mirroring) with a 6 degree rise: tan(16) = 0.28 gains 28 mm of x over 0.1 m (x 0.090 at z 0.06, 0.099
+  # at z 0.03, both >= 8 mm clear of the head), then a short bend UP (65 degrees, 20 mm) lifts it
+  # from y 1.239 to the ear base at y ~1.26 (the ear root is at skull t0.58, offset
+  # (0.086, 0.006, -0.006)), and a last small bend back hooks behind the ear. Radius 4.5 mm.
+  mirror
+    loft lens bone=skull at=0.45 offset=(0.0346,0.004,0.091) dir=fwd len=0.0062 frame=up sides=16 material=glass
+      ring 0.00 w=0.0431 d=0.0431
+      ring 1.00 w=0.0431 d=0.0431
+      cap start=flat end=flat
+    sweep temple bone=skull at=0.45 offset=(0.0562,0.004,0.091) dir=back yaw=-16 sides=8 material=black
+      seg len=0.075 r=0.0035 up=6
+      seg len=0.016 r=0.0032 up=65
+      seg len=0.010 r=0.0030 back=35 tip
+  end
+  # NOSE BRIDGE — the one piece that spans the centreline: 30 mm between the lenses' inner
+  # edges (x +/-0.017), 6 mm above the lens centre and so 10 mm clear of the nose.
+  loft bridge bone=skull at=0.45 offset=(-0.0115,0.012,0.091) dir=side len=0.0230 sides=8 material=black
+    ring 0.00 w=0.0058 d=0.0058
+    ring 1.00 w=0.0058 d=0.0058
+    cap start=flat end=flat
 
   # UTILITY BELT — rebuilt 2026-10-02 against the phase-1 body (owner: "some
   # kind of utility belt around the waist"; the old belt was sized for a gut
@@ -389,6 +431,10 @@ textures
     ao amount=0.22
   texture webbing base=#3b3f42
     noise scale=0.12 amount=0.10
+    ao amount=0.18
+  texture plate base=#6e7378
+    gradient axis=v from=-0.12 to=0.18
+    noise scale=0.10 amount=0.06
     ao amount=0.18
   texture iron base=#6e7378
     gradient axis=v from=-0.12 to=0.18   # painted top-light on the plate

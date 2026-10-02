@@ -51,3 +51,19 @@
 - `silhouette.test.ts` "kit band" re-aimed at 12 bands (the hugging kit is no longer >15 mm outside the flesh outline at
   any of 6 sample rows).
 - Frames: `task5-three-quarter.png`, `task5-side.png`.
+
+## Owner additions during Task 5 (2026-10-02)
+
+- **Dirty wife-beater undershirt.** The shirt paint is now off-white, two-toned (chest e9e7dd, belly cfcab8, spine beads
+  bab5a2). A first cream (ddd3b4) rendered as TAN SKIN under the lab's warm key, so the source is kept neutral and the
+  light does the yellowing. Dirt is tone only: paint is one colour per prim.
+- **Pauldron spikes, left pad only** (owner "one or both"): three spikes (one tall, two flankers) as WAM sweeps snapped to
+  the pad with `on=pauldron.l`, material `plate` (iron's steel under its own name, so the plate-fit pin does not have to
+  cover the tips). First pass was r 0.011 with up=35 per segment and read as thin flat blades; chunkier + 55/40 degree
+  bends fixed it. To mirror them: move the three sweeps into the `mirror` block and use `on=pauldron`.
+- **Round-lens sunglasses with ear hooks.** Two 16-sided lenses (56 mm, 8 mm thick) at x +/-0.045, y 1.229, z 0.122
+  (clears the nose bridge z 0.113 by 9 mm), a 23 mm bridge, and temple arms: `dir=back yaw=-16` so they run out and around the
+  head (half-width 0.075-0.086 behind the cheek), then a 65 degree rise to the ear base and a small hook. WAM sweeps take
+  no explicit `dir=(x,y,z)` (that is bones only). Frame material `black` (LOOK already had it); the watch strap keeps
+  `band`, which the test pins to the left wrist.
+- Frames: `shades-front.png`, `shades-spikes-side.png`.
