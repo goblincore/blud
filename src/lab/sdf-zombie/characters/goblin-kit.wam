@@ -62,7 +62,6 @@ model goblin-kit
   style chunky
 
 palette
-  iron    #6e7378
   leather #4a3526
   brass   #9c7a38
   # Near-black, because a sunglass lens is almost all reflection — the COLOUR
@@ -72,6 +71,10 @@ palette
   boot    #2c2a28
   # Same steel as `iron`; a separate name so the spikes have their own fit pin and (Task 7) their own wear.
   plate   #6e7378
+  # Worn, rusted steel for the pads, lame, chest yoke, collar and knee plates (owner, 2026-10-02: "some kind of
+  # rust or wear on the metal"). Same steel as `iron`, but its own name so kit-overlay.ts can give it a duller finish
+  # than the owner's shiny iron without touching it. `iron` itself is no longer used by this kit.
+  rustplate #62676b
   webbing #3b3f42
   glass   #14161a
   # Glossy black plastic for the sunglass bridge and temple arms (LOOK `black` in kit-overlay.ts); its own
@@ -157,7 +160,7 @@ parts
     # Ray from s -0.060: offset (-0.02196, 0.05436, 0.01254) m = (-0.0169, 0.0418, 0.0096) of
     # height, length 0.152 m = 0.1169, ring t = (s + 0.060) / 0.152. `side=0.005` moves every
     # ring 6.5 mm outward so the bigger shell does not tuck deeper into the chest.
-    loft pauldron bone=upperarm at=0.0 offset=(-0.0169,0.0418,0.0096) dir=down pitch=12 tilt=22 len=0.1169 material=iron
+    loft pauldron bone=upperarm at=0.0 offset=(-0.0169,0.0418,0.0096) dir=down pitch=12 tilt=22 len=0.1169 material=rustplate
       ring 0.000 w=0.0423 d=0.0423 side=0.005
       ring 0.105 w=0.0757 d=0.0757 side=0.005
       ring 0.250 w=0.0957 d=0.0957 side=0.005
@@ -174,7 +177,7 @@ parts
     # last 15 mm and stands outside it (rho 0.047 vs the pad's 0.0437 there; coincident
     # surfaces would z-fight). Arm flesh r 0.0295 at t0.5, so the narrowest ring (0.040)
     # clears it by 10 mm. ring w/d = 2 rho / 1.30: rho .047, .050, .041.
-    loft lame bones=upperarm..upperarm material=iron
+    loft lame bones=upperarm..upperarm material=rustplate
       ring 0.30 w=0.0723 d=0.0723
       ring 0.38 w=0.0769 d=0.0769
       ring 0.52 w=0.0631 d=0.0631
@@ -245,7 +248,7 @@ parts
     # same), so it follows the knee instead of creasing. The chain is 0.29 +
     # 0.27 = 0.56 m, knee at t 0.518. Flesh w: 0.0700 m at thigh t0.9, 0.0774 at
     # the knee, 0.066 at shin t0.15.
-    loft kneeplate bones=thigh..shin material=iron shape=squarish
+    loft kneeplate bones=thigh..shin material=rustplate shape=squarish
       ring 0.44 w=0.064 d=0.064
       ring 0.52 w=0.076 d=0.080 fwd=0.006
       ring 0.59 w=0.066 d=0.066
@@ -312,7 +315,7 @@ parts
   # pass x1.10 had a scalloped edge and hairlines (the body grain's surface noise is a
   # millimetre or two deep and z-fought with a plate that close), x1.18 fixed that and read
   # as a tight tee, this is the loose version.
-  loft yoke bones=chest..chest frame=fwd material=iron
+  loft yoke bones=chest..chest frame=fwd material=rustplate
     ring 0.30 w=0.1262 d=0.1425
     ring 0.50 w=0.1126 d=0.1380
     ring 0.70 w=0.1085 d=0.1400
@@ -353,7 +356,7 @@ parts
   #     off like the hem does (~35 mm): yoke d 0.1380 / 0.1400 / 0.1450 / 0.1560 / 0.1440 at t0.50 /
   #     0.70 / 0.85 / 0.94 / 1.00, collar d 0.1440 / 0.1300 / 0.1180 / 0.1005 (base / 0.12 / 0.28 /
   #     rim). Widths are unchanged: the hanging arms limit those, depth is free.
-  loft collar bone=neck at=0.0 offset=(0,-0.022,0) dir=up pitch=5 len=0.0778 frame=fwd material=iron
+  loft collar bone=neck at=0.0 offset=(0,-0.022,0) dir=up pitch=5 len=0.0778 frame=fwd material=rustplate
     ring 0.000 w=0.0960 d=0.1380
     ring 0.283 w=0.0990 d=0.1420
     ring 0.443 w=0.0900 d=0.1300
@@ -490,13 +493,21 @@ textures
   texture webbing base=#3b3f42
     noise scale=0.12 amount=0.10
     ao amount=0.18
+  # RUST AND WEAR. WAM's texture ops are per-texel in a baked atlas; `spots` lays a coloured blotch where its noise
+  # crosses a threshold (density 0.55 was about a third of the surface and read as a few orange dots, so 0.90 / 0.55 covered most of it and read as a copper-plated yoke; the shipped 0.75 / 0.55 with #74401f is a notch duller), so two spot layers make rust: big orange-brown
+  # patches (scale 0.09 of height, ~12 cm) and a finer, darker pitting inside them (scale 0.03, seed 7). `ao` darkens
+  # the crevices where plates overlap (the lame under the pad), which is where real plate rusts first. Colours are
+  # eyeballed (#8a4a24 rust, #4d2a17 pit); they render darker and warmer under the lab's key, as every paint hex here does.
+  texture rustplate base=#62676b
+    gradient axis=v from=-0.12 to=0.18
+    noise scale=0.10 amount=0.14
+    spots scale=0.090 density=0.75 color=#74401f
+    spots scale=0.035 density=0.55 color=#4d2a17 seed=7
+    ao amount=0.30
   texture plate base=#6e7378
     gradient axis=v from=-0.12 to=0.18
     noise scale=0.10 amount=0.06
-    ao amount=0.18
-  texture iron base=#6e7378
-    gradient axis=v from=-0.12 to=0.18   # painted top-light on the plate
-    noise scale=0.10 amount=0.06         # hammered, not stamped
+    spots scale=0.050 density=0.25 color=#7b4a2a
     ao amount=0.18
   texture leather base=#4a3526
     streaks along=v amount=0.09

@@ -102,8 +102,8 @@ describe('goblin-kit.gltf fits goblin.blob', () => {
     // Named explicitly so a material vanishing from the .wam is a failure
     // rather than a silently smaller test. `cloth` was here until the kilt
     // became a plate fauld, which is itself gone (the trousers are paint).
-    // `boot` and `webbing` (the gaiter cuff) arrived with the phase-2 rebuild, `plate` with the pauldron spikes, `black` with the sunglass frame.
-    expect([...groups.keys()].sort()).toEqual(['band', 'black', 'boot', 'brass', 'glass', 'iron', 'leather', 'plate', 'screen', 'webbing']);
+    // `boot` and `webbing` (the gaiter cuff) arrived with the phase-2 rebuild, `plate` with the pauldron spikes, `black` with the sunglass frame, and `rustplate` replaced `iron` for the worn plate.
+    expect([...groups.keys()].sort()).toEqual(['band', 'black', 'boot', 'brass', 'glass', 'leather', 'plate', 'rustplate', 'screen', 'webbing']);
     // >=, not >: WAM's `kind=box` emits exactly 8 corner vertices
     // (mesh.py:1170-1176), which is what the watch body/screen are.
     for (const [name, vs] of groups) expect(vs.length, name).toBeGreaterThanOrEqual(8);
@@ -236,14 +236,14 @@ describe('goblin-kit.gltf fits goblin.blob', () => {
     expect(cuff.max, 'cuff stays within 16 mm').toBeLessThan(0.016);
   });
 
-  // PLATE FIT, measured 2026-10-02 on the pads, lame, yoke and knee plate (material `iron`). The chest plate and pads are
+  // PLATE FIT, measured 2026-10-02 on the pads, lame, yoke and knee plate (material `rustplate`). The chest plate and pads are
   // OVERSIZED ON PURPOSE (owner: "like an XL, not a small t-shirt"), so this is a loose-fit bound, not a hugging one:
   // deepest vertex 31.3 mm inside the flesh (the pauldron's inner rim in the chest, the forced tuck above), farthest
   // 35.3 mm off it (the yoke's front at the hem, depth x1.38, and the pad dome's 25 mm over the shoulder round). Pinned
   // 2-5 mm outside both, so a plate that drifts bigger, or a body that moves under it, fails instead of passing quietly.
   // The first, tight pass measured 23.9 mm; if that number is ever wanted back, the yoke rings are the dial.
   it('plate fits loose by design but does not float', () => {
-    const d = groups.get('iron')!.map(v => sdBody(v, body));
+    const d = groups.get('rustplate')!.map(v => sdBody(v, body));
     expect(Math.min(...d), 'deepest tuck').toBeGreaterThan(-0.036);
     expect(Math.max(...d), 'farthest standoff').toBeLessThan(0.040);
   });

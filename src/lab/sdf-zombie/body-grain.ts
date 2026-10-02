@@ -1,10 +1,20 @@
 //
 // BODY GRAIN (spec docs/superpowers/specs/2026-10-02-body-grain-design.md; plan
-// docs/superpowers/plans/2026-10-02-body-grain.md). The face sheet's texture on the body, in two octaves of one
-// grain: hard-edged noise cells cut in the hit's REST-space anchor, each an albedo multiply and a normal tilt matched
-// to the face sheet's own grain at the same `grain` value (FleshMaterial.grain, a palette line). Fine cells are
-// face-sized and show up close; coarse cells take over as the fine ones drop below about 1.5 pixels, so the body
-// stays textured farther out and no octave is ever drawn below a pixel, where it would crawl.
+// docs/superpowers/plans/2026-10-02-body-grain.md). The face sheet's texture on the body: hard-edged noise cells
+// cut in the hit's REST-space anchor, each a small albedo multiply and a normal tilt matched to the face sheet's own
+// grain at the same `grain` value (FleshMaterial.grain, a palette line). Cells are face-sized and show up close, then
+// fade out by the pixel cone as they drop below a pixel, so none is ever drawn smaller than a pixel, where it would
+// crawl.
+//
+// ONE OCTAVE SINCE 2026-10-02 (owner, looking at lab turntable frames: "it looks like big pixels ... id rather just keep
+// them small and if they disappear at distance that is fine, but it should be more like a bump map, like little
+// pitted pores, which is what the ones on the face are like"). It used to be two octaves: the 3.5 mm cells, and a
+// 12 mm coarse octave that took over as the fine cells dropped under ~1.5 pixels so the body stayed grainy at normal
+// framings. At the usual 0.9-1.3 m the fine cells are already sub-pixel, so what the owner saw was the 12 mm coarse
+// cells, hard-edged squares each swinging albedo by up to +-22%: "big pixels". The coarse octave is gone, and the
+// albedo swing is now only GRAIN_ALBEDO_SHARE of the face's while the tilt (the relief) keeps the face's full strength,
+// so it reads as pits, not as coloured squares. The body now has NO grain beyond ~0.9 m in the lab turntable (the
+// fine cells' fade-out distance, see grainFadeDistances); that is the owner's stated preference.
 //
 // Pure data and arithmetic, no renderer. The WGSL block (webgpu/march/body/blocks/post/body-grain.wgsl.ts) names
 // these constants in its text (its test pins that they agree) and does the same arithmetic per pixel; these
@@ -19,18 +29,6 @@ import type { Vec3 } from './types';
  */
 export const GRAIN_CELL_FINE = 0.0035;
 
-/**
- * The coarse octave's cell edge, rest-space metres: a 3.4x step from the fine one. In the lab turntable
- * (k = 0.00203) it is full out to 1.48 m (so the owner's 1.35 m framing shows it at full strength, 2.3 px cells),
- * half at 1.97 m and gone beyond 2.96 m. 0.016 would reach 3.9 m with chunkier cells; tuned on the owner's frames.
- * Must stay at least GRAIN_FADE_PX.HI / LO times GRAIN_CELL_FINE, so it is at full weight wherever the fine fades.
- */
-export const GRAIN_CELL_COARSE = 0.012;
-
-/** Added to the coarse octave's cell index before hashing, so its cells read their own stretch of the hash lattice:
- *  within 2 m of the rest origin the fine indices stay inside +-572 and the coarse ones inside 833..1167. */
-export const GRAIN_COARSE_LATTICE_OFFSET = 1000;
-
 /** The face sheet's base tone: blob-face-sheet.ts draws plain skin as 0.46 + (hash - 0.5) x 2 x grain, and the
  *  face multiplies albedo by the texel over its level, so the relative swing is 2 x grain / 0.46. */
 export const GRAIN_BASE_TONE = 0.46;
@@ -39,7 +37,7 @@ export const GRAIN_BASE_TONE = 0.46;
  *  own: `grain` alone sets both the colour swing and the tilt, as it does on the face. */
 export const GRAIN_RELIEF = 1.4;
 
-/** The pixel-cone fade, in SDF pixels per cell: an octave is absent at or below LO and full at or above HI,
+/** The pixel-cone fade, in SDF pixels per cell: the grain is absent at or below LO and full at or above HI,
  *  smoothstep between (midpoint 1.5 px, the spec's "about 1.5 pixels"). */
 export const GRAIN_FADE_PX = { LO: 1.0, HI: 2.0 } as const;
 
@@ -60,16 +58,13 @@ export function grainPixelM(t: number, pixelConeK: number): number {
   return Math.max(2 * t * pixelConeK, 1e-6);
 }
 
-/** The two octaves' fades at hit distance t, before the masks: the fine one by its own pixel size, the coarse one
- *  by its pixel size times what the fine one has lost. Up close (fine 1) the coarse adds nothing. */
-export function grainOctaveFades(t: number, pixelConeK: number): { fine: number; coarse: number } {
-  const pix = grainPixelM(t, pixelConeK);
-  const fine = smoothstep(GRAIN_FADE_PX.LO, GRAIN_FADE_PX.HI, GRAIN_CELL_FINE / pix);
-  const coarse = (1 - fine) * smoothstep(GRAIN_FADE_PX.LO, GRAIN_FADE_PX.HI, GRAIN_CELL_COARSE / pix);
-  return { fine, coarse };
+/** The grain's fade at hit distance t, before the mask: absent at or below one SDF pixel per cell, full at or above
+ *  two, smoothstep between (midpoint 1.5 px, the spec's "about 1.5 pixels"). */
+export function grainFade(t: number, pixelConeK: number): number {
+  return smoothstep(GRAIN_FADE_PX.LO, GRAIN_FADE_PX.HI, GRAIN_CELL_FINE / grainPixelM(t, pixelConeK));
 }
 
-/** Where an octave with cell edge cellM is at full weight (out to `full`), half (`half`) and gone (beyond `none`),
+/** Where a grain with cell edge cellM is at full weight (out to `full`), half (`half`) and gone (beyond `none`),
  *  in metres of hit distance, for pixel cone k. */
 export function grainFadeDistances(cellM: number, pixelConeK: number): { full: number; half: number; none: number } {
   const at = (px: number) => cellM / (2 * px * pixelConeK);
@@ -96,21 +91,18 @@ export function grainMask(m: GrainMasks): number {
   return (1 - m.faceSheetCover) * (1 - Math.max(m.gloss, m.metal)) * (1 - m.painted) * clamp01(1 - m.wound);
 }
 
-/** One drawn octave at a hit: its cell's hash h (0..1) and its weight w (fade x mask). */
-export interface GrainOctaveSample {
-  h: number;
-  w: number;
+/** The share of the face sheet's colour swing the body takes. The face varies albedo AND carries relief; the owner
+ *  wants the body's grain to read as little pitted pores (relief), not coloured squares, so the colour swing is a
+ *  third of the face's while the tilt below keeps the face's full strength. Eyeballed in the turntable. */
+export const GRAIN_ALBEDO_SHARE = 0.35;
+
+/** The albedo multiplier at a hit whose cell hash is h (0..1) and weight w (fade x mask):
+ *  1 + (h - 0.5) x w x 2 x grain / 0.46 x GRAIN_ALBEDO_SHARE. Mean 1; at most +-7.6% at grain 0.10. */
+export function grainAlbedoScale(h: number, w: number, grain: number): number {
+  return 1 + (h - 0.5) * w * 2 * grain / GRAIN_BASE_TONE * GRAIN_ALBEDO_SHARE;
 }
 
-/** The albedo multiplier: 1 + 2 x grain / 0.46 x sum over octaves of (h - 0.5) x w. The weights sum to at most 1,
- *  so it never swings further than one octave at full weight (+-21.7% at grain 0.10); its mean is 1. */
-export function grainAlbedoScale(octaves: readonly GrainOctaveSample[], grain: number): number {
-  let dev = 0;
-  for (const o of octaves) dev += (o.h - 0.5) * o.w;
-  return 1 + dev * 2 * grain / GRAIN_BASE_TONE;
-}
-
-/** The scale on the summed, weighted neighbour-hash gradient (each component at most 1 in size) that gives the
+/** The scale on the weighted neighbour-hash gradient (each component at most 1 in size) that gives the
  *  normal tilt, before projection onto the tangent plane. 0.28 at grain 0.10, the face relief's most. */
 export function grainTiltScale(grain: number): number {
   return 2 * grain * GRAIN_RELIEF;

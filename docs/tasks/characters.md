@@ -47,11 +47,25 @@ so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), like
   accepted as is.
 - [x] **Body grain** (owner, 2026-10-01: "apply the noise texture that is on his face to his body"):
   [spec](../superpowers/specs/2026-10-02-body-grain-design.md), [plan](../superpowers/plans/2026-10-02-body-grain.md).
-  A palette `grain` in the face sheet's units, in two octaves: face-sized 3.5 mm cells up close, 1.2 cm cells farther
-  out, each an albedo multiply and a bump in rest space; the goblin sets `grain 0.10`. **Owner approved 2026-10-02**
+  A palette `grain` in the face sheet's units: face-sized 3.5 mm cells, an albedo multiply and a bump in rest space; the goblin sets `grain 0.10`. **Owner approved 2026-10-02**
   ("fine for now"), as built: coarse cell 0.012, `surfaceNoiseAmp` 0.22, the painted and wound fades kept
   ([frames and numbers](../dev-notes/2026-10-02-body-grain/notes.md)). Built through dispatch (GLM 5.3 flash).
-- [ ] Phase 2, armour: redesign and fit (own brainstorm).
+  **Reworked 2026-10-02 after the owner saw it on the armoured goblin** ("it looks like big pixels ... keep them small,
+  fine if they disappear at distance, more like a bump map, like pitted pores"): the 1.2 cm coarse octave is removed (at
+  normal framing the fine cells are sub-pixel, so the coarse squares were all that showed) and the albedo swing is a
+  35% share of the face's while the tilt keeps the face's full strength. The body now has no grain beyond ~0.9 m in the
+  lab turntable. GPU `render-check` ok; the cold-boot and march-hash gates of the original build were NOT re-run for this
+  edit (shader text changed, 4 march-golden entries re-pinned; it removes code, so boot cost should only fall).
+- [~] **Phase 2, armour: built 2026-10-02, awaiting the owner's final look.** [Spec](../superpowers/specs/2026-10-02-goblin-armour-design.md) ·
+  [plan](../superpowers/plans/2026-10-02-goblin-armour.md) · [notes and frames](../dev-notes/2026-10-02-goblin-armour/notes.md).
+  Painted dark-grey pants and a dirty off-white tank top (paint on the SDF, so no clipping and wounds still work); mesh
+  boots, gaiter cuffs, knee plates, utility belt with pouches, football-pad pauldrons with a lame, left-pauldron spikes,
+  a loose (oversized) chest yoke to the neck with a flared collar, round sunglasses with ear hooks, rust and wear. Flesh
+  feet removed (the boot is the foot; restore lines are commented in `goblin.blob`). Cleaver and buckler removed (retired
+  by this spec). Bandoliers were built and removed ("too busy"; saved in the notes folder). Fit pinned in
+  `goblin-kit.test.ts` (tuck, loose-plate standoff, boot/cuff/belt standoff). Walk-pose clip check is by eye
+  (`BLOB_POSE=walk`), not a vertex-level skinned test. Open: Blender for hero-quality plate (owner's option, see notes).
+  The kit is rigid per bone, so the pads/yoke could be exported from Blender as separate skinned meshes.
 - [ ] Phase 3, held weapons: the player's weapons in the orb hands (own brainstorm).
   - `webgpu/goblin-skin.ts` keeps `forearmRadius` 0.028 and `forearmElbowRadius` 0.038, documented as the goblin's
     forearm bar and elbow blob, which phase 1 removed (both constants are unreferenced). `handRadius` 0.046 is

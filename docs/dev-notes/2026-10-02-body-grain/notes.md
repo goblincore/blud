@@ -107,3 +107,24 @@ Re-shoot only the frames an edit affects.
 revisit with 0.016 or a third octave if the goblin needs texture farther out), `surfaceNoiseAmp` 0.22, and both
 optional fades (painted prims, wounds). The live crawl check was not done; look for it the first time the goblin moves
 on screen.
+
+## Rework: one octave, pitted relief (2026-10-02, owner)
+
+Seen on the armoured goblin in the lab turntable, the owner: "it looks like big pixels ... I would rather keep them small
+and if they disappear at distance that is fine, but it should be more like a bump map, like little pitted pores, which is
+what the ones on the face are like."
+
+- Cause: at the usual 0.9-1.3 m the 3.5 mm fine cells are already sub-pixel (fade-out 0.86 m), so what showed was the
+  12 mm coarse octave, hard-edged squares each swinging albedo by up to +-22%.
+- Change: the coarse octave is removed (`GRAIN_CELL_COARSE`, `GRAIN_COARSE_LATTICE_OFFSET`, `grainOctaveFades` and the
+  second hash branch are gone; `grainFade` is the single fade). The albedo swing is `GRAIN_ALBEDO_SHARE` = 0.35 of the
+  face's (+-7.6% at grain 0.10, was +-21.7%); the normal tilt is unchanged (the face's full relief gain), so the grain
+  reads as relief. 7 hashes per pixel (was up to 14).
+- Tests: `body-grain.test.ts` and `body-grain.wgsl.test.ts` rewritten for one octave (and pin that the coarse names are
+  gone); march golden re-pinned on exactly MARCH_BODY, MARCH_BODY_TRACE, MARCH_TRACE_POST, REFINE_BODY.
+- Checked: `blob:render-check -- goblin` exit 0; lab frames at 0.9 m (smooth, no squares) and 0.4 m (small pitted relief on
+  the arms and hands); full `src/lab/sdf-zombie/` suite 481 files / 6908 tests passing.
+- NOT re-run: the original build's cold-boot A/B and march-hash gates, and the GPU cost bench. The change deletes shader
+  code, so cost should only fall, but it is unmeasured.
+- Open: the grain is now invisible beyond ~0.9 m in the lab turntable (as the owner asked). If the game camera wants some
+  body texture at 2-5 m, that is a different tool (a screen-space or palette-level pore noise), not this one.

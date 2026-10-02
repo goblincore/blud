@@ -101,3 +101,33 @@ console.log('\n--- FOOT (legL) ---');
   console.log('flesh top above ankle: sd along shin axis');
   for (const t of [0.8, 0.9, 1.0]) { const c = boneAt('shin.l', t); console.log(`shin t${t.toFixed(2)} y=${c[1].toFixed(3)} sd=${ALL(c).toFixed(4)}`); }
 }
+
+console.log('\n--- WHOLE BODY at belt height (thigh tops widen the hips: cluster-isolated torso numbers under-measure here) ---');
+for (const t of [0.5, 0.66, 0.84, 1.0]) section(`ALL pelvis t${t.toFixed(2)}`, ALL, boneAt('pelvis', t));
+for (const t of [0.1, 0.25]) section(`ALL spine1 t${t.toFixed(2)}`, ALL, boneAt('spine1', t));
+
+console.log('\n--- HEAD (whole body field), x half-width and front surface by height and z ---');
+{
+  const sk = boneAt('skull', 0.45);
+  console.log('skull t0.45 =', sk.map(n => n.toFixed(4)).join(','));
+  for (const y of [1.20, 1.24, 1.28]) {
+    for (const z of [0.09, 0.06, 0.03, 0.0, -0.03]) {
+      const c: Vec3 = [0, y, z];
+      const xp = march(ALL, c, X, 0.3);
+      console.log(`y=${y.toFixed(2)} z=${z.toFixed(2)}  x half-width=${f(xp)}`);
+    }
+    // front surface at the centreline and at x=0.045
+    for (const x of [0, 0.045, 0.07]) {
+      const c: Vec3 = [x, y, -0.02];
+      console.log(`y=${y.toFixed(2)} x=${x.toFixed(3)}  front z=${f(march(ALL, c, Z, 0.4) - 0.02)}`);
+    }
+  }
+}
+
+console.log('\n--- NECK (head-limb cluster only: the shoulders are another cluster) ---');
+{
+  const HEADF: Field = p => sdClusters(p, ['head']);
+  for (const t of [0.0, 0.15, 0.3, 0.45, 0.6, 0.8]) section(`neck t${t.toFixed(2)}`, HEADF, boneAt('neck', t));
+  const n0 = boneAt('neck', 0), n1 = boneAt('neck', 1);
+  console.log('neck base', n0.map(v => v.toFixed(4)).join(','), ' neck top', n1.map(v => v.toFixed(4)).join(','));
+}
