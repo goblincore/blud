@@ -317,7 +317,10 @@ export function createCrowdType(
   const depthPreMesh = new THREE.Mesh(activeGeometry(), activeHandles().depthPreMaterial);
   depthPreMesh.frustumCulled = false;
   const frontMesh = front && frontHandles ? new THREE.Mesh(front.geo, frontHandles.material) : null;
-  if (frontMesh) frontMesh.frustumCulled = false;
+  if (frontMesh) {
+    frontMesh.frustumCulled = false;
+    frontMesh.visible = dispatch === 'boxes'; // a quad-dispatch type never draws front faces
+  }
   let lastBatches: EarlyzBatches = { front: 0, back: 0, nearestFront: Infinity, nearestBack: Infinity };
 
   const free = new Set<number>();
@@ -652,6 +655,7 @@ export function createCrowdType(
       if (frontMesh && front && mode === 'quad') {
         frontMesh.visible = false;
         front.geo.instanceCount = 0;
+        lastBatches = { front: 0, back: 0, nearestFront: Infinity, nearestBack: Infinity };
       }
     },
 

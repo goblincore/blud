@@ -241,9 +241,10 @@ describe('crowd type quad rasterisation rect (stage a-2 (3))', () => {
 describe('crowd type early-Z batches (earlyz stage 1)', () => {
   const renderer = { compute() { /* GPU dispatch stub */ } } as unknown as THREE.WebGPURenderer;
   const grid = { tilesX: 16, tilesY: 16, tilePx: TILE_SIZE_PX };
-  const cam = (z: number) => {
+  const cam = (z: number, x = 0) => {
     const c = new THREE.PerspectiveCamera(90, 1, 0.01, 100);
-    c.position.set(0, 0, z);
+    c.position.set(x, 0, z);
+    c.lookAt(x, 0, -4); // the stub bodies sit on the z = -4 row, so the quad rect is non-null
     c.updateMatrixWorld();
     c.matrixWorldInverse.copy(c.matrixWorld).invert();
     return c;
@@ -282,13 +283,134 @@ describe('crowd type early-Z batches (earlyz stage 1)', () => {
     expect((t.mesh.material as THREE.Material).side).toBe(THREE.BackSide);
   });
 
-  it('the quad dispatch hides the front mesh and zeroes its batch', () => {
-    const t = createCrowdType(renderer, 'zombie', defaultUniforms(blankFaceTexture()), 256, 256, undefined, { earlyz: true });
+  const frontCount = (t: ReturnType<typeof createCrowdType>) =>
+    (t.frontMesh!.geometry as THREE.InstancedBufferGeometry).instanceCount;
+  const backCount = (t: ReturnType<typeof createCrowdType>) =>
+    (t.mesh.geometry as THREE.InstancedBufferGeometry).instanceCount;
+  const EMPTY = { front: 0, back: 0, nearestFront: Infinity, nearestBack: Infinity };
+  /** slot 0 centre x 0 and slot 1 centre x 1; camera (0,0,-4.2) is inside slot 0 only,
+   *  so a boxes sync gives back = [slot 0], front = [slot 1]. */
+  const twoSlotType = (opts?: { dispatch?: 'boxes' | 'quad' }) => {
+    const t = createCrowdType(renderer, 'zombie', defaultUniforms(blankFaceTexture()), 256, 256,
+      undefined, { earlyz: true, ...opts });
+    t.attach(stubView(0, [groupFor(0)]));
     t.attach(stubView(1, [groupFor(1)]));
+    return t;
+  };
+  const both = new Set([0, 1]);
+
+  it('the quad dispatch hides the front mesh and zeroes its batch', () => {
+    const t = twoSlotType();
+    t.sync(cam(-4.2), grid, both);
+    // A non-zero front batch to lose: the switch must not leave it drawing.
+    expect(frontCount(t)).toBe(1);
+    expect(t.frontMesh!.visible).toBe(true);
+    expect(t.earlyzBatches().front).toBe(1);
+
+    // setDispatch alone (BEFORE any sync) clears the front batch, the mesh and the report.
     t.setDispatch('quad');
-    t.sync(cam(0), grid, new Set([0]));
     expect(t.frontMesh!.visible).toBe(false);
-    expect((t.frontMesh!.geometry as THREE.InstancedBufferGeometry).instanceCount).toBe(0);
+    expect(frontCount(t)).toBe(0);
+    expect(t.earlyzBatches()).toEqual(EMPTY);
+
+    // The quad sync must itself keep it hidden and empty, not lean on setDispatch having
+    // cleaned up: re-dirty the front mesh the way a stale frame would, then sync.
+    t.frontMesh!.visible = true;
+    (t.frontMesh!.geometry as THREE.InstancedBufferGeometry).instanceCount = 5;
+    t.sync(cam(-4.2), grid, both);
+    expect(t.info().rect).not.toBeNull(); // the rect-bound arm of the quad sync
+    expect(t.frontMesh!.visible).toBe(false);
+    expect(frontCount(t)).toBe(0);
+    expect(t.earlyzBatches()).toEqual(EMPTY);
+
+    // ...and the nothing-visible arm (rect null) hides it too.
+    t.frontMesh!.visible = true;
+    t.sync(cam(-4.2), grid, new Set());
+    expect(t.info().rect).toBeNull();
+    expect(t.frontMesh!.visible).toBe(false);
+    expect(frontCount(t)).toBe(0);
+  });
+
+  it('a boxes -> quad -> boxes round trip restores the split; an idle boxes sync reports empty', () => {
+    const t = twoSlotType();
+    t.sync(cam(-4.2), grid, both);
+    t.setDispatch('quad');
+    t.sync(cam(-4.2), grid, both);
+    expect(t.frontMesh!.visible).toBe(false);
+
+    t.setDispatch('boxes');
+    t.sync(cam(-4.2), grid, both);
+    expect(t.frontMesh!.visible).toBe(true);
+    expect(frontCount(t)).toBe(1);
+    expect(backCount(t)).toBe(1);
+    expect(slotOf(t.frontMesh!, 0)).toBe(1);
+    expect(slotOf(t.mesh, 0)).toBe(0);
+    expect((t.instCfg.value as THREE.Vector4).y).toBe(1);
+
+    // Idle: nothing visible. The mesh stays enabled (its draw is a zero-instance no-op),
+    // both batches are empty and the distances are Infinity.
+    t.sync(cam(-4.2), grid, new Set());
+    expect(t.frontMesh!.visible).toBe(true);
+    expect(frontCount(t)).toBe(0);
+    expect(backCount(t)).toBe(0);
+    expect(t.earlyzBatches()).toEqual(EMPTY);
+  });
+
+  it('creation visibility follows the dispatch', () => {
+    expect(twoSlotType().frontMesh!.visible).toBe(true);
+    expect(twoSlotType({ dispatch: 'quad' }).frontMesh!.visible).toBe(false);
+  });
+
+  it('setSkeletonVolume reaches the front material', () => {
+    const t = twoSlotType();
+    const a = new THREE.Data3DTexture();
+    const m = new THREE.DataTexture();
+    t.setSkeletonVolume(a, m);
+    const mat = t.frontMesh!.material as unknown as {
+      segVolumeAtlas: { value: THREE.Texture }; segVolumeMeta: { value: THREE.Texture };
+    };
+    expect(mat.segVolumeAtlas.value).toBe(a);
+    expect(mat.segVolumeMeta.value).toBe(m);
+    // The shipped back material still gets it too.
+    expect((t.mesh.material as unknown as typeof mat).segVolumeAtlas.value).toBe(a);
+  });
+
+  it('a boxes sync re-uploads the front instance buffer', () => {
+    const t = twoSlotType();
+    const fibVersion = () =>
+      (t.frontMesh!.geometry.getAttribute('iCentre') as THREE.InterleavedBufferAttribute).data.version;
+    const backVersion = () =>
+      (t.mesh.geometry.getAttribute('iCentre') as THREE.InterleavedBufferAttribute).data.version;
+    const f0 = fibVersion();
+    const b0 = backVersion();
+    t.sync(cam(-4.2), grid, both);
+    expect(fibVersion()).toBeGreaterThan(f0);
+    expect(backVersion()).toBeGreaterThan(b0);
+    const f1 = fibVersion();
+    t.sync(cam(-4.2), grid, both);
+    expect(fibVersion()).toBeGreaterThan(f1);
+  });
+
+  it('instCfg covers the high-water of ALL drawn slots across both batches', () => {
+    const mk = () => {
+      const t = createCrowdType(renderer, 'zombie', defaultUniforms(blankFaceTexture()), 256, 256, undefined, { earlyz: true });
+      for (let s = 0; s < 4; s++) t.attach(stubView(s, [groupFor(s)]));
+      return t;
+    };
+    // Camera x 3: inside slot 3 only. back = [3], front = [0, 1]; the top slot is in the BACK batch.
+    const a = mk();
+    a.sync(cam(-4.2, 3), grid, new Set([0, 1, 3]));
+    expect(backCount(a)).toBe(1);
+    expect(frontCount(a)).toBe(2);
+    expect((a.instCfg.value as THREE.Vector4).x).toBe(4);
+    expect((a.instCfg.value as THREE.Vector4).y).toBe(1);
+    // Camera x 0: inside slot 0 only. back = [0], front = [1, 2]; the top slot is in the FRONT batch.
+    const b = mk();
+    b.sync(cam(-4.2, 0), grid, new Set([0, 1, 2]));
+    expect(backCount(b)).toBe(1);
+    expect(frontCount(b)).toBe(2);
+    expect((b.instCfg.value as THREE.Vector4).x).toBe(3);
+    expect((b.instCfg.value as THREE.Vector4).y).toBe(1);
   });
 
   it('a budget-culled instance is drawn in neither batch; the batch counts sum to the no-earlyz draw count', () => {
