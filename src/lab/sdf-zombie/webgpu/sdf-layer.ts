@@ -2862,6 +2862,10 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
         if (chunkPass === 'split') {
           for (const [o, v] of wasVisible) o.visible = v;
           for (const o of bodies) { if (!wasVisible.has(o)) { wasVisible.set(o, o.visible); o.visible = false; } }
+          // EARLY-Z SEED: the first render above already wrote it into this target's depth, and the
+          // chunks-only render below does not clear. Left visible it would redraw a full-screen
+          // quad for nothing (the chunks still depth-test against what the first render wrote).
+          if (seed) seed.mesh.visible = false;
           setPassLabel('sdf:march-chunks');
           const prevAuto = renderer.autoClear;
           renderer.autoClear = false;

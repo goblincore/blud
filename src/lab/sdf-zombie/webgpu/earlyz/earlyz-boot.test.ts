@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { applyEarlyzRenderOrder, bootEarlyz, degradeFailedEarlyzFronts } from './earlyz-boot';
+import { applyEarlyzRenderOrder, bootEarlyz, degradeFailedEarlyzFronts, EARLYZ_DETECT_TIMEOUT_MS } from './earlyz-boot';
 import { BACK_BATCH_BASE, FRONT_BATCH_BASE } from './type-order';
 import { installConservativeDepthPatch, detectConservativeDepth } from './conservative-depth-patch';
 import { installPipelineWatch } from './pipeline-watch';
@@ -128,6 +128,45 @@ describe('bootEarlyz', () => {
     expect(earlyz).toMatchObject({ flag: true, on: false, reason: 'cannot observe pipeline creation on this backend' });
     expect(warn).toHaveBeenCalledTimes(1);
     expect(info).not.toHaveBeenCalled();
+  });
+
+  it('stays off, within the bound, when the browser never answers the detection probe', async () => {
+    vi.useFakeTimers();
+    try {
+      install.mockReturnValue({ installed: true, reason: null });
+      detect.mockReturnValue(new Promise(() => { /* never settles */ }));
+      const { device } = makeDevice();
+      const { ctx, earlyz } = makeCtx({ device });
+      let done = false;
+      const booted = bootEarlyz(ctx).then(() => { done = true; });
+      await vi.advanceTimersByTimeAsync(EARLYZ_DETECT_TIMEOUT_MS - 1);
+      expect(done).toBe(false); // still waiting, not yet decided
+      await vi.advanceTimersByTimeAsync(1);
+      await booted;
+      expect(done).toBe(true);
+      expect(earlyz).toMatchObject({ flag: true, on: false, reason: 'detect timed out' });
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(info).not.toHaveBeenCalled();
+      expect(watchInstall).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0); // nothing left pending
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a detection that answers in time leaves no timer behind and ignores the bound', async () => {
+    vi.useFakeTimers();
+    try {
+      install.mockReturnValue({ installed: true, reason: null });
+      detect.mockResolvedValue({ ok: true, reason: null });
+      const { device } = makeDevice();
+      const { ctx, earlyz } = makeCtx({ device });
+      await bootEarlyz(ctx);
+      expect(earlyz).toMatchObject({ on: true, reason: null });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('turns on with a null reason when detection succeeds', async () => {

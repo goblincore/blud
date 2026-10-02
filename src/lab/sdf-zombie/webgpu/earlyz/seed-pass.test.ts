@@ -124,6 +124,23 @@ describe('seed pass wiring (source pins)', () => {
     expect(marchBlock.slice(hide).trim()).toBe('if (seed) seed.mesh.visible = false;');
   });
 
+  it("hides the seed before the 'split' chunks-only render (the first render already wrote it)", () => {
+    // The split branch is: [first render done above] ... chunks-only render. Slice from the branch
+    // head to the end of the march block; its ONE render call is the chunks-only one.
+    const head = marchBlock.indexOf("if (chunkPass === 'split') {");
+    expect(head).toBeGreaterThan(-1);
+    const splitBranch = marchBlock.slice(head);
+    const hide = splitBranch.indexOf('if (seed) seed.mesh.visible = false;');
+    expect(hide).toBeGreaterThan(-1);
+    expect(splitBranch.indexOf("setPassLabel('sdf:march-chunks');")).toBeGreaterThan(hide);
+    expect(splitBranch.indexOf('renderer.render(scene, camera)')).toBeGreaterThan(hide);
+    // ...while everything before the branch (the first render of the bodies, chunks hidden) still
+    // has it visible: nothing hides it until the split branch.
+    const beforeSplit = marchBlock.slice(0, head);
+    expect(beforeSplit).toContain('seed.mesh.visible = seedOnLast;');
+    expect(beforeSplit).not.toContain('seed.mesh.visible = false;');
+  });
+
   it('turns the quad on only around the march, and compiles it only where it could ever draw', () => {
     expect(count('seed.mesh.visible = true;')).toBe(1);
     expect(count('seed.mesh.visible = seedOnLast;')).toBe(1);

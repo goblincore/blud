@@ -15,6 +15,19 @@ type EarlyzDevice = Parameters<typeof detectConservativeDepth>[0] & {
   addEventListener(type: 'uncapturederror', f: (e: { error: { message: string } }) => void): void;
 };
 
+/** The boot waits at most this long for the browser to answer the detection probe. */
+export const EARLYZ_DETECT_TIMEOUT_MS = 5000;
+
+/** `detectConservativeDepth`, bounded: a driver that never answers must not hold the boot. The
+ *  probe keeps running in the background after a timeout; its late answer is ignored. */
+function detectWithTimeout(device: EarlyzDevice): Promise<{ ok: boolean; reason: string | null }> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<{ ok: boolean; reason: string | null }>((resolve) => {
+    timer = setTimeout(() => resolve({ ok: false, reason: 'detect timed out' }), EARLYZ_DETECT_TIMEOUT_MS);
+  });
+  return Promise.race([detectConservativeDepth(device), timeout]).finally(() => clearTimeout(timer));
+}
+
 /**
  * An experiment flag must never block the boot: every failure below (including a throw)
  * leaves `on` false with a reason and ONE console.warn, and the boot continues as shipped.
@@ -36,7 +49,7 @@ export async function bootEarlyz(ctx: GameContext): Promise<void> {
     device.addEventListener('uncapturederror', (e) => {
       if (state.gpuErrors.length < 20) state.gpuErrors.push(String(e.error.message));
     });
-    const det = await detectConservativeDepth(device);
+    const det = await detectWithTimeout(device);
     if (!det.ok) { off(det.reason); return; }
     // Without a way to SEE a failed front pipeline, early-Z could drop bodies silently (three's
     // compileAsync resolves on a failed pipeline, and its draw skips it): refuse rather than run blind.

@@ -19,6 +19,10 @@ function fakeProto() {
 }
 
 describe('conservative depth patch (spec §4 A)', () => {
+  it('runs against the three revision the patch was written for', () => {
+    expect(THREE.REVISION, 'patch written for r186: re-verify getFragDepth before upgrading').toBe('186');
+  });
+
   it('emits the greater builtin only for an opted-in material', () => {
     const p = fakeProto();
     expect(installConservativeDepthPatch(p as never, '186')).toEqual({ installed: true, reason: null });

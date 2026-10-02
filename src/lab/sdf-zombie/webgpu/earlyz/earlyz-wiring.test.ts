@@ -21,19 +21,37 @@ describe('early-Z boot order in game-main.ts (source pins)', () => {
   const boot = only('if (EARLYZ_FLAG) await bootEarlyz(ctx);');
   // The string literal, not the comment above it that quotes the same words.
   const guard = only("'stage 1 is legacy-route only (deferred renderer)'");
+  const accumGuard = only("'stage 1 excludes temporal accumulation boots (far pass)'");
+  const crowdOff = only("'crowd path off (stage 1 is crowd-only)'");
   const seed = only('setEarlyzSeed(');
   const firstType = only('crowdTypeFor(');
 
-  it('boots early-Z, then applies the deferred guard, then the seed, then the first crowd type', () => {
+  it('boots early-Z, then the deferred/accum guard, then the crowd-off check, then the seed, then the first crowd type', () => {
     expect(boot).toBeLessThan(guard);
-    expect(guard).toBeLessThan(seed);
+    expect(boot).toBeLessThan(accumGuard);
+    expect(Math.max(guard, accumGuard)).toBeLessThan(crowdOff);
+    expect(crowdOff).toBeLessThan(seed);
     expect(seed).toBeLessThan(firstType);
   });
 
-  it('turns early-Z off under the deferred renderer in one guarded block', () => {
-    const block = source.slice(source.lastIndexOf('\n  if (', guard), guard + 200);
-    expect(block).toContain('if (ctx.boot.deferredMode && ctx.crowd.earlyz.on) {');
+  it('turns early-Z off under the deferred renderer and for ?accum=1 boots in one guarded block', () => {
+    const start = source.lastIndexOf('\n  if (', guard);
+    const block = source.slice(start, accumGuard + 200);
+    expect(block).toContain('if (ctx.crowd.earlyz.on && (ctx.boot.deferredMode || isAccumBoot())) {');
     expect(block).toContain('ctx.crowd.earlyz.on = false;');
+    // one block: both reasons sit between the same `if (` and the warn
+    expect(block.indexOf('ctx.boot.deferredMode\n      ? ')).toBeGreaterThan(0);
+    expect(block).toContain('console.warn(`[earlyz] off for this boot: ${ctx.crowd.earlyz.reason}`);');
+  });
+
+  it('reports early-Z off when the crowd path is off after the fallback logic resolves', () => {
+    const start = source.lastIndexOf('\n  if (', crowdOff);
+    const block = source.slice(start, crowdOff + 200);
+    expect(block).toContain('if (ctx.crowd.earlyz.on && !ctx.crowd.on) {');
+    expect(block).toContain('ctx.crowd.earlyz.on = false;');
+    // after the refine/cone fallback assigned crowd.on = false
+    expect(source.lastIndexOf('ctx.crowd.fallbackReason = ctx.render.refineWanted', crowdOff)).toBeGreaterThan(0);
+    expect(start).toBeGreaterThan(source.indexOf('ctx.crowd.on = false;\n    console.warn(\'[crowd] refine/cone'));
   });
 
   it('lists each crowd type\'s front mesh with its back mesh in setBodies', () => {
@@ -44,6 +62,25 @@ describe('early-Z boot order in game-main.ts (source pins)', () => {
     const crowdList = source.slice(call, source.indexOf('.concat(', call));
     expect(crowdList).toContain('crowdMarch');
     expect(crowdList).toContain('t.frontMesh ? [t.mesh, t.frontMesh] : [t.mesh]');
+  });
+
+  it('keeps the shipped map() list (no per-frame flatMap) when early-Z is off', () => {
+    const call = only('ctx.render.sdfLayer.setBodies(');
+    const crowdList = source.slice(call, source.indexOf('.concat(', call));
+    const gate = crowdList.indexOf('ctx.crowd.earlyz.on');
+    expect(gate).toBeGreaterThan(-1);
+    // `earlyz.on ? flatMap(...) : map(t => t.mesh)`: the flatMap is the on-branch only
+    expect(crowdList.indexOf('.flatMap(')).toBeGreaterThan(gate);
+    expect(crowdList.indexOf('.map(t => t.mesh)')).toBeGreaterThan(crowdList.indexOf('.flatMap('));
+    expect(crowdList.split('.flatMap(').length - 1).toBe(1);
+  });
+
+  it('does not compile the front mesh of a quad-dispatch type (it never draws)', () => {
+    const fn = source.indexOf('const compileCrowdInBackground');
+    const skip = source.indexOf("if (m === t.frontMesh && t.dispatch === 'quad') continue;", fn);
+    expect(skip).toBeGreaterThan(fn);
+    // before the mesh is made visible for its compile
+    expect(skip).toBeLessThan(source.indexOf('m.visible = true;', fn));
   });
 
   it('draws the seed only for a crowd-march boot with early-Z on', () => {

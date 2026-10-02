@@ -529,11 +529,14 @@ async function main() {
   if (ctx.boot.mode.warning) console.warn(`[sdf-game] ${ctx.boot.mode.warning}`);
   if (ctx.boot.mode.fatal) throw new Error(ctx.boot.mode.fatal);
   ctx.boot.deferredMode = ctx.boot.mode.mode === 'deferred';
-  // EARLY-Z stage 1 is legacy-route only (the deferred route is out of its scope). Off here,
-  // after bootEarlyz and before the seed and any crowdTypeFor, so no front mesh is ever built.
-  if (ctx.boot.deferredMode && ctx.crowd.earlyz.on) {
+  // EARLY-Z stage 1 is out of scope for the deferred route and for temporal-accumulation boots
+  // (`?accum=1`, whose far pass is not covered). Off here, after bootEarlyz and before the seed
+  // and any crowdTypeFor, so no front mesh is ever built.
+  if (ctx.crowd.earlyz.on && (ctx.boot.deferredMode || isAccumBoot())) {
     ctx.crowd.earlyz.on = false;
-    ctx.crowd.earlyz.reason = 'stage 1 is legacy-route only (deferred renderer)';
+    ctx.crowd.earlyz.reason = ctx.boot.deferredMode
+      ? 'stage 1 is legacy-route only (deferred renderer)'
+      : 'stage 1 excludes temporal accumulation boots (far pass)';
     console.warn(`[earlyz] off for this boot: ${ctx.crowd.earlyz.reason}`);
   }
 
@@ -1564,8 +1567,17 @@ async function main() {
     ctx.crowd.on = false;
     console.warn('[crowd] refine/cone twins are not supported under the crowd march (stage 3); falling back to per-body for this boot');
   }
-  // EARLY-Z level-depth seed: only the crowd march has early-Z work to save, so it waits for the
-  // final crowd decision above (a per-body boot gets no seed quad) and for the deferred guard.
+  // EARLY-Z is crowd-only: with the crowd path off for good (`?crowd=0`, or the refine/cone
+  // fallback above) there is nothing to draw as a front batch, so report it OFF here (earlyzInfo,
+  // the bench's state guard) instead of "on" with no effect. Types created later by a runtime
+  // setCrowd(true) are then built without front meshes, consistently.
+  if (ctx.crowd.earlyz.on && !ctx.crowd.on) {
+    ctx.crowd.earlyz.on = false;
+    ctx.crowd.earlyz.reason = 'crowd path off (stage 1 is crowd-only)';
+    console.warn(`[earlyz] off for this boot: ${ctx.crowd.earlyz.reason}`);
+  }
+  // EARLY-Z level-depth seed: waits for the final crowd decision above and for the deferred and
+  // accumulation guards (a per-body boot gets no seed quad).
   if (ctx.crowd.earlyz.on && ctx.crowd.on) ctx.render.sdfLayer.setEarlyzSeed(ctx.boot.handle.scene);
   /** One CrowdType per character registry name; lazily created on first spawn. */
   ctx.crowd.types = new Map<string, CrowdType>();
@@ -2358,10 +2370,12 @@ async function main() {
       // EARLY-Z: a type's front-face twin is a body too. sdf-layer hides the `bodies` list for
       // the 'split' chunks-only render and runs one pass per listed body under the depth gate; a
       // front mesh left out of the list stayed visible there and the whole front batch marched
-      // again (34-45 ms per live chunk, 2026-10-02 cost run). Flag off: frontMesh is null and
-      // the list is unchanged.
+      // again (34-45 ms per live chunk, 2026-10-02 cost run). Flag off keeps the shipped map(),
+      // with no per-frame flatMap allocation.
       crowdMarch
-        ? ([...ctx.crowd.types.values()].flatMap(t => (t.frontMesh ? [t.mesh, t.frontMesh] : [t.mesh])) as THREE.Object3D[])
+        ? ((ctx.crowd.earlyz.on
+            ? [...ctx.crowd.types.values()].flatMap(t => (t.frontMesh ? [t.mesh, t.frontMesh] : [t.mesh]))
+            : [...ctx.crowd.types.values()].map(t => t.mesh)) as THREE.Object3D[])
             .concat(ctx.render.visibleActors.filter(a => !a.crowd).map(a => a.view.object))
         : ctx.render.visibleActors.map(a => a.view.object),
       // GIBS DEGRADE (defer-compile task): the chunk/gib material is the only
@@ -4747,6 +4761,10 @@ async function main() {
       // crowd stays on the per-body fallback.
       for (const m of [t.mesh, t.frontMesh]) {
         if (!m) continue;
+        // A quad-dispatch type never draws its front mesh (hidden in sync), so compiling it is
+        // wasted cold-compile time. A runtime setDispatch('boxes') then compiles it on its first
+        // draw, synchronously: acceptable for a debug switch.
+        if (m === t.frontMesh && t.dispatch === 'quad') continue;
         m.visible = true;
         const p = ctx.render.sdfLayer.precompileInBackground(
           m, scene, camera, { timeoutMs: PRECOMPILE_COLD_PASS_TIMEOUT_MS },

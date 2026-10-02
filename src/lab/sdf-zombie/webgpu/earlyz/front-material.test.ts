@@ -20,6 +20,9 @@ const make = (dispatch: 'boxes' | 'quad', earlyz?: { front: boolean }) => {
 };
 
 describe('front-face crowd material (spec D2-D4)', () => {
+  it('runs against the three revision the patch was written for', () => {
+    expect(THREE.REVISION, 'patch written for r186: re-verify getFragDepth before upgrading').toBe('186');
+  });
   it('the shipped call is unchanged: BackSide, no opt-in property', () => {
     const m = make('boxes');
     expect(m.side).toBe(THREE.BackSide);
