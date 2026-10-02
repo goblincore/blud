@@ -33,7 +33,7 @@
 
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
-import { wgslFn, texture, uv, vec4, uniform, mrt, output, cameraViewMatrix, mat3, mul, mix, perspectiveDepthToViewZ, smoothstep, float } from 'three/tsl';
+import { wgslFn, texture, uv, vec4, uniform, mrt, output, cameraViewMatrix, mat3, mul, mix, perspectiveDepthToViewZ, smoothstep, float, screenUV, positionGeometry } from 'three/tsl';
 import { fieldParity, fieldTargetHeight, fieldJitterNdcY } from './field-render';
 import { createConeUniforms, createDepthPreUniforms, createRefineUniforms, tickMotionFrame, setMotionOutAll, setEdgeOutAll, marchNormalRead, marchAnchorRead, marchBurnRead, marchMotionRead, detailFieldFn, type ConeSource, type DepthPreSource, type LastFrameSource, type OccluderSource, type PrevSource, type RefineSource } from './zombie-gpu';
 import { TEMPORAL_START_DEFAULTS, temporalMarginForMotion } from './temporal-start';
@@ -42,6 +42,8 @@ import { setPassLabel } from './gpu-pass-timing';
 import { layerOn } from './light-layers';
 import { createUpscaleStage, upscaleInfoOf, type UpscaleInfo, type UpscaleStage } from './upscale/upscale-stage';
 import { inputsUseNormals, type UpscaleConfig, type UpscaleModel } from './upscale/upscale-model';
+import { EARLYZ_SEED_WGSL, seedScaleSupported } from './earlyz/seed-depth.wgsl';
+import { SEED_RENDER_ORDER } from './earlyz/type-order';
 
 // ---------------------------------------------------------------------------
 // HALF-RATE (lever C2, temporal amortisation) — render the march every OTHER
@@ -1206,6 +1208,11 @@ export interface SdfLayer {
    * against what the polygonal pass left behind.
    */
   setOutputTarget(t: THREE.RenderTarget | null): void;
+  /** EARLY-Z SEED (spec 2026-10-01 D6): adds the depth-only level-depth seed quad to
+   *  `scene` once the post-aa capture depth exists. Never called with the flag off. */
+  setEarlyzSeed(scene: THREE.Scene): void;
+  /** Whether the seed drew on the last march, and why not when it did not. */
+  earlyzSeedInfo(): { built: boolean; on: boolean; reason: string | null };
   /** The target the layer actually composites into, for evidence readback.
    *  Null when nothing is redirecting, in which case "the output" is the canvas.
    *  Added 2026-09-10 alongside the h/3 investigation: the march target and the
@@ -2049,6 +2056,63 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
    */
   let outputTarget: THREE.RenderTarget | null = null;
 
+  // ---- early-Z level-depth seed (spec 2026-10-01 D6) -----------------------
+  // Built lazily the first time setEarlyzSeed has a scene AND the post-aa capture
+  // target exists (FXAA on). Draws first in the march target (renderOrder), depth-only,
+  // LessEqual against the clear, so repeating it in a later render of the same target
+  // never overwrites a nearer body depth.
+  let seedScene: THREE.Scene | null = null;
+  let seed: {
+    mesh: THREE.Mesh;
+    tex: ReturnType<typeof texture>;
+    marchSize: { value: THREE.Vector2 };
+  } | null = null;
+  let seedOnLast = false;
+  let seedReasonLast: string | null = 'not requested';
+  // Task 5 review (GPU-measured): the seed's 4x4 block cap is exact only when
+  // seedScaleSupported() holds for (level depth size, march size). Cached by size.
+  let seedScaleKey = '';
+  let seedScaleOk = false;
+  const seedFn = wgslFn(EARLYZ_SEED_WGSL);
+  const ensureSeed = (): void => {
+    if (seed || !seedScene) return;
+    const depthTex = outputTarget?.depthTexture;
+    if (!depthTex) return;
+    const tex = texture(depthTex);
+    const marchSize = uniform(new THREE.Vector2(1, 1));
+    const mat = new MeshBasicNodeMaterial();
+    mat.colorWrite = false;
+    mat.depthTest = true;
+    mat.depthWrite = true;
+    mat.side = THREE.DoubleSide;
+    mat.vertexNode = vec4(positionGeometry.x, positionGeometry.y, 0.5, 1.0) as never;
+    mat.depthNode = seedFn({ levelDepth: tex, uv: screenUV, marchSize }) as never;
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
+    mesh.name = 'earlyz-seed';
+    mesh.frustumCulled = false;
+    mesh.renderOrder = SEED_RENDER_ORDER;
+    mesh.layers.set(SDF_LAYER);
+    mesh.visible = false;
+    seedScene.add(mesh);
+    seed = { mesh, tex, marchSize: marchSize as unknown as { value: THREE.Vector2 } };
+  };
+  /** null = the seed may draw this frame; otherwise why it may not. */
+  const seedBlockReason = (): string | null => {
+    if (!seedScene) return 'not requested';
+    if (!outputTarget?.depthTexture) return 'no sampleable level depth (post-aa capture off)';
+    if (fieldStyle !== 'off') return `field style '${fieldStyle}'`;
+    const scaleKey = `${outputTarget.width}x${outputTarget.height}/${target.width}x${target.height}`;
+    if (scaleKey !== seedScaleKey) {
+      seedScaleKey = scaleKey;
+      seedScaleOk = seedScaleSupported([outputTarget.width, outputTarget.height], [target.width, target.height]);
+    }
+    if (!seedScaleOk) return `march ${target.width}x${target.height} over ${outputTarget.width}x${outputTarget.height}: seed block wider than 4 px`;
+    if (target.textures.length !== 1) return 'march MRT boot';
+    if (accumOn) return 'temporal accumulation (jittered march)';
+    if (marchJitter) return 'capture jitter';
+    return null;
+  };
+
   /**
    * Pre-pass targets need an explicit first clear whenever they are
    * (re)allocated. The march materials bind the cone and occluder textures
@@ -2392,7 +2456,10 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       try {
         // --- the marched twins, one layer at a time -------------------------
         camera.layers.set(SDF_LAYER);
+        ensureSeed();
+        if (seed) seed.mesh.visible = true;
         await compile('march', scene, camera, target, marchMrt);
+        if (seed) seed.mesh.visible = false;
         // GATED BY THE SAME FLAG THE RENDER PATH READS. Warming a pass that is
         // off is not free and not harmless: an off-by-default twin can carry a
         // stale mapBody argument list that only fails at pipeline creation, and
@@ -2729,6 +2796,22 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       // discards on.
       camera.layers.set(SDF_LAYER);
       setPassLabel('sdf:march');
+      // EARLY-Z SEED (spec D6): drawn only in the single-render branches below. The
+      // per-body front-to-back branch (ships off) clears and re-renders per body, and
+      // is left exactly as it is.
+      ensureSeed();
+      seedReasonLast = seedBlockReason();
+      if (seedReasonLast === null && prevUniforms.enabled.value > 0.5 && bodies.length > 0) {
+        seedReasonLast = 'per-body depth-gate passes';
+      }
+      seedOnLast = seed !== null && seedReasonLast === null;
+      if (seed) {
+        seed.mesh.visible = seedOnLast;
+        if (seedOnLast) {
+          seed.tex.value = outputTarget!.depthTexture!;
+          seed.marchSize.value.set(target.width, target.height);
+        }
+      }
       if (prevUniforms.enabled.value > 0.5 && bodies.length > 0) {
         // Front-to-back per-body passes (perf round 2 task 5). Clear once,
         // then one pass per body nearest-first, each preceded by a blit of
@@ -2780,6 +2863,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
         renderer.setRenderTarget(target);
         withMarchMrt(() => renderer.render(scene, camera));
       }
+      if (seed) seed.mesh.visible = false;
       // DISTANCE SPLIT FAR PASS: real half-scale rays from D onward, UNJITTERED, into the checker-grid
       // target the resolve merges. Near bodies discard at their proxy (tMax < D), so this costs only the
       // far bodies' pixels.
@@ -3009,6 +3093,8 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       if (!hold) forceFreshFrame = false;
     },
     setOutputTarget(t) { outputTarget = t; },
+    setEarlyzSeed(scene) { seedScene = scene; ensureSeed(); },
+    earlyzSeedInfo() { return { built: seed !== null, on: seedOnLast, reason: seedReasonLast }; },
     get outputTarget() { return outputTarget; },
     setSize(width, height) {
       fullW = width;
