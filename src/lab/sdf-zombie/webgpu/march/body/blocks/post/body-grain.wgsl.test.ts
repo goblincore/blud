@@ -92,3 +92,14 @@ describe('body grain block (post-hit, two octaves)', () => {
       expect(B).not.toContain(marker);
   });
 });
+
+describe('body grain plumbing (palette -> meltCfg.w -> record -> gInstMelt.w)', () => {
+  it('applyMaterial writes the palette grain into meltCfg.w and syncs the record', async () => {
+    const gpu = (await import('../../../../zombie-gpu?raw')).default;
+    const start = gpu.indexOf('applyMaterial(m, light) {');
+    expect(start).toBeGreaterThan(-1);
+    const apply = gpu.slice(start, gpu.indexOf('dispose() {', start));
+    expect(apply).toContain('u.meltCfg.value.w = m.grain;');
+    expect(apply).toContain('syncRecord();');
+  });
+});
