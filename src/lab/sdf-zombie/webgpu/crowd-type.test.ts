@@ -11,6 +11,7 @@ import {
 } from './crowd-type';
 import { defaultUniforms, blankFaceTexture, type ZombieGpuView } from './zombie-gpu';
 import { TILE_SIZE_PX, type TileGroupInput } from './tile-cull';
+import { MAX_TILE_GROUPS } from './tile-bin-compute';
 import source from './crowd-type?raw';
 
 describe('crowd type slots', () => {
@@ -234,5 +235,110 @@ describe('crowd type quad rasterisation rect (stage a-2 (3))', () => {
     expect(t.info().rectFrac).toBe(0);
     expect(t.mesh.visible).toBe(false);
     expect(t.depthPreMesh.visible).toBe(false);
+  });
+});
+
+describe('crowd type early-Z batches (earlyz stage 1)', () => {
+  const renderer = { compute() { /* GPU dispatch stub */ } } as unknown as THREE.WebGPURenderer;
+  const grid = { tilesX: 16, tilesY: 16, tilePx: TILE_SIZE_PX };
+  const cam = (z: number) => {
+    const c = new THREE.PerspectiveCamera(90, 1, 0.01, 100);
+    c.position.set(0, 0, z);
+    c.updateMatrixWorld();
+    c.matrixWorldInverse.copy(c.matrixWorld).invert();
+    return c;
+  };
+  const slotOf = (m: THREE.Mesh, row: number) =>
+    ((m.geometry as THREE.InstancedBufferGeometry).getAttribute('iSlot') as THREE.InterleavedBufferAttribute).getX(row);
+
+  it('without the option: no front mesh, every instance in the shipped batch', () => {
+    const t = createCrowdType(renderer, 'zombie', defaultUniforms(blankFaceTexture()), 256, 256);
+    expect(t.frontMesh).toBeNull();
+    t.attach(stubView(0, [groupFor(0)]));
+    t.sync(cam(0), grid, new Set([0]));
+    expect((t.mesh.geometry as THREE.InstancedBufferGeometry).instanceCount).toBe(1);
+  });
+
+  it('camera-inside instances stay in the back (shipped) batch; the rest draw front faces', () => {
+    const t = createCrowdType(renderer, 'zombie', defaultUniforms(blankFaceTexture()), 256, 256, undefined, { earlyz: true });
+    t.attach(stubView(0, [groupFor(0)])); // centre (0,0,-4), half (0.5,1,0.5)
+    t.attach(stubView(1, [groupFor(1)])); // centre (1,0,-4)
+    t.sync(cam(-4.2), grid, new Set([0, 1])); // inside slot 0's box, outside slot 1's (x 0 < 1 - 0.5 - 0.25)
+    expect((t.mesh.geometry as THREE.InstancedBufferGeometry).instanceCount).toBe(1);
+    expect((t.frontMesh!.geometry as THREE.InstancedBufferGeometry).instanceCount).toBe(1);
+    expect(slotOf(t.mesh, 0)).toBe(0);
+    expect(slotOf(t.frontMesh!, 0)).toBe(1);
+    const b = t.earlyzBatches();
+    expect(b.back).toBe(1);
+    expect(b.front).toBe(1);
+    expect(b.nearestBack).toBeCloseTo(0.2, 6);
+    expect(b.nearestFront).toBeCloseTo(Math.hypot(1, 0.2), 6);
+  });
+
+  it('front material is FrontSide + greater; the back mesh keeps the shipped BackSide material', () => {
+    const t = createCrowdType(renderer, 'zombie', defaultUniforms(blankFaceTexture()), 256, 256, undefined, { earlyz: true });
+    expect((t.frontMesh!.material as THREE.Material).side).toBe(THREE.FrontSide);
+    expect((t.frontMesh!.material as unknown as { conservativeDepth: string }).conservativeDepth).toBe('greater');
+    expect((t.mesh.material as THREE.Material).side).toBe(THREE.BackSide);
+  });
+
+  it('the quad dispatch hides the front mesh and zeroes its batch', () => {
+    const t = createCrowdType(renderer, 'zombie', defaultUniforms(blankFaceTexture()), 256, 256, undefined, { earlyz: true });
+    t.attach(stubView(1, [groupFor(1)]));
+    t.setDispatch('quad');
+    t.sync(cam(0), grid, new Set([0]));
+    expect(t.frontMesh!.visible).toBe(false);
+    expect((t.frontMesh!.geometry as THREE.InstancedBufferGeometry).instanceCount).toBe(0);
+  });
+
+  it('a budget-culled instance is drawn in neither batch; the batch counts sum to the no-earlyz draw count', () => {
+    /** A view at x with `n` tile groups; MAX_TILE_GROUPS groups overflow the shared budget. */
+    const viewAt = (slot: number, x: number, n: number): ZombieGpuView => ({
+      object: { position: new THREE.Vector3(x, 0, -4) },
+      uniforms: { bodyHalf: { value: new THREE.Vector3(0.5, 1, 0.5) } },
+      getTileGroups: () => Array.from({ length: n }, () => groupFor(slot)),
+      rebind: () => { /* the stub binds nothing */ },
+    } as unknown as ZombieGpuView);
+    const drawn = (t: ReturnType<typeof createCrowdType>) =>
+      (t.mesh.geometry as THREE.InstancedBufferGeometry).instanceCount;
+    // Camera (0,0,-4.2): inside a box centred x 0 / 0.1, outside one centred x 1 / 2.
+    const scenes: { name: string; xs: number[]; groups: number[] }[] = [
+      // Nearest-first: 0.2, 1.02, 2.01. Slot 2 overflows the cap, so it alone is culled (a FRONT item).
+      { name: 'culled front item', xs: [0, 1, 2], groups: [1, 1, MAX_TILE_GROUPS] },
+      // The culled FRONT item is its batch's only member: nearestFront must not see it.
+      { name: 'culled item alone in the front batch', xs: [0, 1], groups: [1, MAX_TILE_GROUPS] },
+      // Nearest-first: 0.2, 0.22. Slot 1 overflows; it is inside the guarded box, so a BACK item.
+      { name: 'culled back item', xs: [0, 0.1], groups: [1, MAX_TILE_GROUPS] },
+    ];
+    for (const sc of scenes) {
+      const build = (earlyz: boolean) => {
+        const t = createCrowdType(renderer, 'zombie', defaultUniforms(blankFaceTexture()), 256, 256,
+          undefined, earlyz ? { earlyz: true } : undefined);
+        sc.xs.forEach((x, i) => t.attach(viewAt(i, x, sc.groups[i]!)));
+        t.sync(cam(-4.2), grid, new Set(sc.xs.map((_, i) => i)));
+        return t;
+      };
+      const plain = build(false);
+      const t = build(true);
+      const b = t.earlyzBatches();
+      // The culled slot is packed in neither batch, so it never draws.
+      expect(t.info().culledByBudget, sc.name).toBe(plain.info().culledByBudget);
+      expect(t.info().culledByBudget, sc.name).toBeGreaterThan(0);
+      expect(b.back + b.front, sc.name).toBe(drawn(plain));
+      expect(drawn(t), sc.name).toBe(b.back);
+      expect((t.frontMesh!.geometry as THREE.InstancedBufferGeometry).instanceCount, sc.name).toBe(b.front);
+      const culledSlot = sc.xs.length - 1;
+      for (let r = 0; r < b.back; r++) expect(slotOf(t.mesh, r), sc.name).not.toBe(culledSlot);
+      for (let r = 0; r < b.front; r++) expect(slotOf(t.frontMesh!, r), sc.name).not.toBe(culledSlot);
+      // Nearest distances come from drawn items only: an emptied batch reports Infinity.
+      if (b.front === 0) expect(b.nearestFront, sc.name).toBe(Infinity);
+      if (b.back === 0) expect(b.nearestBack, sc.name).toBe(Infinity);
+    }
+    // Pin the two infinities the loop above can only conditionally check.
+    const only = createCrowdType(renderer, 'zombie', defaultUniforms(blankFaceTexture()), 256, 256, undefined, { earlyz: true });
+    only.attach(viewAt(0, 0, 1));
+    only.attach(viewAt(1, 1, MAX_TILE_GROUPS));
+    only.sync(cam(-4.2), grid, new Set([0, 1]));
+    expect(only.earlyzBatches()).toEqual({ back: 1, front: 0, nearestBack: expect.closeTo(0.2, 6), nearestFront: Infinity });
   });
 });

@@ -29,6 +29,7 @@ import {
   createCrowdMaterial, type CrowdMaterialSources, type MarchUniforms, type ZombieGpuView,
 } from './zombie-gpu';
 import type { GameTelemetry } from './game-telemetry';
+import { splitInstances } from './earlyz/batch-split';
 
 // Re-exported for the existing `./crowd-type` import sites; the function itself
 // now lives beside the record buffer it allocates from (task 7c), so
@@ -90,6 +91,22 @@ export interface InstanceAttrSource {
   visible: boolean;
 }
 
+/** EARLY-Z (spec 2026-10-01 D5): the last sync's two batches. Infinity = empty. */
+export interface EarlyzBatches {
+  front: number;
+  back: number;
+  nearestFront: number;
+  nearestBack: number;
+}
+
+/** Distance to the first VISIBLE item; `items` keeps sync()'s nearest-first order. */
+function nearestVisible(items: readonly InstanceAttrSource[], cam: THREE.Vector3): number {
+  for (const i of items) {
+    if (i.visible) return Math.hypot(i.centre[0]! - cam.x, i.centre[1]! - cam.y, i.centre[2]! - cam.z);
+  }
+  return Infinity;
+}
+
 /**
  * Packs the live instances into the interleaved attribute array, densely from
  * index 0 (the draw's instanceCount is the returned n). Invisible sources are
@@ -122,6 +139,12 @@ export interface CrowdType {
   readonly mesh: THREE.Mesh;
   /** The quarter-res depth-prepass twin on DEPTH_PREPASS_LAYER. */
   readonly depthPreMesh: THREE.Mesh;
+  /** EARLY-Z (spec 2026-10-01 D2/D5): the front-face, conservative-depth twin of
+   *  `mesh`. null unless created with `opts.earlyz`. When it exists, `mesh` draws
+   *  only the camera-inside instances (the shipped back-face material). */
+  readonly frontMesh: THREE.Mesh | null;
+  /** The last sync's batch counts and nearest distances (zeros/Infinity without earlyz). */
+  earlyzBatches(): EarlyzBatches;
   /** The level-shadow TextureNode the shared material binds, for the game's
    *  per-frame `value = map` rebind (same mechanism as the per-body view). */
   readonly levelShadowTex: ReturnType<typeof texture>;
@@ -203,6 +226,8 @@ export function createCrowdType(
      *  Fixed for the type's life; a wider body cannot join it. Default
      *  BASE_PRIM_STRIDE (every body up to 128 prims). */
     stride?: number;
+    /** EARLY-Z (spec 2026-10-01): build the front-face batch. Boxes dispatch only. */
+    earlyz?: boolean;
   },
 ): CrowdType {
   // ONE shared prim atlas, ONE record buffer, ONE material pair, ONE tile
@@ -243,6 +268,24 @@ export function createCrowdType(
   geo.setAttribute('iSlot', new THREE.InterleavedBufferAttribute(ib, 1, 6));
   geo.instanceCount = 0;
 
+  // EARLY-Z FRONT BATCH (spec D2/D5): its own instance buffer and the front material.
+  // Shares the atlas, the records, instCfg, the tile binding and the level-shadow node,
+  // so one sync() feeds both batches.
+  const front = opts?.earlyz === true ? (() => {
+    const fgeo = new THREE.InstancedBufferGeometry().copy(
+      new THREE.BoxGeometry(2, 2, 2) as unknown as THREE.InstancedBufferGeometry,
+    );
+    const fib = new THREE.InstancedInterleavedBuffer(
+      new Float32Array(MAX_CROWD_INSTANCES * INST_FLOATS), INST_FLOATS,
+    );
+    fib.setUsage(THREE.DynamicDrawUsage);
+    fgeo.setAttribute('iCentre', new THREE.InterleavedBufferAttribute(fib, 3, 0));
+    fgeo.setAttribute('iHalf', new THREE.InterleavedBufferAttribute(fib, 3, 3));
+    fgeo.setAttribute('iSlot', new THREE.InterleavedBufferAttribute(fib, 1, 6));
+    fgeo.instanceCount = 0;
+    return { geo: fgeo, ib: fib, out: fib.array as Float32Array };
+  })() : null;
+
   // QUAD DISPATCH (stage a-2): the second geometry/material pair. One screen
   // quad per type draws a single fragment per pixel and reconstructs the pixel
   // ray from screenUV; MARCH_TRACE_SETUP takes its entry from the tile spheres.
@@ -258,6 +301,11 @@ export function createCrowdType(
     atlas.texture, uniforms, { inst: records.node, instCfg }, tiles, sources, 'quad',
     (handles.material as unknown as { levelShadowTex: ReturnType<typeof texture> }).levelShadowTex,
   );
+  const frontHandles = front ? createCrowdMaterial(
+    atlas.texture, uniforms, { inst: records.node, instCfg }, tiles, sources, 'boxes',
+    (handles.material as unknown as { levelShadowTex: ReturnType<typeof texture> }).levelShadowTex,
+    { front: true },
+  ) : null;
   // Quad dispatch's rasterisation rect; the lit and depth-pre materials share
   // this one uniform (see crowdRayNodes).
   const quadRect = quadHandles.quadRect as { value: THREE.Vector4 };
@@ -268,6 +316,9 @@ export function createCrowdType(
   mesh.frustumCulled = false; // the box attributes ARE the bounds; no double cull
   const depthPreMesh = new THREE.Mesh(activeGeometry(), activeHandles().depthPreMaterial);
   depthPreMesh.frustumCulled = false;
+  const frontMesh = front && frontHandles ? new THREE.Mesh(front.geo, frontHandles.material) : null;
+  if (frontMesh) frontMesh.frustumCulled = false;
+  let lastBatches: EarlyzBatches = { front: 0, back: 0, nearestFront: Infinity, nearestBack: Infinity };
 
   const free = new Set<number>();
   for (let i = 0; i < MAX_CROWD_INSTANCES; i++) free.add(i);
@@ -323,7 +374,7 @@ export function createCrowdType(
   }).levelShadowTex;
 
   return {
-    name, atlas, records, uniforms, mesh, depthPreMesh, levelShadowTex, tiles, instCfg, quadRect,
+    name, atlas, records, uniforms, mesh, depthPreMesh, frontMesh, levelShadowTex, tiles, instCfg, quadRect,
     get dispatch() { return dispatch; },
 
     attach(view) {
@@ -485,15 +536,18 @@ export function createCrowdType(
           quadRect.value.set(rect[0], rect[1], rect[2], rect[3]);
           mesh.visible = true;
           depthPreMesh.visible = true;
+          if (frontMesh) frontMesh.visible = false;
         } else {
           // No visible instance: skip both draws entirely. The atlas/record
           // flush below still runs (other types share the buffer).
           mesh.visible = false;
           depthPreMesh.visible = false;
+          if (frontMesh) frontMesh.visible = false;
         }
       } else {
         mesh.visible = true;
         depthPreMesh.visible = true;
+        if (frontMesh) frontMesh.visible = true;
         lastRect = null;
         lastRectFrac = 0;
       }
@@ -503,12 +557,29 @@ export function createCrowdType(
       // so there is no attribute pack and no instanceCount — but keep the box
       // buffer at 0 so a later setDispatch('boxes') cannot draw stale rows
       // before its own sync repacks them.
-      if (dispatch === 'boxes') {
+      if (dispatch === 'boxes' && front) {
+        // EARLY-Z (spec D5): camera-inside instances keep the shipped back-face batch;
+        // the rest draw front faces with conservative depth. Order is kept, so both
+        // packs stay nearest-first.
+        const split = splitInstances(list, [cam.x, cam.y, cam.z]);
+        geo.instanceCount = packInstanceAttrs(split.back, instOut);
+        front.geo.instanceCount = packInstanceAttrs(split.front, front.out);
+        ib.needsUpdate = true;
+        front.ib.needsUpdate = true;
+        lastBatches = {
+          back: geo.instanceCount, front: front.geo.instanceCount,
+          nearestBack: nearestVisible(split.back, cam), nearestFront: nearestVisible(split.front, cam),
+        };
+      } else if (dispatch === 'boxes') {
         const n = packInstanceAttrs(list, instOut);
         geo.instanceCount = n;
         ib.needsUpdate = true;
       } else {
         geo.instanceCount = 0;
+        if (front) {
+          front.geo.instanceCount = 0;
+          lastBatches = { front: 0, back: 0, nearestFront: Infinity, nearestBack: Infinity };
+        }
       }
       // info().visible is the game-visible body count for BOTH dispatches (in
       // box mode it equals the pack length).
@@ -567,6 +638,7 @@ export function createCrowdType(
       volumeRebinds++;
       handles.setSkeletonVolume(atlasTex, meta);
       quadHandles.setSkeletonVolume(atlasTex, meta);
+      frontHandles?.setSkeletonVolume(atlasTex, meta);
       opts?.telemetry?.end('crowd-volume-rebind', rebindTiming);
     },
 
@@ -577,9 +649,15 @@ export function createCrowdType(
       mesh.material = activeHandles().material;
       depthPreMesh.geometry = activeGeometry();
       depthPreMesh.material = activeHandles().depthPreMaterial;
+      if (frontMesh && front && mode === 'quad') {
+        frontMesh.visible = false;
+        front.geo.instanceCount = 0;
+      }
     },
 
     binInputs() { return { groups: lastBinGroups, maxBlendK: lastBinMaxBlendK }; },
+
+    earlyzBatches() { return { ...lastBatches }; },
 
     info() {
       let attached = 0;
