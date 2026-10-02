@@ -26,3 +26,30 @@ Spec: ../../superpowers/specs/2026-10-02-body-grain-design.md. Plan: ../../super
   marchSurface); the face layer leaves faceSheetCover = facing * tex.a; march golden re-pinned on exactly
   FACE_LAYER_WGSL, MARCH_BODY, MARCH_BODY_TRACE, MARCH_TRACE_POST, REFINE_BODY; GPU compile smoke passed (goblin, grain 0).
 - Task 6 done: goblin.blob palette sets grain 0.10 (= its sheet's grain); surfaceNoiseAmp left at 0.22 for the owner.
+
+## In the lab (Task 7)
+
+Goblin, kit hidden, `npm run blob:shot`, 1380x820. Close-ups `BLOB_DIST=0.45` (torso `BLOB_TARGET_Y=0.85`, head `1.15`;
+fine octave). Owner's framing `BLOB_DIST=1.35` (coarse octave at full strength). Off = `meltCfg.w` zeroed by the probe;
+n06 = grain on with `surfaceNoiseAmp` 0.06.
+
+- `blob:render-check -- goblin`: exit 0.
+- Speckle (mean |dL| 3 px apart inside the body mask), ratio to off:
+  - torso: off 5.57, on 12.381 (x2.223, mean x0.992), on + noise 0.06 12.022 (x2.158)
+  - 1.35 m: off 14.853, on 18.756 (x1.263)
+- Observed (for the owner, not a verdict):
+  - Torso close-up, on vs off: the smooth body with soft broad mottling gains a dense field of small hard-edged light
+    and dark cells across the whole torso and arms, in the face sheet's speckle style.
+  - Head close-up (yaw 0 and 90), the face-to-neck crossing: the face sheet's speckle continues into the neck and ears
+    at the same cell size with no visible seam or band at the crossing, from the front and in profile.
+  - 1.35 m framing, on vs off: the body's soft mottling becomes a stronger blotchy light-and-dark patterning (the
+    coarse octave) while the head keeps its face speckle; subtler than the close-up but clearly present.
+  - Torso with surfaceNoiseAmp 0.06 vs 0.22: the broad soft mottling fades so the fine speckle reads cleaner and more
+    uniform; the fine grain itself looks about the same (speckle x2.158 vs x2.223).
+
+![Torso, grain off](frames/torso-off-yaw000.png) ![Torso, grain on](frames/torso-on-yaw000.png)
+![Torso, grain on, side](frames/torso-on-yaw090.png) ![Torso, grain on, surfaceNoiseAmp 0.06](frames/torso-on-n06-yaw000.png)
+![Head, grain on](frames/head-on-yaw000.png) ![Head, grain on, side](frames/head-on-yaw090.png)
+![1.35 m, grain off](frames/full-off-yaw000.png) ![1.35 m, grain on](frames/full-on-yaw000.png)
+
+- Task 7 done: lab frames and speckle numbers recorded.
