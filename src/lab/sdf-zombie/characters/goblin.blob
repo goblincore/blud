@@ -500,3 +500,11 @@ palette
   # A browner, darker green than the base. Mottling toward something far from
   # the base colour reads as dirt ON the creature rather than variation IN it.
   mottleColor   0.21 0.19 0.06
+  # Skin texture: the body's micro-detail normal noise (fbm in rest space,
+  # features ~5-11 mm), raised from the inherited 0.06 (about 1 degree of tilt,
+  # ten times weaker than the face sheet's grain bump) to the wet-meat preset's
+  # 0.22. Owner, 2026-10-01: give the body the face's texture. This is the
+  # quick preview; it is bump only, so it reads as a pebbled skin rather than
+  # the face's speckle. A per-character `grain` (colour + bump, like the face)
+  # is the proper version (planned).
+  surfaceNoiseAmp 0.22

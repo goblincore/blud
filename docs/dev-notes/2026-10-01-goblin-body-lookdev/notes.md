@@ -74,3 +74,18 @@ on the new body and no flesh pokes through it at any yaw.
    `lab-yaw090.png`). The red eyes and the face texture are the lab's own, as before.
 
 **Owner, 2026-10-01: "lgtm".** Phase 1 is done; the profile is accepted as is.
+
+## Skin texture, quick preview (2026-10-01)
+
+Owner: "apply the noise texture that is on his face to his body to give it more texture". The face's texture is a 64×64
+sheet of per-texel white noise (cells ~3-4 mm on the head, hard-edged), applied as a ±25% albedo multiply plus a strong
+bump (~15° tilt). The body had only the micro-detail normal noise at the inherited `surfaceNoiseAmp 0.06` (~1° tilt).
+
+As a data-only preview, `goblin.blob`'s palette now sets `surfaceNoiseAmp 0.22` (the wet-meat preset's value):
+
+![Before (0.06) and after (0.22), front and 3/4, kit hidden](lab/skin-noise-preview.jpg)
+
+It is bump only (smooth fbm, ~5-11 mm features), so it reads as pebbled skin rather than the face's speckle. The proper
+version, a per-character `grain` (hard-edged cells in rest space, colour + bump, faded with distance), is next.
+Side effect to know: settled gib chunks' detail saturates once `surfaceNoiseAmp` reaches ~0.167 (×6 gain in
+`game-dynamite-tuning.ts`).
