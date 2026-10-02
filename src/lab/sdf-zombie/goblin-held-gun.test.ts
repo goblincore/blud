@@ -8,6 +8,7 @@
 //     because its Grip_Hand / Fore_Hand nodes sit exactly on carry.ts's shared GUN_GRIP locators. Re-exporting the
 //     model with different node positions would move the hands off the gun with no error anywhere.
 import { describe, it, expect } from 'vitest';
+// @ts-expect-error — node:fs available in vitest via happy-dom/node (the repo's convention, silhouette.test.ts)
 import { readFileSync } from 'node:fs';
 import { motionProfileFor } from './motion-profile';
 import { GUN_GRIP } from './carry';

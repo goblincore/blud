@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, SHAMBLE_CARRY, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, type ArmStyle, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, type ArmStyle, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { Vec3 } from './types';
@@ -325,7 +325,15 @@ export const BRIDE_PROFILE: MotionProfile = {
 export const GOBLIN_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
   name: 'goblin',
-  gait: { walk: SHAMBLE_CARRY, run: SHAMBLE_CARRY },
+  // Its own scamper (phase 4a, spec 2026-10-02-goblin-gait-design.md): the soldier's stride curves retimed for 0.56 m
+  // legs. SHAMBLE_CARRY, the phase-3 interim, stays exported (gait.ts) and pinned by its own test.
+  gait: { walk: GOBLIN_WALK, run: GOBLIN_RUN },
+  // Speeds come from the curves, not guesses (gait-from-clip.ts: speed = travel x legLen x freq / duty). Walk
+  // 0.888 x 0.56 x 1.5 / 0.625 = 1.19 m/s; run 0.663 x 0.56 x 2.1 / 0.281 = 2.77 m/s. Cruise is the WALK's speed, below
+  // runBand.from, so he marches instead of drifting toward the run (the soldier's overshoot lesson, see SOLDIER_PROFILE);
+  // 1.30 sits just above it.
+  runBand: { from: 1.30, to: 2.77 },
+  cruise: 1.19,
   armStyle: 'carry',
   // The soldier's carries; the goblin's arms are long (0.235 + 0.235 m on a 1.3 m body) and may want their own
   // solve: the carry angles are relative to the authored hang. Judge in the lab turntable before tuning.

@@ -323,6 +323,44 @@ export const GLIDE_CARRY: GaitProfile = { ...GLIDE, name: 'glide-carry', armStyl
  *  owns the arms and the swing is only the sway the hands pick up from the body. */
 export const SHAMBLE_CARRY: GaitProfile = { ...SHAMBLE, name: 'shamble-carry', armStyle: 'carry', armSwing: 0.03 };
 
+/** The goblin's SCAMPER (owner, 2026-10-02: "scheming scamper"; goblin refinement phase 4a, spec
+ *  docs/superpowers/specs/2026-10-02-goblin-gait-design.md): quick short light steps on a stooped body. CURVE MODE on the
+ *  soldier's sampled walk, whose stride shape (thigh and knee angles per phase, hip bob) is normalised by leg length, so
+ *  the goblin's 0.56 m legs (thigh 0.29 + shin 0.27, against the soldier's 0.84) just work. In curve mode strideLen,
+ *  footLift, kneeBend, kneeLift, kneeTrack, footPush, stanceDuty and bobAmp are UNUSED for the legs and root (see CURVE
+ *  MODE above), so the character is cadence, lean, sway and arms. To use a hand-authored goblin walk instead, run a
+ *  skinned clip through `npm run gait:curves` and put it in `curves`; nothing else changes. */
+export const GOBLIN_WALK: GaitProfile = {
+  ...SHAMBLE,
+  name: 'goblin-walk',
+  // 1.5 Hz: the soldier's 0.9375 x 1.6. A pendulum's period goes with sqrt(length), so 0.56/0.84 alone gives x1.22; the
+  // scamper is the rest. At the clip's travel 0.888 leg-lengths and duty 0.625 this implies 0.888 x 0.56 x 1.5 / 0.625 =
+  // 1.19 m/s (motion-profile.ts takes its cruise from it). Eyeballed starting value: tune in the turntable.
+  strideFreq: 1.5,
+  curves: SOLDIER_WALK,
+  // The stoop. The .blob already hunches at rest, so this is only commitment toward the heading. Starting value.
+  torsoLean: 8,
+  swayAmp: 0.025,
+  shoulderSway: 0.45,
+  // The carry table owns the arms (the shotgun); this only rides the shoulders.
+  armSwing: 0.03,
+  asymJitter: 0.08,
+  armStyle: 'carry',
+};
+
+/** The goblin's run: the soldier's run curves at a higher cadence and a deeper lean. 2.1 Hz on the clip's travel 0.663
+ *  and duty 0.281 implies 0.663 x 0.56 x 2.1 / 0.281 = 2.77 m/s (the soldier's run is 2.97 on a 2.04 m body: a small
+ *  creature's legs are quick). Eyeballed starting values. */
+export const GOBLIN_RUN: GaitProfile = {
+  ...GOBLIN_WALK,
+  name: 'goblin-run',
+  strideFreq: 2.1,
+  curves: SOLDIER_RUN,
+  torsoLean: 14,
+  shoulderSway: 0.5,
+  armSwing: 0.04,
+};
+
 /** The bride's STALK: the soldier's march clip slowed and lengthened for her
  *  long legs, with a hip sway the `hem` pendulum picks up and a slight
  *  forward lean. Carry-style arms (the sword owns them). */
