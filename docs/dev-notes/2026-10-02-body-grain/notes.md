@@ -18,3 +18,4 @@ Spec: ../../superpowers/specs/2026-10-02-body-grain-design.md. Plan: ../../super
 ## Progress
 
 - Task 0 done: baselines recorded.
+- Task 1 done: FleshMaterial.grain, 0 in every preset; palette parses it (68 tests pass).
