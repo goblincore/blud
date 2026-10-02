@@ -16,8 +16,16 @@ Scope (owner, 2026-10-02): "keep it thin, shotgun first". One weapon, one stance
 ## Seen (lab, `BLOB_POSE=walk`, frames `walk-front.png`, `walk-side.png`)
 Held in two hands, right fist at the grip, left orb on the fore-end, barrel roughly level at chest height, kit on.
 
+## Aim pose checked (owner asked, same day; `BLOB_POSE=aim`, frames `aim-three-quarter.png`, `aim-side.png`)
+`holdPose('aim')` works in the lab although blob-turntable.mjs's header lists only walk|run|hip. Result: a shouldered aim,
+stock at the cheek, barrel forward at eye height, right fist on the grip and left orb on the fore-end. Checked from 8 yaws:
+no visible plate, pad, yoke, bracer or spike clipping with the gun or arms, and the shades and nose are clear of it. The
+receiver sits right against the cheek (the goblin's long nose and shades are the tightest spot); if that reads crowded in
+play, the `aim` carry's `gunPitch`/`yaw` is the dial, but the carries are shared with the soldier, so add a goblin carry
+rather than edit `aim`.
+
 ## Not done / not checked
-- The `aim` carry (the fire pose), the `chest` carry, shouldering, and any firing, muzzle flash or recoil from the goblin.
+- The `chest` carry (unused: the goblin's run uses `low`), and any firing, muzzle flash or recoil from the goblin.
 - The carry angles are the SOLDIER's (grid-solved per rig, relative to the authored hang); the goblin's arms are long
   (0.235 + 0.235 m). They look plausible but are untuned. Hand roll: the hand bone has no roll, so the grip is the
   orb-through-handle read, not a finger wrap (by design, phase 3 decision).
