@@ -169,7 +169,7 @@ export interface HeadDamageDebug {
   draws: number;
   /** Each region's (and the brain cavity's) last stamped crater: its radius, its carve depth below the anchor
    *  plane (null: a full sphere — no flesh probe) and the measured anchor-to-skull depth (null: none found). */
-  craters: Partial<Record<HeadRegion | 'brain', { radius: number; carveDepth: number | null; skull: number | null }>>;
+  craters: Partial<Record<HeadRegion | 'brain' | 'burst-exit', { radius: number; carveDepth: number | null; skull: number | null }>>;
   /** The head frame the deform hook last measured (the UN-deformed pose; null before the first re-pose). */
   frame: HeadFrame | null;
 }
@@ -379,26 +379,8 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     heads.delete(a);
   }
 
-  function hit(a: ZombieActor, point: Vec3, dir: Vec3, feel: HeadHitFeel): void {
-    const posed = a.posed();
-    const yaw = a.pose().yaw;
-    const field = (q: Vec3) => sdBody(q, posed);
-    // The UN-deformed head frame (the deform hook's last measurement): measured on the posed body mid-wobble,
-    // headShape reads the squashed, dented head — its centre and axes move by centimetres, so hs (and the
-    // nearest region) would drift with every hit landing while the last one still rings.
-    const frame = headAlive(posed) ? (heads.get(a)?.frame ?? frameOf(a, posed)) : null;
-    const impulse = { at: point, vel: [dir[0] * feel.shove, dir[1] * feel.shove, dir[2] * feel.shove] as Vec3 };
-    if (!frame) {
-      // No head to damage (off, or no head prims): the flail's plain face crater.
-      const w = worldHitToWound(posed.prims, point, FLAIL_HEAD.faceCraterR, 'blast', yaw, field);
-      w.severRadius = 0;
-      clothifyWound(posed.prims, w, 'heavy');
-      tearWound(w, flailTear('head'));   // torn lips (v1.5b, torn-lips.ts)
-      a.blast({ wounds: [w], meterCredit: feel.meterCredit * HEAD_LEAF.meterScale, impulse, reaction: 'blast', gain: feel.gain });
-      deps.bleed(a, w, point, dir, 'slug');
-      throwFlesh(a, point, dir, normalAt(field, point), feel);
-      return;
-    }
+  /** The actor's head state, created (with its deform hook) on first use. */
+  function headOf(a: ZombieActor): ActorHead {
     let h = heads.get(a);
     if (!h) {
       h = { model: makeHeadDamage(), deform: makeHeadDeform(), orbits: {}, rand: actorRand(a.id), craters: {}, frame: null, affine: null };
@@ -413,13 +395,16 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
         return f ? deformHead(p, st.deform, f) : p;
       });
     }
-    const dirLocal = rotate(conj(frame.quat), dir);
-    const local = rotate(conj(frame.quat), sub(point, frame.centre));
-    const hs: Vec3 = [local[0] / frame.axes[0], local[1] / frame.axes[1], local[2] / frame.axes[2]];
-    const strip = HEAD_LEAF.strip[feel.side ?? 'R'];
-    const r = headHit(h.model, { hs, strip }, h.rand);
-    h.model = r.state;
+    return h;
+  }
 
+  interface Kit {
+    surfaceOf: (reg: HeadRegion) => Vec3;
+    crater: (reg: HeadRegion | 'brain' | 'burst-exit', at: Vec3, radius: number, carveAs?: SkullRegion) => Wound;
+  }
+  /** The per-hit surface tracer and crater stamper. `carveAs`: carve this crater as that skull region at flesh 0
+   *  (the burst's exit crater has no region of its own). */
+  function kit(h: ActorHead, frame: HeadFrame, posed: BuildResult, yaw: number, field: (q: Vec3) => number): Kit {
     // Region surface points, traced once per hit on the posed (un-carved) surface.
     const surf = new Map<HeadRegion, Vec3>();
     const surfaceOf = (reg: HeadRegion): Vec3 => {
@@ -457,20 +442,53 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
       }
       return best;
     };
-    const crater = (reg: HeadRegion | 'brain', at: Vec3, radius: number): Wound => {
+    const crater = (reg: HeadRegion | 'brain' | 'burst-exit', at: Vec3, radius: number, carveAs?: SkullRegion): Wound => {
       const w = worldHitToWound(posed.prims, at, radius, 'blast', yaw, field);
       w.headSlot = 'keep'; w.headRegion = reg; w.severRadius = 0;
       let skull: number | null = null;
-      if (reg !== 'brain' && w.carveDepth !== undefined) {
+      const as: HeadRegion | undefined = carveAs ?? (reg === 'brain' || reg === 'burst-exit' ? undefined : reg);
+      if (as !== undefined && w.carveDepth !== undefined) {
         const sd = skullDepth(at, radius);
         skull = Number.isFinite(sd) ? sd : null;
         // The carve's depth slab clips the sphere (radius `radius`): deeper than the radius carves nothing more.
-        w.carveDepth = Math.min(radius, regionCarve(reg, h.model.flesh[reg], w.carveDepth, sd));
+        w.carveDepth = Math.min(radius, regionCarve(as, carveAs ? 0 : h.model.flesh[as], w.carveDepth, sd));
       }
       h.craters[reg] = { radius: w.radius, carveDepth: w.carveDepth ?? null, skull };
       // TORN LIPS (v1.5b, torn-lips.ts): every region crater (and the brain's) is torn at full.
       return tearWound(clothifyWound(posed.prims, w, 'heavy'), flailTear('head'));
     };
+    return { surfaceOf, crater };
+  }
+
+  function hit(a: ZombieActor, point: Vec3, dir: Vec3, feel: HeadHitFeel): void {
+    const posed = a.posed();
+    const yaw = a.pose().yaw;
+    const field = (q: Vec3) => sdBody(q, posed);
+    // The UN-deformed head frame (the deform hook's last measurement): measured on the posed body mid-wobble,
+    // headShape reads the squashed, dented head — its centre and axes move by centimetres, so hs (and the
+    // nearest region) would drift with every hit landing while the last one still rings.
+    const frame = headAlive(posed) ? (heads.get(a)?.frame ?? frameOf(a, posed)) : null;
+    const impulse = { at: point, vel: [dir[0] * feel.shove, dir[1] * feel.shove, dir[2] * feel.shove] as Vec3 };
+    if (!frame) {
+      // No head to damage (off, or no head prims): the flail's plain face crater.
+      const w = worldHitToWound(posed.prims, point, FLAIL_HEAD.faceCraterR, 'blast', yaw, field);
+      w.severRadius = 0;
+      clothifyWound(posed.prims, w, 'heavy');
+      tearWound(w, flailTear('head'));   // torn lips (v1.5b, torn-lips.ts)
+      a.blast({ wounds: [w], meterCredit: feel.meterCredit * HEAD_LEAF.meterScale, impulse, reaction: 'blast', gain: feel.gain });
+      deps.bleed(a, w, point, dir, 'slug');
+      throwFlesh(a, point, dir, normalAt(field, point), feel);
+      return;
+    }
+    const h = headOf(a);
+    const dirLocal = rotate(conj(frame.quat), dir);
+    const local = rotate(conj(frame.quat), sub(point, frame.centre));
+    const hs: Vec3 = [local[0] / frame.axes[0], local[1] / frame.axes[1], local[2] / frame.axes[2]];
+    const strip = HEAD_LEAF.strip[feel.side ?? 'R'];
+    const r = headHit(h.model, { hs, strip }, h.rand);
+    h.model = r.state;
+
+    const { surfaceOf, crater } = kit(h, frame, posed, yaw, field);
 
     const wounds: Wound[] = [];
     let bleedAt: Wound | null = null;
