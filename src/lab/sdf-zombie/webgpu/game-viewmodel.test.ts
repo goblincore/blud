@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-viewmodel.test.ts
 import { describe, expect, it } from 'vitest';
 import {
-  CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell,
+  CHAMBER_DEPTH_M, FLASH, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell,
   extractStage, extractorOffset, fireRecoil, flashEnvelope, hingeOpenFraction,
   insertStage, loadCarry, loadHold, magazineAfterFire, reloadPhaseAt, reloadPose,
   stagedShellCenter, supportHandPose, topLeverAngle,
@@ -17,14 +17,14 @@ const FRAME = { out: [0, 0, 1] as const, side: [1, 0, 0] as const };
 describe('flashEnvelope', () => {
   it('is zero before the shot and after the window', () => {
     expect(flashEnvelope(-0.01)).toBe(0);
-    expect(flashEnvelope(0.071)).toBe(0);
+    expect(flashEnvelope(FLASH.windowSec + 0.001)).toBe(0);
   });
   it('peaks at 1 immediately at the shot', () => {
     expect(flashEnvelope(0)).toBeCloseTo(1, 5);
   });
   it('decays monotonically across the window', () => {
     let prev = Infinity;
-    for (let t = 0; t <= 0.07; t += 0.005) {
+    for (let t = 0; t <= FLASH.windowSec; t += 0.005) {
       const v = flashEnvelope(t);
       expect(v).toBeLessThanOrEqual(prev + 1e-9);
       prev = v;
@@ -290,7 +290,10 @@ describe('fireRecoil', () => {
     const r = fireRecoil(0.02);
     expect(r.dz).toBeGreaterThan(0);
     expect(r.dy).toBeGreaterThan(0);
-    expect(r.pitch).toBeLessThan(0);
+    // POSITIVE gunGroup rotation.x raises this model's muzzle. MEASURED on the
+    // live game (bore elevation 1.8 -> -8.8 deg with the old negative sign): the
+    // barrel dropped as the gun jumped, cancelling the rise the owner asked for.
+    expect(r.pitch).toBeGreaterThan(0);
   });
   it('hits both barrels harder than one', () => {
     expect(Math.abs(fireRecoil(0.03, 2).dz)).toBeGreaterThan(Math.abs(fireRecoil(0.03, 1).dz));
@@ -301,6 +304,59 @@ describe('fireRecoil', () => {
       if (fireRecoil(t).dz < -1e-4) { sawNegative = true; break; }
     }
     expect(sawNegative).toBe(true);
+  });
+});
+
+describe('fireRecoil — HEAVY (owner 2026-10-02: the gun should visibly climb with the force)', () => {
+  const peak = (barrels: 1 | 2, key: 'dy' | 'dz' | 'pitch' | 'roll') => {
+    let best = 0;
+    for (let t = 0; t < RECOIL.durationSec; t += 0.002) {
+      const v = fireRecoil(t, barrels)[key];
+      if (Math.abs(v) > Math.abs(best)) best = v;
+    }
+    return best;
+  };
+  it('a double shot lifts the gun ~4 cm and the muzzle 7-10 degrees (trimmed twice: 17.5 -> 13.5 -> 8, because a high muzzle hides the wounds, which is the game)', () => {
+    expect(peak(2, 'dy')).toBeGreaterThan(0.035);
+    expect(peak(2, 'dy')).toBeLessThan(0.05);
+    expect(peak(2, 'pitch')).toBeGreaterThan(7);
+    expect(peak(2, 'pitch')).toBeLessThan(10);
+  });
+  it('a single barrel is still a clear kick, not a nudge', () => {
+    expect(peak(1, 'dy')).toBeGreaterThan(0.022);
+    expect(peak(1, 'pitch')).toBeGreaterThan(4.5);
+  });
+  it('rises over several frames (peak ~0.09 s) so it can be SEEN, then eases back', () => {
+    // The first heavy curve peaked at 0.04 s: at the 30-40 ms frames this scene
+    // runs, the whole rise was one or two frames and the owner could not see it.
+    let tPeak = 0, best = 0;
+    for (let t = 0; t < RECOIL.durationSec; t += 0.002) {
+      const v = Math.abs(fireRecoil(t, 2).pitch);
+      if (v > best) { best = v; tPeak = t; }
+    }
+    expect(tPeak).toBeGreaterThan(0.07);
+    expect(tPeak).toBeLessThan(0.12);
+    // Still more than half raised a full tenth of a second after the peak, and
+    // not yet at rest a quarter second after it: the climb and the drop both read.
+    expect(Math.abs(fireRecoil(tPeak + 0.05, 2).pitch)).toBeGreaterThan(best * 0.5);
+    expect(Math.abs(fireRecoil(tPeak + 0.25, 2).pitch)).toBeLessThan(best * 0.2);
+  });
+  it('is on screen for at least five 30 ms frames before it has mostly gone', () => {
+    let frames = 0;
+    for (let t = 0; t < RECOIL.durationSec; t += 0.030) if (Math.abs(fireRecoil(t, 1).pitch) > 2.5) frames++;
+    expect(frames).toBeGreaterThanOrEqual(4);
+  });
+  it('the muzzle is back near rest within a quarter second (the wounds are visible again)', () => {
+    let tPeak = 0, best = 0;
+    for (let t = 0; t < RECOIL.durationSec; t += 0.002) {
+      const v = Math.abs(fireRecoil(t, 2).pitch);
+      if (v > best) { best = v; tPeak = t; }
+    }
+    expect(Math.abs(fireRecoil(0.25, 2).pitch)).toBeLessThan(best * 0.2);
+  });
+  it('is back at rest by the end of its duration, and the gun is not still raised halfway through the next shot cooldown', () => {
+    expect(Math.abs(fireRecoil(RECOIL.durationSec * 0.99, 2).pitch)).toBeLessThan(1.5);
+    expect(RECOIL.durationSec).toBeLessThanOrEqual(0.45);   // GRAPESHOT.fireCooldownSec: never overlaps the next shot
   });
 });
 

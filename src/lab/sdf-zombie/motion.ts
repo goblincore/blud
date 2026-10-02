@@ -512,6 +512,14 @@ const ARM_JOINTS: ReadonlySet<GaitJointName> = new Set([
   'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR',
 ]);
 
+/** The joints that ride the pelvis through a stagger's ROOT offset. The root
+ *  offset used to move the `pelvis` point alone, so a lurch shoved the pelvis
+ *  and belly away from the tops of the thighs (a flail hit opened a 0.4-0.5 m
+ *  gap between torso and upper legs); `hips`, `hipL` and `hipR` are the pelvis
+ *  block's own sockets and must travel with it. Knees and feet stay put: they
+ *  are the planted contacts the leg IK works from. */
+const STAGGER_ROOT_RIDERS: ReadonlySet<GaitJointName> = new Set(['hips', 'hipL', 'hipR']);
+
 /** How much of the turn lean each joint takes — the upper body rolls into
  *  the turn, the legs stay planted under it. */
 const LEAN_SHARE: Partial<Record<GaitJointName, number>> = {
@@ -802,7 +810,7 @@ export function stepMotion(
       const minLane = name.startsWith('knee') ? .065 : .10;
       gaitOff = [authoredSide * Math.max(minLane, authoredSide * lateral) - base[0] + pivot[0], gaitOff[1], gaitOff[2]];
     }
-    const stagOff = name === 'pelvis' ? stagger.rootOffset : stagger.offsets[name] ?? Z;
+    const stagOff = name === 'pelvis' || STAGGER_ROOT_RIDERS.has(name) ? stagger.rootOffset : stagger.offsets[name] ?? Z;
     const s = ARM_JOINTS.has(name) ? armPresence : blend * strideScale;
     // BRANCHED, not `add(..., ZERO)`: adding zero would turn a -0 component
     // into +0 and break the lab's bit-identity pin for no benefit.

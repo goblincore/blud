@@ -93,3 +93,55 @@ describe('stepRig', () => {
     expect(len(sub(s.points[1]!.pos, restPos))).toBeLessThan(0.02); // and came home
   });
 });
+
+describe('head keep-out', () => {
+  // A vertical head axis (pivot 0 at the neck, tip 1 above it) and a two-point
+  // arm segment (2: elbow, 3: hand) beside it.
+  const rig = (hand: [number, number, number], pinnedHand = false): RigState => {
+    const s = makeRig(
+      [
+        { pos: [0, 1.5, 0], pinned: true }, { pos: [0, 1.65, 0], pinned: true },
+        { pos: [0.4, 1.2, 0], pinned: false }, { pos: hand, pinned: pinnedHand },
+      ],
+      [{ a: 2, b: 3, rest: 0.4, stiffness: 1 }],
+    );
+    return { ...s, headKeepOut: { pivot: 0, tip: 1, t0: 0.05, t1: 0.1, radius: 0.12,
+      limbs: [{ a: 2, b: 3, clearance: 0.18 }] } };
+  };
+  const axisDist = (s: RigState): number => {
+    // distance of the hand to the head axis segment (x/z plane is enough here)
+    const p = s.points[3]!.pos;
+    const y = Math.min(1.6, Math.max(1.55, p[1]));
+    return Math.hypot(p[0], p[1] - y, p[2]);
+  };
+
+  it('a hand dragged into the head by its rest target is held outside it', () => {
+    // restPose for the hand is INSIDE the head: the rest pull wants it there.
+    let s = rig([0.4, 1.6, 0]);
+    s = { ...s, restPose: [s.restPose[0]!, s.restPose[1]!, s.restPose[2]!, [0, 1.6, 0]] };
+    for (let i = 0; i < 60; i++) s = stepRig(s, 1 / 60, { ...OPTS, restStiffness: 0.3 });
+    expect(axisDist(s)).toBeGreaterThan(0.18 - 0.02);
+  });
+
+  it('does nothing to a limb that is already clear', () => {
+    // 0.4 m from the elbow (the constraint's rest length) and clear of the head.
+    const s0 = rig([0.4, 1.6, 0]);
+    const s1 = stepRig(s0, 1 / 60, OPTS);
+    expect(s1.points[3]!.pos).toEqual(s0.points[3]!.pos);
+    expect(s1.points[2]!.pos).toEqual(s0.points[2]!.pos);
+  });
+
+  it('never moves a pinned point and does not move the head', () => {
+    const s0 = rig([0.05, 1.6, 0], true);
+    const s1 = stepRig(s0, 1 / 60, OPTS);
+    expect(s1.points[3]!.pos).toEqual([0.05, 1.6, 0]);
+    expect(s1.points[0]!.pos).toEqual(s0.points[0]!.pos);
+    expect(s1.points[1]!.pos).toEqual(s0.points[1]!.pos);
+  });
+
+  it('pushes out of a limb that crosses the axis exactly (no normal) without NaN', () => {
+    const s0 = rig([0, 1.6, 0]);
+    const s1 = stepRig(s0, 1 / 60, OPTS);
+    for (const p of s1.points) expect(p.pos.every(Number.isFinite)).toBe(true);
+  });
+});
