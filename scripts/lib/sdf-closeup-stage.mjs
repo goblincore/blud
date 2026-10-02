@@ -72,7 +72,10 @@ export async function connectGame({ vite, cdp, width = 1280, height = 800, onFai
   };
   ws.onclose = () => hangup('websocket closed');
   ws.onerror = () => hangup('websocket error');
+  // ...and a send AFTER the socket closed must reject too: WebSocket.send on a CLOSING/CLOSED
+  // socket silently discards the frame, so the reply never comes and the caller hangs.
   const send = (method, params = {}) => new Promise((resolve, reject) => {
+    if (ws.readyState !== 1) { reject(new StageFail(`CDP ${method}: websocket not open (readyState ${ws.readyState}) — page gone`)); return; }
     const id = ++seq; pending.set(id, { resolve, reject }); ws.send(JSON.stringify({ id, method, params }));
   });
   const evaluate = async (expression, timeoutMs = 120_000) => {
