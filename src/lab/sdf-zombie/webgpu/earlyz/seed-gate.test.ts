@@ -142,3 +142,47 @@ describe('seed gate size memo (per-frame caller)', () => {
     expect(seedBlockReasonFor(base())).toBeNull();
   });
 });
+
+/** Seeded LCG so the walk is reproducible (no Math.random). */
+function rng(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+}
+
+describe('seed gate memo, differential', () => {
+  it('one long-lived gate never serves a stale reason (random walk over size AND non-size inputs)', () => {
+    const r = rng(12345);
+    const pick = <T,>(a: T[]): T => a[Math.floor(r() * a.length)]!;
+    const gate = createSeedGate();
+    // One reused input object, filled in place exactly like sdf-layer.ts does per frame.
+    const input = base();
+    let draws = 0, refusals = 0;
+    for (let i = 0; i < 10_000; i++) {
+      const flips = 1 + Math.floor(r() * 2);
+      for (let k = 0; k < flips; k++) {
+        switch (Math.floor(r() * 10)) {
+          case 0: input.requested = r() < 0.9; break;
+          case 1: input.levelDepth = r() < 0.9; break;
+          case 2: input.fieldStyle = pick(['off', 'off', 'off', 'sdf', 'bodies', 'frame']); break;
+          case 3: input.levelSize[0] = pick([800, 850, 801, 750, 1600, 640]); break;
+          case 4: input.levelSize[1] = pick([600, 601, 1500, 450, 1200]); break;
+          case 5: input.marchSize[0] = pick([400, 250, 401, 200, 320]); break;
+          case 6: input.marchSize[1] = pick([300, 301, 225, 150]); break;
+          case 7: input.marchAttachments = pick([1, 1, 1, 2, 4]); break;
+          case 8: input.accumOn = r() < 0.2; input.captureJitter = r() < 0.2; break;
+          case 9: input.perBodyGate = r() < 0.3; break;
+        }
+      }
+      // The reference sees a fresh copy, so it can share no state with the memoising gate.
+      const ref = seedBlockReasonFor({
+        ...input, levelSize: [input.levelSize[0], input.levelSize[1]], marchSize: [input.marchSize[0], input.marchSize[1]],
+      });
+      const got = gate.reason(input);
+      if (got !== ref) throw new Error(`stale at step ${i}: got ${got} want ${ref}, input ${JSON.stringify(input)}`);
+      if (ref === null) draws++; else refusals++;
+    }
+    // The walk must actually exercise both outcomes, or it proves nothing.
+    expect(draws).toBeGreaterThan(100);
+    expect(refusals).toBeGreaterThan(100);
+  });
+});

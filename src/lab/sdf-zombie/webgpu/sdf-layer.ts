@@ -3403,6 +3403,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
         seed = null;
       }
       seedScene = null;
+      // earlyzSeedInfo() after dispose reads like a layer that never had a seed.
+      seedOnLast = false;
+      seedReasonLast = 'not requested';
       target.dispose();
       prev.dispose();
       coneCoarse.dispose();

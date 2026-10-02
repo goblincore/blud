@@ -143,6 +143,10 @@ describe('seed pass wiring (source pins)', () => {
     expect(disposeBlock).toContain('seed.mesh.geometry.dispose();');
     expect(disposeBlock).toContain('(seed.mesh.material as THREE.Material).dispose();');
     expect(disposeBlock).toContain('seed = null;');
-    expect(between('seed = null;', 'target.dispose();')).toContain('seedScene = null;');
+    const afterSeed = between('seed = null;', 'target.dispose();');
+    expect(afterSeed).toContain('seedScene = null;');
+    // earlyzSeedInfo() must read like "never requested" once the layer is disposed.
+    expect(afterSeed).toContain('seedOnLast = false;');
+    expect(afterSeed).toContain("seedReasonLast = 'not requested';");
   });
 });
