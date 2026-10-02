@@ -108,6 +108,10 @@ export interface GibsState {
   /** MESH GIBS (game-mesh-gibs.ts): plain three meshes riding a gib-chunks `Chunk` — the head damage's
    *  modelled brain. Stepped with the SDF chunks, capped (oldest out), cleared on a cast rebuild. */
   meshGibs: MeshGib[];
+  /** The flesh bits' (flesh-bits.ts) own throwaway launch/tumble stream for spawnChunkPiece, so
+   *  flesh on or off leaves rngStreams.misc untouched. Fixed seed, never reseeded; the codemod
+   *  pattern supplies the real `mulberry32` stream at the original line. */
+  fleshSpawnRng: () => number;
 }
 
 /** One mesh gib: its chunk state, its object (the scene child it poses) and a tag the seams filter on. */
@@ -150,6 +154,7 @@ export function makeGibsState(): GibsState {
     pendingGibs: [],
     partsMode: null,
     meshGibs: [],
+    fleshSpawnRng: unbuilt<() => number>(),
   };
 }
 
@@ -185,4 +190,5 @@ export const GIBS_BINDINGS = {
   pendingGibImpulses: 'gibs.pendingGibImpulses',
   pendingGibs: 'gibs.pendingGibs',
   gibPartsMode: 'gibs.partsMode',
+  fleshSpawnRng: 'gibs.fleshSpawnRng',
 } as const;

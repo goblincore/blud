@@ -67,6 +67,10 @@ export interface LightingState {
   tracerLightSlots: number;
   /** Direct body-flash multiplier; 0 = off, bit-identical. */
   bodyFlashGain: number;
+  /** Task 11b: each actor's room fill factor this frame (roomFillFactor at its root, the factor
+   *  applyRoomFill scales its body fill by), written in the actor light loop; bones and gib chunks
+   *  scale their list-mode ambient by it. Keyed by actor; an unknown owner reads as 1. */
+  actorFill: WeakMap<object, number>;
   /** TASK-6 diagnostic: freezes the practical flicker phase. */
   clockFrozen: boolean;
   /** The flicker clock instant captured by `clockFrozen`. */
@@ -106,6 +110,7 @@ export function makeLightingState(): LightingState {
     tracerLightGain: 0,
     tracerLightSlots: 0,
     bodyFlashGain: 0.06,
+    actorFill: new WeakMap<object, number>(),
     clockFrozen: false,
     flickerClockFrozenAt: 0,
     bounceSpotParam: null,
@@ -135,6 +140,7 @@ export const LIGHTING_BINDINGS = {
   tracerLightGain: 'lighting.tracerLightGain',
   tracerLightSlots: 'lighting.tracerLightSlots',
   bodyFlashGain: 'lighting.bodyFlashGain',
+  actorFill: 'lighting.actorFill',
   lightClockFrozen: 'lighting.clockFrozen',
   flickerClockFrozenAt: 'lighting.flickerClockFrozenAt',
   bounceSpotParam: 'lighting.bounceSpotParam',

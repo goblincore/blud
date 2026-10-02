@@ -19,6 +19,7 @@ describe('makeLightingState', () => {
     const b = makeLightingState();
     expect(a.flickerLights).not.toBe(b.flickerLights);
     expect(a.levelProbeNodes).not.toBe(b.levelProbeNodes);
+    expect(a.actorFill).not.toBe(b.actorFill);
   });
 
   it('starts at the declared defaults', () => {
@@ -46,7 +47,8 @@ describe('LIGHTING_BINDINGS', () => {
   });
 
   it('covers every binding assigned to this slice', () => {
-    // 22 + levelListOn and levelListNodes (the cheap level tier, 2026-09-29).
-    expect(Object.keys(LIGHTING_BINDINGS)).toHaveLength(24);
+    // 22 + levelListOn and levelListNodes (the cheap level tier, 2026-09-29)
+    // + actorFill (Task 11b's per-actor room fill, moved off main() 2026-10-01).
+    expect(Object.keys(LIGHTING_BINDINGS)).toHaveLength(25);
   });
 });
