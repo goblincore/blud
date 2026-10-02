@@ -64,7 +64,9 @@ export function createRenderQualitySeams(ctx: GameContext) {
      *  through applySdfScale (the game's own state). `null` turns the stage off and
      *  leaves the scale alone — callers restore it. `{ model }` = random weights (cost/parity
      *  only) and returns the info. `{ trained: '<name>' }` loads a trained export from the dev
-     *  model store and returns a PROMISE of the info (P3); it rejects if the model is missing or invalid. */
+     *  model store and returns a PROMISE of the info (P3); it rejects if the model is missing or invalid.
+     *  It resolves only after the new stage's passes are precompiled and the rAF loop is back in its
+     *  intended state, so `await setUpscale(...)` then `bench()` is safe. */
     setUpscale: (
       raw: { model?: string; layout?: string; inputs?: string; seed?: number; trained?: string } | null,
     ): UpscaleInfo | Promise<UpscaleInfo> => {
