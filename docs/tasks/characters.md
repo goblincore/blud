@@ -2,6 +2,67 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Goblin refinement pass (body, kit, weapons, rig, animation) — phase 1 (body) done 2026-10-01
+
+The owner's complaints:
+- the armour kit clips and fits badly;
+- the buckler and the "axe" are poorly modelled and held nonsensically;
+- the body is a series of orbs and should be smoother;
+- the rig needs work and the animation needs an overhaul.
+
+The goblin is also the player character (the first-person arms copy its palette) and the star of the Flat's cutscenes,
+so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), likely causes:
+
+- **Orbs.**
+  - The ball joints are deliberate (`goblin.blob:252-278`): the nubs are 1.3–1.8× the shaft radius.
+  - The blends are 0.0014–0.005 and are then halved (`roundBlendScale` 0.5, `build-body.ts`), so fillets come out at about 3–10 mm. The zombie's median blend is 0.012, giving about 24 mm.
+  - The torso is five ellipsoids. The quality bar for the body is `zombie.blob` (tapered bars, no nubs).
+  - `goblin-blob.test.ts` pins arm daylight, so a fatter torso blend eats it.
+- **Kit.**
+  - `goblin-kit.wam`'s skeleton is a hand-copied transcription of the `.blob` (metres ÷ 1.30, pitch flipped).
+  - The skin is near rigid: 18 of 623 vertices are weighted to more than one joint, and the feet own none.
+  - The breastplate is rigid per ring. The pauldron is buried 36 mm by design.
+  - The tests check the rest pose only. There is no skeleton-parity test; `juggernaut-kit.test.ts:117` has one to copy.
+- **Buckler and cleaver.**
+  - Both are WAM groups, rigid to the hand bone. The cleaver is anchored at the fingertip (`hand.r at=1.0`).
+  - The hand has no roll and is one mitten ellipsoid, so there is no fist to grip with.
+  - The proper system exists and the goblin does not use it: `MotionProfile.prop` (`gripReach`, `fistOnGrip`), `carry.ts`, `webgpu/held-prop.ts`, `sword-swing.ts`.
+  - No shield or left-arm carry exists anywhere yet.
+- **Rig.** Two-point bones with no roll, and the known 8–10 cm foot stretch (below).
+- **Animation.**
+  - The goblin has none of its own: `motionProfileFor('goblin')` falls back to the zombie's SHAMBLE, with metres tuned for 0.96 m legs (the goblin's are 0.56 m) and the zombie's unarmed attacks.
+  - The bar is the soldier family (clip-derived gaits, planted footwork, carries).
+- **Also:** bone pitches above about 90° do not take in the look-dev pose overrides
+  ([room look-dev notes](../dev-notes/2026-10-01-flat-room-lookdev/notes.md)).
+
+- [x] **Spec** ([design](../superpowers/specs/2026-10-01-goblin-refinement-design.md), owner-approved structure,
+  2026-10-01). The goblin is the protagonist, seen armed in-game (no enemy AI). It holds **the player's weapons**; the buckler
+  and cleaver are retired. **The hands stay orbs** (an early-3D style). Body: **variant A, "sinew"**, picked from three
+  rendered variants ([look-dev](../dev-notes/2026-10-01-goblin-body-lookdev/)).
+- [x] **Phase 1, body:** re-authored to variant A (plan `docs/superpowers/plans/2026-10-01-goblin-body-phase1.md`):
+  continuous torso, tapered limbs, orbs only at the shoulders, hands, ankles and toes; the shoulder round is the arm's
+  `core`. All goblin-reading tests pass plus three new pins (the whole `src/lab/sdf-zombie/` suite: 6604 tests), the
+  pack golden is re-pinned, and `blob:render-check` exits 0. **Owner approved 2026-10-01** ("lgtm") from the lab
+  turntable ([frames](../dev-notes/2026-10-01-goblin-body-lookdev/lab/)); the profile (gut not reading in front) is
+  accepted as is.
+- [x] **Body grain** (owner, 2026-10-01: "apply the noise texture that is on his face to his body"):
+  [spec](../superpowers/specs/2026-10-02-body-grain-design.md), [plan](../superpowers/plans/2026-10-02-body-grain.md).
+  A palette `grain` in the face sheet's units, in two octaves: face-sized 3.5 mm cells up close, 1.2 cm cells farther
+  out, each an albedo multiply and a bump in rest space; the goblin sets `grain 0.10`. **Owner approved 2026-10-02**
+  ("fine for now"), as built: coarse cell 0.012, `surfaceNoiseAmp` 0.22, the painted and wound fades kept
+  ([frames and numbers](../dev-notes/2026-10-02-body-grain/notes.md)). Built through dispatch (GLM 5.3 flash).
+- [ ] Phase 2, armour: redesign and fit (own brainstorm).
+- [ ] Phase 3, held weapons: the player's weapons in the orb hands (own brainstorm).
+  - `webgpu/goblin-skin.ts` keeps `forearmRadius` 0.028 and `forearmElbowRadius` 0.038, documented as the goblin's
+    forearm bar and elbow blob, which phase 1 removed (both constants are unreferenced). `handRadius` 0.046 is
+    hard-coded and must stay equal to `goblin.blob`'s hand.
+- [ ] Phase 4, rig and animation: authored clips and a goblin gait (own brainstorm). Cautionary case: the bride (shelved
+  for janky animation and a sword clipping the body).
+  - `goblin.blob`'s neck vertebra bead (`blob head on neck at=0.30 ...`) is a zero-length head-limb prim, so
+    `rig-bind.ts` (`ridesHead`, ~line 388) binds it to the RIGID head: it is 94 mm below the skull pivot and will slide
+    19-47 mm into or off the neck as the head pitches. Make it a short bar (`bar head on neck from=0.28 to=0.32 ...`)
+    so it binds per end, and check with `__sdfLab.heroPosed()`. `female.blob:107` has the same pattern.
+
 ## Warbull (cyber-minotaur: flesh + bolted-in machinery, rockets + charge) — second draft from the owner's reference plate 2026-09-27, awaiting kit build + playtest
 
 - [x] **Second draft** (owner rejected the first as the existing bull brutes rescaled): a fresh body from

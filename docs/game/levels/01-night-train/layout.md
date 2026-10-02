@@ -13,7 +13,7 @@ Draft 2 with one change, approved by the owner on 2026-09-27
 - Favours and the boiler at the entrance, a 6 × 10 m dance floor under the disco ball (u 14),
   a chill-out, then the DJ end: floor, no riser, the deck across the carriage facing south.
 - A third favour table (east), three pistons on the west bay ribs, five steam vents.
-- The tender and cab move 8 m north; the train is about 138 m.
+- The tender and the last carriage (the cab, now the control room) move 8 m north; the train is about 138 m.
 
 ## Draft 2 (2026-09-26, approved by the owner; built)
 
@@ -26,7 +26,7 @@ flashlight came too early. Eight carriages, about 130 m: **guard's van** (start;
 **the flashlight behind the attendant's counter**; taking it kills the last lamp and wakes the
 room) → **sleeper** (corridor blackout) → **the Boiler Room** (was the party carriage: disco
 ball, DJ deck, strobes, steam vents, pneumatic hammers; 4 dancers instead of 8) → **tender**
-(new: coal bunker and walkway) → **cab** (the level ends at the firebox until the Stoker exists).
+(new: coal bunker and walkway) → **control room** (the level ends at the egg; the Stoker and the dawn are later).
 Cultists are soldiers until the cultist is finished (6 soldiers, 24 zombies). Lamps at power 1.1
 (Doom 3 dark). The tables in `scripts/levels/night_train_layout.py` are the record; the rest of
 this document describes draft 1.
@@ -49,7 +49,7 @@ this document describes draft 1.
 RE0's train works because it is a **chain of distinct rooms**, not a tube: a side corridor,
 compartments, a day room, a lounge. We cheat the same way. No one sees the train from outside,
 so its inside can be wider and more divided than a real carriage. **Width is a pacing tool:**
-tight rooms, then an open saloon, then a corridor, then the biggest open room, then the cab.
+tight rooms, then an open saloon, then a corridor, then the biggest open room, then the control room.
 
 The first slice grows to five carriages: the **sleeper** (carriage 4) joins it.
 
@@ -66,10 +66,10 @@ would need 0.6 m walls between them, which a carriage can't spare. Doorways are 
 | 3 | Dining car | 4.2 × 18 m | 3.0 m | **saloon** (5 tables each side) → **buffet lounge** (a central island) → door west → **galley** |
 | 4 | Sleeper | 4.0 × 18 m | 2.8 m | **south lobby** → a **side corridor** (west, 1.4 m) with **five compartments** C1–C5 (east, 2.5 m deep) → **north lobby** |
 | 5 | Party carriage | 4.2 × 20 m | 3.4 m | one open room: favour tables (west), **dance floor**, two pillars, the **bar** (east), the jukebox (NW corner) |
-| 8 | Cab | 3.0 × 8 m | 2.6 m | the Stoker at the firebox; the boiler backhead fills the north end |
+| 8 | Control room | 8.0 × 10 m | 3.4 m | CRT wall (north), consoles and racks down both sides, the firebox door (east, north end), the egg on its plinth at u 6.3 — [ending spec](../../../superpowers/specs/2026-09-30-night-train-egg-ending-design.md) |
 
 Game z: the van's south end is z = 0; carriages run toward −z (van 0…−16, dining −17.2…−35.2,
-sleeper −36.4…−54.4, party −55.6…−75.6, cab −76.8…−84.8).
+sleeper −36.4…−54.4, party −55.6…−75.6, cab −76.8…−84.8; current layout: control room −130.4…−140.4 after the Boiler Room resize).
 
 ## 2. Encounters (zombies and cultists)
 
@@ -85,7 +85,7 @@ sleeper −36.4…−54.4, party −55.6…−75.6, cab −76.8…−84.8).
 | Sleeper C4 | **1 cultist** | the player in the corridor | a shooter down a long corridor; compartments as cover |
 | Sleeper north lobby | 2 zombies | the cultist's shots | mop-up |
 | Party carriage | 8 dancers (zombies) + **2 cultists at the bar** | the first shot | everything together; circling the pillars |
-| Cab | the Stoker (not an enemy) | — | the set piece (later) |
+| Control room | no enemies; the egg | touching the egg ends the level | the ending (the Stoker is later) |
 
 **Total:** 19 zombies (van 4, dining 3, sleeper 4, party 8), 5 cultists (the format's `cultist` spawn kind).
 
@@ -97,7 +97,7 @@ sleeper −36.4…−54.4, party −55.6…−75.6, cab −76.8…−84.8).
 - **Sleeper:** the full corridor and its row of compartment doors; the C4 cultist steps out
   into it.
 - **Party carriage:** the dance floor, the bar lit on the right, the jukebox glowing at the far end.
-- **Cab:** the Stoker's back and the firebox glow.
+- **Control room:** the CRT wall lit at the far end, the egg milky on its plinth, the firebox glow on the east wall (the Stoker stays later).
 
 ## 4. Loops
 

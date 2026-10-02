@@ -14,6 +14,7 @@ import { openGate } from './game-level-leaves';
 import { PLAYER } from './game-player';
 import { MAGAZINE_CAPACITY } from './game-viewmodel';
 import { requestSlot, type WeaponSlot } from './game-weapon-slots';
+import { startSequence } from './game-sequence-leaves';
 import { switchOnFlashlight, runLightCommand } from './game-dynamic-light-leaves';
 import { commandsFor, expandCues, gatesOpenedBy, makeTriggerState, stepTriggers, type LevelCommand, type TriggerState } from './level-events';
 import { collectPickups, makeInventory, reloadFromReserve, type Inventory } from './pickups';
@@ -118,7 +119,7 @@ export function updateStatus(ctx: GameContext): void {
 
 export function damagePlayer(ctx: GameContext, amount: number, kind: DamageKind): void {
   const rt = ctx.world.loop;
-  if (!rt || rt.god || rt.done) return;
+  if (!rt || rt.god || rt.done || ctx.world.sequence?.active) return;
   const before = rt.vitals;
   rt.vitals = applyDamage(rt.vitals, amount, kind);
   if (rt.vitals === before) return;
@@ -133,7 +134,7 @@ export function damagePlayer(ctx: GameContext, amount: number, kind: DamageKind)
 /** Dead or finished: movement, firing and reloads stop. */
 export function loopBlocksInput(ctx: GameContext): boolean {
   const rt = ctx.world.loop;
-  return !!rt && (rt.vitals.dead || rt.done);
+  return !!rt && (rt.vitals.dead || rt.done || !!ctx.world.sequence?.active);
 }
 
 /** May the player select or fire this slot? The flail is owned as the
@@ -174,6 +175,7 @@ function runLevelCommand(ctx: GameContext, cmd: LevelCommand): void {
     document.exitPointerLock?.();
   }
   if (cmd.kind === 'light') runLightCommand(ctx, cmd.mode, cmd.room);
+  if (cmd.kind === 'sequence') startSequence(ctx, cmd.id);
   // 'wave' and 'alert-room' come with the encounter work (Wake Plan 3 Task 5).
 }
 
@@ -186,7 +188,7 @@ export function stepLoop(ctx: GameContext, dt: number): void {
   // The gun hides while the live slot is a weapon the player doesn't own yet.
   if (ctx.weapon.gunGroup) ctx.weapon.gunGroup.visible = ownsSlot(ctx, ctx.weapon.slotState.live);
   for (const m of rt.meshes.values()) if (!m.userData.still) m.rotation.y += dt * 1.6;
-  if (rt.vitals.dead || rt.done) return;
+  if (rt.vitals.dead || rt.done || ctx.world.sequence?.active) return;
   const feet = ctx.player.player.pos;
   // ZOMBIE BITES. The zombie mind never reports melee contact; a live zombie in reach
   // bites, rate-limited by the melee invulnerability window. Frozen AI never bites.

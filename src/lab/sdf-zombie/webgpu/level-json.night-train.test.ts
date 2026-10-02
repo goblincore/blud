@@ -15,15 +15,15 @@ const t = parseLevelJson(JSON.parse(readFileSync('public/assets/levels/night-tra
 const room = (name: string) => t.rooms.find(r => r.name === name)!;
 
 describe('night-train.level.json', () => {
-  const ORDER = ['guards-van', 'third-class', 'dining-car', 'coat-check', 'sleeper', 'boiler-room', 'tender', 'cab'];
+  const ORDER = ['guards-van', 'third-class', 'dining-car', 'coat-check', 'sleeper', 'boiler-room', 'tender', 'control-room'];
   const inOrder = () => [...t.rooms].sort((a, b) => b.maxZ - a.maxZ);
   it('eight art-shelled carriages in order, at the layout\'s sizes', () => {
     const rs = inOrder();
     expect(rs.map(r => r.name)).toEqual(ORDER);
     expect(t.rooms.every(r => r.shell === 'art')).toBe(true);
     for (let i = 1; i < rs.length; i++) expect(rs[i]!.maxZ).toBeLessThan(rs[i - 1]!.minZ);
-    expect(rs.map(r => +(r.maxX - r.minX).toFixed(2))).toEqual([3.6, 3.8, 4.2, 3.8, 4.0, 8.0, 3.4, 3.0]);   // the Boiler Room at 8 m (resize 2026-09-28)
-    expect(rs.map(r => r.height)).toEqual([2.8, 2.8, 3.0, 2.8, 2.8, 3.4, 2.6, 2.6]);
+    expect(rs.map(r => +(r.maxX - r.minX).toFixed(2))).toEqual([3.6, 3.8, 4.2, 3.8, 4.0, 8.0, 3.4, 8.0]);   // the Boiler Room at 8 m (resize 2026-09-28)
+    expect(rs.map(r => r.height)).toEqual([2.8, 2.8, 3.0, 2.8, 2.8, 3.4, 2.6, 3.4]);
     expect(t.art).toBe('night-train.art.glb');
     expect(missingCapabilities(t, ENGINE_CAPABILITIES)).toEqual([]);
   });
@@ -53,7 +53,7 @@ describe('night-train.level.json', () => {
     expect(t.gates).toEqual([expect.objectContaining({ id: 'c5-door' })]);
   });
 
-  it('starts in the guard\'s van facing the cab', () => {
+  it('starts in the guard\'s van facing the control room', () => {
     expect(roomAtPoint(t, t.playerStart.x, t.playerStart.z)?.name).toBe('guards-van');
     expect(Math.abs(t.playerStart.yaw)).toBeLessThan(1e-3);
   });
@@ -70,9 +70,30 @@ describe('night-train.level.json', () => {
       'third class': [0, 0, z('third-class', 9)], 'third, between benches': [-1.3, 0, z('third-class', 2.4)],
       'coats, west lane': [-1.2, 0, z('coat-check', 6.8)], 'behind the counter': [-1.2, 0, z('coat-check', 12.4)],
       'boiler room': [0, 0, z('boiler-room', 14)], 'chill-out': [3.0, 0, z('boiler-room', 22)], 'DJ end': [-2.0, 0, z('boiler-room', 27.2)],
-      'tender walkway': [0.9, 0, z('tender', 7)], 'cab': [0, 0, z('cab', 5)],
+      'tender walkway': [0.9, 0, z('tender', 7)], 
+      'control room, door': [0, 0, z('control-room', 2)],
+      'control room, west of the egg': [-2.2, 0, z('control-room', 6.3)],
+      'control room, east of the egg': [2.2, 0, z('control-room', 6.3)],
+      'control room, before the CRT wall': [0, 0, z('control-room', 8.8)],
     };
     for (const [name, p] of Object.entries(points)) expect(nav.route(start, p).length, name).toBeGreaterThan(0);
+  });
+
+  it('the control room: 8 x 10 m, no enemies, the egg in the middle, completion at the egg', () => {
+    const r = room('control-room');
+    expect(r.id).toBe(8);
+    expect([r.minX, r.maxX, r.minZ, r.maxZ].map(v => +v.toFixed(2))).toEqual([-4, 4, -140.4, -130.4]);
+    expect(t.spawns.filter(s => roomAtPoint(t, s.pos[0], s.pos[2])?.name === 'control-room')).toHaveLength(0);
+    // The egg and plinth: one collision box 2.4 m square, taller than the player, centred on z -136.7.
+    const egg = t.furniture.filter(f => f.room === r.id).find(f => Math.abs(f.minX + 1.2) < 1e-6 && Math.abs(f.maxX - 1.2) < 1e-6);
+    expect(egg).toBeDefined();
+    expect(egg!.height).toBeGreaterThan(2.8);
+    expect((egg!.minZ + egg!.maxZ) / 2).toBeCloseTo(-136.7, 1);
+    // Completion: the egg.touch trigger (a 3.2 m box around the egg) starts the ending sequence.
+    const end = t.triggers.find(tr => tr.event === 'egg.touch')!;
+    expect(end.box.min[0]).toBeCloseTo(-1.6, 2);
+    expect(end.box.max[0]).toBeCloseTo(1.6, 2);
+    expect(roomAtPoint(t, 0, (end.box.min[2] + end.box.max[2]) / 2)?.name).toBe('control-room');
   });
 });
 
@@ -83,7 +104,7 @@ describe('night-train dynamic light (dynamic light spec §3)', () => {
     expect(moods('coat-check')).toEqual(['dead', 'dying']);
     expect(moods('dining-car')).toEqual(expect.arrayContaining(['flicker', 'dead', 'fire']));
     expect(moods('sleeper')).toEqual(expect.arrayContaining(['stutter', 'fire']));
-    expect(moods('cab')).toEqual(expect.arrayContaining(['steady', 'fire']));
+    expect(moods('control-room')).toEqual(expect.arrayContaining(['dying', 'fire']));
     expect(t.rooms.flatMap(r => r.accents).every(a => a.mood !== undefined)).toBe(true);
   });
   it('the Boiler Room has two rows of tubes but no more shadow casters than one row (2026-09-29)', () => {
@@ -99,10 +120,13 @@ describe('night-train dynamic light (dynamic light spec §3)', () => {
     expect(torch.id).toBe('torch');
     expect(roomAtPoint(t, torch.pos[0], torch.pos[2])?.name).toBe('coat-check');
   });
-  it('taking it kills the coat-check lamps and wakes the room; blackout, strobe and end triggers', () => {
-    expect(t.cues).toEqual([{ on: 'pickup.flashlight', emit: ['light.die.room.6', 'alert.room.6'] }]);
-    expect(t.triggers.map(tr => [tr.event, tr.once]).sort()).toEqual([['level.end', true], ['light.blackout.room.4', true], ['light.strobe.room.5', true]]);
-    expect(t.completeOn).toBe('level.end');
+  it('taking it kills the coat-check lamps and wakes the room; blackout, strobe and egg triggers', () => {
+    expect(t.cues).toEqual([
+      { on: 'pickup.flashlight', emit: ['light.die.room.6', 'alert.room.6'] },
+      { on: 'egg.touch', emit: ['sequence.ending'] },
+    ]);
+    expect(t.triggers.map(tr => [tr.event, tr.once]).sort()).toEqual([['egg.touch', true], ['light.blackout.room.4', true], ['light.strobe.room.5', true]]);
+    expect(t.completeOn).toBe('ending.end');
   });
   it('two red emergency beacons in the Boiler Room (room 5), dead until the strobe ends', () => {
     const b = room('boiler-room');

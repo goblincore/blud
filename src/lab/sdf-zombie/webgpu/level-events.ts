@@ -46,7 +46,8 @@ export type LevelCommand =
   | { kind: 'wave'; wave: number }
   | { kind: 'alert-room'; room: number }
   | { kind: 'complete' }
-  | { kind: 'light'; mode: LightMode; room: number };
+  | { kind: 'light'; mode: LightMode; room: number }
+  | { kind: 'sequence'; id: string };
 
 /** Dynamic light §3: scripted lamp events, `light.<mode>.room.<n>`. */
 export type LightMode = 'die' | 'blackout' | 'strobe';
@@ -61,6 +62,8 @@ export function commandsFor(event: string, completeOn: string): LevelCommand[] {
   if (alert) out.push({ kind: 'alert-room', room: Number(alert[1]) });
   const light = /^light\.(die|blackout|strobe)\.room\.(\d+)$/.exec(event);
   if (light) out.push({ kind: 'light', mode: light[1] as LightMode, room: Number(light[2]) });
+  const seq = /^sequence\.([a-z][a-z0-9-]*)$/.exec(event);
+  if (seq) out.push({ kind: 'sequence', id: seq[1]! });
   return out;
 }
 
