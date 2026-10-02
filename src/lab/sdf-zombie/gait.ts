@@ -338,8 +338,10 @@ export const GOBLIN_WALK: GaitProfile = {
   // 1.19 m/s (motion-profile.ts takes its cruise from it). Eyeballed starting value: tune in the turntable.
   strideFreq: 1.5,
   curves: SOLDIER_WALK,
-  // The stoop. The .blob already hunches at rest, so this is only commitment toward the heading. Starting value.
-  torsoLean: 8,
+  // The stoop. The .blob already hunches at rest, so this is commitment toward the heading. 8 read as an upright soldier
+  // in the first walk frames (2026-10-02, walk-40/55/70 side): 12 is eyeballed from them, the owner's "scheming" is a
+  // forward-hunched creature.
+  torsoLean: 12,
   swayAmp: 0.025,
   shoulderSway: 0.45,
   // The carry table owns the arms (the shotgun); this only rides the shoulders.
@@ -356,7 +358,7 @@ export const GOBLIN_RUN: GaitProfile = {
   name: 'goblin-run',
   strideFreq: 2.1,
   curves: SOLDIER_RUN,
-  torsoLean: 14,
+  torsoLean: 18,
   shoulderSway: 0.5,
   armSwing: 0.04,
 };

@@ -66,11 +66,22 @@ so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), like
   `goblin-kit.test.ts` (tuck, loose-plate standoff, boot/cuff/belt standoff). Walk-pose clip check is by eye
   (`BLOB_POSE=walk`), not a vertex-level skinned test. Open: Blender for hero-quality plate (owner's option, see notes).
   The kit is rigid per bone, so the pads/yoke could be exported from Blender as separate skinned meshes.
-- [ ] Phase 3, held weapons: the player's weapons in the orb hands (own brainstorm).
+- [~] **Phase 3, held weapons: thin first pass done 2026-10-02** (owner: "keep it thin, shotgun first"). The goblin holds the
+  player's double-barrel shorty (`GOBLIN_PROFILE`, `shorty-double.glb` as a held prop, no model work), low and aim carries
+  checked from 8 yaws with no clipping. [Notes](../dev-notes/2026-10-02-goblin-shotgun/notes.md). Not done: other weapons
+  (the flail is the harder grip test), firing, goblin-specific carry angles (the soldier's are used), `chest` carry.
   - `webgpu/goblin-skin.ts` keeps `forearmRadius` 0.028 and `forearmElbowRadius` 0.038, documented as the goblin's
     forearm bar and elbow blob, which phase 1 removed (both constants are unreferenced). `handRadius` 0.046 is
     hard-coded and must stay equal to `goblin.blob`'s hand.
-- [ ] Phase 4, rig and animation: authored clips and a goblin gait (own brainstorm). Cautionary case: the bride (shelved
+- [~] **Phase 4a, the in-game gait: built 2026-10-02, awaiting the owner's look in motion.** [Spec](../superpowers/specs/2026-10-02-goblin-gait-design.md) ·
+  [plan](../superpowers/plans/2026-10-02-goblin-gait.md) · [notes and frames](../dev-notes/2026-10-02-goblin-gait/notes.md).
+  "Scheming scamper": `GOBLIN_WALK`/`GOBLIN_RUN` in curve mode on the soldier's stride curves, retimed for 0.56 m legs
+  (cruise 1.19, run up to 2.77 m/s, derived and pinned), stooped (lean 12/18 degrees), carry arms for the shotgun. Foot
+  stretch measured: gone (flesh feet removed; only the neck cord stretches, +20 mm, under the collar). Only stills checked:
+  tempo, bob, skating and the feel in motion are the owner's gate. The curve source is swappable for a hand-authored clip
+  via `npm run gait:curves`.
+- [ ] **Phase 4b, the Flat's authored poses and clips** (sit, type, recoil, stand, reach; vest and shorts): own spec,
+  authoring route (Blender armature -> bone angles, or keyframes) still to decide. Cautionary case: the bride (shelved
   for janky animation and a sword clipping the body).
   - `goblin.blob`'s neck vertebra bead (`blob head on neck at=0.30 ...`) is a zero-length head-limb prim, so
     `rig-bind.ts` (`ridesHead`, ~line 388) binds it to the RIGID head: it is 94 mm below the skull pivot and will slide
