@@ -360,12 +360,20 @@ body
   # The ankle knob: small, kept as the early-3D accent where shin meets foot.
   blob leg on shin  at=1.00 r=0.026 blend=0.008 mirror
 
+  # NO FLESH FOOT while the goblin wears the kit's boots (owner, 2026-10-02:
+  # "the boots clip"; the soldier made the same call on 2026-09-05). The boot
+  # IS the foot. In the walk pose the flesh foot swung out from under the boot
+  # sole (frames in docs/dev-notes/2026-10-02-goblin-armour/), because the rig
+  # moves the foot's SDF prims and the kit's rigid skin slightly differently
+  # (the known 8-10 cm foot stretch, refinement spec phase 4). The foot BONE
+  # stays: the boot is skinned to it. For a barefoot goblin, uncomment these
+  # two lines (they are the phase-1 body's feet, unchanged):
   # Feet: a shaft forward along the foot bone and a toe pad, slimmed to the new
   # shin (they were sized for the old 0.035 shin and 0.038 ankle nub). Splayed
   # and a little oversized for the leg, which is what stops a long-legged
   # creature reading as stilts. Values from the look-dev variant A.
-  bar  leg on foot  from=0.05 to=0.80 r=0.028 r2=0.024 tall=0.80 blend=0.010 mirror
-  blob leg on foot  at=0.92 r=0.034 wide=1.15 tall=0.70 deep=0.95 blend=0.008 mirror
+  # bar  leg on foot  from=0.05 to=0.80 r=0.028 r2=0.024 tall=0.80 blend=0.010 mirror
+  # blob leg on foot  at=0.92 r=0.034 wide=1.15 tall=0.70 deep=0.95 blend=0.008 mirror
 
 # Wound pass r2: hidden bone, revealed by a wound — same two authored shapes
 # as the zombie, scaled to this body. The limb word is a REAL limb

@@ -68,6 +68,9 @@ palette
   # Near-black, because a sunglass lens is almost all reflection — the COLOUR
   # barely matters and the shine is the whole read. kit-overlay.ts gives it the
   # lowest roughness and the highest env intensity of anything in the kit.
+  # Dark waxed leather for the boots, and a cloth grey for the gaiter cuffs.
+  boot    #2c2a28
+  webbing #3b3f42
   glass   #14161a
   band    #1c1c20
   screen  #22282e
@@ -157,26 +160,69 @@ parts
       ring 0.84 w=0.062 d=0.062
       cap start=none end=none
 
-    # GREAVE — the same idea down the shin, stopping above the ankle.
-    loft greave bones=shin..shin material=iron
-      ring 0.14 w=0.078 d=0.078
-      ring 0.45 w=0.076 d=0.076
-      ring 0.72 w=0.070 d=0.070
+    # BOOT SHAFT, CUFF AND FOOT — rebuilt 2026-10-02 against the phase-1 body
+    # (owner: "the boots clip"). The old greave and boot were sized from a
+    # table 10-30% fatter than the sinew goblin (measure.md in
+    # docs/dev-notes/2026-10-02-goblin-armour/), so they stood proud of a
+    # shin that had shrunk. Every ring below is the MEASURED flesh (metres,
+    # marched from sdBody per limb cluster, see measure.md) divided by 1.30 and
+    # then scaled by 1.19: 8% for `style chunky`'s facet midpoints sitting at
+    # cos(22.5) = 92.4% of the nominal radius, and 10% so the smooth-min does
+    # not bulge through between ring samples. Boots are worn UNDER the painted
+    # trousers' hem, so the cuff just covers the paint seam.
+    #
+    # Shaft: the shin chain from t0.42 (y 0.31 m) to the ankle. Flesh w there:
+    # 0.0585 m at t0.42, 0.0530 at t0.60, 0.0489 at t0.75 (the thinnest point),
+    # and the ankle knob 0.0665 at t1.0.
+    loft bootshaft bones=shin..shin material=boot
+      ring 0.42 w=0.056 d=0.056
+      ring 0.60 w=0.051 d=0.051
+      ring 0.78 w=0.047 d=0.047
+      ring 0.92 w=0.054 d=0.054
+      ring 1.00 w=0.062 d=0.062
       cap start=none end=none
 
-    # BOOT — pointed, and lofted along a FREE RAY rather than the foot bone,
-    # because the foot's toe blob (`at=0.92`, deep=0.95) bulges past the bone's
-    # own tail. A boot ending at t=1.0 of the foot bone stops short of the toe
-    # it is supposed to cover. The ray is the foot bone continued: same origin
-    # (shin tail), same `dir=fwd`, a third longer.
-    loft boot bone=shin at=1.0 dir=fwd len=0.168 frame=up material=leather
-      ring 0.03 w=0.086 d=0.084
-      ring 0.28 w=0.076 d=0.062
-      ring 0.55 w=0.080 d=0.056
-      ring 0.78 w=0.062 d=0.040
-      ring 0.92 w=0.034 d=0.026
-      ring 1.00 w=0.012 d=0.010 tip
-      cap start=none end=point
+    # Cuff: a gaiter band that folds over the boot top, a little wider than the
+    # shaft and flaring out at the top edge so it reads as cloth over leather.
+    loft cuff bones=shin..shin material=webbing
+      ring 0.34 w=0.062 d=0.062
+      ring 0.40 w=0.066 d=0.066
+      ring 0.50 w=0.059 d=0.059
+      cap start=none end=none
+
+    # Foot: a free ray along the foot bone's direction starting 0.040 m BEHIND
+    # the ankle, because the flesh heel reaches z -0.037 m (ankle z -0.0062) and
+    # a loft cannot start at t<0 of a bone. Rings are by z (metres, ankle at
+    # -0.006): w is lateral, d is height (frame=up). Measured flesh width at
+    # the ring's z: heel 0.0345, ankle knob 0.0665, arch 0.052, ball 0.072, toe
+    # pad 0.074 (to z +0.146). The foot is a flat bar 0.04-0.05 m tall centred
+    # on y 0.157.
+    #   z -0.046 w .046 d .060 | -0.030 .062 .076 | -0.006 .080 .082
+    #   z +0.020 .074 .076     | +0.050 .066 .066 | +0.085 .088 .064
+    #   z +0.124 .092 .058     | +0.152 .070 .046 | +0.172 .040 .030 tip
+    loft boot bone=shin at=1.0 offset=(0,0,-0.0306) dir=fwd len=0.1677 frame=up material=boot
+      ring 0.00 w=0.0354 d=0.0462
+      ring 0.07 w=0.0477 d=0.0585
+      ring 0.18 w=0.0615 d=0.0631
+      ring 0.30 w=0.0569 d=0.0585
+      ring 0.44 w=0.0508 d=0.0508
+      ring 0.60 w=0.0677 d=0.0492
+      ring 0.78 w=0.0708 d=0.0446
+      ring 0.91 w=0.0538 d=0.0354
+      ring 1.00 w=0.0308 d=0.0231 tip
+      cap start=dome end=point
+
+    # KNEE PLATE — a squarish collar with the middle ring pushed forward so it
+    # reads as a kneecap, over the bend: a chain loft across thigh..shin, which
+    # WAM skins with blended weights at the joint (the ogre and clown kits do the
+    # same), so it follows the knee instead of creasing. The chain is 0.29 +
+    # 0.27 = 0.56 m, knee at t 0.518. Flesh w: 0.0700 m at thigh t0.9, 0.0774 at
+    # the knee, 0.066 at shin t0.15.
+    loft kneeplate bones=thigh..shin material=iron shape=squarish
+      ring 0.44 w=0.064 d=0.064
+      ring 0.52 w=0.076 d=0.080 fwd=0.006
+      ring 0.59 w=0.066 d=0.066
+      cap start=none end=none
   end
 
   # SMARTWATCH — LEFT WRIST ONLY, matching the FPV arm asset (goblin-arm.glb,
@@ -273,6 +319,13 @@ parts
   # weapons through the held-prop system, so there is no weapon in this kit.
 
 textures
+  texture boot base=#2c2a28
+    streaks along=v amount=0.07
+    noise scale=0.14 amount=0.08
+    ao amount=0.22
+  texture webbing base=#3b3f42
+    noise scale=0.12 amount=0.10
+    ao amount=0.18
   texture iron base=#6e7378
     gradient axis=v from=-0.12 to=0.18   # painted top-light on the plate
     noise scale=0.10 amount=0.06         # hammered, not stamped

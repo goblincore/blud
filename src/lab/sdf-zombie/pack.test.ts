@@ -387,8 +387,11 @@ describe('metal — prof bit 4, value 16 (hard-surface task 2)', () => {
       [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,2,2,2]);
     expect(packedProf('dragon.blob')).toEqual(
       [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,3]);
+    // goblin.blob re-pinned 2026-10-02 (armour phase 2): the four flesh-foot prims (two per side) were removed because
+    // the kit's boots are the feet, so exactly four prof-0 entries left. No prof value changed: painting the pants and
+    // shirt does not touch the metal bit.
     expect(packedProf('goblin.blob')).toEqual(
-      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,3]);
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,3]);
     // Five plate boxes at 24 = box bit 3 (8) + metal bit 4 (16); the two
     // 2s are bent horns, the 3s chamfered+bent ones. Re-pinned when the
     // plates were authored `metal` — every other value is pre-metal.

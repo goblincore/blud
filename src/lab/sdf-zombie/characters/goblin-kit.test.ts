@@ -102,7 +102,8 @@ describe('goblin-kit.gltf fits goblin.blob', () => {
     // Named explicitly so a material vanishing from the .wam is a failure
     // rather than a silently smaller test. `cloth` was here until the kilt
     // became a plate fauld, which is itself gone (the trousers are paint).
-    expect([...groups.keys()].sort()).toEqual(['band', 'brass', 'glass', 'iron', 'leather', 'screen']);
+    // `boot` and `webbing` (the gaiter cuff) arrived with the phase-2 rebuild.
+    expect([...groups.keys()].sort()).toEqual(['band', 'boot', 'brass', 'glass', 'iron', 'leather', 'screen', 'webbing']);
     // >=, not >: WAM's `kind=box` emits exactly 8 corner vertices
     // (mesh.py:1170-1176), which is what the watch body/screen are.
     for (const [name, vs] of groups) expect(vs.length, name).toBeGreaterThanOrEqual(8);
@@ -172,5 +173,32 @@ describe('goblin-kit.gltf fits goblin.blob', () => {
     const top = orb.a[1] + orb.radius * Math.min(...orb.scale);
     const kitTop = Math.max(...[...groups.values()].flat().map(v => v[1]));
     expect(kitTop, `orb crown ${top.toFixed(4)}`).toBeGreaterThan(top);
+  });
+
+  // THE KIT MAY NOT FLOAT. The fit test above asks whether armour pokes INTO flesh; nothing asked whether it hangs away
+  // from it, which is how the phase-1 body (10-30% slimmer than the table the kit was sized from) left every ring loose
+  // while all tests stayed green. sdBody(v) is the distance from a kit vertex to the flesh surface, positive in air.
+  //
+  // Only the boot SHAFT and its cuff are measurable: above the ankle (y > 0.20 m) the leg is flesh. The foot shell has no
+  // flesh under it by design (the goblin's flesh feet are removed in goblin.blob), so there is nothing to float from.
+  // Bounds are measured, not round: the shaft is the leg's flesh plus the 8% facet margin and 10% bulge margin the .wam
+  // header derives, which is 5-7 mm at the thin shin and a little more where the gaiter flares over the boot top.
+  const SHAFT_Y = 0.20;
+  const standoff = (name: string) => {
+    const ds = groups.get(name)!.filter(v => v[1] > SHAFT_Y).map(v => sdBody(v, body));
+    return { min: Math.min(...ds), max: Math.max(...ds), n: ds.length };
+  };
+
+  // Measured 2026-10-02: shaft 6.4-7.9 mm off the flesh (the whole height), cuff 10.6-14.1 mm (it flares over the boot
+  // top on purpose). The bounds sit ~2 mm above those, so a ring that goes loose by one table-row fails and the next
+  // body change has to re-measure rather than pass quietly.
+  it('boot shaft and cuff hug the leg without floating', () => {
+    const shaft = standoff('boot');
+    expect(shaft.n, 'shaft vertices measured').toBeGreaterThan(20);
+    expect(shaft.min, 'boot shaft is clear of the flesh').toBeGreaterThan(0.003);
+    expect(shaft.max, 'boot shaft stays within 10 mm').toBeLessThan(0.010);
+    const cuff = standoff('webbing');
+    expect(cuff.min, 'cuff is clear of the flesh').toBeGreaterThan(0.005);
+    expect(cuff.max, 'cuff stays within 16 mm').toBeLessThan(0.016);
   });
 });
