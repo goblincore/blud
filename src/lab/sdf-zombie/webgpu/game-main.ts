@@ -529,6 +529,13 @@ async function main() {
   if (ctx.boot.mode.warning) console.warn(`[sdf-game] ${ctx.boot.mode.warning}`);
   if (ctx.boot.mode.fatal) throw new Error(ctx.boot.mode.fatal);
   ctx.boot.deferredMode = ctx.boot.mode.mode === 'deferred';
+  // EARLY-Z stage 1 is legacy-route only (the deferred route is out of its scope). Off here,
+  // after bootEarlyz and before the seed and any crowdTypeFor, so no front mesh is ever built.
+  if (ctx.boot.deferredMode && ctx.crowd.earlyz.on) {
+    ctx.crowd.earlyz.on = false;
+    ctx.crowd.earlyz.reason = 'stage 1 is legacy-route only (deferred renderer)';
+    console.warn(`[earlyz] off for this boot: ${ctx.crowd.earlyz.reason}`);
+  }
 
   // BACKGROUND-COMPILE POLICY (defer-compile task, 2026-09-19). A cold boot was
   // four ~48 s serialized march compiles behind the loader (body, crowd,
@@ -1275,7 +1282,6 @@ async function main() {
   // Motion vectors step 2: `?accum=1` also allocates the object-motion attachment accumulation v2
   // reprojects with (boot-time: the attachment count is fixed with the march target).
   ctx.render.sdfLayer = createSdfLayer(ctx.boot.handle.renderer, { marchNormals: ctx.boot.marchNormalsWanted, refine: ctx.render.refineWanted, marchMotion: isAccumBoot() && new URLSearchParams(location.search).get('accummotion') !== '0' });
-  if (ctx.crowd.earlyz.on) ctx.render.sdfLayer.setEarlyzSeed(ctx.boot.handle.scene);
   adoptLateFx(ctx);
   adoptLightFx(ctx);
   adoptDiscoFx(ctx);
@@ -1558,6 +1564,9 @@ async function main() {
     ctx.crowd.on = false;
     console.warn('[crowd] refine/cone twins are not supported under the crowd march (stage 3); falling back to per-body for this boot');
   }
+  // EARLY-Z level-depth seed: only the crowd march has early-Z work to save, so it waits for the
+  // final crowd decision above (a per-body boot gets no seed quad) and for the deferred guard.
+  if (ctx.crowd.earlyz.on && ctx.crowd.on) ctx.render.sdfLayer.setEarlyzSeed(ctx.boot.handle.scene);
   /** One CrowdType per character registry name; lazily created on first spawn. */
   ctx.crowd.types = new Map<string, CrowdType>();
   /** The first attached view per type — the source of the per-frame per-TYPE
@@ -4733,6 +4742,10 @@ async function main() {
         m.visible = false;
         const r = await p;
         ok = ok && r;
+        if (!r && m === t.frontMesh) {
+          ctx.crowd.earlyz.reason = `front compile failed for ${t.name}`;
+          console.warn(`[earlyz] ${ctx.crowd.earlyz.reason}; the crowd stays on the per-body fallback`);
+        }
         if (!ok) break;
       }
       if (!ok) break;

@@ -12,9 +12,13 @@
 // Caveats:
 // - The opt-in is an own property, so `material.clone()` (which copies only known
 //   material fields) drops it; a clone degrades safely to plain `frag_depth`.
-// - detectConservativeDepth pushes a device-wide validation error scope across awaits.
-//   Run it before other GPU work, never concurrently with renderer work on the same
-//   device, or unrelated validation errors are swallowed into its result.
+// - detectConservativeDepth holds its device-wide validation error scope for ONE synchronous
+//   stretch only: push, createShaderModule, pop (the pop PROMISE is awaited later). A scope
+//   held across awaits absorbs any unrelated validation error issued meanwhile (measured on
+//   Chrome 154: an invalid createBuffer between the awaits landed in the scope and never
+//   reached uncapturederror). The compile verdict does not need the long scope: a bad
+//   qualifier shows in getCompilationInfo and in the module's own scope, and a rejected
+//   createRenderPipelineAsync reports through its rejection, not through a scope.
 import { WGSLNodeBuilder, REVISION } from 'three/webgpu';
 
 export const CONSERVATIVE_DEPTH_BUILTIN = 'frag_depth, greater';
@@ -77,13 +81,23 @@ interface DeviceLike {
 }
 
 /** D8: feature detection by COMPILING, not by wgslLanguageFeatures (Chrome 154 does
- *  not list `fragment_depth` but accepts the syntax). */
+ *  not list `fragment_depth` but accepts the syntax). Reason precedence when several
+ *  signals fire: compile > pipeline > validation > threw. */
 export async function detectConservativeDepth(device: DeviceLike): Promise<{ ok: boolean; reason: string | null }> {
-  let pushed = false;
+  // The scope's verdict, settled so it can neither reject unobserved nor throw past a
+  // compile or pipeline reason that outranks it.
+  type Scoped = { error: { message: string } | null } | { thrown: unknown };
   try {
+    let scoped: Promise<Scoped>;
+    let module: ReturnType<DeviceLike['createShaderModule']>;
     device.pushErrorScope('validation');
-    pushed = true;
-    const module = device.createShaderModule({ code: EARLYZ_DETECT_WGSL, label: 'earlyz-detect' });
+    try {
+      module = device.createShaderModule({ code: EARLYZ_DETECT_WGSL, label: 'earlyz-detect' });
+    } finally {
+      // Popped in the same synchronous stretch as the push: nothing else can issue GPU work
+      // inside the scope. Only the pop's result is awaited, below, outside any scope.
+      scoped = device.popErrorScope().then((error): Scoped => ({ error }), (thrown): Scoped => ({ thrown }));
+    }
     const info = await module.getCompilationInfo();
     const errors = info.messages.filter((m) => m.type === 'error');
     let pipelineError: string | null = null;
@@ -99,18 +113,13 @@ export async function detectConservativeDepth(device: DeviceLike): Promise<{ ok:
         pipelineError = String((e as Error)?.message ?? e);
       }
     }
-    // popErrorScope consumes the scope even if its promise rejects, so clear the flag first:
-    // a second pop in the finally would take an unrelated scope off the device's stack.
-    pushed = false;
-    const scoped = await device.popErrorScope();
+    const verdict = await scoped;
     if (errors.length > 0) return { ok: false, reason: `compile: ${errors[0]!.message}` };
     if (pipelineError !== null) return { ok: false, reason: `pipeline: ${pipelineError}` };
-    if (scoped) return { ok: false, reason: `validation: ${scoped.message}` };
+    if ('thrown' in verdict) return { ok: false, reason: `threw: ${String(verdict.thrown)}` };
+    if (verdict.error) return { ok: false, reason: `validation: ${verdict.error.message}` };
     return { ok: true, reason: null };
   } catch (e) {
     return { ok: false, reason: `threw: ${String(e)}` };
-  } finally {
-    // A throw between push and pop must not leave the scope open on the renderer's device.
-    if (pushed) await device.popErrorScope().catch(() => null);
   }
 }

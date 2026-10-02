@@ -154,25 +154,34 @@ interface FakeOpts {
 }
 
 function fakeDevice(o: FakeOpts) {
-  const scopes = { pushed: 0, popped: 0 };
+  const scopes = { pushed: 0, popped: 0, open: 0 };
+  /** Ordered device calls; `openAt` records how many scopes were open at each async step. */
+  const events: string[] = [];
+  const openAt: Record<string, number> = {};
   return {
-    scopes,
-    pushErrorScope() { scopes.pushed++; },
+    scopes, events, openAt,
+    pushErrorScope() { scopes.pushed++; scopes.open++; events.push('push'); },
     popErrorScope: async () => {
-      scopes.popped++;
+      scopes.popped++; scopes.open--; events.push('pop');
       if (o.popRejects) throw new Error(o.popRejects);
       return o.scopeErr ? { message: o.scopeErr } : null;
     },
     createShaderModule: () => {
+      events.push('createShaderModule');
       if (o.shaderModuleThrows) throw new Error(o.shaderModuleThrows);
       return {
         getCompilationInfo: async () => {
+          events.push('getCompilationInfo'); openAt.getCompilationInfo = scopes.open;
           if (o.compileInfoRejects) throw new Error(o.compileInfoRejects);
           return { messages: o.compileErr ? [{ type: 'error', message: o.compileErr }] : [] };
         },
       };
     },
-    createRenderPipelineAsync: async () => { if (o.pipelineThrows) throw new Error(o.pipelineThrows); return {}; },
+    createRenderPipelineAsync: async () => {
+      events.push('createRenderPipelineAsync'); openAt.createRenderPipelineAsync = scopes.open;
+      if (o.pipelineThrows) throw new Error(o.pipelineThrows);
+      return {};
+    },
   };
 }
 
@@ -184,6 +193,11 @@ describe('detectConservativeDepth (spec D8)', () => {
     ['reports a validation-scope error', { scopeErr: 'invalid' }, { ok: false, reason: 'validation: invalid' }],
     ['reports getCompilationInfo rejecting', { compileInfoRejects: 'lost' }, { ok: false, reason: 'threw: Error: lost' }],
     ['reports createShaderModule throwing', { shaderModuleThrows: 'no module' }, { ok: false, reason: 'threw: Error: no module' }],
+    // Precedence: compile > pipeline > validation > threw.
+    ['ranks compile above the scope error', { compileErr: 'c', scopeErr: 'v' }, { ok: false, reason: 'compile: c' }],
+    ['ranks compile above a rejecting pop', { compileErr: 'c', popRejects: 'p' }, { ok: false, reason: 'compile: c' }],
+    ['ranks pipeline above the scope error', { pipelineThrows: 'p', scopeErr: 'v' }, { ok: false, reason: 'pipeline: p' }],
+    ['ranks pipeline above a rejecting pop', { pipelineThrows: 'p', popRejects: 'x' }, { ok: false, reason: 'pipeline: p' }],
   ];
   for (const [name, opts, expected] of cases) {
     it(name + ' and leaves the error scope balanced', async () => {
@@ -191,6 +205,7 @@ describe('detectConservativeDepth (spec D8)', () => {
       expect(await detectConservativeDepth(device)).toEqual(expected);
       expect(device.scopes.pushed).toBe(1);
       expect(device.scopes.popped).toBe(1);
+      expect(device.scopes.open).toBe(0);
     });
   }
   it('a rejecting happy-path pop is one pop only, reported as threw', async () => {
@@ -203,6 +218,27 @@ describe('detectConservativeDepth (spec D8)', () => {
     const device = fakeDevice({ compileInfoRejects: 'lost', popRejects: 'gone' });
     expect(await detectConservativeDepth(device)).toEqual({ ok: false, reason: 'threw: Error: lost' });
     expect(device.scopes.popped).toBe(1);
+  });
+  it('pops the scope in the same synchronous stretch as the push, before the first await', async () => {
+    const device = fakeDevice({});
+    const done = detectConservativeDepth(device);
+    // Nothing has been awaited yet: the push, the module creation and the pop already ran.
+    expect(device.events).toEqual(['push', 'createShaderModule', 'pop', 'getCompilationInfo']);
+    expect(device.scopes.open).toBe(0);
+    await done;
+    expect(device.events).toEqual(['push', 'createShaderModule', 'pop', 'getCompilationInfo', 'createRenderPipelineAsync']);
+  });
+  it('pops on the synchronous path when createShaderModule throws', async () => {
+    const device = fakeDevice({ shaderModuleThrows: 'no module' });
+    const done = detectConservativeDepth(device);
+    expect(device.events).toEqual(['push', 'createShaderModule', 'pop']);
+    await done;
+  });
+  it('holds no scope open across the awaits, so unrelated device work cannot be absorbed', async () => {
+    const device = fakeDevice({});
+    await detectConservativeDepth(device);
+    expect(device.openAt.getCompilationInfo).toBe(0);
+    expect(device.openAt.createRenderPipelineAsync).toBe(0);
   });
   it('probes the exact builtin the patch emits', () => {
     expect(EARLYZ_DETECT_WGSL).toContain(`@builtin(${CONSERVATIVE_DEPTH_BUILTIN})`);
