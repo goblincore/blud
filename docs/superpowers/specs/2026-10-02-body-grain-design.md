@@ -35,8 +35,15 @@ A per-character palette setting, **`grain`**, that gives the body the face sheet
 - **It sticks to the skin.** Cells are cut in the hit's rest-space anchor (the same `anchor` the mottle and the
   micro-detail use), so they ride each limb through animation instead of swimming over it.
 - **The face is not grained twice.** Where the face sheet covers the head, the body grain fades out by that coverage.
-- **No shimmer.** The grain fades out as a cell shrinks below about 1.5 pixels, using the march's pixel cone (`aaCfg.x`
-  × hit distance).
+- **Two scales, so it never vanishes and never crawls** (owner, 2026-10-02). A single 3.5 mm cell fading below about
+  1.5 pixels would be invisible beyond about 0.9 m in the lab (the plan's measurement: full grain only within about
+  0.43 m). The face never fades, so at 1.35 m its texels are about 0.6 px and it crawls in motion. So there are two
+  octaves of the same grain:
+  - the **fine** octave, with face-sized cells (about 3.5 mm), at full strength up close, where it matches the face;
+  - a **coarse** octave, with cells of about 1.2 cm, which takes over as the fine one fades.
+  Each fades by the march's pixel cone (`aaCfg.x` × hit distance); the coarse one is weighted by what the fine one has
+  lost. The body reads textured at game distances, and no octave is drawn below about a pixel. Both cell sizes are
+  constants that are tuned on the owner's frames.
 - **Gloss and metal skip it,** as they skip the micro-detail.
 - **Off by default.** Every preset has `grain 0`; with `grain 0` the shading takes the old path, and every other
   character renders exactly as before.
