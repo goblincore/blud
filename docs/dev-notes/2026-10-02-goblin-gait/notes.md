@@ -29,3 +29,20 @@ Spec `../../superpowers/specs/2026-10-02-goblin-gait-design.md`, plan `../../sup
   hurried soldier), foot skating (the system plants feet by design; not measured), and the head bob, which in curve mode
   is the clip's hip bob x leg length and may be weak. The owner's look in the live lab is the gate.
 - Task 4 skipped (no foot stretch, see above).
+
+## Head roll (owner, after trying it live in the lab): "his head leans a bit too much to the side" (2026-10-02)
+
+- **Measured, not guessed.** `BLOB_PROBE` with a script that steps `holdPose` through a cycle (every 4 frames) and reads
+  `heroPosed().prims`. The true head ROLL is the angle of the line between the two ear-tip prims (`goblin.blob` ears,
+  `head on skull`, `both`); a centroid-based lean metric first used mixed head yaw into it and under-read the roll.
+  Rest = 0.
+- **Before:** ear-line roll +-9.5 degrees in the walk, +-11 in the run (yaw only +-1.6 / +-1.9).
+- **Isolating the cause** (walk): sway 0 -> roll 0; torsoLean 0 -> unchanged (+-12); shoulderSway 0 -> unchanged;
+  `headSteady` 1.0 (head follows the chest rigidly, my first guess) -> unchanged (+-10); swayAmp halved -> halved (+-4.6).
+  So the roll is proportional to the upper body's own sideways sway, not to how the head differs from the chest.
+  (The head's rigid rotation comes from the neck->head rig-point direction in `rig-bind.ts` headTransform, and the Verlet
+  head point lags the swaying neck.)
+- **Fix:** a new gait dial `upperSway` (gait.ts GAIT_TUNING, default 1 = every older profile unchanged) scales the sideways
+  sway of spine, chest, clavicles, neck, head and jaw while the hips keep theirs. Goblin 0.4: roll +-3.0 walk, +-3.9 run
+  (0.3 gave +-2.3 / +-2.9). My first dial, `headSteady`, did nothing and is removed.
+- Pinned in `goblin-gait.test.ts` (upper body sways <= half the hips', hips unchanged).

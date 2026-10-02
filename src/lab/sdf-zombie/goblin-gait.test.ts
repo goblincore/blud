@@ -5,7 +5,7 @@
 // borrows, so retuning the cadence in the turntable must keep cruise, the run band and the curves in step.
 import { describe, it, expect } from 'vitest';
 import { motionProfileFor } from './motion-profile';
-import { GOBLIN_WALK, GOBLIN_RUN } from './gait';
+import { GOBLIN_WALK, GOBLIN_RUN, SHAMBLE, makeGaitState, stepGait, type GaitSkew } from './gait';
 import { SOLDIER_WALK } from './gait-curves/soldier-walk';
 import { SOLDIER_RUN } from './gait-curves/soldier-run';
 import type { GaitCurves } from './gait-curves';
@@ -45,5 +45,29 @@ describe('goblin gait', () => {
   it('stoops forward, more when running', () => {
     expect(GOBLIN_WALK.torsoLean).toBeGreaterThan(0);
     expect(GOBLIN_RUN.torsoLean).toBeGreaterThan(GOBLIN_WALK.torsoLean);
+  });
+
+  // THE HEAD STAYS UPRIGHT (owner, 2026-10-02: "his head leans a bit too much to the side"). Measured in the lab by the ear-line:
+  // the head rolled +-9.5 degrees in the walk and +-11 in the run. The roll is proportional to the sideways sway of the upper
+  // body (zero at zero sway; making the head follow the chest changed nothing), so the dial that fixes it is upperSway, and
+  // the sideways offsets of chest, neck and head are pinned against the unscaled gait.
+  it('sways the upper body much less than the hips, so the head does not roll (upperSway)', () => {
+    const NONE: GaitSkew = { damageMeter: 0, missing: {}, wounded: {} };
+    const span = (profile: typeof SHAMBLE, joint: 'hips' | 'chest' | 'neck' | 'head') => {
+      let st = makeGaitState(7), worst = 0;
+      for (let i = 0; i < 240; i++) {
+        const step = stepGait(st, NONE, 1 / 60, 'carry', profile);
+        st = step.state;
+        worst = Math.max(worst, Math.abs(step.pose.offsets[joint][0]));
+      }
+      return worst;
+    };
+    for (const g of [GOBLIN_WALK, GOBLIN_RUN]) {
+      const full = { ...g, upperSway: 1 };
+      expect(g.upperSway, g.name).toBeLessThanOrEqual(0.5);
+      expect(span(g, 'hips'), `${g.name} hips keep their sway`).toBeCloseTo(span(full, 'hips'), 10);
+      for (const j of ['chest', 'neck', 'head'] as const)
+        expect(span(g, j), `${g.name} ${j}`).toBeLessThanOrEqual(span(full, j) * 0.5 + 1e-12);
+    }
   });
 });

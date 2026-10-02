@@ -144,6 +144,13 @@ export const GAIT_TUNING = {
   reachSwayAmp: 0.025,
   /** Head counter-bob as a fraction of the root bob. */
   headBob: 0.5,
+  /** Scale on the sideways sway of everything ABOVE the hips (spine, chest, clavicles, neck, head), 0..1, default 1 (every
+   *  older profile). The hips keep their full sway, so the legs and pelvis keep their life while the upper body stays
+   *  steadier. Added 2026-10-02 (owner on the goblin: "his head leans a bit too much to the side"): measured in the lab
+   *  by the ear-line, the goblin's head rolled +-9.5 degrees in the walk and +-11 in the run, it was zero with the sway
+   *  at zero and proportional to it, and making the head follow the chest rigidly changed nothing, so the roll rides
+   *  the upper body's own lateral movement, not the head's offset from the chest. */
+  upperSway: 1,
   /** Seeded per-side asymmetry magnitude — the claymation "hand-posed" jitter. */
   asymJitter: 0.18,
   /** Missing-arm shoulder droop (m). */
@@ -347,6 +354,10 @@ export const GOBLIN_WALK: GaitProfile = {
   // The carry table owns the arms (the shotgun); this only rides the shoulders.
   armSwing: 0.03,
   asymJitter: 0.08,
+  // 0.4 (owner, 2026-10-02: "his head leans a bit too much to the side"). Measured by the ear-line in the held walk and
+  // run (every 4 frames over a cycle): at 1 the head rolled +-9.5 / +-11 degrees, at 0.3 +-2.3 / +-2.9, so 0.4 should be
+  // about +-3 / +-4 (roll is linear in it) with a little life left. The hips keep their full sway.
+  upperSway: 0.4,
   armStyle: 'carry',
 };
 
@@ -713,10 +724,10 @@ export function stepGait(
 
   const offsets: Record<Exclude<GaitJointName, 'pelvis'>, Vec3> = {
     hips: [sway * 0.9, bob * 0.9, 0],
-    chest: [sway * 0.6, bob * 0.6, 0],
-    neck: [sway * 0.3, bob * 0.4, 0],
+    chest: [sway * 0.6 * T.upperSway, bob * 0.6, 0],
+    neck: [sway * 0.3 * T.upperSway, bob * 0.4, 0],
     // The head counter-bobs: it rises as the root dips.
-    head: [-sway * 0.2, -bob * T.headBob, 0],
+    head: [-sway * 0.2 * T.upperSway, -bob * T.headBob, 0],
     shoulderL: shoulder('L'),
     shoulderR: shoulder('R'),
     elbowL: armA.elbow,
@@ -731,10 +742,10 @@ export function stepGait(
     footR: legB.foot,
     // Secondary joints — rigid with their parents. Nothing is authored
     // against them; they exist so richer skeletons have a target per point.
-    spineA: [sway * 0.75, bob * 0.75, 0],
-    spineB: [sway * 0.65, bob * 0.65, 0],
-    clavicleL: [sway * 0.6, bob * 0.6, 0],
-    clavicleR: [sway * 0.6, bob * 0.6, 0],
+    spineA: [sway * 0.75 * T.upperSway, bob * 0.75, 0],
+    spineB: [sway * 0.65 * T.upperSway, bob * 0.65, 0],
+    clavicleL: [sway * 0.6 * T.upperSway, bob * 0.6, 0],
+    clavicleR: [sway * 0.6 * T.upperSway, bob * 0.6, 0],
     handTipL: armA.hand,
     handTipR: armB.hand,
     toeL: legA.foot,
@@ -745,7 +756,7 @@ export function stepGait(
     hem: [0, bob * 0.9, 0],
     // Rigid with the head (motion.ts re-derives the jaw target from the
     // head frame anyway; this keeps the pre-override target sane).
-    jaw: [-sway * 0.2, -bob * T.headBob, 0],
+    jaw: [-sway * 0.2 * T.upperSway, -bob * T.headBob, 0],
   };
 
   let p = (phiL % TAU) / TAU;
