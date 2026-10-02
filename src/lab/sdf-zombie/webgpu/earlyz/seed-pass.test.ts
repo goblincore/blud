@@ -4,8 +4,9 @@
 // The pass needs a WebGPU target, so there is no unit seam; Task 11's smoke and Task 12's
 // parity verify it in the browser. What can be pinned here is the wiring that keeps the flag
 // OFF byte-identical and the seed conservative: nothing builds the mesh unless setEarlyzSeed
-// ran, the 4x4 block cap is never trusted without seedScaleSupported, and the quad never leaks
-// into any pass but the ship march.
+// ran, the draw/refuse decision is the pure seed-gate fed from the layer's own state (the gate
+// itself is table-tested in seed-gate.test.ts), and the quad never leaks into any pass but the
+// ship march.
 import { describe, it, expect } from 'vitest';
 import source from '../sdf-layer?raw';
 
@@ -21,8 +22,10 @@ function between(start: string, end: string, from = 0): string {
 const count = (needle: string): number => source.split(needle).length - 1;
 
 const ensureSeedBody = between('const ensureSeed = (): void => {', 'const seedBlockReason');
-const blockReasonBody = between('const seedBlockReason = (): string | null => {', '\n  };\n');
+const blockReasonBody = between('const seedBlockReason = (perBodyGate: boolean): string | null => {', '\n  };\n');
 const marchBlock = between("setPassLabel('sdf:march');\n      // EARLY-Z SEED", '// DISTANCE SPLIT FAR PASS');
+const precompileBlock = between('ensureSeed();\n        // Only a boot where the seed could ever draw', 'GATED BY THE SAME FLAG');
+const disposeBlock = between('dispose() {\n      upscale?.dispose();\n      if (seed) {', 'target.dispose();');
 
 describe('seed pass wiring (source pins)', () => {
   it('exposes setEarlyzSeed and earlyzSeedInfo on the interface and the returned object', () => {
@@ -36,20 +39,30 @@ describe('seed pass wiring (source pins)', () => {
     // The one construction site: nothing else may create a seed material or mesh.
     expect(count("mesh.name = 'earlyz-seed'")).toBe(1);
     expect(count('seedScene.add(')).toBe(1);
-    expect(count('new MeshBasicNodeMaterial()')).toBeGreaterThanOrEqual(1);
     expect(ensureSeedBody).toContain("mesh.name = 'earlyz-seed'");
     expect(ensureSeedBody).toContain('seedScene.add(mesh)');
     // Guarded by the scene, which only setEarlyzSeed sets: flag off means no mesh, no pipeline.
     expect(ensureSeedBody).toMatch(/if \(seed \|\| !seedScene\) return;/);
-    expect(source.match(/\bseedScene = /g)).toHaveLength(1); // only setEarlyzSeed assigns it
+    expect(source.match(/\bseedScene = /g)).toHaveLength(2); // setEarlyzSeed, and dispose clearing it
     // It needs the sampleable level depth of the post-aa capture target.
     expect(ensureSeedBody).toContain('outputTarget?.depthTexture');
+  });
+
+  it('creates the seed node only inside ensureSeed (flag off makes no node at all)', () => {
+    expect(count('wgslFn(EARLYZ_SEED_WGSL)')).toBe(1);
+    expect(ensureSeedBody).toContain('seedFn ??= wgslFn(EARLYZ_SEED_WGSL);');
+    // ... after the two early returns that flag-off and no-capture-target boots take.
+    expect(ensureSeedBody.indexOf('wgslFn(')).toBeGreaterThan(ensureSeedBody.indexOf('if (!depthTex) return;'));
+    expect(source).not.toMatch(/const seedFn = wgslFn/);
   });
 
   it('is a depth-only, full-screen quad that draws first in the SDF layer and starts hidden', () => {
     expect(ensureSeedBody).toContain('mat.colorWrite = false;');
     expect(ensureSeedBody).toContain('mat.depthTest = true;');
     expect(ensureSeedBody).toContain('mat.depthWrite = true;');
+    // three's default depthFunc (LessEqual) is the contract: a later render of the same target must
+    // never overwrite a nearer body depth, so the seed material must not pick its own compare.
+    expect(ensureSeedBody).not.toContain('depthFunc');
     expect(ensureSeedBody).toContain('mesh.renderOrder = SEED_RENDER_ORDER;');
     expect(ensureSeedBody).toContain('mesh.layers.set(SDF_LAYER);');
     expect(ensureSeedBody).toContain('mesh.visible = false;');
@@ -57,50 +70,79 @@ describe('seed pass wiring (source pins)', () => {
     expect(ensureSeedBody).toContain('mat.depthNode = seedFn({ levelDepth: tex, uv: screenUV, marchSize })');
   });
 
-  it('never trusts the 4x4 block cap without seedScaleSupported', () => {
-    expect(count('seedScaleSupported([')).toBe(1); // the one call (the import and the comment have no `([`)
-    expect(blockReasonBody).toContain('seedScaleSupported([outputTarget.width, outputTarget.height], [target.width, target.height])');
-    // A refusal when it is false, ahead of the final `return null` (which means "may draw").
-    const supported = blockReasonBody.indexOf('seedScaleSupported(');
-    const refusal = blockReasonBody.indexOf('if (!seedScaleOk) return');
-    expect(refusal).toBeGreaterThan(supported);
-    expect(refusal).toBeLessThan(blockReasonBody.indexOf('return null;'));
+  it('feeds the pure seed gate every input from the layer\'s own state, sizes included', () => {
+    // The size-keyed memo and every refusal live in seed-gate.ts (seed-gate.test.ts); here the
+    // layer must hand it the live values. The march size is the INTEGER target size, both axes.
+    expect(source).toContain("import { createSeedGate, type SeedGateInput } from './earlyz/seed-gate';");
+    expect(count('seedScaleSupported(')).toBe(0); // the layer no longer decides anything itself
+    expect(blockReasonBody).toContain('g.requested = seedScene !== null;');
+    expect(blockReasonBody).toContain('g.levelDepth = outputTarget?.depthTexture != null;');
+    expect(blockReasonBody).toContain('g.fieldStyle = fieldStyle;');
+    expect(blockReasonBody).toContain('g.levelSize[0] = outputTarget?.width ?? 0;');
+    expect(blockReasonBody).toContain('g.levelSize[1] = outputTarget?.height ?? 0;');
+    expect(blockReasonBody).toContain('g.marchSize[0] = target.width;');
+    expect(blockReasonBody).toContain('g.marchSize[1] = target.height;');
+    expect(blockReasonBody).toContain('g.marchAttachments = target.textures.length;');
+    expect(blockReasonBody).toContain('g.accumOn = accumOn;');
+    expect(blockReasonBody).toContain('g.captureJitter = marchJitter !== null;');
+    expect(blockReasonBody).toContain('g.perBodyGate = perBodyGate;');
+    expect(blockReasonBody.trimEnd().endsWith('return seedGate.reason(g);')).toBe(true);
+    // One gate for the whole layer: its memo is the size cache.
+    expect(count('createSeedGate()')).toBe(1);
   });
 
-  it('refuses every case where the seed would not be conservative or would not fit', () => {
-    expect(blockReasonBody).toContain("if (!seedScene) return 'not requested';");
-    expect(blockReasonBody).toContain('no sampleable level depth');
-    expect(blockReasonBody).toContain("if (fieldStyle !== 'off')");
-    expect(blockReasonBody).toContain('if (target.textures.length !== 1) return');
-    expect(blockReasonBody).toContain('if (accumOn) return');
-    expect(blockReasonBody).toContain('if (marchJitter) return');
-    expect(blockReasonBody.trimEnd().endsWith('return null;')).toBe(true);
+  it('decides the per-body branch and the seed with ONE shared predicate', () => {
+    const predicate = 'prevUniforms.enabled.value > 0.5 && bodies.length > 0';
+    expect(source).toContain(`const perBodyGate = ${predicate};`);
+    // The real predicate is written once; nothing re-derives it for the branch or the seed.
+    expect(count(predicate)).toBe(1);
+    expect(count('const perBodyGate')).toBe(1);
+    expect(marchBlock).toContain('if (perBodyGate) {');
+    expect(marchBlock).toContain('seedReasonLast = seedBlockReason(perBodyGate);');
+    expect(marchBlock).not.toContain("'per-body depth-gate passes'"); // the reason string is the gate's
+    // Declared before both users, in the same block.
+    const decl = marchBlock.indexOf('const perBodyGate');
+    expect(decl).toBeGreaterThan(-1);
+    expect(decl).toBeLessThan(marchBlock.indexOf('seedBlockReason(perBodyGate)'));
+    expect(decl).toBeLessThan(marchBlock.indexOf('if (perBodyGate) {'));
   });
 
-  it('shows the seed only for a single-render march, and hides it again straight after the march', () => {
-    expect(marchBlock).toContain('seedReasonLast = seedBlockReason();');
-    // The per-body depth-gate branch re-renders per body: the seed is refused there.
-    expect(marchBlock).toContain("seedReasonLast = 'per-body depth-gate passes';");
+  it('shows the seed only for a single-render march of the scene it lives in, then hides it', () => {
+    expect(marchBlock).toContain('ensureSeed();\n      seedReasonLast = seedBlockReason(perBodyGate);');
+    expect(marchBlock).toContain("if (seedReasonLast === null && seed !== null && seed.mesh.parent !== scene) {");
+    expect(marchBlock).toContain("seedReasonLast = 'seed lives in another scene';");
     expect(marchBlock).toContain('seedOnLast = seed !== null && seedReasonLast === null;');
     expect(marchBlock).toContain('seed.mesh.visible = seedOnLast;');
-    expect(marchBlock).toContain('seed.marchSize.value.set(target.width, target.height);');
+    // Both uniforms are refreshed every drawn frame: the capture target (and its depth texture)
+    // can be reallocated by post-aa, and the march size follows the resize.
+    expect(marchBlock).toContain(
+      'if (seedOnLast) {\n          seed.tex.value = outputTarget!.depthTexture!;\n          seed.marchSize.value.set(target.width, target.height);\n        }',
+    );
     // Hidden right after the whole branch chain, before the far pass and every later pass.
     const hide = marchBlock.lastIndexOf('if (seed) seed.mesh.visible = false;');
     expect(hide).toBeGreaterThan(marchBlock.indexOf('renderer.render(scene, camera)'));
     expect(marchBlock.slice(hide).trim()).toBe('if (seed) seed.mesh.visible = false;');
   });
 
-  it('turns the quad on only around the march in the render path and the precompile', () => {
+  it('turns the quad on only around the march, and compiles it only where it could ever draw', () => {
     expect(count('seed.mesh.visible = true;')).toBe(1);
     expect(count('seed.mesh.visible = seedOnLast;')).toBe(1);
-    // Precompile: shown, compiled, hidden again, in that order.
-    const pre = between('ensureSeed();\n        if (seed) seed.mesh.visible = true;', 'GATED BY THE SAME FLAG');
-    const compileAt = pre.indexOf("await compile('march', scene, camera, target, marchMrt);");
-    expect(compileAt).toBeGreaterThan(0);
-    expect(pre.indexOf('if (seed) seed.mesh.visible = false;')).toBeGreaterThan(compileAt);
+    // Precompile: shown (single-attachment march only), compiled, hidden again, in that order.
+    expect(precompileBlock).toContain('if (seed && !marchMrt) seed.mesh.visible = true;');
+    const compileAt = precompileBlock.indexOf("await compile('march', scene, camera, target, marchMrt);");
+    expect(compileAt).toBeGreaterThan(precompileBlock.indexOf('seed.mesh.visible = true;'));
+    expect(precompileBlock.indexOf('if (seed) seed.mesh.visible = false;')).toBeGreaterThan(compileAt);
   });
 
   it('never calls setEarlyzSeed itself (the flag-gated caller does)', () => {
     expect(count('setEarlyzSeed(')).toBe(2); // interface + implementation
+  });
+
+  it('dispose removes the quad from its scene and frees its geometry and material', () => {
+    expect(disposeBlock).toContain('seed.mesh.removeFromParent();');
+    expect(disposeBlock).toContain('seed.mesh.geometry.dispose();');
+    expect(disposeBlock).toContain('(seed.mesh.material as THREE.Material).dispose();');
+    expect(disposeBlock).toContain('seed = null;');
+    expect(between('seed = null;', 'target.dispose();')).toContain('seedScene = null;');
   });
 });

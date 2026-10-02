@@ -42,7 +42,8 @@ import { setPassLabel } from './gpu-pass-timing';
 import { layerOn } from './light-layers';
 import { createUpscaleStage, upscaleInfoOf, type UpscaleInfo, type UpscaleStage } from './upscale/upscale-stage';
 import { inputsUseNormals, type UpscaleConfig, type UpscaleModel } from './upscale/upscale-model';
-import { EARLYZ_SEED_WGSL, seedScaleSupported } from './earlyz/seed-depth.wgsl';
+import { EARLYZ_SEED_WGSL } from './earlyz/seed-depth.wgsl';
+import { createSeedGate, type SeedGateInput } from './earlyz/seed-gate';
 import { SEED_RENDER_ORDER } from './earlyz/type-order';
 
 // ---------------------------------------------------------------------------
@@ -2058,9 +2059,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
 
   // ---- early-Z level-depth seed (spec 2026-10-01 D6) -----------------------
   // Built lazily the first time setEarlyzSeed has a scene AND the post-aa capture
-  // target exists (FXAA on). Draws first in the march target (renderOrder), depth-only,
-  // LessEqual against the clear, so repeating it in a later render of the same target
-  // never overwrites a nearer body depth.
+  // target exists (post-aa redirected). Draws first in the march target (renderOrder),
+  // depth-only, LessEqual against the clear, so repeating it in a later render of the
+  // same target never overwrites a nearer body depth.
   let seedScene: THREE.Scene | null = null;
   let seed: {
     mesh: THREE.Mesh;
@@ -2069,15 +2070,22 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
   } | null = null;
   let seedOnLast = false;
   let seedReasonLast: string | null = 'not requested';
-  // Task 5 review (GPU-measured): the seed's 4x4 block cap is exact only when
-  // seedScaleSupported() holds for (level depth size, march size). Cached by size.
-  let seedScaleKey = '';
-  let seedScaleOk = false;
-  const seedFn = wgslFn(EARLYZ_SEED_WGSL);
+  // WHEN the seed may draw is a pure decision (earlyz/seed-gate.ts, table-tested). The gate
+  // memoises its size-dependent part: the seed's 4x4 block cap is exact only when
+  // seedScaleSupported holds for (level depth size, march size), and a steady frame must not
+  // rerun that loop or build a string. The input object is reused, filled in place per frame.
+  const seedGate = createSeedGate();
+  const seedGateIn: SeedGateInput = {
+    requested: false, levelDepth: false, fieldStyle: 'off', levelSize: [0, 0], marchSize: [0, 0],
+    marchAttachments: 1, accumOn: false, captureJitter: false, perBodyGate: false,
+  };
+  // Created inside ensureSeed, so a flag-off boot makes no node at all.
+  let seedFn: ReturnType<typeof wgslFn> | null = null;
   const ensureSeed = (): void => {
     if (seed || !seedScene) return;
     const depthTex = outputTarget?.depthTexture;
     if (!depthTex) return;
+    seedFn ??= wgslFn(EARLYZ_SEED_WGSL);
     const tex = texture(depthTex);
     const marchSize = uniform(new THREE.Vector2(1, 1));
     const mat = new MeshBasicNodeMaterial();
@@ -2097,20 +2105,20 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     seed = { mesh, tex, marchSize: marchSize as unknown as { value: THREE.Vector2 } };
   };
   /** null = the seed may draw this frame; otherwise why it may not. */
-  const seedBlockReason = (): string | null => {
-    if (!seedScene) return 'not requested';
-    if (!outputTarget?.depthTexture) return 'no sampleable level depth (post-aa capture off)';
-    if (fieldStyle !== 'off') return `field style '${fieldStyle}'`;
-    const scaleKey = `${outputTarget.width}x${outputTarget.height}/${target.width}x${target.height}`;
-    if (scaleKey !== seedScaleKey) {
-      seedScaleKey = scaleKey;
-      seedScaleOk = seedScaleSupported([outputTarget.width, outputTarget.height], [target.width, target.height]);
-    }
-    if (!seedScaleOk) return `march ${target.width}x${target.height} over ${outputTarget.width}x${outputTarget.height}: seed block wider than 4 px`;
-    if (target.textures.length !== 1) return 'march MRT boot';
-    if (accumOn) return 'temporal accumulation (jittered march)';
-    if (marchJitter) return 'capture jitter';
-    return null;
+  const seedBlockReason = (perBodyGate: boolean): string | null => {
+    const g = seedGateIn;
+    g.requested = seedScene !== null;
+    g.levelDepth = outputTarget?.depthTexture != null;
+    g.fieldStyle = fieldStyle;
+    g.levelSize[0] = outputTarget?.width ?? 0;
+    g.levelSize[1] = outputTarget?.height ?? 0;
+    g.marchSize[0] = target.width;
+    g.marchSize[1] = target.height;
+    g.marchAttachments = target.textures.length;
+    g.accumOn = accumOn;
+    g.captureJitter = marchJitter !== null;
+    g.perBodyGate = perBodyGate;
+    return seedGate.reason(g);
   };
 
   /**
@@ -2457,7 +2465,8 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
         // --- the marched twins, one layer at a time -------------------------
         camera.layers.set(SDF_LAYER);
         ensureSeed();
-        if (seed) seed.mesh.visible = true;
+        // Only a boot where the seed could ever draw (a single-attachment march) compiles it.
+        if (seed && !marchMrt) seed.mesh.visible = true;
         await compile('march', scene, camera, target, marchMrt);
         if (seed) seed.mesh.visible = false;
         // GATED BY THE SAME FLAG THE RENDER PATH READS. Warming a pass that is
@@ -2798,11 +2807,12 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       setPassLabel('sdf:march');
       // EARLY-Z SEED (spec D6): drawn only in the single-render branches below. The
       // per-body front-to-back branch (ships off) clears and re-renders per body, and
-      // is left exactly as it is.
+      // is left exactly as it is: ONE predicate decides both that branch and the seed.
+      const perBodyGate = prevUniforms.enabled.value > 0.5 && bodies.length > 0;
       ensureSeed();
-      seedReasonLast = seedBlockReason();
-      if (seedReasonLast === null && prevUniforms.enabled.value > 0.5 && bodies.length > 0) {
-        seedReasonLast = 'per-body depth-gate passes';
+      seedReasonLast = seedBlockReason(perBodyGate);
+      if (seedReasonLast === null && seed !== null && seed.mesh.parent !== scene) {
+        seedReasonLast = 'seed lives in another scene';
       }
       seedOnLast = seed !== null && seedReasonLast === null;
       if (seed) {
@@ -2812,7 +2822,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
           seed.marchSize.value.set(target.width, target.height);
         }
       }
-      if (prevUniforms.enabled.value > 0.5 && bodies.length > 0) {
+      if (perBodyGate) {
         // Front-to-back per-body passes (perf round 2 task 5). Clear once,
         // then one pass per body nearest-first, each preceded by a blit of
         // the accumulated state into `prev` — the march's gate reads it and
@@ -3386,6 +3396,13 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     get pixelConeK() { return coneKFor(1) * (accumOn && checkerOn ? 0.5 : 1); },
     dispose() {
       upscale?.dispose();
+      if (seed) {
+        seed.mesh.removeFromParent();
+        seed.mesh.geometry.dispose();
+        (seed.mesh.material as THREE.Material).dispose();
+        seed = null;
+      }
+      seedScene = null;
       target.dispose();
       prev.dispose();
       coneCoarse.dispose();
