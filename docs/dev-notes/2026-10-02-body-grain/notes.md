@@ -25,3 +25,4 @@ Spec: ../../superpowers/specs/2026-10-02-body-grain-design.md. Plan: ../../super
 - Task 5 done: BODY_GRAIN_BLOCK spliced between the face layer and gore in MARCH_TRACE_POST (marchBody, refineBody,
   marchSurface); the face layer leaves faceSheetCover = facing * tex.a; march golden re-pinned on exactly
   FACE_LAYER_WGSL, MARCH_BODY, MARCH_BODY_TRACE, MARCH_TRACE_POST, REFINE_BODY; GPU compile smoke passed (goblin, grain 0).
+- Task 6 done: goblin.blob palette sets grain 0.10 (= its sheet's grain); surfaceNoiseAmp left at 0.22 for the owner.

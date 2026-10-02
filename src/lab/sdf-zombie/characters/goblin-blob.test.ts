@@ -67,6 +67,15 @@ describe('goblin.blob', () => {
     expect(m.mottleAmp).toBeGreaterThan(0);
   });
 
+  // Body grain (docs/superpowers/specs/2026-10-02-body-grain-design.md): the face sheet's speckle on the
+  // body. The palette's `grain` is in the sheet's own units, and the goblin sets one value in both, so face
+  // and body carry one contrast.
+  it('grains its body like its face sheet', () => {
+    const m = compilePalette(doc)!;
+    expect(m.grain).toBeGreaterThan(0);
+    expect(m.grain).toBe(compileSheet(doc)!.grain);
+  });
+
   it('folds its knees the way it declared', () => {
     const b = built();
     expect(checkStance(b.bones, doc.stance)).toEqual([]);
