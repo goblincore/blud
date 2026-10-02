@@ -8,6 +8,7 @@ import type { Vec3 } from '../types';
 import { FLAIL_FEEL } from './game-flail';
 import { sdBody, sdPrimitive } from '../validate';
 import { headQuatOf } from '../rig-bind';
+import { burstTuning, setBurstTuning } from '../head-burst';
 import type { BuildResult } from '../build-body';
 
 /** game-main's headShape (the fattest additive head prim's midpoint and radius·scale axes — the frame the face
@@ -36,6 +37,10 @@ export function createHeadSeams(ctx: GameContext) {
     head: {
       /** The leaf's debug for actor `id` (null before its first head hit). */
       state: (id: number) => ctx.weapon.headDamage?.debug(id) ?? null,
+      /** Slug head burst tuning (head-burst.ts burstTuning): set any of { on, centreFrac, swell, shardScale, flapCount }.
+       *  Returns the live values. `on: false` sends every slug down the ordinary path. */
+      burstTune: (p: Partial<typeof burstTuning>) => setBurstTuning(p),
+      burstTuning: () => ({ ...burstTuning }),
       /** Actor `id`'s UN-deformed head frame { centre, quat, axes } (world; hs = conj(quat)·(p − centre) ÷ axes):
        *  the leaf's own once it has one, else measured now the way the leaf does (headShape + the rigid head's
        *  rotation) — valid before the first head hit, while the head is undeformed. The gates aim the crosshair at

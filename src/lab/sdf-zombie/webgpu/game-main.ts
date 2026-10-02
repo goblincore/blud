@@ -7894,9 +7894,14 @@ async function main() {
               const sources = ctx.render.skeletonSources.get(hitActor)?.sources;
               if (sources) ctx.render.segMeshRenderer.impact(hitActor, sources, hitPoint, dirN, p.kind);
             }
-            const stamped = p.kind === 'slug'
-              ? hitActor.hitSlug(hitPoint, dirN, p.shot)
-              : hitActor.hit(hitPoint, dirN, p.shot);
+            // A slug on a zombie's head bursts or ruptures it (game-head-damage.ts burst); anything the leaf declines
+            // (not the head, not the plain zombie, off) takes the ordinary path below. Routed by projectile kind,
+            // never by Wound.type (slugs stamp 'blast').
+            const burstHandled = p.kind === 'slug' && !!ctx.weapon.headDamage?.burst(hitActor, hitPoint, dirN, p.shot);
+            const stamped = burstHandled ? null
+              : p.kind === 'slug'
+                ? hitActor.hitSlug(hitPoint, dirN, p.shot)
+                : hitActor.hit(hitPoint, dirN, p.shot);
             ctx.telemetry.telemetry.end('wound-hit', hitTiming);
             if (ctx.telemetry.telemetry.active) ctx.telemetry.telemetry.event('impact', {
               actor: hitActor.id, model: 'zombie', room: hitActor.room, kind: p.kind, stamped: !!stamped,
