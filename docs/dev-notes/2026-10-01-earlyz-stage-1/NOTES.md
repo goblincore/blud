@@ -517,26 +517,47 @@ were the same in every repeat. † in the load column: the 1-min load passed 6 d
 | ---: | --- | --- | --- | --- | --- | --- | --- |
 | 1 | 23.26 → 24.63 (+1.4) | 24.87 → 25.80 (+0.9) | noise | 14.83 [13.44-15.80] → 14.37 [13.47-14.89] (-0.5) | 15.65 → 14.82 (-0.8) | noise | soldier@1 1F, zombie@2 1F, zombie@4 4F |
 | 2 | 27.42 → 32.88 (+5.5) | 27.59 → 32.17 (+4.6) | suggestive (+), ranges 23-43 ms | 20.66 [18.62-24.02] → 21.74 [19.78-25.41] (+1.1) | 20.41 → 20.90 (+0.5) | suggestive (+) | zombie@2 2F, zombie@6 1F, soldier@5 2F, zombie@5 2F |
-| 3 | 54.48 → 56.04 (+1.6) | 49.33 → 61.72 (+12.4) ‡ | noise (p50); mean ‡ | 40.79 [35.75-54.90] → 39.58 [34.28-43.40] (-1.2) | 37.74 → 35.49 (-2.3) | noise | zombie@2 2F, zombie@3 3F, zombie@4 1F |
+| 3 ‡ (re-run after the fix, 1 run of 3) | 60.16 [59.10-60.82] → 60.53 [59.18-61.53] (+0.4) | 55.11 [54.05-56.15] → 53.29 [53.13-53.34] (-1.8) | noise (p50 and mean disagree) | 40.01 [39.72-40.18] → 39.30 [38.92-39.82] (-0.7) | 37.87 [37.42-38.61] → 36.43 [36.00-36.68] (-1.4) | suggestive (one run) | zombie@2 2F, zombie@3 3F, zombie@4 1F |
+| 3 (pooled, before the fix) | 54.48 → 56.04 (+1.6) | 49.33 → 61.72 (+12.4): the split-chunk bug | invalid | 40.79 [35.75-54.90] → 39.58 [34.28-43.40] (-1.2) | 37.74 → 35.49 (-2.3) | noise | |
 | 4 | 16.09 → 17.03 (+0.9) | 16.33 → 16.89 (+0.6) | noise | 10.32 [10.01-11.16] → 11.15 [10.68-11.34] (+0.8) | 9.73 → 10.18 (+0.45) | **suggestive, not established** (+): disjoint in 2 of 3 runs | zombie@4 4F |
 | 5 | 25.26 → 23.09 (-2.2) | 25.26 → 23.45 (-1.8) | noise | 16.11 [14.97-17.27] → 16.86 [16.32-17.50] (+0.75) | 16.03 → 15.98 (-0.06) | noise: the pf mean changes sign across runs | zombie@6 1F, soldier@5 3F, zombie@5 2F |
 
-**‡ Room 3's frame mean is the split chunk pass, an artifact of the measuring mode.**
-- In room 3 the slug severs one live chunk (census chunks 0 → 1 in `fire`).
-- In passes mode the harness renders chunks in their own pass (`setChunkPass('split')`, `sdf:march-chunks`), so it can
-  label them. With the flag on, that pass costs **p50 34-45 ms** against **0.0-0.5 ms** with it off. This held in all
-  9 repeats, in fire and in gib. The fenced fire segment goes from 62 to 95 ms (per-frame means).
-- **It does not happen in the shipped merged chunk pass.** A throughput-mode check of room 3 (`BENCH_ROOMS=3`, merged
-  pass, 3 repeats, seed 7, load 3.47 / 2.09-3.47) gave:
+**‡ Room 3 and the split chunk pass: a bug in the early-Z wiring, found by this run and fixed.**
+- **Symptom.** In room 3 the slug severs one live chunk (census chunks 0 → 1 in `fire`).
+  - In passes mode the harness renders chunks in their own pass (`setChunkPass('split')`, label `sdf:march-chunks`).
+  - With the flag on, that pass cost **p50 34-45 ms** against **0.0-0.5 ms** with it off, in all 9 repeats, in fire
+    and in gib. The fenced fire segment went from 62 to 95 ms (per-frame means).
+- **Cause** (the coordinator's diagnosis, confirmed by the fix).
+  - `game-main.ts` passed `setBodies` only each crowd type's back mesh (`t.mesh`).
+  - The split branch in `sdf-layer.ts` hides the `bodies` list for its chunks-only second render. Every type's FRONT
+    mesh (`t.frontMesh`) was not in the list, so it stayed visible, and the whole front batch was marched a second
+    time inside `sdf:march-chunks`.
+  - The same omission would have drawn the front meshes in every per-body pass of the depth-gate branch, which
+    ships off.
+- **Fix:** the crowd list is now
+  `flatMap(t => (t.frontMesh ? [t.mesh, t.frontMesh] : [t.mesh]))`.
+  - With the flag off, `frontMesh` is null and the list is unchanged; `march-hash.mjs` still gives room1 `d7392d52…`
+    (exit 0, load 3.2).
+  - The other users of the list are each correct with the front meshes in it:
+    - the temporal-margin motion measure (one more static object per type);
+    - the per-body depth-gate branch (each listed mesh gets its own pass and is hidden in the others);
+    - the split branch (the front meshes are now hidden in the chunk pass).
+  - The seed quad still draws again in the chunk pass. It is depth-only and costs nothing measurable there.
+  - A source pin in `earlyz-wiring.test.ts` keeps the front mesh in the list.
+- **After the fix**, cast room 3 in passes mode (3 repeats, seed 7, load 3.83 at start, max 3.96):
+  - `sdf:march-chunks` with the flag on: fire p50 0.12-0.15 ms (n 117 per repeat), gib 0.32-3.61 ms (n 6), per-frame
+    mean 0.17-0.21 ms. The control reads 0.13-0.14, 0.08-0.13 and 0.14-0.20. Back to the control's level.
+  - The fenced fire segment mean is 72.6-73.6 ms against the control's 73.9-76.9.
+  - The census is identical, with no drift.
+- **The shipped merged pass was never affected.** It draws bodies and chunks in one render, so nothing is drawn
+  twice. A throughput-mode run of room 3 before the fix (`BENCH_ROOMS=3`, 3 repeats, seed 7, load 3.47 / max 3.47)
+  gave:
   - fire mean 59.5 / 60.1 / 60.9 → 58.8 / 57.8 / 58.6;
   - walk 25.3 / 25.3 / 25.5 → 22.7 / 22.8 / 22.7;
-  - gib 49.7 / 50.5 / 51.0 → 51.6 / 50.8 / 51.8;
   - overall mean 44.82 / 45.30 / 45.80 → 44.40 / 43.79 / 44.36.
-  The census was identical. So there is no chunk regression in the shipped configuration, and the walk segment gains
-  about 2.6 ms there.
-- **Consequence:** under the flag, passes-mode numbers for any scene with a live chunk are not valid. The flag's
-  interaction with the split chunk pass is unexplained and worth a look. Room 3's passes-mode frame mean (+12.4) is
-  that artifact. Its march columns are unaffected (`sdf:march` is a separate label).
+- **Before the fix, passes-mode numbers with a live chunk were invalid under the flag.** In the runs above that is cast
+  room 3 only: no other scene had `sdf:march-chunks` samples. The pooled room-3 frame columns are therefore replaced
+  by the re-run. Their `sdf:march` columns were not affected.
 
 Per-segment `sdf:march` pf mean (median of repeats, ms, control → earlyz):
 - **doorway:** walk 45.1 → 32.1, fire 47.8 → 34.5, gib 46.4 → 33.2. No shot landed (0 wounds), so the scene is
@@ -578,7 +599,8 @@ Per-segment `sdf:march` pf mean (median of repeats, ms, control → earlyz):
     suggestive, not established.
   - Room 5's pf mean changes sign across the runs, so its +0.75 p50 is noise.
   - Room 2 leans the same way as room 4 (suggestive).
-  - No cast room shows a frame delta beyond the noise. Room 3's frame mean is the split-chunk artifact above.
+  - No cast room shows a frame delta beyond the noise. Room 3 (re-run after the split-chunk fix) is -1.8 ms on the
+    frame mean, against +0.4 on the p50 (noise), and its march is suggestive (-1.4 pf mean, one run).
 - **Train doorway: nothing to measure.** The march is about 9 ms with 3 of the 12 spawned bodies drawn, plus
   `van-guard`.
 
@@ -589,11 +611,14 @@ Per-segment `sdf:march` pf mean (median of repeats, ms, control → earlyz):
    - The seed gate refuses only a field style other than `'off'` (`seed-gate.ts`).
    - So in this harness `earlyz` vs `baseline` is the native-scale march with the seed on, not the field-style case.
      Inferred from `seed.on: true, reason: null` and the gate code. The legs comment in the harness now says so.
-2. **The split chunk pass under the flag** (‡ above): 35-45 ms for one live chunk in passes mode, nothing in the
-   shipped merged pass. Unexplained.
+2. **A wiring bug: the split chunk pass re-marched the front batch** (‡ above). It cost 35-45 ms per live chunk in
+   passes mode, the front meshes being missing from `setBodies`. Fixed; the shipped merged pass was never affected.
 3. **One unreproduced outlier.** A single-repeat validation run of the room grid (seed 7, same harness, load 2.1-3.2)
    read control 80.58 against earlyz 125.98 ms frame p50 (march 72.86 against 116.34). Its earlyz fire/gib march was
-   99 / 108 ms; the six matched repeats read 62-68 / 63-72. Not reproduced, cause not found, not in the table.
+   99 / 108 ms; the six matched repeats read 62-68 / 63-72. Not reproduced, cause not found, not in the table. Every
+   GPU pass in that earlyz leg was slower, not only the march (`sdf:polys` 1.92 against 1.25, `sdf:last-blit` 0.69
+   against 0.08). That points to a GPU-wide slowdown during that leg rather than the flag. It had no live chunk, so
+   it is not the split-chunk bug.
 4. **The harness race (change 3) is worth fixing in the page.**
 
 **Not covered.**
@@ -603,7 +628,8 @@ Per-segment `sdf:march` pf mean (median of repeats, ms, control → earlyz):
 
 Nothing here suggests a correctness or crash problem under the flag. Every earlyz leg had 0 GPU errors, and no leg
 failed or was aborted in the runs of record. The census was identical between legs and repeats, and the frame hash
-between repeats. The split-chunk cost is a performance anomaly in a measuring mode.
+between repeats. The split-chunk cost was a wiring bug, now fixed. It drew the front batch twice in a measuring mode
+(and would have under the depth gate); whether that second draw changed any pixel was not checked.
 
 **Raw outputs are not committed.** Each run wrote `passes.md`, `passes.json`, `bench.md`, `bench.json`, the logs and
 the load samples to a scratch `BENCH_OUT` outside the repository.
