@@ -207,3 +207,34 @@ Replace the box with a hull that needs no per-frame extraction:
    overlap. If ordinary rooms hold neither, stage 1 may measure as a wash outside crowd grids. The doorway scene and
    the recordings decide.
 5. **Per-body path** (`?crowd=0`, refine boots) stays on today's materials. **Owner 2026-10-01: yes, out of scope.**
+
+## 11. As built (amendments, 2026-10-02)
+
+The code differs from §3–§5 in these deliberate ways. Each was settled in a plan amendment or a review, and the dev note
+`docs/dev-notes/2026-10-01-earlyz-stage-1/NOTES.md` records the reason.
+
+- **D4:** the analytic box exit is passed through the crowd material's existing `rays.worldPos` override
+  (`earlyz/box-exit.wgsl.ts`). `ray-window.wgsl.ts` is not edited, so the march body's text is unchanged.
+- **D6:**
+  - The seed quad uses three's default **LessEqual** depth test, not `always`. Repeating it in a later render of the
+    same target can never overwrite a nearer body depth.
+  - Its block maths is exact **i32**. f32 division under-read at 4× on the GPU.
+  - It covers blocks up to 4×4 and runs whenever `seedScaleSupported()` holds, which includes native 1:1, not only the
+    2× upscaler boot.
+  - The gate lives in the pure `earlyz/seed-gate.ts`.
+  - The seed is also hidden for the 'split' chunk-only render.
+- **Warm-up:** the front material compiles in the **background crowd job** (`compileCrowdInBackground`), not in
+  `precompilePasses`. The front mesh is skipped while the dispatch is quad. `precompilePasses` compiles only the seed,
+  and only for single-attachment march targets.
+- **D7:** back batches draw before front batches (amended in the plan).
+- **D8:**
+  - Detection's error scope brackets only the synchronous `createShaderModule`, and detection is bounded (5 s).
+  - A failed front **pipeline** is caught by `earlyz/pipeline-watch.ts`, because three r186's `compileAsync` resolves
+    even when a pipeline fails. The type then degrades: `disableEarlyzFront` sends every instance to the shipped
+    back batch.
+- **Scope guards added in review:**
+  - early-Z is refused for the deferred route, `?accum=1` boots and a crowd-off boot;
+  - the depth prepass, miss cull and depth gate seams refuse to turn on while early-Z is on;
+  - `setBodies` lists the front meshes.
+- **Results and owner decisions:** see the dev note's Verdict. In short, the parity gate is red on pack/far from a
+  polygon-occluder fringe, which is an owner call; the default stays OFF; stage 2 is not opened.
