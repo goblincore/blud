@@ -2351,8 +2351,13 @@ async function main() {
     // NOT the per-type sync so the bench can attribute a cpu:draw climb.
     const setBodiesTiming = ctx.telemetry.telemetry.begin();
     ctx.render.sdfLayer.setBodies(
+      // EARLY-Z: a type's front-face twin is a body too. sdf-layer hides the `bodies` list for
+      // the 'split' chunks-only render and runs one pass per listed body under the depth gate; a
+      // front mesh left out of the list stayed visible there and the whole front batch marched
+      // again (34-45 ms per live chunk, 2026-10-02 cost run). Flag off: frontMesh is null and
+      // the list is unchanged.
       crowdMarch
-        ? ([...ctx.crowd.types.values()].map(t => t.mesh) as THREE.Object3D[])
+        ? ([...ctx.crowd.types.values()].flatMap(t => (t.frontMesh ? [t.mesh, t.frontMesh] : [t.mesh])) as THREE.Object3D[])
             .concat(ctx.render.visibleActors.filter(a => !a.crowd).map(a => a.view.object))
         : ctx.render.visibleActors.map(a => a.view.object),
       // GIBS DEGRADE (defer-compile task): the chunk/gib material is the only

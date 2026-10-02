@@ -36,6 +36,16 @@ describe('early-Z boot order in game-main.ts (source pins)', () => {
     expect(block).toContain('ctx.crowd.earlyz.on = false;');
   });
 
+  it('lists each crowd type\'s front mesh with its back mesh in setBodies', () => {
+    // sdf-layer hides the `bodies` list for the 'split' chunks-only render and gives each listed
+    // body its own pass under the depth gate. A front mesh missing from the list stayed visible
+    // in both, and the front batch marched again in sdf:march-chunks (2026-10-02 cost run).
+    const call = only('ctx.render.sdfLayer.setBodies(');
+    const crowdList = source.slice(call, source.indexOf('.concat(', call));
+    expect(crowdList).toContain('crowdMarch');
+    expect(crowdList).toContain('t.frontMesh ? [t.mesh, t.frontMesh] : [t.mesh]');
+  });
+
   it('draws the seed only for a crowd-march boot with early-Z on', () => {
     const line = source.slice(source.lastIndexOf('\n', seed) + 1, source.indexOf('\n', seed));
     expect(line).toContain('ctx.crowd.earlyz.on');
