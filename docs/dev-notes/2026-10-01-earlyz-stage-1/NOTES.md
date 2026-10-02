@@ -668,3 +668,156 @@ between repeats. The split-chunk cost was a wiring bug, now fixed. It drew the f
 
 **Raw outputs are not committed.** Each run wrote `passes.md`, `passes.json`, `bench.md`, `bench.json`, the logs and
 the load samples to a scratch `BENCH_OUT` outside the repository.
+
+## Boot time and final gates (Task 14)
+
+2026-10-02. All of it on the owner's Mac (headless Chrome 154, Metal), at a 1-min load of 4 or less at every start.
+
+### Cold boot, flag off vs on
+
+`node scripts/boot-time.mjs 5391 9391 'seed=20260918'` (flag off) and `... 'seed=20260918&earlyz=1'` (flag on). The script
+starts its own vite and headless Chrome with a FRESH Chrome profile each run and exits at the loader gate's `ready`. It
+prints `drawOnce` and `warmMs` only: **it does not expose the background crowd job** (`__warmDone.phases.backgroundDone`),
+which is where the front-face program compiles. The run order alternated (off, on, off, on).
+
+| run | flag | `uptime` at start | line |
+| --- | --- | --- | --- |
+| 1 | off | 2.56 2.46 2.84 | `{"drawOnce":1727.2,"warmMs":2661}` |
+| 2 | on | 3.29 2.62 2.89 | `{"drawOnce":1731.7,"warmMs":2647}` |
+| 3 | off | 3.91 2.87 2.98 | `{"drawOnce":1751.2,"warmMs":2661}` |
+| 4 | on | 3.67 2.77 2.94 | `{"drawOnce":1787.2,"warmMs":2660}` |
+
+- The first attempt at run 3 started at a load of 4.06 and read 1798.1 / 2689. It is out of the table by the plan's load
+  rule (wait for the load to drop) and was re-run at 3.91.
+- **Against the base branch** (`c484305c`, the tree before Task 1, extracted with `git archive` into a scratch directory
+  and run with the same script, alternating with the branch's flag-off boots):
+  - base `drawOnce` 1771.8 / 1789.0 / 1843.9 ms, `warmMs` 2688 / 2690 / 2790 (load 2.99 / 3.90 / 3.84);
+  - the branch with the flag off, six boots (runs 1 and 3, the discarded attempt, two interleaved extras at 3.31 / 3.99, and
+    the scratch variant below): `drawOnce` 1727-1820 ms, mean 1773; `warmMs` 2661-2769.
+  - Flag off is within run-to-run noise of the base (the branch is not slower: 1773 against 1802 ms mean).
+- **Flag on:** `drawOnce` 1731 / 1787 / 1731 ms (the third from the scratch variant), `warmMs` 2572-2660. No increase.
+- **These boots were warm.** A fresh Chrome profile does not empty the OS-level Metal shader cache, and `warmMs` of about
+  2.6 s shows the cache was hot. So boot-time.mjs did not reproduce the cold-compile case. The cold number is the smoke's
+  (Smoke, Timings): the front-face crowd program's compile is about 22-30 s, paid in the background crowd job after
+  `ready`, not behind the loader.
+- **The background crowd job**, from a scratch copy of the script that keeps waiting after `ready` (not committed; it also
+  prints `__warmDone.phases.backgroundDone`), at load 3.83 / 3.86, warm cache, ms from the warm-up's start:
+
+  | flag | `drawOnce` | `warmMs` | `backgroundDone` gib / crowd |
+  | --- | --- | --- | --- |
+  | off | 1745.6 | 2665 | 2873 / 3772 |
+  | on | 1730.8 | 2572 | 2779 / 4447 |
+
+  So with a warm cache the flag adds about 0.7 s to the background crowd job. Cold, the smoke measured the crowd job at
+  25.5 s and 25.6 s with the flag on (runs 1 and 3) against 3.3-3.6 s with it off, about +22 s for the front program, and in
+  run 7 (every program cold) 46.0 s off against 34.0 s on, which is cache churn, not the flag.
+- **What a player on a cold shader cache sees.** `ready` comes at the same time as without the flag. Until the crowd job
+  settles, the crowd draws on the per-body fallback, as it does today while the shipped crowd program compiles. With the
+  flag that window is about 22 s longer on a cold cache and 0.7 s longer on a warm one.
+
+### Flag-off gates, final
+
+- `timeout 600 npm test -- march-golden crowd-type earlyz game-context sdf-layer game-seams-render` (load 3.69): 18 files,
+  228 tests, **227 pass, 1 fails.**
+  - `march-golden` 2/2, `crowd-type` 21/21, `sdf-layer` 37/37, `game-context` 3/3, `game-seams-render.earlyz` 3/3 and
+    every `earlyz/*.test.ts` pass.
+  - The one failure is the pre-existing `scripts/game-context-coverage.test.ts` > `leaves ctx as the only state binding in
+    main()`, expecting `['ctx']` and getting `['ctx', 'actorFill', 'fleshSpawnRng']`: the same two names as at the
+    baseline, no third.
+  - **Main has since fixed it:** `d24a953d` moved both bindings onto ctx slices (merged as `f00400e7`). This branch is
+    based on `644aea34`, before that. A dry-run `git merge-tree` of main into this branch reports no conflicts, so the
+    failure clears when main is merged.
+- `march-hash.mjs` inside `lab-servers` (load 3.08): exit 0, identical to Task 0:
+  `{"room1":"d7392d5234c98ddc1babb3b29860abc3a02ced84","room1-repeat":"d7392d5234c98ddc1babb3b29860abc3a02ced84","room1-wounded":"76bd51aa6eb281297999463529a0b782ce2b67f6"}`.
+- `npx tsc --noEmit`: exactly one error, the pre-existing `src/lab/sdf-zombie/pack-golden.test.ts(11,28)` (`node:crypto`).
+
+## Verdict
+
+Stage 1 is built, flag-off is byte-identical (the golden and the hash did not move), and with `?earlyz=1` it removes
+13-21 ms from scenes where bodies hide behind a wall or each other. Whether to keep it rests on one owner look.
+
+### Owner decisions needed
+
+1. **The fringe.** Look at `look/doorway-zoom.png` and `look/doorway-seed-overlay-half.png` (the mesh skeleton's eyes),
+   `look/pack-zoom.png` (the shotgun's outline) and the other sheets, then choose from "Owner's call" above:
+   - **(a) accept** the 1-3 px fringe and gate on the evidence instead of the pixel count;
+   - **(b) keep the viewmodel and the mesh skeleton's eyes out of the seed's depth**, which removes the gun fringe and the
+     face blobs at the price of no early-Z under the gun or behind an eye (a code change, then parity and cost again);
+   - **(c) leave it red.** The plan's numeric gate stays red on `pack` (1071 px) and `far` (1118 px) against 1024.
+2. **The default.** `?earlyz=1` stays OFF until (1) is decided and the owner has looked at the sheets. Nothing in this
+   branch flips it.
+3. **Stage 2 (the built-once hull): yes or no.** The recommendation is no, for now (below).
+
+### Spec §8, criterion by criterion
+
+1. **Parity (only the edge fringe) and the owner passes the look sheet: OWNER-CALL.**
+   - By the evidence it is fringe only: no march texel went miss to hit in any scene (`newHit` 0); no diff pixel falls on an
+     interior seeded texel in any scene (5092 / 2044 / 581 / 95 / 779 interior texels, 0 diff pixels); same-flag boots give
+     a bit-identical march target. The extra pixels sit at polygon occluders: the shotgun, door jambs, chair slats, feet,
+     and the mesh skeleton's polygon eyes (proved by the procedural-skeleton A/B).
+   - The plan's numeric gate is **red on `pack` (1071 px) and `far` (1118 px) against 1024**. `melee` passes (152 px, for a
+     scene-specific reason). `doorway` (1168) and `train-doorway` (1221) are reported, not gated.
+   - Open: 0-31 unexplained pixels on the ring and 68 on the train (54 near boot noise), mechanism not shown. And the
+     owner has not looked at the sheets, so "passes the look sheet" is not yet true.
+2. **`sdf:march` at least 1 ms p50 better on an ordinary scene: PASS.**
+   - Doorway (ring, 12 bodies, 9 drawn): march p50 **-14.8 ms** (46.08 to 31.24), pf mean -13.3, frame p50 -13.5 (-27 %). Real
+     by the notes' rule (disjoint ranges in every run).
+   - Distance (16 bodies behind each other): march -20.7 ms, frame -21.2 (-20 %). Real.
+   - Caveat on "ordinary": both are staged scenes built to hide bodies. The one real recording, the room-1 demo, shows no
+     saving (below). The room grid (16 close bodies) and the native grid are suggestive wins (-7 and -15 ms of frame mean).
+3. **No regression above noise elsewhere: PASS as stated, with a suggestive cost.**
+   - No scene shows an established regression. Where nothing is hidden, the flag leans slower and the notes should not hide it:
+     - demo: march +0.26 ms per frame (suggestive), frame +0.8 p50 / +0.4 mean (suggestive); the march pass now runs on
+       every frame, so an empty frame costs about +0.05 ms instead of nothing;
+     - cast room 4: march +0.45 ms pf (+5 %), up in all three runs, p50 ranges overlap in one; room 2: +0.5 pf, frame
+       +5.5 p50 (suggestive, ranges 23-43 ms under load spikes); room 1 frame +1.4 (suggestive);
+     - train doorway: frame +3.2 p50 (suggestive) inside a 16-25 ms spread, march -0.4 (suggestive).
+   - So the cost where nothing is culled is plausibly small but not zero. It was not established, and not ruled out.
+4. **No hitch at melee range: PASS on correctness; a frame-time hitch was not benched.**
+   - The camera-inside body moves from the front to the back batch (`soldier@1` front 1 to 0, back 0 to 1), the camera is
+     inside the guarded box by 0.37-1.13 m per axis, no new GPU errors, device not lost (smoke). The `melee` parity scene shows the
+     body clean (152 px, 0 interior diff).
+   - The back batch is the shipped material, already compiled in the warm-up, so there is no compile hitch by construction.
+   - There is no melee bench scene; a per-frame spike at the front-to-back switch was not measured.
+5. **Cold-compile increase recorded: PASS (recorded).** Front program about 22-30 s on a cold shader cache, in the
+   background crowd job after `ready`; +0.7 s warm; `drawOnce` and `warmMs` unchanged (see Boot time above).
+
+### Stage-2 gate: NOT OPENED
+
+Stage 2 (built-once hull): **NOT OPENED.** Two reasons.
+- **Stage 1 does not yet "hold".** Criterion 1 is an owner call and the default is undecided.
+- **The passes data does not show the remaining cost is where the gate says.** From the passes reports of the runs of
+  record (raw files not committed; p50, control to early-Z):
+
+  | scene | `sdf:march` | march share of the labelled total | `sdf:shell-hull` |
+  | --- | --- | --- | --- |
+  | doorway | 46.08 to 31.24 | 95 % to 93 % | 0.18 to 0.17 |
+  | distance, 16 | 97.58 to 76.88 | 97 % to 96 % | 0.26 to 0.24 |
+  | room grid, 16 (run a / b) | 84.01 to 82.20 / 77.60 to 73.72 | 96 % to 96 % / 96 % to 95 % | 0.11 to 0.11 |
+  | native grid, 16 | 267.80 to 265.09 | 99 % | 0.14 to 0.14 |
+  | demo | pf mean 5.69 to 5.94 | n/a (n differs) | 1.17 to 1.18 |
+
+  - After stage 1 the march is still 93-99 % of the labelled GPU time in every crowd scene. It does not shrink where nothing
+    is hidden (the cast rooms). What is left is the march of what is on screen: walk on visible flesh plus any empty box,
+    which this data cannot split.
+  - **`sdf:shell-hull` is not the ~3.7 ms fixed pass the gate quotes:** 0.1-0.3 ms in the ring crowd scenes. Its label is
+    unreliable, though: it trades about 1.1-1.6 ms with `sdf:polys` between legs and runs (cast rooms 1, 4 and 5 read 1.1-1.4
+    ms as hull in one run and 0.06 in another), and in the train doorway the pair reads 4.65 + 0.42 in the control and
+    0.52 + 4.66 with the flag (sum 5.07 and 5.18). Read as a pair, `sdf:polys` + `sdf:shell-hull` is 1.2-1.7 ms in the
+    ring crowd scenes and about 5 ms on the train, where the control labels it `sdf:polys`, the level's polygons.
+  - **Empty-box pixels are not measured at all.** `__sdfGame.occupancy()` reads before the discard, so it cannot price
+    them (PASSOFF-2 section 2.1, `docs/tasks/rendering.md`). No scene here can say how much of the remaining march is
+    empty box.
+- **What would change the recommendation:** fix the occupancy reader (a post-discard hit flag), re-price the march on the
+  crowd grid, distance and native scenes after stage 1, and open stage 2 only if empty-box pixels are a large share of the
+  march that is left. Then the wording becomes "stage 2 (built-once hull): OPEN, needs the occupancy reader fix first
+  (PASSOFF-2 section 2.1)". That is a recommendation for the owner, not a decision.
+
+### Spun off
+
+- **`setUpscale()` loop race (page side).** On a booted page, `setUpscale()` pauses the rAF loop, precompiles and resumes
+  the loop in a `finally` that nothing awaits. If that lands after `bench()` has paused the loop, the loop runs next to the
+  stepped frames and `bench()` never returns (see Cost, harness change 3). `scripts/sdf-game-bench.mjs` waits for the loop
+  as a workaround; remove it once the page is fixed. Every upscale leg benched before 4b520325 ran with the race.
+- **`scripts/game-context-coverage.test.ts` bindings** (`actorFill`, `fleshSpawnRng`): fixed on main (`d24a953d`, merged
+  `f00400e7`); it clears when main is merged into this branch. No separate task needed.
