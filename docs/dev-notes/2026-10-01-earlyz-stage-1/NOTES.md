@@ -143,16 +143,19 @@ The pack behind the camera stayed `zombie@1 {front 6, back 0}`. `patchHits` stay
 
 ## Parity and look (Task 12)
 
-`EARLYZ_ON_NOISE=1 scripts/earlyz-run.sh parity` (`scripts/earlyz-parity.mjs`; headless Chrome 154.0.8037.93, Metal,
-warm shader cache, `uptime` load **1.43 1.78 2.23** at start, 2026-10-02). Per scene, fresh boots on one tab, staged
-the same way (`scripts/lib/earlyz-scenes.mjs`): `off`, `on` (`&earlyz=1`), `off2`, `on2`. The diff counts pixels whose
-max RGB difference is > 8 (the plan's `DIFF_LEVEL`). Output: [`look/`](look/).
+`LAB_TMP=.lab-tmp scripts/earlyz-run.sh parity` (`scripts/earlyz-parity.mjs`; headless Chrome 154.0.8037.93, Metal,
+warm shader cache). The run of record was taken after the code review of 93592141, at `uptime` load
+**2.06 1.65 1.76**, 2026-10-02. Per scene, four fresh boots on one tab, staged the same way
+(`scripts/lib/earlyz-scenes.mjs`): `off`, `on` (`&earlyz=1`), `off2`, `on2`. The diff counts pixels whose max RGB
+difference is > 8 (the plan's `DIFF_LEVEL`). Pixels that differ between two boots with the same flag (off vs off2, or
+on vs on2) are boot noise: they are masked out of the diff and counted separately (cyan in the sheets). Output:
+[`look/`](look/).
 
 **Result: the plan's gate FAILS on `pack` (1071 px) and `far` (1118 px) against 1024 px. `melee` passes (152 px).**
-Every other check passes (77 of 79). The extra pixels are the seed's upscaler fringe, not a seed bug. The fringe
-also appears at polygon occlusion edges the plan did not expect in the gated scenes: the shotgun in hand, the ring's
-door jambs, and feet in the floor. The gate was not loosened. Whether to accept this look is the owner's call (see
-"Owner's call" below).
+Every other check passes (107 of 109). The extra pixels are the seed's upscaler fringe at polygon occlusion edges the
+plan did not expect in the gated scenes: the shotgun in hand, the ring's door jambs, feet in the floor, and the mesh
+skeleton's polygon eyes. The gate was not loosened. Whether to accept this look is the owner's call (see "Owner's
+call" below).
 
 ### What the script does beyond the plan's sketch
 
@@ -174,117 +177,188 @@ door jambs, and feet in the floor. The gate was not loosened. Whether to accept 
   probe showed the screenshot is unchanged by that read).
   - off vs on, texel by texel: `seededOut` (hit -> miss), `changedHit`, `changedHitBig` (rgb moved > 0.03), `newHit`.
     `newHit` is a check and must be 0.
-  - Each diff pixel is then mapped back to its march texel through the canvas rect AND the fisheye lens
+  - The seeded-out texels are grouped into 8-connected **components** (size, bbox in march texels, interior count),
+    reported in `parity.json`. An **interior** texel is seeded with all 8 of its neighbours seeded.
+  - **Check: no diff pixel may map to an interior texel.** If the seed had removed visible flesh, the pixels over the
+    inside of that region would change. Components too thin to have an interior are not covered by this check; they
+    are listed below and were looked at.
+  - Each diff pixel is mapped back to its march texel through the canvas rect AND the fisheye lens
     (`fisheye.ts` `warpUv`). Without the lens the mapping is off by tens of pixels toward the edges.
-  - Each diff pixel is classified as **seed fringe** (within 24 screen px of a seeded-out texel: the t16 reach of 6.5
-    texels, through the 1.33x canvas scale and the lens), **march change**, or **unexplained**. This split is a
-    report, not a gate.
-- **Committed per scene:**
-  - `<scene>-off-on-diff-half.png`: off | on | red diff at half size (1920 x 400). The images are box-averaged; the
-    diff panel is max-pooled, so a 1 px fringe survives.
-  - `<scene>-zoom.png`: a 320 x 200 window round the densest red, 3x nearest-neighbour.
-  - `<scene>-seed-overlay-half.png`: the off frame with seeded-out texels tinted blue, and the diff coloured by cause:
-    red = seed fringe, yellow = march change, magenta = unexplained.
-  - `parity.json`.
-  - The full-size sheets (3840 x 800, ~1 MB each), the raw captures and the march floats go to `$LAB_TMP/earlyz-parity/`
-    and are not committed.
+  - Each diff pixel is then classified as **seed fringe** (counted within 6 and within 24 screen px of a seeded-out
+    texel), **march change**, or **unexplained**. This split is a report, not a gate. 24 px is the t16 upscaler's
+    reach of 6.5 texels, through the 1.33x canvas scale and the lens.
+- **Output and the copy rule.**
+  - A run writes everything to `$LAB_TMP/earlyz-parity/` (the work directory).
+  - Per scene:
+    - `<scene>-off-on-diff-half.png`: off | on | diff at half size, with a text strip giving the pixel count, max
+      diff, masked noise and fringe counts. The images are box-averaged; the diff panel is max-pooled, so a 1 px
+      fringe survives.
+    - `<scene>-zoom.png`: a 320 x 200 window round the densest red, 3x nearest-neighbour.
+    - `<scene>-seed-overlay-half.png`: the off frame with seeded-out texels tinted blue, and the diff coloured by
+      cause: red = seed fringe, yellow = march change, magenta = unexplained, cyan = masked noise.
+    - plus `parity.json`.
+  - `raw/` holds the full-size sheets, the captures, the march floats and the logs.
+  - Only a **complete run of record** copies the sheets, zooms, overlays and `parity.json` into `look/`. That means all
+    five scenes in order, no `EARLYZ_EXTRA_QUERY`, the default settle, the `on2` boots on, and a run that reached the
+    end. Every failed check must be one of the plan's parity gate checks; pack and far failing the gate is the result
+    the owner has to see, so it does not block the copy.
+  - Subset, A/B and aborted runs never touch `look/`. The copy removes the old committed files first.
+  - `EARLYZ_EXTRA_QUERY` appends a query to every boot, for A/B diagnostics (used below with `skeleton=procedural`).
 
 ### Numbers of record
 
 Noise floor: `pack` off vs off2 **0 px** (max diff 1), so the gate is max(2 x 0, 0.1 % of 1280 x 800) = **1024 px**.
-In every scene, both the off pair and the on pair have a **bit-identical march target** (120000 of 120000 texels).
+Within each scene, two boots with the same flag gave a **bit-identical march target** (all 120000 texels, both flag
+states).
 
-| scene | diff px | % | max | noise off/off2 | noise on/on2 | seed | batches (types drawn) | march seededOut / changedHit / big / newHit | seed fringe / march change / unexplained | gate |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| pack | **1071** | 0.105 | 115 | 0 | 0 | on, reason null | zombie@1 6F, soldier@1 1F, zombie@2 1F, zombie@4 1F | 5897 / 15097 / 4 / 0 | 1010 / 30 / 31 | **FAIL** |
-| doorway | 1168 | 0.114 | 84 | 0 | 0 | on, reason null | zombie@1 9F, zombie@2 2F | 2527 / 2641 / 4 / 0 | 1145 / 23 / 0 | reported |
-| train-doorway | 1272 | 0.124 | 85 | 193 (max 27) | 75 (max 20) | on, reason null | zombie@1 2F 1B, zombie@2 1F | 899 / 1032 / 0 / 0 | 1169 / 0 / 103 | reported |
-| melee | 152 | 0.015 | 60 | 0 | 0 | on, reason null | soldier@1 **1B** | 163 / 163 / 0 / 0 | 152 / 0 / 0 | PASS |
-| far | **1118** | 0.109 | 103 | 0 | 0 | on, reason null | zombie@1 16F, soldier@1 1F, zombie@2 1F, zombie@4 1F | 1077 / 11933 / 9 / 0 | 926 / 164 / 28 | **FAIL** |
+| scene | diff px (masked noise) | % | max | noise off/off2, on/on2 | seed | batches (types drawn) | march seededOut / changedHit / big / newHit | seeded components (largest sizes) | fringe <=6 / <=24 px | march change / unexplained | diff in seeded interior | gate |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| pack | **1071** (0) | 0.105 | 115 | 0, 0 | on, reason null | zombie@1 6F, soldier@1 1F, zombie@2 1F, zombie@4 1F | 5897 / 15097 / 4 / 0 | 5 (5216, 495, 164, 20, 2) | 923 / 1010 | 30 / 31 | **0** | **FAIL** |
+| doorway | 1168 (0) | 0.114 | 84 | 0, 0 | on, reason null | zombie@1 9F, zombie@2 2F | 2527 / 2641 / 4 / 0 | 7 (1546, 945, 26, 4, 3, 2, 1) | 1023 / 1145 | 23 / 0 | **0** | reported |
+| train-doorway | 1221 (27) | 0.119 | 85 | 126 (max 28), 157 (max 22) | on, reason null | zombie@1 2F 1B, zombie@2 1F | 899 / 1032 / 0 / 0 | 5 (659, 158, 51, 25, 6) | 1063 / 1153 | 0 / 68 | **0** | reported |
+| melee | 152 (0) | 0.015 | 60 | 0, 0 | on, reason null | soldier@1 **1B** | 163 / 163 / 0 / 0 | 1 (163) | 152 / 152 | 0 / 0 | **0** | PASS |
+| far | **1118** (0) | 0.109 | 103 | 0, 0 | on, reason null | zombie@1 16F, soldier@1 1F, zombie@2 1F, zombie@4 1F | 1077 / 11933 / 9 / 0 | 11 (897, 162, 3, 3, 3, 2, 2, 2, 1, 1, 1) | 875 / 926 | 164 / 28 | **0** | **FAIL** |
 
 (F = front batch, B = back batch.)
 
 - `patchHits` was 18-24 and `gpuErrors` was 0 in every flag-on boot.
-- Ready times were warm: 4.5-5.5 s on the ring and 7.9-9.5 s on the Night Train.
-- How far the seed-fringe pixels are from the nearest seeded-out pixel: in every scene, **79-98 % are within 4 screen
-  px**. The tail reaches up to 24 px along silhouettes.
-- `melee`: the near body's type `soldier@1` is in the back batch (`{front 0, back 1}`), as the plan expects.
+- Ready times were warm: 4.4-5.5 s on the ring and 7.5-9.1 s on the Night Train.
 - In both doorway scenes the seed drew, with `seed.reason` null.
+- `melee`: the near body's type `soldier@1` is in the back batch (`{front 0, back 1}`), as the plan expects.
+- **`melee` passes for a scene-specific reason.** The camera looks down at the floor, so the shotgun overlaps the body
+  only where its muzzle crosses one foot: a single component of 163 texels. It is not evidence that a gated scene with
+  the gun across a body would pass.
 
-### Why pack and far fail: the seed fringe at polygon occlusion edges
+**What the seed took (the components, bbox in march texels of 400 x 300):**
+- **pack:**
+  - 5216 [166-245, 189-299]: the shotgun over the pack.
+  - 495 [134-162, 247-278]: the hand and sleeve.
+  - 164 [292-304, 152-183]: a body in the next room behind the right doorway jamb.
+  - 20 [250-252, 239-247]: a thin strip at the gun's right barrel edge.
+  - 2 [79-80, 191]: the small figure in the left doorway.
+- **doorway:**
+  - 1546 [301-327, 143-229] and 945 [281-298, 144-218]: far-room bodies behind the tunnel's right jamb (invisible in
+    both frames).
+  - 26 [260-261, 177-196]: a gap between two bodies in the column, where level geometry is in front of a farther body.
+  - 4 [248-251, 207] and 1 [244, 214]: at the column's feet, on the floor.
+  - **3 [252-253, 148-149] and 2 [244, 148-149]: the eyes (see the next section).**
+- **train-doorway:**
+  - 659 [262-284, 146-189]: a body behind the right-hand door frame (invisible in both frames).
+  - 158, 51 and 25 [205-219, 184-217], and 6 [198-203, 183]: the chair-back slats in front of the visible body.
+- **melee:** 163 [208-227, 189-201]: the muzzle over the soldier's foot.
+- **far:**
+  - 897 [188-222, 189-237]: the shotgun.
+  - 162 [293-304, 152-183]: the body behind the right jamb.
+  - Nine 1-3-texel components at y 213-238: feet sinking into the floor.
+
+Per scene (pack / doorway / train-doorway / melee / far), 5092 / 2044 / 581 / 95 / 779 seeded texels are interior,
+and **no diff pixel falls on any of them in any scene**. The thin components (doorway's eyes, gap and specks; far's feet; pack's 2- and 20-texel ones)
+have no interior, so that check does not cover them. I mapped each one's centre to the screen through the lens and
+looked at it in the overlays and zooms.
+
+### The doorway "eye blobs": the mesh skeleton's polygon eyes
+
+The two thin components in the middle of the nearest heads ([252-253, 148-149] and [244, 148-149], every neighbour a
+hit) are behind the **polygon eyes of the mesh skeleton**.
+- **The code path.**
+  - Forward mode's default skeleton is the extracted mesh skeleton (`resolveSkeletonMode` -> `'mesh'`;
+    `skeleton-spike/mesh-renderer.ts`).
+  - Its seated eyes are instanced `SphereGeometry` with `depthWrite` on, on `FIELD_MESH_LAYER`.
+  - The bone-exposure cull keeps the eye-carrying segment for every body, wounded or not (`segmentNeeded`: `hasEyes`),
+    because by design the eyes show through intact flesh.
+  - `sdf-layer.ts` pass 1 renders `FIELD_MESH_LAYER` into post-aa's capture. That capture's depth is the seed's source
+    (spec D6), so wherever an eyeball covers a whole march texel, the seed removes the flesh texel behind it.
+- **The A/B.** `EARLYZ_SCENES=doorway EARLYZ_EXTRA_QUERY=skeleton=procedural` (procedural bones in the field; no mesh
+  eyes), same staging.
+  - The seeded components are identical except that **exactly those two head components are gone**: 5 components
+    (1546, 945, 26, 4, 1) instead of 7.
+  - The diff falls from 1168 to **979 px**, and the face blobs are gone: 197 diff px in a 120 x 50 crop round the heads
+    with the mesh skeleton, 11 with the procedural one.
+  - In the mesh-skeleton frames each near head shows a light, sclera-like patch beside the glowing pupil, in both off
+    and on. It is absent with the procedural skeleton, where the glow is painted in the march.
+- **So this is the seed fringe again, at the eyeball's edge, on a visible face.** No interior to check, but every
+  neighbour is flesh. The composite shows the eyeball there in both frames, and the diff (max 49, ~8 x 8 px) is the
+  upscaler around it. It is a design consequence of D6, not a seed bug. It is the case most likely to matter for the
+  look, because it is on faces at conversation distance.
+
+### Why pack and far fail
 
 - **The shotgun is in the seed.** Spec D6 takes the seed from post-aa's `sceneTarget.depthTexture`. That is the
-  polygonal pass's depth, and it includes the first-person weapon and hand. Wherever the gun covers a body over a whole
-  march texel, the seed takes the texel out (blue in the overlays: exactly the gun and hand silhouettes in `pack`,
-  `far` and `melee`).
-- The composite shows the gun there in both frames. But the upscaler (t16 plus the reconstruction, which borrows a
-  neighbour texel where its own texel is a miss) used to see hidden flesh under the gun and now sees `miss`. So the 1-3
-  px of flesh along the gun's silhouette change. That is spec §7's fringe on an edge the plan did not count. It is in
-  every scene where the gun overlaps a body.
-- The ring's room 1 also shows bodies in rooms 2 and 4 behind door jambs (blue strips in the `pack` and `far` overlays).
-  Feet that sink into the floor give a few texels too.
-- **Not a seed bug:**
-  - No texel went miss -> hit in any scene.
-  - Every seeded-out region lies under polygon geometry that is in front in the off frame (gun, hand, jambs, chair
-    slats, floor, and the unidentified polygon beside the doorway eyes).
-  - No vertically mirrored band: the overlays line up with the geometry through the lens, so the seed's uv origin is
-    right.
-  - The flag-on path is exactly as deterministic as the shipped path.
+  polygonal pass's depth, and it includes the first-person weapon and hand (and the mesh skeleton's eyes, above).
+  - Wherever the gun covers a body over a whole march texel, the seed removes the texel (the 5216 / 897 / 163
+    components).
+  - The composite shows the gun there in both frames. But the upscaler (t16, plus the reconstruction that borrows a
+    neighbour texel where its own texel is a miss) used to see hidden flesh under the gun and now sees `miss`. So the
+    flesh along the gun's outline changes.
+  - 79-98 % of the fringe pixels are within 4 screen px of a seeded texel; the tail reaches 24 px along silhouettes.
+- The ring's room 1 also shows bodies in rooms 2 and 4 behind door jambs, and feet that sink into the floor.
 - **A second, smaller source: the front-face path itself.**
   - With front batches, every hit texel moves at float level: rgb within 1e-3 for 99 % of texels, depth within 1e-6.
   - A handful of grazing silhouette texels hit a different surface (`changedHitBig`: 4 in `pack`, 4 in `doorway`, 9 in
     `far`, 0 in `melee` and the train). In `far` one crevice texel goes from dark red to a bright rim.
   - That is the "march change" column: 23-164 px.
   - `far` without it would be 954 px. That is under the gate, but only because it is shared with the gun fringe.
-- **Unexplained** is 0-31 px on the ring. These are isolated pixels on body silhouettes more than 24 px from any
-  seeded texel, with no march change > 1/255 within 12 texels. Example: `pack` at (926, 604), red channel off 144 vs
-  on 114.
-  - Not traced to a mechanism. FXAA's along-edge search (up to ~26 px each way) carrying a fringe change down a
-    silhouette is the likely route, but it is unproven: FXAA cannot be switched off to test it, because the seed needs
-    the post-aa capture.
-  - The train's 103 unexplained px are its boot noise. `off`/`off2` (193 px) and `on`/`on2` (75 px) differ in the same
-    place: thin posts in the dark carriage, plus the flail ball's residual. The march target is bit-identical there, so
-    the noise is in the polygonal pass. The cause was not traced.
+
+### What the checks show, and what they do not
+
+- No march texel went miss -> hit, in any scene: the flag added no content.
+- No diff pixel lies on an interior seeded texel, in any scene. Wherever the seed removed a block of texels, the image
+  over its inside is unchanged, so no visible body was culled there.
+- Thin components (1-2 texels across) are not covered by that check. Here they are the eyes, the doorway gap, specks,
+  feet and a strip at the gun's edge, and looking at them shows only fringe.
+- There is no vertically mirrored band: the overlays line up with the geometry through the lens, so the seed's uv
+  origin is right.
+- Two boots with the same flag give a bit-identical march target, flag on or off.
+- **Unexplained, 0-31 px on the ring: mechanism unknown.** These are isolated pixels on body silhouettes.
+  - Example: `pack` at (476, 433). The nearest seeded texel is **45 texels** away. The march target there differs
+    between off and on only at float level (1.5e-5 at the texel itself, at most 2.4e-3 within 5 texels: the front-face
+    path's change on every hit).
+  - Candidates, none tested:
+    - those float-level changes amplified by the t16 network or CAS at a high-contrast silhouette;
+    - a later pass that depends on depth content, which changes with the flag on. Post-aa's depth readers are the fire
+      volume, the flame tongues and SSCS; none should be active here (no fire; SSCS ships off), so this is unlikely;
+    - FXAA's along-edge search.
+  - Until one is shown, these pixels are an open question, not fringe.
+  - The train's 68 unexplained px sit in the region where its own boots differ (posts in the dark carriage); 27 more
+    were masked as noise.
 
 ### What I saw in each sheet
+
+Every sheet now carries its numbers in a strip along the top.
 
 - **pack.** Off and on look identical at half size, and also in the 3x zoom.
   - Red: a thin 1-3 px line tracing the shotgun's barrels and the hand/sleeve where they overlap the pack's legs and
     backs, plus the bead sight.
-  - A short run on the right-most zombie's right arm, next to the jamb of the right-hand doorway: a body in the next
-    room is behind it, blue in the overlay.
+  - A short run on the right-most zombie's right arm, next to the right doorway jamb (the 164-texel body behind it).
   - Two dots on the small figure in the left doorway.
   - No red on the open parts of the bodies, the floor or the walls.
-- **doorway.** Red along the tunnel's right jamb, where far-room bodies stand behind it (fully blue in the overlay,
-  invisible in both frames).
-  - A 2-3 px vertical line in a narrow gap between two bodies in the column. Level geometry shows through the gap in
-    front of a farther body; the seed took those texels out. The edge's light rim moves by ~1 px, which fits the
-    reconstruction borrowing the near body's texel where the far body's used to be (red channel along y=540, x=842-845: off 99 80 80 22,
-    on 91 21 21 20).
-  - Small blobs (~8 x 8 px, max 49) beside one eye of each of the two nearest heads. A few texels there were seeded
-    out (seen in an 8x scratch overlay), so polygon depth sits in front of the face over those texels. Which object it is was not
-    identified; the body bone tubes are off for living bodies.
+- **doorway.** Red along the tunnel's right jamb, which hides the far-room bodies (fully blue in the overlay, invisible
+  in both frames).
+  - A 2-3 px vertical line in the gap between two bodies in the column (the 26-texel component): level geometry is in
+    front of a farther body there. The edge's light rim moves by ~1 px (red channel along y=540, x=842-845: off
+    99 80 80 22, on 91 21 21 20).
+  - Blobs at the two nearest heads' eyes: the mesh eyes, above.
   - The open doorway, the tunnel and the rest of the bodies have no red.
 - **train-doorway.** Through the guards-van door, a body stands behind a slatted chair back. Red follows the edges of
   the chair slats across the body's legs, and the post beside them.
-  - A second body behind the right-hand door frame is fully seeded (blue) and invisible in both frames.
+  - The body behind the right-hand door frame is fully seeded and invisible in both frames.
   - The `van-guard` at bottom left (0.67 m, back batch) has no red.
-  - Scattered magenta dots in the dark carriage and on the flail ball are boot noise (above).
+  - A few cyan (masked noise) dots on the flail ball, and magenta dots in the dark carriage.
 - **melee.** The camera looks down at the soldier's legs. The only red is a thin arc where the shotgun's muzzle crosses
   the right foot (152 px). The body above it is clean.
-- **far.** Red along the shotgun's top and left edges where it covers the front rows, a few pixels at feet on the
-  floor, and yellow march-change blobs on a few heads and shoulders in the crowd (grazing hits).
+- **far.** Red along the shotgun's top and left edges where it covers the front rows, and a few pixels at feet on the
+  floor. Yellow march-change blobs on a few heads and shoulders in the crowd (grazing hits).
   - A blue strip behind the right-hand doorway jamb, with no visible red there.
   - The 16 bodies' open surfaces have no red.
 
 ### Owner's call (not decided here)
 
-1. **Accept the fringe** and restate the gate for the gated scenes as "no unexplained red beyond the noise". On this run
-   that version, with a tolerance of 0.01 % of the pixels (103 px), passes pack (31), melee (0) and far (28). This run
-   counts it but does not gate on it.
-2. **Keep the viewmodel out of the seed's depth** (and any other non-level polygon). That would remove the gun fringe
-   in every scene, at the cost of no early-Z under the gun.
+1. **Accept the fringe.** Treat the pixel count as a report, and gate instead on the evidence above: no miss -> hit,
+   no diff in a seeded interior (0 in every scene), the seeded components accounted for by occluding polygons. The
+   unexplained pixels are not part of that gate and should be explained first.
+2. **Keep non-level polygons out of the seed's depth**: the viewmodel, and the mesh skeleton's eyes. That would remove
+   the gun fringe in every scene and the face blobs, at the cost of no early-Z under the gun or behind an eye.
 3. **Leave it as is:** the plan's gate stays red on `pack` and `far` until 1 or 2 is chosen.
 
-The face blobs in `doorway` (polygon depth in front of flesh beside an eye) are the case most likely to matter for the
-look. They are worth a look at full size: `look/doorway-zoom.png` and `look/doorway-seed-overlay-half.png`.
+The face blobs (doorway, the mesh eyes) are the case most worth a look at full size: `look/doorway-zoom.png` and
+`look/doorway-seed-overlay-half.png`.

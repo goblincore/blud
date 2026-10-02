@@ -1,14 +1,16 @@
 // scripts/earlyz-parity.mjs — early-Z stage 1 parity + owner look sheet (plan 2026-10-01 Task 12).
-// Usage: scripts/earlyz-run.sh parity [outDir]   (EARLYZ_SCENES=pack,doorway to subset)
+// Usage: scripts/earlyz-run.sh parity [workDir]   (EARLYZ_SCENES=pack,doorway to subset)
 //
 // THE QUESTION: does `?earlyz=1` leave the PRESENTED frame unchanged? Per scene, three fresh boots
 // on one tab, staged identically (scripts/lib/earlyz-scenes.mjs):
 //   off   ?frozen=1&vhs=off&seed=20260918[&scene query]        the shipped image
 //   on    the same + &earlyz=1                                  the flag's image
 //   off2  the same as off                                       this scene's noise floor
-// on vs off is the parity diff and the owner sheet (off | on | red diff); off vs off2 is the
-// determinism floor of THIS scene, run after `on` so it brackets it. The gate floor is the plan's:
-// the PACK scene's off-vs-off pixel count (pack runs first, for the floor, even when not listed).
+//   on2   the same as on (EARLYZ_ON_NOISE=0 skips it)           the flag-on path's noise
+// on vs off is the parity diff and the owner sheet (off | on | red diff). Pixels that differ in
+// off vs off2 OR on vs on2 (boot noise) are MASKED out of it and counted apart (cyan in the
+// sheets). The gate floor is the plan's: the PACK scene's off-vs-off2 pixel count (pack runs
+// first, for the floor, even when not listed).
 //
 // GATE (plan Task 12, spec §7), unchanged from the plan: every scene but the two doorways within
 // max(2 x the pack floor, 0.1 % of the pixels) diff pixels. The doorways are REPORTED, not gated: at
@@ -17,8 +19,9 @@
 // is a bug; so is a vertically mirrored band of missing bodies (seed uv flipped, seed-depth.wgsl.ts).
 // The checks besides the gate: each boot staged the same pose, no page exceptions, no GPU errors,
 // the upscale stage on, the flag reads as asked, the seed DREW in every flag-on boot, no march texel
-// went miss -> hit under the flag, and in `melee` the near body's type sits in the back batch. Exit 0
-// only when every check passes.
+// went miss -> hit under the flag, NO DIFF PIXEL INSIDE A FULLY SEEDED 3x3 TEXEL NEIGHBOURHOOD (see
+// below), and in `melee` the near body's type sits in the back batch. Exit 0 only when every check
+// passes.
 //
 // WHY, NOT ONLY HOW MUCH. Each boot also reads the exact march target (readMarchTarget, after the
 // screenshot). off vs on, texel by texel: `seededOut` (hit -> miss: the seed took it), `changedHit`
@@ -26,6 +29,12 @@
 // Each presented diff pixel is then classified (classify(): seed fringe / march change /
 // unexplained, a report, not a gate) through the canvas rect and THE LENS (the presented canvas is
 // the capture warped by fisheye.ts, so a screen pixel is not where the march texel is).
+// WRONGLY CULLED BODIES. `newHit == 0` only proves the flag added nothing. The evidence that it
+// removed nothing visible: the seeded-out texels are grouped into 8-connected components (size,
+// bbox, interior), and no diff pixel may map to an INTERIOR texel (seeded, with all 8 neighbours
+// seeded). If the seed had taken out visible flesh, the presented pixels over the inside of that
+// region would change. A component too thin to have an interior (1-2 texels) is not covered by
+// this check; those are listed with their bbox so they can be looked at.
 //
 // DETERMINISM PINS, identical in every boot (the march-hash recipe, scripts/march-hash.mjs header):
 // the rAF loop stopped; the dynamic-light clock frozen AND set to 0 (lamp moods, fill, key); the
@@ -43,39 +52,66 @@
 // to rest, and post-aa's smear history converges (at 30 frames, melee showed a highlight on the
 // shotgun that 180 frames removed). The screenshot is taken only once two consecutive screenshots
 // 250 ms apart are byte-identical (a deferred render landing late cannot be captured).
-// EARLYZ_ON_NOISE=1 adds a second flag-on boot (on2) per scene: the flag-on path's own noise.
+// EARLYZ_EXTRA_QUERY (e.g. `skeleton=procedural`) is appended to EVERY boot's query: an A/B
+// diagnostic; such a run never touches the committed directory.
 //
-// OUTPUT. outDir (committed): <scene>-off-on-diff-half.png, the sheet at half size (1920 x 400:
-// off and on 2x2 box-averaged, the diff panel 2x2 MAX-pooled so a 1 px red fringe survives);
-// <scene>-zoom.png when the scene has diff pixels (a 320 x 200 window round the densest diff, 3x
-// nearest-neighbour, off | on | diff); <scene>-seed-overlay-half.png (the off frame, seeded-out
-// texels tinted blue, the diff coloured by cause: seed fringe red, march change yellow,
-// unexplained magenta); parity.json. $LAB_TMP/earlyz-parity (disposable): the full-size sheets
-// (3840 x 800), the raw captures and march floats, the march maps and the noise sheets.
+// OUTPUT. Everything goes to workDir (default $LAB_TMP/earlyz-parity, disposable):
+//   <scene>-off-on-diff-half.png  the sheet at half size (1920 x 400 + a text strip with the pixel
+//                                 count, max diff, masked noise and fringe counts): off and on 2x2
+//                                 box-averaged, the diff panel 2x2 MAX-pooled so a 1 px fringe
+//                                 survives (red = diff, cyan = masked boot noise);
+//   <scene>-zoom.png              a 320 x 200 window round the densest red, 3x nearest-neighbour;
+//   <scene>-seed-overlay-half.png the off frame, seeded-out texels tinted blue, the diff coloured by
+//                                 cause: seed fringe red, march change yellow, unexplained magenta,
+//                                 masked noise cyan;
+//   parity.json;
+//   raw/                          full-size sheets (3840 x 800), captures, march floats, march maps,
+//                                 noise sheets, console logs.
+// THE COMMITTED COPY (docs/dev-notes/2026-10-01-earlyz-stage-1/look/) is written ONLY by a complete
+// run of record: all five scenes in the default order, no EARLYZ_EXTRA_QUERY, the default settle,
+// on2 boots on, the run reached the end (no fail(), no watchdog), and every failed check is one of
+// the plan's parity GATE checks (today pack and far fail it on the seed fringe; that is the result
+// the owner has to see, so it does not block the copy). Any other failed check, any subset or A/B
+// run, and any aborted run leaves the committed directory untouched. The copy first removes the
+// committed sheets/zooms/overlays/parity.json, so a stale file cannot survive.
 //
 // BOUNDED (the earlyz-smoke patterns): a watchdog (EARLYZ_WATCHDOG_MIN, default 75) ends the run
 // whatever hangs, a loader gate that settles anything but 'ready' fails at once, and fail() gives
 // the page 10 s to answer its diagnostic read. A second CDP client collects the console per boot
-// into $LAB_TMP/earlyz-parity/<scene>-<boot>.console.log.
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+// into workDir/raw/<scene>-<boot>.console.log.
+import { copyFileSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { loadavg } from 'node:os';
 import { connectGame, bootCloseupPage, applyShipDefaults, sleep } from './lib/sdf-closeup-stage.mjs';
 import { decodePng } from './lib/demo-presented.mjs';
 import { writePng } from './lib/png-write.mjs';
 import { STAGES } from './lib/earlyz-scenes.mjs';
 
-const [, , VITE, CDP, OUT = 'docs/dev-notes/2026-10-01-earlyz-stage-1/look'] = process.argv;
+const [, , VITE, CDP, WORK_ARG] = process.argv;
 const TMP = process.env.LAB_TMP ?? '/tmp';
-const RAW = join(TMP, 'earlyz-parity');
-mkdirSync(OUT, { recursive: true });
+const WORK = WORK_ARG ?? join(TMP, 'earlyz-parity');
+const RAW = join(WORK, 'raw');
+const LOOK_DIR = 'docs/dev-notes/2026-10-01-earlyz-stage-1/look';
+if (resolve(WORK) === resolve(LOOK_DIR)) {
+  console.error(`earlyz-parity: workDir must not be the committed ${LOOK_DIR} (a run writes there only by the copy rule)`);
+  process.exit(2);
+}
 mkdirSync(RAW, { recursive: true });
-const SCENES = (process.env.EARLYZ_SCENES ?? 'pack,doorway,train-doorway,melee,far').split(',').filter(Boolean);
+const DEFAULT_SCENES = ['pack', 'doorway', 'train-doorway', 'melee', 'far'];
+const SCENES = (process.env.EARLYZ_SCENES ?? DEFAULT_SCENES.join(',')).split(',').filter(Boolean);
 for (const s of SCENES) if (!STAGES[s]) { console.error(`earlyz-parity: unknown scene '${s}' (have ${Object.keys(STAGES).join(', ')})`); process.exit(2); }
 const FLOOR_SCENE = 'pack';
 const DIFF_LEVEL = 8;
 const W = 1280, H = 800;
-const SETTLE_FRAMES = Number(process.env.EARLYZ_SETTLE_FRAMES ?? 180);
+const DEFAULT_SETTLE = 180;
+const SETTLE_FRAMES = Number(process.env.EARLYZ_SETTLE_FRAMES ?? DEFAULT_SETTLE);
+const EXTRA_QUERY = process.env.EARLYZ_EXTRA_QUERY ?? '';
+const ON_NOISE = process.env.EARLYZ_ON_NOISE !== '0';
+/** Why this run may NOT update the committed look/ (null = it may, if its checks allow). */
+const notOfRecord = SCENES.join(',') !== DEFAULT_SCENES.join(',') ? `scene subset ${SCENES.join(',')}`
+  : EXTRA_QUERY ? `EARLYZ_EXTRA_QUERY=${EXTRA_QUERY}`
+  : SETTLE_FRAMES !== DEFAULT_SETTLE ? `EARLYZ_SETTLE_FRAMES=${SETTLE_FRAMES}`
+  : !ON_NOISE ? 'EARLYZ_ON_NOISE=0' : null;
 const WATCHDOG_MIN = Number(process.env.EARLYZ_WATCHDOG_MIN ?? 75);
 const SEED = 20260918;
 
@@ -102,9 +138,10 @@ const exceptionsIn = (p) => (logs[p] ?? []).filter((l) => l.level === 'exception
 
 const report = {
   when: new Date().toISOString(), load: loadavg().map((x) => +x.toFixed(2)), diffLevel: DIFF_LEVEL,
-  settleFrames: SETTLE_FRAMES, seed: SEED, viewport: [W, H], rawDir: RAW, scenes: {}, checks: [],
+  settleFrames: SETTLE_FRAMES, seed: SEED, viewport: [W, H], extraQuery: EXTRA_QUERY || null, onNoise: ON_NOISE,
+  workDir: WORK, ofRecord: notOfRecord === null, scenes: {}, checks: [],
 };
-const writeReport = () => writeFileSync(join(OUT, 'parity.json'), JSON.stringify(report, null, 2));
+const writeReport = () => writeFileSync(join(WORK, 'parity.json'), JSON.stringify(report, null, 2));
 
 // Ref'd on purpose: it must fire even if every other handle is gone. Every exit path calls
 // process.exit, so it never holds a finished run open.
@@ -216,7 +253,7 @@ async function capture(scene, flagOn, boot) {
   phase = `${scene}-${boot}`;
   logs[phase] = [];
   const s = STAGES[scene];
-  const q = ['frozen=1', 'vhs=off', `seed=${SEED}`, s.query, flagOn ? 'earlyz=1' : ''].filter(Boolean).join('&');
+  const q = ['frozen=1', 'vhs=off', `seed=${SEED}`, s.query, EXTRA_QUERY, flagOn ? 'earlyz=1' : ''].filter(Boolean).join('&');
   const t0 = Date.now();
   const load = +loadavg()[0].toFixed(2);
   await bootCloseupPage({ send, evaluate, url: `http://localhost:${VITE}/sdf-game.html?${q}`, fail: die });
@@ -354,94 +391,211 @@ function screenDistance(mask, mw, mh, rect, lens, W, H, CAP = 255) {
   return dist;
 }
 
+
+/** The seeded-out texels as 8-connected components (the "what did the seed take" inventory), and
+ *  the INTERIOR mask: a seeded texel whose 8 neighbours are all seeded (off-target neighbours count
+ *  as not seeded). Components are sorted largest first; `top` keeps the 40 largest with size, bbox
+ *  [x0, y0, x1, y1] in march texels and interior count. */
+function seededComponents(march) {
+  const { w, h } = march;
+  const s = march.masks.seededMask;
+  const interior = new Uint8Array(w * h);
+  const at = (x, y) => (x >= 0 && y >= 0 && x < w && y < h ? s[y * w + x] : 0);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (!s[y * w + x]) continue;
+    let all = 1;
+    for (let dy = -1; dy <= 1 && all; dy++) for (let dx = -1; dx <= 1; dx++) if (!at(x + dx, y + dy)) { all = 0; break; }
+    interior[y * w + x] = all;
+  }
+  const label = new Int32Array(w * h).fill(-1);
+  const comps = [];
+  const stack = [];
+  for (let i = 0; i < w * h; i++) {
+    if (!s[i] || label[i] >= 0) continue;
+    const c = { size: 0, bbox: [w, h, -1, -1], interior: 0 };
+    label[i] = comps.length; stack.push(i);
+    while (stack.length) {
+      const j = stack.pop();
+      const x = j % w, y = (j - x) / w;
+      c.size++; c.interior += interior[j];
+      if (x < c.bbox[0]) c.bbox[0] = x; if (y < c.bbox[1]) c.bbox[1] = y;
+      if (x > c.bbox[2]) c.bbox[2] = x; if (y > c.bbox[3]) c.bbox[3] = y;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const X = x + dx, Y = y + dy;
+        if (X < 0 || Y < 0 || X >= w || Y >= h) continue;
+        const k = Y * w + X;
+        if (s[k] && label[k] < 0) { label[k] = comps.length; stack.push(k); }
+      }
+    }
+    comps.push(c);
+  }
+  comps.sort((a, b) => b.size - a.size);
+  const bins = { '1': 0, '2-4': 0, '5-16': 0, '17-64': 0, '65-256': 0, '>256': 0 };
+  for (const c of comps) bins[c.size === 1 ? '1' : c.size <= 4 ? '2-4' : c.size <= 16 ? '5-16' : c.size <= 64 ? '17-64' : c.size <= 256 ? '65-256' : '>256']++;
+  const r = { count: comps.length, interiorTexels: interior.reduce((n, v) => n + v, 0), sizeHist: bins, top: comps.slice(0, 40) };
+  Object.defineProperty(r, 'interior', { value: interior, enumerable: false });
+  return r;
+}
+
 /** Where the presented diff pixels are, relative to what moved in the march target. A REPORT, not a
- *  gate (the plan's gate is the pixel count below); it says where to look.
+ *  gate (the plan's gate is the pixel count; the interior check is separate); it says where to look.
+ *  Only the UNMASKED diff (boot noise taken out) is classified.
  *  - `seedFringe`: within FRINGE_PX screen px of a seeded-out texel (the upscaler and the post chain
  *    read that texel's neighbourhood: hidden flesh before, `miss` now). FRINGE_PX is the upscaler's
  *    own reach: t16 is 3x3 convs with dilations 1, 2, 1, 1 (radius 5 texels), the reconstruction
  *    borrows one neighbour and CAS reads a 3x3, about 6.5 texels = 13 canvas px; the canvas is drawn
  *    at 1.33x and the lens magnifies the centre up to 1.31x, so 13 canvas px is up to ~23 screen px.
- *    FXAA's along-edge search (up to ~26 px each way) can carry a change further along a silhouette;
- *    that is NOT counted, so such pixels land in `unexplained`.
+ *    `seedFringe6` is the same count at a tight 6 px (the 1-2 output-px fringe the spec expects).
  *  - `marchChange`: not seed fringe, but within FRINGE_PX of a texel that moved for another reason
  *    (a hit whose rgb moved by more than BIG, a new hit, a changed miss).
- *  - `unexplained`: neither. Red there is what to inspect first (spec: red inside an open doorway or
- *    on a fully visible body is a bug).
+ *  - `unexplained`: neither. MECHANISM UNKNOWN: on the ring these pixels sit far (45+ texels) from
+ *    any seeded texel where the march target moved only at float level. Candidates not yet tested:
+ *    a later pass that reads the capture DEPTH (which the composite writes from the march, so it
+ *    changes along the fringe) over a wide footprint, or FXAA's along-edge search. Red there is what
+ *    to inspect first (spec: red inside an open doorway or on a fully visible body is a bug).
+ *  - `insideInterior`: diff pixels whose march texel is an INTERIOR seeded texel (must be 0).
  *  `seedDistHist` bins the seed-fringe pixels by their distance to the nearest seeded-out pixel. */
 const FRINGE_PX = 24;
-/** The "why" picture, half size: the OFF frame with every pixel whose march texel the seed took out
- *  tinted BLUE, texels that moved for another reason ORANGE; the presented diff on top, max-pooled,
- *  by cause (classify): seed fringe RED, march change YELLOW, unexplained MAGENTA. */
-const CLASS_COL = [null, [255, 0, 0, 255], [255, 255, 0, 255], [255, 0, 255, 255]];
-function seedOverlayHalf(a, where, march, rect, lens) {
-  const { w, h } = a;
-  const hw = w >> 1, hh = h >> 1;
-  const out = new Uint8Array(hw * hh * 4);
-  const { seededMask, otherMask } = march.masks;
-  for (let y = 0; y < hh; y++) for (let x = 0; x < hw; x++) {
-    const o = (y * hw + x) * 4;
-    const taps = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([dx, dy]) => (2 * y + dy) * w + 2 * x + dx);
-    const k = Math.max(...taps.map((i) => where.cls[i]));
-    if (k) { out.set(CLASS_COL[k], o); continue; }
-    const col = [0, 1, 2].map((c) => (taps.reduce((n, i) => n + a.data[i * a.ch + c], 0) + 2) >> 2);
-    const t = screenToTexel(2 * x, 2 * y, rect, lens, march.w, march.h);
-    if (t >= 0 && seededMask[t]) out.set([col[0] >> 1, col[1] >> 1, Math.min(255, (col[2] >> 1) + 130), 255], o);
-    else if (t >= 0 && otherMask[t]) out.set([255, 150, 0, 255], o);
-    else out.set([...col, 255], o);
-  }
-  return writePng(hw, hh, out);
-}
-
-function classify(d, march, rect, lens, W, H) {
+const TIGHT_PX = 6;
+function classify(d, march, comps, rect, lens) {
   const sd = screenDistance(march.masks.seededMask, march.w, march.h, rect, lens, W, H);
   const od = screenDistance(march.masks.otherMask, march.w, march.h, rect, lens, W, H);
-  const BINS = [0, 1, 2, 3, 4, 6, 10, FRINGE_PX];
+  const BINS = [0, 1, 2, 3, 4, TIGHT_PX, 10, FRINGE_PX];
   const hist = Object.fromEntries(BINS.map((b) => [`<=${b}`, 0]));
-  const r = { fringePx: FRINGE_PX, seedFringe: 0, marchChange: 0, unexplained: 0, seedDistHist: hist, unexplainedBbox: null };
+  const r = { fringePx: FRINGE_PX, tightPx: TIGHT_PX, seedFringe: 0, seedFringe6: 0, marchChange: 0, unexplained: 0,
+    insideInterior: 0, insideInteriorAt: [], seedDistHist: hist, unexplainedBbox: null };
   const cls = new Uint8Array(W * H); // 1 seed fringe, 2 march change, 3 unexplained
   Object.defineProperty(r, 'cls', { value: cls, enumerable: false });
   let ux0 = W, uy0 = H, ux1 = -1, uy1 = -1;
   for (let i = 0; i < W * H; i++) {
-    if (!(d.image[i * 4] === 255 && d.image[i * 4 + 1] === 0)) continue;
-    if (sd[i] <= FRINGE_PX) { r.seedFringe++; cls[i] = 1; hist[`<=${BINS.find((b) => sd[i] <= b)}`]++; continue; }
+    if (!d.hot[i]) continue;
+    const x = i % W, y = (i - x) / W;
+    const t = screenToTexel(x, y, rect, lens, march.w, march.h);
+    if (t >= 0 && comps.interior[t]) { r.insideInterior++; if (r.insideInteriorAt.length < 20) r.insideInteriorAt.push([x, y]); }
+    if (sd[i] <= FRINGE_PX) {
+      r.seedFringe++; cls[i] = 1; hist[`<=${BINS.find((b) => sd[i] <= b)}`]++;
+      if (sd[i] <= TIGHT_PX) r.seedFringe6++;
+      continue;
+    }
     if (od[i] <= FRINGE_PX) { r.marchChange++; cls[i] = 2; continue; }
     r.unexplained++; cls[i] = 3;
-    const x = i % W, y = (i - x) / W;
     if (x < ux0) ux0 = x; if (x > ux1) ux1 = x; if (y < uy0) uy0 = y; if (y > uy1) uy1 = y;
   }
   if (r.unexplained) r.unexplainedBbox = [ux0, uy0, ux1, uy1];
   return r;
 }
 
-/** Max per-channel abs diff per pixel; red where it exceeds DIFF_LEVEL, dim grey (a's red) elsewhere.
- *  Also the diff's bounding box and an 8 x 5 grid of counts, so a reader can place the red. */
-function diff(a, b) {
+// ---- pixel diff --------------------------------------------------------------------------------
+/** Max per-channel abs diff per pixel (0..255). */
+function pixelDiff(a, b) {
   if (a.w !== b.w || a.h !== b.h) die(`size mismatch ${a.w}x${a.h} vs ${b.w}x${b.h}`);
+  const n = a.w * a.h;
+  const d = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    let m = 0;
+    for (let c = 0; c < 3; c++) m = Math.max(m, Math.abs(a.data[i * a.ch + c] - b.data[i * b.ch + c]));
+    d[i] = m;
+  }
+  return d;
+}
+
+/** Summarise a pixel diff against `a`. `mask` (optional, Uint8Array) marks boot-noise pixels: a hot
+ *  pixel under it is counted in `maskedPx`, drawn CYAN, and left out of px / max / bbox / grid. The
+ *  image: RED unmasked hot, CYAN masked hot, dim grey (a's red channel) elsewhere. `hot` is the
+ *  unmasked hot mask. Also the diff's bbox and an 8 x 5 grid of counts. */
+const RED = [255, 0, 0, 255], CYAN = [0, 170, 170, 255];
+function summarize(a, d, mask = null) {
   const { w, h } = a;
   const out = new Uint8Array(w * h * 4);
+  const hot = new Uint8Array(w * h);
   const GX = 8, GY = 5;
   const grid = Array.from({ length: GY }, () => new Array(GX).fill(0));
-  let px = 0, max = 0, sum = 0;
+  let px = 0, maskedPx = 0, max = 0, sum = 0;
   let bx0 = w, by0 = h, bx1 = -1, by1 = -1;
   for (let i = 0; i < w * h; i++) {
-    let d = 0;
-    for (let c = 0; c < 3; c++) d = Math.max(d, Math.abs(a.data[i * a.ch + c] - b.data[i * b.ch + c]));
-    sum += d;
-    if (d > max) max = d;
-    const hot = d > DIFF_LEVEL;
-    if (hot) {
-      px++;
+    const v = d[i];
+    const isHot = v > DIFF_LEVEL;
+    const masked = isHot && mask !== null && mask[i] === 1;
+    if (masked) { maskedPx++; out.set(CYAN, i * 4); continue; }
+    sum += v;
+    if (v > max) max = v;
+    if (isHot) {
+      px++; hot[i] = 1;
       const x = i % w, y = (i - x) / w;
       if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y;
       grid[Math.floor((y * GY) / h)][Math.floor((x * GX) / w)]++;
+      out.set(RED, i * 4);
+    } else {
+      const g = a.data[i * a.ch] >> 2;
+      out[i * 4] = g; out[i * 4 + 1] = g; out[i * 4 + 2] = g; out[i * 4 + 3] = 255;
     }
-    const g = a.data[i * a.ch] >> 2;
-    out.set(hot ? [255, 0, 0, 255] : [g, g, g, 255], i * 4);
   }
-  return { px, frac: px / (w * h), max, meanAbs: +(sum / (w * h)).toFixed(4),
-    bbox: px ? [bx0, by0, bx1, by1] : null, grid, image: out };
+  const r = { px, maskedPx, frac: px / (w * h), max, meanAbs: +(sum / (w * h)).toFixed(4),
+    bbox: px ? [bx0, by0, bx1, by1] : null, grid };
+  Object.defineProperty(r, 'image', { value: out, enumerable: false });
+  Object.defineProperty(r, 'hot', { value: hot, enumerable: false });
+  return r;
+}
+const hotMask = (d) => { const m = new Uint8Array(d.length); for (let i = 0; i < d.length; i++) m[i] = d[i] > DIFF_LEVEL ? 1 : 0; return m; };
+const isRed = (src, s) => src[s] === 255 && src[s + 1] === 0 && src[s + 2] === 0;
+const isCyan = (src, s) => src[s] === CYAN[0] && src[s + 1] === CYAN[1] && src[s + 2] === CYAN[2];
+
+// ---- a 5x7 bitmap font, so each sheet carries its own numbers (spec §7) -------------------------
+const GLYPHS = {
+  A: [' ### ', '#   #', '#   #', '#####', '#   #', '#   #', '#   #'], B: ['#### ', '#   #', '#   #', '#### ', '#   #', '#   #', '#### '],
+  C: [' ### ', '#   #', '#    ', '#    ', '#    ', '#   #', ' ### '], D: ['#### ', '#   #', '#   #', '#   #', '#   #', '#   #', '#### '],
+  E: ['#####', '#    ', '#    ', '#### ', '#    ', '#    ', '#####'], F: ['#####', '#    ', '#    ', '#### ', '#    ', '#    ', '#    '],
+  G: [' ### ', '#   #', '#    ', '# ###', '#   #', '#   #', ' ####'], H: ['#   #', '#   #', '#   #', '#####', '#   #', '#   #', '#   #'],
+  I: [' ### ', '  #  ', '  #  ', '  #  ', '  #  ', '  #  ', ' ### '], J: ['  ###', '   # ', '   # ', '   # ', '   # ', '#  # ', ' ##  '],
+  K: ['#   #', '#  # ', '# #  ', '##   ', '# #  ', '#  # ', '#   #'], L: ['#    ', '#    ', '#    ', '#    ', '#    ', '#    ', '#####'],
+  M: ['#   #', '## ##', '# # #', '# # #', '#   #', '#   #', '#   #'], N: ['#   #', '#   #', '##  #', '# # #', '#  ##', '#   #', '#   #'],
+  O: [' ### ', '#   #', '#   #', '#   #', '#   #', '#   #', ' ### '], P: ['#### ', '#   #', '#   #', '#### ', '#    ', '#    ', '#    '],
+  Q: [' ### ', '#   #', '#   #', '#   #', '# # #', '#  # ', ' ## #'], R: ['#### ', '#   #', '#   #', '#### ', '# #  ', '#  # ', '#   #'],
+  S: [' ####', '#    ', '#    ', ' ### ', '    #', '    #', '#### '], T: ['#####', '  #  ', '  #  ', '  #  ', '  #  ', '  #  ', '  #  '],
+  U: ['#   #', '#   #', '#   #', '#   #', '#   #', '#   #', ' ### '], V: ['#   #', '#   #', '#   #', '#   #', '#   #', ' # # ', '  #  '],
+  W: ['#   #', '#   #', '#   #', '# # #', '# # #', '# # #', ' # # '], X: ['#   #', '#   #', ' # # ', '  #  ', ' # # ', '#   #', '#   #'],
+  Y: ['#   #', '#   #', ' # # ', '  #  ', '  #  ', '  #  ', '  #  '], Z: ['#####', '    #', '   # ', '  #  ', ' #   ', '#    ', '#####'],
+  0: [' ### ', '#   #', '#  ##', '# # #', '##  #', '#   #', ' ### '], 1: ['  #  ', ' ##  ', '  #  ', '  #  ', '  #  ', '  #  ', ' ### '],
+  2: [' ### ', '#   #', '    #', '   # ', '  #  ', ' #   ', '#####'], 3: ['#####', '   # ', '  #  ', '   # ', '    #', '#   #', ' ### '],
+  4: ['   # ', '  ## ', ' # # ', '#  # ', '#####', '   # ', '   # '], 5: ['#####', '#    ', '#### ', '    #', '    #', '#   #', ' ### '],
+  6: ['  ## ', ' #   ', '#    ', '#### ', '#   #', '#   #', ' ### '], 7: ['#####', '    #', '   # ', '  #  ', ' #   ', ' #   ', ' #   '],
+  8: [' ### ', '#   #', '#   #', ' ### ', '#   #', '#   #', ' ### '], 9: [' ### ', '#   #', '#   #', ' ####', '    #', '   # ', ' ##  '],
+  '|': ['  #  ', '  #  ', '  #  ', '  #  ', '  #  ', '  #  ', '  #  '], '>': ['#    ', ' #   ', '  #  ', '   # ', '  #  ', ' #   ', '#    '],
+  '(': ['   # ', '  #  ', ' #   ', ' #   ', ' #   ', '  #  ', '   # '], ')': [' #   ', '  #  ', '   # ', '   # ', '   # ', '  #  ', ' #   '],
+  '%': ['##   ', '##  #', '   # ', '  #  ', ' #   ', '#  ##', '   ##'], '.': ['     ', '     ', '     ', '     ', '     ', ' ##  ', ' ##  '],
+  '-': ['     ', '     ', '     ', '#####', '     ', '     ', '     '], ':': ['     ', ' ##  ', ' ##  ', '     ', ' ##  ', ' ##  ', '     '],
+  '/': ['     ', '    #', '   # ', '  #  ', ' #   ', '#    ', '     '], '=': ['     ', '     ', '#####', '     ', '#####', '     ', '     '],
+  ',': ['     ', '     ', '     ', '     ', ' ##  ', '  #  ', ' #   '], '+': ['     ', '  #  ', '  #  ', '#####', '  #  ', '  #  ', '     '],
+};
+const STRIP_SCALE = 2, LINE_H = 7 * STRIP_SCALE + 6;
+/** `rgba` (w x h) with a dark strip on top carrying `text` (a string or an array of lines;
+ *  upper-cased; unknown characters are blank; a line too long for `w` is cut, so keep them short). */
+function withStrip(rgba, w, h, text) {
+  const lines = Array.isArray(text) ? text : [text];
+  const SH = lines.length * LINE_H + 4;
+  const out = new Uint8Array(w * (h + SH) * 4);
+  for (let i = 0; i < w * SH; i++) out.set([16, 16, 20, 255], i * 4);
+  out.set(rgba, w * SH * 4);
+  lines.forEach((line, li) => {
+    let cx = 6;
+    for (const ch of line.toUpperCase()) {
+      const g = GLYPHS[ch];
+      if (g) {
+        for (let gy = 0; gy < 7; gy++) for (let gx = 0; gx < 5; gx++) {
+          if (g[gy][gx] !== '#') continue;
+          for (let sy = 0; sy < STRIP_SCALE; sy++) for (let sx = 0; sx < STRIP_SCALE; sx++) {
+            const x = cx + gx * STRIP_SCALE + sx, y = 4 + li * LINE_H + gy * STRIP_SCALE + sy;
+            if (x < w) out.set([235, 235, 235, 255], (y * w + x) * 4);
+          }
+        }
+      }
+      cx += 6 * STRIP_SCALE;
+    }
+  });
+  return { rgba: out, w, h: h + SH };
 }
 
+// ---- sheets ------------------------------------------------------------------------------------
 /** RGBA panel accessor over a decoded capture (3 or 4 channels) or a diff image (4). */
 const panel = (src, ch) => ({ src, ch });
 
@@ -462,8 +616,9 @@ function sheetFull(a, b, d) {
   return writePng(w * 3, h, out);
 }
 
-/** The same sheet at half size: images 2x2 box-averaged, the diff 2x2 max-pooled (red wins). */
-function sheetHalf(a, b, d) {
+/** The same sheet at half size with a text strip: images 2x2 box-averaged, the diff 2x2 max-pooled
+ *  (red wins, then cyan). */
+function sheetHalf(a, b, d, text) {
   const { w, h } = a;
   const hw = w >> 1, hh = h >> 1;
   const panels = [panel(a.data, a.ch), panel(b.data, b.ch), panel(d.image, 4)];
@@ -474,28 +629,29 @@ function sheetHalf(a, b, d) {
       for (let x = 0; x < hw; x++) {
         const o = (y * hw * 3 + k * hw + x) * 4;
         const taps = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([dx, dy]) => ((2 * y + dy) * w + 2 * x + dx) * ch);
-        if (k === 2 && taps.some((s) => src[s] === 255 && src[s + 1] === 0)) { out.set([255, 0, 0, 255], o); continue; }
+        if (k === 2 && taps.some((s) => isRed(src, s))) { out.set(RED, o); continue; }
+        if (k === 2 && taps.some((s) => isCyan(src, s))) { out.set(CYAN, o); continue; }
         for (let c = 0; c < 3; c++) out[o + c] = (taps.reduce((n, s) => n + src[s + c], 0) + 2) >> 2;
         out[o + 3] = 255;
       }
     }
   }
-  return writePng(hw * 3, hh, out);
+  const s = withStrip(out, hw * 3, hh, text);
+  return writePng(s.w, s.h, s.rgba);
 }
 
-/** A ZW x ZH window centred on the densest diff (by a coarse count), ZOOM x nearest, off | on | diff. */
-function zoomSheet(a, b, d) {
+/** A ZW x ZH window centred on the densest red (by a coarse count), ZOOM x nearest, off | on | diff. */
+function zoomSheet(a, b, d, scene) {
   const ZW = 320, ZH = 200, ZOOM = 3, CELL = 40;
   const { w, h } = a;
   const cw = Math.ceil(w / CELL), chh = Math.ceil(h / CELL);
   const counts = new Array(cw * chh).fill(0);
   for (let i = 0; i < w * h; i++) {
-    if (d.image[i * 4] === 255 && d.image[i * 4 + 1] === 0) {
+    if (d.hot[i]) {
       const x = i % w, y = (i - x) / w;
       counts[Math.floor(y / CELL) * cw + Math.floor(x / CELL)]++;
     }
   }
-  // Densest ZW x ZH window over the cell grid.
   const nx = ZW / CELL, ny = ZH / CELL;
   let best = -1, bx = 0, by = 0;
   for (let cy = 0; cy + ny <= chh; cy++) {
@@ -519,84 +675,149 @@ function zoomSheet(a, b, d) {
       }
     }
   }
-  return { png: writePng(OW * 3, OH, out), window: [x0, y0, ZW, ZH], redInWindow: best };
+  const sw = withStrip(out, OW * 3, OH, `${scene} zoom 3x: window x ${x0} y ${y0} ${ZW}x${ZH} px, ${best} red px in it   off | on | diff`);
+  return { png: writePng(sw.w, sw.h, sw.rgba), window: [x0, y0, ZW, ZH], redInWindow: best };
 }
 
-const strip = ({ image, ...r }) => r;
-const check = (name, ok) => { report.checks.push({ name, ok }); return ok; };
+/** The "why" picture, half size: the OFF frame with every pixel whose march texel the seed took out
+ *  tinted BLUE, texels that moved for another reason ORANGE; the diff on top, max-pooled, by cause
+ *  (classify): seed fringe RED, march change YELLOW, unexplained MAGENTA; masked boot noise CYAN. */
+const CLASS_COL = [null, RED, [255, 255, 0, 255], [255, 0, 255, 255]];
+function seedOverlayHalf(a, d, where, march, rect, lens, scene) {
+  const { w, h } = a;
+  const hw = w >> 1, hh = h >> 1;
+  const out = new Uint8Array(hw * hh * 4);
+  const { seededMask, otherMask } = march.masks;
+  for (let y = 0; y < hh; y++) for (let x = 0; x < hw; x++) {
+    const o = (y * hw + x) * 4;
+    const taps = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([dx, dy]) => (2 * y + dy) * w + 2 * x + dx);
+    const k = Math.max(...taps.map((i) => where.cls[i]));
+    if (k) { out.set(CLASS_COL[k], o); continue; }
+    if (taps.some((i) => isCyan(d.image, i * 4))) { out.set(CYAN, o); continue; }
+    const col = [0, 1, 2].map((c) => (taps.reduce((n, i) => n + a.data[i * a.ch + c], 0) + 2) >> 2);
+    const t = screenToTexel(2 * x, 2 * y, rect, lens, march.w, march.h);
+    if (t >= 0 && seededMask[t]) out.set([col[0] >> 1, col[1] >> 1, Math.min(255, (col[2] >> 1) + 130), 255], o);
+    else if (t >= 0 && otherMask[t]) out.set([255, 150, 0, 255], o);
+    else out.set([...col, 255], o);
+  }
+  const s = withStrip(out, hw, hh, [`${scene}: seeded texels blue, fringe red`, 'march change yellow, unexpl. magenta', 'masked boot noise cyan']);
+  return writePng(s.w, s.h, s.rgba);
+}
+
+const check = (name, ok, opts = {}) => { report.checks.push({ name, ok, ...(opts.gate ? { gate: true } : {}) }); return ok; };
 const samePose = (p, q) => p && q && p.pos.every((v, i) => Math.abs(v - q.pos[i]) < 1e-4)
   && Math.abs(p.yaw - q.yaw) < 1e-5 && Math.abs(p.pitch - q.pitch) < 1e-5;
+/** The files of one scene that the committed look/ carries. */
+const lookFiles = (scene) => [`${scene}-off-on-diff-half.png`, `${scene}-zoom.png`, `${scene}-seed-overlay-half.png`];
 
-/** One scene: off, on, off2; the sheets; the per-boot checks. */
+/** One scene: off, on, off2, on2; the noise mask; the sheets; the per-boot checks. */
 async function runScene(scene, { floorOnly = false } = {}) {
   console.log(`--- ${scene}${floorOnly ? ' (noise floor only)' : ''} ---`);
   const off = await capture(scene, false, 'off');
   const on = floorOnly ? null : await capture(scene, true, 'on');
   const off2 = await capture(scene, false, 'off2');
-  // EARLYZ_ON_NOISE=1: a second flag-on boot, so the flag-on path's own boot-to-boot noise is on
-  // record too (diagnostic; not part of the gate).
-  const on2 = !floorOnly && process.env.EARLYZ_ON_NOISE === '1' ? await capture(scene, true, 'on2') : null;
-  const floor = diff(off.img, off2.img);
+  const on2 = !floorOnly && ON_NOISE ? await capture(scene, true, 'on2') : null;
+  const dOff = pixelDiff(off.img, off2.img);
+  const floor = summarize(off.img, dOff);
   writeFileSync(join(RAW, `${scene}-noise-sheet.png`), sheetFull(off.img, off2.img, floor));
   const marchNoise = marchDiff(off.march, off2.march, join(RAW, `${scene}-noise-march.png`));
-  const row = { noise: strip(floor), marchNoise, boots: { off: off.rec, off2: off2.rec } };
-  console.log(`  noise floor (off vs off2): ${floor.px} px (${(floor.frac * 100).toFixed(3)} %), max ${floor.max}, bbox ${JSON.stringify(floor.bbox)}; march ${JSON.stringify(marchNoise)}`);
+  const row = { noise: floor, marchNoise, boots: { off: off.rec, off2: off2.rec } };
+  console.log(`  noise floor (off vs off2): ${floor.px} px (${(floor.frac * 100).toFixed(3)} %), max ${floor.max}, bbox ${JSON.stringify(floor.bbox)}; march same ${marchNoise.same}/${marchNoise.w * marchNoise.h}`);
+  // Boot noise: a pixel that changed between two boots of the SAME flag is not the flag's doing.
+  const noiseMask = hotMask(dOff);
+  let dOn = null;
   if (on2) {
-    const n2 = diff(on.img, on2.img);
+    dOn = pixelDiff(on.img, on2.img);
+    const n2 = summarize(on.img, dOn);
     writeFileSync(join(RAW, `${scene}-on-noise-sheet.png`), sheetFull(on.img, on2.img, n2));
-    row.onNoise = strip(n2);
+    row.onNoise = n2;
     row.onMarchNoise = marchDiff(on.march, on2.march, join(RAW, `${scene}-on-noise-march.png`));
     row.boots.on2 = on2.rec;
-    console.log(`  flag-on noise (on vs on2): ${n2.px} px, max ${n2.max}, bbox ${JSON.stringify(n2.bbox)}; march ${JSON.stringify(row.onMarchNoise)}`);
+    for (let i = 0; i < dOn.length; i++) if (dOn[i] > DIFF_LEVEL) noiseMask[i] = 1;
+    console.log(`  flag-on noise (on vs on2): ${n2.px} px, max ${n2.max}, bbox ${JSON.stringify(n2.bbox)}; march same ${row.onMarchNoise.same}/${row.onMarchNoise.w * row.onMarchNoise.h}`);
   }
-  for (const [name, b] of [['off', off], ['off2', off2], ...(on ? [['on', on]] : [])]) {
+  const boots = [['off', off], ['off2', off2], ...(on ? [['on', on]] : []), ...(on2 ? [['on2', on2]] : [])];
+  for (const [name, b] of boots) {
     check(`[${scene}/${name}] no page exceptions (${b.rec.exceptions.length})`, b.rec.exceptions.length === 0);
     check(`[${scene}/${name}] GPU device not lost, 0 uncaptured errors`, b.rec.gpu.lost === null && b.rec.gpu.uncapturedCount === 0);
     check(`[${scene}/${name}] upscale stage on (the shipped path)`, b.rec.upscale === true);
+    check(`[${scene}/${name}] staged the same pose as off`, samePose(off.rec.pose, b.rec.pose));
   }
   check(`[${scene}] off boots: flag off, nothing patched`, [off, off2].every((b) => b.rec.earlyz.flag === false && b.rec.earlyz.patchHits === 0));
-  check(`[${scene}] off and off2 staged the same pose`, samePose(off.rec.pose, off2.rec.pose));
   if (on) {
     row.boots.on = on.rec;
-    const d = diff(off.img, on.img);
-    row.parity = strip(d);
+    const d = summarize(off.img, pixelDiff(off.img, on.img), noiseMask);
+    row.parity = d;
     row.march = marchDiff(off.march, on.march, join(RAW, `${scene}-off-on-march.png`));
-    row.where = classify(d, row.march, off.rec.canvas.rect, off.rec.lens, W, H);
-    writeFileSync(join(OUT, `${scene}-seed-overlay-half.png`), seedOverlayHalf(off.img, row.where, row.march, off.rec.canvas.rect, off.rec.lens));
+    const comps = seededComponents(row.march);
+    row.seeded = comps;
+    row.where = classify(d, row.march, comps, off.rec.canvas.rect, off.rec.lens);
+    writeFileSync(join(WORK, `${scene}-seed-overlay-half.png`), seedOverlayHalf(off.img, d, row.where, row.march, off.rec.canvas.rect, off.rec.lens, scene));
     console.log(`  march off vs on: ${JSON.stringify(row.march)}`);
+    console.log(`  seeded components: ${comps.count} (interior texels ${comps.interiorTexels}), sizes ${JSON.stringify(comps.sizeHist)}, largest ${JSON.stringify(comps.top.slice(0, 6))}`);
     console.log(`  diff px by cause: ${JSON.stringify(row.where)}`);
     check(`[${scene}] no march texel went miss -> hit under the flag (${row.march.newHit})`, row.march.newHit === 0);
+    check(`[${scene}] no diff pixel inside a fully seeded 3x3 texel neighbourhood (${row.where.insideInterior})`, row.where.insideInterior === 0);
     writeFileSync(join(RAW, `${scene}-off-on-diff.png`), sheetFull(off.img, on.img, d));
-    writeFileSync(join(OUT, `${scene}-off-on-diff-half.png`), sheetHalf(off.img, on.img, d));
+    const label = `${scene}  off | on | diff>${DIFF_LEVEL}   ${d.px} px (${(d.frac * 100).toFixed(3)}%)  max ${d.max}`
+      + `   noise-masked ${d.maskedPx} px   seed fringe ${row.where.seedFringe6} within ${TIGHT_PX}px, ${row.where.seedFringe} within ${FRINGE_PX}px`
+      + `   march ${row.where.marchChange}  unexpl. ${row.where.unexplained}`;
+    writeFileSync(join(WORK, `${scene}-off-on-diff-half.png`), sheetHalf(off.img, on.img, d, label));
     if (d.px > 0) {
-      const z = zoomSheet(off.img, on.img, d);
-      writeFileSync(join(OUT, `${scene}-zoom.png`), z.png);
+      const z = zoomSheet(off.img, on.img, d, scene);
+      writeFileSync(join(WORK, `${scene}-zoom.png`), z.png);
       row.zoom = { window: z.window, redInWindow: z.redInWindow, scale: 3 };
+    } else {
+      rmSync(join(WORK, `${scene}-zoom.png`), { force: true });
     }
     const e = on.rec.earlyz;
     check(`[${scene}/on] flag on, patched + detected`, e.flag === true && e.on === true && e.patchHits > 0);
     check(`[${scene}/on] seed drew (seed.on ${e.seed.on}, reason ${JSON.stringify(e.seed.reason)})`, e.seed.on === true);
-    check(`[${scene}] off and on staged the same pose`, samePose(off.rec.pose, on.rec.pose));
     if (scene === 'melee') {
       const b = on.rec.nearType ? e.batches[on.rec.nearType] : null;
       check(`[melee/on] the near body's type (${on.rec.nearType}) is in the back batch (${JSON.stringify(b)})`, !!b && b.back >= 1);
     }
-    console.log(`  ${scene.padEnd(14)} diff px ${d.px} (${(d.frac * 100).toFixed(3)} %) max ${d.max} bbox ${JSON.stringify(d.bbox)}`
+    console.log(`  ${scene.padEnd(14)} diff px ${d.px} (${(d.frac * 100).toFixed(3)} %) max ${d.max} masked ${d.maskedPx} bbox ${JSON.stringify(d.bbox)}`
       + ` seed ${e.seed.on} ${e.seed.reason ?? ''} batches ${JSON.stringify(e.batches)}`);
   }
   report.scenes[scene] = row;
   writeReport();
 }
 
+/** The copy rule (header): only a complete run of record whose only failures are gate checks. */
+function copyToLook() {
+  const failed = report.checks.filter((c) => !c.ok);
+  const blocking = failed.filter((c) => !c.gate);
+  const why = notOfRecord ?? (blocking.length ? `${blocking.length} non-gate check(s) failed` : null);
+  if (why) {
+    report.committedCopy = { done: false, reason: why };
+    console.log(`committed ${LOOK_DIR}/ NOT touched: ${why}`);
+    return;
+  }
+  mkdirSync(LOOK_DIR, { recursive: true });
+  const owned = /(-off-on-diff-half|-zoom|-seed-overlay-half)\.png$|^parity\.json$/;
+  for (const f of readdirSync(LOOK_DIR)) if (owned.test(f)) rmSync(join(LOOK_DIR, f));
+  const files = [];
+  for (const scene of SCENES) for (const f of lookFiles(scene)) {
+    try { copyFileSync(join(WORK, f), join(LOOK_DIR, f)); files.push(f); } catch { /* no zoom: no diff */ }
+  }
+  report.committedCopy = { done: true, to: LOOK_DIR, files: [...files, 'parity.json'], gateFailures: failed.map((c) => c.name) };
+  writeReport();
+  copyFileSync(join(WORK, 'parity.json'), join(LOOK_DIR, 'parity.json'));
+  console.log(`committed ${LOOK_DIR}/ updated: ${files.length + 1} files`);
+}
+
 try {
-  console.log(`earlyz-parity: scenes ${SCENES.join(',')}, settle ${SETTLE_FRAMES} frames, load ${report.load.join(' ')}`);
+  console.log(`earlyz-parity: scenes ${SCENES.join(',')}, settle ${SETTLE_FRAMES} frames, on2 ${ON_NOISE}, extra query '${EXTRA_QUERY}', load ${report.load.join(' ')}`);
+  console.log(notOfRecord ? `not a run of record (${notOfRecord}): ${LOOK_DIR}/ will not be touched` : `run of record: ${LOOK_DIR}/ is updated at the end if only gate checks fail`);
   if (!SCENES.includes(FLOOR_SCENE)) await runScene(FLOOR_SCENE, { floorOnly: true });
   for (const scene of SCENES) await runScene(scene);
 } catch (e) {
   await fail(e?.message ?? String(e));
 }
 
-// The gate (plan Task 12): every scene but the doorways within max(2 x the pack floor, 0.1 %).
+// The gate (plan Task 12): every scene but the doorways within max(2 x the pack floor, 0.1 %), on
+// the noise-masked diff.
 const packFloor = report.scenes[FLOOR_SCENE].noise.px;
 const floor = Math.max(2 * packFloor, 0.001 * W * H);
 report.noiseFloor = { scene: FLOOR_SCENE, px: packFloor, gatePx: floor };
@@ -606,13 +827,15 @@ for (const [scene, r] of Object.entries(report.scenes)) {
   if (!r.parity) continue;
   const gated = !scene.includes('doorway');
   const ok = !gated || r.parity.px <= floor;
-  if (gated) check(`[${scene}] parity: ${r.parity.px} px <= ${floor} px`, ok);
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${scene}${gated ? '' : ' (reported only)'}  ${r.parity.px} px vs floor ${floor}  (own noise ${r.noise.px} px;`
-    + ` seed fringe ${r.where.seedFringe}, march change ${r.where.marchChange}, unexplained ${r.where.unexplained})`);
+  if (gated) check(`[${scene}] parity: ${r.parity.px} px <= ${floor} px`, ok, { gate: true });
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${scene}${gated ? '' : ' (reported only)'}  ${r.parity.px} px vs floor ${floor}  (masked noise ${r.parity.maskedPx} px;`
+    + ` seed fringe ${r.where.seedFringe6} @${TIGHT_PX} / ${r.where.seedFringe} @${FRINGE_PX}, march change ${r.where.marchChange}, unexplained ${r.where.unexplained},`
+    + ` inside seeded interior ${r.where.insideInterior}; seeded components ${r.seeded.count})`);
 }
 let bad = 0;
-for (const c of report.checks) { if (!c.ok) { bad++; console.log(`FAIL  ${c.name}`); } }
+for (const c of report.checks) { if (!c.ok) { bad++; console.log(`FAIL  ${c.name}${c.gate ? ' (gate)' : ''}`); } }
 console.log(`${report.checks.length - bad}/${report.checks.length} checks pass`);
 writeReport();
+copyToLook();
 cws.close();
 process.exit(bad ? 1 : 0);

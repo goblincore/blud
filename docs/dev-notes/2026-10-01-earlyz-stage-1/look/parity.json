@@ -1,9 +1,9 @@
 {
-  "when": "2026-10-02T06:42:56.535Z",
+  "when": "2026-10-02T07:13:56.422Z",
   "load": [
-    1.43,
-    1.78,
-    2.23
+    2.06,
+    1.65,
+    1.76
   ],
   "diffLevel": 8,
   "settleFrames": 180,
@@ -12,14 +12,18 @@
     1280,
     800
   ],
-  "rawDir": ".lab-tmp/earlyz-parity",
+  "extraQuery": null,
+  "onNoise": true,
+  "workDir": ".lab-tmp/earlyz-parity",
+  "ofRecord": true,
   "scenes": {
     "pack": {
       "noise": {
         "px": 0,
+        "maskedPx": 0,
         "frac": 0,
         "max": 1,
-        "meanAbs": 0.0012,
+        "meanAbs": 0,
         "bbox": null,
         "grid": [
           [
@@ -89,8 +93,8 @@
       "boots": {
         "off": {
           "query": "frozen=1&vhs=off&seed=20260918",
-          "readyMs": 4830,
-          "load": 1.43,
+          "readyMs": 5318,
+          "load": 2.06,
           "ship": {
             "sdfScale": 0.5,
             "upscale": true
@@ -214,15 +218,15 @@
           },
           "exceptions": [],
           "console": {
-            "file": ".lab-tmp/earlyz-parity/pack-off.console.log",
+            "file": ".lab-tmp/earlyz-parity/raw/pack-off.console.log",
             "lines": 43,
             "loud": 4
           }
         },
         "off2": {
           "query": "frozen=1&vhs=off&seed=20260918",
-          "readyMs": 4920,
-          "load": 1.59,
+          "readyMs": 4846,
+          "load": 1.82,
           "ship": {
             "sdfScale": 0.5,
             "upscale": true
@@ -346,15 +350,15 @@
           },
           "exceptions": [],
           "console": {
-            "file": ".lab-tmp/earlyz-parity/pack-off2.console.log",
+            "file": ".lab-tmp/earlyz-parity/raw/pack-off2.console.log",
             "lines": 42,
             "loud": 3
           }
         },
         "on2": {
           "query": "frozen=1&vhs=off&seed=20260918&earlyz=1",
-          "readyMs": 5447,
-          "load": 1.72,
+          "readyMs": 5479,
+          "load": 1.7,
           "ship": {
             "sdfScale": 0.5,
             "upscale": true
@@ -478,15 +482,15 @@
           },
           "exceptions": [],
           "console": {
-            "file": ".lab-tmp/earlyz-parity/pack-on2.console.log",
+            "file": ".lab-tmp/earlyz-parity/raw/pack-on2.console.log",
             "lines": 61,
             "loud": 4
           }
         },
         "on": {
           "query": "frozen=1&vhs=off&seed=20260918&earlyz=1",
-          "readyMs": 5413,
-          "load": 1.88,
+          "readyMs": 5350,
+          "load": 1.96,
           "ship": {
             "sdfScale": 0.5,
             "upscale": true
@@ -610,7 +614,7 @@
           },
           "exceptions": [],
           "console": {
-            "file": ".lab-tmp/earlyz-parity/pack-on.console.log",
+            "file": ".lab-tmp/earlyz-parity/raw/pack-on.console.log",
             "lines": 61,
             "loud": 4
           }
@@ -618,9 +622,10 @@
       },
       "onNoise": {
         "px": 0,
+        "maskedPx": 0,
         "frac": 0,
         "max": 1,
-        "meanAbs": 0.0106,
+        "meanAbs": 0.0107,
         "bbox": null,
         "grid": [
           [
@@ -689,9 +694,10 @@
       },
       "parity": {
         "px": 1071,
+        "maskedPx": 0,
         "frac": 0.0010458984375,
         "max": 115,
-        "meanAbs": 0.0484,
+        "meanAbs": 0.048,
         "bbox": [
           258,
           433,
@@ -763,11 +769,79 @@
         "changedHitMaxRgb": 0.7723,
         "changedHitMaxAlpha": 0.0009549
       },
+      "seeded": {
+        "count": 5,
+        "interiorTexels": 5092,
+        "sizeHist": {
+          "1": 0,
+          "2-4": 1,
+          "5-16": 0,
+          "17-64": 1,
+          "65-256": 1,
+          ">256": 2
+        },
+        "top": [
+          {
+            "size": 5216,
+            "bbox": [
+              166,
+              189,
+              245,
+              299
+            ],
+            "interior": 4637
+          },
+          {
+            "size": 495,
+            "bbox": [
+              134,
+              247,
+              162,
+              278
+            ],
+            "interior": 374
+          },
+          {
+            "size": 164,
+            "bbox": [
+              292,
+              152,
+              304,
+              183
+            ],
+            "interior": 78
+          },
+          {
+            "size": 20,
+            "bbox": [
+              250,
+              239,
+              252,
+              247
+            ],
+            "interior": 3
+          },
+          {
+            "size": 2,
+            "bbox": [
+              79,
+              191,
+              80,
+              191
+            ],
+            "interior": 0
+          }
+        ]
+      },
       "where": {
         "fringePx": 24,
+        "tightPx": 6,
         "seedFringe": 1010,
+        "seedFringe6": 923,
         "marchChange": 30,
         "unexplained": 31,
+        "insideInterior": 0,
+        "insideInteriorAt": [],
         "seedDistHist": {
           "<=0": 144,
           "<=1": 190,
@@ -799,9 +873,10 @@
     "doorway": {
       "noise": {
         "px": 0,
+        "maskedPx": 0,
         "frac": 0,
-        "max": 1,
-        "meanAbs": 0.0001,
+        "max": 0,
+        "meanAbs": 0,
         "bbox": null,
         "grid": [
           [
@@ -871,8 +946,8 @@
       "boots": {
         "off": {
           "query": "frozen=1&vhs=off&seed=20260918",
-          "readyMs": 4890,
-          "load": 1.77,
+          "readyMs": 4994,
+          "load": 1.61,
           "ship": {
             "sdfScale": 0.5,
             "upscale": true
@@ -1004,15 +1079,15 @@
           },
           "exceptions": [],
           "console": {
-            "file": ".lab-tmp/earlyz-parity/doorway-off.console.log",
+            "file": ".lab-tmp/earlyz-parity/raw/doorway-off.console.log",
             "lines": 42,
             "loud": 3
           }
         },
         "off2": {
           "query": "frozen=1&vhs=off&seed=20260918",
-          "readyMs": 4984,
-          "load": 2.49,
+          "readyMs": 5004,
+          "load": 1.61,
           "ship": {
             "sdfScale": 0.5,
             "upscale": true
@@ -1144,15 +1219,15 @@
           },
           "exceptions": [],
           "console": {
-            "file": ".lab-tmp/earlyz-parity/doorway-off2.console.log",
+            "file": ".lab-tmp/earlyz-parity/raw/doorway-off2.console.log",
             "lines": 42,
             "loud": 3
           }
         },
         "on2": {
           "query": "frozen=1&vhs=off&seed=20260918&earlyz=1",
-          "readyMs": 5467,
-          "load": 3.58,
+          "readyMs": 5446,
+          "load": 1.62,
           "ship": {
             "sdfScale": 0.5,
             "upscale": true
@@ -1284,15 +1359,15 @@
           },
           "exceptions": [],
           "console": {
-            "file": ".lab-tmp/earlyz-parity/doorway-on2.console.log",
+            "file": ".lab-tmp/earlyz-parity/raw/doorway-on2.console.log",
             "lines": 61,
             "loud": 4
           }
         },
         "on": {
           "query": "frozen=1&vhs=off&seed=20260918&earlyz=1",
-          "readyMs": 5505,
-          "load": 2.76,
+          "readyMs": 5444,
+          "load": 1.55,
           "ship": {
             "sdfScale": 0.5,
             "upscale": true
@@ -1424,7 +1499,7 @@
           },
           "exceptions": [],
           "console": {
-            "file": ".lab-tmp/earlyz-parity/doorway-on.console.log",
+            "file": ".lab-tmp/earlyz-parity/raw/doorway-on.console.log",
             "lines": 61,
             "loud": 4
           }
@@ -1432,9 +1507,10 @@
       },
       "onNoise": {
         "px": 0,
+        "maskedPx": 0,
         "frac": 0,
-        "max": 0,
-        "meanAbs": 0,
+        "max": 1,
+        "meanAbs": 0.0001,
         "bbox": null,
         "grid": [
           [
@@ -1503,9 +1579,10 @@
       },
       "parity": {
         "px": 1168,
+        "maskedPx": 0,
         "frac": 0.001140625,
         "max": 84,
-        "meanAbs": 0.0409,
+        "meanAbs": 0.0398,
         "bbox": [
           786,
           380,
@@ -1577,11 +1654,99 @@
         "changedHitMaxRgb": 0.663,
         "changedHitMaxAlpha": 0.00009084
       },
+      "seeded": {
+        "count": 7,
+        "interiorTexels": 2044,
+        "sizeHist": {
+          "1": 1,
+          "2-4": 3,
+          "5-16": 0,
+          "17-64": 1,
+          "65-256": 0,
+          ">256": 2
+        },
+        "top": [
+          {
+            "size": 1546,
+            "bbox": [
+              301,
+              143,
+              327,
+              229
+            ],
+            "interior": 1296
+          },
+          {
+            "size": 945,
+            "bbox": [
+              281,
+              144,
+              298,
+              218
+            ],
+            "interior": 748
+          },
+          {
+            "size": 26,
+            "bbox": [
+              260,
+              177,
+              261,
+              196
+            ],
+            "interior": 0
+          },
+          {
+            "size": 4,
+            "bbox": [
+              248,
+              207,
+              251,
+              207
+            ],
+            "interior": 0
+          },
+          {
+            "size": 3,
+            "bbox": [
+              252,
+              148,
+              253,
+              149
+            ],
+            "interior": 0
+          },
+          {
+            "size": 2,
+            "bbox": [
+              244,
+              148,
+              244,
+              149
+            ],
+            "interior": 0
+          },
+          {
+            "size": 1,
+            "bbox": [
+              244,
+              214,
+              244,
+              214
+            ],
+            "interior": 0
+          }
+        ]
+      },
       "where": {
         "fringePx": 24,
+        "tightPx": 6,
         "seedFringe": 1145,
+        "seedFringe6": 1023,
         "marchChange": 23,
         "unexplained": 0,
+        "insideInterior": 0,
+        "insideInteriorAt": [],
         "seedDistHist": {
           "<=0": 151,
           "<=1": 225,
@@ -1607,15 +1772,16 @@
     },
     "train-doorway": {
       "noise": {
-        "px": 193,
-        "frac": 0.0001884765625,
-        "max": 27,
-        "meanAbs": 0.0057,
+        "px": 126,
+        "maskedPx": 0,
+        "frac": 0.000123046875,
+        "max": 28,
+        "meanAbs": 0.0064,
         "bbox": [
-          663,
-          375,
-          754,
-          452
+          654,
+          372,
+          998,
+          711
         ],
         "grid": [
           [
@@ -1643,734 +1809,8 @@
             0,
             0,
             0,
-            193,
-            0,
-            0,
-            0
-          ],
-          [
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0
-          ],
-          [
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0
-          ]
-        ]
-      },
-      "marchNoise": {
-        "w": 400,
-        "h": 300,
-        "same": 120000,
-        "seededOut": 0,
-        "newHit": 0,
-        "changedHit": 0,
-        "changedHitBig": 0,
-        "changedMiss": 0,
-        "changedHitMaxRgb": 0,
-        "changedHitMaxAlpha": 0
-      },
-      "boots": {
-        "off": {
-          "query": "frozen=1&vhs=off&seed=20260918&level=night-train",
-          "readyMs": 7945,
-          "load": 3.26,
-          "ship": {
-            "sdfScale": 0.5,
-            "upscale": true
-          },
-          "staged": {
-            "tunnel": "tunnel-1-2",
-            "farId": 2,
-            "player": [
-              1.2,
-              -13.5
-            ],
-            "mouth": [
-              0,
-              -16
-            ],
-            "spawned": 12
-          },
-          "nearType": null,
-          "trainAlign": {
-            "t0": 1.5505000001192095,
-            "T": 11.11111111111111,
-            "n": 574,
-            "dt": 0.01665611691810436,
-            "t1": 11.111111111111274
-          },
-          "shotTries": 2,
-          "earlyz": {
-            "flag": false,
-            "on": false,
-            "reason": null,
-            "gpuErrors": [],
-            "patchHits": 0,
-            "seed": {
-              "built": false,
-              "on": false,
-              "reason": "not requested"
-            },
-            "batches": {
-              "juggernaut@7": {
-                "front": 0,
-                "back": 0
-              },
-              "soldier@5": {
-                "front": 0,
-                "back": 0
-              },
-              "soldier@4": {
-                "front": 0,
-                "back": 0
-              },
-              "soldier@3": {
-                "front": 0,
-                "back": 0
-              },
-              "soldier@2": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@4": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@7": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@6": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@3": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@5": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@2": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@1": {
-                "front": 0,
-                "back": 0
-              }
-            }
-          },
-          "gpu": {
-            "lost": null,
-            "uncaptured": [],
-            "uncapturedCount": 0
-          },
-          "march": {
-            "nonZero": 120000,
-            "rSum": 1435.069,
-            "w": 400,
-            "h": 300
-          },
-          "pose": {
-            "pos": [
-              1.27,
-              0,
-              -13.5
-            ],
-            "yaw": -0.44751997515716985,
-            "pitch": 0
-          },
-          "upscale": true,
-          "resolution": {
-            "rung": "800",
-            "cap": {
-              "mode": "fixed",
-              "width": 800,
-              "height": 600
-            },
-            "content": {
-              "width": 800,
-              "height": 600
-            },
-            "letterboxed": true
-          },
-          "train": {
-            "speed": 0,
-            "time": 14.111111111111423,
-            "windows": 7,
-            "swaying": 10,
-            "steam": 5,
-            "roll": 0,
-            "bob": 0
-          },
-          "canvas": {
-            "w": 800,
-            "h": 600,
-            "rect": [
-              107,
-              0,
-              1067,
-              800
-            ]
-          },
-          "lens": {
-            "k": 0.1101133044945095,
-            "renderFovDeg": 58,
-            "centerFovDeg": 46,
-            "aspect": 1.3333333333333333
-          },
-          "visible": {
-            "zombie@2": 1,
-            "zombie@1": 3
-          },
-          "exceptions": [],
-          "console": {
-            "file": ".lab-tmp/earlyz-parity/train-doorway-off.console.log",
-            "lines": 65,
-            "loud": 3
-          }
-        },
-        "off2": {
-          "query": "frozen=1&vhs=off&seed=20260918&level=night-train",
-          "readyMs": 8101,
-          "load": 3.95,
-          "ship": {
-            "sdfScale": 0.5,
-            "upscale": true
-          },
-          "staged": {
-            "tunnel": "tunnel-1-2",
-            "farId": 2,
-            "player": [
-              1.2,
-              -13.5
-            ],
-            "mouth": [
-              0,
-              -16
-            ],
-            "spawned": 12
-          },
-          "nearType": null,
-          "trainAlign": {
-            "t0": 1.7498000000119207,
-            "T": 11.11111111111111,
-            "n": 562,
-            "dt": 0.01665713720836155,
-            "t1": 11.11111111111124
-          },
-          "shotTries": 2,
-          "earlyz": {
-            "flag": false,
-            "on": false,
-            "reason": null,
-            "gpuErrors": [],
-            "patchHits": 0,
-            "seed": {
-              "built": false,
-              "on": false,
-              "reason": "not requested"
-            },
-            "batches": {
-              "juggernaut@7": {
-                "front": 0,
-                "back": 0
-              },
-              "soldier@5": {
-                "front": 0,
-                "back": 0
-              },
-              "soldier@4": {
-                "front": 0,
-                "back": 0
-              },
-              "soldier@3": {
-                "front": 0,
-                "back": 0
-              },
-              "soldier@2": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@4": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@7": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@6": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@3": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@5": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@2": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@1": {
-                "front": 0,
-                "back": 0
-              }
-            }
-          },
-          "gpu": {
-            "lost": null,
-            "uncaptured": [],
-            "uncapturedCount": 0
-          },
-          "march": {
-            "nonZero": 120000,
-            "rSum": 1435.069,
-            "w": 400,
-            "h": 300
-          },
-          "pose": {
-            "pos": [
-              1.27,
-              0,
-              -13.5
-            ],
-            "yaw": -0.44751997515716985,
-            "pitch": 0
-          },
-          "upscale": true,
-          "resolution": {
-            "rung": "800",
-            "cap": {
-              "mode": "fixed",
-              "width": 800,
-              "height": 600
-            },
-            "content": {
-              "width": 800,
-              "height": 600
-            },
-            "letterboxed": true
-          },
-          "train": {
-            "speed": 0,
-            "time": 14.11111111111139,
-            "windows": 7,
-            "swaying": 10,
-            "steam": 5,
-            "roll": 0,
-            "bob": 0
-          },
-          "canvas": {
-            "w": 800,
-            "h": 600,
-            "rect": [
-              107,
-              0,
-              1067,
-              800
-            ]
-          },
-          "lens": {
-            "k": 0.1101133044945095,
-            "renderFovDeg": 58,
-            "centerFovDeg": 46,
-            "aspect": 1.3333333333333333
-          },
-          "visible": {
-            "zombie@2": 1,
-            "zombie@1": 3
-          },
-          "exceptions": [],
-          "console": {
-            "file": ".lab-tmp/earlyz-parity/train-doorway-off2.console.log",
-            "lines": 65,
-            "loud": 3
-          }
-        },
-        "on2": {
-          "query": "frozen=1&vhs=off&seed=20260918&level=night-train&earlyz=1",
-          "readyMs": 9541,
-          "load": 3.28,
-          "ship": {
-            "sdfScale": 0.5,
-            "upscale": true
-          },
-          "staged": {
-            "tunnel": "tunnel-1-2",
-            "farId": 2,
-            "player": [
-              1.2,
-              -13.5
-            ],
-            "mouth": [
-              0,
-              -16
-            ],
-            "spawned": 12
-          },
-          "nearType": null,
-          "trainAlign": {
-            "t0": 2.8167000001072893,
-            "T": 11.11111111111111,
-            "n": 498,
-            "dt": 0.01665544399799964,
-            "t1": 11.111111111110993
-          },
-          "shotTries": 2,
-          "earlyz": {
-            "flag": true,
-            "on": true,
-            "reason": null,
-            "gpuErrors": [],
-            "patchHits": 24,
-            "seed": {
-              "built": true,
-              "on": true,
-              "reason": null
-            },
-            "batches": {
-              "juggernaut@7": {
-                "front": 0,
-                "back": 0
-              },
-              "soldier@5": {
-                "front": 0,
-                "back": 0
-              },
-              "soldier@4": {
-                "front": 0,
-                "back": 0
-              },
-              "soldier@3": {
-                "front": 0,
-                "back": 0
-              },
-              "soldier@2": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@4": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@7": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@6": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@3": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@5": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@2": {
-                "front": 1,
-                "back": 0
-              },
-              "zombie@1": {
-                "front": 2,
-                "back": 1
-              }
-            }
-          },
-          "gpu": {
-            "lost": null,
-            "uncaptured": [],
-            "uncapturedCount": 0
-          },
-          "march": {
-            "nonZero": 120000,
-            "rSum": 1282.555,
-            "w": 400,
-            "h": 300
-          },
-          "pose": {
-            "pos": [
-              1.27,
-              0,
-              -13.5
-            ],
-            "yaw": -0.44751997515716985,
-            "pitch": 0
-          },
-          "upscale": true,
-          "resolution": {
-            "rung": "800",
-            "cap": {
-              "mode": "fixed",
-              "width": 800,
-              "height": 600
-            },
-            "content": {
-              "width": 800,
-              "height": 600
-            },
-            "letterboxed": true
-          },
-          "train": {
-            "speed": 0,
-            "time": 14.111111111111143,
-            "windows": 7,
-            "swaying": 10,
-            "steam": 5,
-            "roll": 0,
-            "bob": 0
-          },
-          "canvas": {
-            "w": 800,
-            "h": 600,
-            "rect": [
-              107,
-              0,
-              1067,
-              800
-            ]
-          },
-          "lens": {
-            "k": 0.1101133044945095,
-            "renderFovDeg": 58,
-            "centerFovDeg": 46,
-            "aspect": 1.3333333333333333
-          },
-          "visible": {
-            "zombie@2": 1,
-            "zombie@1": 3
-          },
-          "exceptions": [],
-          "console": {
-            "file": ".lab-tmp/earlyz-parity/train-doorway-on2.console.log",
-            "lines": 102,
-            "loud": 4
-          }
-        },
-        "on": {
-          "query": "frozen=1&vhs=off&seed=20260918&level=night-train&earlyz=1",
-          "readyMs": 8926,
-          "load": 3.68,
-          "ship": {
-            "sdfScale": 0.5,
-            "upscale": true
-          },
-          "staged": {
-            "tunnel": "tunnel-1-2",
-            "farId": 2,
-            "player": [
-              1.2,
-              -13.5
-            ],
-            "mouth": [
-              0,
-              -16
-            ],
-            "spawned": 12
-          },
-          "nearType": null,
-          "trainAlign": {
-            "t0": 2.23319999986887,
-            "T": 11.11111111111111,
-            "n": 533,
-            "dt": 0.01665649364210552,
-            "t1": 11.111111111111153
-          },
-          "shotTries": 2,
-          "earlyz": {
-            "flag": true,
-            "on": true,
-            "reason": null,
-            "gpuErrors": [],
-            "patchHits": 24,
-            "seed": {
-              "built": true,
-              "on": true,
-              "reason": null
-            },
-            "batches": {
-              "juggernaut@7": {
-                "front": 0,
-                "back": 0
-              },
-              "soldier@5": {
-                "front": 0,
-                "back": 0
-              },
-              "soldier@4": {
-                "front": 0,
-                "back": 0
-              },
-              "soldier@3": {
-                "front": 0,
-                "back": 0
-              },
-              "soldier@2": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@4": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@7": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@6": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@3": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@5": {
-                "front": 0,
-                "back": 0
-              },
-              "zombie@2": {
-                "front": 1,
-                "back": 0
-              },
-              "zombie@1": {
-                "front": 2,
-                "back": 1
-              }
-            }
-          },
-          "gpu": {
-            "lost": null,
-            "uncaptured": [],
-            "uncapturedCount": 0
-          },
-          "march": {
-            "nonZero": 120000,
-            "rSum": 1282.555,
-            "w": 400,
-            "h": 300
-          },
-          "pose": {
-            "pos": [
-              1.27,
-              0,
-              -13.5
-            ],
-            "yaw": -0.44751997515716985,
-            "pitch": 0
-          },
-          "upscale": true,
-          "resolution": {
-            "rung": "800",
-            "cap": {
-              "mode": "fixed",
-              "width": 800,
-              "height": 600
-            },
-            "content": {
-              "width": 800,
-              "height": 600
-            },
-            "letterboxed": true
-          },
-          "train": {
-            "speed": 0,
-            "time": 14.111111111111303,
-            "windows": 7,
-            "swaying": 10,
-            "steam": 5,
-            "roll": 0,
-            "bob": 0
-          },
-          "canvas": {
-            "w": 800,
-            "h": 600,
-            "rect": [
-              107,
-              0,
-              1067,
-              800
-            ]
-          },
-          "lens": {
-            "k": 0.1101133044945095,
-            "renderFovDeg": 58,
-            "centerFovDeg": 46,
-            "aspect": 1.3333333333333333
-          },
-          "visible": {
-            "zombie@2": 1,
-            "zombie@1": 3
-          },
-          "exceptions": [],
-          "console": {
-            "file": ".lab-tmp/earlyz-parity/train-doorway-on.console.log",
-            "lines": 102,
-            "loud": 4
-          }
-        }
-      },
-      "onNoise": {
-        "px": 75,
-        "frac": 0.0000732421875,
-        "max": 20,
-        "meanAbs": 0.0037,
-        "bbox": [
-          658,
-          375,
-          917,
-          655
-        ],
-        "grid": [
-          [
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0
-          ],
-          [
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0
-          ],
-          [
-            0,
-            0,
-            0,
-            0,
-            46,
-            22,
+            99,
+            8,
             0,
             0
           ],
@@ -2391,12 +1831,12 @@
             0,
             0,
             7,
-            0,
+            12,
             0
           ]
         ]
       },
-      "onMarchNoise": {
+      "marchNoise": {
         "w": 400,
         "h": 300,
         "same": 120000,
@@ -2408,14 +1848,665 @@
         "changedHitMaxRgb": 0,
         "changedHitMaxAlpha": 0
       },
-      "parity": {
-        "px": 1272,
-        "frac": 0.0012421875,
-        "max": 85,
-        "meanAbs": 0.0402,
+      "boots": {
+        "off": {
+          "query": "frozen=1&vhs=off&seed=20260918&level=night-train",
+          "readyMs": 7975,
+          "load": 1.67,
+          "ship": {
+            "sdfScale": 0.5,
+            "upscale": true
+          },
+          "staged": {
+            "tunnel": "tunnel-1-2",
+            "farId": 2,
+            "player": [
+              1.2,
+              -13.5
+            ],
+            "mouth": [
+              0,
+              -16
+            ],
+            "spawned": 12
+          },
+          "nearType": null,
+          "trainAlign": {
+            "t0": 1.5775000000000008,
+            "T": 11.11111111111111,
+            "n": 573,
+            "dt": 0.016638064766337016,
+            "t1": 11.111111111110977
+          },
+          "shotTries": 2,
+          "earlyz": {
+            "flag": false,
+            "on": false,
+            "reason": null,
+            "gpuErrors": [],
+            "patchHits": 0,
+            "seed": {
+              "built": false,
+              "on": false,
+              "reason": "not requested"
+            },
+            "batches": {
+              "juggernaut@7": {
+                "front": 0,
+                "back": 0
+              },
+              "soldier@5": {
+                "front": 0,
+                "back": 0
+              },
+              "soldier@4": {
+                "front": 0,
+                "back": 0
+              },
+              "soldier@3": {
+                "front": 0,
+                "back": 0
+              },
+              "soldier@2": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@4": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@7": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@6": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@3": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@5": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@2": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@1": {
+                "front": 0,
+                "back": 0
+              }
+            }
+          },
+          "gpu": {
+            "lost": null,
+            "uncaptured": [],
+            "uncapturedCount": 0
+          },
+          "march": {
+            "nonZero": 120000,
+            "rSum": 1435.069,
+            "w": 400,
+            "h": 300
+          },
+          "pose": {
+            "pos": [
+              1.27,
+              0,
+              -13.5
+            ],
+            "yaw": -0.44751997515716985,
+            "pitch": 0
+          },
+          "upscale": true,
+          "resolution": {
+            "rung": "800",
+            "cap": {
+              "mode": "fixed",
+              "width": 800,
+              "height": 600
+            },
+            "content": {
+              "width": 800,
+              "height": 600
+            },
+            "letterboxed": true
+          },
+          "train": {
+            "speed": 0,
+            "time": 14.111111111111127,
+            "windows": 7,
+            "swaying": 10,
+            "steam": 5,
+            "roll": 0,
+            "bob": 0
+          },
+          "canvas": {
+            "w": 800,
+            "h": 600,
+            "rect": [
+              107,
+              0,
+              1067,
+              800
+            ]
+          },
+          "lens": {
+            "k": 0.1101133044945095,
+            "renderFovDeg": 58,
+            "centerFovDeg": 46,
+            "aspect": 1.3333333333333333
+          },
+          "visible": {
+            "zombie@2": 1,
+            "zombie@1": 3
+          },
+          "exceptions": [],
+          "console": {
+            "file": ".lab-tmp/earlyz-parity/raw/train-doorway-off.console.log",
+            "lines": 65,
+            "loud": 3
+          }
+        },
+        "off2": {
+          "query": "frozen=1&vhs=off&seed=20260918&level=night-train",
+          "readyMs": 7506,
+          "load": 4.31,
+          "ship": {
+            "sdfScale": 0.5,
+            "upscale": true
+          },
+          "staged": {
+            "tunnel": "tunnel-1-2",
+            "farId": 2,
+            "player": [
+              1.2,
+              -13.5
+            ],
+            "mouth": [
+              0,
+              -16
+            ],
+            "spawned": 12
+          },
+          "nearType": null,
+          "trainAlign": {
+            "t0": 1.1961999999880792,
+            "T": 11.11111111111111,
+            "n": 595,
+            "dt": 0.01666371615314795,
+            "t1": 11.111111111111178
+          },
+          "shotTries": 2,
+          "earlyz": {
+            "flag": false,
+            "on": false,
+            "reason": null,
+            "gpuErrors": [],
+            "patchHits": 0,
+            "seed": {
+              "built": false,
+              "on": false,
+              "reason": "not requested"
+            },
+            "batches": {
+              "juggernaut@7": {
+                "front": 0,
+                "back": 0
+              },
+              "soldier@5": {
+                "front": 0,
+                "back": 0
+              },
+              "soldier@4": {
+                "front": 0,
+                "back": 0
+              },
+              "soldier@3": {
+                "front": 0,
+                "back": 0
+              },
+              "soldier@2": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@4": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@7": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@6": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@3": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@5": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@2": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@1": {
+                "front": 0,
+                "back": 0
+              }
+            }
+          },
+          "gpu": {
+            "lost": null,
+            "uncaptured": [],
+            "uncapturedCount": 0
+          },
+          "march": {
+            "nonZero": 120000,
+            "rSum": 1435.069,
+            "w": 400,
+            "h": 300
+          },
+          "pose": {
+            "pos": [
+              1.27,
+              0,
+              -13.5
+            ],
+            "yaw": -0.44751997515716985,
+            "pitch": 0
+          },
+          "upscale": true,
+          "resolution": {
+            "rung": "800",
+            "cap": {
+              "mode": "fixed",
+              "width": 800,
+              "height": 600
+            },
+            "content": {
+              "width": 800,
+              "height": 600
+            },
+            "letterboxed": true
+          },
+          "train": {
+            "speed": 0,
+            "time": 14.111111111111327,
+            "windows": 7,
+            "swaying": 10,
+            "steam": 5,
+            "roll": 0,
+            "bob": 0
+          },
+          "canvas": {
+            "w": 800,
+            "h": 600,
+            "rect": [
+              107,
+              0,
+              1067,
+              800
+            ]
+          },
+          "lens": {
+            "k": 0.1101133044945095,
+            "renderFovDeg": 58,
+            "centerFovDeg": 46,
+            "aspect": 1.3333333333333333
+          },
+          "visible": {
+            "zombie@2": 1,
+            "zombie@1": 3
+          },
+          "exceptions": [],
+          "console": {
+            "file": ".lab-tmp/earlyz-parity/raw/train-doorway-off2.console.log",
+            "lines": 65,
+            "loud": 3
+          }
+        },
+        "on2": {
+          "query": "frozen=1&vhs=off&seed=20260918&level=night-train&earlyz=1",
+          "readyMs": 8993,
+          "load": 4.3,
+          "ship": {
+            "sdfScale": 0.5,
+            "upscale": true
+          },
+          "staged": {
+            "tunnel": "tunnel-1-2",
+            "farId": 2,
+            "player": [
+              1.2,
+              -13.5
+            ],
+            "mouth": [
+              0,
+              -16
+            ],
+            "spawned": 12
+          },
+          "nearType": null,
+          "trainAlign": {
+            "t0": 2.251599999904633,
+            "T": 11.11111111111111,
+            "n": 532,
+            "dt": 0.016653216374448266,
+            "t1": 11.111111111111152
+          },
+          "shotTries": 2,
+          "earlyz": {
+            "flag": true,
+            "on": true,
+            "reason": null,
+            "gpuErrors": [],
+            "patchHits": 24,
+            "seed": {
+              "built": true,
+              "on": true,
+              "reason": null
+            },
+            "batches": {
+              "juggernaut@7": {
+                "front": 0,
+                "back": 0
+              },
+              "soldier@5": {
+                "front": 0,
+                "back": 0
+              },
+              "soldier@4": {
+                "front": 0,
+                "back": 0
+              },
+              "soldier@3": {
+                "front": 0,
+                "back": 0
+              },
+              "soldier@2": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@4": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@7": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@6": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@3": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@5": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@2": {
+                "front": 1,
+                "back": 0
+              },
+              "zombie@1": {
+                "front": 2,
+                "back": 1
+              }
+            }
+          },
+          "gpu": {
+            "lost": null,
+            "uncaptured": [],
+            "uncapturedCount": 0
+          },
+          "march": {
+            "nonZero": 120000,
+            "rSum": 1282.555,
+            "w": 400,
+            "h": 300
+          },
+          "pose": {
+            "pos": [
+              1.27,
+              0,
+              -13.5
+            ],
+            "yaw": -0.44751997515716985,
+            "pitch": 0
+          },
+          "upscale": true,
+          "resolution": {
+            "rung": "800",
+            "cap": {
+              "mode": "fixed",
+              "width": 800,
+              "height": 600
+            },
+            "content": {
+              "width": 800,
+              "height": 600
+            },
+            "letterboxed": true
+          },
+          "train": {
+            "speed": 0,
+            "time": 14.1111111111113,
+            "windows": 7,
+            "swaying": 10,
+            "steam": 5,
+            "roll": 0,
+            "bob": 0
+          },
+          "canvas": {
+            "w": 800,
+            "h": 600,
+            "rect": [
+              107,
+              0,
+              1067,
+              800
+            ]
+          },
+          "lens": {
+            "k": 0.1101133044945095,
+            "renderFovDeg": 58,
+            "centerFovDeg": 46,
+            "aspect": 1.3333333333333333
+          },
+          "visible": {
+            "zombie@2": 1,
+            "zombie@1": 3
+          },
+          "exceptions": [],
+          "console": {
+            "file": ".lab-tmp/earlyz-parity/raw/train-doorway-on2.console.log",
+            "lines": 102,
+            "loud": 4
+          }
+        },
+        "on": {
+          "query": "frozen=1&vhs=off&seed=20260918&level=night-train&earlyz=1",
+          "readyMs": 9128,
+          "load": 2.91,
+          "ship": {
+            "sdfScale": 0.5,
+            "upscale": true
+          },
+          "staged": {
+            "tunnel": "tunnel-1-2",
+            "farId": 2,
+            "player": [
+              1.2,
+              -13.5
+            ],
+            "mouth": [
+              0,
+              -16
+            ],
+            "spawned": 12
+          },
+          "nearType": null,
+          "trainAlign": {
+            "t0": 2.496099999964238,
+            "T": 11.11111111111111,
+            "n": 517,
+            "dt": 0.01666346443161871,
+            "t1": 11.111111111110999
+          },
+          "shotTries": 2,
+          "earlyz": {
+            "flag": true,
+            "on": true,
+            "reason": null,
+            "gpuErrors": [],
+            "patchHits": 24,
+            "seed": {
+              "built": true,
+              "on": true,
+              "reason": null
+            },
+            "batches": {
+              "juggernaut@7": {
+                "front": 0,
+                "back": 0
+              },
+              "soldier@5": {
+                "front": 0,
+                "back": 0
+              },
+              "soldier@4": {
+                "front": 0,
+                "back": 0
+              },
+              "soldier@3": {
+                "front": 0,
+                "back": 0
+              },
+              "soldier@2": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@4": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@7": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@6": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@3": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@5": {
+                "front": 0,
+                "back": 0
+              },
+              "zombie@2": {
+                "front": 1,
+                "back": 0
+              },
+              "zombie@1": {
+                "front": 2,
+                "back": 1
+              }
+            }
+          },
+          "gpu": {
+            "lost": null,
+            "uncaptured": [],
+            "uncapturedCount": 0
+          },
+          "march": {
+            "nonZero": 120000,
+            "rSum": 1282.555,
+            "w": 400,
+            "h": 300
+          },
+          "pose": {
+            "pos": [
+              1.27,
+              0,
+              -13.5
+            ],
+            "yaw": -0.44751997515716985,
+            "pitch": 0
+          },
+          "upscale": true,
+          "resolution": {
+            "rung": "800",
+            "cap": {
+              "mode": "fixed",
+              "width": 800,
+              "height": 600
+            },
+            "content": {
+              "width": 800,
+              "height": 600
+            },
+            "letterboxed": true
+          },
+          "train": {
+            "speed": 0,
+            "time": 14.111111111111148,
+            "windows": 7,
+            "swaying": 10,
+            "steam": 5,
+            "roll": 0,
+            "bob": 0
+          },
+          "canvas": {
+            "w": 800,
+            "h": 600,
+            "rect": [
+              107,
+              0,
+              1067,
+              800
+            ]
+          },
+          "lens": {
+            "k": 0.1101133044945095,
+            "renderFovDeg": 58,
+            "centerFovDeg": 46,
+            "aspect": 1.3333333333333333
+          },
+          "visible": {
+            "zombie@2": 1,
+            "zombie@1": 3
+          },
+          "exceptions": [],
+          "console": {
+            "file": ".lab-tmp/earlyz-parity/raw/train-doorway-on.console.log",
+            "lines": 102,
+            "loud": 4
+          }
+        }
+      },
+      "onNoise": {
+        "px": 157,
+        "maskedPx": 0,
+        "frac": 0.0001533203125,
+        "max": 22,
+        "meanAbs": 0.0043,
         "bbox": [
-          631,
-          375,
+          657,
+          381,
           965,
           671
         ],
@@ -2445,8 +2536,85 @@
             0,
             0,
             0,
-            82,
-            16,
+            119,
+            24,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            7,
+            7,
+            0
+          ]
+        ]
+      },
+      "onMarchNoise": {
+        "w": 400,
+        "h": 300,
+        "same": 120000,
+        "seededOut": 0,
+        "newHit": 0,
+        "changedHit": 0,
+        "changedHitBig": 0,
+        "changedMiss": 0,
+        "changedHitMaxRgb": 0,
+        "changedHitMaxAlpha": 0
+      },
+      "parity": {
+        "px": 1221,
+        "maskedPx": 27,
+        "frac": 0.0011923828125,
+        "max": 85,
+        "meanAbs": 0.0401,
+        "bbox": [
+          631,
+          376,
+          832,
+          627
+        ],
+        "grid": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            52,
+            2,
             0,
             0
           ],
@@ -2467,7 +2635,7 @@
             0,
             0,
             0,
-            7,
+            0,
             0
           ]
         ]
@@ -2484,11 +2652,79 @@
         "changedHitMaxRgb": 0.009006,
         "changedHitMaxAlpha": 3.576e-7
       },
+      "seeded": {
+        "count": 5,
+        "interiorTexels": 581,
+        "sizeHist": {
+          "1": 0,
+          "2-4": 0,
+          "5-16": 1,
+          "17-64": 2,
+          "65-256": 1,
+          ">256": 1
+        },
+        "top": [
+          {
+            "size": 659,
+            "bbox": [
+              262,
+              146,
+              284,
+              189
+            ],
+            "interior": 511
+          },
+          {
+            "size": 158,
+            "bbox": [
+              205,
+              184,
+              219,
+              217
+            ],
+            "interior": 42
+          },
+          {
+            "size": 51,
+            "bbox": [
+              206,
+              200,
+              211,
+              208
+            ],
+            "interior": 20
+          },
+          {
+            "size": 25,
+            "bbox": [
+              206,
+              193,
+              211,
+              197
+            ],
+            "interior": 8
+          },
+          {
+            "size": 6,
+            "bbox": [
+              198,
+              183,
+              203,
+              183
+            ],
+            "interior": 0
+          }
+        ]
+      },
       "where": {
         "fringePx": 24,
-        "seedFringe": 1169,
+        "tightPx": 6,
+        "seedFringe": 1153,
+        "seedFringe6": 1063,
         "marchChange": 0,
-        "unexplained": 103,
+        "unexplained": 68,
+        "insideInterior": 0,
+        "insideInteriorAt": [],
         "seedDistHist": {
           "<=0": 124,
           "<=1": 225,
@@ -2497,32 +2733,33 @@
           "<=4": 114,
           "<=6": 123,
           "<=10": 84,
-          "<=24": 22
+          "<=24": 6
         },
         "unexplainedBbox": [
           658,
-          375,
-          965,
-          671
+          376,
+          832,
+          524
         ]
       },
       "zoom": {
         "window": [
-          480,
+          440,
           440,
           320,
           200
         ],
-        "redInWindow": 1199,
+        "redInWindow": 1183,
         "scale": 3
       }
     },
     "melee": {
       "noise": {
         "px": 0,
+        "maskedPx": 0,
         "frac": 0,
         "max": 1,
-        "meanAbs": 0.0007,
+        "meanAbs": 0.0008,
         "bbox": null,
         "grid": [
           [
@@ -2592,8 +2829,8 @@
       "boots": {
         "off": {
           "query": "frozen=1&vhs=off&seed=20260918",
-          "readyMs": 4894,
-          "load": 2.82,
+          "readyMs": 5001,
+          "load": 3.89,
           "ship": {
             "sdfScale": 0.5,
             "upscale": true
@@ -2712,15 +2949,15 @@
           },
           "exceptions": [],
           "console": {
-            "file": ".lab-tmp/earlyz-parity/melee-off.console.log",
+            "file": ".lab-tmp/earlyz-parity/raw/melee-off.console.log",
             "lines": 42,
             "loud": 3
           }
         },
         "off2": {
           "query": "frozen=1&vhs=off&seed=20260918",
-          "readyMs": 4872,
-          "load": 3.95,
+          "readyMs": 4903,
+          "load": 4.47,
           "ship": {
             "sdfScale": 0.5,
             "upscale": true
@@ -2839,15 +3076,15 @@
           },
           "exceptions": [],
           "console": {
-            "file": ".lab-tmp/earlyz-parity/melee-off2.console.log",
+            "file": ".lab-tmp/earlyz-parity/raw/melee-off2.console.log",
             "lines": 42,
             "loud": 3
           }
         },
         "on2": {
           "query": "frozen=1&vhs=off&seed=20260918&earlyz=1",
-          "readyMs": 5458,
-          "load": 4.27,
+          "readyMs": 5469,
+          "load": 4.43,
           "ship": {
             "sdfScale": 0.5,
             "upscale": true
@@ -2966,15 +3203,15 @@
           },
           "exceptions": [],
           "console": {
-            "file": ".lab-tmp/earlyz-parity/melee-on2.console.log",
+            "file": ".lab-tmp/earlyz-parity/raw/melee-on2.console.log",
             "lines": 61,
             "loud": 4
           }
         },
         "on": {
           "query": "frozen=1&vhs=off&seed=20260918&earlyz=1",
-          "readyMs": 5468,
-          "load": 2.92,
+          "readyMs": 5374,
+          "load": 4.65,
           "ship": {
             "sdfScale": 0.5,
             "upscale": true
@@ -3093,7 +3330,7 @@
           },
           "exceptions": [],
           "console": {
-            "file": ".lab-tmp/earlyz-parity/melee-on.console.log",
+            "file": ".lab-tmp/earlyz-parity/raw/melee-on.console.log",
             "lines": 61,
             "loud": 4
           }
@@ -3101,9 +3338,10 @@
       },
       "onNoise": {
         "px": 0,
+        "maskedPx": 0,
         "frac": 0,
         "max": 1,
-        "meanAbs": 0.0003,
+        "meanAbs": 0.0002,
         "bbox": null,
         "grid": [
           [
@@ -3172,9 +3410,10 @@
       },
       "parity": {
         "px": 152,
+        "maskedPx": 0,
         "frac": 0.0001484375,
         "max": 60,
-        "meanAbs": 0.0078,
+        "meanAbs": 0.0083,
         "bbox": [
           670,
           531,
@@ -3246,11 +3485,39 @@
         "changedHitMaxRgb": 0.008089,
         "changedHitMaxAlpha": 0.0005721
       },
+      "seeded": {
+        "count": 1,
+        "interiorTexels": 95,
+        "sizeHist": {
+          "1": 0,
+          "2-4": 0,
+          "5-16": 0,
+          "17-64": 0,
+          "65-256": 1,
+          ">256": 0
+        },
+        "top": [
+          {
+            "size": 163,
+            "bbox": [
+              208,
+              189,
+              227,
+              201
+            ],
+            "interior": 95
+          }
+        ]
+      },
       "where": {
         "fringePx": 24,
+        "tightPx": 6,
         "seedFringe": 152,
+        "seedFringe6": 152,
         "marchChange": 0,
         "unexplained": 0,
+        "insideInterior": 0,
+        "insideInteriorAt": [],
         "seedDistHist": {
           "<=0": 20,
           "<=1": 37,
@@ -3277,9 +3544,10 @@
     "far": {
       "noise": {
         "px": 0,
+        "maskedPx": 0,
         "frac": 0,
         "max": 1,
-        "meanAbs": 0.0007,
+        "meanAbs": 0.0083,
         "bbox": null,
         "grid": [
           [
@@ -3349,8 +3617,8 @@
       "boots": {
         "off": {
           "query": "frozen=1&vhs=off&seed=20260918",
-          "readyMs": 4503,
-          "load": 4.08,
+          "readyMs": 4414,
+          "load": 4.43,
           "ship": {
             "sdfScale": 0.5,
             "upscale": true
@@ -3474,15 +3742,15 @@
           },
           "exceptions": [],
           "console": {
-            "file": ".lab-tmp/earlyz-parity/far-off.console.log",
+            "file": ".lab-tmp/earlyz-parity/raw/far-off.console.log",
             "lines": 43,
             "loud": 4
           }
         },
         "off2": {
           "query": "frozen=1&vhs=off&seed=20260918",
-          "readyMs": 4958,
-          "load": 2.49,
+          "readyMs": 4911,
+          "load": 3.19,
           "ship": {
             "sdfScale": 0.5,
             "upscale": true
@@ -3606,15 +3874,15 @@
           },
           "exceptions": [],
           "console": {
-            "file": ".lab-tmp/earlyz-parity/far-off2.console.log",
+            "file": ".lab-tmp/earlyz-parity/raw/far-off2.console.log",
             "lines": 43,
             "loud": 4
           }
         },
         "on2": {
           "query": "frozen=1&vhs=off&seed=20260918&earlyz=1",
-          "readyMs": 5463,
-          "load": 2.55,
+          "readyMs": 5483,
+          "load": 2.94,
           "ship": {
             "sdfScale": 0.5,
             "upscale": true
@@ -3738,15 +4006,15 @@
           },
           "exceptions": [],
           "console": {
-            "file": ".lab-tmp/earlyz-parity/far-on2.console.log",
+            "file": ".lab-tmp/earlyz-parity/raw/far-on2.console.log",
             "lines": 62,
             "loud": 5
           }
         },
         "on": {
           "query": "frozen=1&vhs=off&seed=20260918&earlyz=1",
-          "readyMs": 5430,
-          "load": 2.96,
+          "readyMs": 5515,
+          "load": 4.05,
           "ship": {
             "sdfScale": 0.5,
             "upscale": true
@@ -3870,7 +4138,7 @@
           },
           "exceptions": [],
           "console": {
-            "file": ".lab-tmp/earlyz-parity/far-on.console.log",
+            "file": ".lab-tmp/earlyz-parity/raw/far-on.console.log",
             "lines": 62,
             "loud": 5
           }
@@ -3878,9 +4146,10 @@
       },
       "onNoise": {
         "px": 0,
+        "maskedPx": 0,
         "frac": 0,
         "max": 1,
-        "meanAbs": 0.0083,
+        "meanAbs": 0.0084,
         "bbox": null,
         "grid": [
           [
@@ -3949,9 +4218,10 @@
       },
       "parity": {
         "px": 1118,
+        "maskedPx": 0,
         "frac": 0.001091796875,
         "max": 103,
-        "meanAbs": 0.0562,
+        "meanAbs": 0.0563,
         "bbox": [
           271,
           376,
@@ -4023,11 +4293,139 @@
         "changedHitMaxRgb": 0.9268,
         "changedHitMaxAlpha": 0.004057
       },
+      "seeded": {
+        "count": 11,
+        "interiorTexels": 779,
+        "sizeHist": {
+          "1": 3,
+          "2-4": 6,
+          "5-16": 0,
+          "17-64": 0,
+          "65-256": 1,
+          ">256": 1
+        },
+        "top": [
+          {
+            "size": 897,
+            "bbox": [
+              188,
+              189,
+              222,
+              237
+            ],
+            "interior": 702
+          },
+          {
+            "size": 162,
+            "bbox": [
+              293,
+              152,
+              304,
+              183
+            ],
+            "interior": 77
+          },
+          {
+            "size": 3,
+            "bbox": [
+              136,
+              228,
+              138,
+              228
+            ],
+            "interior": 0
+          },
+          {
+            "size": 3,
+            "bbox": [
+              184,
+              228,
+              186,
+              228
+            ],
+            "interior": 0
+          },
+          {
+            "size": 3,
+            "bbox": [
+              109,
+              238,
+              111,
+              238
+            ],
+            "interior": 0
+          },
+          {
+            "size": 2,
+            "bbox": [
+              93,
+              230,
+              94,
+              230
+            ],
+            "interior": 0
+          },
+          {
+            "size": 2,
+            "bbox": [
+              142,
+              230,
+              143,
+              230
+            ],
+            "interior": 0
+          },
+          {
+            "size": 2,
+            "bbox": [
+              163,
+              238,
+              164,
+              238
+            ],
+            "interior": 0
+          },
+          {
+            "size": 1,
+            "bbox": [
+              174,
+              213,
+              174,
+              213
+            ],
+            "interior": 0
+          },
+          {
+            "size": 1,
+            "bbox": [
+              82,
+              223,
+              82,
+              223
+            ],
+            "interior": 0
+          },
+          {
+            "size": 1,
+            "bbox": [
+              89,
+              228,
+              89,
+              228
+            ],
+            "interior": 0
+          }
+        ]
+      },
       "where": {
         "fringePx": 24,
+        "tightPx": 6,
         "seedFringe": 926,
+        "seedFringe6": 875,
         "marchChange": 164,
         "unexplained": 28,
+        "insideInterior": 0,
+        "insideInteriorAt": [],
         "seedDistHist": {
           "<=0": 152,
           "<=1": 204,
@@ -4071,6 +4469,10 @@
       "ok": true
     },
     {
+      "name": "[pack/off] staged the same pose as off",
+      "ok": true
+    },
+    {
       "name": "[pack/off2] no page exceptions (0)",
       "ok": true
     },
@@ -4080,6 +4482,10 @@
     },
     {
       "name": "[pack/off2] upscale stage on (the shipped path)",
+      "ok": true
+    },
+    {
+      "name": "[pack/off2] staged the same pose as off",
       "ok": true
     },
     {
@@ -4095,15 +4501,35 @@
       "ok": true
     },
     {
+      "name": "[pack/on] staged the same pose as off",
+      "ok": true
+    },
+    {
+      "name": "[pack/on2] no page exceptions (0)",
+      "ok": true
+    },
+    {
+      "name": "[pack/on2] GPU device not lost, 0 uncaptured errors",
+      "ok": true
+    },
+    {
+      "name": "[pack/on2] upscale stage on (the shipped path)",
+      "ok": true
+    },
+    {
+      "name": "[pack/on2] staged the same pose as off",
+      "ok": true
+    },
+    {
       "name": "[pack] off boots: flag off, nothing patched",
       "ok": true
     },
     {
-      "name": "[pack] off and off2 staged the same pose",
+      "name": "[pack] no march texel went miss -> hit under the flag (0)",
       "ok": true
     },
     {
-      "name": "[pack] no march texel went miss -> hit under the flag (0)",
+      "name": "[pack] no diff pixel inside a fully seeded 3x3 texel neighbourhood (0)",
       "ok": true
     },
     {
@@ -4112,10 +4538,6 @@
     },
     {
       "name": "[pack/on] seed drew (seed.on true, reason null)",
-      "ok": true
-    },
-    {
-      "name": "[pack] off and on staged the same pose",
       "ok": true
     },
     {
@@ -4131,6 +4553,10 @@
       "ok": true
     },
     {
+      "name": "[doorway/off] staged the same pose as off",
+      "ok": true
+    },
+    {
       "name": "[doorway/off2] no page exceptions (0)",
       "ok": true
     },
@@ -4140,6 +4566,10 @@
     },
     {
       "name": "[doorway/off2] upscale stage on (the shipped path)",
+      "ok": true
+    },
+    {
+      "name": "[doorway/off2] staged the same pose as off",
       "ok": true
     },
     {
@@ -4155,15 +4585,35 @@
       "ok": true
     },
     {
+      "name": "[doorway/on] staged the same pose as off",
+      "ok": true
+    },
+    {
+      "name": "[doorway/on2] no page exceptions (0)",
+      "ok": true
+    },
+    {
+      "name": "[doorway/on2] GPU device not lost, 0 uncaptured errors",
+      "ok": true
+    },
+    {
+      "name": "[doorway/on2] upscale stage on (the shipped path)",
+      "ok": true
+    },
+    {
+      "name": "[doorway/on2] staged the same pose as off",
+      "ok": true
+    },
+    {
       "name": "[doorway] off boots: flag off, nothing patched",
       "ok": true
     },
     {
-      "name": "[doorway] off and off2 staged the same pose",
+      "name": "[doorway] no march texel went miss -> hit under the flag (0)",
       "ok": true
     },
     {
-      "name": "[doorway] no march texel went miss -> hit under the flag (0)",
+      "name": "[doorway] no diff pixel inside a fully seeded 3x3 texel neighbourhood (0)",
       "ok": true
     },
     {
@@ -4172,10 +4622,6 @@
     },
     {
       "name": "[doorway/on] seed drew (seed.on true, reason null)",
-      "ok": true
-    },
-    {
-      "name": "[doorway] off and on staged the same pose",
       "ok": true
     },
     {
@@ -4191,6 +4637,10 @@
       "ok": true
     },
     {
+      "name": "[train-doorway/off] staged the same pose as off",
+      "ok": true
+    },
+    {
       "name": "[train-doorway/off2] no page exceptions (0)",
       "ok": true
     },
@@ -4200,6 +4650,10 @@
     },
     {
       "name": "[train-doorway/off2] upscale stage on (the shipped path)",
+      "ok": true
+    },
+    {
+      "name": "[train-doorway/off2] staged the same pose as off",
       "ok": true
     },
     {
@@ -4215,15 +4669,35 @@
       "ok": true
     },
     {
+      "name": "[train-doorway/on] staged the same pose as off",
+      "ok": true
+    },
+    {
+      "name": "[train-doorway/on2] no page exceptions (0)",
+      "ok": true
+    },
+    {
+      "name": "[train-doorway/on2] GPU device not lost, 0 uncaptured errors",
+      "ok": true
+    },
+    {
+      "name": "[train-doorway/on2] upscale stage on (the shipped path)",
+      "ok": true
+    },
+    {
+      "name": "[train-doorway/on2] staged the same pose as off",
+      "ok": true
+    },
+    {
       "name": "[train-doorway] off boots: flag off, nothing patched",
       "ok": true
     },
     {
-      "name": "[train-doorway] off and off2 staged the same pose",
+      "name": "[train-doorway] no march texel went miss -> hit under the flag (0)",
       "ok": true
     },
     {
-      "name": "[train-doorway] no march texel went miss -> hit under the flag (0)",
+      "name": "[train-doorway] no diff pixel inside a fully seeded 3x3 texel neighbourhood (0)",
       "ok": true
     },
     {
@@ -4232,10 +4706,6 @@
     },
     {
       "name": "[train-doorway/on] seed drew (seed.on true, reason null)",
-      "ok": true
-    },
-    {
-      "name": "[train-doorway] off and on staged the same pose",
       "ok": true
     },
     {
@@ -4251,6 +4721,10 @@
       "ok": true
     },
     {
+      "name": "[melee/off] staged the same pose as off",
+      "ok": true
+    },
+    {
       "name": "[melee/off2] no page exceptions (0)",
       "ok": true
     },
@@ -4260,6 +4734,10 @@
     },
     {
       "name": "[melee/off2] upscale stage on (the shipped path)",
+      "ok": true
+    },
+    {
+      "name": "[melee/off2] staged the same pose as off",
       "ok": true
     },
     {
@@ -4275,15 +4753,35 @@
       "ok": true
     },
     {
+      "name": "[melee/on] staged the same pose as off",
+      "ok": true
+    },
+    {
+      "name": "[melee/on2] no page exceptions (0)",
+      "ok": true
+    },
+    {
+      "name": "[melee/on2] GPU device not lost, 0 uncaptured errors",
+      "ok": true
+    },
+    {
+      "name": "[melee/on2] upscale stage on (the shipped path)",
+      "ok": true
+    },
+    {
+      "name": "[melee/on2] staged the same pose as off",
+      "ok": true
+    },
+    {
       "name": "[melee] off boots: flag off, nothing patched",
       "ok": true
     },
     {
-      "name": "[melee] off and off2 staged the same pose",
+      "name": "[melee] no march texel went miss -> hit under the flag (0)",
       "ok": true
     },
     {
-      "name": "[melee] no march texel went miss -> hit under the flag (0)",
+      "name": "[melee] no diff pixel inside a fully seeded 3x3 texel neighbourhood (0)",
       "ok": true
     },
     {
@@ -4292,10 +4790,6 @@
     },
     {
       "name": "[melee/on] seed drew (seed.on true, reason null)",
-      "ok": true
-    },
-    {
-      "name": "[melee] off and on staged the same pose",
       "ok": true
     },
     {
@@ -4315,6 +4809,10 @@
       "ok": true
     },
     {
+      "name": "[far/off] staged the same pose as off",
+      "ok": true
+    },
+    {
       "name": "[far/off2] no page exceptions (0)",
       "ok": true
     },
@@ -4324,6 +4822,10 @@
     },
     {
       "name": "[far/off2] upscale stage on (the shipped path)",
+      "ok": true
+    },
+    {
+      "name": "[far/off2] staged the same pose as off",
       "ok": true
     },
     {
@@ -4339,15 +4841,35 @@
       "ok": true
     },
     {
+      "name": "[far/on] staged the same pose as off",
+      "ok": true
+    },
+    {
+      "name": "[far/on2] no page exceptions (0)",
+      "ok": true
+    },
+    {
+      "name": "[far/on2] GPU device not lost, 0 uncaptured errors",
+      "ok": true
+    },
+    {
+      "name": "[far/on2] upscale stage on (the shipped path)",
+      "ok": true
+    },
+    {
+      "name": "[far/on2] staged the same pose as off",
+      "ok": true
+    },
+    {
       "name": "[far] off boots: flag off, nothing patched",
       "ok": true
     },
     {
-      "name": "[far] off and off2 staged the same pose",
+      "name": "[far] no march texel went miss -> hit under the flag (0)",
       "ok": true
     },
     {
-      "name": "[far] no march texel went miss -> hit under the flag (0)",
+      "name": "[far] no diff pixel inside a fully seeded 3x3 texel neighbourhood (0)",
       "ok": true
     },
     {
@@ -4359,25 +4881,50 @@
       "ok": true
     },
     {
-      "name": "[far] off and on staged the same pose",
-      "ok": true
-    },
-    {
       "name": "[pack] parity: 1071 px <= 1024 px",
-      "ok": false
+      "ok": false,
+      "gate": true
     },
     {
       "name": "[melee] parity: 152 px <= 1024 px",
-      "ok": true
+      "ok": true,
+      "gate": true
     },
     {
       "name": "[far] parity: 1118 px <= 1024 px",
-      "ok": false
+      "ok": false,
+      "gate": true
     }
   ],
   "noiseFloor": {
     "scene": "pack",
     "px": 0,
     "gatePx": 1024
+  },
+  "committedCopy": {
+    "done": true,
+    "to": "docs/dev-notes/2026-10-01-earlyz-stage-1/look",
+    "files": [
+      "pack-off-on-diff-half.png",
+      "pack-zoom.png",
+      "pack-seed-overlay-half.png",
+      "doorway-off-on-diff-half.png",
+      "doorway-zoom.png",
+      "doorway-seed-overlay-half.png",
+      "train-doorway-off-on-diff-half.png",
+      "train-doorway-zoom.png",
+      "train-doorway-seed-overlay-half.png",
+      "melee-off-on-diff-half.png",
+      "melee-zoom.png",
+      "melee-seed-overlay-half.png",
+      "far-off-on-diff-half.png",
+      "far-zoom.png",
+      "far-seed-overlay-half.png",
+      "parity.json"
+    ],
+    "gateFailures": [
+      "[pack] parity: 1071 px <= 1024 px",
+      "[far] parity: 1118 px <= 1024 px"
+    ]
   }
 }
