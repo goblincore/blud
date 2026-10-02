@@ -82,13 +82,22 @@ describe('the flashlight pickup (dynamic light §2.1)', () => {
 });
 
 describe('resolveInfiniteAmmo', () => {
-  it('is unlimited on the bare testbed unless ?ammo=finite asks for the magazine', () => {
-    expect(resolveInfiniteAmmo(false, null)).toBe(true);
-    expect(resolveInfiniteAmmo(false, 'finite')).toBe(false);
+  it('a finite level always runs the magazine down, whatever else is asked', () => {
+    for (const param of [null, 'finite', 'unlimited']) for (const bot of [false, true])
+      expect(resolveInfiniteAmmo(true, param, bot)).toBe(false);
   });
 
-  it('stays finite on a finite level whatever the boot default says (the reload never played when the later init clobbered the loop)', () => {
-    expect(resolveInfiniteAmmo(true, null)).toBe(false);
-    expect(resolveInfiniteAmmo(true, 'finite')).toBe(false);
+  it('the bare testbed reloads for a person (owner 2026-10-02: reload should show even with unlimited reserve)', () => {
+    expect(resolveInfiniteAmmo(false, null, false)).toBe(false);
+    expect(resolveInfiniteAmmo(false, 'finite', false)).toBe(false);
+  });
+
+  it('?ammo=unlimited restores the no-magazine testbed', () => {
+    expect(resolveInfiniteAmmo(false, 'unlimited', false)).toBe(true);
+  });
+
+  it('an automated browser keeps unlimited ammo unless it asks for the magazine (the gate scripts fire freely)', () => {
+    expect(resolveInfiniteAmmo(false, null, true)).toBe(true);
+    expect(resolveInfiniteAmmo(false, 'finite', true)).toBe(false);
   });
 });

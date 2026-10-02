@@ -22,8 +22,8 @@ import {
 import { rngStreams } from './rng';
 
 const FLAME_VARIANTS = 3;
-/** The point light's peak at the shot. It was 55 for the single-star flash. */
-const FLASH_LIGHT_PEAK = 95;
+/** The point light's peak at the shot. It was 55 for the single-star flash, 95 for the first jets. */
+const FLASH_LIGHT_PEAK = 100;
 
 interface Jet {
   on: boolean;
@@ -44,7 +44,10 @@ interface FlashRig { jets: [Jet, Jet]; flame: THREE.DataTexture[]; shot: number 
 
 const rigs = new WeakMap<THREE.Group, FlashRig>();
 
-const additive = (map: THREE.Texture, color: number): THREE.MeshBasicMaterial => new THREE.MeshBasicMaterial({
+/** `color` may exceed 1.0 per channel (HDR): additive layers stack, and a flash
+ *  that tops out at white 1.0 over a bright target is invisible -- the first cut
+ *  read as "subtle". */
+const additive = (map: THREE.Texture, color: THREE.ColorRepresentation): THREE.MeshBasicMaterial => new THREE.MeshBasicMaterial({
   map, color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending,
   depthWrite: false, depthTest: false, side: THREE.DoubleSide,
 });
@@ -85,10 +88,10 @@ export function buildMuzzleFlash(starTextures: THREE.Texture[]): THREE.Group {
   const sparkGeo = new THREE.PlaneGeometry(0.011, 0.06);
 
   const makeJet = (): Jet => {
-    const coreMat = additive(starTextures[0]!, 0xfff0c8);
-    const bloomMat = additive(soft, 0xff7a1c);
-    const tongueMat = additive(flame[0]!, 0xffffff);
-    const sparkMat = additive(flame[1]!, 0xffcf70);
+    const coreMat = additive(starTextures[0]!, new THREE.Color().setRGB(1.7, 1.5, 1.1));
+    const bloomMat = additive(soft, new THREE.Color().setRGB(2.2, 0.95, 0.22));
+    const tongueMat = additive(flame[0]!, new THREE.Color().setRGB(1.8, 1.8, 1.8));
+    const sparkMat = additive(flame[1]!, new THREE.Color().setRGB(2.2, 1.6, 0.7));
     const core = overlay(new THREE.Mesh(quad, coreMat));
     const bloom = overlay(new THREE.Mesh(quad, bloomMat));
     const tongueRoot = new THREE.Group();

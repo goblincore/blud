@@ -14,24 +14,29 @@
 // the leaf that draws it (game-muzzle-flash.ts) holds no timing of its own.
 
 export const MUZZLE_FLASH = {
-  /** Every layer is dark by this many seconds after the shot. */
-  windowSec: 0.13,
-  /** The core's exponential decay rate (1/s): ~1% left at the window's end. */
-  coreDecay: 36,
+  /** Every layer is dark by this many seconds after the shot. 0.2 s is five or six
+   *  frames at this scene's 30-40 ms; the first cut was 0.13 s and the owner
+   *  barely saw it. */
+  windowSec: 0.2,
+  /** The core holds full brightness this long (about three 60 fps frames), so
+   *  even a slow frame lands on the flash at its brightest. */
+  coreHoldSec: 0.05,
+  /** The core's exponential decay rate (1/s) after the hold: ~5% left at the end. */
+  coreDecay: 20,
   /** The tongue reaches its full length this fast. */
-  tongueRiseSec: 0.022,
+  tongueRiseSec: 0.03,
   /** Longest the flame tongue gets, metres, and its widest, metres. */
-  tongueMaxLen: 0.42,
-  tongueMaxWidth: 0.16,
+  tongueMaxLen: 0.55,
+  tongueMaxWidth: 0.21,
   /** Fireball scale (metres across) at the start and the end of the window. */
-  bloomStart: 0.10,
-  bloomEnd: 0.46,
+  bloomStart: 0.12,
+  bloomEnd: 0.36,
   /** Core star scale (metres across) at the start and the end. */
-  coreStart: 0.14,
+  coreStart: 0.16,
   coreEnd: 0.30,
   /** Sparks per barrel, their speed range (m/s), drag rate (1/s), gravity (m/s^2)
    *  and life (s). */
-  sparkCount: 7,
+  sparkCount: 8,
   sparkSpeedMin: 4,
   sparkSpeedMax: 9,
   sparkDrag: 7,
@@ -44,9 +49,10 @@ const inWindow = (t: number): boolean => t >= 0 && t <= W;
 const clamp01 = (x: number): number => Math.min(1, Math.max(0, x));
 const smooth = (x: number): number => { const k = clamp01(x); return k * k * (3 - 2 * k); };
 
-/** Core opacity: full at the shot, then an exponential burn-off. */
+/** Core opacity: full through the hold, then an exponential burn-off. */
 export function coreAlpha(t: number): number {
-  return inWindow(t) ? Math.exp(-MUZZLE_FLASH.coreDecay * t) : 0;
+  if (!inWindow(t)) return 0;
+  return t <= MUZZLE_FLASH.coreHoldSec ? 1 : Math.exp(-MUZZLE_FLASH.coreDecay * (t - MUZZLE_FLASH.coreHoldSec));
 }
 
 /** Core size (metres across): it swells as it dies, gas pushing outward. */
@@ -62,7 +68,7 @@ export function tongueLength(t: number): number {
   const rise = MUZZLE_FLASH.tongueRiseSec;
   if (t < rise) return MUZZLE_FLASH.tongueMaxLen * Math.sin((t / rise) * Math.PI / 2);
   const u = (t - rise) / (W - rise);
-  return MUZZLE_FLASH.tongueMaxLen * Math.pow(1 - u, 1.6);
+  return MUZZLE_FLASH.tongueMaxLen * Math.pow(1 - u, 1.25);
 }
 
 /** The tongue's width, metres: it spreads as it travels, so it is a plume. */
@@ -87,7 +93,7 @@ export function bloomScale(t: number): number {
 export function bloomAlpha(t: number): number {
   if (!inWindow(t)) return 0;
   const u = clamp01(t / W);
-  return 0.75 * Math.min(1, u * 12) * (1 - u) * (1 - u);
+  return 0.5 * Math.min(1, u * 12) * (1 - u) * (1 - u) * (1 - u);
 }
 
 /** A spark's displacement from the muzzle, metres, `t` seconds after the shot,

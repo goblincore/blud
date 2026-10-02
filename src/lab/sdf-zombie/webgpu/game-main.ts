@@ -349,6 +349,7 @@ import { predictSlugHitNow } from './game-world-leaves';
 import { TracerView, hideTracer, newTracerView, placeTracer } from './game-weapon-leaves';
 import { MUZZLE_VIEW, MUZZLE_VIEW_SIDES, fire } from './game-weapon-leaves';
 import { buildMuzzleFlash, stepFlashLight, stepMuzzleFlash } from './game-muzzle-flash';
+import { carryWithRecoil } from './recoil-carry';
 import { BakedChunk, ChunkTemplate, freeBaked } from './game-bake-leaves';
 import { GIB_ATLAS_URL, GIB_SHEET_URL, ensureGibAtlas } from './game-gibs-leaves';
 import { applyInputFrame } from './game-player-leaves';
@@ -4908,25 +4909,26 @@ async function main() {
   /** Shells in the gun. The reload animation only means something if running
    *  dry is a state the player can be in. */
   ctx.weapon.shells = MAGAZINE_CAPACITY;
-  /** UNLIMITED AMMO — ON by default, 2026-09-10 (owner: "i noticed we have like
-   *  'ammo'? it should be unlimited for now to make testing easier").
+  /** AMMO POLICY (pickups.ts resolveInfiniteAmmo). History: 2026-09-10 the owner
+   *  asked for unlimited ammo by default so a gib/blast tuning pass was not a
+   *  reload every second shot. 2026-10-02 the owner reversed it for people: the
+   *  bare testbed's RESERVE is still unlimited, but the two-shell magazine runs
+   *  down and the full reload animation plays ("even with infinite ammo, there
+   *  should still be reload"). The no-magazine behaviour remains for
    *
-   *  The grapeshot holds two shells and then spends 1.30 s breaking open and
-   *  reloading, which is the right feel for the weapon and pure friction for a
-   *  gib/blast tuning pass — every second shot is a reload instead of a test.
-   *  So running the magazine down is OFF unless asked for:
+   *    ?ammo=unlimited             an explicit request,
+   *    an automated browser        navigator.webdriver: ~20 gate scripts fire
+   *                                the shotgun freely and would stall on a 1.3 s
+   *                                reload every second shot (they may still ask
+   *                                for the magazine with ?ammo=finite),
+   *    __sdfGame.setInfiniteAmmo(true)   at runtime.
    *
-   *    ?ammo=finite   restores the two-shell magazine, the dry click and the
-   *                   reload — which is the ONLY way to exercise that animation,
-   *                   so the flag is the reload gate, not a legacy switch.
-   *    __sdfGame.setInfiniteAmmo(false)   same, at runtime.
-   *
-   *  The gun's own 0.45 s fire cooldown still applies, so this is unlimited
-   *  AMMO, not an unlimited rate of fire. The dynamite needs nothing: its prop
-   *  pool refills the hand after each throw's recovery beat, so it was already
-   *  unlimited. */
+   *  A finite LEVEL (night-train) always runs the magazine down from a real
+   *  reserve. The gun's own 0.45 s fire cooldown applies in every mode. The
+   *  dynamite needs nothing: its prop pool refills the hand after each throw. */
   ctx.weapon.infiniteAmmo = resolveInfiniteAmmo(
-    ctx.world.loop?.finite ?? false, new URLSearchParams(location.search).get('ammo'));
+    ctx.world.loop?.finite ?? false, new URLSearchParams(location.search).get('ammo'),
+    typeof navigator !== 'undefined' && navigator.webdriver === true);
   /** Seconds into the reload, or Infinity when not reloading. */
   ctx.weapon.reloadAge = Infinity;
   /** Varies the eject arc per reload (owner: "they always eject the same").
@@ -7618,6 +7620,9 @@ async function main() {
     stepMuzzleFlash(ctx);   // the jets follow the barrels through the kick
     if (ctx.weapon.topLeverNode) ctx.weapon.topLeverNode.rotation.y = topLeverAngle(reloading ? ctx.weapon.reloadAge : 0);
 
+    /** Where the fore hand is this frame BEFORE the recoil carries it: the rest
+     *  place, or the reload's path while one is running. */
+    let foreHandBase: THREE.Vector3 = FORE_HAND_REST;
     if (reloading) {
       // THE BORE BASIS, this frame, in rig space. The cases leave along it,
       // the fresh ones are staged on it, and the hand's two breech keys are
@@ -7656,6 +7661,7 @@ async function main() {
         FORE_HAND_REST.y + sh.dy,
         FORE_HAND_REST.z + sh.dz,
       );
+      foreHandBase = handNow;
       if (ctx.weapon.foreHandGroup) { ctx.weapon.foreHandGroup.position.copy(handNow); aimArms(ctx); }
 
       // ——— STAGE 1: EXTRACTION, and the INSERT that mirrors it ————————
@@ -7756,6 +7762,16 @@ async function main() {
         for (const m of ctx.weapon.loadShells) m.visible = false;
         updateHud(ctx);
       }
+    }
+    // THE HANDS RIDE THE KICK. They are placed at rest (or by the reload) and the
+    // recoil moves only the gun, so the hands used to hang where the fore-end had
+    // been. Carry both by the recoil part of the gun's motion; the window runs a
+    // little past the recoil so the last frame lands them exactly at rest.
+    if (ctx.weapon.fireAge < RECOIL.durationSec + 0.1 && ctx.weapon.gripHandGroup && ctx.weapon.foreHandGroup) {
+      const gunRest = { pos: GUN_REST.pos, pitchDeg: GUN_REST.pitchDeg, rollDeg: GUN_REST.rollDeg };
+      carryWithRecoil(GRIP_HAND_REST, gunRest, rc, ctx.weapon.gripHandGroup.position);
+      carryWithRecoil(foreHandBase, gunRest, rc, ctx.weapon.foreHandGroup.position);
+      aimArms(ctx);
     }
     {
       const projectileTiming = ctx.telemetry.telemetry.begin();

@@ -17,15 +17,20 @@ describe('the flame jet timeline', () => {
     }
   });
 
-  it('the core is at full brightness at the instant of the shot, then only decays', () => {
+  it('the core HOLDS full brightness for ~3 frames at 60 fps, then only decays', () => {
+    // At this scene's 30-40 ms frames a flash that starts decaying on frame one is
+    // seen once, dimmed: the owner could barely see it.
     expect(coreAlpha(0)).toBeCloseTo(1, 5);
+    expect(coreAlpha(MUZZLE_FLASH.coreHoldSec * 0.9)).toBeCloseTo(1, 5);
+    expect(coreAlpha(MUZZLE_FLASH.coreHoldSec)).toBeCloseTo(1, 5);
+    expect(coreAlpha(0.1)).toBeGreaterThan(0.3);   // still plainly lit at 3 frames of 33 ms
     let prev = Infinity;
     for (let t = 0; t <= W; t += 0.005) { const v = coreAlpha(t); expect(v).toBeLessThanOrEqual(prev + 1e-9); prev = v; }
   });
 
   it('the tongue SHOOTS out: it is long within a couple of frames, then dies back', () => {
     const peak = Math.max(...Array.from({ length: 40 }, (_, i) => tongueLength((i / 39) * W)));
-    expect(peak).toBeGreaterThan(0.25);                       // metres: a visible jet, not a spark
+    expect(peak).toBeGreaterThan(0.45);                       // metres: a visible jet, not a spark
     expect(tongueLength(0.03)).toBeGreaterThan(peak * 0.8);   // most of it by ~2 frames
     expect(tongueLength(W * 0.95)).toBeLessThan(peak * 0.25); // and nearly gone at the end
   });
@@ -33,11 +38,14 @@ describe('the flame jet timeline', () => {
   it('the fireball only grows, and ends well wider than the barrel', () => {
     expect(bloomScale(W * 0.9)).toBeGreaterThan(bloomScale(0.01));
     expect(bloomScale(W * 0.9)).toBeGreaterThan(0.25);
+    expect(bloomScale(W * 0.9)).toBeLessThan(0.45);   // focused: a tight fireball, not a screen-filling glow
     expect(coreScale(0.05)).toBeGreaterThan(coreScale(0));
+    expect(coreScale(W)).toBeLessThan(0.35);          // the owner found 0.6 m 'big and soft'
   });
 
-  it('is brighter and bigger than the single star it replaces (visible for >= 0.1 s)', () => {
-    expect(W).toBeGreaterThanOrEqual(0.1);
+  it('lasts long enough to be caught at 30-40 ms frames (>= 0.18 s), and the sparks fit inside it', () => {
+    expect(W).toBeGreaterThanOrEqual(0.18);
+    expect(MUZZLE_FLASH.sparkLifeSec).toBeLessThanOrEqual(W);
   });
 });
 

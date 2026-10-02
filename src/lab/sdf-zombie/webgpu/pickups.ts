@@ -96,11 +96,23 @@ export function reloadFromReserve(shells: number, capacity: number, inv: Invento
   return { shells: shells + take, inventory: { ...inv, shellsReserve: inv.shellsReserve - take } };
 }
 
-/** Whether the shotgun's magazine is unlimited. ONE decision for both inputs:
- *  a finite level (the game loop's `finite`) always runs the magazine down, and
- *  the bare testbed does only when `?ammo=finite` asks. Two separate writers of
- *  this flag is how the later one clobbered the loop's `false` and the reload
- *  never played on a finite level. */
-export function resolveInfiniteAmmo(levelFinite: boolean, ammoParam: string | null): boolean {
-  return !levelFinite && ammoParam !== 'finite';
+/** Whether the shotgun skips its magazine entirely (never decrements, never
+ *  reloads). ONE decision for every input.
+ *
+ *   - A finite LEVEL (the game loop's `finite`) always runs the magazine down.
+ *   - `?ammo=finite` asks for the magazine; `?ammo=unlimited` asks for none.
+ *   - Otherwise a PERSON gets the magazine: the bare testbed still has an
+ *     unlimited RESERVE (nothing runs dry), but the two-shell magazine reloads
+ *     with the full animation (owner, 2026-10-02: "even with infinite ammo,
+ *     there should still be reload").
+ *   - An AUTOMATED browser (navigator.webdriver) keeps the old no-magazine
+ *     default: about twenty gate scripts fire the shotgun freely and would stall
+ *     on a 1.3 s reload every second shot.
+ *
+ *  Two separate writers of this flag is how a later init once clobbered the
+ *  loop's `false` and the reload never played on a finite level. */
+export function resolveInfiniteAmmo(levelFinite: boolean, ammoParam: string | null, automated = false): boolean {
+  if (levelFinite || ammoParam === 'finite') return false;
+  if (ammoParam === 'unlimited') return true;
+  return automated;
 }
