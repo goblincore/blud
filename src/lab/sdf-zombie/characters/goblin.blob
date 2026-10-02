@@ -506,9 +506,9 @@ palette
   # 0.22. Owner, 2026-10-01: give the body the face's texture. This is the
   # quick preview; it is bump only, so it reads as a pebbled skin rather than
   # the face's speckle. A per-character `grain` (colour + bump, like the face)
-  # is the proper version, below. Whether this stays at 0.22 or goes back
-  # toward 0.06 now that the grain carries the texture is the owner's call at
-  # the grain gate (docs/superpowers/plans/2026-10-02-body-grain.md, Task 10).
+  # is the proper version, below. Owner, 2026-10-02: keep 0.22 with the grain
+  # ("fine for now"); 0.06 reads a cleaner speckle if the two ever stack too
+  # much (docs/dev-notes/2026-10-02-body-grain/, frame torso-on-n06).
   surfaceNoiseAmp 0.22
   # BODY GRAIN (body-grain.ts; spec docs/superpowers/specs/2026-10-02-body-grain-design.md):
   # the face sheet's speckle on the rest of the body, in two octaves. Same

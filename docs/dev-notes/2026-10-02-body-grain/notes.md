@@ -102,3 +102,8 @@ Each answer becomes an edit with a number behind it:
 Re-shoot only the frames an edit affects.
 
 - Task 10 done: task board, reference and gate questions written; awaiting the owner.
+
+**Owner, 2026-10-02: "I think it's fine for now, LGTM".** Kept as built: `GRAIN_CELL_COARSE` 0.012 (gone by about 3 m;
+revisit with 0.016 or a third octave if the goblin needs texture farther out), `surfaceNoiseAmp` 0.22, and both
+optional fades (painted prims, wounds). The live crawl check was not done; look for it the first time the goblin moves
+on screen.

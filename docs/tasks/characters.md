@@ -45,11 +45,12 @@ so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), like
   pack golden is re-pinned, and `blob:render-check` exits 0. **Owner approved 2026-10-01** ("lgtm") from the lab
   turntable ([frames](../dev-notes/2026-10-01-goblin-body-lookdev/lab/)); the profile (gut not reading in front) is
   accepted as is.
-- [~] **Body grain** (owner, 2026-10-01: "apply the noise texture that is on his face to his body"):
+- [x] **Body grain** (owner, 2026-10-01: "apply the noise texture that is on his face to his body"):
   [spec](../superpowers/specs/2026-10-02-body-grain-design.md), [plan](../superpowers/plans/2026-10-02-body-grain.md).
   A palette `grain` in the face sheet's units, in two octaves: face-sized 3.5 mm cells up close, 1.2 cm cells farther
-  out, each an albedo multiply and a bump in rest space; the goblin sets `grain 0.10`. **Awaiting the owner's look**
-  ([frames and numbers](../dev-notes/2026-10-02-body-grain/notes.md)).
+  out, each an albedo multiply and a bump in rest space; the goblin sets `grain 0.10`. **Owner approved 2026-10-02**
+  ("fine for now"), as built: coarse cell 0.012, `surfaceNoiseAmp` 0.22, the painted and wound fades kept
+  ([frames and numbers](../dev-notes/2026-10-02-body-grain/notes.md)). Built through dispatch (GLM 5.3 flash).
 - [ ] Phase 2, armour: redesign and fit (own brainstorm).
 - [ ] Phase 3, held weapons: the player's weapons in the orb hands (own brainstorm).
   - `webgpu/goblin-skin.ts` keeps `forearmRadius` 0.028 and `forearmElbowRadius` 0.038, documented as the goblin's
