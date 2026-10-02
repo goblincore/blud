@@ -2,6 +2,38 @@
 
 The march, temporal work, the upscaler, post, perf sessions. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Early-Z for the SDF march (conservative depth), stage 1 — built behind `?earlyz=1`, owner look pending 2026-10-02
+
+- [x] Spec `docs/superpowers/specs/2026-10-01-sdf-march-early-z-design.md`, plan `docs/superpowers/plans/2026-10-01-sdf-march-early-z-stage-1.md`.
+- [x] Behind `?earlyz=1` (default OFF): front-face crowd proxies + `frag_depth, greater`, camera-inside back batch,
+  level-depth seed, near-to-far order. Results: `docs/dev-notes/2026-10-01-earlyz-stage-1/NOTES.md`.
+  Flag off is byte-identical (golden, `march-hash` room1 `d7392d52…`, boot `drawOnce` ~1.75 s as before). Flag on: smoke
+  22/22; doorway march -14.8 ms / frame -13.5 ms, 16 bodies behind each other -21 ms (both real); no saving in the demo
+  recording (+0.26 ms march per frame, suggestive); no established cost in the cast rooms, but where nothing is culled it
+  leans slower. Front program cold compile ~22-30 s, in the background crowd job after `ready`.
+- [ ] Owner look at `look/*.png` (doorway edge fringe) and the default decision. The plan's numeric parity gate is red on
+  `pack` (1071 px) and `far` (1118 px) against 1024; by the evidence it is a 1-3 px upscaler fringe at polygon occluders
+  (shotgun, door jambs, the mesh skeleton's eyes), with no body culled. Options in the notes: accept / keep the viewmodel
+  and eyes out of the seed / leave red. The default stays OFF until then.
+- [ ] Stage 2 (built-once hull): NOT OPENED per the verdict. After stage 1 the march is still 93-99 % of the labelled GPU
+  time in the crowd scenes, `sdf:shell-hull` is small (0.1-0.3 ms; its label trades with `sdf:polys`), and empty-box pixels
+  are unmeasured. Open it only after the occupancy reader is fixed (post-discard hit flag, PASSOFF-2 section 2.1) and shows
+  a large empty-box share.
+- [ ] Spun off: the page-side `setUpscale()` loop race (its un-awaited `finally` resumes the rAF loop after `bench()` paused
+  it; the bench harness waits as a workaround). `game-context-coverage` bindings (`actorFill`, `fleshSpawnRng`) are fixed on
+  main (`d24a953d`); they clear when main is merged into this branch.
+
+- [ ] **Before any default flip** (final review 2026-10-02; none blocks merging with the flag OFF):
+  - N1: `earlyz/flag-off-node-ids.test.ts` is order-dependent; fold it into one sequential `it`, or `vi.resetModules()` and assert deltas.
+  - N2: three's synchronous pipeline path opens only a validation scope, so a GPU internal error (e.g. a Metal compile
+    failure) on a front pipeline created at first draw (`?warm=0`, a runtime `setDispatch('boxes')`, crowd types created
+    after the background job) is invisible to `pipeline-watch`. Treat `gpuErrors` growth after a front mesh's first draw
+    as a failure, or background-compile runtime-created types.
+  - N3: `scripts/sdf-game-bench.mjs` `checkEarlyzState` must fail a leg with any `batches[*].frontDisabled`.
+  - N4: read the pipeline from `getForRender`'s return value, not `renderObject.pipeline`.
+  - N5: install the watch after the deferred, accum and crowd-off guards.
+  - N6: fix the stale mock comment in `earlyz-boot.test.ts`.
+
 ## Shared light list, Part 3 plan 1 — done, pending owner sign-off 2026-09-27
 
 - [x] Spec written: [`docs/superpowers/specs/2026-09-26-shared-light-list-design.md`](../superpowers/specs/2026-09-26-shared-light-list-design.md);

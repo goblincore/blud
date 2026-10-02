@@ -304,6 +304,9 @@ import { createFlailSeams } from './game-seams-flail';
 import { createSkeletonSeams } from './game-seams-skeleton';
 import { createDynamiteSeams } from './game-seams-dynamite';
 import { createMarchDebugSeams } from './game-seams-march-debug';
+import { createEarlyzSeams } from './game-seams-earlyz';
+import { EARLYZ_FLAG } from './earlyz/flag';
+import { bootEarlyz, applyEarlyzRenderOrder, degradeFailedEarlyzFronts } from './earlyz/earlyz-boot';
 import { ensureImpactSplashLayer } from './game-vfx-leaves';
 import { laySpriteBench, sizeSdfLayer } from './game-render-leaves';
 import { withCtx } from './game-context';
@@ -457,6 +460,9 @@ async function main() {
   if (!ctx.boot.mount) throw new Error('#app not found');
   ctx.boot.resKey = resRungFromUrl(ctx.vfx.boundedWoundPreview ? '640' : DEFAULT_RES);
   ctx.boot.handle = await createLabRenderer(ctx.boot.mount, RES_RUNGS[ctx.boot.resKey]);
+  // EARLY-Z (spec 2026-10-01): patch + detect BEFORE any crowd material is built.
+  // Flag off: nothing runs; the boot is byte-for-byte the shipped boot.
+  if (EARLYZ_FLAG) await bootEarlyz(ctx);
   // Per-pass GPU timestamps (gpu-pass-timing.ts). Wraps the backend's uid
   // builder once; costs a string concat per pass. Read through
   // __sdfGame.bench({ mode: 'passes' }) or __sdfGame.passTimings().
@@ -523,6 +529,16 @@ async function main() {
   if (ctx.boot.mode.warning) console.warn(`[sdf-game] ${ctx.boot.mode.warning}`);
   if (ctx.boot.mode.fatal) throw new Error(ctx.boot.mode.fatal);
   ctx.boot.deferredMode = ctx.boot.mode.mode === 'deferred';
+  // EARLY-Z stage 1 is out of scope for the deferred route and for temporal-accumulation boots
+  // (`?accum=1`, whose far pass is not covered). Off here, after bootEarlyz and before the seed
+  // and any crowdTypeFor, so no front mesh is ever built.
+  if (ctx.crowd.earlyz.on && (ctx.boot.deferredMode || isAccumBoot())) {
+    ctx.crowd.earlyz.on = false;
+    ctx.crowd.earlyz.reason = ctx.boot.deferredMode
+      ? 'stage 1 is legacy-route only (deferred renderer)'
+      : 'stage 1 excludes temporal accumulation boots (far pass)';
+    console.warn(`[earlyz] off for this boot: ${ctx.crowd.earlyz.reason}`);
+  }
 
   // BACKGROUND-COMPILE POLICY (defer-compile task, 2026-09-19). A cold boot was
   // four ~48 s serialized march compiles behind the loader (body, crowd,
@@ -1551,6 +1567,18 @@ async function main() {
     ctx.crowd.on = false;
     console.warn('[crowd] refine/cone twins are not supported under the crowd march (stage 3); falling back to per-body for this boot');
   }
+  // EARLY-Z is crowd-only: with the crowd path off for good (`?crowd=0`, or the refine/cone
+  // fallback above) there is nothing to draw as a front batch, so report it OFF here (earlyzInfo,
+  // the bench's state guard) instead of "on" with no effect. Types created later by a runtime
+  // setCrowd(true) are then built without front meshes, consistently.
+  if (ctx.crowd.earlyz.on && !ctx.crowd.on) {
+    ctx.crowd.earlyz.on = false;
+    ctx.crowd.earlyz.reason = 'crowd path off (stage 1 is crowd-only)';
+    console.warn(`[earlyz] off for this boot: ${ctx.crowd.earlyz.reason}`);
+  }
+  // EARLY-Z level-depth seed: waits for the final crowd decision above and for the deferred and
+  // accumulation guards (a per-body boot gets no seed quad).
+  if (ctx.crowd.earlyz.on && ctx.crowd.on) ctx.render.sdfLayer.setEarlyzSeed(ctx.boot.handle.scene);
   /** One CrowdType per character registry name; lazily created on first spawn. */
   ctx.crowd.types = new Map<string, CrowdType>();
   /** The first attached view per type — the source of the per-frame per-TYPE
@@ -2250,6 +2278,10 @@ async function main() {
         tilesY: Math.ceil(Math.max(1, csize.height) / TILE_SIZE_PX),
         tilePx: TILE_SIZE_PX,
       };
+      // EARLY-Z: a front pipeline three marked errored (first draw with no precompile, ?warm=0, or a
+      // late failure) is switched off BEFORE this frame's sync, so the same frame already routes
+      // that type's bodies through the back batch.
+      if (ctx.crowd.earlyz.on) degradeFailedEarlyzFronts(ctx.crowd.types, ctx.crowd.earlyz);
       const crowdTiming = ctx.telemetry.telemetry.begin();
       // The level-shadow depth texture the type rebinds (same expression the
       // per-body loop's `map` uses; `flashlight.levelShadow.shadow.map` is
@@ -2298,6 +2330,7 @@ async function main() {
         t.sync(camera, grid, vis);
       }
       ctx.telemetry.telemetry.end('crowd-sync', crowdTiming);
+      if (ctx.crowd.earlyz.on) applyEarlyzRenderOrder(ctx.crowd.types);
       // DEGRADE, NEVER STALL (defer-compile task). While the crowd program is
       // not ready, keep the type meshes invisible so the boot precompile and
       // the live draw cannot reach them; the actors are drawn instead through
@@ -2306,7 +2339,10 @@ async function main() {
       // on an UNCACHED mesh builds the 48 s pipeline SYNCHRONOUSLY — so the
       // exclusion has to be the draw list (and visibility for the boot pass).
       if (!crowdMarch) {
-        for (const t of ctx.crowd.types.values()) { t.mesh.visible = false; t.depthPreMesh.visible = false; }
+        for (const t of ctx.crowd.types.values()) {
+          t.mesh.visible = false; t.depthPreMesh.visible = false;
+          if (t.frontMesh) t.frontMesh.visible = false;
+        }
       }
       // THE FALLBACK HAS TO SHOW THE PROXIES ITSELF (cold-cache flesh bug,
       // 2026-09-20). Attached views are spawned hidden, and only sdf-layer's
@@ -2331,8 +2367,15 @@ async function main() {
     // NOT the per-type sync so the bench can attribute a cpu:draw climb.
     const setBodiesTiming = ctx.telemetry.telemetry.begin();
     ctx.render.sdfLayer.setBodies(
+      // EARLY-Z: a type's front-face twin is a body too. sdf-layer hides the `bodies` list for
+      // the 'split' chunks-only render and runs one pass per listed body under the depth gate; a
+      // front mesh left out of the list stayed visible there and the whole front batch marched
+      // again (34-45 ms per live chunk, 2026-10-02 cost run). Flag off keeps the shipped map(),
+      // with no per-frame flatMap allocation.
       crowdMarch
-        ? ([...ctx.crowd.types.values()].map(t => t.mesh) as THREE.Object3D[])
+        ? ((ctx.crowd.earlyz.on
+            ? [...ctx.crowd.types.values()].flatMap(t => (t.frontMesh ? [t.mesh, t.frontMesh] : [t.mesh]))
+            : [...ctx.crowd.types.values()].map(t => t.mesh)) as THREE.Object3D[])
             .concat(ctx.render.visibleActors.filter(a => !a.crowd).map(a => a.view.object))
         : ctx.render.visibleActors.map(a => a.view.object),
       // GIBS DEGRADE (defer-compile task): the chunk/gib material is the only
@@ -4520,7 +4563,10 @@ async function main() {
       // compile back behind the loader. The background crowd job flips a mesh
       // visible only across its own compileAsync prologue, then hides it again.
       if (ctx.boot.backgroundMode && ctx.crowd.on) {
-        for (const t of ctx.crowd.types.values()) { t.mesh.visible = false; t.depthPreMesh.visible = false; }
+        for (const t of ctx.crowd.types.values()) {
+          t.mesh.visible = false; t.depthPreMesh.visible = false;
+          if (t.frontMesh) t.frontMesh.visible = false;
+        }
       }
       // THE GIB / CHUNK MARCH VARIANT (2026-09-18) now compiles in the
       // BACKGROUND set (2026-09-19): detached pieces march through the SHARED
@@ -4702,16 +4748,40 @@ async function main() {
   const compileCrowdInBackground = async (): Promise<boolean> => {
     let ok = true;
     for (const t of ctx.crowd.types.values()) {
-      t.mesh.visible = true;
-      const p = ctx.render.sdfLayer.precompileInBackground(
-        t.mesh, scene, camera, { timeoutMs: PRECOMPILE_COLD_PASS_TIMEOUT_MS },
-      );
-      // The prologue (which projects the object into the render context) has
-      // already run synchronously; visibility no longer matters, and keeping it
-      // hidden is what lets the live draw skip the pending pipeline safely.
-      t.mesh.visible = false;
-      const r = await p;
-      ok = ok && r;
+      // EARLY-Z: the front-face twin is a second program per type; it compiles in the
+      // same job, so the crowd stays on the fallback until BOTH have SETTLED. Settled is not
+      // built: a pipeline CREATION ERROR neither rejects nor times out compileAsync (three marks
+      // the pipeline errored, logs, and resolves; its draw then skips it), so `r` below is true
+      // for a front twin that will never draw. degradeFailedEarlyzFronts reads that mark right
+      // after each front compile and routes the type's bodies through the shipped back-face batch
+      // instead. `r` false (a throw or the bounded wait timing out) is the other failure: the
+      // crowd stays on the per-body fallback.
+      for (const m of [t.mesh, t.frontMesh]) {
+        if (!m) continue;
+        // A quad-dispatch type never draws its front mesh (hidden in sync), so compiling it is
+        // wasted cold-compile time. A runtime setDispatch('boxes') then compiles it on its first
+        // draw, synchronously: acceptable for a debug switch.
+        if (m === t.frontMesh && t.dispatch === 'quad') continue;
+        m.visible = true;
+        const p = ctx.render.sdfLayer.precompileInBackground(
+          m, scene, camera, { timeoutMs: PRECOMPILE_COLD_PASS_TIMEOUT_MS },
+        );
+        // The prologue (which projects the object into the render context) has
+        // already run synchronously; visibility no longer matters, and keeping it
+        // hidden is what lets the live draw skip the pending pipeline safely.
+        m.visible = false;
+        const r = await p;
+        ok = ok && r;
+        if (m === t.frontMesh) {
+          if (!r) {
+            ctx.crowd.earlyz.reason = `front compile failed for ${t.name}`;
+            console.warn(`[earlyz] ${ctx.crowd.earlyz.reason}; the crowd stays on the per-body fallback`);
+          } else {
+            degradeFailedEarlyzFronts(ctx.crowd.types, ctx.crowd.earlyz);
+          }
+        }
+        if (!ok) break;
+      }
       if (!ok) break;
     }
     return ok;
@@ -8661,6 +8731,7 @@ async function main() {
     createSkeletonSeams(ctx),
     createDynamiteSeams(ctx),
     createMarchDebugSeams(ctx),
+    createEarlyzSeams(ctx),
     createMiscSeams(ctx),
     createFxSeams(ctx),
     createWeaponPlayerSeams(ctx),
