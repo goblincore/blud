@@ -25,7 +25,9 @@ export interface EarlyzState {
   flag: boolean;
   /** The r186 patch installed AND the browser compiled `frag_depth, greater` (D8). */
   on: boolean;
-  /** Why it is off; null when on or not requested. */
+  /** Why early-Z is off, or (while `on`) the last early-Z problem seen, e.g. a front-mesh compile
+   *  failure; null when on and healthy or not requested. Scripts must read `on` and the crowd
+   *  warm state, not infer 'off' from `reason`. */
   reason: string | null;
   /** Uncaptured WebGPU errors seen since boot under the flag (first 20). */
   gpuErrors: string[];
