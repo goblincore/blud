@@ -194,14 +194,13 @@ describe('goblin-kit.gltf fits goblin.blob', () => {
   // Measured 2026-10-02: shaft 6.4-7.9 mm off the flesh (the whole height), cuff 10.6-14.1 mm (it flares over the boot
   // top on purpose). The bounds sit ~2 mm above those, so a ring that goes loose by one table-row fails and the next
   // body change has to re-measure rather than pass quietly.
-  // THE BELT SIZED FROM THE WRONG FLESH, once. At belt height the widest flesh is the tops of the thighs (hip joints at
-  // x 0.058, r 0.046), so the whole body is 0.209 m wide there while the torso alone is 0.162 m; a belt sized from the
-  // torso cluster had side vertices 12 mm inside the thighs. The belt and its pouches are measured here against the
-  // WHOLE body. The window excludes the forearm bracers (they are leather too, and hang at x >= 0.10 m).
-  // Measured 2026-10-02: tightest vertex 1.5 mm off the flesh (a pouch's inner face), farthest 46.8 mm (the back pouch's
-  // outer face); buckle 10.5-37.7 mm off.
+  // THE BELT AT THE WAIST (2026-10-03). It first sat at hip height on the hips bone, sized against the WHOLE body because the thigh
+  // tops widen the hips there (0.209 m against the torso's 0.162: a torso-sized belt had side vertices 12 mm inside the thighs). It
+  // now rides the spine1 bone at y 0.766-0.812 (the waist, above the thigh top at 0.751), where only the torso is that wide, so the
+  // window is that band; the bracers hang lower and are outside it. Measured: tightest vertex 0.2 mm off the flesh (a pouch's
+  // inner corner), farthest 46.4 mm (the back pouch); buckle 8.7-38.0 mm off.
   it('belt, pouches and buckle sit on the waist', () => {
-    const near = groups.get('leather')!.filter(v => v[1] > 0.64 && v[1] < 0.74 && Math.abs(v[0]) < 0.095);
+    const near = groups.get('leather')!.filter(v => v[1] > 0.74 && v[1] < 0.84 && Math.abs(v[0]) < 0.095); // the waist band; bracers hang lower
     expect(near.length, 'belt vertices found').toBeGreaterThan(30);
     const d = near.map(v => sdBody(v, body));
     expect(Math.min(...d), 'no belt vertex inside the flesh').toBeGreaterThan(0);

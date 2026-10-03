@@ -165,7 +165,9 @@ describe('goblin.blob', () => {
   it('has one continuous torso, not stacked rings', () => {
     const b = built();
     for (const c of b.clusters) if (c.limb.startsWith('arm') || c.limb.startsWith('leg')) c.alive = false;
-    const p0 = b.bones.get('pelvis')!.head;
+    // From 60 mm above the root: since 2026-10-03 the pelvis is a squashed sphere AT the hip joint (its bottom is y 0.648), so the root
+    // point itself (y 0.60) is outside the body and `reach` rightly refuses to start there.
+    const p0 = boneAt(b, 'pelvis', 0.6);
     const p1 = boneAt(b, 'chest', 0.85);
     const width: number[] = [];
     for (let y = p0[1]; y <= p1[1]; y += 0.005) {

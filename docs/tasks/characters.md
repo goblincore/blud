@@ -86,8 +86,9 @@ so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), like
   angle-space blending, ground-lock), the `cfg.pose` seam in `stepMotion` (writes the targets, pins every point), and the goblin's
   `type`, `recoil`, `sit`, `stand`, `jolt` (`characters/goblin-poses.ts`), checked in the lab (`BLOB_POSE=pose:<name>`). **Still to do:**
   `reach` (the Flat spec's fifth pose), the at-home vest and shorts, hands-on-keyboard contact, the game/sequence wiring, and the
-  authoring route for richer clips (the key list is the target for a Blender export; text for now). Open: the pale shirt lump at
-  the lower back when the spine curls (notes). Original scope note: authoring route (Blender armature -> bone angles, or keyframes) Cautionary case: the bride (shelved
+  authoring route for richer clips (the key list is the target for a Blender export; text for now). **Owner feedback fixed 2026-10-03:** the seated "diaper" (pelvis mass hung 17 cm below the hip joint; now a squashed sphere at the joint
+  plus glutes) and the belt clipping when seated (belt moved to the waist on `spine1`); both in the notes. **Not re-checked after the
+  pelvis change:** the walk, run and recoil poses. Open: the pale shirt lump at the lower back when the spine curls (notes). Original scope note: authoring route (Blender armature -> bone angles, or keyframes) Cautionary case: the bride (shelved
   for janky animation and a sword clipping the body).
   - `goblin.blob`'s neck vertebra bead (`blob head on neck at=0.30 ...`) is a zero-length head-limb prim, so
     `rig-bind.ts` (`ridesHead`, ~line 388) binds it to the RIGID head: it is 94 mm below the skull pivot and will slide

@@ -38,3 +38,29 @@ Spec `../../superpowers/specs/2026-10-03-goblin-pose-layer-design.md`, plan `../
   a render frame, but it allocates; the game wiring should sample once per frame, not per sub-step.
 - No hands-on-keyboard contact, no chair, no prop contact: hands hover where the arm angles put them.
 - Not wired into the game or the Flat scene (which does not exist yet); only the lab and the tests.
+
+## Owner feedback on the seated pose: the "diaper" and the belt (2026-10-03)
+
+Owner: "his legs are attached to the side of his pelvis so his pelvis dips below when he sits like he has a big diaper ... his
+pelvis and butt need some work ... when he sits his belt has all kinds of clipping issues where it doesn't really move with his
+waist." Both confirmed by close-up frames (`type-*` before, `pelvis-fix-*` after) and fixed.
+
+- **Cause 1, the pelvis.** `goblin.blob`'s pelvis was ONE tapered bar from the root (y 0.60) to the hip joint (y 0.705) with a
+  68 mm round end cap: 17 cm of mass hung below the hips. Standing, the thighs hid it; seated, the thighs lie flat at hip height
+  (underside 46 mm below the joint) and the pelvis dangled ~8 cm under them.
+- **Fix 1.** A squashed sphere AT the hip joint (bottom y 0.648), the gut blob 20 mm further forward and 12 mm lower, and a
+  mirrored glute pair (`both`, 38 mm out, 46 mm back, r 0.050). Seated: flush on the thigh line. Standing from behind: two cheeks.
+  Front: no crotch gap visible. Re-pinned on purpose: pack golden snapshot, the prof array (+2 prof-0 entries), the
+  continuity test's start point (the root is now outside the body). The "gut in front" pin was kept, not loosened: the first
+  pass dropped the belly from +27 to +8 mm because the new glutes fill the back, so the gut blob was pushed forward until it
+  passed again.
+- **Cause 2, the belt.** It rode the HIPS bone at y 0.669-0.705: the hip joint's own height, a rigid hoop on the pelvis. Seated,
+  the spine pitches and the belly moves but the belt does not, and the thighs swing through that height.
+- **Fix 2.** The belt now sits at the waist (y 0.766-0.812, the torso's narrowest) skinned to `spine1`, so it bends with the belly;
+  the pants/shirt paint seam (y 0.705) is now below it, so the tank top hangs untucked over the pants. Pouches and buckle moved with
+  it. **WAM `attach` boxes HANG DOWN from their anchor** (found the hard way: the pouches dangled below the belt toward the thighs
+  and their inner corners were 10.8 mm inside the belly); anchored at the belt band's top now.
+- **Residual:** pitching the spine 20 degrees about the hip drops a point 0.085 m in front of the pivot by ~3 cm, so the belt front
+  still settles to within ~1 cm of the thigh top when seated. A rigid ring cannot fold; it reads fine in the frames, but it is the
+  first place to look if clipping is still visible.
+- Not re-checked after the pelvis change: the WALK and RUN poses (only rest and seated were shot), and the recoil pose.

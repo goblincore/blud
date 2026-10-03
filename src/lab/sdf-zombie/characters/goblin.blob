@@ -187,8 +187,22 @@ body
   # renderer darkens low sRGB values hard (a first 4a4d50 pant read near black), so these are
   # chosen to land on dingy white and fatigue grey on screen (the first cream ddd3b4 rendered as tan skin: the key is warm, so the source is kept NEUTRAL and the light does the yellowing), not to match a paint chip.
   # Pants 7a7e82. Neck, arms, head, hands, ankle knob and feet stay flesh (boots cover the feet).
-  bar  torso on pelvis from=0.00 to=1.00 r=0.068 r2=0.074 deep=1.10 offset=(0,0,0.012) blend=0.014 color=7a7e82
-  blob torso on pelvis at=0.80 r=0.060 tall=1.05 offset=(0,0,0.030) blend=0.016 color=7a7e82
+  # PELVIS AND BUTT, REWORKED 2026-10-03 (owner, seeing the seated pose: "his pelvis dips below when he sits like he has a big
+  # diaper ... his pelvis and butt need some work"). The pelvis used to be ONE tapered bar from the root (y 0.60) to the hip joint
+  # (y 0.705) with a 68 mm round end cap, so 17 cm of mass hung below the hips. Standing, the thighs hid it; seated, the thighs lie
+  # flat forward at hip height (their underside is only 46 mm below the joint) and the pelvis dangled 8 cm under them. Now:
+  #   * the pelvis is a squashed sphere AT the hip joint (tall 0.72: its bottom is y 0.648, 57 mm under the joint, about the thigh
+  #     underside), so seated it sits flush on the thigh line;
+  #   * the gut blob rides at the joint too, 12 mm lower than before and 20 mm further forward, so
+  #     the belly keeps its +15 mm over the back (goblin-blob.test.ts) now that the back has a butt;
+  #   * a pair of GLUTES (`both`, mirrored in x), 38 mm either side of the spine and 50 mm behind it, at the hip joint's height
+  #     minus 3 cm: they are the seat, and from behind they are the cheeks the owner wants, with a 14 mm blend so they merge.
+  # The old bar's cap used to fill the crotch between the thighs; the legs now start at a narrow slit (thigh centres 0.116 m
+  # apart, r 0.046) under the pelvis, which is how legs meet a body. Measured by eye in the lab, rest and seated (frames in
+  # docs/dev-notes/2026-10-03-goblin-poses/).
+  blob torso on pelvis at=1.00 r=0.074 tall=0.72 deep=1.10 offset=(0,-0.004,0.012) blend=0.014 color=7a7e82
+  blob torso on pelvis at=1.00 r=0.060 tall=1.00 offset=(0,-0.012,0.050) blend=0.016 color=7a7e82
+  blob torso on pelvis at=1.00 r=0.050 offset=(0.038,-0.030,-0.046) blend=0.014 both color=7a7e82
   bar  torso on spine1 from=0.00 to=1.00 r=0.072 r2=0.068 deep=1.08 offset=(0,0,0.010) blend=0.016 color=cfcab8
   bar  torso on chest  from=0.00 to=0.95 r=0.068 r2=0.056 wide=1.00 deep=1.12 blend=0.016 color=e9e7dd
 

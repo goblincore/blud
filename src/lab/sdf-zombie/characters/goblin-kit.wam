@@ -424,60 +424,48 @@ parts
     ring 1.00 w=0.0058 d=0.0058
     cap start=flat end=flat
 
-  # UTILITY BELT — rebuilt 2026-10-02 against the phase-1 body (owner: "some
-  # kind of utility belt around the waist"; the old belt was sized for a gut
-  # 11% wider and 27% deeper, and its buckle floated 5 cm off the new belly).
+  # UTILITY BELT — AT THE WAIST, ON THE SPINE (2026-10-03, owner, seeing the seated pose: "when he sits his belt has all kinds of
+  # clipping issues where it doesn't really move with his waist"). It used to ride the HIPS bone at y 0.669-0.705 m, which is the
+  # hip joint's own height: a rigid hoop on the pelvis, so when the spine pitched forward the belly moved and the belt did not,
+  # and the thighs, which lie flat forward at exactly that height when he sits (the thigh top is y 0.751 at the hip), swung
+  # straight through it and its front pouches. Now it sits at the WAIST, the narrowest part of the torso (spine1 t0.45-0.79,
+  # y 0.766-0.812), skinned to `spine1` so it bends with the belly it wraps, and the pouches hang inside that band (their bottoms
+  # are at y 0.757, just over the thigh top). The paint seam between pants and shirt (y 0.705) is now below the belt: the tank
+  # top hangs untucked over the pants, a dirty wife-beater's natural line.
   #
-  # It sits ON THE PAINT SEAM: the pants end and the shirt starts where the
-  # pelvis and spine1 bars meet (y 0.705 m at rest, see goblin.blob), so the belt
-  # is what a viewer reads as the join. Lofted along the hips..spine1 chain
-  # (0.105 + 0.135 = 0.240 m, root at y 0.60), rings at y 0.679 / 0.701 / 0.722.
-  # WAM FOLDED THAT: a loft spanning the hips->spine1 bend (13 deg) with rings this
-  # wide doubles back ("missing faces"). So the belt is lofted on the hips bone alone,
-  # rings at hips t0.66 / 0.84 / 1.00 = y 0.669 / 0.688 / 0.705 m: a 36 mm belt that
-  # ends exactly on the paint seam. Ring sizes are the same flesh x 1.10 numbers.
+  # RESIDUAL, HONEST: pitching the spine 20 degrees about the hip drops a point 0.085 m in front of the pivot by about 3 cm, so
+  # the belt front still settles to within ~1 cm of the thigh top when seated. The belly flesh meets the thigh there too, so
+  # the belt follows the belly instead of passing through it, but a rigid ring cannot fold; the lab frames say whether it reads.
   #
-  # Flesh there (metres, measure.md): pelvis t0.75 w 0.1573 d 0.1761 with the
-  # section's centre 0.0137 forward of the bone axis (the gut is in front, the
-  # back is flat); pelvis t1.0 / spine1 t0 w 0.1618 d 0.1807, centre +0.0131;
-  # spine1 t0.15 w ~0.158 d ~0.178, centre +0.006. THE WIDTH IS NOT THE TORSO'S: at belt
-  # height the widest flesh is the TOPS OF THE THIGHS (hip joints at x 0.058, r 0.046),
-  # so the whole-body width is 0.2088-0.2101 m (measure.md, "WHOLE BODY"), not the
-  # torso cluster's 0.1618. The first belt used the torso number and its side vertices
-  # sat 12 mm inside the thigh tops. Width = 0.209 x 1.10 / 1.30 = 0.1775; depth is
-  # still the torso's (nothing else reaches front or back). Every ring is flesh x 1.10 / 1.30
-  # with `fwd` carrying the centre offset: 10% is the facet margin for `style
-  # chunky` plus a hair of belt thickness (facet midpoints land ~1-2 mm proud,
-  # the vertices ~8 mm), thin on purpose, because a belt that stands off the
-  # body reads as a hoop. The asymmetry matters: centred on the bone axis the
-  # belt would float at the back and cut into the gut.
-  loft belt bones=hips..hips material=leather
-    ring 0.66 w=0.1775 d=0.1490 fwd=0.0105
-    ring 0.84 w=0.1775 d=0.1529 fwd=0.0101
-    ring 1.00 w=0.1775 d=0.1529 fwd=0.0101
+  # Sizes: the spine1 flesh sections from measure.md (torso cluster; nothing else reaches this high in x, the thigh tops end at
+  # y 0.751): t0.5 w 0.1409 d 0.1635 (centre +0.0058 forward of the bone axis), t0.25 0.1542 / 0.1748, t0.75 0.1462 / 0.1632,
+  # t1.0 0.1516 / 0.1742; interpolated at the ring heights. Rings = flesh x 1.10 / 1.30 (the facet margin and a hair of belt, as
+  # before), `fwd` carries the section's forward offset 0.0045 of height.
+  loft belt bones=spine1..spine1 material=leather
+    ring 0.45 w=0.1199 d=0.1396 fwd=0.0045
+    ring 0.62 w=0.1214 d=0.1383 fwd=0.0045
+    ring 0.79 w=0.1247 d=0.1396 fwd=0.0045
     cap start=none end=none
 
-  # BUCKLE — brass, front centre. NOT `on=belt` (it sinks the origin in by an
-  # inset and buried the old buckle). Hand-placed: hips t0.95 is y 0.70 m, and the
-  # belt's front vertex is 0.1117 m forward there, so the box (0.026 m deep)
-  # is centred at z 0.1227 m = 0.0944 of height, its front face standing 11 mm
-  # proud of the belt and its back face 2 mm inside it.
-  attach buckle bone=hips kind=box at=0.95 offset=(0,0,0.0944) size=0.030 w=0.044 d=0.020 material=brass
+  # BUCKLE — brass, front centre, hand-placed (not `on=belt`, which buried the first one). NOTE an `attach` box HANGS DOWN from its
+  # anchor (found 2026-10-03: the pouches' tops sat at the anchor and their bodies dangled below the belt). spine1 t0.74 is y 0.8055 m
+  # (the box then spans 0.766-0.8055, exactly the belt band) with the bone axis at z 0.0224; the belt's front vertex is 0.1189 m
+  # forward, so the 0.026 m deep box is centred at z 0.1299 m = offset 0.0827 of height: front face 11 mm proud, back 2 mm inside.
+  attach buckle bone=spine1 kind=box at=0.74 offset=(0,0,0.0827) size=0.030 w=0.044 d=0.020 material=brass
 
-  # POUCHES — at the belt's FRONT CORNERS, not at the hip: the hanging forearm
-  # owns the flank (the soldier kit's measured lesson; the goblin's forearm is at
-  # x 0.14-0.16 m and the hand at 0.144), so anything at x >= 0.10 m is swallowed
-  # or collides in the swing. The corner is where the belt ellipse passes
-  # x 0.070 m, z 0.090 m (0.0131 + 0.0969 * sqrt(1 - (0.070/0.1152)^2), the belt ellipse is
-  # now 0.230 m wide); a box is centred 7 mm outside that so 2 mm of it is tucked into
-  # the belt, hanging from the belt line (hips t0.81 = y 0.685 m). Boxes are 8 vertices each.
+  # POUCHES — at the belt's FRONT CORNERS, anchored at the TOP of the belt band (spine1 t0.79, y 0.812 m) so they span 0.768-0.812
+  # and no longer dangle toward the thighs (their bottoms are over the 0.751 thigh top). The hanging forearm owns the flank (the
+  # soldier kit's lesson), so x stays at 0.062 m. At t0.79 the bone axis is z 0.0238 and the belt ellipse at x 0.062 is z 0.0881
+  # (0.0238 + 0.0058 + 0.0907 x sqrt(1 - (0.062/0.0811)^2)). The first pass centred them 7 mm outside that and their INNER
+  # corners sat 10.8 mm inside the belly (the octagonal belt and the flesh ellipse differ at a corner): centred at z 0.1078 m =
+  # offset 0.0646 of height the inner corners were still 2.6 mm in, so 0.0676 (z 0.1117 m); it measures 1+ mm clear. Boxes are 8 vertices each.
   mirror
-    attach pouch bone=hips kind=box at=0.81 offset=(0.0538,0,0.0747) size=0.034 w=0.030 d=0.018 material=leather
+    attach pouch bone=spine1 kind=box at=0.79 offset=(0.0477,0,0.0676) size=0.034 w=0.030 d=0.018 material=leather
   end
 
-  # BACK POUCH — one, centred, on the flat back. The belt's back vertex is at
-  # z -0.0863 m (0.0131 - 0.0994); the box is centred 11 mm behind that.
-  attach backpouch bone=hips kind=box at=0.81 offset=(0,0,-0.0746) size=0.032 w=0.038 d=0.018 material=leather
+  # BACK POUCH — one, centred, on the flat back, top-anchored like the others (spans 0.7704-0.812): the belt's back vertex at t0.79
+  # is z -0.0611 m (0.0238 + 0.0058 - 0.0907); the box is centred 13.7 mm behind it, -0.0748 m = offset z -0.0758 of height.
+  attach backpouch bone=spine1 kind=box at=0.79 offset=(0,0,-0.0758) size=0.032 w=0.038 d=0.018 material=leather
 
   # NO FAULD, CLEAVER OR BUCKLER (owner, 2026-10-02). The pelvic skirt clipped
   # both thighs and the gut and is gone; the trousers are paint in goblin.blob.
