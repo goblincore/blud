@@ -187,7 +187,7 @@ export function stampCut(prims: Primitive[], seg: CutSeg, calibre: CutCalibre, b
   const alongW = Math.hypot(t[0], t[1], t[2]) > 1e-9 ? unit(t) : Math.hypot(c[0], c[1], c[2]) > 1e-9 ? unit(c) : perp(inward);
   w.shape = 'cut';
   w.carveN = worldDirToWoundLocal(prims, w, inward, bodyYaw);
-  w.carveDepth = Math.min(wantDepth, thick * CUT.thickFrac);
+  w.carveDepth = Math.min(wantDepth, thick * CUT.thickFrac, CUT_SHADE.maxDepthPerHalfLen * half);
   w.cutDir = worldDirToWoundLocal(prims, w, alongW, bodyYaw);
   w.kerf = calibre.kerf;
   w.rimScale = calibre.lip;

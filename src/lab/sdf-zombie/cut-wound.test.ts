@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/cut-wound.test.ts
 import { describe, expect, it } from 'vitest';
-import { CUT, ROD_CALIBRE, cutCarve, cutExposureSpheres, cutsFromSweep, stampCut } from './cut-wound';
+import { CUT, CUT_SHADE, ROD_CALIBRE, cutCarve, cutExposureSpheres, cutsFromSweep, stampCut } from './cut-wound';
 import { woundDirToWorld, woundWorldPos } from './damage';
 import { prim } from './head-pop';
 import { sdBody } from './validate';
@@ -133,11 +133,11 @@ describe('stampCut', () => {
     expect(w.kerf).toBe(ROD_CALIBRE.kerf);
     expect(w.rimScale).toBe(ROD_CALIBRE.lip);
   });
-  it('depth comes from the flesh, not the cut length: a 0.03 m and a 0.12 m cut both get the full calibre depth', () => {
-    for (const half of [0.015, 0.06]) {
-      const g = stampCut(prims, { a: [0, 1.25 - half, 0.15], b: [0, 1.25 + half, 0.15], view: [0, 0, -1] }, ROD_CALIBRE, 0, field);
-      expect(g.carveDepth).toBe(ROD_CALIBRE.depth);
-    }
+  it('depth comes from the flesh and obeys the depth/length clamp: a 0.12 m cut gets the full calibre depth, a 0.03 m cut 1.6 x its half-length', () => {
+    const cut = (half: number) => stampCut(prims, { a: [0, 1.25 - half, 0.15], b: [0, 1.25 + half, 0.15], view: [0, 0, -1] }, ROD_CALIBRE, 0, field);
+    expect(cut(0.06).carveDepth).toBe(ROD_CALIBRE.depth);
+    expect(cut(0.015).carveDepth).toBeCloseTo(CUT_SHADE.maxDepthPerHalfLen * 0.015, 9);
+    expect(cut(0.015).carveDepth).toBeCloseTo(0.024, 9);
   });
   it('a slash across the arm silhouette (chord midpoint on its axis) anchors on the skin facing the viewer', () => {
     const g = stampCut(prims, { a: [0.35, 1.25, 0], b: [0.45, 1.25, 0], view: [0, 0, -1] }, ROD_CALIBRE, 0, field);
