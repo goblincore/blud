@@ -44,6 +44,14 @@ describe('burstHit', () => {
     expect(b.state.skull.crown).toBeCloseTo(REGION_TUNING.glanceSkull + REGION_TUNING.skullPerHit, 9);
     expect(b.events.some(e => e.kind === 'kill')).toBe(true);
   });
+  it('a gentler repeat step makes the zombie much harder to kill: 4 repeats at 0.04 survive, the 5th kills', () => {
+    let st = burstHit(makeHeadDamage(), { hs: crownHs, lethal: false, step: 0.04 }).state;
+    for (let i = 0; i < 4; i++) {
+      st = burstHit(st, { hs: crownHs, lethal: false, step: 0.04 }).state;
+      expect(st.dead).toBe(false);
+    }
+    expect(burstHit(st, { hs: crownHs, lethal: false, step: 0.04 }).state.dead).toBe(true);
+  });
   it('glancing slugs on DIFFERENT regions each crack their own region and do not kill', () => {
     const a = burstHit(makeHeadDamage(), { hs: crownHs, lethal: false }).state;
     const b = burstHit(a, { hs: [...HEAD_REGIONS.cheekR], lethal: false });

@@ -40,7 +40,7 @@ export const HEAD_DEFORM = {
  *  head across the shot in proportion to how far b is above rest (the transient inflate only). */
 export const BURST_DEFORM = {
   swell: 0.32,
-  rest: 0.35,
+  rest: 0.5,
   hz: 9,
   zeta: 0.3,
   across: 0.45,
@@ -51,7 +51,7 @@ export const BURST_DEFORM = {
   restV: 1e-2,
 } as const;
 
-export interface BurstSpring { b: number; v: number; rest: number; axis: 0 | 1 | 2; sign: 1 | -1 }
+export interface BurstSpring { b: number; v: number; rest: number; axis: 0 | 1 | 2; sign: 1 | -1; /** Lasting widening across the shot. */ splay: number }
 
 export interface HeadDeformState {
   /** Wobble displacement and velocity (s, ds/dt). */
@@ -95,12 +95,12 @@ export function stepWobble(st: HeadDeformState, dt: number): HeadDeformState {
 }
 
 /** A slug burst: swell to the peak along the shot axis (head-local `axisLocal`), then ring toward the lasting rest. */
-export function kickBurst(st: HeadDeformState, axisLocal: Vec3, severity: number, swell: number = BURST_DEFORM.swell): HeadDeformState {
+export function kickBurst(st: HeadDeformState, axisLocal: Vec3, severity: number, swell: number = BURST_DEFORM.swell, splay = 0): HeadDeformState {
   const axis = argmaxAbs(axisLocal);
   const sign: 1 | -1 = axisLocal[axis]! >= 0 ? 1 : -1;
   const sev = Math.min(1, Math.max(0, severity));
   const peak = Math.min(BURST_DEFORM.maxB, swell * (0.5 + 0.5 * sev));
-  return { ...st, bu: { b: peak, v: 0, rest: peak * BURST_DEFORM.rest, axis, sign } };
+  return { ...st, bu: { b: peak, v: 0, rest: peak * BURST_DEFORM.rest, axis, sign, splay } };
 }
 
 /** Advance the burst spring (semi-implicit Euler, sub-stepped like stepWobble); snaps to rest when settled. */
@@ -164,7 +164,7 @@ export function headAffine(st: HeadDeformState, f: HeadFrame): HeadAffine | null
     const transient = Math.max(0, bu.b - bu.rest);
     for (const k of [0, 1, 2] as const) {
       if (k === bu.axis) { mul[k] *= 1 + bu.b; shift[k] += bu.sign * bu.b * f.axes[k]; }
-      else mul[k] *= 1 + BURST_DEFORM.across * transient;
+      else mul[k] *= 1 + BURST_DEFORM.across * transient + bu.splay;
     }
   }
   // The shear leans along the blow's across-the-neck (head x/z) part only: a blow from above does not lean.

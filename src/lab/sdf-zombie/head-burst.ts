@@ -16,12 +16,14 @@ export const BURST = {
   /** A hit point farther than this from the head centre in hs units (the head ellipsoid is 1) is a neck / shoulder hit. */
   maxHs: 1.35,
   /** Crater radii, m. Glancing scales by (0.7 + 0.3 · severity). */
-  entryR: { lethal: 0.09, glancing: 0.07 },
-  exitR: 0.11,
+  entryR: { lethal: 0.12, glancing: 0.09 },
+  exitR: 0.14,
   /** Shards thrown (inclusive ranges, scaled by 0.5 + 0.5·severity and burstTuning.shardScale). */
   shards: { lethal: [14, 18], glancing: [6, 9] } as { lethal: readonly [number, number]; glancing: readonly [number, number] },
   /** Hinged scalp flaps (hard cap flapMax). */
-  flaps: { lethal: 3, glancing: 2 },
+  /** OFF by default: the capsule flaps read as wiggling orange tubes on the zombie (owner, 2026-10-03). The code stays
+   *  for a future monster; `burstTune({ flapCount })` forces any count up to flapMax. */
+  flaps: { lethal: 0, glancing: 0 },
   flapMax: 4,
   /** Brain lumps thrown (the lethal burst also launches the whole brain). */
   lumps: { lethal: 3, glancing: 2 },
@@ -35,7 +37,16 @@ export const burstTuning = {
   on: true,
   centreFrac: BURST.centreFrac as number,
   /** Swell peak of the jelly rupture (head-deform BURST_DEFORM.swell). */
-  swell: 0.32,
+  swell: 0.4,
+  /** false (for now): a centred slug splits the head open but the zombie LIVES. true: a centred slug kills. */
+  lethal: false,
+  /** How much a repeat slug on an already-cracked region adds to its skull crack (kills at 1 from glanceSkull 0.8:
+   *  0.04 = the fifth repeat kills). */
+  repeatStep: 0.04,
+  /** Multiplies the entry and exit crater radii. */
+  craterScale: 1,
+  /** Lasting widening of the head across the shot after a split (head-deform BurstSpring.splay). */
+  splay: 0.1,
   shardScale: 1,
   /** -1: the plan's default count; otherwise forced (clamped to flapMax). */
   flapCount: -1,

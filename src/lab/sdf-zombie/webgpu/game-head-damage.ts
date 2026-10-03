@@ -223,7 +223,7 @@ interface FlapSet {
   flaps: FlapState[];
 }
 /** The last burst's verdict, for the seams and gate. */
-export interface BurstDebug { kind: 'lethal' | 'glancing'; offset: number; severity: number; shards: number; flaps: number }
+export interface BurstDebug { kind: 'lethal' | 'glancing'; /** What happened: 'lethal' killed, 'split' (a centred slug, zombie lives) or 'glancing'. */ outcome: 'lethal' | 'split' | 'glancing'; offset: number; severity: number; shards: number; flaps: number }
 interface ActorHead {
   /** The last slug burst's scalp flaps (one attached piece) and verdict. */
   flaps: FlapSet | null; burst: BurstDebug | null;
@@ -673,15 +673,18 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     const h = headOf(a);
     const v = classifyBurst({ point, dir }, frame);
     const plan = burstPlan(v, h.rand);
-    const lethal = v.kind === 'lethal';
-    const r = burstHit(h.model, { hs: hsHit, lethal });
+    // A centred slug OPENS the head (exit crater, heavy debris, splay) either way; it only KILLS while burstTuning.lethal
+    // is on. Off (for now, owner 2026-10-03): the head splits open and the zombie lives.
+    const opened = v.kind === 'lethal';
+    const kills = opened && burstTuning.lethal;
+    const r = burstHit(h.model, { hs: hsHit, lethal: kills, step: burstTuning.repeatStep });
     h.model = r.state;
-    h.burst = { kind: v.kind, offset: v.offset, severity: v.severity, shards: plan.shards, flaps: plan.flaps };
+    h.burst = { kind: v.kind, outcome: kills ? 'lethal' : opened ? 'split' : 'glancing', offset: v.offset, severity: v.severity, shards: plan.shards, flaps: plan.flaps };
 
     // Deform: the jelly rupture's spring, plus a lasting dent on the entry side. (No plain wobble kick: the burst's own
     // spring is the jelly, and the two would fight along the shot axis.)
     const dirLocal = rotate(conj(frame.quat), dir);
-    h.deform = kickBurst(h.deform, v.axisLocal, v.severity, burstTuning.swell);
+    h.deform = kickBurst(h.deform, v.axisLocal, v.severity, burstTuning.swell, opened ? burstTuning.splay : 0);
     h.deform = addDent(h.deform, dirLocal, BURST_DEFORM.cave * (0.5 + 0.5 * v.severity), frame.axes);
 
     const { crater } = kit(h, frame, posed, yaw, field);
@@ -694,14 +697,14 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     }
 
     // Craters: the entry (this region's own, carved to the skull), and on a lethal burst the larger exit crater.
-    const entryR = lethal ? BURST.entryR.lethal : BURST.entryR.glancing * (0.7 + 0.3 * v.severity);
+    const entryR = (opened ? BURST.entryR.lethal : BURST.entryR.glancing * (0.7 + 0.3 * v.severity)) * burstTuning.craterScale;
     const entry = crater(region, point, entryR);
     const wounds: Wound[] = [entry];
     let exitPt = point;
     let exit: Wound | null = null;
-    if (lethal) {
+    if (opened) {
       exitPt = surfaceToward(field, add(v.exit, scale(dir, 0.12)), frame);
-      exit = crater('burst-exit', exitPt, BURST.exitR, region);
+      exit = crater('burst-exit', exitPt, BURST.exitR * burstTuning.craterScale, region);
       wounds.push(exit);
     }
     for (const w of wounds) w.shot = shot?.weapon === 'slug' ? shot : { weapon: 'slug' };
@@ -713,11 +716,11 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     });
 
     // Debris from the exit side on a lethal burst, from the entry on a glancing one.
-    const base = lethal ? exitPt : point;
+    const base = opened ? exitPt : point;
     const outN = normalAt(field, base);
-    const shardDir = lethal ? dir : unit(add(outN, scale(dir, 0.3)));
+    const shardDir = opened ? dir : unit(add(outN, scale(dir, 0.3)));
     const pieces: GorePiece[] = [...skullShards(base, shardDir, plan.shards, h.rand), ...brainLumps(base, dir, h.rand).slice(0, plan.lumps)];
-    if (lethal) {
+    if (kills) {
       const l = brainLaunch(base, dir, h.rand);
       const thrown = deps.brain?.throw(l.pos, l.vel, l.angVel) ?? false;
       if (!thrown) pieces.push(brainPiece(base, dir, h.rand));
@@ -731,7 +734,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     deps.burst(a, base, dir);
 
     // The torn scalp flaps hinge round the larger opening.
-    attachFlaps(a, h, posed, yaw, field, base, outN, lethal ? BURST.exitR : entryR, plan.flapAngles, dir);
+    attachFlaps(a, h, posed, yaw, field, base, outN, opened ? BURST.exitR * burstTuning.craterScale : entryR, plan.flapAngles, dir);
     return true;
   }
 

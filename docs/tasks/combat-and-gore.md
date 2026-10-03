@@ -9,7 +9,8 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
   the body. Plain zombie only. [Spec](../../docs/superpowers/specs/2026-10-02-slug-head-burst-design.md) ·
   [plan](../../docs/superpowers/plans/2026-10-02-slug-head-burst.md) ·
   [notes](../../docs/dev-notes/2026-10-02-head-burst/NOTES.md) · gate `scripts/head-burst-gate.mjs`. Tune live with
-  `__sdfGame.head.burstTune({ centreFrac, swell, shardScale, flapCount, on })`.
+  `__sdfGame.head.burstTune({ centreFrac, swell, shardScale, flapCount, lethal, repeatStep, craterScale, splay, on })`.
+  Playtest 1 (2026-10-03): flaps off (orange tubes), a centred slug now splits the head open and the zombie lives, much harder to kill.
 - [ ] **Spike (separate, not started): shader-side burst/peel displacement field** (approach C of the same spec) for
   truer jelly peeling flesh. New march WGSL, shared march cost, and a Rust port to carry; only after the composed
   version has been played.

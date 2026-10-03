@@ -221,7 +221,7 @@ export function headHit(
  *  escalates by skullPerHit too). Dangling eyes snap either way.
  *  Deterministic: draws nothing from a random stream. */
 export function burstHit(
-  s: HeadDamageState, hit: { hs: HS; lethal: boolean },
+  s: HeadDamageState, hit: { hs: HS; lethal: boolean; /** What a repeat on a cracked region adds (default skullPerHit). */ step?: number },
 ): { state: HeadDamageState; events: HeadEvent[] } {
   const region = nearestSkullRegion(hit.hs);
   const burst: HeadEvent = { kind: 'burst', lethal: hit.lethal, region };
@@ -244,8 +244,8 @@ export function burstHit(
   // A region the skull of which is ALREADY cracked this far takes a second slug as a plain skull hit: it escalates, so
   // two glancing slugs on one spot kill (0.8 + skullPerHit ≥ 1). Otherwise the first one cracks it to glanceSkull.
   const repeat = skull[region] >= REGION_TUNING.glanceSkull;
-  skull[region] = repeat ? skull[region] + REGION_TUNING.skullPerHit : REGION_TUNING.glanceSkull;
-  if (skull[region] >= 1) {
+  skull[region] = repeat ? skull[region] + (hit.step ?? REGION_TUNING.skullPerHit) : REGION_TUNING.glanceSkull;
+  if (skull[region] >= 1 - 1e-9) {
     events.push({ kind: 'kill' });
     return { state: { ...s, hits: s.hits + 1, flesh, skull, eyes, anchor, brainLeak: true, dead: true }, events };
   }

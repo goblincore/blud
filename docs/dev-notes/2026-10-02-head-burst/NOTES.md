@@ -29,13 +29,36 @@ Spec: `docs/superpowers/specs/2026-10-02-slug-head-burst-design.md` · plan: `do
 - **Frame cost.** The draw timer in this environment spreads by tens of ms between identical runs (baselines 94 / 94.5,
   then 102 / 64), and a burst leaves ~7-20 debris chunk views in the scene, so a delta cannot isolate the flaps. What is
   measured and gated: all flaps of a head share ONE attached piece (1 draw). Real cost needs a quiet machine.
-- **How it looks next to the ballistic dummy.** From the captures: the head bulges and distorts toward the exit side, the
-  entry crater is a dark open cavity that stays after the swell settles, blood and shards fly. The scalp flaps read as torn
-  strips beside the crater but are still bright orange-red and tube-like (the chunk shader brightens meat; darkening the
-  colour barely moved them). The photo stance is the zombie's profile, so the exit crater is not in frame. Owner call.
+- **How it looks next to the ballistic dummy.** Owner call (see the playtest round below for the first verdict).
 - Other characters (goblin, bride, minotaur, warbull) are excluded: only `profileName() === 'zombie'` takes the burst.
 
 ## Tuning knobs
 
 `__sdfGame.head.burstTune({ on, centreFrac (0.35), swell (0.32), shardScale (1), flapCount (-1 = plan default) })`;
 constants in `head-burst.ts` `BURST`, `head-deform.ts` `BURST_DEFORM`, `head-flap.ts` `FLAP`, `head-crown.ts` `SHARDS`.
+
+## Owner playtest round 1 (2026-10-03) and what changed
+
+Feedback: the flaps read as wiggling orange tubes, not torn flesh sheets (but "quite creepy"); two head slugs killed the
+zombie so the rupture could not be studied; the rupture was hard to see; and there should be a state where the head splits
+open but the zombie lives (reference: a mesh zombie with the side of the head peeled open into ragged sheets).
+
+- **Flaps are OFF for the zombie** (`BURST.flaps` 0, default `flapCount` -1 → 0). The code (`head-flap.ts`, the leaf's
+  `attachFlaps`/`stepFlaps`) stays. `burstTune({ flapCount: 3 })` brings them back.
+- **A centred slug no longer kills** (`burstTune({ lethal: true })` restores it). It SPLITS the head open and the zombie
+  lives (outcome `split`): entry + exit crater, heavy debris, a lasting widening across the shot (`splay` 0.1) and a bigger
+  lasting exit bulge (`BURST_DEFORM.rest` 0.35 → 0.5, swell 0.32 → 0.4).
+- **Much harder to kill:** a repeat slug on an already-cracked region adds only `repeatStep` (0.04) instead of 0.32. In the
+  gate a split zombie survived 8 slugs at the same aim and died on the 9th.
+- **More visible:** crater radii up (entry 0.09 → 0.12, exit 0.11 → 0.14, glancing 0.07 → 0.09), `craterScale` multiplies both.
+  The split capture (`gate/S-settled.png`) shows a large open cavity through the head with the skull interior visible.
+- **Gate:** 24 checks, 0 failed (new scenario S; A and B now set `lethal: true`, `flapCount: 3` to keep the kill path and the
+  flaps tested).
+
+## Monster idea (owner, 2026-10-03)
+
+**A new monster with dangling, wiggling, jelly-orange tubes** as its signature: the scalp-flap chain that did not suit the
+zombie ("quite creepy"). The pieces already exist: `head-flap.ts` (sprung verlet chain, constant prim count) and the leaf's
+rim-hinged attach (one draw for all of them, riding the head through wound trackers). A real "torn flesh sheet" look needs
+flat geometry (the tubes are capsules); try prims with `orient` and a flattened `scale`, and check the chunk shader's
+brightening (head-pop's note: thrown meat is brighter than MEAT because of the dim chunk fill).

@@ -212,3 +212,7 @@ Built 2026-10-02 from [the plan](../plans/2026-10-02-slug-head-burst.md); what w
    takes the ordinary path, which still severs through `severRadius`.
 8. **Slug on a corpse's head** still ruptures it (the model reports `burst` without changing a dead head's state).
 9. **Frame cost is unmeasured** (see the notes): the gate checks that all flaps share one draw, not milliseconds.
+10. **After the first playtest (2026-10-03):** the scalp flaps are OFF by default (they read as orange tubes; kept for a future
+    monster); a centred slug SPLITS the head open and the zombie LIVES unless `burstTune({ lethal: true })` (§1's lethal burst
+    is now opt-in); repeats on a cracked region add `repeatStep` 0.04 (kills on the fifth repeat); craters, the lasting exit
+    bulge and a new lasting `splay` are bigger. See the build notes.

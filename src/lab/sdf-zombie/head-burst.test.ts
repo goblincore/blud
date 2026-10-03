@@ -10,7 +10,7 @@ const frame: HeadFrame = { centre: [0, 1.6, 0], quat: [0, 0, 0, 1], axes: [0.09,
 /** A slug travelling −z that crosses the head's front surface at world x = `x`. */
 const shot = (x: number, y = 1.6) => ({ point: [x, y, 0.1] as Vec3, dir: [0, 0, -1] as Vec3 });
 
-beforeEach(() => setBurstTuning({ on: true, centreFrac: BURST.centreFrac, swell: 0.32, shardScale: 1, flapCount: -1 }));
+beforeEach(() => setBurstTuning({ on: true, centreFrac: BURST.centreFrac, swell: 0.4, shardScale: 1, flapCount: -1, lethal: false, repeatStep: 0.04, craterScale: 1, splay: 0.1 }));
 
 describe('classifyBurst', () => {
   it('head radius is the geometric mean of the axes', () => {
@@ -97,6 +97,16 @@ describe('burstPlan', () => {
     expect(burstPlan(lethal(), mulberry32(1)).flaps).toBe(0);
     setBurstTuning({ flapCount: -1, shardScale: 2 });
     expect(burstPlan(lethal(), mulberry32(1)).shards).toBeGreaterThan(BURST.shards.lethal[1]);
+  });
+  it('flaps are OFF by default (the orange-tube look was rejected for the zombie) and forced on by flapCount', () => {
+    expect(burstPlan(lethal(), mulberry32(2)).flaps).toBe(0);
+    expect(burstPlan(glance(), mulberry32(2)).flaps).toBe(0);
+    setBurstTuning({ flapCount: 3 });
+    expect(burstPlan(lethal(), mulberry32(2)).flaps).toBe(3);
+  });
+  it('slugs do not kill by default (lethal off), repeats creep up slowly', () => {
+    expect(burstTuning.lethal).toBe(false);
+    expect(burstTuning.repeatStep).toBeLessThan(0.1);
   });
   it('setBurstTuning returns a copy and updates burstTuning', () => {
     const t = setBurstTuning({ swell: 0.4 });

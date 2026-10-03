@@ -3,6 +3,8 @@
 //   A. a dead-centre slug is LETHAL: head dead, burst kind lethal with offset < 0.35, a burst-exit crater, the swell
 //      peaks (bu.b >= 0.2 within 8 frames) and settles to rest, chunks thrown, flaps drawn, the head still on, the
 //      zombie collapses when thawed.
+//   S. SPLIT: with lethal OFF (the default) a centred slug opens the head through and the zombie lives, no flaps, and survives
+//      the third slug.
 //   B. an off-centre slug is GLANCING: not dead, kind glancing with offset >= 0.35, brainLeak, skull cracked >= 0.8, no
 //      exit crater, flaps drawn, still standing when thawed; a SECOND slug at the same spot then kills.
 //   C. cost: the flaps of a head share ONE attached piece (draws === 1). Frame time is reported, not gated: the debris
@@ -251,7 +253,8 @@ const chunks = () => evaluate("__sdfGame.chunkCount");
 const out = {};
 try {
   await boot("burst");
-  await evaluate("__sdfGame.head.burstTune({ on: true, centreFrac: 0.35, swell: 0.32, shardScale: 1, flapCount: -1 })");
+  // A and B test the KILL path and the flaps (both OFF by default now): lethal on, three flaps, a repeat step that kills in one.
+  await evaluate("__sdfGame.head.burstTune({ on: true, centreFrac: 0.35, swell: 0.4, shardScale: 1, flapCount: 3, lethal: true, repeatStep: 0.32, craterScale: 1, splay: 0.1 })");
 
   // -------- C0. the draw-time baseline (twice), before any slug
   const base = fresh();
@@ -305,6 +308,33 @@ try {
   await aimLine(B.id, SHOT_D, GLANCE_SHIFT);
   const sb2 = await slug(B.id, 6);
   check(sb2[sb2.length - 1]?.dead === true, "B: a second slug at the same spot kills");
+
+  // -------- S. SPLIT: with lethal OFF (the default) a centred slug opens the head wide and the zombie LIVES; repeats creep up.
+  await evaluate("__sdfGame.head.burstTune({ lethal: false, flapCount: 0, repeatStep: 0.04 })");
+  const S = fresh();
+  await stand(S.id, PHOTO_D); await capture("S-before");
+  await aimLine(S.id, SHOT_D, 0);
+  const ss = await slug(S.id, 8);
+  const hsS = ss[ss.length - 1];
+  note(`S: burst ${JSON.stringify(hsS?.burst)}, craters ${Object.keys(hsS?.craters ?? {}).join(",")}, bu ${JSON.stringify(hsS?.bu)}, flaps ${hsS?.flaps}, draws ${hsS?.draws}`);
+  check(hsS?.burst?.outcome === "split" && hsS.dead === false, `S: a centred slug with lethal off SPLITS the head (outcome ${hsS?.burst?.outcome}) and the zombie lives`);
+  check(!!hsS?.craters?.["burst-exit"], "S: it opens the head through (a burst-exit crater)");
+  check(hsS?.flaps === 0 && hsS?.draws === 0, `S: no flaps by default (${hsS?.flaps} flaps, ${hsS?.draws} draws)`);
+  await stepN(8); await stand(S.id, PHOTO_D); await capture("S-after-8f");
+  await stepN(120); await stand(S.id, PHOTO_D); await capture("S-settled");
+  await evaluate("__sdfGame.freeze(false)"); await stepN(3);
+  const alS = (await evaluate("__sdfGame.actorList()")).find((q) => q.id === S.id);
+  check(alS && alS.phase === "standing", `S: the split zombie is still standing when thawed (phase ${alS?.phase})`);
+  await evaluate("__sdfGame.freeze(true)");
+  let nS = 1, deadS = false;
+  for (; nS < 12 && !deadS; nS++) {
+    await aimLine(S.id, SHOT_D, 0);
+    const r = await slug(S.id, 4);
+    deadS = r[r.length - 1]?.dead === true;
+    if (nS === 2) check(!deadS, "S: it survives the third slug (much harder to kill)");
+  }
+  note(`S: died after ${deadS ? nS : "(not within 12)"} slugs at the same aim`);
+  await stepN(8); await stand(S.id, PHOTO_D); await capture("S-final");
 
   // -------- D. the off switch
   await evaluate("__sdfGame.head.burstTune({ on: false })");

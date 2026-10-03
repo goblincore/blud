@@ -63,3 +63,15 @@ describe('the burst in the head affine', () => {
     expect(m.mul[0]).not.toBe(1);          // the wobble axis squashed
   });
 });
+
+describe('splay: a lasting widening across the shot', () => {
+  it('kickBurst records it and the settled head stays wider across the shot by that much', () => {
+    const kicked = kickBurst(makeHeadDeform(), [0, 0, -1], 1, BURST_DEFORM.swell, 0.1);
+    expect(kicked.bu!.splay).toBe(0.1);
+    const rested = settle(kicked, 2);
+    expect(applyHeadAffine(headAffine(rested, frame)!, [0.09, 1.6, 0])[0]).toBeCloseTo(0.09 * 1.1, 6);
+  });
+  it('defaults to none', () => {
+    expect(kickBurst(makeHeadDeform(), [0, 0, -1], 1).bu!.splay).toBe(0);
+  });
+});

@@ -234,3 +234,9 @@ only if an idea below earns it.
   visor band (the failure mode `face.ts` documents), and the red chest cabling reads as a flat band, not bundled loom.
 - [!] Its dispatch run CRASHED with dispatch-ui and committed nothing; the work was
   rescued off the worktree. `blob:render-check` has not been run on it.
+
+## Ideas
+
+- [ ] **A monster with dangling jelly-orange tubes** (owner, 2026-10-03): the slug-burst's scalp flaps (`head-flap.ts`,
+  the leaf's rim-hinged flap piece) read as wiggling orange tubes on the zombie, "quite creepy", so they are off there and
+  can be the signature of a new creature. See [build notes](../dev-notes/2026-10-02-head-burst/NOTES.md).
