@@ -83,3 +83,20 @@ describe('per-eye glow mask (melee head damage v2, spec §15)', () => {
     expect(MARCH_SURFACE).toContain('faceGlow = faceGlow * faceEyeGlow;');
   });
 });
+
+describe("the face sheet's own coverage, for the body grain (body-grain.ts)", () => {
+  const FACE = MARCH_BODY.slice(
+    MARCH_BODY.indexOf('if (faceCfg.x > 0.5) {'),
+    MARCH_BODY.indexOf('// PER-PRIMITIVE COLOUR'),
+  );
+  it('declares faceSheetCover before the face branch, so it is 0 wherever no sheet is drawn', () => {
+    const decl = MARCH_BODY.indexOf('var faceSheetCover = 0.0;');
+    expect(decl).toBeGreaterThan(-1);
+    expect(decl).toBeLessThan(MARCH_BODY.indexOf('if (faceCfg.x > 0.5) {'));
+  });
+  it('sets it to facing x alpha only where the sheet is actually sampled', () => {
+    const set = FACE.indexOf('faceSheetCover = facing * tex.a;');
+    expect(set).toBeGreaterThan(-1);
+    expect(set).toBeGreaterThan(FACE.indexOf('let tex = texel(faceTex, base);'));
+  });
+});

@@ -384,6 +384,13 @@ describe('compilePalette', () => {
     expect(m.mottleScale).toBe(1.6);
     expect(m.mottleColor).toEqual([0.2, 0.19, 0.06]);
   });
+
+  // Body grain (2026-10-02): authorable with no grammar change, because compilePalette reads its keys off
+  // the base preset. Unnamed, it keeps the preset's 0 (off).
+  it('carries the body grain through, and leaves it off when unnamed', () => {
+    expect(compilePalette(doc('  grain 0.1\n'))!.grain).toBe(0.1);
+    expect(compilePalette(doc('  wetness 0.2\n'))!.grain).toBe(0);
+  });
 });
 
 const PAINTED = `model painted

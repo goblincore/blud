@@ -1023,7 +1023,8 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       const k = impactOutputs(impact).rig;
       rig.position.set(k.pos[0], -0.42 * lower + k.pos[1], 0.06 * lower + k.pos[2]);
       rig.rotation.set(THREE.MathUtils.degToRad(38) * lower + k.rot[0], k.rot[1], k.rot[2]);
-      rig.visible = lower < 0.999 && ownsSlot(ctx, 'flail');
+      // Hidden for a scripted sequence (game-sequence-leaves.ts); a hidden rig also cancels any swing in tick().
+      rig.visible = lower < 0.999 && ownsSlot(ctx, 'flail') && !ctx.world.sequence?.started;
     },
     timeScale(dt) {
       rawDt = dt;

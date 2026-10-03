@@ -137,6 +137,9 @@ export const MATERIAL_SLIDERS: { key: keyof FleshMaterial; min: number; max: num
   { key: 'surfaceNoiseAmp', min: 0, max: 0.6 },
   { key: 'silhouetteNoiseAmp', min: 0, max: 0.2 },
   { key: 'wetness', min: 0, max: 2 },
+  // Body grain (body-grain.ts): the face sheet's units, so 0.085-0.10 matches the authored sheets; 0.3 is
+  // a +-65% swing, headroom for the owner's look. "save skin -> repo" saves it with the rest.
+  { key: 'grain', min: 0, max: 0.3 },
 ];
 
 /** Face sliders, mirroring MATERIAL_SLIDERS. Ranges are authoring judgement. */

@@ -390,7 +390,8 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     // 2026-09-21 — melee bench: -2.7 ms wounded, -3.6 ms wounded+fire; march-hash equal.
     counts2: uniform(new THREE.Vector4(0, 0, SHIP_COUNTS2_Z, 0)),
     /** x melt progress 0..1 (zombie melt task 6), y motion-out switch, z skin detail k
-     *  (skin-detail-proto.ts, setSkinDetail), w spare. x drives the
+     *  (skin-detail-proto.ts, setSkinDetail), w body grain (FleshMaterial.grain,
+     *  written by applyMaterial; body-grain.ts). x drives the
      *  flesh-only wet-red albedo/gloss ramp in MARCH_BODY — the body goes red
      *  while still standing, before it visibly sags. 0 everywhere except a
      *  melting body (and the bone chunks it releases), so every other view
@@ -3010,6 +3011,11 @@ export function createZombieGpuView(
       u.visceraColor.value.setRGB(...m.visceraColor);
       u.visceraDepth.value = m.visceraDepth;
       u.marchCfg.value.z = m.silhouetteNoiseAmp;
+      // BODY GRAIN (body-grain.ts): the palette's grain rides meltCfg.w, the per-INSTANCE record lane
+      // (writeViewRecord copies meltCfg whole), so a crowd body wears its own palette's grain through the
+      // shared per-type material. 0, every preset, skips the shader block. Written unconditionally so a
+      // lab character switch to a body without grain clears it.
+      u.meltCfg.value.w = m.grain;
       u.lightDir.value.set(...light.keyDir);
       u.keyColor.value.setRGB(...light.keyColor);
       u.lightCfg.value.set(light.keyIntensity, light.fillIntensity);
@@ -3020,6 +3026,9 @@ export function createZombieGpuView(
       u.bounceCfg.value.x = light.probeWeight;
       u.bounceCfg.value.y = light.ambientGain;
       u.bounceCfg.value.w = light.chromaGain;
+      // meltCfg.w is per instance (above): push it into the record now rather than waiting for the next
+      // setter that happens to sync.
+      syncRecord();
     },
     dispose() {
       mesh.geometry.dispose();

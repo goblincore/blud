@@ -28,7 +28,9 @@
 //              override, not spare)
 //   meltCfg    x melt progress 0..1 (zombie melt task 6) — drives the
 //              flesh-only wet-red albedo/gloss ramp below; y motion-out, z skin
-//              detail k (skin-detail-proto.ts), w spare.
+//              detail k (skin-detail-proto.ts), w body grain (palette
+//              grain, body-grain.ts). meltCfg is not a parameter: it rides
+//              the per-instance record (REC_MELT) and reads as gInstMelt.
 //              0 everywhere except a melting body and its released bone
 //              chunks, so every other view shades bit-identical
 //   marchCfg   x steps, y stepMul, z silhouetteNoiseAmp

@@ -13,7 +13,7 @@ export const REC_COUNTS2 = 1;       // boneCount, bareBones, ownerRefoldGate, wo
 export const REC_WOUND_BOUND = 2;   // xyz centre, w radius (1e9 = no cull)
 export const REC_ANCHOR_BAND = 3;   // bodyAnchor.xyz, w = band = slot * DATA_ROWS
 export const REC_WIND_ALIVE = 4;    // windDrift.xyz, w = 1 alive / 0 free slot
-export const REC_MELT = 5;          // meltCfg
+export const REC_MELT = 5;          // meltCfg: x melt, y motion-out, z skin detail k, w body grain
 export const REC_FLASH = 6;         // bodyFlash
 export const REC_NOISE_YAW = 7;     // noiseShift.xyz, w = bodyYaw
 export const REC_HEAD_WCOUNT = 8;   // headCentre.xyz, w = wound count

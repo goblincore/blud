@@ -37,6 +37,12 @@ describe('flesh presets', () => {
       expect(FLESH_PRESETS[n].silhouetteNoiseAmp).toBeLessThanOrEqual((1 - 0.6) * 0.5);
   });
 
+  // Body grain (body-grain.ts) is a per-character decision, like mottleAmp: 0 in every preset skips the
+  // shader block, so a body that does not opt in shades exactly as it did before the grain existed.
+  it('ships body grain OFF (0) in every preset', () => {
+    for (const n of names) expect(FLESH_PRESETS[n].grain, n).toBe(0);
+  });
+
   it('defines both lighting presets with a key direction and intensities', () => {
     for (const n of ['practical-hard-key', 'game-ambient'] as const) {
       expect(LIGHT_PRESETS[n].keyDir).toHaveLength(3);

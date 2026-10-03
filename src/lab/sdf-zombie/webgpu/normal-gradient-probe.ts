@@ -13,10 +13,11 @@ import {
   type NgReason,
   type V3,
 } from './normal-gradient-reference';
-import { buildNormalGradientFn, NORMAL_GRADIENT_PROBE, NORMAL_GRADIENT_HELPERS, NG_WOUND_LIP, NG_WOUNDS } from './normal-gradient.wgsl';
+import { buildNormalGradientFn, NORMAL_GRADIENT_PROBE } from './normal-gradient.wgsl';
 
-import { SMIN, SMAX, APPLY_WOUNDS, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, DATA_ROWS } from './march.wgsl';
+import { ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, DATA_ROWS } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
+import { NG_WOUND_PROBE, probeWoundSources } from './normal-gradient-probe.wgsl';
 
 type V4 = [number, number, number, number];
 
@@ -313,16 +314,9 @@ async function main(): Promise<void> {
   const uCfg2=uniform(new THREE.Vector4());
   const uBound=uniform(new THREE.Vector4());
   const uPerf=uniform(new THREE.Vector4());
-  const sources=[SMIN,SMAX,APPLY_WOUNDS,...NORMAL_GRADIENT_HELPERS,NG_WOUND_LIP,NG_WOUNDS];
+  const sources=probeWoundSources();
   const chain=sources.reduce<ReturnType<typeof wgslFn>[]>((a,h)=>[...a,wgslFn(h,a.slice(-1))],[]);
-  const woundFn=wgslFn(`fn ngWoundProbe(p: vec3<f32>, base: vec4<f32>, data: texture_2d<f32>, cfg: vec4<f32>, cfg2: vec4<f32>, perf: vec4<f32>, bound: vec4<f32>, kind: f32) -> vec4<f32> {
-    let reset = ngReset();
-    let incoming = vec4<f32>(base.x + dot(base.yzw, p), base.yzw);
-    if (kind > 1.5) { let scalar = applyWounds(incoming.x, p, data, cfg, cfg2, perf, bound); return vec4<f32>(scalar.x, scalar.y, 0.0, 0.0); }
-    let result = ngWounds(incoming, p, data, cfg, cfg2, perf, bound);
-    if (kind > 0.5) { return vec4<f32>(f32(gNgReason), gNgLip, gNgNear, 0.0); }
-    return result;
-  }`,chain.slice(-1));
+  const woundFn=wgslFn(NG_WOUND_PROBE,chain.slice(-1));
   const woundMaterial=new MeshBasicNodeMaterial();
   woundMaterial.outputNode=woundFn({p:uP,base:uDgA,data:texture(woundTexture),cfg:uCfg,cfg2:uCfg2,perf:uPerf,bound:uBound,kind:uKind});
   woundMaterial.depthTest=false;woundMaterial.depthWrite=false;woundMaterial.blending=THREE.NoBlending;woundMaterial.toneMapped=false;

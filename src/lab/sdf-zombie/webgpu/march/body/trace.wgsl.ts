@@ -18,6 +18,7 @@ import { WOUND_MASKS_BLOCK } from './blocks/post/wound-masks.wgsl';
 import { TISSUE_BLOCK } from './blocks/post/tissue.wgsl';
 import { ORGAN_BLOCK } from './blocks/post/organ.wgsl';
 import { MOTTLE_BLOCK } from './blocks/post/mottle.wgsl';
+import { BODY_GRAIN_BLOCK } from './blocks/post/body-grain.wgsl';
 import { GORE_BLOCK } from './blocks/post/gore.wgsl';
 import { SOLDIER_MEAT_BLOCK } from './blocks/post/soldier-meat.wgsl';
 import { PAINT_CHAR_BLOCK } from './blocks/post/paint-char.wgsl';
@@ -27,7 +28,7 @@ import { MELT_BLOCK } from './blocks/post/melt.wgsl';
 /**
  * SECTION 2 of 4 — the trace: ray setup and pre-pass gates, the march loop,
  * the hit test, and the full post-hit MATERIAL chain (normal evaluation,
- * wound/char masks, tissue ramp, organ/mottle/gore, the face pass, painted
+ * wound/char masks, tissue ramp, organ/mottle/gore, the face pass, the body grain, painted
  * prims, char, melt). Everything here is light-independent, so the deferred
  * surface entry reuses this text verbatim. The debug early-returns and the
  * miss discard are part of the trace and behave identically in both entries.
@@ -356,6 +357,8 @@ ${ORGAN_BLOCK}
 ${MOTTLE_BLOCK}
 
 ${FACE_LAYER_WGSL}
+
+${BODY_GRAIN_BLOCK}
 
 ${GORE_BLOCK}
 
