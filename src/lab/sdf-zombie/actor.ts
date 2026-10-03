@@ -140,6 +140,8 @@ export interface ActorStepInput {
   /** A live swing (attack.ts's phase clock) — see MotionConfig.attack. Only
    *  forwarded when set, so callers without one step bit-identically. */
   attack?: { phase: number; side: 'L' | 'R'; variant: SwingVariant };
+  /** The pose layer's joint positions for this frame — see MotionConfig.pose. Only forwarded when set. */
+  pose?: readonly Vec3[];
 }
 
 /**
@@ -167,6 +169,7 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
         profile: input.profile, forceSpeed: input.forceSpeed,
         carryOverride: input.carryOverride,
         ...(input.attack ? { attack: input.attack } : {}),
+        ...(input.pose ? { pose: input.pose } : {}),
       },
       {
         dt: sdt,
