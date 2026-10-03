@@ -48,7 +48,7 @@
 // is an env var rather than a positional argument so the four positions above
 // — which the authoring skill documents verbatim — keep their meaning.
 // BLOB_DIST, BLOB_PITCH and BLOB_TARGET_Y override the camera framing the same way.
-// BLOB_POSE=walk|run|hip (and BLOB_POSE_FRAMES, default 90) shoot a held
+// BLOB_POSE=walk|run|hip|aim (and BLOB_POSE_FRAMES, default 90) shoot a held
 // motion pose instead of the rest pose — see the pose block below.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { decodePng } from './lib/demo-presented.mjs';
@@ -201,6 +201,9 @@ await evaluate(`(() => {
 // yaw, and the same document still yields the same frames.
 const POSE = process.env.BLOB_POSE ?? 'rest';
 const POSE_FRAMES = Number(process.env.BLOB_POSE_FRAMES ?? 90);
+// BLOB_POSE=pose:<name> holds an AUTHORED pose or clip of the active character (the pose layer, src/lab/sdf-zombie/pose.ts) instead
+// of a gait; BLOB_POSE_T is the clip time in seconds (default 0). BLOB_POSE_FRAMES (default 90 here) is how long it is stepped.
+const POSE_T = Number(process.env.BLOB_POSE_T ?? 0);
 // BLOB_SWING=<variant>:<phase> (e.g. cleave:0.4) holds a melee swing at that
 // phase over the pose's last 30 frames (holdPose's `swing`).
 const SWING = process.env.BLOB_SWING
@@ -215,6 +218,9 @@ const poseResult = await evaluate(`(() => {
     window.__sdfLab.setMotionEnabled(false);
     window.__sdfLab.setWander(false);
     return 'rest';
+  }
+  if (${JSON.stringify(POSE)}.startsWith('pose:')) {
+    return JSON.stringify(window.__sdfLab.holdAuthoredPose(${JSON.stringify(POSE.slice(5))}, ${POSE_T}, ${POSE_FRAMES}));
   }
   return JSON.stringify(window.__sdfLab.holdPose(${JSON.stringify(POSE)}, ${POSE_FRAMES}${SWING ? ', ' + JSON.stringify(SWING) : ''}));
 })()`);

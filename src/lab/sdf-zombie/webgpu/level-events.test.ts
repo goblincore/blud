@@ -51,6 +51,17 @@ describe('commandsFor', () => {
     expect(commandsFor('pickup.shells', 'pickup.cd')).toEqual([]);
     expect(commandsFor('wave.x', 'pickup.cd')).toEqual([]);
   });
+  it('sequence.<id> starts that sequence', () => {
+    expect(commandsFor('sequence.ending', 'ending.end')).toEqual([{ kind: 'sequence', id: 'ending' }]);
+    expect(commandsFor('sequence.long-one-2', 'x')).toEqual([{ kind: 'sequence', id: 'long-one-2' }]);
+  });
+  it('malformed sequence events and the end event do nothing special', () => {
+    expect(commandsFor('sequence.', 'x')).toEqual([]);
+    expect(commandsFor('sequence.Ending', 'x')).toEqual([]);
+    expect(commandsFor('sequence.a.b', 'x')).toEqual([]);
+    expect(commandsFor('egg.touch', 'ending.end')).toEqual([]);
+    expect(commandsFor('ending.end', 'ending.end')).toEqual([{ kind: 'complete' }]);
+  });
 });
 
 describe('light commands and cues (dynamic light §3)', () => {

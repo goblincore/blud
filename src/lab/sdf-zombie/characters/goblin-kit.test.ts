@@ -101,8 +101,9 @@ describe('goblin-kit.gltf fits goblin.blob', () => {
   it('decodes the compiled kit', () => {
     // Named explicitly so a material vanishing from the .wam is a failure
     // rather than a silently smaller test. `cloth` was here until the kilt
-    // became a plate fauld.
-    expect([...groups.keys()].sort()).toEqual(['band', 'brass', 'glass', 'iron', 'leather', 'screen']);
+    // became a plate fauld, which is itself gone (the trousers are paint).
+    // `boot` and `webbing` (the gaiter cuff) arrived with the phase-2 rebuild, `plate` with the pauldron spikes, `black` with the sunglass frame, and `rustplate` replaced `iron` for the worn plate.
+    expect([...groups.keys()].sort()).toEqual(['band', 'black', 'boot', 'brass', 'glass', 'leather', 'plate', 'rustplate', 'screen', 'webbing']);
     // >=, not >: WAM's `kind=box` emits exactly 8 corner vertices
     // (mesh.py:1170-1176), which is what the watch body/screen are.
     for (const [name, vs] of groups) expect(vs.length, name).toBeGreaterThanOrEqual(8);
@@ -140,7 +141,9 @@ describe('goblin-kit.gltf fits goblin.blob', () => {
   // Re-derive it, do not raise it: the deepest legitimate tuck is a property
   // of how far the widest joint sits from the body axis, and if a redesign
   // needs more room than this, the plate has probably stopped being plate.
-  const TUCK_MAX = 0.045;
+  // RE-DERIVED 2026-10-02 for the rebuilt pad (0.045 -> 0.036): the deepest vertex is now the pad's inner rim, 31.3 mm in,
+  // because the shoulder round is r 0.0405 and the shell R 0.060 about it (see the .wam). It was 0.045 for the old pad.
+  const TUCK_MAX = 0.036;
 
   it.each([...groups.keys()])('no %s vertex passes through the body', name => {
     const vs = groups.get(name)!;
@@ -172,5 +175,75 @@ describe('goblin-kit.gltf fits goblin.blob', () => {
     const top = orb.a[1] + orb.radius * Math.min(...orb.scale);
     const kitTop = Math.max(...[...groups.values()].flat().map(v => v[1]));
     expect(kitTop, `orb crown ${top.toFixed(4)}`).toBeGreaterThan(top);
+  });
+
+  // THE KIT MAY NOT FLOAT. The fit test above asks whether armour pokes INTO flesh; nothing asked whether it hangs away
+  // from it, which is how the phase-1 body (10-30% slimmer than the table the kit was sized from) left every ring loose
+  // while all tests stayed green. sdBody(v) is the distance from a kit vertex to the flesh surface, positive in air.
+  //
+  // Only the boot SHAFT and its cuff are measurable: above the ankle (y > 0.20 m) the leg is flesh. The foot shell has no
+  // flesh under it by design (the goblin's flesh feet are removed in goblin.blob), so there is nothing to float from.
+  // Bounds are measured, not round: the shaft is the leg's flesh plus the 8% facet margin and 10% bulge margin the .wam
+  // header derives, which is 5-7 mm at the thin shin and a little more where the gaiter flares over the boot top.
+  const SHAFT_Y = 0.20;
+  const standoff = (name: string) => {
+    const ds = groups.get(name)!.filter(v => v[1] > SHAFT_Y).map(v => sdBody(v, body));
+    return { min: Math.min(...ds), max: Math.max(...ds), n: ds.length };
+  };
+
+  // Measured 2026-10-02: shaft 6.4-7.9 mm off the flesh (the whole height), cuff 10.6-14.1 mm (it flares over the boot
+  // top on purpose). The bounds sit ~2 mm above those, so a ring that goes loose by one table-row fails and the next
+  // body change has to re-measure rather than pass quietly.
+  // THE BELT AT THE WAIST (2026-10-03). It first sat at hip height on the hips bone, sized against the WHOLE body because the thigh
+  // tops widen the hips there (0.209 m against the torso's 0.162: a torso-sized belt had side vertices 12 mm inside the thighs). It
+  // now rides the spine1 bone at y 0.766-0.812 (the waist, above the thigh top at 0.751), where only the torso is that wide, so the
+  // window is that band; the bracers hang lower and are outside it. Measured: tightest vertex 0.2 mm off the flesh (a pouch's
+  // inner corner), farthest 46.4 mm (the back pouch); buckle 8.7-38.0 mm off.
+  it('belt, pouches and buckle sit on the waist', () => {
+    const near = groups.get('leather')!.filter(v => v[1] > 0.74 && v[1] < 0.84 && Math.abs(v[0]) < 0.095); // the waist band; bracers hang lower
+    expect(near.length, 'belt vertices found').toBeGreaterThan(30);
+    const d = near.map(v => sdBody(v, body));
+    expect(Math.min(...d), 'no belt vertex inside the flesh').toBeGreaterThan(0);
+    expect(Math.max(...d), 'nothing hangs more than 55 mm off').toBeLessThan(0.055);
+    // The only brass in the kit is the buckle (the bandoliers' cartridges were removed 2026-10-02), one 8-vertex box.
+    const bk = groups.get('brass')!.map(v => sdBody(v, body));
+    expect(bk.length, 'buckle vertices found').toBe(8);
+    expect(Math.min(...bk), 'buckle is clear of the flesh').toBeGreaterThan(0.005);
+    expect(Math.max(...bk), 'buckle is not floating').toBeLessThan(0.045);
+  });
+
+  // Measured 2026-10-02: shaft 6.4-7.9 mm off the flesh (the whole height), cuff 10.6-14.1 mm (it flares over the boot
+  // top on purpose). The bounds sit ~2 mm above those, so a ring that goes loose by one table-row fails and the next
+  // body change has to re-measure rather than pass quietly.
+  it('PROBE belt', () => {
+    const belt = groups.get('leather')!.filter(v => v[1] > 0.64 && v[1] < 0.74 && Math.abs(v[0]) < 0.095);
+    const ds = belt.map(v => sdBody(v, body));
+    console.log('belt', belt.length, Math.min(...ds).toFixed(4), Math.max(...ds).toFixed(4));
+    belt.map((v, i) => ({ v, d: ds[i]! })).sort((a, b) => a.d - b.d).slice(0, 4)
+      .forEach(o => console.log('low', o.v.map(n => n.toFixed(3)).join(','), o.d.toFixed(4)));
+    const bk = groups.get('brass')!.map(v => sdBody(v, body));
+    console.log('brass', Math.min(...bk).toFixed(4), Math.max(...bk).toFixed(4));
+  });
+
+  it('boot shaft and cuff hug the leg without floating', () => {
+    const shaft = standoff('boot');
+    expect(shaft.n, 'shaft vertices measured').toBeGreaterThan(20);
+    expect(shaft.min, 'boot shaft is clear of the flesh').toBeGreaterThan(0.003);
+    expect(shaft.max, 'boot shaft stays within 10 mm').toBeLessThan(0.010);
+    const cuff = standoff('webbing');
+    expect(cuff.min, 'cuff is clear of the flesh').toBeGreaterThan(0.005);
+    expect(cuff.max, 'cuff stays within 16 mm').toBeLessThan(0.016);
+  });
+
+  // PLATE FIT, measured 2026-10-02 on the pads, lame, yoke and knee plate (material `rustplate`). The chest plate and pads are
+  // OVERSIZED ON PURPOSE (owner: "like an XL, not a small t-shirt"), so this is a loose-fit bound, not a hugging one:
+  // deepest vertex 31.3 mm inside the flesh (the pauldron's inner rim in the chest, the forced tuck above), farthest
+  // 35.3 mm off it (the yoke's front at the hem, depth x1.38, and the pad dome's 25 mm over the shoulder round). Pinned
+  // 2-5 mm outside both, so a plate that drifts bigger, or a body that moves under it, fails instead of passing quietly.
+  // The first, tight pass measured 23.9 mm; if that number is ever wanted back, the yoke rings are the dial.
+  it('plate fits loose by design but does not float', () => {
+    const d = groups.get('rustplate')!.map(v => sdBody(v, body));
+    expect(Math.min(...d), 'deepest tuck').toBeGreaterThan(-0.036);
+    expect(Math.max(...d), 'farthest standoff').toBeLessThan(0.040);
   });
 });

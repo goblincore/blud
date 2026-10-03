@@ -182,7 +182,20 @@ def prop(label, x0, x1, u0, u1, h, g, rid, n, w2):
         west = xc < 0
         put("booth", -w2 if west else w2, 0, zc, 0.0 if west else PI)
         put("party-hats", -(w2 - 0.4) if west else w2 - 0.4, 0.76, zc)
-    elif label != "backhead":  # the cab shell has its own backhead
+    elif label == "console":   # against a side wall, its screen facing the room; colours cycle with n
+        west = xc < 0
+        put(f"crt-console-{('green', 'amber', 'cyan')[n % 3]}", -w2 if west else w2, 0, zc, 0.0 if west else PI)
+    elif label == "rack":
+        west = xc < 0
+        put("server-rack", -w2 if west else w2, 0, zc, 0.0 if west else PI)
+    elif label == "firebox":   # east wall
+        put("firebox-door", w2, 0, zc, PI)
+    elif label == "egg":
+        put("egg-plinth", xc, 0, zc)
+        put("egg-placeholder", xc, 0, zc)
+    elif label == "crt wall":   # modelled like a south end wall; turned for the north wall
+        put("crt-wall", 0, 0, g(u1), PI)
+    elif label != "backhead":
         piece = {"coffin": "coffin", "desk": "desk", "stove": "stove", "buffet island": "buffet-island",
                  "stoves": "galley-stoves", "counter": "galley-counter", "bunk": "bunk", "favours": "favour-table",
                  "pillar": "pillar-round", "bar": "bar", "jukebox": "jukebox"}[label]
@@ -204,64 +217,67 @@ def carriage(c, zs):
         glight(f"fire:{rid}:{fid}", (x, y, g(u)), FIRE, power, "fire")
     for i, (x, u, y, spin) in enumerate(c.get("beacons", [])):
         glight(f"beacon:{rid}:{i}", (x, y, g(u)), BEACON_RED, LIGHT_POWER, "dead", "beacon", spin)
-    if name == "cab":
-        put("cab-shell", 0, 0, zs)
+    bays = int(L // BAY)
+    pad = (L - bays * BAY) / 2
+    ceil_piece, end_piece = f"bay-ceiling-{dm(w)}-{dm(h)}", f"end-wall-door-{dm(w)}-{dm(h)}"
+    floor_piece = f"bay-floor-{'plate' if name == 'guards-van' else 'grate'}-{dm(w)}"
+    for z0 in (zs, g(L - pad)):
+        walls("plain", "plain", w2, z0, pad)
+        put(ceil_piece, 0, 0, z0, 0.0, pad / BAY)
+        put(floor_piece, 0, 0, z0, 0.0, pad / BAY)
+    for b in range(bays):
+        z0 = g(pad + b * BAY)
+        windowed = name not in ("guards-van", "tender", "control-room") or (name == "guards-van" and b in (1, 4))
+        kind = "window" if windowed else "plain"
+        walls(kind, kind, w2, z0, BAY)
+        put(ceil_piece, 0, 0, z0)
+        put(floor_piece, 0, 0, z0)
+        put("bay-pillar", -w2, 0, z0)
+        put("bay-pillar", w2, 0, z0, PI)
+        if windowed and name in ("dining-car", "boiler-room", "sleeper", "third-class"):
+            put("curtain", -w2, 1.9, z0 - 0.4)
+            put("curtain", w2, 1.9, z0 - 1.5, PI)
+        if name == "guards-van" and b % 2 == 0:
+            put("luggage-rack", -w2, 0, z0)
+            put("luggage-rack", w2, 0, z0 - BAY, PI)
+        if name == "boiler-room" and b % 2 == 0:
+            put("lamp-hanging", 0, h, z0)
+        # Industrial dressing: a valve or gauges on alternate bays, both sides; grilles in the van.
+        if b % 2 == 0 and name != "control-room":   # valves and gauges would sit behind the consoles
+            fit = "valve" if b % 4 == 0 else "gauges"
+            put(fit, -w2, 0, z0 - BAY / 2)
+            put(fit, w2, 0, z0 - BAY / 2, PI)
+        if name == "guards-van" and not windowed:
+            put("grille", -w2, 1.3, z0 - BAY / 2)
+        # Party remnants: streamers from the ceiling pipe, bunting across the party carriage.
+        if name == "boiler-room" or (name == "dining-car" and b % 2 == 1):
+            put("streamers", 0, h - 0.33, z0)
+        if name == "boiler-room" and b % 2 == 1:
+            put(f"bunting-{dm(w)}", 0, h - 0.45, z0 - BAY / 2)
+    put(end_piece, 0, 0, zs)
+    if name == "control-room":   # a dead end: no door on the north wall
+        put(f"end-wall-blank-{dm(w)}-{dm(h)}", 0, 0, g(L), PI)
     else:
-        bays = int(L // BAY)
-        pad = (L - bays * BAY) / 2
-        ceil_piece, end_piece = f"bay-ceiling-{dm(w)}-{dm(h)}", f"end-wall-door-{dm(w)}-{dm(h)}"
-        floor_piece = f"bay-floor-{'plate' if name == 'guards-van' else 'grate'}-{dm(w)}"
-        for z0 in (zs, g(L - pad)):
-            walls("plain", "plain", w2, z0, pad)
-            put(ceil_piece, 0, 0, z0, 0.0, pad / BAY)
-            put(floor_piece, 0, 0, z0, 0.0, pad / BAY)
-        for b in range(bays):
-            z0 = g(pad + b * BAY)
-            windowed = name not in ("guards-van", "tender") or (name == "guards-van" and b in (1, 4))
-            kind = "window" if windowed else "plain"
-            walls(kind, kind, w2, z0, BAY)
-            put(ceil_piece, 0, 0, z0)
-            put(floor_piece, 0, 0, z0)
-            put("bay-pillar", -w2, 0, z0)
-            put("bay-pillar", w2, 0, z0, PI)
-            if windowed and name in ("dining-car", "boiler-room", "sleeper", "third-class"):
-                put("curtain", -w2, 1.9, z0 - 0.4)
-                put("curtain", w2, 1.9, z0 - 1.5, PI)
-            if name == "guards-van" and b % 2 == 0:
-                put("luggage-rack", -w2, 0, z0)
-                put("luggage-rack", w2, 0, z0 - BAY, PI)
-            if name == "boiler-room" and b % 2 == 0:
-                put("lamp-hanging", 0, h, z0)
-            # Industrial dressing: a valve or gauges on alternate bays, both sides; grilles in the van.
-            if b % 2 == 0:
-                fit = "valve" if b % 4 == 0 else "gauges"
-                put(fit, -w2, 0, z0 - BAY / 2)
-                put(fit, w2, 0, z0 - BAY / 2, PI)
-            if name == "guards-van" and not windowed:
-                put("grille", -w2, 1.3, z0 - BAY / 2)
-            # Party remnants: streamers from the ceiling pipe, bunting across the party carriage.
-            if name == "boiler-room" or (name == "dining-car" and b % 2 == 1):
-                put("streamers", 0, h - 0.33, z0)
-            if name == "boiler-room" and b % 2 == 1:
-                put(f"bunting-{dm(w)}", 0, h - 0.45, z0 - BAY / 2)
-        put(end_piece, 0, 0, zs)
         put(end_piece, 0, 0, g(L), PI)
-        if w >= 4.0:   # exposed gears on each bulkhead, west of the door (the van is too narrow)
-            put("gear-housing", -(w2 - 0.6), 1.5, zs - 0.01, PI / 2)
-            put("gear-housing", -(w2 - 0.6), 1.5, g(L) + 0.01, -PI / 2)
+    if w >= 4.0 and name != "control-room":   # exposed gears on each bulkhead (not behind the CRT wall)
+        put("gear-housing", -(w2 - 0.6), 1.5, zs - 0.01, PI / 2)
+        put("gear-housing", -(w2 - 0.6), 1.5, g(L) + 0.01, -PI / 2)
     # Wall boilers, with their collision (clear of the spawns and the corridor entrance).
     boilers = {"sleeper": 0.6, "boiler-room": 0.7}
     if name in boilers:
         u = boilers[name]
         put("boiler", w2, 0, g(u), PI)
         gbox("furniture", f"boiler:{rid}", (w2 - 0.8, 0, g(u + 0.4)), (w2, 2.0, g(u - 0.4)))
+    if name == "control-room":   # two trays down the ceiling, clear of the centre pipe
+        for x in (-1.6, 1.6):
+            put("cable-tray-34", x, 0, g(0.6), 0.0, 8.8)
     # Boiler Room: the disco ball over the dance floor, steam vents; shovels in the tender and cab.
     if name == "boiler-room":
         put("disco-ball", 0, h - 0.33, g(14.0))   # the centre of the 6 x 10 m dance floor
         for vx, vu in ((-2.9, 10.8), (-2.9, 13.05), (-2.9, 14.95), (-2.9, 17.0), (2.8, 21.5)):
             put("steam-vent", vx, 0, g(vu))
-    if name in ("tender", "cab"):
-        put("shovel", w2, 0, g(1.2 if name == "tender" else 3.0), PI)
+    if name == "tender":
+        put("shovel", w2, 0, g(1.2), PI)
     for x0, x1, u0, u1 in c["walls"]:
         # Cages (art v2): the van's partitions and the sleeper's corridor wall (compartment fronts).
         cage = name == "guards-van" or (name == "sleeper" and (x1 - x0) < (u1 - u0))

@@ -139,6 +139,11 @@ const LOOK: Record<string, {
   // is where it showed.
   plate:   { metalness: 0.72, roughness: 0.16, envIntensity: 1.15 },
   webbing: { metalness: 0.05, roughness: 0.70, envIntensity: 0.25 },
+  // The goblin's worn, rusted plate (owner, 2026-10-02): BETWEEN the shiny iron above (0.72 / 0.16 / 1.15) and the
+  // dull soldier plate in the warning at the top of this table's history (0.45 / 0.60 / 0.25). Rusty steel is rougher
+  // than polished, but the owner's rule is that nothing in Blud is dead matte, and a strong env on a rust-orange
+  // albedo turns the shadow side pale blue. Starting values, tuned in the turntable: see goblin-armour notes.md.
+  rustplate: { metalness: 0.55, roughness: 0.38, envIntensity: 0.70 },
 
   // ---- juggernaut (juggernaut-kit.wam) ----
   // The power-armour helmet's two round eye lenses: `glass`'s sheen plus a

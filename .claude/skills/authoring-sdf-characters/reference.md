@@ -269,6 +269,11 @@ palette
 - Pick a `mottleColor` that differs in HUE, not only in value. A mottle that is
   just a darker base is nearly invisible; one far from the base reads as dirt
   ON the creature rather than variation IN it.
+- **`grain` puts the face sheet's speckle on the body** (`body-grain.ts`), in two octaves of hard-edged rest-space
+  cells: face-sized (3.5 mm) up close, 1.2 cm farther out, each an albedo multiply plus a bump. It is in the sheet's
+  own units, so setting the sheet's `grain` and the palette's `grain` to one value gives one contrast on face and body
+  (the goblin: 0.10 in both). 0 (every preset) is off. Each octave fades as its cells drop below ~1.5 SDF pixels; in
+  the lab turntable the coarse octave is full out to ~1.5 m and gone by ~3 m.
 
 ## Paint: `color=` on a primitive (added 2026-08-22)
 

@@ -121,6 +121,27 @@ class Nodes:
                 sock.default_value = v if key == "Factor" else (*v, 1)
         return [s for s in nd.outputs if s.type == "RGBA"][0]
 
+    def periodic(self, freq):
+        """(vector, w) sockets that wrap the UV square onto a torus in 4D: a 4D noise or Voronoi at Scale 1 fed with
+        them repeats exactly once per tile in u and v, with about `freq` features across it. Seamless, unlike plain UV."""
+        sep = self.node("ShaderNodeSeparateXYZ", {"Vector": self.uv}).outputs
+        r = freq / (2 * math.pi)
+        a = self.math("MULTIPLY", sep["X"], 2 * math.pi)
+        b = self.math("MULTIPLY", sep["Y"], 2 * math.pi)
+        x, y = self.math("MULTIPLY", self.math("COSINE", a), r), self.math("MULTIPLY", self.math("SINE", a), r)
+        z, w = self.math("MULTIPLY", self.math("COSINE", b), r), self.math("MULTIPLY", self.math("SINE", b), r)
+        return self.node("ShaderNodeCombineXYZ", {"X": x, "Y": y, "Z": z}).outputs[0], w
+
+    def noise4(self, freq, detail=4.0, rough=0.5):
+        vec, w = self.periodic(freq)
+        return self.node("ShaderNodeTexNoise", {"Vector": vec, "W": w, "Scale": 1.0, "Detail": detail, "Roughness": rough},
+                         noise_dimensions="4D").outputs["Fac"]
+
+    def voronoi4(self, freq, feature="F1"):
+        vec, w = self.periodic(freq)
+        return self.node("ShaderNodeTexVoronoi", {"Vector": vec, "W": w, "Scale": 1.0}, voronoi_dimensions="4D",
+                         feature=feature).outputs["Distance"]
+
     def grid_dots(self, per_m, radius):
         """1 inside a dot of `radius` (in cells) at the centre of each 1/per_m cell."""
         v = self.node("ShaderNodeVectorMath", {0: self.uv, 1: (per_m, per_m, 1.0)}, operation="MULTIPLY").outputs[0]
@@ -171,6 +192,26 @@ def procedural(kind, t):
         col = t.mix(bar, (0.015, 0.015, 0.015), (0.3, 0.3, 0.31))
         rough = t.math("ADD", t.math("MULTIPLY", bar, -0.1), 0.6)
         return col, rough, bar
+    if kind == "sand":
+        # The Bryce look's sand shelf (2026-10-01 look-dev): dark and pale blotches, a pitted ripple from Voronoi cells.
+        n = t.noise4(3.0, 8.0, 0.65)
+        cells = t.voronoi4(9.0)
+        fine = t.noise4(40.0, 4.0, 0.5)
+        tone = t.math("ADD", t.math("MULTIPLY", n, 0.7), t.math("MULTIPLY", cells, 0.35))
+        col = t.ramp(tone, [(0.15, (0.09, 0.07, 0.05)), (0.5, (0.24, 0.19, 0.13)), (0.85, (0.42, 0.34, 0.25))])
+        rough = t.math("SUBTRACT", 0.88, t.math("MULTIPLY", n, 0.12))
+        height = t.math("ADD", t.math("ADD", t.math("MULTIPLY", n, 0.4), t.math("MULTIPLY", cells, 0.8)), t.math("MULTIPLY", fine, 0.15))
+        return col, rough, height
+    if kind == "rock":
+        # The Bryce look's rock (boulders, the spiky arch): blotched two-tone stone, pitted cells, a few dark cracks.
+        n = t.noise4(4.0, 12.0, 0.7)
+        cells = t.voronoi4(24.0)
+        crack = t.math("LESS_THAN", t.voronoi4(5.0, "DISTANCE_TO_EDGE"), 0.01)   # hairlines (0.035 read as crazy paving)
+        base = t.ramp(n, [(0.25, (0.1, 0.085, 0.07)), (0.5, (0.24, 0.2, 0.16)), (0.8, (0.42, 0.36, 0.28))])
+        col = t.mix(t.math("MULTIPLY", crack, 0.45), base, (0.06, 0.05, 0.04))
+        rough = t.math("ADD", 0.76, t.math("MULTIPLY", crack, 0.12))
+        height = t.math("SUBTRACT", t.math("ADD", t.math("MULTIPLY", n, 0.6), t.math("MULTIPLY", cells, 0.9)), t.math("MULTIPLY", crack, 0.5))
+        return col, rough, height
     if kind == "rust":
         n = t.noise(4.0, 6.0, t.stretch(1.0, 6.0))
         col = t.ramp(n, [(0.0, (0.08, 0.035, 0.015)), (0.5, (0.24, 0.1, 0.035)), (1.0, (0.45, 0.2, 0.07))])
@@ -268,15 +309,19 @@ BAKED = {  # name: (kind, size px, metallic)
     "train.coal": ("coal", 512, 0.2),
     "train.mirror": ("mirror", 512, 1.0),
     "train.rubber": ("rubber", 256, 0.0),
+    # The retro-CGI look (docs/reference/retro-cgi-recipes.md): seamless 4D-noise tiles, not yet used by a piece.
+    "train.rock": ("rock", 1024, 0.0),
+    "train.sand": ("sand", 1024, 0.0),
 }
 FLAT = {"soot", "party", "rubber"}  # no roughness/normal maps
 
 
-def bake_textures():
+def bake_textures(only=None):
     """For each material: colour and roughness through EMIT bakes, the normal through a NORMAL
-    bake of a Principled BSDF with Bump(height), all on a UV'd 1 x 1 m plane (1 texture = 1 m)."""
+    bake of a Principled BSDF with Bump(height), all on a UV'd 1 x 1 m plane (1 texture = 1 m).
+    `only`: a set of short names to bake, leaving every other map on disk untouched."""
     os.makedirs(TEX, exist_ok=True)
-    for f in os.listdir(TEX):  # v1's maps (wood, panel, velvet...) must not linger
+    for f in os.listdir(TEX) if only is None else ():  # v1's maps (wood, panel, velvet...) must not linger
         if f.endswith(".png"):
             os.remove(os.path.join(TEX, f))
     scene = bpy.context.scene
@@ -289,6 +334,8 @@ def bake_textures():
     out = {}
     for name, (kind, size, _) in BAKED.items():
         short = name.split(".", 1)[1]
+        if only is not None and short not in only:
+            continue
         maps = ("color",) if kind in FLAT else ("color", "rough", "normal")
         out[name] = {}
         for which in maps:
@@ -367,7 +414,12 @@ def final_materials(paths):
             t.l.new(nmap.outputs["Normal"], bsdf.inputs["Normal"])
         mats[name] = m
     for name, rgb, strength in (("train.lamp", (1.0, 0.78, 0.5), LAMP_STRENGTH), ("train.firebox", (1.0, 0.42, 0.1), 1.0),
-                                 ("train.led", (1.0, 0.12, 0.05), 1.0)):
+                                 ("train.led", (1.0, 0.12, 0.05), 1.0),
+                                 # Control room (egg ending plan 1): beige plastic, CRT screens, the placeholder egg.
+                                 ("train.beige", (0.42, 0.38, 0.29), 0.0),
+                                 ("train.crt-green", (0.1, 1.0, 0.3), 1.0), ("train.crt-amber", (1.0, 0.65, 0.15), 1.0),
+                                 ("train.crt-cyan", (0.25, 0.9, 0.8), 0.8), ("train.crt-dim", (0.55, 0.75, 0.6), 0.5),
+                                 ("train.egg", (0.85, 0.88, 0.82), 0.35)):
         m = bpy.data.materials.new(name)
         m.use_nodes = True
         bsdf = m.node_tree.nodes["Principled BSDF"]
@@ -975,6 +1027,120 @@ def cab_shell():
     return p
 
 
+# ---- the control room (egg ending plan 1) ---------------------------------------------------
+#
+# Wall pieces: origin on the wall plane (x = 0 for a side wall, the room on +x; turn PI for the
+# east wall). The CRT wall is modelled like an end wall: at z = 0, the room on the -z side; turn
+# PI at the north wall. Floor pieces: origin at the floor centre.
+
+BEIGE = "train.beige"
+
+
+def crt_console(color):
+    """A console against a side wall: steel desk, sloped panel, a beige CRT facing +x with a lit
+    screen, a keyboard. 0.8 m deep (x), 1.2 m long (z), 1.45 m high."""
+    p = Piece(f"crt-console-{color}")
+    p.box(S, (0.0, 0.0, -0.6), (0.8, 0.9, 0.6))
+    p.box(SX, (0.05, 0.9, -0.55), (0.6, 0.98, 0.55))
+    p.box(BEIGE, (0.1, 0.98, -0.28), (0.6, 1.45, 0.28))
+    p.wall_x(f"train.crt-{color}", 0.605, 1, -0.22, 0.22, 1.06, 1.38)
+    p.box(BEIGE, (0.62, 0.90, -0.25), (0.78, 0.93, 0.25))
+    return p
+
+
+def server_rack():
+    """A tall rack against a side wall, 0.7 m deep, 1.4 m long, 2.4 m high, with a row of LEDs."""
+    p = Piece("server-rack")
+    p.box(S, (0.0, 0.0, -0.7), (0.7, 2.4, 0.7))
+    p.box(SX, (0.7, 0.05, -0.62), (0.72, 2.35, 0.62))
+    for i in range(8):
+        y = 0.5 + 0.22 * i
+        p.box("train.led" if i % 3 == 0 else "train.crt-green", (0.72, y, -0.5), (0.74, y + 0.04, -0.4))
+        p.box("train.crt-amber" if i % 2 else "train.crt-cyan", (0.72, y, 0.3), (0.74, y + 0.04, 0.45))
+    return p
+
+
+def crt_wall():
+    """The north wall: a base and a grid of beige CRTs (9 across; the bottom and middle rows skip the
+    three centre columns), each with a screen, and one big monitor between them. 6.8 m wide."""
+    p = Piece("crt-wall")
+    screens = ["train.crt-green", "train.crt-amber", "train.crt-cyan", S, "train.crt-green", "train.crt-cyan", "train.crt-amber"]
+    p.box(S, (-3.4, 0.0, -0.5), (3.4, 0.57, 0.0))
+    k = 0
+    for r in range(3):
+        for c in range(-4, 5):
+            if r < 2 and c in (-1, 0, 1):
+                continue
+            x, y = c * 0.72, 0.9 + r * 0.72
+            p.box(BEIGE, (x - 0.33, y - 0.33, -0.5), (x + 0.33, y + 0.33, 0.0))
+            p.wall_z(screens[k % len(screens)], -0.505, -1, x - 0.26, x + 0.26, y - 0.26, y + 0.26)
+            k += 1
+    p.box(BEIGE, (-1.05, 0.6, -0.7), (1.05, 1.95, 0.0))
+    p.wall_z("train.crt-dim", -0.705, -1, -0.85, 0.85, 0.78, 1.77)   # the big monitor, dimly lit
+    return p
+
+
+def firebox_door():
+    """The engine's firebox in the east wall: a rusted frame and an orange door. 0.4 m deep, 1.3 m long."""
+    p = Piece("firebox-door")
+    p.box("train.rust", (0.0, 0.0, -0.65), (0.4, 1.8, 0.65))
+    p.wall_x("train.firebox", 0.405, 1, -0.45, 0.45, 0.3, 1.3)
+    p.box(BR, (0.4, 0.25, -0.5), (0.44, 0.3, 0.5))
+    p.box(BR, (0.4, 1.3, -0.5), (0.44, 1.35, 0.5))
+    return p
+
+
+def egg_plinth():
+    """The egg's plinth (a plate, a rusted drum, six clamps) and 14 cables running out across the floor."""
+    p = Piece("egg-plinth")
+    p.box(PL, (-1.3, 0.0, -1.3), (1.3, 0.16, 1.3))
+    p.cyl("train.rust", (0.0, 0.16, 0.0), "y", 0.24, 1.25, 16, r_end=1.0)
+    for i in range(6):
+        a = 2 * math.pi * i / 6 + 0.3
+        p.cyl(SX, (math.cos(a), 0.4, math.sin(a)), "y", 0.9, 0.07, 8, r_end=0.04)
+    for i in range(14):
+        a = 2 * math.pi * i / 14 + 0.17
+        reach = 2.2 + 0.5 * (i % 3)
+        p.tube("train.rubber", [(0.6 * math.cos(a), 0.45, 0.6 * math.sin(a)), (1.6 * math.cos(a), 0.06, 1.6 * math.sin(a)),
+                                (reach * math.cos(a), 0.04, reach * math.sin(a))], 0.04)
+    return p
+
+
+def egg_placeholder():
+    """A milky ellipsoid standing on the plinth (0.95 m semi-axes across, 1.3 m high, narrower at the top).
+    A stand-in: plan 2 replaces it with the WGSL egg."""
+    p = Piece("egg-placeholder")
+    n, layers = 16, 12
+    rings = []
+    for j in range(layers + 1):
+        th = math.pi * (0.04 + 0.92 * j / layers)
+        k = 1.0 - 0.12 * math.cos(th)
+        r, y = 0.95 * k * math.sin(th), 1.6 + 1.3 * math.cos(th)
+        rings.append([(r * math.cos(2 * math.pi * i / n), y, r * math.sin(2 * math.pi * i / n)) for i in range(n)])
+    p.loft("train.egg", rings)
+    return p
+
+
+def cable_tray(height):
+    """A ceiling cable tray, 0.6 m wide, 1 m long (stretch it along z), hung 0.55 m under the ceiling."""
+    p = Piece(f"cable-tray-{dm(height)}")
+    y = height - 0.55
+    p.box(SX, (-0.3, y, -1.0), (0.3, y + 0.05, 0.0))
+    p.box(S, (-0.3, y, -1.0), (-0.27, y + 0.12, 0.0))
+    p.box(S, (0.27, y, -1.0), (0.3, y + 0.12, 0.0))
+    return p
+
+
+def end_wall_blank(width, height):
+    """A plain bulkhead at a carriage's SOUTH end (z = 0), facing north (-z), no door. Turn it PI for a
+    dead-end north wall."""
+    W = width / 2
+    p = Piece(f"end-wall-blank-{dm(width)}-{dm(height)}")
+    p.wall_z(PL, 0, -1, -W, W, 0, DADO)
+    p.wall_z(S, 0, -1, -W, W, DADO, height)
+    return p
+
+
 # ---- the second pass: third class, coat check, the Boiler Room, the tender --------------------
 #
 # Footprints are the collision boxes of scripts/levels/night_train_layout.py. "Floor" pieces have
@@ -1343,6 +1509,9 @@ def shovel():
 
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
+    if "--bake-only" in ARGV:  # e.g. --bake-only rock,sand: bake those maps, touch nothing else, build no kit
+        print("baked", bake_textures(only=set(arg("--bake-only", "").split(","))))
+        return
     mats = final_materials(bake_textures())
     widths = sorted({w for w, _ in SIZES})
     heights = sorted({h for _, h in SIZES})
@@ -1358,6 +1527,8 @@ def main():
         booth(), boiler(), gear_housing(), grille(), valve(), gauges(), streamers(),
         *[bunting(w) for w in widths], party_hats(),
         third_bench(), coat_rack(), counter(), dj_deck(), disco_ball(), piston(), steam_vent(), coal_heap(), shovel(),
+        *[crt_console(c) for c in ("green", "amber", "cyan")], server_rack(), crt_wall(), firebox_door(),
+        egg_plinth(), egg_placeholder(), cable_tray(3.4), end_wall_blank(8.0, 3.4),
     ]
     for pc in pieces:
         pc.finish(mats)

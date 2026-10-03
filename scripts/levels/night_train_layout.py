@@ -36,9 +36,10 @@ T = 0.1  # internal partition thickness
 #             (spin: rev/s about the vertical, sign = direction; Boiler Room beacons spec). Optional.
 FIRE = (1.0, 0.42, 0.12)
 # When `on` fires, the level also fires `emit` (dynamic light spec §3).
-CUES = [("pickup.flashlight", ["light.die.room.6", "alert.room.6"])]
-# The level ends at the firebox (the Stoker comes later); the CD is a collectible.
-COMPLETE_ON = "level.end"
+CUES = [("pickup.flashlight", ["light.die.room.6", "alert.room.6"]),
+        ("egg.touch", ["sequence.ending"])]   # touching the egg starts the ending sequence (ending plan 3)
+# The level completes when the ending sequence ends (ending-sequence.ts SEQUENCES.ending.endEvent); the CD is a collectible.
+COMPLETE_ON = "ending.end"
 CARRIAGES = [
     dict(rid=1, name="guards-van", w=3.6, L=16.0, h=2.8,
          walls=[(-1.8, -1.7, 5.5, 5.5 + T), (-0.3, 1.8, 5.5, 5.5 + T),        # hold | cage, door west
@@ -133,12 +134,21 @@ CARRIAGES = [
          spawns=[("coal-1", "zombie", 0.9, 3.5), ("tender-juggernaut", "juggernaut", 0.9, 7.2)],   # guards the way to the cab
          pickups=[("tender-health", "health", 1.2, 9.2)],
          gates=[], moods=["dying"], fires=[], triggers=[]),
-    dict(rid=8, name="cab", w=3.0, L=8.0, h=2.6,
+    # Control room (egg ending plan 1, spec 2026-09-30): the old 3 x 8 m cab becomes an 8 x 10 m room,
+    # "bigger on the inside". CRT wall on the north, consoles and racks down both sides, the firebox door
+    # in the east wall, the egg on its plinth at u 6.3. Touching the egg fires egg.touch, whose cue starts the ending sequence (plan 3).
+    dict(rid=8, name="control-room", w=8.0, L=10.0, h=3.4,
          walls=[],
-         areas=[("cab: the Stoker at the firebox", -1.5, 1.5, 0, 8.0)],
-         props=[("backhead", -1.5, 1.5, 7.6, 8.0, 2.4)],
-         spawns=[], pickups=[], gates=[], moods=["steady"], fires=[("firebox", 0.0, 7.0, 1.0, 4.0)],
-         triggers=[("end", COMPLETE_ON, -1.5, 1.5, 4.5, 6.5)]),
+         areas=[("control room: the egg on its plinth", -4.0, 4.0, 0, 10.0)],
+         props=[*[("console", -4.0, -3.2, u - 0.6, u + 0.6, 1.0) for u in (1.8, 3.3, 4.8, 7.6, 8.8)],
+                *[("console", 3.2, 4.0, u - 0.6, u + 0.6, 1.0) for u in (1.8, 3.3, 4.8, 7.6)],
+                ("rack", -4.0, -3.3, 5.6, 7.0, 2.4), ("rack", 3.3, 4.0, 5.6, 7.0, 2.4),
+                ("firebox", 3.6, 4.0, 8.25, 9.55, 1.8),
+                ("egg", -1.2, 1.2, 5.1, 7.5, 2.9),
+                ("crt wall", -3.4, 3.4, 9.3, 10.0, 2.4)],
+         spawns=[], pickups=[], gates=[], moods=["dying"],
+         fires=[("egg", 0.0, 6.3, 1.5, 4.0), ("firebox", 3.3, 8.9, 1.0, 4.0)],
+         triggers=[("egg", "egg.touch", -1.6, 1.6, 4.7, 7.9)]),
 ]
 
 
@@ -255,7 +265,7 @@ def to_svg() -> str:
         for tid, event, x0, x1, u0, u1 in c["triggers"]:
             o.append(box(x0, x1, u0, u1, "none", "#f0e040", 1.5, 'stroke-dasharray="4 3"')
                      + text((u0 + u1) / 2, x1 - 0.15, event, "#f0e040", 9, "middle"))
-        for (lx, _, lu), mood in lamps(c):
+        for (lx, _, lu), mood, *_ in lamps(c):
             o.append(f'<circle cx="{X(lu):.1f}" cy="{Y(lx):.1f}" r="4" fill="none" stroke="#ffd080" stroke-width="1.5"/>'
                      + text(lu, lx + 0.45, mood, "#ffd080", 9, "middle"))
         for _, fx, fu, _, _ in c["fires"]:

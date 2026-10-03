@@ -105,4 +105,19 @@ describe('crowd records', () => {
       expect(Array.from(r.floats.slice(o, o + 4))).toEqual([-1, -1, -1, -1]);
     });
   });
+
+  // Body grain (body-grain.ts): the palette's grain rides meltCfg.w, which the record copies whole, so a
+  // crowd body wears its own value through the shared per-type material.
+  it('carries meltCfg.w (the body grain) in REC_MELT.w', () => {
+    const r = createCrowdRecords(2);
+    r.write(1, {
+      counts: [0, 0, 0, 0], counts2: [0, 0, 0, 0], woundBound: [0, 0, 0, 1e9],
+      bodyAnchor: [0, 0, 0], windDrift: [0, 0, 0], meltCfg: [0, 0, 0, 0.1], bodyFlash: [0, 0, 0, 0],
+      noiseShift: [0, 0, 0], bodyYaw: 0, headCentre: [0, 0, 0], woundCount: 0,
+      headQuat: [0, 0, 0, 1], volumePose0: [0, 0, 0, 0], volumePose1: [0, 0, 0, 0],
+      bodyCentre: [0, 0, 0], variantSeed: 0, bodyHalf: [0, 0, 0], damageRevision: 0, gore: 0,
+      burn: 0, burnSec: 0, charAmount: 0,
+    });
+    expect(r.floats[1 * REC_VEC4S * 4 + REC_MELT * 4 + 3]).toBeCloseTo(0.1, 6);
+  });
 });
