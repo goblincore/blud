@@ -91,6 +91,19 @@ export function isSoldierFamily(profile: Pick<MotionProfile, 'family'> | null | 
   return profile?.family === 'soldier';
 }
 
+/**
+ * Do the torso guards (rig.ts RigGuardSphere) apply to this profile? Only to an
+ * UNARMED body: the zombie and the other bare-handed characters. Anything that
+ * holds a prop or a gun, or carries one in a stance (the soldier family, the
+ * cultist's tommy gun, the bride's sword guard, the ogre's chainsaw, the
+ * juggernaut's chaingun, the warbull's launcher), puts its hands at or in front of
+ * the torso on purpose, and a guard that keeps arms off the torso would fight the
+ * authored pose and drag the prop off its grip.
+ */
+export function wantsTorsoGuards(profile: MotionProfile | null | undefined): boolean {
+  return !profile || (!profile.family && !profile.carries && !profile.prop && !profile.gunner && !profile.melee);
+}
+
 export interface FlailTuning {
   /** Arm swing out to the side. */
   abduct: number;

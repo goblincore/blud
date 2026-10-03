@@ -23,7 +23,7 @@ import {
 } from './game-actor';
 import type { Aabb } from './game-level';
 import { ROOMS, FURNITURE, wanderBounds, spawnPoints } from './game-level';
-import { sdBody } from '../validate';
+import { sdBody, sdPrimitive } from '../validate';
 import { woundWorldPos } from '../damage';
 import { rotateYaw } from '../gait';
 import { mulberry32 } from './game-weapon';
@@ -1050,6 +1050,67 @@ describe('arms never clip through the head', () => {
     for (let f = 0; f < 40; f++) { a.step(1 / 60); worst = Math.max(worst, armIntoHead(a)); }
     expect(worst).toBeLessThan(0.01);
   });
+});
+
+// ---------------------------------------------------------------------------
+// Arms do not pass through the torso.
+//
+// OWNER REPORT (2026-10-02, playtest after the head fix): "I saw the arm
+// clipping into the chest/torso at times."
+// MEASURED: a flail-strength hit sank the upper arm up to 7.7 cm into the
+// ribs/belly (the lower torso rides the pelvis' shove at full strength while the
+// arms ride the chest's 55%, so on an angled hit the torso slides into the arm),
+// and the zombie's overhead/cleave swing 4 cm. The head keep-out only covered the
+// head.
+// ---------------------------------------------------------------------------
+describe('arms never clip through the torso', () => {
+  type Actor = ReturnType<typeof makeTestActor>;
+  /** Deepest overlap (m; > 0 = inside) of an arm prim's surface with the torso
+   *  prims. The inner half of the upper arm is the shoulder socket, which sits in
+   *  the torso by design, so those samples are skipped. */
+  const armIntoTorso = (a: Actor): number => {
+    const prims = a.posed().prims;
+    const torso = prims.filter(p => p.limb === 'torso' && !p.dead && (p.op === undefined || p.op === 'add'));
+    let worst = -Infinity;
+    for (const p of prims) {
+      if ((p.limb !== 'armL' && p.limb !== 'armR') || /clavicle/.test(p.bone ?? '') || p.dead) continue;
+      if (p.op !== undefined && p.op !== 'add') continue;
+      const upper = /upperArm|upperarm/.test(p.bone ?? '');
+      for (let k = upper ? 4 : 0; k <= 8; k++) {
+        const q = [0, 1, 2].map(i => p.a[i]! + (p.b[i]! - p.a[i]!) * (k / 8)) as unknown as Vec3;
+        let d = Infinity;
+        for (const t of torso) d = Math.min(d, sdPrimitive(q, t));
+        worst = Math.max(worst, p.radius - d);
+      }
+    }
+    return worst;
+  };
+
+  for (const variant of ['hook', 'overhead', 'shove', 'cleave', 'sweep', 'lunge'] as const) {
+    for (const side of ['L', 'R'] as const) {
+      it(`a ${variant} swing (${side}) keeps the arm out of the torso`, () => {
+        const a = makeTestActor({ start: [0, 0, 0] });
+        for (let f = 0; f < 20; f++) a.step(1 / 60);
+        let worst = -Infinity;
+        for (let i = 0; i <= 40; i++) { a.forceSwing(i / 40, side, variant); a.step(1 / 60); worst = Math.max(worst, armIntoTorso(a)); }
+        // <= 1.5 cm is a graze against the chest where the arm rests at its authored
+        // distance (the guards never ask for more than the rest clearance).
+        expect(worst).toBeLessThan(0.015);   // the bug measured up to 0.041 m
+      });
+    }
+  }
+
+  for (const vel of [[0, 0, 6], [0, 0, -6], [6, 0, 0], [-6, 0, 0], [4, 0, 4], [-4, 0, 4]] as const) {
+    it(`a flail hit along (${vel}) does not slide the torso into an arm`, () => {
+      const a = makeTestActor({ start: [0, 0, 0] });
+      for (let f = 0; f < 30; f++) a.step(1 / 60);
+      const c = a.posed().clusters.find(c => c.limb === 'torso')!.center;
+      a.blast({ wounds: [], meterCredit: 0, impulse: { at: [c[0], c[1], c[2]], vel: [...vel] }, reaction: 'blast', gain: 1.3 });
+      let worst = -Infinity;
+      for (let f = 0; f < 40; f++) { a.step(1 / 60); worst = Math.max(worst, armIntoTorso(a)); }
+      expect(worst).toBeLessThan(0.015);   // the bug measured up to 0.077 m
+    });
+  }
 });
 
 describe('blast() reaction option (melee)', () => {
