@@ -216,10 +216,45 @@ describe('cut wounds in the march', () => {
     expect(branch).toContain('let depthT = max(dEff * prof, max(wCut.w, 1e-4));');
     expect(branch).toContain('let kerfT = wCut.w * (1.0 + jag) * (0.35 + 0.65 * prof);');
     expect(branch).toContain('let vWall = kerfT * (1.0 - clamp(cs, 0.0, depthT) / depthT) - abs(cu);');
-    expect(branch).toContain(`let carve = min(min(vWall, depthT - cs), w.w - abs(ca)) * ${f(CUT_SHADE.carveK)};`);
+    // The lid (cs + kerf): cutCarve's fourth min() term.
+    expect(branch).toContain(`let carve = min(min(min(vWall, depthT - cs), w.w - abs(ca)), cs + wCut.w) * ${f(CUT_SHADE.carveK)};`);
+    // A row with no inward axis carves nothing (first statement of the branch).
+    expect(branch).toMatch(/^\(i32\(wFlags\.x\) & 32\) != 0\) \{\s*(\/\/[^\n]*\n\s*)*if \(length\(wCap\.xyz\) < 0\.5\) \{ continue; \}/);
     // The running d is the carve target; dIn (pre-wound) is the depth reading. A cut never reaches the crater rim
     // code, which reads META.w as an offset scale (for a cut it is the sag).
     expect(branch).not.toMatch(/max\(-d,/);
     expect(branch).toMatch(/continue;\s*}\s*(\/\/[^\n]*\n\s*)*$/);
+  });
+  // cut-wound.ts cutLip is the CPU mirror of the lip: amp x exp(-lx^2) x rim x offKerf x nearSkin.
+  it('the cut lip mirrors cutLip term for term (bounded to the near skin, kept off the kerf)', () => {
+    const iCut = APPLY_WOUNDS.indexOf('(i32(wFlags.x) & 32) != 0');
+    const branch = APPLY_WOUNDS.slice(iCut, APPLY_WOUNDS.indexOf('if (wMeta.x < -0.5)'));
+    const f = (v: number) => (Number.isInteger(v) ? `${v}.0` : `${v}`);
+    expect(branch).toContain(`let lipW = max(wCut.w * ${f(CUT_SHADE.lipWidth)}, 1e-4);`);
+    expect(branch).toContain(`let lx = (abs(cu) - wCut.w * ${f(CUT_SHADE.lipOffset)}) / lipW;`);
+    expect(branch).toContain(`let cutAmp0 = wCut.w * ${f(CUT_SHADE.lipHeight)} * wMeta.z;`);
+    expect(branch).toContain('let cutAmp = cutAmp0 * prof;');
+    expect(branch).toContain('let cutRimB = max(cutAmp0, lipW);');
+    expect(branch).toContain('let cutRim = 1.0 - smoothstep(-0.3 * cutRimB, 0.7 * cutRimB, dIn);');
+    expect(branch).toContain('let offKerf = smoothstep(kerfT, kerfT + lipW, abs(cu));');
+    expect(branch).toContain('let nearSkin = 1.0 - smoothstep(0.0, 2.0 * lipW, cs);');
+    expect(branch).toContain('d = d - cutAmp * exp(-lx * lx) * cutRim * offKerf * nearSkin;');
+    // prof is 0 past the tips, so the old step(abs(ca), w.w) gate was redundant.
+    expect(branch).not.toContain('step(abs(ca)');
+  });
+  // cut-wound.ts cutMask is the CPU mirror of the footprint: band x ends x far, far measured from the chord plane - sag.
+  it('the cut mask mirrors cutMask term for term (no infinite slab along the inward axis)', () => {
+    const iCut = WOUND_MASK.indexOf('(fBits & 32) != 0');
+    const branch = WOUND_MASK.slice(iCut, WOUND_MASK.indexOf('var rM = length(p - w.xyz);'));
+    const f = (v: number) => (Number.isInteger(v) ? `${v}.0` : `${v}`);
+    expect(branch).toContain(`let cSag = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META} + gBand), 0).w;`);
+    expect(branch).toContain('let cPlane = dot(crel, cIn) - cSag;');
+    expect(branch).toContain('let cKerf = max(cCut.w, 1e-4);');
+    expect(branch).toContain(`let cDEff = min(cCap.w, ${f(CUT_SHADE.maxDepthPerHalfLen)} * w.w);`);
+    expect(branch).toContain(`let cBand = 1.0 - smoothstep(cKerf, cKerf * ${f(CUT_SHADE.maskWidth)}, cU);`);
+    expect(branch).toContain('let cEnds = 1.0 - smoothstep(w.w * 0.85, w.w * 1.15, cA);');
+    expect(branch).toContain('let cFar = 1.0 - smoothstep(cDEff + cKerf, cDEff + 2.0 * cKerf, cPlane);');
+    expect(branch).toContain('let cC = cBand * cEnds * cFar;');
+    expect(branch).toMatch(/continue;\s*}\s*$/);
   });
 });

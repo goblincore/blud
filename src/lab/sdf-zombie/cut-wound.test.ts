@@ -1,9 +1,9 @@
 // src/lab/sdf-zombie/cut-wound.test.ts
 import { describe, expect, it } from 'vitest';
-import { CUT, CUT_SHADE, ROD_CALIBRE, cutCarve, cutExposureSpheres, cutsFromSweep, stampCut } from './cut-wound';
-import { woundDirToWorld, woundWorldPos } from './damage';
+import { CUT, CUT_SHADE, ROD_CALIBRE, cutCarve, cutExposureSpheres, cutLip, cutMask, cutsFromSweep, stampCut } from './cut-wound';
+import { WOUND_PROFILES, woundDirToWorld, woundWorldPos } from './damage';
 import { prim } from './head-pop';
-import { sdBody } from './validate';
+import { sdBody, smax } from './validate';
 import type { Primitive, Vec3 } from './types';
 
 // A torso-like capsule (cluster 1) and an arm (cluster 2), both along +y.
@@ -272,4 +272,177 @@ describe('cutExposureSpheres (for the sphere-only bone exposure)', () => {
     const crater = { primIdx: 0, local: w.local, radius: 0.05, type: 'pellet' as const, ageSec: 0, axis0: w.axis0 };
     expect(cutExposureSpheres(prims, crater, 0)).toEqual([{ pos: woundWorldPos(prims, crater, 0), radius: 0.05 }]);
   });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// The lip and the mask (Task 5 review): CPU mirrors of the WGSL, and the whole cut field the march sees:
+//   F = smax(dBody, carve, kW) - lip,  kW = woundCfg.y (0.015) x clamp(kerf / 0.05, 0.1, 1),  lipScale = META.z.
+// ---------------------------------------------------------------------------------------------------------------------
+const LIP_SCALE = WOUND_PROFILES.pellet.rimSplayScale * ROD_CALIBRE.lip;   // META.z for a rod cut (character-view.ts)
+const kWOf = (kerf: number) => 0.015 * Math.min(1, Math.max(0.1, kerf / 0.05));
+const lipAt = (k: ReturnType<typeof slotOf>, p: Vec3) =>
+  cutLip(p, k.mid, k.halfLen, k.along, k.inward, k.kerf, field(p), k.sag, LIP_SCALE);
+const carvedAt = (k: ReturnType<typeof slotOf>, p: Vec3) => smax(field(p), carveAt(k, p), kWOf(k.kerf));
+const fullAt = (k: ReturnType<typeof slotOf>, p: Vec3) => carvedAt(k, p) - lipAt(k, p);
+const maskAt = (k: ReturnType<typeof slotOf>, p: Vec3) => cutMask(p, k.mid, k.halfLen, k.along, k.inward, k.depth, k.kerf, k.sag);
+const armAlong = (cal = ROD_CALIBRE) => stampCut(prims, { a: [0.4, 1.15, 0.05], b: [0.4, 1.35, 0.05], view: [0, 0, -1] }, cal, 0, field);
+const armSilhouette = (cal = ROD_CALIBRE) => stampCut(prims, { a: [0.35, 1.25, 0], b: [0.45, 1.25, 0], view: [0, 0, -1] }, cal, 0, field);
+/** Skin points on the BACK of a capsule (outward normal facing away from the viewer at -z: n.z < -0.2), `inset` inside. */
+const backSkin = (cx: number, r: number, inset = 0): Vec3[] => {
+  const out: Vec3[] = [];
+  for (let y = 1.05; y <= 1.45; y += 0.0025) {
+    for (let th = Math.PI; th <= 2 * Math.PI; th += Math.PI / 180) {
+      if (Math.sin(th) >= -0.2) continue;
+      out.push([cx + (r - inset) * Math.cos(th), y, (r - inset) * Math.sin(th)]);
+    }
+  }
+  return out;
+};
+
+describe('cutLip / cutMask: the lip and the mask stay on the near skin', () => {
+  const cuts = () => [
+    { name: 'torso along', k: slotOf(torsoCut(0.1, false)), back: backSkin(0, 0.15) },
+    { name: 'torso around', k: slotOf(torsoCut(0.1, true)), back: backSkin(0, 0.15) },
+    { name: 'arm along', k: slotOf(armAlong()), back: backSkin(0.4, 0.05) },
+  ];
+  it('(a) behind a front cut the lip lowers the far skin by < 0.05 mm and the mask is 0', () => {
+    for (const { name, k, back } of cuts()) {
+      let lip = 0, mask = 0;
+      for (const p of back) { lip = Math.max(lip, lipAt(k, p)); mask = Math.max(mask, maskAt(k, p)); }
+      console.log(`far skin ${name}: max lip ${(lip * 1000).toFixed(4)} mm, max mask ${mask.toExponential(2)}`);
+      expect(lip).toBeLessThan(5e-5);
+      expect(mask).toBe(0);
+    }
+  });
+  it('the mask still paints the near side: 1 on the slot line at the skin, 0 past maskWidth x kerf', () => {
+    const k = slotOf(torsoCut(0.1, false));
+    expect(maskAt(k, slotPoint(k, 0, 0, 0))).toBe(1);
+    expect(maskAt(k, slotPoint(k, 0, 0, k.kerf * CUT_SHADE.maskWidth + 1e-4))).toBe(0);
+    expect(maskAt(k, slotPoint(k, 1.2 * k.halfLen, 0, 0))).toBe(0);
+  });
+  // The half-width is measured a fixed depth below the PRE-WOUND skin, found along `inward` at each |u| (the first form
+  // probed 1 mm below the chord plane: off the slot a curved torso's skin falls away below that plane, so the carve-only
+  // scan never met flesh and reported its 30 mm cap). The criterion depth is one blend width kW down: above it the
+  // edge IS smax's rounded fillet (carve-only half-width 18.3 mm 1 mm down against a 10 mm kerf), which the lip, centred
+  // at 1.5 kerf, everts by design. Measured (rod, torso along): carve-only 18.34 / 13.70 / 11.26 mm at 1 / 3 (= kW) /
+  // 5 mm down; the old ungated lip 6.32 / 5.26 / 4.70 mm, open centre depth 47.1 of 60.0 mm; this lip 13.48 / 12.20 /
+  // 11.02 mm, depth 60.0 mm. 1 mm down only the kerf is guaranteed (offKerf): the lip never narrows the slot below it.
+  it('(b) with the lip on, the slot keeps >= 80% of its half-width one blend width below the skin and of its open centre depth', () => {
+    for (const { name, k } of cuts()) {
+      const kW = kWOf(k.kerf);
+      const skinAt = (u: number) => {
+        let lo = -0.05, hi = lo;
+        while (hi < 0.2 && field(slotPoint(k, 0, hi, u)) >= 0) { lo = hi; hi += 0.001; }
+        for (let i = 0; i < 30; i++) { const m = 0.5 * (lo + hi); if (field(slotPoint(k, 0, m, u)) >= 0) lo = m; else hi = m; }
+        return hi;
+      };
+      const skins: number[] = [];
+      for (let i = 0; i <= 1500; i++) skins.push(skinAt(i * 0.00002));
+      const halfWidth = (F: (p: Vec3) => number, below: number) => {
+        for (let i = 0; i <= 1500; i++) if (F(slotPoint(k, 0, skins[i]! + below, i * 0.00002)) < 0) return i * 0.00002;
+        return 0.03;
+      };
+      const openDepth = (F: (p: Vec3) => number) => {
+        for (let s = k.sag; s <= 0.2; s += 0.00002) if (F(slotPoint(k, 0, s, 0)) < 0) return s - k.sag;
+        return 0.2;
+      };
+      const carved = (p: Vec3) => carvedAt(k, p), full = (p: Vec3) => fullAt(k, p);
+      const mm = (x: number) => (x * 1000).toFixed(2);
+      const w0 = halfWidth(carved, kW), w1 = halfWidth(full, kW), d0 = openDepth(carved), d1 = openDepth(full);
+      const top0 = halfWidth(carved, 0.001), top1 = halfWidth(full, 0.001), low0 = halfWidth(carved, 0.005), low1 = halfWidth(full, 0.005);
+      console.log(`slot ${name}: half-width carve-only -> with lip, 1 mm down ${mm(top0)} -> ${mm(top1)}, kW ${mm(kW)} mm down ${mm(w0)} -> ${mm(w1)} (${(100 * w1 / w0).toFixed(1)}%), 5 mm down ${mm(low0)} -> ${mm(low1)}; open centre depth ${mm(d0)} -> ${mm(d1)} mm (${(100 * d1 / d0).toFixed(1)}%)`);
+      expect(w1).toBeGreaterThanOrEqual(0.8 * w0);
+      expect(top1).toBeGreaterThanOrEqual(k.kerf);
+      expect(d1).toBeGreaterThanOrEqual(0.8 * d0);
+    }
+  });
+  it('(d) the lip still raises the near skin beside the cut: > 0.3 mm at |u| = lipOffset x kerf', () => {
+    for (const { name, k } of cuts()) {
+      const u = CUT_SHADE.lipOffset * k.kerf;
+      const skin = (F: (p: Vec3) => number) => {
+        for (let s = -0.02; s <= 0.05; s += 0.00001) if (F(slotPoint(k, 0, s, u)) < 0) return s;
+        return 0.05;
+      };
+      const raise = skin((p) => carvedAt(k, p)) - skin((p) => fullAt(k, p));
+      console.log(`lip ${name}: raises the skin at |u| = ${(u * 1000).toFixed(1)} mm by ${(raise * 1000).toFixed(3)} mm`);
+      expect(raise).toBeGreaterThan(0.0003);
+    }
+  });
+  it('the lid: the carve is closed one kerf above the skin (empty space above the cut is not raised)', () => {
+    const k = slotOf(torsoCut(0.1, false));
+    expect(carveAt(k, slotPoint(k, 0, -0.5 * k.kerf, 0))).toBeGreaterThan(0);
+    for (const s of [-1.01 * k.kerf, -0.02, -0.05, -0.2]) expect(carveAt(k, slotPoint(k, 0, s, 0))).toBeLessThan(0);
+  });
+});
+
+// A silhouette-to-silhouette chord across the 0.05 m arm: sag = the radius (the chord lies on the axis plane), so the
+// depth left is thickFrac x 0.1 - 0.05 = 0.03. The back skin stays closed over the middle of the chord. Near the TIPS it
+// opens, and that is the blade's geometry, not a leak: there the round arm is thinner behind the chord plane than the
+// slot is deep (a straight blade 0.03 below the axis plane severs it wherever |a| > 0.8 h), and the slot's kerf floor
+// (depthT >= kerf) plus smax's blend reach it. Measured (0.5 mm inset samples): rod 234 of 25277 opened, all at
+// |a| >= 0.904 h, at most 20.1 mm below the chord plane; kerf 0.015: 784, all at |a| >= 0.747 h, at most 32.5 mm below.
+// Before the sag-first depth cap (HEAD ffe5a3eb, depth 0.06 from the flesh behind the anchor): 1447 and 2293 opened,
+// 835 and 1393 of them within |a| <= 0.7 h, i.e. straight through the middle of the arm's back.
+describe('stampCut: a slash across a thin limb\'s silhouette leaves its back closed', () => {
+  for (const [name, cal] of [['rod', ROD_CALIBRE], ['kerf 0.015', { ...ROD_CALIBRE, kerf: 0.015 }]] as const) {
+    it(`${name}: depth fits between the chord and thickFrac of the flesh; no far-skin opening in the middle 70% of the chord`, () => {
+      const w = armSilhouette(cal);
+      const k = slotOf(w);
+      expect(k.sag).toBeGreaterThan(0.045);
+      expect(k.sag + k.depth).toBeLessThanOrEqual(CUT.thickFrac * 0.1 + CUT.thickFrac * 0.005 + 1e-9);   // probe step slack
+      expect(k.depth).toBeGreaterThanOrEqual(cal.kerf);
+      const dEff = Math.min(k.depth, CUT_SHADE.maxDepthPerHalfLen * k.halfLen);
+      let opened = 0, n = 0, middle = 0, minA = Infinity, maxBelow = -Infinity;
+      for (const p of backSkin(0.4, 0.05, 0.0005)) {
+        n++;
+        if (fullAt(k, p) < 0) continue;
+        opened++;
+        const rel = [p[0] - k.mid[0], p[1] - k.mid[1], p[2] - k.mid[2]];
+        const a = Math.abs(rel[0]! * k.along[0] + rel[1]! * k.along[1] + rel[2]! * k.along[2]) / k.halfLen;
+        const below = rel[0]! * k.inward[0] + rel[1]! * k.inward[1] + rel[2]! * k.inward[2] - k.sag;
+        if (a <= 0.7) middle++;
+        minA = Math.min(minA, a); maxBelow = Math.max(maxBelow, below);
+      }
+      console.log(`silhouette ${name}: sag ${k.sag.toFixed(4)} depth ${k.depth.toFixed(4)}, opened ${opened} of ${n} back-skin samples, ${middle} within |a| <= 0.7 h, nearest the middle at |a| = ${minA.toFixed(3)} h, deepest ${(maxBelow * 1000).toFixed(1)} mm below the chord plane`);
+      expect(middle).toBe(0);
+      // Every opened sample is flesh a straight blade at the slot's full depth (plus smax's blend) would sever anyway.
+      if (opened > 0) expect(maxBelow).toBeLessThan(dEff + kWOf(k.kerf));
+    });
+  }
+});
+
+describe('cutLip + cutCarve: Lipschitz bound of the whole cut field', () => {
+  it('max |grad| of smax(dBody, carve, kW) - lip <= 2.2 over halfLen x depth x kerf', () => {
+    let worst = 0, worstAt = '';
+    const h = 2e-4, step = 0.0025;
+    for (const half of [0.015, 0.05, 0.1, 0.175]) {
+      for (const depth of [0.03, 0.06, 0.15]) {
+        for (const kerf of [0.006, 0.01, 0.015]) {
+          const kinds = half <= 0.1 ? [false, true] : [false];
+          for (const around of kinds) {
+            const k = slotOf(torsoCut(half, around, { depth, kerf, lip: 1 }));
+            const F = (p: Vec3) => fullAt(k, p);
+            for (let a = -k.halfLen - 0.02; a <= k.halfLen + 0.02; a += step) {
+              for (let s = -0.02; s <= k.depth + k.sag + 0.02; s += step) {
+                for (let u = -0.04; u <= 0.04; u += 0.001) {
+                  const p = slotPoint(k, a, s, u);
+                  const f0 = F(p);
+                  if (f0 < -0.003 || f0 > 0.02) continue;
+                  for (const sg of [1, -1]) {
+                    const g = Math.hypot(
+                      (F(slotPoint(k, a + sg * h, s, u)) - f0) / h,
+                      (F(slotPoint(k, a, s + sg * h, u)) - f0) / h,
+                      (F(slotPoint(k, a, s, u + sg * h)) - f0) / h);
+                    if (g > worst) { worst = g; worstAt = `h ${half} depth ${depth} kerf ${kerf} ${around ? 'around' : 'along'} at a ${a.toFixed(3)} s ${s.toFixed(3)} u ${u.toFixed(3)}`; }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    console.log(`lipschitz (carve + lip) max ${worst.toFixed(3)} at ${worstAt}`);
+    expect(worst).toBeLessThanOrEqual(2.2);
+  }, 900000);
 });

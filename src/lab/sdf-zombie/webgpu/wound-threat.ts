@@ -25,6 +25,7 @@
 // wound smax overshoot. The slab half is skipped for distorted groups because its
 // bound is not closed under a distortion factor above one.
 
+import { CUT_SHADE } from '../cut-wound';
 import type { Vec3 } from '../types';
 
 export interface ThreatWound {
@@ -34,6 +35,10 @@ export interface ThreatWound {
   owner: number;
   /** Depth slab: inward normal + depth. Null or depth <= 0 = uncapped sphere. */
   cap?: { n: Vec3; depth: number } | null;
+  /** A CUT's slot (flag 32; built by `cutThreatWound`): the carve is a thin box, so besides the sphere and the slab a group
+   *  must also reach |along| <= halfLen and |side| <= halfWidth (side = along x cap.n), each widened by `widen` x (group
+   *  radius + margin). Tested on undistorted groups only, like the slab. */
+  slot?: { along: Vec3; halfLen: number; halfWidth: number; widen: number } | null;
 }
 
 export interface ThreatGroup { center: readonly [number, number, number]; radius: number; distort: number }
@@ -63,7 +68,14 @@ export function woundThreatMasks(
         if (Math.hypot(dx, dy, dz) - grp.radius >= (w.radius + margin) * f) continue;
         if (capped && f <= 1.001) {
           const n = w.cap!.n;
-          if (dx * n[0] + dy * n[1] + dz * n[2] - grp.radius >= w.cap!.depth + margin) continue;
+          const widen = w.slot ? w.slot.widen * (grp.radius + margin) : 0;
+          if (dx * n[0] + dy * n[1] + dz * n[2] - grp.radius >= w.cap!.depth + margin + widen) continue;
+          if (w.slot) {
+            const t = w.slot.along;
+            const sd: Vec3 = [t[1] * n[2] - t[2] * n[1], t[2] * n[0] - t[0] * n[2], t[0] * n[1] - t[1] * n[0]];
+            if (Math.abs(dx * t[0] + dy * t[1] + dz * t[2]) - grp.radius >= w.slot.halfLen + margin + widen) continue;
+            if (Math.abs(dx * sd[0] + dy * sd[1] + dz * sd[2]) - grp.radius >= w.slot.halfWidth + margin + widen) continue;
+          }
         }
         mask |= 1 << (c + 1);
         break;
@@ -71,4 +83,40 @@ export function woundThreatMasks(
     }
     return mask;
   });
+}
+
+/**
+ * The threat wound of a CUT row (cut-wound.ts, applyWounds' flag-32 branch). A crater's carve lies inside its radius,
+ * a cut's does not, so the row's half-length is the wrong sphere:
+ *
+ * - Inward, the slot reaches its floor at sag + depthT below the anchor, depthT <= max(dEff, kerf),
+ *   dEff = min(depth, maxDepthPerHalfLen x halfLen): that is the slab (the depth alone missed the sag).
+ * - Outward, nothing bounds it but the shader's per-wound reach. Inside ANY flesh the slot's depth coordinate
+ *   s = max(-dIn, plane - sag) is >= 0 (dIn < 0 there), so neither the floor nor the lid closes the slot in a foreign
+ *   limb crossing the channel above the cut: it is carved wherever it lies in reach. So the sphere is the reach,
+ *   `reachR` (woundReachBound's form: halfLen x max(2, 2 rimOffset + 3 rimWidth) + 4 blendK + 0.25), plus the carve's
+ *   own height (carveK x 1.35 kerf, the jagged kerf at most).
+ * - Sideways and along, the box: |side| <= 1.35 kerf, |along| <= halfLen.
+ *
+ * The carve is scaled by carveK (< 1), so where the slot is negative it falls off slower than distance; carried
+ * through the header's derivation that widens each box test by (1 / carveK - 1) x (group radius + margin).
+ */
+export function cutThreatWound(
+  pos: Vec3, owner: number, halfLen: number, inward: Vec3, depth: number, sag: number, along: Vec3, kerf: number,
+  reachR: number,
+): ThreatWound {
+  const halfWidth = (1 + CUT_SHADE.jagAmp) * kerf;
+  const dEff = Math.min(depth, CUT_SHADE.maxDepthPerHalfLen * halfLen);
+  return {
+    pos, owner,
+    radius: reachR + CUT_SHADE.carveK * halfWidth,
+    cap: { n: inward, depth: sag + Math.max(dEff, kerf) },
+    slot: { along, halfLen, halfWidth, widen: 1 / CUT_SHADE.carveK - 1 },
+  };
+}
+
+/** The most a cut's lip can LOWER a field (applyWounds' cutAmp at prof 1): kerf x lipHeight x the row's lip scale
+ *  (META.z). A crater's is radius x rimSplay x splay; for a cut the radius is the half-length, which overstated it ~6x. */
+export function cutLipAmp(kerf: number, splay: number): number {
+  return kerf * CUT_SHADE.lipHeight * splay;
 }

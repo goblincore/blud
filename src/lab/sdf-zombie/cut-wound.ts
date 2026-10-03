@@ -63,7 +63,7 @@ const unit = (v: Vec3, fb: Vec3 = [0, 1, 0]): Vec3 => (Math.hypot(v[0], v[1], v[
  *  coordinate is `s = max(-dIn, along-inward distance - sag)`: the depth below the real skin where that is the deeper
  *  reading (it follows curved skin) but never shallower than the slot's own plane, so a cut can not open the far skin of a
  *  thin limb (`-dIn` alone is depth below the NEAREST skin, which is the far side behind the middle of an arm). The lip
- *  has no CPU mirror: Task 5's GPU gate checks it. */
+ *  is `cutLip` below (subtracted after the carve's smax). */
 export function cutCarve(p: Vec3, mid: Vec3, halfLen: number, along: Vec3, inward: Vec3, depth: number, kerf: number, dIn: number, sag: number, jag = 0): number {
   const rel = sub(p, mid);
   const side = cross(along, inward);
@@ -76,7 +76,66 @@ export function cutCarve(p: Vec3, mid: Vec3, halfLen: number, along: Vec3, inwar
   const depthT = Math.max(dEff * prof, Math.max(kerf, 1e-4));
   const kerfT = kerf * (1 + jag) * (0.35 + 0.65 * prof);
   const vWall = kerfT * (1 - clamp(s, 0, depthT) / depthT) - Math.abs(u);
-  return Math.min(vWall, depthT - s, halfLen - Math.abs(a)) * CUT_SHADE.carveK;
+  // The LID (s + kerf): the carve is negative wherever s < -kerf, i.e. more than one kerf from EVERY skin (s >= -dIn) and
+  // above the chord. Without it the carve was positive in the whole open channel above the cut out to the wound's reach
+  // sphere (~3.6 half-lengths): no zero set changed (the field there is already > 0), but the smax raised the field there
+  // and flagged the cut as a raiser at every such sample (MAP_BODY re-folds the threatened clusters there). It does NOT
+  // protect a foreign limb crossing the channel: inside any flesh dIn < 0, so s >= 0 and the lid never binds; that limb
+  // is carved wherever it lies in reach and only the owner re-fold restores it (wound-threat.ts cutThreatWound covers the
+  // channel for that reason). The owner's surface is unchanged.
+  return Math.min(vWall, depthT - s, halfLen - Math.abs(a), s + kerf) * CUT_SHADE.carveK;
+}
+
+const smoothstep = (e0: number, e1: number, x: number) => {
+  const t = clamp((x - e0) / (e1 - e0), 0, 1);
+  return t * t * (3 - 2 * t);
+};
+
+/** How much the cut's LIPS lower the field at `p` (>= 0; subtract it from the carved field): the CPU mirror of the lip in
+ *  applyWounds' cut branch, term for term. Two everted ridges along the slot's edges, as high as the lens is deep
+ *  (`prof`) and scaled by `lipScale` (META.z). Three gates keep it where a lip belongs:
+ *  - `rim`: only near the PRE-WOUND skin (`dIn`), as the crater's rim is. Its band is the WOUND's scale, `rimB` = max(peak
+ *    lip height, lip width), constant along the slot: the crater's form (a band of the local height, amp) has a slope x
+ *    height of 1.5 whatever the scale, which added 1.5 to the body's own |grad| 1 (measured 2.51 on a 0.015 half-length
+ *    cut) and, as amp shrinks toward the tips, a steep along-slot term too. With rimB the rim's contribution is at most
+ *    1.5 x amp / rimB <= 1.5 x 0.6 at the rod's lip scale (measured whole-field max: the Lipschitz test);
+ *  - `offKerf`: zero inside the slot's own kerf, so the lip never refills the slot it borders;
+ *  - `nearSkin`: zero once the slot's depth coordinate `s` (cutCarve's) is two lip widths deep, so the lip lives at the
+ *    near skin only and never bulges the far skin behind the cut (where `dIn` is again ~0). */
+export function cutLip(p: Vec3, mid: Vec3, halfLen: number, along: Vec3, inward: Vec3, kerf: number, dIn: number, sag: number, lipScale: number, jag = 0): number {
+  const rel = sub(p, mid);
+  const side = cross(along, inward);
+  const a = dot(rel, along), u = Math.abs(dot(rel, side));
+  const s = Math.max(-dIn, dot(rel, inward) - sag);
+  const tN = clamp(a / Math.max(halfLen, 1e-4), -1, 1);
+  const prof = 1 - tN * tN;
+  const kerfT = kerf * (1 + jag) * (0.35 + 0.65 * prof);
+  const lipW = Math.max(kerf * CUT_SHADE.lipWidth, 1e-4);
+  const amp0 = kerf * CUT_SHADE.lipHeight * lipScale;
+  const amp = amp0 * prof;
+  const lx = (u - kerf * CUT_SHADE.lipOffset) / lipW;
+  const rimB = Math.max(amp0, lipW);
+  const rim = 1 - smoothstep(-0.3 * rimB, 0.7 * rimB, dIn);
+  const offKerf = smoothstep(kerfT, kerfT + lipW, u);
+  const nearSkin = 1 - smoothstep(0, 2 * lipW, s);
+  return amp * Math.exp(-lx * lx) * rim * offKerf * nearSkin;
+}
+
+/** The cut's surface-shading footprint at `p`, 0..1: the CPU mirror of woundMask's cut branch, term for term. A band
+ *  either side of the slot (kerf to maskWidth x kerf), fading out past the tips, and fading out beyond the slot's floor
+ *  measured from its own chord plane (`plane - sag`): without that last term the band was an infinite slab along the
+ *  inward axis and painted a stripe on the far skin of every cut limb. No `dIn`: the mask runs on shaded surface points. */
+export function cutMask(p: Vec3, mid: Vec3, halfLen: number, along: Vec3, inward: Vec3, depth: number, kerf: number, sag: number): number {
+  const rel = sub(p, mid);
+  const side = cross(along, inward);
+  const a = Math.abs(dot(rel, along)), u = Math.abs(dot(rel, side));
+  const plane = dot(rel, inward) - sag;
+  const k = Math.max(kerf, 1e-4);   // WGSL leaves smoothstep(e, e, x) undefined: a zero kerf must not reach it
+  const dEff = Math.min(depth, CUT_SHADE.maxDepthPerHalfLen * halfLen);
+  const band = 1 - smoothstep(k, k * CUT_SHADE.maskWidth, u);
+  const ends = 1 - smoothstep(halfLen * 0.85, halfLen * 1.15, a);
+  const far = 1 - smoothstep(dEff + k, dEff + 2 * k, plane);
+  return band * ends * far;
 }
 
 export interface SweepSample { point: Vec3; view: Vec3 }
@@ -189,20 +248,27 @@ export function stampCut(prims: Primitive[], seg: CutSeg, calibre: CutCalibre, b
   // No field: the cut sizes its own depth and rim below (a crater's probe caps are the wrong ones for it).
   const w = worldHitToWound(prims, anchor, half, 'pellet', bodyYaw);
   const wantDepth = Math.min(calibre.depth, CUT.maxDepth);
-  const flesh = fleshBehind(field, anchor, prims[w.primIdx]!, wantDepth / CUT.thickFrac);
-  const inward = flesh.inward ?? unit(scale(grad(field, anchor, scale(view, -1)), -1));
-  const thick = flesh.inward ? flesh.thick : wantDepth / CUT.thickFrac;   // on the prim's axis: assume enough flesh
+  // The inward direction first (a short probe is enough to find it), then the sag, then the flesh: the slot's floor sits
+  // at sag + depth below the anchor along `inward`, so the flesh that bounds the depth is measured to that point.
+  const dir = fleshBehind(field, anchor, prims[w.primIdx]!, 0);
+  const inward = dir.inward ?? unit(scale(grad(field, anchor, scale(view, -1)), -1));
+  // Only the drop along the inward direction is skin fall-off; the straight-line distance would also count the anchor's
+  // sideways shift under an oblique view and reopen the far skin.
+  const sag = Math.max(0, dot(sub(scale(add(seg.a, seg.b), 0.5), anchor), inward));
+  const flesh = fleshBehind(field, anchor, prims[w.primIdx]!, (sag + wantDepth) / CUT.thickFrac);
+  // On the prim's axis (no inward from the probe): assume enough flesh.
+  const thick = flesh.inward ? flesh.thick : (sag + wantDepth) / CUT.thickFrac;
   const t = sub(d, scale(inward, dot(d, inward)));
   const c = cross(inward, view);
   const alongW = Math.hypot(t[0], t[1], t[2]) > 1e-9 ? unit(t) : Math.hypot(c[0], c[1], c[2]) > 1e-9 ? unit(c) : perp(inward);
   w.shape = 'cut';
   w.carveN = worldDirToWoundLocal(prims, w, inward, bodyYaw);
-  w.carveDepth = Math.min(wantDepth, thick * CUT.thickFrac, CUT_SHADE.maxDepthPerHalfLen * half);
+  // A slash across a thin limb's silhouette has its chord on the limb's axis (sag = the radius): the depth left is what
+  // fits between the chord and thickFrac of the flesh, floored at one kerf (the slot's own floor: cutCarve's depthT).
+  w.carveDepth = Math.max(calibre.kerf, Math.min(wantDepth, CUT.thickFrac * thick - sag, CUT_SHADE.maxDepthPerHalfLen * half));
   w.cutDir = worldDirToWoundLocal(prims, w, alongW, bodyYaw);
   w.kerf = calibre.kerf;
-  // Only the drop along the inward direction is skin fall-off; the straight-line distance would also count the anchor's
-  // sideways shift under an oblique view and reopen the far skin.
-  w.sag = Math.max(0, dot(sub(scale(add(seg.a, seg.b), 0.5), anchor), inward));
+  w.sag = sag;
   w.rimScale = calibre.lip;
   w.severRadius = 0;
   w.wetLip = 1;

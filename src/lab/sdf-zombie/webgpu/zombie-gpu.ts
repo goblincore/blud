@@ -42,7 +42,7 @@ import {
   ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS, ROW_WOUND_CUT, ROW_PREV_A, ROW_PREV_B, ROW_PREV_QUAT,
   QUAD_TILE_EMPTY_WGSL,
 } from './march.wgsl';
-import { woundThreatMasks } from './wound-threat';
+import { cutLipAmp, cutThreatWound, woundThreatMasks, type ThreatWound } from './wound-threat';
 
 /** The shipped owner re-fold mode (counts2.z): 2 = the raiser gate (map-body.wgsl.ts).
  *  0 = the full re-fold it replaced; see game-seams-world.ts for the others. */
@@ -2466,6 +2466,9 @@ export function createZombieGpuView(
     tears?: readonly boolean[];
     caps?: readonly ({ n: Vec3; depth: number } | null)[];
     owners?: readonly ({ cluster: number; start: number; count: number } | null)[];
+    /** For a cut row (cuts[i] non-null: flag 32) offsetScales[i] is its sag; cuts[i] = (world along unit, kerf). */
+    offsetScales?: number[];
+    cuts?: readonly ({ dir: Vec3; kerf: number } | null)[];
   } | null = null;
   let lastThreatMasks: number[] = [];
   let lastThreatMargin = 0;
@@ -2480,15 +2483,28 @@ export function createZombieGpuView(
     const ampByOwner = new Map<number, number>();
     for (let i = 0; i < n; i++) {
       const o = w.owners?.[i]?.cluster ?? -1;
-      ampByOwner.set(o, (ampByOwner.get(o) ?? 0) + w.radii[i]! * u.woundCfg.value.z * (w.splayScales?.[i] ?? 1)
-        * (w.tears?.[i] ? TORN.PETAL_HI : 1));
+      // A cut's lip is kerf-sized (cutLipAmp); its radius is the half-length, which would overstate it.
+      const cut = w.cuts?.[i];
+      const amp = cut ? cutLipAmp(cut.kerf, w.splayScales?.[i] ?? 1)
+        : w.radii[i]! * u.woundCfg.value.z * (w.splayScales?.[i] ?? 1) * (w.tears?.[i] ? TORN.PETAL_HI : 1);
+      ampByOwner.set(o, (ampByOwner.get(o) ?? 0) + amp);
     }
     const unowned = ampByOwner.get(-1) ?? 0;
     const margin0 = 4 * kw + kw * Math.min(n, 3) + 2 * p.maxBlendK + unowned;
     lastThreatMargin = margin0;
     const clusterGroups: [number, number][] = [];
     for (let c = 0; c < p.clusterCount; c++) clusterGroups.push([p.clusterGroups[c * 4]!, p.clusterGroups[c * 4 + 1]!]);
-    const wounds = w.worldPositions.slice(0, n).map((pos, i) => ({ pos, radius: w.radii[i]!, owner: w.owners?.[i]?.cluster ?? -1, cap: w.caps?.[i] ?? null }));
+    // Cut rows (flag 32): the slot's box, its floor at sag + depth and the shader's reach (cutThreatWound), not the
+    // half-length sphere. The reach is woundReachBound's per-wound form from the same live uniforms.
+    const reachF = Math.max(2, 2 * u.woundCfg.value.w + 3 * u.woundCfg2.value.x);
+    const wounds = w.worldPositions.slice(0, n).map((pos, i): ThreatWound => {
+      const owner = w.owners?.[i]?.cluster ?? -1, cap = w.caps?.[i] ?? null, cut = w.cuts?.[i];
+      if (cut && cap) {
+        return cutThreatWound(pos, owner, w.radii[i]!, cap.n, cap.depth, w.offsetScales?.[i] ?? 0, cut.dir, cut.kerf,
+          w.radii[i]! * reachF + 4 * kw + 0.25);
+      }
+      return { pos, radius: w.radii[i]!, owner, cap };
+    });
     // A cluster that owns wounds gets its own bump ceiling on top; test it separately.
     const base = woundThreatMasks(wounds, lastGroups, clusterGroups, margin0);
     for (const [owner, amp] of ampByOwner) {
@@ -2914,7 +2930,7 @@ export function createZombieGpuView(
       syncRecord();
     },
     setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps, owners, holes, decals, tears, wetLips, cuts) {
-      lastWoundThreatIn = { worldPositions, radii, splayScales, tears, caps, owners };
+      lastWoundThreatIn = { worldPositions, radii, splayScales, tears, caps, owners, offsetScales, cuts };
       u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, sink.woundLayout, caps, undefined, owners, threatMasks(), holes, decals, tears, wetLips, cuts);
       // Union-reach bound, from the LIVE woundCfg/woundCfg2 channels the
       // reach formula reads (blendK, rimOffset, rimWidth) — see
