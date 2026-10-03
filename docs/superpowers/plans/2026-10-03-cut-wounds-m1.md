@@ -980,6 +980,10 @@ cat <<'EOF'
 // Bare ring page, frozen zombies, headless WebGPU.
 //   W. WOUND CAPACITY: 30 pellet hits on one body's torso keep >= 28 visible wounds (32 slots; merging, not dropping);
 //      40 hits keep exactly 32 and none of the first 10 hit points is left uncovered (merge, not evict).
+//   G. WOUNDS 17-32 RENDER ON THE GPU (added after Task 2's review): on a fresh body stamp 16 wounds on the torso's
+//      far side, photo the near side, stamp 8 more at distinct near-side spots, photo again: every one of those 8 spots
+//      changes (mean luma shift in a crater-radius disc, measured, threshold set from the first read image). And frame
+//      cost: timeDraws with that body at 0 vs 32 wounds, reported with the two baselines' spread (not gated).
 //   K. SEAM CUT: __sdfGame.cut on a torso: one wound, shape cut; a dark slot across the cut line and lit lips beside it
 //      (luma profile across the cut, from a 0.6 m photo), bone-coloured pixels inside the slot only where it reaches bone.
 //   H. HEAD CUT: the same on a head: the cut shows, the face beside it is unchanged outside the mask band.
