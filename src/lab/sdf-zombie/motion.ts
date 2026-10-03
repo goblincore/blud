@@ -398,6 +398,12 @@ export interface MotionConfig {
   forceSpeed?: number;
   /** Hold this carry regardless of gait/fire state (lab captures). */
   carryOverride?: CarryName;
+  /** THE POSE LAYER (spec 2026-10-03-goblin-pose-layer-design.md): joint positions in RIG-POINT order and the REST world
+   *  frame (pose.ts poseJoints), already sampled for this frame. When present the rest targets ARE this pose (turned about
+   *  the pelvis line by the body yaw, then shifted, exactly like the rest targets) and every rig point is pinned, so the
+   *  Verlet rig neither lags nor sags. The gait, carry, aim and plant state still run (cheap, and it keeps their state warm) but
+   *  their targets are overwritten; a collapse ignores it. Enter it from a standstill: there is no blend from a moving gait. */
+  pose?: readonly Vec3[];
   /** Aim facing independent of travel, used by directed soldier movement. */
   faceHeading?: number;
   /** Melee swing: phase 0..1 plus which arm swings, throwing which variant
@@ -1404,6 +1410,16 @@ export function stepMotion(
     fall.forEach((p, i) => { targets[i] = p; });
   }
 
+  // --- the pose layer -------------------------------------------------------
+  // After every other target writer (gait, carry, aim, plants, the soldier fall) so the authored pose has the last word.
+  const poseActive = cfg.pose !== undefined && cfg.pose.length === targets.length && !collapsed;
+  if (poseActive) {
+    cfg.pose!.forEach((p, i) => {
+      const spun = rotateYaw([p[0] - pivot[0], p[1], p[2] - pivot[2]], bodyYaw);
+      targets[i] = [pivot[0] + shift[0] + spun[0], spun[1], pivot[2] + shift[2] + spun[2]];
+    });
+  }
+
   const nextState: MotionState = {
     ...(fallPose ? { fallPose, fallFatal, fallImpact, fallStrength } : {}),
     wander, gait: gait.state, stagger: stagger.state,
@@ -1442,6 +1458,7 @@ export function stepMotion(
       // legs. The two lists are MERGED into one posePins (a second spread of
       // the key would silently drop the first).
       ...((): { posePins?: number[] } => {
+        if (poseActive) return { posePins: targets.map((_, i) => i) };
         const legs = footwork && !stagger.staggered && !soldierStagger.active && recoil.joint === null
           ? (['pelvis', 'hips', 'hipL', 'hipR', 'kneeL', 'kneeR', 'footL', 'footR', 'toeL', 'toeR'] as const) : [];
         // Never pin a MISSING arm's joints (a severed left arm under the
