@@ -9,7 +9,8 @@
 // REFERENCES, NOT POSITIONS (the spec's anchoring rule). An entry stores the
 // Wound object itself, not an index into the actor's wound ring: pushWound
 // evicts from the ring's head at MAX_WOUNDS, so an index silently re-aims at
-// the wrong wound the moment anything evicts. The Wound is an immutable
+// the wrong wound the moment anything evicts.
+// (A full ring can also MERGE a wound into a neighbour, damage.ts MERGE: the survivor is a new object.) The Wound is an immutable
 // snapshot (primIdx + prim-local offset) that woundWorldPos consumes against
 // the CURRENT posed prims every frame — blood rides the walking, staggering,
 // collapsing body for free.

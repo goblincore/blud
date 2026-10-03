@@ -590,28 +590,43 @@ export const MERGE = {
 const localDist = (a: Wound, b: Wound): number =>
   Math.hypot(a.local[0] - b.local[0], a.local[1] - b.local[1], a.local[2] - b.local[2]);
 
-/** The oldest wound at index `victim` folded into its nearest same-prim crater neighbour, or null when none is in reach. */
+/** Head damage craters (head-damage.ts) own their slot rules and never move, grow or change through a merge. */
+const headTagged = (x: Wound): boolean => x.headSlot !== undefined || x.headRegion !== undefined;
+
+/** The oldest wound at index `victim` folded into its nearest same-prim crater neighbour (the survivor becomes the minimal
+ *  sphere enclosing both), or null when none is in reach, or the enclosing sphere would pass MERGE.maxRadius (the caller
+ *  then evicts, as before: a merge never shrinks below what covers both). */
 function mergeVictim(next: Wound[], victim: number): Wound[] | null {
   const v = next[victim]!;
-  const headTagged = (x: Wound): boolean => x.headSlot !== undefined || x.headRegion !== undefined;
   if (v.shape === 'cut' || v.decal || headTagged(v)) return null;
   let best = -1, bd = Infinity;
   next.forEach((o, i) => {
-    if (i === victim || o.primIdx !== v.primIdx || o.shape === 'cut' || o.decal || headTagged(o) || o.type !== v.type) return;
+    if (i === victim || o.primIdx !== v.primIdx || o.shape === 'cut' || o.decal || headTagged(o) || o.type !== v.type || o.cloth !== v.cloth) return;
     const d = localDist(v, o);
     if (d <= MERGE.reach * (v.radius + o.radius) && d < bd) { bd = d; best = i; }
   });
   if (best < 0) return null;
   const o = next[best]!;
-  const wv = v.radius, wo = o.radius, k = wv / (wv + wo);
-  const local: Vec3 = [o.local[0] + (v.local[0] - o.local[0]) * k, o.local[1] + (v.local[1] - o.local[1]) * k, o.local[2] + (v.local[2] - o.local[2]) * k];
-  const radius = Math.min(MERGE.maxRadius, Math.max(wv, wo, (bd + wv + wo) / 2));
+  const rv = v.radius, ro = o.radius;
+  let local: Vec3, radius: number;
+  if (bd + Math.min(rv, ro) <= Math.max(rv, ro)) {
+    // One crater already contains the other: the larger sphere stands as it is.
+    const big = rv > ro ? v : o;
+    local = [big.local[0], big.local[1], big.local[2]];
+    radius = big.radius;
+  } else {
+    radius = (bd + rv + ro) / 2;
+    const t = (radius - ro) / bd; // bd > 0 here: bd = 0 takes the containment branch
+    local = [o.local[0] + (v.local[0] - o.local[0]) * t, o.local[1] + (v.local[1] - o.local[1]) * t, o.local[2] + (v.local[2] - o.local[2]) * t];
+  }
+  if (radius > MERGE.maxRadius) return null;
   const merged: Wound = { ...o, local, radius };
   if (v.carveDepth !== undefined || o.carveDepth !== undefined) merged.carveDepth = Math.max(v.carveDepth ?? 0, o.carveDepth ?? 0);
-  if (v.severRadius !== undefined || o.severRadius !== undefined) {
-    // A deliberate 0 ("never sever": flail and slug-burst craters, cuts) wins over any larger calibre.
-    merged.severRadius = v.severRadius === 0 || o.severRadius === 0 ? 0 : Math.max(v.severRadius ?? v.radius, o.severRadius ?? o.radius);
-  }
+  // A merge never raises the sever calibre: always explicit, so connectivity never falls back to the grown radius. A
+  // deliberate 0 ("never sever": flail and slug-burst craters, cuts) wins over any larger calibre.
+  merged.severRadius = v.severRadius === 0 || o.severRadius === 0 ? 0 : Math.max(v.severRadius ?? rv, o.severRadius ?? ro);
+  if (v.tear !== undefined || o.tear !== undefined) merged.tear = Math.max(v.tear ?? 0, o.tear ?? 0);
+  if (v.wetLip !== undefined || o.wetLip !== undefined) merged.wetLip = Math.max(v.wetLip ?? 0, o.wetLip ?? 0);
   const out = [...next];
   out[best] = merged;
   out.splice(victim, 1);
@@ -620,8 +635,9 @@ function mergeVictim(next: Wound[], victim: number): Wound[] | null {
 
 /** Ring buffer append. A wound with a headRegion replaces an earlier wound of the same region, in that
  *  one's index. Head craters keep their own MAX_HEAD_WOUNDS slots (oldest 'face' crater evicted first),
- *  and the total cap evicts the oldest wound that is not a 'keep' head crater. A ring with no head tags
- *  evicts oldest-first, exactly as before. */
+ *  and the total cap takes the oldest wound that is not a 'keep' head crater: it is MERGED into its nearest
+ *  same-prim crater when one is in reach (MERGE; head-tagged wounds, cuts and decals never merge), and only
+ *  evicted when none is. A merged survivor is a NEW Wound object. */
 export function pushWound(ring: Wound[], wound: Wound, cap: number): Wound[] {
   if (wound.headRegion !== undefined) {
     const prev = ring.findIndex(x => x.headRegion === wound.headRegion);
@@ -643,7 +659,9 @@ export function pushWound(ring: Wound[], wound: Wound, cap: number): Wound[] {
   while (out.length > cap) {
     const i = out.findIndex(x => x.headSlot !== 'keep');
     const victim = i < 0 ? 0 : i;
-    out = mergeVictim(out, victim) ?? (out.splice(victim, 1), out);
+    const merged = mergeVictim(out, victim);
+    if (merged) out = merged;
+    else out.splice(victim, 1);
   }
   return out;
 }

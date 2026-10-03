@@ -70,4 +70,57 @@ describe('pushWound merges instead of evicting', () => {
     ring = pushWound(ring, w(4, 2, [0, 0, 0]), 3);
     expect(ring.find(x => x.eventId === 2)!.severRadius).toBe(0);
   });
+  describe('merge geometry', () => {
+    const encloses = (m: Wound, c: Wound): boolean =>
+      Math.hypot(m.local[0] - c.local[0], m.local[1] - c.local[1], m.local[2] - c.local[2]) + c.radius <= m.radius + 1e-9;
+    const mergeTwo = (a: Wound, b: Wound): Wound => {
+      const ring = pushWound([a, b, w(3, 1, [0, 0, 0])], w(4, 2, [0, 0, 0]), 3);
+      expect(ring.map(x => x.eventId)).toEqual([b.eventId, 3, 4]);
+      return ring[0]!;
+    };
+    it('the merged sphere is the minimal enclosing sphere of unequal craters', () => {
+      const a = w(1, 0, [0, 0, 0], 0.05), b = w(2, 0, [0.09, 0, 0], 0.01);
+      const m = mergeTwo(a, b);
+      expect(encloses(m, a)).toBe(true);
+      expect(encloses(m, b)).toBe(true);
+      expect(m.radius).toBeCloseTo(0.075, 9);
+      expect(m.local[0]).toBeCloseTo(0.025, 9);
+    });
+    it('a crater already inside the other merges to the larger sphere unchanged', () => {
+      const a = w(1, 0, [0, 0, 0], 0.1), b = w(2, 0, [0.05, 0, 0], 0.01);
+      const m = mergeTwo(a, b);
+      expect(m.local).toEqual([0, 0, 0]);
+      expect(m.radius).toBe(0.1);
+      const a2 = w(1, 0, [0.05, 0, 0], 0.01), b2 = w(2, 0, [0, 0, 0], 0.1);
+      const m2 = mergeTwo(a2, b2);
+      expect(m2.local).toEqual([0, 0, 0]);
+      expect(m2.radius).toBe(0.1);
+    });
+    it('zero-radius craters merge without NaN', () => {
+      const m = mergeTwo(w(1, 0, [0, 0, 0], 0), w(2, 0, [0, 0, 0], 0));
+      expect(m.local).toEqual([0, 0, 0]);
+      expect(m.radius).toBe(0);
+    });
+    it('when the enclosing sphere would pass MERGE.maxRadius the oldest is evicted, the other unchanged', () => {
+      const a = w(1, 0, [0, 0, 0], 0.13, { type: 'blast' }), b = w(2, 0, [0.38, 0, 0], 0.13, { type: 'blast' });
+      const ring = pushWound([a, b, w(3, 1, [0, 0, 0])], w(4, 2, [0, 0, 0]), 3);
+      expect(ring.map(x => x.eventId)).toEqual([2, 3, 4]);
+      expect(ring[0]).toBe(b);
+    });
+    it('a merge never raises the sever calibre: absent severRadius pins to the larger original radius', () => {
+      const m = mergeTwo(w(1, 0, [0, 0, 0], 0.05), w(2, 0, [0.04, 0, 0], 0.03));
+      expect(m.radius).toBeGreaterThan(0.05);
+      expect(m.severRadius).toBe(0.05);
+    });
+    it('tear and wetLip survive as the larger of the two', () => {
+      const m = mergeTwo(w(1, 0, [0, 0, 0], 0.05, { tear: 0.8 }), w(2, 0, [0.03, 0, 0], 0.05, { wetLip: 0.5, tear: 0.2 }));
+      expect(m.tear).toBe(0.8);
+      expect(m.wetLip).toBe(0.5);
+    });
+    it('cloth and non-cloth craters do not merge', () => {
+      const ring = pushWound([w(1, 0, [0, 0, 0]), w(2, 0, [0.03, 0, 0], 0.05, { cloth: 'tear' }), w(3, 1, [0, 0, 0])], w(4, 2, [0, 0, 0]), 3);
+      expect(ring.map(x => x.eventId)).toEqual([2, 3, 4]);
+      expect(ring[0]!.radius).toBe(0.05);
+    });
+  });
 });
