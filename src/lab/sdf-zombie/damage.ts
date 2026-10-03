@@ -593,10 +593,11 @@ const localDist = (a: Wound, b: Wound): number =>
 /** The oldest wound at index `victim` folded into its nearest same-prim crater neighbour, or null when none is in reach. */
 function mergeVictim(next: Wound[], victim: number): Wound[] | null {
   const v = next[victim]!;
-  if (v.shape === 'cut' || v.decal) return null;
+  const headTagged = (x: Wound): boolean => x.headSlot !== undefined || x.headRegion !== undefined;
+  if (v.shape === 'cut' || v.decal || headTagged(v)) return null;
   let best = -1, bd = Infinity;
   next.forEach((o, i) => {
-    if (i === victim || o.primIdx !== v.primIdx || o.shape === 'cut' || o.decal || o.type !== v.type) return;
+    if (i === victim || o.primIdx !== v.primIdx || o.shape === 'cut' || o.decal || headTagged(o) || o.type !== v.type) return;
     const d = localDist(v, o);
     if (d <= MERGE.reach * (v.radius + o.radius) && d < bd) { bd = d; best = i; }
   });
@@ -607,7 +608,10 @@ function mergeVictim(next: Wound[], victim: number): Wound[] | null {
   const radius = Math.min(MERGE.maxRadius, Math.max(wv, wo, (bd + wv + wo) / 2));
   const merged: Wound = { ...o, local, radius };
   if (v.carveDepth !== undefined || o.carveDepth !== undefined) merged.carveDepth = Math.max(v.carveDepth ?? 0, o.carveDepth ?? 0);
-  if (v.severRadius !== undefined || o.severRadius !== undefined) merged.severRadius = Math.max(v.severRadius ?? v.radius, o.severRadius ?? o.radius);
+  if (v.severRadius !== undefined || o.severRadius !== undefined) {
+    // A deliberate 0 ("never sever": flail and slug-burst craters, cuts) wins over any larger calibre.
+    merged.severRadius = v.severRadius === 0 || o.severRadius === 0 ? 0 : Math.max(v.severRadius ?? v.radius, o.severRadius ?? o.radius);
+  }
   const out = [...next];
   out[best] = merged;
   out.splice(victim, 1);

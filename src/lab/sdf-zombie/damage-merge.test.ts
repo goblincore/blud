@@ -43,4 +43,31 @@ describe('pushWound merges instead of evicting', () => {
     expect(merged.carveDepth).toBe(0.03);
     expect(merged.severRadius).toBe(0.1);
   });
+  it('an ordinary victim beside a same-prim head keep crater is evicted; the head crater is untouched', () => {
+    const head = w(2, 0, [0.03, 0, 0], 0.05, { headSlot: 'keep', headRegion: 'brow', carveDepth: 0.02, severRadius: 0 });
+    let ring: Wound[] = [w(1, 0, [0, 0, 0]), head, w(3, 1, [0, 0, 0])];
+    ring = pushWound(ring, w(4, 2, [0, 0, 0]), 3);
+    expect(ring.map(x => x.eventId)).toEqual([2, 3, 4]);
+    const kept = ring.find(x => x.eventId === 2)!;
+    expect(kept.local).toEqual([0.03, 0, 0]);
+    expect(kept.radius).toBe(0.05);
+    expect(kept.severRadius).toBe(0);
+    expect(kept.carveDepth).toBe(0.02);
+  });
+  it('a face head victim with an ordinary neighbour in reach is evicted, not merged', () => {
+    let ring: Wound[] = [w(1, 0, [0, 0, 0], 0.05, { headSlot: 'face' }), w(2, 0, [0.03, 0, 0]), w(3, 1, [0, 0, 0])];
+    ring = pushWound(ring, w(4, 2, [0, 0, 0]), 3);
+    expect(ring.map(x => x.eventId)).toEqual([2, 3, 4]);
+    const n = ring.find(x => x.eventId === 2)!;
+    expect(n.local).toEqual([0.03, 0, 0]);
+    expect(n.radius).toBe(0.05);
+  });
+  it('a deliberate no-sever (severRadius 0) on either crater keeps the merged wound at 0', () => {
+    let ring: Wound[] = [w(1, 0, [0, 0, 0], 0.05, { severRadius: 0 }), w(2, 0, [0.03, 0, 0], 0.05, { severRadius: 0.1 }), w(3, 1, [0, 0, 0])];
+    ring = pushWound(ring, w(4, 2, [0, 0, 0]), 3);
+    expect(ring.find(x => x.eventId === 2)!.severRadius).toBe(0);
+    ring = [w(1, 0, [0, 0, 0], 0.05, { severRadius: 0.1 }), w(2, 0, [0.03, 0, 0], 0.05, { severRadius: 0 }), w(3, 1, [0, 0, 0])];
+    ring = pushWound(ring, w(4, 2, [0, 0, 0]), 3);
+    expect(ring.find(x => x.eventId === 2)!.severRadius).toBe(0);
+  });
 });
