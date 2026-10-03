@@ -4,7 +4,7 @@
 // the contract gets pinned explicitly.
 import { describe, expect, it } from 'vitest';
 import { writeWounds } from './zombie-gpu';
-import { DATA_ROWS, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS } from './march.wgsl';
+import { DATA_ROWS, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS, ROW_WOUND_CUT } from './march.wgsl';
 import { BASE_PRIM_STRIDE } from '../validate';
 
 const STRIDE = 64; // any stride; tests below read through the same layout math
@@ -108,5 +108,38 @@ describe('cavity flag (entrails)', () => {
     const wBase = ROW_WOUND * BASE_PRIM_STRIDE * 4, mBase = ROW_WOUND_META * BASE_PRIM_STRIDE * 4;
     expect(Array.from(a.slice(wBase, wBase + 4))).toEqual(Array.from(b.slice(wBase, wBase + 4)));
     expect(Array.from(a.slice(mBase, mBase + 4))).toEqual(Array.from(b.slice(mBase, mBase + 4)));
+  });
+});
+
+describe('cut wounds (flag 32, ROW_WOUND_CUT)', () => {
+  it('writes the along unit and kerf into ROW_WOUND_CUT and sets flag bit 32', () => {
+    const stride = 128;
+    const texels = new Float32Array(DATA_ROWS * stride * 4);
+    writeWounds(texels, [[0, 1, 0]], [0.1], [0], [0], [1], [1], { stride }, [{ n: [0, 0, -1], depth: 0.05 }],
+      undefined, undefined, undefined, undefined, undefined, undefined, [true],
+      [{ dir: [0, 1, 0], kerf: 0.01 }]);
+    const cut = ROW_WOUND_CUT * stride * 4;
+    expect([...texels.subarray(cut, cut + 4)]).toEqual([0, 1, 0, Math.fround(0.01)]);
+    const flags = ROW_WOUND_FLAGS * stride * 4;
+    expect(Math.floor(texels[flags]!) & 32).toBe(32);
+    expect(Math.floor(texels[flags]!) & 16).toBe(16);   // and its wet lip
+  });
+  it('a crater leaves ROW_WOUND_CUT untouched and has no bit 32', () => {
+    const stride = 128;
+    const texels = new Float32Array(DATA_ROWS * stride * 4);
+    writeWounds(texels, [[0, 1, 0]], [0.05], [0], [0], undefined, undefined, { stride });
+    expect(Math.floor(texels[ROW_WOUND_FLAGS * stride * 4]!) & 32).toBe(0);
+    expect(texels[ROW_WOUND_CUT * stride * 4 + 3]).toBe(0);
+  });
+  it('a cut keeps its sag in ROW_WOUND_META.w (offsetScales slot), and honours a custom cutRow', () => {
+    const stride = 64;
+    const texels = new Float32Array(30 * stride * 4);
+    writeWounds(texels, [[0, 1, 0]], [0.1], [0], [0], [1], [0.037],
+      { stride, woundRow: 0, metaRow: 1, capRow: 2, flagsRow: 3, cutRow: 4 }, undefined,
+      undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+      [{ dir: [1, 0, 0], kerf: 0.02 }]);
+    expect(texels[1 * stride * 4 + 3]).toBe(Math.fround(0.037));
+    expect([...texels.subarray(4 * stride * 4, 4 * stride * 4 + 4)]).toEqual([1, 0, 0, Math.fround(0.02)]);
+    expect(Math.floor(texels[3 * stride * 4]!) & 32).toBe(32);
   });
 });

@@ -4,7 +4,7 @@
 // rows per band, one band per instance slot. A DataTexture cannot resize in
 // place, so the width and band count are fixed at creation.
 import * as THREE from 'three/webgpu';
-import { DATA_ROWS, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS } from './march.wgsl';
+import { DATA_ROWS, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS, ROW_WOUND_CUT } from './march.wgsl';
 import { BASE_PRIM_STRIDE } from '../validate';
 import { MAX_WOUNDS } from '../damage';
 
@@ -25,7 +25,7 @@ export interface PrimSink {
   /** Row inside the band; same contract as the legacy writeRow(row, src, count, col). */
   writeRow(row: number, src: Float32Array, count: number, col?: number): void;
   /** Layout for `writeWounds(texels, ..., layout)` so wound rows land in this band. */
-  readonly woundLayout: { maxWounds: number; woundRow: number; metaRow: number; capRow: number; flagsRow: number; stride: number };
+  readonly woundLayout: { maxWounds: number; woundRow: number; metaRow: number; capRow: number; flagsRow: number; cutRow: number; stride: number };
   markDirty(): void;
 }
 
@@ -77,7 +77,7 @@ export function createCrowdPrimAtlas(bands: number, upload?: AtlasUploader, stri
         woundLayout: {
           maxWounds: MAX_WOUNDS, stride,
           woundRow: r0 + ROW_WOUND, metaRow: r0 + ROW_WOUND_META,
-          capRow: r0 + ROW_WOUND_CAP, flagsRow: r0 + ROW_WOUND_FLAGS,
+          capRow: r0 + ROW_WOUND_CAP, flagsRow: r0 + ROW_WOUND_FLAGS, cutRow: r0 + ROW_WOUND_CUT,
         },
         markDirty: mark,
       };

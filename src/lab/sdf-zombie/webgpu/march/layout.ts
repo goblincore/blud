@@ -16,7 +16,7 @@ export const RAY_CULL_SLACK = '0.07';
  *  surface. It widens `t` only — a conservative lower bound, never a miss. */
 export const QUAD_ENTRY_SLACK = '0.02';
 
-export const DATA_ROWS = 25;
+export const DATA_ROWS = 26;
 export const ROW_PRIM_A = 0;
 export const ROW_PRIM_B = 1;
 export const ROW_PRIM_SCALE = 2;
@@ -115,6 +115,12 @@ export const ROW_PRIM_STRAND = 21;
 export const ROW_PREV_A = 22;
 export const ROW_PREV_B = 23;
 export const ROW_PREV_QUAT = 24;
+
+/** CUT WOUNDS (cut-wound.ts, 2026-10-03): xyz = the cut's along-segment unit (world, rotated out by the uploader),
+ *  w = kerf (half-width at the skin, m). Read only for wounds with ROW_WOUND_FLAGS.x bit 5 (value 32). For a cut,
+ *  ROW_WOUND is (midpoint, half-length), ROW_WOUND_CAP is (inward unit, depth), and ROW_WOUND_META.w carries the
+ *  cut's sag (m: how far the skin falls away under the chord) instead of the crater rim offset scale. */
+export const ROW_WOUND_CUT = 25;
 
 /**
  * Sphere-trace step multiplier inside applyWounds' nearWound zone.

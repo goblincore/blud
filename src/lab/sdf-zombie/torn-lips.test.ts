@@ -16,7 +16,7 @@ const wound = (extra: Partial<Wound> = {}): Wound => ({ primIdx: 0, local: [0, 0
 
 describe('torn lips: the flag', () => {
   it('packs tear as bit 3 beside cavity/hole/decal, integer part only', () => {
-    expect(WOUND_FLAG).toEqual({ cavity: 1, hole: 2, decal: 4, tear: 8, wetLip: 16 });
+    expect(WOUND_FLAG).toEqual({ cavity: 1, hole: 2, decal: 4, tear: 8, wetLip: 16, cut: 32 });
     expect(woundFlagBits({})).toBe(0);
     expect(woundFlagBits({ tear: true })).toBe(8);
     expect(woundFlagBits({ cavity: true, hole: true, decal: true, tear: true })).toBe(15);

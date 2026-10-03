@@ -39,7 +39,7 @@ import {
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_COLOR, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
-  ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS, ROW_PREV_A, ROW_PREV_B, ROW_PREV_QUAT,
+  ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS, ROW_WOUND_CUT, ROW_PREV_A, ROW_PREV_B, ROW_PREV_QUAT,
   QUAD_TILE_EMPTY_WGSL,
 } from './march.wgsl';
 import { woundThreatMasks } from './wound-threat';
@@ -114,7 +114,9 @@ export interface ZombieGpuView {
     /** Per-wound TORN flags (damage.ts Wound.tear, the flail): bit 3. Omitted = none. */
     tears?: readonly boolean[],
     /** Per-wound WET-LIP flags (damage.ts Wound.wetLip, the gun): bit 4, shading only. Omitted = none. */
-    wetLips?: readonly boolean[]): void;
+    wetLips?: readonly boolean[],
+    /** Per-wound cut data (cut-wound.ts): ROW_WOUND_CUT = (along unit, kerf), flags bit 5. Omitted = craters. */
+    cuts?: readonly ({ dir: Vec3; kerf: number } | null)[]): void;
   /** Wound union-reach cull gate (close-up wound-cull task, 2026-09-05).
    *  Ships ON — the cull is a value no-op (outside the bound every per-wound
    *  reach test would `continue`). false parks the bound's radius at 1e9 (the
@@ -2095,20 +2097,22 @@ export interface WriteWoundsLayout {
   capRow?: number;
   /** Row index for the per-wound flag texels (was ROW_WOUND_FLAGS). */
   flagsRow?: number;
+  /** Row index for the cut texels (was ROW_WOUND_CUT). */
+  cutRow?: number;
   /** Data-texture column stride (default BASE_PRIM_STRIDE, the width of a
    *  createDataTexture() texture — NOT MAX_PRIMS, which is only the ceiling). */
   stride?: number;
 }
 
 /** ROW_WOUND_FLAGS.x integer-part bits (the WGSL readers test `i32(flags.x) & bit`). */
-export const WOUND_FLAG = { cavity: 1, hole: 2, decal: 4, tear: 8, wetLip: 16 } as const;
+export const WOUND_FLAG = { cavity: 1, hole: 2, decal: 4, tear: 8, wetLip: 16, cut: 32 } as const;
 
 /** The integer part of ROW_WOUND_FLAGS.x for one wound. The threat mask rides the
- *  fraction (see writeWounds), so this stays an integer <= 31. */
-export function woundFlagBits(f: { cavity?: boolean; hole?: boolean; decal?: boolean; tear?: boolean; wetLip?: boolean }): number {
+ *  fraction (see writeWounds), so this stays an integer <= 63. */
+export function woundFlagBits(f: { cavity?: boolean; hole?: boolean; decal?: boolean; tear?: boolean; wetLip?: boolean; cut?: boolean }): number {
   return (f.cavity ? WOUND_FLAG.cavity : 0) + (f.hole ? WOUND_FLAG.hole : 0)
     + (f.decal ? WOUND_FLAG.decal : 0) + (f.tear ? WOUND_FLAG.tear : 0)
-    + (f.wetLip ? WOUND_FLAG.wetLip : 0);
+    + (f.wetLip ? WOUND_FLAG.wetLip : 0) + (f.cut ? WOUND_FLAG.cut : 0);
 }
 
 export function writeWounds(
@@ -2149,6 +2153,9 @@ export function writeWounds(
    *  the torn wet red lip / glossy walls / clotted floor shade it; the carve's shape
    *  and the analytic normal ignore the bit. Omitted = none. */
   wetLips?: readonly boolean[],
+  /** Per-wound CUT data (cut-wound.ts): ROW_WOUND_CUT = (along unit, kerf) and flags bit 5 (value 32).
+   *  Omitted or null per wound = a crater. */
+  cuts?: readonly ({ dir: Vec3; kerf: number } | null)[],
 ): number {
   const stride = layout.stride ?? BASE_PRIM_STRIDE;
   const woundRow = layout.woundRow ?? ROW_WOUND;
@@ -2175,11 +2182,19 @@ export function writeWounds(
       texels[capBase + i * 4 + 2] = cap.n[2];
       texels[capBase + i * 4 + 3] = cap.depth;
     }
+    const cut = cuts?.[i];
+    if (cut) {
+      const cutBase = (layout.cutRow ?? ROW_WOUND_CUT) * stride * 4;
+      texels[cutBase + i * 4] = cut.dir[0];
+      texels[cutBase + i * 4 + 1] = cut.dir[1];
+      texels[cutBase + i * 4 + 2] = cut.dir[2];
+      texels[cutBase + i * 4 + 3] = cut.kerf;
+    }
     // Integer part is a BITFIELD (woundFlagBits): bit 0 cavity, bit 1 cloth
-    // bullet hole, bit 2 cloth decal (no carve), bit 3 torn, bit 4 wet lip;
+    // bullet hole, bit 2 cloth decal (no carve), bit 3 torn, bit 4 wet lip, bit 5 cut;
     // the fraction is the threat mask / 1024 (< 0.5).
     texels[flagBase + i * 4] = woundFlagBits({
-      cavity: cavities?.[i], hole: holes?.[i], decal: decals?.[i], tear: tears?.[i], wetLip: wetLips?.[i],
+      cavity: cavities?.[i], hole: holes?.[i], decal: decals?.[i], tear: tears?.[i], wetLip: wetLips?.[i], cut: !!cut,
     }) + ((threats?.[i] ?? 0) & 511) / 1024;
     const owner = owners?.[i];
     texels[flagBase + i * 4 + 1] = owner ? owner.cluster + 1 : 0;
@@ -2896,9 +2911,9 @@ export function createZombieGpuView(
       u.meltCfg.value.y = edgeOutAll ? 2 : motionOutAll ? 1 : 0;
       syncRecord();
     },
-    setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps, owners, holes, decals, tears, wetLips) {
+    setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps, owners, holes, decals, tears, wetLips, cuts) {
       lastWoundThreatIn = { worldPositions, radii, splayScales, tears, caps, owners };
-      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, sink.woundLayout, caps, undefined, owners, threatMasks(), holes, decals, tears, wetLips);
+      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, sink.woundLayout, caps, undefined, owners, threatMasks(), holes, decals, tears, wetLips, cuts);
       // Union-reach bound, from the LIVE woundCfg/woundCfg2 channels the
       // reach formula reads (blendK, rimOffset, rimWidth) — see
       // woundReachBound. Stale only under a live panel edit without a
