@@ -187,13 +187,14 @@ What changed, CPU mirror first (`cut-wound.ts`), then the WGSL copies it term fo
 - **The lid** (`s + kerf`, the previous agent's addition, kept in cutCarve and the WGSL). Its comment claimed it
   stops the carve slicing a foreign limb in the open channel above a cut. **It does not**: inside any flesh
   `dIn < 0`, so `s >= -dIn > 0` and the lid never binds. A CPU check (a 3 cm ball 15 mm above a chest cut, union
-  field as `dIn`) found the carve positive at 92k of the ball's 128k grid points, lid or not. What the lid does do:
-  the carve is negative more than one kerf from every skin above the chord, so that empty space is no longer raised
-  by the smax or flagged as a raiser out to the reach. No zero set changes. Comments corrected. The foreign limb is
-  restored by the owner re-fold, so the threat mask has to cover the channel (next item).
+  field as `dIn`) found the carve positive at 92k of the ball's 128k grid points, lid or not. That lid only made the
+  carve negative more than one kerf from every skin above the chord. (This round's notes said that kept that empty
+  space from being raised "out to the reach". That overstated it: smax raises d only where the carve is within 4 kW
+  of d, i.e. within ~2 cm of the skin.) **Superseded in round 2** by a lid on the raw plane, which does close the
+  channel.
 - **`applyWounds`**: `if (length(wCap.xyz) < 0.5) { continue; }` first in the cut branch.
-- **Threat masks** (`wound-threat.ts` `cutThreatWound`, `cutLipAmp`; `zombie-gpu.ts` threatMasks). A cut row is no
-  longer the half-length sphere. It is the shader's reach sphere (the channel above the cut is carved anywhere in
+- **Threat masks** (`wound-threat.ts` `cutThreatWound`, `cutLipAmp`; `zombie-gpu.ts` threatMasks; the sphere was
+  tightened in round 2). A cut row is no longer the half-length sphere. It is the shader's reach sphere (the channel above the cut is carved anywhere in
   reach), the slot's box (|along| <= h, |side| <= 1.35 kerf, each widened by (1/carveK - 1) x (group radius +
   margin) because the carve is scaled by carveK), and a slab at `sag + max(dEff, kerf)`. The lip amp is
   `kerf x lipHeight x META.z` (7.2 mm for the rod) rather than `h x rimSplay x META.z` (44 mm at h 0.1).
@@ -256,3 +257,104 @@ to 5.2.
 Per pair, drawOnce moved -7.6, +5.0, +10.9, -3.8 and +5.2 ms, and warmMs -471, -293, +516, -199 and +394 ms. Both are
 noise: the extra lip gates and the mask's META load cost nothing measurable. **Acceptance met**: the new max (1650.2)
 is within the base spread + 10% of Task 2's result (~1810 ms).
+
+## Task 5 fix round 2 (2026-10-03): normal-gated mask, raw-plane lid, tight threat sphere, null-cap guards
+
+Base `b61beff4`; commit `f2be31cc`.
+
+**C1: the far-skin mask stripe on thin limbs.** `far` fades from dEff + kerf to dEff + 2 kerf below the chord plane,
+and stampCut makes sag + dEff = 0.8 thick. So the floor sits 0.2 thick above the back skin, and whenever 0.2 thick is
+under 2 kerf the back skin is inside the band.
+- The fix: woundMask and `cutMask(p, nrm, ...)` multiply by `cBack = 1 - smoothstep(0.25, 0.6, dot(nrm, inward))`.
+  `far` stays as a second guard.
+- The slot's walls (dot ~ 0), floor and skin (~ -1) keep the band (tested with analytic normals).
+
+Max back-skin mask (back skin = outward normal z < -0.2, analytic normals), `far` only -> with the gate:
+
+| arm radius | rod | kerf 0.015 |
+| --- | --- | --- |
+| 0.02 | 1.000 -> 0.146 | 1.000 -> 0.853 |
+| 0.03 | 0.762 -> 0 | 1.000 -> 0.146 |
+| 0.04 | 0.131 -> 0 | 0.957 -> 0 |
+| 0.045 | 0 -> 0 | 0.224 -> 0 |
+
+The "before" column matches the review's probe. What remains at r 0.02 / 0.03 is on the limb's sides,
+dot(nrm, inward) 0.26 to 0.5 (15 to 30 degrees past the side). There the 2.2-kerf band is wider than the arm, so the cut
+wraps it. The back proper (dot >= 0.6) is 0 for every radius. The test pins both numbers.
+
+**I1: the lid is on the raw plane**, `min(..., dot(rel, inward) + kerf + lidSlack x halfLen)`, lidSlack 0.25, in
+cutCarve and the WGSL. It closes the channel above a cut inside a foreign limb, which the round-1 `s`-based lid never did.
+- **Owner zero set**, sampled (scratch grid, 21.5M near-surface samples, |d| < 2 cm, smax with vs without the lid):
+  - Convex fixtures: 0 sign flips with or without the slack. These are torso along / around at half-length 0.015 to
+    0.175, arm along, the arm silhouette and the oblique view, at kerf 0.006 / 0.01 / 0.015.
+  - **Concave crease fixtures DO rise above the anchor's tangent plane.** These are an arm blended into the torso's
+    side (blendK 0.03), cut over the top, across the front and obliquely into the armpit. No slack: 69882 flips of
+    4.4M. 0.25 h: 1863, all on the armpit cut (kerf 0.006 and 0.01). 0.5 h: 0.
+  - **I took 0.25 h**, as the review suggested. A larger slack weakens the foreign-limb protection, and a flip can only
+    REMOVE carve (the lid lowers the carve): the cut stops short of a wall that rises steeply above the anchor. It
+    never opens flesh.
+  - The committed test samples a coarser grid (1.28M samples). It asserts 0 flips on the convex fixtures, <= 0.5% on
+    the armpit (177 of 50843 at kerf 0.006) and 0 on the other creases. It also asserts the lid only ever lowers the
+    field.
+- **Foreign ball** (3 cm, its bottom 5 mm above the lid of a 0.1 m chest cut): 5376 of 14013 inside points carved
+  without the lid, 0 with it (max carve -0.0049).
+- **The wound-threat hand** (0.15 m above a half-length-0.05 cut): carve +0.0068 -> -0.0697. The review's -0.0784
+  was without the slack.
+- **Lipschitz unchanged**: the lid's gradient is carveK. Whole field 2.075 at lip scale 0.8.
+
+**The threat sphere is the box, not the reach.**
+- cutThreatWound adds an outward (lid) face, `kerf + lidSlack h`, to the box's faces. Each face is still widened by
+  (1/carveK - 1)(group radius + margin).
+- The sphere is now the smaller of two bounds. The first is the exact reach form, reach + carveK x halfWidth: kept,
+  because the GPU's reach skip is exact. The second is the box's corner sphere, boxR = |(h, max(floor, outward), hw)| +
+  carveK hw, plus sqrt(3)/carveK x (group radius + margin) for the carve falling off slower than distance outside the
+  box. The derivation is in the function's comment.
+- Rod at half-length 0.1: reach form 0.675 m; box form **0.127 m** + 2.47 x (group radius + margin). Undistorted groups
+  are bounded by the box faces, which removes the column in front of every cut. The corner sphere bounds distorted
+  groups.
+- **No-miss check** (wound-threat.test.ts, the cut-wound fixtures at three kerfs):
+  - 278663 positive-carve samples (dIn = the union with a 1 mm group at the sample): every one flagged at margin 0 and
+    at 0.125.
+  - 795 random groups whose ball holds a sample where s_g(p) < carve(p) + margin: every one flagged.
+  - Not covered: distorted groups.
+
+**I2 / I3: null caps.**
+- character-view uploads `{ n: [0,0,0], depth: 0 }` for a cut row without a carve normal (it used to send null, which
+  leaves the slot's stale CAP row).
+- woundMask's cut branch skips a row with no inward axis, as applyWounds' does.
+- threatMasks / cutThreatWound give such a row no threat and no lip amp. Tested in character-view and wound-threat.
+
+**M1:** silhouette counts pinned: rod <= 300 opened at >= 0.85 h; kerf 0.015 <= 900 at >= 0.7 h. Measured 234 at
+0.904 h and 784 at 0.747 h; the raw-plane lid did not change them.
+
+**M4: the lip scale is clamped** to `CUT_SHADE.maxLipScale` = 1.1 (cutLip, the WGSL `min(wMeta.z, 1.1)`, cutLipAmp).
+- Full sweep: 2.075 at lip scales 0.8 to 1.1, and **2.275 at 1.333**: the lip's along-slot slope at the tip of a
+  0.015 half-length, kerf-0.015 cut.
+- The committed Lipschitz row at the clamp sweeps half-lengths 0.015 and 0.05 only (the full sweep took 225 s):
+  1.995. The rod's 0.8 row stays the full sweep (2.075).
+
+### Shader checks
+
+- `npx vitest run march-golden -u` (golden updated).
+- `compile-census.mjs 2`: both boots `phase=ready`, `uncapturedCount 0`, no device loss. March module 302047 B
+  (was 301519 B), 9 entries per boot. Boot 1 cold: warmMs 42722, drawOnce 1711.2. Boot 2 warm: drawOnce 1923.0, at
+  load average ~6; see below.
+- `march-hash.mjs` (5241/9241): no pin moved. Default `d7392d52…` / `76bd51aa…` on 2/2 boots; crowd quad
+  `0c71e712…` / `bf6836cd…`; per-body `470ff0b3…` / `f618070e…`.
+
+### Cold boot, interleaved, truly cold (hash13 nonces 0.103221 to 0.103238), base `b61beff4` worktree vs `f2be31cc`
+
+| set (load average) | base drawOnce | new drawOnce | base / new warmMs |
+| --- | --- | --- | --- |
+| 1 (9.5 falling to 3.1) | 1654.1, 1618.2, 1618.1, 1628.7 | 1619.7, **1929.9**, 1625.9, 1595.2 | 42519 41126 43969 42333 / 41157 43064 42096 41687 |
+| 2 (3.0 to 2.2) | 1616.2, 1589.0, 1596.2, 1591.7 | 1609.6, 1611.5, 1608.2, 1598.5 | 40355 40316 40274 39886 / 40135 40415 40385 40135 |
+
+All 8 pairs: base median 1617.2 (spread 65.1), new median 1610.6 (spread 30.7 without the 1929.9). On the quiet
+set: base 1594.0, new 1608.9 (+15 ms, inside the base set's 27 ms spread). Six more alternating boots afterwards
+(the OS cache missed: warmMs ~39 to 41 s): base 1597.6, 1599.3, 1597.9, 1593.6, 1610.2, 1604.8; new 1606.0,
+1599.9, 1591.8, 1607.8, 1671.4, 1617.5.
+
+**The 1929.9 outlier.** One new-build boot read 1929.9 at load ~8, and the census's warm boot read 1923.0 at load ~6.
+No base boot did (14 boots, max 1654.1 at load 9.5), and no new-build boot did in the 10 boots after the load fell.
+I read it as load, but two hits on one side is not proof. **Acceptance:** every boot but that one is under ~1810 ms;
+that one is over.

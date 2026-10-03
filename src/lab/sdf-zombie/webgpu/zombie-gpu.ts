@@ -2496,8 +2496,9 @@ export function createZombieGpuView(
     lastThreatMargin = margin0;
     const clusterGroups: [number, number][] = [];
     for (let c = 0; c < p.clusterCount; c++) clusterGroups.push([p.clusterGroups[c * 4]!, p.clusterGroups[c * 4 + 1]!]);
-    // Cut rows (flag 32): the slot's box, its floor at sag + depth and the shader's reach (cutThreatWound), not the
-    // half-length sphere. The reach is woundReachBound's per-wound form from the same live uniforms.
+    // Cut rows (flag 32): the slot's box (its floor at sag + depth, its lid, its corner sphere) and the shader's reach
+    // as a second, exact sphere (cutThreatWound), not the half-length sphere. The reach is woundReachBound's per-wound
+    // form from the same live uniforms.
     const reachF = Math.max(2, 2 * u.woundCfg.value.w + 3 * u.woundCfg2.value.x);
     const wounds = w.worldPositions.slice(0, n).map((pos, i): ThreatWound => {
       const owner = w.owners?.[i]?.cluster ?? -1, cap = w.caps?.[i] ?? null, cut = w.cuts?.[i];
