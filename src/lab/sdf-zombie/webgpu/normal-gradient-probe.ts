@@ -16,6 +16,7 @@ import {
 import { buildNormalGradientFn, NORMAL_GRADIENT_PROBE, NORMAL_GRADIENT_HELPERS, NG_WOUND_LIP, NG_WOUNDS } from './normal-gradient.wgsl';
 
 import { SMIN, SMAX, APPLY_WOUNDS, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, DATA_ROWS } from './march.wgsl';
+import { MAX_WOUNDS } from '../damage';
 
 type V4 = [number, number, number, number];
 
@@ -304,8 +305,9 @@ async function main(): Promise<void> {
   };
   // Exercise the REAL production applyWounds alongside ngWounds with the
   // exact uploaded row adapter. The CPU scalar oracle below is independent.
-  const woundRows = new Float32Array(16 * DATA_ROWS * 4);
-  const woundTexture = new THREE.DataTexture(woundRows,16,DATA_ROWS,THREE.RGBAFormat,THREE.FloatType);
+  // One texel per wound slot: the fixture is as wide as the shader's wound loops.
+  const woundRows = new Float32Array(MAX_WOUNDS * DATA_ROWS * 4);
+  const woundTexture = new THREE.DataTexture(woundRows,MAX_WOUNDS,DATA_ROWS,THREE.RGBAFormat,THREE.FloatType);
   woundTexture.needsUpdate=true;
   const uCfg=uniform(new THREE.Vector4());
   const uCfg2=uniform(new THREE.Vector4());
@@ -347,7 +349,7 @@ async function main(): Promise<void> {
       const base=c.base??[-.02,0,0,1] as V4;
       const baseAt=(q:V3)=>base[0]+q.reduce((v,x,i)=>v+x*base[i+1]!,0);
       woundRows.fill(0);
-      c.rows.forEach((r,i)=>{woundRows.set(r.w,(ROW_WOUND*16+i)*4);woundRows.set(r.meta,(ROW_WOUND_META*16+i)*4);woundRows.set(r.cap,(ROW_WOUND_CAP*16+i)*4);});
+      c.rows.forEach((r,i)=>{woundRows.set(r.w,(ROW_WOUND*MAX_WOUNDS+i)*4);woundRows.set(r.meta,(ROW_WOUND_META*MAX_WOUNDS+i)*4);woundRows.set(r.cap,(ROW_WOUND_CAP*MAX_WOUNDS+i)*4);});
       woundTexture.needsUpdate=true;
       uCfg.value.fromArray([c.rows.length,...cfg.slice(1)]);uCfg2.value.fromArray(cfg2);uBound.value.fromArray(bound);uPerf.value.fromArray(perf);
       uP.value.fromArray(p);uDgA.value.fromArray(base);

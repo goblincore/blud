@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/validate.test.ts
 import { describe, it, expect } from 'vitest';
-import { validateBody, sdBody, sdPrimitive, nearestPrim, checkBoneContainment, MAX_PRIMS, MAX_CLUSTERS, MAX_CLUSTER_PRIMS, BASE_PRIM_STRIDE, primStride, bodyPrimStride, type Body } from './validate';
+import { validateBody, sdBody, sdPrimitive, nearestPrim, checkBoneContainment, MAX_PRIMS, MAX_CLUSTERS, MAX_CLUSTER_PRIMS, BASE_PRIM_STRIDE, BONE_SEG_MAX, primStride, bodyPrimStride, type Body } from './validate';
 import { assignClusters } from './clusters';
 import { FRAG } from './march.glsl';
 import { APPLY_CARVES, MAP_BODY, HELPERS } from './webgpu/march.wgsl';
@@ -9,6 +9,7 @@ import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { parseBlob } from './blob-parse';
 import { compileBlob, compileFace } from './blob-compile';
 import { add } from './vec';
+import { MAX_WOUNDS } from './damage';
 
 describe('shader caps', () => {
   it('bakes the same ceilings into the GLSL that the CPU side enforces', () => {
@@ -61,9 +62,11 @@ describe('per-body data texture width', () => {
   });
 
   it('keeps the cluster-bounds and wound columns inside the base width', () => {
-    // ROW_CLUSTER_* use columns up to 2 * MAX_CLUSTERS + BONE_SEG_MAX (44);
-    // the wound rows use MAX_WOUNDS (32). Both must fit the narrowest texture.
-    expect(2 * MAX_CLUSTERS + 1 + 32).toBeLessThanOrEqual(BASE_PRIM_STRIDE);
+    // ROW_CLUSTER_* use columns 0 .. 2 * MAX_CLUSTERS + BONE_SEG_MAX (so that
+    // + 1 wide); the wound rows use columns 0 .. MAX_WOUNDS - 1. Both must fit
+    // the narrowest texture.
+    expect(2 * MAX_CLUSTERS + 1 + BONE_SEG_MAX).toBeLessThanOrEqual(BASE_PRIM_STRIDE);
+    expect(MAX_WOUNDS).toBeLessThanOrEqual(BASE_PRIM_STRIDE);
   });
 
   it('sizes a built body from flesh AND bone', () => {

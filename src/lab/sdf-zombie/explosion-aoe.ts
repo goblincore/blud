@@ -76,17 +76,22 @@ const QUAKE_MAG_SCALE = 40;
 
 // ——— Lab-owned knobs ————————————————————————————————————————————————
 
+/** Wounds one blast stamps per body. It was the wound-ring size (MAX_WOUNDS)
+ *  while that was 16, and stays 16 now the ring is 32 (cut wounds M1,
+ *  2026-10-03). What that keeps the same is a blast's STAMPING: how many
+ *  wounds it writes and the sever/chain-cut results they produce. What it does
+ *  not keep: the ring no longer evicts the body's earlier wounds to make room,
+ *  so a body can hold up to MAX_WOUNDS live wounds after a blast, and its
+ *  per-body GPU wound cost can rise accordingly. */
+export const BLAST_WOUNDS_PER_BODY = 16;
+
 export const EXPLOSION_TUNING = {
   /** Sphere-trace step budget — lab-main raycastBody's 128-iteration cap. */
   traceSteps: 128,
   /** Surface-hit epsilon — raycastBody's 0.002 (also its minimum step). */
   traceEps: 0.002,
-  /** Hard cap on wounds one blast stamps per body. Was the wound-ring size
-   *  (MAX_WOUNDS) while that was 16; held at 16 when the ring grew to 32
-   *  (cut wounds M1, 2026-10-03) so a blast's wound count, sever results and
-   *  per-body wound cost do not change with the ring. A blast now fills half
-   *  the ring and leaves older wounds standing. */
-  maxWoundsPerBody: 16,
+  /** Hard cap on wounds one blast stamps per body: BLAST_WOUNDS_PER_BODY. */
+  maxWoundsPerBody: BLAST_WOUNDS_PER_BODY,
   /** Hand-splash band as a fraction of radiusM — a FLOURISH, not the game's
    *  player damage: hands scar when the blast is genuinely too close
    *  (or the stick overcooks in-hand). 0.35 × 4.69 m ≈ 1.6 m. */

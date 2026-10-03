@@ -11,6 +11,22 @@ fresh profile per boot. Its timers are noisy, so each number comes with its spre
 `fields/tissue.wgsl.ts` charMask, `fields/groups.wgsl.ts`, `body/blocks/setup/wound-list.wgsl.ts`,
 `normal-gradient.wgsl.ts` ngWounds), so the shader and the CPU ring cannot disagree again.
 
+**Not verified yet:** wounds 17 to 32 have not been checked on the GPU, and the frame cost of a full
+32-wound ring has not been measured. Task 8's gate covers both. Every capture below stages fewer than 16
+wounds.
+
+What else depends on the cap:
+
+- **Blasts.** `explosion-aoe.ts` `BLAST_WOUNDS_PER_BODY = 16` (was `MAX_WOUNDS`). A blast's stamping and
+  sever results are unchanged, but older wounds now survive it, so a blasted body can carry up to 32 live
+  wounds.
+- **The frozen GLSL twin.** `/sdf-lab.html` (`march.glsl.ts`, `zombie.ts`) keeps its own
+  `GLSL_MAX_WOUNDS = 16`. Its `setWounds` now uploads the NEWEST 16 of the longer ring. It used to upload
+  the first 16, so every shot after the 16th was invisible.
+- **The normal-gradient probe.** `webgpu/normal-gradient-probe.ts`'s fixture texture is now `MAX_WOUNDS`
+  wide. Separately, and NOT fixed here: its `ngWoundProbe` calls `applyWounds` with 7 arguments, but
+  `applyWounds` takes 8 (`band`), so that GPU probe would fail to compile today.
+
 ### Cold-boot `drawOnce` (`scripts/boot-time.mjs`, the gate)
 
 | run set | drawOnce ms | warmMs |

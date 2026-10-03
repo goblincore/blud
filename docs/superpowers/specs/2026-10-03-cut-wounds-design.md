@@ -34,7 +34,7 @@ Measured facts that rule out the existing tools (explored 2026-10-03):
 
 ## 3. The cut wound (`cut-wound.ts`, pure)
 
-A new wound SHAPE beside the crater. It lives in the same 16-wound ring (`MAX_WOUNDS`), rides one prim's frame exactly like a
+A new wound SHAPE beside the crater. It lives in the same wound ring, `MAX_WOUNDS` long (32 since M1 Task 2), rides one prim's frame exactly like a
 crater (so it moves with the body and is stamped against the same `posed` prims; see the orient-presence warning in the repo
 notes), bleeds through the same bleed ledger, and stacks with later damage.
 

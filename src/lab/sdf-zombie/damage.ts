@@ -4,7 +4,9 @@ import { add, basisFromAxis, dot, len, normalize, qFromTo, qRotate, scale, sub }
 import { rotateYaw } from './gait';
 import { sdPrimitive } from './validate';
 
-/** Must match MAX_WOUNDS in the fragment shader. */
+/** Wounds per body (the ring cap). Every WGSL wound loop bound and the per-ray
+ *  wound list size are built from this constant. The frozen GLSL twin
+ *  (march.glsl.ts) keeps its own cap, GLSL_MAX_WOUNDS, and shows the newest wounds. */
 export const MAX_WOUNDS = 32;
 
 export type WoundType = 'pellet' | 'blast' | 'burn';
