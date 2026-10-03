@@ -46,8 +46,15 @@ export const CUT_SHADE = {
   lipOffset: 1.5,
   lipWidth: 1.2,
   lipHeight: 0.9,
+  /** The cut lip's scale (META.z = pellet rimSplayScale 0.8 x calibre lip) is clamped to this, and the whole-field
+   *  Lipschitz test runs at it as well as at the rod's 0.8. MEASURED: max |grad| stays at the carve's own 2.075 up to
+   *  1.1; at 1.333 it reached 2.275 (the lip's along-slot slope at the tip of a 0.015 half-length, kerf-0.015 cut). */
+  maxLipScale: 1.1,
   /** The shading mask's soft edge, × kerf. */
   maskWidth: 2.2,
+  /** The lid's slack above the anchor's tangent plane, × halfLen (on top of one kerf): room for a concave crease's skin
+   *  to rise above that plane without the lid closing the slot (cutCarve). */
+  lidSlack: 0.25,
 } as const;
 
 export interface CutCalibre { depth: number; kerf: number; lip: number }
@@ -64,7 +71,7 @@ const unit = (v: Vec3, fb: Vec3 = [0, 1, 0]): Vec3 => (Math.hypot(v[0], v[1], v[
  *  reading (it follows curved skin) but never shallower than the slot's own plane, so a cut can not open the far skin of a
  *  thin limb (`-dIn` alone is depth below the NEAREST skin, which is the far side behind the middle of an arm). The lip
  *  is `cutLip` below (subtracted after the carve's smax). */
-export function cutCarve(p: Vec3, mid: Vec3, halfLen: number, along: Vec3, inward: Vec3, depth: number, kerf: number, dIn: number, sag: number, jag = 0): number {
+export function cutCarve(p: Vec3, mid: Vec3, halfLen: number, along: Vec3, inward: Vec3, depth: number, kerf: number, dIn: number, sag: number, jag = 0, lid = true): number {
   const rel = sub(p, mid);
   const side = cross(along, inward);
   const a = dot(rel, along), u = dot(rel, side);
@@ -76,14 +83,17 @@ export function cutCarve(p: Vec3, mid: Vec3, halfLen: number, along: Vec3, inwar
   const depthT = Math.max(dEff * prof, Math.max(kerf, 1e-4));
   const kerfT = kerf * (1 + jag) * (0.35 + 0.65 * prof);
   const vWall = kerfT * (1 - clamp(s, 0, depthT) / depthT) - Math.abs(u);
-  // The LID (s + kerf): the carve is negative wherever s < -kerf, i.e. more than one kerf from EVERY skin (s >= -dIn) and
-  // above the chord. Without it the carve was positive in the whole open channel above the cut out to the wound's reach
-  // sphere (~3.6 half-lengths): no zero set changed (the field there is already > 0), but the smax raised the field there
-  // and flagged the cut as a raiser at every such sample (MAP_BODY re-folds the threatened clusters there). It does NOT
-  // protect a foreign limb crossing the channel: inside any flesh dIn < 0, so s >= 0 and the lid never binds; that limb
-  // is carved wherever it lies in reach and only the owner re-fold restores it (wound-threat.ts cutThreatWound covers the
-  // channel for that reason). The owner's surface is unchanged.
-  return Math.min(vWall, depthT - s, halfLen - Math.abs(a), s + kerf) * CUT_SHADE.carveK;
+  // The LID (plane + kerf + lidSlack x halfLen): the slot is closed that far outward of the anchor's tangent plane (the
+  // RAW plane, not the skin-relative `s`). It stops the carve slicing a FOREIGN limb lying across the channel above the
+  // cut: inside that limb dIn < 0, so `s` (>= -dIn) reads the depth below the FOREIGN skin and no `s`-based term closes
+  // the slot there. On convex skin the owner's flesh under the slot lies inward of the anchor's tangent plane, so
+  // `plane + kerf` alone changes no owner surface; in a concave crease (an armpit) the skin rises above that plane, and
+  // the slack keeps the lid above it (measured, cut-wound.test.ts: 0 owner sign flips on every convex fixture with no
+  // slack; the three crease fixtures flipped ~70k of 4.4M near-surface samples with none, and 1863 with 0.25 h, all
+  // on the oblique armpit cut). A flip can only REMOVE carve (the lid lowers the carve): the cut stops short of a wall that rises
+  // steeply above the anchor, it never opens flesh. The term's gradient is 1 x carveK, like the others.
+  // `lid = false` is a test seam only (the zero-set test compares the two); the WGSL always has the lid.
+  return Math.min(vWall, depthT - s, halfLen - Math.abs(a), lid ? dot(rel, inward) + kerf + CUT_SHADE.lidSlack * halfLen : Infinity) * CUT_SHADE.carveK;
 }
 
 const smoothstep = (e0: number, e1: number, x: number) => {
@@ -111,7 +121,8 @@ export function cutLip(p: Vec3, mid: Vec3, halfLen: number, along: Vec3, inward:
   const prof = 1 - tN * tN;
   const kerfT = kerf * (1 + jag) * (0.35 + 0.65 * prof);
   const lipW = Math.max(kerf * CUT_SHADE.lipWidth, 1e-4);
-  const amp0 = kerf * CUT_SHADE.lipHeight * lipScale;
+  // The lip scale is clamped (maxLipScale): the measured slope bound holds up to it, not for any calibre's lip.
+  const amp0 = kerf * CUT_SHADE.lipHeight * Math.min(lipScale, CUT_SHADE.maxLipScale);
   const amp = amp0 * prof;
   const lx = (u - kerf * CUT_SHADE.lipOffset) / lipW;
   const rimB = Math.max(amp0, lipW);
@@ -121,11 +132,14 @@ export function cutLip(p: Vec3, mid: Vec3, halfLen: number, along: Vec3, inward:
   return amp * Math.exp(-lx * lx) * rim * offKerf * nearSkin;
 }
 
-/** The cut's surface-shading footprint at `p`, 0..1: the CPU mirror of woundMask's cut branch, term for term. A band
- *  either side of the slot (kerf to maskWidth x kerf), fading out past the tips, and fading out beyond the slot's floor
- *  measured from its own chord plane (`plane - sag`): without that last term the band was an infinite slab along the
- *  inward axis and painted a stripe on the far skin of every cut limb. No `dIn`: the mask runs on shaded surface points. */
-export function cutMask(p: Vec3, mid: Vec3, halfLen: number, along: Vec3, inward: Vec3, depth: number, kerf: number, sag: number): number {
+/** The cut's surface-shading footprint at `p` with outward surface normal `nrm`, 0..1: the CPU mirror of woundMask's cut
+ *  branch, term for term. A band either side of the slot (kerf to maskWidth x kerf), fading out past the tips, gated off
+ *  surfaces that face along the slot's inward axis (`back`: the far skin of the cut limb, dot(nrm, inward) ~ +1; the slot's
+ *  walls (~0), floor and lips (~-1) keep the band), and, as a second guard, fading out beyond the slot's floor measured
+ *  from its own chord plane (`far`). `far` alone left a stripe on thin limbs: the floor sits only 0.2 x thick above the
+ *  back skin, inside the 2-kerf fade whenever 0.2 thick < 2 kerf (a 0.03 m arm: 0.76 rod, 1.0 kerf 0.015). No `dIn`:
+ *  the mask runs on shaded surface points. */
+export function cutMask(p: Vec3, nrm: Vec3, mid: Vec3, halfLen: number, along: Vec3, inward: Vec3, depth: number, kerf: number, sag: number): number {
   const rel = sub(p, mid);
   const side = cross(along, inward);
   const a = Math.abs(dot(rel, along)), u = Math.abs(dot(rel, side));
@@ -135,7 +149,8 @@ export function cutMask(p: Vec3, mid: Vec3, halfLen: number, along: Vec3, inward
   const band = 1 - smoothstep(k, k * CUT_SHADE.maskWidth, u);
   const ends = 1 - smoothstep(halfLen * 0.85, halfLen * 1.15, a);
   const far = 1 - smoothstep(dEff + k, dEff + 2 * k, plane);
-  return band * ends * far;
+  const back = 1 - smoothstep(0.25, 0.6, dot(nrm, inward));
+  return band * ends * far * back;
 }
 
 export interface SweepSample { point: Vec3; view: Vec3 }

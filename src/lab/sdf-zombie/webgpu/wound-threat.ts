@@ -35,10 +35,14 @@ export interface ThreatWound {
   owner: number;
   /** Depth slab: inward normal + depth. Null or depth <= 0 = uncapped sphere. */
   cap?: { n: Vec3; depth: number } | null;
-  /** A CUT's slot (flag 32; built by `cutThreatWound`): the carve is a thin box, so besides the sphere and the slab a group
-   *  must also reach |along| <= halfLen and |side| <= halfWidth (side = along x cap.n), each widened by `widen` x (group
-   *  radius + margin). Tested on undistorted groups only, like the slab. */
-  slot?: { along: Vec3; halfLen: number; halfWidth: number; widen: number } | null;
+  /** A CUT's slot (flag 32; built by `cutThreatWound`). Its carve is positive only inside a thin box about `pos`:
+   *  |along| <= halfLen, |side| <= halfWidth (side = along x cap.n), from `outward` above the anchor's tangent plane (the
+   *  lid) to cap.depth below it. On undistorted groups (like the slab) each box face is tested, widened by `widen` x
+   *  (group radius + margin). The sphere is the smaller of `radius` (the shader's reach) and `boxR` + `cornerWiden` x
+   *  (group radius + margin) (the box's corner sphere, valid for distorted groups too); see cutThreatWound. */
+  slot?: {
+    along: Vec3; halfLen: number; halfWidth: number; outward: number; widen: number; boxR: number; cornerWiden: number;
+  } | null;
 }
 
 export interface ThreatGroup { center: readonly [number, number, number]; radius: number; distort: number }
@@ -65,12 +69,16 @@ export function woundThreatMasks(
         if (!grp) continue;
         const f = Math.max(1, grp.distort);
         const dx = grp.center[0] - w.pos[0], dy = grp.center[1] - w.pos[1], dz = grp.center[2] - w.pos[2];
-        if (Math.hypot(dx, dy, dz) - grp.radius >= (w.radius + margin) * f) continue;
+        const dist = Math.hypot(dx, dy, dz) - grp.radius;
+        if (dist >= (w.radius + margin) * f) continue;
+        if (w.slot && dist >= (w.slot.boxR + margin) * f + w.slot.cornerWiden * (grp.radius + margin)) continue;
         if (capped && f <= 1.001) {
           const n = w.cap!.n;
           const widen = w.slot ? w.slot.widen * (grp.radius + margin) : 0;
-          if (dx * n[0] + dy * n[1] + dz * n[2] - grp.radius >= w.cap!.depth + margin + widen) continue;
+          const inward = dx * n[0] + dy * n[1] + dz * n[2];
+          if (inward - grp.radius >= w.cap!.depth + margin + widen) continue;
           if (w.slot) {
+            if (-inward - grp.radius >= w.slot.outward + margin + widen) continue;
             const t = w.slot.along;
             const sd: Vec3 = [t[1] * n[2] - t[2] * n[1], t[2] * n[0] - t[0] * n[2], t[0] * n[1] - t[1] * n[0]];
             if (Math.abs(dx * t[0] + dy * t[1] + dz * t[2]) - grp.radius >= w.slot.halfLen + margin + widen) continue;
@@ -87,36 +95,48 @@ export function woundThreatMasks(
 
 /**
  * The threat wound of a CUT row (cut-wound.ts, applyWounds' flag-32 branch). A crater's carve lies inside its radius,
- * a cut's does not, so the row's half-length is the wrong sphere:
+ * a cut's does not, so the row's half-length is the wrong sphere. The carve is positive only inside a box about the
+ * midpoint, in the slot's frame:
  *
- * - Inward, the slot reaches its floor at sag + depthT below the anchor, depthT <= max(dEff, kerf),
- *   dEff = min(depth, maxDepthPerHalfLen x halfLen): that is the slab (the depth alone missed the sag).
- * - Outward, nothing bounds it but the shader's per-wound reach. Inside ANY flesh the slot's depth coordinate
- *   s = max(-dIn, plane - sag) is >= 0 (dIn < 0 there), so neither the floor nor the lid closes the slot in a foreign
- *   limb crossing the channel above the cut: it is carved wherever it lies in reach. So the sphere is the reach,
- *   `reachR` (woundReachBound's form: halfLen x max(2, 2 rimOffset + 3 rimWidth) + 4 blendK + 0.25), plus the carve's
- *   own height (carveK x 1.35 kerf, the jagged kerf at most).
- * - Sideways and along, the box: |side| <= 1.35 kerf, |along| <= halfLen.
+ * - along: |a| <= halfLen; sideways: |u| <= (1 + jagAmp) kerf, the jagged kerf at its widest;
+ * - inward: the floor, at most sag + max(dEff, kerf) below the anchor, dEff = min(depth, maxDepthPerHalfLen x halfLen)
+ *   (the slab; the depth alone missed the sag);
+ * - outward: the LID, kerf + lidSlack x halfLen above the anchor's tangent plane. Before the raw-plane lid nothing closed
+ *   the channel above a cut inside a foreign limb, so the sphere had to be the shader's whole reach (~0.68 m for the rod
+ *   at half-length 0.1), a column in front of every cut.
  *
- * The carve is scaled by carveK (< 1), so where the slot is negative it falls off slower than distance; carried
- * through the header's derivation that widens each box test by (1 / carveK - 1) x (group radius + margin).
+ * Carried through the header's derivation: the limb can only win at p where s_g(p) < (carve(p) + margin) f, and the
+ * carve is carveK x the box terms, so it falls off slower than distance outside the box. Each face test is widened by
+ * (1 / carveK - 1) x (group radius + margin). The corner sphere: such a p lies in the box grown by W = (group radius +
+ * margin) / carveK per face, so |p - pos| <= boxCorner + sqrt(3) W, and s_g(p) < (carveK halfWidth + margin) f; hence
+ * dist < (boxR + margin) f + sqrt(3) / carveK x (group radius + margin), with boxR = boxCorner + carveK halfWidth.
+ * The reach form (`reachR`, the GPU skip: woundReachBound's per-wound radius) stays as a second, exact bound, plus
+ * carveK halfWidth for the carve's own height. A row with no inward axis carves nothing on the GPU (the branch's
+ * guard), so it threatens nobody.
  */
 export function cutThreatWound(
   pos: Vec3, owner: number, halfLen: number, inward: Vec3, depth: number, sag: number, along: Vec3, kerf: number,
   reachR: number,
 ): ThreatWound {
+  if (Math.hypot(inward[0], inward[1], inward[2]) < 0.5) return { pos, radius: 0, owner: -1 };
   const halfWidth = (1 + CUT_SHADE.jagAmp) * kerf;
   const dEff = Math.min(depth, CUT_SHADE.maxDepthPerHalfLen * halfLen);
+  const floor = sag + Math.max(dEff, kerf);
+  const outward = kerf + CUT_SHADE.lidSlack * halfLen;
+  const boxCorner = Math.hypot(halfLen, Math.max(floor, outward), halfWidth);
   return {
     pos, owner,
     radius: reachR + CUT_SHADE.carveK * halfWidth,
-    cap: { n: inward, depth: sag + Math.max(dEff, kerf) },
-    slot: { along, halfLen, halfWidth, widen: 1 / CUT_SHADE.carveK - 1 },
+    cap: { n: inward, depth: floor },
+    slot: {
+      along, halfLen, halfWidth, outward, widen: 1 / CUT_SHADE.carveK - 1,
+      boxR: boxCorner + CUT_SHADE.carveK * halfWidth, cornerWiden: Math.sqrt(3) / CUT_SHADE.carveK,
+    },
   };
 }
 
 /** The most a cut's lip can LOWER a field (applyWounds' cutAmp at prof 1): kerf x lipHeight x the row's lip scale
- *  (META.z). A crater's is radius x rimSplay x splay; for a cut the radius is the half-length, which overstated it ~6x. */
+ *  (META.z, clamped to maxLipScale as the shader does). A crater's is radius x rimSplay x splay; for a cut the radius is the half-length, which overstated it ~6x. */
 export function cutLipAmp(kerf: number, splay: number): number {
-  return kerf * CUT_SHADE.lipHeight * splay;
+  return kerf * CUT_SHADE.lipHeight * Math.min(splay, CUT_SHADE.maxLipScale);
 }

@@ -438,11 +438,13 @@ export function createWoundRing(): WoundRing {
         // META.w: the crater rim code reads it as an offset scale; cut wounds (flag 32) carry their sag there,
         // which requires Task 5's cut branch to skip the rim for them.
         rows.map((w, i) => isCut[i] ? (w.sag ?? 0) : WOUND_PROFILES[w.type].rimOffsetScale * torn[i]!.offsetMul),
-        rows.map(w => {
+        rows.map((w, i) => {
           const n = woundCarveNormal(posed.prims, w, bodyYaw);
           // The preview repacks slots as its second cutter appears. Clear
           // an uncapped slot explicitly so it cannot inherit an old cap.
-          return n ? { n: map(n, w, true), depth: w.carveDepth ?? 0 } : visual ? { n: [0, 0, 0] as Vec3, depth: 0 } : null;
+          // A CUT row without a normal must clear it too: a null leaves the slot's stale CAP row in place, and the
+          // shader's cut branches skip a row only when its inward axis is zero.
+          return n ? { n: map(n, w, true), depth: w.carveDepth ?? 0 } : (visual || isCut[i]) ? { n: [0, 0, 0] as Vec3, depth: 0 } : null;
         }),
         rows.map(w => {
           // Severing retains wound history and primitive indices. A hidden

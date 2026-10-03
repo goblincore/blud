@@ -2484,7 +2484,9 @@ export function createZombieGpuView(
     for (let i = 0; i < n; i++) {
       const o = w.owners?.[i]?.cluster ?? -1;
       // A cut's lip is kerf-sized (cutLipAmp); its radius is the half-length, which would overstate it.
-      const cut = w.cuts?.[i];
+      const cut = w.cuts?.[i], cap = w.caps?.[i];
+      // A cut row with no inward axis is skipped by the shader's guard: no lip either.
+      if (cut && (!cap || Math.hypot(cap.n[0], cap.n[1], cap.n[2]) < 0.5)) continue;
       const amp = cut ? cutLipAmp(cut.kerf, w.splayScales?.[i] ?? 1)
         : w.radii[i]! * u.woundCfg.value.z * (w.splayScales?.[i] ?? 1) * (w.tears?.[i] ? TORN.PETAL_HI : 1);
       ampByOwner.set(o, (ampByOwner.get(o) ?? 0) + amp);
@@ -2499,6 +2501,8 @@ export function createZombieGpuView(
     const reachF = Math.max(2, 2 * u.woundCfg.value.w + 3 * u.woundCfg2.value.x);
     const wounds = w.worldPositions.slice(0, n).map((pos, i): ThreatWound => {
       const owner = w.owners?.[i]?.cluster ?? -1, cap = w.caps?.[i] ?? null, cut = w.cuts?.[i];
+      // A cut row without a cap uploads a zero axis (character-view), which the shader skips: it threatens nobody.
+      if (cut && !cap) return { pos, radius: 0, owner: -1 };
       if (cut && cap) {
         return cutThreatWound(pos, owner, w.radii[i]!, cap.n, cap.depth, w.offsetScales?.[i] ?? 0, cut.dir, cut.kerf,
           w.radii[i]! * reachF + 4 * kw + 0.25);
