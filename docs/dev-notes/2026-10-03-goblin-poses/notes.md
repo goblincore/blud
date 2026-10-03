@@ -64,3 +64,9 @@ waist." Both confirmed by close-up frames (`type-*` before, `pelvis-fix-*` after
   still settles to within ~1 cm of the thigh top when seated. A rigid ring cannot fold; it reads fine in the frames, but it is the
   first place to look if clipping is still visible.
 - Not re-checked after the pelvis change: the WALK and RUN poses (only rest and seated were shot), and the recoil pose.
+
+## Re-check after the pelvis and belt rework (2026-10-03)
+
+Re-shot walk, run and the recoil pose (BLOB_DIST 2.0, frames `recheck-*.png`). No regressions: the glutes and the waist belt
+follow through the walk and run strides (no thigh through the belt, no pelvis block hanging below the hips), and the recoil
+(arms at 150-175 degrees, thighs 78) keeps pauldrons, yoke and collar clear of the head from front, side and back.
