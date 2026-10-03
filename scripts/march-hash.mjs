@@ -118,6 +118,11 @@ const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
 //   per-body (?crowd=0, tiles off)                  = 470ff0b375adfdb48992adecf04e8915e814b3f7
 // Each reproduced on TWO boots (ports 5288/9288, headless) at cc23eb99.
 //
+// 2026-10-03 RE-VERIFIED, NO MOVE — cut wound fix round (73289ded: the cut lip's gates, the cut mask's far-side fade,
+// the lid, cut threat masks). Default d7392d52… / wounded 76bd51aa… on 2/2 boots; crowd quad 0c71e712… / wounded
+// bf6836cd… and per-body 470ff0b3… / wounded f618070e… on 1/1 each (ports 5241/9241, LAB_TMP=.lab-tmp). Expected: only
+// flag-32 rows take the changed code, and no staged scene has one.
+//
 // 2026-10-03 RE-VERIFIED, NO MOVE — cut wound branch (flag 32; cut wounds M1 Task 5: applyWounds' slot carve
 // and lips, woundMask's cut footprint, ngWounds' tap fallback). The shader text changed (march golden -u) but the
 // branch runs only for flag-32 wounds and no staged scene has one. At 1b6ccf5e + Task 5: default d7392d52… /
