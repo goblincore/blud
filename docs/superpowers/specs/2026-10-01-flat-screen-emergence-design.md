@@ -179,7 +179,7 @@ until plan 4 exists, after the current two-shot stub.
   in the Flat (§3.1). The riskiest item; spike it first.
 - **The screen pass's look:** wet, stretched, torn and goo in one marched field is the heart of the sequence; build it in
   the lab first, against the animatic and the owner's notes, before wiring the sequence.
-- **The held pose:** whether the rig can hold a recompiled rest pose without its gait or the wound system fighting it.
+- **The held pose:** whether the rig can hold a recompiled rest pose without its gait or the wound system fighting it. *Answered 2026-10-03:* yes, via the pose layer (`pose.ts`, `MotionConfig.pose`: writes the targets and pins every rig point), shown in the lab for type, recoil, sit, stand and jolt ([spec](2026-10-03-goblin-pose-layer-design.md)). Not yet exercised with the wound system or in a second scene.
 - **The cut from the FPS frame to the CRT:** the capture must match the framing, or the pull-back's first frame jumps.
 
 ## Open questions for the owner

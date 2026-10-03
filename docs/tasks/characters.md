@@ -80,8 +80,14 @@ so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), like
   stretch measured: gone (flesh feet removed; only the neck cord stretches, +20 mm, under the collar). Only stills checked:
   tempo, bob, skating and the feel in motion are the owner's gate. The curve source is swappable for a hand-authored clip
   via `npm run gait:curves`.
-- [ ] **Phase 4b, the Flat's authored poses and clips** (sit, type, recoil, stand, reach; vest and shorts): own spec,
-  authoring route (Blender armature -> bone angles, or keyframes) still to decide. Cautionary case: the bride (shelved
+- [~] **Phase 4b, the Flat's authored poses and clips: first slice built 2026-10-03, awaiting the owner's look.**
+  [Spec](../superpowers/specs/2026-10-03-goblin-pose-layer-design.md) · [plan](../superpowers/plans/2026-10-03-goblin-pose-layer.md) ·
+  [notes and frames](../dev-notes/2026-10-03-goblin-poses/notes.md). A pure pose layer (`pose.ts`: bone-angle poses and keyed clips,
+  angle-space blending, ground-lock), the `cfg.pose` seam in `stepMotion` (writes the targets, pins every point), and the goblin's
+  `type`, `recoil`, `sit`, `stand`, `jolt` (`characters/goblin-poses.ts`), checked in the lab (`BLOB_POSE=pose:<name>`). **Still to do:**
+  `reach` (the Flat spec's fifth pose), the at-home vest and shorts, hands-on-keyboard contact, the game/sequence wiring, and the
+  authoring route for richer clips (the key list is the target for a Blender export; text for now). Open: the pale shirt lump at
+  the lower back when the spine curls (notes). Original scope note: authoring route (Blender armature -> bone angles, or keyframes) Cautionary case: the bride (shelved
   for janky animation and a sword clipping the body).
   - `goblin.blob`'s neck vertebra bead (`blob head on neck at=0.30 ...`) is a zero-length head-limb prim, so
     `rig-bind.ts` (`ridesHead`, ~line 388) binds it to the RIGID head: it is 94 mm below the skull pivot and will slide
