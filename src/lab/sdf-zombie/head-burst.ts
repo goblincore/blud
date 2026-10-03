@@ -34,10 +34,16 @@ export const BURST = {
   shove: 2.5,
 } as const;
 
-/** Live tuning (debug seams): mutable on purpose, defaults from BURST. */
-export const burstTuning = {
+/** The shipped tuning (burstTuning starts as a copy; burstTune({ ...BURST_TUNING_DEFAULTS }) resets it). */
+export const BURST_TUNING_DEFAULTS = {
   /** false: slugs take the ordinary path. */
   on: true,
+  /** DEBUG (owner 2026-10-03, "I can't trigger it"): any player gun hit on the head bursts it, pellets too, once per
+   *  shot. false: slugs only (the design). */
+  anyWeapon: true,
+  /** DEBUG (same request: "make head wounds trigger it all the time"): every head hit SPLITS, however far off centre
+   *  its line runs. false: the centreFrac test decides split vs glancing. */
+  alwaysSplit: true,
   centreFrac: BURST.centreFrac as number,
   /** Swell peak of the jelly rupture (head-deform BURST_DEFORM.swell). */
   swell: 0.4,
@@ -54,6 +60,8 @@ export const burstTuning = {
   /** -1: the plan's default count; otherwise forced (clamped to flapMax). */
   flapCount: -1,
 };
+/** Live tuning (debug seams): mutable on purpose. */
+export const burstTuning: { -readonly [K in keyof typeof BURST_TUNING_DEFAULTS]: (typeof BURST_TUNING_DEFAULTS)[K] } = { ...BURST_TUNING_DEFAULTS };
 export function setBurstTuning(p: Partial<typeof burstTuning>): typeof burstTuning {
   Object.assign(burstTuning, p);
   return { ...burstTuning };

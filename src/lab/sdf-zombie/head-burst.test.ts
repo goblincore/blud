@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/head-burst.test.ts
 import { beforeEach, describe, expect, it } from 'vitest';
-import { BURST, burstPlan, burstTuning, classifyBurst, headRadius, hsOf, onHeadPrim, setBurstTuning } from './head-burst';
+import { BURST, BURST_TUNING_DEFAULTS, burstPlan, burstTuning, classifyBurst, headRadius, hsOf, onHeadPrim, setBurstTuning } from './head-burst';
 import { prim } from './head-pop';
 import { mulberry32 } from './melt-bones';
 import type { HeadFrame } from './head-deform';
@@ -10,7 +10,7 @@ const frame: HeadFrame = { centre: [0, 1.6, 0], quat: [0, 0, 0, 1], axes: [0.09,
 /** A slug travelling −z that crosses the head's front surface at world x = `x`. */
 const shot = (x: number, y = 1.6) => ({ point: [x, y, 0.1] as Vec3, dir: [0, 0, -1] as Vec3 });
 
-beforeEach(() => setBurstTuning({ on: true, centreFrac: 0.35, swell: 0.4, shardScale: 1, flapCount: -1, lethal: false, repeatStep: 0.04, craterScale: 1, splay: 0.1 }));
+beforeEach(() => setBurstTuning({ ...BURST_TUNING_DEFAULTS, centreFrac: 0.35 }));
 
 describe('classifyBurst', () => {
   it('head radius is the geometric mean of the axes', () => {
@@ -108,8 +108,13 @@ describe('burstPlan', () => {
     expect(burstPlan(lethal(), mulberry32(2)).flaps).toBe(3);
   });
   it('slugs do not kill by default (lethal off), repeats creep up slowly', () => {
-    expect(burstTuning.lethal).toBe(false);
-    expect(burstTuning.repeatStep).toBeLessThan(0.1);
+    expect(BURST_TUNING_DEFAULTS.lethal).toBe(false);
+    expect(BURST_TUNING_DEFAULTS.repeatStep).toBeLessThan(0.1);
+  });
+  it('DEBUG: any gun hit on the head triggers it by default (pellets too), so it cannot be missed while tuning', () => {
+    expect(BURST_TUNING_DEFAULTS.anyWeapon).toBe(true);
+    expect(BURST_TUNING_DEFAULTS.alwaysSplit).toBe(true);
+    expect(burstTuning.anyWeapon).toBe(true);
   });
   it('setBurstTuning returns a copy and updates burstTuning', () => {
     const t = setBurstTuning({ swell: 0.4 });

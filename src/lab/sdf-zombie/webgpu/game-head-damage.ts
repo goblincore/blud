@@ -187,7 +187,7 @@ export interface HeadDamageLeaf {
   /** A SLUG on a head (slug head burst): the lethal burst or the glancing rupture. `point` is the impact (world), `dir`
    *  the shot direction (world unit). Returns false when it declined (not a head hit, not the plain zombie, off, no head):
    *  the caller then takes the ordinary slug path. */
-  burst(a: ZombieActor, point: Vec3, dir: Vec3, shot?: ShotProvenance): boolean;
+  burst(a: ZombieActor, point: Vec3, dir: Vec3, shot?: ShotProvenance, kind?: 'pellet' | 'slug'): boolean;
   tick(dt: number): void;
   /** Drop an actor's state: dispose its pieces, clear its deform hook, its eyes glow again. */
   forget(id: number): void;
@@ -227,6 +227,8 @@ export interface BurstDebug { kind: 'lethal' | 'glancing'; /** What happened: 'l
 interface ActorHead {
   /** The last slug burst's scalp flaps (one attached piece) and verdict. */
   flaps: FlapSet | null; burst: BurstDebug | null;
+  /** The shot that last burst this head: a pellet volley bursts it once, not once per pellet. */
+  lastShot?: number;
   model: HeadDamageState; deform: HeadDeformState;
   orbits: Partial<Record<EyeSide, Orbit>>;
   /** The per-actor jitter stream (seed = actor id). */
@@ -659,8 +661,8 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     f.piece?.update(c, localEnds(prims, c));
   }
 
-  function burst(a: ZombieActor, point: Vec3, dir: Vec3, shot?: ShotProvenance): boolean {
-    if (!burstTuning.on || a.profileName() !== 'zombie') return false;
+  function burst(a: ZombieActor, point: Vec3, dir: Vec3, shot?: ShotProvenance, kind: 'pellet' | 'slug' = 'slug'): boolean {
+    if (!burstTuning.on || (kind !== 'slug' && !burstTuning.anyWeapon) || a.profileName() !== 'zombie') return false;
     const posed = a.posed();
     if (!headAlive(posed) || !onHeadPrim(posed.prims, point)) return false;
     // The UN-deformed head frame (see hit()): mid-wobble headShape reads the squashed head.
@@ -671,10 +673,17 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     const yaw = a.pose().yaw;
     const field = (q: Vec3) => sdBody(q, posed);
     const h = headOf(a);
+    // One burst per shot: the rest of a pellet volley that lands on this head is swallowed (no ordinary craters either:
+    // they would pock the fresh opening).
+    const shotId = shot && 'shotId' in shot ? shot.shotId : undefined;
+    if (shotId !== undefined) {
+      if (h.lastShot === shotId) return true;
+      h.lastShot = shotId;
+    }
     const v = classifyBurst({ point, dir }, frame);
     // A centred slug OPENS the head (exit crater, heavy debris, splay) either way; it only KILLS while burstTuning.lethal
     // is on. Off (for now, owner 2026-10-03): the head splits open and the zombie lives.
-    const opened = v.kind === 'lethal';
+    const opened = v.kind === 'lethal' || burstTuning.alwaysSplit;
     const kills = opened && burstTuning.lethal;
     // THE OPENING FOLLOWS THE HEAD, NOT THE GRAZE. The slug leaves the muzzle ~10 cm low and right of the crosshair, so a
     // head shot's real line skims the jaw (an unaided capture blew out the jaw and left the skull shut). A split therefore
@@ -690,6 +699,8 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     const r = burstHit(h.model, { hs: hsB, lethal: kills, step: burstTuning.repeatStep });
     h.model = r.state;
     h.burst = { kind: v.kind, outcome: kills ? 'lethal' : opened ? 'split' : 'glancing', offset: v.offset, severity: vc.severity, shards: plan.shards, flaps: plan.flaps };
+    // Visible in the browser console while the effect is being tuned (owner: "I can't trigger it").
+    console.info(`[head-burst] actor ${a.id} ${kind}: ${h.burst.outcome} (line ${v.offset.toFixed(2)} head radii off centre)`);
 
     // Deform: the jelly rupture's spring, plus a lasting dent on the entry side. (No plain wobble kick: the burst's own
     // spring is the jelly, and the two would fight along the shot axis.)

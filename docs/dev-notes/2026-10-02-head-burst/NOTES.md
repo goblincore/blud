@@ -75,3 +75,15 @@ as a weak GLANCING graze. The slug leaves the muzzle ~10 cm low and right of the
   exit on the far side), not wherever the off-axis slug grazed: the first unaided capture blew out the jaw and left the skull
   shut. The verdict's real `offset` is still reported in `head.state(id).burst`.
 - Re-captured unaided at 1.5 m and 3 m: a large open cavity with the skull showing, blood and debris. Gate 24/24.
+
+## Playtest round 3 (2026-10-03): still could not trigger it → debug defaults
+
+- `burstTuning.anyWeapon` (default **true**, DEBUG): any player gun hit on a zombie head bursts it, PELLETS too, once per shot
+  (`ActorHead.lastShot`; the rest of the volley is swallowed). `alwaysSplit` (default **true**, DEBUG): every head hit splits.
+  Each burst logs `[head-burst] actor N pellet|slug: split|glancing|lethal (line X head radii off centre)` to the console.
+  `BURST_TUNING_DEFAULTS` now holds the shipped values (the old default tests read the live object a beforeEach had just set).
+- Gate scenario P: a plain pellet volley on a fresh page splits the head, once per shot. It runs FIRST: after the slug
+  scenarios the same volley landed on no actor at all (harness state: unresolved, noted rather than chased).
+- Gate: 26 checks, 0 failed.
+- Owner verdict on the approach: craters cannot make "deep jagged cuts into the body" (axe, sword, chainsaw, a head cleaved in
+  two). That needs a new wound type: see the cut-wound exploration (next spec).

@@ -9,6 +9,7 @@
 //      exit crater, flaps drawn, still standing when thawed; a SECOND slug at the same spot then kills.
 //   C. cost: the flaps of a head share ONE attached piece (draws === 1). Frame time is reported, not gated: the debris
 //      chunks confound it and this environment's draw timer spreads by milliseconds between identical runs.
+//   P. the DEBUG defaults (anyWeapon, alwaysSplit): a pellet volley on a head splits it, once per shot.
 //   D. the OFF switch: burstTune({ on: false }) leaves the head with no burst state (the ordinary slug path).
 //   E. zero console errors / exceptions.
 // Photos are written to OUT for the look loop. Usage:
@@ -253,8 +254,29 @@ const chunks = () => evaluate("__sdfGame.chunkCount");
 const out = {};
 try {
   await boot("burst");
+  // -------- P. (FIRST, on the fresh page: run after the slug scenarios, the same volley landed on no actor at all — harness
+  // state, not the effect; a fresh-page pellet test split the head.) The DEBUG default (owner: "trigger it all the time"): a plain PELLET volley on a head splits it, once per shot.
+  await evaluate("__sdfGame.head.burstTune({ on: true, anyWeapon: true, alwaysSplit: true, centreFrac: 1.25, lethal: false, flapCount: -1, repeatStep: 0.04 })");
+  const P = fresh();
+  await aimLine(P.id, SHOT_D, 0);   // checked stance: the predicted line must hit THIS zombie
+  // A reload left over from S's slugs refuses fire() even with full shells: wait it out, as slug() does.
+  let firedP = false;
+  for (let i = 0; i < 6 && !firedP; i++) {
+    await evaluate("__sdfGame.refillShells()");
+    firedP = await evaluate("__sdfGame.fire(1)");
+    if (!firedP) await stepN(90);
+  }
+  if (!firedP) fail("P: fire(1) never fired (reload?)");
+  await stepN(30);   // pellets are slower than slugs
+  const hsP = await hstate(P.id);
+  note(`P: wounds on P ${(await evaluate(`__sdfGame.actorWounds(${P.id})`))?.length}`);
+  note(`P: burst ${JSON.stringify(hsP?.burst)}, craters ${Object.keys(hsP?.craters ?? {}).join(",")}`);
+  check(hsP?.burst?.outcome === "split" && hsP.dead === false, `P: a pellet volley on the head splits it with the debug defaults (outcome ${hsP?.burst?.outcome})`);
+  check(hsP?.hits === 1, `P: once per shot, not once per pellet (head hits ${hsP?.hits})`);
+  await stand(P.id, 0.8); await capture("P-pellets");
+
   // A and B test the KILL path and the flaps (both OFF by default now): lethal on, three flaps, a repeat step that kills in one.
-  await evaluate("__sdfGame.head.burstTune({ on: true, centreFrac: 0.35, swell: 0.4, shardScale: 1, flapCount: 3, lethal: true, repeatStep: 0.32, craterScale: 1, splay: 0.1 })");
+  await evaluate("__sdfGame.head.burstTune({ on: true, anyWeapon: false, alwaysSplit: false, centreFrac: 0.35, swell: 0.4, shardScale: 1, flapCount: 3, lethal: true, repeatStep: 0.32, craterScale: 1, splay: 0.1 })");
 
   // -------- C0. the draw-time baseline (twice), before any slug
   const base = fresh();
@@ -310,7 +332,7 @@ try {
   check(sb2[sb2.length - 1]?.dead === true, "B: a second slug at the same spot kills");
 
   // -------- S. SPLIT: with lethal OFF (the default) a centred slug opens the head wide and the zombie LIVES; repeats creep up.
-  await evaluate("__sdfGame.head.burstTune({ lethal: false, flapCount: 0, repeatStep: 0.04 })");
+  await evaluate("__sdfGame.head.burstTune({ lethal: false, flapCount: 0, repeatStep: 0.04, alwaysSplit: true, centreFrac: 1.25 })");
   const S = fresh();
   await stand(S.id, PHOTO_D); await capture("S-before");
   await aimLine(S.id, SHOT_D, 0);
