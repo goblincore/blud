@@ -82,6 +82,12 @@ export interface Wound {
    *  ROW_WOUND_FLAGS.x bit 4: the torn look's wet red lip / glossy walls / clotted floor SHADING on
    *  the stock crater SHAPE. Absent or 0 = the stock look. Set with `wetLipWound`. */
   wetLip?: number;
+  /** CUT (cut-wound.ts, 2026-10-03): a blade slot instead of a crater. `local` is the slot's MIDPOINT, `radius` its HALF-
+   *  LENGTH (so every sphere bound stays a superset), `carveN`/`carveDepth` its inward direction and depth, `cutDir` its
+   *  along-segment unit (prim-local, same frame as `local`), `kerf` its half-width at the skin. Absent = a crater. */
+  shape?: 'cut';
+  cutDir?: Vec3;
+  kerf?: number;
   /**
    * SEVERING IS A DAMAGE DECISION, NOT A CRATER SIDE-EFFECT. When set, this
    * is the radius connectivity's carve-union test (cutLimbs/cutChains) uses
@@ -573,6 +579,41 @@ export function wetLipWound(wound: Wound, wetLip: number): Wound {
  *  the brain cavity and the slug burst's exit crater. */
 export const MAX_HEAD_WOUNDS = 8;
 
+/** MERGE ON OVERFLOW (2026-10-03, owner: tough enemies' faces "reappear" when old wounds are evicted). */
+export const MERGE = {
+  /** Two craters on one prim merge when their centres are within this × (r1 + r2). */
+  reach: 1.5,
+  /** A merged crater never grows past this radius (m): a whole limb must not become one bowl. */
+  maxRadius: 0.16,
+} as const;
+
+const localDist = (a: Wound, b: Wound): number =>
+  Math.hypot(a.local[0] - b.local[0], a.local[1] - b.local[1], a.local[2] - b.local[2]);
+
+/** The oldest wound at index `victim` folded into its nearest same-prim crater neighbour, or null when none is in reach. */
+function mergeVictim(next: Wound[], victim: number): Wound[] | null {
+  const v = next[victim]!;
+  if (v.shape === 'cut' || v.decal) return null;
+  let best = -1, bd = Infinity;
+  next.forEach((o, i) => {
+    if (i === victim || o.primIdx !== v.primIdx || o.shape === 'cut' || o.decal || o.type !== v.type) return;
+    const d = localDist(v, o);
+    if (d <= MERGE.reach * (v.radius + o.radius) && d < bd) { bd = d; best = i; }
+  });
+  if (best < 0) return null;
+  const o = next[best]!;
+  const wv = v.radius, wo = o.radius, k = wv / (wv + wo);
+  const local: Vec3 = [o.local[0] + (v.local[0] - o.local[0]) * k, o.local[1] + (v.local[1] - o.local[1]) * k, o.local[2] + (v.local[2] - o.local[2]) * k];
+  const radius = Math.min(MERGE.maxRadius, Math.max(wv, wo, (bd + wv + wo) / 2));
+  const merged: Wound = { ...o, local, radius };
+  if (v.carveDepth !== undefined || o.carveDepth !== undefined) merged.carveDepth = Math.max(v.carveDepth ?? 0, o.carveDepth ?? 0);
+  if (v.severRadius !== undefined || o.severRadius !== undefined) merged.severRadius = Math.max(v.severRadius ?? v.radius, o.severRadius ?? o.radius);
+  const out = [...next];
+  out[best] = merged;
+  out.splice(victim, 1);
+  return out;
+}
+
 /** Ring buffer append. A wound with a headRegion replaces an earlier wound of the same region, in that
  *  one's index. Head craters keep their own MAX_HEAD_WOUNDS slots (oldest 'face' crater evicted first),
  *  and the total cap evicts the oldest wound that is not a 'keep' head crater. A ring with no head tags
@@ -594,9 +635,11 @@ export function pushWound(ring: Wound[], wound: Wound, cap: number): Wound[] {
       next.splice(next.indexOf(victim), 1);
     }
   }
-  while (next.length > cap) {
-    const i = next.findIndex(x => x.headSlot !== 'keep');
-    next.splice(i < 0 ? 0 : i, 1);
+  let out = next;
+  while (out.length > cap) {
+    const i = out.findIndex(x => x.headSlot !== 'keep');
+    const victim = i < 0 ? 0 : i;
+    out = mergeVictim(out, victim) ?? (out.splice(victim, 1), out);
   }
-  return next;
+  return out;
 }
