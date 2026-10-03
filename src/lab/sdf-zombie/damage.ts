@@ -475,6 +475,20 @@ export function woundCarveNormal(prims: Primitive[], wound: Wound, bodyYaw = 0):
   return add(add(scale(u, c[0]), scale(v, c[1])), scale(w, c[2]));
 }
 
+/** A prim-local direction of `wound` (same frame as `local` / `carveN`) in world space. */
+export function woundDirToWorld(prims: Primitive[], wound: Wound, local: Vec3, bodyYaw = 0): Vec3 {
+  const prim = prims[wound.primIdx]!;
+  const { u, v, w } = frame(prim, bodyYaw, wound.axis0);
+  return add(add(scale(u, local[0]), scale(v, local[1])), scale(w, local[2]));
+}
+
+/** A world direction in `wound`'s prim-local frame (the inverse of woundDirToWorld). */
+export function worldDirToWoundLocal(prims: Primitive[], wound: Wound, dir: Vec3, bodyYaw = 0): Vec3 {
+  const prim = prims[wound.primIdx]!;
+  const { u, v, w } = frame(prim, bodyYaw, wound.axis0);
+  return [dot(dir, u), dot(dir, v), dot(dir, w)];
+}
+
 /**
  * Is this prim CLOTH to a bullet? A shell (the sheet garments) or any painted
  * prim that is not metal and does not glow — the cultist's robe-coloured
