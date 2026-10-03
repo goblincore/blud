@@ -652,6 +652,13 @@ Update `march/primitives.wgsl.test.ts:412`'s pinned 25 to 26.
 
 - [ ] **Step 5: Commit** — `git commit -m "feat(wounds): upload cut wounds (ROW_WOUND_CUT, flag 32; DATA_ROWS 26; golden -u)"`.
 
+> **Amended after Task 3's second review (controller):** a cut also uploads its `sag` (Wound.sag, metres: how far the skin
+> falls away under the cut's chord). It rides **ROW_WOUND_META.w** for cut wounds only: in `character-view.ts` `refresh`, the
+> offset-scale array becomes `rows.map((w, i) => w.shape === 'cut' ? (w.sag ?? 0) : WOUND_PROFILES[w.type].rimOffsetScale * torn[i]!.offsetMul)`.
+> META.w is read only by the crater rim code (which the cut branch skips) — verify with
+> `grep -n "wMeta.w\|META.*\.w" src/lab/sdf-zombie/webgpu/march src/lab/sdf-zombie/webgpu/normal-gradient.wgsl.ts -r` and the CPU
+> threat amp (`zombie-gpu.ts` threatMasks reads splayScales, not offsetScales — confirm). Add a write-wounds test that a cut's
+> META.w carries its sag.
 ---
 
 ## Task 5: The cut in WGSL (carve, mask, normals)
@@ -781,6 +788,15 @@ the cut branch sits above them, update the pinned text to the same lines at thei
 > **Also (controller, after Task 3's fix commits 76e99ad0 / 7f66ef6e):** `cutCarve` clamps the slot's depth to
 > `CUT_SHADE.maxDepthPerHalfLen * halfLen` (1.6); the stored carveDepth already obeys it, and the WGSL must apply the same
 > clamp (`min(wCap.w, ${f(CUT_SHADE.maxDepthPerHalfLen)} * w.w)`) so the GPU slot equals the CPU mirror.
+
+> **Amended after Task 3's second review (controller) — THE TS IS AUTHORITATIVE, mirror `cutCarve` term for term:**
+> - depth coordinate: `let cs = max(-dIn, dot(rel, wCap.xyz) - wMeta.w);` (wMeta.w = the cut's sag; `dIn` is applyWounds'
+>   PRE-WOUND argument, never the running `d`) — this stops the slot carving the far-side skin;
+> - `let dEff = min(wCap.w, ${f(CUT_SHADE.maxDepthPerHalfLen)} * w.w);` (1.4) and `let depthT = max(dEff * prof, max(wCut.w, 1e-4));`;
+> - re-orthogonalise the frame on the GPU: `let cin = normalize(wCap.xyz); let calong = normalize(wCut.xyz - cin * dot(wCut.xyz, cin)); let side = cross(calong, cin);`
+>   and use `calong` / `cin` everywhere the snippet used `wCut.xyz` / `wCap.xyz` as directions;
+> - the lip has no CPU mirror: the Task 8 gate's photo + luma profile is its check, and record in NOTES that the lip's
+>   steepness was not measured on the CPU.
 ---
 
 ## Task 6: Bones show inside cuts
