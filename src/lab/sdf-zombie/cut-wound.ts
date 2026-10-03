@@ -6,6 +6,8 @@
 // wound pipeline keeps stays a superset), `carveN`/`carveDepth` its inward direction and depth, `cutDir` its along-segment
 // unit, `kerf` its half-width at the skin. `cutCarve` is the CPU mirror of the WGSL slot (applyWounds' cut branch) for tests
 // and docs; keep the two identical apart from the GPU's noise.
+// The sweep grouping fixes single-sample jitter only: two-sample jitter or a lone end sample can still split a run (acceptable
+// for v1).
 //
 // A cut is tagged type 'pellet' for profile purposes (the rim / upload paths treat it as a pellet-sized wound) and is always
 // wetLip: both are deliberate for now, not an oversight.
@@ -30,12 +32,14 @@ export const CUT_SHADE = {
   jagFreq: 90,
   jagAmp: 0.35,
   /** Field scale for the slot (the zero set is unchanged). MEASURED, not argued: with this scale cutCarve's max |grad| over
-   *  a dense grid is <= 2.2 (measured 1.21, 1.67, 1.80 for 0.1, 0.05, 0.015 m half-lengths; the test logs them), i.e. near the stock
+   *  a dense grid, WGSL-shaped call included (dIn from the curved fixture body, sag from stampCut), is <= 2.2 over half-lengths
+   *  0.015-0.175, depths 0.03-0.15 and kerfs 0.006-0.015: measured max 2.075 (the test logs it), i.e. near the stock
    *  crater's bound (~2.06, layout.ts) rather than under it; the step multiplier decision there applies unchanged. */
   carveK: 0.7,
   /** A slot's depth never exceeds this x its half-length: the lens floor's slope is ~2 depth / halfLen, so a deep, very short
-   *  slot (0.06 deep over 0.015 half-length measured |grad| 4.96) would be a wall the march steps through. */
-  maxDepthPerHalfLen: 1.6,
+   *  slot (0.06 deep over 0.015 half-length measured |grad| 4.96) would be a wall the march steps through. 1.4 bounds the
+   *  floor term at 0.7 x sqrt(1 + 2.8^2) ~ 2.08. */
+  maxDepthPerHalfLen: 1.4,
   /** Lip: centre offset from the slot axis, width and height, all × kerf; height also × META.z (rim splay scale). */
   lipOffset: 1.5,
   lipWidth: 1.2,
@@ -51,19 +55,23 @@ export const ROD_CALIBRE: CutCalibre = { depth: 0.06, kerf: 0.01, lip: 1 };
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
 const unit = (v: Vec3, fb: Vec3 = [0, 1, 0]): Vec3 => (Math.hypot(v[0], v[1], v[2]) > 1e-9 ? normalize(v) : fb);
 
-/** The slot's inside-positive carve term at `p` (no noise): the CPU mirror of applyWounds' cut branch. `below`, when given,
- *  is the depth of `p` below the ACTUAL (pre-wound) skin and replaces the straight-inward coordinate in the floor and V-wall
- *  terms, so the slot follows curved skin (the WGSL passes `-dIn`); the along and across coordinates come from the frame. */
-export function cutCarve(p: Vec3, mid: Vec3, halfLen: number, along: Vec3, inward: Vec3, depth: number, kerf: number, jag = 0, below?: number): number {
+/** The slot's inside-positive carve term at `p` (no noise): the CPU mirror of applyWounds' cut branch, one path only.
+ *  `mid` is the wound's anchor on the skin; `dIn` is the PRE-WOUND body field at `p` (after carves, before ANY wound: the
+ *  WGSL passes applyWounds' `dIn`, never the running `d`); `sag` is the wound's stored chord sag. The slot's depth
+ *  coordinate is `s = max(-dIn, along-inward distance - sag)`: the depth below the real skin where that is the deeper
+ *  reading (it follows curved skin) but never shallower than the slot's own plane, so a cut can not open the far skin of a
+ *  thin limb (`-dIn` alone is depth below the NEAREST skin, which is the far side behind the middle of an arm). The lip
+ *  has no CPU mirror: Task 5's GPU gate checks it. */
+export function cutCarve(p: Vec3, mid: Vec3, halfLen: number, along: Vec3, inward: Vec3, depth: number, kerf: number, dIn: number, sag: number, jag = 0): number {
   const rel = sub(p, mid);
   const side = cross(along, inward);
   const a = dot(rel, along), u = dot(rel, side);
-  const s = below ?? dot(rel, inward);
+  const s = Math.max(-dIn, dot(rel, inward) - sag);
   const tN = clamp(a / Math.max(halfLen, 1e-4), -1, 1);
   const prof = 1 - tN * tN;
-  depth = Math.min(depth, CUT_SHADE.maxDepthPerHalfLen * halfLen);
+  const dEff = Math.min(depth, CUT_SHADE.maxDepthPerHalfLen * halfLen);
   // Floors at one kerf so the tips never close to a point (that made the field's slope blow up at short slots).
-  const depthT = Math.max(depth * prof, kerf);
+  const depthT = Math.max(dEff * prof, Math.max(kerf, 1e-4));
   const kerfT = kerf * (1 + jag) * (0.35 + 0.65 * prof);
   const vWall = kerfT * (1 - clamp(s, 0, depthT) / depthT) - Math.abs(u);
   return Math.min(vWall, depthT - s, halfLen - Math.abs(a)) * CUT_SHADE.carveK;
@@ -190,6 +198,7 @@ export function stampCut(prims: Primitive[], seg: CutSeg, calibre: CutCalibre, b
   w.carveDepth = Math.min(wantDepth, thick * CUT.thickFrac, CUT_SHADE.maxDepthPerHalfLen * half);
   w.cutDir = worldDirToWoundLocal(prims, w, alongW, bodyYaw);
   w.kerf = calibre.kerf;
+  w.sag = Math.hypot(...sub(anchor, scale(add(seg.a, seg.b), 0.5)));
   w.rimScale = calibre.lip;
   w.severRadius = 0;
   w.wetLip = 1;
@@ -197,8 +206,9 @@ export function stampCut(prims: Primitive[], seg: CutSeg, calibre: CutCalibre, b
 }
 
 /** The sphere list the bone-exposure consumers read (they know only craters): a crater is itself; a cut is a chain of
- *  spheres along its slot following the lens, each of radius max(2 kerf, depth x profile) and, at interior stations, pushed
- *  inward by half its radius (the slot is cut into the flesh, not on its skin). Stations are spaced by max(depth, 2 kerf). */
+ *  stations along its slot following the lens. With r = depth x profile (the reach from skin to floor), an interior station
+ *  is a sphere of radius max(2 kerf, r/2 + kerf) centred r/2 inward: it spans skin to floor and stays tight sideways. The
+ *  end stations (r = 0) sit on the skin with radius 2 kerf. Stations are spaced by max(depth, 2 kerf). */
 export function cutExposureSpheres(prims: Primitive[], w: Wound, bodyYaw: number): { pos: Vec3; radius: number }[] {
   const c = woundWorldPos(prims, w, bodyYaw);
   if (w.shape !== 'cut' || !w.cutDir) return [{ pos: c, radius: w.radius }];
@@ -209,9 +219,10 @@ export function cutExposureSpheres(prims: Primitive[], w: Wound, bodyYaw: number
   const out: { pos: Vec3; radius: number }[] = [];
   for (let i = 0; i <= n; i++) {
     const t = -1 + (2 * i) / n;
-    const radius = Math.max(2 * kerf, depth * (1 - t * t));
+    const r = depth * (1 - t * t);
+    const radius = Math.max(2 * kerf, r / 2 + kerf);
     let pos = add(c, scale(along, t * w.radius));
-    if (inward && i > 0 && i < n) pos = add(pos, scale(inward, radius / 2));
+    if (inward && i > 0 && i < n) pos = add(pos, scale(inward, r / 2));
     out.push({ pos, radius });
   }
   return out;

@@ -90,6 +90,9 @@ export interface Wound {
   shape?: 'cut';
   cutDir?: Vec3;
   kerf?: number;
+  /** CUT: how far the chord midpoint sits below the anchor (`local`): the skin's fall-off over the cut; 0 for a straight cut.
+   *  The slot's floor is measured from the anchor plane shifted inward by this, so it can never open the far skin. */
+  sag?: number;
   /**
    * SEVERING IS A DAMAGE DECISION, NOT A CRATER SIDE-EFFECT. When set, this
    * is the radius connectivity's carve-union test (cutLimbs/cutChains) uses

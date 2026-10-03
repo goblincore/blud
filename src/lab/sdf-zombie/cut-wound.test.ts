@@ -15,38 +15,119 @@ const field = (p: Vec3) => sdBody(p, body);
 const mid: Vec3 = [0, 1.25, 0.15];
 const along: Vec3 = [0, 1, 0], inward: Vec3 = [0, 0, -1];
 
+// The WGSL-shaped call: a stamped cut on the real fixture body, carve evaluated with dIn = the pre-wound field at p.
+const slotOf = (w: ReturnType<typeof stampCut>) => ({
+  mid: woundWorldPos(prims, w, 0),
+  along: woundDirToWorld(prims, w, w.cutDir!, 0),
+  inward: woundDirToWorld(prims, w, w.carveN!, 0),
+  depth: w.carveDepth!, kerf: w.kerf!, sag: w.sag!, halfLen: w.radius,
+});
+const carveAt = (k: ReturnType<typeof slotOf>, p: Vec3) =>
+  cutCarve(p, k.mid, k.halfLen, k.along, k.inward, k.depth, k.kerf, field(p), k.sag);
+const slotPoint = (k: ReturnType<typeof slotOf>, a: number, s: number, u: number): Vec3 => {
+  const side = [k.along[1] * k.inward[2] - k.along[2] * k.inward[1], k.along[2] * k.inward[0] - k.along[0] * k.inward[2], k.along[0] * k.inward[1] - k.along[1] * k.inward[0]];
+  return [0, 1, 2].map(i => k.mid[i]! + k.along[i]! * a + k.inward[i]! * s + side[i]! * u) as unknown as Vec3;
+};
+const torsoCut = (half: number, around: boolean, cal = ROD_CALIBRE) => {
+  const z = Math.sqrt(0.15 * 0.15 - half * half);
+  return stampCut(prims, around
+    ? { a: [-half, 1.25, z], b: [half, 1.25, z], view: [0, 0, -1] }
+    : { a: [0, 1.25 - half, 0.15], b: [0, 1.25 + half, 0.15], view: [0, 0, -1] }, cal, 0, field);
+};
+
 describe('cutCarve (the CPU mirror of the WGSL slot)', () => {
-  const at = (a: number, s: number, u: number): Vec3 => [u, mid[1] + a, mid[2] - s];
+  // Flat-skin stand-in: dIn = -(depth below the plane through mid), sag 0.
+  const flat = (a: number, s: number, u: number, depth = 0.06, h = 0.1) => {
+    const p: Vec3 = [u, mid[1] + a, mid[2] - s];
+    return cutCarve(p, mid, h, along, inward, depth, 0.01, -s, 0);
+  };
   it('is inside (positive) along the slot centre down to most of its depth, at the middle', () => {
-    expect(cutCarve(at(0, 0.03, 0), mid, 0.1, along, inward, 0.06, 0.01)).toBeGreaterThan(0);
+    expect(flat(0, 0.03, 0)).toBeGreaterThan(0);
   });
   it('is outside past the kerf, past the floor and past the ends', () => {
-    expect(cutCarve(at(0, 0.01, 0.02), mid, 0.1, along, inward, 0.06, 0.01)).toBeLessThan(0);
-    expect(cutCarve(at(0, 0.07, 0), mid, 0.1, along, inward, 0.06, 0.01)).toBeLessThan(0);
-    expect(cutCarve(at(0.11, 0.0, 0), mid, 0.1, along, inward, 0.06, 0.01)).toBeLessThan(0);
+    expect(flat(0, 0.01, 0.02)).toBeLessThan(0);
+    expect(flat(0, 0.07, 0)).toBeLessThan(0);
+    expect(flat(0.11, 0.0, 0)).toBeLessThan(0);
   });
   it('is a lens: deepest at the middle, shallow near the ends', () => {
-    expect(cutCarve(at(0, 0.05, 0), mid, 0.1, along, inward, 0.06, 0.01)).toBeGreaterThan(0);
-    expect(cutCarve(at(0.09, 0.05, 0), mid, 0.1, along, inward, 0.06, 0.01)).toBeLessThan(0);
+    expect(flat(0, 0.05, 0)).toBeGreaterThan(0);
+    expect(flat(0.09, 0.05, 0)).toBeLessThan(0);
   });
   it('the walls close into a V: wider at the skin than near the floor', () => {
-    expect(cutCarve(at(0, 0.005, 0.007), mid, 0.1, along, inward, 0.06, 0.01)).toBeGreaterThan(0);
-    expect(cutCarve(at(0, 0.05, 0.007), mid, 0.1, along, inward, 0.06, 0.01)).toBeLessThan(0);
+    expect(flat(0, 0.005, 0.007)).toBeGreaterThan(0);
+    expect(flat(0, 0.05, 0.007)).toBeLessThan(0);
+  });
+  it('clamps depth to maxDepthPerHalfLen x halfLen', () => {
+    expect(flat(0, 0.03, 0, 0.06, 0.015)).toBeLessThan(0);   // floor at 1.4 x 0.015 = 0.021
+    expect(flat(0, 0.015, 0, 0.06, 0.015)).toBeGreaterThan(0);
   });
 });
 
-describe('cutCarve: Lipschitz bound and the skin-following depth', () => {
-  // Max |grad| of the carve term by one-sided finite differences over a dense grid around the slot.
-  const maxGrad = (halfLen: number, depth: number, kerf: number): number => {
-    const f = (a: number, s: number, u: number) => cutCarve([u, mid[1] + a, mid[2] - s], mid, halfLen, along, inward, depth, kerf);
-    const h = 2e-4, step = 0.001;
+describe('cut depth is bounded by the slot\'s own plane (sag), never the far skin', () => {
+  const farSide = (k: ReturnType<typeof slotOf>) => {
+    let carved = 0, beyond = 0;
+    for (let a = -k.halfLen - 0.01; a <= k.halfLen + 0.01; a += 0.002) {
+      for (let s = -0.02; s <= 0.2; s += 0.002) {
+        for (let u = -0.03; u <= 0.03; u += 0.002) {
+          if (carveAt(k, slotPoint(k, a, s, u)) > 0) { carved++; if (s > k.depth + k.sag + 1e-9) beyond++; }
+        }
+      }
+    }
+    return { carved, beyond };
+  };
+  it('a cut along the arm (0.1 m across) carves nothing past depth + sag, and the far skin stays', () => {
+    const w = stampCut(prims, { a: [0.4, 1.15, 0.05], b: [0.4, 1.35, 0.05], view: [0, 0, -1] }, ROD_CALIBRE, 0, field);
+    expect(w.primIdx).toBe(1);
+    const k = slotOf(w);
+    const r = farSide(k);
+    console.log(`far-side arm: carved ${r.carved}, beyond ${r.beyond}, sag ${k.sag}`);
+    expect(r.carved).toBeGreaterThan(0);
+    expect(r.beyond).toBe(0);
+    for (const y of [1.2, 1.25, 1.3]) expect(carveAt(k, [0.4, y, -0.05])).toBeLessThan(0);   // the arm's far skin
+  });
+  it('a cut around the torso carves nothing past depth + sag', () => {
+    const k = slotOf(torsoCut(0.1, true));
+    const r = farSide(k);
+    console.log(`far-side torso: carved ${r.carved}, beyond ${r.beyond}, sag ${k.sag}`);
+    expect(k.sag).toBeGreaterThan(0.03);
+    expect(r.carved).toBeGreaterThan(0);
+    expect(r.beyond).toBe(0);
+  });
+  it('the slot follows curvature: a 0.2 m cut around the torso reaches ~0.02 below the real skin at a/h = 0.85', () => {
+    const k = slotOf(torsoCut(0.1, true));
+    const a = 0.85 * k.halfLen;
+    let reach = 0;
+    for (let s = -0.02; s <= 0.1; s += 0.0005) {
+      const p = slotPoint(k, a, s, 0);
+      if (carveAt(k, p) > 0 && field(p) <= 0) reach = Math.max(reach, -field(p));
+    }
+    // the same, measured along the inward axis from the real skin
+    let skinS = 0;
+    for (let s = -0.02; s <= 0.1; s += 0.0001) { if (field(slotPoint(k, a, s, 0)) <= 0) { skinS = s; break; } }
+    let floorS = skinS;
+    for (let s = skinS; s <= 0.1; s += 0.0001) { if (carveAt(k, slotPoint(k, a, s, 0)) > 0) floorS = s; }
+    console.log(`curvature reach along axis ${(floorS - skinS).toFixed(4)} (field-depth ${reach.toFixed(4)})`);
+    expect(floorS - skinS).toBeGreaterThan(0.015);
+    expect(floorS - skinS).toBeLessThan(0.03);
+  });
+});
+
+describe('cutCarve: Lipschitz bound (WGSL-shaped call on the curved fixture)', () => {
+  // Max |grad| of the carve term, field gradient included (dIn comes from sdBody at each point).
+  const maxGrad = (k: ReturnType<typeof slotOf>, step: number): number => {
+    const f = (p: Vec3) => carveAt(k, p);
+    const h = 2e-4;
     let m = 0;
-    for (let a = -halfLen - 0.02; a <= halfLen + 0.02; a += step) {
-      for (let s = -0.02; s <= depth + 0.02; s += step) {
-        for (let u = -0.03; u <= 0.03; u += step) {
-          const f0 = f(a, s, u);
+    for (let a = -k.halfLen - 0.02; a <= k.halfLen + 0.02; a += step) {
+      for (let s = -0.02; s <= k.depth + k.sag + 0.02; s += step) {
+        for (let u = -0.025; u <= 0.025; u += 0.001) {
+          const p = slotPoint(k, a, s, u);
+          const f0 = f(p);
           for (const sg of [1, -1]) {
-            const g = Math.hypot((f(a + sg * h, s, u) - f0) / h, (f(a, s + sg * h, u) - f0) / h, (f(a, s, u + sg * h) - f0) / h);
+            const g = Math.hypot(
+              (f(slotPoint(k, a + sg * h, s, u)) - f0) / h,
+              (f(slotPoint(k, a, s + sg * h, u)) - f0) / h,
+              (f(slotPoint(k, a, s, u + sg * h)) - f0) / h);
             if (g > m) m = g;
           }
         }
@@ -54,20 +135,23 @@ describe('cutCarve: Lipschitz bound and the skin-following depth', () => {
     }
     return m;
   };
-  for (const [h, name] of [[0.1, 'long'], [0.05, 'medium'], [0.015, 'short']] as const) {
-    it(`max |grad| <= 2.2 for a ${name} slot (halfLen ${h}, depth 0.06, kerf 0.01)`, () => {
-      const m = maxGrad(h, 0.06, 0.01);
-      console.log(`lipschitz halfLen=${h}: ${m.toFixed(3)}`);
-      expect(m).toBeLessThanOrEqual(2.2);
-    });
-  }
-  it('with `below` passed, depth follows the real skin, not the straight inward axis', () => {
-    // At |a|/h = 0.7 the slot is shallow (prof 0.51, floor 0.031). A point 0.03 below the real (curved-away) skin but
-    // 0.045 along the inward axis: outside by s alone, inside by `below`.
-    const p: Vec3 = [0, mid[1] + 0.07, mid[2] - 0.045];
-    expect(cutCarve(p, mid, 0.1, along, inward, 0.06, 0.01)).toBeLessThan(0);
-    expect(cutCarve(p, mid, 0.1, along, inward, 0.06, 0.01, 0, 0.03)).toBeGreaterThan(0);
-  });
+  it('max |grad| <= 2.2 over halfLen x depth x kerf (straight along the torso, and around it)', () => {
+    let worst = 0, worstAt = '';
+    for (const h of [0.015, 0.05, 0.1, 0.175]) {
+      for (const depth of [0.03, 0.06, 0.15]) {
+        for (const kerf of [0.006, 0.01, 0.015]) {
+          const cal = { depth, kerf, lip: 1 };
+          const kinds = h <= 0.1 ? [false, true] : [false];
+          for (const around of kinds) {
+            const m = maxGrad(slotOf(torsoCut(h, around, cal)), 0.0025);
+            if (m > worst) { worst = m; worstAt = `h ${h} depth ${depth} kerf ${kerf} ${around ? 'around' : 'along'}`; }
+          }
+        }
+      }
+    }
+    console.log(`lipschitz max ${worst.toFixed(3)} at ${worstAt}`);
+    expect(worst).toBeLessThanOrEqual(2.2);
+  }, 600000);
 });
 
 describe('cutsFromSweep', () => {
@@ -133,11 +217,11 @@ describe('stampCut', () => {
     expect(w.kerf).toBe(ROD_CALIBRE.kerf);
     expect(w.rimScale).toBe(ROD_CALIBRE.lip);
   });
-  it('depth comes from the flesh and obeys the depth/length clamp: a 0.12 m cut gets the full calibre depth, a 0.03 m cut 1.6 x its half-length', () => {
+  it('depth comes from the flesh and obeys the depth/length clamp: a 0.12 m cut gets the full calibre depth, a 0.03 m cut 1.4 x its half-length', () => {
     const cut = (half: number) => stampCut(prims, { a: [0, 1.25 - half, 0.15], b: [0, 1.25 + half, 0.15], view: [0, 0, -1] }, ROD_CALIBRE, 0, field);
     expect(cut(0.06).carveDepth).toBe(ROD_CALIBRE.depth);
     expect(cut(0.015).carveDepth).toBeCloseTo(CUT_SHADE.maxDepthPerHalfLen * 0.015, 9);
-    expect(cut(0.015).carveDepth).toBeCloseTo(0.024, 9);
+    expect(cut(0.015).carveDepth).toBeCloseTo(0.021, 9);
   });
   it('a slash across the arm silhouette (chord midpoint on its axis) anchors on the skin facing the viewer', () => {
     const g = stampCut(prims, { a: [0.35, 1.25, 0], b: [0.45, 1.25, 0], view: [0, 0, -1] }, ROD_CALIBRE, 0, field);
@@ -163,8 +247,9 @@ describe('cutExposureSpheres (for the sphere-only bone exposure)', () => {
     // radius follows the lens, centres sit inward at interior points (z < the skin's 0.15)
     const mids = s.filter(x => Math.abs(x.pos[1] - 1.25) < 0.01);
     expect(mids.length).toBeGreaterThan(0);
-    expect(mids[0]!.radius).toBeCloseTo(ROD_CALIBRE.depth, 3);
-    expect(mids[0]!.pos[2]).toBeLessThan(0.15 - 0.02);
+    // r = depth x profile = 0.06 at the middle: radius max(2 kerf, r/2 + kerf) = 0.04, centred r/2 = 0.03 inward
+    expect(mids[0]!.radius).toBeCloseTo(ROD_CALIBRE.depth / 2 + ROD_CALIBRE.kerf, 3);
+    expect(mids[0]!.pos[2]).toBeCloseTo(0.15 - ROD_CALIBRE.depth / 2, 3);
     expect(s[0]!.radius).toBeCloseTo(2 * ROD_CALIBRE.kerf, 6);
     const crater = { primIdx: 0, local: w.local, radius: 0.05, type: 'pellet' as const, ageSec: 0, axis0: w.axis0 };
     expect(cutExposureSpheres(prims, crater, 0)).toEqual([{ pos: woundWorldPos(prims, crater, 0), radius: 0.05 }]);
