@@ -2,6 +2,13 @@
 
 Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Cut wounds and the head split — designed 2026-10-03
+
+- [ ] **Cut wounds (axe / sword / chainsaw base) and a head that splits into two hinged halves.** Craters cannot make deep
+  jagged cuts (owner, 2026-10-03). M1: a cut wound shape (blade slot, jagged walls, lips) + a rod stand-in weapon; M2: the head
+  split (authored presets, a `mapBody` warp, CPU mirror, skull mesh); M3: tuning. Spec approved, plan next:
+  [spec](../../docs/superpowers/specs/2026-10-03-cut-wounds-design.md).
+
 ## Slug head burst — designed 2026-10-02
 
 - [~] **Slug on the head: lethal burst (dead-centre) and glancing rupture (off-centre). Built 2026-10-02; owner playtest
