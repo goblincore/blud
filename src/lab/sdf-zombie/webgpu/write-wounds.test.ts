@@ -127,9 +127,22 @@ describe('cut wounds (flag 32, ROW_WOUND_CUT)', () => {
   it('a crater leaves ROW_WOUND_CUT untouched and has no bit 32', () => {
     const stride = 128;
     const texels = new Float32Array(DATA_ROWS * stride * 4);
+    const cutBase = ROW_WOUND_CUT * stride * 4;
+    texels.fill(-7, cutBase, cutBase + 4);   // sentinel: a crater must not touch the cut row
     writeWounds(texels, [[0, 1, 0]], [0.05], [0], [0], undefined, undefined, { stride });
     expect(Math.floor(texels[ROW_WOUND_FLAGS * stride * 4]!) & 32).toBe(0);
-    expect(texels[ROW_WOUND_CUT * stride * 4 + 3]).toBe(0);
+    expect([...texels.subarray(cutBase, cutBase + 4)]).toEqual([-7, -7, -7, -7]);
+  });
+  it('a crater reusing a cut slot clears bit 32 (the cut row is left stale, readers gate on the bit)', () => {
+    const stride = 128;
+    const texels = new Float32Array(DATA_ROWS * stride * 4);
+    const cutBase = ROW_WOUND_CUT * stride * 4;
+    writeWounds(texels, [[0, 1, 0]], [0.1], [0], [0], [1], [1], { stride }, undefined,
+      undefined, undefined, undefined, undefined, undefined, undefined, [true], [{ dir: [0, 1, 0], kerf: 0.01 }]);
+    expect(Math.floor(texels[ROW_WOUND_FLAGS * stride * 4]!) & 32).toBe(32);
+    writeWounds(texels, [[0, 1, 0]], [0.05], [0], [0], undefined, undefined, { stride });
+    expect(Math.floor(texels[ROW_WOUND_FLAGS * stride * 4]!) & 32).toBe(0);
+    expect([...texels.subarray(cutBase, cutBase + 4)]).toEqual([0, 1, 0, Math.fround(0.01)]);
   });
   it('a cut keeps its sag in ROW_WOUND_META.w (offsetScales slot), and honours a custom cutRow', () => {
     const stride = 64;

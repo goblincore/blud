@@ -43,9 +43,9 @@ export interface CrowdPrimAtlas {
    *
    *  Fire/gib fix (2026-09-14): slots are allocated lowest-first, so the bands
    *  written each frame are almost always a prefix [0, hi]. Uploading that
-   *  prefix is ONE queue write of (hi+1) * DATA_ROWS rows — 22 rows / ~45 KB
-   *  for one body — instead of re-sending the full 128 x 22 x 64 RGBA32F atlas
-   *  (~2.9 MB) per type per frame. Under fire/gib the full upload stalled
+   *  prefix is ONE queue write of (hi+1) * DATA_ROWS rows — 26 rows / ~52 KiB
+   *  for one body — instead of re-sending the full 128 x 26 x 64 RGBA32F atlas
+   *  (~3.25 MiB) per type per frame. Under fire/gib the full upload stalled
    *  behind the busy GPU and cost 30-50 ms of draw submit in room 2, and it
    *  also inflated sdf:march (the upload serialises ahead of the pass).
    *  Bands above `maxBand` are not drawn this frame, so their CPU data waits

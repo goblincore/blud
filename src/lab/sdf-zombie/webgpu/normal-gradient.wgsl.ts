@@ -278,6 +278,8 @@ export const NG_WOUND_LIP = /* wgsl */ `fn ngWoundLip(base: f32, r: f32, rim: ve
   return radialLip * mMax + bumpMax * gateLip;
 }`;
 
+// NOTE (cut wounds): wMeta.w feeds the crater rim offset below, but for bit-32 (cut) wounds it holds the cut's sag and must not
+// be read as an offset scale for them (the finite-difference cut fallback skips this rim).
 export const NG_WOUNDS = /* wgsl */ `fn ngWounds(base: vec4<f32>, p: vec3<f32>, data: texture_2d<f32>, cfg: vec4<f32>, cfg2: vec4<f32>, perf: vec4<f32>, bound: vec4<f32>) -> vec4<f32> {
   gNgLip = 1.0;
   gNgNear = 0.0;

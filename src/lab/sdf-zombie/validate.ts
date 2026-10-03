@@ -17,12 +17,12 @@ import { add, bendCtrl, cross, dot, len, lerp, normalize, qMul, qNormalize, qRot
  * Why per-body and not one global width: the WGSL reads the texture by
  * (column, row) and every fold breaks on the LIVE count, so the GPU never
  * sees the width. What does scale with it is CPU-side and per texture: the
- * crowd atlas (MAX_CROWD_INSTANCES = 64 bands per character type, ~3.1 MiB
+ * crowd atlas (MAX_CROWD_INSTANCES = 64 bands per character type, ~3.25 MiB
  * GPU + the same again as its CPU mirror at 128 wide), its per-frame prefix
- * upload (~51 KB per drawn body at 128), and every flying gib chunk, which
+ * upload (~52 KiB per drawn body at 128), and every flying gib chunk, which
  * re-uploads its whole texture each frame it moves. A global 256 doubled all
  * of that for a cast that averages well under 128. A crowd type is sized from
- * the first body attached to it; a 256-wide type costs ~6.25 MiB + mirror.
+ * the first body attached to it; a 256-wide type costs ~6.5 MiB + mirror.
  *
  * The real per-body wall for dense characters is usually MAX_CLUSTER_PRIMS
  * (64 per limb cluster — hair and a face both land in `head`), not this.

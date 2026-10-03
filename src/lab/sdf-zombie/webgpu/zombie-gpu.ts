@@ -98,7 +98,8 @@ export interface ZombieGpuView {
    */
   update(body: BuildResult, rest?: BuildResult): void;
   /** Uploads wounds already transformed to world space by the caller.
-   *  splay/offsetScales are the per-wound rim multipliers (WOUND_PROFILES);
+   *  splay/offsetScales are the per-wound rim multipliers (WOUND_PROFILES); for a cut wound
+   *  (see `cuts`) the offsetScales entry is its sag, not a rim scale;
    *  omitted, they default to 1 — chunk torn ends pass nothing and get 1s.
    *  caps are the per-wound depth-slab (inward normal + max depth); omitted
    *  = uncapped spheres (the lab — its look is pinned; old wounds). */
@@ -2079,7 +2080,7 @@ export function createDataTexture(stride = BASE_PRIM_STRIDE) {
 /**
  * Writes the wound rows. Shared by the body and by a chunk's torn end, which
  * is itself just a single blast wound parked where the limb came away.
- * meta texel = (type, age, rimSplayScale, rimOffsetScale); the scale slots
+ * meta texel = (type, age, rimSplayScale, rimOffsetScale; a CUT wound (flag 32) carries its sag in .w instead); the scale slots
  * default to 1 so callers that pass nothing (chunk torn ends) keep the global
  * woundCfg rim settings unchanged.
  * Exported for the hands view, which owns its own (splash-wound) ring, and for
@@ -2154,7 +2155,8 @@ export function writeWounds(
    *  and the analytic normal ignore the bit. Omitted = none. */
   wetLips?: readonly boolean[],
   /** Per-wound CUT data (cut-wound.ts): ROW_WOUND_CUT = (along unit, kerf) and flags bit 5 (value 32).
-   *  Omitted or null per wound = a crater. */
+   *  Omitted or null per wound = a crater. Rows for non-cut slots are left at whatever they held,
+   *  so readers MUST gate on flags bit 32 before reading ROW_WOUND_CUT or META.w as a sag. */
   cuts?: readonly ({ dir: Vec3; kerf: number } | null)[],
 ): number {
   const stride = layout.stride ?? BASE_PRIM_STRIDE;

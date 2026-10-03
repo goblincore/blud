@@ -24,6 +24,8 @@ export const CUT = {
   maxDepth: 0.15,
   /** A cut may reach this share of the flesh measured behind its midpoint. */
   thickFrac: 0.8,
+  /** Half-width at the skin (m) when a cut wound carries no kerf of its own. */
+  defaultKerf: 0.01,
 } as const;
 
 /** The WGSL slot's look constants (interpolated into fields/wounds.wgsl.ts like torn-lips.ts's TORN). */
@@ -216,7 +218,7 @@ export function cutExposureSpheres(prims: Primitive[], w: Wound, bodyYaw: number
   if (w.shape !== 'cut' || !w.cutDir) return [{ pos: c, radius: w.radius }];
   const along = unit(woundDirToWorld(prims, w, w.cutDir, bodyYaw));
   const inward = w.carveN ? unit(woundDirToWorld(prims, w, w.carveN, bodyYaw)) : null;
-  const depth = w.carveDepth ?? 0.03, kerf = w.kerf ?? 0.01;
+  const depth = w.carveDepth ?? 0.03, kerf = w.kerf ?? CUT.defaultKerf;
   const n = Math.max(2, Math.ceil((2 * w.radius) / Math.max(depth, 2 * kerf)));
   const out: { pos: Vec3; radius: number }[] = [];
   for (let i = 0; i <= n; i++) {

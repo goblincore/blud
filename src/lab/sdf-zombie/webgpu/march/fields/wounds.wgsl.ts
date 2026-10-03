@@ -58,6 +58,8 @@ const TORN_LOBE = (n: string) => `mix(${n}, noise3(q * ${f(TORN_OCTAVE_FREQ)} + 
 // and hands views keep). A sample outside it is outside EVERY per-wound reach
 // sphere, so every loop iteration would hit the early-out `continue` — the
 // early return is bit-identical to running the loop: d unchanged, near 0.
+// NOTE (cut wounds): ROW_WOUND_META.w is the crater rim offset scale below, but for bit-32 (cut) wounds it holds the cut's sag and must
+// not be read as an offset scale for them (the cut branch skips this rim code).
 export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, perfCfg: vec4<f32>, woundBound: vec4<f32>, band: i32) -> vec2<f32> {
   var d = dIn;
   var near = 0.0;

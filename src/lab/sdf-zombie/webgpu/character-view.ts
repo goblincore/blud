@@ -47,6 +47,7 @@ import { loadHeldProp, type HeldProp } from './held-prop';
 import { applyKitBeam } from './kit-lights';
 import { createArmorSparks, createMuzzleFlash } from './character-effects';
 import { createEjectionCycle, createShotgunCasings } from './shotgun-casings';
+import { CUT } from '../cut-wound';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
 import {
   MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundDirToWorld, woundWorldPos,
@@ -426,14 +427,17 @@ export function createWoundRing(): WoundRing {
       // Torn wounds (Wound.tear, torn-lips.ts): a raised ragged fraction, a taller lip pushed
       // outward, and flags bit 3. tear absent/0 = the stock values exactly.
       const torn = rows.map(w => tearUpload(w.tear, w.ragged));
+      // One cut condition for every cut upload: META.w sag, ROW_WOUND_CUT and flag bit 32 must agree.
+      const isCut = rows.map(w => w.shape === 'cut' && !!w.cutDir);
       gpu.setWounds(
         rows.map(w => map(woundWorldPos(posed.prims, w, bodyYaw), w, false)),
         rows.map(w => w.radius),
         rows.map((w, i) => 'presetCut' in w && w.presetCut ? -1 : TYPE_ID[w.type] + Math.min(0.45, Math.max(0, torn[i]!.torn ? torn[i]!.ragged : w.ragged ?? 0))),
         rows.map(w => w.ageSec),
         rows.map((w, i) => WOUND_PROFILES[w.type].rimSplayScale * (w.rimScale ?? 1) * torn[i]!.splayMul),
-        // META.w: a cut carries its sag (cut-wound.ts); the crater rim code that reads it as an offset scale skips cuts.
-        rows.map((w, i) => w.shape === 'cut' ? (w.sag ?? 0) : WOUND_PROFILES[w.type].rimOffsetScale * torn[i]!.offsetMul),
+        // META.w: the crater rim code reads it as an offset scale; cut wounds (flag 32) carry their sag there,
+        // which requires Task 5's cut branch to skip the rim for them.
+        rows.map((w, i) => isCut[i] ? (w.sag ?? 0) : WOUND_PROFILES[w.type].rimOffsetScale * torn[i]!.offsetMul),
         rows.map(w => {
           const n = woundCarveNormal(posed.prims, w, bodyYaw);
           // The preview repacks slots as its second cutter appears. Clear
@@ -458,8 +462,8 @@ export function createWoundRing(): WoundRing {
         // Gun wounds' wet red lip (flags bit 4, torn-lips.ts): shading only, never on cloth.
         rows.map(w => wetLipUpload(w)),
         // CUT WOUNDS (cut-wound.ts): the along unit rides the same transform as the cap normal.
-        rows.map(w => (w.shape === 'cut' && w.cutDir
-          ? { dir: map(woundDirToWorld(posed.prims, w, w.cutDir, bodyYaw), w, true), kerf: w.kerf ?? 0.01 }
+        rows.map((w, i) => (isCut[i]
+          ? { dir: map(woundDirToWorld(posed.prims, w, w.cutDir!, bodyYaw), w, true), kerf: w.kerf ?? CUT.defaultKerf }
           : null)),
       );
     },
