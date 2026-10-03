@@ -30,6 +30,18 @@ const expectRow = (got: number[], want: number[]) => {
 describe('writeWounds — depth-slab cap row', () => {
   const texels = () => new Float32Array(STRIDE * DATA_ROWS * 4); // zero-initialised
 
+  it('a cut with a null cap zeroes a stale CAP texel (reused slot), so no inward axis survives', () => {
+    const t = texels();
+    writeWounds(t, [[1, 2, 3]], [0.16], [2], [0.5], [0.45], [0.85], { stride: STRIDE },
+      [{ n: [0, 1, 0], depth: 0.056 }]);
+    expectRow(read(t, ROW_WOUND_CAP, 0), [0, 1, 0, 0.056]);
+    writeWounds(t, [[1, 2, 3]], [0.16], [2], [0.5], [0.45], [0.85], { stride: STRIDE },
+      [null], undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+      [{ dir: [1, 0, 0], kerf: 0.01 }]);
+    expectRow(read(t, ROW_WOUND_CAP, 0), [0, 0, 0, 0]);
+    expectRow(read(t, ROW_WOUND_CUT, 0), [1, 0, 0, 0.01]);
+  });
+
   it('writes the cap when given: inward normal + depth', () => {
     const t = texels();
     const n = writeWounds(

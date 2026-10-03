@@ -2186,6 +2186,14 @@ export function writeWounds(
       texels[capBase + i * 4 + 3] = cap.depth;
     }
     const cut = cuts?.[i];
+    // A cut with no cap must not inherit a stale CAP texel from a reused slot: zero means "no inward axis", which the
+    // shader's length(wCap.xyz) < 0.5 guard skips and threatMasks' cut && !cap shortcut relies on.
+    if (cut && !cap) {
+      texels[capBase + i * 4] = 0;
+      texels[capBase + i * 4 + 1] = 0;
+      texels[capBase + i * 4 + 2] = 0;
+      texels[capBase + i * 4 + 3] = 0;
+    }
     if (cut) {
       const cutBase = (layout.cutRow ?? ROW_WOUND_CUT) * stride * 4;
       texels[cutBase + i * 4] = cut.dir[0];

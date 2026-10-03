@@ -22,6 +22,8 @@ import {
 } from '../../march.wgsl';
 import { CUT_SHADE } from '../../../cut-wound';
 import { declaredName } from '../../march-test-support';
+import { WOUND_MASKS_BLOCK } from '../body/blocks/post/wound-masks.wgsl';
+import { SKIN_NORMAL } from '../body/blocks/light/skin-detail-proto';
 import { MAX_WOUNDS } from '../../../damage';
 
 describe('ported features reach the entry point', () => {
@@ -259,5 +261,14 @@ describe('cut wounds in the march', () => {
     // A row with no inward axis paints nothing: the guard comes right after the CAP load, before any frame math.
     expect(branch).toMatch(/let cCap = textureLoad\([^\n]*\n\s*(\/\/[^\n]*\n\s*)*if \(length\(cCap\.xyz\) < 0\.5\) \{ continue; \}/);
     expect(branch).toMatch(/continue;\s*}\s*$/);
+  });
+  // nrm is read by exactly one thing in woundMask: the cut branch's back-facing gate. The call site hands it the smooth
+  // normal (analytic gradient, no pore noise), which SKIN_NORMAL defines upstream of the mask block.
+  it('woundMask reads nrm only in the cut back gate, and the call passes the smooth normal', () => {
+    expect(WOUND_MASK.match(/\bnrm\b/g)).toHaveLength(2); // the parameter and the cBack dot
+    expect(WOUND_MASK).toContain('fn woundMask(p: vec3<f32>, nrm: vec3<f32>,');
+    expect(WOUND_MASKS_BLOCK).toContain('woundMask(p, nSmooth, data, woundCfg, woundCfg2)');
+    expect(WOUND_MASKS_BLOCK).not.toContain('woundMask(p, n,');
+    expect(SKIN_NORMAL).toContain('var nSmooth = n;');
   });
 });

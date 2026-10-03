@@ -5,7 +5,8 @@
 // joined WGSL is byte-identical. See docs/dev-notes/2026-09-18-march-split/.
 
 export const WOUND_MASKS_BLOCK = /* wgsl */ `  gWoundShadePrim = select(-1.0, f32(hitBest), hitBest >= 0 && hitBest < i32(gInstCounts.x));
-  let wmBoth = woundMask(p, n, data, woundCfg, woundCfg2);
+  // The cut mask's back-facing gate takes the SMOOTH normal (nSmooth, SKIN_NORMAL): pore noise in n speckled its edge.
+  let wmBoth = woundMask(p, nSmooth, data, woundCfg, woundCfg2);
   let wm = wmBoth.x;      // colouring / wet / cavity shading
   let wmRim = wmBoth.y;   // fresnel fade, covers the lip
   let wmCav = wmBoth.z;   // cavity-ness: only wounds whose flags row opened one
