@@ -602,6 +602,10 @@ export function createZombieActor(opts: {
   /** The body fired its weapon this frame. Called from step(); the wiring
    *  spawns the flash and the pellets. */
   onFire?: (shot: { origin: Vec3; direction: Vec3 }) => void;
+  /** May he shoot from `self` (his root) at `player` now? Feeds the mind's
+   *  mayFire every step (the warbull: rocketLineSafe, so he never fires into
+   *  a wall at his nose). Absent = always. */
+  fireSafe?: (self: Vec3, player: { x: number; z: number }) => boolean;
   /** Diagnostic/gameplay contact pulse; the game intentionally has no health. */
   onMeleeContact?: (event: { actorId: number; variant: SwingVariant }) => void;
   /** Receives every detached piece, already placed in world space, plus the
@@ -1186,6 +1190,13 @@ export function createZombieActor(opts: {
         player: encounterOrder ? encounterOrder.player : brainPlayer,
         alerted: encounterOrder ? encounterOrder.visible : brainAlerted,
         ...(encounterOrder ? { lineOfSight: encounterOrder.visible, mayFire: encounterOrder.fireAllowed } : {}),
+        // TRIGGER DISCIPLINE (opts.fireSafe; the warbull's rockets): no shot
+        // down a line whose blast would land on himself. ANDed onto the
+        // encounter director's permission.
+        ...(opts.fireSafe && (encounterOrder ? encounterOrder.player : brainPlayer)
+          ? { mayFire: (encounterOrder ? encounterOrder.fireAllowed : true)
+            && opts.fireSafe(state.wander.pos, (encounterOrder ? encounterOrder.player : brainPlayer)!) }
+          : {}),
         hasToken: ringToken,
         drift: ringDrift,
         ...(armor?.disarmPlate ? { disarmed: disarmedNow() } : {}),

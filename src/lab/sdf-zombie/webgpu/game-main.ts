@@ -324,7 +324,7 @@ import { awaitBakes, pickChunkObjects, registerLitChunkMaterial, type ChunkPickF
 import { playerRoomId } from './game-player-leaves';
 import { _bd, _bfA, _bfB, _muzA, _muzB, _o, boreFrameInRig, muzzleWorld, viewDirToRig } from './game-weapon-leaves';
 import { ceilingAt } from './game-world-leaves';
-import { blastPlayerDamage, spawnRocket, stepRockets, ROCKET } from '../rockets';
+import { blastPlayerDamage, rocketLineSafe, spawnRocket, stepRockets, ROCKET } from '../rockets';
 import { BUNDLE_BODY_RADIUS_M, EXPLOSION_LIGHT, EXPLOSION_LIGHTS, _propPos, bundleHitsBody, explosionLightEnv, igniteExplosionLight, propWorld } from './game-dynamite-leaves';
 import { BUNDLE_HOLD, BURST_SLOTS, spawnBurstStandIn, stepWeaponSlots } from './game-weapon-leaves';
 import { TRAIL_STREAM_BASE, trailStreamId } from './game-vfx-leaves';
@@ -3579,6 +3579,25 @@ async function main() {
           else ctx.weapon.soldierPellets.push(...spawnPellets(muz, shotDir, 1, seedFromUnit(rngStreams.misc())));
         },
       } : {}),
+      // A ROCKET gunner's trigger discipline (rockets.ts rocketLineSafe): no
+      // shot while the first wall along his line to the player's chest, or
+      // the player, is inside the blast's reach. Walks the line in 0.25 m
+      // steps against the level's colliders from his muzzle height.
+      ...(characterEntry(name).profile.gunner?.weapon === 'rocket' ? {
+        fireSafe: (self: Vec3, pl: { x: number; z: number }) => {
+          const from: Vec3 = [self[0], 1.7, self[2]];
+          const to: Vec3 = [pl.x, ctx.player.player.pos[1] + SMG_TARGET_CHEST_Y, pl.z];
+          const dist = Math.hypot(to[0] - from[0], to[1] - from[1], to[2] - from[2]);
+          let obstacle = Infinity;
+          const n = Math.max(1, Math.ceil(dist / 0.25));
+          for (let i = 0; i < n && obstacle === Infinity; i++) {
+            const a: Vec3 = [from[0] + (to[0] - from[0]) * i / n, from[1] + (to[1] - from[1]) * i / n, from[2] + (to[2] - from[2]) * i / n];
+            const b: Vec3 = [from[0] + (to[0] - from[0]) * (i + 1) / n, from[1] + (to[1] - from[1]) * (i + 1) / n, from[2] + (to[2] - from[2]) * (i + 1) / n];
+            if (ctx.world.colliders.some(box => segmentHitsBox(a, b, box))) obstacle = dist * i / n;
+          }
+          return rocketLineSafe(Math.hypot(pl.x - self[0], pl.z - self[2]), obstacle);
+        },
+      } : {}),
       profile: characterEntry(name).profile,
       seed: 1337 + ctx.boot.nextId * 101,
       bounds: wanderBounds(room),
@@ -5748,7 +5767,9 @@ async function main() {
   mark('detonation-start');
   ctx.dynamite.blastProfile = newBlastProfile(ctx);
 
-  function detonateAt(at: Vec3, inHand = false): void {
+  /** `rocket`: a warbull rocket (rockets.ts), not a bundle: bodies take a
+   *  blast ROCKET.blastRadiusScale the size, and the firer none of it. */
+  function detonateAt(at: Vec3, inHand = false, rocket?: { owner: number }): void {
     const t0 = performance.now();
     ctx.dynamite.gibTierLog = [];
     const prof = newBlastProfile(ctx);
@@ -5758,9 +5779,9 @@ async function main() {
     EXPLOSION_PROFILE.bodiesPruned = 0; EXPLOSION_PROFILE.prunedPrims = 0;
     EXPLOSION_PROFILE.traces = 0;
     ctx.dynamite.detonations++;
-    const bodies: ExplosionBody[] = ctx.world.actors.map(a => ({
-      id: String(a.id), body: a.posed(), bodyYaw: a.pose().yaw,
-    }));
+    const bodies: ExplosionBody[] = ctx.world.actors
+      .filter(a => !rocket || a.id !== rocket.owner)
+      .map(a => ({ id: String(a.id), body: a.posed(), bodyYaw: a.pose().yaw }));
     const tResolve = performance.now();
     const fx = resolveExplosion(at, bodies, {
       eye: eyeOf(ctx.player.player),
@@ -5773,7 +5794,7 @@ async function main() {
       // THE FOCUS KNOBS, live from the panel. Both are the resolver's own
       // options and both default to the reference (scale 1, floor 0.45), so a
       // page that never touches them resolves exactly as before.
-      radiusScale: ctx.vfx.aoeRadiusScale,
+      radiusScale: ctx.vfx.aoeRadiusScale * (rocket ? ROCKET.blastRadiusScale : 1),
       launchFloor: ctx.vfx.aoeLaunchFloor,
       // The hand-splash flourish only makes sense for an in-hand detonation:
       // the resolver measures the FPV hands, and this page's hands are meshes
@@ -7963,7 +7984,7 @@ async function main() {
         ctx.weapon.rockets = stepped.live;
         for (const d of stepped.detonations) {
           ctx.telemetry.telemetry.event('rocket-detonate', { cause: d.cause, owner: d.owner, x: d.at[0], y: d.at[1], z: d.at[2] });
-          detonateAt(d.at);
+          detonateAt(d.at, false, { owner: d.owner });
           const hurt = blastPlayerDamage(Math.hypot(pp[0] - d.at[0], pp[1] + PLAYER.height * 0.5 - d.at[1], pp[2] - d.at[2]));
           if (hurt > 0) damagePlayer(ctx, hurt, 'blast');
         }

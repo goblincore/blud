@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ROCKET, blastFalloff, blastPlayerDamage, spawnRocket, stepRockets, type RocketWorld } from './rockets';
+import { ROCKET, blastFalloff, blastPlayerDamage, rocketLineSafe, spawnRocket, stepRockets, type RocketWorld } from './rockets';
 import type { Vec3 } from './types';
 
 const open: RocketWorld = { hitsWorld: () => false, hitsPlayer: () => false, hitsActor: () => false };
@@ -67,5 +67,19 @@ describe('rockets', () => {
     // volley's three must land.
     expect(blastPlayerDamage(0)).toBeLessThan(100);
     expect(blastPlayerDamage(0) * 3).toBeGreaterThan(100);
+  });
+
+  it('trigger discipline: never into a wall or a player inside safeDistance', () => {
+    const S = ROCKET.safeDistance;
+    expect(rocketLineSafe(8, Infinity)).toBe(true);             // clear line
+    expect(rocketLineSafe(8, 1.5)).toBe(false);                 // the doorframe at his nose
+    expect(rocketLineSafe(8, S + 0.1)).toBe(true);              // a wall far enough off
+    expect(rocketLineSafe(2.5, Infinity)).toBe(false);          // player too close: charge instead
+    expect(rocketLineSafe(6, 7)).toBe(true);                    // wall behind the player
+  });
+
+  it('the safe distance clears the rocket\'s own blast radius', () => {
+    const blastM = 4.6875 * ROCKET.blastRadiusScale;           // explosion-aoe.ts reference radius
+    expect(ROCKET.safeDistance).toBeGreaterThan(blastM + 0.5);
   });
 });
