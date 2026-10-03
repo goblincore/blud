@@ -341,6 +341,15 @@ function probeFlesh(
   return { thick, inward: dir };
 }
 
+/** The flesh behind `hit` along the owning prim's inward direction, measured up to `cap` metres (the march stops once it
+ *  reaches `cap`, so `thick >= cap` means "at least that much"). `probeFlesh`'s result, unchanged: `inward` is null when
+ *  `hit` sits on the prim's axis. Cut wounds size their depth from this, not from a crater's probe cap. */
+export function fleshBehind(
+  field: (p: Vec3) => number, hit: Vec3, prim: Primitive, cap: number,
+): { thick: number; inward: Vec3 | null } {
+  return probeFlesh(field, hit, prim, cap);
+}
+
 /**
  * THE LIP IS PEELED MATERIAL, NOT CONJURED (cyclops, 2026-08-23). The rim
  * in applyWounds is a Gaussian shell gated by distance to the ORIGINAL skin,
