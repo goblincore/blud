@@ -672,20 +672,30 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     const field = (q: Vec3) => sdBody(q, posed);
     const h = headOf(a);
     const v = classifyBurst({ point, dir }, frame);
-    const plan = burstPlan(v, h.rand);
     // A centred slug OPENS the head (exit crater, heavy debris, splay) either way; it only KILLS while burstTuning.lethal
     // is on. Off (for now, owner 2026-10-03): the head splits open and the zombie lives.
     const opened = v.kind === 'lethal';
     const kills = opened && burstTuning.lethal;
-    const r = burstHit(h.model, { hs: hsHit, lethal: kills, step: burstTuning.repeatStep });
+    // THE OPENING FOLLOWS THE HEAD, NOT THE GRAZE. The slug leaves the muzzle ~10 cm low and right of the crosshair, so a
+    // head shot's real line skims the jaw (an unaided capture blew out the jaw and left the skull shut). A split therefore
+    // opens along the line through the head's CENTRE parallel to the shot: its entry is where that line meets the face, its
+    // exit the far side. The verdict's offset still says how centred the real shot was (debug), but the shape is centred.
+    let entryPt = point, hsB = hsHit, vc = v;
+    if (opened) {
+      const along = unit(dir);
+      const front = traceRaySurface(field, sub(frame.centre, scale(along, 0.3)), along, 0.6);
+      if (front) { entryPt = front; hsB = hsOf(frame, front); vc = classifyBurst({ point: front, dir }, frame); }
+    }
+    const plan = burstPlan(vc, h.rand);
+    const r = burstHit(h.model, { hs: hsB, lethal: kills, step: burstTuning.repeatStep });
     h.model = r.state;
-    h.burst = { kind: v.kind, outcome: kills ? 'lethal' : opened ? 'split' : 'glancing', offset: v.offset, severity: v.severity, shards: plan.shards, flaps: plan.flaps };
+    h.burst = { kind: v.kind, outcome: kills ? 'lethal' : opened ? 'split' : 'glancing', offset: v.offset, severity: vc.severity, shards: plan.shards, flaps: plan.flaps };
 
     // Deform: the jelly rupture's spring, plus a lasting dent on the entry side. (No plain wobble kick: the burst's own
     // spring is the jelly, and the two would fight along the shot axis.)
     const dirLocal = rotate(conj(frame.quat), dir);
-    h.deform = kickBurst(h.deform, v.axisLocal, v.severity, burstTuning.swell, opened ? burstTuning.splay : 0);
-    h.deform = addDent(h.deform, dirLocal, BURST_DEFORM.cave * (0.5 + 0.5 * v.severity), frame.axes);
+    h.deform = kickBurst(h.deform, vc.axisLocal, vc.severity, burstTuning.swell, opened ? burstTuning.splay : 0);
+    h.deform = addDent(h.deform, dirLocal, BURST_DEFORM.cave * (0.5 + 0.5 * vc.severity), frame.axes);
 
     const { crater } = kit(h, frame, posed, yaw, field);
     let region: SkullRegion = 'crown';
@@ -697,13 +707,13 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     }
 
     // Craters: the entry (this region's own, carved to the skull), and on a lethal burst the larger exit crater.
-    const entryR = (opened ? BURST.entryR.lethal : BURST.entryR.glancing * (0.7 + 0.3 * v.severity)) * burstTuning.craterScale;
-    const entry = crater(region, point, entryR);
+    const entryR = (opened ? BURST.entryR.lethal : BURST.entryR.glancing * (0.7 + 0.3 * vc.severity)) * burstTuning.craterScale;
+    const entry = crater(region, entryPt, entryR);
     const wounds: Wound[] = [entry];
-    let exitPt = point;
+    let exitPt = entryPt;
     let exit: Wound | null = null;
     if (opened) {
-      exitPt = surfaceToward(field, add(v.exit, scale(dir, 0.12)), frame);
+      exitPt = surfaceToward(field, add(vc.exit, scale(dir, 0.12)), frame);
       exit = crater('burst-exit', exitPt, BURST.exitR * burstTuning.craterScale, region);
       wounds.push(exit);
     }
@@ -716,7 +726,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     });
 
     // Debris from the exit side on a lethal burst, from the entry on a glancing one.
-    const base = opened ? exitPt : point;
+    const base = opened ? exitPt : entryPt;
     const outN = normalAt(field, base);
     const shardDir = opened ? dir : unit(add(outN, scale(dir, 0.3)));
     const pieces: GorePiece[] = [...skullShards(base, shardDir, plan.shards, h.rand), ...brainLumps(base, dir, h.rand).slice(0, plan.lumps)];
@@ -729,7 +739,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     throwFlesh(a, base, dir, outN, { meterCredit: 0, shove: 0, side: 'H' });
 
     // Blood: the entry gout the ordinary slug path would have made, the exit gout, and the burst along the shot.
-    deps.bleed(a, entry, point, dir, 'slug');
+    deps.bleed(a, entry, entryPt, dir, 'slug');
     if (exit) deps.bleed(a, exit, exitPt, dir, 'slug');
     deps.burst(a, base, dir);
 

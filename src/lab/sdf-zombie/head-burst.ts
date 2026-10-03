@@ -11,8 +11,11 @@ import { sdPrimitive } from './validate';
 import type { Primitive, Vec3 } from './types';
 
 export const BURST = {
-  /** Offset (fraction of head radius) under which a slug bursts the head. Tuned at playtest. */
-  centreFrac: 0.35,
+  /** Offset (fraction of head radius) under which a slug SPLITS the head (the full opening); wider is a weak glancing graze.
+   *  1.25 = every slug that hits the head splits, for now: the slug leaves the muzzle ~10 cm low and right of the crosshair,
+   *  so an aimed shot's line passes ~0.9-1.0 head radii from the centre and a 0.35 zone was never reached in play (owner
+   *  playtest 2026-10-03: "not able to trigger it"). Lower it with burstTune({ centreFrac }) to bring glancing back. */
+  centreFrac: 1.25,
   /** A hit point farther than this from the head centre in hs units (the head ellipsoid is 1) is a neck / shoulder hit. */
   maxHs: 1.35,
   /** Crater radii, m. Glancing scales by (0.7 + 0.3 · severity). */

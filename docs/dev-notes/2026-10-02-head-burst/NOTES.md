@@ -62,3 +62,16 @@ zombie ("quite creepy"). The pieces already exist: `head-flap.ts` (sprung verlet
 rim-hinged attach (one draw for all of them, riding the head through wound trackers). A real "torn flesh sheet" look needs
 flat geometry (the tubes are capsules); try prims with `orient` and a flattened `scale`, and check the chunk shader's
 brightening (head-pop's note: thrown meat is brighter than MEAT because of the dim chunk fill).
+
+## Playtest round 2 (2026-10-03): "can't see or trigger the split"
+
+Reproduced with UNAIDED aim (crosshair on the head at 0.9 / 1.5 / 2.5 / 4 m, no solved stance): the burst fired every time, but
+as a weak GLANCING graze. The slug leaves the muzzle ~10 cm low and right of the crosshair, so an aimed shot's line passes
+0.92-1.02 head radii from the centre; the 0.35 "centre" zone was only ever reached by the gate's solved aim. Fixed:
+
+- `BURST.centreFrac` 0.35 → **1.25**: every slug that hits the head SPLITS it (glancing is a tuning option:
+  `burstTune({ centreFrac: 0.35 })`). The classifier unit tests pin 0.35 explicitly.
+- A split now opens along the line through the head's **centre** parallel to the shot (entry where that line meets the face,
+  exit on the far side), not wherever the off-axis slug grazed: the first unaided capture blew out the jaw and left the skull
+  shut. The verdict's real `offset` is still reported in `head.state(id).burst`.
+- Re-captured unaided at 1.5 m and 3 m: a large open cavity with the skull showing, blood and debris. Gate 24/24.

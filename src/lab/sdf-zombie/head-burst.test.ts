@@ -10,7 +10,7 @@ const frame: HeadFrame = { centre: [0, 1.6, 0], quat: [0, 0, 0, 1], axes: [0.09,
 /** A slug travelling −z that crosses the head's front surface at world x = `x`. */
 const shot = (x: number, y = 1.6) => ({ point: [x, y, 0.1] as Vec3, dir: [0, 0, -1] as Vec3 });
 
-beforeEach(() => setBurstTuning({ on: true, centreFrac: BURST.centreFrac, swell: 0.4, shardScale: 1, flapCount: -1, lethal: false, repeatStep: 0.04, craterScale: 1, splay: 0.1 }));
+beforeEach(() => setBurstTuning({ on: true, centreFrac: 0.35, swell: 0.4, shardScale: 1, flapCount: -1, lethal: false, repeatStep: 0.04, craterScale: 1, splay: 0.1 }));
 
 describe('classifyBurst', () => {
   it('head radius is the geometric mean of the axes', () => {
@@ -52,6 +52,9 @@ describe('classifyBurst', () => {
     expect(v.kind).toBe('lethal');
     expect(v.axisLocal[2]).toBeCloseTo(1, 6);
     expect(Math.abs(v.axisLocal[0])).toBeLessThan(1e-9);
+  });
+  it('the shipped zone is wide enough that an aimed player shot (line ~1 head radius off centre) still splits', () => {
+    expect(BURST.centreFrac).toBeGreaterThan(1.1);
   });
   it('centreFrac is a live tuning constant', () => {
     setBurstTuning({ centreFrac: 0.6 });
