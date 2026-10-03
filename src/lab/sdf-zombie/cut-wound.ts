@@ -291,23 +291,33 @@ export function stampCut(prims: Primitive[], seg: CutSeg, calibre: CutCalibre, b
 }
 
 /** The sphere list the bone-exposure consumers read (they know only craters): a crater is itself; a cut is a chain of
- *  stations along its slot following the lens. With r = depth x profile (the reach from skin to floor), an interior station
- *  is a sphere of radius max(2 kerf, r/2 + kerf) centred r/2 inward: it spans skin to floor and stays tight sideways. The
- *  end stations (r = 0) sit on the skin with radius 2 kerf. Stations are spaced by max(depth, 2 kerf). */
+ *  stations along its slot, one per `max(depth, 2 kerf)`, covering the flesh cutCarve removes there. At station t the slot
+ *  is `r = dEff x (1 - t^2)` deep (floored at one kerf, as depthT is) BELOW THE SKIN: cutCarve's depth coordinate is
+ *  `s = max(-dIn, plane - sag)`, so the carve never goes more than depthT below the nearest skin, and also stops at the
+ *  plane `sag + depthT`. The skin itself lies `skin(x)` below the anchor's tangent plane: the circle through the anchor and
+ *  the chord's ends (the chord sits `sag` below the anchor), R = (h^2 + sag^2) / (2 sag), skin(x) = R - sqrt(R^2 - x^2),
+ *  which is 0 on a straight limb (sag 0) and `sag` at the chord's ends. A station is a sphere of radius max(2 kerf,
+ *  r/2 + kerf) centred `skin + r/2` along the inward axis: it spans skin to floor and stays tight sideways. At sag 0 this
+ *  is the original lens; a thin limb's silhouette cut (sag ~ the limb's radius) curves the chain down to the chord. */
 export function cutExposureSpheres(prims: Primitive[], w: Wound, bodyYaw: number): { pos: Vec3; radius: number }[] {
   const c = woundWorldPos(prims, w, bodyYaw);
   if (w.shape !== 'cut' || !w.cutDir) return [{ pos: c, radius: w.radius }];
   const along = unit(woundDirToWorld(prims, w, w.cutDir, bodyYaw));
   const inward = w.carveN ? unit(woundDirToWorld(prims, w, w.carveN, bodyYaw)) : null;
   const depth = w.carveDepth ?? 0.03, kerf = w.kerf ?? CUT.defaultKerf;
-  const n = Math.max(2, Math.ceil((2 * w.radius) / Math.max(depth, 2 * kerf)));
+  const h = w.radius, sag = Math.max(0, w.sag ?? 0);
+  const dEff = Math.min(depth, CUT_SHADE.maxDepthPerHalfLen * h);
+  const R = sag > 1e-6 ? (h * h + sag * sag) / (2 * sag) : Infinity;
+  const n = Math.max(2, Math.ceil((2 * h) / Math.max(depth, 2 * kerf)));
   const out: { pos: Vec3; radius: number }[] = [];
   for (let i = 0; i <= n; i++) {
     const t = -1 + (2 * i) / n;
-    const r = depth * (1 - t * t);
+    const r = Math.max(dEff * (1 - t * t), kerf);
+    const x = t * h;
+    const skin = Number.isFinite(R) ? R - Math.sqrt(Math.max(R * R - x * x, 0)) : 0;
     const radius = Math.max(2 * kerf, r / 2 + kerf);
-    let pos = add(c, scale(along, t * w.radius));
-    if (inward && i > 0 && i < n) pos = add(pos, scale(inward, r / 2));
+    let pos = add(c, scale(along, x));
+    if (inward) pos = add(pos, scale(inward, skin + r / 2));
     out.push({ pos, radius });
   }
   return out;

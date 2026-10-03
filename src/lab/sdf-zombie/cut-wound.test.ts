@@ -275,6 +275,45 @@ describe('cutExposureSpheres (for the sphere-only bone exposure)', () => {
   });
 });
 
+// Intent: the spheres must cover the flesh the cut REMOVES (cutCarve > 0 where the pre-wound body is solid): that is where
+// the bones must show. They follow the slot's own geometry: the chord sits `sag` below the anchor, the floor at
+// sag + depthT, the skin above the chord by sag x (1 - t^2).
+describe('cutExposureSpheres cover the flesh the cut removes (the slot follows sag and floor)', () => {
+  const fixtures: [string, () => ReturnType<typeof stampCut>][] = [
+    ['torso along', () => torsoCut(0.06, false)],
+    ['torso around', () => torsoCut(0.06, true)],
+    ['arm along', () => armAlong()],
+    ['arm silhouette (sag ~ limb radius)', () => armSilhouette()],
+  ];
+  const removed = (k: ReturnType<typeof slotOf>): Vec3[] => {
+    const out: Vec3[] = [];
+    const ds = 0.003, du = k.kerf / 3;
+    for (let a = -k.halfLen; a <= k.halfLen + 1e-9; a += k.halfLen / 20)
+      for (let s = -0.01; s <= k.sag + k.depth + 0.02; s += ds)
+        for (let u = -1.5 * k.kerf; u <= 1.5 * k.kerf + 1e-9; u += du) {
+          const q = slotPoint(k, a, s, u);
+          if (carveAt(k, q) > 0 && field(q) < 0) out.push(q);
+        }
+    return out;
+  };
+  for (const [name, make] of fixtures) {
+    it(`${name}: >= 90% of the removed flesh is inside a sphere; no centre strays more than a kerf outside the body`, () => {
+      const w = make();
+      const k = slotOf(w);
+      const spheres = cutExposureSpheres(prims, w, 0);
+      const pts = removed(k);
+      expect(pts.length).toBeGreaterThan(50);
+      const inside = (q: Vec3) => spheres.some(sp => Math.hypot(q[0] - sp.pos[0], q[1] - sp.pos[1], q[2] - sp.pos[2]) <= sp.radius);
+      const covered = pts.filter(inside).length / pts.length;
+      const worst = Math.max(...spheres.map(sp => field(sp.pos)));
+      console.log(`exposure coverage ${name}: ${(covered * 100).toFixed(1)}% of ${pts.length} removed-flesh samples, ${spheres.length} spheres, max centre field ${worst.toFixed(4)} (kerf ${k.kerf}), sag ${k.sag.toFixed(4)} depth ${k.depth.toFixed(4)}`);
+      expect(covered).toBeGreaterThanOrEqual(0.9);
+      expect(worst).toBeLessThanOrEqual(k.kerf);
+      expect(spheres.length).toBeLessThanOrEqual(12);
+    });
+  }
+});
+
 // ---------------------------------------------------------------------------------------------------------------------
 // The lip and the mask (Task 5 review): CPU mirrors of the WGSL, and the whole cut field the march sees:
 //   F = smax(dBody, carve, kW) - lip,  kW = woundCfg.y (0.015) x clamp(kerf / 0.05, 0.1, 1),  lipScale = META.z.
