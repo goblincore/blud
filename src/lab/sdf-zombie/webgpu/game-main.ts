@@ -186,6 +186,7 @@ import {
   stepWeaponSlot, type WeaponSlot, type WeaponSlotState,
 } from './game-weapon-slots';
 import { setCarveProbeCapEnabled, setProbeCapEnabled, woundWorldPos, woundCarveNormal, type Wound } from '../damage';
+import { cutExposureSpheres } from '../cut-wound';
 import type { ImpactGoutProfile, Droplet } from '../blood-sim';
 import {
   createBloodSim, spawnWoundDroplets, spawnImpactGout, emitTrails, stepBlood, IMPACT_GOUT, burstVolume,
@@ -1694,7 +1695,7 @@ async function main() {
         const craters: { pos: Vec3; radius: number }[] = [];
         for (const a of ctx.world.actors) {
           const prims = a.posed().prims;
-          for (const w of a.visualWounds()) if (!w.decal) craters.push({ pos: woundWorldPos(prims, w, ctx.vfx.boundedWoundPreview ? a.pose().yaw : 0), radius: w.radius });
+          for (const w of a.visualWounds()) if (!w.decal) craters.push(...cutExposureSpheres(prims, w, ctx.vfx.boundedWoundPreview ? a.pose().yaw : 0));
         }
         ctx.render.boneInstancer.setWounds(craters);
       }
@@ -1740,7 +1741,7 @@ async function main() {
       for (const a of ctx.render.visualActors) {
         const prims = a.posed().prims;
         // Cloth decals carve nothing, so they expose no bone.
-        for (const w of a.visualWounds()) if (!w.decal) craters.push({ pos: woundWorldPos(prims, w, ctx.vfx.boundedWoundPreview ? a.pose().yaw : 0), radius: w.radius });
+        for (const w of a.visualWounds()) if (!w.decal) craters.push(...cutExposureSpheres(prims, w, ctx.vfx.boundedWoundPreview ? a.pose().yaw : 0));
       }
       ctx.render.segMeshRenderer.setWounds(craters);
       ctx.render.segMeshRenderer.update(ctx.world.actors.map(a => {
