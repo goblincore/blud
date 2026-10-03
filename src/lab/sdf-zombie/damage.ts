@@ -90,7 +90,7 @@ export interface Wound {
   shape?: 'cut';
   cutDir?: Vec3;
   kerf?: number;
-  /** CUT: how far the chord midpoint sits below the anchor (`local`): the skin's fall-off over the cut; 0 for a straight cut.
+  /** CUT: the chord midpoint's depth below the anchor (`local`) along the inward direction (>= 0): the skin's fall-off over the cut; 0 for a straight cut.
    *  The slot's floor is measured from the anchor plane shifted inward by this, so it can never open the far skin. */
   sag?: number;
   /**

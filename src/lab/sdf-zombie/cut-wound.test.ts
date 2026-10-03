@@ -65,15 +65,20 @@ describe('cutCarve (the CPU mirror of the WGSL slot)', () => {
 
 describe('cut depth is bounded by the slot\'s own plane (sag), never the far skin', () => {
   const farSide = (k: ReturnType<typeof slotOf>) => {
-    let carved = 0, beyond = 0;
+    let carved = 0, beyond = 0, far = 0;
     for (let a = -k.halfLen - 0.01; a <= k.halfLen + 0.01; a += 0.002) {
       for (let s = -0.02; s <= 0.2; s += 0.002) {
         for (let u = -0.03; u <= 0.03; u += 0.002) {
-          if (carveAt(k, slotPoint(k, a, s, u)) > 0) { carved++; if (s > k.depth + k.sag + 1e-9) beyond++; }
+          const p = slotPoint(k, a, s, u);
+          if (carveAt(k, p) > 0) {
+            carved++;
+            if (s > k.depth + k.sag + 1e-9) beyond++;
+            if (-field(p) < 0.01 && s > k.depth + 0.01) far++;   // on the far skin: right at a skin, far below the slot's plane
+          }
         }
       }
     }
-    return { carved, beyond };
+    return { carved, beyond, far };
   };
   it('a cut along the arm (0.1 m across) carves nothing past depth + sag, and the far skin stays', () => {
     const w = stampCut(prims, { a: [0.4, 1.15, 0.05], b: [0.4, 1.35, 0.05], view: [0, 0, -1] }, ROD_CALIBRE, 0, field);
@@ -84,6 +89,17 @@ describe('cut depth is bounded by the slot\'s own plane (sag), never the far ski
     expect(r.carved).toBeGreaterThan(0);
     expect(r.beyond).toBe(0);
     for (const y of [1.2, 1.25, 1.3]) expect(carveAt(k, [0.4, y, -0.05])).toBeLessThan(0);   // the arm's far skin
+  });
+  it('an oblique 65 degree view of a +-60 degree slash across the arm still leaves the far skin alone', () => {
+    const v = Math.tan((65 * Math.PI) / 180), n = Math.hypot(v, 1);
+    const half = 0.05 * Math.sin(Math.PI / 3);   // chord at z = 0.05 cos 60 = 0.025
+    const w = stampCut(prims, { a: [0.4 - half, 1.25, 0.025], b: [0.4 + half, 1.25, 0.025], view: [0, -v / n, -1 / n] }, ROD_CALIBRE, 0, field);
+    expect(w.primIdx).toBe(1);
+    const k = slotOf(w);
+    const r = farSide(k);
+    console.log(`far-side oblique arm: carved ${r.carved}, beyond ${r.beyond}, far-skin ${r.far}, sag ${k.sag}`);
+    expect(r.carved).toBeGreaterThan(0);
+    expect(r.far).toBe(0);
   });
   it('a cut around the torso carves nothing past depth + sag', () => {
     const k = slotOf(torsoCut(0.1, true));
@@ -113,7 +129,8 @@ describe('cut depth is bounded by the slot\'s own plane (sag), never the far ski
 });
 
 describe('cutCarve: Lipschitz bound (WGSL-shaped call on the curved fixture)', () => {
-  // Max |grad| of the carve term, field gradient included (dIn comes from sdBody at each point).
+  // Max |grad| of the carve term, field gradient included (dIn comes from sdBody at each point). The 2.5 mm grid is coarse for
+  // kerf 0.006; the analytical floor bound 0.7 x sqrt(1 + 2.8^2) ~ 2.08 (maxDepthPerHalfLen) backs it.
   const maxGrad = (k: ReturnType<typeof slotOf>, step: number): number => {
     const f = (p: Vec3) => carveAt(k, p);
     const h = 2e-4;
@@ -123,6 +140,7 @@ describe('cutCarve: Lipschitz bound (WGSL-shaped call on the curved fixture)', (
         for (let u = -0.025; u <= 0.025; u += 0.001) {
           const p = slotPoint(k, a, s, u);
           const f0 = f(p);
+          if (f0 < -0.003) continue;   // only the slot and its immediate surround: the steep regions are all there
           for (const sg of [1, -1]) {
             const g = Math.hypot(
               (f(slotPoint(k, a + sg * h, s, u)) - f0) / h,

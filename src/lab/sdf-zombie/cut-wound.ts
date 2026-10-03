@@ -198,7 +198,9 @@ export function stampCut(prims: Primitive[], seg: CutSeg, calibre: CutCalibre, b
   w.carveDepth = Math.min(wantDepth, thick * CUT.thickFrac, CUT_SHADE.maxDepthPerHalfLen * half);
   w.cutDir = worldDirToWoundLocal(prims, w, alongW, bodyYaw);
   w.kerf = calibre.kerf;
-  w.sag = Math.hypot(...sub(anchor, scale(add(seg.a, seg.b), 0.5)));
+  // Only the drop along the inward direction is skin fall-off; the straight-line distance would also count the anchor's
+  // sideways shift under an oblique view and reopen the far skin.
+  w.sag = Math.max(0, dot(sub(scale(add(seg.a, seg.b), 0.5), anchor), inward));
   w.rimScale = calibre.lip;
   w.severRadius = 0;
   w.wetLip = 1;
