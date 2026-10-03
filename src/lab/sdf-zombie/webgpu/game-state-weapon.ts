@@ -37,6 +37,7 @@ import type { AimPoint } from './free-aim';
 import type { GoblinArms } from './game-arms';
 import type { Projectile } from './game-weapon';
 import type { WeaponSlotState } from './game-weapon-slots';
+import type { RodHarness } from './game-rod';
 
 /** `game-main.ts`'s local `TracerView`: a tracer's two billboard quads. */
 interface TracerView {
@@ -90,6 +91,8 @@ export interface WeaponState {
   aimRig: THREE.Group | null;
   /** Slot 5 (flare test harness, game-flare.ts); null until the aim rig exists. */
   flare: FlareHarness | null;
+  /** Slot 6 (the rod, cut-wound stand-in blade, game-rod.ts); null until the aim rig exists. */
+  rod: RodHarness | null;
   /** Slot 1 (the spike flail, game-flail.ts); null until the aim rig exists. */
   flail: FlailWeapon | null;
   /** The melee head damage leaf (game-head-damage.ts): the flail's head-region hits; null until built. */
@@ -220,6 +223,7 @@ export function makeWeaponState(): WeaponState {
     viewModelAnchor: unbuilt<THREE.Group>(),
     aimRig: null,
     flare: null,
+    rod: null,
     flail: null,
     headDamage: null,
     launcher: null,

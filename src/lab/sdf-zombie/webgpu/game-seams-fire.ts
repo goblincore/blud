@@ -15,6 +15,12 @@ export function createFireSeams(ctx: GameContext) {
     // FLARE TEST HARNESS (slot 5): the weapon verb plus the crowd helpers, so a
     // full room can be set alight without aiming at each body.
     fireFlare: () => ctx.weapon.flare?.fire() ?? false,
+    /** CUT WOUNDS (game-rod.ts): cut actor `id` along a→b (world) as seen along `view`; optional calibre overrides. */
+    cut: (id: number, a: Vec3, b: Vec3, view: Vec3, calibre?: { depth?: number; kerf?: number; lip?: number }) => ctx.weapon.rod?.cut(id, a, b, view, calibre) ?? 0,
+    rod: () => ctx.weapon.rod?.debug() ?? null,
+    /** Rod press / release without pointer lock (the canvas mousedown handler needs it): headless gates. */
+    rodPress: () => ctx.weapon.rod?.onMouseDown(0) ?? false,
+    rodRelease: () => ctx.weapon.rod?.onMouseUp(0),
     fireLauncher: () => ctx.weapon.launcher?.fire() ?? false,
     reloadLauncher: () => ctx.weapon.launcher?.reload() ?? false,
     launcher: () => ctx.weapon.launcher?.debug() ?? null,

@@ -25,16 +25,17 @@ function run(state: WeaponSlotState, sec: number, press?: WeaponSlot): WeaponSlo
 }
 
 describe('slot mapping', () => {
-  it('maps 1 through 5 and nothing else', () => {
+  it('maps 1 through 6 and nothing else', () => {
     expect(slotForKey('Digit1')).toBe('flail');
     expect(slotForKey('Digit2')).toBe('shotgun');
     expect(slotForKey('Digit3')).toBe('dynamite');
     expect(slotForKey('Digit4')).toBe('launcher');
     expect(slotForKey('Digit5')).toBe('flare');
-    expect(slotForKey('Digit6')).toBeNull();
+    expect(slotForKey('Digit6')).toBe('rod');
+    expect(slotForKey('Digit7')).toBeNull();
     expect(slotForKey('KeyE')).toBeNull();
-    expect(Object.keys(SLOT_BY_KEY)).toHaveLength(5);
-    expect(WEAPON_SLOTS).toEqual(['flail', 'shotgun', 'dynamite', 'launcher', 'flare']);
+    expect(Object.keys(SLOT_BY_KEY)).toHaveLength(6);
+    expect(WEAPON_SLOTS).toEqual(['flail', 'shotgun', 'dynamite', 'launcher', 'flare', 'rod']);
   });
 });
 
@@ -129,6 +130,17 @@ describe('cancel and retarget', () => {
     let s = run(requestSlot(makeWeaponSlotState(), 'dynamite'), 1.0);
     const settled = stepWeaponSlot(s, STEP);
     expect(settled).toBe(s);
+  });
+});
+
+describe('rod (slot 6)', () => {
+  it('settles on the rod and holsters every other slot', () => {
+    let s = requestSlot(makeWeaponSlotState(), 'rod');
+    s = run(s, WEAPON_SWITCH.lowerSec + WEAPON_SWITCH.raiseSec + STEP);
+    expect(s.live).toBe('rod');
+    expect(slotReady(s)).toBe(true);
+    expect(slotLowerAmount(s, 'rod')).toBe(0);
+    for (const w of WEAPON_SLOTS) if (w !== 'rod') expect(slotLowerAmount(s, w)).toBe(1);
   });
 });
 

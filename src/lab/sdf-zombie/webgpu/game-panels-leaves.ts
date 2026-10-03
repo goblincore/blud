@@ -27,7 +27,9 @@ export function updateHud(ctx: GameContext) {
           ? '4 LAUNCHER · FPV PROTOTYPE (R reload)'
           : S.live === 'flare'
             ? '5 FLARE'
-            : '2 GRAPESHOT';
+            : S.live === 'rod'
+              ? '6 ROD (hold + sweep to cut)'
+              : '2 GRAPESHOT';
   ctx.boot.hudEl.textContent =
     `${ctx.boot.frameEma.toFixed(1)} ms · bodies ${bodiesOnScreen(ctx)}/${ctx.world.actors.length}` +
     ` · ${where} · probe ${ctx.probes.weight.toFixed(2)}` +

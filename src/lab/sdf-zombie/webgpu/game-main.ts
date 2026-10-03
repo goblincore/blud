@@ -282,6 +282,7 @@ import { createFxSeams } from './game-seams-fx';
 // beside this file; main() holds only their call sites.
 import { createGameBurning } from './game-burning';
 import { createFlareHarness } from './game-flare';
+import { createRodHarness } from './game-rod';
 import { createFlail } from './game-flail';
 import { createHeadDamage } from './game-head-damage';
 import { createBrainGib } from './game-brain-gib';
@@ -3976,6 +3977,8 @@ async function main() {
     if (ctx.weapon.flail?.onMouseDown(e.button)) return;
     // SLOT 5 (flare): left click only, deferred to the tick like every other edge.
     if (ctx.weapon.flare?.onMouseDown(e.button)) return;
+    // SLOT 6 (the rod): hold + sweep; the cut lands on release.
+    if (ctx.weapon.rod?.onMouseDown(e.button)) return;
     // SLOT 4 (opt-in launcher prototype): acts only while it is the live slot.
     if (ctx.weapon.launcher?.onMouseDown(e.button)) return;
     // Deferred to the tick (see the input seam note): an edge event must land
@@ -3994,6 +3997,8 @@ async function main() {
   });
   // The flail's release: no pointer-lock check, so letting go anywhere ends a held chain.
   window.addEventListener('mouseup', (e) => ctx.weapon.flail?.onMouseUp(e.button));
+  // The rod's release: likewise unlocked, so letting go anywhere ends the sweep.
+  window.addEventListener('mouseup', (e) => ctx.weapon.rod?.onMouseUp(e.button));
   // The seam for the grapeshot dispatch: a view-model hangs off this group,
   // which rides the camera every frame.
   // The FOV-compensation rig sits between the camera and everything the
@@ -4024,6 +4029,11 @@ async function main() {
   // WEAPON SLOT 5 (flare test harness, game-flare.ts): its own rig on aimRig.
   ctx.weapon.flare = createFlareHarness(ctx, {
     burning: ctx.vfx.burning, traceSlugHitFrom: withCtx(ctx, traceSlugHitFrom), eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
+  });
+  // WEAPON SLOT 6 (the rod, cut wounds' stand-in blade, game-rod.ts): its own rig on aimRig.
+  ctx.weapon.rod = createRodHarness(ctx, {
+    traceSlugHitFrom: withCtx(ctx, traceSlugHitFrom), eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
+    bleed: (a, w, point, incoming) => registerBleed(ctx, a, w, 'pellet', { point, incoming }),
   });
   // WEAPON SLOT 1 (the spike flail, game-flail.ts): its own rig on aimRig.
   ctx.weapon.flail = createFlail(ctx, {
@@ -7497,6 +7507,7 @@ async function main() {
     ctx.telemetry.telemetry.lap('region', 'tick:weapon-rig-reload');
     ctx.weapon.cooldown = Math.max(0, ctx.weapon.cooldown - dt);
     ctx.weapon.flare?.tickCooldown(dt);
+    ctx.weapon.rod?.tick(dt);
     ctx.weapon.launcher?.tick(dt);
     ctx.weapon.recoilPitch *= Math.exp(-9 * dt);
     // ——— FREE AIM ————————————————————————————————————————————————————
