@@ -694,19 +694,23 @@ APPLY_WOUNDS, immediately after the line `let capEff = select(1.0e5, wCap.w, wCa
 ```wgsl
     // CUT (cut-wound.ts, flag 32): a blade SLOT instead of a sphere. ROW_WOUND = (midpoint, half-length), CAP = (inward,
     // depth), ROW_WOUND_CUT = (along unit, kerf). A lens along the segment (deepest mid-way), walls closing into a V, the
-    // kerf jagged by scalar noise, lips along both edges. MIRRORED by cut-wound.ts cutCarve (no noise there).
+    // kerf jagged by scalar noise, lips along both edges. MIRRORED by cut-wound.ts cutCarve with `below` = -dIn (no noise there); its steepness bound is pinned
+    // by cut-wound.test.ts's Lipschitz test.
     if ((i32(wFlags.x) & 32) != 0) {
       let wCut = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_CUT} + band), 0);
       let rel = p - w.xyz;
       let side = cross(wCut.xyz, wCap.xyz);
       let ca = dot(rel, wCut.xyz);
-      let cs = dot(rel, wCap.xyz);
+      // Depth below the REAL (pre-wound) skin, not the anchor's tangent plane, so the slot follows curved bodies
+      // (Task 3 review: on a 0.15 m torso the plane-depth slot vanished past 0.85 of its half-length). MIRRORS
+      // cutCarve's `below` argument.
+      let cs = -dIn;
       let cu = dot(rel, side);
       let tN = clamp(ca / max(w.w, 1e-4), -1.0, 1.0);
       let prof = 1.0 - tN * tN;
-      let depthT = max(wCap.w * prof, 1e-4);
+      let depthT = max(wCap.w * prof, wCut.w);
       let jag = noise3(rel * ${f(CUT_SHADE.jagFreq)} + vec3<f32>(w.w * 311.0, wCut.w * 977.0, 17.0)) * ${f(CUT_SHADE.jagAmp)};
-      let kerfT = wCut.w * (1.0 + jag) * (0.35 + 0.65 * sqrt(prof));
+      let kerfT = wCut.w * (1.0 + jag) * (0.35 + 0.65 * prof);
       let vWall = kerfT * (1.0 - clamp(cs, 0.0, depthT) / depthT) - abs(cu);
       let carve = min(min(vWall, depthT - cs), w.w - abs(ca)) * ${f(CUT_SHADE.carveK)};
       let dBeforeCut = d;
@@ -768,6 +772,15 @@ the cut branch sits above them, update the pinned text to the same lines at thei
 
 - [ ] **Step 6: Commit** — `git commit -m "feat(march): cut wounds — slot carve, lips, mask, normal fallback (golden -u, march-hash re-pinned)"`.
 
+
+> **Amended after Task 3's review (controller):** the slot's depth term is `-dIn` (depth below the real skin), the floor is
+> `max(depth·prof, kerf)` and the kerf tapers with `prof` (not sqrt) — exactly cut-wound.ts `cutCarve` after its fix commit.
+> Before writing the WGSL, read the CURRENT `cutCarve` in src/lab/sdf-zombie/cut-wound.ts and make the WGSL match it
+> term for term (plus the noise jag); if they differ from the snippet above, the TS is authoritative.
+
+> **Also (controller, after Task 3's fix commits 76e99ad0 / 7f66ef6e):** `cutCarve` clamps the slot's depth to
+> `CUT_SHADE.maxDepthPerHalfLen * halfLen` (1.6); the stored carveDepth already obeys it, and the WGSL must apply the same
+> clamp (`min(wCap.w, ${f(CUT_SHADE.maxDepthPerHalfLen)} * w.w)`) so the GPU slot equals the CPU mirror.
 ---
 
 ## Task 6: Bones show inside cuts
@@ -844,8 +857,9 @@ export interface RodHarness {
   /** Per frame: sample the sweep while held, cut on release, pose the rod. */
   tick(dt: number): void;
   updateRig(): void;
-  /** Cut `actorId` along a→b (world) with blade-plane normal `normal` (console seam / gates). Returns the wounds stamped. */
-  cut(actorId: number, a: Vec3, b: Vec3, normal: Vec3, calibre?: Partial<CutCalibre>): number;
+  /** Cut `actorId` along a→b (world), seen along `view` (the anchor is found from the viewer's side; console seam / gates).
+   *  Returns the wounds stamped. */
+  cut(actorId: number, a: Vec3, b: Vec3, view: Vec3, calibre?: Partial<CutCalibre>): number;
   /** The last sweep's samples (debug / gates). */
   debug(): { held: boolean; samples: number; lastCuts: number };
 }
@@ -928,10 +942,10 @@ export function createRodHarness(ctx: GameContext, deps: RodDeps): RodHarness {
       pivot.rotation.z += (-dy * ROD.swingGain - pivot.rotation.z) * 0.35;
       pivot.rotation.x += (dp * ROD.swingGain - pivot.rotation.x) * 0.35;
     },
-    cut(actorId, a, b, normal, calibre) {
+    cut(actorId, a, b, view, calibre) {
       const actor = ctx.world.actors.find(x => x.id === actorId);
       if (!actor) return 0;
-      return cutActor(actor, [{ a, b, normal }], { ...ROD_CALIBRE, ...calibre });
+      return cutActor(actor, [{ a, b, view }], { ...ROD_CALIBRE, ...calibre });
     },
     debug: () => ({ held, samples: [...samples.values()].reduce((m, l) => m + l.length, 0), lastCuts }),
   };
@@ -958,13 +972,16 @@ or the player type); if the field names differ, use them. `a.blast` with `impuls
   - Import `createRodHarness` from `'./game-rod'`.
 - [ ] **Step 5: Seams.** `game-seams-fire.ts` returned object:
 ```ts
-    /** CUT WOUNDS (game-rod.ts): cut actor `id` along a→b (world) with blade normal n; optional calibre overrides. */
-    cut: (id: number, a: Vec3, b: Vec3, n: Vec3, calibre?: { depth?: number; kerf?: number; lip?: number }) => ctx.weapon.rod?.cut(id, a, b, n, calibre) ?? 0,
+    /** CUT WOUNDS (game-rod.ts): cut actor `id` along a→b (world) as seen along `view`; optional calibre overrides. */
+    cut: (id: number, a: Vec3, b: Vec3, view: Vec3, calibre?: { depth?: number; kerf?: number; lip?: number }) => ctx.weapon.rod?.cut(id, a, b, view, calibre) ?? 0,
     rod: () => ctx.weapon.rod?.debug() ?? null,
 ```
 - [ ] **Step 6:** `npx tsc --noEmit && npx vitest run game-weapon-slots game-context-coverage game-loop game-panels cut-wound` → clean / PASS.
 - [ ] **Step 7: Commit** — `git commit -m "feat(rod): weapon slot 6 — sweep the crosshair to cut (cut-wound stand-in blade)"`.
 
+
+> **Amended after Task 3's review (controller):** `CutSeg` is `{ a, b, view }` (no blade normal; the slot is cut normal to
+> the skin). Read the current cut-wound.ts exports before writing game-rod.ts and match them.
 ---
 
 ## Task 8: The capture gate
@@ -1099,6 +1116,9 @@ midpoint with the page's camera, as `head-damage-gate.mjs`'s `toPx` does), not b
 
 - [ ] **Step 5: Commit** — `git commit -m "test(cut-wound): capture gate (capacity, seam cuts, the rod) and look notes"`.
 
+
+> **Amended after Task 3's review (controller):** `__sdfGame.cut(id, a, b, view)` takes the VIEW direction (from the camera toward
+> the body, unit) as its 4th argument, not a blade normal: pass the direction from the player's stance to the cut midpoint.
 ---
 
 ## Task 9: Docs
