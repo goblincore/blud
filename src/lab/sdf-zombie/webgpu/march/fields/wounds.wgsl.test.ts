@@ -17,8 +17,10 @@ import {
   WOUND_MASK,
   WOUND_SHADOW,
   ROW_WOUND_CAP,
+  ROW_WOUND_CUT,
   CALC_NORMAL,
 } from '../../march.wgsl';
+import { CUT_SHADE } from '../../../cut-wound';
 import { declaredName } from '../../march-test-support';
 import { MAX_WOUNDS } from '../../../damage';
 
@@ -186,5 +188,38 @@ describe('wound halo — ONE unified wound mask, no split shading overlays', () 
     // The key path keeps keyColor; the ambient path must NOT be tinted by
     // the lamp any more. That tint is exactly what ambientAt now decides.
     expect(MARCH_BODY).not.toContain('(lightCfg.y + diff');
+  });
+});
+
+describe('cut wounds in the march', () => {
+  it('applyWounds has a cut branch (flag 32) before the preset branch, reading ROW_WOUND_CUT', () => {
+    const iCut = APPLY_WOUNDS.indexOf('(i32(wFlags.x) & 32) != 0');
+    const iPreset = APPLY_WOUNDS.indexOf('if (wMeta.x < -0.5)');
+    expect(iCut).toBeGreaterThan(0);
+    expect(iCut).toBeLessThan(iPreset);
+    expect(APPLY_WOUNDS).toContain(`${ROW_WOUND_CUT} + band`);
+  });
+  it('woundMask paints a cut footprint and skips the radial one for it', () => {
+    expect(WOUND_MASK).toContain('(fBits & 32) != 0');
+    expect(WOUND_MASK).toContain(`${ROW_WOUND_CUT} + gBand`);
+  });
+  // cut-wound.ts cutCarve is the CPU mirror: the slot's terms must be the same ones, in the same form.
+  it('the cut branch mirrors cutCarve term for term (depth coordinate, depth clamp, floor, kerf taper, carve)', () => {
+    const iCut = APPLY_WOUNDS.indexOf('(i32(wFlags.x) & 32) != 0');
+    const branch = APPLY_WOUNDS.slice(iCut, APPLY_WOUNDS.indexOf('if (wMeta.x < -0.5)'));
+    const f = (v: number) => (Number.isInteger(v) ? `${v}.0` : `${v}`);
+    expect(branch).toContain('let side = cross(calong, cin);');
+    expect(branch).toContain('let cs = max(-dIn, dot(rel, cin) - wMeta.w);');
+    expect(branch).toContain('let tN = clamp(ca / max(w.w, 1e-4), -1.0, 1.0);');
+    expect(branch).toContain('let prof = 1.0 - tN * tN;');
+    expect(branch).toContain(`let dEff = min(wCap.w, ${f(CUT_SHADE.maxDepthPerHalfLen)} * w.w);`);
+    expect(branch).toContain('let depthT = max(dEff * prof, max(wCut.w, 1e-4));');
+    expect(branch).toContain('let kerfT = wCut.w * (1.0 + jag) * (0.35 + 0.65 * prof);');
+    expect(branch).toContain('let vWall = kerfT * (1.0 - clamp(cs, 0.0, depthT) / depthT) - abs(cu);');
+    expect(branch).toContain(`let carve = min(min(vWall, depthT - cs), w.w - abs(ca)) * ${f(CUT_SHADE.carveK)};`);
+    // The running d is the carve target; dIn (pre-wound) is the depth reading. A cut never reaches the crater rim
+    // code, which reads META.w as an offset scale (for a cut it is the sag).
+    expect(branch).not.toMatch(/max\(-d,/);
+    expect(branch).toMatch(/continue;\s*}\s*(\/\/[^\n]*\n\s*)*$/);
   });
 });

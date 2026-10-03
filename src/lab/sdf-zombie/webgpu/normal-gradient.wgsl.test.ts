@@ -6,7 +6,7 @@ import {
   NORMAL_GRADIENT_PROBE,
   buildNormalGradientFn,
 } from './normal-gradient.wgsl';
-import { ROW_WOUND_FLAGS } from './march.wgsl';
+import { ROW_WOUND_FLAGS, ROW_WOUND_META } from './march.wgsl';
 
 function declaredName(src: string): string | null {
   return /^fn\s+([a-z_0-9]+)\s*\(/i.exec(src)?.[1] ?? null;
@@ -79,6 +79,12 @@ describe('final-hit helper isolation', () => {
     expect(NG_WOUNDS.indexOf(load)).toBeGreaterThan(NG_WOUNDS.indexOf('if (r > reach) { continue; }'));
     expect(NG_WOUNDS.indexOf(load)).toBeLessThan(NG_WOUNDS.indexOf('if (wMeta.x < -0.5)'));
     expect(NG_BODY).toMatch(/d = ngWounds\([^;]+;\s*if \(gNgReason != 0\) \{ return d; \}/);
+  });
+
+  it('ngWounds falls back to calcNormal taps for a cut (flag 32)', () => {
+    expect(NG_WOUNDS).toContain('(i32(flagsRow.x) & 32) != 0');
+    // Before any read of META (whose w is the cut's sag, not a rim offset).
+    expect(NG_WOUNDS.indexOf('(i32(flagsRow.x) & 32) != 0')).toBeLessThan(NG_WOUNDS.indexOf(`${ROW_WOUND_META} + gBand`));
   });
 
   it('parses game helpers without modifying the production fold state', () => {

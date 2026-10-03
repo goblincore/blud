@@ -278,8 +278,9 @@ export const NG_WOUND_LIP = /* wgsl */ `fn ngWoundLip(base: f32, r: f32, rim: ve
   return radialLip * mMax + bumpMax * gateLip;
 }`;
 
-// NOTE (cut wounds): wMeta.w feeds the crater rim offset below, but for bit-32 (cut) wounds it holds the cut's sag and must not
-// be read as an offset scale for them (the finite-difference cut fallback skips this rim).
+// NOTE (cut wounds): wMeta.w feeds the crater rim offset below, but for bit-32 (cut) wounds it holds the cut's sag. The cut
+// test (flag 32, right after the decal skip) returns to calcNormal's finite-difference taps before META is loaded, so a cut
+// never reaches this rim.
 export const NG_WOUNDS = /* wgsl */ `fn ngWounds(base: vec4<f32>, p: vec3<f32>, data: texture_2d<f32>, cfg: vec4<f32>, cfg2: vec4<f32>, perf: vec4<f32>, bound: vec4<f32>) -> vec4<f32> {
   gNgLip = 1.0;
   gNgNear = 0.0;
@@ -305,6 +306,9 @@ export const NG_WOUNDS = /* wgsl */ `fn ngWounds(base: vec4<f32>, p: vec3<f32>, 
     let flagsRow = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + gBand), 0);
     // CLOTH DECAL (bit 2): never carved — mirrors applyWounds' skip.
     if ((i32(flagsRow.x) & 4) != 0) { continue; }
+    // CUT (flag 32): the slot (jagged lens, lips) has no analytic gradient here — take calcNormal's taps, like torn. Before
+    // the META load: a cut's META.w is its sag, not the rim offset the crater path below reads.
+    if ((i32(flagsRow.x) & 32) != 0) { gNgReason = 1; return d; }
     // TORN (bit 3, flail lips 2026-09-29): a two-octave ragged edge with lobe-
     // modulated petals has no analytic counterpart here — take calcNormal's taps.
     if ((i32(flagsRow.x) & 8) != 0) { gNgReason = 1; return d; }

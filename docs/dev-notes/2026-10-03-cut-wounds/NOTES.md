@@ -81,3 +81,73 @@ At 32, a truly cold compile costs the same as at 16.
 Base: default `d7392d52…`, wounded `76bd51aa…`. At 32: default `d7392d52…` on 2/2 boots, crowd quad
 `0c71e712…` and per-body `470ff0b3…` on 1/1 each, and the wounded variants unchanged. No pin moved. The
 header records the re-verification.
+
+## Task 5: the cut in WGSL (carve, mask, normals) (2026-10-03)
+
+Base for this section: `1b6ccf5e` (Tasks 1 to 4). What changed:
+
+- `fields/wounds.wgsl.ts` applyWounds: a cut branch (flag 32) right after the cap load and before the preset branch.
+  It reads `ROW_WOUND_CUT` only inside the branch and always `continue`s, so a cut never reaches the crater rim
+  code, which reads `META.w` as an offset scale (for a cut, `META.w` is the sag). The carve is `cutCarve`
+  (`cut-wound.ts`) term for term: `cs = max(-dIn, dot(rel, in) - sag)`, `dEff = min(depth, 1.4 halfLen)`,
+  `depthT = max(dEff prof, max(kerf, 1e-4))`, `kerfT = kerf (1 + jag) (0.35 + 0.65 prof)`, the same vWall and the
+  same `min(...) * carveK`. A text test pins each term. The GPU adds three things the CPU mirror does not have:
+  - The frame is re-orthogonalised (inward normalised, along made orthogonal to it). Guarded divides are used
+    rather than `normalize`, so a degenerate row cannot produce a NaN.
+  - The jag noise is sampled in the slot's own frame (along, side, inward), so it moves with the wound. The
+    plan's snippet sampled world-space `rel`, which would make the jag swim as the body turns.
+  - The lips. Their amplitude per point (`kerf * lipHeight * META.z * prof`) is added to `gWoundAmp` for the
+    re-fold pre-scan, as a crater's amp is.
+- woundMask: a cut footprint, a band of `kerf..kerf * maskWidth` either side of the segment that fades over
+  0.85 to 1.15 half-lengths. It uses the same frame, feeds `m`, the cavity mask (flag 1) and the tear and wet-only
+  masks (flags 8 and 16, the same as the radial path), and skips the radial disc.
+- `normal-gradient.wgsl.ts` ngWounds: a flag-32 row returns to calcNormal's finite-difference taps (`gNgReason = 1`),
+  as a torn row does. The return comes before the META load.
+
+**The jag's slope.** The CPU Lipschitz test runs with jag = 0. I ran a scratch measurement, not committed: a JS
+port of `hash13`/`noise3` fed into `cutCarve`'s jag argument, on flat skin, 0.7 mm grid, the same halfLen,
+depth and kerf sweep. It gave a max |grad| of **2.032** (worst at h 0.1, depth 0.15, kerf 0.006, which is the
+floor term, not the jagged wall). That is within the 2.2 bound. The JS hash runs in f64 while the GPU runs in
+f32, so the noise values differ, but its slope statistics are the same.
+
+**The lip was not measured on the CPU.** Its steepness and its look are unchecked until Task 8's gate (photo
+plus a luma profile across the cut line). No cut has been rendered on the GPU yet either: no staged scene
+carries one. This task proves that the shader compiles and changes no existing pixel. It does not prove the
+cut looks right.
+
+**Reach.** The per-wound reach (`w.w * max(2, ...) + 4k + slack`) and the per-ray list use `w.w` = the half-length
+for a cut. The deepest carved point is about `dEff + sag` from the midpoint (`dEff <= min(0.15, 1.4 h)`), and
+the lip extends to 1.2 h. Both stay inside `2 h + 4k + slack` for any sag up to `0.6 h + 4k`, which covers the
+stamp's chord sags. I argued this; I did not test it.
+
+### Compile census (`scripts/compile-census.mjs 2`, after)
+
+Both boots `phase=ready`, `uncapturedCount 0`, no device loss. The march-family module is 299883 B (9 entries per
+boot; the gib and crowd variants compile in the background, as in Task 2). Boot 1 was truly cold: warmMs 40784,
+asyncFirst 38868, two march pipelines at about 19.2 s each. Boot 2 was warm: warmMs 2456, drawOnce 1655.5, median
+march compile 39.9 ms.
+
+### Cold-boot `drawOnce` (`scripts/boot-time.mjs 5241 9241`), truly cold, interleaved
+
+Each boot nudged `hash13`'s `0.1031` to a unique nonce (the Task 2 method; reverted, `math.wgsl.ts` unchanged
+in the commit). The base runs swapped in `wounds.wgsl.ts` and `normal-gradient.wgsl.ts` from `1b6ccf5e` between
+boots. Load average was 2 to 4.
+
+| build | nonces | drawOnce ms | warmMs |
+| --- | --- | --- | --- |
+| base `1b6ccf5e` | 0.103191 (before any edit), 93, 95, 97, 99 | 1591.3, 1605.5, 1609.5, 1621.7, 1677.4 (median 1609.5, spread 86.1) | 39536, 39089, 40029, 38981, 41255 (median 39536) |
+| + cut branch | 0.103192, 94, 96, 98 | 1627.7, 1612.3, 1627.4, 1640.7 (median 1627.6, spread 28.4) | 41012, 40676, 41032, 40666 (median 40844) |
+
+**drawOnce: met.** The new max (1640.7) is below the base max (1677.4), and both are well under Task 2's +10%
+line (about 1810 ms).
+
+**Cold compile cost.** The whole cold warm-up moved by about +1.3 s median (+3.3%) on a 39.5 s compile. In the
+interleaved pairs it was +1.9, +0.6, +2.1 and -0.6 s, so the extra compile time is real but small and noisy. It is
+the WGSL compile cost of the cut branch, which runs on the warm-up path. drawOnce is not affected.
+
+### march-hash
+
+No pin moved (re-verified, header updated). Default: `d7392d52…` / wounded `76bd51aa…` on 2/2. Crowd quad:
+`0c71e712…` / wounded `bf6836cd…`. Per-body: `470ff0b3…` / wounded `f618070e…`. The crowd and per-body wounded
+hashes were also taken at the base `1b6ccf5e` and are identical. This was expected: no staged scene carries a
+flag-32 wound.
