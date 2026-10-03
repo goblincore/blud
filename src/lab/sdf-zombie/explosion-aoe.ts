@@ -44,7 +44,7 @@
 import type { BuildResult } from './build-body';
 import type { LimbId, Primitive, Vec3 } from './types';
 import { add, len, scale, sub } from './vec';
-import { WOUND_PROFILES, worldHitToWound, MAX_WOUNDS, type Wound } from './damage';
+import { WOUND_PROFILES, worldHitToWound, type Wound } from './damage';
 import { cutChains, cutLimbs, type ChainCut } from './connectivity';
 import { COLLAPSE_TUNING } from './collapse';
 import { sdBody, sdPrimitive, smin } from './validate';
@@ -81,9 +81,12 @@ export const EXPLOSION_TUNING = {
   traceSteps: 128,
   /** Surface-hit epsilon — raycastBody's 0.002 (also its minimum step). */
   traceEps: 0.002,
-  /** Hard cap on wounds per body: the shader's wound-ring size — a blast
-   *  can fill the ring but never needs more than it can hold. */
-  maxWoundsPerBody: MAX_WOUNDS,
+  /** Hard cap on wounds one blast stamps per body. Was the wound-ring size
+   *  (MAX_WOUNDS) while that was 16; held at 16 when the ring grew to 32
+   *  (cut wounds M1, 2026-10-03) so a blast's wound count, sever results and
+   *  per-body wound cost do not change with the ring. A blast now fills half
+   *  the ring and leaves older wounds standing. */
+  maxWoundsPerBody: 16,
   /** Hand-splash band as a fraction of radiusM — a FLOURISH, not the game's
    *  player damage: hands scar when the blast is genuinely too close
    *  (or the stick overcooks in-hand). 0.35 × 4.69 m ≈ 1.6 m. */

@@ -71,7 +71,7 @@ describe('data texture layout', () => {
       if (!src.includes('i32(woundCfg.x)')) continue;
       // The loop variable name can change (the per-ray wound list folds by k);
       // pin only the BOUND, which is the MAX_WOUNDS literal that can drift
-      // from damage.ts. Match `var x = 0; x < 16` for any identifier x.
+      // from damage.ts. Match `var x = 0; x < MAX_WOUNDS` for any identifier x.
       expect(src).toMatch(new RegExp(`var\\s+[a-z]\\w*\\s*=\\s*0\\s*;\\s*[a-z]\\w*\\s*<\\s*${MAX_WOUNDS}\\b`));
     }
   });

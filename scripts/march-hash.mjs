@@ -118,6 +118,13 @@ const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
 //   per-body (?crowd=0, tiles off)                  = 470ff0b375adfdb48992adecf04e8915e814b3f7
 // Each reproduced on TWO boots (ports 5288/9288, headless) at cc23eb99.
 //
+// 2026-10-03 RE-VERIFIED, NO MOVE — wound loop bound 16 -> 32 (cut wounds M1 Task 2: every
+// WGSL wound loop bound and gWoundList's size now come from MAX_WOUNDS = 32). The shader text
+// changed (march golden -u) but no pin moved: default d7392d52… on 2/2 boots, crowd quad
+// 0c71e712… and per-body 470ff0b3… on 1/1 each (ports 5241/9241, LAB_TMP=.lab-tmp). The
+// wounded variants held too (default 76bd51aa…, same as the base a66c1c4a). Expected: the
+// staged scenes carry far fewer than 16 wounds and every loop breaks on the live count.
+//
 // 2026-09-29 RE-PIN — THE BROWSER, NOT THE CODE. Google Chrome auto-updated 153.0.8010.54 ->
 // 154.0.8037.58 (2026-09-28 19:41), after the last passing run. Every probe now gives the new
 // default, including commits that passed before: 248b2cee, 77ab162e (docs only since the pass),

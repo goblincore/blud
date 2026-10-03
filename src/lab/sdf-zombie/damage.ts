@@ -5,7 +5,7 @@ import { rotateYaw } from './gait';
 import { sdPrimitive } from './validate';
 
 /** Must match MAX_WOUNDS in the fragment shader. */
-export const MAX_WOUNDS = 16;
+export const MAX_WOUNDS = 32;
 
 export type WoundType = 'pellet' | 'blast' | 'burn';
 

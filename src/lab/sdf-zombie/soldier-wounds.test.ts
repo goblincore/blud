@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { Wound } from './damage';
+import { MAX_WOUNDS, type Wound } from './damage';
 import { setRaggedCraters, soldierVisualWounds } from './soldier-wounds';
 
 const wound = (n: number): Wound => ({ primIdx:n, local:[n*.01,0,0], radius:.055, type:'pellet', ageSec:n, carveN:[0,0,1], carveDepth:.03 });
@@ -19,7 +19,7 @@ describe('soldier cosmetic wounds (the lobe path, off since ragged craters ship)
     expect(d+a[2]!.radius).toBeLessThan(input[0]!.radius*1.35);
   });
   it('never lets cosmetic lobes evict real wounds', () => {
-    const input=Array.from({length:16},(_,i)=>wound(i));
+    const input=Array.from({length:MAX_WOUNDS},(_,i)=>wound(i));
     expect(soldierVisualWounds(input)).toEqual(input);
   });
   it.each([[[0,0,1]],[[1,0,0]]])('offsets in the wound tangent plane for normal %j',(normal)=>{

@@ -20,6 +20,7 @@ import {
   CALC_NORMAL,
 } from '../../march.wgsl';
 import { declaredName } from '../../march-test-support';
+import { MAX_WOUNDS } from '../../../damage';
 
 describe('ported features reach the entry point', () => {
 
@@ -70,7 +71,7 @@ describe('ported features reach the entry point', () => {
     // w = 1e9 is the no-cull identity (chunk torn ends, hands view).
     expect(APPLY_WOUNDS).toContain('woundBound: vec4<f32>');
     const iBound = APPLY_WOUNDS.indexOf('if (length(p - woundBound.xyz) > woundBound.w) { return vec2<f32>(dIn, 0.0); }');
-    const iLoop = APPLY_WOUNDS.indexOf('for (var k = 0; k < 16; k = k + 1)');
+    const iLoop = APPLY_WOUNDS.indexOf(`for (var k = 0; k < ${MAX_WOUNDS}; k = k + 1)`);
     const iFirstLoad = APPLY_WOUNDS.indexOf(`vec2<i32>(i, ${ROW_WOUND} + band)`);
     expect(iBound).toBeGreaterThan(-1);
     expect(iLoop).toBeGreaterThan(iBound);

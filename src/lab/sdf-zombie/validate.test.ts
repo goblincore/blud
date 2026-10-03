@@ -62,7 +62,7 @@ describe('per-body data texture width', () => {
 
   it('keeps the cluster-bounds and wound columns inside the base width', () => {
     // ROW_CLUSTER_* use columns up to 2 * MAX_CLUSTERS + BONE_SEG_MAX (44);
-    // the wound rows use MAX_WOUNDS (16). Both must fit the narrowest texture.
+    // the wound rows use MAX_WOUNDS (32). Both must fit the narrowest texture.
     expect(2 * MAX_CLUSTERS + 1 + 32).toBeLessThanOrEqual(BASE_PRIM_STRIDE);
   });
 

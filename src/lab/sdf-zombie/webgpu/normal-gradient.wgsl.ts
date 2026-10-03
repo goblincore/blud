@@ -5,6 +5,7 @@ import {
   ROW_GROUP_RANGE, ROW_GROUP_BOUNDS, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS, ROW_PRIM_BEND,
 } from './march.wgsl';
 import { MAX_PRIMS } from '../validate';
+import { MAX_WOUNDS } from '../damage';
 import { TILE_MAX_ENTRIES } from './tile-cull';
 
 // Local diagnostic validity. The declaration follows the first function
@@ -286,7 +287,7 @@ export const NG_WOUNDS = /* wgsl */ `fn ngWounds(base: vec4<f32>, p: vec3<f32>, 
   let boundDistance = length(p - bound.xyz);
   if (abs(boundDistance - bound.w) <= R) { gNgReason = 3; }
   if (boundDistance > bound.w) { return d; }
-  for (var i = 0; i < 16; i = i + 1) {
+  for (var i = 0; i < ${MAX_WOUNDS}; i = i + 1) {
     if (i >= i32(cfg.x)) { break; }
     let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND} + gBand), 0);
     let v = p - w.xyz;

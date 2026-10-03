@@ -5,6 +5,7 @@
 // file; see docs/dev-notes/2026-09-18-march-split/.
 import { ROW_WOUND, ROW_WOUND_CAP, ROW_WOUND_FLAGS, ROW_WOUND_META } from '../layout';
 import { TORN } from '../../../torn-lips';
+import { MAX_WOUNDS } from '../../../damage';
 
 // TORN LIPS (flail, spec §14.2, 2026-09-29). A wound whose flags.x integer part has
 // bit 3 (value 8, zombie-gpu.ts WOUND_FLAG.tear) is TORN: its ragged outline gains
@@ -60,7 +61,7 @@ const TORN_LOBE = (n: string) => `mix(${n}, noise3(q * ${f(TORN_OCTAVE_FREQ)} + 
 export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, perfCfg: vec4<f32>, woundBound: vec4<f32>, band: i32) -> vec2<f32> {
   var d = dIn;
   var near = 0.0;
-  // One sphere test before the loop replaces up to 16 wound-row loads plus a
+  // One sphere test before the loop replaces up to ${MAX_WOUNDS} wound-row loads plus a
   // length() each, on every mapBody evaluation, for every sample nowhere near
   // a crater. Tested BEFORE the loop (pinned by test): the whole point is
   // that a far sample pays nothing per-wound.
@@ -70,7 +71,7 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
   // loop iterates only the preloaded reachable set; with it OFF this is the
   // same iteration sequence as before (k == i, same break on n), so OFF is
   // bit-identical to the shipped shader.
-  for (var k = 0; k < 16; k = k + 1) {
+  for (var k = 0; k < ${MAX_WOUNDS}; k = k + 1) {
     var i = k;
     if (gWoundListOn > 0.5) {
       if (k >= gWoundN) { break; }
@@ -266,7 +267,7 @@ export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>,
   // Per-instance wound count: the slot loop's loadInstance set this before
   // the post-hit readback (POST reloads gHitSlot).
   let n = i32(gInstWoundCount);
-  for (var i = 0; i < 16; i = i + 1) {
+  for (var i = 0; i < ${MAX_WOUNDS}; i = i + 1) {
     if (i >= n) { break; }
     let flags = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + gBand), 0);
     if (flags.y > 0.0 && gWoundShadePrim >= 0.0 &&

@@ -23,6 +23,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { APPLY_WOUNDS, MARCH_BODY, RAY_CULL_SLACK } from './march.wgsl';
+import { MAX_WOUNDS } from '../damage';
 
 /** The shared reach formula. Both APPLY_WOUNDS (the per-step cull) and
  *  MARCH_BODY (the preload) must carry it verbatim; MARCH_BODY may append
@@ -39,7 +40,7 @@ describe('per-ray wound list', () => {
   it('keeps the union-reach early return BEFORE the loop (the cull must stay first)', () => {
     const iBound = APPLY_WOUNDS.indexOf(
       'if (length(p - woundBound.xyz) > woundBound.w) { return vec2<f32>(dIn, 0.0); }');
-    const iLoop = APPLY_WOUNDS.indexOf('for (var k = 0; k < 16; k = k + 1)');
+    const iLoop = APPLY_WOUNDS.indexOf(`for (var k = 0; k < ${MAX_WOUNDS}; k = k + 1)`);
     expect(iBound).toBeGreaterThan(-1);
     expect(iLoop).toBeGreaterThan(iBound);
   });

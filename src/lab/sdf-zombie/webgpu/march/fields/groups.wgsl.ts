@@ -5,6 +5,7 @@
 // file; see docs/dev-notes/2026-09-18-march-split/.
 import { REC_ANCHOR_BAND, REC_BURN, REC_CENTRE_SEED, REC_COUNTS, REC_COUNTS2, REC_FLASH, REC_GORE, REC_HALF_REV, REC_HEAD_QUAT, REC_HEAD_WCOUNT, REC_LIGHTS, REC_MELT, REC_NOISE_YAW, REC_VEC4S, REC_VOL_POSE0, REC_VOL_POSE1, REC_WIND_ALIVE, REC_WOUND_BOUND } from '../../crowd-records';
 import { TILE_MAX_ENTRIES } from '../../tile-cull';
+import { MAX_WOUNDS } from '../../../damage';
 import { LIMB_ACCUMULATORS as LIMBS } from '../limbs-flag';
 import { ROW_PRIM_B, ROW_PRIM_BEND, ROW_PRIM_CLIP, ROW_PRIM_SCALE, ROW_PRIM_SHAPE, ROW_PRIM_SHELL, ROW_PRIM_WARP } from '../layout';
 
@@ -235,12 +236,12 @@ var<private> gTileBand: array<f32, ${TILE_MAX_ENTRIES}>;
 // through the gWoundListOn gate. Private vars are per-invocation and start
 // at their INITIALISERS (never at a previous fragment's value), so the
 // cone/depth pre-pass chains — separate invocations that never run the
-// preload — keep gWoundListOn 0 and fold the full 16-wound loop, which is
+// preload — keep gWoundListOn 0 and fold the full MAX_WOUNDS-wound loop, which is
 // CONSERVATIVE by construction (the cone certifies emptiness against the
 // full field, and any correctly-binned list is a subset of it).
 var<private> gWoundListOn: f32 = 0.0;
 var<private> gWoundN: i32 = 0;
-var<private> gWoundList: array<i32, 16>;
+var<private> gWoundList: array<i32, ${MAX_WOUNDS}>;
 var<private> gSlot: i32 = 0;
 var<private> gBand: i32 = 0;
 var<private> gHitSlot: i32 = 0;
