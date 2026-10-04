@@ -18,6 +18,10 @@
 //   inside the region (dh <= r):  min(P0, P+, P-, C)
 //   outside (dh > r):             min(P0, C)              (= min(P0, dh - rho); P+- are never evaluated)
 //
+// Outside the region P0 is f(p) except deep inside material, where f(p) < min(up(p), rho - dh) <= rho - dh < 0: only
+// interior probes notice (the march, shadows and AO sample the sign and the outside). A side that does not move
+// (theta 0) shares f(p) with P0, so a one-sided split costs two f evaluations inside the region.
+//
 // Each piece is a rigid motion of f intersected with half-spaces and a ball, so it is a sound, 1-Lipschitz distance
 // bound, and so is their min. Outside the region P+- >= dh - rho = C, so dropping them for C under-estimates (sound)
 // and never makes a false surface (C >= REGION_MARGIN > 0). C also caps the field inside the region: at dh = r both
@@ -45,8 +49,10 @@ export interface SplitPreset {
 }
 
 /** The region sphere's radius is `rho + REGION_MARGIN`, where `rho` (= |centre - h| + 1.25 R) holds all the moved
- *  material. Also the floor of the region shell bound C, so it must stay well above the march's hit epsilon. */
-export const REGION_MARGIN = 0.03;
+ *  material. Also the floor of the region shell bound C, which caps the field in open air near the region sphere, so
+ *  it must be at least the AO probe distance: occlusion.wgsl.ts reads clamp(mapBody(p + n * 0.06) / 0.06, 0.35, 1),
+ *  and at 0.03 the cap darkened 14-20% of surface samples by up to 0.48 (0% at 0.06). */
+export const REGION_MARGIN = 0.06;
 
 export const HEAD_SPLIT = {
   presets: {
@@ -153,17 +159,26 @@ export function splitWarpOf(st: SplitState, f: HeadFrame): SplitWarp | null {
 const moveBack = (w: SplitWarp, p: Vec3, theta: number): Vec3 =>
   theta === 0 ? p : add(w.h, rotAxis(sub(p, w.h), w.a, -theta));
 
+/** P0's cap, min(up(p), rho - dh): the rest stays where it is below the hinge plane or at least rho from h. One
+ *  place for both branches of splitField. */
+const restCap = (w: SplitWarp, p: Vec3, dh: number): number =>
+  Math.min(dot(cross(w.n, w.a), sub(p, w.h)), w.r - REGION_MARGIN - dh);
+
 /** The three pieces at p (index 0 = the unmoved rest, 1 = the + half, 2 = the - half): their un-warped points and
- *  capped fields. `dh` = |p - h|. */
+ *  capped fields. `dh` = |p - h|. A side that does not move (theta 0, the larger side of a one-sided split) is at p
+ *  itself, so it reuses f(p): min(max(f, c0), max(f, c1)) = max(f, min(c0, c1)), exactly. A one-sided split costs
+ *  two f evaluations, a two-sided one three. */
 function pieces(w: SplitWarp, f: (q: Vec3) => number, p: Vec3, dh: number): { q: Vec3; d: number }[] {
   const u = cross(w.n, w.a), rho = w.r - REGION_MARGIN;
   const s = (q: Vec3) => dot(w.n, q) - w.d0;
   const up = (q: Vec3) => dot(u, sub(q, w.h));
+  const fp = f(p);
   const qp = moveBack(w, p, w.thetaP), qm = moveBack(w, p, w.thetaM);
+  const fqp = w.thetaP === 0 ? fp : f(qp), fqm = w.thetaM === 0 ? fp : f(qm);
   return [
-    { q: p, d: Math.max(f(p), Math.min(up(p), rho - dh)) },
-    { q: qp, d: Math.max(f(qp), -s(qp), -up(qp), dh - rho) },
-    { q: qm, d: Math.max(f(qm), s(qm), -up(qm), dh - rho) },
+    { q: p, d: Math.max(fp, restCap(w, p, dh)) },
+    { q: qp, d: Math.max(fqp, -s(qp), -up(qp), dh - rho) },
+    { q: qm, d: Math.max(fqm, s(qm), -up(qm), dh - rho) },
   ];
 }
 
@@ -172,10 +187,7 @@ export function splitField(w: SplitWarp | null | undefined, f: (q: Vec3) => numb
   if (!w) return f(p);
   const dh = len(sub(p, w.h));
   const shell = REGION_MARGIN + Math.abs(dh - w.r);
-  if (dh > w.r) {
-    const rho = w.r - REGION_MARGIN, u = cross(w.n, w.a);
-    return Math.min(Math.max(f(p), Math.min(dot(u, sub(p, w.h)), rho - dh)), shell);
-  }
+  if (dh > w.r) return Math.min(Math.max(f(p), restCap(w, p, dh)), shell);
   let best = shell;
   for (const pc of pieces(w, f, p, dh)) best = Math.min(best, pc.d);
   return best;
