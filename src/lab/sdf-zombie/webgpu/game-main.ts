@@ -186,7 +186,7 @@ import {
   stepWeaponSlot, type WeaponSlot, type WeaponSlotState,
 } from './game-weapon-slots';
 import { setCarveProbeCapEnabled, setProbeCapEnabled, woundWorldPos, woundCarveNormal, type Wound } from '../damage';
-import { cutExposureSpheres } from '../cut-wound';
+import { boneExposureOf } from '../cut-wound';
 import type { ImpactGoutProfile, Droplet } from '../blood-sim';
 import {
   createBloodSim, spawnWoundDroplets, spawnImpactGout, emitTrails, stepBlood, IMPACT_GOUT, burstVolume,
@@ -1693,11 +1693,9 @@ async function main() {
     // bones could only be tubes if living skeletons became tubes as well.
     if (ctx.render.boneMesh || ctx.gibs.boneMesh) {
       if (ctx.render.boneMesh) {
+        // On the wound's own body frame (the live yaw, as every stamp and the GPU upload): cut-wound.ts boneExposureOf.
         const craters: { pos: Vec3; radius: number }[] = [];
-        for (const a of ctx.world.actors) {
-          const prims = a.posed().prims;
-          for (const w of a.visualWounds()) if (!w.decal) craters.push(...cutExposureSpheres(prims, w, ctx.vfx.boundedWoundPreview ? a.pose().yaw : 0));
-        }
+        for (const a of ctx.world.actors) craters.push(...boneExposureOf(a));
         ctx.render.boneInstancer.setWounds(craters);
       }
       ctx.render.boneInstancer.update([
@@ -1739,11 +1737,8 @@ async function main() {
       // gradient, which only matters for meshes that are drawn — build the
       // list from the visual set only (the bone INSTANCER's own crater list
       // above keeps walking every actor; tube mode is not part of this cull).
-      for (const a of ctx.render.visualActors) {
-        const prims = a.posed().prims;
-        // Cloth decals carve nothing, so they expose no bone.
-        for (const w of a.visualWounds()) if (!w.decal) craters.push(...cutExposureSpheres(prims, w, ctx.vfx.boundedWoundPreview ? a.pose().yaw : 0));
-      }
+      // Cloth decals carve nothing, so they expose no bone; the spheres sit on the live body yaw (boneExposureOf).
+      for (const a of ctx.render.visualActors) craters.push(...boneExposureOf(a));
       ctx.render.segMeshRenderer.setWounds(craters);
       ctx.render.segMeshRenderer.update(ctx.world.actors.map(a => {
         let e = ctx.render.skeletonSources.get(a);

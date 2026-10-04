@@ -55,6 +55,10 @@ export function createSkeletonSeams(ctx: GameContext) {
       if (!a || !r) return null;
       return { listOn: r.uniforms.lightListCfg.value.x, instances: r.ownerLights(a), fill: r.ownerFill(a), body: a.view.uniforms.bodyLights.value.toArray() };
     },
+    /** skeleton=mesh: the bone-exposure spheres game-main last fed the segment meshes ([x, y, z, radius] rows, every
+     *  visual actor's in order; cut-wound.ts boneExposureOf). null without the mesh skeleton. The cut gate's turned-body
+     *  check reads these against the wound's uploaded slot. */
+    meshExposure: () => ctx.render.segMeshRenderer ? ctx.render.segMeshRenderer.exposureRows() : null,
     meshEyeState: (bodyId?: number) => { const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId); return a && ctx.render.segMeshRenderer ? ctx.render.segMeshRenderer.eyeState(a) : null; },
     /** Cold-start task 1: how many per-character body builds the memo actually
      *  ran (vs served from cache) and their cumulative CPU time. */

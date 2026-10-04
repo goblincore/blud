@@ -127,6 +127,8 @@ export interface SegmentMeshRenderer {
   eyeState(owner: object): { missing: number[]; debris: number };
   /** This frame's craters (world centre + radius) for the exposure gradient. */
   setWounds(wounds: ReadonlyArray<{ pos: readonly [number, number, number]; radius: number }>): void;
+  /** Diagnostics: the exposure rows setWounds last uploaded (what the shader reads), as [x, y, z, radius]. */
+  exposureRows(): number[][];
   /** Coverage accounting for diagnostics: meshed segment/vertex/triangle
    *  counts from the LAST update, plus cache extraction-health flags. */
   readonly stats: {
@@ -487,6 +489,11 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       }
       u.woundCount.value = n;
       woundTex.needsUpdate = true;
+    },
+    exposureRows() {
+      const out: number[][] = [];
+      for (let i = 0; i < u.woundCount.value; i++) out.push(Array.from(woundData.subarray(i * 4, i * 4 + 4)));
+      return out;
     },
     get stats() { return stats; },
     get drawn() { return drawn; },

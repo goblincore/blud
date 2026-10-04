@@ -14,6 +14,10 @@
 //      >= 1 cut stamped. The canvas mousedown needs pointer lock, which headless Chrome cannot take: that path is NOT
 //      exercised here (rodPress / rodRelease call the harness's onMouseDown / onMouseUp).
 //   C. cost: draw time before / after 3 cuts (with its spread, not gated); zero console errors.
+//   T. K ON A TURNED BODY (its own boot): the ring walks until a zombie stands ~90 degrees round, then freezes; K's cut and
+//      bone checks on that body, plus the exposure the bone meshes received (meshExposure) covers the slot's midpoint. Every
+//      ring zombie boots at yaw 0, where the wound body frame equals the world frame, so K alone cannot see a yaw mismatch.
+// ONLY=K,T (env) runs just those scenarios.
 // Usage (bash, not zsh):
 //   export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up
 //   node scripts/cut-wound-gate.mjs 5241 9241
@@ -36,6 +40,8 @@ const G_SPOT_MIN = 5;
 //   K: the dimmest view (the chest's shadowed side) dipped 15.7 below its darker shoulder.
 const K_DIP_MIN = 8;
 //   H: 7.4 within 5 cm of the cut; 0.81 outside it (1.8% of the pixels over 6), against 0.06 between two renders.
+//   T: the turned body for K's checks on a non-zero yaw (about 90 degrees round), staged within this many walking frames.
+const T_SIN_MIN = 0.97, T_MAX_FRAMES = 900;
 const H_PIX = 6, H_BAND_CM = 5, H_IN_MIN = 4, H_OUT_MAX = 1.0, H_OUT_SHARE_MAX = 0.03;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
@@ -49,6 +55,9 @@ const withTimeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => se
 const f2 = (v) => v.map((c) => c.toFixed(3)).join(", ");
 const median = (a) => { const s = [...a].sort((x, y) => x - y); return s[s.length >> 1]; };
 mkdirSync(OUT, { recursive: true });
+/** ONLY=K,T runs just those scenarios (iteration aid); unset runs them all, which is the gate. */
+const ONLY = process.env.ONLY ? new Set(process.env.ONLY.split(",")) : null;
+const run = (k) => !ONLY || ONLY.has(k);
 
 // ---- A CDP session (a tab), one at a time ---------------------------------------------
 let S = null;
@@ -193,6 +202,7 @@ async function boot(label) {
   for (let i = 0; i < 400; i++) { wb = await evaluate("__sdfGame.warmBackground()"); if (wb.gib === "ready" || wb.gib === "failed") break; await sleep(500); if (i % 10 === 0) await evaluate("__sdfGame.step(1, 1 / 60)"); }
   if (wb?.gib !== "ready") die(`[${label}] the background gib warm is ${JSON.stringify(wb)}`);
   console.log(`[${label}] ready; room ${ROOM} (${pool.length} zombies); warm ${JSON.stringify(wb)}`);
+  console.log(`[${label}] pool yaws (deg): ${pool.map((z) => `${z.id}:${(z.yaw * 180 / Math.PI).toFixed(1)}`).join(" ")}`);
 }
 const stepOne = () => evaluate("__sdfGame.step(1, 1 / 60)");
 async function stepN(n) { for (let i = 0; i < n; i++) await stepOne(); }
@@ -306,7 +316,7 @@ const out = {};
 try {
   await boot("cut");
   // -------- W. capacity: 40 pellet rays at a 5 x 8 grid on one torso's near side.
-  {
+  if (run("W")) {
     const z = fresh();
     const t = await torsoOf(z.id), f = await frontOf(z.id);
     const v = await look(t, 1.6, f);
@@ -338,7 +348,7 @@ try {
   }
 
   // -------- G. wounds 17-32 render on the GPU; frame cost at 0 vs 32 wounds.
-  {
+  if (run("G")) {
     const z = fresh();
     const t = await torsoOf(z.id), f = await frontOf(z.id);
     // The cost at a play distance too (2 m), where the wounds cover far fewer pixels than in the 0.6 m close-up.
@@ -404,7 +414,7 @@ try {
   }
 
   // -------- K. a seam cut on a torso: a vertical slot through the near-side centre.
-  {
+  if (run("K")) {
     const z = fresh();
     const t = await torsoOf(z.id), f = await frontOf(z.id);
     let v = await look(t, PHOTO_D, f);
@@ -459,7 +469,7 @@ try {
   }
 
   // -------- H. a seam cut on a head: a diagonal slash on the face's near side.
-  {
+  if (run("H")) {
     const z = fresh();
     const h = await headOf(z.id), f = await frontOf(z.id);
     let v = await look(h, PHOTO_D, f);
@@ -503,7 +513,7 @@ try {
 
   // -------- R. the real rod: slot 6, held, the crosshair swept across a torso, released. (The canvas mousedown needs pointer
   // lock, which a headless page cannot take: rodPress / rodRelease call the harness's onMouseDown / onMouseUp directly.)
-  {
+  if (run("R")) {
     await evaluate("__sdfGame.setBleed(true)");
     const z = fresh();
     const t = await torsoOf(z.id), f = await frontOf(z.id);
@@ -544,7 +554,7 @@ try {
   }
 
   // -------- C. cost: draw time before / after 3 cuts on one torso (reported with its spread, not gated).
-  {
+  if (run("C")) {
     const z = fresh();
     const t = await torsoOf(z.id), f = await frontOf(z.id);
     const v = await look(t, PHOTO_D, f);
@@ -561,6 +571,65 @@ try {
     out.c3 = await timeDraws();
     await capture("C-3cuts");
     note(`C: frame cost (UNGATED): no cuts ${out.c0a.toFixed(2)} / ${out.c0b.toFixed(2)} ms (spread ${Math.abs(out.c0a - out.c0b).toFixed(2)}), 3 cuts ${out.c3.toFixed(2)} ms; delta ${(out.c3 - (out.c0a + out.c0b) / 2).toFixed(2)} ms`);
+  }
+
+  // -------- T. K ON A TURNED BODY (final review item 1). Every ring zombie boots at yaw 0 (it never stepped), where the wound
+  // body frame and the world frame coincide: that is why K could not see bone exposure resolved at yaw 0 (game-main's old
+  // call) while the carve and its upload use the live yaw. Stage a turned body under its own motion: unfreeze, let the ring
+  // walk, freeze as soon as an unused zombie stands about 90 degrees round (|sin yaw| >= T_SIN_MIN), standing, not
+  // collapsed. Then K's cut and K's bone checks, on that body's front.
+  if (run("T")) {
+    // Its own boot: the scenarios above used the ring's zombies, and walking them would move the bodies they staged.
+    if (usedZ.size) { closeSession(S); usedZ = new Set(); await boot("turned"); }
+    await evaluate("__sdfGame.freeze(false)");
+    let pick = null, frames = 0;
+    for (; frames < T_MAX_FRAMES && !pick; frames += 10) {
+      await stepN(10);
+      const zs = (await evaluate("__sdfGame.actorList()")).filter((q) => q.kind === "zombie" && pool.some((p) => p.id === q.id) && !usedZ.has(q.id));
+      pick = zs.filter((q) => Math.abs(Math.sin(q.yaw)) >= T_SIN_MIN && !/collapse|dead|fall/i.test(String(q.phase))).sort((a, b) => Math.abs(Math.sin(b.yaw)) - Math.abs(Math.sin(a.yaw)))[0] ?? null;
+    }
+    await evaluate("__sdfGame.freeze(true)");
+    if (!pick) die(`T: no unused ring zombie turned to |sin yaw| >= ${T_SIN_MIN} in ${T_MAX_FRAMES} frames`);
+    usedZ.add(pick.id);
+    await stepN(30);
+    const yawNow = (await evaluate("__sdfGame.actorList()")).find((q) => q.id === pick.id).yaw;
+    out.tYawDeg = +(yawNow * 180 / Math.PI).toFixed(1);
+    note(`T: zombie ${pick.id} frozen after ${frames} walking frames at yaw ${out.tYawDeg} deg (phase ${pick.phase})`);
+    check(Math.abs(Math.sin(yawNow)) >= T_SIN_MIN, `T: the body is turned (yaw ${out.tYawDeg} deg, |sin| ${Math.abs(Math.sin(yawNow)).toFixed(2)} >= ${T_SIN_MIN})`);
+    const z = pick;
+    const t = await torsoOf(z.id), f = await frontOf(z.id);
+    let v = await look(t, PHOTO_D, f);
+    const e = await eye();
+    const P = await surfHit(z.id, e, unit(sub(t, e)));
+    v = await look(add(P, mul(v.up, 0.06)), PHOTO_D, f);
+    const before = await capture("T-before");
+    const view = unit(sub(P, await eye()));
+    const a = add(P, mul(v.up, -0.1)), b = add(P, mul(v.up, 0.1));
+    const n = await evaluate(`__sdfGame.cut(${z.id}, ${J(a)}, ${J(b)}, ${J(view)})`);
+    const ws = await woundsOf(z.id);
+    check(n === 1 && ws.length === 1 && ws[0].shape === "cut", `T: one cut wound stamped on the turned body (${n}; shapes ${J(ws.map((w) => w.shape))})`);
+    const after = await capture("T-after");
+    const w = ws[0];
+    // The exposure the bone meshes actually received this frame (skeleton=mesh): its stain / wet terms must sit on the slot.
+    // The cut's slot midpoint (actorWounds' pos: the upload's own transform at the live yaw) must lie inside an exposure
+    // sphere. At yaw 0 (the pre-fix call) the chain resolved in the world basis and missed the slot on a turned body.
+    const rows = await evaluate("__sdfGame.meshExposure()");
+    if (!rows) die("T: no mesh skeleton exposure (skeleton mode is not mesh)");
+    const near = rows.map((r) => ({ d: len(sub([r[0], r[1], r[2]], w.pos)), r: r[3] })).sort((a, b) => a.d - b.d)[0] ?? { d: Infinity, r: 0 };
+    out.tExposure = { nearest: +near.d.toFixed(4), radius: +near.r.toFixed(4), rows: rows.length };
+    note(`T: the exposure sphere nearest the cut's slot midpoint: centre ${near.d.toFixed(4)} m away, radius ${near.r.toFixed(4)} m (${rows.length} rows fed)`);
+    check(near.d <= near.r, `T: the bone exposure sits on the turned body's slot: its midpoint is inside an exposure sphere (${near.d.toFixed(4)} <= ${near.r.toFixed(4)} m)`);
+    const c = await toPx(w.pos), cr = await toPx(add(w.pos, mul(v.right, w.kerf)));
+    const kerfPx = Math.hypot(cr[0] - c[0], cr[1] - c[1]);
+    note(`T: the cut sits ${len(sub(w.pos, P)).toFixed(4)} m from the aimed surface point; kerf ${kerfPx.toFixed(1)} px`);
+    // As K: the slot's upper half (the view model covers its lower end).
+    const pa = await toPx(w.pos), pb = await toPx(add(w.pos, mul(v.up, 0.9 * w.radius)));
+    out.tBone = boneAlong(after, pa, pb, kerfPx);
+    out.tBoneBefore = boneAlong(before, pa, pb, kerfPx);
+    note(`T: pale (bone-mesh) share in the slot ${out.tBone.inSlot.toFixed(3)} (before ${out.tBoneBefore.inSlot.toFixed(3)}), 2-4 kerf beside it ${out.tBone.beside.toFixed(3)} (before ${out.tBoneBefore.beside.toFixed(3)})`);
+    check(out.tBone.inSlot >= out.tBoneBefore.inSlot + 0.02, `T: on the turned body the slot reaches the sternum: bone shows inside it (pale share ${out.tBoneBefore.inSlot.toFixed(3)} -> ${out.tBone.inSlot.toFixed(3)})`);
+    check(out.tBone.beside <= out.tBoneBefore.beside + 0.02, `T: and only inside it: no bone colour appears beside the slot (${out.tBoneBefore.beside.toFixed(3)} -> ${out.tBone.beside.toFixed(3)})`);
+    cropOut(before, c, 240, 300, "T-before-crop"); cropOut(after, c, 240, 300, "T-after-crop");
   }
 } finally { closeSession(S); }
 const errs = consoleEvents.filter((e) => e.type === "error" || e.type === "exception");

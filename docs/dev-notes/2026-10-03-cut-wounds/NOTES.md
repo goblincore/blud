@@ -510,3 +510,63 @@ or march-hash work was needed for this task).
 
 No pin moved. Default `d7392d52…` / wounded `76bd51aa…` on 2/2 boots. Crowd quad `0c71e712…` / `bf6836cd…`. Per-body
 `470ff0b3…` / `f618070e…`. Header updated.
+
+## Final review fixes (2026-10-04)
+
+### 1. Bone exposure on the wound's own body frame (turned bodies)
+
+`game-main.ts` built both bone-exposure lists (the bone instancer's and the mesh skeleton's) with
+`cutExposureSpheres(prims, w, boundedWoundPreview ? a.pose().yaw : 0)`. Which yaw each path uses, read from the code and
+checked by `bone-exposure-yaw.test.ts`:
+
+| path | default | `?bounded-wounds` |
+| --- | --- | --- |
+| crater stamp: `woundFromPellet` / `woundFromSlug` / `woundRing.stamp(w, posed, bodyYaw)`; blasts take `ExplosionBody.bodyYaw = pose().yaw` | live yaw | live yaw |
+| cut stamp: `game-rod.ts` `cutActor` → `stampCut(posed.prims, seg, calibre, a.pose().yaw, field)` (the `cut` seam goes through it) | live yaw | live yaw |
+| GPU upload: `refreshWounds` → `woundRing.refresh(view, posed, bodyYaw, visual, xf)` (positions, cap normals, cut dirs) | live yaw | live yaw (the preset rows too) |
+| bone exposure (`game-main.ts`, both lists) | **0 (the bug)** | live yaw |
+| sever resolve (`runSeverChecks`, the REST body) and the preview's region split (`torso.ts regionFor`, REST prims) | 0 on the rest body = the body frame | same |
+
+- **Craters and cuts are stamped the same way.** Both use the live yaw in both modes, so one fix covers both. The
+  "stamps on applyRig output at yaw 0" rule in project memory is stale: the 2026-09-02 billboarding fix (`ebaa7dd6b`) moved
+  stamp and upload to the live yaw.
+- **What `boundedWoundPreview` is.** The DEV-only `?bounded-wounds` URL flag (`8ef192d71`, 2026-09-06): the opt-in bounded
+  torso wound preview. Torso wounds fold into 4 rest-space regions, each uploading 2 preset cutter rows (`presetCut`) in place of
+  the per-hit ring, at the 640 res rung. That commit moved the exposure to the live yaw for its own mode only. The default
+  was left at 0, although stamps and uploads had used the live yaw since 2026-09-02. Nothing makes the default need 0.
+- **The fix.** `cut-wound.ts boneExposureOf(actor)`: the visual wounds minus decals, through `cutExposureSpheres` at
+  `actor.pose().yaw`, in both modes. `game-main.ts` calls it for both lists.
+- **How far off the old call was** (`bone-exposure-yaw.test.ts`, the real zombie posed at yaw θ about an off-origin point;
+  worst error of the yaw-0 exposure against the upload's own rows, in mm):
+
+  | yaw | sphere prim, crater / cut | capsule prim, crater / cut | orient prim (head) |
+  | --- | --- | --- | --- |
+  | 0.7 | 92.4 / 89.2 | 42.5 / 39.0 | 0 |
+  | π/2 | 190.5 / 183.9 | 87.6 / 80.6 | 0 |
+  | π | 269.4 / 260.0 | 124.0 / 114.0 | 0 |
+  | -2.3 | 245.9 / 237.4 | 113.2 / 104.0 | 0 |
+
+  At the live yaw the error is 0.0000 mm at every yaw, in both modes (the preview's preset rows included). Vertical capsules
+  are off too: at yaw 0 `frame()` builds the basis from the world axis, while at the live yaw it de-yaws, builds and
+  re-yaws. Only orient prims (the rigid head) are yaw-free.
+- **What it looked like.** With `skeleton=mesh` (the default), bone visibility comes from the depth test against the carved
+  flesh, so the bone in a slot showed either way. The exposure spheres drive only the mesh bone's wound stain and wetness
+  (`meshBoneSurface`'s `expo`), and the tube instancer's exposure. On a turned body the slot's bone was drawn dry and
+  unstained, and the stain sat on buried bone ~0.15 m away. In the gate's T photos, old vs fixed, 469 pixels differ, all
+  inside the slot.
+- **Gate T** (`scripts/cut-wound-gate.mjs`): every ring zombie boots at yaw 0, where the body frame equals the world
+  frame, so K could not see this. T boots again, lets the ring walk until an unused zombie stands at |sin yaw| >= 0.97,
+  freezes it, and then:
+  - runs K's cut and bone checks on its front;
+  - reads the exposure the mesh skeleton actually received (new seam `meshExposure`, `exposureRows()` on the mesh
+    renderer) and requires the cut's slot midpoint to lie inside an exposure sphere.
+- **T results.**
+  - Zombie 14, after 50 walking frames, at yaw -81.2°.
+  - Pre-fix `game-main.ts`: nearest exposure centre 0.1482 m from the slot midpoint (radius 0.040). **FAIL.**
+  - Fixed: 0.0300 m (the middle station, dEff/2 inward). PASS.
+  - Bone in the slot 0.005 → 0.058, beside it 0.003 → 0.003 (it passes on both builds: the pale-share check cannot see the
+    stain).
+  - Full gate: **29 checks, 0 failed.** W, G, K, H, R and C read the same numbers as runs 7 and 8; their photos differ only
+    in the HUD text and were not re-committed.
+- **Not covered:** a body mid-rupture. `refreshWounds` passes the rupture's per-region rigid transform (`xf`) to the
+  upload, and the exposure does not apply it. This predates the cuts.

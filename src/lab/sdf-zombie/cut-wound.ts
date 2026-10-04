@@ -322,3 +322,20 @@ export function cutExposureSpheres(prims: Primitive[], w: Wound, bodyYaw: number
   }
   return out;
 }
+
+/** The bone-exposure sphere list for one actor (game-main's bone instancer and segment meshes): every visual wound but cloth
+ *  decals (they carve nothing), as cutExposureSpheres, ON THE FRAME THE GPU ROWS USE. The ring uploads from the posed prims
+ *  WITH THE LIVE BODY YAW (character-view.ts refresh; game-actor.ts "THE WOUND FRAME IS THE BODY FRAME"), and every stamp
+ *  (pellet, slug, blast, the rod's stampCut) resolves with that same yaw, in the default and the bounded-wounds preview
+ *  alike. The exposure must too: at yaw 0 damage.ts frame() keeps the world basis instead of re-yawing the body-frame one,
+ *  so on a turned body the spheres slid off the carve (a yaw-pi torso cut exposed bone on the BACK). */
+export function boneExposureOf(a: {
+  posed(): { prims: Primitive[] };
+  pose(): { yaw: number };
+  visualWounds(): readonly Wound[];
+}): { pos: Vec3; radius: number }[] {
+  const prims = a.posed().prims, yaw = a.pose().yaw;
+  const out: { pos: Vec3; radius: number }[] = [];
+  for (const w of a.visualWounds()) if (!w.decal) out.push(...cutExposureSpheres(prims, w, yaw));
+  return out;
+}
