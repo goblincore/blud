@@ -32,7 +32,7 @@ import {
   FLAIL_IMPACT, FLAIL_TIMING, cancelFlailSwing, comboSide, flailBallVel, flailPose, makeFlailSwing, stepFlailSwing,
   type FlailSide, type FlailSwing,
 } from './flail-swing';
-import { FLAIL_ARC_DEG, flailWound, headNeck, isHeadRegion, resolveStrike, type StrikeActor } from './flail-strike';
+import { FLAIL_ARC_DEG, flailWound, headNeck, isHeadRegion, resolveStrike, strikeActorsFrom } from './flail-strike';
 import {
   FLAIL_CHAIN_SIM, chainTeleported, drawChain, guideWeight, linkRest, makeChain, stepChainInPlace, type ChainState, type ChainStepOpts,
 } from './flail-chain';
@@ -590,22 +590,9 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     const d = deps.aimDir();
     const aim: Vec3 = [eye[0] + d[0], eye[1] + d[1], eye[2] + d[2]];
     const aimYaw = Math.atan2(d[0], -d[2]);
-    const actors: StrikeActor[] = [];
+    const actors = strikeActorsFrom(ctx.world.actors);
     const heads: Record<number, Vec3> = {};
-    for (const a of ctx.world.actors) {
-      const posed = a.posed();
-      const c = posed.clusters.find(cc => cc.limb === 'torso')?.center;
-      if (!c) continue;
-      // THE HEAD MAGNET (spec §13.1): the live head cluster's centre NOW (the zombie lunges between click and
-      // strike) and the head's own field — sdBody over the head cluster(s) alone, so the same smooth unions and
-      // carves as the body, without the arms in front of the face.
-      const headClusters = posed.clusters.filter(cc => cc.limb === 'head' && cc.alive);
-      const head = headClusters.length > 0
-        ? { centre: [...headClusters[0]!.center] as Vec3, field: (q: Vec3) => sdBody(q, { prims: posed.prims, clusters: headClusters }) }
-        : undefined;
-      if (head) heads[a.id] = head.centre;
-      actors.push({ id: a.id, centre: c, field: q => sdBody(q, posed), head });
-    }
+    for (const a of actors) if (a.head) heads[a.id] = a.head.centre;
     const hits = resolveStrike(eye, aimYaw, aim, actors, FLAIL_ARC_DEG[side]);
     const struckHeads: Record<number, number> = {};
     const struckPoints: Record<number, Vec3> = {};

@@ -28,6 +28,7 @@
 // body — assuming the field's gradient never drops below FLAIL_STRIKE.minGrad.
 
 import type { LimbId, Primitive, Vec3 } from '../types';
+import { sdBody, type Body } from '../validate';
 import type { FlailSide } from './flail-swing';
 
 export const FLAIL_STRIKE = {
@@ -280,4 +281,23 @@ export function headNeck(prims: readonly Primitive[]): { root: Vec3; mid: Vec3 }
   const n = prims.find(p => p.limb === 'head' && p.op !== 'sub' && !p.dead);
   if (!n) return null;
   return { root: [n.a[0], n.a[1], n.a[2]], mid: [(n.a[0] + n.b[0]) / 2, (n.a[1] + n.b[1]) / 2, (n.a[2] + n.b[2]) / 2] };
+}
+
+/** The strike list for resolveStrike, from the live actors (the flail's and the axe's strike share it): each actor
+ *  with a torso cluster, at its torso centre, with its posed body field, and THE HEAD MAGNET's live head (spec
+ *  §13.1): the head cluster's centre now and sdBody over the head cluster(s) alone, so the arms in front of the face
+ *  do not block a head strike. */
+export function strikeActorsFrom(actors: readonly { id: number; posed(): Body }[]): StrikeActor[] {
+  const out: StrikeActor[] = [];
+  for (const a of actors) {
+    const posed = a.posed();
+    const c = posed.clusters.find(cc => cc.limb === 'torso')?.center;
+    if (!c) continue;
+    const headClusters = posed.clusters.filter(cc => cc.limb === 'head' && cc.alive);
+    const head = headClusters.length > 0
+      ? { centre: [...headClusters[0]!.center] as Vec3, field: (q: Vec3) => sdBody(q, { prims: posed.prims, clusters: headClusters }) }
+      : undefined;
+    out.push({ id: a.id, centre: c, field: (q: Vec3) => sdBody(q, posed), head });
+  }
+  return out;
 }
