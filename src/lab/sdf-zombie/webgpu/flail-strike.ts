@@ -286,7 +286,8 @@ export function headNeck(prims: readonly Primitive[]): { root: Vec3; mid: Vec3 }
 /** The strike list for resolveStrike, from the live actors (the flail's and the axe's strike share it): each actor
  *  with a torso cluster, at its torso centre, with its posed body field, and THE HEAD MAGNET's live head (spec
  *  §13.1): the head cluster's centre now and sdBody over the head cluster(s) alone, so the arms in front of the face
- *  do not block a head strike. */
+ *  do not block a head strike. The head-only body carries the posed body's head split, so a strike lands on the opened
+ *  halves (the centre stays the closed head's). */
 export function strikeActorsFrom(actors: readonly { id: number; posed(): Body }[]): StrikeActor[] {
   const out: StrikeActor[] = [];
   for (const a of actors) {
@@ -295,7 +296,7 @@ export function strikeActorsFrom(actors: readonly { id: number; posed(): Body }[
     if (!c) continue;
     const headClusters = posed.clusters.filter(cc => cc.limb === 'head' && cc.alive);
     const head = headClusters.length > 0
-      ? { centre: [...headClusters[0]!.center] as Vec3, field: (q: Vec3) => sdBody(q, { prims: posed.prims, clusters: headClusters }) }
+      ? { centre: [...headClusters[0]!.center] as Vec3, field: (q: Vec3) => sdBody(q, { prims: posed.prims, clusters: headClusters, split: posed.split ?? null }) }
       : undefined;
     out.push({ id: a.id, centre: c, field: (q: Vec3) => sdBody(q, posed), head });
   }

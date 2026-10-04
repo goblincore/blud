@@ -13,9 +13,8 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import type { GameContext } from './game-context';
 import type { ZombieActor } from './game-actor';
 import type { Vec3 } from '../types';
-import { worldHitToWound, type Wound } from '../damage';
-import { sdBody } from '../validate';
-import { stampCut } from '../cut-wound';
+import { unwarpHit, worldHitToWound, type Wound } from '../damage';
+import { stampCut, unwarpCutSeg } from '../cut-wound';
 import { slotLowerAmount, slotReady } from './game-weapon-slots';
 import { loopBlocksInput } from './game-loop-leaves';
 import { BEND_R_VIEW } from './game-weapon-leaves';
@@ -158,14 +157,21 @@ export function createAxeHarness(ctx: GameContext, deps: AxeDeps): AxeHarness {
   function hitActor(a: ZombieActor, side: AxeSide, aim: Vec3, point: Vec3, dir: Vec3, magnet: boolean): number {
     const posed = a.posed();
     const yaw = a.pose().yaw;
-    const field = (q: Vec3) => sdBody(q, posed);
     const aimYaw = Math.atan2(aim[0], -aim[2]), aimPitch = Math.asin(Math.max(-1, Math.min(1, aim[1])));
-    const w = stampCut(posed.prims, axeCutSeg(deps.eye(), aimYaw, aimPitch, side, point, dir), AXE_CALIBRE, yaw, field);
+    // The cut is stamped in the un-warped head (cut-wound.ts unwarpCutSeg): a chop into an opened half lands on the
+    // closed head's prims, where the GPU reads it. The shove and the blood below keep the world point.
+    const cut = unwarpCutSeg(posed, axeCutSeg(deps.eye(), aimYaw, aimPitch, side, point, dir));
+    const w = stampCut(posed.prims, cut.seg, AXE_CALIBRE, yaw, cut.field);
     // The head region: the magnet's hit is on the head by construction; else the flail's test on the struck prim (the
-    // probe only finds that prim, so it is skipped for a magnet hit).
-    const region = magnet || isHeadRegion(
-      posed.prims[worldHitToWound(posed.prims, point, 0.05, 'blast', yaw, field).primIdx]?.limb,
-      point, posed.clusters.find(c => c.limb === 'head' && c.alive)?.center ?? null, headNeck(posed.prims)?.root ?? null);
+    // probe only finds that prim, so it is skipped for a magnet hit), at the un-warped hit: the prims and the head
+    // centre are the closed head's.
+    const headRegion = (): boolean => {
+      const u = unwarpHit(posed, point);
+      return isHeadRegion(
+        posed.prims[worldHitToWound(posed.prims, u.hit, 0.05, 'blast', yaw, u.field).primIdx]?.limb,
+        u.hit, posed.clusters.find(c => c.limb === 'head' && c.alive)?.center ?? null, headNeck(posed.prims)?.root ?? null);
+    };
+    const region = magnet || headRegion();
     const f = AXE_HIT[side];
     const impulse = { at: point, vel: [dir[0] * f.shove, dir[1] * f.shove, dir[2] * f.shove] as Vec3 };
     if (region) {

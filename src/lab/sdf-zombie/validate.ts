@@ -3,6 +3,7 @@ import type { ClusterInfo, Primitive, Vec3 } from './types';
 import type { Quat } from './vec';
 import { boxReach, shellReach, strandReach } from './extent';
 import { sdStrand, strandLipschitz } from './strand';
+import { splitField, type SplitWarp } from './head-split';
 import { add, bendCtrl, cross, dot, len, lerp, normalize, qMul, qNormalize, qRotate, scale as vscale, sub } from './vec';
 
 /**
@@ -100,6 +101,13 @@ export interface Body {
    * has no bone. See BuiltBody.bonePrims in types.ts for the full contract.
    */
   bonePrims?: Primitive[];
+  /**
+   * THE HEAD SPLIT (head-split.ts), in world space for this pose: `sdBody`
+   * returns the split field, so every strike, shot and trace sees the opened
+   * halves. The prims stay the CLOSED head's, and wounds are stamped there
+   * (damage.ts unwarpHit). Absent or null = closed, the body as its prims say.
+   */
+  split?: SplitWarp | null;
 }
 
 /**
@@ -535,8 +543,17 @@ export function smax(a: number, b: number, k: number): number {
  * field also backs click-to-shoot raycasting, so drift means shots land where
  * the body isn't — or inside an eye socket. primScale.w semantics are shared
  * with the shaders: 0 add, 1 carve, 2 dead — dead prims skip BOTH passes.
+ *
+ * A body with a `split` (the head split) returns head-split.ts's split field
+ * over this fold: the mirror of mapBody's three-piece union. The fold itself
+ * (`sdBodyClosed`) never looks at `split`, so the split cannot recurse.
  */
 export function sdBody(p: Vec3, body: Body): number {
+  return body.split ? splitField(body.split, q => sdBodyClosed(q, body), p) : sdBodyClosed(p, body);
+}
+
+/** sdBody's fold, the split ignored: the body as its prims say. */
+function sdBodyClosed(p: Vec3, body: Body): number {
   let d = 1e9;
   for (const c of body.clusters) {
     if (!c.alive) continue;

@@ -2,7 +2,8 @@
 import type { Primitive, Vec3 } from './types';
 import { add, basisFromAxis, dot, len, normalize, qFromTo, qRotate, scale, sub } from './vec';
 import { rotateYaw } from './gait';
-import { sdPrimitive } from './validate';
+import { sdBody, sdPrimitive, type Body } from './validate';
+import { unwarpDir, unwarpPoint } from './head-split';
 
 /** Wounds per body (the ring cap). Every WGSL wound loop bound and the per-ray
  *  wound list size are built from this constant. The frozen GLSL twin
@@ -376,6 +377,40 @@ export function rimScaleFor(
   const { thick, inward } = probeFlesh(field, hit, prim, full);
   if (!inward) return 1;
   return Math.max(0, Math.min(1, thick / full));
+}
+
+/** A hit on a body, taken to where wounds live (unwarpHit). */
+export interface UnwarpedHit {
+  /** The hit in the UN-WARPED body: stamp here. The hit itself when nothing moved it. */
+  hit: Vec3;
+  /** The piece of the split it is on: 0 the unmoved rest (and every hit on a closed body), 1 the + half, 2 the - half. */
+  piece: 0 | 1 | 2;
+  /** The CLOSED body's field (sdBody with no split): probe the flesh behind the stamp with this one. */
+  field: (p: Vec3) => number;
+  /** A world direction (a view, a blade line) in that piece's un-warped frame. */
+  dir: (v: Vec3) => Vec3;
+}
+
+/**
+ * WOUNDS LIVE IN THE UN-WARPED HEAD (the head split, head-split.ts). A split
+ * body's FIELD has the head's halves turned open (validate.ts sdBody), but its
+ * prims are the closed head's, and the GPU reads every wound at the un-warped
+ * point of the piece it is shading. A stamp made at the world hit would sit
+ * out where the half now is, off the closed prims, and never be read. So every
+ * stamp takes its hit back first: stamp `hit` with `field`, and turn any
+ * direction that goes into the wound through `dir`. World-space effects of
+ * the same hit (the shove, the blood, the reaction) keep the world point.
+ *
+ * On a body with no split this is the identity: `hit` is the same point, `dir`
+ * returns its argument, and `field` is sdBody on the body as given.
+ */
+export function unwarpHit(body: Body, hit: Vec3): UnwarpedHit {
+  const split = body.split;
+  if (!split) return { hit, piece: 0, field: p => sdBody(p, body), dir: v => v };
+  const closed: Body = { ...body, split: null };
+  const field = (p: Vec3) => sdBody(p, closed);
+  const { q, piece } = unwarpPoint(split, hit, field);
+  return { hit: q, piece, field, dir: v => unwarpDir(split, piece, v) };
 }
 
 /**

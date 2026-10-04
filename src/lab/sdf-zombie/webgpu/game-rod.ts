@@ -12,11 +12,10 @@ import type { GameContext } from './game-context';
 import type { ZombieActor } from './game-actor';
 import type { Vec3 } from '../types';
 import type { Wound } from '../damage';
-import { sdBody } from '../validate';
 import { rotateYaw } from '../gait';
 import { loopBlocksInput } from './game-loop-leaves';
 import { slotLowerAmount, slotReady } from './game-weapon-slots';
-import { CUT, ROD_CALIBRE, cutsFromSweep, stampCut, type CutCalibre, type CutSeg, type SweepSample } from '../cut-wound';
+import { CUT, ROD_CALIBRE, cutsFromSweep, stampCut, unwarpCutSeg, type CutCalibre, type CutSeg, type SweepSample } from '../cut-wound';
 
 export const ROD = {
   /** Only hits within this of the eye count (a melee reach). The trace is a straight ray capped at it (traceMeleeHitFrom),
@@ -103,9 +102,12 @@ export function createRodHarness(ctx: GameContext, deps: RodDeps): RodHarness {
   function cutActor(a: ZombieActor, segs: CutSeg[], calibre: CutCalibre): number {
     if (!segs.length) return 0;
     const posed = a.posed();
-    const field = (q: Vec3) => sdBody(q, posed);
     const yaw = a.pose().yaw;
-    const wounds = segs.map(s => stampCut(posed.prims, s, calibre, yaw, field));
+    // Each segment is stamped in the un-warped head (cut-wound.ts unwarpCutSeg); the blood below keeps the world segment.
+    const wounds = segs.map((s) => {
+      const u = unwarpCutSeg(posed, s);
+      return stampCut(posed.prims, u.seg, calibre, yaw, u.field);
+    });
     a.blast({ wounds, meterCredit: 0, impulse: null, reaction: 'flinch' });
     for (let i = 0; i < wounds.length; i++) {
       const s = segs[i]!;

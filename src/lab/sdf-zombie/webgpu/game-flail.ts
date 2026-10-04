@@ -19,7 +19,7 @@ import {
 import type { GameContext } from './game-context';
 import type { Vec3 } from '../types';
 import type { ZombieActor } from './game-actor';
-import { clothifyWound, tearWound, worldHitToWound, type Wound } from '../damage';
+import { clothifyWound, tearWound, unwarpHit, worldHitToWound, type Wound } from '../damage';
 import { flailTear, flailTearOn, setFlailTear } from '../torn-lips';
 import { fieldNormal, fleshBitCount, fleshBits, fleshBitsOn, fleshRand, setFleshBitsOn, swingBlow } from '../flesh-bits';
 import type { GorePiece } from '../head-pop';
@@ -533,11 +533,15 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       // radius changes. With deps.headHit (the head damage model, game-head-damage.ts)
       // a head-region hit goes there instead and climbs its ladder (eye, cave, scalp,
       // brain) — still never a sever. headHits stays the flail's own counter.
-      const probe = worldHitToWound(posed.prims, h.point, FLAIL_FEEL.craterR, 'blast', yaw, field);
+      // Stamped (and the region read) at the UN-WARPED hit with the closed body's field (damage.ts unwarpHit: on a
+      // split head the prims and the head centre are the closed head's). `field` stays the body as it stands, for the
+      // world-space normal below; the shove, the head snap and the gore keep the world point.
+      const u = unwarpHit(posed, h.point);
+      const probe = worldHitToWound(posed.prims, u.hit, FLAIL_FEEL.craterR, 'blast', yaw, u.field);
       const headC = posed.clusters.find(c => c.limb === 'head' && c.alive)?.center ?? null;
       const neck = headNeck(posed.prims);
       // A magnet hit is on the head by construction (its point is on the head's own surface).
-      const region = !!h.magnet || isHeadRegion(posed.prims[probe.primIdx]?.limb, h.point, headC, neck?.root ?? null);
+      const region = !!h.magnet || isHeadRegion(posed.prims[probe.primIdx]?.limb, u.hit, headC, neck?.root ?? null);
       const spec = flailWound(region, FLAIL_FEEL.craterR, FLAIL_FEEL.severMul);
       if (region) headHits.set(a.id, (headHits.get(a.id) ?? 0) + 1);
       struckHeads[a.id] = headHits.get(a.id) ?? 0;
@@ -556,7 +560,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
         snap();
         continue;
       }
-      const w = spec.radius === FLAIL_FEEL.craterR ? probe : worldHitToWound(posed.prims, h.point, spec.radius, 'blast', yaw, field);
+      const w = spec.radius === FLAIL_FEEL.craterR ? probe : worldHitToWound(posed.prims, u.hit, spec.radius, 'blast', yaw, u.field);
       w.severRadius = spec.severRadius;
       clothifyWound(posed.prims, w, 'heavy');
       // TORN LIPS (v1.5b, torn-lips.ts): the flail's craters are torn, hardest on the overhead.

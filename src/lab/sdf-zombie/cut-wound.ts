@@ -14,8 +14,8 @@
 //
 // A cut is tagged type 'pellet' for profile purposes (the rim / upload paths treat it as a pellet-sized wound) and is always
 // wetLip: both are deliberate for now, not an oversight.
-import { fleshBehind, worldDirToWoundLocal, woundDirToWorld, woundWorldPos, worldHitToWound, type Wound } from './damage';
-import { hash13, noise3, sdPrimitive } from './validate';
+import { fleshBehind, unwarpHit, worldDirToWoundLocal, woundDirToWorld, woundWorldPos, worldHitToWound, type Wound } from './damage';
+import { hash13, noise3, sdPrimitive, type Body } from './validate';
 import { add, cross, dot, normalize, scale, sub } from './vec';
 import type { Primitive, Vec3 } from './types';
 
@@ -357,7 +357,19 @@ function perp(n: Vec3): Vec3 {
   return unit(cross(n, axis));
 }
 
-/** One cut wound from a segment on the body (world space at `bodyYaw`). */
+/** A cut segment on a body whose head may be split, taken to the UN-WARPED body, where stampCut works (damage.ts
+ *  unwarpHit: wounds live there). ONE rigid motion for the whole segment, that of the piece its midpoint is on, so the
+ *  segment keeps its length and its ends never land on different pieces. `field` is the closed body's, for the stamp.
+ *  With no split, or a midpoint on the unmoved rest, the segment is returned as it is. */
+export function unwarpCutSeg(body: Body, seg: CutSeg): { seg: CutSeg; field: (p: Vec3) => number } {
+  const u = unwarpHit(body, scale(add(seg.a, seg.b), 0.5));
+  if (u.piece === 0) return { seg, field: u.field };
+  const half = u.dir(scale(sub(seg.b, seg.a), 0.5));
+  return { seg: { a: sub(u.hit, half), b: add(u.hit, half), view: u.dir(seg.view) }, field: u.field };
+}
+
+/** One cut wound from a segment on the body (world space at `bodyYaw`). On a split head: the un-warped segment and the
+ *  closed body's field (unwarpCutSeg). */
 export function stampCut(prims: Primitive[], seg: CutSeg, calibre: CutCalibre, bodyYaw: number, field: (p: Vec3) => number): Wound {
   const d = sub(seg.b, seg.a);
   const half = Math.min(CUT.maxLen, Math.hypot(d[0], d[1], d[2])) / 2;

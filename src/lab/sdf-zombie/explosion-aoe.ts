@@ -44,7 +44,7 @@
 import type { BuildResult } from './build-body';
 import type { LimbId, Primitive, Vec3 } from './types';
 import { add, len, scale, sub } from './vec';
-import { WOUND_PROFILES, worldHitToWound, type Wound } from './damage';
+import { WOUND_PROFILES, unwarpHit, worldHitToWound, type Wound } from './damage';
 import { cutChains, cutLimbs, type ChainCut } from './connectivity';
 import { COLLAPSE_TUNING } from './collapse';
 import { sdBody, sdPrimitive, smin } from './validate';
@@ -580,12 +580,17 @@ export function resolveExplosion(
       });
       continue;
     }
-    const wounds: Wound[] = hits.slice(0, T.maxWoundsPerBody).map(h =>
-      worldHitToWound(
-        body.prims, h.point,
+    // Each stamped in the UN-WARPED head (damage.ts unwarpHit: on a split
+    // head the traces above ran on the opened halves, the prims are the closed
+    // head's). No split: the hit and sdBody on the body, as before.
+    const wounds: Wound[] = hits.slice(0, T.maxWoundsPerBody).map((h) => {
+      const u = unwarpHit(body, h.point);
+      return worldHitToWound(
+        body.prims, u.hit,
         WOUND_PROFILES.blast.radius * h.falloff, 'blast', bodyYaw,
-        p => sdBody(p, body),
-      ));
+        u.field,
+      );
+    });
     // Entrails (2026-09-02): a blast over the TORSO opens a body cavity —
     // the same gate the slug path applies, read off the prim
     // worldHitToWound bound each wound to (its arg-min prim IS the struck
