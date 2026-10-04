@@ -58,7 +58,7 @@ Task 5 details worth knowing:
 - **32-wound frame cost.** With the torso filling the frame (0.6 m), 32 wounds add +17 to +25 ms over a ~20 ms baseline; at 2 m, +4 to +6 ms. The 16 far-side wounds alone add ~2.5 ms. The 32-wound reading spreads by 8 ms between runs (`NOTES.md`, Task 8 frame cost).
 - **Look suggestions (not applied; the owner's call, `NOTES.md` Task 8):**
   1. Lips read darker than the uncut skin in shadow (the wet-lip band darkens the ridges). Try `CUT_SHADE.lipHeight`, or less darkening of a cut's band. At 0.6 m the rod's 1 cm kerf is ~5 march px, so a lip may need to be larger than the CPU slope tests assume.
-  2. The rod's slit (`ROD_CALIBRE.kerf` 0.01, 2 cm wide) reads as a thin line at 0.6 m in shadow. A wider kerf is one constant.
+  2. *(Applied 2026-10-04 at the owner's request: `ROD_CALIBRE.kerf` 0.01 → 0.015; see NOTES.)* The rod's 2 cm slit read as a thin line at 0.6 m in shadow.
   3. Exposed bone renders crisp at output resolution inside the soft upscaled flesh (hard-edged pink patches). This predates the cuts (skeleton=mesh).
 - **Gate thresholds.** The H outside-band margin is thin (0.78 vs a 1.0 limit); the residue near the right eye's lower lid was not isolated. A large flat pale-yellow polygon fills the lower left of the C photos before any cut; not investigated.
 - **Fixed on main, merged in `f48e0084`.** The `ngWoundProbe` arity bug found in Task 2: the probe now calls the 8-argument `applyWounds` (`normal-gradient-probe.wgsl.ts`, pinned by `normal-gradient-probe.wgsl.test.ts`).

@@ -7,6 +7,10 @@ import { sdBody, smax } from './validate';
 import { cross } from './vec';
 import type { Primitive, Vec3 } from './types';
 
+/** The rod's original 1 cm kerf (ROD_CALIBRE was widened to 0.015 on 2026-10-04): the narrow calibre the pinned
+ *  thin-limb and silhouette numbers below were measured at, kept so both widths stay covered. */
+const KERF_010 = { ...ROD_CALIBRE, kerf: 0.01 };
+
 // A torso-like capsule (cluster 1) and an arm (cluster 2), both along +y.
 const torso = prim([0, 1.0, 0], [0, 1.5, 0], 0.15, [1, 1, 1], { limb: 'torso', cluster: 1 });
 const arm = prim([0.4, 1.0, 0], [0.4, 1.5, 0], 0.05, [1, 1, 1], { limb: 'armL', cluster: 2 });
@@ -364,12 +368,12 @@ describe('cutLip / cutMask: the lip and the mask stay on the near skin', () => {
   // What remains is on the limb's SIDES (dot(nrm, inward) 0.26-0.5, i.e. 15-30 degrees past the side): a 2.2-kerf band is
   // wider than a 2 cm arm, so the cut wraps it. The back proper (dot >= 0.6, within 53 degrees of the back pole) is 0.
   for (const r of [0.02, 0.03, 0.04]) {
-    it(`(a) a front cut along a ${r} m arm leaves its back unpainted (rod and kerf 0.015)`, () => {
+    it(`(a) a front cut along a ${r} m arm leaves its back unpainted (kerf 0.01 and 0.015)`, () => {
       const thin = prim([0.4, 1.0, 0], [0.4, 1.5, 0], r, [1, 1, 1], { limb: 'armL', cluster: 2 });
       const tp: Primitive[] = [torso, thin];
       const tb = { prims: tp, clusters: [{ start: 0, count: 1, alive: true }, { start: 1, count: 1, alive: true }] } as unknown as Parameters<typeof sdBody>[1];
       const tf = (p: Vec3) => sdBody(p, tb);
-      for (const [cal, sideMax] of [[ROD_CALIBRE, r <= 0.02 ? 0.2 : 1e-3], [{ ...ROD_CALIBRE, kerf: 0.015 }, r <= 0.02 ? 0.9 : r <= 0.03 ? 0.2 : 1e-3]] as const) {
+      for (const [cal, sideMax] of [[KERF_010, r <= 0.02 ? 0.2 : 1e-3], [{ ...ROD_CALIBRE, kerf: 0.015 }, r <= 0.02 ? 0.9 : r <= 0.03 ? 0.2 : 1e-3]] as const) {
         const w = stampCut(tp, { a: [0.4, 1.15, r], b: [0.4, 1.35, r], view: [0, 0, -1] }, cal, 0, tf);
         const mid = woundWorldPos(tp, w, 0), al = woundDirToWorld(tp, w, w.cutDir!, 0), inw = woundDirToWorld(tp, w, w.carveN!, 0);
         let back = 0, all = 0;
@@ -537,7 +541,7 @@ describe('the lid leaves the owner\'s surface alone and closes the channel above
 });
 
 describe('stampCut: a slash across a thin limb\'s silhouette leaves its back closed', () => {
-  for (const [name, cal] of [['rod', ROD_CALIBRE], ['kerf 0.015', { ...ROD_CALIBRE, kerf: 0.015 }]] as const) {
+  for (const [name, cal] of [['kerf 0.01', KERF_010], ['kerf 0.015', { ...ROD_CALIBRE, kerf: 0.015 }]] as const) {
     it(`${name}: depth fits between the chord and thickFrac of the flesh; no far-skin opening in the middle 70% of the chord`, () => {
       const w = armSilhouette(cal);
       const k = slotOf(w);
@@ -559,7 +563,7 @@ describe('stampCut: a slash across a thin limb\'s silhouette leaves its back clo
       console.log(`silhouette ${name}: sag ${k.sag.toFixed(4)} depth ${k.depth.toFixed(4)}, opened ${opened} of ${n} back-skin samples, ${middle} within |a| <= 0.7 h, nearest the middle at |a| = ${minA.toFixed(3)} h, deepest ${(maxBelow * 1000).toFixed(1)} mm below the chord plane`);
       expect(middle).toBe(0);
       // Pinned counts and positions (measured 234 at >= 0.904 h, 784 at >= 0.747 h; unchanged by the raw-plane lid).
-      const [maxOpened, minTip] = cal.kerf === ROD_CALIBRE.kerf ? [300, 0.85] : [900, 0.7];
+      const [maxOpened, minTip] = cal.kerf === KERF_010.kerf ? [300, 0.85] : [900, 0.7];
       expect(opened).toBeLessThanOrEqual(maxOpened);
       if (opened > 0) expect(minA).toBeGreaterThanOrEqual(minTip);
       // Every opened sample is flesh a straight blade at the slot's full depth (plus smax's blend) would sever anyway.

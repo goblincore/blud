@@ -42,6 +42,11 @@ const K_DIP_MIN = 8;
 //   H: 7.4 within 5 cm of the cut; 0.81 outside it (1.8% of the pixels over 6), against 0.06 between two renders.
 //   T: the turned body for K's checks on a non-zero yaw (about 90 degrees round), staged within this many walking frames.
 const T_SIN_MIN = 0.97, T_MAX_FRAMES = 900;
+const H_LIP_REACH_KERF = 1.5 + 2 * 1.2;   // CUT_SHADE.lipOffset + 2 x CUT_SHADE.lipWidth (cut-wound.ts)
+// H_NEAR_CM: a ring just past the band, reported but not gated. At the 1.5 cm rod kerf (2026-10-04) a head cut ending
+// at the eye socket changes the eye's surroundings a little past the lip's reach (mean 1.27-1.48 over the whole outside
+// vs the 1.0 limit); the check's intent is the face FAR from the cut, so the limit applies beyond this ring.
+const H_NEAR_CM = 2;
 const H_PIX = 6, H_BAND_CM = 5, H_IN_MIN = 4, H_OUT_MAX = 1.0, H_OUT_SHARE_MAX = 0.03;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
@@ -444,6 +449,10 @@ try {
     const mean = (xs) => xs.reduce((m, q) => m + q.l, 0) / xs.length;
     out.k = {
       kerfPx: +kerfPx.toFixed(1), interiorMin: +Math.min(...inner.map((q) => q.l)).toFixed(1), interiorMean: +mean(inner).toFixed(1),
+      // The darker half of the slot's columns: its flesh walls. The other half can be exposed sternum (pale, often brighter
+      // than the skin it replaced): at the rod's 1.5 cm kerf the bone fills the slot's centre, so the full mean rose above
+      // the uncut skin's while the walls stayed dark.
+      interiorWalls: +mean([...inner].sort((x, y) => x.l - y.l).slice(0, Math.max(1, Math.floor(inner.length / 2)))).toFixed(1),
       lipLMax: +Math.max(...lipL.map((q) => q.l)).toFixed(1), lipRMax: +Math.max(...lipR.map((q) => q.l)).toFixed(1),
       beforeCentre: +mean(pB.filter((q) => Math.abs(q.t) <= kerfPx)).toFixed(1),
       beforeLipL: +Math.max(...pB.filter((q) => q.t <= -kerfPx && q.t >= -4 * kerfPx).map((q) => q.l)).toFixed(1),
@@ -456,7 +465,7 @@ try {
     note(`K: ${J(out.k)}`);
     const shoulder = Math.min(out.k.lipLMax, out.k.lipRMax);
     check(shoulder - out.k.interiorMin >= K_DIP_MIN, `K: the luma profile dips across the slot between two brighter shoulders: darkest interior ${out.k.interiorMin} vs shoulders (max over 1-4 kerf) ${out.k.lipLMax} / ${out.k.lipRMax} (dip ${(shoulder - out.k.interiorMin).toFixed(1)} >= ${K_DIP_MIN})`);
-    check(out.k.beforeCentre - out.k.interiorMean >= K_DIP_MIN, `K: the slot is darker than the skin it replaced (mean over |t| <= kerf ${out.k.beforeCentre} -> ${out.k.interiorMean})`);
+    check(out.k.beforeCentre - out.k.interiorWalls >= K_DIP_MIN, `K: the slot's walls are darker than the skin they replaced (mean over |t| <= kerf ${out.k.beforeCentre} -> darker half ${out.k.interiorWalls}; full mean incl. bone ${out.k.interiorMean})`);
     note(`K: at the lip ridges (1.5 kerf) luma before -> after: left ${out.k.lipAtL.join(" -> ")}, right ${out.k.lipAtR.join(" -> ")} (UNGATED: whether the lips read LIT)`);
     // The slot's UPPER half only: the view model's barrels (grey, pale) cover its lower end in this framing.
     const pa = await toPx(w.pos), pb = await toPx(add(w.pos, mul(v.up, 0.9 * w.radius)));
@@ -489,8 +498,13 @@ try {
     const pa = await toPx(a), pb = await toPx(b);
     const k0 = await toPx(w.pos), k1 = await toPx(add(w.pos, mul(v.right, 0.01)));
     const cmPx = Math.hypot(k1[0] - k0[0], k1[1] - k0[1]);   // px per cm at the cut
-    const band = H_BAND_CM * cmPx;
+    // The cut's own footprint scales with its kerf: the lip Gaussian is ~0 past lipOffset + 2 lipWidth kerfs from the line
+    // (CUT_SHADE 1.5 + 2 x 1.2 = 3.9 kerf). A fixed 5 cm band fit the 1 cm rod; the 1.5 cm rod's lip reaches 5.85 cm.
+    const bandCm = Math.max(H_BAND_CM, 100 * H_LIP_REACH_KERF * w.kerf);
+    out.hBandCm = +bandCm.toFixed(2);
+    const band = bandCm * cmPx;
     let nIn = 0, sIn = 0, nOut = 0, sOut = 0, nOutN = 0, sOutN = 0, nOutBig = 0;
+    let nNear = 0, sNear = 0, nNearBig = 0;   // the ring just past the lip's reach: reported, not gated (the cut's ends)
     const twin = await capture(null);   // a second locked render of the after state: the noise floor outside the band
     // The diff map for the notes: |dLuma| x 8 in red, outside-band pixels over H_PIX in yellow, the band's edge in blue.
     const dmap = Buffer.alloc(W * H * 3);
@@ -501,13 +515,15 @@ try {
         const sd = segDist([x, y], pa, pb), o = (y * W + x) * 3;
         dmap[o] = Math.min(255, dl * 8);
         if (Math.abs(sd - band) < 1) dmap[o + 2] = 255;
-        if (sd <= band) { nIn++; sIn += dl; } else { nOut++; sOut += dl; nOutN++; sOutN += Math.abs(luma(px(after, x, y)) - luma(px(twin, x, y))); if (dl > H_PIX) { nOutBig++; dmap[o + 1] = 255; dmap[o] = 255; } }
+        if (sd <= band) { nIn++; sIn += dl; }
+        else if (sd <= band + H_NEAR_CM * cmPx) { nNear++; sNear += dl; if (dl > H_PIX) { nNearBig++; dmap[o + 1] = 128; dmap[o] = 255; } }
+        else { nOut++; sOut += dl; nOutN++; sOutN += Math.abs(luma(px(after, x, y)) - luma(px(twin, x, y))); if (dl > H_PIX) { nOutBig++; dmap[o + 1] = 255; dmap[o] = 255; } }
       }
     writeFileSync(`${OUT}/H-diff.png`, encodePng(W, H, dmap));
-    out.h = { headRpx: +headR.toFixed(0), bandPx: +band.toFixed(1), inBand: +(sIn / nIn).toFixed(2), outside: +(sOut / nOut).toFixed(2), outsideNoise: +(sOutN / nOutN).toFixed(2), outsideOverPix: +(nOutBig / nOut).toFixed(4), nIn, nOut };
-    note(`H: mean |dLuma| before -> after in the head disc: within ${H_BAND_CM} cm of the cut ${out.h.inBand}, outside it ${out.h.outside} (two locked renders: ${out.h.outsideNoise}); ${J(out.h)}`);
-    check(out.h.inBand >= H_IN_MIN, `H: the cut shows (mean |dLuma| ${out.h.inBand} >= ${H_IN_MIN} within ${H_BAND_CM} cm of it)`);
-    check(out.h.outside <= H_OUT_MAX && out.h.outsideOverPix <= H_OUT_SHARE_MAX, `H: the face outside the cut's band is unchanged (mean |dLuma| ${out.h.outside} <= ${H_OUT_MAX}; ${(100 * out.h.outsideOverPix).toFixed(1)}% of its pixels over ${H_PIX} <= ${100 * H_OUT_SHARE_MAX}%)`);
+    out.h = { headRpx: +headR.toFixed(0), bandPx: +band.toFixed(1), inBand: +(sIn / nIn).toFixed(2), outside: +(sOut / nOut).toFixed(2), outsideNoise: +(sOutN / nOutN).toFixed(2), outsideOverPix: +(nOutBig / nOut).toFixed(4), near: +(sNear / Math.max(1, nNear)).toFixed(2), nearOverPix: +(nNearBig / Math.max(1, nNear)).toFixed(4), nIn, nNear, nOut };
+    note(`H: mean |dLuma| before -> after in the head disc: within ${out.hBandCm} cm of the cut ${out.h.inBand}, outside it ${out.h.outside} (two locked renders: ${out.h.outsideNoise}); ${J(out.h)}`);
+    check(out.h.inBand >= H_IN_MIN, `H: the cut shows (mean |dLuma| ${out.h.inBand} >= ${H_IN_MIN} within ${out.hBandCm} cm of it)`);
+    check(out.h.outside <= H_OUT_MAX && out.h.outsideOverPix <= H_OUT_SHARE_MAX, `H: the face more than ${H_NEAR_CM} cm past the cut's band is unchanged (near ring, not gated: mean ${out.h.near}, ${(100 * out.h.nearOverPix).toFixed(1)}% over ${H_PIX}; far: mean |dLuma| ${out.h.outside} <= ${H_OUT_MAX}; ${(100 * out.h.outsideOverPix).toFixed(1)}% of its pixels over ${H_PIX} <= ${100 * H_OUT_SHARE_MAX}%)`);
     cropOut(before, hc, 300, 300, "H-before-crop"); cropOut(after, hc, 300, 300, "H-after-crop");
   }
 

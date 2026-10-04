@@ -8,6 +8,7 @@ import { makeWeaponSlotState, requestSlot, stepWeaponSlot, type WeaponSlotState 
 import { prim } from '../head-pop';
 import { rotateYaw } from '../gait';
 import { woundDirToWorld, woundWorldPos, type Wound } from '../damage';
+import { ROD_CALIBRE } from '../cut-wound';
 import type { GameContext } from './game-context';
 import type { ZombieActor } from './game-actor';
 import type { Vec3 } from '../types';
@@ -101,7 +102,7 @@ describe('rod harness: cut()', () => {
     expect(n).toBe(1);
     const w = f.blasts()[0]!.wounds[0]!;
     for (const v of [w.carveDepth, w.kerf, w.radius, ...w.local]) expect(Number.isFinite(v)).toBe(true);
-    expect(w.kerf).toBeCloseTo(0.01, 6);           // ROD_CALIBRE.kerf
+    expect(w.kerf).toBeCloseTo(ROD_CALIBRE.kerf, 6);
   });
 });
 

@@ -624,3 +624,21 @@ checked by `bone-exposure-yaw.test.ts`:
   - a rod-sweep ring (20 cuts + 6 pairs, then 12 more cuts) folds all 6 pairs before the first cut goes.
 
   4 of the 6 fail on the old `pushWound`.
+
+## Rod kerf widened 0.01 → 0.015 (2026-10-04, owner playtest)
+
+After playtesting, the owner asked for "widening a bit": the 2 cm slit read as a thin line at 0.6 m in shadow (look suggestion 2). `ROD_CALIBRE.kerf` is now 0.015, the widest kerf the Lipschitz, thin-limb and silhouette tests already sweep. No WGSL changed.
+
+**Look** (`gate/K-after-crop.png`, `gate/R-after.png`, `gate/H-after-crop.png`):
+- On the torso, the cut is now an open gash with lit, ragged red-orange edges, and the sternum runs down its middle. The 1 cm slot showed as a dark line with a speck of bone.
+- The rod's belly slash reads as a wound.
+- The head slash is a wide gash from the cheek across the nose to the eye.
+
+**Tests:** the thin-limb and silhouette pins measured at 1 cm now name `KERF_010` explicitly, so both widths stay covered. They used to go through `ROD_CALIBRE`.
+
+**Gate restatements (30 checks, 0 failed):**
+- **K, "slot darker than the skin it replaced".** This check compared the slot's full mean luma, and the wider slot fills its centre with pale sternum: in one K-only run the full mean went 60.9 → 61.2. It now compares the darker half of the slot's columns, i.e. its flesh walls: 32.9 → 7.7 in the full run.
+- **K's dip check is unchanged.** It still passes: dip 30.9 in the K-only run.
+- **H, "face outside the band unchanged".** The band is now `max(5 cm, 3.9·kerf)` (lipOffset + 2·lipWidth), which is 5.85 cm at the new kerf.
+- **H's limit now applies beyond a 2 cm ring past that band.** The ring is reported, not gated: mean 1.8, 5.4% of pixels over 6. There the cut's upper end, at the right eye socket, changes the eye's surroundings.
+- **Far face:** mean 0.75 (limit 1.0), 2.6% over 6 (limit 3%). That margin is still thin.

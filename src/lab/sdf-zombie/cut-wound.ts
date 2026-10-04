@@ -60,8 +60,9 @@ export const CUT_SHADE = {
 } as const;
 
 export interface CutCalibre { depth: number; kerf: number; lip: number }
-/** The rod stand-in's blade (tunable). */
-export const ROD_CALIBRE: CutCalibre = { depth: 0.06, kerf: 0.01, lip: 1 };
+/** The rod stand-in's blade (tunable). Kerf widened 0.01 -> 0.015 (2026-10-04, owner playtest: the 2 cm slit read as a
+ *  thin line at 0.6 m in shadow); 0.015 is the widest kerf the Lipschitz and thin-limb tests sweep. */
+export const ROD_CALIBRE: CutCalibre = { depth: 0.06, kerf: 0.015, lip: 1 };
 
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
 const unit = (v: Vec3, fb: Vec3 = [0, 1, 0]): Vec3 => (Math.hypot(v[0], v[1], v[2]) > 1e-9 ? normalize(v) : fb);
