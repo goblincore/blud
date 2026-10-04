@@ -4,10 +4,13 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
 
 ## Cut wounds and the head split — designed 2026-10-03
 
-- [ ] **Cut wounds (axe / sword / chainsaw base) and a head that splits into two hinged halves.** Craters cannot make deep
+- [~] **Cut wounds (axe / sword / chainsaw base) and a head that splits into two hinged halves.** M1 built 2026-10-04: cut
+  wounds + rod (slot 6) + 32 wounds with merging; owner playtest pending; M2 (head split) next. Craters cannot make deep
   jagged cuts (owner, 2026-10-03). M1: a cut wound shape (blade slot, jagged walls, lips) + a rod stand-in weapon; M2: the head
-  split (authored presets, a `mapBody` warp, CPU mirror, skull mesh); M3: tuning. Spec approved, plan next:
-  [spec](../../docs/superpowers/specs/2026-10-03-cut-wounds-design.md).
+  split (authored presets, a `mapBody` warp, CPU mirror, skull mesh); M3: tuning.
+  [Spec](../../docs/superpowers/specs/2026-10-03-cut-wounds-design.md) (section 11: as built) ·
+  [plan](../../docs/superpowers/plans/2026-10-03-cut-wounds-m1.md) · gate `scripts/cut-wound-gate.mjs` ·
+  [notes](../../docs/dev-notes/2026-10-03-cut-wounds/NOTES.md).
 
 ## Slug head burst — designed 2026-10-02
 

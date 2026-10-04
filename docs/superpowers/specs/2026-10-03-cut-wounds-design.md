@@ -167,3 +167,38 @@ or a later prim.)
    instance with a complementary clip).
 4. Which weapon slot the rod takes, and its view-model asset (a primitive is enough).
 5. Whether the split's cut-face wound uses the ring like any cut or a reserved slot (it must not be evicted while the head is open).
+
+## 11. As built (M1)
+
+What differed from the sections above. Measurements and decisions: [NOTES](../../dev-notes/2026-10-03-cut-wounds/NOTES.md).
+
+- **Wound slots: 32.** `MAX_WOUNDS` is 32 and every WGSL bound interpolates it. The WebGL lab twin stays at 16 (it uploads the
+  newest 16). `explosion-aoe` is held at 16 per body. On overflow a full ring merges instead of evicting; the oldest is evicted
+  only when no same-prim partner is in reach, or the merged sphere would pass `MERGE.maxRadius`. Head slots are protected.
+- **Cut geometry.** The slot has a sag (the offset from the surface, uploaded in `META.w`, with the cut's data in
+  `ROW_WOUND_CUT` 25 and flag bit 32). `cutCarve`, `cutLip` and `cutMask` are the CPU mirrors and the WGSL copies them term
+  for term (text pins in `wounds.wgsl.test.ts`). The mask is normal-gated: it uses the smooth normal and has a back-facing
+  gate. The lid is a raw plane at `dot(rel, inward) + kerf + 0.25 h`. The lip scale is clamped to 1.1. A cut with no cap gets a
+  zero CAP. The combined field's Lipschitz bound is 2.075.
+- **Threat box sphere.** `cutThreatWound` carries a tight sphere around the cut's box.
+- **Bone exposure spheres.** `cutExposureSpheres` covers the shell the carve removes, follows the slot's sag and floor, and
+  feeds the crater lists in `game-main.ts` so bones show along a cut.
+- **The rod (`game-rod.ts`, slot 6).** Sweep samples are stored in the body's own frame, grouped into
+  runs, with one frame of run slack (two missed frames start a new pass); the longest cuts across the runs are stamped on
+  release. A hold finishes on its own after 2 s. It acts only when armed: slot 6 is live and settled and the loop is not
+  blocking input. Switching away or a loop block clears the sweep, and a window blur or a pointer-lock loss abandons it. The
+  seams are `cut`, `rod`, `rodPress` and `rodRelease`.
+- **The gate (`scripts/cut-wound-gate.mjs`).** Scenario R drives the rod through `rodPress` / `rodRelease` and `setAimPoint`
+  sweeps, because headless Chrome cannot take pointer lock. **The pointer-lock mousedown path was not exercised.** The gate
+  reported 24 checks, 0 failed, on runs 7 and 8.
+- **Frame cost of 32 wounds** (`timeDraws(120)` median): at 0.6 m with the torso filling the frame, +17 to +25 ms over
+  ~20 ms (20.8 / 20.0 to 37.4 on the final run); at 2 m, +4 to +6 ms. The 32-wound reading varied by 8 ms between runs. Three
+  cuts at 0.6 m cost +1 to +5 ms, within the baseline spread. The march-hash pins did not move after the main merge.
+- **Known limitations.**
+  - The oblique armpit crease: about 0.35% of samples flip on an oblique armpit cut. This only removes carve (the slot stops
+    short with a small flat roof).
+  - Thin-limb side mask: on r <= 0.02 limbs the mask band wraps the sides (0.146 at the rod's kerf; the back proper is 0).
+  - The actor-local frame is rigid, so a cut does not follow limb animation (drift on a moving limb).
+  - The rod's trace ignores level geometry within its 2.2 m reach (a wall between the eye and a body does not block it).
+  - Lips read dark in shadow: the wet-lip band darkens the ridges on a shadowed surface (luma fell at 1.5 kerf in gate scenario
+    K). In side light they read bright orange. No look constant was changed.

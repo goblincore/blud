@@ -20,6 +20,10 @@
   on, torn scalp flaps); off-centre it ruptures one side and the zombie lives. Gate `scripts/head-burst-gate.mjs`.
   [Spec](docs/superpowers/specs/2026-10-02-slug-head-burst-design.md) · [notes](docs/dev-notes/2026-10-02-head-burst/NOTES.md).
 
+**Cut wounds** — [combat and gore](docs/tasks/combat-and-gore.md)
+- [~] **Cut wounds M1 built; owner playtest pending** — a cut wound shape, the rod (weapon slot 6), 32 wounds with merging.
+  M2 (head split) next. Gate `scripts/cut-wound-gate.mjs`. [Notes](docs/dev-notes/2026-10-03-cut-wounds/NOTES.md) · [handoff](docs/dev-notes/2026-10-03-cut-wounds/HANDOFF.md).
+
 **Night Train (level 1)** — [levels](docs/tasks/levels.md) (items 4a–4k)
 - [x] **Body lighting settled** (owner, 2026-09-28): LIGHT LAYERS panel (`light-layers.ts`) — every body-lighting
   change since the melee branch behind a live switch. Default = the owner's pick: the list on; with the torch lit,
