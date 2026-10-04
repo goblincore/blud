@@ -665,7 +665,8 @@ function mergeVictim(next: Wound[], victim: number): Wound[] | null {
  *  one's index. Head craters keep their own MAX_HEAD_WOUNDS slots (oldest 'face' crater evicted first),
  *  and the total cap takes the oldest wound that is not a 'keep' head crater: it is MERGED into its nearest
  *  same-prim crater when one is in reach (MERGE; head-tagged wounds, cuts and decals never merge), and only
- *  evicted when none is. A merged survivor is a NEW Wound object. */
+ *  evicted when none is. When that oldest wound is a CUT, the oldest crater that can merge is folded instead,
+ *  and the cut is evicted only when no crater can. A merged survivor is a NEW Wound object. */
 export function pushWound(ring: Wound[], wound: Wound, cap: number): Wound[] {
   if (wound.headRegion !== undefined) {
     const prev = ring.findIndex(x => x.headRegion === wound.headRegion);
@@ -687,7 +688,14 @@ export function pushWound(ring: Wound[], wound: Wound, cap: number): Wound[] {
   while (out.length > cap) {
     const i = out.findIndex(x => x.headSlot !== 'keep');
     const victim = i < 0 ? 0 : i;
-    const merged = mergeVictim(out, victim);
+    let merged = mergeVictim(out, victim);
+    // A CUT never merges, so as the victim it would simply be evicted: a rod release stamps up to 3, and ~11 sweeps fill
+    // the ring. Fold the oldest crater that CAN merge first (oldest first; mergeVictim keeps its own guards: same prim, in
+    // reach, never a cut, decal or head-tagged crater), so old slashes outlive craters that still have room to merge. Only
+    // when nothing can merge is the oldest evicted, as before.
+    if (!merged && out[victim]!.shape === 'cut') {
+      for (let j = 0; j < out.length && !merged; j++) if (j !== victim) merged = mergeVictim(out, j);
+    }
     if (merged) out = merged;
     else out.splice(victim, 1);
   }
