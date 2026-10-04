@@ -23,7 +23,7 @@
 **Cut wounds** — [combat and gore](docs/tasks/combat-and-gore.md)
 - [~] **Cut wounds M1 built; owner playtest pending** — a cut wound shape, the rod (weapon slot 6), 32 wounds with merging.
   M2 (head split) next. Gate `scripts/cut-wound-gate.mjs`. [Notes](docs/dev-notes/2026-10-03-cut-wounds/NOTES.md) · [handoff](docs/dev-notes/2026-10-03-cut-wounds/HANDOFF.md).
-- [~] **The axe (slot 7) part A built 2026-10-04; owner playtest pending** — chops cut, head chops kill on 3; part B (head split) next. Gate `scripts/axe-gate.mjs`. [Spec](docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 9) · [notes](docs/dev-notes/2026-10-04-axe/2026-10-04-axe-part-a.md).
+- [~] **The axe (slot 7) part A built 2026-10-04; owner playtest pending** — chops cut, head chops kill on 3; part B (head split) next. Gate `scripts/axe-gate.mjs`. [Spec](docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 9) · [notes](docs/dev-notes/2026-10-04-axe/NOTES.md).
 
 **Night Train (level 1)** — [levels](docs/tasks/levels.md) (items 4a–4k)
 - [x] **Body lighting settled** (owner, 2026-09-28): LIGHT LAYERS panel (`light-layers.ts`) — every body-lighting

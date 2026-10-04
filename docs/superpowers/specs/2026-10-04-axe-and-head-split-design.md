@@ -137,7 +137,7 @@ The march step is clamped at the bisector (`min(d, distance to the bisector)`), 
 - **Screen tiles and proxy boxes:** inflated for a split head.
 - **The skull mesh** (`skeleton=mesh`, `skeleton-spike/mesh-renderer.ts`, `mesh-skull.ts`): a per-side rotation in the vertex shader and a plane clip in the fragment shader.
 
-**Cut faces.** Opening a split stamps one cut per opened half along the plane. These cuts are head-tagged, so the protected head slots (`MAX_HEAD_WOUNDS`) keep them while the head is open. This answers the eviction question in cut-wounds spec §10.5.
+**Cut faces.** Opening a split stamps one cut per opened half along the plane. These cuts must survive eviction while the head is open. `headRegion` alone does NOT protect them: it only buys replace-in-place and no merging (`damage.ts` `pushWound`). So the cut faces set `headSlot: 'keep'`, which puts them under the `MAX_HEAD_WOUNDS` head cap and keeps them through the total cap. This answers the eviction question in cut-wounds spec §10.5. *(Corrected 2026-10-04 after the part A final review; the earlier text claimed head-tagging alone protected them.)* Part B must check how many `'keep'` slots head-damage already uses, so the split's two faces don't evict its brain or region craters.
 
 **Steps.** Each step is small and runs its own shader checks (§6):
 - **B1:** presets, spring and the CPU mirror.
@@ -217,4 +217,4 @@ The march step is clamped at the bisector (`min(d, distance to the bisector)`), 
   - Three chops at one aim point make a star with a crater. A small along-blade offset per chop would avoid it.
   - The head is a plain box and reads a little like a cleaver. A tapered or bearded profile would help; a modelled axe is already planned.
   - Cuts on a dark face (K-1) are hard to see in this light. Part B's split will change this.
-- **Cost.** Three chops on one torso add about +4.3 ms (ungated; `timeDraws(120)` at 0.9 m), against +1 to +5 ms for three rod cuts.
+- **Cost.** Three chops on one torso add about +4.3 ms (ungated; `timeDraws(120)` at 0.9 m, against the second baseline read: the first read is ~5 ms lower in every run, cause not investigated, which would make it +9.9 ms), against +1 to +5 ms for three rod cuts.

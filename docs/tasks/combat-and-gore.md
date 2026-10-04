@@ -9,7 +9,7 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
   light list. Pose and look suggestions are left for the owner (spec section 9, notes).
   [Spec](../../docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 9: as built) ·
   [plan](../../docs/superpowers/plans/2026-10-04-axe-part-a.md) · gate `scripts/axe-gate.mjs` (24 checks) ·
-  [notes](../../docs/dev-notes/2026-10-04-axe/2026-10-04-axe-part-a.md).
+  [notes](../../docs/dev-notes/2026-10-04-axe/NOTES.md).
 
 - [~] **Cut wounds (axe / sword / chainsaw base) and a head that splits into two hinged halves.** M1 built 2026-10-04: cut
   wounds + rod (slot 6) + 32 wounds with merging; owner playtest pending; M2 (head split) next. Craters cannot make deep
