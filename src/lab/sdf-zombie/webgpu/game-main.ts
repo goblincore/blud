@@ -283,6 +283,7 @@ import { createFxSeams } from './game-seams-fx';
 import { createGameBurning } from './game-burning';
 import { createFlareHarness } from './game-flare';
 import { createRodHarness } from './game-rod';
+import { createAxeHarness } from './game-axe';
 import { createFlail } from './game-flail';
 import { createHeadDamage } from './game-head-damage';
 import { createBrainGib } from './game-brain-gib';
@@ -3974,6 +3975,8 @@ async function main() {
     if (ctx.weapon.flare?.onMouseDown(e.button)) return;
     // SLOT 6 (the rod): hold + sweep; the cut lands on release.
     if (ctx.weapon.rod?.onMouseDown(e.button)) return;
+    // SLOT 7 (the axe): a click starts the combo's next chop.
+    if (ctx.weapon.axe?.onMouseDown(e.button)) return;
     // SLOT 4 (opt-in launcher prototype): acts only while it is the live slot.
     if (ctx.weapon.launcher?.onMouseDown(e.button)) return;
     // Deferred to the tick (see the input seam note): an edge event must land
@@ -3994,13 +3997,14 @@ async function main() {
   window.addEventListener('mouseup', (e) => ctx.weapon.flail?.onMouseUp(e.button));
   // The rod's release: likewise unlocked, so letting go anywhere ends the sweep.
   window.addEventListener('mouseup', (e) => ctx.weapon.rod?.onMouseUp(e.button));
+  window.addEventListener('mouseup', (e) => ctx.weapon.axe?.onMouseUp(e.button));
   // The seam for the grapeshot dispatch: a view-model hangs off this group,
   // which rides the camera every frame.
   // The FOV-compensation rig sits between the camera and everything the
   // player holds, and carries NOTHING but viewmodelFovScale()'s scale — so
   // the anchor's ride height below is scaled with the rest of the rig rather
   // than surviving as an unscaled camera-space offset. Every weapon slot
-  // (flail, shotgun, dynamite, launcher, flare, rod) is a descendant, so this is
+  // (flail, shotgun, dynamite, launcher, flare, rod, axe) is a descendant, so this is
   // one transform for all of them.
   ctx.weapon.fovRig = new THREE.Group();
   ctx.weapon.fovRig.name = 'view-model-fov-rig';
@@ -4029,6 +4033,12 @@ async function main() {
   ctx.weapon.rod = createRodHarness(ctx, {
     traceMelee: withCtx(ctx, traceMeleeHitFrom), eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
     bleed: (a, w, point, incoming) => registerBleed(ctx, a, w, 'pellet', { point, incoming }),
+  });
+  // WEAPON SLOT 7 (the axe, game-axe.ts): its own rig on aimRig.
+  ctx.weapon.axe = createAxeHarness(ctx, {
+    eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
+    // 'slug': a heavier bleed than the rod's 'pellet' (spec §3); registerBleed's kinds are pellet | slug | stump, and 'stump' is a severed limb's.
+    bleed: (a, w, point, incoming) => registerBleed(ctx, a, w, 'slug', { point, incoming }),
   });
   // WEAPON SLOT 1 (the spike flail, game-flail.ts): its own rig on aimRig.
   ctx.weapon.flail = createFlail(ctx, {
@@ -7503,6 +7513,7 @@ async function main() {
     ctx.weapon.cooldown = Math.max(0, ctx.weapon.cooldown - dt);
     ctx.weapon.flare?.tickCooldown(dt);
     ctx.weapon.rod?.tick(dt);
+    ctx.weapon.axe?.tick(dt);
     ctx.weapon.launcher?.tick(dt);
     ctx.weapon.recoilPitch *= Math.exp(-9 * dt);
     // ——— FREE AIM ————————————————————————————————————————————————————

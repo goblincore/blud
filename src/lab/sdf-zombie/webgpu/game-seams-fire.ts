@@ -21,6 +21,11 @@ export function createFireSeams(ctx: GameContext) {
     /** Rod press / release without pointer lock (the canvas mousedown handler needs it): headless gates. */
     rodPress: () => { ctx.weapon.rod?.onMouseDown(0); return ctx.weapon.rod?.debug().held ?? false; },
     rodRelease: () => ctx.weapon.rod?.onMouseUp(0),
+    /** THE AXE (game-axe.ts): debug state; a click on the next tick (the canvas mousedown needs pointer lock); a direct
+     *  chop of actor `id` with `side`, aimed at its torso or head centre (gates). */
+    axe: () => ctx.weapon.axe?.debug() ?? null,
+    axeSwing: () => ctx.weapon.axe?.click(),
+    axeChop: (id: number, side: 'H' | 'R' | 'L', target?: 'torso' | 'head') => ctx.weapon.axe?.chop(id, side, target) ?? 0,
     fireLauncher: () => ctx.weapon.launcher?.fire() ?? false,
     reloadLauncher: () => ctx.weapon.launcher?.reload() ?? false,
     launcher: () => ctx.weapon.launcher?.debug() ?? null,
