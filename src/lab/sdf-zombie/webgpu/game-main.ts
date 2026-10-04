@@ -302,7 +302,7 @@ import { gateRefineTwin, woundStreamId } from './game-world-leaves2';
 import { describeRecordedWound, neutralInput, placeFromDemo, readInputFrame, updateDemoHud } from './game-demo-leaves';
 import { applyMouseDelta } from './game-player-leaves';
 import { setLoader } from './game-boot-leaves';
-import { registerBleed, stepGutRopes } from './game-world-leaves3';
+import { registerBleed, registerCutBleed, stepGutRopes } from './game-world-leaves3';
 import { headPopDebris } from '../head-pop';
 import { demoRecordStop } from './game-demo-leaves2';
 import { createFireSeams } from './game-seams-fire';
@@ -4033,13 +4033,15 @@ async function main() {
   // WEAPON SLOT 6 (the rod, cut wounds' stand-in blade, game-rod.ts): its own rig on aimRig.
   ctx.weapon.rod = createRodHarness(ctx, {
     traceMelee: withCtx(ctx, traceMeleeHitFrom), eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
-    bleed: (a, w, point, incoming) => registerBleed(ctx, a, w, 'pellet', { point, incoming }),
+    // 'slug' (was 'pellet'; 2026-10-04 look pass, "more excessive") plus gouts along the slot (registerCutBleed).
+    bleed: (a, w, point, incoming) => registerCutBleed(ctx, a, w, 'slug', { point, incoming }),
   });
   // WEAPON SLOT 7 (the axe, game-axe.ts): its own rig on aimRig.
   ctx.weapon.axe = createAxeHarness(ctx, {
     eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
-    // 'slug': a heavier bleed than the rod's 'pellet' (spec §3); registerBleed's kinds are pellet | slug | stump, and 'stump' is a severed limb's.
-    bleed: (a, w, point, incoming) => registerBleed(ctx, a, w, 'slug', { point, incoming }),
+    // 'slug' (spec §3; registerBleed's kinds are pellet | slug | stump, and 'stump' is a severed limb's), plus gouts along
+    // the slot (registerCutBleed).
+    bleed: (a, w, point, incoming) => registerCutBleed(ctx, a, w, 'slug', { point, incoming }),
   });
   // WEAPON SLOT 1 (the spike flail, game-flail.ts): its own rig on aimRig.
   ctx.weapon.flail = createFlail(ctx, {

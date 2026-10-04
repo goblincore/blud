@@ -142,10 +142,12 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     let capEff = select(1.0e5, wCap.w, wCap.w > 0.0);
     // CUT (cut-wound.ts, flag 32): a blade SLOT instead of a sphere. ROW_WOUND = (midpoint, half-length), CAP = (inward,
     // depth), ROW_WOUND_CUT = (along unit, kerf), META.z = lip scale, META.w = SAG (the chord's inward drop, NOT the crater
-    // rim offset: this branch always continues, so a cut never reaches the rim code below). A lens along the segment
-    // (deepest mid-way), walls closing into a V, the kerf jagged by scalar noise, lips along both edges. MIRRORED term for
-    // term by cut-wound.ts: the carve is cutCarve (no noise there, jag = 0), the lip is cutLip; the whole field's
-    // steepness is pinned by cut-wound.test.ts's Lipschitz tests.
+    // rim offset: this branch always continues, so a cut never reaches the rim code below). A squared lens along the
+    // segment (cutTaper: deepest and widest mid-way, kerf and depth closing together into needle tips), walls closing into
+    // a V, the kerf jagged by noise (fine wall jag + a coarse pinch that grows toward the tips and can close the slot, so
+    // the tails break up), lips along both edges. MIRRORED term for term by cut-wound.ts: the carve is cutCarve (the
+    // noise enters it as its jag argument), the lip is cutLip; the whole field's steepness, noise included (a JS port of
+    // hash13 / noise3), is pinned by cut-wound.test.ts's Lipschitz tests.
     if ((i32(wFlags.x) & 32) != 0) {
       // A cut row without an inward axis (a stale or unwritten CAP) has no slot frame: carve nothing.
       if (length(wCap.xyz) < 0.5) { continue; }
@@ -163,34 +165,45 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
       let cs = max(-dIn, dot(rel, cin) - wMeta.w);
       let tN = clamp(ca / max(w.w, 1e-4), -1.0, 1.0);
       let prof = 1.0 - tN * tN;
+      let taper = prof * prof;
       let dEff = min(wCap.w, ${f(CUT_SHADE.maxDepthPerHalfLen)} * w.w);
-      let depthT = max(dEff * prof, max(wCut.w, 1e-4));
-      // Noise in the SLOT's own frame (along, side, inward), so the jag rides the wound as the body moves.
-      let jag = noise3(vec3<f32>(ca, cu, dot(rel, cin)) * ${f(CUT_SHADE.jagFreq)} + vec3<f32>(w.w * 311.0, wCut.w * 977.0, 17.0)) * ${f(CUT_SHADE.jagAmp)};
-      let kerfT = wCut.w * (1.0 + jag) * (0.35 + 0.65 * prof);
+      let depthT = max(dEff * taper, 1e-4);
+      // Noise in the SLOT's own frame (along, side, inward), so the jag rides the wound as the body moves. The fine jag
+      // runs at jagCycles per kerf (its slope relative to the kerf is the same at every width); the pinch is 1-D value
+      // noise along the slot, pinchCycles per half-length, its amplitude rising toward the tips.
+      let jq = ${f(CUT_SHADE.jagCycles)} / max(wCut.w, 1e-4);
+      let jagFine = noise3(vec3<f32>(ca, cu, dot(rel, cin)) * jq + vec3<f32>(w.w * 311.0, wCut.w * 977.0, 17.0)) * ${f(CUT_SHADE.jagAmp)};
+      let cPx = ca / max(w.w, 1e-4) * ${f(CUT_SHADE.pinchCycles)} + wCut.w * 1531.0;
+      let cPi = floor(cPx);
+      let cPf = cPx - cPi;
+      let cPn = mix(hash13(vec3<f32>(cPi, w.w * 311.0, 5.0)), hash13(vec3<f32>(cPi + 1.0, w.w * 311.0, 5.0)), cPf * cPf * (3.0 - 2.0 * cPf)) * 2.0 - 1.0;
+      let jag = jagFine + cPn * (${f(CUT_SHADE.pinchAmp)} + ${f(CUT_SHADE.pinchTip)} * tN * tN);
+      let kerfT = wCut.w * max(1.0 + jag, 0.0) * taper;
       let vWall = kerfT * (1.0 - clamp(cs, 0.0, depthT) / depthT) - abs(cu);
       // The LID (cutCarve's): closed kerf + lidSlack x halfLen outward of the anchor's tangent plane (the RAW plane: inside
       // a foreign limb lying across the channel above the cut, cs reads the depth below the FOREIGN skin, so no cs-based
       // term would close the slot there). The slack leaves room for a concave crease's skin to rise above the plane.
       let carve = min(min(min(vWall, depthT - cs), w.w - abs(ca)), dot(rel, cin) + wCut.w + ${f(CUT_SHADE.lidSlack)} * w.w) * ${f(CUT_SHADE.carveK)};
       let dBeforeCut = d;
-      d = smax(d, carve, woundCfg.y * clamp(wCut.w / 0.05, 0.1, 1.0));
+      // The fillet's kerf is capped at blendDepthFrac x dEff (cutBlendK): it must not reach a thin limb's back skin.
+      d = smax(d, carve, woundCfg.y * clamp(min(wCut.w, ${f(CUT_SHADE.blendDepthFrac)} * dEff) / 0.05, 0.1, 1.0));
       if (d > dBeforeCut) { gWoundRaisers = gWoundRaisers | (1u << u32(owner)); gWoundThreat = gWoundThreat | threat; }
       let lipW = max(wCut.w * ${f(CUT_SHADE.lipWidth)}, 1e-4);
-      if (abs(ca) < w.w * 1.2 && abs(cu) < (wCut.w * ${f(CUT_SHADE.lipOffset)} + lipW) * 2.0 && cs < depthT * 2.0) { near = 1.0; }
-      // The lips (cutLip): two ridges along the edges, as high as the lens is deep (prof, so none past the tips), gated
-      // to the PRE-WOUND skin over the wound's own scale (cutRimB, constant along the slot), kept out of the kerf
-      // (offKerf) and off everything deeper than two lip widths below the slot's depth coordinate (nearSkin: never the
-      // far skin behind the cut). cutAmp bounds this row's bump at p for the re-fold pre-scan (MAP_BODY), like the
-      // crater's amp.
+      if (abs(ca) < w.w * 1.2 && abs(cu) < (wCut.w * ${f(CUT_SHADE.lipOffset)} + lipW) * 2.0 && cs < max(depthT, wCut.w) * 2.0) { near = 1.0; }
+      // The lips (cutLip): two ridges along the edges, as high as the slot is deep (taper, so none past the tips), gated
+      // to the PRE-WOUND skin over the wound's own scale (cutRimB, constant along the slot), kept out of the smooth
+      // (un-jagged) kerf (offKerf) and off everything deeper than min(two lip widths, dEff) below the slot's depth
+      // coordinate (nearSkin: never the far skin behind the cut, a thin limb's included). cutAmp bounds this row's bump
+      // at p for the re-fold pre-scan (MAP_BODY), like the crater's amp.
       let lx = (abs(cu) - wCut.w * ${f(CUT_SHADE.lipOffset)}) / lipW;
       let cutAmp0 = wCut.w * ${f(CUT_SHADE.lipHeight)} * min(wMeta.z, ${f(CUT_SHADE.maxLipScale)});
-      let cutAmp = cutAmp0 * prof;
+      let cutAmp = cutAmp0 * taper;
       if (gWoundCluster == 0.0) { gWoundAmp[u32(owner)] = gWoundAmp[u32(owner)] + cutAmp; }
-      let cutRimB = max(cutAmp0, lipW);
+      let cutRimB = ${f(CUT_SHADE.rimSpan)} * max(cutAmp0, lipW);
       let cutRim = 1.0 - smoothstep(-0.3 * cutRimB, 0.7 * cutRimB, dIn);
-      let offKerf = smoothstep(kerfT, kerfT + lipW, abs(cu));
-      let nearSkin = 1.0 - smoothstep(0.0, 2.0 * lipW, cs);
+      let kerfS = wCut.w * taper;
+      let offKerf = smoothstep(kerfS, kerfS + lipW, abs(cu));
+      let nearSkin = 1.0 - smoothstep(0.0, max(min(2.0 * lipW, dEff), 1e-4), cs);
       d = d - cutAmp * exp(-lx * lx) * cutRim * offKerf * nearSkin;
       continue;
     }
@@ -336,7 +349,8 @@ export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>,
     let ragged = select(0.0, fract(tId), tId > -0.5 && tId < 1.5);
     let fBits = i32(flags.x);
     // CUT (flag 32): the slot's footprint (cut-wound.ts cutMask, term for term), a band either side of the segment, not a
-    // disc (see applyWounds' cut branch, same re-orthogonalised frame), fading past the tips, off back-facing surfaces and
+    // disc (see applyWounds' cut branch, same re-orthogonalised frame), narrowing to nothing at maskEnd x halfLen (a wet
+    // scratch past the carve's tips) with a noise-ragged edge (cutMask's jag), off back-facing surfaces and
     // past the slot's floor measured from its own chord plane (META.w = sag): without the last two the band was an
     // infinite slab along the inward axis and painted the far skin of a cut limb. META.x is 0 for a cut, so the ragged edge above is off for it.
     if ((fBits & 32) != 0) {
@@ -349,18 +363,29 @@ export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>,
       let cAl = cCut.xyz - cIn * dot(cCut.xyz, cIn);
       let cAlong = cAl / max(length(cAl), 1e-6);
       let crel = p - w.xyz;
-      let cA = abs(dot(crel, cAlong));
-      let cU = abs(dot(crel, cross(cAlong, cIn)));
+      let cAs = dot(crel, cAlong);
+      let cUs = dot(crel, cross(cAlong, cIn));
+      let cA = abs(cAs);
+      let cU = abs(cUs);
       let cPlane = dot(crel, cIn) - cSag;
       let cKerf = max(cCut.w, 1e-4);
       let cDEff = min(cCap.w, ${f(CUT_SHADE.maxDepthPerHalfLen)} * w.w);
-      let cBand = 1.0 - smoothstep(cKerf, cKerf * ${f(CUT_SHADE.maskWidth)}, cU);
-      let cEnds = 1.0 - smoothstep(w.w * 0.85, w.w * 1.15, cA);
+      let cEnd = ${f(CUT_SHADE.maskEnd)} * max(w.w, 1e-4);
+      // The band's ragged edge: noise in the slot frame (the surface point's own (a, u)), maskCycles per kerf.
+      let cJag = noise3(vec3<f32>(cAs, cUs, 0.0) * (${f(CUT_SHADE.maskCycles)} / cKerf) + vec3<f32>(w.w * 173.0, cKerf * 619.0, 41.0)) * ${f(CUT_SHADE.maskJag)};
+      let cMw = sqrt(clamp(1.0 - (cA / cEnd) * (cA / cEnd), 0.0, 1.0)) * max(1.0 + cJag, 0.0);
+      let cBand = 1.0 - smoothstep(cKerf * cMw, cKerf * ${f(CUT_SHADE.maskWidth)} * cMw + 1e-4, cU);
+      let cEnds = 1.0 - smoothstep(0.9 * cEnd, cEnd, cA);
       let cFar = 1.0 - smoothstep(cDEff + cKerf, cDEff + 2.0 * cKerf, cPlane);
       // Off surfaces facing along the inward axis: the far skin of a cut limb (dot ~ +1). The slot's walls (~0), floor
       // and lips (~-1) keep the band. cFar alone left a stripe on thin limbs, whose floor sits within 2 kerf of the back.
-      let cBack = 1.0 - smoothstep(0.25, 0.6, dot(nrm, cIn));
-      let cC = cBand * cEnds * cFar * cBack;
+      let cNi = dot(nrm, cIn);
+      let cBack = 1.0 - smoothstep(0.25, 0.6, cNi);
+      // Beyond the jagged walls' reach the band also needs skin facing out of the cut's mouth (a thin limb's sides).
+      let cWall = cKerf * ${f(1 + CUT_SHADE.jagAmp)};
+      let cInner = 1.0 - smoothstep(cWall, 1.3 * cWall, cU);
+      let cFace = 1.0 - smoothstep(${f(CUT_SHADE.maskFace[0])}, ${f(CUT_SHADE.maskFace[1])}, cNi);
+      let cC = cBand * cEnds * cFar * min(cBack, max(cInner, cFace));
       m = max(m, cC);
       if ((fBits & 1) != 0) { cav = max(cav, cC); }
       if ((fBits & 24) != 0) { gWoundTear = max(gWoundTear, cC); }

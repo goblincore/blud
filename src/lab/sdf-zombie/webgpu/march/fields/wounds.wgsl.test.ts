@@ -206,7 +206,7 @@ describe('cut wounds in the march', () => {
     expect(WOUND_MASK).toContain(`${ROW_WOUND_CUT} + gBand`);
   });
   // cut-wound.ts cutCarve is the CPU mirror: the slot's terms must be the same ones, in the same form.
-  it('the cut branch mirrors cutCarve term for term (depth coordinate, depth clamp, floor, kerf taper, carve)', () => {
+  it('the cut branch mirrors cutCarve term for term (depth coordinate, depth clamp, taper, jag, kerf taper, carve)', () => {
     const iCut = APPLY_WOUNDS.indexOf('(i32(wFlags.x) & 32) != 0');
     const branch = APPLY_WOUNDS.slice(iCut, APPLY_WOUNDS.indexOf('if (wMeta.x < -0.5)'));
     const f = (v: number) => (Number.isInteger(v) ? `${v}.0` : `${v}`);
@@ -214,10 +214,21 @@ describe('cut wounds in the march', () => {
     expect(branch).toContain('let cs = max(-dIn, dot(rel, cin) - wMeta.w);');
     expect(branch).toContain('let tN = clamp(ca / max(w.w, 1e-4), -1.0, 1.0);');
     expect(branch).toContain('let prof = 1.0 - tN * tN;');
+    // cutTaper: the lens squared, for depth and kerf alike (no one-kerf depth floor any more).
+    expect(branch).toContain('let taper = prof * prof;');
     expect(branch).toContain(`let dEff = min(wCap.w, ${f(CUT_SHADE.maxDepthPerHalfLen)} * w.w);`);
-    expect(branch).toContain('let depthT = max(dEff * prof, max(wCut.w, 1e-4));');
-    expect(branch).toContain('let kerfT = wCut.w * (1.0 + jag) * (0.35 + 0.65 * prof);');
+    expect(branch).toContain('let depthT = max(dEff * taper, 1e-4);');
+    // The jag the CPU mirror takes as `jag` (cut-wound.test.ts ports this noise): fine wall jag at jagCycles per kerf,
+    // plus the pinch, 1-D value noise along the slot at pinchCycles per half-length, pinchAmp + pinchTip x tN^2.
+    expect(branch).toContain(`let jq = ${f(CUT_SHADE.jagCycles)} / max(wCut.w, 1e-4);`);
+    expect(branch).toContain(`let jagFine = noise3(vec3<f32>(ca, cu, dot(rel, cin)) * jq + vec3<f32>(w.w * 311.0, wCut.w * 977.0, 17.0)) * ${f(CUT_SHADE.jagAmp)};`);
+    expect(branch).toContain(`let cPx = ca / max(w.w, 1e-4) * ${f(CUT_SHADE.pinchCycles)} + wCut.w * 1531.0;`);
+    expect(branch).toContain('let cPn = mix(hash13(vec3<f32>(cPi, w.w * 311.0, 5.0)), hash13(vec3<f32>(cPi + 1.0, w.w * 311.0, 5.0)), cPf * cPf * (3.0 - 2.0 * cPf)) * 2.0 - 1.0;');
+    expect(branch).toContain(`let jag = jagFine + cPn * (${f(CUT_SHADE.pinchAmp)} + ${f(CUT_SHADE.pinchTip)} * tN * tN);`);
+    expect(branch).toContain('let kerfT = wCut.w * max(1.0 + jag, 0.0) * taper;');
     expect(branch).toContain('let vWall = kerfT * (1.0 - clamp(cs, 0.0, depthT) / depthT) - abs(cu);');
+    // The fillet's kerf is capped at blendDepthFrac x dEff (cut-wound.ts cutBlendK).
+    expect(branch).toContain(`d = smax(d, carve, woundCfg.y * clamp(min(wCut.w, ${f(CUT_SHADE.blendDepthFrac)} * dEff) / 0.05, 0.1, 1.0));`);
     // The lid on the RAW plane (dot(rel, cin) + kerf + lidSlack x halfLen): cutCarve's fourth min() term.
     expect(branch).toContain(`let carve = min(min(min(vWall, depthT - cs), w.w - abs(ca)), dot(rel, cin) + wCut.w + ${f(CUT_SHADE.lidSlack)} * w.w) * ${f(CUT_SHADE.carveK)};`);
     // A row with no inward axis carves nothing (first statement of the branch).
@@ -235,16 +246,19 @@ describe('cut wounds in the march', () => {
     expect(branch).toContain(`let lipW = max(wCut.w * ${f(CUT_SHADE.lipWidth)}, 1e-4);`);
     expect(branch).toContain(`let lx = (abs(cu) - wCut.w * ${f(CUT_SHADE.lipOffset)}) / lipW;`);
     expect(branch).toContain(`let cutAmp0 = wCut.w * ${f(CUT_SHADE.lipHeight)} * min(wMeta.z, ${f(CUT_SHADE.maxLipScale)});`);
-    expect(branch).toContain('let cutAmp = cutAmp0 * prof;');
-    expect(branch).toContain('let cutRimB = max(cutAmp0, lipW);');
+    expect(branch).toContain('let cutAmp = cutAmp0 * taper;');
+    expect(branch).toContain(`let cutRimB = ${f(CUT_SHADE.rimSpan)} * max(cutAmp0, lipW);`);
     expect(branch).toContain('let cutRim = 1.0 - smoothstep(-0.3 * cutRimB, 0.7 * cutRimB, dIn);');
-    expect(branch).toContain('let offKerf = smoothstep(kerfT, kerfT + lipW, abs(cu));');
-    expect(branch).toContain('let nearSkin = 1.0 - smoothstep(0.0, 2.0 * lipW, cs);');
+    // The lip is kept off the SMOOTH kerf, not the jagged one (the jag's slope stays out of the lip).
+    expect(branch).toContain('let kerfS = wCut.w * taper;');
+    expect(branch).toContain('let offKerf = smoothstep(kerfS, kerfS + lipW, abs(cu));');
+    expect(branch).toContain('let nearSkin = 1.0 - smoothstep(0.0, max(min(2.0 * lipW, dEff), 1e-4), cs);');
     expect(branch).toContain('d = d - cutAmp * exp(-lx * lx) * cutRim * offKerf * nearSkin;');
-    // prof is 0 past the tips, so the old step(abs(ca), w.w) gate was redundant.
+    // taper is 0 past the tips, so the old step(abs(ca), w.w) gate was redundant.
     expect(branch).not.toContain('step(abs(ca)');
   });
-  // cut-wound.ts cutMask is the CPU mirror of the footprint: band x ends x far, far measured from the chord plane - sag.
+  // cut-wound.ts cutMask is the CPU mirror of the footprint: band x ends x far x back, far measured from the chord plane -
+  // sag; the band narrows to nothing at maskEnd x halfLen, its width ragged by noise (cutMask's `jag`, |jag| <= maskJag).
   it('the cut mask mirrors cutMask term for term (no infinite slab along the inward axis)', () => {
     const iCut = WOUND_MASK.indexOf('(fBits & 32) != 0');
     const branch = WOUND_MASK.slice(iCut, WOUND_MASK.indexOf('var rM = length(p - w.xyz);'));
@@ -253,11 +267,19 @@ describe('cut wounds in the march', () => {
     expect(branch).toContain('let cPlane = dot(crel, cIn) - cSag;');
     expect(branch).toContain('let cKerf = max(cCut.w, 1e-4);');
     expect(branch).toContain(`let cDEff = min(cCap.w, ${f(CUT_SHADE.maxDepthPerHalfLen)} * w.w);`);
-    expect(branch).toContain(`let cBand = 1.0 - smoothstep(cKerf, cKerf * ${f(CUT_SHADE.maskWidth)}, cU);`);
-    expect(branch).toContain('let cEnds = 1.0 - smoothstep(w.w * 0.85, w.w * 1.15, cA);');
+    expect(branch).toContain(`let cEnd = ${f(CUT_SHADE.maskEnd)} * max(w.w, 1e-4);`);
+    expect(branch).toContain(`let cJag = noise3(vec3<f32>(cAs, cUs, 0.0) * (${f(CUT_SHADE.maskCycles)} / cKerf) + vec3<f32>(w.w * 173.0, cKerf * 619.0, 41.0)) * ${f(CUT_SHADE.maskJag)};`);
+    expect(branch).toContain('let cMw = sqrt(clamp(1.0 - (cA / cEnd) * (cA / cEnd), 0.0, 1.0)) * max(1.0 + cJag, 0.0);');
+    expect(branch).toContain(`let cBand = 1.0 - smoothstep(cKerf * cMw, cKerf * ${f(CUT_SHADE.maskWidth)} * cMw + 1e-4, cU);`);
+    expect(branch).toContain('let cEnds = 1.0 - smoothstep(0.9 * cEnd, cEnd, cA);');
     expect(branch).toContain('let cFar = 1.0 - smoothstep(cDEff + cKerf, cDEff + 2.0 * cKerf, cPlane);');
-    expect(branch).toContain('let cBack = 1.0 - smoothstep(0.25, 0.6, dot(nrm, cIn));');
-    expect(branch).toContain('let cC = cBand * cEnds * cFar * cBack;');
+    expect(branch).toContain('let cNi = dot(nrm, cIn);');
+    expect(branch).toContain('let cBack = 1.0 - smoothstep(0.25, 0.6, cNi);');
+    // The skin band beyond the jagged walls' reach keeps to skin facing out of the cut's mouth (cutMask's face gate).
+    expect(branch).toContain(`let cWall = cKerf * ${f(1 + CUT_SHADE.jagAmp)};`);
+    expect(branch).toContain('let cInner = 1.0 - smoothstep(cWall, 1.3 * cWall, cU);');
+    expect(branch).toContain(`let cFace = 1.0 - smoothstep(${f(CUT_SHADE.maskFace[0])}, ${f(CUT_SHADE.maskFace[1])}, cNi);`);
+    expect(branch).toContain('let cC = cBand * cEnds * cFar * min(cBack, max(cInner, cFace));');
     // A row with no inward axis paints nothing: the guard comes right after the CAP load, before any frame math.
     expect(branch).toMatch(/let cCap = textureLoad\([^\n]*\n\s*(\/\/[^\n]*\n\s*)*if \(length\(cCap\.xyz\) < 0\.5\) \{ continue; \}/);
     expect(branch).toMatch(/continue;\s*}\s*$/);
@@ -265,7 +287,7 @@ describe('cut wounds in the march', () => {
   // nrm is read by exactly one thing in woundMask: the cut branch's back-facing gate. The call site hands it the smooth
   // normal (analytic gradient, no pore noise), which SKIN_NORMAL defines upstream of the mask block.
   it('woundMask reads nrm only in the cut back gate, and the call passes the smooth normal', () => {
-    expect(WOUND_MASK.match(/\bnrm\b/g)).toHaveLength(2); // the parameter and the cBack dot
+    expect(WOUND_MASK.match(/\bnrm\b/g)).toHaveLength(2); // the parameter and the cNi dot (the back and face gates)
     expect(WOUND_MASK).toContain('fn woundMask(p: vec3<f32>, nrm: vec3<f32>,');
     expect(WOUND_MASKS_BLOCK).toContain('woundMask(p, nSmooth, data, woundCfg, woundCfg2)');
     expect(WOUND_MASKS_BLOCK).not.toContain('woundMask(p, n,');

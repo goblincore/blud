@@ -77,7 +77,10 @@ describe('the axe\'s numbers', () => {
     expect(AXE_CALIBRE.depth).toBeGreaterThan(ROD_CALIBRE.depth);   // deeper than the rod
     expect(AXE_CALIBRE.lip).toBeGreaterThan(ROD_CALIBRE.lip);       // lippier than the rod
     expect(AXE_CALIBRE.kerf).toBeGreaterThanOrEqual(ROD_CALIBRE.kerf);
-    expect(AXE_CALIBRE.kerf).toBeLessThanOrEqual(0.015);            // the widest cut-wound.test.ts measured at this depth and lip
+    // stampCut keeps the calibre's kerf (kerfPerHalfLen x halfLen is the Lipschitz-safe ceiling), and it is within the widest
+    // kerf cut-wound.test.ts sweeps (0.03).
+    expect(AXE_CALIBRE.kerf).toBeLessThanOrEqual(CUT_SHADE.kerfPerHalfLen * AXE_CUT.halfLen);
+    expect(AXE_CALIBRE.kerf).toBeLessThanOrEqual(0.03);
     expect(2 * AXE_CUT.halfLen).toBeGreaterThanOrEqual(CUT.minLen);
     expect(2 * AXE_CUT.halfLen).toBeLessThanOrEqual(CUT.maxLen);
   });

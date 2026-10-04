@@ -25,7 +25,7 @@
 // wound smax overshoot. The slab half is skipped for distorted groups because its
 // bound is not closed under a distortion factor above one.
 
-import { CUT_SHADE } from '../cut-wound';
+import { CUT_JAG_MAX, CUT_SHADE } from '../cut-wound';
 import type { Vec3 } from '../types';
 
 export interface ThreatWound {
@@ -98,7 +98,8 @@ export function woundThreatMasks(
  * a cut's does not, so the row's half-length is the wrong sphere. The carve is positive only inside a box about the
  * midpoint, in the slot's frame:
  *
- * - along: |a| <= halfLen; sideways: |u| <= (1 + jagAmp) kerf, the jagged kerf at its widest;
+ * - along: |a| <= halfLen; sideways: |u| <= (1 + CUT_JAG_MAX) kerf, the jagged kerf at its widest (fine jag + the pinch at
+ *   a tip; the taper is <= 1);
  * - inward: the floor, at most sag + max(dEff, kerf) below the anchor, dEff = min(depth, maxDepthPerHalfLen x halfLen)
  *   (the slab; the depth alone missed the sag);
  * - outward: the LID, kerf + lidSlack x halfLen above the anchor's tangent plane. Before the raw-plane lid nothing closed
@@ -119,7 +120,7 @@ export function cutThreatWound(
   reachR: number,
 ): ThreatWound {
   if (Math.hypot(inward[0], inward[1], inward[2]) < 0.5) return { pos, radius: 0, owner: -1 };
-  const halfWidth = (1 + CUT_SHADE.jagAmp) * kerf;
+  const halfWidth = (1 + CUT_JAG_MAX) * kerf;
   const dEff = Math.min(depth, CUT_SHADE.maxDepthPerHalfLen * halfLen);
   const floor = sag + Math.max(dEff, kerf);
   const outward = kerf + CUT_SHADE.lidSlack * halfLen;

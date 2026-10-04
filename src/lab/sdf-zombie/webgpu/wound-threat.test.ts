@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { cutLipAmp, cutThreatWound, woundThreatMasks, type ThreatGroup } from './wound-threat';
-import { CUT_SHADE, ROD_CALIBRE, cutCarve, stampCut } from '../cut-wound';
+import { CUT_JAG_MAX, CUT_SHADE, ROD_CALIBRE, cutCarve, stampCut } from '../cut-wound';
 import { woundDirToWorld, woundWorldPos, type Wound } from '../damage';
 import { prim } from '../head-pop';
 import { sdBody } from '../validate';
@@ -88,7 +88,9 @@ describe('a cut row (flag 32): cutThreatWound', () => {
   it('the corner sphere is the box, not the reach: rod at half-length 0.1 (game margin 0.125)', () => {
     const rod = cutThreatWound(mid, 0, 0.1, inward, 0.06, 0, along, 0.01, 0.1 * Math.max(2, 2 * 1.15 + 3 * 0.42) + 4 * 0.015 + 0.25);
     console.log(`rod threat sphere: reach form ${rod.radius.toFixed(4)} m, box form ${rod.slot!.boxR.toFixed(4)} m + ${rod.slot!.cornerWiden.toFixed(2)} x (group radius + margin)`);
-    expect(rod.slot!.boxR).toBeLessThan(0.13);
+    // 0.127 m with the old side allowance (1 + jagAmp 0.35) kerf; 0.135 m with the look pass's (1 + CUT_JAG_MAX 1.35)
+    // kerf (the pinch can widen a slot's tip to 2.35 of its local kerf). Still a fifth of the reach form.
+    expect(rod.slot!.boxR).toBeLessThan(0.14);
     expect(rod.radius).toBeGreaterThan(0.6);
   });
   it('a cut row with no inward axis threatens nobody (the shader skips it)', () => {
@@ -104,7 +106,8 @@ describe('a cut row (flag 32): cutThreatWound', () => {
 
 // NO MISSED CARVE. On the cut-wound fixtures (a torso and an arm capsule), every sample where the slot's carve is
 // positive inside a foreign group is flagged: a tiny group (radius 1 mm) at each such sample, margin 0 and the game's
-// ~0.125, plus random groups whose ball holds a sample where s_g(p) < carve(p) + margin (the header's win condition).
+// ~0.125, plus random groups whose ball holds a sample where s_g(p) < carve(p) + margin (the header's win condition). The
+// tiny-group pass runs at jag 0 and at CUT_JAG_MAX (the widest the GPU's fine jag + pinch can open a slot).
 describe('cutThreatWound never misses a carve (fixtures)', () => {
   const torso = prim([0, 1.0, 0], [0, 1.5, 0], 0.15, [1, 1, 1], { limb: 'torso', cluster: 1 });
   const arm = prim([0.4, 1.0, 0], [0.4, 1.5, 0], 0.05, [1, 1, 1], { limb: 'armL', cluster: 2 });
@@ -128,7 +131,7 @@ describe('cutThreatWound never misses a carve (fixtures)', () => {
     let positive = 0, randomWins = 0;
     let seed = 12345;
     const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
-    for (const kerf of [0.006, 0.01, 0.015]) {
+    for (const kerf of [0.006, 0.01, 0.015, 0.025]) {
       for (const [name, w] of fixtures(kerf)) {
         const pos = woundWorldPos(prims, w, 0), al = woundDirToWorld(prims, w, w.cutDir!, 0), inw = woundDirToWorld(prims, w, w.carveN!, 0);
         const h = w.radius;
@@ -138,11 +141,12 @@ describe('cutThreatWound never misses a carve (fixtures)', () => {
         const flagged = (g: ThreatGroup, margin: number) => woundThreatMasks([tw], [{ center: [9, 9, 9], radius: 0.01, distort: 1 }, g], [[0, 1], [1, 1]], margin)[0] === 1 << 2;
         // (1) tiny groups at positive-carve samples (dIn = the union with that group: <= -1 mm there).
         const step = Math.max(0.0015, h / 25);
-        for (let a = -h - 0.01; a <= h + 0.01; a += step) {
+        const uw = Math.max(0.025, (1 + CUT_JAG_MAX) * w.kerf! + 0.005);
+        for (const jag of [0, CUT_JAG_MAX]) for (let a = -h - 0.01; a <= h + 0.01; a += step) {
           for (let s = -0.08; s <= w.sag! + w.carveDepth! + 0.02; s += 0.0015) {
-            for (let u = -0.025; u <= 0.025; u += 0.0015) {
+            for (let u = -uw; u <= uw; u += 0.0015) {
               const p = at(a, s, u);
-              const c = cutCarve(p, pos, h, al, inw, w.carveDepth!, w.kerf!, Math.min(field(p), -0.001), w.sag!);
+              const c = cutCarve(p, pos, h, al, inw, w.carveDepth!, w.kerf!, Math.min(field(p), -0.001), w.sag!, jag);
               if (c <= 0) continue;
               positive++;
               const g: ThreatGroup = { center: p as unknown as [number, number, number], radius: 0.001, distort: 1 };
@@ -174,5 +178,5 @@ describe('cutThreatWound never misses a carve (fixtures)', () => {
     console.log(`threat no-miss: ${positive} positive-carve samples flagged, ${randomWins} winning random groups flagged`);
     expect(positive).toBeGreaterThan(1000);
     expect(randomWins).toBeGreaterThan(50);
-  }, 300000);
+  }, 600000);
 });

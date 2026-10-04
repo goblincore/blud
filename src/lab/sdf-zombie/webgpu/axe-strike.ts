@@ -10,15 +10,19 @@ import type { CutCalibre, CutSeg } from '../cut-wound';
 import { AXE_BLADE_DIR, type AxeSide } from './axe-swing';
 import { viewToWorld } from './flail-strike';
 
-/** The axe's blade: deeper and lippier than the rod (cut-wound.ts ROD_CALIBRE 0.06 / 0.015 / 1), the rod's kerf. The
- *  kerf is capped by cut-wound.test.ts's measured envelopes: 0.022 broke the Lipschitz bound (2.63 > 2.2 at the clamp
- *  lip scale) and the thin-limb silhouette closure; 0.02 and 0.018 too; 0.015 passes. Tunable, but re-measure there.
- *  depth stays within CUT.maxDepth and lip within CUT_SHADE.maxLipScale (axe-strike.test.ts). */
-export const AXE_CALIBRE: CutCalibre = { depth: 0.1, kerf: 0.015, lip: 1.1 };
+/** The axe's blade: deeper, lippier and wider than the rod (cut-wound.ts ROD_CALIBRE 0.06 / 0.02 / 1). The kerf was
+ *  capped at 0.015 by cut-wound.test.ts's measured envelopes (0.022 broke the Lipschitz bound, 2.63 > 2.2 at the clamp lip
+ *  scale, and the thin-limb silhouette closure); the 2026-10-04 look pass made the field Lipschitz-safe at any kerf up to
+ *  kerfPerHalfLen x the half-length (the along-slot slopes are kerf / halfLen x a constant) and capped the lip's inward
+ *  band at the slot depth (the silhouette closure), and widened it to 0.025. Tunable, but re-measure there. depth stays
+ *  within CUT.maxDepth, lip within CUT_SHADE.maxLipScale and kerf within kerfPerHalfLen x AXE_CUT.halfLen
+ *  (axe-strike.test.ts). */
+export const AXE_CALIBRE: CutCalibre = { depth: 0.1, kerf: 0.025, lip: 1.1 };
 
 export const AXE_CUT = {
-  /** Half the chop's cut length along the blade line, metres (an axe bit is ~0.15 m; the gash runs a little longer). */
-  halfLen: 0.09,
+  /** Half the chop's cut length along the blade line, metres. 0.09 -> 0.15 (look pass: "a little short"; the slot's
+   *  tails now taper to nothing, cutTaper, so its full-width core is about +-0.08 m, the old gash's length). */
+  halfLen: 0.15,
   /** The strike window's half-angle about the aim's bearing, degrees (the flail's narrow swings use 50). */
   arcDeg: 45,
 } as const;

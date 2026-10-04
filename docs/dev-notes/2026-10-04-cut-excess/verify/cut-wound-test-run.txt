@@ -1,0 +1,133 @@
+
+ RUN  v2.1.9 /Users/donny/Projects/blud/.claude/worktrees/head-explosion-effect-d6231e
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > cut depth is bounded by the slot's own plane (sag), never the far skin > a cut along the arm (0.1 m across) carves nothing past depth + sag, and the far skin stays
+far-side arm: carved 23430, beyond 0, sag 0
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > cut depth is bounded by the slot's own plane (sag), never the far skin > an oblique 65 degree view of a +-60 degree slash across the arm still leaves the far skin alone
+far-side oblique arm: carved 7657, beyond 0, far-skin 0, sag 0.025000000025132432
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > cut depth is bounded by the slot's own plane (sag), never the far skin > a cut around the torso carves nothing past depth + sag
+far-side torso: carved 26552, beyond 0, sag 0.038196601122617746
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > cut depth is bounded by the slot's own plane (sag), never the far skin > the slot follows curvature: a 0.2 m cut around the torso reaches ~0.025 below the real skin at a/h = 0.6
+curvature reach along axis 0.0272 (field-depth 0.0243)
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > cutCarve: Lipschitz bound (WGSL-shaped call on the curved fixture) > max |grad| <= 2.2 over halfLen x depth x kerf (straight along the torso, and around it)
+lipschitz max 1.774 at h 0.1 depth 0.15 kerf 0.03 along
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > cutExposureSpheres cover the flesh the cut removes (the slot follows sag and floor) > torso along: >= 90% of the removed flesh is inside a sphere; no centre strays more than a kerf outside the body
+exposure coverage torso along: 100.0% of 934 removed-flesh samples, 4 spheres, max centre field -0.0090 (kerf 0.018000000000000016), sag 0.0000 depth 0.0600
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > cutExposureSpheres cover the flesh the cut removes (the slot follows sag and floor) > torso around: >= 90% of the removed flesh is inside a sphere; no centre strays more than a kerf outside the body
+exposure coverage torso around: 100.0% of 964 removed-flesh samples, 3 spheres, max centre field -0.0082 (kerf 0.018), sag 0.0125 depth 0.0600
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > cutExposureSpheres cover the flesh the cut removes (the slot follows sag and floor) > arm along: >= 90% of the removed flesh is inside a sphere; no centre strays more than a kerf outside the body
+exposure coverage arm along: 100.0% of 912 removed-flesh samples, 5 spheres, max centre field -0.0100 (kerf 0.02), sag 0.0000 depth 0.0600
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > cutExposureSpheres cover the flesh the cut removes (the slot follows sag and floor) > arm silhouette (sag ~ limb radius): >= 90% of the removed flesh is inside a sphere; no centre strays more than a kerf outside the body
+exposure coverage arm silhouette (sag ~ limb radius): 100.0% of 510 removed-flesh samples, 5 spheres, max centre field 0.0006 (kerf 0.015000000000000005), sag 0.0500 depth 0.0300
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > cutLip / cutMask: the lip and the mask stay on the near skin > (a) behind a front cut the lip lowers the far skin by < 0.05 mm and the mask is 0
+far skin torso along: max lip 0.0000 mm, max mask 0.00e+0
+far skin torso around: max lip 0.0000 mm, max mask 0.00e+0
+far skin arm along: max lip 0.0000 mm, max mask 0.00e+0
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > cutLip / cutMask: the lip and the mask stay on the near skin > (a) a front cut along a 0.02 m arm leaves its back unpainted (kerf 0.01, 0.015, the rod's and the axe's)
+thin arm r 0.02 kerf 0.01: max mask on the back 0.000, on all back-facing skin 0.311
+thin arm r 0.02 kerf 0.015: max mask on the back 0.000, on all back-facing skin 1.000
+thin arm r 0.02 kerf 0.02: max mask on the back 0.000, on all back-facing skin 1.000
+thin arm r 0.02 kerf 0.025: max mask on the back 0.000, on all back-facing skin 1.000
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > cutLip / cutMask: the lip and the mask stay on the near skin > (a) a front cut along a 0.03 m arm leaves its back unpainted (kerf 0.01, 0.015, the rod's and the axe's)
+thin arm r 0.03 kerf 0.01: max mask on the back 0.000, on all back-facing skin 0.000
+thin arm r 0.03 kerf 0.015: max mask on the back 0.000, on all back-facing skin 0.311
+thin arm r 0.03 kerf 0.02: max mask on the back 0.000, on all back-facing skin 1.000
+thin arm r 0.03 kerf 0.025: max mask on the back 0.000, on all back-facing skin 1.000
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > cutLip / cutMask: the lip and the mask stay on the near skin > (a) a front cut along a 0.04 m arm leaves its back unpainted (kerf 0.01, 0.015, the rod's and the axe's)
+thin arm r 0.04 kerf 0.01: max mask on the back 0.000, on all back-facing skin 0.000
+thin arm r 0.04 kerf 0.015: max mask on the back 0.000, on all back-facing skin 0.000
+thin arm r 0.04 kerf 0.02: max mask on the back 0.000, on all back-facing skin 0.311
+thin arm r 0.04 kerf 0.025: max mask on the back 0.000, on all back-facing skin 0.980
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > cutLip / cutMask: the lip and the mask stay on the near skin > (b) with the lip on, the slot keeps >= 80% of its half-width one blend width below the skin and of its open centre depth
+slot torso along: half-width carve-only -> with lip, 1 mm down 30.00 -> 27.80, kW 6.00 mm down 25.96 -> 23.96 (92.3%), 5 mm down 27.76 -> 24.72; open centre depth 60.02 -> 60.02 mm (100.0%)
+slot torso around: half-width carve-only -> with lip, 1 mm down 30.00 -> 28.02, kW 6.00 mm down 26.58 -> 24.20 (91.0%), 5 mm down 28.48 -> 24.96; open centre depth 21.82 -> 21.82 mm (100.0%)
+slot arm along: half-width carve-only -> with lip, 1 mm down 30.00 -> 27.52, kW 6.00 mm down 25.70 -> 23.86 (92.8%), 5 mm down 27.42 -> 24.60; open centre depth 60.02 -> 60.02 mm (100.0%)
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > cutLip / cutMask: the lip and the mask stay on the near skin > (d) the lip still raises the near skin beside the cut: > 0.3 mm at |u| = lipOffset x kerf
+lip torso along: raises the skin at |u| = 34.0 mm by 7.970 mm
+lip torso around: raises the skin at |u| = 34.0 mm by 8.170 mm
+lip arm along: raises the skin at |u| = 34.0 mm by 9.260 mm
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > the lid leaves the owner's surface alone and closes the channel above a cut > no owner sign flip on the convex fixtures (sampled), and few on concave creases
+lid, kerf 0.006 crease top: 0 owner sign flips of 66174 near-surface samples
+lid, kerf 0.006 crease front: 0 owner sign flips of 68129 near-surface samples
+lid, kerf 0.006 armpit: 79 owner sign flips of 50843 near-surface samples
+lid, kerf 0.015 crease top: 0 owner sign flips of 66174 near-surface samples
+lid, kerf 0.015 crease front: 0 owner sign flips of 68129 near-surface samples
+lid, kerf 0.015 armpit: 0 owner sign flips of 50843 near-surface samples
+lid, kerf 0.025 crease top: 0 owner sign flips of 66174 near-surface samples
+lid, kerf 0.025 crease front: 0 owner sign flips of 68129 near-surface samples
+lid, kerf 0.025 armpit: 0 owner sign flips of 50843 near-surface samples
+lid: 1916211 near-surface samples checked
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > the lid leaves the owner's surface alone and closes the channel above a cut > a foreign ball lying across the channel above a chest cut is not carved (it was, before the raw-plane lid)
+foreign ball: 14013 points inside, carved without the lid 7202, with it 0 (max carve -0.0049)
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > stampCut: a slash across a thin limb's silhouette leaves its back closed > kerf 0.01: depth fits between the chord and thickFrac of the flesh; no far-skin opening in the middle 70% of the arm
+silhouette kerf 0.01: half 0.050 kerf 0.0100 sag 0.0500 depth 0.0300, opened 18 of 25277 back-skin samples, 0 within |a| <= 0.7 r, nearest the middle at |a| = 0.968 r, deepest 10.3 mm below the chord plane
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > stampCut: a slash across a thin limb's silhouette leaves its back closed > kerf 0.015: depth fits between the chord and thickFrac of the flesh; no far-skin opening in the middle 70% of the arm
+silhouette kerf 0.015: half 0.050 kerf 0.0150 sag 0.0500 depth 0.0300, opened 286 of 25277 back-skin samples, 0 within |a| <= 0.7 r, nearest the middle at |a| = 0.918 r, deepest 18.5 mm below the chord plane
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > stampCut: a slash across a thin limb's silhouette leaves its back closed > the rod (kerf 0.02): depth fits between the chord and thickFrac of the flesh; no far-skin opening in the middle 70% of the arm
+silhouette the rod (kerf 0.02): half 0.050 kerf 0.0150 sag 0.0500 depth 0.0300, opened 286 of 25277 back-skin samples, 0 within |a| <= 0.7 r, nearest the middle at |a| = 0.918 r, deepest 18.5 mm below the chord plane
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > stampCut: a slash across a thin limb's silhouette leaves its back closed > the axe calibre: depth fits between the chord and thickFrac of the flesh; no far-skin opening in the middle 70% of the arm
+silhouette the axe calibre: half 0.050 kerf 0.0150 sag 0.0500 depth 0.0300, opened 282 of 25277 back-skin samples, 0 within |a| <= 0.7 r, nearest the middle at |a| = 0.918 r, deepest 18.5 mm below the chord plane
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > stampCut: a slash across a thin limb's silhouette leaves its back closed > the rod, stretched chord: depth fits between the chord and thickFrac of the flesh; no far-skin opening in the middle 70% of the arm
+silhouette the rod, stretched chord: half 0.070 kerf 0.0200 sag 0.0500 depth 0.0300, opened 856 of 25277 back-skin samples, 0 within |a| <= 0.7 r, nearest the middle at |a| = 0.724 r, deepest 33.8 mm below the chord plane
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > stampCut: a slash across a thin limb's silhouette leaves its back closed > the axe calibre, stretched chord: depth fits between the chord and thickFrac of the flesh; no far-skin opening in the middle 70% of the arm
+silhouette the axe calibre, stretched chord: half 0.070 kerf 0.0210 sag 0.0500 depth 0.0300, opened 856 of 25277 back-skin samples, 0 within |a| <= 0.7 r, nearest the middle at |a| = 0.724 r, deepest 33.8 mm below the chord plane
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > cutLip + cutCarve: Lipschitz bound of the whole cut field (GPU noise included) > max |grad| <= 2.2 over halfLen x depth x kerf (lip scale 0.8)
+lipschitz (carve + lip + noise, lip scale 0.8) max 1.822 at h 0.225 depth 0.15 kerf 0.006 (clamped 0.0060) along at a -0.13 h, s 0.0100, u 1.33 kerf
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > cutLip + cutCarve: Lipschitz bound of the whole cut field (GPU noise included) > max |grad| <= 2.2 over halfLen x depth x kerf (lip scale 1.1)
+lipschitz (carve + lip + noise, lip scale 1.1) max 1.999 at h 0.1 depth 0.06 kerf 0.025 (clamped 0.0250) around at a -0.02 h, s 0.0025, u -1.50 kerf
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > cutLip + cutCarve: Lipschitz bound at the shipped calibres (GPU noise included) > rod: max |grad| <= 2.2 over halfLen (lip scale 0.8)
+lipschitz (rod calibre, lip scale 0.8) max 1.725 at h 0.015 (kerf 0.0045) along at a 0.67 h, s 0.0075, u 0.22 kerf
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > cutLip + cutCarve: Lipschitz bound at the shipped calibres (GPU noise included) > rod: max |grad| <= 2.2 over halfLen (lip scale 1.1)
+lipschitz (rod calibre, lip scale 1.1) max 1.822 at h 0.05 (kerf 0.0150) around at a -0.15 h, s 0.0025, u 1.50 kerf
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > cutLip + cutCarve: Lipschitz bound at the shipped calibres (GPU noise included) > axe: max |grad| <= 2.2 over halfLen (lip scale 0.8800000000000001)
+lipschitz (axe calibre, lip scale 0.8800000000000001) max 1.725 at h 0.015 (kerf 0.0045) along at a 0.67 h, s 0.0075, u 0.22 kerf
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > cutLip + cutCarve: Lipschitz bound at the shipped calibres (GPU noise included) > axe: max |grad| <= 2.2 over halfLen (lip scale 1.1)
+lipschitz (axe calibre, lip scale 1.1) max 1.814 at h 0.05 (kerf 0.0150) around at a -0.15 h, s 0.0025, u 1.50 kerf
+
+stdout | src/lab/sdf-zombie/cut-wound.test.ts > cutLip + cutCarve: Lipschitz bound at the shipped calibres (GPU noise included) > thin limbs: max |grad| <= 2.2 along, across the silhouette and chopped across, at the rod and axe calibres
+lipschitz (thin limbs, clamp lip scale) max 1.955 at r 0.05 chop across kerf 0.0200 depth 0.0600 at a 0.03 h, s 0.0025, u 1.47 kerf
+
+ ✓ src/lab/sdf-zombie/cut-wound.test.ts (49 tests) 324888ms
+   ✓ cutCarve: Lipschitz bound (WGSL-shaped call on the curved fixture) > max |grad| <= 2.2 over halfLen x depth x kerf (straight along the torso, and around it) 14406ms
+   ✓ the lid leaves the owner's surface alone and closes the channel above a cut > no owner sign flip on the convex fixtures (sampled), and few on concave creases 9573ms
+   ✓ cutLip + cutCarve: Lipschitz bound of the whole cut field (GPU noise included) > max |grad| <= 2.2 over halfLen x depth x kerf (lip scale 0.8) 146071ms
+   ✓ cutLip + cutCarve: Lipschitz bound of the whole cut field (GPU noise included) > max |grad| <= 2.2 over halfLen x depth x kerf (lip scale 1.1) 59186ms
+   ✓ cutLip + cutCarve: Lipschitz bound at the shipped calibres (GPU noise included) > rod: max |grad| <= 2.2 over halfLen (lip scale 0.8) 17869ms
+   ✓ cutLip + cutCarve: Lipschitz bound at the shipped calibres (GPU noise included) > rod: max |grad| <= 2.2 over halfLen (lip scale 1.1) 16590ms
+   ✓ cutLip + cutCarve: Lipschitz bound at the shipped calibres (GPU noise included) > axe: max |grad| <= 2.2 over halfLen (lip scale 0.8800000000000001) 17624ms
+   ✓ cutLip + cutCarve: Lipschitz bound at the shipped calibres (GPU noise included) > axe: max |grad| <= 2.2 over halfLen (lip scale 1.1) 15272ms
+   ✓ cutLip + cutCarve: Lipschitz bound at the shipped calibres (GPU noise included) > thin limbs: max |grad| <= 2.2 along, across the silhouette and chopped across, at the rod and axe calibres 27465ms
+
+ Test Files  1 passed (1)
+      Tests  49 passed (49)
+   Start at  13:49:00
+   Duration  325.43s (transform 119ms, setup 0ms, collect 136ms, tests 324.89s, environment 152ms, prepare 56ms)
+

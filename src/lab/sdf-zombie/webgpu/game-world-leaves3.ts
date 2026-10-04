@@ -8,7 +8,7 @@
 import type { GameContext } from './game-context';
 import { woundEmitAnchorAndNormal } from '../bleed-registry'
 import { spawnImpactGout, type Droplet } from '../blood-sim'
-import { type Wound } from '../damage'
+import { type Wound, woundDirToWorld } from '../damage'
 import { detachGutChain, pinGutChain, stepGutChain } from '../entrails'
 import { type Vec3 } from '../types'
 import { type ZombieActor } from './game-actor'
@@ -140,4 +140,25 @@ export function registerBleed(ctx: GameContext,
   // nothing advances the stream while bleed is frozen. The capture twins
   // (stampWoundAt/explode) call spillVerdict directly instead.
   spillVerdict(ctx, a, wound);
+}
+
+/** CUT GORE (2026-10-04 look pass, "more excessive"): a cut bleeds as registerBleed does (the trickle and the gout at its
+ *  midpoint) plus an extra impact gout at each of `CUT_EXTRA_GOUTS` stations along the slot, so a long gash spills along
+ *  its length rather than from one point. Same bleedRng and the wound's own stream id, so setBleed(false) freezes them
+ *  with the rest (nothing rolls when bleed is off). A crater, or a cut without its frame, is plain registerBleed. */
+const CUT_EXTRA_GOUTS = [-0.55, 0.55] as const;
+export function registerCutBleed(ctx: GameContext,
+  a: ZombieActor, wound: Wound, kind: 'pellet' | 'slug',
+  contact?: { point: Vec3; incoming: Vec3 },
+): void {
+  registerBleed(ctx, a, wound, kind, contact);
+  if (!ctx.vfx.bleedEnabled || wound.shape !== 'cut' || !wound.cutDir) return;
+  const prims = a.posed().prims, yaw = a.pose().yaw;
+  const { anchor, normal } = woundEmitAnchorAndNormal(prims, wound, yaw);
+  const along = woundDirToWorld(prims, wound, wound.cutDir, yaw);
+  const streamId = woundStreamId(ctx, wound);
+  for (const t of CUT_EXTRA_GOUTS) {
+    const at: Vec3 = [anchor[0] + along[0] * t * wound.radius, anchor[1] + along[1] * t * wound.radius, anchor[2] + along[2] * t * wound.radius];
+    spawnImpactGout(ctx.vfx.bloodSim, kind, at, [-normal[0], -normal[1], -normal[2]], rngStreams.bleed, streamId);
+  }
 }
