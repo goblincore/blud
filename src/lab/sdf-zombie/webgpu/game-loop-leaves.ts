@@ -138,13 +138,13 @@ export function loopBlocksInput(ctx: GameContext): boolean {
 }
 
 /** May the player select or fire this slot? The flail is owned as the
- *  'melee' inventory item (the level format's name). The flare and the rod are
- *  dev harnesses: always. */
+ *  'melee' inventory item (the level format's name). The flare, the rod and the
+ *  axe are dev harnesses: always. */
 export function ownsSlot(ctx: GameContext, slot: WeaponSlot): boolean {
   if (slot === 'launcher') return ctx.weapon.launcher !== null;
   const rt = ctx.world.loop;
   const item = slot === 'flail' ? 'melee' : slot;
-  return !rt || slot === 'flare' || slot === 'rod' || rt.inventory.weapons.includes(item);
+  return !rt || slot === 'flare' || slot === 'rod' || slot === 'axe' || rt.inventory.weapons.includes(item);
 }
 
 /** A finite level with an empty reserve cannot reload (a dry click). */

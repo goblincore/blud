@@ -25,17 +25,18 @@ function run(state: WeaponSlotState, sec: number, press?: WeaponSlot): WeaponSlo
 }
 
 describe('slot mapping', () => {
-  it('maps 1 through 6 and nothing else', () => {
+  it('maps 1 through 7 and nothing else', () => {
     expect(slotForKey('Digit1')).toBe('flail');
     expect(slotForKey('Digit2')).toBe('shotgun');
     expect(slotForKey('Digit3')).toBe('dynamite');
     expect(slotForKey('Digit4')).toBe('launcher');
     expect(slotForKey('Digit5')).toBe('flare');
     expect(slotForKey('Digit6')).toBe('rod');
-    expect(slotForKey('Digit7')).toBeNull();
+    expect(slotForKey('Digit7')).toBe('axe');
+    expect(slotForKey('Digit8')).toBeNull();
     expect(slotForKey('KeyE')).toBeNull();
-    expect(Object.keys(SLOT_BY_KEY)).toHaveLength(6);
-    expect(WEAPON_SLOTS).toEqual(['flail', 'shotgun', 'dynamite', 'launcher', 'flare', 'rod']);
+    expect(Object.keys(SLOT_BY_KEY)).toHaveLength(7);
+    expect(WEAPON_SLOTS).toEqual(['flail', 'shotgun', 'dynamite', 'launcher', 'flare', 'rod', 'axe']);
   });
 });
 
@@ -141,6 +142,18 @@ describe('rod (slot 6)', () => {
     expect(slotReady(s)).toBe(true);
     expect(slotLowerAmount(s, 'rod')).toBe(0);
     for (const w of WEAPON_SLOTS) if (w !== 'rod') expect(slotLowerAmount(s, w)).toBe(1);
+  });
+});
+
+describe('axe (slot 7)', () => {
+  it('Digit7 selects the axe, and it settles with every other slot holstered', () => {
+    expect(slotForKey('Digit7')).toBe('axe');
+    let s = requestSlot(makeWeaponSlotState(), 'axe');
+    s = run(s, WEAPON_SWITCH.lowerSec + WEAPON_SWITCH.raiseSec + STEP);
+    expect(s.live).toBe('axe');
+    expect(slotReady(s)).toBe(true);
+    expect(slotLowerAmount(s, 'axe')).toBe(0);
+    for (const w of WEAPON_SLOTS) if (w !== 'axe') expect(slotLowerAmount(s, w)).toBe(1);
   });
 });
 
