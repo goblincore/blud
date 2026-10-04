@@ -43,7 +43,7 @@ Task 5 details worth knowing:
 
 ## Remaining
 
-1. **Final code review** of the whole M1 range (`3d80e9d2..HEAD`, excluding the main merge `f48e0084`). It covers Task 7's rod, which has no separate review recorded here.
+1. **Final code review** of the whole M1 range (`3d80e9d2..HEAD`, excluding the main merge `f48e0084`). Task 7's rod had its own spec review (compliant) and quality review (approved after `5f075950`; minors in `fb35b370`).
 2. **Owner playtest.** Tell the user M1 is ready: weapon slot 6, hold the left button and sweep across a zombie. Their dev server is `blud-head-burst` on 5273 (never touch it). The pointer-lock mousedown path has not been exercised by any gate (the gate's R scenario uses the `rodPress` / `rodRelease` seams), so the playtest is its first real check.
 3. **The M2 plan** (head split: authored presets, the nearest one to the hit wins, plus a dynamic warp). The spec covers M2.
 
@@ -59,7 +59,7 @@ Task 5 details worth knowing:
   2. The rod's slit (`ROD_CALIBRE.kerf` 0.01, 2 cm wide) reads as a thin line at 0.6 m in shadow. A wider kerf is one constant.
   3. Exposed bone renders crisp at output resolution inside the soft upscaled flesh (hard-edged pink patches). This predates the cuts (skeleton=mesh).
 - **Gate thresholds.** The H outside-band margin is thin (0.78 vs a 1.0 limit); the residue near the right eye's lower lid was not isolated. A large flat pale-yellow polygon fills the lower left of the C photos before any cut; not investigated.
-- **Not fixed.** `ngWoundProbe` in `normal-gradient-probe.ts` calls `applyWounds` with 7 arguments but it takes 8, so that GPU probe would not compile (found in Task 2).
+- **Fixed on main, merged in `f48e0084`.** The `ngWoundProbe` arity bug found in Task 2: the probe now calls the 8-argument `applyWounds` (`normal-gradient-probe.wgsl.ts`, pinned by `normal-gradient-probe.wgsl.test.ts`).
 - **Cosmetic test log.** The `character-view.test` line "soldier sheet FAILED TO COMPILE" is a deliberate test input, not a bug.
 
 ## House rules

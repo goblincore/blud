@@ -25,7 +25,8 @@ What else depends on the cap:
   the first 16, so every shot after the 16th was invisible.
 - **The normal-gradient probe.** `webgpu/normal-gradient-probe.ts`'s fixture texture is now `MAX_WOUNDS`
   wide. Separately, and NOT fixed here: its `ngWoundProbe` calls `applyWounds` with 7 arguments, but
-  `applyWounds` takes 8 (`band`), so that GPU probe would fail to compile today.
+  `applyWounds` takes 8 (`band`), so that GPU probe would fail to compile today. *(Update 2026-10-04: fixed on
+  main by the probe spike, merged into this branch in `f48e0084`.)*
 
 ### Cold-boot `drawOnce` (`scripts/boot-time.mjs`, the gate)
 
