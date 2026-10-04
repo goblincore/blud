@@ -109,6 +109,18 @@ describe('axe harness: input', () => {
     expect(f.axe.debug()).toMatchObject({ phase: 'swing', side: 'H', swingId: 1 });
   });
 
+  it('a click while a scripted sequence has started (the rig hidden) does not swing, nor does the seam', () => {
+    const f = fixture();
+    f.ctx.world.sequence = { started: true, active: false };   // the sequence ended (inactive) but the level is not done
+    expect(f.axe.onMouseDown(0)).toBe(true);                 // swallowed, not armed
+    f.axe.tick(1 / 60);
+    f.axe.onMouseUp(0);
+    f.axe.click();
+    f.ticks(60);
+    expect(f.axe.debug()).toMatchObject({ phase: 'idle', swingId: 0, strikes: 0 });
+    expect(f.blasts()).toHaveLength(0);
+  });
+
   it('a click while the axe is still raising is ignored, as the rod\'s is (not replayed once it is up)', () => {
     const f = fixture('shotgun');
     let s = requestSlot(f.ctx.weapon.slotState, 'axe');

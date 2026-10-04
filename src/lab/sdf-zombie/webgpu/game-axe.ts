@@ -141,8 +141,11 @@ export function createAxeHarness(ctx: GameContext, deps: AxeDeps): AxeHarness {
   let click = false, held = false, strikes = 0;
   let last: AxeDebug['last'] = null;
   const heads = new Map<number, AxeHeadState>();
-  /** The axe may act: it is the live slot, settled (not lowering / raising) and the loop is not blocking input. */
-  const armed = () => ctx.weapon.slotState.live === 'axe' && slotReady(ctx.weapon.slotState) && !loopBlocksInput(ctx);
+  /** The axe may act: it is the live slot, settled (not lowering / raising), the loop is not blocking input, and no
+   *  scripted sequence has started (the rig is hidden then: an ended sequence before the level is done must not chop
+   *  unseen; the flail's `!rig.visible` guard). */
+  const armed = () => ctx.weapon.slotState.live === 'axe' && slotReady(ctx.weapon.slotState) && !loopBlocksInput(ctx)
+    && !ctx.world.sequence?.started;
   const release = () => { held = false; click = false; };
   // A button released outside the window or with the lock lost never reaches us: do not stay held (the rod's resets).
   const onBlur = () => release();
@@ -233,7 +236,7 @@ export function createAxeHarness(ctx: GameContext, deps: AxeDeps): AxeHarness {
       const p = axePose(swing);
       haft.position.set(p.grip[0], p.grip[1], p.grip[2]);
       haft.rotation.set(p.rot[0], p.rot[1], p.rot[2], 'XYZ');
-      aimHand();
+      if (rig.visible) aimHand();   // a hidden axe skips the arm IK
     },
     syncFill() { vlights?.syncFill(); },
     refreshLights() { vlights?.relist(); },
