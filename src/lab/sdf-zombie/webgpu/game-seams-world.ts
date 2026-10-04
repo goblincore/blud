@@ -199,13 +199,15 @@ export function createWorldSeams(ctx: GameContext) {
       if (ndc.z > 1) return null;
       return { x: (ndc.x + 1) * 0.5 * width, y: (1 - ndc.y) * 0.5 * height };
     },
-    /** P3 capture: an actor's wounds in world space — the transform rendering uses. */
+    /** P3 capture: an actor's wounds in world space — the transform rendering uses. `shape` is 'cut' for a blade slot
+     *  (cut-wound.ts; `radius` is then its half-length, `kerf` its half-width), else 'crater'. `prim` / `limb`: the
+     *  primitive it rides (merges only join wounds on one prim). */
     actorWounds: (actorId: number) => {
       const a = ctx.world.actors.find((q) => q.id === actorId);
       if (!a) return [];
       const posed = a.posed();
       const yaw = a.pose().yaw;
-      return a.wounds().map((w) => ({ pos: woundWorldPos(posed.prims, w, yaw), radius: w.radius, type: w.type }));
+      return a.wounds().map((w) => ({ pos: woundWorldPos(posed.prims, w, yaw), radius: w.radius, type: w.type, shape: w.shape ?? 'crater', kerf: w.kerf ?? null, prim: w.primIdx, limb: posed.prims[w.primIdx]?.limb ?? null }));
     },
     /** P3 capture: every actor's head circle and wound circles, projected through the live camera to
      *  output px (row 0 = top); circles behind the camera are omitted. Call after a render, with the

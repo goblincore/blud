@@ -358,3 +358,154 @@ set: base 1594.0, new 1608.9 (+15 ms, inside the base set's 27 ms spread). Six m
 No base boot did (14 boots, max 1654.1 at load 9.5), and no new-build boot did in the 10 boots after the load fell.
 I read it as load, but two hits on one side is not proof. **Acceptance:** every boot but that one is under ~1810 ms;
 that one is over.
+
+## Task 8: the capture gate (2026-10-04)
+
+`scripts/cut-wound-gate.mjs` (bash, not zsh):
+
+```
+export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up
+node scripts/cut-wound-gate.mjs 5241 9241
+```
+
+Bare ring page, frozen zombies, headless Chrome 154.0.8037.93, 1280 x 800, shipped render (march target 400 x 300,
+neural upscale to 800 x 600). Photos in [`gate/`](gate/). Runs 7 and 8 (the committed script) at `fb35b370` + this change: **24 checks, 0 failed**,
+zero console errors, the same pixel numbers both times. Load average ~2.3.
+
+`actorWounds` (`game-seams-world.ts`) now also returns `shape` ('cut' or 'crater'), `kerf`, `prim` and `limb`.
+
+### Where the gate departs from the plan's snippet, and why
+
+- **Stances face the body's front** (the head frame's forward). The plan's room-centre stance showed one zombie's back
+  and another's side: the torso was edge-on and only 2 of G's 4 grid columns hit it.
+- **W**: the grid is 0.04 x 0.035 m (plan 0.06 x 0.05), plus a prim check. The torso is three prims (#5, #6, #7: 10 / 15
+  / 15 of the 40 hits), and a merge only joins wounds on one prim (`MERGE`), so a lone wound on a prim of its own is
+  evicted by design. With the plan's grid from the front, the first hit point (the bottom-left corner) ended 2.5 cm
+  outside every wound. That run did not log prims, so I did not establish whether that hit was a lone wound on another
+  prim (evicted by design) or something else. With the tighter grid every hit has same-prim partners and all 10 first
+  hits stay covered (gaps -0.055 to -0.081 m).
+- **G** checks two batches of 8 (wounds 17-24, then 25-32), not one, so the whole ring above 16 is checked on the GPU.
+- **K / H**: no hand step between the before and after photos. Two stepped frames sway the view model and its light:
+  0.41 / 0.69 mean |dLuma| over a head with nothing else changed (measured). The cut shows on the capture's own locked
+  renders: 6.43 mean |dLuma| over the head with no step.
+- **The view model stays visible.** Hiding it (`setViewModelVisible(false)`) halves the head's mean luma (72.4 -> 37.6),
+  so the light rides with it.
+- **Blood is off** (`setBleed(false)`) for W, G, K, H and C: those photos judge the carve and its shading. R switches the
+  bleed back on (the rod's real path).
+- **Free aim is off for photos**, because its DOM reticle draws over the cut. R turns free aim on for its `setAimPoint` sweep.
+- **K is framed 6 cm above the cut's midpoint**, so the screen-centre dot (always drawn) is clear of the profile's band.
+- **R:** the canvas mousedown needs pointer lock, which headless Chrome cannot take. **The pointer-lock path was NOT
+  exercised.** `rodPress` / `rodRelease` call the harness's `onMouseDown` / `onMouseUp`. The sweep is setAimPoint x
+  -0.15 -> +0.15 over 20 `step`s, at 1.1 m from the torso.
+- **Bone colour.** head-damage-gate's `isBone` (tuned on the lit skull: g/r 0.62-0.92, b/g 0.45-0.85) reads 0 on the
+  exposed bone here. The skeleton is `mesh` and its bone renders about 185/110/112 under the red-tinted light. The gate
+  uses `isPale` (r >= 120, g and b >= 0.5 r, r >= 1.4 g, which excludes the grey view model). **Proof that the pale patch in the K slot is bone:** I made an A/B
+  boot with `?skeleton=procedural`, the same zombie and the same cut ([`gate/K-skeleton-ab.png`](gate/K-skeleton-ab.png),
+  3x, left mesh, right procedural). The crisp pink patch becomes a dim grey-green bone.
+
+### Results (runs 7 and 8)
+
+| check | measured |
+| --- | --- |
+| W | 30 hits keep 30 wounds; 40 keep exactly 32; the first 10 hit points all covered |
+| G | 16 far-side + 8 + 8 near-side wounds; every new spot changes: min mean \|dLuma\| 11.57 (17-24), 13.17 (25-32); noise max 0.29 |
+| K | one cut, shape 'cut'; darkest interior 7.3 vs shoulders 23.1 / 87.9 (dip 15.8 >= 8); slot mean 32.4 -> 18.3; bone in the slot 0 -> 0.058, beside it 0.060 -> 0.051 |
+| H | within 5 cm of the cut 7.37 mean \|dLuma\|; outside it 0.78 (twin renders 0.11), 1.8% of pixels over 6 |
+| R | slot 6 selectable, armed, holds on press; 20 samples; 1 cut, half-length 0.11 m |
+| C | 3 cuts stamped |
+
+**Thresholds** come from the first read images. The renders are deterministic: two locked renders differ by at most
+0.3 in every measured disc. The thresholds are:
+- G_SPOT_MIN 5 (the lowest spot measured 11.6);
+- K_DIP_MIN 8 (the dimmest view measured 15.7);
+- H_IN_MIN 4 (7.4 measured);
+- H_OUT_MAX 1.0 and an outside share of at most 3% (measured 0.78-0.81 and 1.8%).
+
+The H outside-band margin is thin. The residue sits in one cluster at the right eye's lower lid, just outside the 5 cm
+band ([`gate/H-diff.png`](gate/H-diff.png): red = |dLuma| x 8, yellow = outside-band pixels over 6, blue = the band's
+edge). **Its cause was not isolated.**
+
+**G per spot** (mean |dLuma| in a 0.6-crater-radius disc against the previous photo):
+
+| batch | spots |
+| --- | --- |
+| 17-24 | 30.7, 26.3, 28.2, 17.4, 24.7, 32.2, 11.6, 20.8 |
+| 25-32 | 27.9, 27.0, 38.6, 36.1, 34.8, 22.3, 13.2, 17.3 |
+
+The far-side stamps moved those near-side discs by 0-1.26 (G-00 -> G-16).
+
+**K luma profile** across the cut at its midpoint (px 641, 477), kerf 14.8 px, averaged +-25 px along the cut.
+Before -> after, at t px from the cut line:
+
+| t | -40 | -22 | -10 | -6 | 0 | +6 | +10 | +22 | +40 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| before | 21 | 25 | 29 | 30 | 32 | 35 | 37 | 45 | 59 |
+| after | 22 | 17 | 10 | 10 | 46 | 7 | 11 | 21 | 62 |
+
+The t = 0 peak is the exposed sternum (bone mesh). Past about 2 kerf both sides return to the uncut skin. **The lips do
+not read lit in this view.** At the ridges (1.5 kerf) luma fell, 24.5 -> 17.4 (left) and 44.5 -> 20.7 (right). The
+wet-lip shading band (2.2 kerf) darkens them on this shadowed chest. In the side-lit C photo the lips read bright orange.
+
+### Frame cost (`timeDraws(120)` median, ungated)
+
+Each row is one run, all on the same framings:
+
+| run | 0.6 m: 0 wounds (x2) | 16 far | 24 | 32 | 2 m: 0 (x2) | 32 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2 | 19.9 / 19.6 | - | - | 42.8 | 17.0 / 16.8 | 21.1 |
+| 3 | 21.4 / 21.0 | - | - | 45.8 | 15.7 / 18.1 | 22.0 |
+| 5 | 20.9 / 20.5 | - | - | 37.6 | 14.7 / 15.9 | 20.9 |
+| 7 | 21.0 / 20.3 | 23.1 | 33.2 | 37.5 | 14.4 / 16.1 | 19.4 |
+| 8 (final) | 20.8 / 20.0 | 24.3 | 35.1 | 37.4 | 14.7 / 15.6 | 19.6 |
+
+- At 0.6 m (the torso fills the frame), 32 wounds add +17 to +25 ms. The 16 far-side wounds alone add ~2.5 ms with no
+  visible pixel.
+- At 2 m they add +4 to +6 ms. The baselines spread by up to 2.4 ms, and the 32-wound reading varies by 8 ms between runs.
+
+**C, 3 cuts at 0.6 m**: 17.4 / 19.2 -> 23.5 (run 2), 21.1 / 20.7 -> 23.6 (run 3), 20.4 / 20.0 -> 22.0 (run 5),
+18.9 / 20.3 -> 20.7 (run 7), 20.3 / 20.1 -> 21.2 (run 8). That is +1 to +5 ms, inside a 0.4 to 1.8 ms baseline spread.
+
+### What the photos show
+
+- `K-before` / `K-after` (+ `-crop`): the zombie's chest from 0.6 m, eye at standing height, most of the chest in shadow,
+  the flashlight's hot spot on its right side. After: a thin vertical dark slit down the sternum. Inside it sits a crisp
+  pale-pink sliver, which is the sternum bone mesh (it renders at output resolution, so its edges are hard against the
+  soft half-res march). The shotgun covers the slit's lower third. The slot is visible, but in the shadow it reads as a
+  thin dark line, not a lipped gash.
+- `H-before` / `H-after` (+ `-crop`, `H-diff`): the face. After: a diagonal gash from under the left eye across the nose to
+  the right cheek. It has a dark interior, an orange-lit jagged upper edge and wet white specular spots on the lower lip.
+  It reads clearly as a slash.
+- `R-before` / `R-after`: the rod (a dark steel cylinder from the lower right toward the centre; this is the first time it
+  has been seen in a render) with the zombie at 1.1 m. After the sweep: a long horizontal slit across the belly, about
+  0.22 m. It has a dark interior and a glossy red lit lip, and the bleed's drops run down from its middle. It reads strongly.
+- `G-00` / `G-16` / `G-24` / `G-32`: G-16 is unchanged from G-00 (all 16 wounds are on the back). G-24 has 8 distinct
+  round craters (rim, dark bowl, crisp pink rib patches inside). G-32 has 16 overlapping craters: a honeycomb over the
+  chest and belly.
+- `W-40`: 40 merged pellet hits make one large chest cavity with the sternum and rib (bone mesh) exposed.
+- `C-before` / `C-3cuts`: three cuts (vertical, diagonal across it, a horizontal one low), lit orange from the side. The
+  lips read bright here and the bone shows at the crossing. **Unrelated to the cuts:** a large flat pale-yellow polygon
+  covers the lower-left of BOTH frames at this stance, before any cut. It is a scene element near the camera; not investigated.
+- In every photo I saw no holes through the body, no speckle and no seams on or around the cuts. The hard-edged bone
+  patches are the skeleton=mesh exposure path (craters show them too), not a cut artefact.
+
+### Look loop: no constant changed
+
+The task allowed one-constant changes only for a clear readability defect. **None was found.** The slot is visible in every
+photo, including the dimmest (K). So `CUT_SHADE` and `ROD_CALIBRE` are unchanged, and no WGSL changed (no golden, census
+or march-hash work was needed for this task).
+
+**Look suggestions for the owner** (not applied):
+
+1. **Lips in shadow.** On a shadowed surface the lips read darker than the uncut skin: the wet-lip band darkens the
+   ridges. Candidates: `CUT_SHADE.lipHeight`, or less darkening in the wet-lip shading of a cut's band. Scale matters
+   here: at 0.6 m the rod's 1 cm kerf is ~5 march px wide and the ~3 mm lip ridge about one march px. So a lip that
+   reads at this march scale may have to be larger than the CPU slope tests assume.
+2. **Slit width.** `ROD_CALIBRE.kerf` 0.01 gives a 2 cm slit, which reads as a thin line at 0.6 m in shadow. If the
+   stand-in should read from further away, try a wider kerf (one constant).
+3. **Exposed bone looks aliased.** The bone mesh renders crisp at output resolution inside the soft upscaled flesh, as
+   hard-edged pink rectangles. This predates the cuts (skeleton=mesh), but a slot exposes it along its whole length.
+
+### march-hash (after the main merge)
+
+No pin moved. Default `d7392d52…` / wounded `76bd51aa…` on 2/2 boots. Crowd quad `0c71e712…` / `bf6836cd…`. Per-body
+`470ff0b3…` / `f618070e…`. Header updated.

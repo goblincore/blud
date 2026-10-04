@@ -118,6 +118,11 @@ const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
 //   per-body (?crowd=0, tiles off)                  = 470ff0b375adfdb48992adecf04e8915e814b3f7
 // Each reproduced on TWO boots (ports 5288/9288, headless) at cc23eb99.
 //
+// 2026-10-04 RE-VERIFIED, NO MOVE — after the origin/main merge (f48e0084) and cut wounds Task 6 (ee51bc6c: the cut
+// mask's back-facing gate reads nSmooth) and Task 7 (the rod; no WGSL), at fb35b370. Default d7392d52… / wounded
+// 76bd51aa… on 2/2 boots; crowd quad 0c71e712… / bf6836cd…; per-body 470ff0b3… / f618070e… (ports 5241/9241, Chrome
+// 154.0.8037.93). Main's merged changes moved no pin.
+//
 // 2026-10-03 RE-VERIFIED, NO MOVE — cut wound fix round 2 (f2be31cc: normal-gated cut mask, raw-plane lid, mask
 // null-axis guard, lip-scale clamp). Default d7392d52… / wounded 76bd51aa… on 2/2 boots; crowd quad 0c71e712… /
 // bf6836cd…; per-body 470ff0b3… / f618070e… (ports 5241/9241). Only flag-32 rows take the changed code.
