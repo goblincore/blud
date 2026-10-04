@@ -24,6 +24,7 @@ import { axePose, cancelAxeSwing, makeAxeSwing, stepAxeSwing, type AxeSide, type
 import { AXE_CALIBRE, AXE_CUT, AXE_HIT, axeCutSeg } from './axe-strike';
 import { chopHead, makeAxeHead, type AxeHeadState } from './axe-head';
 import { headNeck, isHeadRegion, resolveStrike, strikeActorsFrom } from './flail-strike';
+import { createViewmodelLights } from './viewmodel-lights';
 
 export const AXE_LOOK = {
   haftLen: 0.62, haftR: 0.017,
@@ -34,6 +35,9 @@ export const AXE_LOOK = {
   handShoulder: new THREE.Vector3(0.35, -0.47, 0.08),
   /** Where the fist holds the haft, haft-local +Y from its bottom end. */
   gripY: 0.08,
+  /** The torch FILL's share of the torch's intensity on the axe and its hand (viewmodel-lights.ts; the flail's
+   *  FLAIL_LOOK.flashFill). Under the torch itself the haft clipped white: 92% of its samples at rest (NOTES.md). */
+  flashFill: 0.018,
 } as const;
 
 export interface AxeDeps {
@@ -60,6 +64,10 @@ export interface AxeHarness {
   onMouseUp(button: number): void;
   tick(dt: number): void;
   updateRig(): void;
+  /** The torch FILL follows this frame's torch (game-main, right after flashlight.update(camera)). */
+  syncFill(): void;
+  /** Re-list the axe's own lights (game-main, when the muzzle flash is added with the gun). */
+  refreshLights(): void;
   /** Seam (gates): a click, as the mouse would give, on the next tick. */
   click(): void;
   /** Seam (gates): strike actor `id` now with chop `side`, aimed at its torso or head centre. The strike arc is
@@ -99,12 +107,18 @@ export function createAxeHarness(ctx: GameContext, deps: AxeDeps): AxeHarness {
   bit.rotation.y = Math.PI / 2;
   haft.add(bit);
   if (ctx.boot.deferredApi) ctx.boot.deferredApi.router.register(rig, 'mesh', 'level-only');
+  // OWN LIGHT LIST (viewmodel-lights.ts, the flail's): the torch swapped for a dim fill, on the axe and (below) its hand.
+  // Forward route only; none without a renderer (the stub ctx).
+  const vlights = renderer ? createViewmodelLights(ctx, { name: 'axe-flash-fill', fillScale: AXE_LOOK.flashFill }) : null;
+  vlights?.relist();
+  vlights?.ownLights(rig);
 
   let hand: THREE.Object3D | null = null;
   if (env) {
     void loadGoblinArms(GOBLIN_ARM_GLB, { env, envMapIntensity: 1.1 }).then((arms) => {
       hand = arms.right; hand.name = 'axe-hand';
       hand.scale.setScalar(AXE_LOOK.handScale);
+      vlights?.ownLights(hand);
       haft.add(hand);
     }).catch((e) => console.warn('[sdf-game] axe hand: goblin-arm.glb failed', e));
   }
@@ -221,6 +235,8 @@ export function createAxeHarness(ctx: GameContext, deps: AxeDeps): AxeHarness {
       haft.rotation.set(p.rot[0], p.rot[1], p.rot[2], 'XYZ');
       aimHand();
     },
+    syncFill() { vlights?.syncFill(); },
+    refreshLights() { vlights?.relist(); },
     click() { if (armed()) click = true; },
     chop(id, side, target = 'torso') { return strike(side, { id, target }); },
     debug: () => {

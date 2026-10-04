@@ -14,7 +14,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import {
   clamp, dot, float, instanceIndex, length, materialColor, materialEmissive, materialMetalness, materialRoughness, max, mix,
-  mx_noise_float, normalView, normalize, positionGeometry, positionView, pow, smoothstep, uniform, varying, vec3, lights,
+  mx_noise_float, normalView, normalize, positionGeometry, positionView, pow, smoothstep, uniform, varying, vec3,
 } from 'three/tsl';
 import type { GameContext } from './game-context';
 import type { Vec3 } from '../types';
@@ -37,7 +37,8 @@ import {
   FLAIL_CHAIN_SIM, chainTeleported, drawChain, guideWeight, linkRest, makeChain, stepChainInPlace, type ChainState, type ChainStepOpts,
 } from './flail-chain';
 import { reticleNdc } from './fisheye';
-import { FLAIL_FILL_LAYER, GIB_BLUR_LAYER } from './gib-motion-blur';
+import { GIB_BLUR_LAYER } from './gib-motion-blur';
+import { createViewmodelLights } from './viewmodel-lights';
 import type { GibBlurSubject } from './gib-shutter-layer';
 import {
   FLAIL_BLUR, FLAIL_BLUR_IDS, ballMotionState, chainSegmentStates, flailBlurActive, makeMotionState,
@@ -279,101 +280,16 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
   const wood = new THREE.MeshStandardMaterial({ color: 0x4a2f1a, roughness: 0.8 });
   const iron = new THREE.MeshStandardMaterial({ color: 0x2c2b2a, metalness: 0.85, roughness: 0.5, envMap: env, envMapIntensity: 0.8 });
 
-  // ---- OWN LIGHT LIST (ported from the censer, commit 8c24de2a) -------------
-  // `material.lightsNode` REPLACES the scene's light list for that material
-  // (the level does this per room, game-main "LEVEL SURFACES"). The flail's
-  // list mirrors the default one — every light the camera sees whose whole
-  // ancestor chain is visible — EXCEPT the torch, which is swapped for the FILL
-  // (FLAIL_LOOK.flashFill). Re-listed on events, not polled: here (the level's
-  // lights and the flashlight exist before the flail) and via refreshLights()
-  // when game-main adds the muzzle flash with the gun. Forward route only
-  // (deferred has its own lighting).
-  const lightList = lights([]);
-  let listed: THREE.Light[] = [];
-  // THE FILL: on a layer no camera renders (so three's default per-camera lists
-  // skip it) and with `onlyRooms` empty (so the level's per-room lists skip it
-  // too — game-lighting-leaves levelSceneLights). Parented to the scene root,
-  // never hidden; its pose and intensity follow the torch every tick (syncFill).
-  const fill = new THREE.SpotLight(0xffffff, 0, 16, Math.PI * 0.12, 0.45, 0);
-  fill.name = 'flail-flash-fill';
-  fill.castShadow = false;
-  fill.layers.set(FLAIL_FILL_LAYER);
-  fill.userData.onlyRooms = new Set<number>();
-  fill.target.layers.set(FLAIL_FILL_LAYER);
-  const _fp = new THREE.Vector3();
+  // ---- OWN LIGHT LIST (ported from the censer, commit 8c24de2a; viewmodel-lights.ts) -------------
+  // The flail's materials light from a list that mirrors the scene's lights but swaps the torch for a dim FILL
+  // (FLAIL_LOOK.flashFill of its intensity): the torch rendered the brown haft white. Re-listed on events via
+  // refreshLights() (game-main adds the muzzle flash with the gun). Forward route only.
+  const vlights = createViewmodelLights(ctx, { name: 'flail-flash-fill', fillScale: FLAIL_LOOK.flashFill });
+  const lightList = vlights.list;
+  const relist = vlights.relist, ownLights = vlights.ownLights;
   function syncFill(): void {
     if (ctx.boot.deferredMode) return;
-    const spot = ctx.lighting.flashlight?.spot;
-    if (!spot || !spot.visible) { fill.intensity = 0; sheenU.value = FLAIL_BLOOD_LOOK.glintDark; return; }   // the torch is off in this rig (outdoor)
-    sheenU.value = 1;
-    spot.updateMatrixWorld();
-    spot.target.updateMatrixWorld();
-    fill.position.copy(spot.getWorldPosition(_fp));
-    fill.target.position.copy(spot.target.getWorldPosition(_fp));
-    fill.color.copy(spot.color);
-    fill.angle = spot.angle;
-    fill.penumbra = spot.penumbra;
-    fill.distance = spot.distance;
-    fill.intensity = spot.intensity * FLAIL_LOOK.flashFill;
-    fill.updateMatrixWorld();
-    fill.target.updateMatrixWorld();
-  }
-  if (!ctx.boot.deferredMode) ctx.boot.handle.scene.add(fill, fill.target);
-  const litMaterials = new Set<THREE.Material>();
-  const shownInTree = (o: THREE.Object3D): boolean => {
-    for (let p: THREE.Object3D | null = o; p; p = p.parent) if (!p.visible) return false;
-    return true;
-  };
-  /** Re-list; true when the list changed. */
-  function relist(): boolean {
-    if (ctx.boot.deferredMode) return false;
-    const next: THREE.Light[] = [];
-    const torch = ctx.lighting.flashlight;
-    const camera = ctx.boot.handle.camera;
-    ctx.boot.handle.scene.traverse((o) => {
-      const l = o as THREE.Light;
-      if (!l.isLight || l === torch?.spot || l === torch?.levelShadow) return;
-      if (l.layers.test(camera.layers) && shownInTree(l)) next.push(l);
-    });
-    if (fill.parent) next.push(fill);
-    if (next.length === listed.length && next.every((l, i) => l === listed[i])) return false;
-    listed = next;
-    lightList.setLights(next);
-    // setLights() does not bump the node's version, so the materials' cache keys
-    // would never change and three would never rebuild them with the new list:
-    // bump the node, then the materials (the censer's verified fix).
-    lightList.needsUpdate = true;
-    for (const m of litMaterials) m.needsUpdate = true;
-    return true;
-  }
-  const library = ctx.boot.handle.renderer.library as unknown as { fromMaterial(m: THREE.Material): THREE.NodeMaterial | null };
-  const lit = new Map<THREE.Material, THREE.Material>();
-  /** Point every mesh under `root` at the flail's own light list. */
-  function ownLights(root: THREE.Object3D): void {
-    if (ctx.boot.deferredMode) return;
-    const conv = (m: THREE.Material): THREE.Material => {
-      let nm = lit.get(m);
-      if (!nm) {
-        // A material that is ALREADY a node material (the goblin skin) may be
-        // shared with other meshes: give the flail its own copy rather than
-        // re-point someone else's lights.
-        const node = (m as THREE.NodeMaterial).isNodeMaterial
-          ? (m as THREE.NodeMaterial).clone() as THREE.NodeMaterial
-          : library.fromMaterial(m);
-        if (!node) return m;
-        node.lightsNode = lightList;
-        lit.set(m, node);
-        lit.set(node, node);
-        litMaterials.add(node);
-        nm = node;
-      }
-      return nm;
-    };
-    root.traverse((o) => {
-      const mesh = o as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      mesh.material = Array.isArray(mesh.material) ? mesh.material.map(conv) : conv(mesh.material);
-    });
+    sheenU.value = vlights.syncFill() ? 1 : FLAIL_BLOOD_LOOK.glintDark;   // the torch is off in this rig (outdoor)
   }
 
   // ---- BLOOD ON THE FLAIL (spec §14.1 item 7; flail-blood.ts holds the level) ----------------------
@@ -445,7 +361,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       node.needsUpdate = true;
       cache!.set(m, node);
       cache!.set(node, node);
-      litMaterials.add(node);
+      vlights.track(node);
       return node;
     };
     // The goblin hand hangs under the haft: never bloodied (skip its subtree, whichever loaded first).

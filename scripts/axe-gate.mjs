@@ -16,6 +16,7 @@
 //   C. cost: draw time before / after 3 chops on one body (with its spread, not gated); zero console errors.
 //   T. A TURNED BODY (its own boot): the ring walks until a zombie stands ~90 degrees round, then freezes; a torso chop's
 //      cut lands within 5 cm of the strike's hit point (__sdfGame.axe().last.points).
+//   F. (opt-in, ONLY=F) the H -> R -> L combo as film strips (OUT/F-<side>-strip.png), for the look loop; not gated.
 // ONLY=A,K (env) runs just those scenarios.
 // Usage (bash, not zsh):
 //   export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up
@@ -471,6 +472,44 @@ try {
       note(`S: the cut's midpoint is ${out.sCutOffCrosshairPx} px from the crosshair (dir ${J(ws[0].dirWorld?.map((q) => +q.toFixed(2)))})`);
     }
     out.sLightAfter = await axeLight(after);
+  }
+  // -------- F. (opt-in: ONLY=F) the swing as a film strip, for the look loop: the H -> R -> L combo on a fresh zombie at
+  // SWING_D, a frame every F_EVERY steps, tiled per chop at 1/F_DOWN scale into OUT/F-<side>-strip.png. Not gated.
+  if (ONLY?.has("F")) {
+    const z = fresh(); const t = await torsoOf(z.id), f = await frontOf(z.id);
+    await evaluate(`__sdfGame.selectSlot("axe")`);
+    await stepN(40);
+    await look(t, SWING_D, f);
+    await stepN(2);
+    const F_EVERY = Number(process.env.F_EVERY ?? 3), F_DOWN = 4, COLS = 5;
+    for (const side of ["H", "R", "L"]) {
+      const s0 = await evaluate("__sdfGame.axe()");
+      await evaluate("__sdfGame.axeSwing()");
+      const frames = [];
+      for (let i = 0; i < 45; i++) {
+        await stepOne();
+        const d = await evaluate("__sdfGame.axe()");
+        if (i % F_EVERY === 0 || d.strikes > (frames.at(-1)?.strikes ?? s0.strikes)) frames.push({ i: i + 1, img: await capture(null), strikes: d.strikes, side: d.side, phase: d.phase });
+        if (d.phase === "idle") break;
+      }
+      const w = Math.floor(W / F_DOWN), h = Math.floor(H / F_DOWN), rows = Math.ceil(frames.length / COLS);
+      const rgb = Buffer.alloc(w * COLS * h * rows * 3);
+      frames.forEach((fr, k) => {
+        const ox = (k % COLS) * w, oy = Math.floor(k / COLS) * h;
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+          let r = 0, g = 0, b = 0;
+          for (let dy = 0; dy < F_DOWN; dy++) for (let dx = 0; dx < F_DOWN; dx++) { const c = px(fr.img, x * F_DOWN + dx, y * F_DOWN + dy); r += c[0]; g += c[1]; b += c[2]; }
+          const o = ((oy + y) * w * COLS + ox + x) * 3, n = F_DOWN * F_DOWN;
+          // A red bar along the top of the strike frame.
+          const strikeBar = y < 3 && fr.strikes > s0.strikes && (k === 0 || frames[k - 1].strikes === s0.strikes);
+          rgb[o] = strikeBar ? 255 : r / n; rgb[o + 1] = strikeBar ? 0 : g / n; rgb[o + 2] = strikeBar ? 0 : b / n;
+        }
+      });
+      writeFileSync(`${OUT}/F-${side}-strip.png`, encodePng(w * COLS, h * rows, rgb));
+      note(`F: ${side}: ${frames.length} frames (${frames.map((q) => `${q.i}${q.strikes > s0.strikes ? "*" : ""}`).join(" ")}; * = struck) -> ${OUT}/F-${side}-strip.png`);
+      // Continue the combo: the next click comes inside the combo window.
+      await stepN(2);
+    }
   }
   // -------- C. cost: draw time before / after 3 chops on one body (reported with its spread, not gated).
   if (run("C")) {

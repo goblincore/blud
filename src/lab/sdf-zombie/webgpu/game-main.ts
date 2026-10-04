@@ -1661,8 +1661,9 @@ async function main() {
     // — a non-zero row there means an unlabelled pass exists.
     setPassLabel('frame:other');
     ctx.lighting.flashlight.update(camera);
-    // The flail's torch FILL follows this frame's torch (game-flail.ts OWN LIGHT LIST).
+    // The flail's and the axe's torch FILLs follow this frame's torch (viewmodel-lights.ts OWN LIGHT LIST).
     ctx.weapon.flail?.syncFill();
+    ctx.weapon.axe?.syncFill();
     // The kit twin follows the flashlight's SWITCH like the spot and the bodies' beam do (night-train
     // starts dark until the coat-check pickup): ungated it lit kitted enemies at full strength first.
     ctx.lighting.flashlight.setKitBeamGain(ctx.vfx.beamTuning.gain * flashlightGate(ctx));
@@ -4413,8 +4414,9 @@ async function main() {
     ctx.weapon.aimRig.add(ctx.weapon.flashLight);
     // The level's light lists were built before this light existed.
     refreshLevelLights(ctx);
-    // …and so was the flail's own list (game-flail.ts OWN LIGHT LIST).
+    // …and so were the flail's and the axe's own lists (viewmodel-lights.ts OWN LIGHT LIST).
     ctx.weapon.flail?.refreshLights();
+    ctx.weapon.axe?.refreshLights();
     ctx.weapon.gunReady = true;
     resolveGunReady();
     mark('gun-ready');
