@@ -2,8 +2,10 @@
 //
 // CUT WOUNDS (spec docs/superpowers/specs/2026-10-03-cut-wounds-design.md §3-4). Pure. A cut is a wound SHAPE beside the
 // crater: a blade SLOT along a segment, deepest at its middle (a lens), its walls closing into a V, jagged and lipped on the
-// GPU. It rides one prim exactly like a crater: `local` is its midpoint, `radius` its HALF-LENGTH (every sphere bound the
-// wound pipeline keeps stays a superset), `carveN`/`carveDepth` its inward direction and depth, `cutDir` its along-segment
+// GPU. It rides one prim exactly like a crater: `local` is its midpoint, `radius` its HALF-LENGTH (the shader's reach and the
+// threat box are supersets of the slot; plain `radius` consumers are NOT: the occluder-hull exclusions at game-main.ts and
+// game-seams-render.ts treat it as a sphere about `local`, which misses the slot's sag, lip and width; mostly
+// absorbed by WOUND_CLEARANCE 0.05), `carveN`/`carveDepth` its inward direction and depth, `cutDir` its along-segment
 // unit, `kerf` its half-width at the skin. `cutCarve` is the CPU mirror of the WGSL slot (applyWounds' cut branch) for tests
 // and docs; keep the two identical apart from the GPU's noise.
 // The sweep grouping fixes single-sample jitter only: two-sample jitter or a lone end sample can still split a run (acceptable

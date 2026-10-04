@@ -319,7 +319,7 @@ import { crowdTypeFor } from './game-crowd-leaves';
 import { pushProbeWeight } from './game-probes-leaves';
 import { aimFrustum } from './game-weapon-leaves';
 import { takePropForThrow } from './game-dynamite-leaves';
-import { bodiesOnScreen, traceSlugHitFrom } from './game-world-leaves';
+import { bodiesOnScreen, traceMeleeHitFrom, traceSlugHitFrom } from './game-world-leaves';
 import { captureTelemetryScene } from './game-telemetry-leaves';
 import { demoScenarioOf } from './game-demo-leaves';
 import { awaitBakes, pickChunkObjects, registerLitChunkMaterial, type ChunkPickFrame } from './game-bake-leaves';
@@ -4027,7 +4027,7 @@ async function main() {
   });
   // WEAPON SLOT 6 (the rod, cut wounds' stand-in blade, game-rod.ts): its own rig on aimRig.
   ctx.weapon.rod = createRodHarness(ctx, {
-    traceSlugHitFrom: withCtx(ctx, traceSlugHitFrom), eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
+    traceMelee: withCtx(ctx, traceMeleeHitFrom), eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
     bleed: (a, w, point, incoming) => registerBleed(ctx, a, w, 'pellet', { point, incoming }),
   });
   // WEAPON SLOT 1 (the spike flail, game-flail.ts): its own rig on aimRig.

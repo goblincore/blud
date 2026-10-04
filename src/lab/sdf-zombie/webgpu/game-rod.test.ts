@@ -39,8 +39,9 @@ function fixture(live: 'rod' | 'shotgun' = 'rod', actors = [stubActor(7)]) {
   };
   let hit: { id: number; p: Vec3 } | null = null;
   const bleed = vi.fn();
+  const traceMelee = vi.fn((_o: Vec3, _d: Vec3, _reach: number) => (hit ? { actorId: hit.id, hit: hit.p } : { actorId: -1, hit: null }));
   const deps: RodDeps = {
-    traceSlugHitFrom: () => (hit ? { actorId: hit.id, hit: hit.p } : { actorId: -1, hit: null }),
+    traceMelee,
     eye: () => [0.4, 1.25, 1],
     aimDir: () => [0, 0, -1],
     bleed,
@@ -51,7 +52,7 @@ function fixture(live: 'rod' | 'shotgun' = 'rod', actors = [stubActor(7)]) {
   /** One held frame with the crosshair at p (null: off every body). */
   const frame = (p: Vec3 | null, id = actors[0]!.s.id) => { aim(id, p); rod.tick(1 / 60); };
   const blasts = () => actors.flatMap(a => a.s.blasts);
-  return { ctx, rod, bleed, aim, frame, blasts, actors };
+  return { ctx, rod, bleed, aim, frame, blasts, actors, traceMelee };
 }
 /** A point on the torso's front skin at height y (torso at x 0.4, radius 0.15). */
 const skin = (y: number, x = 0.4): Vec3 => [x, y, 0.15];
@@ -93,6 +94,15 @@ describe('rod harness: cut()', () => {
     expect(f.bleed.mock.calls[0]![3]).toEqual([0, 0, -1]);
     expect(f.rod.cut(99, [0.4, 1.15, 0.15], [0.4, 1.35, 0.15], [0, 0, -1])).toBe(0);
   });
+
+  it('an explicit undefined calibre field keeps the rod default instead of overwriting it (no NaN wound)', () => {
+    const f = fixture();
+    const n = f.rod.cut(7, [0.4, 1.15, 0.15], [0.4, 1.35, 0.15], [0, 0, -1], { depth: undefined, kerf: undefined, lip: undefined });
+    expect(n).toBe(1);
+    const w = f.blasts()[0]!.wounds[0]!;
+    for (const v of [w.carveDepth, w.kerf, w.radius, ...w.local]) expect(Number.isFinite(v)).toBe(true);
+    expect(w.kerf).toBeCloseTo(0.01, 6);           // ROD_CALIBRE.kerf
+  });
 });
 
 describe('rod harness: sweeping', () => {
@@ -115,11 +125,14 @@ describe('rod harness: sweeping', () => {
     expect(f.ctx.telemetry.telemetry.event).toHaveBeenCalledWith('rod-cut', { cuts: 1 });
   });
 
-  it('ignores hits beyond the rod reach', () => {
+  it('traces a straight melee ray from the eye along the aim, capped at the rod reach; a miss samples nothing', () => {
     const f = fixture();
     f.rod.onMouseDown(0);
-    f.frame([0.4, 1.25, -5]);                    // eye at z = 1, so 6 m away
+    f.frame(null);
+    expect(f.traceMelee).toHaveBeenCalledWith([0.4, 1.25, 1], [0, 0, -1], ROD.reach);
     expect(f.rod.debug().samples).toBe(0);
+    f.frame(skin(1.2));
+    expect(f.rod.debug().samples).toBe(1);
   });
 
   it('keeps at most maxSamples per actor', () => {
@@ -130,6 +143,23 @@ describe('rod harness: sweeping', () => {
       if (f.rod.debug().held === false) break;   // the hold cap may end it first: refresh
     }
     expect(f.rod.debug().samples).toBeLessThanOrEqual(ROD.maxSamples);
+  });
+
+  it('the sample cap covers the whole hold at any frame rate: a 2 s sweep at 120 fps still has its end', () => {
+    const f = fixture();
+    f.rod.onMouseDown(0);
+    const n = Math.round(ROD.maxHoldS * 120);
+    for (let i = 0; i < n + 5 && f.rod.debug().held; i++) {
+      f.aim(7, skin(1.1 + (0.3 * Math.min(i, n)) / n));   // 1.1 → 1.4 across the whole hold
+      f.rod.tick(1 / 120);
+      expect(f.rod.debug().samples).toBeLessThanOrEqual(ROD.maxSamples);
+    }
+    expect(f.rod.debug().held).toBe(false);        // the hold cap ended it on its own
+    const w = f.blasts().flatMap(b => b.wounds);
+    expect(w).toHaveLength(1);
+    expect(w[0]!.radius).toBeGreaterThan(0.13);    // one chord ~0.3 m long (half-length 0.15), not the first 0.75 s of it
+    const c = woundWorldPos(f.actors[0]!.posed().prims, w[0]!, 0);
+    expect(c[1]).toBeGreaterThan(1.22);
   });
 
   it('two actors in one sweep: two cuts, one telemetry event', () => {
@@ -190,7 +220,7 @@ describe('rod harness: sweeping', () => {
     const f = fixture();
     f.rod.onMouseDown(0);
     let i = 0;
-    while (f.rod.debug().held && i < 400) { f.frame(skin(1.1 + (i % 5) * 0.03)); i++; }
+    while (f.rod.debug().held && i < 400) { f.frame(skin(1.1 + Math.min(i, 100) * 0.003)); i++; }   // a monotone sweep (a sawtooth's chord may close on itself)
     expect(i).toBeLessThanOrEqual(Math.ceil(ROD.maxHoldS * 60) + 1);
     expect(f.rod.debug().held).toBe(false);
     expect(f.rod.debug().lastCuts).toBe(1);        // the capped hold still cuts what it swept

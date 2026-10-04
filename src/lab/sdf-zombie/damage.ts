@@ -85,7 +85,7 @@ export interface Wound {
    *  the stock crater SHAPE. Absent or 0 = the stock look. Set with `wetLipWound`. */
   wetLip?: number;
   /** CUT (cut-wound.ts, 2026-10-03): a blade slot instead of a crater. `local` is the slot's MIDPOINT, `radius` its HALF-
-   *  LENGTH (so every sphere bound stays a superset), `carveN`/`carveDepth` its inward direction and depth, `cutDir` its
+   *  LENGTH (the shader's reach and the threat box are supersets; plain `radius` consumers are not, see cut-wound.ts), `carveN`/`carveDepth` its inward direction and depth, `cutDir` its
    *  along-segment unit (prim-local, same frame as `local`), `kerf` its half-width at the skin. Absent = a crater. */
   shape?: 'cut';
   cutDir?: Vec3;
