@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-rod.test.ts
 //
 // The rod harness against a stub ctx and stub actors on a torso-capsule fixture: no renderer, no WebGPU.
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { createRodHarness, ROD, type RodDeps } from './game-rod';
 import { makeWeaponSlotState, requestSlot, stepWeaponSlot, type WeaponSlotState } from './game-weapon-slots';
@@ -26,6 +26,9 @@ function stubActor(id: number, pos: Vec3 = [0, 0, 0], yaw = 0) {
   return { s, actor: actor as unknown as ZombieActor, posed, place };
 }
 
+const made: { dispose(): void }[] = [];
+afterEach(() => { for (const r of made.splice(0)) r.dispose(); });
+
 function fixture(live: 'rod' | 'shotgun' = 'rod', actors = [stubActor(7)]) {
   const ctx = {
     weapon: { aimRig: new THREE.Group(), slotState: makeWeaponSlotState(live) as WeaponSlotState },
@@ -43,6 +46,7 @@ function fixture(live: 'rod' | 'shotgun' = 'rod', actors = [stubActor(7)]) {
     bleed,
   };
   const rod = createRodHarness(ctx as unknown as GameContext, deps);
+  made.push(rod);
   const aim = (id: number, p: Vec3 | null) => { hit = p ? { id, p } : null; };
   /** One held frame with the crosshair at p (null: off every body). */
   const frame = (p: Vec3 | null, id = actors[0]!.s.id) => { aim(id, p); rod.tick(1 / 60); };
@@ -63,7 +67,6 @@ describe('rod harness: slot, press, blocking', () => {
     const f = fixture();
     expect(f.rod.onMouseDown(2)).toBe(true);
     expect(f.rod.debug().held).toBe(false);
-    f.ctx.weapon.slotState = requestSlot(makeWeaponSlotState('rod'), 'rod');   // retarget same slot: settled
     f.ctx.weapon.slotState = requestSlot(makeWeaponSlotState('rod'), 'shotgun'); // lowering
     expect(f.rod.onMouseDown(0)).toBe(true);
     expect(f.rod.debug().held).toBe(false);
@@ -154,6 +157,35 @@ describe('rod harness: sweeping', () => {
     for (const w of ws) expect(w.radius).toBeLessThan(0.08);      // each is its own short run (half-length ~0.045)
   });
 
+  it('one missed frame mid-stroke does not split the stroke: still ONE cut', () => {
+    const f = fixture();
+    f.rod.onMouseDown(0);
+    for (let i = 0; i < 4; i++) f.frame(skin(1.1 + i * 0.04));    // 1.10..1.22
+    f.frame(null);                                                // one frame off the body
+    for (let i = 4; i < 8; i++) f.frame(skin(1.1 + i * 0.04));    // 1.26..1.38
+    f.rod.onMouseUp(0); f.rod.tick(1 / 60);
+    const ws = f.blasts().flatMap(b => b.wounds);
+    expect(ws).toHaveLength(1);
+    expect(ws[0]!.radius).toBeGreaterThan(0.1);                   // one chord across the whole stroke (~0.28 long)
+  });
+
+  it('the per-slash cap keeps the LONGEST cuts across runs, not the earliest', () => {
+    const f = fixture();
+    f.rod.onMouseDown(0);
+    const pass = (y0: number, len: number) => {
+      for (let i = 0; i < 5; i++) f.frame(skin(y0 + (len * i) / 4));
+      for (let i = 0; i < 3; i++) f.frame(null);                  // a real gap: the next pass is its own run
+    };
+    pass(1.40, 0.04);                                             // short, first
+    pass(1.0, 0.30); pass(1.05, 0.25); pass(1.1, 0.20);           // three long ones after it
+    f.rod.onMouseUp(0); f.rod.tick(1 / 60);
+    const ws = f.blasts().flatMap(b => b.wounds);
+    expect(ws).toHaveLength(3);
+    const radii = ws.map(w => w.radius);
+    expect(Math.min(...radii)).toBeGreaterThan(0.08);             // the 0.04 m pass (radius 0.02) was dropped
+    expect(radii[0]! > radii[1]! && radii[1]! > radii[2]!).toBe(true);   // and they stay in sweep order
+  });
+
   it('the hold is capped: after maxHoldS the sweep finishes on its own', () => {
     const f = fixture();
     f.rod.onMouseDown(0);
@@ -161,8 +193,8 @@ describe('rod harness: sweeping', () => {
     while (f.rod.debug().held && i < 400) { f.frame(skin(1.1 + (i % 5) * 0.03)); i++; }
     expect(i).toBeLessThanOrEqual(Math.ceil(ROD.maxHoldS * 60) + 1);
     expect(f.rod.debug().held).toBe(false);
-    expect(f.rod.debug().lastCuts).toBeGreaterThanOrEqual(0);
-    expect(f.blasts().length).toBeGreaterThan(0);
+    expect(f.rod.debug().lastCuts).toBe(1);        // the capped hold still cuts what it swept
+    expect(f.blasts()).toHaveLength(1);
   });
 });
 
@@ -231,6 +263,15 @@ describe('rod harness: the armed gate', () => {
     f.ctx.world.loop = { vitals: { dead: true }, done: false };
     f.rod.onMouseUp(0); f.rod.tick(1 / 60);
     expect(f.blasts()).toHaveLength(0);
+  });
+
+  it('dispose() removes the blur / lock listeners: a later blur no longer touches the harness', () => {
+    const f = fixture();
+    f.rod.onMouseDown(0);
+    f.frame(skin(1.1));
+    f.rod.dispose();
+    window.dispatchEvent(new Event('blur'));
+    expect(f.rod.debug().held).toBe(true);
   });
 
   it('a window blur abandons a held sweep: nothing is cut later', () => {

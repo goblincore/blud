@@ -52,6 +52,8 @@ export interface RodHarness {
   /** Cut `actorId` along a→b (world), seen along `view` (the anchor is found from the viewer's side; console seam / gates).
    *  Returns the wounds stamped. */
   cut(actorId: number, a: Vec3, b: Vec3, view: Vec3, calibre?: Partial<CutCalibre>): number;
+  /** Remove the window / document listeners (tests; a teardown). */
+  dispose(): void;
   /** The last sweep's samples (debug / gates). */
   debug(): { held: boolean; samples: number; lastCuts: number };
 }
@@ -83,10 +85,9 @@ export function createRodHarness(ctx: GameContext, deps: RodDeps): RodHarness {
   const armed = () => ctx.weapon.slotState.live === 'rod' && slotReady(ctx.weapon.slotState) && !loopBlocksInput(ctx);
   const abandon = () => { held = false; release = false; runs.clear(); };
   // A button released outside the window or with the lock lost never reaches us: do not stay held (the flail's resets).
+  const onLockChange = () => { if (document.pointerLockElement !== ctx.boot.canvas) abandon(); };
   window.addEventListener('blur', abandon);
-  document.addEventListener('pointerlockchange', () => {
-    if (document.pointerLockElement !== ctx.boot.canvas) abandon();
-  });
+  document.addEventListener('pointerlockchange', onLockChange);
 
   function cutActor(a: ZombieActor, segs: CutSeg[], calibre: CutCalibre): number {
     if (!segs.length) return 0;
@@ -111,10 +112,16 @@ export function createRodHarness(ctx: GameContext, deps: RodDeps): RodHarness {
       // Back to world through the body's CURRENT pose; each run is its own sweep (a gap is two passes, never one chord).
       const { pos, yaw } = a.pose();
       const prims = a.posed().prims;
-      const segs = list.flatMap(run => cutsFromSweep(prims, run.map((s): SweepSample => {
-        const p = rotateYaw(s.point, yaw), v = rotateYaw(s.view, yaw);
-        return { point: [pos[0] + p[0], pos[1] + p[1], pos[2] + p[2]], view: v };
-      }))).slice(0, CUT.maxPerSlash);
+      // The per-slash cap keeps the LONGEST segments across runs (cutsFromSweep's own rule, which only sees one run), in
+      // sweep order.
+      const cands: { seg: CutSeg; len: number; order: number }[] = [];
+      for (const run of list) {
+        for (const seg of cutsFromSweep(prims, run.map((s): SweepSample => {
+          const p = rotateYaw(s.point, yaw), v = rotateYaw(s.view, yaw);
+          return { point: [pos[0] + p[0], pos[1] + p[1], pos[2] + p[2]], view: v };
+        }))) cands.push({ seg, len: Math.hypot(seg.b[0] - seg.a[0], seg.b[1] - seg.a[1], seg.b[2] - seg.a[2]), order: cands.length });
+      }
+      const segs = cands.sort((x, y) => y.len - x.len).slice(0, CUT.maxPerSlash).sort((x, y) => x.order - y.order).map(c => c.seg);
       n += cutActor(a, segs, ROD_CALIBRE);
     }
     runs.clear();
@@ -148,8 +155,9 @@ export function createRodHarness(ctx: GameContext, deps: RodDeps): RodHarness {
           const rel: Vec3 = [h.hit[0] - pos[0], h.hit[1] - pos[1], h.hit[2] - pos[2]];
           const list = runs.get(a.id) ?? [];
           if (list.reduce((m, r) => m + r.length, 0) < ROD.maxSamples) {
+            // One missed frame is slack (a crosshair jitter off a thin limb); two or more is a new pass.
             let run = list[list.length - 1];
-            if (!run || run[run.length - 1]!.frame !== frameNo - 1) { run = []; list.push(run); }
+            if (!run || run[run.length - 1]!.frame < frameNo - 2) { run = []; list.push(run); }
             run.push({ frame: frameNo, point: rotateYaw(rel, -yaw), view: rotateYaw(dir, -yaw) });
           }
           runs.set(a.id, list);
@@ -178,6 +186,10 @@ export function createRodHarness(ctx: GameContext, deps: RodDeps): RodHarness {
       if (!actor) return 0;
       lastCuts = cutActor(actor, [{ a, b, view }], { ...ROD_CALIBRE, ...calibre });
       return lastCuts;
+    },
+    dispose() {
+      window.removeEventListener('blur', abandon);
+      document.removeEventListener('pointerlockchange', onLockChange);
     },
     debug: () => ({ held, samples: [...runs.values()].reduce((m, l) => m + l.reduce((k, r) => k + r.length, 0), 0), lastCuts }),
   };
