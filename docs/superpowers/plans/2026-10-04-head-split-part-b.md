@@ -744,3 +744,26 @@ Commit `test(head-split): capture gate (open, one side, widen, kill, later cuts,
 - [ ] The spec: append `## 10. As built (part B)`. Cover the union-of-pieces decision (vs the bisector pick), the record layout (21), the cut faces' `'keep'` budget, the cost, and the limits.
 - [ ] Run `npx tsc --noEmit && npx vitest run head-split head-split-cpu game-head-split game-axe axe-head cut-wound crowd-records groups.wgsl map-body.wgsl trace.wgsl wounds.wgsl mesh-renderer march-golden game-context-coverage` → PASS.
 - [ ] Commit `docs: the head split part B as built`.
+
+> **Amended after Task B1 (controller): THE SPLIT FIELD CHANGED. `head-split.ts` is authoritative; read its header.**
+>
+> The draft's region bound `min(f, dh − r + REGION_SKIN)` jumped by ~0.2 m at the region sphere (max |grad| ~2000). It also rotated non-head material (a raised hand) that crossed the sphere. The fixed field, with `rho = r − REGION_MARGIN` and `dh = |p − h|`:
+>
+> - `P0 = max(f(p), min(up(p), rho − dh))`: the unmoved rest of the body. A point counts as "moved" only if it is above the hinge plane AND within `rho` of `h`.
+> - `P± = max(f(q±), ∓s(q±), −up(q±), dh − rho)`: each moving half also gets a ball cap (rotation about `h` keeps `dh`).
+> - `C = REGION_MARGIN + |dh − r|`.
+> - Inside the region: `min(P0, P+, P−, C)`. Outside: `min(P0, C)`.
+> - `REGION_SKIN` is gone.
+>
+> This field is continuous and 1-Lipschitz everywhere (measured: |grad| 1.000, seam straddle 2e-7).
+>
+> **What Task B4 must do:** copy this exactly in WGSL. That means:
+> - piece 0's cap is `min(up, rho − dh)`;
+> - pieces 1 and 2 add `dh − rho`;
+> - the slot result takes `min(·, REGION_MARGIN + |dh − r|)` on BOTH branches (inside and outside the region), replacing the `splitDh − r + REGION_SKIN` line in the plan's snippet.
+> - Outside the region the slot still evaluates P0. That is the normal body with `min(up, rho − dh)` capping it, and since `rho − dh < 0` out there, it reduces to `max(f, rho − dh)` → `f`.
+> - Use `rotAxis` (exported) for the text pins.
+>
+> **What Task B3 must do:** size `radius` in `HeadFrame` from the REAL head extent, not `headShape` axes.x alone. Head flesh beyond `rho` (the jaw, a tall cranium) stays unmoved and visibly tears. Use, for example, the max over head flesh prims of the distance from the hinge plus the prim's radius × scale, or the head cluster's radius. Measure which one covers the zombie's head.
+>
+> **Look (Task B8):** the face preset's hinge sits 2 cm in front of its plane. Consider moving it onto the plane while tuning.
