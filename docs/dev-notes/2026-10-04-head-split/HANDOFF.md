@@ -1,8 +1,11 @@
 # The axe and the head split: handoff (2026-10-04)
 
-**Branch:** `claude/head-explosion-effect-d6231e`
-**Worktree:** `.claude/worktrees/head-explosion-effect-d6231e`
-**Draft PR:** goblincore/blud#31. It is pushed up to `4955568c`. B1's commits are not pushed yet.
+**Branch:** `claude/head-cleaving-effect-ef9515` (worktree `.claude/worktrees/head-cleaving-effect-ef9515`). It was
+fast-forwarded from `claude/head-explosion-effect-d6231e` at `e04577ce` and carries everything since. A session
+cannot write into another worktree (a hook blocks it), so work continues here. To see it on the owner's 5273 server,
+fast-forward `claude/head-explosion-effect-d6231e` to this branch in its own worktree.
+**Draft PR:** goblincore/blud#31 tracks `claude/head-explosion-effect-d6231e`, pushed up to `e04577ce`. Nothing on
+this branch is pushed.
 
 | Document | Path |
 | --- | --- |
@@ -31,7 +34,41 @@ The per-task texts used for dispatch are in the session scratchpad (`scratchpad/
   - `REGION_MARGIN` is 0.06, because the shipped AO probe reads `mapBody(p + n·0.06)`.
   - A one-sided split costs 2 field evaluations.
 
-## In flight when we paused: the cut "excess" pass, stopped
+- **B2 is done** (`866f7d5d`): the CPU mirror.
+  - `sdBody` honours `body.split` (`splitField` over `sdBodyClosed`); with no split it is bit-for-bit unchanged.
+  - Hits are un-warped before stamping through `unwarpHit` (`damage.ts`) and `unwarpCutSeg` (`cut-wound.ts`): pellet,
+    slug, axe, rod, the flail's body crater, explosions and the `stampWoundAt` seam.
+- **B3 is done** (`e86f2833`, fixes `c111d14e`): the leaf `webgpu/game-head-split.ts`, the axe driving it, the seams.
+  - Chop 1 opens and stamps the cut faces (`headSlot: 'keep'`), chop 2 widens, chop 3 kills; the split stays open on
+    the corpse. A chop on an open head always counts, and stamps its own cut only on outer skin
+    (`headChopCut`, `webgpu/axe-head.ts`).
+  - Head damage and the split are mutually exclusive: on a split head the slug burst and the flail's head ladder are
+    skipped; a head that head damage already holds refuses to split and keeps part A.
+  - The hook answers null for a dead head, a tearing body or a closed state.
+  - `HeadFrame.radius` is the skull's largest semi-axis (0.137 on the zombie; 0.037 m spare inside rho).
+    `choosePreset` still takes the half-width.
+  - `warpPoint` / `warpDir` (forward warp); head blood emitters follow the opened halves.
+  - Seams: `__sdfGame.headSplit(id)`, `forceSplit(id, preset, sides, offset, angleFrac)`.
+  - **Nothing is drawn yet.** The head looks closed until B4.
+
+## For B4 and later (from B2/B3 and their reviews)
+
+- **B4 reads the split from the pose:** the `split` field of the body passed to `view.update(drawnPose(), …)`
+  (`a.drawnBody().split`). It is null during a tear. The leaf keeps no copy.
+- **B4:** also record the winning piece's field value BEFORE its caps (a private next to `gHitPiece`), so B6 can shade
+  the cut faces as a cross-section by depth (skin, bone ring, meat) instead of relying on the face cuts' masks alone.
+- **B4:** a view that is dropped or reused must get `setHeadSplit(null)`.
+- **B5:** hull wound spheres and `cutExposureSpheres` read closed-head `woundWorldPos` (`game-main.ts` ~3840, ~7470,
+  ~7513; `webgpu/game-seams-render.ts` ~287).
+- **B8:** `scripts/axe-gate.mjs` check K expects at least 3 head-tagged cuts on the corpse; a centred split chopped
+  through the gap leaves 2. Restate it.
+- **B8 look:** the face cuts are untuned (kerf 0.012, depth 0.12, inset 0.006 in `HEAD_SPLIT.faceCut` /
+  `faceCalibre`). A flail hit on a split head takes the plain crater with full meter credit.
+- **Known limits:** a pellet or slug crater on a cut face sits on the old plane, so it shows on both faces. A rod sweep
+  across the gap is un-warped as one segment by its midpoint's piece. `sdBody` costs about 2.7× inside the region
+  (radius ~0.32 m). A forced re-split with fewer sides leaves the old face wound (seam only).
+
+## The cut "excess" pass: landed as built
 
 Status is in [`docs/dev-notes/2026-10-04-cut-excess/STATUS.md`](../2026-10-04-cut-excess/STATUS.md) (`3002f57e`). The code is committed as a labelled WIP commit (see `git log --grep "wip(cut)"`); the raw photos are untracked.
 
@@ -46,32 +83,18 @@ Status is in [`docs/dev-notes/2026-10-04-cut-excess/STATUS.md`](../2026-10-04-cu
 - Gates: 30/30 cut-wound and 24/24 axe.
 - Golden `-u`; census ready; march-hash pins unmoved.
 
-**Concerns to decide before committing:**
+**Costs, carried as open debt (decision in [`compare/NOTES.md`](../2026-10-04-cut-excess/compare/NOTES.md), `880b201a`;
+the owner can overrule):**
 - Cold boot is about +430 ms (from +136 to +936 ms over 4 pairs).
 - 3 axe chops now add about +22 ms of frame time, against +4.3 ms before.
 - Neither has been investigated.
 
-**Unfinished:**
-- the side-by-side comparison PNGs and `compare/NOTES.md`;
-- the code commits;
-- the cost decision.
-
-The photos and logs are untracked in `photos/` (38 MB: don't commit them all) and `verify/`.
+The before/after comparisons are in `compare/`. The raw photos are untracked in the OTHER worktree's `photos/`
+(38 MB: don't commit them all).
 
 ## Remaining (plan B)
 
-1. Land the cut excess pass first (see above and its STATUS.md): decide the two costs, make the comparisons, commit. B2 and B4 touch some of the same files and the golden snapshot.
-2. **B2, the CPU mirror.**
-   - `sdBody` honours `body.split`.
-   - `ZombieActor.setHeadSplit` and `unwarp`.
-   - `strikeActorsFrom` carries `split`.
-   - The axe, the rod and the pellet/slug paths stamp in the un-warped head.
-3. **B3, the per-frame leaf.**
-   - `game-head-split.ts`: the per-frame spring.
-   - The axe opens, widens and kills through it.
-   - The cut faces get `headSlot: 'keep'`.
-   - A `forceSplit` seam.
-   - Size `HeadFrame.radius` from the real head extent, not `headShape` axes.x.
+1. ~~The cut excess pass~~, ~~B2~~, ~~B3~~: done (above).
 4. **B4, the GPU record and `mapBody`.**
    - `REC_VEC4S` 17 → 21.
    - `mapBody` uses the three-piece union with the EXACT EARLY SKIP: caps first, `best = C`, visit pieces in ascending cap order with an unrolled compare-swap and no indexed arrays.
