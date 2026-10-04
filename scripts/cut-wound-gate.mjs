@@ -573,6 +573,67 @@ try {
     note(`C: frame cost (UNGATED): no cuts ${out.c0a.toFixed(2)} / ${out.c0b.toFixed(2)} ms (spread ${Math.abs(out.c0a - out.c0b).toFixed(2)}), 3 cuts ${out.c3.toFixed(2)} ms; delta ${(out.c3 - (out.c0a + out.c0b) / 2).toFixed(2)} ms`);
   }
 
+  // -------- X. A RING FULL OF CUTS: cost (final review item 2). Its own boot, two fresh bodies, the same framing on each
+  // (front, torso centre): 32 craters at 32 spots spread over the torso and limbs' near side on one, 32 rod cuts (the cut
+  // seam, ROD_CALIBRE, alternating across / along / diagonal, 2 x X_HALF long) at the same spots on the other. timeDraws at 0.6 m
+  // and 2 m, each twice (the spread), on the bare body first. Not gated: it reports.
+  if (run("X")) {
+    if (usedZ.size) { closeSession(S); usedZ = new Set(); await boot("cost"); }
+    const spotsOf = async (id) => {
+      const t = await torsoOf(id), f = await frontOf(id), right = unit([-f[2], 0, f[0]]), up = [0, 1, 0];
+      const targets = [];
+      for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) targets.push(add(add(t, mul(right, (c - 1.5) * 0.06)), mul(up, (r - 1.5) * 0.08)));
+      for (const limb of ["armL", "armR", "legL", "legR"]) {
+        const lc = await evaluate(`__sdfGame.actorLimbCentre(${id}, ${J(limb)})`);
+        for (let k = 0; k < 4; k++) targets.push(add(lc, mul(up, (k - 1.5) * 0.1)));
+      }
+      const spots = [];
+      for (const q of targets) { const P = await surfHit(id, add(q, mul(f, 0.8)), mul(f, -1)); if (P) spots.push(P); }
+      return { t, f, right, up, spots };
+    };
+    const measure = async (t, f, tag) => {
+      await look(t, PHOTO_D, f); await stepN(2);
+      const n06 = [await timeDraws(), await timeDraws()];
+      await look(t, 2.0, f); await stepN(2);
+      const n2 = [await timeDraws(), await timeDraws()];
+      await look(t, PHOTO_D, f); await stepN(2);
+      if (tag) await capture(tag);
+      return { n06, n2 };
+    };
+    const fmt = (m) => `0.6 m ${m.n06.map((x) => x.toFixed(1)).join(" / ")}, 2 m ${m.n2.map((x) => x.toFixed(1)).join(" / ")}`;
+    // Craters. X_SWAP=1 stamps the cuts on the first fresh body and the craters on the second (the bodies stand in different
+    // spots and light, so the bare baselines differ: swapping separates the body from the wound shape).
+    const swap = process.env.X_SWAP === "1";
+    // The cuts' half-length (m): 0.06 by default; X_HALF=0.11 is the rod's measured R slash (reach ~0.45 m).
+    const X_HALF = Number(process.env.X_HALF ?? 0.06);
+    const za = fresh(), zb = fresh();
+    const zc = swap ? zb : za;
+    const C = await spotsOf(zc.id);
+    const c0 = await measure(C.t, C.f, null);
+    let nc = 0;
+    for (const P of C.spots) { const d = unit(sub(P, add(P, mul(C.f, 0.8)))); const o = add(P, mul(C.f, 0.8)); if (await evaluate(`__sdfGame.stampWoundAt(${o[0]}, ${o[1]}, ${o[2]}, ${d[0]}, ${d[1]}, ${d[2]}, "pellet", ${zc.id})`)) nc++; }
+    const wc = await woundsOf(zc.id);
+    const c32 = await measure(C.t, C.f, "X-32craters");
+    // Cuts.
+    const zk = swap ? za : zb;
+    const K = await spotsOf(zk.id);
+    const k0 = await measure(K.t, K.f, null);
+    let nk = 0;
+    const view = mul(K.f, -1);
+    for (let i = 0; i < K.spots.length; i++) {
+      const P = K.spots[i], dir = i % 3 === 0 ? K.right : i % 3 === 1 ? K.up : unit(add(K.right, K.up));
+      nk += await evaluate(`__sdfGame.cut(${zk.id}, ${J(add(P, mul(dir, -X_HALF)))}, ${J(add(P, mul(dir, X_HALF)))}, ${J(view)})`);
+    }
+    const wk = await woundsOf(zk.id);
+    const k32 = await measure(K.t, K.f, "X-32cuts");
+    out.x = { swap, half: X_HALF, halfLens: [Math.min(...wk.map((w) => w.radius)), Math.max(...wk.map((w) => w.radius))].map((v) => +v.toFixed(3)), craterBody: zc.id, cutBody: zk.id, craters: { spots: C.spots.length, stamped: nc, wounds: wc.length, base: c0, full: c32 }, cuts: { spots: K.spots.length, stamped: nk, wounds: wk.length, shapes: [...new Set(wk.map((w) => w.shape))], base: k0, full: k32 } };
+    note(`X: craters: ${nc} stamped, ${wc.length} wounds; bare ${fmt(c0)}; 32 craters ${fmt(c32)} ms`);
+    note(`X: cuts: ${nk} stamped, ${wk.length} wounds (${J(out.x.cuts.shapes)}); bare ${fmt(k0)}; 32 cuts ${fmt(k32)} ms`);
+    const dm = (a, b) => (a.reduce((m, x) => m + x, 0) / a.length - b.reduce((m, x) => m + x, 0) / b.length).toFixed(1);
+    note(`X: delta over bare (mean of two): craters +${dm(c32.n06, c0.n06)} (0.6 m) / +${dm(c32.n2, c0.n2)} (2 m); cuts +${dm(k32.n06, k0.n06)} (0.6 m) / +${dm(k32.n2, k0.n2)} (2 m) ms`);
+    check(wc.length === 32 && wk.length === 32 && out.x.cuts.shapes.length === 1 && out.x.cuts.shapes[0] === "cut", `X: 32 craters and 32 cuts staged (${wc.length}, ${wk.length})`);
+  }
+
   // -------- T. K ON A TURNED BODY (final review item 1). Every ring zombie boots at yaw 0 (it never stepped), where the wound
   // body frame and the world frame coincide: that is why K could not see bone exposure resolved at yaw 0 (game-main's old
   // call) while the carve and its upload use the live yaw. Stage a turned body under its own motion: unfreeze, let the ring

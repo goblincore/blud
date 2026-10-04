@@ -570,3 +570,56 @@ checked by `bone-exposure-yaw.test.ts`:
     in the HUD text and were not re-committed.
 - **Not covered:** a body mid-rupture. `refreshWounds` passes the rupture's per-region rigid transform (`xf`) to the
   upload, and the exposure does not apply it. This predates the cuts.
+
+### 2. A ring full of cuts: cost, and eviction
+
+**Measured first: gate X** (`scripts/cut-wound-gate.mjs`, its own boot, `ONLY=X` to run it alone).
+- **Setup.** Two fresh bodies, the same framing on each (front, torso centre). One gets 32 craters, the other 32 rod cuts
+  (the `cut` seam, `ROD_CALIBRE`, across / along / diagonal in turn), at the same 32 spots: a 4 x 4 grid on the torso plus
+  4 per limb ([`gate/X-32cuts.png`](gate/X-32cuts.png), [`gate/X-32craters.png`](gate/X-32craters.png)).
+- **Timing.** `timeDraws(120)` medians, each twice, bare first.
+- **Two confounds.**
+  - The bodies stand in different places and light, so their bare baselines differ by ~4 ms. `X_SWAP=1` swaps which body
+    gets which wound shape.
+  - `X_HALF` sets the cut half-length. The default is 0.06 m, which is about a pellet crater's 0.055 m radius. 0.11 m is
+    the rod's measured R slash: shader reach ~0.45 m, the case the review raised.
+
+| run (load ~3) | craters: bare -> 32 (0.6 m / 2 m) | cuts: bare -> 32 (0.6 m / 2 m) | delta craters / cuts, 0.6 m | delta craters / cuts, 2 m |
+| --- | --- | --- | --- | --- |
+| h 0.06 | 18.8 -> 41.7 / 13.0 -> 19.4 | 22.8 -> 39.5 / 16.9 -> 20.9 | +22.9 / +16.8 | +6.4 / +4.0 |
+| h 0.06, swapped | 19.8 -> 41.5 / 13.5 -> 21.2 | 21.7 -> 39.7 / 12.5 -> 17.4 | +21.7 / +17.9 | +7.7 / +4.8 |
+| h 0.06 (the full-gate run) | 18.6 -> 42.6 / 12.0 -> 19.2 | 23.2 -> 39.9 / 17.2 -> 21.2 | +23.9 / +16.8 | +7.2 / +4.0 |
+| h 0.11 | 18.7 -> 42.8 / 12.4 -> 19.1 | 23.0 -> 46.4 / 16.8 -> 21.6 | +24.1 / +23.4 | +6.7 / +4.8 |
+| h 0.11, swapped | 19.6 -> 41.6 / 13.6 -> 21.0 | 21.7 -> 44.6 / 12.8 -> 18.7 | +22.0 / +22.9 | +7.4 / +5.9 |
+
+(Each cell is the mean of two `timeDraws`. Within a pair the two readings differ by 0 to 1.5 ms.)
+
+- **32 cuts do not cost clearly more than 32 craters.**
+  - At pellet-sized half-lengths, cuts cost less: +17 to +18 ms at 0.6 m against +22 to +24 ms for craters, and +4 to +5 ms
+    at 2 m against +6 to +8 ms.
+  - At the rod's 0.11 m slashes the 0.6 m cost is the same (+23 / +23 against +24 / +22 ms), and the 2 m cost is still
+    lower (+5 to +6 against +7 ms).
+  - A crater's bowl, rim and normal taps cover as many pixels per row as a cut's lens does.
+- **So the slot-box early-out (item 2b) was NOT done.** No WGSL changed, so no golden, census, march-hash or boot pair
+  was needed.
+- **Unmeasured:** the per-pass split (march vs normal). The early-out remains an option if a cut-heavy frame shows up in
+  play. The review's analysis holds as an upper bound: noise3 every step inside reach, no box skip, finite-difference
+  normals in `ngWounds`.
+- **Absolute cost.** A full ring of either shape roughly doubles a 0.6 m close-up (~19-23 ms to ~40-46 ms). This is the
+  Task 8 finding, not a cut-specific one.
+
+**Eviction (item 2c): a full ring merges craters before evicting a cut.**
+- `damage.ts pushWound`: when the ring is over the cap and its oldest non-keep wound is a CUT (cuts never merge), the
+  oldest crater that CAN merge is folded into its nearest neighbour first (`mergeVictim`, guards unchanged: same prim,
+  in reach, never a cut, a decal or a head-tagged crater). Only when no crater can merge is the oldest wound evicted, as
+  before.
+- Head-slot protection is untouched: a `keep` head crater is never the victim, the folded crater or a merge partner.
+- Tests in `damage-merge.test.ts`:
+  - the oldest cut survives while a pair elsewhere merges;
+  - the oldest mergeable crater is the one that folds;
+  - with nothing mergeable the cut is evicted as before;
+  - the incoming crater may be the one that folds;
+  - head protection holds;
+  - a rod-sweep ring (20 cuts + 6 pairs, then 12 more cuts) folds all 6 pairs before the first cut goes.
+
+  4 of the 6 fail on the old `pushWound`.
