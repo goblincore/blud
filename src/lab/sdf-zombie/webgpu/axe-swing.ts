@@ -61,6 +61,9 @@ const KEYS: Readonly<Record<AxeSide, readonly Key[]>> = {
   ],
 };
 
+/** Each side's keys, read-only (the tests read these). */
+export function axeKeys(side: AxeSide): readonly Readonly<AxePose & { t: number }>[] { return KEYS[side]; }
+
 /** Each side's key times (the tests read these). */
 export function axeKeyTimes(side: AxeSide): number[] { return KEYS[side].map(k => k.t); }
 
