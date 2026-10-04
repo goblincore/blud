@@ -4005,7 +4005,7 @@ async function main() {
   // player holds, and carries NOTHING but viewmodelFovScale()'s scale — so
   // the anchor's ride height below is scaled with the rest of the rig rather
   // than surviving as an unscaled camera-space offset. Every weapon slot
-  // (flail, shotgun, dynamite, launcher, flare) is a descendant, so this is
+  // (flail, shotgun, dynamite, launcher, flare, rod) is a descendant, so this is
   // one transform for all of them.
   ctx.weapon.fovRig = new THREE.Group();
   ctx.weapon.fovRig.name = 'view-model-fov-rig';

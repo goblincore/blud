@@ -19,7 +19,7 @@ export function createFireSeams(ctx: GameContext) {
     cut: (id: number, a: Vec3, b: Vec3, view: Vec3, calibre?: { depth?: number; kerf?: number; lip?: number }) => ctx.weapon.rod?.cut(id, a, b, view, calibre) ?? 0,
     rod: () => ctx.weapon.rod?.debug() ?? null,
     /** Rod press / release without pointer lock (the canvas mousedown handler needs it): headless gates. */
-    rodPress: () => ctx.weapon.rod?.onMouseDown(0) ?? false,
+    rodPress: () => { ctx.weapon.rod?.onMouseDown(0); return ctx.weapon.rod?.debug().held ?? false; },
     rodRelease: () => ctx.weapon.rod?.onMouseUp(0),
     fireLauncher: () => ctx.weapon.launcher?.fire() ?? false,
     reloadLauncher: () => ctx.weapon.launcher?.reload() ?? false,
