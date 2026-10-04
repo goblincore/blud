@@ -5,6 +5,7 @@ import { WOUND_PROFILES, woundDirToWorld, woundWorldPos } from './damage';
 import { prim } from './head-pop';
 import { sdBody, smax } from './validate';
 import { cross } from './vec';
+import { AXE_CALIBRE } from './webgpu/axe-strike';
 import type { Primitive, Vec3 } from './types';
 
 /** The rod's original 1 cm kerf (ROD_CALIBRE was widened to 0.015 on 2026-10-04): the narrow calibre the pinned
@@ -367,13 +368,19 @@ describe('cutLip / cutMask: the lip and the mask stay on the near skin', () => {
   //   r 0.04: 0.131 -> 0, 0.957 -> 0;  r 0.045: 0 -> 0, 0.224 -> 0.
   // What remains is on the limb's SIDES (dot(nrm, inward) 0.26-0.5, i.e. 15-30 degrees past the side): a 2.2-kerf band is
   // wider than a 2 cm arm, so the cut wraps it. The back proper (dot >= 0.6, within 53 degrees of the back pole) is 0.
+  // The axe's calibre (AXE_CALIBRE: depth 0.1, kerf 0.015, lip 1.1; webgpu/axe-strike.ts), measured the same way. Its kerf
+  // was first 0.022 (the back proper stayed 0, but the sides reached 1.000 / 0.826 / 0.316 at r 0.02 / 0.03 / 0.04) and
+  // was lowered with the Lipschitz and silhouette limits (below). At 0.015 it is the rod's kerf-0.015 row: the back
+  // proper (dot >= 0.6) is 0 at every radius; the sides, all back-facing skin, measure 0.853 / 0.146 / 0 at r 0.02 /
+  // 0.03 / 0.04, pinned just above (0.9 / 0.2 / 1e-3).
+  const AXE_SIDE_MAX: Record<number, number> = { 0.02: 0.9, 0.03: 0.2, 0.04: 1e-3 };
   for (const r of [0.02, 0.03, 0.04]) {
-    it(`(a) a front cut along a ${r} m arm leaves its back unpainted (kerf 0.01 and 0.015)`, () => {
+    it(`(a) a front cut along a ${r} m arm leaves its back unpainted (kerf 0.01, 0.015 and the axe's)`, () => {
       const thin = prim([0.4, 1.0, 0], [0.4, 1.5, 0], r, [1, 1, 1], { limb: 'armL', cluster: 2 });
       const tp: Primitive[] = [torso, thin];
       const tb = { prims: tp, clusters: [{ start: 0, count: 1, alive: true }, { start: 1, count: 1, alive: true }] } as unknown as Parameters<typeof sdBody>[1];
       const tf = (p: Vec3) => sdBody(p, tb);
-      for (const [cal, sideMax] of [[KERF_010, r <= 0.02 ? 0.2 : 1e-3], [{ ...ROD_CALIBRE, kerf: 0.015 }, r <= 0.02 ? 0.9 : r <= 0.03 ? 0.2 : 1e-3]] as const) {
+      for (const [cal, sideMax] of [[KERF_010, r <= 0.02 ? 0.2 : 1e-3], [{ ...ROD_CALIBRE, kerf: 0.015 }, r <= 0.02 ? 0.9 : r <= 0.03 ? 0.2 : 1e-3], [AXE_CALIBRE, AXE_SIDE_MAX[r]!]] as const) {
         const w = stampCut(tp, { a: [0.4, 1.15, r], b: [0.4, 1.35, r], view: [0, 0, -1] }, cal, 0, tf);
         const mid = woundWorldPos(tp, w, 0), al = woundDirToWorld(tp, w, w.cutDir!, 0), inw = woundDirToWorld(tp, w, w.carveN!, 0);
         let back = 0, all = 0;
@@ -541,7 +548,7 @@ describe('the lid leaves the owner\'s surface alone and closes the channel above
 });
 
 describe('stampCut: a slash across a thin limb\'s silhouette leaves its back closed', () => {
-  for (const [name, cal] of [['kerf 0.01', KERF_010], ['kerf 0.015', { ...ROD_CALIBRE, kerf: 0.015 }]] as const) {
+  for (const [name, cal] of [['kerf 0.01', KERF_010], ['kerf 0.015', { ...ROD_CALIBRE, kerf: 0.015 }], ['the axe calibre', AXE_CALIBRE]] as const) {
     it(`${name}: depth fits between the chord and thickFrac of the flesh; no far-skin opening in the middle 70% of the chord`, () => {
       const w = armSilhouette(cal);
       const k = slotOf(w);
@@ -563,6 +570,8 @@ describe('stampCut: a slash across a thin limb\'s silhouette leaves its back clo
       console.log(`silhouette ${name}: sag ${k.sag.toFixed(4)} depth ${k.depth.toFixed(4)}, opened ${opened} of ${n} back-skin samples, ${middle} within |a| <= 0.7 h, nearest the middle at |a| = ${minA.toFixed(3)} h, deepest ${(maxBelow * 1000).toFixed(1)} mm below the chord plane`);
       expect(middle).toBe(0);
       // Pinned counts and positions (measured 234 at >= 0.904 h, 784 at >= 0.747 h; unchanged by the raw-plane lid).
+      // The axe calibre (kerf 0.015, depth clamped to the thickFrac 0.03 like the rod's): the same 784 at >= 0.747 h.
+      // At kerf 0.022 / 0.02 / 0.018 it opened 3243 / 2961 / 2581 samples, 1919 / 1777 / 1513 of them in the middle 70%.
       const [maxOpened, minTip] = cal.kerf === KERF_010.kerf ? [300, 0.85] : [900, 0.7];
       expect(opened).toBeLessThanOrEqual(maxOpened);
       if (opened > 0) expect(minA).toBeGreaterThanOrEqual(minTip);
@@ -609,4 +618,40 @@ describe('cutLip + cutCarve: Lipschitz bound of the whole cut field', () => {
     console.log(`lipschitz (carve + lip, lip scale ${lipScale}) max ${worst.toFixed(3)} at ${worstAt}`);
     expect(worst).toBeLessThanOrEqual(2.2);
   }, 900000);
+});
+
+describe('cutLip + cutCarve: Lipschitz bound at the axe calibre', () => {
+  // AXE_CALIBRE (webgpu/axe-strike.ts: depth 0.1, kerf 0.015, lip 1.1; depth 0.1 and half-length 0.09 are outside the sweeps above). Measured
+  // max 1.863 at the calibre's lip scale (0.88) and 1.941 at the clamp (1.1). kerf 0.022 / 0.02 / 0.018 measured 2.136 /
+  // 1.991 / 1.844 at 0.88 but 2.632 / 2.441 / 2.246 at 1.1, so the kerf was lowered to 0.015. The
+  // axe's half-lengths are 0.09 (AXE_CUT.halfLen) and the cut model's range (0.015 .. 0.175). Swept at the lip scale a
+  // calibre's lip makes (the pellet rim splay x lip, as LIP_SCALE) and at the clamp (CUT_SHADE.maxLipScale).
+  for (const lipScale of [WOUND_PROFILES.pellet.rimSplayScale * AXE_CALIBRE.lip, CUT_SHADE.maxLipScale]) it(`max |grad| <= 2.2 over halfLen at depth ${AXE_CALIBRE.depth}, kerf ${AXE_CALIBRE.kerf} (lip scale ${lipScale})`, () => {
+    let worst = 0, worstAt = '';
+    const h = 2e-4, step = 0.0025;
+    for (const half of [0.015, 0.05, 0.09, 0.175]) {
+      for (const around of half <= 0.1 ? [false, true] : [false]) {
+        const k = slotOf(torsoCut(half, around, AXE_CALIBRE));
+        const F = (p: Vec3) => fullAt(k, p, lipScale);
+        for (let a = -k.halfLen - 0.02; a <= k.halfLen + 0.02; a += step) {
+          for (let s = -0.02; s <= k.depth + k.sag + 0.02; s += step) {
+            for (let u = -0.05; u <= 0.05; u += 0.001) {
+              const p = slotPoint(k, a, s, u);
+              const f0 = F(p);
+              if (f0 < -0.003 || f0 > 0.02) continue;
+              for (const sg of [1, -1]) {
+                const g = Math.hypot(
+                  (F(slotPoint(k, a + sg * h, s, u)) - f0) / h,
+                  (F(slotPoint(k, a, s + sg * h, u)) - f0) / h,
+                  (F(slotPoint(k, a, s, u + sg * h)) - f0) / h);
+                if (g > worst) { worst = g; worstAt = `h ${half} ${around ? 'around' : 'along'} at a ${a.toFixed(3)} s ${s.toFixed(3)} u ${u.toFixed(3)}`; }
+              }
+            }
+          }
+        }
+      }
+    }
+    console.log(`lipschitz (axe calibre, lip scale ${lipScale}) max ${worst.toFixed(3)} at ${worstAt}`);
+    expect(worst).toBeLessThanOrEqual(2.2);
+  }, 300000);
 });

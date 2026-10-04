@@ -10,9 +10,11 @@ import type { CutCalibre, CutSeg } from '../cut-wound';
 import { AXE_BLADE_DIR, type AxeSide } from './axe-swing';
 import { viewToWorld } from './flail-strike';
 
-/** The axe's blade: deeper, wider and lippier than the rod (cut-wound.ts ROD_CALIBRE 0.06 / 0.015 / 1). Tunable;
+/** The axe's blade: deeper and lippier than the rod (cut-wound.ts ROD_CALIBRE 0.06 / 0.015 / 1), the rod's kerf. The
+ *  kerf is capped by cut-wound.test.ts's measured envelopes: 0.022 broke the Lipschitz bound (2.63 > 2.2 at the clamp
+ *  lip scale) and the thin-limb silhouette closure; 0.02 and 0.018 too; 0.015 passes. Tunable, but re-measure there.
  *  depth stays within CUT.maxDepth and lip within CUT_SHADE.maxLipScale (axe-strike.test.ts). */
-export const AXE_CALIBRE: CutCalibre = { depth: 0.1, kerf: 0.022, lip: 1.1 };
+export const AXE_CALIBRE: CutCalibre = { depth: 0.1, kerf: 0.015, lip: 1.1 };
 
 export const AXE_CUT = {
   /** Half the chop's cut length along the blade line, metres (an axe bit is ~0.15 m; the gash runs a little longer). */
@@ -35,12 +37,19 @@ export const AXE_HIT: Readonly<Record<AxeSide, { meterCredit: number; shove: num
  *  across the line of sight (a cut is drawn ON the skin as the viewer sees it; stampCut finds the skin). */
 export function axeCutSeg(eye: Vec3, yaw: number, pitch: number, side: AxeSide, point: Vec3, view: Vec3): CutSeg {
   const o = viewToWorld(eye, yaw, pitch, [0, 0, 0]);
-  const w = viewToWorld(eye, yaw, pitch, AXE_BLADE_DIR[side]);
-  let d: Vec3 = [w[0] - o[0], w[1] - o[1], w[2] - o[2]];
-  const along = d[0] * view[0] + d[1] * view[1] + d[2] * view[2];
-  d = [d[0] - along * view[0], d[1] - along * view[1], d[2] - along * view[2]];
-  const l = Math.hypot(d[0], d[1], d[2]) || 1;
-  const h = AXE_CUT.halfLen / l;
+  /** The aim-space direction `v` (view space) as a world vector, projected off the line of sight; null when it lies along it. */
+  const across = (v: Vec3): Vec3 | null => {
+    const w = viewToWorld(eye, yaw, pitch, v);
+    const e: Vec3 = [w[0] - o[0], w[1] - o[1], w[2] - o[2]];
+    const al = e[0] * view[0] + e[1] * view[1] + e[2] * view[2];
+    const p: Vec3 = [e[0] - al * view[0], e[1] - al * view[1], e[2] - al * view[2]];
+    const l = Math.hypot(p[0], p[1], p[2]);
+    return l < 1e-6 ? null : [p[0] / l, p[1] / l, p[2] / l];
+  };
+  // The blade line; when the line of sight lies along it (looking straight down an overhead chop) the aim's right
+  // vector, then its up vector, so the cut keeps its full length across the view instead of collapsing to a point.
+  const d = across(AXE_BLADE_DIR[side]) ?? across([1, 0, 0]) ?? across([0, 1, 0]) ?? [1, 0, 0];
+  const h = AXE_CUT.halfLen;
   return {
     a: [point[0] - d[0] * h, point[1] - d[1] * h, point[2] - d[2] * h],
     b: [point[0] + d[0] * h, point[1] + d[1] * h, point[2] + d[2] * h],

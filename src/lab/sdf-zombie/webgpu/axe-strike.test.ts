@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { AXE_CALIBRE, AXE_CUT, AXE_HIT, axeCutSeg } from './axe-strike';
 import { strikeActorsFrom } from './flail-strike';
-import { CUT, CUT_SHADE } from '../cut-wound';
+import { CUT, CUT_SHADE, ROD_CALIBRE } from '../cut-wound';
 import { prim } from '../head-pop';
 import type { Body } from '../validate';
 import type { Vec3 } from '../types';
@@ -35,6 +35,27 @@ describe('axeCutSeg: the chop\'s blade line, in world, centred on the hit', () =
     expect(s.a[0]).toBeLessThan(s.b[0]);
     expect(s.a[1]).toBeGreaterThan(s.b[1]);
   });
+  it('turned (yaw 1.1, pitch 0): R runs right-to-left across the aim\'s right vector, L left-to-right', () => {
+    const yaw = 1.1;
+    const right: Vec3 = [Math.cos(yaw), 0, Math.sin(yaw)];
+    const v: Vec3 = [Math.sin(yaw), 0, -Math.cos(yaw)];
+    const p: Vec3 = [eye[0] + v[0], eye[1] + v[1], eye[2] + v[2]];
+    const r = axeCutSeg(eye, yaw, 0, 'R', p, v), l = axeCutSeg(eye, yaw, 0, 'L', p, v);
+    expect(dot(sub(r.b, r.a), right)).toBeLessThan(0);
+    expect(r.a[1]).toBeGreaterThan(r.b[1]);
+    expect(dot(sub(l.b, l.a), right)).toBeGreaterThan(0);
+    expect(l.a[1]).toBeGreaterThan(l.b[1]);
+  });
+  it('degenerate: the view lying along the H blade (straight down) still gives a full-length cut across the view', () => {
+    const down: Vec3 = [0, -1, 0];
+    const p: Vec3 = [eye[0], eye[1] - 1, eye[2]];
+    const s = axeCutSeg(eye, 0, 0, 'H', p, down);
+    const d = sub(s.b, s.a);
+    expect(len(d)).toBeCloseTo(2 * AXE_CUT.halfLen, 6);
+    expect(Math.abs(dot(d, down))).toBeLessThan(1e-9);
+    const mid: Vec3 = [(s.a[0] + s.b[0]) / 2, (s.a[1] + s.b[1]) / 2, (s.a[2] + s.b[2]) / 2];
+    expect(len(sub(mid, p))).toBeLessThan(1e-9);
+  });
   it('turned and pitched: still perpendicular to the view, still centred, still 2 x halfLen', () => {
     const yaw = 1.1, pitch = -0.4;
     const v: Vec3 = [Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)];
@@ -53,7 +74,10 @@ describe('the axe\'s numbers', () => {
   it('the calibre is a deep, wide cut inside the cut model\'s limits', () => {
     expect(AXE_CALIBRE.depth).toBeLessThanOrEqual(CUT.maxDepth);
     expect(AXE_CALIBRE.lip).toBeLessThanOrEqual(CUT_SHADE.maxLipScale);
-    expect(AXE_CALIBRE.kerf).toBeGreaterThan(0.015);   // wider than the rod
+    expect(AXE_CALIBRE.depth).toBeGreaterThan(ROD_CALIBRE.depth);   // deeper than the rod
+    expect(AXE_CALIBRE.lip).toBeGreaterThan(ROD_CALIBRE.lip);       // lippier than the rod
+    expect(AXE_CALIBRE.kerf).toBeGreaterThanOrEqual(ROD_CALIBRE.kerf);
+    expect(AXE_CALIBRE.kerf).toBeLessThanOrEqual(0.015);            // the widest cut-wound.test.ts measured at this depth and lip
     expect(2 * AXE_CUT.halfLen).toBeGreaterThanOrEqual(CUT.minLen);
     expect(2 * AXE_CUT.halfLen).toBeLessThanOrEqual(CUT.maxLen);
   });
@@ -77,6 +101,7 @@ describe('strikeActorsFrom: the strike list the flail and the axe share', () => 
     expect(list[0]!.centre).toEqual([0, 1.2, 0]);
     expect(list[0]!.head!.centre).toEqual([0, 1.58, 0]);
     expect(list[0]!.field([0, 1.2, 0])).toBeLessThan(0);
+    expect(list[0]!.head!.field([0, 1.58, 0])).toBeLessThan(0);    // inside the head
     expect(list[0]!.head!.field([0, 1.2, 0])).toBeGreaterThan(0);   // the head field ignores the torso
   });
   it('a dead head cluster gives no head entry', () => {
