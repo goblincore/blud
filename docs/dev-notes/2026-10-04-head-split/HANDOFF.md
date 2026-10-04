@@ -31,24 +31,36 @@ The per-task texts used for dispatch are in the session scratchpad (`scratchpad/
   - `REGION_MARGIN` is 0.06, because the shipped AO probe reads `mapBody(p + n·0.06)`.
   - A one-sided split costs 2 field evaluations.
 
-## In flight when we paused
+## In flight when we paused: the cut "excess" pass, stopped
 
-**The cut "excess" pass was a background agent.** Its work is UNCOMMITTED in the working tree.
-- **Files:** `cut-wound.ts` and its test, `wounds.wgsl.ts` and its test, `axe-strike.ts` and its test, `wound-threat.ts` and its test, `game-main.ts`, `game-world-leaves3.ts`, `cut-wound-gate.mjs`, and the golden snapshot.
-- **Its goal:**
-  - longer cuts (axe half-length about 0.15);
-  - ragged ends that taper gradually;
-  - rougher edges and bigger lips;
-  - a wider kerf, but only through a field change that keeps the Lipschitz bound ≤ 2.2;
-  - more blood;
-  - before/after comparison PNGs in `docs/dev-notes/2026-10-04-cut-excess/compare/`.
-- **On resume:**
-  - Check whether it finished and committed: `git log`, and look for that folder.
-  - If it didn't, review the partial diff (`git diff`) before trusting it. Then re-dispatch it with the same brief: run the Lipschitz, far-skin, thin-limb and silhouette invariants, both gates, the census, march-hash and a boot pair.
+Status is in [`docs/dev-notes/2026-10-04-cut-excess/STATUS.md`](../2026-10-04-cut-excess/STATUS.md) (`3002f57e`). The code is UNCOMMITTED in the working tree.
+
+**What it does:**
+- Longer cuts: the axe's half-length goes 0.09 → 0.15, and the rod's sweeps are 1.4× longer, with `maxLen` 0.45.
+- Wider cuts: kerf 0.025 for the axe and 0.02 for the rod. Each cut's kerf is capped at 0.3 × its half-length to keep the Lipschitz bound ≤ 2.2.
+- Tapered, broken-up ends; rougher walls; lips raised 8–9 mm (from 2.9); a blotchy wet band; more blood.
+
+**Verified:**
+- Lipschitz maxima are 1.7–2.0, now including the GPU noise.
+- The far-skin, thin-limb, silhouette and lid invariants hold.
+- Gates: 30/30 cut-wound and 24/24 axe.
+- Golden `-u`; census ready; march-hash pins unmoved.
+
+**Concerns to decide before committing:**
+- Cold boot is about +430 ms (from +136 to +936 ms over 4 pairs).
+- 3 axe chops now add about +22 ms of frame time, against +4.3 ms before.
+- Neither has been investigated.
+
+**Unfinished:**
+- the side-by-side comparison PNGs and `compare/NOTES.md`;
+- the code commits;
+- the cost decision.
+
+The photos and logs are untracked in `photos/` (38 MB: don't commit them all) and `verify/`.
 
 ## Remaining (plan B)
 
-1. Finish or land the cut excess pass first: B2 and B4 touch some of the same files and the golden snapshot.
+1. Land the cut excess pass first (see above and its STATUS.md): decide the two costs, make the comparisons, commit. B2 and B4 touch some of the same files and the golden snapshot.
 2. **B2, the CPU mirror.**
    - `sdBody` honours `body.split`.
    - `ZombieActor.setHeadSplit` and `unwarp`.
