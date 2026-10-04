@@ -33,7 +33,7 @@ The per-task texts used for dispatch are in the session scratchpad (`scratchpad/
 
 ## In flight when we paused: the cut "excess" pass, stopped
 
-Status is in [`docs/dev-notes/2026-10-04-cut-excess/STATUS.md`](../2026-10-04-cut-excess/STATUS.md) (`3002f57e`). The code is UNCOMMITTED in the working tree.
+Status is in [`docs/dev-notes/2026-10-04-cut-excess/STATUS.md`](../2026-10-04-cut-excess/STATUS.md) (`3002f57e`). The code is committed as a labelled WIP commit (see `git log --grep "wip(cut)"`); the raw photos are untracked.
 
 **What it does:**
 - Longer cuts: the axe's half-length goes 0.09 → 0.15, and the rod's sweeps are 1.4× longer, with `maxLen` 0.45.
