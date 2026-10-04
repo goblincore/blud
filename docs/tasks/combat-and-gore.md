@@ -4,6 +4,13 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
 
 ## Cut wounds and the head split — designed 2026-10-03
 
+- [~] **The axe (slot 7) — part A built 2026-10-04: chops cut, head chops kill on 3 (tunable); owner playtest pending; part B (head split warp) next.** An
+  H / R / L chop combo, cut wounds with the axe calibre (kerf 0.015, measured), 1.8 m reach shared with the flail, its own
+  light list. Pose and look suggestions are left for the owner (spec section 9, notes).
+  [Spec](../../docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 9: as built) ·
+  [plan](../../docs/superpowers/plans/2026-10-04-axe-part-a.md) · gate `scripts/axe-gate.mjs` (24 checks) ·
+  [notes](../../docs/dev-notes/2026-10-04-axe/2026-10-04-axe-part-a.md).
+
 - [~] **Cut wounds (axe / sword / chainsaw base) and a head that splits into two hinged halves.** M1 built 2026-10-04: cut
   wounds + rod (slot 6) + 32 wounds with merging; owner playtest pending; M2 (head split) next. Craters cannot make deep
   jagged cuts (owner, 2026-10-03). M1: a cut wound shape (blade slot, jagged walls, lips) + a rod stand-in weapon; M2: the head
