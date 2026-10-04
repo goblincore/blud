@@ -11,6 +11,11 @@
 // Wounds go through ZombieActor.blast (the kill is its forceCollapse). The per-actor state lives in this
 // module (keyed by the actor object), never on main().
 //
+// A SPLIT HEAD IS NOT THIS LEAF'S (game-head-split.ts). Its regions, craters, trackers and deform are all
+// measured on the closed head, so while a head is split open (deps.splitOpen) both ways in decline: hit()
+// and burst() return false and the caller stamps its ordinary wound (which is un-warped: damage.ts
+// unwarpHit). The other way round, has() tells the split to refuse a head this leaf already holds state for.
+//
 // EVENTS → WORLD.
 //   strip          the region's ONE crater, stamped or replaced (Wound.headRegion) at the region's surface
 //                  point — traced toward the head centre from its ANCHOR's hs direction (the model's
@@ -148,6 +153,8 @@ export interface HeadDamageDeps {
   bleed(a: ZombieActor, w: Wound, point: Vec3, dir: Vec3, kind: 'pellet' | 'slug'): void;
   /** ctx.boot.attachPiece (absent before the chunk spawner exists: the pieces are then not drawn). */
   attach?: (a: ZombieActor, prims: Primitive[], pos: Vec3, opts?: { clean?: boolean }) => AttachedPiece;
+  /** The actor's head is split open (game-head-split.ts isOpen): hit() and burst() then decline. Absent: never. */
+  splitOpen?(a: ZombieActor): boolean;
 }
 
 export interface HeadDamageDebug {
@@ -182,12 +189,16 @@ export interface HeadDamageDebug {
 }
 
 export interface HeadDamageLeaf {
-  /** One head-region hit at `point` (world, on the posed surface), blow direction `dir` (world, unit). */
-  hit(a: ZombieActor, point: Vec3, dir: Vec3, feel: HeadHitFeel): void;
+  /** One head-region hit at `point` (world, on the posed surface), blow direction `dir` (world, unit). Returns false
+   *  when it declined (the head is split open) and did nothing: the caller then stamps its own plain crater. */
+  hit(a: ZombieActor, point: Vec3, dir: Vec3, feel: HeadHitFeel): boolean;
   /** A SLUG on a head (slug head burst): the lethal burst or the glancing rupture. `point` is the impact (world), `dir`
-   *  the shot direction (world unit). Returns false when it declined (not a head hit, not the plain zombie, off, no head):
-   *  the caller then takes the ordinary slug path. */
+   *  the shot direction (world unit). Returns false when it declined (not a head hit, not the plain zombie, off, no head,
+   *  or the head is split open): the caller then takes the ordinary slug path. */
   burst(a: ZombieActor, point: Vec3, dir: Vec3, shot?: ShotProvenance, kind?: 'pellet' | 'slug'): boolean;
+  /** This leaf holds state for the actor's head (ladder craters, dents, a burst, flaps, eye pieces): the head split
+   *  refuses such a head (game-head-split.ts open). */
+  has(a: ZombieActor): boolean;
   tick(dt: number): void;
   /** Drop an actor's state: dispose its pieces, clear its deform hook, its eyes glow again. */
   forget(id: number): void;
@@ -491,7 +502,8 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     return { surfaceOf, crater };
   }
 
-  function hit(a: ZombieActor, point: Vec3, dir: Vec3, feel: HeadHitFeel): void {
+  function hit(a: ZombieActor, point: Vec3, dir: Vec3, feel: HeadHitFeel): boolean {
+    if (deps.splitOpen?.(a)) return false;
     const posed = a.posed();
     const yaw = a.pose().yaw;
     const field = (q: Vec3) => sdBody(q, posed);
@@ -509,7 +521,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
       a.blast({ wounds: [w], meterCredit: feel.meterCredit * HEAD_LEAF.meterScale, impulse, reaction: 'blast', gain: feel.gain });
       deps.bleed(a, w, point, dir, 'slug');
       throwFlesh(a, point, dir, normalAt(field, point), feel);
-      return;
+      return true;
     }
     const h = headOf(a);
     const dirLocal = rotate(conj(frame.quat), dir);
@@ -612,6 +624,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     // Head strips bleed a PELLET's gout (spec §15), and so does the brain stage (spec §14: so the brain is seen).
     if (bleedAt) deps.bleed(a, bleedAt, point, dir, 'pellet');
     throwFlesh(a, point, dir, normalAt(field, point), feel);
+    return true;
   }
 
   /** Hinge `angles.length` flaps round a crater rim: hinges snapped onto the posed surface, each riding the head
@@ -663,6 +676,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
 
   function burst(a: ZombieActor, point: Vec3, dir: Vec3, shot?: ShotProvenance, kind: 'pellet' | 'slug' = 'slug'): boolean {
     if (!burstTuning.on || (kind !== 'slug' && !burstTuning.anyWeapon) || a.profileName() !== 'zombie') return false;
+    if (deps.splitOpen?.(a)) return false;
     const posed = a.posed();
     if (!headAlive(posed) || !onHeadPrim(posed.prims, point)) return false;
     // The UN-deformed head frame (see hit()): mid-wobble headShape reads the squashed head.
@@ -821,6 +835,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
       for (const [a, h] of heads) drop(a, h);
     },
     affine: a => heads.get(a)?.affine ?? null,
+    has: a => heads.has(a),
     debug(id) {
       for (const [a, h] of heads) {
         if (a.id !== id) continue;

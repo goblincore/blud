@@ -10,6 +10,7 @@ import { woundEmitAnchorAndNormal } from '../bleed-registry'
 import { spawnImpactGout, type Droplet } from '../blood-sim'
 import { type Wound, woundDirToWorld } from '../damage'
 import { detachGutChain, pinGutChain, stepGutChain } from '../entrails'
+import { warpDir, warpPoint } from '../head-split'
 import { type Vec3 } from '../types'
 import { type ZombieActor } from './game-actor'
 import { spillVerdict } from './game-vfx-leaves'
@@ -36,7 +37,7 @@ export function stepGutRopes(ctx: GameContext, dt: number): void {
       ctx.vfx.gutRopes.set(a.id, entry);
     }
     if (entry.chain.attached) {
-      const { anchor } = woundEmitAnchorAndNormal(a.posed().prims, entry.wound, a.pose().yaw);
+      const { anchor } = woundEmitAnchorAndNormal(a.posed().prims, entry.wound, a.pose().yaw, a.posed().split);
       entry = { ...entry, chain: pinGutChain(entry.chain, anchor) };
       ctx.vfx.gutRopes.set(a.id, entry);
     }
@@ -102,7 +103,7 @@ export function registerBleed(ctx: GameContext,
   // the sever path already funnel through this function, and two copies
   // would drift. Uses the SAME bleedRng, so setBleed(false) freezes gouts
   // and the trickle together and captures stay deterministic.
-  const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, wound, a.pose().yaw);
+  const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, wound, a.pose().yaw, a.posed().split);
   // The gout sprays back along the incoming shot; spawnImpactGout negates
   // what it is handed, and the wound normal already points OUT of the
   // body, so pass the inward direction. The wound's stable stream id tags
@@ -153,12 +154,15 @@ export function registerCutBleed(ctx: GameContext,
 ): void {
   registerBleed(ctx, a, wound, kind, contact);
   if (!ctx.vfx.bleedEnabled || wound.shape !== 'cut' || !wound.cutDir) return;
-  const prims = a.posed().prims, yaw = a.pose().yaw;
+  const posed = a.posed(), prims = posed.prims, yaw = a.pose().yaw;
+  // The stations are laid out on the closed head's prims (where the slot is), then each goes out with the half it is on
+  // (head-split.ts warpPoint; the identity on a closed head).
   const { anchor, normal } = woundEmitAnchorAndNormal(prims, wound, yaw);
   const along = woundDirToWorld(prims, wound, wound.cutDir, yaw);
   const streamId = woundStreamId(ctx, wound);
   for (const t of CUT_EXTRA_GOUTS) {
-    const at: Vec3 = [anchor[0] + along[0] * t * wound.radius, anchor[1] + along[1] * t * wound.radius, anchor[2] + along[2] * t * wound.radius];
-    spawnImpactGout(ctx.vfx.bloodSim, kind, at, [-normal[0], -normal[1], -normal[2]], rngStreams.bleed, streamId);
+    const m = warpPoint(posed.split, [anchor[0] + along[0] * t * wound.radius, anchor[1] + along[1] * t * wound.radius, anchor[2] + along[2] * t * wound.radius]);
+    const out = warpDir(posed.split, m.piece, normal);
+    spawnImpactGout(ctx.vfx.bloodSim, kind, m.p, [-out[0], -out[1], -out[2]], rngStreams.bleed, streamId);
   }
 }

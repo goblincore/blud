@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  HEAD_SPLIT, REGION_MARGIN, choosePreset, kickSplit, makeSplitState, splitField, splitWarpOf, stepSplit, unwarpDir,
-  unwarpPoint,
+  HEAD_SPLIT, REGION_MARGIN, choosePreset, forcedSplit, headFrameOf, headLocalDir, headLocalPoint, kickSplit, makeSplitState,
+  openSplit, splitFaceSegs, splitField, splitMaxAngle, splitWarpOf, stepSplit, unwarpDir, unwarpPoint, warpDir, warpPoint,
+  widenSplit,
   type HeadFrame, type SplitWarp,
 } from './head-split';
 import type { Vec3 } from './types';
@@ -309,4 +310,135 @@ describe('the split field is a sound, continuous distance bound (the march relie
       expect(seam).toBeLessThan(1e-5);
     }, 120000);
   }
+});
+
+describe('open, widen, force: the state a chop or the seam leaves', () => {
+  it('splitMaxAngle: both halves vs one side, per preset; 0 when closed', () => {
+    expect(splitMaxAngle(makeSplitState())).toBe(0);
+    expect(splitMaxAngle({ ...makeSplitState(), preset: 'middle', sides: 0 })).toBe(HEAD_SPLIT.presets.middle.maxBoth);
+    expect(splitMaxAngle({ ...makeSplitState(), preset: 'middle', sides: -1 })).toBe(HEAD_SPLIT.presets.middle.maxOne);
+    expect(splitMaxAngle({ ...makeSplitState(), preset: 'face', sides: 1 })).toBe(HEAD_SPLIT.presets.face.maxOne);
+  });
+  it('openSplit: the chop\'s preset, kicked toward frac x its max from angle 0', () => {
+    const st = openSplit([1, 0, 0], [0.005, 0, 0.1], 0.09, 0.55);
+    expect(st).toMatchObject({ preset: 'middle', sides: 0, offset: 0, angle: 0 });
+    expect(st.target).toBeCloseTo(0.55 * HEAD_SPLIT.presets.middle.maxBoth, 12);
+    expect(st.vel).toBeGreaterThan(0);
+    const one = openSplit([1, 0, 0], [0.05, 0, 0.1], 0.09, 0.55);
+    expect(one.sides).toBe(1);
+    expect(one.target).toBeCloseTo(0.55 * HEAD_SPLIT.presets.middle.maxOne, 12);
+    expect(openSplit([0, 0, 1], [0, 0, 0.02], 0.09, 0.55).preset).toBe('face');
+  });
+  it('widenSplit keeps the preset, the side and the offset, raises the target and never lowers it; a closed state stays closed', () => {
+    let st = openSplit([1, 0, 0], [0.05, 0, 0.1], 0.09, 0.55);
+    for (let i = 0; i < 240; i++) st = stepSplit(st, 1 / 60);
+    const w = widenSplit(st, 0.8);
+    expect(w).toMatchObject({ preset: st.preset, sides: st.sides, offset: st.offset, angle: st.angle });
+    expect(w.target).toBeCloseTo(0.8 * HEAD_SPLIT.presets.middle.maxOne, 12);
+    expect(w.vel).toBeGreaterThan(0);
+    expect(widenSplit(widenSplit(st, 1), 0.8).target).toBeCloseTo(HEAD_SPLIT.presets.middle.maxOne, 12);
+    expect(widenSplit(makeSplitState(), 0.8)).toEqual(makeSplitState());
+  });
+  it('forcedSplit sits at angleFrac x the max at once (no spring); angleFrac 0 is the closed state', () => {
+    const st = forcedSplit('face', 1, 0.02, 0.5);
+    expect(st).toEqual({ preset: 'face', sides: 1, offset: 0.02, angle: 0.5 * HEAD_SPLIT.presets.face.maxOne, vel: 0, target: 0.5 * HEAD_SPLIT.presets.face.maxOne });
+    expect(stepSplit(st, 1 / 60)).toEqual(st);
+    expect(forcedSplit('middle', 0, 0, 0)).toEqual(makeSplitState());
+  });
+});
+
+describe('the head frame', () => {
+  it('headFrameOf: the radius is the skull\'s LARGEST semi-axis (the hold ball must cover the whole cranium)', () => {
+    const q = qFromAxisAngle([0, 1, 0], 0.7);
+    expect(headFrameOf({ centre: [1, 2, 3], axes: [0.09, 0.137, 0.105] }, q)).toEqual({ centre: [1, 2, 3], quat: q, radius: 0.137 });
+  });
+  it('headLocalPoint / headLocalDir undo the frame (x right, y up, z face-forward)', () => {
+    const q = qFromAxisAngle([0.3, 1, -0.2], 1.1);
+    const f: HeadFrame = { centre: [2, 0.4, -1], quat: q, radius: 0.11 };
+    const l: Vec3 = [0.03, -0.02, 0.09];
+    const back = headLocalPoint(f, add(f.centre, qRotate(q, l)));
+    expect(len(sub(back, l))).toBeLessThan(1e-12);
+    expect(len(sub(headLocalDir(f, qRotate(q, [0, 0, 1])), [0, 0, 1]))).toBeLessThan(1e-12);
+  });
+});
+
+describe('the forward warp: where a closed-head point is on the open head', () => {
+  it('each piece\'s skin goes out with its half and unwarpPoint brings it back (the round trip)', () => {
+    for (const [name, w] of CASES) {
+      const u = cross(w.n, w.a);
+      // Closed-head skin points: both sides of the plane high on the skull, and the neck below the hinge.
+      const skin: Vec3[] = [];
+      for (const d of [[0.9, 0.4, 0.1], [-0.9, 0.4, 0.1], [0.5, 0.8, 0.3], [-0.4, 0.7, -0.5], [0.3, 0.6, 0.7], [-0.2, 0.5, 0.8]] as Vec3[]) {
+        const l = len(d);
+        skin.push(add(FRAME.centre, [d[0] / l * 0.11, d[1] / l * 0.11, d[2] / l * 0.11]));
+      }
+      skin.push([0.05, 1.5, 0], [0, 1.52, -0.05]);
+      const seen = new Set<number>();
+      for (const q of skin) {
+        expect(Math.abs(head(q))).toBeLessThan(1e-9);
+        const m = warpPoint(w, q);
+        const above = dot(u, sub(q, w.h)) >= 0;
+        const want = !above ? 0 : dot(w.n, q) - w.d0 >= 0 ? 1 : 2;
+        expect(m.piece, name).toBe(want);
+        seen.add(m.piece);
+        const theta = m.piece === 1 ? w.thetaP : m.piece === 2 ? w.thetaM : 0;
+        expect(len(sub(m.p, moveOpen(w, q, theta))), name).toBeLessThan(1e-12);
+        expect(Math.abs(splitField(w, head, m.p)), name).toBeLessThan(1e-9);   // still on the skin, of the open head
+        const back = unwarpPoint(w, m.p, head);
+        expect(len(sub(back.q, q)), name).toBeLessThan(1e-9);
+        expect(back.piece, name).toBe(m.piece);
+        // A direction goes with its piece and comes back.
+        const v: Vec3 = [0.3, 0.8, -0.52];
+        expect(len(sub(unwarpDir(w, m.piece, warpDir(w, m.piece, v)), v))).toBeLessThan(1e-12);
+        if (m.piece === 0) expect(warpDir(w, 0, v)).toBe(v);
+      }
+      expect([...seen].sort()).toEqual([0, 1, 2]);
+    }
+  });
+  it('a point beyond rho of the hinge, or with no split, stays put (piece 0)', () => {
+    const w = open('middle', [0, 0, 0.1]);
+    const tip: Vec3 = [0.01, 1.99, -0.06];   // the crest's tip: above the hinge, past rho
+    expect(len(sub(tip, w.h))).toBeGreaterThan(w.r - REGION_MARGIN);
+    expect(warpPoint(w, tip)).toEqual({ p: tip, piece: 0 });
+    expect(warpPoint(null, tip)).toEqual({ p: tip, piece: 0 });
+  });
+});
+
+describe('the cut faces: one cut segment per half that opens, along the plane over the crown', () => {
+  const stOf = (preset: 'middle' | 'face', impact: Vec3) => ({ ...makeSplitState(), ...choosePreset(preset === 'middle' ? [1, 0, 0] : [0, 0, 1], impact, FRAME.radius) });
+  it('both halves: two segments, each inset into its own half, along the hinge axis, seen from above the crown', () => {
+    const st = stOf('middle', [0, 0, 0.1]);
+    const w = splitWarpOf({ ...st, angle: 0.3 }, FRAME)!;
+    const segs = splitFaceSegs(st, FRAME);
+    expect(segs.map(s => s.side)).toEqual([1, -1]);
+    for (const s of segs) {
+      const mid: Vec3 = [(s.a[0] + s.b[0]) / 2, (s.a[1] + s.b[1]) / 2, (s.a[2] + s.b[2]) / 2];
+      expect((dot(w.n, mid) - w.d0) * s.side).toBeCloseTo(HEAD_SPLIT.faceCut.inset, 12);
+      expect(Math.abs(dot(sub(s.b, s.a), w.a))).toBeCloseTo(2 * HEAD_SPLIT.faceCut.lenFrac * FRAME.radius, 12);
+      expect(len(sub(s.view, [0, -1, 0]))).toBeLessThan(1e-12);
+      expect(mid[1]).toBeCloseTo(FRAME.centre[1] + FRAME.radius, 12);
+    }
+  });
+  it('one side: one segment, on the side that moves, at the plane\'s offset; closed: none', () => {
+    const st = stOf('middle', [-0.04, 0, 0.1]);
+    expect(st.sides).toBe(-1);
+    const segs = splitFaceSegs(st, FRAME);
+    expect(segs).toHaveLength(1);
+    expect(segs[0]!.side).toBe(-1);
+    expect((segs[0]!.a[0] + segs[0]!.b[0]) / 2).toBeCloseTo(st.offset - HEAD_SPLIT.faceCut.inset, 12);
+    const face = splitFaceSegs(stOf('face', [0, 0, 0.03]), FRAME);
+    expect(face).toHaveLength(1);
+    expect(Math.abs(face[0]!.b[0] - face[0]!.a[0])).toBeCloseTo(2 * HEAD_SPLIT.faceCut.lenFrac * FRAME.radius, 12);   // across the head
+    expect(splitFaceSegs(makeSplitState(), FRAME)).toEqual([]);
+  });
+  it('the segments follow a turned, moved head', () => {
+    const q = qFromAxisAngle([0.3, 1, -0.2], 1.1);
+    const f: HeadFrame = { centre: [2, 0.4, -1], quat: q, radius: FRAME.radius };
+    const st = stOf('middle', [0, 0, 0.1]);
+    const local = splitFaceSegs(st, FRAME), world = splitFaceSegs(st, f);
+    local.forEach((s, i) => {
+      for (const k of ['a', 'b'] as const) expect(len(sub(world[i]![k], add(f.centre, qRotate(q, sub(s[k], FRAME.centre)))))).toBeLessThan(1e-12);
+      expect(len(sub(world[i]!.view, qRotate(q, s.view)))).toBeLessThan(1e-12);
+    });
+  });
 });

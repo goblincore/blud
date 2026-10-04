@@ -9,6 +9,7 @@
 import { setBurnBehaviourEnabled } from '../burn-behaviour';
 import type { GameContext } from './game-context';
 import { type Vec3 } from '../types';
+import type { SplitPresetId } from '../head-split';
 
 export function createFireSeams(ctx: GameContext) {
   return {
@@ -26,6 +27,12 @@ export function createFireSeams(ctx: GameContext) {
     axe: () => ctx.weapon.axe?.debug() ?? null,
     axeSwing: () => ctx.weapon.axe?.click(),
     axeChop: (id: number, side: 'H' | 'R' | 'L', target?: 'torso' | 'head') => ctx.weapon.axe?.chop(id, side, target) ?? 0,
+    /** THE HEAD SPLIT (game-head-split.ts): actor `id`'s split state (preset, side, plane offset, the spring's angle,
+     *  rate and target), null while it has none; and the tuning / gate seam: set it by hand, at `angleFrac` of the
+     *  preset's max at once (`offset` in head-local metres along the plane normal; `angleFrac` 0 closes it). */
+    headSplit: (id: number) => ctx.weapon.headSplit?.state(id) ?? null,
+    forceSplit: (id: number, preset: SplitPresetId, sides: -1 | 0 | 1, offset: number, angleFrac: number) =>
+      ctx.weapon.headSplit?.force(id, preset, sides, offset, angleFrac) ?? false,
     fireLauncher: () => ctx.weapon.launcher?.fire() ?? false,
     reloadLauncher: () => ctx.weapon.launcher?.reload() ?? false,
     launcher: () => ctx.weapon.launcher?.debug() ?? null,

@@ -359,13 +359,14 @@ function perp(n: Vec3): Vec3 {
 
 /** A cut segment on a body whose head may be split, taken to the UN-WARPED body, where stampCut works (damage.ts
  *  unwarpHit: wounds live there). ONE rigid motion for the whole segment, that of the piece its midpoint is on, so the
- *  segment keeps its length and its ends never land on different pieces. `field` is the closed body's, for the stamp.
+ *  segment keeps its length and its ends never land on different pieces. `field` is the closed body's, for the stamp;
+ *  `hit` is the un-warped midpoint and `piece` the piece it is on (unwarpHit's).
  *  With no split, or a midpoint on the unmoved rest, the segment is returned as it is. */
-export function unwarpCutSeg(body: Body, seg: CutSeg): { seg: CutSeg; field: (p: Vec3) => number } {
+export function unwarpCutSeg(body: Body, seg: CutSeg): { seg: CutSeg; field: (p: Vec3) => number; hit: Vec3; piece: 0 | 1 | 2 } {
   const u = unwarpHit(body, scale(add(seg.a, seg.b), 0.5));
-  if (u.piece === 0) return { seg, field: u.field };
+  if (u.piece === 0) return { seg, field: u.field, hit: u.hit, piece: 0 };
   const half = u.dir(scale(sub(seg.b, seg.a), 0.5));
-  return { seg: { a: sub(u.hit, half), b: add(u.hit, half), view: u.dir(seg.view) }, field: u.field };
+  return { seg: { a: sub(u.hit, half), b: add(u.hit, half), view: u.dir(seg.view) }, field: u.field, hit: u.hit, piece: u.piece };
 }
 
 /** One cut wound from a segment on the body (world space at `bodyYaw`). On a split head: the un-warped segment and the

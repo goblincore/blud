@@ -286,6 +286,7 @@ import { createRodHarness } from './game-rod';
 import { createAxeHarness } from './game-axe';
 import { createFlail } from './game-flail';
 import { createHeadDamage } from './game-head-damage';
+import { createHeadSplit } from './game-head-split';
 import { createBrainGib } from './game-brain-gib';
 import { clearMeshGibs, spawnMeshGib, stepMeshGibs } from './game-mesh-gibs';
 import { createHeadSeams } from './game-seams-head';
@@ -3794,6 +3795,7 @@ async function main() {
   function rebuildCast(): void {
     // Head damage state (and any dangling eye's piece) belongs to the old cast; so do its brain mesh gibs.
     ctx.weapon.headDamage?.reset();
+    ctx.weapon.headSplit?.reset();
     clearMeshGibs(ctx);
     ctx.world.soldierCorpses?.dispose();
     ctx.world.encounter.clear(); ctx.world.encounterHomes.clear();
@@ -4036,18 +4038,23 @@ async function main() {
     // 'slug' (was 'pellet'; 2026-10-04 look pass, "more excessive") plus gouts along the slot (registerCutBleed).
     bleed: (a, w, point, incoming) => registerCutBleed(ctx, a, w, 'slug', { point, incoming }),
   });
+  // The head split (game-head-split.ts): the axe's head chops open, widen and kill through it. It refuses a head the
+  // head damage leaf (built below, read lazily) already holds state for.
+  ctx.weapon.headSplit = createHeadSplit(ctx, { headDamaged: a => ctx.weapon.headDamage?.has(a) ?? false });
   // WEAPON SLOT 7 (the axe, game-axe.ts): its own rig on aimRig.
   ctx.weapon.axe = createAxeHarness(ctx, {
     eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
     // 'slug' (spec §3; registerBleed's kinds are pellet | slug | stump, and 'stump' is a severed limb's), plus gouts along
     // the slot (registerCutBleed).
     bleed: (a, w, point, incoming) => registerCutBleed(ctx, a, w, 'slug', { point, incoming }),
+    split: ctx.weapon.headSplit,
   });
   // WEAPON SLOT 1 (the spike flail, game-flail.ts): its own rig on aimRig.
   ctx.weapon.flail = createFlail(ctx, {
     eye: () => eyeOf(ctx.player.player),
     aimDir: () => aimDir(ctx),
     bleed: (a, w, point, incoming) => registerBleed(ctx, a, w, 'slug', { point, incoming }),
+    // False when the leaf declines (a split head): the flail then stamps its plain crater.
     headHit: (a, p, d, f) => ctx.weapon.headDamage?.hit(a, p, d, f),
     // Read lazily: the chunk spawner that assigns onGoreDispatch is built further down.
     gore: (a, pieces) => ctx.boot.onGoreDispatch?.(a, pieces),
@@ -4072,6 +4079,8 @@ async function main() {
     },
     bleed: (a, w, point, incoming, kind) => registerBleed(ctx, a, w, kind, { point, incoming }),
     attach: (a, prims, pos, opts) => ctx.boot.attachPiece?.(a, prims, pos, opts) ?? { update() {}, dispose() {} },
+    // A split head is not head damage's: the flail's ladder and the slug burst both decline it (game-head-split.ts).
+    splitOpen: a => ctx.weapon.headSplit?.isOpen(a) ?? false,
     // The modelled brain (game-brain-gib.ts), lit by the level's light list for the room it is thrown in.
     brain: createBrainGib(ctx, { lightsAt: p => ctx.world.levelLightLists.get(roomIdAt(p[0], p[2])) ?? null }),
   });
@@ -7586,6 +7595,8 @@ async function main() {
     // The head damage model after the flail (actors stepped earlier this frame,
     // so the dangling eye follows this frame's pose).
     ctx.weapon.headDamage?.tick(dt);
+    // The head split's spring, likewise after the actors' step (game-head-split.ts).
+    ctx.weapon.headSplit?.tick(dt);
     stepDynamite(dt);
     if (ctx.player.reticleEl) {
       ctx.player.reticleEl.style.display = ctx.player.freeAimOn && !ctx.world.sequence?.started ? 'block' : 'none';
@@ -8128,7 +8139,7 @@ async function main() {
         for (const e of ctx.vfx.bleed.live(ctx.vfx.bleedClock)) {
           const a = ctx.world.actors.find(q => q.id === e.bodyId);
           if (!a) { ctx.vfx.bleed.evictForBody(e.bodyId); continue; }
-          const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, e.wound, a.pose().yaw);
+          const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, e.wound, a.pose().yaw, a.posed().split);
           e.acc = spawnWoundDroplets(
             ctx.vfx.bloodSim, e.kind, ctx.vfx.bleedClock - e.bornAt, anchor, normal, cdt, e.acc, rngStreams.bleed,
             woundStreamId(ctx, e.wound),

@@ -3,7 +3,8 @@
 // THE HEAD SPLIT (spec docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md §5; plan
 // docs/superpowers/plans/2026-10-04-head-split-part-b.md). Pure. An axe chop opens the head on a hinge; this module
 // holds the presets, the preset choice from the chop's blade plane, the angle spring, the world-space split
-// description (SplitWarp) and THE SPLIT FIELD.
+// description (SplitWarp), THE SPLIT FIELD, the maps between the open head and the closed one (unwarpPoint,
+// warpPoint) and the cut faces' segments.
 //
 // What moves: body material ABOVE the hinge plane AND within rho = r - REGION_MARGIN of the hinge point h (the head;
 // rho is sized to hold it). The + side of the old plane turns open by thetaP, the - side by thetaM. Everything else
@@ -32,7 +33,7 @@
 //
 // The GPU (map-body.wgsl.ts) evaluates the same pieces; this is its CPU mirror and the reference for its tests.
 import type { Vec3 } from './types';
-import { add, cross, dot, len, normalize, qRotate, sub, type Quat } from './vec';
+import { add, cross, dot, len, normalize, qRotate, scale, sub, type Quat } from './vec';
 
 export type SplitPresetId = 'middle' | 'face';
 
@@ -48,8 +49,8 @@ export interface SplitPreset {
   maxBoth: number; maxOne: number;
 }
 
-/** The region sphere's radius is `rho + REGION_MARGIN`, where `rho` (= |centre - h| + 1.25 R) holds all the moved
- *  material. Also the floor of the region shell bound C, which caps the field in open air near the region sphere, so
+/** The region sphere's radius is `rho + REGION_MARGIN`, where `rho` (= |centre - h| + holdFrac x HeadFrame.radius)
+ *  holds all the moved material. Also the floor of the region shell bound C, which caps the field in open air near the region sphere, so
  *  it must be at least the AO probe distance: occlusion.wgsl.ts reads clamp(mapBody(p + n * 0.06) / 0.06, 0.35, 1),
  *  and at 0.03 the cap darkened 14-20% of surface samples by up to 0.48 (0% at 0.06). */
 export const REGION_MARGIN = 0.06;
@@ -68,6 +69,14 @@ export const HEAD_SPLIT = {
   faceOffsetFrac: [-0.3, 0.5],
   /** `rho` = |centre - h| + `holdFrac` * radius: the ball about the hinge that holds the moved head. */
   holdFrac: 1.25,
+  /** A hit on an open head is on the OUTER skin when the closed head's field there is within this of zero; deeper, it
+   *  is on a cut face (or the hinge-plane face), which un-warps to the inside of the closed head. */
+  skinEps: 0.015,
+  /** The cut faces (splitFaceSegs): each segment sits `inset` into its own half off the plane and runs `lenFrac` x the
+   *  frame radius either way along the hinge axis; `faceCalibre` is the cut stamped along it (cut-wound.ts
+   *  CutCalibre). */
+  faceCut: { inset: 0.006, lenFrac: 1.1 },
+  faceCalibre: { depth: 0.12, kerf: 0.012, lip: 1 },
   /** The angle spring (head-deform.ts BURST_DEFORM's shape). `kick` scales the target into the initial rate. */
   hz: 7, zeta: 0.35, kick: 6, restA: 1e-4, restV: 1e-2,
 } as const;
@@ -87,7 +96,9 @@ export function makeSplitState(): SplitState {
 }
 
 /** The preset for a chop: `bladeNormalLocal` is the blade plane's normal in head-local space (cross(blade dir, view),
- *  any sign), `impactLocal` the hit in head-local metres, `radius` the head's (headShape axes.x). */
+ *  any sign), `impactLocal` the hit in head-local metres, `radius` the head's HALF-WIDTH (the skull's x semi-axis,
+ *  flame-anchors.ts headShape axes.x): the offsets are shares of it. Not HeadFrame.radius, which is the larger hold
+ *  radius. */
 export function choosePreset(bladeNormalLocal: Vec3, impactLocal: Vec3, radius: number): Pick<SplitState, 'preset' | 'sides' | 'offset'> {
   const ax = Math.abs(bladeNormalLocal[0]), az = Math.abs(bladeNormalLocal[2]);
   if (az > ax) {
@@ -116,8 +127,50 @@ export function stepSplit(st: SplitState, dt: number): SplitState {
   return { ...st, angle: Math.max(0, a), vel: v };
 }
 
-/** The head's frame: skull centre, world rotation (rig-bind.ts headQuatOf), radius (headShape axes.x). */
+/** The preset's full opening angle for this state: both halves vs one side (0 when closed). */
+export function splitMaxAngle(st: Pick<SplitState, 'preset' | 'sides'>): number {
+  if (st.preset === null) return 0;
+  const p = HEAD_SPLIT.presets[st.preset];
+  return st.sides === 0 ? p.maxBoth : p.maxOne;
+}
+
+/** The chop that opens a head: its preset (choosePreset), sprung from closed toward `frac` of the preset's max. */
+export function openSplit(bladeNormalLocal: Vec3, impactLocal: Vec3, halfWidth: number, frac: number): SplitState {
+  const st = { ...makeSplitState(), ...choosePreset(bladeNormalLocal, impactLocal, halfWidth) };
+  return kickSplit(st, frac * splitMaxAngle(st));
+}
+
+/** A later chop: spring on to `frac` of the preset's max. The preset, side and offset stay; the target never drops. */
+export function widenSplit(st: SplitState, frac: number): SplitState {
+  if (st.preset === null) return st;
+  return kickSplit(st, Math.max(st.target, frac * splitMaxAngle(st)));
+}
+
+/** A split set by hand (the tuning / gate seam): at `angleFrac` of the max at once, at rest. `offset` is head-local
+ *  metres along n and is not clamped, nor is `angleFrac` above 1; `angleFrac` <= 0 is the closed state. */
+export function forcedSplit(preset: SplitPresetId, sides: -1 | 0 | 1, offset: number, angleFrac: number): SplitState {
+  if (!(angleFrac > 0)) return makeSplitState();
+  const angle = angleFrac * splitMaxAngle({ preset, sides });
+  return { preset, sides, offset, angle, vel: 0, target: angle };
+}
+
+/** The head's frame: skull centre, world rotation (rig-bind.ts headQuatOf) and the hold radius (headFrameOf). */
 export interface HeadFrame { centre: Vec3; quat: Quat; radius: number }
+
+/** The frame of a skull (flame-anchors.ts headShape: its centre and semi-axes) turned by `quat`. The radius is the
+ *  skull's LARGEST semi-axis, because rho = |centre - h| + holdFrac x radius must hold all the head flesh above the
+ *  hinge plane, for every preset, hinge and offset: whatever lies within holdFrac x radius of the centre is within rho
+ *  of any hinge. Measured on the zombie (semi-axes 0.090, 0.137, 0.105): that flesh reaches 0.152 m from the centre
+ *  (the jaw, under the face preset's low hinge) against 1.25 x 0.137 = 0.171. With the half-width (0.090) the crown
+ *  (0.137 up) lay outside rho, stayed behind and tore. */
+export function headFrameOf(skull: { centre: Vec3; axes: Vec3 }, quat: Quat): HeadFrame {
+  return { centre: skull.centre, quat, radius: Math.max(skull.axes[0], skull.axes[1], skull.axes[2]) };
+}
+
+const conj = (q: Quat): Quat => [-q[0], -q[1], -q[2], q[3]];
+/** A world point / direction in head-local space (x right, y up, z face-forward; metres from the skull centre). */
+export function headLocalPoint(f: HeadFrame, p: Vec3): Vec3 { return qRotate(conj(f.quat), sub(p, f.centre)); }
+export function headLocalDir(f: HeadFrame, v: Vec3): Vec3 { return qRotate(conj(f.quat), v); }
 
 /** The split in WORLD space for this frame (null when closed). The GPU record carries exactly these fields. */
 export interface SplitWarp {
@@ -209,4 +262,41 @@ export function unwarpPoint(w: SplitWarp | null | undefined, p: Vec3, f: (q: Vec
 export function unwarpDir(w: SplitWarp | null | undefined, piece: 0 | 1 | 2, v: Vec3): Vec3 {
   if (!w || piece === 0) return v;
   return rotAxis(v, w.a, piece === 1 ? -w.thetaP : -w.thetaM);
+}
+
+/** The forward map, unwarpPoint's inverse on the closed head's material: where the closed-head point `q` is on the
+ *  open head, and the piece that carries it. `q` is on the + half (piece 1) when it is above the hinge plane, within
+ *  rho of h and on the + side of the plane (s(q) >= 0), on the - half (piece 2) likewise on the - side, else on the
+ *  unmoved rest (piece 0); a half's points turn by its angle about the hinge. What rides the head but is stored on the
+ *  closed prims (a wound's blood emitter) goes through here. */
+export function warpPoint(w: SplitWarp | null | undefined, q: Vec3): { p: Vec3; piece: 0 | 1 | 2 } {
+  if (!w) return { p: q, piece: 0 };
+  const rel = sub(q, w.h);
+  if (dot(cross(w.n, w.a), rel) < 0 || len(rel) > w.r - REGION_MARGIN) return { p: q, piece: 0 };
+  const piece = dot(w.n, q) - w.d0 >= 0 ? 1 : 2;
+  const theta = piece === 1 ? w.thetaP : w.thetaM;
+  return { p: theta === 0 ? q : add(w.h, rotAxis(rel, w.a, theta)), piece };
+}
+
+/** A direction on the closed head (a wound's outward normal) turned with its piece: unwarpDir's inverse. */
+export function warpDir(w: SplitWarp | null | undefined, piece: 0 | 1 | 2, v: Vec3): Vec3 {
+  if (!w || piece === 0) return v;
+  return rotAxis(v, w.a, piece === 1 ? w.thetaP : w.thetaM);
+}
+
+/** THE CUT FACES: one cut segment (cut-wound.ts CutSeg, world space, on the CLOSED head) per half that opens. Each
+ *  runs along the hinge axis over the top of the head, HEAD_SPLIT.faceCut.inset into its own half off the plane (so
+ *  the cut belongs to that half and turns with it), seen from above along -up: stampCut finds the scalp under its
+ *  midpoint and cuts down from there, so the face of the half reads as cut flesh from the scalp inward. */
+export function splitFaceSegs(st: SplitState, f: HeadFrame): { side: 1 | -1; a: Vec3; b: Vec3; view: Vec3 }[] {
+  if (st.preset === null) return [];
+  const p = HEAD_SPLIT.presets[st.preset], c = HEAD_SPLIT.faceCut;
+  const n = normalize(qRotate(f.quat, p.n));
+  const up = normalize(qRotate(f.quat, p.up));
+  const half = scale(normalize(cross(up, n)), c.lenFrac * f.radius);
+  const sides: (1 | -1)[] = st.sides === 0 ? [1, -1] : [st.sides];
+  return sides.map(side => {
+    const mid = add(f.centre, add(scale(n, st.offset + side * c.inset), scale(up, f.radius)));
+    return { side, a: sub(mid, half), b: add(mid, half), view: scale(up, -1) };
+  });
 }

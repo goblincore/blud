@@ -17,6 +17,7 @@
 
 import { WOUND_BLEED, type BleedKind } from './blood-sim';
 import { woundCarveNormal, woundWorldPos, type Wound } from './damage';
+import { warpDir, warpPoint, type SplitWarp } from './head-split';
 import type { Primitive, Vec3 } from './types';
 import { dot, len, scale, sub } from './vec';
 
@@ -80,6 +81,10 @@ export class BleedRegistry {
  * from the owning prim's axis through the anchor — for a shoulder stump
  * anchored on the torso that reads as the gush blowing away from the body,
  * which is the read that matters; the cone + gravity arc dominate anyway.
+ *
+ * A SPLIT HEAD (head-split.ts): wounds live on the closed head's prims, so a
+ * wound on an opened half is found there and then carried out with its half
+ * (warpPoint); the spray turns with it. Pass the posed body's `split`.
  */
 export function woundEmitAnchorAndNormal(
   prims: Primitive[], wound: Wound,
@@ -87,7 +92,17 @@ export function woundEmitAnchorAndNormal(
    *  wounds (every torso blob) have no axis to carry the turn, so without it
    *  the anchor stays viewer-fixed while the flesh turns (2026-09-02). */
   bodyYaw = 0,
+  /** The posed body's head split (`posed().split`); absent or null = closed. */
+  split?: SplitWarp | null,
 ): { anchor: Vec3; normal: Vec3 } {
+  const closed = closedAnchorAndNormal(prims, wound, bodyYaw);
+  if (!split) return closed;
+  const m = warpPoint(split, closed.anchor);
+  return { anchor: m.p, normal: warpDir(split, m.piece, closed.normal) };
+}
+
+/** The anchor and spray direction on the body as its prims say (the closed head). */
+function closedAnchorAndNormal(prims: Primitive[], wound: Wound, bodyYaw: number): { anchor: Vec3; normal: Vec3 } {
   const anchor = woundWorldPos(prims, wound, bodyYaw);
   const inward = woundCarveNormal(prims, wound, bodyYaw);
   if (inward) return { anchor, normal: scale(inward, -1) };

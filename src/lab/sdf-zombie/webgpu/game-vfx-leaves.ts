@@ -100,7 +100,7 @@ export function spillVerdict(ctx: GameContext, a: ZombieActor, wound: Wound): vo
     if (entry) ctx.vfx.gutRopes.set(a.id, { ...entry, chain: detachGutChain(entry.chain) });
     return;
   }
-  const { anchor } = woundEmitAnchorAndNormal(a.posed().prims, wound, a.pose().yaw);
+  const { anchor } = woundEmitAnchorAndNormal(a.posed().prims, wound, a.pose().yaw, a.posed().split);
   ctx.vfx.gutRopes.set(a.id, {
     chain: makeGutChain(anchor, {
       coilTightness: ctx.vfx.woundTuning.coilTightness,

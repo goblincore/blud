@@ -542,10 +542,6 @@ export interface ZombieActor {
    *  world space, or null while the head is closed; it rides `posed().split`, so sdBody (every strike, shot and trace)
    *  sees the opened halves. The prims stay the closed head's. null removes the hook. */
   setHeadSplit(fn: ((posed: BuildResult) => SplitWarp | null) | null): void;
-  /** Where a world point on the split head lives in the UN-WARPED head, and the piece it is on (head-split.ts
-   *  unwarpPoint, with the closed body's field): wounds are stamped there (damage.ts unwarpHit). The point itself,
-   *  piece 0, while the head is closed. */
-  unwarp(p: Vec3): { q: Vec3; piece: 0 | 1 | 2 };
   /** Re-pose NOW so a changed head deform shows on a frame this actor did not step (a frozen actor:
    *  `?frozen=1`, the gates). Without it the posed and drawn head keep whatever the deform was at the
    *  last hit's re-pose — the wobble's peak squash, forever. The same refresh as blast()'s tail. */
@@ -2038,10 +2034,6 @@ export function createZombieActor(opts: {
   return {
     setHeadDeform: (fn) => { headDeform = fn; },
     setHeadSplit: (fn) => { headSplit = fn; },
-    unwarp: (p) => {
-      const u = unwarpHit(posed, p);
-      return { q: u.hit, piece: u.piece };
-    },
     reposeHead: () => {
       posed = repose();
       view.update(drawnPose(), current);
@@ -2060,6 +2052,10 @@ export function createZombieActor(opts: {
     beginTear: (at: Vec3, falloff: number, plan: RupturePlan) => {
       tear = { at: [...at] as Vec3, falloff, age: 0 };
       tearPlan = plan;
+      // The head split describes the CLEAN pose in world space, and rupturePosed spreads `posed`: it must not ride onto
+      // the regions as they pull apart. The split closes here (the plan's pieces are the closed head's prims anyway),
+      // and the split hook answers null for as long as the window runs (game-head-split.ts).
+      if (posed.split) posed = { ...posed, split: null };
       // Flesh-prim -> region, for the wound upload's rigid carry (refreshWounds).
       tearPrimRegion = new Int32Array(posed.prims.length).fill(-1);
       for (let r = 0; r < plan.pieces.length; r++) {

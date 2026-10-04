@@ -8,12 +8,18 @@
 // chopsToKill-th kills (blast forceCollapse). The axe NEVER routes into the slug head burst (game-head-damage.ts):
 // it has no head-damage dependency. Not a recorded demo verb (like the flail, the flare and the rod). No hit-stop or
 // camera kick yet (the flail's flail-impact.ts feel is owned by the flail; an axe feel pass is a follow-up).
+//
+// THE HEAD SPLIT (spec §4 "Part B behaviour"; deps.split, game-head-split.ts). The first head chop OPENS the head: the
+// preset comes from the chop's blade plane and the impact, and the split's cut faces are that chop's cut. Every later
+// head chop WIDENS it (axe-head.ts chopOpenFrac), the kill chop to fully open. A chop on an open head stamps its own
+// cut only when it lands on the outer skin; on a cut face, or through the gap, the widening is the effect. A head the
+// split refuses (not the plain zombie, or one head damage already holds) keeps the cuts and the count alone.
 import * as THREE from 'three/webgpu';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { GameContext } from './game-context';
 import type { ZombieActor } from './game-actor';
 import type { Vec3 } from '../types';
-import { unwarpHit, worldHitToWound, type Wound } from '../damage';
+import { worldHitToWound, type Wound } from '../damage';
 import { stampCut, unwarpCutSeg } from '../cut-wound';
 import { slotLowerAmount, slotReady } from './game-weapon-slots';
 import { loopBlocksInput } from './game-loop-leaves';
@@ -21,9 +27,12 @@ import { BEND_R_VIEW } from './game-weapon-leaves';
 import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms } from './game-arms';
 import { axePose, cancelAxeSwing, makeAxeSwing, stepAxeSwing, type AxeSide, type AxeSwing } from './axe-swing';
 import { AXE_CALIBRE, AXE_CUT, AXE_HIT, axeCutSeg } from './axe-strike';
-import { chopHead, makeAxeHead, type AxeHeadState } from './axe-head';
+import { chopHead, chopOpenFrac, makeAxeHead, type AxeHeadState } from './axe-head';
 import { headNeck, isHeadRegion, resolveStrike, strikeActorsFrom } from './flail-strike';
 import { createViewmodelLights } from './viewmodel-lights';
+import type { HeadSplitLeaf } from './game-head-split';
+import { HEAD_SPLIT } from '../head-split';
+import { cross, normalize, sub } from '../vec';
 
 export const AXE_LOOK = {
   haftLen: 0.62, haftR: 0.017,
@@ -45,6 +54,8 @@ export interface AxeDeps {
   aimDir(): Vec3;
   /** Blood for a cut (game-world-leaves3 registerBleed). */
   bleed(a: ZombieActor, wound: Wound, point: Vec3, incoming: Vec3): void;
+  /** The head split (game-head-split.ts): head chops open and widen it. Absent: cuts and the count only. */
+  split?: Pick<HeadSplitLeaf, 'open' | 'widen' | 'isOpen'>;
 }
 
 export interface AxeDebug {
@@ -160,33 +171,52 @@ export function createAxeHarness(ctx: GameContext, deps: AxeDeps): AxeHarness {
     const aimYaw = Math.atan2(aim[0], -aim[2]), aimPitch = Math.asin(Math.max(-1, Math.min(1, aim[1])));
     // The cut is stamped in the un-warped head (cut-wound.ts unwarpCutSeg): a chop into an opened half lands on the
     // closed head's prims, where the GPU reads it. The shove and the blood below keep the world point.
-    const cut = unwarpCutSeg(posed, axeCutSeg(deps.eye(), aimYaw, aimPitch, side, point, dir));
-    const w = stampCut(posed.prims, cut.seg, AXE_CALIBRE, yaw, cut.field);
+    const seg = axeCutSeg(deps.eye(), aimYaw, aimPitch, side, point, dir);
+    const cut = unwarpCutSeg(posed, seg);
+    const stamp = (): Wound => stampCut(posed.prims, cut.seg, AXE_CALIBRE, yaw, cut.field);
     // The head region: the magnet's hit is on the head by construction; else the flail's test on the struck prim (the
     // probe only finds that prim, so it is skipped for a magnet hit), at the un-warped hit: the prims and the head
     // centre are the closed head's.
-    const headRegion = (): boolean => {
-      const u = unwarpHit(posed, point);
-      return isHeadRegion(
-        posed.prims[worldHitToWound(posed.prims, u.hit, 0.05, 'blast', yaw, u.field).primIdx]?.limb,
-        u.hit, posed.clusters.find(c => c.limb === 'head' && c.alive)?.center ?? null, headNeck(posed.prims)?.root ?? null);
-    };
+    const headRegion = (): boolean => isHeadRegion(
+      posed.prims[worldHitToWound(posed.prims, cut.hit, 0.05, 'blast', yaw, cut.field).primIdx]?.limb,
+      cut.hit, posed.clusters.find(c => c.limb === 'head' && c.alive)?.center ?? null, headNeck(posed.prims)?.root ?? null);
     const region = magnet || headRegion();
     const f = AXE_HIT[side];
     const impulse = { at: point, vel: [dir[0] * f.shove, dir[1] * f.shove, dir[2] * f.shove] as Vec3 };
-    if (region) {
-      const r = chopHead(heads.get(a.id) ?? makeAxeHead());
-      heads.set(a.id, r.state);
+    if (!region) {
+      const w = stamp();
+      a.blast({ wounds: [w], meterCredit: f.meterCredit, impulse, reaction: 'blast' });
+      deps.bleed(a, w, point, dir);
+      return 0;
+    }
+    const r = chopHead(heads.get(a.id) ?? makeAxeHead());
+    heads.set(a.id, r.state);
+    // THE HEAD SPLIT: a closed head opens along the preset nearest the chop's blade plane (the plane through the blade
+    // line and the line of sight); an open one widens. `faces` are the split's cut faces, null when there is no split.
+    const frac = chopOpenFrac(r.chop);
+    const wasOpen = deps.split?.isOpen(a) ?? false;
+    const faces = wasOpen
+      ? deps.split!.widen(a, frac)
+      : deps.split?.open(a, normalize(cross(sub(seg.b, seg.a), dir)), point, frac) ?? null;
+    // The chop's own cut. Not on the chop that opens the head: the faces are its cut. Not on an open head unless the
+    // hit is on the OUTER skin (the closed head's field within skinEps of zero at the un-warped hit): on a cut face or
+    // through the gap the un-warped point is deep inside the closed head, and stampCut would walk back out to the
+    // scalp and anchor the cut centimetres away.
+    const opened = !wasOpen && faces !== null;
+    const onSkin = !posed.split || Math.abs(cut.field(cut.hit)) <= HEAD_SPLIT.skinEps;
+    const wounds: Wound[] = [];
+    if (!opened && onSkin) {
+      const w = stamp();
       // headRegion only, never headSlot: the cut is an ordinary ring member under the MAX_WOUNDS cap, not one of
-      // head-damage's protected MAX_HEAD_WOUNDS slots, and (head-tagged, and a cut) it never merges. pushWound replaces
+      // the head's protected MAX_HEAD_WOUNDS slots, and (head-tagged, and a cut) it never merges. pushWound replaces
       // a same-region wound in place, so the region is unique per chop: no chop's cut replaces another's.
       w.headRegion = `axe-${r.chop}`;
-      a.blast({ wounds: [w], meterCredit: 0, impulse, reaction: 'flinch', forceCollapse: r.action === 'kill' });
-    } else {
-      a.blast({ wounds: [w], meterCredit: f.meterCredit, impulse, reaction: 'blast' });
+      wounds.push(w);
     }
-    deps.bleed(a, w, point, dir);
-    return region ? 1 : 0;
+    a.blast({ wounds, meterCredit: 0, impulse, reaction: 'flinch', forceCollapse: r.action === 'kill' });
+    // The chop's cut bleeds; with none stamped, the faces do.
+    for (const w of wounds.length > 0 ? wounds : faces ?? []) deps.bleed(a, w, point, dir);
+    return 1;
   }
 
   function strike(side: AxeSide, only?: { id: number; target: 'torso' | 'head' }): number {

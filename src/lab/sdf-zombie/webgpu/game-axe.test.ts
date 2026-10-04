@@ -311,13 +311,14 @@ describe('axe harness: head chops', () => {
     expect(f.axe.debug().heads).toEqual({ 7: AXE_HEAD.chopsToKill + 1 });
   });
 
-  it('never calls into the slug burst: the harness has no head-damage dependency at all (RodDeps-like deps only)', () => {
+  it('never calls into the slug burst: the harness has no head-damage dependency at all (its deps: aim, blood, the head split)', () => {
     const f = fixture();
     for (let i = 0; i < AXE_HEAD.chopsToKill + 1; i++) f.axe.chop(7, 'H', 'head');
     f.clickOnce(); f.ticks(60);                              // and the click path
     expect(f.blasts()).toHaveLength(AXE_HEAD.chopsToKill + 2);
     expect(f.touchedHeadDamage).toEqual([]);                 // ctx.weapon.headDamage never read
-    expect([...f.depsUsed].sort()).toEqual(['aimDir', 'bleed', 'eye']);
+    // `split` is the head split leaf (game-head-split.test.ts drives it); absent here, so head chops are cuts and the count.
+    expect([...f.depsUsed].sort()).toEqual(['aimDir', 'bleed', 'eye', 'split']);
   });
 });
 

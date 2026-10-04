@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { BleedRegistry, PER_BODY_EMITTER_CAP, woundEmitAnchorAndNormal } from './bleed-registry';
 import type { Wound } from './damage';
+import { warpDir, warpPoint } from './head-split';
 import type { Primitive, Vec3 } from './types';
 
 const capsule = (a: [number, number, number], b: [number, number, number]): Primitive =>
@@ -103,5 +104,24 @@ describe('woundEmitAnchorAndNormal — where blood leaves the wound', () => {
     const w = wound({ local: [0, 0, 1] });
     const { normal } = woundEmitAnchorAndNormal(prims, w);
     expect(normal).toEqual([0, 1, 0]);
+  });
+
+  it('on a split head the anchor and the spray turn with the half the wound is on (head-split.ts warpPoint)', () => {
+    const prims = [capsule([0, 0, 0], [0, 2, 0])];
+    const w = wound({ local: [0, 0.1, 1] });            // world (0.1, 1, 0): on the + side of the plane x = 0
+    const closed = woundEmitAnchorAndNormal(prims, w);
+    // The plane x = 0, hinged along z through (0, 0.5, 0); the + half is open by 0.5 rad, the - half by 0.3.
+    const split = { n: [1, 0, 0] as Vec3, d0: 0, h: [0, 0.5, 0] as Vec3, a: [0, 0, -1] as Vec3, thetaP: 0.5, thetaM: -0.3, r: 1 };
+    const open = woundEmitAnchorAndNormal(prims, w, 0, split);
+    const m = warpPoint(split, closed.anchor);
+    expect(m.piece).toBe(1);
+    expect(open.anchor).toEqual(m.p);
+    expect(open.anchor[0]).toBeGreaterThan(closed.anchor[0] + 0.2);   // swung out toward +x
+    expect(open.normal).toEqual(warpDir(split, 1, closed.normal));
+    expect(open.normal[1]).toBeLessThan(-0.4);                         // the +x normal now leans down
+    // Below the hinge plane nothing moves; and no split is the closed answer.
+    const low = wound({ local: [0, 0.1, 0.2] });
+    expect(woundEmitAnchorAndNormal(prims, low, 0, split)).toEqual(woundEmitAnchorAndNormal(prims, low));
+    expect(woundEmitAnchorAndNormal(prims, w, 0, null)).toEqual(closed);
   });
 });
