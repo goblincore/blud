@@ -239,7 +239,7 @@ describe('axe harness: a body chop', () => {
     f.clickOnce();
     f.ticks(60);
     expect(f.axe.debug().strikes).toBe(1);
-    expect(f.axe.debug().last).toEqual({ side: 'H', hits: [], heads: [] });
+    expect(f.axe.debug().last).toEqual({ side: 'H', hits: [], heads: [], points: [] });
     expect(f.blasts()).toHaveLength(0);
   });
 });
@@ -264,7 +264,7 @@ describe('axe harness: head chops', () => {
       // The magnet's point is on the head's surface.
       const at = b.impulse!.at;
       expect(Math.hypot(at[0], at[1] - HEAD_Y, at[2])).toBeCloseTo(0.11, 2);
-      expect(f.axe.debug().last).toEqual({ side: 'H', hits: [7], heads: [7] });
+      expect(f.axe.debug().last).toEqual({ side: 'H', hits: [7], heads: [7], points: [at] });   // the hit point is the impulse's
     }
     expect(f.bleed).toHaveBeenCalledTimes(2);
     expect(f.axe.debug().heads).toEqual({ 7: 2 });
@@ -328,7 +328,12 @@ describe('axe harness: seams', () => {
 
   it('debug() reports the swing phase/side, the last strike\'s hit ids and each struck actor\'s head chop count', () => {
     const f = fixture('axe', [stubActor(7), stubActor(8, [0.6, 0, 0])]);
-    expect(f.axe.debug()).toEqual({ phase: 'idle', side: 'H', swingId: 0, strikes: 0, last: null, heads: {} });
+    expect(f.axe.debug()).toMatchObject({ phase: 'idle', side: 'H', swingId: 0, strikes: 0, last: null, heads: {} });
+    // The drawn axe's readback (the gate's lighting measure): world points, no hand without a renderer (the stub ctx).
+    const rig = f.axe.debug().rig;
+    expect(rig.grip).toHaveLength(3);
+    expect(Math.hypot(...rig.top.map((v, i) => v - rig.grip[i]!))).toBeGreaterThan(0.4);   // the haft's top is up the haft
+    expect(rig.hand).toBeNull();
     f.axe.chop(8, 'H', 'head');
     f.axe.chop(8, 'R', 'head');
     f.clickOnce();
@@ -340,6 +345,7 @@ describe('axe harness: seams', () => {
     expect(d.last!.side).toBe('H');
     expect([...d.last!.hits].sort()).toEqual([7, 8]);
     expect(d.last!.heads).toEqual([]);
+    expect(d.last!.points).toHaveLength(2);
     expect(d.heads).toEqual({ 8: 2 });
   });
 });

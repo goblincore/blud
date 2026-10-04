@@ -46,10 +46,13 @@ export interface AxeDeps {
 
 export interface AxeDebug {
   phase: 'idle' | 'swing'; side: AxeSide; swingId: number; strikes: number;
-  /** The last strike: its side, the ids it hit and which of those were head chops. */
-  last: { side: AxeSide; hits: number[]; heads: number[] } | null;
+  /** The last strike: its side, the ids it hit, which of those were head chops, and each hit's world point. */
+  last: { side: AxeSide; hits: number[]; heads: number[]; points: Vec3[] } | null;
   /** Head chops per actor id. */
   heads: Record<number, number>;
+  /** Where the drawn axe is (world, gate readback only): the fist's grip point on the haft, the haft's top end, the
+   *  head's centre, the hand's origin (null until the goblin arm loads), and whether the rig is shown. */
+  rig: { grip: Vec3; top: Vec3; head: Vec3; hand: Vec3 | null; visible: boolean };
 }
 
 export interface AxeHarness {
@@ -186,7 +189,7 @@ export function createAxeHarness(ctx: GameContext, deps: AxeDeps): AxeHarness {
       const a = ctx.world.actors.find(x => x.id === h.actorId);
       if (a && hitActor(a, side, d, h.point, h.dir, !!h.magnet)) headIds.push(a.id);
     }
-    last = { side, hits: hits.map(h => h.actorId), heads: headIds };
+    last = { side, hits: hits.map(h => h.actorId), heads: headIds, points: hits.map(h => [h.point[0], h.point[1], h.point[2]] as Vec3) };
     ctx.telemetry.telemetry.event('axe-strike', { side, hits: hits.length, heads: headIds.length });
     return hits.length;
   }
@@ -220,10 +223,19 @@ export function createAxeHarness(ctx: GameContext, deps: AxeDeps): AxeHarness {
     },
     click() { if (armed()) click = true; },
     chop(id, side, target = 'torso') { return strike(side, { id, target }); },
-    debug: () => ({
-      phase: swing.phase, side: swing.side, swingId: swing.swingId, strikes, last,
-      heads: Object.fromEntries([...heads].map(([k, v]) => [k, v.chops])),
-    }),
+    debug: () => {
+      rig.updateMatrixWorld(true);
+      const w = (o: THREE.Object3D, local?: THREE.Vector3): Vec3 =>
+        (local ? o.localToWorld(local) : o.getWorldPosition(new THREE.Vector3())).toArray() as Vec3;
+      return {
+        phase: swing.phase, side: swing.side, swingId: swing.swingId, strikes, last,
+        heads: Object.fromEntries([...heads].map(([k, v]) => [k, v.chops])),
+        rig: {
+          grip: w(haft), top: w(haft, new THREE.Vector3(0, AXE_LOOK.haftLen - AXE_LOOK.gripY, 0)), head: w(bit),
+          hand: hand ? w(hand) : null, visible: rig.visible,
+        },
+      };
+    },
     dispose() { window.removeEventListener('blur', onBlur); document.removeEventListener('pointerlockchange', onLock); },
   };
 }
