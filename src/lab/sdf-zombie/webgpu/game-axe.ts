@@ -59,8 +59,9 @@ export interface AxeHarness {
   updateRig(): void;
   /** Seam (gates): a click, as the mouse would give, on the next tick. */
   click(): void;
-  /** Seam (gates): strike actor `id` now with chop `side`, aimed at its torso or head centre (the arc ignored).
-   *  Returns the hits, which is the wounds stamped (one cut per hit). */
+  /** Seam (gates): strike actor `id` now with chop `side`, aimed at its torso or head centre. The strike arc is
+   *  ignored, but resolveStrike still enforces FLAIL_STRIKE.reach (1.8 m, horizontal, eye to torso centre): a farther
+   *  actor is not hit. Returns the hits, which is the wounds stamped (one cut per hit). */
   chop(id: number, side: AxeSide, target?: 'torso' | 'head'): number;
   debug(): AxeDebug;
   /** Remove the window / document listeners (tests; a teardown). */
@@ -75,14 +76,16 @@ export function createAxeHarness(ctx: GameContext, deps: AxeDeps): AxeHarness {
   rig.add(haft);
   const wood = new THREE.MeshStandardMaterial({ color: 0x4a2e1a, roughness: 0.8, metalness: 0 });
   // Metal reads near black in forward mode without an env (game-rod.ts's note): the flail's PMREM room env, built once.
+  // The stub ctx (tests) has no renderer: no env, and so no goblin arm (below).
   let env: THREE.Texture | null = null;
-  try {
-    const pmrem = new THREE.PMREMGenerator(ctx.boot.handle.renderer);
+  const renderer = ctx.boot.handle?.renderer;
+  if (renderer) {
+    const pmrem = new THREE.PMREMGenerator(renderer);
     const room = new RoomEnvironment();
     env = pmrem.fromScene(room, 0.04).texture;
     pmrem.dispose();
     room.dispose();
-  } catch { env = null; }   // stub ctx (tests): no renderer
+  }
   const steel = new THREE.MeshStandardMaterial({ color: 0x8a8d92, roughness: 0.35, metalness: 0.85, envMap: env, envMapIntensity: 1.1 });
   const stick = new THREE.Mesh(new THREE.CylinderGeometry(AXE_LOOK.haftR, AXE_LOOK.haftR * 1.15, AXE_LOOK.haftLen, 10), wood);
   stick.position.y = AXE_LOOK.haftLen / 2 - AXE_LOOK.gripY;
@@ -138,16 +141,20 @@ export function createAxeHarness(ctx: GameContext, deps: AxeDeps): AxeHarness {
     const field = (q: Vec3) => sdBody(q, posed);
     const aimYaw = Math.atan2(aim[0], -aim[2]), aimPitch = Math.asin(Math.max(-1, Math.min(1, aim[1])));
     const w = stampCut(posed.prims, axeCutSeg(deps.eye(), aimYaw, aimPitch, side, point, dir), AXE_CALIBRE, yaw, field);
-    // The head region: the magnet's hit is on the head by construction; else the flail's test on the struck prim.
-    const probe = worldHitToWound(posed.prims, point, 0.05, 'blast', yaw, field);
-    const headC = posed.clusters.find(c => c.limb === 'head' && c.alive)?.center ?? null;
-    const region = magnet || isHeadRegion(posed.prims[probe.primIdx]?.limb, point, headC, headNeck(posed.prims)?.root ?? null);
+    // The head region: the magnet's hit is on the head by construction; else the flail's test on the struck prim (the
+    // probe only finds that prim, so it is skipped for a magnet hit).
+    const region = magnet || isHeadRegion(
+      posed.prims[worldHitToWound(posed.prims, point, 0.05, 'blast', yaw, field).primIdx]?.limb,
+      point, posed.clusters.find(c => c.limb === 'head' && c.alive)?.center ?? null, headNeck(posed.prims)?.root ?? null);
     const f = AXE_HIT[side];
     const impulse = { at: point, vel: [dir[0] * f.shove, dir[1] * f.shove, dir[2] * f.shove] as Vec3 };
     if (region) {
       const r = chopHead(heads.get(a.id) ?? makeAxeHead());
       heads.set(a.id, r.state);
-      w.headRegion = `axe-${r.chop}`;   // unique per chop: a same-region wound would replace its predecessor
+      // headRegion only, never headSlot: the cut is an ordinary ring member under the MAX_WOUNDS cap, not one of
+      // head-damage's protected MAX_HEAD_WOUNDS slots, and (head-tagged, and a cut) it never merges. pushWound replaces
+      // a same-region wound in place, so the region is unique per chop: no chop's cut replaces another's.
+      w.headRegion = `axe-${r.chop}`;
       a.blast({ wounds: [w], meterCredit: 0, impulse, reaction: 'flinch', forceCollapse: r.action === 'kill' });
     } else {
       a.blast({ wounds: [w], meterCredit: f.meterCredit, impulse, reaction: 'blast' });
@@ -204,7 +211,8 @@ export function createAxeHarness(ctx: GameContext, deps: AxeDeps): AxeHarness {
       const lower = slotLowerAmount(ctx.weapon.slotState, 'axe');
       rig.position.set(0, -0.42 * lower, 0.06 * lower);
       rig.rotation.set(THREE.MathUtils.degToRad(38) * lower, 0, 0);
-      rig.visible = lower < 0.999;
+      // Hidden for a scripted sequence, as the flail is (game-sequence-leaves.ts).
+      rig.visible = lower < 0.999 && !ctx.world.sequence?.started;
       const p = axePose(swing);
       haft.position.set(p.grip[0], p.grip[1], p.grip[2]);
       haft.rotation.set(p.rot[0], p.rot[1], p.rot[2], 'XYZ');

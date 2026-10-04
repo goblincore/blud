@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { createAxeHarness, type AxeDeps } from './game-axe';
 import { makeWeaponSlotState, requestSlot, stepWeaponSlot, type WeaponSlotState } from './game-weapon-slots';
-import { AXE_TIMING, type AxeSide } from './axe-swing';
+import { AXE_TIMING, axePose, makeAxeSwing, stepAxeSwing, type AxeSide } from './axe-swing';
 import { AXE_CALIBRE, AXE_HIT } from './axe-strike';
 import { AXE_HEAD } from './axe-head';
 import { prim } from '../head-pop';
@@ -49,12 +49,12 @@ function fixture(live: 'axe' | 'shotgun' = 'axe', actors = [stubActor(7)]) {
   const touchedHeadDamage: PropertyKey[] = [];
   const ctx = {
     weapon: {
-      aimRig: new THREE.Group(), slotState: makeWeaponSlotState(live) as WeaponSlotState,
+      aimRig: new THREE.Group(), viewModelAnchor: new THREE.Group(), slotState: makeWeaponSlotState(live) as WeaponSlotState,
       // The slug head burst's leaf: the axe must never touch it.
       headDamage: new Proxy({}, { get: (_t, k) => { touchedHeadDamage.push(k); return undefined; } }),
     },
     player: { player: { yaw: 0, pitch: 0 } },
-    world: { actors: actors.map(a => a.actor), loop: null as unknown, sequence: null },
+    world: { actors: actors.map(a => a.actor), loop: null as unknown, sequence: null as { started: boolean; active: boolean } | null },
     boot: { canvas: {}, deferredApi: null },
     telemetry: { telemetry: { event: vi.fn() } },
   };
@@ -288,6 +288,17 @@ describe('axe harness: head chops', () => {
     expect(g.blasts().map(b => b.forceCollapse)).toEqual([false, undefined]);
   });
 
+  it('a head chop after the kill (the chopsToKill+1-th) sends forceCollapse: false and its own region', () => {
+    const f = fixture();
+    for (let i = 0; i < AXE_HEAD.chopsToKill + 1; i++) expect(f.axe.chop(7, 'H', 'head')).toBe(1);
+    const after = f.blasts()[AXE_HEAD.chopsToKill]!;
+    expect(f.blasts()[AXE_HEAD.chopsToKill - 1]!.forceCollapse).toBe(true);
+    expect(after.forceCollapse).toBe(false);
+    expect(after.wounds[0]!.headRegion).toBe(`axe-${AXE_HEAD.chopsToKill + 1}`);
+    expect(after.wounds[0]!.headSlot).toBeUndefined();     // never in head-damage's protected slots
+    expect(f.axe.debug().heads).toEqual({ 7: AXE_HEAD.chopsToKill + 1 });
+  });
+
   it('never calls into the slug burst: the harness has no head-damage dependency at all (RodDeps-like deps only)', () => {
     const f = fixture();
     for (let i = 0; i < AXE_HEAD.chopsToKill + 1; i++) f.axe.chop(7, 'H', 'head');
@@ -330,5 +341,56 @@ describe('axe harness: seams', () => {
     expect([...d.last!.hits].sort()).toEqual([7, 8]);
     expect(d.last!.heads).toEqual([]);
     expect(d.heads).toEqual({ 8: 2 });
+  });
+});
+
+describe('axe harness: the rig', () => {
+  const rigOf = (f: ReturnType<typeof fixture>) => {
+    const rig = f.ctx.weapon.aimRig.getObjectByName('axe-rig')!;
+    return { rig, haft: rig.getObjectByName('axe-haft')! };
+  };
+
+  it('hangs on the aim rig, shown when the axe is up, hidden when fully lowered', () => {
+    const f = fixture();
+    const { rig } = rigOf(f);
+    expect(rig.parent).toBe(f.ctx.weapon.aimRig);
+    f.axe.updateRig();
+    expect(rig.visible).toBe(true);
+    expect(rig.position.length()).toBeCloseTo(0, 12);       // no holster offset when up
+    const off = fixture('shotgun');                          // another slot is up: the axe is fully lowered
+    off.axe.updateRig();
+    expect(rigOf(off).rig.visible).toBe(false);
+  });
+
+  it('is hidden while a scripted sequence has started', () => {
+    const f = fixture();
+    f.ctx.world.sequence = { started: true, active: false };
+    f.axe.updateRig();
+    expect(rigOf(f).rig.visible).toBe(false);
+    f.ctx.world.sequence = { started: false, active: false };
+    f.axe.updateRig();
+    expect(rigOf(f).rig.visible).toBe(true);
+  });
+
+  it('poses the haft from axePose: rest when idle, the swing\'s pose mid-swing', () => {
+    const f = fixture();
+    const { haft } = rigOf(f);
+    f.axe.updateRig();
+    const rest = axePose(makeAxeSwing());
+    expect(haft.position.toArray()).toEqual([...rest.grip]);
+    expect([haft.rotation.x, haft.rotation.y, haft.rotation.z]).toEqual([...rest.rot]);
+    // Mirror the harness's inputs on the pure swing: the click tick (held), the release, then 9 more ticks.
+    let s = stepAxeSwing(makeAxeSwing(), { click: true, held: true }, 1 / 60).state;
+    for (let i = 0; i < 9; i++) s = stepAxeSwing(s, { click: false, held: false }, 1 / 60).state;
+    f.clickOnce();
+    f.ticks(9);
+    f.axe.updateRig();
+    const p = axePose(s);
+    expect(s.phase).toBe('swing');
+    expect(Math.hypot(p.grip[0] - rest.grip[0], p.grip[1] - rest.grip[1], p.grip[2] - rest.grip[2])).toBeGreaterThan(0.05);
+    for (let i = 0; i < 3; i++) {
+      expect(haft.position.getComponent(i)).toBeCloseTo(p.grip[i as 0 | 1 | 2], 9);
+      expect([haft.rotation.x, haft.rotation.y, haft.rotation.z][i]).toBeCloseTo(p.rot[i as 0 | 1 | 2], 9);
+    }
   });
 });
