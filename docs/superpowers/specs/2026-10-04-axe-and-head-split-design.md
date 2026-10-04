@@ -200,3 +200,11 @@ The march step is clamped at the bisector (`min(d, distance to the bisector)`), 
 3. How the skull mesh gets its per-side transform: new uniforms on the existing material, or a second instance with a complementary clip. This is cut-wounds spec §10.3.
 4. Whether `REC_VEC4S` 17 → 19 costs anything measurable for crowds with no split. Measure it in B2.
 5. The death path for an axe kill: which existing kill entry it uses, so the corpse keeps its split state.
+
+## 9. As built (part A, 2026-10-04)
+
+- **Reach.** `resolveStrike` takes no reach parameter, so the axe uses the flail's `FLAIL_STRIKE.reach` (1.8 m, horizontal, eye to torso centre). Accepted for part A.
+- **Kerf.** `AXE_CALIBRE` is `{ depth: 0.1, kerf: 0.015, lip: 1.1 }`, not §3's kerf 0.022. At 0.022 the measured Lipschitz bound in `cut-wound.test.ts` was 2.63 against its 2.2 limit, and a slash across a thin arm opened the arm's back (0.02 and 0.018 failed too). A wider axe gash needs the carve's shape changed, not a bigger number.
+- **Lighting.** The axe and its goblin hand light from their own list: the flail's, extracted to `webgpu/viewmodel-lights.ts`. The torch is swapped for a 0.018 fill. Without it the torch clipped the haft white (92% at rest, forward mode).
+- **The kill** (open question 5, part A only). The `chopsToKill`-th head chop calls `ZombieActor.blast` with `forceCollapse: true`. The actor's next `step()` consumes it into the normal collapse path (`standing` → `falling`).
+- **Gate:** `scripts/axe-gate.mjs` runs A, D, K, S, C and T (24 checks). Notes and photos are in `docs/dev-notes/2026-10-04-axe/`.
