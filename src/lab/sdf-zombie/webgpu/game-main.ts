@@ -4054,8 +4054,9 @@ async function main() {
     eye: () => eyeOf(ctx.player.player),
     aimDir: () => aimDir(ctx),
     bleed: (a, w, point, incoming) => registerBleed(ctx, a, w, 'slug', { point, incoming }),
-    // False when the leaf declines (a split head): the flail then stamps its plain crater.
-    headHit: (a, p, d, f) => ctx.weapon.headDamage?.hit(a, p, d, f),
+    // False when the leaf declines (a split head): the flail then stamps its plain crater. With no leaf the hit
+    // counts as taken (`?? true`), as it always has: a head hit before the leaf exists stamps nothing.
+    headHit: (a, p, d, f) => ctx.weapon.headDamage?.hit(a, p, d, f) ?? true,
     // Read lazily: the chunk spawner that assigns onGoreDispatch is built further down.
     gore: (a, pieces) => ctx.boot.onGoreDispatch?.(a, pieces),
   });
@@ -7263,6 +7264,10 @@ async function main() {
     // Damage transitions use their own clock; frozen pose captures must
     // still show a newly selected preset. Refresh exclusions as it grows.
     for (const a of ctx.world.actors) if (a.advanceWoundPreview(dt)) ctx.render.frozenHullBuilt = false;
+    // The head split's spring (game-head-split.ts), BEFORE the actors step: their step is what asks the split hook, so
+    // this frame's pose carries this frame's angle. Outside the wanderFrozen branch: a frozen actor is re-posed by the
+    // tick itself.
+    ctx.weapon.headSplit?.tick(dt);
     // ——— VISUAL-ACTOR SET (visual-actor-cull plan task 2) ————————
     // Which actors need PER-ACTOR VISUAL upkeep this tick: the padded view
     // cone from the player's eye/yaw/pitch and the camera's fov/aspect,
@@ -7595,8 +7600,6 @@ async function main() {
     // The head damage model after the flail (actors stepped earlier this frame,
     // so the dangling eye follows this frame's pose).
     ctx.weapon.headDamage?.tick(dt);
-    // The head split's spring, likewise after the actors' step (game-head-split.ts).
-    ctx.weapon.headSplit?.tick(dt);
     stepDynamite(dt);
     if (ctx.player.reticleEl) {
       ctx.player.reticleEl.style.display = ctx.player.freeAimOn && !ctx.world.sequence?.started ? 'block' : 'none';

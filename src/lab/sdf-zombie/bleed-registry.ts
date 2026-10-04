@@ -42,8 +42,11 @@ export interface BleedEntry {
 export class BleedRegistry {
   private entries: BleedEntry[] = [];
 
-  /** Oldest-first insertion order — live() returns a copy in this order. */
+  /** Oldest-first insertion order — live() returns a copy in this order. ONE EMITTER PER WOUND: registering a wound
+   *  that is already bleeding on this body restarts its emitter (a second blow into the same wound: the head split's
+   *  cut faces bleed again at every widening chop) instead of adding another, which would evict an older wound's. */
   register(bodyId: number, wound: Wound, kind: BleedKind, now: number): void {
+    this.entries = this.entries.filter(e => !(e.bodyId === bodyId && e.wound === wound));
     const mine = this.entries.filter(e => e.bodyId === bodyId);
     if (mine.length >= PER_BODY_EMITTER_CAP) {
       let oldest = mine[0]!;

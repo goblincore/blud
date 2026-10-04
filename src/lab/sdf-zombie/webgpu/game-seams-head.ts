@@ -84,7 +84,8 @@ export function createHeadSeams(ctx: GameContext) {
         return true;
       },
       /** One head hit at world point (x, y, z), blow direction (dx, dy, dz) (normalised here), with swing
-       *  `side`'s feel (default R; H strips 0.35, R/L 0.25). False when there is no such actor or no leaf. */
+       *  `side`'s feel (default R; H strips 0.35, R/L 0.25). False when there is no such actor or no leaf, or the
+       *  leaf declined the hit (the head is split open). */
       hit: (id: number, x: number, y: number, z: number, dx: number, dy: number, dz: number, side: 'R' | 'L' | 'H' = 'R'): boolean => {
         const a = ctx.world.actors.find(q => q.id === id);
         const leaf = ctx.weapon.headDamage;
@@ -92,8 +93,7 @@ export function createHeadSeams(ctx: GameContext) {
         const l = Math.hypot(dx, dy, dz) || 1;
         const dir: Vec3 = [dx / l, dy / l, dz / l];
         const f = FLAIL_FEEL.swing[side];
-        leaf.hit(a, [x, y, z], dir, { meterCredit: f.meterCredit, shove: f.shove, side });
-        return true;
+        return leaf.hit(a, [x, y, z], dir, { meterCredit: f.meterCredit, shove: f.shove, side });
       },
     },
   };

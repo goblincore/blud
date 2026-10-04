@@ -140,9 +140,10 @@ export interface FlailDeps {
   /** Gore pieces (ctx.boot.onGoreDispatch): the flying flesh bits (flesh-bits.ts). Absent: none thrown. */
   gore?(a: ZombieActor, pieces: GorePiece[]): void;
   /** The head damage model (game-head-damage.ts): a head-region hit goes here INSTEAD of the face crater
-   *  and blast below — it stamps its own ladder wounds, blasts with this swing's feel and bleeds. It returns
-   *  false when it declined the hit (a split head, game-head-split.ts): the face crater below is stamped then. */
-  headHit?(a: ZombieActor, point: Vec3, dir: Vec3, feel: { meterCredit: number; shove: number; side: FlailSide; gain?: number }): boolean | void;
+   *  and blast below — it stamps its own ladder wounds, blasts with this swing's feel and bleeds. True: the
+   *  hit is taken (nothing more is stamped here). False: it declined (a split head, game-head-split.ts), and
+   *  the face crater below is stamped, as it is when this dep is absent. */
+  headHit?(a: ZombieActor, point: Vec3, dir: Vec3, feel: { meterCredit: number; shove: number; side: FlailSide; gain?: number }): boolean;
 }
 
 export interface FlailDebug {
@@ -557,7 +558,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       };
       // The head damage model takes every head-region hit (its ladder counts the same hits as headHits), unless it
       // declines one (false: the head is split open): that hit takes the plain crater below, at the un-warped point.
-      if (region && deps.headHit && deps.headHit(a, h.point, h.dir, { meterCredit: f.meterCredit, shove: f.shove, side, gain }) !== false) {
+      if (region && deps.headHit?.(a, h.point, h.dir, { meterCredit: f.meterCredit, shove: f.shove, side, gain })) {
         snap();
         continue;
       }

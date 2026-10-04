@@ -80,6 +80,7 @@ import { FLAP, flapPrims, makeFlap, stepFlap, type FlapState } from '../head-fla
 import { COLLAPSE_TUNING } from '../collapse';
 import type { BrainGibLeaf } from './game-brain-gib';
 import { FLAIL_HEAD, snapToSurface, traceRaySurface } from './flail-strike';
+import { headAlive } from './flame-anchors';
 import { rngStreams } from './rng';
 import { mulberry32 } from '../melt-bones';
 import { FLESH_BITS, fleshBitCount, fleshBits, fleshBitsOn, fleshRand, swingBlow } from '../flesh-bits';
@@ -299,8 +300,6 @@ function actorRand(id: number): () => number {
   h = Math.imul(h ^ (h >>> 15), 0x85ebca6b) >>> 0;
   return mulberry32(h);
 }
-
-const headAlive = (b: BuildResult): boolean => b.clusters.some(c => c.limb === 'head' && c.alive);
 
 export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDamageLeaf {
   const heads = new Map<ZombieActor, ActorHead>();

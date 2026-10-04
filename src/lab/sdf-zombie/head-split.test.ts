@@ -340,10 +340,18 @@ describe('open, widen, force: the state a chop or the seam leaves', () => {
     expect(widenSplit(makeSplitState(), 0.8)).toEqual(makeSplitState());
   });
   it('forcedSplit sits at angleFrac x the max at once (no spring); angleFrac 0 is the closed state', () => {
-    const st = forcedSplit('face', 1, 0.02, 0.5);
+    const st = forcedSplit('face', 1, 0.02, 0.5)!;
     expect(st).toEqual({ preset: 'face', sides: 1, offset: 0.02, angle: 0.5 * HEAD_SPLIT.presets.face.maxOne, vel: 0, target: 0.5 * HEAD_SPLIT.presets.face.maxOne });
     expect(stepSplit(st, 1 / 60)).toEqual(st);
     expect(forcedSplit('middle', 0, 0, 0)).toEqual(makeSplitState());
+  });
+  it('forcedSplit refuses what is not a split (null): an unknown preset, a side that is not -1 / 0 / 1, a non-finite number', () => {
+    expect(forcedSplit('sideways' as never, 0, 0, 1)).toBeNull();
+    expect(forcedSplit('toString' as never, 0, 0, 1)).toBeNull();
+    expect(forcedSplit('middle', 2 as never, 0, 1)).toBeNull();
+    expect(forcedSplit('middle', 0, NaN, 1)).toBeNull();
+    expect(forcedSplit('middle', 0, 0, NaN)).toBeNull();
+    expect(forcedSplit('sideways' as never, 0, 0, 0)).toBeNull();
   });
 });
 

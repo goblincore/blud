@@ -553,7 +553,7 @@ export function sdBody(p: Vec3, body: Body): number {
 }
 
 /** sdBody's fold, the split ignored: the body as its prims say. */
-function sdBodyClosed(p: Vec3, body: Body): number {
+export function sdBodyClosed(p: Vec3, body: Body): number {
   let d = 1e9;
   for (const c of body.clusters) {
     if (!c.alive) continue;

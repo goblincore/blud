@@ -12,9 +12,11 @@ import type { Vec3 } from '../types';
 import type { GameContext } from './game-context';
 import { createZombieActor, type ZombieActor } from './game-actor';
 import { createHeadDamage, type HeadDamageDeps } from './game-head-damage';
+import { createHeadSeams } from './game-seams-head';
 import { headShape } from './flame-anchors';
 import { traceRaySurface } from './flail-strike';
 import flailSrc from './game-flail.ts?raw';
+import mainSrc from './game-main.ts?raw';
 
 function freshActor(id = 1): ZombieActor {
   const view = new Proxy({}, { get: () => () => {} });
@@ -74,8 +76,23 @@ describe('a split head is not head damage\'s: both ways in decline', () => {
     expect(f.leaf.hit(f.a, f.point, f.dir, FEEL)).toBe(true);
     expect(f.leaf.has(f.a)).toBe(true);
   });
+  it('the head.hit seam reports the leaf\'s answer: true for a hit taken, false for one declined or with no actor', () => {
+    const open = new Set<number>();
+    const f = fixture(a => open.has(a.id));
+    const ctx = { world: { actors: [f.a] }, weapon: { headDamage: f.leaf } };
+    const hit = (id: number) => createHeadSeams(ctx as unknown as GameContext).head.hit(id, ...f.point, ...f.dir);
+    expect(hit(99)).toBe(false);
+    open.add(f.a.id);
+    expect(hit(f.a.id)).toBe(false);
+    expect(f.leaf.has(f.a)).toBe(false);
+    open.clear();
+    expect(hit(f.a.id)).toBe(true);
+    expect(f.leaf.has(f.a)).toBe(true);
+  });
   it('the flail falls through to its plain crater when the ladder declines (source pin: the flail has no harness)', () => {
-    expect(flailSrc).toContain('if (region && deps.headHit && deps.headHit(a, h.point, h.dir, { meterCredit: f.meterCredit, shove: f.shove, side, gain }) !== false) {');
-    expect(flailSrc).toContain('headHit?(a: ZombieActor, point: Vec3, dir: Vec3, feel: { meterCredit: number; shove: number; side: FlailSide; gain?: number }): boolean | void;');
+    expect(flailSrc).toContain('if (region && deps.headHit?.(a, h.point, h.dir, { meterCredit: f.meterCredit, shove: f.shove, side, gain })) {');
+    expect(flailSrc).toContain('headHit?(a: ZombieActor, point: Vec3, dir: Vec3, feel: { meterCredit: number; shove: number; side: FlailSide; gain?: number }): boolean;');
+    // With no head damage leaf the hit still counts as taken (no plain crater), as before the split existed.
+    expect(mainSrc).toContain('headHit: (a, p, d, f) => ctx.weapon.headDamage?.hit(a, p, d, f) ?? true,');
   });
 });

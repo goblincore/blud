@@ -73,6 +73,32 @@ describe('BleedRegistry — the game page\'s wound-emitter ledger', () => {
   });
 });
 
+describe('BleedRegistry — one emitter per wound', () => {
+  it('registering a wound that is already bleeding restarts its emitter instead of adding one', () => {
+    const r = new BleedRegistry();
+    const a = wound({ primIdx: 1 }), b = wound({ primIdx: 2 });
+    r.register(1, a, 'slug', 0);
+    r.register(1, b, 'slug', 0.1);
+    r.live(0.1)[0]!.acc = 0.7;
+    r.register(1, a, 'slug', 0.2);
+    const live = r.live(0.2);
+    expect(live.map(e => e.wound)).toEqual([b, a]);            // still two, the restarted one newest
+    expect(live[1]).toMatchObject({ bornAt: 0.2, acc: 0 });
+    // The same wound object on another body is another emitter.
+    r.register(2, a, 'slug', 0.2);
+    expect(r.size).toBe(3);
+  });
+  it('a re-registered wound never evicts another body emitter at the cap', () => {
+    const r = new BleedRegistry();
+    const ws = Array.from({ length: PER_BODY_EMITTER_CAP }, (_, i) => wound({ primIdx: i }));
+    ws.forEach((w, i) => r.register(1, w, 'pellet', i * 0.01));
+    for (let k = 0; k < 4; k++) r.register(1, ws[PER_BODY_EMITTER_CAP - 1]!, 'pellet', 0.1 + k * 0.01);
+    const live = r.live(0.2);
+    expect(live).toHaveLength(PER_BODY_EMITTER_CAP);
+    for (const w of ws) expect(live.some(e => e.wound === w)).toBe(true);
+  });
+});
+
 describe('woundEmitAnchorAndNormal — where blood leaves the wound', () => {
   it('negates the carve normal when the wound carries a depth slab', () => {
     const prims = [capsule([0, 1, 0], [0, 1.4, 0])];

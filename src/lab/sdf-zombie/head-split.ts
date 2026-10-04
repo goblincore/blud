@@ -50,9 +50,10 @@ export interface SplitPreset {
 }
 
 /** The region sphere's radius is `rho + REGION_MARGIN`, where `rho` (= |centre - h| + holdFrac x HeadFrame.radius)
- *  holds all the moved material. Also the floor of the region shell bound C, which caps the field in open air near the region sphere, so
- *  it must be at least the AO probe distance: occlusion.wgsl.ts reads clamp(mapBody(p + n * 0.06) / 0.06, 0.35, 1),
- *  and at 0.03 the cap darkened 14-20% of surface samples by up to 0.48 (0% at 0.06). */
+ *  holds all the moved material. Also the floor of the region shell bound C, which caps the field in open air near
+ *  the region sphere, so it must be at least the AO probe distance: occlusion.wgsl.ts reads
+ *  clamp(mapBody(p + n * 0.06) / 0.06, 0.35, 1), and at 0.03 the cap darkened 14-20% of surface samples by up to 0.48
+ *  (0% at 0.06). */
 export const REGION_MARGIN = 0.06;
 
 export const HEAD_SPLIT = {
@@ -147,8 +148,14 @@ export function widenSplit(st: SplitState, frac: number): SplitState {
 }
 
 /** A split set by hand (the tuning / gate seam): at `angleFrac` of the max at once, at rest. `offset` is head-local
- *  metres along n and is not clamped, nor is `angleFrac` above 1; `angleFrac` <= 0 is the closed state. */
-export function forcedSplit(preset: SplitPresetId, sides: -1 | 0 | 1, offset: number, angleFrac: number): SplitState {
+ *  metres along n and is not clamped, nor is `angleFrac` above 1; `angleFrac` <= 0 is the closed state. The seam is
+ *  called from a console, so what is not a split is refused (null): an unknown preset, a side that is not -1 / 0 / 1,
+ *  a non-finite offset or angle. */
+export function forcedSplit(
+  preset: SplitPresetId, sides: -1 | 0 | 1, offset: number, angleFrac: number,
+): SplitState | null {
+  if (!Object.hasOwn(HEAD_SPLIT.presets, preset) || !(sides === -1 || sides === 0 || sides === 1)
+    || !Number.isFinite(offset) || !Number.isFinite(angleFrac)) return null;
   if (!(angleFrac > 0)) return makeSplitState();
   const angle = angleFrac * splitMaxAngle({ preset, sides });
   return { preset, sides, offset, angle, vel: 0, target: angle };
@@ -190,14 +197,20 @@ export function rotAxis(v: Vec3, k: Vec3, t: number): Vec3 {
   return [v[0] * c + x[0] * s + k[0] * d * (1 - c), v[1] * c + x[1] * s + k[1] * d * (1 - c), v[2] * c + x[2] * s + k[2] * d * (1 - c)];
 }
 
+/** A preset's axes in WORLD space for the head frame `f`: the plane normal n, the in-plane up, and the hinge axis
+ *  a = normalize(up x n). */
+function presetBasis(p: SplitPreset, f: HeadFrame): { n: Vec3; up: Vec3; a: Vec3 } {
+  const n = normalize(qRotate(f.quat, p.n));
+  const up = normalize(qRotate(f.quat, p.up));
+  return { n, up, a: normalize(cross(up, n)) };
+}
+
 export function splitWarpOf(st: SplitState, f: HeadFrame): SplitWarp | null {
   if (st.preset === null || !(st.angle > 0)) return null;
   const p = HEAD_SPLIT.presets[st.preset];
   const hL0 = st.sides === 0 ? p.hingeBoth : p.hingeOne;
   const hL: Vec3 = [hL0[0] + p.n[0] * st.offset, hL0[1] + p.n[1] * st.offset, hL0[2] + p.n[2] * st.offset];
-  const n = normalize(qRotate(f.quat, p.n));
-  const up = normalize(qRotate(f.quat, p.up));
-  const a = normalize(cross(up, n));
+  const { n, a } = presetBasis(p, f);
   const h = add(f.centre, qRotate(f.quat, hL));
   const d0 = dot(n, f.centre) + st.offset;
   return {
@@ -290,10 +303,9 @@ export function warpDir(w: SplitWarp | null | undefined, piece: 0 | 1 | 2, v: Ve
  *  midpoint and cuts down from there, so the face of the half reads as cut flesh from the scalp inward. */
 export function splitFaceSegs(st: SplitState, f: HeadFrame): { side: 1 | -1; a: Vec3; b: Vec3; view: Vec3 }[] {
   if (st.preset === null) return [];
-  const p = HEAD_SPLIT.presets[st.preset], c = HEAD_SPLIT.faceCut;
-  const n = normalize(qRotate(f.quat, p.n));
-  const up = normalize(qRotate(f.quat, p.up));
-  const half = scale(normalize(cross(up, n)), c.lenFrac * f.radius);
+  const c = HEAD_SPLIT.faceCut;
+  const { n, up, a } = presetBasis(HEAD_SPLIT.presets[st.preset], f);
+  const half = scale(a, c.lenFrac * f.radius);
   const sides: (1 | -1)[] = st.sides === 0 ? [1, -1] : [st.sides];
   return sides.map(side => {
     const mid = add(f.centre, add(scale(n, st.offset + side * c.inset), scale(up, f.radius)));
