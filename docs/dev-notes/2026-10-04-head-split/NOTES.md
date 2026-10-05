@@ -1167,3 +1167,204 @@ step back, `git revert` the revert, or cherry-pick the step's commit.
 
 **Still true, and accepted:** in a one-sided split the face cut marks the crown on both sides of the plane (775 of
 4520 still-half texels, up to 8.2 mm; B8 part A's finding). The owner saw this build and is happy with it.
+
+## Look pass, group 2: the owner's two playtest requests (2026-10-05)
+
+The owner played `d5b6f9f3` with real clicks: happy with it for the most part. Two requests, and nothing else was
+touched (the cut faces, the skull's look and the blood are as he played them).
+
+### Step 1: the axe skips the thin crack (`69124ac5`)
+
+"The skull stages are fine, though I think we can skip to stage 2 or 3 with the axe."
+
+| Chop | Before | After |
+| --- | --- | --- |
+| 1 | flesh 0.55 of the full angle (17.3 degrees a half), bone 1.7: a thin crack | flesh 0.8 (25.2), bone 7.6: the wide crack. Alive |
+| 2 | flesh 0.8 (25.2), bone 7.6 | flesh 1.0 (31.5), bone 26.8: split wide. Alive |
+| 3 | kills; flesh to 1.0, bone 26.8 | kills; the split is already full, so the chop KICKS it |
+
+- `AXE_HEAD.openAngles` `[0.55, 0.8]` -> `[0.8, 1]`. `chopsToKill` stays 3. The follow table and the presets did not
+  change: the thin crack is still the table's first stage (a lighter weapon's; `forceSplit(..., 0.55)`).
+- **The kill's kick** (`AXE_HEAD.killKick` 0.3, `axe-head.ts chopKick`, `head-split.ts punchSplit`): a rate toward
+  open that alone carries the halves 0.3 of the preset's full angle past where they stand. It is sized by the
+  spring's own reach (how far 1 rad/s carries it before it turns back, by its own sub-steps), so it means the same
+  under a retuned spring. Middle, both: 31.51 -> 39.50, 40.74, 37.55, 33.15, 29.92, 28.73 ... degrees a half on
+  frames 1 to 6; within half a degree of rest from frame 12, exactly at rest on frame 27. One side: 51.6 -> 66.7.
+  A chop on the corpse's open head kicks it again.
+- **The skull's stage only advances** (`SplitState.stage`; `SplitWarp.stage` replaces `.target`). B7's rule read the
+  table at min(flesh, target): on the swing back under the target the bone followed the table DOWN, 7% on the old
+  kill against its flesh's 2%. Under the kick that was a flap: the flesh swings back to 28.7 degrees, which read the
+  table at 0.91 and took the bone from 26.8 toward 17. The stage is now the high-water mark of min(angle, target),
+  kept in the state, and the bone is the stage's share of each half's own flesh angle, whatever that angle does:
+  through the kick 26.79 -> 34.63 -> 24.42, the flesh's own 31.51 -> 40.74 -> 28.73 times 0.85 on every tick (unit
+  test; the gate's K reads the drawn copies' matrices 3 frames into the kick). Rest angles are the same to the bit.
+  B7's first residual (the dip) is gone. The second stays: a chop that lands while the flesh is past the old target
+  steps the share at the next tick (seam only: play's strikes are 0.6 s apart).
+- **To turn this off:** `openAngles: [0.55, 0.8]` and `killKick: 0`.
+- Sheets: `look/04-axe-table.jpg` (the three chops, front 0.6 m, above-behind and front 2 m, before | after, a boot
+  each so the zombie, cameras and light are the same) and `look/05-kill-kick.jpg` (frames 1 to 8 after the kill
+  chop). Read: chop 1 now shows the skull's face between two clearly parted halves where it was a slit; chop 2 is the
+  full V. The kick shows on frames 1 and 2 as the halves thrown to the edge of the crop and back by frame 4. At 2 m
+  chop 1 reads as an opened head at a glance, which the thin crack did not.
+- **Gate expectations.** Followed the table by themselves: S (target, the spring's frames), W, O, T, K's count and
+  target. Restated, with why:
+  - K gained two checks: the kick (rate 12.77 rad/s at the chop; 6.03 degrees past the full angle 3 frames on, 0.64
+    of `killKick` x the full angle) and the bone drawn at the stage's share during it.
+  - M's forced landmark takes the follow table's three stages, not the axe's angles (which are now two of them).
+  - M's landmark on the really chopped head is chop 1's only (0.48 px off, the eye moves 17.8 px). Chop 2 now splits
+    the bone wide on a head the first flinch has bowed, and each half's shell hides its own seated eye: 40.0 px off
+    from the wedge eye, 32.9 px from the front. That stage keeps its matrices check, and the forced, upright head
+    reads the same bone angle to 3.4 px.
+  - L and H's flail head pin their own openings (0.8 and 0.55) instead of borrowing the axe's.
+  - **`GAP_REST_OVER` 2 -> 3 mm** (it is now `GAP_OVER`). Chop 2 rests at the full angle, where the gap measure can
+    read long: a sample inside a half counts as seen until its surface is 5 mm in front along a sight line that
+    grazes the cut face, 1.0 mm a side at the full angle (0.5 mm at 0.3 rad). Measured at the full angle on two
+    zombies of the ring: -0.6 and +2.4 mm (W), -0.6 and +1.4 mm (K). The full gate passed inside the old 2 mm; the
+    +2.4 came up in an `ONLY=` subset, which chops a different zombie. A halved GPU angle still reads -12 mm.
+
+### Step 2: the opened halves wobble with the body
+
+"Maybe it could be a little less stiff after the split? Like it kind of wobbles or shakes with the movement of the
+body."
+
+**The model** (`head-split.ts`, pure; `HEAD_SPLIT.wobble`). Each turning half carries an offset on top of the
+spring's angle, `SplitState.wobP` / `wobM` (rad, positive = further open) with rates `wobVP` / `wobVM`: a damped
+spring about zero, stepped with the angle spring in `stepSplit(st, dt, drive)` on the same 1/240 s sub-steps. The
+warp's two angles are `thetaP = angle + wobP` and `thetaM = -(angle + wobM)`. Nothing else carries it: the CPU field,
+the GPU record, the bounds, the hulls and the skull already read those two angles from the pose.
+
+- **The drive** is the acceleration of the split's MASS POINT, `arm` (10 cm) up from the hinge into the head
+  (`splitMassPoint`), in two components (`wobbleDrive`): ACROSS the split, along n (the halves lag the head, so one
+  closes and the other opens: +half gets `-gainSide x a.n`, -half `+gainSide x a.n`), and UP out of the hinge, along
+  u (both open, or both close: `+gainBob x a.u`). Along the hinge axis: none. A half less far open than its preset's
+  full angle is driven in proportion. No gravity term: at rest the offset is exactly 0 whichever way up the head
+  lies.
+- **Why the mass point and not the bare hinge** (the brief said the hinge): the hinge is low at the back of the
+  skull, and a head that rolls or shakes about it moves its crown, not its hinge. The point 10 cm up carries the
+  hinge's translation plus the head's own turning about the hinge axis.
+- **Where the acceleration comes from** (`game-head-split.ts`, `pointAccel`): finite differences of the point on the
+  actor's POSE. The leaf ticks before the actors step, so the pose it reads is the last step's: tick N differences
+  the point at steps N-1, N-2 and N-3 (each over its own step's dt), an acceleration centred on step N-2, two frames
+  (33 ms) behind the pose that draws this tick's angles. The first two samples give no acceleration (a position,
+  then one velocity), so a head that splits on a walking body is not kicked by the walk's speed. A pose with no
+  split (the head gone, the body tearing) forgets the motion. A tick of no time (a gate's camera sync) takes no
+  sample and loses none.
+- **The limits** (`wobbleLimits`, held on every sub-step; at a limit the offset stops and keeps no rate into it):
+  within `max` x the half's own spring angle either way; never nearer shut than `minOpen` once the spring is past it;
+  never further open than the full angle x (1 + `over`), but for where the spring alone takes it (the kick). Each
+  drive component is clamped to `accelClamp`; a value that is not finite is no drive.
+
+| Constant | Value | |
+| --- | --- | --- |
+| `hz`, `zeta` | 3, 0.3 | the offset's spring (the chop's is 7, 0.35): a flop, one swing back, rest |
+| `gainSide` | 6 rad/s^2 per m/s^2 | across the split |
+| `gainBob` | 8 | up out of the hinge |
+| `arm` | 0.10 m | the mass point above the hinge |
+| `accelClamp` | 40 m/s^2 | each component |
+| `max` | 0.45 | of the half's spring angle: +-14.2 degrees at the full 31.5 |
+| `minOpen` | 0.03 rad | 1.7 degrees |
+| `over` | 0.45 | 45.7 degrees at most for `middle` both |
+
+**To turn this off:** `gainSide: 0` and `gainBob: 0`. Then no offset is ever stepped and the angles are the spring's
+to the bit: `stepSplit` equal to the undriven one field for field over a driven run with a kick (unit test); a
+stepping actor's pose carrying `angle` exactly for 200 frames (leaf test); the 840-frame live run below with the
+gains at 0: no offset on any frame, `thetaP === angle` and `thetaM === -angle` on every frame, the spring's angle
+equal to the gains-on run's on every frame; and the gate's S / W / K / M with the gains at 0 against step 1's run on
+the same zombies (below).
+
+**Frozen actors rest at exactly zero offset.** A frozen actor's point does not move, so the drive is exactly 0 and
+the wobble is not stepped at all. After a thaw the cast stops dead and the offsets settle; the gate then steps until
+they are exactly 0 (`restWobble`: 72 to 74 frozen frames after a 3-frame thaw, bound 104 from the constants) before
+it measures a rest angle.
+
+**The traces** (`look/06-wobble-traces.png`; a split forced to the full angle, the cast thawed, the player parked at
+the spawn; degrees a half off the spring's 31.5):
+
+| | + half, peak | - half, peak | apart, peak | Settle |
+| --- | --- | --- | --- | --- |
+| A walk, 420 frames (it lurches three times) | 14.2 (the limit) | 14.2 | 28.4 | - |
+| ... its steady stretch (140 frames) | -3.4 to +5.7 | -6.7 to +2.6 | | |
+| The cast frozen mid-walk (the body stops dead) | 5.9 | 8.0 | 4.0 | under 1 degree after 27 frames (0.45 s), exactly 0 after 72 |
+| A chop on the walking zombie, the 40 frames after | 10.8 | 7.4 | 7.8 | it keeps walking |
+| A second chop | 14.1 | 9.2 | 19.1 | |
+| The kill and the fall, 300 frames | 14.9 (0.45 of the kicked 33.2) | 14.1 | 19.9 | the hinge is still from frame 109; under 1 degree 9 frames on, exactly 0 after 53 |
+
+The openings over the fall run from 16.8 to 45.7 degrees. Of 3120 half-frames in these runs 13 sit at a limit and
+none is outside. What the walking zombie's mass point does, measured: it bobs +-2 m/s^2 at 2.1 Hz, is thrown 1.9
+m/s^2 across the split while the body turns, and lurches at 20 to 39 m/s^2 for about ten frames every hundred or two.
+The fall's landing reads 200 to 470 m/s^2 for single frames (the pose snaps): that is what `accelClamp` is for.
+
+**Unequal angles, verified where they are read.**
+- The field on the GPU: the hand twin (`map-body-split-twin.test.ts`) gained two two-sided cases, 0.74 / -0.31 rad
+  and 0.03 / -0.62 (one half at `minOpen`): max |twin - splitField| 3.2e-16 and 3.1e-16 over 11 600 points each.
+- The bounds and the hulls (`head-split-bounds.test.ts`): three unequal warps (1.45 / 0.55 of the full angle, the
+  other way round, and 0.06 / 1.1) run through every soundness test: the sphere images, the grown cluster and group
+  spheres, the outer hull holding the open body's solid, the inner hull's spheres staying solid.
+- The skull: each half's bone is the stage's share of that half's own angle and the stage does not move (unit test
+  over a driven run). In the game: the gate's K reads the drawn copies 3 frames into the kill, 26.11 / 31.09 degrees
+  against 26.11 / 31.09, and J on a swing, 24.65 / 33.82 against 24.65 / 33.82 (3.9e-16 rad off).
+- The GPU record: J reads its two angle lanes on a swing, equal to the pose's as floats.
+
+**The strips** (a walking split zombie, the camera riding the head; wobble off | on are two boots of the same
+script, and the body is the same on every frame up to the first chop, within 0.22 mm after it: a chop lands on a
+half that stands elsewhere). The photos do not touch the sim: the run with photos equals the run without on every
+frame and field.
+- `look/07-wobble-walk.jpg`: 8 consecutive frames of a lurch (frames 44 to 51), front and above-behind.
+- `look/08-wobble-fall.jpg`: the 8 frames after the kill chop.
+- `look/09-wobble-more.jpg`: the steady walk (every 4th frame), a flinch, the corpse landing.
+
+**Read.** Off, the eight frames of a strip are one picture: the head carries two fixed plates. On, the halves lag the
+head: in the lurch one half comes up over the skull while the other swings out, over five or six frames, and they
+come back together. It is a slow swing (3 Hz), not a shake from frame to frame, and it reads as soft tissue hanging
+off a hinge. In the steady walk it is small (3 to 6 degrees): visible in motion, hard to see in stills. What is
+still wrong, or not shown by stills: (1) the lurches take a half to its stop and it stands there for one to three
+frames, which may read as a hard end; `max` and `gainSide` are the dials. (2) A half that swings shut to 17 degrees
+covers the skull's face in the gap for a moment. (3) The halves do not meet the floor or the shoulders: on the
+landing the corpse's halves flap through where the floor is, as the rigid ones already lay in it. (4) Each half is
+still a rigid plate about one hinge; there is no bend in it. No clip was recorded: `scripts/` has no gif or webm
+capture.
+
+**Gate scenario J** (8 checks, in T's boot after it; the player at the spawn, since in the ring's sight the soldiers'
+fire takes the zombie apart inside 300 thawed frames).
+
+| Check | Measured | Fails under |
+| --- | --- | --- |
+| frozen: the halves stand at the spring's angle | 0.55 / -0.55 rad, offsets 0, 20 frames | - |
+| thawed, wandering, one chop: each half swings | 9.5 and 13.4 degrees, 22.6 apart (>= 2, 2, 1) | the gains at 0: 0.00 |
+| inside the shipped limits every frame | openings 19.7 to 45.0 degrees, 0 outside | - |
+| the stop holds: `max` cut live to 0.03 for the first 90 frames | no half past 0.95 degrees, at the stop on 74 frames | the clamp removed: 88 frames past it, to 30.05 degrees; the gains at 0: never reaches it |
+| the pose's split is the state's two angles | 0 of 90 frames differ | - |
+| frozen on a swing, the GPU record carries them | 29.0 / 39.8 degrees, equal as floats | the gains at 0: no swing |
+| the skull's copies at the stage's share of each | 24.65 / 33.82 against 24.65 / 33.82 | the gains at 0: equal halves |
+| at rest again, exactly, within the settle bound | 74 frames (bound 104), then 20 more | the gains at 0: 0 frames |
+
+With the gains at 0 five of the eight fail; with the clamp line removed, one. K waits for the fall's wobble to rest
+before it reads the corpse (73 frozen frames).
+
+### The check set (both steps, 2026-10-05)
+
+No WGSL changed, so there is no golden update, census or boot pair.
+
+| Check | Result |
+| --- | --- |
+| `tsc --noEmit` | the `node:crypto` error only |
+| the whole tree (`--exclude '**/cut-wound.test.ts'`) | 510 files, 7444 tests passed, 1 skipped |
+| `scripts/head-split-gate.mjs`, twice | **77 checks, 0 failed** each; every check line and every measure line but the draw times the same in both |
+| `scripts/axe-gate.mjs` | **25 checks, 0 failed** (with the new table: K's three chops, the kill, the split on the corpse) |
+| `scripts/cut-wound-gate.mjs` | **30 checks, 0 failed** |
+| `scripts/march-hash.mjs` | unmoved: `d7392d52…` (and its repeat) / wounded `76bd51aa…` |
+
+- **Baseline, before either step** (`d0d407d2`): the gate at 67 checks, 0 failed.
+- **Frozen actors rest at exactly zero, by the gate's numbers.** The final run, wobble on, against step 1's run (the
+  same zombies): every check line is the same to the character but the four whose wording changed (S's and W's thaw
+  lines and K's corpse line now say how long the wobble took to rest: 62, 74 and 74 frozen frames; K's kick line
+  reads the bone per half, 28.89 / 28.31 degrees, the wobble of its three thawed frames).
+- **Off is step 1, by the gate's numbers.** `ONLY=S,W,K,M` with both gains at 0 against step 1's run of the same
+  subset: 30 checks, the numbers on every line the same (the 60 per-frame gaps of chop 1, the gaps at rest 55.0 /
+  76.0 / 75.0 mm, the kick 6.03 degrees with the bone at 31.92 / 31.92, the landmarks 0.41 and 0.52 px), and every
+  wait for rest 0 frames.
+- **Cost.** At the start, on a quiet machine: `timeDraws` at 0.6 m closed 26.2 ms, open 33.6 (+7.4); at 2 m +0.6.
+  At the end the machine was loaded on every attempt (load average 9 to 104 through the two gate runs, 24.6 on a
+  third try): open minus closed read +5.4 to +14 ms with spreads of 6 to 11 ms. Not quotable. Neither step adds
+  draw work: a head at rest hands the renderers the same two angles as before, and the wobble is a few dozen
+  floating-point operations a tick for each split head.

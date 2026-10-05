@@ -108,7 +108,24 @@ The per-task texts used for dispatch are in the session scratchpad (`scratchpad/
 - **Owner feedback (2026-10-05, on the B6 photos):** "looking pretty good"; the skull needs cracked/split states
   (B7 is the answer; photos in `b7/` for the owner's choice); the open-head cost (+6 ms at 0.6 m) "is a lot but we
   can figure out how to optimize later".
-- All measurements and photos: [`NOTES.md`](NOTES.md), `b4/` … `b7/`.
+- **B8 part B, group 1 (the cut faces): tried, reverted** (`d0d407d2`). The owner prefers the cut faces as he played
+  them, ragged face cuts included. Do not restyle them.
+- **B8 part B, group 2 is done** (2026-10-05): the owner's two playtest requests. Numbers in [`NOTES.md`](NOTES.md),
+  sheets in `look/`.
+  - **The axe skips the thin crack** (`69124ac5`): `AXE_HEAD.openAngles` is `[0.8, 1]`. Chop 1 opens to the wide
+    crack, chop 2 splits the head wide with the zombie alive, chop 3 kills and kicks the full split
+    (`AXE_HEAD.killKick` 0.3, `head-split.ts punchSplit`). Off: `[0.55, 0.8]` and `killKick` 0. The thin crack is
+    still the follow table's first stage.
+  - **The skull's stage only advances** (`SplitState.stage`, `SplitWarp.stage` in place of `.target`): the bone keeps
+    the stage's share of each half's own flesh angle, so a kick or a wobble swings it in proportion and never steps
+    it.
+  - **The opened halves wobble with the body** (`HEAD_SPLIT.wobble`): each turning half has its own offset
+    (`SplitState.wobP` / `wobM`), a damped spring driven by the acceleration of the split's mass point, with hard
+    limits. It reaches the renderers only through `SplitWarp.thetaP` / `thetaM`. Off: `gainSide` 0 and `gainBob` 0
+    (bit-identical). A frozen actor rests at exactly zero offset.
+  - The gate is 77 checks: K holds the kick, J is the wobble. After a thaw it waits for the wobble to rest
+    (`restWobble`) before it measures a rest angle; a new scenario that thaws must do the same.
+- All measurements and photos: [`NOTES.md`](NOTES.md), `b4/` … `b7/`, `look/`.
 - **Testing rule added:** after any WGSL change run the full tree,
   `npx vitest run src/lab/sdf-zombie --exclude '**/cut-wound.test.ts'` (510 files, 3–5 minutes). Targeted sets missed
   a red cross-cutting gate twice (`entrails-gates`, `normal-gradient-probe`).
@@ -125,9 +142,8 @@ The per-task texts used for dispatch are in the session scratchpad (`scratchpad/
   close. An off-centre split halves an eyeball. The face cuts are untuned (`HEAD_SPLIT.faceCut` / `faceCalibre`).
   Loose pixels at the slab tip and speckle on the face preset's crown. A flail hit on a split head takes the plain
   crater with full meter credit.
-- **Bone residuals (accepted):** a 7–8% dip on the swing back under the target; a chop landing above the old target
-  steps the stage at once (seam only: play's minimum strike gap is 0.6 s). A monotone stage in `SplitState` would
-  remove both.
+- **Bone residual (accepted):** a chop landing above the old target steps the stage at the next tick (seam only:
+  play's minimum strike gap is 0.6 s). The dip on the swing back is gone with the monotone stage.
 - **Still closed-head:** the shadow hull, `bodyInSight` (`game-main.ts` ~7311) and motion vectors. The top vertebra
   is left unsplit on purpose.
 - **`gRefoldBy` is indexed by piece, not slot:** in a crowd pixel another slot's re-fold win can leak into an open
@@ -169,8 +185,10 @@ The before/after comparisons are in `compare/`. The raw photos are untracked in 
 1. ~~The cut excess pass~~, ~~B2~~, ~~B3~~: done (above).
 4. ~~B4~~, ~~B5~~: done (above).
 6. ~~B6~~, ~~B7~~: done (above).
-8. ~~B8 part A: the gate~~ (above). **B8 part B: the look pass.** The owner wants it EXCESSIVE.
-9. **B9: docs.**
+8. ~~B8 part A: the gate~~, ~~B8 part B: the look pass~~ (above: the cut faces stay as played; the axe's table and
+   the wobble are in). A wetness-under-the-flashlight step for the cut faces is planned separately.
+9. **B9: docs.** To record: spec §4 / §5 (the axe's stages are the table's second and third, the kill's kick, the
+   stage that only advances, the wobble and its two off switches); `TASKS.md`.
 
 ## Known design notes
 
