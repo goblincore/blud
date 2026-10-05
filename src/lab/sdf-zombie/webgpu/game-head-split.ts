@@ -33,8 +33,10 @@
 // closed head). open() refuses a head that leaf holds state for (deps.headDamaged), and that leaf declines a head
 // this one has open (isOpen). Only the plain zombie has presets (the slug burst's rule too).
 //
-// AT RANGE the view writes the split closed (head-split.ts splitDrawDistance): the tick hands each split actor's view
-// the camera's eye. Drawing only; the pose, and so every strike and trace, keeps the split.
+// AT RANGE the view writes the split closed (head-split.ts splitDrawDistance), measured from the eye the frame is
+// drawn with: the draw stage hands it over (drawEye, game-main), and the leaf passes it to the view of each actor it
+// holds a split for. An actor it drops gets its eye taken back. Drawing only; the pose, and so every strike and
+// trace, keeps the split.
 //
 // The per-actor state lives in this module (keyed by the actor object), never on main(). Deterministic: sim time only.
 import type { GameContext } from './game-context';
@@ -70,6 +72,9 @@ export interface HeadSplitLeaf {
   /** The actor's head has an open split state (from the opening chop on, before the spring has moved). */
   isOpen(a: ZombieActor): boolean;
   tick(dt: number): void;
+  /** The eye this frame is drawn with (world), for every actor with a split state: its view draws the split out to
+   *  a distance from it (zombie-gpu.ts setSplitEye). Called from the draw stage, where the render camera is final. */
+  drawEye(eye: Vec3): void;
   /** A copy of the actor's state, or null when it has none. */
   state(id: number): SplitState | null;
   /** Tuning / gate seam: set actor `id`'s split by hand, at `angleFrac` of the preset's max at once (no spring), and
@@ -137,6 +142,7 @@ export function createHeadSplit(ctx: GameContext, deps: HeadSplitDeps = {}): Hea
 
   function drop(a: ZombieActor): void {
     a.setHeadSplit(null);
+    a.view.setSplitEye(null);
     heads.delete(a);
   }
 
@@ -155,12 +161,12 @@ export function createHeadSplit(ctx: GameContext, deps: HeadSplitDeps = {}): Hea
       return h.faces;
     },
     isOpen: a => heads.has(a),
+    drawEye(eye) {
+      for (const a of heads.keys()) a.view.setSplitEye(eye);
+    },
     tick(dt) {
-      const eye = ctx.boot.handle.camera.position;
       for (const [a, h] of heads) {
         if (!ctx.world.actors.includes(a)) { drop(a); continue; }
-        // The view draws the split out to a distance from this eye (zombie-gpu.ts setSplitEye). The pose keeps it.
-        a.view.setSplitEye([eye.x, eye.y, eye.z]);
         const angle = h.st.angle;
         h.st = stepSplit(h.st, dt);
         // A FROZEN actor never steps, and the step is where the hook is asked: without this its posed and drawn head

@@ -17,7 +17,10 @@ import {
   storage, attribute, positionGeometry, vec3, mix, Fn, If, Discard, positionLocal, select,
 } from 'three/tsl';
 import type { BuildResult } from '../build-body';
-import { splitBound, splitDrawDistance, splitHoldBall, type SplitWarp } from '../head-split';
+import {
+  REGION_MARGIN, SPLIT_REOPEN_FRAC, splitBound, splitDrawDistance, splitFrame, splitHoldBall, splitNearReach,
+  type SplitWarp,
+} from '../head-split';
 import { packBody, PRIM_STRIDE, W_BONE, W_ORGAN } from '../pack';
 import { MAX_PRIMS, MAX_CLUSTERS, BONE_SEG_MAX, BASE_PRIM_STRIDE, bodyPrimStride } from '../validate';
 import { MAX_WOUNDS } from '../damage';
@@ -216,6 +219,9 @@ export interface ZombieGpuView {
    *  with this view's own accept uniforms). Past that distance the record is written closed; the bounds follow the
    *  pose's split either way. Null (the default) draws the split at any distance. */
   setSplitEye(eye: Vec3 | null): void;
+  /** The split the record carries after its last write: the pose's, or null for a closed pose or one closed for
+   *  range. What the march draws; whatever else draws the head (the skull mesh) follows this, not the pose. */
+  readonly splitDrawn: SplitWarp | null;
   /** Crowd stage a: the per-instance record buffer this view writes through
    *  syncRecord(). Exposed so the frame-hash seam can cover pose/wound state. */
   records: CrowdRecords;
@@ -2394,6 +2400,23 @@ function wireViewTiles(
   };
 }
 
+/** THE NEAR ACCEPT REACH, CHECKED (head-split.ts splitNearReach). An open split is sound up close only while the
+ *  march's near accept reach stays within REGION_MARGIN; the game's defaults give 0.61 of it. A coarser SDF pass
+ *  (aaCfg.x) or a larger last-step factor (perfCfg.w, ?laststep) can pass it, and then the region sphere may be
+ *  drawn as a ball round the head at about 1.8 m. Nothing closes the split for it (it would vanish at melee range):
+ *  a dev build says so once. */
+let nearReachWarned = false;
+function warnNearReach(u: MarchUniforms): void {
+  if (nearReachWarned || !import.meta.env.DEV) return;
+  const a = u.aaCfg.value;
+  const reach = splitNearReach({ coneK: a.x, strength: a.y, near: a.z, fadeM: a.w, secant: u.perfCfg.value.w });
+  if (reach <= REGION_MARGIN) return;
+  nearReachWarned = true;
+  console.warn(`[head-split] the march's near accept reach is ${(reach * 1000).toFixed(0)} mm, over REGION_MARGIN `
+    + `(${REGION_MARGIN * 1000} mm): an open head's region sphere can be drawn as a surface near 1.8 m `
+    + `(aaCfg ${a.toArray().map(v => +v.toPrecision(3)).join(', ')}; last-step ${u.perfCfg.value.w})`);
+}
+
 export function createZombieGpuView(
   body: BuildResult, opts: GpuViewOpts = {},
 ): ZombieGpuView {
@@ -2438,16 +2461,23 @@ export function createZombieGpuView(
   // THE HEAD SPLIT of the body the view last received (`posed.split`, head-split.ts; null = closed): the one it was
   // built from, then each update()'s. The pose is its one source, so a closed or torn pose closes the record
   // (REC_SPLIT_*), and the setters' syncRecord() re-writes it unchanged. The prims are the closed head's either way.
+  // The BOUNDS do not read this: upload() and fit() take the split of the body they are handed.
   let headSplit: SplitWarp | null = body.split ?? null;
-  // The split the RECORD carries: the pose's, or none once the eye (setSplitEye) is past the split's draw distance,
+  // The split the RECORD carries: the pose's, or none while the eye (setSplitEye) is past the split's draw distance,
   // where the march's accept reach would take the region shell for a surface (head-split.ts splitDrawDistance).
+  // Closed for range, it opens again only inside SPLIT_REOPEN_FRAC of that distance. A new eye-less or split-less
+  // state forgets the range, so a split that first appears just inside the distance is drawn.
   let splitEye: Vec3 | null = null;
-  const splitDrawn = (): boolean => {
-    if (!headSplit || !splitEye) return headSplit !== null;
+  let rangeClosed = false;
+  const recordSplit = (): SplitWarp | null => {
+    if (!headSplit || !splitEye) { rangeClosed = false; return headSplit; }
     const h = headSplit.h, d = Math.hypot(h[0] - splitEye[0], h[1] - splitEye[1], h[2] - splitEye[2]);
-    return d <= splitDrawDistance(headSplit, { coneK: u.aaCfg.value.x, strength: u.aaCfg.value.y, secant: u.perfCfg.value.w });
+    const far = splitDrawDistance(headSplit, { coneK: u.aaCfg.value.x, strength: u.aaCfg.value.y, secant: u.perfCfg.value.w });
+    if (d > far) rangeClosed = true;
+    else if (d < SPLIT_REOPEN_FRAC * far) rangeClosed = false;
+    return rangeClosed ? null : headSplit;
   };
-  let lastSplitDrawn = headSplit !== null;
+  let splitDrawn: SplitWarp | null = headSplit;
   // Each view owns its packing scratch. writeRow copies into the atlas before
   // the next upload, so the temporary rows need not allocate every frame.
   let uploadScratch: ReturnType<typeof packBody> | undefined;
@@ -2605,22 +2635,27 @@ export function createZombieGpuView(
         flags: gr[o + 3]!,
       });
     }
-    // THE HEAD SPLIT'S BOUNDS (head-split.ts splitBound). The screen tiles and the depth pre-pass's miss cull test
-    // these spheres against the WORLD ray, which meets an opened half where the closed head is not: a sphere whose
-    // material reaches the hold ball grows to hold the ball. The reach is the march's own for that sphere (4 x the
-    // blend width x its distortion factor). ROW_GROUP_BOUNDS and the threat masks keep the closed spheres: their
-    // readers (mapBody's group cull, the wound threats) work at a piece's un-warped point.
+    // THE HEAD SPLIT'S BOUNDS (head-split.ts splitBound), from the split of THIS body. The screen tiles and the
+    // depth pre-pass's miss cull test these spheres against the WORLD ray, which meets an opened half where the
+    // closed head is not: a sphere that holds flesh of a turning half grows. The reach is the march's own for that
+    // sphere (4 x the blend width x its distortion factor). What mapBody's per-step culls then read, at a piece's
+    // un-warped point (a grown sphere holds the closed one, so they stay sound and cull less):
+    //   the tiled path (the crowd)      foldGroup takes the tile entry's sphere: the GROWN one;
+    //   the cluster walk (per-body,     the cluster cull reads ROW_CLUSTER_BOUNDS: the GROWN one; the group cull
+    //   the cone / depth pre-pass)      reads ROW_GROUP_BOUNDS, which stays the CLOSED sphere (exact).
+    // The wound threat masks keep the closed spheres too (lastGroups): they are measured on the closed head.
     tileGroups = lastGroups;
-    if (headSplit) {
-      const w = headSplit, k4 = 4 * p.maxBlendK;
+    const split = splitFrame(next.split);
+    if (split) {
+      const k4 = 4 * p.maxBlendK;
       tileGroups = lastGroups.map((g) => {
-        const b = splitBound(w, g.center, g.radius, k4 * Math.max(g.distort, 1));
+        const b = splitBound(split, g.center, g.radius, k4 * Math.max(g.distort, 1));
         return b.radius === g.radius ? g : { ...g, center: [b.centre[0], b.centre[1], b.centre[2]], radius: b.radius };
       });
       for (let c = 0; c < p.clusterCount; c++) {
         const o = c * 4, cb = p.clusterBounds;
         if (p.clusterRange[o + 2]! < 0.5) continue;
-        const b = splitBound(w, [cb[o]!, cb[o + 1]!, cb[o + 2]!], cb[o + 3]!, k4 * Math.max(p.clusterGroups[o + 2]!, 1));
+        const b = splitBound(split, [cb[o]!, cb[o + 1]!, cb[o + 2]!], cb[o + 3]!, k4 * Math.max(p.clusterGroups[o + 2]!, 1));
         cb.set([b.centre[0], b.centre[1], b.centre[2], b.radius], o);
       }
     }
@@ -2761,8 +2796,8 @@ export function createZombieGpuView(
       }
     }
     // An open head's halves reach anywhere in the split's hold ball (head-split.ts splitHoldBall).
-    if (headSplit) {
-      const b = splitHoldBall(headSplit);
+    if (body_.split) {
+      const b = splitHoldBall(body_.split);
       for (let i = 0; i < 3; i++) {
         min[i] = Math.min(min[i]!, b.centre[i]! - b.radius);
         max[i] = Math.max(max[i]!, b.centre[i]! + b.radius);
@@ -2914,8 +2949,9 @@ export function createZombieGpuView(
    *  kernel reads. The uniform nodes stay authoritative for the per-TYPE
    *  block; this is the bridge for the per-INSTANCE half. */
   function syncRecord() {
-    lastSplitDrawn = splitDrawn();
-    writeViewRecord(records, slot, u, mesh.position, undefined, lastSplitDrawn ? headSplit : null);
+    splitDrawn = recordSplit();
+    if (splitDrawn) warnNearReach(u);
+    writeViewRecord(records, slot, u, mesh.position, undefined, splitDrawn);
     if (ownRecords) ownRecords.flush();
   }
 
@@ -2972,10 +3008,11 @@ export function createZombieGpuView(
     setMotionOut(on) { u.meltCfg.value.y = on ? 1 : 0; syncRecord(); },
     setGoreStrength(v) { u.lodCfg.value.w = v; syncRecord(); },
     setSplitEye(eye) {
-      splitEye = eye;
+      splitEye = eye ? [eye[0], eye[1], eye[2]] : null;
       // The eye moves every frame: the record is re-written only when the answer changes.
-      if (splitDrawn() !== lastSplitDrawn) syncRecord();
+      if (recordSplit() !== splitDrawn) syncRecord();
     },
+    get splitDrawn() { return splitDrawn; },
     update(next, rest) {
       headSplit = next.split ?? null;
       const p = upload(next, rest, true);

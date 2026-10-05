@@ -305,37 +305,54 @@ export function splitHoldBall(w: SplitWarp): { centre: Vec3; radius: number } {
   return { centre: w.h, radius: w.r - REGION_MARGIN };
 }
 
-/** THE ONE RULE FOR A BOUND UNDER A SPLIT. `centre` / `radius` is a sphere that bounds some of the CLOSED body's
- *  material (a cluster, a prim group), and `reach` how far past it that material still shapes the field (its blend).
- *  What moves is above the hinge plane and inside the hold ball, and it may be turned to anywhere in the ball: a
- *  sphere that reaches both grows to the smallest one holding itself and the ball. A sphere clear of the ball, or
- *  wholly below the hinge plane, bounds material that does not move, and stays. The split's own readers of the closed
- *  body (mapBody's culls, at a piece's un-warped point) keep the closed sphere: this is for a reader that tests a
- *  WORLD ray or a screen position. */
+/** A split made ready for sphere tests (once per split, not per sphere): `u` = n x a, up from the hinge into the
+ *  head, and the hold ball's radius. With it, for a point c: up(c) = u.(c - h), s(c) = n.c - d0, dh = |c - h|. */
+export interface SplitFrame { w: SplitWarp; u: Vec3; rho: number }
+
+export function splitFrame(w: SplitWarp | null | undefined): SplitFrame | null {
+  return w ? { w, u: cross(w.n, w.a), rho: w.r - REGION_MARGIN } : null;
+}
+
+/** WHICH TURNING HALVES A SPHERE OF THE CLOSED BODY CAN HOLD FLESH OF: bit 1 the + half, bit 2 the - half, 0 none.
+ *  The one gate of every bound below. A half's flesh is above the hinge plane (up >= 0), inside the hold ball
+ *  (dh <= rho) and on its side of the old plane (s >= 0 for +, s <= 0 for -), and it moves only if its half turns
+ *  (theta != 0). A sphere that cannot reach all of that holds nothing that moves: what it bounds is where the
+ *  closed prims put it. */
+export function splitHolds(f: SplitFrame, centre: Vec3, radius: number): number {
+  const rel = sub(centre, f.w.h);
+  if (dot(f.u, rel) + radius < 0 || len(rel) - radius > f.rho) return 0;
+  const s = dot(f.w.n, centre) - f.w.d0;
+  return (f.w.thetaP !== 0 && s + radius >= 0 ? 1 : 0) | (f.w.thetaM !== 0 && s - radius <= 0 ? 2 : 0);
+}
+
+/** THE RULE FOR A BOUND THAT IS ONE SPHERE. `centre` / `radius` bounds some of the CLOSED body's material (a cluster,
+ *  a prim group), and `reach` is how far past it that material still shapes the field (its blend). If the sphere
+ *  holds flesh of a turning half (splitHolds, with the reach), that flesh may be anywhere in the hold ball, and the
+ *  sphere grows to the smallest one holding itself and the ball; otherwise it stays. For a reader that tests a
+ *  WORLD ray or a screen position (the depth pre-pass's miss cull, the screen tiles). The grown sphere still holds
+ *  the closed one, so mapBody's own culls, which test a piece's UN-WARPED point, may read it too: they cull less. */
 export function splitBound(
-  w: SplitWarp | null | undefined, centre: Vec3, radius: number, reach = 0,
+  f: SplitFrame | null, centre: Vec3, radius: number, reach = 0,
 ): { centre: Vec3; radius: number } {
-  if (!w) return { centre, radius };
-  const rho = w.r - REGION_MARGIN, off = sub(w.h, centre), d = len(off);
-  const below = dot(cross(w.n, w.a), off) > radius + reach;
-  if (below || d - radius - reach > rho || d + rho <= radius) return { centre, radius };
-  if (d + radius <= rho) return { centre: w.h, radius: rho };
-  const grown = (d + radius + rho) / 2;
+  if (!f || splitHolds(f, centre, radius + reach) === 0) return { centre, radius };
+  const off = sub(f.w.h, centre), d = len(off);
+  if (d + f.rho <= radius) return { centre, radius };
+  if (d + radius <= f.rho) return { centre: f.w.h, radius: f.rho };
+  const grown = (d + radius + f.rho) / 2;
   return { centre: add(centre, scale(off, (grown - radius) / d)), radius: grown };
 }
 
 /** The same rule for a bound made of MANY spheres (the outer hull's chains), which can follow the halves instead of
  *  covering the whole ball: the centres of the sphere's turned copies. Whatever material of the closed body the
  *  sphere holds is, on the open head, in the sphere itself (what does not move) or in the same-size sphere at one of
- *  these centres: a half is a rigid turn about the hinge, and only a sphere that reaches the half's side of the old
- *  plane, above the hinge plane and inside the hold ball, holds any of it. None for a closed head. */
-export function splitSphereImages(w: SplitWarp | null | undefined, centre: Vec3, radius: number): Vec3[] {
-  if (!w) return [];
-  const rel = sub(centre, w.h);
-  if (dot(cross(w.n, w.a), rel) + radius < 0 || len(rel) - radius > w.r - REGION_MARGIN) return [];
-  const s = dot(w.n, centre) - w.d0, out: Vec3[] = [];
-  if (w.thetaP !== 0 && s + radius >= 0) out.push(add(w.h, rotAxis(rel, w.a, w.thetaP)));
-  if (w.thetaM !== 0 && s - radius <= 0) out.push(add(w.h, rotAxis(rel, w.a, w.thetaM)));
+ *  these centres, one per half it holds flesh of (splitHolds): a half is a rigid turn about the hinge. None for a
+ *  closed head. */
+export function splitSphereImages(f: SplitFrame | null, centre: Vec3, radius: number): Vec3[] {
+  const holds = f ? splitHolds(f, centre, radius) : 0, out: Vec3[] = [];
+  if (!f || holds === 0) return out;
+  const rel = sub(centre, f.w.h);
+  if (holds & 1) out.push(add(f.w.h, rotAxis(rel, f.w.a, f.w.thetaP)));
+  if (holds & 2) out.push(add(f.w.h, rotAxis(rel, f.w.a, f.w.thetaM)));
   return out;
 }
 
@@ -353,10 +370,35 @@ export const SHELL_ACCEPT_FRAC = 0.8;
 /** The eye-to-hinge distance the split is drawn to (see SHELL_ACCEPT_FRAC). `coneK` is the pixel footprint radius per
  *  metre (aaCfg.x), `strength` the far accept strength (aaCfg.y; 0 = no footprint accept, the epsilon is its 1.2 mm
  *  floor and the split is drawn at any distance) and `secant` the last-step factor (perfCfg.w; 0 = off). The near
- *  accept boost (aaCfg.z, fading out by aaCfg.w metres) is not in it: this is the far law. */
+ *  accept boost (aaCfg.z, fading out by aaCfg.w metres) is not in it: this is the far law (splitNearReach is the
+ *  near one). */
 export function splitDrawDistance(w: SplitWarp, accept: { coneK: number; strength: number; secant: number }): number {
   const perMetre = accept.coneK * accept.strength * Math.max(1, accept.secant);
   return perMetre > 0 ? SHELL_ACCEPT_FRAC * REGION_MARGIN / perMetre - w.r : Infinity;
+}
+
+/** A split closed for range opens again only inside this share of its draw distance, so an eye that hovers at the
+ *  distance does not flip it every frame. */
+export const SPLIT_REOPEN_FRAC = 0.9;
+
+/** THE ACCEPT REACH UP CLOSE (metres): the largest t x aaKt(t) x max(1, secant) over the near accept's range, with
+ *  trace.wgsl.ts's aaKt = coneK x mix(near, strength, smoothstep(fadeM / 2, fadeM, t)) (`near` aaCfg.z, `fadeM`
+ *  aaCfg.w; near 0 = no boost, and the reach is the far law's at fadeM). The draw distance cannot help here: the
+ *  boost is strongest at arm's length. While this stays at or under REGION_MARGIN the shell is safe up close; over
+ *  it (a coarse SDF pass, a large ?laststep) the region sphere can be drawn as a ball round an open head near 1.8 m.
+ *  Nothing closes the split for it: the view warns (zombie-gpu.ts). */
+export function splitNearReach(
+  accept: { coneK: number; strength: number; near: number; fadeM: number; secant: number },
+): number {
+  const { coneK, strength, near, fadeM } = accept, k = coneK * Math.max(1, accept.secant);
+  if (!(near > 0) || !(fadeM > 0)) return Math.max(0, fadeM) * strength * k;
+  // The product rises with t up to fadeM / 2 (strength `near`) and from fadeM on (strength `strength`, the far law).
+  let peak = 0;
+  for (let i = 0; i <= 64; i++) {
+    const x = i / 64, t = fadeM * (0.5 + 0.5 * x), ss = x * x * (3 - 2 * x);
+    peak = Math.max(peak, t * (near + (strength - near) * ss));
+  }
+  return peak * k;
 }
 
 /** THE CUT FACES: one cut segment (cut-wound.ts CutSeg, world space, on the CLOSED head) per half that opens. Each

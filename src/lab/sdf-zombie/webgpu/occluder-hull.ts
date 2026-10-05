@@ -47,7 +47,7 @@ import { positionWorld, cameraPosition, vec4, length, sub, uniform, mix } from '
 import { SHADOW_HULL_LAYER } from './sdf-layer';
 import { strandReach } from '../extent';
 import type { BuiltBody, Vec3 } from '../types';
-import { splitHoldBall } from '../head-split';
+import { splitFrame, splitHolds } from '../head-split';
 
 /**
  * How far each hull sphere is pulled in from the primitive that contains it.
@@ -213,18 +213,13 @@ export function buildHullInstances(
     const bodyStart = out.length;
     const live = new Set<number>();
     for (const c of body.clusters) if (c.alive) live.add(c.id);
-    // THE HEAD SPLIT (head-split.ts): the prims are the closed head's, and an INNER sphere (shrink < 1) in flesh that
-    // has turned away sits in the open gap, where a ray cut at it would lose the halves behind. Inside the split's
-    // hold ball the solid is no longer where the prims are, so every inner sphere that reaches the ball is dropped;
-    // outside it the body is the closed body, and its wounds are where `wounds` has them. The shadow hull
-    // (shrink >= 1) keeps the closed head: it casts the closed head's shadow.
-    const hold = body.split && shrink < 1 ? splitHoldBall(body.split) : null;
-    const clearOfSplit = (c: Vec3, r: number): boolean => {
-      if (!hold) return true;
-      const dx = c[0] - hold.centre[0], dy = c[1] - hold.centre[1], dz = c[2] - hold.centre[2];
-      const reach = hold.radius + r + shellAmp;
-      return dx * dx + dy * dy + dz * dz >= reach * reach;
-    };
+    // THE HEAD SPLIT (head-split.ts): the prims are the closed head's, and an INNER sphere (shrink < 1) in flesh
+    // that has turned away sits in the open gap, where a ray cut at it would lose the halves behind. A sphere is
+    // kept only if it holds no flesh of a turning half (splitHolds): below the hinge plane, outside the hold ball,
+    // or wholly on a side that does not turn, the solid is where the closed prims put it, with its wounds where
+    // `wounds` has them. The shadow hull (shrink >= 1) keeps the closed head: it casts the closed head's shadow.
+    const split = shrink < 1 ? splitFrame(body.split) : null;
+    const clearOfSplit = (c: Vec3, r: number): boolean => !split || splitHolds(split, c, r + shellAmp) === 0;
 
     for (const p of body.prims) {
       // Carves are the subtractive half of the body's own definition. A hull

@@ -3,7 +3,7 @@
 // Packed-channel checks for the noise root shift (motion-polish). The anchor
 // itself is guarded by tripwires in march.wgsl.test.ts; these pin the CPU side:
 // WHICH channel carries it, what its default is, and who overwrites it.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
 import { readFileSync } from 'node:fs';
 import {
@@ -17,7 +17,13 @@ import { makeChunk } from '../gib-chunks';
 import { ROW_CLUSTER_BOUNDS, ROW_GROUP_BOUNDS, ROW_PRIM_A, ROW_PRIM_BEND } from './march.wgsl';
 import { REC_ANCHOR_BAND, REC_COUNTS, REC_GORE, REC_HALF_REV, REC_LIGHTS, REC_SPLIT_N, REC_SPLIT_R, REC_VEC4S, createCrowdRecords } from './crowd-records';
 import { createCrowdPrimAtlas } from './crowd-atlas';
-import { forcedSplit, headFrameOf, splitDrawDistance, splitHoldBall, splitWarpOf, type SplitWarp } from '../head-split';
+import {
+  SPLIT_REOPEN_FRAC, forcedSplit, headFrameOf, splitBound, splitDrawDistance, splitFrame, splitHoldBall, splitWarpOf,
+  type SplitWarp,
+} from '../head-split';
+import { packBody } from '../pack';
+import { FISHEYE_DEFAULTS } from './fisheye';
+import { GAME_AA, GAME_AA_FADE_M, GAME_AA_NEAR, GAME_LAST_STEP_DEFAULT } from './game-march-accept';
 import { headShape } from './flame-anchors';
 import { BASE_PRIM_STRIDE, MAX_PRIMS } from '../validate';
 import { encodeSurfaceClass } from './deferred-surface';
@@ -204,52 +210,96 @@ describe('the head split in the view record', () => {
   });
 });
 
-// THE HEAD SPLIT'S BOUNDS. What the view hands a reader that tests a WORLD ray or a screen position (the proxy box,
-// the screen tiles' group spheres, the cluster row the depth pre-pass's miss cull reads) holds the split's hold ball,
-// from the pose's split alone; the rows mapBody culls with at a piece's un-warped point stay the closed head's.
+// THE HEAD SPLIT'S BOUNDS. What the view hands a reader that tests a WORLD ray or a screen position follows the
+// split of the body it was handed: the screen tiles' group spheres and the cluster row the depth pre-pass's miss cull
+// reads grow by head-split.ts splitBound (to hold the split's hold ball), and so does the proxy box. The group row
+// stays the closed head's.
 describe('the head split in the view\'s bounds', () => {
   const skull = headShape(body)!;
   const warp = splitWarpOf(forcedSplit('middle', 1, 0.036, 1)!, headFrameOf(skull, [0, 0, 0, 1]))!;
-  const ball = splitHoldBall(warp);
+  const frame = splitFrame(warp)!;
   const row = (view: ReturnType<typeof createZombieGpuView>, r: number, col: number): number[] => {
     const data = (view.dataTexture as THREE.DataTexture).image.data as Float32Array;
     return Array.from(data.subarray((r * BASE_PRIM_STRIDE + col) * 4, (r * BASE_PRIM_STRIDE + col) * 4 + 4));
   };
-  const holds = (centre: ArrayLike<number>, radius: number) =>
-    Math.hypot(centre[0]! - ball.centre[0], centre[1]! - ball.centre[1], centre[2]! - ball.centre[2]) + ball.radius <= radius + 1e-6;
+  // The body's own layout, not authored indices: the head's and a leg's cluster, and their groups (pack.ts).
+  const packed = packBody(body);
+  const cluster = (limb: (l: string) => boolean) => body.clusters.findIndex(c => limb(c.limb));
+  const groupsOf = (c: number) => Array.from({ length: packed.clusterGroups[c * 4 + 1]! }, (_, i) => packed.clusterGroups[c * 4]! + i);
+  const HEAD = cluster(l => l === 'head'), LEG = cluster(l => l.startsWith('leg'));
+  const HEAD_GROUPS = groupsOf(HEAD), LEG_GROUPS = groupsOf(LEG);
+  const k4 = 4 * packed.maxBlendK;
+  /** A cluster row against a sphere: the view grows the PACKED (float32) sphere, so to float precision. */
+  const expectRow = (got: number[], b: { centre: readonly number[]; radius: number }) => {
+    [...b.centre, b.radius].forEach((v, i) => expect(got[i]!).toBeCloseTo(v, 5));
+  };
   /** The proxy box's world min / max (the mesh is the box; update() scales it). */
   const box = (view: ReturnType<typeof createZombieGpuView>) => {
     const h = view.uniforms.bodyHalf.value, c = view.object.position;
     return { min: [c.x - h.x, c.y - h.y, c.z - h.z], max: [c.x + h.x, c.y + h.y, c.z + h.z] };
   };
 
-  it('an open pose grows the head\'s tile groups and cluster sphere to hold the hold ball; a closed pose restores them', () => {
+  const at = (d: number): [number, number, number] => [warp.h[0], warp.h[1], warp.h[2] + d];
+  /** The game's accept law on a view (game-march-accept.ts; one pixel of the default 600-row SDF pass). */
+  const setGameAccept = (view: ReturnType<typeof createZombieGpuView>) => {
+    view.uniforms.aaCfg.value.set(Math.tan(FISHEYE_DEFAULTS.renderFovDeg * Math.PI / 360) / 600, GAME_AA, GAME_AA_NEAR, GAME_AA_FADE_M);
+    view.uniforms.perfCfg.value.w = GAME_LAST_STEP_DEFAULT;
+  };
+
+  it('the fixture reads the body: a head and a leg cluster, each with groups', () => {
+    expect(HEAD).toBeGreaterThanOrEqual(0);
+    expect(LEG).toBeGreaterThanOrEqual(0);
+    expect(HEAD_GROUPS.length).toBeGreaterThan(1);
+    expect(LEG_GROUPS.length).toBeGreaterThan(0);
+  });
+
+  it('an open pose grows the head\'s tile groups and cluster sphere by splitBound; a closed pose restores them', () => {
     const view = createZombieGpuView(body, {});
     const closedGroups = view.getTileGroups().map(g => ({ ...g }));
-    const closedHead = row(view, ROW_CLUSTER_BOUNDS, 0), closedLeg = row(view, ROW_CLUSTER_BOUNDS, 4);
-    const closedGroupRow = [0, 1, 2].map(g => row(view, ROW_GROUP_BOUNDS, g));
-    expect(holds(closedHead, closedHead[3]!)).toBe(false);
+    const closedHead = row(view, ROW_CLUSTER_BOUNDS, HEAD), closedLeg = row(view, ROW_CLUSTER_BOUNDS, LEG);
+    const closedGroupRow = HEAD_GROUPS.map(g => row(view, ROW_GROUP_BOUNDS, g));
 
     view.update({ ...body, split: warp });
     const open = view.getTileGroups();
     expect(open.length).toBe(closedGroups.length);
-    // The head's three groups (the neck, the skull, the face) hold the ball; ranges, distortion and flags ride along.
-    for (const g of [0, 1, 2]) {
-      expect(holds(open[g]!.center, open[g]!.radius), `group ${g}`).toBe(true);
-      expect({ ...open[g]!, center: 0, radius: 0 }).toEqual({ ...closedGroups[g]!, center: 0, radius: 0 });
+    // The head's groups: each is the rule's sphere for its closed one, with the march's reach for that group; the
+    // ones that grew hold their closed sphere. Ranges, distortion and flags ride along.
+    let grew = 0;
+    for (const g of HEAD_GROUPS) {
+      const c = closedGroups[g]!;
+      const want = splitBound(frame, c.center, c.radius, k4 * Math.max(c.distort, 1));
+      expect({ centre: open[g]!.center, radius: open[g]!.radius }, `group ${g}`).toEqual({ centre: [...want.centre], radius: want.radius });
+      expect(Math.hypot(...c.center.map((v, i) => v - open[g]!.center[i]!)) + c.radius).toBeLessThanOrEqual(open[g]!.radius + 1e-9);
+      expect({ ...open[g]!, center: 0, radius: 0 }).toEqual({ ...c, center: 0, radius: 0 });
+      if (open[g]!.radius > c.radius) grew++;
     }
+    expect(grew).toBeGreaterThan(0);
     // A leg's groups are the closed ones, untouched.
-    expect(open.slice(15)).toEqual(closedGroups.slice(15));
-    // The cluster row (the depth pre-pass's miss cull): the head's sphere holds the ball, a leg's is unchanged.
-    const openHead = row(view, ROW_CLUSTER_BOUNDS, 0);
-    expect(holds(openHead, openHead[3]!)).toBe(true);
-    expect(row(view, ROW_CLUSTER_BOUNDS, 4)).toEqual(closedLeg);
-    // The group row is the closed head's: mapBody culls with it at a piece's un-warped point.
-    expect([0, 1, 2].map(g => row(view, ROW_GROUP_BOUNDS, g))).toEqual(closedGroupRow);
+    for (const g of LEG_GROUPS) expect(open[g]).toEqual(closedGroups[g]);
+    // The cluster row (the depth pre-pass's miss cull): the head's sphere by the same rule, a leg's unchanged.
+    const hc = body.clusters[HEAD]!;
+    const wantHead = splitBound(frame, hc.center, hc.radius, k4 * Math.max(packed.clusterGroups[HEAD * 4 + 2]!, 1));
+    expect(wantHead.radius).toBeGreaterThan(hc.radius);
+    expectRow(row(view, ROW_CLUSTER_BOUNDS, HEAD), wantHead);
+    expect(row(view, ROW_CLUSTER_BOUNDS, LEG)).toEqual(closedLeg);
+    // The group row is the closed head's: the cluster walk's group cull reads it at a piece's un-warped point.
+    expect(HEAD_GROUPS.map(g => row(view, ROW_GROUP_BOUNDS, g))).toEqual(closedGroupRow);
 
     view.update(body);
     expect(view.getTileGroups()).toEqual(closedGroups);
-    expect(row(view, ROW_CLUSTER_BOUNDS, 0)).toEqual(closedHead);
+    expect(row(view, ROW_CLUSTER_BOUNDS, HEAD)).toEqual(closedHead);
+    view.dispose();
+  });
+
+  it('the bounds are the split of the body handed in, whatever the view held before: a re-pack keeps them', () => {
+    const view = createZombieGpuView(body, {});
+    view.update({ ...body, split: warp });
+    const open = view.getTileGroups().map(g => ({ ...g }));
+    const head = row(view, ROW_CLUSTER_BOUNDS, HEAD);
+    // setBoneCullMode re-packs the last body: the same split, the same bounds.
+    view.setBoneCullMode('cluster');
+    expect(view.getTileGroups()).toEqual(open);
+    expect(row(view, ROW_CLUSTER_BOUNDS, HEAD)).toEqual(head);
     view.dispose();
   });
 
@@ -278,29 +328,27 @@ describe('the head split in the view\'s bounds', () => {
 
   it('AT RANGE the record is written closed and the bounds stay open: setSplitEye past the split\'s draw distance', () => {
     const lanes = (f: Float32Array) => Array.from(f.subarray(REC_SPLIT_N * 4, (REC_SPLIT_R + 1) * 4));
+    const ZERO = new Array(16).fill(0);
     const view = createZombieGpuView(body, {});
-    // The game's accept law: one pixel of the 600-row grid, far strength 1, the last-step secant at 4 epsilons.
-    view.uniforms.aaCfg.value.set(Math.tan(29 * Math.PI / 180) / 600, 1, 6, 3);
-    view.uniforms.perfCfg.value.w = 4;
+    setGameAccept(view);
     view.update({ ...body, split: warp });
-    const far = splitDrawDistance(warp, { coneK: view.uniforms.aaCfg.value.x, strength: 1, secant: 4 });
+    const open = view.getTileGroups().map(g => ({ ...g })), head = row(view, ROW_CLUSTER_BOUNDS, HEAD);
+    const far = splitDrawDistance(warp, { coneK: view.uniforms.aaCfg.value.x, strength: GAME_AA, secant: GAME_LAST_STEP_DEFAULT });
     expect(far).toBeGreaterThan(12);
     expect(far).toBeLessThan(13);
-    const at = (d: number): [number, number, number] => [warp.h[0], warp.h[1], warp.h[2] + d];
     // No eye yet: drawn.
     expect(lanes(view.records.floats)[0]).toBe(warp.n[0]);
     view.setSplitEye(at(far - 0.01));
     expect(lanes(view.records.floats)[0]).toBe(warp.n[0]);
     view.setSplitEye(at(far + 0.01));
-    expect(lanes(view.records.floats)).toEqual(new Array(16).fill(0));
-    // Every later record write keeps it closed (the setters, the next pose), and the bounds still hold the ball.
+    expect(lanes(view.records.floats)).toEqual(ZERO);
+    // Every later record write keeps it closed (the setters, the next pose), and the bounds are still the open head's.
     view.setTime(2);
     view.update({ ...body, split: warp });
-    expect(lanes(view.records.floats)).toEqual(new Array(16).fill(0));
-    expect(holds(view.getTileGroups()[1]!.center, view.getTileGroups()[1]!.radius)).toBe(true);
-    const head = row(view, ROW_CLUSTER_BOUNDS, 0);
-    expect(holds(head, head[3]!)).toBe(true);
-    // Back inside: open again at once, without a new pose.
+    expect(lanes(view.records.floats)).toEqual(ZERO);
+    expect(view.getTileGroups()).toEqual(open);
+    expect(row(view, ROW_CLUSTER_BOUNDS, HEAD)).toEqual(head);
+    // Well inside: open again at once, without a new pose.
     view.setSplitEye(at(2));
     expect(lanes(view.records.floats)[0]).toBe(warp.n[0]);
     // The distance is the view's own accept law: a pixel twice as coarse closes it at this eye; no secant opens it.
@@ -308,24 +356,112 @@ describe('the head split in the view\'s bounds', () => {
     expect(lanes(view.records.floats)[0]).toBe(warp.n[0]);
     view.uniforms.aaCfg.value.x *= 2;
     view.syncRecord();
-    expect(lanes(view.records.floats)).toEqual(new Array(16).fill(0));
+    expect(lanes(view.records.floats)).toEqual(ZERO);
     view.uniforms.perfCfg.value.w = 0;
     view.syncRecord();
     expect(lanes(view.records.floats)[0]).toBe(warp.n[0]);
     // No eye: drawn at any distance (the labs, a view nobody feeds).
-    view.uniforms.perfCfg.value.w = 4;
+    setGameAccept(view);
     view.setSplitEye(at(500));
-    expect(lanes(view.records.floats)).toEqual(new Array(16).fill(0));
+    expect(lanes(view.records.floats)).toEqual(ZERO);
     view.setSplitEye(null);
     expect(lanes(view.records.floats)[0]).toBe(warp.n[0]);
     view.dispose();
   });
 
+  it('a split closed for range opens again only inside SPLIT_REOPEN_FRAC of the distance: a hovering eye does not flip it', () => {
+    const view = createZombieGpuView(body, {});
+    setGameAccept(view);
+    view.update({ ...body, split: warp });
+    const far = splitDrawDistance(warp, { coneK: view.uniforms.aaCfg.value.x, strength: GAME_AA, secant: GAME_LAST_STEP_DEFAULT });
+    expect(SPLIT_REOPEN_FRAC * far).toBeLessThan(far - 0.3);
+    // From inside, an eye going +-0.3 m round the cut-off: it closes on the first step out and stays closed.
+    view.setSplitEye(at(far - 0.3));
+    expect(view.splitDrawn).toBe(warp);
+    const seen: boolean[] = [];
+    for (let i = 0; i < 12; i++) {
+      view.setSplitEye(at(far + (i % 2 === 0 ? 0.3 : -0.3)));
+      if (i % 3 === 0) view.setTime(i);   // any record write asks again
+      seen.push(view.splitDrawn !== null);
+    }
+    expect(seen).toEqual(new Array(12).fill(false));
+    // It opens again once well inside, and then holds up to the cut-off.
+    view.setSplitEye(at(SPLIT_REOPEN_FRAC * far + 0.01));
+    expect(view.splitDrawn).toBeNull();
+    view.setSplitEye(at(SPLIT_REOPEN_FRAC * far - 0.01));
+    expect(view.splitDrawn).toBe(warp);
+    view.setSplitEye(at(far - 0.01));
+    expect(view.splitDrawn).toBe(warp);
+    // The range is forgotten with the split or the eye: a head split afresh just inside the cut-off is drawn.
+    view.setSplitEye(at(far + 0.3));
+    expect(view.splitDrawn).toBeNull();
+    view.update(body);
+    view.setSplitEye(at(far - 0.3));
+    view.update({ ...body, split: warp });
+    expect(view.splitDrawn).toBe(warp);
+    view.setSplitEye(at(far + 0.3));
+    view.setSplitEye(null);
+    view.setSplitEye(at(far - 0.3));
+    expect(view.splitDrawn).toBe(warp);
+    view.dispose();
+  });
+
+  it('splitDrawn is the split the record carries: the pose\'s, or null for a closed pose or one closed for range', () => {
+    const lanes = (f: Float32Array) => Array.from(f.subarray(REC_SPLIT_N * 4, (REC_SPLIT_R + 1) * 4));
+    const view = createZombieGpuView(body, {});
+    setGameAccept(view);
+    expect(view.splitDrawn).toBeNull();
+    view.update({ ...body, split: warp });
+    expect(view.splitDrawn).toBe(warp);
+    view.setSplitEye(at(40));
+    expect(view.splitDrawn).toBeNull();
+    expect(lanes(view.records.floats)).toEqual(new Array(16).fill(0));
+    view.setSplitEye(at(1));
+    expect(view.splitDrawn).toBe(warp);
+    expect(lanes(view.records.floats)[0]).toBe(warp.n[0]);
+    view.update(body);
+    expect(view.splitDrawn).toBeNull();
+    // Built from an open pose: drawn from the start. The eye the view keeps is a copy.
+    const eye: [number, number, number] = [warp.h[0], warp.h[1], warp.h[2] + 1];
+    const born = createZombieGpuView({ ...body, split: warp }, {});
+    setGameAccept(born);
+    expect(born.splitDrawn).toBe(warp);
+    born.setSplitEye(eye);
+    eye[2] = warp.h[2] + 100;
+    born.syncRecord();
+    expect(born.splitDrawn).toBe(warp);
+    view.dispose(); born.dispose();
+  });
+
+  it('warns once when the live accept law makes the near reach pass REGION_MARGIN under a drawn split', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const view = createZombieGpuView(body, {});
+      setGameAccept(view);
+      view.update({ ...body, split: warp });
+      view.uniforms.perfCfg.value.w = 6;
+      view.syncRecord();
+      expect(warn).not.toHaveBeenCalled();
+      // A closed head does not care.
+      view.update(body);
+      view.uniforms.perfCfg.value.w = 7;
+      view.syncRecord();
+      expect(warn).not.toHaveBeenCalled();
+      view.update({ ...body, split: warp });
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]![0])).toMatch(/near accept reach is \d+ mm, over REGION_MARGIN/);
+      view.syncRecord();
+      view.update({ ...body, split: warp });
+      expect(warn).toHaveBeenCalledTimes(1);
+      view.dispose();
+    } finally { warn.mockRestore(); }
+  });
+
   it('a view built from an open pose is bounded for it from the start', () => {
     const view = createZombieGpuView({ ...body, split: warp }, {});
-    expect(holds(view.getTileGroups()[1]!.center, view.getTileGroups()[1]!.radius)).toBe(true);
-    const head = row(view, ROW_CLUSTER_BOUNDS, 0);
-    expect(holds(head, head[3]!)).toBe(true);
+    const hc = body.clusters[HEAD]!;
+    expectRow(row(view, ROW_CLUSTER_BOUNDS, HEAD), splitBound(frame, hc.center, hc.radius, k4 * Math.max(packed.clusterGroups[HEAD * 4 + 2]!, 1)));
+    expect(HEAD_GROUPS.some(g => view.getTileGroups()[g]!.radius > packed.groupBounds[g * 4 + 3]!)).toBe(true);
     view.dispose();
   });
 });

@@ -287,6 +287,7 @@ import { createAxeHarness } from './game-axe';
 import { createFlail } from './game-flail';
 import { createHeadDamage } from './game-head-damage';
 import { createHeadSplit } from './game-head-split';
+import { GAME_AA, GAME_AA_FADE_M, GAME_AA_NEAR, GAME_LAST_STEP_DEFAULT } from './game-march-accept';
 import { createBrainGib } from './game-brain-gib';
 import { clearMeshGibs, spawnMeshGib, stepMeshGibs } from './game-mesh-gibs';
 import { createHeadSeams } from './game-seams-head';
@@ -1755,6 +1756,10 @@ async function main() {
       if (firstMeshSync) mark('mesh-sync-end');
     }
     ctx.telemetry.telemetry.lap('region', 'draw:uniforms-cull-crowd');
+    // THE HEAD SPLIT AT RANGE: each split actor's view measures its split's draw distance from the eye this frame is
+    // drawn with (game-head-split.ts drawEye). Here, not in the tick: the render camera is final, also after a
+    // teleport and while the sim is paused, and the crowd's record flush (its sync, below) comes after.
+    ctx.weapon.headSplit?.drawEye(camera.position.toArray());
     // skeleton=volume: only the tiny pose/meta texture changes per frame.
     // A body-reference change means sever/rebuild and therefore a new
     // revision-keyed atlas; stale same-name grids are never re-enabled.
@@ -2552,28 +2557,13 @@ async function main() {
   // the pre-lever march bit for bit); __sdfGame.setLastStep() flips it live.
   const GAME_LAST_STEP = (() => {
     const raw = new URLSearchParams(location.search).get('laststep');
-    if (raw === null) return 4;
+    if (raw === null) return GAME_LAST_STEP_DEFAULT;
     const v = Number(raw) || 0;
     return v > 0 ? Math.min(16, v) : 0;
   })();
 
-  /** Perf round 2, task 6: the footprint-AA strength (aaCfg.y). When > 0 the
-   *  march may accept a sample once the field is within the ray's projected
-   *  PIXEL footprint (t * aaCfg.x) instead of the 1.2 mm literal — fewer
-   *  steps at range, geometric aliasing prefiltered below Nyquist. The
-   *  epsilon divides by the dominant prim's GROUP DISTORTION factor
-   *  (gFoldBestDistort, up to 22x on the schoolgirl sole plate) so
-   *  high-distortion regions cannot stop a ray short — the exact defect that
-   *  kept this lever OFF when it first shipped (see march.wgsl.ts).
-   *  `__sdfGame.setAa(strength)` flips it live for A/B; 0 is the old
-   *  behaviour bit-for-bit (t * 0 / distort == t * 0 == 0). */
-  const GAME_AA = 1.0;
-  /** DISTANCE-BASED ACCEPT (2026-09-22, cost census): accept strength GAME_AA_NEAR up
-   *  close, fading to GAME_AA over [GAME_AA_FADE_M / 2, GAME_AA_FADE_M] metres. Owner A/B:
-   *  invisible at 6 (and judged "okay" at 12 — 12 saves ~19 % of wounded-melee prim work vs
-   *  ~15 % at 6; a one-number follow-up). `__sdfGame.setAaDistance(near, fadeM)`; 0 = off. */
-  const GAME_AA_NEAR = 6.0;
-  const GAME_AA_FADE_M = 3.0;
+  // The footprint-AA strength and the distance-based accept (aaCfg.y/z/w) are game-march-accept.ts's GAME_AA,
+  // GAME_AA_NEAR and GAME_AA_FADE_M.
 
   /** Perf round 2, task 7: bodies RECEIVE the level's shadows. The twin
    *  light (dungeon-lighting.ts) renders a level-only depth map (layer 0 —

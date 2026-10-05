@@ -24,6 +24,8 @@ import { makeWeaponSlotState } from './game-weapon-slots';
 import { AXE_HEAD, chopOpenFrac } from './axe-head';
 import { headShape } from './flame-anchors';
 import { traceRaySurface } from './flail-strike';
+import mainSrc from './game-main.ts?raw';
+import leafSrc from './game-head-split.ts?raw';
 
 const made: { dispose(): void }[] = [];
 afterEach(() => { for (const r of made.splice(0)) r.dispose(); });
@@ -31,9 +33,9 @@ afterEach(() => { for (const r of made.splice(0)) r.dispose(); });
 /** A fresh zombie (never stepped: yaw 0, the head frame is the identity), its blasts recorded and its split hook and
  *  head re-poses observable. */
 function freshActor(id = 7) {
-  // The view takes every call and keeps the eyes the split leaf hands it (setSplitEye).
-  const eyes: Vec3[] = [];
-  const view = new Proxy({}, { get: (_t, k) => (k === 'setSplitEye' ? (e: Vec3) => { eyes.push(e); } : () => {}) });
+  // The view takes every call and keeps the eyes the split leaf hands it (setSplitEye; null takes the eye back).
+  const eyes: (Vec3 | null)[] = [];
+  const view = new Proxy({}, { get: (_t, k) => (k === 'setSplitEye' ? (e: Vec3 | null) => { eyes.push(e); } : () => {}) });
   const a = createZombieActor({ id, room: 0, body: buildBody(makeZombie(), DEFAULT_BUILD_OPTS, {}), view: view as never,
     start: [0, 0, 0], seed: 3, bounds: { minX: -5, maxX: 5, minZ: -5, maxZ: 5 }, furniture: [] });
   const seen = { blasts: [] as ActorBlastEffect[], reposes: 0, hook: null as ((p: BuildResult) => SplitWarp | null) | null, eyes };
@@ -50,7 +52,7 @@ function fixture(o: { headDamaged?: HeadSplitDeps['headDamaged']; frozen?: boole
     weapon: { aimRig: new THREE.Group(), viewModelAnchor: new THREE.Group(), slotState: makeWeaponSlotState('axe'), headSplit: null as unknown },
     player: { player: { yaw: 0, pitch: 0 } },
     world: { actors: [a], loop: null, sequence: null },
-    boot: { canvas: {}, deferredApi: null, handle: { camera: new THREE.PerspectiveCamera() } },
+    boot: { canvas: {}, deferredApi: null },
     telemetry: { telemetry: { event: vi.fn() } },
     demo: { wanderFrozen: o.frozen ?? true },
     render: { frozenHullBuilt: true },
@@ -291,20 +293,45 @@ describe('the leaf: the per-frame tick', () => {
     expect(g.a.drawnBody().split).toBe(g.a.posed().split);
   });
 
-  it('hands each split actor\'s view the camera\'s eye every tick (the view closes the split\'s record at range); an actor with no split state gets none', () => {
+  it('drawEye hands the frame\'s eye to the view of each actor it holds a split for, and the tick hands none', () => {
     const f = fixture();
+    f.split.drawEye([9, 9, 9]);
     f.ticks(3);
     expect(f.seen.eyes).toEqual([]);
     f.open(X, f.skinFrom(f.view.eye));
-    f.ctx.boot.handle.camera.position.set(1, 2, 3);
-    f.ticks(1);
-    f.ctx.boot.handle.camera.position.set(4, 5, 6);
-    f.ticks(1);
+    f.ticks(2);
+    expect(f.seen.eyes).toEqual([]);
+    f.split.drawEye([1, 2, 3]);
+    f.split.drawEye([4, 5, 6]);
     expect(f.seen.eyes).toEqual([[1, 2, 3], [4, 5, 6]]);
     // The pose keeps its split wherever the eye is: every strike and trace reads it there.
-    f.ctx.boot.handle.camera.position.set(0, 0, 500);
+    f.split.drawEye([0, 0, 500]);
     f.ticks(300);
     expect(f.a.posed().split).toBeTruthy();
+  });
+
+  it('an actor the leaf drops gets its eye taken back: closed by the seam, gone from the cast, or reset', () => {
+    for (const how of ['force', 'gone', 'reset'] as const) {
+      const f = fixture();
+      f.open(X, f.skinFrom(f.view.eye));
+      f.split.drawEye([1, 2, 3]);
+      if (how === 'force') f.split.force(7, 'middle', 0, 0, 0);
+      else if (how === 'gone') { f.ctx.world.actors.length = 0; f.ticks(1); }
+      else f.split.reset();
+      expect(f.seen.eyes, how).toEqual([[1, 2, 3], null]);
+      // And a later frame's eye passes it by.
+      f.split.drawEye([7, 7, 7]);
+      expect(f.seen.eyes, how).toHaveLength(2);
+    }
+  });
+
+  it('the draw stage feeds it: game-main calls drawEye with the render camera before the crowd\'s sync', () => {
+    const iEye = mainSrc.indexOf('ctx.weapon.headSplit?.drawEye(camera.position.toArray());');
+    expect(iEye).toBeGreaterThan(mainSrc.indexOf("ctx.telemetry.telemetry.lap('region', 'draw:uniforms-cull-crowd');"));
+    expect(iEye).toBeLessThan(mainSrc.indexOf('refreshActorTiles();', iEye));
+    // The tick's call hands no eye.
+    expect(mainSrc).toContain('ctx.weapon.headSplit?.tick(dt);');
+    expect(leafSrc).not.toContain('ctx.boot.handle');
   });
 
   it('a FROZEN actor\'s split asks for the frozen hull build again whenever it changes (the hulls follow the pose\'s split)', () => {
