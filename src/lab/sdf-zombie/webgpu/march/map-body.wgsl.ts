@@ -6,8 +6,9 @@
 import { LIMB_ACCUMULATORS as LIMBS } from './limbs-flag';
 import { MAX_CROWD_INSTANCES } from '../crowd-records';
 import { ROW_CLUSTER_BOUNDS, ROW_CLUSTER_GROUPS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE } from './layout';
+import { REGION_MARGIN } from '../../head-split';
 
-export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, volumeTex: texture_3d<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, segVolumeAtlas: texture_3d<f32>, segVolumeMeta: texture_2d<f32>, perfCfg: vec4<f32>, inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>) -> vec4<f32> {
+export const MAP_BODY = /* wgsl */ `fn mapBody(pIn: vec3<f32>, data: texture_2d<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, volumeTex: texture_3d<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, segVolumeAtlas: texture_3d<f32>, segVolumeMeta: texture_2d<f32>, perfCfg: vec4<f32>, inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>) -> vec4<f32> {
   gRefoldWin = 0.0;
   gWalkGapNew = 1e9;
   gWalkAttempted = 0.0;
@@ -31,6 +32,9 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   var foldU = 1e9;
   var nearWoundU = 0.0;
   var carvedU = 0.0;
+  // THE HEAD SPLIT: the piece that won the union (0 for every closed slot) and its field before the piece caps.
+  var pieceU = 0;
+  var splitFU = 1e9;
   // PER-STEP SLOT ITERATION. Tiles off: walk the capacity bound and take slot
   // k directly (the pre-crowd one-slot case is k == 0). Tiles on: walk the
   // per-pixel table built in MARCH_TRACE_SETUP — gPixN distinct slots, each
@@ -61,6 +65,64 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     let volumePose0 = gInstVolPose0;
     let volumePose1 = gInstVolPose1;
     let band = gBand;
+    // THE HEAD SPLIT (head-split.ts splitField is the CPU mirror, and its header has the argument). A slot whose
+    // record carries a split is the union of up to three rigid CAPPED PIECES of its own field f, each read at its
+    // own un-warped point. With u = n x a, s(q) = n.q - d0, up(q) = u.(q - h), dh = |pIn - h|, rho = r - margin and
+    // q+- = splitMoveBack(pIn, theta+-):
+    //   P0 = max(f(pIn), min(up(pIn), rho - dh))            the unmoved rest of the body
+    //   P+ = max(f(q+), -s(q+), -up(q+), dh - rho)          the + half, turned open by thetaP
+    //   P- = max(f(q-),  s(q-), -up(q-), dh - rho)          the - half (thetaM <= 0)
+    //   C  = margin + |dh - r|                               the region shell bound
+    // The slot is min(P0, P+, P-, C) inside the region sphere (dh <= r) and min(P0, C) outside. Every piece is a
+    // rigid motion of f cut by half-spaces and a ball, so the min is a continuous distance bound: the march, the cone
+    // and every probe step through it as through any body. A piece is a vec3 (cap, theta, id); a CLOSED slot is the
+    // one piece (-1e9, 0, 0) at pIn with no cap and no shell, which is the body exactly as before.
+    let splitOpen = dot(gInstSplitN.xyz, gInstSplitN.xyz) > 0.5;
+    var splitShell = 1e9;
+    var pcA = vec3<f32>(-1e9, 0.0, 0.0);
+    var pcB = vec3<f32>(1e9, 0.0, 1.0);
+    var pcC = vec3<f32>(1e9, 0.0, 2.0);
+    if (splitOpen) {
+      let spN = gInstSplitN.xyz;
+      let spH = gInstSplitH.xyz;
+      let spA = gInstSplitA.xyz;
+      let spU = cross(spN, spA);
+      let spDh = length(pIn - spH);
+      let spRho = gInstSplitR.x - ${REGION_MARGIN};
+      splitShell = ${REGION_MARGIN} + abs(spDh - gInstSplitR.x);
+      var cap0 = min(dot(spU, pIn - spH), spRho - spDh);
+      if (spDh <= gInstSplitR.x) {
+        let qP = splitMoveBack(pIn, spH, spA, gInstSplitN.w);
+        let qM = splitMoveBack(pIn, spH, spA, gInstSplitA.w);
+        let capP = max(max(-(dot(spN, qP) - gInstSplitH.w), -dot(spU, qP - spH)), spDh - spRho);
+        let capM = max(max(dot(spN, qM) - gInstSplitH.w, -dot(spU, qM - spH)), spDh - spRho);
+        // A side that does not move (theta 0, the larger side of a one-sided split) is at pIn itself and shares the
+        // rest's field: min(max(f, cap0), max(f, capSide)) = max(f, min(cap0, capSide)), so it is not a piece.
+        if (gInstSplitN.w == 0.0) { cap0 = min(cap0, capP); } else { pcB.x = capP; pcB.y = gInstSplitN.w; }
+        if (gInstSplitA.w == 0.0) { cap0 = min(cap0, capM); } else { pcC.x = capM; pcC.y = gInstSplitA.w; }
+      }
+      pcA.x = cap0;
+      // Ascending caps (three scalars' compare-swap; no indexed array), for the early skip below.
+      if (pcB.x < pcA.x) { let sw = pcA; pcA = pcB; pcB = sw; }
+      if (pcC.x < pcB.x) { let sw = pcB; pcB = pcC; pcC = sw; }
+      if (pcB.x < pcA.x) { let sw = pcA; pcA = pcB; pcB = sw; }
+    }
+    // THE PIECE LOOP wraps the whole slot body, and each piece is unioned like a slot. EARLY SKIP: a piece's value
+    // is max(f, cap) >= cap, so a cap at or over the best so far (the union's running min, or the shell) cannot win,
+    // and neither can the larger caps after it: exact. A missing piece has cap 1e9, so a closed slot, or a point
+    // outside the region, runs the body once.
+    // continue / break AUDIT (2026-10-04): the slot body below has none at its own level. Every one sits inside an
+    // inner loop (the cluster, group and tile walks, the owner re-fold's cluster loop and its pre-scan), so none
+    // skips or ends a piece, and none ever ended the slot loop. The skip's break is the only one that targets this
+    // loop (pinned by map-body.wgsl.test.ts).
+    for (var pc = 0; pc < 3; pc = pc + 1) {
+    let piece = select(select(pcC, pcB, pc == 1), pcA, pc == 0);
+    if (piece.x >= min(dUnion, splitShell)) { break; }
+    // p, for the rest of the slot body, is this piece's un-warped point: the tile and group bounds, the carves, the
+    // wounds, the bones and the rest anchor all live on the closed head.
+    var pMoved = pIn;
+    if (piece.y != 0.0) { pMoved = splitMoveBack(pIn, gInstSplitH.xyz, gInstSplitA.xyz, piece.y); }
+    let p = pMoved;
     var d = 1e9;
     // Argmin tracking now lives in private globals shared with foldGroup
     // (above); reset per slot — calcNormal calls mapBody four times and each
@@ -121,8 +183,10 @@ ${LIMBS ? `    // Mode 4 only where it can matter: a body with wounds. An unwoun
   let primCount = i32(counts.x);
   // UPPER-BOUND CULL (see gCullRef): only for the slot the bound was measured
   // on, and never with per-limb accumulators (a limb's fold is not bounded by
-  // the body's).
-  gCullRef = select(1e9, gCullUB, base + s == gCullSlot && !limbMode);
+  // the body's). A split slot's pieces fold at different un-warped points, so
+  // the bound holds for the PIECE it was measured on only: its point at the
+  // last sample and at this one are the same rigid motion of the ray's.
+  gCullRef = select(1e9, gCullUB, base + s == gCullSlot && i32(piece.z) == gCullPiece && !limbMode);
   if (tiled) {
     // TILE-LIST PATH (perf task 5 step 2, range-walked in 7d). MARCH_BODY
     // preloaded this pixel's tile entries into gTile* ONCE, before any
@@ -219,7 +283,9 @@ ${LIMBS ? `  if (limbMode) { limbSwitch(-1); }
   // unwritten mask is zero and would switch the re-fold off entirely.
   let raisersAtBase = gWoundRaisers & ~1u;
   let threatAtBase = gWoundThreat;
-  let walkSkip = walkSkipOn && gWalkStep > 0.5 && gWalkGap > 0.0;
+  // Never on an open split slot: the gap was measured on the pieces the LAST sample evaluated, and the early skip
+  // may have left this one out.
+  let walkSkip = walkSkipOn && gWalkStep > 0.5 && gWalkGap > 0.0 && !splitOpen;
   if (!walkSkip && !cheapProbe && gNormalHint != 0.0 && (nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5 && (refoldMode < 0.5 || (((refoldMode > 1.5 && refoldMode < 2.5) || limbMode) && raisersAtBase != 0u) || (refoldMode > 2.5 && refoldMode < 3.5 && threatAtBase != 0u))) {
     let owners = gWoundOwners;
     for (var c = 0; c < 8; c = c + 1) {
@@ -373,10 +439,14 @@ ${LIMBS ? `      let savedBest = gFoldBest;
     let anchor = restPoint(p, data, i32(bestIdx), noiseLocal(p, noiseShift), band);
     dmgFinal = dmg + fbm(anchor * 3.0) * noiseCfg.x;
   }
+    // THE PIECE CAPS (above), on the finished field: the cut faces are the caps' planes, flat under the wounds, the
+    // bones and the normal's noise alike.
+    var dPiece = dmgFinal;
+    if (splitOpen) { dPiece = max(dmgFinal, piece.x); }
     // UNION MIN. .w keeps the PRE-WOUND carved field value, exactly as the
     // one-slot entry returned it; POST's tissue-depth read is unchanged.
-    if (dmgFinal < dUnion) {
-      dUnion = dmgFinal;
+    if (dPiece < dUnion) {
+      dUnion = dPiece;
       bestSlot = base + s;
       nearWoundU = nearWound;
       carvedU = carved;
@@ -384,14 +454,23 @@ ${LIMBS ? `      let savedBest = gFoldBest;
       bestU = gFoldBest;
       bestDistortU = gFoldBestDistort;
       foldU = foldSlot;
+      pieceU = i32(piece.z);
+      splitFU = dmgFinal;
     }
+    }
+    // The region shell bound C caps the slot's value only: it is at least the margin, so it is never the surface,
+    // and the bookkeeping stays with the last piece or slot that won.
+    if (splitOpen) { dUnion = min(dUnion, splitShell); }
   }
   gLastFold = foldU;
   gLastFoldSlot = bestSlot;
+  gLastFoldPiece = pieceU;
   gFoldBest = bestU;
   gFoldBestIdx = bestIdxU;
   gFoldBestDistort = bestDistortU;
   gHitSlot = bestSlot;
+  gHitPiece = pieceU;
+  gHitSplitF = splitFU;
   // Leave the instance globals on the slot the caller expects: the pinned hit
   // slot after the hit, else the union's winner. No-op for a one-slot pixel.
   let wantSlot = select(bestSlot, gPinSlot, gPinSlot >= 0);
@@ -399,12 +478,15 @@ ${LIMBS ? `      let savedBest = gFoldBest;
   return vec4<f32>(dUnion, bestIdxU, nearWoundU, carvedU);
 }
 // UPPER-BOUND CULL plumbing (see gCullRef): the march loop writes gCullUB /
-// gCullSlot before its mapBody call and clears them after; mapBody leaves the
-// winning slot's pre-carve FOLD in gLastFold / gLastFoldSlot for the next one.
+// gCullSlot / gCullPiece before its mapBody call and clears the bound after;
+// mapBody leaves the winning slot's pre-carve FOLD, and the split piece it was
+// folded for, in gLastFold / gLastFoldSlot / gLastFoldPiece for the next one.
 var<private> gCullUB: f32 = 1e9;
 var<private> gCullSlot: i32 = -1;
+var<private> gCullPiece: i32 = 0;
 var<private> gLastFold: f32 = 1e9;
-var<private> gLastFoldSlot: i32 = -1;`;
+var<private> gLastFoldSlot: i32 = -1;
+var<private> gLastFoldPiece: i32 = 0;`;
 
 // Tetrahedron differences. Epsilon stays SMALL: the prior blendshell experiment
 // used 0.02 (2 cm on 6 cm limbs) and smeared normals exactly at the

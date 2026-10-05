@@ -3,19 +3,21 @@ import {
   REC_VEC4S, MAX_CROWD_INSTANCES, REC_COUNTS, REC_COUNTS2, REC_WOUND_BOUND, REC_ANCHOR_BAND,
   REC_WIND_ALIVE, REC_MELT, REC_FLASH, REC_NOISE_YAW, REC_HEAD_WCOUNT, REC_HEAD_QUAT,
   REC_VOL_POSE0, REC_VOL_POSE1, REC_CENTRE_SEED, REC_HALF_REV, REC_GORE, REC_BURN,
-  REC_LIGHTS, createCrowdRecords, type RecordSource,
+  REC_LIGHTS, REC_SPLIT_N, REC_SPLIT_H, REC_SPLIT_A, REC_SPLIT_R, createCrowdRecords, type RecordSource,
 } from './crowd-records';
 import { DATA_ROWS } from './march.wgsl';
+import type { SplitWarp } from '../head-split';
 
 describe('crowd records', () => {
   it('gives every field a distinct vec4 inside the record', () => {
     const rows = [REC_COUNTS, REC_COUNTS2, REC_WOUND_BOUND, REC_ANCHOR_BAND, REC_WIND_ALIVE, REC_MELT,
       REC_FLASH, REC_NOISE_YAW, REC_HEAD_WCOUNT, REC_HEAD_QUAT, REC_VOL_POSE0, REC_VOL_POSE1,
-      REC_CENTRE_SEED, REC_HALF_REV, REC_GORE, REC_BURN, REC_LIGHTS];
+      REC_CENTRE_SEED, REC_HALF_REV, REC_GORE, REC_BURN, REC_LIGHTS, REC_SPLIT_N, REC_SPLIT_H, REC_SPLIT_A, REC_SPLIT_R];
     expect(new Set(rows).size).toBe(rows.length);
     expect(Math.max(...rows)).toBeLessThan(REC_VEC4S);
-    expect(REC_VEC4S).toBe(17);
+    expect(REC_VEC4S).toBe(21);
     expect(REC_LIGHTS).toBe(16);
+    expect([REC_SPLIT_N, REC_SPLIT_H, REC_SPLIT_A, REC_SPLIT_R]).toEqual([17, 18, 19, 20]);
     expect(MAX_CROWD_INSTANCES).toBe(64);
   });
 
@@ -89,10 +91,10 @@ describe('crowd records', () => {
       bodyCentre: [0, 0, 0], variantSeed: 0, bodyHalf: [0, 0, 0], damageRevision: 0, gore: 0,
       burn: 0, burnSec: 0, charAmount: 0,
     };
-    it('writes the four packed index+weight picks at (slot * 17 + 16) * 4', () => {
+    it('writes the four packed index+weight picks at (slot * 21 + 16) * 4', () => {
       const r = createCrowdRecords(3);
       r.write(2, { ...minimalSource, lights: [0.9, 2.5, -1, -1] });
-      const o = (2 * 17 + 16) * 4;
+      const o = (2 * 21 + 16) * 4;
       expect(r.floats[o]).toBeCloseTo(0.9, 6);
       expect(r.floats[o + 1]).toBeCloseTo(2.5, 6);
       expect(r.floats[o + 2]).toBe(-1);
@@ -101,7 +103,7 @@ describe('crowd records', () => {
     it('writes four empty picks (-1) when the source carries none', () => {
       const r = createCrowdRecords(2);
       r.write(1, minimalSource);
-      const o = (1 * 17 + 16) * 4;
+      const o = (1 * 21 + 16) * 4;
       expect(Array.from(r.floats.slice(o, o + 4))).toEqual([-1, -1, -1, -1]);
     });
   });
@@ -119,5 +121,52 @@ describe('crowd records', () => {
       burn: 0, burnSec: 0, charAmount: 0,
     });
     expect(r.floats[1 * REC_VEC4S * 4 + REC_MELT * 4 + 3]).toBeCloseTo(0.1, 6);
+  });
+
+  describe('the head split (REC_SPLIT_N / H / A / R, slots 17-20)', () => {
+    const src: RecordSource = {
+      counts: [0, 0, 0, 0], counts2: [0, 0, 0, 0], woundBound: [0, 0, 0, 1e9],
+      bodyAnchor: [0, 0, 0], windDrift: [0, 0, 0], meltCfg: [0, 0, 0, 0], bodyFlash: [0, 0, 0, 0],
+      noiseShift: [0, 0, 0], bodyYaw: 0, headCentre: [0, 0, 0], woundCount: 0,
+      headQuat: [0, 0, 0, 1], volumePose0: [0, 0, 0, 0], volumePose1: [0, 0, 0, 0],
+      bodyCentre: [0, 0, 0], variantSeed: 0, bodyHalf: [0, 0, 0], damageRevision: 0, gore: 0,
+      burn: 0, burnSec: 0, charAmount: 0,
+    };
+    const warp: SplitWarp = { n: [1, 0, 0], d0: 0.25, h: [0.5, 1.5, -0.25], a: [0, 0, -1], thetaP: 0.5, thetaM: -0.25, r: 0.375 };
+    const lanes = (r: ReturnType<typeof createCrowdRecords>, slot: number) =>
+      Array.from(r.floats.subarray((slot * REC_VEC4S + REC_SPLIT_N) * 4, (slot * REC_VEC4S + REC_SPLIT_R + 1) * 4));
+    const ZERO = new Array(16).fill(0);
+
+    it('writes (n, thetaP), (h, d0), (a, thetaM), (r, 0, 0, 0)', () => {
+      const r = createCrowdRecords(3);
+      r.write(2, { ...src, split: warp });
+      expect(lanes(r, 2)).toEqual([1, 0, 0, 0.5, 0.5, 1.5, -0.25, 0.25, 0, 0, -1, -0.25, 0.375, 0, 0, 0]);
+      expect(lanes(r, 1)).toEqual(ZERO);
+    });
+    it('a source with no split writes zeros, over a split the slot held (a closed head is a zero record)', () => {
+      const r = createCrowdRecords(2);
+      r.write(1, { ...src, split: warp });
+      r.write(1, { ...src, split: null });
+      expect(lanes(r, 1)).toEqual(ZERO);
+      r.write(1, { ...src, split: warp });
+      r.write(1, src);
+      expect(lanes(r, 1)).toEqual(ZERO);
+    });
+    it('a split at angle 0 on both sides is closed too: the march tests n for "open"', () => {
+      const r = createCrowdRecords(2);
+      r.write(1, { ...src, split: { ...warp, thetaP: 0, thetaM: 0 } });
+      expect(lanes(r, 1)).toEqual(ZERO);
+      r.write(1, { ...src, split: { ...warp, thetaP: 0 } });
+      expect(lanes(r, 1).slice(0, 4)).toEqual([1, 0, 0, 0]);
+      expect(lanes(r, 1)[11]).toBe(-0.25);
+    });
+    it('freeing a slot zeroes its split, so the next view to take it starts closed', () => {
+      const r = createCrowdRecords(2);
+      r.write(1, { ...src, split: warp });
+      r.alive(1, false);
+      expect(lanes(r, 1)).toEqual(ZERO);
+      r.alive(1, true);
+      expect(lanes(r, 1)).toEqual(ZERO);
+    });
   });
 });

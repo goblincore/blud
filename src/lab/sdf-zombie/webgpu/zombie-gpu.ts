@@ -17,6 +17,7 @@ import {
   storage, attribute, positionGeometry, vec3, mix, Fn, If, Discard, positionLocal, select,
 } from 'three/tsl';
 import type { BuildResult } from '../build-body';
+import type { SplitWarp } from '../head-split';
 import { packBody, PRIM_STRIDE, W_BONE, W_ORGAN } from '../pack';
 import { MAX_PRIMS, MAX_CLUSTERS, BONE_SEG_MAX, BASE_PRIM_STRIDE, bodyPrimStride } from '../validate';
 import { MAX_WOUNDS } from '../damage';
@@ -1690,6 +1691,7 @@ export interface CrowdMaterialSources {
  */
 export function writeViewRecord(
   records: CrowdRecords, slot: number, u: MarchUniforms, centre: THREE.Vector3, band?: number,
+  split?: SplitWarp | null,
 ): void {
   records.write(slot, {
     counts: u.counts.value.toArray(), counts2: u.counts2.value.toArray(),
@@ -1713,6 +1715,7 @@ export function writeViewRecord(
     // The body's light picks ride its record (REC_LIGHTS): every SDF view is a
     // crowd slot, so this is the one path to the march for single actors too.
     lights: u.bodyLights.value.toArray(),
+    split,
   }, band);
 }
 
@@ -2426,6 +2429,10 @@ export function createZombieGpuView(
   const motionRow = new Float32Array(MAX_PRIMS * 4);
   const motionPrev = { a: new Float32Array(MAX_PRIMS * 4), b: new Float32Array(MAX_PRIMS * 4), q: new Float32Array(MAX_PRIMS * 4), count: -1 };
   let lastUploadRest: BuildResult | undefined;
+  // THE HEAD SPLIT of the body last handed to update() (`posed.split`, head-split.ts; null = closed). The pose is its
+  // one source: every update() takes it from the body, so a closed or torn pose closes the record (REC_SPLIT_*), and
+  // the setters' syncRecord() re-writes it unchanged. The prims are the closed head's either way.
+  let headSplit: SplitWarp | null = null;
   // Each view owns its packing scratch. writeRow copies into the atlas before
   // the next upload, so the temporary rows need not allocate every frame.
   let uploadScratch: ReturnType<typeof packBody> | undefined;
@@ -2865,7 +2872,7 @@ export function createZombieGpuView(
    *  kernel reads. The uniform nodes stay authoritative for the per-TYPE
    *  block; this is the bridge for the per-INSTANCE half. */
   function syncRecord() {
-    writeViewRecord(records, slot, u, mesh.position);
+    writeViewRecord(records, slot, u, mesh.position, undefined, headSplit);
     if (ownRecords) ownRecords.flush();
   }
 
@@ -2922,6 +2929,7 @@ export function createZombieGpuView(
     setMotionOut(on) { u.meltCfg.value.y = on ? 1 : 0; syncRecord(); },
     setGoreStrength(v) { u.lodCfg.value.w = v; syncRecord(); },
     update(next, rest) {
+      headSplit = next.split ?? null;
       const p = upload(next, rest, true);
       const f = fit(next, p.maxBlendK);
       mesh.position.copy(f.centre);

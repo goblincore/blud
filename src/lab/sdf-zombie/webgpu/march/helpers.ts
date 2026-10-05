@@ -11,7 +11,7 @@ import { SEG_VOLUME_WGSL } from '../skeleton-spike/volume.wgsl';
 import { DEPTH_PRE_FETCH, DEPTH_PRE_MISS } from './cone-march.wgsl';
 import { APPLY_BONES, FOLD_BONE_RANGE } from './fields/bones.wgsl';
 import { APPLY_CARVES, PREV_POSED, REST_POINT } from './fields/carves.wgsl';
-import { FOLD_GROUP, INSTANCE_STATE } from './fields/groups.wgsl';
+import { FOLD_GROUP, INSTANCE_STATE, SPLIT_MOVE_BACK } from './fields/groups.wgsl';
 import { CHAR_MASK, TISSUE_RAMP } from './fields/tissue.wgsl';
 import { SAMPLE_VOLUME } from './fields/volume.wgsl';
 import { APPLY_WOUNDS, WOUND_MASK, WOUND_SHADOW } from './fields/wounds.wgsl';
@@ -45,7 +45,7 @@ export const HELPERS = [
   SD_SHELL,
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT, PREV_POSED,
   APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, TISSUE_RAMP, CHAR_MASK, SAMPLE_VOLUME,
-  FOLD_GROUP, INSTANCE_STATE, FOLD_BONE_RANGE, SEG_VOLUME_WGSL, APPLY_BONES, MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER, SOFT_SHOULDER,
+  FOLD_GROUP, INSTANCE_STATE, SPLIT_MOVE_BACK, FOLD_BONE_RANGE, SEG_VOLUME_WGSL, APPLY_BONES, MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER, SOFT_SHOULDER,
   WALL_CONTRIBUTION, AMBIENT_AT, PROBE_GRID_WGSL, PROBE_DYNAMIC_WGSL, FLASHLIGHT_BOUNCE_WGSL, LEVEL_SHADOW,
   // Quarter-res depth prepass fetch (close-up task 3). No field deps — it is
   // a textureLoad — so it rides last, ahead of MARCH_BODY which calls it.

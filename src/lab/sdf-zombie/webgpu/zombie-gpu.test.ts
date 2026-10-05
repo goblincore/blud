@@ -15,7 +15,9 @@ import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { ZOMBIE } from '../body';
 import { makeChunk } from '../gib-chunks';
 import { ROW_PRIM_A, ROW_PRIM_BEND } from './march.wgsl';
-import { REC_ANCHOR_BAND, REC_COUNTS, REC_GORE, REC_LIGHTS, REC_VEC4S, createCrowdRecords } from './crowd-records';
+import { REC_ANCHOR_BAND, REC_COUNTS, REC_GORE, REC_LIGHTS, REC_SPLIT_N, REC_SPLIT_R, REC_VEC4S, createCrowdRecords } from './crowd-records';
+import { createCrowdPrimAtlas } from './crowd-atlas';
+import type { SplitWarp } from '../head-split';
 import { BASE_PRIM_STRIDE, MAX_PRIMS } from '../validate';
 import { encodeSurfaceClass } from './deferred-surface';
 import type { Primitive } from '../types';
@@ -127,6 +129,66 @@ describe('noise root shift — packed channel (faceCfg3.zw)', () => {
     expect(view.object.scale.x).toBeCloseTo(view.object.scale.y, 9);
     view.dispose();
     template.dispose();
+  });
+});
+
+// THE HEAD SPLIT rides the record (crowd-records.ts REC_SPLIT_*), and the posed body is its one source: the view copies
+// `split` from the body it is handed in update(), so a closed or torn pose (no split) writes zeros.
+describe('the head split in the view record', () => {
+  const warp: SplitWarp = { n: [1, 0, 0], d0: 0.25, h: [0.5, 1.5, -0.25], a: [0, 0, -1], thetaP: 0.5, thetaM: -0.25, r: 0.375 };
+  const lanes = (floats: Float32Array, slot: number) =>
+    Array.from(floats.subarray((slot * REC_VEC4S + REC_SPLIT_N) * 4, (slot * REC_VEC4S + REC_SPLIT_R + 1) * 4));
+  const OPEN = [1, 0, 0, 0.5, 0.5, 1.5, -0.25, 0.25, 0, 0, -1, -0.25, 0.375, 0, 0, 0];
+  const ZERO = new Array(16).fill(0);
+
+  it('update() writes the posed body\'s split, and zeros again once the pose carries none', () => {
+    const view = createZombieGpuView(body, {});
+    expect(lanes(view.records.floats, 0)).toEqual(ZERO);
+    view.update({ ...body, split: warp });
+    expect(lanes(view.records.floats, 0)).toEqual(OPEN);
+    // The setters re-write the record from the view's state: the split stays until the next pose.
+    view.setTime(1.5);
+    view.setHeadRotation([0, 0, 0, 1]);
+    expect(lanes(view.records.floats, 0)).toEqual(OPEN);
+    view.update({ ...body, split: null });
+    expect(lanes(view.records.floats, 0)).toEqual(ZERO);
+    view.update({ ...body, split: warp });
+    view.update(body);
+    expect(lanes(view.records.floats, 0)).toEqual(ZERO);
+    view.dispose();
+  });
+
+  it('a view moved to another slot takes its split along; a fresh view on a slot a split view held writes zeros', () => {
+    const records = createCrowdRecords(3);
+    const atlas = createCrowdPrimAtlas(3);
+    const a = createZombieGpuView(body, {});
+    a.update({ ...body, split: warp });
+    a.rebind({ sink: atlas.sink(1), records, slot: 1 });
+    expect(lanes(records.floats, 1)).toEqual(OPEN);
+    // The actor is gone: its slot is freed (crowd-type.ts detach), then handed to a new body's view.
+    records.alive(1, false);
+    expect(lanes(records.floats, 1)).toEqual(ZERO);
+    const b = createZombieGpuView(body, {});
+    b.rebind({ sink: atlas.sink(1), records, slot: 1 });
+    records.alive(1, true);
+    expect(lanes(records.floats, 1)).toEqual(ZERO);
+    b.update(body);
+    expect(lanes(records.floats, 1)).toEqual(ZERO);
+    // Without the free in between, too: the new view's own write closes the slot.
+    a.rebind({ sink: atlas.sink(2), records, slot: 2 });
+    expect(lanes(records.floats, 2)).toEqual(OPEN);
+    b.rebind({ sink: atlas.sink(2), records, slot: 2 });
+    expect(lanes(records.floats, 2)).toEqual(ZERO);
+    a.dispose(); b.dispose(); atlas.texture.dispose();
+  });
+
+  it('writeViewRecord with no split (chunks, the FPV arm) writes zeros over whatever the slot held', () => {
+    const records = createCrowdRecords(2);
+    const u = defaultUniforms(blankFaceTexture());
+    writeViewRecord(records, 1, u, new THREE.Vector3(), undefined, warp);
+    expect(lanes(records.floats, 1)).toEqual(OPEN);
+    writeViewRecord(records, 1, u, new THREE.Vector3());
+    expect(lanes(records.floats, 1)).toEqual(ZERO);
   });
 });
 

@@ -3,7 +3,7 @@
 // Phase-1 split of march.wgsl.ts (2026-09-18): group fold and crowd instance state.
 // MOVE-ONLY: the WGSL text below is byte-identical to the original
 // file; see docs/dev-notes/2026-09-18-march-split/.
-import { REC_ANCHOR_BAND, REC_BURN, REC_CENTRE_SEED, REC_COUNTS, REC_COUNTS2, REC_FLASH, REC_GORE, REC_HALF_REV, REC_HEAD_QUAT, REC_HEAD_WCOUNT, REC_LIGHTS, REC_MELT, REC_NOISE_YAW, REC_VEC4S, REC_VOL_POSE0, REC_VOL_POSE1, REC_WIND_ALIVE, REC_WOUND_BOUND } from '../../crowd-records';
+import { REC_ANCHOR_BAND, REC_BURN, REC_CENTRE_SEED, REC_COUNTS, REC_COUNTS2, REC_FLASH, REC_GORE, REC_HALF_REV, REC_HEAD_QUAT, REC_HEAD_WCOUNT, REC_LIGHTS, REC_MELT, REC_NOISE_YAW, REC_SPLIT_A, REC_SPLIT_H, REC_SPLIT_N, REC_SPLIT_R, REC_VEC4S, REC_VOL_POSE0, REC_VOL_POSE1, REC_WIND_ALIVE, REC_WOUND_BOUND } from '../../crowd-records';
 import { TILE_MAX_ENTRIES } from '../../tile-cull';
 import { MAX_WOUNDS } from '../../../damage';
 import { LIMB_ACCUMULATORS as LIMBS } from '../limbs-flag';
@@ -245,6 +245,12 @@ var<private> gWoundList: array<i32, ${MAX_WOUNDS}>;
 var<private> gSlot: i32 = 0;
 var<private> gBand: i32 = 0;
 var<private> gHitSlot: i32 = 0;
+// THE HEAD SPLIT (map-body.wgsl.ts): which piece of the hit slot won the union fold (0 = the unmoved rest, and every
+// closed body; 1 = the + half; 2 = the - half), and that piece's field BEFORE its caps: the closed head's depth at the
+// un-warped point (about 0 on outer skin, negative on a cut face). Written by every mapBody call, so a reader after
+// the march keeps its own copy.
+var<private> gHitPiece: i32 = 0;
+var<private> gHitSplitF: f32 = 0.0;
 // PINNED SLOT (crowd fix 2026-09-14). Once the hit instance is loaded, every
 // later mapBody call in the invocation (calcNormal's four taps, the AO and
 // scatter probes, wound/level shadow marches) still walks all the slots in
@@ -301,6 +307,14 @@ var<private> gInstBurn: vec4<f32> = vec4<f32>(0.0);
 // -1 empty; slot 0 the dominant light). Every SDF view is a crowd slot, so the
 // record is authoritative for single actors too.
 var<private> gInstLights: vec4<f32> = vec4<f32>(-1.0);
+// THE HEAD SPLIT (head-split.ts SplitWarp, world space; crowd-records.ts REC_SPLIT_*): N = (plane normal, thetaP),
+// H = (hinge point, d0), A = (hinge axis, thetaM), R = (region radius, spare). A closed head is a zero record and an
+// open one has a unit normal, so N alone says which; H, A and R are loaded only for an open slot and are STALE
+// otherwise (another slot's): read them behind the open test.
+var<private> gInstSplitN: vec4<f32> = vec4<f32>(0.0);
+var<private> gInstSplitH: vec4<f32> = vec4<f32>(0.0);
+var<private> gInstSplitA: vec4<f32> = vec4<f32>(0.0);
+var<private> gInstSplitR: vec4<f32> = vec4<f32>(0.0);
 // The surface fire's emissive contribution, written in the surface prep and
 // read by the lighting tail, which is a separate WGSL export.
 var<private> gBurnEmit: vec3<f32> = vec3<f32>(0.0);
@@ -373,5 +387,20 @@ export const INSTANCE_STATE = /* wgsl */ `fn loadInstance(inst: ptr<storage, arr
   gInstEyeMask = vec4<f32>(1.0 - gore.y, 1.0 - gore.z, gore.w, 0.0);
   gInstBurn = (*inst)[base + ${REC_BURN}];
   gInstLights = (*inst)[base + ${REC_LIGHTS}];
+  gInstSplitN = (*inst)[base + ${REC_SPLIT_N}];
+  if (dot(gInstSplitN.xyz, gInstSplitN.xyz) > 0.5) {
+    gInstSplitH = (*inst)[base + ${REC_SPLIT_H}];
+    gInstSplitA = (*inst)[base + ${REC_SPLIT_A}];
+    gInstSplitR = (*inst)[base + ${REC_SPLIT_R}];
+  }
 }
 `;
+
+// THE HEAD SPLIT: p taken back by -theta about the hinge (point h, unit axis a), Rodrigues. head-split.ts moveBack /
+// rotAxis is the CPU mirror. A half that turned open by theta is the closed head's field read at this point.
+export const SPLIT_MOVE_BACK = /* wgsl */ `fn splitMoveBack(p: vec3<f32>, h: vec3<f32>, a: vec3<f32>, theta: f32) -> vec3<f32> {
+  let v = p - h;
+  let c = cos(-theta);
+  let s = sin(-theta);
+  return h + v * c + cross(a, v) * s + a * (dot(a, v) * (1.0 - c));
+}`;
