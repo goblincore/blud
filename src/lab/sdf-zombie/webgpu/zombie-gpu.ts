@@ -17,7 +17,7 @@ import {
   storage, attribute, positionGeometry, vec3, mix, Fn, If, Discard, positionLocal, select,
 } from 'three/tsl';
 import type { BuildResult } from '../build-body';
-import type { SplitWarp } from '../head-split';
+import { splitBound, splitDrawDistance, splitHoldBall, type SplitWarp } from '../head-split';
 import { packBody, PRIM_STRIDE, W_BONE, W_ORGAN } from '../pack';
 import { MAX_PRIMS, MAX_CLUSTERS, BONE_SEG_MAX, BASE_PRIM_STRIDE, bodyPrimStride } from '../validate';
 import { MAX_WOUNDS } from '../damage';
@@ -212,6 +212,10 @@ export interface ZombieGpuView {
    * the whole recoil phase: an intact body is never repainted.
    */
   setGoreStrength(v: number): void;
+  /** THE HEAD SPLIT AT RANGE: the eye the split's draw distance is measured from (head-split.ts splitDrawDistance,
+   *  with this view's own accept uniforms). Past that distance the record is written closed; the bounds follow the
+   *  pose's split either way. Null (the default) draws the split at any distance. */
+  setSplitEye(eye: Vec3 | null): void;
   /** Crowd stage a: the per-instance record buffer this view writes through
    *  syncRecord(). Exposed so the frame-hash seam can cover pose/wound state. */
   records: CrowdRecords;
@@ -2412,8 +2416,10 @@ export function createZombieGpuView(
   const ownsVolume = !opts.volumeTex;
   const volumeTex = opts.volumeTex ?? createFallbackHandVolumeTexture();
 
-  // Posed bound groups of the LAST upload (perf task 5): the binner's input.
+  // Posed bound groups of the LAST upload (perf task 5): the closed body's (the wound threats), and the binner's
+  // input, which is the same list unless the head is split (upload()).
   let lastGroups: import('./tile-cull').TileGroupInput[] = [];
+  let tileGroups: import('./tile-cull').TileGroupInput[] = [];
   // The last upload()'s args, so setBoneCull / setPackBones can re-pack
   // the SAME posed body immediately (used by the frozen-frame exactness gate
   // — a.step is gated on !wanderFrozen, so the per-frame re-pack a cull flag
@@ -2433,6 +2439,15 @@ export function createZombieGpuView(
   // built from, then each update()'s. The pose is its one source, so a closed or torn pose closes the record
   // (REC_SPLIT_*), and the setters' syncRecord() re-writes it unchanged. The prims are the closed head's either way.
   let headSplit: SplitWarp | null = body.split ?? null;
+  // The split the RECORD carries: the pose's, or none once the eye (setSplitEye) is past the split's draw distance,
+  // where the march's accept reach would take the region shell for a surface (head-split.ts splitDrawDistance).
+  let splitEye: Vec3 | null = null;
+  const splitDrawn = (): boolean => {
+    if (!headSplit || !splitEye) return headSplit !== null;
+    const h = headSplit.h, d = Math.hypot(h[0] - splitEye[0], h[1] - splitEye[1], h[2] - splitEye[2]);
+    return d <= splitDrawDistance(headSplit, { coneK: u.aaCfg.value.x, strength: u.aaCfg.value.y, secant: u.perfCfg.value.w });
+  };
+  let lastSplitDrawn = headSplit !== null;
   // Each view owns its packing scratch. writeRow copies into the atlas before
   // the next upload, so the temporary rows need not allocate every frame.
   let uploadScratch: ReturnType<typeof packBody> | undefined;
@@ -2590,6 +2605,25 @@ export function createZombieGpuView(
         flags: gr[o + 3]!,
       });
     }
+    // THE HEAD SPLIT'S BOUNDS (head-split.ts splitBound). The screen tiles and the depth pre-pass's miss cull test
+    // these spheres against the WORLD ray, which meets an opened half where the closed head is not: a sphere whose
+    // material reaches the hold ball grows to hold the ball. The reach is the march's own for that sphere (4 x the
+    // blend width x its distortion factor). ROW_GROUP_BOUNDS and the threat masks keep the closed spheres: their
+    // readers (mapBody's group cull, the wound threats) work at a piece's un-warped point.
+    tileGroups = lastGroups;
+    if (headSplit) {
+      const w = headSplit, k4 = 4 * p.maxBlendK;
+      tileGroups = lastGroups.map((g) => {
+        const b = splitBound(w, g.center, g.radius, k4 * Math.max(g.distort, 1));
+        return b.radius === g.radius ? g : { ...g, center: [b.centre[0], b.centre[1], b.centre[2]], radius: b.radius };
+      });
+      for (let c = 0; c < p.clusterCount; c++) {
+        const o = c * 4, cb = p.clusterBounds;
+        if (p.clusterRange[o + 2]! < 0.5) continue;
+        const b = splitBound(w, [cb[o]!, cb[o + 1]!, cb[o + 2]!], cb[o + 3]!, k4 * Math.max(p.clusterGroups[o + 2]!, 1));
+        cb.set([b.centre[0], b.centre[1], b.centre[2], b.radius], o);
+      }
+    }
     writeRow(ROW_PRIM_A, p.primA, W);
     writeRow(ROW_PRIM_B, p.primB, W);
     writeRow(ROW_PRIM_SCALE, p.primScale, W);
@@ -2724,6 +2758,14 @@ export function createZombieGpuView(
       for (let i = 0; i < 3; i++) {
         min[i] = Math.min(min[i]!, c.center[i]! - c.radius);
         max[i] = Math.max(max[i]!, c.center[i]! + c.radius);
+      }
+    }
+    // An open head's halves reach anywhere in the split's hold ball (head-split.ts splitHoldBall).
+    if (headSplit) {
+      const b = splitHoldBall(headSplit);
+      for (let i = 0; i < 3; i++) {
+        min[i] = Math.min(min[i]!, b.centre[i]! - b.radius);
+        max[i] = Math.max(max[i]!, b.centre[i]! + b.radius);
       }
     }
     const pad = maxBlendK * 4 + 0.05;
@@ -2872,7 +2914,8 @@ export function createZombieGpuView(
    *  kernel reads. The uniform nodes stay authoritative for the per-TYPE
    *  block; this is the bridge for the per-INSTANCE half. */
   function syncRecord() {
-    writeViewRecord(records, slot, u, mesh.position, undefined, headSplit);
+    lastSplitDrawn = splitDrawn();
+    writeViewRecord(records, slot, u, mesh.position, undefined, lastSplitDrawn ? headSplit : null);
     if (ownRecords) ownRecords.flush();
   }
 
@@ -2898,7 +2941,7 @@ export function createZombieGpuView(
     },
     tiles: viewTiles,
     levelShadowTex: (material as unknown as MaterialWithLevelShadowTex).levelShadowTex,
-    getTileGroups() { return lastGroups; },
+    getTileGroups() { return tileGroups; },
     woundThreats() { return [...lastThreatMasks]; },
     get woundThreatMargin() { return lastThreatMargin; },
     setPackBones(on) { packBones = on; },
@@ -2928,6 +2971,11 @@ export function createZombieGpuView(
     setSkinDetail(k) { u.meltCfg.value.z = k; syncRecord(); },
     setMotionOut(on) { u.meltCfg.value.y = on ? 1 : 0; syncRecord(); },
     setGoreStrength(v) { u.lodCfg.value.w = v; syncRecord(); },
+    setSplitEye(eye) {
+      splitEye = eye;
+      // The eye moves every frame: the record is re-written only when the answer changes.
+      if (splitDrawn() !== lastSplitDrawn) syncRecord();
+    },
     update(next, rest) {
       headSplit = next.split ?? null;
       const p = upload(next, rest, true);

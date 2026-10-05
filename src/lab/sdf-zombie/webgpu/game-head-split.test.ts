@@ -31,10 +31,12 @@ afterEach(() => { for (const r of made.splice(0)) r.dispose(); });
 /** A fresh zombie (never stepped: yaw 0, the head frame is the identity), its blasts recorded and its split hook and
  *  head re-poses observable. */
 function freshActor(id = 7) {
-  const view = new Proxy({}, { get: () => () => {} });
+  // The view takes every call and keeps the eyes the split leaf hands it (setSplitEye).
+  const eyes: Vec3[] = [];
+  const view = new Proxy({}, { get: (_t, k) => (k === 'setSplitEye' ? (e: Vec3) => { eyes.push(e); } : () => {}) });
   const a = createZombieActor({ id, room: 0, body: buildBody(makeZombie(), DEFAULT_BUILD_OPTS, {}), view: view as never,
     start: [0, 0, 0], seed: 3, bounds: { minX: -5, maxX: 5, minZ: -5, maxZ: 5 }, furniture: [] });
-  const seen = { blasts: [] as ActorBlastEffect[], reposes: 0, hook: null as ((p: BuildResult) => SplitWarp | null) | null };
+  const seen = { blasts: [] as ActorBlastEffect[], reposes: 0, hook: null as ((p: BuildResult) => SplitWarp | null) | null, eyes };
   const blast = a.blast, repose = a.reposeHead, setHook = a.setHeadSplit;
   a.blast = (e) => { seen.blasts.push(e); blast(e); };
   a.reposeHead = () => { seen.reposes++; repose(); };
@@ -48,9 +50,10 @@ function fixture(o: { headDamaged?: HeadSplitDeps['headDamaged']; frozen?: boole
     weapon: { aimRig: new THREE.Group(), viewModelAnchor: new THREE.Group(), slotState: makeWeaponSlotState('axe'), headSplit: null as unknown },
     player: { player: { yaw: 0, pitch: 0 } },
     world: { actors: [a], loop: null, sequence: null },
-    boot: { canvas: {}, deferredApi: null },
+    boot: { canvas: {}, deferredApi: null, handle: { camera: new THREE.PerspectiveCamera() } },
     telemetry: { telemetry: { event: vi.fn() } },
     demo: { wanderFrozen: o.frozen ?? true },
+    render: { frozenHullBuilt: true },
   };
   const split = createHeadSplit(ctx as unknown as GameContext, { headDamaged: o.headDamaged });
   ctx.weapon.headSplit = split;
@@ -286,6 +289,44 @@ describe('the leaf: the per-frame tick', () => {
     g.a.step(1 / 60);
     expect(g.a.posed().split!.thetaP).toBe(g.split.state(7)!.angle);
     expect(g.a.drawnBody().split).toBe(g.a.posed().split);
+  });
+
+  it('hands each split actor\'s view the camera\'s eye every tick (the view closes the split\'s record at range); an actor with no split state gets none', () => {
+    const f = fixture();
+    f.ticks(3);
+    expect(f.seen.eyes).toEqual([]);
+    f.open(X, f.skinFrom(f.view.eye));
+    f.ctx.boot.handle.camera.position.set(1, 2, 3);
+    f.ticks(1);
+    f.ctx.boot.handle.camera.position.set(4, 5, 6);
+    f.ticks(1);
+    expect(f.seen.eyes).toEqual([[1, 2, 3], [4, 5, 6]]);
+    // The pose keeps its split wherever the eye is: every strike and trace reads it there.
+    f.ctx.boot.handle.camera.position.set(0, 0, 500);
+    f.ticks(300);
+    expect(f.a.posed().split).toBeTruthy();
+  });
+
+  it('a FROZEN actor\'s split asks for the frozen hull build again whenever it changes (the hulls follow the pose\'s split)', () => {
+    // game-main builds the hulls once per frozen stretch and clears ctx.render.frozenHullBuilt to build them again.
+    const f = fixture();
+    f.open(X, f.skinFrom(f.view.eye), true);
+    f.ctx.render.frozenHullBuilt = true;
+    f.ticks(1);   // the spring moves: the pose now carries the split
+    expect(f.a.posed().split).toBeTruthy();
+    expect(f.ctx.render.frozenHullBuilt).toBe(false);
+    f.ticks(300);
+    f.ctx.render.frozenHullBuilt = true;
+    f.ticks(5);   // settled: nothing changes, nothing is rebuilt
+    expect(f.ctx.render.frozenHullBuilt).toBe(true);
+    // The seam: a forced split is on the pose at once, and closing it takes it off.
+    const g = fixture();
+    g.ctx.render.frozenHullBuilt = true;
+    expect(g.split.force(7, 'face', 1, 0, 1)).toBe(true);
+    expect(g.ctx.render.frozenHullBuilt).toBe(false);
+    g.ctx.render.frozenHullBuilt = true;
+    expect(g.split.force(7, 'face', 1, 0, 0)).toBe(true);
+    expect(g.ctx.render.frozenHullBuilt).toBe(false);
   });
   it('is deterministic: the same chops and ticks give the same angles', () => {
     const run = () => {

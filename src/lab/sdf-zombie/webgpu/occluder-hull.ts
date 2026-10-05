@@ -47,6 +47,7 @@ import { positionWorld, cameraPosition, vec4, length, sub, uniform, mix } from '
 import { SHADOW_HULL_LAYER } from './sdf-layer';
 import { strandReach } from '../extent';
 import type { BuiltBody, Vec3 } from '../types';
+import { splitHoldBall } from '../head-split';
 
 /**
  * How far each hull sphere is pulled in from the primitive that contains it.
@@ -212,6 +213,18 @@ export function buildHullInstances(
     const bodyStart = out.length;
     const live = new Set<number>();
     for (const c of body.clusters) if (c.alive) live.add(c.id);
+    // THE HEAD SPLIT (head-split.ts): the prims are the closed head's, and an INNER sphere (shrink < 1) in flesh that
+    // has turned away sits in the open gap, where a ray cut at it would lose the halves behind. Inside the split's
+    // hold ball the solid is no longer where the prims are, so every inner sphere that reaches the ball is dropped;
+    // outside it the body is the closed body, and its wounds are where `wounds` has them. The shadow hull
+    // (shrink >= 1) keeps the closed head: it casts the closed head's shadow.
+    const hold = body.split && shrink < 1 ? splitHoldBall(body.split) : null;
+    const clearOfSplit = (c: Vec3, r: number): boolean => {
+      if (!hold) return true;
+      const dx = c[0] - hold.centre[0], dy = c[1] - hold.centre[1], dz = c[2] - hold.centre[2];
+      const reach = hold.radius + r + shellAmp;
+      return dx * dx + dy * dy + dz * dz >= reach * reach;
+    };
 
     for (const p of body.prims) {
       // Carves are the subtractive half of the body's own definition. A hull
@@ -270,7 +283,7 @@ export function buildHullInstances(
       // the first character whose tapered prim was fat enough to clear
       // MIN_HULL_RADIUS; nothing about it was unusual.
       const rB = (p.radiusB ?? p.radius) * minScale * shrink * strandGrow - shellAmp;
-      if (rA >= MIN_HULL_RADIUS && clearOfWounds(p.a, rA)) out.push({ centre: p.a, radius: rA });
+      if (rA >= MIN_HULL_RADIUS && clearOfWounds(p.a, rA) && clearOfSplit(p.a, rA)) out.push({ centre: p.a, radius: rA });
       // A zero-length capsule is a sphere; one instance is enough.
       const dx = p.b[0] - p.a[0], dy = p.b[1] - p.a[1], dz = p.b[2] - p.a[2];
       const lenSq = dx * dx + dy * dy + dz * dz;
@@ -288,9 +301,9 @@ export function buildHullInstances(
         const t = i / steps;
         const c: Vec3 = [p.a[0] + dx * t, p.a[1] + dy * t, p.a[2] + dz * t];
         const r = rA + (rB - rA) * t;
-        if (r >= MIN_HULL_RADIUS && clearOfWounds(c, r)) out.push({ centre: c, radius: r });
+        if (r >= MIN_HULL_RADIUS && clearOfWounds(c, r) && clearOfSplit(c, r)) out.push({ centre: c, radius: r });
       }
-      if (rB >= MIN_HULL_RADIUS && clearOfWounds(p.b, rB)) {
+      if (rB >= MIN_HULL_RADIUS && clearOfWounds(p.b, rB) && clearOfSplit(p.b, rB)) {
         out.push({ centre: p.b, radius: rB });
       }
     }

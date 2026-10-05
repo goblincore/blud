@@ -49,6 +49,17 @@ describe('per-ray wound list', () => {
     expect(MARCH_BODY).toContain('gWoundListOn = select(0.0, 1.0, gInstCounts2.w > 0.5);');
   });
 
+  it('an open head split bypasses the list: the fold takes it only for a slot with no split', () => {
+    // The list is the wounds the WORLD ray reaches; a split slot's pieces read wounds at their un-warped points.
+    const iGate = APPLY_WOUNDS.indexOf('let listOn = gWoundListOn > 0.5 && !gInstSplitOpen;');
+    const iLoop = APPLY_WOUNDS.indexOf(`for (var k = 0; k < ${MAX_WOUNDS}; k = k + 1)`);
+    expect(iGate).toBeGreaterThan(-1);
+    expect(iLoop).toBeGreaterThan(iGate);
+    // The gate is the only reader of the switch in the fold: the loop branches on it and nothing else.
+    expect(APPLY_WOUNDS.split('gWoundListOn > 0.5').length - 1).toBe(1);
+    expect(APPLY_WOUNDS.slice(iLoop)).toContain('if (listOn) {\n      if (k >= gWoundN) { break; }\n      i = gWoundList[k];');
+  });
+
   it('pins the reach formula text in BOTH the fold and the preload (they cannot drift)', () => {
     // The fold's constant 0.25 became `slack` (0.25 at ship, max(0, -d) <= 0.25 under
     // the exact-fix switch), so the preload's 0.25 is still a superset of the fold.

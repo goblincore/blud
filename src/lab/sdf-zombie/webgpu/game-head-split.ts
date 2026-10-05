@@ -33,6 +33,9 @@
 // closed head). open() refuses a head that leaf holds state for (deps.headDamaged), and that leaf declines a head
 // this one has open (isOpen). Only the plain zombie has presets (the slug burst's rule too).
 //
+// AT RANGE the view writes the split closed (head-split.ts splitDrawDistance): the tick hands each split actor's view
+// the camera's eye. Drawing only; the pose, and so every strike and trace, keeps the split.
+//
 // The per-actor state lives in this module (keyed by the actor object), never on main(). Deterministic: sim time only.
 import type { GameContext } from './game-context';
 import type { ZombieActor } from './game-actor';
@@ -127,6 +130,11 @@ export function createHeadSplit(ctx: GameContext, deps: HeadSplitDeps = {}): Hea
     return h.faces;
   }
 
+  /** The hulls follow the pose's split (shell-hull-outer.ts, occluder-hull.ts), and while the cast is frozen they are
+   *  built once per frozen stretch (game-main): a split that changes on a frozen actor asks for that build again.
+   *  Unfrozen play rebuilds them every tick. */
+  const hullsStale = (): void => { ctx.render.frozenHullBuilt = false; };
+
   function drop(a: ZombieActor): void {
     a.setHeadSplit(null);
     heads.delete(a);
@@ -148,14 +156,17 @@ export function createHeadSplit(ctx: GameContext, deps: HeadSplitDeps = {}): Hea
     },
     isOpen: a => heads.has(a),
     tick(dt) {
+      const eye = ctx.boot.handle.camera.position;
       for (const [a, h] of heads) {
         if (!ctx.world.actors.includes(a)) { drop(a); continue; }
+        // The view draws the split out to a distance from this eye (zombie-gpu.ts setSplitEye). The pose keeps it.
+        a.view.setSplitEye([eye.x, eye.y, eye.z]);
         const angle = h.st.angle;
         h.st = stepSplit(h.st, dt);
         // A FROZEN actor never steps, and the step is where the hook is asked: without this its posed and drawn head
         // would keep the angle of the last hit's re-pose (game-head-damage.ts tick's rule). Not while it tears: the
         // rupture window re-uploads the body itself, with its wounds carried.
-        if (ctx.demo.wanderFrozen && h.st.angle !== angle && !tearing(a)) a.reposeHead();
+        if (ctx.demo.wanderFrozen && h.st.angle !== angle && !tearing(a)) { a.reposeHead(); hullsStale(); }
       }
     },
     state(id) {
@@ -167,7 +178,7 @@ export function createHeadSplit(ctx: GameContext, deps: HeadSplitDeps = {}): Hea
       const st = forcedSplit(preset, sides, offset, angleFrac);
       if (!a || !st) return false;
       if (st.preset === null) {
-        if (heads.has(a)) { drop(a); a.reposeHead(); }
+        if (heads.has(a)) { drop(a); a.reposeHead(); hullsStale(); }
         return true;
       }
       if (!canSplit(a)) return false;
@@ -175,6 +186,7 @@ export function createHeadSplit(ctx: GameContext, deps: HeadSplitDeps = {}): Hea
       if (!sk) return false;
       // No reaction of its own; the blast re-poses the actor, so the forced split shows at once.
       a.blast({ wounds: begin(a, st, sk.frame), meterCredit: 0, impulse: null, reaction: 'none' });
+      hullsStale();
       return true;
     },
     reset() {

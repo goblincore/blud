@@ -297,6 +297,68 @@ export function warpDir(w: SplitWarp | null | undefined, piece: 0 | 1 | 2, v: Ve
   return rotAxis(v, w.a, piece === 1 ? w.thetaP : w.thetaM);
 }
 
+/** THE HOLD BALL: centre h, radius rho = r - REGION_MARGIN. Every SURFACE a split adds is inside it: an opened half is
+ *  capped at dh <= rho (P+-), and outside the ball the body is where its prims are (P0 = f). So a bound on where the
+ *  body's surface can be (a proxy box, a cull sphere, a screen tile, a hull) needs this ball and not the region sphere:
+ *  between rho and r there is only the shell bound C, which is at least REGION_MARGIN and so never a surface. */
+export function splitHoldBall(w: SplitWarp): { centre: Vec3; radius: number } {
+  return { centre: w.h, radius: w.r - REGION_MARGIN };
+}
+
+/** THE ONE RULE FOR A BOUND UNDER A SPLIT. `centre` / `radius` is a sphere that bounds some of the CLOSED body's
+ *  material (a cluster, a prim group), and `reach` how far past it that material still shapes the field (its blend).
+ *  What moves is above the hinge plane and inside the hold ball, and it may be turned to anywhere in the ball: a
+ *  sphere that reaches both grows to the smallest one holding itself and the ball. A sphere clear of the ball, or
+ *  wholly below the hinge plane, bounds material that does not move, and stays. The split's own readers of the closed
+ *  body (mapBody's culls, at a piece's un-warped point) keep the closed sphere: this is for a reader that tests a
+ *  WORLD ray or a screen position. */
+export function splitBound(
+  w: SplitWarp | null | undefined, centre: Vec3, radius: number, reach = 0,
+): { centre: Vec3; radius: number } {
+  if (!w) return { centre, radius };
+  const rho = w.r - REGION_MARGIN, off = sub(w.h, centre), d = len(off);
+  const below = dot(cross(w.n, w.a), off) > radius + reach;
+  if (below || d - radius - reach > rho || d + rho <= radius) return { centre, radius };
+  if (d + radius <= rho) return { centre: w.h, radius: rho };
+  const grown = (d + radius + rho) / 2;
+  return { centre: add(centre, scale(off, (grown - radius) / d)), radius: grown };
+}
+
+/** The same rule for a bound made of MANY spheres (the outer hull's chains), which can follow the halves instead of
+ *  covering the whole ball: the centres of the sphere's turned copies. Whatever material of the closed body the
+ *  sphere holds is, on the open head, in the sphere itself (what does not move) or in the same-size sphere at one of
+ *  these centres: a half is a rigid turn about the hinge, and only a sphere that reaches the half's side of the old
+ *  plane, above the hinge plane and inside the hold ball, holds any of it. None for a closed head. */
+export function splitSphereImages(w: SplitWarp | null | undefined, centre: Vec3, radius: number): Vec3[] {
+  if (!w) return [];
+  const rel = sub(centre, w.h);
+  if (dot(cross(w.n, w.a), rel) + radius < 0 || len(rel) - radius > w.r - REGION_MARGIN) return [];
+  const s = dot(w.n, centre) - w.d0, out: Vec3[] = [];
+  if (w.thetaP !== 0 && s + radius >= 0) out.push(add(w.h, rotAxis(rel, w.a, w.thetaP)));
+  if (w.thetaM !== 0 && s - radius <= 0) out.push(add(w.h, rotAxis(rel, w.a, w.thetaM)));
+  return out;
+}
+
+/** THE REGION SHELL AT RANGE. The shell bound C is a bound, never a surface, only while the march cannot accept it: C
+ *  is at least REGION_MARGIN, and the march takes a sample for a hit when the field is under its hit epsilon
+ *  (t x coneK x strength: the pixel footprint at ray distance t, step-config.wgsl.ts / trace.wgsl.ts) or when the
+ *  last-step secant's root is under `secant` epsilons (trace.wgsl.ts; on a field that never goes under REGION_MARGIN
+ *  the root is over REGION_MARGIN too). So the shell is safe while that ACCEPT REACH, t x coneK x strength x
+ *  max(1, secant), is at most REGION_MARGIN, and past the distance where it gets there the region sphere would be
+ *  drawn as a ball round the head. The view draws the split only while the reach at the far side of the region
+ *  sphere is within this share of REGION_MARGIN, and writes a closed record beyond (webgpu/zombie-gpu.ts): the head
+ *  is a few pixels there. The CPU's split (the pose) is not touched. */
+export const SHELL_ACCEPT_FRAC = 0.8;
+
+/** The eye-to-hinge distance the split is drawn to (see SHELL_ACCEPT_FRAC). `coneK` is the pixel footprint radius per
+ *  metre (aaCfg.x), `strength` the far accept strength (aaCfg.y; 0 = no footprint accept, the epsilon is its 1.2 mm
+ *  floor and the split is drawn at any distance) and `secant` the last-step factor (perfCfg.w; 0 = off). The near
+ *  accept boost (aaCfg.z, fading out by aaCfg.w metres) is not in it: this is the far law. */
+export function splitDrawDistance(w: SplitWarp, accept: { coneK: number; strength: number; secant: number }): number {
+  const perMetre = accept.coneK * accept.strength * Math.max(1, accept.secant);
+  return perMetre > 0 ? SHELL_ACCEPT_FRAC * REGION_MARGIN / perMetre - w.r : Infinity;
+}
+
 /** THE CUT FACES: one cut segment (cut-wound.ts CutSeg, world space, on the CLOSED head) per half that opens. Each
  *  runs along the hinge axis over the top of the head, HEAD_SPLIT.faceCut.inset into its own half off the plane (so
  *  the cut belongs to that half and turns with it), seen from above along -up: stampCut finds the scalp under its

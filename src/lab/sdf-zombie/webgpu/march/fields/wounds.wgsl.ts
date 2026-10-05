@@ -75,9 +75,13 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
   // loop iterates only the preloaded reachable set; with it OFF this is the
   // same iteration sequence as before (k == i, same break on n), so OFF is
   // bit-identical to the shipped shader.
+  // NEVER FOR AN OPEN HEAD SPLIT (gInstSplitOpen, the slot mapBody is folding): the list holds the wounds whose
+  // reach the WORLD ray enters, and a split slot's piece reads its wounds at its un-warped point, off that ray. Such
+  // a slot folds every wound.
+  let listOn = gWoundListOn > 0.5 && !gInstSplitOpen;
   for (var k = 0; k < ${MAX_WOUNDS}; k = k + 1) {
     var i = k;
-    if (gWoundListOn > 0.5) {
+    if (listOn) {
       if (k >= gWoundN) { break; }
       i = gWoundList[k];
     } else {
