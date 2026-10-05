@@ -49,24 +49,54 @@ The per-task texts used for dispatch are in the session scratchpad (`scratchpad/
     `choosePreset` still takes the half-width.
   - `warpPoint` / `warpDir` (forward warp); head blood emitters follow the opened halves.
   - Seams: `__sdfGame.headSplit(id)`, `forceSplit(id, preset, sides, offset, angleFrac)`.
-  - **Nothing is drawn yet.** The head looks closed until B4.
+- **B4 is done** (`535afee6`, notes `ec3d0889`, fixes `de671db2`, `cf49fccc`): the split is on screen.
+  - `REC_VEC4S` is 21: lanes N 17 = (n, thetaP), H 18 = (h, d0), A 19 = (a, thetaM), R 20 = (r, 0, 0, 0). The view
+    reads `body.split` in `update()`; a closed, torn or reused view writes zeros.
+  - `mapBody` wraps the slot body in THE PIECE LOOP: three pieces as `vec3 (cap, theta, id)`, sorted by unrolled
+    compare-swaps, with the exact early skip. `loadInstance` sets `gInstSplitOpen`, the only open test.
+  - `gHitPiece` / `gHitSplitF` (the winning piece's field before its caps) are set at exit.
+  - `webgpu/march/map-body-split-twin.test.ts` is a HAND TWIN of that WGSL, compared with `splitField`
+    (max difference 3.5e-16). Edit both together.
+  - With no split open the march-hash pins did not move.
+  - Cost: cold shader compile +4.5 s (45.0 → 49.5 s warm-up; `drawOnce` unchanged), accepted.
+- **B5 is done** (`0cba1400`, notes `e347eb27`, fixes `06039f50`): bounds and culls follow the open head.
+  - One pure rule set in `head-split.ts` (`splitFrame`, `splitHolds`, `splitHoldBall`, `splitBound`,
+    `splitSphereImages`): the proxy box, the cluster row, the tile groups, the outer hull (turned copies of chain
+    spheres) and the occluder hull (inner spheres that could meet a moved half are dropped). Bounds use `rho`.
+  - The per-ray wound list is off for an open slot.
+  - **Past 12.7 m a split is drawn closed** (`splitDrawDistance`; reopens inside 0.9×). Beyond it the march's accept
+    reach could draw the region shell as a false surface. `view.splitDrawn` is what the record really carries.
+  - Shipped path against bounds off: the worst case (one side, 0.6 m) went from 215 clipped texels to 13; the closed
+    head's own floor is 0–23.
+  - Cost: an open head is about +6 ms over closed at 0.6 m (B4: +3.5) and about +1 ms at 2 m. Closed is unchanged.
+    A tighter tile bound was tried, gained 0.2 ms, and was reverted.
+- All measurements and photos: [`NOTES.md`](NOTES.md), `b4/`, `b5/`.
 
-## For B4 and later (from B2/B3 and their reviews)
+## For B6 and later (from B2–B5 and their reviews)
 
-- **B4 reads the split from the pose:** the `split` field of the body passed to `view.update(drawnPose(), …)`
-  (`a.drawnBody().split`). It is null during a tear. The leaf keeps no copy.
-- **B4:** also record the winning piece's field value BEFORE its caps (a private next to `gHitPiece`), so B6 can shade
-  the cut faces as a cross-section by depth (skin, bone ring, meat) instead of relying on the face cuts' masks alone.
-- **B4:** a view that is dropped or reused must get `setHeadSplit(null)`.
-- **B5:** hull wound spheres and `cutExposureSpheres` read closed-head `woundWorldPos` (`game-main.ts` ~3840, ~7470,
-  ~7513; `webgpu/game-seams-render.ts` ~287).
+- **B6:** copy `gHitPiece` / `gHitSplitF` into locals in the march loop (`trace.wgsl.ts` ~136); `calcNormal` and the
+  probes overwrite them.
+- **B6:** `hitField.w` / `.z` are the winning piece's uncapped values, so a cut face reads as deep tissue
+  (`tissue.wgsl.ts` ~20). Use `gHitSplitF` to shade the cut faces as a cross-section by depth (skin, bone ring,
+  meat) rather than relying on the face cuts' masks alone.
+- **B6:** `gRefoldWin` → `hitRefold` (`trace.wgsl.ts` ~138) and `gWoundOwners` come from whichever piece ran last,
+  not the union winner. The shell noise (`trace.wgsl.ts` ~147) calls `restPoint` at the world point.
+  `normal-gradient.wgsl.ts` ~462 reads `ROW_GROUP_BOUNDS` at the world point.
+- **B7:** drive the skull pieces from `view.splitDrawn`, not the pose, or the skull opens past 12.7 m while the
+  flesh is drawn closed.
 - **B8:** `scripts/axe-gate.mjs` check K expects at least 3 head-tagged cuts on the corpse; a centred split chopped
   through the gap leaves 2. Restate it.
 - **B8 look:** the face cuts are untuned (kerf 0.012, depth 0.12, inset 0.006 in `HEAD_SPLIT.faceCut` /
-  `faceCalibre`). A flail hit on a split head takes the plain crater with full meter credit.
+  `faceCalibre`). A flail hit on a split head takes the plain crater with full meter credit. Loose pixels at the
+  slab tip and speckle on the face preset's crown remain.
+- **Still closed-head:** the shadow hull, `bodyInSight` (`game-main.ts` ~7311) and motion vectors.
 - **Known limits:** a pellet or slug crater on a cut face sits on the old plane, so it shows on both faces. A rod sweep
   across the gap is un-warped as one segment by its midpoint's piece. `sdBody` costs about 2.7× inside the region
-  (radius ~0.32 m). A forced re-split with fewer sides leaves the old face wound (seam only).
+  (radius ~0.32 m). A forced re-split with fewer sides leaves the old face wound (seam only). Temporal start uses
+  last frame's depth with no split motion, so a thin slab swinging into a pixel may start late for one frame
+  (unverified).
+- **House rule added:** never run `git checkout -- .`, `git restore .`, `git reset --hard` or `git clean` here; an
+  implementer wiped its own uncommitted work that way.
 
 ## The cut "excess" pass: landed as built
 
@@ -95,11 +125,7 @@ The before/after comparisons are in `compare/`. The raw photos are untracked in 
 ## Remaining (plan B)
 
 1. ~~The cut excess pass~~, ~~B2~~, ~~B3~~: done (above).
-4. **B4, the GPU record and `mapBody`.**
-   - `REC_VEC4S` 17 → 21.
-   - `mapBody` uses the three-piece union with the EXACT EARLY SKIP: caps first, `best = C`, visit pieces in ascending cap order with an unrolled compare-swap and no indexed arrays.
-   - Then the full shader check set: golden `-u`, census, march-hash and a boot pair.
-5. **B5: bounds and culls.** The proxy box `fit`, the head tile groups, the outer and occluder hulls, and the wound-list bypass.
+4. ~~B4~~, ~~B5~~: done (above).
 6. **B6: post-hit shading at the un-warped point.**
    - `restPoint`, `woundMask`/`charMask`, the face block and the burn taps use it.
    - Analytic normals fall back to FD in the split.
