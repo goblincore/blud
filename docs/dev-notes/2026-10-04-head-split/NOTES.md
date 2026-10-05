@@ -1227,3 +1227,50 @@ had to be over 8 cm; new: the notch bites under a centimetre into a still half a
 
 Checks: no WGSL changed. `head-split-gate` **67 checks, 0 failed**; `npx vitest run head-split game-head-split axe`
 209 passed.
+
+### Step: a bone ring on the cut faces (`look/02-bone-ring.jpg`; the brief's step 1)
+
+A band of cut bone on every cap, where the face lies 10 to 17 mm inside the closed head: the skull in section. It
+follows the head's outline, so it rings the jaw and crosses the floor of the V as well; that reads as section in
+every view shot, and no fade at the neck was added.
+
+- **Constants:** `SPLIT_SHADE.bone = { lo: 0.01, hi: 0.017, soft: 0.0015, colour: [1.3, 1.4, 1.6], strength: 1 }`.
+  **To turn this off: `strength` 0** (exact: 0 of 120 000 texels differ from the build before, in the fifteen
+  `middle` both views; the other ten views have another zombie's head in frame, left in another state by the reach
+  capture).
+- **10 to 17 mm, not the brief's 6 to 13.** Measured on this head (the flesh hidden, skull against head outline, front
+  and side): the skull mesh lies 5 to 20 mm under the skin, about 10 at the temples, 12 to 18 at the back, 20 at the
+  crown. And the layers step needs two bands of flesh outside the ring at 2.3 mm a texel.
+- **The colour** is the material's own `boneColor` uniform (what the skeleton mesh is seeded from) x the tint, so a
+  character with other bone gets another ring; over 1 because cut bone is paler than a skull's outside.
+- **The depth is the closed head's BEFORE its wounds** (`cutSection = max(0, -hitField.w)`, the walk's pre-wound
+  field at the un-warped point: what the tissue ramp reads off a cut face), not `cutDepth`, which is the depth as
+  the head is now. With `cutDepth` the first try painted bone across everything 6 to 13 mm from the face cut's slot
+  wall (a tan slab over half of the still face). The ring does not bend round a crater either.
+- **It is not flesh:** `cutKeep` is its share, so the mottle, the gore and the wound wetness leave it alone (it has
+  the skin's wetness, not the wound's 1.6 x).
+- `head-split.ts cutBoneRing` is the band's CPU twin (tested).
+
+| Measure (25 views, float march target) | |
+| --- | --- |
+| Cut-face texels (the gate, painted) | 31 167 |
+| ... changed by the ring | 6505 (**20.9%**); largest channel step: median 0.025, mean 0.077, max 0.90; 11.4% of the face by over 0.02 |
+| Every other hit texel | 2 of 587 236 differ, by 7.7e-8 (the mask's own edge) |
+| Three-quarter at 2 m (three presets; no mask boot for this camera) | 39 / 58 / 56 texels changed, mean 0.34 to 0.51 |
+| Closed bodies | the six `march-hash` pins unmoved |
+
+**My read of the sheet.** At 0.6 m, from above and from three-quarter, a pale band now runs inside the edge of each
+face and the face stops being one red sheet; under the torch it is cream, in the half's own shadow it goes olive.
+From the front the faces of a `middle` split are edge-on at any distance and nothing on them shows (this is true of
+every step here). At 2 m from three-quarter the ring is one texel wide and still reads as a pale line round the red.
+Wrong: it is thin next to the skull mesh in the gap, which stays the larger bone shape; the mouth's carve is in the
+pre-wound field, so the ring draws a thin rectangle round it low on the face; in a `middle` one-sided split the
+mesh's fracture teeth poke through the still face as pale specks, 14 to 18 mm inside the outline, a little deeper
+than the ring.
+
+| Check | Result |
+| --- | --- |
+| `march-golden -u` | 1 snapshot (`MARCH_TRACE_POST` and what embeds it; comments in the mottle, gore and wet blocks) |
+| `compile-census` | phase ready, `uncapturedCount` 0, no device loss; march module 326 068 B -> **327 020 B** (83 fns); cold `warmMs` 48 213 |
+| `march-hash` | no pin moved (`d7392d52…` / `76bd51aa…`, `0c71e712…` / `bf6836cd…`, `470ff0b3…` / `f618070e…`) |
+| `head-split-gate` | 67 checks, 0 failed |

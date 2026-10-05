@@ -128,8 +128,30 @@ export const HEAD_SPLIT = {
  *  geometry, not shading: its own numbers, so the gate can move without moving a surface.
  *  `poreCut`: no skin pores (the micro-detail normal, and the output-resolution detail pass) from this much gate.
  *  `wet`: how wet a cut face is at every depth, as a share of the gate: 1 = wet all over, 0 = wet like a crater (its
- *  lip glistens, its floor does not). */
-export const SPLIT_SHADE = { cutLo: 0.0015, cutHi: 0.004, shellLo: 0.0015, shellHi: 0.004, poreCut: 0.5, wet: 1 } as const;
+ *  lip glistens, its floor does not).
+ *  `bone`: THE BONE RING (look pass, step 1): the skull in section. A band of cut bone where the face lies between
+ *  `lo` and `hi` metres inside the closed head as it was before its wounds, each edge blended over +-`soft`. It follows the head's
+ *  outline, so it also rings the jaw and the floor of the V. 10 to 17 mm: the skull mesh lies 5 to 20 mm under this
+ *  head's skin (10 at the temples, 12 to 18 at the back, 20 at the crown), and two layers of flesh must fit outside
+ *  the ring at 2.3 mm a texel (the layers step). `colour` multiplies the material's bone colour (the uniform the
+ *  skeleton mesh is seeded from), so the ring follows the character's bone; over 1 because it is bone cut through,
+ *  paler than the skull's weathered outside. `strength` is the band's share of the albedo, and the share the mottle,
+ *  the gore and the wound wetness leave alone (cutKeep). To turn the ring off: `strength` 0. */
+export const SPLIT_SHADE = {
+  cutLo: 0.0015, cutHi: 0.004, shellLo: 0.0015, shellHi: 0.004, poreCut: 0.5, wet: 1,
+  bone: { lo: 0.01, hi: 0.017, soft: 0.0015, colour: [1.3, 1.4, 1.6], strength: 1 },
+} as const;
+
+const smooth01 = (e0: number, e1: number, x: number): number => {
+  const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
+  return t * t * (3 - 2 * t);
+};
+
+/** The bone ring's band at `depth` metres inside the closed, unwounded head, 0..1 before its strength: the CPU twin of the
+ *  WGSL in cut-face.wgsl.ts (the same two smoothsteps on the same edges). */
+export function cutBoneRing(depth: number, bone: { lo: number; hi: number; soft: number } = SPLIT_SHADE.bone): number {
+  return smooth01(bone.lo - bone.soft, bone.lo + bone.soft, depth) * (1 - smooth01(bone.hi - bone.soft, bone.hi + bone.soft, depth));
+}
 
 export interface SplitState {
   preset: SplitPresetId | null;

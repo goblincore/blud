@@ -22,7 +22,7 @@ import { GORE_BLOCK } from './gore.wgsl';
 import { BURN_BLOCK } from './burn.wgsl';
 import { WET_BLOCK } from '../surface/wet.wgsl';
 import {
-  HEAD_SPLIT, SPLIT_SHADE, forcedSplit, headLocalPoint, splitWarpOf, unwarpDir, warpDir, warpPoint,
+  HEAD_SPLIT, SPLIT_SHADE, cutBoneRing, forcedSplit, headLocalPoint, splitWarpOf, unwarpDir, warpDir, warpPoint,
   type HeadFrame, type SplitWarp,
 } from '../../../../../head-split';
 import { NG_REASON_SPLIT } from '../../../../normal-gradient-reference';
@@ -214,10 +214,11 @@ describe('cut faces shade as wound interior', () => {
     expect(WET_BLOCK.indexOf('if (cutWet > 0.0) { lip = mix(lip, 1.0, cutWet); }')).toBeLessThan(WET_BLOCK.indexOf('let wetWound = max(wm * lip * (1.0 - cutKeep), gore);'));
     expect(noComments(WET_BLOCK)).not.toMatch(/\bcutFace\b/);
   });
-  it('what comes after the block leaves its non-flesh share alone: cutKeep, 0 until the look pass writes one', () => {
+  it('what comes after the block leaves its non-flesh share alone: cutKeep, written once, by the bone ring', () => {
     const code = noComments(CUT_FACE_BLOCK);
-    // Declared, and not written yet: every reader below multiplies by exactly 1.
-    expect(code.match(/\bcutKeep\b/g)).toHaveLength(1);
+    // Declared 0, written once (the ring's share), read once by the block itself (the ring's own mix).
+    expect(code.match(/\bcutKeep\b/g)).toHaveLength(3);
+    expect(code.match(/\bcutKeep = /g)).toHaveLength(2);
     expect(code).toContain('var cutKeep = 0.0;');
     expect(MOTTLE_BLOCK).toContain('albedo = mix(albedo, mottleColor, blotch * surfCfg2.z * (1.0 - cutKeep));');
     expect(GORE_BLOCK).toContain('* select(1.0, 0.0, isBone) * (1.0 - cutKeep);');
@@ -225,10 +226,40 @@ describe('cut faces shade as wound interior', () => {
     // Its readers come after it.
     for (const reader of [MOTTLE_BLOCK, GORE_BLOCK]) expect(MARCH_TRACE_POST.indexOf(reader)).toBeGreaterThan(MARCH_TRACE_POST.indexOf(CUT_FACE_BLOCK));
   });
-  it('SPLIT_SHADE holds the look\'s numbers, one per thing they drive; today they are what they were', () => {
-    expect(SPLIT_SHADE).toEqual({ cutLo: 0.0015, cutHi: 0.004, shellLo: 0.0015, shellHi: 0.004, poreCut: 0.5, wet: 1 });
+  it('SPLIT_SHADE holds the look\'s numbers, one per thing they drive', () => {
+    expect(SPLIT_SHADE).toEqual({
+      cutLo: 0.0015, cutHi: 0.004, shellLo: 0.0015, shellHi: 0.004, poreCut: 0.5, wet: 1,
+      bone: { lo: 0.01, hi: 0.017, soft: 0.0015, colour: [1.3, 1.4, 1.6], strength: 1 },
+    });
     // x * 1.0 is x to the bit, so the wetness is the gate itself until the look pass moves it.
     expect(wgslF(SPLIT_SHADE.wet)).toBe('1.0');
+  });
+  it('THE BONE RING: a band of the material\'s bone colour by the face\'s depth, behind the gate; its share is cutKeep', () => {
+    const code = noComments(CUT_FACE_BLOCK), B = SPLIT_SHADE.bone;
+    const body = code.slice(code.indexOf('if (cutFace > 0.0) {'));
+    // The band: the two edges, each blended over +-soft, on the depth split-hit gives (the same depth the ramp reads).
+    const e = [B.lo - B.soft, B.lo + B.soft, B.hi - B.soft, B.hi + B.soft].map(v => wgslF(+v.toFixed(9)));
+    expect(body).toContain(`let boneRing = smoothstep(${e[0]}, ${e[1]}, cutSection) * (1.0 - smoothstep(${e[2]}, ${e[3]}, cutSection));`);
+    // The depth is the closed head's BEFORE its wounds (the walk's pre-wound field, as the tissue ramp reads it off a
+    // cut face): the ring does not bend round a crater or the face cuts' own slots.
+    expect(body).toContain('let cutSection = max(0.0, -hitField.w);');
+    expect(body.indexOf('let cutSection')).toBeLessThan(body.indexOf('let boneRing'));
+    // Its share: the gate x the band x the strength. Strength 0 is the off switch: the share is 0 and the mix is the albedo.
+    expect(body).toContain(`cutKeep = cutFace * boneRing * ${wgslF(B.strength)};`);
+    expect(body).toContain(`albedo = mix(albedo, boneColor * vec3<f32>(${B.colour.map(wgslF).join(', ')}), cutKeep);`);
+    expect(body.indexOf('albedo = mix(albedo, boneColor')).toBeGreaterThan(body.indexOf('cutKeep = cutFace * boneRing'));
+    // The colour is the material's own bone colour (the uniform the skeleton mesh is seeded from), tinted.
+    expect(MARCH_TRACE_POST.indexOf('var albedo = mix(baseColor, tissue, wm);')).toBeLessThan(MARCH_TRACE_POST.indexOf('albedo = mix(albedo, boneColor * vec3<f32>('));
+    // The CPU twin of the band: nothing at the skin or deep inside, all of it mid-band, half at each edge.
+    expect(cutBoneRing(0)).toBe(0);
+    expect(cutBoneRing(B.lo - B.soft)).toBe(0);
+    expect(cutBoneRing(B.lo)).toBeCloseTo(0.5, 12);
+    expect(cutBoneRing((B.lo + B.hi) / 2)).toBe(1);
+    expect(cutBoneRing(B.hi)).toBeCloseTo(0.5, 12);
+    expect(cutBoneRing(B.hi + B.soft)).toBe(0);
+    expect(cutBoneRing(0.05)).toBe(0);
+    // The band needs a flat top: its two edges must not overlap.
+    expect(B.hi - B.soft).toBeGreaterThan(B.lo + B.soft);
   });
   it('no face sheet, eye glow or head-skin gore protection on a cut face', () => {
     const gate = 'if (cutFace > 0.0) { facing = facing * (1.0 - cutFace); faceCover = faceCover * (1.0 - cutFace); }';
