@@ -82,6 +82,14 @@ export const HEAD_SPLIT = {
   hz: 7, zeta: 0.35, kick: 6, restA: 1e-4, restV: 1e-2,
 } as const;
 
+/** THE CUT FACES' SHADING (the march after the hit: webgpu/march/body/blocks/post/split-hit.wgsl.ts). A piece cap is
+ *  the surface where it holds the split field above the piece's own field; that gap, (the split field) - (the piece's
+ *  field before its caps), is exactly 0 on skin and the depth inside the closed body on a cut face. The hit shades as
+ *  skin up to `cutLo` of it and as wound interior from `cutHi` (the tissue ramp by that depth, wet, no skin detail, no
+ *  face sheet), blending between. Both are under the zombie's fat stop (4 mm), so the ramp's pale band is not hidden.
+ *  The walk's shell noise fades out over the same range. */
+export const SPLIT_SHADE = { cutLo: 0.0015, cutHi: 0.004 } as const;
+
 export interface SplitState {
   preset: SplitPresetId | null;
   /** +1 the + side moves, -1 the - side, 0 both. */

@@ -29,7 +29,9 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
   // anchor must exist before the normal runs. restPoint and noiseLocal are
   // pure reads, so hoisting them cannot move a pixel, and the mode-0 branch
   // below is byte-for-byte the pre-task-2 call.
-  let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift), gBand);
+  // THE HEAD SPLIT: at pS, the hit piece's un-warped point (split-hit.wgsl.ts), where the rest rows are: the texture
+  // rides a half as it opens.
+  let anchor = restPoint(pS, data, hitBest, noiseLocal(pS, noiseShift), gBand);
   var n = vec3<f32>(0.0);
   var ng0 = vec3<f32>(0.0, 1.0, 0.0);
   var ngValid = false;
@@ -42,8 +44,13 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
   // now reads whatever slot the caller loaded, so the gradient is the hit
   // instance's own. The finite-difference path below remains the fallback for
   // unsupported fields and as the debug comparison.
+  // THE HEAD SPLIT: no analytic gradient inside an OPEN head's region sphere (splitIn, reason 8). ngBody differentiates
+  // the closed body at the world point: it knows neither a half's turn nor the piece caps (the cut faces, and the
+  // rest's hinge-plane and ball caps, so a hit on the unmoved piece is out too). The finite-difference path below
+  // differentiates mapBody, which is the split field.
   gNgDebugMask = u32(max(normalGradientCfg.z, 0.0));
-  if (normalGradientCfg.x > 0.5) {
+  if (splitIn) { ngReason = 8; }
+  if (normalGradientCfg.x > 0.5 && !splitIn) {
     // counts2.z + 64: owned wounds may go analytic where no limb won the re-fold.
     gNgOwnedOk = select(0.0, 1.0, gInstCounts2.z % 128.0 > 63.5 && hitRefold == 0.0);
     let noiseAmplitude = marchCfg.z * (1.0 - max(gloss, metal));

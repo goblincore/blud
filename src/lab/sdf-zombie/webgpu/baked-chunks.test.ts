@@ -67,6 +67,18 @@ describe('createBakedChunkMaterial — default lit path (M1 behavior)', () => {
   });
 });
 
+describe('the mesh face layer is the march\'s, renamed (FACE_LAYER_WGSL)', () => {
+  it('binds the layer\'s head frame to the mesh\'s own and has no head split: nothing of the march\'s instance or split state survives the renames', () => {
+    // The march hands the layer the head frame turned with the hit piece (faceCentre / faceQuat) and the cut-face
+    // gate (cutFace); a settled head mesh is one rigid piece with its own frame and no cut face.
+    expect(CHUNK_FACE_SHADE_WGSL).toContain('let hpv = p - headCentre;');
+    expect(CHUNK_FACE_SHADE_WGSL).toContain('let hql = -headQuat.xyz;');
+    expect(CHUNK_FACE_SHADE_WGSL).toContain('if (0.0 > 0.0) { facing = facing * (1.0 - 0.0); faceCover = faceCover * (1.0 - 0.0); }');
+    expect(CHUNK_FACE_SHADE_WGSL).not.toMatch(/\bfaceCentre\b|\bfaceQuat\b|\bcutFace\b|\bgInst\w+|\bsplit\w+|\bpS\b/);
+    expect(CHUNK_SHADE_WGSL).not.toMatch(/\bfaceCentre\b|\bfaceQuat\b|\bcutFace\b/);
+  });
+});
+
 describe('chunkShade — shared light list (plan 1, Task 12)', () => {
   it('takes picks, the list and the switch after response, before any face args', () => {
     for (const src of [CHUNK_SHADE_WGSL, CHUNK_FACE_SHADE_WGSL]) {

@@ -27,8 +27,12 @@ describe('ported features reach the entry point', () => {
     expect(MARCH_BODY).toMatch(/abs\(d\) < shellAmp \* 4\.0/);
     // The shell's fbm samples the dominant prim's REST frame (task 6) — the
     // displaced silhouette rides the same flesh as the normal-warped skin.
+    // The point and the amplitude are locals, shellP / shellK: the world sample and shellAmp for every closed body
+    // (so the line computes what it always did), the hit piece's for a split head (split-hit.wgsl.test.ts).
+    expect(MARCH_BODY).toContain('var shellP = camPos + rd * t;');
+    expect(MARCH_BODY).toContain('var shellK = shellAmp;');
     expect(MARCH_BODY)
-      .toMatch(/d = d \+ fbm\(restPoint\(camPos \+ rd \* t, data, i32\(dres\.y\), noiseLocal\(camPos \+ rd \* t, noiseShift\), gBand\) \* 3\.0\) \* shellAmp;/);
+      .toContain('d = d + fbm(restPoint(shellP, data, i32(dres.y), noiseLocal(shellP, noiseShift), gBand) * 3.0) * shellK;');
   });
 
   it('anchors every noise site in REST space, so texture rides every limb (task 6)', () => {
@@ -48,7 +52,9 @@ describe('ported features reach the entry point', () => {
     // literal zeros since the 2026-09-04 merge removed it. The gloss/metal
     // kill this pins is unchanged.)
     expect(MARCH_BODY).toContain('calcNormal(p, data, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg)');
-    expect(MARCH_BODY).toContain('let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift), gBand);');
+    // The hit's anchor is taken at pS, the hit piece's un-warped point (the head split): p itself off a turned half.
+    expect(MARCH_BODY).toContain('let anchor = restPoint(pS, data, hitBest, noiseLocal(pS, noiseShift), gBand);');
+    expect(MARCH_BODY).not.toContain('restPoint(p, data, hitBest');
     expect(MARCH_BODY).toContain('fbm(anchor * 22.0)');
     expect(MARCH_BODY).not.toContain('fbm(p * 22.0)');
     const mapBody = HELPERS.find(h => declaredName(h) === 'mapBody')!;

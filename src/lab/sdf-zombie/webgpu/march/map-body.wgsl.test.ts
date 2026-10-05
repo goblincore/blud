@@ -6,7 +6,7 @@
 // contract and docs/dev-notes/2026-09-18-march-split/ for the split.
 
 import { describe, it, expect } from 'vitest';
-import { HELPERS, MAP_BODY, MARCH_BODY } from '../march.wgsl';
+import { APPLY_WOUNDS, HELPERS, MAP_BODY, MARCH_BODY } from '../march.wgsl';
 import { REGION_MARGIN } from '../../head-split';
 import { declaredName } from '../march-test-support';
 
@@ -98,6 +98,20 @@ describe('the head split in mapBody (head-split.ts splitField)', () => {
     expect(union).toContain('splitFU = dmgFinal;');
     expect(MAP_BODY).toContain('gHitPiece = pieceU;');
     expect(MAP_BODY).toContain('gHitSplitF = splitFU;');
+  });
+
+  it('a re-fold win is filed under its piece, in the win\'s own branch: nothing is added to the per-sample path', () => {
+    // gRefoldWin is written where it always was (the reset at entry, the win). The piece's entry of gRefoldBy rides
+    // the same branch, and the first win of a call clears the others, so there is no reset on the common path.
+    expect(code.match(/gRefoldWin = /g)).toHaveLength(2);
+    const win = code.slice(code.indexOf('if (limbDamage < dmg) {'), code.indexOf('} else {', code.indexOf('if (limbDamage < dmg) {')));
+    expect(win).toContain('if (gRefoldWin == 0.0) { gRefoldBy = vec3<f32>(0.0); }');
+    expect(win).toContain('gRefoldWin = f32(c + 1);');
+    expect(win).toContain('gRefoldBy = select(gRefoldBy, vec3<f32>(gRefoldWin), vec3<bool>(piece.z == 0.0, piece.z == 1.0, piece.z == 2.0));');
+    expect(win.indexOf('if (gRefoldWin == 0.0)')).toBeLessThan(win.indexOf('gRefoldWin = f32(c + 1);'));
+    expect(code.match(/gRefoldBy = /g)).toHaveLength(2);
+    expect(code.replace(win, '')).not.toContain('gRefoldBy');
+    expect(APPLY_WOUNDS).toContain('var<private> gRefoldBy: vec3<f32> = vec3<f32>(0.0);');
   });
 
   it('no continue or break in the slot body targets the piece loop, except the early skip', () => {

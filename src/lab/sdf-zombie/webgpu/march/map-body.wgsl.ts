@@ -392,7 +392,12 @@ ${LIMBS ? `      let savedBest = gFoldBest;
       gWalkGapNew = min(gWalkGapNew, max(limbDamage - dmg, 0.0));
       if (limbDamage < dmg) {
         dmg = limbDamage;
+        // THE HEAD SPLIT: the win is also filed under its piece (gRefoldBy.x / .y / .z = piece 0 / 1 / 2), so the walk
+        // can take the HIT piece's hint and not the last piece's that won. All of it in this branch, off the
+        // per-sample path: the first win of a call clears the other entries, so nothing resets them at entry.
+        if (gRefoldWin == 0.0) { gRefoldBy = vec3<f32>(0.0); }
         gRefoldWin = f32(c + 1);
+        gRefoldBy = select(gRefoldBy, vec3<f32>(gRefoldWin), vec3<bool>(piece.z == 0.0, piece.z == 1.0, piece.z == 2.0));
         if (gDebugMode > 0.5) { gDebugRefoldWins = gDebugRefoldWins + 1.0; }
       } else {
         gFoldBest = savedBest;

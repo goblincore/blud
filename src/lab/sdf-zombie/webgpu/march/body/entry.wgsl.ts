@@ -81,6 +81,9 @@ export const REFINE_LOOP = /* wgsl */ `  if (refineCfg.x < 0.5) { discard; }
   var hitNearWound = false;
   // The refine's own accepting sample decides the normal hint, like the walk's.
   var hitRefold = 0.0;
+  // The head split's piece at that sample, as the walk copies it.
+  var hitPiece = 0;
+  var hitSplitF = 0.0;
   var hitField = vec4<f32>(0.0);
   var pRef = camPos + rd * t;
   var dres = mapBody(pRef, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
@@ -99,6 +102,10 @@ export const REFINE_LOOP = /* wgsl */ `  if (refineCfg.x < 0.5) { discard; }
   hitField = dres;
   hitNearWound = dres.z > 0.5;
   hitRefold = gRefoldWin;
+  hitPiece = gHitPiece;
+  hitSplitF = gHitSplitF;
+  // (The hit piece's own win, as in the walk.)
+  if (gInstSplitOpen && hitRefold != 0.0) { hitRefold = select(select(gRefoldBy.z, gRefoldBy.y, hitPiece == 1), gRefoldBy.x, hitPiece == 0); }
   // t*aaCfg.x is one OUTPUT pixel's world footprint (the same framing as texelFoot above
   // and the PARAMS doc), so refineCfg.z scales the stencil in output-pixel footprints.
   // The floor exists because the footprint goes to zero at the near plane and a stencil

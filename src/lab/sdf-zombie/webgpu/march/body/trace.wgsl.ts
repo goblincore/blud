@@ -4,6 +4,7 @@
 // MOVE-ONLY: the WGSL text below is byte-identical to the original
 // file; see docs/dev-notes/2026-09-18-march-split/.
 import { WOUND_STEP_MUL } from '../layout';
+import { SPLIT_SHADE } from '../../../head-split';
 import { FACE_LAYER_WGSL } from './face.wgsl';
 import { TILE_PRELOAD_BLOCK } from './blocks/setup/tile-preload.wgsl';
 import { WOUND_LIST_BLOCK } from './blocks/setup/wound-list.wgsl';
@@ -12,6 +13,7 @@ import { RAY_WINDOW_BLOCK } from './blocks/setup/ray-window.wgsl';
 import { STEP_CONFIG_BLOCK } from './blocks/setup/step-config.wgsl';
 import { START_BOUNDS_BLOCK } from './blocks/setup/start-bounds.wgsl';
 import { DEBUG_COUNTERS_BLOCK } from './blocks/loop/debug-counters.wgsl';
+import { SPLIT_HIT_BLOCK } from './blocks/post/split-hit.wgsl';
 import { PRIM_MATERIAL_BLOCK } from './blocks/post/prim-material.wgsl';
 import { SHADING_NORMAL_BLOCK } from './blocks/post/shading-normal.wgsl';
 import { WOUND_MASKS_BLOCK } from './blocks/post/wound-masks.wgsl';
@@ -104,6 +106,11 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(max(
   // Which limb's re-fold won at the ACCEPTED sample (gRefoldWin, 0 = none), for
   // the NORMAL HINT around calcNormal. Re-assigned every iteration like the rest.
   var hitRefold = 0.0;
+  // THE HEAD SPLIT: the ACCEPTED sample's winning piece and that piece's field before its caps (gHitPiece,
+  // gHitSplitF), for the post-hit blocks. Copied here because every later mapBody call (the normal's taps, the
+  // probes) writes the globals again.
+  var hitPiece = 0;
+  var hitSplitF = 0.0;
   for (var i = 0; i < 512; i = i + 1) {
     if (i >= steps) { break; }
     if (debugCfg.x > 0.5) { gDebugSteps = gDebugSteps + 1.0; }
@@ -136,6 +143,11 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(max(
     hitBest = i32(dres.y);
     hitField = dres;
     hitRefold = gRefoldWin;
+    hitPiece = gHitPiece;
+    hitSplitF = gHitSplitF;
+    // An open slot's pieces each fold their own limbs: the hint is the HIT piece's win (none: 0), not the last
+    // piece's that won. A closed slot keeps gRefoldWin.
+    if (gInstSplitOpen && hitRefold != 0.0) { hitRefold = select(select(gRefoldBy.z, gRefoldBy.y, hitPiece == 1), gRefoldBy.x, hitPiece == 0); }
     // Shell displacement: inside a thin shell of the smooth surface, the
     // silhouette noise displaces the REAL field — bumpy outlines are back —
     // and stepping goes conservative because the noise breaks the Lipschitz
@@ -145,8 +157,20 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(max(
     let shellAmp = woundCfg2.z;
     var conservative = false;
     if (shellAmp > 0.0 && abs(d) < shellAmp * 4.0) {
-      d = d + fbm(restPoint(camPos + rd * t, data, i32(dres.y), noiseLocal(camPos + rd * t, noiseShift), gBand) * 3.0) * shellAmp;
-      conservative = true;
+      // THE HEAD SPLIT: the noise is glued to the flesh, so on a half that turned open it is read at this sample's
+      // own un-warped point (the piece mapBody just left in gHitPiece), and it fades out where a piece cap holds the
+      // field above the piece's own (d - gHitSplitF, the post's cut-face gate): a cut face is flat, and a sample
+      // over one is no shell sample at all (the walk stays relaxed). shellK is shellAmp for every closed body.
+      var shellP = camPos + rd * t;
+      var shellK = shellAmp;
+      if (gInstSplitOpen) {
+        if (gHitPiece != 0) { shellP = splitMoveBack(shellP, gInstSplitH.xyz, gInstSplitA.xyz, select(gInstSplitA.w, gInstSplitN.w, gHitPiece == 1)); }
+        shellK = shellAmp * (1.0 - smoothstep(${SPLIT_SHADE.cutLo}, ${SPLIT_SHADE.cutHi}, d - gHitSplitF));
+      }
+      if (shellK > 0.0) {
+        d = d + fbm(restPoint(shellP, data, i32(dres.y), noiseLocal(shellP, noiseShift), gBand) * 3.0) * shellK;
+        conservative = true;
+      }
     }
     // Near a wound (mapBody.z) the field is not a distance bound — see
     // applyWounds — so step UNDER-relaxed at 0.6, exactly as the noise shell
@@ -350,6 +374,7 @@ export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) {
   let debugPrims = gDebugPrims;
 
   let p = camPos + rd * t;
+${SPLIT_HIT_BLOCK}
 ${PRIM_MATERIAL_BLOCK}
 ${SHADING_NORMAL_BLOCK}
 ${WOUND_MASKS_BLOCK}

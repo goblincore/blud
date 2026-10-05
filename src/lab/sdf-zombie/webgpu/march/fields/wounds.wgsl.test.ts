@@ -289,8 +289,11 @@ describe('cut wounds in the march', () => {
   it('woundMask reads nrm only in the cut back gate, and the call passes the smooth normal', () => {
     expect(WOUND_MASK.match(/\bnrm\b/g)).toHaveLength(2); // the parameter and the cNi dot (the back and face gates)
     expect(WOUND_MASK).toContain('fn woundMask(p: vec3<f32>, nrm: vec3<f32>,');
-    expect(WOUND_MASKS_BLOCK).toContain('woundMask(p, nSmooth, data, woundCfg, woundCfg2)');
-    expect(WOUND_MASKS_BLOCK).not.toContain('woundMask(p, n,');
+    // (The head split: at the hit piece's un-warped point pS, with that normal turned into the piece's frame,
+    // nSmoothS. Both are p and nSmooth themselves off a turned half.)
+    expect(WOUND_MASKS_BLOCK).toContain('var nSmoothS = nSmooth;');
+    expect(WOUND_MASKS_BLOCK).toContain('woundMask(pS, nSmoothS, data, woundCfg, woundCfg2)');
+    expect(WOUND_MASKS_BLOCK).not.toMatch(/woundMask\(p,|woundMask\(pS, n,/);
     expect(SKIN_NORMAL).toContain('var nSmooth = n;');
   });
 });

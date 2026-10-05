@@ -20,7 +20,10 @@ export const WET_BLOCK = /* wgsl */ `  // Wounds are wetter than the surrounding
   // wetWound is exactly the old max(wm, gore): the amp-0 guarantee survives
   // this line. Bone is matte — wet skin reflects, wet bone just looks
   // polished.
-  let lip = 1.0 - smoothstep(surfCfg3.z, surfCfg3.z * 3.0, tissueDepth);
+  // THE HEAD SPLIT: a cut face (cutFace, split-hit.wgsl.ts) is wet all over. It is a flat face laid open at every
+  // depth, not a crater whose floor lies under its lip.
+  var lip = 1.0 - smoothstep(surfCfg3.z, surfCfg3.z * 3.0, tissueDepth);
+  if (cutFace > 0.0) { lip = mix(lip, 1.0, cutFace); }
   let wetWound = max(wm * lip, gore);
   let woundWetBoost = mix(1.6, 2.15, faceGlowRedOnly);
   var wet = mix(surfCfg2.x * mix(1.0, woundWetBoost, wetWound) * (1.0 - cm) * select(1.0, 0.25, isBone) * select(1.0, 1.8, isOrgan), 1.0, gloss);

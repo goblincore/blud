@@ -295,6 +295,9 @@ var<private> gProbePass: f32 = 0.0;
 // gRefoldWin = cluster + 1 whose re-fold won on the latest mapBody call (0 = none);
 // gNormalHint >= 0 while calcNormal's taps run: re-fold only that cluster (0 = none).
 var<private> gRefoldWin: f32 = 0.0;
+// THE HEAD SPLIT: the same win per piece of the slot that had it (x / y / z = piece 0 / 1 / 2; 0 = that piece had
+// none), valid while gRefoldWin != 0 (mapBody clears it at a call's first win). The walk reads the hit piece's.
+var<private> gRefoldBy: vec3<f32> = vec3<f32>(0.0);
 var<private> gNormalHint: f32 = -1.0;
 // WALK SKIP (counts2.z + 128, 2026-09-22): after a LOSING walk re-fold, the losing gap
 // (limb - body) bounds how soon it could flip — each value moves <= ~stepLen per step —
