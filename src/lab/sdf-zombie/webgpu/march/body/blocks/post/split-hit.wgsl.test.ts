@@ -230,6 +230,8 @@ describe('cut faces shade as wound interior', () => {
     expect(SPLIT_SHADE).toEqual({
       cutLo: 0.0015, cutHi: 0.004, shellLo: 0.0015, shellHi: 0.004, poreCut: 0.5, wet: 1,
       bone: { lo: 0.01, hi: 0.017, soft: 0.0015, colour: [1.3, 1.4, 1.6], strength: 1 },
+      layers: { fat: 0.006, soft: 0.0008, fatColour: [1.1, 1.05, 0.9], muscle: 0.4, rag: 0.0015, ragScale: 110, clot: 0.7, clotColour: 0.25, strength: 1 },
+      cavity: { rim: 0.32, centre: 0.12, reach: 0.035, blotch: 0.4, scale: 30, strength: 1 },
     });
     // x * 1.0 is x to the bit, so the wetness is the gate itself until the look pass moves it.
     expect(wgslF(SPLIT_SHADE.wet)).toBe('1.0');
@@ -260,6 +262,33 @@ describe('cut faces shade as wound interior', () => {
     expect(cutBoneRing(0.05)).toBe(0);
     // The band needs a flat top: its two edges must not overlap.
     expect(B.hi - B.soft).toBeGreaterThan(B.lo + B.soft);
+  });
+  it('THE LAYERS AND THE CAVITY: flesh outside the ring, a dark lining inside it, both behind the gate, both before the ring', () => {
+    const code = noComments(CUT_FACE_BLOCK), B = SPLIT_SHADE.bone, L = SPLIT_SHADE.layers, C = SPLIT_SHADE.cavity;
+    const body = code.slice(code.indexOf('if (cutFace > 0.0) {'));
+    const e = (v: number) => wgslF(+v.toFixed(9));
+    // The layers: the fat line's inner edge on the section's depth, torn by a noise of the REST anchor (it rides the
+    // half; the world point would swim), clotted where that noise runs high; muscle beyond; only outside the ring.
+    expect(body).toContain(`let cutRag = noise3(anchor * ${e(L.ragScale)});`);
+    expect(body).toContain(`let cutFat = 1.0 - smoothstep(${e(L.fat - L.soft)}, ${e(L.fat + L.soft)}, cutSection + cutRag * ${e(L.rag)});`);
+    expect(body).toContain(`let cutClot = smoothstep(0.1, 0.5, cutRag) * ${e(L.clot)};`);
+    expect(body).toContain(`let cutLayers = mix(deepColor * ${e(L.muscle)}, mix(fatColor * vec3<f32>(${L.fatColour.map(e).join(', ')}), deepColor * ${e(L.clotColour)}, cutClot), cutFat);`);
+    expect(body).toContain(`albedo = mix(albedo, cutLayers, cutFace * (1.0 - smoothstep(${e(B.lo - B.soft)}, ${e(B.lo + B.soft)}, cutSection)) * ${e(L.strength)});`);
+    // The cavity: from the ring's inner edge in, darker over `reach`, blotched by a slow noise of the rest anchor.
+    expect(body).toContain(`let cutCavity = deepColor * mix(${e(C.rim)}, ${e(C.centre)}, smoothstep(${e(B.hi)}, ${e(B.hi + C.reach)}, cutSection)) * (1.0 + ${e(C.blotch)} * noise3(anchor * ${e(C.scale)}));`);
+    expect(body).toContain(`albedo = mix(albedo, cutCavity, cutFace * smoothstep(${e(B.hi - B.soft)}, ${e(B.hi + B.soft)}, cutSection) * ${e(C.strength)});`);
+    // Flesh first, then the ring over it: the ring's share (cutKeep) is of the finished albedo.
+    expect(body.indexOf('albedo = mix(albedo, cutLayers')).toBeLessThan(body.indexOf('albedo = mix(albedo, cutCavity'));
+    expect(body.indexOf('albedo = mix(albedo, cutCavity')).toBeLessThan(body.indexOf('albedo = mix(albedo, boneColor'));
+    // They are flesh: neither writes cutKeep (the mottle, the gore and the wetness still take them).
+    expect(code.match(/\bcutKeep = /g)).toHaveLength(2);
+    // Room for both layers outside the ring at the march's texel (2.3 mm at 0.6 m): each at least 1.3 texels.
+    expect(L.fat - (SPLIT_SHADE.cutLo + SPLIT_SHADE.cutHi) / 2).toBeGreaterThan(1.3 * 0.0023);
+    expect(B.lo - L.fat).toBeGreaterThan(1.3 * 0.0023);
+    // The cavity is darker than the muscle, and darkest in the middle; the blotch never turns it negative.
+    expect(C.rim).toBeLessThan(L.muscle);
+    expect(C.centre).toBeLessThan(C.rim);
+    expect(C.blotch).toBeLessThan(1);
   });
   it('no face sheet, eye glow or head-skin gore protection on a cut face', () => {
     const gate = 'if (cutFace > 0.0) { facing = facing * (1.0 - cutFace); faceCover = faceCover * (1.0 - cutFace); }';

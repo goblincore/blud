@@ -136,10 +136,23 @@ export const HEAD_SPLIT = {
  *  the ring at 2.3 mm a texel (the layers step). `colour` multiplies the material's bone colour (the uniform the
  *  skeleton mesh is seeded from), so the ring follows the character's bone; over 1 because it is bone cut through,
  *  paler than the skull's weathered outside. `strength` is the band's share of the albedo, and the share the mottle,
- *  the gore and the wound wetness leave alone (cutKeep). To turn the ring off: `strength` 0. */
+ *  the gore and the wound wetness leave alone (cutKeep). To turn the ring off: `strength` 0.
+ *  `layers`: THE FLESH OUTSIDE THE RING (look pass, step 2), from the skin in: the skin's edge (the gate's own blend),
+ *  a pale line of fat to `fat` metres deep, then dark muscle to the ring. Sized for the march's texel (2.3 mm at
+ *  0.6 m): the fat line is 1.4 texels there, the muscle 1.9; the material's own ramp (fat by 4 mm, muscle by 14) put
+ *  the fat inside the gate's blend and never reached its red before the ring. `fatColour` multiplies the material's
+ *  fat colour and `muscle` its deep colour. THE TORN EDGE: the layers' depth is pushed in and out by `rag` metres of
+ *  a noise `ragScale` cells a metre across (it rides the half), and where that noise runs high the fat line is
+ *  clotted over by `clot` (0 = an unbroken line) with the deep colour x `clotColour`. Shading only: the outline
+ *  itself is the cap's. To turn the layers off: `strength` 0 (the material's ramp again).
+ *  `cavity`: INSIDE THE RING: a dark lining, the deep colour x `rim` at the ring going to x `centre` over `reach`
+ *  metres further in, blotched by +-`blotch` of a slow noise (`scale` cells a metre; it rides the half). No brain:
+ *  that is an object of its own. To turn the cavity off: `strength` 0. */
 export const SPLIT_SHADE = {
   cutLo: 0.0015, cutHi: 0.004, shellLo: 0.0015, shellHi: 0.004, poreCut: 0.5, wet: 1,
   bone: { lo: 0.01, hi: 0.017, soft: 0.0015, colour: [1.3, 1.4, 1.6], strength: 1 },
+  layers: { fat: 0.006, soft: 0.0008, fatColour: [1.1, 1.05, 0.9], muscle: 0.4, rag: 0.0015, ragScale: 110, clot: 0.7, clotColour: 0.25, strength: 1 },
+  cavity: { rim: 0.32, centre: 0.12, reach: 0.035, blotch: 0.4, scale: 30, strength: 1 },
 } as const;
 
 const smooth01 = (e0: number, e1: number, x: number): number => {

@@ -1274,3 +1274,50 @@ than the ring.
 | `compile-census` | phase ready, `uncapturedCount` 0, no device loss; march module 326 068 B -> **327 020 B** (83 fns); cold `warmMs` 48 213 |
 | `march-hash` | no pin moved (`d7392d52…` / `76bd51aa…`, `0c71e712…` / `bf6836cd…`, `470ff0b3…` / `f618070e…`) |
 | `head-split-gate` | 67 checks, 0 failed |
+
+### Step: layers outside the ring, a dark cavity inside it (`look/03-layers-cavity.jpg`; the brief's step 2)
+
+Outside the ring, from the skin in: the skin's edge (the gate's own blend, to about 2.75 mm), a pale line of fat to
+6 mm, dark muscle to the ring at 10 mm. Inside the ring: a dark lining, darker toward the middle, blotched.
+
+- **Constants:** `SPLIT_SHADE.layers = { fat: 0.006, soft: 0.0008, fatColour: [1.1, 1.05, 0.9], muscle: 0.4, rag:
+  0.0015, ragScale: 110, clot: 0.7, clotColour: 0.25, strength: 1 }` and `SPLIT_SHADE.cavity = { rim: 0.32, centre:
+  0.12, reach: 0.035, blotch: 0.4, scale: 30, strength: 1 }`. The colours multiply the material's own (`fatColor`,
+  `deepColor`). **To turn them off: `layers.strength` 0 and `cavity.strength` 0** (each alone works too). Exact: the
+  off capture equals the ring build in all 25 views, 0 texels.
+- **Sized by the texel.** 0.43 texels a millimetre at 0.6 m, 0.13 at 2 m. The material's ramp has its fat stop at
+  4 mm, inside the gate's blend (1.5 to 4 mm), and its muscle stop at 14 mm, inside the ring: before this step the
+  flesh outside the ring was one orange band. Now the fat line is 3.25 mm (1.4 texels at 0.6 m) and the muscle 4 mm
+  (1.7 texels); a unit test holds each over 1.3 texels. At 2 m all of it, ring included, is under 2.5 texels.
+- **The torn edge, in shading** (the reach step's other half): the layers' depth is pushed in and out by 1.5 mm of
+  a noise with 9 mm cells, and where that noise runs high the fat line is clotted over with dark red. Shading only:
+  the outline is the cap's.
+- **Both noises are of the rest anchor**, not of `pS`: `pS` is a world point and would swim on a body that walks;
+  the anchor is its rest-space image and rides the half (the mottle's and the pores' rule).
+- **The lines are written only while each is on.** With strength 0 as a multiplier the albedo is untouched, but the
+  compiler rounds the ring's own mix after those lines another way: 403 ring texels of 25 views differed, by up to
+  3e-7. So strength 0 writes no line, and off is the text without them.
+
+| Measure (25 views, float march target) | |
+| --- | --- |
+| Cut-face texels | 31 167 |
+| ... changed | 28 540 (**91.6%**); largest channel step: median 0.032, mean 0.094, max 0.91; 54.4% of the face by over 0.02 |
+| Every other hit texel | 9 of 587 236 differ, by at most 5.4e-7 (the gate's own edge) |
+| Three-quarter at 2 m | 150 / 269 / 246 texels changed, mean 0.34 to 0.42 |
+| Closed bodies | the six `march-hash` pins unmoved |
+
+**My read of the sheet.** This is the step that does the most. At 0.6 m (three-quarter, from above) the face stops
+being a lit red sheet: it is a dark hollow with a banded rim, yellow, dark, cream, and the ring now stands between
+two darker bands instead of fading into orange. At 2 m from three-quarter the neon red patch is a darker red with a
+pale banded border; the bands themselves merge there. From the front, edge-on, nothing. Wrong: under the torch at
+2 m the cavity is still a saturated red, only darker; the blotch is too slow and too faint to see; the torn edge
+does not show at sheet size (1.5 mm is 0.65 texel), so the outline away from the crown still reads as a clean
+cleave; the cavity is an empty lining (the brain is the next group's). In the unlit `face` preset from above the
+cavity goes almost black.
+
+| Check | Result |
+| --- | --- |
+| `march-golden -u` | 1 snapshot (`MARCH_TRACE_POST` and what embeds it) |
+| `compile-census` | phase ready, `uncapturedCount` 0, no device loss; march module 327 020 B -> **328 182 B** (83 fns); `warmMs` 4083 (not a cold number: the OS shader cache held this text from the captures minutes before) |
+| `march-hash` | no pin moved |
+| `head-split-gate` | 67 checks, 0 failed |
