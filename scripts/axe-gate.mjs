@@ -6,9 +6,13 @@
 //      cut-wound-gate's K measures it.
 //   D. A DIAGONAL CHOP ("R"): its cut runs diagonally (|dir.y| in 0.4..0.9).
 //   K. HEAD CHOPS TO THE KILL: chops 1 and 2 count and the zombie stays standing; chop 3 kills (its phase leaves
-//      'standing'); the corpse keeps its head cuts. The gate's zombies are frozen and a forced collapse is only consumed
-//      in the actor's step(), so after each chop the ring is thawed for 3 frames, the phase read, and frozen again
-//      (head-burst-gate's A does the same).
+//      'standing'). Chop 1 opens the head split (game-head-split.ts), so what the corpse keeps is the split's: it is
+//      still open on it, and its two cut faces are in the wound ring as head-kept wounds. A chop that lands in the gap
+//      of an open head stamps no cut of its own (axe-head.ts headChopCut), so the corpse's cuts are not counted;
+//      scripts/head-split-gate.mjs measures the split itself. The gate's zombies are frozen and a forced collapse is
+//      only consumed in the actor's step(), so after each chop the ring is thawed for 3 frames, the phase read, and
+//      frozen again (head-burst-gate's A does the same); then the split's spring is left to settle, as in play, where
+//      strikes are at least 0.6 s apart (axe-swing.ts).
 //   S. THE REAL SWING: slot 7 selected and settled, a click (the axeSwing seam: the canvas mousedown needs pointer lock,
 //      which headless Chrome cannot take, so that path is NOT exercised here), the chop lands on the zombie in front.
 //      Photos at rest, at the strike frame and after; the drawn axe's haft / head / grip clipping (share of pixels with
@@ -33,6 +37,8 @@ const EYE_H = 1.62;
 const CHOP_D = 0.9, HEAD_D = 0.7, SWING_D = 1.1;
 // Thresholds. A: cut-wound-gate's K dip (the dimmest view dipped 15.7 below its darker shoulder there).
 const A_DIP_MIN = 8;
+// K: frames between head chops (0.67 s: the split's spring at rest).
+const K_SETTLE = 40;
 // T: the turned body (about 90 degrees round), staged within this many walking frames; the cut on the hit point.
 const T_SIN_MIN = 0.97, T_MAX_FRAMES = 900, T_LAND_MAX = 0.05;
 /** A clipped pixel: any channel at or over this. */
@@ -405,7 +411,7 @@ try {
     const c = await toPx(w.pos);
     if (c) cropOut(img, c, 320, 320, "D-after-crop");
   }
-  // -------- K. head chops: 1 and 2 cut and the zombie lives; 3 kills; the corpse keeps 3 head cuts.
+  // -------- K. head chops: 1 opens the head and 2 widens it, the zombie lives; 3 kills; the split and its cut faces stay.
   if (run("K")) {
     const z = fresh(); const f = await frontOf(z.id);
     await look(await headOf(z.id), HEAD_D, f);
@@ -429,16 +435,22 @@ try {
       out.k.push({ chop: i, side, phase: ph });
       if (i < 3) check(ph === "standing", `K: alive after head chop ${i} (thawed 3 frames: phase ${ph})`);
       else check(ph !== "standing", `K: head chop 3 kills (thawed 3 frames: phase ${phase0} -> ${ph})`);
+      await stepN(K_SETTLE);
     }
-    await stepN(1);
-    const cuts = (await woundsOf(z.id)).filter((w) => w.shape === "cut" && w.headRegion);
-    out.kCuts = cuts.map((w) => ({ region: w.headRegion, limb: w.limb, half: +w.radius.toFixed(3) }));
-    check(cuts.length >= 3 && new Set(cuts.map((w) => w.headRegion)).size === cuts.length, `K: the corpse keeps its head cuts (${J(out.kCuts)})`);
-    // The corpse a few frames on (thawed): it falls, the cuts stay.
+    // The split's cut faces: one cut per opened half, head-kept; and the split's own state.
+    const facesOf = async () => (await woundsOf(z.id)).filter((w) => w.shape === "cut" && (w.headRegion === "split+" || w.headRegion === "split-"));
+    const faces = await facesOf(), split = await evaluate(`__sdfGame.headSplit(${z.id})`);
+    out.kFaces = faces.map((w) => ({ region: w.headRegion, slot: w.headSlot, limb: w.limb, half: +w.radius.toFixed(3) }));
+    out.kSplit = split && { preset: split.preset, sides: split.sides, angle: +split.angle.toFixed(4), target: +split.target.toFixed(4) };
+    check(!!split && split.preset !== null && split.angle > 0 && split.angle === split.target, `K: the head is split open on the corpse, thrown to the kill's angle (${J(out.kSplit)})`);
+    check(faces.length === (split?.sides === 0 ? 2 : 1) && new Set(faces.map((w) => w.headRegion)).size === faces.length && faces.every((w) => w.headSlot === "keep"),
+      `K: the corpse keeps the split's cut faces, one per opened half, head-kept (${J(out.kFaces)})`);
+    // The corpse a few frames on (thawed): it falls, the split and its faces stay.
     await evaluate("__sdfGame.freeze(false)"); await stepN(45); await evaluate("__sdfGame.freeze(true)");
     out.kPhaseLater = await actorPhase(z.id);
-    const later = (await woundsOf(z.id)).filter((w) => w.shape === "cut" && w.headRegion).length;
-    check(later >= 3, `K: 45 frames on (phase ${out.kPhaseLater}) the corpse still has ${later} head cuts`);
+    const later = await facesOf(), splitLater = await evaluate(`__sdfGame.headSplit(${z.id})`);
+    check(later.length === faces.length && later.every((w) => w.headSlot === "keep") && !!splitLater && splitLater.angle === split?.target,
+      `K: 45 frames on (phase ${out.kPhaseLater}) the corpse's head is still open (${splitLater ? splitLater.angle.toFixed(4) : null} rad) with its ${later.length} cut face(s)`);
   }
   // -------- S. the real swing: slot 7 selected, armed, a click (seam), the chop lands on a zombie in front.
   if (run("S")) {

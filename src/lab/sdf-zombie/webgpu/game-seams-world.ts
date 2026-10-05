@@ -202,7 +202,8 @@ export function createWorldSeams(ctx: GameContext) {
     /** P3 capture: an actor's wounds in world space — the transform rendering uses. `shape` is 'cut' for a blade slot
      *  (cut-wound.ts; `radius` is then its half-length, `kerf` its half-width), else 'crater'. `prim` / `limb`: the
      *  primitive it rides (merges only join wounds on one prim). `dirWorld`: a cut's along-slot direction in world
-     *  space at the live yaw (null for a crater). `headRegion`: the wound's head tag, if any (an axe head chop's). */
+     *  space at the live yaw (null for a crater). `headRegion`: the wound's head tag, if any (an axe head chop's, a
+     *  split's cut face), and `headSlot`: 'keep' for a head-kept wound, which outlives the wound ring's cap. */
     actorWounds: (actorId: number) => {
       const a = ctx.world.actors.find((q) => q.id === actorId);
       if (!a) return [];
@@ -212,7 +213,7 @@ export function createWorldSeams(ctx: GameContext) {
         pos: woundWorldPos(posed.prims, w, yaw), radius: w.radius, type: w.type, shape: w.shape ?? 'crater', kerf: w.kerf ?? null,
         prim: w.primIdx, limb: posed.prims[w.primIdx]?.limb ?? null,
         dirWorld: w.shape === 'cut' && w.cutDir ? woundDirToWorld(posed.prims, w, w.cutDir, yaw) : null,
-        headRegion: w.headRegion ?? null,
+        headRegion: w.headRegion ?? null, headSlot: w.headSlot ?? null,
       }));
     },
     /** P3 capture: every actor's head circle and wound circles, projected through the live camera to
