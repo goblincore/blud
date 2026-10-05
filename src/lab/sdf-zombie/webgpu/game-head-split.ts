@@ -19,7 +19,10 @@
 // before the step, so the pose it reads is the last step's: tick N differences the point at steps N-1, N-2 and N-3,
 // an acceleration centred on step N-2, two frames (33 ms) behind the pose that will draw this tick's angles.
 // Secondary motion trails its body anyway. A frozen actor's point does not move: no drive, and its halves come to
-// rest at exactly the spring's angle. A pose with no split (the head gone, the body tearing) forgets the motion.
+// rest at exactly the spring's angle. A pose with no split (the head gone, the body tearing) forgets the motion, and
+// a point that jumps (a teleport) starts it again. The wobble's parameters are the leaf's (deps.wobble; the shipped
+// HEAD_SPLIT.wobble by default). script() is the gate's seam: accelerations fed by hand, one a tick, in place of
+// the pose's.
 //
 // THE CUT FACES. Opening stamps one cut per opened half along the plane (head-split.ts splitFaceSegs → cut-wound.ts
 // stampCut, on the closed head, where wounds live), tagged headSlot 'keep' so they outlive the wound ring's cap, and
@@ -57,14 +60,17 @@ import { headQuatOf } from '../rig-bind';
 import {
   HEAD_SPLIT, forcedSplit, headFrameOf, headLocalDir, headLocalPoint, makePointMotion, openSplit, pointAccel, punchSplit,
   splitFaceSegs, splitMassPoint, splitWarpOf, stepSplit, widenSplit, wobbleDrive,
-  type HeadFrame, type PointMotion, type SplitPresetId, type SplitState, type SplitWarp,
+  type HeadFrame, type PointMotion, type SplitPresetId, type SplitState, type SplitWarp, type WobbleParams,
 } from '../head-split';
 import { headAlive, headShape } from './flame-anchors';
+import { cross } from '../vec';
 
 export interface HeadSplitDeps {
   /** The head damage leaf holds state for this head (game-head-damage.ts has): open() and force() refuse it. Absent:
    *  never. */
   headDamaged?(a: ZombieActor): boolean;
+  /** The wobble's parameters (head-split.ts WobbleParams). Absent: the shipped HEAD_SPLIT.wobble. */
+  wobble?: WobbleParams;
 }
 
 export interface HeadSplitLeaf {
@@ -90,6 +96,12 @@ export interface HeadSplitLeaf {
    *  faces stay in the ring). False for an unknown id, arguments that are not a split (head-split.ts forcedSplit), or
    *  a head open() would refuse. */
   force(id: number, preset: SplitPresetId, sides: -1 | 0 | 1, offset: number, angleFrac: number): boolean;
+  /** Gate seam: THE WOBBLE'S DRIVE BY HAND. `accs` are world accelerations of actor `id`'s mass point (m/s^2), taken
+   *  one a tick, from the next tick on, IN PLACE of the one the pose gives; when they are spent the pose's is back.
+   *  Null or an empty list clears what is left. False for an actor with no split state, or a list that is not one of
+   *  three-number vectors. A repeatable motion for a frozen actor: what it does is the pure step's on the same
+   *  list (head-split.ts stepSplit with wobbleDrive). */
+  script(id: number, accs: readonly Vec3[] | null): boolean;
   /** Drop every actor's state and hook (a cast rebuild / level reset). */
   reset(): void;
 }
@@ -101,6 +113,8 @@ interface ActorSplit {
    *  reads was stepped with. */
   motion: PointMotion;
   dt: number;
+  /** Accelerations fed by hand (script()), the next tick's first. */
+  script: Vec3[];
 }
 
 /** The rupture window is running, or spent and not yet ended (the actor is about to be gibbed). */
@@ -108,6 +122,7 @@ const tearing = (a: ZombieActor): boolean => a.tearing() || a.tearAge() > 0;
 
 export function createHeadSplit(ctx: GameContext, deps: HeadSplitDeps = {}): HeadSplitLeaf {
   const heads = new Map<ZombieActor, ActorSplit>();
+  const wobble: WobbleParams = deps.wobble ?? HEAD_SPLIT.wobble;
 
   /** The head's frame on a body posed by `a`'s rig (the prims are the closed head's, split or not), and the skull's
    *  half-width, which the preset's offsets are shares of. */
@@ -131,7 +146,7 @@ export function createHeadSplit(ctx: GameContext, deps: HeadSplitDeps = {}): Hea
   function begin(a: ZombieActor, st: SplitState, frame: HeadFrame): readonly Wound[] {
     let h = heads.get(a);
     if (!h) {
-      h = { st, faces: [], motion: makePointMotion(), dt: 0 };
+      h = { st, faces: [], motion: makePointMotion(), dt: 0, script: [] };
       heads.set(a, h);
       const rec = h;
       a.setHeadSplit(p => hook(a, rec, p));
@@ -181,10 +196,12 @@ export function createHeadSplit(ctx: GameContext, deps: HeadSplitDeps = {}): Hea
         if (!ctx.world.actors.includes(a)) { drop(a); continue; }
         // A tick of no time (a gate syncing its camera) steps nothing and has no pose of its own: it takes no sample,
         // and the last step's time stands for the tick that follows.
-        const was = h.st, w = a.posed().split ?? null;
-        const s = dt > 0 ? pointAccel(h.motion, w ? splitMassPoint(w) : null, h.dt) : null;
+        const was = h.st, w = a.posed().split ?? null, u = w ? cross(w.n, w.a) : null;
+        const s = dt > 0 ? pointAccel(h.motion, w && u ? splitMassPoint(w, wobble, u) : null, h.dt, wobble) : null;
         if (s) { h.motion = s.motion; h.dt = dt; }
-        h.st = stepSplit(was, dt, s && w ? wobbleDrive(w, s.acc) : null);
+        // An acceleration fed by hand stands in for the pose's on this tick.
+        const acc = s && w && h.script.length > 0 ? h.script.shift()! : s ? s.acc : null;
+        h.st = stepSplit(was, dt, acc && w && u ? wobbleDrive(w, acc, wobble, u) : null, wobble);
         // A FROZEN actor never steps, and the step is where the hook is asked: without this its posed and drawn head
         // would keep the angles of the last hit's re-pose (game-head-damage.ts tick's rule). Not while it tears: the
         // rupture window re-uploads the body itself, with its wounds carried.
@@ -210,6 +227,13 @@ export function createHeadSplit(ctx: GameContext, deps: HeadSplitDeps = {}): Hea
       // No reaction of its own; the blast re-poses the actor, so the forced split shows at once.
       a.blast({ wounds: begin(a, st, sk.frame), meterCredit: 0, impulse: null, reaction: 'none' });
       hullsStale();
+      return true;
+    },
+    script(id, accs) {
+      const a = ctx.world.actors.find(x => x.id === id), h = a && heads.get(a);
+      if (!h) return false;
+      if (accs !== null && !(Array.isArray(accs) && accs.every(v => Array.isArray(v) && v.length === 3))) return false;
+      h.script = (accs ?? []).map(v => [v[0], v[1], v[2]] as Vec3);
       return true;
     },
     reset() {

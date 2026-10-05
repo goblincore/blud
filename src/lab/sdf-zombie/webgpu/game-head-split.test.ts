@@ -11,7 +11,7 @@ import { gibPlan } from '../gib-parts';
 import { sdBody } from '../validate';
 import { MAX_HEAD_WOUNDS, MAX_WOUNDS, pushWound, woundWorldPos, worldHitToWound, type Wound } from '../damage';
 import { BleedRegistry } from '../bleed-registry';
-import { HEAD_SPLIT, splitMaxAngle, unwarpPoint, type SplitWarp } from '../head-split';
+import { HEAD_SPLIT, splitMaxAngle, splitWarpOf, stepSplit, unwarpPoint, wobbleDrive, type SplitWarp, type WobbleParams } from '../head-split';
 import { add, cross, dot, len, qRotate, scale, sub } from '../vec';
 import { headQuatOf } from '../rig-bind';
 import type { Vec3 } from '../types';
@@ -47,7 +47,7 @@ function freshActor(id = 7) {
   return { a, seen };
 }
 
-function fixture(o: { headDamaged?: HeadSplitDeps['headDamaged']; frozen?: boolean } = {}) {
+function fixture(o: { headDamaged?: HeadSplitDeps['headDamaged']; frozen?: boolean; wobble?: WobbleParams } = {}) {
   const { a, seen } = freshActor();
   const ctx = {
     weapon: { aimRig: new THREE.Group(), viewModelAnchor: new THREE.Group(), slotState: makeWeaponSlotState('axe'), headSplit: null as unknown },
@@ -58,7 +58,7 @@ function fixture(o: { headDamaged?: HeadSplitDeps['headDamaged']; frozen?: boole
     demo: { wanderFrozen: o.frozen ?? true },
     render: { frozenHullBuilt: true },
   };
-  const split = createHeadSplit(ctx as unknown as GameContext, { headDamaged: o.headDamaged });
+  const split = createHeadSplit(ctx as unknown as GameContext, { headDamaged: o.headDamaged, wobble: o.wobble });
   ctx.weapon.headSplit = split;
   const skull = headShape(a.posed())!;
   const view = { eye: [skull.centre[0], skull.centre[1], skull.centre[2] + 1.2] as Vec3 };
@@ -476,19 +476,90 @@ describe('the leaf: the wobble (the halves swing with the body)', () => {
     expect(f.split.state(7)).toMatchObject({ wobP: 0, wobVP: 0, wobM: 0, wobVM: 0 });
   });
 
-  it('OFF (both gains 0): a walking actor\'s pose carries the spring\'s angle alone, to the bit', () => {
-    const live = W as { gainSide: number; gainBob: number }, keep = [live.gainSide, live.gainBob];
-    live.gainSide = 0; live.gainBob = 0;
-    try {
-      const f = fixture({ frozen: false });
-      f.open(X, f.skinFrom(f.view.eye, [0, 0.03, 0]));
-      for (let i = 0; i < 200; i++) {
-        frame(f);
-        const st = f.split.state(7)!;
-        expect(st).toMatchObject({ wobP: 0, wobVP: 0, wobM: 0, wobVM: 0 });
-        expect(open2(f)).toEqual({ p: st.angle, m: st.angle });
-      }
-    } finally { [live.gainSide, live.gainBob] = keep as [number, number]; }
+  it('OFF (both gains 0, the leaf\'s own parameters): a walking actor\'s pose carries the spring\'s angle alone, to the bit', () => {
+    const f = fixture({ frozen: false, wobble: { ...W, gainSide: 0, gainBob: 0 } });
+    f.open(X, f.skinFrom(f.view.eye, [0, 0.03, 0]));
+    for (let i = 0; i < 200; i++) {
+      frame(f);
+      const st = f.split.state(7)!;
+      expect(st).toMatchObject({ wobP: 0, wobVP: 0, wobM: 0, wobVM: 0 });
+      expect(open2(f)).toEqual({ p: st.angle, m: st.angle });
+    }
+    // The shipped constant was not written to.
+    expect(W.gainSide).toBeGreaterThan(0);
+  });
+
+  it('A SCRIPTED DRIVE (the gate\'s seam): fed accelerations are stepped one a tick in place of the pose\'s, exactly as the pure step steps them, and a frozen actor is re-posed with each', () => {
+    const f = fixture();
+    f.split.force(7, 'middle', 0, 0, 1);
+    const w0 = f.a.posed().split!, u = cross(w0.n, w0.a);
+    // In the split's own frame: thrown across it, then up out of the hinge, then hard enough to reach a stop.
+    const script: Vec3[] = [];
+    for (let i = 0; i < 60; i++) {
+      const side = i < 20 ? 5 * Math.sin(i * 0.5) : i < 40 ? 0 : 60, bob = i >= 20 && i < 40 ? 4 : 0;
+      script.push(add(scale(w0.n, side), scale(u, bob)));
+    }
+    expect(f.split.script(99, script)).toBe(false);          // no such actor
+    expect(f.split.script(7, script)).toBe(true);
+    let ref = f.split.state(7)!;
+    const n0 = f.seen.reposes;
+    let atStop = 0;
+    for (let i = 0; i < script.length; i++) {
+      f.ticks(1);
+      ref = stepSplit(ref, 1 / 60, wobbleDrive(splitWarpOf(ref, { centre: f.skull.centre, quat: [0, 0, 0, 1], radius: Math.max(...f.skull.axes) })!, script[i]!));
+      const st = f.split.state(7)!;
+      expect(st).toEqual(ref);
+      expect(open2(f)).toEqual({ p: st.angle + st.wobP, m: st.angle + st.wobM });
+      if (Math.abs(st.wobP) === W.max * st.angle) atStop++;
+    }
+    // Re-posed on every tick an angle moved (held at a stop under the hard push, nothing moves and nothing is posed).
+    expect(f.seen.reposes).toBeGreaterThan(n0 + 30);
+    expect(f.seen.reposes).toBeLessThan(n0 + script.length);
+    expect(atStop).toBeGreaterThan(5);
+    // The script is spent: the next ticks have the pose's own (none, frozen), and the halves settle.
+    f.ticks(1);
+    expect(f.split.state(7)).toEqual(stepSplit(ref, 1 / 60));
+    f.ticks(settleFrames(MID.maxBoth));
+    expect(f.split.state(7)).toMatchObject({ wobP: 0, wobVP: 0, wobM: 0, wobVM: 0 });
+    // Cleared by null; refused for a head with no split, and for what is not a list of vectors.
+    expect(f.split.script(7, [[1, 0, 0]])).toBe(true);
+    expect(f.split.script(7, null)).toBe(true);
+    f.ticks(3);
+    expect(f.split.state(7)).toMatchObject({ wobP: 0, wobM: 0 });
+    expect(f.split.script(7, [[1, 2] as unknown as Vec3])).toBe(false);
+    expect(f.split.script(7, 'x' as never)).toBe(false);
+    const g = fixture();
+    expect(g.split.script(7, script)).toBe(false);
+    // The seam.
+    const seams = createFireSeams(f.ctx as unknown as GameContext);
+    expect(seams.headSplitDrive(7, [[0, 0, 0]])).toBe(true);
+    expect(seams.headSplitDrive(99, [[0, 0, 0]])).toBe(false);
+    expect(createFireSeams({ weapon: { headSplit: null } } as unknown as GameContext).headSplitDrive(7, [])).toBe(false);
+  });
+
+  it('a body that is thrown across the room is not a motion: a tick whose sample moved faster than jumpSpeed, and the tick after it, step the halves with no drive at all', () => {
+    const f = fixture({ frozen: false });
+    f.split.force(7, 'middle', 0, 0, 1);
+    for (let i = 0; i < 60; i++) frame(f);
+    // 2 m at once (the crowd separation's seam). The actor slides its pose there over a few steps, at up to 38 m/s.
+    f.a.nudge(f.a.pose().pos[0] > 0 ? -2 : 2, 0);
+    const limit = W.jumpSpeed / 60;
+    let fast = 0, undriven = 0, moved = [0, 0];
+    for (let i = 0; i < 12; i++) {
+      const was = f.split.state(7)!, h0 = f.a.posed().split!.h;
+      frame(f);
+      // This frame's tick read the pose the step before left: a jump there is dropped (the history starts again), and
+      // the sample after a dropped one is a position and one velocity. Neither drives.
+      if (moved[1]! > limit || moved[0]! > limit) { expect(f.split.state(7), `frame ${i}`).toEqual(stepSplit(was, 1 / 60)); undriven++; }
+      moved = [moved[1]!, len(sub(f.a.posed().split!.h, h0))];
+      if (moved[1]! > limit) fast++;
+    }
+    expect(fast).toBeGreaterThanOrEqual(2);
+    expect(undriven).toBeGreaterThan(fast);
+    // Then the walk drives them again.
+    let driven = false;
+    for (let i = 0; i < 30 && !driven; i++) { const was = f.split.state(7)!; frame(f); driven = JSON.stringify(f.split.state(7)) !== JSON.stringify(stepSplit(was, 1 / 60)); }
+    expect(driven).toBe(true);
   });
 
   it('a split that opens on a walking body is not kicked by the walk\'s speed: the first drive is the third sample\'s', () => {

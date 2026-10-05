@@ -1544,3 +1544,75 @@ against 43.7 / 46.0 / 49.0) and +7.2 ms with `gain` 0 in the same session (32.1 
 41.8); an earlier pair of the session read +8.1 and +7.1. The level itself moved by 6 to 13 ms from boot to boot, so
 the film's cost is not resolved: under 1 ms if anything. At 2 m the spread (16 ms in one triple) hides everything.
 The work added is per raw texel only: six noise taps and two powers.
+
+### Group 2, review fixes (2026-10-05)
+
+**The owner played `9dcd133f`** and said the wobble "looked fine to me". The tuning stays exactly as built: no value
+of `HEAD_SPLIT.wobble`, `AXE_HEAD.openAngles` or `killKick` changed here. The monotone stage, the mass point, the
+drive in proportion to the opening and `GAP_REST_OVER` 3 mm were accepted in review.
+
+**Guards.**
+- **The step does not trust its drive** (`stepSplit`). A NaN handed straight to it left `wobP` NaN for good. Now a
+  drive component that is not finite is none, one past `accelClamp` is held to it, and offsets or rates that are not
+  finite (in the state, or after the step) are at rest. The leaf's `wobbleDrive` still clamps; the guarantee no
+  longer rests on it.
+- **A jump is not a motion** (`pointAccel`, `HEAD_SPLIT.wobble.jumpSpeed` 25 m/s). A teleport read as a +-40 m/s^2
+  doublet: bounded, but a 2.9 degree blip (7.4 at worst). A sample that moved faster than `jumpSpeed` from the last
+  is dropped and the history starts again from it. The fastest a body's mass point was measured at is 5.3 m/s in a
+  lurch; the corpse's hinge whipped down at 11 m/s in one fall. (A crowd-separation nudge of 2 m is slid over five
+  steps by the actor, at 21 to 38 m/s: the fast ones are dropped.)
+- **Each difference over its own step's time** (`PointMotion.dt`): the two velocities are each over their own dt, and
+  the acceleration is their difference over the time between those steps' middles. With equal steps the numbers are
+  the same to the bit (the gate's did not move).
+
+**Parameters are passed in** (`WobbleParams`): `stepSplit`, `wobbleDrive`, `splitMassPoint`, `pointAccel` and
+`wobbleLimits` take them as a last argument (the shipped `HEAD_SPLIT.wobble` by default), and the leaf takes
+`deps.wobble`. The tests pass their own sets; nothing writes to the constant any more, the gate included.
+
+**The hot path.** `n x a` is computed once a tick in the leaf and handed down; `pointAccel` builds its two vectors
+directly; `stepSplit` steps both halves in one loop on scalars and spreads the state once (it made two tuples, a
+limits pair and two state copies before).
+
+**The gate: 78 checks.**
+- **J is scripted.** It needed the ring's wander to swing the halves, twice, in fixed windows: flake-prone. Now a
+  FROZEN zombie's split is driven through a new seam, `__sdfGame.headSplitDrive(id, accs)` (`game-head-split.ts
+  script`): world accelerations of the mass point, taken one a tick in place of the pose's. The list is 164 ticks in
+  the split's own frame: a walk (the measured bob of +-2 m/s^2 at 2.1 Hz and 1.9 across), four hard throws at the
+  clamp (across the split each way, up and down), and a swing to end on. A really wandering zombie is still watched
+  at the end, printed and not checked (8.3 and 12.5 degrees in 150 frames).
+
+| J's check | Measured | The mutation that fails it |
+| --- | --- | --- |
+| frozen and undriven, at the spring's angle | 0.55 / -0.55 rad, 20 frames | a gravity term in the leaf's drive: sags 7.4 degrees |
+| the leaf steps the list exactly as the pure step | 0 of 164 frames differ | the leaf halving what it is fed (101 differ); the gravity term (95) |
+| under the walk each half swings | 5.7 and 5.7 degrees, 5.0 apart | the gains at 0: 0.00 |
+| inside the limits every frame, into all four stops | 17.3 to 45.7 degrees; 34 to 38 frames at each stop | the clamp removed: -56.9 to 96.8 degrees; the gains at 0 (no stop reached) |
+| the frozen actor's pose carries the state's two angles | 0 of 164 differ; the pose moved on 99 | the leaf not re-posing for a wobble (164 differ); the warp giving both halves one offset (126) |
+| held on a swing, the GPU record carries them | 30.8 / 42.8 degrees, equal as floats | the gains at 0; no re-pose; one offset for both |
+| the skull's copies at the stage's share of each | 26.19 / 36.38 against the same | the same three |
+| the drive over, at rest exactly within the bound | 69 frames (bound 104), 20 more | the gravity term (never); the gains at 0 (0 frames) |
+
+  The live cut of `max` is gone: the hard throws reach the shipped stops by themselves.
+- **K's bone check could not fail.** It read frame 3 of the kick, where the flesh is past its target and the rule
+  before the stage gives the same bone. The kick is now followed for 12 frames on the still-frozen body (no wobble on
+  top, so the flesh's angle is the spring's), before the thaw that kills: the old check at frame 3 (37.55 degrees,
+  bone 31.92) and a new one at the bottom of the swing back (frame 6: 28.73, bone 24.42 / 24.42). With the old rule
+  restored the new one fails: the bone is drawn at 17.44.
+- W's and T's rest checks also hold the wobble at rest (offsets and rates exactly 0), and T the pose's two angles.
+
+**The residual, restated.** With the axe's own table a chop landing above the old target is a large step: chop 2
+landing 3, 4 or 5 frames after chop 1 moves the bone 20.6, 18.3 and 14.4 degrees in one tick with 5.2, 0.3 and -1.7
+of flesh (2 frames after, 23.4 with 11.3 of flesh: steep, inside the per-tick bound). Seam only: strikes are at
+least 0.6 s apart in play. The unit test documented 4.2 degrees, the old table's. The per-tick bound's test now runs
+the shipped table and the kill's kick.
+
+**For a later optimisation pass:** a walking split head never rests (its halves' angles change every tick: 99 of
+164 frames in the script, every frame of a walk), so its bounds, hulls and record are re-made every tick. Only a
+corpse, or a body that stands still, comes to an exact rest and could cache them.
+
+Checks for the review fixes (no WGSL touched): `tsc --noEmit` the `node:crypto` error only; the whole tree 511 files,
+7464 tests passed, 1 skipped; `head-split-gate` **78 checks, 0 failed** twice, every check line and every measure
+line but the draw times the same in both; `axe-gate` 25 of 25; `cut-wound-gate` 30 of 30. Against the run at
+`9dcd133f` the lines that were already there read the same, but for three that moved by a hair (O's lit texels 131
+-> 151, L's centroid 0.51 -> 0.50 texels, M's worst 3.37 -> 3.36 px): shading measures, with the flashlight wetness
+commits in between (not bisected).

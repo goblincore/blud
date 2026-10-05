@@ -33,6 +33,9 @@ export function createFireSeams(ctx: GameContext) {
     headSplit: (id: number) => ctx.weapon.headSplit?.state(id) ?? null,
     forceSplit: (id: number, preset: SplitPresetId, sides: -1 | 0 | 1, offset: number, angleFrac: number) =>
       ctx.weapon.headSplit?.force(id, preset, sides, offset, angleFrac) ?? false,
+    /** Gate seam: drive actor `id`'s split wobble by hand, with world accelerations of its mass point taken one a tick
+     *  in place of the pose's (game-head-split.ts script; null clears). */
+    headSplitDrive: (id: number, accs: readonly Vec3[] | null) => ctx.weapon.headSplit?.script(id, accs) ?? false,
     fireLauncher: () => ctx.weapon.launcher?.fire() ?? false,
     reloadLauncher: () => ctx.weapon.launcher?.reload() ?? false,
     launcher: () => ctx.weapon.launcher?.debug() ?? null,

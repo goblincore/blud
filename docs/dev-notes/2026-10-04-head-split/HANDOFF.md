@@ -123,8 +123,12 @@ The per-task texts used for dispatch are in the session scratchpad (`scratchpad/
     (`SplitState.wobP` / `wobM`), a damped spring driven by the acceleration of the split's mass point, with hard
     limits. It reaches the renderers only through `SplitWarp.thetaP` / `thetaM`. Off: `gainSide` 0 and `gainBob` 0
     (bit-identical). A frozen actor rests at exactly zero offset.
-  - The gate is 77 checks: K holds the kick, J is the wobble. After a thaw it waits for the wobble to rest
-    (`restWobble`) before it measures a rest angle; a new scenario that thaws must do the same.
+  - The gate is 78 checks: K holds the kick (and the bone on its swing back), J is the wobble, driven by a scripted
+    list of accelerations through `__sdfGame.headSplitDrive` on a frozen zombie. After a thaw the gate waits for the
+    wobble to rest (`restWobble`) before it measures a rest angle; a new scenario that thaws must do the same.
+  - Review fixes (after the owner played `9dcd133f` and kept the tuning): `stepSplit` sanitises its drive and state,
+    `pointAccel` drops a jump (`jumpSpeed`) and uses each step's own dt, the wobble's parameters are passed in
+    (`WobbleParams`; nothing writes to the constant).
 - **The opened head glistens under the flashlight** (2026-10-05; the owner's one request from the cut-face
   comparison). A wet film over an open split's raw surfaces, the pit and the caps: highlights only, off a normal of
   its own (`march/body/blocks/light/split-glisten.wgsl.ts`, numbers in `SPLIT_SHADE.glisten`). Off: `gain` 0, which

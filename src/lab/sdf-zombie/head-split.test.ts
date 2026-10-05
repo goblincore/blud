@@ -4,7 +4,7 @@ import {
   makeSplitState, openSplit, pointAccel, punchSplit, skullFollow, skullFollowOk, skullPieceAt, skullPieces, skullSplitOf, skullWarpPoint,
   splitFaceSegs, splitField, splitMassPoint, splitMaxAngle, splitWarpOf, stepSplit, unwarpDir, unwarpPoint, warpDir, warpPoint, widenSplit,
   wobbleDrive, wobbleLimits,
-  type HeadFrame, type SplitState, type SplitWarp, type WobbleDrive,
+  type HeadFrame, type SplitState, type SplitWarp, type WobbleDrive, type WobbleParams,
 } from './head-split';
 import type { Vec3 } from './types';
 import { AXE_HEAD, chopKick, chopOpenFrac } from './webgpu/axe-head';
@@ -426,12 +426,8 @@ describe('the wobble: an opened half swings with the body and comes back to rest
   };
   /** The frames it takes an offset at its limit to be exactly at rest with no drive: the envelope's decay to restA. */
   const settleFrames = (angle: number) => Math.ceil(1.25 * Math.log(W.max * angle / HEAD_SPLIT.restA) / (W.zeta * 2 * Math.PI * W.hz) / dt);
-  /** Run with the two gains set to `g` (HEAD_SPLIT is one live object; the gate does the same through its module). */
-  const withGains = <T>(g: number, fn: () => T): T => {
-    const live = W as { gainSide: number; gainBob: number }, keep = [live.gainSide, live.gainBob];
-    live.gainSide = g; live.gainBob = g;
-    try { return fn(); } finally { [live.gainSide, live.gainBob] = keep as [number, number]; }
-  };
+  /** The shipped parameters with both gains at 0: the wobble off. Passed in; the constant is never written to. */
+  const OFF: WobbleParams = { ...W, gainSide: 0, gainBob: 0 };
 
   it('the constants: softer and slower than the chop\'s spring, visible gains, limits that leave the split open', () => {
     expect(W.hz).toBeLessThan(HEAD_SPLIT.hz);
@@ -492,12 +488,44 @@ describe('the wobble: an opened half swings with the body and comes back to rest
     // No split on the pose (null), or a point that is not one: start again, and the next two samples give nothing.
     for (const bad of [null, [NaN, 0, 0], [0, Infinity, 0]] as (Vec3 | null)[]) {
       const r = pointAccel(moving, bad, 0.1);
-      expect(r.motion).toEqual({ p: null, v: null });
+      expect(r.motion).toEqual(makePointMotion());
       expect(r.acc).toEqual([0, 0, 0]);
       const a1 = pointAccel(r.motion, [9, 9, 9], 0.1), a2 = pointAccel(a1.motion, [9, 9, 10], 0.1);
       expect(a1.acc).toEqual([0, 0, 0]);
       expect(a2.acc).toEqual([0, 0, 0]);
     }
+  });
+  it('pointAccel: each difference over its own step\'s time (a frame that ran long does not read as a jolt)', () => {
+    // 3 m/s^2 along x again, sampled at uneven times: the velocities are the intervals' own, and the acceleration is
+    // their difference over the time between the intervals' middles.
+    const at = (t: number): Vec3 => [0.5 * 3 * t * t, 0, 2 * t];
+    const times = [0, 0.25, 0.375, 0.875, 1, 1.5];
+    let m = makePointMotion();
+    const accs: Vec3[] = [];
+    for (let i = 0; i < times.length; i++) { const r = pointAccel(m, at(times[i]!), i === 0 ? 0.25 : times[i]! - times[i - 1]!); m = r.motion; accs.push(r.acc); }
+    for (const a of accs.slice(2)) { expect(a[0]).toBeCloseTo(3, 9); expect(a[1]).toBe(0); expect(a[2]).toBeCloseTo(0, 9); }
+    // With the current step's time under both differences the third sample (0.125 s after a 0.25 s step) read 4.5.
+  });
+  it('pointAccel: A JUMP IS NOT A MOTION: a sample faster than jumpSpeed from the last is dropped and the history starts again from it', () => {
+    const still = (p: Vec3) => { let m = makePointMotion(); for (let i = 0; i < 3; i++) m = pointAccel(m, p, dt).motion; return m; };
+    const at: Vec3 = [1, 1.6, -2], far: Vec3 = [1 + 2 * W.jumpSpeed * dt, 1.6, -2];
+    // A teleport: no acceleration on the jump, none on the two samples after it (a position, then one velocity).
+    let m = still(at);
+    const jump = pointAccel(m, far, dt);
+    expect(jump.acc).toEqual([0, 0, 0]);
+    expect(jump.motion).toMatchObject({ p: far, v: null });
+    const a1 = pointAccel(jump.motion, far, dt), a2 = pointAccel(a1.motion, far, dt);
+    expect(a1.acc).toEqual([0, 0, 0]);
+    expect(a2.acc).toEqual([0, 0, 0]);
+    // So a split head carried through a teleport does not move at all.
+    let st = split(), mo = still(at);
+    const w = splitWarpOf(st, FRAME)!;
+    for (const p of [far, far, far, at, at, at]) { const r = pointAccel(mo, p, dt); mo = r.motion; st = stepSplit(st, dt, wobbleDrive(w, r.acc)); expect(st).toMatchObject({ wobP: 0, wobM: 0 }); }
+    // Just under the limit it is a motion: the fastest thing a body does (the corpse's head whips down at 11 m/s) is far under.
+    const near: Vec3 = [1 + 0.99 * W.jumpSpeed * dt, 1.6, -2];
+    expect(pointAccel(still(at), near, dt).acc[0]).toBeCloseTo(0.99 * W.jumpSpeed / dt, 6);
+    expect(W.jumpSpeed).toBeGreaterThan(2 * 11);
+    expect(pointAccel(still(at), far, dt, { ...W, jumpSpeed: 1000 }).acc[0]).toBeGreaterThan(0);
   });
   it('the mass point is `arm` up from the hinge into the head; the drive is its acceleration across the split and up, clamped', () => {
     for (const frame of [FRAME, { ...FRAME, quat: qFromAxisAngle([0.3, 0.8, 0.52], 0.9) }]) {
@@ -526,16 +554,53 @@ describe('the wobble: an opened half swings with the body and comes back to rest
     }
   });
   it('OFF (both gains 0): whatever the body does, the halves stand at the spring\'s angle, to the bit', () => {
-    withGains(0, () => {
+    let st = split(), ref = split();
+    for (let i = 0; i < 300; i++) {
+      if (i === 100) { st = punchSplit(st, 0.3); ref = punchSplit(ref, 0.3); }
+      st = stepSplit(st, dt, { side: 30 * Math.sin(i), bob: 40 * Math.cos(i * 0.7) }, OFF);
+      ref = stepSplit(ref, dt);
+      expect(st).toEqual(ref);
+      expect(totals(st)).toEqual({ p: st.angle, m: st.angle });
+    }
+  });
+  it('THE PARAMETERS ARE PASSED IN: another set steps another wobble, and the shipped constant is the default', () => {
+    const drive = { side: 3, bob: 2 };
+    const run = (P?: WobbleParams) => { let st = split(); for (let i = 0; i < 20; i++) st = P ? stepSplit(st, dt, drive, P) : stepSplit(st, dt, drive); return st; };
+    expect(run({ ...W })).toEqual(run());
+    expect(Math.abs(run({ ...W, gainSide: 2 * W.gainSide, gainBob: 2 * W.gainBob }).wobP)).toBeGreaterThan(1.5 * Math.abs(run().wobP));
+    // A tighter stop holds where the shipped one would not, and the limits are the parameters'.
+    const tight: WobbleParams = { ...W, max: 0.02 };
+    let st = split();
+    for (let i = 0; i < 60; i++) { st = stepSplit(st, dt, { side: 30, bob: 0 }, tight); expect(Math.abs(st.wobP)).toBeLessThanOrEqual(0.02 * st.angle + 1e-12); }
+    expect(st.wobP).toBe(-0.02 * st.angle);
+    expect(wobbleLimits(st, tight)[0]).toBe(-0.02 * st.angle);
+    expect(splitMassPoint(splitWarpOf(st, FRAME)!, { ...W, arm: 0.3 })[1] - splitWarpOf(st, FRAME)!.h[1]).toBeCloseTo(0.3, 12);
+    expect(wobbleDrive(splitWarpOf(st, FRAME)!, [1e9, 0, 0], { ...W, accelClamp: 7 }).side).toBe(7);
+  });
+  it('THE STEP DOES NOT TRUST ITS DRIVE: one that is not a number is no drive, one past accelClamp is held to it, and a state that is not a number goes back to rest', () => {
+    const bads: WobbleDrive[] = [{ side: NaN, bob: 0 }, { side: 0, bob: NaN }, { side: Infinity, bob: -Infinity }, { side: NaN, bob: NaN }];
+    for (const bad of bads) {
+      // Mid-swing: the bad tick is stepped as one with that component at 0, and nothing after it is poisoned.
       let st = split(), ref = split();
-      for (let i = 0; i < 300; i++) {
-        if (i === 100) { st = punchSplit(st, 0.3); ref = punchSplit(ref, 0.3); }
-        st = stepSplit(st, dt, { side: 30 * Math.sin(i), bob: 40 * Math.cos(i * 0.7) });
-        ref = stepSplit(ref, dt);
-        expect(st).toEqual(ref);
-        expect(totals(st)).toEqual({ p: st.angle, m: st.angle });
-      }
-    });
+      for (let i = 0; i < 10; i++) { st = stepSplit(st, dt, { side: 4, bob: 2 }); ref = stepSplit(ref, dt, { side: 4, bob: 2 }); }
+      st = stepSplit(st, dt, bad);
+      ref = stepSplit(ref, dt, { side: Number.isFinite(bad.side) ? bad.side : 0, bob: Number.isFinite(bad.bob) ? bad.bob : 0 });
+      expect(st).toEqual(ref);
+      for (let i = 0; i < 200; i++) { st = stepSplit(st, dt, i < 5 ? bad : null); expectInside(st); }
+      expect(st).toMatchObject({ wobP: 0, wobVP: 0, wobM: 0, wobVM: 0 });
+    }
+    // A drive past the clamp is the clamp's (the leaf's wobbleDrive holds it already; a caller that does not is held here).
+    const push = (d: WobbleDrive) => stepSplit(split(), dt, d);
+    expect(push({ side: 1e30, bob: -1e30 })).toEqual(push({ side: W.accelClamp, bob: -W.accelClamp }));
+    expect(push({ side: 1e308, bob: 1e308 })).toEqual(push({ side: W.accelClamp, bob: W.accelClamp }));
+    // A state that has been poisoned (not by this step) is not carried: both halves start again from rest.
+    for (const poison of [{ wobP: NaN }, { wobVM: Infinity }, { wobM: NaN, wobVP: NaN }]) {
+      const st = stepSplit({ ...split(), wobP: 0.1, wobVP: 1, wobM: -0.1, wobVM: -1, ...poison }, dt);
+      expect(st).toMatchObject({ wobP: 0, wobVP: 0, wobM: 0, wobVM: 0 });
+      expect(totals(st)).toEqual({ p: st.angle, m: st.angle });
+      const driven = stepSplit({ ...split(), ...poison }, dt, { side: 4, bob: 2 });
+      expect(driven).toEqual(stepSplit(split(), dt, { side: 4, bob: 2 }));
+    }
   });
   it('thrown ACROSS the split the halves lag: one closes and the other opens; thrown UP out of the hinge both open', () => {
     const push = (drive: WobbleDrive) => { let st = split(); for (let i = 0; i < 6; i++) st = stepSplit(st, dt, drive); return st; };
@@ -914,14 +979,14 @@ describe('the skull split: the bone opens LESS than the flesh, in stages (the me
     }
     return L;
   };
-  it('EVERY TICK of chops that land settled: the bone moves no more than the table\'s steepest slope x what its flesh moves', () => {
+  it('EVERY TICK of the axe\'s own chops, landing settled: the bone moves no more than the table\'s steepest slope x what its flesh moves', () => {
     const L = boneSlope(), eps = 1e-9, dt = 1 / 60;
-    let st = openSplit([1, 0, 0], [0, 0, 0.1], 0.09, 0.55);
+    let st = openSplit([1, 0, 0], [0, 0, 0.1], 0.09, chopOpenFrac(1));
     let prevBone = 0, prevFlesh = st.angle, worst = 0, ticks = 0;
-    for (const [chop, frac] of [[1, 0.55], [2, 0.8], [3, 1]] as const) {
+    for (let chop = 1; chop <= AXE_HEAD.chopsToKill; chop++) {
       // The chop lands on a settled spring (play's strikes are at least 0.6 s apart, webgpu/axe-swing.ts): the tick
-      // that takes the new target is in the bound too.
-      if (chop > 1) { expect(st.vel).toBe(0); expect(st.angle).toBe(st.target); st = widenSplit(st, frac); }
+      // that takes the new target, or the kill's kick, is in the bound too.
+      if (chop > 1) { expect(st.vel).toBe(0); expect(st.angle).toBe(st.target); st = punchSplit(widenSplit(st, chopOpenFrac(chop)), chopKick(chop)); }
       for (let i = 0; i < 180; i++) {
         st = stepSplit(st, dt);
         const s = skullSplitOf(splitWarpOf(st, FRAME)), bone = s ? s.angleP : 0;
@@ -931,32 +996,41 @@ describe('the skull split: the bone opens LESS than the flesh, in stages (the me
         prevBone = bone; prevFlesh = st.angle; ticks++;
       }
     }
-    expect(ticks).toBe(540);
-    // The bound is what the last chop does on its way up the table's last segment, not slack: the tick that ends just
-    // under the target moves the bone 3.14 x its flesh (the slope there is L = 3.6, and a tick is a chord of it).
+    expect(ticks).toBe(180 * AXE_HEAD.chopsToKill);
+    // The bound is what chop 2 does on its way up the table's last segment, not slack: the tick that ends just under
+    // the target moves the bone 3.14 x its flesh (the slope there is L = 3.6, and a tick is a chord of it). Through
+    // the kill's kick the bone is the stage's share of its flesh: 0.85 x.
     expect(worst).toBeGreaterThan(0.85 * L);
     expect(worst).toBeLessThanOrEqual(L);
   });
   it('a chop landing ABOVE the old target steps the stage, and the bone\'s share with it, on the next tick', () => {
     // KNOWN, and accepted for now: the stage is the high-water mark of min(flesh, target), so a chop that lands while
     // the flesh is past the old target takes the stage up to the flesh at the next step. Play cannot do it (the spring
-    // is at rest 0.6 s on); the axeChop seam can.
-    const dt = 1 / 60, full = HEAD_SPLIT.presets.middle.maxBoth;
-    let st = openSplit([1, 0, 0], [0, 0, 0.1], 0.09, 0.55);
-    let peak = st;
-    for (let i = 0; i < 60; i++) { st = stepSplit(st, dt); if (st.angle > peak.angle) peak = st; }
-    expect(peak.angle).toBeGreaterThan(peak.target);
-    const before = skullSplitOf(splitWarpOf(peak, FRAME))!;
-    const chopped = widenSplit(peak, 0.8);
-    // The chop itself moves nothing: the stage is the step's to advance.
-    expect(skullSplitOf(splitWarpOf(chopped, FRAME))!.angleP).toBe(before.angleP);
-    const next = stepSplit(chopped, dt), after = skullSplitOf(splitWarpOf(next, FRAME))!;
-    // In that one tick the bone's share goes from the thin crack's to the table's at the flesh (0.1 -> 0.25), and the
-    // bone moves 4.2 degrees while its flesh moves 1.5.
-    expect(before.follow).toBeCloseTo(skullFollow(0.55), 12);
-    expect(after.follow).toBeCloseTo(skullFollow(next.angle / full), 12);
-    expect(after.follow - before.follow).toBeGreaterThan(0.1);
-    expect(after.angleP - before.angleP).toBeGreaterThan(2 * (next.angle - peak.angle));
+    // is at rest 0.6 s on); the axeChop seam can. With the axe's own table it is a large step: chop 2 landing 3 to 5
+    // frames after chop 1 finds the flesh past the wide crack's target, and the bone's share goes at once from the
+    // wide crack's 0.3 to the split's 0.85 (0.80 at 5 frames): 20.6, 18.3 and 14.4 degrees of bone in one tick, with
+    // 5.2, 0.3 and -1.7 degrees of flesh. (Landing 2 frames after, the flesh is still under the target and rising:
+    // 23.4 degrees of bone with 11.3 of flesh, steep but inside the per-tick bound above.)
+    const L = boneSlope(), dt = 1 / 60, full = HEAD_SPLIT.presets.middle.maxBoth, deg = 180 / Math.PI;
+    const steps: number[] = [];
+    for (let after = 3; after <= 5; after++) {
+      let st = openSplit([1, 0, 0], [0, 0, 0.1], 0.09, chopOpenFrac(1));
+      for (let i = 0; i < after; i++) st = stepSplit(st, dt);
+      expect(st.angle, `${after} frames on`).toBeGreaterThan(st.target);
+      const before = skullSplitOf(splitWarpOf(st, FRAME))!;
+      const chopped = widenSplit(st, chopOpenFrac(2));
+      // The chop itself moves nothing: the stage is the step's to advance.
+      expect(skullSplitOf(splitWarpOf(chopped, FRAME))!.angleP).toBe(before.angleP);
+      const next = stepSplit(chopped, dt), now = skullSplitOf(splitWarpOf(next, FRAME))!;
+      expect(before.follow).toBeCloseTo(skullFollow(chopOpenFrac(1)), 12);
+      expect(now.follow).toBeCloseTo(skullFollow(next.stage / full), 12);
+      expect(now.follow - before.follow).toBeGreaterThan(0.4);
+      // Past the per-tick bound: the bone moves with little or no flesh behind it.
+      expect(now.angleP - before.angleP).toBeGreaterThan(L * Math.abs(next.angle - st.angle) + 1e-9);
+      steps.push((now.angleP - before.angleP) * deg);
+    }
+    expect(Math.min(...steps)).toBeGreaterThan(14);
+    expect(Math.max(...steps)).toBeLessThan(21);
   });
   it('THE AXE\'S OWN CHOPS through the real spring: a wide crack, a split with the zombie alive, and a kill that kicks the split without moving its stage', () => {
     const full = HEAD_SPLIT.presets.middle.maxBoth, dt = 1 / 60, deg = 180 / Math.PI;
