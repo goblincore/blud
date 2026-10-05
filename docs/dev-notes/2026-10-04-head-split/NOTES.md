@@ -509,8 +509,8 @@ three each, load average 2.0-2.8.
   and the split-hit block calls `mapBody`: the debug counters, `loadInstance`, the debug returns). But it was
   SLOWER on a closed head at 0.6 m, sessions interleaved: 20.3 / 20.2 hoisted against 19.7 / 19.8 in the walk, base
   19.6 / 19.5 (single draws within 0.2-0.4 of each session's median). A third round ran under a load spike and is
-  not counted. Like the re-fold report below, it is which privates stay live across the inlined `mapBody`, not
-  the count of statements.
+  not counted. Like the re-fold report below, it is probably which privates stay live across the inlined `mapBody`,
+  not the count of statements (not shown: no variant isolated it).
 - **The first form of the re-fold report cost 0.5 ms more than that** and was replaced. It kept the win in a
   per-piece local and wrote `gRefoldWin` on the per-sample path (one guarded write per piece, one at the union
   min). On a closed head at 0.6 m, sessions interleaved: base 19.6, the new post with the base's `mapBody` 19.7,
@@ -562,3 +562,225 @@ Still wrong in them, and whose:
   piece number. It takes two slots winning limb re-folds at one sample, and it steers only the normal hint
   (`gNormalHint`) and `gNgOwnedOk`, never the field. Fixing it moves what closed crowd pixels compute, so it is its
   own task, with its own `march-hash` re-pin.
+
+## B7: the skull mesh cracks and splits with the head (2026-10-05)
+
+### What was built
+
+The skull is a forward-rendered mesh of the CLOSED head's bone (`webgpu/skeleton-spike/mesh-renderer.ts`); after B6 it
+was the one thing still standing whole in the gap. The owner (2026-10-05, on the B6 photos): "looking pretty good,
+though the skull/mesh would need some states where it's cracked/split". So the bone does not simply ride its flesh
+half: it opens LESS, in stages, and breaks along a ragged edge.
+
+- **The rule** (`head-split.ts`, pure): `skullSplitOf(warp, follow?, seed)` makes the skull's split from the split
+  the view DRAWS. Each half's bone angle is its flesh angle x `follow(frac)`, `frac` = the flesh angle over the
+  preset's full angle, `follow` a piecewise-linear table (`HEAD_SPLIT.skull.follow`). `frac` needs the preset's full
+  angle, which the warp did not carry: `SplitWarp.full` is new (written by `splitWarpOf`; the GPU record does not
+  take it), so nothing reads the leaf's state. `frac` is held at 1 and `follow` in 0..1, so a spring overshoot never
+  turns the bone past its flesh. A bone that does not turn at all (`follow` 0) is no split: the closed draw.
+  `skullPieceAt(s, q, jag)` is the ownership of a closed-skull point (the flesh's rule, `warpPoint`: above the hinge
+  plane, within `rho`, by the side of the plane; but a side whose bone does not turn belongs to the rest, and the
+  plane is the fracture, `s(q) + jag >= 0`). `skullWarpPoint` is the forward map; `skullPieces(s, centre, radius)`
+  says which pieces can own part of a sphere.
+- **Driven from `view.splitDrawn`** (`game-main.ts`): the mesh update's new `split` hook answers the view's drawn
+  split for the `'head'` segment. `drawEye` (which settles `splitDrawn` for the frame) moved up, ahead of the mesh
+  update: it was after it, and the skull would have opened or closed a frame after the flesh at the range cut-off.
+- **Per-piece copies** (`mesh-renderer.ts drawPieces`): a segment (or eye) the hook answers for is drawn once per
+  piece that owns part of its bounding sphere: the rest at its closed matrix, a half at
+  `T(h) R(a, bone angle) T(-h)` x that matrix. A sphere the rest owns alone stays ONE instance in the closed batch.
+- **Their own batches and materials.** The copies draw from a second `BufferGeometry` that shares the segment's
+  vertex attributes and index (the same objects, so the same GPU buffers) and has its own instance data, on two
+  new materials (bone and eye). A closed head touches none of it: same batch, same material object, same instance
+  count and matrices (tested), and the pixels below.
+- **The clip** (`mesh-split.ts MESH_SPLIT_CLIP_WGSL`, hand-written, through the material's `wgslFn` chain and
+  `maskNode`): the fragment is taken back by the copy's angle about the hinge to the UN-TURNED point `q`, and kept
+  if the copy's piece owns `q`. The surface function reads `q` where the closed material reads `positionWorld`, so
+  craters and bone exposure (stored on the closed head) sit right on a turned copy. Lighting stays at the turned
+  place. `meshSplitKeep` is the clip's hand twin, tested against `skullPieceAt` on 3000 points x 4 cases.
+- **The fracture** (`MESH_SPLIT_JAG_WGSL` / `meshSplitJag`): the offset `jag(q)` is read in the split's own frame
+  (along the hinge axis, up from the hinge), so it rides the head and is the same number for both halves at the
+  same point: the two edges are complementary. A zig-zag (a triangle wave along each of the two directions, phase
+  pushed about by a slow noise) plus square chips (a constant per cell). The hinge plane and the ball stay clean.
+  A per-head seed (the order heads first split) shifts the pattern.
+- **The inside of the bone.** The closed material is front-faced, so a clipped shell would be see-through. The split
+  materials are two-sided; a back face is the inner wall: one dark colour, wet, no grazing sheen
+  (`MESH_SPLIT_INSIDE_WGSL`). Within 4 mm of the break the wall takes the colour of cut bone (`rim`): the mesh has no
+  thickness, and seen across the gap that band reads as the bone's.
+- **The per-instance record:** four vec4s (`iSplitN` = n, d0; `iSplitH` = h, the copy's bone angle; `iSplitA` = a,
+  rho; `iSplitK` = piece, + turns, - turns, seed) in ONE interleaved instance buffer. With four separate buffers
+  the pipeline had 9 vertex buffers and WebGPU allows 8 (the first capture said so: "Vertex buffer count (9)
+  exceeds the maximum number of vertex buffers (8)").
+- **Seams:** `__sdfGame.skullSplit({ follow, zigAmp, zigLen, chipAmp, chipLen, inside, rim, rimWidth })` (the look,
+  live; `follow: null` puts the table back) and `__sdfGame.meshSkeletonShow({ bones, eyes })` (diagnostics: a shown /
+  hidden pair of one frame tells bone pixels from flesh).
+
+### Measured on the zombie (rest pose)
+
+| | middle, both | middle, one side (4 cm) | face |
+| --- | --- | --- | --- |
+| Skull vertices (of 2220) above the hinge plane | 1720 | 2018 | 2080 |
+| ... their largest distance from the hinge, against `rho` | 0.205 / 0.263 m | 0.213 / 0.270 m | 0.219 / 0.273 m |
+| Seated eyes (radius 19 mm): centre off the plane | 36 mm each side | 4 mm and 76 mm | 34 mm, both on the face side |
+| Top neck vertebra (`axial:2-3`, 272 vertices) above the hinge plane | 4 (to 4 mm) | 56 (to 34 mm) | 72 (to 44 mm) |
+| ... of them on a side that turns | 4 | 0 | 10 |
+
+- Every skull and eye vertex is inside `rho` with 5 cm to spare. The clip keeps the ball term all the same (one
+  `length`): `rho` rides the record's spare lane, and the rule is then the flesh's with no measured assumption.
+- There is no jaw segment: skull and jaw are ONE `'head'` mesh, and it has vertices below the hinge plane in every
+  preset (500 / 202 / 140), so the unmoved rest is always drawn.
+- **Only the `'head'` segment splits.** The top vertebra pokes up to 44 mm above the hinge plane, where its flesh
+  turns with a half. It stays whole with the neck: a sliver of spine carried off by an infinite plane is an
+  artefact, a spine tip left standing in the cut is not.
+
+**Instances per head** (skull copies + eye instances): closed 1 + 2, as before. Middle both: 3 + 2 (each eye wholly
+in its own half: one copy). Middle one side: 2 + 3 (the plane passes through one socket: that eye is drawn for both
+pieces; the other eye stays a closed instance). Face: 2 + 2.
+
+### The constants (all in `HEAD_SPLIT.skull`, live through the seam)
+
+| Constant | Value | |
+| --- | --- | --- |
+| `follow` | (0.55, 0.1), (0.8, 0.3), (1, 0.85) | the bone's share of the flesh angle at chop 1 / chop 2 / the kill |
+| `jag.zigAmp`, `jag.zigLen` | 4 mm, 22 mm | the zig-zag's amplitude and period |
+| `jag.chipAmp`, `jag.chipLen` | 1.5 mm, 6 mm | the chips' depth and cell |
+| `inside` | (0.1, 0.018, 0.015) | the inner wall; gloss `MESH_GLOSS_WET`, exposure 0, no fresnel |
+| `rim.color`, `rim.width` | (0.72, 0.5, 0.4), 4 mm | the broken edge on the inner wall: full to 2 mm, gone at 4 |
+
+Inside `meshSplitJag`, not surfaced: the wobble noise at 0.43 cells per `zigLen` with phase gains 1.7 and 1.3, the
+second wave at 0.73 x the first's frequency, the seed steps 0.618 / 0.414 / 7.31.
+
+**`follow` is NOT the plan's first table** (0.25 / 0.5 / 0.85). Both were shot (`b7/stages-*.jpg`, third column).
+With 0.25 the skull is already 3 cm apart at the crown on chop 1 and its face is gone from the gap; chop 1 and
+chop 2 look alike. With 0.1 / 0.3 the stages are three different things: chop 1 a cracked skull that still shows
+its sockets and teeth between the peeled flesh (1.7 degrees a half, about 1 cm at the crown), chop 2 a split one
+(7.6 degrees), the kill thrown wide (26.8 degrees, just behind the flesh's 31.5). The bone angles for the other
+presets at full: 43.8 degrees (middle, one side), 39 degrees (face).
+
+### The check set
+
+| Check | Result |
+| --- | --- |
+| `march-golden` | not run with `-u`: no march text changed |
+| `compile-census` | phase ready, `uncapturedCount` 0, no device loss; march module 324498 B (83 fns), as B6 left it; `warmMs` 2618 (the march text is in the OS Metal cache from B6: a warm boot, as it should be with the text untouched) |
+| `march-hash` | no pin moved: default `d7392d52…` / wounded `76bd51aa…`, crowd quad `0c71e712…` / `bf6836cd…`, per-body `470ff0b3…` / `f618070e…` |
+| cold boot pair | not run: the census boot did not move, and the split materials are not built at boot |
+| the split pipelines | built when a split copy is first drawn. Every capture session below forced splits and read `__sdfGame.gpuDiagnostics()`: `uncapturedCount` 0, no device loss, no console error |
+| `tsc --noEmit` | the `node:crypto` error only |
+| the whole tree | 509 files, 7392 tests passed, 1 skipped |
+
+**The first split of a session** (the frame that builds the two pipelines): `forceSplit` 1.6 ms, the step 10 ms, the
+draw 60-66 ms against 32-37 ms for the draws after. A SECOND head's first split frame costs the same (62-64 ms), so
+that frame is the split's own re-pose and hull work (B3-B5), not a pipeline hitch that could be told apart from it.
+
+### The numbers
+
+Screenshots, 1280 x 800, the bare ring page, frozen zombies. `flail.toScreen` places world points (lens-mapped).
+
+**(a) The skull's opening on screen is the rule's.** Each seated eye's pixels (eyes shown / hidden, the same
+frame), their centroid against the eye seat's centre taken through `skullWarpPoint` and projected. The flesh is
+thrown open to 1.8 x its full angle so no flesh half covers an eye (at real stages it does: a first attempt at the
+full angle had the eye half covered and its centroid moving half as far as predicted), and `follow` is set by hand
+to the three stages' own bone angles.
+
+| Bone angle (stage) | 0.6 m: the eye moves | off the prediction | 2 m: moves | off the prediction |
+| --- | --- | --- | --- | --- |
+| 0 (closed) | - | 1.1 / 1.6 px (the centroid's own bias) | - | 0.2 / 0.1 px |
+| 0.030 rad (chop 1) | 4.0 px (predicted 4.0) | 1.0 / 1.7 px | 1.4 px (1.2) | 0.1 / 0.4 px |
+| 0.132 rad (chop 2) | 17.9 / 17.7 px (17.4) | 1.4 / 1.9 px | 5.5 / 5.7 px (5.2) | 0.3 / 0.5 px |
+| 0.4675 rad (the kill) | 58.3 px (60.7) | 3.8 px | 16.9 px (18.3) | 1.8 / 1.7 px |
+
+The eye is 44 px across at 0.6 m. At the kill angle a quarter of it is behind its own socket rim from the front
+(1145 of 1540 px in view), which is the 3.8 px.
+
+**(b) A closed head is unchanged.** A closed head with its skull laid bare by a pellet crater (12 952 skull pixels in
+view, by the shown / hidden pair), the same zombie and camera, B6's tree (`2ad65481`) against B7's, and B7 against a
+second B7 session:
+
+| | Head disc (285 174 px): differ / by over 8 / max | The skull's own pixels: differ / max |
+| --- | --- | --- |
+| B7 against B6 | 2 / 0 / 1 | 2 / 1 |
+| B7 against B7, another session | 2 / 0 / 1 | 2 / 1 |
+| B7, the same session ten steps on | 81 185 / 2153 / 148 | 1018 / 40 |
+
+B7 differs from B6 by exactly what two B7 sessions differ by. The census's module sizes agree too (the 123 kinds of
+module outside the march are the same sizes in both).
+
+**(c) Skull pixels the flesh does not hide** (bone and eyes shown / hidden, in the region's screen disc), sorted by
+the march's hit mask under them (taken to the screen through the lens): over flesh, in the GAP (no flesh under
+them, flesh to both sides on the row), or OUTSIDE the flesh's outline. `follow` 0 is the whole closed skull, B6's
+draw, in the same session and frame. `b7/skull-pixels.png` paints them.
+
+| Middle both, front 0.6 m | B6 (follow 0): gap / outside | B7 staged: gap / outside | follow 1: gap / outside |
+| --- | --- | --- | --- |
+| chop 1 | 17 874 / 0 | 17 387 / 4 | 1519 / 0 |
+| chop 2 | 24 449 / 294 | 19 260 / 72 | 1693 / 0 |
+| the kill | 27 715 / 1954 | 5968 / 0 | 1772 / 0 |
+
+From above and behind: 4684 / 0, 6429 / 139, 7118 / 877 on B6 against 4603 / 0, 4796 / 26, 981 / 0. On B6 the skull's
+dome stood above the tips of the opened halves from the second chop on (the red cap in the picture); staged, 72 px
+of it still do on chop 2, none on the kill. Middle one side, front (the gap is open to the side, so both columns
+together): 8941 on B6, 4055 staged, 596 riding the flesh. Face: nothing against the background in any of the three
+(0 / 7, 0 / 22, 0 / 0).
+
+### Cost
+
+`__sdfGame.timeDraws(120)`, headless, one zombie's head centred, `middle` both, open and closed interleaved four
+times a session; B6's tree and this one in alternate sessions. The machine was busy (load average 3-7, in bursts):
+of thirteen sessions only these read cleanly (a closed spread under 1 ms).
+
+| | Closed | Open | Open - closed |
+| --- | --- | --- | --- |
+| 0.6 m, B6 (2 sessions) | 19.2-19.4, 19.1-19.3 | 25.0-26.6, 25.0-25.3 | **+6.3 / +5.9** |
+| 0.6 m, B7 (1 session, and half of another) | 19.1-19.8, 19.4-19.5 | 25.2-26.4, 25.5-25.6 | **+6.7 / +6.1** |
+| 2 m, B6 (1 session) | 12.0-12.2 | 13.3-13.6 | +1.4 |
+| 2 m, B7 (1 session, under rising load) | 12.2-13.5 | 13.8-14.9 | +1.6 |
+
+- **A closed head: no cost that shows** (19.1-19.8 against 19.1-19.4), and none by construction: the closed batch
+  and material are the ones it had.
+- **The split skull itself, in ONE session** (the open head at 0.6 m, eight rounds of: the staged copies, the whole
+  closed skull as B6 drew it, no bone meshes at all; median of 60 draws each): 25.7 against 25.3 against 24.8 ms.
+  The staged copies cost **+0.5 ms over the whole skull** (per round -0.1 to +1.6), which itself costs +0.4. A
+  noisier session read +1.8 (-2.9 to +3.8). At 2 m: +0.3 in the one clean round, medians +1.3 / +1.4 inside a
+  spread of several ms.
+- Where it goes, not chased (the owner: optimise the open head later): a clipped copy is shaded in full. The mask is
+  a `discard`, so there is no early depth test; all three copies and both faces run the whole surface function
+  (the back face's result is thrown away by a select) over every pixel the unclipped skull covers.
+
+### Photos (`b7/`)
+
+B6's cameras; the B6 column is B6's tree (`2ad65481`), the same zombies and cameras.
+
+- `stages-front.jpg`, `stages-top.jpg`: the three chops of `middle` both, B6 | B7 | B7 with the plan's first, looser
+  table. From the front at 0.6 m and from above and behind.
+- `one-side-and-face.jpg`: `middle` one side and `face` at full angle, B6 | B7.
+- `options-follow.jpg`: chop 2 with `follow` 0 (the whole skull, B6's) | the staged default | 1 (rides the flesh).
+- `options-fracture.jpg`: chop 2 with the clean plane | the default | an 8 mm zig-zag | small zig-zag, 4 mm chips.
+- `rim.jpg`: the broken edge with and without the rim, enlarged.
+- `fracture-closeup.jpg`: the break from close above, the three chops.
+- `front-2m.jpg`: the kill chop from 2 m.
+- `skull-pixels.png`: (c)'s classes painted: over flesh yellow, in the gap green, outside red.
+
+Still wrong in them, and whose:
+
+- **The inner wall is hollow and empty**: no brain, and the bone is a shell with no thickness but for the rim band.
+  From the front the gap shows the room behind the head (B8: something in the skull).
+- **The break is a saw from close up**: the teeth are even enough to read as a pattern at chop 2. `zigLen`, the
+  wobble and the chips are the dials (`options-fracture.jpg`).
+- **The skull is see-through** where it stands in the gap (the field buffer's composite; so it was on B6).
+- **On the `face` preset and the one-sided split the bone's ragged edge pokes through the STILL side's flesh cut
+  face** (a tan band along the cut). It reads as the skull's section there, by luck: the flesh cut is a clean plane
+  and the bone's edge is up to 5.5 mm off it. The same on the halves' cut faces with `follow` near 1.
+- **A one-sided split 4 cm off centre cuts an eyeball in two** (it is drawn clipped, for both pieces).
+- An eye shot out of a split head (`impact`) leaves from its closed seat, not the turned one.
+- The cut faces of the FLESH have no bone ring (B8, the march's cut-face shading).
+
+### For the tasks after
+
+- **B8:** the look lives in `HEAD_SPLIT.skull` and the seam. The march knows nothing of the bone's angle: if the
+  flesh's cut faces get a bone ring, the skull's edge and that ring are two different surfaces (the bone lags).
+- **The split copies' fragment cost** (above) has two cheap cuts if it matters: branch instead of select on the back
+  face, and draw the rest (piece 0) of a both-sided split front-faced when its top is hidden.
+- **Still closed-head:** the shadow hull, `bodyInSight`, motion vectors; and now the bone's own motion while the
+  spring moves.
+- The bone's `follow` reads the instantaneous flesh angle, so while the spring overshoots a chop's target the bone
+  swings wider and comes back with it (never past the flesh).
