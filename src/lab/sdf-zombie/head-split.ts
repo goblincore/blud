@@ -135,8 +135,38 @@ export const HEAD_SPLIT = {
  *  geometry, not shading: its own numbers, so the gate can move without moving a surface.
  *  `poreCut`: no skin pores (the micro-detail normal, and the output-resolution detail pass) from this much gate.
  *  `wet`: how wet a cut face is at every depth, as a share of the gate: 1 = wet all over, 0 = wet like a crater (its
- *  lip glistens, its floor does not). */
-export const SPLIT_SHADE = { cutLo: 0.0015, cutHi: 0.004, shellLo: 0.0015, shellHi: 0.004, poreCut: 0.5, wet: 1 } as const;
+ *  lip glistens, its floor does not).
+ *  `glisten`: THE WET FILM (the light tail: webgpu/march/body/blocks/light/split-glisten.wgsl.ts). The raw surfaces of
+ *  an OPEN split, the pit the face cuts carve and the flat caps around it, catch the torch (or, with it off, the lamp
+ *  that keys the body) as tight highlights that move as the eye or the light does. The film has a normal of its own:
+ *  the shading normal tilted by two octaves of noise that ride the half. The diffuse light keeps the surface's normal,
+ *  so the flesh between the highlights shades as it did. Nothing outside an open split's region runs it.
+ *    `gain`: the highlights' strength, x the light's colour, added before the highlight shoulder. **0 = off: the
+ *      block is not written into the shader, and an opened head shades exactly as it did before the film.**
+ *    `pow`: the exponent of the torch's highlight. Higher = tighter.
+ *    `spill`: the torch's glint reaches past the beam's outer cone by this much of the cosine to the beam's axis
+ *      (the film mirrors the lamp itself, and the torch is mounted a quarter metre off the eye: a head at arm's
+ *      length in the middle of the screen stands at the cone's edge).
+ *    `lamps`, `lampPow`: with the torch off, the lamp that keys the body (the light list's dominant pick) glints off
+ *      the same normal: its share of `gain`, and its exponent. What keeps the head wet in the dark. With the torch
+ *      lit the lamps add no glint.
+ *    `rawLo`, `rawHi`: the film comes in over this range of the wound mask, so the mask's faint reach over the skin
+ *      about a cut stays dry.
+ *    `lump`, `fine`: the cell of each noise octave (m). `lumpTilt`, `fineTilt`: how far each tilts the film's normal
+ *      (the tangent of the tilt at the noise's full swing on one axis).
+ *    `lumpFlat`: the coarse octave is pushed off zero, v / (|v| + lumpFlat): the smaller, the fewer facets lie flat in
+ *      the surface. A flat film is a mirror: all of it fires when it faces the light, none of it otherwise.
+ *    `fadeLo`, `fadeHi`: an octave fades out as its cell shrinks from `fadeHi` to `fadeLo` march texels (smaller, it
+ *      would crawl), and the whole film with the coarse one: whole to about 2.4 m, gone by about 5 m (the fine
+ *      octave: whole to about 1 m, gone by 2 m).
+ *    `edge`: the film fades out over the last `edge` metres of the split's region sphere, so its boundary is no seam. */
+export const SPLIT_SHADE = {
+  cutLo: 0.0015, cutHi: 0.004, shellLo: 0.0015, shellHi: 0.004, poreCut: 0.5, wet: 1,
+  glisten: {
+    gain: 4, pow: 24, spill: 0.3, lamps: 0.45, lampPow: 20, rawLo: 0.3, rawHi: 0.8,
+    lump: 0.014, lumpTilt: 1.4, lumpFlat: 0.1, fine: 0.006, fineTilt: 0.3, fadeLo: 0.75, fadeHi: 1.5, edge: 0.03,
+  },
+} as const;
 
 export interface SplitState {
   preset: SplitPresetId | null;

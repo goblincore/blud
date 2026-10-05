@@ -225,8 +225,10 @@ describe('cut faces shade as wound interior', () => {
     // Its readers come after it.
     for (const reader of [MOTTLE_BLOCK, GORE_BLOCK]) expect(MARCH_TRACE_POST.indexOf(reader)).toBeGreaterThan(MARCH_TRACE_POST.indexOf(CUT_FACE_BLOCK));
   });
-  it('SPLIT_SHADE holds the look\'s numbers, one per thing they drive; today they are what they were', () => {
-    expect(SPLIT_SHADE).toEqual({ cutLo: 0.0015, cutHi: 0.004, shellLo: 0.0015, shellHi: 0.004, poreCut: 0.5, wet: 1 });
+  it('SPLIT_SHADE holds the look\'s numbers, one per thing they drive; the cut face\'s are what they were', () => {
+    // (The wet film's numbers, SPLIT_SHADE.glisten, are held by blocks/light/split-glisten.wgsl.test.ts.)
+    const { glisten: _film, ...cutFace } = SPLIT_SHADE;
+    expect(cutFace).toEqual({ cutLo: 0.0015, cutHi: 0.004, shellLo: 0.0015, shellHi: 0.004, poreCut: 0.5, wet: 1 });
     // x * 1.0 is x to the bit, so the wetness is the gate itself until the look pass moves it.
     expect(wgslF(SPLIT_SHADE.wet)).toBe('1.0');
   });
