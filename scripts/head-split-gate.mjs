@@ -16,8 +16,8 @@
 //      leaf re-poses them itself, so the spring runs without a thaw (a thaw would let the body sway under the camera).
 //   W. CHOP 2 WIDENS: the gap at rest is wider, and the prediction's.
 //   K. CHOP 3 KILLS (thawed 3 frames, as axe-gate's K) and KICKS the split it finds at its full angle: the halves are
-//      past it 3 frames on, the bone drawn at its stage's share of them. 45 frames on the corpse's head is still open:
-//      the state, the pose's split, the GPU record, and the gap measured on the fallen head.
+//      past it 3 frames on, the bone drawn at its stage's share of them. 45 frames on, and the fall's wobble at rest,
+//      the corpse's head is still open: the state, the pose's split, the GPU record, and the gap on the fallen head.
 //   O. AN OFF-CENTRE CHOP (the eye stands round to the head's right, so the chop's line meets the skin off centre)
 //      opens ONE side; the other half's march texels are those of the same head closed again.
 //   L. LATER HITS on a moved half's outer skin, a rod cut and a pellet: each is stamped where unwarpPoint puts its
@@ -38,9 +38,18 @@
 //   H. HEAD DAMAGE AND THE SPLIT DO NOT MIX: a slug and a flail hit on a split head take the plain un-warped paths (no
 //      head damage state; the flail's crater credits the head's share of the meter); a head that head damage holds
 //      refuses to split and still dies on chop 3.
+//   J. THE HALVES WOBBLE WITH THE BODY AND COME TO REST (head-split.ts HEAD_SPLIT.wobble; T's boot, after it): frozen,
+//      a split head's halves stand at exactly the spring's angle; thawed, wandering and chopped once, each swings off
+//      it by its own offset, inside the wobble's limits on every frame, the pose carrying exactly the state's two
+//      angles; frozen on a swing, the GPU record carries those angles and the skull's copies are drawn at the stage's
+//      share of each; and they are back at the spring's angle, to the bit, within the settle time the constants give.
+//      The player stands at the spawn, rooms away, while the cast is thawed: in the ring's sight the soldiers' fire
+//      takes the zombie apart within 300 frames.
 //   B. BOUNDS (two boots): each preset at full angle, from the front at 0.6 m and from above and behind: the shipped
 //      path's hit mask and depth against the per-body path with every march bound off (?crowd=0, the proxy box grown).
-//   T. S ON A TURNED ZOMBIE (its own boot): the ring walks until one stands about 90 degrees round.
+//   T. S ON A TURNED ZOMBIE (its own boot, with J): the ring walks until one stands about 90 degrees round.
+// The thaws let the body move, and a moving body swings the halves: after each, the cast frozen again, the gate
+// steps until the wobble is exactly at rest (restWobble) before it measures a rest angle.
 // A scenario that throws is a failed check of its own; the others still run, and the run ends in its summary.
 // ONLY=S,K (env) runs just those scenarios (W and K need S; M's really chopped measures need S, W and K). Unset runs
 // them all: the gate. The contact sheets go to .lab-tmp/head-split-gate; SHEETS=1 writes the tracked ones in
@@ -251,6 +260,31 @@ const B_MARGIN = 30;
  *  face from the front); the hull without its turned copies: +5395. */
 const B_DEPTH = 2e-3;
 const B_DEPTH_MARGIN = 150;
+// ---- J.
+/** Frames the frozen head is watched before the thaw and after it is at rest again. */
+const J_STILL = 20;
+/** Frames the thawed zombie walks at least, and the frame of its one (non-kill) head chop: the flinch. From J_WALK on
+ *  the walk ends on the first frame that has both halves swung off the spring's angle and apart (J_MOVED, J_APART),
+ *  so the cast is frozen on a swing; J_WALK_MAX frames at most (a wandering zombie also stands still for a while). */
+const J_WALK = 180;
+const J_WALK_MAX = 420;
+const J_CHOP_AT = 120;
+/** THE STOP, EXERCISED: for the walk's first J_TIGHT frames the live HEAD_SPLIT.wobble.max is cut to J_TIGHT_MAX (the
+ *  offset within 0.95 degrees of the full angle's 31.5, under J_MOVED), so a walk that swings the halves at all drives
+ *  them into the stop: every one of those frames must be inside that limit, and at least one at it. With the shipped
+ *  max a walk may or may not reach its stop (14.2 degrees) in the frames it is given. */
+const J_TIGHT = 90;
+const J_TIGHT_MAX = 0.03;
+/** Each half must swing at least this far off the spring's angle while it walks (rad: 2 degrees), and the two halves
+ *  must stand at least J_APART apart at some frame. Measured below. */
+const J_MOVED = 2 * Math.PI / 180;
+const J_APART = 1 * Math.PI / 180;
+/** The settle bound: the time the wobble's envelope takes from its limit (max x the angle) down to restA, x this. */
+const J_REST_MARGIN = 1.25;
+/** Slack on the limits (rad): the offsets are clamped in double precision. */
+const J_EPS = 1e-12;
+/** The eye for the drawn checks: this far in front of the hinge (m), inside the split's draw distance. */
+const J_EYE_D = 2;
 // ---- T.
 /** The ring walks until a zombie stands this far round (|sin yaw|), within T_MAX_FRAMES. */
 const T_SIN_MIN = 0.97;
@@ -383,7 +417,7 @@ async function capture() {
   return Object.assign(decodePng(buf), { buf });
 }
 // ---- Boot the bare ring page, frozen zombies -----------------------------------------------------------
-let centre = [0, 0, 0], pool = [], usedZ = new Set();
+let centre = [0, 0, 0], pool = [], usedZ = new Set(), spawn = null;
 async function boot(label, extra = "") {
   const s = await openSession(label);
   await send("Page.enable"); await send("Runtime.enable");
@@ -430,6 +464,8 @@ async function boot(label, extra = "") {
   for (let i = 0; i < BOOT_SETTLE; i++) await evaluate("__sdfGame.step(1, 1 / 60)");
   await evaluate("__sdfGame.installDebugProbe()");
   usedZ = new Set();
+  // Where the page stands the player: rooms away from the ring, out of its sight (J's walk is from here).
+  spawn = await evaluate("__sdfGame.pose()");
   console.log(`[${label}] ready; room ${ROOM} (${pool.length} zombies); warm ${JSON.stringify(wb)}`);
   console.log(`[${label}] pool yaws (deg): ${pool.map((z) => `${z.id}:${(z.yaw * 180 / Math.PI).toFixed(1)}`).join(" ")}`);
 }
@@ -709,12 +745,28 @@ function turnBetween(a, b) {
   return Math.acos(Math.max(-1, Math.min(1, (tr - 1) / 2)));
 }
 /** The bone's turn AS DRAWN: from the matrices of actor `id`'s split skull copies, each half's against the rest's;
- *  and the follow table's bone angle for the split's state (flesh angle x the table at the state's stage / full). */
+ *  and the follow table's bone angle for the split's state: the table's share at the state's stage / full, of the
+ *  spring's angle (`rule`) and of each half's own angle on the pose (`ruleP`, `ruleM`: the spring's and its wobble). */
 async function boneDrawn(id) {
-  const r = await evaluate(`(async () => { const H = ${HS}; const st = __sdfGame.headSplit(${id}), d = __sdfGame.skullDrawn(${id});
-    const full = st ? H.splitMaxAngle(st) : 0; return { copies: d ? d.copies.filter((c) => !c.eye) : [], rule: st ? st.angle * H.skullFollow(st.stage / full) : 0 }; })()`);
+  const r = await evaluate(`(async () => { const H = ${HS}; const st = __sdfGame.headSplit(${id}), d = __sdfGame.skullDrawn(${id}), w = __sdfGame.zombie(${id}).posed().split;
+    const k = st ? H.skullFollow(st.stage / H.splitMaxAngle(st)) : 0;
+    return { copies: d ? d.copies.filter((c) => !c.eye) : [], rule: st ? st.angle * k : 0, ruleP: w ? w.thetaP * k : 0, ruleM: w ? -w.thetaM * k : 0 }; })()`);
   const rest = r.copies.find((c) => c.piece === 0), turn = (piece) => { const c = r.copies.find((q) => q.piece === piece); return rest && c ? turnBetween(c.matrix, rest.matrix) : null; };
-  return { plus: turn(1), minus: turn(2), rule: r.rule, copies: r.copies.length };
+  return { plus: turn(1), minus: turn(2), rule: r.rule, ruleP: r.ruleP, ruleM: r.ruleM, copies: r.copies.length };
+}
+/** The frames a wobble at its limit takes to be exactly at rest with nothing driving it, for a half whose spring
+ *  stands at `angle`: its envelope's decay from max x angle to restA, with J_REST_MARGIN (head-split.ts
+ *  HEAD_SPLIT.wobble). */
+const wobbleRestFrames = (angle) => { const W = HEAD_SPLIT.wobble; return Math.ceil(J_REST_MARGIN * Math.log(W.max * angle / HEAD_SPLIT.restA) / (W.zeta * 2 * Math.PI * W.hz) * 60); };
+const wobbleAtRest = (st) => !st || (st.wobP === 0 && st.wobVP === 0 && st.wobM === 0 && st.wobVM === 0);
+/** Step the FROZEN cast until actor `id`'s halves are exactly at rest on its spring's angle: the frames it took (0
+ *  when they already were: a body that has not moved, or the wobble off), -1 if not within wobbleRestFrames. */
+async function restWobble(id) {
+  let st = await stateOf(id);
+  if (wobbleAtRest(st)) return 0;
+  const bound = wobbleRestFrames(Math.max(st.angle, st.target));
+  for (let i = 1; i <= bound; i++) { await stepOne(); st = await stateOf(id); if (wobbleAtRest(st)) return i; }
+  return -1;
 }
 /** Take actor `id`'s FLESH out of the frame (its proxy box shrunk to nothing: no ray of the march enters it) and put
  *  it back. The skull meshes stay, and so does the split they are drawn from. Holds while the actor is not re-posed. */
@@ -1019,8 +1071,8 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
       const sk1 = await skullOf(z.id), bd1 = await boneDrawn(z.id), lm1 = run("M") ? await boneLandmark(z.id, front) : null;
       const shot1 = await photo(front);
       await thaw(3);
-      const ph1 = await actorPhase(z.id);
-      check(ph1 === "standing", `S: the zombie lives (thawed 3 frames: phase ${ph1})`);
+      const ph1 = await actorPhase(z.id), rest1 = await restWobble(z.id);
+      check(ph1 === "standing" && rest1 >= 0, `S: the zombie lives (thawed 3 frames: phase ${ph1}; its halves at rest again ${rest1} frozen frames on)`);
       sheet("S-open", [{ img: shot0, c: px0 }, ...s.photos.map((img) => ({ img, c: px0 })), { img: shot1, c: px0 }]);
       // ---- W. chop 2 widens. The thaw let the body move (it flinches): the line and the eye are taken again.
       let sk2 = null, bd2 = null; const wk = [];
@@ -1037,8 +1089,8 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
         sk2 = await skullOf(z.id); bd2 = await boneDrawn(z.id);
         wk.push({ img: await photo([eyeW, line.G0]), c: await toPx(line.G0) });
         await thaw(3);
-        const ph2 = await actorPhase(z.id);
-        check(ph2 === "standing", `W: alive after chop 2 (thawed 3 frames: phase ${ph2})`);
+        const ph2 = await actorPhase(z.id), rest2w = await restWobble(z.id);
+        check(ph2 === "standing" && rest2w >= 0, `W: alive after chop 2 (thawed 3 frames: phase ${ph2}; its halves at rest again ${rest2w} frozen frames on)`);
       }
       // ---- K. chop 3 kills; the split is open on the corpse 45 frames on.
       let sk3 = null, bd3 = null;
@@ -1057,13 +1109,15 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
         if (kick > 0 && Math.abs(t2 - full) < 1e-12) {
           check(st0?.angle === full && st0.vel > 0 && past >= K_KICK_SHARE * kick,
             `K: the kill kicks the split it finds at its full angle: rate ${st0?.vel.toFixed(2)} rad/s at the chop, ${deg(past)} degrees a half past it 3 frames on (${(past / kick).toFixed(2)} of killKick x the full angle, >= ${K_KICK_SHARE})`);
-          check(st3?.stage === full && bdK.plus !== null && Math.abs(bdK.plus - bdK.rule) <= M_ANGLE_TOL && Math.abs(bdK.minus - bdK.rule) <= M_ANGLE_TOL,
-            `K: the bone rides the kick at its stage's share, the stage unmoved (${st3?.stage} rad): drawn ${bdK.plus === null ? null : deg(bdK.plus)} / ${bdK.minus === null ? null : deg(bdK.minus)} degrees against ${deg(bdK.rule)} (the flesh ${deg(st3?.angle ?? 0)})`);
+          check(st3?.stage === full && bdK.plus !== null && Math.abs(bdK.plus - bdK.ruleP) <= M_ANGLE_TOL && Math.abs(bdK.minus - bdK.ruleM) <= M_ANGLE_TOL,
+            `K: the bone rides the kick at its stage's share of each half, the stage unmoved (${st3?.stage} rad): drawn ${bdK.plus === null ? null : deg(bdK.plus)} / ${bdK.minus === null ? null : deg(bdK.minus)} degrees against ${deg(bdK.ruleP)} / ${deg(bdK.ruleM)} (the spring ${deg(st3?.angle ?? 0)}; the bone's share of it ${deg(bdK.rule)})`);
         } else note(`K: no kick to hold (killKick ${AXE_HEAD.killKick}; chop 2's target ${t2.toFixed(4)} of ${full})`);
         await thaw(K_LATER);
+        // The fall throws the halves about: frozen where it lies, the corpse's wobble comes to rest first.
+        const restK = await restWobble(z.id);
         const stL = await stateOf(z.id), wL = await splitOf(z.id), dL = await drawnOf(z.id), phL = await actorPhase(z.id);
-        check(stL?.preset === "middle" && stL.angle === full && !!wL && Math.abs(wL.thetaP - full) < 1e-12 && Math.abs(wL.thetaM + full) < 1e-12 && !!dL && await recordOpen(z.id),
-          `K: ${K_LATER} frames on (phase ${phL}) the corpse's head is still split open: state angle ${stL?.angle.toFixed(4)} rad, the pose's split ${wL ? `${wL.thetaP.toFixed(4)} / ${wL.thetaM.toFixed(4)}` : null}, drawn ${J(dL && [+dL.thetaP.toFixed(4), +dL.thetaM.toFixed(4)])}, the GPU record open`);
+        check(restK >= 0 && stL?.preset === "middle" && stL.angle === full && !!wL && wL.thetaP === full && wL.thetaM === -full && !!dL && await recordOpen(z.id),
+          `K: ${K_LATER} frames on (phase ${phL}), its halves at rest ${restK} frozen frames later, the corpse's head is still split open: state angle ${stL?.angle.toFixed(4)} rad, the pose's split ${wL ? `${wL.thetaP.toFixed(4)} / ${wL.thetaM.toFixed(4)}` : null}, drawn ${J(dL && [+dL.thetaP.toFixed(4), +dL.thetaM.toFixed(4)])}, the GPU record open`);
         // The gap on the corpse, wherever it lies.
         const lineK = await gapLine(z.id), eyeK = wedgeEye(lineK);
         const gapK = await gapRead(lineK, await readFrom(eyeK, lineK.G0)), predK = gapPredicted(lineK, full, -full);
@@ -1087,7 +1141,7 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
         out.mStages = { closed: closedSkull, stages: got, drawn, landmark: { worst: lm1.worst, far: lm1.far, rows: lm1.rows } };
         check(closedSkull.bones === 0 && closedSkull.eyes === 0 && closedSkull.draws > 0 && closedSkull.angleP === 0,
           `M: a closed head draws the closed skull (${closedSkull.draws} bone draws for the actor, ${closedSkull.bones} split copies)`);
-        const turnOff = Math.max(...drawn.flatMap((d) => [d.plus, d.minus].map((t) => (t === null ? Infinity : Math.abs(t - d.rule)))));
+        const turnOff = Math.max(...drawn.flatMap((d) => [[d.plus, d.ruleP], [d.minus, d.ruleM]].map(([t, rule]) => (t === null ? Infinity : Math.abs(t - rule)))));
         check(turnOff <= M_ANGLE_TOL && drawn[0].rule > 0 && drawn[1].rule > drawn[0].rule && drawn[2].rule >= drawn[1].rule,
           `M: the bone is drawn turned by the follow table's angle at each chop, wider at chop 2 and no narrower after the kill: its copies' matrices give ${drawn.map((d) => `${deg(d.plus)} / ${deg(d.minus)}`).join(", ")} degrees (+ / - half) against ${drawn.map((d) => deg(d.rule)).join(", ")} (worst ${turnOff.toExponential(1)} rad off <= ${M_ANGLE_TOL})`);
         check(got.every((g) => g.bones === 3 && g.eyes === 2), `M: each stage draws the skull as three clipped copies and an eye a half (${got.map((g) => `${g.bones}+${g.eyes}`).join(", ")})`);
@@ -1295,37 +1349,105 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
     writeFileSync(`${OUT}/B-bounds-masks.png`, encodePng(6 * BW * 2, BW * 2, sheetRgb)); console.log(`  sheet ${OUT}/B-bounds-masks.png (6 views)`);
     sheet("B-bounds", tiles);
   } catch (e) { await threw("B", e); } finally { if (S) { closeSession(S); S = null; } }
-  // ======== BOOT 5. T: S on a turned zombie (the ring walks until one stands about 90 degrees round, then freezes).
-  if (run("T")) try {
+  // ======== BOOT 5. T: S on a turned zombie (the ring walks until one stands about 90 degrees round, then freezes);
+  // then J: the wobble, on another zombie of the ring.
+  if (run("T") || run("J")) try {
     await boot("turned"); await loadRules();
-    await evaluate("__sdfGame.freeze(false)");
-    let pick = null, frames = 0;
-    for (; frames < T_MAX_FRAMES && !pick; frames += 10) {
-      await stepN(10);
-      const zs = (await evaluate("__sdfGame.actorList()")).filter((q) => q.kind === "zombie" && pool.some((p) => p.id === q.id));
-      pick = zs.filter((q) => Math.abs(Math.sin(q.yaw)) >= T_SIN_MIN && q.phase === "standing").sort((a, b) => Math.abs(Math.sin(b.yaw)) - Math.abs(Math.sin(a.yaw)))[0] ?? null;
-    }
-    await evaluate("__sdfGame.freeze(true)");
-    if (!pick) die(`T: no ring zombie turned to |sin yaw| >= ${T_SIN_MIN} in ${T_MAX_FRAMES} frames`);
-    await stepN(30);
-    const yawNow = (await evaluate("__sdfGame.actorList()")).find((q) => q.id === pick.id).yaw;
-    const hc = await headOf(pick.id), f = await frontOf(pick.id);
-    const front = (await look(hc, HEAD_D, f)).pose; await stepN(SETTLE);
-    const shot0 = await capture(), px0 = await headPx(pick.id);
-    const line = await gapLine(pick.id), eyeW = wedgeEye(line);
-    const closedGap = await gapRead(line, await readFrom(eyeW, line.G0));
-    await camAt(eyeW, line.G0); await syncCam();
-    const s = await chopAndFollow(pick.id, "H", line, eyeW, front, [SPRING_FRAMES]);
-    const t1 = AXE_HEAD.openAngles[0] * HEAD_SPLIT.presets.middle.maxBoth, rest = s.frames.at(-1).gap, pred = gapPredicted(line, t1, -t1);
-    const w = await splitOf(pick.id), lineW = await gapLine(pick.id);
-    out.t = { yawDeg: +(yawNow * 180 / Math.PI).toFixed(1), frames, state: s.state, restMm: +mm(rest), predictedMm: +mm(pred), planeDotFrame: w ? +dot(w.n, line.n).toFixed(9) : null };
-    check(Math.abs(Math.sin(yawNow)) >= T_SIN_MIN, `T: the body is turned (yaw ${out.t.yawDeg} deg, |sin| ${Math.abs(Math.sin(yawNow)).toFixed(2)} >= ${T_SIN_MIN}; ${frames} walking frames)`);
-    check(s.n === 1 && s.state?.preset === "middle" && s.state.sides === 0 && s.state.angle === t1 && !!w && dot(w.n, line.n) > 1 - 1e-9 && len(sub(lineW.G0, line.G0)) < 1e-9,
-      `T: a chop from its front opens a centred middle split on the turned head's own plane (${J(s.state && { preset: s.state.preset, sides: s.state.sides })}; plane normal . head right ${out.t.planeDotFrame}; the gap lines ${len(sub(lineW.G0, line.G0)).toExponential(1)} m apart)`);
-    check(closedGap === 0 && rest - pred >= -GAP_REST_UNDER && rest - pred <= GAP_REST_OVER, `T: the gap on the turned head is the CPU split's: ${mm(rest)} mm against ${mm(pred)} mm predicted (${mm(rest - pred)} mm off; allowed -${mm(GAP_REST_UNDER)} to +${mm(GAP_REST_OVER)}; closed ${mm(closedGap)} mm)`);
-    sheet("T-turned", [{ img: shot0, c: px0 }, { img: s.photos[0], c: px0 }]);
+    if (run("T")) try {
+      await evaluate("__sdfGame.freeze(false)");
+      let pick = null, frames = 0;
+      for (; frames < T_MAX_FRAMES && !pick; frames += 10) {
+        await stepN(10);
+        const zs = (await evaluate("__sdfGame.actorList()")).filter((q) => q.kind === "zombie" && pool.some((p) => p.id === q.id));
+        pick = zs.filter((q) => Math.abs(Math.sin(q.yaw)) >= T_SIN_MIN && q.phase === "standing").sort((a, b) => Math.abs(Math.sin(b.yaw)) - Math.abs(Math.sin(a.yaw)))[0] ?? null;
+      }
+      await evaluate("__sdfGame.freeze(true)");
+      if (pick) usedZ.add(pick.id);
+      if (!pick) die(`T: no ring zombie turned to |sin yaw| >= ${T_SIN_MIN} in ${T_MAX_FRAMES} frames`);
+      await stepN(30);
+      const yawNow = (await evaluate("__sdfGame.actorList()")).find((q) => q.id === pick.id).yaw;
+      const hc = await headOf(pick.id), f = await frontOf(pick.id);
+      const front = (await look(hc, HEAD_D, f)).pose; await stepN(SETTLE);
+      const shot0 = await capture(), px0 = await headPx(pick.id);
+      const line = await gapLine(pick.id), eyeW = wedgeEye(line);
+      const closedGap = await gapRead(line, await readFrom(eyeW, line.G0));
+      await camAt(eyeW, line.G0); await syncCam();
+      const s = await chopAndFollow(pick.id, "H", line, eyeW, front, [SPRING_FRAMES]);
+      const t1 = AXE_HEAD.openAngles[0] * HEAD_SPLIT.presets.middle.maxBoth, rest = s.frames.at(-1).gap, pred = gapPredicted(line, t1, -t1);
+      const w = await splitOf(pick.id), lineW = await gapLine(pick.id);
+      out.t = { yawDeg: +(yawNow * 180 / Math.PI).toFixed(1), frames, state: s.state, restMm: +mm(rest), predictedMm: +mm(pred), planeDotFrame: w ? +dot(w.n, line.n).toFixed(9) : null };
+      check(Math.abs(Math.sin(yawNow)) >= T_SIN_MIN, `T: the body is turned (yaw ${out.t.yawDeg} deg, |sin| ${Math.abs(Math.sin(yawNow)).toFixed(2)} >= ${T_SIN_MIN}; ${frames} walking frames)`);
+      check(s.n === 1 && s.state?.preset === "middle" && s.state.sides === 0 && s.state.angle === t1 && !!w && dot(w.n, line.n) > 1 - 1e-9 && len(sub(lineW.G0, line.G0)) < 1e-9,
+        `T: a chop from its front opens a centred middle split on the turned head's own plane (${J(s.state && { preset: s.state.preset, sides: s.state.sides })}; plane normal . head right ${out.t.planeDotFrame}; the gap lines ${len(sub(lineW.G0, line.G0)).toExponential(1)} m apart)`);
+      check(closedGap === 0 && rest - pred >= -GAP_REST_UNDER && rest - pred <= GAP_REST_OVER, `T: the gap on the turned head is the CPU split's: ${mm(rest)} mm against ${mm(pred)} mm predicted (${mm(rest - pred)} mm off; allowed -${mm(GAP_REST_UNDER)} to +${mm(GAP_REST_OVER)}; closed ${mm(closedGap)} mm)`);
+      sheet("T-turned", [{ img: shot0, c: px0 }, { img: s.photos[0], c: px0 }]);
+    } catch (e) { await threw("T", e); }
+    // -------- J. the halves wobble with the body and come to rest. After T: it thaws the ring for good.
+    if (run("J")) try {
+      const z = fresh(); const W = HEAD_SPLIT.wobble, full = HEAD_SPLIT.presets.middle.maxBoth;
+      await setCam(spawn); await stepOne();
+      const ok = await force(z.id, "middle", 0, 0, 1);
+      // A frame's angles: the state (the spring's angle and each half's offset), the pose's split, the phase.
+      const row = () => evaluate(`(() => { const w = __sdfGame.zombie(${z.id}).posed().split, st = __sdfGame.headSplit(${z.id});
+        return { st, tp: w ? w.thetaP : null, tm: w ? w.thetaM : null, phase: __sdfGame.actorList().find((q) => q.id === ${z.id}).phase }; })()`);
+      const atSpring = (q) => wobbleAtRest(q.st) && q.tp === q.st.angle && q.tm === -q.st.angle;
+      const still = []; for (let i = 0; i < J_STILL; i++) { await stepOne(); still.push(await row()); }
+      check(ok && still.every((q) => atSpring(q) && q.st.angle === full), `J: frozen, the halves stand at exactly the spring's angle for ${J_STILL} frames (${still[0]?.tp} / ${still[0]?.tm} rad; offsets ${still[0]?.st.wobP}, ${still[0]?.st.wobM})`);
+      // Thawed: it wanders, and takes one head chop on the way (the first on this head: a flinch, no kill). The chop
+      // is struck from in front of the head and the player is back at the spawn before the frame is stepped.
+      await evaluate("__sdfGame.freeze(false)");
+      const walk = []; let chopped = 0;
+      const swung = (q) => Math.abs(q.st.wobP) >= J_MOVED && Math.abs(q.st.wobM) >= J_MOVED && Math.abs(q.tp + q.tm) >= J_APART;
+      const liveMax = (v) => evaluate(`(async () => { (${HS}).HEAD_SPLIT.wobble.max = ${v}; return 1; })()`);
+      const tight = [];
+      await liveMax(J_TIGHT_MAX);
+      try { for (let i = 1; i <= J_TIGHT; i++) { await stepOne(); tight.push(await row()); } } finally { await liveMax(W.max); }
+      for (let i = J_TIGHT + 1; i <= J_WALK_MAX && !(i > J_WALK && swung(walk.at(-1))); i++) {
+        if (i === J_CHOP_AT) { const h1 = await headOf(z.id), f1 = await frontOf(z.id), e = add(h1, mul(f1, HEAD_D)); await evaluate(`__sdfGame.setPose(${e[0]}, ${e[2]}, ${yawOf(-f1[0], -f1[2])}, 0, 0)`); chopped = await chop(z.id, "R"); await setCam(spawn); }
+        await stepOne(); walk.push(await row());
+      }
+      await evaluate("__sdfGame.freeze(true)");
+      const last = walk.at(-1), deg = (r) => (r * 180 / Math.PI).toFixed(2);
+      const peakP = Math.max(...walk.map((q) => Math.abs(q.st.wobP))), peakM = Math.max(...walk.map((q) => Math.abs(q.st.wobM))), apart = Math.max(...walk.map((q) => Math.abs(q.tp + q.tm)));
+      out.j = { frames: walk.length, chopped, peakPDeg: +deg(peakP), peakMDeg: +deg(peakM), apartDeg: +deg(apart), phases: [...new Set(walk.map((q) => q.phase))] };
+      check(chopped === 1 && peakP >= J_MOVED && peakM >= J_MOVED && apart >= J_APART,
+        `J: thawed and wandering (frames ${J_TIGHT + 1} to ${J_TIGHT + walk.length}, a head chop on frame ${J_CHOP_AT}), each half swings off the spring's angle: the + half by up to ${deg(peakP)} degrees, the - half ${deg(peakM)} (>= ${deg(J_MOVED)}), the two up to ${deg(apart)} apart (>= ${deg(J_APART)})`);
+      // THE LIMITS, on every frame, from the constants: the offset within max x the spring's angle, the half never
+      // nearer shut than minOpen, never past the full angle x (1 + over) but where the spring alone takes it.
+      const inside = (q, x) => Math.abs(x) <= W.max * q.st.angle + J_EPS && q.st.angle + x >= Math.min(q.st.angle, W.minOpen) - J_EPS && q.st.angle + x <= Math.max(q.st.angle, full * (1 + W.over)) + J_EPS;
+      const outside = walk.filter((q) => !inside(q, q.st.wobP) || !inside(q, q.st.wobM)).length;
+      const totals = walk.flatMap((q) => [q.tp, -q.tm]), atLimit = walk.filter((q) => [q.st.wobP, q.st.wobM].some((x) => Math.abs(Math.abs(x) - W.max * q.st.angle) <= J_EPS)).length;
+      out.j.limits = { outside, atLimitFrames: atLimit, minDeg: +deg(Math.min(...totals)), maxDeg: +deg(Math.max(...totals)) };
+      check(outside === 0 && Math.min(...totals) >= W.minOpen, `J: both halves stay inside the wobble's limits on every frame: openings ${deg(Math.min(...totals))} to ${deg(Math.max(...totals))} degrees (the spring's ${deg(full)}; the offset within ${W.max} of it, never under ${deg(W.minOpen)} or over ${deg(full * (1 + W.over))}); ${outside} frames outside, ${atLimit} at a limit`);
+      // The stop itself, on the frames the limit was cut for: nothing past it, and the walk did reach it.
+      const tightLim = (q) => J_TIGHT_MAX * q.st.angle, offs = (q) => [q.st.wobP, q.st.wobM];
+      const tightOut = tight.filter((q) => offs(q).some((x) => Math.abs(x) > tightLim(q) + J_EPS)).length, tightHit = tight.filter((q) => offs(q).some((x) => Math.abs(Math.abs(x) - tightLim(q)) <= J_EPS)).length;
+      const tightPeak = Math.max(...tight.flatMap((q) => offs(q).map(Math.abs)));
+      out.j.tight = { frames: tight.length, outside: tightOut, atLimit: tightHit, peakDeg: +deg(tightPeak) };
+      check(tight.length === J_TIGHT && tightOut === 0 && tightHit >= 1, `J: the stop holds: with the limit cut to ${J_TIGHT_MAX} of the spring's angle (${deg(J_TIGHT_MAX * full)} degrees) for the walk's first ${J_TIGHT} frames, no half is past it (${tightOut} frames; the largest offset ${deg(tightPeak)} degrees) and the walk drives one into it on ${tightHit} frames`);
+      const poseOff = walk.filter((q) => q.tp !== q.st.angle + q.st.wobP || q.tm !== -(q.st.angle + q.st.wobM)).length;
+      check(poseOff === 0, `J: every frame the pose's split carries exactly the state's two angles: the spring's and each half's own offset (${poseOff} of ${walk.length} frames differ)`);
+      // Frozen on a swing, the eye brought into the split's draw distance by a tick of no time (the halves do not
+      // move): the two angles are the only way the wobble travels. The GPU record's angle lanes (N.w and A.w of the
+      // open slot, floats) are the pose's, and the skull's copies are drawn at the stage's share of each half's own.
+      const sp = await splitOf(z.id), f2 = await frontOf(z.id), e2 = add(sp.h, mul(f2, J_EYE_D));
+      await camAt([e2[0], Math.max(EYE_H, e2[1]), e2[2]], sp.h); await syncCam(); await syncCam();
+      const held = await row(), bd = await boneDrawn(z.id);
+      const rec = await evaluate(`(() => { const r = __sdfGame.zombie(${z.id}).view.records.floats; for (let q = 0; q * 84 < r.length; q++) if (Math.hypot(r[q * 84 + 68], r[q * 84 + 69], r[q * 84 + 70]) > 0.5) return [r[q * 84 + 71], r[q * 84 + 79]]; return null; })()`);
+      out.j.swing = { tp: last.tp, tm: last.tm, rec, bone: bd };
+      check(swung(last) && held.tp === last.tp && held.tm === last.tm && !!rec && rec[0] === Math.fround(last.tp) && rec[1] === Math.fround(last.tm),
+        `J: frozen on a swing (${deg(last.tp)} / ${deg(-last.tm)} degrees, the spring's ${deg(last.st.angle)}), the GPU record carries the pose's two angles (${J(rec)} against ${last.tp.toFixed(6)} / ${last.tm.toFixed(6)} rad, as floats), which a tick of no time left alone`);
+      check(bd.plus !== null && Math.abs(bd.plus - bd.ruleP) <= M_ANGLE_TOL && Math.abs(bd.minus - bd.ruleM) <= M_ANGLE_TOL && Math.abs(bd.ruleP - bd.ruleM) > M_ANGLE_TOL,
+        `J: the skull's copies are drawn at the stage's share of each half's own angle: ${bd.plus === null ? null : deg(bd.plus)} / ${bd.minus === null ? null : deg(bd.minus)} degrees against ${deg(bd.ruleP)} / ${deg(bd.ruleM)} (worst ${bd.plus === null ? null : Math.max(Math.abs(bd.plus - bd.ruleP), Math.abs(bd.minus - bd.ruleM)).toExponential(1)} rad off <= ${M_ANGLE_TOL})`);
+      // At rest within the settle time, exactly on the spring's angle, and it stays.
+      const bound = wobbleRestFrames(full), n = await restWobble(z.id);
+      const after = []; for (let i = 0; i < J_STILL; i++) { await stepOne(); after.push(await row()); }
+      out.j.rest = { frames: n, bound, phase: after.at(-1)?.phase };
+      check(n > 0 && n <= bound && after.every((q) => atSpring(q) && q.st.angle === full),
+        `J: frozen, the halves are back at exactly the spring's angle ${n} frames on (the wobble's settle bound from its constants: ${bound}) and stay for ${J_STILL} more (${after.at(-1)?.tp} / ${after.at(-1)?.tm} rad; phase ${after.at(-1)?.phase})`);
+    } catch (e) { await threw("J", e); }
     await diag("turned");
-  } catch (e) { await threw("boot 5 (T)", e); } finally { if (S) { closeSession(S); S = null; } }
+  } catch (e) { await threw("boot 5 (T, J)", e); } finally { if (S) { closeSession(S); S = null; } }
 }
 check(FLOOR.colour <= FLOOR_COLOUR_MAX && FLOOR.depth <= FLOOR_DEPTH_MAX, `C: the instrument's floor over the run: the two reads of each of ${FLOOR.captures} settled captures differ by at most ${FLOOR.colour.toExponential(1)} in colour and ${FLOOR.depth.toExponential(1)} in clip depth (<= ${FLOOR_COLOUR_MAX}, ${FLOOR_DEPTH_MAX})`);
 const errs = consoleEvents.filter((e) => e.type === "error" || e.type === "exception");

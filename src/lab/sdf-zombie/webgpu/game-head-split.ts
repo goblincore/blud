@@ -12,7 +12,14 @@
 //
 // THE TICK RUNS BEFORE THE ACTORS STEP (game-main tick), so the step's re-pose asks the hook with this frame's angle:
 // a stepping actor's pose does not lag the spring. A FROZEN actor (?frozen=1, the gates) never steps; the tick
-// re-poses it itself whenever the angle moved.
+// re-poses it itself whenever an angle moved.
+//
+// THE WOBBLE (head-split.ts HEAD_SPLIT.wobble): the halves swing with the body. Its drive is the acceleration of the
+// split's mass point (splitMassPoint), by finite differences of where the POSE has it (pointAccel). The tick comes
+// before the step, so the pose it reads is the last step's: tick N differences the point at steps N-1, N-2 and N-3,
+// an acceleration centred on step N-2, two frames (33 ms) behind the pose that will draw this tick's angles.
+// Secondary motion trails its body anyway. A frozen actor's point does not move: no drive, and its halves come to
+// rest at exactly the spring's angle. A pose with no split (the head gone, the body tearing) forgets the motion.
 //
 // THE CUT FACES. Opening stamps one cut per opened half along the plane (head-split.ts splitFaceSegs → cut-wound.ts
 // stampCut, on the closed head, where wounds live), tagged headSlot 'keep' so they outlive the wound ring's cap, and
@@ -48,9 +55,9 @@ import { sdBodyClosed } from '../validate';
 import { stampCut } from '../cut-wound';
 import { headQuatOf } from '../rig-bind';
 import {
-  HEAD_SPLIT, forcedSplit, headFrameOf, headLocalDir, headLocalPoint, openSplit, punchSplit, splitFaceSegs, splitWarpOf,
-  stepSplit, widenSplit,
-  type HeadFrame, type SplitPresetId, type SplitState, type SplitWarp,
+  HEAD_SPLIT, forcedSplit, headFrameOf, headLocalDir, headLocalPoint, makePointMotion, openSplit, pointAccel, punchSplit,
+  splitFaceSegs, splitMassPoint, splitWarpOf, stepSplit, widenSplit, wobbleDrive,
+  type HeadFrame, type PointMotion, type SplitPresetId, type SplitState, type SplitWarp,
 } from '../head-split';
 import { headAlive, headShape } from './flame-anchors';
 
@@ -90,6 +97,10 @@ export interface HeadSplitLeaf {
 interface ActorSplit {
   st: SplitState;
   faces: readonly Wound[];
+  /** The mass point's motion (head-split.ts pointAccel), and the last tick's time step: the one the pose this tick
+   *  reads was stepped with. */
+  motion: PointMotion;
+  dt: number;
 }
 
 /** The rupture window is running, or spent and not yet ended (the actor is about to be gibbed). */
@@ -120,7 +131,7 @@ export function createHeadSplit(ctx: GameContext, deps: HeadSplitDeps = {}): Hea
   function begin(a: ZombieActor, st: SplitState, frame: HeadFrame): readonly Wound[] {
     let h = heads.get(a);
     if (!h) {
-      h = { st, faces: [] };
+      h = { st, faces: [], motion: makePointMotion(), dt: 0 };
       heads.set(a, h);
       const rec = h;
       a.setHeadSplit(p => hook(a, rec, p));
@@ -168,12 +179,17 @@ export function createHeadSplit(ctx: GameContext, deps: HeadSplitDeps = {}): Hea
     tick(dt) {
       for (const [a, h] of heads) {
         if (!ctx.world.actors.includes(a)) { drop(a); continue; }
-        const angle = h.st.angle;
-        h.st = stepSplit(h.st, dt);
+        // A tick of no time (a gate syncing its camera) steps nothing and has no pose of its own: it takes no sample,
+        // and the last step's time stands for the tick that follows.
+        const was = h.st, w = a.posed().split ?? null;
+        const s = dt > 0 ? pointAccel(h.motion, w ? splitMassPoint(w) : null, h.dt) : null;
+        if (s) { h.motion = s.motion; h.dt = dt; }
+        h.st = stepSplit(was, dt, s && w ? wobbleDrive(w, s.acc) : null);
         // A FROZEN actor never steps, and the step is where the hook is asked: without this its posed and drawn head
-        // would keep the angle of the last hit's re-pose (game-head-damage.ts tick's rule). Not while it tears: the
+        // would keep the angles of the last hit's re-pose (game-head-damage.ts tick's rule). Not while it tears: the
         // rupture window re-uploads the body itself, with its wounds carried.
-        if (ctx.demo.wanderFrozen && h.st.angle !== angle && !tearing(a)) { a.reposeHead(); hullsStale(); }
+        const moved = h.st.angle !== was.angle || h.st.wobP !== was.wobP || h.st.wobM !== was.wobM;
+        if (ctx.demo.wanderFrozen && moved && !tearing(a)) { a.reposeHead(); hullsStale(); }
       }
     },
     state(id) {

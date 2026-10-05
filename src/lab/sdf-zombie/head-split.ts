@@ -2,10 +2,10 @@
 //
 // THE HEAD SPLIT (spec docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md §5; plan
 // docs/superpowers/plans/2026-10-04-head-split-part-b.md). Pure. An axe chop opens the head on a hinge; this module
-// holds the presets, the preset choice from the chop's blade plane, the angle spring, the world-space split
-// description (SplitWarp), THE SPLIT FIELD, the maps between the open head and the closed one (unwarpPoint,
-// warpPoint), the cut faces' segments, and THE SKULL SPLIT: how far the bone mesh opens behind its flesh, and which
-// piece owns a point of it (skullSplitOf).
+// holds the presets, the preset choice from the chop's blade plane, the angle spring and each half's wobble on top of
+// it, the world-space split description (SplitWarp), THE SPLIT FIELD, the maps between the open head and the closed
+// one (unwarpPoint, warpPoint), the cut faces' segments, and THE SKULL SPLIT: how far the bone mesh opens behind its
+// flesh, and which piece owns a point of it (skullSplitOf).
 //
 // What moves: body material ABOVE the hinge plane AND within rho = r - REGION_MARGIN of the hinge point h (the head;
 // rho is sized to hold it). The + side of the old plane turns open by thetaP, the - side by thetaM. Everything else
@@ -81,6 +81,25 @@ export const HEAD_SPLIT = {
   faceCalibre: { depth: 0.12, kerf: 0.012, lip: 1 },
   /** The angle spring (head-deform.ts BURST_DEFORM's shape). `kick` scales the target into the initial rate. */
   hz: 7, zeta: 0.35, kick: 6, restA: 1e-4, restV: 1e-2,
+  /** THE WOBBLE: an opened half is meat on a hinge, not a prop. Each turning half carries an offset on top of the
+   *  spring's angle (SplitState.wobP / wobM, rad, positive = further open): a damped spring about zero, driven by how
+   *  the head is thrown about (wobbleDrive) and stepped with the angle (stepSplit). No gravity in it: at rest the
+   *  offset is exactly 0, whichever way up the head lies.
+   *  `hz`, `zeta`: the offset's own spring, slower and softer than the chop's: a flop, a swing back, rest.
+   *  `gainSide`, `gainBob`: the drive (rad/s^2) per m/s^2 of the mass point's acceleration ACROSS the split (along n:
+   *  the halves lag behind the head, so one opens and the other closes) and UP out of the hinge (along u: both open,
+   *  or both close), for a half at its preset's full angle; a half less far open is driven in proportion to its
+   *  angle. Both 0 = no wobble: the halves stand at the spring's angle, to the bit.
+   *  `arm`: the mass point is this far up from the hinge into the head (m). Its acceleration, not the bare hinge's,
+   *  holds the head's own turning about the hinge axis: a head that rolls throws its crown, not its hinge.
+   *  `accelClamp`: each of the two accelerations is held to this (m/s^2): a pose that snaps, a teleport.
+   *  THE LIMITS (wobbleLimits), kept on every sub-step:
+   *  `max`: the offset stays within this share of the half's own spring angle, either way;
+   *  `minOpen`: the half is never closer to shut than this (rad) once its spring angle is past it: the cut faces
+   *  never meet;
+   *  `over`: and never stands further open than the preset's full angle x (1 + over), but for where its spring alone
+   *  takes it. */
+  wobble: { hz: 3, zeta: 0.3, gainSide: 6, gainBob: 8, arm: 0.1, accelClamp: 40, max: 0.45, minOpen: 0.03, over: 0.45 },
   /** THE SKULL (the bone mesh; skullSplitOf below, drawn by webgpu/skeleton-spike/mesh-renderer.ts). The bone opens
    *  LESS than its flesh half, so it stays in the gap as a skull that cracks, then splits.
    *  `follow`: knots of (the flesh's opening as a share of its preset's full angle, the bone's share of the flesh
@@ -131,10 +150,13 @@ export interface SplitState {
    *  back under the target, or a kick on a split already at its angle (punchSplit), leaves it where it is. The skull
    *  reads it (skullSplitOf). */
   stage: number;
+  /** THE WOBBLE (HEAD_SPLIT.wobble): the + half's and the - half's offset on top of `angle` (rad, positive = further
+   *  open) and their rates. A side that does not turn keeps 0. */
+  wobP: number; wobVP: number; wobM: number; wobVM: number;
 }
 
 export function makeSplitState(): SplitState {
-  return { preset: null, sides: 0, offset: 0, angle: 0, vel: 0, target: 0, stage: 0 };
+  return { preset: null, sides: 0, offset: 0, angle: 0, vel: 0, target: 0, stage: 0, wobP: 0, wobVP: 0, wobM: 0, wobVM: 0 };
 }
 
 /** The preset for a chop: `bladeNormalLocal` is the blade plane's normal in head-local space (cross(blade dir, view),
@@ -175,9 +197,68 @@ export function punchSplit(st: SplitState, frac: number): SplitState {
   return { ...st, vel: st.vel + frac * splitMaxAngle(st) / springReach() };
 }
 
+/** THE WOBBLE'S DRIVE for one tick: the mass point's acceleration across the split (along n) and up out of the hinge
+ *  (along u), m/s^2. */
+export interface WobbleDrive { side: number; bob: number }
+
+/** The point of a split whose acceleration drives its wobble: HEAD_SPLIT.wobble.arm up from the hinge into the head
+ *  (world). */
+export function splitMassPoint(w: SplitWarp): Vec3 {
+  return add(w.h, scale(cross(w.n, w.a), HEAD_SPLIT.wobble.arm));
+}
+
+/** The drive for the split `w` whose mass point accelerates by `acc` (world, m/s^2): its two components, each held to
+ *  HEAD_SPLIT.wobble.accelClamp. What is not a finite number is no drive. */
+export function wobbleDrive(w: SplitWarp, acc: Vec3): WobbleDrive {
+  const c = HEAD_SPLIT.wobble.accelClamp;
+  const held = (x: number): number => (Number.isFinite(x) ? Math.max(-c, Math.min(c, x)) : 0);
+  return { side: held(dot(acc, w.n)), bob: held(dot(acc, cross(w.n, w.a))) };
+}
+
+/** A POINT'S MOTION, kept from sample to sample for its acceleration by finite differences: where it was last, and how
+ *  fast it was going (null until known). */
+export interface PointMotion { p: Vec3 | null; v: Vec3 | null }
+
+export function makePointMotion(): PointMotion { return { p: null, v: null }; }
+
+/** One more sample of a point: it is at `p`, `dt` seconds after the last sample. Returns the motion to keep and the
+ *  point's acceleration over the last two intervals (m/s^2). The first two samples give none (a position, then one
+ *  velocity: a head that splits on a walking body is not kicked by the walk's speed); a sample of no time (dt <= 0) is
+ *  no sample; no point (null, or not finite: the pose carries no split) forgets the motion. */
+export function pointAccel(m: PointMotion, p: Vec3 | null, dt: number): { motion: PointMotion; acc: Vec3 } {
+  if (!p || !(Number.isFinite(p[0]) && Number.isFinite(p[1]) && Number.isFinite(p[2]))) return { motion: makePointMotion(), acc: [0, 0, 0] };
+  if (!(dt > 0)) return { motion: m, acc: [0, 0, 0] };
+  if (!m.p) return { motion: { p, v: null }, acc: [0, 0, 0] };
+  const v = scale(sub(p, m.p), 1 / dt);
+  return { motion: { p, v }, acc: m.v ? scale(sub(v, m.v), 1 / dt) : [0, 0, 0] };
+}
+
+/** THE WOBBLE'S LIMITS: the range [lo, hi] a half's offset is held in while its spring stands at `st.angle`
+ *  (HEAD_SPLIT.wobble max, minOpen, over). lo <= 0 <= hi, so an offset of 0 is always inside. */
+export function wobbleLimits(st: Pick<SplitState, 'preset' | 'sides' | 'angle'>): [number, number] {
+  const W = HEAD_SPLIT.wobble, reach = W.max * st.angle;
+  return [
+    -Math.min(reach, Math.max(0, st.angle - W.minOpen)),
+    Math.min(reach, Math.max(0, splitMaxAngle(st) * (1 + W.over) - st.angle)),
+  ];
+}
+
+/** One half's offset `x` and rate `v` over `n` sub-steps of `h` seconds under the drive `push` (rad/s^2), held in
+ *  [lo, hi]: at a limit the offset stops there and keeps no rate into it. Snaps to rest like the spring. */
+function stepHalfWobble(x: number, v: number, push: number, n: number, h: number, lo: number, hi: number): [number, number] {
+  const w = 2 * Math.PI * HEAD_SPLIT.wobble.hz, z = HEAD_SPLIT.wobble.zeta;
+  for (let i = 0; i < n; i++) {
+    v += (-w * w * x - 2 * z * w * v + push) * h; x += v * h;
+    if (x < lo) { x = lo; v = Math.max(v, 0); } else if (x > hi) { x = hi; v = Math.min(v, 0); }
+  }
+  return Math.abs(x) < HEAD_SPLIT.restA && Math.abs(v) < HEAD_SPLIT.restV ? [0, 0] : [x, v];
+}
+
 /** Advance the spring (semi-implicit Euler, 1/240 s sub-steps); snaps onto the target when settled. The stage follows
- *  the angle up, as far as the target. */
-export function stepSplit(st: SplitState, dt: number): SplitState {
+ *  the angle up, as far as the target. Then each turning half's wobble about the new angle, under `drive` (null: none,
+ *  the offsets only settle). With no drive and no offset the wobble is not stepped at all: a body that does not move
+ *  keeps its halves at the spring's angle. */
+export function stepSplit(st: SplitState, dt: number, drive: WobbleDrive | null = null): SplitState {
   if (st.preset === null) return st;
   const w = 2 * Math.PI * HEAD_SPLIT.hz, z = HEAD_SPLIT.zeta;
   let a = st.angle, v = st.vel, stage = st.stage;
@@ -187,7 +268,14 @@ export function stepSplit(st: SplitState, dt: number): SplitState {
     stage = Math.max(stage, Math.min(a, st.target));
   }
   if (Math.abs(a - st.target) < HEAD_SPLIT.restA && Math.abs(v) < HEAD_SPLIT.restV) { a = st.target; v = 0; stage = Math.max(stage, a); }
-  return { ...st, angle: Math.max(0, a), vel: v, stage };
+  const next: SplitState = { ...st, angle: Math.max(0, a), vel: v, stage };
+  const W = HEAD_SPLIT.wobble, side = drive ? drive.side * W.gainSide : 0, bob = drive ? drive.bob * W.gainBob : 0;
+  if (side === 0 && bob === 0 && st.wobP === 0 && st.wobVP === 0 && st.wobM === 0 && st.wobVM === 0) return next;
+  const full = splitMaxAngle(next), free = full > 0 ? Math.min(1, next.angle / full) : 0, [lo, hi] = wobbleLimits(next);
+  // Across the split the halves lag the head: the + half, which opens toward +n, closes as the head is thrown to +n.
+  const [wobP, wobVP] = st.sides >= 0 ? stepHalfWobble(st.wobP, st.wobVP, (bob - side) * free, n, h, lo, hi) : [0, 0];
+  const [wobM, wobVM] = st.sides <= 0 ? stepHalfWobble(st.wobM, st.wobVM, (bob + side) * free, n, h, lo, hi) : [0, 0];
+  return { ...next, wobP, wobVP, wobM, wobVM };
 }
 
 /** The preset's full opening angle for this state: both halves vs one side (0 when closed). */
@@ -220,7 +308,7 @@ export function forcedSplit(
     || !Number.isFinite(offset) || !Number.isFinite(angleFrac)) return null;
   if (!(angleFrac > 0)) return makeSplitState();
   const angle = angleFrac * splitMaxAngle({ preset, sides });
-  return { preset, sides, offset, angle, vel: 0, target: angle, stage: angle };
+  return { ...makeSplitState(), preset, sides, offset, angle, target: angle, stage: angle };
 }
 
 /** The head's frame: skull centre, world rotation (rig-bind.ts headQuatOf) and the hold radius (headFrameOf). */
@@ -248,7 +336,9 @@ export interface SplitWarp {
   n: Vec3; d0: number;
   /** Hinge point and unit axis a = normalize(up x n); u = n x a points up into the head, a x u = +n. */
   h: Vec3; a: Vec3;
-  /** + side and - side angles (rad): thetaP >= 0, thetaM <= 0. Turning by +theta about a moves the + side to +n. */
+  /** + side and - side angles (rad): thetaP >= 0, thetaM <= 0. Turning by +theta about a moves the + side to +n. Each
+   *  is its half's own: the spring's angle and that half's wobble (SplitState.wobP / wobM), so the two differ while
+   *  the head is thrown about. */
   thetaP: number; thetaM: number;
   /** The region sphere: centred on h, radius r. The moved material lies within r - REGION_MARGIN of h. */
   r: number;
@@ -282,8 +372,8 @@ export function splitWarpOf(st: SplitState, f: HeadFrame): SplitWarp | null {
   const d0 = dot(n, f.centre) + st.offset;
   return {
     n, d0, h, a,
-    thetaP: st.sides >= 0 ? st.angle : 0,
-    thetaM: st.sides <= 0 ? -st.angle : 0,
+    thetaP: st.sides >= 0 ? st.angle + st.wobP : 0,
+    thetaM: st.sides <= 0 ? -(st.angle + st.wobM) : 0,
     r: len(sub(f.centre, h)) + f.radius * HEAD_SPLIT.holdFrac + REGION_MARGIN,
     full: splitMaxAngle(st), stage: st.stage,
   };

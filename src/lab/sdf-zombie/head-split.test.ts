@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  HEAD_SPLIT, REGION_MARGIN, choosePreset, forcedSplit, headFrameOf, headLocalDir, headLocalPoint, kickSplit, makeSplitState,
-  openSplit, punchSplit, skullFollow, skullFollowOk, skullPieceAt, skullPieces, skullSplitOf, skullWarpPoint, splitFaceSegs, splitField,
-  splitMaxAngle, splitWarpOf, stepSplit, unwarpDir, unwarpPoint, warpDir, warpPoint, widenSplit,
-  type HeadFrame, type SplitWarp,
+  HEAD_SPLIT, REGION_MARGIN, choosePreset, forcedSplit, headFrameOf, headLocalDir, headLocalPoint, kickSplit, makePointMotion,
+  makeSplitState, openSplit, pointAccel, punchSplit, skullFollow, skullFollowOk, skullPieceAt, skullPieces, skullSplitOf, skullWarpPoint,
+  splitFaceSegs, splitField, splitMassPoint, splitMaxAngle, splitWarpOf, stepSplit, unwarpDir, unwarpPoint, warpDir, warpPoint, widenSplit,
+  wobbleDrive, wobbleLimits,
+  type HeadFrame, type SplitState, type SplitWarp, type WobbleDrive,
 } from './head-split';
 import type { Vec3 } from './types';
 import { AXE_HEAD, chopKick, chopOpenFrac } from './webgpu/axe-head';
@@ -391,7 +392,7 @@ describe('open, widen, force: the state a chop or the seam leaves', () => {
   it('forcedSplit sits at angleFrac x the max at once (no spring); angleFrac 0 is the closed state', () => {
     const st = forcedSplit('face', 1, 0.02, 0.5)!;
     const half = 0.5 * HEAD_SPLIT.presets.face.maxOne;
-    expect(st).toEqual({ preset: 'face', sides: 1, offset: 0.02, angle: half, vel: 0, target: half, stage: half });
+    expect(st).toEqual({ preset: 'face', sides: 1, offset: 0.02, angle: half, vel: 0, target: half, stage: half, wobP: 0, wobVP: 0, wobM: 0, wobVM: 0 });
     expect(stepSplit(st, 1 / 60)).toEqual(st);
     expect(forcedSplit('middle', 0, 0, 0)).toEqual(makeSplitState());
   });
@@ -402,6 +403,284 @@ describe('open, widen, force: the state a chop or the seam leaves', () => {
     expect(forcedSplit('middle', 0, NaN, 1)).toBeNull();
     expect(forcedSplit('middle', 0, 0, NaN)).toBeNull();
     expect(forcedSplit('sideways' as never, 0, 0, 0)).toBeNull();
+  });
+});
+
+describe('the wobble: an opened half swings with the body and comes back to rest (HEAD_SPLIT.wobble)', () => {
+  const W = HEAD_SPLIT.wobble, dt = 1 / 60, deg = 180 / Math.PI;
+  const split = (sides: -1 | 0 | 1 = 0, frac = 1, preset: 'middle' | 'face' = 'middle') => forcedSplit(preset, sides, 0, frac)!;
+  /** The halves' total openings (rad, both >= 0), as the warp carries them. */
+  const totals = (st: SplitState) => { const w = splitWarpOf(st, FRAME)!; return { p: w.thetaP, m: -w.thetaM }; };
+  /** Every limit, on a state: the offsets inside wobbleLimits, never shut, never past the over-open margin. */
+  const expectInside = (st: SplitState, tag = '') => {
+    const [lo, hi] = wobbleLimits(st), full = splitMaxAngle(st), eps = 1e-12;
+    for (const [side, x] of [[1, st.wobP], [-1, st.wobM]] as const) {
+      if (st.sides !== 0 && st.sides !== side) { expect(x, tag).toBe(0); continue; }
+      expect(Number.isFinite(x), tag).toBe(true);
+      expect(x, tag).toBeGreaterThanOrEqual(lo - eps);
+      expect(x, tag).toBeLessThanOrEqual(hi + eps);
+      expect(Math.abs(x), tag).toBeLessThanOrEqual(W.max * st.angle + eps);
+      expect(st.angle + x, tag).toBeGreaterThanOrEqual(Math.min(st.angle, W.minOpen) - eps);
+      expect(st.angle + x, tag).toBeLessThanOrEqual(Math.max(st.angle, full * (1 + W.over)) + eps);
+    }
+  };
+  /** The frames it takes an offset at its limit to be exactly at rest with no drive: the envelope's decay to restA. */
+  const settleFrames = (angle: number) => Math.ceil(1.25 * Math.log(W.max * angle / HEAD_SPLIT.restA) / (W.zeta * 2 * Math.PI * W.hz) / dt);
+  /** Run with the two gains set to `g` (HEAD_SPLIT is one live object; the gate does the same through its module). */
+  const withGains = <T>(g: number, fn: () => T): T => {
+    const live = W as { gainSide: number; gainBob: number }, keep = [live.gainSide, live.gainBob];
+    live.gainSide = g; live.gainBob = g;
+    try { return fn(); } finally { [live.gainSide, live.gainBob] = keep as [number, number]; }
+  };
+
+  it('the constants: softer and slower than the chop\'s spring, visible gains, limits that leave the split open', () => {
+    expect(W.hz).toBeLessThan(HEAD_SPLIT.hz);
+    expect(W.zeta).toBeGreaterThan(0.1);
+    expect(W.zeta).toBeLessThan(1);
+    expect(W.gainSide).toBeGreaterThan(0);
+    expect(W.gainBob).toBeGreaterThan(0);
+    expect(W.max).toBeGreaterThan(0);
+    expect(W.max).toBeLessThan(1);
+    expect(W.minOpen).toBeGreaterThan(0);
+    expect(W.over).toBeGreaterThanOrEqual(0);
+    expect(W.accelClamp).toBeGreaterThan(9.8);
+  });
+  it('a state made closed, opened, forced or widened has no offset; the warp\'s angles are the spring\'s', () => {
+    const none = { wobP: 0, wobVP: 0, wobM: 0, wobVM: 0 };
+    expect(makeSplitState()).toMatchObject(none);
+    expect(openSplit([1, 0, 0], [0, 0, 0.1], 0.09, 0.8)).toMatchObject(none);
+    expect(widenSplit(split(), 1)).toMatchObject(none);
+    const st = split(0, 0.8), w = splitWarpOf(st, FRAME)!;
+    expect(w.thetaP).toBe(st.angle);
+    expect(w.thetaM).toBe(-st.angle);
+  });
+  it('the warp carries each half\'s own angle: the spring\'s and that half\'s offset; a side that does not turn has neither', () => {
+    const st = { ...split(0, 0.8), wobP: 0.05, wobM: -0.11 }, w = splitWarpOf(st, FRAME)!;
+    expect(w.thetaP).toBe(st.angle + 0.05);
+    expect(w.thetaM).toBe(-(st.angle - 0.11));
+    expect(w.stage).toBe(st.stage);
+    const one = splitWarpOf({ ...split(1, 0.8), wobP: 0.05, wobM: 0.2 }, FRAME)!;
+    expect(one.thetaP).toBeCloseTo(0.8 * HEAD_SPLIT.presets.middle.maxOne + 0.05, 12);
+    expect(one.thetaM).toBe(0);
+    expect(splitWarpOf({ ...split(-1, 0.8), wobP: 0.2, wobM: 0.05 }, FRAME)!.thetaP).toBe(0);
+  });
+  it('pointAccel: no acceleration from the first two samples, then the second difference over dt^2', () => {
+    let m = makePointMotion();
+    const at = (t: number): Vec3 => [0.5 * 3 * t * t, 1.5 + 2 * t, -t];   // 3 m/s^2 along x
+    const accs: Vec3[] = [];
+    for (let i = 0; i < 5; i++) { const r = pointAccel(m, at(i * 0.25), 0.25); m = r.motion; accs.push(r.acc); }
+    expect(accs[0]).toEqual([0, 0, 0]);
+    expect(accs[1]).toEqual([0, 0, 0]);     // one velocity: not an acceleration from rest
+    for (const a of accs.slice(2)) { expect(a[0]).toBeCloseTo(3, 9); expect(a[1]).toBeCloseTo(0, 9); expect(a[2]).toBeCloseTo(0, 9); }
+    expect(m.p).toEqual(at(1));
+  });
+  it('pointAccel: a point that does not move accelerates by exactly nothing; no time is no sample; no point forgets', () => {
+    let m = makePointMotion();
+    const p: Vec3 = [0.123456789, 1.61803, -2.71828];
+    for (let i = 0; i < 6; i++) {
+      const r = pointAccel(m, [...p], 1 / 60);
+      m = r.motion;
+      for (const c of r.acc) expect(Object.is(c, 0)).toBe(true);
+    }
+    // A step of no time (the gates' camera syncs) neither moves the record nor reads as a stop.
+    const moving = pointAccel(pointAccel(makePointMotion(), [0, 0, 0], 0.1).motion, [1, 0, 0], 0.1).motion;
+    for (const dt0 of [0, -1, NaN]) {
+      const r = pointAccel(moving, [5, 5, 5], dt0);
+      expect(r.motion).toBe(moving);
+      expect(r.acc).toEqual([0, 0, 0]);
+    }
+    // No split on the pose (null), or a point that is not one: start again, and the next two samples give nothing.
+    for (const bad of [null, [NaN, 0, 0], [0, Infinity, 0]] as (Vec3 | null)[]) {
+      const r = pointAccel(moving, bad, 0.1);
+      expect(r.motion).toEqual({ p: null, v: null });
+      expect(r.acc).toEqual([0, 0, 0]);
+      const a1 = pointAccel(r.motion, [9, 9, 9], 0.1), a2 = pointAccel(a1.motion, [9, 9, 10], 0.1);
+      expect(a1.acc).toEqual([0, 0, 0]);
+      expect(a2.acc).toEqual([0, 0, 0]);
+    }
+  });
+  it('the mass point is `arm` up from the hinge into the head; the drive is its acceleration across the split and up, clamped', () => {
+    for (const frame of [FRAME, { ...FRAME, quat: qFromAxisAngle([0.3, 0.8, 0.52], 0.9) }]) {
+      const w = splitWarpOf(split(0, 0.8), frame)!, u = cross(w.n, w.a);
+      expect(len(sub(splitMassPoint(w), add(w.h, [u[0] * W.arm, u[1] * W.arm, u[2] * W.arm])))).toBeLessThan(1e-12);
+      const acc: Vec3 = add(add([w.n[0] * 3, w.n[1] * 3, w.n[2] * 3], [u[0] * -2, u[1] * -2, u[2] * -2]), [w.a[0] * 7, w.a[1] * 7, w.a[2] * 7]);
+      const d = wobbleDrive(w, acc);
+      expect(d.side).toBeCloseTo(3, 9);
+      expect(d.bob).toBeCloseTo(-2, 9);      // along the hinge axis: no drive at all
+      // A teleport, a torn frame: held to accelClamp either way; what is not a number is no drive.
+      const huge = wobbleDrive(w, [w.n[0] * 1e9 - u[0] * 1e9, w.n[1] * 1e9 - u[1] * 1e9, w.n[2] * 1e9 - u[2] * 1e9]);
+      expect(huge).toEqual({ side: W.accelClamp, bob: -W.accelClamp });
+      expect(wobbleDrive(w, [NaN, 0, 0])).toEqual({ side: 0, bob: 0 });
+      expect(wobbleDrive(w, [Infinity, Infinity, Infinity])).toEqual({ side: 0, bob: 0 });
+    }
+  });
+  it('NO DRIVE, NO OFFSET: a split whose body does not move is stepped to the bit as one with no wobble at all', () => {
+    for (const drive of [undefined, null, { side: 0, bob: 0 }, { side: -0, bob: 0 }] as (WobbleDrive | null | undefined)[]) {
+      let st = openSplit([1, 0, 0], [0, 0, 0.1], 0.09, 0.8);
+      for (let i = 0; i < 200; i++) {
+        st = drive === undefined ? stepSplit(st, dt) : stepSplit(st, dt, drive);
+        expect(Object.is(st.wobP, 0) && Object.is(st.wobM, 0) && Object.is(st.wobVP, 0) && Object.is(st.wobVM, 0)).toBe(true);
+        if (st.angle > 0) { const w = splitWarpOf(st, FRAME)!; expect(w.thetaP).toBe(st.angle); expect(w.thetaM).toBe(-st.angle); }
+      }
+      expect(st.angle).toBe(st.target);
+    }
+  });
+  it('OFF (both gains 0): whatever the body does, the halves stand at the spring\'s angle, to the bit', () => {
+    withGains(0, () => {
+      let st = split(), ref = split();
+      for (let i = 0; i < 300; i++) {
+        if (i === 100) { st = punchSplit(st, 0.3); ref = punchSplit(ref, 0.3); }
+        st = stepSplit(st, dt, { side: 30 * Math.sin(i), bob: 40 * Math.cos(i * 0.7) });
+        ref = stepSplit(ref, dt);
+        expect(st).toEqual(ref);
+        expect(totals(st)).toEqual({ p: st.angle, m: st.angle });
+      }
+    });
+  });
+  it('thrown ACROSS the split the halves lag: one closes and the other opens; thrown UP out of the hinge both open', () => {
+    const push = (drive: WobbleDrive) => { let st = split(); for (let i = 0; i < 6; i++) st = stepSplit(st, dt, drive); return st; };
+    // The head accelerates toward +n: the + half (which opens toward +n) is left behind, closing; the - half opens.
+    const side = push({ side: 5, bob: 0 });
+    expect(side.wobP).toBeLessThan(-0.005);
+    expect(side.wobM).toBeCloseTo(-side.wobP, 12);
+    expect(push({ side: -5, bob: 0 }).wobP).toBeCloseTo(-side.wobP, 12);
+    // The head accelerates up: both halves sink, which opens them; down, both close.
+    const up = push({ side: 0, bob: 5 });
+    expect(up.wobP).toBeGreaterThan(0.005);
+    expect(up.wobM).toBe(up.wobP);
+    expect(push({ side: 0, bob: -5 }).wobP).toBeCloseTo(-up.wobP, 12);
+    // The spring's own angle is not touched by any of it.
+    for (const st of [side, up]) expect(st).toMatchObject({ angle: split().angle, vel: 0, stage: split().stage });
+    // One side: only the half that turns swings.
+    const one = (() => { let st = split(1); for (let i = 0; i < 6; i++) st = stepSplit(st, dt, { side: 5, bob: 3 }); return st; })();
+    expect(one.wobP).not.toBe(0);
+    expect(one).toMatchObject({ wobM: 0, wobVM: 0 });
+    const other = (() => { let st = split(-1); for (let i = 0; i < 6; i++) st = stepSplit(st, dt, { side: 5, bob: 3 }); return st; })();
+    expect(other.wobM).not.toBe(0);
+    expect(other).toMatchObject({ wobP: 0, wobVP: 0 });
+  });
+  it('a half less far open is driven in proportion to its angle', () => {
+    const after = (frac: number) => { let st = split(0, frac); for (let i = 0; i < 4; i++) st = stepSplit(st, dt, { side: 0, bob: 2 }); return st.wobP; };
+    expect(after(0.5) / after(1)).toBeCloseTo(0.5, 9);
+    expect(after(0.8) / after(1)).toBeCloseTo(0.8, 9);
+  });
+  it('A WALK: a steady bob and sway of a few m/s^2 swings the halves a few degrees; when the body stops they are at rest within about half a second, and exactly so soon after', () => {
+    // The walking zombie, measured (NOTES, the traces): the mass point bobs +-2 m/s^2 at 2.1 Hz and is thrown about
+    // 2 m/s^2 across the split as the body turns.
+    let st = split();
+    const peak = { p: 0, m: 0, apart: 0 };
+    for (let i = 0; i < 300; i++) {
+      const t = i * dt;
+      st = stepSplit(st, dt, { side: -1.9, bob: 2 * Math.sin(2 * Math.PI * 2.1 * t) });
+      expectInside(st);
+      if (i >= 120) {
+        peak.p = Math.max(peak.p, Math.abs(st.wobP)); peak.m = Math.max(peak.m, Math.abs(st.wobM));
+        peak.apart = Math.max(peak.apart, Math.abs(st.wobP - st.wobM));
+      }
+    }
+    for (const x of [peak.p, peak.m]) { expect(x * deg).toBeGreaterThan(2); expect(x * deg).toBeLessThan(10); }
+    expect(peak.apart * deg).toBeGreaterThan(2);       // the two halves are not at the same angle
+    // The body stops.
+    let within = -1, exact = -1;
+    for (let i = 1; i <= 240 && exact < 0; i++) {
+      st = stepSplit(st, dt, { side: 0, bob: 0 });
+      if (Math.max(Math.abs(st.wobP), Math.abs(st.wobM)) * deg > 1) within = -1; else if (within < 0) within = i;
+      if (st.wobP === 0 && st.wobM === 0 && st.wobVP === 0 && st.wobVM === 0) exact = i;
+    }
+    expect(within).toBeGreaterThan(0);
+    expect(within * dt).toBeLessThan(0.6);
+    expect(exact).toBeGreaterThan(0);
+    expect(exact).toBeLessThanOrEqual(settleFrames(st.angle));
+    expect(totals(st)).toEqual({ p: st.angle, m: st.angle });
+    console.log(`wobble, a steady walk (bob +-2 m/s^2 at 2.1 Hz, 1.9 m/s^2 across): +half +-${(peak.p * deg).toFixed(1)} deg, -half +-${(peak.m * deg).toFixed(1)}; `
+      + `stopped: within 1 degree after ${within} frames, exactly at rest after ${exact} (bound ${settleFrames(st.angle)})`);
+  });
+  it('THE LIMITS hold on every tick, whatever is thrown at it: any preset, any stage, huge and broken drives, chops and kicks on the way', () => {
+    const rnd = (() => { let s = 12345; return () => (s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296; })();
+    let hitLo = 0, hitHi = 0;
+    for (const [preset, sides] of [['middle', 0], ['middle', 1], ['middle', -1], ['face', 1]] as const) {
+      for (const frac of [0.04, 0.3, 0.55, 0.8, 1]) {
+        let st = forcedSplit(preset, sides, 0, frac)!;
+        for (let i = 0; i < 1500; i++) {
+          const kind = rnd();
+          const drive: WobbleDrive = kind < 0.05 ? { side: NaN, bob: Infinity }
+            : kind < 0.25 ? { side: (rnd() - 0.5) * 1e7, bob: (rnd() - 0.5) * 1e7 }
+            : { side: (rnd() - 0.5) * 2 * W.accelClamp, bob: (rnd() - 0.5) * 2 * W.accelClamp };
+          // The drive the leaf hands over is always wobbleDrive's: clamped, finite.
+          const w = splitWarpOf(st, FRAME)!, u = cross(w.n, w.a);
+          const held = wobbleDrive(w, [w.n[0] * drive.side + u[0] * drive.bob, w.n[1] * drive.side + u[1] * drive.bob, w.n[2] * drive.side + u[2] * drive.bob]);
+          if (i % 400 === 150) st = widenSplit(st, Math.min(1, frac + 0.2));
+          if (i % 400 === 350) st = punchSplit(st, 0.3);
+          st = stepSplit(st, i % 7 === 0 ? 1 / 30 : dt, held);
+          expectInside(st, `${preset} ${sides} ${frac} tick ${i}`);
+          const [lo, hi] = wobbleLimits(st);
+          for (const x of [st.wobP, st.wobM]) { if (lo < 0 && x === lo) hitLo++; if (hi > 0 && x === hi) hitHi++; }
+          const t = splitWarpOf(st, FRAME)!;
+          if (sides >= 0) expect(t.thetaP).toBeGreaterThan(0);
+          if (sides <= 0) expect(t.thetaM).toBeLessThan(0);
+        }
+        // Left alone it comes to rest, exactly, the spring on its target and each half on the spring.
+        for (let i = 0; i < settleFrames(st.target) + 60; i++) st = stepSplit(st, dt);
+        expect(st).toMatchObject({ angle: st.target, vel: 0, wobP: 0, wobVP: 0, wobM: 0, wobVM: 0 });
+      }
+    }
+    // The abuse did reach both stops (so the limits were what held it).
+    expect(hitLo).toBeGreaterThan(50);
+    expect(hitHi).toBeGreaterThan(50);
+  });
+  it('the limits themselves: within max x the angle, never shut past minOpen, never over the preset\'s full angle by more than `over`', () => {
+    const full = HEAD_SPLIT.presets.middle.maxBoth;
+    const lim = (angle: number) => wobbleLimits({ preset: 'middle', sides: 0, angle });
+    for (const k of [1, 0.8]) {
+      expect(lim(k * full)[0]).toBe(-W.max * k * full);
+      expect(lim(k * full)[1]).toBeCloseTo(Math.min(W.max * k, 1 + W.over - k) * full, 12);
+    }
+    // A split that has barely begun to open is not closed again, and one past its full angle (a kick) is not thrown on.
+    expect(lim(0.5 * W.minOpen)[0]).toBe(-0);
+    expect(lim(W.minOpen + 0.004)[0]).toBeCloseTo(-0.004, 12);
+    expect(lim(full * (1 + W.over) - 0.01)[1]).toBeCloseTo(0.01, 12);
+    expect(lim(full * (1 + W.over) + 0.2)[1]).toBe(0);
+    for (const a of [0, 0.01, 0.2, full, 2 * full]) { const [lo, hi] = lim(a); expect(lo).toBeLessThanOrEqual(0); expect(hi).toBeGreaterThanOrEqual(0); }
+  });
+  it('A CHOP DURING A WALK: the spring is the same to the bit with the body moving or still, and the kick and the wobble stay inside the limits together', () => {
+    const walk = (i: number): WobbleDrive => ({ side: 6 * Math.sin(i * 0.31), bob: 3 * Math.sin(i * 0.22) });
+    let st = openSplit([1, 0, 0], [0, 0, 0.1], 0.09, chopOpenFrac(1)), still = st;
+    let peakTotal = 0;
+    for (let i = 0; i < 360; i++) {
+      if (i === 90) { st = widenSplit(st, chopOpenFrac(2)); still = widenSplit(still, chopOpenFrac(2)); }
+      if (i === 180) { st = punchSplit(widenSplit(st, chopOpenFrac(3)), chopKick(3)); still = punchSplit(widenSplit(still, chopOpenFrac(3)), chopKick(3)); }
+      st = stepSplit(st, dt, walk(i));
+      still = stepSplit(still, dt);
+      // The wobble never feeds the spring.
+      expect([st.angle, st.vel, st.target, st.stage]).toEqual([still.angle, still.vel, still.target, still.stage]);
+      expectInside(st, `tick ${i}`);
+      peakTotal = Math.max(peakTotal, totals(st).p, totals(st).m);
+    }
+    const full = HEAD_SPLIT.presets.middle.maxBoth;
+    expect(peakTotal).toBeGreaterThan(full * 1.2);                       // the kick showed
+    expect(peakTotal).toBeLessThanOrEqual(full * (1 + W.over) + 1e-12);   // and the two together stopped at the margin
+    for (let i = 0; i < settleFrames(full) + 30; i++) st = stepSplit(st, dt);
+    expect(st).toMatchObject({ angle: full, vel: 0, wobP: 0, wobM: 0 });
+  });
+  it('THE SKULL rides each half\'s own wobble in proportion, and its stage does not move', () => {
+    let st = split(0, 0.8);
+    const share = skullFollow(0.8);
+    let apart = 0;
+    for (let i = 0; i < 240; i++) {
+      st = stepSplit(st, dt, { side: 8 * Math.sin(i * 0.3), bob: 4 * Math.cos(i * 0.21) });
+      const w = splitWarpOf(st, FRAME)!, s = skullSplitOf(w)!;
+      expect(s.frac).toBeCloseTo(0.8, 12);
+      expect(s.follow).toBeCloseTo(share, 12);
+      expect(s.angleP).toBeCloseTo(share * w.thetaP, 12);
+      expect(s.angleM).toBeCloseTo(share * w.thetaM, 12);
+      expect(s.angleP).toBeLessThanOrEqual(w.thetaP);
+      apart = Math.max(apart, Math.abs(s.angleP + s.angleM));
+    }
+    expect(apart * deg).toBeGreaterThan(0.5);          // the two halves of the bone stood at different angles
+  });
+  it('is deterministic: the same drives give the same angles', () => {
+    const run = () => { let st = split(); const out: number[] = []; for (let i = 0; i < 200; i++) { st = stepSplit(st, dt, { side: 9 * Math.sin(i * 0.4), bob: 5 * Math.cos(i * 0.13) }); out.push(st.wobP, st.wobM); } return out; };
+    expect(run()).toEqual(run());
   });
 });
 

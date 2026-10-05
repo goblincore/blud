@@ -407,6 +407,132 @@ describe('the leaf: the per-frame tick', () => {
   });
 });
 
+describe('the leaf: the wobble (the halves swing with the body)', () => {
+  const W = HEAD_SPLIT.wobble, deg = 180 / Math.PI;
+  /** A frame of play: the leaf's tick, then the actor's step (game-main's order). */
+  const frame = (f: ReturnType<typeof fixture>) => { f.ticks(1); f.a.step(1 / 60); };
+  /** The pose's two openings (rad, both >= 0). */
+  const open2 = (f: ReturnType<typeof fixture>) => { const w = f.a.posed().split!; return { p: w.thetaP, m: -w.thetaM }; };
+  const settleFrames = (angle: number) => Math.ceil(1.25 * Math.log(W.max * angle / HEAD_SPLIT.restA) / (W.zeta * 2 * Math.PI * W.hz) * 60);
+
+  it('a FROZEN actor\'s halves stand at exactly the spring\'s angle, every tick: nothing moves the mass point', () => {
+    const f = fixture();
+    f.split.force(7, 'middle', 0, 0, 1);
+    const n0 = f.seen.reposes;
+    for (let i = 0; i < 120; i++) {
+      f.ticks(1);
+      expect(f.split.state(7)).toMatchObject({ wobP: 0, wobVP: 0, wobM: 0, wobVM: 0 });
+      expect(open2(f)).toEqual({ p: MID.maxBoth, m: MID.maxBoth });
+    }
+    expect(f.seen.reposes).toBe(n0);
+  });
+
+  it('a WALKING actor\'s halves swing off the spring\'s angle, each by its own offset, inside the limits; the pose carries exactly the state\'s angles', () => {
+    const f = fixture({ frozen: false });
+    f.split.force(7, 'middle', 0, 0, 1);
+    let peakP = 0, peakM = 0, apart = 0;
+    for (let i = 0; i < 300; i++) {
+      frame(f);
+      const st = f.split.state(7)!, o = open2(f);
+      // The step's re-pose asked the hook with this tick's state.
+      expect(o.p).toBe(st.angle + st.wobP);
+      expect(o.m).toBe(st.angle + st.wobM);
+      expect(st.angle).toBe(MID.maxBoth);
+      for (const x of [st.wobP, st.wobM]) {
+        expect(Math.abs(x)).toBeLessThanOrEqual(W.max * st.angle + 1e-12);
+        expect(st.angle + x).toBeGreaterThanOrEqual(W.minOpen);
+        expect(st.angle + x).toBeLessThanOrEqual(MID.maxBoth * (1 + W.over) + 1e-12);
+      }
+      peakP = Math.max(peakP, Math.abs(st.wobP)); peakM = Math.max(peakM, Math.abs(st.wobM)); apart = Math.max(apart, Math.abs(st.wobP - st.wobM));
+    }
+    console.log(`the leaf, a stepping zombie (300 frames): +half off its rest by up to ${(peakP * deg).toFixed(1)} deg, -half ${(peakM * deg).toFixed(1)}, apart by up to ${(apart * deg).toFixed(1)}`);
+    expect(peakP * deg).toBeGreaterThan(1);
+    expect(peakM * deg).toBeGreaterThan(1);
+    expect(apart * deg).toBeGreaterThan(0.5);
+  });
+
+  it('frozen again, the halves come back to exactly the spring\'s angle within the wobble\'s settle time, the leaf re-posing them on the way, and stay', () => {
+    const f = fixture({ frozen: false });
+    f.split.force(7, 'middle', 0, 0, 1);
+    for (let i = 0; i < 200; i++) frame(f);
+    f.ctx.demo.wanderFrozen = true;
+    const n0 = f.seen.reposes;
+    let rest = -1;
+    for (let i = 1; i <= settleFrames(MID.maxBoth) && rest < 0; i++) {
+      f.ticks(1);
+      const st = f.split.state(7)!;
+      // A frozen actor never steps: the tick re-posed it, so its pose is this tick's.
+      expect(open2(f)).toEqual({ p: st.angle + st.wobP, m: st.angle + st.wobM });
+      if (st.wobP === 0 && st.wobM === 0 && st.wobVP === 0 && st.wobVM === 0) rest = i;
+    }
+    expect(rest).toBeGreaterThan(1);
+    expect(f.seen.reposes).toBeGreaterThan(n0);
+    expect(open2(f)).toEqual({ p: MID.maxBoth, m: MID.maxBoth });
+    const settled = f.seen.reposes;
+    f.ctx.render.frozenHullBuilt = true;
+    f.ticks(60);
+    expect(f.seen.reposes).toBe(settled);
+    expect(f.ctx.render.frozenHullBuilt).toBe(true);
+    expect(f.split.state(7)).toMatchObject({ wobP: 0, wobVP: 0, wobM: 0, wobVM: 0 });
+  });
+
+  it('OFF (both gains 0): a walking actor\'s pose carries the spring\'s angle alone, to the bit', () => {
+    const live = W as { gainSide: number; gainBob: number }, keep = [live.gainSide, live.gainBob];
+    live.gainSide = 0; live.gainBob = 0;
+    try {
+      const f = fixture({ frozen: false });
+      f.open(X, f.skinFrom(f.view.eye, [0, 0.03, 0]));
+      for (let i = 0; i < 200; i++) {
+        frame(f);
+        const st = f.split.state(7)!;
+        expect(st).toMatchObject({ wobP: 0, wobVP: 0, wobM: 0, wobVM: 0 });
+        expect(open2(f)).toEqual({ p: st.angle, m: st.angle });
+      }
+    } finally { [live.gainSide, live.gainBob] = keep as [number, number]; }
+  });
+
+  it('a split that opens on a walking body is not kicked by the walk\'s speed: the first drive is the third sample\'s', () => {
+    const f = fixture({ frozen: false });
+    for (let i = 0; i < 120; i++) f.a.step(1 / 60);                // walking before the chop
+    const q = headQuatOf(f.a.boundRig(), f.a.pose().yaw)!, c = headShape(f.a.posed())!.centre;
+    f.split.open(f.a, qRotate(q, X), add(c, qRotate(q, [0, 0.04, 0.09])), 1);
+    const seenAt: number[] = [];
+    for (let i = 1; i <= 6; i++) { frame(f); const st = f.split.state(7)!; if (st.wobP !== 0 || st.wobM !== 0) seenAt.push(i); }
+    // Tick 1 has no split on the pose yet; ticks 2 and 3 take a position and a velocity; tick 4 is the first with an
+    // acceleration.
+    expect(seenAt[0]).toBeGreaterThanOrEqual(4);
+  });
+
+  it('a tick of no time (a gate syncing its camera) takes no sample and loses none: the frames after are the same to the bit', () => {
+    const run = (zeroTicks: boolean) => {
+      const f = fixture({ frozen: false });
+      f.split.force(7, 'middle', 0, 0, 1);
+      const out: number[] = [];
+      for (let i = 0; i < 150; i++) {
+        frame(f);
+        if (zeroTicks && i % 3 === 0) { f.split.tick(0); f.split.tick(0); }
+        const st = f.split.state(7)!;
+        out.push(st.wobP, st.wobM, st.angle);
+      }
+      return out;
+    };
+    const plain = run(false);
+    expect(plain.some(x => x !== 0 && x !== MID.maxBoth)).toBe(true);
+    expect(run(true)).toEqual(plain);
+  });
+
+  it('is deterministic with the body moving: the same frames give the same angles', () => {
+    const run = () => {
+      const f = fixture({ frozen: false });
+      f.split.force(7, 'middle', 1, 0.02, 1);
+      const out: number[] = [];
+      for (let i = 0; i < 150; i++) { frame(f); out.push(f.a.posed().split!.thetaP, f.split.state(7)!.wobP); }
+      return out;
+    };
+    expect(run()).toEqual(run());
+  });
+});
+
 describe('the cut faces', () => {
   it('opening stamps one cut per opened half: head-kept, on its own half beside the plane, at the scalp of the closed head', () => {
     const f = fixture();
@@ -685,7 +811,8 @@ describe('the debug seams (game-seams-fire.ts)', () => {
     expect(seams.headSplit(7)).toBeNull();
     expect(f.seen.blasts).toHaveLength(0);
     expect(seams.forceSplit(7, 'middle', 1, 0.02, 0.5)).toBe(true);
-    expect(seams.headSplit(7)).toEqual({ preset: 'middle', sides: 1, offset: 0.02, angle: 0.5 * MID.maxOne, vel: 0, target: 0.5 * MID.maxOne, stage: 0.5 * MID.maxOne });
+    expect(seams.headSplit(7)).toEqual({ preset: 'middle', sides: 1, offset: 0.02, angle: 0.5 * MID.maxOne, vel: 0, target: 0.5 * MID.maxOne, stage: 0.5 * MID.maxOne,
+      wobP: 0, wobVP: 0, wobM: 0, wobVM: 0 });
     // At once: the pose is split before any tick, at the forced plane and angle.
     const w = f.a.posed().split!;
     expect(w.thetaP).toBe(0.5 * MID.maxOne);

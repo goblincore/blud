@@ -144,6 +144,10 @@ const CASES: { name: string; w: SplitWarp; maxEvals: number; meanEvalsUnder: num
   { name: 'middle, + side', w: warp('middle', 1, 0.04, 1), maxEvals: 2, meanEvalsUnder: 1.45 },
   { name: 'middle, - side', w: warp('middle', -1, -0.04, 1), maxEvals: 2, meanEvalsUnder: 1.45 },
   { name: 'face', w: warp('face', 1, 0, 1), maxEvals: 2, meanEvalsUnder: 1.5 },
+  // The two halves at different angles (the wobble, head-split.ts HEAD_SPLIT.wobble): one thrown past its full angle
+  // and the other swung back, and one all but shut against the other wide.
+  { name: 'middle, both sides, unequal', w: { ...warp('middle', 0, 0, 1), thetaP: 0.74, thetaM: -0.31 }, maxEvals: 3, meanEvalsUnder: 1.8 },
+  { name: 'middle, both sides, one nearly shut', w: { ...warp('middle', 0, 0, 1), thetaP: 0.03, thetaM: -0.62 }, maxEvals: 3, meanEvalsUnder: 1.8 },
 ];
 
 describe('the head split slot in mapBody, by value (a hand twin of the WGSL against splitField)', () => {

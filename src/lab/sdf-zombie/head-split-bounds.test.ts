@@ -43,8 +43,17 @@ const SHAPES: [name: string, preset: SplitPresetId, sides: -1 | 0 | 1, offset: n
   ['face, far forward', 'face', 1, 0.045],
 ];
 const FRACS = [0.02, 0.25, 0.5, 0.75, 1];
-const warps = (frame: HeadFrame = FRAME): [name: string, w: SplitWarp][] => SHAPES.flatMap(([name, preset, sides, offset]) =>
-  FRACS.map((frac): [string, SplitWarp] => [`${name} @ ${frac}`, splitWarpOf(forcedSplit(preset, sides, offset, frac)!, frame)!]));
+/** The two halves at different angles, as the wobble leaves them (head-split.ts HEAD_SPLIT.wobble): one thrown to the
+ *  over-open margin with the other swung back, either way round, and one all but shut. Shares of the full angle. */
+const UNEQUAL: [plus: number, minus: number][] = [[1.45, 0.55], [0.55, 1.45], [0.06, 1.1]];
+const warps = (frame: HeadFrame = FRAME): [name: string, w: SplitWarp][] => [
+  ...SHAPES.flatMap(([name, preset, sides, offset]) =>
+    FRACS.map((frac): [string, SplitWarp] => [`${name} @ ${frac}`, splitWarpOf(forcedSplit(preset, sides, offset, frac)!, frame)!])),
+  ...UNEQUAL.map(([plus, minus]): [string, SplitWarp] => {
+    const w = splitWarpOf(forcedSplit('middle', 0, 0, 1)!, frame)!;
+    return [`middle, both halves, unequal ${plus} / ${minus}`, { ...w, thetaP: plus * w.full, thetaM: -minus * w.full }];
+  }),
+];
 /** The same head turned off every world axis: the pure-geometry rules must not lean on an upright frame. */
 const TILTED: HeadFrame = { ...FRAME, quat: qFromAxisAngle(normalize([0.3, 0.5, 0.8]), 0.7) };
 /** The rules take a split made ready once (splitFrame); these wrap a bare warp. */
