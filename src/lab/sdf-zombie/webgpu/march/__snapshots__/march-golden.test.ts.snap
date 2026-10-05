@@ -28,7 +28,7 @@ exports[`march.wgsl split golden > keeps every string export byte-identical 1`] 
   "HEAD_EXTERIOR_GORE_KEEP": "num:0.3",
   "INSTANCE_STATE": "f0a29639fef47571cb51a0a309080962b27bd833",
   "LEVEL_SHADOW": "694f49c6272d874d9226e431f1736158bb4bf6f7",
-  "MAP_BODY": "c72416e54eb2ff95e71670fc3aa5d35d02420b7d",
+  "MAP_BODY": "f9bcb817f43489a98c272310efbc37a7d2220ac7",
   "MARCH_ANCHOR_READ": "57d3265e1519f7cf5f0bd4c96faba22d320548ad",
   "MARCH_BODY": "5a0f3873e40a507a4070ccb23a55cc9db7768388",
   "MARCH_BODY_LIGHT": "02cd73b5c0738bc3dc4c0d6a3b9129a8442b06be",
@@ -107,7 +107,7 @@ exports[`march.wgsl split golden > keeps every string export byte-identical 1`] 
   "WOUND_SHADOW": "2151c7d3774353131f1165826832053b2aa4322b",
   "WOUND_STEP_MUL": "num:0.6",
   "__HELPERS_count": "50",
-  "__HELPERS_joined": "2122f741b9e75bd72658ba6143979497d3da1d94",
+  "__HELPERS_joined": "2bd7dce3881b1e9cf6d574b438226e119b295143",
   "__export_names": "8fcf60b7a61df585171b1396f67066466c838de1",
 }
 `;

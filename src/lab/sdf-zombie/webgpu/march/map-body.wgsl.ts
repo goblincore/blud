@@ -104,7 +104,8 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(pIn: vec3<f32>, data: texture_2d<
       }
       pcA.x = cap0;
       // Ascending caps, for the early skip below. An unrolled compare-swap of three vec3s, NOT an array indexed by the
-      // loop: a dynamically indexed private array in this function's inlined body hung the Metal compile (185 s).
+      // loop: runtime-indexed private arrays in this function's inlined body stopped the Metal compile (cold over
+      // 180 s, the browser frozen: the per-limb accumulators, fields/groups.wgsl.ts foldGroup).
       if (pcB.x < pcA.x) { let sw = pcA; pcA = pcB; pcB = sw; }
       if (pcC.x < pcB.x) { let sw = pcB; pcB = pcC; pcC = sw; }
       if (pcB.x < pcA.x) { let sw = pcA; pcA = pcB; pcB = sw; }

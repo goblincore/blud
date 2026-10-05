@@ -54,8 +54,9 @@ inlines about ten times.
 
 **Accepted (controller, 2026-10-04):** the cold compile cost stands; the shader is not restructured for it. Two
 restructurings from the review were NOT tried, should it matter later: a fixed piece order with a per-piece
-`continue` in place of the compare-swap sort (fewer live vec3s across the slot body, at the price of the exact
-ascending-cap skip), and flattening the pieces into the slot loop (one loop level instead of two).
+`continue` in place of the compare-swap sort (fewer live vec3s across the slot body; the skip stays exact, but
+without the ascending order a piece is skipped against a worse running best, so more pieces are evaluated), and
+flattening the pieces into the slot loop (one loop level instead of two).
 
 ### The field on the GPU is the CPU's field
 
