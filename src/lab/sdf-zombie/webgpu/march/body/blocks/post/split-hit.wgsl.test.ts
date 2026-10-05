@@ -21,6 +21,7 @@ import {
   HEAD_SPLIT, SPLIT_SHADE, forcedSplit, headLocalPoint, splitWarpOf, unwarpDir, warpDir, warpPoint,
   type HeadFrame, type SplitWarp,
 } from '../../../../../head-split';
+import { NG_REASON_SPLIT } from '../../../../normal-gradient-reference';
 import type { Vec3 } from '../../../../../types';
 import { qFromAxisAngle, qRotate, type Quat } from '../../../../../vec';
 
@@ -132,11 +133,15 @@ describe('who reads the body where', () => {
 describe('finite-difference normals inside an open region', () => {
   it('the analytic gradient is skipped for any hit inside an open slot\'s region sphere, through the existing fallback', () => {
     expect(noComments(SPLIT_HIT_BLOCK)).toContain('let splitIn = gInstSplitOpen && length(p - gInstSplitH.xyz) <= gInstSplitR.x;');
-    expect(SHADING_NORMAL_BLOCK).toContain('if (splitIn) { ngReason = 8; }');
+    // Reason NG_REASON_SPLIT, and only where the analytic gradient was asked for: with the mode off the pixel reports
+    // what it always did.
+    expect(NG_REASON_SPLIT).toBe(8);
+    expect(SHADING_NORMAL_BLOCK).toContain('if (normalGradientCfg.x > 0.5 && splitIn) { ngReason = 8; }');
+    expect(SHADING_NORMAL_BLOCK).not.toContain('if (splitIn) { ngReason');
     expect(SHADING_NORMAL_BLOCK).toContain('if (normalGradientCfg.x > 0.5 && !splitIn) {');
     // ngValid stays false, so the one calcNormal call below it runs (it differentiates mapBody, the split field).
     const gate = SHADING_NORMAL_BLOCK.indexOf('if (normalGradientCfg.x > 0.5 && !splitIn) {');
-    expect(SHADING_NORMAL_BLOCK.indexOf('if (splitIn) { ngReason = 8; }')).toBeLessThan(gate);
+    expect(SHADING_NORMAL_BLOCK.indexOf('if (normalGradientCfg.x > 0.5 && splitIn) { ngReason = 8; }')).toBeLessThan(gate);
     expect(SHADING_NORMAL_BLOCK.indexOf('if (!ngValid || debugNormal12) {')).toBeGreaterThan(gate);
     expect(noComments(SHADING_NORMAL_BLOCK).match(/ngBody\(/g)).toHaveLength(1);
     expect(SHADING_NORMAL_BLOCK.indexOf('ngBody(')).toBeGreaterThan(gate);
@@ -156,11 +161,16 @@ describe('cut faces shade as wound interior', () => {
   });
   it('raises the one wound mask and drops what the closed body\'s wounds and burns throw through the solid', () => {
     const code = noComments(WOUND_MASKS_BLOCK);
-    const cut = code.slice(code.indexOf('if (cutFace > 0.0) {'), code.indexOf('let detailAmp'));
-    expect(cut).toContain('wm = max(wm, cutFace);');
-    expect(cut).toContain('wmRim = max(wmRim, cutFace);');
-    for (const dropped of ['wmCav', 'cm', 'gWoundTear', 'gWoundWetOnly', 'gWoundHole', 'gClothMark', 'gClothStain'])
+    // The mask vector is edited BEFORE it is destructured, so the three masks stay single-assignment and the cavity
+    // share keeps its one sink (entrails-gates.test.ts counts every mention of it in the march).
+    const cut = code.slice(code.indexOf('if (cutFace > 0.0) {'), code.indexOf('let wm = wmBoth.x;'));
+    expect(code).toContain('var wmBoth = woundMask(pS, nSmoothS, data, woundCfg, woundCfg2);');
+    expect(cut).toContain('wmBoth = vec3<f32>(max(wmBoth.xy, vec2<f32>(cutFace)), wmBoth.z * (1.0 - cutFace));');
+    for (const dropped of ['cm', 'gWoundTear', 'gWoundWetOnly', 'gWoundHole', 'gClothMark', 'gClothStain'])
       expect(cut, dropped).toContain(`${dropped} = ${dropped} * (1.0 - cutFace);`);
+    for (const one of ['let wm = wmBoth.x;', 'let wmRim = wmBoth.y;', 'let wmCav = wmBoth.z;']) expect(code).toContain(one);
+    expect(code.indexOf('let wmCav = wmBoth.z;')).toBeLessThan(code.indexOf('let detailAmp'));
+    expect(WOUND_MASKS_BLOCK.match(/wmCav/g)).toHaveLength(1);
     // No skin pores on a cut face, here or in the output-resolution detail pass the anchor is handed to.
     expect(code).toContain('if (detailAmp > 0.0 && cutFace < 0.5) {');
     expect(code).toContain('gMarchAnchor = vec4<f32>(anchor, select(detailAmp, 0.0, cutFace >= 0.5));');

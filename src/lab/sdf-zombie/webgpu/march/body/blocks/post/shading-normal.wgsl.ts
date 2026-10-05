@@ -5,6 +5,7 @@
 // joined WGSL is byte-identical. See docs/dev-notes/2026-09-18-march-split/.
 
 import { SKIN_NORMAL } from '../light/skin-detail-proto';
+import { NG_REASON_SPLIT } from '../../../../normal-gradient-reference';
 
 export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the normal, scaled by (1 - max(gloss, metal)) at
   // the point of application: a polished or machined prim has no pits. The
@@ -44,12 +45,13 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
   // now reads whatever slot the caller loaded, so the gradient is the hit
   // instance's own. The finite-difference path below remains the fallback for
   // unsupported fields and as the debug comparison.
-  // THE HEAD SPLIT: no analytic gradient inside an OPEN head's region sphere (splitIn, reason 8). ngBody differentiates
-  // the closed body at the world point: it knows neither a half's turn nor the piece caps (the cut faces, and the
-  // rest's hinge-plane and ball caps, so a hit on the unmoved piece is out too). The finite-difference path below
-  // differentiates mapBody, which is the split field.
+  // THE HEAD SPLIT: no analytic gradient inside an OPEN head's region sphere (splitIn). ngBody differentiates the
+  // closed body at the world point: it knows neither a half's turn nor the piece caps (the cut faces, and the rest's
+  // hinge-plane and ball caps, so a hit on the unmoved piece is out too). The finite-difference path below
+  // differentiates mapBody, which is the split field. The reason (normal-gradient-reference.ts NG_REASON_SPLIT) is
+  // reported only where the gradient was asked for: with the mode off the pixel reports what it always did.
   gNgDebugMask = u32(max(normalGradientCfg.z, 0.0));
-  if (splitIn) { ngReason = 8; }
+  if (normalGradientCfg.x > 0.5 && splitIn) { ngReason = ${NG_REASON_SPLIT}; }
   if (normalGradientCfg.x > 0.5 && !splitIn) {
     // counts2.z + 64: owned wounds may go analytic where no limb won the re-fold.
     gNgOwnedOk = select(0.0, 1.0, gInstCounts2.z % 128.0 > 63.5 && hitRefold == 0.0);

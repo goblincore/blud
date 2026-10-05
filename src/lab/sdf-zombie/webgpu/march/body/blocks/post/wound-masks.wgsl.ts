@@ -10,19 +10,15 @@ export const WOUND_MASKS_BLOCK = /* wgsl */ `  gWoundShadePrim = select(-1.0, f3
   // point pS with that normal turned into the piece's frame (split-hit.wgsl.ts; p and nSmooth off a turned half).
   var nSmoothS = nSmooth;
   if (splitTheta != 0.0) { nSmoothS = qRot(vec4<f32>(-splitQ.xyz, splitQ.w), nSmooth); }
-  let wmBoth = woundMask(pS, nSmoothS, data, woundCfg, woundCfg2);
-  var wm = wmBoth.x;      // colouring / wet / cavity shading
-  var wmRim = wmBoth.y;   // fresnel fade, covers the lip
-  var wmCav = wmBoth.z;   // cavity-ness: only wounds whose flags row opened one
+  var wmBoth = woundMask(pS, nSmoothS, data, woundCfg, woundCfg2);
   var cm = charMask(pS, data, woundCfg);
   // A CUT FACE (cutFace, split-hit.wgsl.ts) is the inside of the closed body laid open: wound interior all over, so
-  // the one mask is raised to it (the tissue ramp, the wet boost and the fresnel fade follow, as in any wound). What
-  // the masks found at pS is not on this surface: the footprints the closed body's wounds and burns throw THROUGH the
-  // solid (a cavity's viscera, a tear's red, a cloth mark, char) are dropped.
+  // the one mask is raised to it (.xy; the tissue ramp, the wet boost and the fresnel fade follow, as in any wound).
+  // What the masks found at pS is not on this surface: the footprints the closed body's wounds and burns throw
+  // THROUGH the solid (a cavity's viscera, .z; a tear's red, a cloth mark, char) are dropped. The vector is edited
+  // before it is taken apart, so each mask below is still assigned once and keeps the sinks it had.
   if (cutFace > 0.0) {
-    wm = max(wm, cutFace);
-    wmRim = max(wmRim, cutFace);
-    wmCav = wmCav * (1.0 - cutFace);
+    wmBoth = vec3<f32>(max(wmBoth.xy, vec2<f32>(cutFace)), wmBoth.z * (1.0 - cutFace));
     cm = cm * (1.0 - cutFace);
     gWoundTear = gWoundTear * (1.0 - cutFace);
     gWoundWetOnly = gWoundWetOnly * (1.0 - cutFace);
@@ -30,6 +26,9 @@ export const WOUND_MASKS_BLOCK = /* wgsl */ `  gWoundShadePrim = select(-1.0, f3
     gClothMark = gClothMark * (1.0 - cutFace);
     gClothStain = gClothStain * (1.0 - cutFace);
   }
+  let wm = wmBoth.x;      // colouring / wet / cavity shading
+  let wmRim = wmBoth.y;   // fresnel fade, covers the lip
+  let wmCav = wmBoth.z;   // cavity-ness: only wounds whose flags row opened one
   let detailAmp = surfCfg2.y * (1.0 - max(gloss, metal));
   // Run 4: hand the anchor + gate to the output-res detail pass (MARCH_ANCHOR_READ).
   // The detail is skin pores, so there is none on a cut face, in that pass or here.

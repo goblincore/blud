@@ -276,3 +276,34 @@ describe('procedural wound gradients', () => {
     expect(woundGradient({d:.02,g:[0,1,0],reason:'ok'},[.14,0,0],[{...wound,blend:0,rimAmp:0,cap:1e5}]).reason).toBe('hard-boundary');
   });
 });
+
+import { NG_REASON_CODES, NG_REASON_SPLIT, ngCoverageClass } from './normal-gradient-reference';
+describe('the reason codes a coverage reader meets', () => {
+  it('the head split\'s code follows the eight of NgReason, and has its own bucket', () => {
+    expect(NG_REASON_SPLIT).toBe(8);
+    expect(NG_REASON_CODES).toBe(9);
+  });
+  it('a split-region pixel is counted apart: the closed body is the wrong oracle for it', () => {
+    expect(ngCoverageClass(NG_REASON_SPLIT, 3)).toBe('split');
+    for (let code = 0; code < NG_REASON_SPLIT; code++) expect(ngCoverageClass(code, 0)).toBe('body');
+  });
+  it('background, an unknown code and a pixel with no dominant prim are not counted', () => {
+    expect(ngCoverageClass(-1, 0)).toBe('skip');
+    expect(ngCoverageClass(NG_REASON_CODES, 0)).toBe('skip');
+    expect(ngCoverageClass(NaN, 0)).toBe('skip');
+    expect(ngCoverageClass(0, -1)).toBe('skip');
+    expect(ngCoverageClass(NG_REASON_SPLIT, -1)).toBe('skip');
+  });
+  it('the wound-coverage probe sizes its buckets by the codes and leaves the split\'s pixels to their own region', async () => {
+    const probe = (await import('./game-seams-debug-probe?raw')).default as string;
+    expect(probe).toContain('reasons:Array<number>(NG_REASON_CODES).fill(0)');
+    expect(probe).toContain('split:make()');
+    const cls = probe.indexOf('const cls=ngCoverageClass(code,owner);');
+    const split = probe.indexOf("if(cls==='split'){add(regions.split);continue;}");
+    expect(cls).toBeGreaterThan(-1);
+    expect(split).toBeGreaterThan(cls);
+    // Before the closed-body oracle is asked anything about the pixel.
+    expect(split).toBeLessThan(probe.indexOf('const base=sdBody(p,body);'));
+    expect(probe).not.toContain('code>7');
+  });
+});

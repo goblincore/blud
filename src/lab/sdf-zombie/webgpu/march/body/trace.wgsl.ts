@@ -217,9 +217,10 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(max(
       // displaced (shell) or near-wound sample, only while approaching
       // (dPrev > d, so the ratio is < 1 and the series converges), and only
       // after a forward step (stepLen > 0 — a retraction's previous sample
-      // was inside the solid). hitField/hitBest still describe the sample the
-      // jump left, which is at most perfCfg.w * hitEps behind the accepted t
-      // — the same tolerance the plain accept already grants.
+      // was inside the solid). hitField/hitBest (and the head split's hitPiece /
+      // hitSplitF) still describe the sample the jump left, which is at most
+      // perfCfg.w * hitEps behind the accepted t — the same tolerance the
+      // plain accept already grants.
       if (perfCfg.w > 0.0 && !conservative && !nearWound && stepLen > 0.0 && prevRadius > radius) {
         let root = radius * stepLen / (prevRadius - radius);
         if (root < hitEps * perfCfg.w) {

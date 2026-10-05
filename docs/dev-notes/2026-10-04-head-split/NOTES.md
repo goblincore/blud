@@ -380,8 +380,10 @@ hit piece's un-warped point or frame. Lighting, the normal's taps and the probes
   | motion vector (`prevPosed(anchor) - p`) | the point | `- pS`: the closed body's motion (with the anchor at `pS`, `- p` would have reported the half's whole offset) |
   | flashlight, light list, AO / scatter probes, wound and level shadow, ambient, the deferred AO probe | the point, the normal | world |
 
-- **The mesh face layer** (`baked-chunks.ts`) is the march's by regex renames. Its contract now maps `faceCentre` /
-  `faceQuat` to the mesh's `headCentre` / `headQuat` and `cutFace` to `0.0` (a settled head mesh is one rigid piece).
+- **The mesh face layer** (`baked-chunks.ts`) is the march's by regex renames. What the split-hit block hands the
+  layer is DECLARED ahead of it there (`let faceCentre = headCentre; let faceQuat = headQuat; let cutFace = 0.0;`: a
+  settled head mesh is one rigid piece), not renamed inside it, so a later write to one of them in the march cannot
+  come out as an assignment to a literal.
 - **The re-fold report.** `gRefoldWin` (the normal hint) was whatever piece won a limb re-fold last. A win is now
   also filed under its piece (`gRefoldBy.x / .y / .z`), and the walk takes the HIT piece's entry for an open slot.
   Both writes sit in the win's own branch; `mapBody`'s per-sample path is untouched (see Cost). A closed slot reads
@@ -389,8 +391,12 @@ hit piece's un-warped point or frame. Lighting, the normal's taps and the probes
   re-fold, nothing outside `mapBody` reads it. The hand twin (`map-body-split-twin.test.ts`) is unchanged: the
   pieces compute what they did.
 - **Normals.** Inside an open head's region sphere (`splitIn`: the slot is open and `|p - h| <= r`) the analytic
-  gradient is skipped and the existing finite-difference fallback runs (`ngReason` 8). Not only on turned halves:
-  the unmoved piece's hinge-plane and ball caps are not in the analytic gradient either.
+  gradient is skipped and the existing finite-difference fallback runs. Not only on turned halves: the unmoved
+  piece's hinge-plane and ball caps are not in the analytic gradient either. The pixel reports reason 8
+  (`normal-gradient-reference.ts NG_REASON_SPLIT`) only where the gradient was asked for (analytic mode on); with
+  the mode off it reports 7 as it always did. The wound-coverage probe (`game-seams-debug-probe.ts
+  normalWoundCoverage`) has nine reason buckets and counts those pixels in a `split` region of their own, before
+  it asks the closed body's `sdBody` anything: that is the wrong oracle for a turned or capped piece.
 - **Cut faces** (`head-split.ts SPLIT_SHADE = { cutLo: 0.0015, cutHi: 0.004 }`). The gate is
   `cutFace = smoothstep(cutLo, cutHi, hitField.x - hitSplitF)`: how far a piece cap holds the split field above the
   piece's own field. That gap is exactly 0 on skin and on every closed body and equals the depth inside the closed
@@ -404,6 +410,8 @@ hit piece's un-warped point or frame. Lighting, the normal's taps and the probes
   The pink eyeballs in the gap are the skull mesh's seated eyes (B7).
 - **The walk's shell noise** (`woundCfg2.z`; 0 in the game) is read at the sample's own piece's un-warped point and
   fades out over the same gate; a sample over a cut face is no shell sample at all (the walk stays relaxed there).
+  The noise still displaces the first 1.5-4 mm of a cut face from its rim, where the gate is fading: a hard cut-off
+  would step the field at the skin / cap edge.
 - **A leftover of B5, fixed here:** `normal-gradient-probe.wgsl.ts` copies the globals `applyWounds` reads, and B5's
   wound-list gate added `gInstSplitOpen`; the probe's test had been failing since (the dev probe page would not
   compile). One name added, its own commit.
@@ -416,6 +424,21 @@ hit piece's un-warped point or frame. Lighting, the normal's taps and the probes
 | `compile-census` | phase ready, `uncapturedCount` 0, no device loss; march module 316216 B -> 324134 B (83 fns, as before). Cold `warmMs` 44453 at load 2.5-2.9 (two earlier texts of this task: 47557 and 49836 at load 4-5.5) |
 | `march-hash` | no pin moved: default `d7392d52…` / wounded `76bd51aa…`, crowd quad `0c71e712…` / `bf6836cd…`, per-body `470ff0b3…` / `f618070e…` (run three times over the task, on each text) |
 | cold boot pair (base `6bdded42`) | new 44382 / 44291 ms, base 44283 / 44089 ms warm-up (`drawOnce` 1659 / 1655 vs 1665 / 1682); load average 2.6-3.2. An earlier text under load 4.3-6.2: new 45177 / 46491, base 45205 / 45222 |
+
+After the review fixes (`wmBoth` edited before it is taken apart, reason 8 in analytic mode only, the mesh layer's
+declared names): `march-golden -u` (`MARCH_TRACE_POST`, `MARCH_TRACE_LOOP` for a comment, and what embeds them);
+`compile-census` ready, `uncapturedCount` 0, no device loss, march module 324498 B (83 fns), cold `warmMs` 52174 with
+`drawOnce` 1875 on a machine running about 10% slow at the time (load 3.4-3.9; the timing sessions beside it read
+21.7 where they had read 19.5); a cold boot pair then had the BASE tree as slow: new 48400 / 53787 ms, base 47973 /
+52126 ms (load 3.3-4.0, swinging 4-5 s between rounds in both trees, so no cost can be read off it); `march-hash`:
+the same six pins.
+
+**The whole tree** (`npx vitest run src/lab/sdf-zombie --exclude '**/cut-wound.test.ts'`): 508 files, 7360 tests
+passed, 1 skipped. At `1277bebe` it had ONE red test, which the targeted set did not run:
+`entrails-gates.test.ts` gate 1a counts every mention of `wmCav` in the march (its single-sink rule: `visceraAmp` 0
+shades as before entrails), and the cut-face block wrote to it. Green at `6bdded42`, red at `1277bebe`, green again
+with the masks edited as one vector before the destructure; the gate itself was not touched. Run the whole tree
+before a march commit.
 
 ### The numbers
 
@@ -475,9 +498,19 @@ three each, load average 2.0-2.8.
 
 - **Finite-difference normals in the region cost nothing that shows:** open minus closed is +6.0 ms before and
   after.
-- **A closed body costs about 0.3 ms more at 0.6 m** (18.1 against 17.85; a second measure on another closed head,
-  three sessions each: 19.8 / 19.8 / 19.8 against 19.3 / 19.6 / 19.5). It computes the same values; what it pays is
-  the split's extra locals and branches in the post. Not chased further.
+- **A closed body costs 0.1-0.3 ms more at 0.6 m, unattributed.** As committed first (`1277bebe`): 18.1 against
+  17.85, and on another closed head, three sessions each, 19.8 / 19.8 / 19.8 against 19.3 / 19.6 / 19.5. With the
+  review fixes: 19.7 / 19.8 / 19.7 against 19.6 / 19.5. It computes the same values (the pins), and no part of the
+  change was shown to carry the cost.
+- **Hoisting the hit copies out of the walk was tried and reverted.** The walk copies `gHitPiece` / `gHitSplitF`
+  and picks the open slot's hint at every sample. Taking them once after the walk is sound (the eps, graze and
+  secant accepts all break in the iteration of the `mapBody` call that accepted; a retraction goes round again, so
+  its accepting call is the later one; the refine entry's last call is its accepting one; nothing between there
+  and the split-hit block calls `mapBody`: the debug counters, `loadInstance`, the debug returns). But it was
+  SLOWER on a closed head at 0.6 m, sessions interleaved: 20.3 / 20.2 hoisted against 19.7 / 19.8 in the walk, base
+  19.6 / 19.5 (single draws within 0.2-0.4 of each session's median). A third round ran under a load spike and is
+  not counted. Like the re-fold report below, it is which privates stay live across the inlined `mapBody`, not
+  the count of statements.
 - **The first form of the re-fold report cost 0.5 ms more than that** and was replaced. It kept the win in a
   per-piece local and wrote `gRefoldWin` on the per-sample path (one guarded write per piece, one at the union
   min). On a closed head at 0.6 m, sessions interleaved: base 19.6, the new post with the base's `mapBody` 19.7,
@@ -523,6 +556,9 @@ Still wrong in them, and whose:
   head that is then baked would need its own answer.
 - **Motion vectors** carry the closed body's motion only (unchanged in kind: the previous-frame rows are the closed
   head's).
-- **A cross-slot leak of the normal hint is as it was:** in a crowd pixel `gRefoldWin` is the last slot's that won
-  a re-fold, not the union winner's, for closed bodies too. Left alone: fixing it moves what closed crowd pixels
-  compute.
+- **A cross-slot leak of the normal hint, a known and separate follow-up.** In a crowd pixel `gRefoldWin` is the
+  last slot's that won a re-fold, not the union winner's, for closed bodies too (as it was before the split), and
+  `gRefoldBy` is filed by piece, not by slot, so an open head's hit can read another slot's win under the same
+  piece number. It takes two slots winning limb re-folds at one sample, and it steers only the normal hint
+  (`gNormalHint`) and `gNgOwnedOk`, never the field. Fixing it moves what closed crowd pixels compute, so it is its
+  own task, with its own `march-hash` re-pin.

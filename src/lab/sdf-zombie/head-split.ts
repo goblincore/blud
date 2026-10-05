@@ -86,7 +86,8 @@ export const HEAD_SPLIT = {
  *  the surface where it holds the split field above the piece's own field; that gap, (the split field) - (the piece's
  *  field before its caps), is exactly 0 on skin and the depth inside the closed body on a cut face. The hit shades as
  *  skin up to `cutLo` of it and as wound interior from `cutHi` (the tissue ramp by that depth, wet, no skin detail, no
- *  face sheet), blending between. Both are under the zombie's fat stop (4 mm), so the ramp's pale band is not hidden.
+ *  face sheet), blending between. `cutHi` is the zombie's fat stop (fatDepth, 4 mm): the gate is fully open where the
+ *  tissue ramp reaches its pale fat band, and the ramp's first stop (skin to fat) lies under the blend.
  *  The walk's shell noise fades out over the same range. */
 export const SPLIT_SHADE = { cutLo: 0.0015, cutHi: 0.004 } as const;
 

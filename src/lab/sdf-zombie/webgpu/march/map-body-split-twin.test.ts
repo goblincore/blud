@@ -42,12 +42,12 @@ type Piece = [cap: number, theta: number, id: number];
  *  running union when the slot is reached (1e9: it is the first). */
 function twinSlot(
   w: SplitWarp | null, f: (q: Vec3) => number, pIn: Vec3, dUnion0 = 1e9,
-): { d: number; piece: number; evals: number } {
+): { d: number; piece: number; splitF: number; evals: number } {
   // The record, and loadInstance's gInstSplitOpen.
   const rec = w && (w.thetaP !== 0 || w.thetaM !== 0) ? w : null;
   const gInstSplitN = rec ? rec.n : [0, 0, 0] as Vec3;
   const splitOpen = dot(gInstSplitN, gInstSplitN) > 0.5;
-  let dUnion = dUnion0, pieceU = 0, evals = 0;
+  let dUnion = dUnion0, pieceU = 0, splitFU = 1e9, evals = 0;
 
   let splitShell = 1e9;
   let pcA: Piece = [-1e9, 0, 0];
@@ -87,10 +87,12 @@ function twinSlot(
     if (dPiece < dUnion) {
       dUnion = dPiece;
       pieceU = piece[2];
+      splitFU = dmgFinal;
     }
   }
   if (splitOpen) { dUnion = Math.min(dUnion, splitShell); }
-  return { d: dUnion, piece: pieceU, evals };
+  // gHitPiece / gHitSplitF: the winning piece and its field BEFORE its caps.
+  return { d: dUnion, piece: pieceU, splitF: splitFU, evals };
 }
 
 // The posed zombie's closed body, and its head frame, as the split leaf measures it.
@@ -154,6 +156,7 @@ describe('the head split slot in mapBody, by value (a hand twin of the WGSL agai
         expect(t.d).toBe(f(p));
         expect(t.evals).toBe(1);
         expect(t.piece).toBe(0);
+        expect(t.d - t.splitF).toBe(0);   // no cap on a closed slot: the cut-face gap is exactly 0
       }
     }
   });
@@ -203,6 +206,63 @@ describe('the head split slot in mapBody, by value (a hand twin of the WGSL agai
     });
   }
 
+  // THE CUT-FACE GAP (the post's gate, split-hit.wgsl.ts): d - splitF, the split field minus the winning piece's own
+  // field before its caps. It is max(f, cap) - f: exactly 0 where the piece's field is the surface (skin), and the
+  // depth inside the closed body where a cap is (a cut face).
+  for (const [ci, c] of CASES.entries()) {
+    it(`${c.name}: the cut-face gap is exactly 0 on skin and the closed body's depth on a cap`, () => {
+      const { w } = c, rnd = rng(5000 + ci), u = cross(w.n, w.a), rho = w.r - REGION_MARGIN;
+      const turned: [number, number][] = [];
+      if (w.thetaP !== 0) turned.push([1, w.thetaP]);
+      if (w.thetaM !== 0) turned.push([-1, w.thetaM]);
+      let skin = 0, caps = 0, any = 0;
+      // Everywhere the shell bound is not the value: the gap is never negative, the pre-cap field is the closed
+      // body's at the CPU's un-warped point, and with the gap added back it is the split field.
+      for (let i = 0; i < 3000; i++) {
+        const p = inBall(rnd, w.h, w.r), got = twinSlot(w, f, p);
+        if (got.d >= REGION_MARGIN + Math.abs(len(sub(p, w.h)) - w.r)) continue;
+        any++;
+        expect(got.d - got.splitF).toBeGreaterThanOrEqual(0);
+        expect(got.splitF + (got.d - got.splitF)).toBeCloseTo(splitField(w, f, p), 12);
+        if (Math.abs(got.d) < 0.01) expect(Math.abs(got.splitF - f(unwarpPoint(w, p, f).q))).toBeLessThan(1e-12);
+      }
+      for (const [side, theta] of turned) {
+        for (let i = 0; i < 4000 && (skin < 60 || caps < 60); i++) {
+          // SKIN: a point of the closed head's outer skin on this half (found down a ray from outside; the head's, not
+          // a raised hand's), clear of the old plane, the hinge plane and the hold ball's rim, carried open with its half.
+          const dir = inBall(rnd, [0, 0, 0], 1), dl = len(dir) || 1;
+          let q: Vec3 = add(FRAME.centre, scale(dir, 0.4 / dl));
+          for (let k = 0; k < 80; k++) { const v = f(q); if (Math.abs(v) < 1e-9) break; q = sub(q, scale(dir, v / dl)); }
+          const clear = (x: Vec3, m: number) => side * (dot(w.n, x) - w.d0) > m && dot(u, sub(x, w.h)) > m && len(sub(x, w.h)) < rho - m;
+          if (Math.abs(f(q)) < 1e-8 && clear(q, 0.01) && len(sub(q, FRAME.centre)) < 0.16) {
+            const p = add(w.h, rotAxis(sub(q, w.h), w.a, theta)), got = twinSlot(w, f, p);
+            // (Where the half swings into the unmoved rest, the rest is what is seen: not this half's skin.)
+            if (got.piece === (side === 1 ? 1 : 2)) {
+              expect(Math.abs(got.d)).toBeLessThan(1e-7);
+              expect(got.d - got.splitF).toBe(0);
+              skin++;
+            }
+          }
+          // A CAP: a point of the old plane inside the closed head, at least 5 mm deep, carried open with its half
+          // (a hair onto the half's own side, so the half is what holds it).
+          const r0 = inBall(rnd, FRAME.centre, 0.12);
+          const c0 = add(sub(r0, scale(w.n, dot(w.n, r0) - w.d0)), scale(w.n, side * 1e-9));
+          if (f(c0) < -0.005 && dot(u, sub(c0, w.h)) > 0.01 && len(sub(c0, w.h)) < rho - 0.01) {
+            const p = add(w.h, rotAxis(sub(c0, w.h), w.a, theta)), got = twinSlot(w, f, p);
+            if (got.piece !== (side === 1 ? 1 : 2)) continue;   // the other half's face lies against it (a small angle)
+            expect(Math.abs(got.d)).toBeLessThan(1e-6);          // on the cut face
+            expect(Math.abs((got.d - got.splitF) - -f(c0))).toBeLessThan(1e-6);
+            expect(got.d - got.splitF).toBeGreaterThan(0.005);
+            caps++;
+          }
+        }
+      }
+      expect(any).toBeGreaterThan(1000);
+      expect(skin).toBeGreaterThanOrEqual(60);
+      expect(caps).toBeGreaterThanOrEqual(60);
+    });
+  }
+
   it('the twin copies the WGSL\'s statements in the WGSL\'s order', () => {
     const order = [
       'let splitOpen = gInstSplitOpen;',
@@ -230,6 +290,7 @@ describe('the head split slot in mapBody, by value (a hand twin of the WGSL agai
       'if (splitOpen) { dPiece = max(dmgFinal, piece.x); }',
       'if (dPiece < dUnion) {',
       'pieceU = i32(piece.z);',
+      'splitFU = dmgFinal;',
       'if (splitOpen) { dUnion = min(dUnion, splitShell); }',
     ];
     let at = 0;

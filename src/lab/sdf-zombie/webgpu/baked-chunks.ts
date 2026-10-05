@@ -208,13 +208,16 @@ export type BakedChunkUniforms = ReturnType<typeof bakedChunkUniforms>;
  */
 // The same face layer as the march, with mesh-local variable names. The
 // source texture remains a texture: baking it into 1 cm vertex colours loses
-// eyes/teeth. Settled heads have no melt animation. The layer's head frame
+// eyes/teeth. Settled heads have no melt animation. What the march's
+// split-hit block hands the layer is declared ahead of it here: the head frame
 // (faceCentre / faceQuat: in the march, the record's frame turned with the hit
 // piece of a split head) is the mesh's own, and a mesh has no cut face.
-const MESH_FACE_LAYER = FACE_LAYER_WGSL
+const MESH_FACE_LAYER = `  let faceCentre = headCentre;
+  let faceQuat = headQuat;
+  let cutFace = 0.0;
+${FACE_LAYER_WGSL
   .replace(/\balbedo\b/g, 'faceAlbedo').replace(/\bn\b/g, 'nrm')
-  .replace(/\bfaceCentre\b/g, 'headCentre').replace(/\bfaceQuat\b/g, 'headQuat').replace(/\bcutFace\b/g, '0.0')
-  .replaceAll('gInstMelt.x', '0.0').replaceAll('gInstEyeMask', 'faceEyeMask');
+  .replaceAll('gInstMelt.x', '0.0').replaceAll('gInstEyeMask', 'faceEyeMask')}`;
 const FACE_ARGS = `faceTex: texture_2d<f32>, headCentre: vec3<f32>, headAxes: vec3<f32>, headQuat: vec4<f32>, faceCfg: vec4<f32>, faceCfg2: vec4<f32>, faceCfg3: vec4<f32>, faceProj: vec4<f32>, faceAtlas: vec4<f32>, faceGlowRedOnly: f32, faceGlowColor: vec3<f32>, faceEyeMask: vec4<f32>`;
 function chunkShadeWgsl(face: boolean): string { return /* wgsl */ `fn chunkShade(p: vec3<f32>, n: vec3<f32>, camPos: vec3<f32>, albedo: vec4<f32>, ao: f32, deepColor: vec3<f32>, ambient: vec3<f32>, look: vec4<f32>, lightDir: vec3<f32>, keyColor: vec3<f32>, lightCfg: vec2<f32>, spotPos: vec3<f32>, spotAxis: vec3<f32>, spotCfg: vec4<f32>, spotCfg2: vec4<f32>, spotColor: vec3<f32>, gloss: f32, pl: vec3<f32>, kind: f32, goreCfg: vec4<f32>, goreCfg2: vec4<f32>, anchor: vec4<f32>, fleshDetail: vec4<f32>, response: vec4<f32>, picks: vec4<f32>, lights: ptr<storage, array<vec4<f32>>, read>, listOn: f32, listGain: f32${face ? ', ' + FACE_ARGS : ''}) -> vec3<f32> {
   var a = albedo;
