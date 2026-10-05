@@ -156,3 +156,162 @@ What is wrong in them, by owner:
 - **The region shell at range.** `C` is at least 6 cm, far over the hit epsilon up close, but the epsilon grows
   with distance (about half a pixel's footprint): past roughly 30-40 m it reaches 6 cm and the region sphere could
   read as a surface. Not seen at game distances; B5 should bound it when it sizes the split's bounds.
+
+## B5: the bounds, tiles, hulls and the wound list follow the open head (2026-10-04)
+
+### What was built
+
+Every bound that tests a WORLD ray or a screen position against the body described the closed head's prims. They now
+read the pose's split through three pure functions in `head-split.ts`:
+
+- `splitHoldBall(w)`: the ball about the hinge `h` of radius `rho = r - REGION_MARGIN`.
+- `splitBound(w, centre, radius, reach)`: THE rule for a bound that is ONE sphere. A sphere that reaches the hold
+  ball (within `reach`, the march's own blend reach for it: 4 x blendK x its distortion factor) and is not wholly
+  below the hinge plane grows to the smallest sphere holding itself and the ball; any other stays.
+- `splitSphereImages(w, centre, radius)`: the same rule for a bound made of MANY spheres: the centres of the
+  sphere's copies turned with each half it holds flesh of.
+
+| Bound | What it does under a split | Where |
+| --- | --- | --- |
+| Proxy box (`fit`), and through it the record's box, the ray window, the cone and depth pre-pass twins, the crowd's instanced box and screen rect | the AABB also holds the hold ball | `webgpu/zombie-gpu.ts` `fit` |
+| `ROW_CLUSTER_BOUNDS` (the depth pre-pass's miss cull; `mapBody`'s cluster cull reads it too, looser) | each live cluster's sphere through `splitBound` | `zombie-gpu.ts` `upload` |
+| Screen tiles (binning, and the per-ray sphere test of the quad dispatch) | each group's sphere through `splitBound`, in the list the binner takes (`getTileGroups`) | `zombie-gpu.ts` `upload` |
+| `ROW_GROUP_BOUNDS`, the wound threat masks, the wound bound | unchanged: `mapBody` reads them at a piece's un-warped point, where the closed sphere is exact | - |
+| Outer hull (the `shellOut <= 0` discard, `shellIn`, the hull exit bound) | a turned copy of each of the body's chain spheres that holds flesh of a half (`splitSphereImages`) | `webgpu/shell-hull-outer.ts` |
+| Occluder (inner) hull | every inner sphere that reaches the hold ball is dropped | `webgpu/occluder-hull.ts` |
+| Per-ray wound list | never taken for an open slot (`gInstSplitOpen`), in `applyWounds` itself | `march/fields/wounds.wgsl.ts` |
+
+**The radius is `rho`, not `r`, at every bound.** Each of these bounds where a SURFACE can be. An opened half is
+capped at `dh <= rho` and outside the ball the body is where its prims are, so `rho` holds every surface the split
+adds; between `rho` and `r` there is only the shell bound `C`, which is not a surface (below).
+
+**The outer hull does not use the ball.** One sphere round the hold ball made every ray through its screen disc
+march (40% of the frame at 0.6 m) and cost 1.5 ms more than the turned copies (below). The copies are sound for the
+cut faces too: an opened half is the closed head's solid turned rigidly, and the chains hold the closed solid, not
+only its skin (tested on sampled solid, not surface).
+
+**The hull's wound spheres stay where they are** (`woundWorldPos` on the closed prims, `game-main.ts` and
+`game-seams-render.ts`): the inner hull keeps no sphere near the hold ball, and what it keeps is the unmoved rest
+(P0), which reads its wounds at their closed positions. The shadow hull is the closed head's (its shadow is the
+closed head's).
+
+**The frozen cast.** The hulls are built once per frozen stretch. The split leaf now asks for that build again
+whenever a frozen actor's split changes (`ctx.render.frozenHullBuilt`); before, every frozen capture drew an open
+head through the closed head's hull.
+
+### Shipped path against the bounds-off path
+
+Hit texels of the 400 x 300 march target that differ between the shipped path and the per-body path with every
+march bound off and the proxy box grown (two sessions, the same cameras to the last bit), inside the region's
+screen disc: "clipped" (bounds off hits, shipped does not) / "ship only". The closed head's own count is the
+instrument's floor.
+
+| Preset, view | Closed head (floor) | Open, B4 | Open, B5 |
+| --- | --- | --- | --- |
+| middle both, 0.6 m | 0 / 0 | 1 / 4 | 0 / 4 |
+| middle both, 2 m | 8 / 2 | 4 / 2 | 6 / 10 |
+| middle both, above-behind | 8 / 2 | 11 / 6 | 5 / 7 |
+| middle one side, 0.6 m | 0 / 0 | **215 / 117** | 13 / 10 |
+| middle one side, 2 m | 15 / 2 | **44 / 6** | 12 / 4 |
+| middle one side, above-behind | 0 / 0 | **205 / 73** | 16 / 2 |
+| face, 0.6 m | 17 / 1 | 16 / 5 | 20 / 8 |
+| face, 2 m | 23 / 2 | 23 / 4 | 21 / 2 |
+| face, above-behind | 0 / 0 | 2 / 2 | 4 / 2 |
+
+The folded face's band was not a mask error but a depth one. Texels both paths hit whose depth differs by over
+0.2%: face at 0.6 m **5517** of 33 706 on B4, 204 on B5 (closed head 122); face at 2 m 21 -> 8 (closed 0); the other
+seven views 0-128 before and 0-125 after, against 0-127 closed.
+
+**What remains is not a bound.** The two paths start their rays at different distances, so the samples of a ray that
+grazes a surface fall differently and one accepts where the other does not: rim texels (the closed head has them
+too), and one-texel lines along the flat cut faces seen edge-on (the one-sided split from the front: 16 texels in a
+column on the cut's edge). With one bound off at a time on the shipped path (shell, depth pre-pass, temporal start,
+hull exit bound) the counts move by 11 at most and never to zero. The secant decides most of them: with it off on
+the shipped path alone, the face at 2 m goes from 14 ship-only texels to 0.
+
+### The region shell at range
+
+The march accepts a sample when the field is under `hitEps = max(1.2 mm, t x aaCfg.x x strength / distort)` (the
+pixel footprint; `step-config.wgsl.ts`, `trace.wgsl.ts`), or when the last-step secant's root is under `perfCfg.w`
+epsilons. The game's values, read from a live view: `aaCfg` = (0.000924, 1, 6, 3), `perfCfg.w` = 4. So beyond 3 m
+the epsilon is 0.92 mm per metre (one pixel of the 600-row grid at 58 degrees), and up close the strength is 6,
+fading to 1 between 1.5 and 3 m (the product peaks at 1.8 m: 9.1 mm).
+
+- The epsilon alone reaches `REGION_MARGIN / 2` at **32.5 m** and `REGION_MARGIN` at 65 m.
+- The secant makes the reach four epsilons. On a field that never goes under `REGION_MARGIN` its root is over
+  `REGION_MARGIN` too (`C2 x C1 / (C1 - C2)` with `C1 > C2 >= margin`), so the shell is safe exactly while
+  `4 x hitEps <= REGION_MARGIN`: to **16.2 m**. Past that a ray that comes at the shell from far off can take it.
+- **The rule** (`splitDrawDistance`, `SHELL_ACCEPT_FRAC` 0.8): the view writes the split into its record only
+  while `(d + r) x aaCfg.x x aaCfg.y x max(1, perfCfg.w) <= 0.8 x REGION_MARGIN`, `d` from the eye to the hinge:
+  **12.7 m** at the game's defaults, 51.6 m with the secant off. It scales with the live uniforms (a coarser SDF
+  pass closes it nearer). The pose keeps the split (every strike and trace); the bounds keep following it. The
+  leaf's tick hands each split actor's view the camera's eye (`setSplitEye`); a view nobody feeds draws the split at
+  any distance. No hysteresis.
+- Measured on the shipped path, all three shapes: the record is open at 12.5-12.6 m and closed at 12.8-12.9 m, and
+  from there the march target is the closed head's (0-4 differing texels in the region disc, which is what two reads
+  of one closed head differ by; 7-18 just inside the distance). Secant off (`middle` both): open at 51.1 m, closed at
+  52.1 m.
+- **No false shell hit was seen at any distance.** The measure: hits the open head has outside the hold ball's
+  screen disc (by 1.5 texels or more) that the closed head has not, in the annulus out to `r` (14 306 texels at
+  1.1 m, 152 at 16 m). On the shipped path: 0-8 from 1.0 to 1.9 m on the two `middle` shapes, 0 from 2.2 m to
+  12.6 m but for one texel, and 0-2 beyond, where the record is closed (so 2 is the measure's floor). With every
+  bound off (the two `middle` shapes, 1 to 32 m): 0-6 from 1.0 to 1.9 m, then 0 out to 32 m but for one texel at
+  10 m; with the secant off as well, 0-1. The texels up close are the secant's fatter rim on the halves' tips
+  (they go with the secant, and the reach there is 0.61 x `REGION_MARGIN`, under what the shell needs). The epsilon
+  is divided by the dominant prim's distortion factor (1.5 and 3.8 on the head), which is why even 32 m shows none.
+  The cut-off is from the law, not from a sighting.
+- **Up close** the reach peaks at 4 x 9.1 mm = 0.61 x `REGION_MARGIN` (0.76 x at `?res=640`). The near strength is
+  not in the rule. It would pass `REGION_MARGIN` if `aaCfg.x` went over 0.00152: an SDF pass under 0.61 of the
+  800 x 600 rung (adaptive resolution is off by default).
+
+### The check set
+
+| Check | Result |
+| --- | --- |
+| `march-golden -u` | `APPLY_WOUNDS` (the wound list's gate) and the joined helpers; `MAP_BODY` for the comment in the re-review commit |
+| `compile-census` | phase ready, `uncapturedCount` 0, no device loss; march module 315815 B -> 316216 B (83 fns). `warmMs` 2596: the text was already in the OS Metal cache from the captures, so this boot was warm |
+| `march-hash` | no pin moved: default `d7392d52…` / wounded `76bd51aa…`, crowd quad `0c71e712…` / `bf6836cd…`, per-body `470ff0b3…` / `f618070e…` |
+| cold boot pair (base `de671db2`) | new 44752 / 44419 ms, base 44503 / 44565 ms warm-up (`drawOnce` 1672 / 1677 vs 1668 / 1670); load average 2.2-2.6 |
+
+### Cost
+
+`__sdfGame.timeDraws(120)`, headless, one zombie's head centred, `middle` both, open and closed interleaved four
+times a session; the B4 tree (`cf49fccc`) and this one in alternate sessions, load average 1.8-3.8.
+
+| | Closed | Open | Open - closed |
+| --- | --- | --- | --- |
+| 0.6 m, B4 (2 sessions) | 17.6-18.1 | 21.1-21.6 | **+3.5** |
+| 0.6 m, B5 (2 sessions) | 17.5-17.9 | 23.4-24.2 | **+5.9 / +6.4** |
+| 2 m, B4 | 11.5-12.6 | 12.1-12.5 | +0.4 / +0.6 |
+| 2 m, B5 | 11.5-11.7 (one session: outliers to 14.2) | 12.4-12.8 | +1.1 (the other session unreadable) |
+
+The closed head costs what it did (17.5-18.5 over six B5 sessions against 17.6-18.1; the wound list's gate alone,
+A/B in alternate sessions: no difference). The open head costs 2.4 ms more than on B4 at 0.6 m, because more
+pixels march it. Where that goes (0.6 m, open, one session each): with no hull addition at all (tips clipped)
+21.9-22.2; with one sphere round the hold ball as the hull 24.9-26.1, and that without the tiles' growth
+23.6-24.4. Not tried: the tile groups and cluster spheres could take the turned copies' rule too (the bounding
+sphere of a sphere and its copies in place of the sphere and the whole ball).
+
+### Photos (`b5/`)
+
+B4's cameras and scenes, so the sheets lie next to `b4/`.
+
+- `front-0.6m.jpg`, `front-2m.jpg`: closed, open on B4's shipped path, open on B5's, and B5 with the march bounds
+  off. The one-sided slab's tip is whole and the folded face has no band; columns 3 and 4 are the same picture.
+- `top.jpg`: from above and behind, the same three open columns.
+- `mask-mid-one-0.6.png`, `mask-mid-one-top.png`, `mask-face-0.6.png`: the march target, shipped against bounds
+  off, B4 left and B5 right (grey both hit, red bounds off only, blue shipped only, yellow depth over 0.2% apart).
+
+Still wrong in them, and whose: the halves wear a smeared face or none and the cut faces shade as skin (B6); the
+closed skull stands in the gap (B7); the slab's tip has loose pixels where it reaches `rho`, with the bounds off
+too, and the `face` preset's crown is speckled by the face cut (B8).
+
+### For the tasks after
+
+- **The split's motion is not in the motion vectors** (the previous-frame prim rows are the closed head's): while
+  the spring moves, a half's object motion reads zero. Temporal accumulation is off by default.
+- **The actor visibility cull** (frustum, clear sight) was not looked at: it still judges the closed body.
+- **A split that closes at 12.7 m pops.** At that distance it changes 14 texels of the march target.
+- The per-ray wound list (off by default) is built from the base slot's wounds only and read by every slot of a
+  crowd pixel; the split's gate does not change that.
+
