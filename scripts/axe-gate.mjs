@@ -172,7 +172,7 @@ async function boot(label) {
   await fetch(`http://localhost:${CDP}/json/activate/${s.tab.id}`);
   await send("Page.bringToFront");
   await send("Emulation.setDeviceMetricsOverride", { width: W, height: H, deviceScaleFactor: 1, mobile: false });
-  await send("Page.navigate", { url: `http://localhost:${VITE}/sdf-game.html?seed=1&vhs=off&loader=0` });
+  await send("Page.navigate", { url: `http://localhost:${VITE}/sdf-game.html?seed=1&frozen=1&vhs=off&loader=0` });
   let backend = null;
   for (let i = 0; i < 240 && !backend; i++) { await sleep(500); try { backend = await evaluate("typeof window.__sdfGame === \"object\" ? window.__sdfGame.backend : null"); } catch { backend = null; } }
   if (backend !== "webgpu") die(`[${label}] backend ${backend}, expected webgpu`);
@@ -183,13 +183,11 @@ async function boot(label) {
   await evaluate(`(() => { for (const e of document.body.children) { if (/TUNING|DYNAMITE \\/ GIB|BLOOD \\+ GIB BLUR|Record \\[F8\\]/.test(e.innerText || "")) e.style.display = "none"; } return 1; })()`);
   s.rect = await evaluate(`(() => { const r = document.querySelector("#app canvas, canvas").getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`);
   await evaluate("__sdfGame.freeze(true)");
-  // Pixel measures: the practical-fire flicker pinned (two locked renders compare), no blood over the wound (the photos
-  // judge the carve and its shading; the rod's own bleed is exercised in R, where it is switched back on), and free aim
-  // OFF so the DOM reticle is not drawn over the cut (R turns it on for its setAimPoint sweep).
-  await evaluate("__sdfGame.setLightClockFrozen(true)");
+  // No blood over the wound (the photos judge the carve and its shading; the rod's own bleed is exercised in R, where
+  // it is switched back on), and free aim OFF so the DOM reticle is not drawn over the cut (R turns it on for its
+  // setAimPoint sweep).
   await evaluate("__sdfGame.setBleed(false)");
   await evaluate("__sdfGame.setFreeAim(false)");
-  for (let i = 0; i < 90; i++) await evaluate("__sdfGame.step(1, 1 / 60)");
   const zs = (await evaluate("__sdfGame.actorList()")).filter((a) => a.kind === "zombie");
   const byRoom = new Map();
   for (const z of zs) byRoom.set(z.room, [...(byRoom.get(z.room) ?? []), z]);
@@ -197,10 +195,18 @@ async function boot(label) {
   pool = byRoom.get(ROOM);
   const room = (await evaluate("__sdfGame.rooms")).find((r) => r.id === ROOM);
   centre = [(room.bounds.minX + room.bounds.maxX) / 2, 0, (room.bounds.minZ + room.bounds.maxZ) / 2];
-  // The background gib / crowd compiles would confound the draw timings: wait for the gib warm, as the head-burst gate does.
+  // The background gib / crowd compiles would confound the draw timings: wait for the gib warm, as the head-burst gate
+  // does. The wait is as long as the wall clock makes it, so the frames it draws are steps of NO sim time.
   let wb = null;
-  for (let i = 0; i < 400; i++) { wb = await evaluate("__sdfGame.warmBackground()"); if (wb.gib === "ready" || wb.gib === "failed") break; await sleep(500); if (i % 10 === 0) await evaluate("__sdfGame.step(1, 1 / 60)"); }
+  for (let i = 0; i < 400; i++) { wb = await evaluate("__sdfGame.warmBackground()"); if (wb.gib === "ready" || wb.gib === "failed") break; await sleep(500); if (i % 10 === 0) await evaluate("__sdfGame.step(1, 0)"); }
   if (wb?.gib !== "ready") die(`[${label}] the background gib warm is ${JSON.stringify(wb)}`);
+  // THE PINS, after everything whose length the wall clock sets (scripts/march-hash.mjs has the measurements behind
+  // each; scripts/head-split-gate.mjs pins the same): the dynamic-light clock frozen and set to 0 (every sim step
+  // advances it, and the lamps, the room fill and the body key read it), the room probes' afterglow a per-frame
+  // estimate, the field interlace off, the render-side subsampling clocks held. Without them the lit frame of one
+  // scene differs from boot to boot.
+  await evaluate(`(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setLightTime(0); __sdfGame.setDemoHold(true); __sdfGame.setProbeBlend(1); __sdfGame.setProbeFall(1); __sdfGame.setFieldStyle("off"); return 1; })()`);
+  for (let i = 0; i < 90; i++) await evaluate("__sdfGame.step(1, 1 / 60)");
   console.log(`[${label}] ready; room ${ROOM} (${pool.length} zombies); warm ${JSON.stringify(wb)}`);
   console.log(`[${label}] pool yaws (deg): ${pool.map((z) => `${z.id}:${(z.yaw * 180 / Math.PI).toFixed(1)}`).join(" ")}`);
 }

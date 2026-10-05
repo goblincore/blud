@@ -6,6 +6,7 @@ import {
   type HeadFrame, type SplitWarp,
 } from './head-split';
 import type { Vec3 } from './types';
+import { AXE_HEAD } from './webgpu/axe-head';
 import { qFromAxisAngle, qRotate } from './vec';
 
 const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -497,6 +498,18 @@ describe('the skull split: the bone opens LESS than the flesh, in stages (the me
     expect(a[2]!).toBeGreaterThan(1.5 * a[1]!);
     expect(a[2]!).toBeLessThan(both(1).thetaP);
   });
+  it('at the axe\'s own chops the table reads as a CRACK on chop 1 (under 3.5 degrees a half) and a SPLIT on the kill (over 20), for every preset', () => {
+    // The stages are the axe's opening fractions (webgpu/axe-head.ts AXE_HEAD.openAngles, then the kill at 1): what the
+    // owner chose from the photos is a skull that still shows its face in the gap on chop 1 and is thrown wide on the
+    // kill. A retuned angle, spring or table has to keep that, or change this on purpose.
+    const CRACK_MAX = 0.06, SPLIT_MIN = 0.35, opens = [...AXE_HEAD.openAngles, 1];
+    for (const [preset, impact] of [['middle', [0, 0, 0.1]], ['middle', [0.06, 0, 0.1]], ['face', [0, 0, 0.1]]] as const) {
+      const bone = opens.map(f => { const s = skullSplitOf(open(preset, [...impact], f))!; return Math.max(s.angleP, -s.angleM); });
+      expect(bone[0]!, `${preset} chop 1`).toBeLessThan(CRACK_MAX);
+      expect(bone[bone.length - 1]!, `${preset} the kill`).toBeGreaterThan(SPLIT_MIN);
+      for (let i = 1; i < bone.length; i++) expect(bone[i]!, `${preset} chop ${i + 1}`).toBeGreaterThan(bone[i - 1]!);
+    }
+  });
   it('the warp carries the spring\'s target, and the stage is read there: past its target the flesh takes the bone along in proportion', () => {
     const st = { ...makeSplitState(), ...choosePreset([1, 0, 0], [0, 0, 0.1], FRAME.radius) };
     const full = HEAD_SPLIT.presets.middle.maxBoth, target = 0.8 * full;
@@ -564,8 +577,6 @@ describe('the skull split: the bone opens LESS than the flesh, in stages (the me
   };
   it('EVERY TICK of chops that land settled: the bone moves no more than the table\'s steepest slope x what its flesh moves', () => {
     const L = boneSlope(), eps = 1e-9, dt = 1 / 60;
-    // (0.8, 0.3) -> (1, 0.85): 0.85 + 1 x 2.75.
-    expect(L).toBeCloseTo(3.6, 12);
     let st = openSplit([1, 0, 0], [0, 0, 0.1], 0.09, 0.55);
     let prevBone = 0, prevFlesh = st.angle, worst = 0, ticks = 0;
     for (const [chop, frac] of [[1, 0.55], [2, 0.8], [3, 1]] as const) {

@@ -17,6 +17,8 @@ import { WOUND_MASKS_BLOCK } from './wound-masks.wgsl';
 import { TISSUE_BLOCK } from './tissue.wgsl';
 import { CUT_FACE_BLOCK } from './cut-face.wgsl';
 import { ORGAN_BLOCK } from './organ.wgsl';
+import { MOTTLE_BLOCK } from './mottle.wgsl';
+import { GORE_BLOCK } from './gore.wgsl';
 import { BURN_BLOCK } from './burn.wgsl';
 import { WET_BLOCK } from '../surface/wet.wgsl';
 import {
@@ -205,12 +207,23 @@ describe('cut faces shade as wound interior', () => {
     // It is not a second mask and not another sink for the cavity share: it never writes or names them.
     expect(code).not.toMatch(/\bwmCav\b|\bwmBoth\b|\bwm\s*=|\bwmRim\s*=/);
     // One closed body, one branch: everything it does is behind the gate.
-    expect(code.replace(/\s+/g, ' ').trim()).toMatch(/^var cutWet = 0\.0; if \(cutFace > 0\.0\) \{[^}]*\}$/);
+    expect(code.replace(/\s+/g, ' ').trim()).toMatch(/^var cutWet = 0\.0; var cutKeep = 0\.0; if \(cutFace > 0\.0\) \{[^}]*\}$/);
     // The wet block lifts its lip term to the look block's wetness, and nothing else reads the gate there.
     expect(WET_BLOCK).toContain('var lip = 1.0 - smoothstep(surfCfg3.z, surfCfg3.z * 3.0, tissueDepth);');
     expect(WET_BLOCK).toContain('if (cutWet > 0.0) { lip = mix(lip, 1.0, cutWet); }');
-    expect(WET_BLOCK.indexOf('if (cutWet > 0.0) { lip = mix(lip, 1.0, cutWet); }')).toBeLessThan(WET_BLOCK.indexOf('let wetWound = max(wm * lip, gore);'));
+    expect(WET_BLOCK.indexOf('if (cutWet > 0.0) { lip = mix(lip, 1.0, cutWet); }')).toBeLessThan(WET_BLOCK.indexOf('let wetWound = max(wm * lip * (1.0 - cutKeep), gore);'));
     expect(noComments(WET_BLOCK)).not.toMatch(/\bcutFace\b/);
+  });
+  it('what comes after the block leaves its non-flesh share alone: cutKeep, 0 until the look pass writes one', () => {
+    const code = noComments(CUT_FACE_BLOCK);
+    // Declared, and not written yet: every reader below multiplies by exactly 1.
+    expect(code.match(/\bcutKeep\b/g)).toHaveLength(1);
+    expect(code).toContain('var cutKeep = 0.0;');
+    expect(MOTTLE_BLOCK).toContain('albedo = mix(albedo, mottleColor, blotch * surfCfg2.z * (1.0 - cutKeep));');
+    expect(GORE_BLOCK).toContain('* select(1.0, 0.0, isBone) * (1.0 - cutKeep);');
+    expect(WET_BLOCK).toContain('let wetWound = max(wm * lip * (1.0 - cutKeep), gore);');
+    // Its readers come after it.
+    for (const reader of [MOTTLE_BLOCK, GORE_BLOCK]) expect(MARCH_TRACE_POST.indexOf(reader)).toBeGreaterThan(MARCH_TRACE_POST.indexOf(CUT_FACE_BLOCK));
   });
   it('SPLIT_SHADE holds the look\'s numbers, one per thing they drive; today they are what they were', () => {
     expect(SPLIT_SHADE).toEqual({ cutLo: 0.0015, cutHi: 0.004, shellLo: 0.0015, shellHi: 0.004, poreCut: 0.5, wet: 1 });

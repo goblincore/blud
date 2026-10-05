@@ -5,6 +5,7 @@ import { FLAIL_ARC_DEG, FLAIL_HEAD, FLAIL_STRIKE, flailWound, headNeck, inStrike
 import type { Primitive, Vec3 } from '../types';
 import { HEAD_LEAF } from './game-head-damage';
 import flailSrc from './game-flail.ts?raw';
+import { FLESH_BITS, craterFleshBits, fleshRand } from '../flesh-bits';
 
 /** Standard polynomial smooth-min (k = blend radius). */
 const smin = (a: number, b: number, k: number) => {
@@ -234,7 +235,23 @@ describe('head damage (no decapitation, spec §12.3)', () => {
     expect(flailWound(false, 0.09, 1.3)).toMatchObject({ meterScale: 1, flesh: 'body' });
     expect(flailWound(true, 0.09, 1.3)).toMatchObject({ meterScale: FLAIL_HEAD.meterScale, flesh: 'head' });
     expect(flailSrc).toContain('meterCredit: f.meterCredit * spec.meterScale,');
-    expect(flailSrc).toContain("fleshBitCount(spec.flesh, side, fr), fr, spec.flesh === 'head' ? FLESH_BITS.headScale : 1)");
+    expect(flailSrc).toContain('craterFleshBits(spec.flesh, side, h.point,');
+    // What that kind throws: a head crater more and bigger bits than a body crater, from the same stream.
+    const throwOf = (kind: 'body' | 'head') => craterFleshBits(kind, 'R', [0, 1.6, 0], [0, 0, -1], [0, 0, 1], fleshRand(14));
+    const body = throwOf('body'), head = throwOf('head');
+    expect(body.length).toBeGreaterThanOrEqual(FLESH_BITS.body[0]);
+    expect(body.length).toBeLessThanOrEqual(FLESH_BITS.body[1]);
+    expect(head.length).toBeGreaterThanOrEqual(FLESH_BITS.head[0]);
+    expect(head.length).toBeLessThanOrEqual(FLESH_BITS.head[1]);
+    const gob = (p: (typeof body)[number]) => p.prims[0]!.radius;
+    for (const p of body) { expect(gob(p)).toBeGreaterThanOrEqual(FLESH_BITS.size[0] - 1e-12); expect(gob(p)).toBeLessThanOrEqual(FLESH_BITS.size[1] + 1e-12); }
+    for (const p of head) { expect(gob(p)).toBeGreaterThanOrEqual(FLESH_BITS.size[0] * FLESH_BITS.headScale - 1e-12); expect(gob(p)).toBeLessThanOrEqual(FLESH_BITS.size[1] * FLESH_BITS.headScale + 1e-12); }
+    // Every seed: the head's throw is never the smaller one, and its smallest gob is bigger than a body's smallest could be.
+    for (let seed = 1; seed <= 40; seed++) {
+      const b = craterFleshBits('body', 'L', [0, 1.6, 0], [0, 0, -1], [0, 0, 1], fleshRand(seed)), h = craterFleshBits('head', 'L', [0, 1.6, 0], [0, 0, -1], [0, 0, 1], fleshRand(seed));
+      expect(h.length, `seed ${seed}`).toBeGreaterThanOrEqual(b.length);
+      expect(Math.min(...h.map(gob)), `seed ${seed}`).toBeGreaterThanOrEqual(FLESH_BITS.size[0] * FLESH_BITS.headScale - 1e-12);
+    }
   });
   it('headNeck finds the head chain root and neck midpoint on live prims, null once the head is gone', () => {
     const prims = [

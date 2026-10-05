@@ -21,7 +21,7 @@ import type { Vec3 } from '../types';
 import type { ZombieActor } from './game-actor';
 import { clothifyWound, tearWound, unwarpHit, worldHitToWound, type Wound } from '../damage';
 import { flailTear, flailTearOn, setFlailTear } from '../torn-lips';
-import { FLESH_BITS, fieldNormal, fleshBitCount, fleshBits, fleshBitsOn, fleshRand, setFleshBitsOn, swingBlow } from '../flesh-bits';
+import { craterFleshBits, fieldNormal, fleshBitsOn, fleshRand, setFleshBitsOn, swingBlow } from '../flesh-bits';
 import type { GorePiece } from '../head-pop';
 import { sdBody } from '../validate';
 import { slotLowerAmount, slotReady } from './game-weapon-slots';
@@ -581,7 +581,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       if (fleshBitsOn() && deps.gore) {
         let fr = fleshStreams.get(a);
         if (!fr) { fr = fleshRand(a.id * 2); fleshStreams.set(a, fr); }
-        deps.gore(a, fleshBits(h.point, swingBlow(h.dir, side), fieldNormal(field, h.point), fleshBitCount(spec.flesh, side, fr), fr, spec.flesh === 'head' ? FLESH_BITS.headScale : 1));
+        deps.gore(a, craterFleshBits(spec.flesh, side, h.point, swingBlow(h.dir, side), fieldNormal(field, h.point), fr));
       }
     }
     if (hits.length > 0) {

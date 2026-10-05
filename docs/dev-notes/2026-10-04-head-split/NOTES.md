@@ -846,96 +846,142 @@ Part A is the feature's own gate and the groundwork the look pass needs. No look
 
 ### The gate: `scripts/head-split-gate.mjs`
 
-61 checks (57 as first built; scenario A came with the fix further down), five boots (the three chops, one side,
-later hits, face, skull and cost; range, the body chop and head damage; bounds on the shipped path; bounds with the
-field alone; the turned zombie), about 2 min 20 s. Three runs in a row as first built: **57 checks, 0 failed** each,
-every check line (with its measured numbers) the same to the character.
+**67 checks**, five boots (one side, later hits, face, skull, cost and the three chops; range, the body chop and head
+damage; bounds on the shipped path; bounds with the field alone; the turned zombie), about 4 min 30 s. Three runs in
+a row across fresh boots: **67 checks, 0 failed** each, every check line and every measured number the same to the
+character (but the ungated draw times). As first built it had 57 checks; scenario A came with the chest-chop fix, and
+the review round below reworked the measures. A scenario that throws is a failed check of its own and the run goes on
+to its summary. A routine run writes its sheets to `.lab-tmp/head-split-gate`; `SHEETS=1` rewrites the tracked ones.
 
 **What it measures on.** The float march target (`__sdfGameDebug.readMarchTarget`), not screenshots, but for the
-skull's eyes (a mesh: a shown / hidden pair of one frame). Two facts about that target, both measured here:
+skull's eyes (a mesh: a shown / hidden pair of one frame). What was measured about that target:
 
-- Once the camera has stood for 24 frames, the same frame read twice is equal to the bit (0 of 120 000 texels). Ten
-  frames after a camera move it is not (30 000 texels differ by up to 0.014): the shadow maps and temporal passes
-  trail the move.
-- `setLightClockFrozen(true)` froze the flicker at the wall clock's now, so lit values differed from boot to boot. The
-  seam now takes the phase (`setLightClockFrozen(true, 60)`) and the gate gives it. With the phase given, boots still
-  land in one of a few lighting states (texels up to 0.027 apart; not explained, not chased). Geometry (hit and depth)
-  is the same in all of them, and the gate's colour measures (O's light, L's mask) kept their numbers over every run.
+- **A capture is two reads** (`readF`): `readMarchTarget` draws a frame of its own, and back-to-back reads cycle with
+  period 2 (`scripts/march-hash.mjs`). The two reads of one SETTLED frame differ by 0 in colour and in depth on all
+  47 settled captures of a run (the gate checks every one: `FLOOR_COLOUR_MAX` 1e-4, `FLOOR_DEPTH_MAX` 1e-6). A frame is
+  settled 24 frames after a camera move: at 10 frames 30 000 texels still differ by up to 0.014 (the shadow maps and
+  temporal passes trail the move), and a frame read while the spring moves differs between its two reads by up to
+  0.015 (those reads are not counted as floor). Part A's first notes said "read twice, equal to the bit" of a check
+  that printed a colour step of 0.0048 every run: that was the unpinned boot, below.
+- **Across boots the lit target was NOT the same**, and part A's first notes misnamed the cause. Measured then: one
+  scene's target in a few discrete states from boot to boot, texels up to 0.027 apart. Part A had "pinned" the flicker
+  with a phase argument on `setLightClockFrozen`; that clock is only the burning bodies' (`game-burning.ts`) and
+  nothing here burns. The causes are the three `scripts/march-hash.mjs` documents: the dynamic-light clock (every sim
+  step advances it, so it stood wherever boot and the wall-clock waits left it; the lamps, the room fill and the body
+  key read it), the room probes' afterglow (a temporal filter whose state is the number of frames drawn) and the field
+  interlace's parity. The boot now pins them as `march-hash` does, AFTER everything whose length the wall clock sets:
+  `?frozen=1`, `setLightClockFrozen(true)`, `setLightTime(0)`, `setDemoHold(true)`, `setProbeBlend(1)`,
+  `setProbeFall(1)`, `setFieldStyle("off")`; and the warm waits draw their frames as steps of no sim time
+  (`step(1, 0)`). **After: the same scene (three presets, closed and open, 120 000 texels each) across 4 fresh boots:
+  0 texels differ, largest difference 0.** The phase argument is gone from the seam.
+- `scripts/axe-gate.mjs` boots with the same pins: still 25 of 25. Two of its printed luma measures moved by
+  tenths (A's darkest interior 22 -> 22.2, shoulders 50.8 / 216.7 -> 51 / 217, the skin before 61.4 -> 61.8, the
+  full mean 83 -> 83.1); the dip (28.8) and every other line are unchanged.
 
 **The gap** (S, W, K, T). `gapRead` walks a line across the old plane at the head centre's height (below the face
 cuts' slab, which reaches from the scalp to 1.7 cm above the centre) and counts the stretch the camera SEES: texel a
 miss, or no surface more than 5 mm in front of the point. The eye stands in the wedge (`wedgeEye`: on the old plane,
 0.6 m out to the face's side and up the plane), where every sight line stays between the cut faces, so the count is
 the wedge's width: `lever x (tan thetaP + tan |thetaM|)`, lever 6 cm on the zombie. The line and the eye come from
-the pose's split, so the measure holds on a flinching body and on the corpse. Two limits of the instrument, which the
-tolerance (-11 / +6 mm) is made of: each face is drawn fat by the march's accept footprint (3.3 mm at 0.6 m), and
-the run is whole texels (2.2 mm). An eye straight above the head or under standing height is not possible (the
-player is pushed out of the body and held on the floor).
+the pose's split, so the measure holds on a flinching body and on the corpse. Two limits of the instrument: each face
+is drawn fat by the march's accept footprint (3.3 mm at 0.6 m), and the run is whole texels (2.2 mm). At rest the
+gap reads within -1.5 mm of the prediction; while the spring moves, up to 6.3 mm short. An eye straight above the head
+or under standing height is not possible (the player is pushed out of the body and held on the floor).
 
-| Check | Measured | Threshold | Shown to fail under |
+**Derived, so the look pass can retune.** The gate reads `HEAD_SPLIT`, `AXE_HEAD` and the follow table live. S holds
+the measured gap against the angles the CPU's spring took on the same frames: its peak frame, its overshoot ratio
+and its settle frame move with a retuned spring (with `zeta` 1.2 the spring no longer overshoots and S still
+passes: 13 of 13). The spring's own shape and the table's "a crack on chop 1, a split on the kill" are unit tests
+now (`head-split.test.ts`: both fail under `zeta` 1.2 and under a 0.25 / 0.5 table).
+
+| Check | Measured | Threshold (constant) | Fails under |
 | --- | --- | --- | --- |
-| S the instrument (depth convention) | the closed nose within 12 mm along the sight line; nothing 5 cm in front | both | - (the same landmark measure fails in F under the halved GPU angle) |
-| S a closed head has no gap | 0.0 mm | = 0 | - |
-| S chop 1 opens `middle`, both sides | target 0.3025 rad, offset 0 | exact | - |
-| S the pose's split lies on the head's frame | 0 m apart | < 1e-9 | - (its twin on T fails when the plane is not turned with the head: 0.13 m apart, normals -0.089) |
-| S the gap grows to its peak | 9.0 mm on frame 1, peak 45.0 mm on frame 4 | rising, peak by frame 8 | spring `zeta` 1.2: peak on frame 16 |
-| S it overshoots | 1.216 x its rest 37.0 mm | >= 1.15 | `zeta` 1.2: 1.000 |
-| S it settles | within 1.5 mm from frame 20; angle = target, rate 0 at frame 60 | < frame 30 | `zeta` 0.04: still ringing at frame 59 |
-| S the gap is the CPU split's every frame | rest 37.0 against 37.4 mm; -6.3 to -0.4 mm over 60 frames | -11 to +6 mm | GPU record's angle halved: rest 25.0, -15.9 mm |
+| S the instrument: the closed nose | a surface within 12 mm, none 50 mm in front | `DEPTH_TOL`, `NOSE_CLEAR` | positive control |
+| S a closed head has no gap | 0.0 mm | = 0 | positive control |
+| S chop 1 opens `middle`, both sides | target 0.3025 rad, offset 0 | exact, from `AXE_HEAD.openAngles` | - |
+| S the split lies on the head's frame | 0 m apart | < 1e-9 | its twin on T: the plane not turned with the head |
+| S the gap grows to its peak | 9.0 mm on frame 1, peak 45.0 mm on frame 4; the CPU's peak on frame 4 | `S_PEAK_FRAMES` +-1 (while the CPU overshoots by `S_OVERSHOOT_MIN`) | - |
+| S it overshoots as the CPU's spring | 1.216 x rest against 1.331 x predicted | `S_OVERSHOOT_TOL` +-0.18 (the reviewer's 0.05 is under the measure's step: one texel a side is 0.12 of the 37 mm rest gap) | - |
+| S it settles | within 6.5 mm from frame 6 (predicted 6); angle = target, rate 0 | `GAP_SETTLED`, `S_SETTLE_FRAMES` +3 | - |
+| S the gap every frame of the spring | -6.3 to -0.4 mm off | `GAP_UNDER` 11, `GAP_OVER` 3 mm | GPU record's angle halved: -15.9 |
+| S at rest | 37.0 against 37.4 mm (-0.4) | `GAP_REST_UNDER` 4, `GAP_REST_OVER` 2 mm | the same: 25.0 (-12.4) |
 | S the zombie lives | standing after a 3-frame thaw | | (the kill is K's) |
-| W chop 2 springs on | count 2, target 0.44 rad, settled | exact | `widenSplit` a no-op: target 0.3025 |
-| W the gap is wider | 37.0 -> 55.0 mm (+18.0), 56.5 predicted | +10 mm; -11 to +6 | the same: +0.0 |
+| W chop 2 springs on | count 2, target 0.44 rad, settled | exact | `widenSplit` a no-op |
+| W the gap is wider | +18.0 of +19.0 mm predicted | `W_WIDER_SHARE` 0.75 | the same: +0.0 |
+| W at rest | 55.0 against 56.5 mm (-1.5) | `GAP_REST_*` | the same |
 | W alive | standing | | |
-| K chop 3 kills | count 3, falling | | `chopsToKill` 4: standing |
-| K thrown to the full angle | target 0.55 rad | exact | the same: 0.44 |
-| K still open 45 frames on | state 0.55, the pose's split 0.55 / -0.55, drawn, record open | all | the hook answering null for a dead actor: pose and drawn null |
-| K the gap on the corpse | 73.0 against 73.6 mm (eye at 1.63 m) | -11 to +6 mm | the same: 0.0 mm; `chopsToKill` 4: 57.0 |
-| K the two cut faces kept | `split+`, `split-`, both cuts | 2 | - |
-| M closed head, closed skull | 3 bone draws, 0 split copies | 0 | - |
-| M the bone's stages | 1.73 / 7.56 / 26.79 degrees a half | the table's; crack < 3.4, split > 20.1 | follow table 0.25 / 0.5: 4.33 / 12.61 |
+| K chop 3 kills | count 3, falling | | `chopsToKill` 4 |
+| K thrown to the full angle | target 0.55 rad | exact | the same |
+| K still open 45 frames on (`K_LATER`) | state, the pose's split, drawn, record | all | the hook answering null for a dead actor |
+| K the gap on the corpse | 73.0 against 73.6 mm (-0.6) | `GAP_REST_*` | the same: 0.0 mm |
+| K the two cut faces kept | `split+`, `split-` | 2 | - |
+| M closed head, closed skull | 3 bone draws, 0 copies | 0 | positive control |
+| M the bone DRAWN at each chop | the copies' matrices: 1.73 / 7.56 / 26.79 degrees a half, 3.5e-15 rad off the table's | `M_ANGLE_TOL` 1e-6 | the mesh copy's angle halved: 0.87 / 3.78 / 13.39 |
 | M three copies and an eye a half | 3 + 2 at each stage | exact | - |
-| M both eyes found; whole skull at follow 0 | 0 copies, then 3, 3, 3 | | |
-| M each eye against `skullWarpPoint` | worst 3.37 px off its shift; largest shift 58.2 px | <= 5 px; >= 40 px | the mesh copy's angle halved: 29.78 px, 31.5 px |
-| O one side, the struck one | hit 33.7 mm off centre; sides 1, offset 33.7 of 35.9 mm, 0.495 rad | exact | - |
+| M the eyes on the REALLY chopped head (flesh out of the frame) | 0.15 px off at chop 1 (moves 4.1 px), 2.32 px at chop 2 (51.2 px) | `M_SHIFT_PX` 5 | the same: 10.35 px at chop 2 |
+| M (forced) eyes found, whole skull at follow 0 | 0 copies, then 3, 3, 3 | | |
+| M (forced) each eye against `skullWarpPoint` | worst 3.37 px; largest shift 58.2 px | `M_SHIFT_PX` 5, `M_FAR_PX` 40 | the same: 29.78 px |
+| O one side, the struck one | hit 33.7 mm off centre; sides 1, offset 33.7 of 35.9 mm | exact | - |
 | O the pose turns that half only | 0.495 / 0 | exact | both sides turned on the CPU |
-| O the floor | 0 of 4520 texels | = 0 | - |
-| O the other half does not move | 0 hit texels, 0 over 1 mm in depth, of 4520 | floor + 0 | the GPU record turning both: 2350 hit, 2695 depth |
-| O its light | 292 of 4520 over 0.01 (0.065) | <= 0.1 | - |
-| O the struck half did move | 2164 of 2197 (0.98) | >= 0.5 | - |
-| L rod cut / pellet stamped at `unwarpPoint` | 0.0 mm / 0.0 mm off | <= 12 mm | `unwarpHit` not un-warping: 24.2 / 51.9 mm |
-| L its mask on its crater, rod cut | 65 texels, 0.66 in the crater, centroids 3.69 texels apart; 6.1 from its open place, 23.6 from its closed | >= 0.5; <= 6; nearer the open place by 2 x | masks read at the world point (WGSL): 0.06, 10.49 |
-| L the same, pellet | 607 texels, 0.91, 3.91; 7.9 / 18.5 | | the same: 11.68 apart, 17.3 / 9.3 |
-| F `forceSplit(face)` holds | 0.8 rad, 0.8 / 0 | exact | - |
-| F the CPU folds the face | the nose 110.6 mm (41.2 forward, 102.6 down) | >= 50 mm | - |
-| F the march draws it there | a surface at the cut face's point (none on the closed head), none at the closed nose | all | GPU record's angle halved |
+| O the floor of its captures | 0 colour, 0 depth | `FLOOR_*` | positive control |
+| O the other half does not move | 0 hit, 0 over 1 mm (`O_DEPTH`), of 4520 | `O_STILL_MOVED` 0 | the GPU record turning both: 2350 / 2695 |
+| O its light | 188 of 4520 over 0.01 (0.042) | `O_COLOUR` 0.01 (1% of full scale; the floor is 0), `O_STILL_LIGHT` 0.1 | - |
+| O the struck half did move | 0.98 | `O_MOVED_MIN` 0.5 | positive control |
+| L each wound lands | split forced, a hit, a new wound | | positive control |
+| L stamped at `unwarpPoint` | 0.000 / 0.000 mm | `L_POS_TOL` 1 mm | `unwarpHit` not un-warping: 65 mm |
+| L mask on crater, rod cut | centroids 1.20 texels apart; 0.62 of the crater masked | `L_CENTROID_TX` 1.5, `L_CRATER_MASKED` 0.5 | masks read at the world point (WGSL): 3.08 |
+| L the same, pellet | 0.51 texels; 0.96 | | the same: 9.70 |
+| F `forceSplit(face)` holds | 0.8 rad | exact | - |
+| F the CPU folds the face | the nose 110.6 mm | `F_MOVED_MIN` 50 mm | - |
+| F the march draws it there | a surface at the cut face's point, none at the closed nose | `DEPTH_TOL` | GPU record's angle halved |
 | R the draw distance | 12.67 m, reopening inside 11.40 m | finite | - |
-| R inside (12.37 m) open | record, 3 + 2 skull copies, 18 of 109 texels off the closed head | >= 5 | - |
-| R beyond (12.97 m) closed | no record, 0 copies of 22 draws, 0 of 94 texels | <= 6 | never closing: record, 5 copies, 16 |
-| R band (12.03 m) still closed | 3 of 113 | <= 6 | no hysteresis: open, 21 |
-| R reopened (11.10 m) | 21 of 120 | >= 5 | - |
+| R inside (12.37 m) open | 18 of 109 region texels off the closed head (0.165) | `R_OPEN_SHARE` 0.1 | - |
+| R beyond (12.97 m) closed | 0 of 94 (0) | `R_CLOSED_SHARE` 0.05 | never closing: 0.170 |
+| R band (12.03 m) still closed | 3 of 113 (0.027) | | no hysteresis: 0.186 |
+| R reopened (11.10 m) | 21 of 120 (0.175) | | - |
 | R the pose keeps the split | 0.55 rad | | |
-| A the torso chop lands in the flail's head region | 190.0 mm from the neck root, 376.2 mm from the skull centre | < 200; > 300 | - |
-| A a body chop: head closed, not counted | no split, 0 head chops | | the axe asking `isHeadRegion`: split `middle`, 1 head chop |
-| A its own cut where it landed | 1 torso cut, 0 mm from the hit, vertical | <= 50 mm | the same: 2 face cuts 512 mm away |
+| A the torso chop lands in the flail's head region | 190.0 mm from the neck root, 376.2 mm from the skull centre | < `neckDist`; `A_OFF_HEAD` 300 | positive control |
+| A a body chop: head closed, not counted | no split, 0 head chops | | the axe asking `isHeadRegion` |
+| A its own cut where it landed | 1 torso cut, 0 mm from the hit, vertical | `A_LAND_MAX` 50 mm, `A_VERTICAL` 0.8 | the same: 2 face cuts 512 mm away |
 | A the body's meter | +0.120 | exact | the same: 0 |
-| H slug into a split head | 1 head wound, no head damage state | | `burst` not declining: a burst state |
-| H flail hit on a split head | one crater of radius 0.06, no state | | `hit` not declining: six region craters, a state |
-| H the meter | +0.0195 (0.065 x 0.3) | exact | full credit: 0.065 |
-| H a held head refuses | null on all three chops | | `canSplit` ignoring head damage: three split states |
+| H slug into a split head | 1 head wound, no head damage state | | `burst` not declining |
+| H flail hit on a split head | one crater of radius 0.06, no state | | `hit` not declining |
+| H the meter | +0.0195 | exact | full credit: 0.065 |
+| H a held head refuses | null on all three chops | | `canSplit` ignoring head damage |
 | H it still dies on chop 3 | standing, standing, falling | | - |
-| B six views (three presets, front 0.6 m, above-behind) | clipped 0 / 1 / 13 / 2 / 18 / 19 against the closed head's 0 / 2 / 0 / 2 / 15 / 2; depth over 0.2% apart 71 / 22 / 125 / 23 / 204 / 12 against 108 / 50 / 126 / 36 / 122 / 33 | floor + 30; floor + 150 | no turned copies in the outer hull: 215 and 218 clipped (one side), 5517 at another depth (face, front) |
-| T the body is turned | yaw -81.2 degrees | sin >= 0.97 | - |
-| T a centred split on its own plane | sides 0, normals 1, lines 0 m apart | exact | the plane not turned with the head |
-| T the gap | 37.0 against 37.4 mm | -11 to +6 mm | the same: 0.0 mm |
+| B six views | clipped 0 / 1 / 13 / 2 / 18 / 19 against the closed head's 0 / 2 / 0 / 2 / 15 / 2; another depth 71 / 22 / 125 / 23 / 204 / 12 against 108 / 50 / 126 / 36 / 122 / 33 | `B_MARGIN` 30, `B_DEPTH` 0.2%, `B_DEPTH_MARGIN` 150 | no turned copies in the outer hull: 215 and 218 clipped, 5517 at another depth |
+| T the body is turned | yaw -81.2 degrees | `T_SIN_MIN` 0.97 | positive control |
+| T a centred split on its own plane | sides 0, normals 1 | exact | the plane not turned with the head |
+| T the gap | 37.0 against 37.4 mm | `GAP_REST_*` | the same: 0.0 mm |
+| C the floor over the run | 0 / 0 on 47 settled captures | `FLOOR_*` | positive control |
 | C zero console errors | 0 | = 0 | a `console.error` in `open()` |
 | C `gpuDiagnostics` clean, five boots | no device loss, `uncapturedCount` 0 | | - |
 
+"Positive control" marks a check that shows the scenario or the instrument is what the next checks assume; "-" a
+check no breaking change was run against. Every SCENARIO has at least one check shown to fail.
+
+**L, as B6 measured it, with two differences.** Ported from B6's `wounds.py`: the rise in green share over 0.06, the
+eye glow excluded, a window of 1.2 (cut) / 1.6 (crater) wound radii about the wound's place on the open head, the
+crater where the surface went in by over 3 mm. (1) Each wound is read from an eye square on to it, 0.75 m out along
+the skin's outward direction on the open head: from the front, a wound on a turned half is cut short by the half's
+outline and its floor is in shadow (3.1 and 2.9 texels there). The pellet moved to the upper side of the - half: its
+5.5 cm crater holds no eye seat and stays off the face cut's band along the plane, where the mask is already full and
+cannot rise. (2) The check holds the mask's PLAIN centroid to the crater's, not B6's rise-weighted one: the weighted
+one moves with the wet highlight on the crater, 0.27 texels on one zombie of the ring and 2.69 on its neighbour with
+0.98 and 0.96 of the crater masked; the plain one reads 1.14 / 1.03 and 1.20 / 0.51 (rod cut / pellet) on the two.
+The weighted value is printed. So `L_CENTROID_TX` is 1.5, and "masks read at the world point" reads 3.08 and 9.70.
+
 **What it does not guard.** B fails when the outer hull loses its turned copies, which is B4's defect to the texel
 (215 / 117 and 5517). It did NOT fail when the proxy box stopped growing to the hold ball (`fit`), nor when
-`splitBound` stopped growing the cluster and tile spheres, nor with both, from 0.6 m, 2 m or above: at these cameras
-those bounds do not bite. Their rules have unit tests (`head-split-bounds.test.ts`, `zombie-gpu.test.ts`). The cost
-(C) is reported, not gated: open minus closed +7.6 to +8.0 ms at 0.6 m (25.2 -> 33.2 ms), +0.6 to +0.7 ms at 2 m in
-the two quiet runs.
+`splitBound` stopped growing the cluster and tile spheres, nor with both: no texel changes from the front at 0.6 m,
+from the front at 2 m or from above and behind. A fourth camera, from the side at 0.8 m, was tried for the review
+round: its own floor is 127 to 289 clipped texels on the CLOSED head (shipped against the field alone), and the two
+removals change nothing there either. So those two bounds are held by their unit tests only
+(`head-split-bounds.test.ts`, `zombie-gpu.test.ts`); B is left with its two cameras. The cost (C) is reported, not
+gated: open minus closed again +7.6 to +8.0 ms at 0.6 m (25.2 -> 33.2 ms), +0.6 to +0.7 ms at 2 m in the two quiet
+runs of the first build; "closed again" is a head that still carries the split's cut faces (the seam re-stamps them),
+and the gate now also times the untouched head first. The review round's runs were under load (5 to 7) and their
+times are not quoted.
 
 **Found by it.**
 
@@ -948,9 +994,13 @@ the two quiet runs.
 
 Photos (`gate/`, contact sheets, half size): `S-open.png` (closed, frames 4, 8, 30, 60 of chop 1), `WK-widen-kill.png`
 (chop 2 from the wedge eye; the corpse 45 frames after the kill), `O-one-side.png`, `L-later-hits.png` (before and
-after the rod cut and the pellet), `F-face.png` (closed, folded from the front, the folded cut face from above),
-`M-skull.png` (the flesh thrown open; the bone at 0 and the three stages), `T-turned.png`, `B-bounds.png` and
-`B-bounds-masks.png` (shipped against the field alone: grey both, red clipped, blue extra, yellow another depth).
+after the rod cut and the pellet) and `L-mask-vs-crater.png` (the measure: green mask, red crater, yellow both; white
+the wound's place on the open head, blue its closed one), `F-face.png` (closed, folded from the front, the folded cut
+face from above), `M-skull.png` (the forced head: the bone at 0 and three angles), `M-skull-chopped.png` (the really
+chopped head with its flesh out of the frame, chop 1 and chop 2), `R-range.png` (the four stances, enlarged; "beyond"
+is past the torch and dark), `H-head-damage.png` (the slug's head, the flail's, the held head after its third chop),
+`T-turned.png`, `B-bounds.png` and `B-bounds-masks.png` (shipped against the field alone: grey both, red clipped,
+blue extra, yellow another depth).
 
 ### The axe gate's K, and the two older gates on this tree
 
@@ -1016,7 +1066,7 @@ cut at the hit, 0.12 credit, no count, and three of them do not kill; the level 
 chops still count). Gate scenario A (4 checks) fails 3 of them on the code before: split `middle`, 2 face cuts 51 cm
 from the hit, meter 0.
 
-All three gates on the final tree: `head-split-gate` **61 checks, 0 failed**, twice, the check lines identical (and
+All three gates at that commit: `head-split-gate` **61 checks, 0 failed**, twice, the check lines identical (and
 identical to the runs before the fix but for the new scenario and one actor id); `axe-gate` **25 checks, 0 failed**;
 `cut-wound-gate` **30 checks, 0 failed**. No WGSL changed.
 
@@ -1054,6 +1104,16 @@ identical to the runs before the fix but for the new scenario and one actor id);
 | `tsc --noEmit` | the `node:crypto` error only |
 | the whole tree | 510 files, 7406 tests passed, 1 skipped |
 
+**`cutKeep` (review round).** What runs after the block on the albedo it leaves: the organ block, the mottle
+(ungated), the face layer (off a cut face), the body grain, the gore, the soldier's meat, the paint and char mix, the
+burn's soot, the melt, then the wetness. A bone ring written to `albedo` there would be mottled, gored and wet as
+flesh. The block now also declares `cutKeep` (0: nothing writes it yet), and the mottle, the gore strength and the
+wound wetness multiply by `(1 - cutKeep)`. Proof it changes nothing: `march-golden -u` (`MARCH_TRACE_POST`,
+`MARCH_BODY_SURFACE_PREP`); census ready, `uncapturedCount` 0, no device loss, march module 326068 B (83 fns), cold
+`warmMs` 51097 at load 10.3; the six `march-hash` pins unmoved; the open heads of three presets against the tree
+before, with the boot pinned: 0 of 120 000 texels differ in all six captures; cold boot pair (base `d55dd8c9`) new
+45479 / 45232 ms, base 45310 / 45096 ms.
+
 ### Leftovers
 
 - **A flail hit on a split head is a head hit.** The head damage leaf declines a split head and the flail stamps its
@@ -1063,8 +1123,9 @@ identical to the runs before the fix but for the new scenario and one actor id);
 - **The bone's per-tick bound** (`head-split.test.ts`): for chops that land settled, every tick holds
   `|d bone| <= L |d flesh|`, `L` = 3.6 from the follow table's steepest slope (measured 3.5975). Chops four ticks
   apart through the seam break it by 0.69 degrees in one tick; that case is pinned as known.
-- **New seams:** `__sdfGame.skullDrawn(id)` (an actor's split skull copies among the bone draws),
-  `actorWounds(...).headSlot`, `setLightClockFrozen(on, at)`.
+- **New seams:** `__sdfGame.skullDrawn(id)` (an actor's split skull copies among the bone draws, each with the
+  matrix it is drawn with), `actorWounds(...).headSlot`.
+- A flail crater's flesh is `flesh-bits.ts craterFleshBits(kind, ...)`, tested by what it throws.
 
 ### Known and accepted for now
 
@@ -1072,7 +1133,6 @@ identical to the runs before the fix but for the new scenario and one actor id);
   the old target steps the stage at once (seam only). A stage that only advances, in `SplitState`, removes both.
 - The top vertebra is not split. The shadow hull, `bodyInSight` and the motion vectors use the closed head.
 - A pellet or slug crater on a cut face sits on the old plane and shows on both faces.
-- The lit march target differs between boots by up to 0.027 in a few discrete states (above).
 
 ### For part B (the look pass)
 
@@ -1080,9 +1140,10 @@ identical to the runs before the fix but for the new scenario and one actor id);
 | --- | --- |
 | Bone ring and meat on the flesh's cut faces | `CUT_FACE_BLOCK`: `albedo` is in scope there with `cutFace`, `cutDepth` and `pS` (`applyBones` at `pS` for the ring); numbers into `SPLIT_SHADE`; the ramp's own stops are the material's (`surfCfg3`, `fatColor`, `deepColor`) |
 | Wetness of the faces | `SPLIT_SHADE.wet` (check it under the flashlight: this gate's cameras do not show it) |
+| A term on the cut face that is not flesh | set `cutKeep` in `CUT_FACE_BLOCK` to its share: the mottle, the gore and the wound wetness then leave it alone (the soot, the char and the melt still take it) |
 | The gate between skin and cut face | `SPLIT_SHADE.cutLo` / `cutHi`; the shell fade and the pores no longer follow it |
 | Something in the gap (a brain) | a mesh riding piece 0, drawn from `view.splitDrawn` like the skull (`mesh-renderer.ts`) |
-| More violent angles and spring | `HEAD_SPLIT.presets.*.maxBoth` / `maxOne`, `axe-head.ts AXE_HEAD.openAngles`, `HEAD_SPLIT.hz` / `zeta` / `kick`. The gate reads all of them live; its fixed thresholds that would move: the overshoot (1.15 x), the settle frame (30), `M_CRACK_MAX` / `M_SPLIT_MIN`, and the gap line needs the faces to reach the head centre's height |
+| More violent angles and spring | `HEAD_SPLIT.presets.*.maxBoth` / `maxOne`, `axe-head.ts AXE_HEAD.openAngles`, `HEAD_SPLIT.hz` / `zeta` / `kick`. The gate reads all of them live and derives S, W, K, T and M from them. What a retune can still trip: the gap line needs the cut faces to reach the head centre's height; `F_MOVED_MIN`; `O_BEARING` must still land a one-sided hit; and the two unit tests that hold the spring's overshoot and the table's crack / split |
 | Blood on open | `game-axe.ts` (`deps.bleed` per face) and the split leaf's `open()` |
 | Fracture teeth | `__sdfGame.skullSplit({ zigAmp, zigLen, chipAmp, chipLen, wobble… })`, `HEAD_SPLIT.skull.jag` |
 | The face cuts | `HEAD_SPLIT.faceCut` / `faceCalibre` (the lip marks the whole crown: above) |

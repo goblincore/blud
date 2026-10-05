@@ -89,10 +89,15 @@ The per-task texts used for dispatch are in the session scratchpad (`scratchpad/
     before.
   - Seams: `__sdfGame.skullSplit(...)` (look and follow table), `meshSkeletonShow(...)`.
 - **B8 part A is done** (2026-10-05): the gate, the look block, leftovers. Numbers in [`NOTES.md`](NOTES.md).
-  - `scripts/head-split-gate.mjs`: 61 checks (open, widen, kill, one side, later hits, face, skull, range, a body
-    chop near the neck, head damage, bounds, turned, cost), three runs in a row identical; each check was shown to fail under a breaking change.
+  - `scripts/head-split-gate.mjs`: 67 checks (open, widen, kill, one side, later hits, face, skull, range, a body
+    chop near the neck, head damage, bounds, turned, cost). Pinned across boots (the dynamic-light clock, the probes'
+    afterglow, the field interlace): the same numbers in every run. Each scenario was shown to fail under a breaking
+    change; its expectations are derived from the live tuning constants, so the look pass can retune angles and spring.
+    A routine run writes its sheets to `.lab-tmp/`; `SHEETS=1` rewrites the tracked ones in `gate/`.
   - One cut-face look block (`march/body/blocks/post/cut-face.wgsl.ts`), `cutDepth` from `split-hit`, and
     `SPLIT_SHADE` with one number per thing it drives. A pure move: pins unmoved, open heads equal to the bit.
+    It also gives `cutKeep` (0 today): the share of a cut-face texel that is not flesh, which the mottle, the gore
+    and the wound wetness after it leave alone. A bone ring written there sets it.
   - A flail hit on a split head credits the head's share of the meter. The bone has a per-tick bound.
   - **Only a chop on head flesh is a head chop** (`axe-head.ts chopOnHead`; decided by the controller, to be flagged
     to the owner). Since B3 a chop on the upper chest, within 0.2 m of the neck root, opened the head (the flail's

@@ -26,11 +26,14 @@ export function createFxSeams(ctx: GameContext) {
      *  practical intensity. G-buffer invariance never cared; MATCHED LIT
      *  screenshots do. Freezing this one clock pins the flicker phase so
      *  locked renders are bit-comparable in lit output too. Gate-only:
-     *  default OFF, ordinary gameplay never freezes it. Frozen at the wall
-     *  clock's now, or at `at` (seconds): a gate that compares lit values
-     *  from one boot with another's gives the phase itself. */
-    setLightClockFrozen: (on: boolean, at?: number) => {
-      if (on) ctx.lighting.flickerClockFrozenAt = at !== undefined && Number.isFinite(at) ? at : performance.now() * 0.001;
+     *  default OFF, ordinary gameplay never freezes it.
+     *  WITHIN one boot. It also stops the dynamic-light clock (game-dynamic-light-
+     *  leaves.ts rt.time), but where that stands: boot and any wall-clock wait
+     *  advanced it, and the lamps, the room fill and the body key read it. To
+     *  compare lit values ACROSS boots also setLightTime(0), setProbeBlend(1),
+     *  setProbeFall(1) and setFieldStyle("off") (scripts/march-hash.mjs). */
+    setLightClockFrozen: (on: boolean) => {
+      if (on) ctx.lighting.flickerClockFrozenAt = performance.now() * 0.001;
       ctx.lighting.clockFrozen = on;
     },
     get lightClockFrozen() { return ctx.lighting.clockFrozen; },

@@ -13,6 +13,14 @@
 //     this block starts from is already the wound interior's;
 //   * face.wgsl.ts takes the face sheet, the glow and the gore protection off it (that layer is also the mesh head's,
 //     by renames: baked-chunks.ts).
+//
+// WHAT RUNS AFTER THIS BLOCK, on the albedo it leaves: the organ block (bone and organ prims only), the mottle
+// (ungated: it blotches every albedo), the face layer (off a cut face), the body grain (masked by the wound mask), the
+// gore (a doomed or detached body), the soldier's meat (soldiers), the paint and char mix, the burn's soot, the melt;
+// and in the surface prep the wetness. A term written here that is NOT flesh (a ring of cut bone) would be mottled,
+// gored and wet as flesh. So the block also gives cutKeep, the share of this texel that is such a term (0 today:
+// nothing writes one): the mottle, the gore and the wound wetness leave that share alone. The soot, the char and the
+// melt still take it, as they take bone.
 import { SPLIT_SHADE } from '../../../../../head-split';
 
 const f = (v: number) => (Number.isInteger(v) ? `${v}.0` : `${v}`);
@@ -20,6 +28,8 @@ const f = (v: number) => (Number.isInteger(v) ? `${v}.0` : `${v}`);
 export const CUT_FACE_BLOCK = /* wgsl */ `  // THE CUT FACE'S LOOK (head-split.ts SPLIT_SHADE). Everything is behind the gate: a closed body runs none of it.
   // cutWet is the face's wetness at every depth (the wet block lifts its lip term to it; 0 off a cut face).
   var cutWet = 0.0;
+  // cutKeep is the share of the albedo written here that is not flesh (see the header): 0 until something is.
+  var cutKeep = 0.0;
   if (cutFace > 0.0) {
     // What the masks found at pS is not on this surface: the footprints the closed body's wounds and burns throw
     // THROUGH the solid (char, a tear's red, a wet-only band, a hole, a cloth mark or stain) are dropped.
