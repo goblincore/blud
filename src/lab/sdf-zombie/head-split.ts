@@ -74,23 +74,11 @@ export const HEAD_SPLIT = {
   /** A hit on an open head is on the OUTER skin when the closed head's field there is within this of zero; deeper, it
    *  is on a cut face (or the hinge-plane face), which un-warps to the inside of the closed head. */
   skinEps: 0.015,
-  /** The face cuts (splitFaceSegs): each segment sits `inset` into its own half off the plane and runs `lenFrac` x the
+  /** The cut faces (splitFaceSegs): each segment sits `inset` into its own half off the plane and runs `lenFrac` x the
    *  frame radius either way along the hinge axis; `faceCalibre` is the cut stamped along it (cut-wound.ts
-   *  CutCalibre).
-   *  THEIR JOB IS THE CROWN'S EDGE ONLY (look pass, 2026-10-05): a narrow, shallow notch along the plane over the top
-   *  of the head, which rags the scalp where the plane meets it, bloodies a band of skin either side and carries each
-   *  half's blood emitter. The FACES of the halves are the piece caps, flat, drawn as a section by the cut-face look
-   *  block (SPLIT_SHADE). A cut's slot is measured down from its anchor's plane, so it cannot follow the head's
-   *  outline: a slot deep enough to reach the brow is a wedge through the whole upper head.
-   *  Before (B3 to B8 part A): inset 0.006, depth 0.12, kerf 0.012, lip 1. That wedge, 12 mm a side at the scalp and
-   *  12 cm deep, WAS the upper 12 cm of each moved half's face (a wound wall 6 to 18 mm inside the plane, so no cap
-   *  and no section there), left a wafer of flesh between the plane and its lower half, and carved and lipped the
-   *  half that did not move (824 of 4823 still-half texels moved, by up to 8.2 mm). To go back: those four values.
-   *  `inset` only has to put each cut's anchor on its own half (the emitter rides it); the notch straddles the plane,
-   *  so both edges of the cut are ragged alike and no wafer is left. `kerf` x 1.75 (its jag and pinch) stays under a
-   *  centimetre: that is how far the notch bites into a half that does not move. */
-  faceCut: { inset: 0.001, lenFrac: 1.1 },
-  faceCalibre: { depth: 0.015, kerf: 0.005, lip: 0.3 },
+   *  CutCalibre). */
+  faceCut: { inset: 0.006, lenFrac: 1.1 },
+  faceCalibre: { depth: 0.12, kerf: 0.012, lip: 1 },
   /** The angle spring (head-deform.ts BURST_DEFORM's shape). `kick` scales the target into the initial rate. */
   hz: 7, zeta: 0.35, kick: 6, restA: 1e-4, restV: 1e-2,
   /** THE SKULL (the bone mesh; skullSplitOf below, drawn by webgpu/skeleton-spike/mesh-renderer.ts). The bone opens
@@ -128,43 +116,8 @@ export const HEAD_SPLIT = {
  *  geometry, not shading: its own numbers, so the gate can move without moving a surface.
  *  `poreCut`: no skin pores (the micro-detail normal, and the output-resolution detail pass) from this much gate.
  *  `wet`: how wet a cut face is at every depth, as a share of the gate: 1 = wet all over, 0 = wet like a crater (its
- *  lip glistens, its floor does not).
- *  `bone`: THE BONE RING (look pass, step 1): the skull in section. A band of cut bone where the face lies between
- *  `lo` and `hi` metres inside the closed head as it was before its wounds, each edge blended over +-`soft`. It follows the head's
- *  outline, so it also rings the jaw and the floor of the V. 10 to 17 mm: the skull mesh lies 5 to 20 mm under this
- *  head's skin (10 at the temples, 12 to 18 at the back, 20 at the crown), and two layers of flesh must fit outside
- *  the ring at 2.3 mm a texel (the layers step). `colour` multiplies the material's bone colour (the uniform the
- *  skeleton mesh is seeded from), so the ring follows the character's bone; over 1 because it is bone cut through,
- *  paler than the skull's weathered outside. `strength` is the band's share of the albedo, and the share the mottle,
- *  the gore and the wound wetness leave alone (cutKeep). To turn the ring off: `strength` 0.
- *  `layers`: THE FLESH OUTSIDE THE RING (look pass, step 2), from the skin in: the skin's edge (the gate's own blend),
- *  a pale line of fat to `fat` metres deep, then dark muscle to the ring. Sized for the march's texel (2.3 mm at
- *  0.6 m): the fat line is 1.4 texels there, the muscle 1.9; the material's own ramp (fat by 4 mm, muscle by 14) put
- *  the fat inside the gate's blend and never reached its red before the ring. `fatColour` multiplies the material's
- *  fat colour and `muscle` its deep colour. THE TORN EDGE: the layers' depth is pushed in and out by `rag` metres of
- *  a noise `ragScale` cells a metre across (it rides the half), and where that noise runs high the fat line is
- *  clotted over by `clot` (0 = an unbroken line) with the deep colour x `clotColour`. Shading only: the outline
- *  itself is the cap's. To turn the layers off: `strength` 0 (the material's ramp again).
- *  `cavity`: INSIDE THE RING: a dark lining, the deep colour x `rim` at the ring going to x `centre` over `reach`
- *  metres further in, blotched by +-`blotch` of a slow noise (`scale` cells a metre; it rides the half). No brain:
- *  that is an object of its own. To turn the cavity off: `strength` 0. */
-export const SPLIT_SHADE = {
-  cutLo: 0.0015, cutHi: 0.004, shellLo: 0.0015, shellHi: 0.004, poreCut: 0.5, wet: 1,
-  bone: { lo: 0.01, hi: 0.017, soft: 0.0015, colour: [1.3, 1.4, 1.6], strength: 1 },
-  layers: { fat: 0.006, soft: 0.0008, fatColour: [1.1, 1.05, 0.9], muscle: 0.4, rag: 0.0015, ragScale: 110, clot: 0.7, clotColour: 0.25, strength: 1 },
-  cavity: { rim: 0.32, centre: 0.12, reach: 0.035, blotch: 0.4, scale: 30, strength: 1 },
-} as const;
-
-const smooth01 = (e0: number, e1: number, x: number): number => {
-  const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
-  return t * t * (3 - 2 * t);
-};
-
-/** The bone ring's band at `depth` metres inside the closed, unwounded head, 0..1 before its strength: the CPU twin of the
- *  WGSL in cut-face.wgsl.ts (the same two smoothsteps on the same edges). */
-export function cutBoneRing(depth: number, bone: { lo: number; hi: number; soft: number } = SPLIT_SHADE.bone): number {
-  return smooth01(bone.lo - bone.soft, bone.lo + bone.soft, depth) * (1 - smooth01(bone.hi - bone.soft, bone.hi + bone.soft, depth));
-}
+ *  lip glistens, its floor does not). */
+export const SPLIT_SHADE = { cutLo: 0.0015, cutHi: 0.004, shellLo: 0.0015, shellHi: 0.004, poreCut: 0.5, wet: 1 } as const;
 
 export interface SplitState {
   preset: SplitPresetId | null;
@@ -491,10 +444,10 @@ export function splitNearReach(
   return peak * k;
 }
 
-/** THE FACE CUTS: one cut segment (cut-wound.ts CutSeg, world space, on the CLOSED head) per half that opens. Each
+/** THE CUT FACES: one cut segment (cut-wound.ts CutSeg, world space, on the CLOSED head) per half that opens. Each
  *  runs along the hinge axis over the top of the head, HEAD_SPLIT.faceCut.inset into its own half off the plane (so
  *  the cut belongs to that half and turns with it), seen from above along -up: stampCut finds the scalp under its
- *  midpoint and notches it from there (HEAD_SPLIT.faceCalibre: the crown's ragged edge, not the face of the half). */
+ *  midpoint and cuts down from there, so the face of the half reads as cut flesh from the scalp inward. */
 export function splitFaceSegs(st: SplitState, f: HeadFrame): { side: 1 | -1; a: Vec3; b: Vec3; view: Vec3 }[] {
   if (st.preset === null) return [];
   const c = HEAD_SPLIT.faceCut;

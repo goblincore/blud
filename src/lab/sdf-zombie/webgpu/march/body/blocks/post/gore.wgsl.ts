@@ -27,7 +27,7 @@ export const GORE_BLOCK = /* wgsl */ `  // Gore mask (gobs-and-goo spec §2): ch
   // without). Bone carries its own junction stain (organ block), so it skips
   // the mask, and with gore 0 it also skips the wet boost below — bone is
   // matte.
-  // The cut-face look block's non-flesh share is exempt like bone (cutKeep, cut-face.wgsl.ts: the bone ring).
+  // The cut-face look block's non-flesh share is exempt like bone (cutKeep, cut-face.wgsl.ts; 0 today).
   let goreStrength = max(lodCfg.w, gInstGore) * (1.0 - faceCover) * select(1.0, 0.0, isBone) * (1.0 - cutKeep);
   var gore = 0.0;
   if (goreStrength > 0.0) {

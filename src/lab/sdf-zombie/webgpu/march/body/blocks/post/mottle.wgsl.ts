@@ -41,6 +41,6 @@ export const MOTTLE_BLOCK = /* wgsl */ `  // Colour mottle. surfaceNoiseAmp abov
     // by 5 it is already freckles, and past ~10 it aliases into what looks
     // like compression noise rather than skin.
     let blotch = smoothstep(-0.35, 0.35, fbm(anchor * surfCfg2.w));
-    // Not over what the cut-face look block wrote as something other than flesh (cutKeep, cut-face.wgsl.ts: the bone ring).
+    // Not over what the cut-face look block wrote as something other than flesh (cutKeep, cut-face.wgsl.ts; 0 today).
     albedo = mix(albedo, mottleColor, blotch * surfCfg2.z * (1.0 - cutKeep));
   }`;

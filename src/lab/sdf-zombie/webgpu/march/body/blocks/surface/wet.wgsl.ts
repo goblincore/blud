@@ -24,7 +24,7 @@ export const WET_BLOCK = /* wgsl */ `  // Wounds are wetter than the surrounding
   // a flat face laid open, not a crater whose floor lies under its lip.
   var lip = 1.0 - smoothstep(surfCfg3.z, surfCfg3.z * 3.0, tissueDepth);
   if (cutWet > 0.0) { lip = mix(lip, 1.0, cutWet); }
-  // The wound's wetness is flesh's: not on the look block's non-flesh share (cutKeep: the bone ring).
+  // The wound's wetness is flesh's: not on the look block's non-flesh share (cutKeep; 0 today).
   let wetWound = max(wm * lip * (1.0 - cutKeep), gore);
   let woundWetBoost = mix(1.6, 2.15, faceGlowRedOnly);
   var wet = mix(surfCfg2.x * mix(1.0, woundWetBoost, wetWound) * (1.0 - cm) * select(1.0, 0.25, isBone) * select(1.0, 1.8, isOrgan), 1.0, gloss);

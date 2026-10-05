@@ -1148,176 +1148,22 @@ before, with the boot pinned: 0 of 120 000 texels differ in all six captures; co
 | Fracture teeth | `__sdfGame.skullSplit({ zigAmp, zigLen, chipAmp, chipLen, wobble… })`, `HEAD_SPLIT.skull.jag` |
 | The face cuts | `HEAD_SPLIT.faceCut` / `faceCalibre` (the lip marks the whole crown: above) |
 
-## Look pass, group 1: the flesh cut faces (B8 part B, first half; 2026-10-05)
+## Look pass, group 1 (the flesh cut faces): tried, not kept (2026-10-05)
 
-Four look changes, one commit each, each with an off setting and a before / after sheet in [`look/`](look/). They
-were built in the order **reach, bone ring, layers and cavity, wetness**, not the brief's (ring, layers, reach,
-wetness), for a measured reason: with the face cuts as part A left them, the look block's cut-face gate held only
-10 430 of the faces' texels over twenty views, because the upper 12 cm of every moved half's face was not a cap at all
-but the face cut's own slot wall. A ring written there changed 21% of those texels by a mean 0.02 and could not be
-seen (`look1/s1-zoom.jpg` in the scratchpad). So the reach came first; **the ring and the layers need it**: with the
-reach turned back, most of each face is wound wall again and shows neither.
+Three look steps for the cut faces were built and then reverted in one commit, at the owner's call. He had played
+the build at `d5b6f9f3` and, shown the before/after sheets, said the change was "pretty subtle" and "I'm happy with
+the before". The cut faces therefore stay as B6 built them (the wound-interior ramp by depth, wet all over), and
+the face cuts keep their B3 values (`HEAD_SPLIT.faceCut` / `faceCalibre`: kerf 0.012, depth 0.12, inset 0.006).
 
-How every number below was taken: `scripts/head-split-gate.mjs`'s boot pins and cameras (front 0.6 m, three-quarter
-0.6 m, above-behind, a raised view of the rim, front 2 m), the float march target read twice per capture (floor 0),
-one boot per variant. A variant is the live constants changed as the page loads `head-split.ts` (the response is
-rewritten in flight by the capture script; no file is touched), so "before" is each step's own off setting on the
-same build. **The off settings are exact:** each step's off capture equals the build before it in all 120 000 texels
-of every view (0 differ). The cut-face mask is the look block's own gate: a third boot paints the whole gate green
-through `SPLIT_SHADE.bone` (`lo` -1, `hi` 10), and the mask is where that differs from the off boot. On the march
-target a texel is 2.3 mm at 0.6 m (0.43 texels a millimetre) and 7.5 mm at 2 m (0.13).
-
-### Step: the face cuts' reach (`look/01-face-cut-reach.jpg`; the brief's step 3)
-
-**What the face cuts were.** A cut's slot is measured down from its anchor's tangent plane (`cut-wound.ts cutCarve`:
-`s = max(depth below the skin, depth below the plane)`), tapering to nothing at its depth. Stamped at the crown with
-depth 12 cm, kerf 12 mm and inset 6 mm, each was a wedge through the upper head: 12 mm a side at the scalp, closing
-1.7 cm above the head centre. So (1) the upper 12 cm of each moved half's face was the slot's far wall, 18 to 6 mm
-inside the plane: a wound wall, jagged, shaded as a wound, no cap; (2) between the plane and the lower half of the
-wedge a wafer of flesh was left, 0 to 6 mm thick; (3) the wedge and its lips reached 6 mm and more into a half that
-does not move. The cut model cannot follow the head's outline: a slot deep enough to reach the brow is that wedge.
-
-**So the face cuts cannot do both jobs** (rag the whole edge, leave the still half alone), and they no longer try.
-They are a notch at the crown: it rags the scalp where the plane meets it, bloodies a band of skin either side, and
-carries each half's blood emitter and its head-kept wound. The faces of the halves are the piece caps, flat, and
-the look block draws them. The torn edge round the rest of the outline is the look block's to draw (the layers step).
-
-| | Before | After |
+| Step | Commit (reverted) | What it did |
 | --- | --- | --- |
-| `HEAD_SPLIT.faceCut` | `inset` 0.006, `lenFrac` 1.1 | `inset` 0.001, `lenFrac` 1.1 |
-| `HEAD_SPLIT.faceCalibre` | `depth` 0.12, `kerf` 0.012, `lip` 1 | `depth` 0.015, `kerf` 0.005, `lip` 0.3 |
+| The face cuts' reach | `f2a1c7f8` | Shrank the face cuts to a notch at the crown (inset 1 mm, depth 1.5 cm, kerf 5 mm, lip 0.3) so a one-sided split stops carving the half that did not move. It also removed the ragged, carved texture the wide wedge leaves on the cut faces, which is part of the look the owner liked. |
+| A bone ring | `eb2f131b` | A pale bone band on the cut face by depth into the closed head (`SPLIT_SHADE.bone`), kept clear of mottle and gore through `cutKeep`. |
+| Layers and a cavity | `e1e4acf2` | Readable skin / fat / muscle bands outside the ring and a dark wet cavity inside it (`SPLIT_SHADE.layers`, `.cavity`). |
 
-**To turn this off:** the four "before" values (recorded in the constant's comment too).
+A fourth step (wetness under the flashlight) was in progress and was dropped uncommitted. The sheets
+(`look/01-face-cut-reach.jpg`, `02-bone-ring.jpg`, `03-layers-cavity.jpg`) are in those commits' trees. To bring a
+step back, `git revert` the revert, or cherry-pick the step's commit.
 
-| Measure | Before | After |
-| --- | --- | --- |
-| The gate's O, the face cut alone on the still half (closed head with its face cut against the untouched head; texels moved over 1 mm, largest move, texels whose colour changed) | 775 of 4520, 8.2 mm, 463 | **0 of 4520, 0 mm, 0** |
-| The same on a forced one-sided split, 4 cm off centre | 824 of 4823, 8.2 mm, 153 | 0 of 4823, 0 mm, 2 |
-| ... with the notch 2 / 2.5 / 3 cm deep (kerf 5 mm) | | 3 / 21 / 44 texels, 4.1 mm: the notch's own front end crossing the 1 cm line. Kerf 4 or 5 mm and lip 0 or 0.3 do not change it; 1.5 cm clears it |
-| Cut-face texels (the look block's gate) over the same twenty views (three presets, three stages of `middle` both; front, three-quarter, above-behind, front 2 m) | 10 430 | 17 270 (31 167 with the five raised views) |
-| The `face` preset's crown from the front at 0.6 m: texels over 0.08 luma off their 3 x 3 median | 111 of 1798 | 47 of 1962 |
-| Loose pixels at the peeled slab's tip | by eye (the sheet, row 4): a ragged dark fringe | gone; hit texels with under 3 hit neighbours 3 -> 1, which is no measure (the fringe was clumps, not single texels) |
-
-**My read of the sheet.** At 0.6 m the faces go from hollowed, streaky troughs with a thick pale rim to flat cut
-faces; the closed-again head has no gash across its crown; the `face` preset's speckled band is gone. What is wrong:
-the faces are now plain flat red (the next two steps), and the opened edge is a clean line everywhere but the crown,
-where the notch at 1.5 cm is small. At 2 m this step alone is no improvement: the old wedge showed more bright red
-from the front. It is ON because the still half's numbers are the brief's own target and the ring and the layers
-need caps to be drawn on.
-
-**Gate expectations restated in this commit** (`scripts/head-split-gate.mjs`), neither derived from a constant:
-
-- **`L_CENTROID_TX` 1.5 -> 2.0.** The rod cut sits on the brow, inside the old face cut's reach; it now stands on
-  clean skin: crater 79 -> 71 texels, mask 172 -> 177, centroids 1.20 -> **1.51** texels apart (the pellet 0.51 ->
-  0.77). "Masks read at the world point" reads 3.08 (measured before the retune).
-- **The gap at rest: `+2 mm` -> `gapRestOver(theta)` = 3 mm + 2 x `GAP_FRONT` x sin(theta).** The gap read 2.5 (W),
-  7.4 (K) and 2.6 mm (T) LONG where it had read 1.5, 0.6 and 0.4 short; S is unchanged (-0.4), frame for frame. The
-  split did not change: same state, same wounds, same hits (probe: `look1/tail-swk.mjs`). The instrument did. A
-  point of the line just inside a half counts as seen while the face is under `GAP_FRONT` (5 mm) in front of it
-  along the sight line, and a sight line in the wedge meets a face at no more than the opening angle, so the run
-  reads long by up to 5 mm x sin(theta) a side plus a texel: 5.2, 6.5 and 7.4 mm at the three chops. Until now the
-  faces at the line lay inside the face cuts' reach, where the walk accepts a footprint early and draws them fat:
-  on texels that are cap before and after, the old surface is nearer the eye by a median 2.5 mm and nowhere farther
-  (one side, three-quarter, 2154 texels), and that fat hid the allowance. The short side, which a halved angle
-  trips (-12.4 mm), is unchanged. What the long side still catches: an angle about 15% too wide at chop 1 (it was
-  about 7%).
-
-Unit tests restated: `head-split-cpu.test.ts` (the face cut's carve depth is its calibre's, under 5 cm, where it
-had to be over 8 cm; new: the notch bites under a centimetre into a still half and its anchor is on its own half).
-
-Checks: no WGSL changed. `head-split-gate` **67 checks, 0 failed**; `npx vitest run head-split game-head-split axe`
-209 passed.
-
-### Step: a bone ring on the cut faces (`look/02-bone-ring.jpg`; the brief's step 1)
-
-A band of cut bone on every cap, where the face lies 10 to 17 mm inside the closed head: the skull in section. It
-follows the head's outline, so it rings the jaw and crosses the floor of the V as well; that reads as section in
-every view shot, and no fade at the neck was added.
-
-- **Constants:** `SPLIT_SHADE.bone = { lo: 0.01, hi: 0.017, soft: 0.0015, colour: [1.3, 1.4, 1.6], strength: 1 }`.
-  **To turn this off: `strength` 0** (exact: 0 of 120 000 texels differ from the build before, in the fifteen
-  `middle` both views; the other ten views have another zombie's head in frame, left in another state by the reach
-  capture).
-- **10 to 17 mm, not the brief's 6 to 13.** Measured on this head (the flesh hidden, skull against head outline, front
-  and side): the skull mesh lies 5 to 20 mm under the skin, about 10 at the temples, 12 to 18 at the back, 20 at the
-  crown. And the layers step needs two bands of flesh outside the ring at 2.3 mm a texel.
-- **The colour** is the material's own `boneColor` uniform (what the skeleton mesh is seeded from) x the tint, so a
-  character with other bone gets another ring; over 1 because cut bone is paler than a skull's outside.
-- **The depth is the closed head's BEFORE its wounds** (`cutSection = max(0, -hitField.w)`, the walk's pre-wound
-  field at the un-warped point: what the tissue ramp reads off a cut face), not `cutDepth`, which is the depth as
-  the head is now. With `cutDepth` the first try painted bone across everything 6 to 13 mm from the face cut's slot
-  wall (a tan slab over half of the still face). The ring does not bend round a crater either.
-- **It is not flesh:** `cutKeep` is its share, so the mottle, the gore and the wound wetness leave it alone (it has
-  the skin's wetness, not the wound's 1.6 x).
-- `head-split.ts cutBoneRing` is the band's CPU twin (tested).
-
-| Measure (25 views, float march target) | |
-| --- | --- |
-| Cut-face texels (the gate, painted) | 31 167 |
-| ... changed by the ring | 6505 (**20.9%**); largest channel step: median 0.025, mean 0.077, max 0.90; 11.4% of the face by over 0.02 |
-| Every other hit texel | 2 of 587 236 differ, by 7.7e-8 (the mask's own edge) |
-| Three-quarter at 2 m (three presets; no mask boot for this camera) | 39 / 58 / 56 texels changed, mean 0.34 to 0.51 |
-| Closed bodies | the six `march-hash` pins unmoved |
-
-**My read of the sheet.** At 0.6 m, from above and from three-quarter, a pale band now runs inside the edge of each
-face and the face stops being one red sheet; under the torch it is cream, in the half's own shadow it goes olive.
-From the front the faces of a `middle` split are edge-on at any distance and nothing on them shows (this is true of
-every step here). At 2 m from three-quarter the ring is one texel wide and still reads as a pale line round the red.
-Wrong: it is thin next to the skull mesh in the gap, which stays the larger bone shape; the mouth's carve is in the
-pre-wound field, so the ring draws a thin rectangle round it low on the face; in a `middle` one-sided split the
-mesh's fracture teeth poke through the still face as pale specks, 14 to 18 mm inside the outline, a little deeper
-than the ring.
-
-| Check | Result |
-| --- | --- |
-| `march-golden -u` | 1 snapshot (`MARCH_TRACE_POST` and what embeds it; comments in the mottle, gore and wet blocks) |
-| `compile-census` | phase ready, `uncapturedCount` 0, no device loss; march module 326 068 B -> **327 020 B** (83 fns); cold `warmMs` 48 213 |
-| `march-hash` | no pin moved (`d7392d52…` / `76bd51aa…`, `0c71e712…` / `bf6836cd…`, `470ff0b3…` / `f618070e…`) |
-| `head-split-gate` | 67 checks, 0 failed |
-
-### Step: layers outside the ring, a dark cavity inside it (`look/03-layers-cavity.jpg`; the brief's step 2)
-
-Outside the ring, from the skin in: the skin's edge (the gate's own blend, to about 2.75 mm), a pale line of fat to
-6 mm, dark muscle to the ring at 10 mm. Inside the ring: a dark lining, darker toward the middle, blotched.
-
-- **Constants:** `SPLIT_SHADE.layers = { fat: 0.006, soft: 0.0008, fatColour: [1.1, 1.05, 0.9], muscle: 0.4, rag:
-  0.0015, ragScale: 110, clot: 0.7, clotColour: 0.25, strength: 1 }` and `SPLIT_SHADE.cavity = { rim: 0.32, centre:
-  0.12, reach: 0.035, blotch: 0.4, scale: 30, strength: 1 }`. The colours multiply the material's own (`fatColor`,
-  `deepColor`). **To turn them off: `layers.strength` 0 and `cavity.strength` 0** (each alone works too). Exact: the
-  off capture equals the ring build in all 25 views, 0 texels.
-- **Sized by the texel.** 0.43 texels a millimetre at 0.6 m, 0.13 at 2 m. The material's ramp has its fat stop at
-  4 mm, inside the gate's blend (1.5 to 4 mm), and its muscle stop at 14 mm, inside the ring: before this step the
-  flesh outside the ring was one orange band. Now the fat line is 3.25 mm (1.4 texels at 0.6 m) and the muscle 4 mm
-  (1.7 texels); a unit test holds each over 1.3 texels. At 2 m all of it, ring included, is under 2.5 texels.
-- **The torn edge, in shading** (the reach step's other half): the layers' depth is pushed in and out by 1.5 mm of
-  a noise with 9 mm cells, and where that noise runs high the fat line is clotted over with dark red. Shading only:
-  the outline is the cap's.
-- **Both noises are of the rest anchor**, not of `pS`: `pS` is a world point and would swim on a body that walks;
-  the anchor is its rest-space image and rides the half (the mottle's and the pores' rule).
-- **The lines are written only while each is on.** With strength 0 as a multiplier the albedo is untouched, but the
-  compiler rounds the ring's own mix after those lines another way: 403 ring texels of 25 views differed, by up to
-  3e-7. So strength 0 writes no line, and off is the text without them.
-
-| Measure (25 views, float march target) | |
-| --- | --- |
-| Cut-face texels | 31 167 |
-| ... changed | 28 540 (**91.6%**); largest channel step: median 0.032, mean 0.094, max 0.91; 54.4% of the face by over 0.02 |
-| Every other hit texel | 9 of 587 236 differ, by at most 5.4e-7 (the gate's own edge) |
-| Three-quarter at 2 m | 150 / 269 / 246 texels changed, mean 0.34 to 0.42 |
-| Closed bodies | the six `march-hash` pins unmoved |
-
-**My read of the sheet.** This is the step that does the most. At 0.6 m (three-quarter, from above) the face stops
-being a lit red sheet: it is a dark hollow with a banded rim, yellow, dark, cream, and the ring now stands between
-two darker bands instead of fading into orange. At 2 m from three-quarter the neon red patch is a darker red with a
-pale banded border; the bands themselves merge there. From the front, edge-on, nothing. Wrong: under the torch at
-2 m the cavity is still a saturated red, only darker; the blotch is too slow and too faint to see; the torn edge
-does not show at sheet size (1.5 mm is 0.65 texel), so the outline away from the crown still reads as a clean
-cleave; the cavity is an empty lining (the brain is the next group's). In the unlit `face` preset from above the
-cavity goes almost black.
-
-| Check | Result |
-| --- | --- |
-| `march-golden -u` | 1 snapshot (`MARCH_TRACE_POST` and what embeds it) |
-| `compile-census` | phase ready, `uncapturedCount` 0, no device loss; march module 327 020 B -> **328 182 B** (83 fns); `warmMs` 4083 (not a cold number: the OS shader cache held this text from the captures minutes before) |
-| `march-hash` | no pin moved |
-| `head-split-gate` | 67 checks, 0 failed |
+**Still true, and accepted:** in a one-sided split the face cut marks the crown on both sides of the plane (775 of
+4520 still-half texels, up to 8.2 mm; B8 part A's finding). The owner saw this build and is happy with it.
