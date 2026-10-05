@@ -29,15 +29,18 @@ describe('ported features reach the entry point', () => {
   });
 });
 
-// THE HEAD SPLIT. head-split.ts (splitField / pieces / restCap) is the CPU mirror: the caps, the region shell and the
-// piece frames below must be the same ones, in the same form.
+// THE HEAD SPLIT: what can be said of the slot's STRUCTURE from text (the loader gate, the piece order and early skip,
+// where the caps and the shell go, the hit bookkeeping, the continue / break audit). What the pieces COMPUTE is tested
+// by value in map-body-split-twin.test.ts, a hand twin of this WGSL run against head-split.ts splitField; the terms'
+// text is held by the march golden snapshot.
 describe('the head split in mapBody (head-split.ts splitField)', () => {
   const M = `${REGION_MARGIN}`;
   const code = MAP_BODY.replace(/\/\/[^\n]*/g, '');
 
   it('the slot is closed unless its record carries a plane normal, and a closed slot is one uncapped piece at pIn', () => {
     expect(MAP_BODY).toMatch(/^fn mapBody\(pIn: vec3<f32>, /);
-    expect(MAP_BODY).toContain('let splitOpen = dot(gInstSplitN.xyz, gInstSplitN.xyz) > 0.5;');
+    // The open test is loadInstance's (gInstSplitOpen, groups.wgsl.ts); mapBody does not make its own.
+    expect(MAP_BODY).toContain('let splitOpen = gInstSplitOpen;');
     expect(MAP_BODY).toContain('var splitShell = 1e9;');
     expect(MAP_BODY).toContain('var pcA = vec3<f32>(-1e9, 0.0, 0.0);');
     expect(MAP_BODY).toContain('var pcB = vec3<f32>(1e9, 0.0, 1.0);');
@@ -45,33 +48,14 @@ describe('the head split in mapBody (head-split.ts splitField)', () => {
     // Every split read sits behind splitOpen, or behind a piece angle only an open slot can set.
     const setup = code.slice(code.indexOf('if (splitOpen) {'), code.indexOf('for (var pc = 0;'));
     const rest = code.replace(setup, '');
-    expect(rest.match(/gInstSplit[NHAR]/g)).toEqual(['gInstSplitN', 'gInstSplitN', 'gInstSplitH', 'gInstSplitA']);
+    expect(rest.match(/gInstSplit[NHAR]/g)).toEqual(['gInstSplitH', 'gInstSplitA']);
     expect(rest).toContain('if (piece.y != 0.0) { pMoved = splitMoveBack(pIn, gInstSplitH.xyz, gInstSplitA.xyz, piece.y); }');
+    // The region margin comes from head-split.ts by interpolation, never as a literal.
+    expect(MAP_BODY).toContain(`let spRho = gInstSplitR.x - ${M};`);
+    expect(MAP_BODY).toContain(`splitShell = ${M} + abs(spDh - gInstSplitR.x);`);
     // The caps and the shell touch the result only for an open slot.
     expect(MAP_BODY).toContain('if (splitOpen) { dPiece = max(dmgFinal, piece.x); }');
     expect(MAP_BODY).toContain('if (splitOpen) { dUnion = min(dUnion, splitShell); }');
-  });
-
-  it('mirrors the pieces term for term: u, dh, rho, the shell C, the rest cap and the two halves\' caps', () => {
-    expect(REGION_MARGIN).toBe(0.06);
-    expect(MAP_BODY).toContain('let spU = cross(spN, spA);');                                   // u = n x a
-    expect(MAP_BODY).toContain('let spDh = length(pIn - spH);');                                // dh = |p - h|
-    expect(MAP_BODY).toContain(`let spRho = gInstSplitR.x - ${M};`);                            // rho = r - REGION_MARGIN
-    expect(MAP_BODY).toContain(`splitShell = ${M} + abs(spDh - gInstSplitR.x);`);               // C
-    expect(MAP_BODY).toContain('var cap0 = min(dot(spU, pIn - spH), spRho - spDh);');           // restCap
-    expect(MAP_BODY).toContain('let qP = splitMoveBack(pIn, spH, spA, gInstSplitN.w);');        // q+ (thetaP)
-    expect(MAP_BODY).toContain('let qM = splitMoveBack(pIn, spH, spA, gInstSplitA.w);');        // q- (thetaM)
-    // P+ = max(f(q+), -s(q+), -up(q+), dh - rho); P- = max(f(q-), s(q-), -up(q-), dh - rho); s(q) = n.q - d0.
-    expect(MAP_BODY).toContain('let capP = max(max(-(dot(spN, qP) - gInstSplitH.w), -dot(spU, qP - spH)), spDh - spRho);');
-    expect(MAP_BODY).toContain('let capM = max(max(dot(spN, qM) - gInstSplitH.w, -dot(spU, qM - spH)), spDh - spRho);');
-    // The halves exist only inside the region sphere (dh <= r); outside, the slot is min(P0, C).
-    const iIn = MAP_BODY.indexOf('if (spDh <= gInstSplitR.x) {');
-    expect(iIn).toBeGreaterThan(MAP_BODY.indexOf('var cap0 ='));
-    expect(MAP_BODY.indexOf('let qP =')).toBeGreaterThan(iIn);
-    // A side that does not move shares the rest's field: max(f, min(cap0, its cap)), and is not a piece of its own.
-    expect(MAP_BODY).toContain('if (gInstSplitN.w == 0.0) { cap0 = min(cap0, capP); } else { pcB.x = capP; pcB.y = gInstSplitN.w; }');
-    expect(MAP_BODY).toContain('if (gInstSplitA.w == 0.0) { cap0 = min(cap0, capM); } else { pcC.x = capM; pcC.y = gInstSplitA.w; }');
-    expect(MAP_BODY).toContain('pcA.x = cap0;');
   });
 
   it('visits the pieces in ascending cap order (an unrolled compare-swap) and stops at the first cap that cannot win', () => {
@@ -79,6 +63,8 @@ describe('the head split in mapBody (head-split.ts splitField)', () => {
     const iSort2 = MAP_BODY.indexOf('if (pcC.x < pcB.x) { let sw = pcB; pcB = pcC; pcC = sw; }');
     const iSort3 = MAP_BODY.indexOf('if (pcB.x < pcA.x) { let sw = pcA; pcA = pcB; pcB = sw; }', iSort2);
     const iLoop = MAP_BODY.indexOf('for (var pc = 0; pc < 3; pc = pc + 1) {');
+    // The halves are pieces only inside the region sphere; the rest's cap is set last, before the sort.
+    expect(MAP_BODY.indexOf('if (spDh <= gInstSplitR.x) {')).toBeLessThan(MAP_BODY.indexOf('pcA.x = cap0;'));
     expect(iSort).toBeGreaterThan(MAP_BODY.indexOf('pcA.x = cap0;'));
     expect(iSort2).toBeGreaterThan(iSort);
     expect(iSort3).toBeGreaterThan(iSort2);

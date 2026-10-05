@@ -2429,10 +2429,10 @@ export function createZombieGpuView(
   const motionRow = new Float32Array(MAX_PRIMS * 4);
   const motionPrev = { a: new Float32Array(MAX_PRIMS * 4), b: new Float32Array(MAX_PRIMS * 4), q: new Float32Array(MAX_PRIMS * 4), count: -1 };
   let lastUploadRest: BuildResult | undefined;
-  // THE HEAD SPLIT of the body last handed to update() (`posed.split`, head-split.ts; null = closed). The pose is its
-  // one source: every update() takes it from the body, so a closed or torn pose closes the record (REC_SPLIT_*), and
-  // the setters' syncRecord() re-writes it unchanged. The prims are the closed head's either way.
-  let headSplit: SplitWarp | null = null;
+  // THE HEAD SPLIT of the body the view last received (`posed.split`, head-split.ts; null = closed): the one it was
+  // built from, then each update()'s. The pose is its one source, so a closed or torn pose closes the record
+  // (REC_SPLIT_*), and the setters' syncRecord() re-writes it unchanged. The prims are the closed head's either way.
+  let headSplit: SplitWarp | null = body.split ?? null;
   // Each view owns its packing scratch. writeRow copies into the atlas before
   // the next upload, so the temporary rows need not allocate every frame.
   let uploadScratch: ReturnType<typeof packBody> | undefined;

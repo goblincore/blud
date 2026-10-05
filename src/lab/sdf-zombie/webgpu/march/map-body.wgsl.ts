@@ -16,14 +16,15 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(pIn: vec3<f32>, data: texture_2d<
   // character type; each instance's FULL field is evaluated in turn and the
   // min is the union surface. PER-INSTANCE state (counts, counts2, woundBound,
   // the volume pose, noise shift, band) is loaded from the record buffer by
-  // slot, so the body below is the pre-crowd mapBody verbatim with those names
-  // bound to locals.
+  // slot, so the body below is the pre-crowd mapBody with those names bound to
+  // locals, wrapped in the head split's piece loop (below).
   //
   // SINGLE-INSTANCE BIT IDENTITY: with instCfg.x == 1 and gTileActive == 0 the
-  // loop runs exactly once with band 0, and its body is the pre-change mapBody
-  // character for character. The final min against 1e9 and the argmin
-  // save/restore touch only the RETURN value, never the per-sample float ops
-  // that produce it, so d is bit-identical.
+  // slot loop runs exactly once with band 0, and for a body with no split the
+  // piece loop runs its body exactly once at the incoming point with no cap:
+  // the same per-sample float ops, in the same order, as the pre-crowd mapBody.
+  // The final min against 1e9 and the argmin save/restore touch only the
+  // RETURN value, never those ops, so d is bit-identical (march-hash holds).
   var dUnion = 1e9;
   var bestSlot = gSlot;          // the slot POST will reload
   var bestIdxU = -1.0;
@@ -42,8 +43,8 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(pIn: vec3<f32>, data: texture_2d<
   // MAX_CROWD_INSTANCES slots and testing each for membership per step.
   //
   // BIT IDENTITY: with one instance and tiles off, tiled = false, nIter =
-  // nInst = 1, k = 0, s = 0, and the body below is the pre-change mapBody
-  // character for character. The alive read is the same value, now hoisted
+  // nInst = 1, k = 0, s = 0, and the body below evaluates what the pre-crowd
+  // mapBody did (see above). The alive read is the same value, now hoisted
   // into gInstAlive by loadInstance.
   let nInst = i32(instCfg.x);
   // BASE SLOT (crowd stage a, task 7c). A material drawing ONE field out of a
@@ -77,7 +78,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(pIn: vec3<f32>, data: texture_2d<
     // rigid motion of f cut by half-spaces and a ball, so the min is a continuous distance bound: the march, the cone
     // and every probe step through it as through any body. A piece is a vec3 (cap, theta, id); a CLOSED slot is the
     // one piece (-1e9, 0, 0) at pIn with no cap and no shell, which is the body exactly as before.
-    let splitOpen = dot(gInstSplitN.xyz, gInstSplitN.xyz) > 0.5;
+    let splitOpen = gInstSplitOpen;
     var splitShell = 1e9;
     var pcA = vec3<f32>(-1e9, 0.0, 0.0);
     var pcB = vec3<f32>(1e9, 0.0, 1.0);
@@ -102,7 +103,8 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(pIn: vec3<f32>, data: texture_2d<
         if (gInstSplitA.w == 0.0) { cap0 = min(cap0, capM); } else { pcC.x = capM; pcC.y = gInstSplitA.w; }
       }
       pcA.x = cap0;
-      // Ascending caps (three scalars' compare-swap; no indexed array), for the early skip below.
+      // Ascending caps, for the early skip below. An unrolled compare-swap of three vec3s, NOT an array indexed by the
+      // loop: a dynamically indexed private array in this function's inlined body hung the Metal compile (185 s).
       if (pcB.x < pcA.x) { let sw = pcA; pcA = pcB; pcB = sw; }
       if (pcC.x < pcB.x) { let sw = pcB; pcB = pcC; pcC = sw; }
       if (pcB.x < pcA.x) { let sw = pcA; pcA = pcB; pcB = sw; }
@@ -115,7 +117,8 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(pIn: vec3<f32>, data: texture_2d<
     // inner loop (the cluster, group and tile walks, the owner re-fold's cluster loop and its pre-scan), so none
     // skips or ends a piece, and none ever ended the slot loop. The skip's break is the only one that targets this
     // loop (pinned by map-body.wgsl.test.ts).
-    for (var pc = 0; pc < 3; pc = pc + 1) {
+    // (The loop's body is not indented a level; its closing brace is labelled.)
+    for (var pc = 0; pc < 3; pc = pc + 1) {   // THE PIECE LOOP
     let piece = select(select(pcC, pcB, pc == 1), pcA, pc == 0);
     if (piece.x >= min(dUnion, splitShell)) { break; }
     // p, for the rest of the slot body, is this piece's un-warped point: the tile and group bounds, the carves, the
@@ -125,8 +128,9 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(pIn: vec3<f32>, data: texture_2d<
     let p = pMoved;
     var d = 1e9;
     // Argmin tracking now lives in private globals shared with foldGroup
-    // (above); reset per slot — calcNormal calls mapBody four times and each
-    // must track its own dominant prim.
+    // (above); reset per PIECE (a piece is folded like a slot of its own) —
+    // calcNormal calls mapBody four times and each must track its own
+    // dominant prim.
     gFoldBest = 1e9;
     gFoldBestIdx = -1.0;
     gFoldBestDistort = 1.0;
@@ -457,7 +461,7 @@ ${LIMBS ? `      let savedBest = gFoldBest;
       pieceU = i32(piece.z);
       splitFU = dmgFinal;
     }
-    }
+    }   // end of THE PIECE LOOP
     // The region shell bound C caps the slot's value only: it is at least the margin, so it is never the surface,
     // and the bookkeeping stays with the last piece or slot that won.
     if (splitOpen) { dUnion = min(dUnion, splitShell); }

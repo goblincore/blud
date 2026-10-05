@@ -122,11 +122,17 @@ export function createCrowdRecords(capacity = MAX_CROWD_INSTANCES): CrowdRecords
       floats[lo] = l?.[0] ?? -1; floats[lo + 1] = l?.[1] ?? -1;
       floats[lo + 2] = l?.[2] ?? -1; floats[lo + 3] = l?.[3] ?? -1;
       // No split, or one with neither side turned, is the zero record (see REC_SPLIT_N).
-      const sp = s.split && (s.split.thetaP !== 0 || s.split.thetaM !== 0) ? s.split : null;
-      put4(b + REC_SPLIT_N * 4, sp?.n ?? [], sp?.thetaP ?? 0);
-      put4(b + REC_SPLIT_H * 4, sp?.h ?? [], sp?.d0 ?? 0);
-      put4(b + REC_SPLIT_A * 4, sp?.a ?? [], sp?.thetaM ?? 0);
-      put4(b + REC_SPLIT_R * 4, [sp?.r ?? 0], 0);
+      const sp = s.split;
+      const so = b + REC_SPLIT_N * 4;
+      if (sp && (sp.thetaP !== 0 || sp.thetaM !== 0)) {
+        put4(so, sp.n, sp.thetaP);
+        put4(b + REC_SPLIT_H * 4, sp.h, sp.d0);
+        put4(b + REC_SPLIT_A * 4, sp.a, sp.thetaM);
+        const ro = b + REC_SPLIT_R * 4;
+        floats[ro] = sp.r; floats[ro + 1] = 0; floats[ro + 2] = 0; floats[ro + 3] = 0;
+      } else {
+        floats.fill(0, so, b + (REC_SPLIT_R + 1) * 4);
+      }
       rec.dirty = true;
     },
     alive(slot, on) {

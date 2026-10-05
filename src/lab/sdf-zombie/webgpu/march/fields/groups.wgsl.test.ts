@@ -52,10 +52,16 @@ describe('crowd instance state', () => {
     }
     expect([REC_SPLIT_N, REC_SPLIT_H, REC_SPLIT_A, REC_SPLIT_R]).toEqual([17, 18, 19, 20]);
     const iN = INSTANCE_STATE.indexOf('gInstSplitN = (*inst)[base + 17];');
-    // A zero record is a closed head; an open one carries a unit normal (crowd-records.ts write()).
-    const iOpen = INSTANCE_STATE.indexOf('if (dot(gInstSplitN.xyz, gInstSplitN.xyz) > 0.5) {');
+    // A zero record is a closed head; an open one carries a unit normal (crowd-records.ts write()). The test is made
+    // ONCE, here, into gInstSplitOpen: mapBody and the post-hit read the flag, never the normal.
+    expect(globals).toContain('var<private> gInstSplitOpen: bool = false;');
+    const iFlag = INSTANCE_STATE.indexOf('gInstSplitOpen = dot(gInstSplitN.xyz, gInstSplitN.xyz) > 0.5;');
+    const iOpen = INSTANCE_STATE.indexOf('if (gInstSplitOpen) {');
     expect(iN).toBeGreaterThan(-1);
-    expect(iOpen).toBeGreaterThan(iN);
+    expect(iFlag).toBeGreaterThan(iN);
+    expect(iOpen).toBeGreaterThan(iFlag);
+    expect(MAP_BODY).toContain('let splitOpen = gInstSplitOpen;');
+    expect(MAP_BODY).not.toContain('dot(gInstSplitN');
     const open = INSTANCE_STATE.slice(iOpen, INSTANCE_STATE.indexOf('}', iOpen));
     expect(open).toContain('gInstSplitH = (*inst)[base + 18];');
     expect(open).toContain('gInstSplitA = (*inst)[base + 19];');

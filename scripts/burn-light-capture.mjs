@@ -526,10 +526,14 @@ try {
   const recScan = await evaluate(`(() => {
     window.__sdfGame.installDebugProbe();
     const d = window.__sdfGameDebug.normalCaptureState();
-    const STRIDE = 84, BURN = 15 * 4; // REC_VEC4S (21) * 4 floats; REC_BURN = 15
+    // The record stride (REC_VEC4S * 4 floats), from a live view's own buffer: its length over its slot count.
+    const actor0 = window.__sdfGame.actorList()[0];
+    const rec0 = actor0 ? window.__sdfGame.zombie(actor0.id).view.records : null;
+    const STRIDE = rec0 ? rec0.floats.length / rec0.capacity : 0;
+    const BURN = 15 * 4; // REC_BURN = 15
     const out = [];
     for (const p of d.pieces) {
-      if (!p.records || p.records.length < STRIDE) continue;
+      if (!STRIDE || !p.records || p.records.length < STRIDE) continue;
       const n = Math.floor(p.records.length / STRIDE);
       let hot = 0, maxBurn = 0;
       for (let i = 0; i < n; i++) { const b = p.records[i * STRIDE + BURN]; if (b > 0.001) hot++; if (b > maxBurn) maxBurn = b; }

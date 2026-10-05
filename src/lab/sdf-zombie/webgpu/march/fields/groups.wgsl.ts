@@ -309,8 +309,10 @@ var<private> gInstBurn: vec4<f32> = vec4<f32>(0.0);
 var<private> gInstLights: vec4<f32> = vec4<f32>(-1.0);
 // THE HEAD SPLIT (head-split.ts SplitWarp, world space; crowd-records.ts REC_SPLIT_*): N = (plane normal, thetaP),
 // H = (hinge point, d0), A = (hinge axis, thetaM), R = (region radius, spare). A closed head is a zero record and an
-// open one has a unit normal, so N alone says which; H, A and R are loaded only for an open slot and are STALE
-// otherwise (another slot's): read them behind the open test.
+// open one has a unit normal, so N alone says which: loadInstance sets gInstSplitOpen from it, and that flag is THE
+// open test for every reader. H, A and R are loaded only for an open slot and are STALE otherwise (another slot's):
+// read them behind gInstSplitOpen.
+var<private> gInstSplitOpen: bool = false;
 var<private> gInstSplitN: vec4<f32> = vec4<f32>(0.0);
 var<private> gInstSplitH: vec4<f32> = vec4<f32>(0.0);
 var<private> gInstSplitA: vec4<f32> = vec4<f32>(0.0);
@@ -388,7 +390,8 @@ export const INSTANCE_STATE = /* wgsl */ `fn loadInstance(inst: ptr<storage, arr
   gInstBurn = (*inst)[base + ${REC_BURN}];
   gInstLights = (*inst)[base + ${REC_LIGHTS}];
   gInstSplitN = (*inst)[base + ${REC_SPLIT_N}];
-  if (dot(gInstSplitN.xyz, gInstSplitN.xyz) > 0.5) {
+  gInstSplitOpen = dot(gInstSplitN.xyz, gInstSplitN.xyz) > 0.5;
+  if (gInstSplitOpen) {
     gInstSplitH = (*inst)[base + ${REC_SPLIT_H}];
     gInstSplitA = (*inst)[base + ${REC_SPLIT_A}];
     gInstSplitR = (*inst)[base + ${REC_SPLIT_R}];

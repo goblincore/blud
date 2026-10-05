@@ -158,6 +158,17 @@ describe('the head split in the view record', () => {
     view.dispose();
   });
 
+  it('a view built from an open pose is open from its first record write, before any update()', () => {
+    const view = createZombieGpuView({ ...body, split: warp }, {});
+    view.syncRecord();
+    expect(lanes(view.records.floats, 0)).toEqual(OPEN);
+    view.setTime(0.5);
+    expect(lanes(view.records.floats, 0)).toEqual(OPEN);
+    view.update(body);
+    expect(lanes(view.records.floats, 0)).toEqual(ZERO);
+    view.dispose();
+  });
+
   it('a view moved to another slot takes its split along; a fresh view on a slot a split view held writes zeros', () => {
     const records = createCrowdRecords(3);
     const atlas = createCrowdPrimAtlas(3);
