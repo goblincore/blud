@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   HEAD_SPLIT, REGION_MARGIN, choosePreset, forcedSplit, headFrameOf, headLocalDir, headLocalPoint, kickSplit, makeSplitState,
-  openSplit, skullFollow, skullFollowOk, skullPieceAt, skullPieces, skullSplitOf, skullWarpPoint, splitFaceSegs, splitField, splitMaxAngle,
-  splitWarpOf, stepSplit, unwarpDir, unwarpPoint, warpDir, warpPoint, widenSplit,
+  openSplit, punchSplit, skullFollow, skullFollowOk, skullPieceAt, skullPieces, skullSplitOf, skullWarpPoint, splitFaceSegs, splitField,
+  splitMaxAngle, splitWarpOf, stepSplit, unwarpDir, unwarpPoint, warpDir, warpPoint, widenSplit,
   type HeadFrame, type SplitWarp,
 } from './head-split';
 import type { Vec3 } from './types';
-import { AXE_HEAD } from './webgpu/axe-head';
+import { AXE_HEAD, chopKick, chopOpenFrac } from './webgpu/axe-head';
 import { qFromAxisAngle, qRotate } from './vec';
 
 const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -37,7 +37,7 @@ const openIn = (frame: HeadFrame, preset: 'middle' | 'face', impactLocal: Vec3, 
   const st = { ...makeSplitState(), ...choosePreset(preset === 'middle' ? [1, 0, 0] : [0, 0, 1], impactLocal, frame.radius) };
   const p = HEAD_SPLIT.presets[st.preset!];
   const angle = angleFrac * (st.sides === 0 ? p.maxBoth : p.maxOne);
-  return splitWarpOf({ ...st, angle, target: angle }, frame)!;   // at rest on its target
+  return splitWarpOf({ ...st, angle, target: angle, stage: angle }, frame)!;   // at rest on its target
 };
 const open = (preset: 'middle' | 'face', impactLocal: Vec3, angleFrac = 1) => openIn(FRAME, preset, impactLocal, angleFrac);
 const CASES = [
@@ -80,6 +80,53 @@ describe('the spring: kick, overshoot, settle exactly on the target', () => {
   it('a closed state (no preset) does not move', () => {
     const st = makeSplitState();
     expect(stepSplit(st, 1 / 60)).toEqual(st);
+  });
+  it('THE STAGE is the furthest the spring has opened, no further than its target, and it only ever advances', () => {
+    let st = kickSplit({ ...makeSplitState(), preset: 'middle', sides: 0, offset: 0 }, 0.3);
+    expect(st.stage).toBe(0);
+    let prev = 0, dipped = false, rose = false;
+    for (let i = 0; i < 240; i++) {
+      st = stepSplit(st, 1 / 60);
+      expect(st.stage).toBeGreaterThanOrEqual(prev);
+      expect(st.stage).toBeLessThanOrEqual(st.target);
+      // On the way up it is the angle itself; from the first pass over the target on, the target.
+      if (!rose && st.angle < st.target) expect(st.stage).toBe(st.angle);
+      rose ||= st.angle >= st.target;
+      if (rose) { expect(st.stage).toBe(0.3); dipped ||= st.angle < 0.3 - 1e-3; }
+      prev = st.stage;
+    }
+    expect(dipped).toBe(true);   // the swing back went under the target, and the stage did not follow it
+    // A later chop takes it on from where it stands; a kick with nowhere further to go leaves it.
+    st = kickSplit(st, 0.5);
+    expect(st.stage).toBe(0.3);
+    st = stepSplit(st, 1 / 60);
+    expect(st.stage).toBe(st.angle);
+    for (let i = 0; i < 240; i++) st = stepSplit(st, 1 / 60);
+    expect(st.stage).toBe(0.5);
+    for (let i = 0, k = punchSplit(st, 0.4); i < 240; i++) { k = stepSplit(k, 1 / 60); expect(k.stage).toBe(0.5); }
+  });
+  it('punchSplit: a hit on a split already at its angle throws it frac x its max past, and the spring brings it back', () => {
+    for (const [sides, frac] of [[0, 0.3], [1, 0.3], [0, 0.1]] as const) {
+      const full = splitMaxAngle({ preset: 'middle', sides });
+      let st = forcedSplit('middle', sides, 0, 1)!;
+      const hit = punchSplit(st, frac);
+      expect(hit).toMatchObject({ angle: full, target: full, stage: full });
+      expect(hit.vel).toBeGreaterThan(0);
+      st = hit;
+      let peak = 0, peakAt = 0, trough = Infinity;
+      for (let i = 1; i <= 240; i++) { st = stepSplit(st, 1 / 60); if (st.angle > peak) { peak = st.angle; peakAt = i; } trough = Math.min(trough, st.angle); }
+      // The peak the frames see (the spring's own is between two of them): within a tenth of what was asked.
+      expect((peak - full) / (frac * full)).toBeGreaterThan(0.9);
+      expect((peak - full) / (frac * full)).toBeLessThan(1.05);
+      expect(peakAt).toBeLessThanOrEqual(3);
+      expect(trough).toBeLessThan(full);
+      expect(st).toMatchObject({ angle: full, vel: 0, target: full, stage: full });
+    }
+    // Twice the share, twice the rate; none, and a closed state: untouched.
+    const st = forcedSplit('middle', 0, 0, 1)!;
+    expect(punchSplit(st, 0.6).vel).toBeCloseTo(2 * punchSplit(st, 0.3).vel, 12);
+    expect(punchSplit(st, 0)).toBe(st);
+    expect(punchSplit(makeSplitState(), 0.3)).toEqual(makeSplitState());
   });
 });
 
@@ -343,7 +390,8 @@ describe('open, widen, force: the state a chop or the seam leaves', () => {
   });
   it('forcedSplit sits at angleFrac x the max at once (no spring); angleFrac 0 is the closed state', () => {
     const st = forcedSplit('face', 1, 0.02, 0.5)!;
-    expect(st).toEqual({ preset: 'face', sides: 1, offset: 0.02, angle: 0.5 * HEAD_SPLIT.presets.face.maxOne, vel: 0, target: 0.5 * HEAD_SPLIT.presets.face.maxOne });
+    const half = 0.5 * HEAD_SPLIT.presets.face.maxOne;
+    expect(st).toEqual({ preset: 'face', sides: 1, offset: 0.02, angle: half, vel: 0, target: half, stage: half });
     expect(stepSplit(st, 1 / 60)).toEqual(st);
     expect(forcedSplit('middle', 0, 0, 0)).toEqual(makeSplitState());
   });
@@ -498,31 +546,43 @@ describe('the skull split: the bone opens LESS than the flesh, in stages (the me
     expect(a[2]!).toBeGreaterThan(1.5 * a[1]!);
     expect(a[2]!).toBeLessThan(both(1).thetaP);
   });
-  it('at the axe\'s own chops the table reads as a CRACK on chop 1 (under 3.5 degrees a half) and a SPLIT on the kill (over 20), for every preset', () => {
-    // The stages are the axe's opening fractions (webgpu/axe-head.ts AXE_HEAD.openAngles, then the kill at 1): what the
-    // owner chose from the photos is a skull that still shows its face in the gap on chop 1 and is thrown wide on the
-    // kill. A retuned angle, spring or table has to keep that, or change this on purpose.
-    const CRACK_MAX = 0.06, SPLIT_MIN = 0.35, opens = [...AXE_HEAD.openAngles, 1];
+  it('at the axe\'s own chops the table reads as a WIDE CRACK on chop 1 and a SPLIT from chop 2 on, for every preset; the thin crack stays below them', () => {
+    // The stages are the axe's opening fractions (webgpu/axe-head.ts AXE_HEAD.openAngles, then the kill at 1). The owner
+    // (2026-10-05): the thin crack is too timid for an axe, so its first chop is the table's second stage, wider than
+    // the thin crack (over 3.5 degrees a half) and not yet a split (under 15), and its second is the split (over 20).
+    // A retuned angle, spring or table has to keep that, or change this on purpose.
+    const CRACK_MAX = 0.06, WIDE_MAX = 0.26, SPLIT_MIN = 0.35, opens = [1, 2, 3].map(c => chopOpenFrac(c));
+    expect(opens).toEqual([...AXE_HEAD.openAngles, 1]);
     for (const [preset, impact] of [['middle', [0, 0, 0.1]], ['middle', [0.06, 0, 0.1]], ['face', [0, 0, 0.1]]] as const) {
-      const bone = opens.map(f => { const s = skullSplitOf(open(preset, [...impact], f))!; return Math.max(s.angleP, -s.angleM); });
-      expect(bone[0]!, `${preset} chop 1`).toBeLessThan(CRACK_MAX);
-      expect(bone[bone.length - 1]!, `${preset} the kill`).toBeGreaterThan(SPLIT_MIN);
-      for (let i = 1; i < bone.length; i++) expect(bone[i]!, `${preset} chop ${i + 1}`).toBeGreaterThan(bone[i - 1]!);
+      const boneAt = (f: number) => { const s = skullSplitOf(open(preset, [...impact], f))!; return Math.max(s.angleP, -s.angleM); };
+      const bone = opens.map(boneAt);
+      expect(bone[0]!, `${preset} chop 1`).toBeGreaterThan(CRACK_MAX);
+      expect(bone[0]!, `${preset} chop 1`).toBeLessThan(WIDE_MAX);
+      expect(bone[1]!, `${preset} chop 2`).toBeGreaterThan(SPLIT_MIN);
+      for (let i = 1; i < bone.length; i++) expect(bone[i]!, `${preset} chop ${i + 1}`).toBeGreaterThanOrEqual(bone[i - 1]!);
+      // The table's first stage is still there for a lighter weapon (and the seam's forceSplit(..., 0.55)).
+      expect(boneAt(S.follow[0][0]), `${preset} the thin crack`).toBeLessThan(CRACK_MAX);
     }
   });
-  it('the warp carries the spring\'s target, and the stage is read there: past its target the flesh takes the bone along in proportion', () => {
+  it('the warp carries the spring\'s stage, and the table is read there: whatever the flesh does, the bone takes the stage\'s share of it', () => {
     const st = { ...makeSplitState(), ...choosePreset([1, 0, 0], [0, 0, 0.1], FRAME.radius) };
     const full = HEAD_SPLIT.presets.middle.maxBoth, target = 0.8 * full;
-    const at = (angle: number, tgt = target) => skullSplitOf(splitWarpOf({ ...st, angle, target: tgt }, FRAME))!;
-    expect(splitWarpOf({ ...st, angle: 0.1, target }, FRAME)!.target).toBe(target);
-    // Past the target: the target's share, whatever the angle.
-    for (const over of [1, 1.1, 1.3]) {
-      expect(at(over * target).frac).toBeCloseTo(0.8, 12);
-      expect(at(over * target).angleP).toBeCloseTo(over * target * skullFollow(0.8), 12);
+    const at = (angle: number, stage = target) => skullSplitOf(splitWarpOf({ ...st, angle, target, stage }, FRAME))!;
+    expect(splitWarpOf({ ...st, angle: 0.1, target, stage: 0.07 }, FRAME)!.stage).toBe(0.07);
+    // Past the target, and back under it: the stage's share, whatever the angle.
+    for (const k of [0.7, 0.9, 1, 1.1, 1.3]) {
+      expect(at(k * target).frac).toBeCloseTo(0.8, 12);
+      expect(at(k * target).angleP).toBeCloseTo(k * target * skullFollow(0.8), 12);
+      expect(at(k * target).angleM).toBeCloseTo(-k * target * skullFollow(0.8), 12);
     }
-    // On the way up: the table at the flesh's own opening, meeting the target's share there.
-    expect(at(0.6 * full).follow).toBeCloseTo(skullFollow(0.6), 12);
-    expect(at(target - 1e-9).angleP).toBeCloseTo(at(target + 1e-9).angleP, 8);
+    // On the way up the stage is the flesh's own opening: the table there.
+    expect(at(0.6 * full, 0.6 * full).follow).toBeCloseTo(skullFollow(0.6), 12);
+    // Each half's bone turns by its OWN flesh angle's share: unequal halves, one stage.
+    const w = { ...splitWarpOf({ ...st, angle: target, target, stage: target }, FRAME)!, thetaP: 0.5, thetaM: -0.2 };
+    const s = skullSplitOf(w)!;
+    expect(s.frac).toBeCloseTo(0.8, 12);
+    expect(s.angleP).toBeCloseTo(0.5 * skullFollow(0.8), 12);
+    expect(s.angleM).toBeCloseTo(-0.2 * skullFollow(0.8), 12);
   });
   it('THE REAL SPRING through chop 1, chop 2 and the kill: the bone moves without a jump, swings no wider than its flesh does, and never passes it', () => {
     let st = openSplit([1, 0, 0], [0, 0, 0.1], 0.09, 0.55);
@@ -552,13 +612,13 @@ describe('the skull split: the bone opens LESS than the flesh, in stages (the me
       // The bone's overshoot, as a share of its rest angle, is the flesh's.
       expect(peakFlesh).toBeGreaterThan(1.05 * restFlesh);
       expect(peakBone / restBone).toBeLessThanOrEqual(peakFlesh / restFlesh + 1e-9);
-      // The swing back under the target reads the table below the stage, where it is steeper than the bone's share:
-      // the bone dips further than its flesh, by the table's slope. Held under a fifth of its rest angle.
-      expect(troughBone / restBone).toBeGreaterThan(0.8);
+      // And so is its swing back under the rest angle: the stage stays the target's, so the bone dips with its flesh
+      // and no further (read at the flesh's own angle, the table's slope took it down 7% where its flesh went 2%).
+      expect(troughFlesh).toBeLessThan(restFlesh);
+      expect(troughBone / restBone).toBeGreaterThanOrEqual(troughFlesh / restFlesh - 1e-9);
       // Measured (degrees, rest -> peak -> trough): chop 1 flesh 17.33 -> 22.56 -> 15.86, bone 1.73 -> 2.26 -> 1.59;
-      // chop 2 flesh 25.21 -> 27.59 -> 24.53, bone 7.56 -> 8.28 -> 6.94; the kill flesh 31.51 -> 33.42 -> 30.97, bone
-      // 26.79 -> 28.40 -> 24.88.
-      void troughFlesh;
+      // chop 2 flesh 25.21 -> 27.59 -> 24.53, bone 7.56 -> 8.28 -> 7.36; the kill flesh 31.51 -> 33.42 -> 30.97, bone
+      // 26.79 -> 28.40 -> 26.33.
     }
     // No jump. The bone's fastest tick is on the kill, where it goes from 7.6 to 26.8 degrees while its flesh rises
     // 6.3: a tick moves it no more than 1.2 x what the fastest tick moves the flesh (9.4 against 8.3 degrees).
@@ -593,27 +653,78 @@ describe('the skull split: the bone opens LESS than the flesh, in stages (the me
       }
     }
     expect(ticks).toBe(540);
-    // The bound is what the kill does on its way up the table's last segment, not slack. Measured: 3.5975. (Chops
-    // four ticks apart through the seam break it by 0.69 degrees in one tick: the test below.)
-    expect(worst).toBeGreaterThan(0.9 * L);
+    // The bound is what the last chop does on its way up the table's last segment, not slack: the tick that ends just
+    // under the target moves the bone 3.14 x its flesh (the slope there is L = 3.6, and a tick is a chord of it).
+    expect(worst).toBeGreaterThan(0.85 * L);
     expect(worst).toBeLessThanOrEqual(L);
   });
-  it('the per-tick bound is what a stage step breaks: a chop landing ABOVE the old target moves the bone with no flesh behind it', () => {
-    // KNOWN, and accepted for now: the stage is min(flesh, target), so a chop that lands while the flesh is past the old
-    // target steps the bone at once. Play cannot do it (the spring is at rest 0.6 s on); the axeChop seam can. A
-    // stage that only advances, kept in SplitState, would remove it. Here it shows the bound above can fail.
-    const L = boneSlope(), dt = 1 / 60;
+  it('a chop landing ABOVE the old target steps the stage, and the bone\'s share with it, on the next tick', () => {
+    // KNOWN, and accepted for now: the stage is the high-water mark of min(flesh, target), so a chop that lands while
+    // the flesh is past the old target takes the stage up to the flesh at the next step. Play cannot do it (the spring
+    // is at rest 0.6 s on); the axeChop seam can.
+    const dt = 1 / 60, full = HEAD_SPLIT.presets.middle.maxBoth;
     let st = openSplit([1, 0, 0], [0, 0, 0.1], 0.09, 0.55);
     let peak = st;
     for (let i = 0; i < 60; i++) { st = stepSplit(st, dt); if (st.angle > peak.angle) peak = st; }
     expect(peak.angle).toBeGreaterThan(peak.target);
-    const before = skullSplitOf(splitWarpOf(peak, FRAME))!.angleP;
+    const before = skullSplitOf(splitWarpOf(peak, FRAME))!;
     const chopped = widenSplit(peak, 0.8);
-    const after = skullSplitOf(splitWarpOf(chopped, FRAME))!.angleP;
-    // The flesh has not moved; the bone has, by more than a degree (2.26 -> 5.26 degrees).
-    expect(chopped.angle).toBe(peak.angle);
-    expect(after - before).toBeGreaterThan(Math.PI / 180);
-    expect(after - before).toBeGreaterThan(L * Math.abs(chopped.angle - peak.angle) + 1e-9);
+    // The chop itself moves nothing: the stage is the step's to advance.
+    expect(skullSplitOf(splitWarpOf(chopped, FRAME))!.angleP).toBe(before.angleP);
+    const next = stepSplit(chopped, dt), after = skullSplitOf(splitWarpOf(next, FRAME))!;
+    // In that one tick the bone's share goes from the thin crack's to the table's at the flesh (0.1 -> 0.25), and the
+    // bone moves 4.2 degrees while its flesh moves 1.5.
+    expect(before.follow).toBeCloseTo(skullFollow(0.55), 12);
+    expect(after.follow).toBeCloseTo(skullFollow(next.angle / full), 12);
+    expect(after.follow - before.follow).toBeGreaterThan(0.1);
+    expect(after.angleP - before.angleP).toBeGreaterThan(2 * (next.angle - peak.angle));
+  });
+  it('THE AXE\'S OWN CHOPS through the real spring: a wide crack, a split with the zombie alive, and a kill that kicks the split without moving its stage', () => {
+    const full = HEAD_SPLIT.presets.middle.maxBoth, dt = 1 / 60, deg = 180 / Math.PI;
+    const boneOf = (s: typeof st) => skullSplitOf(splitWarpOf(s, FRAME))?.angleP ?? 0;
+    let st = openSplit([1, 0, 0], [0, 0, 0.1], 0.09, chopOpenFrac(1));
+    const rest: number[] = [];
+    for (let chop = 1; chop <= 2; chop++) {
+      if (chop > 1) st = punchSplit(widenSplit(st, chopOpenFrac(chop)), chopKick(chop));
+      for (let i = 0; i < 180; i++) st = stepSplit(st, dt);
+      expect(st).toMatchObject({ angle: chopOpenFrac(chop) * full, vel: 0 });
+      rest.push(boneOf(st) * deg);
+    }
+    // Chop 1 is the table's second stage (7.56 degrees a half), chop 2 its third (26.79): the head is split wide before
+    // the kill, and chop 2 gave no kick of its own.
+    expect(chopKick(1)).toBe(0);
+    expect(chopKick(2)).toBe(0);
+    expect(rest[0]!).toBeCloseTo(0.8 * full * skullFollow(0.8) * deg, 9);
+    expect(rest[1]!).toBeCloseTo(full * skullFollow(1) * deg, 9);
+    expect(st.angle).toBe(full);
+    // THE KILL lands on a split already at its full angle: the target does not move, the spring is kicked.
+    expect(chopOpenFrac(3)).toBe(1);
+    expect(chopKick(3)).toBe(AXE_HEAD.killKick);
+    st = punchSplit(widenSplit(st, chopOpenFrac(3)), chopKick(3));
+    expect(st).toMatchObject({ angle: full, target: full, stage: full });
+    expect(st.vel).toBeGreaterThan(0);
+    const share = skullFollow(1);
+    let peak = 0, trough = Infinity, bonePeak = 0, boneTrough = Infinity, prevBone = boneOf(st), prevFlesh = st.angle;
+    for (let i = 0; i < 180; i++) {
+      st = stepSplit(st, dt);
+      const bone = boneOf(st);
+      // No step, no flap: on every tick of the kick the bone is the stage's share of its flesh, so it moves in
+      // proportion and never further in a tick than its flesh.
+      expect(st.stage).toBe(full);
+      expect(bone).toBeCloseTo(share * st.angle, 12);
+      expect(Math.abs(bone - prevBone)).toBeLessThanOrEqual(Math.abs(st.angle - prevFlesh) + 1e-12);
+      peak = Math.max(peak, st.angle); trough = Math.min(trough, st.angle);
+      bonePeak = Math.max(bonePeak, bone); boneTrough = Math.min(boneTrough, bone);
+      prevBone = bone; prevFlesh = st.angle;
+    }
+    // It reads as a hit: the halves snap wider by about killKick x the full angle, swing back under it, and settle.
+    expect((peak - full) / (AXE_HEAD.killKick * full)).toBeGreaterThan(0.9);
+    expect((peak - full) / (AXE_HEAD.killKick * full)).toBeLessThan(1.05);
+    expect(trough).toBeLessThan(full - 0.2 * AXE_HEAD.killKick * full);
+    expect(st).toMatchObject({ angle: full, vel: 0, target: full, stage: full });
+    expect(boneTrough / (share * full)).toBeCloseTo(trough / full, 9);
+    console.log(`the kill's kick (middle, both): flesh ${(full * deg).toFixed(2)} -> ${(peak * deg).toFixed(2)} -> ${(trough * deg).toFixed(2)} degrees a half, `
+      + `bone ${(share * full * deg).toFixed(2)} -> ${(bonePeak * deg).toFixed(2)} -> ${(boneTrough * deg).toFixed(2)}`);
   });
   it('a spring overshoot never opens the bone past its flesh: frac is held at 1, follow at 1', () => {
     const w = both(1.4), s = skullSplitOf(w)!;

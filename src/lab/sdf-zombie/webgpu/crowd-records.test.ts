@@ -132,7 +132,7 @@ describe('crowd records', () => {
       bodyCentre: [0, 0, 0], variantSeed: 0, bodyHalf: [0, 0, 0], damageRevision: 0, gore: 0,
       burn: 0, burnSec: 0, charAmount: 0,
     };
-    const warp: SplitWarp = { n: [1, 0, 0], d0: 0.25, h: [0.5, 1.5, -0.25], a: [0, 0, -1], thetaP: 0.5, thetaM: -0.25, r: 0.375, full: 0.55, target: 0.5 };
+    const warp: SplitWarp = { n: [1, 0, 0], d0: 0.25, h: [0.5, 1.5, -0.25], a: [0, 0, -1], thetaP: 0.5, thetaM: -0.25, r: 0.375, full: 0.55, stage: 0.5 };
     const lanes = (r: ReturnType<typeof createCrowdRecords>, slot: number) =>
       Array.from(r.floats.subarray((slot * REC_VEC4S + REC_SPLIT_N) * 4, (slot * REC_VEC4S + REC_SPLIT_R + 1) * 4));
     const ZERO = new Array(16).fill(0);

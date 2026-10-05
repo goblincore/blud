@@ -84,10 +84,10 @@ export const HEAD_SPLIT = {
   /** THE SKULL (the bone mesh; skullSplitOf below, drawn by webgpu/skeleton-spike/mesh-renderer.ts). The bone opens
    *  LESS than its flesh half, so it stays in the gap as a skull that cracks, then splits.
    *  `follow`: knots of (the flesh's opening as a share of its preset's full angle, the bone's share of the flesh
-   *  angle), straight lines between them and flat outside. 1 would ride the flesh, 0 is the whole skull. The knots sit
-   *  on the axe's chops (axe-head.ts openAngles, then the kill): chop 1 cracks the skull (it parts 1.7 degrees a half,
-   *  about a centimetre at the crown, and still shows its face in the gap), chop 2 splits it (7.6 degrees), the kill
-   *  throws it wide (27 degrees, close behind the flesh).
+   *  angle), straight lines between them and flat outside. 1 would ride the flesh, 0 is the whole skull. The knots are
+   *  the split's three stages: a thin crack (the skull parts 1.7 degrees a half, about a centimetre at the crown, and
+   *  still shows its face in the gap), a wide crack (7.6 degrees) and split wide (27 degrees, close behind the flesh).
+   *  The axe opens to the second and then the third (axe-head.ts openAngles); the first is a lighter weapon's.
    *  `jag`: the fracture edge between the two halves (mesh-split.ts meshSplitJag), in metres: a zig-zag of amplitude
    *  `zigAmp` and period `zigLen` along the break, and chips of `chipAmp` in cells of `chipLen`. Amplitudes 0 = the
    *  clean plane. The zig-zag's teeth are made uneven by a slow noise of `wobble` cells per `zigLen` that pushes the
@@ -127,10 +127,14 @@ export interface SplitState {
   offset: number;
   /** Current opening angle (rad, >= 0) and its rate; `target` is where the spring settles. */
   angle: number; vel: number; target: number;
+  /** THE STAGE (rad): the furthest the spring has opened, no further than its target. It only ever advances: the swing
+   *  back under the target, or a kick on a split already at its angle (punchSplit), leaves it where it is. The skull
+   *  reads it (skullSplitOf). */
+  stage: number;
 }
 
 export function makeSplitState(): SplitState {
-  return { preset: null, sides: 0, offset: 0, angle: 0, vel: 0, target: 0 };
+  return { preset: null, sides: 0, offset: 0, angle: 0, vel: 0, target: 0, stage: 0 };
 }
 
 /** The preset for a chop: `bladeNormalLocal` is the blade plane's normal in head-local space (cross(blade dir, view),
@@ -154,15 +158,36 @@ export function kickSplit(st: SplitState, target: number): SplitState {
   return { ...st, target, vel: st.vel + (target - st.angle) * HEAD_SPLIT.kick };
 }
 
-/** Advance the spring (semi-implicit Euler, 1/240 s sub-steps); snaps onto the target when settled. */
+/** How far (rad) a rate of 1 rad/s carries the spring past its rest before it turns back: its first peak, by
+ *  stepSplit's own sub-steps (hz 7, zeta 0.35: 0.0128 rad, 0.03 s on). */
+function springReach(): number {
+  const w = 2 * Math.PI * HEAD_SPLIT.hz, z = HEAD_SPLIT.zeta, h = 1 / 240;
+  let a = 0, v = 1, peak = 0;
+  for (let i = 0; i < 4096 && v > 0; i++) { v += (-w * w * a - 2 * z * w * v) * h; a += v * h; peak = Math.max(peak, a); }
+  return peak;
+}
+
+/** A HIT ON A SPLIT THAT IS ALREADY THERE (the kill chop on a head split wide): a rate toward open that, alone,
+ *  carries the halves `frac` of the preset's max past where they stand before the spring brings them back
+ *  (springReach). The target and the stage stay. */
+export function punchSplit(st: SplitState, frac: number): SplitState {
+  if (st.preset === null || !(frac > 0)) return st;
+  return { ...st, vel: st.vel + frac * splitMaxAngle(st) / springReach() };
+}
+
+/** Advance the spring (semi-implicit Euler, 1/240 s sub-steps); snaps onto the target when settled. The stage follows
+ *  the angle up, as far as the target. */
 export function stepSplit(st: SplitState, dt: number): SplitState {
   if (st.preset === null) return st;
   const w = 2 * Math.PI * HEAD_SPLIT.hz, z = HEAD_SPLIT.zeta;
-  let a = st.angle, v = st.vel;
+  let a = st.angle, v = st.vel, stage = st.stage;
   const n = Math.max(1, Math.ceil(dt * 240)), h = dt / n;
-  for (let i = 0; i < n; i++) { v += (-w * w * (a - st.target) - 2 * z * w * v) * h; a += v * h; }
-  if (Math.abs(a - st.target) < HEAD_SPLIT.restA && Math.abs(v) < HEAD_SPLIT.restV) { a = st.target; v = 0; }
-  return { ...st, angle: Math.max(0, a), vel: v };
+  for (let i = 0; i < n; i++) {
+    v += (-w * w * (a - st.target) - 2 * z * w * v) * h; a += v * h;
+    stage = Math.max(stage, Math.min(a, st.target));
+  }
+  if (Math.abs(a - st.target) < HEAD_SPLIT.restA && Math.abs(v) < HEAD_SPLIT.restV) { a = st.target; v = 0; stage = Math.max(stage, a); }
+  return { ...st, angle: Math.max(0, a), vel: v, stage };
 }
 
 /** The preset's full opening angle for this state: both halves vs one side (0 when closed). */
@@ -195,7 +220,7 @@ export function forcedSplit(
     || !Number.isFinite(offset) || !Number.isFinite(angleFrac)) return null;
   if (!(angleFrac > 0)) return makeSplitState();
   const angle = angleFrac * splitMaxAngle({ preset, sides });
-  return { preset, sides, offset, angle, vel: 0, target: angle };
+  return { preset, sides, offset, angle, vel: 0, target: angle, stage: angle };
 }
 
 /** The head's frame: skull centre, world rotation (rig-bind.ts headQuatOf) and the hold radius (headFrameOf). */
@@ -217,7 +242,7 @@ export function headLocalPoint(f: HeadFrame, p: Vec3): Vec3 { return qRotate(con
 export function headLocalDir(f: HeadFrame, v: Vec3): Vec3 { return qRotate(conj(f.quat), v); }
 
 /** The split in WORLD space for this frame (null when closed). The GPU record carries exactly these fields, but for
- *  `full` and `target`. */
+ *  `full` and `stage`. */
 export interface SplitWarp {
   /** Plane normal (unit) and offset: s(q) = n.q - d0. */
   n: Vec3; d0: number;
@@ -228,9 +253,9 @@ export interface SplitWarp {
   /** The region sphere: centred on h, radius r. The moved material lies within r - REGION_MARGIN of h. */
   r: number;
   /** The preset's full opening angle for this split (splitMaxAngle; rad): what the angles are a share of, and the
-   *  angle the spring is settling on (SplitState.target; rad): the stage the split is at, whatever the spring is doing
-   *  on the way. The field reads neither; the skull does (skullSplitOf). */
-  full: number; target: number;
+   *  stage the split has reached (SplitState.stage; rad), whatever its angles are doing. The field reads neither; the
+   *  skull does (skullSplitOf). */
+  full: number; stage: number;
 }
 
 /** Rodrigues: v rotated by t (right-handed) about unit axis k. */
@@ -260,7 +285,7 @@ export function splitWarpOf(st: SplitState, f: HeadFrame): SplitWarp | null {
     thetaP: st.sides >= 0 ? st.angle : 0,
     thetaM: st.sides <= 0 ? -st.angle : 0,
     r: len(sub(f.centre, h)) + f.radius * HEAD_SPLIT.holdFrac + REGION_MARGIN,
-    full: splitMaxAngle(st), target: st.target,
+    full: splitMaxAngle(st), stage: st.stage,
   };
 }
 
@@ -468,8 +493,8 @@ export function splitFaceSegs(st: SplitState, f: HeadFrame): { side: 1 | -1; a: 
 export interface SkullSplit {
   /** The flesh's split, ready for point tests: the bone breaks on the same plane and hinge. */
   frame: SplitFrame;
-  /** The stage the table was read at (the flesh's opening, no further than its spring's target, as a share of the
-   *  preset's full angle; 0..1), and the bone's share of the flesh angle. */
+  /** The stage the table was read at (the split's stage as a share of the preset's full angle; 0..1), and the bone's
+   *  share of the flesh angle. */
   frac: number; follow: number;
   /** The bone's angles (rad): the + half's (>= 0) and the - half's (<= 0). A half whose flesh stays has 0. */
   angleP: number; angleM: number;
@@ -502,17 +527,17 @@ export function skullFollowOk(follow: unknown): follow is SkullFollow {
 
 /** The skull's split for a drawn flesh split (null: closed). `follow` set by hand replaces the table (the tuning
  *  seam: a share, or another table; null = HEAD_SPLIT.skull.follow).
- *  THE STAGE IS THE SPRING'S TARGET, not where the spring is: the table is read at min(flesh angle, target) over the
- *  preset's full angle. While the flesh rises toward a chop's target the bone opens along the table with it; once
- *  the flesh is past the target the share stays the target's, so an overshoot swings the bone only in proportion to
- *  its flesh (read at the flesh's own angle, the table's slope swung it three times as wide on chop 1). The share is
- *  held in 0..1, so the bone never turns past its flesh. A bone that does not turn at all is the closed skull:
- *  null. */
+ *  THE TABLE IS READ AT THE SPLIT'S STAGE (SplitWarp.stage over the preset's full angle), not where the flesh is.
+ *  While the flesh rises toward a chop's target the stage rises with it, and the bone opens along the table; from
+ *  there on the share stays the stage's, so whatever each half's flesh then does (the spring's overshoot and its swing
+ *  back, a kick, one half further open than the other) swings that half's bone in proportion to it and no more. Read
+ *  at the flesh's own angle, the table's slope swung the bone three times as wide on a thin crack's overshoot. The
+ *  share is held in 0..1, so the bone never turns past its flesh. A bone that does not turn at all is the closed
+ *  skull: null. */
 export function skullSplitOf(w: SplitWarp | null | undefined, follow: SkullFollow | null = null, seed = 0): SkullSplit | null {
   const frame = splitFrame(w);
   if (!frame) return null;
-  const flesh = Math.max(frame.w.thetaP, -frame.w.thetaM);
-  const frac = frame.w.full > 0 ? Math.min(1, Math.min(flesh, frame.w.target) / frame.w.full) : 1;
+  const frac = frame.w.full > 0 ? Math.max(0, Math.min(1, frame.w.stage / frame.w.full)) : 1;
   const k = Math.max(0, Math.min(1, typeof follow === 'number' ? follow : skullFollow(frac, follow ?? HEAD_SPLIT.skull.follow)));
   const angleP = frame.w.thetaP * k, angleM = frame.w.thetaM * k;
   if (angleP === 0 && angleM === 0) return null;

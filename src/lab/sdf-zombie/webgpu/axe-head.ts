@@ -3,8 +3,9 @@
 // HEAD CHOPS (spec docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md §4). Pure, per actor. Every axe chop
 // that lands on the head (chopOnHead: on head flesh, not the flail's wider head region) counts here; the chopsToKill-th chop kills (ZombieActor.blast forceCollapse). Head
 // chops do not feed the body's collapse meter: the count kills, which keeps the rhythm readable.
-// THE HEAD SPLIT: chop 1 opens the head, later chops widen it and the kill chop throws it fully open (chopOpenFrac);
-// the split's own state and spring live in head-split.ts / game-head-split.ts. What a head chop cuts is headChopCut:
+// THE HEAD SPLIT: chop 1 opens the head to a wide crack, chop 2 splits it wide (chopOpenFrac), and the kill chop, with
+// nothing left to widen, kicks the split (chopKick); the split's own state and spring live in head-split.ts /
+// game-head-split.ts. What a head chop cuts is headChopCut:
 // the split's faces when it opens the head, its own deep head-tagged cut on a head that is not split or on an open
 // head's outer skin, nothing on a cut face or through the gap (the widening is the effect there).
 import { HEAD_SPLIT } from '../head-split';
@@ -13,8 +14,14 @@ import type { LimbId } from '../types';
 export const AXE_HEAD = {
   /** The owner's debug default (2026-10-04: "a bit more tough for debug"): split (part B) on 1, wider on 2, kill on 3. */
   chopsToKill: 3,
-  /** The split's opening after each chop before the kill, as fractions of the preset's max angle (head-split.ts). */
-  openAngles: [0.55, 0.8],
+  /** The split's opening after each chop before the kill, as fractions of the preset's max angle (head-split.ts): the
+   *  skull's second stage (a wide crack), then its third (split wide). An axe does not start at the first stage, the
+   *  thin crack at 0.55 (the owner, 2026-10-05: too timid for an axe); that table was [0.55, 0.8]. */
+  openAngles: [0.8, 1],
+  /** THE KILL'S KICK: the kill chop finds the split already at its full angle, so it throws the halves this share of
+   *  the preset's max angle past where they stand, and the spring brings them back (head-split.ts punchSplit). 0 = no
+   *  kick. */
+  killKick: 0.3,
 } as const;
 
 export interface AxeHeadState {
@@ -38,6 +45,13 @@ export function chopHead(st: AxeHeadState, chopsToKill: number = AXE_HEAD.chopsT
 export function chopOpenFrac(chop: number, chopsToKill: number = AXE_HEAD.chopsToKill, angles: readonly number[] = AXE_HEAD.openAngles): number {
   if (chop >= chopsToKill || angles.length === 0) return 1;
   return angles[Math.min(Math.max(chop, 1), angles.length) - 1]!;
+}
+
+/** The kick head chop `chop` (1-based) gives a split that is already open, as a share of its preset's max angle
+ *  (head-split.ts punchSplit): `kick` from the kill chop on (a chop on the corpse's open head kicks it again), none
+ *  before. */
+export function chopKick(chop: number, chopsToKill: number = AXE_HEAD.chopsToKill, kick: number = AXE_HEAD.killKick): number {
+  return chop >= chopsToKill ? kick : 0;
 }
 
 /** A CHOP IS ON THE HEAD when the flesh it lands on is the head's: `limb` is the limb of the prim nearest the hit (the

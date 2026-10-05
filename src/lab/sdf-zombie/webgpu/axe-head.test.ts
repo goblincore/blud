@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/webgpu/axe-head.test.ts
 import { describe, expect, it } from 'vitest';
-import { AXE_HEAD, chopHead, chopOpenFrac, headChopCut, makeAxeHead, chopOnHead } from './axe-head';
+import { AXE_HEAD, chopHead, chopKick, chopOpenFrac, headChopCut, makeAxeHead, chopOnHead } from './axe-head';
 import { HEAD_SPLIT } from '../head-split';
 
 describe('head chops: cut, cut, ..., kill on chopsToKill', () => {
@@ -35,12 +35,19 @@ describe('head chops: cut, cut, ..., kill on chopsToKill', () => {
 
 describe('the head split\'s opening per chop (part B)', () => {
   const [first, second] = AXE_HEAD.openAngles;
-  it('openAngles are fractions of the preset\'s max: rising, strictly between closed and fully open', () => {
+  it('openAngles are fractions of the preset\'s max: rising, above closed, the last no further than fully open', () => {
     expect(AXE_HEAD.openAngles.length).toBeGreaterThan(0);
     AXE_HEAD.openAngles.forEach((v, i) => {
       expect(v).toBeGreaterThan(i === 0 ? 0 : AXE_HEAD.openAngles[i - 1]!);
-      expect(v).toBeLessThan(1);
+      expect(v).toBeLessThanOrEqual(1);
     });
+  });
+  it('the axe skips the thin crack: chop 1 is the skull\'s second stage, chop 2 its third (split wide), before the kill', () => {
+    const stages = HEAD_SPLIT.skull.follow.map(k => k[0]);
+    expect(first).toBe(stages[1]);
+    expect(second).toBe(stages[2]);
+    expect(second).toBe(1);
+    expect(first).toBeGreaterThan(stages[0]!);
   });
   it('chop 1 opens to the first angle, chop 2 widens to the second, the kill chop goes to 1 (and stays there)', () => {
     expect([1, 2, 3, 4].map(c => chopOpenFrac(c, 3))).toEqual([first, second, 1, 1]);
@@ -51,6 +58,16 @@ describe('the head split\'s opening per chop (part B)', () => {
     expect([1, 2, 3, 4, 5].map(c => chopOpenFrac(c, 5))).toEqual([first, second, second, second, 1]);
     expect(chopOpenFrac(1, 1)).toBe(1);
     expect([1, 2].map(c => chopOpenFrac(c, 2))).toEqual([first, 1]);
+  });
+});
+
+describe('the kill\'s kick (chopKick)', () => {
+  it('no kick before the kill chop; killKick from it on (a chop on the corpse\'s open head kicks too)', () => {
+    expect(AXE_HEAD.killKick).toBeGreaterThan(0);
+    expect(AXE_HEAD.killKick).toBeLessThan(1);
+    expect([1, 2, 3, 4, 5].map(c => chopKick(c))).toEqual([0, 0, AXE_HEAD.killKick, AXE_HEAD.killKick, AXE_HEAD.killKick]);
+    expect([1, 2].map(c => chopKick(c, 2, 0.5))).toEqual([0, 0.5]);
+    expect(chopKick(3, 3, 0)).toBe(0);
   });
 });
 

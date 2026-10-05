@@ -1,10 +1,10 @@
 // src/lab/sdf-zombie/webgpu/game-head-split.ts
 //
 // THE HEAD SPLIT LEAF (spec docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md §4-§5). The axe hands its
-// head chops here (game-axe.ts → deps.split): chop 1 opens the head, later chops widen it, the kill chop throws it
-// fully open. head-split.ts decides everything (the preset from the chop, the spring, the world-space SplitWarp, the
-// cut faces' segments); this leaf only owns each actor's SplitState, steps its spring once a frame and installs the
-// actor's split hook (ZombieActor.setHeadSplit), which gives the split for every re-pose.
+// head chops here (game-axe.ts → deps.split): chop 1 opens the head, later chops widen it, and a chop on a head
+// already split wide kicks it. head-split.ts decides everything (the preset from the chop, the spring, the
+// world-space SplitWarp, the cut faces' segments); this leaf only owns each actor's SplitState, steps its spring once
+// a frame and installs the actor's split hook (ZombieActor.setHeadSplit), which gives the split for every re-pose.
 //
 // THE POSE IS THE ONE SOURCE OF THE SPLIT. The hook's answer rides `posed().split` and nothing else keeps a copy:
 // sdBody (every strike, shot and trace) reads it there, and so does the renderer, from the body the actor hands its
@@ -48,8 +48,8 @@ import { sdBodyClosed } from '../validate';
 import { stampCut } from '../cut-wound';
 import { headQuatOf } from '../rig-bind';
 import {
-  HEAD_SPLIT, forcedSplit, headFrameOf, headLocalDir, headLocalPoint, openSplit, splitFaceSegs, splitWarpOf, stepSplit,
-  widenSplit,
+  HEAD_SPLIT, forcedSplit, headFrameOf, headLocalDir, headLocalPoint, openSplit, punchSplit, splitFaceSegs, splitWarpOf,
+  stepSplit, widenSplit,
   type HeadFrame, type SplitPresetId, type SplitState, type SplitWarp,
 } from '../head-split';
 import { headAlive, headShape } from './flame-anchors';
@@ -66,9 +66,10 @@ export interface HeadSplitLeaf {
    *  chop. Null when it refused (already open, not the plain zombie, no live head, tearing, or a head the head-damage
    *  leaf holds): the caller then keeps its own cut. */
   open(a: ZombieActor, bladeNormalW: Vec3, impactW: Vec3, frac: number): readonly Wound[] | null;
-  /** Later chops: spring on to `frac` of the preset's max (the preset stays; the target never drops). Returns the cut
-   *  faces (to bleed again), or null when the head is not open. */
-  widen(a: ZombieActor, frac: number): readonly Wound[] | null;
+  /** Later chops: spring on to `frac` of the preset's max (the preset stays; the target never drops), and kick the
+   *  halves `kick` of the preset's max past where that leaves them (head-split.ts punchSplit; 0 = no kick). Returns
+   *  the cut faces (to bleed again), or null when the head is not open. */
+  widen(a: ZombieActor, frac: number, kick?: number): readonly Wound[] | null;
   /** The actor's head has an open split state (from the opening chop on, before the spring has moved). */
   isOpen(a: ZombieActor): boolean;
   tick(dt: number): void;
@@ -154,10 +155,10 @@ export function createHeadSplit(ctx: GameContext, deps: HeadSplitDeps = {}): Hea
       const st = openSplit(headLocalDir(sk.frame, bladeNormalW), headLocalPoint(sk.frame, impactW), sk.halfWidth, frac);
       return begin(a, st, sk.frame);
     },
-    widen(a, frac) {
+    widen(a, frac, kick = 0) {
       const h = heads.get(a);
       if (!h) return null;
-      h.st = widenSplit(h.st, frac);
+      h.st = punchSplit(widenSplit(h.st, frac), kick);
       return h.faces;
     },
     isOpen: a => heads.has(a),

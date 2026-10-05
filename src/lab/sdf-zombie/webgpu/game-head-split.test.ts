@@ -21,7 +21,7 @@ import { createHeadSplit, type HeadSplitDeps } from './game-head-split';
 import { createAxeHarness } from './game-axe';
 import { createFireSeams } from './game-seams-fire';
 import { makeWeaponSlotState } from './game-weapon-slots';
-import { AXE_HEAD, chopOpenFrac } from './axe-head';
+import { AXE_HEAD, chopKick, chopOpenFrac } from './axe-head';
 import { headShape } from './flame-anchors';
 import { FLAIL_HEAD, headNeck, traceRaySurface } from './flail-strike';
 import { AXE_HIT } from './axe-strike';
@@ -87,6 +87,8 @@ function fixture(o: { headDamaged?: HeadSplitDeps['headDamaged']; frozen?: boole
 const X: Vec3 = [1, 0, 0], Z: Vec3 = [0, 0, 1];
 /** The first and second chops' openings, as fractions of the preset's max. */
 const [OPEN, WIDE] = AXE_HEAD.openAngles as readonly [number, number];
+/** The split's own stages (the follow table's knots: the thin crack, the wide crack, split wide), whatever the axe uses. */
+const STAGES = HEAD_SPLIT.skull.follow.map(k => k[0]);
 const MID = HEAD_SPLIT.presets.middle, FACE = HEAD_SPLIT.presets.face;
 
 describe('the leaf: open, the spring, widen, kill', () => {
@@ -121,16 +123,16 @@ describe('the leaf: open, the spring, widen, kill', () => {
     expect(sdBody(gap, f.a.posed())).toBeGreaterThan(0.005);
   });
 
-  it('widen springs on to the second angle and the kill to the max, keeping the preset, side and offset', () => {
+  it('widen springs on to a later angle and the kill to the max, keeping the preset, side and offset', () => {
     const f = fixture();
-    f.open(X, f.skinFrom(f.view.eye, [0.05, 0.03, 0]));
+    f.split.open(f.a, X, f.skinFrom(f.view.eye, [0.05, 0.03, 0]), STAGES[0]!);
     const first = f.split.state(7)!;
     expect(first.sides).toBe(1);
     f.ticks(240);
-    expect(f.split.widen(f.a, WIDE)).not.toBeNull();
-    expect(f.split.state(7)!.target).toBeCloseTo(WIDE * MID.maxOne, 12);
+    expect(f.split.widen(f.a, STAGES[1]!)).not.toBeNull();
+    expect(f.split.state(7)!.target).toBeCloseTo(STAGES[1]! * MID.maxOne, 12);
     f.ticks(240);
-    expect(f.split.state(7)).toMatchObject({ preset: 'middle', sides: 1, offset: first.offset, angle: WIDE * MID.maxOne, vel: 0 });
+    expect(f.split.state(7)).toMatchObject({ preset: 'middle', sides: 1, offset: first.offset, angle: STAGES[1]! * MID.maxOne, vel: 0 });
     f.split.widen(f.a, 1);
     f.ticks(240);
     expect(f.split.state(7)!.angle).toBe(MID.maxOne);
@@ -140,6 +142,25 @@ describe('the leaf: open, the spring, widen, kill', () => {
     const g = fixture();
     expect(g.split.widen(g.a, WIDE)).toBeNull();
     expect(g.split.state(7)).toBeNull();
+  });
+
+  it('widen with a kick on a split already at its angle: the target stays, the halves are thrown past it and come back', () => {
+    const f = fixture();
+    f.split.force(7, 'middle', 0, 0, 1);
+    const n0 = f.seen.reposes;
+    expect(f.split.widen(f.a, 1, 0.3)).not.toBeNull();
+    expect(f.split.state(7)).toMatchObject({ angle: MID.maxBoth, target: MID.maxBoth, stage: MID.maxBoth });
+    expect(f.split.state(7)!.vel).toBeGreaterThan(0);
+    let peak = 0;
+    for (let i = 0; i < 240; i++) { f.ticks(1); peak = Math.max(peak, f.a.posed().split!.thetaP); }
+    expect(peak).toBeGreaterThan(MID.maxBoth * 1.25);
+    expect(f.seen.reposes).toBeGreaterThan(n0);                   // the frozen actor was re-posed while it swung
+    expect(f.split.state(7)).toMatchObject({ angle: MID.maxBoth, vel: 0, stage: MID.maxBoth });
+    expect(f.a.posed().split!.thetaP).toBe(MID.maxBoth);
+    // No kick asked: a widen with nowhere to go does nothing.
+    const st = f.split.state(7);
+    f.split.widen(f.a, 1);
+    expect(f.split.state(7)).toEqual(st);
   });
 
   it('an off-centre chop opens one side only, the plane at the impact (clamped to 40% of the head\'s half-width)', () => {
@@ -464,7 +485,7 @@ describe('the axe drives the split (the real zombie)', () => {
     f.ticks(240);
     const max = splitMaxAngle(st);
 
-    // Chop 2, aimed at the open head from the front: it still counts, and widens.
+    // Chop 2, aimed at the open head from the front: it still counts, and widens: split wide, and the zombie lives.
     expect(chopFrom(f, front, 'R')).toBe(1);
     expect(f.axe.debug().last!.heads).toEqual([7]);
     expect(f.axe.debug().heads).toEqual({ 7: 2 });
@@ -472,14 +493,22 @@ describe('the axe drives the split (the real zombie)', () => {
     expect(f.split.state(7)!.target).toBeGreaterThan(st.target);
     expect(f.seen.blasts.at(-1)!.forceCollapse).toBe(false);
     f.ticks(240);
+    expect(chopOpenFrac(2)).toBe(1);
+    expect(f.split.state(7)).toMatchObject({ target: max, angle: max, vel: 0 });
+    expect(f.seen.blasts.filter(b => b.forceCollapse)).toHaveLength(0);
 
-    // The kill chop: fully open, and the kill.
+    // The kill chop lands on a split already at its full angle: it kills, and kicks the spring (axe-head.ts chopKick).
     for (let c = 3; c <= AXE_HEAD.chopsToKill; c++) {
       expect(chopFrom(f, front, 'L')).toBe(1);
-      f.ticks(240);
+      const kicked = f.split.state(7)!;
+      expect(kicked).toMatchObject({ target: max, angle: max, stage: max });
+      expect(kicked.vel > 0).toBe(chopKick(c) > 0);
+      let peak = max;
+      for (let i = 0; i < 240; i++) { f.ticks(1); peak = Math.max(peak, f.a.posed().split!.thetaP); }
+      expect((peak - max) / max).toBeGreaterThan(0.9 * chopKick(c));
     }
     expect(f.axe.debug().heads).toEqual({ 7: AXE_HEAD.chopsToKill });
-    expect(f.split.state(7)).toMatchObject({ target: max, angle: max });
+    expect(f.split.state(7)).toMatchObject({ target: max, angle: max, vel: 0 });
     expect(f.seen.blasts.at(-1)).toMatchObject({ reaction: 'flinch', forceCollapse: true, meterCredit: 0 });
     expect(f.seen.blasts.filter(b => b.forceCollapse)).toHaveLength(1);
     expect(Math.max(f.a.posed().split!.thetaP, -f.a.posed().split!.thetaM)).toBe(max);
@@ -519,7 +548,7 @@ describe('the axe drives the split (the real zombie)', () => {
     const eyes: Vec3[] = [[0, 1.6, 1.3], [0, 1.9, 1.2], [1.2, 1.62, 0.1], [-1.2, 1.62, 0.1], [0.8, 1.7, 0.9], [-0.6, 1.75, 1.0], [0, 1.65, -1.1]];
     let cuts = 0, none = 0;
     for (const [preset, sides, offset] of [['middle', 0, 0], ['middle', 1, 0.03], ['middle', -1, -0.03], ['face', 1, 0.02]] as const) {
-      for (const frac of [OPEN, WIDE, 1]) for (const eye of eyes) {
+      for (const frac of STAGES) for (const eye of eyes) {
         const f = fixture();
         f.split.force(7, preset, sides, offset, frac);
         const n = f.seen.blasts.length;
@@ -656,7 +685,7 @@ describe('the debug seams (game-seams-fire.ts)', () => {
     expect(seams.headSplit(7)).toBeNull();
     expect(f.seen.blasts).toHaveLength(0);
     expect(seams.forceSplit(7, 'middle', 1, 0.02, 0.5)).toBe(true);
-    expect(seams.headSplit(7)).toEqual({ preset: 'middle', sides: 1, offset: 0.02, angle: 0.5 * MID.maxOne, vel: 0, target: 0.5 * MID.maxOne });
+    expect(seams.headSplit(7)).toEqual({ preset: 'middle', sides: 1, offset: 0.02, angle: 0.5 * MID.maxOne, vel: 0, target: 0.5 * MID.maxOne, stage: 0.5 * MID.maxOne });
     // At once: the pose is split before any tick, at the forced plane and angle.
     const w = f.a.posed().split!;
     expect(w.thetaP).toBe(0.5 * MID.maxOne);

@@ -12,9 +12,9 @@
 //
 // THE HEAD SPLIT (spec §4 "Part B behaviour"; deps.split, game-head-split.ts). The first head chop OPENS the head: the
 // preset comes from the chop's blade plane and the impact, and the split's cut faces are that chop's cut. Every later
-// head chop WIDENS it (axe-head.ts chopOpenFrac), the kill chop to fully open. A chop on an open head stamps its own
-// cut only when it lands on the outer skin; on a cut face, or through the gap, the widening is the effect and the
-// faces bleed again. A head the split refuses (not the plain zombie, or one head damage already holds) keeps the cuts
+// head chop WIDENS it (axe-head.ts chopOpenFrac); the kill chop, on a split already at its full angle, KICKS it
+// (chopKick). A chop on an open head stamps its own cut only when it lands on the outer skin; on a cut face, or
+// through the gap, the widening is the effect and the faces bleed again. A head the split refuses (not the plain zombie, or one head damage already holds) keeps the cuts
 // and the count alone.
 import * as THREE from 'three/webgpu';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -29,7 +29,7 @@ import { BEND_R_VIEW } from './game-weapon-leaves';
 import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms } from './game-arms';
 import { axePose, cancelAxeSwing, makeAxeSwing, stepAxeSwing, type AxeSide, type AxeSwing } from './axe-swing';
 import { AXE_CALIBRE, AXE_CUT, AXE_HIT, axeCutSeg } from './axe-strike';
-import { chopHead, chopOnHead, chopOpenFrac, headChopCut, makeAxeHead, type AxeHeadState } from './axe-head';
+import { chopHead, chopKick, chopOnHead, chopOpenFrac, headChopCut, makeAxeHead, type AxeHeadState } from './axe-head';
 import { resolveStrike, strikeActorsFrom } from './flail-strike';
 import { createViewmodelLights } from './viewmodel-lights';
 import type { HeadSplitLeaf } from './game-head-split';
@@ -190,11 +190,12 @@ export function createAxeHarness(ctx: GameContext, deps: AxeDeps): AxeHarness {
     const r = chopHead(heads.get(a.id) ?? makeAxeHead());
     heads.set(a.id, r.state);
     // THE HEAD SPLIT: a closed head opens along the preset nearest the chop's blade plane (the plane through the blade
-    // line and the line of sight); an open one widens. `faces` are the split's cut faces, null when there is no split.
+    // line and the line of sight); an open one widens, and from the kill chop on is kicked. `faces` are the split's cut
+    // faces, null when there is no split.
     const frac = chopOpenFrac(r.chop);
     const wasOpen = deps.split?.isOpen(a) ?? false;
     const faces = wasOpen
-      ? deps.split!.widen(a, frac)
+      ? deps.split!.widen(a, frac, chopKick(r.chop))
       : deps.split?.open(a, normalize(cross(sub(seg.b, seg.a), dir)), point, frac) ?? null;
     // What the chop cuts (axe-head.ts headChopCut): the faces when it opened the head (they go into the ring with this
     // blast), its own cut, or nothing. The closed head's field at the un-warped hit says whether a chop on an open head

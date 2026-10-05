@@ -15,8 +15,9 @@
 //      gap head-split.ts predicts for the spring's angle on every frame. The zombie lives. Frozen actors: the split
 //      leaf re-poses them itself, so the spring runs without a thaw (a thaw would let the body sway under the camera).
 //   W. CHOP 2 WIDENS: the gap at rest is wider, and the prediction's.
-//   K. CHOP 3 KILLS (thawed 3 frames, as axe-gate's K), and 45 frames on the corpse's head is still open: the state,
-//      the pose's split, the GPU record, and the gap measured on the fallen head.
+//   K. CHOP 3 KILLS (thawed 3 frames, as axe-gate's K) and KICKS the split it finds at its full angle: the halves are
+//      past it 3 frames on, the bone drawn at its stage's share of them. 45 frames on the corpse's head is still open:
+//      the state, the pose's split, the GPU record, and the gap measured on the fallen head.
 //   O. AN OFF-CENTRE CHOP (the eye stands round to the head's right, so the chop's line meets the skin off centre)
 //      opens ONE side; the other half's march texels are those of the same head closed again.
 //   L. LATER HITS on a moved half's outer skin, a rod cut and a pellet: each is stamped where unwarpPoint puts its
@@ -24,9 +25,9 @@
 //   F. __sdfGame.forceSplit(id, "face", ...) folds the face half forward: a point of its cut face is where warpPoint
 //      puts it.
 //   M. THE SKULL: at the three real chops the bone's copies are drawn turned by the follow table's angle (their
-//      matrices), and at the two standing stages each seated eye is on screen where skullWarpPoint puts it (the flesh
-//      out of the frame); the same landmark on a forced head at a small, a middle and a wide bone angle; and the
-//      closed skull on a closed head.
+//      matrices), and after chop 1 each seated eye is on screen where skullWarpPoint puts it (the flesh out of the
+//      frame); the same landmark on a forced head at the bone angles of the table's three stages (a small, a middle
+//      and a wide one); and the closed skull on a closed head.
 //   C. cost: draw time, untouched, open and closed again, at 0.6 m and 2 m (with its spread, not gated); the
 //      instrument's floor over the run; zero console errors and a clean gpuDiagnostics at the end of every boot.
 //   R. RANGE (its own boot): beyond the draw distance a split is drawn closed, flesh and skull; it opens again only
@@ -92,9 +93,14 @@ const GAP_RISE = 0.15;
  *  measure reads short by up to 2 x 3.3 + 2 x 2.2 = 11 mm and never long by more than a texel. */
 const GAP_UNDER = 0.011;
 const GAP_OVER = 0.003;
-/** AT REST, the same (m). Measured -0.4 (S), -1.5 (W), -0.6 (K), -0.4 mm (T). */
+/** AT REST, the same (m). Measured -1.5 (S), +0.5 (T), -0.6 and +2.4 (W, on two zombies of the ring), -0.6 and +1.4 mm
+ *  (K).
+ *  Long by up to GAP_OVER, as while it moves: a sample inside a half still counts as seen until its surface is
+ *  GAP_FRONT in front of it along the sight line, and from the wedge eye that line grazes the cut face. At the full
+ *  angle, where chop 2 and the kill rest, that is 1.0 mm a side (0.5 mm at 0.3 rad), on top of the 1 mm sampling
+ *  step. */
 const GAP_REST_UNDER = 0.004;
-const GAP_REST_OVER = 0.002;
+const GAP_REST_OVER = GAP_OVER;
 /** "At rest" for the settle frame (m): one step of the measure, three texels at the wedge eye. */
 const GAP_SETTLED = 0.0065;
 // ---- S. The expectations come from the angles the CPU's spring took on the same frames (s.frames), so a retuned
@@ -119,6 +125,9 @@ const W_WIDER_SHARE = 0.75;
 // ---- K.
 /** Frames the corpse is left to fall before the split is read again. */
 const K_LATER = 45;
+/** The kill's kick, 3 frames on (the thaw): the halves stand past the full angle by at least this share of
+ *  AXE_HEAD.killKick x the full angle. Measured 0.64: the spring's peak is on frame 2, and it is on its way back. */
+const K_KICK_SHARE = 0.5;
 // ---- O.
 /** The chop's bearing round to the head's right (rad): the hit lands 33.7 mm off centre (one side from 13.5 mm). */
 const O_BEARING = 0.5;
@@ -146,6 +155,9 @@ const O_MOVED_MIN = 0.5;
  *  and cannot rise), and that skin still looks upward once the half has turned, so an eye can stand square on to it. */
 const L_CUT_DIR = [0.38, 0.42, 0.82];
 const L_PELLET_DIR = [-0.8, 0.6, 0.1];
+/** The head's opening for both wounds, as a share of its full angle: the split's second stage (the wide crack). The
+ *  directions above and the measured values below are this opening's. */
+const L_OPEN = 0.8;
 /** The eye for each wound: this far out from its place on the open head, square on (m). */
 const L_EYE_D = 0.75;
 /** The rod cut's half-length along the head's up (m). */
@@ -185,6 +197,9 @@ const M_THROWN = 1.8;
 const M_SHIFT_PX = 5;
 /** The largest shift on the forced head must be at least this (px). Measured 58.2. */
 const M_FAR_PX = 40;
+/** The really chopped head's eyes must move at least this far at chop 1 (px). Measured 17.9: the copies' turn halved
+ *  would leave each about 9 px short. */
+const M_CHOP_PX = 10;
 /** The drawn copies' turn (from their matrices) against the follow table's bone angle (rad). Measured 0 to 1e-9. */
 const M_ANGLE_TOL = 1e-6;
 /** The eye seats in the head frame (mesh-eyes.ts, the rest pose). */
@@ -220,8 +235,10 @@ const H_SLUG_OPEN = 0.25;
 const H_SLUG_D = 2;
 const H_SLUG_OFF = 0.03;
 const H_FRAMES = 20;
-/** The flail's distance (m, eye to the head centre). */
+/** The flail's distance (m, eye to the head centre), and its head's opening as a share of the full angle (the split's
+ *  first stage, the thin crack). */
 const H_FLAIL_D = 1.0;
+const H_FLAIL_OPEN = 0.55;
 // ---- B.
 /** The cameras: from the front at B_FRONT_D, and from above and behind (topCam). */
 const B_FRONT_D = 0.6;
@@ -692,10 +709,10 @@ function turnBetween(a, b) {
   return Math.acos(Math.max(-1, Math.min(1, (tr - 1) / 2)));
 }
 /** The bone's turn AS DRAWN: from the matrices of actor `id`'s split skull copies, each half's against the rest's;
- *  and the follow table's bone angle for the split's state (flesh angle x the table at min(angle, target) / full). */
+ *  and the follow table's bone angle for the split's state (flesh angle x the table at the state's stage / full). */
 async function boneDrawn(id) {
   const r = await evaluate(`(async () => { const H = ${HS}; const st = __sdfGame.headSplit(${id}), d = __sdfGame.skullDrawn(${id});
-    const full = st ? H.splitMaxAngle(st) : 0; return { copies: d ? d.copies.filter((c) => !c.eye) : [], rule: st ? st.angle * H.skullFollow(Math.min(st.angle, st.target) / full) : 0 }; })()`);
+    const full = st ? H.splitMaxAngle(st) : 0; return { copies: d ? d.copies.filter((c) => !c.eye) : [], rule: st ? st.angle * H.skullFollow(st.stage / full) : 0 }; })()`);
   const rest = r.copies.find((c) => c.piece === 0), turn = (piece) => { const c = r.copies.find((q) => q.piece === piece); return rest && c ? turnBetween(c.matrix, rest.matrix) : null; };
   return { plus: turn(1), minus: turn(2), rule: r.rule, copies: r.copies.length };
 }
@@ -800,10 +817,10 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
       const z = fresh(); const hc = await headOf(z.id), f = await frontOf(z.id), fr = await frameOf(z.id);
       const right = qRot(fr.quat, [1, 0, 0]), up = qRot(fr.quat, [0, 1, 0]);
       const cam = (await look(hc, HEAD_D, f)).pose;
-      // A point of the CLOSED head's skin for each wound, then the split (chop 2's angle), then where the CPU puts them.
+      // A point of the CLOSED head's skin for each wound, then the split (L_OPEN), then where the CPU puts them.
       const skin = [];
       for (const d of [L_CUT_DIR, L_PELLET_DIR]) { const out0 = unit(qRot(fr.quat, d)); skin.push(await surfHit(z.id, add(fr.centre, mul(out0, 0.5)), mul(out0, -1))); }
-      const ok = await force(z.id, "middle", 0, 0, AXE_HEAD.openAngles[1]);
+      const ok = await force(z.id, "middle", 0, 0, L_OPEN);
       // Each wound is aimed from, and then read from, an eye square on to its place on the OPEN head: L_EYE_D out along
       // the skin's outward direction there (from the skull centre through the point, turned with its half), so the
       // torch lights its floor and neither its mask nor its crater is cut short by the half's outline.
@@ -923,8 +940,9 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
       const cam = (await look(hc, HEAD_D, f)).pose;
       const seats = M_SEATS.map((l) => add(fr.centre, qRot(fr.quat, l)));
       const ok = await force(z.id, "middle", 0, 0, M_THROWN), w = await splitOf(z.id);
-      // The bone angles the shipped table gives at the first chop, the second and the kill, as shares of this flesh angle.
-      const MIDm = HEAD_SPLIT.presets.middle, fracs = [...AXE_HEAD.openAngles, 1];
+      // The bone angles the shipped table gives at its three stages (the thin crack, the wide crack, split wide), as
+      // shares of this flesh angle.
+      const MIDm = HEAD_SPLIT.presets.middle, fracs = HEAD_SPLIT.skull.follow.map((k) => k[0]);
       const angles = await evaluate(`(async () => { const H = ${HS}; return ${J(fracs)}.map((x) => x * ${MIDm.maxBoth} * H.skullFollow(x)); })()`);
       await setCam(cam); await stepN(SETTLE);
       const c = await toPx(w.h), R = d2(c, await toPx(add(w.h, [0, w.r, 0])));
@@ -1005,7 +1023,7 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
       check(ph1 === "standing", `S: the zombie lives (thawed 3 frames: phase ${ph1})`);
       sheet("S-open", [{ img: shot0, c: px0 }, ...s.photos.map((img) => ({ img, c: px0 })), { img: shot1, c: px0 }]);
       // ---- W. chop 2 widens. The thaw let the body move (it flinches): the line and the eye are taken again.
-      let sk2 = null, bd2 = null, lm2 = null; const wk = [];
+      let sk2 = null, bd2 = null; const wk = [];
       if (run("W") || run("K")) {
         line = await gapLine(z.id); eyeW = wedgeEye(line);
         const before = await gapRead(line, await readFrom(eyeW, line.G0)), predBefore = gapPredicted(line, t1, -t1);
@@ -1016,7 +1034,7 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
           `W: chop 2 is counted and springs the same split on to its second angle (count ${heads}, target ${w.state?.target.toFixed(4)} rad, expected ${t2.toFixed(4)}; settled ${w.state?.angle === w.state?.target})`);
         check(rest2 - before >= W_WIDER_SHARE * (pred2 - predBefore), `W: the gap is wider than after chop 1: ${mm(before)} -> ${mm(rest2)} mm (+${mm(rest2 - before)}; predicted +${mm(pred2 - predBefore)}, at least ${W_WIDER_SHARE} of it)`);
         check(rest2 - pred2 >= -GAP_REST_UNDER && rest2 - pred2 <= GAP_REST_OVER, `W: at rest it is ${mm(rest2)} mm against ${mm(pred2)} mm predicted (${mm(rest2 - pred2)} mm off; allowed -${mm(GAP_REST_UNDER)} to +${mm(GAP_REST_OVER)})`);
-        sk2 = await skullOf(z.id); bd2 = await boneDrawn(z.id); lm2 = run("M") ? await boneLandmark(z.id, [eyeW, line.G0]) : null;
+        sk2 = await skullOf(z.id); bd2 = await boneDrawn(z.id);
         wk.push({ img: await photo([eyeW, line.G0]), c: await toPx(line.G0) });
         await thaw(3);
         const ph2 = await actorPhase(z.id);
@@ -1026,11 +1044,22 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
       let sk3 = null, bd3 = null;
       if (run("K")) {
         line = await gapLine(z.id); eyeW = wedgeEye(line); await camAt(eyeW, line.G0); await syncCam();
-        const n3 = await chop(z.id, "L"), heads = (await evaluate("__sdfGame.axe()")).heads[z.id];
+        const n3 = await chop(z.id, "L"), heads = (await evaluate("__sdfGame.axe()")).heads[z.id], st0 = await stateOf(z.id);
         await thaw(3);
-        const ph3 = await actorPhase(z.id), st3 = await stateOf(z.id);
+        const ph3 = await actorPhase(z.id), st3 = await stateOf(z.id), bdK = await boneDrawn(z.id);
         check(n3 === 1 && heads === 3 && ph3 !== "standing", `K: chop 3 kills (count ${heads}; thawed 3 frames: phase ${ph3})`);
         check(st3?.preset === "middle" && Math.abs(st3.target - full) < 1e-12, `K: the kill throws the split to its full angle (target ${st3?.target.toFixed(4)} rad, the preset's ${full})`);
+        // The kill lands on a split already at its target (when the table's last angle is the full one): it kicks the
+        // spring. 3 frames on the halves are past the full angle, and the bone is drawn at the stage's share of them:
+        // the stage has not moved.
+        const kick = AXE_HEAD.killKick * full, past = st3 ? st3.angle - full : 0, deg = (r) => (r * 180 / Math.PI).toFixed(2);
+        out.kKick = { before: st0, after: st3, bone: bdK };
+        if (kick > 0 && Math.abs(t2 - full) < 1e-12) {
+          check(st0?.angle === full && st0.vel > 0 && past >= K_KICK_SHARE * kick,
+            `K: the kill kicks the split it finds at its full angle: rate ${st0?.vel.toFixed(2)} rad/s at the chop, ${deg(past)} degrees a half past it 3 frames on (${(past / kick).toFixed(2)} of killKick x the full angle, >= ${K_KICK_SHARE})`);
+          check(st3?.stage === full && bdK.plus !== null && Math.abs(bdK.plus - bdK.rule) <= M_ANGLE_TOL && Math.abs(bdK.minus - bdK.rule) <= M_ANGLE_TOL,
+            `K: the bone rides the kick at its stage's share, the stage unmoved (${st3?.stage} rad): drawn ${bdK.plus === null ? null : deg(bdK.plus)} / ${bdK.minus === null ? null : deg(bdK.minus)} degrees against ${deg(bdK.rule)} (the flesh ${deg(st3?.angle ?? 0)})`);
+        } else note(`K: no kick to hold (killKick ${AXE_HEAD.killKick}; chop 2's target ${t2.toFixed(4)} of ${full})`);
         await thaw(K_LATER);
         const stL = await stateOf(z.id), wL = await splitOf(z.id), dL = await drawnOf(z.id), phL = await actorPhase(z.id);
         check(stL?.preset === "middle" && stL.angle === full && !!wL && Math.abs(wL.thetaP - full) < 1e-12 && Math.abs(wL.thetaM + full) < 1e-12 && !!dL && await recordOpen(z.id),
@@ -1048,21 +1077,23 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
       }
       if (wk.length) sheet("WK-widen-kill", wk);
       // ---- M (really chopped). The skull at the three chops: a closed head draws the closed skull; at each stage the
-      // copies are DRAWN turned by the follow table's bone angle for the split's state (their matrices); and at the two
-      // standing stages each seated eye is on screen where skullWarpPoint puts it (the flesh out of the frame).
+      // copies are DRAWN turned by the follow table's bone angle for the split's state (their matrices); and after
+      // chop 1 each seated eye is on screen where skullWarpPoint puts it (the flesh out of the frame). Chop 2 splits
+      // the bone wide on a head the first flinch has bowed: each half's shell hides its own eye from every eye the
+      // player can stand at (32.9 px off from the front, 40.0 from the wedge), so that stage's landmark is the forced
+      // head's, upright, at the same bone angle.
       if (run("M") && sk2 && sk3) {
         const got = [sk1, sk2, sk3], drawn = [bd1, bd2, bd3], deg = (r) => (r * 180 / Math.PI).toFixed(2);
-        out.mStages = { closed: closedSkull, stages: got, drawn, landmarks: [lm1, lm2].map((l) => l && { worst: l.worst, far: l.far, rows: l.rows }) };
+        out.mStages = { closed: closedSkull, stages: got, drawn, landmark: { worst: lm1.worst, far: lm1.far, rows: lm1.rows } };
         check(closedSkull.bones === 0 && closedSkull.eyes === 0 && closedSkull.draws > 0 && closedSkull.angleP === 0,
           `M: a closed head draws the closed skull (${closedSkull.draws} bone draws for the actor, ${closedSkull.bones} split copies)`);
         const turnOff = Math.max(...drawn.flatMap((d) => [d.plus, d.minus].map((t) => (t === null ? Infinity : Math.abs(t - d.rule)))));
-        check(turnOff <= M_ANGLE_TOL && drawn[0].rule > 0 && drawn[1].rule > drawn[0].rule && drawn[2].rule > drawn[1].rule,
-          `M: the bone is drawn turned by the follow table's angle at each chop, wider each time: its copies' matrices give ${drawn.map((d) => `${deg(d.plus)} / ${deg(d.minus)}`).join(", ")} degrees (+ / - half) against ${drawn.map((d) => deg(d.rule)).join(", ")} (worst ${turnOff.toExponential(1)} rad off <= ${M_ANGLE_TOL})`);
+        check(turnOff <= M_ANGLE_TOL && drawn[0].rule > 0 && drawn[1].rule > drawn[0].rule && drawn[2].rule >= drawn[1].rule,
+          `M: the bone is drawn turned by the follow table's angle at each chop, wider at chop 2 and no narrower after the kill: its copies' matrices give ${drawn.map((d) => `${deg(d.plus)} / ${deg(d.minus)}`).join(", ")} degrees (+ / - half) against ${drawn.map((d) => deg(d.rule)).join(", ")} (worst ${turnOff.toExponential(1)} rad off <= ${M_ANGLE_TOL})`);
         check(got.every((g) => g.bones === 3 && g.eyes === 2), `M: each stage draws the skull as three clipped copies and an eye a half (${got.map((g) => `${g.bones}+${g.eyes}`).join(", ")})`);
-        const lmWorst = Math.max(lm1.worst, lm2.worst);
-        note(`M: really chopped, the eyes: chop 1 ${J(lm1.rows)}; chop 2 ${J(lm2.rows)}`);
-        check(lmWorst <= M_SHIFT_PX && lm2.far > lm1.far, `M: on the really chopped head each seated eye is on screen where skullWarpPoint puts it: worst ${lm1.worst.toFixed(2)} px off its shift at chop 1 (it moves ${lm1.far.toFixed(1)} px), ${lm2.worst.toFixed(2)} px at chop 2 (${lm2.far.toFixed(1)} px) (<= ${M_SHIFT_PX} px)`);
-        sheet("M-skull-chopped", [{ img: lm1.img, c: lm1.c }, { img: lm2.img, c: lm2.c }]);
+        note(`M: really chopped, the eyes after chop 1: ${J(lm1.rows)}`);
+        check(lm1.worst <= M_SHIFT_PX && lm1.far >= M_CHOP_PX, `M: on the really chopped head each seated eye is on screen where skullWarpPoint puts it: worst ${lm1.worst.toFixed(2)} px off its shift after chop 1 (<= ${M_SHIFT_PX} px), which moves it ${lm1.far.toFixed(1)} px (>= ${M_CHOP_PX} px)`);
+        sheet("M-skull-chopped", [{ img: lm1.img, c: lm1.c }]);
       }
     } catch (e) { await threw("S / W / K", e); }
     await diag("chops");
@@ -1161,7 +1192,7 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
       // (2) a flail hit on a split head: the plain face crater, as a head hit (the head's share of the meter).
       {
         const z = fresh(); const hc = await headOf(z.id), f = await frontOf(z.id);
-        const ok = await force(z.id, "middle", 0, 0, AXE_HEAD.openAngles[0]);
+        const ok = await force(z.id, "middle", 0, 0, H_FLAIL_OPEN);
         const sel = await evaluate(`__sdfGame.selectSlot("flail")`); await stepN(40);
         await evaluate("__sdfGame.flail.setHitStop(false); __sdfGame.flail.setImpactFx(false); 1");
         await look(hc, H_FLAIL_D, f); await stepN(2);
