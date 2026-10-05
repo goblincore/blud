@@ -258,6 +258,9 @@ export const FLAIL_HEAD = {
    *  chest ~0.16 m from it and sever the neck on hit 1 (spec §11, now moot — the flail never severs). */
   neckDist: 0.2,
   faceCraterR: 0.06,
+  /** A head hit's share of the swing's collapse credit (flail spec §13.2): the head model kills, not the meter
+   *  (R/L 0.065 × 0.3 ≈ 0.02 per head hit). */
+  meterScale: 0.3,
 } as const;
 
 export function isHeadRegion(limb: LimbId | undefined, point: Vec3, headCentre: Vec3 | null, neckRoot: Vec3 | null): boolean {
@@ -267,12 +270,14 @@ export function isHeadRegion(limb: LimbId | undefined, point: Vec3, headCentre: 
 }
 
 /** The wound for one hit (spec §12.3): a head-region hit is always the face crater with no sever; a body
- *  hit is the full crater at its sever calibre. */
+ *  hit is the full crater at its sever calibre. `meterScale` is the hit's share of the swing's collapse credit and
+ *  `flesh` the bits it throws (flesh-bits.ts FLESH_BITS): a head-region hit is a head hit in both, also when the
+ *  head damage leaf declines it (a split head) and the flail stamps this crater itself. */
 export function flailWound(
   headRegion: boolean, craterR: number, severMul: number,
-): { radius: number; severRadius: number } {
-  if (!headRegion) return { radius: craterR, severRadius: craterR * severMul };
-  return { radius: FLAIL_HEAD.faceCraterR, severRadius: 0 };
+): { radius: number; severRadius: number; meterScale: number; flesh: 'body' | 'head' } {
+  if (!headRegion) return { radius: craterR, severRadius: craterR * severMul, meterScale: 1, flesh: 'body' };
+  return { radius: FLAIL_HEAD.faceCraterR, severRadius: 0, meterScale: FLAIL_HEAD.meterScale, flesh: 'head' };
 }
 
 /** The head chain's root (it sits in the shoulders) and its first segment's midpoint (the neck), from the

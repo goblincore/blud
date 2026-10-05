@@ -21,7 +21,7 @@ import type { Vec3 } from '../types';
 import type { ZombieActor } from './game-actor';
 import { clothifyWound, tearWound, unwarpHit, worldHitToWound, type Wound } from '../damage';
 import { flailTear, flailTearOn, setFlailTear } from '../torn-lips';
-import { fieldNormal, fleshBitCount, fleshBits, fleshBitsOn, fleshRand, setFleshBitsOn, swingBlow } from '../flesh-bits';
+import { FLESH_BITS, fieldNormal, fleshBitCount, fleshBits, fleshBitsOn, fleshRand, setFleshBitsOn, swingBlow } from '../flesh-bits';
 import type { GorePiece } from '../head-pop';
 import { sdBody } from '../validate';
 import { slotLowerAmount, slotReady } from './game-weapon-slots';
@@ -557,7 +557,8 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
         a.rigImpulse(h.point, [h.dir[0] * m, h.dir[1] * m, h.dir[2] * m]);
       };
       // The head damage model takes every head-region hit (its ladder counts the same hits as headHits), unless it
-      // declines one (false: the head is split open): that hit takes the plain crater below, at the un-warped point.
+      // declines one (false: the head is split open): that hit takes the plain crater below, at the un-warped point,
+      // still as a head hit (flailWound: the face crater, the head's share of the meter, head flesh).
       if (region && deps.headHit?.(a, h.point, h.dir, { meterCredit: f.meterCredit, shove: f.shove, side, gain })) {
         snap();
         continue;
@@ -569,7 +570,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       tearWound(w, flailTear(side));
       a.blast({
         wounds: [w],
-        meterCredit: f.meterCredit,
+        meterCredit: f.meterCredit * spec.meterScale,
         impulse: { at: h.point, vel: [h.dir[0] * f.shove, h.dir[1] * f.shove, h.dir[2] * f.shove] },
         reaction: 'blast',
         gain,
@@ -580,7 +581,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       if (fleshBitsOn() && deps.gore) {
         let fr = fleshStreams.get(a);
         if (!fr) { fr = fleshRand(a.id * 2); fleshStreams.set(a, fr); }
-        deps.gore(a, fleshBits(h.point, swingBlow(h.dir, side), fieldNormal(field, h.point), fleshBitCount('body', side, fr), fr));
+        deps.gore(a, fleshBits(h.point, swingBlow(h.dir, side), fieldNormal(field, h.point), fleshBitCount(spec.flesh, side, fr), fr, spec.flesh === 'head' ? FLESH_BITS.headScale : 1));
       }
     }
     if (hits.length > 0) {

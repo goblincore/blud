@@ -551,6 +551,59 @@ describe('the skull split: the bone opens LESS than the flesh, in stages (the me
     // 6.3: a tick moves it no more than 1.2 x what the fastest tick moves the flesh (9.4 against 8.3 degrees).
     expect(maxStep).toBeLessThanOrEqual(1.2 * maxFleshStep);
   });
+  /** The steepest the bone angle can rise with its flesh angle while the target stands: the bone is
+   *  flesh x follow(flesh / full) under the target, so its slope is follow(x) + x x follow'(x), largest at the top
+   *  end of a table segment; past the target it is the target's share (at most 1). */
+  const boneSlope = (knots: readonly (readonly [number, number])[] = S.follow): number => {
+    let L = 1;
+    for (let i = 1; i < knots.length; i++) {
+      const [xa, ka] = knots[i - 1]!, [xb, kb] = knots[i]!, m = (kb - ka) / (xb - xa);
+      L = Math.max(L, ka + xa * m, kb + xb * m);
+    }
+    return L;
+  };
+  it('EVERY TICK of chops that land settled: the bone moves no more than the table\'s steepest slope x what its flesh moves', () => {
+    const L = boneSlope(), eps = 1e-9, dt = 1 / 60;
+    // (0.8, 0.3) -> (1, 0.85): 0.85 + 1 x 2.75.
+    expect(L).toBeCloseTo(3.6, 12);
+    let st = openSplit([1, 0, 0], [0, 0, 0.1], 0.09, 0.55);
+    let prevBone = 0, prevFlesh = st.angle, worst = 0, ticks = 0;
+    for (const [chop, frac] of [[1, 0.55], [2, 0.8], [3, 1]] as const) {
+      // The chop lands on a settled spring (play's strikes are at least 0.6 s apart, webgpu/axe-swing.ts): the tick
+      // that takes the new target is in the bound too.
+      if (chop > 1) { expect(st.vel).toBe(0); expect(st.angle).toBe(st.target); st = widenSplit(st, frac); }
+      for (let i = 0; i < 180; i++) {
+        st = stepSplit(st, dt);
+        const s = skullSplitOf(splitWarpOf(st, FRAME)), bone = s ? s.angleP : 0;
+        const dBone = Math.abs(bone - prevBone), dFlesh = Math.abs(st.angle - prevFlesh);
+        expect(dBone, `chop ${chop} tick ${i}`).toBeLessThanOrEqual(L * dFlesh + eps);
+        if (dFlesh > 1e-6) worst = Math.max(worst, dBone / dFlesh);
+        prevBone = bone; prevFlesh = st.angle; ticks++;
+      }
+    }
+    expect(ticks).toBe(540);
+    // The bound is what the kill does on its way up the table's last segment, not slack. Measured: 3.5975. (Chops
+    // four ticks apart through the seam break it by 0.69 degrees in one tick: the test below.)
+    expect(worst).toBeGreaterThan(0.9 * L);
+    expect(worst).toBeLessThanOrEqual(L);
+  });
+  it('the per-tick bound is what a stage step breaks: a chop landing ABOVE the old target moves the bone with no flesh behind it', () => {
+    // KNOWN, and accepted for now: the stage is min(flesh, target), so a chop that lands while the flesh is past the old
+    // target steps the bone at once. Play cannot do it (the spring is at rest 0.6 s on); the axeChop seam can. A
+    // stage that only advances, kept in SplitState, would remove it. Here it shows the bound above can fail.
+    const L = boneSlope(), dt = 1 / 60;
+    let st = openSplit([1, 0, 0], [0, 0, 0.1], 0.09, 0.55);
+    let peak = st;
+    for (let i = 0; i < 60; i++) { st = stepSplit(st, dt); if (st.angle > peak.angle) peak = st; }
+    expect(peak.angle).toBeGreaterThan(peak.target);
+    const before = skullSplitOf(splitWarpOf(peak, FRAME))!.angleP;
+    const chopped = widenSplit(peak, 0.8);
+    const after = skullSplitOf(splitWarpOf(chopped, FRAME))!.angleP;
+    // The flesh has not moved; the bone has, by more than a degree (2.26 -> 5.26 degrees).
+    expect(chopped.angle).toBe(peak.angle);
+    expect(after - before).toBeGreaterThan(Math.PI / 180);
+    expect(after - before).toBeGreaterThan(L * Math.abs(chopped.angle - peak.angle) + 1e-9);
+  });
   it('a spring overshoot never opens the bone past its flesh: frac is held at 1, follow at 1', () => {
     const w = both(1.4), s = skullSplitOf(w)!;
     expect(s.frac).toBe(1);

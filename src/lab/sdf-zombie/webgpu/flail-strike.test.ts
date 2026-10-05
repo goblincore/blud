@@ -3,6 +3,8 @@
 import { describe, expect, it } from 'vitest';
 import { FLAIL_ARC_DEG, FLAIL_HEAD, FLAIL_STRIKE, flailWound, headNeck, inStrikeArc, isHeadRegion, resolveStrike, snapToSurface, snapToSurfaceResidual, viewToWorld, type StrikeActor } from './flail-strike';
 import type { Primitive, Vec3 } from '../types';
+import { HEAD_LEAF } from './game-head-damage';
+import flailSrc from './game-flail.ts?raw';
 
 /** Standard polynomial smooth-min (k = blend radius). */
 const smin = (a: number, b: number, k: number) => {
@@ -217,12 +219,22 @@ describe('head damage (no decapitation, spec §12.3)', () => {
     expect(isHeadRegion('armL', [0, 1.0, 0], null, null)).toBe(false);
   });
   it('a head-region hit is always a face crater with no sever, however many came before', () => {
-    for (let n = 0; n < 20; n++) expect(flailWound(true, 0.09, 1.3)).toEqual({ radius: FLAIL_HEAD.faceCraterR, severRadius: 0 });
+    for (let n = 0; n < 20; n++) expect(flailWound(true, 0.09, 1.3)).toEqual({ radius: FLAIL_HEAD.faceCraterR, severRadius: 0, meterScale: FLAIL_HEAD.meterScale, flesh: 'head' });
   });
   it('a body hit is the full crater with its sever calibre', () => {
     const w = flailWound(false, 0.09, 1.3);
     expect(w.radius).toBe(0.09);
     expect(w.severRadius).toBeCloseTo(0.117, 9);
+  });
+  it('a head-region hit credits the head\'s share of the collapse meter and throws head flesh, whoever stamps it', () => {
+    // The head damage leaf's own hits and the plain crater the flail stamps when that leaf declines (a split head)
+    // read ONE scale: a split head is not beaten down four times as fast as a whole one.
+    expect(FLAIL_HEAD.meterScale).toBe(0.3);
+    expect(HEAD_LEAF.meterScale).toBe(FLAIL_HEAD.meterScale);
+    expect(flailWound(false, 0.09, 1.3)).toMatchObject({ meterScale: 1, flesh: 'body' });
+    expect(flailWound(true, 0.09, 1.3)).toMatchObject({ meterScale: FLAIL_HEAD.meterScale, flesh: 'head' });
+    expect(flailSrc).toContain('meterCredit: f.meterCredit * spec.meterScale,');
+    expect(flailSrc).toContain("fleshBitCount(spec.flesh, side, fr), fr, spec.flesh === 'head' ? FLESH_BITS.headScale : 1)");
   });
   it('headNeck finds the head chain root and neck midpoint on live prims, null once the head is gone', () => {
     const prims = [

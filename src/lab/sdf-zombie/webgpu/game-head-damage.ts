@@ -93,9 +93,9 @@ export const HEAD_LEAF = {
    *  chunks — an orbit is bone on hit 2, both eyes pop on hit 3 (v1.4, flail spec §13.2, was R/L 0.20, H 0.28;
    *  head spec §15 had R and L 0.25, H 0.35). */
   strip: { R: 0.4, L: 0.4, H: 0.55 } as Record<'R' | 'L' | 'H', number>,
-  /** A head hit's share of the swing's collapse credit (flail spec §13.2): the head model kills, not the meter
-   *  (R/L 0.065 × 0.3 ≈ 0.02 per head hit). */
-  meterScale: 0.3,
+  /** A head hit's share of the swing's collapse credit (flail-strike.ts FLAIL_HEAD.meterScale, which the flail's own
+   *  crater on a head this leaf declines reads too). */
+  meterScale: FLAIL_HEAD.meterScale,
   /** The eye's spring-out speed along the reflected blow (spec §6). */
   popSpeed: 2.5,
   /** The eyeballs' iris: the face sheet's glow colour (faceGlowColor, march/body/face.wgsl.ts). */
