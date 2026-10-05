@@ -345,3 +345,184 @@ too, and the `face` preset's crown is speckled by the face cut (B8).
 - The per-ray wound list (off by default) is built from the base slot's wounds only and read by every slot of a
   crowd pixel; the split's gate does not change that.
 
+## B6: shading after the hit follows the opened halves (2026-10-05)
+
+### What was built
+
+The march hit an opened half in the right place (B4) but shaded it at the WORLD point: the face sheet, the eye glow,
+the wound masks and the rest anchor were read where the closed head had been, and the cut faces were lit skin. The
+body's wounds, rest rows, bones and face live on the closed head, so everything anchored to the body now reads the
+hit piece's un-warped point or frame. Lighting, the normal's taps and the probes stay at the world point.
+
+- **The hit's own copy.** The walk copies `gHitPiece` / `gHitSplitF` into `hitPiece` / `hitSplitF` at every sample,
+  next to `hitRefold` (`body/trace.wgsl.ts`; the refine entry's `REFINE_LOOP` too). Nothing after the walk reads the
+  globals: `calcNormal` and the probes have overwritten them by then.
+- **The un-warped pair** (`body/blocks/post/split-hit.wgsl.ts`, spliced right after `let p = camPos + rd * t;`):
+  `splitTheta` (the hit piece's angle; 0 off a turned half), `pS` (`splitMoveBack(p, …, splitTheta)`), `splitQ` (the
+  piece's turn as a quaternion), `faceCentre` / `faceQuat` (the record's head frame turned with the piece),
+  `splitIn` (the hit is inside an open head's region sphere) and `cutFace`. Directions cross between the frames
+  with the existing `qRot` and `qMulQ`: no new helper (the include list is still 50).
+  A hit that is not on a turned half takes `p`, the record's frame and the identity themselves (`var pS = p;`, the
+  rotation only behind `if (splitTheta != 0.0)`): `h + R(a, 0)(p - h)` is not bit-equal to `p`.
+- **Who reads what** (every post-hit use of the world point or the normal):
+
+  | Block | Reads | Now |
+  | --- | --- | --- |
+  | shading normal: the rest anchor (`restPoint`, `noiseLocal`) | the point | `pS`. Everything on `anchor` follows: micro-detail, mottle, viscera lumps, body grain, gore, meat detail, burn noise, melt patches, the output-res detail pass |
+  | shading normal: `ngBody` / `ngDetail` | the world point, the closed body | skipped inside an open region (below) |
+  | shading normal: `calcNormal` | the world point | world (it differentiates `mapBody`, which is the split field) |
+  | wound masks: `woundMask`, `charMask` | the point, the smooth normal | `pS`, and `nSmoothS` = the normal turned into the piece's frame |
+  | tissue ramp | `hitField.w` (pre-wound field, uncapped) | the same; on a cut face `hitSplitF` |
+  | face layer | `p - gInstHeadCentre`, `gInstHeadQuat` (projection, `facing`, the bump to world) | the turned frame `faceCentre` / `faceQuat`, so the layer's own maths is unchanged; gated off on cut faces |
+  | body grain, micro-detail | a noise vector added to `n` | world, as on any limb that turns (their comments say so); the cells come from `anchor` |
+  | burn: bone probe and its four taps | the point | `pS`; the bone normal turned out to the world (`qRot(splitQ, boneN)`) |
+  | wet (surface prep) | `wm`, `tissueDepth` | a cut face is wet at every depth |
+  | motion vector (`prevPosed(anchor) - p`) | the point | `- pS`: the closed body's motion (with the anchor at `pS`, `- p` would have reported the half's whole offset) |
+  | flashlight, light list, AO / scatter probes, wound and level shadow, ambient, the deferred AO probe | the point, the normal | world |
+
+- **The mesh face layer** (`baked-chunks.ts`) is the march's by regex renames. Its contract now maps `faceCentre` /
+  `faceQuat` to the mesh's `headCentre` / `headQuat` and `cutFace` to `0.0` (a settled head mesh is one rigid piece).
+- **The re-fold report.** `gRefoldWin` (the normal hint) was whatever piece won a limb re-fold last. A win is now
+  also filed under its piece (`gRefoldBy.x / .y / .z`), and the walk takes the HIT piece's entry for an open slot.
+  Both writes sit in the win's own branch; `mapBody`'s per-sample path is untouched (see Cost). A closed slot reads
+  `gRefoldWin` as before. `gWoundOwners` needed nothing: it is reset per piece and read only by that piece's own
+  re-fold, nothing outside `mapBody` reads it. The hand twin (`map-body-split-twin.test.ts`) is unchanged: the
+  pieces compute what they did.
+- **Normals.** Inside an open head's region sphere (`splitIn`: the slot is open and `|p - h| <= r`) the analytic
+  gradient is skipped and the existing finite-difference fallback runs (`ngReason` 8). Not only on turned halves:
+  the unmoved piece's hinge-plane and ball caps are not in the analytic gradient either.
+- **Cut faces** (`head-split.ts SPLIT_SHADE = { cutLo: 0.0015, cutHi: 0.004 }`). The gate is
+  `cutFace = smoothstep(cutLo, cutHi, hitField.x - hitSplitF)`: how far a piece cap holds the split field above the
+  piece's own field. That gap is exactly 0 on skin and on every closed body and equals the depth inside the closed
+  body on a cap, so it does not fire on skin the walk accepted a few millimetres deep (a wound lip) or dented, as
+  `-hitSplitF` alone would. On a cut face: the one wound mask is raised to `cutFace` (`wm`, `wmRim`), the tissue ramp
+  takes the depth `-hitSplitF` (so the face is a cross-section: skin at the rim, the pale fat band, red, clot), it is
+  wet at every depth, and there are no skin pores, no body grain (already masked by `wm`), no face sheet, glow or
+  relief, and none of what the closed body's wounds and burns throw THROUGH the solid at `pS` (cavity, tear, cloth
+  marks, char). No new material: the existing wound interior.
+- **The eye glow** is the face sheet's emissive term, inside the face layer, so it follows from the turned frame.
+  The pink eyeballs in the gap are the skull mesh's seated eyes (B7).
+- **The walk's shell noise** (`woundCfg2.z`; 0 in the game) is read at the sample's own piece's un-warped point and
+  fades out over the same gate; a sample over a cut face is no shell sample at all (the walk stays relaxed there).
+- **A leftover of B5, fixed here:** `normal-gradient-probe.wgsl.ts` copies the globals `applyWounds` reads, and B5's
+  wound-list gate added `gInstSplitOpen`; the probe's test had been failing since (the dev probe page would not
+  compile). One name added, its own commit.
+
+### The check set
+
+| Check | Result |
+| --- | --- |
+| `march-golden -u` | `MAP_BODY`, `APPLY_WOUNDS` (the `gRefoldBy` private), `MARCH_TRACE_LOOP`, `MARCH_TRACE_POST`, `REFINE_LOOP`, `FACE_LAYER_WGSL`, `MARCH_BODY_SURFACE_PREP`, `MARCH_BODY_LIGHT` and what embeds them; helper count 50, unchanged |
+| `compile-census` | phase ready, `uncapturedCount` 0, no device loss; march module 316216 B -> 324134 B (83 fns, as before). Cold `warmMs` 44453 at load 2.5-2.9 (two earlier texts of this task: 47557 and 49836 at load 4-5.5) |
+| `march-hash` | no pin moved: default `d7392d52…` / wounded `76bd51aa…`, crowd quad `0c71e712…` / `bf6836cd…`, per-body `470ff0b3…` / `f618070e…` (run three times over the task, on each text) |
+| cold boot pair (base `6bdded42`) | new 44382 / 44291 ms, base 44283 / 44089 ms warm-up (`drawOnce` 1659 / 1655 vs 1665 / 1682); load average 2.6-3.2. An earlier text under load 4.3-6.2: new 45177 / 46491, base 45205 / 45222 |
+
+### The numbers
+
+The march target is the camera's own projection; the lens comes after it. `__sdfGame.screenPosOf` places a world
+point on it, `flail.toScreen` (lens-mapped, right for screenshots) does not: with the latter a point cast from a
+texel came back 10 texels off at 0.6 m. B4's and B5's march-target discs were placed with `flail.toScreen` (they
+carry a margin of a few texels; not re-measured).
+
+**(a) The face rides the half.** Each painted eye's glow in the march target (r over 2: the glow is HDR, lit skin
+tops out near 1), closed and open. The closed eye's surface point (a CPU ray through the glow's centroid) goes
+through `warpPoint` and is projected: that is where the CPU says the eye is on the open head.
+
+| Preset, distance | The CPU moves the eye | Open glow centroid, off the prediction | Its surface point, un-warped, off the closed eye's | B5 |
+| --- | --- | --- | --- | --- |
+| middle both, 0.6 m | 25.6 / 23.1 texels (51 / 46 mm) | 0.2 / 0.2 texel (0.5 screen px) | 0.7 / 0.5 mm | one eye: 2 glow texels left, 59 texels off; the other: 18 of its 36 texels still at the closed spot |
+| middle both, 2 m | 7.1 / 6.5 texels | 0.37 / 0.35 texel | 3.3 / 3.0 mm (the texel is 3.7 mm there) | no glow texel at all |
+| face, 0.6 m | 50 / 47 texels (113 / 104 mm) | 0.34 texel on the eye in view (23 texels); the other shows 2 texels, 1.85 off | 1.1 mm | no glow texel |
+| face, 2 m | 13 / 12 texels | 0.94 texel (2 texels in view; the other eye hidden) | - | no glow texel |
+| middle one side, 0.6 m | the plane (offset 4 cm) cuts THROUGH the moved side's eye | the flap carries 8 of its texels, 3.4 texels from the whole eye's predicted centre; 10 stay on the still side's cut edge | - | the flap has none |
+| middle one side, the still side's eye | 0 | 0 (36 of 36 texels in place) | 0 | the same |
+
+**(b) A wound's mask sits on its crater.** One pellet crater on one half's brow and one rod cut down the other
+half's temple, stamped on the closed head through the seams, then the split (`middle`, both). With the tissue
+colours painted green the mask is the rise in green chromaticity against the same open head without wounds; the
+crater is where the surface went in by over 3 mm (`b6/mask-vs-crater.png`).
+
+| Wound, view | Moved with its half | Mask centroid to crater centroid, B5 -> B6 | Crater texels masked, B5 -> B6 |
+| --- | --- | --- | --- |
+| pellet crater (radius 5.5 cm), front 0.6 m | 27.0 texels | 14.2 -> **0.54** texel | 43% -> 73% |
+| rod cut (half-length 3.5 cm, kerf 1 cm), front 0.6 m | 22.7 texels | 8.66 -> **0.39** texel | 4% -> 73% |
+| rod cut, three-quarter view | 20.2 texels | 7.35 -> 2.56 texels | 35% -> 57% |
+
+A pellet crater on a head is 5.5 cm in radius, most of a half's face, so one was stamped, not a few.
+
+**(c) Closed bodies.** The six `march-hash` pins above. By construction every rotation is behind
+`splitTheta != 0.0` or `gInstSplitOpen`, and the rest are selects that pick the old value (pinned by text in
+`split-hit.wgsl.test.ts`, with a hand twin of the formulas against `unwarpPoint` / `unwarpDir` / `warpDir` /
+`headLocalPoint`: worst difference under 1e-12 over 4 x 4000 points, and the very same values off a turned half).
+
+**The shell noise** (switched on for the test, 0.016; above-behind): depth moved by the noise on the 1035 cut-face
+texels: B5 median 10.8 mm, none still; B6 median 0.00 mm, 61% exactly still (what moves is the rim band and the
+face cuts' own walls, which are wound surface, not cap). Skin: 9.4-10.2 mm mean in both.
+
+**The burn block's bone taps** (`?skeleton=procedural`, fully charred; `b6/shell-and-char.jpg`): on B5 the cut
+faces were painted ivory, the bone probe reading the closed head at the world point; on B6 they are charred like
+the rest. No bone shows through the head's own skin at these settings in either.
+
+### Cost
+
+`__sdfGame.timeDraws(120)`, headless, one zombie's head centred; base (`6bdded42`) and new in alternate sessions,
+three each, load average 2.0-2.8.
+
+| | Closed, base | Closed, B6 | Open, base | Open, B6 | Open - closed, base / B6 |
+| --- | --- | --- | --- | --- | --- |
+| 0.6 m | 17.75 / 17.95 / 17.85 | 18.15 / 18.15 / 18.1 | 23.75 / 23.95 / 23.95 | 24.1 / 24.25 / 23.95 | +6.0 / +6.0 / +6.1 against +6.0 / +6.1 / +5.9 |
+| 2 m | 11.4-12.2 | 12.1-12.8 | 12.6-13.6 | 12.6-13.9 | unreadable: single draws spread 1-4 ms in both trees |
+
+- **Finite-difference normals in the region cost nothing that shows:** open minus closed is +6.0 ms before and
+  after.
+- **A closed body costs about 0.3 ms more at 0.6 m** (18.1 against 17.85; a second measure on another closed head,
+  three sessions each: 19.8 / 19.8 / 19.8 against 19.3 / 19.6 / 19.5). It computes the same values; what it pays is
+  the split's extra locals and branches in the post. Not chased further.
+- **The first form of the re-fold report cost 0.5 ms more than that** and was replaced. It kept the win in a
+  per-piece local and wrote `gRefoldWin` on the per-sample path (one guarded write per piece, one at the union
+  min). On a closed head at 0.6 m, sessions interleaved: base 19.6, the new post with the base's `mapBody` 19.7,
+  that form 20.2, a lighter one (the closed slot's write back in the win branch) 19.9; two earlier rounds had that
+  form at 21.0 / 20.9 against 20.1 / 20.1, and 20.4 / 20.4 with the base's `mapBody`. `mapBody` is inlined about
+  ten times, and a line on its per-sample path is paid at every step of every ray: keep bookkeeping in the rare
+  branches.
+
+### Photos (`b6/`)
+
+B5's cameras and scenes; B5 left, B6 right.
+
+- `front-0.6m.jpg`, `front-2m.jpg`: closed, open on B5, open on B6, for `middle` both, `middle` one side and `face`.
+  Each half wears its own half of the face with its eye; the folded face of the `face` preset shows its brow, nose
+  and both eyes from above; the cut faces are red flesh with a pale rim, not skin.
+- `top.jpg`: from above and behind. The cut faces are wound interior (dark red where the light does not reach,
+  bright wet red under the flashlight).
+- `wounds.jpg`: the pellet crater and the rod cut of (b), front, three-quarter and above-behind.
+- `mask-vs-crater.png`: the march target of (b), mask against crater, B5 and B6.
+- `shell-and-char.jpg`: the shell noise switched on, and the charred head with the procedural skeleton.
+
+Still wrong in them, and whose:
+
+- The closed skull stands in the gap, with its seated eyeballs (B7).
+- The cut faces are one flat wet red, garish where the flashlight hits them square at 0.6 m, with no bone ring and
+  no brain; the tissue ramp reaches its clot stop 3.5 cm in, so most of a face is the darkest stop (B8).
+- A one-sided split 4 cm off centre cuts through an eye: a sliver of glow stays on the still side's cut edge and
+  the rest rides the flap. Correct for the plane, odd to look at (B8: the offset, or the eye disc).
+- Pale streaks along the halves' inner edges and the speckle on the `face` preset's crown are the face cuts' own
+  lips and jag; the red cut mask on the forehead of the one-sided split at 2 m is the face cut's band (B8).
+- The normal's silhouette noise is under the caps (`max(f + noise, cap)`), so within the noise's reach of a cut
+  face's rim (up to about a centimetre where the noise pushes the skin out) the normal can be the skin's, not the
+  cap's. Not picked out in the photos; noted for B8.
+
+### For the tasks after
+
+- **B7:** the face sheet now rides the halves, so the skull mesh in the gap is the one thing left at the closed
+  position. `faceCentre` / `faceQuat` (`split-hit.wgsl.ts`) are the turned head frame, if the skull's shading wants
+  the same.
+- **B8:** `SPLIT_SHADE` holds the cut-face gate; the look itself is the wound interior's (`surfCfg3`, `deepColor`,
+  `fatColor`, the wet boost). The gate also drives the face layer's fade and the shell noise's.
+- **A detached or baked head** takes the mesh face layer with no split (`cutFace` 0, the mesh's own frame). A split
+  head that is then baked would need its own answer.
+- **Motion vectors** carry the closed body's motion only (unchanged in kind: the previous-frame rows are the closed
+  head's).
+- **A cross-slot leak of the normal hint is as it was:** in a crowd pixel `gRefoldWin` is the last slot's that won
+  a re-fold, not the union winner's, for closed bodies too. Left alone: fixing it moves what closed crowd pixels
+  compute.
