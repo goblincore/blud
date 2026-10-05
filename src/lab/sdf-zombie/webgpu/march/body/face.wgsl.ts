@@ -111,7 +111,7 @@ export const FACE_LAYER_WGSL = /* wgsl */ `  // Emissive mask from the face shee
     // HEAD_EXTERIOR_GORE_KEEP fraction of the piece's gore.
     faceCover = clamp(facing + faceRegion * ${HEAD_EXTERIOR_GORE_KEEP}, 0.0, 1.0);
     // A cut face of a split head (cutFace, the caller's: 0 anywhere else) is the head's inside, not its skin: no
-    // sheet, no glow and no relief on it, and no protection from the gore.
+    // sheet, no glow and no relief on it, and no protection from the gore. (Its look: blocks/post/cut-face.wgsl.ts.)
     if (cutFace > 0.0) { facing = facing * (1.0 - cutFace); faceCover = faceCover * (1.0 - cutFace); }
     if (facing > 0.0 && uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
       let base = uv * faceAtlas.xy + faceAtlas.zw;

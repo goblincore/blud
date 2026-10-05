@@ -1,8 +1,8 @@
 // src/lab/sdf-zombie/webgpu/march/body/blocks/post/split-hit.wgsl.ts
 //
 // THE HEAD SPLIT after the hit (head-split.ts unwarpPoint / unwarpDir are the CPU mirror): the hit piece's un-warped
-// point, its turn, the head frame turned with it, and the cut-face gate. Spliced into MARCH_TRACE_POST right after the
-// world hit point, so marchBody, refineBody and the deferred marchSurface all run it.
+// point, its turn, the head frame turned with it, and the cut-face gate and depth. Spliced into MARCH_TRACE_POST right
+// after the world hit point, so marchBody, refineBody and the deferred marchSurface all run it.
 import { SPLIT_SHADE } from '../../../../../head-split';
 
 export const SPLIT_HIT_BLOCK = /* wgsl */ `  // THE HEAD SPLIT. The hit is on ONE rigid piece of its body (hitPiece, the walk's copy of gHitPiece: 0 the unmoved
@@ -31,6 +31,9 @@ export const SPLIT_HIT_BLOCK = /* wgsl */ `  // THE HEAD SPLIT. The hit is on ON
   // CUT FACES (head-split.ts SPLIT_SHADE). hitField.x is the split field at the accepted sample and hitSplitF the
   // winning piece's own field there, before its caps: equal on skin, where the piece's field is the surface, and
   // apart by the depth inside the closed body where a cap is (a cut face, the rest's hinge-plane face). cutFace is 0
-  // on skin and on every closed body, 1 on a cut face; the wound mask block and the face layer read it.
+  // on skin and on every closed body, 1 on a cut face; the wound mask block, the face layer and the cut-face look
+  // block (cut-face.wgsl.ts) read it. cutDepth is how deep inside the closed body, as it is now, the hit lies at its
+  // un-warped point: the depth the tissue ramp takes on a cut face, and the look block's.
   var cutFace = 0.0;
-  if (gInstSplitOpen) { cutFace = smoothstep(${SPLIT_SHADE.cutLo}, ${SPLIT_SHADE.cutHi}, hitField.x - hitSplitF); }`;
+  if (gInstSplitOpen) { cutFace = smoothstep(${SPLIT_SHADE.cutLo}, ${SPLIT_SHADE.cutHi}, hitField.x - hitSplitF); }
+  let cutDepth = max(0.0, -hitSplitF);`;

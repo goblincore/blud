@@ -18,6 +18,7 @@ import { PRIM_MATERIAL_BLOCK } from './blocks/post/prim-material.wgsl';
 import { SHADING_NORMAL_BLOCK } from './blocks/post/shading-normal.wgsl';
 import { WOUND_MASKS_BLOCK } from './blocks/post/wound-masks.wgsl';
 import { TISSUE_BLOCK } from './blocks/post/tissue.wgsl';
+import { CUT_FACE_BLOCK } from './blocks/post/cut-face.wgsl';
 import { ORGAN_BLOCK } from './blocks/post/organ.wgsl';
 import { MOTTLE_BLOCK } from './blocks/post/mottle.wgsl';
 import { BODY_GRAIN_BLOCK } from './blocks/post/body-grain.wgsl';
@@ -159,13 +160,14 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(max(
     if (shellAmp > 0.0 && abs(d) < shellAmp * 4.0) {
       // THE HEAD SPLIT: the noise is glued to the flesh, so on a half that turned open it is read at this sample's
       // own un-warped point (the piece mapBody just left in gHitPiece), and it fades out where a piece cap holds the
-      // field above the piece's own (d - gHitSplitF, the post's cut-face gate): a cut face is flat, and a sample
-      // over one is no shell sample at all (the walk stays relaxed). shellK is shellAmp for every closed body.
+      // field above the piece's own (d - gHitSplitF, the gap the post's cut-face gate reads; SPLIT_SHADE.shellLo /
+      // shellHi): a cut face is flat, and a sample over one is no shell sample at all (the walk stays relaxed).
+      // shellK is shellAmp for every closed body.
       var shellP = camPos + rd * t;
       var shellK = shellAmp;
       if (gInstSplitOpen) {
         if (gHitPiece != 0) { shellP = splitMoveBack(shellP, gInstSplitH.xyz, gInstSplitA.xyz, select(gInstSplitA.w, gInstSplitN.w, gHitPiece == 1)); }
-        shellK = shellAmp * (1.0 - smoothstep(${SPLIT_SHADE.cutLo}, ${SPLIT_SHADE.cutHi}, d - gHitSplitF));
+        shellK = shellAmp * (1.0 - smoothstep(${SPLIT_SHADE.shellLo}, ${SPLIT_SHADE.shellHi}, d - gHitSplitF));
       }
       if (shellK > 0.0) {
         d = d + fbm(restPoint(shellP, data, i32(dres.y), noiseLocal(shellP, noiseShift), gBand) * 3.0) * shellK;
@@ -380,6 +382,7 @@ ${PRIM_MATERIAL_BLOCK}
 ${SHADING_NORMAL_BLOCK}
 ${WOUND_MASKS_BLOCK}
 ${TISSUE_BLOCK}
+${CUT_FACE_BLOCK}
 
 ${ORGAN_BLOCK}
 

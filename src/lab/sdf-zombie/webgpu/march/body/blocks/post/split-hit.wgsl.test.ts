@@ -15,6 +15,8 @@ import { SPLIT_HIT_BLOCK } from './split-hit.wgsl';
 import { SHADING_NORMAL_BLOCK } from './shading-normal.wgsl';
 import { WOUND_MASKS_BLOCK } from './wound-masks.wgsl';
 import { TISSUE_BLOCK } from './tissue.wgsl';
+import { CUT_FACE_BLOCK } from './cut-face.wgsl';
+import { ORGAN_BLOCK } from './organ.wgsl';
 import { BURN_BLOCK } from './burn.wgsl';
 import { WET_BLOCK } from '../surface/wet.wgsl';
 import {
@@ -150,6 +152,7 @@ describe('finite-difference normals inside an open region', () => {
 
 describe('cut faces shade as wound interior', () => {
   const f = (v: number) => `${v}`;
+  const wgslF = (v: number) => (Number.isInteger(v) ? `${v}.0` : `${v}`);
   it('the gate: how far a piece cap holds the surface above the piece\'s own field, 0 on skin and on every closed body', () => {
     expect(SPLIT_SHADE.cutLo).toBeGreaterThan(0);
     expect(SPLIT_SHADE.cutHi).toBeGreaterThan(SPLIT_SHADE.cutLo);
@@ -159,27 +162,60 @@ describe('cut faces shade as wound interior', () => {
     expect(code).toContain('var cutFace = 0.0;');
     expect(code).toContain(`if (gInstSplitOpen) { cutFace = smoothstep(${f(SPLIT_SHADE.cutLo)}, ${f(SPLIT_SHADE.cutHi)}, hitField.x - hitSplitF); }`);
   });
-  it('raises the one wound mask and drops what the closed body\'s wounds and burns throw through the solid', () => {
+  it('the depth of a cut face is derived once, beside the gate', () => {
+    const code = noComments(SPLIT_HIT_BLOCK);
+    expect(code).toContain('let cutDepth = max(0.0, -hitSplitF);');
+    expect(code.indexOf('let cutDepth')).toBeGreaterThan(code.indexOf('cutFace = smoothstep('));
+    // Its readers: the tissue ramp, on a cut face only (a closed body takes the pre-wound field as it always did).
+    expect(TISSUE_BLOCK).toContain('let tissueDepth = select(max(0.0, -hitField.w), cutDepth, cutFace > 0.0) * surfCfg3.x;');
+    expect(noComments(LATER).match(/\bhitSplitF\b/g)).toHaveLength(2);   // the gate and the depth, both in split-hit
+  });
+  it('the wound mask block raises the one mask, before it is taken apart; that edit stays there', () => {
     const code = noComments(WOUND_MASKS_BLOCK);
     // The mask vector is edited BEFORE it is destructured, so the three masks stay single-assignment and the cavity
     // share keeps its one sink (entrails-gates.test.ts counts every mention of it in the march).
     const cut = code.slice(code.indexOf('if (cutFace > 0.0) {'), code.indexOf('let wm = wmBoth.x;'));
     expect(code).toContain('var wmBoth = woundMask(pS, nSmoothS, data, woundCfg, woundCfg2);');
-    expect(cut).toContain('wmBoth = vec3<f32>(max(wmBoth.xy, vec2<f32>(cutFace)), wmBoth.z * (1.0 - cutFace));');
-    for (const dropped of ['cm', 'gWoundTear', 'gWoundWetOnly', 'gWoundHole', 'gClothMark', 'gClothStain'])
-      expect(cut, dropped).toContain(`${dropped} = ${dropped} * (1.0 - cutFace);`);
+    expect(cut.replace(/\s+/g, ' ').trim()).toBe('if (cutFace > 0.0) { wmBoth = vec3<f32>(max(wmBoth.xy, vec2<f32>(cutFace)), wmBoth.z * (1.0 - cutFace)); }');
     for (const one of ['let wm = wmBoth.x;', 'let wmRim = wmBoth.y;', 'let wmCav = wmBoth.z;']) expect(code).toContain(one);
     expect(code.indexOf('let wmCav = wmBoth.z;')).toBeLessThan(code.indexOf('let detailAmp'));
     expect(WOUND_MASKS_BLOCK.match(/wmCav/g)).toHaveLength(1);
-    // No skin pores on a cut face, here or in the output-resolution detail pass the anchor is handed to.
-    expect(code).toContain('if (detailAmp > 0.0 && cutFace < 0.5) {');
-    expect(code).toContain('gMarchAnchor = vec4<f32>(anchor, select(detailAmp, 0.0, cutFace >= 0.5));');
+    // No skin pores on a cut face, here or in the output-resolution detail pass the anchor is handed to. The pore
+    // cutoff has its own number: moving the gate's range does not move it.
+    expect(code).toContain(`if (detailAmp > 0.0 && cutFace < ${f(SPLIT_SHADE.poreCut)}) {`);
+    expect(code).toContain(`gMarchAnchor = vec4<f32>(anchor, select(detailAmp, 0.0, cutFace >= ${f(SPLIT_SHADE.poreCut)}));`);
+    expect(f(SPLIT_SHADE.poreCut)).toBe('0.5');
   });
-  it('the tissue ramp takes the depth inside the closed body there, and the whole face is wet', () => {
-    expect(TISSUE_BLOCK).toContain('let tissueDepth = max(0.0, -select(hitField.w, hitSplitF, cutFace > 0.0)) * surfCfg3.x;');
+  it('THE CUT FACE\'S LOOK is one block after the tissue ramp: what the closed body throws through the solid is dropped, and the face is wet', () => {
+    const iTissue = MARCH_TRACE_POST.indexOf(TISSUE_BLOCK), iLook = MARCH_TRACE_POST.indexOf(CUT_FACE_BLOCK), iOrgan = MARCH_TRACE_POST.indexOf(ORGAN_BLOCK);
+    expect(iTissue).toBeGreaterThan(0);
+    expect(iLook).toBe(iTissue + TISSUE_BLOCK.length + 1);
+    expect(iOrgan).toBeGreaterThan(iLook);
+    // Nothing between the masks and the look block reads what the block edits (so it is the same edit, later).
+    const post = noComments(MARCH_TRACE_POST);
+    const between = post.slice(post.indexOf('let wm = wmBoth.x;'), post.indexOf('var cutWet = 0.0;'));
+    expect(between).toContain('var albedo = mix(baseColor, tissue, wm);');
+    expect(between).not.toMatch(/\bcm\b|gWoundTear|gWoundWetOnly|gWoundHole|gClothMark|gClothStain/);
+    const code = noComments(CUT_FACE_BLOCK);
+    expect(code).toContain('var cutWet = 0.0;');
+    const body = code.slice(code.indexOf('if (cutFace > 0.0) {'));
+    for (const dropped of ['cm', 'gWoundTear', 'gWoundWetOnly', 'gWoundHole', 'gClothMark', 'gClothStain'])
+      expect(body, dropped).toContain(`${dropped} = ${dropped} * (1.0 - cutFace);`);
+    expect(body).toContain(`cutWet = cutFace * ${wgslF(SPLIT_SHADE.wet)};`);
+    // It is not a second mask and not another sink for the cavity share: it never writes or names them.
+    expect(code).not.toMatch(/\bwmCav\b|\bwmBoth\b|\bwm\s*=|\bwmRim\s*=/);
+    // One closed body, one branch: everything it does is behind the gate.
+    expect(code.replace(/\s+/g, ' ').trim()).toMatch(/^var cutWet = 0\.0; if \(cutFace > 0\.0\) \{[^}]*\}$/);
+    // The wet block lifts its lip term to the look block's wetness, and nothing else reads the gate there.
     expect(WET_BLOCK).toContain('var lip = 1.0 - smoothstep(surfCfg3.z, surfCfg3.z * 3.0, tissueDepth);');
-    expect(WET_BLOCK).toContain('if (cutFace > 0.0) { lip = mix(lip, 1.0, cutFace); }');
-    expect(WET_BLOCK.indexOf('if (cutFace > 0.0) { lip = mix(lip, 1.0, cutFace); }')).toBeLessThan(WET_BLOCK.indexOf('let wetWound = max(wm * lip, gore);'));
+    expect(WET_BLOCK).toContain('if (cutWet > 0.0) { lip = mix(lip, 1.0, cutWet); }');
+    expect(WET_BLOCK.indexOf('if (cutWet > 0.0) { lip = mix(lip, 1.0, cutWet); }')).toBeLessThan(WET_BLOCK.indexOf('let wetWound = max(wm * lip, gore);'));
+    expect(noComments(WET_BLOCK)).not.toMatch(/\bcutFace\b/);
+  });
+  it('SPLIT_SHADE holds the look\'s numbers, one per thing they drive; today they are what they were', () => {
+    expect(SPLIT_SHADE).toEqual({ cutLo: 0.0015, cutHi: 0.004, shellLo: 0.0015, shellHi: 0.004, poreCut: 0.5, wet: 1 });
+    // x * 1.0 is x to the bit, so the wetness is the gate itself until the look pass moves it.
+    expect(wgslF(SPLIT_SHADE.wet)).toBe('1.0');
   });
   it('no face sheet, eye glow or head-skin gore protection on a cut face', () => {
     const gate = 'if (cutFace > 0.0) { facing = facing * (1.0 - cutFace); faceCover = faceCover * (1.0 - cutFace); }';
@@ -195,7 +231,8 @@ describe('the shell noise in the walk follows the piece', () => {
   it('reads the noise at this sample\'s own un-warped point, and fades it out where a cap holds the field', () => {
     const open = shell.slice(shell.indexOf('if (gInstSplitOpen) {'), shell.indexOf('d = d + fbm('));
     expect(open).toContain('if (gHitPiece != 0) { shellP = splitMoveBack(shellP, gInstSplitH.xyz, gInstSplitA.xyz, select(gInstSplitA.w, gInstSplitN.w, gHitPiece == 1)); }');
-    expect(open).toContain(`shellK = shellAmp * (1.0 - smoothstep(${SPLIT_SHADE.cutLo}, ${SPLIT_SHADE.cutHi}, d - gHitSplitF));`);
+    // Its own range (SPLIT_SHADE.shellLo / shellHi): the fade is geometry, the cut-face gate is shading.
+    expect(open).toContain(`shellK = shellAmp * (1.0 - smoothstep(${SPLIT_SHADE.shellLo}, ${SPLIT_SHADE.shellHi}, d - gHitSplitF));`);
     // A closed slot touches neither.
     expect(shell.replace(open, '')).not.toMatch(/gInstSplit[NHAR]|gHitPiece|gHitSplitF|splitMoveBack/);
   });

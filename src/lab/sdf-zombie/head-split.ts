@@ -104,14 +104,20 @@ export const HEAD_SPLIT = {
   },
 } as const;
 
-/** THE CUT FACES' SHADING (the march after the hit: webgpu/march/body/blocks/post/split-hit.wgsl.ts). A piece cap is
- *  the surface where it holds the split field above the piece's own field; that gap, (the split field) - (the piece's
- *  field before its caps), is exactly 0 on skin and the depth inside the closed body on a cut face. The hit shades as
- *  skin up to `cutLo` of it and as wound interior from `cutHi` (the tissue ramp by that depth, wet, no skin detail, no
- *  face sheet), blending between. `cutHi` is the zombie's fat stop (fatDepth, 4 mm): the gate is fully open where the
- *  tissue ramp reaches its pale fat band, and the ramp's first stop (skin to fat) lies under the blend.
- *  The walk's shell noise fades out over the same range. */
-export const SPLIT_SHADE = { cutLo: 0.0015, cutHi: 0.004 } as const;
+/** THE CUT FACES' SHADING (the march after the hit: webgpu/march/body/blocks/post/split-hit.wgsl.ts derives the gate
+ *  and the depth, blocks/post/cut-face.wgsl.ts holds the look). A piece cap is the surface where it holds the split
+ *  field above the piece's own field; that gap, (the split field) - (the piece's field before its caps), is exactly 0
+ *  on skin and the depth inside the closed body on a cut face.
+ *  `cutLo`, `cutHi`: THE GATE (cutFace). The hit shades as skin up to `cutLo` of the gap and as wound interior from
+ *  `cutHi` (the tissue ramp by that depth, no face sheet), blending between. `cutHi` is the zombie's fat stop
+ *  (fatDepth, 4 mm): the gate is fully open where the tissue ramp reaches its pale fat band, and the ramp's first stop
+ *  (skin to fat) lies under the blend.
+ *  `shellLo`, `shellHi`: the walk's shell noise fades out over this range of the same gap (body/trace.wgsl.ts). It is
+ *  geometry, not shading: its own numbers, so the gate can move without moving a surface.
+ *  `poreCut`: no skin pores (the micro-detail normal, and the output-resolution detail pass) from this much gate.
+ *  `wet`: how wet a cut face is at every depth, as a share of the gate: 1 = wet all over, 0 = wet like a crater (its
+ *  lip glistens, its floor does not). */
+export const SPLIT_SHADE = { cutLo: 0.0015, cutHi: 0.004, shellLo: 0.0015, shellHi: 0.004, poreCut: 0.5, wet: 1 } as const;
 
 export interface SplitState {
   preset: SplitPresetId | null;

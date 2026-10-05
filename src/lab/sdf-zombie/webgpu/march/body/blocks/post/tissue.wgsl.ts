@@ -18,10 +18,10 @@ export const TISSUE_BLOCK = /* wgsl */ `  // Tissue depth rides mapBody's .w (th
   // one mask into three and cost two days to the resulting halo; the note above
   // WOUND_MASK is the record.
   //
-  // THE HEAD SPLIT: on a cut face (cutFace, split-hit.wgsl.ts) the depth is the hit piece's own field before its
-  // caps, hitSplitF: how deep inside the closed body, as it is now, the face lies. So a cut face shows the ramp as a
-  // cross-section from its rim inward.
-  let tissueDepth = max(0.0, -select(hitField.w, hitSplitF, cutFace > 0.0)) * surfCfg3.x;
+  // THE HEAD SPLIT: on a cut face (cutFace, split-hit.wgsl.ts) the depth is cutDepth, from the hit piece's own field
+  // before its caps: how deep inside the closed body, as it is now, the face lies. So a cut face shows the ramp as a
+  // cross-section from its rim inward. The rest of a cut face's look: cut-face.wgsl.ts, right after this block.
+  let tissueDepth = select(max(0.0, -hitField.w), cutDepth, cutFace > 0.0) * surfCfg3.x;
   // Viscera (entrails): low-frequency fbm over the rest-space anchor lumps
   // the cavity colour so it reads as organs and not as noise. Lumped only
   // where it can be SEEN: inside a cavity wound, with the stop enabled. The
