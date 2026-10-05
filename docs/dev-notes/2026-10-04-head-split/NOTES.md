@@ -578,6 +578,7 @@ half: it opens LESS, in stages, and breaks along a ragged edge.
   angle, which the warp did not carry: `SplitWarp.full` is new (written by `splitWarpOf`; the GPU record does not
   take it), so nothing reads the leaf's state. `frac` is held at 1 and `follow` in 0..1, so a spring overshoot never
   turns the bone past its flesh. A bone that does not turn at all (`follow` 0) is no split: the closed draw.
+  The stage is the spring's TARGET (`SplitWarp.target`, review fix below): `frac` = min(flesh angle, target) / full.
   `skullPieceAt(s, q, jag)` is the ownership of a closed-skull point (the flesh's rule, `warpPoint`: above the hinge
   plane, within `rho`, by the side of the plane; but a side whose bone does not turn belongs to the rest, and the
   plane is the fracture, `s(q) + jag >= 0`). `skullWarpPoint` is the forward map; `skullPieces(s, centre, radius)`
@@ -628,9 +629,11 @@ half: it opens LESS, in stages, and breaks along a ragged edge.
   `length`): `rho` rides the record's spare lane, and the rule is then the flesh's with no measured assumption.
 - There is no jaw segment: skull and jaw are ONE `'head'` mesh, and it has vertices below the hinge plane in every
   preset (500 / 202 / 140), so the unmoved rest is always drawn.
-- **Only the `'head'` segment splits.** The top vertebra pokes up to 44 mm above the hinge plane, where its flesh
-  turns with a half. It stays whole with the neck: a sliver of spine carried off by an infinite plane is an
-  artefact, a spine tip left standing in the cut is not.
+- **Only the `'head'` segment splits, on purpose.** The top vertebra pokes up to 44 mm above the hinge plane, where
+  its flesh turns with a half. It stays whole with the neck: a sliver of spine carried off by an infinite plane is
+  an artefact, a spine tip left standing in the cut reads as spine. In `face`, 10 of its vertices stand up to 44 mm
+  proud of the still half's cut face; in `middle` both, 4 vertices by 4 mm; in the one-sided split none are on the
+  side that turns.
 
 **Instances per head** (skull copies + eye instances): closed 1 + 2, as before. Middle both: 3 + 2 (each eye wholly
 in its own half: one copy). Middle one side: 2 + 3 (the plane passes through one socket: that eye is drawn for both
@@ -646,8 +649,10 @@ pieces; the other eye stays a closed instance). Face: 2 + 2.
 | `inside` | (0.1, 0.018, 0.015) | the inner wall; gloss `MESH_GLOSS_WET`, exposure 0, no fresnel |
 | `rim.color`, `rim.width` | (0.72, 0.5, 0.4), 4 mm | the broken edge on the inner wall: full to 2 mm, gone at 4 |
 
-Inside `meshSplitJag`, not surfaced: the wobble noise at 0.43 cells per `zigLen` with phase gains 1.7 and 1.3, the
-second wave at 0.73 x the first's frequency, the seed steps 0.618 / 0.414 / 7.31.
+Also in `HEAD_SPLIT.skull.jag` and the seam since the review: `wobble` 0.43 (noise cells per `zigLen`),
+`wobbleAlong` 1.7 and `wobbleUp` 1.3 (how many periods it pushes each wave's phase), `upFreq` 0.73 (the second
+wave's frequency against the first's). The seed's steps are `mesh-split.ts JAG_SEED` (0.618 / 0.414 / 0.31 / 7.31 /
+3), ONE table the TypeScript twin reads and the WGSL is built from.
 
 **`follow` is NOT the plan's first table** (0.25 / 0.5 / 0.85). Both were shot (`b7/stages-*.jpg`, third column).
 With 0.25 the skull is already 3 cm apart at the crown on chop 1 and its face is gone from the gap; chop 1 and
@@ -784,3 +789,53 @@ Still wrong in them, and whose:
   spring moves.
 - The bone's `follow` reads the instantaneous flesh angle, so while the spring overshoots a chop's target the bone
   swings wider and comes back with it (never past the flesh).
+
+### Review fixes (2026-10-05)
+
+- **The bone flapped on the spring's overshoot.** `follow` was read at the INSTANTANEOUS flesh angle, and the table
+  is steep past chop 1, so the flesh's overshoot swung the bone by the table's slope on top of its own. The warp now
+  carries the spring's target (`SplitWarp.target`; not in the GPU record) and the table is read at
+  min(flesh, target) / full: on the way up the bone opens along the table with its flesh, past the target its share
+  stays the target's. The real spring through the three chops (`head-split.test.ts`; degrees, rest -> peak):
+
+  | | Flesh | Bone, before | Bone, after |
+  | --- | --- | --- | --- |
+  | chop 1 | 17.33 -> 22.56 (x1.30) | 1.73 -> 5.26 (x3.0) | 1.73 -> 2.26 (x1.30) |
+  | chop 2 | 25.21 -> 27.59 (x1.09) | 7.56 -> 14.0 (x1.85) | 7.56 -> 8.28 (x1.09) |
+  | the kill | 31.51 -> 33.42 (x1.06) | 26.79 -> 28.40 (x1.06) | the same |
+
+  The bone's overshoot is now the flesh's, as a share of its rest angle, at every chop; it never passes the flesh.
+  No jump at a chop: the target steps while the flesh is at the old rest, where min(flesh, target) is still the old
+  stage. The fastest tick is on the kill, where the bone goes from 7.6 to 26.8 degrees while its flesh rises 6.3:
+  9.4 degrees in a 1/60 s tick against the flesh's 8.3 (the test holds it under 1.2 x the flesh's fastest tick).
+  **The rest angles did not move** (the test holds each stage's settled bone angle to 1e-12; chop 2 shot again with
+  the clean plane, front / above / close: 18 / 250 / 13 px differ from the photographed run, none by more than
+  1/255, the closed head's own floor between the two sessions being 0 / 264 / 8).
+  **Two things it does not cure**, both smaller: (1) the swing BACK under the target reads the table below the
+  stage, so the bone dips by the table's slope: 1.73 -> 1.59 (the flesh's own 8%), 7.56 -> 6.94 (8% against the
+  flesh's 3%), 26.79 -> 24.88 (7% against 2%), for two or three ticks; (2) a chop that lands while the flesh is
+  still ABOVE the old target steps the stage at once (from the overshoot's first peak of chop 1 that would be 2.3
+  -> 5.3 degrees in a tick; a full cycle later, 0.15 s on, a quarter of a degree). Both go with a stage that only
+  ever advances, carried in the spring's own state (a high-water mark from the kick); that is state in `SplitState`
+  and was not asked for.
+- **Split twin geometries were never disposed** (three keeps a rendered geometry until it is). A split batch's twin
+  is now disposed with its batch, at the idle drop and in `clear()`. Disposing the twin also frees the GPU buffers of
+  the vertex attributes it SHARES with the segment's own geometry; three makes them again at that geometry's next
+  draw. Checked on the GPU in one session, skull pixels by the shown / hidden pair at each step: a closed head with a
+  crater 12 581; split 21 574; closed again and 150 steps on, the split batch dropped (gone from the scene) 13 684
+  (the split's face cuts lay more bone bare); split again 21 566; then a cast rebuild with the split open
+  (`resetCast`: `clear()` and the cache's dispose), the new cast closed 1, a new head split 11 034.
+  `gpuDiagnostics` clean at every step (`uncapturedCount` 0, no device loss), no console error. The twin shares the
+  buffers still; it needed no copies of its own.
+- **The fracture seed is the actor id** (it was a counter in first-split order, so a capture depended on what split
+  before). The photos' break pattern is therefore not this build's to the tooth; the angles are.
+- **The clipped fragments' colour is behind a real branch** on the clip's own test (a `discard` does not end the
+  shader). The split skull's cost on the open head at 0.6 m, sessions alternated without / with the branch, eight
+  interleaved rounds each (staged copies, median of 60 draws): 24.9 / 24.9 ms without, 24.8 / 24.8 with (rounds
+  spread 23.7-25.5); the staged copies over the whole closed skull +0.1 / +0.3 ms without, +0.4 / +0.3 with (per
+  round -1.0 to +1.6). No gain that shows, no cost: kept. On this quieter machine the split copies cost
+  +0.1 to +0.4 ms over the whole skull (the +0.5 above).
+- Also: the seams refuse non-finite input and the follow TABLE is settable (`skullSplit({ follow: [[0.55, 0.1], …] })`);
+  `stats.verts` / `stats.tris` count every copy drawn; an eye's bound is scaled with its segment's matrix.
+- Checks after the fixes: census ready, `uncapturedCount` 0, no device loss, march module 324498 B, `warmMs` 2570;
+  the six `march-hash` pins unmoved.

@@ -1757,8 +1757,12 @@ async function main() {
       }), ctx.world.actors, ctx.render.visualActors, boneExposedActors(ctx),
       // Melee head damage: the skull segment squashes and dents with the flesh (game-head-damage affine).
       (owner, segment) => (segment === 'head' && ctx.weapon.headDamage ? ctx.weapon.headDamage.affine(owner as ZombieActor) : null),
-      // The head split: the skull breaks with the split the march DRAWS (closed past the range cut-off, torn or dead).
-      (owner, segment) => (segment === 'head' ? (owner as ZombieActor).view.splitDrawn : null));
+      // The head split: the skull breaks with the split the march DRAWS (closed past the range cut-off, while the
+      // body tears, or with the head gone; a killed zombie's split stays open). Its fracture is seeded by the actor.
+      {
+        warp: (owner, segment) => (segment === 'head' ? (owner as ZombieActor).view.splitDrawn : null),
+        seed: owner => (owner as ZombieActor).id,
+      });
       ctx.telemetry.telemetry.end('skeleton-mesh', meshTiming);
       if (firstMeshSync) mark('mesh-sync-end');
     }

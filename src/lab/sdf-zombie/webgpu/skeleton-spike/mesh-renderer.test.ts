@@ -262,7 +262,10 @@ describe('the head split: the skull is drawn once per piece that owns part of it
     const posed = applyRig(body, bound, 0);
     return splitWarpOf(forcedSplit(preset, sides, offset, frac)!, headFrameOf(headShape(posed)!, headQuatOf(bound, 0) ?? [0, 0, 0, 1]))!;
   };
-  const headOnly = (w: SplitWarp | null) => (_o: object, segment: string) => (segment === 'head' ? w : null);
+  const headOnly = (w: SplitWarp | null) => ({
+    warp: (_o: object, segment: string) => (segment === 'head' ? w : null),
+    seed: (o: object) => (o as { id: number }).id,
+  });
   const at = (m: THREE.Matrix4, p: Vec3): Vec3 => new THREE.Vector3(...p).applyMatrix4(m).toArray() as Vec3;
   const dist = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
   const make = () => { const cache = new SegmentMeshCache(); return { cache, renderer: createSegmentMeshRenderer(cache) }; };
@@ -290,7 +293,7 @@ describe('the head split: the skull is drawn once per piece that owns part of it
     const { cache, renderer } = make();
     const open = { id: 1 }, shut = { id: 2 };
     const w = warpOf('middle', 0, 0, 0.8), s = skullSplitOf(w)!;
-    renderer.update([[headSrc], [headSrc]], [open, shut], undefined, undefined, undefined, (o, seg) => (o === open && seg === 'head' ? w : null));
+    renderer.update([[headSrc], [headSrc]], [open, shut], undefined, undefined, undefined, { warp: (o, seg) => (o === open && seg === 'head' ? w : null) });
     const closedM = segs(renderer, shut)[0]!.matrix;
     expect(segs(renderer, shut).map(d => d.piece)).toEqual([null]);
     expect(eyes(renderer, shut).map(d => d.piece)).toEqual([null, null]);
@@ -355,6 +358,9 @@ describe('the head split: the skull is drawn once per piece that owns part of it
     // The face preset is one-sided too.
     renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(warpOf('face', 1, 0, 1)));
     expect(segs(renderer, owner).map(d => d.piece)).toEqual([0, 1]);
+    // Both eyes sit in front of the face's plane, clear of it: one copy each, on the face piece.
+    expect(eyes(renderer, owner).map(d => d.piece)).toEqual([1, 1]);
+    expect(batch(renderer, 'skeleton-fleshy-eyes')!.count).toBe(0);
     renderer.dispose(); cache.dispose();
   });
 
@@ -363,7 +369,7 @@ describe('the head split: the skull is drawn once per piece that owns part of it
     const owner = { id: 1 };
     const spine = sources.find(x => x.segment.startsWith('axial:'))!;
     const asked: string[] = [];
-    renderer.update([[headSrc, spine]], [owner], undefined, undefined, undefined, (_o, seg) => { asked.push(seg); return seg === 'head' ? warpOf('middle', 0, 0, 1) : null; });
+    renderer.update([[headSrc, spine]], [owner], undefined, undefined, undefined, { warp: (_o, seg) => { asked.push(seg); return seg === 'head' ? warpOf('middle', 0, 0, 1) : null; } });
     expect(asked.sort()).toEqual(['head', spine.segment].sort());
     expect(segs(renderer, owner).map(d => d.piece)).toEqual([0, 1, 2, null]);
     renderer.dispose(); cache.dispose();
@@ -390,11 +396,31 @@ describe('the head split: the skull is drawn once per piece that owns part of it
     renderer.update([], []);
     expect(renderer.drawn).toHaveLength(0);
     expect(batch(renderer, 'skeleton-segments-split')!.count).toBe(0);
-    // A split segment batch nobody draws is dropped like any stale batch.
+    // A split segment batch nobody draws is dropped like any stale batch, and its twin geometry (the renderer's own:
+    // three holds a rendered geometry until it is disposed) with it. The skull's own geometry is the cache's.
+    const disposed: string[] = [];
+    const watch = (name: string) => batch(renderer, name)!.geometry.addEventListener('dispose', () => { disposed.push(name); });
+    const base = batch(renderer, 'skeleton-segments')!.geometry, twin = batch(renderer, 'skeleton-segments-split')!.geometry;
+    watch('skeleton-segments'); watch('skeleton-segments-split'); watch('skeleton-fleshy-eyes'); watch('skeleton-fleshy-eyes-split');
     for (let i = 0; i < 130; i++) renderer.update([[headSrc]], [owner]);
     expect(batch(renderer, 'skeleton-segments-split')).toBeUndefined();
+    expect(disposed).toEqual(['skeleton-segments-split']);
+    // The next split makes a NEW twin, on the same shared vertex data.
+    renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(warpOf('middle', 0, 0, 1)));
+    const twin2 = batch(renderer, 'skeleton-segments-split')!.geometry;
+    expect(twin2).not.toBe(twin);
+    expect(twin2.getAttribute('position')).toBe(base.getAttribute('position'));
+    expect(segs(renderer, owner).map(d => d.piece)).toEqual([0, 1, 2]);
+    twin2.addEventListener('dispose', () => { disposed.push('twin2'); });
+    // clear() (a cast rebuild) disposes every twin it holds, and no geometry that is not its own.
     renderer.clear();
     expect(renderer.object.children).toHaveLength(0);
+    expect(disposed.sort()).toEqual(['skeleton-fleshy-eyes-split', 'skeleton-segments-split', 'twin2']);
+    // And the renderer draws again after it: closed, then split.
+    renderer.update([[headSrc]], [owner]);
+    expect(renderer.drawn.map(d => d.piece)).toEqual([null, null, null]);
+    renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(warpOf('middle', 0, 0, 1)));
+    expect(segs(renderer, owner).map(d => d.piece)).toEqual([0, 1, 2]);
     renderer.dispose(); cache.dispose();
   });
 
@@ -417,18 +443,25 @@ describe('the head split: the skull is drawn once per piece that owns part of it
     }
     expect(renderer.ownerLights(owners[7]!)).toHaveLength(5);   // three skull copies, two eyes
     expect(renderer.ownerFill(owners[7]!)).toEqual([0.5, 0.5, 0.5, 0.5, 0.5]);
-    // Each head breaks along its own pattern, and keeps it.
-    const seeds = owners.map((_, i) => rowsOf(sb).array[i * 48 + K + 3]!);
-    expect(new Set(seeds).size).toBe(40);
-    renderer.update(owners.map(() => [headSrc]), owners, undefined, undefined, undefined, headOnly(w));
-    expect(owners.map((_, i) => rowsOf(sb).array[i * 48 + K + 3])).toEqual(seeds);
+    // Each head breaks along its own pattern: the seed the hook answers for its owner (the actor id), whatever
+    // order heads split in. No seed hook: 0.
+    expect(owners.map((_, i) => rowsOf(sb).array[i * 48 + K + 3])).toEqual(owners.map(o => o.id));
+    renderer.update([[headSrc]], [owners[7]!], undefined, undefined, undefined, headOnly(w));
+    expect(rowsOf(sb).array[K + 3]).toBe(7);
+    renderer.update([[headSrc]], [owners[7]!], undefined, undefined, undefined, { warp: headOnly(w).warp });
+    expect(rowsOf(sb).array[K + 3]).toBe(0);
+    // The stats count what is drawn: three copies of the skull.
+    const one = renderer.stats.tris;
+    renderer.update([[headSrc]], [owners[7]!]);
+    expect(one).toBe(3 * renderer.stats.tris);
+    expect(renderer.stats.tris).toBeGreaterThan(0);
     renderer.dispose(); cache.dispose();
   });
 
   it('the split copies have their own two-sided material; the closed skull keeps its front-faced one', () => {
     const { cache, renderer } = make();
     const a = { id: 1 }, b = { id: 2 };
-    renderer.update([[headSrc], [headSrc]], [a, b], undefined, undefined, undefined, (o, seg) => (o === a && seg === 'head' ? warpOf('middle', 0, 0, 1) : null));
+    renderer.update([[headSrc], [headSrc]], [a, b], undefined, undefined, undefined, { warp: (o, seg) => (o === a && seg === 'head' ? warpOf('middle', 0, 0, 1) : null) });
     const mat = (name: string) => batch(renderer, name)!.material as THREE.Material;
     expect(mat('skeleton-segments').side).toBe(THREE.FrontSide);
     expect(mat('skeleton-fleshy-eyes').side).toBe(THREE.FrontSide);
@@ -448,7 +481,7 @@ describe('the head split: the skull is drawn once per piece that owns part of it
   it('diagnostics: show.bones / show.eyes hide a kind of batch, closed and split alike, from the next update', () => {
     const { cache, renderer } = make();
     const a = { id: 1 }, b = { id: 2 };
-    const upd = () => renderer.update([[headSrc], [headSrc]], [a, b], undefined, undefined, undefined, (o, seg) => (o === a && seg === 'head' ? warpOf('middle', 0, 0, 1) : null));
+    const upd = () => renderer.update([[headSrc], [headSrc]], [a, b], undefined, undefined, undefined, { warp: (o, seg) => (o === a && seg === 'head' ? warpOf('middle', 0, 0, 1) : null) });
     const vis = () => ['skeleton-segments', 'skeleton-segments-split', 'skeleton-fleshy-eyes', 'skeleton-fleshy-eyes-split'].map(n => batch(renderer, n)!.visible);
     upd();
     expect(vis()).toEqual([true, true, true, true]);
@@ -468,6 +501,7 @@ describe('the head split: the skull is drawn once per piece that owns part of it
     expect(renderer.splitLook.follow).toBeNull();
     expect(renderer.splitLook.jag.value.toArray()).toEqual([j.zigAmp, j.zigLen, j.chipAmp, j.chipLen]);
     expect(renderer.splitLook.inside.value.toArray().map(v => +v.toFixed(6))).toEqual([...HEAD_SPLIT.skull.inside]);
+    expect(renderer.splitLook.jagShape.value.toArray()).toEqual([j.wobble, j.wobbleAlong, j.wobbleUp, j.upFreq]);
     expect(renderer.splitLook.rim.value.toArray()).toEqual([...HEAD_SPLIT.skull.rim.color, HEAD_SPLIT.skull.rim.width]);
     const angleOf = () => { const h = segs(renderer, owner); const t = new THREE.Quaternion().setFromRotationMatrix(h[1]!.matrix.clone().multiply(h[0]!.matrix.clone().invert())); return 2 * Math.acos(Math.min(1, Math.abs(t.w))); };
     renderer.splitLook.follow = 1;
@@ -476,6 +510,9 @@ describe('the head split: the skull is drawn once per piece that owns part of it
     renderer.splitLook.follow = 0;
     renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
     expect(renderer.drawn.map(d => d.piece)).toEqual([null, null, null]);
+    renderer.splitLook.follow = [[0.5, 0.6], [1, 0.6]];   // another table
+    renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
+    expect(angleOf()).toBeCloseTo(w.thetaP * 0.6, 9);
     renderer.splitLook.follow = null;
     renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
     expect(angleOf()).toBeCloseTo(w.thetaP * skullFollow(0.8), 9);

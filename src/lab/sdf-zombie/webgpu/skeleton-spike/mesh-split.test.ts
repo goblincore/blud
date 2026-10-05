@@ -9,7 +9,8 @@ import {
 import type { Vec3 } from '../../types';
 import { qFromAxisAngle } from '../../vec';
 import {
-  MESH_SPLIT_CLIP_WGSL, MESH_SPLIT_INSIDE_WGSL, MESH_SPLIT_JAG_WGSL, SPLIT_INSTANCE_ATTRS, SPLIT_INSTANCE_FLOATS,
+  JAG_SEED, MESH_SPLIT_CLIP_WGSL, MESH_SPLIT_INSIDE_WGSL, MESH_SPLIT_JAG_LINES, MESH_SPLIT_JAG_WGSL, SPLIT_INSTANCE_ATTRS,
+  SPLIT_INSTANCE_FLOATS,
   meshSplitJag, meshSplitJagMax, meshSplitKeep, meshSplitRim, packSplitInstance, skullJagAt,
 } from './mesh-split';
 
@@ -67,6 +68,18 @@ describe('meshSplitJag: the fracture\'s offset from the old plane', () => {
     for (let i = 0; i < 12; i++) seen.add(meshSplitJag(cell * (i + 0.5), cell * 0.5, 0, chipOnly));
     expect(seen.size).toBeGreaterThan(8);
   });
+  it('the wobble\'s four are the twin\'s dials: each one moves the edge, and no wobble is an even saw', () => {
+    const zigOnly = { ...JAG, chipAmp: 0 };
+    const sample = (j: typeof zigOnly) => Array.from({ length: 64 }, (_, i) => meshSplitJag(0.004 * i, 0.03 + 0.003 * i, 2, j));
+    const base = sample(zigOnly);
+    for (const k of ['wobble', 'wobbleAlong', 'wobbleUp', 'upFreq'] as const) {
+      const moved = sample({ ...zigOnly, [k]: zigOnly[k] * 1.5 });
+      expect(moved.some((v, i) => Math.abs(v - base[i]!) > 1e-4), k).toBe(true);
+    }
+    // No wobble: along the axis alone the edge is the plain triangle wave, period zigLen.
+    const even = { ...zigOnly, wobbleAlong: 0, wobbleUp: 0 };
+    for (const x of [0.011, 0.047, 0.09]) expect(meshSplitJag(x + JAG.zigLen, 0.05, 1, even)).toBeCloseTo(meshSplitJag(x, 0.05, 1, even), 12);
+  });
   it('the seed moves the pattern: two heads do not break alike', () => {
     let differ = 0;
     for (let i = 0; i < 200; i++) {
@@ -87,12 +100,23 @@ describe('meshSplitJag: the fracture\'s offset from the old plane', () => {
 
 describe('the WGSL: one function per string, scalars and vectors only', () => {
   it('the jag and the clip are the twins\' formulas', () => {
-    expect(MESH_SPLIT_JAG_WGSL).toContain('fn meshSplitJag(c: vec2<f32>, seed: f32, jag: vec4<f32>) -> f32');
-    expect(MESH_SPLIT_JAG_WGSL).toContain('return jag.x * zig + jag.z * chip;');
-    expect(MESH_SPLIT_CLIP_WGSL).toContain('fn meshSplitClip(pWorld: vec3<f32>, sn: vec4<f32>, sh: vec4<f32>, sa: vec4<f32>, sk: vec4<f32>, jag: vec4<f32>) -> vec4<f32>');
+    expect(MESH_SPLIT_JAG_WGSL).toContain('fn meshSplitJag(c: vec2<f32>, seed: f32, jag: vec4<f32>, shape: vec4<f32>) -> f32');
+    // Every body line is in the string, and the seed's numbers in them are JAG_SEED's (the twin reads the same table).
+    for (const line of MESH_SPLIT_JAG_LINES) expect(MESH_SPLIT_JAG_WGSL).toContain(`\n  ${line}`);
+    expect(MESH_SPLIT_JAG_LINES).toEqual([
+      'let z = c / max(jag.y, 1e-5);',
+      `let wob = boneNoise(vec3<f32>(z * shape.x, seed * ${JAG_SEED.noise})) - 0.5;`,
+      `let t1 = abs(fract(z.x + seed * ${JAG_SEED.along} + wob * shape.y) - 0.5) * 4.0 - 1.0;`,
+      `let t2 = abs(fract(z.y * shape.w + seed * ${JAG_SEED.up} + ${JAG_SEED.upPhase} - wob * shape.z) - 0.5) * 4.0 - 1.0;`,
+      'let zig = 0.5 * (t1 + t2);',
+      `let chip = boneHash(vec3<f32>(floor(c / max(jag.w, 1e-5)), seed + ${JAG_SEED.chip}.0)) * 2.0 - 1.0;`,
+      'return jag.x * zig + jag.z * chip;',
+    ]);
+    expect(MESH_SPLIT_JAG_WGSL).not.toMatch(/\$\{|undefined|NaN/);
+    expect(MESH_SPLIT_CLIP_WGSL).toContain('fn meshSplitClip(pWorld: vec3<f32>, sn: vec4<f32>, sh: vec4<f32>, sa: vec4<f32>, sk: vec4<f32>, jag: vec4<f32>, shape: vec4<f32>) -> vec4<f32>');
     // The clip tests the UN-TURNED point, and both halves read the fracture there.
     expect(MESH_SPLIT_CLIP_WGSL).toContain('let q = sh.xyz + rel * c - cross(sa.xyz, rel) * s + sa.xyz * (dot(sa.xyz, rel) * (1.0 - c));');
-    expect(MESH_SPLIT_CLIP_WGSL).toContain('meshSplitJag(vec2<f32>(dot(sa.xyz, r), up), sk.w, jag)');
+    expect(MESH_SPLIT_CLIP_WGSL).toContain('meshSplitJag(vec2<f32>(dot(sa.xyz, r), up), sk.w, jag, shape)');
     expect(MESH_SPLIT_CLIP_WGSL).toContain('return vec4<f32>(q, keep);');
     expect(MESH_SPLIT_INSIDE_WGSL).toContain('let edge = clamp((rim.w - keep) / max(rim.w, 1e-6) * 2.0, 0.0, 1.0);');
     expect(MESH_SPLIT_INSIDE_WGSL).toContain('return select(vec4<f32>(mix(inside, rim.xyz, edge), edge), surface, front > 0.5);');
@@ -161,7 +185,7 @@ describe('meshSplitKeep, the clip\'s hand twin: each copy keeps exactly what its
   }
   it('keep is the distance to the copy\'s nearest edge on a clean plane (what a rim would read)', () => {
     const [, s] = CASES[0]!, { w, u } = s.frame;
-    const clean = { zigAmp: 0, zigLen: 1, chipAmp: 0, chipLen: 1 };
+    const clean = { ...JAG, zigAmp: 0, chipAmp: 0 };
     const q = add(add(w.h, [u[0] * 0.1, u[1] * 0.1, u[2] * 0.1]), [w.n[0] * 0.007, w.n[1] * 0.007, w.n[2] * 0.007]);
     const p = add(w.h, rotAxis(sub(q, w.h), w.a, s.angleP));
     expect(meshSplitKeep(p, { w, rho: s.frame.rho, angle: s.angleP, piece: 1, turnP: true, turnM: true, seed: 0 }, clean).keep).toBeCloseTo(0.007, 9);

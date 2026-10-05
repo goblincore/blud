@@ -331,7 +331,7 @@ describe('the leaf: the per-frame tick', () => {
     // The skull follows view.splitDrawn, which this call settles for the frame.
     const iSkull = mainSrc.indexOf('ctx.render.segMeshRenderer.update(');
     expect(iSkull).toBeGreaterThan(iEye);
-    expect(mainSrc.slice(iSkull, mainSrc.indexOf("ctx.telemetry.telemetry.end('skeleton-mesh', meshTiming);"))).toContain("(owner, segment) => (segment === 'head' ? (owner as ZombieActor).view.splitDrawn : null)");
+    expect(mainSrc.slice(iSkull, mainSrc.indexOf("ctx.telemetry.telemetry.end('skeleton-mesh', meshTiming);"))).toContain("warp: (owner, segment) => (segment === 'head' ? (owner as ZombieActor).view.splitDrawn : null),");
     expect(iEye).toBeLessThan(mainSrc.indexOf('refreshActorTiles();', iEye));
     // The tick's call hands no eye.
     expect(mainSrc).toContain('ctx.weapon.headSplit?.tick(dt);');

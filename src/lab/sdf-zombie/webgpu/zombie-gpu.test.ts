@@ -142,7 +142,7 @@ describe('noise root shift — packed channel (faceCfg3.zw)', () => {
 // THE HEAD SPLIT rides the record (crowd-records.ts REC_SPLIT_*), and the posed body is its one source: the view copies
 // `split` from the body it is handed in update(), so a closed or torn pose (no split) writes zeros.
 describe('the head split in the view record', () => {
-  const warp: SplitWarp = { n: [1, 0, 0], d0: 0.25, h: [0.5, 1.5, -0.25], a: [0, 0, -1], thetaP: 0.5, thetaM: -0.25, r: 0.375, full: 0.55 };
+  const warp: SplitWarp = { n: [1, 0, 0], d0: 0.25, h: [0.5, 1.5, -0.25], a: [0, 0, -1], thetaP: 0.5, thetaM: -0.25, r: 0.375, full: 0.55, target: 0.5 };
   const lanes = (floats: Float32Array, slot: number) =>
     Array.from(floats.subarray((slot * REC_VEC4S + REC_SPLIT_N) * 4, (slot * REC_VEC4S + REC_SPLIT_R + 1) * 4));
   const OPEN = [1, 0, 0, 0.5, 0.5, 1.5, -0.25, 0.25, 0, 0, -1, -0.25, 0.375, 0, 0, 0];

@@ -90,13 +90,15 @@ export const HEAD_SPLIT = {
    *  throws it wide (27 degrees, close behind the flesh).
    *  `jag`: the fracture edge between the two halves (mesh-split.ts meshSplitJag), in metres: a zig-zag of amplitude
    *  `zigAmp` and period `zigLen` along the break, and chips of `chipAmp` in cells of `chipLen`. Amplitudes 0 = the
-   *  clean plane.
+   *  clean plane. The zig-zag's teeth are made uneven by a slow noise of `wobble` cells per `zigLen` that pushes the
+   *  phase of the wave along the hinge axis by `wobbleAlong` periods and of the wave up from the hinge by `wobbleUp`;
+   *  that second wave runs at `upFreq` x the first's frequency, so the two never line up.
    *  `inside`: the colour of the bone's inner wall, seen through the break (dark, wet).
    *  `rim`: the broken edge. The mesh is a shell with no thickness, so the inner wall takes the colour of cut bone
    *  within `width` (m) of the break: seen across the gap it reads as the thickness of the bone. Width 0 = none. */
   skull: {
     follow: [[0.55, 0.1], [0.8, 0.3], [1, 0.85]],
-    jag: { zigAmp: 0.004, zigLen: 0.022, chipAmp: 0.0015, chipLen: 0.006 },
+    jag: { zigAmp: 0.004, zigLen: 0.022, chipAmp: 0.0015, chipLen: 0.006, wobble: 0.43, wobbleAlong: 1.7, wobbleUp: 1.3, upFreq: 0.73 },
     inside: [0.1, 0.018, 0.015],
     rim: { color: [0.72, 0.5, 0.4], width: 0.004 },
   },
@@ -209,7 +211,7 @@ export function headLocalPoint(f: HeadFrame, p: Vec3): Vec3 { return qRotate(con
 export function headLocalDir(f: HeadFrame, v: Vec3): Vec3 { return qRotate(conj(f.quat), v); }
 
 /** The split in WORLD space for this frame (null when closed). The GPU record carries exactly these fields, but for
- *  `full`. */
+ *  `full` and `target`. */
 export interface SplitWarp {
   /** Plane normal (unit) and offset: s(q) = n.q - d0. */
   n: Vec3; d0: number;
@@ -219,9 +221,10 @@ export interface SplitWarp {
   thetaP: number; thetaM: number;
   /** The region sphere: centred on h, radius r. The moved material lies within r - REGION_MARGIN of h. */
   r: number;
-  /** The preset's full opening angle for this split (splitMaxAngle; rad): what the angles are a share of. The field
-   *  does not read it; the skull does (skullSplitOf). */
-  full: number;
+  /** The preset's full opening angle for this split (splitMaxAngle; rad): what the angles are a share of, and the
+   *  angle the spring is settling on (SplitState.target; rad): the stage the split is at, whatever the spring is doing
+   *  on the way. The field reads neither; the skull does (skullSplitOf). */
+  full: number; target: number;
 }
 
 /** Rodrigues: v rotated by t (right-handed) about unit axis k. */
@@ -251,7 +254,7 @@ export function splitWarpOf(st: SplitState, f: HeadFrame): SplitWarp | null {
     thetaP: st.sides >= 0 ? st.angle : 0,
     thetaM: st.sides <= 0 ? -st.angle : 0,
     r: len(sub(f.centre, h)) + f.radius * HEAD_SPLIT.holdFrac + REGION_MARGIN,
-    full: st.sides === 0 ? p.maxBoth : p.maxOne,
+    full: splitMaxAngle(st), target: st.target,
   };
 }
 
@@ -459,7 +462,8 @@ export function splitFaceSegs(st: SplitState, f: HeadFrame): { side: 1 | -1; a: 
 export interface SkullSplit {
   /** The flesh's split, ready for point tests: the bone breaks on the same plane and hinge. */
   frame: SplitFrame;
-  /** The flesh's opening as a share of its preset's full angle (0..1), and the bone's share of the flesh angle. */
+  /** The stage the table was read at (the flesh's opening, no further than its spring's target, as a share of the
+   *  preset's full angle; 0..1), and the bone's share of the flesh angle. */
   frac: number; follow: number;
   /** The bone's angles (rad): the + half's (>= 0) and the - half's (<= 0). A half whose flesh stays has 0. */
   angleP: number; angleM: number;
@@ -479,16 +483,31 @@ export function skullFollow(frac: number, knots: readonly (readonly [number, num
   return last[1];
 }
 
+/** What may replace HEAD_SPLIT.skull.follow from the tuning seam: one share for every stage, or another table. */
+export type SkullFollow = number | readonly (readonly [number, number])[];
+
+/** `follow` is something skullSplitOf can take: a finite share, or a table of finite knots whose openings rise. */
+export function skullFollowOk(follow: unknown): follow is SkullFollow {
+  if (typeof follow === 'number') return Number.isFinite(follow);
+  if (!Array.isArray(follow) || follow.length === 0) return false;
+  return follow.every((k, i) => Array.isArray(k) && k.length === 2 && Number.isFinite(k[0]) && Number.isFinite(k[1])
+    && (i === 0 || k[0] > follow[i - 1][0]));
+}
+
 /** The skull's split for a drawn flesh split (null: closed). `follow` set by hand replaces the table (the tuning
- *  seam; null = the table). The flesh opening is held at the preset's full angle and the bone's share at 1, so a
- *  spring that overshoots never turns the bone past its flesh. A bone that does not turn at all is the closed skull:
+ *  seam: a share, or another table; null = HEAD_SPLIT.skull.follow).
+ *  THE STAGE IS THE SPRING'S TARGET, not where the spring is: the table is read at min(flesh angle, target) over the
+ *  preset's full angle. While the flesh rises toward a chop's target the bone opens along the table with it; once
+ *  the flesh is past the target the share stays the target's, so an overshoot swings the bone only in proportion to
+ *  its flesh (read at the flesh's own angle, the table's slope swung it three times as wide on chop 1). The share is
+ *  held in 0..1, so the bone never turns past its flesh. A bone that does not turn at all is the closed skull:
  *  null. */
-export function skullSplitOf(w: SplitWarp | null | undefined, follow: number | null = null, seed = 0): SkullSplit | null {
+export function skullSplitOf(w: SplitWarp | null | undefined, follow: SkullFollow | null = null, seed = 0): SkullSplit | null {
   const frame = splitFrame(w);
   if (!frame) return null;
   const flesh = Math.max(frame.w.thetaP, -frame.w.thetaM);
-  const frac = frame.w.full > 0 ? Math.min(1, flesh / frame.w.full) : 1;
-  const k = Math.max(0, Math.min(1, follow ?? skullFollow(frac)));
+  const frac = frame.w.full > 0 ? Math.min(1, Math.min(flesh, frame.w.target) / frame.w.full) : 1;
+  const k = Math.max(0, Math.min(1, typeof follow === 'number' ? follow : skullFollow(frac, follow ?? HEAD_SPLIT.skull.follow)));
   const angleP = frame.w.thetaP * k, angleM = frame.w.thetaM * k;
   if (angleP === 0 && angleM === 0) return null;
   return { frame, frac, follow: k, angleP, angleM, seed };

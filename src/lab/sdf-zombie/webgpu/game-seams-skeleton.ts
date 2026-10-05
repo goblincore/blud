@@ -13,6 +13,7 @@ import { bodyBuildCacheStats } from './character-view';
 import { applyBoneMesh } from './game-render-leaves';
 import { traceProjectile } from './game-weapon';
 import { sdBody } from '../validate';
+import { splitLookOk, type SplitLookSet } from './skeleton-spike/mesh-split';
 
 export function createSkeletonSeams(ctx: GameContext) {
   return {
@@ -60,38 +61,44 @@ export function createSkeletonSeams(ctx: GameContext) {
      *  check reads these against the wound's uploaded slot. */
     meshExposure: () => ctx.render.segMeshRenderer ? ctx.render.segMeshRenderer.exposureRows() : null,
     /** The split skull's look (head-split.ts HEAD_SPLIT.skull; mesh-renderer.ts splitLook), read and set live.
-     *  `follow`: a number replaces the staged table (1 = the bone rides its flesh, 0 = the whole skull), null puts the
-     *  table back. `zigAmp` / `zigLen` / `chipAmp` / `chipLen` (m): the fracture edge; both amplitudes 0 = a clean
-     *  plane. `inside`: the bone's inner wall, [r, g, b]. `rim` / `rimWidth`: the broken edge's colour and width (m;
-     *  0 = no rim). Returns the values in force; null without the mesh skeleton. */
-    skullSplit: (set?: {
-      follow?: number | null; zigAmp?: number; zigLen?: number; chipAmp?: number; chipLen?: number;
-      inside?: readonly [number, number, number]; rim?: readonly [number, number, number]; rimWidth?: number;
-    }) => {
+     *  `follow`: a number is one share for every stage (1 = the bone rides its flesh, 0 = the whole skull), a table of
+     *  [flesh opening, share] knots replaces the staged one, null puts HEAD_SPLIT's back. `zigAmp` / `zigLen` /
+     *  `chipAmp` / `chipLen` (m) and `wobble` / `wobbleAlong` / `wobbleUp` / `upFreq`: the fracture edge
+     *  (mesh-split.ts meshSplitJag); both amplitudes 0 = a clean plane. `inside`: the bone's inner wall, [r, g, b].
+     *  `rim` / `rimWidth`: the broken edge's colour and width (m; 0 = no rim). Returns the values in force; null
+     *  without the mesh skeleton. The seam is called from a console: a set with anything that is not a finite number
+     *  where one belongs (mesh-split.ts splitLookOk) is refused whole, and answers false. */
+    skullSplit: (set?: SplitLookSet) => {
       const look = ctx.render.segMeshRenderer?.splitLook;
       if (!look) return null;
-      if (set) {
+      if (set !== undefined) {
+        if (!splitLookOk(set)) return false;
         if (set.follow !== undefined) look.follow = set.follow;
-        const j = look.jag.value;
+        const j = look.jag.value, sh = look.jagShape.value, r = look.rim.value;
         j.set(set.zigAmp ?? j.x, set.zigLen ?? j.y, set.chipAmp ?? j.z, set.chipLen ?? j.w);
+        sh.set(set.wobble ?? sh.x, set.wobbleAlong ?? sh.y, set.wobbleUp ?? sh.z, set.upFreq ?? sh.w);
         if (set.inside) look.inside.value.setRGB(set.inside[0], set.inside[1], set.inside[2]);
-        const r = look.rim.value;
         r.set(set.rim?.[0] ?? r.x, set.rim?.[1] ?? r.y, set.rim?.[2] ?? r.z, set.rimWidth ?? r.w);
       }
-      const j = look.jag.value, r = look.rim.value;
+      const j = look.jag.value, sh = look.jagShape.value, r = look.rim.value;
       return {
-        follow: look.follow, zigAmp: j.x, zigLen: j.y, chipAmp: j.z, chipLen: j.w, inside: look.inside.value.toArray(),
-        rim: [r.x, r.y, r.z], rimWidth: r.w,
+        follow: look.follow, zigAmp: j.x, zigLen: j.y, chipAmp: j.z, chipLen: j.w,
+        wobble: sh.x, wobbleAlong: sh.y, wobbleUp: sh.z, upFreq: sh.w,
+        inside: look.inside.value.toArray(), rim: [r.x, r.y, r.z], rimWidth: r.w,
       };
     },
     /** skeleton=mesh diagnostics: draw or hide the bone meshes and the seated eyes (both drawn by default), so a
      *  capture can tell their pixels from the flesh's by a shown / hidden pair. Returns the state; null without the
-     *  mesh skeleton. */
+     *  mesh skeleton; false (and nothing changed) for a flag that is not a boolean. */
     meshSkeletonShow: (set?: { bones?: boolean; eyes?: boolean }) => {
       const show = ctx.render.segMeshRenderer?.show;
       if (!show) return null;
-      if (set?.bones !== undefined) show.bones = set.bones;
-      if (set?.eyes !== undefined) show.eyes = set.eyes;
+      if (set !== undefined) {
+        const flag = (v: unknown) => v === undefined || typeof v === 'boolean';
+        if (set === null || typeof set !== 'object' || !flag(set.bones) || !flag(set.eyes)) return false;
+        if (set.bones !== undefined) show.bones = set.bones;
+        if (set.eyes !== undefined) show.eyes = set.eyes;
+      }
       return { ...show };
     },
     meshEyeState: (bodyId?: number) => { const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId); return a && ctx.render.segMeshRenderer ? ctx.render.segMeshRenderer.eyeState(a) : null; },

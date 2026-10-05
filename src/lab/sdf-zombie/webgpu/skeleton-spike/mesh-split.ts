@@ -17,11 +17,21 @@
 //
 // Pure (no three): the TypeScript twins below are the reference the WGSL is edited with (mesh-appearance.ts's idiom).
 import type { Vec3 } from '../../types';
-import { HEAD_SPLIT, type SkullSplit, type SplitWarp } from '../../head-split';
+import { HEAD_SPLIT, skullFollowOk, type SkullFollow, type SkullSplit, type SplitWarp } from '../../head-split';
 import { boneHash3, boneNoise3 } from './mesh-appearance';
 
-/** The fracture's shape (HEAD_SPLIT.skull.jag): metres. */
-export interface SplitJag { zigAmp: number; zigLen: number; chipAmp: number; chipLen: number }
+/** The fracture's shape (HEAD_SPLIT.skull.jag): amplitudes and lengths in metres, the wobble's four in periods. */
+export interface SplitJag {
+  zigAmp: number; zigLen: number; chipAmp: number; chipLen: number;
+  wobble: number; wobbleAlong: number; wobbleUp: number; upFreq: number;
+}
+
+/** How the per-head seed enters meshSplitJag: the phase it adds to the wave along the axis and to the wave up from the
+ *  hinge, that second wave's own fixed phase, the noise layer it picks, and the chip layer's offset from it. ONE
+ *  table for the TypeScript twin and the WGSL (interpolated below), so the two cannot drift. */
+export const JAG_SEED = { along: 0.618, up: 0.414, upPhase: 0.31, noise: 7.31, chip: 3 } as const;
+/** A number as a WGSL f32 literal. */
+const wf = (v: number): string => (Number.isInteger(v) ? v.toFixed(1) : String(v));
 
 const fract = (v: number) => v - Math.floor(v);
 /** A triangle wave of period 1 in [-1, 1]. */
@@ -36,15 +46,16 @@ const tri = (x: number) => Math.abs(fract(x) - 0.5) * 4 - 1;
  *  `seed` shifts both. Never beyond meshSplitJagMax. MESH_SPLIT_JAG_WGSL is this function. */
 export function meshSplitJag(along: number, up: number, seed: number, jag: SplitJag = HEAD_SPLIT.skull.jag): number {
   const zx = along / Math.max(jag.zigLen, 1e-5), zy = up / Math.max(jag.zigLen, 1e-5);
-  const wob = boneNoise3([zx * 0.43, zy * 0.43, seed * 7.31]) - 0.5;
-  const zig = 0.5 * (tri(zx + seed * 0.618 + wob * 1.7) + tri(zy * 0.73 + seed * 0.414 + 0.31 - wob * 1.3));
+  const wob = boneNoise3([zx * jag.wobble, zy * jag.wobble, seed * JAG_SEED.noise]) - 0.5;
+  const zig = 0.5 * (tri(zx + seed * JAG_SEED.along + wob * jag.wobbleAlong)
+    + tri(zy * jag.upFreq + seed * JAG_SEED.up + JAG_SEED.upPhase - wob * jag.wobbleUp));
   const cl = Math.max(jag.chipLen, 1e-5);
-  const chip = boneHash3([Math.floor(along / cl), Math.floor(up / cl), seed + 3]) * 2 - 1;
+  const chip = boneHash3([Math.floor(along / cl), Math.floor(up / cl), seed + JAG_SEED.chip]) * 2 - 1;
   return jag.zigAmp * zig + jag.chipAmp * chip;
 }
 
 /** The largest |meshSplitJag|: what a bound adds to a sphere before it asks which pieces own it (skullPieces). */
-export function meshSplitJagMax(jag: SplitJag = HEAD_SPLIT.skull.jag): number {
+export function meshSplitJagMax(jag: Pick<SplitJag, 'zigAmp' | 'chipAmp'> = HEAD_SPLIT.skull.jag): number {
   return Math.abs(jag.zigAmp) + Math.abs(jag.chipAmp);
 }
 
@@ -58,15 +69,21 @@ export function skullJagAt(s: SkullSplit, q: Vec3, jag: SplitJag = HEAD_SPLIT.sk
   return meshSplitJag(dot(w.a, r), dot(u, r), s.seed, jag);
 }
 
-export const MESH_SPLIT_JAG_WGSL = /* wgsl */ `fn meshSplitJag(c: vec2<f32>, seed: f32, jag: vec4<f32>) -> f32 {
-  // jag = (zigAmp, zigLen, chipAmp, chipLen), metres; c = (along the hinge axis, up from the hinge).
-  let z = c / max(jag.y, 1e-5);
-  let wob = boneNoise(vec3<f32>(z * 0.43, seed * 7.31)) - 0.5;
-  let t1 = abs(fract(z.x + seed * 0.618 + wob * 1.7) - 0.5) * 4.0 - 1.0;
-  let t2 = abs(fract(z.y * 0.73 + seed * 0.414 + 0.31 - wob * 1.3) - 0.5) * 4.0 - 1.0;
-  let zig = 0.5 * (t1 + t2);
-  let chip = boneHash(vec3<f32>(floor(c / max(jag.w, 1e-5)), seed + 3.0)) * 2.0 - 1.0;
-  return jag.x * zig + jag.z * chip;
+/** The WGSL's body, line by line, for the tests to pin against JAG_SEED. */
+export const MESH_SPLIT_JAG_LINES = [
+  'let z = c / max(jag.y, 1e-5);',
+  `let wob = boneNoise(vec3<f32>(z * shape.x, seed * ${wf(JAG_SEED.noise)})) - 0.5;`,
+  `let t1 = abs(fract(z.x + seed * ${wf(JAG_SEED.along)} + wob * shape.y) - 0.5) * 4.0 - 1.0;`,
+  `let t2 = abs(fract(z.y * shape.w + seed * ${wf(JAG_SEED.up)} + ${wf(JAG_SEED.upPhase)} - wob * shape.z) - 0.5) * 4.0 - 1.0;`,
+  'let zig = 0.5 * (t1 + t2);',
+  `let chip = boneHash(vec3<f32>(floor(c / max(jag.w, 1e-5)), seed + ${wf(JAG_SEED.chip)})) * 2.0 - 1.0;`,
+  'return jag.x * zig + jag.z * chip;',
+] as const;
+
+export const MESH_SPLIT_JAG_WGSL = /* wgsl */ `fn meshSplitJag(c: vec2<f32>, seed: f32, jag: vec4<f32>, shape: vec4<f32>) -> f32 {
+  // jag = (zigAmp, zigLen, chipAmp, chipLen), metres; shape = (wobble, wobbleAlong, wobbleUp, upFreq);
+  // c = (along the hinge axis, up from the hinge).
+  ${MESH_SPLIT_JAG_LINES.join('\n  ')}
 }`;
 
 /** The per-instance attributes of a split copy: four vec4s, in this order, in one row of SPLIT_INSTANCE_FLOATS. */
@@ -92,7 +109,7 @@ export function packSplitInstance(rows: Float32Array, i: number, s: SkullSplit, 
  *    the + half keeps  min(region, side)  >= 0
  *    the - half keeps  min(region, -side) >= 0
  *    the rest keeps what no TURNING half takes: the negative of each turning half's value. */
-export const MESH_SPLIT_CLIP_WGSL = /* wgsl */ `fn meshSplitClip(pWorld: vec3<f32>, sn: vec4<f32>, sh: vec4<f32>, sa: vec4<f32>, sk: vec4<f32>, jag: vec4<f32>) -> vec4<f32> {
+export const MESH_SPLIT_CLIP_WGSL = /* wgsl */ `fn meshSplitClip(pWorld: vec3<f32>, sn: vec4<f32>, sh: vec4<f32>, sa: vec4<f32>, sk: vec4<f32>, jag: vec4<f32>, shape: vec4<f32>) -> vec4<f32> {
   // sn = (n, d0), sh = (h, this copy's angle), sa = (a, rho), sk = (piece, + turns, - turns, seed).
   let rel = pWorld - sh.xyz;
   let c = cos(sh.w);
@@ -100,7 +117,7 @@ export const MESH_SPLIT_CLIP_WGSL = /* wgsl */ `fn meshSplitClip(pWorld: vec3<f3
   let q = sh.xyz + rel * c - cross(sa.xyz, rel) * s + sa.xyz * (dot(sa.xyz, rel) * (1.0 - c));
   let r = q - sh.xyz;
   let up = dot(cross(sn.xyz, sa.xyz), r);
-  let side = dot(sn.xyz, q) - sn.w + meshSplitJag(vec2<f32>(dot(sa.xyz, r), up), sk.w, jag);
+  let side = dot(sn.xyz, q) - sn.w + meshSplitJag(vec2<f32>(dot(sa.xyz, r), up), sk.w, jag, shape);
   let region = min(up, sa.w - length(r));
   let dP = min(region, side);
   let dM = min(region, -side);
@@ -121,6 +138,24 @@ export const MESH_SPLIT_INSIDE_WGSL = /* wgsl */ `fn meshSplitInside(surface: ve
 /** MESH_SPLIT_INSIDE_WGSL's rim share at `keep` metres from the edge (its hand twin). */
 export function meshSplitRim(keep: number, width: number = HEAD_SPLIT.skull.rim.width): number {
   return Math.max(0, Math.min(1, (width - keep) / Math.max(width, 1e-6) * 2));
+}
+
+/** What the tuning seam may set of the split skull's look (game-seams-skeleton.ts skullSplit; the renderer's
+ *  splitLook): the fracture's SplitJag numbers, the bone's follow (null = HEAD_SPLIT's table), the inner wall, the rim. */
+export type SplitLookSet = Partial<SplitJag> & {
+  follow?: SkullFollow | null;
+  inside?: readonly [number, number, number]; rim?: readonly [number, number, number]; rimWidth?: number;
+};
+
+const LOOK_NUMBERS = ['zigAmp', 'zigLen', 'chipAmp', 'chipLen', 'wobble', 'wobbleAlong', 'wobbleUp', 'upFreq', 'rimWidth'] as const;
+/** `set` is a SplitLookSet: every number given is finite, a colour is three of them, `follow` is null or something
+ *  skullSplitOf can take. A NaN here would reach the copies' matrices and the clip. */
+export function splitLookOk(set: unknown): set is SplitLookSet {
+  if (set === null || typeof set !== 'object') return false;
+  const s = set as Record<string, unknown>;
+  const colour = (c: unknown) => c === undefined || (Array.isArray(c) && c.length === 3 && c.every(v => Number.isFinite(v)));
+  return LOOK_NUMBERS.every(k => s[k] === undefined || (typeof s[k] === 'number' && Number.isFinite(s[k])))
+    && colour(s.inside) && colour(s.rim) && (s.follow === undefined || s.follow === null || skullFollowOk(s.follow));
 }
 
 /** MESH_SPLIT_CLIP_WGSL's hand twin, for the tests: edit the two together. */
