@@ -125,6 +125,13 @@ The per-task texts used for dispatch are in the session scratchpad (`scratchpad/
     (bit-identical). A frozen actor rests at exactly zero offset.
   - The gate is 77 checks: K holds the kick, J is the wobble. After a thaw it waits for the wobble to rest
     (`restWobble`) before it measures a rest angle; a new scenario that thaws must do the same.
+- **The opened head glistens under the flashlight** (2026-10-05; the owner's one request from the cut-face
+  comparison). A wet film over an open split's raw surfaces, the pit and the caps: highlights only, off a normal of
+  its own (`march/body/blocks/light/split-glisten.wgsl.ts`, numbers in `SPLIT_SHADE.glisten`). Off: `gain` 0, which
+  writes no shader text at all. Nothing outside an open split's region changes (0 texels; pins unmoved). Sheets
+  `look/10`-`12`. Under the torch at 0.6 m the raw texels over 0.6 luma go 1.98% -> 4.63%, over 0.95 0.02% -> 0.76%
+  (worst view 2.89%). Striking on a one-sided split's big face; modest on the two-sided one, where little raw
+  surface faces the player. Stills only: it needs the owner's eye in motion.
 - All measurements and photos: [`NOTES.md`](NOTES.md), `b4/` … `b7/`, `look/`.
 - **Testing rule added:** after any WGSL change run the full tree,
   `npx vitest run src/lab/sdf-zombie --exclude '**/cut-wound.test.ts'` (510 files, 3–5 minutes). Targeted sets missed
@@ -153,6 +160,12 @@ The per-task texts used for dispatch are in the session scratchpad (`scratchpad/
 - **Known limits:** a pellet or slug crater on a cut face sits on the old plane, so it shows on both faces. A rod sweep
   across the gap is un-warped as one segment by its midpoint's piece. `sdBody` costs about 2.7× inside the region.
   A forced re-split with fewer sides leaves the old face wound (seam only). A baked split head has no answer yet.
+- **Do not call `bodyLights` a second time in the march entry.** One more call, behind an open split's gate, left
+  16 px screen tiles of the open head at the world origin's depth (rectangular notches). Mechanism unknown;
+  NOTES, "Look: wet under the flashlight". A follow-up is flagged.
+- **At 0.6 m the torch's beam misses a head in the middle of the screen** (the torch is 0.25 m off the eye, its cone
+  21.6 degrees). The body's own torch light there is weak by construction; the wet film has its own wider cone
+  (`SPLIT_SHADE.glisten.spill`). With the torch lit the lamps add no glint to the film.
 - **House rule:** never run `git checkout -- .`, `git restore .`, `git reset --hard` or `git clean` here; an
   implementer wiped its own uncommitted work that way.
 
@@ -186,9 +199,10 @@ The before/after comparisons are in `compare/`. The raw photos are untracked in 
 4. ~~B4~~, ~~B5~~: done (above).
 6. ~~B6~~, ~~B7~~: done (above).
 8. ~~B8 part A: the gate~~, ~~B8 part B: the look pass~~ (above: the cut faces stay as played; the axe's table and
-   the wobble are in). A wetness-under-the-flashlight step for the cut faces is planned separately.
+   the wobble are in; the wet film under the flashlight is in).
 9. **B9: docs.** To record: spec §4 / §5 (the axe's stages are the table's second and third, the kill's kick, the
-   stage that only advances, the wobble and its two off switches); `TASKS.md`.
+   stage that only advances, the wobble and its two off switches; the wet film and its off switch, and that the
+   deferred surface entry does not carry it); `TASKS.md`.
 
 ## Known design notes
 

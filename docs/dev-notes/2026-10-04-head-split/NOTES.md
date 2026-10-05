@@ -1368,3 +1368,179 @@ No WGSL changed, so there is no golden update, census or boot pair.
   third try): open minus closed read +5.4 to +14 ms with spreads of 6 to 11 ms. Not quotable. Neither step adds
   draw work: a head at rest hands the renderers the same two angles as before, and the wobble is a few dozen
   floating-point operations a tick for each split head.
+
+## Look: wet under the flashlight (2026-10-05)
+
+The owner's one request from the cut-face comparison: "the wetness under flashlight is probably more visually
+striking". One step, one commit. The ragged look is untouched: no albedo, no geometry, no face cut number moved.
+
+### What was built
+
+A wet film over the RAW SURFACES of an OPEN split: the pit the face cuts carve and the flat caps around it. It adds
+highlights and nothing else. One block, `webgpu/march/body/blocks/light/split-glisten.wgsl.ts`, spliced into the light
+tail's compose right after the light list's add and before the highlight shoulder; its numbers are
+`head-split.ts SPLIT_SHADE.glisten`.
+
+- **The gate** (`glisRaw`): `splitIn` (the hit is inside an open head's region sphere: false on every closed body)
+  x the one wound mask past its faint reach (`smoothstep(rawLo, rawHi, wm)`; the mask is already raised on a cut face,
+  so the pit and the cap are one surface to it) x not under the face sheet x not `cutKeep`, not char, bone at a
+  quarter x the film's distance fade x a fade over the last 3 cm of the region sphere (no seam at its boundary; the
+  turned halves lie 6 cm inside it and carry the whole film).
+- **The film's normal**: the shading normal tilted by two octaves of noise cut in the REST anchor (which is taken at
+  the hit piece's un-warped point `pS`, B6), turned out to the world with a turned half. It rides its half; nothing
+  swims. The coarse octave is pushed off zero (`v / (|v| + lumpFlat)`): plain value noise sits near zero, which made
+  the film a mirror with a little noise on it (nothing until it faces the light, then all of it).
+  The diffuse light, the AO probe and the surface's own highlight keep the surface's normal.
+- **The torch** glints from its own place (the analytic flashlight's uniforms), with its switch, range and level
+  shadow, and a cone wider than the beam's by `spill`.
+- **The lamp** glints only with the torch off: the light list then hands the key to its dominant pick, and the key's
+  highlight off the film's normal is that lamp's.
+- Added before the shoulder, so it is compressed with everything else.
+
+### Three things found on the way
+
+- **At arm's length the torch's beam misses a head in the middle of the screen.** The torch rides 0.25 m right and
+  0.15 m under the eye, its axis parallel to the view (`dungeon-lighting.ts FLASHLIGHT_OFFSET`), and its cone is
+  21.6 degrees. At 0.6 m the head's centre stands 26 degrees off the beam's axis: on the raw surfaces the march's
+  per-pixel beam is 0 (measured: `keyI` 0 over the whole top of the head, front and three-quarter; 1 at 2 m). A glint
+  tied to the beam showed nothing at 0.6 m at any strength. Hence `spill`: the film mirrors the lamp itself, which it
+  sees from outside the cone. The body's own torch light at arm's length is as it was.
+- **With the torch lit the lamps are not the key** (`game-light-list-leaves.ts torchLane`: lit, the torch keeps the
+  key by its per-pixel beam and the lamps are only in the list's sums; off, the list's dominant pick is the key). So a
+  lamp can glint off the film only with the torch off. Lit, the lamps add nothing to the film.
+- **A second `bodyLights` call in the march entry leaves screen tiles of an open head at a wrong depth.** The first
+  build walked the list again off the film's normal (`bodyLights(p, glisN, V, gInstLights, lightList, false, true)`
+  behind the raw gate). On the float march target, 72 to 197 texels of each 0.6 m capture, in blocks on the 16 px tile
+  grid at the head's silhouette, kept their lit colour to the bit but took ONE exact clip depth per camera: the
+  projection of the world origin (view distance -9.74 m from the front, 13.15 m from three-quarter). In the composite
+  they are rectangular notches. With only that call removed: 0 such texels. With the call in the text but unreachable
+  (`if (false)`): 0. Closed bodies never showed it. The mechanism is NOT known. The block does not call it (a text pin
+  in its test), and the lamp's term reads the key instead. A follow-up to find the mechanism, and whether bones or
+  chunks can hit it, is flagged.
+
+### The constants (`SPLIT_SHADE.glisten`)
+
+| | | |
+| --- | --- | --- |
+| `gain` | 4 | the highlights' strength x the light's colour. **To turn the step off: `gain` 0.** The block is then not written into the shader at all: the three march exports hash to this commit's parent's golden values (checked), so off is the look before, to the byte |
+| `pow` | 24 | the torch's highlight exponent |
+| `spill` | 0.3 | how far past the beam's outer cone the torch's glint reaches, in the cosine to the beam's axis (to about 51 degrees) |
+| `lamps`, `lampPow` | 0.45, 20 | torch off: the keying lamp's share of `gain`, and its exponent |
+| `rawLo`, `rawHi` | 0.3, 0.8 | the film comes in over this range of the wound mask |
+| `lump`, `lumpTilt`, `lumpFlat` | 0.014 m, 1.4, 0.1 | the coarse octave: cell, tilt (tangent at full swing), and the push off zero |
+| `fine`, `fineTilt` | 0.006 m, 0.3 | the fine octave |
+| `fadeLo`, `fadeHi` | 0.75, 1.5 | an octave fades as its cell shrinks from 1.5 to 0.75 march texels: the fine one whole to about 1 m and gone by 2 m, the coarse one (and with it the film) whole to 2.4 m and gone by 5 m |
+| `edge` | 0.03 m | the fade at the region sphere |
+
+### The numbers
+
+**The instrument.** The float march target, display-encoded (the target holds the lit colour after the legacy display
+decode; luma is taken after the sRGB encode, which is what the screen shows before the post FX). **Raw surface**: the
+texels where the film's own gate is over 0.5, painted by a scratch build of the block (`glisRaw > 0.5` writes a flat
+colour; not committed). The gate's tissue-green paint was tried first and is the wrong instrument here: it also
+marks the wound mask's faint reach over the skin and the footprint under the face sheet, and misses part of the pit.
+Before = this build with `gain` 0, same session, same boot pins, same cameras (two zombies of the ring: `middle` both
+and `middle` one side, forced to the full angle; a third with a pellet crater in a closed head; a fourth with a torso
+chop). The torch cannot be switched back on under the frozen light clock, so each boot shoots everything torch on,
+then everything torch off.
+
+Share of raw-surface texels over 0.6 and over 0.95 luma, before -> after:
+
+| | raw texels | torch ON, over 0.6 | over 0.95 | torch OFF, over 0.6 | over 0.95 |
+| --- | --- | --- | --- | --- | --- |
+| **0.6 m, pooled** (front, three-quarter, above-behind; both scenes) | 11 467 | **1.98 -> 4.63%** | 0.02 -> 0.76% | 1.20 -> 1.80% | 0 -> 0 |
+| **2 m, pooled** (front; both scenes) | 179 | **6.15 -> 9.50%** | 0 -> 0.56% | 0.56 -> 1.12% | 0 -> 0 |
+| both, front 0.6 m | 861 | 5.46 -> 7.55% | 0 -> 0.35% | 0.81 -> 2.32% | 0 -> 0 |
+| both, three-quarter 0.6 m | 1586 | 0.19 -> 5.17% | 0 -> 1.77% | 0 -> 2.40% | 0 -> 0 |
+| both, above-behind | 2743 | 4.99 -> 7.51% | 0.07 -> 1.02% | 2.59 -> 3.03% | 0 -> 0 |
+| both, front 2 m | 80 | 11.25 -> 15.00% | 0 -> 1.25% | 1.25 -> 2.50% | 0 -> 0 |
+| one side, front 0.6 m | 1251 | 1.04 -> 1.84% | 0 -> 0 | 0 -> 0.08% | 0 -> 0 |
+| one side, three-quarter 0.6 m | 3037 | 0.79 -> 3.49% | 0 -> 0.59% | 0 -> 0 (mean luma 0.072 -> 0.093) | 0 -> 0 |
+| one side, above-behind | 1989 | 0.15 -> 2.46% | 0 -> 0.50% | 3.02 -> 3.22% | 0 -> 0 |
+| one side, front 2 m | 99 | 2.02 -> 5.05% | 0 -> 0 | 0 -> 0 | 0 -> 0 |
+| one side, from the head's right side 0.6 m (the most highlight of any view shot) | 3324 | 3.13 -> 9.78% | 0.75 -> **2.89%** | 0.09 -> 0.39% | 0 -> 0 |
+
+No view passes 3% over 0.95. The first tuning (plain value noise, `gain` 3.5) read 17.9% / 8.2% in that side view;
+pushing the coarse octave off zero is what brought it down, at no cost to the oblique views.
+
+**The highlights over the 5-frame orbit** (the eye and its torch orbit the head at 0.6 m, 8.6 degrees a frame; a
+highlight texel is a raw texel over 0.6, placed in the world by its depth, so one that stays on its spot of flesh
+reads as staying):
+
+| | highlight texels per frame, before | after | after: share of a frame's highlights with none within 4 mm in the next | across the whole sweep (first -> last, last -> first) |
+| --- | --- | --- | --- | --- |
+| both | 11, 12, 11, 8, 3 | 53, 40, 31, 43, 48 | 55%, 78%, 68%, 40% | 100%, 100% |
+| one side | 8, 14, 16, 19, 24 | 25, 40, 57, 73, 106 | 40%, 17%, 11%, 12% | 36%, 54% |
+
+In the pit (both) the set is replaced almost every step: the highlights jump from ridge to ridge. On the one-sided
+head's big cap they are denser and turn over more slowly; a highlight that persists stays within 1.2 to 2.6 mm
+(the median distance to the nearest highlight of the next frame), and the count quadruples as the cap turns to the
+torch. Honestly: on the cap they read as glints switching on and off as you move, more than as one highlight
+sliding.
+
+**Nothing outside an open split changed.**
+
+- `march-hash`: the six pins unmoved (`d7392d52…` / `76bd51aa…`, `0c71e712…` / `bf6836cd…`, `470ff0b3…` /
+  `f618070e…`).
+- A closed head with a pellet crater, front 0.6 m, torch on and off: **0 of 120 000 texels differ**, colour and
+  depth. A torso chop, 0.9 m: **0 of 120 000**.
+- Over all 34 captures, every body texel outside both open heads' region spheres (placed in the world by its depth;
+  339 742 texels): **0 differ**. Inside a sphere 24 216 differ. No capture differs in depth anywhere. The floor of
+  every capture (its two reads) is 0.
+- Inside the region but more than 3 texels from any raw texel, up to 72 texels a capture differ: most under 1e-5 (the
+  compiler rounding the open head's light another way with the block in the text, as B8 saw), a few up to 0.05 where
+  the mask's fade runs wide on the crown.
+
+**The gate** (`head-split-gate.mjs`, 77 checks, 0 failed) against group 2's last run: every check line the same to
+the character but three, all on open heads: O's light on the still half, 131 -> 151 of 4520 texels over 0.01
+(0.029 -> 0.033 against 0.1: the open head now has glints the same head closed does not); L's pellet, centroids
+0.51 -> 0.50 texels, 1229 -> 1230 mask texels (its rod cut 1.20 / 0.62 as before); M's eye landmark 3.37 -> 3.36 px.
+No threshold was touched.
+
+### The sheets (`look/`)
+
+`10-wet-flashlight.jpg` (before | after: both at the kill and one side, torch on and off, the four cameras),
+`11-wet-flashlight-sweep.jpg` (the orbit), `12-wet-flashlight-side.jpg` (from the head's right side).
+
+What I see in them. On the one-sided head the big cut face now reads as wet meat under the torch from three-quarter
+and from above: white glints on the dark red, and more of them as the face turns to the light. That is the view where
+the step is striking. On the head split both ways at the kill the change is real but small: the pit picks up a few
+white glints from three-quarter and from above, and from the front the raw surfaces are thin slivers seen edge on and
+the before and after are hard to tell apart. At 2 m it is one or two texels: the number moves, the picture hardly
+does. With the torch off the cap takes a sparse warm speckle from the lamp; it reads as wet, not grey or plastic, and
+on the large cap of the one-sided head slightly spotted. The cap and the pit match: the same pattern at the same
+scale, the pit's glints gathered on its ridges, the cap's spread evenly. The glints are streaks more than dots (the
+push off zero makes the film's facets long and narrow); I read them as wet fibre.
+
+**Still wrong, or not known.**
+
+- All of this is stills. Glints the size of one march texel exist at 0.6 m; they will twinkle as the eye moves, and
+  whether that reads as sparkle or as noise needs the owner's eye in play. The dials: `fineTilt` 0 (no fine octave),
+  a larger `lump`, a lower `gain`.
+- The step is modest on the two-sided split, where little raw surface faces the player. More would mean changing what
+  is seen there (not this step).
+- With the torch lit the lamps add no glint (above).
+- The deferred surface entry does not carry the film (it has no highlight of its own; the game runs the legacy tail).
+- The wobble was not shot: the pattern is cut in the rest anchor and turned with the half, so it should ride a
+  swinging half, but no capture shows it.
+
+### The check set
+
+| Check | Result |
+| --- | --- |
+| `march-golden -u` | `MARCH_BODY`, `MARCH_BODY_LIGHT`, `REFINE_BODY` |
+| `compile-census` | phase ready, `uncapturedCount` 0, no device loss; march module 326068 B -> 330409 B (83 fns) |
+| `march-hash` | no pin moved |
+| cold boot pair (base `9dcd133f`) | new 44821 / 44714 ms, base 44569 / 44275 ms warm-up (`drawOnce` 1662 / 1677 against 1682 / 1667); load 3.5-4.3. Taken before two comments in the block were reworded; the shader's code is the same |
+| `head-split-gate.mjs` | 77 checks, 0 failed (twice: before and after the comment rewording, every check line the same) |
+| `axe-gate.mjs` | 25 checks, 0 failed |
+| `cut-wound-gate.mjs` | 30 checks, 0 failed |
+| `tsc --noEmit` | the `node:crypto` error only |
+| the whole tree (`--exclude '**/cut-wound.test.ts'`) | 511 files, 7458 tests passed, 1 skipped |
+
+**Cost** (`timeDraws`, three interleaved pairs each, load 4 to 5). Open minus closed at 0.6 m: at the start (HEAD)
++8.7 ms (closed 26.4 / 26.8 / 33.0, open 35.3 / 35.5 / 36.4); at the end +8.0 ms with the film (37.3 / 38.0 / 38.7
+against 43.7 / 46.0 / 49.0) and +7.2 ms with `gain` 0 in the same session (32.1 / 32.7 / 32.8 against 39.2 / 39.9 /
+41.8); an earlier pair of the session read +8.1 and +7.1. The level itself moved by 6 to 13 ms from boot to boot, so
+the film's cost is not resolved: under 1 ms if anything. At 2 m the spread (16 ms in one triple) hides everything.
+The work added is per raw texel only: six noise taps and two powers.
