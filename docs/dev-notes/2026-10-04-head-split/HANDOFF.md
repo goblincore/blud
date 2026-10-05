@@ -89,13 +89,17 @@ The per-task texts used for dispatch are in the session scratchpad (`scratchpad/
     before.
   - Seams: `__sdfGame.skullSplit(...)` (look and follow table), `meshSkeletonShow(...)`.
 - **B8 part A is done** (2026-10-05): the gate, the look block, leftovers. Numbers in [`NOTES.md`](NOTES.md).
-  - `scripts/head-split-gate.mjs`: 57 checks (open, widen, kill, one side, later hits, face, skull, range, head
-    damage, bounds, turned, cost), three runs in a row identical; each check was shown to fail under a breaking change.
+  - `scripts/head-split-gate.mjs`: 61 checks (open, widen, kill, one side, later hits, face, skull, range, a body
+    chop near the neck, head damage, bounds, turned, cost), three runs in a row identical; each check was shown to fail under a breaking change.
   - One cut-face look block (`march/body/blocks/post/cut-face.wgsl.ts`), `cutDepth` from `split-hit`, and
     `SPLIT_SHADE` with one number per thing it drives. A pure move: pins unmoved, open heads equal to the bit.
   - A flail hit on a split head credits the head's share of the meter. The bone has a per-tick bound.
-  - **`scripts/axe-gate.mjs` fails 7 of 25 (A, D, T) since B3:** a chop on the upper chest, within 0.2 m of the neck
-    root, is a head-region chop and now opens the head instead of leaving its own cut. Owner's call (NOTES).
+  - **Only a chop on head flesh is a head chop** (`axe-head.ts chopOnHead`; decided by the controller, to be flagged
+    to the owner). Since B3 a chop on the upper chest, within 0.2 m of the neck root, opened the head (the flail's
+    `isHeadRegion`), and `scripts/axe-gate.mjs` failed 7 of 25. Now 25 of 25; `head-split-gate` scenario A holds it.
+    Behaviour change for every character: three chops on the upper chest, collar or neck base no longer kill by count.
+  - **Spec §4's sentence that a head chop is one `isHeadRegion` accepts is superseded for the axe** (the spec's
+    wording is B9's).
 - **Owner feedback (2026-10-05, on the B6 photos):** "looking pretty good"; the skull needs cracked/split states
   (B7 is the answer; photos in `b7/` for the owner's choice); the open-head cost (+6 ms at 0.6 m) "is a lot but we
   can figure out how to optimize later".

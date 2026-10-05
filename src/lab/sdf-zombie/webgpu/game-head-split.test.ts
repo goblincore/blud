@@ -23,7 +23,8 @@ import { createFireSeams } from './game-seams-fire';
 import { makeWeaponSlotState } from './game-weapon-slots';
 import { AXE_HEAD, chopOpenFrac } from './axe-head';
 import { headShape } from './flame-anchors';
-import { traceRaySurface } from './flail-strike';
+import { FLAIL_HEAD, headNeck, traceRaySurface } from './flail-strike';
+import { AXE_HIT } from './axe-strike';
 import mainSrc from './game-main.ts?raw';
 import leafSrc from './game-head-split.ts?raw';
 
@@ -564,6 +565,75 @@ describe('the axe drives the split (the real zombie)', () => {
     expect(f.seen.blasts.map(b => b.forceCollapse)).toEqual(Array.from({ length: AXE_HEAD.chopsToKill }, (_, i) => i === AXE_HEAD.chopsToKill - 1));
     expect('split' in f.a.posed()).toBe(false);
   });
+
+  /** One real click with the eye at `eye`, aimed level along -z: the swing runs to its strike. Returns the strike. */
+  const clickFrom = (f: ReturnType<typeof fixture>, eye: Vec3) => {
+    f.view.eye = eye;
+    const before = f.seen.blasts.length;
+    f.axe.onMouseDown(0);
+    for (let i = 0; i < 120 && f.seen.blasts.length === before; i++) f.axe.tick(1 / 60);
+    f.axe.onMouseUp(0);
+    for (let i = 0; i < 90; i++) f.axe.tick(1 / 60);          // the swing ends: the next click starts the combo again
+    return { blast: f.seen.blasts[before], last: f.axe.debug().last! };
+  };
+
+  it('the axe gate\'s body chop, 0.19 m from the neck root (the flail\'s head region), is a BODY chop: its own cut at the hit, the body\'s meter, no split, no head count', () => {
+    const f = fixture();
+    const posed = f.a.posed(), torso = posed.clusters.find(c => c.limb === 'torso')!.center, neck = headNeck(posed.prims)!.root;
+    // scripts/axe-gate.mjs A / D / T: the eye at standing height, 0.9 m from the torso centre, chopping at it.
+    const dy = 1.62 - torso[1];
+    f.view.eye = [torso[0], 1.62, torso[2] + Math.sqrt(0.9 * 0.9 - dy * dy)];
+    expect(f.axe.chop(7, 'H', 'torso')).toBe(1);
+    const point = f.axe.debug().last!.points[0]!;
+    // Inside the flail's head region by its neck-root clause, a third of a metre from the head.
+    expect(len(sub(point, neck))).toBeLessThan(FLAIL_HEAD.neckDist);
+    expect(len(sub(point, f.skull.centre))).toBeGreaterThan(0.3);
+    expect(f.axe.debug().last!.heads).toEqual([]);
+    expect(f.axe.debug().heads).toEqual({});
+    expect(f.split.state(7)).toBeNull();
+    expect(f.seen.blasts).toHaveLength(1);
+    const b = f.seen.blasts[0]!;
+    expect(b).toMatchObject({ meterCredit: AXE_HIT.H.meterCredit, reaction: 'blast' });
+    expect(b.forceCollapse ?? false).toBe(false);
+    expect(b.wounds).toHaveLength(1);
+    expect(b.wounds[0]).toMatchObject({ shape: 'cut' });
+    expect(b.wounds[0]!.headRegion).toBeUndefined();
+    expect(b.wounds[0]!.headSlot).toBeUndefined();
+    expect(posed.prims[b.wounds[0]!.primIdx]!.limb).toBe('torso');
+    expect(len(sub(woundWorldPos(f.a.posed().prims, b.wounds[0]!, 0), point))).toBeLessThan(0.05);
+    // Three of them do not kill: the head chop counter never moved.
+    f.axe.chop(7, 'R', 'torso'); f.axe.chop(7, 'L', 'torso');
+    expect(f.seen.blasts.some(x => x.forceCollapse)).toBe(false);
+    expect(f.axe.debug().heads).toEqual({});
+  });
+
+  it('up the front of the body, level chops from 0.9 m: the chest, the collar and the neck\'s base are body chops; the jaw line and up open the head', () => {
+    const rows: string[] = [];
+    const run = (y: number) => {
+      const f = fixture();
+      const neck = headNeck(f.a.posed().prims)!.root;
+      const { blast, last } = clickFrom(f, [0, y, f.skull.centre[2] + 0.9]);
+      const point = last.points[0]!, head = last.heads.length === 1;
+      rows.push(`y ${y.toFixed(2)}: hit y ${point[1].toFixed(3)}, ${len(sub(point, neck)).toFixed(3)} m from the neck root, ${len(sub(point, f.skull.centre)).toFixed(3)} m from the skull centre -> ${head ? 'HEAD' : 'body'}`);
+      return { f, blast: blast!, head, point };
+    };
+    for (const y of [1.25, 1.30, 1.35, 1.40, 1.44]) {
+      const r = run(y);
+      expect(r.head, `y ${y}`).toBe(false);
+      expect(r.f.split.state(7), `y ${y}`).toBeNull();
+      expect(r.blast.wounds, `y ${y}`).toHaveLength(1);
+      expect(r.blast.wounds[0]!.headRegion, `y ${y}`).toBeUndefined();
+      expect(r.blast, `y ${y}`).toMatchObject({ meterCredit: AXE_HIT.H.meterCredit, reaction: 'blast' });
+    }
+    for (const y of [1.50, 1.55, 1.60, 1.65, 1.70]) {
+      const r = run(y);
+      expect(r.head, `y ${y}`).toBe(true);
+      expect(r.f.split.state(7)?.preset, `y ${y}`).toBe('middle');
+      expect(r.blast.wounds.every(w => w.headSlot === 'keep'), `y ${y}`).toBe(true);
+      expect(r.blast, `y ${y}`).toMatchObject({ meterCredit: 0, reaction: 'flinch' });
+    }
+    console.log(rows.join('\n'));
+  }, 120000);
 
   it('a body chop neither opens nor widens', () => {
     const f = fixture();

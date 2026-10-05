@@ -4,7 +4,7 @@
 // half: a primitive axe (wooden haft, steel wedge head) on the goblin arm, on the aim rig, posed from axe-swing.ts.
 // A click runs the H -> R -> L chop combo; at each strike frame flail-strike.ts resolveStrike decides who is hit and
 // where, and each hit gets the chop's cut (axe-strike.ts axeCutSeg -> cut-wound.ts stampCut). A body chop blasts with
-// the chop's collapse credit and shove; a head chop counts (axe-head.ts) -- the chopsToKill-th kills (blast
+// the chop's collapse credit and shove; a chop on head flesh (axe-head.ts chopOnHead) counts -- the chopsToKill-th kills (blast
 // forceCollapse) -- and cuts what axe-head.ts headChopCut says: the split's faces when it opens the head, its own
 // head-tagged cut, or nothing. The axe NEVER routes into the slug head burst (game-head-damage.ts):
 // it has no head-damage dependency. Not a recorded demo verb (like the flail, the flare and the rod). No hit-stop or
@@ -29,8 +29,8 @@ import { BEND_R_VIEW } from './game-weapon-leaves';
 import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms } from './game-arms';
 import { axePose, cancelAxeSwing, makeAxeSwing, stepAxeSwing, type AxeSide, type AxeSwing } from './axe-swing';
 import { AXE_CALIBRE, AXE_CUT, AXE_HIT, axeCutSeg } from './axe-strike';
-import { chopHead, chopOpenFrac, headChopCut, makeAxeHead, type AxeHeadState } from './axe-head';
-import { headNeck, isHeadRegion, resolveStrike, strikeActorsFrom } from './flail-strike';
+import { chopHead, chopOnHead, chopOpenFrac, headChopCut, makeAxeHead, type AxeHeadState } from './axe-head';
+import { resolveStrike, strikeActorsFrom } from './flail-strike';
 import { createViewmodelLights } from './viewmodel-lights';
 import type { HeadSplitLeaf } from './game-head-split';
 import { cross, normalize, sub } from '../vec';
@@ -166,7 +166,7 @@ export function createAxeHarness(ctx: GameContext, deps: AxeDeps): AxeHarness {
 
   /** One hit's cut and blast. `aim` is the strike's aim direction (the chop's blade line is drawn in its view). Returns
    *  1 for a head chop, 0 for a body chop. */
-  function hitActor(a: ZombieActor, side: AxeSide, aim: Vec3, point: Vec3, dir: Vec3, magnet: boolean): number {
+  function hitActor(a: ZombieActor, side: AxeSide, aim: Vec3, point: Vec3, dir: Vec3): number {
     const posed = a.posed();
     const yaw = a.pose().yaw;
     const aimYaw = Math.atan2(aim[0], -aim[2]), aimPitch = Math.asin(Math.max(-1, Math.min(1, aim[1])));
@@ -175,13 +175,10 @@ export function createAxeHarness(ctx: GameContext, deps: AxeDeps): AxeHarness {
     const seg = axeCutSeg(deps.eye(), aimYaw, aimPitch, side, point, dir);
     const cut = unwarpCutSeg(posed, seg);
     const stamp = (): Wound => stampCut(posed.prims, cut.seg, AXE_CALIBRE, yaw, cut.field);
-    // The head region: the magnet's hit is on the head by construction; else the flail's test on the struck prim (the
-    // probe only finds that prim, so it is skipped for a magnet hit), at the un-warped hit: the prims and the head
-    // centre are the closed head's.
-    const headRegion = (): boolean => isHeadRegion(
-      posed.prims[worldHitToWound(posed.prims, cut.hit, 0.05, 'blast', yaw, cut.field).primIdx]?.limb,
-      cut.hit, posed.clusters.find(c => c.limb === 'head' && c.alive)?.center ?? null, headNeck(posed.prims)?.root ?? null);
-    const region = magnet || headRegion();
+    // A head chop is a chop on head flesh (axe-head.ts chopOnHead): the prim the probe finds at the un-warped hit, where
+    // the prims are the closed head's. The magnet's hit is tested like any other: it is on the head's own field, which
+    // at the neck's base is in the shoulders. A chop on the chest near the neck is a body chop.
+    const region = chopOnHead(posed.prims[worldHitToWound(posed.prims, cut.hit, 0.05, 'blast', yaw, cut.field).primIdx]?.limb);
     const f = AXE_HIT[side];
     const impulse = { at: point, vel: [dir[0] * f.shove, dir[1] * f.shove, dir[2] * f.shove] as Vec3 };
     if (!region) {
@@ -240,7 +237,7 @@ export function createAxeHarness(ctx: GameContext, deps: AxeDeps): AxeHarness {
     const headIds: number[] = [];
     for (const h of hits) {
       const a = ctx.world.actors.find(x => x.id === h.actorId);
-      if (a && hitActor(a, side, d, h.point, h.dir, !!h.magnet)) headIds.push(a.id);
+      if (a && hitActor(a, side, d, h.point, h.dir)) headIds.push(a.id);
     }
     last = { side, hits: hits.map(h => h.actorId), heads: headIds, points: hits.map(h => [h.point[0], h.point[1], h.point[2]] as Vec3) };
     ctx.telemetry.telemetry.event('axe-strike', { side, hits: hits.length, heads: headIds.length });

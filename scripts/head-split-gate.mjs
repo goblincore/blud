@@ -23,6 +23,9 @@
 //      clean gpuDiagnostics at the end of every boot.
 //   R. RANGE (its own boot): beyond the draw distance a split is drawn closed, flesh and skull; it opens again only
 //      inside the reopen distance, and holds its state at each stance.
+//   A. A BODY CHOP NEAR THE NECK (the axe gate's torso chop: on the upper chest, inside the flail's head region)
+//      leaves the head closed and stamps its own cut where it landed: only a chop on head flesh is a head chop
+//      (axe-head.ts chopOnHead).
 //   H. HEAD DAMAGE AND THE SPLIT DO NOT MIX: a slug and a flail hit on a split head take the plain un-warped paths (no
 //      head damage state; the flail's crater credits the head's share of the meter); a head that head damage holds
 //      refuses to split and still dies on chop 3.
@@ -68,6 +71,9 @@ const M_CRACK_MAX = 0.06, M_SPLIT_MIN = 0.35, M_THROWN = 1.8, M_SHIFT_PX = 5, M_
 /** The eye seats in the head frame (mesh-eyes.ts, the rest pose). */
 const M_SEATS = [[-0.0363, 0.0159, 0.0343], [0.0363, 0.0159, 0.0343]];
 const R_STEP = 0.3, R_HOLD = 20, R_MIN_HITS = 20, R_CLOSED_MAX = 6, R_OPEN_MIN = 5;
+/** A: the axe gate's torso chop distance (m, eye to the torso centre); the hit is this far or more from the skull
+ *  centre, and its cut within this of the hit. */
+const A_CHOP_D = 0.9, A_OFF_HEAD = 0.3, A_LAND_MAX = 0.05;
 const H_SLUG_OPEN = 0.25, H_SLUG_D = 2, H_SLUG_OFF = 0.03, H_FRAMES = 20, H_FLAIL_D = 1.0;
 const B_MIN_HITS = 500, B_MARGIN = 30, B_DEPTH = 2e-3, B_DEPTH_MARGIN = 150;
 const T_SIN_MIN = 0.97, T_MAX_FRAMES = 900;
@@ -775,8 +781,8 @@ try {
     }
     await diag("chops"); closeSession(S); S = null;
   }
-  // ======== BOOT 2 (the shipped path): range (R), head damage against the split (H).
-  if (run("R") || run("H")) {
+  // ======== BOOT 2 (the shipped path): range (R), a body chop near the neck (A), head damage against the split (H).
+  if (run("R") || run("H") || run("A")) {
     await boot("range"); await loadRules();
     // -------- R. past the cut-off a split is drawn closed, flesh and skull; it opens again only inside the reopen
     // distance, and does not flip between the two.
@@ -816,6 +822,29 @@ try {
       await visit("inside", true); await visit("beyond", false); await visit("band", false); await visit("reopened", true);
       const pose = await splitOf(z.id);
       check(!!pose && pose.thetaP === w.thetaP, `R: the pose keeps the split at every range (${pose ? pose.thetaP : null} rad): only the drawing closes`);
+    }
+    // -------- A. a body chop near the neck (scripts/axe-gate.mjs's own torso chop: from A_CHOP_D at standing height it
+    // lands on the upper chest, inside the flail's head region) is a BODY chop: the head stays closed, the chop is not
+    // counted toward the kill, and its cut is where it landed.
+    if (run("A")) {
+      const z = fresh(); const t = await evaluate(`__sdfGame.actorLimbCenter(${z.id}, "torso")`), f = await frontOf(z.id), fr = await frameOf(z.id);
+      await look(t, A_CHOP_D, f);
+      const n = await evaluate(`__sdfGame.axeChop(${z.id}, "H", "torso")`);
+      const dbg = await evaluate("__sdfGame.axe()"), point = dbg.last.points[0];
+      const rule = await evaluate(`(async () => { const K = await import("/src/lab/sdf-zombie/webgpu/flail-strike.ts"), X = await import("/src/lab/sdf-zombie/webgpu/axe-strike.ts");
+        return { neck: K.headNeck(__sdfGame.zombie(${z.id}).posed().prims).root, neckDist: K.FLAIL_HEAD.neckDist, credit: X.AXE_HIT.H.meterCredit }; })()`);
+      const toNeck = len(sub(point, rule.neck)), toSkull = len(sub(point, fr.centre));
+      const st = await stateOf(z.id), pose = await splitOf(z.id), ws = (await woundsOf(z.id)).filter((w) => w.shape === "cut"), m0 = await meterOf(z.id);
+      // The meter the seam reports is the actor's last step's: one thawed frame (the ring moves a frame with it).
+      await thaw(1);
+      const m1 = await meterOf(z.id), ph = await actorPhase(z.id);
+      out.a = { toNeckRootMm: +mm(toNeck), toSkullMm: +mm(toSkull), heads: dbg.last.heads, count: dbg.heads[z.id] ?? 0, split: st, cuts: ws.map((w) => ({ limb: w.limb, region: w.headRegion, offHitMm: +mm(len(sub(w.pos, point))), dirY: +Math.abs(w.dirWorld?.[1] ?? 0).toFixed(2) })), meter: [m0, m1] };
+      check(n === 1 && toNeck < rule.neckDist && toSkull > A_OFF_HEAD, `A: the chop lands on the upper chest, inside the flail's head region and off the head (${mm(toNeck)} mm from the neck root < ${mm(rule.neckDist)}; ${mm(toSkull)} mm from the skull centre > ${mm(A_OFF_HEAD)})`);
+      check(st === null && pose === null && dbg.last.heads.length === 0 && (dbg.heads[z.id] ?? 0) === 0 && ph === "standing",
+        `A: it is a body chop: the head stays closed and no head chop is counted (split ${J(st && st.preset)}, the pose's split ${pose ? "open" : null}, head chops ${dbg.heads[z.id] ?? 0})`);
+      check(ws.length === 1 && ws[0].limb === "torso" && ws[0].headRegion === null && len(sub(ws[0].pos, point)) <= A_LAND_MAX && Math.abs(ws[0].dirWorld?.[1] ?? 0) > 0.8,
+        `A: it stamps its own cut where it landed (${ws.length} cut(s): ${J(out.a.cuts)}; within ${mm(A_LAND_MAX)} mm of the hit, vertical)`);
+      check(Math.abs((m1 - m0) - rule.credit) < 1e-9, `A: it credits the body's collapse meter (${(m1 - m0).toFixed(3)}; a body overhead is ${rule.credit}, a head chop 0)`);
     }
     // -------- H. head damage and the split do not mix.
     if (run("H")) {

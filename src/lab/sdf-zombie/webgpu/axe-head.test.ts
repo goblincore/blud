@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/webgpu/axe-head.test.ts
 import { describe, expect, it } from 'vitest';
-import { AXE_HEAD, chopHead, chopOpenFrac, headChopCut, makeAxeHead } from './axe-head';
+import { AXE_HEAD, chopHead, chopOpenFrac, headChopCut, makeAxeHead, chopOnHead } from './axe-head';
 import { HEAD_SPLIT } from '../head-split';
 
 describe('head chops: cut, cut, ..., kill on chopsToKill', () => {
@@ -70,5 +70,12 @@ describe('what a head chop cuts (headChopCut)', () => {
     expect(headChopCut(false, -eps - 1e-6)).toBe('none');     // inside the closed head: a cut face, the gap's floor
     expect(headChopCut(false, -0.09)).toBe('none');
     expect(headChopCut(false, eps + 1e-6)).toBe('none');      // off the closed head altogether
+  });
+});
+
+describe('a chop is on the head when it lands on head flesh', () => {
+  it('the struck prim\'s limb decides: the head, and nothing else (no limb: not on the head)', () => {
+    expect(chopOnHead('head')).toBe(true);
+    for (const limb of ['torso', 'armL', 'armR', 'legL', 'legR', undefined] as const) expect(chopOnHead(limb), String(limb)).toBe(false);
   });
 });

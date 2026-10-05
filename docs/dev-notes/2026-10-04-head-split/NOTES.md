@@ -846,9 +846,10 @@ Part A is the feature's own gate and the groundwork the look pass needs. No look
 
 ### The gate: `scripts/head-split-gate.mjs`
 
-57 checks, five boots (the three chops, one side, later hits, face, skull and cost; range and head damage; bounds on
-the shipped path; bounds with the field alone; the turned zombie), about 2 min 20 s. Three runs in a row: **57 checks,
-0 failed** each, every check line (with its measured numbers) the same to the character.
+61 checks (57 as first built; scenario A came with the fix further down), five boots (the three chops, one side,
+later hits, face, skull and cost; range, the body chop and head damage; bounds on the shipped path; bounds with the
+field alone; the turned zombie), about 2 min 20 s. Three runs in a row as first built: **57 checks, 0 failed** each,
+every check line (with its measured numbers) the same to the character.
 
 **What it measures on.** The float march target (`__sdfGameDebug.readMarchTarget`), not screenshots, but for the
 skull's eyes (a mesh: a shown / hidden pair of one frame). Two facts about that target, both measured here:
@@ -913,6 +914,10 @@ player is pushed out of the body and held on the floor).
 | R band (12.03 m) still closed | 3 of 113 | <= 6 | no hysteresis: open, 21 |
 | R reopened (11.10 m) | 21 of 120 | >= 5 | - |
 | R the pose keeps the split | 0.55 rad | | |
+| A the torso chop lands in the flail's head region | 190.0 mm from the neck root, 376.2 mm from the skull centre | < 200; > 300 | - |
+| A a body chop: head closed, not counted | no split, 0 head chops | | the axe asking `isHeadRegion`: split `middle`, 1 head chop |
+| A its own cut where it landed | 1 torso cut, 0 mm from the hit, vertical | <= 50 mm | the same: 2 face cuts 512 mm away |
+| A the body's meter | +0.120 | exact | the same: 0 |
 | H slug into a split head | 1 head wound, no head damage state | | `burst` not declining: a burst state |
 | H flail hit on a split head | one crater of radius 0.06, no state | | `hit` not declining: six region craters, a state |
 | H the meter | +0.0195 (0.065 x 0.3) | exact | full credit: 0.065 |
@@ -939,7 +944,7 @@ the two quiet runs.
   the split: against the same head closed again with its cut face, 0 texels move. It is the face cut wound itself
   (half-length 0.151 m, kerf 12 mm, lip 1): its lips and ragged walls. O therefore compares the open head with the
   same head closed. For the look pass: `HEAD_SPLIT.faceCalibre.lip` and the cut's reach.
-- **A chop on the upper chest opens the head.** See the axe gate below.
+- **A chop on the upper chest opened the head.** See the axe gate below; fixed.
 
 Photos (`gate/`, contact sheets, half size): `S-open.png` (closed, frames 4, 8, 30, 60 of chop 1), `WK-widen-kill.png`
 (chop 2 from the wedge eye; the corpse 45 frames after the kill), `O-one-side.png`, `L-later-hits.png` (before and
@@ -956,15 +961,64 @@ half, head-kept (`actorWounds` now reports `headSlot`); and 45 frames on both st
 frames between chops. K: 10 of 10.
 
 - `scripts/cut-wound-gate.mjs`: **30 checks, 0 failed.**
-- `scripts/axe-gate.mjs`: **25 checks, 7 failed** (A x 4, D x 1, T x 2), all one cause, and not this task's: the
-  same seven fail on `2ad65481`. A, D and T chop the TORSO from 0.9 m at standing height; the chop lands on the upper
-  chest at y 1.245, 0.190 m from the neck root, inside `FLAIL_HEAD.neckDist` (0.2), so it is a head-region chop. In
-  part A that stamped its own cut where it landed, and the checks passed. Since B3 (`game-axe.ts hitActor`) a
-  head-region chop on a closed head opens the split and stamps the FACES instead: 2 cuts on the crown running along
-  the hinge axis, none at the hit (T: 45 cm from it). From 1.3 m the same chop lands 0.216 m from the neck root and
-  is a torso chop with one cut. **Left failing, for the owner to decide:** either a chest chop should not open the
-  head (the smallest change: open only on the magnet, a head prim or within `regionDist` of the head centre; a
-  neck-root-only hit keeps part A's own cut), or it should, and A / D / T must chop from where the hit is a body hit.
+- `scripts/axe-gate.mjs`: **25 checks, 7 failed** (A x 4, D x 1, T x 2) as part A left it, all one cause, and not
+  this task's: the same failures on `2ad65481`. A, D and T chop the TORSO from 0.9 m at standing height; the chop
+  lands on the upper chest at y 1.245, 0.190 m from the neck root, inside `FLAIL_HEAD.neckDist` (0.2), so the flail's
+  `isHeadRegion` called it a head-region chop. In part A that stamped its own cut where it landed, and the checks
+  passed. Since B3 (`game-axe.ts hitActor`) a head-region chop on a closed head opened the split and stamped the
+  FACES instead: 2 cuts on the crown, none at the hit (T: 45 cm from it). **Fixed below: 25 of 25, the gate's chops
+  unmoved.**
+
+### Only a chop on the head is a head chop (the fix, 2026-10-05)
+
+Decision (controller): a chest chop must not open the head. The axe no longer asks the flail's `isHeadRegion`
+(the head limb, or within 0.25 m of the head cluster's centre, or within 0.2 m of the neck root: right for a blunt
+weapon's head ladder). It asks `axe-head.ts chopOnHead`: **the prim nearest the un-warped hit is a head-limb prim.**
+The strike's head magnet has no clause of its own: its point is on the head's own field and is tested like any
+other.
+
+Measured on the posed zombie (skull centre y 1.619, largest semi-axis 0.137; head cluster centre y 1.583; neck root
+y 1.405):
+
+| Chop | Lands | Before | After |
+| --- | --- | --- | --- |
+| The axe gate's A / D / T: torso from 0.7 m / 0.9 m | y 1.287 / 1.245, 0.159 / 0.190 m from the neck root, torso prim | HEAD | body |
+| The same from 1.1 m / 1.3 m | y 1.224 / 1.213, 0.207 / 0.216 m from the neck root | body | body |
+| Level from 0.9 m in front, at y 1.25 / 1.30 / 1.35 / 1.40 (chest, collar) | 0.186 / 0.150 / 0.119 / 0.094 m from the neck root, torso prim | HEAD | body |
+| ... at y 1.44 (the neck's base) | y 1.439, 0.081 m from the root, 0.181 m from the skull centre, torso prim | HEAD | body |
+| ... at y 1.50 / 1.55 (the jaw line) | 0.158 / 0.138 m from the skull centre, head prim | HEAD | HEAD |
+| ... at y 1.60 / 1.65 / 1.70 (face, brow) | 0.124 / 0.111 / 0.116 m, head prim | HEAD | HEAD |
+| From the side / behind at y 1.36 and 1.40 (shoulder top, nape's base) | torso prim, 0.230-0.274 m from the skull centre | HEAD | body |
+| From behind at y 1.44 (magnet) | y 1.456, torso prim, 0.188 m | HEAD | body |
+| From the side at y 1.44 (magnet), 1.48, 1.52; from behind at 1.48, 1.52 | head prim, 0.119-0.157 m | HEAD | HEAD |
+| The head-split gate's S / K (front 0.6 m) and O (0.5 rad round) | head prim, 0.124 / 0.109 m | HEAD | HEAD |
+| The 84 chops on OPEN heads (4 splits x 3 stages x 7 eyes; cut faces, the gap, outer skin) | all 84 un-warp onto a head prim, at most 0.132 m | HEAD | HEAD |
+
+A dense sweep (twelve bearings, three eye heights, aims up the neck and head axis and 6 cm either side; about 2700
+hits) puts the line where the flesh changes: all 1714 hits on a head prim lie 0.090-0.168 m from the skull centre,
+the lowest at y 1.452 (4.7 cm above the neck root: the upper neck is head flesh); the 800 on a torso prim start at
+0.156 m. Of the magnet's hits, 163 were on a torso prim (the neck's base in the shoulders, 0.163-0.251 m): body
+chops now. The split's own hold radius (1.25 x 0.137 = 0.171 m) was the other candidate; it holds every head-prim hit
+but also 48 torso-prim hits at the nape, so the prim decides.
+
+**A chop the flail's test calls head-region and this does not is a body chop:** its own cut where it landed, the
+body's collapse credit (`AXE_HIT`: 0.12 overhead, 0.09 diagonal), reaction `blast`, and no step of the head chop
+counter.
+
+**Behaviour change, for every character.** Since part A, three chops anywhere in the flail's head region killed:
+that included the upper chest, the collar and the neck's base. Those are body chops now and kill through the
+collapse meter like any other (about 7 overheads or 9 diagonals), on the zombie, on a head the head damage leaf holds
+(it refuses the split and keeps part A for chops on its head flesh) and on characters with no split presets. Three
+chops on head flesh still kill all of them.
+
+Tests: `axe-head.test.ts` (the predicate), `game-head-split.test.ts` on the real zombie (the gate's chop: body, its
+cut at the hit, 0.12 credit, no count, and three of them do not kill; the level chops up the front; the 84 open-head
+chops still count). Gate scenario A (4 checks) fails 3 of them on the code before: split `middle`, 2 face cuts 51 cm
+from the hit, meter 0.
+
+All three gates on the final tree: `head-split-gate` **61 checks, 0 failed**, twice, the check lines identical (and
+identical to the runs before the fix but for the new scenario and one actor id); `axe-gate` **25 checks, 0 failed**;
+`cut-wound-gate` **30 checks, 0 failed**. No WGSL changed.
 
 ### One cut-face look block
 
