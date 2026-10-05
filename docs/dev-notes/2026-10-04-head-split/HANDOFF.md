@@ -70,32 +70,57 @@ The per-task texts used for dispatch are in the session scratchpad (`scratchpad/
     head's own floor is 0–23.
   - Cost: an open head is about +6 ms over closed at 0.6 m (B4: +3.5) and about +1 ms at 2 m. Closed is unchanged.
     A tighter tile bound was tried, gained 0.2 ms, and was reverted.
-- All measurements and photos: [`NOTES.md`](NOTES.md), `b4/`, `b5/`.
+- **B6 is done** (`1277bebe`, notes `23d91606`, fixes `791238ae`, `2ad65481`): shading rides the halves.
+  - `webgpu/march/body/blocks/post/split-hit.wgsl.ts` derives the post-hit split state once: `splitTheta`, `pS` (the
+    un-warped point), `splitQ`, `faceCentre` / `faceQuat`, `splitIn`, `cutFace`. Closed slots and piece 0 never run a
+    rotation, so closed bodies are bit-identical (march-hash unmoved).
+  - Readers at `pS`: the anchor, wound and char masks, the face sheet and eye glow, burn bone taps, wetness, motion.
+  - Analytic normals fall back to FD inside an open region (`ngReason` 8, analytic mode only).
+  - Cut faces shade as wound flesh; the gate is `smoothstep(cutLo, cutHi, hitField.x − hitSplitF)`, constants in
+    `SPLIT_SHADE` (`head-split.ts`).
+  - `mapBody` files re-fold wins per piece (`gRefoldBy`).
+- **B7 is done** (`b794b416`, notes `d3c5628e`, fixes `c1b820bb`): the skull mesh cracks, then splits.
+  - Pure rule in `head-split.ts` (`HEAD_SPLIT.skull`, `skullFollow`, `skullSplitOf`, `skullPieceAt`,
+    `skullWarpPoint`, `skullPieces`): the bone opens LESS than the flesh, staged by the spring's target. The follow
+    table is (0.55 → 0.1), (0.8 → 0.3), (1 → 0.85): a crack on chop 1, a wider crack on chop 2, split on the kill.
+  - `webgpu/skeleton-spike/mesh-split.ts` and `mesh-renderer.ts`: per-piece instance copies in separate split
+    batches, clipped at the un-rotated position with a fracture edge (one `jag` table shared by the WGSL and its TS
+    twin), two-sided with a dark inside and a cut-bone rim. Driven from `view.splitDrawn`. Closed heads draw as
+    before.
+  - Seams: `__sdfGame.skullSplit(...)` (look and follow table), `meshSkeletonShow(...)`.
+- **Owner feedback (2026-10-05, on the B6 photos):** "looking pretty good"; the skull needs cracked/split states
+  (B7 is the answer; photos in `b7/` for the owner's choice); the open-head cost (+6 ms at 0.6 m) "is a lot but we
+  can figure out how to optimize later".
+- All measurements and photos: [`NOTES.md`](NOTES.md), `b4/` … `b7/`.
+- **Testing rule added:** after any WGSL change run the full tree,
+  `npx vitest run src/lab/sdf-zombie --exclude '**/cut-wound.test.ts'` (510 files, 3–5 minutes). Targeted sets missed
+  a red cross-cutting gate twice (`entrails-gates`, `normal-gradient-probe`).
 
-## For B6 and later (from B2–B5 and their reviews)
+## For B8 and later (from B2–B7 and their reviews)
 
-- **B6:** copy `gHitPiece` / `gHitSplitF` into locals in the march loop (`trace.wgsl.ts` ~136); `calcNormal` and the
-  probes overwrite them.
-- **B6:** `hitField.w` / `.z` are the winning piece's uncapped values, so a cut face reads as deep tissue
-  (`tissue.wgsl.ts` ~20). Use `gHitSplitF` to shade the cut faces as a cross-section by depth (skin, bone ring,
-  meat) rather than relying on the face cuts' masks alone.
-- **B6:** `gRefoldWin` → `hitRefold` (`trace.wgsl.ts` ~138) and `gWoundOwners` come from whichever piece ran last,
-  not the union winner. The shell noise (`trace.wgsl.ts` ~147) calls `restPoint` at the world point.
-  `normal-gradient.wgsl.ts` ~462 reads `ROW_GROUP_BOUNDS` at the world point.
-- **B7:** drive the skull pieces from `view.splitDrawn`, not the pose, or the skull opens past 12.7 m while the
-  flesh is drawn closed.
+- **B8 groundwork:** the cut-face look is spread over five blocks; move it into one look block with `cutDepth`
+  exported from `split-hit` before tuning anything. A bone ring on the flesh cut faces belongs there (`applyBones`
+  at `pS`), not in the skull mesh (the march's cut face is coplanar with the skull's clip).
 - **B8:** `scripts/axe-gate.mjs` check K expects at least 3 head-tagged cuts on the corpse; a centred split chopped
-  through the gap leaves 2. Restate it.
-- **B8 look:** the face cuts are untuned (kerf 0.012, depth 0.12, inset 0.006 in `HEAD_SPLIT.faceCut` /
-  `faceCalibre`). A flail hit on a split head takes the plain crater with full meter credit. Loose pixels at the
-  slab tip and speckle on the face preset's crown remain.
-- **Still closed-head:** the shadow hull, `bodyInSight` (`game-main.ts` ~7311) and motion vectors.
+  through the gap leaves the 2 faces. Restate it. In gates, let the spring settle between chops.
+- **B8 look, known wrong:** after the kill the skull is hollow and the gap is empty (the room shows through the V);
+  a whole brain mesh riding piece 0 is the cheapest structural answer. The fracture teeth read as a regular saw up
+  close. An off-centre split halves an eyeball. The face cuts are untuned (`HEAD_SPLIT.faceCut` / `faceCalibre`).
+  Loose pixels at the slab tip and speckle on the face preset's crown. A flail hit on a split head takes the plain
+  crater with full meter credit.
+- **Bone residuals (accepted):** a 7–8% dip on the swing back under the target; a chop landing above the old target
+  steps the stage at once (seam only: play's minimum strike gap is 0.6 s). A monotone stage in `SplitState` would
+  remove both.
+- **Still closed-head:** the shadow hull, `bodyInSight` (`game-main.ts` ~7311) and motion vectors. The top vertebra
+  is left unsplit on purpose.
+- **`gRefoldBy` is indexed by piece, not slot:** in a crowd pixel another slot's re-fold win can leak into an open
+  slot's normal hint. A separate follow-up (the fix moves crowd pixels).
+- **Costs carried as debt** (the owner: optimise later): open head about +6 to +6.7 ms at 0.6 m, +1.4 ms at 2 m;
+  cold shader compile +4.5 s from B4; closed bodies +0.1–0.3 ms from B6, unattributed.
 - **Known limits:** a pellet or slug crater on a cut face sits on the old plane, so it shows on both faces. A rod sweep
-  across the gap is un-warped as one segment by its midpoint's piece. `sdBody` costs about 2.7× inside the region
-  (radius ~0.32 m). A forced re-split with fewer sides leaves the old face wound (seam only). Temporal start uses
-  last frame's depth with no split motion, so a thin slab swinging into a pixel may start late for one frame
-  (unverified).
-- **House rule added:** never run `git checkout -- .`, `git restore .`, `git reset --hard` or `git clean` here; an
+  across the gap is un-warped as one segment by its midpoint's piece. `sdBody` costs about 2.7× inside the region.
+  A forced re-split with fewer sides leaves the old face wound (seam only). A baked split head has no answer yet.
+- **House rule:** never run `git checkout -- .`, `git restore .`, `git reset --hard` or `git clean` here; an
   implementer wiped its own uncommitted work that way.
 
 ## The cut "excess" pass: landed as built
@@ -126,10 +151,7 @@ The before/after comparisons are in `compare/`. The raw photos are untracked in 
 
 1. ~~The cut excess pass~~, ~~B2~~, ~~B3~~: done (above).
 4. ~~B4~~, ~~B5~~: done (above).
-6. **B6: post-hit shading at the un-warped point.**
-   - `restPoint`, `woundMask`/`charMask`, the face block and the burn taps use it.
-   - Analytic normals fall back to FD in the split.
-7. **B7: the skull mesh.** Per-piece instances plus a clip plane.
+6. ~~B6~~, ~~B7~~: done (above).
 8. **B8: the gate** (`scripts/head-split-gate.mjs`: S/O/W/K/L/F/T/C) and the look pass. The owner wants it EXCESSIVE.
 9. **B9: docs.**
 
