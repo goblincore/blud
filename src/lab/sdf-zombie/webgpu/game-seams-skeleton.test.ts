@@ -74,3 +74,16 @@ describe('__sdfGame.meshSkeletonShow: draw or hide the bone meshes and the eyes'
     expect(make(false).seams.meshSkeletonShow({ bones: false })).toBeNull();
   });
 });
+
+describe('__sdfGame.skullDrawn: an actor\'s split skull copies among this frame\'s bone draws', () => {
+  it('lists the copies by piece (bone or eye) and counts the actor\'s draws; a closed head has none; null without the renderer or the actor', () => {
+    const a = { id: 7 }, b = { id: 8 };
+    const draw = (owner: unknown, eye: boolean, piece: 0 | 1 | 2 | null) => ({ owner, eye, piece });
+    const drawn = [draw(a, false, null), draw(a, false, 0), draw(a, false, 1), draw(a, false, 2), draw(a, true, 1), draw(a, true, 2), draw(b, false, null), draw(b, true, null)];
+    const seams = createSkeletonSeams({ world: { actors: [a, b] }, render: { segMeshRenderer: { drawn } } } as unknown as GameContext);
+    expect(seams.skullDrawn(7)).toEqual({ draws: 6, copies: [{ eye: false, piece: 0 }, { eye: false, piece: 1 }, { eye: false, piece: 2 }, { eye: true, piece: 1 }, { eye: true, piece: 2 }] });
+    expect(seams.skullDrawn(8)).toEqual({ draws: 2, copies: [] });
+    expect(seams.skullDrawn(9)).toBeNull();
+    expect(createSkeletonSeams({ world: { actors: [a] }, render: { segMeshRenderer: null } } as unknown as GameContext).skullDrawn(7)).toBeNull();
+  });
+});

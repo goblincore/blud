@@ -101,6 +101,15 @@ export function createSkeletonSeams(ctx: GameContext) {
       }
       return { ...show };
     },
+    /** skeleton=mesh diagnostics: among this frame's instanced bone draws, actor `id`'s copies of a split head (bone
+     *  or eye, and the piece each is clipped to: 0 the rest, 1 the + half, 2 the - half), and how many draws it has in
+     *  all. A closed head has no copies: it is drawn as it always was. null without the mesh skeleton or the actor. */
+    skullDrawn: (id: number) => {
+      const a = ctx.world.actors.find(q => q.id === id), r = ctx.render.segMeshRenderer;
+      if (!a || !r) return null;
+      const mine = r.drawn.filter(d => d.owner === a);
+      return { draws: mine.length, copies: mine.filter(d => d.piece !== null).map(d => ({ eye: d.eye, piece: d.piece })) };
+    },
     meshEyeState: (bodyId?: number) => { const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId); return a && ctx.render.segMeshRenderer ? ctx.render.segMeshRenderer.eyeState(a) : null; },
     /** Cold-start task 1: how many per-character body builds the memo actually
      *  ran (vs served from cache) and their cumulative CPU time. */
