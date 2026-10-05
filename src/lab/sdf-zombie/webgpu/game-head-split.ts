@@ -14,8 +14,9 @@
 // a stepping actor's pose does not lag the spring. A FROZEN actor (?frozen=1, the gates) never steps; the tick
 // re-poses it itself whenever the angle moved.
 //
-// THE CUT FACES. Opening stamps one cut per opened half along the plane (head-split.ts splitFaceSegs → cut-wound.ts
-// stampCut, on the closed head, where wounds live), tagged headSlot 'keep' so they outlive the wound ring's cap, and
+// THE FACE CUTS. Opening stamps one cut per opened half along the plane over the crown (head-split.ts splitFaceSegs →
+// cut-wound.ts stampCut, on the closed head, where wounds live): a notch that rags the scalp's edge (the faces of the
+// halves are the piece caps, shaded by the march's cut-face block). Tagged headSlot 'keep' so they outlive the wound ring's cap, and
 // headRegion 'split+' / 'split-' so a re-stamp replaces its own face. They are the only head-kept wounds a split head
 // has (at most 2 of damage.ts MAX_HEAD_WOUNDS): the other users of those slots are head damage's craters, which a
 // split head never has (below). open() hands them to the caller to blast with its chop (one blast, one re-pose);

@@ -74,11 +74,23 @@ export const HEAD_SPLIT = {
   /** A hit on an open head is on the OUTER skin when the closed head's field there is within this of zero; deeper, it
    *  is on a cut face (or the hinge-plane face), which un-warps to the inside of the closed head. */
   skinEps: 0.015,
-  /** The cut faces (splitFaceSegs): each segment sits `inset` into its own half off the plane and runs `lenFrac` x the
+  /** The face cuts (splitFaceSegs): each segment sits `inset` into its own half off the plane and runs `lenFrac` x the
    *  frame radius either way along the hinge axis; `faceCalibre` is the cut stamped along it (cut-wound.ts
-   *  CutCalibre). */
-  faceCut: { inset: 0.006, lenFrac: 1.1 },
-  faceCalibre: { depth: 0.12, kerf: 0.012, lip: 1 },
+   *  CutCalibre).
+   *  THEIR JOB IS THE CROWN'S EDGE ONLY (look pass, 2026-10-05): a narrow, shallow notch along the plane over the top
+   *  of the head, which rags the scalp where the plane meets it, bloodies a band of skin either side and carries each
+   *  half's blood emitter. The FACES of the halves are the piece caps, flat, drawn as a section by the cut-face look
+   *  block (SPLIT_SHADE). A cut's slot is measured down from its anchor's plane, so it cannot follow the head's
+   *  outline: a slot deep enough to reach the brow is a wedge through the whole upper head.
+   *  Before (B3 to B8 part A): inset 0.006, depth 0.12, kerf 0.012, lip 1. That wedge, 12 mm a side at the scalp and
+   *  12 cm deep, WAS the upper 12 cm of each moved half's face (a wound wall 6 to 18 mm inside the plane, so no cap
+   *  and no section there), left a wafer of flesh between the plane and its lower half, and carved and lipped the
+   *  half that did not move (824 of 4823 still-half texels moved, by up to 8.2 mm). To go back: those four values.
+   *  `inset` only has to put each cut's anchor on its own half (the emitter rides it); the notch straddles the plane,
+   *  so both edges of the cut are ragged alike and no wafer is left. `kerf` x 1.75 (its jag and pinch) stays under a
+   *  centimetre: that is how far the notch bites into a half that does not move. */
+  faceCut: { inset: 0.001, lenFrac: 1.1 },
+  faceCalibre: { depth: 0.015, kerf: 0.005, lip: 0.3 },
   /** The angle spring (head-deform.ts BURST_DEFORM's shape). `kick` scales the target into the initial rate. */
   hz: 7, zeta: 0.35, kick: 6, restA: 1e-4, restV: 1e-2,
   /** THE SKULL (the bone mesh; skullSplitOf below, drawn by webgpu/skeleton-spike/mesh-renderer.ts). The bone opens
@@ -444,10 +456,10 @@ export function splitNearReach(
   return peak * k;
 }
 
-/** THE CUT FACES: one cut segment (cut-wound.ts CutSeg, world space, on the CLOSED head) per half that opens. Each
+/** THE FACE CUTS: one cut segment (cut-wound.ts CutSeg, world space, on the CLOSED head) per half that opens. Each
  *  runs along the hinge axis over the top of the head, HEAD_SPLIT.faceCut.inset into its own half off the plane (so
  *  the cut belongs to that half and turns with it), seen from above along -up: stampCut finds the scalp under its
- *  midpoint and cuts down from there, so the face of the half reads as cut flesh from the scalp inward. */
+ *  midpoint and notches it from there (HEAD_SPLIT.faceCalibre: the crown's ragged edge, not the face of the half). */
 export function splitFaceSegs(st: SplitState, f: HeadFrame): { side: 1 | -1; a: Vec3; b: Vec3; view: Vec3 }[] {
   if (st.preset === null) return [];
   const c = HEAD_SPLIT.faceCut;

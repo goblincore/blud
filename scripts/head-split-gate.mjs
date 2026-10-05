@@ -75,8 +75,9 @@ const FLOOR_COLOUR_MAX = 1e-4;
 /** The largest clip-depth step between them. Measured 0; a millimetre at 0.6 m is 2.8e-4. */
 const FLOOR_DEPTH_MAX = 1e-6;
 // ---- THE GAP (gapLine / gapRead / wedgeEye).
-/** The line's height above the head centre (m): the face cuts carve their halves from the scalp down to 1.7 cm above
- *  it, so the line runs under them, across clean cut faces. */
+/** The line's height above the head centre (m): the face cuts notch the crown (to 1.5 cm under the scalp; until the
+ *  look pass's retune they carved their halves down to 1.7 cm above the centre), so the line runs across clean cut
+ *  faces. */
 const GAP_LEVER = 0;
 /** The line's sampling step (m) and half length (samples). */
 const GAP_STEP = 0.001;
@@ -92,9 +93,20 @@ const GAP_RISE = 0.15;
  *  measure reads short by up to 2 x 3.3 + 2 x 2.2 = 11 mm and never long by more than a texel. */
 const GAP_UNDER = 0.011;
 const GAP_OVER = 0.003;
-/** AT REST, the same (m). Measured -0.4 (S), -1.5 (W), -0.6 (K), -0.4 mm (T). */
+/** AT REST, the same (m): short by at most GAP_REST_UNDER, long by at most gapRestOver(the opening angle).
+ *  THE LONG SIDE IS THE INSTRUMENT'S OWN, AND IT GROWS WITH THE ANGLE. A point of the line just inside a half still
+ *  counts as seen while that half's face lies less than GAP_FRONT in front of it along the sight line. The eye is in
+ *  the wedge, so a sight line meets a face at no more than the opening angle theta: the run reads long by up to
+ *  GAP_FRONT x sin(theta) a side, and by a texel (2.2 mm at the wedge eye; GAP_REST_OVER holds it and the run's 1 mm
+ *  step). Restated with the look pass's face-cut retune (2026-10-05). Until then the faces at the line lay inside the
+ *  face cuts' reach, where the walk accepts a footprint early: on the texels that were face before and after, the
+ *  old surface is nearer the eye by a median 2.5 mm and nowhere farther (0.6 m, three-quarter view), and that fat hid
+ *  the allowance. Measured then: -0.4 (S), -1.5 (W), -0.6 (K), -0.4 mm (T), against one fixed +2 mm. Measured now:
+ *  -0.4 (S), +2.5 (W, allowed +7.3), +7.4 (K, allowed +8.2), +2.6 mm (T, allowed +6.0). The short side, the one a
+ *  halved angle trips (-12.4 mm), is unchanged. */
 const GAP_REST_UNDER = 0.004;
-const GAP_REST_OVER = 0.002;
+const GAP_REST_OVER = 0.003;
+const gapRestOver = (theta) => GAP_REST_OVER + 2 * GAP_FRONT * Math.sin(theta);
 /** "At rest" for the settle frame (m): one step of the measure, three texels at the wedge eye. */
 const GAP_SETTLED = 0.0065;
 // ---- S. The expectations come from the angles the CPU's spring took on the same frames (s.frames), so a retuned
@@ -165,9 +177,13 @@ const L_DENT = 0.003;
 const L_POS_TOL = 0.001;
 /** Mask and crater must each have this many texels. */
 const L_MIN_TEXELS = 15;
-/** The mask's centroid against the crater's centroid (texels). Measured 1.14 and 1.20 (the rod cut), 1.03 and 0.51
- *  (the pellet) on two zombies of the ring; with the masks read at the world point 3.08 and 9.70. */
-const L_CENTROID_TX = 1.5;
+/** The mask's centroid against the crater's centroid (texels). Measured 1.51 (the rod cut) and 0.77 (the pellet); with
+ *  the masks read at the world point 3.08 and 9.70 (measured before the retune below).
+ *  Restated 1.5 -> 2.0 with the look pass's face-cut retune (2026-10-05): the rod cut is on the brow, which lay inside
+ *  the old face cut's reach (its mask band and lip were under the cut: 1.14 and 1.20 then, 1.03 and 0.51 the pellet,
+ *  on two zombies of the ring). The face cut is now a notch at the crown, and the rod cut stands on clean skin: its
+ *  crater 79 -> 71 texels, its mask 172 -> 177, their centroids 1.20 -> 1.51 apart. */
+const L_CENTROID_TX = 2.0;
 /** The share of the crater's texels the mask covers. Measured 0.62 to 0.67 (the rod cut: its lips are mask, not
  *  crater), 0.96 to 0.98 (the pellet). */
 const L_CRATER_MASKED = 0.5;
@@ -996,7 +1012,7 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
       check(settleOf(gaps) <= settleOf(cpu) + S_SETTLE_FRAMES && st1.angle === st1.target && st1.vel === 0, `S: it settles: within ${mm(GAP_SETTLED)} mm of rest from frame ${settleOf(gaps)} on (predicted ${settleOf(cpu)}, +${S_SETTLE_FRAMES}), the spring exactly on its target at frame ${SPRING_FRAMES} (angle ${st1.angle.toFixed(4)}, rate ${st1.vel})`);
       const off = s.frames.map((q, i) => q.gap - cpu[i]);
       check(Math.min(...off) >= -GAP_UNDER && Math.max(...off) <= GAP_OVER, `S: the gap is the CPU split's on every frame of the spring: ${mm(Math.min(...off))} to ${mm(Math.max(...off))} mm off over the ${SPRING_FRAMES} frames (allowed -${mm(GAP_UNDER)} to +${mm(GAP_OVER)})`);
-      check(rest - cpuRest >= -GAP_REST_UNDER && rest - cpuRest <= GAP_REST_OVER, `S: at rest it is ${mm(rest)} mm against ${mm(cpuRest)} mm predicted (${mm(rest - cpuRest)} mm off; allowed -${mm(GAP_REST_UNDER)} to +${mm(GAP_REST_OVER)})`);
+      check(rest - cpuRest >= -GAP_REST_UNDER && rest - cpuRest <= gapRestOver(t1), `S: at rest it is ${mm(rest)} mm against ${mm(cpuRest)} mm predicted (${mm(rest - cpuRest)} mm off; allowed -${mm(GAP_REST_UNDER)} to +${mm(gapRestOver(t1))})`);
       // The skull at this stage, three ways: the rule's angles and the copies, the copies' turn as drawn, and the eyes on screen.
       const sk1 = await skullOf(z.id), bd1 = await boneDrawn(z.id), lm1 = run("M") ? await boneLandmark(z.id, front) : null;
       const shot1 = await photo(front);
@@ -1015,7 +1031,7 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
         check(w.n === 1 && heads === 2 && w.state?.preset === "middle" && w.state.sides === 0 && Math.abs(w.state.target - t2) < 1e-12 && w.state.angle === w.state.target,
           `W: chop 2 is counted and springs the same split on to its second angle (count ${heads}, target ${w.state?.target.toFixed(4)} rad, expected ${t2.toFixed(4)}; settled ${w.state?.angle === w.state?.target})`);
         check(rest2 - before >= W_WIDER_SHARE * (pred2 - predBefore), `W: the gap is wider than after chop 1: ${mm(before)} -> ${mm(rest2)} mm (+${mm(rest2 - before)}; predicted +${mm(pred2 - predBefore)}, at least ${W_WIDER_SHARE} of it)`);
-        check(rest2 - pred2 >= -GAP_REST_UNDER && rest2 - pred2 <= GAP_REST_OVER, `W: at rest it is ${mm(rest2)} mm against ${mm(pred2)} mm predicted (${mm(rest2 - pred2)} mm off; allowed -${mm(GAP_REST_UNDER)} to +${mm(GAP_REST_OVER)})`);
+        check(rest2 - pred2 >= -GAP_REST_UNDER && rest2 - pred2 <= gapRestOver(t2), `W: at rest it is ${mm(rest2)} mm against ${mm(pred2)} mm predicted (${mm(rest2 - pred2)} mm off; allowed -${mm(GAP_REST_UNDER)} to +${mm(gapRestOver(t2))})`);
         sk2 = await skullOf(z.id); bd2 = await boneDrawn(z.id); lm2 = run("M") ? await boneLandmark(z.id, [eyeW, line.G0]) : null;
         wk.push({ img: await photo([eyeW, line.G0]), c: await toPx(line.G0) });
         await thaw(3);
@@ -1041,7 +1057,7 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
         const shotK = await photo([eyeK, lineK.G0]), pxK = await toPx(lineK.G0);
         sk3 = await skullOf(z.id); bd3 = await boneDrawn(z.id);
         out.k = { phase: ph3, later: phL, gapMm: +mm(gapK), predictedMm: +mm(predK), eye: eyeK.map((v) => +v.toFixed(3)), G0: lineK.G0.map((v) => +v.toFixed(3)) };
-        check(gapK - predK >= -GAP_REST_UNDER && gapK - predK <= GAP_REST_OVER, `K: the gap measured on the corpse is the full split's: ${mm(gapK)} mm against ${mm(predK)} mm predicted (${mm(gapK - predK)} mm off; allowed -${mm(GAP_REST_UNDER)} to +${mm(GAP_REST_OVER)}; the eye at height ${eyeK[1].toFixed(2)} m)`);
+        check(gapK - predK >= -GAP_REST_UNDER && gapK - predK <= gapRestOver(full), `K: the gap measured on the corpse is the full split's: ${mm(gapK)} mm against ${mm(predK)} mm predicted (${mm(gapK - predK)} mm off; allowed -${mm(GAP_REST_UNDER)} to +${mm(gapRestOver(full))}; the eye at height ${eyeK[1].toFixed(2)} m)`);
         const faces = (await woundsOf(z.id)).filter((w) => w.headRegion === "split+" || w.headRegion === "split-");
         check(faces.length === 2 && faces.every((w) => w.shape === "cut"), `K: the corpse keeps the two cut faces (${J(faces.map((w) => w.headRegion))})`);
         wk.push({ img: shotK, c: pxK ?? px0 });
@@ -1291,7 +1307,7 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
     check(Math.abs(Math.sin(yawNow)) >= T_SIN_MIN, `T: the body is turned (yaw ${out.t.yawDeg} deg, |sin| ${Math.abs(Math.sin(yawNow)).toFixed(2)} >= ${T_SIN_MIN}; ${frames} walking frames)`);
     check(s.n === 1 && s.state?.preset === "middle" && s.state.sides === 0 && s.state.angle === t1 && !!w && dot(w.n, line.n) > 1 - 1e-9 && len(sub(lineW.G0, line.G0)) < 1e-9,
       `T: a chop from its front opens a centred middle split on the turned head's own plane (${J(s.state && { preset: s.state.preset, sides: s.state.sides })}; plane normal . head right ${out.t.planeDotFrame}; the gap lines ${len(sub(lineW.G0, line.G0)).toExponential(1)} m apart)`);
-    check(closedGap === 0 && rest - pred >= -GAP_REST_UNDER && rest - pred <= GAP_REST_OVER, `T: the gap on the turned head is the CPU split's: ${mm(rest)} mm against ${mm(pred)} mm predicted (${mm(rest - pred)} mm off; allowed -${mm(GAP_REST_UNDER)} to +${mm(GAP_REST_OVER)}; closed ${mm(closedGap)} mm)`);
+    check(closedGap === 0 && rest - pred >= -GAP_REST_UNDER && rest - pred <= gapRestOver(t1), `T: the gap on the turned head is the CPU split's: ${mm(rest)} mm against ${mm(pred)} mm predicted (${mm(rest - pred)} mm off; allowed -${mm(GAP_REST_UNDER)} to +${mm(gapRestOver(t1))}; closed ${mm(closedGap)} mm)`);
     sheet("T-turned", [{ img: shot0, c: px0 }, { img: s.photos[0], c: px0 }]);
     await diag("turned");
   } catch (e) { await threw("boot 5 (T)", e); } finally { if (S) { closeSession(S); S = null; } }

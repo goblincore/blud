@@ -538,6 +538,10 @@ describe('(l) the cut faces on the real head', () => {
     expect(2 * half).toBeGreaterThanOrEqual(CUT.minLen);
     expect(2 * half).toBeLessThanOrEqual(CUT.maxLen);
     expect(HEAD_SPLIT.faceCut.inset).toBeLessThan(c.kerf);          // each face's slot reaches the plane
+    // A half that does not move is notched under a centimetre from the plane (the jag and the pinch widen the kerf
+    // by up to 0.75 mid-slot), and its anchor sits on its own half.
+    expect(c.kerf * (1 + CUT_SHADE.jagAmp + CUT_SHADE.pinchAmp) - HEAD_SPLIT.faceCut.inset).toBeLessThan(0.01);
+    expect(HEAD_SPLIT.faceCut.inset).toBeGreaterThan(0);
   });
   it('each face is stamped at the scalp over the crown, on its own half, running along the hinge axis into the head', () => {
     for (const [preset, sides, offset] of [['middle', 0, 0], ['middle', 1, 0.03], ['face', 1, 0.02]] as const) {
@@ -556,7 +560,9 @@ describe('(l) the cut faces on the real head', () => {
         expect(Math.abs(dot(along, w.a))).toBeGreaterThan(0.95);
         const inward = normalize(woundDirToWorld(CLOSED.prims, cut, cut.carveN!, 0));
         expect(dot(inward, cross(w.n, w.a))).toBeLessThan(-0.9);                             // down into the head
-        expect(cut.carveDepth).toBeGreaterThan(0.08);
+        // The whole calibre depth: a notch at the crown (the head is far thicker than it), not a slot through the head.
+        expect(cut.carveDepth).toBeCloseTo(HEAD_SPLIT.faceCalibre.depth, 9);
+        expect(cut.carveDepth).toBeLessThan(0.05);
         // It belongs to the half it is on: it turns with it.
         expect(dist(woundEmitAnchorAndNormal(CLOSED.prims, cut, 0, w).anchor, at)).toBeGreaterThan(0.03);
       }

@@ -1147,3 +1147,83 @@ before, with the boot pinned: 0 of 120 000 texels differ in all six captures; co
 | Blood on open | `game-axe.ts` (`deps.bleed` per face) and the split leaf's `open()` |
 | Fracture teeth | `__sdfGame.skullSplit({ zigAmp, zigLen, chipAmp, chipLen, wobble… })`, `HEAD_SPLIT.skull.jag` |
 | The face cuts | `HEAD_SPLIT.faceCut` / `faceCalibre` (the lip marks the whole crown: above) |
+
+## Look pass, group 1: the flesh cut faces (B8 part B, first half; 2026-10-05)
+
+Four look changes, one commit each, each with an off setting and a before / after sheet in [`look/`](look/). They
+were built in the order **reach, bone ring, layers and cavity, wetness**, not the brief's (ring, layers, reach,
+wetness), for a measured reason: with the face cuts as part A left them, the look block's cut-face gate held only
+10 430 of the faces' texels over twenty views, because the upper 12 cm of every moved half's face was not a cap at all
+but the face cut's own slot wall. A ring written there changed 21% of those texels by a mean 0.02 and could not be
+seen (`look1/s1-zoom.jpg` in the scratchpad). So the reach came first; **the ring and the layers need it**: with the
+reach turned back, most of each face is wound wall again and shows neither.
+
+How every number below was taken: `scripts/head-split-gate.mjs`'s boot pins and cameras (front 0.6 m, three-quarter
+0.6 m, above-behind, a raised view of the rim, front 2 m), the float march target read twice per capture (floor 0),
+one boot per variant. A variant is the live constants changed as the page loads `head-split.ts` (the response is
+rewritten in flight by the capture script; no file is touched), so "before" is each step's own off setting on the
+same build. **The off settings are exact:** each step's off capture equals the build before it in all 120 000 texels
+of every view (0 differ). The cut-face mask is the look block's own gate: a third boot paints the whole gate green
+through `SPLIT_SHADE.bone` (`lo` -1, `hi` 10), and the mask is where that differs from the off boot. On the march
+target a texel is 2.3 mm at 0.6 m (0.43 texels a millimetre) and 7.5 mm at 2 m (0.13).
+
+### Step: the face cuts' reach (`look/01-face-cut-reach.jpg`; the brief's step 3)
+
+**What the face cuts were.** A cut's slot is measured down from its anchor's tangent plane (`cut-wound.ts cutCarve`:
+`s = max(depth below the skin, depth below the plane)`), tapering to nothing at its depth. Stamped at the crown with
+depth 12 cm, kerf 12 mm and inset 6 mm, each was a wedge through the upper head: 12 mm a side at the scalp, closing
+1.7 cm above the head centre. So (1) the upper 12 cm of each moved half's face was the slot's far wall, 18 to 6 mm
+inside the plane: a wound wall, jagged, shaded as a wound, no cap; (2) between the plane and the lower half of the
+wedge a wafer of flesh was left, 0 to 6 mm thick; (3) the wedge and its lips reached 6 mm and more into a half that
+does not move. The cut model cannot follow the head's outline: a slot deep enough to reach the brow is that wedge.
+
+**So the face cuts cannot do both jobs** (rag the whole edge, leave the still half alone), and they no longer try.
+They are a notch at the crown: it rags the scalp where the plane meets it, bloodies a band of skin either side, and
+carries each half's blood emitter and its head-kept wound. The faces of the halves are the piece caps, flat, and
+the look block draws them. The torn edge round the rest of the outline is the look block's to draw (the layers step).
+
+| | Before | After |
+| --- | --- | --- |
+| `HEAD_SPLIT.faceCut` | `inset` 0.006, `lenFrac` 1.1 | `inset` 0.001, `lenFrac` 1.1 |
+| `HEAD_SPLIT.faceCalibre` | `depth` 0.12, `kerf` 0.012, `lip` 1 | `depth` 0.015, `kerf` 0.005, `lip` 0.3 |
+
+**To turn this off:** the four "before" values (recorded in the constant's comment too).
+
+| Measure | Before | After |
+| --- | --- | --- |
+| The gate's O, the face cut alone on the still half (closed head with its face cut against the untouched head; texels moved over 1 mm, largest move, texels whose colour changed) | 775 of 4520, 8.2 mm, 463 | **0 of 4520, 0 mm, 0** |
+| The same on a forced one-sided split, 4 cm off centre | 824 of 4823, 8.2 mm, 153 | 0 of 4823, 0 mm, 2 |
+| ... with the notch 2 / 2.5 / 3 cm deep (kerf 5 mm) | | 3 / 21 / 44 texels, 4.1 mm: the notch's own front end crossing the 1 cm line. Kerf 4 or 5 mm and lip 0 or 0.3 do not change it; 1.5 cm clears it |
+| Cut-face texels (the look block's gate) over the same twenty views (three presets, three stages of `middle` both; front, three-quarter, above-behind, front 2 m) | 10 430 | 17 270 (31 167 with the five raised views) |
+| The `face` preset's crown from the front at 0.6 m: texels over 0.08 luma off their 3 x 3 median | 111 of 1798 | 47 of 1962 |
+| Loose pixels at the peeled slab's tip | by eye (the sheet, row 4): a ragged dark fringe | gone; hit texels with under 3 hit neighbours 3 -> 1, which is no measure (the fringe was clumps, not single texels) |
+
+**My read of the sheet.** At 0.6 m the faces go from hollowed, streaky troughs with a thick pale rim to flat cut
+faces; the closed-again head has no gash across its crown; the `face` preset's speckled band is gone. What is wrong:
+the faces are now plain flat red (the next two steps), and the opened edge is a clean line everywhere but the crown,
+where the notch at 1.5 cm is small. At 2 m this step alone is no improvement: the old wedge showed more bright red
+from the front. It is ON because the still half's numbers are the brief's own target and the ring and the layers
+need caps to be drawn on.
+
+**Gate expectations restated in this commit** (`scripts/head-split-gate.mjs`), neither derived from a constant:
+
+- **`L_CENTROID_TX` 1.5 -> 2.0.** The rod cut sits on the brow, inside the old face cut's reach; it now stands on
+  clean skin: crater 79 -> 71 texels, mask 172 -> 177, centroids 1.20 -> **1.51** texels apart (the pellet 0.51 ->
+  0.77). "Masks read at the world point" reads 3.08 (measured before the retune).
+- **The gap at rest: `+2 mm` -> `gapRestOver(theta)` = 3 mm + 2 x `GAP_FRONT` x sin(theta).** The gap read 2.5 (W),
+  7.4 (K) and 2.6 mm (T) LONG where it had read 1.5, 0.6 and 0.4 short; S is unchanged (-0.4), frame for frame. The
+  split did not change: same state, same wounds, same hits (probe: `look1/tail-swk.mjs`). The instrument did. A
+  point of the line just inside a half counts as seen while the face is under `GAP_FRONT` (5 mm) in front of it
+  along the sight line, and a sight line in the wedge meets a face at no more than the opening angle, so the run
+  reads long by up to 5 mm x sin(theta) a side plus a texel: 5.2, 6.5 and 7.4 mm at the three chops. Until now the
+  faces at the line lay inside the face cuts' reach, where the walk accepts a footprint early and draws them fat:
+  on texels that are cap before and after, the old surface is nearer the eye by a median 2.5 mm and nowhere farther
+  (one side, three-quarter, 2154 texels), and that fat hid the allowance. The short side, which a halved angle
+  trips (-12.4 mm), is unchanged. What the long side still catches: an angle about 15% too wide at chop 1 (it was
+  about 7%).
+
+Unit tests restated: `head-split-cpu.test.ts` (the face cut's carve depth is its calibre's, under 5 cm, where it
+had to be over 8 cm; new: the notch bites under a centimetre into a still half and its anchor is on its own half).
+
+Checks: no WGSL changed. `head-split-gate` **67 checks, 0 failed**; `npx vitest run head-split game-head-split axe`
+209 passed.
