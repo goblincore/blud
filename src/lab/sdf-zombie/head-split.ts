@@ -4,7 +4,8 @@
 // docs/superpowers/plans/2026-10-04-head-split-part-b.md). Pure. An axe chop opens the head on a hinge; this module
 // holds the presets, the preset choice from the chop's blade plane, the angle spring, the world-space split
 // description (SplitWarp), THE SPLIT FIELD, the maps between the open head and the closed one (unwarpPoint,
-// warpPoint) and the cut faces' segments.
+// warpPoint), the cut faces' segments, and THE SKULL SPLIT: how far the bone mesh opens behind its flesh, and which
+// piece owns a point of it (skullSplitOf).
 //
 // What moves: body material ABOVE the hinge plane AND within rho = r - REGION_MARGIN of the hinge point h (the head;
 // rho is sized to hold it). The + side of the old plane turns open by thetaP, the - side by thetaM. Everything else
@@ -80,6 +81,25 @@ export const HEAD_SPLIT = {
   faceCalibre: { depth: 0.12, kerf: 0.012, lip: 1 },
   /** The angle spring (head-deform.ts BURST_DEFORM's shape). `kick` scales the target into the initial rate. */
   hz: 7, zeta: 0.35, kick: 6, restA: 1e-4, restV: 1e-2,
+  /** THE SKULL (the bone mesh; skullSplitOf below, drawn by webgpu/skeleton-spike/mesh-renderer.ts). The bone opens
+   *  LESS than its flesh half, so it stays in the gap as a skull that cracks, then splits.
+   *  `follow`: knots of (the flesh's opening as a share of its preset's full angle, the bone's share of the flesh
+   *  angle), straight lines between them and flat outside. 1 would ride the flesh, 0 is the whole skull. The knots sit
+   *  on the axe's chops (axe-head.ts openAngles, then the kill): chop 1 cracks the skull (it parts 1.7 degrees a half,
+   *  about a centimetre at the crown, and still shows its face in the gap), chop 2 splits it (7.6 degrees), the kill
+   *  throws it wide (27 degrees, close behind the flesh).
+   *  `jag`: the fracture edge between the two halves (mesh-split.ts meshSplitJag), in metres: a zig-zag of amplitude
+   *  `zigAmp` and period `zigLen` along the break, and chips of `chipAmp` in cells of `chipLen`. Amplitudes 0 = the
+   *  clean plane.
+   *  `inside`: the colour of the bone's inner wall, seen through the break (dark, wet).
+   *  `rim`: the broken edge. The mesh is a shell with no thickness, so the inner wall takes the colour of cut bone
+   *  within `width` (m) of the break: seen across the gap it reads as the thickness of the bone. Width 0 = none. */
+  skull: {
+    follow: [[0.55, 0.1], [0.8, 0.3], [1, 0.85]],
+    jag: { zigAmp: 0.004, zigLen: 0.022, chipAmp: 0.0015, chipLen: 0.006 },
+    inside: [0.1, 0.018, 0.015],
+    rim: { color: [0.72, 0.5, 0.4], width: 0.004 },
+  },
 } as const;
 
 /** THE CUT FACES' SHADING (the march after the hit: webgpu/march/body/blocks/post/split-hit.wgsl.ts). A piece cap is
@@ -188,7 +208,8 @@ const conj = (q: Quat): Quat => [-q[0], -q[1], -q[2], q[3]];
 export function headLocalPoint(f: HeadFrame, p: Vec3): Vec3 { return qRotate(conj(f.quat), sub(p, f.centre)); }
 export function headLocalDir(f: HeadFrame, v: Vec3): Vec3 { return qRotate(conj(f.quat), v); }
 
-/** The split in WORLD space for this frame (null when closed). The GPU record carries exactly these fields. */
+/** The split in WORLD space for this frame (null when closed). The GPU record carries exactly these fields, but for
+ *  `full`. */
 export interface SplitWarp {
   /** Plane normal (unit) and offset: s(q) = n.q - d0. */
   n: Vec3; d0: number;
@@ -198,6 +219,9 @@ export interface SplitWarp {
   thetaP: number; thetaM: number;
   /** The region sphere: centred on h, radius r. The moved material lies within r - REGION_MARGIN of h. */
   r: number;
+  /** The preset's full opening angle for this split (splitMaxAngle; rad): what the angles are a share of. The field
+   *  does not read it; the skull does (skullSplitOf). */
+  full: number;
 }
 
 /** Rodrigues: v rotated by t (right-handed) about unit axis k. */
@@ -227,6 +251,7 @@ export function splitWarpOf(st: SplitState, f: HeadFrame): SplitWarp | null {
     thetaP: st.sides >= 0 ? st.angle : 0,
     thetaM: st.sides <= 0 ? -st.angle : 0,
     r: len(sub(f.centre, h)) + f.radius * HEAD_SPLIT.holdFrac + REGION_MARGIN,
+    full: st.sides === 0 ? p.maxBoth : p.maxOne,
   };
 }
 
@@ -424,4 +449,82 @@ export function splitFaceSegs(st: SplitState, f: HeadFrame): { side: 1 | -1; a: 
     const mid = add(f.centre, add(scale(n, st.offset + side * c.inset), scale(up, f.radius)));
     return { side, a: sub(mid, half), b: add(mid, half), view: scale(up, -1) };
   });
+}
+
+/** THE SKULL SPLIT. The skull is a mesh of the CLOSED head's bone (webgpu/skeleton-spike/mesh-renderer.ts), drawn once
+ *  per piece that owns part of it, each copy turned about the hinge by its piece's BONE angle and clipped to what the
+ *  piece owns. The bone turns less than its flesh half (HEAD_SPLIT.skull.follow), so the flesh peels off it and the
+ *  skull stands in the gap, cracked open by its own smaller angle. Made from the split the view DRAWS
+ *  (zombie-gpu.ts splitDrawn), so the bone is closed whenever the flesh is drawn closed. */
+export interface SkullSplit {
+  /** The flesh's split, ready for point tests: the bone breaks on the same plane and hinge. */
+  frame: SplitFrame;
+  /** The flesh's opening as a share of its preset's full angle (0..1), and the bone's share of the flesh angle. */
+  frac: number; follow: number;
+  /** The bone's angles (rad): the + half's (>= 0) and the - half's (<= 0). A half whose flesh stays has 0. */
+  angleP: number; angleM: number;
+  /** Shifts the fracture pattern, so two heads do not break alike. */
+  seed: number;
+}
+
+/** The bone's share of the flesh angle at flesh opening `frac`: HEAD_SPLIT.skull.follow's knots, straight lines between
+ *  them, flat outside. */
+export function skullFollow(frac: number, knots: readonly (readonly [number, number])[] = HEAD_SPLIT.skull.follow): number {
+  const first = knots[0]!, last = knots[knots.length - 1]!;
+  if (!(frac > first[0])) return first[1];
+  for (let i = 1; i < knots.length; i++) {
+    const a = knots[i - 1]!, b = knots[i]!;
+    if (frac <= b[0]) return a[1] + (b[1] - a[1]) * (frac - a[0]) / (b[0] - a[0]);
+  }
+  return last[1];
+}
+
+/** The skull's split for a drawn flesh split (null: closed). `follow` set by hand replaces the table (the tuning
+ *  seam; null = the table). The flesh opening is held at the preset's full angle and the bone's share at 1, so a
+ *  spring that overshoots never turns the bone past its flesh. A bone that does not turn at all is the closed skull:
+ *  null. */
+export function skullSplitOf(w: SplitWarp | null | undefined, follow: number | null = null, seed = 0): SkullSplit | null {
+  const frame = splitFrame(w);
+  if (!frame) return null;
+  const flesh = Math.max(frame.w.thetaP, -frame.w.thetaM);
+  const frac = frame.w.full > 0 ? Math.min(1, flesh / frame.w.full) : 1;
+  const k = Math.max(0, Math.min(1, follow ?? skullFollow(frac)));
+  const angleP = frame.w.thetaP * k, angleM = frame.w.thetaM * k;
+  if (angleP === 0 && angleM === 0) return null;
+  return { frame, frac, follow: k, angleP, angleM, seed };
+}
+
+/** The piece that owns the closed skull's point `q`: 1 the + half, 2 the - half, 0 the rest. The flesh's rule
+ *  (warpPoint: above the hinge plane, within rho of the hinge, by the side of the old plane), with two differences: a
+ *  side whose bone does not turn belongs to the rest, and the old plane is the FRACTURE, s(q) + `jag` >= 0, where
+ *  `jag` is the fracture's offset at q (mesh-split.ts meshSplitJag; 0 = the clean plane). Both halves read the same
+ *  offset at the same point, so their edges fit. The hinge plane and the ball stay clean. The mesh's clip
+ *  (mesh-split.ts MESH_SPLIT_CLIP_WGSL) is this rule on the GPU. */
+export function skullPieceAt(s: SkullSplit, q: Vec3, jag = 0): 0 | 1 | 2 {
+  const { w, u, rho } = s.frame, rel = sub(q, w.h);
+  if (dot(u, rel) < 0 || len(rel) > rho) return 0;
+  if (dot(w.n, q) - w.d0 + jag >= 0) return s.angleP !== 0 ? 1 : 0;
+  return s.angleM !== 0 ? 2 : 0;
+}
+
+/** Where the closed skull's point `q` is on the open skull, and the piece that carries it (skullPieceAt). */
+export function skullWarpPoint(s: SkullSplit, q: Vec3, jag = 0): { p: Vec3; piece: 0 | 1 | 2 } {
+  const piece = skullPieceAt(s, q, jag);
+  if (piece === 0) return { p: q, piece };
+  const h = s.frame.w.h;
+  return { p: add(h, rotAxis(sub(q, h), s.frame.w.a, piece === 1 ? s.angleP : s.angleM)), piece };
+}
+
+/** WHICH PIECES A SPHERE OF THE CLOSED SKULL CAN HAVE BONE OF: bit 0 the rest, bit 1 the + half, bit 2 the - half
+ *  (1 << piece). What is drawn once per piece (a segment mesh, an eye) asks with its bounding sphere, its radius grown
+ *  by the fracture's largest offset; a sphere that is the rest's alone (mask 1) is drawn as on a closed head. */
+export function skullPieces(s: SkullSplit, centre: Vec3, radius: number): number {
+  const { w, u, rho } = s.frame, rel = sub(centre, w.h);
+  const up = dot(u, rel), dh = len(rel), side = dot(w.n, centre) - w.d0;
+  const reaches = up + radius >= 0 && dh - radius <= rho, within = up - radius >= 0 && dh + radius <= rho;
+  const turnP = s.angleP !== 0, turnM = s.angleM !== 0;
+  const mask = (reaches && turnP && side + radius >= 0 ? 2 : 0) | (reaches && turnM && side - radius <= 0 ? 4 : 0);
+  // All of it turns: wholly in the turning region, and on a turning side (or both sides turn).
+  const allTurns = within && ((turnP && turnM) || (turnP && side - radius >= 0) || (turnM && side + radius <= 0));
+  return allTurns ? mask : mask | 1;
 }

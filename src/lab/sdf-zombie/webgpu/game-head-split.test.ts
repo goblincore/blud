@@ -325,9 +325,13 @@ describe('the leaf: the per-frame tick', () => {
     }
   });
 
-  it('the draw stage feeds it: game-main calls drawEye with the render camera before the crowd\'s sync', () => {
+  it('the draw stage feeds it: game-main calls drawEye with the render camera before the skull meshes and the crowd\'s sync', () => {
     const iEye = mainSrc.indexOf('ctx.weapon.headSplit?.drawEye(camera.position.toArray());');
-    expect(iEye).toBeGreaterThan(mainSrc.indexOf("ctx.telemetry.telemetry.lap('region', 'draw:uniforms-cull-crowd');"));
+    expect(iEye).toBeGreaterThan(mainSrc.indexOf("ctx.telemetry.telemetry.lap('region', 'draw:probe-gather-lights');"));
+    // The skull follows view.splitDrawn, which this call settles for the frame.
+    const iSkull = mainSrc.indexOf('ctx.render.segMeshRenderer.update(');
+    expect(iSkull).toBeGreaterThan(iEye);
+    expect(mainSrc.slice(iSkull, mainSrc.indexOf("ctx.telemetry.telemetry.end('skeleton-mesh', meshTiming);"))).toContain("(owner, segment) => (segment === 'head' ? (owner as ZombieActor).view.splitDrawn : null)");
     expect(iEye).toBeLessThan(mainSrc.indexOf('refreshActorTiles();', iEye));
     // The tick's call hands no eye.
     expect(mainSrc).toContain('ctx.weapon.headSplit?.tick(dt);');

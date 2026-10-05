@@ -1717,6 +1717,11 @@ async function main() {
           : []),
       ]);
     }
+    // THE HEAD SPLIT AT RANGE: each split actor's view measures its split's draw distance from the eye this frame is
+    // drawn with (game-head-split.ts drawEye). Here, not in the tick: the render camera is final, also after a
+    // teleport and while the sim is paused. Before the skull meshes are posed (they follow each view's splitDrawn)
+    // and before the crowd's record flush (its sync, below).
+    ctx.weapon.headSplit?.drawEye(camera.position.toArray());
     // skeleton=mesh: re-pose this frame's segment meshes + crater exposure.
     // Sever re-derive: the actor's posed body reference changes — rebuild
     // the sources (revision changes, the cache extracts fresh geometry).
@@ -1751,15 +1756,13 @@ async function main() {
         return e.sources;
       }), ctx.world.actors, ctx.render.visualActors, boneExposedActors(ctx),
       // Melee head damage: the skull segment squashes and dents with the flesh (game-head-damage affine).
-      (owner, segment) => (segment === 'head' && ctx.weapon.headDamage ? ctx.weapon.headDamage.affine(owner as ZombieActor) : null));
+      (owner, segment) => (segment === 'head' && ctx.weapon.headDamage ? ctx.weapon.headDamage.affine(owner as ZombieActor) : null),
+      // The head split: the skull breaks with the split the march DRAWS (closed past the range cut-off, torn or dead).
+      (owner, segment) => (segment === 'head' ? (owner as ZombieActor).view.splitDrawn : null));
       ctx.telemetry.telemetry.end('skeleton-mesh', meshTiming);
       if (firstMeshSync) mark('mesh-sync-end');
     }
     ctx.telemetry.telemetry.lap('region', 'draw:uniforms-cull-crowd');
-    // THE HEAD SPLIT AT RANGE: each split actor's view measures its split's draw distance from the eye this frame is
-    // drawn with (game-head-split.ts drawEye). Here, not in the tick: the render camera is final, also after a
-    // teleport and while the sim is paused, and the crowd's record flush (its sync, below) comes after.
-    ctx.weapon.headSplit?.drawEye(camera.position.toArray());
     // skeleton=volume: only the tiny pose/meta texture changes per frame.
     // A body-reference change means sever/rebuild and therefore a new
     // revision-keyed atlas; stale same-name grids are never re-enabled.

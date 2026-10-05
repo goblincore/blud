@@ -137,7 +137,7 @@ describe('woundEmitAnchorAndNormal — where blood leaves the wound', () => {
     const w = wound({ local: [0, 0.1, 1] });            // world (0.1, 1, 0): on the + side of the plane x = 0
     const closed = woundEmitAnchorAndNormal(prims, w);
     // The plane x = 0, hinged along z through (0, 0.5, 0); the + half is open by 0.5 rad, the - half by 0.3.
-    const split = { n: [1, 0, 0] as Vec3, d0: 0, h: [0, 0.5, 0] as Vec3, a: [0, 0, -1] as Vec3, thetaP: 0.5, thetaM: -0.3, r: 1 };
+    const split = { n: [1, 0, 0] as Vec3, d0: 0, h: [0, 0.5, 0] as Vec3, a: [0, 0, -1] as Vec3, thetaP: 0.5, thetaM: -0.3, r: 1, full: 0.55 };
     const open = woundEmitAnchorAndNormal(prims, w, 0, split);
     const m = warpPoint(split, closed.anchor);
     expect(m.piece).toBe(1);

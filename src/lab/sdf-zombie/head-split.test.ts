@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   HEAD_SPLIT, REGION_MARGIN, choosePreset, forcedSplit, headFrameOf, headLocalDir, headLocalPoint, kickSplit, makeSplitState,
-  openSplit, splitFaceSegs, splitField, splitMaxAngle, splitWarpOf, stepSplit, unwarpDir, unwarpPoint, warpDir, warpPoint,
-  widenSplit,
+  openSplit, skullFollow, skullPieceAt, skullPieces, skullSplitOf, skullWarpPoint, splitFaceSegs, splitField, splitMaxAngle,
+  splitWarpOf, stepSplit, unwarpDir, unwarpPoint, warpDir, warpPoint, widenSplit,
   type HeadFrame, type SplitWarp,
 } from './head-split';
 import type { Vec3 } from './types';
@@ -448,5 +448,130 @@ describe('the cut faces: one cut segment per half that opens, along the plane ov
       for (const k of ['a', 'b'] as const) expect(len(sub(world[i]![k], add(f.centre, qRotate(q, sub(s[k], FRAME.centre)))))).toBeLessThan(1e-12);
       expect(len(sub(world[i]!.view, qRotate(q, s.view)))).toBeLessThan(1e-12);
     });
+  });
+});
+
+describe('the skull split: the bone opens LESS than the flesh, in stages (the mesh skull, mesh-renderer.ts)', () => {
+  const S = HEAD_SPLIT.skull;
+  const scale = (a: Vec3, k: number): Vec3 => [a[0] * k, a[1] * k, a[2] * k];
+  /** A seeded value in [0, 1) per (index, lane). */
+  const hash = (i: number, lane: number): number => { const x = Math.sin(i * 127.1 + lane * 311.7) * 43758.5453; return x - Math.floor(x); };
+  const both = (angleFrac: number) => open('middle', [0, 0, 0.1], angleFrac);
+  it('the warp carries its preset\'s full angle: both halves vs one side', () => {
+    expect(both(0.5).full).toBe(HEAD_SPLIT.presets.middle.maxBoth);
+    expect(open('middle', [0.06, 0, 0.1], 0.5).full).toBe(HEAD_SPLIT.presets.middle.maxOne);
+    expect(open('face', [0, 0, 0.1], 0.5).full).toBe(HEAD_SPLIT.presets.face.maxOne);
+  });
+  it('skullFollow: the table\'s knots, straight lines between them, flat outside', () => {
+    for (const [frac, k] of S.follow) expect(skullFollow(frac)).toBeCloseTo(k, 12);
+    const [[f0, k0], [f1, k1]] = S.follow;
+    expect(skullFollow(0)).toBe(k0);
+    expect(skullFollow((f0 + f1) / 2)).toBeCloseTo((k0 + k1) / 2, 12);
+    expect(skullFollow(7)).toBe(S.follow[S.follow.length - 1]![1]);
+    // It never falls as the head opens, and never passes the flesh.
+    let prev = 0;
+    for (let i = 0; i <= 100; i++) { const k = skullFollow(i / 100); expect(k).toBeGreaterThanOrEqual(prev); expect(k).toBeLessThanOrEqual(1); prev = k; }
+    expect(skullFollow(0.5, [[0, 0], [1, 1]])).toBeCloseTo(0.5, 12);
+  });
+  it('skullSplitOf: each half\'s bone angle is its flesh angle x follow(flesh angle / the preset\'s full angle)', () => {
+    expect(skullSplitOf(null)).toBeNull();
+    for (const frac of [0.3, 0.55, 0.7, 0.8, 0.9, 1]) {
+      const w = both(frac), s = skullSplitOf(w)!;
+      expect(s.frac).toBeCloseTo(frac, 12);
+      expect(s.follow).toBeCloseTo(skullFollow(frac), 12);
+      expect(s.angleP).toBeCloseTo(w.thetaP * skullFollow(frac), 12);
+      expect(s.angleM).toBeCloseTo(w.thetaM * skullFollow(frac), 12);
+      expect(s.frame.w).toBe(w);
+    }
+    // One side: the still side's bone does not turn either.
+    const one = skullSplitOf(open('middle', [0.06, 0, 0.1], 0.8))!;
+    expect(one.angleP).toBeGreaterThan(0);
+    expect(one.angleM).toBe(0);
+    expect(skullSplitOf(open('middle', [-0.06, 0, 0.1], 0.8))!.angleP).toBe(0);
+  });
+  it('the three chop stages widen the bone: a crack, a wider crack, split wide', () => {
+    const a = [0.55, 0.8, 1].map(f => skullSplitOf(both(f))!.angleP);
+    expect(a[0]!).toBeGreaterThan(0);
+    expect(a[1]!).toBeGreaterThan(2 * a[0]!);
+    expect(a[2]!).toBeGreaterThan(1.5 * a[1]!);
+    expect(a[2]!).toBeLessThan(both(1).thetaP);
+  });
+  it('a spring overshoot never opens the bone past its flesh: frac is held at 1, follow at 1', () => {
+    const w = both(1.4), s = skullSplitOf(w)!;
+    expect(s.frac).toBe(1);
+    expect(s.angleP).toBeLessThanOrEqual(w.thetaP);
+    expect(-s.angleM).toBeLessThanOrEqual(-w.thetaM);
+    const over = skullSplitOf(both(0.8), 3)!;   // a follow set by hand above 1
+    expect(over.follow).toBe(1);
+    expect(over.angleP).toBe(both(0.8).thetaP);
+  });
+  it('a follow set by hand replaces the table: 1 rides the flesh, 0 is the whole skull (no split at all)', () => {
+    const w = both(0.8);
+    expect(skullSplitOf(w, 1)!.angleP).toBe(w.thetaP);
+    expect(skullSplitOf(w, 1)!.angleM).toBe(w.thetaM);
+    expect(skullSplitOf(w, 0)).toBeNull();
+    expect(skullSplitOf(w, null)!.follow).toBeCloseTo(skullFollow(0.8), 12);
+    expect(skullSplitOf(w, null, 5)!.seed).toBe(5);
+  });
+  it('skullPieceAt: the flesh\'s ownership (warpPoint), but a side whose bone does not turn belongs to the rest', () => {
+    for (const [name, w] of CASES) {
+      const s = skullSplitOf(w)!;
+      let seen = 0;
+      for (let i = 0; i < 4000; i++) {
+        const q: Vec3 = [(hash(i, 1) - 0.5) * 0.5, 1.45 + hash(i, 2) * 0.45, (hash(i, 3) - 0.5) * 0.5];
+        const flesh = warpPoint(w, q).piece;
+        const want = flesh === 1 && w.thetaP === 0 ? 0 : flesh === 2 && w.thetaM === 0 ? 0 : flesh;
+        expect(skullPieceAt(s, q), `${name} ${q}`).toBe(want);
+        seen |= 1 << want;
+      }
+      expect(seen & 1, name).toBe(1);
+      expect(seen & 6, name).not.toBe(0);
+    }
+  });
+  it('skullPieceAt: the fracture offset moves the edge between the halves, for both of them alike', () => {
+    const s = skullSplitOf(both(1))!, w = s.frame.w;
+    const onPlane: Vec3 = [0, 1.75, 0];
+    const q: Vec3 = add(onPlane, [0.002, 0, 0]);   // 2 mm on the + side
+    expect(skullPieceAt(s, q)).toBe(1);
+    expect(skullPieceAt(s, q, -0.003)).toBe(2);
+    expect(skullPieceAt(s, add(onPlane, [-0.002, 0, 0]), 0.003)).toBe(1);
+    // The hinge plane and the hold ball stay clean: no offset moves them.
+    const below: Vec3 = add(w.h, [0.05, -0.01, 0]);
+    expect(skullPieceAt(s, below, 0.05)).toBe(0);
+    expect(skullPieceAt(s, add(w.h, [0.02, w.r, 0]), 0.05)).toBe(0);
+  });
+  it('skullWarpPoint: a bone point turns about the hinge by its piece\'s BONE angle; the rest stays', () => {
+    const w = both(0.8), s = skullSplitOf(w)!;
+    const qp: Vec3 = [0.05, 1.75, 0.02], qm: Vec3 = [-0.05, 1.75, 0.02], q0: Vec3 = [0.05, 1.5, 0];
+    expect(skullWarpPoint(s, qp).piece).toBe(1);
+    expect(len(sub(skullWarpPoint(s, qp).p, moveOpen(w, qp, s.angleP)))).toBeLessThan(1e-12);
+    expect(len(sub(skullWarpPoint(s, qm).p, moveOpen(w, qm, s.angleM)))).toBeLessThan(1e-12);
+    expect(skullWarpPoint(s, q0)).toEqual({ p: q0, piece: 0 });
+    // The bone lags its flesh half: it is nearer the old plane than the flesh point it sat under.
+    expect(Math.abs(skullWarpPoint(s, qp).p[0])).toBeLessThan(Math.abs(warpPoint(w, qp).p[0]));
+  });
+  it('skullPieces: the pieces a sphere of the closed skull can have bone of (bit 0 the rest, 1 the + half, 2 the - half)', () => {
+    for (const [name, w] of CASES) {
+      const s = skullSplitOf(w)!;
+      for (let k = 0; k < 300; k++) {
+        const c: Vec3 = [(hash(k, 7) - 0.5) * 0.4, 1.45 + hash(k, 8) * 0.45, (hash(k, 9) - 0.5) * 0.4];
+        const r = 0.01 + hash(k, 10) * 0.12, slack = 0.004;
+        const mask = skullPieces(s, c, r + slack);
+        let seen = 0;
+        for (let i = 0; i < 200; i++) {
+          let d: Vec3 = [hash(k * 977 + i, 11) - 0.5, hash(k * 977 + i, 12) - 0.5, hash(k * 977 + i, 13) - 0.5];
+          d = scale(d, r * Math.cbrt(hash(k * 977 + i, 14)) / (len(d) || 1));
+          seen |= 1 << skullPieceAt(s, add(c, d), (hash(k * 977 + i, 15) - 0.5) * 2 * slack);
+        }
+        expect(seen & ~mask, `${name} sphere ${c} r ${r}`).toBe(0);
+      }
+      // Tight where it matters: a sphere deep in one half is that half's alone; one below the hinge is the rest's.
+      const u = cross(w.n, w.a), up = (d: number, side: number): Vec3 => add(add(w.h, scale(u, d)), scale(w.n, side));
+      if (w.thetaP !== 0) expect(skullPieces(s, up(0.12, 0.06), 0.02), name).toBe(2);
+      if (w.thetaM !== 0) expect(skullPieces(s, up(0.12, -0.06), 0.02), name).toBe(4);
+      if (w.thetaM === 0) expect(skullPieces(s, up(0.12, -0.06), 0.02), name).toBe(1);
+      expect(skullPieces(s, up(-0.08, 0.03), 0.02), name).toBe(1);
+      expect(skullPieces(s, up(0.12, 0), 0.02) & 1, name).toBe(w.thetaP !== 0 && w.thetaM !== 0 ? 0 : 1);
+    }
   });
 });

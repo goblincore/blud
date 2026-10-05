@@ -40,6 +40,13 @@ import { meshBoneSource } from './mesh-skull';
 // implemented for this prototype (the game wiring refuses skeleton=mesh
 // under ?renderer=deferred and reports it).
 //
+// THE HEAD SPLIT (head-split.ts skullSplitOf): a segment the caller's `split` hook answers for (the skull, of a head
+// whose split the march draws) is drawn once per PIECE that owns part of it: the unmoved rest, and a copy turned about
+// the hinge for each half whose bone turns. The copies go to their own batches (a second geometry sharing the
+// segment's vertex data, with its own instance data) on their own two-sided materials, which clip each copy to its
+// piece along the fracture (mesh-split.ts) and paint back faces as the bone's dark inner wall. A closed head never
+// touches any of it: same batches, same material, same instances as before.
+//
 // PROTOTYPE SCOPE / FALLBACKS (counted, not hidden): actor bones mesh;
 // chunks, organs and every non-actor bone stay procedural. Limb segments
 // pose with the contract's two-anchor approximation (measured 1.26 mm
@@ -47,7 +54,8 @@ import { meshBoneSource } from './mesh-skull';
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial, type Node } from 'three/webgpu';
 import {
-  attribute, wgslFn, mul, add, texture, vec4, positionGeometry, positionWorld, normalWorld, cameraPosition,
+  attribute, wgslFn, mul, add, mix, float, texture, uniform, vec4, positionGeometry, positionWorld, normalWorld,
+  cameraPosition, frontFacing,
 } from 'three/tsl';
 import {
   BONE_HASH_WGSL, BONE_NOISE_WGSL, BONE_SHADE_WGSL, NO_OWNER_PICKS,
@@ -60,11 +68,16 @@ import type { SegmentMeshCache } from './mesh';
 import {
   meshAppearanceCoord, MESH_BONE_SURFACE_WGSL, MESH_BONE_WET_WGSL,
   MESH_SKULL_CAVITY_WGSL, MESH_SOCKET_VESSEL_WGSL, MESH_TOOTH_ROW_WGSL,
-  MESH_SPEC_SCALE, MESH_FRES_SCALE,
+  MESH_SPEC_SCALE, MESH_FRES_SCALE, MESH_GLOSS_WET,
 } from './mesh-appearance';
 import {
   meshEyePlacements, meshEyeImpactIndices, MESH_EYE_EMISSION_WGSL, MESH_EYE_SURFACE_WGSL, MESH_EYE_VESSEL_WGSL,
 } from './mesh-eyes';
+import { HEAD_SPLIT, skullPieces, skullSplitOf, type SkullSplit, type SplitWarp } from '../../head-split';
+import {
+  MESH_SPLIT_CLIP_WGSL, MESH_SPLIT_INSIDE_WGSL, MESH_SPLIT_JAG_WGSL, SPLIT_INSTANCE_ATTRS, SPLIT_INSTANCE_FLOATS,
+  packSplitInstance,
+} from './mesh-split';
 
 const MAX_WOUNDS_TEX = 64;
 /** Updates a segment batch may sit unused before it is dropped (a stale revision's geometry). */
@@ -105,11 +118,26 @@ export interface SegmentMeshRenderer {
    *  (column-major 4x4) applied after a segment's rigid pose, per owner and
    *  segment key — the head deform's squash and dents on the 'head' skull
    *  segment, so the skull deforms with the flesh (its seated eyes ride the
-   *  same matrix). Null = the rigid pose. */
+   *  same matrix). Null = the rigid pose.
+   *  `split` (the head split): the split the march DRAWS for this owner's segment (the view's splitDrawn for the
+   *  'head' segment), or null. The segment and its eyes are then drawn once per piece of the skull's split
+   *  (head-split.ts skullSplitOf), each copy turned by its piece's bone angle and clipped to it. Null, or omitted =
+   *  the closed draw, exactly. */
   update(
     entries: ReadonlyArray<readonly BoneFieldSource[]>, owners?: readonly object[], shown?: ReadonlySet<unknown>,
     exposed?: ReadonlySet<unknown>, extra?: (owner: object, segment: string) => ArrayLike<number> | null,
+    split?: (owner: object, segment: string) => SplitWarp | null,
   ): void;
+  /** The split skull's look, live: `follow` set by hand replaces HEAD_SPLIT.skull.follow's table (null = the table;
+   *  1 rides the flesh, 0 the whole skull); `jag` = (zigAmp, zigLen, chipAmp, chipLen), the fracture edge
+   *  (mesh-split.ts meshSplitJag); `inside` the bone's inner wall; `rim` = (the broken edge's colour, its width in
+   *  metres). */
+  readonly splitLook: {
+    follow: number | null; jag: { value: THREE.Vector4 }; inside: { value: THREE.Color }; rim: { value: THREE.Vector4 };
+  };
+  /** Diagnostics: which batches are drawn (both true by default). A capture tells bone or eye pixels from everything
+   *  else by a shown / hidden pair of the same frame. Takes effect at the next update. */
+  readonly show: { bones: boolean; eyes: boolean };
   /** Copy each drawn instance's OWNER picks into its batch's iLights (shared light list, Task
    *  11): `lightsOf(owner)` is the owner actor's `bodyLights` value, read NOW, so call it after
    *  this frame's picks are written (the game's light loop runs after update). Undefined/null =
@@ -136,8 +164,9 @@ export interface SegmentMeshRenderer {
     hidden: number; verts: number; tris: number;
     overflow: number; clamped: number; droppedQuads: number;
   };
-  /** This update's instanced draws (tests, diagnostics): owner, eye or segment, world matrix. */
-  readonly drawn: ReadonlyArray<{ owner: unknown; eye: boolean; matrix: THREE.Matrix4; geometry: THREE.BufferGeometry }>;
+  /** This update's instanced draws (tests, diagnostics): owner, eye or segment, world matrix, and for a copy of a
+   *  split head the piece it is clipped to (0 the rest, 1 the + half, 2 the - half; null = not split). */
+  readonly drawn: ReadonlyArray<{ owner: unknown; eye: boolean; matrix: THREE.Matrix4; geometry: THREE.BufferGeometry; piece: 0 | 1 | 2 | null }>;
   /** How many instanced draws this update issued (one per segment geometry in use, plus eyes). */
   readonly draws: number;
   /** Remove every actor slot while keeping material/uniforms reusable. */
@@ -230,6 +259,50 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   eyeMaterial.colorNode = vec4(add(eyeShaded.xyz, eyeEmission.xyz), 1.0);
   eyeMaterial.depthTest = true;
   eyeMaterial.depthWrite = true;
+  // THE SPLIT COPIES' MATERIALS (see the header). The clip takes the fragment back to the un-turned point q and
+  // answers whether this copy's piece owns it; craters and bone exposure are stored on the closed head, so the
+  // surface reads q where the closed material reads positionWorld. Lighting stays at the turned place. Two-sided: a
+  // clipped shell shows its inside, and a back face is the bone's inner wall (three flips normalWorld there).
+  const splitLook = {
+    follow: null as number | null,
+    jag: uniform(new THREE.Vector4(HEAD_SPLIT.skull.jag.zigAmp, HEAD_SPLIT.skull.jag.zigLen, HEAD_SPLIT.skull.jag.chipAmp, HEAD_SPLIT.skull.jag.chipLen)),
+    inside: uniform(new THREE.Color(...HEAD_SPLIT.skull.inside)),
+    rim: uniform(new THREE.Vector4(...HEAD_SPLIT.skull.rim.color, HEAD_SPLIT.skull.rim.width)),
+  };
+  const jagFn = wgslFn(MESH_SPLIT_JAG_WGSL, fns.slice(0, 2));
+  const clipFn = wgslFn(MESH_SPLIT_CLIP_WGSL, [...fns.slice(0, 2), jagFn]);
+  const insideFn = wgslFn(MESH_SPLIT_INSIDE_WGSL);
+  const clip = clipFn({
+    pWorld: positionWorld, sn: attribute('iSplitN', 'vec4'), sh: attribute('iSplitH', 'vec4'),
+    sa: attribute('iSplitA', 'vec4'), sk: attribute('iSplitK', 'vec4'), jag: splitLook.jag,
+  }) as unknown as { xyz: Node<'vec3'>; w: Node<'float'> };
+  const front = float(frontFacing);
+  const splitSided = (m: MeshBasicNodeMaterial) => {
+    m.maskNode = clip.w.greaterThanEqual(0.0);
+    m.side = THREE.DoubleSide;
+    m.depthTest = true;
+    m.depthWrite = true;
+  };
+  const splitSurf = surfaceFn({
+    pWorld: clip.xyz, pLocal: positionGeometry,
+    feature: featureAttr,
+    boneColor: u.boneColor, deepColor: u.deepColor, look: u.look,
+    woundTex: texture(woundTex), woundCount: u.woundCount,
+  }) as unknown as { xyz: unknown; w: unknown };
+  const innerWall = (surface: unknown) => insideFn({ surface: surface as never, front, inside: splitLook.inside, keep: clip.w, rim: splitLook.rim });
+  // The inner wall is wet all over, with no grazing sheen (it is a hollow); the outside keeps its patchy gloss.
+  const splitGloss = mix(float(MESH_GLOSS_WET), wetFn({ pLocal: positionGeometry, feature: featureAttr, expo: splitSurf.w }) as never, front);
+  const splitMaterial = new MeshBasicNodeMaterial();
+  splitMaterial.colorNode = lit(
+    innerWall(splitSurf),
+    vec4(u.look.x, u.look.y, mul(mul(u.look.z, splitGloss), MESH_SPEC_SCALE), mul(mul(mul(u.look.w, splitGloss), MESH_FRES_SCALE), front)),
+  );
+  splitSided(splitMaterial);
+  // A split eye: the eye's own surface outside, the same wall inside, and no glow from the back.
+  const eyeSplitMaterial = new MeshBasicNodeMaterial();
+  const eyeSplitShaded = lit(innerWall(eyeSurface), u.look) as unknown as { xyz: Node<'vec3'> };
+  eyeSplitMaterial.colorNode = vec4(add(eyeSplitShaded.xyz, mul(eyeEmission.xyz, front)), 1.0);
+  splitSided(eyeSplitMaterial);
   const eyeGeometry = new THREE.SphereGeometry(1, 24, 16);
   // Ejected eyes are plain meshes on the eye material, so they need an iLights of their own (one
   // instance, no owner: the old key). Their own geometry, so the eye batch can grow its attribute.
@@ -248,8 +321,24 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   // segment per actor (~250 draws on Night Train). The shaders read `positionGeometry`, not
   // `positionLocal`: an InstancedMesh folds the instance matrix into positionLocal, and the
   // segment-local appearance (patches, teeth, iris) must stay in the segment's own frame.
-  interface Batch { mesh: THREE.InstancedMesh; count: number; eye: boolean; idle: number; owners: unknown[] }
+  interface Batch { mesh: THREE.InstancedMesh; count: number; eye: boolean; split: boolean; idle: number; owners: unknown[] }
   const batches = new Map<THREE.BufferGeometry, Batch>();
+  // The split copies' geometry for a segment (or the eye) geometry: the SAME vertex attributes and index (shared
+  // objects, so one set of GPU buffers), and instance attributes of its own. The batch map is keyed by the geometry a
+  // batch draws, so a closed batch and its split twin never share instance data.
+  let splitGeometries = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
+  const splitGeometryOf = (base: THREE.BufferGeometry): THREE.BufferGeometry => {
+    let g = splitGeometries.get(base);
+    if (!g) {
+      g = new THREE.BufferGeometry();
+      for (const [name, attr] of Object.entries(base.attributes)) {
+        if (!(attr as THREE.InstancedBufferAttribute).isInstancedBufferAttribute) g.setAttribute(name, attr as THREE.BufferAttribute);
+      }
+      g.setIndex(base.index);
+      splitGeometries.set(base, g);
+    }
+    return g;
+  };
   /** The geometry's per-instance `name` attribute (itemSize floats, `init` fill), at least `cap`
    *  instances (grown in step with the batch, contents kept). */
   const ensureInstanced = (geometry: THREE.BufferGeometry, name: string, itemSize: number, init: number, cap: number): THREE.InstancedBufferAttribute => {
@@ -261,30 +350,45 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     geometry.setAttribute(name, next);
     return next;
   };
-  /** iLights (4 packed picks) and iFill (1 float), both sized to `cap` instances. */
-  const ensureLights = (geometry: THREE.BufferGeometry, cap: number) => {
+  /** A split geometry's records (mesh-split.ts packSplitInstance): ONE interleaved instance buffer of
+   *  SPLIT_INSTANCE_FLOATS a row, read as the four vec4 attributes SPLIT_INSTANCE_ATTRS. One buffer, not four: the
+   *  pipeline may bind 8 vertex buffers, and position, normal, meshFeature, the instance matrix, iLights and iFill
+   *  are six. At least `cap` rows (grown with the batch; the rows are rewritten every update). */
+  const splitRows = (geometry: THREE.BufferGeometry, cap = 0): THREE.InstancedInterleavedBuffer => {
+    const cur = (geometry.getAttribute(SPLIT_INSTANCE_ATTRS[0]) as THREE.InterleavedBufferAttribute | undefined)?.data as THREE.InstancedInterleavedBuffer | undefined;
+    if (cur && cur.count >= cap) return cur;
+    const next = new THREE.InstancedInterleavedBuffer(new Float32Array(cap * SPLIT_INSTANCE_FLOATS), SPLIT_INSTANCE_FLOATS);
+    next.setUsage(THREE.DynamicDrawUsage);
+    if (cur) (next.array as Float32Array).set(cur.array as Float32Array);
+    SPLIT_INSTANCE_ATTRS.forEach((name, k) => geometry.setAttribute(name, new THREE.InterleavedBufferAttribute(next, 4, k * 4)));
+    return next;
+  };
+  /** iLights (4 packed picks) and iFill (1 float), both sized to `cap` instances; a split batch's records with them. */
+  const ensureLights = (geometry: THREE.BufferGeometry, cap: number, split: boolean) => {
     ensureInstanced(geometry, 'iLights', 4, NO_OWNER_PICKS, cap);
     ensureInstanced(geometry, 'iFill', 1, 1, cap);
+    if (split) splitRows(geometry, cap);
   };
   /** Upload only the live instances (M3): the attribute is DynamicDrawUsage, so three uploads it
    *  every frame, whole, unless a range is set; r186's WebGPU backend honours BufferAttribute
    *  updateRanges (and clears them after the write). */
-  const markLive = (attr: THREE.InstancedBufferAttribute, count: number) => {
+  const markLive = (attr: THREE.InstancedBufferAttribute | THREE.InstancedInterleavedBuffer, count: number, floats = (attr as THREE.InstancedBufferAttribute).itemSize) => {
     attr.clearUpdateRanges();
-    attr.addUpdateRange(0, Math.max(count, 1) * attr.itemSize);
+    attr.addUpdateRange(0, Math.max(count, 1) * floats);
     attr.needsUpdate = true;
   };
-  const batchFor = (geometry: THREE.BufferGeometry, eye: boolean): Batch => {
+  /** The batch that draws `geometry`. `split`: `geometry` is a splitGeometryOf, drawn on the split materials. */
+  const batchFor = (geometry: THREE.BufferGeometry, eye: boolean, split = false): Batch => {
     let b = batches.get(geometry);
     if (!b) {
-      const mesh = new THREE.InstancedMesh(geometry, eye ? eyeMaterial : material, 16);
-      mesh.name = eye ? 'skeleton-fleshy-eyes' : 'skeleton-segments';
+      const mesh = new THREE.InstancedMesh(geometry, split ? (eye ? eyeSplitMaterial : splitMaterial) : (eye ? eyeMaterial : material), 16);
+      mesh.name = (eye ? 'skeleton-fleshy-eyes' : 'skeleton-segments') + (split ? '-split' : '');
       mesh.frustumCulled = false;
       mesh.layers.set(layer);
       mesh.count = 0;
-      ensureLights(geometry, mesh.instanceMatrix.count);
+      ensureLights(geometry, mesh.instanceMatrix.count, split);
       group.add(mesh);
-      b = { mesh, count: 0, eye, idle: 0, owners: [] };
+      b = { mesh, count: 0, eye, split, idle: 0, owners: [] };
       batches.set(geometry, b);
     }
     return b;
@@ -295,7 +399,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       const grown = new THREE.InstancedMesh(old.geometry, old.material as THREE.Material, old.instanceMatrix.count * 2);
       grown.name = old.name; grown.frustumCulled = false; grown.layers.mask = old.layers.mask;
       (grown.instanceMatrix.array as Float32Array).set(old.instanceMatrix.array as Float32Array);
-      ensureLights(old.geometry, grown.instanceMatrix.count);
+      ensureLights(old.geometry, grown.instanceMatrix.count, b.split);
       group.remove(old); old.dispose();
       group.add(grown);
       b.mesh = grown;
@@ -329,6 +433,9 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     drawn.length = 0;
     slots.length = 0;
     absent = new WeakMap();
+    splitGeometries = new WeakMap();
+    seeds = new WeakMap();
+    nextSeed = 0;
     for (const d of debris) group.remove(d.mesh);
     debris.length = 0;
     stats.actors = stats.segments = stats.rigid = stats.limb = stats.hidden = 0;
@@ -337,8 +444,50 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   };
   const segM = new THREE.Matrix4(), eyeM = new THREE.Matrix4(), tmpM = new THREE.Matrix4();
   const one = new THREE.Vector3(1, 1, 1), pv = new THREE.Vector3(), qv = new THREE.Quaternion();
+  const show = { bones: true, eyes: true };
   /** Test/diagnostic view of this update's instanced draws. */
-  const drawn: { owner: unknown; eye: boolean; matrix: THREE.Matrix4; geometry: THREE.BufferGeometry }[] = [];
+  const drawn: { owner: unknown; eye: boolean; matrix: THREE.Matrix4; geometry: THREE.BufferGeometry; piece: 0 | 1 | 2 | null }[] = [];
+  // Each head breaks along its own pattern: a seed per owner, in the order heads first split.
+  let seeds = new WeakMap<object, number>();
+  let nextSeed = 0;
+  const seedOf = (owner: object): number => {
+    let seed = seeds.get(owner);
+    if (seed === undefined) { seed = nextSeed++; seeds.set(owner, seed); }
+    return seed;
+  };
+  const turnM = new THREE.Matrix4(), pieceM = new THREE.Matrix4(), axisV = new THREE.Vector3(), hingeV = new THREE.Vector3();
+  const shiftV = new THREE.Vector3(), centreV = new THREE.Vector3();
+  /** Draw one segment (or eye) whose closed world matrix is `m` and whose bone lies in the sphere `centre`, `radius`
+   *  of the closed head. `skull` null, or a sphere the rest owns alone: one instance in the closed batch, as ever.
+   *  Else one copy per piece that owns part of the sphere, in the split batch: the rest at `m`, a half turned about
+   *  the hinge by its bone angle, each with its split record. */
+  const drawPieces = (
+    geometry: THREE.BufferGeometry, eye: boolean, m: THREE.Matrix4, owner: unknown, skull: SkullSplit | null,
+    centre: THREE.Vector3, radius: number,
+  ) => {
+    const mask = skull ? skullPieces(skull, [centre.x, centre.y, centre.z], radius + Math.abs(splitLook.jag.value.x) + Math.abs(splitLook.jag.value.z)) : 1;
+    if (!skull || mask === 1) {
+      push(batchFor(geometry, eye), m, owner);
+      drawn.push({ owner, eye, matrix: m.clone(), geometry, piece: null });
+      return;
+    }
+    const sg = splitGeometryOf(geometry), b = batchFor(sg, eye, true), w = skull.frame.w;
+    for (const piece of [0, 1, 2] as const) {
+      if (!(mask & (1 << piece))) continue;
+      const angle = piece === 1 ? skull.angleP : piece === 2 ? skull.angleM : 0;
+      let copy = m;
+      if (angle !== 0) {
+        // T(h) R(a, angle) T(-h): the turn about the hinge line, premultiplied (the instance matrix is the world's).
+        hingeV.set(w.h[0], w.h[1], w.h[2]);
+        turnM.makeRotationAxis(axisV.set(w.a[0], w.a[1], w.a[2]), angle);
+        turnM.setPosition(shiftV.copy(hingeV).applyMatrix4(turnM).negate().add(hingeV));
+        copy = pieceM.multiplyMatrices(turnM, m);
+      }
+      push(b, copy, owner);
+      packSplitInstance(splitRows(sg).array as Float32Array, b.count - 1, skull, piece);
+      drawn.push({ owner, eye, matrix: copy.clone(), geometry: sg, piece });
+    }
+  };
 
   return {
     object: group,
@@ -379,7 +528,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
         if (d.age > 2.5) { group.remove(d.mesh); debris.splice(i, 1); }
       }
     },
-    update(entries, owners, shown, exposed, extra) {
+    update(entries, owners, shown, exposed, extra, split) {
       stats.actors = entries.length;
       stats.segments = stats.rigid = stats.limb = stats.hidden = 0;
       stats.verts = stats.tris = 0;
@@ -388,7 +537,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       for (const b of batches.values()) b.count = 0;
       const liveOwners = new Set(owners ?? entries);
       for (let i = debris.length - 1; i >= 0; i--) if (owners && !liveOwners.has(debris[i]!.owner)) { group.remove(debris[i]!.mesh); debris.splice(i, 1); }
-      const eyeBatch = batchFor(eyeGeometry, true);
+      batchFor(eyeGeometry, true);
       entries.forEach((srcs, ai) => {
         let slot = slots[ai];
         if (!slot) { slot = { keys: [], eyes: [] }; slots[ai] = slot; }
@@ -424,13 +573,22 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
           // world matrix and a world-space affine premultiplies it.
           const x = extra?.(owner as object, s.segment) ?? null;
           if (x) segM.premultiply(extraM.fromArray(x));
-          push(batchFor(baked.geometry, false), segM, owner);
-          drawn.push({ owner, eye: false, matrix: segM.clone(), geometry: baked.geometry });
+          // The head split: the skull's own split for the one the march draws (null: closed, and the draws below
+          // are the closed ones).
+          const drawnSplit = split?.(owner as object, s.segment) ?? null;
+          const skull = drawnSplit ? skullSplitOf(drawnSplit, splitLook.follow, seedOf(owner as object)) : null;
+          let radius = 0;
+          if (skull) {
+            const { min, max } = s.bounds;
+            centreV.set((min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2).applyMatrix4(segM);
+            radius = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]) / 2 * segM.getMaxScaleOnAxis();
+          }
+          drawPieces(baked.geometry, false, segM, owner, skull, centreV, radius);
           for (const e of eyes) {
             eyeM.copy(segM).multiply(tmpM.makeTranslation(e.center[0], e.center[1], e.center[2]))
               .multiply(tmpM.makeScale(e.radius, e.radius, e.radius));
-            push(eyeBatch, eyeM, owner);
-            drawn.push({ owner, eye: true, matrix: eyeM.clone(), geometry: eyeGeometry });
+            if (skull) centreV.setFromMatrixPosition(eyeM);
+            drawPieces(eyeGeometry, true, eyeM, owner, skull, centreV, e.radius);
           }
         });
       });
@@ -438,8 +596,11 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       for (const [geo, b] of batches) {
         b.mesh.count = b.count;
         b.owners.length = b.count;
-        b.mesh.visible = b.count > 0;
-        if (b.count > 0) { b.mesh.instanceMatrix.needsUpdate = true; b.idle = 0; }
+        b.mesh.visible = b.count > 0 && (b.eye ? show.eyes : show.bones);
+        if (b.count > 0) {
+          b.mesh.instanceMatrix.needsUpdate = true; b.idle = 0;
+          if (b.split) markLive(splitRows(geo), b.count, SPLIT_INSTANCE_FLOATS);
+        }
         // A segment geometry nobody has drawn for a while (a revision replaced it: a sever, an
         // anatomy change) drops its batch; the cache owns the geometry itself.
         else if (!b.eye && ++b.idle > BATCH_IDLE_UPDATES) { group.remove(b.mesh); b.mesh.dispose(); batches.delete(geo); }
@@ -496,6 +657,8 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       return out;
     },
     get stats() { return stats; },
+    splitLook,
+    show,
     get drawn() { return drawn; },
     get draws() { let n = 0; for (const b of batches.values()) if (b.count > 0) n++; return n; },
     clear,
@@ -503,6 +666,8 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       clear();
       material.dispose();
       eyeMaterial.dispose();
+      splitMaterial.dispose();
+      eyeSplitMaterial.dispose();
       eyeGeometry.dispose();
       debrisEyeGeometry.dispose();
       woundTex.dispose();
