@@ -608,13 +608,10 @@ describe('the axe drives the split (the real zombie)', () => {
   });
 
   it('up the front of the body, level chops from 0.9 m: the chest, the collar and the neck\'s base are body chops; the jaw line and up open the head', () => {
-    const rows: string[] = [];
     const run = (y: number) => {
       const f = fixture();
-      const neck = headNeck(f.a.posed().prims)!.root;
       const { blast, last } = clickFrom(f, [0, y, f.skull.centre[2] + 0.9]);
       const point = last.points[0]!, head = last.heads.length === 1;
-      rows.push(`y ${y.toFixed(2)}: hit y ${point[1].toFixed(3)}, ${len(sub(point, neck)).toFixed(3)} m from the neck root, ${len(sub(point, f.skull.centre)).toFixed(3)} m from the skull centre -> ${head ? 'HEAD' : 'body'}`);
       return { f, blast: blast!, head, point };
     };
     for (const y of [1.25, 1.30, 1.35, 1.40, 1.44]) {
@@ -632,7 +629,6 @@ describe('the axe drives the split (the real zombie)', () => {
       expect(r.blast.wounds.every(w => w.headSlot === 'keep'), `y ${y}`).toBe(true);
       expect(r.blast, `y ${y}`).toMatchObject({ meterCredit: 0, reaction: 'flinch' });
     }
-    console.log(rows.join('\n'));
   }, 120000);
 
   it('a body chop neither opens nor widens', () => {

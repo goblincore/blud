@@ -122,7 +122,7 @@ const K_LATER = 45;
 // ---- O.
 /** The chop's bearing round to the head's right (rad): the hit lands 33.7 mm off centre (one side from 13.5 mm). */
 const O_BEARING = 0.5;
-/** The still half starts this far beyond the plane (m), and both halves are counted within O_DISC of the centre. */
+/** Each half starts this far beyond the plane on its own side (m), and both are counted within O_DISC of the centre. */
 const O_CLEAR = 0.01;
 const O_DISC = 0.12;
 /** A texel's surface moved: its depth along the view differs by more than this (m). Measured largest on the still
@@ -190,6 +190,9 @@ const M_ANGLE_TOL = 1e-6;
 /** The eye seats in the head frame (mesh-eyes.ts, the rest pose). */
 const M_SEATS = [[-0.0363, 0.0159, 0.0343], [0.0363, 0.0159, 0.0343]];
 // ---- R.
+/** The draw distance from the live uniforms must be at least this (m; measured 12.67): nearer, a split would close
+ *  at a range where the head is still tens of pixels across. */
+const R_FAR_MIN = 4;
 /** The stances stand this far inside and beyond the draw distance and the reopen distance (m). */
 const R_STEP = 0.3;
 /** The sheet's crop at range (screen px square; the head is about 20 px across there). */
@@ -505,7 +508,8 @@ const out = {};
 async function threw(what, e) {
   fail(`${what}: stopped by an exception, its remaining checks did not run (${String(e?.message ?? e).replace(/\s+/g, " ").slice(0, 300)})`);
   try { await evaluate("__sdfGame.setRenderLock(false)", 5000); } catch { /* the page may be gone */ }
-}const actorPhase = async (id) => (await evaluate("__sdfGame.actorList()")).find((q) => q.id === id)?.phase;
+}
+const actorPhase = async (id) => (await evaluate("__sdfGame.actorList()")).find((q) => q.id === id)?.phase;
 const meterOf = async (id) => (await evaluate("__sdfGame.actorList()")).find((q) => q.id === id)?.meter;
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -765,7 +769,7 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
       const C = await txOf(fr.centre, tO), Rd = d2(C, await txOf(add(fr.centre, [0, O_DISC, 0]), tO));
       const lineAt = async (s) => [await txOf(add(add(fr.centre, mul(right, s)), [0, 0.2, 0]), tO), await txOf(add(add(fr.centre, mul(right, s)), [0, -0.2, 0]), tO)];
       const sideOf = ([a, b], x, y) => Math.sign((b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0]));
-      const stillLine = await lineAt(st.offset - side * O_CLEAR), movedLine = await lineAt(st.offset + side * 0.01);
+      const stillLine = await lineAt(st.offset - side * O_CLEAR), movedLine = await lineAt(st.offset + side * O_CLEAR);
       const stillRef = await txOf(add(fr.centre, mul(right, -side * 0.3)), tO), movedRef = await txOf(add(fr.centre, mul(right, side * 0.3)), tO);
       // Per half: texels either frame hits; those whose hit differs (`mask`), whose surface moved along the view by
       // more than O_DEPTH (`depth`: an open slot's walk lands its samples a hair off the closed one's, under a tenth
@@ -814,64 +818,67 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
       const tissue = (deep, fat) => evaluate(`(() => { for (const q of ${allViews}) { const u = q.view.uniforms; u.deepColor.value.setRGB(${deep[0]}, ${deep[1]}, ${deep[2]}); u.fatColor.value.setRGB(${fat[0]}, ${fat[1]}, ${fat[2]}); } return 1; })()`);
       await setCam(cam); await stepN(SETTLE); await settle();
       const shot0 = await capture(), px0 = await headPx(z.id);
-      // The wound mask is the tissue colours' reach (albedo = mix(base, tissue, mask)): paint them green and it is the
-      // rise in green against the same open head before the hit.
-      await tissue([0, 1, 0], [0, 1, 0]); await settle();
       // A rod cut down the + half's brow, then a pellet high on the - half's forehead: both aimed from the front at
       // the OPEN head. Each is read against the frame before it, so its mask is its own.
       const green = (t, i) => t.f[i * 4 + 1] / (t.f[i * 4] + t.f[i * 4 + 1] + t.f[i * 4 + 2] + 1e-6);
       const glow = (t, i) => t.f[i * 4] > L_EYE_RED;
       out.l = [];
       const LW = 150, lRgb = Buffer.alloc(2 * LW * 2 * LW * 2 * 3); let lCol = 0;
-      for (const [k, name] of [[0, "rod cut"], [1, "pellet"]]) {
-        const at = open[k], eyeAt = eyes[k], view = unit(sub(at, eyeAt));
-        const prev = await readFrom(eyeAt, at);
-        const w0 = (await woundsOf(z.id)).length;
-        const aim = name === "rod cut"
-          ? ((await evaluate(`__sdfGame.cut(${z.id}, ${J(add(at, mul(up, -L_CUT_HALF)))}, ${J(add(at, mul(up, L_CUT_HALF)))}, ${J(view)})`)) >= 1 ? at : null)
-          : await evaluate(`__sdfGame.stampWoundAt(${eyeAt[0]}, ${eyeAt[1]}, ${eyeAt[2]}, ${view[0]}, ${view[1]}, ${view[2]}, "pellet", ${z.id})`);
-        await stepN(3);
-        const wd = (await woundsOf(z.id)).slice(w0)[0];
-        check(ok && !!aim && !!wd, `L: the ${name} lands on the open head (split forced ${ok}, hit ${!!aim}, a new wound ${!!wd})`);
-        if (!aim || !wd) continue;
-        const t1 = await readFrom(eyeAt, at);
-        const pred = await unwarpOf(z.id, aim), shown = await warpOf(z.id, wd.pos);
-        const tx = await txOf(shown.p, t1), closedTx = await txOf(wd.pos, t1);
-        // The window: about the wound's place on the open head, a multiple of its radius there (B6's).
-        const win = Math.max(L_WINDOW_MIN, (wd.shape === "cut" ? L_WINDOW_CUT : L_WINDOW_CRATER) * d2(await txOf(add(shown.p, mul(up, wd.radius)), t1), tx));
-        // The mask: texels both frames hit, neither an eye's glow, whose green share rose by more than L_GREEN. The
-        // crater: texels whose surface went in by more than L_DENT. The check holds the mask's plain centroid to the
-        // crater's. B6 weighted the mask's by the rise; that one is reported: it moves with the wet highlight on the
-        // crater (0.27 texels on one zombie of the ring, 2.69 on its neighbour, with 0.98 and 0.96 of the crater masked).
-        const dist = await depthToDistance();
-        let n = 0, wsum = 0, sx = 0, sy = 0, ux = 0, uy = 0, cn = 0, cx = 0, cy = 0, both = 0;
-        for (let y = 0; y < t1.h; y++) for (let x = 0; x < t1.w; x++) { const i = y * t1.w + x; if (!hitAt(prev, i) || !hitAt(t1, i) || d2([x + 0.5, y + 0.5], tx) > win) continue;
-          const rise = green(t1, i) - green(prev, i), m = rise > L_GREEN && !glow(t1, i) && !glow(prev, i), c = dist(t1.f[i * 4 + 3]) - dist(prev.f[i * 4 + 3]) > L_DENT;
-          if (m) { n++; wsum += rise; sx += (x + 0.5) * rise; sy += (y + 0.5) * rise; ux += x + 0.5; uy += y + 0.5; } if (c) { cn++; cx += x + 0.5; cy += y + 0.5; } if (m && c) both++; }
-        const posErr = len(sub(wd.pos, pred.q)), mask = n ? [ux / n, uy / n] : null, crater = cn ? [cx / cn, cy / cn] : null;
-        const err = mask && crater ? d2(mask, crater) : Infinity, toOpen = mask ? d2(mask, tx) : Infinity, toClosed = mask ? d2(mask, closedTx) : 0, covered = cn ? both / cn : 0;
-        const weighted = n && crater ? d2([sx / wsum, sy / wsum], crater) : Infinity;
-        out.l.push({ wound: name, shape: wd.shape, piece: pred.piece, posErrMm: +(1000 * posErr).toFixed(3), windowTx: +win.toFixed(1), maskTexels: n, craterTexels: cn, craterMasked: +covered.toFixed(2), maskToCraterTx: +err.toFixed(2), riseWeightedTx: +weighted.toFixed(2), maskToOpenPlaceTx: +toOpen.toFixed(1), maskToClosedPlaceTx: +toClosed.toFixed(1) });
-        check(pred.piece !== 0 && shown.piece === pred.piece && posErr <= L_POS_TOL, `L: the ${name} is stamped where unwarpPoint puts its hit, on the closed head (piece ${pred.piece}; ${(1000 * posErr).toFixed(3)} mm off <= ${mm(L_POS_TOL)} mm)`);
-        check(n >= L_MIN_TEXELS && cn >= L_MIN_TEXELS && err <= L_CENTROID_TX && covered >= L_CRATER_MASKED && toClosed > toOpen,
-          `L: its mask is drawn on its crater, on the moved half: centroids ${err.toFixed(2)} texels apart (<= ${L_CENTROID_TX}), ${covered.toFixed(2)} of the crater's ${cn} texels masked (>= ${L_CRATER_MASKED}; ${n} mask texels in a ${win.toFixed(1)}-texel window); the mask is ${toOpen.toFixed(1)} texels from the wound's place on the open head, ${toClosed.toFixed(1)} from its closed one`);
-        // The picture: grey hit, green mask only, red crater only, yellow both; white the wound's place on the open
-        // head, blue its closed one. 2 x 2 px a texel, about the head.
-        const hcTx = tx;
-        for (let y = 0; y < LW * 2; y++) for (let x = 0; x < LW * 2; x++) {
-          const tx0 = Math.round(hcTx[0] - LW / 2) + (x >> 1), ty0 = Math.round(hcTx[1] - LW / 2) + (y >> 1), o = (y * 2 * LW * 2 + lCol * LW * 2 + x) * 3;
-          if (tx0 < 0 || ty0 < 0 || tx0 >= t1.w || ty0 >= t1.h) continue;
-          const i = ty0 * t1.w + tx0, hit = hitAt(prev, i) && hitAt(t1, i), inWin = d2([tx0 + 0.5, ty0 + 0.5], tx) <= win;
-          const m = hit && inWin && green(t1, i) - green(prev, i) > L_GREEN && !glow(t1, i) && !glow(prev, i), c = hit && inWin && dist(t1.f[i * 4 + 3]) - dist(prev.f[i * 4 + 3]) > L_DENT;
-          const near = (q) => d2([tx0 + 0.5, ty0 + 0.5], q) < 1;
-          const col = near(tx) ? [255, 255, 255] : near(closedTx) ? [0, 120, 255] : m && c ? [230, 230, 0] : m ? [0, 200, 0] : c ? [200, 0, 0] : hit ? [60, 60, 60] : [0, 0, 0];
-          lRgb[o] = col[0]; lRgb[o + 1] = col[1]; lRgb[o + 2] = col[2];
+      // The wound mask is the tissue colours' reach (albedo = mix(base, tissue, mask)): paint them green and it is the
+      // rise in green against the same open head before the hit. The paint is on every view of the page, so it comes
+      // off again whatever happens in between (the scenarios after this one read the same boot).
+      await tissue([0, 1, 0], [0, 1, 0]);
+      try {
+        await settle();
+        for (const [k, name] of [[0, "rod cut"], [1, "pellet"]]) {
+          const at = open[k], eyeAt = eyes[k], view = unit(sub(at, eyeAt));
+          const prev = await readFrom(eyeAt, at);
+          const w0 = (await woundsOf(z.id)).length;
+          const aim = name === "rod cut"
+            ? ((await evaluate(`__sdfGame.cut(${z.id}, ${J(add(at, mul(up, -L_CUT_HALF)))}, ${J(add(at, mul(up, L_CUT_HALF)))}, ${J(view)})`)) >= 1 ? at : null)
+            : await evaluate(`__sdfGame.stampWoundAt(${eyeAt[0]}, ${eyeAt[1]}, ${eyeAt[2]}, ${view[0]}, ${view[1]}, ${view[2]}, "pellet", ${z.id})`);
+          await stepN(3);
+          const wd = (await woundsOf(z.id)).slice(w0)[0];
+          check(ok && !!aim && !!wd, `L: the ${name} lands on the open head (split forced ${ok}, hit ${!!aim}, a new wound ${!!wd})`);
+          if (!aim || !wd) continue;
+          const t1 = await readFrom(eyeAt, at);
+          const pred = await unwarpOf(z.id, aim), shown = await warpOf(z.id, wd.pos);
+          const tx = await txOf(shown.p, t1), closedTx = await txOf(wd.pos, t1);
+          // The window: about the wound's place on the open head, a multiple of its radius there (B6's).
+          const win = Math.max(L_WINDOW_MIN, (wd.shape === "cut" ? L_WINDOW_CUT : L_WINDOW_CRATER) * d2(await txOf(add(shown.p, mul(up, wd.radius)), t1), tx));
+          // The mask: texels both frames hit, neither an eye's glow, whose green share rose by more than L_GREEN. The
+          // crater: texels whose surface went in by more than L_DENT. The check holds the mask's plain centroid to the
+          // crater's. B6 weighted the mask's by the rise; that one is reported: it moves with the wet highlight on the
+          // crater (0.27 texels on one zombie of the ring, 2.69 on its neighbour, with 0.98 and 0.96 of the crater masked).
+          const dist = await depthToDistance();
+          let n = 0, wsum = 0, sx = 0, sy = 0, ux = 0, uy = 0, cn = 0, cx = 0, cy = 0, both = 0;
+          for (let y = 0; y < t1.h; y++) for (let x = 0; x < t1.w; x++) { const i = y * t1.w + x; if (!hitAt(prev, i) || !hitAt(t1, i) || d2([x + 0.5, y + 0.5], tx) > win) continue;
+            const rise = green(t1, i) - green(prev, i), m = rise > L_GREEN && !glow(t1, i) && !glow(prev, i), c = dist(t1.f[i * 4 + 3]) - dist(prev.f[i * 4 + 3]) > L_DENT;
+            if (m) { n++; wsum += rise; sx += (x + 0.5) * rise; sy += (y + 0.5) * rise; ux += x + 0.5; uy += y + 0.5; } if (c) { cn++; cx += x + 0.5; cy += y + 0.5; } if (m && c) both++; }
+          const posErr = len(sub(wd.pos, pred.q)), mask = n ? [ux / n, uy / n] : null, crater = cn ? [cx / cn, cy / cn] : null;
+          const err = mask && crater ? d2(mask, crater) : Infinity, toOpen = mask ? d2(mask, tx) : Infinity, toClosed = mask ? d2(mask, closedTx) : 0, covered = cn ? both / cn : 0;
+          const weighted = n && crater ? d2([sx / wsum, sy / wsum], crater) : Infinity;
+          out.l.push({ wound: name, shape: wd.shape, piece: pred.piece, posErrMm: +(1000 * posErr).toFixed(3), windowTx: +win.toFixed(1), maskTexels: n, craterTexels: cn, craterMasked: +covered.toFixed(2), maskToCraterTx: +err.toFixed(2), riseWeightedTx: +weighted.toFixed(2), maskToOpenPlaceTx: +toOpen.toFixed(1), maskToClosedPlaceTx: +toClosed.toFixed(1) });
+          check(pred.piece !== 0 && shown.piece === pred.piece && posErr <= L_POS_TOL, `L: the ${name} is stamped where unwarpPoint puts its hit, on the closed head (piece ${pred.piece}; ${(1000 * posErr).toFixed(3)} mm off <= ${mm(L_POS_TOL)} mm)`);
+          check(n >= L_MIN_TEXELS && cn >= L_MIN_TEXELS && err <= L_CENTROID_TX && covered >= L_CRATER_MASKED && toClosed > toOpen,
+            `L: its mask is drawn on its crater, on the moved half: centroids ${err.toFixed(2)} texels apart (<= ${L_CENTROID_TX}), ${covered.toFixed(2)} of the crater's ${cn} texels masked (>= ${L_CRATER_MASKED}; ${n} mask texels in a ${win.toFixed(1)}-texel window); the mask is ${toOpen.toFixed(1)} texels from the wound's place on the open head, ${toClosed.toFixed(1)} from its closed one`);
+          // The picture: grey hit, green mask only, red crater only, yellow both; white the wound's place on the open
+          // head, blue its closed one. 2 x 2 px a texel, about the head.
+          const hcTx = tx;
+          for (let y = 0; y < LW * 2; y++) for (let x = 0; x < LW * 2; x++) {
+            const tx0 = Math.round(hcTx[0] - LW / 2) + (x >> 1), ty0 = Math.round(hcTx[1] - LW / 2) + (y >> 1), o = (y * 2 * LW * 2 + lCol * LW * 2 + x) * 3;
+            if (tx0 < 0 || ty0 < 0 || tx0 >= t1.w || ty0 >= t1.h) continue;
+            const i = ty0 * t1.w + tx0, hit = hitAt(prev, i) && hitAt(t1, i), inWin = d2([tx0 + 0.5, ty0 + 0.5], tx) <= win;
+            const m = hit && inWin && green(t1, i) - green(prev, i) > L_GREEN && !glow(t1, i) && !glow(prev, i), c = hit && inWin && dist(t1.f[i * 4 + 3]) - dist(prev.f[i * 4 + 3]) > L_DENT;
+            const near = (q) => d2([tx0 + 0.5, ty0 + 0.5], q) < 1;
+            const col = near(tx) ? [255, 255, 255] : near(closedTx) ? [0, 120, 255] : m && c ? [230, 230, 0] : m ? [0, 200, 0] : c ? [200, 0, 0] : hit ? [60, 60, 60] : [0, 0, 0];
+            lRgb[o] = col[0]; lRgb[o + 1] = col[1]; lRgb[o + 2] = col[2];
+          }
+          lCol++;
         }
-        lCol++;
-      }
+      } finally { await tissue(saved.deep, saved.fat); }
       writeFileSync(`${OUT}/L-mask-vs-crater.png`, encodePng(2 * LW * 2, LW * 2, lRgb)); console.log(`  sheet ${OUT}/L-mask-vs-crater.png (the rod cut, the pellet)`);
       note(`L: ${J(out.l)}`);
-      await tissue(saved.deep, saved.fat);
       await setCam(cam); await stepN(SETTLE); await settle();
       const shot1 = await capture();
       sheet("L-later-hits", [{ img: shot0, c: px0 }, { img: shot1, c: px0 }]);
@@ -1100,7 +1107,7 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
         else check(steady && !rec && sk.bones === 0 && sk.eyes === 0 && sk.draws > 0 && hits >= R_MIN_HITS && share <= R_CLOSED_SHARE,
           `R: ${k} (${DS[k].toFixed(2)} m): drawn CLOSED for ${R_HOLD} frames, flesh and skull (record ${rec}, ${sk.bones + sk.eyes} skull copies of ${sk.draws} bone draws; ${differ} of ${hits} region texels differ from the closed head: ${share.toFixed(3)} <= ${R_CLOSED_SHARE})`);
       };
-      check(okF && Number.isFinite(far) && far > 4 && near < far, `R: the draw distance from the live uniforms: ${far.toFixed(2)} m, reopening inside ${near.toFixed(2)} m (accept ${J(accept)})`);
+      check(okF && Number.isFinite(far) && far > R_FAR_MIN && near < far, `R: the draw distance from the live uniforms: ${far.toFixed(2)} m, reopening inside ${near.toFixed(2)} m (accept ${J(accept)})`);
       await visit("inside", true); await visit("beyond", false); await visit("band", false); await visit("reopened", true);
       const pose = await splitOf(z.id);
       check(!!pose && pose.thetaP === w.thetaP, `R: the pose keeps the split at every range (${pose ? pose.thetaP : null} rad): only the drawing closes`);
