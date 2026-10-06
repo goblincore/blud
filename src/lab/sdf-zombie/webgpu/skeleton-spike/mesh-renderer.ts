@@ -44,8 +44,10 @@ import { meshBoneSource } from './mesh-skull';
 // whose split the march draws) is drawn once per PIECE that owns part of it: the unmoved rest, and a copy turned about
 // the hinge for each half whose bone turns. The copies go to their own batches (a second geometry sharing the
 // segment's vertex data, with its own instance data) on their own two-sided materials, which clip each copy to its
-// piece along the fracture (mesh-split.ts) and paint back faces as the bone's dark inner wall. A closed head never
-// touches any of it: same batches, same material, same instances as before.
+// piece along the fracture (mesh-split.ts). The sculpted skull and the eyes are thin closed shells: their back faces
+// are painted as the bone's dark inner wall. An anatomical plate has thickness, and an inside of its own geometry: its
+// copies keep the plate's surface and normal map on both faces, and are cut bone at the fracture edge. A closed head
+// never touches any of it: same batches, same material, same instances as before.
 //
 // PROTOTYPE SCOPE / FALLBACKS (counted, not hidden): actor bones mesh;
 // chunks, organs and every non-actor bone stay procedural. Limb segments
@@ -79,8 +81,8 @@ import type { FittedSkull } from './anatomical-skull';
 import type { Vec3 } from '../../types';
 import { HEAD_SPLIT, skullPieces, skullSplitOf, type SkullFollow, type SkullSplit, type SplitWarp } from '../../head-split';
 import {
-  MESH_SPLIT_CLIP_WGSL, MESH_SPLIT_INSIDE_WGSL, MESH_SPLIT_JAG_WGSL, SPLIT_INSTANCE_ATTRS, SPLIT_INSTANCE_FLOATS,
-  meshSplitJagMax, packSplitInstance,
+  MESH_SPLIT_CLIP_WGSL, MESH_SPLIT_CUT_BONE_WGSL, MESH_SPLIT_INSIDE_WGSL, MESH_SPLIT_JAG_WGSL, SPLIT_INSTANCE_ATTRS,
+  SPLIT_INSTANCE_FLOATS, meshSplitJagMax, packSplitInstance,
 } from './mesh-split';
 
 const MAX_WOUNDS_TEX = 64;
@@ -136,8 +138,8 @@ export interface SegmentMeshRenderer {
   /** The split skull's look, live: `follow` set by hand replaces HEAD_SPLIT.skull.follow (null = that table; a
    *  number is one share for every stage, 1 rides the flesh, 0 the whole skull; or another table); `jag` = (zigAmp,
    *  zigLen, chipAmp, chipLen) and `jagShape` = (wobble, wobbleAlong, wobbleUp, upFreq), the fracture edge
-   *  (mesh-split.ts meshSplitJag); `inside` the bone's inner wall; `rim` = (the broken edge's colour, its width in
-   *  metres). */
+   *  (mesh-split.ts meshSplitJag); `inside` the bone's inner wall (the sculpted skull's and the eyes': an anatomical
+   *  plate has none); `rim` = (the broken edge's colour, its width in metres). */
   readonly splitLook: {
     follow: SkullFollow | null; jag: { value: THREE.Vector4 }; jagShape: { value: THREE.Vector4 };
     inside: { value: THREE.Color }; rim: { value: THREE.Vector4 };
@@ -250,16 +252,24 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   const material = new MeshBasicNodeMaterial();
   material.colorNode = lit(surf, meshLook);
   let skullMaterial: MeshBasicNodeMaterial | null = null;
+  // The anatomical plates' shading, in parts, for the closed material here and the split one below: the surface with
+  // its craters read at `pWorld`, the atlas sample, the normal that sample tilts (from the fragment's own world
+  // position and normal), and the look.
+  let plate: { surface(pWorld: unknown): unknown; texel(): Node<'vec3'>; normal(texel: unknown): Node<'vec3'>; look: unknown } | null = null;
   if (cache.skullKit) {
     const sf = wgslFn(ANATOMICAL_SKULL_SURFACE_WGSL, fns.slice(0,2));
     const nf = wgslFn(ANATOMICAL_SKULL_NORMAL_WGSL);
     const kit = cache.skullKit;
-    const skullSurface = sf({pWorld:positionWorld,pLocal:positionGeometry,boneColor:u.boneColor,deepColor:u.deepColor,
-      woundTex:texture(woundTex),woundCount:u.woundCount});
-    const skullNormal = nf({p:positionWorld,n:normalWorld,uv:uv(),texel:texture(kit.normalMap).xyz,
-      normalScale:vec2(kit.normalScale.x,kit.normalScale.y)});
+    plate = {
+      surface: pWorld => sf({pWorld:pWorld as never,pLocal:positionGeometry,boneColor:u.boneColor,deepColor:u.deepColor,
+        woundTex:texture(woundTex),woundCount:u.woundCount}),
+      texel: () => texture(kit.normalMap).xyz as unknown as Node<'vec3'>,
+      normal: texel => nf({p:positionWorld,n:normalWorld,uv:uv(),texel:texel as never,
+        normalScale:vec2(kit.normalScale.x,kit.normalScale.y)}) as unknown as Node<'vec3'>,
+      look: vec4(u.look.x,u.look.y,mul(u.look.z,0.12),mul(u.look.w,0.10)),
+    };
     skullMaterial = new MeshBasicNodeMaterial();
-    skullMaterial.colorNode = lit(skullSurface,vec4(u.look.x,u.look.y,mul(u.look.z,0.12),mul(u.look.w,0.10)),skullNormal);
+    skullMaterial.colorNode = lit(plate.surface(positionWorld),plate.look,plate.normal(plate.texel()));
     skullMaterial.depthTest = true; skullMaterial.depthWrite = true;
     skullMaterial.side = THREE.DoubleSide;
   }
@@ -320,9 +330,14 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   // A clipped fragment is discarded by the mask, but a discard does not end the shader: the colour is behind a real
   // branch on the same test, so what the copy does not own skips the surface and the lighting. (Legal in a branch:
   // the surface reads its craters with textureLoad, and nothing in the chain takes a derivative.)
-  const kept = (colour: () => unknown) => Fn(() => {
+  // A colour that does take a derivative, or samples a texture, may not do it there: WGSL allows both only in uniform
+  // control flow, and the branch is on a varying. It takes them in `ahead`, which runs before the branch and hands
+  // its values to `colour`. Each must be declared there with .toVar(): a node that is not is written into the shader
+  // where it is first read, which is inside the branch.
+  const kept = <T = undefined>(colour: (ahead: T) => unknown, ahead?: () => T) => Fn(() => {
+    const before = ahead?.() as T;
     const out = vec4(0.0, 0.0, 0.0, 1.0).toVar();
-    If(clip.w.greaterThanEqual(0.0), () => { out.assign(colour() as never); });
+    If(clip.w.greaterThanEqual(0.0), () => { out.assign(colour(before) as never); });
     return out;
   })() as never;
   const splitMaterial = new MeshBasicNodeMaterial();
@@ -338,6 +353,23 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     return vec4(add(shaded.xyz, mul(eyeEmission.xyz, front)), 1.0);
   });
   splitSided(eyeSplitMaterial);
+  // A split anatomical plate. It is two-sided closed as well, its inside real geometry, so nothing of it is a wall:
+  // both faces keep the plate's surface (its craters read at q, as the sculpt's are) and the closed plate's look, and
+  // go to cut bone within the rim's width of the fracture. The normal is the closed material's own, from the turned
+  // copy's position and normal (the instance matrix carries the turn): on a back face three hands it the vertex
+  // normal turned to face the eye, and the atlas's tilt turns with it, so the inside of a plate is lit as a surface
+  // facing the eye, split or closed.
+  let skullSplitMaterial: MeshBasicNodeMaterial | null = null;
+  if (plate) {
+    const cutBoneFn = wgslFn(MESH_SPLIT_CUT_BONE_WGSL), parts = plate;
+    skullSplitMaterial = new MeshBasicNodeMaterial();
+    skullSplitMaterial.colorNode = kept(
+      normal => lit(cutBoneFn({ surface: parts.surface(clip.xyz) as never, keep: clip.w, rim: splitLook.rim }), parts.look, normal),
+      // The atlas is sampled and the normal takes dpdx / dpdy: both ahead of the branch.
+      () => parts.normal(parts.texel().toVar()).toVar(),
+    );
+    splitSided(skullSplitMaterial);
+  }
   const eyeGeometry = new THREE.SphereGeometry(1, 24, 16);
   // Ejected eyes are plain meshes on the eye material, so they need an iLights of their own (one
   // instance, no owner: the old key). Their own geometry, so the eye batch can grow its attribute.
@@ -383,6 +415,8 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
         if (!(attr as THREE.InstancedBufferAttribute).isInstancedBufferAttribute) g.setAttribute(name, attr as THREE.BufferAttribute);
       }
       g.setIndex(base.index);
+      // A plate's twin is a plate: batchFor picks the material by this.
+      if (base.userData.anatomicalSkull) g.userData.anatomicalSkull = true;
       splitGeometries.set(base, g);
     }
     return g;
@@ -400,8 +434,9 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   };
   /** A split geometry's records (mesh-split.ts packSplitInstance): ONE interleaved instance buffer of
    *  SPLIT_INSTANCE_FLOATS a row, read as the four vec4 attributes SPLIT_INSTANCE_ATTRS. One buffer, not four: the
-   *  pipeline may bind 8 vertex buffers, and position, normal, meshFeature, the instance matrix, iLights and iFill
-   *  are six. At least `cap` rows (grown with the batch; the rows are rewritten every update). */
+   *  pipeline may bind 8 vertex buffers, and position, normal, meshFeature (an anatomical plate: uv in its place),
+   *  the instance matrix, iLights and iFill are six. At least `cap` rows (grown with the batch; the rows are
+   *  rewritten every update). */
   const splitRows = (geometry: THREE.BufferGeometry, cap = 0): THREE.InstancedInterleavedBuffer => {
     const cur = (geometry.getAttribute(SPLIT_INSTANCE_ATTRS[0]) as THREE.InterleavedBufferAttribute | undefined)?.data as THREE.InstancedInterleavedBuffer | undefined;
     if (cur && cur.count >= cap) return cur;
@@ -429,8 +464,10 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   const batchFor = (geometry: THREE.BufferGeometry, eye: boolean, split = false): Batch => {
     let b = batches.get(geometry);
     if (!b) {
-      const closed = eye ? eyeMaterial : geometry.userData.anatomicalSkull ? skullMaterial! : material;
-      const mesh = new THREE.InstancedMesh(geometry, split ? (eye ? eyeSplitMaterial : splitMaterial) : closed, 16);
+      const anatomical = !eye && !!geometry.userData.anatomicalSkull;
+      const closed = eye ? eyeMaterial : anatomical ? skullMaterial! : material;
+      const open = eye ? eyeSplitMaterial : anatomical ? skullSplitMaterial! : splitMaterial;
+      const mesh = new THREE.InstancedMesh(geometry, split ? open : closed, 16);
       mesh.name = (eye ? 'skeleton-fleshy-eyes' : 'skeleton-segments') + (split ? '-split' : '');
       mesh.frustumCulled = false;
       mesh.layers.set(layer);
@@ -820,6 +857,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       skullMaterial?.dispose();
       eyeMaterial.dispose();
       splitMaterial.dispose();
+      skullSplitMaterial?.dispose();
       eyeSplitMaterial.dispose();
       eyeGeometry.dispose();
       debrisEyeGeometry.dispose();

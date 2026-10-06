@@ -13,7 +13,10 @@
 //   * the fracture (MESH_SPLIT_JAG_WGSL): the edge between the two halves is not the old plane but a ragged sheet over
 //     it, s(q) + jag >= 0. The offset is a function of q alone, in the split's own frame (along the hinge axis, up
 //     from the hinge), so it rides the head, and both halves read the same value at the same point: their edges fit
-//     like one bone that broke.
+//     like one bone that broke;
+//   * the broken edge: a thin closed shell shows its back faces as one dark inner wall, cut bone at the edge
+//     (MESH_SPLIT_INSIDE_WGSL); a plate with real thickness has an inside of its own geometry, and takes only the
+//     cut-bone rim, on both faces (MESH_SPLIT_CUT_BONE_WGSL).
 //
 // Pure (no three): the TypeScript twins below are the reference the WGSL is edited with (mesh-appearance.ts's idiom).
 import type { Vec3 } from '../../types';
@@ -126,18 +129,41 @@ export const MESH_SPLIT_CLIP_WGSL = /* wgsl */ `fn meshSplitClip(pWorld: vec3<f3
   return vec4<f32>(q, keep);
 }`;
 
+/** The rim's share of a fragment `keep` metres inside its copy's edge (rim.w = the rim's width): 1 to half the width,
+ *  0 from the width on. One line for the two functions below; meshSplitRim is its twin. */
+const RIM_SHARE_LINE = 'let edge = clamp((rim.w - keep) / max(rim.w, 1e-6) * 2.0, 0.0, 1.0);';
+
 /** THE INSIDE OF THE BONE. A clipped shell shows its back faces: they are the skull's inner wall, one dark colour
  *  (HEAD_SPLIT.skull.inside) whatever is painted outside, with exposure 0, the shade's occluded end. Within the rim's
  *  width of the copy's edge (`keep`, the clip's distance to it) the wall is cut bone instead: full at half the width,
  *  gone at the width. `front` is 1 on a front face, which keeps its own surface; rim = (colour, width in metres). */
 export const MESH_SPLIT_INSIDE_WGSL = /* wgsl */ `fn meshSplitInside(surface: vec4<f32>, front: f32, inside: vec3<f32>, keep: f32, rim: vec4<f32>) -> vec4<f32> {
-  let edge = clamp((rim.w - keep) / max(rim.w, 1e-6) * 2.0, 0.0, 1.0);
+  ${RIM_SHARE_LINE}
   return select(vec4<f32>(mix(inside, rim.xyz, edge), edge), surface, front > 0.5);
 }`;
 
-/** MESH_SPLIT_INSIDE_WGSL's rim share at `keep` metres from the edge (its hand twin). */
+/** The rim's share at `keep` metres from the edge: the hand twin of the `edge` line MESH_SPLIT_INSIDE_WGSL and
+ *  MESH_SPLIT_CUT_BONE_WGSL share. */
 export function meshSplitRim(keep: number, width: number = HEAD_SPLIT.skull.rim.width): number {
   return Math.max(0, Math.min(1, (width - keep) / Math.max(width, 1e-6) * 2));
+}
+
+/** THE CUT BONE OF A PLATE WITH THICKNESS (the anatomical skull's). Its inside is real geometry with a surface of its
+ *  own, so there is no wall to paint: within the rim's width of the copy's edge the surface, whichever way it faces,
+ *  goes to cut bone (the rim's colour, exposure 1, as the wall's rim has it) by the same share as the wall's: full at
+ *  half the width, gone at the width. rim = (colour, width in metres). */
+export const MESH_SPLIT_CUT_BONE_WGSL = /* wgsl */ `fn meshSplitCutBone(surface: vec4<f32>, keep: f32, rim: vec4<f32>) -> vec4<f32> {
+  ${RIM_SHARE_LINE}
+  return mix(surface, vec4<f32>(rim.xyz, 1.0), edge);
+}`;
+
+/** MESH_SPLIT_CUT_BONE_WGSL's hand twin: `surface` = (albedo, exposure) at `keep` metres from the copy's edge. */
+export function meshSplitCutBone(
+  surface: readonly [number, number, number, number], keep: number,
+  rim: { color: readonly [number, number, number]; width: number } = HEAD_SPLIT.skull.rim,
+): [number, number, number, number] {
+  const edge = meshSplitRim(keep, rim.width), cut = [rim.color[0], rim.color[1], rim.color[2], 1] as const;
+  return [0, 1, 2, 3].map(i => surface[i]! * (1 - edge) + cut[i]! * edge) as [number, number, number, number];
 }
 
 /** What the tuning seam may set of the split skull's look (game-seams-skeleton.ts skullSplit; the renderer's

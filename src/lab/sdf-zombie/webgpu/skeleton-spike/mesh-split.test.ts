@@ -9,9 +9,9 @@ import {
 import type { Vec3 } from '../../types';
 import { qFromAxisAngle } from '../../vec';
 import {
-  JAG_SEED, MESH_SPLIT_CLIP_WGSL, MESH_SPLIT_INSIDE_WGSL, MESH_SPLIT_JAG_LINES, MESH_SPLIT_JAG_WGSL, SPLIT_INSTANCE_ATTRS,
-  SPLIT_INSTANCE_FLOATS,
-  meshSplitJag, meshSplitJagMax, meshSplitKeep, meshSplitRim, packSplitInstance, skullJagAt,
+  JAG_SEED, MESH_SPLIT_CLIP_WGSL, MESH_SPLIT_CUT_BONE_WGSL, MESH_SPLIT_INSIDE_WGSL, MESH_SPLIT_JAG_LINES, MESH_SPLIT_JAG_WGSL,
+  SPLIT_INSTANCE_ATTRS, SPLIT_INSTANCE_FLOATS,
+  meshSplitCutBone, meshSplitJag, meshSplitJagMax, meshSplitKeep, meshSplitRim, packSplitInstance, skullJagAt,
 } from './mesh-split';
 
 const hash = (i: number, lane: number): number => { const x = Math.sin(i * 127.1 + lane * 311.7) * 43758.5453; return x - Math.floor(x); };
@@ -120,7 +120,12 @@ describe('the WGSL: one function per string, scalars and vectors only', () => {
     expect(MESH_SPLIT_CLIP_WGSL).toContain('return vec4<f32>(q, keep);');
     expect(MESH_SPLIT_INSIDE_WGSL).toContain('let edge = clamp((rim.w - keep) / max(rim.w, 1e-6) * 2.0, 0.0, 1.0);');
     expect(MESH_SPLIT_INSIDE_WGSL).toContain('return select(vec4<f32>(mix(inside, rim.xyz, edge), edge), surface, front > 0.5);');
-    for (const src of [MESH_SPLIT_JAG_WGSL, MESH_SPLIT_CLIP_WGSL, MESH_SPLIT_INSIDE_WGSL]) {
+    // The cut bone of a plate: the same share of the rim as the wall's, mixed into the surface whichever way it faces.
+    expect(MESH_SPLIT_CUT_BONE_WGSL).toContain('fn meshSplitCutBone(surface: vec4<f32>, keep: f32, rim: vec4<f32>) -> vec4<f32>');
+    expect(MESH_SPLIT_CUT_BONE_WGSL).toContain('let edge = clamp((rim.w - keep) / max(rim.w, 1e-6) * 2.0, 0.0, 1.0);');
+    expect(MESH_SPLIT_CUT_BONE_WGSL).toContain('return mix(surface, vec4<f32>(rim.xyz, 1.0), edge);');
+    expect(MESH_SPLIT_CUT_BONE_WGSL).not.toMatch(/front|inside/);
+    for (const src of [MESH_SPLIT_JAG_WGSL, MESH_SPLIT_CLIP_WGSL, MESH_SPLIT_INSIDE_WGSL, MESH_SPLIT_CUT_BONE_WGSL]) {
       expect(src.match(/\bfn /g)).toHaveLength(1);
       expect(src).not.toMatch(/array<|\[|\bvar<|\bloop\b|\bfor\b/);
     }
@@ -137,6 +142,27 @@ describe('meshSplitRim: the inner wall is cut bone near the break', () => {
     expect(meshSplitRim(w)).toBe(0);
     expect(meshSplitRim(0.05)).toBe(0);
     expect(meshSplitRim(1e-4, 0)).toBe(0);
+  });
+});
+
+describe('meshSplitCutBone: a plate with thickness is cut bone near the break, on both of its faces', () => {
+  const { color, width } = HEAD_SPLIT.skull.rim;
+  const surface = [0.31, 0.27, 0.2, 0.4] as const;
+  const cut = [...color, 1];
+  it('the rim\'s colour, fully exposed, to half the width; the plate\'s own surface from the width on', () => {
+    expect(meshSplitCutBone(surface, 0)).toEqual(cut);
+    expect(meshSplitCutBone(surface, width / 2)).toEqual(cut);
+    meshSplitCutBone(surface, width * 0.75).forEach((v, i) => expect(v, `lane ${i}`).toBeCloseTo((surface[i]! + cut[i]!) / 2, 12));
+    expect(meshSplitCutBone(surface, width)).toEqual([...surface]);
+    expect(meshSplitCutBone(surface, 0.05)).toEqual([...surface]);
+  });
+  it('its share is meshSplitRim\'s at every distance and width, and a width of 0 is no rim at all', () => {
+    for (const w of [width, 0.001, 0.012]) for (let i = 0; i <= 40; i++) {
+      const keep = w * 1.25 * i / 40, share = meshSplitRim(keep, w);
+      meshSplitCutBone(surface, keep, { color, width: w }).forEach((v, k) => expect(v, `width ${w} keep ${keep} lane ${k}`).toBeCloseTo(surface[k]! * (1 - share) + cut[k]! * share, 12));
+    }
+    expect(meshSplitCutBone(surface, 1e-4, { color, width: 0 })).toEqual([...surface]);
+    expect(meshSplitCutBone(surface, 0, { color, width: 0 })).toEqual([...surface]);
   });
 });
 

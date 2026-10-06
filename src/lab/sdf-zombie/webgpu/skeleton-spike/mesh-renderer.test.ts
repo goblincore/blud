@@ -12,6 +12,8 @@
 
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three/webgpu';
+import type { MeshBasicNodeMaterial, Node } from 'three/webgpu';
+import { getCurrentStack, setCurrentStack, stack } from 'three/tsl';
 import { parseBlob } from '../../blob-parse';
 import { compileBlob } from '../../blob-compile';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../../build-body';
@@ -29,6 +31,8 @@ import { headShape } from '../flame-anchors';
 import { meshBoneSource } from './mesh-skull';
 import { meshEyePlacements } from './mesh-eyes';
 import { SPLIT_INSTANCE_ATTRS, SPLIT_INSTANCE_FLOATS, packSplitInstance } from './mesh-split';
+import { AnatomicalSkullKit } from './anatomical-skull';
+import { anatomicalSkullSource } from './anatomical-skull.fixture';
 import type { Vec3 } from '../../types';
 
 const body = buildBody(compileBlob(parseBlob(zombieSrc)), DEFAULT_BUILD_OPTS);
@@ -517,5 +521,166 @@ describe('the head split: the skull is drawn once per piece that owns part of it
     renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
     expect(angleOf()).toBeCloseTo(w.thetaP * skullFollow(0.8), 9);
     renderer.dispose(); cache.dispose();
+  });
+
+  describe('on the anatomical skull (anatomical-skull.ts): a split plate keeps its own surface and normal map', () => {
+    /** A renderer on the real asset's kit, as the game's default cache has it. */
+    const makeAnatomical = () => {
+      const normalMap = new THREE.Texture();
+      const cache = new SegmentMeshCache(undefined, new AnatomicalSkullKit(anatomicalSkullSource(), normalMap, new THREE.Vector2(1, 1)));
+      return { cache, normalMap, renderer: createSegmentMeshRenderer(cache, 0, undefined, () => {}) };
+    };
+    // The same head under a name the kit does not fit: it keeps the extracted bone, in the same renderer.
+    const otherHead = createSkeletonSources(body, bound, { character: 'ghoul' }).find(s => s.segment === 'head')!;
+    type Drawn = R['drawn'][number];
+    const matOf = (r: R, d: Drawn) => (r.object.children.find(c => (c as THREE.InstancedMesh).geometry === d.geometry) as THREE.InstancedMesh).material as MeshBasicNodeMaterial;
+    type Graph = Node & { functionNode?: { code: string }; isTextureNode?: boolean; isVarNode?: boolean; intent?: boolean; value?: unknown; node?: Node; ifNode?: unknown };
+    /** Every node `roots` reach, not looking behind a node of `stop`. */
+    const reach = (roots: readonly Node[], stop: ReadonlySet<Node> = new Set()): Graph[] => {
+      const seen = new Set<Node>(), todo = [...roots];
+      while (todo.length) {
+        const n = todo.pop()!;
+        if (seen.has(n) || stop.has(n)) continue;
+        seen.add(n);
+        for (const c of n.getChildren()) todo.push(c as Node);
+      }
+      return [...seen] as Graph[];
+    };
+    /** The WGSL functions a graph calls, by name. */
+    const calls = (nodes: readonly Graph[]) => new Set(nodes.flatMap(n => (n.functionNode ? [/\bfn (\w+)/.exec(n.functionNode.code)![1]!] : [])));
+    const samples = (nodes: readonly Graph[], map: THREE.Texture) => nodes.some(n => n.isTextureNode === true && n.value === map);
+    /** A split material's colour as three builds it: the function's body run on a stack of its own. `held` are the
+     *  values declared ahead of the branch on the clip (real variables: an intent is written where it is first read),
+     *  `branch` what the branch stacks. */
+    const colourOf = (m: MeshBasicNodeMaterial) => {
+      const body = (m.colorNode as unknown as { node: { shaderNode: { jsFunc(): unknown } } }).node.shaderNode;
+      const was = getCurrentStack(), outer = stack();
+      try {
+        setCurrentStack(outer); body.jsFunc();
+        const nodes = outer.nodes as Graph[], at = nodes.findIndex(n => n.ifNode !== undefined);
+        expect(at).toBeGreaterThan(0);
+        const inner = stack();
+        setCurrentStack(inner); (nodes[at]!.ifNode as { jsFunc(): unknown }).jsFunc();
+        return { held: nodes.slice(0, at).filter(n => n.isVarNode === true && n.intent !== true), branch: inner.nodes as Graph[], rest: nodes.slice(at + 1) };
+      } finally { setCurrentStack(was); }
+    };
+    const allCalls = (m: MeshBasicNodeMaterial) => { const c = colourOf(m); return calls(reach([...c.held, ...c.branch])); };
+
+    it('the split copies are on the plates\' split material; a head the kit does not fit and every closed head keep theirs', () => {
+      const { cache, renderer } = makeAnatomical();
+      const open = { id: 1 }, shut = { id: 2 }, otherOpen = { id: 3 }, otherShut = { id: 4 };
+      const w = warpOf('middle', 0, 0, 1);
+      renderer.update([[headSrc], [headSrc], [otherHead], [otherHead]], [open, shut, otherOpen, otherShut], undefined, undefined, undefined,
+        { warp: (o, seg) => ((o === open || o === otherOpen) && seg === 'head' ? w : null) });
+      expect(segs(renderer, open).map(d => d.piece)).toEqual([0, 1, 2]);
+      expect(segs(renderer, shut).map(d => d.piece)).toEqual([null]);
+      expect(segs(renderer, otherOpen).map(d => d.piece)).toEqual([0, 1, 2]);
+      expect(segs(renderer, otherShut).map(d => d.piece)).toEqual([null]);
+      const mats = [open, shut, otherOpen, otherShut].map(o => { const m = new Set(segs(renderer, o).map(d => matOf(renderer, d))); expect(m.size).toBe(1); return [...m][0]!; });
+      const [plateSplit, plate, boneSplit, bone] = mats as [MeshBasicNodeMaterial, MeshBasicNodeMaterial, MeshBasicNodeMaterial, MeshBasicNodeMaterial];
+      expect(new Set(mats).size).toBe(4);
+      // Sidedness: the closed plates are two-sided already (they have thickness); so are their split copies. The clip
+      // is the split materials' alone.
+      expect(mats.map(m => m.side)).toEqual([THREE.DoubleSide, THREE.DoubleSide, THREE.DoubleSide, THREE.FrontSide]);
+      expect(mats.map(m => m.maskNode != null)).toEqual([true, false, true, false]);
+      // What each one paints with. The plates: their own surface and normal map, the cut-bone rim, no inner wall.
+      expect([...allCalls(plateSplit)].sort()).toEqual(['anatomicalSkullNormal', 'anatomicalSkullSurface', 'boneShade', 'meshSplitClip', 'meshSplitCutBone']);
+      expect([...calls(reach([plate.colorNode!]))].sort()).toEqual(['anatomicalSkullNormal', 'anatomicalSkullSurface', 'boneShade']);
+      // The extracted bone: the painted surface, and the dark wall on its back faces.
+      expect([...allCalls(boneSplit)].sort()).toEqual(['boneShade', 'meshBoneSurface', 'meshBoneWet', 'meshSplitClip', 'meshSplitInside']);
+      expect([...calls(reach([bone.colorNode!]))].sort()).toEqual(['boneShade', 'meshBoneSurface', 'meshBoneWet']);
+      // The seated eyes are closed spheres: theirs is the eye split material, wall and all.
+      const eyeCopies = eyes(renderer, open);
+      expect(eyeCopies.map(d => d.piece).sort()).toEqual([1, 2]);
+      const eyeMats = new Set(eyeCopies.map(d => matOf(renderer, d)));
+      expect(eyeMats.size).toBe(1);
+      expect([...allCalls([...eyeMats][0]!)].sort()).toEqual(['boneShade', 'meshEyeEmission', 'meshEyeSurface', 'meshSplitClip', 'meshSplitInside']);
+      renderer.dispose(); cache.dispose();
+    });
+
+    it('without the kit (?skull=sculpt) the zombie\'s split skull is the sculpt\'s: its painted surface outside, the wall inside', () => {
+      const { cache, renderer } = make();
+      const owner = { id: 1 };
+      renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(warpOf('middle', 0, 0, 1)));
+      const m = matOf(renderer, segs(renderer, owner)[0]!);
+      expect(m).toBe(batch(renderer, 'skeleton-segments-split')!.material);
+      expect([...allCalls(m)].sort()).toEqual(['boneShade', 'meshBoneSurface', 'meshBoneWet', 'meshSplitClip', 'meshSplitInside']);
+      // Nothing of it needs to be ahead of the branch: no derivative, no sampled texture.
+      expect(colourOf(m).held.every(v => calls(reach([v.node!])).size === 0)).toBe(true);
+      renderer.dispose(); cache.dispose();
+    });
+
+    it('a skull with a plate missing: every surviving plate\'s copies are on the same split material, a plate the rest owns alone on the closed one', () => {
+      const { cache, renderer } = makeAnatomical();
+      const whole = { id: 1 }, struck = { id: 2 }, shut = { id: 3 };
+      let w = warpOf('middle', 0, 0, 1);
+      const hook = { warp: (o: object, seg: string) => (o !== shut && seg === 'head' ? w : null) };
+      const y = headSrc.bounds.min[1] + (headSrc.bounds.max[1] - headSrc.bounds.min[1]) * 0.75;
+      renderer.impact(struck, [headSrc], headSrc.toWorld([0, y, headSrc.bounds.max[2] + 0.03]), [0, 0, -1], 'slug');
+      expect(renderer.skullState(struck).pieces).toHaveLength(1);
+      renderer.update([[headSrc], [headSrc], [headSrc]], [whole, struck, shut], undefined, undefined, undefined, hook);
+      const plateSplit = matOf(renderer, segs(renderer, whole)[1]!), plate = matOf(renderer, segs(renderer, shut)[0]!);
+      expect(plateSplit).not.toBe(plate);
+      const plates = segs(renderer, struck);
+      // Thirteen plates are left, each drawn through one geometry: its own (closed), or its split twin.
+      expect(new Set(plates.map(d => d.geometry)).size).toBe(13);
+      for (const piece of [0, 1, 2]) expect(plates.filter(d => d.piece === piece).length, `piece ${piece}`).toBeGreaterThan(0);
+      for (const d of plates.filter(q => q.piece !== null)) {
+        expect(matOf(renderer, d)).toBe(plateSplit);
+        expect(d.geometry.userData.anatomicalSkull).toBe(true);
+        expect(d.geometry.getAttribute('uv')).toBeDefined();
+      }
+      // An off-centre split turns one side only: a plate of the far side is the rest's alone, one closed instance on
+      // the closed plates' material, as on a closed head.
+      w = warpOf('middle', 1, 0.04, 1);
+      renderer.update([[headSrc], [headSrc], [headSrc]], [whole, struck, shut], undefined, undefined, undefined, hook);
+      const oneSided = segs(renderer, struck), closed = oneSided.filter(d => d.piece === null);
+      expect(new Set(oneSided.map(d => d.geometry)).size).toBe(13);
+      expect(closed.length).toBeGreaterThan(0);
+      expect(oneSided.filter(d => d.piece === 1).length).toBeGreaterThan(0);
+      for (const d of oneSided) expect(matOf(renderer, d)).toBe(d.piece === null ? plate : plateSplit);
+      renderer.dispose(); cache.dispose();
+    });
+
+    it('the twin of a plate geometry shares its uv and says it is anatomical; an extracted bone\'s twin has neither', () => {
+      const { cache, renderer } = makeAnatomical();
+      const open = { id: 1 }, shut = { id: 2 }, otherOpen = { id: 3 };
+      const w = warpOf('middle', 0, 0, 1);
+      renderer.update([[headSrc], [headSrc], [otherHead]], [open, shut, otherOpen], undefined, undefined, undefined, { warp: (o, seg) => (o !== shut && seg === 'head' ? w : null) });
+      const base = segs(renderer, shut)[0]!.geometry, twin = segs(renderer, open)[0]!.geometry;
+      expect(twin).not.toBe(base);
+      expect(base.userData.anatomicalSkull).toBe(true);
+      expect(twin.userData.anatomicalSkull).toBe(true);
+      for (const name of ['position', 'normal', 'uv']) {
+        expect(base.getAttribute(name), name).toBeDefined();
+        expect(twin.getAttribute(name), name).toBe(base.getAttribute(name));
+      }
+      expect(twin.index).toBe(base.index);
+      expect(twin.getAttribute('iSplitN')).toBeDefined();
+      expect(base.getAttribute('iSplitN')).toBeUndefined();
+      const otherTwin = segs(renderer, otherOpen)[0]!.geometry;
+      expect(otherTwin.userData.anatomicalSkull).toBeUndefined();
+      expect(otherTwin.getAttribute('uv')).toBeUndefined();
+      renderer.dispose(); cache.dispose();
+    });
+
+    it('the normal map and its normal are taken ahead of the branch on the clip (a derivative or a sample inside it does not compile)', () => {
+      const { cache, normalMap, renderer } = makeAnatomical();
+      const owner = { id: 1 };
+      renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(warpOf('middle', 0, 0, 1)));
+      const { held, branch, rest } = colourOf(matOf(renderer, segs(renderer, owner)[0]!));
+      // Declared before the branch: the atlas sample, and the normal function (it takes dpdx / dpdy).
+      const ahead = reach(held.map(v => v.node!));
+      expect(samples(ahead, normalMap)).toBe(true);
+      expect(calls(ahead).has('anatomicalSkullNormal')).toBe(true);
+      // The branch reaches both only through those declared values; everything else of the colour is inside it.
+      const inside = reach(branch, new Set<Node>(held));
+      expect(samples(inside, normalMap)).toBe(false);
+      expect(calls(inside).has('anatomicalSkullNormal')).toBe(false);
+      for (const fn of ['anatomicalSkullSurface', 'meshSplitCutBone', 'boneShade']) expect(calls(inside).has(fn), fn).toBe(true);
+      // And nothing is stacked after the branch.
+      expect(rest).toHaveLength(0);
+      renderer.dispose(); cache.dispose();
+    });
   });
 });
