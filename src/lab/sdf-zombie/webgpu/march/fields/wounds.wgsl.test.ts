@@ -20,7 +20,7 @@ import {
   ROW_WOUND_CUT,
   CALC_NORMAL,
 } from '../../march.wgsl';
-import { CUT_JAG_SLACK, CUT_SHADE } from '../../../cut-wound';
+import { CUT_JAG_SLACK, CUT_NEAR, CUT_SHADE } from '../../../cut-wound';
 import { declaredName } from '../../march-test-support';
 import { WOUND_MASKS_BLOCK } from '../body/blocks/post/wound-masks.wgsl';
 import { SKIN_NORMAL } from '../body/blocks/light/skin-detail-proto';
@@ -265,6 +265,23 @@ describe('cut wounds in the march', () => {
     expect(branch.indexOf('let lipW =')).toBeGreaterThan(iClose);
     // The same 4 x k the smax's own h reads (primitives.wgsl.ts smin: k = kIn * 4.0).
     expect(HELPERS.join('\n')).toContain('let k = kIn * 4.0;');
+  });
+  // A cut's column is a SOFT near zone (cut-wound.ts CUT_NEAR): near to every "near a wound?" test (> 0.5), and to the
+  // inside-flesh fold only where a carve raised the field. A crater's zone stays 1 and folds as before.
+  it('a cut reports a soft near zone, and mapBody folds the inside-flesh rows there only under a raising carve', () => {
+    const iCut = APPLY_WOUNDS.indexOf('(i32(wFlags.x) & 32) != 0');
+    const branch = APPLY_WOUNDS.slice(iCut, APPLY_WOUNDS.indexOf('if (wMeta.x < -0.5)'));
+    const f = (v: number) => (Number.isInteger(v) ? `${v}.0` : `${v}`);
+    expect(CUT_NEAR).toBeGreaterThan(0.5);
+    expect(CUT_NEAR).toBeLessThan(1);
+    expect(branch).toContain(`cs < max(depthT, wCut.w) * 2.0) { near = max(near, ${f(CUT_NEAR)}); }`);
+    expect(branch).not.toContain('near = 1.0');
+    // Every other branch still reports 1 (the preset, the crater).
+    expect(APPLY_WOUNDS.replace(branch, '').match(/near = 1\.0;/g)).toHaveLength(2);
+    expect(MAP_BODY).toContain(`if ((nearWound > ${(1 + CUT_NEAR) / 2} || (nearWound > 0.5 && gWoundRaisers != 0u) || counts2.y > 0.5) && counts2.x > 0.0) {`);
+    // The trace's own reader keeps the plain test, and so does the re-fold's trigger.
+    expect(MARCH_BODY).toContain('let nearWound = dres.z > 0.5;');
+    expect(MAP_BODY).toContain('(nearWound > 0.5 || dmg != carved)');
   });
   // cut-wound.ts cutLip is the CPU mirror of the lip: amp x exp(-lx^2) x rim x offKerf x nearSkin.
   it('the cut lip mirrors cutLip term for term (bounded to the near skin, kept off the kerf)', () => {

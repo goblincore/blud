@@ -5,7 +5,7 @@
 // file; see docs/dev-notes/2026-09-18-march-split/.
 import { ROW_WOUND, ROW_WOUND_CAP, ROW_WOUND_CUT, ROW_WOUND_FLAGS, ROW_WOUND_META } from '../layout';
 import { TORN } from '../../../torn-lips';
-import { CUT_JAG_SLACK, CUT_SHADE } from '../../../cut-wound';
+import { CUT_JAG_SLACK, CUT_NEAR, CUT_SHADE } from '../../../cut-wound';
 import { MAX_WOUNDS } from '../../../damage';
 
 // TORN LIPS (flail, spec §14.2, 2026-09-29). A wound whose flags.x integer part has
@@ -206,7 +206,7 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
         if (d > dBeforeCut) { gWoundRaisers = gWoundRaisers | (1u << u32(owner)); gWoundThreat = gWoundThreat | threat; }
       }
       let lipW = max(wCut.w * ${f(CUT_SHADE.lipWidth)}, 1e-4);
-      if (abs(ca) < w.w * 1.2 && abs(cu) < (wCut.w * ${f(CUT_SHADE.lipOffset)} + lipW) * 2.0 && cs < max(depthT, wCut.w) * 2.0) { near = 1.0; }
+      if (abs(ca) < w.w * 1.2 && abs(cu) < (wCut.w * ${f(CUT_SHADE.lipOffset)} + lipW) * 2.0 && cs < max(depthT, wCut.w) * 2.0) { near = max(near, ${f(CUT_NEAR)}); }
       // The lips (cutLip): two ridges along the edges, as high as the slot is deep (taper, so none past the tips), gated
       // to the PRE-WOUND skin over the wound's own scale (cutRimB, constant along the slot), kept out of the smooth
       // (un-jagged) kerf (offKerf) and off everything deeper than min(two lip widths, dEff) below the slot's depth

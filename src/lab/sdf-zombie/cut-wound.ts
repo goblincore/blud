@@ -143,6 +143,14 @@ export function cutJag(a: number, u: number, plane: number, halfLen: number, ker
   return fine + pn * (CUT_SHADE.pinchAmp + CUT_SHADE.pinchTip * tN * tN);
 }
 
+/** A cut's near zone is SOFT. applyWounds reports `near` = 1 inside a crater's zone and this value inside a cut's column
+ *  (every consumer that asks "near a wound?" tests > 0.5, so both read as near). mapBody's inside-flesh fold (organs,
+ *  packed bones) asks more of a soft zone: it runs there only where some wound's carve RAISED the field at the sample.
+ *  Those rows are contained in the flesh (validate.ts checkBoneContainment), so they can win the hard min only where
+ *  the field stands above the pre-wound flesh, and a cut's column is mostly lip and open air above the slot: skipping
+ *  the fold there is the same exact identity the near gate itself rests on. */
+export const CUT_NEAR = 0.75;
+
 /** Slack on the jag's ceiling (cutJagTop), in units of the jag: the GPU's noise is f32, and a trilinear mix of hashes in
  *  [0, 1) can pass 1 by an ulp (~1e-7), so the ceiling the shader tests against stands this far above the exact one. */
 export const CUT_JAG_SLACK = 1e-3;
