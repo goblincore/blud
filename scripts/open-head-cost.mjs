@@ -24,7 +24,9 @@
 //           counters (debug modes 13 and 14, read off the float march target) summed over the frame: texels
 //           marched, hit, steps, prim evaluations, wound rows; mode 14 adds the post-hit chain's (the normal's
 //           taps, the probes). Counters do not depend on the machine's load.
-//   TICK=1  also time the CPU side of a live tick (see tickMs) with the cast thawed: open against closed.
+//   PARITY  comma list of leg pairs a:b (e.g. open:tileCullOld). Each pair's frames are read off the float march
+//           target and compared texel by texel: for a switch that must change the work and not the picture.
+//   TICK=1  also time the CPU side of a split head's re-pose and of the hull build, open against closed.
 //   OUT     a JSON file for the raw numbers.
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
@@ -41,7 +43,7 @@ const LOAD_MAX = Number(process.env.LOAD_MAX ?? 8);
 const LOAD_GO = Number(process.env.LOAD_GO ?? 6);
 const QUIET_WAIT = Number(process.env.QUIET_WAIT ?? 600);
 const RETRIES = Number(process.env.RETRIES ?? 3);
-const W = 1280, H = 800, EYE_H = 1.62, BOOT_SETTLE = 90;
+const W = 1280, H = 800, EYE_H = 1.62, BOOT_SETTLE = 90, SETTLE = 24;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const die = (msg) => { console.error(`open-head-cost: ${msg}`); process.exit(2); };
 const withTimeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`TIMEOUT(${ms}ms): ${what}`)), ms))]);
@@ -115,6 +117,9 @@ async function boot() {
   await evaluate(`(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setLightTime(0); __sdfGame.setDemoHold(true); __sdfGame.setProbeBlend(1); __sdfGame.setProbeFall(1); __sdfGame.setFieldStyle("off"); return 1; })()`);
   for (let i = 0; i < BOOT_SETTLE; i++) await evaluate("__sdfGame.step(1, 1 / 60)");
   await evaluate("__sdfGame.installDebugProbe()");
+  // A shader that did not compile draws nothing, and every number after it would be of an empty frame.
+  const d0 = await evaluate("__sdfGame.gpuDiagnostics()");
+  if (d0.lost || d0.uncapturedCount !== 0) die(`the page has GPU errors after the boot: ${JSON.stringify(d0).slice(0, 600)}`);
   console.log(`ready: flags '${FLAGS}', warm ${warmS.toFixed(1)} s, room ${ROOM} (${pool.length} zombies), load ${load().toFixed(1)}`);
   return warmS;
 }
@@ -153,7 +158,8 @@ const ablate = (mask, boundsOff) => evaluate(`(() => { __sdfGame.splitAblate({ m
 const timeDraws = () => evaluate(`__sdfGame.timeDraws(${N})`, 600000);
 /** THE CENSUS of the frame as it stands (debug-counters.wgsl.ts mode 13: the walk, returned before the miss discard;
  *  display-debug.wgsl.ts mode 14: the same counters after the post-hit chain, hit texels only). Summed in the page.
- *  Mode 13's texel is (prims, wound rows, steps + 1000 hit + 2000 near-wound hit); a texel no fragment wrote is 0. */
+ *  Mode 13's texel is (prims, wound rows, steps + 1000 hit + 2000 near-wound hit); a texel no fragment wrote holds the
+ *  clear colour (about 0.01 a channel), so a marched texel is one with at least one step. */
 const census = () => evaluate(`(async () => {
   const sum = async (mode) => {
     __sdfGame.setMarchDebugMode(mode);
@@ -163,7 +169,7 @@ const census = () => evaluate(`(async () => {
     let prims = 0, rows = 0, steps = 0, hits = 0, marched = 0, hitPrims = 0, hitRows = 0;
     for (let i = 0; i < f.length; i += 4) {
       const b = f[i + 2];
-      if (!(b > 0)) continue;
+      if (!(b >= 0.5)) continue;   // the target's clear value is a small non-zero colour: not a marched texel
       marched++; prims += f[i]; rows += f[i + 1];
       const st = b % 1000; steps += st; if (b >= 1000) { hits++; hitPrims += f[i]; hitRows += f[i + 1]; }
     }
@@ -188,6 +194,8 @@ const LEGS_ALL = {
   hullsOff:     { frac: 1, boundsOff: 12, what: "(d'') open, both hulls closed" },
   hullOutOff:   { frac: 1, boundsOff: 4, what: "(d3) open, the outer hull closed (no turned copies)" },
   hullInOff:    { frac: 1, boundsOff: 8, what: "(d4) open, the occluder hull closed (it keeps its spheres in turning flesh)" },
+  tileCullOld:  { frac: 1, boundsOff: 16, what: "(d6) open, the grown tile groups culled per step with their grown spheres (before 2026-10-06)" },
+  hullOld:      { frac: 1, boundsOff: 32, what: "(d7) open, the outer hull's first rule: every sphere kept, whole turned copies (before 2026-10-06)" },
   boxOff:       { frac: 1, boundsOff: 1, what: "(d5) open, the proxy box closed" },
   analyticN:    { frac: 1, mask: 2, what: "(e) open, analytic normals in the region" },
   noFilm:       { frac: 1, mask: 4, what: "(f) open, the film's block skipped at run time" },
@@ -245,32 +253,53 @@ for (const sn of SCENS) {
     }
     const counts = {};
     if (process.env.CENSUS !== "0") for (const k of legs) { await setLeg(z.id, scen, LEGS_ALL[k]); counts[k] = await census(); }
+    const parity = {};
+    for (const pair of (process.env.PARITY ?? "").split(",").filter(Boolean)) {
+      const [a, b] = pair.split(":"), t = {};
+      for (const k of [a, b]) {
+        await setLeg(z.id, scen, LEGS_ALL[k] ?? die(`no leg '${k}'`)); await stepN(SETTLE);
+        await evaluate("__sdfGameDebug.readMarchTarget()", 120000);
+        const r = await evaluate("__sdfGameDebug.readMarchTarget()", 120000);
+        t[k] = new Float32Array(Uint8Array.from(Buffer.from(r.rgba32f, "base64")).buffer);
+      }
+      let texels = 0, colour = 0, depth = 0, hitsA = 0, hitsB = 0; const miss = t[a][3];
+      for (let i = 0; i < t[a].length; i += 4) {
+        const c = Math.max(Math.abs(t[a][i] - t[b][i]), Math.abs(t[a][i + 1] - t[b][i + 1]), Math.abs(t[a][i + 2] - t[b][i + 2])), dz = Math.abs(t[a][i + 3] - t[b][i + 3]);
+        if (t[a][i + 3] !== miss) hitsA++; if (t[b][i + 3] !== miss) hitsB++;
+        if (c > 0 || dz > 0) texels++; colour = Math.max(colour, c); depth = Math.max(depth, dz);
+      }
+      parity[pair] = { texels, colour, depth, hitsA, hitsB };
+      console.log(`  parity ${sn} @${d} m, ${a} against ${b}: ${texels} texels differ (largest colour step ${colour.toExponential(2)}, clip depth ${depth.toExponential(2)}); hit texels ${hitsA} / ${hitsB}`);
+    }
     await setLeg(z.id, scen, LEGS_ALL.closed);
-    res[d] = { untouched, rows, counts };
+    res[d] = { untouched, rows, counts, parity };
   }
 }
 
-// ---- TICK=1: the CPU side of a live tick, open against closed, the cast thawed ---------------
-// A walking split head never rests (its wobble moves every tick), so the view re-makes its bounds, hulls and record
-// every tick. What is timed is __sdfGame.step alone (sim + the draw's CPU submission; no GPU fence), the player parked
-// at the boot spawn's side of the room, per round: STEPS steps with the head open, STEPS with it closed.
+// ---- TICK=1: the CPU side of a split head's re-pose, open against closed -----------------------------
+// A walking split head's wobble moves its angles every tick, so its view re-makes the bounds and the record every
+// tick. So does any walking body's: the pose changes every tick, split or not. What the split ADDS is measured here
+// on one frozen zombie: the mean ms of STEPS calls of the actor's own re-pose (reposeHead: the pose, view.update with
+// its bounds and tile groups, the record, the wounds), with the head open and with it closed again, interleaved; and
+// the frozen cast's hull build (both hulls, every body: what live play runs every tick), timed as a step that is
+// asked to build them against one that is not.
 if (process.env.TICK === "1") {
-  const STEPS = Number(process.env.STEPS ?? 240);
+  const STEPS = Number(process.env.STEPS ?? 400);
   const z = fresh(), scen = SCEN_ALL["mid-both"];
-  const tick = () => evaluate(`(async () => { const ms = []; for (let i = 0; i < ${STEPS}; i++) { const t0 = performance.now(); __sdfGame.step(1, 1 / 60); ms.push(performance.now() - t0); } ms.sort((a, b) => a - b); return { med: ms[ms.length >> 1], p90: ms[Math.floor(ms.length * 0.9)], mean: ms.reduce((a, b) => a + b, 0) / ms.length }; })()`, 600000);
-  await evaluate("__sdfGame.freeze(false)");
-  const rows = { open: [], closed: [] };
+  const repose = () => evaluate(`(() => { const a = __sdfGame.zombie(${z.id}); const t0 = performance.now(); for (let i = 0; i < ${STEPS}; i++) a.reposeHead(); return (performance.now() - t0) / ${STEPS}; })()`, 600000);
+  const hulls = () => evaluate(`(() => { const ms = [[], []]; for (let i = 0; i < 60; i++) for (const stale of [0, 1]) { if (stale) __sdfGame.splitAblate({}); const t0 = performance.now(); __sdfGame.step(1, 0); ms[stale].push(performance.now() - t0); } const med = (a) => a.sort((x, y) => x - y)[a.length >> 1]; return { kept: med(ms[0]), rebuilt: med(ms[1]) }; })()`, 600000);
+  const rows = { open: [], closed: [] }, hull = { open: [], closed: [] };
   for (let r = 0; r < ROUNDS; r++) {
     for (const k of r % 2 ? ["closed", "open"] : ["open", "closed"]) {
-      await force(z.id, scen, k === "open" ? 1 : 0); await stepN(20);
+      await force(z.id, scen, k === "open" ? 1 : 0); await stepN(3);
       await quiet();
-      const l0 = load(), t = await tick();
-      rows[k].push({ ...t, load: +Math.max(l0, load()).toFixed(1), alive: !!(await evaluate(`__sdfGame.actorList().find((q) => q.id === ${z.id})`)) });
+      const l0 = load(), ms = await repose(), h = await hulls();
+      rows[k].push({ ms, load: +Math.max(l0, load()).toFixed(1) });
+      hull[k].push({ ...h, load: +Math.max(l0, load()).toFixed(1) });
     }
-    console.log(`  tick round ${r + 1}/${ROUNDS}: open med ${rows.open[r].med.toFixed(3)} mean ${rows.open[r].mean.toFixed(3)}  closed med ${rows.closed[r].med.toFixed(3)} mean ${rows.closed[r].mean.toFixed(3)}  (load ${load().toFixed(1)})`);
+    console.log(`  re-pose round ${r + 1}/${ROUNDS}: open ${rows.open[r].ms.toFixed(4)} ms, closed ${rows.closed[r].ms.toFixed(4)} ms a call; a zero-time step with the hulls kept / rebuilt: open ${hull.open[r].kept.toFixed(3)} / ${hull.open[r].rebuilt.toFixed(3)}, closed ${hull.closed[r].kept.toFixed(3)} / ${hull.closed[r].rebuilt.toFixed(3)} ms  (load ${load().toFixed(1)})`);
   }
-  await evaluate("__sdfGame.freeze(true)");
-  out.tick = { steps: STEPS, rows };
+  out.tick = { steps: STEPS, rows, hull };
 }
 
 // ---- The table --------------------------------------------------------------------------------
@@ -300,12 +329,13 @@ for (const [sn, res] of Object.entries(out.scen)) for (const [d, { counts }] of 
   }
 }
 if (out.tick) {
-  const q = (k, f) => out.tick.rows[k].filter((m) => m.load <= LOAD_MAX).map((m) => m[f]);
-  console.log(`\ntick (CPU, ${out.tick.steps} live steps a measure): open median ${fmt(median(q("open", "med")))} mean ${fmt(median(q("open", "mean")))}; closed median ${fmt(median(q("closed", "med")))} mean ${fmt(median(q("closed", "mean")))}`);
+  const q = (o, k, f) => out.tick[o][k].filter((m) => m.load <= LOAD_MAX).map((m) => m[f]);
+  console.log(`\nre-pose (CPU, mean of ${out.tick.steps} calls, median of the rounds): open ${median(q("rows", "open", "ms")).toFixed(4)} ms, closed ${median(q("rows", "closed", "ms")).toFixed(4)} ms`);
+  console.log(`a zero-time step, hulls kept / rebuilt (median ms): open ${median(q("hull", "open", "kept")).toFixed(3)} / ${median(q("hull", "open", "rebuilt")).toFixed(3)}, closed ${median(q("hull", "closed", "kept")).toFixed(3)} / ${median(q("hull", "closed", "rebuilt")).toFixed(3)}`);
 }
 const diag = await evaluate("__sdfGame.gpuDiagnostics()");
 console.log(`\ngpuDiagnostics: ${JSON.stringify(diag)}; console errors ${consoleEvents.length}${consoleEvents.length ? ": " + JSON.stringify(consoleEvents.slice(0, 3)) : ""}`);
 out.diag = diag; out.errors = consoleEvents; out.loadEnd = load();
 if (process.env.OUT) writeFileSync(process.env.OUT, JSON.stringify(out, null, 1));
 closeSession();
-process.exit(0);
+process.exit(diag.lost || diag.uncapturedCount !== 0 || consoleEvents.length ? 1 : 0);

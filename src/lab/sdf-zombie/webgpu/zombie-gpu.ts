@@ -21,7 +21,7 @@ import {
   REGION_MARGIN, SPLIT_REOPEN_FRAC, splitBound, splitDrawDistance, splitFrame, splitHoldBall, splitNearReach,
   type SplitWarp,
 } from '../head-split';
-import { SPLIT_BOUND, boundsSplit } from './split-ablate';
+import { SPLIT_BOUND, boundsSplit, splitAblate } from './split-ablate';
 import { packBody, PRIM_STRIDE, W_BONE, W_ORGAN } from '../pack';
 import { MAX_PRIMS, MAX_CLUSTERS, BONE_SEG_MAX, BASE_PRIM_STRIDE, bodyPrimStride } from '../validate';
 import { MAX_WOUNDS } from '../damage';
@@ -37,7 +37,7 @@ import {
   TILE_SIZE_PX,
 } from './tile-cull';
 import { NORMAL_GRADIENT_HELPERS, NORMAL_GRADIENT_GAME_HELPERS } from './normal-gradient.wgsl';
-import type { TileGroupInput } from './tile-cull';
+import { withCullSphere, type TileGroupInput } from './tile-cull';
 import type { ComputeTileBinding } from './tile-bin-compute';
 import {
   HELPERS, MARCH_BODY, REFINE_BODY, CONE_MARCH, DEPTH_PREPASS_MARCH, DATA_ROWS, MARCH_BURN_OUT, DETAIL_FIELD, HASH13, NOISE3, FBM,
@@ -2641,7 +2641,12 @@ export function createZombieGpuView(
     // closed head is not: a sphere that holds flesh of a turning half grows. The reach is the march's own for that
     // sphere (4 x the blend width x its distortion factor). What mapBody's per-step culls then read, at a piece's
     // un-warped point (a grown sphere holds the closed one, so they stay sound and cull less):
-    //   the tiled path (the crowd)      foldGroup takes the tile entry's sphere: the GROWN one;
+    //   the tiled path (the crowd)      foldGroup takes the tile entry's CULL sphere: the group's own again, named
+    //                                   by the entry's cullOffset (tile-cull.ts withCullSphere). The grown sphere
+    //                                   is what the binner and the per-ray test read. Before 2026-10-06 the fold
+    //                                   culled with the grown one, and every group of the neck and shoulders that
+    //                                   reaches the hold ball was folded at every sample of an open head: a fifth
+    //                                   to a quarter of its prim evaluations;
     //   the cluster walk (per-body,     the cluster cull reads ROW_CLUSTER_BOUNDS: the GROWN one; the group cull
     //   the cone / depth pre-pass)      reads ROW_GROUP_BOUNDS, which stays the CLOSED sphere (exact).
     // The wound threat masks keep the closed spheres too (lastGroups): they are measured on the closed head.
@@ -2649,9 +2654,13 @@ export function createZombieGpuView(
     const split = splitFrame(boundsSplit(next.split, SPLIT_BOUND.tiles));
     if (split) {
       const k4 = 4 * p.maxBlendK;
+      const ownCull = (splitAblate.boundsOff & SPLIT_BOUND.tileCull) === 0;
       tileGroups = lastGroups.map((g) => {
         const b = splitBound(split, g.center, g.radius, k4 * Math.max(g.distort, 1));
-        return b.radius === g.radius ? g : { ...g, center: [b.centre[0], b.centre[1], b.centre[2]], radius: b.radius };
+        if (b.radius === g.radius) return g;
+        // The per-step cull keeps the group's own sphere (tile-cull.ts cullOffset).
+        if (ownCull) return withCullSphere(g, b.centre, b.radius);
+        return { ...g, center: [b.centre[0], b.centre[1], b.centre[2]], radius: b.radius };
       });
       for (let c = 0; c < p.clusterCount; c++) {
         const o = c * 4, cb = p.clusterBounds;

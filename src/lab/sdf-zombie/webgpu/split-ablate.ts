@@ -57,6 +57,9 @@ export const SPLIT_BOUND = {
   hullOuter: 4,
   /** The occluder hull keeps its spheres in turning flesh (occluder-hull.ts). */
   hullInner: 8,
+  /** The tile groups carry no per-step cull sphere of their own (tile-cull.ts cullOffset): mapBody culls a grown
+   *  group with its grown sphere, as before 2026-10-06. The frame is the same; only the work differs. */
+  tileCull: 16,
 } as const;
 
 export const splitAblate = { mask: 0, boundsOff: 0 };

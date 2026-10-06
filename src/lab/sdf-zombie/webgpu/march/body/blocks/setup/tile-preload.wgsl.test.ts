@@ -39,6 +39,22 @@ describe('tile-list fold path (raymarcher-perf task 5)', () => {
     expect(MARCH_BODY).toContain('let lin = (head.x + u32(e)) * 3u;');
   });
 
+  it('the per-step cull takes the sphere the entry names by its offset; the per-ray tests keep the entry\'s own', () => {
+    // tile-cull.ts cullOffset (the head split's grown groups): the cull sphere is rebuilt ONCE per pixel, here, so
+    // mapBody's per-sample path has no new work. With no offset (every other body) it is b itself: b.xyz + 0 and
+    // b.w - length(0).
+    expect(MARCH_BODY).toContain('let entMeta = (*tileEnt)[lin + 2u];');
+    expect(MARCH_BODY).toContain('gTileBounds[w] = vec4<f32>(b.xyz + entMeta.yzw, b.w - length(entMeta.yzw));');
+    expect(MARCH_BODY).not.toContain('gTileBounds[w] = b;');
+    // Both ray tests (the per-ray cull, the quad's entry distance) come before the rebuild and read b.
+    const rebuild = MARCH_BODY.indexOf('gTileBounds[w] = vec4<f32>(b.xyz + entMeta.yzw');
+    for (const line of ['let rInf = b.w + reach * max(g.z, 1.0);', 'let ocQ = b.xyz - camPos;']) {
+      const at = MARCH_BODY.indexOf(line);
+      expect(at, line).toBeGreaterThan(-1);
+      expect(at, line).toBeLessThan(rebuild);
+    }
+  });
+
   it('mapBody walks the per-pixel slot table: tile range vs cluster walk, both through foldGroup', () => {
     expect(MAP_BODY).toContain('let tiled = gTileActive > 0.5;');
     // crowd stage a, task 7c: a shared-record single-field material offsets the
