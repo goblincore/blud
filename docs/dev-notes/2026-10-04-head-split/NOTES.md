@@ -1766,3 +1766,127 @@ what says that is enough for a walk's wobble. A hard throw, or the eye moving fa
 | the whole tree (`--exclude '**/cut-wound.test.ts'`) | 511 files, 7467 tests passed, 1 skipped (one pin restated: `split-hit.wgsl.test.ts` counted the light tail's readers of `pS` at 2, the motion vectors; the film's head-side gate is the third) |
 | cold boot pair | not run: the census cold compile did not move by a second |
 
+
+## Look: wet under the flashlight, round 3: the film glints square on (2026-10-05)
+
+The review fixes were re-reviewed and approved, with one finding that changes the look. This round answers it, and
+gives the owner a sheet of variants to pick from (the constants are compile-time).
+
+### The grazing bias
+
+With the tilt projected onto the tangent plane, n . glisN = 1 / sqrt(1 + |tilt|^2), and the retune of the last round
+(`lumpTilt` 3.2, to match the first sheets' luma shares) put nearly every facet close to grazing. The film's lean (the
+angle between its normal and the surface's), by the block's twin in `split-glisten.wgsl.test.ts` over 76 800 anchors
+on three planes:
+
+| | 5% | median | 95% | facets under 10 degrees |
+| --- | --- | --- | --- | --- |
+| the build before (`lumpTilt` 3.2, `lumpFlat` 0.1, `fineTilt` 0.3) | 60.9 | **72.2** | 76.4 | 0.02% |
+| now (`lumpTilt` 2.4, `lumpFlat` 1, `fineTilt` 0.6) | 14.5 | **39.3** | 54.8 | 2.4% |
+
+So the film only caught a light raking across it, and a cut face seen square on under the player's torch, the
+commonest view of an opened head, was nearly dry: 1.86% of its raw texels over 0.6 luma against 1.19% with no film.
+The retune had matched the aggregate shares and moved where the glints live.
+
+`lumpFlat` moved too (the brief named `lumpTilt` and `fineTilt`). At 0.1 the coarse octave is two-valued, so lowering
+`lumpTilt` alone gives a narrow lean with no tail (at 0.6: 16.5 / 30.7 / 40.8, 1.3% under 10 degrees); at 1 it is
+close to the plain noise and the lean spreads from near the normal out to about 55 degrees. The projection and the
+horizon are kept.
+
+### The variants (`look/14-wet-variants.jpg`)
+
+Columns OFF | A | B | C; rows: both at the kill square on from the front, the same from above looking down into the
+V, one side square on to the big cut face (69 degrees round from the front and raised: square on from the side the
+folded half is in the way), one side three-quarter, both at 2 m, and one side three-quarter with the torch off.
+To switch, paste a line into `SPLIT_SHADE.glisten` (the other numbers stay: `spill` 0.3, `lamps` 0.45, `lampPow` 20,
+`rawLo` 0.3, `rawHi` 0.8, `lump` 0.014, `fine` 0.006, `fadeLo` 0.75, `fadeHi` 1.5, `edge` 0.01, `horizon` 0.15):
+
+| | paste |
+| --- | --- |
+| OFF | `gain: 0` |
+| A (the build before) | `gain: 4, pow: 24, lumpTilt: 3.2, lumpFlat: 0.1, fineTilt: 0.3` |
+| **B (shipped)** | `gain: 2.6, pow: 40, lumpTilt: 2.4, lumpFlat: 1, fineTilt: 0.6` |
+| C (bolder) | `gain: 4.5, pow: 28, lumpTilt: 2.4, lumpFlat: 1, fineTilt: 0.6` |
+
+Share of raw-surface texels over 0.6 / over 0.95 luma, torch on unless said (float march target; raw = the film's own
+gate, painted by a scratch build, as before):
+
+| | raw texels | OFF | A | B | C |
+| --- | --- | --- | --- | --- | --- |
+| both, square on from the front | 861 | 5.46 / 0 | 8.94 / 0.46 | 5.57 / 0 | 6.62 / 0 |
+| both, down into the V | 4399 | 1.68 / 0.09 | **12.46 / 3.59** | 3.48 / 0.34 | 6.12 / 1.64 |
+| one side, square on to the big cut face | 4355 | 1.19 / 0.09 | 1.86 / 0.28 | **5.63 / 0.92** | 11.50 / 4.32 |
+| one side, three-quarter | 3037 | 0.79 / 0 | 2.96 / 0.72 | 3.92 / 0.72 | 7.94 / 3.06 |
+| both, three-quarter | 1586 | 0.19 / 0 | 5.23 / 1.70 | 3.47 / 0.88 | 6.43 / 3.03 |
+| both, 69 degrees round and raised | 1521 | 3.29 / 0.53 | 5.00 / 1.05 | 6.51 / 1.64 | 10.19 / 3.42 |
+| one side, from the head's right side (the pit at the crown) | 3324 | 3.13 / 0.75 | 4.45 / 1.29 | 8.48 / **2.50** | 13.66 / 6.41 |
+| both, front 2 m | 80 | 11.25 / 0 | 13.75 / 0 | 12.50 / 0 | 13.75 / 0 |
+| one side, three-quarter, torch OFF | 3037 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
+| both, three-quarter, torch OFF | 1586 | 0 / 0 | 0.50 / 0 | 0.44 / 0 | 4.10 / 0 |
+| **pooled, the first rounds' cameras at 0.6 m** (front, three-quarter, above-behind; both scenes) | 11 467 | 1.98 / 0.02 | 5.05 / 1.08 | **3.83 / 0.45** | 6.30 / 1.68 |
+| the same, torch OFF | 11 467 | 1.20 / 0 | 1.53 / 0 | **1.49 / 0** | 2.40 / 0 |
+| **pooled, 2 m** (front; both scenes) | 179 | 6.15 / 0 | 8.94 / 0.56 | **6.70 / 0** | 7.82 / 0 |
+| the same, torch OFF | 179 | 0.56 / 0 | 1.68 / 0 | **0.56 / 0** | 1.12 / 0 |
+| pooled, the four views from the side (69 degrees round and raised; from the head's right; both scenes) | 9508 | 2.30 / 0.39 | 3.51 / 0.82 | 6.79 / 1.56 | 11.97 / 4.83 |
+| pooled, down into the V (both scenes) | 7325 | 1.27 / 0.05 | 10.83 / 2.94 | 3.39 / 0.44 | 6.05 / 1.76 |
+
+What I see in the sheet, two sentences each:
+
+- **OFF.** The opened head as the owner played it: dark wet colour, no highlight on the raw surfaces but where the
+  surface's own broad highlight happens to land. Nothing moves when you do.
+- **A.** Looking down into the V it is the wettest of the four, white streaks all over both faces. Square on to the
+  big cut face it cannot be told from OFF: the face is dry.
+- **B.** The big cut face seen square on now carries a fine web of thin white glints, and three-quarter is about as
+  wet as A. Down into the V it keeps a few glints where A had many, the glints everywhere are thin lines and specks
+  more than blobs, and at 2 m it adds almost nothing (10 highlight texels of 80 against 9 with no film on the
+  two-sided head, 2 of 99 against 2 on the one-sided).
+- **C.** The same film brighter and broader: the square-on face is plainly wet at a glance, the V from above reads
+  wet again, and three-quarter has large white flecks. It is past the blow-out bound in the square-on views (3.4% to
+  6.4% over 0.95 where the bound is 3%), and with the torch off the lamp's speckle becomes visible on the two-sided
+  head (4.1% over 0.6 from three-quarter).
+
+**B against A, plainly.** Square on, B is clearly better: 5.63% against 1.86% on the big cut face, 6.79% against
+3.51% over the four views from the side, and the picture shows it. Everywhere else B is the quieter of the two: at a
+rake (3.39% against 10.83%), over the first rounds' cameras (3.83% against 5.05%) and at 2 m (6.70% against 8.94%,
+with no film 6.15%). The 3% bound on the worst view (2.50%, the pit at the crown from the side) is what holds B's
+`gain` at 2.6. If "striking" is the brief, C is the one that reads at a glance; B is the one that stays inside the
+blow-out bound. B ships.
+
+**Also measured on B.**
+
+- The wobble strip (round 2's measure): 2.8% of film highlight texels last a single tick at 0.6 m (24 of 859; 8.5%
+  new each tick), 2.4% at 2 m (4 of 166; 12.7% new). `fineTilt` 0.6 did not make it sparkle.
+- Nothing outside an open split: a closed head with a pellet crater and a torso chop, 0 of 120 000 texels each,
+  torch on and off; a chest chop and a shoulder pellet under an open head, 0 of 36 156 / 35 518 texels under the
+  hinge plane; every body texel outside the region sphere of every open head over 70 captures (855 479): 0 differ.
+- `look/10` to `13` are shot again on B (their "after"); the numbers in the two sections above are those builds'.
+
+### The depth guard, tightened
+
+- **The gap.** The origin's depth was counted only among texels the other two arms had already judged bad, and the
+  box's slack is 0.44 m at 13 m: a faulty texel whose origin-depth point fell inside some body's grown box passed.
+  Now, of ALL body texels whose clip depth is the world origin's (within 1e-6), the guard takes the largest set that
+  share one depth to the bit, per capture: a surface that really crosses that depth does so at many depths, a hit
+  written at (0, 0, 0) at one. A run over 2 fails.
+- **Its arms can each fail** (a positive control in the gate, on made-up texels through the same pure
+  `depthJudge`: nothing is rendered): one texel behind the camera, one 13 m off in no bound, and three at the
+  origin's depth that land INSIDE a body's box read 1, 1 and a run of 3; a clean target reads 0, 0, 0.
+- **What else is in the target it reads.** Everything on the SDF layer: the actors' bodies and the marched GIB
+  CHUNKS (`createChunkGpuView`). So a live chunk's sphere (`chunkStats().livePieces`: its centre, 1.75 x its radius)
+  is a bound too, beside the actors' proxy boxes; without it a gibbed body's pieces would read as "outside". None is
+  live in the gate's captures today (the check prints the most it saw: 0). The first-person weapon is a mesh and is
+  not in the target; the marched first-person hands (`fpv-view.ts createHandsGpuView`) exist in the character lab
+  only.
+
+### The check set
+
+| Check | Result |
+| --- | --- |
+| `march-golden -u` | `MARCH_BODY`, `MARCH_BODY_LIGHT`, `REFINE_BODY` (constants only: the block's text is the last round's but for five numbers) |
+| `compile-census` | phase ready, `uncapturedCount` 0, no device loss; march module 331149 B (83 fns: the same size, five numbers changed); cold `warmMs` 43181 (a cold boot with no warm cache: B4's 45.0 to 49.5 s is the level, the 21 to 24 s of the two rounds before were warmed) |
+| `march-hash` | no pin moved (`d7392d52…` / `76bd51aa…`, `0c71e712…` / `bf6836cd…`, `470ff0b3…` / `f618070e…`) |
+| `head-split-gate.mjs`, twice | **80 checks, 0 failed** each (79 and the guard's positive control); every check and measure line the same in both runs but the draw times. The guard: 0 of 7 545 127 body texels over 227 captures behind the camera or outside every bound, 0 chunks live, the largest bit-equal run at the origin's depth 0 |
+| `axe-gate.mjs` | 25 checks, 0 failed |
+| `cut-wound-gate.mjs` | 30 checks, 0 failed |
+| `tsc --noEmit` | the `node:crypto` error only |
+| the whole tree (`--exclude '**/cut-wound.test.ts'`) | 511 files, 7468 tests passed, 1 skipped |
