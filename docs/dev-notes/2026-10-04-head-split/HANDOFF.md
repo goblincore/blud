@@ -262,9 +262,13 @@ All of it is accepted for now and none of it has been investigated. Numbers and 
 - **The split skull's copies** cost +0.1 to +0.5 ms over the whole skull: a clipped copy is shaded in full.
 - **The wet film** is six `noise3` taps and two `pow` per raw texel, and again in the refine twin. Its frame cost was
   not resolved (under 1 ms if anything).
-- **The cut excess pass:** cold boot about +430 ms (+136 to +936 ms over four pairs); three axe chops on one torso
-  add about +22 ms of frame time, against +4.3 ms before. First things to try: drop or cheapen the `woundMask` noise
-  and the pinch's `hash13` calls, tighten the cut's reach sphere, lower `AXE_CUT.halfLen` or the kerf.
+- **The cut excess pass** (investigated 2026-10-06, [notes](../2026-10-06-cut-cost/NOTES.md)): three axe chops on one
+  torso cost about 4 to 5 ms at 0.9 m (4.8 ms, IQR 4.2 to 5.2), not the +22 ms recorded here before. That figure was
+  the axe gate's C scenario, whose "before" frame draws no body flesh (a stale march view after K's thaw; the gate
+  also does not wait for the crowd warm). Do not quote the gate's C line as a cost; use `scripts/cut-cost.mjs`.
+  The "+430 ms cold boot" was not reproduced on a quiet machine. Branch `claude/cut-cost` takes back 0.5 to 2.2 ms
+  with exact early exits. What is left is the organ fold in every wound's near zone (about 2 ms of the 4.8): the
+  owner decided on 2026-10-06 that organs become mesh.
 
 Not tried, for the open head: a fixed piece order with a per-piece `continue` in place of the compare-swap sort;
 flattening the pieces into the slot loop; for the skull copies, a branch in place of the select on the back face, and

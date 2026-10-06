@@ -168,12 +168,20 @@ kerf limit is now `kerfPerHalfLen·halfLen` and ≤ 0.03.
 New was slower in all four pairs. Load was 4–6. **This is a concern:** the code is larger (an extra `noise3` in
 `woundMask`, plus the pinch's `hash13` calls).
 
+> **2026-10-06:** not reproduced on a quiet machine (this commit against its base: `drawOnce` 1673 / 1665 ms against
+> 1810 / 1661 ms); neither term moves `drawOnce`
+> ([cut-cost notes](../2026-10-06-cut-cost/NOTES.md), "Cold boot").
+
 ### Frame cost (ungated, full axe gate C)
 
 - The draw time went from 25.8 / 28.6 ms before to 49.1 / 48.6 ms after 3 chops: about +22 ms.
 - In the axe NOTES it was +4.3 ms.
 - **This is a concern.** The likely causes: the longer, wider slots (halfLen 0.15, kerf 0.025), the bigger lip
   reach, and the extra noise. Not investigated.
+
+> **2026-10-06: these two reads are not the cuts' cost.** The gate's "before" frame draws no body flesh, so the
+> figure is the torso plus the cuts; three chops cost about 4 to 5 ms
+> ([cut-cost notes](../2026-10-06-cut-cost/NOTES.md), "The measurement trap").
 
 ## Photos
 
