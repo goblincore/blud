@@ -113,6 +113,20 @@ export function createSkeletonSeams(ctx: GameContext) {
     },
     meshEyeState: (bodyId?: number) => { const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId); return a && ctx.render.segMeshRenderer ? ctx.render.segMeshRenderer.eyeState(a) : null; },
     skullState: (bodyId?: number) => { const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q=>q.id===bodyId); return a && ctx.render.segMeshRenderer ? ctx.render.segMeshRenderer.skullState(a) : null; },
+    /** skeleton=mesh diagnostics: the anatomical skull's plates as fitted to actor `bodyId`'s head
+     *  (anatomical-skull.ts), in SKULL_PIECES order: each plate's id and its pivot in the head segment's own frame,
+     *  the frame skullDrawn's matrices take to the world. A fragment is released from its plate's pivot. null without
+     *  the anatomical skull, the actor or its head. */
+    skullPlates: (bodyId?: number) => {
+      const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId);
+      const head = a && ctx.render.skeletonSources.get(a)?.sources.find(s => s.segment === 'head');
+      const fitted = head && ctx.render.segMeshCache?.skullKit?.head(head);
+      return fitted ? fitted.pieces.map(p => ({ id: p.id, pivot: [...p.pivot] })) : null;
+    },
+    /** The live skull-fragment mesh gibs (game-mesh-gibs.ts, tag 'skull'), oldest first: the plate each was, its
+     *  world position and its velocity. */
+    skullFragments: () => ctx.gibs.meshGibs.filter(g => g.tag === 'skull')
+      .map(g => ({ plate: g.object.name.replace(/^skull-fragment:/, ''), pos: [...g.state.pos], vel: [...g.state.vel] })),
     explodeMeshSkull: (bodyId?: number) => {
       const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q=>q.id===bodyId);
       return a && ctx.render.segMeshRenderer ? ctx.render.segMeshRenderer.explodeSkull(a,ctx.render.skeletonSources.get(a)?.sources ?? [],[0,1,0]) : 0;

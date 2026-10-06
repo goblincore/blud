@@ -89,3 +89,33 @@ describe('__sdfGame.skullDrawn: an actor\'s split skull copies among this frame\
     expect(createSkeletonSeams({ world: { actors: [a] }, render: { segMeshRenderer: null } } as unknown as GameContext).skullDrawn(7)).toBeNull();
   });
 });
+
+describe('__sdfGame.skullPlates / skullFragments: the anatomical skull\'s plates and the fragments in flight', () => {
+  it('lists each fitted plate\'s pivot in the head segment\'s frame; null without the kit, the actor or its head', () => {
+    const a = { id: 7 }, b = { id: 8 }, head = { segment: 'head' }, spine = { segment: 'axial:x-y' };
+    const pieces = [{ id: 'frontal', pivot: [0, 0.1, 0.06] }, { id: 'mandible', pivot: [0, 0.02, 0.05] }];
+    const asked: unknown[] = [];
+    const ctx = (kit: unknown) => ({
+      world: { actors: [a, b] },
+      render: { segMeshCache: kit ? { skullKit: kit } : {}, skeletonSources: new Map<unknown, unknown>([[a, { sources: [spine, head] }], [b, { sources: [spine] }]]) },
+    }) as unknown as GameContext;
+    const seams = createSkeletonSeams(ctx({ head: (s: unknown) => { asked.push(s); return { pieces }; } }));
+    expect(seams.skullPlates(7)).toEqual([{ id: 'frontal', pivot: [0, 0.1, 0.06] }, { id: 'mandible', pivot: [0, 0.02, 0.05] }]);
+    expect(asked).toEqual([head]);
+    // A copy: the caller cannot move the kit's own pivot.
+    expect(seams.skullPlates(7)![0]!.pivot).not.toBe(pieces[0]!.pivot);
+    expect(seams.skullPlates(8)).toBeNull();   // no head segment
+    expect(seams.skullPlates(9)).toBeNull();   // no such actor
+    expect(createSkeletonSeams(ctx(null)).skullPlates(7)).toBeNull();   // ?skull=sculpt
+    expect(createSkeletonSeams(ctx({ head: () => null })).skullPlates(7)).toBeNull();   // a head the kit does not fit
+  });
+  it('lists the skull fragments among the mesh gibs, oldest first, by plate', () => {
+    const gib = (tag: string, name: string, pos: number[], vel: number[]) => ({ tag, object: { name }, state: { pos, vel } });
+    const meshGibs = [gib('skull', 'skull-fragment:frontal', [1, 2, 3], [0, 4, 0]), gib('brain', 'brain', [5, 5, 5], [0, 0, 0]), gib('skull', 'skull-fragment:parietal-left', [2, 2, 2], [1, 1, 1])];
+    const seams = createSkeletonSeams({ gibs: { meshGibs } } as unknown as GameContext);
+    expect(seams.skullFragments()).toEqual([
+      { plate: 'frontal', pos: [1, 2, 3], vel: [0, 4, 0] }, { plate: 'parietal-left', pos: [2, 2, 2], vel: [1, 1, 1] },
+    ]);
+    expect(seams.skullFragments()[0]!.pos).not.toBe(meshGibs[0]!.state.pos);
+  });
+});
