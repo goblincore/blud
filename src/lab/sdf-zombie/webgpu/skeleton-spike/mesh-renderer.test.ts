@@ -799,6 +799,32 @@ describe('the head split: the skull is drawn once per piece that owns part of it
         }
       });
 
+      it('clear() forgets the last update\'s hooks: a shot before the next update is the closed head\'s, in the rigid pose', () => {
+        const { cache, kit, renderer, fragments } = makeAnatomical();
+        const owner = { id: 4 }, w = warpOf('middle', 0, 0, 1), s = skullSplitOf(w, null, owner.id)!;
+        const index = plateOf('temporal-right'), closedShot = shotAt(kit, index);
+        const from = turned(s, 2, closedShot.from), dir = turnedDir(s, 2, closedShot.dir);
+        const plain = makeAnatomical();
+        plain.renderer.update([[headSrc]], [owner]);
+        // Split and deformed: the ray at the turned plate meets it, and the closed head's own answer is another.
+        renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
+        expect(renderer.skullRay(owner, [headSrc], from, dir)?.plate).toBe('temporal-right');
+        expect(plain.renderer.skullRay(owner, [headSrc], from, dir)?.plate).not.toBe('temporal-right');
+        renderer.clear();
+        expect(renderer.skullRay(owner, [headSrc], from, dir)).toEqual(plain.renderer.skullRay(owner, [headSrc], from, dir));
+        expect(renderer.skullRay(owner, [headSrc], closedShot.from, closedShot.dir)).toEqual(plain.renderer.skullRay(owner, [headSrc], closedShot.from, closedShot.dir));
+        // The deform's affine goes the same way: the closed head's numbers, not the squashed head's.
+        renderer.update([[headSrc]], [owner], undefined, undefined, (_o, seg) => (seg === 'head' ? DEFORM : null), headOnly(w));
+        renderer.clear();
+        expect(renderer.fractureSkull(owner, [headSrc], shotFrom(), SHOT.dir, 'slug')).toBe(1);
+        expect(fragments.map(numbersOf)).toEqual([CLOSED_HIT]);
+        // And a pop is the closed head's.
+        fragments.length = 0;
+        expect(renderer.explodeSkull(owner, [headSrc], SHOT.pop)).toBe(13);
+        expect(fragments.map(f => [f.name, ...f.pos, ...f.vel])).toEqual(CLOSED_POP);
+        for (const r of [plain, { renderer, cache }]) { r.renderer.dispose(); r.cache.dispose(); }
+      });
+
       it('a slug at a turned plate releases THAT plate, from its turned pivot, turned and launched with its piece', () => {
         for (const [id, piece] of [['parietal-left', 1], ['temporal-right', 2]] as const) {
           const { cache, kit, renderer, fragments } = makeAnatomical();

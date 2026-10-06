@@ -22,7 +22,7 @@
 //
 // Pure (no three): the TypeScript twins below are the reference the WGSL is edited with (mesh-appearance.ts's idiom).
 import type { Vec3 } from '../../types';
-import { HEAD_SPLIT, skullFollowOk, type SkullFollow, type SkullSplit, type SplitWarp } from '../../head-split';
+import { HEAD_SPLIT, skullFollowOk, skullPieceAngle, type SkullFollow, type SkullSplit, type SplitWarp } from '../../head-split';
 import { boneHash3, boneNoise3 } from './mesh-appearance';
 
 /** The fracture's shape (HEAD_SPLIT.skull.jag): amplitudes and lengths in metres, the wobble's four in periods. */
@@ -102,7 +102,7 @@ export function packSplitInstance(rows: Float32Array, i: number, s: SkullSplit, 
   const w = s.frame.w, o = i * SPLIT_INSTANCE_FLOATS;
   rows[o] = w.n[0]; rows[o + 1] = w.n[1]; rows[o + 2] = w.n[2]; rows[o + 3] = w.d0;
   rows[o + 4] = w.h[0]; rows[o + 5] = w.h[1]; rows[o + 6] = w.h[2];
-  rows[o + 7] = piece === 1 ? s.angleP : piece === 2 ? s.angleM : 0;
+  rows[o + 7] = skullPieceAngle(s, piece);
   rows[o + 8] = w.a[0]; rows[o + 9] = w.a[1]; rows[o + 10] = w.a[2]; rows[o + 11] = s.frame.rho;
   rows[o + 12] = piece; rows[o + 13] = s.angleP !== 0 ? 1 : 0; rows[o + 14] = s.angleM !== 0 ? 1 : 0; rows[o + 15] = s.seed;
 }

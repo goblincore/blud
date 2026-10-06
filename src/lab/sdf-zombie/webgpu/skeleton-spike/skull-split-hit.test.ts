@@ -10,7 +10,7 @@ import { buildBody, DEFAULT_BUILD_OPTS } from '../../build-body';
 import { applyRig, bindRig, headQuatOf } from '../../rig-bind';
 import zombieSrc from '../../characters/zombie.blob?raw';
 import {
-  HEAD_SPLIT, forcedSplit, headFrameOf, rotAxis, skullSplitOf, skullWarpPoint, splitWarpOf, type SkullSplit,
+  HEAD_SPLIT, forcedSplit, headFrameOf, rotAxis, skullPieceAngle, skullSplitOf, skullWarpPoint, splitWarpOf, type SkullSplit,
 } from '../../head-split';
 import { SKULL_REACH, intactSkull, skullRayCast, skullRayHit, type SkullDamage, type SkullPieceSurface } from '../../skull-fracture';
 import type { Vec3 } from '../../types';
@@ -22,7 +22,7 @@ import { anatomicalSkullSource } from './anatomical-skull.fixture';
 import { createSkeletonSources } from './contract';
 import { meshSplitFracture, meshSplitJagMax, skullJagAt, type SplitJag } from './mesh-split';
 import {
-  segmentInBound, skullCopiesBound, skullOwnerAt, skullPieceAngle, skullShotCast, skullSplitRayHit, skullStruck,
+  segmentInBound, skullCopiesBound, skullOwnerAt, skullShotCast, skullSplitRayHit, skullStruck,
   type SkullBound, type SkullHeadFrame, type SkullShotStep, type SkullSplitHit, type SkullStrikes,
 } from './skull-split-hit';
 

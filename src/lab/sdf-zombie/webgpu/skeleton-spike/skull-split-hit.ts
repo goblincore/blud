@@ -17,7 +17,7 @@
 // Pure (no three): the renderer hands in the head's frame as functions, so a closed head's test is the same
 // arithmetic it always was.
 import type { Vec3 } from '../../types';
-import { HEAD_SPLIT, rotAxis, skullPieceAt, type SkullSplit } from '../../head-split';
+import { HEAD_SPLIT, rotAxis, skullPieceAngle, skullPieceAt, type SkullSplit } from '../../head-split';
 import { SKULL_REACH, skullRayCast, type SkullDamage, type SkullPieceSurface } from '../../skull-fracture';
 import { skullJagAt, type SplitJag } from './mesh-split';
 
@@ -35,11 +35,6 @@ export interface SkullHeadFrame {
 /** What a ray meets on a skull: the plate, the piece whose copy shows it there (0 the rest, 1 the + half, 2 the -
  *  half; a closed skull is all piece 0), and the distance along the ray in head-frame metres, as skullRayCast's. */
 export interface SkullSplitHit { plate: number; piece: 0 | 1 | 2; distance: number }
-
-/** The bone angle of a piece's copy (rad): 0 for the rest, and for a half that does not turn. */
-export function skullPieceAngle(split: SkullSplit, piece: 0 | 1 | 2): number {
-  return piece === 1 ? split.angleP : piece === 2 ? split.angleM : 0;
-}
 
 /** The piece that owns the closed skull's WORLD point `q`, by the fracture `jag` the copies are clipped along
  *  (head-split.ts skullPieceAt at mesh-split.ts skullJagAt): the clip's rule, on the CPU. */

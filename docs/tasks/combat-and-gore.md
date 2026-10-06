@@ -31,7 +31,7 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
     lists: spec section 10.10.
   - **On the anatomical skull (2026-10-06, branch `claude/split-anatomical-skull`):** split plates have their own
     material, shots break them where an opened half draws them, and the gate runs on it. For the owner: retune how far
-    the bone opens? [Notes and look sheets](../../docs/dev-notes/2026-10-06-split-anatomical-skull/NOTES.md).
+    the bone opens? [Notes and look sheets](../dev-notes/2026-10-06-split-anatomical-skull/NOTES.md).
   - **Gates (as of 2026-10-06):** `scripts/head-split-gate.mjs` (95 checks), `scripts/axe-gate.mjs` (27),
     `scripts/cut-wound-gate.mjs` (30).
 
