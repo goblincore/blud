@@ -353,10 +353,12 @@ describe('the hulls follow the open head', () => {
       const c: Vec3 = [rnd(), rnd(), rnd()];
       const chain = ellipsoidChain(c, axes, orient, pad);
       const big = Math.max(...axes), mid = [...axes].sort((x, y) => x - y)[1]!;
-      // Its spheres are the middle semi-axis's (plus the pad), inflated as every chain's; one sphere for a sphere.
-      for (const s of chain) expect(s.radius).toBeCloseTo((mid + pad) * 1.13, 12);
+      // Its spheres are the middle semi-axis's (plus the pad) to within 1%, all alike; one sphere for a sphere; and
+      // the chain reaches no more than 1% past the padded ellipsoid's tips.
+      for (const s of chain) { expect(s.radius).toBeGreaterThanOrEqual(mid + pad); expect(s.radius).toBeLessThan((mid + pad) * 1.01); expect(s.radius).toBe(chain[0]!.radius); }
       if (big - mid < 1e-12) expect(chain.length).toBe(1);
-      if ((mid + pad) * 1.13 < (big + pad) * 1.13 * 0.9) slimmer++;
+      expect(len(sub(chain[0]!.centre, chain[chain.length - 1]!.centre)) / 2 + chain[0]!.radius).toBeLessThan((big + pad) * 1.01);
+      if ((mid + pad) * 1.01 < (big + pad) * 1.13 * 0.9) slimmer++;
       // Every point of the padded ellipsoid's surface (a surface point pushed out along its normal by the pad) and of
       // its inside is in some sphere of the chain.
       for (let i = 0; i < 400; i++) {

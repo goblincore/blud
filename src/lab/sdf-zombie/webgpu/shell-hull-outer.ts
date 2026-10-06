@@ -120,6 +120,15 @@ function bezier(a: Vec3, c: Vec3, b: Vec3, t: number): Vec3 {
 
 export interface HullSphere { centre: Vec3; radius: number }
 
+/** The tight cover's spacing, as a share of its capsule's radius, and the hair of slack on its spheres. A chain of
+ *  spheres of radius rho, spaced d along a segment, covers the capsule of radius R about that segment exactly when
+ *  rho^2 >= R^2 + (d / 2)^2 (the worst point is on the capsule's surface midway between two centres; an end cap is
+ *  inside its end sphere). At a quarter of the radius that is 0.8% over R, where the hull's own chains (spaced at the
+ *  radius) need 13%: on a cover whose whole point is to be slim, and whose end spheres would otherwise reach 13%
+ *  past the ellipsoid's tips, the extra spheres are worth it (four for a skull). */
+const TIGHT_CHAIN_SPACING = 0.25;
+const TIGHT_CHAIN_SLACK = 1.001;
+
 /**
  * THE TIGHT COVER OF A PLAIN ELLIPSOID: a sphere chain along its LONGEST axis, where the hull's own sphere for it
  * (one sphere of the largest semi-axis) is loose across the two shorter ones. `axes` are the semi-axes in the
@@ -130,8 +139,8 @@ export interface HullSphere { centre: Vec3; radius: number }
  * x^2 + y^2 <= b^2 (1 - z^2 / c^2), so it is within b of the z axis; and past the segment's end, at |z| = t in
  * (c - b, c], its distance to the end point squared is at most b^2 (1 - t^2 / c^2) + (t - c + b)^2, which is at most
  * b^2 exactly when t <= c. So the ellipsoid lies in the capsule of radius b about the segment of half-length c - b,
- * the padded one in the capsule of radius b + pad, and the chain covers that capsule by the same spacing and
- * inflation as every capsule prim's (SPHERE_CHAIN_INFLATE). A sphere (b = c) is the one sphere it always was.
+ * the padded one in the capsule of radius b + pad, and the chain covers that capsule (TIGHT_CHAIN_SPACING). A sphere
+ * (b = c) is one sphere of radius b + pad.
  *
  * The outer hull keeps its one loose sphere where the body stands: closed bodies draw as they did. THE HEAD SPLIT
  * turns copies of THIS cover with each half instead (below): the skull's sphere is 0.158 m against a 0.090 m
@@ -143,12 +152,13 @@ export function ellipsoidChain(centre: Vec3, axes: Vec3, orient: Quat | undefine
   const reach = b + pad, half = Math.max(c - b, 0);
   const unit: Vec3 = [kc === 0 ? 1 : 0, kc === 1 ? 1 : 0, kc === 2 ? 1 : 0];
   const dir = orient ? qRotate(orient, unit) : unit;
-  const n = Math.max(1, Math.ceil(2 * half / (reach * SPHERE_CHAIN_SPACING)));
+  const n = half === 0 ? 0 : Math.max(1, Math.ceil(2 * half / (reach * TIGHT_CHAIN_SPACING)));
+  const d = n === 0 ? 0 : 2 * half / n;
+  const radius = Math.hypot(reach, d / 2) * TIGHT_CHAIN_SLACK;
   const out: HullSphere[] = [];
   for (let i = 0; i <= n; i++) {
-    const t = half === 0 ? 0 : -half + 2 * half * i / n;
-    out.push({ centre: [centre[0] + dir[0] * t, centre[1] + dir[1] * t, centre[2] + dir[2] * t], radius: reach * SPHERE_CHAIN_INFLATE });
-    if (half === 0) break;
+    const t = n === 0 ? 0 : -half + d * i;
+    out.push({ centre: [centre[0] + dir[0] * t, centre[1] + dir[1] * t, centre[2] + dir[2] * t], radius });
   }
   return out;
 }
