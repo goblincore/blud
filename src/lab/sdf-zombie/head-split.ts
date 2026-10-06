@@ -149,6 +149,10 @@ export const HEAD_SPLIT = {
  *    `gain`: the highlights' strength, x the light's colour, added before the highlight shoulder. **0 = off: the
  *      block is not written into the shader, and an opened head shades exactly as it did before the film.**
  *    `pow`: the exponent of the torch's highlight. Higher = tighter.
+ *      `gain` 4.5 and `pow` 28 are THE OWNER'S PICK (2026-10-06, variant C of
+ *      docs/dev-notes/2026-10-04-head-split/look/14-wet-variants.jpg): the boldest of three. It is past the 3% bound on
+ *      highlight blow-out that the quieter variant B kept (`gain` 2.6, `pow` 40: 2.5% of raw texels over 0.95 luma in
+ *      its worst view; C reads 3.4% to 6.4% square on). The alternatives' numbers: the head-split NOTES.
  *    `spill`: the torch's glint reaches past the beam's outer cone by this much of the cosine to the beam's axis
  *      (the film mirrors the lamp itself, and the torch is mounted a quarter metre off the eye: a head at arm's
  *      length in the middle of the screen stands at the cone's edge).
@@ -177,7 +181,7 @@ export const HEAD_SPLIT = {
 export const SPLIT_SHADE = {
   cutLo: 0.0015, cutHi: 0.004, shellLo: 0.0015, shellHi: 0.004, poreCut: 0.5, wet: 1,
   glisten: {
-    gain: 2.6, pow: 40, spill: 0.3, lamps: 0.45, lampPow: 20, rawLo: 0.3, rawHi: 0.8,
+    gain: 4.5, pow: 28, spill: 0.3, lamps: 0.45, lampPow: 20, rawLo: 0.3, rawHi: 0.8,
     lump: 0.014, lumpTilt: 2.4, lumpFlat: 1, fine: 0.006, fineTilt: 0.6, fadeLo: 0.75, fadeHi: 1.5, edge: 0.01, horizon: 0.15,
   },
 } as const;
