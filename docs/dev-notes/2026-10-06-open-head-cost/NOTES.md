@@ -521,7 +521,8 @@ With both changes in, `middle` both sides at 0.6 m walks 2.359M prims against th
 3.693M), takes 310.9k steps against 262.1k (399.8k) and walks 0.862M wound rows against 0.534M (1.159M). What the
 remaining excess is made of, largest first:
 
-1. **The cut rows** (another session's, in progress). An open head still walks 0.33M more wound rows than a closed
+1. **The cut rows** (another session's; committed the same day on `claude/cut-cost`, off the same base, not merged
+   here: `11325bf1` the exact idle exits in a cut row, `503b4646` a soft near zone for cuts). An open head still walks 0.33M more wound rows than a closed
    one and 0.05M more after the hit, and every one of its extra prims' samples pays them. The exact per-row exit of
    §4.1 makes a far sample's cut row free on every body. Re-run this note's driver on top of it when it lands: the
    no-wound legs put 2 to 3 ms of the open head's cost there before this pass.
@@ -531,6 +532,11 @@ remaining excess is made of, largest first:
    torso chops' 4.8 ms, has a soft near zone for cuts in its candidate build, and the owner decided on 2026-10-06
    that organs become mesh, which takes the fold out of the default march. That may be most of what the counters
    here leave unexplained (§3.3).
+   Its own result is a caution for the re-measure: on three torso chops the exits cut the cut rows' noise reads by
+   92 to 96% and the organ evaluations by 78 to 80%, and the frame gained 0.5 to 1.0 ms of 4.8 (2.2 of 6.5 on the
+   gate's zombie). Per-sample exits bought much less time than the work they skip, as −36% of the prims did here.
+   When the two branches meet: both moved the `march-golden` snapshot (re-run it with `-u`), and they touch
+   different lines of `wounds.wgsl.ts` and `map-body.wgsl.ts`.
 2. **The pieces that do not win** (0.29 of 1.41 evaluations a step with both sides open). No exact skip is known
    that is cheaper than the fold it would skip; after 1 the fold is most of what a losing piece costs.
 3. **The piece set-up, a lead and not a finding.** Every sample in the region runs `splitMoveBack` twice for the
