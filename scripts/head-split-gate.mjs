@@ -32,8 +32,8 @@
 //   C. cost: draw time, untouched, open and closed again, at 0.6 m and 2 m (with its spread, not gated); the
 //      instrument's floor over the run; THE DEPTH GUARD over every capture of the run (each body texel, placed in the
 //      world by its depth, lies in front of the camera and inside some actor's proxy box or gib chunk's sphere, and
-//      no run of texels shares the world origin's depth to the bit: depthGuard, with its own arms shown to fail on
-//      made-up texels); zero console errors and a clean gpuDiagnostics at the end of every boot.
+//      no run of texels shares the world origin's depth to the bit: scripts/lib/march-depth-guard.mjs, with its own
+//      arms shown to fail on made-up texels); zero console errors and a clean gpuDiagnostics at the end of every boot.
 //   R. RANGE (its own boot): beyond the draw distance a split is drawn closed, flesh and skull; it opens again only
 //      inside the reopen distance, and holds its state at each stance.
 //   A. A BODY CHOP NEAR THE NECK (the axe gate's torso chop: on the upper chest, inside the flail's head region)
@@ -68,6 +68,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { inflateSync, deflateSync } from "node:zlib";
+import { DEPTH_GUARD_PROBE, depthGuardAdd, depthGuardControl, depthGuardControlLine, depthGuardControlOk, depthGuardLine, depthGuardOk, depthGuardTexels, depthGuardTotals } from "./lib/march-depth-guard.mjs";
 const VITE = Number(process.argv[2] ?? 5241);
 const CDP = Number(process.argv[3] ?? 9241);
 /** Where the contact sheets go. A routine run writes them to scratch (.lab-tmp is ignored by git); SHEETS=1 writes the
@@ -607,76 +608,12 @@ const syncCam = () => evaluate("__sdfGame.step(1, 0)");
  *  SETTLED frame, over the run (FLOOR). A frame read while the spring moves is not settled (`settled` false): the
  *  shadow maps trail it, and its two reads differ by up to 0.015. */
 const FLOOR = { captures: 0, colour: 0, depth: 0 };
-/** THE DEPTH GUARD, on every capture (readF). The target's alpha is the hit's clip depth, so each body texel is a
- *  point in the world: the eye + (its distance along the view axis) x (the texel's ray). Three arms:
- *    BEHIND   that distance is not positive and finite (the point is behind the camera, or nowhere);
- *    OUTSIDE  the point lies outside EVERY marched thing's bound: each actor's proxy box (the box the march
- *             rasterises and can alone hit inside: the view's position +- its bodyHalf) and each live gib chunk's
- *             sphere (chunkStats().livePieces: centre, DEPTH_CHUNK x its radius), all grown by DEPTH_SLACK m and
- *             DEPTH_SLACK_FAR x the distance (a texel's own footprint and the march's accept reach);
- *    ORIGIN   of the texels whose clip depth is the WORLD ORIGIN's (within DEPTH_ORIGIN), the largest set that share
- *             one depth TO THE BIT, counted whether or not the other two arms object (the slack is 0.44 m at 13 m: a
- *             point at the origin's depth can fall inside some body's grown box). A surface that really crosses the
- *             origin's depth does so at many depths; a hit written at (0, 0, 0) gives one. More than
- *             DEPTH_ORIGIN_RUN fails.
- *  ORIGIN is the signature of the fault this guard was built on (NOTES, "Look: wet under the flashlight": screen
- *  cells of an open head keeping their colour and taking the origin's depth). The guard does not know the cause: any
- *  edit that puts a body texel where no body can be fails it.
- *  WHAT ELSE IS IN THIS TARGET. Everything on the SDF layer: the actors' bodies and the marched GIB CHUNKS
- *  (game-main.ts createChunkGpuView), which is why the chunks' spheres are bounds here; none is live in this gate's
- *  captures today (the check prints how many it saw). The first-person weapon is a mesh and is not in it; the
- *  marched first-person hands (fpv-view.ts createHandsGpuView) exist in the character lab only. */
-const DEPTH = { captures: 0, texels: 0, behind: 0, outside: 0, originRun: 0, chunks: 0, worst: null };
-const DEPTH_SLACK = 0.05, DEPTH_SLACK_FAR = 0.03, DEPTH_ORIGIN = 1e-6, DEPTH_ORIGIN_RUN = 2, DEPTH_CHUNK = 1.75;
-/** One target judged: `g` = { c, f, TX, TY (the eye, the view axis and a texel's ray per unit NDC, per metre along the
- *  axis), A, B (clip depth = A - B / distance), z0 (the world origin's clip depth), boxes [[x, y, z, hx, hy, hz]],
- *  chunks [[x, y, z, radius]] }. Pure: the positive control below feeds it made-up texels. */
-function depthJudge(t, g) {
-  const out = { texels: 0, behind: 0, outside: 0, originRun: 0, worst: null };
-  const atOrigin = new Map(); let last = 0;
-  for (let y = 0; y < t.h; y++) for (let x = 0; x < t.w; x++) {
-    const z = t.f[(y * t.w + x) * 4 + 3]; if (z === t.miss) continue;
-    out.texels++;
-    if (Math.abs(z - g.z0) <= DEPTH_ORIGIN) { const k = (atOrigin.get(z) ?? 0) + 1; atOrigin.set(z, k); if (k > out.originRun) out.originRun = k; }
-    const d = g.B / (g.A - z), nx = (x + 0.5) / t.w * 2 - 1, ny = 1 - (y + 0.5) / t.h * 2;
-    let why = null;
-    if (!(d > 0) || !Number.isFinite(d)) why = "behind";
-    else {
-      const p = [g.c[0] + d * (g.f[0] + nx * g.TX[0] + ny * g.TY[0]), g.c[1] + d * (g.f[1] + nx * g.TX[1] + ny * g.TY[1]), g.c[2] + d * (g.f[2] + nx * g.TX[2] + ny * g.TY[2])], slack = DEPTH_SLACK + DEPTH_SLACK_FAR * d;
-      const inBox = (b) => Math.abs(p[0] - b[0]) <= b[3] + slack && Math.abs(p[1] - b[1]) <= b[4] + slack && Math.abs(p[2] - b[2]) <= b[5] + slack;
-      const inChunk = (q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) <= DEPTH_CHUNK * q[3] + slack;
-      if (!(last < g.boxes.length && inBox(g.boxes[last]))) { last = g.boxes.findIndex(inBox); if (last < 0) { last = 0; if (!g.chunks.some(inChunk)) why = "outside"; } }
-    }
-    if (!why) continue;
-    out[why]++; out.worst ??= { texel: [x, y], why, clipDepth: z, distance: +d.toFixed(3), originDepth: +g.z0.toFixed(7) };
-  }
-  return out;
-}
-async function depthGuard(t) {
-  const r = await evaluate(`(() => { const c = __sdfGame.cameraWorld(); const d = (x, y) => { const p = __sdfGame.screenRayToWorld(x, y, 1); return [p[0] - c[0], p[1] - c[1], p[2] - c[2]]; };
-    const a = __sdfGame.screenRayToWorld(0, 0, 0.5), b = __sdfGame.screenRayToWorld(0, 0, 2);
-    return { c, f: d(0, 0), x: d(1, 0), y: d(0, 1), z1: __sdfGame.screenPosOf(a[0], a[1], a[2]).z, z2: __sdfGame.screenPosOf(b[0], b[1], b[2]).z, z0: __sdfGame.screenPosOf(0, 0, 0).z,
-      boxes: __sdfGame.actorList().map((q) => __sdfGame.zombie(q.id)).filter((q) => q && q.view && q.view.object).map((q) => { const p = q.view.object.position, h = q.view.uniforms.bodyHalf.value; return [p.x, p.y, p.z, h.x, h.y, h.z]; }),
-      chunks: __sdfGame.chunkStats().livePieces.map((q) => [q.centre[0], q.centre[1], q.centre[2], q.radius]) }; })()`);
-  // depth = A - B / distance along the view axis; a texel's ray is f + nx TX + ny TY per metre of that distance.
-  const B = (r.z2 - r.z1) / (1 / 0.5 - 1 / 2), A = r.z1 + B / 0.5;
-  const j = depthJudge(t, { c: r.c, f: r.f, TX: sub(mul(r.x, 1 / dot(r.x, r.f)), r.f), TY: sub(mul(r.y, 1 / dot(r.y, r.f)), r.f), A, B, z0: r.z0, boxes: r.boxes, chunks: r.chunks });
-  DEPTH.captures++; DEPTH.texels += j.texels; DEPTH.behind += j.behind; DEPTH.outside += j.outside; DEPTH.originRun = Math.max(DEPTH.originRun, j.originRun); DEPTH.chunks = Math.max(DEPTH.chunks, r.chunks.length);
-  if (j.worst || j.originRun > DEPTH_ORIGIN_RUN) DEPTH.worst ??= { capture: DEPTH.captures, ...(j.worst ?? { why: "origin", originDepth: +r.z0.toFixed(7) }), originRun: j.originRun };
-  return j;
-}
-/** THE GUARD'S OWN ARMS, on made-up texels (a positive control: nothing is rendered). An eye at (0, 1.6, 3) looking
- *  down -z; one body's box 4 m off, and one that happens to stand about the world origin. */
-function depthGuardControl() {
-  const A = 1.0005, B = 0.10005, at = (d) => Math.fround(A - B / d), miss = 1;
-  const g = { c: [0, 1.6, 3], f: [0, 0, -1], TX: [0.05, 0, 0], TY: [0, 0.04, 0], A, B, z0: A - B / 3, boxes: [[0, 1, -1, 0.4, 1, 0.4], [0, 1, 0, 2, 2, 0.5]], chunks: [[3, 1, -7, 0.2]] };
-  const target = (zs) => ({ w: zs.length, h: 1, miss, f: Float32Array.from(zs.flatMap((z) => [0.2, 0.1, 0.1, z])) });
-  // A texel on the first body; one behind the camera; one 13 m off, in no bound; three at the origin's depth to the
-  // bit, which land inside the second body's box (the first guard counted the origin only among texels already bad).
-  const faulty = depthJudge(target([miss, at(4), at(-9.741), at(13), at(3), at(3), at(3), miss]), g);
-  const clean = depthJudge(target([miss, at(4), at(3.9), at(4.1), at(2.9), at(3.02), miss, miss]), g);
-  return { faulty: { texels: faulty.texels, behind: faulty.behind, outside: faulty.outside, originRun: faulty.originRun }, clean: { texels: clean.texels, behind: clean.behind, outside: clean.outside, originRun: clean.originRun } };
-}
+/** THE DEPTH GUARD, on every capture (readF): each body texel, placed in the world by its depth, lies in front of the
+ *  camera and inside some actor's proxy box or gib chunk's sphere, and no run of texels shares the world origin's
+ *  depth to the bit (scripts/lib/march-depth-guard.mjs has the rule, its positive control, and the fault it was built
+ *  on). The run's totals; `worst` is the first failing capture's first bad texel. */
+const DEPTH = depthGuardTotals();
+async function depthGuard(t) { const g = await evaluate(DEPTH_GUARD_PROBE); return depthGuardAdd(DEPTH, depthGuardTexels(t, g), g); }
 const readOnce = async () => { const r = await evaluate("__sdfGameDebug.readMarchTarget()", 120000); return { w: r.w, h: r.h, f: new Float32Array(Uint8Array.from(Buffer.from(r.rgba32f, "base64")).buffer) }; };
 async function readF(settled = true) {
   const a = await readOnce(), t = await readOnce();
@@ -1558,11 +1495,8 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
 }
 check(FLOOR.colour <= FLOOR_COLOUR_MAX && FLOOR.depth <= FLOOR_DEPTH_MAX, `C: the instrument's floor over the run: the two reads of each of ${FLOOR.captures} settled captures differ by at most ${FLOOR.colour.toExponential(1)} in colour and ${FLOOR.depth.toExponential(1)} in clip depth (<= ${FLOOR_COLOUR_MAX}, ${FLOOR_DEPTH_MAX})`);
 const errs = consoleEvents.filter((e) => e.type === "error" || e.type === "exception");
-{ const k = depthGuardControl();
-  check(k.faulty.behind === 1 && k.faulty.outside === 1 && k.faulty.originRun === 3 && k.clean.behind === 0 && k.clean.outside === 0 && k.clean.originRun <= 1,
-    `C: the depth guard's own arms, on made-up texels: of ${k.faulty.texels}, ${k.faulty.behind} behind the camera, ${k.faulty.outside} outside every bound and a run of ${k.faulty.originRun} at the world origin's depth INSIDE a body's box (1, 1 and 3 expected; a run over ${DEPTH_ORIGIN_RUN} fails); on a clean target ${k.clean.behind}, ${k.clean.outside} and a run of ${k.clean.originRun}`); }
-check(DEPTH.captures > 0 && DEPTH.behind === 0 && DEPTH.outside === 0 && DEPTH.originRun <= DEPTH_ORIGIN_RUN,
-  `C: every body texel is where a body can be: of ${DEPTH.texels} over ${DEPTH.captures} captures, ${DEPTH.behind} lie behind the camera and ${DEPTH.outside} outside every actor's proxy box and gib chunk's sphere (+${DEPTH_SLACK} m, +${DEPTH_SLACK_FAR} x the distance; ${DEPTH.chunks} chunks live at most); at the world origin's clip depth the largest run of bit-equal texels in a capture is ${DEPTH.originRun} (<= ${DEPTH_ORIGIN_RUN})${DEPTH.worst ? "; the first " + J(DEPTH.worst) : ""}`);
+{ const k = depthGuardControl(); check(depthGuardControlOk(k), `C: ${depthGuardControlLine(k)}`); }
+check(depthGuardOk(DEPTH), `C: ${depthGuardLine(DEPTH)}`);
 check(errs.length === 0, `C: zero console errors or exceptions across the run (${errs.length}${errs.length ? ": " + J(errs.slice(0, 3)) : ""})`);
 const dirty = Object.entries(out.diag).filter(([, d]) => !d || d.lost || d.uncapturedCount !== 0);
 check(Object.keys(out.diag).length > 0 && dirty.length === 0, `C: gpuDiagnostics clean at the end of every boot (${Object.keys(out.diag).join(", ")}: no device loss, uncapturedCount 0${dirty.length ? "; DIRTY " + J(dirty) : ""})`);

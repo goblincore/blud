@@ -1408,7 +1408,7 @@ tail's compose right after the light list's add and before the highlight shoulde
 - **With the torch lit the lamps are not the key** (`game-light-list-leaves.ts torchLane`: lit, the torch keeps the
   key by its per-pixel beam and the lamps are only in the list's sums; off, the list's dominant pick is the key). So a
   lamp can glint off the film only with the torch off. Lit, the lamps add nothing to the film.
-- **An unexplained depth fault** (reworded after review: it is not a rule about `bodyLights`). The first build of
+- **A depth fault** (unexplained when this was written; bisected since: ["The depth fault, bisected"](#the-depth-fault-bisected-2026-10-05), at the end of this file. It is not a rule about how often `bodyLights` is called). The first build of
   the block walked the light list again off the film's normal (`bodyLights(p, glisN, V, gInstLights, lightList,
   false, true)` behind the raw gate). On the float march target, 72 to 197 texels of each 0.6 m capture then kept
   their lit colour to the bit but took ONE exact clip depth per camera: the projection of the world origin (view
@@ -1423,11 +1423,11 @@ tail's compose right after the light list's add and before the highlight shoulde
     call sites, in exclusive branches (`light-list.wgsl.ts`). The bad texels are skin at the jaw's silhouette whose
     colour is bit-equal to `gain` 0, so the added call never ran on them. The fault also shows on an open head 4.2 m
     away. That depth needs `cameraPosition + rayDir x t` (`zombie-gpu.ts createMarchMaterial`) to be exactly zero: a
-    zeroed temporary, from codegen or from the node graph's ordering. The mechanism is NOT known, and the next
-    unrelated edit to the light tail could bring it back without anyone calling `bodyLights`.
+    zeroed temporary, from codegen or from the node graph's ordering. (Bisected since: the node graph is not it, and
+    what is zeroed is the entry point's ray and hit distance. See the last section.)
   - **What holds it now.** The gate's depth guard (review fixes, below) catches it whatever the cause. The block does
-    not walk the list, and its test pins the entry's count of `bodyLights(` at 2: a tripwire for the one edit known
-    to trigger it, not an explanation. A follow-up to find the mechanism is filed.
+    not walk the list. Its test first pinned the entry's count of `bodyLights(` at 2 as a tripwire; after the
+    bisect it pins the real rule (where the call may sit).
 
 ### The constants (`SPLIT_SHADE.glisten`)
 
@@ -1719,8 +1719,8 @@ speckle was the fault the horizon removes. Faces that do look at the lamp keep t
   clipDepth 1.0107716, distance -9.741, originDepth 1.0107717}". (O failed too on that build: 9 texels of the still
   half moved in depth.) On this build, the same subset and the whole gate: 0.
 - The test, this file and HANDOFF no longer call it a `bodyLights` rule (the first round's section above is
-  reworded, with what the reviewer ruled out and the 4 x 4 cells). The test pins `bodyLights(` at 2 in `MARCH_BODY`
-  and `REFINE_BODY`, as a tripwire.
+  reworded, with what the reviewer ruled out and the 4 x 4 cells). The test pinned `bodyLights(` at 2 in `MARCH_BODY`
+  and `REFINE_BODY`, as a tripwire, until the bisect replaced it (last section).
 
 ### 4. The wobble: does it sparkle?
 
@@ -1868,15 +1868,17 @@ blow-out bound. B ships.
   Now, of ALL body texels whose clip depth is the world origin's (within 1e-6), the guard takes the largest set that
   share one depth to the bit, per capture: a surface that really crosses that depth does so at many depths, a hit
   written at (0, 0, 0) at one. A run over 2 fails.
-- **Its arms can each fail** (a positive control in the gate, on made-up texels through the same pure
-  `depthJudge`: nothing is rendered): one texel behind the camera, one 13 m off in no bound, and three at the
-  origin's depth that land INSIDE a body's box read 1, 1 and a run of 3; a clean target reads 0, 0, 0.
+- **Its arms can each fail** (a positive control on made-up texels through the same pure function: nothing is
+  rendered): one texel behind the camera, one 13 m off in no bound, and three at the origin's depth that land INSIDE
+  a body's box read 1, 1 and a run of 3; a clean target reads 0, 0, 0. (Written inline in the gate as `depthJudge` /
+  `depthGuardControl`; since the merge with the bisect it lives in `scripts/lib/march-depth-guard.mjs` as
+  `depthGuardTexels` / `depthGuardControl`, and both gates run it: last section.)
 - **What else is in the target it reads.** Everything on the SDF layer: the actors' bodies and the marched GIB
   CHUNKS (`createChunkGpuView`). So a live chunk's sphere (`chunkStats().livePieces`: its centre, 1.75 x its radius)
   is a bound too, beside the actors' proxy boxes; without it a gibbed body's pieces would read as "outside". None is
   live in the gate's captures today (the check prints the most it saw: 0). The first-person weapon is a mesh and is
   not in the target; the marched first-person hands (`fpv-view.ts createHandsGpuView`) exist in the character lab
-  only.
+  only. (Measured in the merge, below: the axe gate's three real-swing frames, guard on: 95 739 body texels, 0 bad.)
 
 ### The check set
 
@@ -1890,3 +1892,210 @@ blow-out bound. B ships.
 | `cut-wound-gate.mjs` | 30 checks, 0 failed |
 | `tsc --noEmit` | the `node:crypto` error only |
 | the whole tree (`--exclude '**/cut-wound.test.ts'`) | 511 files, 7468 tests passed, 1 skipped |
+
+## The depth fault, bisected (2026-10-05)
+
+The follow-up on the fault above. It is no longer unexplained as far as the repository can see: the trigger and the
+rule are known, and what is left is inside Apple's Metal compiler or GPU. Machine: Apple M3, macOS 26.3.1, headless
+Chrome 154.0.8037.93 (Dawn and Tint to Metal).
+
+### What it is
+
+**`bodyLights` called under a per-fragment condition.** When only some fragments of one 4 x 4 block of the march
+target take the call, the other fragments of that block come back with zeroed values in the entry point: the ray
+direction and the march's distance, so the hit position is exactly (0, 0, 0) and the depth written is the world
+origin's. Their colour, which the same call returned, is right.
+
+**The fragments that took the call were ones the march missed.** A WGSL `discard` does not end the invocation (Tint
+writes Metal's `discard_fragment()`, which does not either), and `MARCH_TRACE_POST`'s miss branch has no `return`
+after it. A missed fragment therefore runs the whole post-hit chain and the light tail on a garbage hit, its output
+thrown away at the end. Garbage passes the film's gate (`splitIn`, `glisRaw > 0`), so at the head's silhouette some
+missed fragments of a block ran the added call while the hit fragments beside them did not. No visible texel ever ran
+it.
+
+**The 4 x 4 cells are not a structure of ours.** The quarter-resolution depth prepass has that block size, but it is
+off by default and its target is never drawn in these boots. The bad texels sit inside cells of the target's 4-texel
+grid (not always the whole cell: the fragments of the cell that are bodies, or a 4 x 2 or 3 x 4 part of them), which
+reads as the unit the GPU shades fragments in. That is an inference: nothing documents it.
+
+**It is below the shader source.** `bodyLights` is pure, the generated WGSL and the Metal source Tint writes from it
+are both right (below), and one fragment's branch changing another fragment's values is not something a shader can
+say. The cause is in the Metal compile of that source or in how the GPU runs a call that only part of a block takes.
+I could not look further than that from outside the driver.
+
+### The rule
+
+Call `bodyLights` only under conditions every fragment of a draw shares (`lightListCfg`), as `light-list.wgsl.ts`
+does. A block that wants the list per fragment calls it for every fragment and gates the USE of the result: that
+form was built (three call sites, the third at the top of the block under `lightListCfg.x > 0`, off the surface's
+normal for the test) and showed 0 bad texels. The count of call sites was never the rule.
+
+- `split-glisten.wgsl.test.ts` pins it: every `bodyLights(` in `MARCH_BODY` and `REFINE_BODY` sits directly inside
+  one block whose condition reads only `lightListCfg`. The faulty build's call, spliced back, is refused; the hoisted
+  form is accepted. This replaces the count-of-2 tripwire.
+- The comments at `split-glisten.wgsl.ts` and `body-lights.wgsl.ts` say why.
+- The gates' depth guard is what catches the fault whatever its cause (below).
+
+### The reproduction
+
+A scratch switch on the URL chose the block's variant, so one server gave every build. The bare ring page with the
+head-split gate's boot and pins; the first zombie of the pool, `forceSplit(id, "middle", 0, 0, 1)`; the float march
+target read twice, the second kept. Three cameras: the front at 0.6 m, three-quarter (0.8 rad round to the head's
+right) at 0.6 m, the front at 4.2 m. A bad texel is a body texel within 1e-6 of the world origin's clip depth.
+
+Build A is the shipped block with the first build's call put back after the film's normal:
+`let glisBl = bodyLights(p, glisN, V, gInstLights, lightList, false, true); glis = glis + glisBl.spec;`
+
+| Build | front | three-quarter | 4.2 m |
+| --- | --- | --- | --- |
+| shipped | 0 | 0 | 0 |
+| A | **6** | **121** | 0 |
+| A, the head still closed (same boot) | 0 | 0 | |
+| A, `?crowd=0` (the per-body path) | 6 | 121 (the same texels) | |
+| A, with `toVar` on the march's result in lit mode | 6 | 121 | |
+| A, with a `return` after the miss `discard` | **0** | **28** | |
+| H: the call hoisted out of the per-fragment gate (still three call sites) | **0** | **0** | |
+| D1: a copy of `bodyLights` with its storage reads replaced by constants, at the gated site | 0 | 0 | |
+| D4: that copy at three sites (two under `lightListCfg`, one gated) | 0 | 0 | |
+| D2: no call, a four-turn loop with a `continue` | 0 | 0 | |
+| D3: no call, one more `noise3` tap | 0 | 0 | |
+
+In every build the hit mask is the shipped one, and the colour is the shipped one on every texel of the frame (0
+texels differ between shipped and A): only the depth of the bad texels moves.
+
+- **The front's 6 texels** are all six body texels of one cell at the head's top-left silhouette (the cell's other
+  10 are misses). **The three-quarter's 121** are nine cells down the right silhouette and three cells
+  inside the head on one row band (y 132 to 135).
+- **The `return` after the miss `discard`** clears every silhouette cell and leaves the three inside cells. So the
+  silhouette's actors are missed fragments running the tail. What takes the call in the inside cells is not
+  identified: no visible texel does (a marker added where the call runs changed no texel of the frame, compared
+  exactly), and missed fragments no longer reach it in that build.
+- **Distance.** 0 at 4.2 m here; the reviewer saw it on an open head 4.2 m away in the first captures. It depends on
+  which fragments share a cell, not on distance as such.
+
+### What the entry point holds on a bad texel
+
+Probes written into the target's rgb in place of the colour, the alpha left alone (each is its own compile; one of
+the four made the fault vanish, the others kept the same 121 texels):
+
+| Probe (rgb) | On a bad texel | On its good neighbour |
+| --- | --- | --- |
+| the hit position | (0, 0, 0) exactly | (32.13, 1.71, -10.51) |
+| the march's `w`, the ray's z, clip `w` | 0, 0, 14.71 (the world origin's view distance) | 0.656, -0.851, 0.629 |
+| the march's `w`, the ray's x and y | the fault did not show in this build | |
+
+So the ray direction (computed in the entry before the march is called) and the distance the march returned read as
+zero after the call, and so does their sum with the camera position (the camera position was not probed on its
+own), while the colour the same call returned is right and the view and projection matrices are intact.
+
+### Ruled out
+
+- **The node graph's ordering (TSL).** The generated WGSL was captured by wrapping `createShaderModule`. The entry
+  assigns the ray to `nodeVar1`, calls `marchBody` ONCE into `nodeVar2`, and both the depth output and the alpha
+  compute `cameraPosition + nodeVar1 * nodeVar2.w`. Nothing is read before it is written. The march materials'
+  entries (per-body and crowd) have the same shape.
+- **`toVar` on the march's result.** No change (the result is already in a variable).
+- **Tint.** Chrome was run with `--enable-dawn-features=dump_shaders` and the Metal source read from the console
+  (CDP `Log.entryAdded`). It is a faithful translation: `bodyLights` is a function with three call sites that takes
+  the light list as a `const device` pointer and its length; the entry is the WGSL's, line for line; `discard` is
+  `discard_fragment(); return float4(0.0f);` at the setup's sites and a bare `discard_fragment();` at the miss.
+  The module is compiled with `#pragma METAL fp math_mode(relaxed)`.
+- **The tiled path.** `?crowd=0` gives the same texels.
+- **The depth prepass, its miss cull, the temporal start, the occluder, the cone prepass, the depth gate.** Toggled
+  at run time on the faulty build (no recompile). The prepass and the miss cull are off by default, and switching
+  them changes nothing (121). The temporal start off moves 7 texels of the hit mask and the count goes to 139; with
+  it off, the occluder, the cone prepass and the depth gate off each leave it at 139.
+- **The call's own work.** `bodyLights` is pure (the reviewer's reading), and no visible texel ran the added call.
+- **Code size and the count of call sites.** D1 and D4 are the same size as A and clean; H has A's three sites and
+  is clean.
+- **A closed head.** 0 on the same boot. The split's region is what puts the film's gate in reach.
+
+Not separated: whether the fault needs the storage pointer itself or only a function the Metal compiler keeps as a
+real call. The storage-free copy was clean at one site and at three, which points at the pointer, but what the
+compiler inlines cannot be seen from here. The front end's IR (`xcrun metal -c`, then `metal-opt -S`) keeps the
+module's 87 functions apart and marks the `marchBody` call and the matrix products `fast`; the pipeline's own optimiser and
+the GPU back end are not visible.
+
+### The guard
+
+- **`scripts/lib/march-depth-guard.mjs`** now holds the rule the head-split gate had inline (the same arithmetic),
+  with unit tests on synthetic frames (`march-depth-guard.test.mjs`: a texel at the origin's depth, one behind the
+  camera, one off every box each fail). (That was the guard as round 2 left it, counting the origin's depth only
+  among texels already judged bad. The merge put round 3's guard into the module: "The merge", below.)
+- **`head-split-gate.mjs` fails on build A**, run again for this (`ONLY=S,O`): "49 lie behind the camera and 0
+  outside every actor's proxy box; 49 of those at the world origin's depth; the first {capture 2, texel [208, 69],
+  clipDepth 1.0107716, distance -9.741, originDepth 1.0107717}". O fails with it (9 texels of the still half moved).
+- **`axe-gate.mjs` has the guard too** (26 checks), at every screenshot but S's: the first-person axe and hands are
+  marched into the same target and have no actor's box. (Corrected in the merge: they are meshes and are not in the
+  target, S's frames pass the guard and are guarded now; below.) **It does NOT fail on build A**: none of its ten guarded
+  frames puts a faulty cell in view (430 557 body texels, 0 bad). It is there for what else can put a texel where no
+  body is, not as a second detector of this fault.
+
+### Left open
+
+- **A `return` after the miss `discard`** (`trace.wgsl.ts`, `MARCH_TRACE_POST`). Not landed: it changes the shader
+  of every body and wants its own check set. For it: it takes the missed fragments out of the tail, which removed
+  every silhouette cell of the fault, and on the shipped block the three captures are the shipped ones to the bit
+  (hit mask, colour and depth, 0 texels differ). Every missed fragment of every proxy box runs the full post-hit
+  chain today; what that costs was not measured. The refine twin's three `discard`s have no `return` either.
+- **What takes the call in the three inside cells** of the three-quarter frame.
+- **Other helpers under per-fragment conditions.** The shipped shader shows no bad texel in any gate capture; nothing
+  says another function could not behave as `bodyLights` did. The guard is what watches for it.
+- **Reporting it upstream** needs a reduction that stands alone in Metal; none was made.
+
+### The check set
+
+No WGSL text changed in what landed (comments outside the shader strings, a test, the gates' scripts), so
+`march-golden` passes without `-u` and the census, `march-hash` and the boot pair were not run. Every faulty and
+probing build above was a scratch edit, reverted by name.
+
+| Check | Result |
+| --- | --- |
+| `march-golden` (no `-u`) | passes: the three march exports are unchanged |
+| `head-split-gate.mjs` | **79 checks, 0 failed**; the guard through the shared module reads what it read inline: 0 of 7 545 127 body texels over 227 captures |
+| `axe-gate.mjs` | **26 checks, 0 failed** (the 25 and the guard: 0 of 430 557 body texels over 10 screenshots) |
+| `cut-wound-gate.mjs` | 30 checks, 0 failed |
+| `tsc --noEmit` | the `node:crypto` error only |
+| the whole tree (`--exclude '**/cut-wound.test.ts'`, with `scripts/lib/march-depth-guard.test.mjs`) | 512 files, 7474 tests passed, 1 skipped |
+
+### The merge: one guard for both gates (2026-10-05)
+
+The bisect forked before the wet film's round 3, so the two lines each held a depth guard: the bisect's in the shared
+module (round 2's rule, moved), round 3's inline in the head-split gate (the tightened one). Merged, the module is
+the home and round 3's rule is the rule.
+
+- **`scripts/lib/march-depth-guard.mjs`** holds: the pure judge `depthGuardTexels(target, probe)` -> `{ texels,
+  behind, outside, originRun, worst }` (the origin arm over EVERY body texel as the largest bit-equal run; a live gib
+  chunk's sphere a bound beside the actors' boxes); the constants `DEPTH_SLACK`, `DEPTH_SLACK_FAR`, `DEPTH_ORIGIN`,
+  `DEPTH_ORIGIN_RUN`, `DEPTH_CHUNK`; the page probe `DEPTH_GUARD_PROBE` (with the chunks; `[]` on a page that has no
+  `chunkStats`); a run's totals `depthGuardTotals()` / `depthGuardAdd(totals, result, probe, name)`, its verdict
+  `depthGuardOk` and line `depthGuardLine`; and the positive control `depthGuardControl()` with `depthGuardControlOk`
+  and `depthGuardControlLine`. Its tests (`npx vitest run scripts/lib/march-depth-guard`: 14 tests) hold each arm,
+  the run inside a body's box that the first rule let through, a surface really crossing the origin's depth (no
+  run), the chunk bound, the totals and the control.
+- **`head-split-gate.mjs`** keeps a two-line wrapper and its two checks (the control, the run). No guard logic is
+  left in it. It is 80 checks, as round 3 left it, and every check line is the same to the character as before the
+  merge.
+- **`axe-gate.mjs`** uses the same calls and gains the control: 27 checks (the 25, the control, the guard). Its guard now covers S's three
+  real-swing screenshots too. The bisect left them out as "the first-person axe and hands are marched into the same
+  target"; they are meshes on the default layer (`game-axe.ts`, `game-arms.ts`) and are not in it, and with the guard
+  on those three frames alone it read 95 739 body texels, 0 bad, 0 chunks live.
+- **The two `bodyLights` pins.** The bisect's structural pin (every `bodyLights(` of the march and its refine twin
+  sits directly inside one block whose condition reads only `lightListCfg`) replaced the count-of-2 tripwire; the
+  merge kept it alone. Round 3's tests (the film's lean, `gain` 0 against the build without the block) merged beside
+  it untouched.
+- **What the merge made stale, and was brought up to date:** the spec's 10.7 and 10.8, HANDOFF and the two task pages
+  still described the film of the build before round 3 (`lumpTilt` 3.2, 5.05% / 1.08%, "keep, raise the gain or turn
+  off") and the gates at 79 and 26 checks. They now give the shipped film (B), the owner's pending pick from
+  `look/14-wet-variants.jpg`, and 80 and 27.
+
+| Check, on the merge | Result |
+| --- | --- |
+| `march-golden` (no `-u`) | passes: the snapshot is round 3's; the bisect changed no WGSL text |
+| `march-hash` | no pin moved (`d7392d52…` / `76bd51aa…`, `0c71e712…` / `bf6836cd…`, `470ff0b3…` / `f618070e…`) |
+| `head-split-gate.mjs`, twice | **80 checks, 0 failed** each, identical; the guard: 0 of 7 545 127 body texels over 227 captures, no chunk live, the largest bit-equal run at the origin's depth 0 |
+| `axe-gate.mjs` | **27 checks, 0 failed**; the guard over all 13 screenshots, S's three among them: 0 of 572 265 body texels |
+| `cut-wound-gate.mjs` | 30 checks, 0 failed |
+| `tsc --noEmit` | the `node:crypto` error only |
+| the whole tree (`--exclude '**/cut-wound.test.ts'`) and the module's tests | 511 files, 7468 tests passed, 1 skipped; the module's file, 14 tests passed (512 files in all) |
+

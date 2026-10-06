@@ -10,7 +10,6 @@ import { noise3 } from '../../../../../validate';
 import { MARCH_SURFACE } from '../../../../deferred-sdf';
 import { MARCH_BODY, REFINE_BODY } from '../../entry.wgsl';
 import { MARCH_BODY_LIGHT } from '../../light.wgsl';
-import { LIGHT_LIST_BLOCK } from './light-list.wgsl';
 import { MAP_BODY } from '../../../map-body.wgsl';
 import { COMPOSE_BLOCK } from './compose.wgsl';
 import { SKIN_PRE } from './skin-detail-proto';
@@ -19,6 +18,25 @@ import { SPLIT_GLISTEN_BLOCK, splitGlistenBlock } from './split-glisten.wgsl';
 const noComments = (s: string) => s.replace(/\/\/[^\n]*/g, '');
 const G = SPLIT_SHADE.glisten;
 const code = noComments(SPLIT_GLISTEN_BLOCK);
+/** A block header that reads nothing but lightListCfg: `if (...)`, or the `else if (...)` arm of one. */
+const UNIFORM_ONLY = /^(?:else )?if \((?:lightListCfg\.[xyzw] (?:<=|>=|<|>) \d+\.\d+)(?: && lightListCfg\.[xyzw] (?:<=|>=|<|>) \d+\.\d+)*\)$/;
+/** Every call of `call` in an entry's text (comments stripped): the headers of the blocks that enclose it inside
+ *  the function's body, outermost first (the statement text before each open brace: `if (c)`, `else if (c)`,
+ *  `for (...)`, a bare `else`). */
+function callSites(entry: string, call: string): string[][] {
+  const out: string[][] = [];
+  const stack: string[] = [];
+  let stmt = 0;
+  for (let i = 0; i < entry.length; i++) {
+    const ch = entry[i];
+    if (ch === '{') { stack.push(entry.slice(stmt, i).trim().replace(/^\} /, '')); stmt = i + 1; }
+    else if (ch === '}') { stack.pop(); stmt = i; }
+    else if (ch === ';' && !/\bfor \([^)]*$/.test(entry.slice(stmt, i))) stmt = i + 1;
+    if (entry.startsWith(call, i) && !/\w/.test(entry[i - 1] ?? '')) out.push(stack.slice(1));
+  }
+  return out;
+}
+const sitesIn = (entry: string) => callSites(noComments(entry), 'bodyLights(').length;
 /** The block's own float literal. */
 const f = (v0: number) => { const v = +v0.toFixed(6); return Number.isInteger(v) ? `${v}.0` : `${v}`; };
 
@@ -217,19 +235,34 @@ describe('the film', () => {
     // L is the raw direction to that lamp (light-list.wgsl.ts): the horizon is the surface's own, as the torch's.
     expect(code.replace(/\s+/g, ' ')).toContain(`glis = glis + keyC * (pow(max(dot(glisN, H), 0.0), ${f(G.lampPow)}) * smoothstep(0.0, ${f(G.horizon)}, dot(n, L)) * min(keyI, 1.0) * wShadow * ${f(G.lamps)});`);
   });
-  it('A TRIPWIRE, not an explanation: the list is not walked here, and the entry calls bodyLights at its two exclusive sites only', () => {
-    // A build of this block that walked the light list a second time, off the film's normal, showed an unexplained
-    // depth fault: whole 4 x 4 texel cells of an open head kept their colour and took the world origin's depth.
-    // bodyLights is pure (no private write, no callee) and those texels never ran the added call (their colour was
-    // bit-equal to gain 0), so this is NOT a rule about bodyLights: the cause is not known, and any edit to the light
-    // tail could bring it back. What catches it is scripts/head-split-gate.mjs depthGuard. These pins only make the
-    // one edit known to trigger it show up in review.
+  it('bodyLights is called only under conditions every fragment shares (lightListCfg), never inside a per-fragment block', () => {
+    // THE DEPTH FAULT (bisected: NOTES, "The depth fault, bisected"). On Apple's GPU, when only some fragments of a
+    // 4 x 4 block of the target take a bodyLights call, the others come back with a zeroed ray and hit distance in
+    // the entry point: their colour is right and their depth is the world origin's. A build of this block that
+    // walked the list behind its raw gate showed it (the fragments that took the call were ones the march missed:
+    // a WGSL discard does not end the invocation). The same call made for every fragment is clean, so the count of
+    // call sites is not the rule: where each one sits is.
     expect(code).not.toContain('bodyLights(');
     expect(code).not.toMatch(/lightList\b|gInstLights/);
-    for (const entry of [MARCH_BODY, REFINE_BODY]) expect(noComments(entry).match(/\bbodyLights\(/g)).toHaveLength(2);
-    const list = noComments(LIGHT_LIST_BLOCK);
-    expect(list.match(/\bbodyLights\(/g)).toHaveLength(2);
-    expect(list).toMatch(/if \(lightListCfg\.x > 0\.0 && lightListCfg\.z > 0\.5\) \{[^}]*bodyLights\([^}]*\} else if \(lightListCfg\.x > 0\.0\) \{[^}]*bodyLights\(/);
+    for (const entry of [MARCH_BODY, REFINE_BODY]) {
+      const sites = callSites(noComments(entry), 'bodyLights(');
+      expect(sites.length).toBeGreaterThan(0);
+      // Each site: directly inside ONE block of the entry's body, and that block's condition reads nothing but
+      // lightListCfg (the else-arm of such an if counts as the if it closes).
+      for (const site of sites) {
+        expect(site, JSON.stringify(site)).toHaveLength(1);
+        expect(site[0]).toMatch(UNIFORM_ONLY);
+      }
+    }
+    // The walker sees a per-fragment gate: the faulty build's call, spliced back, is refused.
+    const faulty = noComments(MARCH_BODY).replace('var glis = vec3<f32>(0.0);', 'var glis = vec3<f32>(0.0);\n      let glisBl = bodyLights(p, glisN, V, gInstLights, lightList, false, true);');
+    const bad = callSites(faulty, 'bodyLights(').filter((site) => site.length !== 1 || !UNIFORM_ONLY.test(site[0]!));
+    expect(bad).toHaveLength(1);
+    expect(bad[0]).toEqual(['if (splitIn)', 'if (glisRaw > 0.0)']);
+    // And the hoisted form, the one that was built and is clean, is accepted.
+    const hoisted = noComments(MARCH_BODY).replace('if (splitIn) {', 'if (lightListCfg.x > 0.0) { let glisBl0 = bodyLights(p, n, V, gInstLights, lightList, false, true); }\n  if (splitIn) {');
+    expect(callSites(hoisted, 'bodyLights(').every((site) => site.length === 1 && UNIFORM_ONLY.test(site[0]!))).toBe(true);
+    expect(callSites(hoisted, 'bodyLights(')).toHaveLength(sitesIn(MARCH_BODY) + 1);
   });
   it('adds highlights to the lit colour and writes nothing else', () => {
     expect(code).toContain(`fleshLit = fleshLit + glis * (${f(G.gain)} * glisRaw * ao);`);

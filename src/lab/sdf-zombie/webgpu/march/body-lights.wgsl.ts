@@ -33,6 +33,14 @@
 // with the profile gain it converts the list's physical rgb into the body key the old path gave.
 //
 // NAMING. `meta` is a WGSL reserved word, so the light's fourth vec4 is `lm`.
+//
+// WHERE IT MAY BE CALLED (2026-10-05, the head split's depth fault). Only under conditions every fragment of a draw
+// shares (uniforms: lightListCfg), never under a per-fragment one. On Apple's GPU, when only some fragments of a
+// 4 x 4 block of the target take the call, the others come back with zeroed values in the entry point (their ray and
+// hit distance, so their depth is the world origin's). A copy of this function with the storage reads replaced by
+// constants does not show it. A block that needs the list per fragment calls this for every fragment and gates the
+// USE of the result. Record: docs/dev-notes/2026-10-04-head-split/NOTES.md, "The depth fault, bisected"; pin:
+// body/blocks/light/split-glisten.wgsl.test.ts.
 
 import { LIGHT_VEC4S, LIST_LIGHTS_AT } from '../light-list';
 import { PROFILE_VEC4S } from '../light-profiles';

@@ -26,8 +26,8 @@
   Gate `scripts/cut-wound-gate.mjs` (30 checks). [Notes](docs/dev-notes/2026-10-03-cut-wounds/NOTES.md) · [handoff](docs/dev-notes/2026-10-03-cut-wounds/HANDOFF.md).
 - [~] **The axe (slot 7) and the head split built 2026-10-05; owner playtested; draft PR goblincore/blud#31** (branch
   `claude/head-cleaving-effect-ef9515`) — a chop opens a zombie's head on a hinge: a wide crack, then split wide and alive, then
-  the kill. The halves wobble; the skull cracks, then splits. **Pending: the owner's verdict on the wet film under the flashlight.**
-  Debt: an open head costs about +6 to +8 ms at 0.6 m. Gates `scripts/head-split-gate.mjs` (79 checks), `scripts/axe-gate.mjs` (25), as of 2026-10-05.
+  the kill. The halves wobble; the skull cracks, then splits. **Pending: the owner's pick for the wet film under the flashlight (`look/14-wet-variants.jpg`).**
+  Debt: an open head costs about +6 to +8 ms at 0.6 m. Gates `scripts/head-split-gate.mjs` (80 checks), `scripts/axe-gate.mjs` (27), as of 2026-10-05.
   [Spec](docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 10) · [handoff](docs/dev-notes/2026-10-04-head-split/HANDOFF.md) · [notes](docs/dev-notes/2026-10-04-head-split/NOTES.md).
 
 **Night Train (level 1)** — [levels](docs/tasks/levels.md) (items 4a–4k)

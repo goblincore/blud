@@ -10,8 +10,9 @@ fast-forwarded from `claude/head-explosion-effect-d6231e` at `e04577ce` and carr
 2026-10-05 nothing after that commit is pushed. The plan is to fast-forward the PR's branch to this one. A session
 cannot write into another worktree (a hook blocks it), so do that from the PR branch's own worktree.
 
-**Waiting on the owner:** his verdict on the wet film under the flashlight. Keep it, raise the gain, or turn it off
-with `SPLIT_SHADE.glisten.gain` 0.
+**Waiting on the owner:** his pick for the wet film under the flashlight, from `look/14-wet-variants.jpg`: OFF, A
+(the film of the build before: glints only where the light rakes), B (shipped: glints square on too, inside the
+blow-out bound) or C (B's film, bolder). The constants to paste for each are in NOTES ("round 3").
 
 | Document | Path |
 | --- | --- |
@@ -106,7 +107,7 @@ parameters are passed in (`WobbleParams`); nothing writes to the constant.
 Highlights over an open split's raw surfaces (the pit and the caps), off a normal of its own. It keeps to the opened
 head: above the hinge plane and inside the hold ball, so a chest wound on a zombie whose head is open does not take
 it. Nothing outside an open split's region changes. The deferred surface entry does not carry it; the game's default
-entries do.
+entries do. It does not walk the light list, and must not from inside its gate (follow-up 1).
 
 **Seams** (`__sdfGame.…`; `webgpu/game-seams-fire.ts`, `webgpu/game-seams-skeleton.ts`):
 
@@ -140,8 +141,8 @@ bash -c 'export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; 
 
 | Gate | Checks (as of 2026-10-05) | Notes |
 | --- | --- | --- |
-| `scripts/head-split-gate.mjs` | 79 | Scenarios S, W, K, O, L, F, M, R, A, H, J, B, T, C. Five boots. `ONLY=S,K` runs a subset (W and K need S). |
-| `scripts/axe-gate.mjs` | 25 | A, D, K, S, C, T. |
+| `scripts/head-split-gate.mjs` | 80 | Scenarios S, W, K, O, L, F, M, R, A, H, J, B, T, C. Five boots. `ONLY=S,K` runs a subset (W and K need S). C holds the depth guard and its positive control. |
+| `scripts/axe-gate.mjs` | 27 | A, D, K, S, C, T. The 26th and 27th are the depth guard's positive control and the guard. |
 | `scripts/cut-wound-gate.mjs` | 30 | |
 
 - **Photos.** The head-split gate writes its sheets to `.lab-tmp/head-split-gate`; `SHEETS=1` rewrites the tracked
@@ -157,8 +158,13 @@ bash -c 'export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; 
   overshoot and the table's crack / split.
 - **After a thaw, wait for the wobble.** The gate calls `restWobble` before it measures a rest angle. A new scenario
   that thaws must do the same. Let the spring settle between chops.
-- **The depth guard** (`depthGuard`, every capture): each body texel, placed in the world by its depth, must lie in
-  front of the camera and inside some actor's proxy box. It is there for the depth fault (follow-ups, below).
+- **The depth guard** (`scripts/lib/march-depth-guard.mjs`, with unit tests; the head-split gate runs it on every
+  capture, the axe gate at every screenshot). Each body texel, placed in the world by its depth, must lie in front of
+  the camera and inside some actor's proxy box or live gib chunk's sphere (the chunks are marched into the same
+  target; the first-person axe and arms are meshes and are not in it); and of all the body texels at the world
+  origin's clip depth, no more than 2 may share one depth to the bit. Both gates also run its positive control (each
+  arm shown to fail on made-up texels). It is there for the depth fault (follow-ups, below). Only the head-split
+  gate's cameras see that fault on a faulty build; the axe gate's do not.
 - **What the gate does not guard:** the proxy box's growth (`fit`) and `splitBound`'s growth of the cluster and tile
   spheres. No gate camera sees them fail; their unit tests hold them (`head-split-bounds.test.ts`,
   `zombie-gpu.test.ts`). The cost (C) is reported, not gated.
@@ -166,7 +172,7 @@ bash -c 'export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; 
 **The test tree.** After ANY WGSL change run the whole tree:
 
 ```bash
-npx vitest run src/lab/sdf-zombie --exclude '**/cut-wound.test.ts'   # 511 files as of 2026-10-05; 3 to 5 minutes
+npx vitest run src/lab/sdf-zombie --exclude '**/cut-wound.test.ts'   # 511 files as of 2026-10-05; 3 to 5 minutes (the depth guard's own tests: npx vitest run scripts/lib/march-depth-guard)
 npx tsc --noEmit                                                     # only the node:crypto error is allowed
 ```
 
@@ -202,7 +208,7 @@ needs the shader check set. `HEAD_SPLIT.skull` is live through `__sdfGame.skullS
 | The wobble | `HEAD_SPLIT.wobble` | `hz` 3, `zeta` 0.3, `gainSide` 6, `gainBob` 8, `arm` 0.1, `accelClamp` 40, `jumpSpeed` 25, `max` 0.45, `minOpen` 0.03, `over` 0.45 | `gainSide` 0 and `gainBob` 0: bit-identical to no wobble |
 | The cut faces' shading gate | `SPLIT_SHADE.cutLo`, `cutHi`, `shellLo`, `shellHi`, `poreCut` | 0.0015, 0.004, 0.0015, 0.004, 0.5 | |
 | How wet a cut face is | `SPLIT_SHADE.wet` | 1 (wet all over) | 0: wet like a crater (its lip, not its floor) |
-| The wet film | `SPLIT_SHADE.glisten` | `gain` 4, `pow` 24, `spill` 0.3, `lamps` 0.45, `lampPow` 20, `rawLo` 0.3, `rawHi` 0.8, `lump` 0.014, `lumpTilt` 3.2, `lumpFlat` 0.1, `fine` 0.006, `fineTilt` 0.3, `fadeLo` 0.75, `fadeHi` 1.5, `edge` 0.01, `horizon` 0.15 | `gain` 0: the block is not written into the shader at all |
+| The wet film | `SPLIT_SHADE.glisten` | `gain` 2.6, `pow` 40, `spill` 0.3, `lamps` 0.45, `lampPow` 20, `rawLo` 0.3, `rawHi` 0.8, `lump` 0.014, `lumpTilt` 2.4, `lumpFlat` 1, `fine` 0.006, `fineTilt` 0.6, `fadeLo` 0.75, `fadeHi` 1.5, `edge` 0.01, `horizon` 0.15 | `gain` 0: the block is not written into the shader at all |
 | A flail hit on a split head: its share of the meter | `FLAIL_HEAD.meterScale` (`webgpu/flail-strike.ts`) | 0.3 | |
 | The axe's body cut | `AXE_CALIBRE`, `AXE_CUT.halfLen` (`webgpu/axe-strike.ts`) | depth 0.1, kerf 0.025, lip 1.1; 0.15 m | |
 | Blood on opening | `webgpu/game-axe.ts` (`deps.bleed` per face) and the leaf's `open()` | | |
@@ -211,6 +217,9 @@ Not dials: `REGION_MARGIN` (0.06: it must be at least the AO probe's distance), 
 head), `SHELL_ACCEPT_FRAC` (0.8) and `SPLIT_REOPEN_FRAC` (0.9). The bounds and the range rule are derived from them.
 
 If the wet film twinkles in motion, the dials are `fineTilt` 0 (no fine octave), a larger `lump`, or a lower `gain`.
+The film's lean (how far its normal stands off the surface's) is what decides WHERE it glints: median 39 degrees as
+shipped (5% under 15, 95% under 55), so a face seen square on and a raked one both catch the torch; `lumpTilt` 3.2
+with `lumpFlat` 0.1 leans 72 degrees and glints only at a rake. The variants A and C: NOTES, "round 3".
 If a lurch reads as a hard stop, the wobble's dials are `max` and `gainSide`.
 
 ## What the owner decided (2026-10-05)
@@ -222,7 +231,7 @@ If a lurch reads as a hard stop, the wobble's dials are `max` and `gainSide`.
   crown, a bone ring, layers and a dark cavity) was built and reverted in `d0d407d2` at his call: "pretty subtle",
   "I'm happy with the before". The steps are `f2a1c7f8`, `eb2f131b` and `e1e4acf2`; their sheets (`look/01` to `03`)
   are in `e1e4acf2`'s tree. To bring one back, cherry-pick it or revert the revert.
-- **The wet film** was built at his request. **His verdict is pending.**
+- **The wet film** was built at his request. **His pick from `look/14-wet-variants.jpg` is pending.**
 - **The open-head frame cost:** "we can figure out how to optimize later".
 - **Told, and no objection:** chops to the upper chest, the collar and the neck's base no longer count as head chops,
   for any character (`chopOnHead`). They are body chops and kill through the collapse meter (about 7 overheads or 9
@@ -258,13 +267,18 @@ report there cost 0.5 ms on every closed body.
 
 ## Follow-ups
 
-1. **The unexplained depth fault in the light tail** (a follow-up task is filed; NOTES, "Look: wet under the
-   flashlight"). A build of the wet film that walked the light list a second time left whole 4 × 4 texel cells of an
-   open head (of the 400 × 300 march target) with their colour right and the WORLD ORIGIN's depth: rectangular
-   notches. `bodyLights` is pure and those texels never ran the added call, so it is no rule about `bodyLights`.
-   Something zeroes the hit position, the mechanism is not known, and another edit to the light tail could bring it
-   back. Worked around: the block does not walk the list. The gate's depth guard catches it whatever the cause, and
-   the count of `bodyLights(` in the entry is pinned at 2 as a tripwire.
+1. **The depth fault in the light tail: bisected, rule pinned** (NOTES, "The depth fault, bisected"). On Apple's GPU,
+   when only some fragments of a 4 × 4 block of the march target take a `bodyLights` call, the others come back with
+   a zeroed ray and hit distance in the entry point: colour right, depth the WORLD ORIGIN's (rectangular notches).
+   The fragments that took the call were ones the march missed: a WGSL `discard` does not end the invocation, so a
+   missed fragment runs the whole light tail on garbage. The rule: call `bodyLights` only under conditions every
+   fragment shares (`lightListCfg`); a block that wants the list per fragment calls it for every fragment and gates
+   the use (built, clean). `split-glisten.wgsl.test.ts` pins that; the gates' depth guard
+   (`scripts/lib/march-depth-guard.mjs`) catches the fault whatever its cause. The cause proper is below the shader
+   source (Metal's compile or the GPU) and was not reached. **Open from it:** a `return` after the miss `discard` in
+   `MARCH_TRACE_POST` (bit-identical on three captures, it took the fault off every silhouette cell, and it would
+   stop every missed fragment paying for the post-hit chain; not landed, it wants its own check set and a cost
+   measure).
 2. **`gRefoldBy` is indexed by piece, not slot.** In a crowd pixel another slot's re-fold win can leak into an open
    slot's normal hint. It never touches the field. The fix moves what closed crowd pixels compute, so it is its own
    task with its own `march-hash` re-pin.
@@ -273,7 +287,7 @@ report there cost 0.5 ms on every closed body.
    riding piece 0, drawn from `view.splitDrawn` like the skull, is the cheapest structural answer.
 5. **A baked split head** has no answer yet: a detached or baked head takes the mesh face layer with no split.
 6. **The slug opening the split** (spec §2): not started.
-7. **The wet film in fast motion** is not measured. A walk's wobble does not make it sparkle (2.5% of highlight
+7. **The wet film in fast motion** is not measured. A walk's wobble does not make it sparkle (2.8% of highlight
    texels last one tick at 0.6 m).
 
 ## Known limits

@@ -5,7 +5,7 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
 ## Cut wounds and the head split — designed 2026-10-03
 
 - [~] **The axe (slot 7) and the head split — built 2026-10-05; owner playtested; draft PR goblincore/blud#31 (branch
-  `claude/head-cleaving-effect-ef9515`). Pending: the owner's verdict on the wet film under the flashlight.** An H / R / L
+  `claude/head-cleaving-effect-ef9515`). Pending: the owner's pick for the wet film under the flashlight (`look/14-wet-variants.jpg`: off, A, B shipped, C bolder).** An H / R / L
   chop combo, 1.8 m reach shared with the flail, its own light list. Body chops stamp cut wounds (kerf 0.025 since the
   excess pass). Pose and look suggestions for the axe itself are left for the owner (spec section 9, axe notes).
   - **The split.** A chop on a zombie's head flesh opens the head on a hinge, as real SDF geometry: the union of three
@@ -20,10 +20,12 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
     base are body chops now, for every character.
   - **Debt:** an open head costs about +6 to +8 ms at 0.6 m and +0.6 to +1.6 ms at 2 m. A split is drawn closed past
     12.7 m.
-  - **Follow-ups, open:** the unexplained depth fault (worked around; the gate has a depth guard; a task is filed), the
+  - **Follow-ups, open:** a `return` after the march's miss `discard` (from the depth fault's bisect: the fault is
+    `bodyLights` called under a per-fragment condition on Apple's GPU, reached by missed fragments that keep running;
+    the rule is pinned and the gates have a depth guard; NOTES, "The depth fault, bisected"), the
     `gRefoldBy` cross-slot leak, something in the gap (a brain), the slug opening the split. Full lists: spec section
     10.10.
-  - **Gates (as of 2026-10-05):** `scripts/head-split-gate.mjs` (79 checks), `scripts/axe-gate.mjs` (25),
+  - **Gates (as of 2026-10-05):** `scripts/head-split-gate.mjs` (80 checks), `scripts/axe-gate.mjs` (27),
     `scripts/cut-wound-gate.mjs` (30).
 
   [Spec](../../docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 9: the axe as built; section 10:
