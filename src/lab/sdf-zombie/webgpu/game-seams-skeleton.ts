@@ -153,6 +153,19 @@ export function createSkeletonSeams(ctx: GameContext) {
       if (!triple(point) || !triple(direction) || (kind !== 'pellet' && kind !== 'slug')) return false;
       return r.fractureSkull(a, ctx.render.skeletonSources.get(a)?.sources ?? [], [...point] as Vec3, [...direction] as Vec3, kind);
     },
+    /** skeleton=mesh diagnostics: the bone the world ray `point` + t `direction` meets first on actor `bodyId`'s
+     *  anatomical skull as it is drawn, within `reach` metres (a bullet's reach from the skin, 0.14 m, when omitted):
+     *  `{ plate, piece, distance }`, the plate's id, the piece whose copy shows it there (0 the rest, 1 the + half, 2
+     *  the - half; a closed skull is all 0) and how far along the ray. The test skullShot makes, with nothing damaged.
+     *  null: no bone on the ray, or no mesh skeleton, actor or anatomical skull; false for arguments that are not two
+     *  triples of finite numbers and a positive reach. */
+    skullRay: (bodyId: number, point: Vec3, direction: Vec3, reach?: number) => {
+      const a = ctx.world.actors.find(q => q.id === bodyId), r = ctx.render.segMeshRenderer;
+      if (!a || !r) return null;
+      const triple = (v: unknown) => Array.isArray(v) && v.length === 3 && v.every(x => Number.isFinite(x));
+      if (!triple(point) || !triple(direction) || (reach !== undefined && !(Number.isFinite(reach) && reach > 0))) return false;
+      return r.skullRay(a, ctx.render.skeletonSources.get(a)?.sources ?? [], [...point] as Vec3, [...direction] as Vec3, reach);
+    },
     /** The live skull-fragment mesh gibs (game-mesh-gibs.ts, tag 'skull'), oldest first: the plate each was, its
      *  world position and its velocity. */
     skullFragments: () => ctx.gibs.meshGibs.filter(g => g.tag === 'skull')

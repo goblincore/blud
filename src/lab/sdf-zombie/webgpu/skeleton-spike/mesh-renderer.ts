@@ -49,7 +49,9 @@ import { meshBoneSource } from './mesh-skull';
 // copies keep the plate's surface and normal map on both faces, and are cut bone at the fracture edge. A closed head
 // never touches any of it: same batches, same material, same instances as before.
 // A shot goes by the same copies: fractureSkull tests its ray against the plates where they are drawn
-// (skull-split-hit.ts), and a plate that comes off leaves from its copy's turned place.
+// (skull-split-hit.ts), and a plate that comes off leaves from its copy's turned place. An open head has bone with no
+// flesh in front of it, so a projectile's step is cast from its start there (impact's `step`), and a step that meets
+// no flesh of the actor is cast as well (skullPass).
 //
 // PROTOTYPE SCOPE / FALLBACKS (counted, not hidden): actor bones mesh;
 // chunks, organs and every non-actor bone stay procedural. Limb segments
@@ -78,7 +80,7 @@ import {
   meshEyePlacements, meshEyeImpactIndices, MESH_EYE_EMISSION_WGSL, MESH_EYE_SURFACE_WGSL, MESH_EYE_VESSEL_WGSL,
 } from './mesh-eyes';
 import { ANATOMICAL_SKULL_NORMAL_WGSL, ANATOMICAL_SKULL_SURFACE_WGSL } from './anatomical-skull.wgsl';
-import { damageSkull, explodeSkull, intactSkull, skullPieceLaunch, type SkullDamage } from '../../skull-fracture';
+import { SKULL_REACH, damageSkull, explodeSkull, intactSkull, skullPieceLaunch, type SkullDamage } from '../../skull-fracture';
 import type { FittedSkull } from './anatomical-skull';
 import type { Vec3 } from '../../types';
 import { HEAD_SPLIT, skullPieces, skullSplitOf, type SkullFollow, type SkullSplit, type SplitWarp } from '../../head-split';
@@ -86,7 +88,10 @@ import {
   MESH_SPLIT_CLIP_WGSL, MESH_SPLIT_CUT_BONE_WGSL, MESH_SPLIT_FRACTURE_WGSL, MESH_SPLIT_INSIDE_WGSL, MESH_SPLIT_JAG_WGSL,
   SPLIT_INSTANCE_ATTRS, SPLIT_INSTANCE_FLOATS, meshSplitJagMax, packSplitInstance, type SplitJag,
 } from './mesh-split';
-import { skullOwnerAt, skullPieceAngle, skullSplitRayHit, type SkullHeadFrame } from './skull-split-hit';
+import {
+  skullCopiesBound, skullOwnerAt, skullPieceAngle, skullShotCast, skullSplitRayHit, skullStruck,
+  type SkullHeadFrame, type SkullShotStep, type SkullStrikes,
+} from './skull-split-hit';
 
 const MAX_WOUNDS_TEX = 64;
 /** The materials' names, by what each draws: a bone segment (the sculpted skull among them), a plate of the anatomical
@@ -170,7 +175,28 @@ export interface SegmentMeshRenderer {
   /** Diagnostic: the iLights rows (4 packed picks each) of this owner's drawn instances, eyes
    *  included, as last written by syncLights. */
   ownerLights(owner: unknown): number[][];
-  impact(owner: object, sources: readonly BoneFieldSource[], point: readonly [number, number, number], direction: readonly [number, number, number], kind: 'pellet' | 'slug'): number;
+  /** A pellet or slug that met `owner`'s flesh at `point`: the skull is cast (fractureSkull), then an eye near the
+   *  hit is ejected. Returns the eyes ejected.
+   *  `step` (a travelling projectile): `from` is where its step began and `by` the projectile, which remembers the
+   *  skulls it has damaged. On a head whose split is drawn, on the anatomical skull, the skull is then cast from
+   *  `from`, as far as the flesh and a bullet's reach on, so bone standing in front of the flesh counts; and not at
+   *  all when `by` has damaged this skull already (skull-split-hit.ts skullShotCast). Every other head, and `step`
+   *  omitted: from `point`, a bullet's reach on, as ever. */
+  impact(
+    owner: object, sources: readonly BoneFieldSource[], point: readonly [number, number, number], direction: readonly [number, number, number],
+    kind: 'pellet' | 'slug', step?: { from: Vec3; by?: SkullStrikes },
+  ): number;
+  /** A projectile's step `from`..`to` that met NO flesh of `owner` (`to`: where the step ends, or where the
+   *  projectile stopped in something else). On a head whose split is drawn, on the anatomical skull, bone stands in
+   *  the gap with no flesh in front of it: when the step passes the skull it is cast along its length, and the first
+   *  plate it meets is damaged (a plate that breaks leaves as fractureSkull's does). `by`, the projectile, then
+   *  remembers this skull, and a projectile that has damaged it already is not cast. Nothing else of a hit happens,
+   *  and any other head is left alone. Returns the plates released. */
+  skullPass(owner: object, sources: readonly BoneFieldSource[], from: Vec3, to: Vec3, direction: Vec3, kind: 'pellet' | 'slug', by?: SkullStrikes): number;
+  /** Diagnostics: the bone the world ray `point` + t `direction` meets first on `owner`'s anatomical skull as it is
+   *  drawn, within `reach` (m; a bullet's reach when omitted): the plate's id, the piece whose copy shows it there and
+   *  the distance along the ray. The test fractureSkull makes, with nothing damaged. Null: no bone, or no such skull. */
+  skullRay(owner: object, sources: readonly BoneFieldSource[], point: Vec3, direction: Vec3, reach?: number): { plate: string; piece: 0 | 1 | 2; distance: number } | null;
   stepDebris(dt: number): void;
   eyeState(owner: object): { missing: number[]; debris: number };
   skullState(owner: object): { missing: number; pieces: string[] };
@@ -702,34 +728,70 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     }
   };
 
-  const fractureSkull = (owner: object, sources: readonly BoneFieldSource[], point: Vec3, direction: Vec3, kind: 'pellet' | 'slug'): number => {
-      const skullSource = sources.find(s=>s.segment==='head' && s.isLive() && cache.skullKit?.supports(s));
+  /** The live head of `sources` that carries the anatomical skull (undefined: none). */
+  const skullSourceOf = (sources: readonly BoneFieldSource[]) => sources.find(s=>s.segment==='head' && s.isLive() && cache.skullKit?.supports(s));
+  /** What the world ray `point` + t `direction`, `reach` long, meets on `owner`'s anatomical skull where it is drawn
+   *  (`hit` null: no bone), with the skull, its split and its damage as the ray found them. Null: no such skull. */
+  const meetSkull = (owner: object, sources: readonly BoneFieldSource[], point: Vec3, direction: Vec3, reach: number) => {
+      const skullSource = skullSourceOf(sources);
       const skull = skullSource && cache.skullKit?.head(skullSource);
-      if (skullSource && skull && spawnSkull) {
-        const matrix = headMatrix(owner,skullSource), inverse = matrix.clone().invert();
-        // The closed head's frame, the plates' own. A closed head's ray is taken into it as it always was.
-        const frame: SkullHeadFrame = {
-          toLocal: p => new THREE.Vector3(...p).applyMatrix4(inverse).toArray() as Vec3,
-          toWorld: p => new THREE.Vector3(...p).applyMatrix4(matrix).toArray() as Vec3,
-          dirToLocal: v => new THREE.Vector3(...v).transformDirection(inverse).toArray() as Vec3,
-        };
-        const split = skullSplitFor(owner,skullSource.segment);
-        const before = skullDamage.get(owner) ?? intactSkull(skull.pieces.length);
-        const hit = skullSplitRayHit(skull.pieces,before,split,frame,[...point] as Vec3,[...direction] as Vec3,liveJag());
-        const result = damageSkull(before,hit ? hit.plate : null,kind);
-        skullDamage.set(owner,result.state);
-        // The plate that breaks is the one that was hit: it leaves from the copy the ray met.
-        detach(owner,skullSource,skull,result.detached,[...direction] as Vec3,split,() => hit!.piece);
-        return result.detached.length;
-      }
-      return 0;
+      if (!skullSource || !skull || !spawnSkull) return null;
+      const matrix = headMatrix(owner,skullSource), inverse = matrix.clone().invert();
+      // The closed head's frame, the plates' own. A closed head's ray is taken into it as it always was.
+      const frame: SkullHeadFrame = {
+        toLocal: p => new THREE.Vector3(...p).applyMatrix4(inverse).toArray() as Vec3,
+        toWorld: p => new THREE.Vector3(...p).applyMatrix4(matrix).toArray() as Vec3,
+        dirToLocal: v => new THREE.Vector3(...v).transformDirection(inverse).toArray() as Vec3,
+      };
+      const split = skullSplitFor(owner,skullSource.segment);
+      const before = skullDamage.get(owner) ?? intactSkull(skull.pieces.length);
+      const hit = skullSplitRayHit(skull.pieces,before,split,frame,[...point] as Vec3,[...direction] as Vec3,liveJag(),reach);
+      return { skullSource, skull, split, before, hit };
+  };
+  /** Cast that ray and damage the plate it meets (null: none). A plate that breaks leaves from the copy the ray met. */
+  const castSkull = (
+    owner: object, sources: readonly BoneFieldSource[], point: Vec3, direction: Vec3, kind: 'pellet' | 'slug', reach: number,
+  ): { released: number; plate: number | null } => {
+      const met = meetSkull(owner,sources,point,direction,reach);
+      if (!met) return { released: 0, plate: null };
+      const { hit } = met;
+      const result = damageSkull(met.before,hit ? hit.plate : null,kind);
+      skullDamage.set(owner,result.state);
+      // The plate that breaks is the one that was hit: it leaves from the copy the ray met.
+      detach(owner,met.skullSource,met.skull,result.detached,[...direction] as Vec3,met.split,() => hit!.piece);
+      return { released: result.detached.length, plate: hit ? hit.plate : null };
+  };
+  const fractureSkull = (owner: object, sources: readonly BoneFieldSource[], point: Vec3, direction: Vec3, kind: 'pellet' | 'slug'): number =>
+    castSkull(owner,sources,point,direction,kind,SKULL_REACH).released;
+  /** One step of a projectile at `owner`'s skull (skull-split-hit.ts skullShotCast decides the ray). The head is OPEN
+   *  when the march draws its split (the last update's hook) and its skull is the anatomical one: only then does the
+   *  step's start, a step with no flesh, or the projectile's memory `by` matter. Returns the plates released. */
+  const shootSkull = (owner: object, sources: readonly BoneFieldSource[], step: SkullShotStep, kind: 'pellet' | 'slug', by?: SkullStrikes): number => {
+    const source = spawnSkull && splitOf?.warp(owner,'head') ? skullSourceOf(sources) : undefined;
+    const skull = source && cache.skullKit?.head(source);
+    const open = !!source && !!skull;
+    const cast = skullShotCast(open, step, open && skullStruck(by,owner), () => {
+      // Every copy of the skull, the closed bone's sphere turned about the hinge.
+      const m = headMatrix(owner,source!), sphere = skull!.mesh.geometry.boundingSphere!;
+      return skullCopiesBound(sphere.center.clone().applyMatrix4(m).toArray() as Vec3, sphere.radius * m.getMaxScaleOnAxis(), skullSplitFor(owner,'head'));
+    });
+    if (!cast) return 0;
+    const hit = castSkull(owner,sources,cast.origin,cast.direction,kind,cast.reach);
+    if (open && by && hit.plate !== null) (by.skulls ??= []).push(owner);
+    return hit.released;
   };
   return {
     object: group,
     uniforms: u,
     fractureSkull,
-    impact(owner, sources, point, direction, kind) {
-      fractureSkull(owner,sources,point,direction,kind);
+    skullPass: (owner, sources, from, to, direction, kind, by) => shootSkull(owner,sources,{ from, to, direction, flesh: null },kind,by),
+    skullRay(owner, sources, point, direction, reach = SKULL_REACH) {
+      const hit = meetSkull(owner,sources,point,direction,reach)?.hit;
+      return hit ? { plate: cache.skullKit!.source[hit.plate]!.id, piece: hit.piece, distance: hit.distance } : null;
+    },
+    impact(owner, sources, point, direction, kind, step) {
+      if (step) shootSkull(owner,sources,{ from: step.from, to: [...point], direction: [...direction], flesh: [...point] },kind,step.by);
+      else fractureSkull(owner,sources,point,direction,kind);
       const head = sources.find(s => s.segment === 'head' && s.isLive() && (s.character === 'zombie' || cache.skullKit?.supports(s)));
       if (!head) return 0;
       const eyes = meshEyePlacements(meshBoneSource(head));

@@ -287,6 +287,7 @@ import { createAxeHarness } from './game-axe';
 import { createFlail } from './game-flail';
 import { createHeadDamage } from './game-head-damage';
 import { createHeadSplit } from './game-head-split';
+import { skullPasses } from './game-skull-shots';
 import { GAME_AA, GAME_AA_FADE_M, GAME_AA_NEAR, GAME_LAST_STEP_DEFAULT } from './game-march-accept';
 import { createBrainGib } from './game-brain-gib';
 import { clearMeshGibs, spawnMeshGib, stepMeshGibs } from './game-mesh-gibs';
@@ -7925,6 +7926,8 @@ async function main() {
             const d = Math.hypot(hp[0]-from[0], hp[1]-from[1], hp[2]-from[2]);
             if (d < bestDist) { bestDist = d; hitActor = a; hitPoint = hp; }
           }
+          // Bone standing in an open head's gap has no flesh in front of it for the trace above to find.
+          skullPasses(ctx, p, from, hitActor, hitPoint);
           if (hitActor && hitPoint) {
             const l = Math.hypot(p.vel[0], p.vel[1], p.vel[2]) || 1;
             const dirN: Vec3 = [p.vel[0] / l, p.vel[1] / l, p.vel[2] / l];
@@ -7935,7 +7938,7 @@ async function main() {
             const hitTiming = ctx.telemetry.telemetry.begin();
             if (ctx.render.segMeshRenderer) {
               const sources = ctx.render.skeletonSources.get(hitActor)?.sources;
-              if (sources) ctx.render.segMeshRenderer.impact(hitActor, sources, hitPoint, dirN, p.kind);
+              if (sources) ctx.render.segMeshRenderer.impact(hitActor, sources, hitPoint, dirN, p.kind, { from, by: p });
             }
             // A slug on a zombie's head bursts or ruptures it (game-head-damage.ts burst; while burstTuning.anyWeapon is
             // on, pellets too, once per shot); anything the leaf declines (not the head, not the plain zombie, off) takes

@@ -12,14 +12,19 @@ import zombieSrc from '../../characters/zombie.blob?raw';
 import {
   HEAD_SPLIT, forcedSplit, headFrameOf, rotAxis, skullSplitOf, skullWarpPoint, splitWarpOf, type SkullSplit,
 } from '../../head-split';
-import { intactSkull, skullRayCast, skullRayHit, type SkullDamage, type SkullPieceSurface } from '../../skull-fracture';
+import { SKULL_REACH, intactSkull, skullRayCast, skullRayHit, type SkullDamage, type SkullPieceSurface } from '../../skull-fracture';
 import type { Vec3 } from '../../types';
+import { sdBody } from '../../validate';
 import { headShape } from '../flame-anchors';
+import { traceProjectile } from '../game-weapon';
 import { AnatomicalSkullKit, SKULL_PIECES } from './anatomical-skull';
 import { anatomicalSkullSource } from './anatomical-skull.fixture';
 import { createSkeletonSources } from './contract';
 import { meshSplitFracture, meshSplitJagMax, skullJagAt, type SplitJag } from './mesh-split';
-import { skullOwnerAt, skullPieceAngle, skullSplitRayHit, type SkullHeadFrame, type SkullSplitHit } from './skull-split-hit';
+import {
+  segmentInBound, skullCopiesBound, skullOwnerAt, skullPieceAngle, skullShotCast, skullSplitRayHit, skullStruck,
+  type SkullBound, type SkullHeadFrame, type SkullShotStep, type SkullSplitHit, type SkullStrikes,
+} from './skull-split-hit';
 
 const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -291,4 +296,220 @@ describe('skullSplitRayHit: the kill\'s split, both halves turned by the bone an
     expect(differ).toBeGreaterThan(30);
     expect(same).toBeGreaterThan(30);
   });
+});
+
+describe('skullShotCast: where a projectile\'s step is cast at a skull', () => {
+  const at = (from: Vec3, dir: Vec3, t: number): Vec3 => add(from, mul(dir, t));
+  const never = (): SkullBound => { throw new Error('the bound is not asked'); };
+
+  it('a closed head is cast as it always was: from the flesh impact, a bullet\'s reach on, and not at all with no flesh', () => {
+    expect(SKULL_REACH).toBe(0.14);
+    const flesh: Vec3 = [0.1, 1.6, 0.2], direction: Vec3 = [0.1, -0.05, -1];
+    const step: SkullShotStep = { from: [0.1, 1.7, 0.9], to: flesh, direction, flesh };
+    for (const struck of [false, true]) {
+      const cast = skullShotCast(false, step, struck, never)!;
+      expect(cast).toEqual({ origin: [0.1, 1.6, 0.2], direction: [0.1, -0.05, -1], reach: 0.14 });
+      // The impact point and the direction themselves, not numbers worked from the step's start.
+      expect(cast.origin).toBe(flesh);
+      expect(cast.direction).toBe(direction);
+      expect(skullShotCast(false, { ...step, to: [0.1, 1.5, -0.5], flesh: null }, struck, never)).toBeNull();
+    }
+    // The ray it hands the skull is the old call's, to the bit: the same plate at the same distance.
+    const centre = frame.toWorld(skull.mesh.geometry.boundingSphere!.center.toArray() as Vec3);
+    let hits = 0;
+    for (let i = 0; i < 200; i++) {
+      const from = add(centre, mul(unit([hash(i, 31) - 0.5, hash(i, 32) - 0.5, hash(i, 33) - 0.5]), 0.3));
+      const dir = sub(add(centre, [(hash(i, 34) - 0.5) * 0.1, (hash(i, 35) - 0.5) * 0.14, (hash(i, 36) - 0.5) * 0.1]), from);
+      const skin = at(from, unit(dir), 0.16 + 0.08 * hash(i, 37));
+      const cast = skullShotCast(false, { from, to: skin, direction: dir, flesh: skin })!;
+      const got = skullSplitRayHit(pieces, whole, null, frame, cast.origin, cast.direction, JAG, cast.reach);
+      expect(got).toEqual(skullSplitRayHit(pieces, whole, null, frame, skin, dir));
+      if (got) hits++;
+    }
+    expect(hits).toBeGreaterThan(50);
+  });
+
+  describe('an open head (the kill\'s split): bone stands where no flesh covers it', () => {
+    const s = KILL, index = plate('parietal-left');
+    // Shots at the + half's parietal where it is drawn, from 20 cm outside, square on.
+    const shots = outerFaces(index, c => { const q = frame.toWorld(c); return skullOwnerAt(s, q) === 1 && meshSplitFracture(q, s) > 0.015; }).map(f => {
+      const q = frame.toWorld(f.c), n = rotAxis(dirToWorld(f.n), s.frame.w.a, s.angleP);
+      const drawn = skullWarpPoint(s, q, skullJagAt(s, q)).p;
+      return { from: add(drawn, mul(n, 0.2)), dir: mul(n, -1) };
+    });
+    const cast = (step: SkullShotStep, struck = false, bound?: () => SkullBound | null) => {
+      const c = skullShotCast(true, step, struck, bound);
+      return c && skullSplitRayHit(pieces, whole, s, frame, c.origin, c.direction, JAG, c.reach);
+    };
+    const sphere = skull.mesh.geometry.boundingSphere!;
+    const bound = skullCopiesBound(frame.toWorld(sphere.center.toArray() as Vec3), sphere.radius, s);
+
+    it('the fixture: eighty shots and more, each meeting the plate 20 cm out', () => {
+      expect(shots.length).toBeGreaterThan(80);
+      for (const { from, dir } of shots) {
+        const hit = skullSplitRayHit(pieces, whole, s, frame, from, dir, JAG, 0.5)!;
+        expect([hit.plate, hit.piece]).toEqual([index, 1]);
+        expect(hit.distance).toBeCloseTo(0.2, 6);
+      }
+    });
+
+    it('flesh behind the bone: the cast starts at the step\'s start and reaches the flesh and a bullet\'s reach on, so the bone in front is the plate damaged', () => {
+      let missed = 0;
+      for (const { from, dir } of shots) {
+        // The flesh 20 cm behind the bone: further than a bullet reaches back from it.
+        const flesh = at(from, dir, 0.4);
+        const step: SkullShotStep = { from, to: flesh, direction: dir, flesh };
+        expect(skullShotCast(true, step)).toEqual({ origin: from, direction: dir, reach: expect.closeTo(0.4 + SKULL_REACH, 12) });
+        const hit = cast(step)!;
+        expect([hit.plate, hit.piece]).toEqual([index, 1]);
+        expect(hit.distance).toBeCloseTo(0.2, 6);
+        // The closed head's rule at the same step starts at the flesh: the plate is behind it.
+        const old = skullShotCast(false, step)!, behind = skullSplitRayHit(pieces, whole, s, frame, old.origin, old.direction, JAG, old.reach);
+        if (!behind || behind.plate !== index) missed++;
+      }
+      expect(missed).toBe(shots.length);
+    });
+
+    it('flesh in front of the bone: the same plate as the cast from the flesh finds, the nearest on the line', () => {
+      for (const { from, dir } of shots) {
+        const flesh = at(from, dir, 0.17);
+        const step: SkullShotStep = { from, to: flesh, direction: dir, flesh };
+        const hit = cast(step)!, old = skullShotCast(false, step)!;
+        const fromFlesh = skullSplitRayHit(pieces, whole, s, frame, old.origin, old.direction, JAG, old.reach)!;
+        expect([hit.plate, hit.piece]).toEqual([index, 1]);
+        expect([fromFlesh.plate, fromFlesh.piece]).toEqual([index, 1]);
+        expect(hit.distance - 0.17).toBeCloseTo(fromFlesh.distance, 9);
+        // Bone further than a bullet's reach behind the flesh is not reached from the start either.
+        const shallow = at(from, dir, 0.04);
+        expect(cast({ from, to: shallow, direction: dir, flesh: shallow })).toBeNull();
+      }
+    });
+
+    it('no flesh on the step: a segment through the bone is cast along its length and meets the plate; one that stops short meets nothing', () => {
+      for (const { from, dir } of shots) {
+        const through: SkullShotStep = { from, to: at(from, dir, 0.23), direction: dir, flesh: null };
+        expect(skullShotCast(true, through, false, () => bound)).toEqual({ origin: from, direction: dir, reach: expect.closeTo(0.23, 12) });
+        const hit = cast(through, false, () => bound)!;
+        expect([hit.plate, hit.piece]).toEqual([index, 1]);
+        expect(hit.distance).toBeCloseTo(0.2, 6);
+        // Short of the bone by 1 cm: the segment is inside the skull's bound, the cast is made, and it ends in air.
+        const short: SkullShotStep = { from, to: at(from, dir, 0.19), direction: dir, flesh: null };
+        expect(skullShotCast(true, short, false, () => bound)).not.toBeNull();
+        expect(cast(short, false, () => bound)).toBeNull();
+        // The closed head's rule casts nothing for either.
+        expect(skullShotCast(false, through, false, never)).toBeNull();
+      }
+    });
+
+    it('a step that does not pass the skull\'s bound is not cast, and a step of no length neither', () => {
+      const { from, dir } = shots[0]!;
+      let asked = 0;
+      const near = () => { asked++; return bound; };
+      // Away from the head.
+      expect(skullShotCast(true, { from, to: at(from, dir, -0.5), direction: mul(dir, -1), flesh: null }, false, near)).toBeNull();
+      // Toward it, and ending before the bound.
+      const gap = len(sub(bound.centre, from)) - bound.radius;
+      expect(gap).toBeGreaterThan(0.01);
+      expect(skullShotCast(true, { from, to: at(from, dir, gap * 0.5), direction: dir, flesh: null }, false, near)).toBeNull();
+      expect(asked).toBe(2);
+      expect(skullShotCast(true, { from, to: from, direction: dir, flesh: null }, false, near)).toBeNull();
+      expect(asked).toBe(2);
+      // No bound to ask: the step is cast.
+      expect(skullShotCast(true, { from, to: at(from, dir, 0.01), direction: dir, flesh: null })).not.toBeNull();
+      expect(skullShotCast(true, { from, to: at(from, dir, 0.01), direction: dir, flesh: null }, false, () => null)).not.toBeNull();
+    });
+
+    it('one projectile, one plate of a skull: once it has damaged this skull it is not cast again, with flesh or without', () => {
+      const { from, dir } = shots[0]!, owner = {}, other = {}, by: SkullStrikes = {};
+      const through: SkullShotStep = { from, to: at(from, dir, 0.23), direction: dir, flesh: null };
+      expect(skullStruck(undefined, owner)).toBe(false);
+      expect(skullStruck(by, owner)).toBe(false);
+      expect(cast(through, skullStruck(by, owner), () => bound)!.plate).toBe(index);
+      (by.skulls ??= []).push(owner);
+      expect(skullStruck(by, owner)).toBe(true);
+      expect(skullStruck(by, other)).toBe(false);
+      // The next step of the same projectile meets the head's flesh: no second plate.
+      const next = at(from, dir, 0.23), flesh = at(next, dir, 0.05);
+      const fleshStep: SkullShotStep = { from: next, to: flesh, direction: dir, flesh };
+      expect(skullShotCast(true, fleshStep, skullStruck(by, owner), never)).toBeNull();
+      expect(skullShotCast(true, through, skullStruck(by, owner), never)).toBeNull();
+      // Another skull is still cast, and a closed head does not ask.
+      expect(skullShotCast(true, fleshStep, skullStruck(by, other))).not.toBeNull();
+      expect(skullShotCast(false, fleshStep, true)).not.toBeNull();
+    });
+  });
+
+  it('skullCopiesBound holds every copy as it is drawn; a closed skull\'s is its own sphere', () => {
+    const sphere = skull.mesh.geometry.boundingSphere!, centre = frame.toWorld(sphere.center.toArray() as Vec3);
+    expect(skullCopiesBound(centre, sphere.radius, null)).toEqual({ centre, radius: sphere.radius });
+    for (const split of [KILL, splitOf(1, 0.03, 1), splitOf(0, 0, 0.8)]) {
+      const b = skullCopiesBound(centre, sphere.radius, split);
+      expect(b.centre).toBe(split.frame.w.h);
+      let worst = 0;
+      for (const copy of drawnCopies(split)) for (const turned of copy.plates) {
+        for (let i = 0; i < turned.at.length; i += 3) worst = Math.max(worst, len(sub([turned.at[i]!, turned.at[i + 1]!, turned.at[i + 2]!], b.centre)));
+      }
+      expect(worst).toBeLessThanOrEqual(b.radius + 1e-9);
+      // And it is no wild bound: within the skull's own diameter of the furthest bone.
+      expect(b.radius - worst).toBeLessThan(2 * sphere.radius);
+    }
+  });
+
+  it('segmentInBound: the nearest point of the segment, its ends included', () => {
+    const b: SkullBound = { centre: [0, 0, 0], radius: 1 };
+    expect(segmentInBound([-3, 0.5, 0], [3, 0.5, 0], b)).toBe(true);
+    expect(segmentInBound([-3, 1.5, 0], [3, 1.5, 0], b)).toBe(false);
+    expect(segmentInBound([-3, 0, 0], [-1.5, 0, 0], b)).toBe(false);
+    expect(segmentInBound([-3, 0, 0], [-0.9, 0, 0], b)).toBe(true);
+    expect(segmentInBound([0.5, 0, 0], [0.5, 0, 0], b)).toBe(true);
+    expect(segmentInBound([2, 0, 0], [2, 0, 0], b)).toBe(false);
+  });
+
+  it('on the zombie\'s flesh, at the axe\'s first chop: every level shot from the front meets the bone that is drawn on its line, and a third of them meet no flesh at all', () => {
+    // The flesh open to 0.8 of its full angle (25.2 degrees a half), the bone to 7.6: the skull stands far inside the
+    // V. 350 shots, straight back along the head's forward, over a window 12 cm wide and 13 cm tall above the hinge;
+    // each stepped as the projectile loop steps a slug (0.5 m a frame), its flesh found by the loop's own trace.
+    const w = splitWarpOf(forcedSplit('middle', 0, 0, 0.8)!, headFrame)!, split = skullSplitOf(w, null, 7)!;
+    expect(w.thetaP * 180 / Math.PI).toBeCloseTo(25.2, 1);
+    expect(split.angleP * 180 / Math.PI).toBeCloseTo(7.6, 1);
+    const open = { ...posed, split: w }, { u } = split.frame;
+    const forward = unit(dirToWorld([0, 0, 1])), dir = mul(forward, -1);
+    const sphere = skull.mesh.geometry.boundingSphere!;
+    const bound = skullCopiesBound(frame.toWorld(sphere.center.toArray() as Vec3), sphere.radius, split);
+    const onPlane = add(headFrame.centre, mul(w.n, w.d0 - dot(w.n, headFrame.centre)));
+    const STEP = 0.5;
+    let noFlesh = 0, inFront = 0, behind = 0, oldSame = 0;
+    for (let iy = 0; iy < 14; iy++) for (let ix = -12; ix <= 12; ix++) {
+      const target = add(add(onPlane, mul(u, 0.03 + iy * 0.01 - dot(u, sub(onPlane, w.h)))), mul(w.n, ix * 0.005));
+      const start = add(target, mul(forward, 0.4));
+      let from = start, got: { plate: number; at: number } | null = null, stop: number | null = null, old: number | null = null;
+      const by: SkullStrikes = {}, owner = {};
+      for (let n = 0; n < 2 && stop === null; n++) {
+        const to = add(from, mul(dir, STEP)), flesh = traceProjectile(from, to, q => sdBody(q, open));
+        const cast = skullShotCast(true, { from, to: flesh ?? to, direction: dir, flesh }, skullStruck(by, owner), () => bound);
+        const hit = cast && skullSplitRayHit(pieces, whole, split, frame, cast.origin, cast.direction, JAG, cast.reach);
+        if (hit) { expect(got).toBeNull(); got = { plate: hit.plate, at: n * STEP + hit.distance }; (by.skulls ??= []).push(owner); }
+        if (flesh) {
+          stop = n * STEP + len(sub(flesh, from));
+          // The rule a head had: from the flesh impact on, and nothing for a step with no flesh.
+          old = skullSplitRayHit(pieces, whole, split, frame, flesh, dir)?.plate ?? null;
+        }
+        from = to;
+      }
+      // What is drawn on the line, as far as the projectile goes and a bullet's reach on.
+      const truth = drawnHit(split, whole, start, dir, stop === null ? 2 * STEP : stop + SKULL_REACH);
+      expect(got === null, `shot ${ix}, ${iy}`).toBe(truth === null);
+      if (!truth || !got) continue;
+      expect(got.plate, `shot ${ix}, ${iy}`).toBe(truth.plate);
+      expect(got.at, `shot ${ix}, ${iy}`).toBeCloseTo(truth.distance, 6);
+      if (stop === null) noFlesh++; else if (truth.distance < stop) inFront++; else behind++;
+      if (old === truth.plate) oldSame++;
+    }
+    // Measured: 125 shots with bone on the line and no flesh of the head anywhere on it, 153 with the bone behind the
+    // flesh, 1 with it in front. The old rule broke the same plate only where it had flesh to start from.
+    expect(noFlesh).toBeGreaterThan(100);
+    expect(behind).toBeGreaterThan(100);
+    expect(oldSame).toBeLessThanOrEqual(inFront + behind);
+    expect(noFlesh + inFront + behind - oldSame).toBeGreaterThanOrEqual(noFlesh);
+  }, 60_000);
 });

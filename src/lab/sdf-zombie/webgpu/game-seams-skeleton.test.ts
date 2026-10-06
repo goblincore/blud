@@ -151,6 +151,21 @@ describe('__sdfGame.skullPlates / skullFragments: the anatomical skull\'s plates
     expect(seams.skullShot(9, [1, 2, 3], [0, 0, -1])).toBeNull();   // no such actor
     expect(createSkeletonSeams({ world: { actors: [a] }, render: { segMeshRenderer: null } } as unknown as GameContext).skullShot(7, [1, 2, 3], [0, 0, -1])).toBeNull();
   });
+  it('skullRay asks the renderer what a ray meets, with the actor\'s sources, and damages nothing; refuses a ray or a reach that is not one', () => {
+    const a = { id: 7 }, sources = [{ segment: 'head' }];
+    const calls: unknown[][] = [], met = { plate: 'frontal', piece: 1, distance: 0.21 };
+    const renderer = { skullRay: (...args: unknown[]) => { calls.push(args); return met; } };
+    const seams = createSkeletonSeams({ world: { actors: [a] }, render: { segMeshRenderer: renderer, skeletonSources: new Map([[a, { sources }]]) } } as unknown as GameContext);
+    expect(seams.skullRay(7, [1, 2, 3], [0, 0, -1])).toBe(met);
+    expect(seams.skullRay(7, [1, 2, 3], [0, 0, -1], 0.6)).toBe(met);
+    expect(calls).toEqual([[a, sources, [1, 2, 3], [0, 0, -1], undefined], [a, sources, [1, 2, 3], [0, 0, -1], 0.6]]);
+    for (const bad of [[[1, 2], [0, 0, -1]], [[1, 2, NaN], [0, 0, -1]], [[1, 2, 3], '0,0,-1'], [[1, 2, 3], [0, 0, -1], 0], [[1, 2, 3], [0, 0, -1], NaN], [[1, 2, 3], [0, 0, -1], '1']]) {
+      expect((seams.skullRay as (...args: unknown[]) => unknown)(7, ...bad), JSON.stringify(bad)).toBe(false);
+    }
+    expect(calls).toHaveLength(2);
+    expect(seams.skullRay(9, [1, 2, 3], [0, 0, -1])).toBeNull();   // no such actor
+    expect(createSkeletonSeams({ world: { actors: [a] }, render: { segMeshRenderer: null } } as unknown as GameContext).skullRay(7, [1, 2, 3], [0, 0, -1])).toBeNull();
+  });
   it('lists the skull fragments among the mesh gibs, oldest first, by plate', () => {
     const gib = (tag: string, name: string, pos: number[], vel: number[]) => ({ tag, object: { name }, state: { pos, vel } });
     const meshGibs = [gib('skull', 'skull-fragment:frontal', [1, 2, 3], [0, 4, 0]), gib('brain', 'brain', [5, 5, 5], [0, 0, 0]), gib('skull', 'skull-fragment:parietal-left', [2, 2, 2], [1, 1, 1])];
