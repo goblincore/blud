@@ -17,8 +17,11 @@ describe('upper-bound cull', () => {
     expect(FOLD_GROUP).toContain('(min(d, gCullRef) + ');
     expect(MAP_BODY).toMatch(/length\(p - cbounds\.xyz\) - cbounds\.w > \(min\(d, gCullRef\) \+ /);
   });
-  it('mapBody applies the bound only to the measured slot, never with limb accumulators, and clears it before the owner re-fold', () => {
-    expect(MAP_BODY).toContain('gCullRef = select(1e9, gCullUB, base + s == gCullSlot && !limbMode);');
+  it('mapBody applies the bound only to the measured slot and split piece, never with limb accumulators, and clears it before the owner re-fold', () => {
+    // A split slot's pieces are evaluated at different un-warped points (head-split.ts): the last sample's fold bounds
+    // this sample's only for the SAME piece (a rigid motion keeps distances). A closed slot is piece 0 at both.
+    expect(MAP_BODY).toContain('gCullRef = select(1e9, gCullUB, base + s == gCullSlot && i32(piece.z) == gCullPiece && !limbMode);');
+    expect(MAP_BODY).toContain('gLastFoldPiece = pieceU;');
     const clear = MAP_BODY.indexOf('gCullRef = 1e9;');
     expect(clear).toBeGreaterThan(-1);
     expect(clear).toBeLessThan(MAP_BODY.indexOf('let carved = applyCarves(d, p, data, counts, band);'));
@@ -31,5 +34,12 @@ describe('upper-bound cull', () => {
     const reset = MARCH_TRACE_LOOP.indexOf('gCullUB = 1e9;');
     expect(set).toBeLessThan(call);
     expect(reset).toBeGreaterThan(call);
+    // The winning piece rides with the slot, both ways.
+    expect(MARCH_TRACE_LOOP).toContain('var cullPiece = 0;');
+    const setPiece = MARCH_TRACE_LOOP.indexOf('gCullPiece = cullPiece;');
+    const getPiece = MARCH_TRACE_LOOP.indexOf('cullPiece = gLastFoldPiece;');
+    expect(setPiece).toBeGreaterThan(-1);
+    expect(setPiece).toBeLessThan(call);
+    expect(getPiece).toBeGreaterThan(call);
   });
 });

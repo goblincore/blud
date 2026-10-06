@@ -3,7 +3,7 @@ import { createTorsoWounds } from './torso';
 import { PRESETS } from './presets';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { makeZombie } from '../body';
-import { worldHitToWound, woundWorldPos, type Wound } from '../damage';
+import { MAX_WOUNDS, worldHitToWound, woundWorldPos, type Wound } from '../damage';
 import { rotateYaw } from '../gait';
 
 const body = buildBody(makeZombie(), DEFAULT_BUILD_OPTS, {});
@@ -23,11 +23,11 @@ describe('bounded torso visual state', () => {
     expect(first).toHaveLength(4);
     expect(first.map(w => w.radius)).toEqual([.075, .075, .075, .075]);
     for (let i = 0; i < 100; i++) wounds.forEach(w => a.record(w, body));
-    for (let i = 0; i < 20; i++) a.record(wound(arm), body);
+    for (let i = 0; i < MAX_WOUNDS + 4; i++) a.record(wound(arm), body);
     a.advance(.4);
     const result = a.visual(body);
     expect(result.filter(w => w.presetCut)).toHaveLength(8);
-    expect(result.filter(w => !w.presetCut)).toHaveLength(8);
+    expect(result.filter(w => !w.presetCut)).toHaveLength(MAX_WOUNDS - 8);
     const centres = result.filter(w => w.presetCut).map(w => woundWorldPos(body.prims, w));
     for (const hit of hits) expect(Math.min(...centres.map(c => Math.hypot(...c.map((v, i) => v - hit[i]!))))).toBeLessThan(.02);
   });
@@ -82,7 +82,7 @@ describe('bounded torso visual state', () => {
     a.record(wound(), body); a.advance(.32);
     for (let i = 0; i < 100; i++) a.record({ ...wound(arm), radius: i / 100 }, body);
     const result = a.visual(body);
-    expect(result.length).toBeLessThanOrEqual(16);
+    expect(result.length).toBeLessThanOrEqual(MAX_WOUNDS);
     expect(result.filter(w => w.presetCut)).toHaveLength(1);
     expect(result.filter(w => !w.presetCut).at(-1)!.radius).toBe(.99);
   });

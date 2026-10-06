@@ -19,12 +19,18 @@ void main() {
 // does not import this module.
 export { MAX_CLUSTERS, MAX_PRIMS };
 
+/** The frozen GLSL twin's own wound cap (uniform arrays uWound / uWoundMeta).
+ *  Deliberately NOT damage.ts MAX_WOUNDS: the WebGPU march grew to 32 in cut
+ *  wounds M1 (2026-10-03) and this path stays as it was. zombie.ts uploads the
+ *  NEWEST GLSL_MAX_WOUNDS wounds of a longer ring. */
+export const GLSL_MAX_WOUNDS = 16;
+
 export const FRAG = /* glsl */ `
 precision highp float;
 
 #define MAX_PRIMS ${MAX_PRIMS}
 #define MAX_CLUSTERS ${MAX_CLUSTERS}
-#define MAX_WOUNDS 16
+#define MAX_WOUNDS ${GLSL_MAX_WOUNDS}
 uniform vec4 uWound[MAX_WOUNDS];   // xyz = world position, w = radius
 uniform vec4 uWoundMeta[MAX_WOUNDS]; // x = type (0 pellet, 1 blast, 2 burn), y = age, z = rimSplayScale, w = rimOffsetScale (per-wound "calibre")
 uniform int  uWoundCount;

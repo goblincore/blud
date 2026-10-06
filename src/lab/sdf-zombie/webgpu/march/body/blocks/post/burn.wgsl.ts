@@ -55,7 +55,9 @@ export const BURN_BLOCK = /* wgsl */ `  // BURNING BODY. One noise field decides
     // gBurnEmit, or a cold burnt corpse reads as glowing bone.
     var boneMat = 0.0;
     if (skelK > 0.0) {
-      let boneProbe = applyBones(1e9, p, data, gInstCounts, gInstCounts2.x, gBand, segVolumeAtlas, segVolumeMeta);
+      // THE HEAD SPLIT: the bones are the closed head's, so the probe and its taps are taken at pS, the hit piece's
+      // un-warped point, and the bone normal is turned out with the piece (split-hit.wgsl.ts).
+      let boneProbe = applyBones(1e9, pS, data, gInstCounts, gInstCounts2.x, gBand, segVolumeAtlas, segVolumeMeta);
       // Reveal depth (0.08 default; fix pass task 3 history): the plan's 0.045
       // hugged the bones so tightly that only the shin and shoulder edge read
       // through soot. Probed 0.1 under the old flat tint: a whole limb then sat
@@ -94,17 +96,18 @@ export const BURN_BLOCK = /* wgsl */ `  // BURNING BODY. One noise field decides
         // flesh; each tap is the signed distance to the nearest bone surface
         // and the tetrahedron weights recover its outward gradient there.
         let be = max(revealDepth * 0.03, 0.0015);
-        let b0 = applyBones(1e9, p + vec3<f32>(be, -be, -be), data, gInstCounts, gInstCounts2.x, gBand, segVolumeAtlas, segVolumeMeta);
-        let b1 = applyBones(1e9, p + vec3<f32>(-be, -be, be), data, gInstCounts, gInstCounts2.x, gBand, segVolumeAtlas, segVolumeMeta);
-        let b2 = applyBones(1e9, p + vec3<f32>(-be, be, -be), data, gInstCounts, gInstCounts2.x, gBand, segVolumeAtlas, segVolumeMeta);
-        let b3 = applyBones(1e9, p + vec3<f32>(be, be, be), data, gInstCounts, gInstCounts2.x, gBand, segVolumeAtlas, segVolumeMeta);
+        let b0 = applyBones(1e9, pS + vec3<f32>(be, -be, -be), data, gInstCounts, gInstCounts2.x, gBand, segVolumeAtlas, segVolumeMeta);
+        let b1 = applyBones(1e9, pS + vec3<f32>(-be, -be, be), data, gInstCounts, gInstCounts2.x, gBand, segVolumeAtlas, segVolumeMeta);
+        let b2 = applyBones(1e9, pS + vec3<f32>(-be, be, -be), data, gInstCounts, gInstCounts2.x, gBand, segVolumeAtlas, segVolumeMeta);
+        let b3 = applyBones(1e9, pS + vec3<f32>(be, be, be), data, gInstCounts, gInstCounts2.x, gBand, segVolumeAtlas, segVolumeMeta);
         let boneG = vec3<f32>(b0 - b1 - b2 + b3, -b0 - b1 + b2 + b3, -b0 + b1 - b2 + b3);
         // A bone fold can have a zero gradient at its medial axis or where two
         // capsules meet; normalize(0) is NaN and a NaN normal blackens the
         // fragment. Guard it and keep the flesh normal there.
         let boneG2 = dot(boneG, boneG);
         if (boneG2 > 1e-12) {
-          let boneN = boneG * inverseSqrt(boneG2);
+          var boneN = boneG * inverseSqrt(boneG2);
+          if (splitTheta != 0.0) { boneN = qRot(splitQ, boneN); }
           // Bias hard toward the bone normal where the probe is close: hardness
           // is what makes it read as bone, and the flesh normal only has to
           // survive at the reveal edge. Geometry-driven (nearBone), not gated by

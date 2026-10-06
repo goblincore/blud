@@ -17,6 +17,10 @@ import {
   storage, attribute, positionGeometry, vec3, mix, Fn, If, Discard, positionLocal, select,
 } from 'three/tsl';
 import type { BuildResult } from '../build-body';
+import {
+  REGION_MARGIN, SPLIT_REOPEN_FRAC, splitBound, splitDrawDistance, splitFrame, splitHoldBall, splitNearReach,
+  type SplitWarp,
+} from '../head-split';
 import { packBody, PRIM_STRIDE, W_BONE, W_ORGAN } from '../pack';
 import { MAX_PRIMS, MAX_CLUSTERS, BONE_SEG_MAX, BASE_PRIM_STRIDE, bodyPrimStride } from '../validate';
 import { MAX_WOUNDS } from '../damage';
@@ -39,10 +43,10 @@ import {
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_COLOR, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
-  ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS, ROW_PREV_A, ROW_PREV_B, ROW_PREV_QUAT,
+  ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS, ROW_WOUND_CUT, ROW_PREV_A, ROW_PREV_B, ROW_PREV_QUAT,
   QUAD_TILE_EMPTY_WGSL,
 } from './march.wgsl';
-import { woundThreatMasks } from './wound-threat';
+import { cutLipAmp, cutThreatWound, woundThreatMasks, type ThreatWound } from './wound-threat';
 
 /** The shipped owner re-fold mode (counts2.z): 2 = the raiser gate (map-body.wgsl.ts).
  *  0 = the full re-fold it replaced; see game-seams-world.ts for the others. */
@@ -98,7 +102,8 @@ export interface ZombieGpuView {
    */
   update(body: BuildResult, rest?: BuildResult): void;
   /** Uploads wounds already transformed to world space by the caller.
-   *  splay/offsetScales are the per-wound rim multipliers (WOUND_PROFILES);
+   *  splay/offsetScales are the per-wound rim multipliers (WOUND_PROFILES); for a cut wound
+   *  (see `cuts`) the offsetScales entry is its sag, not a rim scale;
    *  omitted, they default to 1 — chunk torn ends pass nothing and get 1s.
    *  caps are the per-wound depth-slab (inward normal + max depth); omitted
    *  = uncapped spheres (the lab — its look is pinned; old wounds). */
@@ -114,7 +119,9 @@ export interface ZombieGpuView {
     /** Per-wound TORN flags (damage.ts Wound.tear, the flail): bit 3. Omitted = none. */
     tears?: readonly boolean[],
     /** Per-wound WET-LIP flags (damage.ts Wound.wetLip, the gun): bit 4, shading only. Omitted = none. */
-    wetLips?: readonly boolean[]): void;
+    wetLips?: readonly boolean[],
+    /** Per-wound cut data (cut-wound.ts): ROW_WOUND_CUT = (along unit, kerf), flags bit 5. Omitted = craters. */
+    cuts?: readonly ({ dir: Vec3; kerf: number } | null)[]): void;
   /** Wound union-reach cull gate (close-up wound-cull task, 2026-09-05).
    *  Ships ON — the cull is a value no-op (outside the bound every per-wound
    *  reach test would `continue`). false parks the bound's radius at 1e9 (the
@@ -208,6 +215,13 @@ export interface ZombieGpuView {
    * the whole recoil phase: an intact body is never repainted.
    */
   setGoreStrength(v: number): void;
+  /** THE HEAD SPLIT AT RANGE: the eye the split's draw distance is measured from (head-split.ts splitDrawDistance,
+   *  with this view's own accept uniforms). Past that distance the record is written closed; the bounds follow the
+   *  pose's split either way. Null (the default) draws the split at any distance. */
+  setSplitEye(eye: Vec3 | null): void;
+  /** The split the record carries after its last write: the pose's, or null for a closed pose or one closed for
+   *  range. What the march draws; whatever else draws the head (the skull mesh) follows this, not the pose. */
+  readonly splitDrawn: SplitWarp | null;
   /** Crowd stage a: the per-instance record buffer this view writes through
    *  syncRecord(). Exposed so the frame-hash seam can cover pose/wound state. */
   records: CrowdRecords;
@@ -1687,6 +1701,7 @@ export interface CrowdMaterialSources {
  */
 export function writeViewRecord(
   records: CrowdRecords, slot: number, u: MarchUniforms, centre: THREE.Vector3, band?: number,
+  split?: SplitWarp | null,
 ): void {
   records.write(slot, {
     counts: u.counts.value.toArray(), counts2: u.counts2.value.toArray(),
@@ -1710,6 +1725,7 @@ export function writeViewRecord(
     // The body's light picks ride its record (REC_LIGHTS): every SDF view is a
     // crowd slot, so this is the one path to the march for single actors too.
     lights: u.bodyLights.value.toArray(),
+    split,
   }, band);
 }
 
@@ -2078,7 +2094,7 @@ export function createDataTexture(stride = BASE_PRIM_STRIDE) {
 /**
  * Writes the wound rows. Shared by the body and by a chunk's torn end, which
  * is itself just a single blast wound parked where the limb came away.
- * meta texel = (type, age, rimSplayScale, rimOffsetScale); the scale slots
+ * meta texel = (type, age, rimSplayScale, rimOffsetScale; a CUT wound (flag 32) carries its sag in .w instead); the scale slots
  * default to 1 so callers that pass nothing (chunk torn ends) keep the global
  * woundCfg rim settings unchanged.
  * Exported for the hands view, which owns its own (splash-wound) ring, and for
@@ -2096,20 +2112,22 @@ export interface WriteWoundsLayout {
   capRow?: number;
   /** Row index for the per-wound flag texels (was ROW_WOUND_FLAGS). */
   flagsRow?: number;
+  /** Row index for the cut texels (was ROW_WOUND_CUT). */
+  cutRow?: number;
   /** Data-texture column stride (default BASE_PRIM_STRIDE, the width of a
    *  createDataTexture() texture — NOT MAX_PRIMS, which is only the ceiling). */
   stride?: number;
 }
 
 /** ROW_WOUND_FLAGS.x integer-part bits (the WGSL readers test `i32(flags.x) & bit`). */
-export const WOUND_FLAG = { cavity: 1, hole: 2, decal: 4, tear: 8, wetLip: 16 } as const;
+export const WOUND_FLAG = { cavity: 1, hole: 2, decal: 4, tear: 8, wetLip: 16, cut: 32 } as const;
 
 /** The integer part of ROW_WOUND_FLAGS.x for one wound. The threat mask rides the
- *  fraction (see writeWounds), so this stays an integer <= 31. */
-export function woundFlagBits(f: { cavity?: boolean; hole?: boolean; decal?: boolean; tear?: boolean; wetLip?: boolean }): number {
+ *  fraction (see writeWounds), so this stays an integer <= 63. */
+export function woundFlagBits(f: { cavity?: boolean; hole?: boolean; decal?: boolean; tear?: boolean; wetLip?: boolean; cut?: boolean }): number {
   return (f.cavity ? WOUND_FLAG.cavity : 0) + (f.hole ? WOUND_FLAG.hole : 0)
     + (f.decal ? WOUND_FLAG.decal : 0) + (f.tear ? WOUND_FLAG.tear : 0)
-    + (f.wetLip ? WOUND_FLAG.wetLip : 0);
+    + (f.wetLip ? WOUND_FLAG.wetLip : 0) + (f.cut ? WOUND_FLAG.cut : 0);
 }
 
 export function writeWounds(
@@ -2150,6 +2168,10 @@ export function writeWounds(
    *  the torn wet red lip / glossy walls / clotted floor shade it; the carve's shape
    *  and the analytic normal ignore the bit. Omitted = none. */
   wetLips?: readonly boolean[],
+  /** Per-wound CUT data (cut-wound.ts): ROW_WOUND_CUT = (along unit, kerf) and flags bit 5 (value 32).
+   *  Omitted or null per wound = a crater. Rows for non-cut slots are left at whatever they held,
+   *  so readers MUST gate on flags bit 32 before reading ROW_WOUND_CUT or META.w as a sag. */
+  cuts?: readonly ({ dir: Vec3; kerf: number } | null)[],
 ): number {
   const stride = layout.stride ?? BASE_PRIM_STRIDE;
   const woundRow = layout.woundRow ?? ROW_WOUND;
@@ -2176,11 +2198,27 @@ export function writeWounds(
       texels[capBase + i * 4 + 2] = cap.n[2];
       texels[capBase + i * 4 + 3] = cap.depth;
     }
+    const cut = cuts?.[i];
+    // A cut with no cap must not inherit a stale CAP texel from a reused slot: zero means "no inward axis", which the
+    // shader's length(wCap.xyz) < 0.5 guard skips and threatMasks' cut && !cap shortcut relies on.
+    if (cut && !cap) {
+      texels[capBase + i * 4] = 0;
+      texels[capBase + i * 4 + 1] = 0;
+      texels[capBase + i * 4 + 2] = 0;
+      texels[capBase + i * 4 + 3] = 0;
+    }
+    if (cut) {
+      const cutBase = (layout.cutRow ?? ROW_WOUND_CUT) * stride * 4;
+      texels[cutBase + i * 4] = cut.dir[0];
+      texels[cutBase + i * 4 + 1] = cut.dir[1];
+      texels[cutBase + i * 4 + 2] = cut.dir[2];
+      texels[cutBase + i * 4 + 3] = cut.kerf;
+    }
     // Integer part is a BITFIELD (woundFlagBits): bit 0 cavity, bit 1 cloth
-    // bullet hole, bit 2 cloth decal (no carve), bit 3 torn, bit 4 wet lip;
+    // bullet hole, bit 2 cloth decal (no carve), bit 3 torn, bit 4 wet lip, bit 5 cut;
     // the fraction is the threat mask / 1024 (< 0.5).
     texels[flagBase + i * 4] = woundFlagBits({
-      cavity: cavities?.[i], hole: holes?.[i], decal: decals?.[i], tear: tears?.[i], wetLip: wetLips?.[i],
+      cavity: cavities?.[i], hole: holes?.[i], decal: decals?.[i], tear: tears?.[i], wetLip: wetLips?.[i], cut: !!cut,
     }) + ((threats?.[i] ?? 0) & 511) / 1024;
     const owner = owners?.[i];
     texels[flagBase + i * 4 + 1] = owner ? owner.cluster + 1 : 0;
@@ -2362,6 +2400,23 @@ function wireViewTiles(
   };
 }
 
+/** THE NEAR ACCEPT REACH, CHECKED (head-split.ts splitNearReach). An open split is sound up close only while the
+ *  march's near accept reach stays within REGION_MARGIN; the game's defaults give 0.61 of it. A coarser SDF pass
+ *  (aaCfg.x) or a larger last-step factor (perfCfg.w, ?laststep) can pass it, and then the region sphere may be
+ *  drawn as a ball round the head at about 1.8 m. Nothing closes the split for it (it would vanish at melee range):
+ *  a dev build says so once. */
+let nearReachWarned = false;
+function warnNearReach(u: MarchUniforms): void {
+  if (nearReachWarned || !import.meta.env.DEV) return;
+  const a = u.aaCfg.value;
+  const reach = splitNearReach({ coneK: a.x, strength: a.y, near: a.z, fadeM: a.w, secant: u.perfCfg.value.w });
+  if (reach <= REGION_MARGIN) return;
+  nearReachWarned = true;
+  console.warn(`[head-split] the march's near accept reach is ${(reach * 1000).toFixed(0)} mm, over REGION_MARGIN `
+    + `(${REGION_MARGIN * 1000} mm): an open head's region sphere can be drawn as a surface near 1.8 m `
+    + `(aaCfg ${a.toArray().map(v => +v.toPrecision(3)).join(', ')}; last-step ${u.perfCfg.value.w})`);
+}
+
 export function createZombieGpuView(
   body: BuildResult, opts: GpuViewOpts = {},
 ): ZombieGpuView {
@@ -2384,8 +2439,10 @@ export function createZombieGpuView(
   const ownsVolume = !opts.volumeTex;
   const volumeTex = opts.volumeTex ?? createFallbackHandVolumeTexture();
 
-  // Posed bound groups of the LAST upload (perf task 5): the binner's input.
+  // Posed bound groups of the LAST upload (perf task 5): the closed body's (the wound threats), and the binner's
+  // input, which is the same list unless the head is split (upload()).
   let lastGroups: import('./tile-cull').TileGroupInput[] = [];
+  let tileGroups: import('./tile-cull').TileGroupInput[] = [];
   // The last upload()'s args, so setBoneCull / setPackBones can re-pack
   // the SAME posed body immediately (used by the frozen-frame exactness gate
   // — a.step is gated on !wanderFrozen, so the per-frame re-pack a cull flag
@@ -2401,6 +2458,26 @@ export function createZombieGpuView(
   const motionRow = new Float32Array(MAX_PRIMS * 4);
   const motionPrev = { a: new Float32Array(MAX_PRIMS * 4), b: new Float32Array(MAX_PRIMS * 4), q: new Float32Array(MAX_PRIMS * 4), count: -1 };
   let lastUploadRest: BuildResult | undefined;
+  // THE HEAD SPLIT of the body the view last received (`posed.split`, head-split.ts; null = closed): the one it was
+  // built from, then each update()'s. The pose is its one source, so a closed or torn pose closes the record
+  // (REC_SPLIT_*), and the setters' syncRecord() re-writes it unchanged. The prims are the closed head's either way.
+  // The BOUNDS do not read this: upload() and fit() take the split of the body they are handed.
+  let headSplit: SplitWarp | null = body.split ?? null;
+  // The split the RECORD carries: the pose's, or none while the eye (setSplitEye) is past the split's draw distance,
+  // where the march's accept reach would take the region shell for a surface (head-split.ts splitDrawDistance).
+  // Closed for range, it opens again only inside SPLIT_REOPEN_FRAC of that distance. A new eye-less or split-less
+  // state forgets the range, so a split that first appears just inside the distance is drawn.
+  let splitEye: Vec3 | null = null;
+  let rangeClosed = false;
+  const recordSplit = (): SplitWarp | null => {
+    if (!headSplit || !splitEye) { rangeClosed = false; return headSplit; }
+    const h = headSplit.h, d = Math.hypot(h[0] - splitEye[0], h[1] - splitEye[1], h[2] - splitEye[2]);
+    const far = splitDrawDistance(headSplit, { coneK: u.aaCfg.value.x, strength: u.aaCfg.value.y, secant: u.perfCfg.value.w });
+    if (d > far) rangeClosed = true;
+    else if (d < SPLIT_REOPEN_FRAC * far) rangeClosed = false;
+    return rangeClosed ? null : headSplit;
+  };
+  let splitDrawn: SplitWarp | null = headSplit;
   // Each view owns its packing scratch. writeRow copies into the atlas before
   // the next upload, so the temporary rows need not allocate every frame.
   let uploadScratch: ReturnType<typeof packBody> | undefined;
@@ -2450,6 +2527,9 @@ export function createZombieGpuView(
     tears?: readonly boolean[];
     caps?: readonly ({ n: Vec3; depth: number } | null)[];
     owners?: readonly ({ cluster: number; start: number; count: number } | null)[];
+    /** For a cut row (cuts[i] non-null: flag 32) offsetScales[i] is its sag; cuts[i] = (world along unit, kerf). */
+    offsetScales?: number[];
+    cuts?: readonly ({ dir: Vec3; kerf: number } | null)[];
   } | null = null;
   let lastThreatMasks: number[] = [];
   let lastThreatMargin = 0;
@@ -2464,15 +2544,33 @@ export function createZombieGpuView(
     const ampByOwner = new Map<number, number>();
     for (let i = 0; i < n; i++) {
       const o = w.owners?.[i]?.cluster ?? -1;
-      ampByOwner.set(o, (ampByOwner.get(o) ?? 0) + w.radii[i]! * u.woundCfg.value.z * (w.splayScales?.[i] ?? 1)
-        * (w.tears?.[i] ? TORN.PETAL_HI : 1));
+      // A cut's lip is kerf-sized (cutLipAmp); its radius is the half-length, which would overstate it.
+      const cut = w.cuts?.[i], cap = w.caps?.[i];
+      // A cut row with no inward axis is skipped by the shader's guard: no lip either.
+      if (cut && (!cap || Math.hypot(cap.n[0], cap.n[1], cap.n[2]) < 0.5)) continue;
+      const amp = cut ? cutLipAmp(cut.kerf, w.splayScales?.[i] ?? 1)
+        : w.radii[i]! * u.woundCfg.value.z * (w.splayScales?.[i] ?? 1) * (w.tears?.[i] ? TORN.PETAL_HI : 1);
+      ampByOwner.set(o, (ampByOwner.get(o) ?? 0) + amp);
     }
     const unowned = ampByOwner.get(-1) ?? 0;
     const margin0 = 4 * kw + kw * Math.min(n, 3) + 2 * p.maxBlendK + unowned;
     lastThreatMargin = margin0;
     const clusterGroups: [number, number][] = [];
     for (let c = 0; c < p.clusterCount; c++) clusterGroups.push([p.clusterGroups[c * 4]!, p.clusterGroups[c * 4 + 1]!]);
-    const wounds = w.worldPositions.slice(0, n).map((pos, i) => ({ pos, radius: w.radii[i]!, owner: w.owners?.[i]?.cluster ?? -1, cap: w.caps?.[i] ?? null }));
+    // Cut rows (flag 32): the slot's box (its floor at sag + depth, its lid, its corner sphere) and the shader's reach
+    // as a second, exact sphere (cutThreatWound), not the half-length sphere. The reach is woundReachBound's per-wound
+    // form from the same live uniforms.
+    const reachF = Math.max(2, 2 * u.woundCfg.value.w + 3 * u.woundCfg2.value.x);
+    const wounds = w.worldPositions.slice(0, n).map((pos, i): ThreatWound => {
+      const owner = w.owners?.[i]?.cluster ?? -1, cap = w.caps?.[i] ?? null, cut = w.cuts?.[i];
+      // A cut row without a cap uploads a zero axis (character-view), which the shader skips: it threatens nobody.
+      if (cut && !cap) return { pos, radius: 0, owner: -1 };
+      if (cut && cap) {
+        return cutThreatWound(pos, owner, w.radii[i]!, cap.n, cap.depth, w.offsetScales?.[i] ?? 0, cut.dir, cut.kerf,
+          w.radii[i]! * reachF + 4 * kw + 0.25);
+      }
+      return { pos, radius: w.radii[i]!, owner, cap };
+    });
     // A cluster that owns wounds gets its own bump ceiling on top; test it separately.
     const base = woundThreatMasks(wounds, lastGroups, clusterGroups, margin0);
     for (const [owner, amp] of ampByOwner) {
@@ -2536,6 +2634,30 @@ export function createZombieGpuView(
         distort: gr[o + 2]!,
         flags: gr[o + 3]!,
       });
+    }
+    // THE HEAD SPLIT'S BOUNDS (head-split.ts splitBound), from the split of THIS body. The screen tiles and the
+    // depth pre-pass's miss cull test these spheres against the WORLD ray, which meets an opened half where the
+    // closed head is not: a sphere that holds flesh of a turning half grows. The reach is the march's own for that
+    // sphere (4 x the blend width x its distortion factor). What mapBody's per-step culls then read, at a piece's
+    // un-warped point (a grown sphere holds the closed one, so they stay sound and cull less):
+    //   the tiled path (the crowd)      foldGroup takes the tile entry's sphere: the GROWN one;
+    //   the cluster walk (per-body,     the cluster cull reads ROW_CLUSTER_BOUNDS: the GROWN one; the group cull
+    //   the cone / depth pre-pass)      reads ROW_GROUP_BOUNDS, which stays the CLOSED sphere (exact).
+    // The wound threat masks keep the closed spheres too (lastGroups): they are measured on the closed head.
+    tileGroups = lastGroups;
+    const split = splitFrame(next.split);
+    if (split) {
+      const k4 = 4 * p.maxBlendK;
+      tileGroups = lastGroups.map((g) => {
+        const b = splitBound(split, g.center, g.radius, k4 * Math.max(g.distort, 1));
+        return b.radius === g.radius ? g : { ...g, center: [b.centre[0], b.centre[1], b.centre[2]], radius: b.radius };
+      });
+      for (let c = 0; c < p.clusterCount; c++) {
+        const o = c * 4, cb = p.clusterBounds;
+        if (p.clusterRange[o + 2]! < 0.5) continue;
+        const b = splitBound(split, [cb[o]!, cb[o + 1]!, cb[o + 2]!], cb[o + 3]!, k4 * Math.max(p.clusterGroups[o + 2]!, 1));
+        cb.set([b.centre[0], b.centre[1], b.centre[2], b.radius], o);
+      }
     }
     writeRow(ROW_PRIM_A, p.primA, W);
     writeRow(ROW_PRIM_B, p.primB, W);
@@ -2671,6 +2793,14 @@ export function createZombieGpuView(
       for (let i = 0; i < 3; i++) {
         min[i] = Math.min(min[i]!, c.center[i]! - c.radius);
         max[i] = Math.max(max[i]!, c.center[i]! + c.radius);
+      }
+    }
+    // An open head's halves reach anywhere in the split's hold ball (head-split.ts splitHoldBall).
+    if (body_.split) {
+      const b = splitHoldBall(body_.split);
+      for (let i = 0; i < 3; i++) {
+        min[i] = Math.min(min[i]!, b.centre[i]! - b.radius);
+        max[i] = Math.max(max[i]!, b.centre[i]! + b.radius);
       }
     }
     const pad = maxBlendK * 4 + 0.05;
@@ -2819,7 +2949,9 @@ export function createZombieGpuView(
    *  kernel reads. The uniform nodes stay authoritative for the per-TYPE
    *  block; this is the bridge for the per-INSTANCE half. */
   function syncRecord() {
-    writeViewRecord(records, slot, u, mesh.position);
+    splitDrawn = recordSplit();
+    if (splitDrawn) warnNearReach(u);
+    writeViewRecord(records, slot, u, mesh.position, undefined, splitDrawn);
     if (ownRecords) ownRecords.flush();
   }
 
@@ -2845,7 +2977,7 @@ export function createZombieGpuView(
     },
     tiles: viewTiles,
     levelShadowTex: (material as unknown as MaterialWithLevelShadowTex).levelShadowTex,
-    getTileGroups() { return lastGroups; },
+    getTileGroups() { return tileGroups; },
     woundThreats() { return [...lastThreatMasks]; },
     get woundThreatMargin() { return lastThreatMargin; },
     setPackBones(on) { packBones = on; },
@@ -2875,7 +3007,14 @@ export function createZombieGpuView(
     setSkinDetail(k) { u.meltCfg.value.z = k; syncRecord(); },
     setMotionOut(on) { u.meltCfg.value.y = on ? 1 : 0; syncRecord(); },
     setGoreStrength(v) { u.lodCfg.value.w = v; syncRecord(); },
+    setSplitEye(eye) {
+      splitEye = eye ? [eye[0], eye[1], eye[2]] : null;
+      // The eye moves every frame: the record is re-written only when the answer changes.
+      if (recordSplit() !== splitDrawn) syncRecord();
+    },
+    get splitDrawn() { return splitDrawn; },
     update(next, rest) {
+      headSplit = next.split ?? null;
       const p = upload(next, rest, true);
       const f = fit(next, p.maxBlendK);
       mesh.position.copy(f.centre);
@@ -2897,9 +3036,9 @@ export function createZombieGpuView(
       u.meltCfg.value.y = edgeOutAll ? 2 : motionOutAll ? 1 : 0;
       syncRecord();
     },
-    setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps, owners, holes, decals, tears, wetLips) {
-      lastWoundThreatIn = { worldPositions, radii, splayScales, tears, caps, owners };
-      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, sink.woundLayout, caps, undefined, owners, threatMasks(), holes, decals, tears, wetLips);
+    setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps, owners, holes, decals, tears, wetLips, cuts) {
+      lastWoundThreatIn = { worldPositions, radii, splayScales, tears, caps, owners, offsetScales, cuts };
+      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, sink.woundLayout, caps, undefined, owners, threatMasks(), holes, decals, tears, wetLips, cuts);
       // Union-reach bound, from the LIVE woundCfg/woundCfg2 channels the
       // reach formula reads (blendK, rimOffset, rimWidth) — see
       // woundReachBound. Stale only under a live panel edit without a

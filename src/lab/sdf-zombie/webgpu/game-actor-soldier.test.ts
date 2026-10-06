@@ -23,6 +23,7 @@ import * as soldierStagger from '../soldier-stagger';
 import * as motion from '../motion';
 import { soldierInjury } from '../soldier-damage';
 import { BURN_BEHAVIOUR } from '../burn-behaviour';
+import { MAX_WOUNDS } from '../damage';
 
 function soldier(furniture: Aabb[] = [], releaseProp?: () => void, body?: BuildResult, onMeleeContact?: () => void) {
   const shots: { age: number; kicks: number; origin: readonly number[]; direction: readonly number[]; expectedOrigin: readonly number[]; expectedDirection: readonly number[] }[] = [];
@@ -337,7 +338,7 @@ describe('soldier actor combat wiring', () => {
     expect(actor.motionFrame()!.collapsed).toBe(false);
     for (let i = 0; i < 8; i++) hitLimb(actor, 'chest');
     actor.step(1 / 60);
-    expect(actor.wounds().length).toBeLessThanOrEqual(16);
+    expect(actor.wounds().length).toBeLessThanOrEqual(MAX_WOUNDS);
     expect(actor.motionFrame()!.collapsed).toBe(true);
   });
 

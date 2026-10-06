@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createZombieActor } from './game-actor';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { makeZombie } from '../body';
-import type { Wound } from '../damage';
+import { MAX_WOUNDS, type Wound } from '../damage';
 import type { Vec3 } from '../types';
 import { createWoundRing } from './character-view';
 import { writeWounds } from './zombie-gpu';
@@ -52,8 +52,8 @@ describe('bounded torso game preview', () => {
   });
   it('keeps gameplay history while uploading only two cutters after saturation', () => {
     const { actor, wound, upload } = fixture(true);
-    actor.stampBlast(Array.from({ length: 20 }, () => ({ ...wound })));
-    expect(actor.wounds()).toHaveLength(16);
+    actor.stampBlast(Array.from({ length: MAX_WOUNDS + 4 }, () => ({ ...wound })));
+    expect(actor.wounds()).toHaveLength(MAX_WOUNDS);
     actor.advanceWoundPreview(.4);
     expect(upload().types).toEqual([-1, -1]);
     expect(upload().radii).toEqual([.12, .07]);

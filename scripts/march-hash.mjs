@@ -118,6 +118,33 @@ const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
 //   per-body (?crowd=0, tiles off)                  = 470ff0b375adfdb48992adecf04e8915e814b3f7
 // Each reproduced on TWO boots (ports 5288/9288, headless) at cc23eb99.
 //
+// 2026-10-04 RE-VERIFIED, NO MOVE — after the origin/main merge (f48e0084) and cut wounds Task 6 (ee51bc6c: the cut
+// mask's back-facing gate reads nSmooth) and Task 7 (the rod; no WGSL), at fb35b370. Default d7392d52… / wounded
+// 76bd51aa… on 2/2 boots; crowd quad 0c71e712… / bf6836cd…; per-body 470ff0b3… / f618070e… (ports 5241/9241, Chrome
+// 154.0.8037.93). Main's merged changes moved no pin.
+//
+// 2026-10-03 RE-VERIFIED, NO MOVE — cut wound fix round 2 (f2be31cc: normal-gated cut mask, raw-plane lid, mask
+// null-axis guard, lip-scale clamp). Default d7392d52… / wounded 76bd51aa… on 2/2 boots; crowd quad 0c71e712… /
+// bf6836cd…; per-body 470ff0b3… / f618070e… (ports 5241/9241). Only flag-32 rows take the changed code.
+//
+// 2026-10-03 RE-VERIFIED, NO MOVE — cut wound fix round (73289ded: the cut lip's gates, the cut mask's far-side fade,
+// the lid, cut threat masks). Default d7392d52… / wounded 76bd51aa… on 2/2 boots; crowd quad 0c71e712… / wounded
+// bf6836cd… and per-body 470ff0b3… / wounded f618070e… on 1/1 each (ports 5241/9241, LAB_TMP=.lab-tmp). Expected: only
+// flag-32 rows take the changed code, and no staged scene has one.
+//
+// 2026-10-03 RE-VERIFIED, NO MOVE — cut wound branch (flag 32; cut wounds M1 Task 5: applyWounds' slot carve
+// and lips, woundMask's cut footprint, ngWounds' tap fallback). The shader text changed (march golden -u) but the
+// branch runs only for flag-32 wounds and no staged scene has one. At 1b6ccf5e + Task 5: default d7392d52… /
+// wounded 76bd51aa… on 2/2 boots; crowd quad 0c71e712… / wounded bf6836cd… and per-body 470ff0b3… / wounded
+// f618070e… on 1/1 each, the wounded pair identical to the base 1b6ccf5e's (ports 5241/9241, LAB_TMP=.lab-tmp).
+//
+// 2026-10-03 RE-VERIFIED, NO MOVE — wound loop bound 16 -> 32 (cut wounds M1 Task 2: every
+// WGSL wound loop bound and gWoundList's size now come from MAX_WOUNDS = 32). The shader text
+// changed (march golden -u) but no pin moved: default d7392d52… on 2/2 boots, crowd quad
+// 0c71e712… and per-body 470ff0b3… on 1/1 each (ports 5241/9241, LAB_TMP=.lab-tmp). The
+// wounded variants held too (default 76bd51aa…, same as the base a66c1c4a). Expected: the
+// staged scenes carry far fewer than 16 wounds and every loop breaks on the live count.
+//
 // 2026-09-29 RE-PIN — THE BROWSER, NOT THE CODE. Google Chrome auto-updated 153.0.8010.54 ->
 // 154.0.8037.58 (2026-09-28 19:41), after the last passing run. Every probe now gives the new
 // default, including commits that passed before: 248b2cee, 77ab162e (docs only since the pass),

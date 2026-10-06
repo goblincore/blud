@@ -47,9 +47,10 @@ import { loadHeldProp, type HeldProp } from './held-prop';
 import { applyKitBeam } from './kit-lights';
 import { createArmorSparks, createMuzzleFlash } from './character-effects';
 import { createEjectionCycle, createShotgunCasings } from './shotgun-casings';
+import { CUT } from '../cut-wound';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
 import {
-  MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos,
+  MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundDirToWorld, woundWorldPos,
   type Wound, type WoundType,
 } from '../damage';
 import { isSoldierFamily } from '../motion-profile';
@@ -426,18 +427,24 @@ export function createWoundRing(): WoundRing {
       // Torn wounds (Wound.tear, torn-lips.ts): a raised ragged fraction, a taller lip pushed
       // outward, and flags bit 3. tear absent/0 = the stock values exactly.
       const torn = rows.map(w => tearUpload(w.tear, w.ragged));
+      // One cut condition for every cut upload: META.w sag, ROW_WOUND_CUT and flag bit 32 must agree.
+      const isCut = rows.map(w => w.shape === 'cut' && !!w.cutDir);
       gpu.setWounds(
         rows.map(w => map(woundWorldPos(posed.prims, w, bodyYaw), w, false)),
         rows.map(w => w.radius),
         rows.map((w, i) => 'presetCut' in w && w.presetCut ? -1 : TYPE_ID[w.type] + Math.min(0.45, Math.max(0, torn[i]!.torn ? torn[i]!.ragged : w.ragged ?? 0))),
         rows.map(w => w.ageSec),
         rows.map((w, i) => WOUND_PROFILES[w.type].rimSplayScale * (w.rimScale ?? 1) * torn[i]!.splayMul),
-        rows.map((w, i) => WOUND_PROFILES[w.type].rimOffsetScale * torn[i]!.offsetMul),
-        rows.map(w => {
+        // META.w: the crater rim code reads it as an offset scale; cut wounds (flag 32) carry their sag there,
+        // which requires Task 5's cut branch to skip the rim for them.
+        rows.map((w, i) => isCut[i] ? (w.sag ?? 0) : WOUND_PROFILES[w.type].rimOffsetScale * torn[i]!.offsetMul),
+        rows.map((w, i) => {
           const n = woundCarveNormal(posed.prims, w, bodyYaw);
           // The preview repacks slots as its second cutter appears. Clear
           // an uncapped slot explicitly so it cannot inherit an old cap.
-          return n ? { n: map(n, w, true), depth: w.carveDepth ?? 0 } : visual ? { n: [0, 0, 0] as Vec3, depth: 0 } : null;
+          // A CUT row without a normal must clear it too: a null leaves the slot's stale CAP row in place, and the
+          // shader's cut branches skip a row only when its inward axis is zero.
+          return n ? { n: map(n, w, true), depth: w.carveDepth ?? 0 } : (visual || isCut[i]) ? { n: [0, 0, 0] as Vec3, depth: 0 } : null;
         }),
         rows.map(w => {
           // Severing retains wound history and primitive indices. A hidden
@@ -456,6 +463,10 @@ export function createWoundRing(): WoundRing {
         rows.map((w, i) => torn[i]!.torn && !w.decal),
         // Gun wounds' wet red lip (flags bit 4, torn-lips.ts): shading only, never on cloth.
         rows.map(w => wetLipUpload(w)),
+        // CUT WOUNDS (cut-wound.ts): the along unit rides the same transform as the cap normal.
+        rows.map((w, i) => (isCut[i]
+          ? { dir: map(woundDirToWorld(posed.prims, w, w.cutDir!, bodyYaw), w, true), kerf: w.kerf ?? CUT.defaultKerf }
+          : null)),
       );
     },
   };

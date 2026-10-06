@@ -306,6 +306,7 @@ async function main(): Promise<void> {
   };
   // Exercise the REAL production applyWounds alongside ngWounds with the
   // exact uploaded row adapter. The CPU scalar oracle below is independent.
+  // One texel per wound slot: the fixture is as wide as the shader's wound loops.
   const woundRows = new Float32Array(MAX_WOUNDS * DATA_ROWS * 4);
   const woundTexture = new THREE.DataTexture(woundRows,MAX_WOUNDS,DATA_ROWS,THREE.RGBAFormat,THREE.FloatType);
   woundTexture.needsUpdate=true;

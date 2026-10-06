@@ -115,6 +115,29 @@ export function traceSlugHitFrom(ctx: GameContext, origin: Vec3, dir: Vec3): { a
     return { actorId: hitActorId, hit: hitPoint };
 }
 
+/** A STRAIGHT melee trace: the nearest body hit by the ray origin → origin + dir * reach (the rod's trace; the slug's
+ *  ballistic march above is 240 gravity steps against every body within 20 m, and its hit sits a hair under the aim line at
+ *  full reach). Same broad phase (a live cluster sphere near the segment) and the same narrow phase (traceProjectile on
+ *  sdBody) as traceSlugHitFrom, in ONE segment per body. Level geometry does not block it (as the slug trace). No state
+ *  mutated. */
+export function traceMeleeHitFrom(
+  ctx: GameContext, origin: Vec3, dir: Vec3, reach: number,
+): { actorId: number; hit: Vec3 | null } {
+  const end: Vec3 = [origin[0] + dir[0] * reach, origin[1] + dir[1] * reach, origin[2] + dir[2] * reach];
+  let bestD = Infinity;
+  let hitActorId = -1;
+  let hitPoint: Vec3 | null = null;
+  for (const a of ctx.world.actors) {
+    const posedA = a.posed();
+    if (!segmentNearAnySphere(origin, end, posedA.clusters.filter(cc => cc.alive), SLUG_BROADPHASE_MARGIN)) continue;
+    const hp = traceProjectile(origin, end, q => sdBody(q, posedA));
+    if (!hp) continue;
+    const d = Math.hypot(hp[0] - origin[0], hp[1] - origin[1], hp[2] - origin[2]);
+    if (d < bestD) { bestD = d; hitActorId = a.id; hitPoint = hp; }
+  }
+  return { actorId: hitActorId, hit: hitPoint };
+}
+
 /** The ceiling over a point, PER ENCLOSURE.
  *
  *  A single global plane stopped being correct the moment the arena added a

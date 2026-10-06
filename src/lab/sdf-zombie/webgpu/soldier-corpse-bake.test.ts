@@ -7,6 +7,8 @@ import soldierSrc from '../characters/soldier.blob?raw';
 import { defaultUniforms } from './zombie-gpu';
 import { corpsePartition, createSoldierCorpseBakes, soldierCorpseSnapshot } from './soldier-corpse-bake';
 import type { ZombieActor } from './game-actor';
+import { cutExposureSpheres } from '../cut-wound';
+import type { Wound } from '../damage';
 import { createGameDeferredScene } from './game-deferred-scene';
 import { createBakedChunkMaterial } from './baked-chunks';
 
@@ -33,6 +35,19 @@ describe('soldier corpse bake lifecycle',()=>{
     expect(corpsePartition(body,true).clusters.filter(c=>c.alive).every(c=>c.limb==='head')).toBe(true);
     expect(data.look.goreStrength).toBe(0);
     expect(data.halfExtent!.every(v=>Number.isFinite(v)&&v>0)).toBe(true);
+  });
+  it('bakes a cut as its exposure chain of small craters, not as one bowl of the cut\'s half-length',()=>{
+    const {body,actor}=setup();
+    const primIdx=body.prims.findIndex(p=>!p.dead&&p.limb!=='head'&&p.op!=='sub');
+    const cut:Wound={primIdx,local:[0,0,0],radius:.15,type:'pellet',ageSec:0,shape:'cut',cutDir:[0,1,0],carveN:[0,0,-1],carveDepth:.05,kerf:.01};
+    const crater:Wound={primIdx,local:[0,0,0],radius:.06,type:'pellet',ageSec:0,carveN:[0,0,-1],carveDepth:.03};
+    (actor as any).wounds=()=>[cut,crater];
+    const torn=soldierCorpseSnapshot(actor)!.torn;
+    const chain=cutExposureSpheres(body.prims,cut,0);
+    expect(torn).toHaveLength(chain.length+1);
+    expect(torn.filter(t=>t.radius===cut.radius)).toHaveLength(0);   // no bowl at the cut's half-length
+    expect(torn.some(t=>t.radius===crater.radius)).toBe(true);       // a crater is baked as before
+    chain.forEach((s,i)=>{ expect(torn[i]!.at).toEqual(s.pos); expect(torn[i]!.radius).toBe(s.radius); expect(torn[i]!.normal).toBeUndefined(); });
   });
   it('waits for a quiet interval, freezes once, swaps to a mesh, and restores on damage',()=>{
     const {actor,worker,manager,scene,damage}=setup();

@@ -89,7 +89,7 @@ export * from './march/helpers';
 // Rows 8-9 (task 6, rest-space noise) diverge the same way, same reason.
 //
 // Wounds ride the SAME texture rather than a uniform array, which the GLSL
-// path had to use. MAX_WOUNDS (16) is comfortably under BASE_PRIM_STRIDE (128), so
+// path had to use. MAX_WOUNDS (32) is comfortably under BASE_PRIM_STRIDE (128), so
 // they fit in two more rows and the whole per-body payload stays one upload.
 //
 // TRANSLATION TRAPS, all of which bite silently:

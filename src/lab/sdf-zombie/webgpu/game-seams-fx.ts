@@ -10,6 +10,7 @@ import * as THREE from 'three/webgpu';
 import { IMPACT_GOUT, type ImpactGoutProfile } from '../blood-sim';
 import { type Vec3 } from '../types';
 import { sdBody } from '../validate';
+import { unwarpHit } from '../damage';
 import { chunkSettled } from '../gib-chunks';
 import { woundFromPellet, woundFromSlug, traceProjectile } from './game-weapon';
 import { spillVerdict, woundTuningNow } from './game-vfx-leaves';
@@ -25,7 +26,12 @@ export function createFxSeams(ctx: GameContext) {
      *  practical intensity. G-buffer invariance never cared; MATCHED LIT
      *  screenshots do. Freezing this one clock pins the flicker phase so
      *  locked renders are bit-comparable in lit output too. Gate-only:
-     *  default OFF, ordinary gameplay never freezes it. */
+     *  default OFF, ordinary gameplay never freezes it.
+     *  WITHIN one boot. It also stops the dynamic-light clock (game-dynamic-light-
+     *  leaves.ts rt.time), but where that stands: boot and any wall-clock wait
+     *  advanced it, and the lamps, the room fill and the body key read it. To
+     *  compare lit values ACROSS boots also setLightTime(0), setProbeBlend(1),
+     *  setProbeFall(1) and setFieldStyle("off") (scripts/march-hash.mjs). */
     setLightClockFrozen: (on: boolean) => {
       if (on) ctx.lighting.flickerClockFrozenAt = performance.now() * 0.001;
       ctx.lighting.clockFrozen = on;
@@ -556,11 +562,12 @@ export function createFxSeams(ctx: GameContext) {
       if (!hit) return null;
       // 'slug' carries the BLAST profile at 0.16 (see SLUG) — the blast-class
       // crater look without resolveExplosion's 16-wound kill-gib.
-      const field = (q: Vec3) => sdBody(q, posed);
+      // Stamped in the un-warped head, as the actor's own hit() / hitSlug() (damage.ts unwarpHit).
+      const u = unwarpHit(posed, hit);
       const yaw = a.pose().yaw;
       const w = kind === 'slug'
-        ? woundFromSlug(posed.prims, hit, field, yaw)
-        : woundFromPellet(posed.prims, hit, yaw, field);
+        ? woundFromSlug(posed.prims, u.hit, u.field, yaw)
+        : woundFromPellet(posed.prims, u.hit, yaw, u.field);
       a.stampBlast([w]);
       // Capture twins must spill too — task 8 judges the rope from exactly
       // this seam. Rolls bleedRng deterministically: same command sequence,

@@ -28,6 +28,7 @@
 // body — assuming the field's gradient never drops below FLAIL_STRIKE.minGrad.
 
 import type { LimbId, Primitive, Vec3 } from '../types';
+import { sdBody, type Body } from '../validate';
 import type { FlailSide } from './flail-swing';
 
 export const FLAIL_STRIKE = {
@@ -257,6 +258,9 @@ export const FLAIL_HEAD = {
    *  chest ~0.16 m from it and sever the neck on hit 1 (spec §11, now moot — the flail never severs). */
   neckDist: 0.2,
   faceCraterR: 0.06,
+  /** A head hit's share of the swing's collapse credit (flail spec §13.2): the head model kills, not the meter
+   *  (R/L 0.065 × 0.3 ≈ 0.02 per head hit). */
+  meterScale: 0.3,
 } as const;
 
 export function isHeadRegion(limb: LimbId | undefined, point: Vec3, headCentre: Vec3 | null, neckRoot: Vec3 | null): boolean {
@@ -266,12 +270,14 @@ export function isHeadRegion(limb: LimbId | undefined, point: Vec3, headCentre: 
 }
 
 /** The wound for one hit (spec §12.3): a head-region hit is always the face crater with no sever; a body
- *  hit is the full crater at its sever calibre. */
+ *  hit is the full crater at its sever calibre. `meterScale` is the hit's share of the swing's collapse credit and
+ *  `flesh` the bits it throws (flesh-bits.ts FLESH_BITS): a head-region hit is a head hit in both, also when the
+ *  head damage leaf declines it (a split head) and the flail stamps this crater itself. */
 export function flailWound(
   headRegion: boolean, craterR: number, severMul: number,
-): { radius: number; severRadius: number } {
-  if (!headRegion) return { radius: craterR, severRadius: craterR * severMul };
-  return { radius: FLAIL_HEAD.faceCraterR, severRadius: 0 };
+): { radius: number; severRadius: number; meterScale: number; flesh: 'body' | 'head' } {
+  if (!headRegion) return { radius: craterR, severRadius: craterR * severMul, meterScale: 1, flesh: 'body' };
+  return { radius: FLAIL_HEAD.faceCraterR, severRadius: 0, meterScale: FLAIL_HEAD.meterScale, flesh: 'head' };
 }
 
 /** The head chain's root (it sits in the shoulders) and its first segment's midpoint (the neck), from the
@@ -280,4 +286,24 @@ export function headNeck(prims: readonly Primitive[]): { root: Vec3; mid: Vec3 }
   const n = prims.find(p => p.limb === 'head' && p.op !== 'sub' && !p.dead);
   if (!n) return null;
   return { root: [n.a[0], n.a[1], n.a[2]], mid: [(n.a[0] + n.b[0]) / 2, (n.a[1] + n.b[1]) / 2, (n.a[2] + n.b[2]) / 2] };
+}
+
+/** The strike list for resolveStrike, from the live actors (the flail's and the axe's strike share it): each actor
+ *  with a torso cluster, at its torso centre, with its posed body field, and THE HEAD MAGNET's live head (spec
+ *  §13.1): the head cluster's centre now and sdBody over the head cluster(s) alone, so the arms in front of the face
+ *  do not block a head strike. The head-only body carries the posed body's head split, so a strike lands on the opened
+ *  halves (the centre stays the closed head's). */
+export function strikeActorsFrom(actors: readonly { id: number; posed(): Body }[]): StrikeActor[] {
+  const out: StrikeActor[] = [];
+  for (const a of actors) {
+    const posed = a.posed();
+    const c = posed.clusters.find(cc => cc.limb === 'torso')?.center;
+    if (!c) continue;
+    const headClusters = posed.clusters.filter(cc => cc.limb === 'head' && cc.alive);
+    const head = headClusters.length > 0
+      ? { centre: [...headClusters[0]!.center] as Vec3, field: (q: Vec3) => sdBody(q, { prims: posed.prims, clusters: headClusters, split: posed.split ?? null }) }
+      : undefined;
+    out.push({ id: a.id, centre: c, field: (q: Vec3) => sdBody(q, posed), head });
+  }
+  return out;
 }

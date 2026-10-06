@@ -10,7 +10,7 @@ import { sampleOrder, jitterGrid, accumulateSamples, float32ToBase64 } from './u
 import { TILE_SIZE_PX } from './tile-cull';
 import { buildNormalBodyPointFn } from './normal-gradient.wgsl';
 import { normalHitPoint } from './normal-gradient-support';
-import { finiteGradient, woundGradient } from './normal-gradient-reference';
+import { finiteGradient, woundGradient, NG_REASON_CODES, ngCoverageClass } from './normal-gradient-reference';
 import { sdBody, smax } from '../validate';
 import {
   ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_PRIM_SHAPE, ROW_PRIM_COLOR,
@@ -299,13 +299,17 @@ export function createDebugProbeSeams(ctx: GameContext, d: DebugProbeDeps) {
           const bound=u.woundBound.value;
           const wounds=Array.from({length:Math.round(cfg[0]!)},(_,i)=>({w:row(i,ROW_WOUND),meta:row(i,ROW_WOUND_META),cap:row(i,ROW_WOUND_CAP)}));
           const raw=Uint8Array.from(atob(packed),c=>c.charCodeAt(0));const data=new Float32Array(raw.buffer);
-          const make=()=>({hits:0,analytic:0,reasons:Array<number>(8).fill(0)});
-          const regions={wall:make(),rim:make(),internal:make(),curvedInternal:make(),headWound:make(),torsoWound:make()};
+          const make=()=>({hits:0,analytic:0,reasons:Array<number>(NG_REASON_CODES).fill(0)});
+          // `split`: pixels inside an open head split's region (ngCoverageClass). Counted, never judged against sdBody.
+          const regions={wall:make(),rim:make(),internal:make(),curvedInternal:make(),headWound:make(),torsoWound:make(),split:make()};
           const point=new THREE.Vector3();
           let scalarSurfaceMax=0;const samples:unknown[]=[];
           for(let i=0;i<data.length;i+=4) {
             const code=Math.round(data[i]!)-1,owner=Math.round(data[i+2]!);
-            if(code<0||code>7||owner<0)continue;
+            const cls=ngCoverageClass(code,owner);
+            if(cls==='skip')continue;
+            const add=(region:ReturnType<typeof make>)=>{region.hits++;region.reasons[code]!++;if(code===0)region.analytic++;};
+            if(cls==='split'){add(regions.split);continue;}
             const pixel=i/4,x=pixel%w,y=Math.floor(pixel/w);
             const p=normalHitPoint(x,y,w,h,data[i+3]!,camera);
             point.fromArray(p);
@@ -331,7 +335,6 @@ export function createDebugProbeSeams(ctx: GameContext, d: DebugProbeDeps) {
               const dg=woundGradient({d:base,g:baseG,reason:'ok'},p,resolved);
               samples.push({pixel:[x,y],p,owner,base,baseG,dg,gradientLength:Math.hypot(...dg.g),primitive:body.prims[owner]});
             }
-            const add=(region:ReturnType<typeof make>)=>{region.hits++;region.reasons[code]!++;if(code===0)region.analytic++;};
             if(owner>=u.counts.value.x) {add(regions.internal);if((Math.round(row(owner,ROW_PRIM_SHAPE)[1]!)&2)!==0)add(regions.curvedInternal);continue;}
             if(Math.abs(d-base)<=1e-5)continue;
             scalarSurfaceMax=Math.max(scalarSurfaceMax,Math.abs(d));

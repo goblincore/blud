@@ -31,16 +31,16 @@ import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan 
 import { applyDeathState, hasDeathState } from '../death-state';
 import { inflateHead, SWELL_SEC } from '../head-pop';
 import {
-  MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos, clothDecal, wetLipWound,
+  MAX_WOUNDS, pushWound, unwarpHit, WOUND_PROFILES, woundCarveNormal, woundWorldPos, clothDecal, wetLipWound,
   type Wound, type WoundType,
 } from '../damage';
+import type { SplitWarp } from '../head-split';
 import { GUN_WET_LIP } from '../torn-lips';
 import { severLimb, severDistal, type SeverResult } from '../sever';
 import { soldierInjury, soldierArmCutAllowed, injuryPoints, SOLDIER_INJURY_TUNING } from '../soldier-damage';
 import { blastPlates, freshPlates, hitPlate, isShed, restHitPoint, shedPlates, type PlateState } from '../plate-armor';
 import { posedDetachedChunk } from '../detached-pose';
 import { cutLimbs, cutChains, chainOrder, jointPoint } from '../connectivity';
-import { sdBody } from '../validate';
 import type { LimbId, Primitive, Vec3 } from '../types';
 import {
   woundFromPellet, woundFromSlug,
@@ -538,6 +538,10 @@ export interface ZombieActor {
   blast(effect: ActorBlastEffect): void;
   /** Melee head damage (game-head-damage.ts): a pure map applied to the posed body after every applyRig (the per-frame step and each hit's re-pose). null removes it. */
   setHeadDeform(fn: ((posed: BuildResult) => BuildResult) | null): void;
+  /** The head split (head-split.ts): after every applyRig and the head deform, `fn` gives the split for that pose in
+   *  world space, or null while the head is closed; it rides `posed().split`, so sdBody (every strike, shot and trace)
+   *  sees the opened halves. The prims stay the closed head's. null removes the hook. */
+  setHeadSplit(fn: ((posed: BuildResult) => SplitWarp | null) | null): void;
   /** Re-pose NOW so a changed head deform shows on a frame this actor did not step (a frozen actor:
    *  `?frozen=1`, the gates). Without it the posed and drawn head keep whatever the deform was at the
    *  last hit's re-pose — the wobble's peak squash, forever. The same refresh as blast()'s tail. */
@@ -653,14 +657,20 @@ export function createZombieActor(opts: {
   /** Melee head damage's per-actor head map (setHeadDeform), applied after
    *  every applyRig below. Null = the body exactly as the rig poses it. */
   let headDeform: ((p: BuildResult) => BuildResult) | null = null;
+  /** The head split's per-actor hook (setHeadSplit), asked after the deform on every re-pose. Null, or a null
+   *  answer = closed: the pose carries no `split` at all. */
+  let headSplit: ((p: BuildResult) => SplitWarp | null) | null = null;
   /** ActorBlastEffect.forceCollapse, latched until the next step() feeds it
    *  to the motion signals (collapse.ts latches the fall from there). */
   let forceCollapseNext = false;
-  /** The one re-pose: applyRig, then the head deform (if any). Every pose
-   *  site (the per-frame step, stampBlast, blast(), flushHitTail) calls it. */
+  /** The one re-pose: applyRig, then the head deform (if any), then the head
+   *  split (if open). Every pose site (the per-frame step, stampBlast,
+   *  blast(), flushHitTail) calls it. */
   const repose = (): BuildResult => {
     const p = applyRig(current, bound, bodyYaw);
-    return headDeform ? headDeform(p) : p;
+    const d = headDeform ? headDeform(p) : p;
+    const s = headSplit?.(d) ?? null;
+    return s ? { ...d, split: s } : d;
   };
   /**
    * THE RUPTURE WINDOW (gib-tear.ts). While this is set the march draws the
@@ -1640,17 +1650,19 @@ export function createZombieActor(opts: {
   }
 
   function hit(hitWorld: Vec3, dirWorld: Vec3, shot?: import('../damage').ShotProvenance): Wound | null {
-    // Stamped at the live yaw `posed` was built with — see refreshWounds.
-    const field = posed;
-    const wound = woundFromPellet(field.prims, hitWorld, bodyYaw, p => sdBody(p, field));
+    // Stamped at the live yaw `posed` was built with — see refreshWounds — and
+    // in the UN-WARPED head (damage.ts unwarpHit): the shove, the reaction
+    // and the blood below keep the world hit.
+    const u = unwarpHit(posed, hitWorld);
+    const wound = woundFromPellet(posed.prims, u.hit, bodyYaw, u.field);
     wound.shot = shot;
     gunWetLip(wound, 'pellet');
     return applyProjectileHit(wound, hitWorld, dirWorld);
   }
 
   function hitSlug(hitWorld: Vec3, dirWorld: Vec3, shot?: import('../damage').ShotProvenance): Wound | null {
-    const field = posed;
-    const wound = woundFromSlug(field.prims, hitWorld, p => sdBody(p, field), bodyYaw);
+    const u = unwarpHit(posed, hitWorld);   // the un-warped head, as hit()
+    const wound = woundFromSlug(posed.prims, u.hit, u.field, bodyYaw);
     wound.shot = shot?.weapon === 'slug' ? shot : { weapon: 'slug' };
     gunWetLip(wound, 'slug');
     return applyProjectileHit(wound, hitWorld, dirWorld);
@@ -2021,6 +2033,7 @@ export function createZombieActor(opts: {
 
   return {
     setHeadDeform: (fn) => { headDeform = fn; },
+    setHeadSplit: (fn) => { headSplit = fn; },
     reposeHead: () => {
       posed = repose();
       view.update(drawnPose(), current);
@@ -2039,6 +2052,10 @@ export function createZombieActor(opts: {
     beginTear: (at: Vec3, falloff: number, plan: RupturePlan) => {
       tear = { at: [...at] as Vec3, falloff, age: 0 };
       tearPlan = plan;
+      // The head split describes the CLEAN pose in world space, and rupturePosed spreads `posed`: it must not ride onto
+      // the regions as they pull apart. The split closes here (the plan's pieces are the closed head's prims anyway),
+      // and the split hook answers null for as long as the window runs (game-head-split.ts).
+      if (posed.split) posed = { ...posed, split: null };
       // Flesh-prim -> region, for the wound upload's rigid carry (refreshWounds).
       tearPrimRegion = new Int32Array(posed.prims.length).fill(-1);
       for (let r = 0; r < plan.pieces.length; r++) {

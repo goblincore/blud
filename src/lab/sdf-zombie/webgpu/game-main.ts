@@ -186,6 +186,7 @@ import {
   stepWeaponSlot, type WeaponSlot, type WeaponSlotState,
 } from './game-weapon-slots';
 import { setCarveProbeCapEnabled, setProbeCapEnabled, woundWorldPos, woundCarveNormal, type Wound } from '../damage';
+import { boneExposureOf } from '../cut-wound';
 import type { ImpactGoutProfile, Droplet } from '../blood-sim';
 import {
   createBloodSim, spawnWoundDroplets, spawnImpactGout, emitTrails, stepBlood, IMPACT_GOUT, burstVolume,
@@ -281,8 +282,12 @@ import { createFxSeams } from './game-seams-fx';
 // beside this file; main() holds only their call sites.
 import { createGameBurning } from './game-burning';
 import { createFlareHarness } from './game-flare';
+import { createRodHarness } from './game-rod';
+import { createAxeHarness } from './game-axe';
 import { createFlail } from './game-flail';
 import { createHeadDamage } from './game-head-damage';
+import { createHeadSplit } from './game-head-split';
+import { GAME_AA, GAME_AA_FADE_M, GAME_AA_NEAR, GAME_LAST_STEP_DEFAULT } from './game-march-accept';
 import { createBrainGib } from './game-brain-gib';
 import { clearMeshGibs, spawnMeshGib, stepMeshGibs } from './game-mesh-gibs';
 import { createHeadSeams } from './game-seams-head';
@@ -299,7 +304,7 @@ import { gateRefineTwin, woundStreamId } from './game-world-leaves2';
 import { describeRecordedWound, neutralInput, placeFromDemo, readInputFrame, updateDemoHud } from './game-demo-leaves';
 import { applyMouseDelta } from './game-player-leaves';
 import { setLoader } from './game-boot-leaves';
-import { registerBleed, stepGutRopes } from './game-world-leaves3';
+import { registerBleed, registerCutBleed, stepGutRopes } from './game-world-leaves3';
 import { headPopDebris } from '../head-pop';
 import { demoRecordStop } from './game-demo-leaves2';
 import { createFireSeams } from './game-seams-fire';
@@ -317,7 +322,7 @@ import { crowdTypeFor } from './game-crowd-leaves';
 import { pushProbeWeight } from './game-probes-leaves';
 import { aimFrustum } from './game-weapon-leaves';
 import { takePropForThrow } from './game-dynamite-leaves';
-import { bodiesOnScreen, traceSlugHitFrom } from './game-world-leaves';
+import { bodiesOnScreen, traceMeleeHitFrom, traceSlugHitFrom } from './game-world-leaves';
 import { captureTelemetryScene } from './game-telemetry-leaves';
 import { demoScenarioOf } from './game-demo-leaves';
 import { awaitBakes, pickChunkObjects, registerLitChunkMaterial, type ChunkPickFrame } from './game-bake-leaves';
@@ -1658,8 +1663,9 @@ async function main() {
     // — a non-zero row there means an unlabelled pass exists.
     setPassLabel('frame:other');
     ctx.lighting.flashlight.update(camera);
-    // The flail's torch FILL follows this frame's torch (game-flail.ts OWN LIGHT LIST).
+    // The flail's and the axe's torch FILLs follow this frame's torch (viewmodel-lights.ts OWN LIGHT LIST).
     ctx.weapon.flail?.syncFill();
+    ctx.weapon.axe?.syncFill();
     // The kit twin follows the flashlight's SWITCH like the spot and the bodies' beam do (night-train
     // starts dark until the coat-check pickup): ungated it lit kitted enemies at full strength first.
     ctx.lighting.flashlight.setKitBeamGain(ctx.vfx.beamTuning.gain * flashlightGate(ctx));
@@ -1691,11 +1697,9 @@ async function main() {
     // bones could only be tubes if living skeletons became tubes as well.
     if (ctx.render.boneMesh || ctx.gibs.boneMesh) {
       if (ctx.render.boneMesh) {
+        // On the wound's own body frame (the live yaw, as every stamp and the GPU upload): cut-wound.ts boneExposureOf.
         const craters: { pos: Vec3; radius: number }[] = [];
-        for (const a of ctx.world.actors) {
-          const prims = a.posed().prims;
-          for (const w of a.visualWounds()) if (!w.decal) craters.push({ pos: woundWorldPos(prims, w, ctx.vfx.boundedWoundPreview ? a.pose().yaw : 0), radius: w.radius });
-        }
+        for (const a of ctx.world.actors) craters.push(...boneExposureOf(a));
         ctx.render.boneInstancer.setWounds(craters);
       }
       ctx.render.boneInstancer.update([
@@ -1713,6 +1717,11 @@ async function main() {
           : []),
       ]);
     }
+    // THE HEAD SPLIT AT RANGE: each split actor's view measures its split's draw distance from the eye this frame is
+    // drawn with (game-head-split.ts drawEye). Here, not in the tick: the render camera is final, also after a
+    // teleport and while the sim is paused. Before the skull meshes are posed (they follow each view's splitDrawn)
+    // and before the crowd's record flush (its sync, below).
+    ctx.weapon.headSplit?.drawEye(camera.position.toArray());
     // skeleton=mesh: re-pose this frame's segment meshes + crater exposure.
     // Sever re-derive: the actor's posed body reference changes — rebuild
     // the sources (revision changes, the cache extracts fresh geometry).
@@ -1737,11 +1746,8 @@ async function main() {
       // gradient, which only matters for meshes that are drawn — build the
       // list from the visual set only (the bone INSTANCER's own crater list
       // above keeps walking every actor; tube mode is not part of this cull).
-      for (const a of ctx.render.visualActors) {
-        const prims = a.posed().prims;
-        // Cloth decals carve nothing, so they expose no bone.
-        for (const w of a.visualWounds()) if (!w.decal) craters.push({ pos: woundWorldPos(prims, w, ctx.vfx.boundedWoundPreview ? a.pose().yaw : 0), radius: w.radius });
-      }
+      // Cloth decals carve nothing, so they expose no bone; the spheres sit on the live body yaw (boneExposureOf).
+      for (const a of ctx.render.visualActors) craters.push(...boneExposureOf(a));
       ctx.render.segMeshRenderer.setWounds(craters);
       ctx.render.segMeshRenderer.update(ctx.world.actors.map(a => {
         let e = ctx.render.skeletonSources.get(a);
@@ -1750,7 +1756,13 @@ async function main() {
         return e.sources;
       }), ctx.world.actors, ctx.render.visualActors, boneExposedActors(ctx),
       // Melee head damage: the skull segment squashes and dents with the flesh (game-head-damage affine).
-      (owner, segment) => (segment === 'head' && ctx.weapon.headDamage ? ctx.weapon.headDamage.affine(owner as ZombieActor) : null));
+      (owner, segment) => (segment === 'head' && ctx.weapon.headDamage ? ctx.weapon.headDamage.affine(owner as ZombieActor) : null),
+      // The head split: the skull breaks with the split the march DRAWS (closed past the range cut-off, while the
+      // body tears, or with the head gone; a killed zombie's split stays open). Its fracture is seeded by the actor.
+      {
+        warp: (owner, segment) => (segment === 'head' ? (owner as ZombieActor).view.splitDrawn : null),
+        seed: owner => (owner as ZombieActor).id,
+      });
       ctx.telemetry.telemetry.end('skeleton-mesh', meshTiming);
       if (firstMeshSync) mark('mesh-sync-end');
     }
@@ -2552,28 +2564,13 @@ async function main() {
   // the pre-lever march bit for bit); __sdfGame.setLastStep() flips it live.
   const GAME_LAST_STEP = (() => {
     const raw = new URLSearchParams(location.search).get('laststep');
-    if (raw === null) return 4;
+    if (raw === null) return GAME_LAST_STEP_DEFAULT;
     const v = Number(raw) || 0;
     return v > 0 ? Math.min(16, v) : 0;
   })();
 
-  /** Perf round 2, task 6: the footprint-AA strength (aaCfg.y). When > 0 the
-   *  march may accept a sample once the field is within the ray's projected
-   *  PIXEL footprint (t * aaCfg.x) instead of the 1.2 mm literal — fewer
-   *  steps at range, geometric aliasing prefiltered below Nyquist. The
-   *  epsilon divides by the dominant prim's GROUP DISTORTION factor
-   *  (gFoldBestDistort, up to 22x on the schoolgirl sole plate) so
-   *  high-distortion regions cannot stop a ray short — the exact defect that
-   *  kept this lever OFF when it first shipped (see march.wgsl.ts).
-   *  `__sdfGame.setAa(strength)` flips it live for A/B; 0 is the old
-   *  behaviour bit-for-bit (t * 0 / distort == t * 0 == 0). */
-  const GAME_AA = 1.0;
-  /** DISTANCE-BASED ACCEPT (2026-09-22, cost census): accept strength GAME_AA_NEAR up
-   *  close, fading to GAME_AA over [GAME_AA_FADE_M / 2, GAME_AA_FADE_M] metres. Owner A/B:
-   *  invisible at 6 (and judged "okay" at 12 — 12 saves ~19 % of wounded-melee prim work vs
-   *  ~15 % at 6; a one-number follow-up). `__sdfGame.setAaDistance(near, fadeM)`; 0 = off. */
-  const GAME_AA_NEAR = 6.0;
-  const GAME_AA_FADE_M = 3.0;
+  // The footprint-AA strength and the distance-based accept (aaCfg.y/z/w) are game-march-accept.ts's GAME_AA,
+  // GAME_AA_NEAR and GAME_AA_FADE_M.
 
   /** Perf round 2, task 7: bodies RECEIVE the level's shadows. The twin
    *  light (dungeon-lighting.ts) renders a level-only depth map (layer 0 —
@@ -3795,6 +3792,7 @@ async function main() {
   function rebuildCast(): void {
     // Head damage state (and any dangling eye's piece) belongs to the old cast; so do its brain mesh gibs.
     ctx.weapon.headDamage?.reset();
+    ctx.weapon.headSplit?.reset();
     clearMeshGibs(ctx);
     ctx.world.soldierCorpses?.dispose();
     ctx.world.encounter.clear(); ctx.world.encounterHomes.clear();
@@ -3975,6 +3973,10 @@ async function main() {
     if (ctx.weapon.flail?.onMouseDown(e.button)) return;
     // SLOT 5 (flare): left click only, deferred to the tick like every other edge.
     if (ctx.weapon.flare?.onMouseDown(e.button)) return;
+    // SLOT 6 (the rod): hold + sweep; the cut lands on release.
+    if (ctx.weapon.rod?.onMouseDown(e.button)) return;
+    // SLOT 7 (the axe): a click starts the combo's next chop.
+    if (ctx.weapon.axe?.onMouseDown(e.button)) return;
     // SLOT 4 (opt-in launcher prototype): acts only while it is the live slot.
     if (ctx.weapon.launcher?.onMouseDown(e.button)) return;
     // Deferred to the tick (see the input seam note): an edge event must land
@@ -3993,13 +3995,16 @@ async function main() {
   });
   // The flail's release: no pointer-lock check, so letting go anywhere ends a held chain.
   window.addEventListener('mouseup', (e) => ctx.weapon.flail?.onMouseUp(e.button));
+  // The rod's release: likewise unlocked, so letting go anywhere ends the sweep.
+  window.addEventListener('mouseup', (e) => ctx.weapon.rod?.onMouseUp(e.button));
+  window.addEventListener('mouseup', (e) => ctx.weapon.axe?.onMouseUp(e.button));
   // The seam for the grapeshot dispatch: a view-model hangs off this group,
   // which rides the camera every frame.
   // The FOV-compensation rig sits between the camera and everything the
   // player holds, and carries NOTHING but viewmodelFovScale()'s scale — so
   // the anchor's ride height below is scaled with the rest of the rig rather
   // than surviving as an unscaled camera-space offset. Every weapon slot
-  // (flail, shotgun, dynamite, launcher, flare) is a descendant, so this is
+  // (flail, shotgun, dynamite, launcher, flare, rod, axe) is a descendant, so this is
   // one transform for all of them.
   ctx.weapon.fovRig = new THREE.Group();
   ctx.weapon.fovRig.name = 'view-model-fov-rig';
@@ -4024,12 +4029,31 @@ async function main() {
   ctx.weapon.flare = createFlareHarness(ctx, {
     burning: ctx.vfx.burning, traceSlugHitFrom: withCtx(ctx, traceSlugHitFrom), eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
   });
+  // WEAPON SLOT 6 (the rod, cut wounds' stand-in blade, game-rod.ts): its own rig on aimRig.
+  ctx.weapon.rod = createRodHarness(ctx, {
+    traceMelee: withCtx(ctx, traceMeleeHitFrom), eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
+    // 'slug' (was 'pellet'; 2026-10-04 look pass, "more excessive") plus gouts along the slot (registerCutBleed).
+    bleed: (a, w, point, incoming) => registerCutBleed(ctx, a, w, 'slug', { point, incoming }),
+  });
+  // The head split (game-head-split.ts): the axe's head chops open, widen and kill through it. It refuses a head the
+  // head damage leaf (built below, read lazily) already holds state for.
+  ctx.weapon.headSplit = createHeadSplit(ctx, { headDamaged: a => ctx.weapon.headDamage?.has(a) ?? false });
+  // WEAPON SLOT 7 (the axe, game-axe.ts): its own rig on aimRig.
+  ctx.weapon.axe = createAxeHarness(ctx, {
+    eye: () => eyeOf(ctx.player.player), aimDir: withCtx(ctx, aimDir),
+    // 'slug' (spec §3; registerBleed's kinds are pellet | slug | stump, and 'stump' is a severed limb's), plus gouts along
+    // the slot (registerCutBleed).
+    bleed: (a, w, point, incoming) => registerCutBleed(ctx, a, w, 'slug', { point, incoming }),
+    split: ctx.weapon.headSplit,
+  });
   // WEAPON SLOT 1 (the spike flail, game-flail.ts): its own rig on aimRig.
   ctx.weapon.flail = createFlail(ctx, {
     eye: () => eyeOf(ctx.player.player),
     aimDir: () => aimDir(ctx),
     bleed: (a, w, point, incoming) => registerBleed(ctx, a, w, 'slug', { point, incoming }),
-    headHit: (a, p, d, f) => ctx.weapon.headDamage?.hit(a, p, d, f),
+    // False when the leaf declines (a split head): the flail then stamps its plain crater. With no leaf the hit
+    // counts as taken (`?? true`), as it always has: a head hit before the leaf exists stamps nothing.
+    headHit: (a, p, d, f) => ctx.weapon.headDamage?.hit(a, p, d, f) ?? true,
     // Read lazily: the chunk spawner that assigns onGoreDispatch is built further down.
     gore: (a, pieces) => ctx.boot.onGoreDispatch?.(a, pieces),
   });
@@ -4053,6 +4077,8 @@ async function main() {
     },
     bleed: (a, w, point, incoming, kind) => registerBleed(ctx, a, w, kind, { point, incoming }),
     attach: (a, prims, pos, opts) => ctx.boot.attachPiece?.(a, prims, pos, opts) ?? { update() {}, dispose() {} },
+    // A split head is not head damage's: the flail's ladder and the slug burst both decline it (game-head-split.ts).
+    splitOpen: a => ctx.weapon.headSplit?.isOpen(a) ?? false,
     // The modelled brain (game-brain-gib.ts), lit by the level's light list for the room it is thrown in.
     brain: createBrainGib(ctx, { lightsAt: p => ctx.world.levelLightLists.get(roomIdAt(p[0], p[2])) ?? null }),
   });
@@ -4397,8 +4423,9 @@ async function main() {
     ctx.weapon.aimRig.add(ctx.weapon.flashLight);
     // The level's light lists were built before this light existed.
     refreshLevelLights(ctx);
-    // …and so was the flail's own list (game-flail.ts OWN LIGHT LIST).
+    // …and so were the flail's and the axe's own lists (viewmodel-lights.ts OWN LIGHT LIST).
     ctx.weapon.flail?.refreshLights();
+    ctx.weapon.axe?.refreshLights();
     ctx.weapon.gunReady = true;
     resolveGunReady();
     mark('gun-ready');
@@ -7234,6 +7261,10 @@ async function main() {
     // Damage transitions use their own clock; frozen pose captures must
     // still show a newly selected preset. Refresh exclusions as it grows.
     for (const a of ctx.world.actors) if (a.advanceWoundPreview(dt)) ctx.render.frozenHullBuilt = false;
+    // The head split's spring (game-head-split.ts), BEFORE the actors step: their step is what asks the split hook, so
+    // this frame's pose carries this frame's angle. Outside the wanderFrozen branch: a frozen actor is re-posed by the
+    // tick itself.
+    ctx.weapon.headSplit?.tick(dt);
     // ——— VISUAL-ACTOR SET (visual-actor-cull plan task 2) ————————
     // Which actors need PER-ACTOR VISUAL upkeep this tick: the padded view
     // cone from the player's eye/yaw/pitch and the camera's fov/aspect,
@@ -7496,6 +7527,8 @@ async function main() {
     ctx.telemetry.telemetry.lap('region', 'tick:weapon-rig-reload');
     ctx.weapon.cooldown = Math.max(0, ctx.weapon.cooldown - dt);
     ctx.weapon.flare?.tickCooldown(dt);
+    ctx.weapon.rod?.tick(dt);
+    ctx.weapon.axe?.tick(dt);
     ctx.weapon.launcher?.tick(dt);
     ctx.weapon.recoilPitch *= Math.exp(-9 * dt);
     // ——— FREE AIM ————————————————————————————————————————————————————
@@ -7901,9 +7934,14 @@ async function main() {
               const sources = ctx.render.skeletonSources.get(hitActor)?.sources;
               if (sources) ctx.render.segMeshRenderer.impact(hitActor, sources, hitPoint, dirN, p.kind);
             }
-            const stamped = p.kind === 'slug'
-              ? hitActor.hitSlug(hitPoint, dirN, p.shot)
-              : hitActor.hit(hitPoint, dirN, p.shot);
+            // A slug on a zombie's head bursts or ruptures it (game-head-damage.ts burst; while burstTuning.anyWeapon is
+            // on, pellets too, once per shot); anything the leaf declines (not the head, not the plain zombie, off) takes
+            // the ordinary path below. Routed by projectile kind, never by Wound.type (slugs stamp 'blast').
+            const burstHandled = !!ctx.weapon.headDamage?.burst(hitActor, hitPoint, dirN, p.shot, p.kind);
+            const stamped = burstHandled ? null
+              : p.kind === 'slug'
+                ? hitActor.hitSlug(hitPoint, dirN, p.shot)
+                : hitActor.hit(hitPoint, dirN, p.shot);
             ctx.telemetry.telemetry.end('wound-hit', hitTiming);
             if (ctx.telemetry.telemetry.active) ctx.telemetry.telemetry.event('impact', {
               actor: hitActor.id, model: 'zombie', room: hitActor.room, kind: p.kind, stamped: !!stamped,
@@ -8101,7 +8139,7 @@ async function main() {
         for (const e of ctx.vfx.bleed.live(ctx.vfx.bleedClock)) {
           const a = ctx.world.actors.find(q => q.id === e.bodyId);
           if (!a) { ctx.vfx.bleed.evictForBody(e.bodyId); continue; }
-          const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, e.wound, a.pose().yaw);
+          const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, e.wound, a.pose().yaw, a.posed().split);
           e.acc = spawnWoundDroplets(
             ctx.vfx.bloodSim, e.kind, ctx.vfx.bleedClock - e.bornAt, anchor, normal, cdt, e.acc, rngStreams.bleed,
             woundStreamId(ctx, e.wound),
