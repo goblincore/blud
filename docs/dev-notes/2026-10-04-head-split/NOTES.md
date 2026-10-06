@@ -2295,3 +2295,66 @@ as the cause; it now says the cause is open. The gates' counts in this section (
 they are 80 / 27 / 30. The gates, `march-hash`, the census and the tree were run once on the final tree, with the
 owner's pick: next section.
 
+## The owner's pick: the wet film is C (2026-10-06)
+
+Shown `look/14-wet-variants.jpg`, the owner chose **C**, the boldest of the three: "I think C is fine". C is the
+default now: B's film (`lumpTilt` 2.4, `lumpFlat` 1, `fineTilt` 0.6: lean 14.5 / 39.3 / 54.8 degrees) with **`gain`
+4.5, `pow` 28**. Nothing else moved; the block's text differs from B's by those two numbers.
+
+**The 3% bound is given up, by his choice.** Round 3 held B's `gain` to the bound "no view over 3% of raw texels
+past 0.95 luma" (B's worst: 2.50%). That bound was the builder's. C passes it in the views from the side (3.42%,
+4.32%, 6.41%; 3.03% and 3.06% from three-quarter) and the owner picked it with the sheet in front of him. No test
+or gate check held the bound (the gate does not measure luma shares), so nothing is restated in code: the constants'
+doc in `head-split.ts`, the spec's 10.7 and HANDOFF say it.
+
+Share of raw-surface texels over 0.6 / over 0.95 luma, on the final tree (the same raw texels as every round; before
+= `gain` 0, same session):
+
+| | raw texels | torch ON: before -> C | torch OFF: before -> C |
+| --- | --- | --- | --- |
+| **0.6 m, pooled** (front, three-quarter, above-behind; both scenes) | 11 467 | **1.98 / 0.02% -> 6.30 / 1.68%** | 1.20 / 0 -> 2.40 / 0% |
+| **2 m, pooled** (front; both scenes) | 179 | **6.15 / 0% -> 7.82 / 0%** | 0.56 / 0 -> 1.12 / 0% |
+| one side, square on to the big cut face | 4355 | 1.19 / 0.09 -> **11.50 / 4.32%** | 0.11 -> 0.30% |
+| both, square on from the front (slivers) | 861 | 5.46 / 0 -> 6.62 / 0% | 0.81 -> 2.79% |
+| both, down into the V | 4399 | 1.68 / 0.09 -> 6.12 / 1.64% | 1.45 -> 3.16% |
+| one side, three-quarter | 3037 | 0.79 / 0 -> 7.94 / 3.06% | 0 -> 0 |
+| both, three-quarter | 1586 | 0.19 / 0 -> 6.43 / 3.03% | 0 -> 4.10% |
+| both, 69 degrees round and raised | 1521 | 3.29 / 0.53 -> 10.19 / 3.42% | 0.53 -> 2.89% |
+| **the worst view**: one side from the head's right (the pit at the crown) | 3324 | 3.13 / 0.75 -> **13.66 / 6.41%** | 0.09 -> 0.21% |
+| pooled, the four views from the side | 9508 | 2.30 / 0.39 -> 11.97 / 4.83% | |
+| pooled, down into the V | 7325 | 1.27 / 0.05 -> 6.05 / 1.76% | |
+
+These are round 3's column C to the digit (the returns of the merge above do not change a texel: `gain` 0 on this
+tree against round 3's `gain` 0, 0 texels differ on the four captures compared).
+
+**Also on C.**
+
+- **The wobble strip:** 0.8% of film highlight texels last a single tick at 0.6 m (17 of 2056; 4.7% new each tick),
+  4.1% at 2 m (10 of 246; 11.0% new). The brighter film has more and larger highlights (198 to 225 a tick against
+  B's 78 to 98), and they hold from tick to tick.
+- **Nothing outside an open split:** a closed head with a pellet crater and a torso chop, 0 of 120 000 texels each,
+  torch on and off; a chest chop and a shoulder pellet under an open head, 0 of 36 156 / 35 518 texels under the
+  hinge plane; every body texel outside the region sphere of every open head over 70 captures (855 479): 0 differ.
+- **The gate against the B build:** every check line the same to the character but three, all on open heads and all
+  far inside their thresholds: O's light on the still half, 141 -> 144 of 4520 texels over 0.01 (0.031 -> 0.032
+  against 0.1); L's pellet, centroids 0.51 -> 0.53 texels and 1232 -> 1235 mask texels (against 1.5; its rod cut as
+  before); M's eye landmark 3.36 -> 3.37 px (against 5). A brighter film on the open head's raw texels is what moves
+  them; no expectation is restated.
+- **The sheets** `look/10` to `13` are shot again on C (their "after"). `look/14` is the sheet he chose from, with C
+  shot on this tree and captioned as shipped; its A and B columns are round 3's captures (those builds, before the
+  returns, which change no texel).
+
+**The alternatives**, to paste into `SPLIT_SHADE.glisten` (the other numbers stay): B `gain: 2.6, pow: 40`; A
+`gain: 4, pow: 24, lumpTilt: 3.2, lumpFlat: 0.1, fineTilt: 0.3`; off `gain: 0`.
+
+| Check, on the final tree (both merges and the pick) | Result |
+| --- | --- |
+| `march-golden` | `-u` for the pick (`MARCH_BODY`, `MARCH_BODY_LIGHT`, `REFINE_BODY`: two numbers), then passes without it |
+| `compile-census` | phase ready, `uncapturedCount` 0, no device loss; march module 331523 B (83 fns: the returns' 331523, unchanged by the pick); `warmMs` 2709 on a warm cache, not a cold figure |
+| `march-hash` | no pin moved (`d7392d52…` / `76bd51aa…`, `0c71e712…` / `bf6836cd…`, `470ff0b3…` / `f618070e…`) |
+| `head-split-gate.mjs`, twice | **80 checks, 0 failed** each, identical; the depth guard 0 of the run's body texels, the largest bit-equal run at the origin's depth 0 |
+| `axe-gate.mjs` | **27 checks, 0 failed**, every check line as on the B build |
+| `cut-wound-gate.mjs` | 30 checks, 0 failed |
+| `tsc --noEmit` | the `node:crypto` error only |
+| the whole tree and the scripts' modules (`npx vitest run src/lab/sdf-zombie scripts/lib --exclude '**/cut-wound.test.ts'`) | 525 files, 7563 tests passed, 1 skipped |
+

@@ -10,9 +10,9 @@ fast-forwarded from `claude/head-explosion-effect-d6231e` at `e04577ce` and carr
 2026-10-05 nothing after that commit is pushed. The plan is to fast-forward the PR's branch to this one. A session
 cannot write into another worktree (a hook blocks it), so do that from the PR branch's own worktree.
 
-**Waiting on the owner:** his pick for the wet film under the flashlight, from `look/14-wet-variants.jpg`: OFF, A
-(the film of the build before: glints only where the light rakes), B (shipped: glints square on too, inside the
-blow-out bound) or C (B's film, bolder). The constants to paste for each are in NOTES ("round 3").
+**The wet film is settled:** shown `look/14-wet-variants.jpg`, the owner chose C on 2026-10-06 ("I think C is
+fine"), the boldest of three, and C ships (`SPLIT_SHADE.glisten`: `gain` 4.5, `pow` 28). The quieter B and the
+grazing-only A are recorded as alternatives (the dial table below; NOTES, "The owner's pick").
 
 | Document | Path |
 | --- | --- |
@@ -213,7 +213,7 @@ needs the shader check set. `HEAD_SPLIT.skull` is live through `__sdfGame.skullS
 | The wobble | `HEAD_SPLIT.wobble` | `hz` 3, `zeta` 0.3, `gainSide` 6, `gainBob` 8, `arm` 0.1, `accelClamp` 40, `jumpSpeed` 25, `max` 0.45, `minOpen` 0.03, `over` 0.45 | `gainSide` 0 and `gainBob` 0: bit-identical to no wobble |
 | The cut faces' shading gate | `SPLIT_SHADE.cutLo`, `cutHi`, `shellLo`, `shellHi`, `poreCut` | 0.0015, 0.004, 0.0015, 0.004, 0.5 | |
 | How wet a cut face is | `SPLIT_SHADE.wet` | 1 (wet all over) | 0: wet like a crater (its lip, not its floor) |
-| The wet film | `SPLIT_SHADE.glisten` | `gain` 2.6, `pow` 40, `spill` 0.3, `lamps` 0.45, `lampPow` 20, `rawLo` 0.3, `rawHi` 0.8, `lump` 0.014, `lumpTilt` 2.4, `lumpFlat` 1, `fine` 0.006, `fineTilt` 0.6, `fadeLo` 0.75, `fadeHi` 1.5, `edge` 0.01, `horizon` 0.15 | `gain` 0: the block is not written into the shader at all |
+| The wet film | `SPLIT_SHADE.glisten` | `gain` 4.5, `pow` 28 (the owner's pick, C; B is `gain` 2.6, `pow` 40; A is `gain` 4, `pow` 24, `lumpTilt` 3.2, `lumpFlat` 0.1, `fineTilt` 0.3), `spill` 0.3, `lamps` 0.45, `lampPow` 20, `rawLo` 0.3, `rawHi` 0.8, `lump` 0.014, `lumpTilt` 2.4, `lumpFlat` 1, `fine` 0.006, `fineTilt` 0.6, `fadeLo` 0.75, `fadeHi` 1.5, `edge` 0.01, `horizon` 0.15 | `gain` 0: the block is not written into the shader at all |
 | A flail hit on a split head: its share of the meter | `FLAIL_HEAD.meterScale` (`webgpu/flail-strike.ts`) | 0.3 | |
 | The axe's body cut | `AXE_CALIBRE`, `AXE_CUT.halfLen` (`webgpu/axe-strike.ts`) | depth 0.1, kerf 0.025, lip 1.1; 0.15 m | |
 | Blood on opening | `webgpu/game-axe.ts` (`deps.bleed` per face) and the leaf's `open()` | | |
@@ -236,7 +236,9 @@ If a lurch reads as a hard stop, the wobble's dials are `max` and `gainSide`.
   crown, a bone ring, layers and a dark cavity) was built and reverted in `d0d407d2` at his call: "pretty subtle",
   "I'm happy with the before". The steps are `f2a1c7f8`, `eb2f131b` and `e1e4acf2`; their sheets (`look/01` to `03`)
   are in `e1e4acf2`'s tree. To bring one back, cherry-pick it or revert the revert.
-- **The wet film** was built at his request. **His pick from `look/14-wet-variants.jpg` is pending.**
+- **The wet film** was built at his request. Shown three settings (`look/14-wet-variants.jpg`), **he chose C, the
+  boldest, on 2026-10-06**: "I think C is fine". It is past the 3% blow-out bound the builder had held B to; his pick
+  overrides that bound.
 - **The open-head frame cost:** "we can figure out how to optimize later".
 - **Told, and no objection:** chops to the upper chest, the collar and the neck's base no longer count as head chops,
   for any character (`chopOnHead`). They are body chops and kill through the collapse meter (about 7 overheads or 9
@@ -302,8 +304,8 @@ report there cost 0.5 ms on every closed body.
    riding piece 0, drawn from `view.splitDrawn` like the skull, is the cheapest structural answer.
 5. **A baked split head** has no answer yet: a detached or baked head takes the mesh face layer with no split.
 6. **The slug opening the split** (spec §2): not started.
-7. **The wet film in fast motion** is not measured. A walk's wobble does not make it sparkle (2.8% of highlight
-   texels last one tick at 0.6 m).
+7. **The wet film in fast motion** is not measured. A walk's wobble does not make it sparkle (0.8% of highlight
+   texels last one tick at 0.6 m, 4.1% at 2 m, on the shipped film).
 8. **The deferred game boot is broken** (found 2026-10-06, on `a2d61133` before any change): at
    `/sdf-game.html?renderer=deferred` no body reaches the G-buffer (surface classes 1 and 17 only, no 18, at
    `scripts/deferred-game-check.mjs`'s own stance), the router counts 9 SDF producers where that gate wants 10, and
