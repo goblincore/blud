@@ -12,7 +12,8 @@
 //           pixels (a shown / hidden pair) sit within tolerance of the sdf organ pixels (an organAmp 1 / 0 pair) in
 //           area and mean colour;
 //        C  three axe chops on another torso (the cut-cost scene): mesh folds no inside-flesh row where sdf does;
-//        H  a head-only wound on a third zombie: no organ instance for it.
+//        H  a head-only wound on a third zombie: no organ instance for it;
+//        T  the belly crater with the torch off: the mesh organ sits as dark and red in its crater as the sdf organ.
 //   Q  ?organs=sdf: the selector. The mode is 'sdf', zombies pack their 8 organ rows, a belly crater draws no organ mesh.
 //   P  ?skeleton=procedural: the mode is 'sdf' whatever the query says, and bodies pack bones and organs.
 //
@@ -20,16 +21,20 @@
 //   export LAB_VITE_PORT=5251 LAB_CDP_PORT=9251 LAB_TMP=.lab-tmp; . scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up
 //   OUT=.lab-tmp/organs-mesh-gate node scripts/organs-mesh-gate.mjs 5251 9251
 // ONLY=M,Q runs a subset of the boots. OUT defaults to .lab-tmp/organs-mesh-gate (never a tracked folder).
+// ONLY=L writes the owner's look sheets instead (no checks): OUT=docs/dev-notes/2026-10-06-organs-mesh/look.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
+import { decodePng } from "./lib/demo-presented.mjs";
+import { writePng } from "./lib/png-write.mjs";
 const VITE = Number(process.argv[2] ?? 5251);
 const CDP = Number(process.argv[3] ?? 9251);
 const OUT = process.env.OUT ?? ".lab-tmp/organs-mesh-gate";
 const ONLY = (process.env.ONLY ?? "M,Q,P").split(",");
 const W = 1280, H = 800, EYE_H = 1.62, DIST = 0.9;
 // Tolerances of S: the mesh organ against the SDF organ, on screen.
-const AREA_LO = 0.4, AREA_HI = 2.5;      // organ pixel count, mesh / sdf
-const COLOUR_MAX = 0.22;                 // distance of the mean organ colours, sRGB 0..1
+const AREA_LO = 0.6, AREA_HI = 1.5;      // organ pixel count, mesh / sdf
+const COLOUR_MAX = 0.08;                 // distance of the mean organ colours, sRGB 0..1 (measured 0.03 to 0.04)
+const ROI = { x0: 340, x1: 940, y0: 100, y1: 540 };   // the screen region the pixel checks read (about the wound)
 mkdirSync(OUT, { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const J = (v) => JSON.stringify(v);
@@ -122,6 +127,11 @@ async function look(target, dist, from) {
   await centreOn(target);
   return (await evaluate("__sdfGame.pose()")).pos;
 }
+/** Where a level shot at `target` from `dist` in front starts (the muzzle of a gun held at the target's height). */
+const levelEye = (target, dist, from) => {
+  const l = Math.hypot(from[0], from[2]) || 1;
+  return [target[0] + (from[0] / l) * dist, target[1], target[2] + (from[2] / l) * dist];
+};
 const frontOf = async (id) => { const fr = await evaluate(`__sdfGame.head.frame(${id})`); const f = qRot(fr.quat, [0, 0, 1]); return [f[0], 0, f[2]]; };
 /** The float march target, drawn under the sim lock (two reads: the second is the settled one). */
 async function readTarget() {
@@ -139,22 +149,28 @@ async function insideFlesh() {
   for (let i = 0; i < t.w * t.h; i++) { const b = t.f[i * 4 + 2]; if (b > 0.5 && b < 1.5) { marched++; evals += t.f[i * 4]; if (t.f[i * 4] > 0) texels++; } }
   return { evals: Math.round(evals), texels, marched };
 }
-/** A screenshot as RGBA bytes (decoded in the page: no PNG decoder here), and the PNG itself. */
+/** A screenshot as RGBA bytes (and, with a name, the PNG in OUT). */
 async function shot(name) {
   await evaluate("__sdfGame.setRenderLock(true)");
   await stepOne(); await stepOne();
   const r = await S.send("Page.captureScreenshot", { format: "png" });
   await evaluate("__sdfGame.setRenderLock(false)");
-  const png = r.result.data;
-  if (name) writeFileSync(`${OUT}/${name}.png`, Buffer.from(png, "base64"));
-  const b64 = await evaluate(`(async () => { const img = new Image(); img.src = "data:image/png;base64,${png}"; await img.decode(); const c = new OffscreenCanvas(img.width, img.height); const g = c.getContext("2d"); g.drawImage(img, 0, 0); const d = g.getImageData(0, 0, img.width, img.height).data; let s = ""; for (let i = 0; i < d.length; i += 32768) s += String.fromCharCode.apply(null, d.subarray(i, i + 32768)); return btoa(s); })()`);
-  return Uint8Array.from(Buffer.from(b64, "base64"));
+  const png = Buffer.from(r.result.data, "base64");
+  if (name) writeFileSync(`${OUT}/${name}.png`, png);
+  if (process.env.EYE) console.log(`  shot ${name ?? ""}: eye ${J(await evaluate("__sdfGame.pose()"))}`);
+  const d = decodePng(png);
+  if (d.ch === 4) return new Uint8Array(d.data);
+  const out = new Uint8Array(d.w * d.h * 4);
+  for (let i = 0, j = 0; i < d.data.length; i += 3, j += 4) { out[j] = d.data[i]; out[j + 1] = d.data[i + 1]; out[j + 2] = d.data[i + 2]; out[j + 3] = 255; }
+  return out;
 }
 /** The pixels that differ between two screenshots (any channel by more than `thr` of 255): count, and the mean colour of
  *  those pixels in `a` (sRGB 0..1). */
 function diffPixels(a, b, thr = 10) {
   let n = 0, r = 0, g = 0, bl = 0;
-  for (let i = 0; i < a.length; i += 4) {
+  // Inside ROI only: the HUD's frame-time readout changes from shot to shot, and the viewmodel sits below.
+  for (let y = ROI.y0; y < ROI.y1; y++) for (let x = ROI.x0; x < ROI.x1; x++) {
+    const i = (y * W + x) * 4;
     if (Math.abs(a[i] - b[i]) > thr || Math.abs(a[i + 1] - b[i + 1]) > thr || Math.abs(a[i + 2] - b[i + 2]) > thr) { n++; r += a[i]; g += a[i + 1]; bl += a[i + 2]; }
   }
   return { n, mean: n ? [r / n / 255, g / n / 255, bl / n / 255] : [0, 0, 0] };
@@ -162,16 +178,25 @@ function diffPixels(a, b, thr = 10) {
 const rowsOf = async (id) => (await evaluate("__sdfGame.organs()")).packed.find((p) => p.id === id)?.rows;
 const r3 = (v) => v.map((x) => +x.toFixed(3));
 
-/** A slug crater in zombie `id`'s belly, fired from the eye at its first organ segment. Returns the segment bound. */
-async function bellySlug(id) {
+/** A level slug at `t` on zombie `id`, fired from `dist` in front of it: the crater faces forward, as a hit from a gun
+ *  at the hip does, whatever height the eye is at. */
+async function levelSlug(id, t, dist) {
+  const eye = levelEye(t, dist, await frontOf(id));
+  const d = [t[0] - eye[0], 0, t[2] - eye[2]], l = Math.hypot(...d);
+  return evaluate(`__sdfGame.stampWoundAt(${eye[0]}, ${eye[1]}, ${eye[2]}, ${d[0] / l}, 0, ${d[2] / l}, "slug", ${id})`);
+}
+/** A slug crater in zombie `id`'s belly, at its largest organ segment (the gut coil on the pelvis frame), seen from the
+ *  player's standing eye `dist` away (the feet are held on the floor: a belly wound is always seen from above). Returns
+ *  the segment bound, with the first frames' times. */
+async function bellySlug(id, dist = 0.7) {
   const segs = await evaluate(`__sdfGame.organSegments(${id})`);
   if (!segs.length) die(`zombie ${id} has no organ segment`);
-  // The largest segment (the gut coil on the pelvis frame).
   const seg = segs.sort((a, b) => b.radius - a.radius)[0];
-  const eye = await look(seg.centre, DIST, await frontOf(id));
-  const d = [seg.centre[0] - eye[0], seg.centre[1] - eye[1], seg.centre[2] - eye[2]], l = Math.hypot(...d);
-  const hit = await evaluate(`__sdfGame.stampWoundAt(${eye[0]}, ${eye[1]}, ${eye[2]}, ${d[0] / l}, ${d[1] / l}, ${d[2] / l}, "slug", ${id})`);
-  if (!hit) die(`the slug missed zombie ${id}`);
+  await look(seg.centre, dist, await frontOf(id));
+  if (!(await levelSlug(id, seg.centre, dist))) die(`the slug missed zombie ${id}`);
+  // The first frames with the wound: wall ms of the sim step and of a fenced draw, then a settled draw. On a fresh
+  // boot the first one builds the pipelines the wound brings in (bone mesh; organ mesh in 'mesh' mode).
+  seg.firstFrames = (await evaluate(`(async () => { const t = performance.now(); __sdfGame.step(1, 1 / 60); const a = performance.now() - t; const b = await __sdfGame.timeDraws(1); const c = await __sdfGame.timeDraws(1); const d = await __sdfGame.timeDraws(8); return [a, b, c, d]; })()`)).map((x) => +x.toFixed(1));
   await stepN(2);
   return seg;
 }
@@ -202,28 +227,26 @@ async function bootM() {
   check("U4 setOrgans('mesh') drops them again", (await rowsOf(zu.id)) === 0, `rows ${await rowsOf(zu.id)}`);
 
   // ——— S: a slug crater in the belly ———
+  // Shots first, counters after: a debug-mode read leaves its picture in the frame for a few steps.
   const seg = await bellySlug(zu.id);
   const sMesh = await evaluate("__sdfGame.organs()");
   const meshOwners = sMesh.drawnBy.filter((id) => id === zu.id).length;
   check("S1 mesh: the belly crater draws the wounded zombie's organ instances, and only its", meshOwners >= 1 && sMesh.drawnBy.every((id) => id === zu.id), `drawnBy ${J(sMesh.drawnBy)}`);
-  const fMesh = await insideFlesh();
-  check("S2 mesh: the march folds no inside-flesh row (debug mode 5)", fMesh.evals === 0 && fMesh.marched > 1000, `evals ${fMesh.evals} over ${fMesh.texels} texels; ${fMesh.marched} marched`);
-  const tMesh = await readTarget();
   // Organ pixels on screen, mesh: shown against hidden.
   const meshOn = await shot("S-mesh");
   await evaluate("__sdfGame.meshSkeletonShow({ organs: false })");
   const meshOff = await shot("S-mesh-organs-hidden");
   await evaluate("__sdfGame.meshSkeletonShow({ organs: true })");
   const pxMesh = diffPixels(meshOn, meshOff);
+  const tMesh = await readTarget();
+  const fMesh = await insideFlesh();
+  await stepN(4);
+  check("S2 mesh: the march folds no inside-flesh row (debug mode 5)", fMesh.evals === 0 && fMesh.marched > 1000, `evals ${fMesh.evals} over ${fMesh.texels} texels; ${fMesh.marched} marched`);
   // The same frame with SDF organs.
   await evaluate(`__sdfGame.setOrgans("sdf")`);
-  await stepN(2);
+  await stepN(4);
   const sSdf = await evaluate("__sdfGame.organs()");
   check("S3 sdf: no organ mesh is drawn", sSdf.drawn === 0, `drawn ${sSdf.drawn}`);
-  const fSdf = await insideFlesh();
-  check("S4 sdf (positive control): the march folds inside-flesh rows in the crater", fSdf.evals > 10000, `evals ${fSdf.evals} over ${fSdf.texels} texels`);
-  const tSdf = await readTarget();
-  check("S5 the march target differs between the modes here (sdf organs are in the field, mesh organs are not)", fnv(tMesh.f) !== fnv(tSdf.f), `mesh ${fnv(tMesh.f)} sdf ${fnv(tSdf.f)}`);
   // Organ pixels on screen, sdf: organAmp 1 against 0 (the organ branch is mix(albedo, organColor, organAmp)).
   const sdfOn = await shot("S-sdf");
   await evaluate("__sdfGame.setWoundTuning({ organAmp: 0 })");
@@ -232,6 +255,11 @@ async function bootM() {
   await evaluate("__sdfGame.setWoundTuning({ organAmp: 1 })");
   await stepN(2);
   const pxSdf = diffPixels(sdfOn, sdfOff);
+  const tSdf = await readTarget();
+  const fSdf = await insideFlesh();
+  await stepN(4);
+  check("S4 sdf (positive control): the march folds inside-flesh rows in the crater", fSdf.evals > 10000, `evals ${fSdf.evals} over ${fSdf.texels} texels`);
+  check("S5 the march target differs between the modes here (sdf organs are in the field, mesh organs are not)", fnv(tMesh.f) !== fnv(tSdf.f), `mesh ${fnv(tMesh.f)} sdf ${fnv(tSdf.f)}`);
   check("S6 sdf (positive control): organ pixels are on screen", pxSdf.n > 300, `${pxSdf.n} px, mean ${J(r3(pxSdf.mean))}`);
   check("S7 mesh: organ pixels are on screen", pxMesh.n > 300, `${pxMesh.n} px, mean ${J(r3(pxMesh.mean))}`);
   const ratio = pxMesh.n / Math.max(pxSdf.n, 1);
@@ -239,7 +267,8 @@ async function bootM() {
   const cd = Math.hypot(pxMesh.mean[0] - pxSdf.mean[0], pxMesh.mean[1] - pxSdf.mean[1], pxMesh.mean[2] - pxSdf.mean[2]);
   check(`S9 the mesh organ's mean colour is within ${COLOUR_MAX} of the sdf organ's`, cd <= COLOUR_MAX, `distance ${cd.toFixed(3)}`);
   await evaluate(`__sdfGame.setOrgans("mesh")`);
-  await stepN(2);
+  await stepN(4);
+  console.log(`  first frames after the first belly slug (step, draw, draw, 8 draws; ms): ${J(seg.firstFrames)}`);
   console.log(J({ scenario: "S", seg: { segment: seg.segment, centre: r3(seg.centre), radius: +seg.radius.toFixed(3) }, mesh: { px: pxMesh.n, mean: r3(pxMesh.mean), inside: fMesh }, sdf: { px: pxSdf.n, mean: r3(pxSdf.mean), inside: fSdf } }));
 
   // ——— C: three chops on another torso (the cut-cost scene) ———
@@ -248,14 +277,16 @@ async function bootM() {
   for (const s of ["H", "R", "L"]) cuts += await evaluate(`__sdfGame.axeChop(${zc.id}, "${s}", "torso")`);
   await stepN(2);
   check("C1 the three chops landed", cuts >= 3, `${cuts} cuts`);
-  const cMesh = await insideFlesh();
-  check("C2 mesh: three torso chops fold no inside-flesh row", cMesh.evals === 0, `evals ${cMesh.evals}`);
   await shot("C-mesh");
+  const cMesh = await insideFlesh();
+  await stepN(4);
+  check("C2 mesh: three torso chops fold no inside-flesh row", cMesh.evals === 0, `evals ${cMesh.evals}`);
   await evaluate(`__sdfGame.setOrgans("sdf")`);
-  await stepN(2);
-  const cSdf = await insideFlesh();
-  check("C3 sdf (positive control): the same frame folds inside-flesh rows", cSdf.evals > 10000, `evals ${cSdf.evals} over ${cSdf.texels} texels`);
+  await stepN(4);
   await shot("C-sdf");
+  const cSdf = await insideFlesh();
+  await stepN(4);
+  check("C3 sdf (positive control): the same frame folds inside-flesh rows", cSdf.evals > 10000, `evals ${cSdf.evals} over ${cSdf.texels} texels`);
   await evaluate(`__sdfGame.setOrgans("mesh")`);
   await stepN(2);
   console.log(J({ scenario: "C", mesh: cMesh, sdf: cSdf }));
@@ -269,6 +300,29 @@ async function bootM() {
   const oH = await evaluate("__sdfGame.organs()");
   const wounds = (await evaluate(`__sdfGame.actorWounds(${zh.id})`)).length;
   check("H1 a head-only wound draws no organ instance for that zombie", !!hit && wounds >= 1 && !oH.drawnBy.includes(zh.id), `hit ${!!hit}, wounds ${wounds}, drawnBy ${J(oH.drawnBy)}`);
+
+  // ——— T: the belly crater again, torch off (the cavity's occlusion: the room's lights alone) ———
+  await look(seg.centre, 0.7, await frontOf(zu.id));
+  await torch(false);
+  const tOn = await shot("T-mesh-torch-off");
+  await evaluate("__sdfGame.meshSkeletonShow({ organs: false })");
+  const tOff = await shot();
+  await evaluate("__sdfGame.meshSkeletonShow({ organs: true })");
+  const pxMeshT = diffPixels(tOn, tOff);
+  await evaluate(`__sdfGame.setOrgans("sdf")`);
+  await stepN(4);
+  const tSdfOn = await shot("T-sdf-torch-off");
+  await evaluate("__sdfGame.setWoundTuning({ organAmp: 0 })");
+  await stepN(2);
+  const pxSdfT = diffPixels(tSdfOn, await shot());
+  await evaluate("__sdfGame.setWoundTuning({ organAmp: 1 })");
+  await evaluate(`__sdfGame.setOrgans("mesh")`);
+  await stepN(4);
+  const cdT = Math.hypot(pxMeshT.mean[0] - pxSdfT.mean[0], pxMeshT.mean[1] - pxSdfT.mean[1], pxMeshT.mean[2] - pxSdfT.mean[2]);
+  check("T1 torch off: both organs are on screen", pxMeshT.n > 300 && pxSdfT.n > 300, `mesh ${pxMeshT.n} px ${J(r3(pxMeshT.mean))}, sdf ${pxSdfT.n} px ${J(r3(pxSdfT.mean))}`);
+  check(`T2 torch off: the mesh organ's mean colour is within ${COLOUR_MAX} of the sdf organ's`, cdT <= COLOUR_MAX, `distance ${cdT.toFixed(3)}`);
+  const lum = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  check("T3 the mesh organ is darker by the room's lights than under the torch, as the sdf organ is", lum(pxMeshT.mean) < 0.75 * lum(pxMesh.mean) && lum(pxSdfT.mean) < 0.75 * lum(pxSdf.mean), `mesh ${lum(pxMeshT.mean).toFixed(3)} / ${lum(pxMesh.mean).toFixed(3)}, sdf ${lum(pxSdfT.mean).toFixed(3)} / ${lum(pxSdf.mean).toFixed(3)}`);
   check("M  no console error", S.errors.length === 0, J(S.errors.slice(0, 3)));
   closeSession();
 }
@@ -280,7 +334,8 @@ async function bootQ() {
   check("Q1 ?organs=sdf boots the sdf mode", o.mode === "sdf", `mode ${o.mode}`);
   const zRows = pool.map((z) => o.packed.find((p) => p.id === z.id)?.rows);
   check("Q2 every zombie packs its 8 organ rows and no bone row", zRows.every((r) => r === 8), `rows ${J(zRows)}`);
-  await bellySlug(pool[0].id);
+  const segQ = await bellySlug(pool[0].id);
+  console.log(`  first frames after the first belly slug (step, draw, draw, 8 draws; ms): ${J(segQ.firstFrames)}`);
   const o2 = await evaluate("__sdfGame.organs()");
   check("Q3 a belly crater draws no organ mesh", o2.drawn === 0, `drawn ${o2.drawn}`);
   const f = await insideFlesh();
@@ -301,8 +356,104 @@ async function bootP() {
   closeSession();
 }
 
+/** THE OWNER'S LOOK SHEET (ONLY=L; not part of the gate's checks). Per scene one sheet: columns = SDF organs (today),
+ *  then the mesh in each ORGAN_LOOKS candidate (match, veined, bloody); rows = torch off, torch on. Every tile is the
+ *  same frame, the mode and look flipped in page. CROP screen px square about the screen centre (the wound). */
+const CROP = Number(process.env.CROP ?? 360);
+const LOOKS = (process.env.LOOKS ?? "match,veined,bloody,pale").split(",");
+/** LOOK_SET='{"name":{"cfg":[..],"gloss":[..]}}' tries looks that are not in ORGAN_LOOKS yet (tuning). */
+const LOOK_SET = Object.fromEntries(Object.entries(JSON.parse(process.env.LOOK_SET ?? "{}")).map(([k, v]) => [k, J(v)]));
+function sheet(name, rows) {
+  const cols = rows[0].length, w = cols * CROP, h = rows.length * CROP, out = new Uint8Array(w * h * 4);
+  const x0 = (W - CROP) >> 1, y0 = (H - CROP) >> 1;
+  rows.forEach((row, ry) => row.forEach((img, cx) => {
+    for (let y = 0; y < CROP; y++) {
+      const src = ((y0 + y) * W + x0) * 4, dst = ((ry * CROP + y) * w + cx * CROP) * 4;
+      out.set(img.subarray(src, src + CROP * 4), dst);
+    }
+    // A 2 px dark seam on the tile's left and top edges.
+    for (let y = 0; y < CROP; y++) for (let k = 0; k < 2; k++) { const d = ((ry * CROP + y) * w + cx * CROP + k) * 4; out[d] = out[d + 1] = out[d + 2] = 0; out[d + 3] = 255; }
+    for (let x = 0; x < CROP; x++) for (let k = 0; k < 2; k++) { const d = ((ry * CROP + k) * w + cx * CROP + x) * 4; out[d] = out[d + 1] = out[d + 2] = 0; out[d + 3] = 255; }
+  }));
+  writeFileSync(`${OUT}/${name}.png`, writePng(w, h, out));
+  console.log(`  sheet ${OUT}/${name}.png (${cols} x ${rows.length}: sdf | ${LOOKS.join(" | ")}; torch off / on)`);
+}
+/** The torch. Off is at once; on ramps with the light clock, which the boot froze: thaw it until the torch is up. */
+async function torch(on) {
+  if (!on) { await evaluate("__sdfGame.setFlashlight(false)"); await stepN(4); return; }
+  await evaluate("__sdfGame.setLightClockFrozen(false)");
+  await evaluate("__sdfGame.setFlashlight(true)");
+  for (let i = 0; i < 240 && !((await evaluate("__sdfGame.lights()")).flashlight > 0.99); i++) await stepOne();
+  await evaluate("__sdfGame.setLightClockFrozen(true)");
+  await stepN(4);
+  const level = (await evaluate("__sdfGame.lights()")).flashlight;
+  if (!(level > 0.99)) die(`the torch did not come on: level ${level}`);
+}
+/** One sheet of the wound at `target` on zombie `id`, from the standing eye `dist` away. */
+async function lookTiles(name, id, target, dist) {
+  await look(target, dist, await frontOf(id));
+  const rows = [];
+  for (const lit of [false, true]) {
+    await torch(lit);
+    await evaluate(`__sdfGame.setOrgans("sdf")`);
+    await stepN(3);
+    const row = [await shot()];
+    // The SDF organ's pixels (organAmp 1 against 0) and each mesh look's (shown against hidden): count and mean colour.
+    await evaluate("__sdfGame.setWoundTuning({ organAmp: 0 })"); await stepN(2);
+    const px = { sdf: diffPixels(row[0], await shot()) };
+    await evaluate("__sdfGame.setWoundTuning({ organAmp: 1 })"); await stepN(2);
+    await evaluate(`__sdfGame.setOrgans("mesh")`);
+    await evaluate("__sdfGame.meshSkeletonShow({ organs: false })"); await stepN(3);
+    const hidden = await shot();
+    await evaluate("__sdfGame.meshSkeletonShow({ organs: true })");
+    for (const l of LOOKS) { await evaluate(`__sdfGame.setOrganLook(${LOOK_SET[l] ?? J(l)})`); await stepN(3); row.push(await shot()); px[l] = diffPixels(row[row.length - 1], hidden); }
+    console.log(`  ${name} torch ${lit ? "on" : "off"}: ` + Object.entries(px).map(([k, v]) => `${k} ${v.n} px ${J(r3(v.mean))}`).join("; "));
+    rows.push(row);
+  }
+  await evaluate(`__sdfGame.setOrganLook("${process.env.LOOK_DEFAULT ?? "match"}")`);
+  await stepN(3);
+  sheet(name, rows);
+  console.log(J({ sheet: name, organs: await evaluate("__sdfGame.organs()").then((o) => ({ drawnBy: o.drawnBy, tint: o.tint })) }));
+}
+async function bootL() {
+  console.log("\n== L: the look sheets ==");
+  await boot("");
+  const [za, zb, zc] = pool;
+  // 1. One slug in the belly, at 0.7 m and at 0.5 m.
+  const segA = await bellySlug(za.id);
+  await lookTiles("01-belly-slug-0.7m", za.id, segA.centre, 0.7);
+  if (process.env.SCENES === "1") { closeSession(); return; }
+  await lookTiles("02-belly-slug-0.5m", za.id, segA.centre, 0.5);
+  // 2. Gutted: two slugs, the gut coil and the loop above it.
+  const segB = await bellySlug(zb.id);
+  await levelSlug(zb.id, [segB.centre[0], segB.centre[1] + 0.10, segB.centre[2]], 0.7);
+  await stepN(2);
+  await lookTiles("03-gutted-two-slugs-0.6m", zb.id, [segB.centre[0], segB.centre[1] + 0.05, segB.centre[2]], 0.6);
+  // 3. The cut-cost scene: three torso chops (they open the chest, above the organs), then a rod cut across the belly.
+  const tc = await evaluate(`__sdfGame.actorLimbCenter(${zc.id}, "torso")`);
+  await look(tc, DIST, await frontOf(zc.id));
+  for (const s of ["H", "R", "L"]) await evaluate(`__sdfGame.axeChop(${zc.id}, "${s}", "torso")`);
+  await stepN(2);
+  const segC = (await evaluate(`__sdfGame.organSegments(${zc.id})`)).sort((a, b) => b.radius - a.radius)[0];
+  await lookTiles("04-three-chops-0.9m", zc.id, tc, DIST);
+  {
+    const eye = await look(segC.centre, 0.7, await frontOf(zc.id));
+    const v = [segC.centre[0] - eye[0], 0, segC.centre[2] - eye[2]], l = Math.hypot(...v);
+    const view = v.map((x) => x / l), right = [view[2], 0, -view[0]];
+    const a = [segC.centre[0] - right[0] * 0.11, segC.centre[1] + 0.02, segC.centre[2] - right[2] * 0.11];
+    const b = [segC.centre[0] + right[0] * 0.11, segC.centre[1] - 0.02, segC.centre[2] + right[2] * 0.11];
+    const n = await evaluate(`__sdfGame.cut(${zc.id}, ${J(a)}, ${J(b)}, ${J(view)})`);
+    console.log(`  belly cut: ${n} wound(s)`);
+    await stepN(2);
+  }
+  await lookTiles("05-chops-and-belly-cut-0.6m", zc.id, segC.centre, 0.6);
+  console.log(`  console errors: ${J(S.errors.slice(0, 3))}`);
+  closeSession();
+}
+
 if (ONLY.includes("M")) await bootM();
 if (ONLY.includes("Q")) await bootQ();
 if (ONLY.includes("P")) await bootP();
+if (ONLY.includes("L")) await bootL();
 console.log(`\n${checks} checks, ${failed} failed. Sheets in ${OUT}`);
 process.exit(failed ? 1 : 0);

@@ -79,7 +79,7 @@ import {
 } from './mesh-eyes';
 import { HEAD_SPLIT, skullPieces, skullSplitOf, type SkullFollow, type SkullSplit, type SplitWarp } from '../../head-split';
 import {
-  MESH_ORGAN_SURFACE_WGSL, MESH_ORGAN_WET_WGSL, ORGAN_LOOKS, ORGAN_LOOK_DEFAULT, type OrganLook, type OrganLookName,
+  MESH_ORGAN_SHADE_WGSL, MESH_ORGAN_SURFACE_WGSL, MESH_ORGAN_WET_WGSL, ORGAN_LOOKS, ORGAN_LOOK_DEFAULT, type OrganLook, type OrganLookName,
 } from './mesh-organ';
 import { organReached, segmentBoundSphere, type ReachSphere } from './organ-reach';
 import {
@@ -153,8 +153,8 @@ export interface SegmentMeshRenderer {
     reach?: (owner: object) => ReadonlyArray<ReachSphere> | null,
   ): void;
   /** The organ material's look, live (mesh-organ.ts): `tint` = (organColor, organAmp), the march's own two values,
-   *  copied from a body view by the game; `cfg` and `gloss` as OrganLook. */
-  readonly organLook: { tint: { value: THREE.Vector4 }; cfg: { value: THREE.Vector4 }; gloss: { value: THREE.Vector4 } };
+   *  copied from a body view by the game; `cfg`, `gloss` and `occ` as OrganLook. */
+  readonly organLook: { tint: { value: THREE.Vector4 }; cfg: { value: THREE.Vector4 }; gloss: { value: THREE.Vector4 }; occ: { value: THREE.Vector4 } };
   /** Set the organ look: one of ORGAN_LOOKS by name, or its numbers. Returns the values in force. */
   setOrganLook(look?: OrganLookName | Partial<OrganLook>): OrganLook;
   /** The split skull's look, live: `follow` set by hand replaces HEAD_SPLIT.skull.follow (null = that table; a
@@ -262,14 +262,15 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     mul(mul(u.look.z, gloss), MESH_SPEC_SCALE),
     mul(mul(u.look.w, gloss), MESH_FRES_SCALE),
   );
-  const lit = (surface: unknown, look: unknown) => vec4(shade({
+  const lightArgs = (surface: unknown, look: unknown) => ({
     p: positionWorld, n: normalWorld, camPos: cameraPosition,
     deepColor: u.deepColor, ambient: u.ambient, look: look as never,
     lightDir: u.lightDir, keyColor: u.keyColor, lightCfg: u.lightCfg,
     spotPos: u.spotPos, spotAxis: u.spotAxis, spotCfg: u.spotCfg, spotCfg2: u.spotCfg2, spotColor: u.spotColor,
     surfaceIn: surface as never,
     picks: picksAttr, lights: listNode, listOn: u.lightListCfg.x, fill: fillAttr,
-  }) as never, 1.0);
+  });
+  const lit = (surface: unknown, look: unknown) => vec4(shade(lightArgs(surface, look)) as never, 1.0);
   const material = new MeshBasicNodeMaterial();
   material.colorNode = lit(surf, meshLook);
   // Eye shader chain: hash -> noise -> sclera vessels -> surface -> emission.
@@ -294,12 +295,15 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   eyeMaterial.depthWrite = true;
   // THE ORGAN MATERIAL (organs as mesh; mesh-organ.ts). Its surface and gloss are their own WGSL on the SAME hash and
   // noise nodes (a second copy would declare them twice in one pipeline, as the eye chain notes); the light compose is
-  // `lit`, the bone's. No meshFeature, no split: an organ is one closed wet surface in its segment's frame.
+  // the bone's with the cavity's occlusion on every light but the beam (meshOrganShade, built on the same body-lights
+  // and boneShade nodes). No meshFeature, no split: an organ is one closed wet surface in its segment's frame.
   const organLook = {
     tint: uniform(new THREE.Vector4(0.72, 0.32, 0.30, 1)),
     cfg: uniform(new THREE.Vector4(...ORGAN_LOOKS[ORGAN_LOOK_DEFAULT].cfg)),
     gloss: uniform(new THREE.Vector4(...ORGAN_LOOKS[ORGAN_LOOK_DEFAULT].gloss)),
+    occ: uniform(new THREE.Vector4(...ORGAN_LOOKS[ORGAN_LOOK_DEFAULT].occ)),
   };
+  const organShade = wgslFn(MESH_ORGAN_SHADE_WGSL, fns.slice());
   const organSurfaceFn = wgslFn(MESH_ORGAN_SURFACE_WGSL, fns.slice(0, 2));
   const organWetFn = wgslFn(MESH_ORGAN_WET_WGSL, fns.slice(0, 2));
   const organSurf = organSurfaceFn({
@@ -308,11 +312,14 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   });
   const organGloss = organWetFn({ pLocal: positionGeometry, lo: organLook.gloss.z }) as never;
   const organMaterial = new MeshBasicNodeMaterial();
-  organMaterial.colorNode = lit(organSurf, vec4(
-    u.look.x, u.look.y,
-    mul(mul(u.look.z, organGloss), organLook.gloss.x),
-    mul(mul(u.look.w, organGloss), organLook.gloss.y),
-  ));
+  organMaterial.colorNode = vec4(organShade({
+    ...lightArgs(organSurf, vec4(
+      u.look.x, u.look.y,
+      mul(mul(u.look.z, organGloss), organLook.gloss.x),
+      mul(mul(u.look.w, organGloss), organLook.gloss.y),
+    )),
+    occ: organLook.occ,
+  }) as never, 1.0);
   organMaterial.depthTest = true;
   organMaterial.depthWrite = true;
   organMaterial.side = THREE.FrontSide;
@@ -754,11 +761,12 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     organLook,
     setOrganLook(look) {
       const set = typeof look === 'string' ? ORGAN_LOOKS[look] : look;
-      const cfg = set?.cfg, gloss = set?.gloss;
+      const cfg = set?.cfg, gloss = set?.gloss, occ = set?.occ;
       if (cfg) organLook.cfg.value.set(cfg[0], cfg[1], cfg[2], cfg[3]);
       if (gloss) organLook.gloss.value.set(gloss[0], gloss[1], gloss[2], gloss[3]);
-      const c = organLook.cfg.value, g = organLook.gloss.value;
-      return { cfg: [c.x, c.y, c.z, c.w], gloss: [g.x, g.y, g.z, g.w] };
+      if (occ) organLook.occ.value.set(occ[0], occ[1], occ[2], occ[3]);
+      const c = organLook.cfg.value, g = organLook.gloss.value, o = organLook.occ.value;
+      return { cfg: [c.x, c.y, c.z, c.w], gloss: [g.x, g.y, g.z, g.w], occ: [o.x, o.y, o.z, o.w] };
     },
     show,
     get drawn() { return drawn; },

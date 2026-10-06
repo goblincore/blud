@@ -122,7 +122,8 @@ describe('__sdfGame.setOrgans / organs (organs as mesh, 2026-10-06)', () => {
     expect(o.drawn).toBe(0);
     expect(o.packed).toEqual([{ id: 1, rows: 0 }, { id: 2, rows: 0 }, { id: 3, rows: 8 }]);
     expect(o.tint).toEqual([0.72, 0.32, 0.30, 1].map(v => expect.closeTo(v, 6)));
-    expect(seams.setOrganLook('veined')).toEqual(o.look && seams.organs().look);
+    expect(seams.setOrganLook('veined')).toEqual(seams.organs().look);
+    expect(seams.organs().look).not.toEqual(o.look);
     renderer.dispose(); cache.dispose();
   });
   it('without the mesh skeleton the mode is fixed', () => {
