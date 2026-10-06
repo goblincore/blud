@@ -1,0 +1,239 @@
+{
+  "runs": [
+    {
+      "skull": "sculpt",
+      "boot": {
+        "ms": 125474,
+        "bootBeforeWarmMs": 464,
+        "flipped": 36,
+        "flippedNames": [
+          "Mesh:?",
+          "Mesh:?",
+          "Group:shell-eject-0",
+          "Group:shell-load-0",
+          "Group:shell-eject-1",
+          "Group:shell-load-1",
+          "Group:muzzle-flash",
+          "Mesh:?",
+          "Mesh:?",
+          "Group:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Group:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?"
+        ],
+        "passes": 13,
+        "computes": 0,
+        "phases": {
+          "flip": 0.3999999761581421,
+          "crowdBins": 0,
+          "goo": 530.1000000238419,
+          "asyncFirst": 119510.09999990463,
+          "gibVariant": 0,
+          "drawOnce": 4051,
+          "precompile": 1381.8000000715256,
+          "backgroundStart": {
+            "gib": 125475
+          },
+          "backgroundDone": {}
+        }
+      },
+      "diagnostic": {
+        "requestedMode": "mesh",
+        "skull": "sculpt",
+        "activeMode": "mesh",
+        "volume": null
+      },
+      "actor": {
+        "id": 1,
+        "room": 1,
+        "pos": [
+          -4.8,
+          0,
+          -4.8
+        ],
+        "yaw": 0
+      },
+      "wound": [
+        -4.8,
+        1.1995306286658396,
+        -4.669844562513903
+      ],
+      "hit": {
+        "actor": 1,
+        "point": [
+          -4.8,
+          1.7957340520533305,
+          -4.655765092740907
+        ],
+        "ejected": 0,
+        "stamped": true,
+        "headCenter": [
+          -4.8,
+          1.762636942476311,
+          -4.931771897819094
+        ],
+        "headEdge": [
+          -4.712,
+          1.762636942476311,
+          -4.931771897819094
+        ]
+      },
+      "fracture": {
+        "missing": 0,
+        "pieces": []
+      }
+    },
+    {
+      "skull": "anatomical",
+      "boot": {
+        "ms": 7352,
+        "bootBeforeWarmMs": 357,
+        "flipped": 36,
+        "flippedNames": [
+          "Mesh:?",
+          "Mesh:?",
+          "Group:shell-eject-0",
+          "Group:shell-load-0",
+          "Group:shell-eject-1",
+          "Group:shell-load-1",
+          "Group:muzzle-flash",
+          "Mesh:?",
+          "Mesh:?",
+          "Group:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Group:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?"
+        ],
+        "passes": 13,
+        "computes": 0,
+        "phases": {
+          "flip": 0.20000004768371582,
+          "crowdBins": 0,
+          "goo": 396.1999999284744,
+          "asyncFirst": 2684.3000000715256,
+          "gibVariant": 0,
+          "drawOnce": 3954.5,
+          "precompile": 316.39999997615814,
+          "backgroundStart": {
+            "gib": 7352
+          },
+          "backgroundDone": {}
+        }
+      },
+      "diagnostic": {
+        "requestedMode": "mesh",
+        "skull": "anatomical",
+        "activeMode": "mesh",
+        "volume": null
+      },
+      "actor": {
+        "id": 1,
+        "room": 1,
+        "pos": [
+          -4.8,
+          0,
+          -4.8
+        ],
+        "yaw": 0
+      },
+      "wound": [
+        -4.8,
+        1.1995306286658396,
+        -4.669844562513903
+      ],
+      "hit": {
+        "actor": 1,
+        "point": [
+          -4.8,
+          1.7957340520533305,
+          -4.655765092740907
+        ],
+        "ejected": 2,
+        "stamped": true,
+        "headCenter": [
+          -4.8,
+          1.762636942476311,
+          -4.931771897819094
+        ],
+        "headEdge": [
+          -4.712,
+          1.762636942476311,
+          -4.931771897819094
+        ]
+      },
+      "fracture": {
+        "missing": 1,
+        "pieces": [
+          "frontal"
+        ]
+      },
+      "exploded": 13,
+      "afterExplosion": {
+        "missing": 16383,
+        "pieces": [
+          "frontal",
+          "parietal-left",
+          "parietal-right",
+          "occipital",
+          "temporal-left",
+          "temporal-right",
+          "zygomatic-left",
+          "zygomatic-right",
+          "maxilla-left",
+          "maxilla-right",
+          "upper-teeth",
+          "mandible",
+          "cranial-base",
+          "nasal-core"
+        ]
+      }
+    }
+  ],
+  "errors": []
+}

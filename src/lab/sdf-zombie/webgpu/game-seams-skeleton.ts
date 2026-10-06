@@ -56,12 +56,18 @@ export function createSkeletonSeams(ctx: GameContext) {
       return { listOn: r.uniforms.lightListCfg.value.x, instances: r.ownerLights(a), fill: r.ownerFill(a), body: a.view.uniforms.bodyLights.value.toArray() };
     },
     meshEyeState: (bodyId?: number) => { const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId); return a && ctx.render.segMeshRenderer ? ctx.render.segMeshRenderer.eyeState(a) : null; },
+    skullState: (bodyId?: number) => { const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q=>q.id===bodyId); return a && ctx.render.segMeshRenderer ? ctx.render.segMeshRenderer.skullState(a) : null; },
+    explodeMeshSkull: (bodyId?: number) => {
+      const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q=>q.id===bodyId);
+      return a && ctx.render.segMeshRenderer ? ctx.render.segMeshRenderer.explodeSkull(a,ctx.render.skeletonSources.get(a)?.sources ?? [],[0,1,0]) : 0;
+    },
     /** Cold-start task 1: how many per-character body builds the memo actually
      *  ran (vs served from cache) and their cumulative CPU time. */
     bodyBuild: () => ({ ...bodyBuildCacheStats() }),
     /** Synchronous active-path proof for capture harnesses. */
     skeletonDiagnostics: () => ({
       requestedMode: ctx.render.skeletonMode,
+      skull: ctx.render.segMeshCache?.skullKit ? 'anatomical' : 'sculpt',
       activeMode: ctx.render.skeletonMode === 'volume'
         ? (ctx.render.skeletonVolumes.size > 0 ? 'volume' : 'procedural')
         : ctx.render.skeletonMode === 'mesh'

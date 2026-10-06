@@ -4,11 +4,11 @@
 // physics as the SDF chunks: a gib-chunks `Chunk` built with makeChunk, stepped with stepChunk against
 // chunkCollidersAt in the chunk loop (game-main, next to the SDF chunk step), and posed from it every frame —
 // position, rotation and the landing squash (squashFactors, world axes after the rotation, the chunkPoint
-// transform). The only user is the head damage's modelled brain (game-brain-gib.ts).
+// transform). Used by the modelled brain and anatomical skull fragments.
 //
-// The list lives on ctx.gibs.meshGibs. At most MESH_GIB_CAP are live; the oldest is taken out of the scene
-// when a new one would exceed it. rebuildCast clears them all. The meshes are clones sharing their owner's
-// geometry and material, so removing one frees nothing and disposes nothing.
+// The list lives on ctx.gibs.meshGibs, with separate bounded pools for skull plates and other meshes.
+// rebuildCast clears them all. Brain meshes share their owner's geometry/material; skull fragments own
+// their geometry (including light rows) and dispose it on removal, while retaining the shared material.
 import * as THREE from 'three/webgpu';
 import type { GameContext } from './game-context';
 import type { MeshGibOpts } from './game-state-boot';
@@ -18,6 +18,8 @@ import { chunkSettled, makeChunk, squashFactors, stepChunk } from '../gib-chunks
 import { chunkCollidersAt } from './game-world-leaves';
 
 export const MESH_GIB_CAP = 8;
+/** A complete skull has fourteen plates; keep its pool separate from brains. */
+export const SKULL_GIB_CAP = 32;
 
 const _m = new THREE.Matrix4();
 const _s = new THREE.Matrix4();
@@ -38,6 +40,10 @@ function pose(g: MeshGib): void {
 function remove(ctx: GameContext, g: MeshGib): void {
   ctx.boot.deferredApi?.router.unregister(g.object);
   g.object.removeFromParent();
+  if(g.tag==='skull')g.object.traverse(o=> {
+    const mesh=o as THREE.Mesh;
+    if(mesh.isMesh && mesh.geometry.userData.ownedSkullDebris)mesh.geometry.dispose();
+  });
 }
 
 /** ctx.boot.spawnMeshGib: add `object` to the scene riding a new chunk. */
@@ -54,7 +60,12 @@ export function spawnMeshGib(
   const g: MeshGib = { state, object, tag: opts?.tag ?? 'mesh' };
   pose(g);
   ctx.gibs.meshGibs.push(g);
-  while (ctx.gibs.meshGibs.length > MESH_GIB_CAP) remove(ctx, ctx.gibs.meshGibs.shift()!);
+  const cap = g.tag === 'skull' ? SKULL_GIB_CAP : MESH_GIB_CAP;
+  const samePool = (q: MeshGib) => (q.tag === 'skull') === (g.tag === 'skull');
+  while (ctx.gibs.meshGibs.filter(samePool).length > cap) {
+    const index = ctx.gibs.meshGibs.findIndex(samePool);
+    remove(ctx,ctx.gibs.meshGibs.splice(index,1)[0]!);
+  }
 }
 
 /** One physics step for every mesh gib (a settled one is left alone: nothing about it can change). */

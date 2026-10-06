@@ -30,6 +30,7 @@ import { meshBoneSource } from './mesh-skull';
 import { extractHullSoup, fitHullGrid } from '../surface-nets-cpu';
 import type { BoneFieldSource } from './contract';
 import type { Vec3 } from '../../types';
+import type { AnatomicalSkullKit } from './anatomical-skull';
 
 /** Extraction resolution. Matches BAKE_CELL (chunk-bake-geometry.ts): 1 cm
  *  cells are what the shipped bake pays for torn-flesh craters; the bone
@@ -133,13 +134,17 @@ export class SegmentMeshCache {
   #lastExtractAt: number | null = null;
   #maxExtractMs = 0;
   #maxExtractKey: string | null = null;
-  constructor(readonly cellSize: number = MESH_CELL) {}
+  constructor(readonly cellSize: number = MESH_CELL, readonly skullKit: AnatomicalSkullKit | null = null) {}
 
   keyOf(source: BoneFieldSource): string {
+    const skull = this.skullKit?.head(source);
+    if (skull) return skull.mesh.key;
     return `${meshBoneSource(source).revision}@${this.cellSize}`;
   }
 
   get(source: BoneFieldSource): SegmentMesh {
+    const skull = this.skullKit?.head(source);
+    if (skull) return skull.mesh;
     const key = this.keyOf(source);
     let m = this.#map.get(key);
     if (!m) {
@@ -160,7 +165,7 @@ export class SegmentMeshCache {
    *  view of the live map. */
   stats(): SegmentMeshCacheStats {
     return {
-      entries: this.#map.size,
+      entries: this.size,
       extractCount: this.#extractCount,
       extractMs: Math.round(this.#extractMs * 100) / 100,
       firstExtractAt: this.#firstExtractAt === null ? null : Math.round(this.#firstExtractAt * 100) / 100,
@@ -171,12 +176,12 @@ export class SegmentMeshCache {
   }
 
   get size(): number {
-    return this.#map.size;
+    return this.#map.size + (this.skullKit?.size ?? 0);
   }
 
   /** Total extracted vertices/triangles across live entries (diagnostics). */
   get totals(): { verts: number; tris: number } {
-    let verts = 0, tris = 0;
+    let { verts, tris } = this.skullKit?.totals ?? {verts:0,tris:0};
     for (const m of this.#map.values()) { verts += m.verts; tris += m.tris; }
     return { verts, tris };
   }
@@ -189,5 +194,6 @@ export class SegmentMeshCache {
   dispose(): void {
     for (const m of this.#map.values()) m.geometry.dispose();
     this.#map.clear();
+    this.skullKit?.dispose();
   }
 }
