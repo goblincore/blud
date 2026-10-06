@@ -26,6 +26,15 @@ left four things wrong on a split head with the anatomical skull:
 
 All four are fixed on this branch. The closed head and the sculpted skull's split (`?skull=sculpt`) draw as before.
 
+A review of the branch then found two more gaps, neither a regression, and both are closed here as well:
+
+5. **bone standing in the open gap could not be shot.** The projectile loop finds a hit by tracing the flesh, and the
+   skull was tested only from the flesh impact onward. The bone of a split head opens less than its flesh, so it
+   stands in the V with no flesh in front of it, and a round on a line through it met nothing;
+6. **no gate check looked at a split plate's pixels.** The eye landmark hides the bone, the material check reads
+   names, and the bone's turn was read from the matrices on the CPU. A plate split material that compiled and drew
+   nothing passed every check.
+
 ## What was built
 
 **The plates' split material** (`185013b9`; `webgpu/skeleton-spike/mesh-renderer.ts` `skullSplitMaterial`,
@@ -52,14 +61,42 @@ that was hit, and a head pop releases each plate from the turn of the piece that
 position, orientation and launch are the closed head's, turned. With no split the arithmetic is the closed head's, to
 the bit.
 
-**The gate on the anatomical skull** (this change; `scripts/head-split-gate.mjs`, `webgpu/game-seams-skeleton.ts`,
+**The gate on the anatomical skull** (`1bdafe1c`; `scripts/head-split-gate.mjs`, `webgpu/game-seams-skeleton.ts`,
 `mesh-renderer.ts` `SEGMENT_MATERIALS`). The pin is gone, the eye landmark measures the whole eye, the gate has a
 scenario for the plates of a split skull (P), and the sculpted skull keeps a boot of its own. Details below.
 
+**Bone standing in the gap can be shot** (`70fea1ff`; `skeleton-spike/skull-split-hit.ts` `skullShotCast`, pure;
+`mesh-renderer.ts` `impact`, `skullPass`; `webgpu/game-skull-shots.ts` `skullPasses`). The rule applies to an actor
+whose head split is drawn and whose skull is the anatomical one:
+
+- A projectile's step that met the actor's flesh casts the skull from the START of the step, as far as the flesh and
+  0.14 m on. The nearest plate on the line is the one damaged, in front of the flesh or behind it.
+- A step that met none of the actor's flesh is cast along its whole length, when it passes the sphere that holds
+  every copy of the skull (the closed skull's sphere turned about the hinge point, `skullCopiesBound`). A plate it
+  meets is damaged. The projectile carries on: it stamps no wound and does no damage to the body.
+- One projectile damages one plate of a skull at most. It remembers the skulls it has damaged (`Projectile.skulls`)
+  and is not cast at them again, so a slug that breaks a plate in the gap on one step and meets that head's flesh on
+  the next breaks nothing more.
+- A closed head, the sculpted skull and every actor whose split is not drawn take the path they always had: from the
+  flesh impact, 0.14 m on, and no cast when no flesh is hit. Tests pin the fragments' numbers to the bit.
+
+The projectile loop (`game-main.ts`) calls the leaf once after its flesh trace, for the open skulls the projectile
+did not stop in, and hands the renderer's `impact` the step's start and the projectile. That is two lines in the
+loop and no new state on the game's context. The eye ejection in `impact` is unchanged.
+
+**The gate sees the plates on screen** (`1cd81c90`). Four checks read the bone's own pixels or fire a real
+projectile; the gate has 100 checks. Details below.
+
+**Smaller fixes** (`a056a080`, `9f684bd6`). A test pins what the split materials read at the clip's un-turned point
+(the surface's craters and the fracture's distance, by walking the node graph). `clear()` in the renderer forgets the
+last update's `split` and `extra` hooks. The bone angle of a piece's copy is one function (`head-split.ts`
+`skullPieceAngle`) for the draw, the per-instance record and the hit test. `detach` takes one argument that answers a
+plate's turn.
+
 ## Measurements
 
-The first seven rows come from the captures made when each part was built, and were not repeated for the gate's
-change. The last four are the gate's, and are the same in every run.
+The first seven rows come from the captures made when each part was built, and were not repeated for the later
+changes. The rows marked "gate" are the same in every run.
 
 | What | Measured | Where |
 | --- | --- | --- |
@@ -73,7 +110,16 @@ change. The last four are the gate's, and are the same in every run.
 | The gate's pellets at the + half's cheekbone | plate released on the third pellet; fragment 0.0000 mm from the pivot as the + half draws it, 36.9 mm from the closed head's | gate, scenario P |
 | The gate's eye landmark, the eye seen whole | worst 0.41 px (anatomical, forced head), 0.15 px (anatomical, after chop 1), 0.27 and 0.43 px (sculpted) | gate, scenario M |
 | The same landmark with the bone drawn | 6.84 px (anatomical), 3.33 px (sculpted), at the kill's bone angle | gate, reported and not held |
-| The head-split gate | 95 checks, 0 failed, six boots | see "Verification" |
+| Level shots from the front at a head opened by the axe's first chop (flesh 25.2 degrees a half, bone 7.6): 350 over a window 12 cm wide and 13 cm tall above the hinge | 125 have drawn bone on their line and no flesh of the head anywhere on it; 153 meet the flesh first with bone behind it; 1 meets bone in front of its flesh | a unit test on the fitted skull and the zombie's flesh field, each shot stepped and traced as the projectile loop does it (0.5 m a frame; the trace samples every 5 cm and counts flesh within 1 cm) |
+| The same 350 shots under the rule | each breaks the plate a forward build of the drawn copies says is first on its line, to within a micrometre of its distance; under the old rule the 125 broke nothing | the same test |
+| The gun's own slug through the open V at that opening, its predicted line meeting no flesh and the frontal bone 0.796 m from the muzzle, before the rule | nothing released; the slug flew on | in-game capture, a forced split at 0.8 of the full angle |
+| The same slug, after | the frontal released; its fragment 0.00 mm from the pivot as the + half's copy draws it, 15.4 mm from the closed head's and 30.7 mm from the - half's; the actor's wounds 2 before and 2 after; zero console errors | the same capture |
+| A slug at a closed head, before and after the rule | the same plate (`parietal-right`), position and velocity to the last digit | the same capture's control |
+| The split skull's bone pixels along the fracture's line (27 points, 3 to 16 cm above the hinge) | bone at 25 of them on the closed anatomical skull (27 on the sculpted one); at none of those on the open one, at the kill's bone angle | gate, scenario M |
+| A mark on each half's brow, 16 mm from the mid-plane | bone over the whole of a 3 px disc where `skullWarpPoint` turns it, 101.6 px from its closed place; no bone there on the open skull | gate, scenario M, both skulls |
+| The frame before and after the gate's pellets release the + half's cheekbone | 0.97 of an 8 px disc about the plate's drawn pivot changes; 0.00 of the disc about the closed head's pivot, 59.0 px away | gate, scenario P |
+| The gate's slug through the open V | the frontal, 290.8 mm along a line with no flesh of the actor in 1 m, released on the first frame of the slug's flight; fragment 0.0000 mm from the + half's drawn pivot; wounds 2 and 2, damage meter 0 and 0 | gate, scenario P |
+| The head-split gate | 100 checks, 0 failed, six boots | see "Verification" |
 
 ## The eye landmark: why it read 6.80 px
 
@@ -113,14 +159,22 @@ Two things had to be right for the whole-eye measure to work, both found by look
 
 ## The gate
 
-`scripts/head-split-gate.mjs` now has 95 checks (80 before) over six boots (five before). It runs on the default
-skull; a check fails if any boot draws the wrong one, which would otherwise happen silently when the plates' asset
-does not load and the page falls back to the sculpt.
+`scripts/head-split-gate.mjs` has 100 checks over six boots (80 over five before this branch; 95 when the gate first
+ran on the anatomical skull). It runs on the default skull; a check fails if any boot draws the wrong one, which would
+otherwise happen silently when the plates' asset does not load and the page falls back to the sculpt.
 
-- **M, on the boot's skull.** As before, plus one check: a split head's bone copies are drawn on the split material
-  of the skull the boot draws, and its eyes' copies on the eyes'. The materials are named
-  (`mesh-renderer.ts` `SEGMENT_MATERIALS`) and `__sdfGame.skullDrawn(id)` reports the name for every draw.
-- **P, the plates of a split anatomical skull** (six checks, in the range boot, last).
+- **M, on the boot's skull.** As before, plus two checks.
+  - A split head's bone copies are drawn on the split material of the skull the boot draws, and its eyes' copies on
+    the eyes'. The materials are named (`mesh-renderer.ts` `SEGMENT_MATERIALS`) and `__sdfGame.skullDrawn(id)`
+    reports the name for every draw.
+  - **The bone is on screen where the split puts it, and clipped.** With the flesh and the eyes out of the frame, the
+    bone's pixels are those that differ between a frame and the same frame with the bone meshes hidden. They are
+    taken on the whole skull (follow 0) and at the kill's bone angle (26.8 degrees a half). Along the fracture's line
+    (27 points of the old plane, 3 to 16 cm above the hinge) at least 0.8 of the points must be bone closed, and at
+    most 0.05 of those may still be bone open: both halves have swung clear and each copy is clipped to its own side.
+    And a mark on each half's brow must be bone over the whole of a 3 px disc where `skullWarpPoint` turns it, at
+    least 70 px from its closed place, where the closed skull has bone and the open one none.
+- **P, the plates of a split anatomical skull** (nine checks, in the range boot, last).
   1. A slug into the face at a closed head's right cheekbone takes that plate off, and the closed head is drawn as
      its 13 other plates.
   2. The same head, split to its full angle, is drawn as those 13 plates in 32 clipped copies on the plates' split
@@ -131,37 +185,93 @@ does not load and the page falls back to the sculpt.
      runs 10.2 mm clear of that plate's box, so a test made there could not have released it.
   5. Its fragment starts 0.0000 mm from the pivot as the + half's copy draws it, and 36.9 mm from the closed head's.
   6. The open head is drawn on without it: 12 plates in 31 copies.
+  7. On screen, the bone alone before the pellets and 30 frames after them (the fragment has left the picture): at
+     least 0.8 of an 8 px disc about the plate's pivot as the + half's copy draws it changes, and at most 0.05 of the
+     disc about the closed head's pivot.
+  8. A slug through the open V at bone with no flesh on its line releases that plate. The same head is put at the
+     axe's first chop (flesh 25.2 degrees a half, bone 7.6). The gun's own slug is put in flight 0.3 m in front of a
+     point of the + half's frontal bone. Before it flies the gate asks what its line meets: the frontal on the + half
+     (`skullRay`), and no flesh of the actor in 1 m by the projectile loop's own trace. The loop then steps it, and
+     the frontal must be released on the first frame.
+  9. That fragment starts within 0.01 mm of the pivot as the + half's copy draws it, and the actor has the same
+     wounds and the same damage meter after as before.
 
-  The rounds go through `__sdfGame.skullShot(id, point, direction, kind)`, which calls the renderer's own
-  `fractureSkull` (what a pellet's or a slug's impact calls first) with a ray the gate lays, and does nothing else of
-  a hit. The gun itself is not fired: a volley shoves the head between its pellets. For check 4 the bone is made to
+  Checks 1 to 7 put their rounds through `__sdfGame.skullShot(id, point, direction, kind)`, which calls the
+  renderer's own `fractureSkull` (what a pellet's or a slug's impact calls first) with a ray the gate lays, and does
+  nothing else of a hit: a volley from the gun shoves the head between its pellets. For check 4 the bone is made to
   ride its flesh (`skullSplit({ follow: 1 })`), so the check does not depend on the follow table; at the shipped
-  table's angle the same line runs 6.0 mm clear.
+  table's angle the same line runs 6.0 mm clear. Checks 8 and 9 use a real projectile, `__sdfGame.slugFrom(origin,
+  direction)`: one slug of the gun's own, started where the gate says, and stepped, traced and spent by the
+  projectile loop like any other. The gun's aim is still not in the gate.
 - **M again on the sculpted skull** (seven checks, a boot of its own with `?skull=sculpt`). The forced landmark and
   the materials, then the three real chops made for the skull alone (`chopsForSkull`: the same chops, with no gap
   read), and M's four checks on them.
-- **Seams added or widened** (`webgpu/game-seams-skeleton.ts`): `skullDrawn(id)` rows carry `material` and `plate`,
-  and a `whole` list of the actor's draws that are not copies; `skullPlates(id)` carries each plate's box;
-  `skullShot` is new.
+- **Seams added or widened** (`webgpu/game-seams-skeleton.ts`, `webgpu/game-seams-weapon-aim.ts`): `skullDrawn(id)`
+  rows carry `material` and `plate`, and a `whole` list of the actor's draws that are not copies; `skullPlates(id)`
+  carries each plate's box; `skullShot`, `skullRay(id, point, direction, reach)` (the bone a ray meets on the skull
+  as drawn, with nothing damaged) and `slugFrom` are new.
+- **The three chops of the sculpted skull's boot** follow each chop's spring with the first boot's own function
+  (`chopAndFollow`, told not to read the gap). What runs between the chops is not shared: the first boot measures
+  the gap and checks at every stage, and stops where `ONLY` says. The sculpted boot's numbers did not move.
 
-**Checks shown to fail.** Three breaking changes were made to `mesh-renderer.ts`, one at a time, the gate was run
-against each, and the file was put back from a saved copy (its diff's checksum was the same before and after).
+**Checks shown to fail.** Seven breaking changes were made, one at a time, and the gate was run against each. The
+first three were made to `mesh-renderer.ts` in the worktree, and the file was put back from a saved copy (its diff's
+checksum was the same before and after). The last four were made in scratch copies of the tree, with the M and P
+scenarios run from each copy; the worktree was never changed.
 
 | Breaking change | What the gate said |
 | --- | --- |
 | `fractureSkull` tests the ray against the closed head's plates, whatever is drawn | P fails twice: the three pellets release nothing (released 0, 0, 0), and there is no fragment |
 | a plate that breaks leaves from the closed head's frame | P's fragment check fails: 36.8551 mm from the drawn pivot (bound 0.01 mm), 0.0 mm from the closed head's |
 | the seated eyes are drawn a twentieth short of their bone's turn | M's landmark fails on both skulls: 3.12 px (anatomical) and 3.10 px (sculpted) against 2 px. The old 5 px bound would have passed it |
+| the split materials' discard is removed (every copy draws all of its bone) | M's bone check fails on both skulls: 25 of 25 points of the fracture's line are still bone on the open anatomical skull and 27 of 27 on the sculpted one, and there is bone at both marks' closed places. The other 24 checks of the two scenarios pass |
+| a copy's turn is left out of its matrix | M's bone check fails on both skulls: no bone at the turned marks (0 of the disc on the anatomical skull, 0.07 and 0.11 on the sculpted). So do nine other checks: the eye landmarks, the bone's turn from its matrices, and five of P's |
+| the plates' split material draws nothing | two checks fail, the two that read pixels: M's bone check on the anatomical skull (0 of the disc at the turned marks) and P's on-screen check (0.00 of the disc changes where the plate was drawn). The other 24 pass, as all 95 did before these checks |
+| the projectile loop does not pass a step with no flesh to the open skulls | P's two slug checks fail: the line meets the frontal 290.8 mm out and no flesh, and nothing is released |
 
-**A subset with no march-target capture fails one line.** `ONLY=P` or `ONLY=M` alone make no capture of the march
-target, and the depth guard's check wants at least one, so such a run ends with that check failing. It is not P's or
-M's failure.
+**A subset with no march-target capture says so.** `ONLY=P` or `ONLY=M` alone make no capture of the march target,
+so the depth guard has nothing to look at. Such a run prints that the guard did not run and does not count it as a
+check (26 checks for `ONLY=M,P`). A run of every scenario that somehow made no capture still fails the guard's check.
 
 **Run time.** The sculpt boot took 25.6 to 30.6 s of wall clock (page load to its last check) over three whole runs.
 P adds about 5 s to the range boot (a boot that ran P alone took 6.5 s in all). The landmark's extra photographs and
 settles add an estimated 10 to 15 s to the first boot; that part was not measured on its own. The whole gate took
 3 min 29 s on the final run; the last run of the 80-check gate took 3 min 50 s under a different load on the same
 machine, so the two totals do not give the difference. The gate prints each boot's wall clock at the end of a run.
+
+With the four checks that read pixels or fire a projectile (100 checks) the whole gate took 3 min 34 s on the final
+run, its servers' start included. By boot, from the page's load to the boot's last check: 109.2 s (the chops), 20.9 s
+(range and P), 14.0 and 13.8 s (bounds), 25.5 s (the turned zombie) and 27.5 s (the sculpted skull). What the new
+checks add was not measured on its own; a run of M and P alone took 15.2 s, 8.9 s and 26.7 s for its three boots.
+
+## The open head's cost on the anatomical skull
+
+The gate's first boot times an open head against the same head closed again (scenario C: `__sdfGame.timeDraws(120)`,
+the median of 120 still frames, each drawn and then fenced; one zombie's head centred, a `middle` split at its full
+angle, both sides; three rounds of open and closed, interleaved). It reports the figure and does not hold it. "Closed
+again" still carries the split's two cut faces, so open minus closed is the split's own cost.
+
+| Gate run | Skull | Untouched head | Open, three rounds | Closed again, three rounds | Open minus closed at 0.6 m | At 2 m |
+| --- | --- | --- | --- | --- | --- | --- |
+| The last run pinned to `?skull=sculpt` (commit `71659a24`) | sculpted | 35.0 ms | 44.0, 41.8, 41.3 ms | 35.7, 34.3, 33.2 ms | +7.5 ms | +2.9 ms |
+| The first run on the default skull (commit `1e88afb2`) | anatomical | 23.7 ms | 33.2, 33.4, 33.5 ms | 25.1, 25.2, 25.1 ms | +8.3 ms | +1.1 ms |
+| A run of this tree from a scratch copy | anatomical | 23.6 ms | 34.3, 35.8, 34.8 ms | 28.7, 28.6, 28.2 ms | +6.2 ms | +0.2 ms |
+| The final run of this tree | anatomical | 24.4 ms | 33.1, 33.5, 33.0 ms | 24.7, 25.0, 25.2 ms | +8.1 ms | +0.9 ms |
+
+**What the figures can and cannot say.**
+
+- **Other sessions shared the machine's GPU on every one of these runs.** The level moves with them: the sculpted
+  run's closed head read 33 to 36 ms where the anatomical runs read 25 to 29 ms, and nothing of the skull explains a
+  9 ms difference in a closed head. An earlier sculpt-pinned run (commit `185013b9`) read +9.7 ms and +4.2 ms.
+- **At 0.6 m the three anatomical readings are +6.2, +8.1 and +8.3 ms, and the two sculpted ones +7.5 and +9.7 ms.**
+  The two ranges overlap. These runs do not show that the anatomical skull's split costs more or less than the
+  sculpted skull's.
+- **The gate prints no figure that isolates the skull's share.** Open minus closed is the whole split: the flesh's
+  march over the open head, its shading, and the bone's copies together. The anatomical plates' own cost was not
+  measured on its own, here or anywhere: a split material that samples a normal map and evaluates the fracture a
+  second time for the rim. The gate's scene has an intact skull, which is one mesh in three copies as the sculpt is;
+  a skull that has lost a plate is drawn plate by plate (13 plates in 32 copies at the full split), and that case
+  was not timed at all.
 
 ## The follow table on the anatomical skull: look sheets for the owner
 
@@ -203,6 +313,10 @@ scratch script built on the gate's helpers; it is not in the repo.
 - **The follow table's retune.** The owner's decision, from the sheets above.
 - **Anything in the cavity.** The plates' insides are real geometry now, but the cavity is empty and the room shows
   through the opened skull.
+- **The gun's aim in the gate.** The gate's slug is a real projectile on a line the gate lays, not a shot from the
+  gun's muzzle. The gun itself was fired at an open head in the captures listed under "Measurements".
+- **A frame cost for the shots at an open head.** A projectile's step costs one sphere test for each open head it did
+  not stop in, and three ray casts at the plates when it passes inside that sphere. It was not timed.
 
 ## Known limits
 
@@ -212,26 +326,40 @@ scratch script built on the gate's helpers; it is not in the repo.
   maxilla's 650 lay across it). Such a plate is drawn in two or three copies. A hit on any copy damages the whole
   plate, and it leaves whole: from the piece that was hit, or on a head pop from the piece that owns its pivot.
 - **Eyes on a split head are ejected by the closed head's frame.** `impact()` picks and launches the eyes as it did
-  before the split.
+  before the split, and only on a flesh hit: a round through the gap that meets no flesh ejects no eye.
+- **A round that breaks bone in the gap flies on unchanged.** It loses no speed and is not turned, so it can go on to
+  wound the same body's flesh behind the bone, or another actor.
+- **One round, one plate of a skull.** A slug whose line crosses two plates of an open skull (the frontal and then
+  the occipital, say) damages the first and passes the second. The memory is per skull: a round through two open
+  heads in a line can damage a plate of each.
+- **The open rule goes by what is drawn.** Beyond the split's draw distance a split head is drawn closed, flesh and
+  bone, and takes the closed head's rule. The split a shot is tested against is the one the last frame drew.
+- **The flesh trace is coarse.** The projectile loop samples a step every 5 cm and counts flesh within 1 cm of a
+  sample, so a line that passes within a centimetre of a cut face can read as a flesh hit there. The skull is then
+  cast from the step's start, so the bone the round would have met first is still the one damaged.
 - **Across pieces the nearest hit is compared in head-frame metres.** That is exact for a rigid head and off by the
   squash under a head deform.
 - **The eyes sit 2 to 5 mm off the centres of the anatomical orbits** (their seats were placed for the sculpt), which
   is why one socket shows 0.53 of its eye and the other 0.37. A separate task is queued for the seats.
-- **The gate's plate scenario does not fire the gun.** Real rounds at an opened half were captured once, in game
-  (the table above); the gate holds the renderer's hit path and the fragment's start, not the weapon's aim.
+- **The gate's plate scenario does not fire the gun.** Its pellets and its first slug are rays handed to the
+  renderer, and its last slug is a real projectile started on a line the gate lays. Real rounds from the gun were
+  captured in game (the table above); the gate does not hold the weapon's aim.
 
 ## Verification
 
-The final runs, from the worktree with nothing being edited (the tracked diff's checksum was the same before and
-after), on 2026-10-06. The gates and the tree each held the machine's shared GPU lock.
+The final runs, from the worktree at commit `9f684bd6` with nothing being edited (the tracked diff's checksum was the
+same before and after), on 2026-10-06. The gates and the tree each held the machine's shared GPU lock.
 
 | Check | Command | Result |
 | --- | --- | --- |
 | Types | `npx tsc --noEmit` | the one known error (`pack-golden.test.ts`, `node:crypto`) and no other |
-| Head-split gate | `node scripts/head-split-gate.mjs 5261 9261` | 95 checks, 0 failed; 3 min 29 s |
+| Head-split gate | `node scripts/head-split-gate.mjs 5261 9261` | 100 checks, 0 failed; 3 min 34 s |
 | Axe gate | `node scripts/axe-gate.mjs 5261 9261` | 27 checks, 0 failed |
 | Cut-wound gate | `node scripts/cut-wound-gate.mjs 5261 9261` | 30 checks, 0 failed |
-| The test tree | `npx vitest run src/lab/sdf-zombie scripts/lib --exclude '**/cut-wound.test.ts'` | 529 files passed; 7,624 tests passed, 1 skipped; 249 s |
+| The test tree | `npx vitest run src/lab/sdf-zombie scripts/lib --exclude '**/cut-wound.test.ts'` | 531 files passed; 7,650 tests passed, 1 skipped; 246 s |
+
+When the gate first ran on the anatomical skull (commit `1bdafe1c`) the same five read 95 checks, 27, 30, and 529
+files with 7,624 tests.
 
 Each gate ran with its own servers (`scripts/lab-servers.sh`) and an `OUT=` folder outside the repo, so no tracked
 picture was rewritten.
@@ -240,8 +368,13 @@ picture was rewritten.
 
 - `cut-wound.test.ts` was not run (the tree leaves it out, as the handoff says to; nothing here touches the cut
   field).
-- No frame time was measured. The gate's cost scenario prints draw times and does not hold them.
+- No frame time was measured beyond what the gate's cost scenario prints (above); it does not hold them, and it
+  does not time the skull alone or a shot at an open head.
 - The look sheets were not judged: they are for the owner. The gate's own contact sheets (`M-skull`, `P-plates` and
   their sculpt twins) were looked at once and are not tracked.
 - The game was not played by hand. The gun was not fired at a split head in the gate (see "Known limits").
-- The three breaking changes were run against the gate's P and M scenarios alone, not against the whole gate.
+- The seven breaking changes were run against the gate's P and M scenarios alone, not against the whole gate.
+- Pellets from the gun were not fired through the gap in the game after the rule was built; one slug was. Pellets
+  through the gap are held by the renderer's tests (three projectiles add up on a plate, one hit each).
+- The rule under a head deform was not exercised: a split head is never deformed (the melee head damage declines a
+  split head, and the split refuses a damaged one).

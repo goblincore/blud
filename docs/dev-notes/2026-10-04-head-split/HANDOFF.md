@@ -108,6 +108,12 @@ skull this feature was built and playtested on). What that changed for the split
 - **Plates on a split head.** A skull that has lost plates is drawn as its surviving plates' clipped copies. A pellet
   or slug is tested against the plates where they are drawn (`webgpu/skeleton-spike/skull-split-hit.ts`), and the
   plate that breaks leaves from the opened half (`mesh-renderer.ts` `fractureSkull`, `explodeSkull`, `detach`).
+- **Bone in the gap can be shot.** The projectile loop traces the flesh, and the bone of an open head stands in the V
+  with no flesh in front of it. For a head whose split is drawn, on the anatomical skull, a step that met the flesh
+  casts the skull from the step's start, and a step that met none of the actor's flesh is cast along its length
+  (`skull-split-hit.ts` `skullShotCast`; `mesh-renderer.ts` `impact`, `skullPass`; the leaf
+  `webgpu/game-skull-shots.ts`, called once from the projectile loop). One projectile damages one plate of a skull at
+  most. A closed head, the sculpted skull and an actor whose split is not drawn keep the old path, to the bit.
 - **The follow table was tuned on the sculpt** and has not been retuned for the smaller anatomical skull: the owner's
   call, from `../2026-10-06-split-anatomical-skull/look/`.
 
@@ -134,6 +140,8 @@ entries do. It does not walk the light list, and must not from inside its gate (
 | `skullDrawn(id)` | an actor's split skull copies, each with the matrix it is drawn with, the material it is on and (drawn plate by plate) its plate; `whole`: its draws that are not copies |
 | `skullPlates(id)`, `skullState(id)`, `skullFragments()` | the anatomical skull's plates as fitted (pivot and box, head-segment frame); the plates an actor has lost; the fragments in flight |
 | `skullShot(id, point, direction, kind)` | one round's ray through the renderer's own skull hit path, and nothing else of a hit (the gate's P) |
+| `skullRay(id, point, direction, reach?)` | the bone a ray meets first on the skull as it is drawn (plate, piece, distance), with nothing damaged |
+| `slugFrom(origin, direction)` | one slug of the gun's own, put in flight where the caller says; the projectile loop steps and traces it (the gate's P) |
 | `meshSkeletonShow({ bones, eyes })` | hides or shows the bone meshes and the eyes (a shown / hidden pair tells bone pixels from flesh) |
 | `actorWounds(id)` | each wound, with `headSlot`, `headRegion` and a cut's `dirWorld` |
 
@@ -161,7 +169,7 @@ bash -c 'export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; 
 
 | Gate | Checks (as of 2026-10-05) | Notes |
 | --- | --- | --- |
-| `scripts/head-split-gate.mjs` | 95 (2026-10-06; 80 on 2026-10-05) | Scenarios S, W, K, O, L, F, M, P, R, A, H, J, B, T, C. Six boots: five on the anatomical skull (the default), one with `?skull=sculpt` that runs M alone. `ONLY=S,K` runs a subset (W and K need S). C holds the depth guard and its positive control, and checks which skull each boot drew. |
+| `scripts/head-split-gate.mjs` | 100 (2026-10-06; 80 on 2026-10-05) | Scenarios S, W, K, O, L, F, M, P, R, A, H, J, B, T, C. Six boots: five on the anatomical skull (the default), one with `?skull=sculpt` that runs M alone. `ONLY=S,K` runs a subset (W and K need S). C holds the depth guard and its positive control, and checks which skull each boot drew. |
 | `scripts/axe-gate.mjs` | 27 | A, D, K, S, C, T. The 26th and 27th are the depth guard's positive control and the guard. |
 | `scripts/cut-wound-gate.mjs` | 30 | |
 
@@ -177,8 +185,15 @@ bash -c 'export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; 
   (the post chain's smear keeps a just-hidden skull on screen for a few frames). With the bone drawn only the part of
   an eye its socket shows is seen, and that part's centroid is not the eye's: 6.8 px off on the anatomical skull,
   where the whole eye reads 0.41 px against a 2 px bound.
-- **A subset with no march-target capture** (`ONLY=P`, `ONLY=M`) ends with the depth guard's check failing, because
-  that check wants at least one capture. Add a scenario that reads the target (`ONLY=P,S`) or ignore that line.
+- **The skull's bone is checked on its own pixels.** With the flesh and the eyes out of the frame, a bone pixel is
+  one that differs between a frame and the same frame with the bone meshes hidden (`boneMask`). M holds the open gap
+  along the fracture's line and a mark on each half's brow; P holds that the frame changes where a released plate was
+  drawn and not where the closed head has it. Before these, a plate split material that drew nothing passed every
+  check.
+- **P's last round is a real projectile** (`slugFrom`), on a line through the open V that meets bone and no flesh:
+  the projectile loop must release the plate on the slug's first frame. The gun's aim is not in the gate.
+- **A subset with no march-target capture** (`ONLY=P`, `ONLY=M`) prints that the depth guard did not run and does
+  not count it as a check. A run of every scenario with no capture still fails the guard.
 - **Its expectations are derived from the live tuning constants** (`HEAD_SPLIT`, `AXE_HEAD`, the follow table), so a
   retune moves them with it. What a retune can still trip: the gap line needs the cut faces to reach the head centre's
   height; `F_MOVED_MIN`; `O_BEARING` must still land a one-sided hit; and the two unit tests that hold the spring's
@@ -282,6 +297,12 @@ All of it is accepted for now and none of it has been investigated. Numbers and 
   that stands still could cache them.
 - **`sdBody` costs about 2.7× inside the region** (CPU).
 - **The split skull's copies** cost +0.1 to +0.5 ms over the whole skull: a clipped copy is shaded in full.
+- **The anatomical skull's share of that cost is not measured.** On 2026-10-06 the gate's scene read +6.2 to +8.3 ms
+  at 0.6 m on the anatomical skull over three runs, and +7.5 and +9.7 ms on the sculpted one over two, with other
+  sessions on the GPU: the ranges overlap. The gate times the whole open head and prints nothing for the bone alone;
+  a skull drawn plate by plate (one that has lost a plate) was not timed.
+- **Shots at an open head** add, for each projectile's step and each open head it did not stop in, a sphere test,
+  and three ray casts at the plates when the step passes inside the sphere. Not timed.
 - **The wet film** is six `noise3` taps and two `pow` per raw texel, and again in the refine twin. Its frame cost was
   not resolved (under 1 ms if anything).
 - **The cut excess pass:** cold boot about +430 ms (+136 to +936 ms over four pairs); three axe chops on one torso
