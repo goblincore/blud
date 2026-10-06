@@ -10,7 +10,8 @@
 import type { GameContext } from './game-context';
 import { type Vec3 } from '../types';
 import { bodyBuildCacheStats } from './character-view';
-import { applyBoneMesh } from './game-render-leaves';
+import { applyBoneMesh, applyOrganMode } from './game-render-leaves';
+import type { OrganLook, OrganLookName } from './skeleton-spike/mesh-organ';
 import { traceProjectile } from './game-weapon';
 import { sdBody } from '../validate';
 import { splitLookOk, type SplitLookSet } from './skeleton-spike/mesh-split';
@@ -90,17 +91,36 @@ export function createSkeletonSeams(ctx: GameContext) {
     /** skeleton=mesh diagnostics: draw or hide the bone meshes and the seated eyes (both drawn by default), so a
      *  capture can tell their pixels from the flesh's by a shown / hidden pair. Returns the state; null without the
      *  mesh skeleton; false (and nothing changed) for a flag that is not a boolean. */
-    meshSkeletonShow: (set?: { bones?: boolean; eyes?: boolean }) => {
+    meshSkeletonShow: (set?: { bones?: boolean; eyes?: boolean; organs?: boolean }) => {
       const show = ctx.render.segMeshRenderer?.show;
       if (!show) return null;
       if (set !== undefined) {
         const flag = (v: unknown) => v === undefined || typeof v === 'boolean';
-        if (set === null || typeof set !== 'object' || !flag(set.bones) || !flag(set.eyes)) return false;
+        if (set === null || typeof set !== 'object' || !flag(set.bones) || !flag(set.eyes) || !flag(set.organs)) return false;
         if (set.bones !== undefined) show.bones = set.bones;
         if (set.eyes !== undefined) show.eyes = set.eyes;
+        if (set.organs !== undefined) show.organs = set.organs;
       }
       return { ...show };
     },
+    /** Organs as mesh (2026-10-06): switch mesh-skeleton actors' organs between segment meshes ('mesh', the default)
+     *  and field rows the march folds ('sdf', the A/B reference). Takes effect at once, on a frozen frame too (the
+     *  views re-pack). Returns the mode in force: always 'sdf' without the mesh skeleton; anything but the two names
+     *  changes nothing. */
+    setOrgans: (mode: 'mesh' | 'sdf') => (mode === 'mesh' || mode === 'sdf' ? applyOrganMode(ctx, mode) : ctx.render.organMode),
+    /** The organ state: the mode, the organ instances the last mesh update drew, the look in force, and per actor the
+     *  inside-flesh rows its body packs (counts2.x: 0 means the march never calls applyBones for it). */
+    organs: () => {
+      const r = ctx.render.segMeshRenderer;
+      return {
+        mode: ctx.render.organMode, drawn: r ? r.stats.organs : 0, look: r ? r.setOrganLook() : null,
+        tint: r ? r.organLook.tint.value.toArray() : null,
+        packed: ctx.world.actors.map(a => ({ id: a.id, rows: a.view.uniforms.counts2.value.x })),
+      };
+    },
+    /** The organ mesh's look (mesh-organ.ts): one of ORGAN_LOOKS by name, or its numbers. null without the mesh
+     *  skeleton. */
+    setOrganLook: (look?: OrganLookName | Partial<OrganLook>) => ctx.render.segMeshRenderer?.setOrganLook(look) ?? null,
     /** skeleton=mesh diagnostics: among this frame's instanced bone draws, actor `id`'s copies of a split head (bone
      *  or eye, the piece each is clipped to: 0 the rest, 1 the + half, 2 the - half, and the world matrix it is drawn
      *  with, column-major), and how many draws it has in all. A closed head has no copies: it is drawn as it always

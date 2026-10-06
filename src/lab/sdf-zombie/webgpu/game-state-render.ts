@@ -29,6 +29,8 @@ import type { OccluderHull } from './occluder-hull';
 import type { PostAa } from './post-aa';
 import type { FieldStyle, SdfLayer } from './sdf-layer';
 import type { BoneFieldSource, SkeletonMode } from './skeleton-spike/contract';
+import type { OrganMode } from './skeleton-spike/selector';
+import type { Vec3 } from '../types';
 import type { SegmentMeshCache } from './skeleton-spike/mesh';
 import type { SegmentMeshRenderer } from './skeleton-spike/mesh-renderer';
 import type { buildSegmentAtlas, SegmentVolumeCache } from './skeleton-spike/volume';
@@ -132,6 +134,10 @@ export interface RenderState {
   boneMesh: boolean;
   /** Skeleton representation for forward bodies (`?skeleton=`). */
   skeletonMode: SkeletonMode;
+  /** How mesh-skeleton actors' organs are drawn (`?organs=`; skeleton-spike/selector.ts). */
+  organMode: OrganMode;
+  /** This frame's wound exposure spheres per visual actor (the organ meshes' reach test). */
+  organReach: Map<object, { pos: Vec3; radius: number }[]>;
   /** Mesh segment cache, or null outside mesh mode. */
   segMeshCache: SegmentMeshCache | null;
   /** Mesh skeleton renderer, or null outside mesh mode. */
@@ -198,6 +204,8 @@ export function makeRenderState(): RenderState {
     boneInstancer: unbuilt<BoneInstancer>(),
     boneMesh: false,
     skeletonMode: 'procedural',
+    organMode: 'sdf',
+    organReach: new Map(),
     segMeshCache: null,
     segMeshRenderer: null,
     skeletonSources: new Map<ZombieActor, SkeletonSourceEntry>(),
@@ -238,6 +246,8 @@ export const RENDER_BINDINGS = {
   boneInstancer: 'render.boneInstancer',
   boneMesh: 'render.boneMesh',
   skeletonMode: 'render.skeletonMode',
+  organMode: 'render.organMode',
+  organReach: 'render.organReach',
   segMeshCache: 'render.segMeshCache',
   segMeshRenderer: 'render.segMeshRenderer',
   skeletonSources: 'render.skeletonSources',

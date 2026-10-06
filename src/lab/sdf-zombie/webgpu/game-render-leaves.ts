@@ -14,6 +14,7 @@ import { type GibBlurSubject } from './gib-shutter-layer';
 import { SDF_LAYER } from './sdf-layer';
 import { type MarchUniforms } from './zombie-gpu';
 import { type Vec3 } from '../types';
+import { type OrganMode } from './skeleton-spike/selector';
 import { billboardGib, makeGibSprite } from './gib-sprites';
 import { bodyInSight } from './actor-sight';
 import { type ZombieActor } from './game-actor';
@@ -159,6 +160,16 @@ export function applyBoneMesh(ctx: GameContext, on: boolean): void {
   ctx.render.boneInstancer.object.visible = on || ctx.gibs.boneMesh;
   for (const a of ctx.world.actors) a.view.setPackBones(!on);
   for (const c of ctx.bake.liveChunks) c.view.setPackBones(!on);
+}
+
+/** Organs as mesh (2026-10-06): switch mesh-skeleton actors' organs between segment meshes and field rows. The
+ *  sources always carry the organ segments; the mode decides whether they are drawn (game-main passes no reach in
+ *  'sdf') and whether the body packs its organ rows. Outside the mesh skeleton the mode is 'sdf' and stays so. */
+export function applyOrganMode(ctx: GameContext, mode: OrganMode): OrganMode {
+  if (!ctx.render.segMeshRenderer) return ctx.render.organMode;
+  ctx.render.organMode = mode;
+  for (const a of ctx.world.actors) if (ctx.render.skeletonSources.has(a)) a.view.setPackOrgans(mode !== 'mesh');
+  return mode;
 }
 
 export function updateUpscaleAbLabel(ctx: GameContext) {
