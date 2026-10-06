@@ -95,8 +95,21 @@ flesh, which the mottle, the gore and the wound wetness leave alone.
 `head-split.ts`: `skullSplitOf`, `skullPieceAt`, `skullWarpPoint`, `skullPieces`). The bone opens LESS than the flesh,
 in stages: a crack, a wider crack, split. It is drawn as per-piece instance copies in their own batches, clipped at the
 un-turned point along a ragged fracture edge that both halves share (one `jag` table for the WGSL and its TypeScript
-twin), two-sided with a dark inside and a cut-bone rim. The stage only advances (`SplitState.stage`), so a kick or a
-wobble swings the bone in proportion and never steps it. Driven from `view.splitDrawn`. Closed heads draw as before.
+twin), two-sided. The stage only advances (`SplitState.stage`), so a kick or a wobble swings the bone in proportion
+and never steps it. Driven from `view.splitDrawn`. Closed heads draw as before.
+
+**The skull is the anatomical one by default since 2026-10-06** (fourteen plates; `?skull=sculpt` is the sculpted
+skull this feature was built and playtested on). What that changed for the split, with every measurement:
+[`../2026-10-06-split-anatomical-skull/NOTES.md`](../2026-10-06-split-anatomical-skull/NOTES.md).
+
+- **Two split materials.** The sculpted skull and the eyes are thin shells: a dark inner wall and a cut-bone rim. The
+  anatomical plates have thickness and no painted wall: the plate's surface on both faces, cut bone within 4 mm of the
+  fracture (`MESH_SPLIT_CUT_BONE_WGSL`, by `MESH_SPLIT_FRACTURE_WGSL`'s distance). 6 of 8 vertex buffers.
+- **Plates on a split head.** A skull that has lost plates is drawn as its surviving plates' clipped copies. A pellet
+  or slug is tested against the plates where they are drawn (`webgpu/skeleton-spike/skull-split-hit.ts`), and the
+  plate that breaks leaves from the opened half (`mesh-renderer.ts` `fractureSkull`, `explodeSkull`, `detach`).
+- **The follow table was tuned on the sculpt** and has not been retuned for the smaller anatomical skull: the owner's
+  call, from `../2026-10-06-split-anatomical-skull/look/`.
 
 **The wobble** (`HEAD_SPLIT.wobble` in `head-split.ts`; driven from the leaf). Each turning half has its own offset
 (`SplitState.wobP` / `wobM`): a damped spring driven by the acceleration of the split's mass point, with hard limits.
@@ -118,7 +131,9 @@ entries do. It does not walk the light list, and must not from inside its gate (
 | `forceSplit(id, preset, sides, offset, angleFrac)` | opens a split directly (for tuning, and for `face`) |
 | `headSplitDrive(id, accs)` | feeds the wobble a scripted list of accelerations, one a tick (the gate's J) |
 | `skullSplit({ follow, zigAmp, zigLen, chipAmp, chipLen, inside, rim, rimWidth, … })` | the skull's look, live; `follow: null` puts the table back |
-| `skullDrawn(id)` | an actor's split skull copies, each with the matrix it is drawn with |
+| `skullDrawn(id)` | an actor's split skull copies, each with the matrix it is drawn with, the material it is on and (drawn plate by plate) its plate; `whole`: its draws that are not copies |
+| `skullPlates(id)`, `skullState(id)`, `skullFragments()` | the anatomical skull's plates as fitted (pivot and box, head-segment frame); the plates an actor has lost; the fragments in flight |
+| `skullShot(id, point, direction, kind)` | one round's ray through the renderer's own skull hit path, and nothing else of a hit (the gate's P) |
 | `meshSkeletonShow({ bones, eyes })` | hides or shows the bone meshes and the eyes (a shown / hidden pair tells bone pixels from flesh) |
 | `actorWounds(id)` | each wound, with `headSlot`, `headRegion` and a cut's `dirWorld` |
 
@@ -146,7 +161,7 @@ bash -c 'export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; 
 
 | Gate | Checks (as of 2026-10-05) | Notes |
 | --- | --- | --- |
-| `scripts/head-split-gate.mjs` | 80 | Scenarios S, W, K, O, L, F, M, R, A, H, J, B, T, C. Five boots. `ONLY=S,K` runs a subset (W and K need S). C holds the depth guard and its positive control. |
+| `scripts/head-split-gate.mjs` | 95 (2026-10-06; 80 on 2026-10-05) | Scenarios S, W, K, O, L, F, M, P, R, A, H, J, B, T, C. Six boots: five on the anatomical skull (the default), one with `?skull=sculpt` that runs M alone. `ONLY=S,K` runs a subset (W and K need S). C holds the depth guard and its positive control, and checks which skull each boot drew. |
 | `scripts/axe-gate.mjs` | 27 | A, D, K, S, C, T. The 26th and 27th are the depth guard's positive control and the guard. |
 | `scripts/cut-wound-gate.mjs` | 30 | |
 
@@ -156,7 +171,14 @@ bash -c 'export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; 
 - **What the head-split gate measures on.** The float march target (`__sdfGameDebug.readMarchTarget`), not
   screenshots. Each capture is two reads, and their difference is checked. Its boot is pinned as `march-hash` pins it
   (the dynamic-light clock, the probes' afterglow, the field interlace), so every number is the same in every run.
-- **Every scenario has a check that was shown to fail** under a breaking change (NOTES lists each mutation).
+- **Every scenario has a check that was shown to fail** under a breaking change (NOTES lists each mutation; P's and
+  the eye landmark's are in the split anatomical skull's notes).
+- **The skull's eye landmark is taken with the bone and the flesh out of the frame,** and after the frame has settled
+  (the post chain's smear keeps a just-hidden skull on screen for a few frames). With the bone drawn only the part of
+  an eye its socket shows is seen, and that part's centroid is not the eye's: 6.8 px off on the anatomical skull,
+  where the whole eye reads 0.41 px against a 2 px bound.
+- **A subset with no march-target capture** (`ONLY=P`, `ONLY=M`) ends with the depth guard's check failing, because
+  that check wants at least one capture. Add a scenario that reads the target (`ONLY=P,S`) or ignore that line.
 - **Its expectations are derived from the live tuning constants** (`HEAD_SPLIT`, `AXE_HEAD`, the follow table), so a
   retune moves them with it. What a retune can still trip: the gap line needs the cut faces to reach the head centre's
   height; `F_MOVED_MIN`; `O_BEARING` must still land a one-sided hit; and the two unit tests that hold the spring's
@@ -207,9 +229,9 @@ needs the shader check set. `HEAD_SPLIT.skull` is live through `__sdfGame.skullS
 | The chop's spring | `HEAD_SPLIT.hz`, `zeta`, `kick` | 7, 0.35, 6 | `zeta` 1.2: no overshoot (the gate still passes; two unit tests fail) |
 | The face cuts (the ragged cut faces) | `HEAD_SPLIT.faceCut`, `faceCalibre` | inset 0.006, `lenFrac` 1.1; depth 0.12, kerf 0.012, lip 1 | No off. The owner wants them as they are |
 | Skin against cut face, for a later chop | `HEAD_SPLIT.skinEps` | 0.015 m | |
-| The skull's follow table | `HEAD_SPLIT.skull.follow` | (0.55 → 0.1), (0.8 → 0.3), (1 → 0.85) | 0: the whole closed skull stands in the gap. 1: the bone rides the flesh |
+| The skull's follow table | `HEAD_SPLIT.skull.follow` | (0.55 → 0.1), (0.8 → 0.3), (1 → 0.85). Tuned on the sculpted skull; not retuned for the anatomical one (owner's call, look sheets in `../2026-10-06-split-anatomical-skull/look/`) | 0: the whole closed skull stands in the gap. 1: the bone rides the flesh |
 | The fracture edge | `HEAD_SPLIT.skull.jag` | `zigAmp` 0.004, `zigLen` 0.022, `chipAmp` 0.0015, `chipLen` 0.006, `wobble` 0.43, `wobbleAlong` 1.7, `wobbleUp` 1.3, `upFreq` 0.73 | `zigAmp` 0 and `chipAmp` 0: the clean plane |
-| The bone's inner wall and broken rim | `HEAD_SPLIT.skull.inside`, `rim` | (0.1, 0.018, 0.015); colour (0.72, 0.5, 0.4), width 0.004 m | `rim.width` 0: no rim |
+| The bone's inner wall and broken rim | `HEAD_SPLIT.skull.inside`, `rim` | (0.1, 0.018, 0.015); colour (0.72, 0.5, 0.4), width 0.004 m. The wall is the sculpted skull's and the eyes' only; an anatomical plate has the rim and no wall | `rim.width` 0: no rim |
 | The wobble | `HEAD_SPLIT.wobble` | `hz` 3, `zeta` 0.3, `gainSide` 6, `gainBob` 8, `arm` 0.1, `accelClamp` 40, `jumpSpeed` 25, `max` 0.45, `minOpen` 0.03, `over` 0.45 | `gainSide` 0 and `gainBob` 0: bit-identical to no wobble |
 | The cut faces' shading gate | `SPLIT_SHADE.cutLo`, `cutHi`, `shellLo`, `shellHi`, `poreCut` | 0.0015, 0.004, 0.0015, 0.004, 0.5 | |
 | How wet a cut face is | `SPLIT_SHADE.wet` | 1 (wet all over) | 0: wet like a crater (its lip, not its floor) |

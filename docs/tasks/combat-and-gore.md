@@ -29,7 +29,10 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
   - **Follow-ups, open:** the `gRefoldBy` cross-slot leak, something in the gap (a brain), the slug opening the
     split, and the deferred game boot (`?renderer=deferred` draws no bodies on `a2d61133`; handoff follow-up 8). Full
     lists: spec section 10.10.
-  - **Gates (as of 2026-10-06):** `scripts/head-split-gate.mjs` (80 checks), `scripts/axe-gate.mjs` (27),
+  - **On the anatomical skull (2026-10-06, branch `claude/split-anatomical-skull`):** split plates have their own
+    material, shots break them where an opened half draws them, and the gate runs on it. For the owner: retune how far
+    the bone opens? [Notes and look sheets](../../docs/dev-notes/2026-10-06-split-anatomical-skull/NOTES.md).
+  - **Gates (as of 2026-10-06):** `scripts/head-split-gate.mjs` (95 checks), `scripts/axe-gate.mjs` (27),
     `scripts/cut-wound-gate.mjs` (30).
 
   [Spec](../../docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 9: the axe as built; section 10:
