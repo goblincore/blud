@@ -18,7 +18,9 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
     cut-face restyle was built and reverted, `d0d407d2`); optimise the open head later.
   - **Behaviour change:** only a chop on head flesh is a head chop. Chops to the upper chest, the collar and the neck's
     base are body chops now, for every character.
-  - **Debt:** an open head costs about +6 to +8 ms at 0.6 m and +0.6 to +1.6 ms at 2 m. A split is drawn closed past
+  - **Debt:** an open head costs about +5 ms at 0.6 m (`middle` both sides; +3.6 ms one side) after a first cost
+    pass (2026-10-06, branch `claude/open-head-cost`, [notes](../dev-notes/2026-10-06-open-head-cost/NOTES.md); +6 to
+    +8 ms before it, and +0.6 to +1.6 ms at 2 m). A split is drawn closed past
     12.7 m.
   - **The `return` after the march's miss `discard`: landed 2026-10-06** (branch `claude/miss-discard-return`, off
     `a2d61133`; with the refine twin's three). Bit-identical (six `march-hash` pins, the three gates, base against new

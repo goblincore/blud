@@ -287,17 +287,20 @@ for (const sn of SCENS) {
   }
 }
 
+const save = () => { if (process.env.OUT) writeFileSync(process.env.OUT, JSON.stringify(out, null, 1)); };
+save();
+
 // ---- TICK=1: the CPU side of a split head's re-pose, open against closed -----------------------------
 // A walking split head's wobble moves its angles every tick, so its view re-makes the bounds and the record every
 // tick. So does any walking body's: the pose changes every tick, split or not. What the split ADDS is measured here
-// on one frozen zombie: the mean ms of STEPS calls of the actor's own re-pose (reposeHead: the pose, view.update with
-// its bounds and tile groups, the record, the wounds), with the head open and with it closed again, interleaved; and
+// on one frozen zombie: the mean ms of STEPS calls of the view's update with the actor's posed body (the rows, the
+// bounds, the tile groups, the proxy box and the record), with the head open and with it closed again, interleaved; and
 // the frozen cast's hull build (both hulls, every body: what live play runs every tick), timed as a step that is
 // asked to build them against one that is not.
 if (process.env.TICK === "1") {
   const STEPS = Number(process.env.STEPS ?? 400);
   const z = fresh(), scen = SCEN_ALL["mid-both"];
-  const repose = () => evaluate(`(() => { const a = __sdfGame.zombie(${z.id}); const t0 = performance.now(); for (let i = 0; i < ${STEPS}; i++) a.reposeHead(); return (performance.now() - t0) / ${STEPS}; })()`, 600000);
+  const repose = () => evaluate(`(() => { const a = __sdfGame.zombie(${z.id}), body = a.posed(); const t0 = performance.now(); for (let i = 0; i < ${STEPS}; i++) a.view.update(body, a.body); return (performance.now() - t0) / ${STEPS}; })()`, 600000);
   const hulls = () => evaluate(`(() => { const ms = [[], []]; for (let i = 0; i < 60; i++) for (const stale of [0, 1]) { if (stale) __sdfGame.splitAblate({}); const t0 = performance.now(); __sdfGame.step(1, 0); ms[stale].push(performance.now() - t0); } const med = (a) => a.sort((x, y) => x - y)[a.length >> 1]; return { kept: med(ms[0]), rebuilt: med(ms[1]) }; })()`, 600000);
   const rows = { open: [], closed: [] }, hull = { open: [], closed: [] };
   for (let r = 0; r < ROUNDS; r++) {
@@ -347,6 +350,6 @@ if (out.tick) {
 const diag = await evaluate("__sdfGame.gpuDiagnostics()");
 console.log(`\ngpuDiagnostics: ${JSON.stringify(diag)}; console errors ${consoleEvents.length}${consoleEvents.length ? ": " + JSON.stringify(consoleEvents.slice(0, 3)) : ""}`);
 out.diag = diag; out.errors = consoleEvents; out.loadEnd = load();
-if (process.env.OUT) writeFileSync(process.env.OUT, JSON.stringify(out, null, 1));
+save();
 closeSession();
 process.exit(diag.lost || diag.uncapturedCount !== 0 || consoleEvents.length ? 1 : 0);
