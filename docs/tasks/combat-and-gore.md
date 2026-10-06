@@ -20,11 +20,15 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
     base are body chops now, for every character.
   - **Debt:** an open head costs about +6 to +8 ms at 0.6 m and +0.6 to +1.6 ms at 2 m. A split is drawn closed past
     12.7 m.
-  - **Follow-ups, open:** a `return` after the march's miss `discard` (from the depth fault's bisect: the fault is
-    `bodyLights` called under a per-fragment condition on Apple's GPU, reached by missed fragments that keep running;
-    the rule is pinned and the gates have a depth guard; NOTES, "The depth fault, bisected"), the
-    `gRefoldBy` cross-slot leak, something in the gap (a brain), the slug opening the split. Full lists: spec section
-    10.10.
+  - **The `return` after the march's miss `discard`: landed 2026-10-06** (branch `claude/miss-discard-return`, off
+    `a2d61133`; with the refine twin's three). Bit-identical (six `march-hash` pins, the three gates, base against new
+    on 8 scenes). **No frame time and no compile time saved:** a probe showed that on Apple's GPU a discarded fragment
+    already paid nothing for the code after its `discard`. That reopens the depth fault's explanation (missed
+    fragments "running the tail"); its rule (`bodyLights` only under conditions every fragment shares), the pin and
+    the gates' depth guard stand. NOTES, "The miss discard's return".
+  - **Follow-ups, open:** the `gRefoldBy` cross-slot leak, something in the gap (a brain), the slug opening the
+    split, and the deferred game boot (`?renderer=deferred` draws no bodies on `a2d61133`; handoff follow-up 8). Full
+    lists: spec section 10.10.
   - **Gates (as of 2026-10-05):** `scripts/head-split-gate.mjs` (79 checks), `scripts/axe-gate.mjs` (26),
     `scripts/cut-wound-gate.mjs` (30).
 

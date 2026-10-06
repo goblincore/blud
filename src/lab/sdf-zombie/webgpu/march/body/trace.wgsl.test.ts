@@ -6,7 +6,8 @@
 // contract and docs/dev-notes/2026-09-18-march-split/ for the split.
 
 import { describe, it, expect } from 'vitest';
-import { HELPERS, MARCH_BODY, CONE_MARCH } from '../../march.wgsl';
+import { HELPERS, MARCH_BODY, REFINE_BODY, CONE_MARCH } from '../../march.wgsl';
+import { MARCH_SURFACE } from '../../deferred-sdf';
 import { declaredName } from '../../march-test-support';
 
 describe('ported features reach the entry point', () => {
@@ -172,5 +173,36 @@ describe('flat-albedo seam (close-up diagnostics task 1)', () => {
     expect(rest).toContain('calcNormal(p,');
     // Scatter + AO probes share one call site since 2026-09-21 (cold compile).
     expect(rest).toContain('mapBody(select(p + n * 0.06, p + L * 0.06, k == 0)');
+  });
+});
+
+describe('every discard is followed by a return (2026-10-06)', () => {
+  // In WGSL a discard does not end the invocation (Tint writes Metal's discard_fragment() and nothing else), so
+  // without a return the text below it stays reachable on garbage. The miss discard and the refine twin's three had
+  // none until 2026-10-06. The return is for the shader's shape, not its speed: output is bit-identical with and
+  // without it, and on Apple's GPU a discarded fragment paid nothing for the code after its discard
+  // (docs/dev-notes/2026-10-04-head-split/NOTES.md, "The miss discard's return"). On the build that showed the head
+  // split's depth fault, the return took the fault off every silhouette cell ("The depth fault, bisected").
+  const code = (text: string) => text.split('\n').map((l) => l.replace(/\/\/.*$/, '')).join('\n');
+  const RETURN = ' return vec4<f32>(0.0, 0.0, 0.0, 0.0);';
+
+  it('every discard in the three entries is followed by a return', () => {
+    for (const [name, text, sites] of [['MARCH_BODY', MARCH_BODY, 8], ['REFINE_BODY', REFINE_BODY, 11], ['MARCH_SURFACE', MARCH_SURFACE, 8]] as const) {
+      const src = code(text);
+      const at = [...src.matchAll(/\bdiscard;/g)].map((m) => m.index!);
+      // The count is here so a regex that stops matching cannot pass this test on nothing.
+      expect(at.length, `${name}: discard sites`).toBe(sites);
+      for (const i of at) {
+        expect(src.slice(i + 'discard;'.length).replace(/^\s*/, ' ').startsWith(RETURN), `${name}: "${src.slice(i - 60, i + 40).trim()}"`).toBe(true);
+      }
+    }
+  });
+
+  it('the miss branch keeps the near-miss write in front of the discard, and nothing between the discard and the return', () => {
+    const src = code(MARCH_BODY);
+    const miss = src.slice(src.indexOf('if (!hit) {'), src.indexOf('loadInstance(inst, gHitSlot);'));
+    expect(miss.replace(/\s+/g, ' ')).toBe(
+      'if (!hit) { if (gInstMelt.y > 1.5 && missNear < 16.0) { return vec4<f32>(missNear, -7.0, 0.0, -1.0); } discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); } ',
+    );
   });
 });

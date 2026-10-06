@@ -77,7 +77,7 @@ ${START_BOUNDS_BLOCK}
 `;
 
 /** Run 5 (plan 2026-09-13-neural-upscale-run5-sdf-refine): the walk alone — from `var t` to the
- *  line before `if (!hit) { discard; }`. REFINE_LOOP replaces exactly this section. */
+ *  line before the miss branch (`if (!hit) {`). REFINE_LOOP replaces exactly this section. */
 export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(max(startT, shellIn), preStart), tempStart), bodyEntry), winFar), 0.0, tMax);
   var hit = false;
   var prevRadius = 0.0;
@@ -338,7 +338,10 @@ export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) {
     // plane (nearer miss wins the depth test, any hit beats every miss) and alpha 1 (still a miss
     // to every reader). Off, this is the old discard exactly.
     if (gInstMelt.y > 1.5 && missNear < 16.0) { return vec4<f32>(missNear, -7.0, 0.0, -1.0); }
-    discard;
+    // THE RETURN (2026-10-06), as at the setup's discards: in WGSL a discard does not end the invocation, and with
+    // the return nothing below is entered on a garbage hit. It is NOT a speed-up. Measured on Apple's GPU: a
+    // discarded fragment already paid nothing for the code after its discard (head-split NOTES, 2026-10-06).
+    discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0);
   }
   // Reload the slot whose field won the union fold. Every post-hit row read
   // below (material, rest anchor, face, wound masks) is the HIT instance's.
