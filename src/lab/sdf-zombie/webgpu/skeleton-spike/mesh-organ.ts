@@ -28,6 +28,8 @@ export const ORGAN_VESSEL_COLOR: Vec3 = [0.42, 0.03, 0.05];
  *  plain organColor, (0.48, 0.167, 0.12): the march's wound overlays (gore, the wet film) redden an organ pixel by
  *  about (1, 0.59, 0.59). NOTES.md, "Matching the SDF organ". */
 export const ORGAN_WASH: Vec3 = [1.0, 0.59, 0.59];
+/** The wet glint's exponent (meshOrganShade): tight, against boneShade's broad sheen. */
+export const ORGAN_GLINT_POWER = 90;
 
 /** One organ look: the three uniforms the material reads beside organColor / organAmp.
  *  `cfg` = (veins, stain, aoFloor, wash):
@@ -35,7 +37,9 @@ export const ORGAN_WASH: Vec3 = [1.0, 0.59, 0.59];
  *   stain   0..1  pull toward the deep tissue colour away from a crater's centre (blood pooled at the rim);
  *   aoFloor 0..1  how dark the organ sits where no crater is centred (boneShade's occlusion input: 1 = none);
  *   wash    0..1  the blood wash, ORGAN_WASH.
- *  `gloss` = (spec scale, fresnel scale, gloss floor, spare).
+ *  `gloss` = (spec scale, fresnel scale, gloss floor, wet highlight): the first three scale boneShade's broad sheen;
+ *   the fourth is the gain of the torch's TIGHT highlight (meshOrganShade), the hot white glint that makes the
+ *   march's organ read as wet (its wetness is 1.8 x the flesh's, under its own per-pixel torch). 0 = none.
  *  `occ` = (r, g, b, beam gain): THE CAVITY'S OCCLUSION. The march shades an organ inside its crater: the room's
  *   lights reach it shadowed and already reddened by the flesh round it, and only a light at the eye (the torch)
  *   shines straight in. A mesh has no field to shadow it, so every light but the beam is multiplied by this colour
@@ -48,14 +52,16 @@ export interface OrganLook {
   occ: readonly [number, number, number, number];
 }
 
-/** The candidates of the owner's look sheet. `match` is fitted to the SDF organs (one flat colour, wet all over, the
- *  measured wash and occlusion); `veined` and `bloody` add detail on it; `pale` is lighter and less occluded, for an
- *  organ that is easier to see than today's. */
+/** The candidates of the owner's look sheet (docs/dev-notes/2026-10-06-organs-mesh/look/).
+ *   match   fitted to the SDF organ: one flat colour, the measured wash and occlusion, a moderate glint;
+ *   wet     the SDF organ as it reads in a shadowed crater: a darker base under a hot glint;
+ *   veined  match, with blotches and vessels;
+ *   pale    lighter and less occluded: an organ that is easier to see than today's. */
 export const ORGAN_LOOKS = {
-  match: { cfg: [0.0, 0.0, 0.75, 1.0], gloss: [1.0, 1.0, 0.85, 0], occ: [0.38, 0.14, 0.10, 1.9] },
-  veined: { cfg: [1.0, 0.2, 0.7, 1.0], gloss: [1.1, 1.0, 0.8, 0], occ: [0.38, 0.14, 0.10, 2.2] },
-  bloody: { cfg: [1.0, 0.7, 0.5, 1.0], gloss: [1.6, 1.3, 0.8, 0], occ: [0.34, 0.10, 0.07, 2.2] },
-  pale: { cfg: [0.25, 0.0, 0.85, 0.3], gloss: [1.0, 1.0, 0.85, 0], occ: [0.75, 0.5, 0.45, 1.9] },
+  match: { cfg: [0.0, 0.0, 0.75, 1.0], gloss: [1.0, 0.6, 0.85, 5.0], occ: [0.38, 0.14, 0.10, 1.5] },
+  wet: { cfg: [0.0, 0.3, 0.75, 1.0], gloss: [1.0, 0.4, 0.85, 10.0], occ: [0.34, 0.11, 0.08, 1.1] },
+  veined: { cfg: [1.0, 0.2, 0.75, 1.0], gloss: [1.0, 0.6, 0.85, 5.0], occ: [0.38, 0.14, 0.10, 1.6] },
+  pale: { cfg: [0.25, 0.0, 0.85, 0.3], gloss: [1.0, 0.8, 0.85, 3.0], occ: [0.75, 0.5, 0.45, 1.7] },
 } as const satisfies Record<string, OrganLook>;
 export type OrganLookName = keyof typeof ORGAN_LOOKS;
 /** Until the owner picks from the sheet (docs/dev-notes/2026-10-06-organs-mesh/look/). */
@@ -124,13 +130,18 @@ export const MESH_ORGAN_WET_WGSL = /* wgsl */ `fn meshOrganWet(pLocal: vec3<f32>
  *  under the torch it is lit as the flesh round it is.
  *  bodyLights is called under the same per-draw condition boneShade calls it under (body-lights.wgsl.ts, "WHERE IT
  *  MAY BE CALLED"). Needs BODY_LIGHTS and BONE_SHADE_WGSL as includes. */
-export const MESH_ORGAN_SHADE_WGSL = /* wgsl */ `fn meshOrganShade(p: vec3<f32>, n: vec3<f32>, camPos: vec3<f32>, deepColor: vec3<f32>, ambient: vec3<f32>, look: vec4<f32>, lightDir: vec3<f32>, keyColor: vec3<f32>, lightCfg: vec2<f32>, spotPos: vec3<f32>, spotAxis: vec3<f32>, spotCfg: vec4<f32>, spotCfg2: vec4<f32>, spotColor: vec3<f32>, surfaceIn: vec4<f32>, picks: vec4<f32>, lights: ptr<storage, array<vec4<f32>>, read>, listOn: f32, fill: f32, occ: vec4<f32>) -> vec3<f32> {
+export const MESH_ORGAN_SHADE_WGSL = /* wgsl */ `fn meshOrganShade(p: vec3<f32>, n: vec3<f32>, camPos: vec3<f32>, deepColor: vec3<f32>, ambient: vec3<f32>, look: vec4<f32>, lightDir: vec3<f32>, keyColor: vec3<f32>, lightCfg: vec2<f32>, spotPos: vec3<f32>, spotAxis: vec3<f32>, spotCfg: vec4<f32>, spotCfg2: vec4<f32>, spotColor: vec3<f32>, surfaceIn: vec4<f32>, picks: vec4<f32>, lights: ptr<storage, array<vec4<f32>>, read>, listOn: f32, fill: f32, occ: vec4<f32>, gloss: vec4<f32>) -> vec3<f32> {
   let lit = boneShade(p, n, camPos, deepColor, ambient, look, lightDir, keyColor, lightCfg, spotPos, spotAxis, spotCfg, spotCfg2, spotColor, surfaceIn, picks, lights, listOn, fill);
   let lumW = vec3<f32>(0.2126, 0.7152, 0.0722);
   var share = 0.0;
+  var glint = vec3<f32>(0.0);
   if (listOn > 0.5 && picks.x > -1.5) {
-    let bl = bodyLights(p, n, normalize(camPos - p), picks, lights, false, false);
+    let V = normalize(camPos - p);
+    let bl = bodyLights(p, n, V, picks, lights, false, false);
     share = bl.lumBeam / max(bl.lumAll + dot(ambient * fill, lumW), 1e-5);
+    // THE WET GLINT: the torch's tight highlight. The beam is at the eye, so its half vector is the view vector and
+    // the glint runs along whatever faces the camera; its strength is the beam's own luminance on the point.
+    glint = vec3<f32>(bl.lumBeam * pow(max(dot(n, V), 0.0), ${ORGAN_GLINT_POWER.toFixed(1)}) * gloss.w);
   } else if (spotCfg.x > 0.0) {
     let toLamp = spotPos - p;
     let dist = length(toLamp);
@@ -139,6 +150,8 @@ export const MESH_ORGAN_SHADE_WGSL = /* wgsl */ `fn meshOrganShade(p: vec3<f32>,
     let distFall = clamp(1.0 - dist / max(spotCfg.w, 1e-4), 0.0, 1.0);
     let beamI = coneFall * coneFall * distFall * distFall * spotCfg.x * spotCfg2.x;
     share = beamI / max(beamI + lightCfg.x * spotCfg2.z + dot(ambient, lumW), 1e-5);
+    glint = spotColor * (beamI * pow(max(dot(n, normalize(camPos - p)), 0.0), ${ORGAN_GLINT_POWER.toFixed(1)}) * gloss.w);
   }
-  return lit * mix(occ.xyz, vec3<f32>(occ.w), clamp(share, 0.0, 1.0));
+  let s = clamp(share, 0.0, 1.0);
+  return lit * mix(occ.xyz, vec3<f32>(occ.w), s) + glint;
 }`;

@@ -318,7 +318,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       mul(mul(u.look.z, organGloss), organLook.gloss.x),
       mul(mul(u.look.w, organGloss), organLook.gloss.y),
     )),
-    occ: organLook.occ,
+    occ: organLook.occ, gloss: organLook.gloss,
   }) as never, 1.0);
   organMaterial.depthTest = true;
   organMaterial.depthWrite = true;

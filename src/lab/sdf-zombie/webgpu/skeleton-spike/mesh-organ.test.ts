@@ -33,10 +33,12 @@ describe('organ mesh material (organs as mesh)', () => {
       for (const v of [...look.cfg.slice(0, 3), look.cfg[3], ...look.occ.slice(0, 3)]) { expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThanOrEqual(1); }
       expect(look.gloss[2]).toBeGreaterThan(0); expect(look.gloss[2]).toBeLessThanOrEqual(1);
       expect(look.occ[3]).toBeGreaterThanOrEqual(1); expect(look.occ[3]).toBeLessThan(4);
+      expect(look.gloss[3]).toBeGreaterThanOrEqual(0);
     }
-    // The match look adds nothing of its own: flat colour.
+    // The match look adds no pattern of its own: flat colour, the full measured wash.
     expect(ORGAN_LOOKS.match.cfg[0]).toBe(0);
     expect(ORGAN_LOOKS.match.cfg[1]).toBe(0);
+    expect(ORGAN_LOOKS.match.cfg[3]).toBe(1);
   });
 
   it('each WGSL string is exactly one fn (the wgslFn rule), and the surface mirrors the CPU terms', () => {
@@ -70,7 +72,9 @@ describe('organ mesh material (organs as mesh)', () => {
     // under the per-draw condition boneShade uses (never per fragment: body-lights.wgsl.ts).
     expect(organOcclusion([0.4, 0.2, 0.1], 1, 1.9)).toEqual([1.9, 1.9, 1.9]);
     expect(organOcclusion([0.4, 0.2, 0.1], 0, 1.9)).toEqual([0.4, 0.2, 0.1]);
-    expect(MESH_ORGAN_SHADE_WGSL).toContain('return lit * mix(occ.xyz, vec3<f32>(occ.w), clamp(share, 0.0, 1.0));');
+    expect(MESH_ORGAN_SHADE_WGSL).toContain('return lit * mix(occ.xyz, vec3<f32>(occ.w), s) + glint;');
+    // The wet glint: the beam's alone (its own luminance, so none with the torch off), gained by gloss.w (0 = none).
+    expect(MESH_ORGAN_SHADE_WGSL).toContain('glint = vec3<f32>(bl.lumBeam * pow(max(dot(n, V), 0.0), 90.0) * gloss.w);');
     expect(MESH_ORGAN_SHADE_WGSL).toContain('share = bl.lumBeam / max(bl.lumAll + dot(ambient * fill, lumW), 1e-5);');
     expect(MESH_ORGAN_SHADE_WGSL).toContain('if (listOn > 0.5 && picks.x > -1.5) {');
     expect(MESH_ORGAN_SHADE_WGSL.match(/bodyLights\(/g)?.length).toBe(1);

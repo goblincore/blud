@@ -134,6 +134,6 @@ describe('__sdfGame.setOrgans / organs (organs as mesh, 2026-10-06)', () => {
     expect(calls).toEqual([[]]);
     expect(seams.organs()).toEqual({ mode: 'sdf', drawn: 0, look: null, tint: null, drawnBy: [], packed: [{ id: 1, rows: 8 }] });
     expect(seams.organSegments(1)).toEqual([]);
-    expect(seams.setOrganLook('bloody')).toBeNull();
+    expect(seams.setOrganLook('wet')).toBeNull();
   });
 });

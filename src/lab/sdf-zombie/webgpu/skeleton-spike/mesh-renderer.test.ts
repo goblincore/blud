@@ -626,11 +626,11 @@ describe('organs as mesh (2026-10-06): organ sources draw on their own batch, on
     const cache = new SegmentMeshCache();
     const renderer = createSegmentMeshRenderer(cache);
     const close = (v: readonly number[]) => v.map(x => expect.closeTo(x, 6));
-    expect(renderer.setOrganLook('bloody')).toEqual({ cfg: close(ORGAN_LOOKS.bloody.cfg), gloss: close(ORGAN_LOOKS.bloody.gloss), occ: close(ORGAN_LOOKS.bloody.occ) });
-    expect(renderer.organLook.cfg.value.x).toBe(ORGAN_LOOKS.bloody.cfg[0]);
+    expect(renderer.setOrganLook('wet')).toEqual({ cfg: close(ORGAN_LOOKS.wet.cfg), gloss: close(ORGAN_LOOKS.wet.gloss), occ: close(ORGAN_LOOKS.wet.occ) });
+    expect(renderer.organLook.cfg.value.x).toBe(ORGAN_LOOKS.wet.cfg[0]);
     expect(renderer.setOrganLook({ cfg: [0.1, 0.2, 0.3, 0] }).cfg).toEqual([0.1, 0.2, 0.3, 0]);
     expect(renderer.setOrganLook({ occ: [0.5, 0.25, 0.125, 0] }).occ).toEqual([0.5, 0.25, 0.125, 0]);
-    expect(renderer.setOrganLook().gloss).toEqual(close(ORGAN_LOOKS.bloody.gloss));
+    expect(renderer.setOrganLook().gloss).toEqual(close(ORGAN_LOOKS.wet.gloss));
     renderer.dispose();
     cache.dispose();
   });
