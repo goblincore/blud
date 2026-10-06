@@ -30,6 +30,14 @@
   Debt: an open head costs about +6 to +8 ms at 0.6 m. Gates `scripts/head-split-gate.mjs` (80 checks), `scripts/axe-gate.mjs` (27), as of 2026-10-05.
   [Spec](docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 10) · [handoff](docs/dev-notes/2026-10-04-head-split/HANDOFF.md) · [notes](docs/dev-notes/2026-10-04-head-split/NOTES.md).
 
+**Organs as mesh** (branch `claude/organs-mesh`) — [rendering](docs/tasks/rendering.md)
+- [~] **Built 2026-10-06; the owner's look pick pending.** On the mesh skeleton a zombie's organs are segment meshes, drawn
+  only where a wound reaches them; the body packs no inside-flesh row, so the march never calls `applyBones` (0
+  evaluations a frame against 869,688 on three torso chops; about 1 to 1.5 ms back at 0.9 m). `?organs=sdf` is the A/B.
+  Look candidates `match` / `wet` / `veined` / `pale` on the [sheets](docs/dev-notes/2026-10-06-organs-mesh/look/).
+  Gate `scripts/organs-mesh-gate.mjs` (32 checks). [Spec](docs/superpowers/specs/2026-10-06-organs-mesh-design.md) ·
+  [notes](docs/dev-notes/2026-10-06-organs-mesh/NOTES.md).
+
 **Night Train (level 1)** — [levels](docs/tasks/levels.md) (items 4a–4k)
 - [x] **Body lighting settled** (owner, 2026-09-28): LIGHT LAYERS panel (`light-layers.ts`) — every body-lighting
   change since the melee branch behind a live switch. Default = the owner's pick: the list on; with the torch lit,
