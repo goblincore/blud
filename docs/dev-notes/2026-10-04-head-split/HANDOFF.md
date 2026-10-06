@@ -123,7 +123,7 @@ The per-task texts used for dispatch are in the session scratchpad (`scratchpad/
     (`SplitState.wobP` / `wobM`), a damped spring driven by the acceleration of the split's mass point, with hard
     limits. It reaches the renderers only through `SplitWarp.thetaP` / `thetaM`. Off: `gainSide` 0 and `gainBob` 0
     (bit-identical). A frozen actor rests at exactly zero offset.
-  - The gate is 78 checks: K holds the kick (and the bone on its swing back), J is the wobble, driven by a scripted
+  - The gate is 78 checks (79 with the depth guard that came with the wet film's review fixes): K holds the kick (and the bone on its swing back), J is the wobble, driven by a scripted
     list of accelerations through `__sdfGame.headSplitDrive` on a frozen zombie. After a thaw the gate waits for the
     wobble to rest (`restWobble`) before it measures a rest angle; a new scenario that thaws must do the same.
   - Review fixes (after the owner played `9dcd133f` and kept the tuning): `stepSplit` sanitises its drive and state,
@@ -135,7 +135,8 @@ The per-task texts used for dispatch are in the session scratchpad (`scratchpad/
   writes no shader text at all. Nothing outside an open split's region changes (0 texels; pins unmoved). Sheets
   `look/10`-`12`. Under the torch at 0.6 m the raw texels over 0.6 luma go 1.98% -> 4.63%, over 0.95 0.02% -> 0.76%
   (worst view 2.89%). Striking on a one-sided split's big face; modest on the two-sided one, where little raw
-  surface faces the player. Stills only: it needs the owner's eye in motion.
+  surface faces the player. It needs the owner's eye in motion. After its review fixes (the head-side gate, the
+  tangent projection and horizon, `lumpTilt` 3.2): 5.05% and 1.08%, worst view 2.27%; sheets `look/10`-`13`.
 - All measurements and photos: [`NOTES.md`](NOTES.md), `b4/` … `b7/`, `look/`.
 - **Testing rule added:** after any WGSL change run the full tree,
   `npx vitest run src/lab/sdf-zombie --exclude '**/cut-wound.test.ts'` (510 files, 3–5 minutes). Targeted sets missed
@@ -164,12 +165,22 @@ The per-task texts used for dispatch are in the session scratchpad (`scratchpad/
 - **Known limits:** a pellet or slug crater on a cut face sits on the old plane, so it shows on both faces. A rod sweep
   across the gap is un-warped as one segment by its midpoint's piece. `sdBody` costs about 2.7× inside the region.
   A forced re-split with fewer sides leaves the old face wound (seam only). A baked split head has no answer yet.
-- **Do not call `bodyLights` a second time in the march entry.** One more call, behind an open split's gate, left
-  16 px screen tiles of the open head at the world origin's depth (rectangular notches). Mechanism unknown;
-  NOTES, "Look: wet under the flashlight". A follow-up is flagged.
+- **An unexplained depth fault in the light tail** (NOTES, "Look: wet under the flashlight"). A build of the wet
+  film that walked the light list a second time left whole 4 x 4 texel cells of an open head (of the 400 x 300 march
+  target) with their colour right and the WORLD ORIGIN's depth: rectangular notches. `bodyLights` is pure and those
+  texels never ran the added call, so it is no rule about `bodyLights`: something zeroes the hit position, the
+  mechanism is not known, and another edit to the light tail could bring it back. The gate's depth guard
+  (`head-split-gate.mjs depthGuard`, every capture) catches it whatever the cause; the count of `bodyLights(` in the
+  entry is pinned at 2 as a tripwire. A follow-up to find the mechanism is filed.
 - **At 0.6 m the torch's beam misses a head in the middle of the screen** (the torch is 0.25 m off the eye, its cone
   21.6 degrees). The body's own torch light there is weak by construction; the wet film has its own wider cone
   (`SPLIT_SHADE.glisten.spill`). With the torch lit the lamps add no glint to the film.
+- **The wet film** keeps to the opened head (above the hinge plane, inside the hold ball: a chest wound of a zombie
+  whose head is open does not take it), leans its normal in the tangent plane and has a horizon on the surface's own
+  normal. The deferred surface entry does not carry it (the game's default entries do). Its cost is per raw texel:
+  six `noise3` and two `pow`, again in the refine twin. Its fade distances are in march texels (2.4 m / 5 m at the
+  gate's resolution). A walk's wobble does not make it sparkle (2.5% of highlight texels last one tick at 0.6 m);
+  fast motion is not measured.
 - **House rule:** never run `git checkout -- .`, `git restore .`, `git reset --hard` or `git clean` here; an
   implementer wiped its own uncommitted work that way.
 

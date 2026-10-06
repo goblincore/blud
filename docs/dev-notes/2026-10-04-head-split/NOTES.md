@@ -1408,15 +1408,26 @@ tail's compose right after the light list's add and before the highlight shoulde
 - **With the torch lit the lamps are not the key** (`game-light-list-leaves.ts torchLane`: lit, the torch keeps the
   key by its per-pixel beam and the lamps are only in the list's sums; off, the list's dominant pick is the key). So a
   lamp can glint off the film only with the torch off. Lit, the lamps add nothing to the film.
-- **A second `bodyLights` call in the march entry leaves screen tiles of an open head at a wrong depth.** The first
-  build walked the list again off the film's normal (`bodyLights(p, glisN, V, gInstLights, lightList, false, true)`
-  behind the raw gate). On the float march target, 72 to 197 texels of each 0.6 m capture, in blocks on the 16 px tile
-  grid at the head's silhouette, kept their lit colour to the bit but took ONE exact clip depth per camera: the
-  projection of the world origin (view distance -9.74 m from the front, 13.15 m from three-quarter). In the composite
-  they are rectangular notches. With only that call removed: 0 such texels. With the call in the text but unreachable
-  (`if (false)`): 0. Closed bodies never showed it. The mechanism is NOT known. The block does not call it (a text pin
-  in its test), and the lamp's term reads the key instead. A follow-up to find the mechanism, and whether bones or
-  chunks can hit it, is flagged.
+- **An unexplained depth fault** (reworded after review: it is not a rule about `bodyLights`). The first build of
+  the block walked the light list again off the film's normal (`bodyLights(p, glisN, V, gInstLights, lightList,
+  false, true)` behind the raw gate). On the float march target, 72 to 197 texels of each 0.6 m capture then kept
+  their lit colour to the bit but took ONE exact clip depth per camera: the projection of the world origin (view
+  distance -9.74 m from the front, 13.15 m from three-quarter). In the composite they are rectangular notches in the
+  head's silhouette. With only that call removed: 0 such texels. With the call in the text but unreachable
+  (`if (false)`): 0. Closed bodies never showed it.
+  - **The cells.** The bad texels are whole 4 x 4 texel cells of the 400 x 300 march target (in three saved captures
+    14 of 16, 11 of 11 and 10 of 10 touched cells have every body texel bad; on a 16-texel grid none has). I first
+    wrote "16 px tiles", from `tile-cull.ts TILE_SIZE_PX`: the data does not support that. A 4-texel cell is about
+    13 px of the 1280 px screen.
+  - **What the reviewer ruled out.** `bodyLights` is pure (no private write, no callee). The entry already has two
+    call sites, in exclusive branches (`light-list.wgsl.ts`). The bad texels are skin at the jaw's silhouette whose
+    colour is bit-equal to `gain` 0, so the added call never ran on them. The fault also shows on an open head 4.2 m
+    away. That depth needs `cameraPosition + rayDir x t` (`zombie-gpu.ts createMarchMaterial`) to be exactly zero: a
+    zeroed temporary, from codegen or from the node graph's ordering. The mechanism is NOT known, and the next
+    unrelated edit to the light tail could bring it back without anyone calling `bodyLights`.
+  - **What holds it now.** The gate's depth guard (review fixes, below) catches it whatever the cause. The block does
+    not walk the list, and its test pins the entry's count of `bodyLights(` at 2: a tripwire for the one edit known
+    to trigger it, not an explanation. A follow-up to find the mechanism is filed.
 
 ### The constants (`SPLIT_SHADE.glisten`)
 
@@ -1427,10 +1438,11 @@ tail's compose right after the light list's add and before the highlight shoulde
 | `spill` | 0.3 | how far past the beam's outer cone the torch's glint reaches, in the cosine to the beam's axis (to about 51 degrees) |
 | `lamps`, `lampPow` | 0.45, 20 | torch off: the keying lamp's share of `gain`, and its exponent |
 | `rawLo`, `rawHi` | 0.3, 0.8 | the film comes in over this range of the wound mask |
-| `lump`, `lumpTilt`, `lumpFlat` | 0.014 m, 1.4, 0.1 | the coarse octave: cell, tilt (tangent at full swing), and the push off zero |
+| `lump`, `lumpTilt`, `lumpFlat` | 0.014 m, 1.4 (**3.2** after the review fixes: the tilt is projected now), 0.1 | the coarse octave: cell, tilt per unit of noise on one axis, and the push off zero |
 | `fine`, `fineTilt` | 0.006 m, 0.3 | the fine octave |
-| `fadeLo`, `fadeHi` | 0.75, 1.5 | an octave fades as its cell shrinks from 1.5 to 0.75 march texels: the fine one whole to about 1 m and gone by 2 m, the coarse one (and with it the film) whole to 2.4 m and gone by 5 m |
-| `edge` | 0.03 m | the fade at the region sphere |
+| `fadeLo`, `fadeHi` | 0.75, 1.5 | an octave fades as its cell shrinks from 1.5 to 0.75 MARCH TEXELS. In metres that is the march resolution's: at the gate's (a 400 x 300 target) the fine one is whole to about 1 m and gone by 2 m, the coarse one (and with it the film) whole to 2.4 m and gone by 5 m. At another resolution the distances scale with the texel |
+| `edge` | 0.03 m at the region sphere (**0.01 m** past the opened head's bounds after the review fixes) | the film's soft boundary |
+| `horizon` | **0.15** (review fixes) | a light's glint comes in over this much of n . L on the surface's own normal |
 
 ### The numbers
 
@@ -1616,3 +1628,141 @@ line but the draw times the same in both; `axe-gate` 25 of 25; `cut-wound-gate` 
 `9dcd133f` the lines that were already there read the same, but for three that moved by a hair (O's lit texels 131
 -> 151, L's centroid 0.51 -> 0.50 texels, M's worst 3.37 -> 3.36 px): shading measures, with the flashlight wetness
 commits in between (not bisected).
+
+## Look: wet under the flashlight, review fixes (2026-10-05)
+
+The step was reviewed: approved with fixes. The look is kept (the owner has the build and has not asked for a change
+to `gain`): `gain`, `pow`, `spill`, `lamps` and `lampPow` are untouched. One code commit on top of the wobble fix
+(`d0fa3777`).
+
+### 1. The film stays on the head
+
+The block's gate was `splitIn` x the wound mask, and the region sphere (r 0.32 m about a hinge at y 1.56) takes in
+the neck, the shoulders and the chest down to about y 1.24. So a wound on the CHEST of a zombie whose head is open
+took the film, and the 3 cm fade at the sphere would have crossed a chest chop.
+
+Now `glisRaw` carries the piece loop's own measure of where the split's flesh is (`map-body.wgsl.ts cap0`), read at
+the hit piece's un-warped point `pS`: `min(up, rho - dh)`, above the hinge plane and inside the hold ball, whole on
+and inside those bounds (the floor of the V lies on the hinge plane) and gone 1 cm past them (`edge`, was 3 cm at the
+region sphere). The film covers the turned halves' raw surfaces and the floor of the V, and nothing under the hinge.
+
+**Proof** (`scratchpad/b8b3/leak.py`). A zombie with its head forced wide open takes a torso chop (its centre 0.315 m
+under the hinge, 0.333 m from it) and a pellet in the shoulder (0.17 m under, 0.244 m from it: inside the region
+sphere). Shot at the chest from 0.9 m and at the shoulder from 0.6 m, torch on and off, this build against `gain` 0,
+every body texel placed in the world by its depth:
+
+| | body texels under the hinge plane (inside the region sphere) | differ, before the fix (`d0fa3777`) | differ, after |
+| --- | --- | --- | --- |
+| chest view, torch on | 36 156 (12 436) | 1247 (up to 0.999) | **0** |
+| chest view, torch off | 36 156 (12 436) | 1340 | **0** |
+| shoulder view, torch on | 35 518 (12 458) | 946 | **0** |
+| shoulder view, torch off | 35 518 (12 458) | 871 | **0** |
+
+In the chop's own window (1.5 x its half-length: 13 187 / 12 266 texels) and the pellet's (2325 / 3187): 0 differ.
+The measure can fail: it read 871 to 1340 on the build before.
+
+And the proof of the first round again, on this build: a closed head with a pellet crater and a torso chop on a
+closed-headed zombie, 0 of 120 000 texels each, torch on and off; over all 62 captures, every body texel outside the
+region sphere of every open head (four of them; 587 723 texels): 0 differ, colour and depth.
+
+### 2. The film leans, and keeps to the lit side
+
+`normalize(n + tilt)` had no tangent projection: with `lumpTilt` 1.4 the film's normal could turn INTO the surface,
+and neither light term had a horizon, so a lamp could glint on flesh facing away from it; and "the tangent of the
+tilt" in the constants' doc was untrue. Now the tilt is projected onto the tangent plane, as the body grain's is
+(`tilt - n dot(tilt, n)`), so the film's normal leans and n . glisN stays positive; and each light's glint carries a
+soft horizon on the surface's own normal (`smoothstep(0, horizon, n . L)`, `horizon` 0.15: the torch's direction for
+the torch, the keying lamp's for the lamp).
+
+**The retune.** Before the fix about half the facets were dead by accident (their normal pointed into the flesh);
+projected, all of them can catch the light, and the same `lumpTilt` gave more and larger highlights (pooled at 0.6 m,
+torch on: 6.48% over 0.6 and 1.98% over 0.95 against 4.63% / 0.76%; 7.63% over 0.95 from three-quarter on the
+two-sided head). `lumpTilt` alone was swept (0.7, 1.0, 1.4, 1.9, 2.5, 3.2) for the nearest match to the previous
+sheets, view by view: **3.2**. `fineTilt` stays 0.3. Nothing else moved.
+
+Share of raw-surface texels over 0.6 / over 0.95 luma (the same raw texels as before: the first round's gate masks),
+the first round's build -> this one:
+
+| | raw texels | torch ON | torch OFF |
+| --- | --- | --- | --- |
+| **0.6 m, pooled** (front, three-quarter, above-behind; both scenes) | 11 467 | **4.63 / 0.76% -> 5.05 / 1.08%** | 1.80 / 0 -> 1.53 / 0% |
+| **2 m, pooled** (front; both scenes) | 179 | **9.50 / 0.56% -> 8.94 / 0.56%** | 1.12 / 0 -> 1.68 / 0% |
+| both, front 0.6 m | 861 | 7.55 / 0.35 -> 8.94 / 0.46% | 2.32 -> 2.90% |
+| both, three-quarter 0.6 m | 1586 | 5.17 / 1.77 -> 5.23 / 1.70% | 2.40 -> 0.50% |
+| both, above-behind | 2743 | 7.51 / 1.02 -> 9.22 / 1.86% | 3.03 -> 3.03% |
+| one side, front 0.6 m | 1251 | 1.84 / 0 -> 1.60 / 0.08% | 0.08 -> 0% |
+| one side, three-quarter 0.6 m | 3037 | 3.49 / 0.59 -> 2.96 / 0.72% | 0 -> 0 (mean luma 0.093 -> 0.072) |
+| one side, above-behind | 1989 | 2.46 / 0.50 -> 2.82 / 0.96% | 3.22 -> 3.02% |
+| from the head's right side, both | 308 | 5.84 / 0.65 -> 9.42 / **2.27%** | 0.32 -> 1.62% |
+| from the head's right side, one side | 3324 | 9.78 / 2.89 -> 4.45 / 1.29% | 0.39 -> 0.09% |
+
+(Before the film at all: 1.98 / 0.02% at 0.6 m and 6.15 / 0% at 2 m, torch on; 1.20% and 0.56% torch off.) No view
+passes 2.3% over 0.95 now. Highlight texels over the 5-frame orbit: both 53, 40, 31, 43, 48 -> 37, 28, 47, 96, 132;
+one side 25, 40, 57, 73, 106 -> 33, 79, 112, 110, 90.
+
+What changed in the picture (`look/10` to `12`, shot again): under the torch the sheets are very close to the first
+round's. With the torch OFF the big cut face of the one-sided head lost its warm speckle from three-quarter (mean
+luma back to the value before the film, 0.072): that face looks away from the lamp that keys the body, and the
+speckle was the fault the horizon removes. Faces that do look at the lamp keep theirs.
+
+### 3. The depth fault: a guard, not a rule
+
+- **The guard** (`scripts/head-split-gate.mjs depthGuard`, run on every capture the gate reads: 227 a run, 7.5 million body texels).
+  The target's alpha is the hit's clip depth, so each body texel is a point in the world: the eye + (its distance
+  along the view axis) x (the texel's ray). A texel is bad when that distance is not positive and finite (behind the
+  camera, or nowhere), or when the point lies outside EVERY actor's proxy box (the view's position +- its
+  `bodyHalf`: the box the march rasterises and can alone hit inside), grown by 5 cm + 3% of the distance (a texel's
+  footprint and the march's accept reach). Of the bad texels, those at the world origin's clip depth (within 1e-6)
+  are counted apart: the fault's signature. One check, in C: 0 bad texels over the run.
+- **It fails on the faulty build.** With the second call put back in the block (a scratch edit, reverted by name),
+  `ONLY=S,O`: "49 lie behind the camera ... 49 of those at the world origin's depth; the first {texel [208, 69],
+  clipDepth 1.0107716, distance -9.741, originDepth 1.0107717}". (O failed too on that build: 9 texels of the still
+  half moved in depth.) On this build, the same subset and the whole gate: 0.
+- The test, this file and HANDOFF no longer call it a `bodyLights` rule (the first round's section above is
+  reworded, with what the reviewer ruled out and the 4 x 4 cells). The test pins `bodyLights(` at 2 in `MARCH_BODY`
+  and `REFINE_BODY`, as a tripwire.
+
+### 4. The wobble: does it sparkle?
+
+A 12-tick strip of an open head driven by the gate's scripted walk (`__sdfGame.headSplitDrive`, scenario J's bob
+and sway; each half swings 0.1 to 0.9 degrees a tick about 30), torch on, from three-quarter at 0.6 m and at 2 m
+(`look/13-wet-flashlight-wobble.jpg`). A film highlight is a body texel over 0.6 luma that is not over 0.6 on the
+same scripted frame with `gain` 0; each is carried back to the CLOSED head by its frame's own split, so a glint that
+rides its half reads as staying. Single-frame: no highlight within 1.75 texel footprints of that spot of flesh on the
+tick before nor on the tick after.
+
+| | highlight texels a tick | single-frame | new against the tick before |
+| --- | --- | --- | --- |
+| 0.6 m (within 4.5 mm) | 118 to 155 | **2.5%** (32 of 1270) | 5.8% |
+| 2 m (within 13.1 mm) | 15 to 22 | 4.0% (7 of 176) | 14.2% |
+
+Far under a third at 0.6 m, so `lumpFlat`, `fadeLo` and `fadeHi` are unchanged. (At `lumpTilt` 1.4 and 2.5 it read
+1.8% and 2.0%.) The pixel-footprint fade is still keyed to the noise's cell, not to the facets' edges; this strip is
+what says that is enough for a walk's wobble. A hard throw, or the eye moving fast, is not measured.
+
+### On record
+
+- **The deferred surface entry does not carry the film.** It has no light tail. The game's default entries (the
+  march and its refine twin) do.
+- **With the torch lit the level's lamps add no glint to the film** (the torch keeps the key; the lamps are only in
+  the list's sums).
+- **Cost per raw texel:** six `noise3` taps and two `pow`, and the same again in the refine twin where it re-shades
+  that texel. Nothing off the opened head's raw surfaces.
+- **The fade's distances** (2.4 m / 5 m) are the gate's march resolution's: the fade is in march texels.
+- **Also pinned now:** with `gain` 0 the three march exports are, to the character, the build without the block
+  (the modules built again with that one number changed: `split-glisten.wgsl.test.ts`).
+
+### The check set
+
+| Check | Result |
+| --- | --- |
+| `march-golden -u` | `MARCH_BODY`, `MARCH_BODY_LIGHT`, `REFINE_BODY` |
+| `compile-census` | phase ready, `uncapturedCount` 0, no device loss; march module 330409 B -> 331149 B (83 fns); cold `warmMs` 21412 (23514 in the first round) |
+| `march-hash` | no pin moved (`d7392d52…` / `76bd51aa…`, `0c71e712…` / `bf6836cd…`, `470ff0b3…` / `f618070e…`) |
+| `head-split-gate.mjs`, twice | **79 checks, 0 failed** each (the wobble fix's 78 and the depth guard: 0 of 7 545 127 body texels over 227 captures behind the camera or outside every proxy box); every check and measure line the same in both runs but the draw times |
+| `axe-gate.mjs` | 25 checks, 0 failed |
+| `cut-wound-gate.mjs` | 30 checks, 0 failed |
+| `tsc --noEmit` | the `node:crypto` error only |
+| the whole tree (`--exclude '**/cut-wound.test.ts'`) | 511 files, 7467 tests passed, 1 skipped (one pin restated: `split-hit.wgsl.test.ts` counted the light tail's readers of `pS` at 2, the motion vectors; the film's head-side gate is the third) |
+| cold boot pair | not run: the census cold compile did not move by a second |
+
