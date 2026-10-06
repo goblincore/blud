@@ -135,3 +135,39 @@ export function skullChips(crown: Vec3, blowDir: Vec3, rand: () => number): Gore
   }
   return out;
 }
+
+/** THE SLUG BURST'S SKULL SHARDS (spec §6.3): flattened bone plates thrown in a cone along `outDir`. */
+export const SHARDS = {
+  speed: [2.5, 6] as const,
+  /** Cone half-width as a share of the unit direction, plus a lift so they arc. */
+  spread: 0.55,
+  lift: 0.25,
+  size: [0.012, 0.024] as const,
+  /** Plate thickness as a share of its width. */
+  thin: 0.22,
+  spin: 40,
+} as const;
+
+/** `count` shards from `origin` along `outDir` (world, unit). Pure given `rand`. */
+export function skullShards(origin: Vec3, outDir: Vec3, count: number, rand: () => number): GorePiece[] {
+  const out: GorePiece[] = [];
+  const base = norm(outDir);
+  for (let i = 0; i < count; i++) {
+    const o = add(origin, [(rand() - 0.5) * 0.05, (rand() - 0.5) * 0.05, (rand() - 0.5) * 0.05]);
+    const dir = norm([
+      base[0] + (rand() - 0.5) * 2 * SHARDS.spread,
+      base[1] + (rand() - 0.5) * 2 * SHARDS.spread + SHARDS.lift,
+      base[2] + (rand() - 0.5) * 2 * SHARDS.spread,
+    ]);
+    const speed = SHARDS.speed[0] + (SHARDS.speed[1] - SHARDS.speed[0]) * rand();
+    const r = SHARDS.size[0] + (SHARDS.size[1] - SHARDS.size[0]) * rand();
+    const tint = 0.88 + 0.12 * rand();
+    out.push({
+      limb: 'head', origin: o, kind: 'gob', tornAt: [], bones: [],
+      prims: [prim(o, o, r, [0.86 * tint, 0.82 * tint, 0.7 * tint], { scale: [1, SHARDS.thin, 0.7 + 0.5 * rand()], blendK: 0.002, op: 'add' })],
+      vel: scale(dir, speed),
+      angVel: [(rand() - 0.5) * SHARDS.spin, (rand() - 0.5) * SHARDS.spin, (rand() - 0.5) * SHARDS.spin],
+    });
+  }
+  return out;
+}

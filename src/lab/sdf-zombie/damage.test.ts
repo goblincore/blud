@@ -467,8 +467,8 @@ describe('head crater slots', () => {
     expect(ring.length).toBe(MAX_WOUNDS);
     expect(ring.some(x => x.eventId === 100)).toBe(true);
   });
-  it('the head keeps 7 crater slots (6 regions and the brain cavity)', () => {
-    expect(MAX_HEAD_WOUNDS).toBe(7);
+  it('the head keeps 8 crater slots (6 regions, the brain cavity and the burst exit crater)', () => {
+    expect(MAX_HEAD_WOUNDS).toBe(8);
   });
 });
 

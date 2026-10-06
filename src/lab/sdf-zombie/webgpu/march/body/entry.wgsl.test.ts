@@ -94,7 +94,7 @@ describe('run 5: MARCH_BODY_TRACE is SETUP + LOOP + POST', () => {
     const newton = m.REFINE_LOOP.indexOf('t = t + dres.x');
     expect(reject).toBeGreaterThan(-1); expect(newton).toBeGreaterThan(reject);
     expect(m.REFINE_LOOP).toContain('gNormalEps = ');
-    expect(m.REFINE_LOOP).toContain('if (wsum < 0.5) { discard; }');
+    expect(m.REFINE_LOOP).toContain('if (wsum < 0.5) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }');
   });
   it('run 5b: the march writes the per-body key into the normal attachment alpha', async () => {
     const m = await import('../../march.wgsl');

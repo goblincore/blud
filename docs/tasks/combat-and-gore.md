@@ -2,6 +2,70 @@
 
 Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Cut wounds and the head split — designed 2026-10-03
+
+- [~] **The axe (slot 7) and the head split — built 2026-10-05; owner playtested; PR goblincore/blud#31 (branch
+  `claude/head-cleaving-effect-ef9515`). The wet film under the flashlight is the owner's pick (C, the boldest of `look/14-wet-variants.jpg`, 2026-10-06).** An H / R / L
+  chop combo, 1.8 m reach shared with the flail, its own light list. Body chops stamp cut wounds (kerf 0.025 since the
+  excess pass). Pose and look suggestions for the axe itself are left for the owner (spec section 9, axe notes).
+  - **The split.** A chop on a zombie's head flesh opens the head on a hinge, as real SDF geometry: the union of three
+    rigid capped pieces, the same field on the CPU and the GPU. Chop 1 opens it to a wide crack, chop 2 splits it wide
+    and the zombie lives, chop 3 kills with a kick (3 is tunable). An off-centre chop opens one side; `face` is rare. The
+    split stays open on the corpse, and later hits land on the opened halves.
+  - **With it:** the skull mesh cracks, then splits along a ragged edge; the halves wobble with the body; a wet film on
+    the raw surfaces glints under the flashlight (off: `SPLIT_SHADE.glisten.gain` 0).
+  - **Owner calls (2026-10-05):** the axe skips the thin crack; the wobble stays as tuned; the ragged face cuts stay (a
+    cut-face restyle was built and reverted, `d0d407d2`); optimise the open head later.
+  - **Behaviour change:** only a chop on head flesh is a head chop. Chops to the upper chest, the collar and the neck's
+    base are body chops now, for every character.
+  - **Debt:** an open head costs about +6 to +8 ms at 0.6 m and +0.6 to +1.6 ms at 2 m. A split is drawn closed past
+    12.7 m.
+  - **The `return` after the march's miss `discard`: landed 2026-10-06** (branch `claude/miss-discard-return`, off
+    `a2d61133`; with the refine twin's three). Bit-identical (six `march-hash` pins, the three gates, base against new
+    on 8 scenes). **No frame time and no compile time saved:** a probe showed that on Apple's GPU a discarded fragment
+    already paid nothing for the code after its `discard`. That reopens the depth fault's explanation (missed
+    fragments "running the tail"); its rule (`bodyLights` only under conditions every fragment shares), the pin and
+    the gates' depth guard stand. NOTES, "The miss discard's return".
+  - **Follow-ups, open:** the `gRefoldBy` cross-slot leak, something in the gap (a brain), the slug opening the
+    split, and the deferred game boot (`?renderer=deferred` draws no bodies on `a2d61133`; handoff follow-up 8). Full
+    lists: spec section 10.10.
+  - **Gates (as of 2026-10-06):** `scripts/head-split-gate.mjs` (80 checks), `scripts/axe-gate.mjs` (27),
+    `scripts/cut-wound-gate.mjs` (30).
+
+  [Spec](../../docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 9: the axe as built; section 10:
+  the head split as built) · plans [A](../../docs/superpowers/plans/2026-10-04-axe-part-a.md) and
+  [B](../../docs/superpowers/plans/2026-10-04-head-split-part-b.md) ·
+  [handoff](../../docs/dev-notes/2026-10-04-head-split/HANDOFF.md) ·
+  [head split notes](../../docs/dev-notes/2026-10-04-head-split/NOTES.md) ·
+  [axe notes](../../docs/dev-notes/2026-10-04-axe/NOTES.md).
+
+- [~] **Cut wounds (axe / sword / chainsaw base) and a head that splits into two hinged halves.** M1 built 2026-10-04: cut
+  wounds + rod (slot 6) + 32 wounds with merging; owner playtested. M2 (the head split) built 2026-10-05, with the axe
+  (above). M3 (tuning) is open. Craters cannot make deep jagged cuts (owner, 2026-10-03). M1: a cut wound shape (blade
+  slot, jagged walls, lips) + a rod stand-in weapon; M2: the head split (authored presets, a split field in `mapBody`,
+  CPU mirror, skull mesh); M3: tuning.
+  - **The excess pass (2026-10-04, after the owner's "more excessive"):** longer, wider, ragged tapered cuts, bigger
+    lips, more blood. Two costs are open and not investigated: cold boot about +430 ms; three axe chops add about
+    +22 ms of frame time (+4.3 ms before). [Status](../../docs/dev-notes/2026-10-04-cut-excess/STATUS.md) ·
+    [before and after, and the decision](../../docs/dev-notes/2026-10-04-cut-excess/compare/NOTES.md).
+
+  [Spec](../../docs/superpowers/specs/2026-10-03-cut-wounds-design.md) (section 11: as built) ·
+  [plan](../../docs/superpowers/plans/2026-10-03-cut-wounds-m1.md) · gate `scripts/cut-wound-gate.mjs` (30 checks) ·
+  [notes](../../docs/dev-notes/2026-10-03-cut-wounds/NOTES.md).
+
+## Slug head burst — designed 2026-10-02
+
+- [~] **Slug on the head: lethal burst (dead-centre) and glancing rupture (off-centre). Built 2026-10-02; owner playtest
+  pending.** Jelly rupture deform, skull shards, brain, blood and hinged torn scalp flaps (one draw); the head stays on
+  the body. Plain zombie only. [Spec](../../docs/superpowers/specs/2026-10-02-slug-head-burst-design.md) ·
+  [plan](../../docs/superpowers/plans/2026-10-02-slug-head-burst.md) ·
+  [notes](../../docs/dev-notes/2026-10-02-head-burst/NOTES.md) · gate `scripts/head-burst-gate.mjs`. Tune live with
+  `__sdfGame.head.burstTune({ centreFrac, swell, shardScale, flapCount, lethal, repeatStep, craterScale, splay, on })`.
+  Playtest 1 (2026-10-03): flaps off (orange tubes), a centred slug now splits the head open and the zombie lives, much harder to kill.
+- [ ] **Spike (separate, not started): shader-side burst/peel displacement field** (approach C of the same spec) for
+  truer jelly peeling flesh. New march WGSL, shared march cost, and a Rust port to carry; only after the composed
+  version has been played.
+
 ## Player melee: spike flail — designed 2026-09-26 (replaces the censer)
 
 **Hand-off (2026-09-30):** [what exists, traps, and the to-do list](../dev-notes/2026-09-30-flail-handoff/HANDOFF.md). PR #22 is merged.

@@ -77,7 +77,7 @@ describe("gloss suppresses the flesh's own noise (hard-surface task 1)", () => {
     // gloss kill folds into the guarded amplitude itself, not into the
     // fbm result.
     expect(SHADE_BODY).toContain('let detailAmp = surfCfg2.y * (1.0 - max(gloss, metal));');
-    const detailBlock=SHADE_BODY.slice(SHADE_BODY.indexOf('if (detailAmp > 0.0)'),SHADE_BODY.indexOf('// Tissue depth'));
+    const detailBlock=SHADE_BODY.slice(SHADE_BODY.indexOf('if (detailAmp > 0.0 && cutFace < 0.5) {'),SHADE_BODY.indexOf('// Tissue depth'));
     expect(detailBlock).toContain('fbm(anchor * 22.0)');
     expect(detailBlock).toContain('detailAmp * mix(1.0, 1.45, soldierPit)');
   });

@@ -94,6 +94,16 @@ export function fleshBitCount(target: 'body' | 'head', side: 'R' | 'L' | 'H', ra
   return side === 'H' ? Math.round(n * FLESH_BITS.hMul) : n;
 }
 
+/** The bits ONE flail crater throws, by what the crater is (flail-strike.ts flailWound's `flesh`): a head hit throws
+ *  FLESH_BITS.head of them at headScale, a body crater FLESH_BITS.body at life size. The count is drawn from `rand`
+ *  first, then the bits. */
+export function craterFleshBits(
+  kind: 'body' | 'head', side: 'R' | 'L' | 'H', point: Vec3, blowDir: Vec3, normal: Vec3, rand: () => number,
+): GorePiece[] {
+  const count = fleshBitCount(kind, side, rand);
+  return fleshBits(point, blowDir, normal, count, rand, kind === 'head' ? FLESH_BITS.headScale : 1);
+}
+
 /**
  * `count` flesh bits off a wound at `point` (world, on the skin), struck along `blowDir` (world, unit-ish,
  * into the body), the skin's outward `normal` there. `scale` sizes them (and ×√scale their speed).

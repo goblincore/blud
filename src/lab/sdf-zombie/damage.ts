@@ -2,10 +2,13 @@
 import type { Primitive, Vec3 } from './types';
 import { add, basisFromAxis, dot, len, normalize, qFromTo, qRotate, scale, sub } from './vec';
 import { rotateYaw } from './gait';
-import { sdPrimitive } from './validate';
+import { sdBody, sdBodyClosed, sdPrimitive, type Body } from './validate';
+import { unwarpDir, unwarpPoint } from './head-split';
 
-/** Must match MAX_WOUNDS in the fragment shader. */
-export const MAX_WOUNDS = 16;
+/** Wounds per body (the ring cap). Every WGSL wound loop bound and the per-ray
+ *  wound list size are built from this constant. The frozen GLSL twin
+ *  (march.glsl.ts) keeps its own cap, GLSL_MAX_WOUNDS, and shows the newest wounds. */
+export const MAX_WOUNDS = 32;
 
 export type WoundType = 'pellet' | 'blast' | 'burn';
 
@@ -82,6 +85,15 @@ export interface Wound {
    *  ROW_WOUND_FLAGS.x bit 4: the torn look's wet red lip / glossy walls / clotted floor SHADING on
    *  the stock crater SHAPE. Absent or 0 = the stock look. Set with `wetLipWound`. */
   wetLip?: number;
+  /** CUT (cut-wound.ts, 2026-10-03): a blade slot instead of a crater. `local` is the slot's MIDPOINT, `radius` its HALF-
+   *  LENGTH (the shader's reach and the threat box are supersets; plain `radius` consumers are not, see cut-wound.ts), `carveN`/`carveDepth` its inward direction and depth, `cutDir` its
+   *  along-segment unit (prim-local, same frame as `local`), `kerf` its half-width at the skin. Absent = a crater. */
+  shape?: 'cut';
+  cutDir?: Vec3;
+  kerf?: number;
+  /** CUT: the chord midpoint's depth below the anchor (`local`) along the inward direction (>= 0): the skin's fall-off over the cut; 0 for a straight cut.
+   *  The slot's floor is measured from the anchor plane shifted inward by this, so it can never open the far skin. */
+  sag?: number;
   /**
    * SEVERING IS A DAMAGE DECISION, NOT A CRATER SIDE-EFFECT. When set, this
    * is the radius connectivity's carve-union test (cutLimbs/cutChains) uses
@@ -333,6 +345,15 @@ function probeFlesh(
   return { thick, inward: dir };
 }
 
+/** The flesh behind `hit` along the owning prim's inward direction, measured up to `cap` metres (the march stops once it
+ *  reaches `cap`, so `thick >= cap` means "at least that much"). `probeFlesh`'s result, unchanged: `inward` is null when
+ *  `hit` sits on the prim's axis. Cut wounds size their depth from this, not from a crater's probe cap. */
+export function fleshBehind(
+  field: (p: Vec3) => number, hit: Vec3, prim: Primitive, cap: number,
+): { thick: number; inward: Vec3 | null } {
+  return probeFlesh(field, hit, prim, cap);
+}
+
 /**
  * THE LIP IS PEELED MATERIAL, NOT CONJURED (cyclops, 2026-08-23). The rim
  * in applyWounds is a Gaussian shell gated by distance to the ORIGINAL skin,
@@ -356,6 +377,39 @@ export function rimScaleFor(
   const { thick, inward } = probeFlesh(field, hit, prim, full);
   if (!inward) return 1;
   return Math.max(0, Math.min(1, thick / full));
+}
+
+/** A hit on a body, taken to where wounds live (unwarpHit). */
+export interface UnwarpedHit {
+  /** The hit in the UN-WARPED body: stamp here. The hit itself when nothing moved it. */
+  hit: Vec3;
+  /** The piece of the split it is on: 0 the unmoved rest (and every hit on a closed body), 1 the + half, 2 the - half. */
+  piece: 0 | 1 | 2;
+  /** The CLOSED body's field (sdBody with no split): probe the flesh behind the stamp with this one. */
+  field: (p: Vec3) => number;
+  /** A world direction (a view, a blade line) in that piece's un-warped frame. */
+  dir: (v: Vec3) => Vec3;
+}
+
+/**
+ * WOUNDS LIVE IN THE UN-WARPED HEAD (the head split, head-split.ts). A split
+ * body's FIELD has the head's halves turned open (validate.ts sdBody), but its
+ * prims are the closed head's, and the GPU reads every wound at the un-warped
+ * point of the piece it is shading. A stamp made at the world hit would sit
+ * out where the half now is, off the closed prims, and never be read. So every
+ * stamp takes its hit back first: stamp `hit` with `field`, and turn any
+ * direction that goes into the wound through `dir`. World-space effects of
+ * the same hit (the shove, the blood, the reaction) keep the world point.
+ *
+ * On a body with no split this is the identity: `hit` is the same point, `dir`
+ * returns its argument, and `field` is sdBody on the body as given.
+ */
+export function unwarpHit(body: Body, hit: Vec3): UnwarpedHit {
+  const split = body.split;
+  if (!split) return { hit, piece: 0, field: p => sdBody(p, body), dir: v => v };
+  const field = (p: Vec3) => sdBodyClosed(p, body);
+  const { q, piece } = unwarpPoint(split, hit, field);
+  return { hit: q, piece, field, dir: v => unwarpDir(split, piece, v) };
 }
 
 /**
@@ -467,6 +521,20 @@ export function woundCarveNormal(prims: Primitive[], wound: Wound, bodyYaw = 0):
   return add(add(scale(u, c[0]), scale(v, c[1])), scale(w, c[2]));
 }
 
+/** A prim-local direction of `wound` (same frame as `local` / `carveN`) in world space. */
+export function woundDirToWorld(prims: Primitive[], wound: Wound, local: Vec3, bodyYaw = 0): Vec3 {
+  const prim = prims[wound.primIdx]!;
+  const { u, v, w } = frame(prim, bodyYaw, wound.axis0);
+  return add(add(scale(u, local[0]), scale(v, local[1])), scale(w, local[2]));
+}
+
+/** A world direction in `wound`'s prim-local frame (the inverse of woundDirToWorld). */
+export function worldDirToWoundLocal(prims: Primitive[], wound: Wound, dir: Vec3, bodyYaw = 0): Vec3 {
+  const prim = prims[wound.primIdx]!;
+  const { u, v, w } = frame(prim, bodyYaw, wound.axis0);
+  return [dot(dir, u), dot(dir, v), dot(dir, w)];
+}
+
 /**
  * Is this prim CLOTH to a bullet? A shell (the sheet garments) or any painted
  * prim that is not metal and does not glow — the cultist's robe-coloured
@@ -569,14 +637,70 @@ export function wetLipWound(wound: Wound, wetLip: number): Wound {
   return wound;
 }
 
-/** Head craters (Wound.headSlot) a body keeps at most — melee head damage, head-damage.ts: six regions
- *  and the brain cavity. */
-export const MAX_HEAD_WOUNDS = 7;
+/** Head craters (Wound.headSlot) a body keeps at most — melee head damage, head-damage.ts: six regions,
+ *  the brain cavity and the slug burst's exit crater. */
+export const MAX_HEAD_WOUNDS = 8;
+
+/** MERGE ON OVERFLOW (2026-10-03, owner: tough enemies' faces "reappear" when old wounds are evicted). */
+export const MERGE = {
+  /** Two craters on one prim merge when their centres are within this × (r1 + r2). */
+  reach: 1.5,
+  /** A merged crater never grows past this radius (m): a whole limb must not become one bowl. */
+  maxRadius: 0.16,
+} as const;
+
+const localDist = (a: Wound, b: Wound): number =>
+  Math.hypot(a.local[0] - b.local[0], a.local[1] - b.local[1], a.local[2] - b.local[2]);
+
+/** Head damage craters (head-damage.ts) own their slot rules and never move, grow or change through a merge. */
+const headTagged = (x: Wound): boolean => x.headSlot !== undefined || x.headRegion !== undefined;
+
+/** The oldest wound at index `victim` folded into its nearest same-prim crater neighbour (the survivor becomes the minimal
+ *  sphere enclosing both), or null when none is in reach, or the enclosing sphere would pass MERGE.maxRadius (the caller
+ *  then evicts, as before: a merge never shrinks below what covers both). */
+function mergeVictim(next: Wound[], victim: number): Wound[] | null {
+  const v = next[victim]!;
+  if (v.shape === 'cut' || v.decal || headTagged(v)) return null;
+  let best = -1, bd = Infinity;
+  next.forEach((o, i) => {
+    if (i === victim || o.primIdx !== v.primIdx || o.shape === 'cut' || o.decal || headTagged(o) || o.type !== v.type || o.cloth !== v.cloth) return;
+    const d = localDist(v, o);
+    if (d <= MERGE.reach * (v.radius + o.radius) && d < bd) { bd = d; best = i; }
+  });
+  if (best < 0) return null;
+  const o = next[best]!;
+  const rv = v.radius, ro = o.radius;
+  let local: Vec3, radius: number;
+  if (bd + Math.min(rv, ro) <= Math.max(rv, ro)) {
+    // One crater already contains the other: the larger sphere stands as it is.
+    const big = rv > ro ? v : o;
+    local = [big.local[0], big.local[1], big.local[2]];
+    radius = big.radius;
+  } else {
+    radius = (bd + rv + ro) / 2;
+    const t = (radius - ro) / bd; // bd > 0 here: bd = 0 takes the containment branch
+    local = [o.local[0] + (v.local[0] - o.local[0]) * t, o.local[1] + (v.local[1] - o.local[1]) * t, o.local[2] + (v.local[2] - o.local[2]) * t];
+  }
+  if (radius > MERGE.maxRadius) return null;
+  const merged: Wound = { ...o, local, radius };
+  if (v.carveDepth !== undefined || o.carveDepth !== undefined) merged.carveDepth = Math.max(v.carveDepth ?? 0, o.carveDepth ?? 0);
+  // A merge never raises the sever calibre: always explicit, so connectivity never falls back to the grown radius. A
+  // deliberate 0 ("never sever": flail and slug-burst craters, cuts) wins over any larger calibre.
+  merged.severRadius = v.severRadius === 0 || o.severRadius === 0 ? 0 : Math.max(v.severRadius ?? rv, o.severRadius ?? ro);
+  if (v.tear !== undefined || o.tear !== undefined) merged.tear = Math.max(v.tear ?? 0, o.tear ?? 0);
+  if (v.wetLip !== undefined || o.wetLip !== undefined) merged.wetLip = Math.max(v.wetLip ?? 0, o.wetLip ?? 0);
+  const out = [...next];
+  out[best] = merged;
+  out.splice(victim, 1);
+  return out;
+}
 
 /** Ring buffer append. A wound with a headRegion replaces an earlier wound of the same region, in that
  *  one's index. Head craters keep their own MAX_HEAD_WOUNDS slots (oldest 'face' crater evicted first),
- *  and the total cap evicts the oldest wound that is not a 'keep' head crater. A ring with no head tags
- *  evicts oldest-first, exactly as before. */
+ *  and the total cap takes the oldest wound that is not a 'keep' head crater: it is MERGED into its nearest
+ *  same-prim crater when one is in reach (MERGE; head-tagged wounds, cuts and decals never merge), and only
+ *  evicted when none is. When that oldest wound is a CUT, the oldest crater that can merge is folded instead,
+ *  and the cut is evicted only when no crater can. A merged survivor is a NEW Wound object. */
 export function pushWound(ring: Wound[], wound: Wound, cap: number): Wound[] {
   if (wound.headRegion !== undefined) {
     const prev = ring.findIndex(x => x.headRegion === wound.headRegion);
@@ -594,9 +718,20 @@ export function pushWound(ring: Wound[], wound: Wound, cap: number): Wound[] {
       next.splice(next.indexOf(victim), 1);
     }
   }
-  while (next.length > cap) {
-    const i = next.findIndex(x => x.headSlot !== 'keep');
-    next.splice(i < 0 ? 0 : i, 1);
+  let out = next;
+  while (out.length > cap) {
+    const i = out.findIndex(x => x.headSlot !== 'keep');
+    const victim = i < 0 ? 0 : i;
+    let merged = mergeVictim(out, victim);
+    // A CUT never merges, so as the victim it would simply be evicted: a rod release stamps up to 3, and ~11 sweeps fill
+    // the ring. Fold the oldest crater that CAN merge first (oldest first; mergeVictim keeps its own guards: same prim, in
+    // reach, never a cut, decal or head-tagged crater), so old slashes outlive craters that still have room to merge. Only
+    // when nothing can merge is the oldest evicted, as before.
+    if (!merged && out[victim]!.shape === 'cut') {
+      for (let j = 0; j < out.length && !merged; j++) if (j !== victim) merged = mergeVictim(out, j);
+    }
+    if (merged) out = merged;
+    else out.splice(victim, 1);
   }
-  return next;
+  return out;
 }

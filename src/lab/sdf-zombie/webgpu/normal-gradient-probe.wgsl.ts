@@ -13,7 +13,7 @@ import { NG_WOUND_LIP, NG_WOUNDS, NORMAL_GRADIENT_HELPERS } from './normal-gradi
 // those exact declaration lines out of the real sources — a renamed or retyped
 // global throws here instead of drifting. The leading fn is three's wgslFn
 // parse contract (every source starts at fn), as in normal-gradient.wgsl.ts.
-export const PROBE_WOUND_GLOBALS = ['gInstWoundCount', 'gInstYaw', 'gBand', 'gWoundListOn', 'gWoundN', 'gWoundList', 'gDebugMode', 'gDebugWoundRows'] as const;
+export const PROBE_WOUND_GLOBALS = ['gInstWoundCount', 'gInstYaw', 'gInstSplitOpen', 'gBand', 'gWoundListOn', 'gWoundN', 'gWoundList', 'gDebugMode', 'gDebugWoundRows'] as const;
 export function probeWoundGlobalsSource(): string {
   const decls = PROBE_WOUND_GLOBALS.map(name => {
     const line = [FOLD_GROUP, SAMPLE_VOLUME]

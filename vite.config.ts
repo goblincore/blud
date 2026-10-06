@@ -159,6 +159,7 @@ export default defineConfig({
       'scripts/lib/demo-presented.test.mjs',
       'scripts/lib/png-write.test.mjs',
       'scripts/lib/hybrid-estimate.test.mjs',
+      'scripts/lib/march-depth-guard.test.mjs',
       'scripts/sdf-melee-stage.test.mjs',
     ],
     exclude: ['**/node_modules/**', '**/.claude/**', 'docs/**', 'dist/**'],

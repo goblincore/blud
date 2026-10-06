@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   HELPERS,
+  MARCH_BODY,
   DATA_ROWS,
   ROW_PRIM_COLOR,
   ROW_GROUP_BOUNDS,
@@ -34,10 +35,12 @@ import {
   ROW_PREV_A,
   ROW_PREV_B,
   ROW_PREV_QUAT,
+  ROW_WOUND_CUT,
 } from '../march.wgsl';
 import { MAX_WOUNDS } from '../../damage';
 import { MAX_PRIMS } from '../../validate';
 import { declaredName } from '../march-test-support';
+import { NG_WOUNDS } from '../normal-gradient.wgsl';
 
 describe('data texture layout', () => {
   it('gives every row a distinct index inside DATA_ROWS', () => {
@@ -47,7 +50,7 @@ describe('data texture layout', () => {
       ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE, ROW_PRIM_BEND, ROW_PRIM_COLOR,
       ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
       ROW_PRIM_SHELL, ROW_PRIM_CLIP, ROW_WOUND_CAP, ROW_WOUND_FLAGS,
-      ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PREV_A, ROW_PREV_B, ROW_PREV_QUAT,
+      ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PREV_A, ROW_PREV_B, ROW_PREV_QUAT, ROW_WOUND_CUT,
     ];
     expect(new Set(rows).size).toBe(rows.length);
     expect(Math.max(...rows)).toBe(DATA_ROWS - 1);
@@ -61,18 +64,21 @@ describe('data texture layout', () => {
 
   it('bounds the wound loops at MAX_WOUNDS', () => {
     // The loop bound is a WGSL literal — a uniform cannot size a loop — so it
-    // is the one constant that can drift from damage.ts silently.
-    for (const src of HELPERS) {
-      const name = declaredName(src);
-      if (!name || !/wound/i.test(name)) continue;
-      // Only helpers that ITERATE the wound grid carry the bound. Others
-      // with "wound" in the name but no wound-count loop (woundShadow's
-      // 14-step penumbra march) are pinned by their own tests instead.
-      if (!src.includes('i32(woundCfg.x)')) continue;
+    // is the one constant that can drift from damage.ts silently. Every source
+    // that walks the wound rows reads the live count first: the march helpers
+    // and the per-ray list block through i32(gInstWoundCount) (applyWounds,
+    // woundMask, charMask, MARCH_BODY's wound list), ngWounds through
+    // i32(cfg.x). woundShadow's 14-step penumbra march reads neither.
+    let checked = 0;
+    for (const src of [...HELPERS, MARCH_BODY, NG_WOUNDS]) {
+      if (!src.includes('i32(gInstWoundCount)') && !src.includes('i32(cfg.x)')) continue;
       // The loop variable name can change (the per-ray wound list folds by k);
       // pin only the BOUND, which is the MAX_WOUNDS literal that can drift
-      // from damage.ts. Match `var x = 0; x < 16` for any identifier x.
-      expect(src).toMatch(new RegExp(`var\\s+[a-z]\\w*\\s*=\\s*0\\s*;\\s*[a-z]\\w*\\s*<\\s*${MAX_WOUNDS}\\b`));
+      // from damage.ts. Match `var x = 0; x < MAX_WOUNDS` for any identifier x.
+      expect(src, declaredName(src) ?? 'MARCH_BODY').toMatch(new RegExp(`var\\s+[a-z]\\w*\\s*=\\s*0\\s*;\\s*[a-z]\\w*\\s*<\\s*${MAX_WOUNDS}\\b`));
+      checked++;
     }
+    // applyWounds, the charMask chunk, woundMask, MARCH_BODY, ngWounds.
+    expect(checked).toBeGreaterThanOrEqual(5);
   });
 });

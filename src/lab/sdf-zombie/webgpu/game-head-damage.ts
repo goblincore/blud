@@ -11,6 +11,11 @@
 // Wounds go through ZombieActor.blast (the kill is its forceCollapse). The per-actor state lives in this
 // module (keyed by the actor object), never on main().
 //
+// A SPLIT HEAD IS NOT THIS LEAF'S (game-head-split.ts). Its regions, craters, trackers and deform are all
+// measured on the closed head, so while a head is split open (deps.splitOpen) both ways in decline: hit()
+// and burst() return false and the caller stamps its ordinary wound (which is un-warped: damage.ts
+// unwarpHit). The other way round, has() tells the split to refuse a head this leaf already holds state for.
+//
 // EVENTS → WORLD.
 //   strip          the region's ONE crater, stamped or replaced (Wound.headRegion) at the region's surface
 //                  point — traced toward the head centre from its ANCHOR's hs direction (the model's
@@ -56,22 +61,26 @@ import type { AttachedPiece } from './game-state-boot';
 import type { Primitive, Vec3 } from '../types';
 import type { BuildResult } from '../build-body';
 import { EYEBALL_R, eyeballPrims, prim, type GorePiece } from '../head-pop';
-import { clothifyWound, tearWound, woundWorldPos, worldHitToWound, type Wound } from '../damage';
+import { clothifyWound, tearWound, woundWorldPos, worldHitToWound, type ShotProvenance, type Wound } from '../damage';
 import { flailTear } from '../torn-lips';
 import { sdBody, sdPrimitive } from '../validate';
 import { headQuatOf } from '../rig-bind';
 import {
-  HEAD_REGIONS, REGION_TUNING, headDeath, headHit, isSkullRegion, makeHeadDamage,
+  HEAD_REGIONS, REGION_TUNING, burstHit, headDeath, headHit, isSkullRegion, makeHeadDamage,
   type EyeSide, type EyeState, type HeadDamageState, type HeadEvent, type HeadRegion, type SkullRegion,
 } from '../head-damage';
 import {
-  addDent, deformHead, headAffine, headAffineMatrix, kickWobble, makeHeadDeform, rotate, stepWobble,
+  BURST_DEFORM, addDent, deformHead, headAffine, headAffineMatrix, kickBurst, kickWobble, makeHeadDeform, rotate, stepBurst, stepWobble,
   type HeadDeformState, type HeadFrame, type Quat,
 } from '../head-deform';
 import { EYE_FLY, EYE_STALK, ORBIT_EYE_R, eyeFlyLaunch, eyeRayStart, makeStalk, popEyeR, stalkPrims, stepStalk, type StalkState } from '../head-eye';
-import { CROWN, brainLaunch, brainLumps, brainPiece, skullChips } from '../head-crown';
+import { CROWN, brainLaunch, brainLumps, brainPiece, skullChips, skullShards } from '../head-crown';
+import { BURST, burstPlan, burstTuning, classifyBurst, hsOf, onHeadPrim } from '../head-burst';
+import { FLAP, flapPrims, makeFlap, stepFlap, type FlapState } from '../head-flap';
+import { COLLAPSE_TUNING } from '../collapse';
 import type { BrainGibLeaf } from './game-brain-gib';
 import { FLAIL_HEAD, snapToSurface, traceRaySurface } from './flail-strike';
+import { headAlive } from './flame-anchors';
 import { rngStreams } from './rng';
 import { mulberry32 } from '../melt-bones';
 import { FLESH_BITS, fleshBitCount, fleshBits, fleshBitsOn, fleshRand, swingBlow } from '../flesh-bits';
@@ -84,9 +93,9 @@ export const HEAD_LEAF = {
    *  chunks — an orbit is bone on hit 2, both eyes pop on hit 3 (v1.4, flail spec §13.2, was R/L 0.20, H 0.28;
    *  head spec §15 had R and L 0.25, H 0.35). */
   strip: { R: 0.4, L: 0.4, H: 0.55 } as Record<'R' | 'L' | 'H', number>,
-  /** A head hit's share of the swing's collapse credit (flail spec §13.2): the head model kills, not the meter
-   *  (R/L 0.065 × 0.3 ≈ 0.02 per head hit). */
-  meterScale: 0.3,
+  /** A head hit's share of the swing's collapse credit (flail-strike.ts FLAIL_HEAD.meterScale, which the flail's own
+   *  crater on a head this leaf declines reads too). */
+  meterScale: FLAIL_HEAD.meterScale,
   /** The eye's spring-out speed along the reflected blow (spec §6). */
   popSpeed: 2.5,
   /** The eyeballs' iris: the face sheet's glow colour (faceGlowColor, march/body/face.wgsl.ts). */
@@ -147,6 +156,8 @@ export interface HeadDamageDeps {
   bleed(a: ZombieActor, w: Wound, point: Vec3, dir: Vec3, kind: 'pellet' | 'slug'): void;
   /** ctx.boot.attachPiece (absent before the chunk spawner exists: the pieces are then not drawn). */
   attach?: (a: ZombieActor, prims: Primitive[], pos: Vec3, opts?: { clean?: boolean }) => AttachedPiece;
+  /** The actor's head is split open (game-head-split.ts isOpen): hit() and burst() then decline. Absent: never. */
+  splitOpen?(a: ZombieActor): boolean;
 }
 
 export interface HeadDamageDebug {
@@ -171,14 +182,26 @@ export interface HeadDamageDebug {
   draws: number;
   /** Each region's (and the brain cavity's) last stamped crater: its radius, its carve depth below the anchor
    *  plane (null: a full sphere — no flesh probe) and the measured anchor-to-skull depth (null: none found). */
-  craters: Partial<Record<HeadRegion | 'brain', { radius: number; carveDepth: number | null; skull: number | null }>>;
+  craters: Partial<Record<HeadRegion | 'brain' | 'burst-exit', { radius: number; carveDepth: number | null; skull: number | null }>>;
   /** The head frame the deform hook last measured (the UN-deformed pose; null before the first re-pose). */
   frame: HeadFrame | null;
+  /** Slug head burst: the last verdict, the burst spring (b, lasting rest) and the flaps hinged on the head. */
+  burst: BurstDebug | null;
+  bu: { b: number; rest: number } | null;
+  flaps: number;
 }
 
 export interface HeadDamageLeaf {
-  /** One head-region hit at `point` (world, on the posed surface), blow direction `dir` (world, unit). */
-  hit(a: ZombieActor, point: Vec3, dir: Vec3, feel: HeadHitFeel): void;
+  /** One head-region hit at `point` (world, on the posed surface), blow direction `dir` (world, unit). Returns false
+   *  when it declined (the head is split open) and did nothing: the caller then stamps its own plain crater. */
+  hit(a: ZombieActor, point: Vec3, dir: Vec3, feel: HeadHitFeel): boolean;
+  /** A SLUG on a head (slug head burst): the lethal burst or the glancing rupture. `point` is the impact (world), `dir`
+   *  the shot direction (world unit). Returns false when it declined (not a head hit, not the plain zombie, off, no head,
+   *  or the head is split open): the caller then takes the ordinary slug path. */
+  burst(a: ZombieActor, point: Vec3, dir: Vec3, shot?: ShotProvenance, kind?: 'pellet' | 'slug'): boolean;
+  /** This leaf holds state for the actor's head (ladder craters, dents, a burst, flaps, eye pieces): the head split
+   *  refuses such a head (game-head-split.ts open). */
+  has(a: ZombieActor): boolean;
   tick(dt: number): void;
   /** Drop an actor's state: dispose its pieces, clear its deform hook, its eyes glow again. */
   forget(id: number): void;
@@ -205,7 +228,21 @@ interface Orbit {
   danglingR0: number[];
   plug: AttachedPiece | null;
 }
+/** The scalp flaps of one burst: one attached piece for all of them (one draw), each hinged on a tracker on the rim. */
+interface FlapSet {
+  piece: AttachedPiece | null;
+  hinge: Wound[];
+  /** A second tracker 2 cm out along the surface normal at each hinge: its direction is the live outward normal. */
+  out: Wound[];
+  flaps: FlapState[];
+}
+/** The last burst's verdict, for the seams and gate. */
+export interface BurstDebug { kind: 'lethal' | 'glancing'; /** What happened: 'lethal' killed, 'split' (a centred slug, zombie lives) or 'glancing'. */ outcome: 'lethal' | 'split' | 'glancing'; offset: number; severity: number; shards: number; flaps: number }
 interface ActorHead {
+  /** The last slug burst's scalp flaps (one attached piece) and verdict. */
+  flaps: FlapSet | null; burst: BurstDebug | null;
+  /** The shot that last burst this head: a pellet volley bursts it once, not once per pellet. */
+  lastShot?: number;
   model: HeadDamageState; deform: HeadDeformState;
   orbits: Partial<Record<EyeSide, Orbit>>;
   /** The per-actor jitter stream (seed = actor id). */
@@ -265,8 +302,6 @@ function actorRand(id: number): () => number {
   h = Math.imul(h ^ (h >>> 15), 0x85ebca6b) >>> 0;
   return mulberry32(h);
 }
-
-const headAlive = (b: BuildResult): boolean => b.clusters.some(c => c.limb === 'head' && c.alive);
 
 export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDamageLeaf {
   const heads = new Map<ZombieActor, ActorHead>();
@@ -331,6 +366,11 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
   const attach = (a: ZombieActor, prims: Primitive[], at: Vec3): AttachedPiece | null =>
     deps.attach ? deps.attach(a, prims, at, { clean: true }) : null;
 
+  function disposeFlaps(h: ActorHead): void {
+    h.flaps?.piece?.dispose();
+    h.flaps = null;
+  }
+
   function disposeOrbit(o: Orbit): void {
     o.inOrbit?.dispose(); o.dangling?.dispose(); o.plug?.dispose();
     o.inOrbit = o.dangling = o.plug = null;
@@ -377,33 +417,16 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     // Pooled views: a recycled view must not keep this zombie's switched-off eyes.
     a.view.setEyeGlow('L', true);
     a.view.setEyeGlow('R', true);
+    disposeFlaps(h);
     a.setHeadDeform(null);
     heads.delete(a);
   }
 
-  function hit(a: ZombieActor, point: Vec3, dir: Vec3, feel: HeadHitFeel): void {
-    const posed = a.posed();
-    const yaw = a.pose().yaw;
-    const field = (q: Vec3) => sdBody(q, posed);
-    // The UN-deformed head frame (the deform hook's last measurement): measured on the posed body mid-wobble,
-    // headShape reads the squashed, dented head — its centre and axes move by centimetres, so hs (and the
-    // nearest region) would drift with every hit landing while the last one still rings.
-    const frame = headAlive(posed) ? (heads.get(a)?.frame ?? frameOf(a, posed)) : null;
-    const impulse = { at: point, vel: [dir[0] * feel.shove, dir[1] * feel.shove, dir[2] * feel.shove] as Vec3 };
-    if (!frame) {
-      // No head to damage (off, or no head prims): the flail's plain face crater.
-      const w = worldHitToWound(posed.prims, point, FLAIL_HEAD.faceCraterR, 'blast', yaw, field);
-      w.severRadius = 0;
-      clothifyWound(posed.prims, w, 'heavy');
-      tearWound(w, flailTear('head'));   // torn lips (v1.5b, torn-lips.ts)
-      a.blast({ wounds: [w], meterCredit: feel.meterCredit * HEAD_LEAF.meterScale, impulse, reaction: 'blast', gain: feel.gain });
-      deps.bleed(a, w, point, dir, 'slug');
-      throwFlesh(a, point, dir, normalAt(field, point), feel);
-      return;
-    }
+  /** The actor's head state, created (with its deform hook) on first use. */
+  function headOf(a: ZombieActor): ActorHead {
     let h = heads.get(a);
     if (!h) {
-      h = { model: makeHeadDamage(), deform: makeHeadDeform(), orbits: {}, rand: actorRand(a.id), craters: {}, frame: null, affine: null };
+      h = { model: makeHeadDamage(), deform: makeHeadDeform(), orbits: {}, rand: actorRand(a.id), craters: {}, frame: null, affine: null, flaps: null, burst: null };
       heads.set(a, h);
       const st = h;
       // Measured on the pose it is handed (fresh from applyRig), so the frame is the un-deformed head's.
@@ -415,13 +438,16 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
         return f ? deformHead(p, st.deform, f) : p;
       });
     }
-    const dirLocal = rotate(conj(frame.quat), dir);
-    const local = rotate(conj(frame.quat), sub(point, frame.centre));
-    const hs: Vec3 = [local[0] / frame.axes[0], local[1] / frame.axes[1], local[2] / frame.axes[2]];
-    const strip = HEAD_LEAF.strip[feel.side ?? 'R'];
-    const r = headHit(h.model, { hs, strip }, h.rand);
-    h.model = r.state;
+    return h;
+  }
 
+  interface Kit {
+    surfaceOf: (reg: HeadRegion) => Vec3;
+    crater: (reg: HeadRegion | 'brain' | 'burst-exit', at: Vec3, radius: number, carveAs?: SkullRegion) => Wound;
+  }
+  /** The per-hit surface tracer and crater stamper. `carveAs`: carve this crater as that skull region at flesh 0
+   *  (the burst's exit crater has no region of its own). */
+  function kit(h: ActorHead, frame: HeadFrame, posed: BuildResult, yaw: number, field: (q: Vec3) => number): Kit {
     // Region surface points, traced once per hit on the posed (un-carved) surface.
     const surf = new Map<HeadRegion, Vec3>();
     const surfaceOf = (reg: HeadRegion): Vec3 => {
@@ -459,20 +485,54 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
       }
       return best;
     };
-    const crater = (reg: HeadRegion | 'brain', at: Vec3, radius: number): Wound => {
+    const crater = (reg: HeadRegion | 'brain' | 'burst-exit', at: Vec3, radius: number, carveAs?: SkullRegion): Wound => {
       const w = worldHitToWound(posed.prims, at, radius, 'blast', yaw, field);
       w.headSlot = 'keep'; w.headRegion = reg; w.severRadius = 0;
       let skull: number | null = null;
-      if (reg !== 'brain' && w.carveDepth !== undefined) {
+      const as: HeadRegion | undefined = carveAs ?? (reg === 'brain' || reg === 'burst-exit' ? undefined : reg);
+      if (as !== undefined && w.carveDepth !== undefined) {
         const sd = skullDepth(at, radius);
         skull = Number.isFinite(sd) ? sd : null;
         // The carve's depth slab clips the sphere (radius `radius`): deeper than the radius carves nothing more.
-        w.carveDepth = Math.min(radius, regionCarve(reg, h.model.flesh[reg], w.carveDepth, sd));
+        w.carveDepth = Math.min(radius, regionCarve(as, carveAs ? 0 : h.model.flesh[as], w.carveDepth, sd));
       }
       h.craters[reg] = { radius: w.radius, carveDepth: w.carveDepth ?? null, skull };
       // TORN LIPS (v1.5b, torn-lips.ts): every region crater (and the brain's) is torn at full.
       return tearWound(clothifyWound(posed.prims, w, 'heavy'), flailTear('head'));
     };
+    return { surfaceOf, crater };
+  }
+
+  function hit(a: ZombieActor, point: Vec3, dir: Vec3, feel: HeadHitFeel): boolean {
+    if (deps.splitOpen?.(a)) return false;
+    const posed = a.posed();
+    const yaw = a.pose().yaw;
+    const field = (q: Vec3) => sdBody(q, posed);
+    // The UN-deformed head frame (the deform hook's last measurement): measured on the posed body mid-wobble,
+    // headShape reads the squashed, dented head — its centre and axes move by centimetres, so hs (and the
+    // nearest region) would drift with every hit landing while the last one still rings.
+    const frame = headAlive(posed) ? (heads.get(a)?.frame ?? frameOf(a, posed)) : null;
+    const impulse = { at: point, vel: [dir[0] * feel.shove, dir[1] * feel.shove, dir[2] * feel.shove] as Vec3 };
+    if (!frame) {
+      // No head to damage (off, or no head prims): the flail's plain face crater.
+      const w = worldHitToWound(posed.prims, point, FLAIL_HEAD.faceCraterR, 'blast', yaw, field);
+      w.severRadius = 0;
+      clothifyWound(posed.prims, w, 'heavy');
+      tearWound(w, flailTear('head'));   // torn lips (v1.5b, torn-lips.ts)
+      a.blast({ wounds: [w], meterCredit: feel.meterCredit * HEAD_LEAF.meterScale, impulse, reaction: 'blast', gain: feel.gain });
+      deps.bleed(a, w, point, dir, 'slug');
+      throwFlesh(a, point, dir, normalAt(field, point), feel);
+      return true;
+    }
+    const h = headOf(a);
+    const dirLocal = rotate(conj(frame.quat), dir);
+    const local = rotate(conj(frame.quat), sub(point, frame.centre));
+    const hs: Vec3 = [local[0] / frame.axes[0], local[1] / frame.axes[1], local[2] / frame.axes[2]];
+    const strip = HEAD_LEAF.strip[feel.side ?? 'R'];
+    const r = headHit(h.model, { hs, strip }, h.rand);
+    h.model = r.state;
+
+    const { surfaceOf, crater } = kit(h, frame, posed, yaw, field);
 
     const wounds: Wound[] = [];
     let bleedAt: Wound | null = null;
@@ -566,6 +626,153 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     // Head strips bleed a PELLET's gout (spec §15), and so does the brain stage (spec §14: so the brain is seen).
     if (bleedAt) deps.bleed(a, bleedAt, point, dir, 'pellet');
     throwFlesh(a, point, dir, normalAt(field, point), feel);
+    return true;
+  }
+
+  /** Hinge `angles.length` flaps round a crater rim: hinges snapped onto the posed surface, each riding the head
+   *  through a tracker pair; the piece holds every flap (one draw). */
+  function attachFlaps(a: ZombieActor, h: ActorHead, posed: BuildResult, yaw: number, field: (q: Vec3) => number,
+    at: Vec3, n: Vec3, rimR: number, angles: readonly number[], kick: Vec3): void {
+    disposeFlaps(h);
+    if (angles.length === 0) return;
+    const t1 = unit(Math.abs(n[1]) < 0.9 ? [n[2], 0, -n[0]] : [0, -n[2], n[1]]);
+    const t2: Vec3 = [n[1] * t1[2] - n[2] * t1[1], n[2] * t1[0] - n[0] * t1[2], n[0] * t1[1] - n[1] * t1[0]];
+    const set: FlapSet = { piece: null, hinge: [], out: [], flaps: [] };
+    const hinges: Vec3[] = [];
+    for (const th of angles) {
+      const ring = add(at, add(scale(t1, Math.cos(th) * rimR * 0.85), scale(t2, Math.sin(th) * rimR * 0.85)));
+      const p = snapToSurface(field, ring);
+      const pi = worldHitToWound(posed.prims, p, 0.01, 'blast', yaw).primIdx;
+      set.hinge.push(tracker(posed.prims, pi, p, yaw));
+      set.out.push(tracker(posed.prims, pi, add(p, scale(n, 0.02)), yaw));
+      hinges.push(p);
+    }
+    const c = scale(hinges.reduce((m, p) => add(m, p), [0, 0, 0] as Vec3), 1 / hinges.length);
+    const prims: Primitive[] = [];
+    hinges.forEach((p, i) => {
+      const rest = unit(add(scale(n, 0.7), scale(unit(sub(p, c)), 0.7)));
+      const f = makeFlap(p, rest, kick, FLAP.kickSpeed);
+      set.flaps.push(f);
+      prims.push(...flapPrims(f, scale(n, -1)));
+    });
+    set.piece = attach(a, prims, c);
+    h.flaps = set;
+  }
+
+  /** Per frame: hinges and outward normals re-read from the posed head, each flap stepped, one piece updated. */
+  function stepFlaps(a: ZombieActor, h: ActorHead, posed: BuildResult, yaw: number, dt: number): void {
+    const f = h.flaps;
+    if (!f) return;
+    const hinges = f.hinge.map(w => woundWorldPos(posed.prims, w, yaw));
+    const outs = f.out.map((w, i) => unit(sub(woundWorldPos(posed.prims, w, yaw), hinges[i]!)));
+    const c = scale(hinges.reduce((m, p) => add(m, p), [0, 0, 0] as Vec3), 1 / hinges.length);
+    const prims: Primitive[] = [];
+    f.flaps = f.flaps.map((s, i) => {
+      const rest = unit(add(scale(outs[i]!, 0.7), scale(unit(sub(hinges[i]!, c)), 0.7)));
+      const ns = stepFlap(s, hinges[i]!, rest, dt);
+      prims.push(...flapPrims(ns, scale(outs[i]!, -1)));
+      return ns;
+    });
+    f.piece?.update(c, localEnds(prims, c));
+  }
+
+  function burst(a: ZombieActor, point: Vec3, dir: Vec3, shot?: ShotProvenance, kind: 'pellet' | 'slug' = 'slug'): boolean {
+    if (!burstTuning.on || (kind !== 'slug' && !burstTuning.anyWeapon) || a.profileName() !== 'zombie') return false;
+    if (deps.splitOpen?.(a)) return false;
+    const posed = a.posed();
+    if (!headAlive(posed) || !onHeadPrim(posed.prims, point)) return false;
+    // The UN-deformed head frame (see hit()): mid-wobble headShape reads the squashed head.
+    const frame = heads.get(a)?.frame ?? frameOf(a, posed);
+    if (!frame) return false;
+    const hsHit = hsOf(frame, point);
+    if (Math.hypot(hsHit[0], hsHit[1], hsHit[2]) > BURST.maxHs) return false;   // a neck or shoulder hit
+    const yaw = a.pose().yaw;
+    const field = (q: Vec3) => sdBody(q, posed);
+    const h = headOf(a);
+    // One burst per shot: the rest of a pellet volley that lands on this head is swallowed (no ordinary craters either:
+    // they would pock the fresh opening).
+    const shotId = shot && 'shotId' in shot ? shot.shotId : undefined;
+    if (shotId !== undefined) {
+      if (h.lastShot === shotId) return true;
+      h.lastShot = shotId;
+    }
+    const v = classifyBurst({ point, dir }, frame);
+    // A centred slug OPENS the head (exit crater, heavy debris, splay) either way; it only KILLS while burstTuning.lethal
+    // is on. Off (for now, owner 2026-10-03): the head splits open and the zombie lives.
+    const opened = v.kind === 'lethal' || burstTuning.alwaysSplit;
+    const kills = opened && burstTuning.lethal;
+    // THE OPENING FOLLOWS THE HEAD, NOT THE GRAZE. The slug leaves the muzzle ~10 cm low and right of the crosshair, so a
+    // head shot's real line skims the jaw (an unaided capture blew out the jaw and left the skull shut). A split therefore
+    // opens along the line through the head's CENTRE parallel to the shot: its entry is where that line meets the face, its
+    // exit the far side. The verdict's offset still says how centred the real shot was (debug), but the shape is centred.
+    let entryPt = point, hsB = hsHit, vc = v;
+    if (opened) {
+      const along = unit(dir);
+      const front = traceRaySurface(field, sub(frame.centre, scale(along, 0.3)), along, 0.6);
+      if (front) { entryPt = front; hsB = hsOf(frame, front); vc = classifyBurst({ point: front, dir }, frame); }
+    }
+    const plan = burstPlan(vc, h.rand);
+    const r = burstHit(h.model, { hs: hsB, lethal: kills, step: burstTuning.repeatStep });
+    h.model = r.state;
+    h.burst = { kind: v.kind, outcome: kills ? 'lethal' : opened ? 'split' : 'glancing', offset: v.offset, severity: vc.severity, shards: plan.shards, flaps: plan.flaps };
+    // Visible in the browser console while the effect is being tuned (owner: "I can't trigger it").
+    console.info(`[head-burst] actor ${a.id} ${kind}: ${h.burst.outcome} (line ${v.offset.toFixed(2)} head radii off centre)`);
+
+    // Deform: the jelly rupture's spring, plus a lasting dent on the entry side. (No plain wobble kick: the burst's own
+    // spring is the jelly, and the two would fight along the shot axis.)
+    const dirLocal = rotate(conj(frame.quat), dir);
+    h.deform = kickBurst(h.deform, vc.axisLocal, vc.severity, burstTuning.swell, opened ? burstTuning.splay : 0);
+    h.deform = addDent(h.deform, dirLocal, BURST_DEFORM.cave * (0.5 + 0.5 * vc.severity), frame.axes);
+
+    const { crater } = kit(h, frame, posed, yaw, field);
+    let region: SkullRegion = 'crown';
+    let forceCollapse = false;
+    for (const ev of r.events as HeadEvent[]) {
+      if (ev.kind === 'eye-snap') snapEye(a, h, ev.side, dir);
+      else if (ev.kind === 'burst') region = ev.region;
+      else if (ev.kind === 'kill') forceCollapse = true;
+    }
+
+    // Craters: the entry (this region's own, carved to the skull), and on a lethal burst the larger exit crater.
+    const entryR = (opened ? BURST.entryR.lethal : BURST.entryR.glancing * (0.7 + 0.3 * vc.severity)) * burstTuning.craterScale;
+    const entry = crater(region, entryPt, entryR);
+    const wounds: Wound[] = [entry];
+    let exitPt = entryPt;
+    let exit: Wound | null = null;
+    if (opened) {
+      exitPt = surfaceToward(field, add(vc.exit, scale(dir, 0.12)), frame);
+      exit = crater('burst-exit', exitPt, BURST.exitR * burstTuning.craterScale, region);
+      wounds.push(exit);
+    }
+    for (const w of wounds) w.shot = shot?.weapon === 'slug' ? shot : { weapon: 'slug' };
+
+    const credit = wounds.reduce((m, w) => m + w.radius, 0) * COLLAPSE_TUNING.meterRadiusWeight;
+    a.blast({
+      wounds, meterCredit: credit, reaction: 'blast', forceCollapse,
+      impulse: { at: point, vel: scale(dir, BURST.shove) },
+    });
+
+    // Debris from the exit side on a lethal burst, from the entry on a glancing one.
+    const base = opened ? exitPt : entryPt;
+    const outN = normalAt(field, base);
+    const shardDir = opened ? dir : unit(add(outN, scale(dir, 0.3)));
+    const pieces: GorePiece[] = [...skullShards(base, shardDir, plan.shards, h.rand), ...brainLumps(base, dir, h.rand).slice(0, plan.lumps)];
+    if (kills) {
+      const l = brainLaunch(base, dir, h.rand);
+      const thrown = deps.brain?.throw(l.pos, l.vel, l.angVel) ?? false;
+      if (!thrown) pieces.push(brainPiece(base, dir, h.rand));
+    }
+    deps.gore(a, pieces);
+    throwFlesh(a, base, dir, outN, { meterCredit: 0, shove: 0, side: 'H' });
+
+    // Blood: the entry gout the ordinary slug path would have made, the exit gout, and the burst along the shot.
+    deps.bleed(a, entry, entryPt, dir, 'slug');
+    if (exit) deps.bleed(a, exit, exitPt, dir, 'slug');
+    deps.burst(a, base, dir);
+
+    // The torn scalp flaps hinge round the larger opening.
+    attachFlaps(a, h, posed, yaw, field, base, outN, opened ? BURST.exitR * burstTuning.craterScale : entryR, plan.flapAngles, dir);
+    return true;
   }
 
   /** FLYING FLESH (v1.5b, flesh-bits.ts): every head hit throws FLESH_BITS.head bits at headScale off the hit. */
@@ -579,19 +786,20 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
   function tick(dt: number): void {
     for (const [a, h] of heads) {
       if (!ctx.world.actors.includes(a)) { drop(a, h); continue; }
-      const s0 = h.deform.s;
-      h.deform = stepWobble(h.deform, dt);
+      const s0 = h.deform.s, b0 = h.deform.bu?.b;
+      h.deform = stepBurst(stepWobble(h.deform, dt), dt);
       // A FROZEN actor (?frozen=1, the gates) never steps, and the step is where the deform is re-applied:
       // its posed/drawn head would keep the hit's re-pose — the wobble's PEAK squash (0.40 along the blow),
       // which pulls the face flesh ~2-3 cm back behind the undeformed skull and teeth — for good.
-      if (ctx.demo.wanderFrozen && h.deform.s !== s0) a.reposeHead();
-      if (!h.orbits.L && !h.orbits.R) continue;
+      if (ctx.demo.wanderFrozen && (h.deform.s !== s0 || h.deform.bu?.b !== b0)) a.reposeHead();
+      if (!h.orbits.L && !h.orbits.R && !h.flaps) continue;
       const posed = a.posed();
       if (!headAlive(posed)) {
         // The head is gone (popped, severed): its eyes and plugs go with it.
         h.model = headDeath(h.model).state;
         for (const side of SIDES) { const o = h.orbits[side]; if (o) disposeOrbit(o); }
         h.orbits = {};
+        disposeFlaps(h);
         continue;
       }
       if (a.debug().phase !== 'standing') {
@@ -601,6 +809,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
         for (const ev of d.events) if (ev.kind === 'eye-snap') snapEye(a, h, ev.side, [0, 0, 0]);
       }
       const yaw = a.pose().yaw;
+      stepFlaps(a, h, posed, yaw, dt);
       for (const side of SIDES) {
         const o = h.orbits[side];
         if (!o) continue;
@@ -619,6 +828,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
 
   return {
     hit,
+    burst,
     tick,
     forget(id) {
       for (const [a, h] of heads) if (a.id === id) drop(a, h);
@@ -627,6 +837,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
       for (const [a, h] of heads) drop(a, h);
     },
     affine: a => heads.get(a)?.affine ?? null,
+    has: a => heads.has(a),
     debug(id) {
       for (const [a, h] of heads) {
         if (a.id !== id) continue;
@@ -663,8 +874,11 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
           eyeR,
           socket,
           stalk,
-          draws,
+          draws: draws + (h.flaps?.piece ? 1 : 0),
           craters: Object.fromEntries(Object.entries(h.craters).map(([k, v]) => [k, { ...v }])),
+          burst: h.burst,
+          bu: h.deform.bu ? { b: h.deform.bu.b, rest: h.deform.bu.rest } : null,
+          flaps: h.flaps?.flaps.length ?? 0,
           frame: h.frame ? { centre: [...h.frame.centre] as Vec3, quat: [...h.frame.quat] as Quat, axes: [...h.frame.axes] as Vec3 } : null,
         };
       }

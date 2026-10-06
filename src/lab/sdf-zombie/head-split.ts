@@ -1,0 +1,738 @@
+// src/lab/sdf-zombie/head-split.ts
+//
+// THE HEAD SPLIT (spec docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md §5; plan
+// docs/superpowers/plans/2026-10-04-head-split-part-b.md). Pure. An axe chop opens the head on a hinge; this module
+// holds the presets, the preset choice from the chop's blade plane, the angle spring and each half's wobble on top of
+// it, the world-space split description (SplitWarp), THE SPLIT FIELD, the maps between the open head and the closed
+// one (unwarpPoint, warpPoint), the cut faces' segments, and THE SKULL SPLIT: how far the bone mesh opens behind its
+// flesh, and which piece owns a point of it (skullSplitOf).
+//
+// What moves: body material ABOVE the hinge plane AND within rho = r - REGION_MARGIN of the hinge point h (the head;
+// rho is sized to hold it). The + side of the old plane turns open by thetaP, the - side by thetaM. Everything else
+// (below the hinge plane, or farther than rho from h: the neck, a raised hand) stays put. With u = n x a,
+// s(q) = n.q - d0, up(q) = u.(q - h), dh = |p - h| (rotation about h keeps dh), q+- = h + R(a, -theta+-)(p - h):
+//
+//   P0 = max(f(p),  min(up(p), rho - dh))                 the unmoved rest of the body
+//   P+ = max(f(q+), -s(q+), -up(q+), dh - rho)            the + half, turned open by thetaP, capped to its piece
+//   P- = max(f(q-),  s(q-), -up(q-), dh - rho)            the - half (thetaM <= 0), likewise
+//   C  = REGION_MARGIN + |dh - r|                          the region shell bound (see below)
+//
+//   inside the region (dh <= r):  min(P0, P+, P-, C)
+//   outside (dh > r):             min(P0, C)              (= min(P0, dh - rho); P+- are never evaluated)
+//
+// Outside the region P0 is f(p) except deep inside material, where f(p) < min(up(p), rho - dh) <= rho - dh < 0: only
+// interior probes notice (the march, shadows and AO sample the sign and the outside). A side that does not move
+// (theta 0) shares f(p) with P0, so a one-sided split costs two f evaluations inside the region.
+//
+// Each piece is a rigid motion of f intersected with half-spaces and a ball, so it is a sound, 1-Lipschitz distance
+// bound, and so is their min. Outside the region P+- >= dh - rho = C, so dropping them for C under-estimates (sound)
+// and never makes a false surface (C >= REGION_MARGIN > 0). C also caps the field inside the region: at dh = r both
+// branches equal min(P0, REGION_MARGIN) (P+- >= dh - rho = REGION_MARGIN there), so the field is CONTINUOUS across
+// the region sphere and 1-Lipschitz everywhere. Without that cap (the plan's first draft, min(f, dh - r + skin)
+// outside and min of pieces inside) the field jumped by up to ~0.2 m at the sphere. Inside the region the cap only
+// bites in empty space near the shell, where it limits a march step to (r - dh) + REGION_MARGIN: one step crosses out.
+//
+// The GPU (map-body.wgsl.ts) evaluates the same pieces; this is its CPU mirror and the reference for its tests.
+import type { Vec3 } from './types';
+import { add, cross, dot, len, normalize, qRotate, scale, sub, type Quat } from './vec';
+
+export type SplitPresetId = 'middle' | 'face';
+
+export interface SplitPreset {
+  /** Head-local plane normal (unit; the + side is the side that moves first). */
+  n: Vec3;
+  /** Head-local hinge point at plane offset 0, for both halves opening (`hingeBoth`) and one side (`hingeOne`). The
+   *  hinge AXIS is up x n, so the point's component along that axis only places the region sphere's centre. */
+  hingeBoth: Vec3; hingeOne: Vec3;
+  /** Head-local "up" from the hinge into the head, in the plane. */
+  up: Vec3;
+  /** Opening angle (rad) at full open, each half: both halves vs one side. */
+  maxBoth: number; maxOne: number;
+}
+
+/** The region sphere's radius is `rho + REGION_MARGIN`, where `rho` (= |centre - h| + holdFrac x HeadFrame.radius)
+ *  holds all the moved material. Also the floor of the region shell bound C, which caps the field in open air near
+ *  the region sphere, so it must be at least the AO probe distance: occlusion.wgsl.ts reads
+ *  clamp(mapBody(p + n * 0.06) / 0.06, 0.35, 1), and at 0.03 the cap darkened 14-20% of surface samples by up to 0.48
+ *  (0% at 0.06). */
+export const REGION_MARGIN = 0.06;
+
+export const HEAD_SPLIT = {
+  presets: {
+    // Sagittal: left and right halves. Centred: both halves, hinged low at the back of the skull. Off-centre: the
+    // smaller side peels outward, hinged low by the jaw on that side (the owner's reference, 2026-10-04).
+    middle: { n: [1, 0, 0], hingeBoth: [0, -0.06, -0.07], hingeOne: [0, -0.09, 0.01], up: [0, 1, 0], maxBoth: 0.55, maxOne: 0.9 },
+    // Coronal: the face half folds forward and down, hinged low at the jaw front. Rare (a chop from the side).
+    face: { n: [0, 0, 1], hingeBoth: [0, -0.1, 0.02], hingeOne: [0, -0.1, 0.02], up: [0, 1, 0], maxBoth: 0.8, maxOne: 0.8 },
+  } satisfies Record<SplitPresetId, SplitPreset>,
+  /** Off-centre impacts move the plane by up to this share of the head radius; inside `bothFrac` both halves open. */
+  maxOffsetFrac: 0.4, bothFrac: 0.15,
+  /** The face plane's offset range, as shares of the head radius (back, front). */
+  faceOffsetFrac: [-0.3, 0.5],
+  /** `rho` = |centre - h| + `holdFrac` * radius: the ball about the hinge that holds the moved head. */
+  holdFrac: 1.25,
+  /** A hit on an open head is on the OUTER skin when the closed head's field there is within this of zero; deeper, it
+   *  is on a cut face (or the hinge-plane face), which un-warps to the inside of the closed head. */
+  skinEps: 0.015,
+  /** The cut faces (splitFaceSegs): each segment sits `inset` into its own half off the plane and runs `lenFrac` x the
+   *  frame radius either way along the hinge axis; `faceCalibre` is the cut stamped along it (cut-wound.ts
+   *  CutCalibre). */
+  faceCut: { inset: 0.006, lenFrac: 1.1 },
+  faceCalibre: { depth: 0.12, kerf: 0.012, lip: 1 },
+  /** The angle spring (head-deform.ts BURST_DEFORM's shape). `kick` scales the target into the initial rate. */
+  hz: 7, zeta: 0.35, kick: 6, restA: 1e-4, restV: 1e-2,
+  /** THE WOBBLE: an opened half is meat on a hinge, not a prop. Each turning half carries an offset on top of the
+   *  spring's angle (SplitState.wobP / wobM, rad, positive = further open): a damped spring about zero, driven by how
+   *  the head is thrown about (wobbleDrive) and stepped with the angle (stepSplit). No gravity in it: at rest the
+   *  offset is exactly 0, whichever way up the head lies.
+   *  `hz`, `zeta`: the offset's own spring, slower and softer than the chop's: a flop, a swing back, rest.
+   *  `gainSide`, `gainBob`: the drive (rad/s^2) per m/s^2 of the mass point's acceleration ACROSS the split (along n:
+   *  the halves lag behind the head, so one opens and the other closes) and UP out of the hinge (along u: both open,
+   *  or both close), for a half at its preset's full angle; a half less far open is driven in proportion to its
+   *  angle. Both 0 = no wobble: the halves stand at the spring's angle, to the bit.
+   *  `arm`: the mass point is this far up from the hinge into the head (m). Its acceleration, not the bare hinge's,
+   *  holds the head's own turning about the hinge axis: a head that rolls throws its crown, not its hinge.
+   *  `accelClamp`: each of the two accelerations is held to this (m/s^2): a pose that snaps.
+   *  `jumpSpeed`: a mass point that moves faster than this between two samples (m/s) has been put somewhere else, not
+   *  carried there (a teleport, a respawn): that sample is dropped and the motion starts again from it (pointAccel).
+   *  The fastest a body does is the corpse's head whipping down, 11 m/s.
+   *  THE LIMITS (wobbleLimits), kept on every sub-step:
+   *  `max`: the offset stays within this share of the half's own spring angle, either way;
+   *  `minOpen`: the half is never closer to shut than this (rad) once its spring angle is past it: the cut faces
+   *  never meet;
+   *  `over`: and never stands further open than the preset's full angle x (1 + over), but for where its spring alone
+   *  takes it. */
+  wobble: { hz: 3, zeta: 0.3, gainSide: 6, gainBob: 8, arm: 0.1, accelClamp: 40, jumpSpeed: 25, max: 0.45, minOpen: 0.03, over: 0.45 },
+  /** THE SKULL (the bone mesh; skullSplitOf below, drawn by webgpu/skeleton-spike/mesh-renderer.ts). The bone opens
+   *  LESS than its flesh half, so it stays in the gap as a skull that cracks, then splits.
+   *  `follow`: knots of (the flesh's opening as a share of its preset's full angle, the bone's share of the flesh
+   *  angle), straight lines between them and flat outside. 1 would ride the flesh, 0 is the whole skull. The knots are
+   *  the split's three stages: a thin crack (the skull parts 1.7 degrees a half, about a centimetre at the crown, and
+   *  still shows its face in the gap), a wide crack (7.6 degrees) and split wide (27 degrees, close behind the flesh).
+   *  The axe opens to the second and then the third (axe-head.ts openAngles); the first is a lighter weapon's.
+   *  `jag`: the fracture edge between the two halves (mesh-split.ts meshSplitJag), in metres: a zig-zag of amplitude
+   *  `zigAmp` and period `zigLen` along the break, and chips of `chipAmp` in cells of `chipLen`. Amplitudes 0 = the
+   *  clean plane. The zig-zag's teeth are made uneven by a slow noise of `wobble` cells per `zigLen` that pushes the
+   *  phase of the wave along the hinge axis by `wobbleAlong` periods and of the wave up from the hinge by `wobbleUp`;
+   *  that second wave runs at `upFreq` x the first's frequency, so the two never line up.
+   *  `inside`: the colour of the bone's inner wall, seen through the break (dark, wet).
+   *  `rim`: the broken edge. The mesh is a shell with no thickness, so the inner wall takes the colour of cut bone
+   *  within `width` (m) of the break: seen across the gap it reads as the thickness of the bone. Width 0 = none. */
+  skull: {
+    follow: [[0.55, 0.1], [0.8, 0.3], [1, 0.85]],
+    jag: { zigAmp: 0.004, zigLen: 0.022, chipAmp: 0.0015, chipLen: 0.006, wobble: 0.43, wobbleAlong: 1.7, wobbleUp: 1.3, upFreq: 0.73 },
+    inside: [0.1, 0.018, 0.015],
+    rim: { color: [0.72, 0.5, 0.4], width: 0.004 },
+  },
+} as const;
+
+/** THE CUT FACES' SHADING (the march after the hit: webgpu/march/body/blocks/post/split-hit.wgsl.ts derives the gate
+ *  and the depth, blocks/post/cut-face.wgsl.ts holds the look). A piece cap is the surface where it holds the split
+ *  field above the piece's own field; that gap, (the split field) - (the piece's field before its caps), is exactly 0
+ *  on skin and the depth inside the closed body on a cut face.
+ *  `cutLo`, `cutHi`: THE GATE (cutFace). The hit shades as skin up to `cutLo` of the gap and as wound interior from
+ *  `cutHi` (the tissue ramp by that depth, no face sheet), blending between. `cutHi` is the zombie's fat stop
+ *  (fatDepth, 4 mm): the gate is fully open where the tissue ramp reaches its pale fat band, and the ramp's first stop
+ *  (skin to fat) lies under the blend.
+ *  `shellLo`, `shellHi`: the walk's shell noise fades out over this range of the same gap (body/trace.wgsl.ts). It is
+ *  geometry, not shading: its own numbers, so the gate can move without moving a surface.
+ *  `poreCut`: no skin pores (the micro-detail normal, and the output-resolution detail pass) from this much gate.
+ *  `wet`: how wet a cut face is at every depth, as a share of the gate: 1 = wet all over, 0 = wet like a crater (its
+ *  lip glistens, its floor does not).
+ *  `glisten`: THE WET FILM (the light tail: webgpu/march/body/blocks/light/split-glisten.wgsl.ts). The raw surfaces of
+ *  an OPENED HEAD, the pit the face cuts carve and the flat caps around it, catch the torch (or, with it off, the lamp
+ *  that keys the body) as tight highlights that move as the eye or the light does. The film has a normal of its own:
+ *  the shading normal leant by two octaves of noise that ride the half. The diffuse light keeps the surface's normal,
+ *  so the flesh between the highlights shades as it did. It keeps to the head: nothing under the hinge plane or
+ *  outside the hold ball takes it (a chest wound of a zombie whose head is open does not), and nothing outside an open
+ *  split's region runs it.
+ *    `gain`: the highlights' strength, x the light's colour, added before the highlight shoulder. **0 = off: the
+ *      block is not written into the shader, and an opened head shades exactly as it did before the film.**
+ *    `pow`: the exponent of the torch's highlight. Higher = tighter.
+ *      `gain` 4.5 and `pow` 28 are THE OWNER'S PICK (2026-10-06, variant C of
+ *      docs/dev-notes/2026-10-04-head-split/look/14-wet-variants.jpg): the boldest of three. It is past the 3% bound on
+ *      highlight blow-out that the quieter variant B kept (`gain` 2.6, `pow` 40: 2.5% of raw texels over 0.95 luma in
+ *      its worst view; C reads 3.4% to 6.4% square on). The alternatives' numbers: the head-split NOTES.
+ *    `spill`: the torch's glint reaches past the beam's outer cone by this much of the cosine to the beam's axis
+ *      (the film mirrors the lamp itself, and the torch is mounted a quarter metre off the eye: a head at arm's
+ *      length in the middle of the screen stands at the cone's edge).
+ *    `lamps`, `lampPow`: with the torch off, the lamp that keys the body (the light list's dominant pick) glints off
+ *      the same normal: its share of `gain`, and its exponent. What keeps the head wet in the dark. With the torch
+ *      lit the lamps add no glint.
+ *    `horizon`: a light's glint comes in over this much of n . L on the SURFACE's own normal: flesh that faces away
+ *      from a light has no film that catches it, however its film leans.
+ *    `rawLo`, `rawHi`: the film comes in over this range of the wound mask, so the mask's faint reach over the skin
+ *      about a cut stays dry.
+ *    `lump`, `fine`: the cell of each noise octave (m). `lumpTilt`, `fineTilt`: how far each leans the film's normal:
+ *      the tilt per unit of noise on one axis. The tilt is projected onto the surface's tangent plane, so the lean's
+ *      tangent is the length of what is left and the film's normal never turns into the surface.
+ *    `lumpFlat`: the coarse octave is pushed off zero, v / (|v| + lumpFlat): the smaller, the fewer facets lie flat in
+ *      the surface (at 1 it is close to the plain noise, halved).
+ *    THE LEAN these give (the angle between the film's normal and the surface's; measured by the block's twin in
+ *      split-glisten.wgsl.test.ts): median 39 degrees, 5% under 15, 95% under 55. So a face seen square on has facets
+ *      that catch a torch beside the eye, and a face raked by the light still has some that do. (With `lumpTilt` 3.2
+ *      and `lumpFlat` 0.1 the median was 72 degrees: the film only glinted at a rake.)
+ *    `fadeLo`, `fadeHi`: an octave fades out as its cell shrinks from `fadeHi` to `fadeLo` MARCH TEXELS (smaller, it
+ *      would crawl), and the whole film with the coarse one. In metres that depends on the march's resolution: at the
+ *      gate's (a 400 x 300 march target) the film is whole to about 2.4 m and gone by about 5 m, the fine octave
+ *      whole to about 1 m and gone by 2 m.
+ *    `edge`: the film fades out over `edge` metres past the opened head's bounds (under the hinge plane, outside the
+ *      hold ball), so its boundary is no seam. */
+export const SPLIT_SHADE = {
+  cutLo: 0.0015, cutHi: 0.004, shellLo: 0.0015, shellHi: 0.004, poreCut: 0.5, wet: 1,
+  glisten: {
+    gain: 4.5, pow: 28, spill: 0.3, lamps: 0.45, lampPow: 20, rawLo: 0.3, rawHi: 0.8,
+    lump: 0.014, lumpTilt: 2.4, lumpFlat: 1, fine: 0.006, fineTilt: 0.6, fadeLo: 0.75, fadeHi: 1.5, edge: 0.01, horizon: 0.15,
+  },
+} as const;
+
+export interface SplitState {
+  preset: SplitPresetId | null;
+  /** +1 the + side moves, -1 the - side, 0 both. */
+  sides: -1 | 0 | 1;
+  /** Head-local plane offset along n (m). */
+  offset: number;
+  /** Current opening angle (rad, >= 0) and its rate; `target` is where the spring settles. */
+  angle: number; vel: number; target: number;
+  /** THE STAGE (rad): the furthest the spring has opened, no further than its target. It only ever advances: the swing
+   *  back under the target, or a kick on a split already at its angle (punchSplit), leaves it where it is. The skull
+   *  reads it (skullSplitOf). */
+  stage: number;
+  /** THE WOBBLE (HEAD_SPLIT.wobble): the + half's and the - half's offset on top of `angle` (rad, positive = further
+   *  open) and their rates. A side that does not turn keeps 0. */
+  wobP: number; wobVP: number; wobM: number; wobVM: number;
+}
+
+export function makeSplitState(): SplitState {
+  return { preset: null, sides: 0, offset: 0, angle: 0, vel: 0, target: 0, stage: 0, wobP: 0, wobVP: 0, wobM: 0, wobVM: 0 };
+}
+
+/** The preset for a chop: `bladeNormalLocal` is the blade plane's normal in head-local space (cross(blade dir, view),
+ *  any sign), `impactLocal` the hit in head-local metres, `radius` the head's HALF-WIDTH (the skull's x semi-axis,
+ *  flame-anchors.ts headShape axes.x): the offsets are shares of it. Not HeadFrame.radius, which is the larger hold
+ *  radius. */
+export function choosePreset(bladeNormalLocal: Vec3, impactLocal: Vec3, radius: number): Pick<SplitState, 'preset' | 'sides' | 'offset'> {
+  const ax = Math.abs(bladeNormalLocal[0]), az = Math.abs(bladeNormalLocal[2]);
+  if (az > ax) {
+    const [lo, hi] = HEAD_SPLIT.faceOffsetFrac;
+    return { preset: 'face', sides: 1, offset: Math.max(lo * radius, Math.min(hi * radius, impactLocal[2])) };
+  }
+  const max = HEAD_SPLIT.maxOffsetFrac * radius;
+  const off = Math.max(-max, Math.min(max, impactLocal[0]));
+  const sides = Math.abs(off) < HEAD_SPLIT.bothFrac * radius ? 0 : off > 0 ? 1 : -1;
+  return { preset: 'middle', sides, offset: sides === 0 ? 0 : off };
+}
+
+/** Spring the angle toward `target` (keeps the preset). */
+export function kickSplit(st: SplitState, target: number): SplitState {
+  return { ...st, target, vel: st.vel + (target - st.angle) * HEAD_SPLIT.kick };
+}
+
+/** How far (rad) a rate of 1 rad/s carries the spring past its rest before it turns back: its first peak, by
+ *  stepSplit's own sub-steps (hz 7, zeta 0.35: 0.0128 rad, 0.03 s on). */
+function springReach(): number {
+  const w = 2 * Math.PI * HEAD_SPLIT.hz, z = HEAD_SPLIT.zeta, h = 1 / 240;
+  let a = 0, v = 1, peak = 0;
+  for (let i = 0; i < 4096 && v > 0; i++) { v += (-w * w * a - 2 * z * w * v) * h; a += v * h; peak = Math.max(peak, a); }
+  return peak;
+}
+
+/** A HIT ON A SPLIT THAT IS ALREADY THERE (the kill chop on a head split wide): a rate toward open that, alone,
+ *  carries the halves `frac` of the preset's max past where they stand before the spring brings them back
+ *  (springReach). The target and the stage stay. */
+export function punchSplit(st: SplitState, frac: number): SplitState {
+  if (st.preset === null || !(frac > 0)) return st;
+  return { ...st, vel: st.vel + frac * splitMaxAngle(st) / springReach() };
+}
+
+/** THE WOBBLE'S PARAMETERS (HEAD_SPLIT.wobble documents each). What steps the wobble takes them as an argument, the
+ *  shipped set by default: a test, a tuning seam or a port passes its own, and the constant is never written to. */
+export interface WobbleParams {
+  hz: number; zeta: number; gainSide: number; gainBob: number; arm: number; accelClamp: number; jumpSpeed: number;
+  max: number; minOpen: number; over: number;
+}
+
+/** THE WOBBLE'S DRIVE for one tick: the mass point's acceleration across the split (along n) and up out of the hinge
+ *  (along u), m/s^2. */
+export interface WobbleDrive { side: number; bob: number }
+
+/** The point of a split whose acceleration drives its wobble: `arm` up from the hinge into the head (world). `u` is
+ *  n x a, for a caller that has it. */
+export function splitMassPoint(w: SplitWarp, P: WobbleParams = HEAD_SPLIT.wobble, u: Vec3 = cross(w.n, w.a)): Vec3 {
+  return [w.h[0] + u[0] * P.arm, w.h[1] + u[1] * P.arm, w.h[2] + u[2] * P.arm];
+}
+
+/** An acceleration as the wobble takes it: held to `clamp` either way; what is not a finite number is none. */
+const heldAccel = (x: number, clamp: number): number => (Number.isFinite(x) ? Math.max(-clamp, Math.min(clamp, x)) : 0);
+
+/** The drive for the split `w` whose mass point accelerates by `acc` (world, m/s^2): its two components, each held to
+ *  accelClamp. What is not a finite number is no drive. `u` is n x a, for a caller that has it. */
+export function wobbleDrive(w: SplitWarp, acc: Vec3, P: WobbleParams = HEAD_SPLIT.wobble, u: Vec3 = cross(w.n, w.a)): WobbleDrive {
+  return { side: heldAccel(dot(acc, w.n), P.accelClamp), bob: heldAccel(dot(acc, u), P.accelClamp) };
+}
+
+/** A POINT'S MOTION, kept from sample to sample for its acceleration by finite differences: where it was last, how
+ *  fast it was going (null until known) and the time step that velocity was taken over. */
+export interface PointMotion { p: Vec3 | null; v: Vec3 | null; dt: number }
+
+export function makePointMotion(): PointMotion { return { p: null, v: null, dt: 0 }; }
+
+/** One more sample of a point: it is at `p`, `dt` seconds after the last sample. Returns the motion to keep and the
+ *  point's acceleration (m/s^2): the difference of its last two velocities, each over its own step's time, across the
+ *  time between those steps' middles. The first two samples give none (a position, then one velocity: a head that
+ *  splits on a walking body is not kicked by the walk's speed); a sample of no time (dt <= 0) is no sample; no point
+ *  (null, or not finite: the pose carries no split) forgets the motion; and a point that has JUMPED (faster than
+ *  jumpSpeed from the last sample) is where the motion starts again, with no acceleration from the jump. */
+export function pointAccel(m: PointMotion, p: Vec3 | null, dt: number, P: WobbleParams = HEAD_SPLIT.wobble): { motion: PointMotion; acc: Vec3 } {
+  if (!p || !(Number.isFinite(p[0]) && Number.isFinite(p[1]) && Number.isFinite(p[2]))) return { motion: makePointMotion(), acc: [0, 0, 0] };
+  if (!(dt > 0)) return { motion: m, acc: [0, 0, 0] };
+  if (!m.p) return { motion: { p, v: null, dt: 0 }, acc: [0, 0, 0] };
+  const k = 1 / dt, v: Vec3 = [(p[0] - m.p[0]) * k, (p[1] - m.p[1]) * k, (p[2] - m.p[2]) * k];
+  if (v[0] * v[0] + v[1] * v[1] + v[2] * v[2] > P.jumpSpeed * P.jumpSpeed) return { motion: { p, v: null, dt: 0 }, acc: [0, 0, 0] };
+  if (!m.v) return { motion: { p, v, dt }, acc: [0, 0, 0] };
+  const j = 1 / ((dt + m.dt) / 2);
+  return { motion: { p, v, dt }, acc: [(v[0] - m.v[0]) * j, (v[1] - m.v[1]) * j, (v[2] - m.v[2]) * j] };
+}
+
+/** THE WOBBLE'S LIMITS: the range [lo, hi] a half's offset is held in while its spring stands at `st.angle` (max,
+ *  minOpen, over). lo <= 0 <= hi, so an offset of 0 is always inside. */
+export function wobbleLimits(st: Pick<SplitState, 'preset' | 'sides' | 'angle'>, P: WobbleParams = HEAD_SPLIT.wobble): [number, number] {
+  const reach = P.max * st.angle;
+  return [
+    -Math.min(reach, Math.max(0, st.angle - P.minOpen)),
+    Math.min(reach, Math.max(0, splitMaxAngle(st) * (1 + P.over) - st.angle)),
+  ];
+}
+
+/** Advance the spring (semi-implicit Euler, 1/240 s sub-steps); snaps onto the target when settled. The stage follows
+ *  the angle up, as far as the target. Then each turning half's wobble about the new angle, under `drive` (null: none,
+ *  the offsets only settle), by the parameters `P`. With no drive and no offset the wobble is not stepped at all: a
+ *  body that does not move keeps its halves at the spring's angle.
+ *  THE WOBBLE TRUSTS NOTHING IT IS HANDED: a drive component that is not a finite number is none, one past accelClamp
+ *  is held to it, and offsets or rates that are not finite numbers (in the state, or after the step) are at rest. At
+ *  a limit (wobbleLimits, on every sub-step) an offset stops there and keeps no rate into it. */
+export function stepSplit(st: SplitState, dt: number, drive: WobbleDrive | null = null, P: WobbleParams = HEAD_SPLIT.wobble): SplitState {
+  if (st.preset === null) return st;
+  const w = 2 * Math.PI * HEAD_SPLIT.hz, z = HEAD_SPLIT.zeta;
+  let a = st.angle, v = st.vel, stage = st.stage;
+  const n = Math.max(1, Math.ceil(dt * 240)), h = dt / n;
+  for (let i = 0; i < n; i++) {
+    v += (-w * w * (a - st.target) - 2 * z * w * v) * h; a += v * h;
+    stage = Math.max(stage, Math.min(a, st.target));
+  }
+  if (Math.abs(a - st.target) < HEAD_SPLIT.restA && Math.abs(v) < HEAD_SPLIT.restV) { a = st.target; v = 0; stage = Math.max(stage, a); }
+  const angle = Math.max(0, a);
+  const sane = Number.isFinite(st.wobP) && Number.isFinite(st.wobVP) && Number.isFinite(st.wobM) && Number.isFinite(st.wobVM);
+  let xP = sane ? st.wobP : 0, vP = sane ? st.wobVP : 0, xM = sane ? st.wobM : 0, vM = sane ? st.wobVM : 0;
+  const side = drive ? heldAccel(drive.side, P.accelClamp) * P.gainSide : 0, bob = drive ? heldAccel(drive.bob, P.accelClamp) * P.gainBob : 0;
+  if (!(side === 0 && bob === 0 && xP === 0 && vP === 0 && xM === 0 && vM === 0)) {
+    const full = splitMaxAngle(st), free = full > 0 ? Math.min(1, angle / full) : 0, reach = P.max * angle;
+    const lo = -Math.min(reach, Math.max(0, angle - P.minOpen)), hi = Math.min(reach, Math.max(0, full * (1 + P.over) - angle));
+    const ww = 2 * Math.PI * P.hz, zz = P.zeta;
+    // Across the split the halves lag the head: the + half, which opens toward +n, closes as the head is thrown to +n.
+    const pushP = (bob - side) * free, pushM = (bob + side) * free;
+    for (let i = 0; i < n; i++) {
+      vP += (-ww * ww * xP - 2 * zz * ww * vP + pushP) * h; xP += vP * h;
+      if (xP < lo) { xP = lo; vP = Math.max(vP, 0); } else if (xP > hi) { xP = hi; vP = Math.min(vP, 0); }
+      vM += (-ww * ww * xM - 2 * zz * ww * vM + pushM) * h; xM += vM * h;
+      if (xM < lo) { xM = lo; vM = Math.max(vM, 0); } else if (xM > hi) { xM = hi; vM = Math.min(vM, 0); }
+    }
+    // A side that does not turn has no offset; a half that has settled, or is no longer a number, is at rest.
+    const restP = st.sides < 0 || !(Number.isFinite(xP) && Number.isFinite(vP)) || (Math.abs(xP) < HEAD_SPLIT.restA && Math.abs(vP) < HEAD_SPLIT.restV);
+    const restM = st.sides > 0 || !(Number.isFinite(xM) && Number.isFinite(vM)) || (Math.abs(xM) < HEAD_SPLIT.restA && Math.abs(vM) < HEAD_SPLIT.restV);
+    if (restP) { xP = 0; vP = 0; }
+    if (restM) { xM = 0; vM = 0; }
+  }
+  return { ...st, angle, vel: v, stage, wobP: xP, wobVP: vP, wobM: xM, wobVM: vM };
+}
+
+/** The preset's full opening angle for this state: both halves vs one side (0 when closed). */
+export function splitMaxAngle(st: Pick<SplitState, 'preset' | 'sides'>): number {
+  if (st.preset === null) return 0;
+  const p = HEAD_SPLIT.presets[st.preset];
+  return st.sides === 0 ? p.maxBoth : p.maxOne;
+}
+
+/** The chop that opens a head: its preset (choosePreset), sprung from closed toward `frac` of the preset's max. */
+export function openSplit(bladeNormalLocal: Vec3, impactLocal: Vec3, halfWidth: number, frac: number): SplitState {
+  const st = { ...makeSplitState(), ...choosePreset(bladeNormalLocal, impactLocal, halfWidth) };
+  return kickSplit(st, frac * splitMaxAngle(st));
+}
+
+/** A later chop: spring on to `frac` of the preset's max. The preset, side and offset stay; the target never drops. */
+export function widenSplit(st: SplitState, frac: number): SplitState {
+  if (st.preset === null) return st;
+  return kickSplit(st, Math.max(st.target, frac * splitMaxAngle(st)));
+}
+
+/** A split set by hand (the tuning / gate seam): at `angleFrac` of the max at once, at rest. `offset` is head-local
+ *  metres along n and is not clamped, nor is `angleFrac` above 1; `angleFrac` <= 0 is the closed state. The seam is
+ *  called from a console, so what is not a split is refused (null): an unknown preset, a side that is not -1 / 0 / 1,
+ *  a non-finite offset or angle. */
+export function forcedSplit(
+  preset: SplitPresetId, sides: -1 | 0 | 1, offset: number, angleFrac: number,
+): SplitState | null {
+  if (!Object.hasOwn(HEAD_SPLIT.presets, preset) || !(sides === -1 || sides === 0 || sides === 1)
+    || !Number.isFinite(offset) || !Number.isFinite(angleFrac)) return null;
+  if (!(angleFrac > 0)) return makeSplitState();
+  const angle = angleFrac * splitMaxAngle({ preset, sides });
+  return { ...makeSplitState(), preset, sides, offset, angle, target: angle, stage: angle };
+}
+
+/** The head's frame: skull centre, world rotation (rig-bind.ts headQuatOf) and the hold radius (headFrameOf). */
+export interface HeadFrame { centre: Vec3; quat: Quat; radius: number }
+
+/** The frame of a skull (flame-anchors.ts headShape: its centre and semi-axes) turned by `quat`. The radius is the
+ *  skull's LARGEST semi-axis, because rho = |centre - h| + holdFrac x radius must hold all the head flesh above the
+ *  hinge plane, for every preset, hinge and offset: whatever lies within holdFrac x radius of the centre is within rho
+ *  of any hinge. Measured on the zombie (semi-axes 0.090, 0.137, 0.105): that flesh reaches 0.152 m from the centre
+ *  (the jaw, under the face preset's low hinge) against 1.25 x 0.137 = 0.171. With the half-width (0.090) the crown
+ *  (0.137 up) lay outside rho, stayed behind and tore. */
+export function headFrameOf(skull: { centre: Vec3; axes: Vec3 }, quat: Quat): HeadFrame {
+  return { centre: skull.centre, quat, radius: Math.max(skull.axes[0], skull.axes[1], skull.axes[2]) };
+}
+
+const conj = (q: Quat): Quat => [-q[0], -q[1], -q[2], q[3]];
+/** A world point / direction in head-local space (x right, y up, z face-forward; metres from the skull centre). */
+export function headLocalPoint(f: HeadFrame, p: Vec3): Vec3 { return qRotate(conj(f.quat), sub(p, f.centre)); }
+export function headLocalDir(f: HeadFrame, v: Vec3): Vec3 { return qRotate(conj(f.quat), v); }
+
+/** The split in WORLD space for this frame (null when closed). The GPU record carries exactly these fields, but for
+ *  `full` and `stage`. */
+export interface SplitWarp {
+  /** Plane normal (unit) and offset: s(q) = n.q - d0. */
+  n: Vec3; d0: number;
+  /** Hinge point and unit axis a = normalize(up x n); u = n x a points up into the head, a x u = +n. */
+  h: Vec3; a: Vec3;
+  /** + side and - side angles (rad): thetaP >= 0, thetaM <= 0. Turning by +theta about a moves the + side to +n. Each
+   *  is its half's own: the spring's angle and that half's wobble (SplitState.wobP / wobM), so the two differ while
+   *  the head is thrown about. */
+  thetaP: number; thetaM: number;
+  /** The region sphere: centred on h, radius r. The moved material lies within r - REGION_MARGIN of h. */
+  r: number;
+  /** The preset's full opening angle for this split (splitMaxAngle; rad): what the angles are a share of, and the
+   *  stage the split has reached (SplitState.stage; rad), whatever its angles are doing. The field reads neither; the
+   *  skull does (skullSplitOf). */
+  full: number; stage: number;
+}
+
+/** Rodrigues: v rotated by t (right-handed) about unit axis k. */
+export function rotAxis(v: Vec3, k: Vec3, t: number): Vec3 {
+  const c = Math.cos(t), s = Math.sin(t), d = dot(k, v), x = cross(k, v);
+  return [v[0] * c + x[0] * s + k[0] * d * (1 - c), v[1] * c + x[1] * s + k[1] * d * (1 - c), v[2] * c + x[2] * s + k[2] * d * (1 - c)];
+}
+
+/** A preset's axes in WORLD space for the head frame `f`: the plane normal n, the in-plane up, and the hinge axis
+ *  a = normalize(up x n). */
+function presetBasis(p: SplitPreset, f: HeadFrame): { n: Vec3; up: Vec3; a: Vec3 } {
+  const n = normalize(qRotate(f.quat, p.n));
+  const up = normalize(qRotate(f.quat, p.up));
+  return { n, up, a: normalize(cross(up, n)) };
+}
+
+export function splitWarpOf(st: SplitState, f: HeadFrame): SplitWarp | null {
+  if (st.preset === null || !(st.angle > 0)) return null;
+  const p = HEAD_SPLIT.presets[st.preset];
+  const hL0 = st.sides === 0 ? p.hingeBoth : p.hingeOne;
+  const hL: Vec3 = [hL0[0] + p.n[0] * st.offset, hL0[1] + p.n[1] * st.offset, hL0[2] + p.n[2] * st.offset];
+  const { n, a } = presetBasis(p, f);
+  const h = add(f.centre, qRotate(f.quat, hL));
+  const d0 = dot(n, f.centre) + st.offset;
+  return {
+    n, d0, h, a,
+    thetaP: st.sides >= 0 ? st.angle + st.wobP : 0,
+    thetaM: st.sides <= 0 ? -(st.angle + st.wobM) : 0,
+    r: len(sub(f.centre, h)) + f.radius * HEAD_SPLIT.holdFrac + REGION_MARGIN,
+    full: splitMaxAngle(st), stage: st.stage,
+  };
+}
+
+/** p taken back by -theta about the hinge (theta 0 returns p itself). The GPU's splitMoveBack. */
+const moveBack = (w: SplitWarp, p: Vec3, theta: number): Vec3 =>
+  theta === 0 ? p : add(w.h, rotAxis(sub(p, w.h), w.a, -theta));
+
+/** P0's cap, min(up(p), rho - dh): the rest stays where it is below the hinge plane or at least rho from h. One
+ *  place for both branches of splitField. */
+const restCap = (w: SplitWarp, p: Vec3, dh: number): number =>
+  Math.min(dot(cross(w.n, w.a), sub(p, w.h)), w.r - REGION_MARGIN - dh);
+
+/** The three pieces at p (index 0 = the unmoved rest, 1 = the + half, 2 = the - half): their un-warped points and
+ *  capped fields. `dh` = |p - h|. A side that does not move (theta 0, the larger side of a one-sided split) is at p
+ *  itself, so it reuses f(p): min(max(f, c0), max(f, c1)) = max(f, min(c0, c1)), exactly. A one-sided split costs
+ *  two f evaluations, a two-sided one three. */
+function pieces(w: SplitWarp, f: (q: Vec3) => number, p: Vec3, dh: number): { q: Vec3; d: number }[] {
+  const u = cross(w.n, w.a), rho = w.r - REGION_MARGIN;
+  const s = (q: Vec3) => dot(w.n, q) - w.d0;
+  const up = (q: Vec3) => dot(u, sub(q, w.h));
+  const fp = f(p);
+  const qp = moveBack(w, p, w.thetaP), qm = moveBack(w, p, w.thetaM);
+  const fqp = w.thetaP === 0 ? fp : f(qp), fqm = w.thetaM === 0 ? fp : f(qm);
+  return [
+    { q: p, d: Math.max(fp, restCap(w, p, dh)) },
+    { q: qp, d: Math.max(fqp, -s(qp), -up(qp), dh - rho) },
+    { q: qm, d: Math.max(fqm, s(qm), -up(qm), dh - rho) },
+  ];
+}
+
+/** The split field (see the header). `f` is the un-split body field. */
+export function splitField(w: SplitWarp | null | undefined, f: (q: Vec3) => number, p: Vec3): number {
+  if (!w) return f(p);
+  const dh = len(sub(p, w.h));
+  const shell = REGION_MARGIN + Math.abs(dh - w.r);
+  if (dh > w.r) return Math.min(Math.max(f(p), restCap(w, p, dh)), shell);
+  let best = shell;
+  for (const pc of pieces(w, f, p, dh)) best = Math.min(best, pc.d);
+  return best;
+}
+
+/** Where a point on the split head lives in the UN-WARPED head (wounds are stamped there; the GPU reads them there):
+ *  the winning piece's un-warped point. `piece` 0 = the unmoved rest, 1 = the + half, 2 = the - half. */
+export function unwarpPoint(w: SplitWarp | null | undefined, p: Vec3, f: (q: Vec3) => number): { q: Vec3; piece: 0 | 1 | 2 } {
+  if (!w) return { q: p, piece: 0 };
+  const dh = len(sub(p, w.h));
+  if (dh > w.r) return { q: p, piece: 0 };
+  const ps = pieces(w, f, p, dh);
+  let k = 0;
+  for (let i = 1; i < 3; i++) if (ps[i]!.d < ps[k]!.d) k = i;
+  return { q: ps[k]!.q, piece: k as 0 | 1 | 2 };
+}
+
+/** A direction (e.g. a view or a normal) into the winning piece's un-warped frame. */
+export function unwarpDir(w: SplitWarp | null | undefined, piece: 0 | 1 | 2, v: Vec3): Vec3 {
+  if (!w || piece === 0) return v;
+  return rotAxis(v, w.a, piece === 1 ? -w.thetaP : -w.thetaM);
+}
+
+/** The forward map, unwarpPoint's inverse on the closed head's material: where the closed-head point `q` is on the
+ *  open head, and the piece that carries it. `q` is on the + half (piece 1) when it is above the hinge plane, within
+ *  rho of h and on the + side of the plane (s(q) >= 0), on the - half (piece 2) likewise on the - side, else on the
+ *  unmoved rest (piece 0); a half's points turn by its angle about the hinge. What rides the head but is stored on the
+ *  closed prims (a wound's blood emitter) goes through here. */
+export function warpPoint(w: SplitWarp | null | undefined, q: Vec3): { p: Vec3; piece: 0 | 1 | 2 } {
+  if (!w) return { p: q, piece: 0 };
+  const rel = sub(q, w.h);
+  if (dot(cross(w.n, w.a), rel) < 0 || len(rel) > w.r - REGION_MARGIN) return { p: q, piece: 0 };
+  const piece = dot(w.n, q) - w.d0 >= 0 ? 1 : 2;
+  const theta = piece === 1 ? w.thetaP : w.thetaM;
+  return { p: theta === 0 ? q : add(w.h, rotAxis(rel, w.a, theta)), piece };
+}
+
+/** A direction on the closed head (a wound's outward normal) turned with its piece: unwarpDir's inverse. */
+export function warpDir(w: SplitWarp | null | undefined, piece: 0 | 1 | 2, v: Vec3): Vec3 {
+  if (!w || piece === 0) return v;
+  return rotAxis(v, w.a, piece === 1 ? w.thetaP : w.thetaM);
+}
+
+/** THE HOLD BALL: centre h, radius rho = r - REGION_MARGIN. Every SURFACE a split adds is inside it: an opened half is
+ *  capped at dh <= rho (P+-), and outside the ball the body is where its prims are (P0 = f). So a bound on where the
+ *  body's surface can be (a proxy box, a cull sphere, a screen tile, a hull) needs this ball and not the region sphere:
+ *  between rho and r there is only the shell bound C, which is at least REGION_MARGIN and so never a surface. */
+export function splitHoldBall(w: SplitWarp): { centre: Vec3; radius: number } {
+  return { centre: w.h, radius: w.r - REGION_MARGIN };
+}
+
+/** A split made ready for sphere tests (once per split, not per sphere): `u` = n x a, up from the hinge into the
+ *  head, and the hold ball's radius. With it, for a point c: up(c) = u.(c - h), s(c) = n.c - d0, dh = |c - h|. */
+export interface SplitFrame { w: SplitWarp; u: Vec3; rho: number }
+
+export function splitFrame(w: SplitWarp | null | undefined): SplitFrame | null {
+  return w ? { w, u: cross(w.n, w.a), rho: w.r - REGION_MARGIN } : null;
+}
+
+/** WHICH TURNING HALVES A SPHERE OF THE CLOSED BODY CAN HOLD FLESH OF: bit 1 the + half, bit 2 the - half, 0 none.
+ *  The one gate of every bound below. A half's flesh is above the hinge plane (up >= 0), inside the hold ball
+ *  (dh <= rho) and on its side of the old plane (s >= 0 for +, s <= 0 for -), and it moves only if its half turns
+ *  (theta != 0). A sphere that cannot reach all of that holds nothing that moves: what it bounds is where the
+ *  closed prims put it. */
+export function splitHolds(f: SplitFrame, centre: Vec3, radius: number): number {
+  const rel = sub(centre, f.w.h);
+  if (dot(f.u, rel) + radius < 0 || len(rel) - radius > f.rho) return 0;
+  const s = dot(f.w.n, centre) - f.w.d0;
+  return (f.w.thetaP !== 0 && s + radius >= 0 ? 1 : 0) | (f.w.thetaM !== 0 && s - radius <= 0 ? 2 : 0);
+}
+
+/** THE RULE FOR A BOUND THAT IS ONE SPHERE. `centre` / `radius` bounds some of the CLOSED body's material (a cluster,
+ *  a prim group), and `reach` is how far past it that material still shapes the field (its blend). If the sphere
+ *  holds flesh of a turning half (splitHolds, with the reach), that flesh may be anywhere in the hold ball, and the
+ *  sphere grows to the smallest one holding itself and the ball; otherwise it stays. For a reader that tests a
+ *  WORLD ray or a screen position (the depth pre-pass's miss cull, the screen tiles). The grown sphere still holds
+ *  the closed one, so mapBody's own culls, which test a piece's UN-WARPED point, may read it too: they cull less. */
+export function splitBound(
+  f: SplitFrame | null, centre: Vec3, radius: number, reach = 0,
+): { centre: Vec3; radius: number } {
+  if (!f || splitHolds(f, centre, radius + reach) === 0) return { centre, radius };
+  const off = sub(f.w.h, centre), d = len(off);
+  if (d + f.rho <= radius) return { centre, radius };
+  if (d + radius <= f.rho) return { centre: f.w.h, radius: f.rho };
+  const grown = (d + radius + f.rho) / 2;
+  return { centre: add(centre, scale(off, (grown - radius) / d)), radius: grown };
+}
+
+/** The same rule for a bound made of MANY spheres (the outer hull's chains), which can follow the halves instead of
+ *  covering the whole ball: the centres of the sphere's turned copies. Whatever material of the closed body the
+ *  sphere holds is, on the open head, in the sphere itself (what does not move) or in the same-size sphere at one of
+ *  these centres, one per half it holds flesh of (splitHolds): a half is a rigid turn about the hinge. None for a
+ *  closed head. */
+export function splitSphereImages(f: SplitFrame | null, centre: Vec3, radius: number): Vec3[] {
+  const holds = f ? splitHolds(f, centre, radius) : 0, out: Vec3[] = [];
+  if (!f || holds === 0) return out;
+  const rel = sub(centre, f.w.h);
+  if (holds & 1) out.push(add(f.w.h, rotAxis(rel, f.w.a, f.w.thetaP)));
+  if (holds & 2) out.push(add(f.w.h, rotAxis(rel, f.w.a, f.w.thetaM)));
+  return out;
+}
+
+/** THE REGION SHELL AT RANGE. The shell bound C is a bound, never a surface, only while the march cannot accept it: C
+ *  is at least REGION_MARGIN, and the march takes a sample for a hit when the field is under its hit epsilon
+ *  (t x coneK x strength: the pixel footprint at ray distance t, step-config.wgsl.ts / trace.wgsl.ts) or when the
+ *  last-step secant's root is under `secant` epsilons (trace.wgsl.ts; on a field that never goes under REGION_MARGIN
+ *  the root is over REGION_MARGIN too). So the shell is safe while that ACCEPT REACH, t x coneK x strength x
+ *  max(1, secant), is at most REGION_MARGIN, and past the distance where it gets there the region sphere would be
+ *  drawn as a ball round the head. The view draws the split only while the reach at the far side of the region
+ *  sphere is within this share of REGION_MARGIN, and writes a closed record beyond (webgpu/zombie-gpu.ts): the head
+ *  is a few pixels there. The CPU's split (the pose) is not touched. */
+export const SHELL_ACCEPT_FRAC = 0.8;
+
+/** The eye-to-hinge distance the split is drawn to (see SHELL_ACCEPT_FRAC). `coneK` is the pixel footprint radius per
+ *  metre (aaCfg.x), `strength` the far accept strength (aaCfg.y; 0 = no footprint accept, the epsilon is its 1.2 mm
+ *  floor and the split is drawn at any distance) and `secant` the last-step factor (perfCfg.w; 0 = off). The near
+ *  accept boost (aaCfg.z, fading out by aaCfg.w metres) is not in it: this is the far law (splitNearReach is the
+ *  near one). */
+export function splitDrawDistance(w: SplitWarp, accept: { coneK: number; strength: number; secant: number }): number {
+  const perMetre = accept.coneK * accept.strength * Math.max(1, accept.secant);
+  return perMetre > 0 ? SHELL_ACCEPT_FRAC * REGION_MARGIN / perMetre - w.r : Infinity;
+}
+
+/** A split closed for range opens again only inside this share of its draw distance, so an eye that hovers at the
+ *  distance does not flip it every frame. */
+export const SPLIT_REOPEN_FRAC = 0.9;
+
+/** THE ACCEPT REACH UP CLOSE (metres): the largest t x aaKt(t) x max(1, secant) over the near accept's range, with
+ *  trace.wgsl.ts's aaKt = coneK x mix(near, strength, smoothstep(fadeM / 2, fadeM, t)) (`near` aaCfg.z, `fadeM`
+ *  aaCfg.w; near 0 = no boost, and the reach is the far law's at fadeM). The draw distance cannot help here: the
+ *  boost is strongest at arm's length. While this stays at or under REGION_MARGIN the shell is safe up close; over
+ *  it (a coarse SDF pass, a large ?laststep) the region sphere can be drawn as a ball round an open head near 1.8 m.
+ *  Nothing closes the split for it: the view warns (zombie-gpu.ts). */
+export function splitNearReach(
+  accept: { coneK: number; strength: number; near: number; fadeM: number; secant: number },
+): number {
+  const { coneK, strength, near, fadeM } = accept, k = coneK * Math.max(1, accept.secant);
+  if (!(near > 0) || !(fadeM > 0)) return Math.max(0, fadeM) * strength * k;
+  // The product rises with t up to fadeM / 2 (strength `near`) and from fadeM on (strength `strength`, the far law).
+  let peak = 0;
+  for (let i = 0; i <= 64; i++) {
+    const x = i / 64, t = fadeM * (0.5 + 0.5 * x), ss = x * x * (3 - 2 * x);
+    peak = Math.max(peak, t * (near + (strength - near) * ss));
+  }
+  return peak * k;
+}
+
+/** THE CUT FACES: one cut segment (cut-wound.ts CutSeg, world space, on the CLOSED head) per half that opens. Each
+ *  runs along the hinge axis over the top of the head, HEAD_SPLIT.faceCut.inset into its own half off the plane (so
+ *  the cut belongs to that half and turns with it), seen from above along -up: stampCut finds the scalp under its
+ *  midpoint and cuts down from there, so the face of the half reads as cut flesh from the scalp inward. */
+export function splitFaceSegs(st: SplitState, f: HeadFrame): { side: 1 | -1; a: Vec3; b: Vec3; view: Vec3 }[] {
+  if (st.preset === null) return [];
+  const c = HEAD_SPLIT.faceCut;
+  const { n, up, a } = presetBasis(HEAD_SPLIT.presets[st.preset], f);
+  const half = scale(a, c.lenFrac * f.radius);
+  const sides: (1 | -1)[] = st.sides === 0 ? [1, -1] : [st.sides];
+  return sides.map(side => {
+    const mid = add(f.centre, add(scale(n, st.offset + side * c.inset), scale(up, f.radius)));
+    return { side, a: sub(mid, half), b: add(mid, half), view: scale(up, -1) };
+  });
+}
+
+/** THE SKULL SPLIT. The skull is a mesh of the CLOSED head's bone (webgpu/skeleton-spike/mesh-renderer.ts), drawn once
+ *  per piece that owns part of it, each copy turned about the hinge by its piece's BONE angle and clipped to what the
+ *  piece owns. The bone turns less than its flesh half (HEAD_SPLIT.skull.follow), so the flesh peels off it and the
+ *  skull stands in the gap, cracked open by its own smaller angle. Made from the split the view DRAWS
+ *  (zombie-gpu.ts splitDrawn), so the bone is closed whenever the flesh is drawn closed. */
+export interface SkullSplit {
+  /** The flesh's split, ready for point tests: the bone breaks on the same plane and hinge. */
+  frame: SplitFrame;
+  /** The stage the table was read at (the split's stage as a share of the preset's full angle; 0..1), and the bone's
+   *  share of the flesh angle. */
+  frac: number; follow: number;
+  /** The bone's angles (rad): the + half's (>= 0) and the - half's (<= 0). A half whose flesh stays has 0. */
+  angleP: number; angleM: number;
+  /** Shifts the fracture pattern, so two heads do not break alike. */
+  seed: number;
+}
+
+/** The bone's share of the flesh angle at flesh opening `frac`: HEAD_SPLIT.skull.follow's knots, straight lines between
+ *  them, flat outside. */
+export function skullFollow(frac: number, knots: readonly (readonly [number, number])[] = HEAD_SPLIT.skull.follow): number {
+  const first = knots[0]!, last = knots[knots.length - 1]!;
+  if (!(frac > first[0])) return first[1];
+  for (let i = 1; i < knots.length; i++) {
+    const a = knots[i - 1]!, b = knots[i]!;
+    if (frac <= b[0]) return a[1] + (b[1] - a[1]) * (frac - a[0]) / (b[0] - a[0]);
+  }
+  return last[1];
+}
+
+/** What may replace HEAD_SPLIT.skull.follow from the tuning seam: one share for every stage, or another table. */
+export type SkullFollow = number | readonly (readonly [number, number])[];
+
+/** `follow` is something skullSplitOf can take: a finite share, or a table of finite knots whose openings rise. */
+export function skullFollowOk(follow: unknown): follow is SkullFollow {
+  if (typeof follow === 'number') return Number.isFinite(follow);
+  if (!Array.isArray(follow) || follow.length === 0) return false;
+  return follow.every((k, i) => Array.isArray(k) && k.length === 2 && Number.isFinite(k[0]) && Number.isFinite(k[1])
+    && (i === 0 || k[0] > follow[i - 1][0]));
+}
+
+/** The skull's split for a drawn flesh split (null: closed). `follow` set by hand replaces the table (the tuning
+ *  seam: a share, or another table; null = HEAD_SPLIT.skull.follow).
+ *  THE TABLE IS READ AT THE SPLIT'S STAGE (SplitWarp.stage over the preset's full angle), not where the flesh is.
+ *  While the flesh rises toward a chop's target the stage rises with it, and the bone opens along the table; from
+ *  there on the share stays the stage's, so whatever each half's flesh then does (the spring's overshoot and its swing
+ *  back, a kick, one half further open than the other) swings that half's bone in proportion to it and no more. Read
+ *  at the flesh's own angle, the table's slope swung the bone three times as wide on a thin crack's overshoot. The
+ *  share is held in 0..1, so the bone never turns past its flesh. A bone that does not turn at all is the closed
+ *  skull: null. */
+export function skullSplitOf(w: SplitWarp | null | undefined, follow: SkullFollow | null = null, seed = 0): SkullSplit | null {
+  const frame = splitFrame(w);
+  if (!frame) return null;
+  const frac = frame.w.full > 0 ? Math.max(0, Math.min(1, frame.w.stage / frame.w.full)) : 1;
+  const k = Math.max(0, Math.min(1, typeof follow === 'number' ? follow : skullFollow(frac, follow ?? HEAD_SPLIT.skull.follow)));
+  const angleP = frame.w.thetaP * k, angleM = frame.w.thetaM * k;
+  if (angleP === 0 && angleM === 0) return null;
+  return { frame, frac, follow: k, angleP, angleM, seed };
+}
+
+/** The piece that owns the closed skull's point `q`: 1 the + half, 2 the - half, 0 the rest. The flesh's rule
+ *  (warpPoint: above the hinge plane, within rho of the hinge, by the side of the old plane), with two differences: a
+ *  side whose bone does not turn belongs to the rest, and the old plane is the FRACTURE, s(q) + `jag` >= 0, where
+ *  `jag` is the fracture's offset at q (mesh-split.ts meshSplitJag; 0 = the clean plane). Both halves read the same
+ *  offset at the same point, so their edges fit. The hinge plane and the ball stay clean. The mesh's clip
+ *  (mesh-split.ts MESH_SPLIT_CLIP_WGSL) is this rule on the GPU. */
+export function skullPieceAt(s: SkullSplit, q: Vec3, jag = 0): 0 | 1 | 2 {
+  const { w, u, rho } = s.frame, rel = sub(q, w.h);
+  if (dot(u, rel) < 0 || len(rel) > rho) return 0;
+  if (dot(w.n, q) - w.d0 + jag >= 0) return s.angleP !== 0 ? 1 : 0;
+  return s.angleM !== 0 ? 2 : 0;
+}
+
+/** Where the closed skull's point `q` is on the open skull, and the piece that carries it (skullPieceAt). */
+export function skullWarpPoint(s: SkullSplit, q: Vec3, jag = 0): { p: Vec3; piece: 0 | 1 | 2 } {
+  const piece = skullPieceAt(s, q, jag);
+  if (piece === 0) return { p: q, piece };
+  const h = s.frame.w.h;
+  return { p: add(h, rotAxis(sub(q, h), s.frame.w.a, piece === 1 ? s.angleP : s.angleM)), piece };
+}
+
+/** WHICH PIECES A SPHERE OF THE CLOSED SKULL CAN HAVE BONE OF: bit 0 the rest, bit 1 the + half, bit 2 the - half
+ *  (1 << piece). What is drawn once per piece (a segment mesh, an eye) asks with its bounding sphere, its radius grown
+ *  by the fracture's largest offset; a sphere that is the rest's alone (mask 1) is drawn as on a closed head. */
+export function skullPieces(s: SkullSplit, centre: Vec3, radius: number): number {
+  const { w, u, rho } = s.frame, rel = sub(centre, w.h);
+  const up = dot(u, rel), dh = len(rel), side = dot(w.n, centre) - w.d0;
+  const reaches = up + radius >= 0 && dh - radius <= rho, within = up - radius >= 0 && dh + radius <= rho;
+  const turnP = s.angleP !== 0, turnM = s.angleM !== 0;
+  const mask = (reaches && turnP && side + radius >= 0 ? 2 : 0) | (reaches && turnM && side - radius <= 0 ? 4 : 0);
+  // All of it turns: wholly in the turning region, and on a turning side (or both sides turn).
+  const allTurns = within && ((turnP && turnM) || (turnP && side - radius >= 0) || (turnM && side + radius <= 0));
+  return allTurns ? mask : mask | 1;
+}

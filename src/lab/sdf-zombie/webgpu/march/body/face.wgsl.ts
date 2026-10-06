@@ -46,9 +46,11 @@ export const FACE_LAYER_WGSL = /* wgsl */ `  // Emissive mask from the face shee
     // stays axis-aligned paints the face onto whichever side happens to face
     // front — nose mass out the ear, eyes off the brow. Rotation by the
     // CONJUGATE of the head quaternion (v' = v + 2*cross(-q.xyz, cross(-q.xyz, v) + q.w*v)).
-    let hql = -gInstHeadQuat.xyz;
-    let hpv = p - gInstHeadCentre;
-    let hrot = hpv + 2.0 * cross(hql, cross(hql, hpv) + gInstHeadQuat.w * hpv);
+    // faceCentre / faceQuat are the head frame THE CALLER hands this layer: the record's, or, for a hit on a half of
+    // a split head, the record's turned open with that half (split-hit.wgsl.ts), so the sheet rides the half.
+    let hql = -faceQuat.xyz;
+    let hpv = p - faceCentre;
+    let hrot = hpv + 2.0 * cross(hql, cross(hql, hpv) + faceQuat.w * hpv);
     let hs = hrot / max(headAxes, vec3<f32>(1e-4, 1e-4, 1e-4));
     var raw = vec2<f32>(hs.x * forward, hs.y);
     if (faceCfg2.x > 0.5) {
@@ -79,7 +81,7 @@ export const FACE_LAYER_WGSL = /* wgsl */ `  // Emissive mask from the face shee
     // far sooner than a round one's, and the un-widened cutoff faded the
     // face out before it had finished dripping.
     let hfw = vec3<f32>(0.0, 0.0, forward);
-    let hfr = hfw + 2.0 * cross(gInstHeadQuat.xyz, cross(gInstHeadQuat.xyz, hfw) + gInstHeadQuat.w * hfw);
+    let hfr = hfw + 2.0 * cross(faceQuat.xyz, cross(faceQuat.xyz, hfw) + faceQuat.w * hfw);
     var facing = smoothstep(mix(0.28, ${FACE_MELT_FADE_LO}, gInstMelt.x), 0.66, dot(n, hfr));
     // Confine it to the HEAD. Generous, because the surface now sits at
     // |hs| ~= 1 everywhere and the jaw hangs past that: this is only a backstop
@@ -108,6 +110,9 @@ export const FACE_LAYER_WGSL = /* wgsl */ `  // Emissive mask from the face shee
     // Full protection on the frontal face; the rest of the head keeps only the
     // HEAD_EXTERIOR_GORE_KEEP fraction of the piece's gore.
     faceCover = clamp(facing + faceRegion * ${HEAD_EXTERIOR_GORE_KEEP}, 0.0, 1.0);
+    // A cut face of a split head (cutFace, the caller's: 0 anywhere else) is the head's inside, not its skin: no
+    // sheet, no glow and no relief on it, and no protection from the gore. (Its look: blocks/post/cut-face.wgsl.ts.)
+    if (cutFace > 0.0) { facing = facing * (1.0 - cutFace); faceCover = faceCover * (1.0 - cutFace); }
     if (facing > 0.0 && uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
       let base = uv * faceAtlas.xy + faceAtlas.zw;
       // Not linearised, deliberately: the sheet is sRGB-encoded and so are the
@@ -189,7 +194,7 @@ export const FACE_LAYER_WGSL = /* wgsl */ `  // Emissive mask from the face shee
         // load-bearing for the hands view, whose frame is a large rotation
         // (Opus hands round 3 — grooves shaded from a skewed direction).
         let bump = bumpL
-          + 2.0 * cross(gInstHeadQuat.xyz, cross(gInstHeadQuat.xyz, bumpL) + gInstHeadQuat.w * bumpL);
+          + 2.0 * cross(faceQuat.xyz, cross(faceQuat.xyz, bumpL) + faceQuat.w * bumpL);
         // Suppressed where it glows: bright means RAISED to a height map, so
         // without this the eyes bulge out of their sockets.
         n = normalize(n + bump * faceCfg.w * facing * tex.a * (1.0 - faceGlow));

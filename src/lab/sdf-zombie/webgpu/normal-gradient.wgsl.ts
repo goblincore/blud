@@ -5,6 +5,7 @@ import {
   ROW_GROUP_RANGE, ROW_GROUP_BOUNDS, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS, ROW_PRIM_BEND,
 } from './march.wgsl';
 import { MAX_PRIMS } from '../validate';
+import { MAX_WOUNDS } from '../damage';
 import { TILE_MAX_ENTRIES } from './tile-cull';
 
 // Local diagnostic validity. The declaration follows the first function
@@ -277,6 +278,9 @@ export const NG_WOUND_LIP = /* wgsl */ `fn ngWoundLip(base: f32, r: f32, rim: ve
   return radialLip * mMax + bumpMax * gateLip;
 }`;
 
+// NOTE (cut wounds): wMeta.w feeds the crater rim offset below, but for bit-32 (cut) wounds it holds the cut's sag. The cut
+// test (flag 32, right after the decal skip) returns to calcNormal's finite-difference taps before META is loaded, so a cut
+// never reaches this rim.
 export const NG_WOUNDS = /* wgsl */ `fn ngWounds(base: vec4<f32>, p: vec3<f32>, data: texture_2d<f32>, cfg: vec4<f32>, cfg2: vec4<f32>, perf: vec4<f32>, bound: vec4<f32>) -> vec4<f32> {
   gNgLip = 1.0;
   gNgNear = 0.0;
@@ -286,7 +290,7 @@ export const NG_WOUNDS = /* wgsl */ `fn ngWounds(base: vec4<f32>, p: vec3<f32>, 
   let boundDistance = length(p - bound.xyz);
   if (abs(boundDistance - bound.w) <= R) { gNgReason = 3; }
   if (boundDistance > bound.w) { return d; }
-  for (var i = 0; i < 16; i = i + 1) {
+  for (var i = 0; i < ${MAX_WOUNDS}; i = i + 1) {
     if (i >= i32(cfg.x)) { break; }
     let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND} + gBand), 0);
     let v = p - w.xyz;
@@ -302,6 +306,9 @@ export const NG_WOUNDS = /* wgsl */ `fn ngWounds(base: vec4<f32>, p: vec3<f32>, 
     let flagsRow = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + gBand), 0);
     // CLOTH DECAL (bit 2): never carved — mirrors applyWounds' skip.
     if ((i32(flagsRow.x) & 4) != 0) { continue; }
+    // CUT (flag 32): the slot (jagged lens, lips) has no analytic gradient here — take calcNormal's taps, like torn. Before
+    // the META load: a cut's META.w is its sag, not the rim offset the crater path below reads.
+    if ((i32(flagsRow.x) & 32) != 0) { gNgReason = 1; return d; }
     // TORN (bit 3, flail lips 2026-09-29): a two-octave ragged edge with lobe-
     // modulated petals has no analytic counterpart here — take calcNormal's taps.
     if ((i32(flagsRow.x) & 8) != 0) { gNgReason = 1; return d; }

@@ -66,6 +66,19 @@ describe('buildCharacterBody', () => {
     ]);
   });
 
+  it('a cut row without a carve normal uploads a zero cap (the shader skips it), never null (a stale CAP row)', () => {
+    const body = buildCharacterBody(characterEntry('soldier'), [0,0,0], []);
+    const torso = body.prims.findIndex(p => p.limb === 'torso' && p.op === 'add');
+    const crater: Wound = { primIdx: torso, local:[0,0,0], radius:.055, type:'pellet', ageSec:0 };
+    const cut: Wound = { ...crater, shape: 'cut', cutDir: [0, 1, 0], kerf: 0.01, sag: 0, carveDepth: 0.03 };
+    const ring = createWoundRing();
+    ring.set([crater, cut]);
+    const setWounds = vi.fn();
+    ring.refresh({ setWounds } as any, body, 0);
+    expect(setWounds.mock.calls[0]![6]).toEqual([null, { n: [0, 0, 0], depth: 0 }]);
+    expect(setWounds.mock.calls[0]![12]![1]).not.toBeNull();   // still flagged a cut (bit 32)
+  });
+
   it('builds every registered character without errors', () => {
     for (const name of characterNames()) {
       const errs: string[] = [];

@@ -48,6 +48,11 @@ export function headShape(b: BuildResult): { centre: Vec3; axes: Vec3 } | null {
   return best === null || bestAxes === null ? null : { centre: best, axes: bestAxes };
 }
 
+/** The body still has its head: a head cluster that is alive (not severed, not popped). */
+export function headAlive(b: BuildResult): boolean {
+  return b.clusters.some(c => c.limb === 'head' && c.alive);
+}
+
 /**
  * The centre of a limb's fattest flesh primitive in the POSED field — the
  * headShape rule generalized to every limb. Null when the cluster is missing

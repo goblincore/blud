@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { BleedRegistry, PER_BODY_EMITTER_CAP, woundEmitAnchorAndNormal } from './bleed-registry';
 import type { Wound } from './damage';
+import { warpDir, warpPoint } from './head-split';
 import type { Primitive, Vec3 } from './types';
 
 const capsule = (a: [number, number, number], b: [number, number, number]): Primitive =>
@@ -72,6 +73,32 @@ describe('BleedRegistry — the game page\'s wound-emitter ledger', () => {
   });
 });
 
+describe('BleedRegistry — one emitter per wound', () => {
+  it('registering a wound that is already bleeding restarts its emitter instead of adding one', () => {
+    const r = new BleedRegistry();
+    const a = wound({ primIdx: 1 }), b = wound({ primIdx: 2 });
+    r.register(1, a, 'slug', 0);
+    r.register(1, b, 'slug', 0.1);
+    r.live(0.1)[0]!.acc = 0.7;
+    r.register(1, a, 'slug', 0.2);
+    const live = r.live(0.2);
+    expect(live.map(e => e.wound)).toEqual([b, a]);            // still two, the restarted one newest
+    expect(live[1]).toMatchObject({ bornAt: 0.2, acc: 0 });
+    // The same wound object on another body is another emitter.
+    r.register(2, a, 'slug', 0.2);
+    expect(r.size).toBe(3);
+  });
+  it('a re-registered wound never evicts another body emitter at the cap', () => {
+    const r = new BleedRegistry();
+    const ws = Array.from({ length: PER_BODY_EMITTER_CAP }, (_, i) => wound({ primIdx: i }));
+    ws.forEach((w, i) => r.register(1, w, 'pellet', i * 0.01));
+    for (let k = 0; k < 4; k++) r.register(1, ws[PER_BODY_EMITTER_CAP - 1]!, 'pellet', 0.1 + k * 0.01);
+    const live = r.live(0.2);
+    expect(live).toHaveLength(PER_BODY_EMITTER_CAP);
+    for (const w of ws) expect(live.some(e => e.wound === w)).toBe(true);
+  });
+});
+
 describe('woundEmitAnchorAndNormal — where blood leaves the wound', () => {
   it('negates the carve normal when the wound carries a depth slab', () => {
     const prims = [capsule([0, 1, 0], [0, 1.4, 0])];
@@ -103,5 +130,24 @@ describe('woundEmitAnchorAndNormal — where blood leaves the wound', () => {
     const w = wound({ local: [0, 0, 1] });
     const { normal } = woundEmitAnchorAndNormal(prims, w);
     expect(normal).toEqual([0, 1, 0]);
+  });
+
+  it('on a split head the anchor and the spray turn with the half the wound is on (head-split.ts warpPoint)', () => {
+    const prims = [capsule([0, 0, 0], [0, 2, 0])];
+    const w = wound({ local: [0, 0.1, 1] });            // world (0.1, 1, 0): on the + side of the plane x = 0
+    const closed = woundEmitAnchorAndNormal(prims, w);
+    // The plane x = 0, hinged along z through (0, 0.5, 0); the + half is open by 0.5 rad, the - half by 0.3.
+    const split = { n: [1, 0, 0] as Vec3, d0: 0, h: [0, 0.5, 0] as Vec3, a: [0, 0, -1] as Vec3, thetaP: 0.5, thetaM: -0.3, r: 1, full: 0.55, stage: 0.5 };
+    const open = woundEmitAnchorAndNormal(prims, w, 0, split);
+    const m = warpPoint(split, closed.anchor);
+    expect(m.piece).toBe(1);
+    expect(open.anchor).toEqual(m.p);
+    expect(open.anchor[0]).toBeGreaterThan(closed.anchor[0] + 0.2);   // swung out toward +x
+    expect(open.normal).toEqual(warpDir(split, 1, closed.normal));
+    expect(open.normal[1]).toBeLessThan(-0.4);                         // the +x normal now leans down
+    // Below the hinge plane nothing moves; and no split is the closed answer.
+    const low = wound({ local: [0, 0.1, 0.2] });
+    expect(woundEmitAnchorAndNormal(prims, low, 0, split)).toEqual(woundEmitAnchorAndNormal(prims, low));
+    expect(woundEmitAnchorAndNormal(prims, w, 0, null)).toEqual(closed);
   });
 });

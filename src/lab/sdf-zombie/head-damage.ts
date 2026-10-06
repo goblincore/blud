@@ -48,6 +48,9 @@ export const REGION_TUNING = {
    *  (0.256 × 4 = 1.02), 3 at +20%: a single region dies on hit 5 (jitter 1), 6 (−20%), 4 (+20%); with H, 5 / 5 / 4.
    *  (v1.4 was 0.25 with strips 0.20/0.28: 7 / 9 / 6. v2 was 0.4 with 0.25/0.35.) */
   skullPerHit: 0.32,
+  /** A glancing slug cracks its region this far (slug head burst): one ordinary hit there then kills
+   *  (0.8 + skullPerHit·jitter, jitter 0.8–1.2 → ≥ 1.056). */
+  glanceSkull: 0.8,
   jitter: 0.2,
   /** Strip changes below this are applied but not reported as events. */
   stripEventMin: 0.02,
@@ -64,6 +67,8 @@ export interface HeadDamageState {
   dead: boolean;
   /** Where each struck non-orbit region's crater sits: the hs of the first blow that struck it. */
   anchor: Partial<Record<SkullRegion, HS>>;
+  /** A glancing slug cracked the skull (slug head burst): the brain leaks. */
+  brainLeak?: boolean;
 }
 
 export type HeadEvent =
@@ -74,6 +79,7 @@ export type HeadEvent =
   | { kind: 'eye-snap'; side: EyeSide }
   | { kind: 'skull-exposed'; region: SkullRegion }
   | { kind: 'brain'; region: SkullRegion }
+  | { kind: 'burst'; lethal: boolean; region: SkullRegion }
   | { kind: 'kill' };
 
 const SIDES: readonly EyeSide[] = ['L', 'R'];
@@ -97,6 +103,16 @@ export function makeHeadDamage(): HeadDamageState {
 export function nearestRegion(hs: HS): HeadRegion {
   let best: HeadRegion = REGION_NAMES[0]!, bd = Infinity;
   for (const r of REGION_NAMES) {
+    const d = d2(hs, HEAD_REGIONS[r]);
+    if (d < bd) { bd = d; best = r; }
+  }
+  return best;
+}
+
+/** The skull region nearest `hs` (orbits excluded: they carry eyes, not bone). */
+export function nearestSkullRegion(hs: HS): SkullRegion {
+  let best: SkullRegion = SKULL_REGIONS[0]!, bd = Infinity;
+  for (const r of SKULL_REGIONS) {
     const d = d2(hs, HEAD_REGIONS[r]);
     if (d < bd) { bd = d; best = r; }
   }
@@ -196,7 +212,44 @@ export function headHit(
       }
     }
   }
-  return { state: { hits: s.hits + 1, flesh, skull, eyes, dead, anchor }, events };
+  return { state: { ...s, hits: s.hits + 1, flesh, skull, eyes, dead, anchor }, events };
+}
+
+/** A SLUG BURST (slug head burst, spec §5). `hs`: the hit, head-local ÷ half-extents. Lethal: the nearest skull region is
+ *  bare and fully cracked and the head dies. Glancing: it is bare and cracked to glanceSkull with brainLeak, and the
+ *  zombie lives (a follow-up hit there finishes it by the ordinary skullPerHit rule; a second glancing slug on the same region
+ *  escalates by skullPerHit too). Dangling eyes snap either way.
+ *  Deterministic: draws nothing from a random stream. */
+export function burstHit(
+  s: HeadDamageState, hit: { hs: HS; lethal: boolean; /** What a repeat on a cracked region adds (default skullPerHit). */ step?: number },
+): { state: HeadDamageState; events: HeadEvent[] } {
+  const region = nearestSkullRegion(hit.hs);
+  const burst: HeadEvent = { kind: 'burst', lethal: hit.lethal, region };
+  if (s.dead) return { state: s, events: [burst] };
+  const events: HeadEvent[] = [];
+  const eyes = { ...s.eyes };
+  for (const side of SIDES) {
+    if (eyes[side] === 'dangling') { eyes[side] = 'gone'; events.push({ kind: 'eye-snap', side }); }
+  }
+  const flesh = { ...s.flesh }, skull = { ...s.skull }, anchor = { ...s.anchor };
+  if (!anchor[region]) anchor[region] = [hit.hs[0], hit.hs[1], hit.hs[2]];
+  events.push(burst);
+  if (hit.lethal) {
+    flesh[region] = 0;
+    skull[region] = 1;
+    events.push({ kind: 'kill' });
+    return { state: { ...s, hits: s.hits + 1, flesh, skull, eyes, anchor, dead: true }, events };
+  }
+  flesh[region] = Math.min(flesh[region], REGION_TUNING.skullExposed * 0.5);
+  // A region the skull of which is ALREADY cracked this far takes a second slug as a plain skull hit: it escalates, so
+  // two glancing slugs on one spot kill (0.8 + skullPerHit ≥ 1). Otherwise the first one cracks it to glanceSkull.
+  const repeat = skull[region] >= REGION_TUNING.glanceSkull;
+  skull[region] = repeat ? skull[region] + (hit.step ?? REGION_TUNING.skullPerHit) : REGION_TUNING.glanceSkull;
+  if (skull[region] >= 1 - 1e-9) {
+    events.push({ kind: 'kill' });
+    return { state: { ...s, hits: s.hits + 1, flesh, skull, eyes, anchor, brainLeak: true, dead: true }, events };
+  }
+  return { state: { ...s, hits: s.hits + 1, flesh, skull, eyes, anchor, brainLeak: true }, events };
 }
 
 /** The zombie died some other way (collapse, dynamite): every dangling eye snaps off (one eye-snap each). */

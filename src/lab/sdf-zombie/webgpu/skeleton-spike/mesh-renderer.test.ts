@@ -20,6 +20,16 @@ import zombieSrc from '../../characters/zombie.blob?raw';
 import { createSkeletonSources } from './contract';
 import { SegmentMeshCache } from './mesh';
 import { createSegmentMeshRenderer, segmentDrawn } from './mesh-renderer';
+import { headQuatOf } from '../../rig-bind';
+import {
+  HEAD_SPLIT, forcedSplit, headFrameOf, skullFollow, skullSplitOf, skullWarpPoint, splitWarpOf,
+  type SplitPresetId, type SplitWarp,
+} from '../../head-split';
+import { headShape } from '../flame-anchors';
+import { meshBoneSource } from './mesh-skull';
+import { meshEyePlacements } from './mesh-eyes';
+import { SPLIT_INSTANCE_ATTRS, SPLIT_INSTANCE_FLOATS, packSplitInstance } from './mesh-split';
+import type { Vec3 } from '../../types';
 
 const body = buildBody(compileBlob(parseBlob(zombieSrc)), DEFAULT_BUILD_OPTS);
 const bound = bindRig(body);
@@ -236,5 +246,276 @@ describe('shared light list (plan 1, Task 11): iLights carries the owner\'s pick
     for (let i = 0; i < 40; i++) expect(a.array[i]).toBeCloseTo(0.25 + i / 80, 5);
     renderer.dispose();
     cache.dispose();
+  });
+});
+
+describe('the head split: the skull is drawn once per piece that owns part of it (head-split.ts skullSplitOf)', () => {
+  type R = ReturnType<typeof createSegmentMeshRenderer>;
+  const segs = (r: R, owner: unknown) => r.drawn.filter(d => d.owner === owner && !d.eye);
+  const eyes = (r: R, owner: unknown) => r.drawn.filter(d => d.owner === owner && d.eye);
+  const batch = (r: R, name: string) => r.object.children.find(c => c.name === name) as THREE.InstancedMesh | undefined;
+  /** A split batch's records: the interleaved instance buffer behind its four iSplit* attributes. */
+  const rowsOf = (m: THREE.InstancedMesh) => (m.geometry.getAttribute('iSplitN') as unknown as THREE.InterleavedBufferAttribute).data as THREE.InstancedInterleavedBuffer;
+  /** The posed zombie's split, as the leaf makes it (game-head-split.ts skullOf). */
+  const warpOf = (preset: SplitPresetId, sides: -1 | 0 | 1, offset: number, frac: number): SplitWarp => {
+    bodyYaw = 0;
+    const posed = applyRig(body, bound, 0);
+    return splitWarpOf(forcedSplit(preset, sides, offset, frac)!, headFrameOf(headShape(posed)!, headQuatOf(bound, 0) ?? [0, 0, 0, 1]))!;
+  };
+  const headOnly = (w: SplitWarp | null) => ({
+    warp: (_o: object, segment: string) => (segment === 'head' ? w : null),
+    seed: (o: object) => (o as { id: number }).id,
+  });
+  const at = (m: THREE.Matrix4, p: Vec3): Vec3 => new THREE.Vector3(...p).applyMatrix4(m).toArray() as Vec3;
+  const dist = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  const make = () => { const cache = new SegmentMeshCache(); return { cache, renderer: createSegmentMeshRenderer(cache) }; };
+  const LOCAL: Vec3[] = [[0.03, 0.15, 0.05], [-0.04, 0.12, -0.03], [0.06, 0.02, 0.08], [0, -0.05, 0]];
+
+  it('a closed head draws exactly as without the split hook: the same instances, matrices and batches', () => {
+    const plain = make(), hooked = make();
+    const owners = [{ id: 1 }, { id: 2 }];
+    plain.renderer.update([[headSrc], [headSrc]], owners);
+    hooked.renderer.update([[headSrc], [headSrc]], owners, undefined, undefined, undefined, headOnly(null));
+    expect(hooked.renderer.drawn).toHaveLength(plain.renderer.drawn.length);
+    plain.renderer.drawn.forEach((d, i) => {
+      const e = hooked.renderer.drawn[i]!;
+      expect(e.owner).toBe(d.owner);
+      expect(e.eye).toBe(d.eye);
+      expect(e.piece).toBeNull();
+      expect(e.matrix.elements).toEqual(d.matrix.elements);
+    });
+    expect(hooked.renderer.object.children.map(c => c.name).sort()).toEqual(plain.renderer.object.children.map(c => c.name).sort());
+    expect(hooked.renderer.draws).toBe(2);
+    for (const r of [plain, hooked]) { r.renderer.dispose(); r.cache.dispose(); }
+  });
+
+  it('a centred split: the rest and two turned copies of the skull, each eye with its own half; a closed neighbour is untouched', () => {
+    const { cache, renderer } = make();
+    const open = { id: 1 }, shut = { id: 2 };
+    const w = warpOf('middle', 0, 0, 0.8), s = skullSplitOf(w)!;
+    renderer.update([[headSrc], [headSrc]], [open, shut], undefined, undefined, undefined, { warp: (o, seg) => (o === open && seg === 'head' ? w : null) });
+    const closedM = segs(renderer, shut)[0]!.matrix;
+    expect(segs(renderer, shut).map(d => d.piece)).toEqual([null]);
+    expect(eyes(renderer, shut).map(d => d.piece)).toEqual([null, null]);
+    const head = segs(renderer, open);
+    expect(head.map(d => d.piece)).toEqual([0, 1, 2]);
+    expect(head[0]!.matrix.elements).toEqual(closedM.elements);
+    // A copy puts a skull point where the rule turns it: about the hinge, by the piece's BONE angle.
+    for (const l of LOCAL) {
+      const q = at(closedM, l);
+      for (const [d, angle] of [[head[1]!, s.angleP], [head[2]!, s.angleM]] as const) {
+        const want = new THREE.Vector3(...q).sub(new THREE.Vector3(...w.h)).applyAxisAngle(new THREE.Vector3(...w.a), angle).add(new THREE.Vector3(...w.h));
+        expect(dist(at(d.matrix, l), want.toArray() as Vec3)).toBeLessThan(1e-9);
+      }
+    }
+    // The rule's own forward map agrees, on a point each half owns (the eye seats).
+    for (const e of meshEyePlacements(meshBoneSource(headSrc))) {
+      const q = headSrc.toWorld(e.center), moved = skullWarpPoint(s, q);
+      expect(moved.piece).not.toBe(0);
+      expect(dist(at(head[moved.piece]!.matrix, e.center as Vec3), moved.p)).toBeLessThan(1e-9);
+    }
+    expect(s.angleP).toBeCloseTo(w.thetaP * skullFollow(0.8), 12);
+    // The bone lags its flesh: the copy's turn is the BONE angle, not the flesh's.
+    const turn = new THREE.Quaternion().setFromRotationMatrix(head[1]!.matrix.clone().multiply(closedM.clone().invert()));
+    expect(2 * Math.acos(Math.min(1, Math.abs(turn.w)))).toBeCloseTo(s.angleP, 9);
+    // The eyes sit a socket's width off the plane: one copy each, on its own half.
+    expect(eyes(renderer, open).map(d => d.piece).sort()).toEqual([1, 2]);
+    // The clip data of the split batch's rows is the rule's record.
+    const sb = batch(renderer, 'skeleton-segments-split')!;
+    expect(sb.count).toBe(3);
+    const rows = rowsOf(sb), want = new Float32Array(3 * SPLIT_INSTANCE_FLOATS);
+    ([0, 1, 2] as const).forEach(piece => packSplitInstance(want, piece, s, piece));
+    expect(Array.from(rows.array.slice(0, want.length))).toEqual(Array.from(want));
+    // One interleaved INSTANCE buffer read as four vec4s (the pipeline's vertex buffer budget); only live rows upload.
+    expect((rows as unknown as { isInstancedInterleavedBuffer: boolean }).isInstancedInterleavedBuffer).toBe(true);
+    expect(rows.stride).toBe(16);
+    expect(rows.updateRanges).toEqual([{ start: 0, count: 48 }]);
+    SPLIT_INSTANCE_ATTRS.forEach((name, k) => {
+      const a = sb.geometry.getAttribute(name) as unknown as THREE.InterleavedBufferAttribute;
+      expect([a.data === rows, a.itemSize, a.offset], name).toEqual([true, 4, k * 4]);
+    });
+    // The closed neighbour is in the closed batch, alone; the split head is not there.
+    expect(batch(renderer, 'skeleton-segments')!.count).toBe(1);
+    expect(batch(renderer, 'skeleton-fleshy-eyes')!.count).toBe(2);
+    expect(batch(renderer, 'skeleton-fleshy-eyes-split')!.count).toBe(2);
+    renderer.dispose(); cache.dispose();
+  });
+
+  it('a one-sided split: the rest and ONE turned copy; an eye off the turning half stays a closed instance', () => {
+    const { cache, renderer } = make();
+    const owner = { id: 1 };
+    const w = warpOf('middle', 1, 0.04, 1), s = skullSplitOf(w)!;
+    renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
+    expect(segs(renderer, owner).map(d => d.piece)).toEqual([0, 1]);
+    expect(s.angleM).toBe(0);
+    // The plane (4 cm off centre) passes through the + eye's socket: that eye is drawn for both pieces, clipped; the
+    // other eye is the rest's alone and stays in the closed batch.
+    const seats = meshEyePlacements(meshBoneSource(headSrc)).map(e => headSrc.toWorld(e.center));
+    const side = seats.map(c => c[0] * w.n[0] + c[1] * w.n[1] + c[2] * w.n[2] - w.d0);
+    expect(Math.min(...side.map(Math.abs))).toBeLessThan(0.0191);
+    expect(eyes(renderer, owner).map(d => d.piece).sort()).toEqual([0, 1, null].sort());
+    expect(batch(renderer, 'skeleton-fleshy-eyes')!.count).toBe(1);
+    // The face preset is one-sided too.
+    renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(warpOf('face', 1, 0, 1)));
+    expect(segs(renderer, owner).map(d => d.piece)).toEqual([0, 1]);
+    // Both eyes sit in front of the face's plane, clear of it: one copy each, on the face piece.
+    expect(eyes(renderer, owner).map(d => d.piece)).toEqual([1, 1]);
+    expect(batch(renderer, 'skeleton-fleshy-eyes')!.count).toBe(0);
+    renderer.dispose(); cache.dispose();
+  });
+
+  it('only the segment the hook answers for splits; the others draw as ever', () => {
+    const { cache, renderer } = make();
+    const owner = { id: 1 };
+    const spine = sources.find(x => x.segment.startsWith('axial:'))!;
+    const asked: string[] = [];
+    renderer.update([[headSrc, spine]], [owner], undefined, undefined, undefined, { warp: (_o, seg) => { asked.push(seg); return seg === 'head' ? warpOf('middle', 0, 0, 1) : null; } });
+    expect(asked.sort()).toEqual(['head', spine.segment].sort());
+    expect(segs(renderer, owner).map(d => d.piece)).toEqual([0, 1, 2, null]);
+    renderer.dispose(); cache.dispose();
+  });
+
+  it('lifecycle: a split that closes (the range cut-off, a tear, the owner gone) is the closed draw again, with nothing left over', () => {
+    const { cache, renderer } = make();
+    const owner = { id: 1 };
+    renderer.update([[headSrc]], [owner]);
+    const before = renderer.drawn.map(d => ({ eye: d.eye, m: d.matrix.elements.slice() }));
+    renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(warpOf('middle', 0, 0, 1)));
+    expect(batch(renderer, 'skeleton-segments')!.visible).toBe(false);
+    expect(batch(renderer, 'skeleton-segments-split')!.visible).toBe(true);
+    // view.splitDrawn went null: the hook answers null.
+    renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(null));
+    expect(renderer.drawn.map(d => ({ eye: d.eye, m: d.matrix.elements.slice() }))).toEqual(before);
+    expect(renderer.drawn.every(d => d.piece === null)).toBe(true);
+    expect(batch(renderer, 'skeleton-segments-split')!.count).toBe(0);
+    expect(batch(renderer, 'skeleton-segments-split')!.visible).toBe(false);
+    expect(batch(renderer, 'skeleton-fleshy-eyes-split')!.visible).toBe(false);
+    expect(batch(renderer, 'skeleton-segments')!.count).toBe(1);
+    // The owner leaves while split: nothing is drawn for it.
+    renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(warpOf('middle', 0, 0, 1)));
+    renderer.update([], []);
+    expect(renderer.drawn).toHaveLength(0);
+    expect(batch(renderer, 'skeleton-segments-split')!.count).toBe(0);
+    // A split segment batch nobody draws is dropped like any stale batch, and its twin geometry (the renderer's own:
+    // three holds a rendered geometry until it is disposed) with it. The skull's own geometry is the cache's.
+    const disposed: string[] = [];
+    const watch = (name: string) => batch(renderer, name)!.geometry.addEventListener('dispose', () => { disposed.push(name); });
+    const base = batch(renderer, 'skeleton-segments')!.geometry, twin = batch(renderer, 'skeleton-segments-split')!.geometry;
+    watch('skeleton-segments'); watch('skeleton-segments-split'); watch('skeleton-fleshy-eyes'); watch('skeleton-fleshy-eyes-split');
+    for (let i = 0; i < 130; i++) renderer.update([[headSrc]], [owner]);
+    expect(batch(renderer, 'skeleton-segments-split')).toBeUndefined();
+    expect(disposed).toEqual(['skeleton-segments-split']);
+    // The next split makes a NEW twin, on the same shared vertex data.
+    renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(warpOf('middle', 0, 0, 1)));
+    const twin2 = batch(renderer, 'skeleton-segments-split')!.geometry;
+    expect(twin2).not.toBe(twin);
+    expect(twin2.getAttribute('position')).toBe(base.getAttribute('position'));
+    expect(segs(renderer, owner).map(d => d.piece)).toEqual([0, 1, 2]);
+    twin2.addEventListener('dispose', () => { disposed.push('twin2'); });
+    // clear() (a cast rebuild) disposes every twin it holds, and no geometry that is not its own.
+    renderer.clear();
+    expect(renderer.object.children).toHaveLength(0);
+    expect(disposed.sort()).toEqual(['skeleton-fleshy-eyes-split', 'skeleton-segments-split', 'twin2']);
+    // And the renderer draws again after it: closed, then split.
+    renderer.update([[headSrc]], [owner]);
+    expect(renderer.drawn.map(d => d.piece)).toEqual([null, null, null]);
+    renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(warpOf('middle', 0, 0, 1)));
+    expect(segs(renderer, owner).map(d => d.piece)).toEqual([0, 1, 2]);
+    renderer.dispose(); cache.dispose();
+  });
+
+  it('capacity: forty split heads grow the split batch, every copy with its own record and its owner\'s lights', () => {
+    const { cache, renderer } = make();
+    const owners = Array.from({ length: 40 }, (_, i) => ({ id: i, bodyLights: [i + 0.5, -1, -1, -1], fill: 0.5 }));
+    const w = warpOf('middle', 0, 0, 1);
+    renderer.update(owners.map(() => [headSrc]), owners, undefined, undefined, undefined, headOnly(w));
+    renderer.syncLights(o => new THREE.Vector4(...(o as { bodyLights: number[] }).bodyLights), o => (o as { fill: number }).fill);
+    const sb = batch(renderer, 'skeleton-segments-split')!;
+    expect(sb.count).toBe(120);
+    for (const name of [...SPLIT_INSTANCE_ATTRS, 'iLights', 'iFill']) {
+      expect((sb.geometry.getAttribute(name) as THREE.InstancedBufferAttribute).count, name).toBeGreaterThanOrEqual(sb.instanceMatrix.count);
+    }
+    const K = 12;   // the K lane's offset in a row: (piece, + turns, - turns, seed)
+    const l = (sb.geometry.getAttribute('iLights') as THREE.InstancedBufferAttribute).array;
+    for (let i = 0; i < 120; i++) {
+      expect(rowsOf(sb).array[i * 16 + K]).toBe(i % 3);
+      expect(l[i * 4]).toBeCloseTo(Math.floor(i / 3) + 0.5, 5);
+    }
+    expect(renderer.ownerLights(owners[7]!)).toHaveLength(5);   // three skull copies, two eyes
+    expect(renderer.ownerFill(owners[7]!)).toEqual([0.5, 0.5, 0.5, 0.5, 0.5]);
+    // Each head breaks along its own pattern: the seed the hook answers for its owner (the actor id), whatever
+    // order heads split in. No seed hook: 0.
+    expect(owners.map((_, i) => rowsOf(sb).array[i * 48 + K + 3])).toEqual(owners.map(o => o.id));
+    renderer.update([[headSrc]], [owners[7]!], undefined, undefined, undefined, headOnly(w));
+    expect(rowsOf(sb).array[K + 3]).toBe(7);
+    renderer.update([[headSrc]], [owners[7]!], undefined, undefined, undefined, { warp: headOnly(w).warp });
+    expect(rowsOf(sb).array[K + 3]).toBe(0);
+    // The stats count what is drawn: three copies of the skull.
+    const one = renderer.stats.tris;
+    renderer.update([[headSrc]], [owners[7]!]);
+    expect(one).toBe(3 * renderer.stats.tris);
+    expect(renderer.stats.tris).toBeGreaterThan(0);
+    renderer.dispose(); cache.dispose();
+  });
+
+  it('the split copies have their own two-sided material; the closed skull keeps its front-faced one', () => {
+    const { cache, renderer } = make();
+    const a = { id: 1 }, b = { id: 2 };
+    renderer.update([[headSrc], [headSrc]], [a, b], undefined, undefined, undefined, { warp: (o, seg) => (o === a && seg === 'head' ? warpOf('middle', 0, 0, 1) : null) });
+    const mat = (name: string) => batch(renderer, name)!.material as THREE.Material;
+    expect(mat('skeleton-segments').side).toBe(THREE.FrontSide);
+    expect(mat('skeleton-fleshy-eyes').side).toBe(THREE.FrontSide);
+    expect(mat('skeleton-segments-split').side).toBe(THREE.DoubleSide);
+    expect(mat('skeleton-fleshy-eyes-split').side).toBe(THREE.DoubleSide);
+    expect(mat('skeleton-segments-split')).not.toBe(mat('skeleton-segments'));
+    // The copies share the skull's vertex data and carry their own instance data.
+    const base = batch(renderer, 'skeleton-segments')!.geometry, split = batch(renderer, 'skeleton-segments-split')!.geometry;
+    expect(split).not.toBe(base);
+    for (const name of ['position', 'normal', 'meshFeature']) expect(split.getAttribute(name), name).toBe(base.getAttribute(name));
+    expect(split.index).toBe(base.index);
+    expect(split.getAttribute('iLights')).not.toBe(base.getAttribute('iLights'));
+    expect(base.getAttribute('iSplitN')).toBeUndefined();
+    renderer.dispose(); cache.dispose();
+  });
+
+  it('diagnostics: show.bones / show.eyes hide a kind of batch, closed and split alike, from the next update', () => {
+    const { cache, renderer } = make();
+    const a = { id: 1 }, b = { id: 2 };
+    const upd = () => renderer.update([[headSrc], [headSrc]], [a, b], undefined, undefined, undefined, { warp: (o, seg) => (o === a && seg === 'head' ? warpOf('middle', 0, 0, 1) : null) });
+    const vis = () => ['skeleton-segments', 'skeleton-segments-split', 'skeleton-fleshy-eyes', 'skeleton-fleshy-eyes-split'].map(n => batch(renderer, n)!.visible);
+    upd();
+    expect(vis()).toEqual([true, true, true, true]);
+    renderer.show.bones = false; upd();
+    expect(vis()).toEqual([false, false, true, true]);
+    renderer.show.bones = true; renderer.show.eyes = false; upd();
+    expect(vis()).toEqual([true, true, false, false]);
+    expect(renderer.drawn).toHaveLength(8);   // still posed: only the draw is off
+    renderer.dispose(); cache.dispose();
+  });
+
+  it('the look seam: a follow set by hand (1 rides the flesh, 0 is the whole closed skull), and the fracture\'s shape', () => {
+    const { cache, renderer } = make();
+    const owner = { id: 1 };
+    const w = warpOf('middle', 0, 0, 0.8);
+    const j = HEAD_SPLIT.skull.jag;
+    expect(renderer.splitLook.follow).toBeNull();
+    expect(renderer.splitLook.jag.value.toArray()).toEqual([j.zigAmp, j.zigLen, j.chipAmp, j.chipLen]);
+    expect(renderer.splitLook.inside.value.toArray().map(v => +v.toFixed(6))).toEqual([...HEAD_SPLIT.skull.inside]);
+    expect(renderer.splitLook.jagShape.value.toArray()).toEqual([j.wobble, j.wobbleAlong, j.wobbleUp, j.upFreq]);
+    expect(renderer.splitLook.rim.value.toArray()).toEqual([...HEAD_SPLIT.skull.rim.color, HEAD_SPLIT.skull.rim.width]);
+    const angleOf = () => { const h = segs(renderer, owner); const t = new THREE.Quaternion().setFromRotationMatrix(h[1]!.matrix.clone().multiply(h[0]!.matrix.clone().invert())); return 2 * Math.acos(Math.min(1, Math.abs(t.w))); };
+    renderer.splitLook.follow = 1;
+    renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
+    expect(angleOf()).toBeCloseTo(w.thetaP, 9);
+    renderer.splitLook.follow = 0;
+    renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
+    expect(renderer.drawn.map(d => d.piece)).toEqual([null, null, null]);
+    renderer.splitLook.follow = [[0.5, 0.6], [1, 0.6]];   // another table
+    renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
+    expect(angleOf()).toBeCloseTo(w.thetaP * 0.6, 9);
+    renderer.splitLook.follow = null;
+    renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
+    expect(angleOf()).toBeCloseTo(w.thetaP * skullFollow(0.8), 9);
+    renderer.dispose(); cache.dispose();
   });
 });
