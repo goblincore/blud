@@ -143,6 +143,72 @@ export function cutJag(a: number, u: number, plane: number, halfLen: number, ker
   return fine + pn * (CUT_SHADE.pinchAmp + CUT_SHADE.pinchTip * tN * tN);
 }
 
+/** Slack on the jag's ceiling (cutJagTop), in units of the jag: the GPU's noise is f32, and a trilinear mix of hashes in
+ *  [0, 1) can pass 1 by an ulp (~1e-7), so the ceiling the shader tests against stands this far above the exact one. */
+export const CUT_JAG_SLACK = 1e-3;
+
+/** The most the GPU's jag can read at normalised slot position tN (the fine jag's amplitude plus the pinch's at that
+ *  tN), plus CUT_JAG_SLACK: cutJag(a, u, plane, ...) <= cutJagTop(a / halfLen) everywhere. applyWounds' idle-carve test
+ *  reads the carve at this ceiling (cutCarveTop) instead of reading the noise. */
+export function cutJagTop(tN: number): number {
+  return CUT_SHADE.jagAmp + CUT_SHADE.pinchAmp + CUT_JAG_SLACK + CUT_SHADE.pinchTip * tN * tN;
+}
+
+/** cutCarve with the jag at its ceiling: an upper bound of the carve at `p` whatever the noise reads there (the jag
+ *  enters only the wall term, which grows with it). The CPU mirror of applyWounds' `carveTop`. */
+export function cutCarveTop(p: Vec3, mid: Vec3, halfLen: number, along: Vec3, inward: Vec3, depth: number, kerf: number, dIn: number, sag: number): number {
+  const tN = clamp(dot(sub(p, mid), along) / Math.max(halfLen, 1e-4), -1, 1);
+  return cutCarve(p, mid, halfLen, along, inward, depth, kerf, dIn, sag, cutJagTop(tN));
+}
+
+/** THE IDLE CARVE: true where the cut's row cannot raise the running field `d` at a point whose carve ceiling is
+ *  `carveTop` (cutCarveTop) and whose fillet is `blendK` (cutBlendK). The shader's quadratic smax(d, carve, k) is
+ *  max(d, carve) + h^2 k with h = max(4 k - |d - carve|, 0) / (4 k): once d stands 4 k above the carve, h is exactly 0
+ *  and the result is d to the bit. carve <= carveTop, so d - carveTop >= 4 k is enough, and applyWounds then skips the
+ *  noise (a noise3 and two hash13) for that row at that sample. */
+export function cutCarveIdle(d: number, carveTop: number, blendK: number): boolean {
+  return !(d - carveTop < 4 * blendK);
+}
+
+/** THE IDLE LIP: true where one of cutLip's gates is exactly 0 at `p` (the rim gate past its band above the skin, the
+ *  kerf gate inside the smooth kerf, the near-skin gate past its depth band), so cutLip is 0 there and applyWounds skips
+ *  the bump. The CPU mirror of the lip block's guard; false only says the bump is computed. */
+export function cutLipIdle(p: Vec3, mid: Vec3, halfLen: number, along: Vec3, inward: Vec3, depth: number, kerf: number, dIn: number, sag: number, lipScale: number): boolean {
+  const rel = sub(p, mid);
+  const side = cross(along, inward);
+  const a = dot(rel, along), u = Math.abs(dot(rel, side));
+  const s = Math.max(-dIn, dot(rel, inward) - sag);
+  const taper = cutTaper(clamp(a / Math.max(halfLen, 1e-4), -1, 1));
+  const dEff = Math.min(depth, CUT_SHADE.maxDepthPerHalfLen * halfLen);
+  const lipW = Math.max(kerf * CUT_SHADE.lipWidth, 1e-4);
+  const amp0 = kerf * CUT_SHADE.lipHeight * Math.min(lipScale, CUT_SHADE.maxLipScale);
+  const rimB = CUT_SHADE.rimSpan * Math.max(amp0, lipW);
+  const rim = 1 - smoothstep(-0.3 * rimB, 0.7 * rimB, dIn);
+  return !(rim > 0 && u > kerf * taper && s < Math.max(Math.min(2 * lipW, dEff), 1e-4));
+}
+
+/** THE IDLE BAND: true where cutMask is 0 at `p` whatever its noise reads (|jag| <= maskJag): the gates' product is 0,
+ *  or the point lies past the band's outer edge at the noise's ceiling (maskJag + CUT_JAG_SLACK). woundMask skips its
+ *  noise3 there. The CPU mirror of the mask block's guard. */
+export function cutMaskIdle(p: Vec3, nrm: Vec3, mid: Vec3, halfLen: number, along: Vec3, inward: Vec3, depth: number, kerf: number, sag: number): boolean {
+  const rel = sub(p, mid);
+  const side = cross(along, inward);
+  const a = Math.abs(dot(rel, along)), u = Math.abs(dot(rel, side));
+  const plane = dot(rel, inward) - sag;
+  const k = Math.max(kerf, 1e-4);
+  const dEff = Math.min(depth, CUT_SHADE.maxDepthPerHalfLen * halfLen);
+  const mEnd = CUT_SHADE.maskEnd * Math.max(halfLen, 1e-4);
+  const lens = Math.sqrt(clamp(1 - (a / mEnd) * (a / mEnd), 0, 1));
+  const ends = 1 - smoothstep(0.9 * mEnd, mEnd, a);
+  const far = 1 - smoothstep(dEff + k, dEff + 2 * k, plane);
+  const ni = dot(nrm, inward);
+  const back = 1 - smoothstep(0.25, 0.6, ni);
+  const wallReach = k * (1 + CUT_SHADE.jagAmp);
+  const inner = 1 - smoothstep(wallReach, 1.3 * wallReach, u);
+  const face = 1 - smoothstep(CUT_SHADE.maskFace[0], CUT_SHADE.maskFace[1], ni);
+  return !(ends * far * Math.min(back, Math.max(inner, face)) > 0 && u < k * CUT_SHADE.maskWidth * (lens * (1 + CUT_SHADE.maskJag + CUT_JAG_SLACK)) + 1e-4);
+}
+
 export interface CutCalibre { depth: number; kerf: number; lip: number }
 /** The rod stand-in's blade (tunable). Kerf 0.01 -> 0.015 (2026-10-04, owner playtest: the 2 cm slit read as a thin line
  *  at 0.6 m in shadow) -> 0.02 (look pass, "everything more excessive"; kerfPerHalfLen made it Lipschitz-safe). */
