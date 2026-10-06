@@ -1,236 +1,318 @@
-# The axe and the head split: handoff (2026-10-04)
+# The axe and the head split: final handoff (2026-10-05)
+
+The feature is built: the axe (part A), the cut excess pass, and the head split (part B, tasks B1 to B9). This file is
+what you need to pick it up cold. The task-by-task record, with every measurement, is in [`NOTES.md`](NOTES.md) and in
+git (`git log --oneline 47db2bec..HEAD`).
 
 **Branch:** `claude/head-cleaving-effect-ef9515` (worktree `.claude/worktrees/head-cleaving-effect-ef9515`). It was
-fast-forwarded from `claude/head-explosion-effect-d6231e` at `e04577ce` and carries everything since. A session
-cannot write into another worktree (a hook blocks it), so work continues here. To see it on the owner's 5273 server,
-fast-forward `claude/head-explosion-effect-d6231e` to this branch in its own worktree.
-**Draft PR:** goblincore/blud#31 tracks `claude/head-explosion-effect-d6231e`, pushed up to `e04577ce`. Nothing on
-this branch is pushed.
+fast-forwarded from `claude/head-explosion-effect-d6231e` at `e04577ce` and carries everything since.
+**Draft PR:** goblincore/blud#31 tracks `claude/head-explosion-effect-d6231e`, which is pushed up to `e04577ce`. As of
+2026-10-05 nothing after that commit is pushed. The plan is to fast-forward the PR's branch to this one. A session
+cannot write into another worktree (a hook blocks it), so do that from the PR branch's own worktree.
+
+**Waiting on the owner:** his verdict on the wet film under the flashlight. Keep it, raise the gain, or turn it off
+with `SPLIT_SHADE.glisten.gain` 0.
 
 | Document | Path |
 | --- | --- |
-| Spec | [`docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md`](../../superpowers/specs/2026-10-04-axe-and-head-split-design.md). §9 is "as built" for part A. §5 was corrected: the split's cut faces need `headSlot: 'keep'`. |
+| Spec | [`docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md`](../../superpowers/specs/2026-10-04-axe-and-head-split-design.md). §9 is "as built" for the axe, §10 for the head split. §5 is superseded in part by §10. |
 | Plan A (the axe) | [`docs/superpowers/plans/2026-10-04-axe-part-a.md`](../../superpowers/plans/2026-10-04-axe-part-a.md). Done. |
-| Plan B (the head split) | [`docs/superpowers/plans/2026-10-04-head-split-part-b.md`](../../superpowers/plans/2026-10-04-head-split-part-b.md). B1 is done. **Read the amendment blocks at the end:** they override the B4 snippet. |
+| Plan B (the head split) | [`docs/superpowers/plans/2026-10-04-head-split-part-b.md`](../../superpowers/plans/2026-10-04-head-split-part-b.md). Done; its status block lists where the build diverged. |
+| Head split notes | [`NOTES.md`](NOTES.md); photos in `b4/` to `b7/`, `gate/` and `look/`. |
 | Axe notes | [`docs/dev-notes/2026-10-04-axe/NOTES.md`](../2026-10-04-axe/NOTES.md) |
+| Cut excess pass | [`STATUS.md`](../2026-10-04-cut-excess/STATUS.md) and [`compare/NOTES.md`](../2026-10-04-cut-excess/compare/NOTES.md) |
 | Cut-wound handoff (house rules) | [`docs/dev-notes/2026-10-03-cut-wounds/HANDOFF.md`](../2026-10-03-cut-wounds/HANDOFF.md) |
 
-The per-task texts used for dispatch are in the session scratchpad (`scratchpad/split/taskB*.md`). They may be gone in a new session. If so, rebuild them from the plan file: each `## Task Bn` section, plus the header as `common.md`, plus the amendments.
+## What exists
 
-## Done
+Paths are under `src/lab/sdf-zombie/` unless they start with `scripts/` or `docs/`.
 
-- **The axe, part A: built, reviewed, owner playtested.**
-  - Slot 7: an H/R/L chop combo.
-  - Each chop stamps a cut.
-  - The 3rd head chop kills.
-  - The light list is shared with the flail (`viewmodel-lights.ts`).
-  - Gate: `scripts/axe-gate.mjs`, 24 checks.
-- **Owner feedback (2026-10-04):**
-  - Cuts are too short and too tidy, with abrupt ends. The owner wants them "more excessive".
-  - The axe model is not important; the owner will do a Blender pass later.
-  - The head split warp is the priority.
-- **B1 is done** (`56656928`, `d0f4c3f4`): `src/lab/sdf-zombie/head-split.ts` plus 35 tests.
-  - The split field is a union of three rigid capped pieces, with ball caps (rho) and a region bound `C = REGION_MARGIN + |dh − r|`. It is continuous and 1-Lipschitz everywhere, and an independent review verified it against brute force.
-  - `REGION_MARGIN` is 0.06, because the shipped AO probe reads `mapBody(p + n·0.06)`.
-  - A one-sided split costs 2 field evaluations.
+**The axe** (`webgpu/axe-swing.ts`, `webgpu/axe-strike.ts`, `webgpu/game-axe.ts`). Weapon slot 7: an H / R / L chop
+combo. Each chop that lands stamps a cut wound along the blade line. It shares the flail's 1.8 m reach, and its light
+list with the flail (`webgpu/viewmodel-lights.ts`). The axe model is a primitive built in code. The owner: it is
+not important, and he will do a Blender pass later.
 
-- **B2 is done** (`866f7d5d`): the CPU mirror.
-  - `sdBody` honours `body.split` (`splitField` over `sdBodyClosed`); with no split it is bit-for-bit unchanged.
-  - Hits are un-warped before stamping through `unwarpHit` (`damage.ts`) and `unwarpCutSeg` (`cut-wound.ts`): pellet,
-    slug, axe, rod, the flail's body crater, explosions and the `stampWoundAt` seam.
-- **B3 is done** (`e86f2833`, fixes `c111d14e`): the leaf `webgpu/game-head-split.ts`, the axe driving it, the seams.
-  - Chop 1 opens and stamps the cut faces (`headSlot: 'keep'`), chop 2 widens, chop 3 kills; the split stays open on
-    the corpse. A chop on an open head always counts, and stamps its own cut only on outer skin
-    (`headChopCut`, `webgpu/axe-head.ts`).
-  - Head damage and the split are mutually exclusive: on a split head the slug burst and the flail's head ladder are
-    skipped; a head that head damage already holds refuses to split and keeps part A.
-  - The hook answers null for a dead head, a tearing body or a closed state.
-  - `HeadFrame.radius` is the skull's largest semi-axis (0.137 on the zombie; 0.037 m spare inside rho).
-    `choosePreset` still takes the half-width.
-  - `warpPoint` / `warpDir` (forward warp); head blood emitters follow the opened halves.
-  - Seams: `__sdfGame.headSplit(id)`, `forceSplit(id, preset, sides, offset, angleFrac)`.
-- **B4 is done** (`535afee6`, notes `ec3d0889`, fixes `de671db2`, `cf49fccc`): the split is on screen.
-  - `REC_VEC4S` is 21: lanes N 17 = (n, thetaP), H 18 = (h, d0), A 19 = (a, thetaM), R 20 = (r, 0, 0, 0). The view
-    reads `body.split` in `update()`; a closed, torn or reused view writes zeros.
-  - `mapBody` wraps the slot body in THE PIECE LOOP: three pieces as `vec3 (cap, theta, id)`, sorted by unrolled
-    compare-swaps, with the exact early skip. `loadInstance` sets `gInstSplitOpen`, the only open test.
-  - `gHitPiece` / `gHitSplitF` (the winning piece's field before its caps) are set at exit.
-  - `webgpu/march/map-body-split-twin.test.ts` is a HAND TWIN of that WGSL, compared with `splitField`
-    (max difference 3.5e-16). Edit both together.
-  - With no split open the march-hash pins did not move.
-  - Cost: cold shader compile +4.5 s (45.0 → 49.5 s warm-up; `drawOnce` unchanged), accepted.
-- **B5 is done** (`0cba1400`, notes `e347eb27`, fixes `06039f50`): bounds and culls follow the open head.
-  - One pure rule set in `head-split.ts` (`splitFrame`, `splitHolds`, `splitHoldBall`, `splitBound`,
-    `splitSphereImages`): the proxy box, the cluster row, the tile groups, the outer hull (turned copies of chain
-    spheres) and the occluder hull (inner spheres that could meet a moved half are dropped). Bounds use `rho`.
-  - The per-ray wound list is off for an open slot.
-  - **Past 12.7 m a split is drawn closed** (`splitDrawDistance`; reopens inside 0.9×). Beyond it the march's accept
-    reach could draw the region shell as a false surface. `view.splitDrawn` is what the record really carries.
-  - Shipped path against bounds off: the worst case (one side, 0.6 m) went from 215 clipped texels to 13; the closed
-    head's own floor is 0–23.
-  - Cost: an open head is about +6 ms over closed at 0.6 m (B4: +3.5) and about +1 ms at 2 m. Closed is unchanged.
-    A tighter tile bound was tried, gained 0.2 ms, and was reverted.
-- **B6 is done** (`1277bebe`, notes `23d91606`, fixes `791238ae`, `2ad65481`): shading rides the halves.
-  - `webgpu/march/body/blocks/post/split-hit.wgsl.ts` derives the post-hit split state once: `splitTheta`, `pS` (the
-    un-warped point), `splitQ`, `faceCentre` / `faceQuat`, `splitIn`, `cutFace`. Closed slots and piece 0 never run a
-    rotation, so closed bodies are bit-identical (march-hash unmoved).
-  - Readers at `pS`: the anchor, wound and char masks, the face sheet and eye glow, burn bone taps, wetness, motion.
-  - Analytic normals fall back to FD inside an open region (`ngReason` 8, analytic mode only).
-  - Cut faces shade as wound flesh; the gate is `smoothstep(cutLo, cutHi, hitField.x − hitSplitF)`, constants in
-    `SPLIT_SHADE` (`head-split.ts`).
-  - `mapBody` files re-fold wins per piece (`gRefoldBy`).
-- **B7 is done** (`b794b416`, notes `d3c5628e`, fixes `c1b820bb`): the skull mesh cracks, then splits.
-  - Pure rule in `head-split.ts` (`HEAD_SPLIT.skull`, `skullFollow`, `skullSplitOf`, `skullPieceAt`,
-    `skullWarpPoint`, `skullPieces`): the bone opens LESS than the flesh, staged by the spring's target. The follow
-    table is (0.55 → 0.1), (0.8 → 0.3), (1 → 0.85): a crack on chop 1, a wider crack on chop 2, split on the kill.
-  - `webgpu/skeleton-spike/mesh-split.ts` and `mesh-renderer.ts`: per-piece instance copies in separate split
-    batches, clipped at the un-rotated position with a fracture edge (one `jag` table shared by the WGSL and its TS
-    twin), two-sided with a dark inside and a cut-bone rim. Driven from `view.splitDrawn`. Closed heads draw as
-    before.
-  - Seams: `__sdfGame.skullSplit(...)` (look and follow table), `meshSkeletonShow(...)`.
-- **B8 part A is done** (2026-10-05): the gate, the look block, leftovers. Numbers in [`NOTES.md`](NOTES.md).
-  - `scripts/head-split-gate.mjs`: 67 checks (open, widen, kill, one side, later hits, face, skull, range, a body
-    chop near the neck, head damage, bounds, turned, cost). Pinned across boots (the dynamic-light clock, the probes'
-    afterglow, the field interlace): the same numbers in every run. Each scenario was shown to fail under a breaking
-    change; its expectations are derived from the live tuning constants, so the look pass can retune angles and spring.
-    A routine run writes its sheets to `.lab-tmp/`; `SHEETS=1` rewrites the tracked ones in `gate/`.
-  - One cut-face look block (`march/body/blocks/post/cut-face.wgsl.ts`), `cutDepth` from `split-hit`, and
-    `SPLIT_SHADE` with one number per thing it drives. A pure move: pins unmoved, open heads equal to the bit.
-    It also gives `cutKeep` (0 today): the share of a cut-face texel that is not flesh, which the mottle, the gore
-    and the wound wetness after it leave alone. A bone ring written there sets it.
-  - A flail hit on a split head credits the head's share of the meter. The bone has a per-tick bound.
-  - **Only a chop on head flesh is a head chop** (`axe-head.ts chopOnHead`; decided by the controller, to be flagged
-    to the owner). Since B3 a chop on the upper chest, within 0.2 m of the neck root, opened the head (the flail's
-    `isHeadRegion`), and `scripts/axe-gate.mjs` failed 7 of 25. Now 25 of 25; `head-split-gate` scenario A holds it.
-    Behaviour change for every character: three chops on the upper chest, collar or neck base no longer kill by count.
-  - **Spec §4's sentence that a head chop is one `isHeadRegion` accepts is superseded for the axe** (the spec's
-    wording is B9's).
-- **Owner feedback (2026-10-05, on the B6 photos):** "looking pretty good"; the skull needs cracked/split states
-  (B7 is the answer; photos in `b7/` for the owner's choice); the open-head cost (+6 ms at 0.6 m) "is a lot but we
-  can figure out how to optimize later".
-- **B8 part B, group 1 (the cut faces): tried, reverted** (`d0d407d2`). The owner prefers the cut faces as he played
-  them, ragged face cuts included. Do not restyle them.
-- **B8 part B, group 2 is done** (2026-10-05): the owner's two playtest requests. Numbers in [`NOTES.md`](NOTES.md),
-  sheets in `look/`.
-  - **The axe skips the thin crack** (`69124ac5`): `AXE_HEAD.openAngles` is `[0.8, 1]`. Chop 1 opens to the wide
-    crack, chop 2 splits the head wide with the zombie alive, chop 3 kills and kicks the full split
-    (`AXE_HEAD.killKick` 0.3, `head-split.ts punchSplit`). Off: `[0.55, 0.8]` and `killKick` 0. The thin crack is
-    still the follow table's first stage.
-  - **The skull's stage only advances** (`SplitState.stage`, `SplitWarp.stage` in place of `.target`): the bone keeps
-    the stage's share of each half's own flesh angle, so a kick or a wobble swings it in proportion and never steps
-    it.
-  - **The opened halves wobble with the body** (`HEAD_SPLIT.wobble`): each turning half has its own offset
-    (`SplitState.wobP` / `wobM`), a damped spring driven by the acceleration of the split's mass point, with hard
-    limits. It reaches the renderers only through `SplitWarp.thetaP` / `thetaM`. Off: `gainSide` 0 and `gainBob` 0
-    (bit-identical). A frozen actor rests at exactly zero offset.
-  - The gate is 78 checks (79 with the depth guard that came with the wet film's review fixes): K holds the kick (and the bone on its swing back), J is the wobble, driven by a scripted
-    list of accelerations through `__sdfGame.headSplitDrive` on a frozen zombie. After a thaw the gate waits for the
-    wobble to rest (`restWobble`) before it measures a rest angle; a new scenario that thaws must do the same.
-  - Review fixes (after the owner played `9dcd133f` and kept the tuning): `stepSplit` sanitises its drive and state,
-    `pointAccel` drops a jump (`jumpSpeed`) and uses each step's own dt, the wobble's parameters are passed in
-    (`WobbleParams`; nothing writes to the constant).
-- **The opened head glistens under the flashlight** (2026-10-05; the owner's one request from the cut-face
-  comparison). A wet film over an open split's raw surfaces, the pit and the caps: highlights only, off a normal of
-  its own (`march/body/blocks/light/split-glisten.wgsl.ts`, numbers in `SPLIT_SHADE.glisten`). Off: `gain` 0, which
-  writes no shader text at all. Nothing outside an open split's region changes (0 texels; pins unmoved). Sheets
-  `look/10`-`12`. Under the torch at 0.6 m the raw texels over 0.6 luma go 1.98% -> 4.63%, over 0.95 0.02% -> 0.76%
-  (worst view 2.89%). Striking on a one-sided split's big face; modest on the two-sided one, where little raw
-  surface faces the player. It needs the owner's eye in motion. After its review fixes (the head-side gate, the
-  tangent projection and horizon, `lumpTilt` 3.2): 5.05% and 1.08%, worst view 2.27%; sheets `look/10`-`13`.
-- All measurements and photos: [`NOTES.md`](NOTES.md), `b4/` … `b7/`, `look/`.
-- **Testing rule added:** after any WGSL change run the full tree,
-  `npx vitest run src/lab/sdf-zombie --exclude '**/cut-wound.test.ts'` (510 files, 3–5 minutes). Targeted sets missed
-  a red cross-cutting gate twice (`entrails-gates`, `normal-gradient-probe`).
+**Head chops** (`webgpu/axe-head.ts`). Pure, per actor: the count, the axe's opening table, the kill's kick, and two
+rules. `chopOnHead`: only a chop whose nearest prim is head flesh is a head chop. `headChopCut`: what a head chop
+stamps (the split's faces when it opens the head, its own cut on outer skin, nothing on a cut face or through the
+gap). Head chops kill by count (3) and do not feed the body's collapse meter.
 
-## For B8 and later (from B2–B7 and their reviews)
+**The cut excess pass** (`cut-wound.ts`, `webgpu/march/fields/wounds.wgsl.ts`; commit `36b3a7c3`). The owner found the
+cuts too short and too tidy. Now: the axe's cut half-length is 0.15 m (was 0.09) and its kerf 0.025; the rod's sweeps
+are 1.4× longer with `maxLen` 0.45 and kerf 0.02. Every cut's kerf is capped at 0.3 × its half-length
+(`kerfPerHalfLen`), which keeps the Lipschitz maxima at 1.7 to 2.0 against the 2.2 bound, GPU noise included. Ends
+taper and break up; walls are rougher; lips rise 8 to 9 mm (from 2.9); the wet band is blotchy; there is more blood.
+The far-skin, thin-limb, silhouette and lid invariants hold. Before and after sheets are in
+`docs/dev-notes/2026-10-04-cut-excess/compare/`; the raw photos (38 MB) are untracked in the other worktree's
+`photos/` and should not all be committed.
 
-- **B8 groundwork:** the cut-face look is spread over five blocks; move it into one look block with `cutDepth`
-  exported from `split-hit` before tuning anything. A bone ring on the flesh cut faces belongs there (`applyBones`
-  at `pS`), not in the skull mesh (the march's cut face is coplanar with the skull's clip).
-- **B8:** `scripts/axe-gate.mjs` check K expects at least 3 head-tagged cuts on the corpse; a centred split chopped
-  through the gap leaves the 2 faces. Restate it. In gates, let the spring settle between chops.
-- **B8 look, known wrong:** after the kill the skull is hollow and the gap is empty (the room shows through the V);
-  a whole brain mesh riding piece 0 is the cheapest structural answer. The fracture teeth read as a regular saw up
-  close. An off-centre split halves an eyeball. The face cuts are untuned (`HEAD_SPLIT.faceCut` / `faceCalibre`).
-  Loose pixels at the slab tip and speckle on the face preset's crown. A flail hit on a split head takes the plain
-  crater with full meter credit.
-- **Bone residual (accepted):** a chop landing above the old target steps the stage at the next tick (seam only:
-  play's minimum strike gap is 0.6 s). The dip on the swing back is gone with the monotone stage.
-- **Still closed-head:** the shadow hull, `bodyInSight` (`game-main.ts` ~7311) and motion vectors. The top vertebra
-  is left unsplit on purpose.
-- **`gRefoldBy` is indexed by piece, not slot:** in a crowd pixel another slot's re-fold win can leak into an open
-  slot's normal hint. A separate follow-up (the fix moves crowd pixels).
-- **Costs carried as debt** (the owner: optimise later): open head about +6 to +6.7 ms at 0.6 m, +1.4 ms at 2 m;
-  cold shader compile +4.5 s from B4; closed bodies +0.1–0.3 ms from B6, unattributed.
-- **Known limits:** a pellet or slug crater on a cut face sits on the old plane, so it shows on both faces. A rod sweep
-  across the gap is un-warped as one segment by its midpoint's piece. `sdBody` costs about 2.7× inside the region.
-  A forced re-split with fewer sides leaves the old face wound (seam only). A baked split head has no answer yet.
-- **An unexplained depth fault in the light tail** (NOTES, "Look: wet under the flashlight"). A build of the wet
-  film that walked the light list a second time left whole 4 x 4 texel cells of an open head (of the 400 x 300 march
-  target) with their colour right and the WORLD ORIGIN's depth: rectangular notches. `bodyLights` is pure and those
-  texels never ran the added call, so it is no rule about `bodyLights`: something zeroes the hit position, the
-  mechanism is not known, and another edit to the light tail could bring it back. The gate's depth guard
-  (`head-split-gate.mjs depthGuard`, every capture) catches it whatever the cause; the count of `bodyLights(` in the
-  entry is pinned at 2 as a tripwire. A follow-up to find the mechanism is filed.
+**The split's rules** (`head-split.ts`, pure; start with its header). Everything the split is: the presets (`middle`,
+`face`), the preset choice from the chop's blade plane, the angle spring, the world-space description `SplitWarp`, THE
+SPLIT FIELD (`splitField`: the union of three rigid capped pieces, continuous and 1-Lipschitz), the maps between the
+open head and the closed one (`unwarpPoint`, `warpPoint`), the cut faces' segments, the bounds rules, the range rule,
+the wobble, and the skull's rule. Spec §10.1 explains the field. A one-sided split costs two field evaluations.
+`HeadFrame.radius` is the skull's largest semi-axis (0.137 m on the zombie, with 0.037 m to spare inside `rho`);
+`choosePreset` takes the head's half-width instead.
+
+**The CPU mirror** (`validate.ts` `sdBody`, `damage.ts` `unwarpHit`, `cut-wound.ts` `unwarpCutSeg`). `sdBody` honours
+`body.split`, so every strike, shot and trace sees the opened halves; with no split it is unchanged to the bit. Every
+stamp un-warps its hit first, because wounds live on the closed head, where the GPU reads them: pellet, slug, axe,
+rod, the flail's body crater, explosions and the `stampWoundAt` seam.
+
+**The leaf** (`webgpu/game-head-split.ts`). Owns each actor's `SplitState`, steps the spring and the wobble once a
+frame (before the actors step), and installs the actor's split hook. THE POSE IS THE ONE SOURCE OF THE SPLIT: the
+hook's answer rides `posed().split`, and nothing else keeps a copy. The hook answers null for a head that is gone, a
+body that is tearing, or a closed state. Zombies only. Head damage and the split are mutually exclusive: a head the
+head-damage leaf holds refuses to split, and that leaf declines a head this one has open. The split stays open on the
+corpse.
+
+**The GPU record and the field** (`webgpu/crowd-records.ts`, `webgpu/march/map-body.wgsl.ts`). `REC_VEC4S` is 21:
+lanes N 17 = (n, thetaP), H 18 = (h, d0), A 19 = (a, thetaM), R 20 = (r, 0, 0, 0). A closed, torn or reused view
+writes zeros. `loadInstance` sets `gInstSplitOpen`, the only open test. `mapBody` wraps the slot body in THE PIECE
+LOOP: three pieces as `vec3 (cap, theta, id)`, sorted by unrolled compare-swaps, with the exact early skip.
+**`webgpu/march/map-body-split-twin.test.ts` is a HAND TWIN of that WGSL**, compared with `splitField` (largest
+difference 3.5e-16). Edit both together.
+
+**Bounds and range** (rules in `head-split.ts`: `splitFrame`, `splitHolds`, `splitHoldBall`, `splitBound`,
+`splitSphereImages`, `splitDrawDistance`; used in `webgpu/zombie-gpu.ts`, `webgpu/shell-hull-outer.ts`,
+`webgpu/occluder-hull.ts`). The proxy box, the cluster row, the tile groups and both hulls follow the open head. Bounds
+use `rho`, not `r`. The per-ray wound list is off for an open slot. **Past 12.7 m a split is drawn closed** and it
+reopens inside 0.9× that (11.4 m): beyond it the march's accept reach could draw the region shell as a false surface.
+`view.splitDrawn` is what the record really carries; anything else that draws the head must follow it, not the pose.
+The shipped accept numbers live in `webgpu/game-march-accept.ts`, and a test holds them under the margin.
+
+**Shading after the hit** (`webgpu/march/body/blocks/post/split-hit.wgsl.ts`, `webgpu/march/body/blocks/post/cut-face.wgsl.ts`).
+`split-hit` derives the hit's split state once: `splitTheta`, `pS` (the un-warped point), `splitQ`, `faceCentre` /
+`faceQuat`, `splitIn`, `cutFace`, `cutDepth`. Everything anchored to the body reads `pS` (the rest anchor, wound and
+char masks, the face sheet and eye glow, burn bone taps, wetness, motion); lighting stays at the world point. Closed
+slots and piece 0 never run a rotation, so closed bodies are bit-identical. Analytic normals fall back to finite
+differences inside an open region (`ngReason` 8, analytic mode only). `cut-face` holds the cut faces' look: wound
+interior by depth, wet all over. It also declares `cutKeep` (0 today): the share of a cut-face texel that is not
+flesh, which the mottle, the gore and the wound wetness leave alone.
+
+**The skull mesh** (`webgpu/skeleton-spike/mesh-split.ts`, `webgpu/skeleton-spike/mesh-renderer.ts`; rule in
+`head-split.ts`: `skullSplitOf`, `skullPieceAt`, `skullWarpPoint`, `skullPieces`). The bone opens LESS than the flesh,
+in stages: a crack, a wider crack, split. It is drawn as per-piece instance copies in their own batches, clipped at the
+un-turned point along a ragged fracture edge that both halves share (one `jag` table for the WGSL and its TypeScript
+twin), two-sided with a dark inside and a cut-bone rim. The stage only advances (`SplitState.stage`), so a kick or a
+wobble swings the bone in proportion and never steps it. Driven from `view.splitDrawn`. Closed heads draw as before.
+
+**The wobble** (`HEAD_SPLIT.wobble` in `head-split.ts`; driven from the leaf). Each turning half has its own offset
+(`SplitState.wobP` / `wobM`): a damped spring driven by the acceleration of the split's mass point, with hard limits.
+It reaches the renderers only through `SplitWarp.thetaP` / `thetaM`. A frozen actor rests at exactly zero offset. Its
+parameters are passed in (`WobbleParams`); nothing writes to the constant.
+
+**The wet film** (`webgpu/march/body/blocks/light/split-glisten.wgsl.ts`; numbers in `SPLIT_SHADE.glisten`).
+Highlights over an open split's raw surfaces (the pit and the caps), off a normal of its own. It keeps to the opened
+head: above the hinge plane and inside the hold ball, so a chest wound on a zombie whose head is open does not take
+it. Nothing outside an open split's region changes. The deferred surface entry does not carry it; the game's default
+entries do.
+
+**Seams** (`__sdfGame.…`; `webgpu/game-seams-fire.ts`, `webgpu/game-seams-skeleton.ts`):
+
+| Seam | What it does |
+| --- | --- |
+| `axe()`, `axeSwing()`, `axeChop(id, side, target?)` | the axe's state; a click; a chop on one actor's torso or head |
+| `headSplit(id)` | an actor's split state |
+| `forceSplit(id, preset, sides, offset, angleFrac)` | opens a split directly (for tuning, and for `face`) |
+| `headSplitDrive(id, accs)` | feeds the wobble a scripted list of accelerations, one a tick (the gate's J) |
+| `skullSplit({ follow, zigAmp, zigLen, chipAmp, chipLen, inside, rim, rimWidth, … })` | the skull's look, live; `follow: null` puts the table back |
+| `skullDrawn(id)` | an actor's split skull copies, each with the matrix it is drawn with |
+| `meshSkeletonShow({ bones, eyes })` | hides or shows the bone meshes and the eyes (a shown / hidden pair tells bone pixels from flesh) |
+| `actorWounds(id)` | each wound, with `headSlot`, `headRegion` and a cut's `dirWorld` |
+
+## How to run and verify
+
+**Playing it.** The axe is weapon slot 7 (`Digit7`; click to chop), always owned in the dev harnesses. The gates use
+the bare ring page, `/sdf-game.html`. While agents are editing this worktree, serve a playtest build from a snapshot
+(a `git archive` of the chosen commit) or from a clean checkout, not from the worktree: the dev server reloads the
+page on every source edit. **Port 5273 is the owner's: never use or stop it.**
+
+**The three gates.** Headless capture only. Each needs its own servers, which come from `scripts/lab-servers.sh`; that
+needs bash, not zsh. Use ports 5241 / 9241.
+
+```bash
+bash -c 'export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up
+  node scripts/head-split-gate.mjs 5241 9241
+  OUT=.lab-tmp/axe-gate node scripts/axe-gate.mjs 5241 9241
+  OUT=.lab-tmp/cut-wound-gate node scripts/cut-wound-gate.mjs 5241 9241'
+```
+
+| Gate | Checks (as of 2026-10-05) | Notes |
+| --- | --- | --- |
+| `scripts/head-split-gate.mjs` | 79 | Scenarios S, W, K, O, L, F, M, R, A, H, J, B, T, C. Five boots. `ONLY=S,K` runs a subset (W and K need S). |
+| `scripts/axe-gate.mjs` | 25 | A, D, K, S, C, T. |
+| `scripts/cut-wound-gate.mjs` | 30 | |
+
+- **Photos.** The head-split gate writes its sheets to `.lab-tmp/head-split-gate`; `SHEETS=1` rewrites the tracked
+  ones in `gate/`. The other two write into TRACKED folders by default (`docs/dev-notes/2026-10-04-axe/gate`,
+  `docs/dev-notes/2026-10-03-cut-wounds/gate`): pass `OUT=` as above, or you will have modified PNGs to put back.
+- **What the head-split gate measures on.** The float march target (`__sdfGameDebug.readMarchTarget`), not
+  screenshots. Each capture is two reads, and their difference is checked. Its boot is pinned as `march-hash` pins it
+  (the dynamic-light clock, the probes' afterglow, the field interlace), so every number is the same in every run.
+- **Every scenario has a check that was shown to fail** under a breaking change (NOTES lists each mutation).
+- **Its expectations are derived from the live tuning constants** (`HEAD_SPLIT`, `AXE_HEAD`, the follow table), so a
+  retune moves them with it. What a retune can still trip: the gap line needs the cut faces to reach the head centre's
+  height; `F_MOVED_MIN`; `O_BEARING` must still land a one-sided hit; and the two unit tests that hold the spring's
+  overshoot and the table's crack / split.
+- **After a thaw, wait for the wobble.** The gate calls `restWobble` before it measures a rest angle. A new scenario
+  that thaws must do the same. Let the spring settle between chops.
+- **The depth guard** (`depthGuard`, every capture): each body texel, placed in the world by its depth, must lie in
+  front of the camera and inside some actor's proxy box. It is there for the depth fault (follow-ups, below).
+- **What the gate does not guard:** the proxy box's growth (`fit`) and `splitBound`'s growth of the cluster and tile
+  spheres. No gate camera sees them fail; their unit tests hold them (`head-split-bounds.test.ts`,
+  `zombie-gpu.test.ts`). The cost (C) is reported, not gated.
+
+**The test tree.** After ANY WGSL change run the whole tree:
+
+```bash
+npx vitest run src/lab/sdf-zombie --exclude '**/cut-wound.test.ts'   # 511 files as of 2026-10-05; 3 to 5 minutes
+npx tsc --noEmit                                                     # only the node:crypto error is allowed
+```
+
+Targeted sets missed a red cross-cutting gate twice (`entrails-gates`, `normal-gradient-probe`). `cut-wound.test.ts`
+is left out of that run (it alone took 5 min 26 s when last timed); run it when you touch the cut field.
+
+**The shader check set.** Every WGSL change needs all four:
+
+1. `npx vitest run march-golden -u`, noted in the commit;
+2. `node scripts/compile-census.mjs`: phase ready, `uncapturedCount` 0, no device loss;
+3. `node scripts/march-hash.mjs`: with no split in its scenes the six pins must NOT move (they did not, in any task);
+4. an interleaved cold boot pair (`node scripts/boot-time.mjs`), base and new alternated, with a unique `hash13` nonce
+   per boot: the OS Metal cache otherwise warms a "cold" boot.
+
+## The tuning dials
+
+Everything is in `head-split.ts` unless a file is named. `SPLIT_SHADE` values are written into WGSL, so changing one
+needs the shader check set. `HEAD_SPLIT.skull` is live through `__sdfGame.skullSplit`.
+
+| Dial | Constant | Shipped | Off, or the neutral setting |
+| --- | --- | --- | --- |
+| Chops to kill | `AXE_HEAD.chopsToKill` (`webgpu/axe-head.ts`) | 3 | |
+| The axe's table: the opening after each chop before the kill | `AXE_HEAD.openAngles` | `[0.8, 1]` of the preset's maximum | `[0.55, 0.8]`: the thin crack first (the design's table) |
+| The kill's kick | `AXE_HEAD.killKick` | 0.3 of the preset's maximum | 0 |
+| Full angles | `HEAD_SPLIT.presets.*.maxBoth` / `maxOne` | `middle` 0.55 / 0.9 rad; `face` 0.8 / 0.8 | |
+| How far off centre the plane goes; when one side opens | `maxOffsetFrac`, `bothFrac`, `faceOffsetFrac` | 0.4, 0.15, `[-0.3, 0.5]` of the head's half-width | |
+| The chop's spring | `HEAD_SPLIT.hz`, `zeta`, `kick` | 7, 0.35, 6 | `zeta` 1.2: no overshoot (the gate still passes; two unit tests fail) |
+| The face cuts (the ragged cut faces) | `HEAD_SPLIT.faceCut`, `faceCalibre` | inset 0.006, `lenFrac` 1.1; depth 0.12, kerf 0.012, lip 1 | No off. The owner wants them as they are |
+| Skin against cut face, for a later chop | `HEAD_SPLIT.skinEps` | 0.015 m | |
+| The skull's follow table | `HEAD_SPLIT.skull.follow` | (0.55 → 0.1), (0.8 → 0.3), (1 → 0.85) | 0: the whole closed skull stands in the gap. 1: the bone rides the flesh |
+| The fracture edge | `HEAD_SPLIT.skull.jag` | `zigAmp` 0.004, `zigLen` 0.022, `chipAmp` 0.0015, `chipLen` 0.006, `wobble` 0.43, `wobbleAlong` 1.7, `wobbleUp` 1.3, `upFreq` 0.73 | `zigAmp` 0 and `chipAmp` 0: the clean plane |
+| The bone's inner wall and broken rim | `HEAD_SPLIT.skull.inside`, `rim` | (0.1, 0.018, 0.015); colour (0.72, 0.5, 0.4), width 0.004 m | `rim.width` 0: no rim |
+| The wobble | `HEAD_SPLIT.wobble` | `hz` 3, `zeta` 0.3, `gainSide` 6, `gainBob` 8, `arm` 0.1, `accelClamp` 40, `jumpSpeed` 25, `max` 0.45, `minOpen` 0.03, `over` 0.45 | `gainSide` 0 and `gainBob` 0: bit-identical to no wobble |
+| The cut faces' shading gate | `SPLIT_SHADE.cutLo`, `cutHi`, `shellLo`, `shellHi`, `poreCut` | 0.0015, 0.004, 0.0015, 0.004, 0.5 | |
+| How wet a cut face is | `SPLIT_SHADE.wet` | 1 (wet all over) | 0: wet like a crater (its lip, not its floor) |
+| The wet film | `SPLIT_SHADE.glisten` | `gain` 4, `pow` 24, `spill` 0.3, `lamps` 0.45, `lampPow` 20, `rawLo` 0.3, `rawHi` 0.8, `lump` 0.014, `lumpTilt` 3.2, `lumpFlat` 0.1, `fine` 0.006, `fineTilt` 0.3, `fadeLo` 0.75, `fadeHi` 1.5, `edge` 0.01, `horizon` 0.15 | `gain` 0: the block is not written into the shader at all |
+| A flail hit on a split head: its share of the meter | `FLAIL_HEAD.meterScale` (`webgpu/flail-strike.ts`) | 0.3 | |
+| The axe's body cut | `AXE_CALIBRE`, `AXE_CUT.halfLen` (`webgpu/axe-strike.ts`) | depth 0.1, kerf 0.025, lip 1.1; 0.15 m | |
+| Blood on opening | `webgpu/game-axe.ts` (`deps.bleed` per face) and the leaf's `open()` | | |
+
+Not dials: `REGION_MARGIN` (0.06: it must be at least the AO probe's distance), `holdFrac` (1.25: `rho` must hold the
+head), `SHELL_ACCEPT_FRAC` (0.8) and `SPLIT_REOPEN_FRAC` (0.9). The bounds and the range rule are derived from them.
+
+If the wet film twinkles in motion, the dials are `fineTilt` 0 (no fine octave), a larger `lump`, or a lower `gain`.
+If a lurch reads as a hard stop, the wobble's dials are `max` and `gainSide`.
+
+## What the owner decided (2026-10-05)
+
+- **The axe skips the thin crack.** Chop 1 opens to 0.8 of the maximum, chop 2 to 1.0 with the zombie alive, chop 3
+  kills with a kick. Kept.
+- **The wobble stays as tuned** ("looked fine to me"). A reviewer suggested a lower `accelClamp`; not applied.
+- **The ragged face cuts stay. Do not restyle the cut faces.** A restyle (the face cuts shrunk to a notch at the
+  crown, a bone ring, layers and a dark cavity) was built and reverted in `d0d407d2` at his call: "pretty subtle",
+  "I'm happy with the before". The steps are `f2a1c7f8`, `eb2f131b` and `e1e4acf2`; their sheets (`look/01` to `03`)
+  are in `e1e4acf2`'s tree. To bring one back, cherry-pick it or revert the revert.
+- **The wet film** was built at his request. **His verdict is pending.**
+- **The open-head frame cost:** "we can figure out how to optimize later".
+- **Told, and no objection:** chops to the upper chest, the collar and the neck's base no longer count as head chops,
+  for any character (`chopOnHead`). They are body chops and kill through the collapse meter (about 7 overheads or 9
+  diagonals).
+- **Earlier:** the cuts were too short and too tidy, and he wanted them "more excessive" (2026-10-04; hence the
+  excess pass). The axe model is not important. On the first photos of the shaded split (2026-10-05): "looking pretty
+  good", but the skull needed cracked and split states, which is why the bone opens in stages.
+
+## Debt
+
+All of it is accepted for now and none of it has been investigated. Numbers and conditions are in spec §10.9.
+
+- **An open head costs about +6 to +8 ms of frame time at 0.6 m** and about +0.6 to +1.6 ms at 2 m, against the same
+  head closed (headless, a 400 × 300 march target). Closed bodies read +0.1 to +0.3 ms at 0.6 m since B6,
+  unattributed.
+- **Cold shader compile: +4.5 s** on B4's boot pair (45.0 → 49.5 s warm-up). Later pairs did not show that level
+  again; it has not been re-measured against the tree before B4.
+- **A walking split head never rests,** so its bounds, hulls and record are re-made every tick. Only a corpse or a body
+  that stands still could cache them.
+- **`sdBody` costs about 2.7× inside the region** (CPU).
+- **The split skull's copies** cost +0.1 to +0.5 ms over the whole skull: a clipped copy is shaded in full.
+- **The wet film** is six `noise3` taps and two `pow` per raw texel, and again in the refine twin. Its frame cost was
+  not resolved (under 1 ms if anything).
+- **The cut excess pass:** cold boot about +430 ms (+136 to +936 ms over four pairs); three axe chops on one torso
+  add about +22 ms of frame time, against +4.3 ms before. First things to try: drop or cheapen the `woundMask` noise
+  and the pinch's `hash13` calls, tighten the cut's reach sphere, lower `AXE_CUT.halfLen` or the kerf.
+
+Not tried, for the open head: a fixed piece order with a per-piece `continue` in place of the compare-swap sort;
+flattening the pieces into the slot loop; for the skull copies, a branch in place of the select on the back face, and
+drawing piece 0 front-faced when its top is hidden. A tighter tile bound was tried, gained 0.2 ms, and was reverted.
+Keep bookkeeping out of `mapBody`'s per-sample path: it is inlined about ten times, and one form of the re-fold
+report there cost 0.5 ms on every closed body.
+
+## Follow-ups
+
+1. **The unexplained depth fault in the light tail** (a follow-up task is filed; NOTES, "Look: wet under the
+   flashlight"). A build of the wet film that walked the light list a second time left whole 4 × 4 texel cells of an
+   open head (of the 400 × 300 march target) with their colour right and the WORLD ORIGIN's depth: rectangular
+   notches. `bodyLights` is pure and those texels never ran the added call, so it is no rule about `bodyLights`.
+   Something zeroes the hit position, the mechanism is not known, and another edit to the light tail could bring it
+   back. Worked around: the block does not walk the list. The gate's depth guard catches it whatever the cause, and
+   the count of `bodyLights(` in the entry is pinned at 2 as a tripwire.
+2. **`gRefoldBy` is indexed by piece, not slot.** In a crowd pixel another slot's re-fold win can leak into an open
+   slot's normal hint. It never touches the field. The fix moves what closed crowd pixels compute, so it is its own
+   task with its own `march-hash` re-pin.
+3. **Optimise the open head** (Debt, above).
+4. **Something in the gap.** After the kill the skull is hollow and the room shows through the V. A whole brain mesh
+   riding piece 0, drawn from `view.splitDrawn` like the skull, is the cheapest structural answer.
+5. **A baked split head** has no answer yet: a detached or baked head takes the mesh face layer with no split.
+6. **The slug opening the split** (spec §2): not started.
+7. **The wet film in fast motion** is not measured. A walk's wobble does not make it sparkle (2.5% of highlight
+   texels last one tick at 0.6 m).
+
+## Known limits
+
+- **Still the closed head's:** the shadow hull, `bodyInSight` (`webgpu/game-main.ts`) and motion vectors (a moving
+  half's object motion reads zero). The top neck vertebra is left unsplit on purpose.
+- **A pellet or slug crater on a cut face** sits on the old plane, so it shows on both faces. A rod sweep across the
+  gap is un-warped as one segment, by its midpoint's piece.
+- **A one-sided split's face cut marks the still half's crown** (775 of 4520 texels, up to 8.2 mm). Accepted by the
+  owner. `HEAD_SPLIT.faceCalibre.lip` and the cut's reach are what drive it.
+- **The bone's stage, through the seam only:** a chop that lands while the flesh is still past the old target steps
+  the bone's share at the next tick (about 20° with chop 2 three frames after chop 1). In play strikes are at least
+  0.6 s apart. A unit test holds the bone's per-tick bound for chops that land settled.
+- **Hands split with the head.** Each piece turns the whole slot body above the hinge and within `rho`, so a hand
+  raised near the face would split. If it shows, evaluate P± on the head cluster only.
+- **The range cut-off pops** at 12.7 m (14 texels of the march target). Up close, a coarser SDF pass (`aaCfg.x` over
+  0.00152) or `?laststep=7` could draw the region sphere as a ball; the view warns once in a dev build.
 - **At 0.6 m the torch's beam misses a head in the middle of the screen** (the torch is 0.25 m off the eye, its cone
-  21.6 degrees). The body's own torch light there is weak by construction; the wet film has its own wider cone
-  (`SPLIT_SHADE.glisten.spill`). With the torch lit the lamps add no glint to the film.
-- **The wet film** keeps to the opened head (above the hinge plane, inside the hold ball: a chest wound of a zombie
-  whose head is open does not take it), leans its normal in the tangent plane and has a horizon on the surface's own
-  normal. The deferred surface entry does not carry it (the game's default entries do). Its cost is per raw texel:
-  six `noise3` and two `pow`, again in the refine twin. Its fade distances are in march texels (2.4 m / 5 m at the
-  gate's resolution). A walk's wobble does not make it sparkle (2.5% of highlight texels last one tick at 0.6 m);
-  fast motion is not measured.
-- **House rule:** never run `git checkout -- .`, `git restore .`, `git reset --hard` or `git clean` here; an
-  implementer wiped its own uncommitted work that way.
-
-## The cut "excess" pass: landed as built
-
-Status is in [`docs/dev-notes/2026-10-04-cut-excess/STATUS.md`](../2026-10-04-cut-excess/STATUS.md) (`3002f57e`). The code is committed as a labelled WIP commit (see `git log --grep "wip(cut)"`); the raw photos are untracked.
-
-**What it does:**
-- Longer cuts: the axe's half-length goes 0.09 → 0.15, and the rod's sweeps are 1.4× longer, with `maxLen` 0.45.
-- Wider cuts: kerf 0.025 for the axe and 0.02 for the rod. Each cut's kerf is capped at 0.3 × its half-length to keep the Lipschitz bound ≤ 2.2.
-- Tapered, broken-up ends; rougher walls; lips raised 8–9 mm (from 2.9); a blotchy wet band; more blood.
-
-**Verified:**
-- Lipschitz maxima are 1.7–2.0, now including the GPU noise.
-- The far-skin, thin-limb, silhouette and lid invariants hold.
-- Gates: 30/30 cut-wound and 24/24 axe.
-- Golden `-u`; census ready; march-hash pins unmoved.
-
-**Costs, carried as open debt (decision in [`compare/NOTES.md`](../2026-10-04-cut-excess/compare/NOTES.md), `880b201a`;
-the owner can overrule):**
-- Cold boot is about +430 ms (from +136 to +936 ms over 4 pairs).
-- 3 axe chops now add about +22 ms of frame time, against +4.3 ms before.
-- Neither has been investigated.
-
-The before/after comparisons are in `compare/`. The raw photos are untracked in the OTHER worktree's `photos/`
-(38 MB: don't commit them all).
-
-## Remaining (plan B)
-
-1. ~~The cut excess pass~~, ~~B2~~, ~~B3~~: done (above).
-4. ~~B4~~, ~~B5~~: done (above).
-6. ~~B6~~, ~~B7~~: done (above).
-8. ~~B8 part A: the gate~~, ~~B8 part B: the look pass~~ (above: the cut faces stay as played; the axe's table and
-   the wobble are in; the wet film under the flashlight is in).
-9. **B9: docs.** To record: spec §4 / §5 (the axe's stages are the table's second and third, the kill's kick, the
-   stage that only advances, the wobble and its two off switches; the wet film and its off switch, and that the
-   deferred surface entry does not carry it); `TASKS.md`.
-
-## Known design notes
-
-- **Hands split with the head.** Each piece rotates the whole slot body above the hinge and within rho, so a hand raised near the face would split. That is accepted for now. If it shows in B8, evaluate P± on the head cluster only.
-- **The face preset's hinge** sits 2 cm in front of its plane. It is sound, but consider moving it onto the plane while tuning.
-- **The axe's kerf is capped at 0.015** by the Lipschitz bound. A wider axe cut needs the field reshaped, which is what the excess pass attempts.
+  21.6 degrees). That is why the film has its own wider cone (`spill`). With the torch lit, the lamps add no glint to
+  the film. The film's fade distances are in march texels (2.4 m / 5 m at the gate's resolution).
+- **Look, known and left:** the fracture's teeth read as a regular saw up close; an off-centre split halves an
+  eyeball; an eye shot out of a split head leaves from its closed seat; loose pixels at the slab's tip and speckle on
+  the `face` preset's crown; the corpse's halves pass through the floor; the `face` preset's hinge sits 2 cm in front
+  of its plane (sound, but worth moving onto the plane in a tune).
+- **A forced re-split with fewer sides** leaves the old face wound (seam only).
+- **The axe's kerf** is 0.025 and can go no wider than 0.3 × the cut's half-length (`kerfPerHalfLen`). Re-measure the
+  Lipschitz bound (`cut-wound.test.ts`) before widening it.
 
 ## House rules
 
-- Never `git stash`.
-- Targeted vitest only; `tsc` allows only the `node:crypto` error.
-- Headless capture only, via `scripts/lab-servers.sh`, which needs bash. Use ports 5241/9241. **Port 5273 is the owner's.**
-- Every WGSL change needs golden `-u`, the census, march-hash and an interleaved cold boot pair (with a unique `hash13` nonce per boot).
-- Don't run implementers in parallel when their files overlap: a broad `git add` mixed commits once.
+- Never `git stash`. Never run `git checkout -- .`, `git restore .`, `git reset --hard` or `git clean` here: an
+  implementer wiped its own uncommitted work that way.
+- `git add` by name. Don't run implementers in parallel when their files overlap: a broad `git add` mixed commits
+  once.
+- Don't edit source while a gate runs: the dev server reloads the gate's page.
+- Headless capture only, via `scripts/lab-servers.sh` (bash), on ports 5241 / 9241. **Port 5273 is the owner's.**
+- Targeted vitest while you iterate. Every WGSL change needs the shader check set and then the whole test tree
+  (above). `tsc` allows only the `node:crypto` error.
+- Prove a visual claim with a number, and look at the images yourself.
+- Never commit extracted Blood assets.
 - Commits end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - Use dualmem for memory, not MEMORY.md.

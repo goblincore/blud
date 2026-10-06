@@ -5,7 +5,7 @@
 > the area pages under [`docs/tasks/`](docs/tasks/), step-by-step plans in `docs/superpowers/plans/`,
 > and hand-offs in `docs/dev-notes/`.
 >
-> **Latest hand-offs:** [2026-10-01 design session — the egg (paused), the Flat's emergence, the game's shape, the retro-CGI look](docs/dev-notes/2026-10-01-design-session-handoff.md) (branch `claude/egg-shader-gooey-transitions-21fb04`, unmerged), [2026-10-01 Night Train ending — control room, egg, sequence system](docs/dev-notes/2026-10-01-night-train-ending-handoff.md) (branch `claude/train-monitor-transition-51f385`, unmerged; plan 4 next), [2026-09-29](docs/dev-notes/2026-09-29-handoff.md) (light layers, Boiler Room
+> **Latest hand-offs:** [2026-10-05 the axe and the head split](docs/dev-notes/2026-10-04-head-split/HANDOFF.md) (branch `claude/head-cleaving-effect-ef9515`, draft PR goblincore/blud#31), [2026-10-01 design session — the egg (paused), the Flat's emergence, the game's shape, the retro-CGI look](docs/dev-notes/2026-10-01-design-session-handoff.md) (branch `claude/egg-shader-gooey-transitions-21fb04`, unmerged), [2026-10-01 Night Train ending — control room, egg, sequence system](docs/dev-notes/2026-10-01-night-train-ending-handoff.md) (branch `claude/train-monitor-transition-51f385`, unmerged; plan 4 next), [2026-09-29](docs/dev-notes/2026-09-29-handoff.md) (light layers, Boiler Room
 > resize, zombie feet, level-list tier, march-hash on Chrome 154) and [2026-09-30 flail / head damage / wounds](docs/dev-notes/2026-09-30-flail-handoff/HANDOFF.md). Previous: [2026-09-27 Night Train](docs/dev-notes/2026-09-27-night-train-handoff.md).
 
 ## In flight / next
@@ -21,9 +21,14 @@
   [Spec](docs/superpowers/specs/2026-10-02-slug-head-burst-design.md) · [notes](docs/dev-notes/2026-10-02-head-burst/NOTES.md).
 
 **Cut wounds** — [combat and gore](docs/tasks/combat-and-gore.md)
-- [~] **Cut wounds M1 built; owner playtest pending** — a cut wound shape, the rod (weapon slot 6), 32 wounds with merging.
-  M2 (head split) next. Gate `scripts/cut-wound-gate.mjs`. [Notes](docs/dev-notes/2026-10-03-cut-wounds/NOTES.md) · [handoff](docs/dev-notes/2026-10-03-cut-wounds/HANDOFF.md).
-- [~] **The axe (slot 7) part A built 2026-10-04; owner playtest pending** — chops cut, head chops kill on 3; part B (head split) next. Gate `scripts/axe-gate.mjs`. [Spec](docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 9) · [notes](docs/dev-notes/2026-10-04-axe/NOTES.md).
+- [~] **Cut wounds M1 built 2026-10-04; owner playtested** — a cut wound shape, the rod (weapon slot 6), 32 wounds with merging.
+  Owner: "more excessive", so longer, wider, ragged cuts landed 2026-10-04 (two costs open: [status](docs/dev-notes/2026-10-04-cut-excess/STATUS.md)). M2 is the head split (next line).
+  Gate `scripts/cut-wound-gate.mjs` (30 checks). [Notes](docs/dev-notes/2026-10-03-cut-wounds/NOTES.md) · [handoff](docs/dev-notes/2026-10-03-cut-wounds/HANDOFF.md).
+- [~] **The axe (slot 7) and the head split built 2026-10-05; owner playtested; draft PR goblincore/blud#31** (branch
+  `claude/head-cleaving-effect-ef9515`) — a chop opens a zombie's head on a hinge: a wide crack, then split wide and alive, then
+  the kill. The halves wobble; the skull cracks, then splits. **Pending: the owner's verdict on the wet film under the flashlight.**
+  Debt: an open head costs about +6 to +8 ms at 0.6 m. Gates `scripts/head-split-gate.mjs` (79 checks), `scripts/axe-gate.mjs` (25), as of 2026-10-05.
+  [Spec](docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 10) · [handoff](docs/dev-notes/2026-10-04-head-split/HANDOFF.md) · [notes](docs/dev-notes/2026-10-04-head-split/NOTES.md).
 
 **Night Train (level 1)** — [levels](docs/tasks/levels.md) (items 4a–4k)
 - [x] **Body lighting settled** (owner, 2026-09-28): LIGHT LAYERS panel (`light-layers.ts`) — every body-lighting

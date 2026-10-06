@@ -1,5 +1,18 @@
 # The head split (part B) Implementation Plan
 
+> **Status (2026-10-05): built. Tasks B1 to B9 are done.** Branch `claude/head-cleaving-effect-ef9515`; draft PR goblincore/blud#31 tracks `claude/head-explosion-effect-d6231e`. The checkboxes below were not ticked as the work went: this block is the status.
+>
+> **Read first:** [spec §10](../specs/2026-10-04-axe-and-head-split-design.md) (what was built and why it differs) and the [handoff](../../dev-notes/2026-10-04-head-split/HANDOFF.md) (how to run, verify and tune it). Measurements are in the [notes](../../dev-notes/2026-10-04-head-split/NOTES.md).
+>
+> **Where the build diverged from the task bodies below:**
+> - **B1, B4: the split field.** The amendment at the end of this file overrides the B4 snippet: ball caps on the turning pieces, the region shell `C`, `REGION_MARGIN` 0.06, no `REGION_SKIN`. `head-split.ts`'s header is authoritative.
+> - **B3:** `HeadFrame.radius` is the skull's largest semi-axis. Head damage and the split were made mutually exclusive.
+> - **B5** also closes a split's record past 12.7 m (the region shell at range), which the plan did not foresee.
+> - **B7:** the skull is not one clip plane per half. It is per-piece copies with a ragged fracture edge, opening less than the flesh in stages (a follow table; not this plan's first numbers).
+> - **B8, the gate:** 14 scenarios and 79 checks, not the 8 scenarios listed. It measures on the float march target, not on screenshot pixels. It found that a chop on the upper chest opened the head; only a chop on head flesh is a head chop now (`chopOnHead`).
+> - **B8, the look:** the plan asked for a wider, more violent tune. What happened: a restyle of the cut faces was built and reverted at the owner's call (`d0d407d2`); the axe's table skips the thin crack and the kill kicks; the halves wobble with the body; a wet film under the flashlight was added and awaits the owner's verdict.
+> - **B9:** the test list in the task body is superseded by the handoff's "How to run and verify".
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax.
 
 **Goal:** an axe chop to a zombie's head splits the head open on a hinge. The halves are real SDF geometry: lit, cut-faced, and choppable again.
