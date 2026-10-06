@@ -306,3 +306,34 @@ describe('SegmentMeshCache', () => {
     cache.dispose();
   });
 });
+
+describe('organ sources extract at their own cell (organs as mesh, 2026-10-06)', () => {
+  const organSrc = createSkeletonSources(body, bound, { character: 'zombie', organs: true }).filter(s => s.kind === 'organ');
+
+  it('keys an organ at ORGAN_MESH_CELL and a bone at the cache cell', async () => {
+    const { ORGAN_MESH_CELL } = await import('./mesh');
+    const cache = new SegmentMeshCache();
+    expect(organSrc.length).toBeGreaterThan(0);
+    for (const s of organSrc) expect(cache.keyOf(s).endsWith(`@${ORGAN_MESH_CELL}`)).toBe(true);
+    expect(cache.keyOf(sources[0]!).endsWith(`@${MESH_CELL}`)).toBe(true);
+    cache.dispose();
+  });
+
+  it('extracts each organ segment complete, unclamped, and on the organ field', () => {
+    const cache = new SegmentMeshCache();
+    for (const s of organSrc) {
+      const m = cache.get(s);
+      expect(m.verts).toBeGreaterThan(500);
+      expect(m.overflow).toBe(false);
+      expect(m.clamped).toBe(false);
+      expect(m.droppedQuads).toBe(0);
+      const pos = m.geometry.getAttribute('position');
+      let worst = 0;
+      for (let i = 0; i < pos.count; i++) worst = Math.max(worst, Math.abs(s.distance([pos.getX(i), pos.getY(i), pos.getZ(i)])));
+      // Newton-pulled onto the zero set; creases between hard-min members hold the largest error.
+      expect(worst).toBeLessThan(0.001);
+      expect(cache.get(s)).toBe(m);
+    }
+    cache.dispose();
+  });
+});

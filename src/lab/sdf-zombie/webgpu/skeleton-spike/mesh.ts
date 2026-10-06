@@ -6,9 +6,9 @@
 // contract bounds — NOT tubes, NOT capsules: the same extraction
 // (surface-nets-cpu, band 0 = the true surface + Newton pull) the settled
 // chunk bake uses (chunk-bake-geometry.ts), so the mesh IS the authored
-// field's surface up to extraction-cell error. Organs never reach this
-// module (excluded by the contract); smooth-union cases do not exist on
-// the bone path (hard min only), so no procedural fallback is needed for
+// field's surface up to extraction-cell error. Organ sources (contract kind
+// 'organ', opt-in) extract the same way at a finer cell; smooth-union cases
+// do not exist on the inside-flesh path (hard min only), so no procedural fallback is needed for
 // field composition — the fallbacks that remain are whole-actor (chunks
 // stay procedural; deferred mode unsupported) and are counted by the
 // renderer, not hidden.
@@ -36,6 +36,9 @@ import type { Vec3 } from '../../types';
  *  cache pays once per revision. The limb two-anchor approximation (worst
  *  measured 1.26 mm, task-1.md) is 8x below this cell — invisible here. */
 export const MESH_CELL = 0.01;
+/** Organ sources (contract kind 'organ') extract at half the bone cell: a gut loop is a 2.2 cm tube, 4 cells across
+ *  at 1 cm and faceted; at 5 mm the zombie's two organ segments are about 4,000 vertices together, once per revision. */
+export const ORGAN_MESH_CELL = 0.005;
 
 export interface SegmentMesh {
   /** Cache key: `${revision}@${cellSize}`. */
@@ -135,15 +138,20 @@ export class SegmentMeshCache {
   #maxExtractKey: string | null = null;
   constructor(readonly cellSize: number = MESH_CELL) {}
 
+  /** The extraction cell for a source: the cache's, or ORGAN_MESH_CELL for an organ source. */
+  cellOf(source: BoneFieldSource): number {
+    return source.kind === 'organ' ? Math.min(ORGAN_MESH_CELL, this.cellSize) : this.cellSize;
+  }
+
   keyOf(source: BoneFieldSource): string {
-    return `${meshBoneSource(source).revision}@${this.cellSize}`;
+    return `${meshBoneSource(source).revision}@${this.cellOf(source)}`;
   }
 
   get(source: BoneFieldSource): SegmentMesh {
     const key = this.keyOf(source);
     let m = this.#map.get(key);
     if (!m) {
-      m = extractSegmentMesh(source, this.cellSize);
+      m = extractSegmentMesh(source, this.cellOf(source));
       const at = performance.now();
       this.#extractCount++;
       this.#extractMs += m.bakeMs;

@@ -519,3 +519,117 @@ describe('the head split: the skull is drawn once per piece that owns part of it
     renderer.dispose(); cache.dispose();
   });
 });
+
+describe('organs as mesh (2026-10-06): organ sources draw on their own batch, only where a wound reaches them', () => {
+  const all = createSkeletonSources(body, bound, { character: 'zombie', organs: true, bodyYaw: () => bodyYaw });
+  const organSrc = all.filter(s => s.kind === 'organ');
+  const organsOf = (r: ReturnType<typeof createSegmentMeshRenderer>, owner: unknown) => r.drawn.filter(d => d.owner === owner && d.organ);
+  const belly = [{ pos: [0, 1.03, 0.12] as const, radius: 0.08 }];
+  const headShot = [{ pos: [0, 1.62, 0.1] as const, radius: 0.1 }];
+  const organMeshes = (r: ReturnType<typeof createSegmentMeshRenderer>) => r.object.children.filter(c => c.name === 'skeleton-organs') as THREE.InstancedMesh[];
+
+  it('organNeeded: exposed owner AND a reaching sphere; no reach list = no reach test', async () => {
+    const { organNeeded } = await import('./mesh-renderer');
+    const a = {}, b = {};
+    expect(organNeeded(a, undefined, undefined, [0, 0, 0], 0.1)).toBe(true);
+    expect(organNeeded(b, new Set([a]), undefined, [0, 0, 0], 0.1)).toBe(false);
+    expect(organNeeded(a, new Set([a]), null, [0, 0, 0], 0.1)).toBe(false);
+    expect(organNeeded(a, new Set([a]), [], [0, 0, 0], 0.1)).toBe(false);
+    expect(organNeeded(a, new Set([a]), [{ pos: [0.1, 0, 0], radius: 0.05 }], [0, 0, 0], 0.1)).toBe(true);
+    expect(organNeeded(a, new Set([a]), [{ pos: [1, 0, 0], radius: 0.05 }], [0, 0, 0], 0.1)).toBe(false);
+  });
+
+  it('a belly wound draws every organ segment once, on the organ material; a head wound and no wound draw none', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const gut = { id: 1 }, head = { id: 2 }, clean = { id: 3 };
+    bodyYaw = 0;
+    const reach = (o: object) => (o === gut ? belly : o === head ? headShot : null);
+    renderer.update([all, all, all], [gut, head, clean], undefined, new Set([gut, head]), undefined, undefined, reach);
+    expect(organSrc.length).toBeGreaterThan(0);
+    expect(organsOf(renderer, gut)).toHaveLength(organSrc.length);
+    expect(organsOf(renderer, head)).toHaveLength(0);
+    expect(organsOf(renderer, clean)).toHaveLength(0);
+    expect(renderer.stats.organs).toBe(organSrc.length);
+    // Their own batches: not the bone material, never a split copy, no eye.
+    const meshes = organMeshes(renderer);
+    expect(meshes).toHaveLength(organSrc.length);
+    const boneMesh = renderer.object.children.find(c => c.name === 'skeleton-segments') as THREE.InstancedMesh;
+    for (const m of meshes) {
+      expect(m.count).toBe(1);
+      expect(m.visible).toBe(true);
+      expect(m.material).not.toBe(boneMesh.material);
+      expect((m.material as THREE.Material).depthWrite).toBe(true);
+      expect(m.geometry.getAttribute('meshFeature')).toBeUndefined();
+    }
+    for (const d of organsOf(renderer, gut)) { expect(d.eye).toBe(false); expect(d.piece).toBeNull(); }
+    // The bones of the exposed owners still draw (the organ branch took nothing from them).
+    expect(renderer.drawn.filter(d => d.owner === head && !d.eye && !d.organ).length).toBeGreaterThan(3);
+    renderer.dispose();
+    cache.dispose();
+  });
+
+  it('the organ instance sits at its segment pose and follows the body yaw', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const owner = { id: 1 };
+    bodyYaw = 0;
+    renderer.update([all], [owner], undefined, new Set([owner]), undefined, undefined, () => belly);
+    const m0 = organsOf(renderer, owner).map(d => d.matrix.clone());
+    organSrc.forEach((s, k) => {
+      const p = s.pose();
+      expect(new THREE.Vector3().setFromMatrixPosition(m0[k]!).distanceTo(new THREE.Vector3(...p.origin))).toBeLessThan(1e-9);
+    });
+    bodyYaw = 1.2;
+    renderer.update([all], [owner], undefined, new Set([owner]), undefined, undefined, () => belly);
+    const q = new THREE.Quaternion(); organsOf(renderer, owner)[0]!.matrix.decompose(new THREE.Vector3(), q, new THREE.Vector3());
+    const q0 = new THREE.Quaternion(); m0[0]!.decompose(new THREE.Vector3(), q0, new THREE.Vector3());
+    expect(q.angleTo(q0)).toBeCloseTo(1.2, 3);
+    bodyYaw = 0;
+    renderer.dispose();
+    cache.dispose();
+  });
+
+  it('show.organs hides the organ batches and leaves the bones; a hidden (not shown) owner draws no organ', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const owner = { id: 1 };
+    renderer.show.organs = false;
+    renderer.update([all], [owner], undefined, new Set([owner]), undefined, undefined, () => belly);
+    for (const m of organMeshes(renderer)) expect(m.visible).toBe(false);
+    expect((renderer.object.children.find(c => c.name === 'skeleton-segments') as THREE.InstancedMesh).visible).toBe(true);
+    renderer.show.organs = true;
+    renderer.update([all], [owner], new Set<unknown>(), new Set([owner]), undefined, undefined, () => belly);
+    expect(organsOf(renderer, owner)).toHaveLength(0);
+    renderer.dispose();
+    cache.dispose();
+  });
+
+  it('a dead torso draws no organ; the bone-only source list draws none either', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const owner = { id: 1 };
+    const torso = body.bonePrims.find(b => b.op === 'organ')!.cluster;
+    const severed = { ...body, clusters: body.clusters.map((c, i) => (i === torso ? { ...c, alive: false } : c)) };
+    const sev = createSkeletonSources(severed, bound, { character: 'zombie', organs: true });
+    renderer.update([sev], [owner], undefined, new Set([owner]), undefined, undefined, () => belly);
+    expect(organsOf(renderer, owner)).toHaveLength(0);
+    renderer.update([sources], [owner], undefined, new Set([owner]), undefined, undefined, () => belly);
+    expect(organsOf(renderer, owner)).toHaveLength(0);
+    expect(renderer.stats.organs).toBe(0);
+    renderer.dispose();
+    cache.dispose();
+  });
+
+  it('setOrganLook takes a name or numbers and answers the values in force', async () => {
+    const { ORGAN_LOOKS } = await import('./mesh-organ');
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    expect(renderer.setOrganLook('bloody')).toEqual({ cfg: [...ORGAN_LOOKS.bloody.cfg], gloss: [...ORGAN_LOOKS.bloody.gloss] });
+    expect(renderer.organLook.cfg.value.x).toBe(ORGAN_LOOKS.bloody.cfg[0]);
+    expect(renderer.setOrganLook({ cfg: [0.1, 0.2, 0.3, 0] }).cfg).toEqual([0.1, 0.2, 0.3, 0]);
+    expect(renderer.setOrganLook().gloss).toEqual([...ORGAN_LOOKS.bloody.gloss]);
+    renderer.dispose();
+    cache.dispose();
+  });
+});
