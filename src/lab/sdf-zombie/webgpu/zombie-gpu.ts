@@ -21,6 +21,7 @@ import {
   REGION_MARGIN, SPLIT_REOPEN_FRAC, splitBound, splitDrawDistance, splitFrame, splitHoldBall, splitNearReach,
   type SplitWarp,
 } from '../head-split';
+import { SPLIT_BOUND, boundsSplit } from './split-ablate';
 import { packBody, PRIM_STRIDE, W_BONE, W_ORGAN } from '../pack';
 import { MAX_PRIMS, MAX_CLUSTERS, BONE_SEG_MAX, BASE_PRIM_STRIDE, bodyPrimStride } from '../validate';
 import { MAX_WOUNDS } from '../damage';
@@ -2645,7 +2646,7 @@ export function createZombieGpuView(
     //   the cone / depth pre-pass)      reads ROW_GROUP_BOUNDS, which stays the CLOSED sphere (exact).
     // The wound threat masks keep the closed spheres too (lastGroups): they are measured on the closed head.
     tileGroups = lastGroups;
-    const split = splitFrame(next.split);
+    const split = splitFrame(boundsSplit(next.split, SPLIT_BOUND.tiles));
     if (split) {
       const k4 = 4 * p.maxBlendK;
       tileGroups = lastGroups.map((g) => {
@@ -2796,8 +2797,9 @@ export function createZombieGpuView(
       }
     }
     // An open head's halves reach anywhere in the split's hold ball (head-split.ts splitHoldBall).
-    if (body_.split) {
-      const b = splitHoldBall(body_.split);
+    const boxSplit = boundsSplit(body_.split, SPLIT_BOUND.box);
+    if (boxSplit) {
+      const b = splitHoldBall(boxSplit);
       for (let i = 0; i < 3; i++) {
         min[i] = Math.min(min[i]!, b.centre[i]! - b.radius);
         max[i] = Math.max(max[i]!, b.centre[i]! + b.radius);

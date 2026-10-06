@@ -72,6 +72,7 @@ import { bendCtrl } from '../vec';
 import { boxReach, shellReach, strandReach } from '../extent';
 import type { BuiltBody, Vec3 } from '../types';
 import { splitFrame, splitSphereImages } from '../head-split';
+import { SPLIT_BOUND, boundsSplit } from './split-ablate';
 
 /**
  * How much bigger each chain sphere is than the capsule radius it covers.
@@ -195,7 +196,7 @@ export function buildOuterHullInstances(
     // THE HEAD SPLIT (head-split.ts): the prims above are the closed head's. An opened half is its closed flesh
     // turned rigidly about the hinge, cut faces included (the chains hold the closed head's inside too), so each of
     // this body's spheres that holds flesh of a half gets a copy turned with that half.
-    const split = splitFrame(body.split);
+    const split = splitFrame(boundsSplit(body.split, SPLIT_BOUND.hullOuter));
     if (split) {
       const end = out.length;
       for (let i = bodyStart; i < end; i++) {

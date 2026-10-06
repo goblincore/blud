@@ -7,6 +7,7 @@ import { ROW_WOUND, ROW_WOUND_CAP, ROW_WOUND_CUT, ROW_WOUND_FLAGS, ROW_WOUND_MET
 import { TORN } from '../../../torn-lips';
 import { CUT_SHADE } from '../../../cut-wound';
 import { MAX_WOUNDS } from '../../../damage';
+import { SPLIT_ABL, ablWgsl } from '../../split-ablate';
 
 // TORN LIPS (flail, spec §14.2, 2026-09-29). A wound whose flags.x integer part has
 // bit 3 (value 8, zombie-gpu.ts WOUND_FLAG.tear) is TORN: its ragged outline gains
@@ -70,7 +71,7 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
   // a crater. Tested BEFORE the loop (pinned by test): the whole point is
   // that a far sample pays nothing per-wound.
   if (length(p - woundBound.xyz) > woundBound.w) { return vec2<f32>(dIn, 0.0); }
-  let n = i32(gInstWoundCount);
+  let n = ${ablWgsl(`select(i32(gInstWoundCount), 0, (i32(gInstSplitR.y) & ${SPLIT_ABL.noFieldWounds}) != 0)`) || 'i32(gInstWoundCount)'};
   // PER-RAY WOUND LIST (counts2.w gate, 2026-09-07): with the gate ON the
   // loop iterates only the preloaded reachable set; with it OFF this is the
   // same iteration sequence as before (k == i, same break on n), so OFF is

@@ -25,6 +25,7 @@
 // that wants the list calls it THERE, for every fragment, and reads the result here: that form was built and is
 // clean. split-glisten.wgsl.test.ts pins the rule; scripts/lib/march-depth-guard.mjs is the gates' guard.
 import { REGION_MARGIN, SPLIT_SHADE } from '../../../../../head-split';
+import { SPLIT_ABL, SPLIT_FILM_OFF, ablWgsl } from '../../../../split-ablate';
 
 /** A number as a WGSL float literal (the cells' reciprocals rounded to the micro: 1 / 0.012 has no short decimal). */
 const f = (v0: number) => { const v = +v0.toFixed(6); return Number.isInteger(v) ? `${v}.0` : `${v}`; };
@@ -38,7 +39,7 @@ export const splitGlistenBlock = (G: Glisten = SPLIT_SHADE.glisten): string => (
   // face cuts carve and the flat caps around it (wm covers both), carry a wet film that catches the torch, or with
   // the torch off the lamp that keys the body, as tight highlights. Everything is behind splitIn: a closed body,
   // and a hit outside an open head's region sphere, run none of it.
-  if (splitIn) {
+  if (splitIn${ablWgsl(` && (splitAbl & ${SPLIT_ABL.noFilm}) == 0`)}) {
     // One march texel at the hit, in metres (the body grain's measure). An octave of the film's noise fades out as
     // its cell nears it, where it would crawl, and the whole film with the coarse one.
     let glisPix = max(2.0 * t * aaCfg.x, 1e-6);
@@ -100,4 +101,5 @@ export const splitGlistenBlock = (G: Glisten = SPLIT_SHADE.glisten): string => (
     }
   }` : '');
 
-export const SPLIT_GLISTEN_BLOCK = splitGlistenBlock();
+/** The shipped block; with `?splitfilm=0` (split-ablate.ts) the build without the film. */
+export const SPLIT_GLISTEN_BLOCK = splitGlistenBlock(SPLIT_FILM_OFF ? { ...SPLIT_SHADE.glisten, gain: 0 } : SPLIT_SHADE.glisten);

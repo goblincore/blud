@@ -6,6 +6,10 @@
 
 import { SKIN_NORMAL } from '../light/skin-detail-proto';
 import { NG_REASON_SPLIT } from '../../../../normal-gradient-reference';
+import { SPLIT_ABL, ablWgsl } from '../../../../split-ablate';
+
+/** The region test the normal reads: split-hit's, or in an ablation build its own (analytic normals forced). */
+const SPLIT_IN = ablWgsl(`(splitIn && (splitAbl & ${SPLIT_ABL.analyticNormal}) == 0)`) || 'splitIn';
 
 export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the normal, scaled by (1 - max(gloss, metal)) at
   // the point of application: a polished or machined prim has no pits. The
@@ -51,8 +55,8 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
   // differentiates mapBody, which is the split field. The reason (normal-gradient-reference.ts NG_REASON_SPLIT) is
   // reported only where the gradient was asked for: with the mode off the pixel reports what it always did.
   gNgDebugMask = u32(max(normalGradientCfg.z, 0.0));
-  if (normalGradientCfg.x > 0.5 && splitIn) { ngReason = ${NG_REASON_SPLIT}; }
-  if (normalGradientCfg.x > 0.5 && !splitIn) {
+  if (normalGradientCfg.x > 0.5 && ${SPLIT_IN}) { ngReason = ${NG_REASON_SPLIT}; }
+  if (normalGradientCfg.x > 0.5 && !${SPLIT_IN}) {
     // counts2.z + 64: owned wounds may go analytic where no limb won the re-fold.
     gNgOwnedOk = select(0.0, 1.0, gInstCounts2.z % 128.0 > 63.5 && hitRefold == 0.0);
     let noiseAmplitude = marchCfg.z * (1.0 - max(gloss, metal));
