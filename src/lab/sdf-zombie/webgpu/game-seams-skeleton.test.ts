@@ -77,37 +77,79 @@ describe('__sdfGame.meshSkeletonShow: draw or hide the bone meshes and the eyes'
 });
 
 describe('__sdfGame.skullDrawn: an actor\'s split skull copies among this frame\'s bone draws', () => {
+  // The renderer's batches as the seam reads them: one mesh a geometry, on a named material.
+  const geo = (position: object = {}) => ({ getAttribute: (name: string) => (name === 'position' ? position : undefined) });
+  const M = new THREE.Matrix4().makeTranslation(1, 2, 3), m = M.toArray();
   it('lists the copies by piece (bone or eye) and counts the actor\'s draws; a closed head has none; null without the renderer or the actor', () => {
     const a = { id: 7 }, b = { id: 8 };
-    const M = new THREE.Matrix4().makeTranslation(1, 2, 3), m = M.toArray();
-    const draw = (owner: unknown, eye: boolean, piece: 0 | 1 | 2 | null) => ({ owner, eye, piece, matrix: M });
-    const drawn = [draw(a, false, null), draw(a, false, 0), draw(a, false, 1), draw(a, false, 2), draw(a, true, 1), draw(a, true, 2), draw(b, false, null), draw(b, true, null)];
-    const seams = createSkeletonSeams({ world: { actors: [a, b] }, render: { segMeshRenderer: { drawn } } } as unknown as GameContext);
-    expect(seams.skullDrawn(7)).toEqual({ draws: 6, copies: [{ eye: false, piece: 0, matrix: m }, { eye: false, piece: 1, matrix: m }, { eye: false, piece: 2, matrix: m }, { eye: true, piece: 1, matrix: m }, { eye: true, piece: 2, matrix: m }] });
-    expect(seams.skullDrawn(8)).toEqual({ draws: 2, copies: [] });
+    const bone = geo(), boneSplit = geo(), eye = geo(), eyeSplit = geo();
+    const draw = (owner: unknown, geometry: unknown, piece: 0 | 1 | 2 | null) => ({ owner, eye: geometry === eye || geometry === eyeSplit, piece, matrix: M, geometry });
+    const drawn = [draw(a, bone, null), draw(a, boneSplit, 0), draw(a, boneSplit, 1), draw(a, boneSplit, 2), draw(a, eyeSplit, 1), draw(a, eyeSplit, 2), draw(b, bone, null), draw(b, eye, null)];
+    const children = [[bone, 'skeleton-bone'], [boneSplit, 'skeleton-bone-split'], [eye, 'skeleton-eye'], [eyeSplit, 'skeleton-eye-split']].map(([geometry, name]) => ({ geometry, material: { name } }));
+    const seams = createSkeletonSeams({ world: { actors: [a, b] }, render: { segMeshRenderer: { drawn, object: { children } }, skeletonSources: new Map() } } as unknown as GameContext);
+    const row = (eyeRow: boolean, piece: number | null, material: string) => ({ eye: eyeRow, piece, matrix: m, material, plate: null });
+    expect(seams.skullDrawn(7)).toEqual({
+      draws: 6,
+      copies: [row(false, 0, 'skeleton-bone-split'), row(false, 1, 'skeleton-bone-split'), row(false, 2, 'skeleton-bone-split'), row(true, 1, 'skeleton-eye-split'), row(true, 2, 'skeleton-eye-split')],
+      whole: [row(false, null, 'skeleton-bone')],
+    });
+    expect(seams.skullDrawn(8)).toEqual({ draws: 2, copies: [], whole: [row(false, null, 'skeleton-bone'), row(true, null, 'skeleton-eye')] });
     expect(seams.skullDrawn(9)).toBeNull();
     expect(createSkeletonSeams({ world: { actors: [a] }, render: { segMeshRenderer: null } } as unknown as GameContext).skullDrawn(7)).toBeNull();
+  });
+  it('names the plate of each bone drawn plate by plate, closed or as its twin\'s copy; the whole skull and an eye have none', () => {
+    const a = { id: 7 }, head = { segment: 'head' };
+    // A plate's split twin has a geometry of its own on the plate's position attribute.
+    const frontalAt = {}, mandibleAt = {};
+    const frontal = geo(frontalAt), mandible = geo(mandibleAt), mandibleTwin = geo(mandibleAt), merged = geo(), eye = geo();
+    const pieces = [{ id: 'frontal', geometry: frontal }, { id: 'mandible', geometry: mandible }];
+    const draw = (geometry: unknown, piece: 0 | 1 | 2 | null) => ({ owner: a, eye: geometry === eye, piece, matrix: M, geometry });
+    const drawn = [draw(frontal, null), draw(mandibleTwin, 0), draw(mandibleTwin, 2), draw(merged, null), draw(eye, null)];
+    const children = [[frontal, 'skeleton-plate'], [mandibleTwin, 'skeleton-plate-split'], [eye, 'skeleton-eye']].map(([geometry, name]) => ({ geometry, material: { name } }));
+    const seams = createSkeletonSeams({
+      world: { actors: [a] },
+      render: { segMeshRenderer: { drawn, object: { children } }, segMeshCache: { skullKit: { head: () => ({ pieces }) } }, skeletonSources: new Map([[a, { sources: [head] }]]) },
+    } as unknown as GameContext);
+    const out = seams.skullDrawn(7)!;
+    expect(out.copies.map(c => [c.plate, c.piece, c.material])).toEqual([['mandible', 0, 'skeleton-plate-split'], ['mandible', 2, 'skeleton-plate-split']]);
+    // A geometry no batch draws (none here for the merged skull) has no material to name.
+    expect(out.whole.map(c => [c.plate, c.eye, c.material])).toEqual([['frontal', false, 'skeleton-plate'], [null, false, null], [null, true, 'skeleton-eye']]);
   });
 });
 
 describe('__sdfGame.skullPlates / skullFragments: the anatomical skull\'s plates and the fragments in flight', () => {
   it('lists each fitted plate\'s pivot in the head segment\'s frame; null without the kit, the actor or its head', () => {
     const a = { id: 7 }, b = { id: 8 }, head = { segment: 'head' }, spine = { segment: 'axial:x-y' };
-    const pieces = [{ id: 'frontal', pivot: [0, 0.1, 0.06] }, { id: 'mandible', pivot: [0, 0.02, 0.05] }];
+    const pieces = [{ id: 'frontal', pivot: [0, 0.1, 0.06], min: [-0.05, 0.07, 0.03], max: [0.05, 0.17, 0.09] }, { id: 'mandible', pivot: [0, 0.02, 0.05], min: [-0.05, -0.02, 0.01], max: [0.05, 0.07, 0.09] }];
     const asked: unknown[] = [];
     const ctx = (kit: unknown) => ({
       world: { actors: [a, b] },
       render: { segMeshCache: kit ? { skullKit: kit } : {}, skeletonSources: new Map<unknown, unknown>([[a, { sources: [spine, head] }], [b, { sources: [spine] }]]) },
     }) as unknown as GameContext;
     const seams = createSkeletonSeams(ctx({ head: (s: unknown) => { asked.push(s); return { pieces }; } }));
-    expect(seams.skullPlates(7)).toEqual([{ id: 'frontal', pivot: [0, 0.1, 0.06] }, { id: 'mandible', pivot: [0, 0.02, 0.05] }]);
+    expect(seams.skullPlates(7)).toEqual(pieces);
     expect(asked).toEqual([head]);
-    // A copy: the caller cannot move the kit's own pivot.
-    expect(seams.skullPlates(7)![0]!.pivot).not.toBe(pieces[0]!.pivot);
+    // Copies: the caller cannot move the kit's own pivot or box.
+    for (const k of ['pivot', 'min', 'max'] as const) expect(seams.skullPlates(7)![0]![k]).not.toBe(pieces[0]![k]);
     expect(seams.skullPlates(8)).toBeNull();   // no head segment
     expect(seams.skullPlates(9)).toBeNull();   // no such actor
     expect(createSkeletonSeams(ctx(null)).skullPlates(7)).toBeNull();   // ?skull=sculpt
     expect(createSkeletonSeams(ctx({ head: () => null })).skullPlates(7)).toBeNull();   // a head the kit does not fit
+  });
+  it('skullShot hands one round\'s ray to the renderer\'s fractureSkull with the actor\'s sources; refuses a ray or a round that is not one', () => {
+    const a = { id: 7 }, sources = [{ segment: 'head' }];
+    const calls: unknown[][] = [];
+    const renderer = { fractureSkull: (...args: unknown[]) => { calls.push(args); return 1; } };
+    const seams = createSkeletonSeams({ world: { actors: [a] }, render: { segMeshRenderer: renderer, skeletonSources: new Map([[a, { sources }]]) } } as unknown as GameContext);
+    expect(seams.skullShot(7, [1, 2, 3], [0, 0, -1])).toBe(1);
+    expect(seams.skullShot(7, [1, 2, 3], [0, 0, -1], 'slug')).toBe(1);
+    expect(calls).toEqual([[a, sources, [1, 2, 3], [0, 0, -1], 'pellet'], [a, sources, [1, 2, 3], [0, 0, -1], 'slug']]);
+    for (const bad of [[[1, 2], [0, 0, -1]], [[1, 2, NaN], [0, 0, -1]], [[1, 2, 3], '0,0,-1'], [[1, 2, 3], [0, 0, -1], 'axe']]) {
+      expect((seams.skullShot as (...args: unknown[]) => unknown)(7, ...bad), JSON.stringify(bad)).toBe(false);
+    }
+    expect(calls).toHaveLength(2);
+    expect(seams.skullShot(9, [1, 2, 3], [0, 0, -1])).toBeNull();   // no such actor
+    expect(createSkeletonSeams({ world: { actors: [a] }, render: { segMeshRenderer: null } } as unknown as GameContext).skullShot(7, [1, 2, 3], [0, 0, -1])).toBeNull();
   });
   it('lists the skull fragments among the mesh gibs, oldest first, by plate', () => {
     const gib = (tag: string, name: string, pos: number[], vel: number[]) => ({ tag, object: { name }, state: { pos, vel } });

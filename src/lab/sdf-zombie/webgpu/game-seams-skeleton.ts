@@ -7,6 +7,7 @@
 // 2026-09-20 split; see the 2026-09-20-seams-leftover-split notes).
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
+import type * as THREE from 'three/webgpu';
 import type { GameContext } from './game-context';
 import { type Vec3 } from '../types';
 import { bodyBuildCacheStats } from './character-view';
@@ -104,24 +105,53 @@ export function createSkeletonSeams(ctx: GameContext) {
     /** skeleton=mesh diagnostics: among this frame's instanced bone draws, actor `id`'s copies of a split head (bone
      *  or eye, the piece each is clipped to: 0 the rest, 1 the + half, 2 the - half, and the world matrix it is drawn
      *  with, column-major), and how many draws it has in all. A closed head has no copies: it is drawn as it always
-     *  was. null without the mesh skeleton or the actor. */
+     *  was. `whole`: its draws that are not copies, in the same form with `piece` null. Every row names the material
+     *  its batch is drawn on (mesh-renderer.ts SEGMENT_MATERIALS) and, when the bone is one plate of the anatomical
+     *  skull (a skull that has lost plates is drawn plate by plate), the plate's id; `plate` is null for the whole
+     *  skull, any other bone and an eye. null without the mesh skeleton or the actor. */
     skullDrawn: (id: number) => {
       const a = ctx.world.actors.find(q => q.id === id), r = ctx.render.segMeshRenderer;
       if (!a || !r) return null;
       const mine = r.drawn.filter(d => d.owner === a);
-      return { draws: mine.length, copies: mine.filter(d => d.piece !== null).map(d => ({ eye: d.eye, piece: d.piece, matrix: d.matrix.toArray() })) };
+      const head = ctx.render.skeletonSources.get(a)?.sources.find(s => s.segment === 'head');
+      const plates = (head && ctx.render.segMeshCache?.skullKit?.head(head)?.pieces) || [];
+      // A split copy is drawn from its bone's twin geometry: instance data of its own on the bone's vertex data. The
+      // shared position attribute says which plate either is.
+      const plateOf = (g: THREE.BufferGeometry) => plates.find(p => p.geometry.getAttribute('position') === g.getAttribute('position'))?.id ?? null;
+      const materialOf = (g: THREE.BufferGeometry) => {
+        const batch = r.object.children.find(c => (c as THREE.InstancedMesh).geometry === g) as THREE.InstancedMesh | undefined;
+        return batch ? (batch.material as THREE.Material).name : null;
+      };
+      const row = (d: (typeof mine)[number]) => ({
+        eye: d.eye, piece: d.piece, matrix: d.matrix.toArray(), material: materialOf(d.geometry), plate: d.eye ? null : plateOf(d.geometry),
+      });
+      return { draws: mine.length, copies: mine.filter(d => d.piece !== null).map(row), whole: mine.filter(d => d.piece === null).map(row) };
     },
     meshEyeState: (bodyId?: number) => { const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId); return a && ctx.render.segMeshRenderer ? ctx.render.segMeshRenderer.eyeState(a) : null; },
     skullState: (bodyId?: number) => { const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q=>q.id===bodyId); return a && ctx.render.segMeshRenderer ? ctx.render.segMeshRenderer.skullState(a) : null; },
     /** skeleton=mesh diagnostics: the anatomical skull's plates as fitted to actor `bodyId`'s head
-     *  (anatomical-skull.ts), in SKULL_PIECES order: each plate's id and its pivot in the head segment's own frame,
-     *  the frame skullDrawn's matrices take to the world. A fragment is released from its plate's pivot. null without
-     *  the anatomical skull, the actor or its head. */
+     *  (anatomical-skull.ts), in SKULL_PIECES order: each plate's id, its pivot and its box (`min`, `max`) in the head
+     *  segment's own frame, the frame skullDrawn's matrices take to the world. A fragment is released from its
+     *  plate's pivot, and a ray that misses a plate's box cannot meet the plate. null without the anatomical skull,
+     *  the actor or its head. */
     skullPlates: (bodyId?: number) => {
       const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId);
       const head = a && ctx.render.skeletonSources.get(a)?.sources.find(s => s.segment === 'head');
       const fitted = head && ctx.render.segMeshCache?.skullKit?.head(head);
-      return fitted ? fitted.pieces.map(p => ({ id: p.id, pivot: [...p.pivot] })) : null;
+      return fitted ? fitted.pieces.map(p => ({ id: p.id, pivot: [...p.pivot], min: [...p.min], max: [...p.max] })) : null;
+    },
+    /** skeleton=mesh diagnostics: one round at actor `bodyId`'s anatomical skull, through the renderer's own
+     *  fractureSkull (mesh-renderer.ts: what a pellet's or a slug's impact calls first): the world ray `point` + t
+     *  `direction`, met where the skull is drawn. Nothing else of a hit happens: no wound, no damage to the actor, no
+     *  eye. Returns the plates released (three pellets on one plate, or one slug, break it); null without the mesh
+     *  skeleton or the actor; false, and nothing done, for a ray that is not two triples of finite numbers or a `kind`
+     *  that is neither round. */
+    skullShot: (bodyId: number, point: Vec3, direction: Vec3, kind: 'pellet' | 'slug' = 'pellet') => {
+      const a = ctx.world.actors.find(q => q.id === bodyId), r = ctx.render.segMeshRenderer;
+      if (!a || !r) return null;
+      const triple = (v: unknown) => Array.isArray(v) && v.length === 3 && v.every(x => Number.isFinite(x));
+      if (!triple(point) || !triple(direction) || (kind !== 'pellet' && kind !== 'slug')) return false;
+      return r.fractureSkull(a, ctx.render.skeletonSources.get(a)?.sources ?? [], [...point] as Vec3, [...direction] as Vec3, kind);
     },
     /** The live skull-fragment mesh gibs (game-mesh-gibs.ts, tag 'skull'), oldest first: the plate each was, its
      *  world position and its velocity. */

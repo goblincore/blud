@@ -89,6 +89,13 @@ import {
 import { skullOwnerAt, skullPieceAngle, skullSplitRayHit, type SkullHeadFrame } from './skull-split-hit';
 
 const MAX_WOUNDS_TEX = 64;
+/** The materials' names, by what each draws: a bone segment (the sculpted skull among them), a plate of the anatomical
+ *  skull and a seated eye, closed and as a split head's clipped copies. Diagnostics only: the skullDrawn seam reports
+ *  the one an instance's batch is drawn on, and three leaves a material's name out of its pipeline key. */
+export const SEGMENT_MATERIALS = {
+  bone: 'skeleton-bone', plate: 'skeleton-plate', eye: 'skeleton-eye',
+  boneSplit: 'skeleton-bone-split', plateSplit: 'skeleton-plate-split', eyeSplit: 'skeleton-eye-split',
+} as const;
 /** Updates a segment batch may sit unused before it is dropped (a stale revision's geometry). */
 const BATCH_IDLE_UPDATES = 120;
 
@@ -261,6 +268,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     picks: picksAttr, lights: listNode, listOn: u.lightListCfg.x, fill: fillAttr,
   }) as never, 1.0);
   const material = new MeshBasicNodeMaterial();
+  material.name = SEGMENT_MATERIALS.bone;
   material.colorNode = lit(surf, meshLook);
   let skullMaterial: MeshBasicNodeMaterial | null = null;
   // The anatomical plates' shading, in parts, for the closed material here and the split one below: the surface with
@@ -280,6 +288,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       look: vec4(u.look.x,u.look.y,mul(u.look.z,0.12),mul(u.look.w,0.10)),
     };
     skullMaterial = new MeshBasicNodeMaterial();
+    skullMaterial.name = SEGMENT_MATERIALS.plate;
     skullMaterial.colorNode = lit(plate.surface(positionWorld),plate.look,plate.normal(plate.texel()));
     skullMaterial.depthTest = true; skullMaterial.depthWrite = true;
     skullMaterial.side = THREE.DoubleSide;
@@ -293,6 +302,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   ]) eyeFns.push(wgslFn(src, eyeFns.slice()));
   const [eyeSurfaceFn, eyeEmissionFn] = [eyeFns[3]!, eyeFns[4]!];
   const eyeMaterial = new MeshBasicNodeMaterial();
+  eyeMaterial.name = SEGMENT_MATERIALS.eye;
   const eyeSurface = eyeSurfaceFn({ p: positionGeometry });
   const eyeEmission = eyeEmissionFn({ p: positionGeometry }) as unknown as { xyz: Node<'vec3'> };
   // Eyes keep the previous uniform look path exactly (u.look === the old
@@ -353,6 +363,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     return out;
   })() as never;
   const splitMaterial = new MeshBasicNodeMaterial();
+  splitMaterial.name = SEGMENT_MATERIALS.boneSplit;
   splitMaterial.colorNode = kept(() => lit(
     innerWall(splitSurf),
     vec4(u.look.x, u.look.y, mul(mul(u.look.z, splitGloss), MESH_SPEC_SCALE), mul(mul(mul(u.look.w, splitGloss), MESH_FRES_SCALE), front)),
@@ -360,6 +371,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   splitSided(splitMaterial);
   // A split eye: the eye's own surface outside, the same wall inside, and no glow from the back.
   const eyeSplitMaterial = new MeshBasicNodeMaterial();
+  eyeSplitMaterial.name = SEGMENT_MATERIALS.eyeSplit;
   eyeSplitMaterial.colorNode = kept(() => {
     const shaded = lit(innerWall(eyeSurface), u.look) as unknown as { xyz: Node<'vec3'> };
     return vec4(add(shaded.xyz, mul(eyeEmission.xyz, front)), 1.0);
@@ -378,6 +390,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     const cutBoneFn = wgslFn(MESH_SPLIT_CUT_BONE_WGSL), parts = plate;
     const fractureFn = wgslFn(MESH_SPLIT_FRACTURE_WGSL, [...fns.slice(0, 2), jagFn]);
     skullSplitMaterial = new MeshBasicNodeMaterial();
+    skullSplitMaterial.name = SEGMENT_MATERIALS.plateSplit;
     skullSplitMaterial.colorNode = kept(
       normal => lit(cutBoneFn({
         surface: parts.surface(clip.xyz) as never, keep: fractureFn({ q: clip.xyz, ...record }) as never, rim: splitLook.rim,

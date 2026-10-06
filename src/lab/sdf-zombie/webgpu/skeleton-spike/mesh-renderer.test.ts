@@ -21,7 +21,7 @@ import { bindRig, applyRig } from '../../rig-bind';
 import zombieSrc from '../../characters/zombie.blob?raw';
 import { createSkeletonSources } from './contract';
 import { SegmentMeshCache } from './mesh';
-import { createSegmentMeshRenderer, segmentDrawn } from './mesh-renderer';
+import { SEGMENT_MATERIALS, createSegmentMeshRenderer, segmentDrawn } from './mesh-renderer';
 import { headQuatOf } from '../../rig-bind';
 import {
   HEAD_SPLIT, forcedSplit, headFrameOf, rotAxis, skullFollow, skullSplitOf, skullWarpPoint, splitWarpOf,
@@ -588,6 +588,8 @@ describe('the head split: the skull is drawn once per piece that owns part of it
       const mats = [open, shut, otherOpen, otherShut].map(o => { const m = new Set(segs(renderer, o).map(d => matOf(renderer, d))); expect(m.size).toBe(1); return [...m][0]!; });
       const [plateSplit, plate, boneSplit, bone] = mats as [MeshBasicNodeMaterial, MeshBasicNodeMaterial, MeshBasicNodeMaterial, MeshBasicNodeMaterial];
       expect(new Set(mats).size).toBe(4);
+      // Each is named for what it draws (the skullDrawn seam reports the name).
+      expect(mats.map(m => m.name)).toEqual([SEGMENT_MATERIALS.plateSplit, SEGMENT_MATERIALS.plate, SEGMENT_MATERIALS.boneSplit, SEGMENT_MATERIALS.bone]);
       // Sidedness: the closed plates are two-sided already (they have thickness); so are their split copies. The clip
       // is the split materials' alone.
       expect(mats.map(m => m.side)).toEqual([THREE.DoubleSide, THREE.DoubleSide, THREE.DoubleSide, THREE.FrontSide]);
@@ -605,6 +607,8 @@ describe('the head split: the skull is drawn once per piece that owns part of it
       const eyeMats = new Set(eyeCopies.map(d => matOf(renderer, d)));
       expect(eyeMats.size).toBe(1);
       expect([...allCalls([...eyeMats][0]!)].sort()).toEqual(['boneShade', 'meshEyeEmission', 'meshEyeSurface', 'meshSplitClip', 'meshSplitInside']);
+      expect([[...eyeMats][0]!.name, matOf(renderer, eyes(renderer, shut)[0]!).name]).toEqual([SEGMENT_MATERIALS.eyeSplit, SEGMENT_MATERIALS.eye]);
+      expect(new Set(Object.values(SEGMENT_MATERIALS)).size).toBe(6);
       renderer.dispose(); cache.dispose();
     });
 
