@@ -127,10 +127,12 @@ describe('who reads the body where', () => {
     for (const world of ['calcNormal(p,', 'woundShadow(p, L,', 'levelShadow(p, n,', 'ambientAt(p, n,', 'mapBody(select(p + n * 0.06, p + L * 0.06, k == 0)',
       'let toLamp = spotPos - p;', 'bodyLights(p, n, -rd,'])
       expect(MARCH_BODY, world).toContain(world);
-    // pS is read by the body-anchored blocks only.
+    // pS is read by what is anchored to the body only: the two motion readers, and the wet film's head-side gate
+    // (where on the CLOSED head the hit lies: blocks/light/split-glisten.wgsl.ts). The film's lights read p.
     const light = noComments(MARCH_BODY_LIGHT).split('\n').filter(l => /\bpS\b/.test(l));
-    expect(light).toHaveLength(2);
-    for (const l of light) expect(l).toMatch(/prev\w*\.xyz - pS|mvPrev\.xyz - pS/);
+    expect(light).toHaveLength(3);
+    for (const l of light) expect(l).toMatch(/prev\w*\.xyz - pS|mvPrev\.xyz - pS|let glisRel = pS - gInstSplitH\.xyz;/);
+    expect(MARCH_BODY_LIGHT).toContain('let glisTo = spotPos - p;');
   });
 });
 

@@ -30,7 +30,9 @@
 //      frame); the same landmark on a forced head at the bone angles of the table's three stages (a small, a middle
 //      and a wide one); and the closed skull on a closed head.
 //   C. cost: draw time, untouched, open and closed again, at 0.6 m and 2 m (with its spread, not gated); the
-//      instrument's floor over the run; zero console errors and a clean gpuDiagnostics at the end of every boot.
+//      instrument's floor over the run; THE DEPTH GUARD over every capture of the run (each body texel, placed in the
+//      world by its depth, lies in front of the camera and inside some actor's proxy box: depthGuard); zero console
+//      errors and a clean gpuDiagnostics at the end of every boot.
 //   R. RANGE (its own boot): beyond the draw distance a split is drawn closed, flesh and skull; it opens again only
 //      inside the reopen distance, and holds its state at each stance.
 //   A. A BODY CHOP NEAR THE NECK (the axe gate's torso chop: on the upper chest, inside the flail's head region)
@@ -604,6 +606,45 @@ const syncCam = () => evaluate("__sdfGame.step(1, 0)");
  *  SETTLED frame, over the run (FLOOR). A frame read while the spring moves is not settled (`settled` false): the
  *  shadow maps trail it, and its two reads differ by up to 0.015. */
 const FLOOR = { captures: 0, colour: 0, depth: 0 };
+/** THE DEPTH GUARD, on every capture (readF). The target's alpha is the hit's clip depth, so each body texel is a
+ *  point in the world: the eye + (its distance along the view axis) x (the texel's ray). A texel is BAD when
+ *    - that distance is not positive and finite (the point is behind the camera, or nowhere), or
+ *    - the point lies outside EVERY actor's proxy box (the box the march rasterises and can alone hit inside: the
+ *      view's position +- its bodyHalf), grown by DEPTH_SLACK m and DEPTH_SLACK_FAR x the distance (a texel's own
+ *      footprint and the march's accept reach).
+ *  Of the bad ones, those whose clip depth is the WORLD ORIGIN's (within DEPTH_ORIGIN) are counted apart: a hit
+ *  written at (0, 0, 0) is the signature of the fault this guard was built on (NOTES, "Look: wet under the
+ *  flashlight": screen cells of an open head keeping their colour and taking the origin's depth). The guard does not
+ *  know the cause: any edit that puts a body texel where no body can be fails it. */
+const DEPTH = { captures: 0, texels: 0, behind: 0, outside: 0, origin: 0, worst: null };
+const DEPTH_SLACK = 0.05, DEPTH_SLACK_FAR = 0.03, DEPTH_ORIGIN = 1e-6;
+async function depthGuard(t) {
+  const g = await evaluate(`(() => { const c = __sdfGame.cameraWorld(); const d = (x, y) => { const p = __sdfGame.screenRayToWorld(x, y, 1); return [p[0] - c[0], p[1] - c[1], p[2] - c[2]]; };
+    const a = __sdfGame.screenRayToWorld(0, 0, 0.5), b = __sdfGame.screenRayToWorld(0, 0, 2);
+    return { c, f: d(0, 0), x: d(1, 0), y: d(0, 1), z1: __sdfGame.screenPosOf(a[0], a[1], a[2]).z, z2: __sdfGame.screenPosOf(b[0], b[1], b[2]).z, z0: __sdfGame.screenPosOf(0, 0, 0).z,
+      boxes: __sdfGame.actorList().map((q) => __sdfGame.zombie(q.id)).filter((q) => q && q.view && q.view.object).map((q) => { const p = q.view.object.position, h = q.view.uniforms.bodyHalf.value; return [p.x, p.y, p.z, h.x, h.y, h.z]; }) }; })()`);
+  // depth = A - B / distance along the view axis; a texel's ray is f + nx TX + ny TY per metre of that distance.
+  const B = (g.z2 - g.z1) / (1 / 0.5 - 1 / 2), A = g.z1 + B / 0.5;
+  const TX = sub(mul(g.x, 1 / dot(g.x, g.f)), g.f), TY = sub(mul(g.y, 1 / dot(g.y, g.f)), g.f);
+  let last = 0; const bad = { behind: 0, outside: 0, origin: 0 };
+  for (let y = 0; y < t.h; y++) for (let x = 0; x < t.w; x++) {
+    const z = t.f[(y * t.w + x) * 4 + 3]; if (z === t.miss) continue;
+    DEPTH.texels++;
+    const d = B / (A - z), nx = (x + 0.5) / t.w * 2 - 1, ny = 1 - (y + 0.5) / t.h * 2;
+    let why = null;
+    if (!(d > 0) || !Number.isFinite(d)) why = "behind";
+    else {
+      const p = [g.c[0] + d * (g.f[0] + nx * TX[0] + ny * TY[0]), g.c[1] + d * (g.f[1] + nx * TX[1] + ny * TY[1]), g.c[2] + d * (g.f[2] + nx * TX[2] + ny * TY[2])], slack = DEPTH_SLACK + DEPTH_SLACK_FAR * d;
+      const inBox = (b) => Math.abs(p[0] - b[0]) <= b[3] + slack && Math.abs(p[1] - b[1]) <= b[4] + slack && Math.abs(p[2] - b[2]) <= b[5] + slack;
+      if (!(last < g.boxes.length && inBox(g.boxes[last]))) { last = g.boxes.findIndex(inBox); if (last < 0) { last = 0; why = "outside"; } }
+    }
+    if (!why) continue;
+    bad[why]++; if (Math.abs(z - g.z0) <= DEPTH_ORIGIN) bad.origin++;
+    DEPTH.worst ??= { capture: DEPTH.captures + 1, texel: [x, y], why, clipDepth: z, distance: +d.toFixed(3), originDepth: +g.z0.toFixed(7) };
+  }
+  DEPTH.captures++; DEPTH.behind += bad.behind; DEPTH.outside += bad.outside; DEPTH.origin += bad.origin;
+  return bad;
+}
 const readOnce = async () => { const r = await evaluate("__sdfGameDebug.readMarchTarget()", 120000); return { w: r.w, h: r.h, f: new Float32Array(Uint8Array.from(Buffer.from(r.rgba32f, "base64")).buffer) }; };
 async function readF(settled = true) {
   const a = await readOnce(), t = await readOnce();
@@ -613,7 +654,9 @@ async function readF(settled = true) {
     depth = Math.max(depth, Math.abs(t.f[i + 3] - a.f[i + 3]));
   }
   if (settled) { FLOOR.captures++; FLOOR.colour = Math.max(FLOOR.colour, colour); FLOOR.depth = Math.max(FLOOR.depth, depth); }
-  return Object.assign(t, { miss: t.f[3], floor: { colour, depth } });
+  Object.assign(t, { miss: t.f[3], floor: { colour, depth } });
+  t.depthBad = await depthGuard(t);
+  return t;
 }
 const hitAt = (t, i) => t.f[i * 4 + 3] !== t.miss;
 /** A world point on the march target: [texel x, texel y, clip depth] (screenPosOf is the camera's own projection;
@@ -1483,6 +1526,8 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
 }
 check(FLOOR.colour <= FLOOR_COLOUR_MAX && FLOOR.depth <= FLOOR_DEPTH_MAX, `C: the instrument's floor over the run: the two reads of each of ${FLOOR.captures} settled captures differ by at most ${FLOOR.colour.toExponential(1)} in colour and ${FLOOR.depth.toExponential(1)} in clip depth (<= ${FLOOR_COLOUR_MAX}, ${FLOOR_DEPTH_MAX})`);
 const errs = consoleEvents.filter((e) => e.type === "error" || e.type === "exception");
+check(DEPTH.captures > 0 && DEPTH.behind === 0 && DEPTH.outside === 0,
+  `C: every body texel is where a body can be: of ${DEPTH.texels} over ${DEPTH.captures} captures, ${DEPTH.behind} lie behind the camera and ${DEPTH.outside} outside every actor's proxy box (+${DEPTH_SLACK} m, +${DEPTH_SLACK_FAR} x the distance); ${DEPTH.origin} of those at the world origin's depth${DEPTH.worst ? "; the first " + J(DEPTH.worst) : ""}`);
 check(errs.length === 0, `C: zero console errors or exceptions across the run (${errs.length}${errs.length ? ": " + J(errs.slice(0, 3)) : ""})`);
 const dirty = Object.entries(out.diag).filter(([, d]) => !d || d.lost || d.uncapturedCount !== 0);
 check(Object.keys(out.diag).length > 0 && dirty.length === 0, `C: gpuDiagnostics clean at the end of every boot (${Object.keys(out.diag).join(", ")}: no device loss, uncapturedCount 0${dirty.length ? "; DIRTY " + J(dirty) : ""})`);
