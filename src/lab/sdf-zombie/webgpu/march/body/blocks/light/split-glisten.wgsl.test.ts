@@ -6,6 +6,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { REGION_MARGIN, SPLIT_SHADE } from '../../../../../head-split';
+import { noise3 } from '../../../../../validate';
 import { MARCH_SURFACE } from '../../../../deferred-sdf';
 import { MARCH_BODY, REFINE_BODY } from '../../entry.wgsl';
 import { MARCH_BODY_LIGHT } from '../../light.wgsl';
@@ -136,7 +137,46 @@ describe('the gate: an open split\'s raw flesh, and nothing else', () => {
   });
 });
 
+// ---- THE FILM'S NORMAL, by hand (a twin of the block's construction, through validate.ts's twin of noise3) -------
+type V3 = [number, number, number];
+/** The film's lean at a rest anchor on a surface of normal n: the angle between the film's normal and n (degrees).
+ *  The two octaves at full strength (close up: no distance fade), no turned half. */
+function filmLean(anchor: V3, n: V3, g: { lump: number; lumpTilt: number; lumpFlat: number; fine: number; fineTilt: number }): number {
+  const off = (p: V3, k: number): V3 => [p[0] + k, p[1] + k, p[2] + k];
+  const A = anchor.map((v) => v * +(1 / g.lump).toFixed(6)) as V3, B = anchor.map((v) => v * +(1 / g.fine).toFixed(6)) as V3;
+  const lump = [noise3(A), noise3(off(A, 5)), noise3(off(A, 11))], fine = [noise3(off(B, 17)), noise3(off(B, 23)), noise3(off(B, 31))];
+  const tilt = lump.map((v, i) => v / (Math.abs(v) + g.lumpFlat) * g.lumpTilt + fine[i]! * g.fineTilt);
+  const d = tilt[0]! * n[0] + tilt[1]! * n[1] + tilt[2]! * n[2];
+  const t = [tilt[0]! - n[0] * d, tilt[1]! - n[1] * d, tilt[2]! - n[2] * d];
+  // normalize(n + t) . n = 1 / sqrt(1 + |t|^2): the lean's tangent is |t|.
+  return Math.atan(Math.hypot(t[0]!, t[1]!, t[2]!)) * 180 / Math.PI;
+}
+/** The lean's quantiles over three planes of the head (a cut plane, a level one, a slanted one), 25 600 anchors each. */
+function leanQuantiles(g: Parameters<typeof filmLean>[2]): { p5: number; median: number; p95: number } {
+  const xs: number[] = [];
+  for (const n of [[1, 0, 0], [0, 1, 0], [0.6, 0, 0.8]] as V3[])
+    for (let i = 0; i < 160; i++) for (let j = 0; j < 160; j++)
+      xs.push(filmLean([34.5 + 0.0011 * i * n[1] + 0.0007 * j * n[2], 1.6 + 0.0011 * i * (1 - n[1]), -0.9 + 0.0009 * j * (1 - Math.abs(n[2]))], n, g));
+  xs.sort((a, b) => a - b);
+  const q = (p: number) => xs[Math.floor(p * (xs.length - 1))]!;
+  return { p5: q(0.05), median: q(0.5), p95: q(0.95) };
+}
+
 describe('the film', () => {
+  it('THE LEAN: centred near the surface\'s normal with a tail toward grazing, so a face seen square on glints and a raked one still does', () => {
+    const now = leanQuantiles(G);
+    // Measured (5% / median / 95%): 14.5 / 39.3 / 54.8 degrees.
+    expect(now.median).toBeGreaterThan(25);
+    expect(now.median).toBeLessThan(40);
+    expect(now.p95).toBeLessThan(65);
+    expect(now.p95).toBeGreaterThan(45);
+    expect(now.p5).toBeLessThan(20);
+    // What it replaced (lumpTilt 3.2, lumpFlat 0.1, fineTilt 0.3) leant 60.9 / 72.2 / 76.4 degrees: a film that only
+    // catches a light raking across it, and is dry seen square on.
+    const was = leanQuantiles({ ...G, lumpTilt: 3.2, lumpFlat: 0.1, fineTilt: 0.3 });
+    expect(was.p5).toBeGreaterThan(55);
+    expect(was.median).toBeGreaterThan(70);
+  });
   it('its pattern is cut in the REST anchor (it rides the half, nothing swims) and turns out with the half', () => {
     expect(code).toContain(`let glisA = anchor * ${f(1 / G.lump)};`);
     expect(code).toContain(`let glisB = anchor * ${f(1 / G.fine)};`);

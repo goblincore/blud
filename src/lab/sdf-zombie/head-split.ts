@@ -163,7 +163,11 @@ export const HEAD_SPLIT = {
  *      the tilt per unit of noise on one axis. The tilt is projected onto the surface's tangent plane, so the lean's
  *      tangent is the length of what is left and the film's normal never turns into the surface.
  *    `lumpFlat`: the coarse octave is pushed off zero, v / (|v| + lumpFlat): the smaller, the fewer facets lie flat in
- *      the surface. A flat film is a mirror: all of it fires when it faces the light, none of it otherwise.
+ *      the surface (at 1 it is close to the plain noise, halved).
+ *    THE LEAN these give (the angle between the film's normal and the surface's; measured by the block's twin in
+ *      split-glisten.wgsl.test.ts): median 39 degrees, 5% under 15, 95% under 55. So a face seen square on has facets
+ *      that catch a torch beside the eye, and a face raked by the light still has some that do. (With `lumpTilt` 3.2
+ *      and `lumpFlat` 0.1 the median was 72 degrees: the film only glinted at a rake.)
  *    `fadeLo`, `fadeHi`: an octave fades out as its cell shrinks from `fadeHi` to `fadeLo` MARCH TEXELS (smaller, it
  *      would crawl), and the whole film with the coarse one. In metres that depends on the march's resolution: at the
  *      gate's (a 400 x 300 march target) the film is whole to about 2.4 m and gone by about 5 m, the fine octave
@@ -173,8 +177,8 @@ export const HEAD_SPLIT = {
 export const SPLIT_SHADE = {
   cutLo: 0.0015, cutHi: 0.004, shellLo: 0.0015, shellHi: 0.004, poreCut: 0.5, wet: 1,
   glisten: {
-    gain: 4, pow: 24, spill: 0.3, lamps: 0.45, lampPow: 20, rawLo: 0.3, rawHi: 0.8,
-    lump: 0.014, lumpTilt: 3.2, lumpFlat: 0.1, fine: 0.006, fineTilt: 0.3, fadeLo: 0.75, fadeHi: 1.5, edge: 0.01, horizon: 0.15,
+    gain: 2.6, pow: 40, spill: 0.3, lamps: 0.45, lampPow: 20, rawLo: 0.3, rawHi: 0.8,
+    lump: 0.014, lumpTilt: 2.4, lumpFlat: 1, fine: 0.006, fineTilt: 0.6, fadeLo: 0.75, fadeHi: 1.5, edge: 0.01, horizon: 0.15,
   },
 } as const;
 
