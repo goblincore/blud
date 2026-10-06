@@ -12,6 +12,7 @@ import { type Vec3 } from '../types';
 import { bodyBuildCacheStats } from './character-view';
 import { applyBoneMesh, applyOrganMode } from './game-render-leaves';
 import type { OrganLook, OrganLookName } from './skeleton-spike/mesh-organ';
+import { segmentBoundSphere } from './skeleton-spike/organ-reach';
 import { traceProjectile } from './game-weapon';
 import { sdBody } from '../validate';
 import { splitLookOk, type SplitLookSet } from './skeleton-spike/mesh-split';
@@ -115,8 +116,17 @@ export function createSkeletonSeams(ctx: GameContext) {
       return {
         mode: ctx.render.organMode, drawn: r ? r.stats.organs : 0, look: r ? r.setOrganLook() : null,
         tint: r ? r.organLook.tint.value.toArray() : null,
+        /** The owner (actor id) of each organ instance the last mesh update drew. */
+        drawnBy: r ? r.drawn.filter(d => d.organ).map(d => (d.owner as { id?: number } | null)?.id ?? -1) : [],
         packed: ctx.world.actors.map(a => ({ id: a.id, rows: a.view.uniforms.counts2.value.x })),
       };
+    },
+    /** Actor `id`'s organ segments (its contract sources of kind 'organ'): key, live, and the posed bound sphere the
+     *  reach test uses (organ-reach.ts). Empty for an actor with no organs, or without the mesh skeleton. */
+    organSegments: (bodyId: number) => {
+      const a = ctx.world.actors.find(q => q.id === bodyId);
+      const sources = a ? ctx.render.skeletonSources.get(a)?.sources ?? [] : [];
+      return sources.filter(s => s.kind === 'organ').map(s => ({ segment: s.segment, live: s.isLive(), ...segmentBoundSphere(s.bounds, s.pose()) }));
     },
     /** The organ mesh's look (mesh-organ.ts): one of ORGAN_LOOKS by name, or its numbers. null without the mesh
      *  skeleton. */
