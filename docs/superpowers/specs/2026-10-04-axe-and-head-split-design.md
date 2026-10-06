@@ -313,7 +313,7 @@ Built on `claude/head-cleaving-effect-ef9515`; draft PR goblincore/blud#31 track
   - **The depth guard** runs on every capture: each body texel, placed in the world by its depth, must lie in front of the camera and inside some actor's proxy box.
   - **To run it** (bash, not zsh; it needs its own servers):
     `bash -c 'export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up; node scripts/head-split-gate.mjs 5241 9241'`
-- **`scripts/axe-gate.mjs` (25 checks) and `scripts/cut-wound-gate.mjs` (30 checks) stay green,** as of 2026-10-05. The axe gate's K was restated for the split: the corpse keeps the split and its two cut faces, not three head cuts.
+- **`scripts/axe-gate.mjs` (26 checks: the 26th is the depth guard) and `scripts/cut-wound-gate.mjs` (30 checks) stay green,** as of 2026-10-05. The axe gate's K was restated for the split: the corpse keeps the split and its two cut faces, not three head cuts.
 - **The whole test tree** (`npx vitest run src/lab/sdf-zombie --exclude '**/cut-wound.test.ts'`): 511 files, as of 2026-10-05.
 
 ### 10.9 Costs, carried as debt
@@ -350,7 +350,7 @@ The owner (2026-10-05): the open-head cost "is a lot but we can figure out how t
 - **Look, known and left:** the skull is hollow and the gap empty after the kill; the fracture's teeth read as a regular saw up close; an off-centre split halves an eyeball; loose pixels at the slab's tip and speckle on the `face` preset's crown; the corpse's halves pass through the floor.
 
 **Follow-ups:**
-1. **The unexplained depth fault** (a follow-up task is filed). A build of the wet film that walked the light list a second time left whole 4 × 4 texel cells of an open head with the right colour and the world origin's depth. `bodyLights` is pure and those texels never ran the added call, so the mechanism is not known. It is worked around (the block does not walk the list). The gate's depth guard catches it whatever the cause, and a test pins the entry's count of `bodyLights(` at 2 as a tripwire.
+1. **The depth fault: bisected, rule pinned** (notes, "The depth fault, bisected"). On Apple's GPU, when only some fragments of a 4 × 4 block of the march target take a `bodyLights` call, the others come back with a zeroed ray and hit distance in the entry point: colour right, depth the world origin's. The fragments that took it were ones the march missed (a WGSL `discard` does not end the invocation). Rule: `bodyLights` only under conditions every fragment shares (`lightListCfg`), pinned in `split-glisten.wgsl.test.ts`; the gates' depth guard (`scripts/lib/march-depth-guard.mjs`) catches it whatever the cause. Open from it: a `return` after the miss `discard` in `MARCH_TRACE_POST` (not landed).
 2. **The `gRefoldBy` cross-slot leak.** The re-fold report is filed by piece, not by slot, so in a crowd pixel an open head's hit can read another slot's normal hint. It never touches the field. The fix moves what closed crowd pixels compute, so it is its own task with its own `march-hash` re-pin.
 3. **Optimise the open head** (§10.9). Not tried: a fixed piece order with a per-piece `continue`; flattening the pieces into the slot loop; caching a resting head's bounds.
 4. **The cut excess pass's costs** (§10.9).

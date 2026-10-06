@@ -67,6 +67,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { inflateSync, deflateSync } from "node:zlib";
+import { DEPTH_GUARD_PROBE, DEPTH_SLACK, DEPTH_SLACK_FAR, depthGuardTexels } from "./lib/march-depth-guard.mjs";
 const VITE = Number(process.argv[2] ?? 5241);
 const CDP = Number(process.argv[3] ?? 9241);
 /** Where the contact sheets go. A routine run writes them to scratch (.lab-tmp is ignored by git); SHEETS=1 writes the
@@ -606,44 +607,15 @@ const syncCam = () => evaluate("__sdfGame.step(1, 0)");
  *  SETTLED frame, over the run (FLOOR). A frame read while the spring moves is not settled (`settled` false): the
  *  shadow maps trail it, and its two reads differ by up to 0.015. */
 const FLOOR = { captures: 0, colour: 0, depth: 0 };
-/** THE DEPTH GUARD, on every capture (readF). The target's alpha is the hit's clip depth, so each body texel is a
- *  point in the world: the eye + (its distance along the view axis) x (the texel's ray). A texel is BAD when
- *    - that distance is not positive and finite (the point is behind the camera, or nowhere), or
- *    - the point lies outside EVERY actor's proxy box (the box the march rasterises and can alone hit inside: the
- *      view's position +- its bodyHalf), grown by DEPTH_SLACK m and DEPTH_SLACK_FAR x the distance (a texel's own
- *      footprint and the march's accept reach).
- *  Of the bad ones, those whose clip depth is the WORLD ORIGIN's (within DEPTH_ORIGIN) are counted apart: a hit
- *  written at (0, 0, 0) is the signature of the fault this guard was built on (NOTES, "Look: wet under the
- *  flashlight": screen cells of an open head keeping their colour and taking the origin's depth). The guard does not
- *  know the cause: any edit that puts a body texel where no body can be fails it. */
+/** THE DEPTH GUARD, on every capture (readF): each body texel, placed in the world by its depth, lies in front of the
+ *  camera and inside some actor's proxy box (scripts/lib/march-depth-guard.mjs has the rule, and what it was built
+ *  on). The run's totals; `worst` is the first bad texel, with its capture. */
 const DEPTH = { captures: 0, texels: 0, behind: 0, outside: 0, origin: 0, worst: null };
-const DEPTH_SLACK = 0.05, DEPTH_SLACK_FAR = 0.03, DEPTH_ORIGIN = 1e-6;
 async function depthGuard(t) {
-  const g = await evaluate(`(() => { const c = __sdfGame.cameraWorld(); const d = (x, y) => { const p = __sdfGame.screenRayToWorld(x, y, 1); return [p[0] - c[0], p[1] - c[1], p[2] - c[2]]; };
-    const a = __sdfGame.screenRayToWorld(0, 0, 0.5), b = __sdfGame.screenRayToWorld(0, 0, 2);
-    return { c, f: d(0, 0), x: d(1, 0), y: d(0, 1), z1: __sdfGame.screenPosOf(a[0], a[1], a[2]).z, z2: __sdfGame.screenPosOf(b[0], b[1], b[2]).z, z0: __sdfGame.screenPosOf(0, 0, 0).z,
-      boxes: __sdfGame.actorList().map((q) => __sdfGame.zombie(q.id)).filter((q) => q && q.view && q.view.object).map((q) => { const p = q.view.object.position, h = q.view.uniforms.bodyHalf.value; return [p.x, p.y, p.z, h.x, h.y, h.z]; }) }; })()`);
-  // depth = A - B / distance along the view axis; a texel's ray is f + nx TX + ny TY per metre of that distance.
-  const B = (g.z2 - g.z1) / (1 / 0.5 - 1 / 2), A = g.z1 + B / 0.5;
-  const TX = sub(mul(g.x, 1 / dot(g.x, g.f)), g.f), TY = sub(mul(g.y, 1 / dot(g.y, g.f)), g.f);
-  let last = 0; const bad = { behind: 0, outside: 0, origin: 0 };
-  for (let y = 0; y < t.h; y++) for (let x = 0; x < t.w; x++) {
-    const z = t.f[(y * t.w + x) * 4 + 3]; if (z === t.miss) continue;
-    DEPTH.texels++;
-    const d = B / (A - z), nx = (x + 0.5) / t.w * 2 - 1, ny = 1 - (y + 0.5) / t.h * 2;
-    let why = null;
-    if (!(d > 0) || !Number.isFinite(d)) why = "behind";
-    else {
-      const p = [g.c[0] + d * (g.f[0] + nx * TX[0] + ny * TY[0]), g.c[1] + d * (g.f[1] + nx * TX[1] + ny * TY[1]), g.c[2] + d * (g.f[2] + nx * TX[2] + ny * TY[2])], slack = DEPTH_SLACK + DEPTH_SLACK_FAR * d;
-      const inBox = (b) => Math.abs(p[0] - b[0]) <= b[3] + slack && Math.abs(p[1] - b[1]) <= b[4] + slack && Math.abs(p[2] - b[2]) <= b[5] + slack;
-      if (!(last < g.boxes.length && inBox(g.boxes[last]))) { last = g.boxes.findIndex(inBox); if (last < 0) { last = 0; why = "outside"; } }
-    }
-    if (!why) continue;
-    bad[why]++; if (Math.abs(z - g.z0) <= DEPTH_ORIGIN) bad.origin++;
-    DEPTH.worst ??= { capture: DEPTH.captures + 1, texel: [x, y], why, clipDepth: z, distance: +d.toFixed(3), originDepth: +g.z0.toFixed(7) };
-  }
-  DEPTH.captures++; DEPTH.behind += bad.behind; DEPTH.outside += bad.outside; DEPTH.origin += bad.origin;
-  return bad;
+  const bad = depthGuardTexels(t, await evaluate(DEPTH_GUARD_PROBE));
+  if (bad.worst) DEPTH.worst ??= { capture: DEPTH.captures + 1, ...bad.worst };
+  DEPTH.captures++; DEPTH.texels += bad.texels; DEPTH.behind += bad.behind; DEPTH.outside += bad.outside; DEPTH.origin += bad.origin;
+  return { behind: bad.behind, outside: bad.outside, origin: bad.origin };
 }
 const readOnce = async () => { const r = await evaluate("__sdfGameDebug.readMarchTarget()", 120000); return { w: r.w, h: r.h, f: new Float32Array(Uint8Array.from(Buffer.from(r.rgba32f, "base64")).buffer) }; };
 async function readF(settled = true) {

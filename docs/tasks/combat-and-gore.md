@@ -20,10 +20,12 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
     base are body chops now, for every character.
   - **Debt:** an open head costs about +6 to +8 ms at 0.6 m and +0.6 to +1.6 ms at 2 m. A split is drawn closed past
     12.7 m.
-  - **Follow-ups, open:** the unexplained depth fault (worked around; the gate has a depth guard; a task is filed), the
+  - **Follow-ups, open:** a `return` after the march's miss `discard` (from the depth fault's bisect: the fault is
+    `bodyLights` called under a per-fragment condition on Apple's GPU, reached by missed fragments that keep running;
+    the rule is pinned and the gates have a depth guard; NOTES, "The depth fault, bisected"), the
     `gRefoldBy` cross-slot leak, something in the gap (a brain), the slug opening the split. Full lists: spec section
     10.10.
-  - **Gates (as of 2026-10-05):** `scripts/head-split-gate.mjs` (79 checks), `scripts/axe-gate.mjs` (25),
+  - **Gates (as of 2026-10-05):** `scripts/head-split-gate.mjs` (79 checks), `scripts/axe-gate.mjs` (26),
     `scripts/cut-wound-gate.mjs` (30).
 
   [Spec](../../docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 9: the axe as built; section 10:

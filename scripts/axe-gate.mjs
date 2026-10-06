@@ -17,7 +17,9 @@
 //      which headless Chrome cannot take, so that path is NOT exercised here), the chop lands on the zombie in front.
 //      Photos at rest, at the strike frame and after; the drawn axe's haft / head / grip clipping (share of pixels with
 //      a channel >= 250) and mean luma at rest and at the strike frame (the flail's blow-out measure).
-//   C. cost: draw time before / after 3 chops on one body (with its spread, not gated); zero console errors.
+//   C. cost: draw time before / after 3 chops on one body (with its spread, not gated); THE DEPTH GUARD at every
+//      screenshot of the run (each body texel of the float march target, placed in the world by its depth, lies in
+//      front of the camera and inside some actor's proxy box: scripts/lib/march-depth-guard.mjs); zero console errors.
 //   T. A TURNED BODY (its own boot): the ring walks until a zombie stands ~90 degrees round, then freezes; a torso chop's
 //      cut lands within 5 cm of the strike's hit point (__sdfGame.axe().last.points).
 //   F. (opt-in, ONLY=F) the H -> R -> L combo as film strips (OUT/F-<side>-strip.png), for the look loop; not gated.
@@ -28,6 +30,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { inflateSync, deflateSync } from "node:zlib";
+import { DEPTH_GUARD_PROBE, depthGuardLine, depthGuardTexels } from "./lib/march-depth-guard.mjs";
 const VITE = Number(process.argv[2] ?? 5241);
 const CDP = Number(process.argv[3] ?? 9241);
 const OUT = process.env.OUT ?? "docs/dev-notes/2026-10-04-axe/gate";
@@ -152,6 +155,22 @@ function cropRgb(img, cx, cy, w, h) {
 }
 
 const ndcPx = (n) => [S.rect.x + (n[0] + 1) * 0.5 * S.rect.w, S.rect.y + (1 - n[1]) * 0.5 * S.rect.h];
+/** THE DEPTH GUARD, at every screenshot (scripts/lib/march-depth-guard.mjs has the rule, and the fault it was built
+ *  on): each body texel of the float march target, placed in the world by its depth, lies in front of the camera and
+ *  inside some actor's proxy box. Two reads, as the head-split gate's captures are: readMarchTarget draws a frame of
+ *  its own, and a pair keeps the render-side clocks on the phase the photos were shot on. A miss is alpha exactly 1
+ *  (the clear value). NOT S's screenshots: the first-person axe and hands are marched into the same target, and they
+ *  are bodies with no actor's box. */
+const DEPTH = { captures: 0, texels: 0, behind: 0, outside: 0, origin: 0, worst: null };
+async function depthGuard(name) {
+  if (name?.startsWith("S-")) return;
+  await evaluate("__sdfGameDebug.readMarchTarget()", 120000);
+  const r = await evaluate("__sdfGameDebug.readMarchTarget()", 120000);
+  const f = new Float32Array(Uint8Array.from(Buffer.from(r.rgba32f, "base64")).buffer);
+  const bad = depthGuardTexels({ w: r.w, h: r.h, f, miss: 1 }, await evaluate(DEPTH_GUARD_PROBE));
+  if (bad.worst) DEPTH.worst ??= { capture: name ?? DEPTH.captures + 1, ...bad.worst };
+  DEPTH.captures++; DEPTH.texels += bad.texels; DEPTH.behind += bad.behind; DEPTH.outside += bad.outside; DEPTH.origin += bad.origin;
+}
 /** Screenshots lag hand-stepped frames by one: lock the sim, re-render twice, then shoot. The lock keeps the sim
  *  still (renderLock), so a capture never advances a frame. */
 async function capture(name) {
@@ -159,6 +178,7 @@ async function capture(name) {
   await evaluate("__sdfGame.step(1, 1 / 60)");
   await evaluate("__sdfGame.step(1, 1 / 60)");
   const s = await send("Page.captureScreenshot", { format: "png" });
+  await depthGuard(name);
   await evaluate("__sdfGame.setRenderLock(false)");
   const buf = Buffer.from(s.result.data, "base64");
   if (name) { writeFileSync(`${OUT}/${name}.png`, buf); console.log(`  shot ${OUT}/${name}.png`); }
@@ -207,6 +227,7 @@ async function boot(label) {
   // scene differs from boot to boot.
   await evaluate(`(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setLightTime(0); __sdfGame.setDemoHold(true); __sdfGame.setProbeBlend(1); __sdfGame.setProbeFall(1); __sdfGame.setFieldStyle("off"); return 1; })()`);
   for (let i = 0; i < 90; i++) await evaluate("__sdfGame.step(1, 1 / 60)");
+  await evaluate("__sdfGame.installDebugProbe()");
   console.log(`[${label}] ready; room ${ROOM} (${pool.length} zombies); warm ${JSON.stringify(wb)}`);
   console.log(`[${label}] pool yaws (deg): ${pool.map((z) => `${z.id}:${(z.yaw * 180 / Math.PI).toFixed(1)}`).join(" ")}`);
 }
@@ -578,6 +599,7 @@ try {
     if (c) cropOut(img, c, 260, 320, "T-after-crop");
   }
 } finally { closeSession(S); }
+check(DEPTH.captures > 0 && DEPTH.behind === 0 && DEPTH.outside === 0, depthGuardLine(DEPTH));
 const errs = consoleEvents.filter((e) => e.type === "error" || e.type === "exception");
 check(errs.length === 0, `zero console errors or exceptions (${errs.length}${errs.length ? ": " + J(errs.slice(0, 3)) : ""})`);
 console.log(`\nsummary: ${J(out)}`);

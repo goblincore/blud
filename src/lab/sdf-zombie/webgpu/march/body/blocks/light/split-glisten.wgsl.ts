@@ -13,12 +13,16 @@
 // The light tail only (the march and its refine twin, the game's default entries): the deferred surface entry has no
 // light tail and does not carry it.
 //
-// THE LIST IS NOT WALKED HERE (no bodyLights call), and split-glisten.wgsl.test.ts holds the entry's count of calls.
-// A build of this block that walked the list off the film's normal showed an UNEXPLAINED DEPTH FAULT: whole 4 x 4
-// texel cells of an open head kept their colour and took the world origin's depth. bodyLights is pure and those
-// texels never ran the added call, so that is no rule about bodyLights: the pin is a tripwire, the guard is
-// scripts/head-split-gate.mjs depthGuard, and the record is docs/dev-notes/2026-10-04-head-split/NOTES.md, "Look: wet
-// under the flashlight".
+// THE LIST IS NOT WALKED HERE, AND MUST NOT BE FROM INSIDE THIS BLOCK. A build that called bodyLights behind the raw
+// gate (off the film's normal) left texels of an open head with their colour right and the WORLD ORIGIN's depth. The
+// cause, bisected (docs/dev-notes/2026-10-04-head-split/NOTES.md, "The depth fault, bisected"): on Apple's GPU, when
+// only some fragments of a 4 x 4 block of the target take a bodyLights call, the others come back with a zeroed ray
+// and hit distance in the entry point. The fragments that took it were ones the march MISSED: a WGSL discard does not
+// end the invocation, so a missed fragment runs the whole light tail on garbage, and garbage passes this block's
+// gate. bodyLights is pure; the fault is below the shader source (the Metal compile or the GPU). So the rule is about
+// WHERE it is called: only under conditions every fragment of a draw shares (lightListCfg), as light-list.wgsl.ts
+// does. A film that wants the list calls it THERE, for every fragment, and reads the result here: that form was
+// built and is clean. split-glisten.wgsl.test.ts pins the rule; scripts/lib/march-depth-guard.mjs is the gates' guard.
 import { REGION_MARGIN, SPLIT_SHADE } from '../../../../../head-split';
 
 /** A number as a WGSL float literal (the cells' reciprocals rounded to the micro: 1 / 0.012 has no short decimal). */

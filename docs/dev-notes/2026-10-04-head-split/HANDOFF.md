@@ -106,7 +106,7 @@ parameters are passed in (`WobbleParams`); nothing writes to the constant.
 Highlights over an open split's raw surfaces (the pit and the caps), off a normal of its own. It keeps to the opened
 head: above the hinge plane and inside the hold ball, so a chest wound on a zombie whose head is open does not take
 it. Nothing outside an open split's region changes. The deferred surface entry does not carry it; the game's default
-entries do.
+entries do. It does not walk the light list, and must not from inside its gate (follow-up 1).
 
 **Seams** (`__sdfGame.…`; `webgpu/game-seams-fire.ts`, `webgpu/game-seams-skeleton.ts`):
 
@@ -141,7 +141,7 @@ bash -c 'export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; 
 | Gate | Checks (as of 2026-10-05) | Notes |
 | --- | --- | --- |
 | `scripts/head-split-gate.mjs` | 79 | Scenarios S, W, K, O, L, F, M, R, A, H, J, B, T, C. Five boots. `ONLY=S,K` runs a subset (W and K need S). |
-| `scripts/axe-gate.mjs` | 25 | A, D, K, S, C, T. |
+| `scripts/axe-gate.mjs` | 26 | A, D, K, S, C, T. The 26th is the depth guard. |
 | `scripts/cut-wound-gate.mjs` | 30 | |
 
 - **Photos.** The head-split gate writes its sheets to `.lab-tmp/head-split-gate`; `SHEETS=1` rewrites the tracked
@@ -157,8 +157,10 @@ bash -c 'export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; 
   overshoot and the table's crack / split.
 - **After a thaw, wait for the wobble.** The gate calls `restWobble` before it measures a rest angle. A new scenario
   that thaws must do the same. Let the spring settle between chops.
-- **The depth guard** (`depthGuard`, every capture): each body texel, placed in the world by its depth, must lie in
-  front of the camera and inside some actor's proxy box. It is there for the depth fault (follow-ups, below).
+- **The depth guard** (`scripts/lib/march-depth-guard.mjs`; the head-split gate runs it on every capture, the axe
+  gate at every screenshot but S's): each body texel, placed in the world by its depth, must lie in front of the
+  camera and inside some actor's proxy box. It is there for the depth fault (follow-ups, below). Only the head-split
+  gate's cameras see that fault on a faulty build; the axe gate's do not.
 - **What the gate does not guard:** the proxy box's growth (`fit`) and `splitBound`'s growth of the cluster and tile
   spheres. No gate camera sees them fail; their unit tests hold them (`head-split-bounds.test.ts`,
   `zombie-gpu.test.ts`). The cost (C) is reported, not gated.
@@ -258,13 +260,18 @@ report there cost 0.5 ms on every closed body.
 
 ## Follow-ups
 
-1. **The unexplained depth fault in the light tail** (a follow-up task is filed; NOTES, "Look: wet under the
-   flashlight"). A build of the wet film that walked the light list a second time left whole 4 × 4 texel cells of an
-   open head (of the 400 × 300 march target) with their colour right and the WORLD ORIGIN's depth: rectangular
-   notches. `bodyLights` is pure and those texels never ran the added call, so it is no rule about `bodyLights`.
-   Something zeroes the hit position, the mechanism is not known, and another edit to the light tail could bring it
-   back. Worked around: the block does not walk the list. The gate's depth guard catches it whatever the cause, and
-   the count of `bodyLights(` in the entry is pinned at 2 as a tripwire.
+1. **The depth fault in the light tail: bisected, rule pinned** (NOTES, "The depth fault, bisected"). On Apple's GPU,
+   when only some fragments of a 4 × 4 block of the march target take a `bodyLights` call, the others come back with
+   a zeroed ray and hit distance in the entry point: colour right, depth the WORLD ORIGIN's (rectangular notches).
+   The fragments that took the call were ones the march missed: a WGSL `discard` does not end the invocation, so a
+   missed fragment runs the whole light tail on garbage. The rule: call `bodyLights` only under conditions every
+   fragment shares (`lightListCfg`); a block that wants the list per fragment calls it for every fragment and gates
+   the use (built, clean). `split-glisten.wgsl.test.ts` pins that; the gates' depth guard
+   (`scripts/lib/march-depth-guard.mjs`) catches the fault whatever its cause. The cause proper is below the shader
+   source (Metal's compile or the GPU) and was not reached. **Open from it:** a `return` after the miss `discard` in
+   `MARCH_TRACE_POST` (bit-identical on three captures, it took the fault off every silhouette cell, and it would
+   stop every missed fragment paying for the post-hit chain; not landed, it wants its own check set and a cost
+   measure).
 2. **`gRefoldBy` is indexed by piece, not slot.** In a crowd pixel another slot's re-fold win can leak into an open
    slot's normal hint. It never touches the field. The fix moves what closed crowd pixels compute, so it is its own
    task with its own `march-hash` re-pin.
