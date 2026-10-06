@@ -4,7 +4,7 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
 
 ## Cut wounds and the head split — designed 2026-10-03
 
-- [~] **The axe (slot 7) and the head split — built 2026-10-05; owner playtested; draft PR goblincore/blud#31 (branch
+- [~] **The axe (slot 7) and the head split — built 2026-10-05; owner playtested; PR goblincore/blud#31 (branch
   `claude/head-cleaving-effect-ef9515`). The wet film under the flashlight is the owner's pick (C, the boldest of `look/14-wet-variants.jpg`, 2026-10-06).** An H / R / L
   chop combo, 1.8 m reach shared with the flail, its own light list. Body chops stamp cut wounds (kerf 0.025 since the
   excess pass). Pose and look suggestions for the axe itself are left for the owner (spec section 9, axe notes).

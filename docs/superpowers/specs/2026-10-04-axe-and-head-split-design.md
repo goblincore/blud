@@ -222,7 +222,7 @@ The march step is clamped at the bisector (`min(d, distance to the bisector)`), 
 
 ## 10. As built (part B, 2026-10-05)
 
-Built on `claude/head-cleaving-effect-ef9515`; draft PR goblincore/blud#31 tracks `claude/head-explosion-effect-d6231e`. Every measurement behind this section is in the [notes](../../dev-notes/2026-10-04-head-split/NOTES.md). How to run, verify and tune it is in the [handoff](../../dev-notes/2026-10-04-head-split/HANDOFF.md). Where this section and §5 differ, this section is what the code does.
+Built on `claude/head-cleaving-effect-ef9515`; PR goblincore/blud#31 (its remote branch `claude/head-explosion-effect-d6231e` was fast-forwarded to this work on 2026-10-06). Every measurement behind this section is in the [notes](../../dev-notes/2026-10-04-head-split/NOTES.md). How to run, verify and tune it is in the [handoff](../../dev-notes/2026-10-04-head-split/HANDOFF.md). Where this section and §5 differ, this section is what the code does.
 
 ### 10.1 The field: a union of three rigid pieces
 

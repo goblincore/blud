@@ -6,9 +6,9 @@ git (`git log --oneline 47db2bec..HEAD`).
 
 **Branch:** `claude/head-cleaving-effect-ef9515` (worktree `.claude/worktrees/head-cleaving-effect-ef9515`). It was
 fast-forwarded from `claude/head-explosion-effect-d6231e` at `e04577ce` and carries everything since.
-**Draft PR:** goblincore/blud#31 tracks `claude/head-explosion-effect-d6231e`, which is pushed up to `e04577ce`. As of
-2026-10-05 nothing after that commit is pushed. The plan is to fast-forward the PR's branch to this one. A session
-cannot write into another worktree (a hook blocks it), so do that from the PR branch's own worktree.
+**PR:** goblincore/blud#31, ready for review as of 2026-10-06. Its branch is `claude/head-explosion-effect-d6231e`
+on the remote; it was fast-forwarded to this work (`claude/head-cleaving-effect-ef9515`) on 2026-10-06. The local
+worktree of that name may still sit at `e04577ce`: pull it before working there.
 
 **The wet film is settled:** shown `look/14-wet-variants.jpg`, the owner chose C on 2026-10-06 ("I think C is
 fine"), the boldest of three, and C ships (`SPLIT_SHADE.glisten`: `gain` 4.5, `pow` 28). The quieter B and the
