@@ -132,6 +132,11 @@ page on every source edit. **Port 5273 is the owner's: never use or stop it.**
 **The three gates.** Headless capture only. Each needs its own servers, which come from `scripts/lab-servers.sh`; that
 needs bash, not zsh. Use ports 5241 / 9241.
 
+**Two sessions at once.** `lab-servers.sh` reuses whatever answers on its ports, so a second session on 5241 / 9241
+drives the first one's vite, which serves the other worktree. If another session may be live, take a private pair
+(5247 / 9247 were used on 2026-10-06) and check after `lab_servers_up` that `$lab_started_vite` and
+`$lab_started_chrome` are both set.
+
 ```bash
 bash -c 'export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up
   node scripts/head-split-gate.mjs 5241 9241
@@ -270,15 +275,25 @@ report there cost 0.5 ms on every closed body.
 1. **The depth fault in the light tail: bisected, rule pinned** (NOTES, "The depth fault, bisected"). On Apple's GPU,
    when only some fragments of a 4 × 4 block of the march target take a `bodyLights` call, the others come back with
    a zeroed ray and hit distance in the entry point: colour right, depth the WORLD ORIGIN's (rectangular notches).
-   The fragments that took the call were ones the march missed: a WGSL `discard` does not end the invocation, so a
-   missed fragment runs the whole light tail on garbage. The rule: call `bodyLights` only under conditions every
-   fragment shares (`lightListCfg`); a block that wants the list per fragment calls it for every fragment and gates
-   the use (built, clean). `split-glisten.wgsl.test.ts` pins that; the gates' depth guard
-   (`scripts/lib/march-depth-guard.mjs`) catches the fault whatever its cause. The cause proper is below the shader
-   source (Metal's compile or the GPU) and was not reached. **Open from it:** a `return` after the miss `discard` in
-   `MARCH_TRACE_POST` (bit-identical on three captures, it took the fault off every silhouette cell, and it would
-   stop every missed fragment paying for the post-hit chain; not landed, it wants its own check set and a cost
-   measure).
+   The rule: call `bodyLights` only under conditions every fragment shares (`lightListCfg`); a block that wants the
+   list per fragment calls it for every fragment and gates the use (built, clean). `split-glisten.wgsl.test.ts` pins
+   that; the gates' depth guard (`scripts/lib/march-depth-guard.mjs`) catches the fault whatever its cause. The cause
+   proper is below the shader source (Metal's compile or the GPU) and was not reached.
+   **The `return` after the miss `discard` landed 2026-10-06** (branch `claude/miss-discard-return`, off `a2d61133`;
+   NOTES, "The miss discard's return"), with the refine twin's three:
+   - **Parity is exact.** The six `march-hash` pins did not move, the three gates are green (79 / 26 / 30 on that branch; 80 / 27 / 30 merged), and base
+     against new is the same to the bit on 8 scenes and on the refine twin's two attachments.
+   - **It saves nothing.** Interleaved `timeDraws(120)` in a crowd and close up: every difference is inside the
+     noise (about 0.5 ms on one body, 1 to 2 ms on a crowd). Truly cold boots: 39.8 s new, 40.0 s base.
+   - **Why:** a probe (16 384 noise taps placed after the miss branch) costs 64 ms when hit fragments run it and
+     nothing when only missed fragments reach it. On this GPU a discarded fragment does not pay for the code after its
+     `discard`. Do not expect a speed-up from an early exit behind a `discard` on Metal; the returns are kept for the
+     shader's shape and for back ends that may keep running.
+   - **So the bisect's explanation is open again.** It said the fragments taking the gated call were missed ones
+     running the tail on garbage. They pay nothing for the tail, so that is not shown. The rule, its pin and the
+     guard do not depend on it.
+   - **Not shown:** the deferred surface entry. `?renderer=deferred` draws no flesh into its G-buffer on the unchanged
+     base and logs pipeline failures (follow-up 8).
 2. **`gRefoldBy` is indexed by piece, not slot.** In a crowd pixel another slot's re-fold win can leak into an open
    slot's normal hint. It never touches the field. The fix moves what closed crowd pixels compute, so it is its own
    task with its own `march-hash` re-pin.
@@ -289,6 +304,12 @@ report there cost 0.5 ms on every closed body.
 6. **The slug opening the split** (spec §2): not started.
 7. **The wet film in fast motion** is not measured. A walk's wobble does not make it sparkle (2.8% of highlight
    texels last one tick at 0.6 m).
+8. **The deferred game boot is broken** (found 2026-10-06, on `a2d61133` before any change): at
+   `/sdf-game.html?renderer=deferred` no body reaches the G-buffer (surface classes 1 and 17 only, no 18, at
+   `scripts/deferred-game-check.mjs`'s own stance), the router counts 9 SDF producers where that gate wants 10, and
+   the console has "Color target has no corresponding fragment stage output" and "structures must have at least one
+   member" pipeline failures. Seen on a `?renderer=deferred&seed=1&vhs=off` boot, waited on for 10 minutes; the
+   deferred gate itself was not run, and nothing was investigated.
 
 ## Known limits
 

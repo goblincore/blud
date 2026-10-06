@@ -1913,6 +1913,10 @@ thrown away at the end. Garbage passes the film's gate (`splitIn`, `glisRaw > 0`
 missed fragments of a block ran the added call while the hit fragments beside them did not. No visible texel ever ran
 it.
 
+> **2026-10-06: this paragraph's explanation is not established.** A cost probe found that a missed fragment pays
+> nothing for the code after its `discard` on this GPU, so it is not shown that it executes the call. The
+> observations stand; see "The miss discard's return", "What this does to the bisect's account".
+
 **The 4 x 4 cells are not a structure of ours.** The quarter-resolution depth prepass has that block size, but it is
 off by default and its target is never drawn in these boots. The bad texels sit inside cells of the target's 4-texel
 grid (not always the whole cell: the fragments of the cell that are bodies, or a 4 x 2 or 3 x 4 part of them), which
@@ -2033,11 +2037,10 @@ the GPU back end are not visible.
 
 ### Left open
 
-- **A `return` after the miss `discard`** (`trace.wgsl.ts`, `MARCH_TRACE_POST`). Not landed: it changes the shader
-  of every body and wants its own check set. For it: it takes the missed fragments out of the tail, which removed
-  every silhouette cell of the fault, and on the shipped block the three captures are the shipped ones to the bit
-  (hit mask, colour and depth, 0 texels differ). Every missed fragment of every proxy box runs the full post-hit
-  chain today; what that costs was not measured. The refine twin's three `discard`s have no `return` either.
+- **A `return` after the miss `discard`** (`trace.wgsl.ts`, `MARCH_TRACE_POST`). **Landed 2026-10-06**, with the
+  refine twin's three: "The miss discard's return", below. Bit-identical, and no cost saved: a missed fragment was
+  not paying for the post-hit chain. (As written on 2026-10-05: not landed, wanting its own check set; it removed
+  every silhouette cell of the fault, and the three captures were the shipped ones to the bit.)
 - **What takes the call in the three inside cells** of the three-quarter frame.
 - **Other helpers under per-fragment conditions.** The shipped shader shows no bad texel in any gate capture; nothing
   says another function could not behave as `bodyLights` did. The guard is what watches for it.
@@ -2098,4 +2101,197 @@ the home and round 3's rule is the rule.
 | `cut-wound-gate.mjs` | 30 checks, 0 failed |
 | `tsc --noEmit` | the `node:crypto` error only |
 | the whole tree (`--exclude '**/cut-wound.test.ts'`) and the module's tests | 511 files, 7468 tests passed, 1 skipped; the module's file, 14 tests passed (512 files in all) |
+
+
+## The miss discard's return (2026-10-06)
+
+The follow-up left open by the bisect above: a `return` behind the miss `discard` in `MARCH_TRACE_POST`, and behind the
+refine twin's three. It is in. The output is the same to the bit. **It saves no frame time and no compile time**, and a
+probe shows why: on this GPU a discarded fragment already paid nothing for the code after its `discard`. That also
+changes how the bisect's account should be read (below). Same machine (Apple M3, macOS 26.3.1, headless Chrome
+154.0.8037.93). Branch `claude/miss-discard-return`, off `a2d61133`.
+
+### What changed
+
+- **`trace.wgsl.ts`, `MARCH_TRACE_POST`:** `discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0);`, the form the setup's
+  discards already had. The near-miss write in front of it is untouched.
+- **`entry.wgsl.ts`, `REFINE_LOOP`:** its three discards return too. What follows each was read first:
+  - `refineCfg.x < 0.5`: the layer draws the refine pass only while `cfg.x > 0.5`, so no drawn frame reaches it.
+  - `wsum < 0.5`: the next statement divides by `wsum` (0 / 0 when no tap was this body's), then calls the field.
+  - the distance reject: the Newton steps, then the shared post and light tail.
+- **Nothing after any of the four can reach another fragment.** The march has no derivative and no implicit-LOD
+  sample: the shader modules the page really created were read back (a wrap on `createShaderModule`), and the 19 march
+  modules, the refine module and the 10 deferred surface modules hold 0 uses of `textureSample`, `dpdx`, `dpdy` or
+  `fwidth` (only `textureLoad`). There is no storage write in them either.
+- **The code that changed is those four returns and nothing else:** the two entries with their comments taken out
+  differ from `a2d61133`'s by exactly those lines.
+- **A test holds it** (`trace.wgsl.test.ts`, "every discard is followed by a return"): each `discard` in `MARCH_BODY`
+  (8), `REFINE_BODY` (11) and the deferred `MARCH_SURFACE` (8) has the return behind it.
+
+### Parity
+
+| Check | Result |
+| --- | --- |
+| `march-hash`, the six closed-body pins | none moved: default `d7392d52…` / wounded `76bd51aa…` (2 of 2 boots), crowd quad `0c71e712…` / `bf6836cd…`, per-body `470ff0b3…` / `f618070e…` |
+| `head-split-gate.mjs` | **79 checks, 0 failed**; the depth guard reads the same texels as on the base: 0 of 7 545 127 over 227 captures |
+| `axe-gate.mjs` | **26 checks, 0 failed** (0 of 430 557 body texels over 10 screenshots) |
+| `cut-wound-gate.mjs` | **30 checks, 0 failed** |
+| Base against new, one Chrome, the float march target of 8 scenes | **0 of 120 000 texels differ in every scene** (the raw bytes' sha1 is the same), hit masks equal |
+| The refine twin (`?refine=1&crowd=0`), one body at 0.7 m and at 2.5 m | both 800 x 600 attachments (colour and normal) the same to the bit: 163 616 and 33 101 accepted pixels |
+
+- **The base-against-new capture.** The base is a `git archive` of `a2d61133` served by its own vite. Both pages sit
+  in one headless Chrome with the head-split gate's boot and pins, the same camera set on both, each target read twice
+  and the second kept.
+- **Its 8 scenes:** the ring room from its corner (6 zombies); a closed head at 0.6 m and at 2 m; the same head split
+  open (`forceSplit(id, "middle", 0, 0, 1)`) from the front and three-quarter at 0.6 m; then 16 more zombies on
+  `spawnCrowd`'s 1.2 m grid, seen from the room's centre (7.5 m), from 1.2 m off the grid's edge, and from inside it.
+- **Silhouette texels were the worry** (a hit fragment whose value hangs on a missed neighbour's derivative). There is
+  no derivative to hang on, and no texel moved.
+- **The timing runs repeated the captures:** 19 more scene captures over four boots, all the same to the bit.
+
+### The cost: nothing
+
+`__sdfGame.timeDraws(120)` (awaited), base and new alternated on the two pages, six rounds a scene, the order flipped
+each round. The machine's load average was 1.0 to 3.4. Each cell is the median of the six; "new - base" is the median
+of the six paired differences, with their range.
+
+| Scene | Run 1 (base page booted first) | Run 2 (new page booted first) | Run 3 (base first) | Base against base |
+| --- | --- | --- | --- | --- |
+| Ring room from its corner | 15.65 / 16.05, +0.35 (0 to +1.0) | 16.2 / 14.9, -0.25 (-2.0 to 0) | 17.3 / 17.3, +0.25 (-0.6 to +2.3) | 0 (-0.4 to +1.6) |
+| Closed head, 0.6 m | 20.2 / 20.55, +0.45 (-0.4 to +1.4) | 26.1 / 26.1, 0 (-3.3 to +1.6) | 24.15 / 24.7, +0.4 (-2.3 to +4.1) | +0.15 (-0.3 to +0.5) |
+| Closed head, 2 m | 14.0 / 15.45, +1.4 (-0.1 to +1.8) | 15.9 / 15.1, -0.7 (-3.9 to +3.4) | 14.5 / 15.3, +1.05 (-0.7 to +2.7) | -0.3 (-1.3 to 0) |
+| Open split head, 0.6 m | 30.6 / 31.05, +0.25 (-1.7 to +2.2) | 35.5 / 35.45, -0.4 (-0.9 to +0.7) | 34.4 / 33.75, -0.45 (-1.6 to +1.2) | -0.3 (-2.6 to +1.2) |
+| Open split head, three-quarter | 21.7 / 21.55, -0.15 (-0.7 to +0.1) | | | |
+| Crowd from the room's centre | 88.7 / 79.0, -0.8 (-10.3 to -0.6) | 84.65 / 88.25, +0.1 (-10.7 to +9.1) | 79.7 / 79.45, -0.15 (-10.4 to +0.2) | 0 (-1.6 to +0.4) |
+| Crowd, 1.2 m off the grid's edge | 152.45 / 148.6, +0.35 (-7.7 to +2.8) | 168.4 / 168.2, +0.25 (-2.3 to +5.8) | see below, +1.55 (-1.6 to +13.2) | |
+| Crowd, inside the grid | 214.25 / 215.65, +1.35 (-1.4 to +1.6) | | | |
+
+Cells read "base ms / new ms, new - base (range)".
+
+- **No scene shows a saving.** Every median difference is inside the range of its own pairs, and inside what two
+  pages of the same build differ by (the last column).
+- **The sign follows the boot order, not the build.** On the single-body scenes the page booted second read 0.3 to
+  1.4 ms slower when it was the new build (runs 1 and 3) and 0.25 to 0.7 ms slower when it was the base (run 2).
+- **What this can resolve:** about 0.5 ms on the single-body scenes and 1 to 2 ms on the crowd. A saving smaller than
+  that would not show.
+- **How many fragments miss** (occupancy counters, the depth-winning fragment of each texel only, so a lower bound):
+
+  | Scene | Texels marched | Of them, misses |
+  | --- | --- | --- |
+  | Ring room from its corner | 16 686 | 4 718 (28%) |
+  | Closed head, 0.6 m | 45 702 | 14 694 (32%) |
+  | Closed head, 2 m | 12 660 | 2 960 (23%) |
+  | Open split head, 0.6 m | 57 826 | 27 238 (47%) |
+  | Open split head, three-quarter | 49 152 | 22 060 (45%) |
+
+  The counters do not cover the spawned crowd. Its scenes hold 13 878, 64 397 and 59 265 hit texels of 120 000.
+- **The level moves from boot to boot** (the closed head at 0.6 m read 20.2, 20.4, 26.1 and 24.2 ms on the base over
+  four boots), as every earlier cost note found. The pairs are what to read.
+- **The crowd from the room's centre has two levels,** 79 and 88 to 89 ms, and flips between them from one call to
+  the next on both builds and on the base-against-base pair. Its pair differences are near 0 or near 10.
+- **Run 3's crowd at the grid's edge:** its first three rounds read 183.5 / 168.0 / 165.0 on the base and 181.9 /
+  174.5 / 167.0 on the new build, its last three about 760 ms on both (753 to 767). Something outside the test; the
+  pairs still agree.
+
+**Cold compile** (truly cold: `scripts/boot-time.mjs`, base and new alternated, each boot with its own `hash13`
+nonce, 0.103461 to 0.103466, the file put back after; load 2.0 to 2.8):
+
+| Build | Warm-up ms | `drawOnce` ms |
+| --- | --- | --- |
+| base `a2d61133` | 39771, 39968, 40196 | 1619.8, 1635.6, 1616.0 |
+| new | 39760, 39743, 40359 | 1627.0, 1630.9, 1632.8 |
+
+No difference: the medians are 39968 and 39760 ms, and 1619.8 and 1630.9 ms with a 20 ms spread on the base.
+
+### Why nothing: a discarded fragment already cost nothing
+
+If missed fragments ran the post-hit chain, taking them out of it should have shown at 0.6 m, where a third of the
+marched texels miss. So the claim itself was tested. Three scratch builds of the base, each with a loop of 16 384
+`noise3` taps placed straight after the miss branch (still without a `return`). The loop's sum is added to `t`
+multiplied by 1e-30, so the compiler cannot drop it and the picture stays the base's (it did, to the bit). The closed
+head at 0.6 m, four interleaved rounds each:
+
+| The loop runs for | Median ms | Against | Difference (range of the pairs) |
+| --- | --- | --- | --- |
+| hit fragments only (`if (hit)`) | 80.95 | the base, 16.75 | **+64.2** (63.9 to 64.7) |
+| missed fragments only (`if (!hit)`) | 16.9 | the base, 17.05 | **-0.2** (-1.2 to +0.8) |
+| every fragment that gets there | 77.8 | the hit-only build, 81.15 | **-2.9** (-4.0 to -1.7) |
+
+- **The 31 008 hit texels pay 64.2 ms for the loop,** 2.07 microseconds each.
+- **The missed fragments pay nothing.** At least 14 694 of them are in that frame, 30 ms of loop at the same price.
+  Giving it to them alone costs nothing that can be measured, and giving it to every fragment costs no more than
+  giving it to the hit ones.
+- **So on this GPU the code after a `discard` is not paid for by the fragment that discarded.** The `return` had
+  nothing to save. Whether Metal's compiler turns `discard_fragment()` into an exit or the GPU stops the fragment
+  cannot be told from here.
+- **Two smaller probes read nothing and proved nothing** (512 taps for missed fragments, 128 for hit ones): 128 taps
+  on every hit fragment cost under 0.5 ms as well, so the loop was too small to see. The 16 384-tap hit-only build
+  is the control that makes the other two rows mean something.
+- **A timing taken while a page still compiles is useless.** One round of these ran while the Metal compiler service
+  was busy with a probe build's background pipelines, and the untouched base page read 98 ms in place of 17. The
+  harness now waits until that service has been idle for 6 s before it times anything.
+- **Measured on Metal only.** WGSL does not promise this: the language says the invocation goes on, and another back
+  end (the release is a wgpu port) may really run it. That is the reason to keep the returns, here and at the setup's
+  sites, which were not probed.
+
+### What this does to the bisect's account
+
+"The depth fault, bisected" says the fragments that took the added `bodyLights` call were missed ones, running the
+tail on garbage after their `discard`. What was observed there stands: the faulty build's bad texels, no visible
+texel taking the call, and the `return` clearing every silhouette cell (6 to 0, 121 to 28). **The explanation is not
+supported by the cost.** A missed fragment pays nothing for the tail, so it is not established that it executes the
+call at all. What the `return` certainly changes is the shape of the function the Metal compiler is given, and the
+fault is known to move with that (one of the four probe builds there made it vanish). So:
+
+- the rule is unchanged (`bodyLights` only under conditions every fragment shares), and so are its pin and the guard;
+- "which fragments take the call" is open again, for the silhouette cells as well as the three inside ones;
+- nothing here was run on the faulty build.
+
+### Not shown
+
+- **The deferred surface entry** (`MARCH_SURFACE`, the same trace text). `?renderer=deferred` draws no flesh into its
+  G-buffer on the unchanged base (classes 1 and 17 only, no 18, at the deferred gate's own stance) and logs pipeline
+  failures ("Color target has no corresponding fragment stage output", "structures must have at least one member"),
+  the same ones on both builds. So there was no body to compare. Its modules were created on both builds and the
+  test holds its 8 discards. The boot was `?renderer=deferred&seed=1&vhs=off`, waited on for 10 minutes; the
+  deferred gate itself was not run. Whatever is wrong there is older than this change.
+- **The refine boot** logs "structures must have at least one member" for three pipelines on the base and on the new
+  build alike; its captures are whole and equal.
+- **Other GPUs.** Everything above is one M3.
+
+### The check set
+
+| Check | Result |
+| --- | --- |
+| `march-golden -u` | `MARCH_TRACE_POST`, `REFINE_LOOP` and the three that embed them (`MARCH_BODY_TRACE`, `MARCH_BODY`, `REFINE_BODY`); run again after the comments were reworded |
+| `compile-census` (2 boots, twice: before and after the rewording) | phase ready, `uncapturedCount` 0, no device loss, all four boots. March module 331149 B -> 331523 B (83 fns; 48 B of it code, the rest the comment). The first two boots were warm (2.7 and 2.5 s: the bisect's scratch build had left the same Metal source in the OS cache); of the second two, one was cold (39.2 s) and one warm (2.6 s) |
+| `march-hash` | no pin moved, before and after the rewording (table above) |
+| cold boot pair | no difference (table above) |
+| `head-split-gate.mjs` / `axe-gate.mjs` / `cut-wound-gate.mjs` | 79 / 26 / 30 checks, 0 failed (taken before the rewording; the code is the same) |
+| `tsc --noEmit` | the `node:crypto` error only |
+| the whole tree (`--exclude '**/cut-wound.test.ts'`) | 511 files, 7469 tests passed, 1 skipped |
+
+**Ports.** A second session was running gates on 5241 / 9241 from another worktree while this was measured, and
+`lab-servers.sh` reuses whatever answers on its ports: the first gate run here attached to that session's servers
+(and stopped, because its Chrome failed the WebGPU probe). Everything above ran on 5247 / 9247 with a check that both
+servers were started by the run (`lab_started_vite` and `lab_started_chrome` set). Worth doing whenever two sessions
+may be live.
+
+### The merge (2026-10-06)
+
+Merged onto the line that holds the wet film's round 3 and the shared depth guard. Where the fault stands after it:
+
+- **(a) Bisected to its trigger:** `bodyLights` called under a per-fragment condition, on Apple's GPU.
+- **(b) Every discard returns:** the miss `discard` in `MARCH_TRACE_POST` and the refine twin's three, with the
+  setup's. In the merged text `MARCH_BODY` has 8 discards and 8 returns behind them, `REFINE_BODY` 11 and 11, and
+  both still carry the film's block as round 3 left it (the golden snapshot regenerated from the merged text:
+  `MARCH_TRACE_POST`, `REFINE_LOOP`, `MARCH_BODY_TRACE`, `MARCH_BODY`, `REFINE_BODY`).
+- **(c) The return did not explain the fault.** The cause is open: which fragments take the gated call is not
+  established.
+- **(d) The rule, its pin and the guard are unchanged.**
+
+The comment at the head of `split-glisten.wgsl.ts` still gave the first account (missed fragments running the tail)
+as the cause; it now says the cause is open. The gates' counts in this section (79 / 26) are that branch's: merged
+they are 80 / 27 / 30. The gates, `march-hash`, the census and the tree were run once on the final tree, with the
+owner's pick: next section.
 
