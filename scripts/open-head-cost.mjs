@@ -24,6 +24,8 @@
 //           counters (debug modes 13 and 14, read off the float march target) summed over the frame: texels
 //           marched, hit, steps, prim evaluations, wound rows; mode 14 adds the post-hit chain's (the normal's
 //           taps, the probes). Counters do not depend on the machine's load.
+//   BASE_BOUNDS  SPLIT_BOUND bits OR-ed into every leg's bounds switches (48 = the tree before 2026-10-06's two
+//           bounds changes, for an attribution of the cost as it stood).
 //   PARITY  comma list of leg pairs a:b (e.g. open:tileCullOld). Each pair's frames are read off the float march
 //           target and compared texel by texel: for a switch that must change the work and not the picture.
 //   TICK=1  also time the CPU side of a split head's re-pose and of the hull build, open against closed.
@@ -154,7 +156,8 @@ async function look(target, dist, from) {
 }
 const setCam = (pp) => evaluate(`__sdfGame.setPose(${pp.pos[0]}, ${pp.pos[2]}, ${pp.yaw}, ${pp.pitch}, ${pp.pos[1]})`);
 const force = async (id, [preset, sides, offset], frac) => { const ok = await evaluate(`__sdfGame.forceSplit(${id}, "${preset}", ${sides}, ${offset}, ${frac})`); if (!ok) die(`forceSplit(${id}, ${preset}, ${sides}, ${offset}, ${frac}) refused`); };
-const ablate = (mask, boundsOff) => evaluate(`(() => { __sdfGame.splitAblate({ mask: ${mask}, boundsOff: ${boundsOff} }); return 1; })()`);
+const BASE_BOUNDS = Number(process.env.BASE_BOUNDS ?? 0);
+const ablate = (mask, boundsOff) => evaluate(`(() => { __sdfGame.splitAblate({ mask: ${mask}, boundsOff: ${boundsOff | BASE_BOUNDS} }); return 1; })()`);
 const timeDraws = () => evaluate(`__sdfGame.timeDraws(${N})`, 600000);
 /** THE CENSUS of the frame as it stands (debug-counters.wgsl.ts mode 13: the walk, returned before the miss discard;
  *  display-debug.wgsl.ts mode 14: the same counters after the post-hit chain, hit texels only). Summed in the page.
@@ -196,6 +199,8 @@ const LEGS_ALL = {
   hullInOff:    { frac: 1, boundsOff: 8, what: "(d4) open, the occluder hull closed (it keeps its spheres in turning flesh)" },
   tileCullOld:  { frac: 1, boundsOff: 16, what: "(d6) open, the grown tile groups culled per step with their grown spheres (before 2026-10-06)" },
   hullOld:      { frac: 1, boundsOff: 32, what: "(d7) open, the outer hull's first rule: every sphere kept, whole turned copies (before 2026-10-06)" },
+  before:       { frac: 1, boundsOff: 48, what: "(b0) open, as before 2026-10-06: grown-sphere tile culls and the outer hull's first rule" },
+  hullNoLip:    { frac: 1, boundsOff: 64, what: "(d8) open, the outer hull's tight copies without the face cut's lip in their pad" },
   boxOff:       { frac: 1, boundsOff: 1, what: "(d5) open, the proxy box closed" },
   analyticN:    { frac: 1, mask: 2, what: "(e) open, analytic normals in the region" },
   noFilm:       { frac: 1, mask: 4, what: "(f) open, the film's block skipped at run time" },
@@ -206,7 +211,7 @@ const LEGS_ALL = {
   openNoW:      { frac: 1, mask: 32, what: "(k) open, no wound folded into the field" },
 };
 
-const out = { flags: FLAGS, n: N, rounds: ROUNDS, scen: {} };
+const out = { flags: FLAGS, n: N, rounds: ROUNDS, baseBounds: BASE_BOUNDS, scen: {} };
 const warmS = await boot();
 out.warmS = warmS;
 const ab = await evaluate("__sdfGame.splitAblate()");
@@ -262,14 +267,20 @@ for (const sn of SCENS) {
         const r = await evaluate("__sdfGameDebug.readMarchTarget()", 120000);
         t[k] = new Float32Array(Uint8Array.from(Buffer.from(r.rgba32f, "base64")).buffer);
       }
-      let texels = 0, colour = 0, depth = 0, hitsA = 0, hitsB = 0; const miss = t[a][3];
+      // A bound that moves where a ray STARTS moves its samples, so the two frames are not equal to the bit: what is
+      // compared is the hit mask (texels one frame hits and the other does not), and on texels both hit how far the
+      // clip depth moved (over 0.2%, the head-split gate's B measure) and the colour (over 0.05).
+      let texels = 0, colour = 0, depth = 0, hitsA = 0, hitsB = 0, onlyA = 0, onlyB = 0, deep = 0, tint = 0; const miss = t[a][3];
       for (let i = 0; i < t[a].length; i += 4) {
         const c = Math.max(Math.abs(t[a][i] - t[b][i]), Math.abs(t[a][i + 1] - t[b][i + 1]), Math.abs(t[a][i + 2] - t[b][i + 2])), dz = Math.abs(t[a][i + 3] - t[b][i + 3]);
-        if (t[a][i + 3] !== miss) hitsA++; if (t[b][i + 3] !== miss) hitsB++;
+        const ha = t[a][i + 3] !== miss, hb = t[b][i + 3] !== miss;
+        if (ha) hitsA++; if (hb) hitsB++;
+        if (ha && !hb) onlyA++; if (hb && !ha) onlyB++;
+        if (ha && hb) { if (dz > 0.002 * Math.abs(t[a][i + 3])) deep++; if (c > 0.05) tint++; }
         if (c > 0 || dz > 0) texels++; colour = Math.max(colour, c); depth = Math.max(depth, dz);
       }
-      parity[pair] = { texels, colour, depth, hitsA, hitsB };
-      console.log(`  parity ${sn} @${d} m, ${a} against ${b}: ${texels} texels differ (largest colour step ${colour.toExponential(2)}, clip depth ${depth.toExponential(2)}); hit texels ${hitsA} / ${hitsB}`);
+      parity[pair] = { texels, colour, depth, hitsA, hitsB, onlyA, onlyB, deep, tint };
+      console.log(`  parity ${sn} @${d} m, ${a} against ${b}: hit texels ${hitsA} / ${hitsB}, ${onlyA} only in ${a}, ${onlyB} only in ${b}; of those both hit, ${deep} moved over 0.2% in clip depth and ${tint} over 0.05 in colour; ${texels} differ at all (largest colour step ${colour.toExponential(2)}, clip depth ${depth.toExponential(2)})`);
     }
     await setLeg(z.id, scen, LEGS_ALL.closed);
     res[d] = { untouched, rows, counts, parity };

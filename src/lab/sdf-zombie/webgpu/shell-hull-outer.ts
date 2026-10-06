@@ -68,11 +68,12 @@
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { positionWorld, cameraPosition, vec4, length, sub } from 'three/tsl';
-import { bendCtrl } from '../vec';
+import { bendCtrl, qRotate, type Quat } from '../vec';
 import { boxReach, shellReach, strandReach } from '../extent';
 import type { BuiltBody, Vec3 } from '../types';
-import { splitFrame, splitSphereImages } from '../head-split';
-import { SPLIT_BOUND, boundsSplit } from './split-ablate';
+import { HEAD_SPLIT, splitFrame, splitSphereImages } from '../head-split';
+import { CUT_SHADE } from '../cut-wound';
+import { SPLIT_BOUND, boundsSplit, splitAblate } from './split-ablate';
 
 /**
  * How much bigger each chain sphere is than the capsule radius it covers.
@@ -119,6 +120,53 @@ function bezier(a: Vec3, c: Vec3, b: Vec3, t: number): Vec3 {
 
 export interface HullSphere { centre: Vec3; radius: number }
 
+/**
+ * THE TIGHT COVER OF A PLAIN ELLIPSOID: a sphere chain along its LONGEST axis, where the hull's own sphere for it
+ * (one sphere of the largest semi-axis) is loose across the two shorter ones. `axes` are the semi-axes in the
+ * prim's frame (radius x scale), `orient` turns that frame into the world (none = the world's axes), and `pad` is
+ * everything the surface may sit proud of the raw ellipsoid by (the blend, the shell noise, the margin).
+ *
+ * WHY IT CONTAINS THE ELLIPSOID. With semi-axes a <= b <= c (c along z): a point of the ellipsoid has
+ * x^2 + y^2 <= b^2 (1 - z^2 / c^2), so it is within b of the z axis; and past the segment's end, at |z| = t in
+ * (c - b, c], its distance to the end point squared is at most b^2 (1 - t^2 / c^2) + (t - c + b)^2, which is at most
+ * b^2 exactly when t <= c. So the ellipsoid lies in the capsule of radius b about the segment of half-length c - b,
+ * the padded one in the capsule of radius b + pad, and the chain covers that capsule by the same spacing and
+ * inflation as every capsule prim's (SPHERE_CHAIN_INFLATE). A sphere (b = c) is the one sphere it always was.
+ *
+ * The outer hull keeps its one loose sphere where the body stands: closed bodies draw as they did. THE HEAD SPLIT
+ * turns copies of THIS cover with each half instead (below): the skull's sphere is 0.158 m against a 0.090 m
+ * half-width, and its turned copies were a ring of rays that march and miss.
+ */
+export function ellipsoidChain(centre: Vec3, axes: Vec3, orient: Quat | undefined, pad: number): HullSphere[] {
+  const kc = axes[0] >= axes[1] && axes[0] >= axes[2] ? 0 : axes[1] >= axes[2] ? 1 : 2;
+  const c = axes[kc]!, b = Math.max(axes[(kc + 1) % 3]!, axes[(kc + 2) % 3]!);
+  const reach = b + pad, half = Math.max(c - b, 0);
+  const unit: Vec3 = [kc === 0 ? 1 : 0, kc === 1 ? 1 : 0, kc === 2 ? 1 : 0];
+  const dir = orient ? qRotate(orient, unit) : unit;
+  const n = Math.max(1, Math.ceil(2 * half / (reach * SPHERE_CHAIN_SPACING)));
+  const out: HullSphere[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = half === 0 ? 0 : -half + 2 * half * i / n;
+    out.push({ centre: [centre[0] + dir[0] * t, centre[1] + dir[1] * t, centre[2] + dir[2] * t], radius: reach * SPHERE_CHAIN_INFLATE });
+    if (half === 0) break;
+  }
+  return out;
+}
+
+/** THE LIP OF A SPLIT'S FACE CUT (m): the most the cut stamped along an opened half's cut face can raise the skin at
+ *  its rim (cut-wound.ts cutLip's amplitude for head-split.ts HEAD_SPLIT.faceCalibre). The outer hull ignores wounds,
+ *  because subtraction only moves a surface inward, and a lip is the one thing a wound ADDS: a loose sphere has the
+ *  room for it, a tight cover does not, and the face cuts sit on the very rims the tight cover hugs. So the tight
+ *  cover is padded by it. */
+export const SPLIT_HULL_LIP = HEAD_SPLIT.faceCalibre.kerf * CUT_SHADE.lipHeight * Math.min(HEAD_SPLIT.faceCalibre.lip, CUT_SHADE.maxLipScale);
+
+/** A prim whose solid is exactly an ellipsoid: a point prim with no taper, bend, box, strand or shell. */
+function plainEllipsoid(p: BuiltBody['prims'][number]): boolean {
+  return p.a[0] === p.b[0] && p.a[1] === p.b[1] && p.a[2] === p.b[2]
+    && p.bend === undefined && p.box === undefined && p.strand === undefined && p.shell === undefined
+    && (p.radiusB === undefined || p.radiusB === p.radius);
+}
+
 export interface OuterHullOpts {
   /** Silhouette-noise amplitude the field may bulge by (marchCfg.z). */
   shellAmp?: number;
@@ -144,9 +192,13 @@ export function buildOuterHullInstances(
   const out: HullSphere[] = [];
 
   for (const body of bodies) {
-    const bodyStart = out.length;
     const live = new Set<number>();
     for (const c of body.clusters) if (c.alive) live.add(c.id);
+    // THE HEAD SPLIT (head-split.ts): the spheres whose turned copies cover the opened halves (below). None for a
+    // closed head.
+    const split = splitFrame(boundsSplit(body.split, SPLIT_BOUND.hullOuter));
+    const tightCopies = split !== null && (splitAblate.boundsOff & SPLIT_BOUND.hullOld) === 0;
+    const turning: HullSphere[] = [];
 
     for (const p of body.prims) {
       // Cutters and severed flesh contribute no surface to contain.
@@ -178,6 +230,7 @@ export function buildOuterHullInstances(
 
       const r = reach * SPHERE_CHAIN_INFLATE;
       const step = reach * SPHERE_CHAIN_SPACING;
+      const primStart = out.length;
       for (let seg = 0; seg + 1 < spine.length; seg++) {
         const s = spine[seg]!;
         const e = spine[seg + 1]!;
@@ -192,15 +245,28 @@ export function buildOuterHullInstances(
           out.push({ centre: [s[0] + dx * t, s[1] + dy * t, s[2] + dz * t], radius: r });
         }
       }
+      // What turns with a half is this prim's cover: the spheres just pushed, or for a plain ellipsoid its tight
+      // chain (ellipsoidChain), which holds the same solid in less room.
+      if (split) {
+        let cover: HullSphere[] | null = null;
+        if (tightCopies && plainEllipsoid(p)) {
+          const axes: Vec3 = [p.radius * p.scale[0], p.radius * p.scale[1], p.radius * p.scale[2]];
+          // The pad is everything in `reach` but the ellipsoid itself (a plain one has no shell), and the face
+          // cut's lip (SPLIT_HULL_LIP). A cover no slimmer than the prim's own sphere is not taken.
+          const pad = blendReach(p.blendK ?? 0, p.blendProfile) + shellAmp + margin + ((splitAblate.boundsOff & SPLIT_BOUND.hullNoLip) === 0 ? SPLIT_HULL_LIP : 0);
+          const chain = ellipsoidChain(p.a, axes, p.orient, pad);
+          if (chain[0]!.radius < r) cover = chain;
+        }
+        if (cover) for (const s of cover) turning.push(s);
+        else for (let i = primStart; i < out.length; i++) turning.push(out[i]!);
+      }
     }
     // THE HEAD SPLIT (head-split.ts): the prims above are the closed head's. An opened half is its closed flesh
-    // turned rigidly about the hinge, cut faces included (the chains hold the closed head's inside too), so each of
-    // this body's spheres that holds flesh of a half gets a copy turned with that half.
-    const split = splitFrame(boundsSplit(body.split, SPLIT_BOUND.hullOuter));
+    // turned rigidly about the hinge, cut faces included (the covers hold the closed head's inside too), so each
+    // sphere of a prim's cover that holds flesh of a half gets a copy turned with that half. The spheres pushed
+    // above stay: they hold what does not turn.
     if (split) {
-      const end = out.length;
-      for (let i = bodyStart; i < end; i++) {
-        const s = out[i]!;
+      for (const s of turning) {
         for (const centre of splitSphereImages(split, s.centre, s.radius)) out.push({ centre, radius: s.radius });
       }
     }

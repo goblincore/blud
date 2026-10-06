@@ -60,6 +60,12 @@ export const SPLIT_BOUND = {
   /** The tile groups carry no per-step cull sphere of their own (tile-cull.ts cullOffset): mapBody culls a grown
    *  group with its grown sphere, as before 2026-10-06. The frame is the same; only the work differs. */
   tileCull: 16,
+  /** The outer hull turns copies of its own loose spheres with a half, not of a plain ellipsoid's tight chain
+   *  (shell-hull-outer.ts ellipsoidChain): the hull before 2026-10-06. */
+  hullOld: 32,
+  /** The tight chain without the face cut's lip in its pad (shell-hull-outer.ts SPLIT_HULL_LIP): what the pad
+   *  costs. */
+  hullNoLip: 64,
 } as const;
 
 export const splitAblate = { mask: 0, boundsOff: 0 };
