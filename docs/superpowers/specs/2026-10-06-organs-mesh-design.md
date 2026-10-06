@@ -1,6 +1,6 @@
 # Organs as mesh — design
 
-**Date:** 2026-10-06 · **Branch:** `claude/organs-mesh` · **Owner decision (2026-10-06):** "we def should convert
+**Date:** 2026-10-06 · **Status:** built, the owner's look pick pending (results: `docs/dev-notes/2026-10-06-organs-mesh/NOTES.md`) · **Branch:** `claude/organs-mesh` · **Owner decision (2026-10-06):** "we def should convert
 them to mesh. they aren't even really that visible or noticeable atm".
 
 ## 1. Why
@@ -46,12 +46,13 @@ reached it. Two culls decide whether the instance is drawn at all:
   This is a pure function with its own test.
 The exposure spheres also drive the organ's blood stain and fake cavity AO, as they do for bone.
 
-**3.4 Shading.** A third material in `mesh-renderer.ts` (bone, eye, organ), hand-written WGSL
-(`MESH_ORGAN_SURFACE_WGSL`, a gloss function) composed with the shared `boneShade`, so key, flashlight, light list
-and room fill match bone. It reads the march's own values: `organColor` and `organAmp` are copied from the body
-view's uniforms each frame (the wound panel's "organ tint" knob keeps working), and the gloss is a wet-all-over
-term standing for the march's `wet * 1.8`. Variation is in segment-local space, so it rides the pose. The owner
-picks the look from a sheet (section 5).
+**3.4 Shading.** A third material in `mesh-renderer.ts` (bone, eye, organ), hand-written WGSL in `mesh-organ.ts`. It
+reads the march's own values: `organColor` and `organAmp` are copied from a body view's uniforms each frame (the wound
+panel's "organ tint" knob keeps working). Variation is in segment-local space, so it rides the pose. Its light compose
+is the bone mesh's `boneShade` (key, torch, light list, room fill) with three corrections, each fitted to measured SDF
+organ pixels (added 2026-10-06 after the first captures; NOTES, "Matching the SDF organ"): a blood wash on the albedo,
+the cavity's occlusion on every light but the torch beam, and the beam's gain with a tight glint. The owner picks the
+look from a sheet (section 5).
 
 **3.5 The selector.** `?organs=sdf` keeps SDF organs on a mesh skeleton (today's default: the A/B "before"), and
 `__sdfGame.setOrgans('mesh' | 'sdf')` flips it at runtime for in-page cost alternation. Default: `mesh` when the
@@ -90,8 +91,9 @@ today. Detached chunks (including the `organ.gut` piece) keep procedural organs,
 5. **Boot:** cold-boot `drawOnce` against main; the organ pipeline must be in the warm path, with no hitch at the
    first exposing wound.
 6. **The three capture gates** with `OUT` set: `head-split-gate`, `axe-gate`, `cut-wound-gate`.
-7. **Owner look sheet:** `docs/dev-notes/2026-10-06-organs-mesh/look/`, before (SDF) beside the mesh candidates, on
-   the same frames (a slug crater, three chops, a blast), with the torch on and off. The owner picks.
+7. **Owner look sheet:** `docs/dev-notes/2026-10-06-organs-mesh/look/`, before (SDF) beside the mesh candidates
+   (`match`, `wet`, `veined`, `pale`), on the same frames (a belly slug, two slugs, three chops), with the torch on and
+   off. The owner picks.
 
 ## 6. Out of scope
 
