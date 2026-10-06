@@ -81,8 +81,8 @@ import type { FittedSkull } from './anatomical-skull';
 import type { Vec3 } from '../../types';
 import { HEAD_SPLIT, skullPieces, skullSplitOf, type SkullFollow, type SkullSplit, type SplitWarp } from '../../head-split';
 import {
-  MESH_SPLIT_CLIP_WGSL, MESH_SPLIT_CUT_BONE_WGSL, MESH_SPLIT_INSIDE_WGSL, MESH_SPLIT_JAG_WGSL, SPLIT_INSTANCE_ATTRS,
-  SPLIT_INSTANCE_FLOATS, meshSplitJagMax, packSplitInstance,
+  MESH_SPLIT_CLIP_WGSL, MESH_SPLIT_CUT_BONE_WGSL, MESH_SPLIT_FRACTURE_WGSL, MESH_SPLIT_INSIDE_WGSL, MESH_SPLIT_JAG_WGSL,
+  SPLIT_INSTANCE_ATTRS, SPLIT_INSTANCE_FLOATS, meshSplitJagMax, packSplitInstance,
 } from './mesh-split';
 
 const MAX_WOUNDS_TEX = 64;
@@ -307,10 +307,11 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   const jagFn = wgslFn(MESH_SPLIT_JAG_WGSL, fns.slice(0, 2));
   const clipFn = wgslFn(MESH_SPLIT_CLIP_WGSL, [...fns.slice(0, 2), jagFn]);
   const insideFn = wgslFn(MESH_SPLIT_INSIDE_WGSL);
-  const clip = clipFn({
-    pWorld: positionWorld, sn: attribute('iSplitN', 'vec4'), sh: attribute('iSplitH', 'vec4'),
-    sa: attribute('iSplitA', 'vec4'), sk: attribute('iSplitK', 'vec4'), jag: splitLook.jag, shape: splitLook.jagShape,
-  }) as unknown as { xyz: Node<'vec3'>; w: Node<'float'> };
+  const record = {
+    sn: attribute('iSplitN', 'vec4'), sh: attribute('iSplitH', 'vec4'), sa: attribute('iSplitA', 'vec4'),
+    sk: attribute('iSplitK', 'vec4'), jag: splitLook.jag, shape: splitLook.jagShape,
+  };
+  const clip = clipFn({ pWorld: positionWorld, ...record }) as unknown as { xyz: Node<'vec3'>; w: Node<'float'> };
   const front = float(frontFacing);
   const splitSided = (m: MeshBasicNodeMaterial) => {
     m.maskNode = clip.w.greaterThanEqual(0.0);
@@ -355,16 +356,21 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   splitSided(eyeSplitMaterial);
   // A split anatomical plate. It is two-sided closed as well, its inside real geometry, so nothing of it is a wall:
   // both faces keep the plate's surface (its craters read at q, as the sculpt's are) and the closed plate's look, and
-  // go to cut bone within the rim's width of the fracture. The normal is the closed material's own, from the turned
-  // copy's position and normal (the instance matrix carries the turn): on a back face three hands it the vertex
-  // normal turned to face the eye, and the atlas's tilt turns with it, so the inside of a plate is lit as a surface
-  // facing the eye, split or closed.
+  // go to cut bone within the rim's width of the fracture. That is the fracture's own distance, not the clip's: the
+  // clip's is to the copy's nearest edge, and on a plate's outside the hinge plane and the hold ball, where a half
+  // meets the rest of the same bone, would be painted broken too. The normal is the closed material's own, from the
+  // turned copy's position and normal (the instance matrix carries the turn): on a back face three hands it the
+  // vertex normal turned to face the eye, and the atlas's tilt turns with it, so the inside of a plate is lit as a
+  // surface facing the eye, split or closed.
   let skullSplitMaterial: MeshBasicNodeMaterial | null = null;
   if (plate) {
     const cutBoneFn = wgslFn(MESH_SPLIT_CUT_BONE_WGSL), parts = plate;
+    const fractureFn = wgslFn(MESH_SPLIT_FRACTURE_WGSL, [...fns.slice(0, 2), jagFn]);
     skullSplitMaterial = new MeshBasicNodeMaterial();
     skullSplitMaterial.colorNode = kept(
-      normal => lit(cutBoneFn({ surface: parts.surface(clip.xyz) as never, keep: clip.w, rim: splitLook.rim }), parts.look, normal),
+      normal => lit(cutBoneFn({
+        surface: parts.surface(clip.xyz) as never, keep: fractureFn({ q: clip.xyz, ...record }) as never, rim: splitLook.rim,
+      }), parts.look, normal),
       // The atlas is sampled and the normal takes dpdx / dpdy: both ahead of the branch.
       () => parts.normal(parts.texel().toVar()).toVar(),
     );

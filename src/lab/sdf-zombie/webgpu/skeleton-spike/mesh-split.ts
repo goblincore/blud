@@ -16,7 +16,9 @@
 //     like one bone that broke;
 //   * the broken edge: a thin closed shell shows its back faces as one dark inner wall, cut bone at the edge
 //     (MESH_SPLIT_INSIDE_WGSL); a plate with real thickness has an inside of its own geometry, and takes only the
-//     cut-bone rim, on both faces (MESH_SPLIT_CUT_BONE_WGSL).
+//     cut-bone rim, on both faces (MESH_SPLIT_CUT_BONE_WGSL). A plate's outside is seen too, so its rim keeps to the
+//     fracture (MESH_SPLIT_FRACTURE_WGSL): a copy's other edges, the hinge plane and the hold ball, are where it meets
+//     the rest of the same bone, and are not broken.
 //
 // Pure (no three): the TypeScript twins below are the reference the WGSL is edited with (mesh-appearance.ts's idiom).
 import type { Vec3 } from '../../types';
@@ -105,6 +107,17 @@ export function packSplitInstance(rows: Float32Array, i: number, s: SkullSplit, 
   rows[o + 12] = piece; rows[o + 13] = s.angleP !== 0 ? 1 : 0; rows[o + 14] = s.angleM !== 0 ? 1 : 0; rows[o + 15] = s.seed;
 }
 
+/** What the clip and the fracture's distance both read at the un-turned point q, line by line: `up` from the hinge
+ *  plane, `side` of the fracture (the old plane's s(q) plus the fracture's offset there) and `region`, how far inside
+ *  the part of the head that turns (above the hinge plane, in the hold ball). ONE list for the two functions, so the
+ *  rim's fracture is the clip's. */
+export const MESH_SPLIT_SIDE_LINES = [
+  'let r = q - sh.xyz;',
+  'let up = dot(cross(sn.xyz, sa.xyz), r);',
+  'let side = dot(sn.xyz, q) - sn.w + meshSplitJag(vec2<f32>(dot(sa.xyz, r), up), sk.w, jag, shape);',
+  'let region = min(up, sa.w - length(r));',
+] as const;
+
 /** THE CLIP. `pWorld` is the fragment on the turned copy. Returns (q, keep): q the un-turned point (pWorld taken back
  *  by the copy's angle about the hinge), and keep >= 0 where the copy's piece owns q (head-split.ts skullPieceAt),
  *  growing with the distance to the piece's nearest edge. With region = min(up, rho - dh) (>= 0: above the hinge plane
@@ -118,15 +131,22 @@ export const MESH_SPLIT_CLIP_WGSL = /* wgsl */ `fn meshSplitClip(pWorld: vec3<f3
   let c = cos(sh.w);
   let s = sin(sh.w);
   let q = sh.xyz + rel * c - cross(sa.xyz, rel) * s + sa.xyz * (dot(sa.xyz, rel) * (1.0 - c));
-  let r = q - sh.xyz;
-  let up = dot(cross(sn.xyz, sa.xyz), r);
-  let side = dot(sn.xyz, q) - sn.w + meshSplitJag(vec2<f32>(dot(sa.xyz, r), up), sk.w, jag, shape);
-  let region = min(up, sa.w - length(r));
+  ${MESH_SPLIT_SIDE_LINES.join('\n  ')}
   let dP = min(region, side);
   let dM = min(region, -side);
   let d0 = min(select(1e3, -dP, sk.y > 0.5), select(1e3, -dM, sk.z > 0.5));
   let keep = select(select(d0, dP, sk.x > 0.5), dM, sk.x > 1.5);
   return vec4<f32>(q, keep);
+}`;
+
+/** THE DISTANCE TO THE FRACTURE (metres, >= 0) at the un-turned point `q` (the clip's xyz). The fracture is the sheet
+ *  side = 0, and it exists only where the halves do, region >= 0: so the distance is |side| there, and under the hinge
+ *  plane or outside the hold ball at least how far outside, max(|side|, max(-region, 0)). The clip's `keep` is the
+ *  distance to the copy's NEAREST edge, which may be the hinge plane or the ball: this one reads 0 on the ragged edge
+ *  between the pieces and nowhere else. The other arguments are the clip's. */
+export const MESH_SPLIT_FRACTURE_WGSL = /* wgsl */ `fn meshSplitFracture(q: vec3<f32>, sn: vec4<f32>, sh: vec4<f32>, sa: vec4<f32>, sk: vec4<f32>, jag: vec4<f32>, shape: vec4<f32>) -> f32 {
+  ${MESH_SPLIT_SIDE_LINES.join('\n  ')}
+  return max(abs(side), max(-region, 0.0));
 }`;
 
 /** The rim's share of a fragment `keep` metres inside its copy's edge (rim.w = the rim's width): 1 to half the width,
@@ -149,15 +169,16 @@ export function meshSplitRim(keep: number, width: number = HEAD_SPLIT.skull.rim.
 }
 
 /** THE CUT BONE OF A PLATE WITH THICKNESS (the anatomical skull's). Its inside is real geometry with a surface of its
- *  own, so there is no wall to paint: within the rim's width of the copy's edge the surface, whichever way it faces,
- *  goes to cut bone (the rim's colour, exposure 1, as the wall's rim has it) by the same share as the wall's: full at
- *  half the width, gone at the width. rim = (colour, width in metres). */
+ *  own, so there is no wall to paint: within the rim's width of the break the surface, whichever way it faces, goes to
+ *  cut bone (the rim's colour, exposure 1, as the wall's rim has it) by the same share as the wall's: full at half the
+ *  width, gone at the width. `keep` is the distance to the break the caller means: a plate's is the fracture's own
+ *  (MESH_SPLIT_FRACTURE_WGSL), because both of its faces are seen. rim = (colour, width in metres). */
 export const MESH_SPLIT_CUT_BONE_WGSL = /* wgsl */ `fn meshSplitCutBone(surface: vec4<f32>, keep: f32, rim: vec4<f32>) -> vec4<f32> {
   ${RIM_SHARE_LINE}
   return mix(surface, vec4<f32>(rim.xyz, 1.0), edge);
 }`;
 
-/** MESH_SPLIT_CUT_BONE_WGSL's hand twin: `surface` = (albedo, exposure) at `keep` metres from the copy's edge. */
+/** MESH_SPLIT_CUT_BONE_WGSL's hand twin: `surface` = (albedo, exposure) at `keep` metres from the break. */
 export function meshSplitCutBone(
   surface: readonly [number, number, number, number], keep: number,
   rim: { color: readonly [number, number, number]; width: number } = HEAD_SPLIT.skull.rim,
@@ -184,6 +205,14 @@ export function splitLookOk(set: unknown): set is SplitLookSet {
     && colour(s.inside) && colour(s.rim) && (s.follow === undefined || s.follow === null || skullFollowOk(s.follow));
 }
 
+/** MESH_SPLIT_SIDE_LINES' hand twin: the fracture's `side` and the turning `region` at the un-turned point `q`. */
+function splitSide(q: Vec3, w: SplitWarp, rho: number, seed: number, jag: SplitJag): { side: number; region: number } {
+  const r: Vec3 = [q[0] - w.h[0], q[1] - w.h[1], q[2] - w.h[2]];
+  const up = dot(cross(w.n, w.a), r);
+  const side = dot(w.n, q) - w.d0 + meshSplitJag(dot(w.a, r), up, seed, jag);
+  return { side, region: Math.min(up, rho - Math.hypot(r[0], r[1], r[2])) };
+}
+
 /** MESH_SPLIT_CLIP_WGSL's hand twin, for the tests: edit the two together. */
 export function meshSplitKeep(
   pWorld: Vec3,
@@ -197,11 +226,15 @@ export function meshSplitKeep(
     w.h[0] + rel[0] * c - x[0] * s + w.a[0] * d, w.h[1] + rel[1] * c - x[1] * s + w.a[1] * d,
     w.h[2] + rel[2] * c - x[2] * s + w.a[2] * d,
   ];
-  const r: Vec3 = [q[0] - w.h[0], q[1] - w.h[1], q[2] - w.h[2]];
-  const up = dot(cross(w.n, w.a), r);
-  const side = dot(w.n, q) - w.d0 + meshSplitJag(dot(w.a, r), up, inst.seed, jag);
-  const region = Math.min(up, inst.rho - Math.hypot(r[0], r[1], r[2]));
+  const { side, region } = splitSide(q, w, inst.rho, inst.seed, jag);
   const dP = Math.min(region, side), dM = Math.min(region, -side);
   const d0 = Math.min(inst.turnP ? -dP : 1e3, inst.turnM ? -dM : 1e3);
   return { q, keep: inst.piece === 2 ? dM : inst.piece === 1 ? dP : d0 };
+}
+
+/** MESH_SPLIT_FRACTURE_WGSL's hand twin: the distance (metres, >= 0) from the closed skull's point `q` to the
+ *  fracture of the split `s`. */
+export function meshSplitFracture(q: Vec3, s: Pick<SkullSplit, 'frame' | 'seed'>, jag: SplitJag = HEAD_SPLIT.skull.jag): number {
+  const { side, region } = splitSide(q, s.frame.w, s.frame.rho, s.seed, jag);
+  return Math.max(Math.abs(side), Math.max(-region, 0));
 }

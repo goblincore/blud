@@ -584,7 +584,8 @@ describe('the head split: the skull is drawn once per piece that owns part of it
       expect(mats.map(m => m.side)).toEqual([THREE.DoubleSide, THREE.DoubleSide, THREE.DoubleSide, THREE.FrontSide]);
       expect(mats.map(m => m.maskNode != null)).toEqual([true, false, true, false]);
       // What each one paints with. The plates: their own surface and normal map, the cut-bone rim, no inner wall.
-      expect([...allCalls(plateSplit)].sort()).toEqual(['anatomicalSkullNormal', 'anatomicalSkullSurface', 'boneShade', 'meshSplitClip', 'meshSplitCutBone']);
+      // The rim reads the fracture's own distance: the extracted bone and the eyes do not call it.
+      expect([...allCalls(plateSplit)].sort()).toEqual(['anatomicalSkullNormal', 'anatomicalSkullSurface', 'boneShade', 'meshSplitClip', 'meshSplitCutBone', 'meshSplitFracture']);
       expect([...calls(reach([plate.colorNode!]))].sort()).toEqual(['anatomicalSkullNormal', 'anatomicalSkullSurface', 'boneShade']);
       // The extracted bone: the painted surface, and the dark wall on its back faces.
       expect([...allCalls(boneSplit)].sort()).toEqual(['boneShade', 'meshBoneSurface', 'meshBoneWet', 'meshSplitClip', 'meshSplitInside']);
@@ -677,7 +678,7 @@ describe('the head split: the skull is drawn once per piece that owns part of it
       const inside = reach(branch, new Set<Node>(held));
       expect(samples(inside, normalMap)).toBe(false);
       expect(calls(inside).has('anatomicalSkullNormal')).toBe(false);
-      for (const fn of ['anatomicalSkullSurface', 'meshSplitCutBone', 'boneShade']) expect(calls(inside).has(fn), fn).toBe(true);
+      for (const fn of ['anatomicalSkullSurface', 'meshSplitFracture', 'meshSplitCutBone', 'boneShade']) expect(calls(inside).has(fn), fn).toBe(true);
       // And nothing is stacked after the branch.
       expect(rest).toHaveLength(0);
       renderer.dispose(); cache.dispose();
