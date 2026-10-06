@@ -13,7 +13,7 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three/webgpu';
 import type { MeshBasicNodeMaterial, Node } from 'three/webgpu';
-import { getCurrentStack, setCurrentStack, stack } from 'three/tsl';
+import { getCurrentStack, positionWorld, setCurrentStack, stack } from 'three/tsl';
 import { parseBlob } from '../../blob-parse';
 import { compileBlob } from '../../blob-compile';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../../build-body';
@@ -694,6 +694,43 @@ describe('the head split: the skull is drawn once per piece that owns part of it
       for (const fn of ['anatomicalSkullSurface', 'meshSplitFracture', 'meshSplitCutBone', 'boneShade']) expect(calls(inside).has(fn), fn).toBe(true);
       // And nothing is stacked after the branch.
       expect(rest).toHaveLength(0);
+      renderer.dispose(); cache.dispose();
+    });
+
+    it('the split materials read their craters and the fracture at the clip\'s un-turned point, not at the fragment\'s own', () => {
+      const { cache, renderer } = makeAnatomical();
+      const open = { id: 1 }, shut = { id: 2 }, otherOpen = { id: 3 };
+      renderer.update([[headSrc], [headSrc], [otherHead]], [open, shut, otherOpen], undefined, undefined, undefined, { warp: (o, seg) => (o !== shut && seg === 'head' ? warpOf('middle', 0, 0, 1) : null) });
+      type Call = Graph & { parameters: Record<string, Graph & { components?: string }> };
+      /** The one call of the WGSL function `fn` among `nodes`. */
+      const callOf = (nodes: readonly Graph[], fn: string): Call => {
+        const found = nodes.filter(n => n.functionNode && new RegExp(`\\bfn ${fn}\\(`).test(n.functionNode.code));
+        expect(found, fn).toHaveLength(1);
+        return found[0] as Call;
+      };
+      const graphOf = (m: MeshBasicNodeMaterial) => { const c = colourOf(m); return reach([...c.held, ...c.branch]); };
+      /** `input` is the xyz of the clip call `clip`: the point q the fragment has on the closed head. */
+      const isClipPoint = (input: Graph & { components?: string }, clip: Call, what: string) => {
+        expect(input, what).not.toBe(positionWorld);
+        expect(input.components, what).toBe('xyz');
+        expect(input.node, what).toBe(clip);
+      };
+      // The plates: the surface's craters and the rim's fracture are both read at q.
+      const plateSplit = graphOf(matOf(renderer, segs(renderer, open)[0]!)), clip = callOf(plateSplit, 'meshSplitClip');
+      // The clip is the one thing taken at the fragment's own world position: it is what turns it back.
+      expect(clip.parameters.pWorld).toBe(positionWorld);
+      isClipPoint(callOf(plateSplit, 'anatomicalSkullSurface').parameters.pWorld!, clip, 'anatomicalSkullSurface pWorld');
+      isClipPoint(callOf(plateSplit, 'meshSplitFracture').parameters.q!, clip, 'meshSplitFracture q');
+      // The fracture takes the clip's own record and shape: the rim's edge is the edge that is cut.
+      for (const k of ['sn', 'sh', 'sa', 'sk', 'jag', 'shape']) expect(callOf(plateSplit, 'meshSplitFracture').parameters[k], k).toBe(clip.parameters[k]);
+      // The rim is cut by the fracture's distance, on the surface read there.
+      const cut = callOf(plateSplit, 'meshSplitCutBone');
+      expect(cut.parameters.keep).toBe(callOf(plateSplit, 'meshSplitFracture'));
+      expect(cut.parameters.surface).toBe(callOf(plateSplit, 'anatomicalSkullSurface'));
+      // The extracted bone's split copies read their surface at q as well; the closed materials at the fragment.
+      const boneSplit = graphOf(matOf(renderer, segs(renderer, otherOpen)[0]!));
+      isClipPoint(callOf(boneSplit, 'meshBoneSurface').parameters.pWorld!, callOf(boneSplit, 'meshSplitClip'), 'meshBoneSurface pWorld');
+      expect(callOf(reach([matOf(renderer, segs(renderer, shut)[0]!).colorNode!]), 'anatomicalSkullSurface').parameters.pWorld).toBe(positionWorld);
       renderer.dispose(); cache.dispose();
     });
 
