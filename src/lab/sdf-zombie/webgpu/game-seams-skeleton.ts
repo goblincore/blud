@@ -10,7 +10,7 @@
 import type { GameContext } from './game-context';
 import { type Vec3 } from '../types';
 import { bodyBuildCacheStats } from './character-view';
-import { applyBoneMesh } from './game-render-leaves';
+import { applyBoneMesh } from './game-render-controls';
 import { traceProjectile } from './game-weapon';
 import { sdBody } from '../validate';
 import { splitLookOk, type SplitLookSet } from './skeleton-spike/mesh-split';

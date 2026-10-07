@@ -37,17 +37,17 @@ export const MAX_PROFILES = 8;
 // times the light's own per-light normaliser `bodyNorm` (light v3.z, light-list.ts) where
 // intensity differs lamp to lamp. Baseline: list mode reproduces TODAY's body brightness; the
 // owner tunes from here. The old path's numbers (mirrored below, pinned equal to their homes by
-// game-light-list-leaves.test.ts):
+// game-light-list.test.ts):
 //  - lightCfg.x, the preset key the old path scaled every key by: practical-hard-key's 2.4;
 //  - lamps and tubes: keyI = lightCfg.x x kl, kl = presentingLamp's k x BODY_LAMP_GAIN 1.5,
-//    k = room lamp LEVEL (0..1) x presence x PRESENT.gain 1.3 (game-dynamic-light-leaves.ts);
+//    k = room lamp LEVEL (0..1) x presence x PRESENT.gain 1.3 (game-dynamic-light.ts);
 //  - the window: keyI = lightCfg.x x intensity x BODY_WINDOW_GAIN 0.035;
 //  - the flashlight: keyI = beam x spotCfg2.x (beamTuning.gain 4), beam = cone² x dist² (0..1);
 //  - muzzle and burning flashes: compose's flashDirect = warm x I x bodyFlashGain 0.06 x n.l / d².
 /** lightCfg.x (practical-hard-key's keyIntensity, material.ts). */
 export const OLD_KEY = LIGHT_PRESETS['practical-hard-key'].keyIntensity;
 /** Mirrors of the old path's live constants, each pinned equal to its home by a test
- *  (game-light-list-leaves.test.ts): game-dynamic-light-leaves.ts BODY_LAMP_GAIN /
+ *  (game-light-list.test.ts): game-dynamic-light.ts BODY_LAMP_GAIN /
  *  BODY_WINDOW_GAIN; makeVfxState().beamTuning.gain (game-state-vfx.ts); makeLightingState()
  *  .bodyFlashGain (game-state-lighting.ts). They are the DEFAULTS: in list mode the live tuning
  *  seams (setBodyFlash, beamTuning) no longer move the list's bodies. */
@@ -96,7 +96,7 @@ const TUBE_PROFILE: LightProfile = { gain: OLD_KEY * OLD_BODY_LAMP_GAIN * 1.3 * 
 // a missing or misspelt key is a TypeScript error, and LIGHT_PROFILES below is derived
 // from this record by sorting the PROFILE_ID keys by their id values.
 export const PROFILES_BY_NAME: Record<ProfileName, LightProfile> = {
-  // tube: game-dynamic-light-leaves.ts PRESENT (tuned with the owner 2026-09-26).
+  // tube: game-dynamic-light.ts PRESENT (tuned with the owner 2026-09-26).
   // gain = lightCfg.x 2.4 x BODY_LAMP_GAIN 1.5 x PRESENT.gain 1.3 = 4.68, on rgb normalised by the
   // tube's own base spot power (bodyNorm = 1 / (base x TUBE.spotGain)): what is left is the lamp's
   // LEVEL x level gain, exactly the old key's level term (flicker and blackouts still ride it);

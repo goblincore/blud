@@ -454,7 +454,7 @@ export function extractLeaves(
 
 /** Append a freshly generated module onto an existing one: one header, one set
  *  of imports (merged per specifier), bodies in order. Wave 1 spawned
- *  game-render-leaves2 / game-world-leaves3 only because the writer could not do
+ *  game-bone-cull / game-bleed only because the writer could not do
  *  this. Imports are read with the PARSER, not a line pattern: the wave-1
  *  modules have imports with no trailing semicolon and multi-line named lists,
  *  which a pattern silently left in the body and then duplicated. */

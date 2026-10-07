@@ -8,16 +8,16 @@
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
 import { setChunkListGain } from './chunk-light-pick';
-import { roomIdAt } from './game-level-leaves';
+import { roomIdAt } from './game-level-rooms';
 import { CHUNK_OBJECT_LIGHT, type ChunkObjectLight } from './baked-chunks';
-import { forEachDrawnChunkMesh, type ChunkMeshSource } from './game-bake-leaves';
+import { forEachDrawnChunkMesh, type ChunkMeshSource } from './game-chunk-bake';
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { ATTACK_TUNING, type SwingVariant } from '../attack';
 import { woundCarveNormal, woundDirToWorld, woundWorldPos } from '../damage';
 import { type Vec3 } from '../types';
 import { sdBody } from '../validate';
-import { openGate } from './game-level-leaves';
+import { openGate } from './game-level-rooms';
 import { RING_TUNING } from '../melee-ring';
 import { MOTION_TUNING } from '../motion';
 import { characterNames } from '../character-registry';

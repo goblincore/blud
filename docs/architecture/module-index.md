@@ -42,11 +42,10 @@ Each line is the first sentence of the module's header comment.
 | [shared-wounds/](#shared-wounds) | 4 | Shared wound-field probe page. |
 | [gait-curves/](#gait-curves) | 2 | Baked gait curve data. |
 | [Entrypoints and labs](#entrypoints-and-labs) | 19 | One module per HTML page; see the entrypoint table above. |
-| [Dev panels](#dev-panels) | 11 | Tuning panels for the labs and the game. |
+| [Dev panels](#dev-panels) | 10 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 23 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: functions lifted out of main()](#game-functions-lifted-out-of-main) | 30 | Named for how they were extracted, not what they hold; to be renamed by content. |
-| [Game: feature modules](#game-feature-modules) | 32 | Gameplay features wired into the game loop. |
+| [Game: feature modules](#game-feature-modules) | 63 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 7 | Blood views, the goo layer, impact splashes. |
@@ -223,7 +222,6 @@ Tuning panels for the labs and the game.
 - `panel.ts` — Dev panel helpers for the lab: per-character override storage and slider, select and button widgets.
 - `webgpu/dynamite-panel.ts` — The DYNAMITE / GIB tuning panel.
 - `webgpu/flame-panel.ts` — The flame lab's tuning panel.
-- `webgpu/game-panels-leaves.ts` — The HUD text line: frame time, bodies on screen, room, weapon slot, ammo and render-mode flags, refreshed from the game context.
 - `webgpu/game-state-panels.ts` — PANELS slice of the GameContext decomposition.
 - `webgpu/goo-panel.ts` — See panel-chrome.ts for the shared shell (title bar, collapse caret, close button) every tuning panel sits in.
 - `webgpu/light-layers-panel.ts` — The LIGHT LAYERS panel (owner 2026-09-28): one checkbox per body-lighting layer added since the melee branch (light-layers.ts), all off by default,…
@@ -286,41 +284,6 @@ The GameContext and its state slices (ECS resources to be). All game state lives
 - `webgpu/game-seams-weapon-player.ts` — The window.__sdfGame player and gun members: placing, posing and teleporting the player, walk-to, aim point, gun tuning and pellet readouts.
 - `webgpu/game-seams-world.ts` — The window.__sdfGame world members: zombie and encounter readouts, pose and wound debug, level info, gates, AA, and screen projection.
 
-## Game: functions lifted out of main()
-
-Named for how they were extracted, not what they hold; to be renamed by content.
-
-- `webgpu/game-art-leaves.ts` — LEVEL ART in the game (mesh key spec §5): fetch and parse <id>.art.glb, then attach every mesh to the level group tagged with its room, so the…
-- `webgpu/game-bake-leaves.ts` — Chunk bake and draw helpers: lit chunk materials, drawn chunk mesh iteration, picking, the gore showcase and bake completion.
-- `webgpu/game-boot-leaves.ts` — Boot helper for the game page: updating the loader status text.
-- `webgpu/game-crowd-leaves.ts` — Crowd helper for the game page: lazily creating the one CrowdType per character and spawn room.
-- `webgpu/game-demo-leaves.ts` — Demo recording helpers: reading input frames, describing recorded wounds, placing from a demo, the demo HUD and recording start.
-- `webgpu/game-demo-leaves2.ts` — Demo recording stop: ends the recorder and saves the demo file to the dev server.
-- `webgpu/game-disco-leaves.ts` — THE BOILER ROOM DISCO BALL in the game (spec 2026-09-27-disco-ball-design.md): the ball gets a mirror-tile material (hand-written WGSL,…
-- `webgpu/game-dynamic-light-leaves.ts` — DYNAMIC LIGHT in the game (docs/superpowers/specs/2026-09-26-night-train-dynamic-light-design.md): every level lamp follows its mood and scripted…
-- `webgpu/game-dynamite-leaves.ts` — Dynamite bundle helpers: taking the prop, throwing it, hit tests against bodies, and the explosion light.
-- `webgpu/game-egg-leaves.ts` — THE CONTROL ROOM'S EGG in the game (spec 2026-09-30-night-train-egg-ending-design.md §2): finds the plan-1 placeholder egg in the level art (material…
-- `webgpu/game-gibs-leaves.ts` — Gib spawning and budgeting: scheduling gibs, retiring actors, carved pieces, the gib atlas loader and the per-frame gib piece budget.
-- `webgpu/game-gibs-leaves2.ts` — Gib piece spawners: building one asset-mesh gib piece or one sprite gib piece and registering it with the game.
-- `webgpu/game-level-leaves.ts` — Runtime helpers for the active level (Level Format v1 — spec docs/superpowers/specs/2026-09-23-level-format-design.md).
-- `webgpu/game-light-list-leaves.ts` — THE SHARED LIGHT LIST, GAME SIDE (Shared Light List plan 1, Task 6).
-- `webgpu/game-lighting-leaves.ts` — Level lighting helpers: hemisphere light intensity, accent rooms, the scene lights for a room, and refreshing the level lights.
-- `webgpu/game-loop-leaves.ts` — THE GAME LOOP in the game (docs/superpowers/plans/2026-09-26-game-loop.md): health and damage, death and restart, pickups and loadout, finite ammo,…
-- `webgpu/game-outdoor-leaves.ts` — OUTDOOR v1 in the game (spec docs/superpowers/specs/2026-09-23-outdoor-v1-design.md §6, §7): the moon DirectionalLight and its room-fitted shadow,…
-- `webgpu/game-player-leaves.ts` — Player input helpers: mouse look, key-edge handling, per-frame input application and the player's current room.
-- `webgpu/game-probes-leaves.ts` — Clamped setter for the global probe-lighting weight on the game context.
-- `webgpu/game-render-leaves.ts` — Render helpers: SDF scale and adaptive scaling, fisheye and viewmodel FOV, actor culling, bone cull modes and the trained upscale.
-- `webgpu/game-render-leaves2.ts` — Render helpers that sit above the bone-cull and world leaves: toggling bone culling and re-stamping the level probes.
-- `webgpu/game-sequence-leaves.ts` — SCRIPTED SEQUENCES in the game (spec 2026-09-30-night-train-egg-ending-design.md §3).
-- `webgpu/game-telemetry-leaves.ts` — Telemetry scene helpers: capturing a frozen actor and camera snapshot, and the bench scene census (bodies, wounds, chunks, droplets).
-- `webgpu/game-train-leaves.ts` — THE TRAIN in the game (carriage kit spec §5, §6): window glass becomes the scrolling night scenery (TRAIN_WINDOW, hand-written WGSL), swaying kit…
-- `webgpu/game-vfx-leaves.ts` — Game VFX leaf functions: face textures, wound ramp and tuning, burst visual scaling, spill verdicts, impact splash layer and trail stream ids.
-- `webgpu/game-void-leaves.ts` — THE VOID in the game (spec 2026-09-24-void-portal-design.md §5-§6): the portal quads, the glow pools, the embers, black fog, and the portal trigger.
-- `webgpu/game-weapon-leaves.ts` — Game weapon leaf functions: view-to-rig transforms, muzzle and aim math, reload, firing, tracers, burst stand-ins and weapon slots.
-- `webgpu/game-world-leaves.ts` — Game world leaf functions: slug and melee hit tracing, ceiling and chunk collider queries, on-screen body count and level probe-room stamping.
-- `webgpu/game-world-leaves2.ts` — Game world leaf functions for wound stream ids and the refine-twin gate that decides which actors get the march cull.
-- `webgpu/game-world-leaves3.ts` — Game world leaf functions for gut rope stepping and for registering wound and cut bleeds on actors.
-
 ## Game: feature modules
 
 Gameplay features wired into the game loop.
@@ -331,32 +294,63 @@ Gameplay features wired into the game loop.
 - `webgpu/game-axe.ts` — WEAPON SLOT 7: THE AXE (spec docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md §3-§4).
 - `webgpu/game-bench-scenario.ts` — The scripted firefight, as DATA.
 - `webgpu/game-bench.ts` — Runs a Scenario against the page and reports per-segment frame cost.
+- `webgpu/game-bleed.ts` — Gut rope stepping, and registering wound and cut bleeds on actors.
+- `webgpu/game-bone-cull.ts` — Toggling bone culling, and re-stamping the level probes.
 - `webgpu/game-brain-gib.ts` — THE BRAIN MESH (melee head damage, plan Task 11; spec §14 decision 3).
 - `webgpu/game-burning.ts` — IN-GAME BURNING (2026-09-18 flare test harness), lifted beside game-main.ts rather than into its closure (the decomposition's rule for new features).
+- `webgpu/game-chunk-bake.ts` — Chunk bake and draw helpers: lit chunk materials, drawn chunk mesh iteration, picking, the gore showcase and bake completion.
+- `webgpu/game-crowd-types.ts` — Crowd helper for the game page: lazily creating the one CrowdType per character and spawn room.
 - `webgpu/game-deferred-lights.ts` — THE SHARED GAME LIGHT LIST (hybrid deferred M2, spec docs/superpowers/specs/2026-09-06-hybrid-deferred-m2-design.md).
 - `webgpu/game-deferred-renderer.ts` — THE GAME'S DEFERRED FRAME COORDINATOR (hybrid deferred M2 task 5, spec docs/superpowers/specs/2026-09-06-hybrid-deferred-m2-design.md).
 - `webgpu/game-deferred-scene.ts` — THE GAME SCENE ROUTER (hybrid deferred M2 task 3, spec docs/superpowers/specs/2026-09-06-hybrid-deferred-m2-design.md).
+- `webgpu/game-demo-record.ts` — Demo recording helpers: reading input frames, describing recorded wounds, placing from a demo, the demo HUD and recording start.
+- `webgpu/game-demo-save.ts` — Demo recording stop: ends the recorder and saves the demo file to the dev server.
+- `webgpu/game-disco.ts` — THE BOILER ROOM DISCO BALL in the game (spec 2026-09-27-disco-ball-design.md): the ball gets a mirror-tile material (hand-written WGSL,…
+- `webgpu/game-dynamic-light.ts` — DYNAMIC LIGHT in the game (docs/superpowers/specs/2026-09-26-night-train-dynamic-light-design.md): every level lamp follows its mood and scripted…
+- `webgpu/game-dynamite-throw.ts` — Dynamite bundle helpers: taking the prop, throwing it, hit tests against bodies, and the explosion light.
 - `webgpu/game-dynamite-tuning.ts` — Dynamite tuning panel hookup: applying tuning values to the game context, the chunk budget ceiling, and reading values back.
+- `webgpu/game-egg.ts` — THE CONTROL ROOM'S EGG in the game (spec 2026-09-30-night-train-egg-ending-design.md §2): finds the plan-1 placeholder egg in the level art (material…
 - `webgpu/game-flail.ts` — WEAPON SLOT 1: THE SPIKE FLAIL (spec docs/superpowers/specs/2026-09-26-spike-flail-design.md).
 - `webgpu/game-flare.ts` — WEAPON SLOT 5: THE FLARE TEST HARNESS (2026-09-18), lifted beside game-main.ts.
+- `webgpu/game-gib-pieces.ts` — Gib piece spawners: building one asset-mesh gib piece or one sprite gib piece and registering it with the game.
+- `webgpu/game-gib-spawn.ts` — Gib spawning and budgeting: scheduling gibs, retiring actors, carved pieces, the gib atlas loader and the per-frame gib piece budget.
 - `webgpu/game-grenade-launcher.ts` — Single-shot launcher timing.
 - `webgpu/game-head-damage.ts` — THE MELEE HEAD DAMAGE LEAF, v2 (spec docs/superpowers/specs/2026-09-28-melee-head-damage-design.md §15; plan Task 17).
 - `webgpu/game-head-split.ts` — THE HEAD SPLIT LEAF (spec docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md §4-§5).
+- `webgpu/game-hit-trace.ts` — Slug and melee hit tracing, ceiling and chunk collider queries, on-screen body count and level probe-room stamping.
+- `webgpu/game-hud.ts` — The HUD text line: frame time, bodies on screen, room, weapon slot, ammo and render-mode flags, refreshed from the game context.
 - `webgpu/game-launcher-view.ts` — Opt-in FPV art prototype.
+- `webgpu/game-level-art.ts` — LEVEL ART in the game (mesh key spec §5): fetch and parse <id>.art.glb, then attach every mesh to the level group tagged with its room, so the…
+- `webgpu/game-level-lights.ts` — Level lighting helpers: hemisphere light intensity, accent rooms, the scene lights for a room, and refreshing the level lights.
+- `webgpu/game-level-rooms.ts` — Runtime helpers for the active level (Level Format v1 — spec docs/superpowers/specs/2026-09-23-level-format-design.md).
 - `webgpu/game-level.ts` — The grey-box ring for sdf-game.html: four rooms in quadrants, connected 1 -> 2 -> 3 -> 4 -> 1 by short tunnels through the dividing bands, with NO…
+- `webgpu/game-light-list.ts` — THE SHARED LIGHT LIST, GAME SIDE (Shared Light List plan 1, Task 6).
+- `webgpu/game-loader-status.ts` — Boot helper for the game page: updating the loader status text.
+- `webgpu/game-loop.ts` — THE GAME LOOP in the game (docs/superpowers/plans/2026-09-26-game-loop.md): health and damage, death and restart, pickups and loadout, finite ammo,…
 - `webgpu/game-march-accept.ts` — THE MARCH'S ACCEPT LAW AS THE GAME SHIPS IT: the numbers game-main writes into every body view's aaCfg.y/z/w and perfCfg.w.
 - `webgpu/game-menu-dom.ts` — The Esc menu overlay. Esc already releases pointer lock (the browser does that); this shows a panel whenever the pointer is free after the first…
 - `webgpu/game-menu.ts` — The Esc menu's decisions, as pure functions: where New game starts, which levels the dev picker offers, the URL that starts one, and when the menu…
 - `webgpu/game-mesh-gibs.ts` — MESH GIBS (melee head damage, plan Task 11; spec §14 decision 3).
 - `webgpu/game-muzzle-flash.ts` — The shotgun's per-barrel flame jets (timing and motion: muzzle-flash.ts).
+- `webgpu/game-outdoor.ts` — OUTDOOR v1 in the game (spec docs/superpowers/specs/2026-09-23-outdoor-v1-design.md §6, §7): the moon DirectionalLight and its room-fitted shadow,…
+- `webgpu/game-player-input.ts` — Player input helpers: mouse look, key-edge handling, per-frame input application and the player's current room.
 - `webgpu/game-player.ts` — First-person player for sdf-game.html: pointer-look state, WASD intent, gravity, and CAPSULE-vs-AABB collision against the level's collider list.
+- `webgpu/game-probe-weight.ts` — Clamped setter for the global probe-lighting weight on the game context.
+- `webgpu/game-render-controls.ts` — Render helpers: SDF scale and adaptive scaling, fisheye and viewmodel FOV, actor culling, bone cull modes and the trained upscale.
 - `webgpu/game-rod.ts` — WEAPON SLOT 6: THE ROD (cut wounds M1, spec docs/superpowers/specs/2026-10-03-cut-wounds-design.md §5).
+- `webgpu/game-sequence.ts` — SCRIPTED SEQUENCES in the game (spec 2026-09-30-night-train-egg-ending-design.md §3).
 - `webgpu/game-telemetry-controls.ts` — The on-screen gameplay telemetry recorder widget: record, mark, save-to-disk and download buttons around a GameTelemetry log.
+- `webgpu/game-telemetry-scene.ts` — Telemetry scene helpers: capturing a frozen actor and camera snapshot, and the bench scene census (bodies, wounds, chunks, droplets).
 - `webgpu/game-telemetry.ts` — Opt-in, bounded live-play recorder (GameTelemetry): frame timings, phase spans, events and snapshots, with no GPU waits.
 - `webgpu/game-tile-playtest.ts` — The opt-in tile-culling playtest controller for the game: owns tile bindings, the enable and ray-cull toggles, and fallback counters.
+- `webgpu/game-train.ts` — THE TRAIN in the game (carriage kit spec §5, §6): window glass becomes the scrolling night scenery (TRAIN_WINDOW, hand-written WGSL), swaying kit…
 - `webgpu/game-viewmodel.ts` — View-model TIMING for sdf-game.html's sawed-off: the reload state machine, the hinge curve, the muzzle-flash envelope and the magazine.
+- `webgpu/game-void.ts` — THE VOID in the game (spec 2026-09-24-void-portal-design.md §5-§6): the portal quads, the glow pools, the embers, black fog, and the portal trigger.
+- `webgpu/game-weapon-rig.ts` — The gun in the view rig: view-to-rig transforms, muzzle and aim math, reload, firing, tracers, burst stand-ins and weapon slots.
 - `webgpu/game-weapon-slots.ts` — WEAPON SLOTS for sdf-game.html — numbers and state only, no Three.js import, for the same reason game-viewmodel.ts is pure: the switch is a timing…
 - `webgpu/game-weapon.ts` — Pure grapeshot logic for sdf-game.html — everything about the gun that can be unit-tested without a renderer or a DOM.
+- `webgpu/game-wound-streams.ts` — Wound stream ids and the refine-twin gate that decides which actors get the march cull.
+- `webgpu/game-wound-vfx.ts` — Face textures, wound ramp and tuning, burst visual scaling, spill verdicts, impact splash layer and trail stream ids.
 
 ## Weapons and viewmodel (render)
 

@@ -24,8 +24,8 @@ import type { Vec3 } from '../types';
 import { worldHitToWound, type Wound } from '../damage';
 import { stampCut, unwarpCutSeg } from '../cut-wound';
 import { slotLowerAmount, slotReady } from './game-weapon-slots';
-import { loopBlocksInput } from './game-loop-leaves';
-import { BEND_R_VIEW } from './game-weapon-leaves';
+import { loopBlocksInput } from './game-loop';
+import { BEND_R_VIEW } from './game-weapon-rig';
 import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms } from './game-arms';
 import { axePose, cancelAxeSwing, makeAxeSwing, stepAxeSwing, type AxeSide, type AxeSwing } from './axe-swing';
 import { AXE_CALIBRE, AXE_CUT, AXE_HIT, axeCutSeg } from './axe-strike';
@@ -51,9 +51,9 @@ export const AXE_LOOK = {
 
 export interface AxeDeps {
   eye(): Vec3;
-  /** The aim ray's direction (world, unit): through the free-aim reticle when free aim is on (game-weapon-leaves aimDir). */
+  /** The aim ray's direction (world, unit): through the free-aim reticle when free aim is on (game-weapon-rig aimDir). */
   aimDir(): Vec3;
-  /** Blood for a cut (game-world-leaves3 registerBleed). */
+  /** Blood for a cut (game-bleed registerBleed). */
   bleed(a: ZombieActor, wound: Wound, point: Vec3, incoming: Vec3): void;
   /** The head split (game-head-split.ts): head chops open and widen it. Absent: cuts and the count only. */
   split?: Pick<HeadSplitLeaf, 'open' | 'widen' | 'isOpen'>;
@@ -265,7 +265,7 @@ export function createAxeHarness(ctx: GameContext, deps: AxeDeps): AxeHarness {
       const lower = slotLowerAmount(ctx.weapon.slotState, 'axe');
       rig.position.set(0, -0.42 * lower, 0.06 * lower);
       rig.rotation.set(THREE.MathUtils.degToRad(38) * lower, 0, 0);
-      // Hidden for a scripted sequence, as the flail is (game-sequence-leaves.ts).
+      // Hidden for a scripted sequence, as the flail is (game-sequence.ts).
       rig.visible = lower < 0.999 && !ctx.world.sequence?.started;
       const p = axePose(swing);
       haft.position.set(p.grip[0], p.grip[1], p.grip[2]);

@@ -9,9 +9,9 @@
 
 import type { GameContext } from './game-context';
 import { withCtx } from './game-context';
-import { applyHemi } from './game-lighting-leaves';
-import { pushProbeWeight } from './game-probes-leaves';
-import { restampLevelProbes } from './game-render-leaves2';
+import { applyHemi } from './game-level-lights';
+import { pushProbeWeight } from './game-probe-weight';
+import { restampLevelProbes } from './game-bone-cull';
 
 export function createLightingProbeSeams(ctx: GameContext) {
   return {

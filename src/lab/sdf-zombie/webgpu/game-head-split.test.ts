@@ -62,7 +62,7 @@ function fixture(o: { headDamaged?: HeadSplitDeps['headDamaged']; frozen?: boole
   ctx.weapon.headSplit = split;
   const skull = headShape(a.posed())!;
   const view = { eye: [skull.centre[0], skull.centre[1], skull.centre[2] + 1.2] as Vec3 };
-  // The blood dep registers each wound's emitter, as game-world-leaves3.ts registerBleed does.
+  // The blood dep registers each wound's emitter, as game-bleed.ts registerBleed does.
   const emitters = new BleedRegistry();
   const bleed = vi.fn((b: ZombieActor, w: Wound) => { emitters.register(b.id, w, 'slug', 0); });
   const axe = createAxeHarness(ctx as unknown as GameContext, { eye: () => view.eye, aimDir: () => [0, 0, -1], bleed, split });

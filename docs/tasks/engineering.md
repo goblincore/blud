@@ -2,6 +2,52 @@
 
 Tests, harnesses, the game-main decomposition, tooling, process notes. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Agent navigability — module index and content names (2026-10-07)
+
+- [x] **Generated module index:** `npx tsx scripts/module-index.ts` writes
+  [module-index.md](../architecture/module-index.md), one line per module (538) from its header comment, by area.
+  `scripts/module-index.test.ts` fails on a module with no summary or a stale index. 100 headers written.
+- [x] **The 31 `game-*-leaves*` modules are named for what they hold** (pure renames, no merges, so load order is
+  unchanged). Dated notes and plans keep the old names; this table resolves them:
+
+  | Was | Now |
+  | --- | --- |
+  | `game-art-leaves` | `game-level-art` |
+  | `game-bake-leaves` | `game-chunk-bake` |
+  | `game-boot-leaves` | `game-loader-status` |
+  | `game-crowd-leaves` | `game-crowd-types` |
+  | `game-demo-leaves` | `game-demo-record` |
+  | `game-demo-leaves2` | `game-demo-save` |
+  | `game-disco-leaves` | `game-disco` |
+  | `game-dynamic-light-leaves` | `game-dynamic-light` |
+  | `game-dynamite-leaves` | `game-dynamite-throw` |
+  | `game-egg-leaves` | `game-egg` |
+  | `game-gibs-leaves` | `game-gib-spawn` |
+  | `game-gibs-leaves2` | `game-gib-pieces` |
+  | `game-level-leaves` | `game-level-rooms` |
+  | `game-light-list-leaves` | `game-light-list` |
+  | `game-lighting-leaves` | `game-level-lights` |
+  | `game-loop-leaves` | `game-loop` |
+  | `game-outdoor-leaves` | `game-outdoor` |
+  | `game-panels-leaves` | `game-hud` |
+  | `game-player-leaves` | `game-player-input` |
+  | `game-probes-leaves` | `game-probe-weight` |
+  | `game-render-leaves` | `game-render-controls` |
+  | `game-render-leaves2` | `game-bone-cull` |
+  | `game-sequence-leaves` | `game-sequence` |
+  | `game-telemetry-leaves` | `game-telemetry-scene` |
+  | `game-train-leaves` | `game-train` |
+  | `game-vfx-leaves` | `game-wound-vfx` |
+  | `game-void-leaves` | `game-void` |
+  | `game-weapon-leaves` | `game-weapon-rig` |
+  | `game-world-leaves` | `game-hit-trace` |
+  | `game-world-leaves2` | `game-wound-streams` |
+  | `game-world-leaves3` | `game-bleed` |
+- [ ] Next: keep extracting from `main()` (the rows under "game-main.ts decomposition" below; `game-main.ts` is back
+  to 8,964 lines), naming modules by content. `scene`, `camera` and a few constants local to `main()` block 9 of the 17.
+- [ ] Then folders, one quiet cluster at a time (`deferred-`, `post-`, `shutter-`, spike entrypoints first; `game-*`
+  and `skeleton-spike/` after the skull PRs merge), with a script that moves files and rewrites imports, scripts and HTML.
+
 ## sdf-zombie suite red (14 tests) — fixed 2026-09-22
 
 - [x] 11 from `3662c1ca` (half-strength blends): zombie ribs/spine/iliac pulled in via `zombie-skeleton-gen.ts`, soldier

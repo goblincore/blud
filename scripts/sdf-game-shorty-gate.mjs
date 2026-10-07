@@ -152,7 +152,7 @@ await evaluate('typeof __sdfGame.vhsPanel === "function" ? (__sdfGame.vhsPanel(f
 // 2026-09-19-shader-compile), and the overlay covers the whole frame until
 // then. This gate used to sleep 2 s and shoot, so `fpv-rest`, `flash-on` and
 // `flash-off` were 15 KB frames of "compiling pipelines" that passed every
-// assertion and showed the owner nothing. game-boot-leaves adds
+// assertion and showed the owner nothing. game-loader-status adds
 // `loader-ready` when the game is playable; `loader-hidden` is what the
 // overlay's own click handler adds, so this is the player's path.
 await waitForLoader(evaluate, { fail, settleMs: 0 });

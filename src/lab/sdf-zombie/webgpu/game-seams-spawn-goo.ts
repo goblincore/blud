@@ -4,7 +4,7 @@
 
 import * as THREE from 'three/webgpu';
 import type { GameContext } from './game-context';
-import { roomSpawnPoints } from './game-level-leaves';
+import { roomSpawnPoints } from './game-level-rooms';
 import { crowdGridPoints, REGION_INSET_M, type FloorRect } from './crowd-spawn';
 import { rngStreams } from './rng';
 import { CHUNK_TUNING } from '../gib-chunks';

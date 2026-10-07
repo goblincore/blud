@@ -8,12 +8,12 @@
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
 import type { GameContext } from './game-context';
-import { updateHud } from './game-panels-leaves';
+import { updateHud } from './game-hud';
 import { MAGAZINE_CAPACITY, RELOAD } from './game-viewmodel';
-import { aimAtNearestSurface, convergedDir, fire, muzzleWorld } from './game-weapon-leaves';
+import { aimAtNearestSurface, convergedDir, fire, muzzleWorld } from './game-weapon-rig';
 import { WEAPON_SLOTS, requestSlot, type WeaponSlot } from './game-weapon-slots';
 import { BOB, FREE_AIM } from './free-aim';
-import { predictSlugHitNow } from './game-world-leaves';
+import { predictSlugHitNow } from './game-hit-trace';
 import { gunWetLipOn, setGunWetLip } from '../torn-lips';
 
 export function createWeaponAimSeams(ctx: GameContext) {

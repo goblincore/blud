@@ -35,7 +35,6 @@ export const AREAS: ReadonlyArray<{ name: string; about: string; match: RegExp }
   { name: 'Dev panels', about: 'Tuning panels for the labs and the game.', match: /(^|\/)[\w-]*panel[\w-]*$/ },
   { name: 'Game: context and state', about: 'The GameContext and its state slices (ECS resources to be). All game state lives here.', match: /^webgpu\/(game-context|game-state-|seam-merge|boot-params|sim-clock|rng$)/ },
   { name: 'Game: debug seams', about: '`window.__sdfGame` members, read by the gate and capture scripts.', match: /^webgpu\/game-seams-/ },
-  { name: 'Game: functions lifted out of main()', about: 'Named for how they were extracted, not what they hold; to be renamed by content.', match: /^webgpu\/game-[\w-]*-leaves\d*$/ },
   { name: 'Game: feature modules', about: 'Gameplay features wired into the game loop.', match: /^webgpu\/game-/ },
   { name: 'Weapons and viewmodel (render)', about: 'Weapon strikes, muzzle flash, held props, first-person view.', match: /^webgpu\/(axe-|flail-|muzzle-flash|flash-sprite|recoil-carry|free-aim|fpv-view|held-prop|viewmodel-|shotgun-casings|tracer-sprite|dynamite-|hand-volume|hands-sheet|pickups)/ },
   { name: 'Gibs and chunks (render)', about: 'Gib assets, baked chunks, gib sprites.', match: /^webgpu\/(gib-|chunk-|baked-chunks|gore-part-geom|soldier-corpse-bake)/ },

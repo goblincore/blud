@@ -9,11 +9,11 @@
 
 import type { GameContext } from './game-context';
 import { withCtx } from './game-context';
-import { demoRecordStart } from './game-demo-leaves';
-import { demoRecordStop } from './game-demo-leaves2';
-import { updateHud } from './game-panels-leaves';
-import { playerRoomId } from './game-player-leaves';
-import { bodiesOnScreen } from './game-world-leaves';
+import { demoRecordStart } from './game-demo-record';
+import { demoRecordStop } from './game-demo-save';
+import { updateHud } from './game-hud';
+import { playerRoomId } from './game-player-input';
+import { bodiesOnScreen } from './game-hit-trace';
 
 export function createDemoStepSeams(ctx: GameContext) {
   return {

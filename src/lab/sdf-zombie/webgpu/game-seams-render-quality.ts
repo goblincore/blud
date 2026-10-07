@@ -10,9 +10,9 @@
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { clampFovDeg } from './fisheye';
-import { applySdfScale, applyViewmodelFovScale, enableTrainedUpscale, fisheyeReport, sizeSdfLayer, updateUpscaleAbLabel } from './game-render-leaves';
-import { ensureImpactSplashLayer } from './game-vfx-leaves';
-import { shellAmpOf } from './game-world-leaves';
+import { applySdfScale, applyViewmodelFovScale, enableTrainedUpscale, fisheyeReport, sizeSdfLayer, updateUpscaleAbLabel } from './game-render-controls';
+import { ensureImpactSplashLayer } from './game-wound-vfx';
+import { shellAmpOf } from './game-hit-trace';
 import { impactSplashPresets, impactSplashProfiles, resolveImpactSplashProfile, type ImpactSplashProfile, type ImpactSplashWeapon } from './impact-splash-profiles';
 import { UPSCALE_SCALE, parseUpscaleConfig } from './upscale/upscale-model';
 import { runUpscaleSelfCheck } from './upscale/upscale-selfcheck';

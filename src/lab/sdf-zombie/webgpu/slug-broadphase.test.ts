@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { segmentNearAnySphere } from './game-world-leaves';
+import { segmentNearAnySphere } from './game-hit-trace';
 import type { Vec3 } from '../types';
 
 const sphere = (center: Vec3, radius: number) => ({ center, radius });

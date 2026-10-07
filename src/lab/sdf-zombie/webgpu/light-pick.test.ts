@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildLightList, type LightSource } from './light-list';
 import { LIGHT_PROFILES, PROFILE_ID } from './light-profiles';
-import { collectLightSources, pickBodyFor } from './game-light-list-leaves';
+import { collectLightSources, pickBodyFor } from './game-light-list';
 import { lightPresence, lightRank, pickLights, unpackPick, type Pick } from './light-pick';
 import { BEACON, beaconAxis } from './beacon';
 import { FLASHLIGHT_OFFSET } from './dungeon-lighting';
@@ -67,7 +67,7 @@ describe('pickLights (spec §4)', () => {
   });
 });
 
-describe('lightRank keeps presentingLamp (game-dynamic-light-leaves.ts) rules', () => {
+describe('lightRank keeps presentingLamp (game-dynamic-light.ts) rules', () => {
   const tubeProf = LIGHT_PROFILES[PROFILE_ID.tube]!;
   it('the coverage floor: far outside the cone but in range, the cover term is exactly the floor', () => {
     const list = buildLightList([tube(0, 0)]);

@@ -15,7 +15,7 @@ import { sdBody } from '../validate';
 import { unwarpHit } from '../damage';
 import { chunkSettled } from '../gib-chunks';
 import { woundFromPellet, woundFromSlug, traceProjectile } from './game-weapon';
-import { spillVerdict, woundTuningNow } from './game-vfx-leaves';
+import { spillVerdict, woundTuningNow } from './game-wound-vfx';
 import { clearSpritePieces, setSpritePiecesVisible, spritePieceStates } from './gib-sprite-pieces';
 import { type GooReconstruction } from './goo-layer';
 

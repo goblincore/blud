@@ -10,14 +10,14 @@
 import type { GameContext } from './game-context';
 import { type Vec3 } from '../types';
 import { headPopDebris } from '../head-pop';
-import { cancelChunkBake, spawnGoreShowcase } from './game-bake-leaves';
-import { igniteExplosionLight } from './game-dynamite-leaves';
-import { ensureCarvedLibrary, ensureGibAssets, ensureGibAtlas, gibAssetArmed } from './game-gibs-leaves';
-import { updateHud } from './game-panels-leaves';
-import { laySpriteBench } from './game-render-leaves';
-import { scaleBurstVisual } from './game-vfx-leaves';
+import { cancelChunkBake, spawnGoreShowcase } from './game-chunk-bake';
+import { igniteExplosionLight } from './game-dynamite-throw';
+import { ensureCarvedLibrary, ensureGibAssets, ensureGibAtlas, gibAssetArmed } from './game-gib-spawn';
+import { updateHud } from './game-hud';
+import { laySpriteBench } from './game-render-controls';
+import { scaleBurstVisual } from './game-wound-vfx';
 import { setSpritePiecesVisible } from './gib-sprite-pieces';
-import { spawnBurstStandIn } from './game-weapon-leaves';
+import { spawnBurstStandIn } from './game-weapon-rig';
 
 export function createGibsBakeSeams(ctx: GameContext) {
   const { camera } = ctx.boot.handle;

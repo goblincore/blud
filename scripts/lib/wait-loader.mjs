@@ -10,7 +10,7 @@
 // that passed their assertions and showed nothing — bleed parity reported a
 // "zero diff" between two identical pictures of the loader.
 //
-// game-boot-leaves adds `loader-ready` when the game is playable;
+// game-loader-status adds `loader-ready` when the game is playable;
 // `loader-hidden` is what the overlay's own click handler adds, so dismissing
 // it this way is the player's path, not a private one.
 //
