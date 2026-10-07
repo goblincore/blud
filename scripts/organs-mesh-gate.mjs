@@ -33,7 +33,10 @@ const ONLY = (process.env.ONLY ?? "M,Q,P").split(",");
 const W = 1280, H = 800, EYE_H = 1.62, DIST = 0.9;
 // Tolerances of S: the mesh organ against the SDF organ, on screen.
 const AREA_LO = 0.6, AREA_HI = 1.5;      // organ pixel count, mesh / sdf
-const COLOUR_MAX = 0.15;                 // distance of the mean organ colours, sRGB 0..1
+// Distance of the mean organ colours, sRGB 0..1. Loose on purpose: the shipped look is the owner's pick, 'wet', whose
+// base is darker than the SDF organ's under the torch (0.19 apart there, 0.05 with the torch off). The check has to
+// catch the wrong MATERIAL: an unoccluded organ in a dark room is 0.36 apart.
+const COLOUR_MAX = 0.25;
 const ROI = { x0: 340, x1: 940, y0: 100, y1: 540 };   // the screen region the pixel checks read (about the wound)
 mkdirSync(OUT, { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -193,6 +196,17 @@ async function costOfSdf(label) {
   }
   const med = (a) => { const q = [...a].sort((x, y) => x - y); return q.length % 2 ? q[q.length >> 1] : (q[q.length / 2 - 1] + q[q.length / 2]) / 2; };
   const iqr = (a) => { const q = [...a].sort((x, y) => x - y); return [q[Math.floor(q.length * 0.25)], q[Math.floor(q.length * 0.75)]].map((x) => +x.toFixed(2)); };
+  // WHERE THE FRAME GOES, per mode: under the render lock a step is a pure re-render, so the step's own time is the
+  // CPU side (pose, uploads, encoding the draws) and the wait on the fence after it is the GPU's; the pass timestamps
+  // split the GPU side by pass.
+  await evaluate("__sdfGame.setRenderLock(true)");
+  for (const mode of ["mesh", "sdf"]) {
+    const r = await evaluate(`(async () => { __sdfGame.setOrgans("${mode}"); await __sdfGame.timeDraws(4); await __sdfGame.passTimings(); const N = 60, cpu = [], gpu = []; for (let i = 0; i < N; i++) { const t0 = performance.now(); __sdfGame.step(1, 0); const t1 = performance.now(); await __sdfGame.resolveGpu(); cpu.push(t1 - t0); gpu.push(performance.now() - t1); } const p = await __sdfGame.passTimings(); const by = {}; for (const q of p.samples) by[q.label] = (by[q.label] ?? 0) + q.ms; const m = (a) => a.sort((x, y) => x - y)[a.length >> 1]; return { cpu: m(cpu), wait: m(gpu), passes: Object.fromEntries(Object.entries(by).map(([k, v]) => [k, +(v / N).toFixed(2)]).sort((a, b) => b[1] - a[1])) }; })()`, 300000);
+    const sum = Object.values(r.passes).reduce((a, b) => a + b, 0);
+    console.log(`  frame ${label} [${mode}]: CPU ${r.cpu.toFixed(2)} ms, then ${r.wait.toFixed(2)} ms waiting on the GPU; GPU passes sum ${sum.toFixed(2)} ms: ${J(r.passes)}`);
+  }
+  await evaluate(`__sdfGame.setOrgans("mesh")`);
+  await evaluate("__sdfGame.setRenderLock(false)");
   console.log(`  cost ${label}: mesh baseline ${med(base).toFixed(2)} ms wall, march ${med(baseGpu).toFixed(2)} ms gpu; sdf organs cost +${med(wall).toFixed(2)} ms wall (IQR ${J(iqr(wall))}), +${med(gpu).toFixed(2)} ms march gpu (IQR ${J(iqr(gpu))}); ${RN} rounds x ${K} frames`);
   await stepN(4);
 }
@@ -419,6 +433,7 @@ async function torch(on) {
 /** One sheet of the wound at `target` on zombie `id`, from the standing eye `dist` away. */
 async function lookTiles(name, id, target, dist) {
   await look(target, dist, await frontOf(id));
+  const shipped = (await evaluate("__sdfGame.organs()")).look;
   const rows = [];
   for (const lit of [false, true]) {
     await torch(lit);
@@ -437,7 +452,7 @@ async function lookTiles(name, id, target, dist) {
     console.log(`  ${name} torch ${lit ? "on" : "off"}: ` + Object.entries(px).map(([k, v]) => `${k} ${v.n} px ${J(r3(v.mean))}`).join("; "));
     rows.push(row);
   }
-  await evaluate(`__sdfGame.setOrganLook("${process.env.LOOK_DEFAULT ?? "match"}")`);
+  await evaluate(`__sdfGame.setOrganLook(${J(shipped)})`);
   await stepN(3);
   sheet(name, rows);
   const bl = await evaluate(`__sdfGame.boneLights(${id})`);

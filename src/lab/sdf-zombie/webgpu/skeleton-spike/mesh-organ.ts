@@ -64,8 +64,8 @@ export const ORGAN_LOOKS = {
   pale: { cfg: [0.25, 0.0, 0.85, 0.3], gloss: [1.0, 0.8, 0.85, 3.0], occ: [0.75, 0.5, 0.45, 1.7] },
 } as const satisfies Record<string, OrganLook>;
 export type OrganLookName = keyof typeof ORGAN_LOOKS;
-/** Until the owner picks from the sheet (docs/dev-notes/2026-10-06-organs-mesh/look/). */
-export const ORGAN_LOOK_DEFAULT: OrganLookName = 'match';
+/** The owner's pick from the sheet, 2026-10-07: "go with wet" (docs/dev-notes/2026-10-06-organs-mesh/look/). */
+export const ORGAN_LOOK_DEFAULT: OrganLookName = 'wet';
 
 const lerp3 = (a: Vec3, b: Vec3, t: number): Vec3 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
