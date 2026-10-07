@@ -549,9 +549,14 @@ export function stumpLipShare(): number { return stumpLip; }
  * So after a sever, with `stump` the wound it stamped (null: none), a crater loses its lip (`rimScale` times the
  * stump lip share, 0 as shipped; its carve and its paint stay) when:
  *   - the flesh it rides is gone: its prim is dead, or its prim's cluster is no longer alive;
- *   - its lip's ring reaches into the stump's carve: centres closer than the stump's radius plus LIP_REACH of its own;
+ *   - its lip's ring reaches into the stump's carve (centres closer than the stump's radius plus LIP_REACH of its own)
+ *     and the stump's bowl takes flesh the crater had left: the bowl is not wholly inside the crater's own carve;
  * and the stump loses its own lip when its ring reaches into such a crater's carve (centres closer than that crater's
- * radius plus LIP_REACH stump radii). Decals carve nothing and are left alone; a cut has no ring.
+ * radius plus LIP_REACH stump radii) and that crater is not wholly inside the stump's bowl. So of a stump and a
+ * crater that holds it (a slug's 16 cm crater at the neck holds the head's 11 cm stump), the crater keeps its lip,
+ * which lines the one hole there is, and the stump loses its own, which would stand in the middle of that hole. A
+ * crater holds the bowl only when its carve is the whole sphere there (no floor nearer than its radius).
+ * Decals carve nothing and are left alone; a cut has no ring.
  * Returns `wounds` itself when nothing changes; a changed wound is a new object.
  */
 export function lipsAfterSever(
@@ -575,8 +580,10 @@ export function lipsAfterSever(
     if (at && stump && prims[w.primIdx]) {
       const c = woundWorldPos(prims, w, bodyYaw);
       const d = len(sub(c, at));
-      if (d < stump.radius + w.radius * LIP_REACH) drop = true;
-      if (d < w.radius + stump.radius * LIP_REACH) stumpHangs = true;
+      const holdsStump = d + stump.radius <= w.radius && (w.carveDepth ?? Infinity) >= w.radius;
+      const inStump = d + w.radius <= stump.radius;
+      if (d < stump.radius + w.radius * LIP_REACH && !holdsStump) drop = true;
+      if (d < w.radius + stump.radius * LIP_REACH && !inStump) stumpHangs = true;
     }
     if (!drop) return w;
     changed = true;

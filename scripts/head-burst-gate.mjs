@@ -443,13 +443,17 @@ try {
   const drawn = await evaluate(`(() => { const d = __sdfGame.skullDrawn(${S1.id}); return d ? { bones: d.copies.filter((c) => !c.eye).length, eyes: d.copies.filter((c) => c.eye).length, pieces: [...new Set(d.copies.filter((c) => !c.eye).map((c) => c.piece))].sort() } : null; })()`);
   const turned = st ? (st.sides === 0 ? [1, 2] : st.sides > 0 ? [1] : [2]) : [];
   check(!!drawn && drawn.pieces.includes(0) && turned.every((p) => drawn.pieces.includes(p)), `S: the skull is drawn broken with the split: clipped copies for the rest and for each half that turned (${JSON.stringify(drawn)})`);
-  // The field where a turned half used to be: 3.5 cm to that half's side of the plane, 6 cm over the head's centre.
+  // The field where a turned half used to be: 6 cm over the head's centre and to that half's side of the split's
+  // PLANE, which a one-sided split puts off the centre, through where the slug landed (head-split.ts choosePreset):
+  // 3.5 cm past it when both halves open, 2 cm when the smaller side peels alone (that side is the narrow one).
   // Flesh on the closed head; empty now that the half has swung away.
-  const side = st && st.sides > 0 ? 1 : -1;
+  const side = st && st.sides > 0 ? 1 : -1, past = st?.sides === 0 ? 0.035 : 0.02;
   const there = await evaluate(`(async () => { const V = await import("/src/lab/sdf-zombie/validate.ts"); const f = __sdfGame.head.frame(${S1.id}), w = __sdfGame.zombie(${S1.id}).posed().split, b = __sdfGame.zombie(${S1.id}).posed();
-    const q = [f.centre[0] + w.n[0] * ${side} * 0.035, f.centre[1] + 0.06, f.centre[2] + w.n[2] * ${side} * 0.035];
-    return { open: V.sdBody(q, b), closed: V.sdBodyClosed(q, b) }; })()`);
-  check(there.closed < 0 && there.open > 0, `S: the field is open where the half was: ${(there.open * 1000).toFixed(1)} mm clear of any flesh, at a point ${(-there.closed * 1000).toFixed(1)} mm inside the closed head`);
+    const c = [f.centre[0], f.centre[1] + 0.06, f.centre[2]];
+    const s = w.d0 - (w.n[0] * c[0] + w.n[1] * c[1] + w.n[2] * c[2]) + ${side} * ${past};
+    const q = [c[0] + w.n[0] * s, c[1] + w.n[1] * s, c[2] + w.n[2] * s];
+    return { open: V.sdBody(q, b), closed: V.sdBodyClosed(q, b), offset: w.d0 - (w.n[0] * f.centre[0] + w.n[1] * f.centre[1] + w.n[2] * f.centre[2]) }; })()`);
+  check(there.closed < 0 && there.open > 0, `S: the field is open where the half was: ${(there.open * 1000).toFixed(1)} mm clear of any flesh, at a point ${(-there.closed * 1000).toFixed(1)} mm inside the closed head (${(past * 1000).toFixed(0)} mm past the split's plane, which is ${(there.offset * 1000).toFixed(1)} mm off the head's centre)`);
   const faces = (await headWounds(S1.id)).filter((w) => w.shape === "cut" && (w.headRegion === "split+" || w.headRegion === "split-"));
   check(faces.length === (st?.sides === 0 ? 2 : 1) && (await hstate(S1.id)) === null, `S: the slug's wound is the split's cut face${st?.sides === 0 ? "s" : ""} (${faces.length}), and the head leaf holds nothing for it (no opening)`);
   await stand(S1.id, PHOTO_D); await capture("S-split");

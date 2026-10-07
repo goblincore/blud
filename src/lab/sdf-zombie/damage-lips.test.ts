@@ -42,15 +42,29 @@ describe('lipsAfterSever', () => {
     expect(out[1]).toBe(far);
     expect(out[3]).toBe(outside);
   });
-  it('the stump loses its own lip when it opens inside a bigger crater\'s carve', () => {
+  it('a stump inside a bigger crater\'s carve loses its own lip, and that crater keeps the lip that lines the one hole', () => {
     const stump = crater(1, [0, 0.15, 0], 0.11);
+    // A slug's 16 cm crater 3 cm from the stump's centre holds the whole 11 cm bowl.
     const big = crater(1, [0.02, 0.14, 0.02], 0.16);
     const out = lipsAfterSever([big, stump], PRIMS, BOTH, stump);
-    expect(out[0]!.rimScale).toBe(0);
+    expect(out[0]).toBe(big);
     expect(out[1]!.rimScale).toBe(0);
+    // A crater with a floor nearer than its radius does not hold the bowl: the stump goes deeper than it did.
+    const floored = lipsAfterSever([{ ...big, carveDepth: 0.05 }, stump], PRIMS, BOTH, stump);
+    expect(floored.map(w => w.rimScale)).toEqual([0, 0]);
+    // Nor does one the bowl pokes out of.
+    const beside = lipsAfterSever([crater(1, [0.08, 0.14, 0.02], 0.16), stump], PRIMS, BOTH, stump);
+    expect(beside.map(w => w.rimScale)).toEqual([0, 0]);
     // A stump with nothing near it keeps its ragged edge.
     const alone = lipsAfterSever([crater(1, [0, -0.3, 0.12], 0.05), stump], PRIMS, BOTH, stump);
     expect(alone[1]).toBe(stump);
+  });
+  it('a crater wholly inside the stump\'s bowl loses its lip, and the stump keeps its own', () => {
+    const stump = crater(1, [0, 0.15, 0], 0.11);
+    const small = crater(1, [0.02, 0.15, 0], 0.03);
+    const out = lipsAfterSever([small, stump], PRIMS, BOTH, stump);
+    expect(out[0]!.rimScale).toBe(0);
+    expect(out[1]).toBe(stump);
   });
   it('decals, cuts and craters that already have no lip are left alone, and with nothing to change the list is the same one', () => {
     const stump = crater(1, [0, 0.15, 0], 0.11);
