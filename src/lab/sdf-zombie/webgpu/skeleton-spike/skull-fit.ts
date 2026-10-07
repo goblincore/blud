@@ -26,8 +26,9 @@
 //    normal on the indexed mesh would open a shading seam at every UV split.
 // A pass takes the worst offender of each small cell as an anchor, to move inward along the flesh's gradient until it
 // has its margin; the field is the anchors' moves blended by a smooth falloff of `radius` (passAt). Passes repeat
-// until every vertex has its margin: three or four on the humanoids. Vertices further than the radius from any
-// offender do not move: the face, the sockets and the teeth keep their shape where they have room.
+// until every vertex has its margin: two to seven on the humanoids. Vertices further than the radius from any
+// offender do not move, so the teeth and the jaw keep their shape where they have room. A vertex within the radius of
+// one is carried with it: on the zombie the cheekbones and the nose move 6 to 10 mm with the forehead above them.
 /** A point or a vector the fit may write to; `At` is one it only reads (types.ts Vec3 is that). */
 export type V3 = [number, number, number];
 type At = readonly [number, number, number];
@@ -45,7 +46,9 @@ export interface SkullFitParams {
   /** The most stage 2 may move a vertex of the vault (the cranium's plates), as a share of the skull's width. 0: no
    *  stage 2, and stage 1 keeps the margin by itself. */
   pull: number;
-  /** The same for a vertex of the face (cheekbones, jaws, teeth, nose): its shape is what reads as a skull. */
+  /** The same for a vertex of the face (cheekbones, jaws, teeth, nose), whose shape is what reads as a skull. Both
+   *  bound what a vertex LACKS when stage 1 is done, which is what stage 2 has to find for it; a vertex beside a
+   *  needier one is carried further than its own lack. */
   facePull: number;
   /** The falloff radius of a pull, as a share of the skull's width. */
   radius: number;
