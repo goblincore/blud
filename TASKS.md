@@ -30,6 +30,11 @@
   Debt: an open head costs about +6 to +8 ms at 0.6 m. Gates `scripts/head-split-gate.mjs` (100 checks, 2026-10-06), `scripts/axe-gate.mjs` (27).
   **On the anatomical skull (2026-10-06, branch `claude/split-anatomical-skull`):** split plates have their own material, shots break them where they are drawn (bone standing in the open gap included), the gate runs on it and reads their pixels. Owner to decide: retune how far the bone opens ([sheets and notes](docs/dev-notes/2026-10-06-split-anatomical-skull/NOTES.md)).
   [Spec](docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 10) · [handoff](docs/dev-notes/2026-10-04-head-split/HANDOFF.md) · [notes](docs/dev-notes/2026-10-04-head-split/NOTES.md).
+- [~] **The sculpted skull, second pass: four variants built 2026-10-07; owner to pick** (branch `claude/sculpt-skull-2`).
+  The owner chose the old sculpted skull over the anatomical one (it fills the head and reads best) and wants it more
+  anatomical and frightening, the jaw and teeth first. `?sculpt=shape | shape-fine | paint | full` (new bone, new bone
+  at a 5 mm cell, new paint, both); the default is unchanged and pinned. `full` reads best on the sheets.
+  [Notes and look sheets](docs/dev-notes/2026-10-07-sculpt-skull-2/NOTES.md).
 
 **Night Train (level 1)** — [levels](docs/tasks/levels.md) (items 4a–4k)
 - [x] **Body lighting settled** (owner, 2026-09-28): LIGHT LAYERS panel (`light-layers.ts`) — every body-lighting

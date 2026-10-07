@@ -33,6 +33,15 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
     material, shots break them where an opened half draws them (bone standing in the open gap included, which no
     flesh covers), and the gate runs on it and reads the plates' pixels. For the owner: retune how far the bone
     opens? [Notes and look sheets](../dev-notes/2026-10-06-split-anatomical-skull/NOTES.md).
+  - **The sculpted skull, second pass (2026-10-07, branch `claude/sculpt-skull-2`):** after playtesting both skulls
+    the owner chose the old sculpted one as the base and asked for it to be more anatomical and frightening: the jaw
+    and teeth first, then the eye sockets, the nose opening, the brow ridge, cheekbones and hollows. Four variants
+    behind `?sculpt=`: `shape` (a second sculpt of the bone), `shape-fine` (the same at a 5 mm cell for the head),
+    `paint` (a second paint with separate teeth and a tilted shading normal) and `full` (both). The default sculpt
+    and the anatomical default are unchanged; the default sculpt's mesh bytes and shader text are pinned by hash. On
+    the sheets `full` is the best in every row, `paint` gives most of the face on the old bone, and the two `shape`
+    variants make the teeth worse under the old paint. For the owner: pick one.
+    [Notes and look sheets](../dev-notes/2026-10-07-sculpt-skull-2/NOTES.md).
   - **Gates (as of 2026-10-06):** `scripts/head-split-gate.mjs` (100 checks), `scripts/axe-gate.mjs` (27),
     `scripts/cut-wound-gate.mjs` (30).
 
