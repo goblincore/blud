@@ -3,7 +3,9 @@
 This file is the cross-harness entry point for coding agents (Claude Code,
 Codex, DSH, etc.). It is intentionally concise. **The status board is
 [TASKS.md](TASKS.md); the current vs. proposed source layout is
-[docs/architecture/repository-map.md](docs/architecture/repository-map.md).**
+[docs/architecture/repository-map.md](docs/architecture/repository-map.md); which
+module owns what is in the generated
+[docs/architecture/module-index.md](docs/architecture/module-index.md).**
 
 ## Active vs. retired — read this first
 
@@ -36,6 +38,23 @@ Codex, DSH, etc.). It is intentionally concise. **The status board is
 `/index.html`; plain `npx vite` stays non-opening for browser-free automation.
 The old `/index.html` still serves legacy until Stage 2.
 
+## Finding and placing code
+
+- **Find it:** [docs/architecture/module-index.md](docs/architecture/module-index.md)
+  lists every module of the active tree with a one-line summary, grouped by
+  area. Grep it before you grep the tree.
+- **Every module starts with a header comment** whose first sentence says what
+  the module owns (`// <path>`, a blank `//`, then the sentence). The index is
+  generated from it. After adding, moving or re-describing a module, run
+  `npx tsx scripts/module-index.ts`; `scripts/module-index.test.ts` fails
+  otherwise.
+- **Do not grow `webgpu/game-main.ts`.** A new feature goes in its own module
+  beside it (as `game-flail.ts`, `game-axe.ts`, `game-head-split.ts` do): state
+  in the matching `game-state-<slice>.ts`, logic in pure functions that take the
+  `GameContext`, and only the wiring call in `game-main.ts`.
+- **Name a module for what it holds**, not for how it was made (no new
+  `-leaves`, `-misc`, `-2` files).
+
 ## Rules
 
 - **Memory:** Every session starts by running **both** launcher commands:
@@ -48,8 +67,16 @@ The old `/index.html` still serves legacy until Stage 2.
   Search memory **before** broad grep/glob exploration for how something works or
   where it lives. **Do not** create a `MEMORY.md` or a `/memory/` persistence.
   Record durable code facts with `--files` pinned to the source file(s).
-- **Verification:** Run the verification appropriate to the change (focused tests
-  for local edits; a build/typecheck for cross-cutting edits). Coordinate any
+- **Verification:** Run the verification appropriate to the change. Locally that is
+  `npm run typecheck` and `npm run test:changed` (the tests beside the files your
+  branch changed, plus the source guards), or `npx vitest run <path>` for one area.
+  A bare `npm test` is the quick suite: it leaves out the slow group (25 files that
+  are 83% of the run time, listed as `SLOW_TESTS` in `vite.config.ts`). Naming a
+  file always runs it, slow or not. **Do not run everything locally**
+  (`npm run test:all`) unless asked: CI (`.github/workflows/ci.yml`) runs it on
+  every push. After a
+  push, read the result with `gh run list --branch <branch>` / `gh run view`. The
+  GPU gates are not in CI; run the ones your change touches by hand. Coordinate any
   GPU / heavy job to avoid concurrent measurements; own and clean up only your
   own resources; respect user-authorized work and preserve unrelated edits.
 - **Resource ownership:** Extracted Blood assets are **dev placeholders only** —
@@ -87,3 +114,12 @@ The mesh path lives in `webgpu/skeleton-spike/` despite the historical name.
 Skull geometry/eye damage and material polish are accepted; stop further polish
 unless requested. Torso cavity brightness remains a documented limitation.
 See `docs/dev-notes/2026-09-07-skeleton-comparison/wrap-up.md`.
+
+**Organs are mesh too — 2026-10-06 (owner decision).** On the mesh skeleton a zombie's organs are segment meshes
+(`skeleton-spike/contract.ts` kind `'organ'`, `mesh-organ.ts`), drawn only where a wound reaches them, and the body
+packs no inside-flesh row, so the march never calls `applyBones`. `?organs=sdf` (or `__sdfGame.setOrgans('sdf')`) keeps
+them as field rows for A/B. `?skeleton=procedural`, deferred rendering and detached chunks keep SDF organs.
+See `docs/superpowers/specs/2026-10-06-organs-mesh-design.md` and `docs/dev-notes/2026-10-06-organs-mesh/NOTES.md`.
+Since 2026-10-07 the organ mesh is swept tubes, one per organ prim (`mesh-organ-tubes.ts`; `ORGAN_MESHES` in `mesh.ts`,
+`__sdfGame.setOrganMesh('nets-5mm')` for the old extraction), and its surface detail (haustra, wrinkles, creases) is
+shading over the per-vertex `organTube` coordinate, not geometry: `docs/dev-notes/2026-10-07-organs-lowpoly/NOTES.md`.

@@ -1,4 +1,7 @@
 // src/lab/sdf-zombie/lab-main.ts
+//
+// Entrypoint of the original WebGL SDF lab page (sdf-lab.html): scene, panels, damage tools and the render loop.
+
 import * as THREE from 'three';
 import { createRenderer } from '../../engine/renderer';
 import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from './build-body';

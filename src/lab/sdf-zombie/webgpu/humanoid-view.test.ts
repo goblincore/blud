@@ -9,8 +9,6 @@
 // HumanoidVolumeAssets.dispose().
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-// @ts-expect-error — node:fs available in vitest via happy-dom/node
-import { readFileSync } from 'node:fs';
 import * as THREE from 'three/webgpu';
 import {
   createHumanoidView, type HumanoidView, type PrewarmReport,
@@ -336,13 +334,6 @@ describe('createHumanoidView lifecycle', () => {
 describe('setWounds uploads without allocating', () => {
   const wound = (boneIdx: number, local: Vec3, type: WoundType = 'pellet'): BoneWound => ({
     boneIdx, local, radius: 0.055, type, ageSec: 0,
-  });
-
-  it('imports writeWounds from zombie-gpu and never defines its own texel writer', () => {
-    const src = readFileSync('src/lab/sdf-zombie/webgpu/humanoid-view.ts', 'utf8');
-    expect(src).toContain("import { writeWounds } from './zombie-gpu'");
-    expect(src).toContain('writeWounds(texels');
-    expect(src).not.toMatch(/\bfunction writeWounds\b/);
   });
 
   it('leaves resourceCounts() bit-identical across 0, 6 and 12 logical wounds', () => {

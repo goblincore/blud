@@ -1,4 +1,7 @@
 // src/lab/sdf-zombie/rig-bind.ts
+//
+// Binds a built body to a verlet rig and applies the rig pose back onto its primitives, with head, jaw and hem handling.
+
 import type { BuildResult } from './build-body';
 import type { ClusterInfo, Primitive, Vec3 } from './types';
 import type { Quat } from './vec';

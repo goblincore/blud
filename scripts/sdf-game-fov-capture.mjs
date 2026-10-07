@@ -129,7 +129,7 @@ for (const p of ['woundPanel', 'gooPanel', 'vhsPanel']) {
 // then. The first run of this script captured its first leg over "compiling
 // pipelines" and produced three 17 KB near-black PNGs that passed every
 // assertion and showed the owner nothing — the same failure mode the shorty
-// gate's panel note records, from the other direction. game-boot-leaves adds
+// gate's panel note records, from the other direction. game-loader-status adds
 // `loader-ready` when the game is actually playable; `loader-hidden` is what
 // the overlay's own click handler adds, so dismissing it this way is the
 // player's path, not a private one.

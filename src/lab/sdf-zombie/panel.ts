@@ -1,4 +1,7 @@
 // src/lab/sdf-zombie/panel.ts
+//
+// Dev panel helpers for the lab: per-character override storage and slider, select and button widgets.
+
 import type { BodyOverride } from './build-body';
 import type { FleshMaterial } from './material';
 import type { FaceParams } from './face';

@@ -1,4 +1,7 @@
 // src/lab/sdf-zombie/resolve.ts
+//
+// Resolves bone placement to world-space heads and tails, and places primitives along those bones.
+
 import type { BoneDef, LimbId, Primitive, ResolvedBone, Vec3 } from './types';
 import type { ExpandedPrim } from './mirror';
 import { add, bendCtrl, lerp, normalize, scale } from './vec';

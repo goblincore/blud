@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/encounter-director.ts
+//
+// Encounter director: line-of-sight and fire-lane tests, plus the per-agent orders (idle, combat, pursue, search, return, yield).
+
 import type { Vec3 } from '../types';
 import type { BrainPlayer } from '../brain';
 import type { Aabb } from './game-level';

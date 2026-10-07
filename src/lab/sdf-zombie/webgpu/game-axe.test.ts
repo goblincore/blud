@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // src/lab/sdf-zombie/webgpu/game-axe.test.ts
 //
 // The axe harness against a stub ctx and stub actors built from real prims (a torso capsule and a head sphere), so the

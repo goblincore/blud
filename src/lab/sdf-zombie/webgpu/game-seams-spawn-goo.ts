@@ -1,6 +1,10 @@
+// src/lab/sdf-zombie/webgpu/game-seams-spawn-goo.ts
+//
+// The window.__sdfGame spawn and goo members: dynamite state readout, crowd spawning, test chunks, spin fixtures, gore look and goo perf.
+
 import * as THREE from 'three/webgpu';
 import type { GameContext } from './game-context';
-import { roomSpawnPoints } from './game-level-leaves';
+import { roomSpawnPoints } from './game-level-rooms';
 import { crowdGridPoints, REGION_INSET_M, type FloorRect } from './crowd-spawn';
 import { rngStreams } from './rng';
 import { CHUNK_TUNING } from '../gib-chunks';

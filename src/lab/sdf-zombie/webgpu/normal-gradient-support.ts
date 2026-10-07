@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/normal-gradient-support.ts
+//
+// Support checks for the analytic normal gradient: which bodies and primitives are supported, owner stability and hit point reconstruction.
+
 import type { Body } from '../validate';
 import type { NgReason } from './normal-gradient-reference';
 

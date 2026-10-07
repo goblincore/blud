@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/enclosure.ts
+//
+// The toggleable Cornell-box enclosure (walls, ceiling, colours) used by the light-bounce spike.
+
 import * as THREE from 'three/webgpu';
 import type { Box, EnclosureWalls, Vec3 } from '../ambient';
 

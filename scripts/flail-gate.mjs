@@ -833,7 +833,7 @@ let tooFarZ = null;   // untouched here (the strike is refused): the LIVE sectio
 // Owner, v1.3 playtest (2026-09-28): with free aim the reticle drifts inside a dead zone, and
 // the flail used to strike down the camera's forward (the screen centre) — the reticle on the
 // head hit the torso, the screen centre on the head hit the face. The shotgun fires through
-// the reticle (game-weapon-leaves.ts aimDir); the flail must too. The view looks at the torso;
+// the reticle (game-weapon-rig.ts aimDir); the flail must too. The view looks at the torso;
 // CONTROL: reticle centred → a torso hit. Then the reticle moved onto the head → a head hit.
 {
   const z = fresh();

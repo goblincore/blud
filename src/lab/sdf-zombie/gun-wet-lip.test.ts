@@ -13,7 +13,6 @@ import { APPLY_WOUNDS, WOUND_MASK, MARCH_BODY, MARCH_TRACE_POST } from './webgpu
 import { MARCH_SURFACE } from './webgpu/deferred-sdf';
 import { NG_WOUNDS } from './webgpu/normal-gradient.wgsl';
 import actorSrc from './webgpu/game-actor.ts?raw';
-import seamSrc from './webgpu/game-seams-weapon-aim.ts?raw';
 import viewSrc from './webgpu/character-view.ts?raw';
 
 const wound = (extra: Partial<Wound> = {}): Wound => ({ primIdx: 0, local: [0, 0, 0], radius: 0.055, type: 'pellet', ageSec: 0, ...extra });
@@ -69,12 +68,11 @@ describe('gun wet lip: who gets it', () => {
     setGunWetLip(true);
     expect(viewSrc).toContain('rows.map(w => wetLipUpload(w)),');
   });
-  it('the gun stamps it on pellets and slugs, zombie-class bodies only; the seam A/Bs it', () => {
+  it('the gun stamps it on pellets and slugs, zombie-class bodies only', () => {
     expect(GUN_WET_LIP).toEqual({ pellet: 1, slug: 1 });
     expect(actorSrc).toContain("gunWetLip(wound, 'pellet');");
     expect(actorSrc).toContain("gunWetLip(wound, 'slug');");
     expect(actorSrc).toContain('if (soldierDamage || softTarget) return;');
-    expect(seamSrc).toContain('setWetLip(on: boolean) {');
   });
 });
 

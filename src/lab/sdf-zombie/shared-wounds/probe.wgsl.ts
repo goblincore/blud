@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/shared-wounds/probe.wgsl.ts
+//
+// The standalone WGSL shader of the shared-wounds probe page, never included in the game material.
+
 import { PRESETS } from './presets';
 const vec = (values: readonly number[]) => `vec3<f32>(${values.map(v => Number.isInteger(v) ? `${v}.0` : v).join(',')})`;
 /** Standalone comparison shader, never included in the game material. */

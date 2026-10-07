@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/normal-gradient-reference.ts
+//
+// CPU reference for the analytic normal gradient: capsule, smooth min and max, wound and finite-difference gradients, plus the reason codes.
+
 export type V3 = readonly [number, number, number];
 
 export type NgReason = 'ok' | 'unsupported' | 'degenerate' | 'hard-boundary'

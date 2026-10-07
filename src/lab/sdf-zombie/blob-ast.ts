@@ -1,4 +1,6 @@
 // src/lab/sdf-zombie/blob-ast.ts
+//
+// The `.blob` document model: line records with their comments, bones, parts, stance and the BlobError type.
 
 /**
  * One significant source line, with the trivia that preceded it.
