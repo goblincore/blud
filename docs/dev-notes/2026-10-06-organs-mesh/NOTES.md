@@ -66,6 +66,10 @@ node scripts/organs-mesh-gate.mjs`.
 
 `ORGAN_LOOK_DEFAULT` is `match` until the pick. `__sdfGame.setOrganLook('wet')` (or numbers) tries one live.
 
+**The pick, 2026-10-07: `wet`** ("go with wet"). `ORGAN_LOOK_DEFAULT = 'wet'`. The gate's colour tolerance went from
+0.15 to 0.25 with it: `wet`'s base is darker than the SDF organ's under the torch on purpose (0.191 apart there, 0.055
+with the torch off). Gate rerun on `wet`: 32 checks, 0 failed; with `wet`'s occlusion set to (1, 1, 1), T2 fails.
+
 ## The gate: `scripts/organs-mesh-gate.mjs`
 
 32 checks, 0 failed (2026-10-06, Chrome 154, ports 5251 / 9251). Three boots; boot M flips the mode in page, so both
@@ -108,6 +112,27 @@ block against the mesh blocks either side):
 So mesh organs take about 1 to 1.5 ms off a wounded torso at 0.9 m: less than the 2.0 ms the `applyBones`-off ablation
 measured (IQR 1.35 to 2.4), inside its spread. The march target is bit-identical between the two on the chop scene
 (`31f830b2`): the organs it paid for were never in the frame. The mesh draw's own cost is inside the wall numbers.
+
+**Is the frame CPU-bound? No** (the owner's question, 2026-10-07). Under the render lock a step is a pure re-render:
+the step's own time is the CPU side and the wait on the fence after it is the GPU's whole frame (`COST=1`, 60 frames
+a mode, medians):
+
+| Scene | mode | CPU | waiting on the GPU |
+| --- | --- | --- | --- |
+| belly crater at 0.7 m | mesh | 4.10 ms | 19.00 ms |
+| | sdf | 4.20 ms | 19.70 ms |
+| three torso chops at 0.9 m | mesh | 3.60 ms | 22.80 ms |
+| | sdf | 3.70 ms | 23.30 ms |
+
+The CPU side is about 4 ms of a 23 to 26 ms frame and does not move with the organ mode (the organ meshes are two
+instanced draws, about 4,000 vertices, for a zombie whose wound reaches its gut). The saving is small because the organs
+were a small part of a GPU-bound frame: about 1 ms of roughly 20. The frame is 19.4 ms before any wound, and of the
+4.3 ms three chops added, 2.8 ms is the carve itself and is still there. A second run on a loaded machine read 12 to
+15 ms CPU and a 31 to 33 ms frame: these are wall numbers and move with load; the GPU wait was 19 to 23 ms in both.
+The same in-page alternation that day gave +0.63 ms wall for the belly crater and +1.25 ms for the chops, the same size
+as the first day's. **The per-pass GPU timestamps do not split this GPU's frame**: read per pass, every pass of a frame
+(march, each upscaler layer, composite, post) reports about the whole frame's time, so "march GPU ms" in the tables
+above is nearer the frame's GPU time than the march's alone.
 
 **The first wound** (a fresh boot, the first belly slug; sim step, then fenced draws, ms): mesh 75.8, 61.8, 21.6;
 sdf 73.1, 4.8, 99.9. The organ pipeline adds no measurable hitch on top of what the first wound already costs (the
@@ -161,7 +186,6 @@ while the scene and the look were being built.
 
 ## Left open
 
-- **The owner's pick** of the look, then `ORGAN_LOOK_DEFAULT`.
 - **No self-shadowing on the mesh organ** (above). A cheap fake would be a directional occlusion from the crater's axis.
 - **The bone and organ mesh pipelines are built at the first wound** (about 60 to 100 ms once a session, before and
   after this branch). Warming them at boot is its own task.

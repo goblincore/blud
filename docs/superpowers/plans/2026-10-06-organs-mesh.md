@@ -2,7 +2,7 @@
 
 > **For agentic workers:** implement task-by-task. Steps use checkbox (`- [x]`) syntax.
 
-**Status 2026-10-06:** built; every task done but the owner's look pick (last line). Results: `docs/dev-notes/2026-10-06-organs-mesh/NOTES.md`. Changes from the plan as written: the organ material has its own light compose (`meshOrganShade`: cavity occlusion, beam gain, torch glint), the looks are `match` / `wet` / `veined` / `pale`, sources always carry organ segments (the mode gates drawing and packing), and the look sheets come from the gate script (`ONLY=L`), not a separate one.
+**Status 2026-10-06:** built; every task done; the owner picked `wet` (2026-10-07). Results: `docs/dev-notes/2026-10-06-organs-mesh/NOTES.md`. Changes from the plan as written: the organ material has its own light compose (`meshOrganShade`: cavity occlusion, beam gain, torch glint), the looks are `match` / `wet` / `veined` / `pale`, sources always carry organ segments (the mode gates drawing and packing), and the look sheets come from the gate script (`ONLY=L`), not a separate one.
 
 **Goal:** With the default `skeleton=mesh`, zombie organs are drawn as segment meshes and the packed body carries no
 inside-flesh rows, so the march never calls `applyBones`.
@@ -167,4 +167,4 @@ beside `setPackBones`; re-pack as it does), `webgpu/game-state-render.ts` (`ctx.
   `docs/dev-notes/2026-10-06-organs-mesh/look/`. Look at every image.
 - [x] Update `AGENTS.md` (the accepted-skeleton paragraph), `TASKS.md`, the combat-and-gore task page, the contract
   header; dualmem decision, architecture and warnings with `--files`.
-- [ ] Sheets shown 2026-10-06. After the owner's pick: set `ORGAN_LOOK_DEFAULT`, rerun Task 7 and the look capture, commit.
+- [x] Sheets shown 2026-10-06. The owner picked `wet` 2026-10-07: `ORGAN_LOOK_DEFAULT = 'wet'`, the gate rerun (32 checks, 0 failed). The sheets' columns do not depend on the default, so they stand.

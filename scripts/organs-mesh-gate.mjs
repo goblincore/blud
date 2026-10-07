@@ -197,13 +197,13 @@ async function costOfSdf(label) {
   const med = (a) => { const q = [...a].sort((x, y) => x - y); return q.length % 2 ? q[q.length >> 1] : (q[q.length / 2 - 1] + q[q.length / 2]) / 2; };
   const iqr = (a) => { const q = [...a].sort((x, y) => x - y); return [q[Math.floor(q.length * 0.25)], q[Math.floor(q.length * 0.75)]].map((x) => +x.toFixed(2)); };
   // WHERE THE FRAME GOES, per mode: under the render lock a step is a pure re-render, so the step's own time is the
-  // CPU side (pose, uploads, encoding the draws) and the wait on the fence after it is the GPU's; the pass timestamps
-  // split the GPU side by pass.
+  // CPU side (pose, uploads, encoding the draws) and the wait on the fence after it is the GPU's whole frame. Both are
+  // wall clock: a loaded machine inflates the CPU side most. (The pass timestamps do not split the GPU side here: on
+  // this GPU every pass of a frame reads about the whole frame's time.)
   await evaluate("__sdfGame.setRenderLock(true)");
   for (const mode of ["mesh", "sdf"]) {
-    const r = await evaluate(`(async () => { __sdfGame.setOrgans("${mode}"); await __sdfGame.timeDraws(4); await __sdfGame.passTimings(); const N = 60, cpu = [], gpu = []; for (let i = 0; i < N; i++) { const t0 = performance.now(); __sdfGame.step(1, 0); const t1 = performance.now(); await __sdfGame.resolveGpu(); cpu.push(t1 - t0); gpu.push(performance.now() - t1); } const p = await __sdfGame.passTimings(); const by = {}; for (const q of p.samples) by[q.label] = (by[q.label] ?? 0) + q.ms; const m = (a) => a.sort((x, y) => x - y)[a.length >> 1]; return { cpu: m(cpu), wait: m(gpu), passes: Object.fromEntries(Object.entries(by).map(([k, v]) => [k, +(v / N).toFixed(2)]).sort((a, b) => b[1] - a[1])) }; })()`, 300000);
-    const sum = Object.values(r.passes).reduce((a, b) => a + b, 0);
-    console.log(`  frame ${label} [${mode}]: CPU ${r.cpu.toFixed(2)} ms, then ${r.wait.toFixed(2)} ms waiting on the GPU; GPU passes sum ${sum.toFixed(2)} ms: ${J(r.passes)}`);
+    const r = await evaluate(`(async () => { __sdfGame.setOrgans("${mode}"); await __sdfGame.timeDraws(4); const N = 60, cpu = [], gpu = []; for (let i = 0; i < N; i++) { const t0 = performance.now(); __sdfGame.step(1, 0); const t1 = performance.now(); await __sdfGame.resolveGpu(); cpu.push(t1 - t0); gpu.push(performance.now() - t1); } const m = (a) => a.sort((x, y) => x - y)[a.length >> 1]; return { cpu: m(cpu), wait: m(gpu) }; })()`, 300000);
+    console.log(`  frame ${label} [${mode}]: CPU ${r.cpu.toFixed(2)} ms, then ${r.wait.toFixed(2)} ms waiting on the GPU`);
   }
   await evaluate(`__sdfGame.setOrgans("mesh")`);
   await evaluate("__sdfGame.setRenderLock(false)");

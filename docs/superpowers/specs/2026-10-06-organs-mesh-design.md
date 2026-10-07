@@ -1,6 +1,6 @@
 # Organs as mesh — design
 
-**Date:** 2026-10-06 · **Status:** built, the owner's look pick pending (results: `docs/dev-notes/2026-10-06-organs-mesh/NOTES.md`) · **Branch:** `claude/organs-mesh` · **Owner decision (2026-10-06):** "we def should convert
+**Date:** 2026-10-06 · **Status:** built; the owner picked the `wet` look 2026-10-07 (results: `docs/dev-notes/2026-10-06-organs-mesh/NOTES.md`) · **Branch:** `claude/organs-mesh` · **Owner decision (2026-10-06):** "we def should convert
 them to mesh. they aren't even really that visible or noticeable atm".
 
 ## 1. Why
