@@ -6,7 +6,7 @@
 
 `cast`: the frames of scripts/sculpt-skull-cast-look.mjs (<column>__<character>__<view>.png and cast.json). One row a
 character, its bare head bone from the front and from three-quarter under each column's page query (clean: VHS off,
-0.6 m). The row's label says which paint the default draws that head with.
+0.6 m, the eye level with the head). The row's label says which paint the default draws that head with.
 
 `cell`: the frames of scripts/sculpt-skull-look.mjs run with COLS=full-1cm,full SCENES=soldier-face,zombie-bare
 (<column>__<scene>__<view>.png and shots.json). One row a head cell (1 cm, 5 mm), one column a view.
@@ -87,7 +87,7 @@ def cast(frames, out, cols):
     draw = ImageDraw.Draw(img)
     big, mid, small = font(24), font(16), font(13)
     draw.text((PAD * 2, 8), 'Every humanoid\'s bare head bone: the first look, and the default', fill=INK, font=big)
-    draw.text((PAD * 2, 40), 'Flesh hidden, VHS off, 0.6 m. Each tile is a 0.34 m window around the head. The eye is level with a head at or above 1.62 m, and looks down on a lower one.', fill=DIM, font=small)
+    draw.text((PAD * 2, 40), 'Flesh hidden, VHS off, 0.6 m, the eye level with the head (lowered for the shorter characters: the game\'s eye is 1.62 m up). Each tile is a 0.34 m window around the head.', fill=DIM, font=small)
     x_of = lambda c, v: gutter + c * (per * (size + PAD) + 3 * PAD) + v * (size + PAD) + PAD
     for c, col in enumerate(cols):
         name, caption = CAST_COLUMNS.get(col, (col, ''))
@@ -95,22 +95,16 @@ def cast(frames, out, cols):
         draw.text((x_of(c, 0), 78), caption, fill=DIM, font=small)
         for v, (_, label) in enumerate(CAST_VIEWS):
             draw.text((x_of(c, v) + size - 8 - draw.textlength(label, font=small), 78), label, fill=DIM, font=small)
-    default = boots.get('default', {}).get('heads', {})
     for r, character in enumerate(characters):
         y = head + r * (size + PAD)
         draw.text((PAD * 2, y + 8), character, fill=INK, font=mid)
         lines = []
-        info = default.get(character)
-        if info:
-            lines.append(f"head at {info['headY']:.2f} m")
-            if info.get('paint') is not None:
-                lines.append(f"default: paint {info['paint']}")
-        front = shots.get(f'{cols[0]}__{character}__clean-0p6-front')
-        if front and abs(front.get('pitchDeg', 0)) > 0.5:
-            lines.append(f"seen from {abs(front['pitchDeg']):.0f} deg above")
-        draw.multiline_text((PAD * 2, y + 32), '\n'.join(lines), fill=DIM, font=small, spacing=4)
-        if info and info.get('paint') == 1:
-            draw.multiline_text((PAD * 2, y + 36 + 17 * len(lines)), 'kept on the\nfirst paint', fill=WARN, font=small, spacing=4)
+        info = boots.get(f'default/{character}')
+        if info and info.get('headY') is not None:
+            lines.append(f"head {info['headY']:.2f} m up")
+        if info and info.get('paint') is not None:
+            lines.append('the default draws it\nunder the ' + ('second paint' if info['paint'] == 2 else 'first paint'))
+        draw.multiline_text((PAD * 2, y + 32), '\n'.join(lines), fill=WARN if info and info.get('paint') == 1 else DIM, font=small, spacing=4)
         for c, col in enumerate(cols):
             for v, (view, _) in enumerate(CAST_VIEWS):
                 name = f'{col}__{character}__{view}'

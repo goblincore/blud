@@ -126,6 +126,23 @@ describe('explodeSkull on a sculpted head', () => {
     renderer.dispose();
   });
 
+  it('a fragment keeps its head\'s paint: the second for a character it is fitted to, the first for one it is not', () => {
+    const { renderer, thrown } = setup(new SegmentMeshCache(undefined, undefined, undefined, sculptRecipe('full')));
+    // The zombie's body under the cultist's name: the paint is chosen by the name, and neither sculpt carves it.
+    const cultistHead = createSkeletonSources(body, bound, { character: 'cultist' }).find(s => s.segment === 'head')!;
+    const a = {}, b = {};
+    renderer.update([[head], [cultistHead]], [a, b]);
+    const n = renderer.explodeSkull(a, [head], [0, 0, -1]);
+    expect(n).toBe(SCULPT_FRAGMENT_IDS.length);
+    const m = renderer.explodeSkull(b, [cultistHead], [0, 0, -1]);
+    expect(m).toBeGreaterThan(0);
+    const paints = thrown.map(t => ((t.object.children[0] as THREE.Mesh).material as THREE.Material).userData.sculptPaint);
+    expect(paints.slice(0, n)).toEqual(new Array(n).fill(2));
+    expect(paints.slice(n)).toEqual(new Array(m).fill(1));
+    for (const t of thrown) expect(((t.object.children[0] as THREE.Mesh).material as THREE.Material).name).toBe(SEGMENT_MATERIALS.boneSplit);
+    renderer.dispose();
+  });
+
   it('on a split head a fragment of a turned half leaves from where that half is drawn', () => {
     const shape = headShape(applyRig(body, bound, 0))!;
     const frame = headFrameOf(shape, headQuatOf(bound, 0) ?? [0, 0, 0, 1]);

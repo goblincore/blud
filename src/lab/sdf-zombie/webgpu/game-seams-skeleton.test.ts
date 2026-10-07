@@ -201,11 +201,13 @@ describe('__sdfGame.skullPlates / skullFragments: the anatomical skull\'s plates
     expect(createSkeletonSeams({ world: { actors: [a] }, render: { segMeshRenderer: null } } as unknown as GameContext).skullRay(7, [1, 2, 3], [0, 0, -1])).toBeNull();
   });
   it('lists the skull fragments among the mesh gibs, oldest first, by plate', () => {
-    const gib = (tag: string, name: string, pos: number[], vel: number[]) => ({ tag, object: { name }, state: { pos, vel } });
-    const meshGibs = [gib('skull', 'skull-fragment:frontal', [1, 2, 3], [0, 4, 0]), gib('brain', 'brain', [5, 5, 5], [0, 0, 0]), gib('skull', 'skull-fragment:parietal-left', [2, 2, 2], [1, 1, 1])];
+    // A fragment is a group holding one mesh; a sculpted head's fragment is on a bone material that says its paint, an
+    // anatomical plate's on one that says none.
+    const gib = (tag: string, name: string, pos: number[], vel: number[], userData: object = {}) => ({ tag, object: { name, children: [{ material: { userData } }] }, state: { pos, vel } });
+    const meshGibs = [gib('skull', 'skull-fragment:frontal', [1, 2, 3], [0, 4, 0]), gib('brain', 'brain', [5, 5, 5], [0, 0, 0]), gib('skull', 'skull-fragment:parietal-left', [2, 2, 2], [1, 1, 1], { sculptPaint: 2 }), gib('skull', 'skull-fragment:mandible', [3, 3, 3], [0, 0, 1], { sculptPaint: 1 })];
     const seams = createSkeletonSeams({ gibs: { meshGibs } } as unknown as GameContext);
     expect(seams.skullFragments()).toEqual([
-      { plate: 'frontal', pos: [1, 2, 3], vel: [0, 4, 0] }, { plate: 'parietal-left', pos: [2, 2, 2], vel: [1, 1, 1] },
+      { plate: 'frontal', pos: [1, 2, 3], vel: [0, 4, 0], paint: null }, { plate: 'parietal-left', pos: [2, 2, 2], vel: [1, 1, 1], paint: 2 }, { plate: 'mandible', pos: [3, 3, 3], vel: [0, 0, 1], paint: 1 },
     ]);
     expect(seams.skullFragments()[0]!.pos).not.toBe(meshGibs[0]!.state.pos);
   });

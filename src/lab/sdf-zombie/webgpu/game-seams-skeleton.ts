@@ -241,10 +241,14 @@ export function createSkeletonSeams(ctx: GameContext) {
       if (!triple(point) || !triple(direction) || (reach !== undefined && !(Number.isFinite(reach) && reach > 0))) return false;
       return r.skullRay(a, ctx.render.skeletonSources.get(a)?.sources ?? [], [...point] as Vec3, [...direction] as Vec3, reach);
     },
-    /** The live skull-fragment mesh gibs (game-mesh-gibs.ts, tag 'skull'), oldest first: the plate each was, its
-     *  world position and its velocity. */
+    /** The live skull-fragment mesh gibs (game-mesh-gibs.ts, tag 'skull'), oldest first: the plate each was (an
+     *  anatomical plate, or a fragment of the sculpted head), its world position and its velocity, and the sculpted
+     *  skull's paint its material draws (1 or 2; null for an anatomical plate). */
     skullFragments: () => ctx.gibs.meshGibs.filter(g => g.tag === 'skull')
-      .map(g => ({ plate: g.object.name.replace(/^skull-fragment:/, ''), pos: [...g.state.pos], vel: [...g.state.vel] })),
+      .map(g => ({
+        plate: g.object.name.replace(/^skull-fragment:/, ''), pos: [...g.state.pos], vel: [...g.state.vel],
+        paint: (((g.object.children?.[0] as THREE.Mesh | undefined)?.material as THREE.Material | undefined)?.userData?.sculptPaint as 1 | 2 | undefined) ?? null,
+      })),
     /** The sculpted skull's fragment cuts (mesh-renderer.ts fragmentStats): how many head meshes have been cut into
      *  fragments for a pop, and how long the last cut took (ms). null without the mesh skeleton. */
     skullFragmentCuts: () => ctx.render.segMeshRenderer?.fragmentStats() ?? null,

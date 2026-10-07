@@ -59,12 +59,21 @@ export function sculptRecipe(variant: SculptVariant): Readonly<SculptRecipe> {
 }
 
 /** THE CHARACTERS THE SECOND PAINT IS DRAWN ON. The second paint draws a face (orbits, a nasal aperture, two rows of
- *  teeth, hollows) at fixed places of the head bone's box, the places the second sculpt carves them on the zombie and
- *  the soldier. Every other character's head is its plain authored bone, with its own proportions: the painted face
- *  sits on some of them and not on others (the cast sheet of 2026-10-07 shows each). A character is listed here once
- *  its head has been looked at under the second paint and the face sits on the bone. One that is not listed, a new
- *  character among them, is drawn under the first paint, as it was before the second paint existed. */
-export const SECOND_PAINT_CHARACTERS: ReadonlySet<string> = new Set(['zombie', 'soldier']);
+ *  teeth, hollows, cracks) at fixed places of the head bone's box: the places the second sculpt carves them on the
+ *  zombie and the soldier. Every other character's head is its plain authored bone, with its own proportions, and the
+ *  painted face sits on some and not on others (the cast sheet of 2026-10-07,
+ *  docs/dev-notes/2026-10-07-sculpt-skull-2/look/cast-bare-heads.jpg):
+ *   - the juggernaut's bone is the soldier's, larger and not carved: a ball 170 mm wide over a jaw. The orbits ring
+ *     the eyes and the two tooth rows lie either side of the crease between the ball and the jaw;
+ *   - the clown's and the clown-alt's is one round mass 176 mm wide: the face is whole on it, the orbits round the
+ *     eyes.
+ *  The cultist's, the cowled cultist's, the bride's, the female's, the three schoolgirls' and the bonewalker's head
+ *  bones are not one skull-sized mass: a ball 48 to 112 mm wide over a jaw ball or a nub, or a column of beads (the
+ *  zombie's is 166 mm wide). Either paint's face falls across the pieces, and the second gains nothing over the first
+ *  there. They are not listed, and so keep the first paint, as they had it before the second paint existed.
+ *  A character is listed here once its head has been looked at under the second paint and the face sits on the
+ *  bone. One that is not listed, a new character among them, is drawn under the first paint. */
+export const SECOND_PAINT_CHARACTERS: ReadonlySet<string> = new Set(['zombie', 'soldier', 'juggernaut', 'clown', 'clown-alt']);
 
 /** The paint `character`'s bones are drawn with under `recipe`: the recipe's for a character the second paint is
  *  fitted to (or for every character, when the recipe says every head), else the first. */

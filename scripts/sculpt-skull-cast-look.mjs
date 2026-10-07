@@ -123,10 +123,10 @@ async function boot(col, character) {
   await evaluate("__sdfGame.freeze(true)");
   await evaluate("__sdfGame.setViewModelVisible(false)");
   await evaluate("__sdfGame.setBleed(false)");
-  // The cast by its character's name: the room with the most of the one this boot photographs.
-  const named = await evaluate("__sdfGame.brains().map((b) => ({ id: b.id, name: b.name }))");
-  const all = (await evaluate("__sdfGame.actorList()")).filter((z) => named.find((b) => b.id === z.id)?.name === character);
-  if (!all.length) throw new Error(`no ${character} in the cast: brains ${J([...new Set(named.map((b) => b.name))])}, actors ${J([...new Set((await evaluate("__sdfGame.actorList()")).map((z) => z.kind))])}`);
+  // The cast by its character (the name its skeleton was built under): the room with the most of the one this boot
+  // photographs.
+  const all = await evaluate(`__sdfGame.actorList().filter((z) => __sdfGame.skullDrawn(z.id)?.character === ${J(character)})`);
+  if (!all.length) throw new Error(`no ${character} in the cast: ${J(await evaluate("[...new Set(__sdfGame.actorList().map((z) => __sdfGame.skullDrawn(z.id)?.character))]"))}`);
   const byRoom = new Map();
   for (const z of all) byRoom.set(z.room, [...(byRoom.get(z.room) ?? []), z]);
   pool = [...byRoom.values()].sort((a, b) => b.length - a.length)[0];

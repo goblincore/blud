@@ -17,7 +17,7 @@ import { forcedSplit, headFrameOf, splitWarpOf, type SplitWarp } from '../../hea
 import { headShape } from '../flame-anchors';
 import { meshBoneSource } from './mesh-skull';
 import { meshEyePlacements } from './mesh-eyes';
-import { SCULPT_VARIANTS, sculptRecipe, type SculptVariant } from './sculpt-variant';
+import { SCULPT_VARIANTS, sculptPaintOf, sculptRecipe, type SculptVariant } from './sculpt-variant';
 import { createBoneMeshCache } from './sculpt-cache';
 import type { AnatomicalSkullKit } from './anatomical-skull';
 import { createSkeletonSeams } from '../game-seams-skeleton';
@@ -127,6 +127,65 @@ describe('the sculpted skull\'s variants in the segment renderer', () => {
       expect(b[i]!.radius).toBe(e.radius);
       expect(Math.abs(b[i]!.center[2] - e.center[2])).toBeLessThan(0.02);
     });
+  });
+});
+
+describe('the second paint is drawn on the characters it is fitted to, and the first on the others', () => {
+  // The zombie's body under another character's name: the paint is chosen by the name. An unlisted character's head
+  // is its plain bone (neither sculpt carves it).
+  const as = (character: string) => { const all = createSkeletonSources(body, bound, { character }); return { head: all.find(s => s.segment === 'head')!, limb: all.find(s => s.segment !== 'head')! }; };
+  const cultist = as('cultist'), juggernaut = as('juggernaut');
+  const rendererOf = (recipe: Parameters<typeof sculptPaintOf>[0]) => { const cache = new SegmentMeshCache(MESH_CELL, undefined, null, recipe); return { cache, renderer: createSegmentMeshRenderer(cache) }; };
+  const batchOf = (r: R, geometry: THREE.BufferGeometry) => r.object.children.find(c => (c as THREE.InstancedMesh).geometry === geometry) as THREE.InstancedMesh;
+  const paintOn = (m: THREE.Material | THREE.Material[]) => [(m as THREE.Material).name, (m as THREE.Material).userData.sculptPaint, [...calls(reach([(m as MeshBasicNodeMaterial).colorNode!]))].sort()];
+
+  it('full: the zombie\'s and the juggernaut\'s bones on the second paint\'s material, the cultist\'s on the first\'s, in one renderer', () => {
+    const { cache, renderer } = rendererOf(sculptRecipe('full'));
+    renderer.update([[headSrc, limbSrc], [cultist.head, cultist.limb], [juggernaut.head, juggernaut.limb]], [{ id: 1 }, { id: 2 }, { id: 3 }]);
+    for (const s of [headSrc, limbSrc, juggernaut.head, juggernaut.limb]) expect(paintOn(batchOf(renderer, cache.get(s).geometry).material), s.revision).toEqual(['skeleton-bone', 2, SECOND]);
+    for (const s of [cultist.head, cultist.limb]) expect(paintOn(batchOf(renderer, cache.get(s).geometry).material), s.revision).toEqual(['skeleton-bone', 1, FIRST]);
+    // Two bone materials in all, each character's bones on one.
+    expect(new Set(renderer.object.children.filter(c => c.name === 'skeleton-segments').map(c => (c as THREE.InstancedMesh).material)).size).toBe(2);
+    expect(batchOf(renderer, cache.get(cultist.head).geometry).material).toBe(batchOf(renderer, cache.get(cultist.limb).geometry).material);
+    expect(batchOf(renderer, cache.get(headSrc).geometry).material).toBe(batchOf(renderer, cache.get(juggernaut.limb).geometry).material);
+    renderer.dispose(); cache.dispose();
+  });
+
+  it('full: a character it is not fitted to is drawn exactly as classic draws it (the same mesh, the same paint)', () => {
+    const full = rendererOf(sculptRecipe('full')), classic = rendererOf(sculptRecipe('classic'));
+    full.renderer.update([[cultist.head]], [{ id: 1 }]); classic.renderer.update([[cultist.head]], [{ id: 1 }]);
+    expect(full.cache.keyOf(cultist.head)).toBe(classic.cache.keyOf(cultist.head));
+    expect(paintOn(batchOf(full.renderer, full.cache.get(cultist.head).geometry).material)).toEqual(paintOn(batchOf(classic.renderer, classic.cache.get(cultist.head).geometry).material));
+    full.renderer.dispose(); full.cache.dispose(); classic.renderer.dispose(); classic.cache.dispose();
+  });
+
+  it('classic: every character on the first paint, and no second material is built', () => {
+    const { cache, renderer } = rendererOf(sculptRecipe('classic'));
+    renderer.update([[headSrc, limbSrc], [cultist.head], [juggernaut.head]], [{ id: 1 }, { id: 2 }, { id: 3 }]);
+    for (const s of [headSrc, limbSrc, cultist.head, juggernaut.head]) expect(paintOn(batchOf(renderer, cache.get(s).geometry).material)).toEqual(['skeleton-bone', 1, FIRST]);
+    expect(new Set(renderer.object.children.filter(c => c.name === 'skeleton-segments').map(c => (c as THREE.InstancedMesh).material)).size).toBe(1);
+    renderer.dispose(); cache.dispose();
+  });
+
+  it('every head (?sculptheads=all): the second paint on the cultist too', () => {
+    const { cache, renderer } = rendererOf({ ...sculptRecipe('full'), everyHead: true });
+    renderer.update([[headSrc], [cultist.head, cultist.limb]], [{ id: 1 }, { id: 2 }]);
+    for (const s of [headSrc, cultist.head, cultist.limb]) expect(paintOn(batchOf(renderer, cache.get(s).geometry).material)).toEqual(['skeleton-bone', 2, SECOND]);
+    renderer.dispose(); cache.dispose();
+  });
+
+  it('a split head\'s copies are on its own paint\'s split material', () => {
+    const { cache, renderer } = rendererOf(sculptRecipe('full'));
+    renderer.update([[headSrc], [cultist.head]], [{ id: 1 }, { id: 2 }], undefined, undefined, undefined, { warp: (_o, seg) => (seg === 'head' ? warp() : null) });
+    const splits = renderer.object.children.filter(c => c.name === 'skeleton-segments-split') as THREE.InstancedMesh[];
+    expect(splits).toHaveLength(2);
+    const of = (src: typeof headSrc) => splits.find(b => b.geometry.getAttribute('position') === cache.get(src).geometry.getAttribute('position'))!.material as MeshBasicNodeMaterial;
+    expect([of(headSrc).name, of(headSrc).userData.sculptPaint]).toEqual(['skeleton-bone-split', 2]);
+    expect([of(cultist.head).name, of(cultist.head).userData.sculptPaint]).toEqual(['skeleton-bone-split', 1]);
+    expect(calls(reach([...colourOf(of(headSrc)).held, ...colourOf(of(headSrc)).branch])).has('sculptPaintSurface')).toBe(true);
+    const first = colourOf(of(cultist.head));
+    expect([...calls(reach([...first.held, ...first.branch]))].sort()).toEqual([...FIRST, 'meshSplitClip', 'meshSplitInside'].sort());
+    renderer.dispose(); cache.dispose();
   });
 });
 

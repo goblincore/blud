@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  SCULPT_CLASSIC, SCULPT_DEFAULT_VARIANT, SCULPT_FINE_CELL, SCULPT_VARIANTS, SKULL_DEFAULT, SKULL_KINDS,
-  resolveSkull, sculptRecipe, sculptVariantOf, type SculptVariant,
+  SCULPT_CLASSIC, SCULPT_DEFAULT_VARIANT, SCULPT_FINE_CELL, SCULPT_VARIANTS, SECOND_PAINT_CHARACTERS, SKULL_DEFAULT, SKULL_KINDS,
+  resolveSkull, sculptPaintOf, sculptRecipe, sculptVariantOf, type SculptVariant,
 } from './sculpt-variant';
 
 describe('the sculpted skull\'s variants', () => {
@@ -147,5 +147,77 @@ describe('resolveSkull: the skull a page\'s query asks for', () => {
       const wantNotes = (skull === 'nonsense' ? 1 : 0) + (sculpt === 'nonsense' ? 1 : 0) + (skull === 'anatomical' && known ? 1 : 0);
       expect(choice.notes, search).toHaveLength(wantNotes);
     }
+  });
+});
+
+describe('sculptPaintOf: the paint a character\'s bones are drawn with', () => {
+  // The thirteen humanoids (anatomical-skull.ts HUMANOID_SKULLS), by what the cast sheet showed.
+  const FITTED = ['zombie', 'soldier', 'juggernaut', 'clown', 'clown-alt'];
+  const NOT_FITTED = ['cultist', 'cultist-cowled', 'bride', 'female', 'schoolgirl', 'schoolgirl-alt', 'schoolgirl-described', 'bonewalker'];
+  const OTHERS = ['goblin', 'ogre', 'warbull', 'mouse', 'a-character-added-tomorrow', '', 'Zombie'];
+  const SECOND: SculptVariant[] = ['paint', 'full-1cm', 'full'], FIRST: SculptVariant[] = ['classic', 'shape', 'shape-fine'];
+
+  it('the second paint is fitted to exactly the five reviewed characters', () => {
+    expect([...SECOND_PAINT_CHARACTERS].sort()).toEqual([...FITTED].sort());
+    expect(FITTED.length + NOT_FITTED.length).toBe(13);
+  });
+
+  it('under a second-paint recipe: the second paint for a fitted character, the first for every other', () => {
+    for (const variant of SECOND) {
+      for (const c of FITTED) expect(sculptPaintOf(sculptRecipe(variant), c), `${variant} ${c}`).toBe(2);
+      for (const c of [...NOT_FITTED, ...OTHERS]) expect(sculptPaintOf(sculptRecipe(variant), c), `${variant} ${c}`).toBe(1);
+    }
+  });
+
+  it('under a first-paint recipe: the first paint for everyone', () => {
+    for (const variant of FIRST) {
+      for (const c of [...FITTED, ...NOT_FITTED, ...OTHERS]) expect(sculptPaintOf(sculptRecipe(variant), c), `${variant} ${c}`).toBe(1);
+    }
+  });
+
+  it('a recipe that says every head: its paint for everyone', () => {
+    for (const c of [...FITTED, ...NOT_FITTED, ...OTHERS]) {
+      expect(sculptPaintOf({ ...sculptRecipe('full'), everyHead: true }, c), c).toBe(2);
+      expect(sculptPaintOf({ ...sculptRecipe('classic'), everyHead: true }, c), c).toBe(1);
+    }
+  });
+
+  it('the default page: the zombie, the soldier, the juggernaut and the clowns under the second paint, the other eight humanoids under the first', () => {
+    const recipe = resolveSkull('').recipe;
+    expect(FITTED.map(c => sculptPaintOf(recipe, c))).toEqual([2, 2, 2, 2, 2]);
+    expect(NOT_FITTED.map(c => sculptPaintOf(recipe, c))).toEqual([1, 1, 1, 1, 1, 1, 1, 1]);
+    // The anatomical skull's page and the first look: the first paint for every bone.
+    for (const search of ['?skull=anatomical', '?sculpt=classic']) {
+      for (const c of [...FITTED, ...NOT_FITTED]) expect(sculptPaintOf(resolveSkull(search).recipe, c), `${search} ${c}`).toBe(1);
+    }
+  });
+});
+
+describe('resolveSkull: ?sculptheads=all', () => {
+  it('a second-paint variant\'s recipe with every head, frozen; the variant keeps its name', () => {
+    for (const search of ['?sculptheads=all', '?sculpt=full&sculptheads=all', '?skull=sculpt&sculptheads=all']) {
+      const choice = resolveSkull(search);
+      expect(choice, search).toEqual({ skull: 'sculpt', variant: 'full', recipe: { ...sculptRecipe('full'), everyHead: true }, notes: [] });
+      expect(Object.isFrozen(choice.recipe)).toBe(true);
+      expect(sculptVariantOf(choice.recipe)).toBe('full');
+      // The variant's own recipe is not touched.
+      expect(sculptRecipe('full').everyHead).toBeUndefined();
+    }
+    expect(resolveSkull('?sculpt=paint&sculptheads=all').recipe).toEqual({ ...sculptRecipe('paint'), everyHead: true });
+    expect(resolveSkull('?sculpt=full-1cm&sculptheads=all').recipe).toEqual({ ...sculptRecipe('full-1cm'), everyHead: true });
+  });
+
+  it('nothing to a first-paint variant, nor to the anatomical skull', () => {
+    for (const variant of ['classic', 'shape', 'shape-fine'] as const) expect(resolveSkull(`?sculpt=${variant}&sculptheads=all`).recipe).toBe(sculptRecipe(variant));
+    expect(resolveSkull('?skull=anatomical&sculptheads=all')).toEqual({ skull: 'anatomical', variant: 'classic', recipe: SCULPT_CLASSIC, notes: [] });
+  });
+
+  it('any other value is passed over and said', () => {
+    for (const value of ['1', 'true', 'ALL', 'none', 'zombie']) {
+      const choice = resolveSkull(`?sculptheads=${value}`);
+      expect(choice.recipe, value).toBe(sculptRecipe('full'));
+      expect(choice.notes).toEqual([expect.stringContaining(`?sculptheads=${value}`)]);
+    }
+    expect(resolveSkull('?sculptheads=').notes).toEqual([]);
   });
 });

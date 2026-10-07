@@ -1,8 +1,10 @@
 // scripts/head-burst-gate.mjs — what a gun round does to a zombie's head (head-burst.ts headShotRule,
 // decapitationRule; webgpu/game-head-shot.ts; the actor's pop). REAL rounds through __sdfGame.fire() and fireSlug()
-// on the bare ring page (/sdf-game.html, no ?level), frozen zombies, four boots.
+// on the bare ring page (/sdf-game.html, no ?level), frozen zombies, four boots. Three draw the default skull (no
+// skull parameter: the sculpted skull, `full`); the one whose checks are the anatomical skull's asks for it
+// (`?skull=anatomical`). Each boot checks that it draws the skull it means to.
 //
-// BOOT 1, the shipped rules (the default skull, the anatomical one):
+// BOOT 1, the shipped rules (the default skull):
 //   NP. pellet volleys on a head never open or split it: ordinary craters, no split, no head-leaf state, the head on.
 //   AIM. a slug fired with the crosshair on the head (no stance solving) is CENTRED by the shipped splitFrac and
 //       splits the head.
@@ -10,13 +12,15 @@
 //   S.  a centred slug SPLITS the head: the head split's state at the preset's full angle (both halves, or the one
 //       the slug landed on: the split's own rule), the pose's split turned that far, the skull drawn as clipped
 //       copies, the field open where a half was, its cut faces, the zombie alive.
-//   X.  a second centred slug on the split head POPS it.
+//   X.  a second centred slug on the split head POPS it: the sculpted skull's ten fragments are thrown.
 //   OFF. burstTune({ on: false }): a centred slug is an ordinary wound.
-// BOOT 1b, the pop on a page of its own:
+// BOOT 1b, the ANATOMICAL skull (`?skull=anatomical`), the pop on a page of its own:
 //   D.  slugs at the neck until the head comes off: the head SWELLS for popSwellS and bursts, no flying head; the
 //       anatomical skull's fourteen plates are all released as fragments, the head segment and its eyes are not
 //       drawn, and 2.5 s on nothing is left at the old head position.
 //   D0. popSwellS 0 bursts with no swell frame.
+//   SA, XA. S's skull and X, on the plates: a centred slug splits the head and the plates are drawn as clipped
+//       copies; a second pops it and the split skull's plates are thrown.
 // BOOT 2, the OPENING switched on by tuning (the slug head burst of 2026-10-02, not shipped): the scenarios this
 // gate had before 2026-10-07, unchanged but for `opening: true` in their tuning:
 //   P. with anyWeapon and alwaysSplit a pellet volley on a head opens it, once per shot.
@@ -28,7 +32,7 @@
 //   S. with lethal off a centred slug opens the head through and the zombie lives, no flaps, and survives the third.
 //   D. burstTune({ on: false }) leaves the head with no burst state.
 //   C. the flaps of a head share ONE attached piece (draws === 1). Frame time is reported, not gated.
-// BOOT 3, the SCULPTED skull (`?sculpt=full`):
+// BOOT 3, the pop on the default skull, on a page of its own:
 //   DS. the decapitating slug pops the head: the sculpted head mesh is thrown as ten fragments (sculpt-fragments.ts),
 //       the head segment and its eyes are not drawn, nothing is left at the old head position.
 // E. zero console errors / exceptions, over all four.
@@ -195,6 +199,17 @@ async function boot(label, query = "") {
   for (let i = 0; i < 400; i++) { wb = await evaluate("__sdfGame.warmBackground()"); if (wb.gib === "ready" || wb.gib === "failed") break; await sleep(500); if (i % 10 === 0) await evaluate("__sdfGame.step(1, 1 / 60)"); }
   if (wb?.gib !== "ready") die(`[${label}] the background gib warm is ${JSON.stringify(wb)}: attached pieces would never draw`);
   console.log(`[${label}] ready; room ${ROOM} (${pool.length} zombies)`);
+  await skullCheck(label, /skull=anatomical/.test(query) ? "anatomical" : "sculpt");
+}
+/** THE SKULL A BOOT DRAWS (__sdfGame.skeletonDiagnostics): the anatomical plates on the boot that asks for them, the
+ *  sculpted skull in its default variant (`full`: the second sculpt, a 5 mm head cell, the second paint) on every
+ *  other. A page that asked for the plates and did not get them falls back to the sculpted skull: that fails here. */
+async function skullCheck(label, want) {
+  const d = await evaluate("__sdfGame.skeletonDiagnostics()");
+  const recipe = JSON.stringify(d.sculpt);
+  if (want === "anatomical") check(d.skull === "anatomical", `[${label}] this boot asks for the anatomical skull and draws it (${d.skull})`);
+  else check(d.skull === "sculpt" && d.sculptVariant === "full" && d.sculpt.shape === 2 && d.sculpt.headCell === 0.005 && d.sculpt.paint === 2,
+    `[${label}] this boot names no skull and draws the default: the sculpted skull, full (${d.skull}, ${d.sculptVariant}, ${recipe})`);
 }
 const stepOne = () => evaluate("__sdfGame.step(1, 1 / 60)");
 async function stepN(n) { for (let i = 0; i < n; i++) await stepOne(); }
@@ -443,6 +458,10 @@ try {
   const drawn = await evaluate(`(() => { const d = __sdfGame.skullDrawn(${S1.id}); return d ? { bones: d.copies.filter((c) => !c.eye).length, eyes: d.copies.filter((c) => c.eye).length, pieces: [...new Set(d.copies.filter((c) => !c.eye).map((c) => c.piece))].sort() } : null; })()`);
   const turned = st ? (st.sides === 0 ? [1, 2] : st.sides > 0 ? [1] : [2]) : [];
   check(!!drawn && drawn.pieces.includes(0) && turned.every((p) => drawn.pieces.includes(p)), `S: the skull is drawn broken with the split: clipped copies for the rest and for each half that turned (${JSON.stringify(drawn)})`);
+  // The default skull's copies: the sculpted head's own mesh, on the bone's split material, under the second paint.
+  const sCopies = await evaluate(`(() => { const d = __sdfGame.skullDrawn(${S1.id}), c = d ? d.copies.filter((q) => !q.eye) : []; return { n: c.length, heads: c.filter((q) => q.head).length, materials: [...new Set(c.map((q) => q.material))], paints: [...new Set(c.map((q) => q.paint))] }; })()`);
+  check(sCopies.n > 0 && sCopies.heads === sCopies.n && sCopies.materials.length === 1 && sCopies.materials[0] === "skeleton-bone-split" && sCopies.paints.length === 1 && sCopies.paints[0] === 2,
+    `S: every copy is the sculpted head's mesh, on the bone's split material under the second paint (${sCopies.heads} of ${sCopies.n} copies the head; ${sCopies.materials.join(", ")}; paint ${sCopies.paints.join(", ")})`);
   // The field where a turned half used to be: 6 cm over the head's centre and to that half's side of the split's
   // PLANE, which a one-sided split puts off the centre, through where the slug landed (head-split.ts choosePreset):
   // 3.5 cm past it when both halves open, 2 cm when the smaller side peels alone (that side is the narrow one).
@@ -470,7 +489,7 @@ try {
   note(`X: line ${xAim.offset.toFixed(3)} radii off; verdict ${JSON.stringify(xShot)}; swell frames ${JSON.stringify(x.swell)}, head off on frame ${x.off}, ${(await fragments()) - f0} fragments`);
   check(xShot?.rule === "pop" && xShot.took === true, `X: a centred slug on the split head is the pop's (${JSON.stringify(xShot)})`);
   check(x.swell.length > 0 && x.off === x.swell[x.swell.length - 1] + 1 && !(await headOn(S1.id)), `X: the open head swells and bursts (swell on ${x.swell.length} frames, off on frame ${x.off})`);
-  check((await fragments()) - f0 >= 10, `X: the split skull's plates are thrown (${(await fragments()) - f0} fragments)`);
+  check((await fragments()) - f0 >= 10, `X: the split skull's pieces are thrown (${(await fragments()) - f0} fragments)`);
   await tune({ splitFrac: TUNING_DEFAULTS.splitFrac });
 
   // -------- OFF. the master switch.
@@ -483,9 +502,9 @@ try {
   await tune({ on: true });
   closeSession(S);
 
-  // ======== BOOT 1b: the pop, on a page of its own. How many slugs cut a neck depends on the zombie and on what
-  // the cast has been through; the first zombie of a fresh page loses its head to the first.
-  await boot("pop");
+  // ======== BOOT 1b (?skull=anatomical): the pop, on a page of its own. How many slugs cut a neck depends on the
+  // zombie and on what the cast has been through; the first zombie of a fresh page loses its head to the first.
+  await boot("anatomical", "&skull=anatomical");
   // -------- D. the decapitating slug pops (the anatomical skull: fourteen plates).
   const D1 = fresh();
   await stand(D1.id, PHOTO_D); await capture("D-before");
@@ -499,6 +518,34 @@ try {
   const d0 = await evaluate(`(() => { const ok = __sdfGame.head.pop(${D0.id}, 0, 0, -1); return { ok, popping: __sdfGame.head.popping(${D0.id}), on: __sdfGame.flail.limbAlive(${D0.id}, "head") > 0 }; })()`);
   check(d0.ok && !d0.popping && !d0.on, `D0: with popSwellS 0 the head bursts at once: no swell, the head off in the same call (${JSON.stringify(d0)})`);
   await tune({ popSwellS: TUNING_DEFAULTS.popSwellS });
+
+  // -------- SA, XA. S's skull and X on the plates (boot 1 makes them on the default skull): the split head's plates
+  // are drawn as clipped copies, and the pop of a split head throws them.
+  await tune({ splitFrac: CENTRE_FRAC });
+  const SA = fresh();
+  const saAim = await aimLine(SA.id, SHOT_D, 0);
+  await watchSlug(SA.id, 8);
+  const saShot = await shotOf(SA.id);
+  check(saShot?.rule === "split" && saShot.took === true && saShot.offset < CENTRE_FRAC, `SA: a slug ${saAim.offset.toFixed(3)} radii off centre splits (verdict ${JSON.stringify(saShot)})`);
+  await stepN(150);
+  const saSt = await splitOf(SA.id);
+  await evaluate("__sdfGame.step(1, 0)");
+  const saDrawn = await evaluate(`(() => { const d = __sdfGame.skullDrawn(${SA.id}); return d ? { bones: d.copies.filter((c) => !c.eye).length, eyes: d.copies.filter((c) => c.eye).length, pieces: [...new Set(d.copies.filter((c) => !c.eye).map((c) => c.piece))].sort(),
+    materials: [...new Set(d.copies.filter((c) => !c.eye).map((c) => c.material))], heads: d.copies.filter((c) => !c.eye && c.head).length, paints: [...new Set(d.copies.filter((c) => !c.eye).map((c) => c.paint))] } : null; })()`);
+  const saTurned = saSt ? (saSt.sides === 0 ? [1, 2] : saSt.sides > 0 ? [1] : [2]) : [];
+  check(!!saDrawn && saDrawn.pieces.includes(0) && saTurned.length > 0 && saTurned.every((q) => saDrawn.pieces.includes(q)), `SA: the skull is drawn broken with the split: clipped copies for the rest and for each half that turned (${JSON.stringify(saDrawn)})`);
+  check(!!saDrawn && saDrawn.bones > 0 && saDrawn.heads === saDrawn.bones && saDrawn.materials.length === 1 && saDrawn.materials[0] === "skeleton-plate-split" && saDrawn.paints.length === 1 && saDrawn.paints[0] === null,
+    `SA: every copy is the anatomical skull's, on the plates' split material and under neither of the sculpted skull's paints (${saDrawn?.heads} of ${saDrawn?.bones} copies the head; ${saDrawn?.materials.join(", ")})`);
+  await stand(SA.id, PHOTO_D); await capture("SA-split");
+  const xaAim = await aimLine(SA.id, SHOT_D, 0);
+  const fa0 = await fragments();
+  const xa = await watchSlug(SA.id, 24);
+  const xaShot = await shotOf(SA.id);
+  note(`XA: line ${xaAim.offset.toFixed(3)} radii off; verdict ${JSON.stringify(xaShot)}; swell frames ${JSON.stringify(xa.swell)}, head off on frame ${xa.off}, ${(await fragments()) - fa0} fragments`);
+  check(xaShot?.rule === "pop" && xaShot.took === true, `XA: a centred slug on the split head is the pop's (${JSON.stringify(xaShot)})`);
+  check(xa.swell.length > 0 && xa.off === xa.swell[xa.swell.length - 1] + 1 && !(await headOn(SA.id)), `XA: the open head swells and bursts (swell on ${xa.swell.length} frames, off on frame ${xa.off})`);
+  check((await fragments()) - fa0 >= 10, `XA: the split skull's plates are thrown (${(await fragments()) - fa0} fragments)`);
+  await tune({ splitFrac: TUNING_DEFAULTS.splitFrac });
   closeSession(S);
 
   // ======== BOOT 2: the opening, switched on by tuning ========
@@ -627,8 +674,8 @@ try {
   note(`draw time (UNGATED, confounded by ${(await chunks()) - 0} live chunks of debris): baseline ${out.base1.toFixed(2)} / ${out.base2.toFixed(2)} ms (spread ${Math.abs(out.base1 - out.base2).toFixed(2)}), after the bursts ${out.withBurst.toFixed(2)} ms; delta ${delta.toFixed(2)} ms`);
   closeSession(S);
 
-  // ======== BOOT 3: the sculpted skull ========
-  await boot("sculpt", "&sculpt=full");
+  // ======== BOOT 3: the pop on the default skull, on a page of its own ========
+  await boot("pop");
   const sk = await evaluate("__sdfGame.skeletonDiagnostics().skull");
   check(sk === "sculpt", `DS: this boot draws the sculpted skull (${sk})`);
   const DS = fresh();
@@ -639,6 +686,8 @@ try {
   check(cuts.meshes === 1, `DS: the fragments were cut once, at the first pop (${cuts.meshes})`);
   const names = await evaluate("__sdfGame.skullFragments().map((f) => f.plate)");
   check(names.length === 10 && new Set(names).size === 10 && names.includes("mandible") && names.includes("frontal"), `DS: the ten named fragments are the gibs (${names.join(", ")})`);
+  const fragPaints = await evaluate("__sdfGame.skullFragments().map((f) => f.paint)");
+  check(fragPaints.length === 10 && fragPaints.every((q) => q === 2), `DS: every fragment keeps the head's paint, the second (${fragPaints.join(", ")})`);
   await evaluate(`__sdfGame.placePlayer({ x: ${dsAt[0] + (centre[0] - dsAt[0]) * 0.3}, z: ${dsAt[2] + (centre[2] - dsAt[2]) * 0.3}, yaw: ${yawOf(dsAt[0] - centre[0], dsAt[2] - centre[2])}, pitch: 0 })`);
   await stepOne(); await capture("DS-popped");
 } finally { if (S) closeSession(S); }
