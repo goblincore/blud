@@ -67,8 +67,13 @@ The old `/index.html` still serves legacy until Stage 2.
   Search memory **before** broad grep/glob exploration for how something works or
   where it lives. **Do not** create a `MEMORY.md` or a `/memory/` persistence.
   Record durable code facts with `--files` pinned to the source file(s).
-- **Verification:** Run the verification appropriate to the change (focused tests
-  for local edits; a build/typecheck for cross-cutting edits). Coordinate any
+- **Verification:** Run the verification appropriate to the change. Locally that is
+  `npm run typecheck` and `npm run test:changed` (the tests beside the files your
+  branch changed, plus the source guards), or `npx vitest run <path>` for one area.
+  **Do not run the full suite locally** unless asked: it takes about ten minutes of
+  every core, and CI (`.github/workflows/ci.yml`) runs it on every push. After a
+  push, read the result with `gh run list --branch <branch>` / `gh run view`. The
+  GPU gates are not in CI; run the ones your change touches by hand. Coordinate any
   GPU / heavy job to avoid concurrent measurements; own and clean up only your
   own resources; respect user-authorized work and preserve unrelated edits.
 - **Resource ownership:** Extracted Blood assets are **dev placeholders only** —

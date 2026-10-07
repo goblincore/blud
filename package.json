@@ -10,6 +10,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:changed": "node scripts/test-changed.mjs",
+    "typecheck": "tsc --noEmit",
     "blob:measure": "tsx scripts/blob-measure.ts",
     "blob:rings": "tsx scripts/blob-rings.ts",
     "blob:depth": "tsx scripts/blob-depth.ts",

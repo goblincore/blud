@@ -8,6 +8,7 @@
 // render change, not a refactor. An intended .blob content edit legitimately
 // moves its character's hash; re-pin with `npx vitest run -u <this file>`.
 import { describe, it, expect } from 'vitest';
+// @ts-expect-error the app tsconfig has no @types/node, so node:crypto is untyped here.
 import { createHash } from 'node:crypto';
 import { packBody } from './pack';
 import { parseBlob } from './blob-parse';
