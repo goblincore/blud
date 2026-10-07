@@ -3,6 +3,7 @@
 // Head damage automation seams (melee head damage, game-head-damage.ts): read an actor's head state and
 // drive a head hit directly, without swinging (the gates' stage driver). A seam hit is not a flail strike,
 // so the flail's own lastStrike.headHits does not count it.
+import * as THREE from 'three/webgpu';
 import type { GameContext } from './game-context';
 import type { Vec3 } from '../types';
 import { FLAIL_FEEL } from './game-flail';
@@ -77,7 +78,8 @@ export function createHeadSeams(ctx: GameContext) {
        *    chunks    the flying SDF gib pieces (id, tag, kind, speed);
        *    baked     the settled ones;
        *    meshGibs  the mesh gibs (the brain, skull fragments: tag, speed);
-       *    flesh     live flesh prims of any actor's head cluster there (the actor's id and the prim's index). */
+       *    objects   any other visible mesh of the scene there, by name (an instanced one by each instance there);
+       *    flesh     flesh prims of a LIVE head cluster there (the actor's id and the prim's index). */
       drawnNear: (x: number, y: number, z: number, r: number) => {
         const near = (p: ArrayLike<number>) => Math.hypot(p[0]! - x, p[1]! - y, p[2]! - z) <= r;
         const at = (p: ArrayLike<number>) => [p[0]!, p[1]!, p[2]!].map(v => Math.round(v * 1000) / 1000);
@@ -93,10 +95,31 @@ export function createHeadSeams(ctx: GameContext) {
             .map(c => ({ id: c.id, tag: c.tag ?? null, kind: c.kind, pos: at(c.state.pos), speed: speed(c.state.vel) })),
           baked: ctx.bake.chunks.filter(b => near(b.centre)).map(b => ({ id: b.id, pos: at(b.centre) })),
           meshGibs: ctx.gibs.meshGibs.filter(g => near(g.state.pos)).map(g => ({ tag: g.tag, pos: at(g.state.pos), speed: speed(g.state.vel) })),
-          flesh: ctx.world.actors.flatMap(a => a.posed().prims
+          // Everything else in the scene: any visible mesh there, by name (an instanced one by its instances).
+          objects: (() => {
+            const out: { name: string; material: string; instance: number | null; pos: number[] }[] = [];
+            const m = new THREE.Matrix4(), v = new THREE.Vector3();
+            ctx.boot.handle.scene.traverseVisible((o) => {
+              const mesh = o as THREE.Mesh & Partial<THREE.InstancedMesh>;
+              if (!mesh.isMesh) return;
+              const name = o.name || o.parent?.name || o.type;
+              const material = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material)?.name ?? '';
+              if (mesh.isInstancedMesh && mesh.getMatrixAt) {
+                for (let i = 0; i < (mesh.count ?? 0); i++) {
+                  mesh.getMatrixAt(i, m); v.setFromMatrixPosition(m).applyMatrix4(o.matrixWorld);
+                  if (near(v.toArray())) out.push({ name, material, instance: i, pos: at(v.toArray()) });
+                }
+              } else {
+                v.setFromMatrixPosition(o.matrixWorld);
+                if (near(v.toArray())) out.push({ name, material, instance: null, pos: at(v.toArray()) });
+              }
+            });
+            return out;
+          })(),
+          flesh: ctx.world.actors.flatMap(a => a.posed().clusters.some(c => c.limb === 'head' && c.alive) ? a.posed().prims
             .map((q, i) => ({ q, i }))
             .filter(e => e.q.limb === 'head' && !e.q.dead && near([(e.q.a[0] + e.q.b[0]) / 2, (e.q.a[1] + e.q.b[1]) / 2, (e.q.a[2] + e.q.b[2]) / 2]))
-            .map(e => ({ actor: a.id, prim: e.i, op: e.q.op ?? 'add', radius: e.q.radius }))),
+            .map(e => ({ actor: a.id, prim: e.i, op: e.q.op ?? 'add', radius: e.q.radius })) : []),
         };
       },
       /** The live brain MESH gibs' positions (world; game-mesh-gibs.ts, tag 'brain'), oldest first. */
