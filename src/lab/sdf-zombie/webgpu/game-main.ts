@@ -292,6 +292,7 @@ import { createAxeHarness } from './game-axe';
 import { createFlail } from './game-flail';
 import { createHeadDamage } from './game-head-damage';
 import { createHeadSplit } from './game-head-split';
+import { createHeadShot } from './game-head-shot';
 import { GAME_AA, GAME_AA_FADE_M, GAME_AA_NEAR, GAME_LAST_STEP_DEFAULT } from './game-march-accept';
 import { createBrainGib } from './game-brain-gib';
 import { clearMeshGibs, spawnMeshGib, stepMeshGibs } from './game-mesh-gibs';
@@ -3361,6 +3362,15 @@ async function main() {
     splitOpen: a => ctx.weapon.headSplit?.isOpen(a) ?? false,
     // The modelled brain (game-brain-gib.ts), lit by the level's light list for the room it is thrown in.
     brain: createBrainGib(ctx, { lightsAt: p => ctx.world.levelLightLists.get(roomIdAt(p[0], p[2])) ?? null }),
+  });
+  // What a gun round does to a zombie's head besides an ordinary wound (game-head-shot.ts): a centred slug opens
+  // the head through the head split, or pops a split one; the burst opening stays behind its tuning.
+  ctx.weapon.headShot = createHeadShot(ctx, {
+    headShape,
+    split: ctx.weapon.headSplit,
+    headDamaged: a => ctx.weapon.headDamage?.has(a) ?? false,
+    opening: (a, point, dir, shot, kind) => ctx.weapon.headDamage?.burst(a, point, dir, shot, kind) ?? false,
+    bleed: (a, w, point, incoming) => registerCutBleed(ctx, a, w, 'slug', { point, incoming }),
   });
   // WEAPON SLOT 2's own subtree. Everything the grapeshot owns — the gun, both
   // orb hands, the muzzle flash, the smoke pool, the ejected/loaded cases and

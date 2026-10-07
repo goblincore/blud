@@ -33,7 +33,7 @@ import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan 
 import { applyDeathState, hasDeathState } from '../death-state';
 import { inflateHead, SWELL_SEC } from '../head-pop';
 import {
-  MAX_WOUNDS, pushWound, unwarpHit, WOUND_PROFILES, woundCarveNormal, woundWorldPos, clothDecal, wetLipWound,
+  MAX_WOUNDS, lipsAfterSever, pushWound, unwarpHit, WOUND_PROFILES, woundCarveNormal, woundWorldPos, clothDecal, wetLipWound,
   type Wound, type WoundType,
 } from '../damage';
 import type { SplitWarp } from '../head-split';
@@ -544,6 +544,17 @@ export interface ZombieActor {
    *  world space, or null while the head is closed; it rides `posed().split`, so sdBody (every strike, shot and trace)
    *  sees the opened halves. The prims stay the closed head's. null removes the hook. */
   setHeadSplit(fn: ((posed: BuildResult) => SplitWarp | null) | null): void;
+  /** THE POP (head-pop.ts), for a body that has an onHeadPop: the head swells for `swellS` seconds (0: none) and then
+   *  bursts along `dir` (world): the head cluster is severed with no flying chunk, and onHeadPop gets the swollen
+   *  head for its burst, its debris and the skull's pieces. While it swells the head stays on, and no sever takes it.
+   *  False, and nothing done, when the head is already gone or already popping, or the body has no onHeadPop. */
+  beginHeadPop(dir: Vec3, swellS: number): boolean;
+  /** The head is swelling toward its pop. */
+  headPopping(): boolean;
+  /** The pop's own clock: advance the swell by `dt` and burst the head when it is spent. Called once a tick for
+   *  every actor, frozen or not (a frozen actor never steps: the gates), before the actors step; it re-poses the
+   *  actor itself. True while a pop is running or just burst (a frozen cast's hulls are then stale). */
+  advanceHeadPop(dt: number): boolean;
   /** Re-pose NOW so a changed head deform shows on a frame this actor did not step (a frozen actor:
    *  `?frozen=1`, the gates). Without it the posed and drawn head keep whatever the deform was at the
    *  last hit's re-pose — the wobble's peak squash, forever. The same refresh as blast()'s tail. */
@@ -620,6 +631,11 @@ export function createZombieActor(opts: {
    *  and calls this with the head's world centre, the shot direction and the
    *  neck's stump wound, for the caller's burst and bleed. */
   onHeadPop?: (head: { origin: Vec3; prims: Primitive[] }, dir: Vec3, stumpWound: Wound | null) => void;
+  /** A DECAPITATION ASKS FIRST. The wounds have cut the head off (the sever checks): `weapon` is what the hit that
+   *  did it was ('other': a blast, a blade, anything that is not a gun round), `dir` its direction (world). Answer
+   *  the seconds of swell to POP the head instead (beginHeadPop; 0 bursts at once), or null for the ordinary flying
+   *  head. Absent: always the flying head. Needs onHeadPop as well. */
+  onDecapitate?: (cause: { weapon: 'slug' | 'pellet' | 'other'; dir: Vec3 }) => number | null;
 }): ZombieActor {
   const { body, view } = opts;
   // Skin detail under the highlight shoulder, per character (skin-detail-proto.ts). Optional call:
@@ -665,12 +681,16 @@ export function createZombieActor(opts: {
   /** ActorBlastEffect.forceCollapse, latched until the next step() feeds it
    *  to the motion signals (collapse.ts latches the fall from there). */
   let forceCollapseNext = false;
-  /** The one re-pose: applyRig, then the head deform (if any), then the head
-   *  split (if open). Every pose site (the per-frame step, stampBlast,
-   *  blast(), flushHitTail) calls it. */
+  /** THE POP in progress (beginHeadPop): seconds into the swell, its length, the burst's direction (world, unit or
+   *  zero). Null on every frame of ordinary play. `popClock` is the swell's wobble clock (head-pop.ts inflateHead). */
+  let pop: { t: number; dur: number; dir: Vec3 } | null = null;
+  let popClock = 0;
+  /** The one re-pose: applyRig, then the head deform (if any), then the pop's swell (if one is running), then the
+   *  head split (if open). Every pose site (the per-frame step, stampBlast, blast(), flushHitTail) calls it. */
   const repose = (): BuildResult => {
     const p = applyRig(current, bound, bodyYaw);
-    const d = headDeform ? headDeform(p) : p;
+    const d0 = headDeform ? headDeform(p) : p;
+    const d = pop ? inflateHead(d0, Math.min(1, pop.t / pop.dur), popClock) : d0;
     const s = headSplit?.(d) ?? null;
     return s ? { ...d, split: s } : d;
   };
@@ -1026,6 +1046,7 @@ export function createZombieActor(opts: {
       torsoWounds?.record(r.stumpWound, current, false);
       pendingWounds.push(r.stumpWound);
     }
+    dropSeveredLips(r.stumpWound);
     pendingSevered.push(limb);
     rebind();
     opts.onSever?.({
@@ -1054,8 +1075,18 @@ export function createZombieActor(opts: {
     return soldierArmCutAllowed(current, soldierWounds, limb, at, injuryTuning);
   }
 
-  /** HEAD POP: the head goes in a burst — no flying chunk (onHeadPop). */
-  function popHead() {
+  /** A sever has just stamped `stump` (or none): the craters whose lips would now hang over it lose them
+   *  (damage.ts lipsAfterSever), judged on the body as it is after the sever. */
+  function dropSeveredLips(stump: Wound | null) {
+    // The pose is the one the wounds were stamped on; which flesh is gone is the body's after the sever.
+    const prims = posed.prims.map((p, i) => (current.prims[i]?.dead && !p.dead ? { ...p, dead: true } : p));
+    const next = lipsAfterSever(woundRing.all(), prims, current.clusters, stump, bodyYaw);
+    if (next !== woundRing.all()) woundRing.set([...next]);
+  }
+
+  /** HEAD POP: the head goes in a burst — no flying chunk (onHeadPop). `dir`: the burst's direction (the soft
+   *  target's death throw when omitted). */
+  function popHead(dir: Vec3 = deathDir) {
     const head = current.clusters.find(c => c.limb === 'head');
     if (!head?.alive) return;
     const r = severLimb(current, 'head');
@@ -1065,9 +1096,47 @@ export function createZombieActor(opts: {
       woundRing.stamp(r.stumpWound, posed, bodyYaw);
       pendingWounds.push(r.stumpWound);
     }
+    dropSeveredLips(r.stumpWound);
     pendingSevered.push('head');
     rebind();
-    opts.onHeadPop?.(piece, deathDir, r.stumpWound);
+    opts.onHeadPop?.(piece, dir, r.stumpWound);
+  }
+
+  /** What every pose change outside step() ends with: the pose, the view, the head's rotation, the wound rows. */
+  function showPose() {
+    posed = repose();
+    view.update(drawnPose(), current);
+    view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
+    refreshWounds();
+  }
+
+  /** The pop's burst: from the FULLY swollen head (the debris is cut from it, whatever the swell's length), then
+   *  what is left is posed. */
+  function burstHead(dir: Vec3) {
+    pop = null;
+    posed = inflateHead(repose(), 1, popClock);
+    popHead(dir);
+    showPose();
+  }
+
+  function beginHeadPop(dir: Vec3, swellS: number): boolean {
+    if (pop || !opts.onHeadPop || !current.clusters.find(c => c.limb === 'head')?.alive) return false;
+    const l = Math.hypot(dir[0], dir[1], dir[2]);
+    const unit: Vec3 = l > 1e-9 ? [dir[0] / l, dir[1] / l, dir[2] / l] : [0, 0, 0];
+    popClock = 0;
+    if (!(swellS > 0)) { burstHead(unit); return true; }
+    pop = { t: 0, dur: swellS, dir: unit };
+    return true;
+  }
+
+  function advanceHeadPop(dt: number): boolean {
+    if (!pop) return false;
+    const step = Number.isFinite(dt) && dt > 0 ? dt : 0;
+    pop.t += step;
+    popClock += step;
+    if (pop.t >= pop.dur) burstHead(pop.dir);
+    else showPose();
+    return true;
   }
 
   /** The first (non-lethal) hit's reaction: the profile's violent throw-back
@@ -1086,17 +1155,26 @@ export function createZombieActor(opts: {
     return react;
   }
 
-  function runSeverChecks() {
+  function runSeverChecks(cause: 'slug' | 'pellet' | 'other' = 'other', dir: Vec3 = [0, 0, 0]) {
+    // A head the wounds have cut off asks first (opts.onDecapitate): popped, it is not detached here. While it swells
+    // it holds, whatever cuts the neck again.
+    const pops = (): boolean => {
+      if (pop) return true;
+      const swell = opts.onDecapitate?.({ weapon: cause, dir });
+      return swell !== null && swell !== undefined && beginHeadPop(dir, swell);
+    };
     const torsoC = current.clusters.find(c => c.limb === 'torso')?.center ?? [0, 1.1, 0] as Vec3;
     const injury = soldierDamage ? soldierInjury(current, soldierWounds, injuryTuning) : null;
     if (injury) soldierFatal ||= injury.fatal;
     const cuttingWounds = soldierDamage ? woundRing.all().filter(w => !w.injuryIgnored) : [...woundRing.all()];
     const fullCuts = [...new Set([...cutLimbs(current, cuttingWounds, torsoC).filter(limb => (!soldierDamage || soldierFatal || limb !== 'head') && allowArmCut(limb)), ...(injury?.sever ?? [])])];
     for (const limb of fullCuts) {
+      if (limb === 'head' && pops()) continue;
       detach(limb, severLimb(current, limb));
     }
     for (const cut of cutChains(current, soldierDamage ? cuttingWounds : [...woundRing.all()])) {
       if (fullCuts.includes(cut.limb) || (soldierDamage && !soldierFatal && cut.limb === 'head') || !allowArmCut(cut.limb, cut.fromPrim)) continue;
+      if (cut.limb === 'head' && pops()) continue;
       detach(cut.limb, severDistal(current, cut));
     }
     // A soft target that loses its gun arm drops the gun.
@@ -1863,6 +1941,10 @@ export function createZombieActor(opts: {
    *  the actor's CURRENT posed body at call time. Returns the stamped wound. */
   let hitBatching = false;
   let hitPending = false;
+  /** What the gun rounds since the last hit tail were, for its sever checks: a slug among them makes the batch a
+   *  slug's (with that slug's direction); 'other' between tails. */
+  let hitCause: 'slug' | 'pellet' | 'other' = 'other';
+  let hitCauseDir: Vec3 = [0, 0, 0];
   /** Consecutive firearm trigger pulls, never individual pellets. Retain
    * dedup identities beyond the 1.5s combo window and after a full reaction. */
   function progressiveHit(wound: Wound): boolean {
@@ -1905,7 +1987,10 @@ export function createZombieActor(opts: {
     }
     pendingPelletHits = 0;
     pendingPelletShot = null;
-    runSeverChecks();
+    // The sever checks are told what this batch of rounds was: a slug's decapitation may pop the head.
+    const cause = hitCause, dir = hitCauseDir;
+    hitCause = 'other';
+    runSeverChecks(cause, dir);
     posed = repose();
     view.update(drawnPose(), current);
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
@@ -1947,6 +2032,8 @@ export function createZombieActor(opts: {
       if (r.absorbed) return absorbedHit(wound, hitWorld, dirWorld);
     }
     damageRevision++; bakePaused = false;
+    const bySlug = wound.shot?.weapon === 'slug';
+    if (bySlug || hitCause !== 'slug') { hitCause = bySlug ? 'slug' : 'pellet'; hitCauseDir = [...dirWorld] as Vec3; }
     const field = posed;
     // stamp() records the pre-impulse position for us — BEFORE the shove
     // below and before flushHitTail re-solves the pose, so it is the
@@ -2036,12 +2123,10 @@ export function createZombieActor(opts: {
   return {
     setHeadDeform: (fn) => { headDeform = fn; },
     setHeadSplit: (fn) => { headSplit = fn; },
-    reposeHead: () => {
-      posed = repose();
-      view.update(drawnPose(), current);
-      view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
-      refreshWounds();
-    },
+    beginHeadPop,
+    headPopping: () => pop !== null,
+    advanceHeadPop,
+    reposeHead: showPose,
     id: opts.id,
     get room() { return actorRoom(); },
     get body() { return current; },

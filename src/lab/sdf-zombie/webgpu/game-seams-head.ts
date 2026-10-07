@@ -38,10 +38,24 @@ export function createHeadSeams(ctx: GameContext) {
     head: {
       /** The leaf's debug for actor `id` (null before its first head hit). */
       state: (id: number) => ctx.weapon.headDamage?.debug(id) ?? null,
-      /** Slug head burst tuning (head-burst.ts burstTuning): set any of { on, centreFrac, swell, shardScale, flapCount }.
-       *  Returns the live values. `on: false` sends every slug down the ordinary path. */
+      /** What a gun round does to a zombie's head, live (head-burst.ts burstTuning): set any of its fields. The
+       *  slug's split { slugSplit, splitFrac, splitOpen }, the pop { slugPop, popSwellS, popOnSplit }, and the old
+       *  burst opening { opening, anyWeapon, alwaysSplit, centreFrac, swell, lethal, repeatStep, craterScale, splay,
+       *  shardScale, flapCount }. Returns the live values. `on: false` sends every round down the ordinary path.
+       *  The behaviour before 2026-10-07 (every gun hit on a head made the opening):
+       *  burstTune({ opening: true, anyWeapon: true, alwaysSplit: true, slugSplit: false, slugPop: false, popOnSplit: false }). */
       burstTune: (p: Partial<typeof burstTuning>) => setBurstTuning(p),
       burstTuning: () => ({ ...burstTuning }),
+      /** The last gun round the head-shot leaf judged on actor `id`'s head (game-head-shot.ts): the rule it came
+       *  to ('ordinary', 'split', 'pop', 'opening'), the round, how far off centre its line ran (head radii) and
+       *  whether the leaf took it. Null: none yet. */
+      shot: (id: number) => ctx.weapon.headShot?.last(id) ?? null,
+      /** Actor `id`'s head is swelling toward its pop (game-actor.ts beginHeadPop). */
+      popping: (id: number): boolean => ctx.world.actors.find(q => q.id === id)?.headPopping() ?? false,
+      /** Pop actor `id`'s head by hand, along (dx, dy, dz), after `swellS` seconds of swell (the tuning's when
+       *  omitted). False: no such actor, no live head, already popping, or a body with no pop. */
+      pop: (id: number, dx = 0, dy = 0, dz = -1, swellS: number = burstTuning.popSwellS): boolean =>
+        ctx.world.actors.find(q => q.id === id)?.beginHeadPop([dx, dy, dz], swellS) ?? false,
       /** Actor `id`'s UN-deformed head frame { centre, quat, axes } (world; hs = conj(quat)·(p − centre) ÷ axes):
        *  the leaf's own once it has one, else measured now the way the leaf does (headShape + the rigid head's
        *  rotation) — valid before the first head hit, while the head is undeformed. The gates aim the crosshair at

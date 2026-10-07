@@ -202,9 +202,11 @@ export interface HeadDamageLeaf {
   /** One head-region hit at `point` (world, on the posed surface), blow direction `dir` (world, unit). Returns false
    *  when it declined (the head is split open) and did nothing: the caller then stamps its own plain crater. */
   hit(a: ZombieActor, point: Vec3, dir: Vec3, feel: HeadHitFeel): boolean;
-  /** A SLUG on a head (slug head burst): the lethal burst or the glancing rupture. `point` is the impact (world), `dir`
-   *  the shot direction (world unit). Returns false when it declined (not a head hit, not the plain zombie, off, no head,
-   *  or the head is split open): the caller then takes the ordinary slug path. */
+  /** THE BURST OPENING (the slug head burst of 2026-10-02; not the shipped behaviour: game-head-shot.ts asks for it
+   *  only while burstTuning.opening is on): the lethal burst or the glancing rupture. `point` is the impact (world),
+   *  `dir` the shot direction (world unit). Returns false when it declined (not a head hit, not the plain zombie,
+   *  off, a pellet without burstTuning.anyWeapon, no head, or the head is split open): the caller then takes the
+   *  ordinary path. */
   burst(a: ZombieActor, point: Vec3, dir: Vec3, shot?: ShotProvenance, kind?: 'pellet' | 'slug'): boolean;
   /** This leaf holds state for the actor's head (ladder craters, dents, a burst, flaps, eye pieces): the head split
    *  refuses such a head (game-head-split.ts open). */

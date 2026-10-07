@@ -524,6 +524,68 @@ export function woundCarveNormal(prims: Primitive[], wound: Wound, bodyYaw = 0):
   return add(add(scale(u, c[0]), scale(v, c[1])), scale(w, c[2]));
 }
 
+/** How far a crater's everted lip reaches from its centre, in its own radii: the shader centres the lip's ring at
+ *  woundCfg.w x rimOffsetScale radii (1.15 x at most 1.12 for a torn wound) and gives it a width of woundCfg2.x radii
+ *  (0.42) each way (march/fields/wounds.wgsl.ts). */
+export const LIP_REACH = 1.6;
+
+/** A/B switch for lipsAfterSever (`__sdfGame.setStumpLips(false)` leaves every lip as it was). Ships ON. */
+let stumpLipsOn = true;
+export function setStumpLips(on: boolean): void { stumpLipsOn = on; }
+export function stumpLipsEnabled(): boolean { return stumpLipsOn; }
+
+/**
+ * THE LIPS THAT WENT WITH THE LIMB. A crater's lip is flesh the shader ADDS in a ring round the crater, wherever the
+ * ring passes within a few centimetres of the body's skin as it was BEFORE any wound (applyWounds' rimLocal reads the
+ * un-wounded field). Carves do not hold it back: where another wound's carve has since taken that skin away, the lip
+ * stays, standing in the hole. A sever makes exactly that hole: the stump wound is a deep bowl stamped where a
+ * limb's root was, usually beside the craters that cut the limb off, and their lips (and the stump's own, when it
+ * opens inside a bigger crater) were left hanging over the stump as a cup or an arc of flesh attached to nothing
+ * (the owner, 2026-10-07: "a floating piece of the neck" over a headless zombie).
+ *
+ * So after a sever, with `stump` the wound it stamped (null: none), a crater loses its lip (`rimScale` 0; its carve
+ * and its paint stay) when:
+ *   - the flesh it rides is gone: its prim is dead, or its prim's cluster is no longer alive;
+ *   - its lip's ring reaches into the stump's carve: centres closer than the stump's radius plus LIP_REACH of its own;
+ * and the stump loses its own lip when its ring reaches into such a crater's carve (centres closer than that crater's
+ * radius plus LIP_REACH stump radii). Decals carve nothing and are left alone; a cut has no ring.
+ * Returns `wounds` itself when nothing changes; a changed wound is a new object.
+ */
+export function lipsAfterSever(
+  wounds: readonly Wound[], prims: Primitive[], clusters: readonly { start: number; count: number; alive: boolean }[],
+  stump: Wound | null, bodyYaw = 0,
+): readonly Wound[] {
+  if (!stumpLipsOn) return wounds;
+  const gone = (w: Wound): boolean => {
+    const p = prims[w.primIdx];
+    if (!p || p.dead) return true;
+    const c = clusters.find(q => w.primIdx >= q.start && w.primIdx < q.start + q.count);
+    return !!c && !c.alive;
+  };
+  const ring = (w: Wound): boolean => !w.decal && w.shape !== 'cut' && (w.rimScale ?? 1) > 0;
+  const at = stump && prims[stump.primIdx] ? woundWorldPos(prims, stump, bodyYaw) : null;
+  let stumpHangs = false;
+  let changed = false;
+  const out = wounds.map((w) => {
+    if (w === stump || !ring(w)) return w;
+    let drop = gone(w);
+    if (at && stump && prims[w.primIdx]) {
+      const c = woundWorldPos(prims, w, bodyYaw);
+      const d = len(sub(c, at));
+      if (d < stump.radius + w.radius * LIP_REACH) drop = true;
+      if (d < w.radius + stump.radius * LIP_REACH) stumpHangs = true;
+    }
+    if (!drop) return w;
+    changed = true;
+    return { ...w, rimScale: 0 };
+  });
+  if (stump && stumpHangs && ring(stump)) {
+    const i = out.indexOf(stump);
+    if (i >= 0) { out[i] = { ...stump, rimScale: 0 }; changed = true; }
+  }
+  return changed ? out : wounds;
+}
+
 /** A prim-local direction of `wound` (same frame as `local` / `carveN`) in world space. */
 export function woundDirToWorld(prims: Primitive[], wound: Wound, local: Vec3, bodyYaw = 0): Vec3 {
   const prim = prims[wound.primIdx]!;

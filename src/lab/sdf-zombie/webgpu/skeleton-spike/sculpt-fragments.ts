@@ -2,8 +2,7 @@
 //
 // The sculpted skull in pieces: a head mesh's triangles sorted into ten named fragments by where they sit in the head's normalized box, for the head pop.
 
-import type { LocalBounds } from './contract';
-import { meshAppearanceCoord } from './mesh-appearance';
+import { meshAppearanceCoord, type LocalBounds } from './mesh-appearance';
 import type { Vec3 } from '../../types';
 
 // THE SCULPTED SKULL HAS NO PLATES (the anatomical one is modelled in fourteen: anatomical-skull.ts). When a head pops
@@ -73,7 +72,8 @@ export interface SculptFragment {
  *  empty index list and its pivot at the box's centre. */
 export function partitionSculptMesh(positions: ArrayLike<number>, indices: ArrayLike<number>, bounds: LocalBounds): SculptFragment[] {
   const lists = new Map<SculptFragmentId, number[]>(SCULPT_FRAGMENT_IDS.map(id => [id, []]));
-  const sums = new Map<SculptFragmentId, { c: Vec3; area: number; min: Vec3; max: Vec3 }>(SCULPT_FRAGMENT_IDS.map(id => [
+  type Triple = [number, number, number];
+  const sums = new Map<SculptFragmentId, { c: Triple; area: number; min: Triple; max: Triple }>(SCULPT_FRAGMENT_IDS.map(id => [
     id, { c: [0, 0, 0], area: 0, min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity] },
   ]));
   const vertex = (i: number): Vec3 => [positions[i * 3]!, positions[i * 3 + 1]!, positions[i * 3 + 2]!];
@@ -93,7 +93,7 @@ export function partitionSculptMesh(positions: ArrayLike<number>, indices: Array
       s.max[k] = Math.max(s.max[k]!, a[k]!, b[k]!, c[k]!);
     }
   }
-  const mid: Vec3 = [0, 1, 2].map(k => (bounds.min[k]! + bounds.max[k]!) / 2) as Vec3;
+  const mid: Vec3 = [(bounds.min[0] + bounds.max[0]) / 2, (bounds.min[1] + bounds.max[1]) / 2, (bounds.min[2] + bounds.max[2]) / 2];
   return SCULPT_FRAGMENT_IDS.map((id) => {
     const s = sums.get(id)!, list = lists.get(id)!;
     const some = list.length > 0 && s.area > 0;
