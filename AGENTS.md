@@ -70,8 +70,11 @@ The old `/index.html` still serves legacy until Stage 2.
 - **Verification:** Run the verification appropriate to the change. Locally that is
   `npm run typecheck` and `npm run test:changed` (the tests beside the files your
   branch changed, plus the source guards), or `npx vitest run <path>` for one area.
-  **Do not run the full suite locally** unless asked: it takes about ten minutes of
-  every core, and CI (`.github/workflows/ci.yml`) runs it on every push. After a
+  A bare `npm test` is the quick suite: it leaves out the slow group (25 files that
+  are 83% of the run time, listed as `SLOW_TESTS` in `vite.config.ts`). Naming a
+  file always runs it, slow or not. **Do not run everything locally**
+  (`npm run test:all`) unless asked: CI (`.github/workflows/ci.yml`) runs it on
+  every push. After a
   push, read the result with `gh run list --branch <branch>` / `gh run view`. The
   GPU gates are not in CI; run the ones your change touches by hand. Coordinate any
   GPU / heavy job to avoid concurrent measurements; own and clean up only your

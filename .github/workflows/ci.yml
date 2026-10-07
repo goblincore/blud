@@ -43,4 +43,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # VITEST_ALL: include the slow group that a bare local `npm test` leaves out (vite.config.ts).
       - run: npx vitest run --shard=${{ matrix.shard }}/4
+        env:
+          VITEST_ALL: 1

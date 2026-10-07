@@ -60,6 +60,12 @@ concepts** — do not conflate them.
 
 - Extracted Blood assets: dev placeholders only, never commit/ship.
 - Prefer focused tests; don't claim a build/test/GPU pass from lightweight checks.
+- **Do not run the full test suite locally.** Run `npm run typecheck` and
+  `npm run test:changed` (the tests beside the files your branch changed), or
+  `npx vitest run <path>`. CI runs everything on every push
+  (`.github/workflows/ci.yml`); read it with `gh run list --branch <branch>`.
+  A bare `npm test` is the quick suite (slow group left out); `npm run test:all`
+  is everything. The GPU gates are not in CI.
 - Plans start from [`docs/superpowers/plan-template.md`](docs/superpowers/plan-template.md):
   logic in pure renderer-free modules, rendering in hand-written WGSL (release
   is a Rust + wgpu port).
