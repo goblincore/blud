@@ -8,12 +8,13 @@
 //   npm run test:changed            # against origin/main
 //   npm run test:changed -- <ref>   # against another base
 //
-// It maps `x.ts` -> `x.test.ts` and no further: a test of some OTHER module
+// It maps `x.ts` -> `x.test.ts` and `x-*.test.ts`, and no further: a test of some OTHER module
 // that imports the changed one is not run, and neither is a test that pins the
 // changed file as text. CI catches those. (vitest's own `--changed` cannot be
 // used here: its import-graph walk fails on the `.blob` imports.)
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 
 const base = process.argv[2] ?? 'origin/main';
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).split('\n').filter(Boolean);
@@ -39,6 +40,14 @@ for (const f of changed) {
   for (const ext of ['ts', 'mjs']) {
     const t = `${m[1]}.test.${ext}`;
     if (existsSync(t)) tests.add(t);
+  }
+  // Sibling suites named after the module: pack.ts -> pack-golden.test.ts.
+  const dir = dirname(f);
+  const stem = basename(m[1]);
+  if (existsSync(dir)) {
+    for (const n of readdirSync(dir)) {
+      if (n.startsWith(`${stem}-`) && /\.test\.(ts|mjs)$/.test(n)) tests.add(join(dir, n));
+    }
   }
 }
 

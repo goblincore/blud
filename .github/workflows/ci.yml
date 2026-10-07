@@ -26,6 +26,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      # Written for `node --test`, so `npm test` (vitest) does not collect them.
+      - run: node --test scripts/lib/normal-gradient-*.test.mjs scripts/zombie-normal-gradient-check.test.mjs
 
   test:
     runs-on: ubuntu-latest
