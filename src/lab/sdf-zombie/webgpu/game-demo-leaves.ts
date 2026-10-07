@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-demo-leaves.ts
 //
+// Demo recording helpers: reading input frames, describing recorded wounds, placing from a demo, the demo HUD and recording start.
+//
 // Extracted from game-main.ts's main() closure. Each function takes the
 // GameContext explicitly instead of capturing main()'s scope.
 //

@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-world-leaves3.ts
 //
+// Game world leaf functions for gut rope stepping and for registering wound and cut bleeds on actors.
+//
 // Extracted from game-main.ts's main() closure. Each function takes the
 // GameContext explicitly instead of capturing main()'s scope.
 //

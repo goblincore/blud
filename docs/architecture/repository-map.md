@@ -1,6 +1,8 @@
 # Blud — repository map
 
-This is the authoritative source map. It distinguishes **current state** (facts,
+This is the source map for the repository's top-level layout (active vs.
+legacy vs. shared). For the modules inside the active tree, read the generated
+[module index](module-index.md). This page distinguishes **current state** (facts,
 verified at base `c120a3e7`, Stage 1) from **proposed target state** (a plan, not
 executed). See the [design spec](../superpowers/specs/2026-09-07-fps-legacy-repo-structure-design.md)
 and the [Stage 2 plan](../superpowers/plans/2026-09-07-fps-legacy-repo-structure.md).
@@ -59,28 +61,18 @@ src/
 
 Includes the character authoring tools, WebGPU lab, benchmarks and their
 modules. Character assets are `.blob` / `.wam` files under `characters/`, with
-GLB clips and GLSL/WGSL sources alongside their TS modules. Lab entrypoints:
+GLB clips and GLSL/WGSL sources alongside their TS modules.
 
-| URL | Module |
-| --- | --- |
-| `/sdf-game.html` | `src/lab/sdf-zombie/webgpu/game-main.ts` (active game) |
-| `/sdf-lab.html` | `src/lab/sdf-zombie/lab-main.ts` |
-| `/sdf-lab-webgpu.html` | `src/lab/sdf-zombie/webgpu/lab-main.ts` |
-| `/sdf-bench.html` | `src/lab/sdf-zombie/webgpu/bench-main.ts` |
-| `/sdf-lab-webgl-bench.html` | `src/lab/sdf-zombie/webgl-bench.ts` |
-| `/sdf-lab-webgpu-bench.html` | `src/lab/sdf-zombie/webgpu/spike-main.ts` |
-| `/humanoid-sdf-spike.html` | `src/lab/sdf-zombie/webgpu/humanoid-spike-main.ts` |
-| `/sdf-hull-spike.html` | `src/lab/sdf-zombie/webgpu/hull-spike-main.ts` |
-| `/sdf-shell-spike.html` | `src/lab/sdf-zombie/webgpu/shell-spike-main.ts` |
-| `/normal-gradient-check.html` | `src/lab/sdf-zombie/webgpu/normal-gradient-probe.ts` |
-| `/shared-wounds-probe.html` | `src/lab/sdf-zombie/shared-wounds/probe.js` |
-| `/bounded-wounds-bench.html` | `docs/dev-notes/2026-09-07-bounded-torso-regions/bench.js` |
+**Which file owns what:** the generated [module index](module-index.md) lists
+every module of this tree with a one-line summary, grouped by area, and the
+HTML page each entrypoint serves. It is rebuilt by
+`npx tsx scripts/module-index.ts` and a test fails when it is stale, so trust
+it over the prose here.
 
-> The **dynamite/FPV demo is `/sdf-lab-webgpu.html`** (`webgpu/lab-main.ts`, which
-> mounts `fpv`, `fpv-mode`, `dynamite-prop` and the FPV `fpv: enter` button / Tab
-> toggle). `/sdf-game.html` (`webgpu/game-main.ts`) is the **active playable FPS but
-> has no dynamite integration** — its header states "no panel, no wounds, no
-> chunks, no dynamite."
+The tree is two flat directories (`src/lab/sdf-zombie/` and its `webgpu/`)
+plus a few subfolders (`webgpu/march/`, `webgpu/earlyz/`,
+`webgpu/skeleton-spike/`, `webgpu/upscale/`, `characters/`). The index's areas
+are name-prefix groups, not folders yet.
 
 ### 1.2 Direct external imports from the active tree
 

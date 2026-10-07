@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-telemetry-leaves.ts
 //
+// Telemetry scene helpers: capturing a frozen actor and camera snapshot, and the bench scene census (bodies, wounds, chunks, droplets).
+//
 // Extracted from game-main.ts's main() closure. Each function takes the
 // GameContext explicitly instead of capturing main()'s scope.
 //

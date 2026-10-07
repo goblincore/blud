@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-world-leaves.ts
 //
+// Game world leaf functions: slug and melee hit tracing, ceiling and chunk collider queries, on-screen body count and level probe-room stamping.
+//
 // Extracted from game-main.ts's main() closure. Each function takes the
 // GameContext explicitly instead of capturing main()'s scope.
 //

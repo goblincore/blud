@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-render-leaves.ts
 //
+// Render helpers: SDF scale and adaptive scaling, fisheye and viewmodel FOV, actor culling, bone cull modes and the trained upscale.
+//
 // Extracted from game-main.ts's main() closure. Each function takes the
 // GameContext explicitly instead of capturing main()'s scope.
 //

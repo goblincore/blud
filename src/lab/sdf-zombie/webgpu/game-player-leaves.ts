@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-player-leaves.ts
 //
+// Player input helpers: mouse look, key-edge handling, per-frame input application and the player's current room.
+//
 // Extracted from game-main.ts's main() closure. Each function takes the
 // GameContext explicitly instead of capturing main()'s scope.
 //

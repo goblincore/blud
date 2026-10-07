@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/game-main.ts
+//
+// The sdf-game.html entry point: boots the renderer, level, actors, player, weapons and loop, and exposes window.__sdfGame.
+
 import { impactSplashPresets, impactSplashProfiles, resolveImpactSplashProfile, type ImpactSplashProfile, type ImpactSplashWeapon } from './impact-splash-profiles';
 import { createEncounterNavigation } from './encounter-navigation';
 import { createEncounterDirector, clearSight, type EncounterAgent } from './encounter-director';

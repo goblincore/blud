@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/visual-actor-set.ts
+//
+// Pure selector for which actors need per-actor visual upkeep this tick, using a view-cone and distance test biased toward keeping bodies.
+
 import type { Vec3 } from '../types';
 
 // Pure, renderer-free selector for which actors need PER-ACTOR VISUAL upkeep

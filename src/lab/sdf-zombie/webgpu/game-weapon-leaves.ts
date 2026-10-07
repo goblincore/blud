@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-weapon-leaves.ts
 //
+// Game weapon leaf functions: view-to-rig transforms, muzzle and aim math, reload, firing, tracers, burst stand-ins and weapon slots.
+//
 // Extracted from game-main.ts's main() closure. Each function takes the
 // GameContext explicitly instead of capturing main()'s scope.
 //

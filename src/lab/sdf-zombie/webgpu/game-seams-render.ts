@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/game-seams-render.ts
+//
+// The window.__sdfGame render-pass members: chunk pass, occluder, cone, FXAA, smear, blast distort, half rate, bone look and depth gates.
+
 import { applySdfScale } from './game-render-leaves';
 // src/lab/sdf-zombie/webgpu/game-seams-render.ts
 //

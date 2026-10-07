@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-seams-render-quality.ts
 //
+// The window.__sdfGame render-quality members: FOV, impact splash, shell, upscale, SDF scale, fisheye and viewmodel FOV controls.
+//
 // Members lifted verbatim out of game-main.ts's `window.__sdfGame` literal.
 // Every one needed nothing but the GameContext, so this factory takes no deps.
 //

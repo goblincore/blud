@@ -1,4 +1,7 @@
 // src/lab/sdf-zombie/material.ts
+//
+// Flesh material and light presets for the SDF renderer: the FleshMaterial shape, FLESH_PRESETS and LIGHT_PRESETS.
+
 import type { Vec3 } from './types';
 
 export interface FleshMaterial {

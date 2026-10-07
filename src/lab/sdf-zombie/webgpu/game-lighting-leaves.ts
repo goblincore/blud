@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-lighting-leaves.ts
 //
+// Level lighting helpers: hemisphere light intensity, accent rooms, the scene lights for a room, and refreshing the level lights.
+//
 // Extracted from game-main.ts's main() closure. Each function takes the
 // GameContext explicitly instead of capturing main()'s scope.
 //

@@ -3,7 +3,9 @@
 This file is the cross-harness entry point for coding agents (Claude Code,
 Codex, DSH, etc.). It is intentionally concise. **The status board is
 [TASKS.md](TASKS.md); the current vs. proposed source layout is
-[docs/architecture/repository-map.md](docs/architecture/repository-map.md).**
+[docs/architecture/repository-map.md](docs/architecture/repository-map.md); which
+module owns what is in the generated
+[docs/architecture/module-index.md](docs/architecture/module-index.md).**
 
 ## Active vs. retired — read this first
 
@@ -35,6 +37,23 @@ Codex, DSH, etc.). It is intentionally concise. **The status board is
 `npm run dev` / `dev:fps` now open `/sdf-game.html`; `dev:legacy` opens
 `/index.html`; plain `npx vite` stays non-opening for browser-free automation.
 The old `/index.html` still serves legacy until Stage 2.
+
+## Finding and placing code
+
+- **Find it:** [docs/architecture/module-index.md](docs/architecture/module-index.md)
+  lists every module of the active tree with a one-line summary, grouped by
+  area. Grep it before you grep the tree.
+- **Every module starts with a header comment** whose first sentence says what
+  the module owns (`// <path>`, a blank `//`, then the sentence). The index is
+  generated from it. After adding, moving or re-describing a module, run
+  `npx tsx scripts/module-index.ts`; `scripts/module-index.test.ts` fails
+  otherwise.
+- **Do not grow `webgpu/game-main.ts`.** A new feature goes in its own module
+  beside it (as `game-flail.ts`, `game-axe.ts`, `game-head-split.ts` do): state
+  in the matching `game-state-<slice>.ts`, logic in pure functions that take the
+  `GameContext`, and only the wiring call in `game-main.ts`.
+- **Name a module for what it holds**, not for how it was made (no new
+  `-leaves`, `-misc`, `-2` files).
 
 ## Rules
 

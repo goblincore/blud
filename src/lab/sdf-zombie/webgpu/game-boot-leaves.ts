@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-boot-leaves.ts
 //
+// Boot helper for the game page: updating the loader status text.
+//
 // Extracted from game-main.ts's main() closure. Each function takes the
 // GameContext explicitly instead of capturing main()'s scope.
 //

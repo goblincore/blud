@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-seams-world.ts
 //
+// The window.__sdfGame world members: zombie and encounter readouts, pose and wound debug, level info, gates, AA, and screen projection.
+//
 // Members lifted verbatim out of game-main.ts's `window.__sdfGame` literal.
 // Every one needed nothing but the GameContext, so this factory takes no deps.
 //

@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/chunk-bake-jobs.ts
+//
+// Main-thread job runner for the chunk bake worker: one in-flight bake, its result slot and the request/reply message types.
+
 import type { ChunkBakeData } from './chunk-bake-geometry';
 import type { ChunkBakeBuffers } from './chunk-bake-buffers';
 

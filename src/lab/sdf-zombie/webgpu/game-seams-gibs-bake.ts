@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-seams-gibs-bake.ts
 //
+// The window.__sdfGame gib and chunk-bake members: wound step, bake toggle, explosion FX, gib render mode, showcases and chunk counts.
+//
 // Members lifted verbatim out of game-main.ts's `window.__sdfGame` literal.
 // Every one needed nothing but the GameContext, so this factory takes no deps.
 //

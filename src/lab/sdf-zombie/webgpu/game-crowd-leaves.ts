@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-crowd-leaves.ts
 //
+// Crowd helper for the game page: lazily creating the one CrowdType per character and spawn room.
+//
 // Extracted from game-main.ts's main() closure. Each function takes the
 // GameContext explicitly instead of capturing main()'s scope.
 //

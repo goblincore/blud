@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/detached-pose.ts
+//
+// Places a severed chunk against the last visible posed body so a limb leaves from where it was drawn.
+
 import type { BuildResult } from './build-body';
 import type { ChunkGroup } from './sever';
 import type { Primitive, Vec3 } from './types';

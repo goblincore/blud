@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-seams-lighting-probes.ts
 //
+// The window.__sdfGame lighting members: probe weight, level probe weight and gain, kit actor listing and kit environment scale.
+//
 // Members lifted verbatim out of game-main.ts's `window.__sdfGame` literal.
 // Every one needed nothing but the GameContext, so this factory takes no deps.
 //

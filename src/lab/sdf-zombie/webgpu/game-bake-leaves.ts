@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-bake-leaves.ts
 //
+// Chunk bake and draw helpers: lit chunk materials, drawn chunk mesh iteration, picking, the gore showcase and bake completion.
+//
 // Extracted from game-main.ts's main() closure. Each function takes the
 // GameContext explicitly instead of capturing main()'s scope.
 //

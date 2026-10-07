@@ -1,4 +1,6 @@
 // src/lab/sdf-zombie/translate.ts
+//
+// Translating a built body in world space (every primitive, cluster centre and bone joint), so raymarched bodies actually move.
 import type { BuildResult } from './build-body';
 import type { Vec3 } from './types';
 

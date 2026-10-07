@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-gibs-leaves2.ts
 //
+// Gib piece spawners: building one asset-mesh gib piece or one sprite gib piece and registering it with the game.
+//
 // Extracted from game-main.ts's main() closure. Each function takes the
 // GameContext explicitly instead of capturing main()'s scope.
 //

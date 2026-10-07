@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-vfx-leaves.ts
 //
+// Game VFX leaf functions: face textures, wound ramp and tuning, burst visual scaling, spill verdicts, impact splash layer and trail stream ids.
+//
 // Extracted from game-main.ts's main() closure. Each function takes the
 // GameContext explicitly instead of capturing main()'s scope.
 //

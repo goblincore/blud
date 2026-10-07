@@ -1,4 +1,7 @@
 // src/lab/sdf-zombie/pack.ts
+//
+// Packs a built body into the flat float arrays the SDF shaders read, plus dead-prim marking and bound groups.
+
 import type { BuiltBody, Primitive, Vec3 } from './types';
 import { bendCtrl } from './vec';
 import { MAX_CLUSTERS, MAX_PRIMS, BONE_SEG_MAX } from './validate';

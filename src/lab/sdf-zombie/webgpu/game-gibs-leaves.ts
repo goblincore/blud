@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-gibs-leaves.ts
 //
+// Gib spawning and budgeting: scheduling gibs, retiring actors, carved pieces, the gib atlas loader and the per-frame gib piece budget.
+//
 // Extracted from game-main.ts's main() closure. Each function takes the
 // GameContext explicitly instead of capturing main()'s scope.
 //

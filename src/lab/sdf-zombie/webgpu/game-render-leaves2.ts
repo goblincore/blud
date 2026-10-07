@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-render-leaves2.ts
 //
+// Render helpers that sit above the bone-cull and world leaves: toggling bone culling and re-stamping the level probes.
+//
 // Extracted from game-main.ts's main() closure. Each function takes the
 // GameContext explicitly instead of capturing main()'s scope.
 //

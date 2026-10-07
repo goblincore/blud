@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-seams-demo-step.ts
 //
+// The window.__sdfGame demo recording, demo info, manual stepping, bodies-on-screen and demo-hold members.
+//
 // Members lifted verbatim out of game-main.ts's `window.__sdfGame` literal.
 // Every one needed nothing but the GameContext, so this factory takes no deps.
 //

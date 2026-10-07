@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/skeleton-spike/mesh-skull.ts
+//
+// The mesh-skull sculpt: meshBoneSource adapts a bone field source into the carved skull and mandible, plus the skull art revision names.
+
 import type { BoneFieldSource, Point3 } from './contract';
 
 /** Mesh art revision is independent of the shared anatomy/volume contract. */

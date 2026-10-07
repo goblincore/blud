@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-dynamite-leaves.ts
 //
+// Dynamite bundle helpers: taking the prop, throwing it, hit tests against bodies, and the explosion light.
+//
 // Extracted from game-main.ts's main() closure. Each function takes the
 // GameContext explicitly instead of capturing main()'s scope.
 //

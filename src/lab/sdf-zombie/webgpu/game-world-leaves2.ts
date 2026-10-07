@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-world-leaves2.ts
 //
+// Game world leaf functions for wound stream ids and the refine-twin gate that decides which actors get the march cull.
+//
 // Extracted from game-main.ts's main() closure. Each function takes the
 // GameContext explicitly instead of capturing main()'s scope.
 //

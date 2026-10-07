@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-panels-leaves.ts
 //
+// The HUD text line: frame time, bodies on screen, room, weapon slot, ammo and render-mode flags, refreshed from the game context.
+//
 // Extracted from game-main.ts's main() closure. Each function takes the
 // GameContext explicitly instead of capturing main()'s scope.
 //

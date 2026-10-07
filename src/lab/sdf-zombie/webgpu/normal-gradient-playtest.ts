@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/normal-gradient-playtest.ts
+//
+// A developer playtest panel that toggles the analytic normal-gradient mode and its debug view in a running game.
+
 interface NormalPlaytestApi {
   setNormalGradient(mode: 0 | 1): void;
   setNormalGradientDebug(mode: 0 | 1 | 2): void;

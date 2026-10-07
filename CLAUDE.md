@@ -13,6 +13,7 @@ reference-only for behavior comparison (dynamite, gibbing).
 - **Status board:** [`TASKS.md`](TASKS.md) — the task wiki's front page: in flight, next, and an index
   of area pages under [`docs/tasks/`](docs/tasks/) (levels, characters, combat and gore, rendering,
   engineering, backlog). Keep the front page short; detail goes on the area pages.
+- **Which module owns what (generated, one line per module):** [`docs/architecture/module-index.md`](docs/architecture/module-index.md)
 - **Source map (current vs. proposed):** [`docs/architecture/repository-map.md`](docs/architecture/repository-map.md)
 - **Legacy dynamite/gibbing reference:** [`docs/reference/legacy-dynamite-gibbing.md`](docs/reference/legacy-dynamite-gibbing.md)
 - **Cross-harness agent context:** [`AGENTS.md`](AGENTS.md)

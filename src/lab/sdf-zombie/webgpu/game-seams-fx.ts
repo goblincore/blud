@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-seams-fx.ts
 //
+// The window.__sdfGame effects members: light clock, bleed, bounce and flash gains, probe gather and ray tuning, and tracer lights.
+//
 // Members lifted verbatim out of game-main.ts's `window.__sdfGame` literal.
 // Every one needed nothing but the GameContext, so this factory takes no deps.
 //

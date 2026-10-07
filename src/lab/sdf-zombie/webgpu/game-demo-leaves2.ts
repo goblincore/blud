@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-demo-leaves2.ts
 //
+// Demo recording stop: ends the recorder and saves the demo file to the dev server.
+//
 // Extracted from game-main.ts's main() closure. Each function takes the
 // GameContext explicitly instead of capturing main()'s scope.
 //

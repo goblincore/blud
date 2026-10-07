@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-probes-leaves.ts
 //
+// Clamped setter for the global probe-lighting weight on the game context.
+//
 // Extracted from game-main.ts's main() closure. Each function takes the
 // GameContext explicitly instead of capturing main()'s scope.
 //
