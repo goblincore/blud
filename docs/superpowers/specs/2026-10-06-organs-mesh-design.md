@@ -62,6 +62,31 @@ today. Detached chunks (including the `organ.gut` piece) keep procedural organs,
 **3.6 Unchanged.** The `cavity` flag, the viscera stop, entrails, gib parts, the melt (lab only), `applyBones` and
 `organ.wgsl.ts` (still used by procedural, deferred and chunks).
 
+**3.7 Low-poly: swept tubes, detail as shading (added 2026-10-07).** Owner, 2026-10-07: "i think the vertices can be
+reduced lol thats alot, tbh you can probably make alot of it via normal maps and simplify it (thinking about like the
+intestines for example)". Supersedes 3.1's "same `SegmentMeshCache` extraction, at a finer cell" for organ sources.
+
+- **The mesh.** An organ prim is a sphere swept along a straight or quadratic-Bezier axis, so its surface has a closed
+  form. Each prim becomes its own closed tube (`skeleton-spike/mesh-organ-tubes.ts`: rings about the axis, a cap at
+  each end), and the segment's mesh is those tubes together. The organ material writes depth, so the nearest surface
+  wins and the union is the field's hard min, with the crease between two loops exact. The zombie's two segments are
+  528 vertices and 1,024 triangles (the 5 mm extraction was 4,038 and 8,084). Vertices lie on the field; the mesh is
+  inscribed in it, never outside. A prim a sweep cannot express (a box, a strand, a shell) sends its whole segment to
+  the surface-nets extraction at 1 cm with normals from the field's gradient.
+- **The normals** are analytic (the direction from the axis), so a coarse ring shades round.
+- **The detail** is in the organ shader (`mesh-organ.ts`). Each vertex carries `organTube`: its place on its own tube
+  pulled straight (x along the axis in metres, yz across it) and a baked crease shade (how near another prim's
+  surface is). `meshOrganHeight` is a height in metres over that coordinate: haustra (a groove a period, in x, so it
+  rings the tube whatever way the loop bends) and fine wrinkles. `meshOrganDetail` turns its slope into a normal per
+  pixel from screen derivatives (no tangent attribute, no instance matrix in the shader), fades each detail out before
+  it aliases, and returns the cavity shade (crease, groove floor) that the light compose multiplies in.
+- **The selector.** `SegmentMeshCache.organMesh` (`ORGAN_MESHES`: `tubes` ships; `tubes-12`, `nets-10mm`, `nets-5mm`
+  for comparison) and `__sdfGame.setOrganMesh(name)`. The look gains `detail` and `relief` (`setOrganLook`).
+- **Unchanged:** the organ sources and their bounds, the reach cull, `?organs=sdf`, the march.
+
+Results and sheets: `docs/dev-notes/2026-10-07-organs-lowpoly/NOTES.md`. The owner picked the detail strength as
+shipped, 2026-10-07.
+
 ## 4. Known differences from SDF organs
 
 - The march's shadows and AO no longer see organs (the same limitation the mesh skeleton has: wrap-up 2026-09-08,

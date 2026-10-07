@@ -186,6 +186,9 @@ while the scene and the look were being built.
 
 ## Left open
 
+- **Follow-up, 2026-10-07:** the 5 mm extraction below is no longer the organ mesh. Organs are swept tubes (528
+  vertices for the pair, not 4,038) with their surface detail as shading: `docs/dev-notes/2026-10-07-organs-lowpoly/NOTES.md`.
+
 - **No self-shadowing on the mesh organ** (above). A cheap fake would be a directional occlusion from the crater's axis.
 - **The bone and organ mesh pipelines are built at the first wound** (about 60 to 100 ms once a session, before and
   after this branch). Warming them at boot is its own task.
