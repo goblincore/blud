@@ -174,7 +174,10 @@ export function createSkeletonSeams(ctx: GameContext) {
      *  was. `whole`: its draws that are not copies, in the same form with `piece` null. Every row names the material
      *  its batch is drawn on (mesh-renderer.ts SEGMENT_MATERIALS) and, when the bone is one plate of the anatomical
      *  skull (a skull that has lost plates is drawn plate by plate), the plate's id; `plate` is null for the whole
-     *  skull, any other bone and an eye. null without the mesh skeleton or the actor. */
+     *  skull, any other bone and an eye. `head`: the row draws the actor's head segment (the sculpted head's mesh, the
+     *  anatomical skull whole, or one of its plates). `paint`: the sculpted skull's paint its material draws (1 or 2;
+     *  null for an eye and for an anatomical plate). `character`: the actor's character, as its skeleton was built.
+     *  null without the mesh skeleton or the actor. */
     skullDrawn: (id: number) => {
       const a = ctx.world.actors.find(q => q.id === id), r = ctx.render.segMeshRenderer;
       if (!a || !r) return null;
@@ -184,14 +187,20 @@ export function createSkeletonSeams(ctx: GameContext) {
       // A split copy is drawn from its bone's twin geometry: instance data of its own on the bone's vertex data. The
       // shared position attribute says which plate either is.
       const plateOf = (g: THREE.BufferGeometry) => plates.find(p => p.geometry.getAttribute('position') === g.getAttribute('position'))?.id ?? null;
-      const materialOf = (g: THREE.BufferGeometry) => {
-        const batch = r.object.children.find(c => (c as THREE.InstancedMesh).geometry === g) as THREE.InstancedMesh | undefined;
-        return batch ? (batch.material as THREE.Material).name : null;
-      };
+      const batchOf = (g: THREE.BufferGeometry) => r.object.children.find(c => (c as THREE.InstancedMesh).geometry === g) as THREE.InstancedMesh | undefined;
+      const materialOf = (g: THREE.BufferGeometry) => (batchOf(g)?.material as THREE.Material | undefined)?.name ?? null;
+      const paintOf = (g: THREE.BufferGeometry) => ((batchOf(g)?.material as THREE.Material | undefined)?.userData.sculptPaint as 1 | 2 | undefined) ?? null;
+      // The head segment's mesh as cached (a split copy shares its position attribute, as a plate's does).
+      const headPosition = head && ctx.render.segMeshCache ? ctx.render.segMeshCache.get(head).geometry.getAttribute('position') : null;
+      const isHead = (g: THREE.BufferGeometry) => (headPosition !== null && g.getAttribute('position') === headPosition) || plateOf(g) !== null;
       const row = (d: (typeof mine)[number]) => ({
         eye: d.eye, piece: d.piece, matrix: d.matrix.toArray(), material: materialOf(d.geometry), plate: d.eye ? null : plateOf(d.geometry),
+        head: !d.eye && !d.organ && isHead(d.geometry), paint: d.eye || d.organ ? null : paintOf(d.geometry),
       });
-      return { draws: mine.length, copies: mine.filter(d => d.piece !== null).map(row), whole: mine.filter(d => d.piece === null).map(row) };
+      return {
+        draws: mine.length, copies: mine.filter(d => d.piece !== null).map(row), whole: mine.filter(d => d.piece === null).map(row),
+        character: ctx.render.skeletonSources.get(a)?.name ?? null,
+      };
     },
     meshEyeState: (bodyId?: number) => { const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId); return a && ctx.render.segMeshRenderer ? ctx.render.segMeshRenderer.eyeState(a) : null; },
     skullState: (bodyId?: number) => { const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q=>q.id===bodyId); return a && ctx.render.segMeshRenderer ? ctx.render.segMeshRenderer.skullState(a) : null; },

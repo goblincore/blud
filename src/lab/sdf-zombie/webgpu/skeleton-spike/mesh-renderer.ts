@@ -91,6 +91,7 @@ import { ANATOMICAL_SKULL_NORMAL_WGSL, ANATOMICAL_SKULL_SURFACE_WGSL } from './a
 import { SCULPT_PAINT_SHAPE1, SCULPT_PAINT_SHAPE2, sculptPaintSources } from './sculpt-paint';
 import { SKULL_REACH, damageSkull, explodeSkull, intactSkull, skullPieceLaunch, type SkullDamage } from '../../skull-fracture';
 import { fragmentVertexData, partitionSculptMesh } from './sculpt-fragments';
+import { sculptPaintOf } from './sculpt-variant';
 import type { FittedSkull } from './anatomical-skull';
 import type { Vec3 } from '../../types';
 import { HEAD_SPLIT, skullPieceAngle, skullPieces, skullSplitOf, type SkullFollow, type SkullSplit, type SplitWarp } from '../../head-split';
@@ -313,7 +314,9 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   // THE SECOND PAINT (sculpt-paint.ts), when the cache's recipe asks for it: its own chain on the same hash and
   // noise, in the layout of the sculpt the cache extracts. `tilt` is the shading normal the painted height tilts
   // (xyz) and the pixel's footprint on the surface (w); it takes screen derivatives, so a material that shades inside
-  // a branch declares it ahead of the branch. Null: the first paint, built below exactly as it always was.
+  // a branch declares it ahead of the branch. Null: the first paint alone, built below exactly as it always was.
+  // With it there are two bone materials, and a character's bones are drawn on its own paint's (sculptPaintOf: the
+  // second paint is fitted to some characters' heads and not to others').
   const paint2 = cache.sculpt.paint === 2 ? (() => {
     const chain: ReturnType<typeof wgslFn>[] = fns.slice(0, 2);
     for (const src of sculptPaintSources(cache.sculpt.shape === 2 ? SCULPT_PAINT_SHAPE2 : SCULPT_PAINT_SHAPE1)) chain.push(wgslFn(src, chain.slice()));
@@ -362,11 +365,20 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   const material = new MeshBasicNodeMaterial();
   material.name = SEGMENT_MATERIALS.bone;
   material.colorNode = lit(surf, meshLook);
+  material.userData.sculptPaint = 1;
+  // The second paint's bone material: the same name (it draws a bone segment), its own colour.
+  let material2: MeshBasicNodeMaterial | null = null;
   if (paint2) {
     const tilt = paint2.tilt();
     const painted = paint2.surface(positionWorld, tilt.w);
     const wet = paint2.wet(painted.w) as never;
-    material.colorNode = lit(painted, vec4(u.look.x, u.look.y, mul(mul(u.look.z, wet), MESH_SPEC_SCALE), mul(mul(u.look.w, wet), MESH_FRES_SCALE)), tilt.xyz);
+    material2 = new MeshBasicNodeMaterial();
+    material2.name = SEGMENT_MATERIALS.bone;
+    material2.colorNode = lit(painted, vec4(u.look.x, u.look.y, mul(mul(u.look.z, wet), MESH_SPEC_SCALE), mul(mul(u.look.w, wet), MESH_FRES_SCALE)), tilt.xyz);
+    material2.userData.sculptPaint = 2;
+    material2.depthWrite = true;
+    material2.depthTest = true;
+    material2.side = THREE.FrontSide;
   }
   let skullMaterial: MeshBasicNodeMaterial | null = null;
   // The anatomical plates' shading, in parts, for the closed material here and the split one below: the surface with
@@ -506,10 +518,15 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     innerWall(splitSurf),
     vec4(u.look.x, u.look.y, mul(mul(u.look.z, splitGloss), MESH_SPEC_SCALE), mul(mul(mul(u.look.w, splitGloss), MESH_FRES_SCALE), front)),
   ));
+  splitMaterial.userData.sculptPaint = 1;
+  let splitMaterial2: MeshBasicNodeMaterial | null = null;
   if (paint2) {
     // The second paint's split copies: the same wall inside; outside, the painted surface read at the un-turned
     // point, under the tilted normal. The tilt's derivatives are taken ahead of the branch.
-    splitMaterial.colorNode = kept(
+    splitMaterial2 = new MeshBasicNodeMaterial();
+    splitMaterial2.name = SEGMENT_MATERIALS.boneSplit;
+    splitMaterial2.userData.sculptPaint = 2;
+    splitMaterial2.colorNode = kept(
       tilt => {
         const painted = paint2.surface(clip.xyz, tilt.w);
         const gloss2 = mix(float(MESH_GLOSS_WET), paint2.wet(painted.w) as never, front);
@@ -521,8 +538,13 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       },
       () => paint2.tilt().toVar() as unknown as ReturnType<typeof paint2.tilt>,
     );
+    splitSided(splitMaterial2);
   }
   splitSided(splitMaterial);
+  /** The bone materials a segment geometry is drawn on, closed and split: its character's paint's (prepareGeometry
+   *  writes the paint on the geometry; a split twin and a fragment carry their base's). */
+  const boneMaterialOf = (geometry: THREE.BufferGeometry) => (geometry.userData.sculptPaint === 2 && material2 ? material2 : material);
+  const boneSplitMaterialOf = (geometry: THREE.BufferGeometry) => (geometry.userData.sculptPaint === 2 && splitMaterial2 ? splitMaterial2 : splitMaterial);
   // A split eye: the eye's own surface outside, the same wall inside, and no glow from the back.
   const eyeSplitMaterial = new MeshBasicNodeMaterial();
   eyeSplitMaterial.name = SEGMENT_MATERIALS.eyeSplit;
@@ -599,8 +621,9 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
         if (!(attr as THREE.InstancedBufferAttribute).isInstancedBufferAttribute) g.setAttribute(name, attr as THREE.BufferAttribute);
       }
       g.setIndex(base.index);
-      // A plate's twin is a plate: batchFor picks the material by this.
+      // A plate's twin is a plate, and a bone's twin is under its bone's paint: batchFor picks the material by these.
       if (base.userData.anatomicalSkull) g.userData.anatomicalSkull = true;
+      g.userData.sculptPaint = base.userData.sculptPaint;
       splitGeometries.set(base, g);
     }
     return g;
@@ -649,8 +672,8 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     let b = batches.get(geometry);
     if (!b) {
       const anatomical = !eye && !!geometry.userData.anatomicalSkull;
-      const closed = eye ? eyeMaterial : anatomical ? skullMaterial! : material;
-      const open = eye ? eyeSplitMaterial : anatomical ? skullSplitMaterial! : splitMaterial;
+      const closed = eye ? eyeMaterial : anatomical ? skullMaterial! : boneMaterialOf(geometry);
+      const open = eye ? eyeSplitMaterial : anatomical ? skullSplitMaterial! : boneSplitMaterialOf(geometry);
       const mesh = new THREE.InstancedMesh(geometry, organ ? organMaterial : split ? open : closed, 16);
       mesh.name = organ ? 'skeleton-organs' : (eye ? 'skeleton-fleshy-eyes' : 'skeleton-segments') + (split ? '-split' : '');
       mesh.frustumCulled = false;
@@ -695,6 +718,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       }
       return;
     }
+    geometry.userData.sculptPaint = sculptPaintOf(cache.sculpt, source.character);
     const feature = new Float32Array(pos.count * 4);
     const isHead = source.segment === 'head' ? (source.character === 'soldier' ? 2 : 1) : 0;
     for (let i = 0; i < pos.count; i++) {
@@ -1003,8 +1027,9 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       ensureLights(geometry, 1, true);
       if (picks) (geometry.getAttribute('iLights') as THREE.InstancedBufferAttribute).setXYZW(0, picks[0], picks[1], picks[2], picks[3]);
       (geometry.getAttribute('iFill') as THREE.InstancedBufferAttribute).setX(0, fill);
-      // The split material: the painted bone outside, the dark inner wall on back faces, two-sided.
-      const mesh = new THREE.Mesh(geometry, splitMaterial);
+      // The split material of the head's own paint: the painted bone outside, the dark inner wall on back faces,
+      // two-sided.
+      const mesh = new THREE.Mesh(geometry, boneSplitMaterialOf(base));
       mesh.layers.set(layer);
       mesh.matrixAutoUpdate = false;
       // The vertices stay in the head's own frame (the paint reads them there): the pivot is moved to the origin.
@@ -1271,10 +1296,12 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     dispose() {
       clear();
       material.dispose();
+      material2?.dispose();
       skullMaterial?.dispose();
       eyeMaterial.dispose();
       organMaterial.dispose();
       splitMaterial.dispose();
+      splitMaterial2?.dispose();
       skullSplitMaterial?.dispose();
       eyeSplitMaterial.dispose();
       eyeGeometry.dispose();

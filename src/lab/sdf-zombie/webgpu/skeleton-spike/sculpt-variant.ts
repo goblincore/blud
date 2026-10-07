@@ -29,7 +29,12 @@ export interface SculptRecipe {
   shape: SculptShape;
   /** The sculpted head's extraction cell (m). Null: the cache's own cell, as every other segment. */
   headCell: number | null;
+  /** The paint of the characters the second paint is fitted to (sculptPaintOf); every other character is drawn
+   *  under the first paint whatever this says. */
   paint: SculptPaint;
+  /** True: the recipe's paint on every character, fitted or not (`?sculptheads=all`, for looking at a head the
+   *  second paint is not fitted to). No variant has it. */
+  everyHead?: boolean;
 }
 
 /** The fine variants' head cell (m): half the bone cache's 1 cm. */
@@ -53,7 +58,21 @@ export function sculptRecipe(variant: SculptVariant): Readonly<SculptRecipe> {
   return RECIPES[variant];
 }
 
-/** The variant a recipe is; null for a recipe that is none of them. */
+/** THE CHARACTERS THE SECOND PAINT IS DRAWN ON. The second paint draws a face (orbits, a nasal aperture, two rows of
+ *  teeth, hollows) at fixed places of the head bone's box, the places the second sculpt carves them on the zombie and
+ *  the soldier. Every other character's head is its plain authored bone, with its own proportions: the painted face
+ *  sits on some of them and not on others (the cast sheet of 2026-10-07 shows each). A character is listed here once
+ *  its head has been looked at under the second paint and the face sits on the bone. One that is not listed, a new
+ *  character among them, is drawn under the first paint, as it was before the second paint existed. */
+export const SECOND_PAINT_CHARACTERS: ReadonlySet<string> = new Set(['zombie', 'soldier']);
+
+/** The paint `character`'s bones are drawn with under `recipe`: the recipe's for a character the second paint is
+ *  fitted to (or for every character, when the recipe says every head), else the first. */
+export function sculptPaintOf(recipe: Readonly<SculptRecipe>, character: string): SculptPaint {
+  return recipe.paint === 2 && (recipe.everyHead === true || SECOND_PAINT_CHARACTERS.has(character)) ? 2 : 1;
+}
+
+/** The variant a recipe is, whatever it says of every head; null for a recipe that is none of them. */
 export function sculptVariantOf(recipe: Readonly<SculptRecipe>): SculptVariant | null {
   return SCULPT_VARIANTS.find(v => RECIPES[v].shape === recipe.shape && RECIPES[v].headCell === recipe.headCell && RECIPES[v].paint === recipe.paint) ?? null;
 }
@@ -79,7 +98,10 @@ export interface SkullChoice {
  *   no `?skull=` and no `?sculpt=`     the sculpted skull, `full`;
  *   `?skull=sculpt`                    the same: `full` is the sculpted skull's look;
  *   `?skull=anatomical`                the anatomical skull;
- *   `?sculpt=<variant>`                the sculpted skull in that variant, whatever `?skull=` says.
+ *   `?sculpt=<variant>`                the sculpted skull in that variant, whatever `?skull=` says;
+ *   `?sculptheads=all`                 that variant's paint on every character's bones (the recipe's `everyHead`),
+ *                                      for looking at a head the second paint is not fitted to. Nothing under the
+ *                                      anatomical skull.
  *  A value that is none of these is passed over, and the page draws what it would have without it: `notes` says so.
  *  An empty value is no value. `?skull=procedural` is an older name for `?skull=sculpt`. */
 export function resolveSkull(search: string): SkullChoice {
@@ -99,7 +121,10 @@ export function resolveSkull(search: string): SkullChoice {
     notes.push(`?skull=anatomical is overruled by ?sculpt=${variant}, which asks for the sculpted skull`);
     skull = 'sculpt';
   }
+  const headsParam = params.get('sculptheads') || null;
+  if (headsParam !== null && headsParam !== 'all') notes.push(`?sculptheads=${headsParam} is not understood (all): passed over`);
   if (skull === 'anatomical') return { skull, variant: 'classic', recipe: SCULPT_CLASSIC, notes };
   variant ??= SCULPT_DEFAULT_VARIANT;
-  return { skull, variant, recipe: RECIPES[variant], notes };
+  const recipe = RECIPES[variant];
+  return { skull, variant, recipe: headsParam === 'all' && recipe.paint === 2 ? Object.freeze({ ...recipe, everyHead: true }) : recipe, notes };
 }
