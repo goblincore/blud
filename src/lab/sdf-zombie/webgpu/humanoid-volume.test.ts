@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // src/lab/sdf-zombie/webgpu/humanoid-volume.test.ts
 //
 // Task 3 — strict humanoid atlas loader. Modeled on hand-volume.test.ts:

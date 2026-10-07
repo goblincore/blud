@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // src/lab/sdf-zombie/webgpu/hand-volume.test.ts
 //
 // X1.26 task B1. The loader is the ONLY thing standing between a corrupt or

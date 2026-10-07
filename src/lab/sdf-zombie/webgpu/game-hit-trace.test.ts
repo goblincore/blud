@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // src/lab/sdf-zombie/webgpu/game-hit-trace.test.ts
 //
 // traceMeleeHitFrom: the straight, reach-capped ray the rod uses (no gravity, no 60 m march), against stub bodies.

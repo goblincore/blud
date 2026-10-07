@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // src/lab/sdf-zombie/webgpu/post-aa.test.ts
 //
 // X1.25 post chain. Nothing here compiles a shader — the WGSL tests are the

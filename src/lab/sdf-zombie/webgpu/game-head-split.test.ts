@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // src/lab/sdf-zombie/webgpu/game-head-split.test.ts
 //
 // The head split leaf, the axe that drives it and the debug seams, against a stub ctx and REAL actors (the posed

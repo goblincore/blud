@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // src/lab/sdf-zombie/webgpu/game-head-damage.test.ts
 //
 // The head damage leaf and the head split do not mix (game-head-split.ts): while a head is split open the leaf declines

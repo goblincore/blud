@@ -187,7 +187,10 @@ export default defineConfig({
   define: { 'import.meta.env.VITE_TELEMETRY_BUILD': JSON.stringify(telemetryBuild) },
   plugins: [labDevSave()],
   test: {
-    environment: 'happy-dom',
+    // Plain Node by default: booting a DOM per file was the largest single cost of a run, and only 19
+    // of 599 files touched one (2026-10-07). A test that needs `document`, `window`, `location` or
+    // URL-relative fetches starts with the line `// @vitest-environment happy-dom`.
+    environment: 'node',
     // Only collect the real app suite (co-located under src/). Without this,
     // vitest's default glob also scans committed model-benchmark scratch dirs
     // (docs/dev-notes/model-benchmarks/**) and sibling .claude worktrees, which

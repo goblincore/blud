@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
 import { collectLightSources, maskRooms, nearRoomMask, pickBodyFor, type LampInput, type TunnelLink } from './game-light-list';
 import { buildLightList, roomMaskOf } from './light-list';
