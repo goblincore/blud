@@ -351,32 +351,48 @@ These numbers are read off pictures taken 1.5 m from the head, 1.6 mm to a pixel
 flesh on the camera's side of the head read about 6% further forward than it is, and a flying gib in front of the
 face counts as flesh. They are good to about 5 mm, and only from frames taken a second after the shot.
 
-**4. "A floating piece of the neck."** A wound's lip standing in another wound's hole.
+**4. "A floating piece of the neck."** The stump's own lip, standing in the middle of a bigger crater's hole.
 
 The shader raises a crater's lip wherever the lip's ring passes within a few centimetres of the body's skin AS IT WAS
-BEFORE ANY WOUND. A carve does not take a lip away with the flesh under it. A decapitation stamps a stump wound: a
-bowl 11 cm in radius, right where the craters that cut the neck are. Their lips, and the stump's own where it opens
-inside a bigger crater, are left standing over the bowl at the height the skin used to be: a cup or an arc of pale
-flesh with a red inside, attached to nothing, 4 to 6 cm over the stump. It depends on where the wounds were, so it
+BEFORE ANY WOUND. A carve does not take a lip away with the flesh under it. A decapitation stamps a stump wound, a
+bowl 11 cm in radius where the neck was, and the stump has a lip like any crater. When the head was cut off by a big
+crater (a slug's is 16 cm in radius, the opening's two were 12 and 14 cm), the stump's bowl opens INSIDE that
+crater's hole. Its lip is then raised round a bowl that is not there: a cup or an arc of pale flesh with a red
+inside, attached to nothing, standing on top of the big crater's own lip. It depends on where the wounds were, so it
 comes and goes.
 
 - Reproduced: two slugs from 40 degrees took a head off and left a cup of flesh over the stump, seen from all four
-  sides. With the rule below switched off and on, the same shots:
-  2,348 cubic centimetres of lip standing more than 1.5 cm from any flesh (up to 5.9 cm from it) with it off, none
-  with it on. The counts come from a CPU twin of the shader's wound rows; the photographs agree.
+  sides. The stump's centre was 2.5 cm from the slug crater's, so the whole 11 cm bowl lay inside the 16 cm crater.
+- Measured on a CPU twin of the shader's wound rows, as lip flesh standing more than 1.5 cm clear of the body with
+  its carves taken out: 2,348 cubic centimetres, reaching 5.9 cm clear, as the game was. No single lip there is
+  taller than 4.0 cm (the slug crater's); 5.9 cm is the stump's lip standing on it. With the rule below: 1,334
+  cubic centimetres, none more than 4.0 cm clear, which is the slug crater's own lip lining its bowl, as it does on
+  any crater. The photographs agree: the red bowl stays, the cup and the arc over it are gone.
 - Ruled out by the draw lists (`__sdfGame.head.drawnNear`), with the piece on screen: no bone-mesh instance, eye or
   organ there (and it stayed with the bone meshes hidden); no piece the head damage leaf attached (no in-orbit eye,
   no dangling eye or socket plug, no flap); no flying or settled gib chunk; no mesh gib (brain, skull fragment); no
   other visible mesh of the scene; no live flesh of the head cluster (the cluster is dead on the CPU). It is in the
-  body's own march.
-- The rule (`damage.ts lipsAfterSever`): after a sever a crater loses its lip when the flesh it rides is gone, or
-  when its lip's ring reaches into the stump's carve; and the stump loses its own lip when it opens inside another
-  crater. The carves and the wounds' paint stay.
-- One thing found on the way: a wound uploaded with a lip height of exactly 0 broke the crater altogether. The
-  shader gates the lip by a smoothstep over the lip's own height, and at 0 the smoothstep's two edges coincide, a
-  NaN on the GPU: the stump drew as a pale dent with no cavity. The upload now never sends 0
-  (`character-view.ts MIN_LIP_SPLAY`). A crater on flesh too thin to carry a lip already had a lip scale of 0 and
-  must have drawn the same way.
+  body's own march, and it goes when the lips' height is set to nothing.
+- The rule (`damage.ts lipsAfterSever`, run when a limb is severed): the stump loses its own lip when it opens in
+  the hole of a crater at least as big as its bowl. A crater loses its lip when the flesh it rides is gone (the
+  severed head's own craters), or when the stump's bowl cuts into flesh under its lip; a crater that holds the
+  whole bowl keeps its lip. The carves and the wounds' paint stay.
+- A first version took the lip off every crater near the stump and off the stump whenever any crater touched it.
+  Nothing hung, but the stump drew as a pale, shallow dish with the spine in it and no red at all, at a lip share
+  of 0, 0.1 and 0.25 alike: a crater's wall is painted by its distance from the crater's centre, and without the
+  lip, which thickens the wall inward, the wall sits where the paint is mostly skin. That was worse than the
+  floating piece and was dropped.
+- **Not the same thing, and not changed:** after a decapitation by pellets (four volleys at the neck of a frozen
+  zombie) a collar of flesh stands at the back of the stump, pale outside, red inside, attached to the shoulders.
+  It is real flesh, not a lip: the base of the neck belongs to the torso, the pellets' small craters cut the neck
+  through from the front, and the stump's 11 cm bowl does not reach the back of the neck's base. It is there with
+  the lips' height at nothing, and the twin finds no lip there more than 2.7 cm clear of it. From the front it can
+  read as a dark hollow with a pale rim over the neck. If that is the piece the owner meant, the fix is a different
+  one (a wider stump bowl at the neck, or the neck's base leaving with the head) and is not made here.
+- One thing fixed on the way: a wound uploaded with a lip height of exactly 0 makes the shader's lip gate a
+  smoothstep whose two edges coincide, which WGSL leaves undefined. The upload now never sends 0
+  (`character-view.ts MIN_LIP_SPLAY`). It was not established that this ever drew wrong; the pale stump first put
+  down to it was the missing lip.
 
 ## What changed, and how to put each thing back
 
@@ -403,7 +419,8 @@ Every value is a field of `burstTuning` (`head-burst.ts`), live from the browser
   and `__sdfGame.head.stumpLips(false)`.
 - The opening's own numbers (`centreFrac`, `swell`, `lethal`, `repeatStep`, `craterScale`, `splay`, `shardScale`,
   `flapCount`) are unchanged and act only while `opening` is on.
-- `__sdfGame.head.stumpLips(false)` leaves every lip as it was after a sever (the floating piece comes back).
+- `__sdfGame.head.stumpLips(false)` leaves every lip as it was after a sever (the floating piece comes back);
+  `stumpLips(share)` leaves that share of a lip the rule would take (0 ships).
 - `__sdfGame.head.pop(id)` pops a head by hand; `__sdfGame.head.shot(id)` says what the rule made of the last round
   on a head.
 
@@ -427,6 +444,16 @@ drawn in the same call that throws the fragments.
   `splitFrac` ships at 1.25, which takes nearly every slug that lands on head flesh, because anything under about
   1.05 would not split on an aimed shot at the face. If the slug's aim is corrected, `splitFrac` can come down to
   0.5 or so and the split becomes a reward for a good shot.
+- **The slug's split is one-sided at fighting distance.** The split's plane goes through where the slug lands, and
+  both halves open only when that is within about 2 cm of the head's middle line. In the gate a slug from 2 m whose
+  line passed 0.2 cm from the head's centre still landed 3.6 cm or more to one side of the middle line (the plane
+  was put at its 3.6 cm limit), because the round does not leave from the crosshair's line, and one half peeled
+  open 0.9 rad (the sheet's "slug, centred" row). To have a slug from the front always open both halves, the leaf
+  would have to hand the split the head's middle line instead of the impact; that is a one-line change the owner
+  can ask for.
+- **Pellets on the head are ordinary damage again.** While every volley made the opening, a volley on the head did
+  the opening's damage once. Now each pellet is a wound: in the staged shots the zombie was falling after the
+  second volley on its head from 2 m (15 pellets on the head), where before it fell at the third.
 - **The pop will be rare in play as it stands.** A frozen zombie's neck is cut by one to four slugs under the chin.
   In live play the zombie turns and walks between shots and dies of the slugs first: twice, ten slugs aimed at the
   neck killed the zombie without taking its head off. A centred slug on a split head (two good head shots) is the
@@ -437,8 +464,9 @@ drawn in the same call that throws the fragments.
 ## The sheet
 
 [`look/burst-before-after.jpg`](look/burst-before-after.jpg). The grid: pellet volleys 1 to 3 with the crosshair on
-the head, a slug on the chin (off centre), a slug 4 cm over the head's centre (centred), and the body after its head
-was taken off; before on the left, after on the right; each as front and profile the way the game ships (VHS on,
+the head (by the third, in the "after" columns, the zombie is dying and falling forward, so those tiles look down
+on its head and shoulders), a slug on the chin (off centre), a slug 4 cm over the head's centre (centred), and the
+body after its head was taken off; before on the left, after on the right; each as front and profile the way the game ships (VHS on,
 1.5 m) and a clean close profile (VHS off, 0.6 m). Under it, the round that takes the head off, frame by frame at 60
 frames a second: before (a pellet volley, the head flies), after (a slug, the pop), the pop with the flesh out of
 the frame so the skull's ten fragments show, and the same two on the anatomical skull with its 14 plates.
@@ -494,12 +522,16 @@ A stance has to wait for the gun: a round fired while the gun is still coming ba
 displaced muzzle (a slug solved to pass 0.03 head radii from the centre passed 0.49 off). The gate waits a full
 reload before it solves a stance.
 
+As run on the final code: this gate 67 checks, 0 failed; the head-split gate (`scripts/head-split-gate.mjs`) 100
+checks, 0 failed; the axe gate (`scripts/axe-gate.mjs`) 27 checks, 0 failed. Neither of those two was edited.
+
 ## What looks worse, or is not done
 
 - **Head wounds are flatter.** A gun crater on a zombie's head has a third of its lip. The torn, everted edge was
   part of the look; on the head it was also what hid the skull. The body's craters are unchanged.
-- **A stump after gunfire is cleaner.** The craters that cut a limb off, and the stump when it opens inside one,
-  have no lip. Stumps from a blade keep theirs.
+- **A stump after gunfire is a little cleaner.** Small craters on the edge of a stump's bowl lose their lips, and
+  a stump that opens inside a slug's or a blast's crater loses its own. Stumps from a blade, and stumps with only
+  pellet craters round them, keep their lip.
 - **The swell is hard to see** at 0.12 s (see above).
 - **The soldier and the cultist are untouched by the rules** (the split, the slug's pop and `headLip` are the plain
   zombie's). One thing does reach the cultist: his pop now throws his skull's mesh in pieces when his head is not on
@@ -508,6 +540,8 @@ reload before it solves a stance.
 ## Not verified
 
 - Live play. Everything was staged on the ring testbed.
+- The sheet's pop frames were taken one commit before the last change to the lip rule (a stump beside craters
+  smaller than its bowl keeps its lip). A slug's crater is bigger than the bowl, so those frames are not affected.
 - The picture-profile numbers under the opening do not agree with a CPU model of the carve alone (the model puts
   the bone 4 cm proud of the entry's floor on the head's middle line; the pictures show flesh level with it). The
   opening's two torn craters have lips about 5 cm tall that the model leaves out, which is the likely reason. Not
