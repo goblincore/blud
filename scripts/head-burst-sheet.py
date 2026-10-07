@@ -13,9 +13,9 @@ The sheet has two parts:
   the grid    one row a stage (pellet volleys 1 to 3, the slug on the chin, the centred slug, the body after the
               slug that took the head off), before on the left and after on the right, each as three tiles: front
               and profile as the game ships (VHS on, 1.5 m), and a clean close profile (VHS off, 0.6 m);
-  the strips  the slug that takes the head off, frame by frame at 60 frames a second, as the game draws it: before
-              (the head flies), after (the pop), the pop with the flesh out of the frame so the skull's pieces show,
-              and the same two on the anatomical skull.
+  the strips  the round that takes the head off, frame by frame at 60 frames a second, as the game draws it: before
+              (a pellet volley, the head flies), after (a slug, the pop), the pop with the flesh out of the frame so
+              the skull's pieces show, and the same two on the anatomical skull.
 
 Every tile is the same window of the world around the head, cut from the whole frame and enlarged to the tile.
 """
@@ -42,7 +42,7 @@ ROWS = [
     ('pellets-3', 'Pellets, 3 volleys'),
     ('slug-chin', 'Slug, off centre\n(crosshair low: it\nlands on the chin)'),
     ('slug-split', 'Slug, centred\n(crosshair 4 cm over\nthe head\'s centre)'),
-    ('slug-pop-after', 'After the slug that\ntook the head off\n(slugs at the neck)'),
+    ('slug-pop-after', 'After the round that\ntook the head off\n(the stump bleeding)'),
 ]
 VIEWS = [('ships-front', 'front, as shipped'), ('ships-profile', 'profile, as shipped'), ('clean-profile', 'profile, clean, 0.6 m')]
 
@@ -98,8 +98,8 @@ def main():
     before, after, anat, out = Run(sys.argv[1]), Run(sys.argv[2]), Run(sys.argv[3]), Path(sys.argv[4])
     big, mid, small = font(24), font(16), font(13)
     strips = [
-        (before, 'slug-pop', 'BEFORE: the slug that\ncuts the neck sends\nthe head flying'),
-        (after, 'slug-pop', 'AFTER: the same slug\npops the head\n(sculpted skull)'),
+        (before, 'slug-pop', 'BEFORE: a pellet volley\ncuts the neck and the\nhead flies (a slug\nmade the opening and\ndid not cut it)'),
+        (after, 'slug-pop', 'AFTER: a slug cuts the\nneck and the head\npops (sculpted skull)'),
         (after, 'pop-bare', 'The pop, the flesh\nout of the frame:\nthe sculpted skull\'s\nten fragments'),
         (anat, 'slug-pop', 'The pop on the\nanatomical skull'),
         (anat, 'pop-bare', 'The flesh out of the\nframe: the anatomical\nskull\'s fourteen plates'),
@@ -116,8 +116,8 @@ def main():
     img = Image.new('RGB', (width, height), BG)
     draw = ImageDraw.Draw(img)
     draw.text((PAD * 2, 8), 'What the gun does to a zombie\'s head: before and after (2026-10-07)', fill=INK, font=big)
-    draw.text((PAD * 2, 40), 'The sculpted skull (?sculpt=full), real rounds, the cast thawed for a second after each. Tiles: a 0.46 m window around the head. '
-              'Before = the old behaviour put back with burstTune (the opening on every gun hit).', fill=DIM, font=small)
+    draw.text((PAD * 2, 40), 'The sculpted skull (?sculpt=full), real rounds from 2 m, the cast thawed for a quarter of a second after each. Tiles: a 0.46 m window around the head. '
+              'Before = the old behaviour put back with burstTune (the opening on every gun hit, the stock lip).', fill=DIM, font=small)
     half = 3 * (TILE + PAD) + 3 * PAD
     for side, (run, name) in enumerate(((before, 'BEFORE: every gun hit on the head made the burst opening'), (after, 'AFTER: ordinary wounds; a centred slug splits; the decapitating slug pops'))):
         x0 = GUTTER + side * half + PAD
@@ -138,8 +138,8 @@ def main():
         draw.multiline_text((PAD * 2, head + r * (TILE + PAD) + 8), label, fill=INK, font=small, spacing=4)
     # The strips.
     y0 = head + grid_h + 8
-    draw.text((PAD * 2, y0), 'The slug that takes the head off, frame by frame (60 frames a second; the number is the frame after the shot)', fill=INK, font=mid)
-    draw.text((PAD * 2, y0 + 24), 'As the game draws it (VHS on, no settling), from 1.5 m, three-quarter; a 0.9 m window around the head. The swell is popSwellS = 0.12 s: seven frames.', fill=DIM, font=small)
+    draw.text((PAD * 2, y0), 'The round that takes the head off, frame by frame (60 frames a second; the number is the frame after the shot)', fill=INK, font=mid)
+    draw.text((PAD * 2, y0 + 24), 'As the game draws it (VHS on, no settling), from 1.5 m, three-quarter; a 0.9 m window around the head. The swell is popSwellS = 0.12 s: eight frames. The cast is held frozen.', fill=DIM, font=small)
     for r, (run, stage, label, ks) in enumerate(picked):
         y = head + grid_h + strip_head + r * (STRIP_TILE + PAD)
         draw.multiline_text((PAD * 2, y + 8), label, fill=INK, font=small, spacing=4)

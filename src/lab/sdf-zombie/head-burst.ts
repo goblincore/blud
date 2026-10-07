@@ -43,7 +43,7 @@ export const BURST = {
 
 /** The shipped tuning (burstTuning starts as a copy; burstTune({ ...BURST_TUNING_DEFAULTS }) resets it).
  *  THE BEHAVIOUR BEFORE 2026-10-07 (every gun hit on the head made the opening) is
- *  burstTune({ opening: true, anyWeapon: true, alwaysSplit: true, slugSplit: false, slugPop: false, popOnSplit: false }). */
+ *  burstTune({ opening: true, anyWeapon: true, alwaysSplit: true, slugSplit: false, slugPop: false, popOnSplit: false, headLip: 1 }). */
 export const BURST_TUNING_DEFAULTS = {
   /** false: every round on a head is an ordinary wound and a decapitation an ordinary one (no split, pop or opening). */
   on: true,
@@ -74,8 +74,12 @@ export const BURST_TUNING_DEFAULTS = {
   /** The swell before the burst, seconds. 0 bursts on the frame of the hit. The cultist's pop swells 0.12 to 0.2 s
    *  (head-pop.ts SWELL_SEC); 0.12 s is seven frames at 60 fps and three or four at 30. */
   popSwellS: 0.12,
-  /** A centred slug on a head that is already split open pops it. false: an ordinary wound on the open head. */
+  /** A centred slug on a head that is already split WIDE pops it. false: an ordinary wound on the open head. */
   popOnSplit: true,
+  /** How wide: the split's opening as a share of its preset's full angle, at or past which the centred slug pops the
+   *  head. The slug's own split opens to 1 and the axe's first chop to 0.8; a head only cracked (under this) takes
+   *  the slug as an ordinary wound on its un-warped flesh. */
+  popSplitMin: 0.5,
 
   // ---- The opening (the slug head burst of 2026-10-02). Not the shipped behaviour: everything below acts only
   // ---- while `opening` is on, and then the opening takes the round before the split is asked.
@@ -117,16 +121,19 @@ export interface HeadShot {
   kind: 'pellet' | 'slug';
   /** classifyBurst's offset of the shot line: head radii from the head's centre. */
   offset: number;
-  /** The head is split open (game-head-split.ts isOpen). */
+  /** The head is split open (game-head-split.ts isOpen), and how far: its target angle as a share of its preset's
+   *  full angle (0 on a closed head). */
   splitOpen: boolean;
+  splitShare: number;
   /** The split would refuse this head: the head damage leaf holds state for it (the flail's ladder, an opening). */
   splitRefused: boolean;
 }
 
 /** THE RULE for one round on a head, in this order:
  *    switched off (`on`)                         ordinary;
- *    the head is split open                      a centred slug pops it (popOnSplit); anything else is ordinary
- *                                                (the opening never touches an open head);
+ *    the head is split open                      a centred slug pops it when it is split wide (popOnSplit, at or
+ *                                                past popSplitMin of its angle); anything else is ordinary (the
+ *                                                opening never touches an open head);
  *    the opening is on                           it takes every slug, and every pellet with anyWeapon;
  *    a centred slug, the split on and not refused   the split;
  *    anything else                               ordinary.
@@ -134,7 +141,7 @@ export interface HeadShot {
 export function headShotRule(shot: HeadShot, t: Readonly<typeof BURST_TUNING_DEFAULTS> = burstTuning): HeadShotRule {
   if (!t.on) return 'ordinary';
   const centred = shot.kind === 'slug' && shot.offset < t.splitFrac;
-  if (shot.splitOpen) return centred && t.popOnSplit ? 'pop' : 'ordinary';
+  if (shot.splitOpen) return centred && t.popOnSplit && shot.splitShare >= t.popSplitMin ? 'pop' : 'ordinary';
   if (t.opening && (shot.kind === 'slug' || t.anyWeapon)) return 'opening';
   if (centred && t.slugSplit && !shot.splitRefused) return 'split';
   return 'ordinary';

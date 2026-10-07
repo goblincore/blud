@@ -10,7 +10,7 @@ import { FLAIL_FEEL } from './game-flail';
 import { sdBody, sdPrimitive } from '../validate';
 import { headQuatOf } from '../rig-bind';
 import { burstTuning, setBurstTuning } from '../head-burst';
-import { setStumpLips, stumpLipsEnabled } from '../damage';
+import { STUMP_LIP, setStumpLip, stumpLipShare } from '../damage';
 import type { BuildResult } from '../build-body';
 
 /** game-main's headShape (the fattest additive head prim's midpoint and radius·scale axes — the frame the face
@@ -51,9 +51,15 @@ export function createHeadSeams(ctx: GameContext) {
        *  to ('ordinary', 'split', 'pop', 'opening'), the round, how far off centre its line ran (head radii) and
        *  whether the leaf took it. Null: none yet. */
       shot: (id: number) => ctx.weapon.headShot?.last(id) ?? null,
-      /** The lips a sever takes with it (damage.ts lipsAfterSever), read and set: true ships; false leaves every
-       *  crater's lip as it was (the look before 2026-10-07, when a lip could hang over a stump). Returns the state. */
-      stumpLips: (on?: boolean): boolean => { if (typeof on === 'boolean') setStumpLips(on); return stumpLipsEnabled(); },
+      /** The lips a sever takes with it (damage.ts lipsAfterSever), read and set: what is left of a lip that would
+       *  hang over the stump, as a share of the lip it had. 0 ships (damage.ts STUMP_LIP); 1, or false, leaves every
+       *  lip as it was (the look before 2026-10-07, when a lip could hang over a stump); true puts the shipped value
+       *  back. Returns the share in force. */
+      stumpLips: (share?: number | boolean): number => {
+        if (typeof share === 'boolean') setStumpLip(share ? STUMP_LIP : 1);
+        else if (typeof share === 'number' && Number.isFinite(share)) setStumpLip(share);
+        return stumpLipShare();
+      },
       /** Actor `id`'s head is swelling toward its pop (game-actor.ts beginHeadPop). */
       popping: (id: number): boolean => ctx.world.actors.find(q => q.id === id)?.headPopping() ?? false,
       /** Pop actor `id`'s head by hand, along (dx, dy, dz), after `swellS` seconds of swell (the tuning's when

@@ -234,3 +234,258 @@ python3 scripts/sculpt-skull-sheet.py <frames dir> docs/dev-notes/2026-10-07-scu
 
 Later, per the owner: combine the anatomical skull's breakaway plates with the sculpted skull. Not part of this
 pass.
+
+---
+
+# The gun and the zombie's head (2026-10-07, after the owner's playtest of `?sculpt=full`)
+
+The owner shot zombies in the head with the gun (weapon slot 2, pellets) and reported four things: shooting the face
+takes the flesh off the BACK of the head; the head is left comically skinny; the shot face looks flat, the skull does
+not protrude; and after the head comes off there is sometimes a small piece floating over the neck stump. They also
+said what they had wanted all along, which was not what the game was doing.
+
+This part says what the game did, what caused each observation (measured), what it does now, and how to put any of
+it back. The sheet is [`look/burst-before-after.jpg`](look/burst-before-after.jpg).
+
+## The words: the owner's and the code's
+
+| The owner says | The code calls it | What it is |
+| --- | --- | --- |
+| an ordinary wound | `ZombieActor.hit` (a pellet), `hitSlug` (a slug) | One crater, stamped where the round lands: 5.5 cm radius for a pellet, 16 cm for a slug. A carve in the flesh, an everted lip round it, bone showing where the carve reaches it. |
+| decapitation, "the head flies off" | the sever checks (`game-actor.ts runSeverChecks`, `connectivity.ts cutLimbs` and `cutChains`) and `onSever` | The craters' carves, taken together, cut through the neck. The head cluster is severed and thrown as one flying piece, and a stump wound is stamped on the shoulders. |
+| the pop: "the head balloons and explodes" | `ZombieActor.beginHeadPop`, `head-pop.ts`, the actor's `onHeadPop` (`game-spawn.ts`) | The head swells (`inflateHead`), then is severed with no flying piece. In its place: a burst of blood, two eyeballs and lumps of the head (`headPopDebris`), and the skull in pieces (`explodeSkull`). The cultist has had it since 2026-09-24. |
+| the head split | the head split leaf (`game-head-split.ts`), opened by the axe | The head opens in two halves about a hinge and stays on. |
+| (the owner did not know this one) | the "burst", now called the OPENING (`game-head-damage.ts burst`) | The slug head burst of 2026-10-02: an entry crater, an exit crater on the far side, a jelly stretch of the head, a dent, bone shards. The head stays on. |
+
+**What the game did until today.** On 2026-10-03 the owner could not trigger the slug head burst and asked for it to
+"trigger all the time" while tuning. Two debug switches were added and left on: `anyWeapon` (every gun hit on a head
+makes the opening, pellets too, once per trigger pull) and `alwaysSplit` (every such hit takes the full opening,
+however far off centre). So for four days every volley that touched a zombie's head stamped a 12 cm entry crater and
+a 14 cm exit crater on a head 22 cm deep. That is what the owner saw; "burst" was never something they asked a
+pellet to do.
+
+**What a gun round does to a zombie's head now, in order** (`head-burst.ts headShotRule` and `decapitationRule`,
+wired in `webgpu/game-head-shot.ts`):
+
+1. **A pellet is always an ordinary wound.** So is a slug whose line runs off centre, and any round on the neck.
+2. **A centred slug on a closed head splits it** through the head split leaf, exactly as the axe opens a head,
+   straight to the preset's full angle. The split's plane holds the shot's direction and the head's up axis: a slug
+   from the front parts the head left and right, one from the side takes the face. The zombie lives.
+3. **A centred slug on a head already split pops it.**
+4. **Ordinary wounds can still take the head off** (the sever checks, unchanged). If the round that cuts the neck
+   is a slug, the head pops instead of flying off: it swells for 0.12 s and bursts. If it is a pellet volley, a
+   blast or a blade, the head flies off as before.
+5. The opening is off. It is still in the code, behind `burstTune({ opening: true })`.
+
+Only the plain zombie has any of this, as before. A head the flail has already damaged cannot split (the head damage
+leaf's regions and deform are measured on the closed head, and the split leaf refuses it, for the axe as well): a
+centred slug on it is an ordinary slug wound, which can still take the head off and pop it. An earlier ordinary
+wound, a pellet's or an off-centre slug's, leaves no such state: the next centred slug still splits.
+
+## What caused the owner's observations
+
+Everything below was measured on the ring testbed with real rounds from 2 m, `?sculpt=full`, with the old behaviour
+put back by tuning (the sheet's "before" columns; `scripts/head-burst-look.mjs`, `OLD=1`).
+
+**1. "Shooting the face removes the flesh on the back of the head."** The opening's exit crater. One pellet volley
+with the crosshair on the head stamped two craters: an entry of 12 cm radius carved 9.9 cm deep, and on the far
+side an exit of 14 cm radius carved 9.9 cm deep. The zombie's head is 22.5 cm from the tip of its nose to the back
+of its skull, and the flesh over the back of the skull is 5 to 10 mm thick (median 9 mm). The exit crater takes all
+of it: the bare cranium stands out behind the flesh in every profile tile of the "before" columns.
+
+**2. "A skinny head."** Mostly the same two craters, a little the deform.
+
+- After one volley the flesh left along the head's front-to-back axis is 71 mm thick, of 225 mm. After two volleys
+  it is 62 mm, after three 52 mm. Seen from the side the head is a tall slab with a flat front. This is the owner's
+  screenshot.
+- The opening also deforms the head for good. From the front that is not what thins it: the head is stretched 3%
+  along the shot (then 3% short of its length once the entry dent reaches its 4 cm cap on the second volley), and
+  WIDENED 10% across. But each shot dents the side it enters by 3 cm, each of the head's six sides keeps its own
+  dent up to 4 cm, and nothing undoes them. Volleys from the front, the left, the back and the right left the head at
+  80% of its width and 79% of its depth, and a fifth volley from the front at 73% and 80%: shots from all round
+  ratchet the head thin.
+
+**3. "The face is flat, the skull should protrude more."** Three causes were possible. Two are ruled out, the third
+is the one, and it has nothing to do with the opening:
+
+- *The sculpt's face sits behind the old one's:* no. At the brow ridge, between the eyes, on the bridge of the nose
+  and at the teeth the second sculpt's surface is the authored bone's own (0.0 mm apart, on the middle line; only the
+  forehead above the brow ridge is sunk, by 8 mm).
+- *The entry dent flattens the skull:* it moves the skull's face back 3 cm with the flesh (the skull takes the head's
+  deform), but it does not flatten it, and with the opening off there is no dent at all.
+- *The flesh round the wound stands in front of the bone:* yes, by centimetres, because of the wound's LIP. The
+  skull's face lies 9 to 19 mm UNDER the skin (16 mm at the brow ridge, 9 mm between the eyes, 19 mm at the bridge
+  of the nose, 12 mm at the upper teeth). A crater's everted lip is a ring of flesh the shader raises round it, and
+  its height is a share of the crater's radius: 24 mm proud of the skin round a pellet crater, 40 mm round a
+  slug's, 47 mm or more round the opening's torn 12 cm crater. From the front the bone shows at the bottom of the
+  hole. From the side it sits 3 to 6 cm behind a wall of lip, and the lip is what the profile shows.
+  With the opening the entry carve is also cut off flat (a crater's carve is a sphere clipped by a depth plane, here
+  9.9 cm under the skin), which is the "flat red plane from brow to chin".
+
+The change for this one is `headLip`: a gun crater on a zombie's head is stamped with 0.3 of the stock lip (7 mm on
+a pellet crater, 12 mm on a slug's). Measured in profile pictures of the same staged shots, with the stock lip and
+with 0.3, how far the skull's silhouette stands in front of the flesh's at each landmark's height (negative: the
+flesh is in front):
+
+| One pellet volley, crosshair on the head | brow ridge | between the eyes | bridge of the nose | upper teeth | lower teeth | chin |
+| --- | --- | --- | --- | --- | --- | --- |
+| stock lip | -13 mm | -10 mm | -18 mm | -38 mm | -29 mm | -16 mm |
+| `headLip` 0.3 | -13 mm | -8 mm | -13 mm | -3 mm | +32 mm | 0 mm |
+
+| One slug on the chin | brow ridge | between the eyes | bridge of the nose | upper teeth | lower teeth |
+| --- | --- | --- | --- | --- | --- |
+| stock lip | -27 mm | -26 mm | -27 mm | +5 mm | +30 mm |
+| `headLip` 0.3 | -21 mm | -14 mm | -14 mm | +38 mm | +61 mm |
+
+(The gun lands its rounds low, so one volley aimed at the head opens the jaw and the mouth, and the brow and the
+nose are still under intact skin: their rows read the skin's own cover. After a second volley the whole face is off,
+and the skull's face stands in front of the receded flesh from the brow down: the sheet's "after" row 2.)
+
+These numbers are read off pictures taken 1.5 m from the head, 1.6 mm to a pixel, with a perspective that makes
+flesh on the camera's side of the head read about 6% further forward than it is, and a flying gib in front of the
+face counts as flesh. They are good to about 5 mm, and only from frames taken a second after the shot.
+
+**4. "A floating piece of the neck."** A wound's lip standing in another wound's hole.
+
+The shader raises a crater's lip wherever the lip's ring passes within a few centimetres of the body's skin AS IT WAS
+BEFORE ANY WOUND. A carve does not take a lip away with the flesh under it. A decapitation stamps a stump wound: a
+bowl 11 cm in radius, right where the craters that cut the neck are. Their lips, and the stump's own where it opens
+inside a bigger crater, are left standing over the bowl at the height the skin used to be: a cup or an arc of pale
+flesh with a red inside, attached to nothing, 4 to 6 cm over the stump. It depends on where the wounds were, so it
+comes and goes.
+
+- Reproduced: two slugs from 40 degrees took a head off and left a cup of flesh over the stump, seen from all four
+  sides. With the rule below switched off and on, the same shots:
+  2,348 cubic centimetres of lip standing more than 1.5 cm from any flesh (up to 5.9 cm from it) with it off, none
+  with it on. The counts come from a CPU twin of the shader's wound rows; the photographs agree.
+- Ruled out by the draw lists (`__sdfGame.head.drawnNear`), with the piece on screen: no bone-mesh instance, eye or
+  organ there (and it stayed with the bone meshes hidden); no piece the head damage leaf attached (no in-orbit eye,
+  no dangling eye or socket plug, no flap); no flying or settled gib chunk; no mesh gib (brain, skull fragment); no
+  other visible mesh of the scene; no live flesh of the head cluster (the cluster is dead on the CPU). It is in the
+  body's own march.
+- The rule (`damage.ts lipsAfterSever`): after a sever a crater loses its lip when the flesh it rides is gone, or
+  when its lip's ring reaches into the stump's carve; and the stump loses its own lip when it opens inside another
+  crater. The carves and the wounds' paint stay.
+- One thing found on the way: a wound uploaded with a lip height of exactly 0 broke the crater altogether. The
+  shader gates the lip by a smoothstep over the lip's own height, and at 0 the smoothstep's two edges coincide, a
+  NaN on the GPU: the stump drew as a pale dent with no cavity. The upload now never sends 0
+  (`character-view.ts MIN_LIP_SPLAY`). A crater on flesh too thin to carry a lip already had a lip scale of 0 and
+  must have drawn the same way.
+
+## What changed, and how to put each thing back
+
+Every value is a field of `burstTuning` (`head-burst.ts`), live from the browser console:
+`__sdfGame.head.burstTune({ ... })`; `__sdfGame.head.burstTuning()` reads them.
+
+| Field | Ships | Before | What it is |
+| --- | --- | --- | --- |
+| `opening` | `false` | `true` | The burst opening (entry and exit craters, the jelly, the dent, shards) on a slug. |
+| `anyWeapon` | `false` | `true` | With the opening on: pellets make it too. |
+| `alwaysSplit` | `false` | `true` | With the opening on: every head hit takes the full opening. |
+| `slugSplit` | `true` | (none) | A centred slug opens the head split. |
+| `splitFrac` | `1.25` | (none) | How centred: the slug's line within this many head radii of the head's centre. |
+| `splitOpen` | `1` | (none) | How far it opens, as a share of the split's full angle (the axe's second chop). |
+| `slugPop` | `true` | (none) | The slug that takes the head off pops it. |
+| `popSwellS` | `0.12` | (none) | The swell before the burst, seconds. 0 bursts on the frame of the hit. The cultist's is 0.12 to 0.2 s. |
+| `popOnSplit` | `true` | (none) | A centred slug on a split head pops it. |
+| `headLip` | `0.3` | `1` | The lip of a gun crater on a zombie's head, as a share of the stock lip. |
+| `on` | `true` | `true` | Off: every round is ordinary and every decapitation a flying head. |
+
+- **Everything as it was at the playtest:**
+  `__sdfGame.head.burstTune({ opening: true, anyWeapon: true, alwaysSplit: true, slugSplit: false, slugPop: false, popOnSplit: false, headLip: 1 })`
+  and `__sdfGame.head.stumpLips(false)`.
+- The opening's own numbers (`centreFrac`, `swell`, `lethal`, `repeatStep`, `craterScale`, `splay`, `shardScale`,
+  `flapCount`) are unchanged and act only while `opening` is on.
+- `__sdfGame.head.stumpLips(false)` leaves every lip as it was after a sever (the floating piece comes back).
+- `__sdfGame.head.pop(id)` pops a head by hand; `__sdfGame.head.shot(id)` says what the rule made of the last round
+  on a head.
+
+**The skull in the pop.** The anatomical skull releases its 14 plates, as the cultist's pop always did. The sculpted
+skull has no plates, so the head mesh that was being drawn is cut into ten fragments by region of the head (brow and
+forehead, two sides of the cranium top, two temples, the back, two cheek-and-orbit halves of the face, the upper jaw
+with its teeth, the lower jaw; `skeleton-spike/sculpt-fragments.ts`). Each is thrown as a mesh gib the way a plate
+is, keeps the sculpt's paint, and shows the bone's dark inner wall on its back faces. Every triangle is in exactly
+one fragment; each fragment is 5% to 21% of the surface on the zombie and the soldier, either sculpt, either cell.
+The cut is made at a mesh's first pop and kept: 8.4 ms for the zombie's 18,296-triangle `full` head in the browser.
+On a split head each fragment leaves from where its half is drawn. The head mesh and its seated eyes stop being
+drawn in the same call that throws the fragments.
+
+## What to know before playing it
+
+- **An aimed slug lands about 10 cm under the crosshair.** With the crosshair on the centre of a zombie's head, from
+  0.8 m to 4 m, the slug's line passes 0.89 to 1.03 head radii from the centre (a head radius is 10.9 cm), 10 cm
+  below it and 2 to 3 cm to one side: it lands on the chin. With the crosshair 2 cm lower it is 1.07 to 1.21 radii
+  off; 4 cm higher, 0.53 to 0.68. At 6 m it is 1.17 with the crosshair on the centre. So "centred" cannot be strict:
+  `splitFrac` ships at 1.25, which takes nearly every slug that lands on head flesh, because anything under about
+  1.05 would not split on an aimed shot at the face. If the slug's aim is corrected, `splitFrac` can come down to
+  0.5 or so and the split becomes a reward for a good shot.
+- **The pop will be rare in play as it stands.** A frozen zombie's neck is cut by one to four slugs under the chin.
+  In live play the zombie turns and walks between shots and dies of the slugs first: twice, ten slugs aimed at the
+  neck killed the zombie without taking its head off. A centred slug on a split head (two good head shots) is the
+  common way to a pop.
+- **The swell is short on purpose.** 0.12 s is seven or eight frames at 60 frames a second. The head grows by 60%
+  by the end, most of it in the last frames. It reads in the strip; in real time it is a flicker before the burst.
+
+## The sheet
+
+[`look/burst-before-after.jpg`](look/burst-before-after.jpg). The grid: pellet volleys 1 to 3 with the crosshair on
+the head, a slug on the chin (off centre), a slug 4 cm over the head's centre (centred), and the body after its head
+was taken off; before on the left, after on the right; each as front and profile the way the game ships (VHS on,
+1.5 m) and a clean close profile (VHS off, 0.6 m). Under it, the round that takes the head off, frame by frame at 60
+frames a second: before (a pellet volley, the head flies), after (a slug, the pop), the pop with the flesh out of
+the frame so the skull's ten fragments show, and the same two on the anatomical skull with its 14 plates.
+
+Two things about the staging, so they are not read as findings:
+
+- The cast is frozen so a zombie can be staged, and thawed for a quarter of a second after every round. A frozen
+  zombie never springs back from a hit, and the renderer's outer hull is built once per frozen stretch, so a frozen
+  body that a shot has moved is drawn clipped to where it used to be: a head shot from the front showed as a thin
+  slab of face with the whole skull bare behind it. That is a capture's artefact and looks exactly like the owner's
+  second observation; the first frames taken for this work had it. The gates photograph frozen zombies after shots
+  the same way, and their pictures should be read with that in mind.
+- For the strips the cast is held frozen (see above: in live play the slug rarely cuts the neck), so the headless
+  body does not react. The pop, the debris and the flying head are the game's own.
+
+To remake it (own servers, headless):
+
+```
+LABEL=before OLD=1 TUNE='{"headLip":1}' node scripts/head-burst-look.mjs <vite> <cdp> <before dir>
+LABEL=after node scripts/head-burst-look.mjs <vite> <cdp> <after dir>
+LABEL=anat QUERY='' SCENES=slug-pop node scripts/head-burst-look.mjs <vite> <cdp> <anatomical dir>
+python3 scripts/head-burst-sheet.py <before dir> <after dir> <anatomical dir> docs/dev-notes/2026-10-07-sculpt-skull-2/look/burst-before-after.jpg
+```
+
+## What looks worse, or is not done
+
+- **Head wounds are flatter.** A gun crater on a zombie's head has a third of its lip. The torn, everted edge was
+  part of the look; on the head it was also what hid the skull. The body's craters are unchanged.
+- **A stump after gunfire is cleaner.** The craters that cut a limb off, and the stump when it opens inside one,
+  have no lip. Stumps from a blade keep theirs.
+- **The swell is hard to see** at 0.12 s (see above).
+- **The soldier and the cultist are untouched by the rules** (the split, the slug's pop and `headLip` are the plain
+  zombie's). One thing does reach the cultist: his pop now throws his skull's mesh in pieces when his head is not on
+  the anatomical skull. His head bone is not sculpted, so the cut gives six pieces, not ten. Not photographed.
+
+## Not verified
+
+- Live play. Everything was staged on the ring testbed.
+- The picture-profile numbers under the opening do not agree with a CPU model of the carve alone (the model puts
+  the bone 4 cm proud of the entry's floor on the head's middle line; the pictures show flesh level with it). The
+  opening's two torn craters have lips about 5 cm tall that the model leaves out, which is the likely reason. Not
+  pursued: the opening no longer ships.
+- The soldier's head wounds, and any character but the zombie under the new lip rule after a sever (the rule is the
+  same for every body; only the zombie's decapitation was photographed).
+- Frame cost. Nothing here adds work to a frame without a pop; the fragment cut is 8 ms once per head mesh.
+
+## Code
+
+| File | What |
+| --- | --- |
+| `head-burst.ts` | The rules (`headShotRule`, `decapitationRule`) and the tuning. |
+| `webgpu/game-head-shot.ts` | The head-shot leaf: a round on a head is judged, and the split or the pop is asked for. |
+| `webgpu/game-actor.ts` | The pop (`beginHeadPop`, `advanceHeadPop`), the decapitation that asks first (`onDecapitate`), the low head lip, the lips a sever takes. |
+| `damage.ts` | `lipsAfterSever`. |
+| `skeleton-spike/sculpt-fragments.ts`, `mesh-renderer.ts` (`explodeSkull`) | The sculpted skull in pieces. |
+| `webgpu/game-head-damage.ts` (`burst`) | The opening, as it was, asked for only when its tuning is on. |
+| `scripts/head-burst-gate.mjs` | The gate, rewritten for these rules; the opening's scenarios run with its tuning switched on. |
+| `scripts/head-burst-look.mjs`, `scripts/head-burst-sheet.py` | The photographs, the measurements and the sheet. |

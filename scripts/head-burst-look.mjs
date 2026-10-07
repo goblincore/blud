@@ -504,7 +504,9 @@ const scenes = {
     await fleshShown(b.id, false);
     await stepN(2);
     await evaluate(`__sdfGame.head.pop(${b.id}, ${-f[0]}, 0, ${-f[2]})`);
-    const frames = await strip("pop-bare", b.id, fr.centre, f, async () => { await fleshShown(b.id, false); return {}; });
+    // Every re-pose of the swell puts the body's box back: it is shrunk again before each frame's picture.
+    const hide = () => evaluate(`(() => { const v = __sdfGame.zombie(${b.id}).view; v.uniforms.bodyHalf.value.setScalar(1e-6); v.object.scale.setScalar(1e-6); v.syncRecord(); return 1; })()`);
+    const frames = await strip("pop-bare", b.id, fr.centre, f, async () => { await hide(); return {}; });
     manifest.stages["pop-bare"] = { actor: b.id, frames }; save();
     console.log(`  pop-bare: the head left on frame ${frames.find((q) => !q.headOn)?.k}; skull fragments in the air per frame: ${frames.map((q) => q.fragments).join(" ")}`);
   },

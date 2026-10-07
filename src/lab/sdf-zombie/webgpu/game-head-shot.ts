@@ -17,7 +17,8 @@
 //              blasted with a slug's shove and a slug's share of the collapse meter, and they bleed as the axe's
 //              do. The zombie lives. If the split refuses after all (the body is tearing apart), the round is
 //              ordinary.
-//   pop        A centred slug on a head that is ALREADY split open: the head swells and bursts
+//   pop        A centred slug on a head that is ALREADY split wide (burstTuning.popSplitMin of its angle or more;
+//              a head only cracked takes it as an ordinary wound): the head swells and bursts
 //              (ZombieActor.beginHeadPop; the burst itself is the actor's onHeadPop, game-spawn.ts). The other way
 //              to a pop is not this leaf's: an ordinary slug wound that cuts the head off pops it through the
 //              actor's onDecapitate (head-burst.ts decapitationRule).
@@ -28,7 +29,8 @@
 // leaf, so a later centred slug still splits. A head the flail has damaged (the head damage leaf holds its regions
 // and deform, measured on the closed head) is refused by the split, here and for the axe: a centred slug on it is
 // an ordinary slug wound, and can still take the head off and pop it. A split head takes pellets and off-centre
-// slugs as ordinary wounds on its un-warped flesh (damage.ts unwarpHit); the next centred slug pops it.
+// slugs as ordinary wounds on its un-warped flesh (damage.ts unwarpHit); the next centred slug pops it if it is
+// split wide.
 import type { GameContext } from './game-context';
 import type { ZombieActor } from './game-actor';
 import type { BuildResult } from '../build-body';
@@ -38,6 +40,7 @@ import { COLLAPSE_TUNING } from '../collapse';
 import { headQuatOf } from '../rig-bind';
 import { rotate, type HeadFrame, type Quat } from '../head-deform';
 import { BURST, burstTuning, classifyBurst, headShotRule, hsOf, onHeadPrim, type HeadShotRule } from '../head-burst';
+import { splitMaxAngle } from '../head-split';
 import type { HeadSplitLeaf } from './game-head-split';
 import { headAlive } from './flame-anchors';
 
@@ -45,7 +48,7 @@ export interface HeadShotDeps {
   /** game-main's headShape: the head frame's centre and half-axes on a posed body. */
   headShape(b: BuildResult): { centre: Vec3; axes: Vec3 } | null;
   /** The head split leaf: the slug opens the head through it, and it says whether a head is open. */
-  split: Pick<HeadSplitLeaf, 'open' | 'isOpen'>;
+  split: Pick<HeadSplitLeaf, 'open' | 'isOpen' | 'state'>;
   /** The head damage leaf holds state for this head (game-head-damage.ts has): the split would refuse it. */
   headDamaged(a: ZombieActor): boolean;
   /** The burst opening (game-head-damage.ts burst); false when it declined the round. */
@@ -111,7 +114,10 @@ export function createHeadShot(_ctx: GameContext, deps: HeadShotDeps): HeadShotL
       const hs = hsOf(frame, at);
       if (Math.hypot(hs[0], hs[1], hs[2]) > BURST.maxHs) return false;   // the neck or a shoulder
       const offset = classifyBurst({ point, dir }, frame).offset;
-      const rule = headShotRule({ kind, offset, splitOpen: deps.split.isOpen(a), splitRefused: deps.headDamaged(a) });
+      // How far a split head stands open: its spring's target, as a share of its preset's full angle.
+      const st = deps.split.isOpen(a) ? deps.split.state(a.id) : null;
+      const full = st ? splitMaxAngle(st) : 0;
+      const rule = headShotRule({ kind, offset, splitOpen: !!st, splitShare: st && full > 0 ? st.target / full : 0, splitRefused: deps.headDamaged(a) });
       const took = rule === 'split' ? split(a, point, dir, frame, shot)
         : rule === 'pop' ? a.beginHeadPop(dir, burstTuning.popSwellS)
           : rule === 'opening' ? deps.opening(a, point, dir, shot, kind)

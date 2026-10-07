@@ -189,6 +189,19 @@ describe('the pop on a split head', () => {
     expect(headAlive(f.a.posed())).toBe(false);
     expect(f.hooks.pops).toHaveLength(1);
   });
+  it('a head only cracked open (under popSplitMin of its angle) takes the centred slug as an ordinary wound', () => {
+    const f = fixture();
+    // (The slugs land 3.5 cm to one side of the middle line: on a half, not through the gap.)
+    const HALF: Vec3 = [0.035, 0.03, 0];
+    expect(f.split.force(f.a.id, 'middle', 0, 0, 0.25)).toBe(true);
+    expect(f.leaf.hit(f.a, f.on(FRONT, HALF), FRONT, undefined, 'slug')).toBe(false);
+    expect(f.leaf.last(f.a.id)).toMatchObject({ rule: 'ordinary', took: false });
+    expect(f.a.headPopping()).toBe(false);
+    const g = fixture();
+    expect(g.split.force(g.a.id, 'middle', 0, 0, 0.8)).toBe(true);
+    expect(g.leaf.hit(g.a, g.on(FRONT, HALF), FRONT, undefined, 'slug')).toBe(true);
+    expect(g.leaf.last(g.a.id)!.rule).toBe('pop');
+  });
   it('a pellet, or popOnSplit off, leaves the open head on', () => {
     const f = fixture();
     f.leaf.hit(f.a, f.on(FRONT), FRONT, undefined, 'slug');

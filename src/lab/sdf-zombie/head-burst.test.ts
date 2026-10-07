@@ -132,7 +132,7 @@ describe('burstPlan', () => {
 
 describe('headShotRule: what a gun round does to a zombie head', () => {
   const T = BURST_TUNING_DEFAULTS;
-  const shot = (o: Partial<HeadShot> = {}): HeadShot => ({ kind: 'slug', offset: 0.9, splitOpen: false, splitRefused: false, ...o });
+  const shot = (o: Partial<HeadShot> = {}): HeadShot => ({ kind: 'slug', offset: 0.9, splitOpen: false, splitShare: o.splitOpen ? 1 : 0, splitRefused: false, ...o });
   /** The tuning before 2026-10-07: every gun hit on the head made the opening. */
   const OLD = { ...T, opening: true, anyWeapon: true, alwaysSplit: true, slugSplit: false, slugPop: false, popOnSplit: false };
 
@@ -167,6 +167,13 @@ describe('headShotRule: what a gun round does to a zombie head', () => {
     expect(headShotRule(shot({ offset: 0.4, splitOpen: true }), { ...T, popOnSplit: false })).toBe('ordinary');
     // The split's own switch does not matter once the head is open: the axe may have opened it.
     expect(headShotRule(shot({ offset: 0.4, splitOpen: true }), { ...T, slugSplit: false })).toBe('pop');
+  });
+  it('only a head split wide pops: one that is cracked under popSplitMin takes the centred slug as an ordinary wound', () => {
+    expect(headShotRule(shot({ offset: 0.4, splitOpen: true, splitShare: 0.25 }), T)).toBe('ordinary');
+    expect(headShotRule(shot({ offset: 0.4, splitOpen: true, splitShare: T.popSplitMin }), T)).toBe('pop');
+    // The axe's first chop (0.8 of the angle) and the slug's own split (1) are wide.
+    expect(headShotRule(shot({ offset: 0.4, splitOpen: true, splitShare: 0.8 }), T)).toBe('pop');
+    expect(headShotRule(shot({ offset: 0.4, splitOpen: true, splitShare: 0.25 }), { ...T, popSplitMin: 0 })).toBe('pop');
   });
   it('the orders: off-centre then centred splits; centred then centred splits then pops', () => {
     // An ordinary slug wound leaves no state: the next slug is judged on a closed, unrefused head.

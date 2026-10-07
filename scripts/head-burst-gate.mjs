@@ -7,15 +7,16 @@
 //   AIM. a slug fired with the crosshair on the head (no stance solving) is CENTRED by the shipped splitFrac and
 //       splits the head.
 //   O.  (splitFrac 0.35 from here, so "off centre" can be staged) an off-centre slug is an ORDINARY slug wound.
-//   S.  a centred slug SPLITS the head: the head split's state at the preset's full angle, both halves, the pose's
-//       split at +full / -full, the skull drawn as clipped copies with an eye a half, the field open on the plane,
-//       two cut faces, the zombie alive.
+//   S.  a centred slug SPLITS the head: the head split's state at the preset's full angle (both halves, or the one
+//       the slug landed on: the split's own rule), the pose's split turned that far, the skull drawn as clipped
+//       copies, the field open where a half was, its cut faces, the zombie alive.
 //   X.  a second centred slug on the split head POPS it.
+//   OFF. burstTune({ on: false }): a centred slug is an ordinary wound.
+// BOOT 1b, the pop on a page of its own:
 //   D.  slugs at the neck until the head comes off: the head SWELLS for popSwellS and bursts, no flying head; the
 //       anatomical skull's fourteen plates are all released as fragments, the head segment and its eyes are not
 //       drawn, and 2.5 s on nothing is left at the old head position.
 //   D0. popSwellS 0 bursts with no swell frame.
-//   OFF. burstTune({ on: false }): a centred slug is an ordinary wound.
 // BOOT 2, the OPENING switched on by tuning (the slug head burst of 2026-10-02, not shipped): the scenarios this
 // gate had before 2026-10-07, unchanged but for `opening: true` in their tuning:
 //   P. with anyWeapon and alwaysSplit a pellet volley on a head opens it, once per shot.
@@ -221,7 +222,7 @@ async function stand(id, dist, shift = 0) {
  *  Returns the head centre and the line's offset as a share of the head radius (head-burst.ts's own measure). */
 const SLUG_SPEED = 30, SLUG_GRAVITY = 6;
 async function aimLine(id, dist, off = 0) {
-  await evaluate("__sdfGame.refillShells()"); await stepN(45); await evaluate("__sdfGame.refillShells()");
+  await ready();
   const fr = await evaluate(`__sdfGame.head.frame(${id})`);
   const head = fr.centre, R = Math.cbrt(fr.axes[0] * fr.axes[1] * fr.axes[2]);
   const ax = centre[0] - head[0], az = centre[2] - head[2], l = Math.hypot(ax, az) || 1;
@@ -316,7 +317,11 @@ async function nearHead(id, c, r = 0.25) {
 /** THE GUN IS READY before a shot is aimed: full shells (no reload) and the last shot's kick played out. A stance is
  *  solved for where the muzzle is NOW; a slug fired out of a reload or a kick leaves from somewhere else (a third
  *  slug fired after a reload ran 0.49 head radii off a line solved to 0.03). */
-async function ready() { await evaluate("__sdfGame.refillShells()"); await stepN(45); await evaluate("__sdfGame.refillShells()"); }
+async function ready() {
+  // A reload in progress refuses fire() even with full shells: wait one out (its length is the game's own number).
+  const frames = Math.ceil((await evaluate("__sdfGame.reloadTotalSec")) * 60) + 12;
+  await evaluate("__sdfGame.refillShells()"); await stepN(frames); await evaluate("__sdfGame.refillShells()");
+}
 /** One REAL slug at actor `id`, watched for `frames` frames: on which frames its head was swelling, when it left, and
  *  the most skull fragments in the air. */
 async function watchSlug(id, frames) {
@@ -425,20 +430,28 @@ try {
   check(sShot?.rule === "split" && sShot.took === true && sShot.offset < CENTRE_FRAC, `S: a slug ${sAim.offset.toFixed(3)} radii off centre splits (verdict ${JSON.stringify(sShot)})`);
   await stepN(150);   // the split's spring settles (the head-split gate: within about 60 frames)
   const st = await splitOf(S1.id);
-  const full = await evaluate(`import("/src/lab/sdf-zombie/head-split.ts").then((m) => m.HEAD_SPLIT.presets.middle.maxBoth)`);
-  check(st?.preset === "middle" && st.sides === 0 && st.offset === 0 && Math.abs(st.target - full * TUNING_DEFAULTS.splitOpen) < 1e-12 && st.angle === st.target && st.vel === 0,
-    `S: the head split's state: the middle preset, both halves, at the preset's full angle and at rest (${st ? `${st.preset} sides ${st.sides} angle ${st.angle} target ${st.target} of ${full}` : null})`);
-  const warp = await evaluate(`(() => { const w = __sdfGame.zombie(${S1.id}).posed().split; return w ? { thetaP: w.thetaP, thetaM: w.thetaM } : null; })()`);
-  check(!!warp && warp.thetaP === st?.angle && warp.thetaM === -st?.angle, `S: the pose's split turns the halves that far apart (${warp ? `${warp.thetaP.toFixed(4)} / ${warp.thetaM.toFixed(4)}` : null})`);
+  // The preset's full angle for what the slug opened: both halves when it landed on the head's middle line, one half
+  // when it landed to a side of it (head-split.ts choosePreset, the axe's own rule).
+  const presets = await evaluate(`import("/src/lab/sdf-zombie/head-split.ts").then((m) => m.HEAD_SPLIT.presets.middle)`);
+  const full = st ? (st.sides === 0 ? presets.maxBoth : presets.maxOne) : NaN;
+  check(st?.preset === "middle" && Math.abs(st.target - full * TUNING_DEFAULTS.splitOpen) < 1e-12 && st.angle === st.target && st.vel === 0,
+    `S: the head split's state: the middle preset (a slug from the front parts the head left and right), at the preset's full angle and at rest (${st ? `${st.preset} sides ${st.sides} angle ${st.angle} target ${st.target} of ${full}` : null})`);
+  const warp = await evaluate(`(() => { const w = __sdfGame.zombie(${S1.id}).posed().split; return w ? { thetaP: w.thetaP, thetaM: w.thetaM, n: [...w.n] } : null; })()`);
+  const wantP = st && st.sides >= 0 ? st.angle : 0, wantM = st && st.sides <= 0 ? -st.angle : 0;
+  check(!!warp && warp.thetaP === wantP && warp.thetaM === wantM, `S: the pose's split turns ${st?.sides === 0 ? "both halves" : "the struck half"} that far (${warp ? `${warp.thetaP.toFixed(4)} / ${warp.thetaM.toFixed(4)}` : null}; wanted ${wantP} / ${wantM})`);
   await evaluate("__sdfGame.step(1, 0)");
   const drawn = await evaluate(`(() => { const d = __sdfGame.skullDrawn(${S1.id}); return d ? { bones: d.copies.filter((c) => !c.eye).length, eyes: d.copies.filter((c) => c.eye).length, pieces: [...new Set(d.copies.filter((c) => !c.eye).map((c) => c.piece))].sort() } : null; })()`);
-  check(!!drawn && drawn.bones >= 3 && drawn.pieces.includes(1) && drawn.pieces.includes(2) && drawn.eyes >= 2, `S: the skull is drawn broken with the split: clipped copies for the rest and each half, and the eyes with their halves (${JSON.stringify(drawn)})`);
-  // The field on the split's plane, 5 cm over the head's centre: flesh on the closed head, the gap on this one.
-  const gap = await evaluate(`(() => { const f = __sdfGame.head.frame(${S1.id}); return __sdfGame.head.surfaceAt(${S1.id}, f.centre[0], f.centre[1] + 0.05, f.centre[2]); })()`);
-  const closedThere = await evaluate(`(() => { const f = __sdfGame.head.frame(${O.id}); return __sdfGame.head.surfaceAt(${O.id}, f.centre[0], f.centre[1] + 0.08, f.centre[2] - 0.03); })()`);
-  check(gap > 0 && closedThere < 0, `S: the field is open on the plane (5 cm over the head's centre: ${(gap * 1000).toFixed(1)} mm outside any flesh; inside a closed head's cranium it reads ${(closedThere * 1000).toFixed(1)} mm)`);
+  const turned = st ? (st.sides === 0 ? [1, 2] : st.sides > 0 ? [1] : [2]) : [];
+  check(!!drawn && drawn.pieces.includes(0) && turned.every((p) => drawn.pieces.includes(p)), `S: the skull is drawn broken with the split: clipped copies for the rest and for each half that turned (${JSON.stringify(drawn)})`);
+  // The field where a turned half used to be: 3.5 cm to that half's side of the plane, 6 cm over the head's centre.
+  // Flesh on the closed head; empty now that the half has swung away.
+  const side = st && st.sides > 0 ? 1 : -1;
+  const there = await evaluate(`(async () => { const V = await import("/src/lab/sdf-zombie/validate.ts"); const f = __sdfGame.head.frame(${S1.id}), w = __sdfGame.zombie(${S1.id}).posed().split, b = __sdfGame.zombie(${S1.id}).posed();
+    const q = [f.centre[0] + w.n[0] * ${side} * 0.035, f.centre[1] + 0.06, f.centre[2] + w.n[2] * ${side} * 0.035];
+    return { open: V.sdBody(q, b), closed: V.sdBodyClosed(q, b) }; })()`);
+  check(there.closed < 0 && there.open > 0, `S: the field is open where the half was: ${(there.open * 1000).toFixed(1)} mm clear of any flesh, at a point ${(-there.closed * 1000).toFixed(1)} mm inside the closed head`);
   const faces = (await headWounds(S1.id)).filter((w) => w.shape === "cut" && (w.headRegion === "split+" || w.headRegion === "split-"));
-  check(faces.length === 2 && (await hstate(S1.id)) === null, `S: the slug's wound is the split's two cut faces (${faces.length}), and the head leaf holds nothing for it (no opening)`);
+  check(faces.length === (st?.sides === 0 ? 2 : 1) && (await hstate(S1.id)) === null, `S: the slug's wound is the split's cut face${st?.sides === 0 ? "s" : ""} (${faces.length}), and the head leaf holds nothing for it (no opening)`);
   await stand(S1.id, PHOTO_D); await capture("S-split");
   await evaluate("__sdfGame.freeze(false)"); await stepN(3);
   const alS1 = (await evaluate("__sdfGame.actorList()")).find((q) => q.id === S1.id);
@@ -456,6 +469,19 @@ try {
   check((await fragments()) - f0 >= 10, `X: the split skull's plates are thrown (${(await fragments()) - f0} fragments)`);
   await tune({ splitFrac: TUNING_DEFAULTS.splitFrac });
 
+  // -------- OFF. the master switch.
+  await tune({ on: false });
+  const OFF = fresh();
+  await aimLine(OFF.id, SHOT_D, 0);
+  await watchSlug(OFF.id, 8);
+  check((await splitOf(OFF.id)) === null && (await hstate(OFF.id)) === null && (await headWounds(OFF.id)).some((w) => w.type === "blast" && w.shape === "crater"),
+    "OFF: with burstTune({ on: false }) a centred slug is an ordinary slug crater: no split, no opening");
+  await tune({ on: true });
+  closeSession(S);
+
+  // ======== BOOT 1b: the pop, on a page of its own. How many slugs cut a neck depends on the zombie and on what
+  // the cast has been through; the first zombie of a fresh page loses its head to the first.
+  await boot("pop");
   // -------- D. the decapitating slug pops (the anatomical skull: fourteen plates).
   const D1 = fresh();
   await stand(D1.id, PHOTO_D); await capture("D-before");
@@ -465,19 +491,10 @@ try {
 
   // -------- D0. popSwellS 0: no swell frame.
   await tune({ popSwellS: 0 });
-  const D0 = AIM;   // any live head: the one the aimed slug split
+  const D0 = fresh();
   const d0 = await evaluate(`(() => { const ok = __sdfGame.head.pop(${D0.id}, 0, 0, -1); return { ok, popping: __sdfGame.head.popping(${D0.id}), on: __sdfGame.flail.limbAlive(${D0.id}, "head") > 0 }; })()`);
   check(d0.ok && !d0.popping && !d0.on, `D0: with popSwellS 0 the head bursts at once: no swell, the head off in the same call (${JSON.stringify(d0)})`);
   await tune({ popSwellS: TUNING_DEFAULTS.popSwellS });
-
-  // -------- OFF. the master switch.
-  await tune({ on: false });
-  const OFF = fresh();
-  await aimLine(OFF.id, SHOT_D, 0);
-  await watchSlug(OFF.id, 8);
-  check((await splitOf(OFF.id)) === null && (await hstate(OFF.id)) === null && (await headWounds(OFF.id)).some((w) => w.type === "blast" && w.shape === "crater"),
-    "OFF: with burstTune({ on: false }) a centred slug is an ordinary slug crater: no split, no opening");
-  await tune({ on: true });
   closeSession(S);
 
   // ======== BOOT 2: the opening, switched on by tuning ========

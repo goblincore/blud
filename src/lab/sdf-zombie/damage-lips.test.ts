@@ -3,11 +3,11 @@
 // The lips that went with the limb (damage.ts lipsAfterSever): after a sever, no crater's everted lip is left
 // standing over the stump's hole or on flesh that is gone.
 import { afterEach, describe, expect, it } from 'vitest';
-import { LIP_REACH, WOUND_PROFILES, lipsAfterSever, setStumpLips, stumpLipsEnabled, type Wound } from './damage';
+import { LIP_REACH, STUMP_LIP, WOUND_PROFILES, lipsAfterSever, setStumpLip, stumpLipShare, type Wound } from './damage';
 import type { Primitive, Vec3 } from './types';
 import { MIN_LIP_SPLAY, createWoundRing } from './webgpu/character-view';
 
-afterEach(() => setStumpLips(true));
+afterEach(() => setStumpLip(STUMP_LIP));
 
 /** Two point prims: 0 a head at (0, 1.6, 0), 1 a torso at (0, 1.3, 0); one cluster each. */
 const prim = (y: number, limb: 'head' | 'torso', o: Partial<Primitive> = {}): Primitive =>
@@ -62,11 +62,13 @@ describe('lipsAfterSever', () => {
     const withStump = [decal, cut, crater(1, [0, -0.3, 0.12], 0.05), stump];
     expect(lipsAfterSever(withStump, PRIMS, BOTH, stump)).toBe(withStump);
   });
-  it('switched off (the look before), every lip is left as it was', () => {
-    setStumpLips(false);
-    expect(stumpLipsEnabled()).toBe(false);
-    const wounds = [crater(0, [0, 0, 0.12], 0.05)];
+  it('at a share of 1 (the look before), every lip is left as it was; in between, a hanging lip keeps that share', () => {
+    const wounds = [crater(0, [0, 0, 0.12], 0.05, { rimScale: 0.8 })];
+    setStumpLip(1);
+    expect(stumpLipShare()).toBe(1);
     expect(lipsAfterSever(wounds, PRIMS, HEADLESS, null)).toBe(wounds);
+    setStumpLip(0.25);
+    expect(lipsAfterSever(wounds, PRIMS, HEADLESS, null)[0]!.rimScale).toBeCloseTo(0.2, 9);
   });
 });
 

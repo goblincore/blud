@@ -529,10 +529,13 @@ export function woundCarveNormal(prims: Primitive[], wound: Wound, bodyYaw = 0):
  *  (0.42) each way (march/fields/wounds.wgsl.ts). */
 export const LIP_REACH = 1.6;
 
-/** A/B switch for lipsAfterSever (`__sdfGame.setStumpLips(false)` leaves every lip as it was). Ships ON. */
-let stumpLipsOn = true;
-export function setStumpLips(on: boolean): void { stumpLipsOn = on; }
-export function stumpLipsEnabled(): boolean { return stumpLipsOn; }
+/** What lipsAfterSever leaves of a lip that would hang, as a share of the lip it had. */
+export const STUMP_LIP = 0;
+/** Live value (`__sdfGame.head.stumpLips(v)`): STUMP_LIP ships; 1 leaves every lip as it was (the look before
+ *  2026-10-07, when a lip could hang over a stump). */
+let stumpLip: number = STUMP_LIP;
+export function setStumpLip(share: number): void { stumpLip = Math.min(1, Math.max(0, share)); }
+export function stumpLipShare(): number { return stumpLip; }
 
 /**
  * THE LIPS THAT WENT WITH THE LIMB. A crater's lip is flesh the shader ADDS in a ring round the crater, wherever the
@@ -543,8 +546,8 @@ export function stumpLipsEnabled(): boolean { return stumpLipsOn; }
  * opens inside a bigger crater) were left hanging over the stump as a cup or an arc of flesh attached to nothing
  * (the owner, 2026-10-07: "a floating piece of the neck" over a headless zombie).
  *
- * So after a sever, with `stump` the wound it stamped (null: none), a crater loses its lip (`rimScale` 0; its carve
- * and its paint stay) when:
+ * So after a sever, with `stump` the wound it stamped (null: none), a crater loses its lip (`rimScale` times the
+ * stump lip share, 0 as shipped; its carve and its paint stay) when:
  *   - the flesh it rides is gone: its prim is dead, or its prim's cluster is no longer alive;
  *   - its lip's ring reaches into the stump's carve: centres closer than the stump's radius plus LIP_REACH of its own;
  * and the stump loses its own lip when its ring reaches into such a crater's carve (centres closer than that crater's
@@ -555,7 +558,7 @@ export function lipsAfterSever(
   wounds: readonly Wound[], prims: Primitive[], clusters: readonly { start: number; count: number; alive: boolean }[],
   stump: Wound | null, bodyYaw = 0,
 ): readonly Wound[] {
-  if (!stumpLipsOn) return wounds;
+  if (stumpLip >= 1) return wounds;
   const gone = (w: Wound): boolean => {
     const p = prims[w.primIdx];
     if (!p || p.dead) return true;
@@ -577,11 +580,11 @@ export function lipsAfterSever(
     }
     if (!drop) return w;
     changed = true;
-    return { ...w, rimScale: 0 };
+    return { ...w, rimScale: (w.rimScale ?? 1) * stumpLip };
   });
   if (stump && stumpHangs && ring(stump)) {
     const i = out.indexOf(stump);
-    if (i >= 0) { out[i] = { ...stump, rimScale: 0 }; changed = true; }
+    if (i >= 0) { out[i] = { ...stump, rimScale: (stump.rimScale ?? 1) * stumpLip }; changed = true; }
   }
   return changed ? out : wounds;
 }
