@@ -1,4 +1,7 @@
 // src/lab/sdf-zombie/blob-emit.ts
+//
+// Writes a `.blob` document back to text, preserving comments and layout, with optional face overrides spliced in.
+
 import type { BlobDoc, BlobLine } from './blob-ast';
 
 /**

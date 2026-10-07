@@ -123,6 +123,58 @@ function labDevSave(): Plugin {
   };
 }
 
+/**
+ * THE SLOW GROUP. These 25 files were 83% of the suite's test time on the first CI run
+ * (2026-10-07: 1142 s of 1371 s summed, seconds beside each): numerical sweeps and tests that shell
+ * out to a CLI. A bare `npm test` leaves them out so a local run stays quick.
+ *
+ * They still run:
+ *   - in CI, always (`VITEST_ALL=1`, .github/workflows/ci.yml);
+ *   - whenever you NAME a test file or filter: `npx vitest run src/lab/sdf-zombie/cut-wound.test.ts`;
+ *   - from `npm run test:changed` when their module changed (it names files);
+ *   - `npm run test:slow` (only these) and `npm run test:all` (everything).
+ *
+ * pack-golden.test.ts (10 s) is deliberately NOT here: CI skips it (its pin is per-platform), so the
+ * default local run is the only place it runs unprompted. Add a file when it passes ~10 s in CI.
+ */
+const SLOW_TESTS = [
+  'src/lab/sdf-zombie/cut-wound.test.ts',                                      // 331 s
+  'src/lab/sdf-zombie/webgpu/gib-carve.test.ts',                               // 125 s
+  'src/lab/sdf-zombie/webgpu/skeleton-spike/volume.test.ts',                   // 123 s
+  'src/lab/sdf-zombie/webgpu/wound-threat.test.ts',                            // 95 s
+  'scripts/blob-measure.test.ts',                                              // 90 s
+  'scripts/blob-depth.test.ts',                                                // 82 s
+  'src/lab/sdf-zombie/webgpu/surface-nets-cpu.test.ts',                        // 27 s
+  'src/lab/sdf-zombie/pack.test.ts',                                           // 27 s
+  'src/lab/sdf-zombie/silhouette.test.ts',                                     // 22 s
+  'src/lab/sdf-zombie/webgpu/gib-library.test.ts',                             // 21 s
+  'src/lab/sdf-zombie/characters/bride-blob.test.ts',                          // 18 s
+  'src/lab/sdf-zombie/characters/mouse-blob.test.ts',                          // 18 s
+  'src/lab/sdf-zombie/motion.test.ts',                                         // 17 s
+  'src/lab/sdf-zombie/webgpu/curl-volume-node.test.ts',                        // 15 s
+  'src/lab/sdf-zombie/webgpu/gib-asset.test.ts',                               // 15 s
+  'src/lab/sdf-zombie/webgpu/skeleton-spike/mesh.test.ts',                     // 14 s
+  'src/lab/sdf-zombie/webgpu/game-actor.test.ts',                              // 13 s
+  'src/lab/sdf-zombie/webgpu/impact-splash.test.ts',                           // 12 s
+  'src/lab/sdf-zombie/webgpu/game-actor-soldier.test.ts',                      // 12 s
+  'src/lab/sdf-zombie/half-blend-audit.test.ts',                               // 12 s
+  'src/lab/sdf-zombie/head-split.test.ts',                                     // 11 s
+  'src/lab/sdf-zombie/blob-checks.test.ts',                                    // 11 s
+  'src/lab/sdf-zombie/characters/broodmother-blob.test.ts',                    // 10 s
+  'src/lab/sdf-zombie/head-keepout.test.ts',                                   // 10 s
+  'src/lab/sdf-zombie/webgpu/character-view.test.ts',                          // 10 s
+];
+for (const f of SLOW_TESTS) {
+  if (!existsSync(resolve(__dirname, f))) throw new Error(`vite.config.ts SLOW_TESTS: no such file ${f}`);
+}
+/** A positional argument after the vitest command is a file filter: the caller asked for those files. */
+const namesTestFiles = (() => {
+  const args = process.argv.slice(2);
+  const i = args.findIndex(a => a === 'run' || a === 'watch' || a === 'dev' || a === 'list' || a === 'related');
+  return args.slice(i + 1).some(a => !a.startsWith('-'));
+})();
+const skipSlow = !process.env.VITEST_ALL && !namesTestFiles;
+
 export default defineConfig({
   // Worktrees share node_modules, but must not overwrite another dev server's
   // optimized Three/TSL modules: mixed module copies collide on node IDs and
@@ -135,7 +187,10 @@ export default defineConfig({
   define: { 'import.meta.env.VITE_TELEMETRY_BUILD': JSON.stringify(telemetryBuild) },
   plugins: [labDevSave()],
   test: {
-    environment: 'happy-dom',
+    // Plain Node by default: booting a DOM per file was the largest single cost of a run, and only 19
+    // of 599 files touched one (2026-10-07). A test that needs `document`, `window`, `location` or
+    // URL-relative fetches starts with the line `// @vitest-environment happy-dom`.
+    environment: 'node',
     // Only collect the real app suite (co-located under src/). Without this,
     // vitest's default glob also scans committed model-benchmark scratch dirs
     // (docs/dev-notes/model-benchmarks/**) and sibling .claude worktrees, which
@@ -162,7 +217,7 @@ export default defineConfig({
       'scripts/lib/march-depth-guard.test.mjs',
       'scripts/sdf-melee-stage.test.mjs',
     ],
-    exclude: ['**/node_modules/**', '**/.claude/**', 'docs/**', 'dist/**'],
+    exclude: ['**/node_modules/**', '**/.claude/**', 'docs/**', 'dist/**', ...(skipSlow ? SLOW_TESTS : [])],
   },
   build: {
     rollupOptions: {

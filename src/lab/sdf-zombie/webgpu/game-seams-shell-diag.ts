@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/game-seams-shell-diag.ts
+//
+// The window.__sdfGame shell diagnostics: the per-pixel shell off/on cross-tab and the chunk census of pieces in the frustum.
+
 import * as THREE from 'three/webgpu';
 import type { GameContext } from './game-context';
 

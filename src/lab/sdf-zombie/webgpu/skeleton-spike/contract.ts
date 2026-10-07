@@ -7,9 +7,14 @@
 // One BoneFieldSource per RIGID SEGMENT — the same units applyRig poses bones
 // by and tags with Primitive.boneSegment (rig-bind.ts): the skull unit, one
 // axial BoneFrame per spine/pelvis segment, one limb bone per bind-point
-// pair. ORGANS ARE EXCLUDED: the 'organs' segment and any op 'organ' prim
-// stay procedural (they shade differently — the isOrgan branch — and ride no
-// rigid frame).
+// pair. ORGANS ARE OPT-IN (organs as mesh, 2026-10-06; spec
+// docs/superpowers/specs/2026-10-06-organs-mesh-design.md): with `organs` set,
+// each op 'organ' prim joins an `organ:axial:<head>-<tail>` source, kind
+// 'organ', on the axial BoneFrame applyRig ALREADY poses it by (bindRig gives
+// every torso inside-flesh prim one; the 'organs' boneSegment tag is only the
+// pack's cull group, not a frame). Without it they are left out, as before:
+// the procedural skeleton, the volume experiment and every chunk keep organs
+// as field rows.
 //
 // distance() consumes SEGMENT-LOCAL metres and folds the segment's bone
 // prims exactly the way the march does: a HARD MIN over sdPrimitive
@@ -67,9 +72,12 @@ export interface BoneFieldSource {
   character: string;
   /**
    * The applyRig segment key: 'head', `axial:<headJoint>-<tailJoint>`, or
-   * `limb:<limb>:<bindA>-<bindB>`. Never 'organs' (excluded by contract).
+   * `limb:<limb>:<bindA>-<bindB>`, or (opts.organs) `organ:axial:<headJoint>-<tailJoint>`.
    */
   segment: string;
+  /** 'organ' for an `organ:axial:*` source (soft viscera: its own material, a finer extraction cell, no eyes, never
+   *  split); 'bone' for every other. */
+  kind: 'bone' | 'organ';
   /**
    * Invalidation token: changes when the segment's rest geometry or prim
    * set changes. Cache keys for mesh/volume bakes MUST include it — a baked
@@ -80,6 +88,10 @@ export interface BoneFieldSource {
   bounds: { min: Point3; max: Point3 };
   /** Bone-only field in segment-local metres. Hard min over member prims. */
   distance(p: Point3): number;
+  /** The member prims distance() folds, segment-local at rest (orient stripped). What a mesher that builds from the
+   *  authored shapes reads instead of sampling the field (mesh-organ-tubes.ts). Absent on a source whose field is no
+   *  longer the fold of its prims (an adapter that carves it), so such a mesher never draws the wrong shape. */
+  prims?: readonly Primitive[];
 
   // ——— Documented extensions (needed by the round-trip/pose contract) ———
   /**
@@ -114,6 +126,7 @@ const qConj = (q: SegmentPose['quat']): Quat => [-q[0], -q[1], -q[2], q[3]];
 
 interface SegDef {
   key: string;
+  kind: 'bone' | 'organ';
   rigidity: 'rigid' | 'limb';
   /** Indices into body.bonePrims. */
   members: number[];
@@ -142,6 +155,8 @@ export interface SkeletonSourceOpts {
    * ~1 cm phantom distance error under a moved pose).
    */
   rig?: () => RigState;
+  /** Also build the organ sources (kind 'organ'). Default false: bone sources only, the list as it always was. */
+  organs?: boolean;
 }
 
 export function createSkeletonSources(
@@ -165,16 +180,34 @@ export function createSkeletonSources(
   };
 
   body.bonePrims.forEach((p, i) => {
-    // Organs stay procedural. Distal severing leaves the parent cluster live
-    // but marks its removed bones dead; baking those would resurrect a moving
-    // skeleton after the flesh/weapon had already detached.
-    if (p.op === 'organ' || p.dead) return;
-    const headLocal = bound.head?.bones.get(i);
+    // Distal severing leaves the parent cluster live but marks its removed
+    // bones dead; baking those would resurrect a moving skeleton after the
+    // flesh/weapon had already detached.
+    if (p.dead) return;
     const frame = bound.boneFrames.get(i);
+    if (p.op === 'organ') {
+      // Organs are opt-in, and ride the axial frame applyRig poses them by. An
+      // organ with no frame (none is authored: organs are torso prims) has no
+      // rigid unit to bake into and stays out.
+      if (!opts.organs || !frame) return;
+      const key = `organ:axial:${frame.head}-${frame.tail}`;
+      const f = frame;
+      defOf(key, () => ({
+        key, kind: 'organ', rigidity: 'rigid', members: [], local: [],
+        poseOf: () => {
+          const origin = pts()[f.head]!.pos;
+          const dir = normalize(sub(pts()[f.tail]!.pos, origin));
+          return { origin, quat: segmentQuat(f.restDir, dir, yawNow()) };
+        },
+      })).members.push(i);
+      defs.get(key)!.local.push({ a: f.restA, b: f.restB });
+      return;
+    }
+    const headLocal = bound.head?.bones.get(i);
     if (headLocal && bound.head) {
       const h = bound.head;
       defOf('head', () => ({
-        key: 'head', rigidity: 'rigid', members: [], local: [],
+        key: 'head', kind: 'bone', rigidity: 'rigid', members: [], local: [],
         poseOf: () => {
           const pivot = pts()[h.pivot]!.pos;
           const tip = pts()[h.tip]!.pos;
@@ -196,7 +229,7 @@ export function createSkeletonSources(
       const key = `axial:${frame.head}-${frame.tail}`;
       const f = frame;
       defOf(key, () => ({
-        key, rigidity: 'rigid', members: [], local: [],
+        key, kind: 'bone', rigidity: 'rigid', members: [], local: [],
         poseOf: () => {
           const origin = pts()[f.head]!.pos;
           const dir = normalize(sub(pts()[f.tail]!.pos, origin));
@@ -221,7 +254,7 @@ export function createSkeletonSources(
     const restJointA = sub(p.a, bind.a.offset);
     const localB = sub(p.b, restJointA);
     defOf(key, () => ({
-      key, rigidity: 'limb', members: [], local: [],
+      key, kind: 'bone', rigidity: 'limb', members: [], local: [],
       poseOf: () => {
         const origin = pts()[bind.a.point]!.pos;
         // Arm endpoints rotate with their bone's frame (armFrame); every
@@ -290,13 +323,15 @@ export function createSkeletonSources(
     const src: BoneFieldSource = {
       character,
       segment: def.key,
+      kind: def.kind,
       revision,
       bounds: { min: lo, max: hi },
       rigidity: def.rigidity,
       primCount: prims.length,
+      prims,
       distance(p) {
-        // foldBoneRange's fold: hard min, no smin, organs absent by
-        // construction. Bone blendK is intentionally unread — the march
+        // foldBoneRange's fold: hard min, no smin (an organ source holds
+        // organs only, a bone source bones only). Bone blendK is intentionally unread — the march
         // never reads it on this path either.
         let d = Infinity;
         for (const pr of prims) {
@@ -349,7 +384,7 @@ export function createSkeletonSources(
     };
     sources.push(src);
   }
-  // Deterministic order: head, axial by key, limb by key — independent of
+  // Deterministic order: axial by key, head, limb by key, organ by key — independent of
   // bonePrims ordering, so two runs diff cleanly.
   sources.sort((a, b) => a.segment < b.segment ? -1 : a.segment > b.segment ? 1 : 0);
   return sources;

@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/soldier-footwork.ts
+//
+// Soldier footwork controller: alternating foot swings and planted feet that follow the root (stepSoldierFootwork).
+
 import type { Vec3 } from './types';
 import { add, len, lerp, sub } from './vec';
 import { rotateYaw } from './gait';

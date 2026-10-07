@@ -1,4 +1,7 @@
 // src/lab/sdf-zombie/blob-compile.ts
+//
+// Compiles a parsed `.blob` document into a BodyDef, plus its face, face sheet and flesh palette.
+
 import { type BlobDoc, type BlobPart, BlobError } from './blob-ast';
 import {
   STRAND_COUNT_MAX, STRAND_CYCLES_MAX, STRAND_CYCLES_MIN,

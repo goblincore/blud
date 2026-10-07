@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-seams-misc.ts
 //
+// The window.__sdfGame leftovers: telemetry, crowd dispatch and info, freeze and render lock, blood blur, panel toggles and light layers.
+//
 // Members lifted verbatim out of game-main.ts's `window.__sdfGame` literal.
 // Every one needed nothing but the GameContext, so this factory takes no deps.
 //

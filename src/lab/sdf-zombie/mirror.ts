@@ -1,4 +1,7 @@
 // src/lab/sdf-zombie/mirror.ts
+//
+// Expands the authored left-side primitives and bones of a BodyDef into both sides.
+
 import type { BodyDef, BoneDef, LimbBase, LimbId, PrimDef } from './types';
 
 /** A prim after mirror expansion: bone name is concrete, limb is a concrete cluster. */

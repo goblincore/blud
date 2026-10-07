@@ -34,7 +34,7 @@ export function createViewmodelLights(ctx: GameContext, opts: { name: string; fi
   const list = lights([]);
   let listed: THREE.Light[] = [];
   // THE FILL: on a layer no camera renders (so three's default per-camera lists skip it) and with `onlyRooms` empty
-  // (so the level's per-room lists skip it too -- game-lighting-leaves levelSceneLights). Parented to the scene root,
+  // (so the level's per-room lists skip it too -- game-level-lights levelSceneLights). Parented to the scene root,
   // never hidden; its pose and intensity follow the torch every frame (syncFill).
   const fill = new THREE.SpotLight(0xffffff, 0, 16, Math.PI * 0.12, 0.45, 0);
   fill.name = opts.name;

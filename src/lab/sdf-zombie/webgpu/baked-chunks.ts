@@ -475,7 +475,7 @@ export interface GoreMaterialOptions extends SurfaceOutputOptions {
  *  bound PER OBJECT, the shared chunk march material's way (zombie-gpu.ts bindObjectValue): three
  *  calls each node's onObjectUpdate with the mesh it is about to draw, and the node takes the
  *  value from that mesh's `userData` record. The game writes the record per drawn mesh per frame
- *  (game-bake-leaves.ts pickChunkObjects); the record is allocated once per mesh and reused. */
+ *  (game-chunk-bake.ts pickChunkObjects); the record is allocated once per mesh and reused. */
 export const CHUNK_OBJECT_LIGHT = '__chunkObjectLight';
 export interface ChunkObjectLight {
   /** 4 packed picks (`index + weight`, -1 empty) at this mesh's own position. */

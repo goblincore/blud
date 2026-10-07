@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // src/lab/sdf-zombie/webgpu/panel-chrome.test.ts
 import { describe, expect, it } from 'vitest';
 import { createPanelShell } from './panel-chrome';

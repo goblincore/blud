@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/webgpu/game-skull-shots.ts
 //
-// A PROJECTILE AT BONE WITH NO FLESH IN FRONT OF IT. The projectile loop (game-main.ts) finds a hit by tracing the
+// A PROJECTILE AT BONE WITH NO FLESH IN FRONT OF IT. The projectile loop (game-tick.ts) finds a hit by tracing the
 // FLESH field, and the skull is cast from that hit (mesh-renderer.ts impact). A head whose split is drawn has bone
 // the eye sees and no flesh covers: the skull opens less than its flesh, and stands in the gap between the halves. A
 // pellet or slug on a line through that bone meets no flesh of the actor on its step, or meets it only behind the

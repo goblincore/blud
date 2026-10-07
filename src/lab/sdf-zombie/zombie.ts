@@ -1,4 +1,7 @@
 // src/lab/sdf-zombie/zombie.ts
+//
+// The WebGL ZombieView (a ShaderMaterial raymarch of one body) and ChunkView (a gib chunk view), with their uniform upload.
+//
 import * as THREE from 'three';
 import type { BuildResult } from './build-body';
 import { packBody, PRIM_STRIDE, type PackedBody } from './pack';

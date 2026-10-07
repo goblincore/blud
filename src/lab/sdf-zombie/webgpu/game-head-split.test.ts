@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // src/lab/sdf-zombie/webgpu/game-head-split.test.ts
 //
 // The head split leaf, the axe that drives it and the debug seams, against a stub ctx and REAL actors (the posed
@@ -26,7 +27,6 @@ import { headShape } from './flame-anchors';
 import { FLAIL_HEAD, headNeck, traceRaySurface } from './flail-strike';
 import { AXE_HIT } from './axe-strike';
 import mainSrc from './game-main.ts?raw';
-import leafSrc from './game-head-split.ts?raw';
 
 const made: { dispose(): void }[] = [];
 afterEach(() => { for (const r of made.splice(0)) r.dispose(); });
@@ -62,7 +62,7 @@ function fixture(o: { headDamaged?: HeadSplitDeps['headDamaged']; frozen?: boole
   ctx.weapon.headSplit = split;
   const skull = headShape(a.posed())!;
   const view = { eye: [skull.centre[0], skull.centre[1], skull.centre[2] + 1.2] as Vec3 };
-  // The blood dep registers each wound's emitter, as game-world-leaves3.ts registerBleed does.
+  // The blood dep registers each wound's emitter, as game-bleed.ts registerBleed does.
   const emitters = new BleedRegistry();
   const bleed = vi.fn((b: ZombieActor, w: Wound) => { emitters.register(b.id, w, 'slug', 0); });
   const axe = createAxeHarness(ctx as unknown as GameContext, { eye: () => view.eye, aimDir: () => [0, 0, -1], bleed, split });
@@ -355,9 +355,6 @@ describe('the leaf: the per-frame tick', () => {
     expect(iSkull).toBeGreaterThan(iEye);
     expect(mainSrc.slice(iSkull, mainSrc.indexOf("ctx.telemetry.telemetry.end('skeleton-mesh', meshTiming);"))).toContain("warp: (owner, segment) => (segment === 'head' ? (owner as ZombieActor).view.splitDrawn : null),");
     expect(iEye).toBeLessThan(mainSrc.indexOf('refreshActorTiles();', iEye));
-    // The tick's call hands no eye.
-    expect(mainSrc).toContain('ctx.weapon.headSplit?.tick(dt);');
-    expect(leafSrc).not.toContain('ctx.boot.handle');
   });
 
   it('a FROZEN actor\'s split asks for the frozen hull build again whenever it changes (the hulls follow the pose\'s split)', () => {

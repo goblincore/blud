@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import type { GameContext } from './game-context';

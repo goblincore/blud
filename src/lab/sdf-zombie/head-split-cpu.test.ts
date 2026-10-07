@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // src/lab/sdf-zombie/head-split-cpu.test.ts
 //
 // THE HEAD SPLIT'S CPU MIRROR (plan docs/superpowers/plans/2026-10-04-head-split-part-b.md), on the real posed zombie:

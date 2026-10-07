@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // src/lab/sdf-zombie/webgpu/game-seams-weapon-aim.test.ts
 //
 // slugFrom: a slug of the gun's own, put in flight on a line a gate lays.

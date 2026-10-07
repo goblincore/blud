@@ -1,4 +1,7 @@
 // src/lab/sdf-zombie/pack.ts
+//
+// Packs a built body into the flat float arrays the SDF shaders read, plus dead-prim marking and bound groups.
+
 import type { BuiltBody, Primitive, Vec3 } from './types';
 import { bendCtrl } from './vec';
 import { MAX_CLUSTERS, MAX_PRIMS, BONE_SEG_MAX } from './validate';
@@ -183,6 +186,14 @@ export interface PackOpts {
    */
   packBones?: boolean;
   /**
+   * Write organ rows (op 'organ') into the inside-flesh array. Default TRUE —
+   * the shipped layout, byte-identical rows. The mesh skeleton sets it FALSE
+   * along with packBones (organs as mesh, 2026-10-06): its actors' organs are
+   * segment meshes too, so the body packs NO inside-flesh row, boneCount is 0
+   * and the march never calls applyBones.
+   */
+  packOrgans?: boolean;
+  /**
    * Write the bone-cluster sphere + range texels (packBoneClusters). Default
    * FALSE — the old flat loop. ON, the BONE rows are grouped cluster by
    * cluster (then a tail for organs and limb-less bones) and each cluster's
@@ -345,6 +356,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
   // same contract as prims.
   const restBones = (rest ?? body).bonePrims ?? [];
   const packBones = opts.packBones ?? true;
+  const packOrgans = opts.packOrgans ?? true;
   const boneCullMode = opts.boneCullMode ?? (opts.packBoneClusters ? 'cluster' : 'off');
   // One pair of texels per CLUSTER plus one tail texel (index MAX_CLUSTERS),
   // stored in the free columns of ROW_CLUSTER_BOUNDS / ROW_CLUSTER_RANGE —
@@ -380,6 +392,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
     (body.bonePrims ?? []).forEach((b, j) => {
       if (!body.clusters[b.cluster]?.alive) return;
       if (!packBones && b.op === 'bone') return;
+      if (!packOrgans && b.op === 'organ') return;
       let owner = -1;
       if (b.op !== 'organ') {
         for (let c = 0; c < body.clusters.length; c++) {
@@ -421,6 +434,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
     (body.bonePrims ?? []).forEach((b, j) => {
       if (!body.clusters[b.cluster]?.alive) return;
       if (!packBones && b.op === 'bone') return;
+      if (!packOrgans && b.op === 'organ') return;
       live.push({ b, j });
     });
     if (live.some(x => typeof x.b.boneSegment !== 'number')) {
@@ -467,6 +481,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
     (body.bonePrims ?? []).forEach((b, j) => {
       if (!body.clusters[b.cluster]?.alive) return;
       if (!packBones && b.op === 'bone') return;
+      if (!packOrgans && b.op === 'organ') return;
       writeBone(b, j);
     });
   }

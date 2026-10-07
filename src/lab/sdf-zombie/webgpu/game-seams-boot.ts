@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-seams-boot.ts
 //
+// The window.__sdfGame boot and frame diagnostics: backend, tiles, frame hash, pass timings, draw counts, frame cap and shadow toggles.
+//
 // Members lifted verbatim out of game-main.ts's `window.__sdfGame` literal.
 // Every one needed nothing but the GameContext, so this factory takes no deps.
 //

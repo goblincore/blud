@@ -2,6 +2,73 @@
 
 Tests, harnesses, the game-main decomposition, tooling, process notes. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Tests: CI, the quick suite, the text-pin audit (2026-10-07)
+
+- [x] **CI** (`.github/workflows/ci.yml`): typecheck, the full vitest suite in four shards, and the five `node --test`
+  suites, on every push. The GPU gates are not in it. `pack-golden.test.ts` is per-platform and skipped there.
+- [x] **Locally:** `npm run test:changed` (tests beside changed files) and `npm run typecheck`. A bare `npm test` is the
+  quick suite: the 25-file slow group (`SLOW_TESTS`, `vite.config.ts`) is left out and the default environment is
+  Node (19 files opt into happy-dom). 276 s → 115 s on the owner's machine. `npm run test:all` is everything.
+- [x] **Text-pin audit:** 834 assertions on source text in 38 files; 488 deleted (94 `it` blocks), 120 kept.
+  [Notes](../dev-notes/2026-10-07-text-pin-audit/README.md)
+- [ ] Convert the 209 pins judged convertible (goo-layer and earlyz seed-pass are 140 of them).
+- [ ] `zombie-gpu-burn.test.ts` key-order block: does three r186 bind `wgslFn` object parameters by name or position?
+- [ ] CI shards are uneven: the shard with `cut-wound.test.ts` (331 s) ran 6 to 10+ minutes against 3 for the others.
+
+## Agent navigability — module index and content names (2026-10-07)
+
+- [x] **Generated module index:** `npx tsx scripts/module-index.ts` writes
+  [module-index.md](../architecture/module-index.md), one line per module (538) from its header comment, by area.
+  `scripts/module-index.test.ts` fails on a module with no summary or a stale index. 100 headers written.
+- [x] **The 31 `game-*-leaves*` modules are named for what they hold** (pure renames, no merges, so load order is
+  unchanged). Dated notes and plans keep the old names; this table resolves them:
+
+  | Was | Now |
+  | --- | --- |
+  | `game-art-leaves` | `game-level-art` |
+  | `game-bake-leaves` | `game-chunk-bake` |
+  | `game-boot-leaves` | `game-loader-status` |
+  | `game-crowd-leaves` | `game-crowd-types` |
+  | `game-demo-leaves` | `game-demo-record` |
+  | `game-demo-leaves2` | `game-demo-save` |
+  | `game-disco-leaves` | `game-disco` |
+  | `game-dynamic-light-leaves` | `game-dynamic-light` |
+  | `game-dynamite-leaves` | `game-dynamite-throw` |
+  | `game-egg-leaves` | `game-egg` |
+  | `game-gibs-leaves` | `game-gib-spawn` |
+  | `game-gibs-leaves2` | `game-gib-pieces` |
+  | `game-level-leaves` | `game-level-rooms` |
+  | `game-light-list-leaves` | `game-light-list` |
+  | `game-lighting-leaves` | `game-level-lights` |
+  | `game-loop-leaves` | `game-loop` |
+  | `game-outdoor-leaves` | `game-outdoor` |
+  | `game-panels-leaves` | `game-hud` |
+  | `game-player-leaves` | `game-player-input` |
+  | `game-probes-leaves` | `game-probe-weight` |
+  | `game-render-leaves` | `game-render-controls` |
+  | `game-render-leaves2` | `game-bone-cull` |
+  | `game-sequence-leaves` | `game-sequence` |
+  | `game-telemetry-leaves` | `game-telemetry-scene` |
+  | `game-train-leaves` | `game-train` |
+  | `game-vfx-leaves` | `game-wound-vfx` |
+  | `game-void-leaves` | `game-void` |
+  | `game-weapon-leaves` | `game-weapon-rig` |
+  | `game-world-leaves` | `game-hit-trace` |
+  | `game-world-leaves2` | `game-wound-streams` |
+  | `game-world-leaves3` | `game-bleed` |
+- [x] **All 22 functions nested in `main()` are out (2026-10-07): `game-main.ts` 8,969 → 6,023.** By `extract-leaf` with
+  `--rebind scene=…,camera=…`, bottom-up, into modules named for content: `game-chunk-pieces`, `game-gib-actor`,
+  `game-dynamite-step`, `game-skeleton-actors`, `game-spawn`, `game-wound-tuning`, `game-demo-replay`,
+  `game-ambient-rig`, `game-crowd-queries`, `game-tick`; `ZOMBIE_FLAT` + `headShape` → `game-zombie-face`. Six tests that
+  pin `game-main.ts` as text were repointed. Verified by `tsc`, vitest, a boot and `march-hash` (next row).
+- [x] Booted and gated at the merge with main (`6c2246ee`, 2026-10-07): Night Train boots to READY with 30 actors, the
+  owner playtested, and `march-hash` room1 is the pinned canonical `d7392d52…` (repeat equal, wounded differs).
+- [ ] `extract-leaf` wrote a second `import { withCtx }` into `game-tick.ts` (removed by hand); fix the import merge.
+- [ ] `game-tick.ts` is still one 1,190-line `tick()`. Split it into `system(ctx, dt)` calls in order: this is the
+  ECS schedule. What is left in `main()` is ~5,500 lines of inline boot code and the `setDrawFn` closure.
+- [ ] Then folders, one quiet cluster at a time (`deferred-`, `post-`, `shutter-`, spike entrypoints first; `game-*`
+  and `skeleton-spike/` after the skull PRs merge), with a script that moves files and rewrites imports, scripts and HTML.
+
 ## sdf-zombie suite red (14 tests) — fixed 2026-09-22
 
 - [x] 11 from `3662c1ca` (half-strength blends): zombie ribs/spine/iliac pulled in via `zombie-skeleton-gen.ts`, soldier

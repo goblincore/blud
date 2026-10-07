@@ -8,7 +8,7 @@ import type { GameContext } from './game-context';
 import type { ZombieActor } from './game-actor';
 import type { Projectile } from './game-weapon';
 import { skullPasses } from './game-skull-shots';
-import mainSrc from './game-main.ts?raw';
+import tickSrc from './game-tick.ts?raw';
 
 type Pass = { owner: unknown; sources: unknown; from: Vec3; to: Vec3; direction: Vec3; kind: string; by: unknown };
 
@@ -65,12 +65,12 @@ describe('skullPasses: a projectile\'s step at the open skulls it did not stop i
   });
 
   it('the projectile loop calls it after the flesh trace, and hands the impact the step\'s start and the projectile', () => {
-    const trace = mainSrc.indexOf('const hp = traceProjectile(from, p.pos, q => sdBody(q, posedA));');
-    const pass = mainSrc.indexOf('skullPasses(ctx, p, from, hitActor, hitPoint);');
-    const impact = mainSrc.indexOf('ctx.render.segMeshRenderer.impact(hitActor, sources, hitPoint, dirN, p.kind, { from, by: p });');
+    const trace = tickSrc.indexOf('const hp = traceProjectile(from, p.pos, q => sdBody(q, posedA));');
+    const pass = tickSrc.indexOf('skullPasses(ctx, p, from, hitActor, hitPoint);');
+    const impact = tickSrc.indexOf('ctx.render.segMeshRenderer.impact(hitActor, sources, hitPoint, dirN, p.kind, { from, by: p });');
     expect(trace).toBeGreaterThan(0);
     expect(pass).toBeGreaterThan(trace);
     expect(impact).toBeGreaterThan(pass);
-    expect(mainSrc.match(/skullPasses\(/g)).toHaveLength(1);
+    expect(tickSrc.match(/skullPasses\(/g)).toHaveLength(1);
   });
 });

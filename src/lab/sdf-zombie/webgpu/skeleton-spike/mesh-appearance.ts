@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/skeleton-spike/mesh-appearance.ts
+//
+// Appearance maths for the skeleton segment meshes: tissue patch classes, skull cavity, sockets, teeth, gloss mask, with matching WGSL.
+
 import type { Vec3 } from '../../types';
 
 export interface LocalBounds { min: Vec3; max: Vec3 }

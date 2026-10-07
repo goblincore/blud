@@ -11,7 +11,7 @@ import type { GameContext } from './game-context';
 import { type ExplosionBody, resolveExplosion } from '../explosion-aoe';
 import { type DynamiteTuningValues } from './dynamite-panel';
 import { applyDynamiteTuning, dynamiteTuningValues } from './game-dynamite-tuning';
-import { spillVerdict } from './game-vfx-leaves';
+import { spillVerdict } from './game-wound-vfx';
 
 export function createDynamiteSeams(ctx: GameContext) {
   return {

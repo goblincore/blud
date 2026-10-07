@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/kit-damage.ts
+//
+// Armor kit damage on skinned meshes: piece support and attachment checks, hit damage, shedding and the detached armor debris.
+
 import * as THREE from 'three/webgpu';
 import type { BuildResult } from '../build-body';
 import type { LimbId, Vec3 } from '../types';

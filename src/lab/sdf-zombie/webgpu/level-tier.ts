@@ -11,7 +11,7 @@ import { maskHasRoom, type ListLight, type Vec3 } from './light-list';
 
 /** Cheap lights the node loops over per room. */
 export const LEVEL_PICKS = 8;
-/** A tube spot's decay (TUBE.decay in game-dynamic-light-leaves.ts). */
+/** A tube spot's decay (TUBE.decay in game-dynamic-light.ts). */
 export const LEVEL_SPOT_DECAY = 1.2;
 /** three's PointLight default, which the level's accent points keep. */
 export const LEVEL_POINT_DECAY = 2;

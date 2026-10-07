@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/material-environment.ts
+//
+// Scopes a MeshStandardMaterial's environment texture to its owner so shared compiled shaders do not borrow another owner's disposed map.
+
 import type { MeshStandardMaterial, Texture } from 'three/webgpu';
 
 /** Keep a disposable environment's bindings scoped to its owner.
