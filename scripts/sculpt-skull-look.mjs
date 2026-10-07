@@ -32,9 +32,11 @@ const OUT = process.argv[4] ?? ".lab-tmp/sculpt-skull/look";
 const W = 1280, H = 800, EYE_H = 1.62, SETTLE = 24;
 const VOLLEYS = Number(process.env.VOLLEYS ?? 3);
 const FACE_SHOT_M = Number(process.env.FACE_SHOT_M ?? 2);
+// `old` is the first look, which was `?skull=sculpt` when the first sheets were shot and is `?sculpt=classic` now;
+// `default` is the page with no skull parameter (the sculpted skull, full).
 const COLUMNS = {
-  old: "&skull=sculpt", shape: "&sculpt=shape", "shape-fine": "&sculpt=shape-fine", paint: "&sculpt=paint", full: "&sculpt=full",
-  anatomical: "",
+  old: "&sculpt=classic", shape: "&sculpt=shape", "shape-fine": "&sculpt=shape-fine", paint: "&sculpt=paint",
+  "full-1cm": "&sculpt=full-1cm", full: "&sculpt=full", default: "", anatomical: "&skull=anatomical",
 };
 const COLS = (process.env.COLS ?? "old,shape,shape-fine,paint,full").split(",");
 const SCENES = new Set((process.env.SCENES ?? "soldier-face,soldier-bare,zombie-burst,zombie-chop1,zombie-chop2,zombie-bare").split(","));

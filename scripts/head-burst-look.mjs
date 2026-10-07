@@ -30,7 +30,7 @@
 //   LABEL=after          the files' prefix (default "look")
 //   OLD=1                the behaviour before 2026-10-07, put back with burstTune (the sheet's "before" column)
 //   TUNE='{"popSwellS":0.2}'   any other __sdfGame.head.burstTune(...) applied at boot
-//   SCENES=pellets,slug-pop    only those scenes          QUERY='&skull=sculpt'   the page query (default &sculpt=full)
+//   SCENES=pellets,slug-pop    only those scenes          QUERY='&skull=anatomical'   the page query (default &sculpt=full)
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { inflateSync } from "node:zlib";

@@ -6,7 +6,7 @@
 Each directory holds one run of the look script: <label>__<stage>__<view>.png and <label>.json (where the head is in
 each frame, what each round did). <before dir> is the run with OLD=1 (the behaviour before 2026-10-07 put back with
 burstTune), <after dir> the shipped rules, both on the sculpted skull (`?sculpt=full`); <anatomical dir> is the pop
-scene alone on the anatomical skull (QUERY='' SCENES=slug-pop).
+scene alone on the anatomical skull (QUERY='&skull=anatomical' SCENES=slug-pop).
 
 The sheet has two parts:
 

@@ -13,8 +13,8 @@ written to <out dir>:
 Every tile is the same window of the world around the head (WINDOW_M metres square), cut from the whole frame and
 enlarged to the tile, so a head is the same size in every tile and what differs is how many of the game's pixels it
 was drawn with: a tile from 2.5 m is the frame enlarged about three times, one from 1 m about 1.2 times, and one from
-0.6 m is about the frame's own size. The enlargement is written on each row. The first column (the skull as it is
-today) is boxed.
+0.6 m is about the frame's own size. The enlargement is written on each row. The first column (the first look, the
+reference) is boxed.
 """
 import json
 import sys
@@ -33,12 +33,14 @@ DIM = (150, 144, 134)
 BOX = (240, 196, 60)
 
 COLUMNS = {
-    'old': ('old skull (today)', '?skull=sculpt: the reference'),
+    'old': ('classic (the first look)', '?sculpt=classic: the reference'),
     'shape': ('shape', 'new bone at the 1 cm cell, old paint'),
     'shape-fine': ('shape-fine', 'new bone at a 5 mm cell, old paint'),
     'paint': ('paint', 'old bone, new paint and painted relief'),
-    'full': ('full', 'new bone at 5 mm under the new paint'),
-    'anatomical': ('anatomical', 'the GLB skull (the default)'),
+    'full-1cm': ('full-1cm', 'new bone at the 1 cm cell under the new paint'),
+    'full': ('full (the default)', 'new bone at 5 mm under the new paint'),
+    'default': ('no skull parameter', 'the page as it ships'),
+    'anatomical': ('anatomical', '?skull=anatomical: the GLB skull'),
 }
 SHIPS = [
     ('soldier-face', 'ships-2p5', 'Soldier, face shot away\n2.5 m'),

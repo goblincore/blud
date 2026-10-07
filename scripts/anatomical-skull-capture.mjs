@@ -36,7 +36,8 @@ try {
   await send('Page.enable');await send('Runtime.enable');
   await send('Emulation.setDeviceMetricsOverride',{width:960,height:720,deviceScaleFactor:1,mobile:false});
   for(const skull of ['sculpt','anatomical']) {
-    await send('Page.navigate',{url:`http://localhost:${vite}/sdf-game.html?frozen=1&seed=20261006&skeleton=mesh&skull=${skull}&crowd=0`});
+    // The sculpted skull these pictures compare the plates with is the first look (`classic`), the one drawn when they were taken.
+    await send('Page.navigate',{url:`http://localhost:${vite}/sdf-game.html?frozen=1&seed=20261006&skeleton=mesh&skull=${skull}${skull==='sculpt'?'&sculpt=classic':''}&crowd=0`});
     const until=Date.now()+180000;
     let ready=false;
     while(Date.now()<until) {
