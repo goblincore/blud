@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-seams-render-quality.ts
 //
+// The window.__sdfGame render-quality members: FOV, impact splash, shell, upscale, SDF scale, fisheye and viewmodel FOV controls.
+//
 // Members lifted verbatim out of game-main.ts's `window.__sdfGame` literal.
 // Every one needed nothing but the GameContext, so this factory takes no deps.
 //
@@ -8,9 +10,9 @@
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { clampFovDeg } from './fisheye';
-import { applySdfScale, applyViewmodelFovScale, enableTrainedUpscale, fisheyeReport, sizeSdfLayer, updateUpscaleAbLabel } from './game-render-leaves';
-import { ensureImpactSplashLayer } from './game-vfx-leaves';
-import { shellAmpOf } from './game-world-leaves';
+import { applySdfScale, applyViewmodelFovScale, enableTrainedUpscale, fisheyeReport, sizeSdfLayer, updateUpscaleAbLabel } from './game-render-controls';
+import { ensureImpactSplashLayer } from './game-wound-vfx';
+import { shellAmpOf } from './game-hit-trace';
 import { impactSplashPresets, impactSplashProfiles, resolveImpactSplashProfile, type ImpactSplashProfile, type ImpactSplashWeapon } from './impact-splash-profiles';
 import { UPSCALE_SCALE, parseUpscaleConfig } from './upscale/upscale-model';
 import { runUpscaleSelfCheck } from './upscale/upscale-selfcheck';

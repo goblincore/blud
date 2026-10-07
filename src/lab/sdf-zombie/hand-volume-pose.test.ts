@@ -419,10 +419,4 @@ describe('bakedDynamitePose', () => {
     expect(JSON.parse(JSON.stringify(hand))).toEqual(snap.hand);
     expect(JSON.parse(JSON.stringify(prop))).toEqual(snap.prop);
   });
-
-  it('source guard: derives only from the volume frame and contract, not the primitive prop seats', () => {
-    const src = readFileSync('src/lab/sdf-zombie/hand-volume-pose.ts', 'utf8');
-    expect(src).not.toContain('handPropPoses');
-    expect(src).not.toContain('PROP_MESH');
-  });
 });

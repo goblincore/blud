@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { it, expect } from 'vitest';
 import { GameTelemetry } from './game-telemetry';
 import { createTelemetryControls } from './game-telemetry-controls';

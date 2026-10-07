@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/skeleton-spike/mesh-renderer.ts
+//
+// The forward-mode renderer for skeleton segment meshes: one pooled mesh per live bone segment per actor, posed from the bone contract.
+
 import { meshBoneSource } from './mesh-skull';
 // src/lab/sdf-zombie/webgpu/skeleton-spike/mesh-renderer.ts
 //

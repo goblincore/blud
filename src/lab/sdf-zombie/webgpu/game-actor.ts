@@ -1,6 +1,6 @@
-import type { EncounterNavigation } from './encounter-navigation';
-import type { EncounterOrder } from './encounter-director';
 // src/lab/sdf-zombie/webgpu/game-actor.ts
+//
+// The zombie actor record for the game page, its combat and navigation step, damage handling, and furniture avoidance helpers.
 //
 // One wandering zombie in the game page: the lab's motion pipeline
 // (stepMotion -> stepRig -> applyRig -> view.update) wrapped per body, minus
@@ -19,6 +19,8 @@ import type { EncounterOrder } from './encounter-director';
 // its target is dropped, so the next step picks a fresh heading. A clamp,
 // not navigation.
 
+import type { EncounterNavigation } from './encounter-navigation';
+import type { EncounterOrder } from './encounter-director';
 import type { BuildResult } from '../build-body';
 import { bindRig, applyRig, headQuatOf, impulseAt, pinTips, type BoundRig } from '../rig-bind';
 import {

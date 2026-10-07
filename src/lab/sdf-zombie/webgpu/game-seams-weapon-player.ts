@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-seams-weapon-player.ts
 //
+// The window.__sdfGame player and gun members: placing, posing and teleporting the player, walk-to, aim point, gun tuning and pellet readouts.
+//
 // Members lifted verbatim out of game-main.ts's `window.__sdfGame` literal.
 // Every one needed nothing but the GameContext, so this factory takes no deps.
 //

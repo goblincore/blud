@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/character-effects.ts
+//
+// Character effect scene drawn after the SDF composite, plus the muzzle flash object posed from shot age.
+
 import * as THREE from 'three/webgpu';
 import type { Vec3 } from '../types';
 import { flashPixels } from './flash-sprite';

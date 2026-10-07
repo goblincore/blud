@@ -863,7 +863,7 @@ const CHUNK = Number(process.env.BENCH_CHUNK ?? 10);
 // THE PRECOMPILE / BENCH LOOP RACE (early-Z cost run, 2026-10-02) is fixed in the
 // page: `setUpscale({ trained })` resolves only after its stage precompile, which
 // now suspends the loop instead of rewriting bench()'s loop intent
-// (game-render-leaves applyUpscaleAbMode). applyLeg awaits every override, so the
+// (game-render-controls applyUpscaleAbMode). applyLeg awaits every override, so the
 // `awaitLoopResumed()` wait that stood here before each bench() call is gone.
 
 /**

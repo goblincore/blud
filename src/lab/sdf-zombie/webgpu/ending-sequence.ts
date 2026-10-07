@@ -3,7 +3,7 @@
 // SHORT SCRIPTED SEQUENCES (spec 2026-09-30-night-train-egg-ending-design.md §3): a timeline of shots,
 // each a duration, a cut type, a camera and an overlay. Abstract on purpose: jump cuts, flashes, a
 // full-screen colour and a line of text, never a third-person shot of the hero. Pure: no three.js, no DOM.
-// The runtime (game-sequence-leaves.ts) advances `t` on the sim step and applies what these return.
+// The runtime (game-sequence.ts) advances `t` on the sim step and applies what these return.
 // Shots are authored in seconds; there is no beat clock yet.
 
 export type Vec3 = [number, number, number];

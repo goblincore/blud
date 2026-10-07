@@ -7,7 +7,7 @@
 // (diffuseColor / PI), so fog, tone and everything downstream are unchanged.
 //
 // The picks are two vec4 uniforms holding up to 8 list indices (-1 = empty), written once a frame by writeLightList
-// (game-light-list-leaves.ts). LEVEL_LIST_WGSL's CPU twin is level-tier.ts levelIrradiance: change one, change both.
+// (game-light-list.ts). LEVEL_LIST_WGSL's CPU twin is level-tier.ts levelIrradiance: change one, change both.
 import * as THREE from 'three/webgpu';
 import { wgslFn, positionWorld, normalWorld, uniform, diffuseColor, vec3 } from 'three/tsl';
 import { LIGHT_VEC4S, LIST_LIGHTS_AT } from './light-list';

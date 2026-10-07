@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/march/cone-march.wgsl.ts
+//
+// WGSL for the cone march, the depth prepass and the quad empty-tile gate.
+
 import { MAX_CROWD_INSTANCES } from '../crowd-records';
 import { ROW_CLUSTER_BOUNDS } from './layout';
 // src/lab/sdf-zombie/webgpu/march/cone-march.wgsl.ts

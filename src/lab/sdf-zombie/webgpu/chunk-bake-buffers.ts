@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/chunk-bake-buffers.ts
+//
+// Packing and unpacking baked chunk geometry into transferable typed arrays for the bake worker.
+
 import * as THREE from 'three';
 import type { BakedChunkResult } from './chunk-bake-geometry';
 

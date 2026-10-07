@@ -1,5 +1,6 @@
-import { impactSplashPresets } from './impact-splash-profiles';
 // src/lab/sdf-zombie/webgpu/blood-compare-main.ts
+//
+// Entry point for the blood-surface comparison page: one BloodSim rendered under several reconstruction variants and a splash shape.
 //
 // THE HONEST SYNCHRONIZED COMPARISON PAGE (blood-surface comparison task,
 // 2026-09-13).
@@ -54,6 +55,7 @@ import { impactSplashPresets } from './impact-splash-profiles';
 // performance are NOT verified by this page's existence — it has to be looked
 // at by a human on a GPU that is not busy training.
 
+import { impactSplashPresets } from './impact-splash-profiles';
 import * as THREE from 'three/webgpu';
 import { uniform, texture, vec4, mul, oneMinus, add, uv, vec2 } from 'three/tsl';
 import { createLabRenderer, type LabRendererHandle } from './lab-renderer';

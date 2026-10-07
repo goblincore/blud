@@ -131,6 +131,7 @@ dated history page beside it (as [Gather dispatch R1](docs/tasks/rendering-gathe
 > only** — preserved for provenance, not current work. Do not treat historical
 > roadmap entries as in-flight.
 >
+> Which module owns what: [docs/architecture/module-index.md](docs/architecture/module-index.md) (generated).
 > Current vs. proposed source layout: [docs/architecture/repository-map.md](docs/architecture/repository-map.md).
 > Legacy dynamite/gibbing reference: [docs/reference/legacy-dynamite-gibbing.md](docs/reference/legacy-dynamite-gibbing.md).
 

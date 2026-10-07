@@ -134,7 +134,7 @@ const shoot = async (name) => {
  *  the coat check the worst and the noisiest). An optimisation pass is next (owner): small-dressing
  *  shadows, one draw per piece, lights per room.
  *  Tightened back to +200 / +12 ms after static batching (2026-09-26: measured +61..+164 draws,
- *  +3.2..+5.8 ms; game-art-leaves.ts batchArt). */
+ *  +3.2..+5.8 ms; game-level-art.ts batchArt). */
 const BUDGET = { drawCalls: 200, frameMs: 12 };
 const stats = (img, fx0, fy0, fx1, fy1) => {
   const { w, h, ch, data } = img; const v = [];

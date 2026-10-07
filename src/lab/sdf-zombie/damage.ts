@@ -1,4 +1,7 @@
 // src/lab/sdf-zombie/damage.ts
+//
+// The wound record and everything that stamps, locates and converts wounds on a body, including cloth wound handling.
+
 import type { Primitive, Vec3 } from './types';
 import { add, basisFromAxis, dot, len, normalize, qFromTo, qRotate, scale, sub } from './vec';
 import { rotateYaw } from './gait';

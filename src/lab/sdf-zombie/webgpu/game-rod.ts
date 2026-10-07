@@ -13,7 +13,7 @@ import type { ZombieActor } from './game-actor';
 import type { Vec3 } from '../types';
 import type { Wound } from '../damage';
 import { rotateYaw } from '../gait';
-import { loopBlocksInput } from './game-loop-leaves';
+import { loopBlocksInput } from './game-loop';
 import { slotLowerAmount, slotReady } from './game-weapon-slots';
 import { CUT, ROD_CALIBRE, cutsFromSweep, stampCut, unwarpCutSeg, type CutCalibre, type CutSeg, type SweepSample } from '../cut-wound';
 

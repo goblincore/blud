@@ -10,7 +10,7 @@
 import type { GameContext } from './game-context';
 import { type Vec3 } from '../types';
 import { bodyBuildCacheStats } from './character-view';
-import { applyBoneMesh, applyOrganMode } from './game-render-leaves';
+import { applyBoneMesh, applyOrganMode } from './game-render-controls';
 import { ORGAN_DETAIL_SETS, type OrganLook, type OrganLookName } from './skeleton-spike/mesh-organ';
 import { ORGAN_MESHES, organMeshKey, type OrganMeshName } from './skeleton-spike/mesh';
 import { segmentBoundSphere } from './skeleton-spike/organ-reach';

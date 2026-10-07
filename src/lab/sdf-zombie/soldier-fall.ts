@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/soldier-fall.ts
+//
+// The soldier's articulated fall pose (soldierFallPose): joint targets that keep bone lengths while the body topples.
+
 import type { Vec3 } from './types';
 import type { GaitJointName } from './gait';
 import { rotateYaw } from './gait';

@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-seams-render-diag.ts
 //
+// The window.__sdfGame render diagnostics: texture round-trip probes, pipeline log and census, shader source lookup and the scene census.
+//
 // Extracted from game-main.ts's window.__sdfGame literal. Each member takes the
 // GameContext explicitly instead of capturing main()'s scope; the handful of
 // remaining main()-scope closures arrive through RenderDiagDeps.

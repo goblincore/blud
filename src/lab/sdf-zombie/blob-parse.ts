@@ -1,4 +1,7 @@
 // src/lab/sdf-zombie/blob-parse.ts
+//
+// The `.blob` text parser: tokenizes source lines and builds the BlobDoc that blob-compile consumes.
+
 import { type BlobBone, type BlobDoc, type BlobLine, type BlobPart, type BlobPartKind, type BlobStance, BlobError } from './blob-ast';
 import { STRAND_DEFAULT_CYCLES, STRAND_DEFAULT_FAT, STRAND_DEFAULT_WAVE } from './strand';
 

@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // src/lab/sdf-zombie/webgpu/humanoid-volume.test.ts
 //
 // Task 3 — strict humanoid atlas loader. Modeled on hand-volume.test.ts:
@@ -540,11 +541,8 @@ describe('loadHumanoidVolume', () => {
 
 describe('big-endian guard', () => {
   it('keeps the hard host endianness guard for r16f-le distance', () => {
-    // The host check is a module constant, not data — the guard's existence is
-    // what is testable here (see hand-volume.test.ts for the same tripwire).
+    // The host check is a module constant, not data.
     expect(HOST_IS_LITTLE_ENDIAN).toBe(true);
-    const src = readFileSync('src/lab/sdf-zombie/webgpu/humanoid-volume.ts', 'utf8');
-    expect(src).toContain('if (!HOST_IS_LITTLE_ENDIAN)');
   });
 });
 

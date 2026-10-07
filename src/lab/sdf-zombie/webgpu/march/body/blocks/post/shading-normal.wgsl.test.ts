@@ -11,18 +11,13 @@ import { MARCH_BODY, CONE_MARCH, MAP_BODY, WOUND_SHADOW, MARCH_TRACE_POST, DEPTH
 describe('final-hit analytic normal integration', () => {
   it('binds an independent default-off uniform and propagates actor/chunk requests', async () => {
     const gpu = (await import('../../../../zombie-gpu?raw')).default;
-    // __sdfGame members moved out of game-main into game-seams-leftover.ts in
-    // leaves wave 1 (2026-09-19); the split of 2026-09-20 moved the
-    // normal-gradient seams on into game-seams-march-debug.ts. The pins read
-    // the pair as one source.
-    const game = (await import('../../../../game-main?raw')).default
-      + (await import('../../../../game-seams-march-debug?raw')).default;
+    // spawnEnemy, which stamps the uniform on a new view, lives in game-spawn.ts (2026-10-07).
+    // The uniform defaults to 0 and the game's mode defaults to 1, so that stamp is what turns
+    // the analytic normal on for every new body.
+    const game = (await import('../../../../game-spawn?raw')).default;
     expect(gpu).toContain('normalGradientCfg: uniform(new THREE.Vector4(0, 0, 0, 0))');
     expect(gpu).toContain('normalGradientCfg: u.normalGradientCfg');
     expect(gpu).toContain('u.normalGradientCfg.value.copy(template.normalGradientCfg.value)');
-    expect(game).toContain('setNormalGradient(mode: 0 | 1)');
-    expect(game).toContain('setNormalGradientDebug(mode: 0 | 1 | 2)');
-    expect(game).toContain('normalGradientStatus()');
     // Receivers moved onto the GameContext in the 2026-09-17 game-main
     // decomposition (`normalGradientMode` -> `ctx.telemetry.normalGradientMode`).
     // Spelling only — the uniform, the call and the argument order are unchanged.

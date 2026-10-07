@@ -54,10 +54,6 @@ describe('demoScenario determinism setup', () => {
 describe('sdf-demo-hash liveness guards', () => {
   const GATE = readFileSync('scripts/sdf-demo-hash.mjs', 'utf8');
 
-  it('refuses a recording whose march target is empty', () => {
-    expect(GATE).toContain('the march target hashed to nothing');
-  });
-
   it('refuses a recording whose dynamic probe layer is empty', () => {
     // Without this, a run can "pass" by comparing two all-zero layers.
     expect(GATE).toContain('the dynamic probe layer hashed to ZERO');

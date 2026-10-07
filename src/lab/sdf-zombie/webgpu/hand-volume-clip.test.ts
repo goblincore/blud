@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // src/lab/sdf-zombie/webgpu/hand-volume-clip.test.ts
 //
 // X1.27 task C1. The clip loader re-asserts the BAKER's manifest contract at

@@ -1,4 +1,8 @@
-import { applySdfScale } from './game-render-leaves';
+// src/lab/sdf-zombie/webgpu/game-seams-render.ts
+//
+// The window.__sdfGame render-pass members: chunk pass, occluder, cone, FXAA, smear, blast distort, half rate, bone look and depth gates.
+
+import { applySdfScale } from './game-render-controls';
 // src/lab/sdf-zombie/webgpu/game-seams-render.ts
 //
 // Members lifted verbatim out of game-main.ts's `window.__sdfGame` literal.
@@ -12,8 +16,8 @@ import { SCALE_LADDER, initialAdaptiveState, scaleForRung } from '../adaptive-sc
 import { type SscsTerms } from './post-sscs';
 import { type VhsPreset, type VhsTerms } from './post-vhs';
 import { woundWorldPos } from '../damage';
-import { applyBoneCullMode } from './game-render-leaves';
-import { applyBoneCull } from './game-render-leaves2';
+import { applyBoneCullMode } from './game-render-controls';
+import { applyBoneCull } from './game-bone-cull';
 import { type RefineTail } from './zombie-gpu';
 
 export function createRenderSeams(ctx: GameContext) {

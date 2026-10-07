@@ -1,4 +1,7 @@
 // src/lab/sdf-zombie/entrails.ts
+//
+// The hanging gut rope: a pure verlet chain anchored at a wound, with make, pin, detach and step functions.
+
 import type { Vec3 } from './types';
 
 /**
