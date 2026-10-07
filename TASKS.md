@@ -37,8 +37,8 @@
   The frame is GPU-bound (CPU about 4 ms); organs were about 1 ms of it. [Sheets](docs/dev-notes/2026-10-06-organs-mesh/look/).
   Gate `scripts/organs-mesh-gate.mjs` (32 checks). [Spec](docs/superpowers/specs/2026-10-06-organs-mesh-design.md) ·
   [notes](docs/dev-notes/2026-10-06-organs-mesh/NOTES.md).
-- [~] **Low-poly organs, built 2026-10-07 on `claude/organs-lowpoly` (PR 37); the owner picked the detail strength as
-  shipped; not merged yet.** Each organ prim is a swept tube (analytic normals): the zombie's organs are 528
+- [x] **Low-poly organs, built 2026-10-07; the owner picked the detail strength as shipped; merged 2026-10-07
+  (PR 37).** Each organ prim is a swept tube (analytic normals): the zombie's organs are 528
   vertices / 1,024 triangles against 4,038 / 8,084, with the same silhouette (0.965 of the extraction's pixels). The
   haustra and wrinkles are a bump in the organ shader over the tube's own coordinate; the crease between loops is a
   baked shade. No frame-time change was measured (+0.62 ms, IQR -0.25 to 1.35): this is tidiness and room for more
