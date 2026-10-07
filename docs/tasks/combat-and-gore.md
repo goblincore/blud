@@ -33,6 +33,12 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
     material, shots break them where an opened half draws them (bone standing in the open gap included, which no
     flesh covers), and the gate runs on it and reads the plates' pixels. For the owner: retune how far the bone
     opens? [Notes and look sheets](../dev-notes/2026-10-06-split-anatomical-skull/NOTES.md).
+  - **The anatomical skull's size (2026-10-07, branch `claude/anatomical-skull-fit`):** the owner found the skull
+    far too small in the zombie's head (0.56 of the sculpted skull's box volume; 43 mm wide in the female's 127 mm
+    head). A fit that sizes the skull to the head's flesh and pulls it in where it would poke through is behind
+    `?skullfit=affine|mid|snug|tight`; with no parameter the skull is byte for byte what it was. For the owner: which
+    fit ships, and whether per character (the female and the soldier read worse under the tighter ones).
+    [Notes, tables for all thirteen humanoids and look sheets](../dev-notes/2026-10-07-anatomical-skull-fit/NOTES.md).
   - **Gates (as of 2026-10-06):** `scripts/head-split-gate.mjs` (100 checks), `scripts/axe-gate.mjs` (27),
     `scripts/cut-wound-gate.mjs` (30).
 
