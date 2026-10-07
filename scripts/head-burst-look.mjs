@@ -49,7 +49,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const withTimeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`TIMEOUT(${ms}ms): ${what}`)), ms))]);
 mkdirSync(OUT, { recursive: true });
 // The whole run has a deadline: a hung page must not hold the capture lock.
-const DEADLINE = setTimeout(() => { console.error("FAIL: the run's deadline passed"); process.exit(2); }, Number(process.env.DEADLINE_MS ?? 25 * 60 * 1000));
+const DEADLINE = setTimeout(() => { console.error("FAIL: the run's deadline passed"); process.exit(2); }, Number(process.env.DEADLINE_MS ?? 40 * 60 * 1000));
 
 const manifest = { label: LABEL, query: QUERY, tune: TUNE, shots: {}, stages: {}, rounds: {} };
 const save = () => writeFileSync(`${OUT}/${LABEL}.json`, JSON.stringify(manifest, null, 1) + "\n");
@@ -430,15 +430,16 @@ async function strip(stage, id, centre, forward, each) {
 }
 
 let failed = 0;
-try {
-  await boot();
-  if (SCENES.has("pellets")) {
+// EVERY SCENE HAS A BOOT OF ITS OWN: a thaw moves the whole cast, and a scene staged after another's thaws finds its
+// zombie mid-stride, turned, or behind another one.
+const scenes = {
+  pellets: async () => {
     const a = fresh();
     manifest.rounds["pellets-0"] = { profile: await profileOf(a.id) }; save();
     console.log(`  intact head: ${manifest.rounds["pellets-0"].profile.rows.map((r) => `${r.name} bone ${r.boneMid} flesh ${r.fleshMid}`).join("; ")}`);
     for (let n = 1; n <= 3; n++) { await round(`pellets-${n}`, a.id, "__sdfGame.fire(1)"); await photograph(`pellets-${n}`, a.id); }
-  }
-  if (SCENES.has("slug-chin")) {
+  },
+  "slug-chin": async () => {
     // The crosshair is lowered a centimetre at a time until the slug's line runs off centre and still meets this zombie.
     const a = fresh();
     let aim = [0, -0.02, 0], line = null;
@@ -450,12 +451,13 @@ try {
     }
     console.log(`  slug-chin: crosshair ${(-aim[1] * 100).toFixed(0)} cm under the head's centre; the slug's line passes ${line.offset.toFixed(2)} head radii from it, and would hit actor ${line.actor} (the target is ${a.id})`);
     await round("slug-chin", a.id, "__sdfGame.fireSlug()", aim); await photograph("slug-chin", a.id);
-  }
-  if (SCENES.has("slug-split")) {
+  },
+  "slug-split": async () => {
     const a = fresh();
-    await round("slug-split", a.id, "__sdfGame.fireSlug()", [0, 0.04, 0]); await photograph("slug-split", a.id);
-  }
-  if (SCENES.has("slug-pop")) {
+    const rec = await round("slug-split", a.id, "__sdfGame.fireSlug()", [0, 0.04, 0]); await photograph("slug-split", a.id);
+    console.log(`  slug-split: the slug's line passed ${rec.line?.offset} head radii from the head's centre and would hit actor ${rec.line?.wouldHit} (the target is ${a.id})`);
+  },
+  "slug-pop": async () => {
     // THE DECAPITATING SLUG. Slugs at the neck (the crosshair 6 cm under the head's centre lands them under the
     // chin), from 40 degrees to one side, until the head leaves; every frame of each slug is shot, and the last
     // slug's are the strip. THE CAST IS HELD FROZEN THROUGH THIS SCENE: thawed, a zombie turns and walks between
@@ -499,9 +501,14 @@ try {
     const frames = await strip("pop-bare", b.id, fr.centre, f, async () => { await fleshShown(b.id, false); return {}; });
     manifest.stages["pop-bare"] = { actor: b.id, frames }; save();
     console.log(`  pop-bare: the head left on frame ${frames.find((q) => !q.headOn)?.k}; skull fragments in the air per frame: ${frames.map((q) => q.fragments).join(" ")}`);
-  }
-} catch (e) { failed++; console.error(`FAIL: ${e.stack ?? e}`); }
-finally { if (S) { closeSession(S); S = null; } }
+  },
+};
+for (const [name, run] of Object.entries(scenes)) {
+  if (!SCENES.has(name)) continue;
+  try { await boot(); await run(); }
+  catch (e) { failed++; console.error(`FAIL [${name}]: ${e.stack ?? e}`); }
+  finally { if (S) { closeSession(S); S = null; } }
+}
 if (consoleErrors.length) { failed++; console.error(`FAIL: ${consoleErrors.length} console errors: ${J(consoleErrors.slice(0, 6))}`); }
 manifest.errors = consoleErrors; save();
 clearTimeout(DEADLINE);
