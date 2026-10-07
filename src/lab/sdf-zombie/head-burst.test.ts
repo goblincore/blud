@@ -1,6 +1,9 @@
 // src/lab/sdf-zombie/head-burst.test.ts
 import { beforeEach, describe, expect, it } from 'vitest';
-import { BURST, BURST_TUNING_DEFAULTS, burstPlan, burstTuning, classifyBurst, headRadius, hsOf, onHeadPrim, setBurstTuning } from './head-burst';
+import {
+  BURST, BURST_TUNING_DEFAULTS, burstPlan, burstTuning, classifyBurst, decapitationRule, headRadius, headShotRule, hsOf, onHeadPrim,
+  setBurstTuning, type HeadShot,
+} from './head-burst';
 import { prim } from './head-pop';
 import { mulberry32 } from './melt-bones';
 import type { HeadFrame } from './head-deform';
@@ -111,14 +114,106 @@ describe('burstPlan', () => {
     expect(BURST_TUNING_DEFAULTS.lethal).toBe(false);
     expect(BURST_TUNING_DEFAULTS.repeatStep).toBeLessThan(0.1);
   });
-  it('DEBUG: any gun hit on the head triggers it by default (pellets too), so it cannot be missed while tuning', () => {
-    expect(BURST_TUNING_DEFAULTS.anyWeapon).toBe(true);
-    expect(BURST_TUNING_DEFAULTS.alwaysSplit).toBe(true);
-    expect(burstTuning.anyWeapon).toBe(true);
+  it('the opening is not the shipped behaviour: off by default, with its two debug switches off as well', () => {
+    expect(BURST_TUNING_DEFAULTS.opening).toBe(false);
+    expect(BURST_TUNING_DEFAULTS.anyWeapon).toBe(false);
+    expect(BURST_TUNING_DEFAULTS.alwaysSplit).toBe(false);
+    // What ships instead: the slug's split and the slug's pop.
+    expect(BURST_TUNING_DEFAULTS.slugSplit).toBe(true);
+    expect(BURST_TUNING_DEFAULTS.slugPop).toBe(true);
+    expect(BURST_TUNING_DEFAULTS.popOnSplit).toBe(true);
   });
   it('setBurstTuning returns a copy and updates burstTuning', () => {
     const t = setBurstTuning({ swell: 0.4 });
     expect(t.swell).toBe(0.4);
     expect(burstTuning.swell).toBe(0.4);
+  });
+});
+
+describe('headShotRule: what a gun round does to a zombie head', () => {
+  const T = BURST_TUNING_DEFAULTS;
+  const shot = (o: Partial<HeadShot> = {}): HeadShot => ({ kind: 'slug', offset: 0.9, splitOpen: false, splitRefused: false, ...o });
+  /** The tuning before 2026-10-07: every gun hit on the head made the opening. */
+  const OLD = { ...T, opening: true, anyWeapon: true, alwaysSplit: true, slugSplit: false, slugPop: false, popOnSplit: false };
+
+  it('a pellet on a head is always an ordinary wound: closed, split open, centred or not', () => {
+    for (const offset of [0, 0.5, 1.2, 2]) for (const splitOpen of [false, true]) for (const splitRefused of [false, true]) {
+      expect(headShotRule(shot({ kind: 'pellet', offset, splitOpen, splitRefused }), T)).toBe('ordinary');
+    }
+  });
+  it('a centred slug on a closed head splits it; an off-centre one is an ordinary slug wound', () => {
+    expect(headShotRule(shot({ offset: 0 }), T)).toBe('split');
+    expect(headShotRule(shot({ offset: T.splitFrac - 0.01 }), T)).toBe('split');
+    expect(headShotRule(shot({ offset: T.splitFrac }), T)).toBe('ordinary');
+    expect(headShotRule(shot({ offset: 2 }), T)).toBe('ordinary');
+  });
+  it('an aimed slug splits: the measured offsets of a slug aimed at the head centre and at the face are under splitFrac', () => {
+    // scripts/head-burst-look.mjs's aim probe on the zombie, 0.8 to 4 m: the crosshair on the head's centre, and 2 cm lower.
+    for (const offset of [0.891, 0.923, 0.946, 0.991, 1.03, 1.071, 1.101, 1.125, 1.168, 1.208]) expect(headShotRule(shot({ offset }), T)).toBe('split');
+  });
+  it('the threshold is the tuning\'s: a tighter splitFrac leaves the same slug ordinary', () => {
+    expect(headShotRule(shot({ offset: 0.9 }), { ...T, splitFrac: 0.5 })).toBe('ordinary');
+    expect(headShotRule(shot({ offset: 0.3 }), { ...T, splitFrac: 0.5 })).toBe('split');
+  });
+  it('a head the split would refuse (the flail has damaged it) takes the centred slug as an ordinary wound', () => {
+    expect(headShotRule(shot({ offset: 0.2, splitRefused: true }), T)).toBe('ordinary');
+  });
+  it('slugSplit off: no slug splits', () => {
+    expect(headShotRule(shot({ offset: 0 }), { ...T, slugSplit: false })).toBe('ordinary');
+  });
+  it('a centred slug on a head already split pops it; an off-centre slug there is ordinary; popOnSplit off, both are', () => {
+    expect(headShotRule(shot({ offset: 0.4, splitOpen: true }), T)).toBe('pop');
+    expect(headShotRule(shot({ offset: T.splitFrac + 0.1, splitOpen: true }), T)).toBe('ordinary');
+    expect(headShotRule(shot({ offset: 0.4, splitOpen: true }), { ...T, popOnSplit: false })).toBe('ordinary');
+    // The split's own switch does not matter once the head is open: the axe may have opened it.
+    expect(headShotRule(shot({ offset: 0.4, splitOpen: true }), { ...T, slugSplit: false })).toBe('pop');
+  });
+  it('the orders: off-centre then centred splits; centred then centred splits then pops', () => {
+    // An ordinary slug wound leaves no state: the next slug is judged on a closed, unrefused head.
+    expect(headShotRule(shot({ offset: 1.4 }), T)).toBe('ordinary');
+    expect(headShotRule(shot({ offset: 0.9 }), T)).toBe('split');
+    expect(headShotRule(shot({ offset: 0.9, splitOpen: true }), T)).toBe('pop');
+  });
+  it('switched off, every round is ordinary', () => {
+    for (const kind of ['pellet', 'slug'] as const) for (const splitOpen of [false, true]) {
+      expect(headShotRule(shot({ kind, offset: 0, splitOpen }), { ...OLD, on: false })).toBe('ordinary');
+      expect(headShotRule(shot({ kind, offset: 0, splitOpen }), { ...T, on: false })).toBe('ordinary');
+    }
+  });
+  it('the opening, switched on, takes every slug on a closed head before the split is asked, and pellets with anyWeapon', () => {
+    expect(headShotRule(shot({ offset: 0 }), { ...T, opening: true })).toBe('opening');
+    expect(headShotRule(shot({ offset: 2 }), { ...T, opening: true })).toBe('opening');
+    expect(headShotRule(shot({ kind: 'pellet' }), { ...T, opening: true })).toBe('ordinary');
+    expect(headShotRule(shot({ kind: 'pellet' }), { ...T, opening: true, anyWeapon: true })).toBe('opening');
+  });
+  it('the old behaviour is one tuning away: every gun hit on a closed head opens it, and nothing splits or pops', () => {
+    for (const kind of ['pellet', 'slug'] as const) for (const offset of [0, 0.9, 1.6]) {
+      expect(headShotRule(shot({ kind, offset }), OLD)).toBe('opening');
+      // An open head (the axe's) was never the opening's: ordinary, as before.
+      expect(headShotRule(shot({ kind, offset, splitOpen: true }), OLD)).toBe('ordinary');
+    }
+    expect(decapitationRule('slug', OLD)).toBeNull();
+  });
+});
+
+describe('decapitationRule: the head that is coming off', () => {
+  const T = BURST_TUNING_DEFAULTS;
+  it('a slug\'s decapitation pops after the swell; a pellet\'s, a blast\'s and a blade\'s are ordinary', () => {
+    expect(decapitationRule('slug', T)).toBe(T.popSwellS);
+    expect(decapitationRule('pellet', T)).toBeNull();
+    expect(decapitationRule('other', T)).toBeNull();
+  });
+  it('the swell is the tuning\'s, and never negative: 0 pops on the frame of the hit', () => {
+    expect(decapitationRule('slug', { ...T, popSwellS: 0 })).toBe(0);
+    expect(decapitationRule('slug', { ...T, popSwellS: 0.3 })).toBe(0.3);
+    expect(decapitationRule('slug', { ...T, popSwellS: -1 })).toBe(0);
+  });
+  it('slugPop off, or everything off: the head flies', () => {
+    expect(decapitationRule('slug', { ...T, slugPop: false })).toBeNull();
+    expect(decapitationRule('slug', { ...T, on: false })).toBeNull();
+  });
+  it('the shipped swell is short: at most 0.15 s', () => {
+    expect(T.popSwellS).toBeGreaterThan(0);
+    expect(T.popSwellS).toBeLessThanOrEqual(0.15);
   });
 });

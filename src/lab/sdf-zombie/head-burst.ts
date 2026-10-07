@@ -1,10 +1,17 @@
 // src/lab/sdf-zombie/head-burst.ts
 //
-// SLUG HEAD BURST — the pure half (spec docs/superpowers/specs/2026-10-02-slug-head-burst-design.md §4).
-// A slug that lands on a head is classified by how CENTRED the shot is: the perpendicular distance from the head's
-// centre to the shot line, as a fraction of the head's radius. Under centreFrac the head bursts (lethal); wider, it
-// ruptures on the struck side (glancing). Everything here is plain data in, plain data out: the leaf
-// (webgpu/game-head-damage.ts) turns the verdict into craters, deform, gore and flaps.
+// WHAT A GUN ROUND DOES TO A ZOMBIE'S HEAD — the pure half. Three things can happen besides an ordinary wound, and
+// headShotRule decides which from the round, how centred its line is, the head's state and the live tuning:
+//   the SPLIT    a centred slug on a closed head opens it like the axe does (the head split, head-split.ts);
+//   the POP      a slug that takes the head off, or a centred slug on a head already split, swells the head and
+//                bursts it (head-pop.ts) in place of the flying head (decapitationRule);
+//   the OPENING  the slug head burst of 2026-10-02 (spec docs/superpowers/specs/2026-10-02-slug-head-burst-design.md
+//                §4): entry and exit craters, a jelly stretch, a dent, shards. NOT THE SHIPPED BEHAVIOUR: it is
+//                kept behind burstTuning.opening, off.
+// Everything else is an ordinary wound: every pellet, an off-centre slug, any round with the rules switched off.
+// A shot is CENTRED by classifyBurst's offset: the perpendicular distance from the head's centre to the shot line, as
+// a fraction of the head's radius. Everything here is plain data in, plain data out: the leaves
+// (webgpu/game-head-shot.ts, webgpu/game-head-damage.ts) turn the verdicts into wounds, deform and gore.
 import { rotate } from './head-deform';
 import type { HeadFrame, Quat } from './head-deform';
 import { sdPrimitive } from './validate';
@@ -34,20 +41,47 @@ export const BURST = {
   shove: 2.5,
 } as const;
 
-/** The shipped tuning (burstTuning starts as a copy; burstTune({ ...BURST_TUNING_DEFAULTS }) resets it). */
+/** The shipped tuning (burstTuning starts as a copy; burstTune({ ...BURST_TUNING_DEFAULTS }) resets it).
+ *  THE BEHAVIOUR BEFORE 2026-10-07 (every gun hit on the head made the opening) is
+ *  burstTune({ opening: true, anyWeapon: true, alwaysSplit: true, slugSplit: false, slugPop: false, popOnSplit: false }). */
 export const BURST_TUNING_DEFAULTS = {
-  /** false: slugs take the ordinary path. */
+  /** false: every round on a head is an ordinary wound and a decapitation an ordinary one (no split, pop or opening). */
   on: true,
-  /** DEBUG (owner 2026-10-03, "I can't trigger it"): any player gun hit on the head bursts it, pellets too, once per
-   *  shot. false: slugs only (the design). */
-  anyWeapon: true,
-  /** DEBUG (same request: "make head wounds trigger it all the time"): every head hit SPLITS, however far off centre
-   *  its line runs. false: the centreFrac test decides split vs glancing. */
-  alwaysSplit: true,
+
+  // ---- The slug split: a centred slug opens the head as the axe does.
+  /** false: a centred slug is an ordinary slug wound. */
+  slugSplit: true,
+  /** A slug is centred when its line passes within this many head radii of the head's centre. 1.25 takes every slug
+   *  that lands on the head: the slug leaves the muzzle low and right of the crosshair, and measured on the zombie an
+   *  aimed slug's line passes 0.89 to 1.03 radii from the centre with the crosshair on it (0.8 to 4 m; 1.17 at 6 m),
+   *  1.07 to 1.21 with the crosshair 2 cm lower on the face, and 0.53 to 0.68 with it 4 cm higher. Under about 1.05 an
+   *  aimed shot at the face would not split. */
+  splitFrac: 1.25,
+  /** How far the slug opens the head, as a share of the split preset's full angle (the axe's second chop is 1). */
+  splitOpen: 1,
+
+  // ---- The pop: the head swells and bursts in place of flying off.
+  /** false: a slug that takes the head off sends it flying, as a pellet's decapitation does. */
+  slugPop: true,
+  /** The swell before the burst, seconds. 0 bursts on the frame of the hit. The cultist's pop swells 0.12 to 0.2 s
+   *  (head-pop.ts SWELL_SEC); 0.12 s is seven frames at 60 fps and three or four at 30. */
+  popSwellS: 0.12,
+  /** A centred slug on a head that is already split open pops it. false: an ordinary wound on the open head. */
+  popOnSplit: true,
+
+  // ---- The opening (the slug head burst of 2026-10-02). Not the shipped behaviour: everything below acts only
+  // ---- while `opening` is on, and then the opening takes the round before the split is asked.
+  /** true: a slug on a closed head makes the burst opening (entry and exit craters, the jelly, the dent, shards). */
+  opening: false,
+  /** With the opening on: any player gun hit on the head opens it, pellets too, once per shot. false: slugs only. */
+  anyWeapon: false,
+  /** With the opening on: every head hit takes the full opening, however far off centre its line runs. false: the
+   *  centreFrac test decides between the full opening and the glancing one. */
+  alwaysSplit: false,
   centreFrac: BURST.centreFrac as number,
   /** Swell peak of the jelly rupture (head-deform BURST_DEFORM.swell). */
   swell: 0.4,
-  /** false (for now): a centred slug splits the head open but the zombie LIVES. true: a centred slug kills. */
+  /** false: a centred slug opens the head but the zombie LIVES. true: a centred slug kills. */
   lethal: false,
   /** How much a repeat slug on an already-cracked region adds to its skull crack (kills at 1 from glanceSkull 0.8:
    *  0.04 = the fifth repeat kills). */
@@ -65,6 +99,43 @@ export const burstTuning: { -readonly [K in keyof typeof BURST_TUNING_DEFAULTS]:
 export function setBurstTuning(p: Partial<typeof burstTuning>): typeof burstTuning {
   Object.assign(burstTuning, p);
   return { ...burstTuning };
+}
+
+/** What a gun round on a head does (the header). */
+export type HeadShotRule = 'ordinary' | 'split' | 'pop' | 'opening';
+
+/** A gun round that landed on a live zombie head. */
+export interface HeadShot {
+  kind: 'pellet' | 'slug';
+  /** classifyBurst's offset of the shot line: head radii from the head's centre. */
+  offset: number;
+  /** The head is split open (game-head-split.ts isOpen). */
+  splitOpen: boolean;
+  /** The split would refuse this head: the head damage leaf holds state for it (the flail's ladder, an opening). */
+  splitRefused: boolean;
+}
+
+/** THE RULE for one round on a head, in this order:
+ *    switched off (`on`)                         ordinary;
+ *    the head is split open                      a centred slug pops it (popOnSplit); anything else is ordinary
+ *                                                (the opening never touches an open head);
+ *    the opening is on                           it takes every slug, and every pellet with anyWeapon;
+ *    a centred slug, the split on and not refused   the split;
+ *    anything else                               ordinary.
+ *  An ordinary slug wound may still take the head off: that is decapitationRule's. */
+export function headShotRule(shot: HeadShot, t: Readonly<typeof BURST_TUNING_DEFAULTS> = burstTuning): HeadShotRule {
+  if (!t.on) return 'ordinary';
+  const centred = shot.kind === 'slug' && shot.offset < t.splitFrac;
+  if (shot.splitOpen) return centred && t.popOnSplit ? 'pop' : 'ordinary';
+  if (t.opening && (shot.kind === 'slug' || t.anyWeapon)) return 'opening';
+  if (centred && t.slugSplit && !shot.splitRefused) return 'split';
+  return 'ordinary';
+}
+
+/** A HEAD IS COMING OFF (the wounds have cut through the neck): the seconds of swell before it pops, or null for the
+ *  ordinary flying head. Only the slug's decapitation pops; a pellet volley's, a blast's and a blade's are ordinary. */
+export function decapitationRule(weapon: 'slug' | 'pellet' | 'other', t: Readonly<typeof BURST_TUNING_DEFAULTS> = burstTuning): number | null {
+  return t.on && t.slugPop && weapon === 'slug' ? Math.max(0, t.popSwellS) : null;
 }
 
 export interface BurstVerdict {
