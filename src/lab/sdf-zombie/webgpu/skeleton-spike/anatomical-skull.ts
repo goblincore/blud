@@ -4,7 +4,6 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { BoneFieldSource } from './contract';
 import type { SegmentMesh } from './mesh';
-import { SegmentMeshCache } from './mesh';
 import type { SkullPieceSurface } from '../../skull-fracture';
 import type { Vec3 } from '../../types';
 
@@ -111,14 +110,4 @@ export async function loadAnatomicalSkull(url = ANATOMICAL_SKULL_URL): Promise<A
   for (const mesh of found.values()) mesh.geometry.dispose();
   for (const m of new Set([...found.values()].flatMap(m=>Array.isArray(m.material)?m.material:[m.material]))) m.dispose();
   return new AnatomicalSkullKit(source,first.normalMap,first.normalScale.clone());
-}
-
-export async function createSkullMeshCache(search: string): Promise<SegmentMeshCache> {
-  const selected = new URLSearchParams(search).get('skull');
-  if (selected === 'sculpt' || selected === 'procedural') return new SegmentMeshCache();
-  try { return new SegmentMeshCache(undefined,undefined,await loadAnatomicalSkull()); }
-  catch (error) {
-    console.warn('[skull] anatomical asset failed; sculpted skull retained',error);
-    return new SegmentMeshCache();
-  }
 }

@@ -18,6 +18,7 @@ import { segmentBoundSphere } from './skeleton-spike/organ-reach';
 import { traceProjectile } from './game-weapon';
 import { sdBody } from '../validate';
 import { splitLookOk, type SplitLookSet } from './skeleton-spike/mesh-split';
+import { sculptVariantOf } from './skeleton-spike/sculpt-variant';
 
 /** The name of the organ mesh spec the segment mesh cache builds by (null without the mesh skeleton; 'custom' for a
  *  spec that is none of ORGAN_MESHES). */
@@ -248,10 +249,15 @@ export function createSkeletonSeams(ctx: GameContext) {
     /** Synchronous active-path proof for capture harnesses. */
     skeletonDiagnostics: () => ({
       requestedMode: ctx.render.skeletonMode,
+      // The skull in force: 'anatomical' when the plates are loaded and drawn, else 'sculpt' (the default, and what a
+      // page that asked for the plates draws when their asset did not load).
       skull: ctx.render.segMeshCache?.skullKit ? 'anatomical' : 'sculpt',
-      // The sculpted skull's recipe (sculpt-variant.ts): which sculpt, the head's extraction cell (null: the cache's
-      // own) and which paint. The default sculpt is { shape: 1, headCell: null, paint: 1 }.
+      // The sculpted skull's recipe in force (sculpt-variant.ts): which sculpt, the head's extraction cell (null: the
+      // cache's own) and which paint; and the variant that recipe is. The default is `full`:
+      // { shape: 2, headCell: 0.005, paint: 2 }. Under the anatomical skull it is `classic`, which the other bones
+      // are drawn with.
       sculpt: ctx.render.segMeshCache ? { ...ctx.render.segMeshCache.sculpt } : null,
+      sculptVariant: ctx.render.segMeshCache ? sculptVariantOf(ctx.render.segMeshCache.sculpt) : null,
       activeMode: ctx.render.skeletonMode === 'volume'
         ? (ctx.render.skeletonVolumes.size > 0 ? 'volume' : 'procedural')
         : ctx.render.skeletonMode === 'mesh'

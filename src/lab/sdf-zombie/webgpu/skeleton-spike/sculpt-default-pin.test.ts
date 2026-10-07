@@ -10,7 +10,7 @@ import { extractSegmentMesh, MESH_CELL, SegmentMeshCache } from './mesh';
 import {
   MESH_BONE_SURFACE_WGSL, MESH_BONE_WET_WGSL, MESH_SKULL_CAVITY_WGSL, MESH_SOCKET_VESSEL_WGSL, MESH_TOOTH_ROW_WGSL,
 } from './mesh-appearance';
-import { SCULPT_DEFAULT, sculptRecipe } from './sculpt-variant';
+import { SCULPT_CLASSIC, sculptRecipe } from './sculpt-variant';
 
 // THE DEFAULT SCULPTED SKULL IS PINNED. `?skull=sculpt` with no `?sculpt=` must draw what it drew before the variants
 // existed: the same mesh bytes for the zombie's and the soldier's head, and the same shader text. The hashes below
@@ -48,7 +48,7 @@ describe('the default sculpted skull is unchanged', () => {
     expect([direct.key, direct.verts, direct.tris]).toEqual([pin.key, pin.verts, pin.tris]);
     expect(bytes(direct)).toBe(pin.bytes);
     // The cache with no recipe, with the default recipe, and with the recipe of no variant: all the same mesh.
-    for (const cache of [new SegmentMeshCache(), new SegmentMeshCache(MESH_CELL, undefined, null, SCULPT_DEFAULT), new SegmentMeshCache(MESH_CELL, undefined, null, sculptRecipe(null))]) {
+    for (const cache of [new SegmentMeshCache(), new SegmentMeshCache(MESH_CELL, undefined, null, SCULPT_CLASSIC), new SegmentMeshCache(MESH_CELL, undefined, null, sculptRecipe('classic'))]) {
       const head = headOf(character, blob);
       expect(cache.keyOf(head)).toBe(pin.key);
       expect(bytes(cache.get(head))).toBe(pin.bytes);

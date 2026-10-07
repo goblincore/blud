@@ -34,7 +34,7 @@ import type { BoneFieldSource } from './contract';
 import { sweepOrganTubes, type OrganTubeSpec } from './mesh-organ-tubes';
 import type { Vec3 } from '../../types';
 import type { AnatomicalSkullKit } from './anatomical-skull';
-import { SCULPT_DEFAULT, type SculptRecipe, type SculptShape } from './sculpt-variant';
+import { SCULPT_CLASSIC, type SculptRecipe, type SculptShape } from './sculpt-variant';
 
 /** Extraction resolution. Matches BAKE_CELL (chunk-bake-geometry.ts): 1 cm
  *  cells are what the shipped bake pays for torn-flesh craters; the bone
@@ -206,10 +206,11 @@ export class SegmentMeshCache {
    *  and the meshes of the old one stay cached until dispose(). */
   organMesh: OrganMeshSpec;
   /** `sculpt`: the sculpted skull's recipe (sculpt-variant.ts): which sculpt carves a sculpted head, and the cell it
-   *  is extracted at. Omitted: the first sculpt at the cache's own cell. */
+   *  is extracted at. Omitted: `classic`, the first sculpt at the cache's own cell. The game never omits it: its
+   *  cache is built from the recipe resolveSkull chooses (sculpt-cache.ts). */
   constructor(
     readonly cellSize: number = MESH_CELL, organMesh: OrganMeshSpec = ORGAN_MESHES[ORGAN_MESH_DEFAULT],
-    readonly skullKit: AnatomicalSkullKit | null = null, readonly sculpt: Readonly<SculptRecipe> = SCULPT_DEFAULT,
+    readonly skullKit: AnatomicalSkullKit | null = null, readonly sculpt: Readonly<SculptRecipe> = SCULPT_CLASSIC,
   ) {
     this.organMesh = organMesh;
   }

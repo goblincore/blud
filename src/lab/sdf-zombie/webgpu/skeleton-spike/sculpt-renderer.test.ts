@@ -19,6 +19,7 @@ import { meshBoneSource } from './mesh-skull';
 import { meshEyePlacements } from './mesh-eyes';
 import { SCULPT_VARIANTS, sculptRecipe, type SculptVariant } from './sculpt-variant';
 import { createBoneMeshCache } from './sculpt-cache';
+import type { AnatomicalSkullKit } from './anatomical-skull';
 import { createSkeletonSeams } from '../game-seams-skeleton';
 import type { GameContext } from '../game-context';
 
@@ -30,7 +31,7 @@ const limbSrc = sources.find(s => s.segment !== 'head')!;
 
 type R = ReturnType<typeof createSegmentMeshRenderer>;
 type Graph = Node & { functionNode?: { code: string }; isVarNode?: boolean; intent?: boolean; node?: Node; ifNode?: unknown };
-const make = (variant: SculptVariant | null) => {
+const make = (variant: SculptVariant) => {
   const cache = new SegmentMeshCache(MESH_CELL, undefined, null, sculptRecipe(variant));
   return { cache, renderer: createSegmentMeshRenderer(cache) };
 };
@@ -68,7 +69,7 @@ const FIRST = ['boneShade', 'meshBoneSurface', 'meshBoneWet'];
 const SECOND = ['boneShade', 'sculptPaintNormal', 'sculptPaintSurface', 'sculptPaintWet'];
 
 describe('the sculpted skull\'s variants in the segment renderer', () => {
-  it.each([[null, FIRST], ['shape', FIRST], ['shape-fine', FIRST], ['paint', SECOND], ['full', SECOND]] as const)('%s: the bone material calls its paint', (variant, expected) => {
+  it.each([['classic', FIRST], ['shape', FIRST], ['shape-fine', FIRST], ['paint', SECOND], ['full-1cm', SECOND], ['full', SECOND]] as const)('%s: the bone material calls its paint', (variant, expected) => {
     const { cache, renderer } = make(variant);
     renderer.update([[headSrc, limbSrc]], [{ id: 1 }]);
     const m = batch(renderer, 'skeleton-segments')!.material as MeshBasicNodeMaterial;
@@ -78,7 +79,7 @@ describe('the sculpted skull\'s variants in the segment renderer', () => {
     renderer.dispose(); cache.dispose();
   });
 
-  it.each([[null, FIRST], ['shape', FIRST], ['paint', SECOND], ['full', SECOND]] as const)('%s: the split copies call the same paint, behind the clip', (variant, expected) => {
+  it.each([['classic', FIRST], ['shape', FIRST], ['paint', SECOND], ['full-1cm', SECOND], ['full', SECOND]] as const)('%s: the split copies call the same paint, behind the clip', (variant, expected) => {
     const { cache, renderer } = make(variant);
     renderer.update([[headSrc]], [{ id: 1 }], undefined, undefined, undefined, { warp: (_o, seg) => (seg === 'head' ? warp() : null) });
     const m = batch(renderer, 'skeleton-segments-split')!.material as MeshBasicNodeMaterial;
@@ -130,39 +131,101 @@ describe('the sculpted skull\'s variants in the segment renderer', () => {
 });
 
 describe('createBoneMeshCache', () => {
-  it.each(SCULPT_VARIANTS)('?sculpt=%s is the sculpted skull in that variant, whatever ?skull= says', async (variant) => {
-    for (const search of [`?sculpt=${variant}`, `?skull=anatomical&sculpt=${variant}`, `?seed=1&sculpt=${variant}&skull=sculpt`]) {
-      const cache = await createBoneMeshCache(search);
-      expect(cache.skullKit).toBeNull();
-      expect(cache.sculpt).toBe(sculptRecipe(variant));
+  const said = () => { const lines: string[] = []; return { lines, say: (line: string) => { lines.push(line); } }; };
+  const noKit = () => Promise.reject(new Error('no asset in this test'));
+  // A stand-in for the loaded plates: the cache only keeps it.
+  const kit = { head: () => null, size: 0, totals: { verts: 0, tris: 0 }, supports: () => false, dispose: () => {} } as unknown as AnatomicalSkullKit;
+
+  it('no skull parameter is the sculpted skull, full: the recipe, the fine head, and nothing said', async () => {
+    for (const search of ['', '?seed=1&frozen=1', '?skull=sculpt', '?skull=sculpt&sculpt=']) {
+      const { lines, say } = said();
+      const cache = await createBoneMeshCache(search, say, noKit);
+      expect(cache.skullKit, search).toBeNull();
+      expect(cache.sculpt, search).toBe(sculptRecipe('full'));
       expect(cache.cellSize).toBe(MESH_CELL);
+      expect(cache.keyOf(headSrc)).toBe(new SegmentMeshCache(MESH_CELL, undefined, null, sculptRecipe('full')).keyOf(headSrc));
+      expect(cache.keyOf(headSrc)).not.toBe(new SegmentMeshCache().keyOf(headSrc));
+      expect(lines).toEqual([]);
       cache.dispose();
     }
   });
-  it('?skull=sculpt alone is the default sculpt: no recipe but the default one', async () => {
-    for (const search of ['?skull=sculpt', '?skull=sculpt&sculpt=', '?skull=sculpt&sculpt=nonsense']) {
-      const cache = await createBoneMeshCache(search);
+  it.each(SCULPT_VARIANTS)('?sculpt=%s is the sculpted skull in that variant, whatever ?skull= says', async (variant) => {
+    for (const search of [`?sculpt=${variant}`, `?skull=anatomical&sculpt=${variant}`, `?seed=1&sculpt=${variant}&skull=sculpt`]) {
+      const { lines, say } = said();
+      const cache = await createBoneMeshCache(search, say, noKit);
       expect(cache.skullKit).toBeNull();
-      expect(cache.sculpt).toBe(sculptRecipe(null));
-      expect(cache.keyOf(headSrc)).toBe(new SegmentMeshCache().keyOf(headSrc));
+      expect(cache.sculpt).toBe(sculptRecipe(variant));
+      expect(cache.cellSize).toBe(MESH_CELL);
+      // The overruled ?skull=anatomical is said, once; nothing else is.
+      expect(lines).toHaveLength(search.includes('anatomical') ? 1 : 0);
+      cache.dispose();
+    }
+  });
+  it('?sculpt=classic is the first look: the cache a bare SegmentMeshCache is', async () => {
+    const cache = await createBoneMeshCache('?sculpt=classic', said().say, noKit);
+    expect(cache.sculpt).toBe(sculptRecipe('classic'));
+    expect(cache.keyOf(headSrc)).toBe(new SegmentMeshCache().keyOf(headSrc));
+    cache.dispose();
+  });
+  it('?skull=anatomical loads the plates and draws the other bones under classic', async () => {
+    const { lines, say } = said();
+    let loads = 0;
+    const cache = await createBoneMeshCache('?skull=anatomical', say, () => { loads++; return Promise.resolve(kit); });
+    expect(cache.skullKit).toBe(kit);
+    expect(cache.sculpt).toBe(sculptRecipe('classic'));
+    expect(loads).toBe(1);
+    expect(lines).toEqual([]);
+  });
+  it('the plates are not loaded unless the page asks for them', async () => {
+    let loads = 0;
+    for (const search of ['', '?skull=sculpt', '?sculpt=full', '?skull=anatomical&sculpt=paint', '?skull=nonsense']) {
+      (await createBoneMeshCache(search, said().say, () => { loads++; return Promise.resolve(kit); })).dispose();
+    }
+    expect(loads).toBe(0);
+  });
+  it('plates that do not load: the default sculpted skull, and one line saying so', async () => {
+    const { lines, say } = said();
+    const cache = await createBoneMeshCache('?skull=anatomical', say, noKit);
+    expect(cache.skullKit).toBeNull();
+    expect(cache.sculpt).toBe(sculptRecipe('full'));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('did not load');
+    expect(lines[0]).toContain('no asset in this test');
+    cache.dispose();
+  });
+  it('an unknown value is passed over and said once', async () => {
+    for (const [search, want] of [['?skull=plates', 'full'], ['?sculpt=nonsense', 'full'], ['?skull=sculpt&sculpt=nonsense', 'full']] as const) {
+      const { lines, say } = said();
+      const cache = await createBoneMeshCache(search, say, noKit);
+      expect(cache.skullKit).toBeNull();
+      expect(cache.sculpt, search).toBe(sculptRecipe(want));
+      expect(lines, search).toHaveLength(1);
       cache.dispose();
     }
   });
 });
 
-describe('__sdfGame.skeletonDiagnostics: which sculpted skull the page draws', () => {
+describe('__sdfGame.skeletonDiagnostics: which skull the page draws', () => {
   const diagnosticsOf = (cache: SegmentMeshCache | null) => createSkeletonSeams({
     render: { skeletonMode: 'mesh', segMeshCache: cache, segMeshRenderer: null, skeletonVolumes: new Map(), segVolumeCache: null },
   } as unknown as GameContext).skeletonDiagnostics();
-  it('reports the recipe: the default sculpt\'s for ?skull=sculpt, a variant\'s for ?sculpt=', () => {
-    const plain = new SegmentMeshCache();
-    expect(diagnosticsOf(plain)).toMatchObject({ skull: 'sculpt', sculpt: { shape: 1, headCell: null, paint: 1 } });
+  it('reports the skull, the recipe in force and the variant it is', async () => {
     for (const variant of SCULPT_VARIANTS) {
       const cache = new SegmentMeshCache(MESH_CELL, undefined, null, sculptRecipe(variant));
-      expect(diagnosticsOf(cache)).toMatchObject({ skull: 'sculpt', sculpt: { ...sculptRecipe(variant) } });
+      expect(diagnosticsOf(cache)).toMatchObject({ skull: 'sculpt', sculpt: { ...sculptRecipe(variant) }, sculptVariant: variant });
       cache.dispose();
     }
-    expect(diagnosticsOf(null).sculpt).toBeNull();
-    plain.dispose();
+    // The page's own caches: the default, and the first look.
+    const noKit = () => Promise.reject(new Error('no asset in this test'));
+    const byDefault = await createBoneMeshCache('', () => {}, noKit);
+    expect(diagnosticsOf(byDefault)).toMatchObject({ skull: 'sculpt', sculpt: { shape: 2, headCell: 0.005, paint: 2 }, sculptVariant: 'full' });
+    const classic = await createBoneMeshCache('?sculpt=classic', () => {}, noKit);
+    expect(diagnosticsOf(classic)).toMatchObject({ skull: 'sculpt', sculpt: { shape: 1, headCell: null, paint: 1 }, sculptVariant: 'classic' });
+    // The anatomical skull: its other bones under classic.
+    const kit = { head: () => null, size: 0, totals: { verts: 0, tris: 0 }, supports: () => false, dispose: () => {} } as unknown as AnatomicalSkullKit;
+    const plates = await createBoneMeshCache('?skull=anatomical', () => {}, () => Promise.resolve(kit));
+    expect(diagnosticsOf(plates)).toMatchObject({ skull: 'anatomical', sculpt: { shape: 1, headCell: null, paint: 1 }, sculptVariant: 'classic' });
+    expect(diagnosticsOf(null)).toMatchObject({ sculpt: null, sculptVariant: null });
+    byDefault.dispose(); classic.dispose();
   });
 });
