@@ -235,6 +235,9 @@ export function createSkeletonSeams(ctx: GameContext) {
      *  world position and its velocity. */
     skullFragments: () => ctx.gibs.meshGibs.filter(g => g.tag === 'skull')
       .map(g => ({ plate: g.object.name.replace(/^skull-fragment:/, ''), pos: [...g.state.pos], vel: [...g.state.vel] })),
+    /** The sculpted skull's fragment cuts (mesh-renderer.ts fragmentStats): how many head meshes have been cut into
+     *  fragments for a pop, and how long the last cut took (ms). null without the mesh skeleton. */
+    skullFragmentCuts: () => ctx.render.segMeshRenderer?.fragmentStats() ?? null,
     explodeMeshSkull: (bodyId?: number) => {
       const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q=>q.id===bodyId);
       return a && ctx.render.segMeshRenderer ? ctx.render.segMeshRenderer.explodeSkull(a,ctx.render.skeletonSources.get(a)?.sources ?? [],[0,1,0]) : 0;

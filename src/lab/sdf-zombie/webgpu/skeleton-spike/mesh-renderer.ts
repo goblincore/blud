@@ -90,6 +90,7 @@ import {
 import { ANATOMICAL_SKULL_NORMAL_WGSL, ANATOMICAL_SKULL_SURFACE_WGSL } from './anatomical-skull.wgsl';
 import { SCULPT_PAINT_SHAPE1, SCULPT_PAINT_SHAPE2, sculptPaintSources } from './sculpt-paint';
 import { SKULL_REACH, damageSkull, explodeSkull, intactSkull, skullPieceLaunch, type SkullDamage } from '../../skull-fracture';
+import { fragmentVertexData, partitionSculptMesh } from './sculpt-fragments';
 import type { FittedSkull } from './anatomical-skull';
 import type { Vec3 } from '../../types';
 import { HEAD_SPLIT, skullPieceAngle, skullPieces, skullSplitOf, type SkullFollow, type SkullSplit, type SplitWarp } from '../../head-split';
@@ -243,9 +244,16 @@ export interface SegmentMeshRenderer {
    *  (skull-split-hit.ts), and the fragment leaves from the turn of the piece that was hit: its position, its
    *  orientation and its launch. A closed head: the closed head's frame, as ever. Returns the plates released. */
   fractureSkull(owner: object, sources: readonly BoneFieldSource[], point: Vec3, direction: Vec3, kind: 'pellet' | 'slug'): number;
-  /** Release every plate the skull still has. On a split head each leaves from the turn of the piece that owns its
-   *  pivot. Returns the plates released. */
+  /** THE SKULL COMES APART (a head pop). The anatomical skull releases every plate it still has. A SCULPTED head
+   *  mesh has no plates: it is cut into the named fragments of sculpt-fragments.ts, each thrown as a mesh gib the way
+   *  a plate is (the same launch rule and support points; its geometry its own, freed when the gib is evicted), with
+   *  the sculpt's paint outside and the bone's dark inner wall on its back faces; the owner's head segment and its
+   *  seated eyes stop being drawn at once, in the batches as they stand, so no frame shows both and none neither.
+   *  The cut is made at a mesh's first pop and kept (fragmentStats). On a split head each piece leaves from the turn
+   *  of the split piece that owns its pivot. Returns the pieces released. */
   explodeSkull(owner: object, sources: readonly BoneFieldSource[], direction: Vec3): number;
+  /** The sculpted skull's fragment cuts so far: how many head meshes have been cut, and the last cut's time (ms). */
+  fragmentStats(): { meshes: number; lastMs: number };
   /** This frame's craters (world centre + radius) for the exposure gradient. */
   setWounds(wounds: ReadonlyArray<{ pos: readonly [number, number, number]; radius: number }>): void;
   /** Diagnostics: the exposure rows setWounds last uploaded (what the shader reads), as [x, y, z, radius]. */
@@ -705,6 +713,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     slots.length = 0;
     absent = new WeakMap();
     skullDamage = new WeakMap();
+    exploded = new WeakSet();
     // The hooks of the last update answer for owners that are gone with it: a shot before the next one is the closed
     // head's, in the rigid pose.
     extraOf = undefined;
@@ -913,6 +922,116 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     if (open && by && hit.plate !== null) (by.skulls ??= []).push(owner);
     return hit.released;
   };
+  // THE SCULPTED SKULL'S FRAGMENTS (sculpt-fragments.ts): one prototype geometry a fragment, cut from a head mesh at
+  // its first pop and kept with it. A thrown fragment is a clone (its own light row, as a plate's debris has).
+  interface FragmentProto { id: string; geometry: THREE.BufferGeometry; pivot: Vec3; min: Vec3; max: Vec3 }
+  const sculptFragments = new WeakMap<THREE.BufferGeometry, FragmentProto[]>();
+  const fragmentCuts = { meshes: 0, lastMs: 0 };
+  /** Fragments with fewer triangles than this are not thrown: on a head neither sculpt carves (the cultist's plain
+   *  bone) some regions hold a sliver or nothing. Both sculpts' smallest fragment has over 150. */
+  const FRAGMENT_MIN_TRIS = 12;
+  const fragmentsOf = (base: THREE.BufferGeometry, source: BoneFieldSource): FragmentProto[] => {
+    let list = sculptFragments.get(base);
+    if (list) return list;
+    const t0 = performance.now();
+    const attrs: Record<string, { array: ArrayLike<number>; itemSize: number }> = {};
+    for (const name of ['position', 'normal', 'meshFeature']) {
+      const a = base.getAttribute(name);
+      if (a) attrs[name] = { array: a.array, itemSize: a.itemSize };
+    }
+    list = [];
+    for (const f of partitionSculptMesh(base.getAttribute('position').array, base.index!.array, source.bounds)) {
+      if (f.indices.length / 3 < FRAGMENT_MIN_TRIS) continue;
+      const data = fragmentVertexData(f, attrs);
+      const geometry = new THREE.BufferGeometry();
+      for (const [name, array] of Object.entries(data.attributes)) geometry.setAttribute(name, new THREE.BufferAttribute(array, attrs[name]!.itemSize));
+      geometry.setIndex(new THREE.BufferAttribute(data.index, 1));
+      list.push({ id: f.id, geometry, pivot: f.pivot, min: f.min, max: f.max });
+    }
+    fragmentCuts.meshes++;
+    fragmentCuts.lastMs = performance.now() - t0;
+    sculptFragments.set(base, list);
+    return list;
+  };
+  /** Owners whose sculpted skull has been thrown: their head segment is not drawn again. */
+  let exploded = new WeakSet<object>();
+  /** Take `owner`'s instances out of the batches that draw `base` (closed, and its split twin) as they stand: the
+   *  matrix goes to zero scale, and the diagnostics' list drops them. The next update leaves them out by itself. */
+  const zeroM = new THREE.Matrix4().makeScale(0, 0, 0);
+  const undraw = (owner: object, base: THREE.BufferGeometry) => {
+    for (const g of [base, splitGeometries.get(base)]) {
+      const b = g && batches.get(g);
+      if (!b) continue;
+      for (let i = 0; i < b.count; i++) if (b.owners[i] === owner) { b.mesh.setMatrixAt(i, zeroM); b.mesh.instanceMatrix.needsUpdate = true; }
+      for (let i = drawn.length - 1; i >= 0; i--) if (drawn[i]!.owner === owner && drawn[i]!.geometry === g) drawn.splice(i, 1);
+    }
+  };
+  /** explodeSkull for a sculpted head (the interface's note). */
+  const explodeSculpt = (owner: object, sources: readonly BoneFieldSource[], direction: Vec3): number => {
+    const source = sources.find(s => s.segment === 'head' && s.kind !== 'organ');
+    if (!spawnSkull || !source || cache.skullKit?.supports(source) || exploded.has(owner)) return 0;
+    const base = cache.get(source).geometry;
+    if (!base.index) return 0;
+    prepareGeometry(base, source);
+    const fragments = fragmentsOf(base, source);
+    exploded.add(owner);
+    const closed = headMatrix(owner, source);
+    const split = skullSplitFor(owner, source.segment), jag = liveJag();
+    const b = source.bounds;
+    const centre: Vec3 = [(b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2];
+    // The owner's light row, from the batch that was drawing its head (or any of its bones).
+    let picks: [number, number, number, number] | null = null, fill = 1;
+    for (const g of [base, splitGeometries.get(base)]) {
+      const batch = g && batches.get(g), slot = batch ? batch.owners.indexOf(owner) : -1;
+      if (!batch || slot < 0) continue;
+      const lights = batch.mesh.geometry.getAttribute('iLights');
+      picks = [lights.getX(slot), lights.getY(slot), lights.getZ(slot), lights.getW(slot)];
+      fill = batch.mesh.geometry.getAttribute('iFill').getX(slot);
+      break;
+    }
+    undraw(owner, base);
+    undraw(owner, eyeGeometry);
+    fragments.forEach((f, index) => {
+      const pivotWorld = new THREE.Vector3(...f.pivot).applyMatrix4(closed);
+      // A split head: the fragment leaves from the turn of the piece that owns its pivot, as a plate does.
+      const turn = split ? pieceTurn(split, skullOwnerAt(split, pivotWorld.toArray() as Vec3, jag), turnM) : null;
+      const matrix = turn ? turn.clone().multiply(closed) : closed;
+      const geometry = f.geometry.clone();
+      geometry.userData.ownedSkullDebris = true;
+      // One instance: its light row, and a split record of zeros, which keeps every fragment of the mesh (the piece
+      // is the rest and neither half turns: mesh-split.ts MESH_SPLIT_CLIP_WGSL) and leaves the surface where it is.
+      ensureLights(geometry, 1, true);
+      if (picks) (geometry.getAttribute('iLights') as THREE.InstancedBufferAttribute).setXYZW(0, picks[0], picks[1], picks[2], picks[3]);
+      (geometry.getAttribute('iFill') as THREE.InstancedBufferAttribute).setX(0, fill);
+      // The split material: the painted bone outside, the dark inner wall on back faces, two-sided.
+      const mesh = new THREE.Mesh(geometry, splitMaterial);
+      mesh.layers.set(layer);
+      mesh.matrixAutoUpdate = false;
+      // The vertices stay in the head's own frame (the paint reads them there): the pivot is moved to the origin.
+      mesh.matrix.copy(matrix).setPosition(0, 0, 0).multiply(tmpM.makeTranslation(-f.pivot[0], -f.pivot[1], -f.pivot[2]));
+      const piece = new THREE.Group(); piece.name = `skull-fragment:${f.id}`; piece.add(mesh);
+      piece.layers.set(layer);
+      const pivot = new THREE.Vector3(...f.pivot).applyMatrix4(matrix);
+      const localDirection = new THREE.Vector3(...direction).transformDirection(matrix.clone().invert());
+      const launch = skullPieceLaunch(f.pivot, centre, localDirection.toArray() as Vec3, index);
+      const velocity = new THREE.Vector3(...launch.velocity).transformDirection(matrix).multiplyScalar(Math.hypot(...launch.velocity));
+      const size = new THREE.Vector3(...f.max).sub(new THREE.Vector3(...f.min));
+      const scales = new THREE.Vector3().setFromMatrixScale(matrix);
+      // The extremal vertices in 26 directions stand for the convex support hull, as a plate's do.
+      const position = geometry.getAttribute('position');
+      const points = Array.from({ length: position.count }, (_, i) => new THREE.Vector3(position.getX(i), position.getY(i), position.getZ(i)).applyMatrix4(mesh.matrix));
+      const support: { c: Vec3; r: number }[] = [];
+      const used = new Set<number>();
+      for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) {
+        if (!x && !y && !z) continue;
+        const axis = new THREE.Vector3(x, y, z); let best = 0, value = -Infinity;
+        points.forEach((q, i) => { const d = q.dot(axis); if (d > value) { value = d; best = i; } });
+        if (!used.has(best)) { used.add(best); support.push({ c: points[best]!.toArray() as Vec3, r: 0.001 }); }
+      }
+      spawnSkull(piece, pivot.toArray() as Vec3, velocity.toArray() as Vec3, launch.angular, Math.max(0.012, size.length() * 0.5 * Math.max(scales.x, scales.y, scales.z)), support);
+    });
+    return fragments.length;
+  };
   return {
     object: group,
     uniforms: u,
@@ -952,10 +1071,12 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       const missing = skullDamage.get(owner)?.missing ?? 0;
       return { missing, pieces: cache.skullKit ? cache.skullKit.source.filter((_,i)=>missing & (1<<i)).map(p=>p.id) : [] };
     },
+    fragmentStats: () => ({ ...fragmentCuts }),
     explodeSkull(owner,sources,direction) {
       const source = sources.find(s=>s.segment==='head' && cache.skullKit?.supports(s));
       const skull = source && cache.skullKit?.head(source);
-      if (!source || !skull || !spawnSkull) return 0;
+      // No anatomical skull on this head: the sculpted mesh is cut into fragments.
+      if (!source || !skull || !spawnSkull) return explodeSculpt(owner, sources, direction);
       const result = explodeSkull(skullDamage.get(owner) ?? intactSkull(skull.pieces.length));
       skullDamage.set(owner,result.state);
       // A plate the fracture runs through is drawn in two copies; the fragment is the whole plate, and goes with the
@@ -1012,6 +1133,8 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
           // Visual-actor cull + bone exposure cull: a culled segment is simply not an instance
           // this frame (no pose read, no write).
           const organ = s.kind === 'organ';
+          // A sculpted skull that has been thrown as fragments is not drawn again, whatever the source says.
+          if (!organ && s.segment === 'head' && exploded.has(owner as object)) { stats.hidden++; return; }
           const live = segmentDrawn(s.isLive(), owner, shown)
             && (organ ? (!exposed || exposed.has(owner)) : segmentNeeded(owner, eyes.length > 0, exposed));
           if (!live) { stats.hidden++; return; }

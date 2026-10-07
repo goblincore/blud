@@ -36,7 +36,7 @@ Each line is the first sentence of the module's header comment.
 | --- | --- | --- |
 | [webgpu/march/](#webgpumarch) | 54 | The SDF march shader, split by stage (WGSL). |
 | [webgpu/earlyz/](#webgpuearlyz) | 10 | Early-Z depth prepass for the march. |
-| [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 22 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
+| [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 23 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
 | [webgpu/upscale/](#webgpuupscale) | 8 | Upscaling of the low-res march target. |
 | [characters/](#characters) | 1 | Character bodies: `.blob` sources, generators and per-character data. |
 | [shared-wounds/](#shared-wounds) | 4 | Shared wound-field probe page. |
@@ -45,7 +45,7 @@ Each line is the first sentence of the module's header comment.
 | [Dev panels](#dev-panels) | 10 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 23 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 75 | Gameplay features wired into the game loop. |
+| [Game: feature modules](#game-feature-modules) | 76 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 7 | Blood views, the goo layer, impact splashes. |
@@ -159,6 +159,7 @@ Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite th
 - `webgpu/skeleton-spike/mesh.ts` — SKELETON REPRESENTATION COMPARISON — Task 2: cached segment-local bone meshes.
 - `webgpu/skeleton-spike/organ-reach.ts` — ORGANS AS MESH (2026-10-06): which organ segments a body's wounds expose.
 - `webgpu/skeleton-spike/sculpt-cache.ts` — The game's bone-mesh cache for a page's query string: a `?sculpt=` variant of the sculpted skull, else the skull `?skull=` chooses.
+- `webgpu/skeleton-spike/sculpt-fragments.ts` — The sculpted skull in pieces: a head mesh's triangles sorted into ten named fragments by where they sit in the head's normalized box, for the head…
 - `webgpu/skeleton-spike/sculpt-paint.ts` — THE SECOND PAINT of the sculpted skull (sculpt-variant.ts: `paint`, `full`).
 - `webgpu/skeleton-spike/sculpt-variant.ts` — The sculpted skull's look variants.
 - `webgpu/skeleton-spike/selector.ts` — Mesh actor skeletons are the accepted forward default in dev and production.
@@ -333,6 +334,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-gib-spawn.ts` — Gib spawning and budgeting: scheduling gibs, retiring actors, carved pieces, the gib atlas loader and the per-frame gib piece budget.
 - `webgpu/game-grenade-launcher.ts` — Single-shot launcher timing.
 - `webgpu/game-head-damage.ts` — THE MELEE HEAD DAMAGE LEAF, v2 (spec docs/superpowers/specs/2026-09-28-melee-head-damage-design.md §15; plan Task 17).
+- `webgpu/game-head-shot.ts` — THE HEAD-SHOT LEAF: what a gun round does to a zombie's head besides an ordinary wound (head-burst.ts headShotRule): a centred slug splits the head…
 - `webgpu/game-head-split.ts` — THE HEAD SPLIT LEAF (spec docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md §4-§5).
 - `webgpu/game-hit-trace.ts` — Slug and melee hit tracing, ceiling and chunk collider queries, on-screen body count and level probe-room stamping.
 - `webgpu/game-hud.ts` — The HUD text line: frame time, bodies on screen, room, weapon slot, ammo and render-mode flags, refreshed from the game context.
@@ -693,7 +695,7 @@ Wound fields, severing, head damage and the head split, death states, melting, b
 - `cut-wound.ts` — CUT WOUNDS (spec docs/superpowers/specs/2026-10-03-cut-wounds-design.md §3-4).
 - `damage.ts` — The wound record and everything that stamps, locates and converts wounds on a body, including cloth wound handling.
 - `death-state.ts` — LIFE-STATE PRIMS (cultist hood, owner playtest 2026-09-24): "it would just probably cause the cowl to go from the 'hood' position to the 'not hood'…
-- `head-burst.ts` — SLUG HEAD BURST — the pure half (spec docs/superpowers/specs/2026-10-02-slug-head-burst-design.md §4).
+- `head-burst.ts` — WHAT A GUN ROUND DOES TO A ZOMBIE'S HEAD — the pure half.
 - `head-crown.ts` — SKULL AND BRAIN (spec §7, §14).
 - `head-damage.ts` — MELEE HEAD DAMAGE v2 (spec §15).
 - `head-deform.ts` — HEAD WOBBLE AND DENTS (spec §5; the plan's decision 1).
