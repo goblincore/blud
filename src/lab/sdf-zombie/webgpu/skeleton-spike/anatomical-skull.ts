@@ -16,7 +16,7 @@ export const SKULL_PIECES = ['frontal','parietal-left','parietal-right','occipit
 export const SKULL_FACE_PIECES: ReadonlySet<string> = new Set(['zygomatic-left','zygomatic-right','maxilla-left','maxilla-right','upper-teeth','mandible','nasal-core']);
 /** The asset's openings, in its own assembled frame (metres): a point inside each orbit and inside the nasal
  *  opening, about 10 mm in front of the cavity's back wall, on a line from the front that meets no bone
- *  (anatomical-skull.test.ts pins that on the asset). `left` is the skull's own left, +x. */
+ *  (anatomical-skull-fit.test.ts pins that on the asset). `left` is the skull's own left, +x. */
 export const SKULL_OPENINGS = {
   orbitLeft: [0.0227, 0.0008, 0.046], orbitRight: [-0.0293, 0.0022, 0.045], nasal: [-0.0039, -0.0274, 0.044],
 } as const satisfies Record<string, Vec3>;
