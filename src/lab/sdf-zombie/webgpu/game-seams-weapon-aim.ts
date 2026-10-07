@@ -1,17 +1,19 @@
 // src/lab/sdf-zombie/webgpu/game-seams-weapon-aim.ts
 //
+// The window.__sdfGame weapon members: firing, muzzle, free aim, ammo and reload tuning, slug mode, aim helpers, decapitate and slot select.
+//
 // Members lifted verbatim out of game-main.ts's `window.__sdfGame` literal.
 // Every one needed nothing but the GameContext, so this factory takes no deps.
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
 import type { GameContext } from './game-context';
-import { updateHud } from './game-panels-leaves';
+import { updateHud } from './game-hud';
 import { MAGAZINE_CAPACITY, RELOAD } from './game-viewmodel';
-import { aimAtNearestSurface, convergedDir, fire, muzzleWorld } from './game-weapon-leaves';
+import { aimAtNearestSurface, convergedDir, fire, muzzleWorld } from './game-weapon-rig';
 import { WEAPON_SLOTS, requestSlot, type WeaponSlot } from './game-weapon-slots';
 import { BOB, FREE_AIM } from './free-aim';
-import { predictSlugHitNow } from './game-world-leaves';
+import { predictSlugHitNow } from './game-hit-trace';
 import { spawnSlug } from './game-weapon';
 import type { Vec3 } from '../types';
 import { gunWetLipOn, setGunWetLip } from '../torn-lips';

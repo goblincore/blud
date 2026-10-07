@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/visual-actor-set.ts
+//
+// Pure selector for which actors need per-actor visual upkeep this tick, using a view-cone and distance test biased toward keeping bodies.
+
 import type { Vec3 } from '../types';
 
 // Pure, renderer-free selector for which actors need PER-ACTOR VISUAL upkeep
@@ -6,7 +10,7 @@ import type { Vec3 } from '../types';
 // a body outside the set still steps, thinks and collides; it just is not
 // drawn-to or posed-for-view while nothing can see it.
 //
-// SAFETY BIAS (same as the march cull in game-world-leaves2.ts): a wrongly
+// SAFETY BIAS (same as the march cull in game-wound-streams.ts): a wrongly
 // culled visible body is a visible bug; a wrongly kept one is only a cost.
 // Everything here points at keeping too much, never too little:
 //  - the cone is the DIAGONAL field of view (wider than the vertical one the
@@ -48,7 +52,7 @@ export const VISUAL_CULL_DEFAULTS: VisualCullOptions = { marginDeg: 35, bodyRadi
 const DEG2RAD = Math.PI / 180;
 
 /** The game's forward vector for a yaw/pitch, identical to `aimDir` in
- *  game-weapon-leaves.ts (the ray the player shoots down MUST be the axis this
+ *  game-weapon-rig.ts (the ray the player shoots down MUST be the axis this
  *  cull is symmetric about). Exported for tests and for the Task 2 wiring. */
 export function visualForward(yaw: number, pitch: number): Vec3 {
   const cp = Math.cos(pitch);

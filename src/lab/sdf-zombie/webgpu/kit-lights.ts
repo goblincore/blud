@@ -23,7 +23,7 @@
 // (the game-glow.ts / game-burning.ts trap). The twin still has to be IN the
 // scene graph so its world matrix updates; it is posed by Flashlight.update.
 // Only the RENDERER honours that layer. Anything that finds lights by traversing
-// the scene graph must skip KIT_BEAM_LAYER itself: game-lighting-leaves
+// the scene graph must skip KIT_BEAM_LAYER itself: game-level-lights
 // levelSceneLights did not, and the twin (ungated by flashlightGate) lit every
 // room's walls as a torch before the flashlight pickup (2026-09-30).
 //

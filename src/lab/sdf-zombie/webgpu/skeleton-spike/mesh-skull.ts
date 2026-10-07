@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/skeleton-spike/mesh-skull.ts
+//
+// The mesh-skull sculpt: meshBoneSource adapts a bone field source into the carved skull and mandible, plus the skull art revision names.
+
 import type { BoneFieldSource, Point3 } from './contract';
 import { sculptSkull2, skull2JawOf } from './mesh-skull-2';
 import type { SculptShape } from './sculpt-variant';
@@ -31,6 +35,8 @@ export function meshBoneSource(source: BoneFieldSource, shape: SculptShape = 1):
   return {
     ...source,
     revision: `${source.revision}:${revision}`,
+    // The sculpt below carves the field: it is no longer the fold of the member prims.
+    prims: undefined,
     distance(p: Point3): number {
       const q = p.map((v, i) => (v - min[i]!) / half[i]! - 1);
       const [x, y, z] = q as [number, number, number];

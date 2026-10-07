@@ -15,7 +15,7 @@ import type { MeshGibOpts } from './game-state-boot';
 import type { MeshGib } from './game-state-gibs';
 import type { Vec3 } from '../types';
 import { chunkSettled, makeChunk, squashFactors, stepChunk } from '../gib-chunks';
-import { chunkCollidersAt } from './game-world-leaves';
+import { chunkCollidersAt } from './game-hit-trace';
 
 export const MESH_GIB_CAP = 8;
 /** A complete skull has fourteen plates; keep its pool separate from brains. */

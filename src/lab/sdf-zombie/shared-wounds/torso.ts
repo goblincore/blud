@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/shared-wounds/torso.ts
+//
+// Torso wound regions built on the shared wound presets: region state, wound hits and the visual wound list.
+
 import type { BuildResult } from '../build-body';
 import { MAX_WOUNDS, woundWorldPos, type Wound } from '../damage';
 import { add, cross, dot, len, normalize, scale, sub } from '../vec';

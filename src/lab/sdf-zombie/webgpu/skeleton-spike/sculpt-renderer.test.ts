@@ -31,7 +31,7 @@ const limbSrc = sources.find(s => s.segment !== 'head')!;
 type R = ReturnType<typeof createSegmentMeshRenderer>;
 type Graph = Node & { functionNode?: { code: string }; isVarNode?: boolean; intent?: boolean; node?: Node; ifNode?: unknown };
 const make = (variant: SculptVariant | null) => {
-  const cache = new SegmentMeshCache(MESH_CELL, null, sculptRecipe(variant));
+  const cache = new SegmentMeshCache(MESH_CELL, undefined, null, sculptRecipe(variant));
   return { cache, renderer: createSegmentMeshRenderer(cache) };
 };
 const batch = (r: R, name: string) => r.object.children.find(c => c.name === name) as THREE.InstancedMesh | undefined;
@@ -158,7 +158,7 @@ describe('__sdfGame.skeletonDiagnostics: which sculpted skull the page draws', (
     const plain = new SegmentMeshCache();
     expect(diagnosticsOf(plain)).toMatchObject({ skull: 'sculpt', sculpt: { shape: 1, headCell: null, paint: 1 } });
     for (const variant of SCULPT_VARIANTS) {
-      const cache = new SegmentMeshCache(MESH_CELL, null, sculptRecipe(variant));
+      const cache = new SegmentMeshCache(MESH_CELL, undefined, null, sculptRecipe(variant));
       expect(diagnosticsOf(cache)).toMatchObject({ skull: 'sculpt', sculpt: { ...sculptRecipe(variant) } });
       cache.dispose();
     }

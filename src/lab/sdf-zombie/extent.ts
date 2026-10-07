@@ -1,4 +1,7 @@
 // src/lab/sdf-zombie/extent.ts
+//
+// Outer-bound reach of boxes, shells and strands, and support-sphere extents of gib chunks and torn ends.
+
 import type { BoxParams, Primitive, ShellParams, Vec3 } from './types';
 import type { SupportSphere } from './gib-chunks';
 import { bendCtrl, len, sub } from './vec';

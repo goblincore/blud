@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-seams-fx.ts
 //
+// The window.__sdfGame effects members: light clock, bleed, bounce and flash gains, probe gather and ray tuning, and tracer lights.
+//
 // Members lifted verbatim out of game-main.ts's `window.__sdfGame` literal.
 // Every one needed nothing but the GameContext, so this factory takes no deps.
 //
@@ -13,7 +15,7 @@ import { sdBody } from '../validate';
 import { unwarpHit } from '../damage';
 import { chunkSettled } from '../gib-chunks';
 import { woundFromPellet, woundFromSlug, traceProjectile } from './game-weapon';
-import { spillVerdict, woundTuningNow } from './game-vfx-leaves';
+import { spillVerdict, woundTuningNow } from './game-wound-vfx';
 import { clearSpritePieces, setSpritePiecesVisible, spritePieceStates } from './gib-sprite-pieces';
 import { type GooReconstruction } from './goo-layer';
 

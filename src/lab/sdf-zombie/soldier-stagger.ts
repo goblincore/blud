@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/soldier-stagger.ts
+//
+// Soldier stagger state: hit-reaction levels, their durations and travel, and the per-frame stagger step.
+
 import type { Vec3 } from './types';
 
 export const SOLDIER_STAGGER = {

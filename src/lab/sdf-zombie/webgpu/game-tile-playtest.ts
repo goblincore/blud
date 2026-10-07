@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/game-tile-playtest.ts
+//
+// The opt-in tile-culling playtest controller for the game: owns tile bindings, the enable and ray-cull toggles, and fallback counters.
+
 import type { PerspectiveCamera } from 'three/webgpu';
 import type { ComputeTileBinding } from './tile-bin-compute';
 import type { ViewTileBinding } from './zombie-gpu';

@@ -1,4 +1,6 @@
 // src/lab/sdf-zombie/types.ts
+//
+// Core SDF body data types: Vec3, primitive and body definitions, shell/box/strand params, limb ids, bones and built bodies.
 import type { Quat } from './vec';
 import type { SplitWarp } from './head-split';
 

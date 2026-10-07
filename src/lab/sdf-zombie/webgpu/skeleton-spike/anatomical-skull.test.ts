@@ -32,7 +32,7 @@ describe('offline anatomical skull asset',()=> {
     const body = buildBody(compileBlob(parseBlob(readFileSync('src/lab/sdf-zombie/characters/zombie.blob','utf8'))),DEFAULT_BUILD_OPTS);
     const head = createSkeletonSources(body,bindRig(body),{character:'zombie'}).find(s=>s.segment==='head')!;
     const kit = new AnatomicalSkullKit(source,new THREE.Texture(),new THREE.Vector2(1,1));
-    const cache = new SegmentMeshCache(undefined,kit);
+    const cache = new SegmentMeshCache(undefined,undefined,kit);
     const debris: THREE.Object3D[] = [];
     const renderer = createSegmentMeshRenderer(cache,0,undefined,object=>debris.push(object));
     const a={},b={};

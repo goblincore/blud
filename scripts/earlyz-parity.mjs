@@ -42,7 +42,7 @@
 // pure per-frame estimate (blend 1, fall 1); ship defaults (applyShipDefaults). The HUD text line
 // is hidden: it prints the frame-time EMA, which differs per boot and is not the renderer's image.
 // THE TRAIN (Night Train only) is stopped, setTrainSpeed(0), as sdf-game-light-gate.mjs does: its
-// own clock (game-train-leaves.ts rt.time, advanced by every sim step from boot, so a wall-clock
+// own clock (game-train.ts rt.time, advanced by every sim step from boot, so a wall-clock
 // length by the time staging runs) drives the camera roll/bob and the lamp and curtain swing. At
 // speed 0 all four are exactly 0 (train-motion.ts). Measured without it: off vs off2 differed on
 // 2.6 % of the pixels, every level edge shifted by the roll, and the flail's chain swung differently.

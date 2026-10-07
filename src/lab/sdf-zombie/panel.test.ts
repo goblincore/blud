@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // src/lab/sdf-zombie/panel.test.ts
 import { describe, it, expect, beforeEach } from 'vitest';
 import {

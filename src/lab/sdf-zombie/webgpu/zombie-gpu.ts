@@ -174,6 +174,15 @@ export interface ZombieGpuView {
    */
   setPackBones(on: boolean): void;
   /**
+   * Flip the packOrgans layout (organs as mesh, 2026-10-06). Default TRUE —
+   * organ rows in the field. FALSE: the mesh skeleton draws this actor's
+   * organs as segment meshes, so with packBones also off the body packs NO
+   * inside-flesh row, counts2.x is 0 and the march never calls applyBones.
+   * A change re-packs the last uploaded body at once (a frozen frame flips
+   * without waiting for a pose update), as setBoneCullMode does.
+   */
+  setPackOrgans(on: boolean): void;
+  /**
    * One bound sphere per flesh cluster's bone rows (packBoneClusters). Default
    * FALSE — the old flat bone loop, bit-identical. TRUE takes effect on the
    * NEXT update(); __sdfGame.setBoneCull flips it live for the bench.
@@ -2485,6 +2494,8 @@ export function createZombieGpuView(
   // Bone tubes: FALSE once the instanced-tube renderer owns the bones — the
   // pack then writes ORGANS only and counts2.x counts organs.
   let packBones = opts.packBones ?? true;
+  // Organs as mesh: FALSE once the segment-mesh renderer owns this actor's organs.
+  let packOrgans = true;
   // Bone-cluster spheres (packBoneClusters): TRUE culls the inside-flesh
   // rows with one per-flesh-cluster sphere before folding them. 'off' (ship)
   // is the old flat loop; pack writes zero bone-cluster texels and the shader
@@ -2591,7 +2602,7 @@ export function createZombieGpuView(
   function upload(next: BuildResult, rest?: BuildResult, advanceMotion = false) {
     lastUploadNext = next;
     lastUploadRest = rest;
-    const p = packBody(next, rest, { packBones, boneCullMode }, uploadScratch);
+    const p = packBody(next, rest, { packBones, packOrgans, boneCullMode }, uploadScratch);
     uploadScratch = p;
     // The texture is sink.stride prims wide (sized from the body at creation,
     // or from the crowd type's first body). A body that outgrew it — a
@@ -2981,6 +2992,11 @@ export function createZombieGpuView(
     woundThreats() { return [...lastThreatMasks]; },
     get woundThreatMargin() { return lastThreatMargin; },
     setPackBones(on) { packBones = on; },
+    setPackOrgans(on) {
+      if (on === packOrgans) return;
+      packOrgans = on;
+      if (lastUploadNext) upload(lastUploadNext, lastUploadRest);
+    },
     setBoneCull(on) {
       // The boolean seam is the cluster mode — kept for the bench's
       // bone-cull-on leg and the parked branch's callers.

@@ -168,7 +168,7 @@ describe.each([['zombie', zombie, MESH_SKULL_2_REVISION], ['soldier', soldier, S
   });
 
   it.each([['the cache\'s cell', MESH_CELL], ['the fine cell', SCULPT_FINE_CELL]])('keeps every extracted vertex at least 3 mm under the intact flesh (%s)', (_name, cell) => {
-    const mesh = extractSegmentMesh(original, cell, 2);
+    const mesh = extractSegmentMesh(original, cell, undefined, 2);
     expect([mesh.overflow, mesh.clamped, mesh.droppedQuads]).toEqual([false, false, 0]);
     expect(mesh.key).toBe(`${skull.revision}@${cell}`);
     const positions = mesh.geometry.getAttribute('position');
@@ -181,7 +181,7 @@ describe.each([['zombie', zombie, MESH_SKULL_2_REVISION], ['soldier', soldier, S
   });
 
   it('the fine cell makes a finer mesh of the same field', () => {
-    const coarse = extractSegmentMesh(original, MESH_CELL, 2), fine = extractSegmentMesh(original, SCULPT_FINE_CELL, 2);
+    const coarse = extractSegmentMesh(original, MESH_CELL, undefined, 2), fine = extractSegmentMesh(original, SCULPT_FINE_CELL, undefined, 2);
     expect(fine.verts).toBeGreaterThan(coarse.verts * 3);
     expect(fine.tris).toBeGreaterThan(coarse.tris * 3);
     // Both are meshes of one surface: the fine one's vertices lie on the field the coarse one was cut from.
@@ -193,10 +193,10 @@ describe.each([['zombie', zombie, MESH_SKULL_2_REVISION], ['soldier', soldier, S
   });
 
   it('a cache with a variant\'s recipe extracts the head by it and everything else as ever', () => {
-    const plain = new SegmentMeshCache(), full = new SegmentMeshCache(MESH_CELL, null, sculptRecipe('full')), shape = new SegmentMeshCache(MESH_CELL, null, sculptRecipe('shape'));
+    const plain = new SegmentMeshCache(), full = new SegmentMeshCache(MESH_CELL, undefined, null, sculptRecipe('full')), shape = new SegmentMeshCache(MESH_CELL, undefined, null, sculptRecipe('shape'));
     expect(full.keyOf(original)).toBe(`${skull.revision}@${SCULPT_FINE_CELL}`);
     expect(shape.keyOf(original)).toBe(`${skull.revision}@${MESH_CELL}`);
-    expect(new SegmentMeshCache(MESH_CELL, null, sculptRecipe('paint')).keyOf(original)).toBe(plain.keyOf(original));
+    expect(new SegmentMeshCache(MESH_CELL, undefined, null, sculptRecipe('paint')).keyOf(original)).toBe(plain.keyOf(original));
     expect(full.get(original).key).toBe(full.keyOf(original));
     expect(full.get(original)).toBe(full.get(original));
     const limb = sources.find(s => s.segment !== 'head')!;
@@ -231,7 +231,7 @@ describe('what each character\'s second sculpt may add', () => {
   it('a head it does not carve is returned as it came', () => {
     const head = sourcesOf('cultist', cultist).sources.find(s => s.segment === 'head')!;
     expect(meshBoneSource(head, 2)).toBe(head);
-    const cache = new SegmentMeshCache(MESH_CELL, null, sculptRecipe('full'));
+    const cache = new SegmentMeshCache(MESH_CELL, undefined, null, sculptRecipe('full'));
     // And it is extracted at the cache's own cell: the fine cell is for a head the sculpt carves.
     expect(cache.keyOf(head)).toBe(`${head.revision}@${MESH_CELL}`);
     cache.dispose();

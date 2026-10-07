@@ -1,4 +1,7 @@
 // src/lab/sdf-zombie/clusters.ts
+//
+// Sorts primitives into the fixed cluster fold order and computes a bounding sphere per cluster.
+
 import { CLUSTER_ORDER, type ClusterInfo, type LimbId, type Primitive, type Vec3 } from './types';
 import { add, bendCtrl, len, scale as vscale, sub } from './vec';
 import { boxReach, shellReach, strandReach } from './extent';

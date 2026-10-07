@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/skeleton-spike/mesh-skull-2.ts
+//
+// The second sculpt of the head's bone: the authored bone carved toward a human skull (brow, angular orbits, pear nose, cheek hollows, parted jaws).
+
 import type { BoneFieldSource, Point3 } from './contract';
 
 // THE SECOND SCULPT of the head's bone: the same authored bone as the first (mesh-skull.ts), carved toward a human

@@ -48,7 +48,7 @@ describe('the default sculpted skull is unchanged', () => {
     expect([direct.key, direct.verts, direct.tris]).toEqual([pin.key, pin.verts, pin.tris]);
     expect(bytes(direct)).toBe(pin.bytes);
     // The cache with no recipe, with the default recipe, and with the recipe of no variant: all the same mesh.
-    for (const cache of [new SegmentMeshCache(), new SegmentMeshCache(MESH_CELL, null, SCULPT_DEFAULT), new SegmentMeshCache(MESH_CELL, null, sculptRecipe(null))]) {
+    for (const cache of [new SegmentMeshCache(), new SegmentMeshCache(MESH_CELL, undefined, null, SCULPT_DEFAULT), new SegmentMeshCache(MESH_CELL, undefined, null, sculptRecipe(null))]) {
       const head = headOf(character, blob);
       expect(cache.keyOf(head)).toBe(pin.key);
       expect(bytes(cache.get(head))).toBe(pin.bytes);

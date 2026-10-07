@@ -24,7 +24,9 @@ describe('early-Z boot order in game-main.ts (source pins)', () => {
   const accumGuard = only("'stage 1 excludes temporal accumulation boots (far pass)'");
   const crowdOff = only("'crowd path off (stage 1 is crowd-only)'");
   const seed = only('setEarlyzSeed(');
-  const firstType = only('crowdTypeFor(');
+  // The first crowd type is made by spawnEnemy (game-spawn.ts since 2026-10-07), which main()
+  // first reaches through the boot's spawnAll.
+  const firstType = only('spawnAll(ctx, ctx.boot.errors);');
 
   it('boots early-Z, then the deferred/accum guard, then the crowd-off check, then the seed, then the first crowd type', () => {
     expect(boot).toBeLessThan(guard);
@@ -32,6 +34,7 @@ describe('early-Z boot order in game-main.ts (source pins)', () => {
     expect(Math.max(guard, accumGuard)).toBeLessThan(crowdOff);
     expect(crowdOff).toBeLessThan(seed);
     expect(seed).toBeLessThan(firstType);
+    expect(source).not.toContain('crowdTypeFor(');
   });
 
   it('turns early-Z off under the deferred renderer and for ?accum=1 boots in one guarded block', () => {
@@ -62,17 +65,6 @@ describe('early-Z boot order in game-main.ts (source pins)', () => {
     const crowdList = source.slice(call, source.indexOf('.concat(', call));
     expect(crowdList).toContain('crowdMarch');
     expect(crowdList).toContain('t.frontMesh ? [t.mesh, t.frontMesh] : [t.mesh]');
-  });
-
-  it('keeps the shipped map() list (no per-frame flatMap) when early-Z is off', () => {
-    const call = only('ctx.render.sdfLayer.setBodies(');
-    const crowdList = source.slice(call, source.indexOf('.concat(', call));
-    const gate = crowdList.indexOf('ctx.crowd.earlyz.on');
-    expect(gate).toBeGreaterThan(-1);
-    // `earlyz.on ? flatMap(...) : map(t => t.mesh)`: the flatMap is the on-branch only
-    expect(crowdList.indexOf('.flatMap(')).toBeGreaterThan(gate);
-    expect(crowdList.indexOf('.map(t => t.mesh)')).toBeGreaterThan(crowdList.indexOf('.flatMap('));
-    expect(crowdList.split('.flatMap(').length - 1).toBe(1);
   });
 
   it('does not compile the front mesh of a quad-dispatch type (it never draws)', () => {

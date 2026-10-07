@@ -73,7 +73,7 @@ export class AnatomicalSkullKit {
     const geometry = mergeGeometries(pieces.map(p=>p.geometry),false)!;
     geometry.userData.anatomicalSkull = true;
     geometry.computeBoundingSphere();
-    head = { pieces, mesh: { key:`${source.revision}:anatomical-skull-1`, geometry,
+    head = { pieces, mesh: { key:`${source.revision}:anatomical-skull-1`, geometry, mesher:'asset',
       verts:geometry.getAttribute('position').count, tris:geometry.getIndex()!.count/3,
       bakeMs:0, overflow:false, clamped:false, droppedQuads:0 } };
     this.#fitted.set(source.revision,head);
@@ -116,7 +116,7 @@ export async function loadAnatomicalSkull(url = ANATOMICAL_SKULL_URL): Promise<A
 export async function createSkullMeshCache(search: string): Promise<SegmentMeshCache> {
   const selected = new URLSearchParams(search).get('skull');
   if (selected === 'sculpt' || selected === 'procedural') return new SegmentMeshCache();
-  try { return new SegmentMeshCache(undefined,await loadAnatomicalSkull()); }
+  try { return new SegmentMeshCache(undefined,undefined,await loadAnatomicalSkull()); }
   catch (error) {
     console.warn('[skull] anatomical asset failed; sculpted skull retained',error);
     return new SegmentMeshCache();

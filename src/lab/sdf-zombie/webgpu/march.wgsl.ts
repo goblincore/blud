@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/march.wgsl.ts
+//
+// The WGSL raymarch shader barrel: re-exports the layout, field, body and helper pieces under march/ that make up the SDF march.
+
 export * from './march/layout';
 export * from './march/math.wgsl';
 export * from './march/primitives.wgsl';

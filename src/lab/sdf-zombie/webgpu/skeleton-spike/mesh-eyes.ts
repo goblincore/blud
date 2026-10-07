@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/skeleton-spike/mesh-eyes.ts
+//
+// Eye placement, shading and impact picking for the skull segment mesh, with matching WGSL for the vessel, surface and emission terms.
+
 import type { Vec3 } from '../../types';
 import type { BoneFieldSource } from './contract';
 import { boneNoise3 } from './mesh-appearance';

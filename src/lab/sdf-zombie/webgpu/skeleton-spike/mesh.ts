@@ -6,9 +6,11 @@
 // contract bounds — NOT tubes, NOT capsules: the same extraction
 // (surface-nets-cpu, band 0 = the true surface + Newton pull) the settled
 // chunk bake uses (chunk-bake-geometry.ts), so the mesh IS the authored
-// field's surface up to extraction-cell error. Organs never reach this
-// module (excluded by the contract); smooth-union cases do not exist on
-// the bone path (hard min only), so no procedural fallback is needed for
+// field's surface up to extraction-cell error. Organ sources (contract kind
+// 'organ', opt-in) are the one exception: by default they ARE tubes, swept from
+// their authored prims (mesh-organ-tubes.ts, ORGAN_MESHES below), and extract
+// by surface nets only on request or when a prim cannot be swept; smooth-union cases
+// do not exist on the inside-flesh path (hard min only), so no procedural fallback is needed for
 // field composition — the fallbacks that remain are whole-actor (chunks
 // stay procedural; deferred mode unsupported) and are counted by the
 // renderer, not hidden.
@@ -27,8 +29,9 @@
 // recesses and mandible planes before extraction; other anatomy is unchanged.
 import * as THREE from 'three';
 import { meshBoneSource } from './mesh-skull';
-import { extractHullSoup, fitHullGrid } from '../surface-nets-cpu';
+import { extractHullSoup, fitHullGrid, gradientOf } from '../surface-nets-cpu';
 import type { BoneFieldSource } from './contract';
+import { sweepOrganTubes, type OrganTubeSpec } from './mesh-organ-tubes';
 import type { Vec3 } from '../../types';
 import type { AnatomicalSkullKit } from './anatomical-skull';
 import { SCULPT_DEFAULT, type SculptRecipe, type SculptShape } from './sculpt-variant';
@@ -38,13 +41,49 @@ import { SCULPT_DEFAULT, type SculptRecipe, type SculptShape } from './sculpt-va
  *  cache pays once per revision. The limb two-anchor approximation (worst
  *  measured 1.26 mm, task-1.md) is 8x below this cell — invisible here. */
 export const MESH_CELL = 0.01;
+/** HOW AN ORGAN SOURCE (contract kind 'organ') BECOMES A MESH (organs, low-poly, 2026-10-07).
+ *   tubes  each prim swept as its own closed tube (mesh-organ-tubes.ts): analytic normals, and the `organTube`
+ *          attribute the organ shader's bump reads;
+ *   nets   the surface-nets extraction every bone gets, at `cell`. `normals: 'gradient'` takes each vertex normal from
+ *          the organ field's own gradient, so a coarse cell still shades round; 'faces' is computeVertexNormals. */
+export type OrganMeshSpec =
+  | ({ kind: 'tubes' } & OrganTubeSpec)
+  | { kind: 'nets'; cell: number; normals: 'faces' | 'gradient' };
+
+/** The organ meshes by name. `tubes` ships. The others are the references a sheet compares it with
+ *  (__sdfGame.setOrganMesh): `nets-5mm` is the mesh of 2026-10-06, vertex for vertex.
+ *  Measured on the zombie's two organ segments (mesh.test.ts pins them):
+ *    nets-5mm   4,038 vertices, 8,084 triangles
+ *    nets-10mm    999 vertices, 1,996 triangles
+ *    tubes        528 vertices, 1,024 triangles */
+export const ORGAN_MESHES = {
+  tubes: { kind: 'tubes', around: 8, turnStep: Math.PI / 10, alongMax: 12, capLats: 2 },
+  'tubes-12': { kind: 'tubes', around: 12, turnStep: Math.PI / 15, alongMax: 16, capLats: 3 },
+  'nets-10mm': { kind: 'nets', cell: 0.01, normals: 'gradient' },
+  'nets-5mm': { kind: 'nets', cell: 0.005, normals: 'faces' },
+} as const satisfies Record<string, OrganMeshSpec>;
+export type OrganMeshName = keyof typeof ORGAN_MESHES;
+export const ORGAN_MESH_DEFAULT: OrganMeshName = 'tubes';
+/** What a 'tubes' request falls back to for a segment with a prim that cannot be swept (a box, a strand, a shell). */
+export const ORGAN_NETS_FALLBACK = ORGAN_MESHES['nets-10mm'];
+
+/** The cache-key part of an organ mesh spec: every number that reaches the geometry. */
+export function organMeshKey(spec: OrganMeshSpec): string {
+  return spec.kind === 'tubes'
+    ? `tubes:${spec.around}:${spec.turnStep.toFixed(5)}:${spec.alongMax}:${spec.capLats}`
+    : `nets:${spec.cell}:${spec.normals}`;
+}
 
 export interface SegmentMesh {
-  /** Cache key: `${revision}@${cellSize}`. */
+  /** Cache key: `${revision}@${cellSize}`, or `${revision}@${organMeshKey}` for an organ source. */
   key: string;
   /** Segment-local indexed geometry, welded by exact position, smooth
-   *  normals from computeVertexNormals. */
+   *  normals from computeVertexNormals (an organ's: see OrganMeshSpec). */
   geometry: THREE.BufferGeometry;
+  /** How the geometry was made: 'nets' (surface nets), 'tubes' (an organ source swept from its prims; then the
+   *  geometry carries the `organTube` attribute), or 'asset' (an authored mesh fitted to the source: the anatomical
+   *  skull). */
+  mesher: 'nets' | 'tubes' | 'asset';
   verts: number;
   tris: number;
   /** CPU extraction cost, ms — reported, never asserted. */
@@ -60,11 +99,30 @@ export interface SegmentMesh {
  * Extract one segment's bone surface, segment-local. Grid: the contract
  * bounds re-centred (fitHullGrid rounds to whole blocks around `centre`),
  * band 0 (the TRUE surface — the Newton pull in extractHullSoup lands
- * vertices ON the field), distort 1 as in the chunk bake. `shape`: which sculpt carves a head (mesh-skull.ts).
+ * vertices ON the field), distort 1 as in the chunk bake.
+ * `organ` (an organ source only): how to mesh it. Omitted = surface nets at `cellSize`, as a bone.
+ * `shape`: which sculpt carves a head (mesh-skull.ts).
  */
-export function extractSegmentMesh(source: BoneFieldSource, cellSize = MESH_CELL, shape: SculptShape = 1): SegmentMesh {
+export function extractSegmentMesh(source: BoneFieldSource, cellSize = MESH_CELL, organ?: OrganMeshSpec, shape: SculptShape = 1): SegmentMesh {
   source = meshBoneSource(source, shape);
   const t0 = performance.now();
+  const spec = source.kind === 'organ' ? organ : undefined;
+  const key = `${source.revision}@${spec ? organMeshKey(spec) : cellSize}`;
+  if (spec?.kind === 'tubes') {
+    const swept = source.prims ? sweepOrganTubes(source.prims, spec) : null;
+    // A prim that cannot be swept: the whole segment extracts instead, under the key that asked for tubes.
+    if (!swept) return { ...extractSegmentMesh(source, cellSize, ORGAN_NETS_FALLBACK), key };
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(swept.positions, 3));
+    geometry.setAttribute('normal', new THREE.BufferAttribute(swept.normals, 3));
+    geometry.setAttribute('organTube', new THREE.BufferAttribute(swept.tube, 4));
+    geometry.setIndex(swept.index);
+    return {
+      key, geometry, mesher: 'tubes', verts: swept.positions.length / 3, tris: swept.index.length / 3,
+      bakeMs: performance.now() - t0, overflow: false, droppedQuads: 0, clamped: false,
+    };
+  }
+  if (spec) cellSize = spec.cell;
   const { min, max } = source.bounds;
   const centre: Vec3 = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
   const half: Vec3 = [(max[0] - min[0]) / 2, (max[1] - min[1]) / 2, (max[2] - min[2]) / 2];
@@ -93,10 +151,19 @@ export function extractSegmentMesh(source: BoneFieldSource, cellSize = MESH_CELL
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setIndex(index);
-  geometry.computeVertexNormals();
+  if (spec?.kind === 'nets' && spec.normals === 'gradient') {
+    // The field's own gradient, differenced over a quarter cell: round on a tube however coarse the cell, and soft
+    // across the crease where two prims meet (a vertex there sees both).
+    const normals = new Float32Array(positions.length);
+    for (let i = 0; i < positions.length; i += 3) {
+      normals.set(gradientOf(p => source.distance(p), [positions[i]!, positions[i + 1]!, positions[i + 2]!], cellSize * 0.25), i);
+    }
+    geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+  } else geometry.computeVertexNormals();
   return {
-    key: `${source.revision}@${cellSize}`,
+    key,
     geometry,
+    mesher: 'nets',
     verts: positions.length / 3,
     tris: index.length / 3,
     bakeMs: performance.now() - t0,
@@ -135,12 +202,17 @@ export class SegmentMeshCache {
   #lastExtractAt: number | null = null;
   #maxExtractMs = 0;
   #maxExtractKey: string | null = null;
+  /** How organ sources are meshed. Assignable: the next get() of an organ source keys (and builds) by the new spec,
+   *  and the meshes of the old one stay cached until dispose(). */
+  organMesh: OrganMeshSpec;
   /** `sculpt`: the sculpted skull's recipe (sculpt-variant.ts): which sculpt carves a sculpted head, and the cell it
    *  is extracted at. Omitted: the first sculpt at the cache's own cell. */
   constructor(
-    readonly cellSize: number = MESH_CELL, readonly skullKit: AnatomicalSkullKit | null = null,
-    readonly sculpt: Readonly<SculptRecipe> = SCULPT_DEFAULT,
-  ) {}
+    readonly cellSize: number = MESH_CELL, organMesh: OrganMeshSpec = ORGAN_MESHES[ORGAN_MESH_DEFAULT],
+    readonly skullKit: AnatomicalSkullKit | null = null, readonly sculpt: Readonly<SculptRecipe> = SCULPT_DEFAULT,
+  ) {
+    this.organMesh = organMesh;
+  }
 
   /** The cell `source` is extracted at: the recipe's head cell for a head the sculpt carves, the cache's for
    *  everything else. `carved` is the source after meshBoneSource. */
@@ -152,7 +224,7 @@ export class SegmentMeshCache {
     const skull = this.skullKit?.head(source);
     if (skull) return skull.mesh.key;
     const carved = meshBoneSource(source, this.sculpt.shape);
-    return `${carved.revision}@${this.#cellOf(source, carved)}`;
+    return `${carved.revision}@${source.kind === 'organ' ? organMeshKey(this.organMesh) : this.#cellOf(source, carved)}`;
   }
 
   get(source: BoneFieldSource): SegmentMesh {
@@ -161,7 +233,7 @@ export class SegmentMeshCache {
     const key = this.keyOf(source);
     let m = this.#map.get(key);
     if (!m) {
-      m = extractSegmentMesh(source, this.#cellOf(source, meshBoneSource(source, this.sculpt.shape)), this.sculpt.shape);
+      m = extractSegmentMesh(source, this.#cellOf(source, meshBoneSource(source, this.sculpt.shape)), this.organMesh, this.sculpt.shape);
       const at = performance.now();
       this.#extractCount++;
       this.#extractMs += m.bakeMs;

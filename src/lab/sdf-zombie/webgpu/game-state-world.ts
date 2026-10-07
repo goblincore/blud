@@ -20,12 +20,12 @@
 // type-correct placeholder in the factory; the codemod supplies the real value
 // at the binding's original line. Every call still hands out fresh containers.
 
-import type { DynamicLightRuntime } from './game-dynamic-light-leaves';
-import type { LoopRuntime } from './game-loop-leaves';
-import type { TrainRuntime } from './game-train-leaves';
-import type { DiscoRuntime } from './game-disco-leaves';
-import type { EggRuntime } from './game-egg-leaves';
-import type { SequenceRuntime } from './game-sequence-leaves';
+import type { DynamicLightRuntime } from './game-dynamic-light';
+import type { LoopRuntime } from './game-loop';
+import type { TrainRuntime } from './game-train';
+import type { DiscoRuntime } from './game-disco';
+import type { EggRuntime } from './game-egg';
+import type { SequenceRuntime } from './game-sequence';
 import type * as THREE from 'three/webgpu';
 import type { Vec3 } from '../types';
 import type { ActiveLevel } from './active-level';

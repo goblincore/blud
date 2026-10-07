@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/impact-splash-sprites.ts
+//
+// Instanced billboard sprites for impact splashes: a procedural splash atlas and normal atlas, and the lit node material that draws them.
+
 import * as THREE from 'three/webgpu';
 import { attribute, mix, texture, uv, vec2, vec4, vec3, normalMap, normalize, cameraViewMatrix, positionView, dot, max, pow, float } from 'three/tsl';
 import type { ImpactSplashEvent, ImpactSplashLightRig } from './impact-splash';

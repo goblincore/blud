@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/skeleton-spike/sculpt-cache.ts
+//
+// The game's bone-mesh cache for a page's query string: a `?sculpt=` variant of the sculpted skull, else the skull `?skull=` chooses.
+
 import { createSkullMeshCache } from './anatomical-skull';
 import { SegmentMeshCache } from './mesh';
 import { resolveSculptVariant, sculptRecipe } from './sculpt-variant';
@@ -7,5 +11,5 @@ import { resolveSculptVariant, sculptRecipe } from './sculpt-variant';
  *  anatomical skull, or with `?skull=sculpt` the sculpted one as it always was. */
 export async function createBoneMeshCache(search: string): Promise<SegmentMeshCache> {
   const variant = resolveSculptVariant(search);
-  return variant ? new SegmentMeshCache(undefined, null, sculptRecipe(variant)) : createSkullMeshCache(search);
+  return variant ? new SegmentMeshCache(undefined, undefined, null, sculptRecipe(variant)) : createSkullMeshCache(search);
 }

@@ -90,7 +90,7 @@
 // room1 differed every boot, always within-boot deterministic. MARCH_HASH_DUMP
 // named the inputs — the body key and fill uniforms (spotCfg2.zw, lightCfg.y,
 // probeCfg.y) — and the clock behind them: the dynamic-light runtime
-// (game-dynamic-light-leaves.ts, bb1355b4 and follow-ups) keeps its OWN light
+// (game-dynamic-light.ts, bb1355b4 and follow-ups) keeps its OWN light
 // clock, `rt.time`, advanced by every sim step. Lamp moods (lampLevel), the
 // room light that applyRoomFill scales the fill by, the lamp presentingLamp
 // keys a body with (applyWindowKey), the tube swing and the storm schedule all

@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // src/lab/sdf-zombie/webgpu/game-rod.test.ts
 //
 // The rod harness against a stub ctx and stub actors on a torso-capsule fixture: no renderer, no WebGPU.

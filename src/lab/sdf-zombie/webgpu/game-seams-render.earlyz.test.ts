@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // Early-Z stage 1 (Task 8 review, Important 1): the depth prepass, miss cull and depth gate
 // debug seams refuse to turn ON under ?earlyz=1, because each sees only a type's back batch.
 import { describe, it, expect, vi, afterEach } from 'vitest';

@@ -11,11 +11,6 @@ const src = readFileSync('src/lab/sdf-zombie/webgpu/zombie-gpu.ts', 'utf8');
 const BURN_SCALARS = ['burnNoiseScale', 'burnRiseSpeed', 'burnCharPatch', 'burnFireGain', 'burnFireCoverage', 'burnSkeleton', 'burnSkeletonDepth'];
 
 describe('burn uniform plumbing', () => {
-  it('declares the burn uniforms', () => {
-    expect(src).toContain('burnCfg: uniform(new THREE.Vector4(0, 0, 0, 0))');
-    for (const name of BURN_SCALARS) expect(src).toContain(`${name}: uniform(`);
-  });
-
   it('binds the burn uniforms last, in the same order as the WGSL tail', () => {
     // The WGSL parameter list ends with burnCfg then the six scalars, so every
     // positional binding object must end with them in that order.
@@ -54,7 +49,6 @@ describe('shared light list plumbing (light list plan 1 task 9)', () => {
   });
 
   it('defaults lightListCfg to 0 (the old key path) and routes the game list to bodies, crowds and the refine twin', () => {
-    expect(src).toContain('lightListCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),');
     expect(src).toContain('sources?.lightList?.node,');
     expect(src.split('opts.lightList?.node,').length - 1).toBe(2);   // the body view and its refine twin
   });

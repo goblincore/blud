@@ -1,4 +1,7 @@
 // src/lab/sdf-zombie/body.ts
+//
+// The frozen hand-authored reference zombie BodyDef, with makeZombie to rebuild it for a given face.
+
 import type { BodyDef } from './types';
 import { DEFAULT_FACE, facePrims, type FaceParams } from './face';
 

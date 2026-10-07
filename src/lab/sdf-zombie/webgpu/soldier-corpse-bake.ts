@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/soldier-corpse-bake.ts
+//
+// Soldier corpse baking: splits a dead soldier into head and body, and bakes the body into a static mesh while the head stays SDF.
+
 import * as THREE from 'three/webgpu';
 import type { ZombieActor } from './game-actor';
 import type { BuildResult } from '../build-body';
