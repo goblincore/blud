@@ -256,8 +256,9 @@ If a lurch reads as a hard stop, the wobble's dials are `max` and `gainSide`.
 
 All of it is accepted for now and none of it has been investigated. Numbers and conditions are in spec §10.9.
 
-- **An open head costs about +4.7 to +5.2 ms of frame time at 0.6 m** (`middle` both sides; +3.6 ms with one side)
-  against the same head closed, after the cost pass of 2026-10-06 ([its notes](../2026-10-06-open-head-cost/NOTES.md):
+- **An open head costs about +4.4 to +4.7 ms of frame time at 0.6 m** (`middle` both sides; +3.2 to +3.6 ms with one
+  side; the lower figures with the cut-cost pass merged under it, 2026-10-07) against the same head closed, after
+  the cost pass of 2026-10-06 ([its notes](../2026-10-06-open-head-cost/NOTES.md):
   the attribution, what was cut, what was measured and not built, what is left). Before it: +6 to +8 ms at 0.6 m
   (+6.15 to +6.6 and +5.6 ms in the pass's own sessions) and about +0.6 to +1.6 ms at 2 m. Headless, a 400 × 300 march target. At 2 m the pass is not resolved by
   timing; the walk's primitive evaluations fall 27%. Closed bodies read +0.1 to +0.3 ms at 0.6 m since B6,
@@ -315,8 +316,8 @@ report there cost 0.5 ms on every closed body.
 2. **`gRefoldBy` is indexed by piece, not slot.** In a crowd pixel another slot's re-fold win can leak into an open
    slot's normal hint. It never touches the field. The fix moves what closed crowd pixels compute, so it is its own
    task with its own `march-hash` re-pin.
-3. **Optimise the open head, second pass** ([the first pass's notes](../2026-10-06-open-head-cost/NOTES.md), §5: what is left, by size). Re-measure
-   first on top of the cut-wound cost pass's early exit for a cut row.
+3. **Optimise the open head, second pass** ([the first pass's notes](../2026-10-06-open-head-cost/NOTES.md), §5: what is left, by size; §8: the
+   re-measure on top of the cut-wound cost pass, which bought 0.3 to 0.5 ms).
 4. **Something in the gap.** After the kill the skull is hollow and the room shows through the V. A whole brain mesh
    riding piece 0, drawn from `view.splitDrawn` like the skull, is the cheapest structural answer.
 5. **A baked split head** has no answer yet: a detached or baked head takes the mesh face layer with no split.

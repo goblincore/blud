@@ -3,7 +3,8 @@
 The owner, on the head split's cost (2026-10-05): "we can figure out how to optimize later". This is that pass.
 
 - **Branch:** `claude/open-head-cost`, off `claude/head-cleaving-effect-ef9515` at `37943f97` (PR goblincore/blud#31 was
-  still open).
+  still open). Since 2026-10-07 it also holds `claude/cut-cost`, merged at `3d5667bd`: §8 is the open head
+  re-measured on top of it.
 - **The feature:** [the head split's handoff](../2026-10-04-head-split/HANDOFF.md), spec
   [§10](../../superpowers/specs/2026-10-04-axe-and-head-split-design.md).
 - **Short version.** An open head costs what it does because it evaluates 2 to 2.5 times the closed head's
@@ -521,8 +522,9 @@ With both changes in, `middle` both sides at 0.6 m walks 2.359M prims against th
 3.693M), takes 310.9k steps against 262.1k (399.8k) and walks 0.862M wound rows against 0.534M (1.159M). What the
 remaining excess is made of, largest first:
 
-1. **The cut rows** (another session's; committed the same day on `claude/cut-cost`, off the same base, not merged
-   here: `11325bf1` the exact idle exits in a cut row, `503b4646` a soft near zone for cuts). An open head still walks 0.33M more wound rows than a closed
+1. **The cut rows** (another session's; committed the same day on `claude/cut-cost`: `11325bf1` the exact idle exits
+   in a cut row, `503b4646` a soft near zone for cuts). **Merged and re-measured on 2026-10-07: §8.** It bought the
+   open head about 0.3 to 0.5 ms, not the 2 to 3 ms the no-wound legs bounded. An open head still walks 0.33M more wound rows than a closed
    one and 0.05M more after the hit, and every one of its extra prims' samples pays them. The exact per-row exit of
    §4.1 makes a far sample's cut row free on every body. Re-run this note's driver on top of it when it lands: the
    no-wound legs put 2 to 3 ms of the open head's cost there before this pass.
@@ -613,3 +615,89 @@ bash -c 'export LAB_TMP=.lab-tmp LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts
 ```
 
 The driver's header lists every option. Never edit `src/` while it runs: the dev server reloads its page.
+
+## 8. On top of the cut-cost merge (2026-10-07)
+
+`claude/cut-cost` (the exact idle exits in a cut's row and mask, and a soft near zone for cuts: the inside-flesh
+fold runs in a cut's column only under a carve that raised the field) was merged into this branch at `3d5667bd`. Two
+conflicts, neither in logic: both branches had added one import to `map-body.wgsl.ts`, and both had rewritten the
+spec's follow-up list. `march-golden` matched the merged text as merged.
+
+**How it was measured.** Two clean snapshots (`git archive`), each on its own dev server, one Chrome: A is this
+branch before the merge (`fc881ee4`), B the merge. The driver ran on A, then B, then A, and so on, on the shipped
+shader (no `?splitablate`): closed and open interleaved, six rounds a pass, `timeDraws(60)`, 0.6 m.
+
+### 8.1 The census: one counter moves
+
+Every counter of §2 is the same to the unit in A and B, in all six views (both scenarios and `face`, 0.6 m and 2 m)
+and all three legs: marched and hit texels, steps, the walk's prims and wound rows, the post-hit chain's. The merge
+does not change what the field is or where a ray goes, which is what its own notes claim.
+
+What moves is the one counter this note had not been reading (mode 5: the walk's inside-flesh evaluations, the
+organ and bone prims `applyBones` folds near a wound):
+
+| Inside-flesh prim evaluations, walk | Closed, before → after the merge | Open, before → after |
+| --- | --- | --- |
+| `middle` both, 0.6 m | 268.9k → 68.1k (−75%) | 694.7k → 355.1k (−49%) |
+| `middle` one, 0.6 m | 252.7k → 38.9k (−85%) | 569.0k → 211.5k (−63%) |
+| `face`, 0.6 m | 218.7k → 16.7k (−92%) | 582.3k → 135.3k (−77%) |
+| `middle` both, 2 m | 15.9k → 2.5k | 46.3k → 20.4k (−56%) |
+| `middle` one, 2 m | 15.9k → 1.4k | 41.5k → 14.0k (−66%) |
+| `face`, 2 m | 15.5k → 0.9k | 30.5k → 5.1k (−83%) |
+
+An open head was folding 2.3 to 2.7 times the closed head's organs at 0.6 m, a cost §2 did not see. After the merge
+it still folds 135k to 355k of them, where a cut face's pit raises the field; the organs-as-mesh task takes those
+out of the march altogether. (The merge's other saving, the cut rows' noise reads, has no counter in this build; the
+cut-cost notes measured it with their own.)
+
+### 8.2 The timings: about 0.3 ms with both sides open, about 0.5 ms with one
+
+Open minus closed at 0.6 m, medians of six rounds, every pass taken on a quiet GPU (below):
+
+| | A, before the merge | B, merged | Mean, A → B |
+| --- | --- | --- | --- |
+| `middle` both | +4.65, +4.50, +4.80 | +4.30, +3.90, +4.90, +4.45 | +4.65 → **+4.39 ms** |
+| `middle` one | +3.90, +3.40 | +3.15, +3.05, +3.35 | +3.65 → **+3.18 ms** |
+
+| Levels, medians (ms) | Closed, A | Closed, B | Open, A | Open, B |
+| --- | --- | --- | --- | --- |
+| `middle` both | 18.30, 18.55, 18.15 | 18.20, 18.20, 18.15, 18.20 | 22.95, 23.05, 22.95 | 22.50, 22.10, 23.05, 22.65 |
+| `middle` one | 20.70, 20.60 | 21.00, 20.85, 20.80 | 24.60, 24.00 | 24.15, 23.90, 24.15 |
+
+- **Both sides open: −0.3 ms, not resolved.** B's passes scatter from +3.90 to +4.90 around A's +4.50 to +4.80.
+- **One side: −0.5 ms.** A's two passes (+3.40, +3.90) sit above B's three (+3.05 to +3.35), by less than A's own
+  two differ.
+- **The closed head does not move** (18.15 to 18.55 against 18.15 to 18.20 ms; 20.6 to 20.7 against 20.8 to 21.0):
+  75 to 92% fewer organ evaluations on a closed head with two face cuts is under 0.2 ms here.
+- **A reproduces §3.3**: +4.65 ms on the shipped shader there, +4.50 to +4.80 here, a day and a restart apart.
+
+So the cut-cost pass's own caution holds on the head too: the exits remove most of the work they target, and that
+work was a small part of the time. §5's item 1 is spent. What an open head costs now, `middle` at its full angle,
+0.6 m: **about +4.4 ms with both sides open and +3.2 ms with one**, from +6.15 and +5.6 ms before this pass.
+
+**Which passes count.** Eight passes a tree were taken. The owner was playtesting on the same GPU for part of the
+session, and in those passes the same trees read 40% slower with rounds scattered by 5 to 20 ms (closed 26 ms, open
+32 ms, a delta of +6.1 ms for the tree that reads +4.65 ms alone): the load average does not show it (3.4 to 6
+throughout), the rounds do. A pass is used when its closed-head rounds lie within 1.5 ms of each other, one stray
+round allowed; that leaves the three and four passes above for `middle` both and two and three for one side. **A
+delta is only comparable with another taken in the same state of the GPU**, and the driver now cannot tell that
+state apart from a slower build except by the spread.
+
+### 8.3 The check set on the merged tree
+
+On `3d5667bd`, 2026-10-07. Each side had passed its own; this is the two together.
+
+| Check | Result |
+| --- | --- |
+| `march-golden` | matches the merged text as merged (both sides' hunks, no re-pin needed) |
+| `march-hash` | **no pin moved**, all three modes: default `d7392d52…` / wounded `76bd51aa…`, crowd quad `0c71e712…` / `bf6836cd…`, per-body `470ff0b3…` / `f618070e…` |
+| `scripts/head-split-gate.mjs` | **80 checks, 0 failed** |
+| `scripts/axe-gate.mjs` (`OUT=` scratch) | **27 checks, 0 failed** |
+| `scripts/cut-wound-gate.mjs` (`OUT=` scratch) | **30 checks, 0 failed** |
+| `compile-census` | phase ready, `uncapturedCount` 0, no device loss; the march module 334 041 B. A warm boot (3.4 s: the gates had just compiled the same text), so it says nothing about cold compile time; no cold boot pair was taken for the merge |
+| The test tree (`npx vitest run src/lab/sdf-zombie scripts/lib --exclude '**/cut-wound.test.ts'`) | 527 files, 7599 tests passed, 1 skipped |
+| `npx tsc --noEmit` | only the `node:crypto` error |
+
+**Not run:** `cut-wound.test.ts` (the cut-cost branch ran it for its own change; the merge adds nothing to the cut
+field), and a cold boot pair for the merged text.
+

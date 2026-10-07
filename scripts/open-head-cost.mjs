@@ -23,7 +23,8 @@
 //   CENSUS=0  skip the census. By default every leg is also COUNTED once per scenario and distance: the march's raw
 //           counters (debug modes 13 and 14, read off the float march target) summed over the frame: texels
 //           marched, hit, steps, prim evaluations, wound rows; mode 14 adds the post-hit chain's (the normal's
-//           taps, the probes). Counters do not depend on the machine's load.
+//           taps, the probes); mode 5 the walk's inside-flesh (bone and organ) prim evaluations. Counters do not
+//           depend on the machine's load.
 //   BASE_BOUNDS  SPLIT_BOUND bits OR-ed into every leg's bounds switches (48 = the tree before 2026-10-06's two
 //           bounds changes, for an attribution of the cost as it stood).
 //   PARITY  comma list of leg pairs a:b (e.g. open:tileCullOld). Each pair's frames are read off the float march
@@ -179,6 +180,15 @@ const census = () => evaluate(`(async () => {
     return { marched, hits, steps, prims, rows, hitPrims, hitRows };
   };
   const walk = await sum(13), all = await sum(14);
+  // Mode 5: r = inside-flesh (bone and organ) prim evaluations of the walk, returned before the miss discard; b = 1 on
+  // every marched texel.
+  __sdfGame.setMarchDebugMode(5);
+  await __sdfGameDebug.readMarchTarget();
+  const r5 = await __sdfGameDebug.readMarchTarget();
+  const f5 = new Float32Array(Uint8Array.from(atob(r5.rgba32f), (c) => c.charCodeAt(0)).buffer);
+  let inside = 0;
+  for (let i = 0; i < f5.length; i += 4) if (f5[i + 2] >= 0.5) inside += f5[i];
+  walk.inside = inside;
   __sdfGame.setMarchDebugMode(0);
   await __sdfGameDebug.readMarchTarget();
   return { walk, post: { hits: all.hits, prims: all.prims - walk.hitPrims, rows: all.rows - walk.hitRows } };
@@ -335,11 +345,11 @@ console.log(`\n=== the census (load-independent): the frame's march counters per
 for (const [sn, res] of Object.entries(out.scen)) for (const [d, { counts }] of Object.entries(res)) {
   if (!counts || !Object.keys(counts).length) continue;
   console.log(`\n${sn} @ ${d} m`);
-  console.log("  leg           marched    hits    steps  steps/px   walk prims  walk rows   +post prims  +post rows");
+  console.log("  leg           marched    hits    steps  steps/px   walk prims  walk rows   +post prims  +post rows  walk inside-flesh prims");
   for (const k of legs) {
     const c = counts[k]; if (!c) continue;
     const n = (v, w) => String(Math.round(v)).padStart(w);
-    console.log(`  ${k.padEnd(12)} ${n(c.walk.marched, 8)} ${n(c.walk.hits, 7)} ${n(c.walk.steps, 8)}  ${(c.walk.steps / Math.max(c.walk.marched, 1)).toFixed(2).padStart(8)} ${n(c.walk.prims, 12)} ${n(c.walk.rows, 10)} ${n(c.post.prims, 13)} ${n(c.post.rows, 11)}`);
+    console.log(`  ${k.padEnd(12)} ${n(c.walk.marched, 8)} ${n(c.walk.hits, 7)} ${n(c.walk.steps, 8)}  ${(c.walk.steps / Math.max(c.walk.marched, 1)).toFixed(2).padStart(8)} ${n(c.walk.prims, 12)} ${n(c.walk.rows, 10)} ${n(c.post.prims, 13)} ${n(c.post.rows, 11)} ${n(c.walk.inside ?? 0, 12)}`);
   }
 }
 if (out.tick) {
