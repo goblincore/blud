@@ -87,3 +87,9 @@ The mesh path lives in `webgpu/skeleton-spike/` despite the historical name.
 Skull geometry/eye damage and material polish are accepted; stop further polish
 unless requested. Torso cavity brightness remains a documented limitation.
 See `docs/dev-notes/2026-09-07-skeleton-comparison/wrap-up.md`.
+
+**Organs are mesh too — 2026-10-06 (owner decision).** On the mesh skeleton a zombie's organs are segment meshes
+(`skeleton-spike/contract.ts` kind `'organ'`, `mesh-organ.ts`), drawn only where a wound reaches them, and the body
+packs no inside-flesh row, so the march never calls `applyBones`. `?organs=sdf` (or `__sdfGame.setOrgans('sdf')`) keeps
+them as field rows for A/B. `?skeleton=procedural`, deferred rendering and detached chunks keep SDF organs.
+See `docs/superpowers/specs/2026-10-06-organs-mesh-design.md` and `docs/dev-notes/2026-10-06-organs-mesh/NOTES.md`.

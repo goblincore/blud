@@ -63,13 +63,14 @@ describe('__sdfGame.skullSplit: the split skull\'s look, live', () => {
 describe('__sdfGame.meshSkeletonShow: draw or hide the bone meshes and the eyes', () => {
   it('reads and sets the two flags; refuses what is not a boolean; null without the mesh skeleton', () => {
     const { seams, renderer, done } = make();
-    expect(seams.meshSkeletonShow()).toEqual({ bones: true, eyes: true });
-    expect(seams.meshSkeletonShow({ eyes: false })).toEqual({ bones: true, eyes: false });
-    expect(renderer!.show).toEqual({ bones: true, eyes: false });
-    expect(seams.meshSkeletonShow({ bones: false, eyes: true })).toEqual({ bones: false, eyes: true });
-    for (const bad of [{ bones: 0 }, { eyes: 'no' }, { bones: true, eyes: null }, null, 1]) {
+    expect(seams.meshSkeletonShow()).toEqual({ bones: true, eyes: true, organs: true });
+    expect(seams.meshSkeletonShow({ eyes: false })).toEqual({ bones: true, eyes: false, organs: true });
+    expect(renderer!.show).toEqual({ bones: true, eyes: false, organs: true });
+    expect(seams.meshSkeletonShow({ bones: false, eyes: true })).toEqual({ bones: false, eyes: true, organs: true });
+    expect(seams.meshSkeletonShow({ organs: false })).toEqual({ bones: false, eyes: true, organs: false });
+    for (const bad of [{ bones: 0 }, { eyes: 'no' }, { bones: true, eyes: null }, { organs: 1 }, null, 1]) {
       expect(seams.meshSkeletonShow(bad as never), JSON.stringify(bad)).toBe(false);
-      expect(renderer!.show).toEqual({ bones: false, eyes: true });
+      expect(renderer!.show).toEqual({ bones: false, eyes: true, organs: false });
     }
     done();
     expect(make(false).seams.meshSkeletonShow({ bones: false })).toBeNull();
@@ -87,5 +88,52 @@ describe('__sdfGame.skullDrawn: an actor\'s split skull copies among this frame\
     expect(seams.skullDrawn(8)).toEqual({ draws: 2, copies: [] });
     expect(seams.skullDrawn(9)).toBeNull();
     expect(createSkeletonSeams({ world: { actors: [a] }, render: { segMeshRenderer: null } } as unknown as GameContext).skullDrawn(7)).toBeNull();
+  });
+});
+
+describe('__sdfGame.setOrgans / organs (organs as mesh, 2026-10-06)', () => {
+  const world = (rows: number[]) => {
+    const calls: boolean[][] = rows.map(() => []);
+    const actors = rows.map((r, i) => ({
+      id: i + 1,
+      view: { uniforms: { counts2: { value: { x: r } } }, setPackOrgans: (on: boolean) => { calls[i]!.push(on); } },
+    }));
+    return { actors, calls };
+  };
+  it('flips the mode and every mesh-skeleton actor\'s organ packing; other actors are left alone', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const { actors, calls } = world([0, 0, 8]);
+    const ctx = {
+      render: { segMeshRenderer: renderer, organMode: 'mesh', skeletonSources: new Map([[actors[0], {}], [actors[1], {}]]) },
+      world: { actors },
+    };
+    const seams = createSkeletonSeams(ctx as unknown as GameContext);
+    expect(seams.setOrgans('sdf')).toBe('sdf');
+    expect(ctx.render.organMode).toBe('sdf');
+    expect(calls).toEqual([[true], [true], []]);
+    expect(seams.setOrgans('mesh')).toBe('mesh');
+    expect(calls).toEqual([[true, false], [true, false], []]);
+    // Not a mode: nothing changes.
+    expect(seams.setOrgans('tubes' as never)).toBe('mesh');
+    expect(calls[0]).toHaveLength(2);
+    const o = seams.organs();
+    expect(o.mode).toBe('mesh');
+    expect(o.drawn).toBe(0);
+    expect(o.packed).toEqual([{ id: 1, rows: 0 }, { id: 2, rows: 0 }, { id: 3, rows: 8 }]);
+    expect(o.tint).toEqual([0.72, 0.32, 0.30, 1].map(v => expect.closeTo(v, 6)));
+    expect(seams.setOrganLook('veined')).toEqual(seams.organs().look);
+    expect(seams.organs().look).not.toEqual(o.look);
+    renderer.dispose(); cache.dispose();
+  });
+  it('without the mesh skeleton the mode is fixed', () => {
+    const { actors, calls } = world([8]);
+    const ctx = { render: { segMeshRenderer: null, organMode: 'sdf', skeletonSources: new Map() }, world: { actors } };
+    const seams = createSkeletonSeams(ctx as unknown as GameContext);
+    expect(seams.setOrgans('mesh')).toBe('sdf');
+    expect(calls).toEqual([[]]);
+    expect(seams.organs()).toEqual({ mode: 'sdf', drawn: 0, look: null, tint: null, drawnBy: [], packed: [{ id: 1, rows: 8 }] });
+    expect(seams.organSegments(1)).toEqual([]);
+    expect(seams.setOrganLook('wet')).toBeNull();
   });
 });
