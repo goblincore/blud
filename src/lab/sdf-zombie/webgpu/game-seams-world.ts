@@ -216,6 +216,9 @@ export function createWorldSeams(ctx: GameContext) {
         prim: w.primIdx, limb: posed.prims[w.primIdx]?.limb ?? null,
         dirWorld: w.shape === 'cut' && w.cutDir ? woundDirToWorld(posed.prims, w, w.cutDir, yaw) : null,
         headRegion: w.headRegion ?? null, headSlot: w.headSlot ?? null,
+        // The carve's depth slab: how deep below the anchor it cuts and the inward unit it is measured along (world);
+        // null for a wound with no slab (the whole sphere is carved).
+        carveDepth: w.carveDepth ?? null, inward: woundCarveNormal(posed.prims, w, yaw), tear: w.tear ?? 0,
       }));
     },
     /** P3 capture: every actor's head circle and wound circles, projected through the live camera to

@@ -61,7 +61,7 @@ import type { AttachedPiece } from './game-state-boot';
 import type { Primitive, Vec3 } from '../types';
 import type { BuildResult } from '../build-body';
 import { EYEBALL_R, eyeballPrims, prim, type GorePiece } from '../head-pop';
-import { clothifyWound, tearWound, woundWorldPos, worldHitToWound, type ShotProvenance, type Wound } from '../damage';
+import { clothifyWound, tearWound, woundCarveNormal, woundWorldPos, worldHitToWound, type ShotProvenance, type Wound } from '../damage';
 import { flailTear } from '../torn-lips';
 import { sdBody, sdPrimitive } from '../validate';
 import { headQuatOf } from '../rig-bind';
@@ -182,12 +182,19 @@ export interface HeadDamageDebug {
   draws: number;
   /** Each region's (and the brain cavity's) last stamped crater: its radius, its carve depth below the anchor
    *  plane (null: a full sphere — no flesh probe) and the measured anchor-to-skull depth (null: none found). */
-  craters: Partial<Record<HeadRegion | 'brain' | 'burst-exit', { radius: number; carveDepth: number | null; skull: number | null }>>;
+  craters: Partial<Record<HeadRegion | 'brain' | 'burst-exit', {
+    radius: number; carveDepth: number | null; skull: number | null;
+    /** Where it was stamped and the carve slab's inward normal there (world, at the stamp; null: no slab). */
+    at: Vec3; inward: Vec3 | null;
+  }>>;
   /** The head frame the deform hook last measured (the UN-deformed pose; null before the first re-pose). */
   frame: HeadFrame | null;
   /** Slug head burst: the last verdict, the burst spring (b, lasting rest) and the flaps hinged on the head. */
   burst: BurstDebug | null;
-  bu: { b: number; rest: number } | null;
+  bu: { b: number; rest: number; axis: 0 | 1 | 2; sign: 1 | -1; splay: number } | null;
+  /** The deform as the head's own axes see it now (head-deform.ts headAffine: x right, y up, z face-forward): each
+   *  axis's scale and shift (m). Null at rest, or before the first re-pose. */
+  deform: { mul: Vec3; shift: Vec3 } | null;
   flaps: number;
 }
 
@@ -496,7 +503,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
         // The carve's depth slab clips the sphere (radius `radius`): deeper than the radius carves nothing more.
         w.carveDepth = Math.min(radius, regionCarve(as, carveAs ? 0 : h.model.flesh[as], w.carveDepth, sd));
       }
-      h.craters[reg] = { radius: w.radius, carveDepth: w.carveDepth ?? null, skull };
+      h.craters[reg] = { radius: w.radius, carveDepth: w.carveDepth ?? null, skull, at: [at[0], at[1], at[2]], inward: woundCarveNormal(posed.prims, w, yaw) };
       // TORN LIPS (v1.5b, torn-lips.ts): every region crater (and the brain's) is torn at full.
       return tearWound(clothifyWound(posed.prims, w, 'heavy'), flailTear('head'));
     };
@@ -877,7 +884,8 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
           draws: draws + (h.flaps?.piece ? 1 : 0),
           craters: Object.fromEntries(Object.entries(h.craters).map(([k, v]) => [k, { ...v }])),
           burst: h.burst,
-          bu: h.deform.bu ? { b: h.deform.bu.b, rest: h.deform.bu.rest } : null,
+          bu: h.deform.bu ? { b: h.deform.bu.b, rest: h.deform.bu.rest, axis: h.deform.bu.axis, sign: h.deform.bu.sign, splay: h.deform.bu.splay } : null,
+          deform: (() => { const m = h.frame ? headAffine(h.deform, h.frame) : null; return m ? { mul: [...m.mul] as Vec3, shift: [...m.shift] as Vec3 } : null; })(),
           flaps: h.flaps?.flaps.length ?? 0,
           frame: h.frame ? { centre: [...h.frame.centre] as Vec3, quat: [...h.frame.quat] as Quat, axes: [...h.frame.axes] as Vec3 } : null,
         };
