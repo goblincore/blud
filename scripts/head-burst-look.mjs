@@ -1,29 +1,34 @@
 // scripts/head-burst-look.mjs — what the gun does to a zombie's head, photographed and measured, for the before and
 // after sheet under docs/dev-notes/2026-10-07-sculpt-skull-2/look/ (scripts/head-burst-sheet.py lays the frames out).
 //
-// One boot of the bare ring page (/sdf-game.html, frozen cast, `?sculpt=full` unless QUERY says otherwise). The scenes,
-// each on a fresh zombie, every round a REAL one (fire(1) is a grapeshot volley, fireSlug() a slug):
-//   pellets   three volleys at the face from 2 m in front, photographed after each (stages pellets-1, -2, -3);
-//   slug      one slug at the head from 2 m in front (stage slug-1);
-//   around    one volley from the front, the left, the back and the right, then the front again: nothing is
-//             photographed until the end (stage around-5), the deform is recorded after every volley.
-// After every round the script waits 2.5 s of game time (the burst's spring settles in under 1 s) and records:
-//   the head leaf's state (__sdfGame.head.state: the burst's outcome, each crater's centre, radius and carve depth,
-//   the deform's per-axis scale and shift), the head's wounds (__sdfGame.actorWounds), whether the head is still on,
-//   and THE PROFILE: per landmark of the skull's face (brow ridge, nasion, nose bridge, upper teeth, lower teeth, chin)
-//   how far forward the bone's front and the flesh's front stand, measured on the CPU fields (profileOf below).
-// Every stage is photographed AS THE GAME SHIPS (the default post chain with VHS on, wounds bleeding) from 1.5 m at the
-// player's eye height: front, profile and three-quarter; and CLEAN (VHS off, blood drops cleared) in profile from
-// 0.6 m, with the flesh and with the flesh out of the frame.
+// One boot of the bare ring page (/sdf-game.html, `?sculpt=full` unless QUERY says otherwise). The cast is frozen so
+// a zombie can be staged, and THAWED FOR A SECOND AFTER EVERY ROUND: a frozen actor takes the hit's shove on its rig
+// and never springs back (its head stays knocked centimetres off its neck), and the march's outer hull is built once
+// per frozen stretch, so a frozen body that moved is drawn clipped to where it used to be. A second of real play
+// lets the body react and rebuilds the hulls; then it is frozen again and photographed. Every round is a REAL one
+// (fire(1) is a grapeshot volley, fireSlug() a slug), aimed with the crosshair as a player aims. The scenes, each on
+// a fresh zombie:
+//   pellets     three volleys with the crosshair on the head's centre, from 2 m in front (stages pellets-1, -2, -3);
+//   slug-chin   one slug with the crosshair low enough that its line runs off centre (it lands on the chin);
+//   slug-split  one slug with the crosshair 4 cm over the head's centre: the centred slug;
+//   slug-pop    slugs at the neck until the head comes off, every frame of the last one kept (stage slug-pop,
+//               frames f00..); then the same pop by hand on a zombie whose flesh is out of the frame (pop-bare), so
+//               the skull's pieces can be seen leaving.
+// After every round the script records the head-shot leaf's verdict, the head leaf's state (the opening's craters
+// and deform, when the opening is on), the head's wounds, whether the head is still on, and THE PROFILE: per
+// landmark of the skull's face how far forward the bone's front and the flesh's front stand, on the CPU fields
+// (profileOf) and on the picture (pixelProfile).
+// Every stage is photographed AS THE GAME SHIPS (the default post chain with VHS on, wounds bleeding) from 1.5 m at
+// the player's eye height, front and profile, and CLEAN (VHS off, blood drops cleared) from 0.6 m, front and profile.
 //
 // Output: <out>/<label>__<stage>__<view>.png (the whole 1280 x 800 frame) and <out>/<label>.json (where the head is in
 // each frame, and everything recorded).
 //
 // Usage (own servers): node scripts/head-burst-look.mjs <vite port> <cdp port> <out dir>
 //   LABEL=after          the files' prefix (default "look")
-//   TUNE='{"pelletExit":true}'   a __sdfGame.head.burstTune(...) applied at boot (the sheet's "before" column is the
-//                        old numbers put back this way)
-//   SCENES=pellets,slug  only those scenes          QUERY='&skull=sculpt'   the page query (default &sculpt=full)
+//   OLD=1                the behaviour before 2026-10-07, put back with burstTune (the sheet's "before" column)
+//   TUNE='{"popSwellS":0.2}'   any other __sdfGame.head.burstTune(...) applied at boot
+//   SCENES=pellets,slug-pop    only those scenes          QUERY='&skull=sculpt'   the page query (default &sculpt=full)
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { inflateSync } from "node:zlib";
@@ -32,8 +37,11 @@ const VITE = Number(process.argv[2] ?? 5261), CDP = Number(process.argv[3] ?? 92
 const OUT = process.argv[4] ?? ".lab-tmp/head-burst-look";
 const LABEL = process.env.LABEL ?? "look";
 const QUERY = process.env.QUERY ?? "&sculpt=full";
-const TUNE = process.env.TUNE ? JSON.parse(process.env.TUNE) : null;
-const SCENES = new Set((process.env.SCENES ?? "pellets,slug,around").split(","));
+/** The tuning before 2026-10-07: every gun hit on a head made the opening (head-burst.ts BURST_TUNING_DEFAULTS). */
+const OLD_TUNE = { opening: true, anyWeapon: true, alwaysSplit: true, slugSplit: false, slugPop: false, popOnSplit: false };
+const TUNE = process.env.OLD ? { ...OLD_TUNE, ...(process.env.TUNE ? JSON.parse(process.env.TUNE) : {}) } : process.env.TUNE ? JSON.parse(process.env.TUNE) : null;
+const SCENES = new Set((process.env.SCENES ?? "pellets,slug-chin,slug-split,slug-pop").split(","));
+const THAW = Number(process.env.THAW ?? 60), STRIP = 30;
 const W = 1280, H = 800, EYE_H = 1.62, SETTLE = 24, SHOT_M = 2, SHIPS_M = 1.5, CLEAN_M = 0.6, MASK_M = 1.5;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const withTimeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`TIMEOUT(${ms}ms): ${what}`)), ms))]);
@@ -65,7 +73,7 @@ async function openSession(label) {
     if (m.method === "Runtime.consoleAPICalled") {
       const text = m.params.args.map((a) => a.value ?? a.description ?? "").join(" ").slice(0, 600);
       if (m.params.type === "error") consoleErrors.push({ label, text });
-      if (text.startsWith("[head-burst]")) burstLog.push(text);
+      if (text.startsWith("[head-burst]") || text.startsWith("[head-shot]")) burstLog.push(text);
     }
     if (m.method === "Runtime.exceptionThrown") consoleErrors.push({ label, text: JSON.stringify(m.params.exceptionDetails).slice(0, 600) });
   };
@@ -317,56 +325,95 @@ async function fire(what, tries = 6) {
 }
 const r4 = (v) => (typeof v === "number" ? +v.toFixed(4) : Array.isArray(v) ? v.map(r4) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, r4(x)])) : v);
 
-/** One real round at actor `id` from `yawDeg` round its head, then 2.5 s of game time; what it did is recorded as
- *  `key`. */
-async function round(key, id, what, yawDeg = 0) {
-  const before = (await evaluate(`__sdfGame.actorWounds(${id})`)).length, log0 = burstLog.length;
-  await aimAt(id, SHOT_M, yawDeg);
-  await fire(what);
-  // The spring's peak: the largest stretch seen while it rings.
-  let peak = 0;
-  for (let k = 0; k < 150; k++) { await stepOne(); if (k < 40) { const b = await evaluate(`__sdfGame.head.state(${id})?.bu?.b ?? 0`); peak = Math.max(peak, b); } }
+/** Let the cast play for THAW frames (the header), then hold it again. */
+async function thaw() {
+  if (THAW > 0) { await evaluate("__sdfGame.freeze(false)"); await stepN(THAW); await evaluate("__sdfGame.freeze(true)"); }
+  await stepN(2);
+}
+const headOn = async (id) => (await evaluate(`__sdfGame.flail.limbAlive(${id}, "head")`)) > 0;
+/** Where a slug fired now would go: how far its line passes from actor `id`'s head centre (head radii, the drop
+ *  included), and what it would hit. */
+async function slugLine(id) {
+  const fr = await frameOf(id), pr = await evaluate("__sdfGame.predictSlugHit()");
+  const R = Math.cbrt(fr.axes[0] * fr.axes[1] * fr.axes[2]);
+  const t = (fr.centre[0] - pr.origin[0]) * pr.dir[0] + (fr.centre[1] - pr.origin[1]) * pr.dir[1] + (fr.centre[2] - pr.origin[2]) * pr.dir[2];
+  const drop = 0.5 * 6 * (Math.max(0, t) / 30) ** 2;
+  const cp = [pr.origin[0] + pr.dir[0] * t, pr.origin[1] + pr.dir[1] * t - drop, pr.origin[2] + pr.dir[2] * t];
+  return { offset: Math.hypot(cp[0] - fr.centre[0], cp[1] - fr.centre[1], cp[2] - fr.centre[2]) / R, actor: pr.actorId };
+}
+/** What a round did to actor `id`, recorded as `key`. */
+async function record(key, id, what, aim, extra = {}) {
   const st = await evaluate(`__sdfGame.head.state(${id})`);
   const wounds = await evaluate(`__sdfGame.actorWounds(${id})`);
+  const on = await headOn(id);
   const rec = {
-    round: what, fromYawDeg: yawDeg, log: burstLog.slice(log0),
-    headOn: (await evaluate(`__sdfGame.flail.limbAlive(${id}, "head")`)) > 0,
-    phase: (await evaluate("__sdfGame.actorList()")).find((q) => q.id === id)?.phase,
-    woundsBefore: before, woundsAfter: wounds.length,
-    headWounds: wounds.filter((w) => w.limb === "head").map((w) => r4({ region: w.headRegion, radius: w.radius, carveDepth: w.carveDepth, pos: w.pos, inward: w.inward, type: w.type, tear: w.tear })),
-    burst: st?.burst ?? null, hits: st?.hits ?? 0, dead: st?.dead ?? null, skull: r4(st?.skull ?? null),
-    craters: r4(st?.craters ?? null), peakB: +peak.toFixed(4), bu: r4(st?.bu ?? null), flat: r4(st?.flat ?? null), deform: r4(st?.deform ?? null),
-    frame: r4(st?.frame ?? null),
-    profile: await profileOf(id),
+    round: what, aim, ...extra,
+    headOn: on, phase: (await evaluate("__sdfGame.actorList()")).find((q) => q.id === id)?.phase,
+    shot: await evaluate(`__sdfGame.head.shot(${id})`), split: r4(await evaluate(`__sdfGame.headSplit(${id})`)),
+    wounds: wounds.length,
+    headWounds: wounds.filter((w) => w.limb === "head").map((w) => r4({ region: w.headRegion, radius: w.radius, carveDepth: w.carveDepth, type: w.type, shape: w.shape })),
+    burst: st?.burst ?? null, craters: r4(st?.craters ?? null), bu: r4(st?.bu ?? null), flat: r4(st?.flat ?? null), deform: r4(st?.deform ?? null),
+    profile: on ? await profileOf(id) : null,
   };
   manifest.rounds[key] = rec; save();
-  const d = rec.deform;
-  console.log(`  ${key}: ${rec.log.join(" | ") || "(no burst)"}; head ${rec.headOn ? "on" : "OFF"}, ${rec.phase}; craters ${J(Object.fromEntries(Object.entries(rec.craters ?? {}).map(([k, c]) => [k, `r ${c.radius} depth ${c.carveDepth} skull ${c.skull}`])))}; peak b ${rec.peakB}; deform mul ${J(d?.mul)} shift ${J(d?.shift)}; flat ${J(rec.flat)}`);
+  console.log(`  ${key}: ${rec.log?.join(" | ") || "(no head rule fired)"}; verdict ${J(rec.shot)}; head ${on ? "on" : "OFF"}, ${rec.phase}; ${rec.wounds} wounds, ${rec.headWounds.length} on the head (${rec.headWounds.map((w) => `${w.shape === "cut" ? "cut" : "r"}${w.radius}`).join(" ")})${rec.split ? `; split ${rec.split.preset} angle ${rec.split.angle} of target ${rec.split.target}` : ""}${rec.craters ? `; opening craters ${J(Object.fromEntries(Object.entries(rec.craters).map(([k, c]) => [k, `r ${c.radius} depth ${c.carveDepth}`])))}; deform ${J(rec.deform)}` : ""}`);
   if (rec.profile) for (const r of rec.profile.rows) console.log(`      ${r.name.padEnd(12)} bone ${String(r.boneMid).padStart(6)} flesh ${String(r.fleshMid).padStart(6)} on the middle line (bone proud ${r.proudMid}); in silhouette bone ${r.boneSil} flesh ${r.fleshSil} (proud ${r.proudSil})`);
-  if (rec.profile) console.log(`      extents mm [lo, hi] x / y / z: skin ${J(rec.profile.extents.skin)}; with the carves out ${J(rec.profile.extents.carved)}`);
   return rec;
+}
+/** One real round at actor `id` with the crosshair `aim` from its head's centre, from `yawDeg` round it; then the
+ *  thaw. Recorded as `key`. */
+async function round(key, id, what, aim = [0, 0, 0], yawDeg = 0) {
+  const log0 = burstLog.length;
+  await aimAt(id, SHOT_M, yawDeg, aim);
+  const line = what.includes("Slug") ? await slugLine(id) : null;
+  await fire(what);
+  await stepN(12);
+  await thaw();
+  return record(key, id, what, aim, { fromYawDeg: yawDeg, log: burstLog.slice(log0), line: line ? { offset: +line.offset.toFixed(3), wouldHit: line.actor } : null });
 }
 
 const vhsOff = async () => { await evaluate("__sdfGame.setVhs(null)"); await settle(); };
 const vhsOn = async () => { await evaluate("__sdfGame.setVhs('blud')"); await settle(); };
 /** A stage's photographs (see the header) and its picture profile. */
 async function photograph(stage, id) {
-  if (!(await evaluate(`__sdfGame.flail.limbAlive(${id}, "head")`))) { console.log(`  ${stage}: the head is off; nothing photographed`); return; }
+  if (!(await headOn(id))) { console.log(`  ${stage}: the head is off; nothing photographed`); return; }
   await shot(stage, "ships-front", id, SHIPS_M, 0);
   await shot(stage, "ships-profile", id, SHIPS_M, 90);
-  await shot(stage, "ships-quarter", id, SHIPS_M, 40);
   await vhsOff();
   await evaluate("__sdfGame.setBleed(false)"); await stepN(2);
-  await shot(stage, "clean-profile", id, CLEAN_M, 90);
   await shot(stage, "clean-front", id, CLEAN_M, 0);
-  await fleshShown(id, false);
-  await shot(stage, "bone-profile", id, CLEAN_M, 90);
-  await fleshShown(id, true);
+  await shot(stage, "clean-profile", id, CLEAN_M, 90);
   const px = await pixelProfile(stage, id);
   manifest.stages[stage] = { actor: id, picture: px }; save();
   if (px) console.log(`  ${stage} picture profile (${px.mmPerPx} mm per pixel): ${px.rows.map((r) => `${r.name} bone ${r.bone} flesh ${r.flesh} proud ${r.proud}`).join("; ")}`);
   await evaluate("__sdfGame.setBleed(true)");
   await vhsOn();
+}
+/** What is drawn within 0.3 m of `c`, in short. */
+const census = async (c) => {
+  const n = await evaluate(`__sdfGame.head.drawnNear(${c[0]}, ${c[1]}, ${c[2]}, 0.3)`);
+  return { bones: n.bones.filter((b) => !b.eye).length, eyes: n.bones.filter((b) => b.eye).length, attached: n.attached.length,
+    chunks: n.chunks.map((q) => [q.tag ?? q.kind, q.speed]), meshGibs: n.meshGibs.map((g) => [g.tag, g.speed]), flesh: n.flesh.length };
+};
+/** THE STRIP: every frame from now for STRIP frames, as the game draws it (no settling: the post chain's smear is in
+ *  the picture, as in play), from 1.5 m, three-quarter. Each frame's file and what the head was doing in it. */
+async function strip(stage, id, centre, forward, each) {
+  const eye = add(centre, mul(turnY(forward, 35 * Math.PI / 180), SHIPS_M)); eye[1] = EYE_H;
+  await camAt(eye, centre); await syncCam();
+  const c = await toPx(centre), top = await toPx(add(centre, [0, 0.1, 0]));
+  const frames = [];
+  for (let k = 0; k < STRIP; k++) {
+    await stepOne();
+    await evaluate("__sdfGame.setRenderLock(true)"); await stepOne();
+    const png = await send("Page.captureScreenshot", { format: "png" });
+    await evaluate("__sdfGame.setRenderLock(false)");
+    const file = `${LABEL}__${stage}__f${String(k).padStart(2, "0")}`;
+    writeFileSync(`${OUT}/${file}.png`, Buffer.from(png.result.data, "base64"));
+    manifest.shots[file] = { stage, view: `f${String(k).padStart(2, "0")}`, actor: id, centre: c, pxPerM: c && top ? Math.hypot(top[0] - c[0], top[1] - c[1]) / 0.1 : null };
+    frames.push({ k, popping: await evaluate(`__sdfGame.head.popping(${id})`), headOn: await headOn(id), fragments: (await evaluate("__sdfGame.skullFragments()")).length, ...(each ? await each(k) : {}) });
+  }
+  save();
+  return frames;
 }
 
 let failed = 0;
@@ -374,19 +421,66 @@ try {
   await boot();
   if (SCENES.has("pellets")) {
     const a = fresh();
-    manifest.rounds["pellets-0"] = { profile: await profileOf(a.id), frame: r4(await frameOf(a.id)) }; save();
-    console.log(`  intact head: ${manifest.rounds["pellets-0"].profile.rows.map((r) => `${r.name} bone ${r.boneMid} flesh ${r.fleshMid}`).join("; ")}; extents ${J(manifest.rounds["pellets-0"].profile.extents.skin)}`);
+    manifest.rounds["pellets-0"] = { profile: await profileOf(a.id) }; save();
+    console.log(`  intact head: ${manifest.rounds["pellets-0"].profile.rows.map((r) => `${r.name} bone ${r.boneMid} flesh ${r.fleshMid}`).join("; ")}`);
     for (let n = 1; n <= 3; n++) { await round(`pellets-${n}`, a.id, "__sdfGame.fire(1)"); await photograph(`pellets-${n}`, a.id); }
   }
-  if (SCENES.has("slug")) {
+  if (SCENES.has("slug-chin")) {
+    // The crosshair is lowered a centimetre at a time until the slug's line runs off centre and still meets this zombie.
     const a = fresh();
-    await round("slug-1", a.id, "__sdfGame.fireSlug()"); await photograph("slug-1", a.id);
+    let aim = [0, -0.02, 0], line = null;
+    for (let k = 0; k < 10; k++) {
+      aim = [0, -0.02 - k * 0.01, 0];
+      await aimAt(a.id, SHOT_M, 0, aim);
+      line = await slugLine(a.id);
+      if (line.offset > manifest.tuning.splitFrac + 0.03) break;
+    }
+    console.log(`  slug-chin: crosshair ${(-aim[1] * 100).toFixed(0)} cm under the head's centre; the slug's line passes ${line.offset.toFixed(2)} head radii from it, and would hit actor ${line.actor} (the target is ${a.id})`);
+    await round("slug-chin", a.id, "__sdfGame.fireSlug()", aim); await photograph("slug-chin", a.id);
   }
-  if (SCENES.has("around")) {
+  if (SCENES.has("slug-split")) {
     const a = fresh();
-    let n = 0;
-    for (const yaw of [0, 90, 180, -90, 0]) await round(`around-${++n}`, a.id, "__sdfGame.fire(1)", yaw);
-    await photograph("around-5", a.id);
+    await round("slug-split", a.id, "__sdfGame.fireSlug()", [0, 0.04, 0]); await photograph("slug-split", a.id);
+  }
+  if (SCENES.has("slug-pop")) {
+    // Slugs at the neck (the crosshair 6 cm under the head's centre lands them under the chin) until the head leaves.
+    const a = fresh();
+    let done = false;
+    for (let n = 1; n <= 8 && !done; n++) {
+      const log0 = burstLog.length;
+      const fr = await frameOf(a.id), f = await frontOf(a.id);
+      await aimAt(a.id, SHOT_M, 0, [0, -0.06, 0]);
+      const line = await slugLine(a.id);
+      await fire("__sdfGame.fireSlug()");
+      const frames = await strip("slug-pop", a.id, fr.centre, f);
+      const off = frames.find((q) => !q.headOn), swell = frames.filter((q) => q.popping).length;
+      const rec = await record(`slug-pop-${n}`, a.id, "__sdfGame.fireSlug()", [0, -0.06, 0], { log: burstLog.slice(log0), line: { offset: +line.offset.toFixed(3), wouldHit: line.actor } });
+      if (off) {
+        done = true;
+        await stepN(90);
+        rec.pop = { slug: n, firstSwellFrame: frames.find((q) => q.popping)?.k ?? null, swellFrames: swell, headOffFrame: off.k, fragmentsAtBurst: off.fragments,
+          fragmentCuts: await evaluate("__sdfGame.skullFragmentCuts()"), skullDraws: await evaluate(`(() => { const d = __sdfGame.skullDrawn(${a.id}); return d ? d.whole.length + d.copies.length : null; })()`),
+          near120: await census(fr.centre) };
+        await thaw(); await stepN(120);
+        rec.pop.nearLater = await census(fr.centre);
+        manifest.rounds[`slug-pop-${n}`] = rec; manifest.stages["slug-pop"] = { actor: a.id, frames }; save();
+        console.log(`  slug-pop: slug ${n} took the head off; the swell showed on ${swell} frames from frame ${rec.pop.firstSwellFrame}, the head left on frame ${off.k} with ${off.fragments} skull fragments in the air; the fragment cut ${J(rec.pop.fragmentCuts)}; 1.5 s on, within 0.3 m of the old head: ${J(rec.pop.near120)}; after another 3 s: ${J(rec.pop.nearLater)}`);
+      } else { await thaw(); }
+    }
+    if (!done) { failed++; console.error("FAIL: slug-pop: eight slugs at the neck did not take the head off"); }
+    // The same pop with the flesh out of the frame: a stamped torso wound (an unwounded body draws no bones), the
+    // proxy box shrunk to nothing, and the head popped by hand along the same direction.
+    const b = fresh();
+    const fr = await frameOf(b.id), f = await frontOf(b.id);
+    const o = add(add(fr.centre, mul(f, 1.5)), [0, -0.45, 0]), d = unit(sub(add(fr.centre, [0, -0.45, 0]), o));
+    await evaluate(`__sdfGame.stampWoundAt(${o[0]}, ${o[1]}, ${o[2]}, ${d[0]}, ${d[1]}, ${d[2]}, "pellet", ${b.id})`);
+    await stepN(2);
+    await fleshShown(b.id, false);
+    await stepN(2);
+    await evaluate(`__sdfGame.head.pop(${b.id}, ${-f[0]}, 0, ${-f[2]})`);
+    const frames = await strip("pop-bare", b.id, fr.centre, f, async () => { await fleshShown(b.id, false); return {}; });
+    manifest.stages["pop-bare"] = { actor: b.id, frames }; save();
+    console.log(`  pop-bare: the head left on frame ${frames.find((q) => !q.headOn)?.k}; skull fragments in the air per frame: ${frames.map((q) => q.fragments).join(" ")}`);
   }
 } catch (e) { failed++; console.error(`FAIL: ${e.stack ?? e}`); }
 finally { if (S) { closeSession(S); S = null; } }
