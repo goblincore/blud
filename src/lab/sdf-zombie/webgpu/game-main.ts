@@ -63,7 +63,7 @@ import { createOuterHull } from './shell-hull-outer';
 import { makeGameContext } from './game-context';
 import { createBoneInstancer } from './bone-instancer';
 import { createSkeletonSources, type BoneFieldSource } from './skeleton-spike/contract';
-import { createSkullMeshCache } from './skeleton-spike/anatomical-skull';
+import { createBoneMeshCache } from './skeleton-spike/sculpt-cache';
 import { createSegmentMeshRenderer } from './skeleton-spike/mesh-renderer';
 import { resolveSkeletonMode } from './skeleton-spike/selector';
 import { SegmentVolumeCache, buildSegmentAtlas, boneSegmentKeyMap } from './skeleton-spike/volume';
@@ -2660,7 +2660,7 @@ async function main() {
   if (import.meta.env.DEV && new URLSearchParams(location.search).get('skeleton') === 'mesh' && ctx.render.skeletonMode !== 'mesh') {
     console.warn('[sdf-game] skeleton=mesh refused (deferred mode) — procedural bones');
   }
-  ctx.render.segMeshCache = ctx.render.skeletonMode === 'mesh' ? await createSkullMeshCache(location.search) : null;
+  ctx.render.segMeshCache = ctx.render.skeletonMode === 'mesh' ? await createBoneMeshCache(location.search) : null;
   // FIELD_MESH_LAYER, not 0: the 'bodies' field style needs to pull the
   // skeleton out of the full-resolution polygonal pass and draw it into the
   // half-height field instead. Every other style just enables that layer in

@@ -181,6 +181,9 @@ export function createSkeletonSeams(ctx: GameContext) {
     skeletonDiagnostics: () => ({
       requestedMode: ctx.render.skeletonMode,
       skull: ctx.render.segMeshCache?.skullKit ? 'anatomical' : 'sculpt',
+      // The sculpted skull's recipe (sculpt-variant.ts): which sculpt, the head's extraction cell (null: the cache's
+      // own) and which paint. The default sculpt is { shape: 1, headCell: null, paint: 1 }.
+      sculpt: ctx.render.segMeshCache ? { ...ctx.render.segMeshCache.sculpt } : null,
       activeMode: ctx.render.skeletonMode === 'volume'
         ? (ctx.render.skeletonVolumes.size > 0 ? 'volume' : 'procedural')
         : ctx.render.skeletonMode === 'mesh'

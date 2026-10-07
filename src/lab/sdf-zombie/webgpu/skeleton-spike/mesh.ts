@@ -31,6 +31,7 @@ import { extractHullSoup, fitHullGrid } from '../surface-nets-cpu';
 import type { BoneFieldSource } from './contract';
 import type { Vec3 } from '../../types';
 import type { AnatomicalSkullKit } from './anatomical-skull';
+import { SCULPT_DEFAULT, type SculptRecipe, type SculptShape } from './sculpt-variant';
 
 /** Extraction resolution. Matches BAKE_CELL (chunk-bake-geometry.ts): 1 cm
  *  cells are what the shipped bake pays for torn-flesh craters; the bone
@@ -59,10 +60,10 @@ export interface SegmentMesh {
  * Extract one segment's bone surface, segment-local. Grid: the contract
  * bounds re-centred (fitHullGrid rounds to whole blocks around `centre`),
  * band 0 (the TRUE surface — the Newton pull in extractHullSoup lands
- * vertices ON the field), distort 1 as in the chunk bake.
+ * vertices ON the field), distort 1 as in the chunk bake. `shape`: which sculpt carves a head (mesh-skull.ts).
  */
-export function extractSegmentMesh(source: BoneFieldSource, cellSize = MESH_CELL): SegmentMesh {
-  source = meshBoneSource(source);
+export function extractSegmentMesh(source: BoneFieldSource, cellSize = MESH_CELL, shape: SculptShape = 1): SegmentMesh {
+  source = meshBoneSource(source, shape);
   const t0 = performance.now();
   const { min, max } = source.bounds;
   const centre: Vec3 = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
@@ -134,12 +135,24 @@ export class SegmentMeshCache {
   #lastExtractAt: number | null = null;
   #maxExtractMs = 0;
   #maxExtractKey: string | null = null;
-  constructor(readonly cellSize: number = MESH_CELL, readonly skullKit: AnatomicalSkullKit | null = null) {}
+  /** `sculpt`: the sculpted skull's recipe (sculpt-variant.ts): which sculpt carves a sculpted head, and the cell it
+   *  is extracted at. Omitted: the first sculpt at the cache's own cell. */
+  constructor(
+    readonly cellSize: number = MESH_CELL, readonly skullKit: AnatomicalSkullKit | null = null,
+    readonly sculpt: Readonly<SculptRecipe> = SCULPT_DEFAULT,
+  ) {}
+
+  /** The cell `source` is extracted at: the recipe's head cell for a head the sculpt carves, the cache's for
+   *  everything else. `carved` is the source after meshBoneSource. */
+  #cellOf(source: BoneFieldSource, carved: BoneFieldSource): number {
+    return carved !== source && this.sculpt.headCell !== null ? this.sculpt.headCell : this.cellSize;
+  }
 
   keyOf(source: BoneFieldSource): string {
     const skull = this.skullKit?.head(source);
     if (skull) return skull.mesh.key;
-    return `${meshBoneSource(source).revision}@${this.cellSize}`;
+    const carved = meshBoneSource(source, this.sculpt.shape);
+    return `${carved.revision}@${this.#cellOf(source, carved)}`;
   }
 
   get(source: BoneFieldSource): SegmentMesh {
@@ -148,7 +161,7 @@ export class SegmentMeshCache {
     const key = this.keyOf(source);
     let m = this.#map.get(key);
     if (!m) {
-      m = extractSegmentMesh(source, this.cellSize);
+      m = extractSegmentMesh(source, this.#cellOf(source, meshBoneSource(source, this.sculpt.shape)), this.sculpt.shape);
       const at = performance.now();
       this.#extractCount++;
       this.#extractMs += m.bakeMs;

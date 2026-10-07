@@ -80,6 +80,7 @@ import {
   meshEyePlacements, meshEyeImpactIndices, MESH_EYE_EMISSION_WGSL, MESH_EYE_SURFACE_WGSL, MESH_EYE_VESSEL_WGSL,
 } from './mesh-eyes';
 import { ANATOMICAL_SKULL_NORMAL_WGSL, ANATOMICAL_SKULL_SURFACE_WGSL } from './anatomical-skull.wgsl';
+import { SCULPT_PAINT_SHAPE1, SCULPT_PAINT_SHAPE2, sculptPaintSources } from './sculpt-paint';
 import { SKULL_REACH, damageSkull, explodeSkull, intactSkull, skullPieceLaunch, type SkullDamage } from '../../skull-fracture';
 import type { FittedSkull } from './anatomical-skull';
 import type { Vec3 } from '../../types';
@@ -263,6 +264,24 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     MESH_SOCKET_VESSEL_WGSL, MESH_BONE_SURFACE_WGSL, MESH_BONE_WET_WGSL, BODY_LIGHTS, BONE_SHADE_WGSL,
   ]) fns.push(wgslFn(src, fns.slice()));
   const [surfaceFn, wetFn, shade] = [fns[5]!, fns[6]!, fns[8]!];
+  // THE SECOND PAINT (sculpt-paint.ts), when the cache's recipe asks for it: its own chain on the same hash and
+  // noise, in the layout of the sculpt the cache extracts. `tilt` is the shading normal the painted height tilts
+  // (xyz) and the pixel's footprint on the surface (w); it takes screen derivatives, so a material that shades inside
+  // a branch declares it ahead of the branch. Null: the first paint, built below exactly as it always was.
+  const paint2 = cache.sculpt.paint === 2 ? (() => {
+    const chain: ReturnType<typeof wgslFn>[] = fns.slice(0, 2);
+    for (const src of sculptPaintSources(cache.sculpt.shape === 2 ? SCULPT_PAINT_SHAPE2 : SCULPT_PAINT_SHAPE1)) chain.push(wgslFn(src, chain.slice()));
+    const [tiltFn, surface2Fn, wet2Fn] = [chain[10]!, chain[11]!, chain[12]!];
+    return {
+      tilt: () => tiltFn({ p: positionWorld, n: normalWorld, feature: attribute('meshFeature', 'vec4') }) as unknown as Node<'vec4'> & { xyz: Node<'vec3'>; w: Node<'float'> },
+      surface: (pWorld: unknown, foot: unknown) => surface2Fn({
+        pWorld: pWorld as never, pLocal: positionGeometry, feature: attribute('meshFeature', 'vec4'),
+        boneColor: u.boneColor, deepColor: u.deepColor, foot: foot as never,
+        woundTex: texture(woundTex), woundCount: u.woundCount,
+      }) as unknown as { xyz: unknown; w: unknown },
+      wet: (expo: unknown) => wet2Fn({ pLocal: positionGeometry, feature: attribute('meshFeature', 'vec4'), expo: expo as never }),
+    };
+  })() : null;
   // The owner's 4 list lights, per instance (iLights, an InstancedBufferAttribute on every batch
   // geometry, sized with the batch). The eye material reads it too (it reuses `lit`).
   const picksAttr = attribute('iLights', 'vec4');
@@ -296,6 +315,12 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   const material = new MeshBasicNodeMaterial();
   material.name = SEGMENT_MATERIALS.bone;
   material.colorNode = lit(surf, meshLook);
+  if (paint2) {
+    const tilt = paint2.tilt();
+    const painted = paint2.surface(positionWorld, tilt.w);
+    const wet = paint2.wet(painted.w) as never;
+    material.colorNode = lit(painted, vec4(u.look.x, u.look.y, mul(mul(u.look.z, wet), MESH_SPEC_SCALE), mul(mul(u.look.w, wet), MESH_FRES_SCALE)), tilt.xyz);
+  }
   let skullMaterial: MeshBasicNodeMaterial | null = null;
   // The anatomical plates' shading, in parts, for the closed material here and the split one below: the surface with
   // its craters read at `pWorld`, the atlas sample, the normal that sample tilts (from the fragment's own world
@@ -394,6 +419,22 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     innerWall(splitSurf),
     vec4(u.look.x, u.look.y, mul(mul(u.look.z, splitGloss), MESH_SPEC_SCALE), mul(mul(mul(u.look.w, splitGloss), MESH_FRES_SCALE), front)),
   ));
+  if (paint2) {
+    // The second paint's split copies: the same wall inside; outside, the painted surface read at the un-turned
+    // point, under the tilted normal. The tilt's derivatives are taken ahead of the branch.
+    splitMaterial.colorNode = kept(
+      tilt => {
+        const painted = paint2.surface(clip.xyz, tilt.w);
+        const gloss2 = mix(float(MESH_GLOSS_WET), paint2.wet(painted.w) as never, front);
+        return lit(
+          innerWall(painted),
+          vec4(u.look.x, u.look.y, mul(mul(u.look.z, gloss2), MESH_SPEC_SCALE), mul(mul(mul(u.look.w, gloss2), MESH_FRES_SCALE), front)),
+          mix(normalWorld, tilt.xyz, front),
+        );
+      },
+      () => paint2.tilt().toVar() as unknown as ReturnType<typeof paint2.tilt>,
+    );
+  }
   splitSided(splitMaterial);
   // A split eye: the eye's own surface outside, the same wall inside, and no glow from the back.
   const eyeSplitMaterial = new MeshBasicNodeMaterial();
@@ -797,7 +838,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       else fractureSkull(owner,sources,point,direction,kind);
       const head = sources.find(s => s.segment === 'head' && s.isLive() && (s.character === 'zombie' || cache.skullKit?.supports(s)));
       if (!head) return 0;
-      const eyes = meshEyePlacements(meshBoneSource(head));
+      const eyes = meshEyePlacements(meshBoneSource(head, cache.sculpt.shape));
       const lost = absent.get(owner) ?? new Set<number>();
       absent.set(owner, lost);
       let count = 0;
@@ -871,7 +912,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
           if (slot!.keys[si] !== baked.key) {
             // Revision swap (anatomy/sever re-derive): the eye seats come from the new source.
             slot!.keys[si] = baked.key;
-            slot!.eyes[si] = [...meshEyePlacements(meshBoneSource(s)).entries()].map(([index, e]) => ({ index, center: e.center, radius: e.radius }));
+            slot!.eyes[si] = [...meshEyePlacements(meshBoneSource(s, cache.sculpt.shape)).entries()].map(([index, e]) => ({ index, center: e.center, radius: e.radius }));
           }
           const eyes = (slot!.eyes[si] ?? []).filter(e => !lost?.has(e.index));
           stats.segments++;
