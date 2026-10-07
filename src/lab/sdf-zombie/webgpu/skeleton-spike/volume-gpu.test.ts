@@ -48,6 +48,7 @@ function fakeSource(opts: {
   const src: BoneFieldSource & { setLive(b: boolean): void; setPose(p: SegmentPose): void } = {
     character: 'synthetic',
     segment: opts.segment,
+    kind: 'bone',
     revision: `synthetic:${opts.segment}:1:abc`,
     bounds: {
       min: [c[0]! - bh, c[1]! - bh, c[2]! - bh],

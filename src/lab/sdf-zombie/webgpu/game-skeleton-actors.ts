@@ -27,6 +27,9 @@ export function buildSkeletonSources(ctx: GameContext, actor: ZombieActor, name:
     character: name,
     rig: () => actor.boundRig().rig,
     bodyYaw: () => actor.pose().yaw,
+    // Always built: the organ MODE decides whether they are drawn and whether the rows are packed, so a live
+    // flip needs no rebuild (game-render-controls.ts applyOrganMode).
+    organs: true,
   }),
 });
 }

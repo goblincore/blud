@@ -69,7 +69,7 @@ import { createBoneInstancer } from './bone-instancer';
 import { createSkeletonSources, type BoneFieldSource } from './skeleton-spike/contract';
 import { SegmentMeshCache } from './skeleton-spike/mesh';
 import { createSegmentMeshRenderer } from './skeleton-spike/mesh-renderer';
-import { resolveSkeletonMode } from './skeleton-spike/selector';
+import { resolveOrganMode, resolveSkeletonMode } from './skeleton-spike/selector';
 import { SegmentVolumeCache, buildSegmentAtlas, boneSegmentKeyMap } from './skeleton-spike/volume';
 import { SegmentVolumeBinding, createSegmentAtlasTexture } from './skeleton-spike/volume-gpu';
 import { createPostAa } from './post-aa';
@@ -1710,11 +1710,23 @@ async function main() {
       // list from the visual set only (the bone INSTANCER's own crater list
       // above keeps walking every actor; tube mode is not part of this cull).
       // Cloth decals carve nothing, so they expose no bone; the spheres sit on the live body yaw (boneExposureOf).
-      for (const a of ctx.render.visualActors) craters.push(...boneExposureOf(a));
+      // The same spheres, kept per actor: an organ mesh is drawn only where one of its owner's wounds reaches it.
+      const organReach = ctx.render.organReach;
+      organReach.clear();
+      for (const a of ctx.render.visualActors) {
+        const spheres = boneExposureOf(a);
+        if (spheres.length === 0) continue;
+        organReach.set(a, spheres);
+        craters.push(...spheres);
+      }
       ctx.render.segMeshRenderer.setWounds(craters);
+      // The organ tint is the march's own (a body view's organColor and organAmp: the wound panel writes them live).
+      const lead = ctx.world.actors[0]?.view.uniforms;
+      if (lead) ctx.render.segMeshRenderer.organLook.tint.value.set(lead.organColor.value.r, lead.organColor.value.g, lead.organColor.value.b, lead.organAmp.value);
+      const organsMesh = ctx.render.organMode === 'mesh';
       ctx.render.segMeshRenderer.update(ctx.world.actors.map(a => {
         let e = ctx.render.skeletonSources.get(a);
-        if (!e) { e = buildSkeletonSources(ctx, a, 'zombie'); ctx.render.skeletonSources.set(a, e); a.view.setPackBones(false); }
+        if (!e) { e = buildSkeletonSources(ctx, a, 'zombie'); ctx.render.skeletonSources.set(a, e); a.view.setPackBones(false); a.view.setPackOrgans(!organsMesh); }
         else if (e.body !== a.body) { e = buildSkeletonSources(ctx, a, e.name); (e as { severed?: boolean }).severed = true; ctx.render.skeletonSources.set(a, e); }
         return e.sources;
       }), ctx.world.actors, ctx.render.visualActors, boneExposedActors(ctx, ctx),
@@ -1725,7 +1737,9 @@ async function main() {
       {
         warp: (owner, segment) => (segment === 'head' ? (owner as ZombieActor).view.splitDrawn : null),
         seed: owner => (owner as ZombieActor).id,
-      });
+      },
+      // Organs as mesh: the owner's exposure spheres; in 'sdf' mode nothing reaches, so no organ mesh is drawn.
+      owner => (organsMesh ? organReach.get(owner) ?? null : null));
       ctx.telemetry.telemetry.end('skeleton-mesh', meshTiming);
       if (firstMeshSync) mark('mesh-sync-end');
     }
@@ -2520,6 +2534,9 @@ async function main() {
     console.warn('[sdf-game] skeleton=mesh refused (deferred mode) — procedural bones');
   }
   ctx.render.segMeshCache = ctx.render.skeletonMode === 'mesh' ? new SegmentMeshCache() : null;
+  // Organs as mesh (2026-10-06): on the mesh skeleton the organs are segment meshes too, and the body packs no
+  // inside-flesh row. ?organs=sdf keeps them as field rows (the A/B reference); __sdfGame.setOrgans flips it live.
+  ctx.render.organMode = resolveOrganMode(location.search, ctx.render.skeletonMode);
   // FIELD_MESH_LAYER, not 0: the 'bodies' field style needs to pull the
   // skeleton out of the full-resolution polygonal pass and draw it into the
   // half-height field instead. Every other style just enables that layer in

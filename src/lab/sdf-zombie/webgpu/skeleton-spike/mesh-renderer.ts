@@ -51,8 +51,12 @@ import { meshBoneSource } from './mesh-skull';
 // piece along the fracture (mesh-split.ts) and paint back faces as the bone's dark inner wall. A closed head never
 // touches any of it: same batches, same material, same instances as before.
 //
-// PROTOTYPE SCOPE / FALLBACKS (counted, not hidden): actor bones mesh;
-// chunks, organs and every non-actor bone stay procedural. Limb segments
+// ORGANS (organs as mesh, 2026-10-06): a source of contract kind 'organ' is drawn like a bone segment (same cache,
+// same instanced batches, same depth rule: it shows exactly where a carve reached it) on its own material
+// (mesh-organ.ts), and only for an owner whose wounds REACH it (organ-reach.ts). Organs carry no eyes and never split.
+//
+// PROTOTYPE SCOPE / FALLBACKS (counted, not hidden): actor bones (and, when their sources are passed, organs) mesh;
+// chunks and every non-actor bone stay procedural. Limb segments
 // pose with the contract's two-anchor approximation (measured 1.26 mm
 // worst, task-1.md — below the 1 cm extraction cell).
 import * as THREE from 'three/webgpu';
@@ -78,6 +82,11 @@ import {
   meshEyePlacements, meshEyeImpactIndices, MESH_EYE_EMISSION_WGSL, MESH_EYE_SURFACE_WGSL, MESH_EYE_VESSEL_WGSL,
 } from './mesh-eyes';
 import { HEAD_SPLIT, skullPieces, skullSplitOf, type SkullFollow, type SkullSplit, type SplitWarp } from '../../head-split';
+import {
+  MESH_ORGAN_DETAIL_WGSL, MESH_ORGAN_HEIGHT_WGSL, MESH_ORGAN_SHADE_WGSL, MESH_ORGAN_SURFACE_WGSL, MESH_ORGAN_WET_WGSL,
+  ORGAN_LOOKS, ORGAN_LOOK_DEFAULT, type OrganLook, type OrganLookName,
+} from './mesh-organ';
+import { organReached, segmentBoundSphere, type ReachSphere } from './organ-reach';
 import {
   MESH_SPLIT_CLIP_WGSL, MESH_SPLIT_INSIDE_WGSL, MESH_SPLIT_JAG_WGSL, SPLIT_INSTANCE_ATTRS, SPLIT_INSTANCE_FLOATS,
   meshSplitJagMax, packSplitInstance,
@@ -109,6 +118,18 @@ export function segmentNeeded(owner: unknown, hasEyes: boolean, exposed?: Readon
   return !exposed || exposed.has(owner) || hasEyes;
 }
 
+/** The organ segment's draw decision (organs as mesh, 2026-10-06): the owner is exposed (as a bone segment's, with no
+ *  eye clause), AND one of its wounds' exposure spheres reaches the segment's posed bound (organ-reach.ts). `spheres`
+ *  undefined = no reach test (every exposed owner's organs draw); null or empty = nothing reaches. */
+export function organNeeded(
+  owner: unknown, exposed: ReadonlySet<unknown> | undefined, spheres: ReadonlyArray<ReachSphere> | null | undefined,
+  centre: readonly [number, number, number], radius: number,
+): boolean {
+  if (exposed && !exposed.has(owner)) return false;
+  if (spheres === undefined) return true;
+  return spheres !== null && organReached(spheres, centre, radius);
+}
+
 export interface SegmentMeshRenderer {
   object: THREE.Group;
   uniforms: BoneInstancerUniforms;
@@ -127,12 +148,23 @@ export interface SegmentMeshRenderer {
    *  splitDrawn for the 'head' segment), or null. The segment and its eyes are then drawn once per piece of the
    *  skull's split (head-split.ts skullSplitOf), each copy turned by its piece's bone angle and clipped to it. Null,
    *  or `split` omitted = the closed draw, exactly. `seed` answers the owner's fracture seed (its actor id: each head
-   *  breaks along its own pattern, the same one whatever else split before it); omitted = 0. */
+   *  breaks along its own pattern, the same one whatever else split before it); omitted = 0.
+   *  `reach` (organs as mesh): the owner's wound exposure spheres (cut-wound.ts boneExposureOf), or null for none. An
+   *  organ source is drawn only when one reaches its posed bound (organNeeded). Omitted = no reach test. */
   update(
     entries: ReadonlyArray<readonly BoneFieldSource[]>, owners?: readonly object[], shown?: ReadonlySet<unknown>,
     exposed?: ReadonlySet<unknown>, extra?: (owner: object, segment: string) => ArrayLike<number> | null,
     split?: { warp(owner: object, segment: string): SplitWarp | null; seed?(owner: object): number },
+    reach?: (owner: object) => ReadonlyArray<ReachSphere> | null,
   ): void;
+  /** The organ material's look, live (mesh-organ.ts): `tint` = (organColor, organAmp), the march's own two values,
+   *  copied from a body view by the game; `cfg`, `gloss`, `occ`, `detail` and `relief` as OrganLook. */
+  readonly organLook: {
+    tint: { value: THREE.Vector4 }; cfg: { value: THREE.Vector4 }; gloss: { value: THREE.Vector4 }; occ: { value: THREE.Vector4 };
+    detail: { value: THREE.Vector4 }; relief: { value: THREE.Vector4 };
+  };
+  /** Set the organ look: one of ORGAN_LOOKS by name, or its numbers. Returns the values in force. */
+  setOrganLook(look?: OrganLookName | Partial<OrganLook>): OrganLook;
   /** The split skull's look, live: `follow` set by hand replaces HEAD_SPLIT.skull.follow (null = that table; a
    *  number is one share for every stage, 1 rides the flesh, 0 the whole skull; or another table); `jag` = (zigAmp,
    *  zigLen, chipAmp, chipLen) and `jagShape` = (wobble, wobbleAlong, wobbleUp, upFreq), the fracture edge
@@ -144,7 +176,7 @@ export interface SegmentMeshRenderer {
   };
   /** Diagnostics: which batches are drawn (both true by default). A capture tells bone or eye pixels from everything
    *  else by a shown / hidden pair of the same frame. Takes effect at the next update. */
-  readonly show: { bones: boolean; eyes: boolean };
+  readonly show: { bones: boolean; eyes: boolean; organs: boolean };
   /** Copy each drawn instance's OWNER picks into its batch's iLights (shared light list, Task
    *  11): `lightsOf(owner)` is the owner actor's `bodyLights` value, read NOW, so call it after
    *  this frame's picks are written (the game's light loop runs after update). Undefined/null =
@@ -170,10 +202,12 @@ export interface SegmentMeshRenderer {
     actors: number; segments: number; rigid: number; limb: number;
     hidden: number; verts: number; tris: number;
     overflow: number; clamped: number; droppedQuads: number;
+    /** Organ instances drawn by the last update (0 with no organ source, or none reached). */
+    organs: number;
   };
   /** This update's instanced draws (tests, diagnostics): owner, eye or segment, world matrix, and for a copy of a
    *  split head the piece it is clipped to (0 the rest, 1 the + half, 2 the - half; null = not split). */
-  readonly drawn: ReadonlyArray<{ owner: unknown; eye: boolean; matrix: THREE.Matrix4; geometry: THREE.BufferGeometry; piece: 0 | 1 | 2 | null }>;
+  readonly drawn: ReadonlyArray<{ owner: unknown; eye: boolean; organ: boolean; matrix: THREE.Matrix4; geometry: THREE.BufferGeometry; piece: 0 | 1 | 2 | null }>;
   /** How many instanced draws this update issued (one per segment geometry in use, plus eyes). */
   readonly draws: number;
   /** Remove every actor slot while keeping material/uniforms reusable. */
@@ -236,14 +270,15 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     mul(mul(u.look.z, gloss), MESH_SPEC_SCALE),
     mul(mul(u.look.w, gloss), MESH_FRES_SCALE),
   );
-  const lit = (surface: unknown, look: unknown) => vec4(shade({
+  const lightArgs = (surface: unknown, look: unknown) => ({
     p: positionWorld, n: normalWorld, camPos: cameraPosition,
     deepColor: u.deepColor, ambient: u.ambient, look: look as never,
     lightDir: u.lightDir, keyColor: u.keyColor, lightCfg: u.lightCfg,
     spotPos: u.spotPos, spotAxis: u.spotAxis, spotCfg: u.spotCfg, spotCfg2: u.spotCfg2, spotColor: u.spotColor,
     surfaceIn: surface as never,
     picks: picksAttr, lights: listNode, listOn: u.lightListCfg.x, fill: fillAttr,
-  }) as never, 1.0);
+  });
+  const lit = (surface: unknown, look: unknown) => vec4(shade(lightArgs(surface, look)) as never, 1.0);
   const material = new MeshBasicNodeMaterial();
   material.colorNode = lit(surf, meshLook);
   // Eye shader chain: hash -> noise -> sclera vessels -> surface -> emission.
@@ -266,6 +301,46 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   eyeMaterial.colorNode = vec4(add(eyeShaded.xyz, eyeEmission.xyz), 1.0);
   eyeMaterial.depthTest = true;
   eyeMaterial.depthWrite = true;
+  // THE ORGAN MATERIAL (organs as mesh; mesh-organ.ts). Its surface and gloss are their own WGSL on the SAME hash and
+  // noise nodes (a second copy would declare them twice in one pipeline, as the eye chain notes); the light compose is
+  // the bone's with the cavity's occlusion on every light but the beam (meshOrganShade, built on the same body-lights
+  // and boneShade nodes). No meshFeature, no split: an organ is one closed wet surface in its segment's frame.
+  // Its one attribute of its own is `organTube` (mesh-organ-tubes.ts): where the vertex is on its tube, and its
+  // crease shade. The detail normal (haustra, wrinkles) is a height over that, per pixel (meshOrganDetail).
+  const organLook = {
+    tint: uniform(new THREE.Vector4(0.72, 0.32, 0.30, 1)),
+    cfg: uniform(new THREE.Vector4(...ORGAN_LOOKS[ORGAN_LOOK_DEFAULT].cfg)),
+    gloss: uniform(new THREE.Vector4(...ORGAN_LOOKS[ORGAN_LOOK_DEFAULT].gloss)),
+    occ: uniform(new THREE.Vector4(...ORGAN_LOOKS[ORGAN_LOOK_DEFAULT].occ)),
+    detail: uniform(new THREE.Vector4(...ORGAN_LOOKS[ORGAN_LOOK_DEFAULT].detail)),
+    relief: uniform(new THREE.Vector4(...ORGAN_LOOKS[ORGAN_LOOK_DEFAULT].relief)),
+  };
+  const organShade = wgslFn(MESH_ORGAN_SHADE_WGSL, fns.slice());
+  const organSurfaceFn = wgslFn(MESH_ORGAN_SURFACE_WGSL, fns.slice(0, 2));
+  const organWetFn = wgslFn(MESH_ORGAN_WET_WGSL, fns.slice(0, 2));
+  const organHeightFn = wgslFn(MESH_ORGAN_HEIGHT_WGSL, fns.slice(0, 2));
+  const organDetailFn = wgslFn(MESH_ORGAN_DETAIL_WGSL, [...fns.slice(0, 2), organHeightFn]);
+  const organDetail = organDetailFn({
+    n: normalWorld, pWorld: positionWorld, tube: attribute('organTube', 'vec4'), detail: organLook.detail,
+    relief: organLook.relief,
+  }) as unknown as { xyz: Node<'vec3'>; w: Node<'float'> };
+  const organSurf = organSurfaceFn({
+    pWorld: positionWorld, pLocal: positionGeometry, tint: organLook.tint, deepColor: u.deepColor, cfg: organLook.cfg,
+    woundTex: texture(woundTex), woundCount: u.woundCount,
+  });
+  const organGloss = organWetFn({ pLocal: positionGeometry, lo: organLook.gloss.z }) as never;
+  const organMaterial = new MeshBasicNodeMaterial();
+  organMaterial.colorNode = vec4(organShade({
+    ...lightArgs(organSurf, vec4(
+      u.look.x, u.look.y,
+      mul(mul(u.look.z, organGloss), organLook.gloss.x),
+      mul(mul(u.look.w, organGloss), organLook.gloss.y),
+    )),
+    n: organDetail.xyz, occ: organLook.occ, gloss: organLook.gloss, cav: organDetail.w,
+  }) as never, 1.0);
+  organMaterial.depthTest = true;
+  organMaterial.depthWrite = true;
+  organMaterial.side = THREE.FrontSide;
   // THE SPLIT COPIES' MATERIALS (see the header). The clip takes the fragment back to the un-turned point q and
   // answers whether this copy's piece owns it; craters and bone exposure are stored on the closed head, so the
   // surface reads q where the closed material reads positionWorld. Lighting stays at the turned place. Two-sided: a
@@ -339,7 +414,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   // segment per actor (~250 draws on Night Train). The shaders read `positionGeometry`, not
   // `positionLocal`: an InstancedMesh folds the instance matrix into positionLocal, and the
   // segment-local appearance (patches, teeth, iris) must stay in the segment's own frame.
-  interface Batch { mesh: THREE.InstancedMesh; count: number; eye: boolean; split: boolean; idle: number; owners: unknown[] }
+  interface Batch { mesh: THREE.InstancedMesh; count: number; eye: boolean; organ: boolean; split: boolean; idle: number; owners: unknown[] }
   /** Take a batch out of the scene. A split batch's geometry is its twin (splitGeometryOf), which this renderer owns:
    *  disposed here, or three keeps it (its instance buffers, and through it the vertex data) for good. Disposing it
    *  also frees the GPU buffers of the vertex attributes it SHARES with the segment's geometry; three makes those
@@ -409,17 +484,17 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     attr.needsUpdate = true;
   };
   /** The batch that draws `geometry`. `split`: `geometry` is a splitGeometryOf, drawn on the split materials. */
-  const batchFor = (geometry: THREE.BufferGeometry, eye: boolean, split = false): Batch => {
+  const batchFor = (geometry: THREE.BufferGeometry, eye: boolean, split = false, organ = false): Batch => {
     let b = batches.get(geometry);
     if (!b) {
-      const mesh = new THREE.InstancedMesh(geometry, split ? (eye ? eyeSplitMaterial : splitMaterial) : (eye ? eyeMaterial : material), 16);
-      mesh.name = (eye ? 'skeleton-fleshy-eyes' : 'skeleton-segments') + (split ? '-split' : '');
+      const mesh = new THREE.InstancedMesh(geometry, organ ? organMaterial : split ? (eye ? eyeSplitMaterial : splitMaterial) : (eye ? eyeMaterial : material), 16);
+      mesh.name = organ ? 'skeleton-organs' : (eye ? 'skeleton-fleshy-eyes' : 'skeleton-segments') + (split ? '-split' : '');
       mesh.frustumCulled = false;
       mesh.layers.set(layer);
       mesh.count = 0;
       ensureLights(geometry, mesh.instanceMatrix.count, split);
       group.add(mesh);
-      b = { mesh, count: 0, eye, split, idle: 0, owners: [] };
+      b = { mesh, count: 0, eye, organ, split, idle: 0, owners: [] };
       batches.set(geometry, b);
     }
     return b;
@@ -444,7 +519,18 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   const preparedGeometry = new WeakSet<THREE.BufferGeometry>();
   const prepareGeometry = (geometry: THREE.BufferGeometry, source: BoneFieldSource) => {
     if (preparedGeometry.has(geometry)) return;
+    preparedGeometry.add(geometry);
     const pos = geometry.getAttribute('position');
+    if (source.kind === 'organ') {
+      // The organ material reads no meshFeature, and always organTube: a swept mesh brings its own; an extracted one
+      // has no tube coordinates (zero: meshOrganDetail leaves its normal alone) and no crease (w = 1).
+      if (!geometry.getAttribute('organTube')) {
+        const tube = new Float32Array(pos.count * 4);
+        for (let i = 3; i < tube.length; i += 4) tube[i] = 1;
+        geometry.setAttribute('organTube', new THREE.BufferAttribute(tube, 4));
+      }
+      return;
+    }
     const feature = new Float32Array(pos.count * 4);
     const isHead = source.segment === 'head' ? (source.character === 'soldier' ? 2 : 1) : 0;
     for (let i = 0; i < pos.count; i++) {
@@ -452,11 +538,10 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       feature.set([q[0], q[1], q[2], isHead], i * 4);
     }
     geometry.setAttribute('meshFeature', new THREE.BufferAttribute(feature, 4));
-    preparedGeometry.add(geometry);
   };
   const stats = {
     actors: 0, segments: 0, rigid: 0, limb: 0, hidden: 0, verts: 0, tris: 0,
-    overflow: 0, clamped: 0, droppedQuads: 0,
+    overflow: 0, clamped: 0, droppedQuads: 0, organs: 0,
   };
   const clear = () => {
     for (const [geo, b] of [...batches]) dropBatch(geo, b);
@@ -466,14 +551,14 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     for (const d of debris) group.remove(d.mesh);
     debris.length = 0;
     stats.actors = stats.segments = stats.rigid = stats.limb = stats.hidden = 0;
-    stats.verts = stats.tris = stats.overflow = stats.clamped = stats.droppedQuads = 0;
+    stats.verts = stats.tris = stats.overflow = stats.clamped = stats.droppedQuads = stats.organs = 0;
     group.visible = false;
   };
   const segM = new THREE.Matrix4(), eyeM = new THREE.Matrix4(), tmpM = new THREE.Matrix4();
   const one = new THREE.Vector3(1, 1, 1), pv = new THREE.Vector3(), qv = new THREE.Quaternion();
-  const show = { bones: true, eyes: true };
+  const show = { bones: true, eyes: true, organs: true };
   /** Test/diagnostic view of this update's instanced draws. */
-  const drawn: { owner: unknown; eye: boolean; matrix: THREE.Matrix4; geometry: THREE.BufferGeometry; piece: 0 | 1 | 2 | null }[] = [];
+  const drawn: { owner: unknown; eye: boolean; organ: boolean; matrix: THREE.Matrix4; geometry: THREE.BufferGeometry; piece: 0 | 1 | 2 | null }[] = [];
   const turnM = new THREE.Matrix4(), pieceM = new THREE.Matrix4(), axisV = new THREE.Vector3(), hingeV = new THREE.Vector3();
   const shiftV = new THREE.Vector3(), centreV = new THREE.Vector3();
   const jagNow = { zigAmp: 0, chipAmp: 0 };
@@ -483,13 +568,13 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
    *  the hinge by its bone angle, each with its split record. Returns the instances drawn. */
   const drawPieces = (
     geometry: THREE.BufferGeometry, eye: boolean, m: THREE.Matrix4, owner: unknown, skull: SkullSplit | null,
-    centre: THREE.Vector3, radius: number,
+    centre: THREE.Vector3, radius: number, organ = false,
   ): number => {
     jagNow.zigAmp = splitLook.jag.value.x; jagNow.chipAmp = splitLook.jag.value.z;
     const mask = skull ? skullPieces(skull, [centre.x, centre.y, centre.z], radius + meshSplitJagMax(jagNow)) : 1;
     if (!skull || mask === 1) {
-      push(batchFor(geometry, eye), m, owner);
-      drawn.push({ owner, eye, matrix: m.clone(), geometry, piece: null });
+      push(batchFor(geometry, eye, false, organ), m, owner);
+      drawn.push({ owner, eye, organ, matrix: m.clone(), geometry, piece: null });
       return 1;
     }
     let copies = 0;
@@ -507,7 +592,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       }
       push(b, copy, owner);
       packSplitInstance(splitRows(sg).array as Float32Array, b.count - 1, skull, piece);
-      drawn.push({ owner, eye, matrix: copy.clone(), geometry: sg, piece });
+      drawn.push({ owner, eye, organ: false, matrix: copy.clone(), geometry: sg, piece });
       copies++;
     }
     return copies;
@@ -552,9 +637,9 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
         if (d.age > 2.5) { group.remove(d.mesh); debris.splice(i, 1); }
       }
     },
-    update(entries, owners, shown, exposed, extra, split) {
+    update(entries, owners, shown, exposed, extra, split, reach) {
       stats.actors = entries.length;
-      stats.segments = stats.rigid = stats.limb = stats.hidden = 0;
+      stats.segments = stats.rigid = stats.limb = stats.hidden = stats.organs = 0;
       stats.verts = stats.tris = 0;
       stats.overflow = stats.clamped = stats.droppedQuads = 0;
       drawn.length = 0;
@@ -585,9 +670,24 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
           if (baked.droppedQuads) stats.droppedQuads += baked.droppedQuads;
           // Visual-actor cull + bone exposure cull: a culled segment is simply not an instance
           // this frame (no pose read, no write).
-          const live = segmentDrawn(s.isLive(), owner, shown) && segmentNeeded(owner, eyes.length > 0, exposed);
+          const organ = s.kind === 'organ';
+          const live = segmentDrawn(s.isLive(), owner, shown)
+            && (organ ? (!exposed || exposed.has(owner)) : segmentNeeded(owner, eyes.length > 0, exposed));
           if (!live) { stats.hidden++; return; }
           const pose = s.pose();
+          if (organ) {
+            // An organ is drawn only where one of its owner's wounds reaches it (the pose is read first: the bound
+            // is the posed one). No extra affine, no split, no eyes.
+            const bound = segmentBoundSphere(s.bounds, pose);
+            if (!organNeeded(owner, exposed, reach ? reach(owner as object) : undefined, bound.centre, bound.radius)) { stats.hidden++; return; }
+            pv.set(pose.origin[0], pose.origin[1], pose.origin[2]);
+            qv.set(pose.quat[0], pose.quat[1], pose.quat[2], pose.quat[3]);
+            segM.compose(pv, qv, one);
+            stats.organs += drawPieces(baked.geometry, false, segM, owner, null, centreV, 0, true);
+            stats.verts += baked.verts;
+            stats.tris += baked.tris;
+            return;
+          }
           pv.set(pose.origin[0], pose.origin[1], pose.origin[2]);
           qv.set(pose.quat[0], pose.quat[1], pose.quat[2], pose.quat[3]);
           segM.compose(pv, qv, one);
@@ -622,7 +722,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       for (const [geo, b] of batches) {
         b.mesh.count = b.count;
         b.owners.length = b.count;
-        b.mesh.visible = b.count > 0 && (b.eye ? show.eyes : show.bones);
+        b.mesh.visible = b.count > 0 && (b.organ ? show.organs : b.eye ? show.eyes : show.bones);
         if (b.count > 0) {
           b.mesh.instanceMatrix.needsUpdate = true; b.idle = 0;
           if (b.split) markLive(splitRows(geo), b.count, SPLIT_INSTANCE_FLOATS);
@@ -684,6 +784,21 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     },
     get stats() { return stats; },
     splitLook,
+    organLook,
+    setOrganLook(look) {
+      const set = typeof look === 'string' ? ORGAN_LOOKS[look] : look;
+      const cfg = set?.cfg, gloss = set?.gloss, occ = set?.occ, detail = set?.detail, relief = set?.relief;
+      if (cfg) organLook.cfg.value.set(cfg[0], cfg[1], cfg[2], cfg[3]);
+      if (gloss) organLook.gloss.value.set(gloss[0], gloss[1], gloss[2], gloss[3]);
+      if (occ) organLook.occ.value.set(occ[0], occ[1], occ[2], occ[3]);
+      if (detail) organLook.detail.value.set(detail[0], detail[1], detail[2], detail[3]);
+      if (relief) organLook.relief.value.set(relief[0], relief[1], relief[2], relief[3]);
+      const c = organLook.cfg.value, g = organLook.gloss.value, o = organLook.occ.value, d = organLook.detail.value, r = organLook.relief.value;
+      return {
+        cfg: [c.x, c.y, c.z, c.w], gloss: [g.x, g.y, g.z, g.w], occ: [o.x, o.y, o.z, o.w],
+        detail: [d.x, d.y, d.z, d.w], relief: [r.x, r.y, r.z, r.w],
+      };
+    },
     show,
     get drawn() { return drawn; },
     get draws() { let n = 0; for (const b of batches.values()) if (b.count > 0) n++; return n; },
@@ -692,6 +807,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       clear();
       material.dispose();
       eyeMaterial.dispose();
+      organMaterial.dispose();
       splitMaterial.dispose();
       eyeSplitMaterial.dispose();
       eyeGeometry.dispose();

@@ -36,7 +36,7 @@ Each line is the first sentence of the module's header comment.
 | --- | --- | --- |
 | [webgpu/march/](#webgpumarch) | 54 | The SDF march shader, split by stage (WGSL). |
 | [webgpu/earlyz/](#webgpuearlyz) | 10 | Early-Z depth prepass for the march. |
-| [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 11 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
+| [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 14 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
 | [webgpu/upscale/](#webgpuupscale) | 8 | Upscaling of the low-res march target. |
 | [characters/](#characters) | 1 | Character bodies: `.blob` sources, generators and per-character data. |
 | [shared-wounds/](#shared-wounds) | 4 | Shared wound-field probe page. |
@@ -147,10 +147,13 @@ Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite th
 - `webgpu/skeleton-spike/contract.ts` — SKELETON REPRESENTATION COMPARISON — shared field contract (Task 1).
 - `webgpu/skeleton-spike/mesh-appearance.ts` — Appearance maths for the skeleton segment meshes: tissue patch classes, skull cavity, sockets, teeth, gloss mask, with matching WGSL.
 - `webgpu/skeleton-spike/mesh-eyes.ts` — Eye placement, shading and impact picking for the skull segment mesh, with matching WGSL for the vessel, surface and emission terms.
+- `webgpu/skeleton-spike/mesh-organ-tubes.ts` — ORGANS, LOW-POLY (2026-10-07): an organ segment's mesh as SWEPT TUBES, one closed tube per organ prim, instead of a surface-nets extraction of their…
+- `webgpu/skeleton-spike/mesh-organ.ts` — ORGANS AS MESH (2026-10-06): the organ mesh's material terms.
 - `webgpu/skeleton-spike/mesh-renderer.ts` — The forward-mode renderer for skeleton segment meshes: one pooled mesh per live bone segment per actor, posed from the bone contract.
 - `webgpu/skeleton-spike/mesh-skull.ts` — The mesh-skull sculpt: meshBoneSource adapts a bone field source into the carved skull and mandible, plus the skull art revision names.
 - `webgpu/skeleton-spike/mesh-split.ts` — THE SKULL MESH UNDER A HEAD SPLIT: the shader side of head-split.ts's skull rule (skullSplitOf, skullPieceAt).
 - `webgpu/skeleton-spike/mesh.ts` — SKELETON REPRESENTATION COMPARISON — Task 2: cached segment-local bone meshes.
+- `webgpu/skeleton-spike/organ-reach.ts` — ORGANS AS MESH (2026-10-06): which organ segments a body's wounds expose.
 - `webgpu/skeleton-spike/selector.ts` — Mesh actor skeletons are the accepted forward default in dev and production.
 - `webgpu/skeleton-spike/volume-gpu.ts` — SKELETON REPRESENTATION COMPARISON — Task 3b: HOST side of the GPU volume path.
 - `webgpu/skeleton-spike/volume.ts` — SKELETON REPRESENTATION COMPARISON — Task 3: cached segment-local bone distance GRIDS.

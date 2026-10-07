@@ -184,6 +184,90 @@ describe('rest pose — identity frames and exact distance agreement', () => {
   });
 });
 
+describe('organ sources (organs as mesh, 2026-10-06)', () => {
+  const withOrgans = createSkeletonSources(body, bound, { character: 'zombie', organs: true });
+  const organSrc = withOrgans.filter(s => s.kind === 'organ');
+  const organIdx = body.bonePrims.map((b, i) => ({ b, i })).filter(x => x.b.op === 'organ' && !x.b.dead);
+  /** Hard min over the posed body's organ prims: what foldBoneRange folds for the organ rows. */
+  const organOracle = (posed: BuildResult, p: Vec3): number => {
+    let d = Infinity;
+    for (const b of posed.bonePrims) if (b.op === 'organ' && !b.dead && posed.clusters[b.cluster]?.alive) d = Math.min(d, sdPrimitive(p, b));
+    return d;
+  };
+
+  it('the zombie authors 8 organ prims, every one on an axial frame', () => {
+    expect(organIdx.length).toBe(8);
+    for (const { i } of organIdx) expect(bound.boneFrames.has(i)).toBe(true);
+  });
+
+  it('is opt-in: without `organs` the source list is the bone list, all kind bone', () => {
+    expect(sources.every(s => s.kind === 'bone')).toBe(true);
+    expect(sources.some(s => s.segment.startsWith('organ:'))).toBe(false);
+    expect(withOrgans.filter(s => s.kind === 'bone').map(s => s.revision)).toEqual(sources.map(s => s.revision));
+  });
+
+  it('groups the organs by the axial frame applyRig poses them by', () => {
+    expect(organSrc.length).toBeGreaterThan(0);
+    for (const s of organSrc) {
+      expect(s.segment).toMatch(/^organ:axial:\d+-\d+$/);
+      expect(s.rigidity).toBe('rigid');
+    }
+    expect(organSrc.reduce((n, s) => n + s.primCount, 0)).toBe(organIdx.length);
+    const keys = new Set(organIdx.map(({ i }) => { const f = bound.boneFrames.get(i)!; return `organ:axial:${f.head}-${f.tail}`; }));
+    expect(new Set(organSrc.map(s => s.segment))).toEqual(keys);
+    // No bone source grew an organ member.
+    expect(withOrgans.filter(s => s.kind === 'bone').reduce((n, s) => n + s.primCount, 0))
+      .toBe(body.bonePrims.filter(b => b.op !== 'organ').length);
+  });
+
+  it('at rest the composed organ field is the hard min of the organ prims', () => {
+    let inside = 0;
+    for (const { b } of organIdx) {
+      const mid: Vec3 = [(b.a[0] + b.b[0]) / 2, (b.a[1] + b.b[1]) / 2, (b.a[2] + b.b[2]) / 2];
+      for (const p of cloud(mid, 0.05)) {
+        const ref = organOracle(rest, p);
+        expect(Math.abs(composedBoneDistance(organSrc, p) - ref)).toBeLessThan(1e-6);
+        if (ref < 0) inside++;
+      }
+    }
+    expect(inside).toBeGreaterThan(0);
+  });
+
+  it('posed and yawed, each organ source follows its frame exactly', () => {
+    let rig = bound.rig;
+    for (let i = 0; i < 60; i++)
+      rig = stepRig(rig, 1 / 60, { gravity: [0, -9.8, 0], damping: 0.04, iterations: 4, restStiffness: 0.2 });
+    const yaw = 1.1;
+    const posed = applyRig(body, { ...bound, rig }, yaw);
+    const live = createSkeletonSources(body, bound, { character: 'zombie', organs: true, rig: () => rig, bodyYaw: yaw })
+      .filter(s => s.kind === 'organ');
+    let moved = 0;
+    for (const s of live) {
+      expect(s.poseEndpointError()).toBeLessThan(1e-9);
+      const centre = s.toWorld([(s.bounds.min[0] + s.bounds.max[0]) / 2, (s.bounds.min[1] + s.bounds.max[1]) / 2, (s.bounds.min[2] + s.bounds.max[2]) / 2]);
+      for (const p of cloud(centre, 0.06)) {
+        // The whole organ field, not this segment's alone: compare the composition.
+        expect(Math.abs(composedBoneDistance(live, p) - organOracle(posed, p))).toBeLessThan(1e-6);
+      }
+      if (Math.abs(1 - s.pose().quat[3]) > 1e-3) moved++;
+    }
+    expect(moved).toBe(live.length);
+  });
+
+  it('dies with the torso cluster', () => {
+    const torso = body.bonePrims[organIdx[0]!.i]!.cluster;
+    const severed: BuildResult = { ...body, clusters: body.clusters.map((c, i) => i === torso ? { ...c, alive: false } : c) };
+    const sev = createSkeletonSources(severed, bound, { character: 'zombie', organs: true }).filter(s => s.kind === 'organ');
+    expect(sev.length).toBeGreaterThan(0);
+    for (const s of sev) expect(s.isLive()).toBe(false);
+    for (const s of organSrc) expect(s.isLive()).toBe(true);
+  });
+
+  it('revisions are unique and differ from every bone revision', () => {
+    expect(new Set(withOrgans.map(s => s.revision)).size).toBe(withOrgans.length);
+  });
+});
+
 describe('posed — round trips and measured rigidity error', () => {
   // A real verlet pose: 60 gravity steps (the rig-bind.test.ts recipe), so
   // joints sit off rest but constraint-legal.

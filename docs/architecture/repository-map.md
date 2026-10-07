@@ -17,6 +17,11 @@ The implementation remains under `src/lab/sdf-zombie/webgpu/skeleton-spike/`.
 both deferred rendering and detached chunks retain procedural bones.
 See [accepted state and limitations](../dev-notes/2026-09-07-skeleton-comparison/wrap-up.md).
 
+Organs (2026-10-06): on the mesh skeleton the zombie's organs are segment meshes too (`contract.ts` kind `'organ'`,
+`mesh-organ.ts`, `organ-reach.ts`) and the body packs no inside-flesh row. `?organs=sdf` keeps the SDF organs for A/B;
+procedural, deferred and detached chunks keep them always.
+See [the design](../superpowers/specs/2026-10-06-organs-mesh-design.md).
+
 ## 1. Current-state tree (facts)
 
 Source lives under `src/`. The active game and tooling sits under

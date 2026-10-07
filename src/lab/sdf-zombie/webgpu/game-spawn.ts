@@ -519,6 +519,7 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
   if (ctx.render.segMeshCache) {
     ctx.render.skeletonSources.set(actor, buildSkeletonSources(ctx, actor, name));
     actor.view.setPackBones(false);
+    actor.view.setPackOrgans(ctx.render.organMode !== 'mesh');
   }
   // Task 3 is zombie-first. Other characters keep exact procedural bones
   // until their source fixtures have been validated.
