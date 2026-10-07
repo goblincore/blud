@@ -69,6 +69,36 @@ export function createHeadSeams(ctx: GameContext) {
         for (const p of a.posed().bonePrims ?? []) if (p.op === 'bone' && p.limb === 'head' && !p.dead) d = Math.min(d, sdPrimitive([x, y, z], p));
         return Number.isFinite(d) ? d : null;
       },
+      /** WHAT IS DRAWN NEAR A POINT: everything this frame draws whose position lies within `r` m of world (x, y, z),
+       *  by the list it is drawn from. A gate asks it at a head's old place after the head has left: only what flew
+       *  off with a velocity belongs there, and nothing after a moment.
+       *    bones     the bone-mesh renderer's instances (their owner's id, an eye or a bone, an organ, the split piece);
+       *    attached  the pieces riding an actor (the head damage's eyes, plugs and flaps): chunk views off the lists;
+       *    chunks    the flying SDF gib pieces (id, tag, kind, speed);
+       *    baked     the settled ones;
+       *    meshGibs  the mesh gibs (the brain, skull fragments: tag, speed);
+       *    flesh     live flesh prims of any actor's head cluster there (the actor's id and the prim's index). */
+      drawnNear: (x: number, y: number, z: number, r: number) => {
+        const near = (p: ArrayLike<number>) => Math.hypot(p[0]! - x, p[1]! - y, p[2]! - z) <= r;
+        const at = (p: ArrayLike<number>) => [p[0]!, p[1]!, p[2]!].map(v => Math.round(v * 1000) / 1000);
+        const speed = (v: ArrayLike<number>) => Math.round(Math.hypot(v[0]!, v[1]!, v[2]!) * 100) / 100;
+        const mesh = ctx.render.segMeshRenderer;
+        return {
+          bones: (mesh ? mesh.drawn : []).map(d => ({ d, p: [d.matrix.elements[12]!, d.matrix.elements[13]!, d.matrix.elements[14]!] }))
+            .filter(e => near(e.p))
+            .map(e => ({ owner: (e.d.owner as { id?: number } | null)?.id ?? -1, eye: e.d.eye, organ: e.d.organ, piece: e.d.piece, pos: at(e.p) })),
+          attached: ctx.bake.attachedViews.filter(v => v.object.visible && near(v.object.position.toArray()))
+            .map(v => ({ pos: at(v.object.position.toArray()) })),
+          chunks: ctx.bake.liveChunks.filter(c => c.view.object.visible && near(c.state.pos))
+            .map(c => ({ id: c.id, tag: c.tag ?? null, kind: c.kind, pos: at(c.state.pos), speed: speed(c.state.vel) })),
+          baked: ctx.bake.chunks.filter(b => near(b.centre)).map(b => ({ id: b.id, pos: at(b.centre) })),
+          meshGibs: ctx.gibs.meshGibs.filter(g => near(g.state.pos)).map(g => ({ tag: g.tag, pos: at(g.state.pos), speed: speed(g.state.vel) })),
+          flesh: ctx.world.actors.flatMap(a => a.posed().prims
+            .map((q, i) => ({ q, i }))
+            .filter(e => e.q.limb === 'head' && !e.q.dead && near([(e.q.a[0] + e.q.b[0]) / 2, (e.q.a[1] + e.q.b[1]) / 2, (e.q.a[2] + e.q.b[2]) / 2]))
+            .map(e => ({ actor: a.id, prim: e.i, op: e.q.op ?? 'add', radius: e.q.radius }))),
+        };
+      },
       /** The live brain MESH gibs' positions (world; game-mesh-gibs.ts, tag 'brain'), oldest first. */
       brains: (): number[][] => ctx.gibs.meshGibs.filter(g => g.tag === 'brain').map(g => [...g.state.pos]),
       /** The live snapped-EYE gibs (spawnChunkPiece tag 'eye'; head-eye EYE_FLY), oldest first: chunk id, world
