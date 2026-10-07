@@ -1,7 +1,8 @@
 # Organs, low-poly — notes
 
 Branch `claude/organs-lowpoly` (worktree `.claude/worktrees/charming-lamport-9fe36c`), on top of `claude/organs-mesh`
-(`e0c951e5`, PR goblincore/blud#34, open when this was built). Follow-up to
+(`e0c951e5`, PR goblincore/blud#34, open when this was built and merged to main the same day; this branch is
+PR goblincore/blud#37 against main). Follow-up to
 `docs/dev-notes/2026-10-06-organs-mesh/NOTES.md`; design in section 3.7 of
 `docs/superpowers/specs/2026-10-06-organs-mesh-design.md`.
 
