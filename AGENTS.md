@@ -93,3 +93,6 @@ See `docs/dev-notes/2026-09-07-skeleton-comparison/wrap-up.md`.
 packs no inside-flesh row, so the march never calls `applyBones`. `?organs=sdf` (or `__sdfGame.setOrgans('sdf')`) keeps
 them as field rows for A/B. `?skeleton=procedural`, deferred rendering and detached chunks keep SDF organs.
 See `docs/superpowers/specs/2026-10-06-organs-mesh-design.md` and `docs/dev-notes/2026-10-06-organs-mesh/NOTES.md`.
+Since 2026-10-07 the organ mesh is swept tubes, one per organ prim (`mesh-organ-tubes.ts`; `ORGAN_MESHES` in `mesh.ts`,
+`__sdfGame.setOrganMesh('nets-5mm')` for the old extraction), and its surface detail (haustra, wrinkles, creases) is
+shading over the per-vertex `organTube` coordinate, not geometry: `docs/dev-notes/2026-10-07-organs-lowpoly/NOTES.md`.

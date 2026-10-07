@@ -24,7 +24,10 @@ import { solveHingeLeg } from '../../ik';
 import { sdBody } from '../../validate';
 import { gradientOf } from '../surface-nets-cpu';
 import { createSkeletonSources, type BoneFieldSource } from './contract';
-import { SegmentMeshCache, extractSegmentMesh, MESH_CELL, type SegmentMesh } from './mesh';
+import {
+  SegmentMeshCache, extractSegmentMesh, MESH_CELL, ORGAN_MESHES, ORGAN_MESH_DEFAULT, ORGAN_NETS_FALLBACK, organMeshKey,
+  type OrganMeshName, type SegmentMesh,
+} from './mesh';
 import { createSegmentMeshRenderer } from './mesh-renderer';
 
 const body = buildBody(compileBlob(parseBlob(zombieSrc)), DEFAULT_BUILD_OPTS);
@@ -307,33 +310,112 @@ describe('SegmentMeshCache', () => {
   });
 });
 
-describe('organ sources extract at their own cell (organs as mesh, 2026-10-06)', () => {
+describe('organ sources mesh by ORGAN_MESHES (organs as mesh, 2026-10-06; low-poly, 2026-10-07)', () => {
   const organSrc = createSkeletonSources(body, bound, { character: 'zombie', organs: true }).filter(s => s.kind === 'organ');
+  const meshed = (name: OrganMeshName) => organSrc.map(s => extractSegmentMesh(s, MESH_CELL, ORGAN_MESHES[name]));
+  const sum = (ms: SegmentMesh[]) => ({ verts: ms.reduce((n, m) => n + m.verts, 0), tris: ms.reduce((n, m) => n + m.tris, 0) });
 
-  it('keys an organ at ORGAN_MESH_CELL and a bone at the cache cell', async () => {
-    const { ORGAN_MESH_CELL } = await import('./mesh');
+  it('keys an organ by its mesh spec and a bone by the cache cell; the default is the swept tubes', () => {
     const cache = new SegmentMeshCache();
-    expect(organSrc.length).toBeGreaterThan(0);
-    for (const s of organSrc) expect(cache.keyOf(s).endsWith(`@${ORGAN_MESH_CELL}`)).toBe(true);
+    expect(organSrc.length).toBe(2);
+    expect(ORGAN_MESH_DEFAULT).toBe('tubes');
+    for (const s of organSrc) expect(cache.keyOf(s)).toBe(`${s.revision}@${organMeshKey(ORGAN_MESHES.tubes)}`);
     expect(cache.keyOf(sources[0]!).endsWith(`@${MESH_CELL}`)).toBe(true);
+    // Every spec has its own key: two specs never share a cached mesh.
+    const keys = Object.values(ORGAN_MESHES).map(organMeshKey);
+    expect(new Set(keys).size).toBe(keys.length);
     cache.dispose();
   });
 
-  it('extracts each organ segment complete, unclamped, and on the organ field', () => {
+  it('the vertex and triangle counts of the zombie organs, per mesh (the numbers the notes report)', () => {
+    // 2026-10-06 shipped nets-5mm. The swept tubes are 13% of its vertices and of its triangles.
+    expect(sum(meshed('nets-5mm'))).toEqual({ verts: 4038, tris: 8084 });
+    expect(sum(meshed('nets-10mm'))).toEqual({ verts: 999, tris: 1996 });
+    expect(sum(meshed('tubes'))).toEqual({ verts: 528, tris: 1024 });
+    expect(meshed('tubes').map(m => m.verts)).toEqual([438, 90]);
+    for (const name of Object.keys(ORGAN_MESHES) as OrganMeshName[]) {
+      const ms = meshed(name);
+      console.log(`  organ mesh ${name}: ${ms.map(m => `${m.verts} v / ${m.tris} t`).join(' + ')} = ${sum(ms).verts} v / ${sum(ms).tris} t; built in ${ms.reduce((n, m) => n + m.bakeMs, 0).toFixed(1)} ms`);
+    }
+  });
+
+  it('extracts each organ segment complete, unclamped, and on the organ field (surface nets)', () => {
+    for (const name of ['nets-5mm', 'nets-10mm'] as const) {
+      for (const [k, m] of meshed(name).entries()) {
+        const s = organSrc[k]!;
+        expect(m.mesher).toBe('nets');
+        expect(m.overflow).toBe(false);
+        expect(m.clamped).toBe(false);
+        expect(m.droppedQuads).toBe(0);
+        expect(m.geometry.getAttribute('organTube')).toBeUndefined();
+        const pos = m.geometry.getAttribute('position');
+        let worst = 0;
+        for (let i = 0; i < pos.count; i++) worst = Math.max(worst, Math.abs(s.distance([pos.getX(i), pos.getY(i), pos.getZ(i)])));
+        // Newton-pulled onto the zero set; creases between hard-min members hold the largest error.
+        expect(worst).toBeLessThan(name === 'nets-5mm' ? 0.001 : 0.002);
+      }
+    }
+  });
+
+  it('nets-10mm takes its normals from the field gradient: unit, and round where face normals are faceted', () => {
+    for (const [k, m] of meshed('nets-10mm').entries()) {
+      const s = organSrc[k]!, pos = m.geometry.getAttribute('position'), nor = m.geometry.getAttribute('normal');
+      const faces = m.geometry.clone();
+      faces.computeVertexNormals();
+      const fn = faces.getAttribute('normal');
+      let worstG = 1, worstF = 1;
+      for (let i = 0; i < pos.count; i++) {
+        const p: Vec3 = [pos.getX(i), pos.getY(i), pos.getZ(i)];
+        expect(Math.hypot(nor.getX(i), nor.getY(i), nor.getZ(i))).toBeCloseTo(1, 5);
+        // Against the same gradient at a much finer step, away from the creases (there the field has two).
+        const fine = gradientOf(q => s.distance(q), p, 1e-5), coarse = gradientOf(q => s.distance(q), p, 0.004);
+        if (fine[0] * coarse[0] + fine[1] * coarse[1] + fine[2] * coarse[2] < 0.98) continue;
+        worstG = Math.min(worstG, nor.getX(i) * fine[0] + nor.getY(i) * fine[1] + nor.getZ(i) * fine[2]);
+        worstF = Math.min(worstF, fn.getX(i) * fine[0] + fn.getY(i) * fine[1] + fn.getZ(i) * fine[2]);
+      }
+      expect(worstG).toBeGreaterThan(0.97);
+      expect(worstG).toBeGreaterThan(worstF);
+    }
+  });
+
+  it('the swept mesh carries organTube and analytic normals; the cache returns it by identity until the spec changes', () => {
     const cache = new SegmentMeshCache();
     for (const s of organSrc) {
       const m = cache.get(s);
-      expect(m.verts).toBeGreaterThan(500);
-      expect(m.overflow).toBe(false);
-      expect(m.clamped).toBe(false);
-      expect(m.droppedQuads).toBe(0);
-      const pos = m.geometry.getAttribute('position');
-      let worst = 0;
-      for (let i = 0; i < pos.count; i++) worst = Math.max(worst, Math.abs(s.distance([pos.getX(i), pos.getY(i), pos.getZ(i)])));
-      // Newton-pulled onto the zero set; creases between hard-min members hold the largest error.
-      expect(worst).toBeLessThan(0.001);
+      expect(m.mesher).toBe('tubes');
+      expect(m.geometry.getAttribute('organTube').itemSize).toBe(4);
+      expect(m.geometry.getAttribute('organTube').count).toBe(m.verts);
+      expect(m.geometry.getAttribute('normal').count).toBe(m.verts);
+      expect(m.geometry.index!.count).toBe(m.tris * 3);
+      expect(cache.get(s)).toBe(m);
+      // Another spec: another entry, and the first is still there to go back to.
+      cache.organMesh = ORGAN_MESHES['nets-10mm'];
+      const n = cache.get(s);
+      expect(n).not.toBe(m);
+      expect(n.mesher).toBe('nets');
+      cache.organMesh = ORGAN_MESHES.tubes;
       expect(cache.get(s)).toBe(m);
     }
+    expect(cache.size).toBe(organSrc.length * 2);
     cache.dispose();
+  });
+
+  it('a segment with a prim that cannot be swept extracts instead, under the key that asked for tubes', () => {
+    const s = organSrc[0]!;
+    const boxed: BoneFieldSource = { ...s, revision: `${s.revision}:boxed`, prims: [...s.prims!, { ...s.prims![0]!, box: { round: 0.3 } }] };
+    const m = extractSegmentMesh(boxed, MESH_CELL, ORGAN_MESHES.tubes);
+    expect(m.mesher).toBe('nets');
+    expect(m.key).toBe(`${boxed.revision}@${organMeshKey(ORGAN_MESHES.tubes)}`);
+    expect(m.verts).toBe(extractSegmentMesh(boxed, MESH_CELL, ORGAN_NETS_FALLBACK).verts);
+    // No prims at all (an adapter carved the field): the same fallback.
+    expect(extractSegmentMesh({ ...s, prims: undefined }, MESH_CELL, ORGAN_MESHES.tubes).mesher).toBe('nets');
+  });
+
+  it('a bone source ignores the organ spec', () => {
+    const bone = sources.find(s => s.segment.startsWith('limb:'))!;
+    const a = extractSegmentMesh(bone), b = extractSegmentMesh(bone, MESH_CELL, ORGAN_MESHES.tubes);
+    expect(b.mesher).toBe('nets');
+    expect(b.key).toBe(a.key);
+    expect(b.verts).toBe(a.verts);
   });
 });

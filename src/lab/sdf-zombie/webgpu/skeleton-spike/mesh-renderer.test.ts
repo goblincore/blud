@@ -626,11 +626,69 @@ describe('organs as mesh (2026-10-06): organ sources draw on their own batch, on
     const cache = new SegmentMeshCache();
     const renderer = createSegmentMeshRenderer(cache);
     const close = (v: readonly number[]) => v.map(x => expect.closeTo(x, 6));
-    expect(renderer.setOrganLook('wet')).toEqual({ cfg: close(ORGAN_LOOKS.wet.cfg), gloss: close(ORGAN_LOOKS.wet.gloss), occ: close(ORGAN_LOOKS.wet.occ) });
+    expect(renderer.setOrganLook('wet')).toEqual({ cfg: close(ORGAN_LOOKS.wet.cfg), gloss: close(ORGAN_LOOKS.wet.gloss), occ: close(ORGAN_LOOKS.wet.occ), detail: close(ORGAN_LOOKS.wet.detail), relief: close(ORGAN_LOOKS.wet.relief) });
     expect(renderer.organLook.cfg.value.x).toBe(ORGAN_LOOKS.wet.cfg[0]);
     expect(renderer.setOrganLook({ cfg: [0.1, 0.2, 0.3, 0] }).cfg).toEqual([0.1, 0.2, 0.3, 0]);
     expect(renderer.setOrganLook({ occ: [0.5, 0.25, 0.125, 0] }).occ).toEqual([0.5, 0.25, 0.125, 0]);
     expect(renderer.setOrganLook().gloss).toEqual(close(ORGAN_LOOKS.wet.gloss));
+    // The surface detail is part of the look: its own numbers, the rest left alone.
+    expect(renderer.setOrganLook({ detail: [0, 0, 0, 0.02] }).detail).toEqual(close([0, 0, 0, 0.02]));
+    expect(renderer.setOrganLook({ relief: [0.25, 0.5, 4, 0.005] }).relief).toEqual(close([0.25, 0.5, 4, 0.005]));
+    expect(renderer.setOrganLook().occ).toEqual([0.5, 0.25, 0.125, 0]);
+    renderer.dispose();
+    cache.dispose();
+  });
+
+  it('every organ geometry carries organTube: a swept mesh its own, an extracted one zeros with no crease (organs, low-poly)', async () => {
+    const { ORGAN_MESHES } = await import('./mesh');
+    const owner = { id: 1 };
+    for (const name of ['tubes', 'nets-10mm'] as const) {
+      const cache = new SegmentMeshCache(undefined, ORGAN_MESHES[name]);
+      const renderer = createSegmentMeshRenderer(cache);
+      renderer.update([all], [owner], undefined, new Set([owner]), undefined, undefined, () => belly);
+      const meshes = organMeshes(renderer);
+      expect(meshes).toHaveLength(organSrc.length);
+      for (const m of meshes) {
+        const tube = m.geometry.getAttribute('organTube'), n = m.geometry.getAttribute('position').count;
+        expect(tube.itemSize).toBe(4);
+        expect(tube.count).toBe(n);
+        const arr = tube.array as Float32Array;
+        if (name === 'tubes') {
+          // Tube coordinates: off the axis by a radius somewhere, and a crease somewhere on the coil.
+          let across = 0; for (let i = 0; i < n; i++) across = Math.max(across, Math.hypot(arr[i * 4 + 1]!, arr[i * 4 + 2]!));
+          expect(across).toBeGreaterThan(0.02);
+        } else {
+          for (let i = 0; i < n; i++) expect([arr[i * 4], arr[i * 4 + 1], arr[i * 4 + 2], arr[i * 4 + 3]]).toEqual([0, 0, 0, 1]);
+        }
+        // The organ pipeline's vertex buffers: position, normal, organTube, iLights, iFill (5 of WebGPU's 8; the
+        // instance matrix is a uniform buffer at this instance count).
+        expect(Object.keys(m.geometry.attributes).sort()).toEqual(['iFill', 'iLights', 'normal', 'organTube', 'position']);
+      }
+      renderer.dispose();
+      cache.dispose();
+    }
+  });
+
+  it('a change of organ mesh spec swaps the drawn geometry at the next update, and the old batch empties', async () => {
+    const { ORGAN_MESHES } = await import('./mesh');
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const owner = { id: 1 };
+    const draw = () => { renderer.update([all], [owner], undefined, new Set([owner]), undefined, undefined, () => belly); return organsOf(renderer, owner); };
+    const vertsOf = (ds: ReturnType<typeof draw>) => ds.reduce((n, d) => n + d.geometry.getAttribute('position').count, 0);
+    const tubes = draw();
+    expect(vertsOf(tubes)).toBe(528);
+    cache.organMesh = ORGAN_MESHES['nets-5mm'];
+    const nets = draw();
+    expect(vertsOf(nets)).toBe(4038);
+    expect(nets.map(d => d.geometry)).not.toEqual(tubes.map(d => d.geometry));
+    // The tube batches are still in the scene (they idle out later), drawing nothing.
+    const live = organMeshes(renderer).filter(m => m.count > 0), idle = organMeshes(renderer).filter(m => m.count === 0);
+    expect(live).toHaveLength(organSrc.length);
+    expect(idle).toHaveLength(organSrc.length);
+    for (const m of idle) expect(m.visible).toBe(false);
+    cache.organMesh = ORGAN_MESHES.tubes;
+    expect(draw().map(d => d.geometry)).toEqual(tubes.map(d => d.geometry));
     renderer.dispose();
     cache.dispose();
   });

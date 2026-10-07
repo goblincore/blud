@@ -30,13 +30,20 @@
   Debt: an open head costs about +6 to +8 ms at 0.6 m. Gates `scripts/head-split-gate.mjs` (80 checks), `scripts/axe-gate.mjs` (27), as of 2026-10-05.
   [Spec](docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 10) · [handoff](docs/dev-notes/2026-10-04-head-split/HANDOFF.md) · [notes](docs/dev-notes/2026-10-04-head-split/NOTES.md).
 
-**Organs as mesh** (branch `claude/organs-mesh`) — [rendering](docs/tasks/rendering.md)
-- [~] **Built 2026-10-06; the owner picked the `wet` look 2026-10-07; not merged yet.** On the mesh skeleton a zombie's organs are segment meshes, drawn
+**Organs as mesh** — [rendering](docs/tasks/rendering.md)
+- [x] **Built 2026-10-06; the owner picked the `wet` look 2026-10-07; merged 2026-10-07 (PR 34).** On the mesh skeleton a zombie's organs are segment meshes, drawn
   only where a wound reaches them; the body packs no inside-flesh row, so the march never calls `applyBones` (0
   evaluations a frame against 869,688 on three torso chops; about 1 to 1.5 ms back at 0.9 m). `?organs=sdf` is the A/B.
   The frame is GPU-bound (CPU about 4 ms); organs were about 1 ms of it. [Sheets](docs/dev-notes/2026-10-06-organs-mesh/look/).
   Gate `scripts/organs-mesh-gate.mjs` (32 checks). [Spec](docs/superpowers/specs/2026-10-06-organs-mesh-design.md) ·
   [notes](docs/dev-notes/2026-10-06-organs-mesh/NOTES.md).
+- [~] **Low-poly organs, built 2026-10-07 on `claude/organs-lowpoly` (PR 37); the owner picked the detail strength as
+  shipped; not merged yet.** Each organ prim is a swept tube (analytic normals): the zombie's organs are 528
+  vertices / 1,024 triangles against 4,038 / 8,084, with the same silhouette (0.965 of the extraction's pixels). The
+  haustra and wrinkles are a bump in the organ shader over the tube's own coordinate; the crease between loops is a
+  baked shade. No frame-time change was measured (+0.62 ms, IQR -0.25 to 1.35): this is tidiness and room for more
+  organs. Gate: 37 checks. [Sheets](docs/dev-notes/2026-10-07-organs-lowpoly/look/) ·
+  [notes](docs/dev-notes/2026-10-07-organs-lowpoly/NOTES.md).
 
 **Night Train (level 1)** — [levels](docs/tasks/levels.md) (items 4a–4k)
 - [x] **Body lighting settled** (owner, 2026-09-28): LIGHT LAYERS panel (`light-layers.ts`) — every body-lighting

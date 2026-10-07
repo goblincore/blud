@@ -11,11 +11,21 @@ import type { GameContext } from './game-context';
 import { type Vec3 } from '../types';
 import { bodyBuildCacheStats } from './character-view';
 import { applyBoneMesh, applyOrganMode } from './game-render-leaves';
-import type { OrganLook, OrganLookName } from './skeleton-spike/mesh-organ';
+import { ORGAN_DETAIL_SETS, type OrganLook, type OrganLookName } from './skeleton-spike/mesh-organ';
+import { ORGAN_MESHES, organMeshKey, type OrganMeshName } from './skeleton-spike/mesh';
 import { segmentBoundSphere } from './skeleton-spike/organ-reach';
 import { traceProjectile } from './game-weapon';
 import { sdBody } from '../validate';
 import { splitLookOk, type SplitLookSet } from './skeleton-spike/mesh-split';
+
+/** The name of the organ mesh spec the segment mesh cache builds by (null without the mesh skeleton; 'custom' for a
+ *  spec that is none of ORGAN_MESHES). */
+function organMeshName(ctx: GameContext): OrganMeshName | 'custom' | null {
+  const cache = ctx.render.segMeshCache;
+  if (!cache) return null;
+  const key = organMeshKey(cache.organMesh);
+  return (Object.keys(ORGAN_MESHES) as OrganMeshName[]).find(n => organMeshKey(ORGAN_MESHES[n]) === key) ?? 'custom';
+}
 
 export function createSkeletonSeams(ctx: GameContext) {
   return {
@@ -116,17 +126,42 @@ export function createSkeletonSeams(ctx: GameContext) {
       return {
         mode: ctx.render.organMode, drawn: r ? r.stats.organs : 0, look: r ? r.setOrganLook() : null,
         tint: r ? r.organLook.tint.value.toArray() : null,
+        /** How organ sources are meshed (skeleton-spike/mesh.ts ORGAN_MESHES), and the vertices and triangles of
+         *  the organ instances the last mesh update drew. */
+        mesh: organMeshName(ctx),
+        /** The surface-detail strengths a sheet compares (mesh-organ.ts), each a Partial<OrganLook> for setOrganLook. */
+        detailSets: ORGAN_DETAIL_SETS,
+        drawnVerts: r ? r.drawn.reduce((n, d) => n + (d.organ ? d.geometry.getAttribute('position').count : 0), 0) : 0,
+        drawnTris: r ? r.drawn.reduce((n, d) => n + (d.organ ? (d.geometry.index?.count ?? 0) / 3 : 0), 0) : 0,
         /** The owner (actor id) of each organ instance the last mesh update drew. */
         drawnBy: r ? r.drawn.filter(d => d.organ).map(d => (d.owner as { id?: number } | null)?.id ?? -1) : [],
         packed: ctx.world.actors.map(a => ({ id: a.id, rows: a.view.uniforms.counts2.value.x })),
       };
     },
-    /** Actor `id`'s organ segments (its contract sources of kind 'organ'): key, live, and the posed bound sphere the
-     *  reach test uses (organ-reach.ts). Empty for an actor with no organs, or without the mesh skeleton. */
+    /** Actor `id`'s organ segments (its contract sources of kind 'organ'): key, live, the posed bound sphere the
+     *  reach test uses (organ-reach.ts), and its mesh as cached now (how it was made, vertices, triangles, the ms it
+     *  took to build). Empty for an actor with no organs, or without the mesh skeleton. */
     organSegments: (bodyId: number) => {
       const a = ctx.world.actors.find(q => q.id === bodyId);
       const sources = a ? ctx.render.skeletonSources.get(a)?.sources ?? [] : [];
-      return sources.filter(s => s.kind === 'organ').map(s => ({ segment: s.segment, live: s.isLive(), ...segmentBoundSphere(s.bounds, s.pose()) }));
+      const cache = ctx.render.segMeshCache;
+      return sources.filter(s => s.kind === 'organ').map(s => {
+        const m = cache?.get(s);
+        return {
+          segment: s.segment, live: s.isLive(), ...segmentBoundSphere(s.bounds, s.pose()),
+          mesh: m ? { mesher: m.mesher, verts: m.verts, tris: m.tris, bakeMs: +m.bakeMs.toFixed(2) } : null,
+        };
+      });
+    },
+    /** How organ sources are meshed (organs, low-poly, 2026-10-07): one of ORGAN_MESHES by name ('tubes' ships;
+     *  'nets-5mm' is the extraction of 2026-10-06, for a before/after on the same frame). Takes effect at the next
+     *  mesh update: each organ segment is built (or found in the cache) under the new spec. Returns the name in
+     *  force; null without the mesh skeleton; an unknown name changes nothing. */
+    setOrganMesh: (name?: OrganMeshName) => {
+      const cache = ctx.render.segMeshCache;
+      if (!cache) return null;
+      if (name !== undefined && Object.hasOwn(ORGAN_MESHES, name)) cache.organMesh = ORGAN_MESHES[name];
+      return organMeshName(ctx);
     },
     /** The organ mesh's look (mesh-organ.ts): one of ORGAN_LOOKS by name, or its numbers. null without the mesh
      *  skeleton. */
