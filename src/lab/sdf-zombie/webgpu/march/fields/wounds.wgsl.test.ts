@@ -20,7 +20,7 @@ import {
   ROW_WOUND_CUT,
   CALC_NORMAL,
 } from '../../march.wgsl';
-import { CUT_SHADE } from '../../../cut-wound';
+import { CUT_JAG_SLACK, CUT_NEAR, CUT_SHADE } from '../../../cut-wound';
 import { declaredName } from '../../march-test-support';
 import { WOUND_MASKS_BLOCK } from '../body/blocks/post/wound-masks.wgsl';
 import { SKIN_NORMAL } from '../body/blocks/light/skin-detail-proto';
@@ -226,17 +226,62 @@ describe('cut wounds in the march', () => {
     expect(branch).toContain('let cPn = mix(hash13(vec3<f32>(cPi, w.w * 311.0, 5.0)), hash13(vec3<f32>(cPi + 1.0, w.w * 311.0, 5.0)), cPf * cPf * (3.0 - 2.0 * cPf)) * 2.0 - 1.0;');
     expect(branch).toContain(`let jag = jagFine + cPn * (${f(CUT_SHADE.pinchAmp)} + ${f(CUT_SHADE.pinchTip)} * tN * tN);`);
     expect(branch).toContain('let kerfT = wCut.w * max(1.0 + jag, 0.0) * taper;');
-    expect(branch).toContain('let vWall = kerfT * (1.0 - clamp(cs, 0.0, depthT) / depthT) - abs(cu);');
-    // The fillet's kerf is capped at blendDepthFrac x dEff (cut-wound.ts cutBlendK).
-    expect(branch).toContain(`d = smax(d, carve, woundCfg.y * clamp(min(wCut.w, ${f(CUT_SHADE.blendDepthFrac)} * dEff) / 0.05, 0.1, 1.0));`);
+    // The wall's closing factor and the terms the noise does not enter are read once, for the carve and its ceiling.
+    expect(branch).toContain('let cWallS = 1.0 - clamp(cs, 0.0, depthT) / depthT;');
+    expect(branch).toContain('let vWall = kerfT * cWallS - abs(cu);');
     // The lid on the RAW plane (dot(rel, cin) + kerf + lidSlack x halfLen): cutCarve's fourth min() term.
-    expect(branch).toContain(`let carve = min(min(min(vWall, depthT - cs), w.w - abs(ca)), dot(rel, cin) + wCut.w + ${f(CUT_SHADE.lidSlack)} * w.w) * ${f(CUT_SHADE.carveK)};`);
+    expect(branch).toContain(`let cRest = min(min(depthT - cs, w.w - abs(ca)), dot(rel, cin) + wCut.w + ${f(CUT_SHADE.lidSlack)} * w.w);`);
+    expect(branch).toContain(`let carve = min(vWall, cRest) * ${f(CUT_SHADE.carveK)};`);
+    // The fillet's kerf is capped at blendDepthFrac x dEff (cut-wound.ts cutBlendK).
+    expect(branch).toContain(`let kCut = woundCfg.y * clamp(min(wCut.w, ${f(CUT_SHADE.blendDepthFrac)} * dEff) / 0.05, 0.1, 1.0);`);
+    expect(branch).toContain('d = smax(d, carve, kCut);');
     // A row with no inward axis carves nothing (first statement of the branch).
     expect(branch).toMatch(/^\(i32\(wFlags\.x\) & 32\) != 0\) \{\s*(\/\/[^\n]*\n\s*)*if \(length\(wCap\.xyz\) < 0\.5\) \{ continue; \}/);
     // The running d is the carve target; dIn (pre-wound) is the depth reading. A cut never reaches the crater rim
     // code, which reads META.w as an offset scale (for a cut it is the sag).
     expect(branch).not.toMatch(/max\(-d,/);
     expect(branch).toMatch(/continue;\s*}\s*(\/\/[^\n]*\n\s*)*$/);
+  });
+  // THE IDLE CARVE (cut-wound.ts cutCarveTop / cutCarveIdle; cut-idle.test.ts holds the argument on the mirror): the
+  // carve at the jag's ceiling is read from the row alone, and the noise only where the running field stands less than
+  // 4 fillets above it. Elsewhere the row's smax is the identity, to the bit, and is not run.
+  it('the cut branch reads its noise only where the carve could raise the field (the idle carve)', () => {
+    const iCut = APPLY_WOUNDS.indexOf('(i32(wFlags.x) & 32) != 0');
+    const branch = APPLY_WOUNDS.slice(iCut, APPLY_WOUNDS.indexOf('if (wMeta.x < -0.5)'));
+    const f = (v: number) => (Number.isInteger(v) ? `${v}.0` : `${v}`);
+    // cutJagTop(tN) + 1 = (1 + jagAmp + pinchAmp + slack) + pinchTip x tN^2, in cutCarve's own wall term.
+    const top = `let carveTop = min(wCut.w * (${f(1 + CUT_SHADE.jagAmp + CUT_SHADE.pinchAmp + CUT_JAG_SLACK)} + ${f(CUT_SHADE.pinchTip)} * tN * tN) * taper * cWallS - abs(cu), cRest) * ${f(CUT_SHADE.carveK)};`;
+    expect(branch).toContain(top);
+    const iTop = branch.indexOf(top), iIf = branch.indexOf('if (d - carveTop < 4.0 * kCut) {');
+    expect(iIf).toBeGreaterThan(iTop);
+    // Every noise read and the smax sit inside that block; the lip and the near zone come after it, unconditionally.
+    const iClose = branch.indexOf('\n      }\n', iIf);
+    for (const inside of ['noise3(', 'hash13(', 'd = smax(d, carve, kCut);', 'gWoundRaisers = gWoundRaisers |']) {
+      const at = branch.indexOf(inside);
+      expect(at).toBeGreaterThan(iIf);
+      expect(at).toBeLessThan(iClose);
+      expect(branch.indexOf(inside, iClose)).toBe(-1);
+    }
+    expect(branch.indexOf('let lipW =')).toBeGreaterThan(iClose);
+    // The same 4 x k the smax's own h reads (primitives.wgsl.ts smin: k = kIn * 4.0).
+    expect(HELPERS.join('\n')).toContain('let k = kIn * 4.0;');
+  });
+  // A cut's column is a SOFT near zone (cut-wound.ts CUT_NEAR): near to every "near a wound?" test (> 0.5), and to the
+  // inside-flesh fold only where a carve raised the field. A crater's zone stays 1 and folds as before.
+  it('a cut reports a soft near zone, and mapBody folds the inside-flesh rows there only under a raising carve', () => {
+    const iCut = APPLY_WOUNDS.indexOf('(i32(wFlags.x) & 32) != 0');
+    const branch = APPLY_WOUNDS.slice(iCut, APPLY_WOUNDS.indexOf('if (wMeta.x < -0.5)'));
+    const f = (v: number) => (Number.isInteger(v) ? `${v}.0` : `${v}`);
+    expect(CUT_NEAR).toBeGreaterThan(0.5);
+    expect(CUT_NEAR).toBeLessThan(1);
+    expect(branch).toContain(`cs < max(depthT, wCut.w) * 2.0) { near = max(near, ${f(CUT_NEAR)}); }`);
+    expect(branch).not.toContain('near = 1.0');
+    // Every other branch still reports 1 (the preset, the crater).
+    expect(APPLY_WOUNDS.replace(branch, '').match(/near = 1\.0;/g)).toHaveLength(2);
+    expect(MAP_BODY).toContain(`if ((nearWound > ${(1 + CUT_NEAR) / 2} || (nearWound > 0.5 && gWoundRaisers != 0u) || counts2.y > 0.5) && counts2.x > 0.0) {`);
+    // The trace's own reader keeps the plain test, and so does the re-fold's trigger.
+    expect(MARCH_BODY).toContain('let nearWound = dres.z > 0.5;');
+    expect(MAP_BODY).toContain('(nearWound > 0.5 || dmg != carved)');
   });
   // cut-wound.ts cutLip is the CPU mirror of the lip: amp x exp(-lx^2) x rim x offKerf x nearSkin.
   it('the cut lip mirrors cutLip term for term (bounded to the near skin, kept off the kerf)', () => {
@@ -252,8 +297,15 @@ describe('cut wounds in the march', () => {
     // The lip is kept off the SMOOTH kerf, not the jagged one (the jag's slope stays out of the lip).
     expect(branch).toContain('let kerfS = wCut.w * taper;');
     expect(branch).toContain('let offKerf = smoothstep(kerfS, kerfS + lipW, abs(cu));');
-    expect(branch).toContain('let nearSkin = 1.0 - smoothstep(0.0, max(min(2.0 * lipW, dEff), 1e-4), cs);');
+    expect(branch).toContain('let nearBand = max(min(2.0 * lipW, dEff), 1e-4);');
+    expect(branch).toContain('let nearSkin = 1.0 - smoothstep(0.0, nearBand, cs);');
     expect(branch).toContain('d = d - cutAmp * exp(-lx * lx) * cutRim * offKerf * nearSkin;');
+    // THE IDLE LIP (cutLipIdle): the bump is computed only where none of its three gates is exactly 0.
+    const iGuard = branch.indexOf('if (cutRim > 0.0 && abs(cu) > kerfS && cs < nearBand) {');
+    expect(iGuard).toBeGreaterThan(branch.indexOf('let nearBand ='));
+    expect(branch.indexOf('d = d - cutAmp')).toBeGreaterThan(iGuard);
+    // The re-fold pre-scan's amplitude is filed whether or not the bump is computed.
+    expect(branch.indexOf('gWoundAmp[u32(owner)] + cutAmp')).toBeLessThan(iGuard);
     // taper is 0 past the tips, so the old step(abs(ca), w.w) gate was redundant.
     expect(branch).not.toContain('step(abs(ca)');
   });
@@ -269,7 +321,8 @@ describe('cut wounds in the march', () => {
     expect(branch).toContain(`let cDEff = min(cCap.w, ${f(CUT_SHADE.maxDepthPerHalfLen)} * w.w);`);
     expect(branch).toContain(`let cEnd = ${f(CUT_SHADE.maskEnd)} * max(w.w, 1e-4);`);
     expect(branch).toContain(`let cJag = noise3(vec3<f32>(cAs, cUs, 0.0) * (${f(CUT_SHADE.maskCycles)} / cKerf) + vec3<f32>(w.w * 173.0, cKerf * 619.0, 41.0)) * ${f(CUT_SHADE.maskJag)};`);
-    expect(branch).toContain('let cMw = sqrt(clamp(1.0 - (cA / cEnd) * (cA / cEnd), 0.0, 1.0)) * max(1.0 + cJag, 0.0);');
+    expect(branch).toContain('let cLens = sqrt(clamp(1.0 - (cA / cEnd) * (cA / cEnd), 0.0, 1.0));');
+    expect(branch).toContain('let cMw = cLens * max(1.0 + cJag, 0.0);');
     expect(branch).toContain(`let cBand = 1.0 - smoothstep(cKerf * cMw, cKerf * ${f(CUT_SHADE.maskWidth)} * cMw + 1e-4, cU);`);
     expect(branch).toContain('let cEnds = 1.0 - smoothstep(0.9 * cEnd, cEnd, cA);');
     expect(branch).toContain('let cFar = 1.0 - smoothstep(cDEff + cKerf, cDEff + 2.0 * cKerf, cPlane);');
@@ -279,7 +332,13 @@ describe('cut wounds in the march', () => {
     expect(branch).toContain(`let cWall = cKerf * ${f(1 + CUT_SHADE.jagAmp)};`);
     expect(branch).toContain('let cInner = 1.0 - smoothstep(cWall, 1.3 * cWall, cU);');
     expect(branch).toContain(`let cFace = 1.0 - smoothstep(${f(CUT_SHADE.maskFace[0])}, ${f(CUT_SHADE.maskFace[1])}, cNi);`);
-    expect(branch).toContain('let cC = cBand * cEnds * cFar * min(cBack, max(cInner, cFace));');
+    expect(branch).toContain('cC = cBand * cEnds * cFar * min(cBack, max(cInner, cFace));');
+    // THE IDLE BAND (cutMaskIdle): the noise is read only where the gates' product is not 0 and the point is inside
+    // the band's outer edge at the noise's ceiling; elsewhere the footprint is 0 whatever it reads.
+    const guard = `if (cEnds * cFar * min(cBack, max(cInner, cFace)) > 0.0 && cU < cKerf * ${f(CUT_SHADE.maskWidth)} * (cLens * ${f(1 + CUT_SHADE.maskJag + CUT_JAG_SLACK)}) + 1e-4) {`;
+    expect(branch).toContain(guard);
+    expect(branch.indexOf('var cC = 0.0;')).toBeLessThan(branch.indexOf(guard));
+    expect(branch.indexOf('noise3(')).toBeGreaterThan(branch.indexOf(guard));
     // A row with no inward axis paints nothing: the guard comes right after the CAP load, before any frame math.
     expect(branch).toMatch(/let cCap = textureLoad\([^\n]*\n\s*(\/\/[^\n]*\n\s*)*if \(length\(cCap\.xyz\) < 0\.5\) \{ continue; \}/);
     expect(branch).toMatch(/continue;\s*}\s*$/);

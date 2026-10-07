@@ -41,3 +41,18 @@ the head split the priority. Neither cost has been investigated yet. The first t
 3. Lower `AXE_CUT.halfLen` or the kerf.
 
 The head split's own cost measurement (plan B, task B4) is taken on top of this state.
+
+### Update 2026-10-06: both costs investigated
+
+[`../../2026-10-06-cut-cost/NOTES.md`](../../2026-10-06-cut-cost/NOTES.md) has the measurements. In short:
+
+| Cost | As recorded above | As measured on 2026-10-06 |
+| --- | --- | --- |
+| Three axe chops on one torso at 0.9 m | about +22 ms | **about 4 to 5 ms** on a fresh zombie (4.8 ms, IQR 4.2 to 5.2); about 6.5 ms on the gate's zombie. The +22 ms was the axe gate's C scenario, whose "before" frame draws no body flesh (a stale march view after the gate's thaw): it is the torso plus the cuts. |
+| The same, after the cut-cost change | | about 0.5 to 1.0 ms less on the fresh zombie, 2.2 ms less on the gate's; same picture (depth identical, colour within 1.2e-5 on the float target) |
+| Cold boot | +136 to +936 ms, mean about +430 ms | not reproduced: the pass's commit against its base reads `drawOnce` 1673 / 1665 ms against 1810 / 1661 ms on a quiet machine (two interleaved pairs), and 1644 to 1683 ms with or without the pass's noise terms; the spread recorded above is what a busy machine does to that number |
+
+Of the first things to try listed above: (1) the mask's noise is not measurable and the pinch's is a small part of a
+noise cost the exact exits already remove 92 to 96% of; (2) a tighter reach is not exact and buys nothing measurable
+once the exits are in; (3) was not needed. The largest piece of what a cut costs is the organ fold in its near
+zone, which is general wound machinery; the owner decided on 2026-10-06 that organs become mesh.

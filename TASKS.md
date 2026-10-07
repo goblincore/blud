@@ -22,7 +22,7 @@
 
 **Cut wounds** — [combat and gore](docs/tasks/combat-and-gore.md)
 - [~] **Cut wounds M1 built 2026-10-04; owner playtested** — a cut wound shape, the rod (weapon slot 6), 32 wounds with merging.
-  Owner: "more excessive", so longer, wider, ragged cuts landed 2026-10-04 (two costs open: [status](docs/dev-notes/2026-10-04-cut-excess/STATUS.md)). M2 is the head split (next line).
+  Owner: "more excessive", so longer, wider, ragged cuts landed 2026-10-04. Their cost, investigated 2026-10-06: about 4 to 5 ms for three chops, not +22 ([notes](docs/dev-notes/2026-10-06-cut-cost/NOTES.md)); next for wound cost is organs to mesh (owner). M2 is the head split (next line).
   Gate `scripts/cut-wound-gate.mjs` (30 checks). [Notes](docs/dev-notes/2026-10-03-cut-wounds/NOTES.md) · [handoff](docs/dev-notes/2026-10-03-cut-wounds/HANDOFF.md).
 - [~] **The axe (slot 7) and the head split built 2026-10-05; owner playtested; PR goblincore/blud#31** (branch
   `claude/head-cleaving-effect-ef9515`) — a chop opens a zombie's head on a hinge: a wide crack, then split wide and alive, then
