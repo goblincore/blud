@@ -198,35 +198,14 @@ describe('shutter game — integration tripwires', () => {
   const gameSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8');
   // tick() moved to game-tick.ts (2026-10-07), where `camera` is `ctx.boot.handle.camera`.
   const tickSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-tick.ts', 'utf8');
-  const miscSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-seams-misc.ts', 'utf8');
-  // setBloodBlurExposure / setBloodBlurMaxStreak moved to game-seams-leftover.ts
-  // in leaves wave 1 (2026-09-19), then on to game-seams-fx.ts in the
-  // 2026-09-20 leftover split.
-  const fxSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-seams-fx.ts', 'utf8');
   const postSrc = readFileSync('src/lab/sdf-zombie/webgpu/post-aa.ts', 'utf8');
   const gooSrc = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
-
-  it('the capture stage reads the capture and writes its own target (no feedback)', () => {
-    expect(layerSrc).toContain('createShutterResolve');
-    expect(layerSrc).toContain('resolve.render(renderer, stageTarget)');
-    expect(layerSrc).toContain('sceneTex: capture.texture');
-    expect(layerSrc).toContain('depthTex: capture.depthTexture!');
-    expect(layerSrc).not.toContain('renderer.render(scene, camera)');
-  });
-
-  it('forwards the optional gib occluder depth to the resolve', () => {
-    expect(layerSrc).toContain('setOccluderDepth(tex: THREE.DepthTexture | null): void');
-    expect(layerSrc).toContain('setOccluderDepth(tex) { resolve?.setOccluderDepth(tex); }');
-  });
 
   it('clamps exposure against particle age (no pre-birth streaks)', () => {
     expect(layerSrc).toContain('clampToAge: true');
   });
 
   it('post-aa runs the stage after the chain and before FXAA/VHS', () => {
-    expect(postSrc).toContain('captureStage(sceneTarget)');
-    expect(postSrc).toContain('captureStage !== null');
-    expect(postSrc).toContain('setCaptureStage');
     const chainIdx = postSrc.indexOf('chain();');
     const stageIdx = postSrc.indexOf('captureStage(sceneTarget)');
     const fxaaIdx = postSrc.indexOf("setPassLabel('post:fxaa')");
@@ -244,17 +223,6 @@ describe('shutter game — integration tripwires', () => {
 
   it('game-main poses the sharp half, installs the stage and exposes live setters', () => {
     expect(tickSrc).toContain('ctx.panels.shutterGame?.poseSharp()');
-    expect(gameSrc).toContain('ctx.render.postAa.setCaptureStage');
-    expect(gameSrc).toContain('readShutterGameSettings(location.search)');
-    // setBloodBlurExposure and setBloodBlurMaxStreak moved into
-    // game-seams-fx.ts in the 2026-09-20 leftover split.
-    expect(fxSrc).toContain('setBloodBlurExposure');
-    expect(fxSrc).toContain('setBloodBlurMaxStreak');
-    // setBloodBlurSeedScale and setBloodBlurDepthBias moved into
-    // game-seams-misc.ts in the 2026-09-17 decomposition. All four setters are
-    // byte-identical — only the holding file differs.
-    expect(miscSrc).toContain('setBloodBlurSeedScale');
-    expect(miscSrc).toContain('setBloodBlurDepthBias');
     // The pose must precede the sync it partitions.
     const poseIdx = tickSrc.indexOf('ctx.panels.shutterGame?.poseSharp()');
     const syncIdx = tickSrc.indexOf('ctx.goo.layer?.sync(ctx.vfx.bloodSim, ctx.boot.handle.camera)', poseIdx);
@@ -265,10 +233,7 @@ describe('shutter game — integration tripwires', () => {
     // Without this the first live blurred frame pays the allocation + first-use
     // compile (measured ~0.26 s). The capture target must be the REAL one the
     // resolve will sample, so identity is stable across refit.
-    expect(postSrc).toContain('captureTarget: THREE.RenderTarget');
     expect(postSrc).toContain('get captureTarget() { return sceneTarget; }');
-    expect(layerSrc).toContain('prewarm(capture: THREE.RenderTarget): boolean');
-    expect(layerSrc).toContain('ensureTargets(capture, diag.densityWidth, diag.densityHeight)');
     expect(gameSrc).toContain('ctx.panels.shutterGame.prewarm(ctx.render.postAa.captureTarget)');
   });
 });

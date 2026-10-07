@@ -198,13 +198,8 @@ describe('loadHandVolume', () => {
   });
 
   it('refuses to run on a big-endian host (r16f-le would be byte-swapped)', async () => {
-    // The host check is a module constant, not data — the guard's existence is
-    // what is testable here, matching the repo's string-tripwire style for
-    // things a test cannot make false on demand (see march.wgsl.test.ts).
+    // The host check is a module constant, not data: a test cannot make it false on demand.
     expect(HOST_IS_LITTLE_ENDIAN).toBe(true);
-    // (import.meta.url is http-schemed under happy-dom; cwd is the repo root.)
-    const src = readFileSync('src/lab/sdf-zombie/webgpu/hand-volume.ts', 'utf8');
-    expect(src).toContain('if (!HOST_IS_LITTLE_ENDIAN)');
   });
 });
 
@@ -270,13 +265,5 @@ describe('shared byte helpers (X1.27 task C1)', () => {
     expect(atlas.image.depth).toBe(4);
     tex.dispose();
     atlas.dispose();
-  });
-
-  it('loadHandVolume uses the shared helpers (one implementation)', () => {
-    const src = readFileSync('src/lab/sdf-zombie/webgpu/hand-volume.ts', 'utf8');
-    expect(src).toContain('await sha256Hex(buffer)');
-    expect(src).toContain('createR16fTexture(new Uint16Array(buffer), [nx, ny, nz])');
-    // the old private twin is gone
-    expect(src).not.toContain('function handVolumeTexture(');
   });
 });

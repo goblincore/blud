@@ -27,8 +27,6 @@ import { headShape } from './flame-anchors';
 import { FLAIL_HEAD, headNeck, traceRaySurface } from './flail-strike';
 import { AXE_HIT } from './axe-strike';
 import mainSrc from './game-main.ts?raw';
-import tickSrc from './game-tick.ts?raw';
-import leafSrc from './game-head-split.ts?raw';
 
 const made: { dispose(): void }[] = [];
 afterEach(() => { for (const r of made.splice(0)) r.dispose(); });
@@ -357,9 +355,6 @@ describe('the leaf: the per-frame tick', () => {
     expect(iSkull).toBeGreaterThan(iEye);
     expect(mainSrc.slice(iSkull, mainSrc.indexOf("ctx.telemetry.telemetry.end('skeleton-mesh', meshTiming);"))).toContain("warp: (owner, segment) => (segment === 'head' ? (owner as ZombieActor).view.splitDrawn : null),");
     expect(iEye).toBeLessThan(mainSrc.indexOf('refreshActorTiles();', iEye));
-    // The tick's call hands no eye (tick moved to game-tick.ts, 2026-10-07).
-    expect(tickSrc).toContain('ctx.weapon.headSplit?.tick(dt);');
-    expect(leafSrc).not.toContain('ctx.boot.handle');
   });
 
   it('a FROZEN actor\'s split asks for the frozen hull build again whenever it changes (the hulls follow the pose\'s split)', () => {

@@ -46,61 +46,23 @@ describe('gib shutter — integration tripwires', () => {
   const gameSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8');
   // tick() moved to game-tick.ts (2026-10-07); the sim tick runs before the render callback.
   const tickSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-tick.ts', 'utf8');
-  // The large __sdfGame members moved to game-seams-spawn-goo.ts in the
-  // 2026-09-17 decomposition; every pinned string below is byte-identical.
-  const seamSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-seams-spawn-goo.ts', 'utf8');
   // setGibBlur and its exposure/streak setters moved to game-seams-leftover.ts
   // in leaves wave 1 (2026-09-19), then on to game-seams-fx.ts in the
   // 2026-09-20 leftover split.
   const fxSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-seams-fx.ts', 'utf8');
   const panelSrc = readFileSync('src/lab/sdf-zombie/webgpu/shutter-panel.ts', 'utf8');
-  const resolveSrc = readFileSync('src/lab/sdf-zombie/webgpu/shutter-blur.ts', 'utf8');
-
-  it('isolates selected pieces on a dedicated layer and removes them from base', () => {
-    expect(layerSrc).toContain('GIB_BLUR_LAYER');
-    expect(layerSrc).toContain('s.mesh.layers.set(GIB_BLUR_LAYER)');
-    expect(layerSrc).toContain('camera.layers.set(GIB_BLUR_LAYER)');
-    expect(layerSrc).toContain('s.mesh.layers.set(s.baseLayer)');
-    // The layer draw is the ONLY scene render, and it is not the full scene.
-    expect(layerSrc).toContain('renderer.render(scene, camera)');
-    expect(layerSrc).not.toContain('renderer.render(mainScene');
-  });
-
-  it('resolves over the CLEAN capture with its own depth, never in place', () => {
-    expect(layerSrc).toContain('createShutterResolve');
-    expect(layerSrc).toContain('sceneTex: capture.texture');
-    expect(layerSrc).toContain('depthTex: capture.depthTexture!');
-    expect(layerSrc).toContain('resolve.render(renderer, stageTarget)');
-  });
 
   it('builds rotation-aware per-surface stamps, not a centre vector', () => {
-    expect(layerSrc).toContain('planGibMotionStamps');
-    expect(layerSrc).toContain('rasterizeSweepSeed');
     expect(layerSrc).toContain('ageSeconds: s.ageSeconds');
-  });
-
-  it('the resolve can be repointed at the gib result (blood reads gibs)', () => {
-    expect(resolveSrc).toContain('setSceneTexture(tex: THREE.Texture)');
-    expect(resolveSrc).toContain('sceneNode.value = tex');
   });
 
   it('mutual occlusion: the blood pass can drop behind a blurred gib', () => {
     // The gib layer owns a SAMPLEABLE depth so the blood resolve (which runs
     // second) can test against the lifted pieces that are absent from the clean
     // capture's depth. Default OFF, so the lab / gib-off frames are unchanged.
-    expect(layerSrc).toContain('layerTarget.depthTexture = new THREE.DepthTexture');
-    expect(layerSrc).toContain('get occluderDepth()');
-    expect(resolveSrc).toContain('occluderTex: texture_depth_2d');
-    expect(resolveSrc).toContain('setOccluderDepth(tex: THREE.DepthTexture | null)');
-    expect(resolveSrc).toContain('occlusionClipZ');
-    expect(resolveSrc).toContain('uCfg2.value.set(tex ? 1 : 0, 0)');
     expect(gameSrc).toContain('gibDepth = ctx.gibs.shutter.occluderDepth');
     // Runtime A/B control for the evidence: the shipped default is ON.
     expect(gameSrc).toContain('ctx.panels.shutterGame.setOccluderDepth(ctx.gibs.occluderEnabled ? gibDepth : null)');
-    // setGibOccluder moved into game-seams-fx.ts with the gibs seam group.
-    expect(readFileSync('src/lab/sdf-zombie/webgpu/game-seams-fx.ts', 'utf8'))
-      .toContain('setGibOccluder:');
-    expect(gameSrc).toContain("get('giboccluder') !== '0'");
   });
 
   it('game-main lifts pieces before the base draw, then chains gib -> blood', () => {
@@ -117,19 +79,13 @@ describe('gib shutter — integration tripwires', () => {
   });
 
   it('exposes a separate gib switch + shared exposure through the panel and API', () => {
-    expect(panelSrc).toContain("'Gib motion blur'");
-    expect(panelSrc).toContain('setGibEnabled');
     expect(panelSrc).toContain('gib?.setExposureMs(applied)');
     expect(panelSrc).toContain('gib?.setMaxStreakPx(applied)');
-    expect(gameSrc).toContain('readGibShutterSettings(location.search)');
-    expect(fxSrc).toContain('setGibBlur');
     expect(fxSrc).toContain('ctx.gibs.shutter?.setExposureMs(applied)');
     expect(fxSrc).toContain('ctx.gibs.shutter?.setMaxStreakPx(applied)');
-    expect(gameSrc).toContain('shutterPanelHost(ctx.panels.shutterGame, ctx.gibs.shutter)');
   });
 
   it('prewarms the gib targets against the real capture at boot', () => {
-    expect(layerSrc).toContain('prewarm(capture: THREE.RenderTarget): boolean');
     expect(gameSrc).toContain('ctx.gibs.shutter.prewarm(ctx.render.postAa.captureTarget)');
   });
 
@@ -147,25 +103,7 @@ describe('gib shutter — integration tripwires', () => {
 
   it('bounds the per-frame work', () => {
     expect(GIB_BLUR_MAX_PIECES).toBeGreaterThan(0);
-    expect(layerSrc).toContain('selectedStates.size >= GIB_BLUR_MAX_PIECES');
     expect(GIB_BLUR_LAYER).toBe(10);
-  });
-
-  it('exposes a deterministic pure-spin fixture for rotation evidence', () => {
-    // Task 4 needs a fixed-centre piece whose ONLY motion is rotation: the
-    // upward kick cancels one frame of gravity, so after `step(1)` the piece
-    // has ~zero linear velocity while still turning. Without this the rotation
-    // claim could only be tested on the random blast.
-    // spawnSpinFixture moved into game-seams-spawn-goo.ts with the rest of the
-    // large __sdfGame members (2026-09-17 decomposition); the seam itself is
-    // unchanged.
-    expect(seamSrc).toContain('spawnSpinFixture:');
-    expect(seamSrc).toContain('spinAngVel: spin');
-    expect(seamSrc).toContain('CHUNK_TUNING.gravity / 60');
-    // The generic fixture seam also returns a stable id and accepts a velocity
-    // so a rig can stage a slow slide and track it across the settle.
-    expect(seamSrc).toContain('spawnTestChunk: (x: number, y: number, z: number, radius = 0.12, stationary = false, velocity?: Vec3, spin?: Vec3)');
-    expect(seamSrc).toContain('velocity ?? (stationary ? [0, 0, 0] : undefined)');
   });
 });
 

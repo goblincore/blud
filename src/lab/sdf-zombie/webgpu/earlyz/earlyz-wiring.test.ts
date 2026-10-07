@@ -7,7 +7,6 @@
 // browser; this keeps a refactor from silently reordering it.
 import { describe, it, expect } from 'vitest';
 import source from '../game-main?raw';
-import spawnSource from '../game-spawn?raw';
 
 /** Index of the single occurrence of `needle`; throws if it is missing or ambiguous, so a moved
  *  or duplicated anchor fails loudly instead of pinning the wrong line. */
@@ -36,7 +35,6 @@ describe('early-Z boot order in game-main.ts (source pins)', () => {
     expect(crowdOff).toBeLessThan(seed);
     expect(seed).toBeLessThan(firstType);
     expect(source).not.toContain('crowdTypeFor(');
-    expect(spawnSource).toContain('crowdTypeFor(ctx, name, room.id, stride)');
   });
 
   it('turns early-Z off under the deferred renderer and for ?accum=1 boots in one guarded block', () => {
@@ -67,17 +65,6 @@ describe('early-Z boot order in game-main.ts (source pins)', () => {
     const crowdList = source.slice(call, source.indexOf('.concat(', call));
     expect(crowdList).toContain('crowdMarch');
     expect(crowdList).toContain('t.frontMesh ? [t.mesh, t.frontMesh] : [t.mesh]');
-  });
-
-  it('keeps the shipped map() list (no per-frame flatMap) when early-Z is off', () => {
-    const call = only('ctx.render.sdfLayer.setBodies(');
-    const crowdList = source.slice(call, source.indexOf('.concat(', call));
-    const gate = crowdList.indexOf('ctx.crowd.earlyz.on');
-    expect(gate).toBeGreaterThan(-1);
-    // `earlyz.on ? flatMap(...) : map(t => t.mesh)`: the flatMap is the on-branch only
-    expect(crowdList.indexOf('.flatMap(')).toBeGreaterThan(gate);
-    expect(crowdList.indexOf('.map(t => t.mesh)')).toBeGreaterThan(crowdList.indexOf('.flatMap('));
-    expect(crowdList.split('.flatMap(').length - 1).toBe(1);
   });
 
   it('does not compile the front mesh of a quad-dispatch type (it never draws)', () => {

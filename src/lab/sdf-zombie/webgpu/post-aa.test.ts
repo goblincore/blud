@@ -175,13 +175,6 @@ describe('post-aa module wiring', () => {
     expect(src).toContain('renderer.setRenderTarget(histWrite)');
   });
 
-  it('every target gets the explicit first clear after (re)allocation', () => {
-    expect(src).toContain(
-      'for (const t of [sceneTarget, fxaaTarget, histA, histB, vhsInA, vhsInB, vhsTarget, sscsTarget, glowA, glowB, fireTarget, fireHistA, fireHistB])',
-    );
-    expect(src).toContain('targetsNeedInit = true;');
-  });
-
   it('round 2b: the fire composite blends into the capture, no copy draw', () => {
     // out = scene * T + emission via dstFactor = srcAlpha (srcAlpha is T).
     expect(src).toContain('fireCompositeMat.blending = THREE.CustomBlending;');
@@ -189,9 +182,6 @@ describe('post-aa module wiring', () => {
     expect(src).toContain('fireCompositeMat.blendDst = THREE.SrcAlphaFactor;');
     expect(src).toContain('fireCompositeMat.blendSrcAlpha = THREE.OneFactor;');
     expect(src).toContain('fireCompositeMat.blendDstAlpha = THREE.ZeroFactor;');
-    // The separate full-res composite target and its copy draw are gone.
-    expect(src).not.toContain('fireOut');
-    expect(src).not.toContain('fireCopyMat');
   });
 
   // THE FIRE WGSL ENTRY POINTS ALL RETURN vec4<f32> (emission.rgb, T), so a
@@ -220,12 +210,6 @@ describe('post-aa module wiring', () => {
     // gun GLB between registering sdfLayer and registering gooLayer, so the
     // redirect had already happened by the time the goo arrived.
     expect(src).toMatch(/addSink\(s\) \{[\s\S]*?if \(redirected\) s\.setOutputTarget\(sceneTarget\);[\s\S]*?\}/);
-  });
-
-  it('the scene capture target carries a depth buffer', () => {
-    // The sdf composite and goo surface depth-test against what the
-    // polygonal pass left — without depth the flesh paints over the floor.
-    expect(src).toMatch(/const sceneTarget = new THREE\.RenderTarget\(1, 1, \{\s*depthBuffer: true/);
   });
 
   it('every declared WGSL parameter is supplied at the call site', () => {

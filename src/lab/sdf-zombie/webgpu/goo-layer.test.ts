@@ -121,9 +121,6 @@ describe('goo blur wiring (source tripwires)', () => {
   });
 
   it('the surface reads the blurred buffer, and the pair rides the density size', () => {
-    expect(src).toContain('makeOverlayMat(blurB.texture)');
-    expect(src).toContain('makeDepthMat(blurB.texture)');
-    expect(src).toContain('makeBlurMat(blurA.texture, 0, 1)');
     // Same explicit-first-clear treatment as the density target (the
     // lazy-init trap) and the same resize in setSize — now including task
     // 4's low-res surface target.
@@ -239,13 +236,6 @@ describe('goo shading setters (blood-viscosity spec: clamp ranges)', () => {
   // lone blob peaks near 1.0, so no reachable value could reject a single
   // droplet and three rounds of tuning were unwinnable. Every new setter gets
   // its ceiling checked against the range the shader actually produces.
-  it('exposes absorb/spec/gloss/rim on the layer interface', () => {
-    const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
-    for (const fn of ['setAbsorb', 'setSpec', 'setGloss', 'setRim']) {
-      expect(src, `${fn} must exist`).toContain(`${fn}(`);
-    }
-  });
-
   it('clamps all four setters to the range the shader actually produces', () => {
     // Whitespace-tolerant (not pinned to one-line formatting) so a reformat
     // doesn't break this, but still asserts the exact bounds per setter —
@@ -300,15 +290,6 @@ describe('goo alpha WGSL (overlay mode)', () => {
 describe('goo overlay mode wiring (source tripwires)', () => {
   const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
 
-  it('builds a material per (mode x blurred) combination', () => {
-    // Asserted on the table literal and the dynamic lookup, NOT on
-    // "surfMats.depth.blur"-style paths: render() indexes the pair with
-    // computed keys, so those strings never appear in the source.
-    expect(src).toMatch(/overlay: \{ raw: makeOverlayMat\(target\.texture\), blur: makeOverlayMat\(blurB\.texture\) \}/);
-    expect(src).toMatch(/depth: \{ raw: makeDepthMat\(target\.texture\), blur: makeDepthMat\(blurB\.texture\) \}/);
-    expect(src).toContain("surfMats[mode][blurred ? 'blur' : 'raw']");
-  });
-
   it('overlay materials neither test nor write depth, and are transparent', () => {
     expect(src).toMatch(/m\.depthWrite = false;\s*\n\s*m\.depthTest = false;\s*\n\s*m\.transparent = true;/);
   });
@@ -318,15 +299,6 @@ describe('goo overlay mode wiring (source tripwires)', () => {
     // reconstruction this mode exists to delete.
     const overlayFn = src.slice(src.indexOf('function makeOverlayMat'), src.indexOf('function makeDepthMat'));
     expect(overlayFn).not.toContain('depthNode');
-  });
-
-  it('retires setDepthTest in favour of setMode', () => {
-    expect(src).not.toContain('setDepthTest');
-    expect(src).toContain("setMode(m: 'overlay' | 'depth')");
-  });
-
-  it('defaults to overlay — the shipped answer to the depth blocker', () => {
-    expect(src).toMatch(/let mode: 'overlay' \| 'depth' = 'overlay';/);
   });
 });
 
@@ -341,12 +313,6 @@ describe('goo sync wiring (the bug that hid the whole layer)', () => {
   //
   // These are source tripwires, in the same style as the blur-wiring guards
   // above: nothing here constructs a renderer.
-  it('the game page syncs the density quads every frame', () => {
-    // tick() moved to game-tick.ts (2026-10-07), where `camera` is `ctx.boot.handle.camera`.
-    const src = readFileSync('src/lab/sdf-zombie/webgpu/game-tick.ts', 'utf8');
-    expect(src).toMatch(/ctx\.goo\.layer\?\.sync\(ctx\.vfx\.bloodSim, ctx\.boot\.handle\.camera\)/);
-  });
-
   it('the game page syncs AFTER the camera is final, so the quads billboard correctly', () => {
     const src = readFileSync('src/lab/sdf-zombie/webgpu/game-tick.ts', 'utf8');
     const cam = src.indexOf('ctx.boot.handle.camera.updateMatrixWorld();');
@@ -599,12 +565,6 @@ describe('goo perf seams (source tripwires)', () => {
     expect(src).toContain('const passGate = { density: true, blur: true, surface: true };');
   });
 
-  it('the low-res surface target carries no depth attachment and half-float', () => {
-    const block = src.slice(src.indexOf('const surfaceLow = new THREE.RenderTarget'), src.indexOf('function makeLowDepthMat'));
-    expect(block).toContain('depthBuffer: false');
-    expect(block).toContain('THREE.HalfFloatType');
-  });
-
   it('the low DEPTH variant packs depth into the colour alpha, never depthNode', () => {
     // The shading pass must not depth-test (its own buffer is empty); the
     // hardware depth test happens in the upsample against the scene.
@@ -614,27 +574,12 @@ describe('goo perf seams (source tripwires)', () => {
     expect(block).not.toContain('depthNode');
   });
 
-  it('the upsample DEPTH variant is the only new place depthNode is bound', () => {
-    const block = src.slice(src.indexOf('function makeUpsampleMat'), src.indexOf('const lowQuad'));
-    expect(block).toContain('m.depthNode = c.w as never;');
-    expect(block).toMatch(/if \(depth\) \{/);
-    expect(block).toContain('m.depthTest = true;');
-  });
-
   it('the low pass clears black with ALPHA 0 — the upsample empty sentinel', () => {
     // A cleared alpha of 1 would be a depth of 1 (or an opaque, gut-masked
     // sludge) in every unshaded texel; the restored scene clear is the
     // background with alpha 1, so the low pass owns its clear explicitly.
     expect(src).toContain('renderer.setClearColor(0x000000, 0);');
     expect(src).toContain('renderer.setClearColor(prevClear, prevClearAlpha);');
-  });
-
-  it('the density pass clear is untouched', () => {
-    // Ground rule: the density target's clear colour is black with alpha 0,
-    // explicitly and for two documented reasons. (The shipped code's
-    // setClearColor(0x000000) predates task 4 and is not ours to restate.)
-    expect(src).toContain('renderer.setClearColor(0x000000);');
-    expect(src).toContain('void renderer.render(gooScene, camera);');
   });
 
   it('passGate only skips work; it never changes what the kept passes read', () => {
@@ -647,25 +592,11 @@ describe('goo perf seams (source tripwires)', () => {
     expect(src).toContain('if (passGate.density) void renderer.render(gooScene, camera);');
   });
 
-  it('the item-1 branch returns after the upsample — the shipped pass B is the else arm', () => {
-    // PER-STREAM is deliberately not combined with the density-res seam, so
-    // the branch is now guarded on it too; the shipped full-res else arm below
-    // is unchanged.
-    expect(src).toContain('if (surfaceAtDensityRes && !perStreamOn) {');
-    expect(src).toContain("surfMats[mode][blurred ? 'blur' : 'raw']");
-    expect(src).toContain('surfMatsStream[mode]');
-  });
-
   it('the minTexel skip is inert at 0 without touching the mist gates', () => {
     expect(src).toContain('if (minTexelRadius <= 0) return false;');
     // Both collection paths keep the mist/size gates ahead of any skip.
     const drops = src.match(/if \(d\.kind === 'mist'\) continue;/g) ?? [];
     expect(drops.length).toBe(2); // once per sync path
-  });
-
-  it('sync still updates the fallMask buffer and draws only live instances', () => {
-    expect(src).toContain('fallAttr.needsUpdate = true;');
-    expect(src).toContain('quads.count = n;');
   });
 });
 
@@ -696,14 +627,7 @@ describe('goo perf page seam (source tripwires)', () => {
   // 2026-09-17 decomposition: `setGooPerf` into game-seams-spawn-goo.ts, and the
   // `goo` getter plus setGooTuning/setGooCandidate into game-seams-fx.ts. Every
   // pinned string below is byte-identical — only the holding file changed.
-  const seamSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-seams-spawn-goo.ts', 'utf8');
   const src = readFileSync('src/lab/sdf-zombie/webgpu/game-seams-fx.ts', 'utf8');
-
-  it('exposes setGooPerf and reports the lever state in the goo getter', () => {
-    expect(seamSrc).toContain('setGooPerf(o: {');
-    expect(src).toContain('surfaceAtDensityRes: ctx.goo.layer.surfaceAtDensityRes,');
-    expect(src).toContain('passGate: ctx.goo.layer.passGate,');
-  });
 
   it('keeps the perf seams OUT of setGooTuning', () => {
     // The goo panel's copy button emits setGooTuning keys; a perf lever in
@@ -1040,15 +964,6 @@ describe('smooth reconstruction wiring (source tripwires)', () => {
     expect(src).toMatch(/setReconstruction\(m: GooReconstruction\) \{ reconstruction = m; \}/);
   });
 
-  it('keeps the baseline materials and adds a parallel smooth table', () => {
-    // The shipped table must still be built exactly as before; the candidate
-    // is a second table, never a rewrite of the first.
-    expect(src).toMatch(/overlay: \{ raw: makeOverlayMat\(target\.texture\), blur: makeOverlayMat\(blurB\.texture\) \}/);
-    expect(src).toMatch(/depth: \{ raw: makeDepthMat\(target\.texture\), blur: makeDepthMat\(blurB\.texture\) \}/);
-    expect(src).toMatch(/overlay: \{ raw: makeSmoothOverlayMat\(target\.texture\), blur: makeSmoothOverlayMat\(blurB\.texture\) \}/);
-    expect(src).toMatch(/depth: \{ raw: makeSmoothDepthMat\(target\.texture\), blur: makeSmoothDepthMat\(blurB\.texture\) \}/);
-  });
-
   it('the smooth DEPTH material blends coverage but never writes depth', () => {
     // The candidate's atomic depth-compositing change: coverage alpha, depth
     // test on (occlusion respected), depth write off (a fringe must not
@@ -1059,28 +974,6 @@ describe('smooth reconstruction wiring (source tripwires)', () => {
     expect(block).toContain('m.depthTest = true;');
     expect(block).toContain('m.depthWrite = false;');
     expect(block).toContain('m.transparent = true;');
-  });
-
-  it('the smooth composite returns after the full-res draw (density-res not combined)', () => {
-    expect(src).toContain("if (reconstruction === 'smooth') {");
-    // The shipped raw/blurred lookups are still the else arms of the
-    // per-stream pick; the per-stream tables are the opt-in then arms.
-    expect(src).toContain("smoothSurfMats[mode][blurred ? 'blur' : 'raw']");
-    expect(src).toContain("surfMats[mode][blurred ? 'blur' : 'raw']");
-    expect(src).toContain('smoothSurfMatsStream[mode]');
-  });
-
-  it('the candidate reports why the density-res seam is bypassed', () => {
-    expect(src).toContain('smoothForcesFullResComposite: reconstruction === ');
-  });
-
-  it('reports source, density and output resolution separately', () => {
-    expect(src).toContain('get densityDiagnostics()');
-    expect(src).toContain('sourceWidth: lastSdfW,');
-    expect(src).toContain('outputWidth: lastOutputW,');
-    expect(src).toContain('texelsPerSourcePixelX: lastSdfW > 0 ? target.width / lastSdfW : 0,');
-    expect(src).toContain('texelsPerOutputPixelX: lastOutputW > 0 ? target.width / lastOutputW : 0,');
-    expect(src).toContain('texelsPerOutputPixelY: lastOutputH > 0 ? target.height / lastOutputH : 0,');
   });
 
   it('tracks the real composite destination for the coverage footprint', () => {
@@ -1236,26 +1129,10 @@ describe('per-stream wiring (source tripwires)', () => {
   it('defaults OFF, so the shipped stream-blind frame is byte-identical', () => {
     expect(src).toContain('let perStreamOn = false;');
     expect(src).toContain('let streamRampSec = 0;');
-    // The shipped density material is UNCHANGED: its colourNode still writes
-    // density/depth/gut from the same weightedFall expression.
-    expect(src).toContain(
-      'densMat.colorNode = vec4(weightedFall, weightedFall.mul(viewDepth), weightedFall.mul(gutMask), 1);',
-    );
-  });
-
-  it('exposes the switch and the ramp on the layer API', () => {
-    expect(src).toContain('setPerStream(on: boolean): void;');
-    expect(src).toContain('setPerStream(on) { perStreamOn = !!on; },');
-    expect(src).toContain('get perStream() { return perStreamOn; },');
-    expect(src).toContain('setStreamRamp(sec) { streamRampSec = Math.max(0, Math.min(4, sec)); },');
-    expect(src).toContain('get streamRamp() { return streamRampSec; },');
   });
 
   it('exposes the raw-channel diagnostic, default off', () => {
     // Used to PROVE the partition in a capture (R/G streams, yellow overlap).
-    expect(src).toContain('setStreamDebug(on) { streamDebugOn = !!on; uStreamDebug.value = on ? 1 : 0; },');
-    expect(src).toContain('get streamDebug() { return streamDebugOn; },');
-    expect(src).toContain('let streamDebugOn = false;');
     expect(GOO_STREAM_COMBINE_WGSL).toContain('if (debug > 0.5) { return vec4<f32>(s.r, s.g, s.b, 1.0); }');
     expect(GOO_STREAM_COMBINE_WGSL).toMatch(/debug: f32/);
   });
@@ -1287,20 +1164,5 @@ describe('per-stream wiring (source tripwires)', () => {
   it('the lazy first clear covers every new target (the submit-rejection trap)', () => {
     expect(src).toContain('for (const t of [streamTarget, streamBlurA, streamBlurB, perStreamField])');
     expect(src).toContain('streamTargetsNeedInit = true;');
-  });
-
-  it('the surface picks the per-stream field via a separate material table', () => {
-    expect(src).toContain('const surfMatsStream = {');
-    expect(src).toContain('const smoothSurfMatsStream = {');
-    expect(src).toContain('makeOverlayMat(perStreamField.texture)');
-    expect(src).toContain('makeSmoothOverlayMat(perStreamField.texture)');
-  });
-
-  it('the GAME never turns it on (byte-identical pin, source side)', () => {
-    const game = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8');
-    expect(game).not.toContain('setPerStream');
-    expect(game).not.toContain('setStreamRamp');
-    // The game goo defaults are not touched by this spike either.
-    expect(src).not.toContain('GAME_GOO_DEFAULTS.perStream');
   });
 });

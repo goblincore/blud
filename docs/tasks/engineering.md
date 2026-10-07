@@ -2,6 +2,19 @@
 
 Tests, harnesses, the game-main decomposition, tooling, process notes. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Tests: CI, the quick suite, the text-pin audit (2026-10-07)
+
+- [x] **CI** (`.github/workflows/ci.yml`): typecheck, the full vitest suite in four shards, and the five `node --test`
+  suites, on every push. The GPU gates are not in it. `pack-golden.test.ts` is per-platform and skipped there.
+- [x] **Locally:** `npm run test:changed` (tests beside changed files) and `npm run typecheck`. A bare `npm test` is the
+  quick suite: the 25-file slow group (`SLOW_TESTS`, `vite.config.ts`) is left out and the default environment is
+  Node (19 files opt into happy-dom). 276 s → 115 s on the owner's machine. `npm run test:all` is everything.
+- [x] **Text-pin audit:** 834 assertions on source text in 38 files; 488 deleted (94 `it` blocks), 120 kept.
+  [Notes](../dev-notes/2026-10-07-text-pin-audit/README.md)
+- [ ] Convert the 209 pins judged convertible (goo-layer and earlyz seed-pass are 140 of them).
+- [ ] `zombie-gpu-burn.test.ts` key-order block: does three r186 bind `wgslFn` object parameters by name or position?
+- [ ] CI shards are uneven: the shard with `cut-wound.test.ts` (331 s) ran 6 to 10+ minutes against 3 for the others.
+
 ## Agent navigability — module index and content names (2026-10-07)
 
 - [x] **Generated module index:** `npx tsx scripts/module-index.ts` writes
