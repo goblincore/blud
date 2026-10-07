@@ -54,7 +54,7 @@ describe('the warp field (skullWarpAt)', () => {
       const j = skullWarpJacobian(passes, p);
       for (let col = 0; col < 3; col++) {
         const up: V3 = [p[0], p[1], p[2]], down: V3 = [p[0], p[1], p[2]];
-        up[col] += h; down[col] -= h;
+        up[col] = up[col]! + h; down[col] = down[col]! - h;
         const a = skullWarpAt(passes, up), b = skullWarpAt(passes, down);
         for (let row = 0; row < 3; row++) expect(j[row * 3 + col], `d${row}/d${col} at ${p}`).toBeCloseTo((a[row]! - b[row]!) / (2 * h), 6);
       }

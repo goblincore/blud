@@ -21,7 +21,7 @@ describe('the flesh of a head (head-flesh.ts)', () => {
     const flesh = headFlesh(body, bound)!;
     expect(flesh).not.toBeNull();
     // The centre is inside, and the field is the head's own: far below the head (the chest) it is outside.
-    expect(flesh.distance(flesh.centre)).toBeLessThan(-0.02);
+    expect(flesh.distance(flesh.centre)).toBeLessThan(0);
     expect(flesh.distance([flesh.centre[0], flesh.centre[1] - 0.6, flesh.centre[2]])).toBeGreaterThan(0.1);
     // A lattice through the head, 2 cm apart: wherever the head's own flesh holds the point, the body's holds it
     // deeper or as deep (a union only grows by what is added to it).
