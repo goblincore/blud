@@ -43,8 +43,15 @@ Tests, harnesses, the game-main decomposition, tooling, process notes. Part of t
   | `game-world-leaves` | `game-hit-trace` |
   | `game-world-leaves2` | `game-wound-streams` |
   | `game-world-leaves3` | `game-bleed` |
-- [ ] Next: keep extracting from `main()` (the rows under "game-main.ts decomposition" below; `game-main.ts` is back
-  to 8,964 lines), naming modules by content. `scene`, `camera` and a few constants local to `main()` block 9 of the 17.
+- [x] **All 22 functions nested in `main()` are out (2026-10-07): `game-main.ts` 8,969 → 6,023.** By `extract-leaf` with
+  `--rebind scene=…,camera=…`, bottom-up, into modules named for content: `game-chunk-pieces`, `game-gib-actor`,
+  `game-dynamite-step`, `game-skeleton-actors`, `game-spawn`, `game-wound-tuning`, `game-demo-replay`,
+  `game-ambient-rig`, `game-crowd-queries`, `game-tick`; `ZOMBIE_FLAT` + `headShape` → `game-zombie-face`. Six tests that
+  pin `game-main.ts` as text were repointed. Verified by `tsc` and vitest only: **no boot, no pixel gate yet.**
+- [ ] Run `march-hash` and boot the game on this branch when the GPU is free.
+- [ ] `extract-leaf` wrote a second `import { withCtx }` into `game-tick.ts` (removed by hand); fix the import merge.
+- [ ] `game-tick.ts` is still one 1,190-line `tick()`. Split it into `system(ctx, dt)` calls in order: this is the
+  ECS schedule. What is left in `main()` is ~5,500 lines of inline boot code and the `setDrawFn` closure.
 - [ ] Then folders, one quiet cluster at a time (`deferred-`, `post-`, `shutter-`, spike entrypoints first; `game-*`
   and `skeleton-spike/` after the skull PRs merge), with a script that moves files and rewrites imports, scripts and HTML.
 

@@ -45,7 +45,7 @@ Each line is the first sentence of the module's header comment.
 | [Dev panels](#dev-panels) | 10 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 23 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 63 | Gameplay features wired into the game loop. |
+| [Game: feature modules](#game-feature-modules) | 74 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 7 | Blood views, the goo layer, impact splashes. |
@@ -289,6 +289,7 @@ The GameContext and its state slices (ECS resources to be). All game state lives
 Gameplay features wired into the game loop.
 
 - `webgpu/game-actor.ts` — The zombie actor record for the game page, its combat and navigation step, damage handling, and furniture avoidance helpers.
+- `webgpu/game-ambient-rig.ts` — applyRig: applies an ambient rig (hemisphere, sun, ambient, fog, clear colour, flashlight visibility) to the scene.
 - `webgpu/game-arms-math.ts` — The FPV arms' pure half: the node contract, the material-name mapping, and the basis that aims an arm.
 - `webgpu/game-arms.ts` — The FPV goblin arms: loads goblin-arm.glb, dresses it, and hands two arm groups (origin = hand centre, local +Y = toward the elbow) to game-main.
 - `webgpu/game-axe.ts` — WEAPON SLOT 7: THE AXE (spec docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md §3-§4).
@@ -299,19 +300,24 @@ Gameplay features wired into the game loop.
 - `webgpu/game-brain-gib.ts` — THE BRAIN MESH (melee head damage, plan Task 11; spec §14 decision 3).
 - `webgpu/game-burning.ts` — IN-GAME BURNING (2026-09-18 flare test harness), lifted beside game-main.ts rather than into its closure (the decomposition's rule for new features).
 - `webgpu/game-chunk-bake.ts` — Chunk bake and draw helpers: lit chunk materials, drawn chunk mesh iteration, picking, the gore showcase and bake completion.
+- `webgpu/game-chunk-pieces.ts` — Chunk gib pieces: creating, dressing and releasing a piece view, spawning a chunk piece, and gibbing chunk meat and baked pieces.
+- `webgpu/game-crowd-queries.ts` — Crowd queries: the live body of a crowd type nearest the player, and the set of actors whose bone can show.
 - `webgpu/game-crowd-types.ts` — Crowd helper for the game page: lazily creating the one CrowdType per character and spawn room.
 - `webgpu/game-deferred-lights.ts` — THE SHARED GAME LIGHT LIST (hybrid deferred M2, spec docs/superpowers/specs/2026-09-06-hybrid-deferred-m2-design.md).
 - `webgpu/game-deferred-renderer.ts` — THE GAME'S DEFERRED FRAME COORDINATOR (hybrid deferred M2 task 5, spec docs/superpowers/specs/2026-09-06-hybrid-deferred-m2-design.md).
 - `webgpu/game-deferred-scene.ts` — THE GAME SCENE ROUTER (hybrid deferred M2 task 3, spec docs/superpowers/specs/2026-09-06-hybrid-deferred-m2-design.md).
 - `webgpu/game-demo-record.ts` — Demo recording helpers: reading input frames, describing recorded wounds, placing from a demo, the demo HUD and recording start.
+- `webgpu/game-demo-replay.ts` — Demo replay: applying a recording's boot flags, the replay driver that owns the sim clock, and demo synthesis.
 - `webgpu/game-demo-save.ts` — Demo recording stop: ends the recorder and saves the demo file to the dev server.
 - `webgpu/game-disco.ts` — THE BOILER ROOM DISCO BALL in the game (spec 2026-09-27-disco-ball-design.md): the ball gets a mirror-tile material (hand-written WGSL,…
 - `webgpu/game-dynamic-light.ts` — DYNAMIC LIGHT in the game (docs/superpowers/specs/2026-09-26-night-train-dynamic-light-design.md): every level lamp follows its mood and scripted…
+- `webgpu/game-dynamite-step.ts` — The dynamite per-tick step: fuse and flight, overcooking in the hand, and detonateAt (blast damage, kick, gibs, light).
 - `webgpu/game-dynamite-throw.ts` — Dynamite bundle helpers: taking the prop, throwing it, hit tests against bodies, and the explosion light.
 - `webgpu/game-dynamite-tuning.ts` — Dynamite tuning panel hookup: applying tuning values to the game context, the chunk budget ceiling, and reading values back.
 - `webgpu/game-egg.ts` — THE CONTROL ROOM'S EGG in the game (spec 2026-09-30-night-train-egg-ending-design.md §2): finds the plan-1 placeholder egg in the level art (material…
 - `webgpu/game-flail.ts` — WEAPON SLOT 1: THE SPIKE FLAIL (spec docs/superpowers/specs/2026-09-26-spike-flail-design.md).
 - `webgpu/game-flare.ts` — WEAPON SLOT 5: THE FLARE TEST HARNESS (2026-09-18), lifted beside game-main.ts.
+- `webgpu/game-gib-actor.ts` — Gibbing a whole actor (gibActor: chunks, blood, blast profile, retire) and spawning the gibs scheduled for later frames.
 - `webgpu/game-gib-pieces.ts` — Gib piece spawners: building one asset-mesh gib piece or one sprite gib piece and registering it with the game.
 - `webgpu/game-gib-spawn.ts` — Gib spawning and budgeting: scheduling gibs, retiring actors, carved pieces, the gib atlas loader and the per-frame gib piece budget.
 - `webgpu/game-grenade-launcher.ts` — Single-shot launcher timing.
@@ -339,9 +345,12 @@ Gameplay features wired into the game loop.
 - `webgpu/game-render-controls.ts` — Render helpers: SDF scale and adaptive scaling, fisheye and viewmodel FOV, actor culling, bone cull modes and the trained upscale.
 - `webgpu/game-rod.ts` — WEAPON SLOT 6: THE ROD (cut wounds M1, spec docs/superpowers/specs/2026-10-03-cut-wounds-design.md §5).
 - `webgpu/game-sequence.ts` — SCRIPTED SEQUENCES in the game (spec 2026-09-30-night-train-egg-ending-design.md §3).
+- `webgpu/game-skeleton-actors.ts` — An actor's skeleton resources: bone field sources, the shared volume atlas (acquire, release), binding and release.
+- `webgpu/game-spawn.ts` — Spawning the cast: spawnEnemy (body, view, march settings, skeleton, kit), spawnAll, rebuildCast, and the game's march constants.
 - `webgpu/game-telemetry-controls.ts` — The on-screen gameplay telemetry recorder widget: record, mark, save-to-disk and download buttons around a GameTelemetry log.
 - `webgpu/game-telemetry-scene.ts` — Telemetry scene helpers: capturing a frozen actor and camera snapshot, and the bench scene census (bodies, wounds, chunks, droplets).
 - `webgpu/game-telemetry.ts` — Opt-in, bounded live-play recorder (GameTelemetry): frame timings, phase spans, events and snapshots, with no GPU waits.
+- `webgpu/game-tick.ts` — The game tick: one simulation step of the whole game (player, weapons, actors, gibs, dynamite, blood, VFX), still one function.
 - `webgpu/game-tile-playtest.ts` — The opt-in tile-culling playtest controller for the game: owns tile bindings, the enable and ray-cull toggles, and fallback counters.
 - `webgpu/game-train.ts` — THE TRAIN in the game (carriage kit spec §5, §6): window glass becomes the scrolling night scenery (TRAIN_WINDOW, hand-written WGSL), swaying kit…
 - `webgpu/game-viewmodel.ts` — View-model TIMING for sdf-game.html's sawed-off: the reload state machine, the hinge curve, the muzzle-flash envelope and the magazine.
@@ -350,7 +359,9 @@ Gameplay features wired into the game loop.
 - `webgpu/game-weapon-slots.ts` — WEAPON SLOTS for sdf-game.html — numbers and state only, no Three.js import, for the same reason game-viewmodel.ts is pure: the switch is a timing…
 - `webgpu/game-weapon.ts` — Pure grapeshot logic for sdf-game.html — everything about the gun that can be unit-tested without a renderer or a DOM.
 - `webgpu/game-wound-streams.ts` — Wound stream ids and the refine-twin gate that decides which actors get the march cull.
+- `webgpu/game-wound-tuning.ts` — applyWoundTuning: writes wound panel values into the game (ramp, viscera, gut ropes), rebuilding the cast when boneRatio changes.
 - `webgpu/game-wound-vfx.ts` — Face textures, wound ramp and tuning, burst visual scaling, spill verdicts, impact splash layer and trail stream ids.
+- `webgpu/game-zombie-face.ts` — The zombie's flat face sheet (url, atlas rect, mean) and headShape, the head prim that normalises the face projection.
 
 ## Weapons and viewmodel (render)
 

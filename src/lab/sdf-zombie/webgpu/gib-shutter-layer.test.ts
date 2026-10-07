@@ -44,6 +44,8 @@ describe('gib shutter — settings share the blood exposure contract', () => {
 describe('gib shutter — integration tripwires', () => {
   const layerSrc = readFileSync('src/lab/sdf-zombie/webgpu/gib-shutter-layer.ts', 'utf8');
   const gameSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8');
+  // tick() moved to game-tick.ts (2026-10-07); the sim tick runs before the render callback.
+  const tickSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-tick.ts', 'utf8');
   // The large __sdfGame members moved to game-seams-spawn-goo.ts in the
   // 2026-09-17 decomposition; every pinned string below is byte-identical.
   const seamSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-seams-spawn-goo.ts', 'utf8');
@@ -102,10 +104,9 @@ describe('gib shutter — integration tripwires', () => {
   });
 
   it('game-main lifts pieces before the base draw, then chains gib -> blood', () => {
-    const selectIdx = gameSrc.indexOf('ctx.gibs.shutter.select(');
-    const renderCbIdx = gameSrc.indexOf('handle.setRenderCallback');
-    expect(selectIdx).toBeGreaterThan(-1);
-    expect(renderCbIdx).toBeGreaterThan(selectIdx);
+    expect(tickSrc.indexOf('ctx.gibs.shutter.select(')).toBeGreaterThan(-1);
+    expect(gameSrc.indexOf('ctx.gibs.shutter.select(')).toBe(-1);
+    expect(gameSrc.indexOf('handle.setRenderCallback')).toBeGreaterThan(-1);
 
     const gibCaptureIdx = gameSrc.indexOf('ctx.gibs.shutter.capture(capture, scene, camera)');
     const setSceneIdx = gameSrc.indexOf('ctx.panels.shutterGame.setSceneTexture(src.texture)');

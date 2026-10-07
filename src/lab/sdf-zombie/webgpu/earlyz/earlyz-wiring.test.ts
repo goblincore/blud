@@ -7,6 +7,7 @@
 // browser; this keeps a refactor from silently reordering it.
 import { describe, it, expect } from 'vitest';
 import source from '../game-main?raw';
+import spawnSource from '../game-spawn?raw';
 
 /** Index of the single occurrence of `needle`; throws if it is missing or ambiguous, so a moved
  *  or duplicated anchor fails loudly instead of pinning the wrong line. */
@@ -24,7 +25,9 @@ describe('early-Z boot order in game-main.ts (source pins)', () => {
   const accumGuard = only("'stage 1 excludes temporal accumulation boots (far pass)'");
   const crowdOff = only("'crowd path off (stage 1 is crowd-only)'");
   const seed = only('setEarlyzSeed(');
-  const firstType = only('crowdTypeFor(');
+  // The first crowd type is made by spawnEnemy (game-spawn.ts since 2026-10-07), which main()
+  // first reaches through the boot's spawnAll.
+  const firstType = only('spawnAll(ctx, ctx.boot.errors);');
 
   it('boots early-Z, then the deferred/accum guard, then the crowd-off check, then the seed, then the first crowd type', () => {
     expect(boot).toBeLessThan(guard);
@@ -32,6 +35,8 @@ describe('early-Z boot order in game-main.ts (source pins)', () => {
     expect(Math.max(guard, accumGuard)).toBeLessThan(crowdOff);
     expect(crowdOff).toBeLessThan(seed);
     expect(seed).toBeLessThan(firstType);
+    expect(source).not.toContain('crowdTypeFor(');
+    expect(spawnSource).toContain('crowdTypeFor(ctx, name, room.id, stride)');
   });
 
   it('turns early-Z off under the deferred renderer and for ?accum=1 boots in one guarded block', () => {

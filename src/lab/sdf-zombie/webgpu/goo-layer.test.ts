@@ -342,14 +342,15 @@ describe('goo sync wiring (the bug that hid the whole layer)', () => {
   // These are source tripwires, in the same style as the blur-wiring guards
   // above: nothing here constructs a renderer.
   it('the game page syncs the density quads every frame', () => {
-    const src = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8');
-    expect(src).toMatch(/ctx\.goo\.layer\?\.sync\(ctx\.vfx\.bloodSim, camera\)/);
+    // tick() moved to game-tick.ts (2026-10-07), where `camera` is `ctx.boot.handle.camera`.
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/game-tick.ts', 'utf8');
+    expect(src).toMatch(/ctx\.goo\.layer\?\.sync\(ctx\.vfx\.bloodSim, ctx\.boot\.handle\.camera\)/);
   });
 
   it('the game page syncs AFTER the camera is final, so the quads billboard correctly', () => {
-    const src = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8');
-    const cam = src.indexOf('camera.updateMatrixWorld();');
-    const sync = src.indexOf('ctx.goo.layer?.sync(ctx.vfx.bloodSim, camera)');
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/game-tick.ts', 'utf8');
+    const cam = src.indexOf('ctx.boot.handle.camera.updateMatrixWorld();');
+    const sync = src.indexOf('ctx.goo.layer?.sync(ctx.vfx.bloodSim, ctx.boot.handle.camera)');
     expect(cam, 'camera.updateMatrixWorld() must be present').toBeGreaterThan(-1);
     expect(sync, 'the goo sync must be present').toBeGreaterThan(-1);
     expect(sync).toBeGreaterThan(cam);

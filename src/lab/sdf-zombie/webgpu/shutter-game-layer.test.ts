@@ -196,6 +196,8 @@ describe('shutter game — query flags', () => {
 describe('shutter game — integration tripwires', () => {
   const layerSrc = readFileSync('src/lab/sdf-zombie/webgpu/shutter-game-layer.ts', 'utf8');
   const gameSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8');
+  // tick() moved to game-tick.ts (2026-10-07), where `camera` is `ctx.boot.handle.camera`.
+  const tickSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-tick.ts', 'utf8');
   const miscSrc = readFileSync('src/lab/sdf-zombie/webgpu/game-seams-misc.ts', 'utf8');
   // setBloodBlurExposure / setBloodBlurMaxStreak moved to game-seams-leftover.ts
   // in leaves wave 1 (2026-09-19), then on to game-seams-fx.ts in the
@@ -241,7 +243,7 @@ describe('shutter game — integration tripwires', () => {
   });
 
   it('game-main poses the sharp half, installs the stage and exposes live setters', () => {
-    expect(gameSrc).toContain('ctx.panels.shutterGame?.poseSharp()');
+    expect(tickSrc).toContain('ctx.panels.shutterGame?.poseSharp()');
     expect(gameSrc).toContain('ctx.render.postAa.setCaptureStage');
     expect(gameSrc).toContain('readShutterGameSettings(location.search)');
     // setBloodBlurExposure and setBloodBlurMaxStreak moved into
@@ -254,8 +256,8 @@ describe('shutter game — integration tripwires', () => {
     expect(miscSrc).toContain('setBloodBlurSeedScale');
     expect(miscSrc).toContain('setBloodBlurDepthBias');
     // The pose must precede the sync it partitions.
-    const poseIdx = gameSrc.indexOf('ctx.panels.shutterGame?.poseSharp()');
-    const syncIdx = gameSrc.indexOf('ctx.goo.layer?.sync(ctx.vfx.bloodSim, camera)', poseIdx);
+    const poseIdx = tickSrc.indexOf('ctx.panels.shutterGame?.poseSharp()');
+    const syncIdx = tickSrc.indexOf('ctx.goo.layer?.sync(ctx.vfx.bloodSim, ctx.boot.handle.camera)', poseIdx);
     expect(syncIdx).toBeGreaterThan(poseIdx);
   });
 
