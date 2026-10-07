@@ -37,6 +37,7 @@ import {
   type Wound, type WoundType,
 } from '../damage';
 import type { SplitWarp } from '../head-split';
+import { burstTuning } from '../head-burst';
 import { GUN_WET_LIP } from '../torn-lips';
 import { severLimb, severDistal, type SeverResult } from '../sever';
 import { soldierInjury, soldierArmCutAllowed, injuryPoints, SOLDIER_INJURY_TUNING } from '../soldier-damage';
@@ -1737,6 +1738,7 @@ export function createZombieActor(opts: {
     const wound = woundFromPellet(posed.prims, u.hit, bodyYaw, u.field);
     wound.shot = shot;
     gunWetLip(wound, 'pellet');
+    headLip(wound);
     return applyProjectileHit(wound, hitWorld, dirWorld);
   }
 
@@ -1745,7 +1747,16 @@ export function createZombieActor(opts: {
     const wound = woundFromSlug(posed.prims, u.hit, u.field, bodyYaw);
     wound.shot = shot?.weapon === 'slug' ? shot : { weapon: 'slug' };
     gunWetLip(wound, 'slug');
+    headLip(wound);
     return applyProjectileHit(wound, hitWorld, dirWorld);
+  }
+
+  /** A GUN CRATER ON THE HEAD KEEPS A LOW LIP (head-burst.ts burstTuning.headLip): the skull's face is 1 to 2 cm
+   *  under the skin, and a full lip walls it in. The head's prims and the neck's (the head limb); the same bodies
+   *  the wet lip is for. */
+  function headLip(wound: Wound): void {
+    if (soldierDamage || softTarget || posed.prims[wound.primIdx]?.limb !== 'head') return;
+    wound.rimScale = (wound.rimScale ?? 1) * Math.max(0, burstTuning.headLip);
   }
 
   /** WET RED LIP on a gun crater (torn-lips.ts, plan Task 35): the zombie-class gore bodies only.

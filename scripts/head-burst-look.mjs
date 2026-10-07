@@ -141,7 +141,10 @@ async function stepN(n) { for (let i = 0; i < n; i++) await stepOne(); }
 const syncCam = () => evaluate("__sdfGame.step(1, 0)");
 /** Re-render without stepping the sim: the post chain mixes each frame with the ones before it. */
 const settle = async (n = SETTLE) => { await evaluate("__sdfGame.setRenderLock(true)"); for (let i = 0; i < n; i++) await stepOne(); await evaluate("__sdfGame.setRenderLock(false)"); };
-const frameOf = (id) => evaluate(`__sdfGame.head.frame(${id})`);
+/** Actor `id`'s head frame; the last one it had once the head is gone (the frames of a headless body are aimed at
+ *  where its head was). */
+const lastFrame = new Map();
+const frameOf = async (id) => { const fr = await evaluate(`__sdfGame.head.frame(${id})`); if (fr) lastFrame.set(id, fr); return fr ?? lastFrame.get(id) ?? null; };
 const frontOf = async (id) => { const fr = await frameOf(id); const f = qRot(fr.quat, [0, 0, 1]); return unit([f[0], 0, f[2]]); };
 let pool = [], used = new Set();
 function fresh() { const z = pool.find((q) => !used.has(q.id)); if (!z) throw new Error("ran out of fresh zombies"); used.add(z.id); return z; }
@@ -376,15 +379,21 @@ const vhsOff = async () => { await evaluate("__sdfGame.setVhs(null)"); await set
 const vhsOn = async () => { await evaluate("__sdfGame.setVhs('blud')"); await settle(); };
 /** A stage's photographs (see the header) and its picture profile. */
 async function photograph(stage, id) {
-  if (!(await headOn(id))) { console.log(`  ${stage}: the head is off; nothing photographed`); return; }
+  const on = await headOn(id);
+  if (!on) {
+    // A headless body: the camera is aimed over its shoulders, where the head would be.
+    const t = await evaluate(`__sdfGame.actorLimbCenter(${id}, "torso")`), fr = lastFrame.get(id);
+    if (!t || !fr) { console.log(`  ${stage}: the body is gone; nothing photographed`); return; }
+    lastFrame.set(id, { ...fr, centre: [t[0], t[1] + 0.4, t[2]] });
+  }
   await shot(stage, "ships-front", id, SHIPS_M, 0);
   await shot(stage, "ships-profile", id, SHIPS_M, 90);
   await vhsOff();
   await evaluate("__sdfGame.setBleed(false)"); await stepN(2);
   await shot(stage, "clean-front", id, CLEAN_M, 0);
   await shot(stage, "clean-profile", id, CLEAN_M, 90);
-  const px = await pixelProfile(stage, id);
-  manifest.stages[stage] = { actor: id, picture: px }; save();
+  const px = on ? await pixelProfile(stage, id) : null;
+  manifest.stages[stage] = { actor: id, headOn: on, picture: px }; save();
   if (px) console.log(`  ${stage} picture profile (${px.mmPerPx} mm per pixel): ${px.rows.map((r) => `${r.name} bone ${r.bone} flesh ${r.flesh} proud ${r.proud}`).join("; ")}`);
   await evaluate("__sdfGame.setBleed(true)");
   await vhsOn();
@@ -443,31 +452,36 @@ try {
     await round("slug-split", a.id, "__sdfGame.fireSlug()", [0, 0.04, 0]); await photograph("slug-split", a.id);
   }
   if (SCENES.has("slug-pop")) {
-    // Slugs at the neck (the crosshair 6 cm under the head's centre lands them under the chin) until the head leaves.
+    // Slugs at the neck (the crosshair 6 cm under the head's centre lands them under the chin), from 40 degrees to
+    // one side, until the head leaves. The cast plays for the half second each slug's strip is shot in, and is held
+    // between slugs.
     const a = fresh();
     let done = false;
-    for (let n = 1; n <= 8 && !done; n++) {
+    for (let n = 1; n <= 10 && !done; n++) {
       const log0 = burstLog.length;
+      if (!(await evaluate(`__sdfGame.head.frame(${a.id})`))) break;
       const fr = await frameOf(a.id), f = await frontOf(a.id);
-      await aimAt(a.id, SHOT_M, 0, [0, -0.06, 0]);
+      await aimAt(a.id, SHOT_M, 40, [0, -0.06, 0]);
       const line = await slugLine(a.id);
       await fire("__sdfGame.fireSlug()");
+      await evaluate("__sdfGame.freeze(false)");
       const frames = await strip("slug-pop", a.id, fr.centre, f);
+      await evaluate("__sdfGame.freeze(true)"); await stepN(2);
       const off = frames.find((q) => !q.headOn), swell = frames.filter((q) => q.popping).length;
       const rec = await record(`slug-pop-${n}`, a.id, "__sdfGame.fireSlug()", [0, -0.06, 0], { log: burstLog.slice(log0), line: { offset: +line.offset.toFixed(3), wouldHit: line.actor } });
       if (off) {
         done = true;
-        await stepN(90);
         rec.pop = { slug: n, firstSwellFrame: frames.find((q) => q.popping)?.k ?? null, swellFrames: swell, headOffFrame: off.k, fragmentsAtBurst: off.fragments,
-          fragmentCuts: await evaluate("__sdfGame.skullFragmentCuts()"), skullDraws: await evaluate(`(() => { const d = __sdfGame.skullDrawn(${a.id}); return d ? d.whole.length + d.copies.length : null; })()`),
-          near120: await census(fr.centre) };
-        await thaw(); await stepN(120);
-        rec.pop.nearLater = await census(fr.centre);
+          fragmentCuts: await evaluate("__sdfGame.skullFragmentCuts()"), near: await census(fr.centre) };
+        await evaluate("__sdfGame.freeze(false)"); await stepN(150); await evaluate("__sdfGame.freeze(true)"); await stepN(2);
+        const t = await evaluate(`__sdfGame.actorLimbCenter(${a.id}, "torso")`);
+        rec.pop.overStumpLater = t ? await census([t[0], t[1] + 0.4, t[2]]) : null;
         manifest.rounds[`slug-pop-${n}`] = rec; manifest.stages["slug-pop"] = { actor: a.id, frames }; save();
-        console.log(`  slug-pop: slug ${n} took the head off; the swell showed on ${swell} frames from frame ${rec.pop.firstSwellFrame}, the head left on frame ${off.k} with ${off.fragments} skull fragments in the air; the fragment cut ${J(rec.pop.fragmentCuts)}; 1.5 s on, within 0.3 m of the old head: ${J(rec.pop.near120)}; after another 3 s: ${J(rec.pop.nearLater)}`);
-      } else { await thaw(); }
+        console.log(`  slug-pop: slug ${n} took the head off; the swell showed on ${swell} frames from frame ${rec.pop.firstSwellFrame}, the head left on frame ${off.k} with ${off.fragments} skull fragments in the air; the fragment cut ${J(rec.pop.fragmentCuts)}; within 0.3 m of the old head half a second on: ${J(rec.pop.near)}; over the stump 2.5 s later: ${J(rec.pop.overStumpLater)}`);
+        await photograph("slug-pop-after", a.id);
+      }
     }
-    if (!done) { failed++; console.error("FAIL: slug-pop: eight slugs at the neck did not take the head off"); }
+    if (!done) { failed++; console.error("FAIL: slug-pop: ten slugs at the neck did not take the head off (the zombie died first, or the neck held)"); }
     // The same pop with the flesh out of the frame: a stamped torso wound (an unwounded body draws no bones), the
     // proxy box shrunk to nothing, and the head popped by hand along the same direction.
     const b = fresh();

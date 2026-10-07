@@ -306,6 +306,30 @@ describe('the decapitation asks first (the actor)', () => {
   });
 });
 
+describe('an ordinary gun crater on the head keeps a low lip', () => {
+  it('a pellet\'s and a slug\'s crater on the head are stamped with headLip of the stock lip; the torso\'s is stock', () => {
+    const f = fixture();
+    const head = f.a.hit(f.on(FRONT), FRONT)!;
+    const torso = f.a.hit(f.on(FRONT, [0, -0.45, 0]), FRONT)!;
+    expect(f.a.posed().prims[head.primIdx]!.limb).toBe('head');
+    expect(f.a.posed().prims[torso.primIdx]!.limb).toBe('torso');
+    expect(head.rimScale).toBeGreaterThan(0);
+    expect(head.rimScale!).toBeLessThanOrEqual(BURST_TUNING_DEFAULTS.headLip);
+    expect(torso.rimScale ?? 1).toBeGreaterThan(BURST_TUNING_DEFAULTS.headLip);
+    setBurstTuning({ slugSplit: false });
+    const g = fixture();
+    const slug = g.a.hitSlug(g.on(FRONT), FRONT)!;
+    expect(slug.rimScale!).toBeLessThanOrEqual(BURST_TUNING_DEFAULTS.headLip);
+  });
+  it('headLip 1 is the stock lip (the look before)', () => {
+    const low = fixture().a, at = fixture();
+    const a = low.hit(at.on(FRONT), FRONT)!;
+    setBurstTuning({ headLip: 1 });
+    const b = fixture().a.hit(at.on(FRONT), FRONT)!;
+    expect(a.rimScale!).toBeCloseTo((b.rimScale ?? 1) * BURST_TUNING_DEFAULTS.headLip, 9);
+  });
+});
+
 describe('the wiring', () => {
   it('the projectile loop asks the head-shot leaf before it stamps a round\'s own wound', () => {
     expect(tickSrc).toContain('ctx.weapon.headShot?.hit(hitActor, hitPoint, dirN, p.shot, p.kind)');

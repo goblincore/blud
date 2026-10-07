@@ -48,6 +48,14 @@ export const BURST_TUNING_DEFAULTS = {
   /** false: every round on a head is an ordinary wound and a decapitation an ordinary one (no split, pop or opening). */
   on: true,
 
+  // ---- An ordinary gun crater on a head.
+  /** THE LIP OF A HEAD CRATER, as a share of the stock everted lip (Wound.rimScale; game-actor.ts headLip). The stock
+   *  lip stands 2.4 cm proud of the skin round a pellet crater and 4 cm round a slug's, and the skull's face lies 1 to
+   *  2 cm UNDER the skin: seen from the side the bone sat 3 to 6 cm behind a wall of lip, and the shot face read flat.
+   *  0.3 leaves a 7 mm lip on a pellet crater and 12 mm on a slug's. 1 is the stock lip (the look before 2026-10-07).
+   *  The zombie-class bodies only, as the wet lip is (the soldier and the cloth-robed keep their own). */
+  headLip: 0.3,
+
   // ---- The slug split: a centred slug opens the head as the axe does.
   /** false: a centred slug is an ordinary slug wound. */
   slugSplit: true,

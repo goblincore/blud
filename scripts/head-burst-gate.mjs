@@ -1,17 +1,36 @@
-// scripts/head-burst-gate.mjs — slug head burst (plan docs/superpowers/plans/2026-10-02-slug-head-burst.md Task 10).
-// REAL slugs through __sdfGame.fireSlug() on the bare ring page (/sdf-game.html, no ?level), frozen zombies:
-//   A. a dead-centre slug is LETHAL: head dead, burst kind lethal with offset < 0.35, a burst-exit crater, the swell
-//      peaks (bu.b >= 0.2 within 8 frames) and settles to rest, chunks thrown, flaps drawn, the head still on, the
-//      zombie collapses when thawed.
-//   S. SPLIT: with lethal OFF (the default) a centred slug opens the head through and the zombie lives, no flaps, and survives
-//      the third slug.
-//   B. an off-centre slug is GLANCING: not dead, kind glancing with offset >= 0.35, brainLeak, skull cracked >= 0.8, no
-//      exit crater, flaps drawn, still standing when thawed; a SECOND slug at the same spot then kills.
-//   C. cost: the flaps of a head share ONE attached piece (draws === 1). Frame time is reported, not gated: the debris
-//      chunks confound it and this environment's draw timer spreads by milliseconds between identical runs.
-//   P. the DEBUG defaults (anyWeapon, alwaysSplit): a pellet volley on a head splits it, once per shot.
-//   D. the OFF switch: burstTune({ on: false }) leaves the head with no burst state (the ordinary slug path).
-//   E. zero console errors / exceptions.
+// scripts/head-burst-gate.mjs — what a gun round does to a zombie's head (head-burst.ts headShotRule,
+// decapitationRule; webgpu/game-head-shot.ts; the actor's pop). REAL rounds through __sdfGame.fire() and fireSlug()
+// on the bare ring page (/sdf-game.html, no ?level), frozen zombies, three boots.
+//
+// BOOT 1, the shipped rules (the default skull, the anatomical one):
+//   NP. pellet volleys on a head never open or split it: ordinary craters, no split, no head-leaf state, the head on.
+//   AIM. a slug fired with the crosshair on the head (no stance solving) is CENTRED by the shipped splitFrac and
+//       splits the head.
+//   O.  (splitFrac 0.35 from here, so "off centre" can be staged) an off-centre slug is an ORDINARY slug wound.
+//   S.  a centred slug SPLITS the head: the head split's state at the preset's full angle, both halves, the pose's
+//       split at +full / -full, the skull drawn as clipped copies with an eye a half, the field open on the plane,
+//       two cut faces, the zombie alive.
+//   X.  a second centred slug on the split head POPS it.
+//   D.  slugs at the neck until the head comes off: the head SWELLS for popSwellS and bursts, no flying head; the
+//       anatomical skull's fourteen plates are all released as fragments, the head segment and its eyes are not
+//       drawn, and 2.5 s on nothing is left at the old head position.
+//   D0. popSwellS 0 bursts with no swell frame.
+//   OFF. burstTune({ on: false }): a centred slug is an ordinary wound.
+// BOOT 2, the OPENING switched on by tuning (the slug head burst of 2026-10-02, not shipped): the scenarios this
+// gate had before 2026-10-07, unchanged but for `opening: true` in their tuning:
+//   P. with anyWeapon and alwaysSplit a pellet volley on a head opens it, once per shot.
+//   A. a dead-centre slug is LETHAL (lethal on): head dead, verdict lethal with offset < 0.35, a burst-exit crater,
+//      the swell peaks (bu.b >= 0.2 within 8 frames) and settles to rest, chunks thrown, flaps drawn, the head still
+//      on, the zombie collapses when thawed.
+//   B. an off-centre slug is GLANCING: not dead, offset >= 0.35, a skull region cracked >= 0.8, no exit crater, flaps
+//      drawn, still standing when thawed; a SECOND slug at the same spot then kills.
+//   S. with lethal off a centred slug opens the head through and the zombie lives, no flaps, and survives the third.
+//   D. burstTune({ on: false }) leaves the head with no burst state.
+//   C. the flaps of a head share ONE attached piece (draws === 1). Frame time is reported, not gated.
+// BOOT 3, the SCULPTED skull (`?sculpt=full`):
+//   DS. the decapitating slug pops the head: the sculpted head mesh is thrown as ten fragments (sculpt-fragments.ts),
+//       the head segment and its eyes are not drawn, nothing is left at the old head position.
+// E. zero console errors / exceptions, over all three.
 // Photos are written to OUT for the look loop. Usage:
 //   export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up
 //   node scripts/head-burst-gate.mjs 5241 9241
@@ -144,13 +163,14 @@ async function capture(name) {
 }
 // ---- Boot the bare ring page, frozen zombies -----------------------------------------------------------
 let centre = [0, 0, 0], pool = [], usedZ = new Set();
-async function boot(label) {
+async function boot(label, query = "") {
+  usedZ = new Set();
   const s = await openSession(label);
   await send("Page.enable"); await send("Runtime.enable");
   await fetch(`http://localhost:${CDP}/json/activate/${s.tab.id}`);
   await send("Page.bringToFront");
   await send("Emulation.setDeviceMetricsOverride", { width: W, height: H, deviceScaleFactor: 1, mobile: false });
-  await send("Page.navigate", { url: `http://localhost:${VITE}/sdf-game.html?seed=1&vhs=off&loader=0` });
+  await send("Page.navigate", { url: `http://localhost:${VITE}/sdf-game.html?seed=1&vhs=off&loader=0${query}` });
   let backend = null;
   for (let i = 0; i < 240 && !backend; i++) { await sleep(500); try { backend = await evaluate("typeof window.__sdfGame === \"object\" ? window.__sdfGame.backend : null"); } catch { backend = null; } }
   if (backend !== "webgpu") die(`[${label}] backend ${backend}, expected webgpu`);
@@ -252,11 +272,206 @@ async function slug(id, frames, perFrame) {
 const chunks = () => evaluate("__sdfGame.chunkCount");
 
 const out = {};
+const tune = (o) => evaluate(`__sdfGame.head.burstTune(${JSON.stringify(o)})`);
+const TUNING_DEFAULTS = {};
+/** The player `dist` m in front of actor `id`'s head with the crosshair `aim` from its centre: an aimed shot, the
+ *  stance not solved. Returns where a slug fired now would go (its line's offset in head radii, drop included). */
+async function crosshairOn(id, dist, aim = [0, 0, 0]) {
+  const fr = await evaluate(`__sdfGame.head.frame(${id})`);
+  const head = fr.centre, R = Math.cbrt(fr.axes[0] * fr.axes[1] * fr.axes[2]);
+  const ax = centre[0] - head[0], az = centre[2] - head[2], l = Math.hypot(ax, az) || 1;
+  const fx = ax / l, fz = az / l;
+  const t = [head[0] + aim[0], head[1] + aim[1], head[2] + aim[2]];
+  await evaluate(`__sdfGame.placePlayer({ x: ${t[0] + fx * dist}, z: ${t[2] + fz * dist}, yaw: ${yawOf(-fx, -fz)}, pitch: ${Math.atan2(t[1] - EYE_H, dist)} })`);
+  await stepOne();
+  await evaluate("__sdfGame.setAimPoint(0, 0)");
+  const pr = await evaluate("__sdfGame.predictSlugHit()");
+  const o = pr.origin, d = pr.dir;
+  const tt = (head[0] - o[0]) * d[0] + (head[1] - o[1]) * d[1] + (head[2] - o[2]) * d[2];
+  const drop = 0.5 * SLUG_GRAVITY * (Math.max(0, tt) / SLUG_SPEED) ** 2;
+  const cp = [o[0] + d[0] * tt, o[1] + d[1] * tt - drop, o[2] + d[2] * tt];
+  return { head, offset: Math.hypot(cp[0] - head[0], cp[1] - head[1], cp[2] - head[2]) / R, actor: pr.actorId };
+}
+const headOn = async (id) => (await evaluate(`__sdfGame.flail.limbAlive(${id}, "head")`)) > 0;
+const shotOf = (id) => evaluate(`__sdfGame.head.shot(${id})`);
+const splitOf = (id) => evaluate(`__sdfGame.headSplit(${id})`);
+const headWounds = async (id) => (await evaluate(`__sdfGame.actorWounds(${id})`)).filter((w) => w.limb === "head");
+const fragments = () => evaluate("__sdfGame.skullFragments().length");
+/** What is drawn within `r` m of `c` that belongs to a head: actor `id`'s bone and eye instances at or over the
+ *  chin's height (the collar bones sit lower), attached pieces, flying and settled chunks, mesh gibs, head flesh. */
+async function nearHead(id, c, r = 0.25) {
+  const n = await evaluate(`__sdfGame.head.drawnNear(${c[0]}, ${c[1]}, ${c[2]}, ${r})`);
+  const up = (q) => q.pos[1] > c[1] - 0.12;
+  return { bones: n.bones.filter((b) => b.owner === id && !b.eye && up(b)).length, eyes: n.bones.filter((b) => b.owner === id && b.eye).length,
+    attached: n.attached.length, chunks: n.chunks.length, baked: n.baked.length, meshGibs: n.meshGibs.length, flesh: n.flesh.filter((f) => f.actor === id).length };
+}
+/** One REAL slug at actor `id`, watched for `frames` frames: on which frames its head was swelling, when it left, and
+ *  the most skull fragments in the air. */
+async function watchSlug(id, frames) {
+  let fired = false;
+  for (let i = 0; i < 4 && !fired; i++) { fired = await evaluate("__sdfGame.fireSlug()"); if (!fired) await stepN(90); }
+  if (!fired) die("fireSlug() never fired (reload?)");
+  const f0 = await fragments();
+  const swell = []; let off = -1, limbChunks = 0;
+  for (let k = 0; k < frames; k++) {
+    await stepOne();
+    if (await evaluate(`__sdfGame.head.popping(${id})`)) swell.push(k);
+    if (off < 0 && !(await headOn(id))) off = k;
+  }
+  return { swell, off, fragments: (await fragments()) - f0, limbChunks };
+}
+/** THE POP's checks on actor `id` after slugs at its neck (the crosshair 6 cm under the head's centre). `want`: the
+ *  skull fragments the pop must throw (null: only "some"). */
+async function popByNeckSlugs(tag, id, want, bonesWhole) {
+  const swellS = (await evaluate("__sdfGame.head.burstTuning()")).popSwellS;
+  let r = null, n = 0, centreAt = null;
+  const flying0 = await evaluate("__sdfGame.chunkStats().livePieces.length");
+  for (n = 1; n <= 8; n++) {
+    const aim = await crosshairOn(id, SHOT_D, [0, -0.06, 0]);
+    if (aim.actor !== id) fail(`${tag}: aim control: the slug would hit actor ${aim.actor}, not ${id}`);
+    centreAt = aim.head;
+    r = await watchSlug(id, 24);
+    if (r.off >= 0 || r.swell.length) break;
+    const v = await shotOf(id);
+    if (v && v.took) fail(`${tag}: slug ${n} at the neck was taken by a head rule (${JSON.stringify(v)}): it must be an ordinary wound`);
+  }
+  note(`${tag}: slug ${n} of at most 8 cut the head off; swell on frames ${JSON.stringify(r.swell)}, the head left on frame ${r.off}, ${r.fragments} skull fragments thrown`);
+  check(r.off >= 0, `${tag}: slugs at the neck take the head off (slug ${n})`);
+  const want60 = swellS * 60;
+  check(r.swell.length >= want60 - 2 && r.swell.length <= want60 + 1, `${tag}: the head swells for popSwellS first: ${r.swell.length} frames at 60 fps for ${swellS} s (${(want60 - 2).toFixed(0)} to ${(want60 + 1).toFixed(0)})`);
+  check(r.swell.length > 0 && r.off === r.swell[r.swell.length - 1] + 1, `${tag}: it holds through the swell and leaves on the frame after it (swell to frame ${r.swell[r.swell.length - 1]}, off on ${r.off})`);
+  check(want === null ? r.fragments >= 1 : r.fragments === want, `${tag}: the skull comes apart: ${r.fragments} fragments are live gibs${want === null ? "" : ` (${want})`}`);
+  if (bonesWhole !== undefined) {
+    const st = await evaluate(`__sdfGame.skullState(${id})`);
+    check(st.pieces.length === bonesWhole, `${tag}: every plate of the anatomical skull is released (${st.pieces.length} of ${bonesWhole} missing)`);
+  }
+  // No flying head: the ordinary decapitation spawns the head as one limb chunk; the pop's debris are gobs.
+  const kinds = await evaluate(`__sdfGame.head.drawnNear(${centreAt[0]}, ${centreAt[1]}, ${centreAt[2]}, 3).chunks.map((c) => c.kind)`);
+  check(!kinds.includes("limb"), `${tag}: no flying head: no limb chunk among the ${kinds.length} flying pieces (${[...new Set(kinds)].join(", ")}; ${flying0} before)`);
+  await stepOne(); await stepOne();
+  const now = await nearHead(id, centreAt);
+  check(now.bones === 0 && now.eyes === 0 && now.flesh === 0, `${tag}: the head segment, its eyes and its flesh are not drawn (bone instances ${now.bones}, eyes ${now.eyes}, head flesh prims ${now.flesh})`);
+  await stepN(150);
+  const later = await nearHead(id, centreAt);
+  check(Object.values(later).every((v) => v === 0), `${tag}: 2.5 s on nothing is left at the old head position: ${JSON.stringify(later)}`);
+  return centreAt;
+}
 try {
-  await boot("burst");
+  // ======== BOOT 1: the shipped rules ========
+  await boot("rules");
+  Object.assign(TUNING_DEFAULTS, await evaluate("__sdfGame.head.burstTuning()"));
+  check(TUNING_DEFAULTS.opening === false && TUNING_DEFAULTS.anyWeapon === false && TUNING_DEFAULTS.alwaysSplit === false && TUNING_DEFAULTS.slugSplit === true && TUNING_DEFAULTS.slugPop === true,
+    `the shipped tuning: the opening off, the slug's split and pop on (${JSON.stringify(TUNING_DEFAULTS)})`);
+
+  // -------- NP. (FIRST, on the fresh page, as the opening's pellet scenario is.) Pellets are ordinary.
+  const NP = fresh();
+  for (let v = 0; v < 2; v++) {
+    const aim = await crosshairOn(NP.id, SHOT_D, [0, 0.06, 0]);
+    if (aim.actor !== NP.id) fail(`NP: aim control: the crosshair is on actor ${aim.actor}, not ${NP.id}`);
+    let fired = false;
+    for (let i = 0; i < 6 && !fired; i++) { await evaluate("__sdfGame.refillShells()"); fired = await evaluate("__sdfGame.fire(2)"); if (!fired) await stepN(90); }
+    if (!fired) fail("NP: fire(2) never fired (reload?)");
+    await stepN(30);
+  }
+  const npWounds = await headWounds(NP.id), npShot = await shotOf(NP.id);
+  note(`NP: ${npWounds.length} wounds on the head (${npWounds.map((w) => `${w.type} r${w.radius.toFixed(3)}`).join(", ")}); last verdict ${JSON.stringify(npShot)}`);
+  check(npWounds.length >= 3, `NP: two double-barrel volleys landed pellets on the head (${npWounds.length} head wounds)`);
+  check(npWounds.every((w) => w.type === "pellet" && w.shape === "crater" && w.headRegion === null), "NP: every one is an ordinary pellet crater (no region crater, no cut)");
+  check(npShot !== null && npShot.rule === "ordinary" && npShot.kind === "pellet" && npShot.took === false, `NP: the head-shot leaf judged a pellet on the head ordinary and did not take it (${JSON.stringify(npShot)})`);
+  check((await splitOf(NP.id)) === null && (await hstate(NP.id)) === null, "NP: no split, and the head leaf holds nothing for it (no opening, no deform)");
+  check(await headOn(NP.id), "NP: the head is still on");
+  await stand(NP.id, 0.8); await capture("NP-pellets");
+
+  // -------- AIM. An aimed slug is centred by the shipped threshold.
+  const AIM = fresh();
+  const aimed = await crosshairOn(AIM.id, SHOT_D, [0, 0, 0]);
+  note(`AIM: crosshair on the head's centre from ${SHOT_D} m: the slug's line passes ${aimed.offset.toFixed(3)} head radii from it (splitFrac ${TUNING_DEFAULTS.splitFrac}); it would hit actor ${aimed.actor}`);
+  check(aimed.actor === AIM.id && aimed.offset < TUNING_DEFAULTS.splitFrac && aimed.offset > 0.5, `AIM: an aimed slug's line is ${aimed.offset.toFixed(3)} radii off centre: far from dead centre, and inside the shipped splitFrac ${TUNING_DEFAULTS.splitFrac}`);
+  await watchSlug(AIM.id, 8);
+  const aimShot = await shotOf(AIM.id);
+  check(aimShot?.rule === "split" && aimShot.took === true && (await splitOf(AIM.id)) !== null, `AIM: it splits the head (${JSON.stringify(aimShot)})`);
+
+  // -------- O. an off-centre slug is ordinary (splitFrac 0.35, so a slug on the head can be off centre).
+  await tune({ splitFrac: CENTRE_FRAC });
+  const O = fresh();
+  const oAim = await aimLine(O.id, SHOT_D, GLANCE_SHIFT);
+  await watchSlug(O.id, 8);
+  const oShot = await shotOf(O.id), oWounds = await headWounds(O.id);
+  note(`O: verdict ${JSON.stringify(oShot)}; head wounds ${oWounds.map((w) => `${w.type} r${w.radius.toFixed(3)} ${w.shape}`).join(", ")}`);
+  check(oShot?.rule === "ordinary" && oShot.kind === "slug" && oShot.took === false && oShot.offset >= CENTRE_FRAC, `O: a slug ${oAim.offset.toFixed(3)} radii off centre is ordinary (offset ${oShot?.offset?.toFixed(3)} >= ${CENTRE_FRAC})`);
+  check(oWounds.length === 1 && oWounds[0].type === "blast" && oWounds[0].shape === "crater" && oWounds[0].headRegion === null && Math.abs(oWounds[0].radius - 0.16) < 1e-6, "O: it left one ordinary slug crater on the head (radius 0.16 m, no region, no cut)");
+  check((await splitOf(O.id)) === null && (await hstate(O.id)) === null && await headOn(O.id), "O: no split, no head-leaf state, the head on");
+  await stand(O.id, PHOTO_D); await capture("O-off-centre");
+
+  // -------- S. a centred slug splits the head, to the full angle.
+  const S1 = fresh();
+  await stand(S1.id, PHOTO_D); await capture("S-before");
+  const sAim = await aimLine(S1.id, SHOT_D, 0);
+  await watchSlug(S1.id, 8);
+  const sShot = await shotOf(S1.id);
+  check(sShot?.rule === "split" && sShot.took === true && sShot.offset < CENTRE_FRAC, `S: a slug ${sAim.offset.toFixed(3)} radii off centre splits (verdict ${JSON.stringify(sShot)})`);
+  await stepN(150);   // the split's spring settles (the head-split gate: within about 60 frames)
+  const st = await splitOf(S1.id);
+  const full = await evaluate(`import("/src/lab/sdf-zombie/head-split.ts").then((m) => m.HEAD_SPLIT.presets.middle.maxBoth)`);
+  check(st?.preset === "middle" && st.sides === 0 && st.offset === 0 && Math.abs(st.target - full * TUNING_DEFAULTS.splitOpen) < 1e-12 && st.angle === st.target && st.vel === 0,
+    `S: the head split's state: the middle preset, both halves, at the preset's full angle and at rest (${st ? `${st.preset} sides ${st.sides} angle ${st.angle} target ${st.target} of ${full}` : null})`);
+  const warp = await evaluate(`(() => { const w = __sdfGame.zombie(${S1.id}).posed().split; return w ? { thetaP: w.thetaP, thetaM: w.thetaM } : null; })()`);
+  check(!!warp && warp.thetaP === st?.angle && warp.thetaM === -st?.angle, `S: the pose's split turns the halves that far apart (${warp ? `${warp.thetaP.toFixed(4)} / ${warp.thetaM.toFixed(4)}` : null})`);
+  await evaluate("__sdfGame.step(1, 0)");
+  const drawn = await evaluate(`(() => { const d = __sdfGame.skullDrawn(${S1.id}); return d ? { bones: d.copies.filter((c) => !c.eye).length, eyes: d.copies.filter((c) => c.eye).length, pieces: [...new Set(d.copies.filter((c) => !c.eye).map((c) => c.piece))].sort() } : null; })()`);
+  check(!!drawn && drawn.bones >= 3 && drawn.pieces.includes(1) && drawn.pieces.includes(2) && drawn.eyes >= 2, `S: the skull is drawn broken with the split: clipped copies for the rest and each half, and the eyes with their halves (${JSON.stringify(drawn)})`);
+  // The field on the split's plane, 5 cm over the head's centre: flesh on the closed head, the gap on this one.
+  const gap = await evaluate(`(() => { const f = __sdfGame.head.frame(${S1.id}); return __sdfGame.head.surfaceAt(${S1.id}, f.centre[0], f.centre[1] + 0.05, f.centre[2]); })()`);
+  const closedThere = await evaluate(`(() => { const f = __sdfGame.head.frame(${O.id}); return __sdfGame.head.surfaceAt(${O.id}, f.centre[0], f.centre[1] + 0.08, f.centre[2] - 0.03); })()`);
+  check(gap > 0 && closedThere < 0, `S: the field is open on the plane (5 cm over the head's centre: ${(gap * 1000).toFixed(1)} mm outside any flesh; inside a closed head's cranium it reads ${(closedThere * 1000).toFixed(1)} mm)`);
+  const faces = (await headWounds(S1.id)).filter((w) => w.shape === "cut" && (w.headRegion === "split+" || w.headRegion === "split-"));
+  check(faces.length === 2 && (await hstate(S1.id)) === null, `S: the slug's wound is the split's two cut faces (${faces.length}), and the head leaf holds nothing for it (no opening)`);
+  await stand(S1.id, PHOTO_D); await capture("S-split");
+  await evaluate("__sdfGame.freeze(false)"); await stepN(3);
+  const alS1 = (await evaluate("__sdfGame.actorList()")).find((q) => q.id === S1.id);
+  check(alS1?.phase === "standing" && await headOn(S1.id), `S: the zombie lives, its head on (thawed 3 frames: phase ${alS1?.phase})`);
+  await evaluate("__sdfGame.freeze(true)");
+
+  // -------- X. a second centred slug on the split head pops it.
+  const xAim = await aimLine(S1.id, SHOT_D, 0);
+  const f0 = await fragments();
+  const x = await watchSlug(S1.id, 24);
+  const xShot = await shotOf(S1.id);
+  note(`X: line ${xAim.offset.toFixed(3)} radii off; verdict ${JSON.stringify(xShot)}; swell frames ${JSON.stringify(x.swell)}, head off on frame ${x.off}, ${(await fragments()) - f0} fragments`);
+  check(xShot?.rule === "pop" && xShot.took === true, `X: a centred slug on the split head is the pop's (${JSON.stringify(xShot)})`);
+  check(x.swell.length > 0 && x.off === x.swell[x.swell.length - 1] + 1 && !(await headOn(S1.id)), `X: the open head swells and bursts (swell on ${x.swell.length} frames, off on frame ${x.off})`);
+  check((await fragments()) - f0 >= 10, `X: the split skull's plates are thrown (${(await fragments()) - f0} fragments)`);
+  await tune({ splitFrac: TUNING_DEFAULTS.splitFrac });
+
+  // -------- D. the decapitating slug pops (the anatomical skull: fourteen plates).
+  const D1 = fresh();
+  await stand(D1.id, PHOTO_D); await capture("D-before");
+  const dAt = await popByNeckSlugs("D", D1.id, null, 14);
+  await evaluate(`__sdfGame.placePlayer({ x: ${dAt[0] + (centre[0] - dAt[0]) * 0.3}, z: ${dAt[2] + (centre[2] - dAt[2]) * 0.3}, yaw: ${yawOf(dAt[0] - centre[0], dAt[2] - centre[2])}, pitch: 0 })`);
+  await stepOne(); await capture("D-popped");
+
+  // -------- D0. popSwellS 0: no swell frame.
+  await tune({ popSwellS: 0 });
+  const D0 = fresh();
+  const d0 = await evaluate(`(() => { const ok = __sdfGame.head.pop(${D0.id}, 0, 0, -1); return { ok, popping: __sdfGame.head.popping(${D0.id}), on: __sdfGame.flail.limbAlive(${D0.id}, "head") > 0 }; })()`);
+  check(d0.ok && !d0.popping && !d0.on, `D0: with popSwellS 0 the head bursts at once: no swell, the head off in the same call (${JSON.stringify(d0)})`);
+  await tune({ popSwellS: TUNING_DEFAULTS.popSwellS });
+
+  // -------- OFF. the master switch.
+  await tune({ on: false });
+  const OFF = fresh();
+  await aimLine(OFF.id, SHOT_D, 0);
+  await watchSlug(OFF.id, 8);
+  check((await splitOf(OFF.id)) === null && (await hstate(OFF.id)) === null && (await headWounds(OFF.id)).some((w) => w.type === "blast" && w.shape === "crater"),
+    "OFF: with burstTune({ on: false }) a centred slug is an ordinary slug crater: no split, no opening");
+  await tune({ on: true });
+  closeSession(S);
+
+  // ======== BOOT 2: the opening, switched on by tuning ========
+  await boot("opening");
   // -------- P. (FIRST, on the fresh page: run after the slug scenarios, the same volley landed on no actor at all — harness
-  // state, not the effect; a fresh-page pellet test split the head.) The DEBUG default (owner: "trigger it all the time"): a plain PELLET volley on a head splits it, once per shot.
-  await evaluate("__sdfGame.head.burstTune({ on: true, anyWeapon: true, alwaysSplit: true, centreFrac: 1.25, lethal: false, flapCount: -1, repeatStep: 0.04 })");
+  // state, not the effect; a fresh-page pellet test opened the head.) The opening with its two debug switches (anyWeapon, alwaysSplit): a plain PELLET volley on a head opens it, once per shot.
+  await evaluate("__sdfGame.head.burstTune({ on: true, opening: true, slugSplit: false, slugPop: false, popOnSplit: false, anyWeapon: true, alwaysSplit: true, centreFrac: 1.25, lethal: false, flapCount: -1, repeatStep: 0.04 })");
   const P = fresh();
   await aimLine(P.id, SHOT_D, 0);   // checked stance: the predicted line must hit THIS zombie
   // A reload left over from S's slugs refuses fire() even with full shells: wait it out, as slug() does.
@@ -271,7 +486,7 @@ try {
   const hsP = await hstate(P.id);
   note(`P: wounds on P ${(await evaluate(`__sdfGame.actorWounds(${P.id})`))?.length}`);
   note(`P: burst ${JSON.stringify(hsP?.burst)}, craters ${Object.keys(hsP?.craters ?? {}).join(",")}`);
-  check(hsP?.burst?.outcome === "split" && hsP.dead === false, `P: a pellet volley on the head splits it with the debug defaults (outcome ${hsP?.burst?.outcome})`);
+  check(hsP?.burst?.outcome === "split" && hsP.dead === false, `P: with the opening on (anyWeapon, alwaysSplit) a pellet volley on the head opens it (outcome ${hsP?.burst?.outcome})`);
   check(hsP?.hits === 1, `P: once per shot, not once per pellet (head hits ${hsP?.hits})`);
   await stand(P.id, 0.8); await capture("P-pellets");
 
@@ -333,30 +548,30 @@ try {
 
   // -------- S. SPLIT: with lethal OFF (the default) a centred slug opens the head wide and the zombie LIVES; repeats creep up.
   await evaluate("__sdfGame.head.burstTune({ lethal: false, flapCount: 0, repeatStep: 0.04, alwaysSplit: true, centreFrac: 1.25 })");
-  const S = fresh();
-  await stand(S.id, PHOTO_D); await capture("S-before");
-  await aimLine(S.id, SHOT_D, 0);
-  const ss = await slug(S.id, 8);
+  const SO = fresh();
+  await stand(SO.id, PHOTO_D); await capture("S-before");
+  await aimLine(SO.id, SHOT_D, 0);
+  const ss = await slug(SO.id, 8);
   const hsS = ss[ss.length - 1];
   note(`S: burst ${JSON.stringify(hsS?.burst)}, craters ${Object.keys(hsS?.craters ?? {}).join(",")}, bu ${JSON.stringify(hsS?.bu)}, flaps ${hsS?.flaps}, draws ${hsS?.draws}`);
   check(hsS?.burst?.outcome === "split" && hsS.dead === false, `S: a centred slug with lethal off SPLITS the head (outcome ${hsS?.burst?.outcome}) and the zombie lives`);
   check(!!hsS?.craters?.["burst-exit"], "S: it opens the head through (a burst-exit crater)");
   check(hsS?.flaps === 0 && hsS?.draws === 0, `S: no flaps by default (${hsS?.flaps} flaps, ${hsS?.draws} draws)`);
-  await stepN(8); await stand(S.id, PHOTO_D); await capture("S-after-8f");
-  await stepN(120); await stand(S.id, PHOTO_D); await capture("S-settled");
+  await stepN(8); await stand(SO.id, PHOTO_D); await capture("S-after-8f");
+  await stepN(120); await stand(SO.id, PHOTO_D); await capture("S-settled");
   await evaluate("__sdfGame.freeze(false)"); await stepN(3);
-  const alS = (await evaluate("__sdfGame.actorList()")).find((q) => q.id === S.id);
+  const alS = (await evaluate("__sdfGame.actorList()")).find((q) => q.id === SO.id);
   check(alS && alS.phase === "standing", `S: the split zombie is still standing when thawed (phase ${alS?.phase})`);
   await evaluate("__sdfGame.freeze(true)");
   let nS = 1, deadS = false;
   for (; nS < 12 && !deadS; nS++) {
-    await aimLine(S.id, SHOT_D, 0);
-    const r = await slug(S.id, 4);
+    await aimLine(SO.id, SHOT_D, 0);
+    const r = await slug(SO.id, 4);
     deadS = r[r.length - 1]?.dead === true;
     if (nS === 2) check(!deadS, "S: it survives the third slug (much harder to kill)");
   }
   note(`S: died after ${deadS ? nS : "(not within 12)"} slugs at the same aim`);
-  await stepN(8); await stand(S.id, PHOTO_D); await capture("S-final");
+  await stepN(8); await stand(SO.id, PHOTO_D); await capture("S-final");
 
   // -------- D. the off switch
   await evaluate("__sdfGame.head.burstTune({ on: false })");
@@ -376,7 +591,23 @@ try {
   out.withBurst = await evaluate("__sdfGame.timeDraws(120)", 300000);
   const delta = out.withBurst - (out.base1 + out.base2) / 2;
   note(`draw time (UNGATED, confounded by ${(await chunks()) - 0} live chunks of debris): baseline ${out.base1.toFixed(2)} / ${out.base2.toFixed(2)} ms (spread ${Math.abs(out.base1 - out.base2).toFixed(2)}), after the bursts ${out.withBurst.toFixed(2)} ms; delta ${delta.toFixed(2)} ms`);
-} finally { closeSession(S); }
+  closeSession(S);
+
+  // ======== BOOT 3: the sculpted skull ========
+  await boot("sculpt", "&sculpt=full");
+  const sk = await evaluate("__sdfGame.skeletonDiagnostics().skull");
+  check(sk === "sculpt", `DS: this boot draws the sculpted skull (${sk})`);
+  const DS = fresh();
+  await stand(DS.id, PHOTO_D); await capture("DS-before");
+  const dsAt = await popByNeckSlugs("DS", DS.id, 10);
+  const cuts = await evaluate("__sdfGame.skullFragmentCuts()");
+  note(`DS: the sculpted head mesh was cut into fragments ${cuts.meshes} time(s); the cut took ${cuts.lastMs.toFixed(1)} ms`);
+  check(cuts.meshes === 1, `DS: the fragments were cut once, at the first pop (${cuts.meshes})`);
+  const names = await evaluate("__sdfGame.skullFragments().map((f) => f.plate)");
+  check(names.length === 10 && new Set(names).size === 10 && names.includes("mandible") && names.includes("frontal"), `DS: the ten named fragments are the gibs (${names.join(", ")})`);
+  await evaluate(`__sdfGame.placePlayer({ x: ${dsAt[0] + (centre[0] - dsAt[0]) * 0.3}, z: ${dsAt[2] + (centre[2] - dsAt[2]) * 0.3}, yaw: ${yawOf(dsAt[0] - centre[0], dsAt[2] - centre[2])}, pitch: 0 })`);
+  await stepOne(); await capture("DS-popped");
+} finally { if (S) closeSession(S); }
 
 const errs = consoleEvents.filter((e) => e.type === "error" || e.type === "exception");
 check(errs.length === 0, `E: zero console errors or exceptions (${errs.length}${errs.length ? ": " + JSON.stringify(errs.slice(0, 3)) : ""})`);
