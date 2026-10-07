@@ -1,6 +1,6 @@
 // scripts/head-burst-gate.mjs — what a gun round does to a zombie's head (head-burst.ts headShotRule,
 // decapitationRule; webgpu/game-head-shot.ts; the actor's pop). REAL rounds through __sdfGame.fire() and fireSlug()
-// on the bare ring page (/sdf-game.html, no ?level), frozen zombies, three boots.
+// on the bare ring page (/sdf-game.html, no ?level), frozen zombies, four boots.
 //
 // BOOT 1, the shipped rules (the default skull, the anatomical one):
 //   NP. pellet volleys on a head never open or split it: ordinary craters, no split, no head-leaf state, the head on.
@@ -31,7 +31,7 @@
 // BOOT 3, the SCULPTED skull (`?sculpt=full`):
 //   DS. the decapitating slug pops the head: the sculpted head mesh is thrown as ten fragments (sculpt-fragments.ts),
 //       the head segment and its eyes are not drawn, nothing is left at the old head position.
-// E. zero console errors / exceptions, over all three.
+// E. zero console errors / exceptions, over all four.
 // Photos are written to OUT for the look loop. Usage:
 //   export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up
 //   node scripts/head-burst-gate.mjs 5241 9241

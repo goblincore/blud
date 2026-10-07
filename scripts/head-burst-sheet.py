@@ -39,7 +39,7 @@ STRIP_WINDOW_M = 0.9
 ROWS = [
     ('pellets-1', 'Pellets, 1 volley\ncrosshair on the\nhead\'s centre, 2 m'),
     ('pellets-2', 'Pellets, 2 volleys'),
-    ('pellets-3', 'Pellets, 3 volleys'),
+    ('pellets-3', 'Pellets, 3 volleys\n(after: the zombie is\ndying of the first two\nand falling forward)'),
     ('slug-chin', 'Slug, off centre\n(crosshair low: it\nlands on the chin)'),
     ('slug-split', 'Slug, centred\n(crosshair 4 cm over\nthe head\'s centre)'),
     ('slug-pop-after', 'After the round that\ntook the head off\n(the stump bleeding)'),

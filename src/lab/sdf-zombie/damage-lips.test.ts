@@ -37,8 +37,9 @@ describe('lipsAfterSever', () => {
     const edge = stump.radius + 0.06 * LIP_REACH;
     const inside = crater(1, [edge - 0.005, 0.15, 0], 0.06), outside = crater(1, [edge + 0.005, 0.15, 0], 0.06);
     const out = lipsAfterSever([near, far, inside, outside, stump], PRIMS, BOTH, stump);
-    // (The stump's own ring reaches into the near crater's carve, so it goes too: the next test.)
-    expect(out.map(w => w.rimScale)).toEqual([0, undefined, 0, undefined, 0]);
+    // The stump keeps its own lip: none of these craters is as big as its bowl (the next test).
+    expect(out.map(w => w.rimScale)).toEqual([0, undefined, 0, undefined, undefined]);
+    expect(out[4]).toBe(stump);
     expect(out[1]).toBe(far);
     expect(out[3]).toBe(outside);
   });
@@ -59,12 +60,17 @@ describe('lipsAfterSever', () => {
     const alone = lipsAfterSever([crater(1, [0, -0.3, 0.12], 0.05), stump], PRIMS, BOTH, stump);
     expect(alone[1]).toBe(stump);
   });
-  it('a crater wholly inside the stump\'s bowl loses its lip, and the stump keeps its own', () => {
+  it('a crater smaller than the stump\'s bowl loses its lip beside it or inside it, and the stump keeps its own', () => {
     const stump = crater(1, [0, 0.15, 0], 0.11);
-    const small = crater(1, [0.02, 0.15, 0], 0.03);
-    const out = lipsAfterSever([small, stump], PRIMS, BOTH, stump);
-    expect(out[0]!.rimScale).toBe(0);
-    expect(out[1]).toBe(stump);
+    // A pellet's crater on the bowl's edge, one wholly inside the bowl, and one just under the bowl's size.
+    for (const small of [crater(1, [0.1, 0.15, 0], 0.055), crater(1, [0.02, 0.15, 0], 0.03), crater(1, [0.1, 0.15, 0], 0.109)]) {
+      const out = lipsAfterSever([small, stump], PRIMS, BOTH, stump);
+      expect(out[0]!.rimScale).toBe(0);
+      expect(out[1]).toBe(stump);
+    }
+    // One as big as the bowl beside it: the stump's lip would stand free in that hole.
+    const same = lipsAfterSever([crater(1, [0.1, 0.15, 0], 0.11), stump], PRIMS, BOTH, stump);
+    expect(same.map(w => w.rimScale)).toEqual([0, 0]);
   });
   it('decals, cuts and craters that already have no lip are left alone, and with nothing to change the list is the same one', () => {
     const stump = crater(1, [0, 0.15, 0], 0.11);

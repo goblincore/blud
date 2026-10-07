@@ -551,11 +551,13 @@ export function stumpLipShare(): number { return stumpLip; }
  *   - the flesh it rides is gone: its prim is dead, or its prim's cluster is no longer alive;
  *   - its lip's ring reaches into the stump's carve (centres closer than the stump's radius plus LIP_REACH of its own)
  *     and the stump's bowl takes flesh the crater had left: the bowl is not wholly inside the crater's own carve;
- * and the stump loses its own lip when its ring reaches into such a crater's carve (centres closer than that crater's
- * radius plus LIP_REACH stump radii) and that crater is not wholly inside the stump's bowl. So of a stump and a
- * crater that holds it (a slug's 16 cm crater at the neck holds the head's 11 cm stump), the crater keeps its lip,
- * which lines the one hole there is, and the stump loses its own, which would stand in the middle of that hole. A
- * crater holds the bowl only when its carve is the whole sphere there (no floor nearer than its radius).
+ * and the stump loses its own lip when its ring reaches into the carve of a crater at least as big as its bowl
+ * (centres closer than that crater's radius plus LIP_REACH stump radii): a hole that wide leaves the stump's lip
+ * standing free in it, while a pellet's 5.5 cm crater beside an 11 cm stump is a bite out of the bowl's edge that the
+ * lip spans, and the stump keeps the red rim it always had. So of a stump and a crater that holds it (a slug's 16 cm
+ * crater at the neck holds the head's 11 cm stump), the crater keeps its lip, which lines the one hole there is, and
+ * the stump loses its own, which would stand in the middle of that hole. A crater holds the bowl only when its
+ * carve is the whole sphere there (no floor nearer than its radius).
  * Decals carve nothing and are left alone; a cut has no ring.
  * Returns `wounds` itself when nothing changes; a changed wound is a new object.
  */
@@ -581,9 +583,8 @@ export function lipsAfterSever(
       const c = woundWorldPos(prims, w, bodyYaw);
       const d = len(sub(c, at));
       const holdsStump = d + stump.radius <= w.radius && (w.carveDepth ?? Infinity) >= w.radius;
-      const inStump = d + w.radius <= stump.radius;
       if (d < stump.radius + w.radius * LIP_REACH && !holdsStump) drop = true;
-      if (d < w.radius + stump.radius * LIP_REACH && !inStump) stumpHangs = true;
+      if (d < w.radius + stump.radius * LIP_REACH && w.radius >= stump.radius) stumpHangs = true;
     }
     if (!drop) return w;
     changed = true;

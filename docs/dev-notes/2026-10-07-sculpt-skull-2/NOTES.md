@@ -270,8 +270,14 @@ wired in `webgpu/game-head-shot.ts`):
 1. **A pellet is always an ordinary wound.** So is a slug whose line runs off centre, and any round on the neck.
 2. **A centred slug on a closed head splits it** through the head split leaf, exactly as the axe opens a head,
    straight to the preset's full angle. The split's plane holds the shot's direction and the head's up axis: a slug
-   from the front parts the head left and right, one from the side takes the face. The zombie lives.
-3. **A centred slug on a head already split pops it.**
+   from the front parts the head left and right, one from the side takes the face. The zombie lives. How the head
+   opens is the split's own rule, the axe's (`head-split.ts choosePreset`): a slug that lands within 15% of the
+   head's radius of its middle line (about 2 cm) opens both halves, 0.55 rad each; one that lands farther to a side
+   peels the smaller side alone, 0.9 rad, with the plane through where it landed.
+3. **A centred slug on a head already split wide pops it.** Wide is half the split's full angle or more
+   (`popSplitMin` 0.5): the slug's own split opens all the way and the axe's first chop to 0.8, so both count. A
+   head only cracked takes the slug as an ordinary wound (the head-split gate fires a centred slug at a head opened
+   a quarter of the way and expects exactly that).
 4. **Ordinary wounds can still take the head off** (the sever checks, unchanged). If the round that cuts the neck
    is a slug, the head pops instead of flying off: it swells for 0.12 s and bursts. If it is a pellet volley, a
    blast or a blade, the head flies off as before.
@@ -388,6 +394,7 @@ Every value is a field of `burstTuning` (`head-burst.ts`), live from the browser
 | `slugPop` | `true` | (none) | The slug that takes the head off pops it. |
 | `popSwellS` | `0.12` | (none) | The swell before the burst, seconds. 0 bursts on the frame of the hit. The cultist's is 0.12 to 0.2 s. |
 | `popOnSplit` | `true` | (none) | A centred slug on a split head pops it. |
+| `popSplitMin` | `0.5` | (none) | How wide the split must stand for that, as a share of its full angle. |
 | `headLip` | `0.3` | `1` | The lip of a gun crater on a zombie's head, as a share of the stock lip. |
 | `on` | `true` | `true` | Off: every round is ordinary and every decapitation a flying head. |
 
@@ -406,7 +413,8 @@ forehead, two sides of the cranium top, two temples, the back, two cheek-and-orb
 with its teeth, the lower jaw; `skeleton-spike/sculpt-fragments.ts`). Each is thrown as a mesh gib the way a plate
 is, keeps the sculpt's paint, and shows the bone's dark inner wall on its back faces. Every triangle is in exactly
 one fragment; each fragment is 5% to 21% of the surface on the zombie and the soldier, either sculpt, either cell.
-The cut is made at a mesh's first pop and kept: 8.4 ms for the zombie's 18,296-triangle `full` head in the browser.
+The cut is made at a mesh's first pop and kept: 7.4 to 10.9 ms for the zombie's 18,296-triangle `full` head in
+the browser, over the runs made for this work.
 On a split head each fragment leaves from where its half is drawn. The head mesh and its seated eyes stop being
 drawn in the same call that throws the fragments.
 
@@ -455,6 +463,37 @@ LABEL=anat QUERY='' SCENES=slug-pop node scripts/head-burst-look.mjs <vite> <cdp
 python3 scripts/head-burst-sheet.py <before dir> <after dir> <anatomical dir> docs/dev-notes/2026-10-07-sculpt-skull-2/look/burst-before-after.jpg
 ```
 
+## The gate
+
+`scripts/head-burst-gate.mjs` was rewritten for these rules. It fires real rounds at frozen zombies on the ring page,
+over four boots:
+
+- **The shipped rules** (anatomical skull): pellet volleys on a head leave ordinary craters and nothing else; a slug
+  fired with the crosshair on the head, with no stance solved for it, is centred by the shipped `splitFrac` and
+  splits the head; with `splitFrac` at 0.35 an off-centre slug is an ordinary wound and a centred one splits (the
+  split's state, the pose, the skull drawn as clipped copies, the field open where the half was, the cut faces, the
+  zombie alive); a second centred slug pops the split head; `on: false` makes a centred slug ordinary.
+- **The pop**, on a page of its own: slugs at the neck until the head comes off. It swells for `popSwellS`, no head
+  flies, all 14 plates are thrown, the head segment and its eyes are not drawn, and 2.5 s later nothing is left where
+  the head was. With `popSwellS` 0 there is no swell frame.
+- **The opening, switched on by tuning**: every scenario the gate had before today (a pellet volley opens the head
+  once per shot; a dead-centre slug is lethal; a glancing slug cracks a region and a second one kills; with `lethal`
+  off the zombie lives; `on: false`; the flaps share one draw), with the same checks and the same thresholds. The
+  only difference is that their tuning now also says `opening: true, slugSplit: false, slugPop: false,
+  popOnSplit: false`, because the opening is no longer what an untuned game does.
+- **The sculpted skull** (`?sculpt=full`): the decapitating slug throws the head mesh as the ten named fragments,
+  cut once.
+
+No check of the old gate was removed. What went is the premise that an untuned game makes the opening: the unit
+test that pinned `anyWeapon` and `alwaysSplit` on as the defaults (`head-burst.test.ts`) now pins the new defaults.
+One existing test's expected value changed with the behaviour: `head-split-cpu.test.ts` compares a pellet's and a
+slug's wound stamped through an opened half, field for field, with the wound built at the un-warped hit; its lip
+scale is now that wound's times `headLip`, still compared exactly.
+
+A stance has to wait for the gun: a round fired while the gun is still coming back from the last one leaves from a
+displaced muzzle (a slug solved to pass 0.03 head radii from the centre passed 0.49 off). The gate waits a full
+reload before it solves a stance.
+
 ## What looks worse, or is not done
 
 - **Head wounds are flatter.** A gun crater on a zombie's head has a third of its lip. The torn, everted edge was
@@ -475,7 +514,7 @@ python3 scripts/head-burst-sheet.py <before dir> <after dir> <anatomical dir> do
   pursued: the opening no longer ships.
 - The soldier's head wounds, and any character but the zombie under the new lip rule after a sever (the rule is the
   same for every body; only the zombie's decapitation was photographed).
-- Frame cost. Nothing here adds work to a frame without a pop; the fragment cut is 8 ms once per head mesh.
+- Frame cost. Nothing here adds work to a frame without a pop; the fragment cut is 7 to 11 ms once per head mesh.
 
 ## Code
 
