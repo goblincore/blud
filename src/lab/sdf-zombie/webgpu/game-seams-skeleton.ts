@@ -140,6 +140,22 @@ export function createSkeletonSeams(ctx: GameContext) {
       const fitted = head && ctx.render.segMeshCache?.skullKit?.head(head);
       return fitted ? fitted.pieces.map(p => ({ id: p.id, pivot: [...p.pivot], min: [...p.min], max: [...p.max] })) : null;
     },
+    /** skeleton=mesh diagnostics: how the anatomical skull was fitted to actor `bodyId`'s head (`?skullfit=`,
+     *  anatomical-skull.ts): the fit's name; for a fit to the flesh (skull-fit.ts) its axis scales and offset, the
+     *  fitted skull's box in the head segment's frame, the furthest stage 2 moved a vertex (m), its passes, whether
+     *  it had to shrink the skull after them (1: no) and the fit's wall time (ms). The envelope fit answers its name
+     *  alone. null without the anatomical skull, the actor or its head. */
+    skullFit: (bodyId?: number) => {
+      const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId);
+      const head = a && ctx.render.skeletonSources.get(a)?.sources.find(s => s.segment === 'head');
+      const fitted = head && ctx.render.segMeshCache?.skullKit?.head(head);
+      if (!fitted) return null;
+      const f = fitted.fit;
+      return f ? {
+        name: f.name, scale: [...f.result.affine.scale], offset: [...f.result.affine.offset], min: [...f.min], max: [...f.max],
+        maxMove: f.result.warp.maxMove, passes: f.result.passes.length, shrunk: f.result.shrunk, ms: f.result.ms,
+      } : { name: 'envelope' as const };
+    },
     /** skeleton=mesh diagnostics: one round at actor `bodyId`'s anatomical skull, through the renderer's own
      *  fractureSkull (mesh-renderer.ts: what a pellet's or a slug's impact calls first): the world ray `point` + t
      *  `direction`, met where the skull is drawn. Nothing else of a hit happens: no wound, no damage to the actor, no
@@ -181,6 +197,7 @@ export function createSkeletonSeams(ctx: GameContext) {
     skeletonDiagnostics: () => ({
       requestedMode: ctx.render.skeletonMode,
       skull: ctx.render.segMeshCache?.skullKit ? 'anatomical' : 'sculpt',
+      skullFit: ctx.render.segMeshCache?.skullKit?.fit ?? null,
       activeMode: ctx.render.skeletonMode === 'volume'
         ? (ctx.render.skeletonVolumes.size > 0 ? 'volume' : 'procedural')
         : ctx.render.skeletonMode === 'mesh'
