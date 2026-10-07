@@ -2,10 +2,12 @@
 // after sheet under docs/dev-notes/2026-10-07-sculpt-skull-2/look/ (scripts/head-burst-sheet.py lays the frames out).
 //
 // One boot of the bare ring page (/sdf-game.html, `?sculpt=full` unless QUERY says otherwise). The cast is frozen so
-// a zombie can be staged, and THAWED FOR A SECOND AFTER EVERY ROUND: a frozen actor takes the hit's shove on its rig
-// and never springs back (its head stays knocked centimetres off its neck), and the march's outer hull is built once
-// per frozen stretch, so a frozen body that moved is drawn clipped to where it used to be. A second of real play
-// lets the body react and rebuilds the hulls; then it is frozen again and photographed. Every round is a REAL one
+// a zombie can be staged, and THAWED FOR A MOMENT AFTER EVERY ROUND (THAW frames, 14 = a quarter of a second): a
+// frozen actor takes the hit's shove on its rig and never springs back (its head stays knocked centimetres off its
+// neck), and the march's outer hull is built once per frozen stretch, so a frozen body that moved is drawn clipped
+// to where it used to be (a head shot from the front then shows as a slab of face with the back of the skull bare:
+// a capture's artefact, not the game's). A moment of real play lets the body react and rebuilds the hulls; then it
+// is frozen again and photographed. Longer, and a zombie two volleys have killed is on the floor. Every round is a REAL one
 // (fire(1) is a grapeshot volley, fireSlug() a slug), aimed with the crosshair as a player aims. The scenes, each on
 // a fresh zombie:
 //   pellets     three volleys with the crosshair on the head's centre, from 2 m in front (stages pellets-1, -2, -3);
@@ -41,7 +43,7 @@ const QUERY = process.env.QUERY ?? "&sculpt=full";
 const OLD_TUNE = { opening: true, anyWeapon: true, alwaysSplit: true, slugSplit: false, slugPop: false, popOnSplit: false };
 const TUNE = process.env.OLD ? { ...OLD_TUNE, ...(process.env.TUNE ? JSON.parse(process.env.TUNE) : {}) } : process.env.TUNE ? JSON.parse(process.env.TUNE) : null;
 const SCENES = new Set((process.env.SCENES ?? "pellets,slug-chin,slug-split,slug-pop").split(","));
-const THAW = Number(process.env.THAW ?? 60), STRIP = 30;
+const THAW = Number(process.env.THAW ?? 14), STRIP = 30;
 const W = 1280, H = 800, EYE_H = 1.62, SETTLE = 24, SHOT_M = 2, SHIPS_M = 1.5, CLEAN_M = 0.6, MASK_M = 1.5;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const withTimeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`TIMEOUT(${ms}ms): ${what}`)), ms))]);
@@ -148,6 +150,8 @@ const frameOf = async (id) => { const fr = await evaluate(`__sdfGame.head.frame(
 const frontOf = async (id) => { const fr = await frameOf(id); const f = qRot(fr.quat, [0, 0, 1]); return unit([f[0], 0, f[2]]); };
 let pool = [], used = new Set();
 function fresh() { const z = pool.find((q) => !used.has(q.id)); if (!z) throw new Error("ran out of fresh zombies"); used.add(z.id); return z; }
+/** A fresh zombie that still has its head (a stray round of an earlier scene may have found one). */
+async function freshWhole() { for (;;) { const z = fresh(); if ((await evaluate(`__sdfGame.head.frame(${z.id})`)) && await evaluate(`__sdfGame.flail.limbAlive(${z.id}, "head") > 0`)) return z; } }
 
 async function boot() {
   const s = await openSession(LABEL);
@@ -393,7 +397,7 @@ async function photograph(stage, id) {
   await shot(stage, "clean-front", id, CLEAN_M, 0);
   await shot(stage, "clean-profile", id, CLEAN_M, 90);
   const px = on ? await pixelProfile(stage, id) : null;
-  manifest.stages[stage] = { actor: id, headOn: on, picture: px }; save();
+  manifest.stages[stage] = { ...(manifest.stages[stage] ?? {}), actor: id, headOn: on, picture: px }; save();
   if (px) console.log(`  ${stage} picture profile (${px.mmPerPx} mm per pixel): ${px.rows.map((r) => `${r.name} bone ${r.bone} flesh ${r.flesh} proud ${r.proud}`).join("; ")}`);
   await evaluate("__sdfGame.setBleed(true)");
   await vhsOn();
@@ -452,39 +456,39 @@ try {
     await round("slug-split", a.id, "__sdfGame.fireSlug()", [0, 0.04, 0]); await photograph("slug-split", a.id);
   }
   if (SCENES.has("slug-pop")) {
-    // Slugs at the neck (the crosshair 6 cm under the head's centre lands them under the chin), from 40 degrees to
-    // one side, until the head leaves. The cast plays for the half second each slug's strip is shot in, and is held
-    // between slugs.
-    const a = fresh();
+    // THE DECAPITATING SLUG. Slugs at the neck (the crosshair 6 cm under the head's centre lands them under the
+    // chin), from 40 degrees to one side, until the head leaves; every frame of each slug is shot, and the last
+    // slug's are the strip. THE CAST IS HELD FROZEN THROUGH THIS SCENE: thawed, a zombie turns and walks between
+    // slugs and dies of them before its neck is cut (ten slugs did not take a head off). Frozen, its body does not
+    // react, but the pop, the debris and the flying head are the game's own. One tick of no time with the cast
+    // playing, before each slug, rebuilds the hulls.
+    const neckSlug = async (id) => { await aimAt(id, SHOT_M, 40, [0, -0.06, 0]); const line = await slugLine(id); await fire("__sdfGame.fireSlug()"); return line; };
+    const a = await freshWhole();
     let done = false;
-    for (let n = 1; n <= 10 && !done; n++) {
+    for (let n = 1; n <= 8 && !done; n++) {
       const log0 = burstLog.length;
-      if (!(await evaluate(`__sdfGame.head.frame(${a.id})`))) break;
       const fr = await frameOf(a.id), f = await frontOf(a.id);
-      await aimAt(a.id, SHOT_M, 40, [0, -0.06, 0]);
-      const line = await slugLine(a.id);
-      await fire("__sdfGame.fireSlug()");
-      await evaluate("__sdfGame.freeze(false)");
+      await evaluate("__sdfGame.freeze(false)"); await evaluate("__sdfGame.step(1, 0)"); await evaluate("__sdfGame.freeze(true)");
+      const line = await neckSlug(a.id);
       const frames = await strip("slug-pop", a.id, fr.centre, f);
-      await evaluate("__sdfGame.freeze(true)"); await stepN(2);
       const off = frames.find((q) => !q.headOn), swell = frames.filter((q) => q.popping).length;
       const rec = await record(`slug-pop-${n}`, a.id, "__sdfGame.fireSlug()", [0, -0.06, 0], { log: burstLog.slice(log0), line: { offset: +line.offset.toFixed(3), wouldHit: line.actor } });
       if (off) {
         done = true;
         rec.pop = { slug: n, firstSwellFrame: frames.find((q) => q.popping)?.k ?? null, swellFrames: swell, headOffFrame: off.k, fragmentsAtBurst: off.fragments,
           fragmentCuts: await evaluate("__sdfGame.skullFragmentCuts()"), near: await census(fr.centre) };
-        await evaluate("__sdfGame.freeze(false)"); await stepN(150); await evaluate("__sdfGame.freeze(true)"); await stepN(2);
-        const t = await evaluate(`__sdfGame.actorLimbCenter(${a.id}, "torso")`);
-        rec.pop.overStumpLater = t ? await census([t[0], t[1] + 0.4, t[2]]) : null;
-        manifest.rounds[`slug-pop-${n}`] = rec; manifest.stages["slug-pop"] = { actor: a.id, frames }; save();
-        console.log(`  slug-pop: slug ${n} took the head off; the swell showed on ${swell} frames from frame ${rec.pop.firstSwellFrame}, the head left on frame ${off.k} with ${off.fragments} skull fragments in the air; the fragment cut ${J(rec.pop.fragmentCuts)}; within 0.3 m of the old head half a second on: ${J(rec.pop.near)}; over the stump 2.5 s later: ${J(rec.pop.overStumpLater)}`);
+        await thaw();
         await photograph("slug-pop-after", a.id);
+        await stepN(150);
+        rec.pop.nearLater = await census(fr.centre);
+        manifest.rounds[`slug-pop-${n}`] = rec; manifest.stages["slug-pop"] = { ...(manifest.stages["slug-pop"] ?? {}), actor: a.id, frames }; save();
+        console.log(`  slug-pop: slug ${n} took the head off; the swell showed on ${swell} frames from frame ${rec.pop.firstSwellFrame}, the head left on frame ${off.k} with ${off.fragments} skull fragments in the air; the fragment cut ${J(rec.pop.fragmentCuts)}; within 0.3 m of the old head half a second on: ${J(rec.pop.near)}; 2.5 s later: ${J(rec.pop.nearLater)}`);
       }
     }
-    if (!done) { failed++; console.error("FAIL: slug-pop: ten slugs at the neck did not take the head off (the zombie died first, or the neck held)"); }
+    if (!done) { failed++; console.error("FAIL: slug-pop: eight slugs at the neck did not take the head off"); }
     // The same pop with the flesh out of the frame: a stamped torso wound (an unwounded body draws no bones), the
     // proxy box shrunk to nothing, and the head popped by hand along the same direction.
-    const b = fresh();
+    const b = await freshWhole();
     const fr = await frameOf(b.id), f = await frontOf(b.id);
     const o = add(add(fr.centre, mul(f, 1.5)), [0, -0.45, 0]), d = unit(sub(add(fr.centre, [0, -0.45, 0]), o));
     await evaluate(`__sdfGame.stampWoundAt(${o[0]}, ${o[1]}, ${o[2]}, ${d[0]}, ${d[1]}, ${d[2]}, "pellet", ${b.id})`);
