@@ -6,8 +6,15 @@ import * as THREE from 'three/webgpu';
 import { HEAD_SPLIT } from '../head-split';
 import type { GameContext } from './game-context';
 import { createSkeletonSeams } from './game-seams-skeleton';
-import { SegmentMeshCache } from './skeleton-spike/mesh';
+import { ORGAN_MESHES, SegmentMeshCache } from './skeleton-spike/mesh';
+import { ORGAN_DETAIL_SETS } from './skeleton-spike/mesh-organ';
 import { createSegmentMeshRenderer } from './skeleton-spike/mesh-renderer';
+import { createSkeletonSources } from './skeleton-spike/contract';
+import { parseBlob } from '../blob-parse';
+import { compileBlob } from '../blob-compile';
+import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
+import { bindRig } from '../rig-bind';
+import zombieSrc from '../characters/zombie.blob?raw';
 
 const make = (withRenderer = true) => {
   const cache = new SegmentMeshCache();
@@ -132,8 +139,45 @@ describe('__sdfGame.setOrgans / organs (organs as mesh, 2026-10-06)', () => {
     const seams = createSkeletonSeams(ctx as unknown as GameContext);
     expect(seams.setOrgans('mesh')).toBe('sdf');
     expect(calls).toEqual([[]]);
-    expect(seams.organs()).toEqual({ mode: 'sdf', drawn: 0, look: null, tint: null, drawnBy: [], packed: [{ id: 1, rows: 8 }] });
+    expect(seams.organs()).toEqual({
+      mode: 'sdf', drawn: 0, look: null, tint: null, mesh: null, detailSets: ORGAN_DETAIL_SETS, drawnVerts: 0, drawnTris: 0,
+      drawnBy: [], packed: [{ id: 1, rows: 8 }],
+    });
     expect(seams.organSegments(1)).toEqual([]);
     expect(seams.setOrganLook('wet')).toBeNull();
+    expect(seams.setOrganMesh('nets-5mm')).toBeNull();
+  });
+
+  it('setOrganMesh names the cache\'s organ mesh spec; organs() counts what the organ instances draw (organs, low-poly)', () => {
+    const body = buildBody(compileBlob(parseBlob(zombieSrc)), DEFAULT_BUILD_OPTS);
+    const sources = createSkeletonSources(body, bindRig(body), { character: 'zombie', organs: true });
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const { actors } = world([0]);
+    const ctx = {
+      render: { segMeshRenderer: renderer, segMeshCache: cache, organMode: 'mesh', skeletonSources: new Map([[actors[0], { sources }]]) },
+      world: { actors },
+    };
+    const seams = createSkeletonSeams(ctx as unknown as GameContext);
+    const draw = () => renderer.update([sources], [actors[0]!], undefined, new Set([actors[0]]), undefined, undefined, () => [{ pos: [0, 1.03, 0.12], radius: 0.08 }]);
+    expect(seams.setOrganMesh()).toBe('tubes');
+    draw();
+    expect(seams.organs()).toMatchObject({ mesh: 'tubes', drawn: 2, drawnVerts: 528, drawnTris: 1024 });
+    expect(seams.organSegments(1).map(s => s.mesh)).toMatchObject([{ mesher: 'tubes', verts: 438, tris: 848 }, { mesher: 'tubes', verts: 90, tris: 176 }]);
+    // The 2026-10-06 extraction, at the next update.
+    expect(seams.setOrganMesh('nets-5mm')).toBe('nets-5mm');
+    expect(cache.organMesh).toBe(ORGAN_MESHES['nets-5mm']);
+    draw();
+    expect(seams.organs()).toMatchObject({ mesh: 'nets-5mm', drawn: 2, drawnVerts: 4038, drawnTris: 8084 });
+    expect(seams.organSegments(1).map(s => s.mesh!.mesher)).toEqual(['nets', 'nets']);
+    // Not a name: nothing changes. A spec that is none of the named ones reads as 'custom'.
+    expect(seams.setOrganMesh('cubes' as never)).toBe('nets-5mm');
+    expect(seams.setOrganMesh('toString' as never)).toBe('nets-5mm');
+    cache.organMesh = { kind: 'nets', cell: 0.02, normals: 'faces' };
+    expect(seams.setOrganMesh()).toBe('custom');
+    expect(seams.setOrganMesh('tubes')).toBe('tubes');
+    // The detail strengths a sheet flips through are looks setOrganLook takes.
+    expect(seams.setOrganLook(seams.organs().detailSets.plain)!.detail.slice(0, 3)).toEqual([0, 0, 0]);
+    renderer.dispose(); cache.dispose();
   });
 });

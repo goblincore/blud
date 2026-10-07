@@ -21,6 +21,8 @@ export function meshBoneSource(source: BoneFieldSource): BoneFieldSource {
   return {
     ...source,
     revision: `${source.revision}:${revision}`,
+    // The sculpt below carves the field: it is no longer the fold of the member prims.
+    prims: undefined,
     distance(p: Point3): number {
       const q = p.map((v, i) => (v - min[i]!) / half[i]! - 1);
       const [x, y, z] = q as [number, number, number];

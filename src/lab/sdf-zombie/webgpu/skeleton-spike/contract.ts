@@ -88,6 +88,10 @@ export interface BoneFieldSource {
   bounds: { min: Point3; max: Point3 };
   /** Bone-only field in segment-local metres. Hard min over member prims. */
   distance(p: Point3): number;
+  /** The member prims distance() folds, segment-local at rest (orient stripped). What a mesher that builds from the
+   *  authored shapes reads instead of sampling the field (mesh-organ-tubes.ts). Absent on a source whose field is no
+   *  longer the fold of its prims (an adapter that carves it), so such a mesher never draws the wrong shape. */
+  prims?: readonly Primitive[];
 
   // ——— Documented extensions (needed by the round-trip/pose contract) ———
   /**
@@ -324,6 +328,7 @@ export function createSkeletonSources(
       bounds: { min: lo, max: hi },
       rigidity: def.rigidity,
       primCount: prims.length,
+      prims,
       distance(p) {
         // foldBoneRange's fold: hard min, no smin (an organ source holds
         // organs only, a bone source bones only). Bone blendK is intentionally unread — the march

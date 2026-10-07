@@ -79,7 +79,8 @@ import {
 } from './mesh-eyes';
 import { HEAD_SPLIT, skullPieces, skullSplitOf, type SkullFollow, type SkullSplit, type SplitWarp } from '../../head-split';
 import {
-  MESH_ORGAN_SHADE_WGSL, MESH_ORGAN_SURFACE_WGSL, MESH_ORGAN_WET_WGSL, ORGAN_LOOKS, ORGAN_LOOK_DEFAULT, type OrganLook, type OrganLookName,
+  MESH_ORGAN_DETAIL_WGSL, MESH_ORGAN_HEIGHT_WGSL, MESH_ORGAN_SHADE_WGSL, MESH_ORGAN_SURFACE_WGSL, MESH_ORGAN_WET_WGSL,
+  ORGAN_LOOKS, ORGAN_LOOK_DEFAULT, type OrganLook, type OrganLookName,
 } from './mesh-organ';
 import { organReached, segmentBoundSphere, type ReachSphere } from './organ-reach';
 import {
@@ -153,8 +154,11 @@ export interface SegmentMeshRenderer {
     reach?: (owner: object) => ReadonlyArray<ReachSphere> | null,
   ): void;
   /** The organ material's look, live (mesh-organ.ts): `tint` = (organColor, organAmp), the march's own two values,
-   *  copied from a body view by the game; `cfg`, `gloss` and `occ` as OrganLook. */
-  readonly organLook: { tint: { value: THREE.Vector4 }; cfg: { value: THREE.Vector4 }; gloss: { value: THREE.Vector4 }; occ: { value: THREE.Vector4 } };
+   *  copied from a body view by the game; `cfg`, `gloss`, `occ`, `detail` and `relief` as OrganLook. */
+  readonly organLook: {
+    tint: { value: THREE.Vector4 }; cfg: { value: THREE.Vector4 }; gloss: { value: THREE.Vector4 }; occ: { value: THREE.Vector4 };
+    detail: { value: THREE.Vector4 }; relief: { value: THREE.Vector4 };
+  };
   /** Set the organ look: one of ORGAN_LOOKS by name, or its numbers. Returns the values in force. */
   setOrganLook(look?: OrganLookName | Partial<OrganLook>): OrganLook;
   /** The split skull's look, live: `follow` set by hand replaces HEAD_SPLIT.skull.follow (null = that table; a
@@ -297,15 +301,25 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   // noise nodes (a second copy would declare them twice in one pipeline, as the eye chain notes); the light compose is
   // the bone's with the cavity's occlusion on every light but the beam (meshOrganShade, built on the same body-lights
   // and boneShade nodes). No meshFeature, no split: an organ is one closed wet surface in its segment's frame.
+  // Its one attribute of its own is `organTube` (mesh-organ-tubes.ts): where the vertex is on its tube, and its
+  // crease shade. The detail normal (haustra, wrinkles) is a height over that, per pixel (meshOrganDetail).
   const organLook = {
     tint: uniform(new THREE.Vector4(0.72, 0.32, 0.30, 1)),
     cfg: uniform(new THREE.Vector4(...ORGAN_LOOKS[ORGAN_LOOK_DEFAULT].cfg)),
     gloss: uniform(new THREE.Vector4(...ORGAN_LOOKS[ORGAN_LOOK_DEFAULT].gloss)),
     occ: uniform(new THREE.Vector4(...ORGAN_LOOKS[ORGAN_LOOK_DEFAULT].occ)),
+    detail: uniform(new THREE.Vector4(...ORGAN_LOOKS[ORGAN_LOOK_DEFAULT].detail)),
+    relief: uniform(new THREE.Vector4(...ORGAN_LOOKS[ORGAN_LOOK_DEFAULT].relief)),
   };
   const organShade = wgslFn(MESH_ORGAN_SHADE_WGSL, fns.slice());
   const organSurfaceFn = wgslFn(MESH_ORGAN_SURFACE_WGSL, fns.slice(0, 2));
   const organWetFn = wgslFn(MESH_ORGAN_WET_WGSL, fns.slice(0, 2));
+  const organHeightFn = wgslFn(MESH_ORGAN_HEIGHT_WGSL, fns.slice(0, 2));
+  const organDetailFn = wgslFn(MESH_ORGAN_DETAIL_WGSL, [...fns.slice(0, 2), organHeightFn]);
+  const organDetail = organDetailFn({
+    n: normalWorld, pWorld: positionWorld, tube: attribute('organTube', 'vec4'), detail: organLook.detail,
+    relief: organLook.relief,
+  }) as unknown as { xyz: Node<'vec3'>; w: Node<'float'> };
   const organSurf = organSurfaceFn({
     pWorld: positionWorld, pLocal: positionGeometry, tint: organLook.tint, deepColor: u.deepColor, cfg: organLook.cfg,
     woundTex: texture(woundTex), woundCount: u.woundCount,
@@ -318,7 +332,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       mul(mul(u.look.z, organGloss), organLook.gloss.x),
       mul(mul(u.look.w, organGloss), organLook.gloss.y),
     )),
-    occ: organLook.occ, gloss: organLook.gloss,
+    n: organDetail.xyz, occ: organLook.occ, gloss: organLook.gloss, cav: organDetail.w,
   }) as never, 1.0);
   organMaterial.depthTest = true;
   organMaterial.depthWrite = true;
@@ -502,9 +516,17 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   const prepareGeometry = (geometry: THREE.BufferGeometry, source: BoneFieldSource) => {
     if (preparedGeometry.has(geometry)) return;
     preparedGeometry.add(geometry);
-    // The organ material reads no meshFeature.
-    if (source.kind === 'organ') return;
     const pos = geometry.getAttribute('position');
+    if (source.kind === 'organ') {
+      // The organ material reads no meshFeature, and always organTube: a swept mesh brings its own; an extracted one
+      // has no tube coordinates (zero: meshOrganDetail leaves its normal alone) and no crease (w = 1).
+      if (!geometry.getAttribute('organTube')) {
+        const tube = new Float32Array(pos.count * 4);
+        for (let i = 3; i < tube.length; i += 4) tube[i] = 1;
+        geometry.setAttribute('organTube', new THREE.BufferAttribute(tube, 4));
+      }
+      return;
+    }
     const feature = new Float32Array(pos.count * 4);
     const isHead = source.segment === 'head' ? (source.character === 'soldier' ? 2 : 1) : 0;
     for (let i = 0; i < pos.count; i++) {
@@ -761,12 +783,17 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     organLook,
     setOrganLook(look) {
       const set = typeof look === 'string' ? ORGAN_LOOKS[look] : look;
-      const cfg = set?.cfg, gloss = set?.gloss, occ = set?.occ;
+      const cfg = set?.cfg, gloss = set?.gloss, occ = set?.occ, detail = set?.detail, relief = set?.relief;
       if (cfg) organLook.cfg.value.set(cfg[0], cfg[1], cfg[2], cfg[3]);
       if (gloss) organLook.gloss.value.set(gloss[0], gloss[1], gloss[2], gloss[3]);
       if (occ) organLook.occ.value.set(occ[0], occ[1], occ[2], occ[3]);
-      const c = organLook.cfg.value, g = organLook.gloss.value, o = organLook.occ.value;
-      return { cfg: [c.x, c.y, c.z, c.w], gloss: [g.x, g.y, g.z, g.w], occ: [o.x, o.y, o.z, o.w] };
+      if (detail) organLook.detail.value.set(detail[0], detail[1], detail[2], detail[3]);
+      if (relief) organLook.relief.value.set(relief[0], relief[1], relief[2], relief[3]);
+      const c = organLook.cfg.value, g = organLook.gloss.value, o = organLook.occ.value, d = organLook.detail.value, r = organLook.relief.value;
+      return {
+        cfg: [c.x, c.y, c.z, c.w], gloss: [g.x, g.y, g.z, g.w], occ: [o.x, o.y, o.z, o.w],
+        detail: [d.x, d.y, d.z, d.w], relief: [r.x, r.y, r.z, r.w],
+      };
     },
     show,
     get drawn() { return drawn; },

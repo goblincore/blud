@@ -13,6 +13,9 @@
 //           area and mean colour;
 //        C  three axe chops on another torso (the cut-cost scene): mesh folds no inside-flesh row where sdf does;
 //        H  a head-only wound on a third zombie: no organ instance for it;
+//        V  the organ MESH (organs, low-poly, 2026-10-07): the default is the swept tubes, a fraction of the vertices;
+//           the 2026-10-06 extraction flipped in on the same frame has the same silhouette and, detail off, the same
+//           shade (notes: docs/dev-notes/2026-10-07-organs-lowpoly/NOTES.md);
 //        T  the belly crater with the torch off: the mesh organ sits as dark and red in its crater as the sdf organ.
 //   Q  ?organs=sdf: the selector. The mode is 'sdf', zombies pack their 8 organ rows, a belly crater draws no organ mesh.
 //   P  ?skeleton=procedural: the mode is 'sdf' whatever the query says, and bodies pack bones and organs.
@@ -22,6 +25,8 @@
 //   OUT=.lab-tmp/organs-mesh-gate node scripts/organs-mesh-gate.mjs 5251 9251
 // ONLY=M,Q runs a subset of the boots. OUT defaults to .lab-tmp/organs-mesh-gate (never a tracked folder).
 // ONLY=L writes the owner's look sheets instead (no checks): OUT=docs/dev-notes/2026-10-06-organs-mesh/look.
+// ONLY=V writes the MESH sheets (organs, low-poly, 2026-10-07; no checks): the same frames, one column a mesh
+// (MESH_COLS below), OUT=docs/dev-notes/2026-10-07-organs-lowpoly/look.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { decodePng } from "./lib/demo-presented.mjs";
@@ -210,6 +215,25 @@ async function costOfSdf(label) {
   console.log(`  cost ${label}: mesh baseline ${med(base).toFixed(2)} ms wall, march ${med(baseGpu).toFixed(2)} ms gpu; sdf organs cost +${med(wall).toFixed(2)} ms wall (IQR ${J(iqr(wall))}), +${med(gpu).toFixed(2)} ms march gpu (IQR ${J(iqr(gpu))}); ${RN} rounds x ${K} frames`);
   await stepN(4);
 }
+/** THE COST OF THE 2026-10-06 EXTRACTION AGAINST THE SWEPT TUBES ON THIS FRAME (COST=1; reported, not checked): the
+ *  same load-cancelling alternation as costOfSdf, the organ MESH flipped in page (tubes, nets-5mm, tubes, ...), the
+ *  detail left as shipped in both. Positive = the 4,038-vertex extraction costs that much more than the tubes. */
+async function costOfMesh(label) {
+  if (process.env.COST !== "1") return;
+  const K = Number(process.env.COST_K ?? 24), RN = Number(process.env.COST_ROUNDS ?? 8);
+  const block = (mesh) => evaluate(`(async () => { __sdfGame.setOrganMesh("${mesh}"); await __sdfGame.timeDraws(3); return await __sdfGame.timeDraws(${K}); })()`, 300000);
+  const wall = [], base = [];
+  let prev = await block("tubes");
+  for (let r = 0; r < RN; r++) {
+    const v = await block("nets-5mm"), next = await block("tubes");
+    wall.push(v - (prev + next) / 2); base.push(prev);
+    prev = next;
+  }
+  const med = (a) => { const q = [...a].sort((x, y) => x - y); return q.length % 2 ? q[q.length >> 1] : (q[q.length / 2 - 1] + q[q.length / 2]) / 2; };
+  const iqr = (a) => { const q = [...a].sort((x, y) => x - y); return [q[Math.floor(q.length * 0.25)], q[Math.floor(q.length * 0.75)]].map((x) => +x.toFixed(2)); };
+  console.log(`  mesh cost ${label}: tubes baseline ${med(base).toFixed(2)} ms wall; nets-5mm costs ${med(wall) >= 0 ? "+" : ""}${med(wall).toFixed(2)} ms wall (IQR ${J(iqr(wall))}); ${RN} rounds x ${K} frames`);
+  await stepN(4);
+}
 const rowsOf = async (id) => (await evaluate("__sdfGame.organs()")).packed.find((p) => p.id === id)?.rows;
 const r3 = (v) => v.map((x) => +x.toFixed(3));
 
@@ -304,6 +328,32 @@ async function bootM() {
   check(`S9 the mesh organ's mean colour is within ${COLOUR_MAX} of the sdf organ's`, cd <= COLOUR_MAX, `distance ${cd.toFixed(3)}`);
   await evaluate(`__sdfGame.setOrgans("mesh")`);
   await stepN(4);
+  // ——— V: the organ mesh itself (organs, low-poly, 2026-10-07) ———
+  // The default is the swept tubes; the extraction of 2026-10-06 ('nets-5mm') is flipped in on the same frame, with
+  // the surface detail off in both, so the two shown / hidden pairs differ by the SILHOUETTE alone.
+  const plain = J({ detail: [0, 0, 0, sMesh.look.detail[3]] });
+  const organPx = async () => { const on = await shot(); await evaluate("__sdfGame.meshSkeletonShow({ organs: false })"); const off = await shot(); await evaluate("__sdfGame.meshSkeletonShow({ organs: true })"); return diffPixels(on, off); };
+  check("V1 the organ mesh is the swept tubes by default, a fraction of the 2026-10-06 extraction's 4,038 vertices", sMesh.mesh === "tubes" && sMesh.drawnVerts > 0 && sMesh.drawnVerts <= 600, `mesh ${sMesh.mesh}, drawn ${sMesh.drawnVerts} vertices / ${sMesh.drawnTris} triangles in ${sMesh.drawn} instance(s)`);
+  await evaluate(`__sdfGame.setOrganLook(${plain})`); await stepN(3);
+  const pxTubes = await organPx();
+  await evaluate(`__sdfGame.setOrganMesh("nets-5mm")`); await stepN(3);
+  const oNets = await evaluate("__sdfGame.organs()");
+  const netsSegs = await evaluate(`__sdfGame.organSegments(${zu.id})`).then((a) => a.map((q) => ({ segment: q.segment, mesh: q.mesh })));
+  const pxNets = await organPx();
+  check("V2 setOrganMesh('nets-5mm') draws the extraction on the same frame (the flip is real)", oNets.mesh === "nets-5mm" && oNets.drawn === sMesh.drawn && oNets.drawnVerts > 4 * sMesh.drawnVerts, `mesh ${oNets.mesh}, drawn ${oNets.drawnVerts} vertices / ${oNets.drawnTris} triangles`);
+  const vr = pxTubes.n / Math.max(pxNets.n, 1);
+  check("V3 the tubes' silhouette is the extraction's: organ pixel area within 0.9..1.05 of it, detail off in both", vr >= 0.9 && vr <= 1.05, `tubes ${pxTubes.n} px, nets-5mm ${pxNets.n} px, ratio ${vr.toFixed(3)}`);
+  const vc = Math.hypot(pxTubes.mean[0] - pxNets.mean[0], pxTubes.mean[1] - pxNets.mean[1], pxTubes.mean[2] - pxNets.mean[2]);
+  // Measured 0.042: the tubes are a little brighter (their normals are the field's own, where the extraction's are
+  // averaged over faces and smeared across each crease). What this has to catch is a mesh shaded WRONG: with its
+  // normals turned inside out the tubes sit 0.163 from the extraction (NOTES, "Each new check was shown to fail").
+  check("V4 with the detail off the tubes shade as the extraction does (mean colour within 0.08)", vc <= 0.08, `distance ${vc.toFixed(3)}; tubes ${J(r3(pxTubes.mean))}, nets-5mm ${J(r3(pxNets.mean))}`);
+  await evaluate(`__sdfGame.setOrganMesh("tubes")`);
+  await evaluate(`__sdfGame.setOrganLook(${J(sMesh.look)})`); await stepN(3);
+  const oBack = await evaluate("__sdfGame.organs()");
+  check("V5 and back: the tubes again, the shipped look", oBack.mesh === "tubes" && oBack.drawnVerts === sMesh.drawnVerts && J(oBack.look) === J(sMesh.look), `mesh ${oBack.mesh}, ${oBack.drawnVerts} vertices`);
+  console.log(J({ scenario: "V", tubes: { segments: await evaluate(`__sdfGame.organSegments(${zu.id})`).then((a) => a.map((q) => ({ segment: q.segment, mesh: q.mesh }))), px: pxTubes.n, mean: r3(pxTubes.mean) }, nets5: { segments: netsSegs, px: pxNets.n, mean: r3(pxNets.mean) } }));
+  await costOfMesh("S, the belly crater at 0.7 m");
   await costOfSdf("S, the belly crater at 0.7 m");
   console.log(`  first frames after the first belly slug (step, draw, draw, 8 draws; ms): ${J(seg.firstFrames)}`);
   console.log(J({ scenario: "S", seg: { segment: seg.segment, centre: r3(seg.centre), radius: +seg.radius.toFixed(3) }, mesh: { px: pxMesh.n, mean: r3(pxMesh.mean), inside: fMesh }, sdf: { px: pxSdf.n, mean: r3(pxSdf.mean), inside: fSdf } }));
@@ -403,7 +453,7 @@ const CROP = Number(process.env.CROP ?? 360);
 const LOOKS = (process.env.LOOKS ?? "match,wet,veined,pale").split(",");
 /** LOOK_SET='{"name":{"cfg":[..],"gloss":[..]}}' tries looks that are not in ORGAN_LOOKS yet (tuning). */
 const LOOK_SET = Object.fromEntries(Object.entries(JSON.parse(process.env.LOOK_SET ?? "{}")).map(([k, v]) => [k, J(v)]));
-function sheet(name, rows) {
+function sheet(name, rows, labels = ["sdf", ...LOOKS]) {
   const cols = rows[0].length, w = cols * CROP, h = rows.length * CROP, out = new Uint8Array(w * h * 4);
   const x0 = (W - CROP) >> 1, y0 = (H - CROP) >> 1;
   rows.forEach((row, ry) => row.forEach((img, cx) => {
@@ -416,7 +466,7 @@ function sheet(name, rows) {
     for (let x = 0; x < CROP; x++) for (let k = 0; k < 2; k++) { const d = ((ry * CROP + k) * w + cx * CROP + x) * 4; out[d] = out[d + 1] = out[d + 2] = 0; out[d + 3] = 255; }
   }));
   writeFileSync(`${OUT}/${name}.png`, writePng(w, h, out));
-  console.log(`  sheet ${OUT}/${name}.png (${cols} x ${rows.length}: sdf | ${LOOKS.join(" | ")}; torch off / on)`);
+  console.log(`  sheet ${OUT}/${name}.png (${cols} x ${rows.length}: ${labels.join(" | ")}; torch off / on)`);
 }
 /** The torch. Off is at once; on ramps with the light clock, which the boot froze: thaw it until the torch is up. */
 async function torch(on) {
@@ -458,6 +508,75 @@ async function lookTiles(name, id, target, dist) {
   const bl = await evaluate(`__sdfGame.boneLights(${id})`);
   console.log(J({ sheet: name, organs: await evaluate("__sdfGame.organs()").then((o) => ({ drawnBy: o.drawnBy, tint: o.tint })), lightList: bl ? { on: bl.listOn, picks: bl.body } : null }));
 }
+/** THE MESH SHEET (ONLY=V; organs, low-poly, 2026-10-07; not part of the gate's checks). Per scene one sheet: a column
+ *  a mesh, on the shipped look; rows = torch off, torch on. Every tile is the same frame, the mesh flipped in page.
+ *  MESH_COLS='[{"label":..,"mesh":..,"set":..,"look":{..}}]' overrides the columns (no mesh = SDF organs). */
+const MESH_COLS = JSON.parse(process.env.MESH_COLS ?? "null") ?? [
+  { label: "sdf" },
+  { label: "nets-5mm, plain (2026-10-06: 4,038 v)", mesh: "nets-5mm", set: "plain" },
+  { label: "tubes, plain (528 v)", mesh: "tubes", set: "plain" },
+  { label: "tubes, detail subtle", mesh: "tubes", set: "subtle" },
+  { label: "tubes, detail as shipped", mesh: "tubes", set: "ships" },
+  { label: "tubes, detail strong", mesh: "tubes", set: "strong" },
+];
+async function meshTiles(name, id, target, dist) {
+  await look(target, dist, await frontOf(id));
+  // A column's `set` names one of the page's own detail strengths (mesh-organ.ts ORGAN_DETAIL_SETS); `look` is numbers.
+  const { look: shipped, detailSets } = await evaluate("__sdfGame.organs()");
+  const rows = [];
+  for (const lit of [false, true]) {
+    await torch(lit);
+    await evaluate(`__sdfGame.setOrgans("mesh")`);
+    await evaluate("__sdfGame.meshSkeletonShow({ organs: false })"); await stepN(3);
+    const hidden = await shot();
+    await evaluate("__sdfGame.meshSkeletonShow({ organs: true })");
+    const row = [], report = [];
+    for (const col of MESH_COLS) {
+      if (!col.mesh) {
+        await evaluate(`__sdfGame.setOrgans("sdf")`); await stepN(3);
+        row.push(await shot());
+        await evaluate("__sdfGame.setWoundTuning({ organAmp: 0 })"); await stepN(2);
+        const px = diffPixels(row[row.length - 1], await shot());
+        await evaluate("__sdfGame.setWoundTuning({ organAmp: 1 })"); await stepN(2);
+        await evaluate(`__sdfGame.setOrgans("mesh")`); await stepN(3);
+        report.push(`${col.label}: ${px.n} px ${J(r3(px.mean))}`);
+        continue;
+      }
+      await evaluate(`__sdfGame.setOrganMesh(${J(col.mesh)})`);
+      if (col.set && !detailSets[col.set]) die(`no detail set ${col.set}`);
+      await evaluate(`__sdfGame.setOrganLook(${J({ ...shipped, ...(col.set ? detailSets[col.set] : {}), ...(col.look ?? {}) })})`); await stepN(3);
+      row.push(await shot());
+      const o = await evaluate("__sdfGame.organs()"), px = diffPixels(row[row.length - 1], hidden);
+      report.push(`${col.label}: ${o.drawnVerts} v / ${o.drawnTris} t, ${px.n} px ${J(r3(px.mean))}`);
+    }
+    console.log(`  ${name} torch ${lit ? "on" : "off"}:\n    ` + report.join("\n    "));
+    rows.push(row);
+  }
+  await evaluate(`__sdfGame.setOrganMesh("tubes")`);
+  await evaluate(`__sdfGame.setOrganLook(${J(shipped)})`);
+  await stepN(3);
+  sheet(name, rows, MESH_COLS.map((c) => c.label));
+}
+async function bootV() {
+  console.log("\n== V: the mesh sheets ==");
+  await boot("");
+  const [za, zb] = pool;
+  const want = (n) => !process.env.SCENES || process.env.SCENES.split(",").includes(String(n));
+  if (want(1)) {
+    const segA = await bellySlug(za.id);
+    await meshTiles("01-belly-slug-0.7m", za.id, segA.centre, 0.7);
+    console.log(J({ segments: await evaluate(`__sdfGame.organSegments(${za.id})`).then((a) => a.map((q) => ({ segment: q.segment, mesh: q.mesh }))) }));
+  }
+  if (want(2)) {
+    const segB = await bellySlug(zb.id);
+    await levelSlug(zb.id, [segB.centre[0], segB.centre[1] + 0.10, segB.centre[2]], 0.7);
+    await stepN(2);
+    await meshTiles("02-gutted-two-slugs-0.6m", zb.id, [segB.centre[0], segB.centre[1] + 0.05, segB.centre[2]], 0.6);
+  }
+  console.log(`  mesh cache: ${J(await evaluate("(() => { const m = __sdfGame.skeletonMesh(); return m ? { entries: m.cacheEntries, totals: m.cacheTotals } : null; })()"))}`);
+  console.log(`  console errors: ${J(S.errors.slice(0, 3))}`);
+  closeSession();
+}
 async function bootL() {
   console.log("\n== L: the look sheets ==");
   await boot("");
@@ -491,5 +610,6 @@ if (ONLY.includes("M")) await bootM();
 if (ONLY.includes("Q")) await bootQ();
 if (ONLY.includes("P")) await bootP();
 if (ONLY.includes("L")) await bootL();
+if (ONLY.includes("V")) await bootV();
 console.log(`\n${checks} checks, ${failed} failed. Sheets in ${OUT}`);
 process.exit(failed ? 1 : 0);
