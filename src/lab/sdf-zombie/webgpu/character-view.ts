@@ -394,6 +394,9 @@ export interface WoundRing {
   set(wounds: Wound[]): void;
 }
 
+/** The least lip height scale a crater is uploaded with (refresh). */
+export const MIN_LIP_SPLAY = 0.01;
+
 export function createWoundRing(): WoundRing {
   let wounds: Wound[] = [];
   let nextEventId = 1;
@@ -434,7 +437,10 @@ export function createWoundRing(): WoundRing {
         rows.map(w => w.radius),
         rows.map((w, i) => 'presetCut' in w && w.presetCut ? -1 : TYPE_ID[w.type] + Math.min(0.45, Math.max(0, torn[i]!.torn ? torn[i]!.ragged : w.ragged ?? 0))),
         rows.map(w => w.ageSec),
-        rows.map((w, i) => WOUND_PROFILES[w.type].rimSplayScale * (w.rimScale ?? 1) * torn[i]!.splayMul),
+        // Never exactly 0: the shader gates the lip by a smoothstep over the lip's own height (applyWounds' rimLocal),
+        // and at height 0 its two edges coincide, which is a NaN on the GPU: the whole crater then draws as nothing.
+        // MIN_LIP_SPLAY leaves a lip under a millimetre tall on the largest crater.
+        rows.map((w, i) => Math.max(MIN_LIP_SPLAY, WOUND_PROFILES[w.type].rimSplayScale * (w.rimScale ?? 1) * torn[i]!.splayMul)),
         // META.w: the crater rim code reads it as an offset scale; cut wounds (flag 32) carry their sag there,
         // which requires Task 5's cut branch to skip the rim for them.
         rows.map((w, i) => isCut[i] ? (w.sag ?? 0) : WOUND_PROFILES[w.type].rimOffsetScale * torn[i]!.offsetMul),

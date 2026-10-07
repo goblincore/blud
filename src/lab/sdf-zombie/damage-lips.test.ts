@@ -3,9 +3,9 @@
 // The lips that went with the limb (damage.ts lipsAfterSever): after a sever, no crater's everted lip is left
 // standing over the stump's hole or on flesh that is gone.
 import { afterEach, describe, expect, it } from 'vitest';
-import { LIP_REACH, lipsAfterSever, setStumpLips, stumpLipsEnabled, type Wound } from './damage';
+import { LIP_REACH, WOUND_PROFILES, lipsAfterSever, setStumpLips, stumpLipsEnabled, type Wound } from './damage';
 import type { Primitive, Vec3 } from './types';
-import { createWoundRing } from './webgpu/character-view';
+import { MIN_LIP_SPLAY, createWoundRing } from './webgpu/character-view';
 
 afterEach(() => setStumpLips(true));
 
@@ -70,8 +70,8 @@ describe('lipsAfterSever', () => {
   });
 });
 
-describe('the upload: a wound with no lip sends a zero lip height', () => {
-  it('the ring uploads rimScale 0 as splay 0, and a whole lip as the profile\'s', () => {
+describe('the upload: a wound with no lip sends the least lip height', () => {
+  it('the ring uploads rimScale 0 as MIN_LIP_SPLAY (never 0: a NaN in the shader\'s lip gate), and a whole lip as the profile\'s', () => {
     const ring = createWoundRing();
     const posed = { prims: PRIMS, clusters: BOTH.map((c, id) => ({ ...c, id, limb: id === 0 ? 'head' : 'torso', center: [0, 0, 0] as Vec3, radius: 1 })) };
     const whole = crater(1, [0, -0.1, 0.12], 0.05), bare = crater(0, [0, 0, 0.12], 0.05);
@@ -81,7 +81,10 @@ describe('the upload: a wound with no lip sends a zero lip height', () => {
     let splay: readonly number[] = [];
     const gpu = { setWounds: (_p: unknown, _r: unknown, _t: unknown, _a: unknown, splayScales: readonly number[]) => { splay = splayScales; } };
     ring.refresh(gpu as never, posed as never, 0);
-    expect(splay[0]).toBeGreaterThan(0);
-    expect(splay[1]).toBe(0);
+    expect(splay[0]).toBe(WOUND_PROFILES.blast.rimSplayScale);
+    expect(splay[1]).toBe(MIN_LIP_SPLAY);
+    expect(MIN_LIP_SPLAY).toBeGreaterThan(0);
+    // A lip under a millimetre on the largest crater (a slug's, 0.16 m, at the stock height uniform 0.55).
+    expect(0.16 * 0.55 * MIN_LIP_SPLAY).toBeLessThan(0.001);
   });
 });

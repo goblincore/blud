@@ -417,13 +417,16 @@ async function strip(stage, id, centre, forward, each) {
   const frames = [];
   for (let k = 0; k < STRIP; k++) {
     await stepOne();
+    // `each` runs between the frame's step and its picture (a body whose flesh is out of the frame is put back in it
+    // by every re-pose: the pop's swell re-poses each frame).
+    const extra = each ? await each(k) : {};
     await evaluate("__sdfGame.setRenderLock(true)"); await stepOne();
     const png = await send("Page.captureScreenshot", { format: "png" });
     await evaluate("__sdfGame.setRenderLock(false)");
     const file = `${LABEL}__${stage}__f${String(k).padStart(2, "0")}`;
     writeFileSync(`${OUT}/${file}.png`, Buffer.from(png.result.data, "base64"));
     manifest.shots[file] = { stage, view: `f${String(k).padStart(2, "0")}`, actor: id, centre: c, pxPerM: c && top ? Math.hypot(top[0] - c[0], top[1] - c[1]) / 0.1 : null };
-    frames.push({ k, popping: await evaluate(`__sdfGame.head.popping(${id})`), headOn: await headOn(id), fragments: (await evaluate("__sdfGame.skullFragments()")).length, ...(each ? await each(k) : {}) });
+    frames.push({ k, popping: await evaluate(`__sdfGame.head.popping(${id})`), headOn: await headOn(id), fragments: (await evaluate("__sdfGame.skullFragments()")).length, ...extra });
   }
   save();
   return frames;
@@ -464,17 +467,20 @@ const scenes = {
     // slugs and dies of them before its neck is cut (ten slugs did not take a head off). Frozen, its body does not
     // react, but the pop, the debris and the flying head are the game's own. One tick of no time with the cast
     // playing, before each slug, rebuilds the hulls.
-    const neckSlug = async (id) => { await aimAt(id, SHOT_M, 40, [0, -0.06, 0]); const line = await slugLine(id); await fire("__sdfGame.fireSlug()"); return line; };
+    // With the OLD tuning a slug there makes the opening and never cuts the neck (eight did not): what took a head
+    // off then was pellets, so the old run fires double-barrel volleys instead.
+    const NECK = process.env.OLD ? "__sdfGame.fire(2)" : "__sdfGame.fireSlug()";
+    const neckSlug = async (id) => { await aimAt(id, SHOT_M, 40, [0, -0.06, 0]); const line = await slugLine(id); await fire(NECK); return line; };
     const a = await freshWhole();
     let done = false;
-    for (let n = 1; n <= 8 && !done; n++) {
+    for (let n = 1; n <= 14 && !done; n++) {
       const log0 = burstLog.length;
       const fr = await frameOf(a.id), f = await frontOf(a.id);
       await evaluate("__sdfGame.freeze(false)"); await evaluate("__sdfGame.step(1, 0)"); await evaluate("__sdfGame.freeze(true)");
       const line = await neckSlug(a.id);
       const frames = await strip("slug-pop", a.id, fr.centre, f);
       const off = frames.find((q) => !q.headOn), swell = frames.filter((q) => q.popping).length;
-      const rec = await record(`slug-pop-${n}`, a.id, "__sdfGame.fireSlug()", [0, -0.06, 0], { log: burstLog.slice(log0), line: { offset: +line.offset.toFixed(3), wouldHit: line.actor } });
+      const rec = await record(`slug-pop-${n}`, a.id, NECK, [0, -0.06, 0], { log: burstLog.slice(log0), line: { offset: +line.offset.toFixed(3), wouldHit: line.actor } });
       if (off) {
         done = true;
         rec.pop = { slug: n, firstSwellFrame: frames.find((q) => q.popping)?.k ?? null, swellFrames: swell, headOffFrame: off.k, fragmentsAtBurst: off.fragments,
@@ -487,7 +493,7 @@ const scenes = {
         console.log(`  slug-pop: slug ${n} took the head off; the swell showed on ${swell} frames from frame ${rec.pop.firstSwellFrame}, the head left on frame ${off.k} with ${off.fragments} skull fragments in the air; the fragment cut ${J(rec.pop.fragmentCuts)}; within 0.3 m of the old head half a second on: ${J(rec.pop.near)}; 2.5 s later: ${J(rec.pop.nearLater)}`);
       }
     }
-    if (!done) { failed++; console.error("FAIL: slug-pop: eight slugs at the neck did not take the head off"); }
+    if (!done) { failed++; console.error("FAIL: slug-pop: fourteen rounds at the neck did not take the head off"); }
     // The same pop with the flesh out of the frame: a stamped torso wound (an unwounded body draws no bones), the
     // proxy box shrunk to nothing, and the head popped by hand along the same direction.
     const b = await freshWhole();

@@ -75,6 +75,20 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
   [notes](../../docs/dev-notes/2026-10-02-head-burst/NOTES.md) · gate `scripts/head-burst-gate.mjs`. Tune live with
   `__sdfGame.head.burstTune({ centreFrac, swell, shardScale, flapCount, lethal, repeatStep, craterScale, splay, on })`.
   Playtest 1 (2026-10-03): flaps off (orange tubes), a centred slug now splits the head open and the zombie lives, much harder to kill.
+  **Playtest 2 (2026-10-07): not what the owner wanted on every gun hit.** The opening is now OFF by default
+  (`burstTune({ opening: true, anyWeapon: true, alwaysSplit: true, slugSplit: false, slugPop: false, popOnSplit: false })`
+  puts the playtested behaviour back).
+- [~] **The gun and the zombie's head, redefined 2026-10-07; owner playtest pending.** Pellets and off-centre slugs
+  leave ordinary wounds. A centred slug splits the head through the head split (`webgpu/game-head-shot.ts`,
+  `head-burst.ts headShotRule`). The slug that cuts the head off pops it: a 0.12 s swell, then the burst, with the
+  skull thrown as pieces (the anatomical skull's 14 plates, or 10 fragments cut from the sculpted head mesh:
+  `skeleton-spike/sculpt-fragments.ts`). A centred slug on a split head pops it. Gun craters on the head keep a low
+  lip (`headLip` 0.3) so the skull's face stands out of the wound, and a sever takes the lips that would hang over the
+  stump. Tune live: `__sdfGame.head.burstTune({ headLip, slugSplit, splitFrac, splitOpen, slugPop, popSwellS, popOnSplit })`.
+  [Notes, measurements and the before/after sheet](../../docs/dev-notes/2026-10-07-sculpt-skull-2/NOTES.md) ·
+  gate `scripts/head-burst-gate.mjs`. Open for the owner: an aimed slug lands about 10 cm under the crosshair, so
+  `splitFrac` 1.25 lets nearly every slug on the head split it; and in live play a zombie usually dies of slugs
+  before one cuts its neck, so the pop is rare.
 - [ ] **Spike (separate, not started): shader-side burst/peel displacement field** (approach C of the same spec) for
   truer jelly peeling flesh. New march WGSL, shared march cost, and a Rust port to carry; only after the composed
   version has been played.

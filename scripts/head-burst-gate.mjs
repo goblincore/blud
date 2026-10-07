@@ -221,6 +221,7 @@ async function stand(id, dist, shift = 0) {
  *  Returns the head centre and the line's offset as a share of the head radius (head-burst.ts's own measure). */
 const SLUG_SPEED = 30, SLUG_GRAVITY = 6;
 async function aimLine(id, dist, off = 0) {
+  await evaluate("__sdfGame.refillShells()"); await stepN(45); await evaluate("__sdfGame.refillShells()");
   const fr = await evaluate(`__sdfGame.head.frame(${id})`);
   const head = fr.centre, R = Math.cbrt(fr.axes[0] * fr.axes[1] * fr.axes[2]);
   const ax = centre[0] - head[0], az = centre[2] - head[2], l = Math.hypot(ax, az) || 1;
@@ -276,10 +277,17 @@ const tune = (o) => evaluate(`__sdfGame.head.burstTune(${JSON.stringify(o)})`);
 const TUNING_DEFAULTS = {};
 /** The player `dist` m in front of actor `id`'s head with the crosshair `aim` from its centre: an aimed shot, the
  *  stance not solved. Returns where a slug fired now would go (its line's offset in head radii, drop included). */
-async function crosshairOn(id, dist, aim = [0, 0, 0]) {
+async function crosshairOn(id, dist, aim = [0, 0, 0], yawDeg = null) {
+  await ready();
   const fr = await evaluate(`__sdfGame.head.frame(${id})`);
   const head = fr.centre, R = Math.cbrt(fr.axes[0] * fr.axes[1] * fr.axes[2]);
-  const ax = centre[0] - head[0], az = centre[2] - head[2], l = Math.hypot(ax, az) || 1;
+  let ax = centre[0] - head[0], az = centre[2] - head[2];
+  if (yawDeg !== null) {
+    // `yawDeg` round the head from straight in front of its face (the head frame's forward), not from the room.
+    const [qx, qy, qz, qw] = fr.quat, f = [2 * (qx * qz + qw * qy), 0, 1 - 2 * (qx * qx + qy * qy)], a = yawDeg * Math.PI / 180;
+    ax = f[0] * Math.cos(a) + f[2] * Math.sin(a); az = -f[0] * Math.sin(a) + f[2] * Math.cos(a);
+  }
+  const l = Math.hypot(ax, az) || 1;
   const fx = ax / l, fz = az / l;
   const t = [head[0] + aim[0], head[1] + aim[1], head[2] + aim[2]];
   await evaluate(`__sdfGame.placePlayer({ x: ${t[0] + fx * dist}, z: ${t[2] + fz * dist}, yaw: ${yawOf(-fx, -fz)}, pitch: ${Math.atan2(t[1] - EYE_H, dist)} })`);
@@ -305,12 +313,15 @@ async function nearHead(id, c, r = 0.25) {
   return { bones: n.bones.filter((b) => b.owner === id && !b.eye && up(b)).length, eyes: n.bones.filter((b) => b.owner === id && b.eye).length,
     attached: n.attached.length, chunks: n.chunks.length, baked: n.baked.length, meshGibs: n.meshGibs.length, flesh: n.flesh.filter((f) => f.actor === id).length };
 }
+/** THE GUN IS READY before a shot is aimed: full shells (no reload) and the last shot's kick played out. A stance is
+ *  solved for where the muzzle is NOW; a slug fired out of a reload or a kick leaves from somewhere else (a third
+ *  slug fired after a reload ran 0.49 head radii off a line solved to 0.03). */
+async function ready() { await evaluate("__sdfGame.refillShells()"); await stepN(45); await evaluate("__sdfGame.refillShells()"); }
 /** One REAL slug at actor `id`, watched for `frames` frames: on which frames its head was swelling, when it left, and
  *  the most skull fragments in the air. */
 async function watchSlug(id, frames) {
-  let fired = false;
-  for (let i = 0; i < 4 && !fired; i++) { fired = await evaluate("__sdfGame.fireSlug()"); if (!fired) await stepN(90); }
-  if (!fired) die("fireSlug() never fired (reload?)");
+  const fired = await evaluate("__sdfGame.fireSlug()");
+  if (!fired) die("fireSlug() did not fire at once: the stance was solved for a gun that was not ready");
   const f0 = await fragments();
   const swell = []; let off = -1, limbChunks = 0;
   for (let k = 0; k < frames; k++) {
@@ -320,14 +331,15 @@ async function watchSlug(id, frames) {
   }
   return { swell, off, fragments: (await fragments()) - f0, limbChunks };
 }
-/** THE POP's checks on actor `id` after slugs at its neck (the crosshair 6 cm under the head's centre). `want`: the
+/** THE POP's checks on actor `id` after slugs at its neck (the crosshair 6 cm under the head's centre, from 40 degrees
+ *  to one side of its face: one to four slugs cut a frozen zombie's neck from there). `want`: the
  *  skull fragments the pop must throw (null: only "some"). */
 async function popByNeckSlugs(tag, id, want, bonesWhole) {
   const swellS = (await evaluate("__sdfGame.head.burstTuning()")).popSwellS;
   let r = null, n = 0, centreAt = null;
   const flying0 = await evaluate("__sdfGame.chunkStats().livePieces.length");
   for (n = 1; n <= 8; n++) {
-    const aim = await crosshairOn(id, SHOT_D, [0, -0.06, 0]);
+    const aim = await crosshairOn(id, SHOT_D, [0, -0.06, 0], 40);
     if (aim.actor !== id) fail(`${tag}: aim control: the slug would hit actor ${aim.actor}, not ${id}`);
     centreAt = aim.head;
     r = await watchSlug(id, 24);
@@ -386,9 +398,10 @@ try {
   const AIM = fresh();
   const aimed = await crosshairOn(AIM.id, SHOT_D, [0, 0, 0]);
   note(`AIM: crosshair on the head's centre from ${SHOT_D} m: the slug's line passes ${aimed.offset.toFixed(3)} head radii from it (splitFrac ${TUNING_DEFAULTS.splitFrac}); it would hit actor ${aimed.actor}`);
-  check(aimed.actor === AIM.id && aimed.offset < TUNING_DEFAULTS.splitFrac && aimed.offset > 0.5, `AIM: an aimed slug's line is ${aimed.offset.toFixed(3)} radii off centre: far from dead centre, and inside the shipped splitFrac ${TUNING_DEFAULTS.splitFrac}`);
+  if (aimed.actor !== AIM.id) fail(`AIM: aim control: the slug would hit actor ${aimed.actor}, not ${AIM.id}`);
   await watchSlug(AIM.id, 8);
   const aimShot = await shotOf(AIM.id);
+  check(!!aimShot && aimShot.offset > 0.5 && aimShot.offset < TUNING_DEFAULTS.splitFrac, `AIM: the aimed slug's line ran ${aimShot?.offset?.toFixed(3)} head radii off centre: far from dead centre (the slug lands under the crosshair), and inside the shipped splitFrac ${TUNING_DEFAULTS.splitFrac}`);
   check(aimShot?.rule === "split" && aimShot.took === true && (await splitOf(AIM.id)) !== null, `AIM: it splits the head (${JSON.stringify(aimShot)})`);
 
   // -------- O. an off-centre slug is ordinary (splitFrac 0.35, so a slug on the head can be off centre).
@@ -452,7 +465,7 @@ try {
 
   // -------- D0. popSwellS 0: no swell frame.
   await tune({ popSwellS: 0 });
-  const D0 = fresh();
+  const D0 = AIM;   // any live head: the one the aimed slug split
   const d0 = await evaluate(`(() => { const ok = __sdfGame.head.pop(${D0.id}, 0, 0, -1); return { ok, popping: __sdfGame.head.popping(${D0.id}), on: __sdfGame.flail.limbAlive(${D0.id}, "head") > 0 }; })()`);
   check(d0.ok && !d0.popping && !d0.on, `D0: with popSwellS 0 the head bursts at once: no swell, the head off in the same call (${JSON.stringify(d0)})`);
   await tune({ popSwellS: TUNING_DEFAULTS.popSwellS });
