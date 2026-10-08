@@ -46,7 +46,7 @@ export function createHeadSeams(ctx: GameContext) {
        *  `on: false` sends every round down the ordinary path.
        *  The behaviour before 2026-10-07 (every gun hit on a head made the opening):
        *  burstTune({ opening: true, anyWeapon: true, alwaysSplit: true, slugSplit: false, slugPop: false, popOnSplit: false }).
-       *  The slug's split until 2026-10-08 (judged on the slug's own line, loosely, from any range):
+       *  The slug's split as it was first built (judged on the slug's own line, loosely, from any range):
        *  burstTune({ splitAim: 'slug', splitFrac: 1.25, splitRangeM: 0, popPrecise: true }). */
       burstTune: (p: Partial<typeof burstTuning>) => setBurstTuning(p),
       burstTuning: () => ({ ...burstTuning }),

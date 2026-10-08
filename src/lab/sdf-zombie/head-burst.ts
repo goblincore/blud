@@ -50,7 +50,7 @@ export const BURST = {
 /** The shipped tuning (burstTuning starts as a copy; burstTune({ ...BURST_TUNING_DEFAULTS }) resets it).
  *  THE BEHAVIOUR BEFORE 2026-10-07 (every gun hit on the head made the opening) is
  *  burstTune({ opening: true, anyWeapon: true, alwaysSplit: true, slugSplit: false, slugPop: false, popOnSplit: false, headLip: 1 }).
- *  THE SLUG'S SPLIT AS IT WAS UNTIL 2026-10-08 (nearly every slug on a head split it, from any range, one half) is
+ *  THE SLUG'S SPLIT AS IT WAS FIRST BUILT (nearly every slug on a head split it, from any range, one half) is
  *  burstTune({ splitAim: 'slug', splitFrac: 1.25, splitRangeM: 0, popPrecise: true }). */
 export const BURST_TUNING_DEFAULTS = {
   /** false: every round on a head is an ordinary wound and a decapitation an ordinary one (no split, pop or opening). */
@@ -68,9 +68,9 @@ export const BURST_TUNING_DEFAULTS = {
   /** false: no slug splits a head. */
   slugSplit: true,
   /** WHAT PRECISION IS MEASURED ON. 'crosshair': the aim recorded at firing, i.e. how far the crosshair's ray passes
-   *  from the head's centre (a slug that carries no aim is never precise). 'slug': the slug's own line, the measure
-   *  before 2026-10-08 (then with splitFrac 1.25, because an aimed slug's line runs 0.89 to 1.03 radii under the
-   *  crosshair: nearly every slug on a head split it). */
+   *  from the head's centre (a slug that carries no aim is never precise). 'slug': the slug's own line, the first
+   *  measure (then with splitFrac 1.25, because an aimed slug's line runs 0.89 to 1.03 radii under the crosshair:
+   *  nearly every slug on a head split it). */
   splitAim: 'crosshair' as 'crosshair' | 'slug',
   /** A slug is precise when that measure is under this many head radii. 0.3 of the zombie's 10.9 cm head radius is
    *  3.3 cm: the crosshair on the bridge of the nose, between the eyes. On screen the zone is 0.3 of the head's own

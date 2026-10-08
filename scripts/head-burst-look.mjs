@@ -11,8 +11,9 @@
 // (fire(1) is a grapeshot volley, fireSlug() a slug), aimed with the crosshair as a player aims. The scenes, each on
 // a fresh zombie:
 //   pellets     three volleys with the crosshair on the head's centre, from 2 m in front (stages pellets-1, -2, -3);
-//   slug-chin   one slug with the crosshair low enough that its line runs off centre (it lands on the chin);
-//   slug-split  one slug with the crosshair 4 cm over the head's centre: the centred slug;
+//   slug-chin   one IMPRECISE slug: the crosshair under the head's centre by more than the precise zone's radius
+//               (head-burst.ts splitFrac of the head's radius), so it is an ordinary slug wound (on the chin);
+//   slug-split  one PRECISE slug: the crosshair on the head's centre. It splits the head;
 //   slug-pop    slugs at the neck until the head comes off, every frame of the last one kept (stage slug-pop,
 //               frames f00..); then the same pop by hand on a zombie whose flesh is out of the frame (pop-bare), so
 //               the skull's pieces can be seen leaving.
@@ -39,8 +40,9 @@ const VITE = Number(process.argv[2] ?? 5261), CDP = Number(process.argv[3] ?? 92
 const OUT = process.argv[4] ?? ".lab-tmp/head-burst-look";
 const LABEL = process.env.LABEL ?? "look";
 const QUERY = process.env.QUERY ?? "&sculpt=full";
-/** The tuning before 2026-10-07: every gun hit on a head made the opening (head-burst.ts BURST_TUNING_DEFAULTS). */
-const OLD_TUNE = { opening: true, anyWeapon: true, alwaysSplit: true, slugSplit: false, slugPop: false, popOnSplit: false };
+/** The tuning before 2026-10-07: every gun hit on a head made the opening (head-burst.ts BURST_TUNING_DEFAULTS).
+ *  The slug's split, off there, is put back on its measure of that day as well (the slug's own line). */
+const OLD_TUNE = { opening: true, anyWeapon: true, alwaysSplit: true, slugSplit: false, slugPop: false, popOnSplit: false, splitAim: "slug", splitFrac: 1.25, splitRangeM: 0, popPrecise: true };
 const TUNE = process.env.OLD ? { ...OLD_TUNE, ...(process.env.TUNE ? JSON.parse(process.env.TUNE) : {}) } : process.env.TUNE ? JSON.parse(process.env.TUNE) : null;
 const SCENES = new Set((process.env.SCENES ?? "pellets,slug-chin,slug-split,slug-pop").split(","));
 const THAW = Number(process.env.THAW ?? 14), STRIP = 30;
@@ -443,21 +445,23 @@ const scenes = {
     for (let n = 1; n <= 3; n++) { await round(`pellets-${n}`, a.id, "__sdfGame.fire(1)"); await photograph(`pellets-${n}`, a.id); }
   },
   "slug-chin": async () => {
-    // The crosshair is lowered a centimetre at a time until the slug's line runs off centre and still meets this zombie.
+    // The crosshair is lowered a centimetre at a time until the shot is imprecise by the tuning's measure: the
+    // crosshair's own distance from the head's centre, or (splitAim "slug", the old tuning) the slug's line's.
     const a = fresh();
+    const fr = await frameOf(a.id), R = Math.cbrt(fr.axes[0] * fr.axes[1] * fr.axes[2]), byLine = manifest.tuning.splitAim === "slug";
     let aim = [0, -0.02, 0], line = null;
     for (let k = 0; k < 10; k++) {
       aim = [0, -0.02 - k * 0.01, 0];
       await aimAt(a.id, SHOT_M, 0, aim);
       line = await slugLine(a.id);
-      if (line.offset > manifest.tuning.splitFrac + 0.03) break;
+      if ((byLine ? line.offset : -aim[1] / R) > manifest.tuning.splitFrac + 0.03) break;
     }
-    console.log(`  slug-chin: crosshair ${(-aim[1] * 100).toFixed(0)} cm under the head's centre; the slug's line passes ${line.offset.toFixed(2)} head radii from it, and would hit actor ${line.actor} (the target is ${a.id})`);
+    console.log(`  slug-chin: crosshair ${(-aim[1] * 100).toFixed(0)} cm under the head's centre (${(-aim[1] / R).toFixed(2)} head radii); the slug's line passes ${line.offset.toFixed(2)} head radii from it, and would hit actor ${line.actor} (the target is ${a.id})`);
     await round("slug-chin", a.id, "__sdfGame.fireSlug()", aim); await photograph("slug-chin", a.id);
   },
   "slug-split": async () => {
     const a = fresh();
-    const rec = await round("slug-split", a.id, "__sdfGame.fireSlug()", [0, 0.04, 0]); await photograph("slug-split", a.id);
+    const rec = await round("slug-split", a.id, "__sdfGame.fireSlug()", [0, 0, 0]); await photograph("slug-split", a.id);
     console.log(`  slug-split: the slug's line passed ${rec.line?.offset} head radii from the head's centre and would hit actor ${rec.line?.wouldHit} (the target is ${a.id})`);
   },
   "slug-pop": async () => {

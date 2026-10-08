@@ -138,7 +138,7 @@ describe('headShotRule: what a gun round does to a zombie head', () => {
   const shot = (o: Partial<HeadShot> = {}): HeadShot => ({ kind: 'slug', offset: 0.9, aimOffset: 0, rangeM: 2, splitOpen: false, splitShare: o.splitOpen ? 1 : 0, splitRefused: false, ...o });
   /** The tuning before 2026-10-07: every gun hit on the head made the opening. */
   const OLD = { ...T, opening: true, anyWeapon: true, alwaysSplit: true, slugSplit: false, slugPop: false, popOnSplit: false };
-  /** The slug's split until 2026-10-08: judged on the slug's own line, loosely, from any range. */
+  /** The slug's split as it was first built: judged on the slug's own line, loosely, from any range. */
   const SLUG_LINE = { ...T, splitAim: 'slug' as const, splitFrac: 1.25, splitRangeM: 0, popPrecise: true };
 
   it('the shipped tuning: precision is the crosshair\'s, very precise, and the range is close to medium', () => {
@@ -255,7 +255,7 @@ describe('headShotRule: what a gun round does to a zombie head', () => {
     expect(headShotRule(shot({ offset: 0.1, aimOffset: null, rangeM: null }), { ...S, splitRangeM: 0 })).toBe('split');
     expect(headShotRule(shot({ offset: 0.1, rangeM: 9 }), S)).toBe('ordinary');
   });
-  it('the split as it was until 2026-10-08 is one tuning away: an aimed slug\'s own line is under 1.25, at any range, with or without an aim', () => {
+  it('the split as it was first built is one tuning away: an aimed slug\'s own line is under 1.25, at any range, with or without an aim', () => {
     // scripts/head-burst-look.mjs's aim probe on the zombie, 0.8 to 4 m: the crosshair on the head's centre, and 2 cm lower.
     for (const offset of [0.891, 0.923, 0.946, 0.991, 1.03, 1.071, 1.101, 1.125, 1.168, 1.208]) {
       for (const rangeM of [2, 30, null]) expect(headShotRule(shot({ offset, aimOffset: rangeM === null ? null : 0.7, rangeM }), SLUG_LINE)).toBe('split');
