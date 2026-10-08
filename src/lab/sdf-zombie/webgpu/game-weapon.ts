@@ -126,6 +126,9 @@ export interface Projectile {
   radius: number;
   /** Which crater this projectile stamps on impact. */
   kind: 'pellet' | 'slug';
+  /** The actors whose skull this projectile has damaged a plate of, on an open head (skeleton-spike/
+   *  skull-split-hit.ts SkullStrikes): one plate of a skull at most. Unset until the first. */
+  skulls?: object[];
 }
 
 /**

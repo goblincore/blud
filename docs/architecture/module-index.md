@@ -36,7 +36,7 @@ Each line is the first sentence of the module's header comment.
 | --- | --- | --- |
 | [webgpu/march/](#webgpumarch) | 54 | The SDF march shader, split by stage (WGSL). |
 | [webgpu/earlyz/](#webgpuearlyz) | 10 | Early-Z depth prepass for the march. |
-| [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 16 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
+| [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 18 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
 | [webgpu/upscale/](#webgpuupscale) | 8 | Upscaling of the low-res march target. |
 | [characters/](#characters) | 1 | Character bodies: `.blob` sources, generators and per-character data. |
 | [shared-wounds/](#shared-wounds) | 4 | Shared wound-field probe page. |
@@ -45,7 +45,7 @@ Each line is the first sentence of the module's header comment.
 | [Dev panels](#dev-panels) | 10 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 23 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 74 | Gameplay features wired into the game loop. |
+| [Game: feature modules](#game-feature-modules) | 75 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 7 | Blood views, the goo layer, impact splashes. |
@@ -144,6 +144,7 @@ Early-Z depth prepass for the march.
 
 Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name).
 
+- `webgpu/skeleton-spike/anatomical-skull.fixture.ts` — THE REAL ANATOMICAL SKULL for the tests: public/assets/lab/anatomical-skull.glb read by hand (GLTFLoader decodes the atlas image through the DOM, and…
 - `webgpu/skeleton-spike/anatomical-skull.ts` — Offline skull mesh loading and rigid-head fitting.
 - `webgpu/skeleton-spike/anatomical-skull.wgsl.ts` — Hand-written shading: real cavities/teeth come from geometry, not the old painted face masks.
 - `webgpu/skeleton-spike/contract.ts` — SKELETON REPRESENTATION COMPARISON — shared field contract (Task 1).
@@ -157,6 +158,7 @@ Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite th
 - `webgpu/skeleton-spike/mesh.ts` — SKELETON REPRESENTATION COMPARISON — Task 2: cached segment-local bone meshes.
 - `webgpu/skeleton-spike/organ-reach.ts` — ORGANS AS MESH (2026-10-06): which organ segments a body's wounds expose.
 - `webgpu/skeleton-spike/selector.ts` — Mesh actor skeletons are the accepted forward default in dev and production.
+- `webgpu/skeleton-spike/skull-split-hit.ts` — A SHOT AT A SPLIT SKULL. The anatomical skull's plates are stored on the CLOSED head (skull-fracture.ts), and a split head draws them once per piece,…
 - `webgpu/skeleton-spike/volume-gpu.ts` — SKELETON REPRESENTATION COMPARISON — Task 3b: HOST side of the GPU volume path.
 - `webgpu/skeleton-spike/volume.ts` — SKELETON REPRESENTATION COMPARISON — Task 3: cached segment-local bone distance GRIDS.
 - `webgpu/skeleton-spike/volume.wgsl.ts` — SKELETON REPRESENTATION COMPARISON — Task 3b: GPU atlas sampler for the baked segment-local bone distance grids (volume.ts).
@@ -351,6 +353,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-rod.ts` — WEAPON SLOT 6: THE ROD (cut wounds M1, spec docs/superpowers/specs/2026-10-03-cut-wounds-design.md §5).
 - `webgpu/game-sequence.ts` — SCRIPTED SEQUENCES in the game (spec 2026-09-30-night-train-egg-ending-design.md §3).
 - `webgpu/game-skeleton-actors.ts` — An actor's skeleton resources: bone field sources, the shared volume atlas (acquire, release), binding and release.
+- `webgpu/game-skull-shots.ts` — A PROJECTILE AT BONE WITH NO FLESH IN FRONT OF IT.
 - `webgpu/game-spawn.ts` — Spawning the cast: spawnEnemy (body, view, march settings, skeleton, kit), spawnAll, rebuildCast, and the game's march constants.
 - `webgpu/game-telemetry-controls.ts` — The on-screen gameplay telemetry recorder widget: record, mark, save-to-disk and download buttons around a GameTelemetry log.
 - `webgpu/game-telemetry-scene.ts` — Telemetry scene helpers: capturing a frozen actor and camera snapshot, and the bench scene census (bodies, wounds, chunks, droplets).

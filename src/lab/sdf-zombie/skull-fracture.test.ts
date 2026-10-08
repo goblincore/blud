@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { damageSkull, explodeSkull, intactSkull, skullRayHit, skullPieceLaunch, type SkullPieceSurface } from './skull-fracture';
+import { damageSkull, explodeSkull, intactSkull, skullRayCast, skullRayHit, skullPieceLaunch, type SkullPieceSurface } from './skull-fracture';
 const plate = (id: string, z: number): SkullPieceSurface => ({ id,
   positions: [-.05,-.05,z, .05,-.05,z, 0,.05,z], indices: [0,1,2],
   min:[-.05,-.05,z], max:[.05,.05,z], pivot:[0,0,z] });
@@ -13,6 +13,29 @@ describe('anatomical skull fracture', () => {
   it('does not count the empty part of a bone bounding box as bone', () => {
     expect(skullRayHit([plate('rim',0)],intactSkull(1),[.045,.04,.1],[0,0,-1])).toBeNull();
     expect(skullRayHit([plate('rim',0)],intactSkull(1),[0,0,.1],[0,0,0])).toBeNull();
+  });
+  it('skullRayCast is the same hit with its distance, and skullRayHit its plate', () => {
+    const pieces = [plate('front', .05),plate('back', -.03)];
+    expect(skullRayCast(pieces,intactSkull(2),[0,0,.1],[0,0,-2])).toEqual({plate:0,distance:expect.closeTo(.05,12)});
+    expect(skullRayCast(pieces,{missing:1,hits:[3,0]},[0,0,.1],[0,0,-1])).toEqual({plate:1,distance:expect.closeTo(.13,12)});
+    expect(skullRayCast(pieces,intactSkull(2),[0,0,.3],[0,0,-1])).toBeNull();
+    expect(skullRayCast(pieces,intactSkull(2),[0,0,.3],[0,0,-1],.3)).toEqual({plate:0,distance:expect.closeTo(.25,12)});
+    for (const [origin,direction] of [[[0,0,.1],[0,0,-1]],[[.01,-.02,.12],[.05,.02,-1]],[[.045,.04,.1],[0,0,-1]],[[0,0,-.1],[0,0,1]]] as const)
+      expect(skullRayHit(pieces,intactSkull(2),[...origin],[...direction])).toBe(skullRayCast(pieces,intactSkull(2),[...origin],[...direction])?.plate ?? null);
+  });
+  it('a hit the predicate refuses is skipped, and the ray carries on to the next surface', () => {
+    const pieces = [plate('front', .05),plate('back', -.03)];
+    const asked: [number,number][] = [];
+    // Refuse whatever lies in front of z = 0: the front plate is not bone there.
+    const behind = (point: readonly number[], index: number) => { asked.push([+point[2]!.toFixed(9),index]); return point[2]! < 0; };
+    expect(skullRayCast(pieces,intactSkull(2),[0,0,.1],[0,0,-1],.14,behind)).toEqual({plate:1,distance:expect.closeTo(.13,12)});
+    // It is asked about the hit POINT (origin + distance x the unit ray), with the plate.
+    expect(asked).toEqual([[.05,0],[-.03,1]]);
+    // A refused hit does not shorten the reach either: the far plate is found from the other side, past a refused near one.
+    expect(skullRayCast(pieces,intactSkull(2),[0,0,-.1],[0,0,3],.2,p=>p[2]! > 0)).toEqual({plate:0,distance:expect.closeTo(.15,12)});
+    // Everything refused: no bone. Everything accepted: the plain test.
+    expect(skullRayCast(pieces,intactSkull(2),[0,0,.1],[0,0,-1],.14,()=>false)).toBeNull();
+    expect(skullRayCast(pieces,intactSkull(2),[0,0,.1],[0,0,-1],.14,()=>true)).toEqual(skullRayCast(pieces,intactSkull(2),[0,0,.1],[0,0,-1]));
   });
   it('accumulates pellets, detaches once, and isolates actors', () => {
     const original = intactSkull(2);

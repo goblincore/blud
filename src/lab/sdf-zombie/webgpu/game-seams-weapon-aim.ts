@@ -14,6 +14,8 @@ import { aimAtNearestSurface, convergedDir, fire, muzzleWorld } from './game-wea
 import { WEAPON_SLOTS, requestSlot, type WeaponSlot } from './game-weapon-slots';
 import { BOB, FREE_AIM } from './free-aim';
 import { predictSlugHitNow } from './game-hit-trace';
+import { spawnSlug } from './game-weapon';
+import type { Vec3 } from '../types';
 import { gunWetLipOn, setGunWetLip } from '../torn-lips';
 
 export function createWeaponAimSeams(ctx: GameContext) {
@@ -62,6 +64,18 @@ export function createWeaponAimSeams(ctx: GameContext) {
       return gunWetLipOn();
     },
     fireSlug: () => { const keep = ctx.weapon.slugMode; ctx.weapon.slugMode = true; try { return fire(ctx, 1); } finally { ctx.weapon.slugMode = keep; } },
+    /** Diagnostics: one slug of the gun's own (game-weapon.ts spawnSlug) put in flight at the world point `origin`
+     *  along `direction`, as if the muzzle were there. The projectile loop steps, traces and spends it like any
+     *  other; the gun itself does nothing (no shell, no recoil, no flash). A gate lays an exact line with it. Returns
+     *  false, and nothing done, for arguments that are not two triples of finite numbers with a direction of some
+     *  length. */
+    slugFrom: (origin: Vec3, direction: Vec3) => {
+      const triple = (v: unknown) => Array.isArray(v) && v.length === 3 && v.every(x => Number.isFinite(x));
+      const l = triple(origin) && triple(direction) ? Math.hypot(direction[0], direction[1], direction[2]) : 0;
+      if (!(l > 0)) return false;
+      ctx.weapon.pellets.push(spawnSlug([...origin] as Vec3, [direction[0] / l, direction[1] / l, direction[2] / l]));
+      return true;
+    },
     /** PLACEMENT GATE (2026-08-26): where a slug fired RIGHT NOW would hit —
      *  computed by exactly the code fire() uses (muzzleWorld + converged
      *  dir) against each actor's CURRENT posed field. No state mutated.

@@ -42,6 +42,7 @@ import { ceilingAt, chunkCollidersAt, shellAmpOf } from './game-hit-trace';
 import { updateHud } from './game-hud';
 import { applyDeathCamera, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop';
 import { stepMeshGibs } from './game-mesh-gibs';
+import { skullPasses } from './game-skull-shots';
 import { stepFlashLight, stepMuzzleFlash } from './game-muzzle-flash';
 import { stepOutdoor } from './game-outdoor';
 import { PLAYER, eyeOf, stepPlayer, type MoveInput } from './game-player';
@@ -879,6 +880,8 @@ export function tick(ctx: GameContext, dt: number) {
           const d = Math.hypot(hp[0]-from[0], hp[1]-from[1], hp[2]-from[2]);
           if (d < bestDist) { bestDist = d; hitActor = a; hitPoint = hp; }
         }
+        // Bone standing in an open head's gap has no flesh in front of it for the trace above to find.
+        skullPasses(ctx, p, from, hitActor, hitPoint);
         if (hitActor && hitPoint) {
           const l = Math.hypot(p.vel[0], p.vel[1], p.vel[2]) || 1;
           const dirN: Vec3 = [p.vel[0] / l, p.vel[1] / l, p.vel[2] / l];
@@ -889,7 +892,7 @@ export function tick(ctx: GameContext, dt: number) {
           const hitTiming = ctx.telemetry.telemetry.begin();
           if (ctx.render.segMeshRenderer) {
             const sources = ctx.render.skeletonSources.get(hitActor)?.sources;
-            if (sources) ctx.render.segMeshRenderer.impact(hitActor, sources, hitPoint, dirN, p.kind);
+            if (sources) ctx.render.segMeshRenderer.impact(hitActor, sources, hitPoint, dirN, p.kind, { from, by: p });
           }
           // A slug on a zombie's head bursts or ruptures it (game-head-damage.ts burst; while burstTuning.anyWeapon is
           // on, pellets too, once per shot); anything the leaf declines (not the head, not the plain zombie, off) takes

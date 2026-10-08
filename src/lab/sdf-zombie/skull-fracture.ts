@@ -15,9 +15,21 @@ const sub = (a: Vec3, b: Vec3): Vec3 => [a[0]-b[0], a[1]-b[1], a[2]-b[2]];
 const dot = (a: Vec3, b: Vec3) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
 const cross = (a: Vec3, b: Vec3): Vec3 => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
 
+/** A ray's first bone: the plate, and how far along the ray (head-frame metres) its surface is. */
+export interface SkullRayHit { plate: number; distance: number }
+
+/** How far past its flesh impact a bullet still breaks bone (m): the reach of a ray cast from the skin. */
+export const SKULL_REACH = 0.14;
+
 /** Exact two-sided triangle hit, bounded to the bullet's penetration into the head.
- * A bounding-box-only hit would break frontal bone even through an empty orbit. */
-export function skullRayHit(pieces: readonly SkullPieceSurface[], state: SkullDamage, origin: Vec3, direction: Vec3, reach = 0.14): number | null {
+ * A bounding-box-only hit would break frontal bone even through an empty orbit.
+ * `accept`, when given, is asked about each triangle hit's point (head frame) and its plate: a hit it refuses is not
+ * bone the ray meets there (a split skull's copy shows only what its piece owns), and the ray carries on to the next
+ * surface. */
+export function skullRayCast(
+  pieces: readonly SkullPieceSurface[], state: SkullDamage, origin: Vec3, direction: Vec3, reach = SKULL_REACH,
+  accept?: (point: Vec3, plate: number) => boolean,
+): SkullRayHit | null {
   const length = Math.hypot(...direction);
   if (length < 1e-9 || !Number.isFinite(length)) return null;
   const ray: Vec3 = [direction[0]/length,direction[1]/length,direction[2]/length];
@@ -45,10 +57,17 @@ export function skullRayHit(pieces: readonly SkullPieceSurface[], state: SkullDa
       const q = cross(t,e1), v = dot(ray,q)/det;
       if (v < 0 || u+v > 1) continue;
       const distance = dot(e2,q)/det;
-      if (distance >= 0 && distance < closest) { closest = distance; result = index; }
+      if (!(distance >= 0 && distance < closest)) continue;
+      if (accept && !accept([origin[0]+ray[0]*distance,origin[1]+ray[1]*distance,origin[2]+ray[2]*distance],index)) continue;
+      closest = distance; result = index;
     }
   });
-  return result;
+  return result === null ? null : { plate: result, distance: closest };
+}
+
+/** The plate skullRayCast hits (null: none within reach). */
+export function skullRayHit(pieces: readonly SkullPieceSurface[], state: SkullDamage, origin: Vec3, direction: Vec3, reach = SKULL_REACH): number | null {
+  return skullRayCast(pieces,state,origin,direction,reach)?.plate ?? null;
 }
 
 export function damageSkull(state: SkullDamage, piece: number | null, kind: 'pellet' | 'slug'): { state: SkullDamage; detached: number[] } {
