@@ -32,7 +32,7 @@
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 import * as ts from 'typescript';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { importTable, importsFor, localTypes, usedLocalTypes, missingLocalValues } from './lib/game-main-deps';
+import { importTable, importsFor, localTypes, mergeImportLines, usedLocalTypes, missingLocalValues } from './lib/game-main-deps';
 
 const GAME_MAIN = 'src/lab/sdf-zombie/webgpu/game-main.ts';
 
@@ -425,6 +425,14 @@ export function extractLeaves(
   const types = usedLocalTypes(fragments, localTypes(source, sf));
   const needsWrapper = fragments.some(f => f.includes('withCtx('));
 
+  const headerImport = needsWrapper
+    ? `import { withCtx, type GameContext } from './game-context';`
+    : `import type { GameContext } from './game-context';`;
+  // One declaration per specifier: with bare refs the header imports withCtx
+  // AND importsFor() re-infers it from game-main's own import of it, which
+  // read as two declarations of one name (TS2300, the game-tick wave).
+  const importLines = mergeImportLines([headerImport, ...inferred, ...extraImports]);
+
   const module = [
     `// src/lab/sdf-zombie/webgpu/${moduleName}.ts`,
     `//`,
@@ -433,11 +441,7 @@ export function extractLeaves(
     `//`,
     `// Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md`,
     ``,
-    needsWrapper
-      ? `import { withCtx, type GameContext } from './game-context';`
-      : `import type { GameContext } from './game-context';`,
-    ...inferred,
-    ...extraImports,
+    ...importLines,
     ``,
     ...types.map(t => t + '\n'),
     ...typeBlocks.map(t => t + '\n'),

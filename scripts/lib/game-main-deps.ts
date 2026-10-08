@@ -93,6 +93,59 @@ export function importsFor(
   return out;
 }
 
+/** One import declaration per module specifier. A module's import block is
+ *  assembled from several sources — extract-leaf's fixed game-context header,
+ *  importsFor()'s inference, and --imports — and two of them can name the same
+ *  specifier with the same binding: extracting a body that wraps a bare fn ref
+ *  makes the header import `withCtx` while importsFor() re-infers it from
+ *  game-main's own import of it. Two declarations of one name is TS2300 (hit
+ *  for real by the game-tick wave, 2026-10-07; the second line was removed by
+ *  hand). Names merge in first-seen order, so the first line's position and
+ *  spelling win. Lines the parser cannot read as a mergeable declaration —
+ *  side-effect and namespace imports, --imports text that is not an import —
+ *  pass through untouched, in position. */
+export function mergeImportLines(lines: readonly string[]): string[] {
+  interface Slot { mod?: string; spec?: { def?: string; named: Array<{ name: string; typeOnly: boolean }> }; verbatim?: string }
+  const slots: Slot[] = [];
+  const byMod = new Map<string, Slot>();
+  for (const line of lines) {
+    const sf = ts.createSourceFile('imports.ts', line, ts.ScriptTarget.ES2022, true);
+    const st = sf.statements.find(ts.isImportDeclaration);
+    const clause = st?.importClause;
+    const mergeable = !!(st && clause
+      && (clause.name || (clause.namedBindings && ts.isNamedImports(clause.namedBindings))));
+    if (!mergeable) { slots.push({ verbatim: line }); continue; }
+    const mod = (st!.moduleSpecifier as ts.StringLiteral).text;
+    let slot = byMod.get(mod);
+    if (!slot) {
+      slot = { mod };
+      byMod.set(mod, slot);
+      slots.push(slot);
+    }
+    const e = slot.spec ??= { named: [] };
+    const blanket = clause.isTypeOnly;
+    if (clause.name) e.def = clause.name.text;
+    const b = clause.namedBindings;
+    if (b && ts.isNamedImports(b)) {
+      for (const el of b.elements) {
+        const name = el.propertyName ? `${el.propertyName.text} as ${el.name.text}` : el.name.text;
+        const typeOnly = blanket || el.isTypeOnly;
+        if (!e.named.some(n => n.name === name)) e.named.push({ name, typeOnly });
+      }
+    }
+  }
+  return slots.map(s => {
+    if (!s.spec) return s.verbatim!;
+    const parts = [
+      ...(s.spec.def ? [s.spec.def] : []),
+      ...(s.spec.named.length
+        ? [`{ ${s.spec.named.map(n => (n.typeOnly ? `type ${n.name}` : n.name)).join(', ')} }`]
+        : []),
+    ];
+    return `import ${parts.join(', ')} from '${s.mod}';`;
+  });
+}
+
 /** Module-scope `type X = …` / `interface X {}`, which are not exported and so
  *  must be COPIED into the new module. */
 export function localTypes(source: string, sf: ts.SourceFile): Map<string, string> {

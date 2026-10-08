@@ -211,6 +211,61 @@ describe('extract-leaf: what the moved code needs to compile', () => {
   });
 });
 
+describe('extract-leaf: one import declaration per specifier', () => {
+  // 2026-10-07, game-tick: the moved body wrapped a bare fn ref in withCtx, so
+  // the header imported `{ withCtx, type GameContext }` — and importsFor()
+  // ALSO re-inferred withCtx from game-main's own import of it (an earlier
+  // wave had put it there). Two declarations of one name, TS2300; the second
+  // line was removed by hand.
+  const src = [
+    "import * as THREE from 'three';",
+    "import { makeGameContext } from './game-context';",
+    "import { withCtx } from './game-context';",
+    '',
+    'export function main(): void {',
+    '  const ctx = makeGameContext();',
+    '  function inner(): number { return ctx.render.frame; }',
+    '  function outer(): unknown { return { inner }; }',
+    '  outer();',
+    '}',
+    '',
+  ].join('\n');
+  const gameCtxLines = (m: string): string[] =>
+    m.match(/^import .*?from '\.\/game-context';$/gm) ?? [];
+
+  it('writes ONE game-context import into a NEW module, carrying withCtx and the type', () => {
+    const r = extractLeaves(src, ['inner', 'outer'], [], 'game-tick');
+    const lines = gameCtxLines(r.module);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('withCtx');
+    expect(lines[0]).toContain('type GameContext');
+    // The wrap itself is untouched — only the import list is merged.
+    expect(r.module).toContain('withCtx(ctx, inner)');
+  });
+
+  it('keeps ONE game-context import when APPENDING to an existing module', () => {
+    // First wave into this module had no bare refs, so its header is the bare
+    // `import type` form; the second wave wraps and also re-infers withCtx.
+    const first = [
+      "import * as THREE from 'three';",
+      "import { makeGameContext } from './game-context';",
+      '',
+      'export function main(): void {',
+      '  const ctx = makeGameContext();',
+      '  function a(x: number): number { return x + ctx.render.frame; }',
+      '  a(1);',
+      '}',
+      '',
+    ].join('\n');
+    const r1 = extractLeaves(first, ['a'], [], 'game-tick');
+    const r2 = extractLeaves(src, ['inner', 'outer'], [], 'game-tick', [], { existing: r1.module });
+    const lines = gameCtxLines(r2.module);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('withCtx');
+    expect(lines[0]).toContain('type GameContext');
+  });
+});
+
 describe('extract-leaf: mergeModule import shapes', () => {
   it('dedupes a namespace import', () => {
     const a = ["// header", "", "import * as THREE from 'three';", "", "export function a(): void {}", ""].join('\n');
