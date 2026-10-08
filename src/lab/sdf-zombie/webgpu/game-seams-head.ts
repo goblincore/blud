@@ -40,16 +40,20 @@ export function createHeadSeams(ctx: GameContext) {
       /** The leaf's debug for actor `id` (null before its first head hit). */
       state: (id: number) => ctx.weapon.headDamage?.debug(id) ?? null,
       /** What a gun round does to a zombie's head, live (head-burst.ts burstTuning): set any of its fields. The
-       *  slug's split { slugSplit, splitFrac, splitOpen }, the pop { slugPop, popSwellS, popOnSplit }, and the old
-       *  burst opening { opening, anyWeapon, alwaysSplit, centreFrac, swell, lethal, repeatStep, craterScale, splay,
-       *  shardScale, flapCount }. Returns the live values. `on: false` sends every round down the ordinary path.
+       *  slug's split { slugSplit, splitAim, splitFrac, splitRangeM, splitOpen }, the pop { slugPop, popSwellS,
+       *  popOnSplit, popSplitMin, popPrecise }, and the old burst opening { opening, anyWeapon, alwaysSplit,
+       *  centreFrac, swell, lethal, repeatStep, craterScale, splay, shardScale, flapCount }. Returns the live values.
+       *  `on: false` sends every round down the ordinary path.
        *  The behaviour before 2026-10-07 (every gun hit on a head made the opening):
-       *  burstTune({ opening: true, anyWeapon: true, alwaysSplit: true, slugSplit: false, slugPop: false, popOnSplit: false }). */
+       *  burstTune({ opening: true, anyWeapon: true, alwaysSplit: true, slugSplit: false, slugPop: false, popOnSplit: false }).
+       *  The slug's split until 2026-10-08 (judged on the slug's own line, loosely, from any range):
+       *  burstTune({ splitAim: 'slug', splitFrac: 1.25, splitRangeM: 0, popPrecise: true }). */
       burstTune: (p: Partial<typeof burstTuning>) => setBurstTuning(p),
       burstTuning: () => ({ ...burstTuning }),
       /** The last gun round the head-shot leaf judged on actor `id`'s head (game-head-shot.ts): the rule it came
-       *  to ('ordinary', 'split', 'pop', 'opening'), the round, how far off centre its line ran (head radii) and
-       *  whether the leaf took it. Null: none yet. */
+       *  to ('ordinary', 'split', 'pop', 'opening'), the round, how far off centre its own line ran (`offset`,
+       *  head radii), how far off centre the crosshair's ray recorded at firing ran and from how far (`aimOffset`,
+       *  `rangeM`; null for a round that carries no aim) and whether the leaf took it. Null: none yet. */
       shot: (id: number) => ctx.weapon.headShot?.last(id) ?? null,
       /** The lips a sever takes with it (damage.ts lipsAfterSever), read and set: what is left of a lip that would
        *  hang over the stump, as a share of the lip it had. 0 ships (damage.ts STUMP_LIP); 1, or false, leaves every

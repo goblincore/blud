@@ -319,6 +319,15 @@ export function convergedDir(ctx: GameContext, origin: Vec3): Vec3 {
   return [d[0] / l, d[1] / l, d[2] / l];
 }
 
+/** THE GUN'S SLUG, as fire() launches it: one lump from the muzzle down one known ray (the converged one), carrying
+ *  where the player was aiming as it left: the eye and the crosshair's ray, the reticle's under free aim. The slug
+ *  lands off that ray (the muzzle is beside and under the eye), so a shot's precision is read from the aim, not from
+ *  the impact (head-burst.ts headShotRule). */
+export function launchSlug(ctx: GameContext): Projectile {
+  const muz = muzzleWorld(ctx);
+  return spawnSlug(muz, convergedDir(ctx, muz), { eye: eyeOf(ctx.player.player), dir: aimDir(ctx) });
+}
+
 /** The two elbows, rig space. See aimArm. */
 /** The two SHOULDERS, rig space: behind and below the camera, either side
  *  of the body. A two-bone arm runs from each hand to these (game-arms.ts
@@ -483,8 +492,7 @@ export function fire(ctx: GameContext, barrels: 1 | 2): boolean {
     }
   }
   if (ctx.weapon.slugMode) {
-    // One lump down one known ray instead of a pellet volley.
-    ctx.weapon.pellets.push(spawnSlug(muzzleWorld(ctx), convergedDir(ctx, muzzleWorld(ctx))));
+    ctx.weapon.pellets.push(launchSlug(ctx));
     return true;
   }
   const muz = muzzleWorld(ctx);

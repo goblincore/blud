@@ -1,36 +1,45 @@
 // src/lab/sdf-zombie/webgpu/game-head-shot.ts
 //
-// THE HEAD-SHOT LEAF: what a gun round does to a zombie's head besides an ordinary wound (head-burst.ts headShotRule): a centred slug splits the head or pops a split one.
+// THE HEAD-SHOT LEAF: what a gun round does to a zombie's head besides an ordinary wound (head-burst.ts headShotRule): a precise slug from close to medium range splits the head, and a slug from that range pops a split one.
 //
 // The projectile loop (game-tick.ts) asks hit() for every round that lands on an actor, before it stamps the
 // round's ordinary wound. This leaf owns no state of its own but the last verdict per actor (the gates' readout):
 // the rule is pure (head-burst.ts headShotRule), and each outcome belongs to a leaf or the actor that already has it.
 //
+// PRECISE AND IN RANGE are read from the slug's provenance: the eye and the crosshair's ray as the gun fired
+// (damage.ts ShotAim; game-weapon-rig.ts launchSlug records them). The slug is precise when that ray passes within
+// burstTuning.splitFrac head radii of the head's centre, and in range when the head is within
+// burstTuning.splitRangeM of that eye. Where the slug itself lands does not decide it: it leaves from the muzzle and
+// lands about 10 cm under the crosshair.
+//
 //   ordinary   hit() answers false and the caller stamps the round's own wound (ZombieActor.hit / hitSlug). Every
-//              pellet, an off-centre slug, a round that is not on head flesh (the neck's base is the torso's), any
-//              character but the plain zombie, a head that is popping, everything with burstTuning.on off.
+//              pellet, an imprecise slug, a slug from too far, a round that is not on head flesh (the neck's base
+//              is the torso's), any character but the plain zombie, a head that is popping, everything with
+//              burstTuning.on off.
 //   split      THE SLUG SPLIT. The head opens through the head split leaf (game-head-split.ts open), exactly as the
 //              axe's chop opens it, straight to burstTuning.splitOpen of the preset's angle. The split's plane holds
 //              the shot's direction and the head's up axis: a slug from the front parts the head left and right
 //              (the 'middle' preset), one from the side takes the face (head-split.ts choosePreset decides, from
-//              the plane's normal and where the slug landed). The split's cut faces are the slug's wound: they are
-//              blasted with a slug's shove and a slug's share of the collapse meter, and they bleed as the axe's
-//              do. The zombie lives. If the split refuses after all (the body is tearing apart), the round is
-//              ordinary.
-//   pop        A centred slug on a head that is ALREADY split wide (burstTuning.popSplitMin of its angle or more;
-//              a head only cracked takes it as an ordinary wound): the head swells and bursts
-//              (ZombieActor.beginHeadPop; the burst itself is the actor's onHeadPop, game-spawn.ts). The other way
-//              to a pop is not this leaf's: an ordinary slug wound that cuts the head off pops it through the
-//              actor's onDecapitate (head-burst.ts decapitationRule).
+//              the plane's normal and the point this leaf hands it). That point is on the head's middle line
+//              (head-burst.ts slugSplitPoint), so the slug from the front opens BOTH halves. The split's cut faces
+//              are the slug's wound: they are blasted with a slug's shove and a slug's share of the collapse meter,
+//              and they bleed as the axe's do. The zombie lives. If the split refuses after all (the body is
+//              tearing apart), the round is ordinary.
+//   pop        A slug from within range on a head that is ALREADY split wide (burstTuning.popSplitMin of its angle
+//              or more; a head only cracked takes it as an ordinary wound). It need not be precise
+//              (burstTuning.popPrecise): the head swells and bursts (ZombieActor.beginHeadPop; the burst itself is
+//              the actor's onHeadPop, game-spawn.ts). The other way to a pop is not this leaf's: an ordinary slug
+//              wound that cuts the head off pops it through the actor's onDecapitate (head-burst.ts
+//              decapitationRule).
 //   opening    The slug head burst of 2026-10-02 (game-head-damage.ts burst), only while burstTuning.opening is on.
 //              Not the shipped behaviour.
 //
-// THE ORDERS. An earlier ordinary wound on the head, a pellet's or an off-centre slug's, leaves no state in any
-// leaf, so a later centred slug still splits. A head the flail has damaged (the head damage leaf holds its regions
-// and deform, measured on the closed head) is refused by the split, here and for the axe: a centred slug on it is
-// an ordinary slug wound, and can still take the head off and pop it. A split head takes pellets and off-centre
-// slugs as ordinary wounds on its un-warped flesh (damage.ts unwarpHit); the next centred slug pops it if it is
-// split wide.
+// THE ORDERS. An earlier ordinary wound on the head, a pellet's or an imprecise slug's, leaves no state in any
+// leaf, so a later precise slug still splits. A head the flail has damaged (the head damage leaf holds its regions
+// and deform, measured on the closed head) is refused by the split, here and for the axe: a precise slug on it is
+// an ordinary slug wound, and can still take the head off and pop it. A split head takes pellets and slugs from too
+// far as ordinary wounds on its un-warped flesh (damage.ts unwarpHit); the next slug from within range pops it if it
+// is split wide.
 import type { GameContext } from './game-context';
 import type { ZombieActor } from './game-actor';
 import type { BuildResult } from '../build-body';
@@ -39,7 +48,7 @@ import { WOUND_PROFILES, unwarpHit, type ShotProvenance, type Wound } from '../d
 import { COLLAPSE_TUNING } from '../collapse';
 import { headQuatOf } from '../rig-bind';
 import { rotate, type HeadFrame, type Quat } from '../head-deform';
-import { BURST, burstTuning, classifyBurst, headShotRule, hsOf, onHeadPrim, type HeadShotRule } from '../head-burst';
+import { BURST, aimOffsetOf, aimRangeOf, burstTuning, classifyBurst, headShotRule, hsOf, onHeadPrim, slugSplitPoint, type HeadShotRule } from '../head-burst';
 import { splitMaxAngle } from '../head-split';
 import type { HeadSplitLeaf } from './game-head-split';
 import { headAlive } from './flame-anchors';
@@ -57,9 +66,11 @@ export interface HeadShotDeps {
   bleed(a: ZombieActor, w: Wound, point: Vec3, dir: Vec3): void;
 }
 
-/** The last round this leaf judged on an actor's head. `took`: the leaf consumed it (false: the caller stamped its
- *  ordinary wound, which is every 'ordinary' verdict and a split or an opening that was refused). */
-export interface HeadShotDebug { rule: HeadShotRule; kind: 'pellet' | 'slug'; offset: number; took: boolean }
+/** The last round this leaf judged on an actor's head. `offset`: how far the round's own line ran from the head's
+ *  centre, head radii. `aimOffset` and `rangeM`: the same of the crosshair's ray recorded at firing, and the metres
+ *  from that eye to the head (null: the round carries no aim). `took`: the leaf consumed it (false: the caller
+ *  stamped its ordinary wound, which is every 'ordinary' verdict and a split or an opening that was refused). */
+export interface HeadShotDebug { rule: HeadShotRule; kind: 'pellet' | 'slug'; offset: number; aimOffset: number | null; rangeM: number | null; took: boolean }
 
 export interface HeadShotLeaf {
   /** One gun round on an actor at `point` (world, on the posed surface), travelling along `dir` (world, unit). True
@@ -87,9 +98,10 @@ export function createHeadShot(_ctx: GameContext, deps: HeadShotDeps): HeadShotL
   const verdicts = new WeakMap<ZombieActor, HeadShotDebug>();
   const byId = new Map<number, ZombieActor>();
 
-  /** Open the head along the slug's plane; the faces are the slug's wound. False when the split refused. */
+  /** Open the head along the slug's plane, laid on the head's middle line (slugSplitPoint); the faces are the
+   *  slug's wound. False when the split refused. */
   function split(a: ZombieActor, point: Vec3, dir: Vec3, frame: HeadFrame, shot: ShotProvenance | undefined): boolean {
-    const faces = deps.split.open(a, slugSplitNormal(dir, frame.quat), point, burstTuning.splitOpen);
+    const faces = deps.split.open(a, slugSplitNormal(dir, frame.quat), slugSplitPoint(burstTuning.splitAim, point, frame), burstTuning.splitOpen);
     if (!faces) return false;
     for (const w of faces) w.shot = shot?.weapon === 'slug' ? shot : { weapon: 'slug' };
     a.blast({
@@ -114,18 +126,23 @@ export function createHeadShot(_ctx: GameContext, deps: HeadShotDeps): HeadShotL
       const hs = hsOf(frame, at);
       if (Math.hypot(hs[0], hs[1], hs[2]) > BURST.maxHs) return false;   // the neck or a shoulder
       const offset = classifyBurst({ point, dir }, frame).offset;
+      // Where the player was aiming as the slug left: the crosshair's ray against this head, and the range.
+      const aim = kind === 'slug' && shot?.weapon === 'slug' ? shot.aim ?? null : null;
+      const aimOffset = aim ? aimOffsetOf(aim, frame) : null, rangeM = aim ? aimRangeOf(aim, frame) : null;
       // How far a split head stands open: its spring's target, as a share of its preset's full angle.
       const st = deps.split.isOpen(a) ? deps.split.state(a.id) : null;
       const full = st ? splitMaxAngle(st) : 0;
-      const rule = headShotRule({ kind, offset, splitOpen: !!st, splitShare: st && full > 0 ? st.target / full : 0, splitRefused: deps.headDamaged(a) });
+      const rule = headShotRule({ kind, offset, aimOffset, rangeM, splitOpen: !!st, splitShare: st && full > 0 ? st.target / full : 0, splitRefused: deps.headDamaged(a) });
       const took = rule === 'split' ? split(a, point, dir, frame, shot)
         : rule === 'pop' ? a.beginHeadPop(dir, burstTuning.popSwellS)
           : rule === 'opening' ? deps.opening(a, point, dir, shot, kind)
             : false;
-      verdicts.set(a, { rule, kind, offset, took });
+      verdicts.set(a, { rule, kind, offset, aimOffset, rangeM, took });
       byId.set(a.id, a);
       // Visible in the browser console while the rules are being tuned.
-      if (rule !== 'ordinary' && rule !== 'opening') console.info(`[head-shot] actor ${a.id} ${kind}: ${rule}${took ? '' : ' (refused)'} (line ${offset.toFixed(2)} head radii off centre)`);
+      if (rule !== 'ordinary' && rule !== 'opening') {
+        console.info(`[head-shot] actor ${a.id} ${kind}: ${rule}${took ? '' : ' (refused)'} (aim ${aimOffset === null ? 'not recorded' : `${aimOffset.toFixed(2)} head radii off centre from ${rangeM!.toFixed(1)} m`}; the round's line ${offset.toFixed(2)})`);
+      }
       return took;
     },
     last(id) {

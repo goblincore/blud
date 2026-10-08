@@ -35,10 +35,15 @@ export const WOUND_PROFILES: Record<WoundType, WoundProfile> = {
   burn: { radius: 0.08, rimSplayScale: 1.0, rimOffsetScale: 1.0 },
 };
 
-/** Gameplay provenance is independent of visual crater calibre. */
+/** WHERE THE PLAYER WAS AIMING when a round left the gun: the eye and the crosshair's ray (world; `dir` unit). The
+ *  round itself leaves from the muzzle, beside and under the eye, and lands off this ray. */
+export interface ShotAim { eye: Vec3; dir: Vec3 }
+
+/** Gameplay provenance is independent of visual crater calibre. A slug carries the aim it was fired with
+ *  (head-burst.ts headShotRule judges the shot's precision on it); one with none was not aimed by a crosshair. */
 export type ShotProvenance =
   | { weapon: 'shotgun'; shotId: number; barrels: 1 | 2; barrel: 0 | 1 }
-  | { weapon: 'slug'; shotId?: number }
+  | { weapon: 'slug'; shotId?: number; aim?: ShotAim }
   | { weapon: 'explosion' };
 
 export interface Wound {

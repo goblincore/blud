@@ -1,21 +1,27 @@
 // src/lab/sdf-zombie/head-burst.ts
 //
 // WHAT A GUN ROUND DOES TO A ZOMBIE'S HEAD — the pure half. Three things can happen besides an ordinary wound, and
-// headShotRule decides which from the round, how centred its line is, the head's state and the live tuning:
-//   the SPLIT    a centred slug on a closed head opens it like the axe does (the head split, head-split.ts);
-//   the POP      a slug that takes the head off, or a centred slug on a head already split, swells the head and
-//                bursts it (head-pop.ts) in place of the flying head (decapitationRule);
+// headShotRule decides which from the round, where the player was aiming, the head's state and the live tuning:
+//   the SPLIT    a PRECISE slug from close to medium range on a closed head opens it like the axe does (the head
+//                split, head-split.ts);
+//   the POP      a slug that takes the head off, or a slug from that range on a head already split wide, swells the
+//                head and bursts it (head-pop.ts) in place of the flying head (decapitationRule);
 //   the OPENING  the slug head burst of 2026-10-02 (spec docs/superpowers/specs/2026-10-02-slug-head-burst-design.md
 //                §4): entry and exit craters, a jelly stretch, a dent, shards. NOT THE SHIPPED BEHAVIOUR: it is
 //                kept behind burstTuning.opening, off.
-// Everything else is an ordinary wound: every pellet, an off-centre slug, any round with the rules switched off.
-// A shot is CENTRED by classifyBurst's offset: the perpendicular distance from the head's centre to the shot line, as
-// a fraction of the head's radius. Everything here is plain data in, plain data out: the leaves
-// (webgpu/game-head-shot.ts, webgpu/game-head-damage.ts) turn the verdicts into wounds, deform and gore.
+// Everything else is an ordinary wound: every pellet, an imprecise slug, a slug from too far, any round with the
+// rules switched off.
+// A slug is PRECISE by where the player AIMED, not by where the slug went: the crosshair's ray recorded at firing
+// (damage.ts ShotAim) passes within splitFrac head radii of the head's centre (aimOffsetOf). The slug itself leaves
+// from the muzzle, beside and under the eye, and lands about 10 cm under the crosshair: its own line (classifyBurst's
+// offset) says little about the aim. That older measure is still there, behind splitAim 'slug'.
+// Everything here is plain data in, plain data out: the leaves (webgpu/game-head-shot.ts, webgpu/game-head-damage.ts)
+// turn the verdicts into wounds, deform and gore.
 import { rotate } from './head-deform';
 import type { HeadFrame, Quat } from './head-deform';
 import { sdPrimitive } from './validate';
 import type { Primitive, Vec3 } from './types';
+import type { ShotAim } from './damage';
 
 export const BURST = {
   /** Offset (fraction of head radius) under which a slug SPLITS the head (the full opening); wider is a weak glancing graze.
@@ -43,7 +49,9 @@ export const BURST = {
 
 /** The shipped tuning (burstTuning starts as a copy; burstTune({ ...BURST_TUNING_DEFAULTS }) resets it).
  *  THE BEHAVIOUR BEFORE 2026-10-07 (every gun hit on the head made the opening) is
- *  burstTune({ opening: true, anyWeapon: true, alwaysSplit: true, slugSplit: false, slugPop: false, popOnSplit: false, headLip: 1 }). */
+ *  burstTune({ opening: true, anyWeapon: true, alwaysSplit: true, slugSplit: false, slugPop: false, popOnSplit: false, headLip: 1 }).
+ *  THE SLUG'S SPLIT AS IT WAS UNTIL 2026-10-08 (nearly every slug on a head split it, from any range, one half) is
+ *  burstTune({ splitAim: 'slug', splitFrac: 1.25, splitRangeM: 0, popPrecise: true }). */
 export const BURST_TUNING_DEFAULTS = {
   /** false: every round on a head is an ordinary wound and a decapitation an ordinary one (no split, pop or opening). */
   on: true,
@@ -56,15 +64,23 @@ export const BURST_TUNING_DEFAULTS = {
    *  The zombie-class bodies only, as the wet lip is (the soldier and the cloth-robed keep their own). */
   headLip: 0.3,
 
-  // ---- The slug split: a centred slug opens the head as the axe does.
-  /** false: a centred slug is an ordinary slug wound. */
+  // ---- The slug split: a precise slug from close to medium range opens the head as the axe does.
+  /** false: no slug splits a head. */
   slugSplit: true,
-  /** A slug is centred when its line passes within this many head radii of the head's centre. 1.25 takes every slug
-   *  that lands on the head: the slug leaves the muzzle low and right of the crosshair, and measured on the zombie an
-   *  aimed slug's line passes 0.89 to 1.03 radii from the centre with the crosshair on it (0.8 to 4 m; 1.17 at 6 m),
-   *  1.07 to 1.21 with the crosshair 2 cm lower on the face, and 0.53 to 0.68 with it 4 cm higher. Under about 1.05 an
-   *  aimed shot at the face would not split. */
-  splitFrac: 1.25,
+  /** WHAT PRECISION IS MEASURED ON. 'crosshair': the aim recorded at firing, i.e. how far the crosshair's ray passes
+   *  from the head's centre (a slug that carries no aim is never precise). 'slug': the slug's own line, the measure
+   *  before 2026-10-08 (then with splitFrac 1.25, because an aimed slug's line runs 0.89 to 1.03 radii under the
+   *  crosshair: nearly every slug on a head split it). */
+  splitAim: 'crosshair' as 'crosshair' | 'slug',
+  /** A slug is precise when that measure is under this many head radii. 0.3 of the zombie's 10.9 cm head radius is
+   *  3.3 cm: the crosshair on the bridge of the nose, between the eyes. On screen the zone is 0.3 of the head's own
+   *  radius at every range: a disc 23 pixels in radius at 1 m, 12 at 2 m, 6 at 4 m and 5 at 5 m, in the game's
+   *  800 x 600 picture (docs/dev-notes/2026-10-07-sculpt-skull-2/NOTES.md has the table). */
+  splitFrac: 0.3,
+  /** CLOSE TO MEDIUM RANGE: the head no farther than this from the eye at firing, metres, for the split and for the
+   *  pop of a split head. Past it a slug on a head is an ordinary slug wound, however well aimed. 0 or less: no
+   *  limit (and a slug that carries no aim, so no range, is then in range). */
+  splitRangeM: 5,
   /** How far the slug opens the head, as a share of the split preset's full angle (the axe's second chop is 1). */
   splitOpen: 1,
 
@@ -74,12 +90,15 @@ export const BURST_TUNING_DEFAULTS = {
   /** The swell before the burst, seconds. 0 bursts on the frame of the hit. The cultist's pop swells 0.12 to 0.2 s
    *  (head-pop.ts SWELL_SEC); 0.12 s is seven frames at 60 fps and three or four at 30. */
   popSwellS: 0.12,
-  /** A centred slug on a head that is already split WIDE pops it. false: an ordinary wound on the open head. */
+  /** A slug on a head that is already split WIDE pops it. false: an ordinary wound on the open head. */
   popOnSplit: true,
-  /** How wide: the split's opening as a share of its preset's full angle, at or past which the centred slug pops the
-   *  head. The slug's own split opens to 1 and the axe's first chop to 0.8; a head only cracked (under this) takes
-   *  the slug as an ordinary wound on its un-warped flesh. */
+  /** How wide: the split's opening as a share of its preset's full angle, at or past which the slug pops the head.
+   *  The slug's own split opens to 1 and the axe's first chop to 0.8; a head only cracked (under this) takes the
+   *  slug as an ordinary wound on its un-warped flesh. */
   popSplitMin: 0.5,
+  /** false: any slug that lands on the open head from within splitRangeM pops it (a head split wide is a wide-open
+   *  target). true: the slug must also be precise, as the split's is (splitFrac, by splitAim). */
+  popPrecise: false,
 
   // ---- The opening (the slug head burst of 2026-10-02). Not the shipped behaviour: everything below acts only
   // ---- while `opening` is on, and then the opening takes the round before the split is asked.
@@ -119,8 +138,13 @@ export type HeadShotRule = 'ordinary' | 'split' | 'pop' | 'opening';
 /** A gun round that landed on a live zombie head. */
 export interface HeadShot {
   kind: 'pellet' | 'slug';
-  /** classifyBurst's offset of the shot line: head radii from the head's centre. */
+  /** classifyBurst's offset of the round's own line: head radii from the head's centre. */
   offset: number;
+  /** aimOffsetOf: how far the crosshair's ray, recorded at firing, passes from the head's centre, in head radii.
+   *  Null: the round carries no aim (a pellet; a slug no crosshair fired). */
+  aimOffset: number | null;
+  /** aimRangeOf: metres from the eye at firing to the head's centre. Null with no aim. */
+  rangeM: number | null;
   /** The head is split open (game-head-split.ts isOpen), and how far: its target angle as a share of its preset's
    *  full angle (0 on a closed head). */
   splitOpen: boolean;
@@ -129,21 +153,38 @@ export interface HeadShot {
   splitRefused: boolean;
 }
 
+/** THE SLUG IS PRECISE: the tuning's measure (splitAim) is under splitFrac. Under 'crosshair' a slug with no
+ *  recorded aim is not. */
+export function preciseSlug(shot: HeadShot, t: Readonly<typeof BURST_TUNING_DEFAULTS> = burstTuning): boolean {
+  if (shot.kind !== 'slug') return false;
+  const measure = t.splitAim === 'slug' ? shot.offset : shot.aimOffset;
+  return measure !== null && measure < t.splitFrac;
+}
+
+/** THE HEAD IS IN RANGE of the split and of the split head's pop: within splitRangeM of the eye at firing. A round
+ *  with no recorded range is out of range, unless the limit is off (splitRangeM 0 or less). */
+export function inSplitRange(shot: HeadShot, t: Readonly<typeof BURST_TUNING_DEFAULTS> = burstTuning): boolean {
+  return t.splitRangeM <= 0 || (shot.rangeM !== null && shot.rangeM <= t.splitRangeM);
+}
+
 /** THE RULE for one round on a head, in this order:
  *    switched off (`on`)                         ordinary;
- *    the head is split open                      a centred slug pops it when it is split wide (popOnSplit, at or
- *                                                past popSplitMin of its angle); anything else is ordinary (the
- *                                                opening never touches an open head);
+ *    the head is split open                      a slug from within range pops it when it is split wide (popOnSplit,
+ *                                                at or past popSplitMin of its angle; precise as well, if
+ *                                                popPrecise asks); anything else is ordinary (the opening never
+ *                                                touches an open head);
  *    the opening is on                           it takes every slug, and every pellet with anyWeapon;
- *    a centred slug, the split on and not refused   the split;
- *    anything else                               ordinary.
+ *    a precise slug from within range, the split on and not refused   the split;
+ *    anything else                               ordinary: a pellet, an imprecise slug, a slug from too far.
  *  An ordinary slug wound may still take the head off: that is decapitationRule's. */
 export function headShotRule(shot: HeadShot, t: Readonly<typeof BURST_TUNING_DEFAULTS> = burstTuning): HeadShotRule {
   if (!t.on) return 'ordinary';
-  const centred = shot.kind === 'slug' && shot.offset < t.splitFrac;
-  if (shot.splitOpen) return centred && t.popOnSplit && shot.splitShare >= t.popSplitMin ? 'pop' : 'ordinary';
-  if (t.opening && (shot.kind === 'slug' || t.anyWeapon)) return 'opening';
-  if (centred && t.slugSplit && !shot.splitRefused) return 'split';
+  const slug = shot.kind === 'slug', near = inSplitRange(shot, t);
+  if (shot.splitOpen) {
+    return slug && near && t.popOnSplit && shot.splitShare >= t.popSplitMin && (!t.popPrecise || preciseSlug(shot, t)) ? 'pop' : 'ordinary';
+  }
+  if (t.opening && (slug || t.anyWeapon)) return 'opening';
+  if (preciseSlug(shot, t) && near && t.slugSplit && !shot.splitRefused) return 'split';
   return 'ordinary';
 }
 
@@ -205,6 +246,38 @@ export function onHeadPrim(prims: readonly Primitive[], p: Vec3): boolean {
     if (q.limb === 'head') head = Math.min(head, d); else other = Math.min(other, d);
   }
   return head <= other && head < 0.03;
+}
+
+/** THE AIM'S OFFSET: the distance from the head's centre to the crosshair's ray (the nearest point of the ray, which
+ *  starts at the eye: a head behind the eye is measured to the eye), as a fraction of the head's radius. classifyBurst
+ *  measures the same thing on the round's own line. */
+export function aimOffsetOf(aim: ShotAim, frame: HeadFrame): number {
+  return len(sub(aimPointOf(aim, frame), frame.centre)) / headRadius(frame.axes);
+}
+
+/** The point of the crosshair's ray nearest the head's centre (world). */
+export function aimPointOf(aim: ShotAim, frame: HeadFrame): Vec3 {
+  const dir = unit(aim.dir);
+  return add(aim.eye, scale(dir, Math.max(0, dot(sub(frame.centre, aim.eye), dir))));
+}
+
+/** THE SHOT'S RANGE: metres from the eye at firing to the head's centre. */
+export function aimRangeOf(aim: ShotAim, frame: HeadFrame): number {
+  return len(sub(frame.centre, aim.eye));
+}
+
+/** WHERE THE SLUG'S SPLIT IS LAID (world): the point the head split takes as the blow's impact, from which it picks
+ *  how the head opens (head-split.ts choosePreset: for a blow from the front, both halves when the point is within
+ *  15% of the head's half-width of its middle line, one half through the point when it is farther to a side).
+ *  Judged on the crosshair, a precise slug is on the middle line by its aim (the crosshair is within splitFrac of
+ *  the centre), wherever the slug itself landed: the point is the impact moved onto the head's middle plane (its
+ *  head-local x made 0), so a precise slug from the front always parts the head left and right, both halves. Its
+ *  height and depth stay the impact's: a slug from the side takes the face off where it landed, as before.
+ *  Judged on the slug's own line (`mode` 'slug'), the point is the impact, as it was. */
+export function slugSplitPoint(mode: 'crosshair' | 'slug', impact: Vec3, frame: HeadFrame): Vec3 {
+  if (mode === 'slug') return [impact[0], impact[1], impact[2]];
+  const l = rotate(conj(frame.quat), sub(impact, frame.centre));
+  return add(frame.centre, rotate(frame.quat, [0, l[1], l[2]]));
 }
 
 /** The far intersection of the shot line with the head ellipsoid; centre + dir · radius when the line misses. */
