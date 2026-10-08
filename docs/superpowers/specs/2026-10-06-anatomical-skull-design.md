@@ -1,6 +1,15 @@
 # Anatomical humanoid skull
 
-**Status, 2026-10-07: opt-in.** This skull was the forward mesh default from 2026-10-06 to 2026-10-07. After
+**Status, 2026-10-07 (later the same day): the skull of eight humanoids by default.** The cultist, the cowled
+cultist, the bride, the female, the three schoolgirls and the bonewalker have no skull-shaped head bone, and draw
+this skull on every page, each fitted to its own flesh (`skeleton-spike/skull-cast.ts`), with the eyes seated in the
+fitted orbits. The zombie, the soldier, the juggernaut and the two clowns draw their sculpted bone, as the next
+paragraph says. The asset is therefore loaded by every page but `?skull=sculpt` and `?sculpt=` ones; if it does not
+load, the boot goes on and every character draws its sculpted bone. `?skull=anatomical` still puts this skull on
+every humanoid, under the envelope fit this spec describes.
+[Notes, the per-character table and the sheet](../../dev-notes/2026-10-07-sculpt-skull-2/NOTES.md).
+
+**Status, 2026-10-07: opt-in for the other five.** This skull was the forward mesh default from 2026-10-06 to 2026-10-07. After
 playtesting it against the sculpted skull the owner chose the sculpted one, in its variant `full`, as the default: it
 fills the head and reads better in play. The anatomical skull is drawn with `?skull=anatomical`, and its asset is
 loaded only then. Everything below holds for a page that asks for it; "the forward mesh default" and "retain

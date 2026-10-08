@@ -3,6 +3,13 @@
 Branch `claude/anatomical-skull-fit`, on top of `claude/split-anatomical-skull`. The default is unchanged; everything
 here is behind the dev URL parameter `?skullfit=`.
 
+**Since (2026-10-07, merged into `claude/sculpt-skull-2`):** the sculpted skull is the game's default, and this fit is
+what the eight humanoids with no skull-shaped head bone draw by default: `snug`, fitted to the skin and held on the
+painted eyes' line, per character. `?skullfit=<name>` still gives a named fit, to whoever draws the anatomical skull
+(the eight by default, every humanoid under `?skull=anatomical`); it is read by `resolveSkull` now, and the fit runs
+at spawn. The eyes of a skull fitted to the flesh are seated in its own orbits. This file is as it was written:
+[the per-character table and what changed](../2026-10-07-sculpt-skull-2/NOTES.md).
+
 ## The complaint
 
 The game draws each humanoid's skull as a mesh under the flesh: one anatomical skull of fourteen plates

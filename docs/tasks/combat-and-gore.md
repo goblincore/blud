@@ -55,9 +55,17 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
     `?skullfit=affine|mid|snug|tight`; with no parameter the skull is byte for byte what it was. For the owner: which
     fit ships, and whether per character (the female and the soldier read worse under the tighter ones).
     [Notes, tables for all thirteen humanoids and look sheets](../dev-notes/2026-10-07-anatomical-skull-fit/NOTES.md).
+  - **The eight ball-headed humanoids draw a fitted anatomical skull (2026-10-07, branch `claude/sculpt-skull-2`):**
+    the cultist, the cowled cultist, the bride, the female, the three schoolgirls and the bonewalker draw the 14
+    plates by default, each under its own fit (`skeleton-spike/skull-cast.ts`: `snug`, to the skin, the orbits held
+    on the painted eyes' line), with the eyes seated in the fitted orbits; the fit runs at spawn and the page loads
+    the asset. For the owner: the schoolgirls' cartoon faces sit 2 to 7 cm under the skull's orbits; the bride's
+    flesh is not drawn when spawned; `schoolgirl-alt` cannot be spawned.
+    [Notes, the table and the sheet](../dev-notes/2026-10-07-sculpt-skull-2/NOTES.md).
   - **Gates (as of 2026-10-07):** `scripts/head-split-gate.mjs` (111 checks), `scripts/axe-gate.mjs` (29),
-    `scripts/cut-wound-gate.mjs` (33), `scripts/head-burst-gate.mjs` (80). Each boot checks the skull it draws; the
-    checks about the plates run on boots that ask for `?skull=anatomical`.
+    `scripts/cut-wound-gate.mjs` (33), `scripts/head-burst-gate.mjs` (103). Each boot checks the skull it draws; the
+    checks about the plates run on boots that ask for `?skull=anatomical`, and on a `?spawn=cultist` boot of the
+    default page for a fitted skull.
 
   [Spec](../../docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 9: the axe as built; section 10:
   the head split as built) · plans [A](../../docs/superpowers/plans/2026-10-04-axe-part-a.md) and

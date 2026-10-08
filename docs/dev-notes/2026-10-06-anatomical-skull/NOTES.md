@@ -1,5 +1,10 @@
 # Anatomical skull — 2026-10-06
 
+**The skull of eight humanoids by default since 2026-10-07 (later the same day).** The cultist, the cowled cultist,
+the bride, the female, the three schoolgirls and the bonewalker draw this skull on every page, each fitted to its
+own flesh, because their sculpted head bones are a few balls; the page loads its asset for them. The other five
+humanoids draw it only with `?skull=anatomical`, as the next paragraph says.
+
 **Opt-in since 2026-10-07.** The owner playtested this skull against the sculpted one and chose the sculpted skull
 as the game's default: it fills the head and reads better at the game's resolution, where this one is small in the
 zombie's head (56% of the sculpted skull's box volume) and harder to read. This skull is drawn with

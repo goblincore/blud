@@ -4,11 +4,235 @@ The game draws each humanoid's skull as a mesh under the SDF flesh; it shows whe
 There are two skulls. The **sculpted** one is the character's own bone field, carved and painted. The **anatomical**
 one is a modelled skull of 14 plates.
 
-This file has four parts, newest first:
+This file has five parts, newest first:
+[the eight ball-headed humanoids draw a fitted anatomical skull](#the-eight-ball-headed-humanoids-draw-a-fitted-anatomical-skull-2026-10-07),
 [the slug's split needs a precise aim](#the-slugs-split-is-a-reward-for-a-precise-shot-at-close-to-medium-range-2026-10-07-second-playtest),
-then the decision that made the sculpted skull the default (below it), then
+then the decision that made the sculpted skull the default (below them), then
 [the variants the owner chose from](#the-sculpted-skull-second-pass-variants-to-choose-from-2026-10-07), then
 [the gun and the zombie's head](#the-gun-and-the-zombies-head-2026-10-07-after-the-owners-playtest-of-sculptfull).
+
+---
+
+# The eight ball-headed humanoids draw a fitted anatomical skull (2026-10-07)
+
+When the sculpted skull became the default, eight of the thirteen humanoids were left showing balls: their head
+bones were authored as a ball over a jaw ball, or a column of beads, 48 to 112 mm wide, for the SDF bone tubes
+(the part below, "The characters that are not carved"). The owner: "for now the other ones can use the anatomical
+skull as long as they are properly filled."
+
+They now do. The sheet: [`look/ball-heads-anatomical.jpg`](look/ball-heads-anatomical.jpg). Left, before
+(`?skull=sculpt`: every character's sculpted bone). Right, after (no skull parameter). For each: the bare bone from
+the front and from three-quarter, the flesh drawn half see-through over the bone, and the face shot away with one
+real pellet volley from 2 m, as the game ships, from 1.5 m at the player's eye height.
+
+## What a page draws now
+
+`resolveSkull` (`skeleton-spike/sculpt-variant.ts`) still decides, and now character by character. Its answer names
+who draws the anatomical skull and under which fit; `skeleton-spike/sculpt-cache.ts` builds the kit with that plan.
+
+| The page's query | The zombie, the soldier | The juggernaut, the two clowns | The eight |
+| --- | --- | --- | --- |
+| no skull parameter | sculpted, `full` | sculpted bone, second paint | **anatomical, each under its own fit** |
+| `?skull=sculpt` | sculpted, `full` | the same | sculpted bone: the balls (the comparison) |
+| `?sculpt=<variant>` | sculpted, that variant | sculpted bone | sculpted bone |
+| `?skull=anatomical` | anatomical, the envelope fit | anatomical, the envelope fit | anatomical, the envelope fit: as it was |
+| `?skullfit=<name>` added | (no change unless `?skull=anatomical`) | (the same) | anatomical under that named fit, plain |
+
+- The eight: cultist, cultist-cowled, bride, female, schoolgirl, schoolgirl-alt, schoolgirl-described, bonewalker.
+- `?skull=anatomical` is what it was: every humanoid on the plates under the envelope fit (fixed fractions of the
+  bone envelope), with the eyes where the sculpted skull seats them. `?skull=anatomical&skullfit=snug` fits every
+  humanoid to its flesh.
+- `?skullfit=` takes `envelope`, `affine`, `mid`, `snug` or `tight` (the fits of
+  [the fit's notes](../2026-10-07-anatomical-skull-fit/NOTES.md)). It gives the named fit as it is, without a
+  character's own values. Where nobody draws the plates it is passed over, and the console says so in a dev build.
+- `__sdfGame.skeletonDiagnostics()` reports `skull` (the page's: `'anatomical'` only when every humanoid draws the
+  plates), `anatomical` (who draws them, with the fit's name), `skullFits` (every skull fitted since boot and what
+  it cost) and `skullAssetMs`. `__sdfGame.skullFit(id)` gives one actor's fit, its box, the head it was sized to,
+  its orbits and eye seats. `__sdfGame.meshEyes(id)` gives the eyes as drawn.
+
+## The fit of each: "properly filled"
+
+The table in the code is `skeleton-spike/skull-cast.ts` `BALL_HEADS`; `skull-cast.test.ts` makes each fit again on
+the shipped asset and the character's own body and holds these numbers.
+
+All eight are `snug` (both stages of the fit to the flesh: sized and placed, then pulled in where it would come
+within 6 mm of the skin), with two things the named fit does not have:
+
+- **The orbits are held on an eye line of the face**, not on the one read off the bone envelope. The bone says
+  nothing of where these faces are: the female's envelope reaches up into her bun, and under plain `snug` her skull
+  sat 47 mm high and dented her forehead; the cultists' ember eyes are 28 mm over their bone's line. The eye line is
+  the painted eyes' height in the face sheet's own frame (`eyeHs`): for a face sheet, the eyes' row in the image put
+  through the sheet's projection; for the cultists, whose eyes are prims, the ember prims' height.
+- **It is fitted to the skin** (`skin`): the head's flesh without its painted prims. Three of these heads have hair
+  modelled as ordinary prims (the schoolgirl's bob, the female's bun and cap), and the fit took it for head.
+
+| Character | Sculpted bone (before) | Fitted skull, wide x tall x deep | Share of the head, wide / deep | Least flesh over it | Orbits against the painted eyes | Eye radius | Fit, in the browser |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| cultist | 78 mm wide: two balls | 137 x 206 x 190 mm | 0.85 / 0.81 | 6.1 mm | level (0.9 mm under) | 18.4 mm | 74 to 105 ms |
+| cultist-cowled | 78 mm: two balls | 138 x 202 x 188 mm | 0.85 / 0.796 | 6.1 mm | level (0.8 mm under) | 18.3 mm | 69 ms |
+| bride | 112 mm: an egg and a nub | 128 x 204 x 164 mm | 0.90 / 0.90 | 6.5 mm | level (1.1 mm under) | 18.0 mm | 63 ms |
+| female | 52 mm: six beads | 103 x 140 x 125 mm | 0.82 / 0.83 | 6.1 mm | level (1.0 mm under) | 13.1 mm | 57 ms |
+| schoolgirl | 72 mm: a lump and beads | 126 x 168 x 156 mm | 0.85 / 0.83 | 6.3 mm | **66 mm over them** | 15.5 mm | 46 ms |
+| schoolgirl-alt | 66 mm: the same | 114 x 152 x 139 mm | 0.83 / 0.82 | 6.1 mm | **49 mm over them** | 13.9 mm | 42 ms (Node; she cannot be spawned) |
+| schoolgirl-described | 56 mm: three beads | 110 x 147 x 137 mm | 0.81 / **0.75** | 6.3 mm | **21 mm over them** | 14.9 mm | 45 ms |
+| bonewalker | 48 mm: two beads | 92 x 141 x 135 mm | **0.75 / 0.68** | 6.0 mm | level (0.9 mm under) | 13.3 mm | 53 ms |
+
+"Share of the head" is the skull's box over the skin head as the fit measures it through its deepest point. Under
+the envelope fit, which is what these characters drew while the anatomical skull was the default, the same skulls
+were 63, 63, 109, 43, 58, 54, 47 and 39 mm wide.
+
+Where a number is short of what was asked (0.8 of the head each way, orbits level with the painted eyes):
+
+- **The three schoolgirls' orbits are not on their painted eyes, and cannot be.** Theirs is a cartoon's face, small
+  and low on a tall head: the painted eyes are 25 mm (schoolgirl) to 60 mm over the bottom of the chin, under
+  200 mm of cranium, and a human skull has its orbits at mid height. Held on those eyes the skull is 47 mm wide on
+  the schoolgirl and 76 mm on the described one, a quarter to a half of the head. So each is held at the lowest eye
+  line where it still fills 0.8 of the head's width, and the orbits stand over the painted eyes by what the table
+  says. The described one gives up depth for it (0.75).
+- **The cowled cultist is 0.796 deep**, a hair under 0.8: his head is 236 mm deep under the cowl.
+- **The bonewalker is 0.75 wide and 0.68 deep.** His head is 122 mm wide and 198 mm deep, with a muzzle, and his
+  eyes are high under the horns. At that eye line the temples bound the width, and a skull's proportions (no axis
+  scaled more than 1.15 times another) keep it from reaching down the muzzle. `tight` (3 mm of cover) would give
+  0.79 / 0.72.
+- `tight` was not taken for anyone: it fills 3 to 6 points more and leaves 3 mm of cover over broad parts of the
+  cranium.
+
+The fit never shrank the skull after its passes, turned nothing inside out (least local volume 0.45 to 0.70 of the
+original), and moved no vertex more than 17.3 mm (the cultist; 5.8 to 14.4 on the others).
+
+## The eyes
+
+On a skull fitted to the flesh the eyes are seated in the fitted skull's own orbits and sized from them: 1.13 times
+the mean radius of its two orbits (`skull-orbits.ts` `ORBIT_EYE_SIZE`: the zombie's 19.1 mm eye in its 16.9 mm
+anatomical orbits, where the seats were tuned). The orbits are found on the plates as fitted, by rasterising them
+from the front and taking the two largest closed basins, so they follow whatever the fit did to the skull. The
+seated eyes, a split head's copies and the ejected eyes all come from the one answer (`mesh-renderer.ts`
+`eyeSeats`).
+
+The zombie's and the soldier's seats did not change: they draw the sculpted skull, and its seats are
+`mesh-eyes.ts`'s as before (the pins hold, and the head-split gate predicts their eyes from those seats, unchanged).
+A head on the ENVELOPE fit also keeps the sculpted skull's seats: `?skull=anatomical` is as it was, eyes included.
+
+**This was ported, not written here.** Another session built the orbit seats on the anatomical skull's branch and
+closed with the work uncommitted in its worktree (`.claude/worktrees/epic-goodall-fcf8af`, branch
+`claude/anatomical-eye-seats`, cut from `3e9ae1de`). Taken from it by hand: `skull-orbits.ts` and its test (as they
+were, plus the eye's size from the orbit), the renderer's single `eyeSeats`, `FittedSkull.orbits` and `eyes`, the
+seam `__sdfGame.meshEyes(id)` and its test, and `anatomical-eyes.test.ts` (rewritten for the fits of this branch).
+What differs from that work: there the orbit seats replaced the sculpted seats on EVERY anatomical head, the
+envelope fit's included, and the eye kept the radius the bone's box gave it. Not taken: its capture gate
+(`scripts/anatomical-eyes-gate.mjs`, 67 checks; the checks it made that matter here are made on the cultist in the
+head-burst gate), and its refusal to load an asset whose front view does not hold two orbits.
+
+## When the fit runs, and what the plates cost
+
+- **The fit runs when a character's skeleton sources are built**: at spawn, and again for a body a sever re-derived
+  (`game-skeleton-actors.ts` `buildSkeletonSources`). It is made once per head revision and kept, so the second
+  cultist of a level costs nothing. Before, a fitted skull was made in the frame its bone first showed. In the
+  browser the fits took 45 to 105 ms each (the table; the cultist's read 74, 76, 100 and 105 ms over four boots).
+- **The plates' asset is loaded by every page on which somebody may draw it**, which by default is now every page
+  (`anatomical-skull.glb`, 1.3 MB). Before, only `?skull=anatomical` asked for it. `?skull=sculpt` and `?sculpt=`
+  pages still do not. The boot waits for it: 26 ms on the head-burst gate's cultist boot, from the local dev server (request, parse and
+  the kit's making). On a real network that is the time of a 1.3 MB download added to every boot.
+- **If it does not load, the boot goes on.** A failed request, a bad asset, or no answer in 8 s
+  (`SKULL_ASSET_WAIT_MS`): every character draws its sculpted bone (the eight show their balls), and the console
+  says so once, in any build. Tested with a loader that fails and one that never answers; not tried by blocking the
+  request in a browser.
+
+## Shots and the pop
+
+Checked on a cultist in the head-burst gate (its new boot, `?spawn=cultist`): real pellet volleys at his face broke
+the frontal plate off the fitted skull on the second volley, thrown as a plate; his head's pop released all
+fourteen plates; and the sculpted skull's fragment cut never ran for him. (`fractureSkull` and `explodeSkull` ask
+the kit per head, so a character either has plates or has the sculpted fragments.)
+
+## What still looks wrong, plainly
+
+Judged on the sheet's tiles and on larger crops of them.
+
+- **The schoolgirl and the described schoolgirl.** The skull's face is too high in the head: on the schoolgirl its
+  orbits are at her fringe and its teeth are behind her painted eyes; on the described one the orbits are at her
+  brows. With the face shot away a skull shows in the head, the right size for the head and in the wrong place for
+  the face. It is better than two beads and it is not right. Her painted face is itself laid low on the head (the
+  sheet's mouth falls off her chin), which is the character's, not the skull's.
+- **schoolgirl-alt was not seen at all.** She cannot be spawned (`createZombieActor` throws "no motion joints").
+  Her fit is made and held by the test; nobody has looked at it.
+- **The bride was judged on numbers and bare bone only.** Her flesh is not drawn when she is spawned with
+  `?spawn=bride` (it was not before this work either; the fit's notes found the same). Her "flesh half see-through"
+  and "face shot away" tiles are bone alone.
+- **The bonewalker's skull is small between his horns** and ends above the big teeth of his painted face. In play
+  his head is 1.20 m up and seen from above; the shipped tiles show the top of his cranium.
+- **The female's skull is small against her whole head**, hair included (103 mm in a head 127 mm wide at the hair),
+  and right against her face: orbits on her eyes, jaw at her chin, no dent.
+- **The cultists read right**: the skull fills the hood's head and the embers sit in the orbits.
+- **Hair is meat.** Hair modelled as prims is flesh to the wound system. The skull stays out of it now, so a shot
+  through the schoolgirl's bob goes through 2 to 5 cm of red before bone.
+- The eyes of every fitted skull are the same rose ball the sculpted skulls have, 13 to 18 mm in radius.
+
+## The gates
+
+| Gate | Before this part | Now | What changed |
+| --- | --- | --- | --- |
+| `scripts/head-burst-gate.mjs` | 90 checks, 0 failed | 103, 0 failed | A sixth boot, `?spawn=cultist`, with 13 checks (CU). Nothing else. |
+| `scripts/head-split-gate.mjs` | 111, 0 failed | 111, 0 failed | Not edited. |
+| `scripts/axe-gate.mjs` | 29, 0 failed | 29, 0 failed | Not edited. |
+| `scripts/cut-wound-gate.mjs` | 33, 0 failed | 33, 0 failed | Not edited. |
+
+CU's checks: the page lists the eight (and nobody else) as drawing the plates, the cultist under his fit; his skull
+was fitted once, as the cast was spawned; the asset was loaded inside the boot's wait; the fit is `snug`, to the
+skin, on his ember eyes' line; its box fills 0.848 of his head across and 0.808 front to back (the table's 0.85
+and 0.81, both 0.8 or more); the orbits are 0.88 mm from the embers' line (within 2 mm); the head is drawn on the
+plates' material; the two eyes are drawn at the fitted skull's own seats, inside their orbits and sized from them;
+pellets break a plate off; the head stays on; the pop releases fourteen plates; every fragment is a plate and no
+sculpted fragment was cut.
+
+No gate expectation changed in this part. Unit tests whose expectation changed, each because the default page now
+draws the plates on the eight:
+
+| Test | Old | New |
+| --- | --- | --- |
+| `sculpt-renderer.test.ts`, the page's cache for no skull parameter | no kit | the kit (the plates are loaded); `?skull=sculpt` has none |
+| the same file, "the plates are not loaded unless the page asks" | 0 loads for `''`, `?skull=nonsense` | 1 load each; 0 for `?skull=sculpt` and every `?sculpt=` |
+| the same file, the failed load | one line, for `?skull=anatomical` | one line for any page that would draw the plates, said in any build |
+| `sculpt-variant.test.ts`, whole-choice comparisons | the choice is `{ skull, variant, recipe, notes }` | the same four compared, and `anatomical` (who draws the plates) tested on its own for every combination |
+| `anatomical-skull-fit.test.ts`, `?skullfit=` | read by `skullFitOf`, an unknown value warned on the console | read by `resolveSkull`, an unknown value is one of its notes |
+
+The zombie's and the soldier's default pins (`sculpt-default-pin.test.ts`) did not move, and are now also checked on
+the default page's cache with the plates loaded: the kit fits nothing for either.
+
+Also run on the final code: `npx tsc --noEmit` (no error), `npx vitest run src/lab/sdf-zombie/webgpu/skeleton-spike`
+(29 files, 761 tests) and `npm run test:changed` (58 files, 1,324 tests, 1 skipped).
+
+## Not verified
+
+- **Night Train, and live play.** The cultist is the one of the eight a level spawns; he was looked at on the ring
+  page with `?spawn=cultist`, frozen. No level was booted with the new default.
+- Frame time. A cultist's exposed skull is 9,947 triangles where his two balls were 972.
+- A fitted skull when the head turns: the fit is made against the flesh at rest (the head's own rigid flesh, so it
+  should hold; not measured in a posed head).
+- `?skullfit=<name>` on a real page for the eight (the resolver and the kit are unit tested; the page was not booted
+  with it).
+- The asset failing in a browser.
+- The eight under the head split: only the plain zombie splits.
+
+## Code
+
+| File | What |
+| --- | --- |
+| `skeleton-spike/skull-cast.ts` | The eight, each with its fit and what it measures. |
+| `skeleton-spike/sculpt-variant.ts` | `resolveSkull`: who draws the plates, under which fit; `?skullfit=`. |
+| `skeleton-spike/sculpt-cache.ts` | Loads the kit with the plan; the wait; the fallback. |
+| `skeleton-spike/anatomical-skull.ts` | The kit fits by plan; a skull fitted to the flesh carries its orbits and eye seats. |
+| `skeleton-spike/skull-fit.ts`, `head-flesh.ts` | The fit (merged from `claude/anatomical-skull-fit`); a character's own values (`SkullFitSpec`); the skin; the face sheet's frame. |
+| `skeleton-spike/skull-orbits.ts` | The orbits and the eye seats (ported). |
+| `game-skeleton-actors.ts` | The fit is made as the sources are built. |
+| `scripts/ball-heads-look.mjs`, `scripts/ball-heads-sheet.py` | The sheet. |
+
+To remake the sheet (own servers, headless):
+
+```
+node scripts/ball-heads-look.mjs <vite port> <cdp port> <frames dir>
+python3 scripts/ball-heads-sheet.py <frames dir> docs/dev-notes/2026-10-07-sculpt-skull-2/look/ball-heads-anatomical.jpg
+```
 
 ---
 
@@ -285,7 +509,9 @@ Said plainly:
 
 What would fix the eight, for the owner to choose: give them the anatomical skull per character (the page would
 load its asset whenever one of them is in the cast); or author a skull-sized head bone for each and carve it, the
-cultist first. Neither is done here.
+cultist first. Neither is done here. (Done since: the owner chose the first, and the eight draw a fitted anatomical
+skull: the first part of this file. This part's table of what a page draws is as it was written; the first part's
+replaces it.)
 
 The photographs are level with each head. The game holds the player's eye 1.62 m up, so the clown (head 0.77 m up)
 and the bonewalker (1.20 m) are only ever seen from above in play. For these frames the capture lowers the page's
