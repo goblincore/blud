@@ -12,7 +12,21 @@ Tests, harnesses, the game-main decomposition, tooling, process notes. Part of t
 - [x] **Text-pin audit:** 834 assertions on source text in 38 files; 488 deleted (94 `it` blocks), 120 kept.
   [Notes](../dev-notes/2026-10-07-text-pin-audit/README.md)
 - [ ] Convert the 209 pins judged convertible (goo-layer and earlyz seed-pass are 140 of them).
-- [ ] `zombie-gpu-burn.test.ts` key-order block: does three r186 bind `wgslFn` object parameters by name or position?
+- [x] **`zombie-gpu-burn.test.ts` key-order block — settled: BY NAME (2026-10-08).** The installed three (0.186.0)
+  binds a `wgslFn(...)({...})` OBJECT argument by parameter name, so the object's key ORDER cannot misbind; only the
+  ARRAY form (`fn(a, b)` — `FunctionCallNode.js:179-181` sends two+ args or a lone Node to `nodeArray`) is positional.
+  Rests on: `node_modules/three/src/nodes/code/FunctionCallNode.js:149-151` (object branch resolves every input via
+  `parameters[inputNode.name]`; a missing key at :159 logs a console error and binds `float(0)`), :121-143 (array
+  branch pairs `parameters[i]` with `inputs[i]` by index), and
+  `node_modules/three/src/renderers/webgpu/nodes/WGSLNodeFunction.js:91` (the `inputs` the loop drives come from the
+  signature's name-type pairs in declaration order, never from the object's key order). Proven GPU-free in
+  `wgslfn-binding.test.ts` (4 tests, real NodeBuilder + WGSLNodeParser: reverse-order keys emit `probe( 1.0, 2.0 )`, an
+  array emits `probe( 9.0, 5.0 )`, a missing key emits `probe( 1.0, 0.0 )` + console error, a stray key is ignored).
+  Done: `zombie-gpu.ts` comments corrected (the KEYS BIND BY NAME note replaces ORDER MATTERS; the 2026-09-01 beam
+  "order" fix is marked as not-the-mechanism — 0.185.1 binds by name too), the key-order block in
+  `zombie-gpu-burn.test.ts` deleted, its `lightList:` presence pin folded into the kept key-presence block. NOT done:
+  `march/body/params.wgsl.ts` still says "bound POSITIONALLY" in signature comments — that text is inside
+  `MARCH_BODY_PARAMS` and guarded by the never-update march-hash golden, so it needs its own reviewed change.
 - [ ] CI shards are uneven: the shard with `cut-wound.test.ts` (331 s) ran 6 to 10+ minutes against 3 for the others.
 
 ## Agent navigability — module index and content names (2026-10-07)
