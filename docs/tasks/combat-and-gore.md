@@ -111,7 +111,7 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
   would hang over the stump. Tune live: `__sdfGame.head.burstTune({ headLip, slugSplit, splitAim, splitFrac,
   splitRangeM, splitOpen, slugPop, popSwellS, popOnSplit, popPrecise })`.
   [Notes, measurements, the precision table and the before/after sheet](../../docs/dev-notes/2026-10-07-sculpt-skull-2/NOTES.md) ·
-  gate `scripts/head-burst-gate.mjs` (90 checks). Open for the owner: the shot is judged against where the head is
+  gate `scripts/head-burst-gate.mjs` (103 checks). Open for the owner: the shot is judged against where the head is
   when the slug arrives, so a crossing zombie has to be led and the split may be rare in live play (`splitFrac` is
   the knob); and a zombie usually dies of slugs before one cuts its neck, so that pop is rare.
 - [ ] **Spike (separate, not started): shader-side burst/peel displacement field** (approach C of the same spec) for
