@@ -19,6 +19,7 @@ import {
   GOO_TUNING, GOO_SURFACE_WGSL, GOO_ALPHA_WGSL, GOO_BLUR_WGSL,
   GOO_DENSITY_BLUE_IS_GUT_MASK,
 } from './goo-layer';
+import { gooLayerFixture } from './goo-layer-test-support';
 
 /** The reserved words WGSL reserves even without implementing (spec appendix). */
 const RESERVED_WORDS = [
@@ -103,30 +104,79 @@ describe('goo blur WGSL (X1.21.1: grapes→sheets)', () => {
   });
 });
 
-describe('goo blur wiring (source tripwires)', () => {
-  // render() needs a live WebGPURenderer, so the bypass path is pinned as
-  // text guards on the module source — the same discipline the WGSL tests
-  // apply to strings that cannot execute in CI. Cwd-relative (vitest runs
-  // from the repo root; import.meta.url is not a file URL under happy-dom).
-  const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
-
+describe('goo blur wiring (live layer on a stub renderer)', () => {
+  // The audit's finding: render() no longer needs a live WebGPURenderer —
+  // these run the real layer over the recording stub in
+  // goo-layer-test-support.ts and assert what it DID.
   it('bypasses both blur passes entirely at blurPx = 0', () => {
-    // One hoisted gate, three consequences: the two blur renders and the
-    // surface's choice of blurred-vs-raw texture. No degenerate copy pass.
-    expect(src).toContain('const blurred = uBlurPx.value > 0');
-    expect(src).toContain('if (blurred && passGate.blur) {');
-    expect(src).toContain("surfMats[mode][blurred ? 'blur' : 'raw']");
-    expect(src).toContain('void renderer.render(blurH.scene, quadCam)');
-    expect(src).toContain('void renderer.render(blurV.scene, quadCam)');
+    const f = gooLayerFixture();
+    f.render();
+    // With the default blurPx > 0 the chain is density -> blurH -> blurV ->
+    // composite: two intermediate targets between the density target and
+    // the canvas, and the composite draws the BLURRED material.
+    const drawn = f.log.drawnTargets();
+    expect(drawn).toHaveLength(4);
+    expect(drawn[0]).toBe(f.layer.debugTargets.density);
+    expect(drawn[1]).not.toBe(drawn[0]);
+    expect(drawn[2]).toBe(f.layer.debugTargets.blurred);
+    expect(drawn[3]).toBeNull();
+    const blurredMat = f.log.draws().at(-1)!.material;
+
+    f.log.reset();
+    f.layer.setBlurPx(0);
+    f.render();
+    // blurPx = 0: not even a degenerate copy pass — the only draws left are
+    // the density pass and the composite, and the composite switched to the
+    // RAW material (a texture binding is baked into the node graph, so
+    // raw-vs-blurred is a different material object).
+    expect(f.log.drawnTargets()).toEqual([f.layer.debugTargets.density, null]);
+    const rawMat = f.log.draws().at(-1)!.material;
+    expect(rawMat).not.toBe(blurredMat);
+
+    // Restoring the blur restores the blurred material: the pick is made
+    // per frame, not latched.
+    f.log.reset();
+    f.layer.setBlurPx(GOO_TUNING.blurPx);
+    f.render();
+    expect(f.log.draws().at(-1)!.material).toBe(blurredMat);
+    f.dispose();
   });
 
-  it('the surface reads the blurred buffer, and the pair rides the density size', () => {
-    // Same explicit-first-clear treatment as the density target (the
-    // lazy-init trap) and the same resize in setSize — now including task
-    // 4's low-res surface target.
-    expect(src).toContain('for (const t of [target, blurA, blurB, surfaceLow])');
-    expect(src).toContain('blurB.setSize(w, h)');
-    expect(src).toContain('surfaceLow.setSize(w, h)');
+  it('the blur pair and the low-res surface target ride the density size, with a lazy first clear', () => {
+    const f = gooLayerFixture();
+    f.layer.setSize(400, 300);
+    f.render();
+    const { density, blurred } = f.layer.debugTargets;
+    // densityScale 0.5: the density target and the blur pair live at half
+    // the SDF grid — one blur texel per density texel.
+    expect(density.width).toBe(200);
+    expect(density.height).toBe(150);
+    expect(blurred.width).toBe(200);
+    expect(blurred.height).toBe(150);
+    // First render: every (re)allocated target gets an explicit first clear
+    // — four distinct targets probed with the empty scene (density, blurA,
+    // blurB and the low-res surface target). A lazily-initialised texture
+    // inside the same encoder as the pass that samples it gets the whole
+    // WebGPU submit rejected, so this clear is load-bearing.
+    const firstInit = f.log.initClears();
+    expect(firstInit).toHaveLength(4);
+    expect(new Set(firstInit.map((r) => r.target)).size).toBe(4);
+    expect(firstInit.map((r) => r.target)).toContain(density);
+    expect(firstInit.map((r) => r.target)).toContain(blurred);
+    // Steady state: nothing re-clears...
+    f.log.reset();
+    f.render();
+    expect(f.log.initClears()).toHaveLength(0);
+    // ...and a resize re-arms the first clear (setSize reallocates the
+    // backing texture, so the lazy-init conflict would come back).
+    f.layer.setSize(800, 600);
+    f.log.reset();
+    f.render();
+    expect(f.log.initClears()).toHaveLength(4);
+    expect(density.width).toBe(400);
+    expect(blurred.width).toBe(400);
+    expect(blurred.height).toBe(300);
+    f.dispose();
   });
 });
 
