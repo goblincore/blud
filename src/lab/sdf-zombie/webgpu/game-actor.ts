@@ -759,7 +759,8 @@ export function createZombieActor(opts: {
    */
   let lastPlayerPos: Vec3 | null = null;
   let bodyYaw = 0;
-  const characterName = opts.characterName ?? opts.character?.entry.name ?? opts.profile?.name ?? 'zombie';
+  // (`entry?.`: a test's stand-in for the CharacterView may carry no entry.)
+  const characterName = opts.characterName ?? opts.character?.entry?.name ?? opts.profile?.name ?? 'zombie';
   const soldierDamage = isSoldierFamily(opts.profile);
   /** A soft target (MotionProfile.soft) dies to its first bullet or blast hit;
    *  set on the hit, turned into a forced collapse on the next step. */

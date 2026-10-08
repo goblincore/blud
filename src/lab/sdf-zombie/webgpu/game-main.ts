@@ -454,7 +454,7 @@ async function main() {
   mark('main-start');
   // The bone-mesh cache, and with it the anatomical skull's asset, starts loading now and is taken where the
   // skeleton is built (sculpt-cache.ts startBoneMeshCache), unless the query already rules the mesh skeleton out.
-  const boneCache = startBoneMeshCache(location.search, resolveSkeletonMode(location.search, { dev: import.meta.env.DEV, deferred: false }) === 'mesh');
+  ctx.render.boneCache = startBoneMeshCache(location.search, resolveSkeletonMode(location.search, { dev: import.meta.env.DEV, deferred: false }) === 'mesh');
   (window as unknown as Record<string, unknown>).__bootMarks = ctx.boot.marks;
   ctx.vfx.boundedWoundPreview = import.meta.env.DEV && new URLSearchParams(location.search).has('bounded-wounds');
   ctx.boot.mount = document.getElementById('app');
@@ -2537,8 +2537,9 @@ async function main() {
   if (import.meta.env.DEV && new URLSearchParams(location.search).get('skeleton') === 'mesh' && ctx.render.skeletonMode !== 'mesh') {
     console.warn('[sdf-game] skeleton=mesh refused (deferred mode) — procedural bones');
   }
-  // The cache was started as main() began (boneCache): the plates' asset has been loading beside the boot.
-  ctx.render.segMeshCache = await boneCache.take(ctx.render.skeletonMode === 'mesh');
+  // The cache was started as main() began (ctx.render.boneCache): the plates' asset has been loading beside the boot.
+  ctx.render.segMeshCache = await ctx.render.boneCache.take(ctx.render.skeletonMode === 'mesh');
+  ctx.render.boneCache = null;
   // Organs as mesh (2026-10-06): on the mesh skeleton the organs are segment meshes too, and the body packs no
   // inside-flesh row. ?organs=sdf keeps them as field rows (the A/B reference); __sdfGame.setOrgans flips it live.
   ctx.render.organMode = resolveOrganMode(location.search, ctx.render.skeletonMode);
