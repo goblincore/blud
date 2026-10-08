@@ -275,9 +275,10 @@ const M_GAP_FROM = 0.03, M_GAP_TO = 0.16, M_GAP_STEP = 0.005;
 const M_GAP_BONE = 0.8;
 const M_GAP_LEFT = 0.05;
 // ---- P.
-/** The zombie P is made on: the pool's sixth (from 0: 5). Its on-screen measure (P_GONE: how much of a disc of the
- *  frame changes when a plate leaves) counts pixels that change by a fixed step, and was set where that zombie
- *  stands, under the room's lamp: measured 0.96 there, and 0.71 on the pool's third, which stands in the dark, with
+/** The zombie P is made on: the pool's sixth (from 0: 5), the one it was on when it ran last in the second boot.
+ *  Its on-screen measure (P_GONE: how much of a disc of the frame changes when a plate leaves) counts screenshot
+ *  pixels that change by a fixed step, and was set at that zombie's place in the room: measured 0.89 there (0.96
+ *  when R, A and H ran before it on the same page), and 0.71 on the pool's third, whose photographs are darker, with
  *  every other measure of P the same to the digit. */
 const P_ZOMBIE = 5;
 /** The plate the slug takes off the closed head, and the plate the pellets take off the open one: the two
