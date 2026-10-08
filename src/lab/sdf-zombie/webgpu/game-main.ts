@@ -1517,23 +1517,25 @@ async function main() {
   // crowd`) is the evidence: crowd-quad beats per-body at every n = 8..24 at
   // both SDF scales, and 24 completes at ship scale under the frame guard.
   ctx.crowd.param = new URLSearchParams(location.search).get('crowd');
-  // Stage a-2 dispatch: `?crowddispatch=boxes` restores the stage-a instanced
-  // proxy boxes; anything else (including absent) uses the one-screen-quad
-  // dispatch, which is the point of the stage.
-  // DEFAULT DISPATCH = BOXES (2026-09-15). On the owner's 56 s room-1 recording
-  // with matched fights the instanced proxy boxes beat per-body overall
-  // (17.3/15.4 vs 19.8/19.2 ms frame p50) while the one-screen-quad did not
-  // (20.3/20.2): the quad's remaining cost is raster footprint the boxes never
-  // rasterise (`docs/dev-notes/2026-09-14-crowd-firefight-cost.md`, Task 5).
-  // `?crowddispatch=quad` keeps the quad reachable; it may still win specific
-  // scenes (many bodies stacked in few tiles) and is worth revisiting.
-  ctx.crowd.dispatch = new URLSearchParams(location.search).get('crowddispatch') === 'quad'
-    ? 'quad' : 'boxes';
-  // DEFAULT = CROWD, BOXES DISPATCH (2026-09-15). The 2026-09-14 revert to
-  // per-body rested on a bench whose legs fought different fights (the
-  // `setCrowd` respawn confound, fixed in sdf-game-bench.mjs). On matched
-  // fights the crowd march with boxes beats per-body on the owner's real
-  // room-1 run and keeps its 8..24-body wins. `?crowd=0` opts out.
+  // Stage a-2 dispatch: one screen quad per type (`quad`) or one instanced
+  // proxy box per body (`boxes`).
+  // DEFAULT DISPATCH = QUAD (owner's call, 2026-10-08). Under boxes every
+  // body's box runs the merged march over its pixels' whole tile list, so
+  // overlapping boxes march the same pixel once each and frag_depth blocks
+  // early-Z: about 10 ms a body in view, linear. Live timeDraws on the bench's
+  // distance scene (docs/dev-notes/2026-10-08-native-wgpu-spike/NOTES.md):
+  // 4 bodies 31 vs 17 ms, 12 bodies 109 vs 24, 24 bodies 237 vs 38. The quad
+  // pays about 3 ms at 2 bodies (16 vs 19) and ties with none — the few-body
+  // recording that made boxes the default on 2026-09-15
+  // (docs/dev-notes/2026-09-14-crowd-firefight-cost.md, Task 5) measured that
+  // end of the range. `?crowddispatch=boxes` keeps the boxes reachable.
+  ctx.crowd.dispatch = new URLSearchParams(location.search).get('crowddispatch') === 'boxes'
+    ? 'boxes' : 'quad';
+  // DEFAULT = CROWD (2026-09-15). The 2026-09-14 revert to per-body rested on
+  // a bench whose legs fought different fights (the `setCrowd` respawn
+  // confound, fixed in sdf-game-bench.mjs). On matched fights the crowd march
+  // beats per-body on the owner's real room-1 run and keeps its 8..24-body
+  // wins. `?crowd=0` opts out.
   ctx.crowd.on = ctx.crowd.param !== '0';
   // STAGE-3 COMPATIBILITY: the refine twins and the cone pass are unsupported
   // under the crowd march (they read per-body state the instance record does

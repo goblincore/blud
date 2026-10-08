@@ -34,7 +34,7 @@ Each line is the first sentence of the module's header comment.
 
 | Area | Modules | What is there |
 | --- | --- | --- |
-| [webgpu/march/](#webgpumarch) | 54 | The SDF march shader, split by stage (WGSL). |
+| [webgpu/march/](#webgpumarch) | 55 | The SDF march shader, split by stage (WGSL). |
 | [webgpu/earlyz/](#webgpuearlyz) | 10 | Early-Z depth prepass for the march. |
 | [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 27 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
 | [webgpu/upscale/](#webgpuupscale) | 8 | Upscaling of the low-res march target. |
@@ -123,6 +123,7 @@ The SDF march shader, split by stage (WGSL).
 - `webgpu/march/math.wgsl.ts` — Hash, value noise, fbm and the quaternion helpers — split out of march.wgsl.ts (phase 1, move-only).
 - `webgpu/march/melt.ts` — Face-melt and melt-skin tuning constants — split out of march.wgsl.ts (phase 1, move-only).
 - `webgpu/march/primitives.wgsl.ts` — SDF primitives, fold operators and the detail field — split out of march.wgsl.ts (phase 1, move-only).
+- `webgpu/march/raymask-flag.ts` — COMPILE-TIME switch for the per-ray primitive mask PROBE (2026-10-08).
 - `webgpu/march/shade-helpers.wgsl.ts` — Small shading helpers — texel fetch, soft shoulder, flicker and the level-only shadow lookup — split out of march.wgsl.ts (phase 1, move-only).
 
 ## webgpu/earlyz/
