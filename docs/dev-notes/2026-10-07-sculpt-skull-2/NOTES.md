@@ -4,12 +4,235 @@ The game draws each humanoid's skull as a mesh under the SDF flesh; it shows whe
 There are two skulls. The **sculpted** one is the character's own bone field, carved and painted. The **anatomical**
 one is a modelled skull of 14 plates.
 
-This file has five parts, newest first:
+This file has six parts, newest first:
+[what two reviews of the branch found, and what changed](#after-review-what-two-reviews-found-and-what-changed-2026-10-08),
 [the eight ball-headed humanoids draw a fitted anatomical skull](#the-eight-ball-headed-humanoids-draw-a-fitted-anatomical-skull-2026-10-07),
 [the slug's split needs a precise aim](#the-slugs-split-is-a-reward-for-a-precise-shot-at-close-to-medium-range-2026-10-07-second-playtest),
 then the decision that made the sculpted skull the default (below them), then
 [the variants the owner chose from](#the-sculpted-skull-second-pass-variants-to-choose-from-2026-10-07), then
 [the gun and the zombie's head](#the-gun-and-the-zombies-head-2026-10-07-after-the-owners-playtest-of-sculptfull).
+
+---
+
+# After review: what two reviews found, and what changed (2026-10-08)
+
+Two reviewers read this branch. Neither found wrong arithmetic. Both found gaps: rules that asked the wrong
+question, a check that looked at no pixels, a look rule that reached too far, work done again in every frame. Each
+finding was checked before it was acted on; where one was not as stated, this part says so.
+
+## A gunshot and a head
+
+**"Only the zombie" is now the zombie.** The split, the slug's pop and the axe's head split asked the actor for its
+MOTION PROFILE's name. Every character with no profile of its own moves on the zombie's (the female, the three
+schoolgirls, the bonewalker, the two clowns, and the creatures that have none: the mouse, the cyclops, the dragon
+and the rest), so a precise slug or an axe split those heads with the zombie's presets. The actor now says which character it is
+(`ZombieActor.characterName()`), and the three rules ask that. On any other character a precise slug from close
+range is an ordinary slug wound, and an axe chop on the head takes the cuts and the chop count it had before the
+split existed.
+
+**The low head lip is wider than the zombie, on purpose.** `headLip` (a gun crater on a head keeps 0.3 of the stock
+lip, so the skull under it shows) is applied to every GORE BODY (`motion-profile.ts isGoreBody`): every body that is
+neither of the soldier's family nor a soft target. Of the thirteen humanoids that is the zombie, the two clowns, the
+bride, the female, the three schoolgirls and the bonewalker. It is not the soldier, the juggernaut or the two
+cultists: they keep the stock lip. All nine draw a skull that the lip would hide, so the rule is theirs too.
+
+**A slug the head-shot rule takes no longer hits the skull as an ordinary slug.** The projectile loop sent every
+round to the skull's own hit path first (the eyes near the hit are thrown out, the plate under it is damaged) and
+asked the head-shot rule second. A frontal slug that split a head therefore also knocked both eyes out. The rule is
+asked first now; a round it takes (a split, a pop) goes no further.
+
+**Where an aimed slug lands no longer decides anything.** The rule returned early when the slug landed more than
+1.35 head radii (in the head ellipsoid's own units) from the centre, a limit left from the old opening. The review
+said a slug 9 cm under the centre was past it. That is not so on a standing zombie: flown as the game flies it (the
+muzzle is 2.8 cm right of, 11.2 cm under and 61.8 cm in front of the eye; measured on six real shots), an aimed slug
+lands 9.4 to 11.4 cm under the centre at 1.29 to 1.33 of those units, because the chin recedes. But the margin is
+2 to 6 hundredths, and it is gone on a WALKING zombie, whose head tips forward: over three walks, 28 of 963 aimed
+slugs that stopped in head flesh landed past 1.35 (up to 1.38), and were refused though the crosshair was inside the
+precise zone. Under the crosshair's measure the limit is no longer asked: precise aim, in range, and the slug
+stopped in the head's own flesh. (Under the older measure, `splitAim: 'slug'`, it still is.)
+
+**The lips a sever takes are judged on the carves, not on a distance.** The rule of the last part took a crater's
+whole lip when its centre was within the stump's radius plus 1.6 of its own radius of the stump: 37 cm for a slug's
+crater and the head's stump. Staged and photographed (`look/stump-lips-before-after.jpg`; `scripts/stump-lips-look.mjs`):
+
+| Staged | Before | Now |
+| --- | --- | --- |
+| A slug's crater on the chest, 17 cm under the stump's centre, then a slug takes the head off | The chest crater lost its lip, the stump lost its own: a pale open chest | The chest crater keeps its lip. The stump still loses its own (below). |
+| Slugs take the head off; the slug's crater on the shoulders holds the stump's bowl (4.5 cm between centres) | The stump lost its lip; the crater kept its own, and A SLIVER OF IT FLOATED over the stump: 445 to 942 pixels joined to nothing, seen from each of four sides at 0.8 m | Both lose their lips. Nothing floats (0 pixels from every side). The bowl is paler at its rim than it was. |
+| Slugs on the upper arm take the forearm off | The three slug craters on the arm that was left lost their lips | They keep them, and so does the stump. |
+| A pellet decapitation (no crater holds the bowl) | Stump lip kept; the pellet craters in reach lost theirs | Stump lip kept; a pellet crater loses its lip only when its centre is inside the bowl. |
+
+The rule now (`damage.ts lipsAfterSever`): a lip is taken only where it would stand in removed flesh.
+
+- The crater rides flesh that is gone (as before).
+- **The stump opens in a crater's hole**: half or more of the shell the stump's lip is raised in lies inside the
+  craters' carves (each a ball, cut off by its depth floor where it has one). The stump loses its lip. Each crater
+  that holds that half by itself loses its own too: on the limb's side that lip stood on the limb.
+- **The crater is in the bowl**: its centre lies inside the stump's carve.
+- Every other lip stays. There is no reach.
+
+Two things were learned on the way that the last part had wrong:
+
+- The piece that floated after that part's fix was the HOLDING crater's lip, not the stump's: with every lip of the
+  body taken to nothing in the running game it was gone, and the stump's own lip was already gone.
+- A crater on the neck is on the head's own flesh, which leaves with the head, but its carve stays cut out of the
+  shoulders. It is a hole the stump's lip can stand in, and is counted as one.
+
+**What looks worse.** With a slug's decapitation the hole at the neck has no raised red rim any more: neither the
+stump nor the slug's crater has a lip there. It reads as an open, pink-walled bowl with the spine in it; the red of
+the wound's paint stays. That is the price of nothing floating: the lip is one number for a whole wound, so the part
+of it that floats cannot be taken alone. A pellet decapitation is unchanged, and still leaves the neck's base
+standing on the shoulders (the collar of the last part): the gate measures 358 to 2,767 pixels of real flesh in the
+old head's place from 0.8 m and does not hold it.
+
+**A lip of nothing is uploaded as nothing again, and it does not draw the same as the least lip did.**
+`MIN_LIP_SPLAY` (a lip never uploaded as exactly 0, but as 0.01 of the stock height) is removed: it changed the
+upload of every wound with no lip on every character (a crater with too little flesh behind it for a lip, and now a
+lip a sever took), to guard a NaN nobody had shown. No NaN was found: at exactly 0 no part of a crater goes missing.
+But the two are NOT the same picture. On one page, one pose, the 400 x 400 pixels about a lipless stump from 0.8 m:
+two frames at a lip of 0 differ in 0 pixels; a lip of 0 against a lip of 0.01 differs in 3,832 to 10,511 of the
+160,000 (5,231 and 8,734 with the chest crater; 87 to 1,633 on four pellet craters on a hand). The difference is a
+band along the crater's rim: at exactly 0 the rim's edge is drawn with a pale line that the least lip does not have
+(`scripts/stump-lips-look.mjs` prints it: "a lip of 0 against a lip of 0.01"; the shader's lip gate is a smoothstep
+whose two edges meet at a height of 0). So removing the minimum puts every lipless wound back as it drew before
+this branch, pale line included, and the lips a sever takes, which are new on this branch, draw with that line too.
+For the owner to judge live: `__sdfGame.head.stumpLips(0.02)` gives a taken lip 2% of its height in place of
+nothing, which is the least lip's look on a stump, and nothing floats at that height.
+
+**Smaller.** The head-shot leaf held every actor it had judged until a level reset; it now reads the verdict through
+the cast. A pop of the anatomical skull takes the skull and its eyes out of the draw in the same call, as the
+sculpted skull's pop does (the next draw can be a frame late). A thrown fragment takes its light from whichever of
+its owner's bones is drawn. The split's and the pop's console lines are a dev build's. One dead line in the sever
+checks is gone.
+
+**The recorded aim is the simulation's, not the drawn camera's.** The slug records the player's eye and aim as the
+simulation holds them. The camera the frame is drawn with also carries recoil pitch, hit shake and, on the train,
+a bob of 0.6 to 1.6 cm, against a precise zone 3.3 cm in radius. The drawn camera is posed after the tick that
+fires, so its ray is not there to record without the simulation reaching into the renderer. Left as it is. On a
+still page the two agree: the gate draws the recorded ray 0.00 px from the crosshair.
+
+## Which skull each character draws
+
+- **A fitted skull is kept under everything it was made from.** The eye line the orbits are held on is read off the
+  face sheet's frame, the head's fattest prim. On the cultists that prim is the hood, a painted shell that neither
+  the bone's revision nor the skin's holds: two bodies differing only in the hood got one skull. The eye line is in
+  the key now.
+- **A known head costs one lookup a frame.** The kit and the mesh cache were asked twice for every head in every
+  frame, and each ask built a key string; for the zombie and the soldier it also carved the bone field anew. Both
+  now answer a source object they have seen from a table keyed by the object.
+- **What the default page's bone material received is pinned.** The pin hashed the paint's source strings. It now
+  also hashes every WGSL text the material's colour reaches on the default page's own cache (the second paint, the
+  bone hash and noise, the shade and the light list, and the first paint's five functions, which ride in as the
+  shade's includes): `22a19cc4defab95a`. The meshes' and the paint's pins did not move.
+- **The seam, fold and openings checks run on the eight shipped fits** as well as the four named ones. They hold.
+- **One renderer on the shipped mix is tested**: a carved head, a plain bone under the second paint, a fitted skull
+  with its eyes in its orbits, a fitted skull with no eyes, and the same with the asset failing.
+- **The boot no longer stands still for the plates' asset.** The cache is asked for as `main()` begins and taken
+  where the skeleton is built. On the ring page from the local dev server (two runs of four boots each, before and
+  after, interleaved; the first boot of a server not counted): the boot stood waiting 22 to 31 ms for the asset
+  before, and 10 to 20 ms after. The whole boot (first boot mark to last) read 1,043 to 1,521 ms before (medians
+  1,091 and 1,118) and 1,008 to 1,471 ms after (medians 1,216 and 1,101): the saving is some 10 ms, far inside the
+  spread between two boots of the same code, and cannot be seen in the total. The asset's own load now reads 129 to
+  249 ms (`skullAssetMs`) where it read 22 to 31: it shares the main thread with the rest of the boot instead of
+  holding it. What the change buys is on a slow network or a stalled request: the boot's other work is done while
+  the asset is on its way, where it used to wait up to 8 s first. `skullAssetWaitMs` says how long the boot stood
+  waiting.
+- **The fit checks every vertex's margin at the end, always.** It used to check only when its passes ran out. None
+  of the shipped fits changes (no fit shrinks).
+- **A planned flesh fit with no flesh to fit to says so**, once for the character, in any build. It still draws the
+  envelope fit.
+- **The bonewalker and the described schoolgirl draw no mesh eyes again.** Neither has bone where the sculpted
+  skull looks for an eye seat, so neither ever drew an eye; the fitted skulls had given each two. Orbit seats now
+  move eyes a head already had and add none. Their fitted skulls show empty orbits when the face is shot away.
+- **The tables that say who draws what are compared with each other and with the registry** in one test
+  (`skull-tables.test.ts`), which builds a kit from the resolver's answer for eight queries and fails where the two
+  disagree for any registered character.
+- A query word that is not honoured (an unknown `?skull=` or `?sculpt=` value, an overruled one) is said on the
+  console once in any build, not a dev build only. `BALL_HEADS` is frozen all the way down.
+
+**A limit, not fixed: a jaw that opens.** A skull is fitted against the head's flesh at rest. The bride's jaw prims
+swing with her gape, and the review measured her cover falling from 6.5 mm at rest to 1.6 mm with the jaw 0.6 to
+0.9 rad open. No fit is made against an open jaw. (`head-flesh.ts` said bone under the head's own flesh was covered
+in every pose; it says this now.)
+
+## The gates
+
+| Gate | Before | Now |
+| --- | --- | --- |
+| `scripts/head-burst-gate.mjs` | 103 checks, 0 failed | 130, 0 failed |
+| `scripts/head-split-gate.mjs` | 111, 0 failed | 111, 0 failed (not edited) |
+| `scripts/axe-gate.mjs` | 29, 0 failed | 29, 0 failed (not edited) |
+| `scripts/cut-wound-gate.mjs` | 33, 0 failed | 33, 0 failed (not edited) |
+
+The head-burst gate asserted no pixels: every "is drawn" read a CPU list. It has three more boots (the ranges, the
+flying heads, the lip rule switched off) and these checks, each a frame as drawn against the same frame with one
+thing taken out:
+
+- AIM: the ray a slug records, drawn through the frame's camera and lens, is at the crosshair's pixel (0.00 px;
+  held at 2).
+- S: no eye is knocked out by the slug that splits the head. Before the shot the head's middle line is flesh on
+  screen (9 of 9 points); after it the room shows there (0 of 9; held at 1) and a half stands to each side (24 and
+  25 of 33 points; held at 19: a closed head covers 14).
+- X: the skull's fragments are on screen (5,422 to 5,451 pixels change when they are taken out; held at 1,500).
+- SA: the splitting slug breaks no plate of the anatomical skull and knocks no eye out.
+- R: the crosshair on the head's centre from 1, 2, 4 and 4.9 m, and 3 cm under it from 2 m: every one splits.
+- DS, FS: **nothing floats over the stump** after the pop and after a slug's flying head. The old head's place (7 cm
+  to either side of the stump's centre, 8 to 24 cm over it; about 21,000 pixels from 0.8 m) is compared with the
+  same frame without the body's flesh, from four sides. That flesh is drawn by the march and is in no CPU list.
+  Held on the second-worst side at 40 pixels (measured 0 or 1; from one side of one staging 61 to 63 pixels differ,
+  which is a status light blinking on another actor behind that place).
+- FL0: with the lip rule off the same decapitation leaves the floating piece, and the check sees it from every
+  side (1,388 to 2,615 pixels; held at 1,000 on the worst side).
+- FP: a pellet decapitation, measured and not held (the collar).
+
+Each new check was seen to fail under a mutation of the game's code, made in a copy of the tree and never in the
+working tree:
+
+| Mutation | Checks that failed |
+| --- | --- |
+| the projectile loop sends a round the rule took on to the skull's hit path | S and SA: 2 eyes missing, 0 eye copies drawn. (No plate broke: the splitting slug lands on the chin, and one slug there does not break a plate. The review's "breaks the plate under the hit" was not reproduced.) |
+| `STUMP_LIP` 1 (the lip rule off by default) | DS: 1,864 to 3,330 px in the old head's place. FS: 1,929 to 3,156. |
+| `splitRangeM` 3 | R4 and R4.9: ordinary. |
+| `slugSplit` false | All five of R: ordinary. |
+| the pop does not throw the skull | X: 182 pixels change with 0 fragments (and the count of fragments). |
+| the march draws a split head closed (its draw distance 0) | S: 9 of 9 points of the middle line are flesh; 13 and 14 points to the sides, under 19. |
+| the aim's ray tilted 0.03 rad off the camera | AIM: the recorded ray is drawn 28.25 px from the crosshair. |
+| every lip's height 0 (the shader's uniform), on the boot with the rule off | FL0: 0 to 4 px. The control sees nothing when there is no lip to float, which also says the piece is lip. |
+
+One mutation taught something: with the player's eye raised 5 cm in the simulation, the on-screen check still
+passed, because the drawn camera takes the same eye. It fails when the aim's DIRECTION leaves the camera's. And the
+halves' bound was first set at 12 points, under what a closed head covers (14); the mutation that draws the head
+closed passed it. It is 19 now.
+
+S's "the middle line is flesh before the shot" is the control half of a pair and was not mutated by itself.
+
+Unit tests whose expectation changed, each with its reason:
+
+| Test | Old | New | Why |
+| --- | --- | --- | --- |
+| `damage-lips.test.ts`, a crater near the stump | loses its lip within the reach (stump radius + 1.6 radii) | keeps it unless its centre is in the bowl or it holds the stump's shell | The reach was the defect. |
+| the same, a crater that holds the bowl | keeps its lip | loses it with the stump | Its lip floated (measured). |
+| the same, a crater as big as the bowl beside it | both lose their lips | both keep them | Neither stands in the other's hole. |
+| the same, the upload of a lip of 0 | `MIN_LIP_SPLAY` (0.01) | 0 | The minimum is removed. |
+| `game-head-split.test.ts`, "only the zombie has presets" | set `profileName` to refuse | set `characterName` | The rule asks the character. |
+| `anatomical-skull-fit.test.ts`, a fitted mesh's key | bone revision, flesh revision, fit | the same and the eye line | The eye line is part of the key. |
+| `anatomical-eyes` and the notes' table | the bonewalker and the described schoolgirl draw two eyes | none | They never had mesh eyes. |
+| `sculpt-renderer.test.ts` | (unchanged; a new test) | a query's note is said with `always` | Notes are said in any build. |
+| `game-state-render.test.ts`, the render slice's bindings | 37 | 38 | `render.boneCache`: the cache the boot starts early. |
+
+Run on the final code: `npm run typecheck` (no error), `npx tsx scripts/module-index.ts --check` (in step),
+`npm run test:changed` (64 files, 1,445 tests, 1 skipped, 0 failed), the head-burst gate (130, 0 failed). The other
+three gates ran on the tree three comment-only edits and one test's count earlier.
+
+## Not verified
+
+- Live play: nothing here was played. Every capture is the ring page with a frozen cast.
+- The landing limit on a walking zombie was shown in a unit test (the actor walked, the slug flown as the game flies
+  it), not in the browser: the gate's zombies are frozen and upright.
+- Whether the status light is what differs in that one view was read off one pair of frames, not chased further.
+- The bride's open-jaw numbers are the review's; they were not measured again.
+- The described schoolgirl's and the bonewalker's empty orbits were not photographed.
+- Frame time: nothing was timed. The two caches' lookups remove allocation; the saving was not measured.
 
 ---
 
@@ -912,7 +1135,9 @@ wired in `webgpu/game-head-shot.ts`):
    blast or a blade, the head flies off as before.
 5. The opening is off. It is still in the code, behind `burstTune({ opening: true })`.
 
-Only the plain zombie has any of this, as before. A head the flail has already damaged cannot split (the head damage
+Only the zombie has the split and the pop, as before: the zombie the CHARACTER (until the review of this branch the
+code asked the motion profile's name, which a dozen other characters share: the first part of this file). The low
+head lip is wider than that, on purpose. A head the flail has already damaged cannot split (the head damage
 leaf's regions and deform are measured on the closed head, and the split leaf refuses it, for the axe as well): a
 centred slug on it is an ordinary slug wound, which can still take the head off and pop it. An earlier ordinary
 wound, a pellet's or an off-centre slug's, leaves no such state: the next centred slug still splits.
@@ -1002,10 +1227,12 @@ comes and goes.
   no dangling eye or socket plug, no flap); no flying or settled gib chunk; no mesh gib (brain, skull fragment); no
   other visible mesh of the scene; no live flesh of the head cluster (the cluster is dead on the CPU). It is in the
   body's own march, and it goes when the lips' height is set to nothing.
-- The rule (`damage.ts lipsAfterSever`, run when a limb is severed): the stump loses its own lip when it opens in
-  the hole of a crater at least as big as its bowl. A crater loses its lip when the flesh it rides is gone (the
-  severed head's own craters), or when the stump's bowl cuts into flesh under its lip; a crater that holds the
-  whole bowl keeps its lip. The carves and the wounds' paint stay.
+- The rule as this part was written (`damage.ts lipsAfterSever`, run when a limb is severed): the stump loses its
+  own lip when it opens in the hole of a crater at least as big as its bowl. A crater loses its lip when the flesh it
+  rides is gone (the severed head's own craters), or when the stump's bowl cuts into flesh under its lip; a crater
+  that holds the whole bowl keeps its lip. The carves and the wounds' paint stay. (REPLACED after review: it judged
+  by the distance between centres, reached a chest crater, and left a sliver of the holding crater's lip floating.
+  The rule now is the first part of this file's.)
 - A first version took the lip off every crater near the stump and off the stump whenever any crater touched it.
   Nothing hung, but the stump drew as a pale, shallow dish with the spine in it and no red at all, at a lip share
   of 0, 0.1 and 0.25 alike: a crater's wall is painted by its distance from the crater's centre, and without the
@@ -1018,10 +1245,11 @@ comes and goes.
   the lips' height at nothing, and the twin finds no lip there more than 2.7 cm clear of it. From the front it can
   read as a dark hollow with a pale rim over the neck. If that is the piece the owner meant, the fix is a different
   one (a wider stump bowl at the neck, or the neck's base leaving with the head) and is not made here.
-- One thing fixed on the way: a wound uploaded with a lip height of exactly 0 makes the shader's lip gate a
-  smoothstep whose two edges coincide, which WGSL leaves undefined. The upload now never sends 0
-  (`character-view.ts MIN_LIP_SPLAY`). It was not established that this ever drew wrong; the pale stump first put
-  down to it was the missing lip.
+- One thing changed on the way and since taken back: a wound uploaded with a lip height of exactly 0 makes the
+  shader's lip gate a smoothstep whose two edges coincide, and for a while the upload never sent 0
+  (`character-view.ts MIN_LIP_SPLAY`). It was never established that a height of 0 drew wrong (the pale stump first
+  put down to it was the missing lip), wounds with no lip had been uploaded as 0 long before this branch, and the
+  minimum is gone again: the first part of this file.
 
 ## What changed, and how to put each thing back
 
@@ -1034,13 +1262,13 @@ Every value is a field of `burstTuning` (`head-burst.ts`), live from the browser
 | `anyWeapon` | `false` | `true` | With the opening on: pellets make it too. |
 | `alwaysSplit` | `false` | `true` | With the opening on: every head hit takes the full opening. |
 | `slugSplit` | `true` | (none) | A centred slug opens the head split. |
-| `splitFrac` | `1.25` | (none) | How centred: the slug's line within this many head radii of the head's centre. |
+| `splitFrac` | `0.3` (it was `1.25` when this part was written) | (none) | How precise: since the second playtest, the CROSSHAIR's ray within this many head radii of the head's centre (`splitAim: 'crosshair'`, from within `splitRangeM` 5 m). As this part was written it was the slug's own line, within 1.25. |
 | `splitOpen` | `1` | (none) | How far it opens, as a share of the split's full angle (the axe's second chop). |
 | `slugPop` | `true` | (none) | The slug that takes the head off pops it. |
 | `popSwellS` | `0.12` | (none) | The swell before the burst, seconds. 0 bursts on the frame of the hit. The cultist's is 0.12 to 0.2 s. |
-| `popOnSplit` | `true` | (none) | A centred slug on a split head pops it. |
+| `popOnSplit` | `true` | (none) | A slug on a split head pops it (since the second playtest: any slug from within `splitRangeM`, precise or not). |
 | `popSplitMin` | `0.5` | (none) | How wide the split must stand for that, as a share of its full angle. |
-| `headLip` | `0.3` | `1` | The lip of a gun crater on a zombie's head, as a share of the stock lip. |
+| `headLip` | `0.3` | `1` | The lip of a gun crater on a head, as a share of the stock lip: on every gore body, not the zombie alone (the first part of this file, "after review", says which characters). |
 | `on` | `true` | `true` | Off: every round is ordinary and every decapitation a flying head. |
 
 - **Everything as it was at the playtest:**
@@ -1166,8 +1394,8 @@ Neither of those two was edited then.
   a stump that opens inside a slug's or a blast's crater loses its own. Stumps from a blade, and stumps with only
   pellet craters round them, keep their lip.
 - **The swell is hard to see** at 0.12 s (see above).
-- **The soldier and the cultist are untouched by the rules** (the split, the slug's pop and `headLip` are the plain
-  zombie's). One thing does reach the cultist: his pop now throws his skull's mesh in pieces when his head is not on
+- **The soldier and the cultist are untouched by the rules** (the split and the slug's pop are the zombie's; the
+  low head lip is every gore body's, which the soldier's family and the soft cultists are not). One thing does reach the cultist: his pop now throws his skull's mesh in pieces when his head is not on
   the anatomical skull. His head bone is not sculpted, so the cut gives six pieces, not ten. Not photographed.
 
 ## Not verified

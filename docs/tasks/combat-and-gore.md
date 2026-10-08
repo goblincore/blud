@@ -62,10 +62,16 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
     the asset. For the owner: the schoolgirls' cartoon faces sit 2 to 7 cm under the skull's orbits; the bride's
     flesh is not drawn when spawned; `schoolgirl-alt` cannot be spawned.
     [Notes, the table and the sheet](../dev-notes/2026-10-07-sculpt-skull-2/NOTES.md).
-  - **Gates (as of 2026-10-07):** `scripts/head-split-gate.mjs` (111 checks), `scripts/axe-gate.mjs` (29),
-    `scripts/cut-wound-gate.mjs` (33), `scripts/head-burst-gate.mjs` (103). Each boot checks the skull it draws; the
+  - **Gates (as of 2026-10-08):** `scripts/head-split-gate.mjs` (111 checks), `scripts/axe-gate.mjs` (29),
+    `scripts/cut-wound-gate.mjs` (33), `scripts/head-burst-gate.mjs` (130). Each boot checks the skull it draws; the
     checks about the plates run on boots that ask for `?skull=anatomical`, and on a `?spawn=cultist` boot of the
-    default page for a fitted skull.
+    default page for a fitted skull. The head-burst gate checks pixels as well as the CPU's lists: the split's gap
+    and halves, the pop's fragments, the aim against the crosshair, and that nothing floats over a stump.
+  - **After two reviews (2026-10-08):** the split and the pop are the zombie's by its character (not its motion
+    profile); a slug the head-shot rule takes no longer knocks the eyes out; an aimed slug is not refused by where it
+    lands; a sever takes a lip only where it would stand in removed flesh. For the owner: a slug's decapitation
+    leaves no raised rim at the neck (nothing floats there now); the bonewalker and the described schoolgirl draw no
+    mesh eyes again; a pellet decapitation still leaves the neck's base standing.
 
   [Spec](../../docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 9: the axe as built; section 10:
   the head split as built) · plans [A](../../docs/superpowers/plans/2026-10-04-axe-part-a.md) and
