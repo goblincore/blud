@@ -236,7 +236,7 @@ async function fleshPair(id, name, bare = false) {
   if (bare) await evaluate("__sdfGame.meshSkeletonShow({ bones: false, eyes: false, organs: false })");
   const shown = await still(name);
   await fleshShown(id, false);
-  const hidden = await still(null);
+  const hidden = await still(process.env.DEBUG_PAIRS && name ? `${name}-hidden` : null);
   await fleshShown(id, true);
   if (bare) await evaluate("__sdfGame.meshSkeletonShow({ bones: true, eyes: true, organs: true })");
   return { shown, hidden };
@@ -478,11 +478,15 @@ const OVER_VIEWS = [["front", 0], ["left", 90], ["back", 180], ["right", -90]];
  *  with the body's flesh out of it. The count is the body's flesh pixels in THE OLD HEAD'S PLACE on screen: 7 cm to
  *  either side of the stump's centre and from 8 to 24 cm over it, where a headless body has nothing. That flesh is
  *  drawn by the march and is in no CPU list: a lip left standing in a crater's hole shows here and nowhere else.
- *  `thaw` false: the cast has been thawed since the sever already. Returns the count from each side and the largest. */
+ *  `thaw` false: the cast has been thawed since the sever already. Returns the count from each side, and the
+ *  largest, the second largest and the least of the four. WHAT STANDS OVER THE STUMP IS THERE FROM EVERY SIDE; what
+ *  shows from one side only is something else in the room behind that place (another actor's blinking status light
+ *  measured 61 to 63 pixels from one side of one staging). So "nothing floats" is held on the SECOND largest count,
+ *  and "the piece is seen" on the least. */
 async function overStump(tag, id, front, thaw = true) {
   if (thaw) { await evaluate("__sdfGame.freeze(false)"); await stepN(14); await evaluate("__sdfGame.freeze(true)"); await stepN(2); }
   const stump = await stumpOf(id);
-  if (!stump) { fail(`${tag}: no stump wound on actor ${id}`); return { max: Infinity, views: {}, stump: null }; }
+  if (!stump) { fail(`${tag}: no stump wound on actor ${id}`); return { max: Infinity, second: Infinity, min: 0, views: {}, stump: null }; }
   const c = stump.pos, views = {};
   for (const [name, yaw] of OVER_VIEWS) {
     await camAbout([c[0], c[1] + 0.08, c[2]], front, yaw, 0.8);
@@ -494,7 +498,8 @@ async function overStump(tag, id, front, thaw = true) {
     for (let y = Math.round(p0[1] - 0.24 * m); y <= Math.round(p0[1] - 0.08 * m); y++) for (let x = Math.round(p0[0] - 0.07 * m); x <= Math.round(p0[0] + 0.07 * m); x++) if (bodyPixel(shown, hidden, x, y)) n++;
     views[name] = n;
   }
-  return { max: Math.max(...Object.values(views)), views, stump };
+  const sorted = Object.values(views).sort((a, b) => b - a);
+  return { max: sorted[0], second: sorted[1], min: sorted[sorted.length - 1], views, stump };
 }
 /** Rounds at actor `id`'s neck until its head is off: the crosshair `under` m under the head's centre from `dist` m,
  *  `yawDeg` round it from its face. Returns how many it took (0: the head held), where the head was and its front. */
@@ -574,9 +579,11 @@ async function acrossHead(id, frame, name) {
 //   the split's halves: at least HALF_MIN of a side's 33 points are flesh;
 //   the pop's fragments: at least FRAGMENT_PX_MIN pixels change when the fragments are taken out of the frame;
 //   the old head's place (about 21,000 pixels from 0.8 m): at most OVER_MOST of them the body's flesh after a
-//   decapitation, and at least OVER_SEEN with the lip rule off (the floating piece, seen).
-// Measured when set: the aim 0.00 px off; 24 and 25 of 33 points a side; 5,422 pixels of fragments; 0 pixels in the old
-// head's place after the pop and after the slug's flying head; 1,388 to 2,614 with the rule off.
+//   decapitation, from the second-worst of four sides; and at least OVER_SEEN from every side with the lip rule off
+//   (the floating piece, seen).
+// Measured when set: the aim 0.00 px off; 24 and 25 of 33 points a side; 5,422 and 5,451 pixels of fragments; in the
+// old head's place 0 or 1 pixel after the pop and after the slug's flying head from every side but one (61 and 63
+// from that one: a status light behind it); 1,388 to 2,615 with the rule off.
 const AIM_PX_MOST = 2, HALF_MIN = 12, FRAGMENT_PX_MIN = 1500, OVER_MOST = 40, OVER_SEEN = 1000;
 
 try {
@@ -979,7 +986,7 @@ try {
   const dsFront = headAxis((await evaluate(`__sdfGame.head.frame(${DS.id})`))?.quat ?? [0, 0, 0, 1], [0, 0, 1]);
   const dsOver = await overStump("DS", DS.id, dsFront);
   note(`DS: the stump is ${dsOver.stump ? `${(dsOver.stump.radius * 100).toFixed(1)} cm, its lip ${dsOver.stump.lip}` : null}; the body's flesh in the old head's place: ${JSON.stringify(dsOver.views)} px`);
-  check(dsOver.max <= OVER_MOST, `DS: nothing floats over the stump after the pop: at most ${dsOver.max} px of the old head's place are the body's flesh, from any of four sides (<= ${OVER_MOST}; ${JSON.stringify(dsOver.views)})`);
+  check(dsOver.second <= OVER_MOST, `DS: nothing floats over the stump after the pop: from two sides or more, at most ${dsOver.second} px of the old head's place are the body's flesh (<= ${OVER_MOST}; the four sides ${JSON.stringify(dsOver.views)})`);
   closeSession(S);
   }
 
@@ -1001,7 +1008,7 @@ try {
   await stepN(150);
   // One thaw for both bodies, then the old head's place over each stump.
   const fsOver = await overStump("FS", FS.id, fs.front ?? [0, 0, 1]);
-  check(fsOver.max <= OVER_MOST, `FS: nothing floats over the stump after the slug's flying head: at most ${fsOver.max} px of the old head's place are the body's flesh (<= ${OVER_MOST}; ${JSON.stringify(fsOver.views)}; the stump's lip ${fsOver.stump?.lip})`);
+  check(fsOver.second <= OVER_MOST, `FS: nothing floats over the stump after the slug's flying head: from two sides or more, at most ${fsOver.second} px of the old head's place are the body's flesh (<= ${OVER_MOST}; the four sides ${JSON.stringify(fsOver.views)}; the stump's lip ${fsOver.stump?.lip})`);
   // The pellets' decapitation is MEASURED, NOT HELD: their small craters cut the neck through and leave the neck's
   // base standing on the shoulders, a collar of real flesh that reaches into the old head's place
   // (docs/dev-notes/2026-10-07-sculpt-skull-2/NOTES.md). It is attached to the shoulders, and it is not a lip.
@@ -1024,7 +1031,7 @@ try {
   check(fl.rounds > 0, `FL0: slugs at the neck take the head off (slug ${fl.rounds})`);
   await stepN(150);
   const flOver = await overStump("FL0", FL.id, fl.front ?? [0, 0, 1]);
-  check(flOver.max >= OVER_SEEN && flOver.stump?.lip === 1, `FL0: with the rule off the stump keeps its lip (${flOver.stump?.lip}) and a piece of flesh stands in the old head's place: ${flOver.max} px at the most (>= ${OVER_SEEN}; ${JSON.stringify(flOver.views)}). The check sees the floating piece.`);
+  check(flOver.min >= OVER_SEEN && flOver.stump?.lip === 1, `FL0: with the rule off the stump keeps its lip (${flOver.stump?.lip}) and a piece of flesh stands in the old head's place from every side: ${flOver.min} px at the least (>= ${OVER_SEEN}; the four sides ${JSON.stringify(flOver.views)}). The check sees the floating piece.`);
   await evaluate("__sdfGame.head.stumpLips(true)");
   closeSession(S);
   }

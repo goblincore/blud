@@ -235,6 +235,23 @@ async function record(scene, id, c, manifest) {
   await ev(`(() => { for (const w of __sdfGame.zombie(${id}).woundList()) w.rimScale = 0; return 1; })()`);
   await stepN(2);
   manifest.noLips = await measure(id, c, `${scene}__nolips`);
+  // A LIP OF NOTHING AGAINST THE LEAST LIP: the same frame with every lip uploaded as exactly 0, and with every lip
+  // uploaded as 0.01 of the stock height (what the upload sent in place of 0 for a while). The 400 x 400 pixels about
+  // the point, from the front and the back: how many differ by more than 14 in a channel, and the largest difference.
+  const least = () => ev(`(async () => { const D = await import("/src/lab/sdf-zombie/damage.ts"); for (const w of __sdfGame.zombie(${id}).woundList()) w.rimScale = 0.01 / D.WOUND_PROFILES[w.type].rimSplayScale; return 1; })()`);
+  const zero = () => ev(`(() => { for (const w of __sdfGame.zombie(${id}).woundList()) w.rimScale = 0; return 1; })()`);
+  // The actor uploads its wounds again when one is stamped: a pellet crater on the other shin, far out of the crop.
+  const again = async (dx) => { const on = add(shin, mul([f[2], 0, -f[0]], dx)), from = add(on, mul(f, 0.8)), d = unit(sub(on, from)); return ev(`!!__sdfGame.stampWoundAt(${from[0]}, ${from[1]}, ${from[2]}, ${d[0]}, ${d[1]}, ${d[2]}, "pellet", ${id})`); };
+  manifest.leastLip = {};
+  for (const [name, yaw] of [["front", 0], ["back", 180]]) {
+    await camAt(c, yaw, 0.8);
+    await zero(); for (const dx of [0.1, -0.1, 0.06, -0.06]) if (await again(dx)) break; await zero(); await stepN(2); await camAt(c, yaw, 0.8);
+    const z1 = await grab(null), z2 = await grab(null);
+    await least(); for (const dx of [-0.1, 0.1, -0.06, 0.06]) if (await again(dx)) break; await least(); await stepN(2); await camAt(c, yaw, 0.8);
+    const m = await grab(`${scene}__leastlip-${name}`);
+    const count = (a, b) => { let n = 0, most = 0; for (let y = a.h / 2 - 200; y < a.h / 2 + 200; y++) for (let x = a.w / 2 - 200; x < a.w / 2 + 200; x++) { const i = (y * a.w + x) * a.ch; const dd = Math.max(Math.abs(a.data[i] - b.data[i]), Math.abs(a.data[i + 1] - b.data[i + 1]), Math.abs(a.data[i + 2] - b.data[i + 2])); if (dd > 14) n++; if (dd > most) most = dd; } return { px: n, most }; };
+    manifest.leastLip[name] = { twoZeroFrames: count(z1, z2), zeroAgainstLeast: count(z1, m) };
+  }
 }
 
 for (const scene of SCENES) {
@@ -295,6 +312,7 @@ for (const scene of SCENES) {
     const line = (m) => Object.entries(m).map(([k, v]) => `${k} over ${v.overPx}, floating ${v.floatPx} px (top ${v.topCm} cm) of ${v.bodyPx}`).join("; ");
     console.log(`[${scene}] floating over the point: ${line(manifest.views)}`);
     console.log(`[${scene}] with every lip at nothing: ${line(manifest.noLips)}`);
+    console.log(`[${scene}] a lip of 0 against a lip of 0.01, 400 x 400 px about the point: ${J(manifest.leastLip)}`);
   } catch (e) { console.error(`FAIL [${scene}]: ${e.stack ?? e}`); process.exitCode = 1; manifest.error = String(e); }
   finally { writeFileSync(`${OUT}/${scene}.json`, JSON.stringify(manifest, null, 1) + "\n"); close(); }
 }
