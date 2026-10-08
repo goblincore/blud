@@ -326,11 +326,68 @@ not see either without the difference map.
 **How to put it back.** `?nearlights=0`: the held meshes shade three's default list again and the flail and axe
 their old mirror of it. `__sdfGame.nearLights()` reports which real light each proxy holds.
 
-`PENDING: the gates' counts, the torch-lit case, CI.`
+**Checks** (on the branch, 2026-10-08):
 
-## 6. The ranking
+| Check | Result |
+| --- | --- |
+| `march-hash`, three modes | **no pin moved**: default `d7392d52…` / wounded `76bd51aa…`, crowd `0c71e712…` / `bf6836cd…`, per-body `470ff0b3…` / `f618070e…` (the body march is not touched) |
+| `scripts/flail-gate.mjs` (`OUT=` scratch) | 47 passes, 0 failed (it measures the haft's and the ball's clipping under the torch's fill) |
+| `scripts/axe-gate.mjs` (`OUT=` scratch) | 29 checks, 0 failed |
+| `scripts/sdf-game-train-gate.mjs` | passed |
+| `scripts/sdf-game-light-gate.mjs` | every check passes but one, **which fails on `main` too**: "skull glows in the dark: skull 0.083 vs surrounding flesh 0.053 (1.56x > 1.5x)" on pristine `06f2ef12`, 1.55x on the branch. It came in with the sculpted skull's second paint; flagged as its own task, not touched here |
+| `npm run typecheck`, `npm run test:changed` | clean; 6 files, 33 tests (the new `near-light-pick.test.ts` among them) |
+| Console errors over the eight look boots and the 16 matrix boots | 0 |
 
-`PENDING.`
+**Not verified.** The torch on Night Train (my two captures did not light it; the torch-lit case in the sheet is the
+bare page's, where it is on from boot, and the flail and axe gates run under it). Outdoor levels (the moon is a
+directional light and takes a directional slot; not captured). A weapon picked up in play after the gun loaded is
+adopted within 2 s (120 frames), not at once: for that long it keeps the default list, as before. The owner has not
+seen it in play.
+
+## 6. The ranking: what closes the gap to 33.3 ms
+
+Where the heavy scenes stand with §5.1 in:
+
+| Heavy scene | Before | With §5.1 | Still over by | What is left in it |
+| --- | --- | --- | --- | --- |
+| Boiler Room, after a fight | 37.6 ms | 33.1 ms | 0 (no margin) | march 23.5 of it: wounds |
+| Bare arena, after a fight (46 wounds) | 37.4 ms | 37.4 ms (no Night Train lights there) | 4.1 | march 30.1: wounds |
+| Close-up, 32 wounds + a torso chop + the head split wide | 36.2 ms | about the same | 2.9 | march 31.2: cuts and the split |
+| Third class, walking in | 26.0 ms | 19.9 ms | under by 13 | |
+
+So everything that is still over is the march on wounded bodies. In order of evidence:
+
+| # | Candidate | Helps | Expected | Evidence | Risk | What changes on screen |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | **Near lights for the held meshes** (§5.1) | Night Train | −2.5 to −6.1 ms; entry hitch halved | built, measured | low | thin far glints on the barrels go; no tube shadow on the gun |
+| 2 | **The props and the kit on their room's lights** (fixtures, pickups, spent shells: 58 meshes on the default list; the soldiers' kit mirrors it too) | Night Train | −1 to −1.5 ms (the 58 meshes' ceiling is 1.5 ms; the kit is not measured) | §3.1 | low: they do not move between rooms, so a fixed list per room rebuilds nothing | none expected |
+| 3 | **Merge PR 35** (the open head's and the cuts' bounds) | cuts, open heads | −23 to −29% of the march's primitive folds on a chopped or split body; −1.5 ms on a clean open head by its own measure; not resolved on a heavily wounded one | §3.3 | low to medium: it predates the skull stack; its three gates and `march-hash` must be re-run on the merge | none (the same picture to the bit, or the same solid inside a smaller hull) |
+| 4 | **Find the cut's and the split's uncounted cost** (a torso chop adds 16 ms to a body with 32 wounds, the split wide another 26 ms, and neither shows in rows or primitives) | the close-up, any chopped body | unknown until attributed; the largest unexplained item | §3.3 | none to measure; the fixes it points at (the cut's noise confined to its rim, the split's per-piece set-up reused) are exact or near-exact | none intended |
+| 5 | **Fold wound rows for a region, not a sample** (a per-tile or per-cluster mask of which wounds can reach it, written when a wound is stamped) | every wounded body | bracketed by two measurements: all rows for everyone costs +10 ms (the early-out off), per-sample removal of 76% returns nothing resolved. A regional cut should land between | §3.3 | medium: a bound that is too tight is a hole in a body | none if the bound is exact |
+| 6 | **Bake craters into a rest-space volume per body** (the research pass's only route to a cost that does not grow with the count) | every wounded body | removes the dependence on count for craters | published practice (Claybook, Dreams); nothing measured here | high: days of work; rims limited by the volume's cell; cuts are too thin for it | crater rims softer unless the noise stays procedural |
+| 7 | **Pose, pack and upload only the bodies in view** | every level's CPU | −1 to −2.5 ms of tick | §3.2 | medium: the posed body has about 30 readers inside `game-actor.ts`; demos must replay to the same hash | none |
+| 8 | **The first shot's 29 pipelines** (70 to 150 ms, once a boot) and the rest of the entry hitch (50 to 85 ms) | stability | removes two visible stalls | §2.1, §5.1 | medium: the warm-up has to draw what a first shot creates without showing it; cold boot grows by whatever it compiles | none |
+
+The CPU items (7, and the level's draw submission) return less in the heavy scenes than their milliseconds: those
+frames are bound by the GPU (the GPU waits on the CPU for 0.8 to 2.4 ms after the slug, 3 to 6 ms while firing).
+
+**Not worth doing** (measured, with the number):
+
+| Idea | Why not |
+| --- | --- |
+| The post chain (FXAA, VHS, the upscale) | about 1 ms together; FXAA 0.1 to 0.4, VHS under the floor |
+| Fewer or baked shadow maps; shadows off on bodies | re-renders 0.15 ms of CPU; sampling on bodies under the floor in all six scenes |
+| A level distance field or light cookies, for time | there is no shadow-map time to win back (above). Both may be worth having for the look (soft shadows and AO from the carriage on bodies without the 16-texture limit; shaped beams), judged as look work |
+| Not drawing intact heads; 1 cm skulls | half a million triangles change the polygon pass by under 0.1 ms |
+| Merging the gun's and the arms' 101 meshes; normal maps or parallax on them | under 1 ms of CPU; their cost was the light list, now fixed. Worth folding into the shotgun's own clean-up, not a perf item |
+| The exact wound reach (`setWoundExact`), the per-ray wound list | −76% rows, no time resolved; the list costs 17 ms more here |
+| Goo, gib chunks, the bone and organ meshes | 0.3 to 1.5 ms, mostly under the floor |
+
+**One wider observation.** Three of today's findings have the same shape: a system grew its own answer to "what is
+relevant right now" and its neighbours never got it. The walls had a per-room light list, the gun and the props did
+not. The visual set gates a body's hulls and bones but not its pose. The warm-up compiles the pipelines it can see
+and not the 29 a first shot makes. One shared answer per tick (which room, which bodies, which lights) would replace
+several partial ones; that is a direction to grow into while fixing these, not a rewrite to schedule.
 
 ## 7. How to re-run
 
