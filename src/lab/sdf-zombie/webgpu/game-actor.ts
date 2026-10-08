@@ -38,7 +38,7 @@ import {
 } from '../damage';
 import type { SplitWarp } from '../head-split';
 import { burstTuning } from '../head-burst';
-import { GUN_WET_LIP } from '../torn-lips';
+import { GUN_WET_LIP, gunWetLipFor } from '../torn-lips';
 import { severLimb, severDistal, type SeverResult } from '../sever';
 import { soldierInjury, soldierArmCutAllowed, injuryPoints, SOLDIER_INJURY_TUNING } from '../soldier-damage';
 import { blastPlates, freshPlates, hitPlate, isShed, restHitPoint, shedPlates, type PlateState } from '../plate-armor';
@@ -1770,11 +1770,10 @@ export function createZombieActor(opts: {
   }
 
   /** WET RED LIP on a gun crater (torn-lips.ts, plan Task 35): the gore bodies only (motion-profile.ts isGoreBody).
-   *  The soldier keeps his own soldierWound stain and the soft target (cultist robe) takes decals,
-   *  so both are left stock; wetLipWound itself refuses cloth wounds and burns. */
+   *  The decision (anything but a gore body stays stock) is torn-lips.ts gunWetLipFor; wetLipWound itself refuses
+   *  the 0 it returns, and cloth wounds and burns. */
   function gunWetLip(wound: Wound, kind: keyof typeof GUN_WET_LIP): void {
-    if (!goreBody) return;
-    wetLipWound(wound, GUN_WET_LIP[kind]);
+    wetLipWound(wound, gunWetLipFor(kind, goreBody));
   }
 
   function stampBlast(blastWounds: readonly Wound[]): void {

@@ -48,7 +48,7 @@ Each line is the first sentence of the module's header comment.
 | [Game: feature modules](#game-feature-modules) | 76 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
-| [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 7 | Blood views, the goo layer, impact splashes. |
+| [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 8 | Blood views, the goo layer, impact splashes. |
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
 | [Levels and world](#levels-and-world) | 27 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
@@ -441,6 +441,7 @@ Blood views, the goo layer, impact splashes.
 
 - `webgpu/blood-connections.ts` — OPTIONAL connected blood for the goo layer (blood-surface comparison task, 2026-09-13).
 - `webgpu/blood-view-gpu.ts` — Instanced billboard renderer for blood-sim: gooey specular droplets + flat floor splats.
+- `webgpu/goo-layer-test-support.ts` — Recording stub renderer and fixtures for the behavioural goo-layer tests: the real createGooLayer runs its real sync()/render() against this stub…
 - `webgpu/goo-layer.ts` — Screen-space metaball blood (gobs-and-goo spec §3): the viscous goo the billboard droplets could never sell.
 - `webgpu/goo-presets.ts` — THE GAME'S GOO DEFAULTS, in one importable place (blood-surface comparison task, 2026-09-13).
 - `webgpu/impact-splash-profiles.ts` — Sprite tuning is independent per weapon; existing events retain a snapshot.
