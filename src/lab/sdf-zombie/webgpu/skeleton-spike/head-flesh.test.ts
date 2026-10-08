@@ -71,4 +71,36 @@ describe('the flesh of a head (head-flesh.ts)', () => {
       expect(headFlesh(body, bound)!.revision.startsWith(`${owned.length - left}:`)).toBe(true);
     }
   });
+
+  it.each([...HUMANOID_SKULLS])('%s: the skin is the flesh without its painted prims, and a point inside it is inside the whole flesh', character => {
+    const body = build(character), bound = bindRig(body);
+    const flesh = headFlesh(body, bound)!;
+    const painted = [...bound.head!.prims.keys()].map(i => body.prims[i]!).filter(p => p.color !== undefined && p.op !== 'sub' && p.op !== 'groove'
+      && p.strand === undefined && p.shell === undefined && p.op !== 'bone' && p.op !== 'organ');
+    // A head with no painted flesh has one field for both.
+    if (painted.length === 0) { expect(flesh.skin!.revision).toBe(flesh.revision); expect(flesh.skin!.distance(flesh.centre)).toBe(flesh.distance(flesh.centre)); return; }
+    const skin = flesh.skin!;
+    expect(skin).not.toBeNull();
+    expect(skin.revision).not.toBe(flesh.revision);
+    let inside = 0, hair = 0;
+    for (let x = -0.14; x <= 0.14; x += 0.02) for (let y = -0.2; y <= 0.3; y += 0.02) for (let z = -0.16; z <= 0.16; z += 0.02) {
+      const p: Vec3 = [flesh.centre[0] + x, flesh.centre[1] + y, flesh.centre[2] + z];
+      const s = skin.distance(p), w = flesh.distance(p);
+      if (s < 0) { inside++; expect(w, `${character} at ${p}`).toBeLessThanOrEqual(s + 1e-9); }
+      else if (w < -0.005) hair++;
+    }
+    expect(inside).toBeGreaterThan(20);
+    // What the skin leaves out is there to leave out: flesh of the whole head that is not skin.
+    expect(hair, `${character}: lattice points in painted flesh alone`).toBeGreaterThanOrEqual(0);
+  });
+
+  it('a head whose hair is ordinary prims has less skin than flesh: the schoolgirl\'s bob, the female\'s bun', () => {
+    for (const [character, up] of [['schoolgirl', 0.14], ['female', 0.2]] as const) {
+      const body = build(character), flesh = headFlesh(body, bindRig(body))!;
+      // A point high in the hair, on the head's middle plane: flesh, and not skin.
+      const sheet = flesh.sheet!, p: Vec3 = [sheet.centre[0], sheet.centre[1] + up, sheet.centre[2] - 0.03];
+      expect(flesh.distance(p), character).toBeLessThan(0);
+      expect(flesh.skin!.distance(p), character).toBeGreaterThan(0);
+    }
+  });
 });

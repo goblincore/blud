@@ -67,6 +67,25 @@ describe('__sdfGame.skullSplit: the split skull\'s look, live', () => {
   });
 });
 
+describe('__sdfGame.meshEyes: an actor\'s eyes as this frame draws them', () => {
+  it('gives each eye\'s world centre, radius and piece; none for an actor that draws none; null without the renderer or the actor', () => {
+    const a = { id: 7 }, b = { id: 8 };
+    const at = (x: number, r: number) => new THREE.Matrix4().makeTranslation(x, 2, 3).scale(new THREE.Vector3(r, r, r));
+    const drawn = [
+      { owner: a, eye: false, piece: null, matrix: at(9, 1) }, { owner: a, eye: true, piece: null, matrix: at(-0.03, 0.019) },
+      { owner: a, eye: true, piece: 2, matrix: at(0.03, 0.019) }, { owner: b, eye: false, piece: null, matrix: at(5, 1) },
+    ];
+    const seams = createSkeletonSeams({ world: { actors: [a, b] }, render: { segMeshRenderer: { drawn } } } as unknown as GameContext);
+    const eyes = seams.meshEyes(7)!;
+    expect(eyes.map(e => e.piece)).toEqual([null, 2]);
+    expect(eyes.map(e => e.centre)).toEqual([[-0.03, 2, 3], [0.03, 2, 3]]);
+    for (const e of eyes) expect(e.radius).toBeCloseTo(0.019, 12);
+    expect(seams.meshEyes(8)).toEqual([]);
+    expect(seams.meshEyes(9)).toBeNull();
+    expect(createSkeletonSeams({ world: { actors: [a] }, render: { segMeshRenderer: null } } as unknown as GameContext).meshEyes(7)).toBeNull();
+  });
+});
+
 describe('__sdfGame.meshSkeletonShow: draw or hide the bone meshes and the eyes', () => {
   it('reads and sets the two flags; refuses what is not a boolean; null without the mesh skeleton', () => {
     const { seams, renderer, done } = make();

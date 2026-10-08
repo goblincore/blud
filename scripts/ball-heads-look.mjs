@@ -11,9 +11,11 @@
 //   bone-front       the same frame with that actor's flesh taken out of it: the sheet blends the two, which is the
 //   bone-quarter     flesh half see-through over the bone; and the bone from three-quarter;
 //   shot-front       ANOTHER actor, its face shot away with real rounds: pellet volleys (`fire(1)`) from 2 m, the
-//   shot-quarter     crosshair on the head, the cast thawed a quarter of a second after each (a frozen body that a
-//                    shot has moved is drawn clipped); then AS THE GAME SHIPS (VHS on), from 1.5 m at the player's
-//                    own eye height, from the front and from three-quarter.
+//   shot-quarter     crosshair AIM_UP over the head's centre (a volley lands about 10 cm under the crosshair), until
+//                    the head has WANT wounds or VOLLEYS are spent or the head is off; the cast thawed a quarter of
+//                    a second after each (a frozen body that a shot has moved is drawn clipped); then AS THE GAME
+//                    SHIPS (VHS on), from 1.5 m at the player's own eye height, from the front and from
+//                    three-quarter.
 // THE EYE IS LEVEL WITH THE HEAD in the clean frames (the page's own eye height, game-player.ts PLAYER.eye, is set
 // to the head's for a head under 1.62 m; nothing in the game does that). The shipped frames are taken from the
 // player's real eye height, so a short character is seen from above, as in play.
@@ -25,13 +27,13 @@
 // Usage (own servers): node scripts/ball-heads-look.mjs <vite port> <cdp port> <out dir>
 //   COLS=before,after         the columns (before, after, or name=query for any other page query)
 //   CAST=cultist,female       only those characters
-//   VOLLEYS=3                 pellet volleys at the face
+//   VOLLEYS=2 WANT=5          at most that many pellet volleys at the face, until the head has that many wounds
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 const VITE = Number(process.argv[2] ?? 5261), CDP = Number(process.argv[3] ?? 9261);
 const OUT = process.argv[4] ?? ".lab-tmp/sculpt-skull/ball-heads";
-const W = 1280, H = 800, EYE_H = 1.62, SETTLE = 24, VOLLEYS = Number(process.env.VOLLEYS ?? 3), THAW = 14;
+const W = 1280, H = 800, EYE_H = 1.62, SETTLE = 24, VOLLEYS = Number(process.env.VOLLEYS ?? 2), WANT = Number(process.env.WANT ?? 5), THAW = 14, AIM_UP = 0.08;
 /** The eight (skeleton-spike/skull-cast.ts BALL_HEADS). schoolgirl-alt cannot be spawned as a game actor. */
 const BALL_HEADS = ["cultist", "cultist-cowled", "bride", "female", "schoolgirl", "schoolgirl-described", "bonewalker"];
 const CAST = (process.env.CAST ?? BALL_HEADS.join(",")).split(",");
@@ -200,16 +202,19 @@ async function ready() {
   const frames = Math.ceil((await evaluate("__sdfGame.reloadTotalSec")) * 60) + 12;
   await evaluate("__sdfGame.refillShells()"); await stepN(frames); await evaluate("__sdfGame.refillShells()");
 }
-/** VOLLEYS pellet volleys at actor `id`'s face from 2 m in front, the crosshair on the head's centre, from the
- *  player's real eye height; the cast thawed THAW frames after each. Returns the wounds they left on the head. */
+/** Pellet volleys at actor `id`'s face from 2 m in front, the crosshair AIM_UP over the head's centre, from the
+ *  player's real eye height, until the head has WANT wounds, VOLLEYS are spent or the head is off; the cast thawed
+ *  THAW frames after each. Returns the volleys fired and the wounds they left on the head. */
 async function shootFace(id) {
   await evaluate(`import("/src/lab/sdf-zombie/webgpu/game-player.ts").then((m) => { m.PLAYER.eye = ${EYE_H}; return 1; })`);
   await evaluate("__sdfGame.setViewModelVisible(true)");
-  for (let v = 0; v < VOLLEYS; v++) {
+  const headWounds = async () => (await evaluate(`__sdfGame.actorWounds(${id})`)).filter((w) => w.limb === "head").length;
+  let volleys = 0;
+  for (; volleys < VOLLEYS; volleys++) {
     const fr = await frameOf(id);
-    if (!fr) break;
+    if (!fr || (await headWounds()) >= WANT || !((await evaluate(`__sdfGame.flail.limbAlive(${id}, "head")`)) > 0)) break;
     const f = unit([qRot(fr.quat, [0, 0, 1])[0], 0, qRot(fr.quat, [0, 0, 1])[2]]);
-    const eye = add(fr.centre, mul(f, 2)), d = sub(fr.centre, [eye[0], EYE_H, eye[2]]);
+    const eye = add(fr.centre, mul(f, 2)), d = sub(add(fr.centre, [0, AIM_UP, 0]), [eye[0], EYE_H, eye[2]]);
     await ready();
     await evaluate(`__sdfGame.placePlayer({ x: ${eye[0]}, z: ${eye[2]}, yaw: ${yawOf(d[0], d[2])}, pitch: ${Math.atan2(d[1], Math.hypot(d[0], d[2]))} })`);
     await stepOne(); await evaluate("__sdfGame.setAimPoint(0, 0)");
@@ -220,7 +225,7 @@ async function shootFace(id) {
     await evaluate("__sdfGame.freeze(false)"); await stepN(THAW); await evaluate("__sdfGame.freeze(true)"); await stepN(2);
   }
   await evaluate("__sdfGame.setViewModelVisible(false)");
-  return (await evaluate(`__sdfGame.actorWounds(${id})`)).filter((w) => w.limb === "head").length;
+  return { volleys, headWounds: await headWounds() };
 }
 
 let failed = 0;
@@ -250,7 +255,7 @@ for (const col of COLS) {
       if (b) {
         const before = await frameOf(b.id);
         await evaluate("__sdfGame.setBleed(true)");
-        record.shot = { actor: b.id, volleys: VOLLEYS, headWounds: await shootFace(b.id), headOn: (await evaluate(`__sdfGame.flail.limbAlive(${b.id}, "head")`)) > 0, phase: (await evaluate("__sdfGame.actorList()")).find((q) => q.id === b.id)?.phase };
+        record.shot = { actor: b.id, ...(await shootFace(b.id)), headOn: (await evaluate(`__sdfGame.flail.limbAlive(${b.id}, "head")`)) > 0, phase: (await evaluate("__sdfGame.actorList()")).find((q) => q.id === b.id)?.phase };
         const now = (await frameOf(b.id)) ?? before;
         await evaluate("__sdfGame.setVhs('blud')"); await settle();
         await shot(col.name, character, "shot-front", b.id, 1.5, 0, false, now);
