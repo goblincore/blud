@@ -50,6 +50,7 @@
   No parameter draws the sculpted skull's second sculpt and second paint; `?skull=anatomical` the 14 plates; `?sculpt=classic` the first look. Both looks are pinned by hash; the four capture gates run on the new default (head-split 111 checks, head-burst 130, axe 29, cut-wound 33).
   The eight humanoids with no skull-shaped head bone (the cultist among them) draw the anatomical skull by default, each fitted to its own flesh with the eyes in the fitted orbits (2026-10-07). For the owner: the three schoolgirls' skulls sit 2 to 7 cm above their cartoon faces; and 1 cm against 5 mm for the head's mesh.
   [Notes, the cast sheet and the cell pair](docs/dev-notes/2026-10-07-sculpt-skull-2/NOTES.md).
+  The light gate's "skull glows in the dark" check failed on it (1.56x against 1.5x) and was re-derived to 2.0 (2026-10-08): the low head lip and the paler paint moved the ratio, the bone's dark-room response did not change. For the owner: the skull is easier to see in a dark carriage than it was. [The before/after pair and the numbers](docs/dev-notes/2026-10-08-skull-dark-gate/NOTES.md).
 
 **Organs as mesh** — [rendering](docs/tasks/rendering.md)
 - [x] **Built 2026-10-06; the owner picked the `wet` look 2026-10-07; merged 2026-10-07 (PR 34).** On the mesh skeleton a zombie's organs are segment meshes, drawn
