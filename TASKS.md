@@ -26,18 +26,17 @@
 **Cut wounds** — [combat and gore](docs/tasks/combat-and-gore.md)
 - [~] **Cut wounds M1 built 2026-10-04; owner playtested** — a cut wound shape, the rod (weapon slot 6), 32 wounds with merging.
   Owner: "more excessive", so longer, wider, ragged cuts landed 2026-10-04 (two costs open: [status](docs/dev-notes/2026-10-04-cut-excess/STATUS.md)). M2 is the head split (next line).
-  Gate `scripts/cut-wound-gate.mjs` (30 checks). [Notes](docs/dev-notes/2026-10-03-cut-wounds/NOTES.md) · [handoff](docs/dev-notes/2026-10-03-cut-wounds/HANDOFF.md).
+  Gate `scripts/cut-wound-gate.mjs` (33 checks). [Notes](docs/dev-notes/2026-10-03-cut-wounds/NOTES.md) · [handoff](docs/dev-notes/2026-10-03-cut-wounds/HANDOFF.md).
 - [~] **The axe (slot 7) and the head split built 2026-10-05; owner playtested; PR goblincore/blud#31** (branch
   `claude/head-cleaving-effect-ef9515`) — a chop opens a zombie's head on a hinge: a wide crack, then split wide and alive, then
   the kill. The halves wobble; the skull cracks, then splits. The wet film under the flashlight is the owner's pick (C, the boldest, 2026-10-06).
-  Debt: an open head costs about +6 to +8 ms at 0.6 m. Gates `scripts/head-split-gate.mjs` (100 checks, 2026-10-06), `scripts/axe-gate.mjs` (27).
+  Debt: an open head costs about +6 to +8 ms at 0.6 m. Gates `scripts/head-split-gate.mjs` (111 checks, 2026-10-07), `scripts/axe-gate.mjs` (29).
   **On the anatomical skull (2026-10-06, branch `claude/split-anatomical-skull`):** split plates have their own material, shots break them where they are drawn (bone standing in the open gap included), the gate runs on it and reads their pixels. Owner to decide: retune how far the bone opens ([sheets and notes](docs/dev-notes/2026-10-06-split-anatomical-skull/NOTES.md)).
   [Spec](docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 10) · [handoff](docs/dev-notes/2026-10-04-head-split/HANDOFF.md) · [notes](docs/dev-notes/2026-10-04-head-split/NOTES.md).
-- [~] **The sculpted skull, second pass: four variants built 2026-10-07; owner to pick** (branch `claude/sculpt-skull-2`).
-  The owner chose the old sculpted skull over the anatomical one (it fills the head and reads best) and wants it more
-  anatomical and frightening, the jaw and teeth first. `?sculpt=shape | shape-fine | paint | full` (new bone, new bone
-  at a 5 mm cell, new paint, both); the default is unchanged and pinned. `full` reads best on the sheets.
-  [Notes and look sheets](docs/dev-notes/2026-10-07-sculpt-skull-2/NOTES.md).
+- [~] **The sculpted skull, `full`, is the default skull since 2026-10-07 (owner's pick); the anatomical skull is opt-in** (branch `claude/sculpt-skull-2`).
+  No parameter draws the sculpted skull's second sculpt and second paint; `?skull=anatomical` the 14 plates; `?sculpt=classic` the first look. Both looks are pinned by hash; the four capture gates run on the new default (head-split 111 checks, head-burst 80, axe 29, cut-wound 33).
+  For the owner: eight humanoids (the cultist among them) have no skull-shaped head bone and show balls where the anatomical skull drew a skull; and 1 cm against 5 mm for the head's mesh.
+  [Notes, the cast sheet and the cell pair](docs/dev-notes/2026-10-07-sculpt-skull-2/NOTES.md).
 
 **Organs as mesh** — [rendering](docs/tasks/rendering.md)
 - [x] **Built 2026-10-06; the owner picked the `wet` look 2026-10-07; merged 2026-10-07 (PR 34).** On the mesh skeleton a zombie's organs are segment meshes, drawn

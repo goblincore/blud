@@ -1,30 +1,285 @@
-# The sculpted skull, second pass: variants to choose from (2026-10-07)
+# The sculpted skull, `full`, is the game's skull (2026-10-07)
 
 The game draws each humanoid's skull as a mesh under the SDF flesh; it shows where flesh is shot or chopped away.
-There are two skulls. The **sculpted** one (`?skull=sculpt`) is the character's own bone field, carved and painted.
-The **anatomical** one (the default) is a modelled skull of 14 plates.
+There are two skulls. The **sculpted** one is the character's own bone field, carved and painted. The **anatomical**
+one is a modelled skull of 14 plates.
 
-The owner playtested both on 2026-10-07 and chose the sculpted skull as the base: it fills the head and reads best in
-play. What bothers them about it, in their order: the jaw and the teeth, the shape of the eye sockets, the nose
-opening, and the lack of a brow ridge, cheekbones and hollows. It is worst on the soldier with his face shot away,
-where it looks cartoony rather than frightening.
+This file has three parts, newest first: this one (the decision and what it changed), then
+[the variants the owner chose from](#the-sculpted-skull-second-pass-variants-to-choose-from-2026-10-07), then
+[the gun and the zombie's head](#the-gun-and-the-zombies-head-2026-10-07-after-the-owners-playtest-of-sculptfull).
 
-This pass builds four variants of a more anatomical sculpted skull, switchable by URL, and leaves the default
-untouched. Nothing here is the default until the owner picks.
+## The decision
+
+The owner playtested both skulls and the variants below on 2026-10-07 and decided: the sculpted skull is the base
+("fits and reads best"), in the variant `full` ("I like FULL"), and "make full and old skull the default". The
+anatomical skull stays in the game behind a switch.
+
+Until then a page with no skull parameter drew the anatomical skull (since 2026-10-06), and `?skull=sculpt` drew the
+sculpted skull in its first look.
+
+## What a page draws
+
+One function decides: `resolveSkull` in `skeleton-spike/sculpt-variant.ts`. `skeleton-spike/sculpt-cache.ts` builds
+the bone cache it asks for.
+
+| The page's query | Skull | What that is |
+| --- | --- | --- |
+| no `skull`, no `sculpt` | sculpted, `full` | The second sculpt of the head at a 5 mm cell, under the second paint. |
+| `?skull=sculpt` | sculpted, `full` | The same. `full` is the sculpted skull's look now. |
+| `?skull=anatomical` | anatomical | The 14 plates, as the default was from 2026-10-06 to 2026-10-07. Every other bone is drawn as it was then (the first paint). |
+| `?sculpt=classic` | sculpted, `classic` | The first look: the first sculpt at the 1 cm cell under the first paint. This is what `?skull=sculpt` drew before. |
+| `?sculpt=shape`, `shape-fine`, `paint` | sculpted, that variant | The variants of the first sheets, unchanged. |
+| `?sculpt=full-1cm` | sculpted, `full-1cm` | `full` with the head at the 1 cm cell (see "The head's cell"). |
+| `?sculpt=full` | sculpted, `full` | The default, named. |
+| `?sculpt=<variant>&skull=anatomical` | sculpted, that variant | A known `?sculpt=` asks for the sculpted skull and overrules `?skull=anatomical`. The console says so. |
+| `?sculptheads=all` | sculpted | The variant's paint on every character, fitted or not (see "The characters that are not carved"). For looking; nothing ships with it. |
+| an unknown `?skull=` or `?sculpt=` value | as if it were not there | The value is passed over. In a dev build the console says so once, naming the value and the values that exist. |
+
+- `?skull=procedural` is an older name for `?skull=sculpt` and still works.
+- The anatomical skull is an asset. If it does not load, the page draws the default sculpted skull and the console
+  says so.
+- `?skeleton=procedural`, the deferred renderer and bones in detached chunks are untouched: they never drew either
+  mesh skull.
+- `__sdfGame.skeletonDiagnostics()` reports the skull in force (`skull`), the recipe in force (`sculpt`: which sculpt,
+  the head's cell, which paint) and the variant that recipe is (`sculptVariant`). `__sdfGame.skullDrawn(id)` says, for
+  each bone an actor draws, whether it is the head and which paint its material draws.
+
+Night Train with each: `/sdf-game.html?level=night-train` (the default), `...&skull=anatomical`, `...&sculpt=classic`.
+
+## The pins
+
+`skeleton-spike/sculpt-default-pin.test.ts` pins two looks by hash, so a change to either is made on purpose:
+
+| Look | Zombie's head mesh | Soldier's head mesh | Paint's shader text |
+| --- | --- | --- | --- |
+| The default (`full`) | 9,144 vertices, 18,296 triangles, `44f3c7f58b87817c` | 7,056 vertices, 14,108 triangles, `f470bb51944b39b1` | `61ebace5c3abd470` (the second paint, written for the second sculpt) |
+| The first look (`classic`) | 2,220 vertices, 4,448 triangles, `492f9fb76d46f916` | 1,686 vertices, 3,392 triangles, `4eef1460c3417114` | `8232c6723fa94dba` (the first paint) |
+
+The first look's hashes are the ones taken before the variants existed (`f127e868`); they did not move. They are
+reached through `?sculpt=classic`, and through a bone cache built with no recipe, which is what the unit tests build.
+The default's hashes are checked on the page's own cache for a query that names no skull.
+
+## The head's cell: 1 cm against 5 mm
+
+`full` extracts the two carved heads at a 5 mm cell. The first report could not tell 1 cm from 5 mm in shipped frames
+under the old paint, and `full` at 1 cm had never been shot. It is `?sculpt=full-1cm` now, and this is the pair:
+[`look/cell-1cm-5mm.jpg`](look/cell-1cm-5mm.jpg). Top row 1 cm, bottom row 5 mm; the soldier with his face shot
+away (the same 18 wounds in both, 8 on the head) and the zombie's bare skull, each as the game ships from 2.5 m and
+from 1 m, and clean from 0.6 m.
+
+**5 mm stays the default**: it is what the owner played and approved. What the pair shows:
+
+- **As the game ships, from 2.5 m: no difference** in either scene.
+- **As the game ships, from 1 m: no difference on the soldier.** On the zombie's bare skull the frame of bone round
+  the upper teeth is a little sharper at 5 mm. It takes the two tiles side by side to find it.
+- **Clean, from 0.6 m: 5 mm is crisper.** The orbit rims, the edge of the upper jaw and the lower tooth arch have hard
+  edges at 5 mm and rounded ones at 1 cm. At 1 cm the lower jaw's rising branches melt into the cheek.
+- **The zombie's "boxed" mouth is softer at 1 cm.** The first notes called the 5 mm mouth a little mechanical seen
+  straight on. The coarser cell rounds that box off. Some may prefer it.
+- From three-quarter at 5 mm the cheekbone's lower edge and the orbit's outer rim show small ragged steps. At 1 cm
+  they are smooth.
+
+What 5 mm costs:
+
+| | 1 cm (`full-1cm`) | 5 mm (`full`) | Difference |
+| --- | --- | --- | --- |
+| Zombie's head, triangles | 4,496 | 18,296 | 4.1 times |
+| Soldier's head, triangles | 3,460 | 14,108 | 4.1 times |
+| Zombie's head, extraction (Node, median of 7, first notes) | 65 ms | 219 ms | +154 ms |
+| Soldier's head, extraction (the same) | 45 ms | 188 ms | +143 ms |
+| Ring page, all bone extraction at boot, in the browser | 954 ms | 1,111 ms | +157 ms |
+| Ring page with every zombie slot a soldier, the same | 379 ms | 446 ms | +67 ms |
+| Triangles in the bone cache, ring page | 180,620 | 205,068 | +24,448 (one zombie head, one soldier head) |
+
+The browser rows are one boot each (`__sdfGame.skeletonMesh().cacheStats.extractMs`), and the largest single
+extraction of the ring page, a zombie torso segment, varied by 33 ms between the two boots: read them as "about a
+tenth of a second, once". The cost is paid once per carved character at boot, not per actor. Every zombie whose
+skull shows draws the 18,296 triangles. Frame time in a crowd of exposed skulls was not measured at either cell.
+
+For the owner: 5 mm buys crisp edges that show at 0.6 m and closer. If the softer mouth at 1 cm is preferred, or
+the boot time matters, `full-1cm` is one word in `SCULPT_DEFAULT_VARIANT`; the pin test then needs the new hashes.
+
+## The characters that are not carved
+
+Only the zombie and the soldier have the second sculpt. Every other character's head is its plain authored bone,
+and a paint draws a face on it at fixed places of the bone's box. Under `full` as it was built, the second paint was
+drawn on every head. This is each humanoid's bare head bone, front and three-quarter:
+[`look/cast-bare-heads.jpg`](look/cast-bare-heads.jpg). Columns: the first look; the second paint on every head
+(`?sculptheads=all`); the default as it ships; the anatomical skull.
+
+The rule that came out of it (`sculpt-variant.ts` `SECOND_PAINT_CHARACTERS` and `sculptPaintOf`, tested): the second
+paint is drawn on the characters it has been looked at on and fits. Every other character, a new one included, keeps
+the first paint, and so is drawn exactly as `classic` draws it. The renderer builds both paints' bone materials and
+puts each character's bones on its own.
+
+| Character | Head bone (its width at its widest, and its shape) | Under the second paint | The default draws |
+| --- | --- | --- | --- |
+| zombie | 166 mm, carved by the second sculpt | The look the owner approved. | second paint |
+| soldier | 148 mm, carved by the second sculpt | The look the owner approved. | second paint |
+| juggernaut | 170 mm: the soldier's bone, larger, not carved (a ball over a jaw) | The orbits ring the eyes; the two tooth rows lie either side of the crease between the ball and the jaw; the nose sits between. It reads as a skull, and better than the first paint's flat wide teeth. It is still a face painted on a ball: no brow, no cheekbones. | second paint |
+| clown, clown-alt | 176 mm: one round mass | The whole face is on the ball, the orbits round the eyes, a wide grin of separate teeth. Cleaner than the first paint, whose cheek sockets read as two rouge spots. A face painted on a ball, as it was. | second paint |
+| cultist | 78 mm: a ball over a separate jaw ball | The eyes sit at the bottom of the upper ball and the teeth on the lower ball, under either paint. The second paint adds a dark outline high on the upper ball. Neither is a skull. | first paint |
+| cultist-cowled | 78 mm: a ball over a jaw ball | The same two balls, joined. Teeth on the lower ball under either paint. | first paint |
+| bride | 112 mm: an egg, with a nub 26 mm wide hanging under it | Sockets and nose sit on the egg. The teeth fall on the egg's bottom tip and on the nub. No gain over the first paint. | first paint |
+| female | 52 mm: a column of beads (six primitives) | The face is spread over three beads under either paint. | first paint |
+| schoolgirl | 72 mm: a lump with a muzzle, beads under it | The sockets are on the muzzle, the teeth on a bead below. | first paint |
+| schoolgirl-described | 56 mm: three beads | The same. | first paint |
+| bonewalker | 48 mm: two beads 4 cm apart | There is no face to paint on. | first paint |
+| schoolgirl-alt | 66 mm: as the schoolgirl | Not photographed: the character cannot be spawned (`createZombieActor` throws "no motion joints"; `?spawn=schoolgirl-alt` stops the boot). Its bone has the schoolgirl's shape. | first paint |
+
+Said plainly:
+
+- **Eight of the thirteen humanoids have no skull under the sculpted skull.** Their head bones were authored as a
+  few small balls for the SDF bone tubes, not as a skull. With the anatomical skull as the default they drew a
+  modelled skull fitted to that bone's box (narrow on the narrow ones: 43 mm wide on the female). With the sculpted
+  skull as the default they draw the balls, with a face painted across them. That is worse than what they drew
+  yesterday, under either paint, and the per-character paint rule does not fix it: it only keeps the second paint
+  from adding to it.
+- **Of those eight, the cultist is in the levels** (a level spawn kind). When his face is shot away, or his head
+  pops, the player sees two balls. The other seven are not placed by any level today (`level-def.ts` `SpawnKind`
+  has no kind for them); they are reachable with `?spawn=<name>`.
+- **The juggernaut and the two clowns are a judgment.** The second paint sits on their bones and reads better than
+  the first, so they are listed. They are not carved, so their skulls are round. To put one back on the first paint,
+  take its name out of `SECOND_PAINT_CHARACTERS`.
+- Characters that are not humanoids (the goblin, the ogre and the rest) were not looked at. They keep the first
+  paint, which is what they drew under both earlier defaults: they never had the anatomical skull.
+
+What would fix the eight, for the owner to choose: give them the anatomical skull per character (the page would
+load its asset whenever one of them is in the cast); or author a skull-sized head bone for each and carve it, the
+cultist first. Neither is done here.
+
+The photographs are level with each head. The game holds the player's eye 1.62 m up, so the clown (head 0.77 m up)
+and the bonewalker (1.20 m) are only ever seen from above in play. For these frames the capture lowers the page's
+own eye height; nothing in the game does.
+
+## The pop and the head split on the default
+
+Both existed for the sculpted skull and neither was changed. Checked on the default in the gates:
+
+- **The head split** draws the sculpted head's own mesh as three clipped copies on the bone's split material, under
+  the second paint: the painted face outside, the dark inner wall on back faces, the pale rim along the fracture.
+  The halves carry their orbit and half the nose; the teeth stay on the piece below the hinge. It reads correctly at
+  the three stages (the head-split gate's `M-skull` and `M-bone` sheets). The seated eyes show more than they did:
+  with the bone drawn, the second sculpt's orbits leave 0.91 of each eye in sight from the front, against 0.51 on
+  the first look (the gate's own measure, not held).
+- **The pop** throws the ten named fragments, each on the split material of the head's own paint (the second, for a
+  zombie), cut once per mesh.
+  Photographed with the flesh out of the frame (`scripts/head-burst-look.mjs`, `QUERY='' SCENES=slug-pop`, the
+  `pop-bare` frames): the pieces are curved shells, pale outside and dark inside, and the blood burst covers most of
+  them for the first tenth of a second. The jaw pieces show their teeth in the frames where they face the camera.
+  Nothing draws wrong.
+- The cultist's pop, on his two balls, throws seven pieces (the regions that hold 12 triangles or more of a
+  972-triangle head mesh). Not photographed.
+
+## The gates
+
+Each boot now says which skull it wants where it matters, and checks that it drew it. No bound was loosened.
+
+| Gate | Checks before | Checks now | Boots and their skulls |
+| --- | --- | --- | --- |
+| `scripts/head-split-gate.mjs` | 100, 0 failed | 111, 0 failed | Seven. Five on the default (S, W, K, O, L, F, M, C; R, A, H; B twice; T, J). One on `?sculpt=classic` (M alone, on the first look). One on `?skull=anatomical` (M on the plates, then P). |
+| `scripts/head-burst-gate.mjs` | 67, 0 failed | 80, 0 failed | Five. Three on the default (the rules; the opening; the pop, DS). Two on `?skull=anatomical` (D and D0; SA and XA). |
+| `scripts/axe-gate.mjs` | 27, 0 failed | 29, 0 failed | Two, both on the default. |
+| `scripts/cut-wound-gate.mjs` | 30, 0 failed | 33, 0 failed | Three, all on the default. |
+
+"Before" is the tree at `74d1eafb`, run the same day on the same machine. No check was removed. The new checks:
+
+- Every boot of every gate checks the skull it drew (`skeletonDiagnostics()`): 2 in the axe gate, 3 in the cut-wound
+  gate, 5 in the head-burst gate. The head-split gate already had one check for all its boots.
+- Head-split M, on each of its three skulls: every bone copy of the split head is the head's own mesh, under the
+  paint that boot's recipe gives the zombie (3 checks). M used to run on two skulls and runs on three (8 more).
+- Head-burst S: every copy is the sculpted head's mesh on the bone's split material under the second paint. DS:
+  every fragment keeps the second paint. SA and XA (6 checks): S's skull check and X, made again on the plates.
+
+Expectations that changed because the default skull changed:
+
+| Gate, check | Before | Now | Why |
+| --- | --- | --- | --- |
+| Head-split, C: which skull each boot draws | Every boot anatomical, the `sculpt` boot sculpted. | Five boots `sculpt full`, the `classic` boot `sculpt classic`, the `anatomical` boot anatomical. | The default changed; the boots that need another skull ask for it. |
+| Head-split, the sculpt boot's URL | `&skull=sculpt` | `&sculpt=classic` | `?skull=sculpt` is `full` now. The boot exists to draw the first sculpt and the first paint's split material, which no other boot draws. |
+| Head-split, M on the default boot: the materials of the split copies and of the whole skull | `skeleton-plate-split`, `skeleton-plate` | `skeleton-bone-split`, `skeleton-bone` | The gate takes them from the skull the boot draws. The plates' are still checked, on the anatomical boot. |
+| Head-split, M: the eye seats the landmark is predicted from | z = 34.3 mm in front of the head's centre | 35.3 mm on a boot whose cache carves the second sculpt; 34.3 mm on the other two | The second sculpt's orbits seat the eyes 1.0 mm further forward (computed from `mesh-eyes.ts` for both sculpts). |
+| Head-split, M on the anatomical skull: the really chopped head | Measured on the first boot's zombie, between S, W and K. | Measured on a zombie chopped for the skull alone (`chopsForSkull`), as the sculpt boot always did. | That first boot draws the default now. The same four checks, the same bounds. |
+| Head-split, P: where it runs | Last in the second boot, after R, A and H. | Last in the anatomical boot, on the same zombie (the pool's sixth). | P is about the plates. |
+| Head-burst, D and D0: the boot | no skull parameter | `&skull=anatomical` | D checks that all 14 plates are released. |
+| Head-burst, DS: the boot | `&sculpt=full` | no skull parameter | That is the default now. |
+| Head-burst, X: the fragments a split head's pop throws | 13 measured (the plates; the splitting slug had knocked one off), bound at least 10 | 10 measured (the sculpted head's fragments), bound at least 10 | The default changed. The plates' pop of a split head is XA now, on the anatomical skull: 13 thrown, as before. |
+
+No numeric bound moved. Measured values that moved, all inside their unchanged bounds:
+
+- Head-split M on the default: each eye's shift on screen is at worst 0.51 px off its prediction on the forced head
+  and 0.19 px after chop 1 (bound 2 px; the anatomical skull read 0.41 and 0.15 px as the default, and reads 0.27 and
+  0.40 px on its own boot). All 27 points of the fracture's line are bone closed and none open (the anatomical
+  skull: 25 of 27, 0).
+- Head-split P's on-screen measure reads 0.89 (bound at least 0.8). It read 0.96 when P followed R, A and H: the
+  frame is a screenshot and what stood in the room before it differs. The margin is thinner. P's other measures are
+  the same to the digit (36.9 mm, 10.2 mm, 0.0000 mm).
+- Cut-wound H (a cut across the face): the mean change of luma in the cut's band is 8.84 in one run and 8.91 in the
+  next, and was 8.99 (bound at least 4). The bone in the cut is the sculpted skull's now.
+- Every other measure of the axe and the cut-wound gates that is not a frame time is the same as before to the
+  digit, but two that are not about the skull: the axe head's mean luma at rest read 80.0 in one run and 85.3 in
+  the next on the same code (it was 80.0), and the bone share beside the turned zombie's slot moved in its fifth
+  decimal. Frame times moved by run-to-run amounts and are not gated.
+
+## Not verified
+
+- Live play on Night Train with the new default. Everything above was staged on the ring page with a frozen cast.
+- Frame time: nothing was timed. A zombie's exposed head is 18,296 triangles where the anatomical skull was 9,947.
+- The soldier's and the juggernaut's skulls in a pop or a split: only the zombie splits, and only the zombie's pop
+  runs in a gate.
+- The non-humanoid characters' heads, under any paint.
+- `schoolgirl-alt`, which cannot be spawned.
+
+## Code
+
+| File | What |
+| --- | --- |
+| `skeleton-spike/sculpt-variant.ts` | `resolveSkull` (the one place that decides), the variants and their recipes, the characters the second paint is fitted to. |
+| `skeleton-spike/sculpt-cache.ts` | The game's bone cache for a query; says the resolver's notes in a dev console; loads the anatomical asset only when asked. |
+| `skeleton-spike/mesh-renderer.ts` | Both paints' bone materials; each character's bones on its own paint's. |
+| `skeleton-spike/sculpt-default-pin.test.ts` | The two pinned looks. |
+| `webgpu/game-seams-skeleton.ts` | `skeletonDiagnostics()` (skull, recipe, variant), `skullDrawn()` (head, paint, character), `skullFragments()` (paint). |
+| `scripts/sculpt-skull-cast-look.mjs`, `scripts/sculpt-skull-default-sheet.py` | The cast's photographs and the two sheets of this part. |
+
+To remake the two sheets (own servers, headless):
+
+```
+COLS='classic,every-head,default,anatomical=&skull=anatomical' CAST=zombie,soldier,juggernaut,clown,clown-alt,cultist,cultist-cowled,bride,female,schoolgirl,schoolgirl-described,bonewalker \
+  node scripts/sculpt-skull-cast-look.mjs <vite port> <cdp port> <cast frames dir>
+python3 scripts/sculpt-skull-default-sheet.py cast <cast frames dir> docs/dev-notes/2026-10-07-sculpt-skull-2/look/cast-bare-heads.jpg
+COLS=full-1cm,full SCENES=soldier-face,zombie-bare node scripts/sculpt-skull-look.mjs <vite port> <cdp port> <cell frames dir>
+python3 scripts/sculpt-skull-default-sheet.py cell <cell frames dir> docs/dev-notes/2026-10-07-sculpt-skull-2/look/cell-1cm-5mm.jpg
+```
+
+---
+
+# The sculpted skull, second pass: variants to choose from (2026-10-07)
+
+This part was written before the owner picked. They picked `full`, and it is the default now (the part above). What
+follows is as it was written, with the URLs brought up to date: "the old skull" and "the old paint" are the first
+look, `?sculpt=classic`, which was `?skull=sculpt` then; the anatomical skull was the default then.
+
+The owner playtested both skulls on 2026-10-07 and chose the sculpted skull as the base: it fills the head and reads
+best in play. What bothers them about it, in their order: the jaw and the teeth, the shape of the eye sockets, the
+nose opening, and the lack of a brow ridge, cheekbones and hollows. It is worst on the soldier with his face shot
+away, where it looks cartoony rather than frightening.
+
+This pass built four variants of a more anatomical sculpted skull, switchable by URL, and left the default
+untouched.
 
 ## How to see them
 
-Add `?sculpt=<name>` to the game's URL. It implies `?skull=sculpt`.
+Add `?sculpt=<name>` to the game's URL. It asks for the sculpted skull.
 
 | URL (dev server, `npm run dev`) | What it is |
 | --- | --- |
-| `/sdf-game.html?level=night-train&skull=sculpt` | The sculpted skull as it is today: the reference. |
+| `/sdf-game.html?level=night-train&sculpt=classic` | The sculpted skull as it was then: the reference, the sheets' boxed first column. |
 | `/sdf-game.html?level=night-train&sculpt=shape` | New bone, meshed at the usual 1 cm cell, under the old paint. |
 | `/sdf-game.html?level=night-train&sculpt=shape-fine` | The same bone meshed at a 5 mm cell for the head, under the old paint. |
 | `/sdf-game.html?level=night-train&sculpt=paint` | The old bone under the new paint. |
-| `/sdf-game.html?level=night-train&sculpt=full` | The new bone at 5 mm under the new paint. |
+| `/sdf-game.html?level=night-train&sculpt=full` | The new bone at 5 mm under the new paint. The default since. |
 
-For a room of soldiers to shoot at, use the ring testbed: `/sdf-game.html?spawn=soldier&sculpt=full`.
+For a room of soldiers to shoot at, use the ring testbed: `/sdf-game.html?spawn=soldier`.
 `__sdfGame.skeletonDiagnostics().sculpt` says which recipe a page is drawing.
 
 ## The sheets
@@ -183,7 +438,8 @@ What looks worse or is unfinished, in the variants that otherwise work:
 - **The axe-chop rows show little difference.** What shows in an open head is mostly the cranium's halves, which the
   variants change least.
 - **Other characters' heads** (cultist, bride and the rest) are not carved by either sculpt. Under `paint` and
-  `full` they get the new face painted on their plain bone, as they get the old face today. Not reviewed.
+  `full` they got the new face painted on their plain bone. Reviewed since: the part above ("The characters that are
+  not carved"); the new paint is now drawn only on the characters it fits.
 
 Not built:
 
@@ -199,18 +455,19 @@ Not verified:
 - The variants in live play on Night Train. The sheets are staged on the ring testbed with a frozen cast.
 - Frame cost in a crowd, or on other hardware.
 - Shots, eye ejection and the head split were photographed and ran without console errors in all five columns, but
-  the head-split and head-burst gates run only on the default skulls, not on the variants.
+  the head-split and head-burst gates ran only on the default skulls of the time, not on the variants. (They run on
+  `full` now: the part above.)
 
 ## Code
 
 | File | What |
 | --- | --- |
 | `skeleton-spike/sculpt-variant.ts` | The variants and their recipes: which sculpt, the head's cell, which paint. |
-| `skeleton-spike/sculpt-cache.ts` | The game's bone cache for a URL (`?sculpt=`). |
+| `skeleton-spike/sculpt-cache.ts` | The game's bone cache for a URL. |
 | `skeleton-spike/mesh-skull-2.ts` | The second sculpt and its landmark table. |
 | `skeleton-spike/sculpt-paint.ts` | The second paint: TypeScript twins and the WGSL written from the same tables. |
 | `skeleton-spike/mesh-skull.ts`, `mesh.ts`, `mesh-renderer.ts` | Take the recipe; the default path is unchanged. |
-| `skeleton-spike/sculpt-default-pin.test.ts` | Pins the default: the zombie's and the soldier's head mesh bytes and the old paint's shader text, by hashes taken from the tree before this work. |
+| `skeleton-spike/sculpt-default-pin.test.ts` | Pins the first look (and, since, the default): the zombie's and the soldier's head mesh bytes and the paint's shader text, by hash. The first look's hashes were taken from the tree before this work. |
 | `scripts/sculpt-skull-look.mjs`, `scripts/sculpt-skull-sheet.py` | The photographs and the sheets. |
 
 To remake the sheets (own servers, headless):
@@ -221,6 +478,9 @@ python3 scripts/sculpt-skull-sheet.py <frames dir> docs/dev-notes/2026-10-07-scu
 ```
 
 ## If the owner picks
+
+The owner picked `full`. Done since: it is the default, and `full` at 1 cm was shot (the part above). Still open
+from the list below: soften the zombie's boxed mouth; seed the cracks per actor; the eyes.
 
 - **`full`:** make it the sculpted skull's default; decide whether the head needs the 5 mm cell or the 1 cm one is
   enough under the new paint (a `full` at 1 cm was not shot); soften the zombie's boxed mouth; seed the cracks per
@@ -487,14 +747,17 @@ To remake it (own servers, headless):
 ```
 LABEL=before OLD=1 TUNE='{"headLip":1}' node scripts/head-burst-look.mjs <vite> <cdp> <before dir>
 LABEL=after node scripts/head-burst-look.mjs <vite> <cdp> <after dir>
-LABEL=anat QUERY='' SCENES=slug-pop node scripts/head-burst-look.mjs <vite> <cdp> <anatomical dir>
+LABEL=anat QUERY='&skull=anatomical' SCENES=slug-pop node scripts/head-burst-look.mjs <vite> <cdp> <anatomical dir>
 python3 scripts/head-burst-sheet.py <before dir> <after dir> <anatomical dir> docs/dev-notes/2026-10-07-sculpt-skull-2/look/burst-before-after.jpg
 ```
 
 ## The gate
 
-`scripts/head-burst-gate.mjs` was rewritten for these rules. It fires real rounds at frozen zombies on the ring page,
-over four boots:
+`scripts/head-burst-gate.mjs` was rewritten for these rules. It fires real rounds at frozen zombies on the ring page.
+(This is the gate as it was written, with four boots, when the anatomical skull was the default. Since the
+sculpted skull became the default the rules and the opening run on it, the pop of the 14 plates runs on a boot that
+asks for the anatomical skull, and the gate has five boots and 80 checks: the first part of this file, "The
+gates".)
 
 - **The shipped rules** (anatomical skull): pellet volleys on a head leave ordinary craters and nothing else; a slug
   fired with the crosshair on the head, with no stance solved for it, is centred by the shipped `splitFrac` and
@@ -522,8 +785,9 @@ A stance has to wait for the gun: a round fired while the gun is still coming ba
 displaced muzzle (a slug solved to pass 0.03 head radii from the centre passed 0.49 off). The gate waits a full
 reload before it solves a stance.
 
-As run on the final code: this gate 67 checks, 0 failed; the head-split gate (`scripts/head-split-gate.mjs`) 100
-checks, 0 failed; the axe gate (`scripts/axe-gate.mjs`) 27 checks, 0 failed. Neither of those two was edited.
+As run on the final code of that work: this gate 67 checks, 0 failed; the head-split gate
+(`scripts/head-split-gate.mjs`) 100 checks, 0 failed; the axe gate (`scripts/axe-gate.mjs`) 27 checks, 0 failed.
+Neither of those two was edited then.
 
 ## What looks worse, or is not done
 

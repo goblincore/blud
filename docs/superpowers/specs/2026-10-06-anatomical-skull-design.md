@@ -1,5 +1,14 @@
 # Anatomical humanoid skull
 
+**Status, 2026-10-07: opt-in.** This skull was the forward mesh default from 2026-10-06 to 2026-10-07. After
+playtesting it against the sculpted skull the owner chose the sculpted one, in its variant `full`, as the default: it
+fills the head and reads better in play. The anatomical skull is drawn with `?skull=anatomical`, and its asset is
+loaded only then. Everything below holds for a page that asks for it; "the forward mesh default" and "retain
+`?skull=sculpt` for comparison" are no longer true (a page with no skull parameter draws the sculpted skull, and the
+earlier sculpted look is `?sculpt=classic`). One function decides which skull a page draws, `resolveSkull` in
+`src/lab/sdf-zombie/webgpu/skeleton-spike/sculpt-variant.ts`; the decision and its consequences are in
+[the notes](../../dev-notes/2026-10-07-sculpt-skull-2/NOTES.md).
+
 Use the supplied Downloads GLB for a simplified anatomically faithful humanoid skull. Preserve major anatomical bone boundaries, orbit and nasal cavities, mandible and dental silhouette. Budget: 10k triangles total, one normal atlas, stable names and per-piece pivots. Source metadata credits WitmerLab / CC BY-NC-ND 4.0; the user confirmed separate permission for this modified game asset on 2026-10-06. Preserve embedded provenance. The original and editable high reference stay outside public in ignored scratch; only the finished low mesh and manifest enter public assets.
 
 Review intact and exploded geometry in Blender. Game integration must share intact geometry across actors, fit within intact flesh, follow the head affine deformation, and preserve existing wound/sever behavior. Fracture selection and impulses belong in renderer-free tested modules. Do not add a texture march for details a normal bake can carry; real openings and fracture thickness require geometry.

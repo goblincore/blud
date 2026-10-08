@@ -42,8 +42,16 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
     the sheets `full` is the best in every row, `paint` gives most of the face on the old bone, and the two `shape`
     variants make the teeth worse under the old paint. For the owner: pick one.
     [Notes and look sheets](../dev-notes/2026-10-07-sculpt-skull-2/NOTES.md).
-  - **Gates (as of 2026-10-06):** `scripts/head-split-gate.mjs` (100 checks), `scripts/axe-gate.mjs` (27),
-    `scripts/cut-wound-gate.mjs` (30).
+  - **The sculpted skull, `full`, is the default skull (2026-10-07, the owner's pick; branch `claude/sculpt-skull-2`):**
+    a page with no skull parameter draws it, `?skull=anatomical` draws the 14 plates, `?sculpt=classic` the first
+    look; one resolver decides (`skeleton-spike/sculpt-variant.ts`), and both looks are pinned by hash. The second
+    paint is drawn only on the characters it fits (zombie, soldier, juggernaut, the two clowns). For the owner: the
+    other eight humanoids have no skull-shaped head bone and show balls where the anatomical skull drew a skull (the
+    cultist is the one the levels spawn); and whether the carved heads need the 5 mm mesh.
+    [Notes, the cast sheet and the cell pair](../dev-notes/2026-10-07-sculpt-skull-2/NOTES.md).
+  - **Gates (as of 2026-10-07):** `scripts/head-split-gate.mjs` (111 checks), `scripts/axe-gate.mjs` (29),
+    `scripts/cut-wound-gate.mjs` (33), `scripts/head-burst-gate.mjs` (80). Each boot checks the skull it draws; the
+    checks about the plates run on boots that ask for `?skull=anatomical`.
 
   [Spec](../../docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 9: the axe as built; section 10:
   the head split as built) · plans [A](../../docs/superpowers/plans/2026-10-04-axe-part-a.md) and
