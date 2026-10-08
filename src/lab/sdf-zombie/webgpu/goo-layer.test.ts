@@ -336,18 +336,36 @@ describe('goo alpha WGSL (overlay mode)', () => {
   });
 });
 
-describe('goo overlay mode wiring (source tripwires)', () => {
-  const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
-
-  it('overlay materials neither test nor write depth, and are transparent', () => {
-    expect(src).toMatch(/m\.depthWrite = false;\s*\n\s*m\.depthTest = false;\s*\n\s*m\.transparent = true;/);
-  });
-
-  it('overlay materials do not bind a depthNode', () => {
+describe('goo overlay mode wiring (live layer on a stub renderer)', () => {
+  it('overlay materials neither test nor write depth, are transparent, and bind no depthNode', () => {
+    const f = gooLayerFixture();
+    // Default mode is overlay: the composite draws over the finished frame
+    // with no depth involvement. This DELETES the depth blocker rather than
+    // fixing it, so the flags below are the mode's whole contract — read
+    // off the material the composite actually drew with.
+    f.render();
+    const composite = f.log.draws().filter((r) => r.target === null).at(-1)!;
+    const m = composite.material!;
+    expect(m.depthWrite).toBe(false);
+    expect(m.depthTest).toBe(false);
+    expect(m.transparent).toBe(true);
     // Binding depthNode in overlay mode would silently reinstate the
-    // reconstruction this mode exists to delete.
-    const overlayFn = src.slice(src.indexOf('function makeOverlayMat'), src.indexOf('function makeDepthMat'));
-    expect(overlayFn).not.toContain('depthNode');
+    // reconstruction this mode exists to delete. (Unset node slots read
+    // back as null, not undefined.)
+    expect(m.depthNode).toBeNull();
+
+    // Contrast: the escape hatch restores depth interleaving — the composite
+    // material under setMode('depth') tests AND writes depth through a
+    // depthNode, so the flags above cannot pass vacuously.
+    f.layer.setMode('depth');
+    f.log.reset();
+    f.render();
+    const depthM = f.log.draws().filter((r) => r.target === null).at(-1)!.material!;
+    expect(depthM).not.toBe(m);
+    expect(depthM.depthTest).toBe(true);
+    expect(depthM.depthWrite).toBe(true);
+    expect(depthM.depthNode).toBeDefined();
+    f.dispose();
   });
 });
 
