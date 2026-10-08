@@ -686,7 +686,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
   }
 
   function burst(a: ZombieActor, point: Vec3, dir: Vec3, shot?: ShotProvenance, kind: 'pellet' | 'slug' = 'slug'): boolean {
-    if (!burstTuning.on || (kind !== 'slug' && !burstTuning.anyWeapon) || a.profileName() !== 'zombie') return false;
+    if (!burstTuning.on || (kind !== 'slug' && !burstTuning.anyWeapon) || a.characterName() !== 'zombie') return false;
     if (deps.splitOpen?.(a)) return false;
     const posed = a.posed();
     if (!headAlive(posed) || !onHeadPrim(posed.prims, point)) return false;
@@ -725,7 +725,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     h.model = r.state;
     h.burst = { kind: v.kind, outcome: kills ? 'lethal' : opened ? 'split' : 'glancing', offset: v.offset, severity: vc.severity, shards: plan.shards, flaps: plan.flaps };
     // Visible in the browser console while the effect is being tuned (owner: "I can't trigger it").
-    console.info(`[head-burst] actor ${a.id} ${kind}: ${h.burst.outcome} (line ${v.offset.toFixed(2)} head radii off centre)`);
+    if (import.meta.env.DEV) console.info(`[head-burst] actor ${a.id} ${kind}: ${h.burst.outcome} (line ${v.offset.toFixed(2)} head radii off centre)`);
 
     // Deform: the jelly rupture's spring, plus a lasting dent on the entry side. (No plain wobble kick: the burst's own
     // spring is the jelly, and the two would fight along the shot axis.)

@@ -24,12 +24,16 @@ import type { Primitive, Vec3 } from './types';
 import type { ShotAim } from './damage';
 
 export const BURST = {
-  /** Offset (fraction of head radius) under which a slug SPLITS the head (the full opening); wider is a weak glancing graze.
-   *  1.25 = every slug that hits the head splits, for now: the slug leaves the muzzle ~10 cm low and right of the crosshair,
-   *  so an aimed shot's line passes ~0.9-1.0 head radii from the centre and a 0.35 zone was never reached in play (owner
-   *  playtest 2026-10-03: "not able to trigger it"). Lower it with burstTune({ centreFrac }) to bring glancing back. */
+  /** THE OPENING's measure only (burstTuning.opening, off as shipped; the split and the pop never read it): the
+   *  offset of the slug's own line, as a fraction of the head's radius, under which the opening is the full one;
+   *  wider is the weak glancing one. 1.25 takes every slug that lands on the head: the slug leaves the muzzle beside
+   *  and under the eye, so an aimed shot's line passes 0.9 to 1.0 head radii from the centre. Lower it with
+   *  burstTune({ centreFrac }) to bring the glancing opening back. */
   centreFrac: 1.25,
-  /** A hit point farther than this from the head centre in hs units (the head ellipsoid is 1) is a neck / shoulder hit. */
+  /** A hit point farther than this from the head's centre in hs units (the head ellipsoid is 1) is a neck or a
+   *  shoulder hit. Asked by the opening, and by the split and the pop while they are judged on the slug's own line
+   *  (splitAim 'slug'). Judged on the crosshair they do not ask it: an aimed slug lands about 10 cm under the
+   *  crosshair, which on the zombie's head is at this reach's edge. */
   maxHs: 1.35,
   /** Crater radii, m. Glancing scales by (0.7 + 0.3 · severity). */
   entryR: { lethal: 0.12, glancing: 0.09 },

@@ -7,6 +7,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { makeZombie } from '../body';
+import { parseBlob } from '../blob-parse';
+import { compileBlob } from '../blob-compile';
+import { characterEntry, characterNames } from '../character-registry';
+import { isGoreBody } from '../motion-profile';
 import { sdBody } from '../validate';
 import type { Primitive, Vec3 } from '../types';
 import type { ShotProvenance, Wound } from '../damage';
@@ -15,10 +19,13 @@ import { createZombieActor, type ZombieActor } from './game-actor';
 import { createHeadDamage } from './game-head-damage';
 import { createHeadSplit } from './game-head-split';
 import { createHeadShot, slugSplitNormal } from './game-head-shot';
-import { BURST_TUNING_DEFAULTS, decapitationRule, headRadius, setBurstTuning } from '../head-burst';
+import { BURST, BURST_TUNING_DEFAULTS, decapitationRule, headRadius, hsOf, onHeadPrim, setBurstTuning } from '../head-burst';
 import { headAlive, headShape } from './flame-anchors';
+import { headQuatOf } from '../rig-bind';
+import { rotate, type Quat } from '../head-deform';
 import { traceRaySurface } from './flail-strike';
-import { woundFromSlug } from './game-weapon';
+import { spawnSlug, stepProjectiles, traceProjectile, woundFromSlug } from './game-weapon';
+import { HUMANOIDS } from './skeleton-spike/skull-cast';
 import tickSrc from './game-tick.ts?raw';
 import spawnSrc from './game-spawn.ts?raw';
 
@@ -28,11 +35,16 @@ interface Hooks {
   pops: { head: { origin: Vec3; prims: Primitive[] }; dir: Vec3; stump: Wound | null }[];
   severed: string[];
 }
-function fixture(o: { decapitate?: (c: { weapon: 'slug' | 'pellet' | 'other' }) => number | null } = {}) {
+/** `character`: a registry character in place of the plain zombie body, on its own motion profile and under its own
+ *  name, as game-spawn.ts makes it. */
+function fixture(o: { decapitate?: (c: { weapon: 'slug' | 'pellet' | 'other' }) => number | null; character?: string } = {}) {
   const hooks: Hooks = { pops: [], severed: [] };
   const view = new Proxy({}, { get: () => () => {} });
+  const entry = o.character ? characterEntry(o.character) : null;
   const a: ZombieActor = createZombieActor({
-    id: 1, room: 0, body: buildBody(makeZombie(), DEFAULT_BUILD_OPTS, {}), view: view as never,
+    id: 1, room: 0, view: view as never,
+    body: entry ? buildBody(compileBlob(parseBlob(entry.src)), DEFAULT_BUILD_OPTS) : buildBody(makeZombie(), DEFAULT_BUILD_OPTS, {}),
+    ...(entry ? { profile: entry.profile, characterName: entry.name } : {}),
     start: [0, 0, 0], seed: 3, bounds: { minX: -5, maxX: 5, minZ: -5, maxZ: 5 }, furniture: [],
     onSever: piece => { hooks.severed.push(piece.limb); },
     onHeadPop: (head, dir, stump) => { hooks.pops.push({ head, dir, stump }); },
@@ -61,16 +73,54 @@ function fixture(o: { decapitate?: (c: { weapon: 'slug' | 'pellet' | 'other' }) 
    *  fired with the crosshair on `aim` (from the centre) from `dist` m. */
   const slug = (dir: Vec3, o: { land?: Vec3; aim?: Vec3; dist?: number } = {}): boolean =>
     leaf.hit(a, on(dir, o.land ?? BROW), dir, aimed(dir, o.aim, o.dist), 'slug');
-  return { a, leaf, split, damage, hooks, opening, bleed, on, aimed, slug, centre: c, radius: headRadius(headShape(posed)!.axes), halfWidth: headShape(posed)!.axes[0] };
+  return { a, ctx, leaf, split, damage, hooks, opening, bleed, on, aimed, slug, centre: c, axes: headShape(posed)!.axes, radius: headRadius(headShape(posed)!.axes), halfWidth: headShape(posed)!.axes[0] };
 }
 const FRONT: Vec3 = [0, 0, -1], SIDE: Vec3 = [-1, 0, 0];
-/** The rounds land 3 cm over the head's centre unless a test says otherwise: the brow from in front (the centre line
- *  meets the nose's tip, which is past the head ellipsoid's reach, BURST.maxHs), the temple from the side. Where a
- *  round lands and where its crosshair was are separate things here, as they are for the gun. */
+/** The rounds land 3 cm over the head's centre unless a test says otherwise: the brow from in front, the temple from
+ *  the side. Where a round lands and where its crosshair was are separate things here, as they are for the gun. */
 const BROW: Vec3 = [0, 0.03, 0];
-/** Where an aimed slug lands: well under the crosshair and to one side, on the jaw (the gun's own lands about 10 cm
- *  under; from straight in front that is past the head ellipsoid's reach, as the nose's tip is). */
+/** A slug on the jaw, well under the crosshair and to one side. (The gun's own aimed slug lands lower still: "the
+ *  gun's real landing" below.) */
 const CHIN: Vec3 = [0.03, -0.065, 0];
+
+/** THE GUN'S MUZZLE AGAINST THE EYE, in the aim's own frame (right, up, forward; metres), with the gun at rest. Read
+ *  off the running game: the mean of six real fire()s at 1 to 4.9 m on the ring page (the loaded gun's two muzzle
+ *  nodes, game-weapon-rig.ts muzzleWorld; they agreed to 2 mm). */
+const MUZZLE: Vec3 = [0.0283, -0.1117, 0.6177];
+/** game-weapon-rig.ts AIM_CONVERGE_M: the slug leaves toward the point of the crosshair's ray this far out. */
+const CONVERGE_M = 8;
+/** The head as it is posed now: its frame, and the direction its face looks along the floor. */
+function headNow(f: ReturnType<typeof fixture>) {
+  const shape = headShape(f.a.posed())!;
+  const quat = (headQuatOf(f.a.boundRig(), f.a.pose().yaw) ?? [0, 0, 0, 1]) as Quat;
+  const face = rotate(quat, [0, 0, 1]), l = Math.hypot(face[0], face[2]) || 1;
+  return { frame: { centre: shape.centre, axes: shape.axes, quat }, face: [face[0] / l, 0, face[2] / l] as Vec3 };
+}
+/** ONE REAL AIMED SLUG at the fixture's zombie, flown as the game flies it (spawnSlug from the muzzle down the
+ *  converged ray, stepProjectiles at 60 Hz, traceProjectile against the posed body): fired from `dist` m in front of
+ *  the face, the eye level with the crosshair, the crosshair on the point `aim` from the head's centre (x to the
+ *  shooter's right, y up). Returns where it lands, its direction there, the provenance it carries, how far under
+ *  the head's centre it landed and how far out in the head ellipsoid's units (|hs|, 1 on the ellipsoid). Null when
+ *  the slug meets no flesh. */
+function gunSlug(f: ReturnType<typeof fixture>, dist: number, aim: Vec3 = [0, 0, 0]) {
+  const { frame, face } = headNow(f);
+  const fwd: Vec3 = [-face[0], 0, -face[2]], right: Vec3 = [-fwd[2], 0, fwd[0]], up: Vec3 = [0, 1, 0];
+  const target = frame.centre.map((v, k) => v + right[k]! * aim[0] + up[k]! * aim[1]) as Vec3;
+  const eye = target.map((v, k) => v - fwd[k]! * dist) as Vec3;
+  const muzzle = eye.map((v, k) => v + right[k]! * MUZZLE[0] + up[k]! * MUZZLE[1] + fwd[k]! * MUZZLE[2]) as Vec3;
+  const to = eye.map((v, k) => v + fwd[k]! * CONVERGE_M - muzzle[k]!) as Vec3, l = Math.hypot(...to);
+  const p = spawnSlug(muzzle, [to[0] / l, to[1] / l, to[2] / l], { eye, dir: fwd });
+  const body = f.a.posed();
+  for (let i = 0; i < 240; i++) {
+    const from = [...p.pos] as Vec3;
+    stepProjectiles([p], 1 / 60);
+    const hit = traceProjectile(from, p.pos, q => sdBody(q, body));
+    if (!hit) continue;
+    const v = Math.hypot(...p.vel);
+    return { point: hit, dir: p.vel.map(x => x / v) as Vec3, shot: p.shot!, under: frame.centre[1] - hit[1], reach: Math.hypot(...hsOf(frame, hit)), frame };
+  }
+  return null;
+}
 
 describe('the head-shot leaf: ordinary rounds', () => {
   it('a pellet on the head is left to the caller, and nothing about the head changes', () => {
@@ -228,6 +278,113 @@ describe('the slug split', () => {
     expect(f.slug(FRONT)).toBe(false);
     expect(f.leaf.last(f.a.id)).toMatchObject({ rule: 'ordinary', took: false });
     expect(f.split.isOpen(f.a)).toBe(false);
+  });
+});
+
+describe('the gun\'s real landing: an aimed slug is judged on its aim, wherever on the head\'s flesh it stops', () => {
+  /** The crosshair's places tried: the centre, and round the precise zone (all within splitFrac of the centre). */
+  const ZONE: Vec3[] = [[0, 0, 0], [0, 0.03, 0], [0, -0.03, 0], [0.03, 0, 0], [-0.03, 0, 0], [0.02, -0.02, 0]];
+  const RANGES = [1, 2, 4, 4.9];
+  it('an aimed slug lands about 10 cm under the crosshair, on the head\'s own flesh, at the edge of the head ellipsoid\'s old reach', () => {
+    for (const dist of RANGES) {
+      const f = fixture(), s = gunSlug(f, dist)!;
+      // The running game's six shots landed 9.4 to 10.8 cm under the centre, 1.29 to 1.31 out.
+      expect(s.under, `${dist} m`).toBeGreaterThan(0.09);
+      expect(s.under, `${dist} m`).toBeLessThan(0.12);
+      expect(onHeadPrim(f.a.posed().prims, s.point), `${dist} m`).toBe(true);
+      expect(s.reach, `${dist} m`).toBeGreaterThan(1.28);
+      expect(s.reach, `${dist} m`).toBeLessThan(BURST.maxHs);
+    }
+  });
+  it('the crosshair anywhere in the precise zone from 1, 2, 4 and 4.9 m: each real slug splits the head, both halves', () => {
+    for (const dist of RANGES) for (const aim of ZONE) {
+      const f = fixture(), s = gunSlug(f, dist, aim)!, at = `${dist} m, crosshair ${JSON.stringify(aim)}`;
+      expect(Math.hypot(...aim) / f.radius).toBeLessThan(BURST_TUNING_DEFAULTS.splitFrac);
+      expect(f.leaf.hit(f.a, s.point, s.dir, s.shot, 'slug'), at).toBe(true);
+      const v = f.leaf.last(f.a.id)!;
+      expect(v, at).toMatchObject({ rule: 'split', took: true });
+      expect(v.aimOffset!).toBeCloseTo(Math.hypot(...aim) / f.radius, 2);
+      expect(v.rangeM!).toBeCloseTo(Math.hypot(dist, ...aim), 2);
+      expect(f.split.state(f.a.id), at).toMatchObject({ preset: 'middle', sides: 0, offset: 0 });
+    }
+  });
+  /** Walk the fixture's zombie (its shamble carries the head tipped forward) to the first step at which a real slug
+   *  from 2 m, the crosshair 3 cm under the head's centre, stops in the head's flesh PAST the old reach. */
+  function walkToALowLanding(f: ReturnType<typeof fixture>) {
+    for (let step = 0; step < 400; step++) {
+      f.a.step(1 / 60);
+      const s = gunSlug(f, 2, [0, -0.03, 0]);
+      if (s && onHeadPrim(f.a.posed().prims, s.point) && s.reach > BURST.maxHs) return s;
+    }
+    throw new Error('fixture: no step of the walk lands the slug past the old reach');
+  }
+  it('A WALKING ZOMBIE: its head tips forward, a precisely aimed slug stops past the old reach of the head ellipsoid, and it still splits', () => {
+    const f = fixture(), s = walkToALowLanding(f);
+    expect(s.reach).toBeGreaterThan(BURST.maxHs);
+    expect(0.03 / f.radius).toBeLessThan(BURST_TUNING_DEFAULTS.splitFrac);
+    expect(f.leaf.hit(f.a, s.point, s.dir, s.shot, 'slug')).toBe(true);
+    expect(f.leaf.last(f.a.id)).toMatchObject({ rule: 'split', took: true });
+    expect(f.split.isOpen(f.a)).toBe(true);
+  });
+  it('judged on the slug\'s own line (splitAim slug) that reach still holds: the same landing is not judged', () => {
+    setBurstTuning({ splitAim: 'slug', splitFrac: 1.25, splitRangeM: 0 });
+    const f = fixture(), s = walkToALowLanding(f);
+    expect(f.leaf.hit(f.a, s.point, s.dir, s.shot, 'slug')).toBe(false);
+    expect(f.leaf.last(f.a.id)).toBeNull();
+  });
+  it('the crosshair outside the zone, or the head past the range, is ordinary on the same kind of landing', () => {
+    const wide = fixture(), w = gunSlug(wide, 2, [0.05, 0, 0])!;
+    expect(wide.leaf.hit(wide.a, w.point, w.dir, w.shot, 'slug')).toBe(false);
+    expect(wide.leaf.last(wide.a.id)).toMatchObject({ rule: 'ordinary', took: false });
+    const far = fixture(), g = gunSlug(far, BURST_TUNING_DEFAULTS.splitRangeM + 0.1)!;
+    expect(far.leaf.hit(far.a, g.point, g.dir, g.shot, 'slug')).toBe(false);
+    expect(far.leaf.last(far.a.id)).toMatchObject({ rule: 'ordinary', took: false });
+  });
+  it('a slug that stops in the torso is not judged, however the crosshair lay', () => {
+    const f = fixture();
+    const chest = f.on(FRONT, [0, -0.3, 0]);
+    expect(onHeadPrim(f.a.posed().prims, chest)).toBe(false);
+    expect(f.leaf.hit(f.a, chest, FRONT, f.aimed(FRONT), 'slug')).toBe(false);
+    expect(f.leaf.last(f.a.id)).toBeNull();
+  });
+});
+
+describe('only the zombie: the character, not the motion profile', () => {
+  /** Every registered character that moves on the zombie's profile and is not the zombie. */
+  const onZombieProfile = characterNames().filter(n => n !== 'zombie' && characterEntry(n).profile.name === 'zombie');
+  it('many characters move on the zombie\'s motion profile; each answers its own name', () => {
+    for (const n of ['female', 'schoolgirl', 'bonewalker', 'clown']) expect(onZombieProfile).toContain(n);
+    const f = fixture({ character: 'female' });
+    expect(f.a.profileName()).toBe('zombie');
+    expect(f.a.characterName()).toBe('female');
+    expect(fixture().a.characterName()).toBe('zombie');
+  });
+  it('a precise slug from within range on such a character\'s head is not judged: the caller stamps an ordinary slug wound', () => {
+    for (const character of ['female', 'clown', 'bonewalker']) {
+      const f = fixture({ character });
+      const at = f.on(FRONT);
+      if (!onHeadPrim(f.a.posed().prims, at)) throw new Error(`fixture: the round missed ${character}'s head`);
+      expect(f.leaf.hit(f.a, at, FRONT, f.aimed(FRONT), 'slug'), character).toBe(false);
+      expect(f.leaf.last(f.a.id), character).toBeNull();
+      expect(f.split.isOpen(f.a), character).toBe(false);
+      expect(f.a.headPopping(), character).toBe(false);
+      // The ordinary path: one slug crater on the head.
+      const wound = f.a.hitSlug(at, FRONT, f.aimed(FRONT));
+      expect(wound, character).not.toBeNull();
+      expect(f.a.wounds().some(w => w.headRegion === 'split+' || w.headRegion === 'split-'), character).toBe(false);
+      // It is the character's name that refuses it: the same body, called the zombie, is judged.
+      const g = fixture({ character });
+      g.a.characterName = () => 'zombie';
+      g.leaf.hit(g.a, g.on(FRONT), FRONT, g.aimed(FRONT), 'slug');
+      expect(g.leaf.last(g.a.id), character).not.toBeNull();
+    }
+  });
+  it('the split leaf refuses every one of them, so a slug cannot pop what cannot be split', () => {
+    for (const character of ['female', 'clown', 'bonewalker']) {
+      const f = fixture({ character });
+      expect(f.split.force(f.a.id, 'middle', 0, 0, 0.8), character).toBe(false);
+      expect(f.split.open(f.a, [1, 0, 0], f.on(FRONT), 1), character).toBeNull();
+    }
   });
 });
 
@@ -447,6 +604,23 @@ describe('an ordinary gun crater on the head keeps a low lip', () => {
     const slug = g.a.hitSlug(g.on(FRONT), FRONT)!;
     expect(slug.rimScale!).toBeLessThanOrEqual(BURST_TUNING_DEFAULTS.headLip);
   });
+  it('WHO GETS IT: every gore body (isGoreBody), which of the humanoids is all but the soldier\'s family and the soft cultists', () => {
+    const gore = HUMANOIDS.filter(n => isGoreBody(characterEntry(n).profile));
+    expect([...gore].sort()).toEqual(['bonewalker', 'bride', 'clown', 'clown-alt', 'female', 'schoolgirl', 'schoolgirl-alt', 'schoolgirl-described', 'zombie']);
+    expect(HUMANOIDS.filter(n => !gore.includes(n)).sort()).toEqual(['cultist', 'cultist-cowled', 'juggernaut', 'soldier']);
+    expect(isGoreBody(undefined)).toBe(true);
+    expect(isGoreBody({ family: 'soldier' })).toBe(false);
+    expect(isGoreBody({ soft: true })).toBe(false);
+    // A gore body that is not the zombie: the female's head crater has the low lip, her torso's the stock one.
+    const f = fixture({ character: 'female' });
+    const head = f.a.hit(f.on(FRONT), FRONT)!;
+    expect(f.a.posed().prims[head.primIdx]!.limb).toBe('head');
+    expect(head.rimScale!).toBeLessThanOrEqual(BURST_TUNING_DEFAULTS.headLip);
+    // The soldier's head crater keeps the stock lip.
+    const s = fixture({ character: 'soldier' });
+    const sh = s.a.hit(s.on(FRONT), FRONT);
+    if (sh && s.a.posed().prims[sh.primIdx]!.limb === 'head') expect(sh.rimScale ?? 1).toBeGreaterThan(BURST_TUNING_DEFAULTS.headLip);
+  });
   it('headLip 1 is the stock lip (the look before)', () => {
     const low = fixture().a, at = fixture();
     const a = low.hit(at.on(FRONT), FRONT)!;
@@ -456,11 +630,39 @@ describe('an ordinary gun crater on the head keeps a low lip', () => {
   });
 });
 
+describe('the last verdict', () => {
+  it('is read through the cast: an actor that has left it has none, and reset() forgets them all', () => {
+    const f = fixture();
+    f.slug(FRONT);
+    expect(f.leaf.last(f.a.id)).not.toBeNull();
+    const cast = f.ctx.world.actors;
+    cast.length = 0;
+    expect(f.leaf.last(f.a.id)).toBeNull();
+    cast.push(f.a);
+    expect(f.leaf.last(f.a.id)).not.toBeNull();
+    f.leaf.reset();
+    expect(f.leaf.last(f.a.id)).toBeNull();
+  });
+});
+
 describe('the wiring', () => {
   it('the projectile loop asks the head-shot leaf before it stamps a round\'s own wound', () => {
     expect(tickSrc).toContain('ctx.weapon.headShot?.hit(hitActor, hitPoint, dirN, p.shot, p.kind)');
     expect(tickSrc).not.toContain('ctx.weapon.headDamage?.burst(');
     expect(tickSrc).toContain('a.advanceHeadPop(dt)');
+  });
+  it('THE LEAF IS ASKED BEFORE THE SKULL\'S OWN HIT PATH, and a round it takes never reaches it (no ejected eyes, no broken plate)', () => {
+    const asked = tickSrc.indexOf('ctx.weapon.headShot?.hit(hitActor, hitPoint, dirN, p.shot, p.kind)');
+    const impact = tickSrc.indexOf('ctx.render.segMeshRenderer.impact(hitActor');
+    expect(asked).toBeGreaterThan(0);
+    expect(impact).toBeGreaterThan(asked);
+    // One call of impact in the player's projectile loop, and it is inside the branch of a round the leaf declined.
+    expect(tickSrc.split('segMeshRenderer.impact(hitActor').length - 1).toBe(1);
+    expect(tickSrc.slice(asked, impact)).toContain('if (!burstHandled && ctx.render.segMeshRenderer) {');
+  });
+  it('the actor is told which character it is, and the zombie\'s pop is wired by that name', () => {
+    expect(spawnSrc).toContain('characterName: name,');
+    expect(spawnSrc).toContain("...(name === 'zombie' ? {\n      onDecapitate:");
   });
   it('the zombie is spawned with the pop and with the decapitation rule', () => {
     expect(spawnSrc).toContain('onDecapitate: ({ weapon }');

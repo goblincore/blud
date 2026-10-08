@@ -3363,8 +3363,9 @@ async function main() {
     // The modelled brain (game-brain-gib.ts), lit by the level's light list for the room it is thrown in.
     brain: createBrainGib(ctx, { lightsAt: p => ctx.world.levelLightLists.get(roomIdAt(p[0], p[2])) ?? null }),
   });
-  // What a gun round does to a zombie's head besides an ordinary wound (game-head-shot.ts): a centred slug opens
-  // the head through the head split, or pops a split one; the burst opening stays behind its tuning.
+  // What a gun round does to a zombie's head besides an ordinary wound (game-head-shot.ts): a precisely aimed slug
+  // from close to medium range opens the head through the head split, a slug from that range pops a head already
+  // split wide; the burst opening stays behind its tuning.
   ctx.weapon.headShot = createHeadShot(ctx, {
     headShape,
     split: ctx.weapon.headSplit,

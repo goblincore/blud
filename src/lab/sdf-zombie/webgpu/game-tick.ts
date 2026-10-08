@@ -893,15 +893,17 @@ export function tick(ctx: GameContext, dt: number) {
           // the ring tail (a hit that also severs puts a stump there).
           if (!hitThisFrame.has(hitActor)) { hitActor.beginHits(); hitThisFrame.add(hitActor); }
           const hitTiming = ctx.telemetry.telemetry.begin();
-          if (ctx.render.segMeshRenderer) {
+          // A round on a zombie's head asks the head-shot leaf FIRST (game-head-shot.ts): a precisely aimed slug from
+          // close to medium range splits the head, a slug from that range pops a head already split wide, and the
+          // leaf takes the round. A round it takes is not an ordinary hit on the skull either: the skull's own hit
+          // path (impact: the eyes near the hit are ejected, the plate under it is damaged) is for the rounds the
+          // leaf declines (every pellet, an imprecise slug, a slug from too far, not the head, not the zombie), which
+          // then take the ordinary wound below. Routed by projectile kind, never by Wound.type (slugs stamp 'blast').
+          const burstHandled = !!ctx.weapon.headShot?.hit(hitActor, hitPoint, dirN, p.shot, p.kind);
+          if (!burstHandled && ctx.render.segMeshRenderer) {
             const sources = ctx.render.skeletonSources.get(hitActor)?.sources;
             if (sources) ctx.render.segMeshRenderer.impact(hitActor, sources, hitPoint, dirN, p.kind, { from, by: p });
           }
-          // A round on a zombie's head asks the head-shot leaf first (game-head-shot.ts): a centred slug splits the
-          // head or pops a split one, and takes the round. Anything it declines (every pellet, an off-centre slug, not
-          // the head, not the plain zombie) takes the ordinary path below. Routed by projectile kind, never by
-          // Wound.type (slugs stamp 'blast').
-          const burstHandled = !!ctx.weapon.headShot?.hit(hitActor, hitPoint, dirN, p.shot, p.kind);
           const stamped = burstHandled ? null
             : p.kind === 'slug'
               ? hitActor.hitSlug(hitPoint, dirN, p.shot)

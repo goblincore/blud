@@ -3,18 +3,26 @@
 // THE HEAD-SHOT LEAF: what a gun round does to a zombie's head besides an ordinary wound (head-burst.ts headShotRule): a precise slug from close to medium range splits the head, and a slug from that range pops a split one.
 //
 // The projectile loop (game-tick.ts) asks hit() for every round that lands on an actor, before it stamps the
-// round's ordinary wound. This leaf owns no state of its own but the last verdict per actor (the gates' readout):
-// the rule is pure (head-burst.ts headShotRule), and each outcome belongs to a leaf or the actor that already has it.
+// round's ordinary wound, and before the round reaches the skull's own hit path (the bone renderer's impact, which
+// ejects the eyes near a hit and breaks the plate under it): a round this leaf takes does neither. This leaf owns no
+// state of its own but the last verdict per actor (the gates' readout): the rule is pure (head-burst.ts
+// headShotRule), and each outcome belongs to a leaf or the actor that already has it.
 //
 // PRECISE AND IN RANGE are read from the slug's provenance: the eye and the crosshair's ray as the gun fired
 // (damage.ts ShotAim; game-weapon-rig.ts launchSlug records them). The slug is precise when that ray passes within
 // burstTuning.splitFrac head radii of the head's centre, and in range when the head is within
-// burstTuning.splitRangeM of that eye. Where the slug itself lands does not decide it: it leaves from the muzzle and
-// lands about 10 cm under the crosshair.
+// burstTuning.splitRangeM of that eye. Where the slug itself lands does not decide it, so long as it stopped in the
+// head's own flesh (head-burst.ts onHeadPrim: the head limb's prims, the neck's included): it leaves from the muzzle
+// and lands about 10 cm under the crosshair, on the chin or under it. The older measure (burstTuning.splitAim
+// 'slug') is the slug's own line, and keeps the reach it always had: a landing point past BURST.maxHs of the head's
+// ellipsoid is the neck's or a shoulder's, and is not judged.
+//
+// ONLY THE ZOMBIE: the character (ZombieActor.characterName), not the motion profile. Every character without a
+// profile of its own moves on the zombie's, and none of them has the split's presets or the pop.
 //
 //   ordinary   hit() answers false and the caller stamps the round's own wound (ZombieActor.hit / hitSlug). Every
 //              pellet, an imprecise slug, a slug from too far, a round that is not on head flesh (the neck's base
-//              is the torso's), any character but the plain zombie, a head that is popping, everything with
+//              is the torso's), any character but the zombie, a head that is popping, everything with
 //              burstTuning.on off.
 //   split      THE SLUG SPLIT. The head opens through the head split leaf (game-head-split.ts open), exactly as the
 //              axe's chop opens it, straight to burstTuning.splitOpen of the preset's angle. The split's plane holds
@@ -94,9 +102,9 @@ export function slugSplitNormal(dir: Vec3, quat: Quat): Vec3 {
   return l > 1e-4 ? [n[0] / l, n[1] / l, n[2] / l] : rotate(quat, [1, 0, 0]);
 }
 
-export function createHeadShot(_ctx: GameContext, deps: HeadShotDeps): HeadShotLeaf {
-  const verdicts = new WeakMap<ZombieActor, HeadShotDebug>();
-  const byId = new Map<number, ZombieActor>();
+export function createHeadShot(ctx: GameContext, deps: HeadShotDeps): HeadShotLeaf {
+  // Keyed by the actor object and held weakly: an actor that has left the cast takes its verdict with it.
+  let verdicts = new WeakMap<ZombieActor, HeadShotDebug>();
 
   /** Open the head along the slug's plane, laid on the head's middle line (slugSplitPoint); the faces are the
    *  slug's wound. False when the split refused. */
@@ -114,7 +122,7 @@ export function createHeadShot(_ctx: GameContext, deps: HeadShotDeps): HeadShotL
 
   return {
     hit(a, point, dir, shot, kind = 'slug') {
-      if (!burstTuning.on || a.profileName() !== 'zombie') return false;
+      if (!burstTuning.on || a.characterName() !== 'zombie') return false;
       const posed = a.posed();
       if (!headAlive(posed) || a.headPopping()) return false;
       // A split head's prims are the closed head's: the hit is judged where it lands on them.
@@ -123,8 +131,13 @@ export function createHeadShot(_ctx: GameContext, deps: HeadShotDeps): HeadShotL
       const shape = deps.headShape(posed);
       if (!shape) return false;
       const frame: HeadFrame = { centre: shape.centre, axes: shape.axes, quat: (headQuatOf(a.boundRig(), a.pose().yaw) as Quat | null) ?? IDENTITY };
-      const hs = hsOf(frame, at);
-      if (Math.hypot(hs[0], hs[1], hs[2]) > BURST.maxHs) return false;   // the neck or a shoulder
+      // Judged on the slug's own line, where it lands is the measure, and a landing point past the head ellipsoid's
+      // reach is the neck's or a shoulder's. Judged on the crosshair it is not asked: an aimed slug lands 10 cm
+      // under the crosshair, at that reach's edge.
+      if (burstTuning.splitAim === 'slug') {
+        const hs = hsOf(frame, at);
+        if (Math.hypot(hs[0], hs[1], hs[2]) > BURST.maxHs) return false;
+      }
       const offset = classifyBurst({ point, dir }, frame).offset;
       // Where the player was aiming as the slug left: the crosshair's ray against this head, and the range.
       const aim = kind === 'slug' && shot?.weapon === 'slug' ? shot.aim ?? null : null;
@@ -138,17 +151,16 @@ export function createHeadShot(_ctx: GameContext, deps: HeadShotDeps): HeadShotL
           : rule === 'opening' ? deps.opening(a, point, dir, shot, kind)
             : false;
       verdicts.set(a, { rule, kind, offset, aimOffset, rangeM, took });
-      byId.set(a.id, a);
-      // Visible in the browser console while the rules are being tuned.
-      if (rule !== 'ordinary' && rule !== 'opening') {
+      // Visible in a dev build's console while the rules are being tuned.
+      if (import.meta.env.DEV && rule !== 'ordinary' && rule !== 'opening') {
         console.info(`[head-shot] actor ${a.id} ${kind}: ${rule}${took ? '' : ' (refused)'} (aim ${aimOffset === null ? 'not recorded' : `${aimOffset.toFixed(2)} head radii off centre from ${rangeM!.toFixed(1)} m`}; the round's line ${offset.toFixed(2)})`);
       }
       return took;
     },
     last(id) {
-      const a = byId.get(id);
+      const a = ctx.world.actors.find(x => x.id === id);
       return a ? verdicts.get(a) ?? null : null;
     },
-    reset() { byId.clear(); },
+    reset() { verdicts = new WeakMap(); },
   };
 }

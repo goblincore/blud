@@ -57,7 +57,7 @@ import { makeRng, headingDir, type Rng, type WanderBounds } from '../wander';
 import { rotateYaw } from '../gait';
 import type { BrainPlayer } from '../brain';
 import { makeZombieMind, type EnemyMind } from './enemy-mind';
-import { isSoldierFamily, wantsTorsoGuards, type MotionProfile } from '../motion-profile';
+import { isGoreBody, isSoldierFamily, wantsTorsoGuards, type MotionProfile } from '../motion-profile';
 import { BARREL_REST, INDEX_REST, barrelsDriven, stepBarrelIndex, stepBarrelSpin, type BarrelIndex, type BarrelSpin } from '../barrel-spin';
 import { lightsModeFor, statusLights, type StatusLights } from '../status-lights';
 import type { MotionFrame } from '../motion';
@@ -396,9 +396,13 @@ export interface ZombieActor {
    *  source of truth for every decision field this interface reports. */
   mind(): EnemyMind;
   readonly kind: 'zombie' | 'soldier';
-  /** The motion profile's character name ('zombie' when none) — which
-   *  character this is, where `kind` is only which decision vocabulary. */
+  /** The MOTION PROFILE's name ('zombie' when none): how this body moves. Not which character it is: every
+   *  character without a profile of its own moves on the zombie's (motion-profile.ts motionProfileFor), so the
+   *  female, the schoolgirls, the bonewalker and the clowns all answer 'zombie' here. */
   profileName(): string;
+  /** WHICH CHARACTER this is: its name in the character registry (opts.characterName, else the CharacterView's
+   *  entry, else the profile's name). Rules that belong to one character ask this, never profileName(). */
+  characterName(): string;
   meleeCapable(): boolean;
   /** The LAST motion frame, or null before the first step. character-view's
    *  pose() reads `gun` (the held prop's transform) and `collapsed` (release
@@ -605,6 +609,8 @@ export function createZombieActor(opts: {
    *  taking the two halves, and callers that HAVE a CharacterView hand it over
    *  as well, for the damage delegation in task 4b. */
   character?: CharacterView;
+  /** The character's name in the registry, for a caller with no CharacterView to hand over (characterName()). */
+  characterName?: string;
   /** Experimental fixed torso presets, off for the normal game. */
   boundedWounds?: boolean;
   start: Vec3;
@@ -753,10 +759,13 @@ export function createZombieActor(opts: {
    */
   let lastPlayerPos: Vec3 | null = null;
   let bodyYaw = 0;
+  const characterName = opts.characterName ?? opts.character?.entry.name ?? opts.profile?.name ?? 'zombie';
   const soldierDamage = isSoldierFamily(opts.profile);
   /** A soft target (MotionProfile.soft) dies to its first bullet or blast hit;
    *  set on the hit, turned into a forced collapse on the next step. */
   const softTarget = !!opts.profile?.soft;
+  /** Gun craters on this body take the wet red lip, and on its head the low lip (gunWetLip, headLip). */
+  const goreBody = isGoreBody(opts.profile);
   let softKilled = false;
   /** The killing hit's death (soft-death.ts planDeath): the style's throw is
    *  applied on the first collapsed sub-step, a stagger first stays up
@@ -1175,7 +1184,6 @@ export function createZombieActor(opts: {
     }
     for (const cut of cutChains(current, soldierDamage ? cuttingWounds : [...woundRing.all()])) {
       if (fullCuts.includes(cut.limb) || (soldierDamage && !soldierFatal && cut.limb === 'head') || !allowArmCut(cut.limb, cut.fromPrim)) continue;
-      if (cut.limb === 'head' && pops()) continue;
       detach(cut.limb, severDistal(current, cut));
     }
     // A soft target that loses its gun arm drops the gun.
@@ -1752,18 +1760,19 @@ export function createZombieActor(opts: {
   }
 
   /** A GUN CRATER ON THE HEAD KEEPS A LOW LIP (head-burst.ts burstTuning.headLip): the skull's face is 1 to 2 cm
-   *  under the skin, and a full lip walls it in. The head's prims and the neck's (the head limb); the same bodies
-   *  the wet lip is for. */
+   *  under the skin, and a full lip walls it in. The head's prims and the neck's (the head limb), on every GORE
+   *  BODY (motion-profile.ts isGoreBody): the zombie and every character that is not of the soldier's family and
+   *  not a soft target. They all draw a skull under the head's flesh, and the lip hides it on each of them alike. */
   function headLip(wound: Wound): void {
-    if (soldierDamage || softTarget || posed.prims[wound.primIdx]?.limb !== 'head') return;
+    if (!goreBody || posed.prims[wound.primIdx]?.limb !== 'head') return;
     wound.rimScale = (wound.rimScale ?? 1) * Math.max(0, burstTuning.headLip);
   }
 
-  /** WET RED LIP on a gun crater (torn-lips.ts, plan Task 35): the zombie-class gore bodies only.
+  /** WET RED LIP on a gun crater (torn-lips.ts, plan Task 35): the gore bodies only (motion-profile.ts isGoreBody).
    *  The soldier keeps his own soldierWound stain and the soft target (cultist robe) takes decals,
    *  so both are left stock; wetLipWound itself refuses cloth wounds and burns. */
   function gunWetLip(wound: Wound, kind: keyof typeof GUN_WET_LIP): void {
-    if (soldierDamage || softTarget) return;
+    if (!goreBody) return;
     wetLipWound(wound, GUN_WET_LIP[kind]);
   }
 
@@ -2316,6 +2325,7 @@ export function createZombieActor(opts: {
      *  from the n-th prim of the limb's chain (0 = root; for the head,
      *  1 leaves the neck on the body — the headshot-stump case). */
     profileName: () => opts.profile?.name ?? 'zombie',
+    characterName: () => characterName,
     debugSever: (limb: LimbId, at: 'full' | number = 'full') => {
       const cluster = current.clusters.find(c => c.limb === limb);
       if (!cluster?.alive) return false;

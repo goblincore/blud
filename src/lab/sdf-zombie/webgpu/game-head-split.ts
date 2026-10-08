@@ -132,8 +132,10 @@ export function createHeadSplit(ctx: GameContext, deps: HeadSplitDeps = {}): Hea
     return { frame: headFrameOf(s, headQuatOf(a.boundRig(), a.pose().yaw) ?? [0, 0, 0, 1]), halfWidth: s.axes[0] };
   }
 
+  /** The character, not the motion profile: every character without a profile of its own moves on the zombie's, and
+   *  the presets are measured on the zombie's head alone. */
   const canSplit = (a: ZombieActor): boolean =>
-    a.profileName() === 'zombie' && headAlive(a.posed()) && !tearing(a) && !deps.headDamaged?.(a);
+    a.characterName() === 'zombie' && headAlive(a.posed()) && !tearing(a) && !deps.headDamaged?.(a);
 
   /** The split hook: asked by the actor at every re-pose, with the un-split pose. */
   function hook(a: ZombieActor, h: ActorSplit, p: BuildResult): SplitWarp | null {

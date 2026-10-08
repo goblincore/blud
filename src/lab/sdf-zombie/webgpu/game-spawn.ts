@@ -420,7 +420,7 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
   const zombieId = ctx.boot.nextId++;
   rigGroup.userData.gameActorId = zombieId;
   const actor = createZombieActor({
-    id: zombieId, room: room.id, body: placed, view, character, start,
+    id: zombieId, room: room.id, body: placed, view, character, characterName: name, start,
     boundedWounds: ctx.vfx.boundedWoundPreview,
     // A SWORD profile (motion-profile.ts `melee.kind === 'sword'`, the
     // bride) gets the ring brain on SWORD_TUNING plus strike contact and
@@ -494,9 +494,10 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
     // the whole swollen head (blood-sim.ts burstVolume — the 10-bead point
     // burst read as a thin mist), a slug gout along the shot, the neck
     // bleeds, and the head itself flies apart (head-pop.ts).
-    // THE ZOMBIE'S POP (head-burst.ts decapitationRule): the same burst, when a slug takes its head off or a centred
-    // slug lands on its split head (game-head-shot.ts). Its eyes are painted on the face sheet, so the debris'
-    // eyeballs take the sheet's glow colour. A pellet's decapitation stays the flying head (onSever).
+    // THE ZOMBIE'S POP (head-burst.ts decapitationRule): the same burst, when a slug takes its head off or a slug
+    // from close to medium range lands on its head already split wide (game-head-shot.ts). The zombie is the
+    // CHARACTER of that name, not every body on the zombie's motion profile. Its eyes are painted on the face sheet,
+    // so the debris' eyeballs take the sheet's glow colour. A pellet's decapitation stays the flying head (onSever).
     ...(name === 'zombie' ? {
       onDecapitate: ({ weapon }: { weapon: 'slug' | 'pellet' | 'other' }) => decapitationRule(weapon),
     } : {}),
