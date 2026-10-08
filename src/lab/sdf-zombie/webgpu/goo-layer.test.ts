@@ -19,7 +19,7 @@ import {
   GOO_TUNING, GOO_SURFACE_WGSL, GOO_ALPHA_WGSL, GOO_BLUR_WGSL,
   GOO_DENSITY_BLUE_IS_GUT_MASK,
 } from './goo-layer';
-import { gooLayerFixture } from './goo-layer-test-support';
+import { gooLayerFixture, gooSim } from './goo-layer-test-support';
 
 /** The reserved words WGSL reserves even without implementing (spec appendix). */
 const RESERVED_WORDS = [
@@ -378,8 +378,8 @@ describe('goo sync wiring (the bug that hid the whole layer)', () => {
   // sweeps plus a depth-reconstruction investigation before anyone checked
   // whether the field had anything in it.
   //
-  // These are source tripwires, in the same style as the blur-wiring guards
-  // above: nothing here constructs a renderer.
+  // The first two tests are source tripwires on the tick order (KEEP per the
+  // audit: tick() has no unit seam); the third runs the layer live.
   it('the game page syncs AFTER the camera is final, so the quads billboard correctly', () => {
     const src = readFileSync('src/lab/sdf-zombie/webgpu/game-tick.ts', 'utf8');
     const cam = src.indexOf('ctx.boot.handle.camera.updateMatrixWorld();');
@@ -397,11 +397,23 @@ describe('goo sync wiring (the bug that hid the whole layer)', () => {
   it('the selection seam partitions droplets in BOTH sync fill paths', () => {
     // Shutter integration: the sharp/selected split is only exact if every
     // droplet fill path filters. One unfiltered loop would draw the selected
-    // blood twice (once sharp, once blurred).
-    const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
-    const filters = src.match(/if \(selection && !selection\.droplet\(d\)\) continue;/g) ?? [];
-    expect(filters.length).toBe(2);
-    expect(src).toContain('if (selection && !selection.droplet(d)) continue;');
+    // blood twice (once sharp, once blurred). liveCount is the layer's own
+    // diagnostic mirror of the instancer's count, so both insertion-order
+    // and area-priority paths are checked through the public API.
+    const f = gooLayerFixture();
+    const sim = gooSim(6, (i) => ({ kind: i % 3 === 0 ? 'mist' : (i % 3 === 1 ? 'drop' : 'gut') }), 2);
+    f.layer.setSelection({ droplet: (d) => d.kind === 'gut', splats: false, extras: false });
+    f.layer.sync(sim, f.camera);
+    expect(f.layer.liveCount).toBe(2); // only the gut droplets, no splats
+    f.layer.setAreaPriority(true);
+    f.layer.sync(sim, f.camera);
+    expect(f.layer.liveCount).toBe(2); // the area-priority path filters too
+    // Null selection restores the shipped one-pass pose: drops + guts ride
+    // the field, mist never does, and the splats come back.
+    f.layer.setSelection(null);
+    f.layer.sync(sim, f.camera);
+    expect(f.layer.liveCount).toBe(6); // 2 drops + 2 guts + 2 splats
+    f.dispose();
   });
 });
 
