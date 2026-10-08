@@ -1243,9 +1243,8 @@ describe('connection blob shape', () => {
 
 // -------------------------------------------------------------------------
 // PER-STREAM FUSION (blood-per-stream spike, 2026-09-18). The mechanism is
-// pure decision code (channel assignment + fuse ramp) plus one WGSL combine
-// pass; the render path itself needs a WebGPU device and is pinned as source
-// tripwires, the same discipline the rest of this file uses.
+// pure decision code (channel assignment + fuse ramp, tested above) plus one
+// WGSL combine pass; the render path runs live on the recording stub.
 // -------------------------------------------------------------------------
 
 describe('streamChannelFor (per-stream partition)', () => {
@@ -1355,12 +1354,12 @@ describe('goo combine WGSL', () => {
   });
 });
 
-describe('per-stream wiring (source tripwires)', () => {
-  const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
-
+describe('per-stream wiring (live layer on a stub renderer)', () => {
   it('defaults OFF, so the shipped stream-blind frame is byte-identical', () => {
-    expect(src).toContain('let perStreamOn = false;');
-    expect(src).toContain('let streamRampSec = 0;');
+    const f = gooLayerFixture();
+    expect(f.layer.perStream).toBe(false);
+    expect(f.layer.streamRamp).toBe(0);
+    f.dispose();
   });
 
   it('exposes the raw-channel diagnostic, default off', () => {
@@ -1370,31 +1369,111 @@ describe('per-stream wiring (source tripwires)', () => {
   });
 
   it('routes each instance into its stream channel and uploads the mask only while on', () => {
-    expect(src).toContain("const streamMask = attribute<'vec4'>('streamMask', 'vec4');");
-    expect(src).toContain("quads.geometry.setAttribute('streamMask', streamAttr);");
-    expect(src).toContain('if (perStreamOn) writeStreamMask(');
-    expect(src).toContain('if (perStreamOn && n > 0) {');
-    expect(src).toContain('streamAttr.addUpdateRange(0, n * 4);');
-    // The channel map is rebuilt every sync (channels are per-frame scratch).
-    expect(src).toContain('streamChannelMap.clear();');
+    const f = gooLayerFixture();
+    f.render(); // the density render exposes the instancer
+    const mesh = gooDensityMesh(f.log);
+    const streamAttr = mesh.geometry.getAttribute('streamMask') as THREE.InstancedBufferAttribute;
+    const streams = [7, 7, 8, 9];
+    // OFF: the mask attribute is never written or uploaded — the shipped
+    // upload path is untouched.
+    f.layer.sync(gooSim(4, (i): Partial<Droplet> => ({ stream: streams[i] })), f.camera);
+    expect(streamAttr.version).toBe(0);
+    expect(streamAttr.updateRanges).toEqual([]);
+    expect(Array.from(streamAttr.array.slice(0, 16))).toEqual(new Array(16).fill(0));
+    // ON: dedicated channels are assigned on first sight (0 and 1), the
+    // third-and-beyond stream shares channel 2, the mask uploads exactly
+    // the live range, and the ramp scales young droplets' density.
+    f.layer.setPerStream(true);
+    f.layer.setStreamRamp(0.5);
+    f.layer.sync(gooSim(4, (i): Partial<Droplet> => ({
+      stream: streams[i],
+      age: [0, 0.5, 9, 9][i], // age 0 sits at the ramp floor, the rest past it
+    })), f.camera);
+    const mask = Array.from(streamAttr.array.slice(0, 16));
+    expect(mask[0]).toBeCloseTo(0.35, 6); // float32 storage of the ramp floor
+    expect(mask.slice(1)).toEqual([
+      0, 0, 0, // (stream 7, channel 0, age 0 -> minFactor, asserted above)
+      1, 0, 0, 0, // stream 7 -> channel 0, ramp done
+      0, 1, 0, 0, // stream 8 -> channel 1
+      0, 0, 1, 0, // stream 9 -> shared channel 2
+    ]);
+    expect(streamAttr.version).toBe(1);
+    expect(streamAttr.updateRanges).toEqual([{ start: 0, count: 16 }]);
+    f.dispose();
   });
 
   it('runs the extra density/blur/combine passes only under the switch', () => {
-    expect(src).toContain('if (perStreamOn) {');
-    expect(src).toContain("setPassLabel('goo:stream-density');");
-    expect(src).toContain("setPassLabel('goo:stream-blur');");
-    expect(src).toContain("setPassLabel('goo:stream-combine');");
-    // The combine writes a field the surface reads; it uses the blurred pair
-    // when the canonical blur ran and the raw pair when it did not.
-    expect(src).toContain('const combineBlurMat = makeCombineMat(blurB.texture, streamBlurB.texture);');
-    expect(src).toContain('const combineRawMat = makeCombineMat(target.texture, streamTarget.texture);');
-    // The combine's orientation uniform is explicit and separable from uFlipY.
-    expect(src).toContain('const uStreamFlipY = uniform(1);');
-    expect(src).toContain('flipY: uStreamFlipY,');
+    const f = gooLayerFixture();
+    f.render();
+    // OFF: the only targets drawn are the canonical chain — density, the
+    // blur pair, and the composite onto the canvas.
+    const off = f.log.drawnTargets();
+    expect(off).toHaveLength(4);
+    expect(off.filter((t) => t === null)).toHaveLength(1);
+    f.layer.setPerStream(true);
+    f.log.reset();
+    f.render();
+    // ON adds exactly four targets — the packed stream density, its blur
+    // pair, and the combine's field — and still composites once.
+    const on = f.log.drawnTargets();
+    expect(on).toHaveLength(8);
+    expect(on.filter((t) => t === null)).toHaveLength(1);
+    expect(on.filter((t) => !off.includes(t))).toHaveLength(4);
+    // The canonical density pass and the stream density pass draw the SAME
+    // instancer through DIFFERENT materials: the stream pass routes each
+    // instance's falloff into its own channel.
+    const densityDraws = f.log.draws().filter((r) =>
+      r.scene.children.some((c) => (c as THREE.InstancedMesh).isInstancedMesh));
+    expect(densityDraws).toHaveLength(2);
+    expect(densityDraws[0]!.material).not.toBe(densityDraws[1]!.material);
+    expect(densityDraws[0]!.target).toBe(f.layer.debugTargets.density);
+    expect(densityDraws[1]!.target).not.toBe(densityDraws[0]!.target);
+    f.dispose();
   });
 
   it('the lazy first clear covers every new target (the submit-rejection trap)', () => {
-    expect(src).toContain('for (const t of [streamTarget, streamBlurA, streamBlurB, perStreamField])');
-    expect(src).toContain('streamTargetsNeedInit = true;');
+    // setSize reallocates the backing texture, and a lazily-initialised
+    // texture inside the same encoder as the pass that samples it gets the
+    // whole WebGPU submit rejected — so every new target must be explicitly
+    // cleared once after (re)allocation.
+    const f = gooLayerFixture();
+    f.layer.setPerStream(true);
+    f.render();
+    // First render: EIGHT explicit first clears — the four canonical
+    // targets plus the four per-stream targets, each a distinct target
+    // probed with the empty scene.
+    const initIdx = f.log.entries
+      .map((e, i) => (e.kind === 'render' && e.scene.children.length === 0 ? i : -1))
+      .filter((i) => i >= 0);
+    expect(initIdx).toHaveLength(8);
+    expect(new Set(initIdx.map((i) => (f.log.entries[i] as Extract<GooLogEntry, { kind: 'render' }>).target)).size).toBe(8);
+    // The four STREAM clears run under an explicit BLACK clear (a non-zero
+    // red channel is density) which is restored to the renderer's previous
+    // colour afterwards.
+    const clearsBefore = f.log.entries.slice(0, initIdx[4]!)
+      .filter((e): e is Extract<GooLogEntry, { kind: 'clear' }> => e.kind === 'clear');
+    expect(clearsBefore.at(-1)).toMatchObject({ color: 0 });
+    const clearAfter = f.log.entries.slice(initIdx[7]! + 1)
+      .find((e): e is Extract<GooLogEntry, { kind: 'clear' }> => e.kind === 'clear');
+    expect(clearAfter).toMatchObject({ color: 0x1a1116, alpha: 1 });
+    // Steady state: nothing re-clears.
+    f.log.reset();
+    f.render();
+    expect(f.log.initClears()).toHaveLength(0);
+    // A resize re-arms BOTH init blocks (setSize reallocates everything).
+    f.layer.setSize(400, 300);
+    f.log.reset();
+    f.render();
+    expect(f.log.initClears()).toHaveLength(8);
+    f.dispose();
+    // And the stream init is genuinely LAZY: turning the experiment on
+    // after the canonical targets are warm pays only the four new clears.
+    const g = gooLayerFixture();
+    g.render();
+    g.log.reset();
+    g.layer.setPerStream(true);
+    g.render();
+    expect(g.log.initClears()).toHaveLength(4);
+    g.dispose();
   });
 });
