@@ -285,32 +285,31 @@ describe('goo shading setters (blood-viscosity spec: clamp ranges)', () => {
   // The clamp trap, in test form: setThreshold was clamped at 0.95 while a
   // lone blob peaks near 1.0, so no reachable value could reject a single
   // droplet and three rounds of tuning were unwinnable. Every new setter gets
-  // its ceiling checked against the range the shader actually produces.
-  it('clamps all four setters to the range the shader actually produces', () => {
-    // Whitespace-tolerant (not pinned to one-line formatting) so a reformat
-    // doesn't break this, but still asserts the exact bounds per setter —
-    // absorb and gloss per the 2D prototype range, spec and rim previously
-    // unpinned entirely.
-    const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
-    const clamp = (fn: string, uniformName: string, lo: string, hi: string) => {
-      const re = new RegExp(
-        `${fn}\\(v\\)\\s*\\{\\s*${uniformName}\\.value\\s*=\\s*Math\\.max\\(${lo},\\s*Math\\.min\\(${hi},\\s*v\\)\\)\\s*;\\s*\\}`,
-      );
-      expect(src, `${fn} must clamp to [${lo}, ${hi}]`).toMatch(re);
-    };
-    clamp('setAbsorb', 'uAbsorb', '0', '3');
-    clamp('setSpec', 'uSpec', '0', '4');
-    // CEILING 220 -> 400 (2026-08-31). The owner's own tuning pass landed on
-    // gloss EXACTLY 220 — the old ceiling — which is the signature of a clamp
-    // capping intent rather than guarding a range. Same story for stretch
-    // (4 -> 8, pinned below). Both originals were guesses; do not "restore"
-    // them without measuring what the shader produces up there.
-    clamp('setGloss', 'uGloss', '8', '400');
-    clamp('setRim', 'uRim', '0', '1');
-    // shadowRed: the deep-red floor that stops absorption or a grazing light
-    // from driving blood to black. Ceiling 0.6 — past that the floor swamps
-    // the thickness gradient it exists to preserve.
-    clamp('setShadowRed', 'uShadowRed', '0', '0.6');
+  // its ceiling checked against the range the shader actually produces —
+  // read back through the layer's own getters on a live layer.
+  it('clamps all shading setters to the range the shader actually produces', () => {
+    const f = gooLayerFixture();
+    // absorb and gloss per the 2D prototype range; spec and rim previously
+    // unpinned entirely. Both ends of every range, via the getters the
+    // console's goo readout uses.
+    f.layer.setAbsorb(-1); expect(f.layer.absorb).toBe(0);
+    f.layer.setAbsorb(99); expect(f.layer.absorb).toBe(3);
+    f.layer.setSpec(-1); expect(f.layer.spec).toBe(0);
+    f.layer.setSpec(99); expect(f.layer.spec).toBe(4);
+    // CEILING 220 -> 400, FLOOR 8 (2026-08-31): the owner's own tuning pass
+    // landed on gloss EXACTLY 220 — the old ceiling — which is the signature
+    // of a clamp capping intent rather than guarding a range. Below ~8 the
+    // lobe is wider than the blob and the whole surface reads flat white.
+    f.layer.setGloss(1); expect(f.layer.gloss).toBe(8);
+    f.layer.setGloss(1e9); expect(f.layer.gloss).toBe(400);
+    f.layer.setRim(-1); expect(f.layer.rim).toBe(0);
+    f.layer.setRim(9); expect(f.layer.rim).toBe(1);
+    // shadowRed: the deep-red floor that stops absorption or a grazing
+    // light from driving blood to black. Ceiling 0.6 — past that the floor
+    // swamps the thickness gradient it exists to preserve.
+    f.layer.setShadowRed(-1); expect(f.layer.shadowRed).toBe(0);
+    f.layer.setShadowRed(9); expect(f.layer.shadowRed).toBe(0.6);
+    f.dispose();
   });
 });
 
