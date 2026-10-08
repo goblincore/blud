@@ -2,6 +2,35 @@
 
 The march, temporal work, the upscaler, post, perf sessions. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## The whole frame: attribution and ranking, toward a stable 30 fps in the heavy scenes — 2026-10-08
+
+Notes, tables and the ranking: [`docs/dev-notes/2026-10-08-frame-cost/NOTES.md`](../dev-notes/2026-10-08-frame-cost/NOTES.md).
+Driver: `scripts/frame-cost.mjs` (per scene: the bench's passes mode live, counters, ablations by alternation; it
+refuses to run beside a stray game page and retakes a run when a fixed loop in the page reads slow).
+
+- [x] **Measured** on six scenes (Night Train's guards' van, third class and Boiler Room; the bare page's room 4 and
+  arena; a wounded, chopped, split close-up). Over 33.3 ms: the Boiler Room after a fight (39.3 ms), the arena after
+  a fight (37.4 ms), the close-up (36 ms). The post chain is about 1 ms; shadow maps and the skull meshes are under
+  the floor.
+- [x] **The held weapons and the arms shade the lights near the eye** (`near-light-pick.ts`, `near-lights.ts`,
+  `viewmodel-lights.ts`; `?nearlights=0` puts the old lists back). They shaded every light of the level: 69 on Night
+  Train. Night Train frames −2.5 to −6.1 ms; the first frame in a carriage 159 to 202 ms → 51 to 84 ms; no change on
+  the bare page. `march-hash` unmoved, flail gate 47 / 0, axe gate 29 / 0. **Owner look pending**
+  ([sheet](../dev-notes/2026-10-08-frame-cost/near-lights-look.jpg)).
+- [ ] The props (fixtures, pickups, spent shells) and the soldiers' kit still shade the whole level's lights: about
+  1 to 1.5 ms on Night Train. They do not change rooms, so a fixed list per room is enough.
+- [ ] PR 35 (the open head's and the cuts' bounds) holds on current `main` by its counters (−23 to −29% primitive
+  folds on a chopped or split body). Re-run its gates on the skull stack, then merge.
+- [ ] Wounds up close are what is left: one zombie at 0.8 m reads 25 ms untouched, 34 ms with 32 pellet wounds, 51
+  ms with a torso chop on top, 64 ms with the head split wide (per-frame fenced). A step folds 19 wound rows against
+  6 primitives; removing rows per sample returns nothing resolved, so the cut has to be per region (a mask per tile
+  or cluster) or baked. The cut's and the split's cost does not show in the counters and needs its own attribution.
+- [ ] CPU: every actor of the level is posed, packed and uploaded each tick, in view or not (about 0.12 ms a body,
+  3.5 ms on Night Train). The visual set gates the upkeep around a body, not the body.
+- [ ] Hitches: the first shot of a boot builds 28 to 37 pipelines (worst frame 70 to 150 ms).
+- [ ] The light gate's "skull glows in the dark" check fails on `main` since the sculpted skull merged (1.56x against
+  1.5x); its own task.
+
 ## Early-Z for the SDF march (conservative depth), stage 1 — built behind `?earlyz=1`, owner look pending 2026-10-02
 
 - [x] Spec `docs/superpowers/specs/2026-10-01-sdf-march-early-z-design.md`, plan `docs/superpowers/plans/2026-10-01-sdf-march-early-z-stage-1.md`.

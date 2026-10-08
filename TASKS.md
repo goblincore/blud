@@ -10,6 +10,15 @@
 
 ## In flight / next
 
+**Frame cost: the heavy scenes at a stable 30 fps** (owner's goal, 2026-10-08) — [rendering](docs/tasks/rendering.md)
+- [~] **Measured and ranked 2026-10-08; first change built, owner look pending.** The whole frame attributed on six
+  scenes ([notes](docs/dev-notes/2026-10-08-frame-cost/NOTES.md), driver `scripts/frame-cost.mjs`). Built: the held
+  weapons and the arms shade the lights near the eye, not the level's 69 (Night Train −2.5 to −6.1 ms a frame; the
+  Boiler Room after a fight 37.6 → 33.1 ms; the hitch on entering a carriage halved; `?nearlights=0` is the A/B).
+  What is still over 33.3 ms is the march on wounded bodies (bare arena after a fight 37.4 ms; a chopped, split
+  close-up 36 ms). Next, in the notes' order: the props and kit on their room's lights, PR 35, the cut's and the
+  split's uncounted cost, wound rows folded per region.
+
 **Player melee: spike flail** (branch `claude/melee-weapon-design-7d1423`, PR #22) — [combat and gore](docs/tasks/combat-and-gore.md)
 - [~] **Flail v1.5b built; owner playtest pending.** Torn, splayed, wet-red lips on flail wounds; gun wounds get the
   wet red lip; flying flesh bits built but OFF by default. Queued: billboard flesh, red matter strings, an
