@@ -34,7 +34,9 @@ export async function createBoneMeshCache(
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const stalled = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`no answer in ${waitMs} ms`)), waitMs); });
+    const began = performance.now();
     const kit = await Promise.race([loadKit(character => anatomicalFitOf(choice, character)), stalled]);
+    kit.loadMs = performance.now() - began;
     return new SegmentMeshCache(undefined, undefined, kit, choice.recipe);
   } catch (error) {
     const variant = choice.skull === 'anatomical' ? SCULPT_DEFAULT_VARIANT : choice.variant;

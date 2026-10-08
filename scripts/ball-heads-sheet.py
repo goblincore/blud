@@ -7,12 +7,16 @@ The frames are those of scripts/ball-heads-look.mjs (<column>__<character>__<vie
 a character; for each column: the bare bone from the front and from three-quarter (clean: VHS off, 0.6 m, the eye
 level with the head), the flesh drawn half see-through over the bone (the flesh frame and the bone frame of one
 camera, blended), and the face shot away with real rounds as the game ships (VHS on, 1.5 m, the player's eye
-height), from the front and from three-quarter. Under each row of the last column: the fit and what it measures.
+height), from the front and from three-quarter. Under each row: what the head is drawn with; for a fitted skull the
+fit, its size, its share of the head it was fitted to (the skin: the flesh without painted hair), how far its orbits
+stand from the painted eyes (read from skeleton-spike/skull-cast.ts, whose test holds the number) and what the fit
+cost.
 
 Every tile is the same window of the world around the head (WINDOW_M metres square), cut from the whole frame and
 enlarged to the tile.
 """
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -64,7 +68,13 @@ def window(frames, shots, name, size, under=None):
     return img.crop((round(cx - half), round(cy - half), round(cx + half), round(cy + half))).resize((size, size), Image.LANCZOS)
 
 
-def caption(boot):
+def eyes_off():
+    """Each ball head's `eyesOff` (mm) from the table in skull-cast.ts."""
+    text = (Path(__file__).resolve().parent.parent / 'src/lab/sdf-zombie/webgpu/skeleton-spike/skull-cast.ts').read_text()
+    return {m.group(1): float(m.group(2)) for m in re.finditer(r"^  '?([a-z-]+)'?: \{\n(?:.*\n)*?    fill: \{[^}]*eyesOff: (-?[\d.]+)", text, re.M)}
+
+
+def caption(boot, character, off):
     """The fit and its numbers, for a boot that draws the anatomical skull; what it draws, for one that does not."""
     fit = boot.get('fit')
     if not fit:
@@ -74,16 +84,19 @@ def caption(boot):
     size = [1000 * (fit['max'][k] - fit['min'][k]) for k in range(3)]
     flesh = fit['flesh']
     wide, deep = size[0] / (2000 * flesh['half']), size[2] / (1000 * (flesh['front'] + flesh['back']))
-    eye = '' if fit.get('eyeHs') is None else f", eye line {fit['eyeHs']:+.3f}"
+    where = ''
+    if character in off:
+        where = ', orbits on the painted eyes' if abs(off[character]) <= 2 else f', orbits {off[character]:.0f} mm over the painted eyes'
     radius = f", eyes r {1000 * fit['eyes'][0]['radius']:.0f} mm" if fit.get('eyes') else ''
-    return (f"anatomical, {fit['name']}{eye}: {size[0]:.0f} x {size[1]:.0f} x {size[2]:.0f} mm, "
-            f"{wide:.2f} of the flesh wide, {deep:.2f} deep{radius}, {fit['madeMs']:.0f} ms")
+    return (f"anatomical, {fit['name']}: {size[0]:.0f} x {size[1]:.0f} x {size[2]:.0f} mm, "
+            f"{wide:.2f} of the head wide, {deep:.2f} deep{where}{radius}, fitted in {fit['madeMs']:.0f} ms")
 
 
 def main():
     frames, out = Path(sys.argv[1]), Path(sys.argv[2])
     cols = (sys.argv[3] if len(sys.argv) > 3 else 'before,after').split(',')
     manifest = json.loads((frames / 'ball-heads.json').read_text())
+    off = eyes_off()
     shots, boots = manifest['shots'], manifest['boots']
     cast = []
     for name in shots.values():
@@ -121,7 +134,7 @@ def main():
                 else:
                     sheet.paste(t, (x, y0))
             shot = boot.get('shot')
-            note = caption(boot) + (f"; {shot['volleys']} volleys, {shot['headWounds']} head wounds" if shot else '')
+            note = caption(boot, character, off) + (f"; {shot['volleys']} volley, {shot['headWounds']} head wounds" if shot else '')
             draw.text((x0, y0 + tile + 4), note, font=tiny, fill=INK)
     out.parent.mkdir(parents=True, exist_ok=True)
     sheet.save(out, quality=88)

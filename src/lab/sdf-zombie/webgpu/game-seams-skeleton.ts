@@ -323,6 +323,8 @@ export function createSkeletonSeams(ctx: GameContext) {
       // Every skull the kit has fitted since boot: whose, under which fit, and how long it took to make (ms). One
       // per head revision, made when the character's skeleton sources are built (game-skeleton-actors.ts).
       skullFits: kitOf() ? kitOf()!.made.map(m => ({ ...m })) : [],
+      // How long the boot waited for the plates' asset (ms); null on a page that did not load it.
+      skullAssetMs: kitOf()?.loadMs ?? null,
       activeMode: ctx.render.skeletonMode === 'volume'
         ? (ctx.render.skeletonVolumes.size > 0 ? 'volume' : 'procedural')
         : ctx.render.skeletonMode === 'mesh'

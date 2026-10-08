@@ -787,9 +787,8 @@ try {
     const made = diag.skullFits.filter((f) => f.character === "cultist");
     check(made.length === 1 && made[0].fit === table.cultist.spec.fit, `CU: his skull was fitted once, as the cast was spawned and before any bone was drawn (${JSON.stringify(diag.skullFits)})`);
     note(`CU: the fit took ${made[0]?.ms.toFixed(0)} ms, once for the six cultists of this boot`);
-    const asset = await evaluate(`(() => { const e = performance.getEntriesByType("resource").filter((r) => r.name.includes("anatomical-skull.glb")); return e.map((r) => ({ ms: +r.duration.toFixed(1), bytes: r.transferSize || r.encodedBodySize, decoded: r.decodedBodySize })); })()`);
-    note(`CU: the plates' asset on this boot: ${JSON.stringify(asset)}`);
-    check(asset.length === 1, `CU: the plates' asset was asked for once (${asset.length})`);
+    note(`CU: the boot waited ${diag.skullAssetMs?.toFixed(0)} ms for the plates' asset (public/assets/lab/anatomical-skull.glb, 1.3 MB)`);
+    check(typeof diag.skullAssetMs === "number" && diag.skullAssetMs < 8000, `CU: the plates' asset was loaded for this page, inside the boot's wait for it (${diag.skullAssetMs?.toFixed(0)} ms of at most 8000)`);
     const CU = fresh();
     const fit = await evaluate(`__sdfGame.skullFit(${CU.id})`);
     const size = fit ? [0, 1, 2].map((k) => fit.max[k] - fit.min[k]) : [0, 0, 0];

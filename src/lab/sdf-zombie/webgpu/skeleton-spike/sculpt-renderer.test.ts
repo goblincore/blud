@@ -236,6 +236,8 @@ describe('createBoneMeshCache', () => {
     expect(cache.skullKit).toBe(kit);
     expect(cache.sculpt).toBe(sculptRecipe('classic'));
     expect(loads).toBe(1);
+    // The wait for the asset is timed onto the kit.
+    expect(kit.loadMs).toBeGreaterThanOrEqual(0);
     expect(lines).toEqual([]);
   });
   it('the plates are loaded only by a page on which somebody draws them: not under the sculpted skull on every character', async () => {

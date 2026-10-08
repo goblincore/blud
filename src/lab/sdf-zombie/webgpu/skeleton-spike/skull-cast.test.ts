@@ -65,7 +65,6 @@ describe('the eight ball-headed humanoids', () => {
 
   it.each(Object.keys(BALL_HEADS))('%s: the fit measures what its entry says, under 6 mm of flesh, with the orbits where the entry puts them', character => {
     const entry = BALL_HEADS[character]!, m = measure(character);
-    if (process.env.SKULL_CAST_PRINT) console.log(`${character}: size ${m.size.map(v => v.toFixed(0)).join(' x ')} fill ${JSON.stringify(Object.fromEntries(Object.entries(m.fill).map(([k, v]) => [k, +v.toFixed(k === 'wide' || k === 'deep' ? 2 : 1)])))} orbits r ${m.skull.orbits.map(o => (o.radius * 1000).toFixed(1))} eyes r ${(m.skull.eyes![0]!.radius * 1000).toFixed(1)} ms ${m.skull.mesh.bakeMs.toFixed(0)} det ${m.fit.result.warp.detMin.toFixed(2)} shrunk ${m.fit.result.shrunk}`);
     // What the entry records.
     expect(m.fill.wide).toBeCloseTo(entry.fill.wide, 1);
     expect(Math.abs(m.fill.wide - entry.fill.wide)).toBeLessThan(0.015);
