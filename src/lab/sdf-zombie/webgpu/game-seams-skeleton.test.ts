@@ -167,7 +167,7 @@ describe('__sdfGame.skullPlates / skullFragments: the anatomical skull\'s plates
     for (const k of ['pivot', 'min', 'max'] as const) expect(seams.skullPlates(7)![0]![k]).not.toBe(pieces[0]![k]);
     expect(seams.skullPlates(8)).toBeNull();   // no head segment
     expect(seams.skullPlates(9)).toBeNull();   // no such actor
-    expect(createSkeletonSeams(ctx(null)).skullPlates(7)).toBeNull();   // ?skull=sculpt
+    expect(createSkeletonSeams(ctx(null)).skullPlates(7)).toBeNull();   // the sculpted skull: no plates
     expect(createSkeletonSeams(ctx({ head: () => null })).skullPlates(7)).toBeNull();   // a head the kit does not fit
   });
   it('skullShot hands one round\'s ray to the renderer\'s fractureSkull with the actor\'s sources; refuses a ray or a round that is not one', () => {

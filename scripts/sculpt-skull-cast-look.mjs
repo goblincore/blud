@@ -199,18 +199,22 @@ for (const col of COLS) {
       const fr = await frameOf(a.id);
       if (!fr) throw new Error("no head frame");
       await bare(a.id);
-      // What the head's bone is drawn with: the material's name, and the paint when the renderer says.
-      const drawn = await evaluate(`(() => { const d = __sdfGame.skullDrawn(${a.id}); return d ? d.whole.filter((q) => !q.eye).map((q) => ({ material: q.material, paint: q.paint ?? null, head: q.head ?? null })) : null; })()`);
-      const headDraw = drawn?.find((q) => q.head) ?? null;
-      Object.assign(record, { actor: a.id, headY: +fr.centre[1].toFixed(3), bones: drawn?.length ?? 0, paint: headDraw?.paint ?? null, material: headDraw?.material ?? null });
+      Object.assign(record, { actor: a.id, headY: +fr.centre[1].toFixed(3) });
       await evaluate("__sdfGame.setVhs('blud')"); await settle();
       await shot(col.name, character, "ships-1p0-front", a.id, 1.0, 0);
       await evaluate("__sdfGame.setVhs(null)"); await settle();
       await shot(col.name, character, "clean-0p6-front", a.id, 0.6, 0);
       await shot(col.name, character, "clean-0p6-quarter", a.id, 0.6, 35);
+      // What the head's bone is drawn with (read last: the bones are drawn once the wound's exposure has reached
+      // them): the material's name and the paint it draws.
+      const drawn = await evaluate(`(() => { const d = __sdfGame.skullDrawn(${a.id}); return d ? d.whole.filter((q) => !q.eye).map((q) => ({ material: q.material, paint: q.paint, head: q.head })) : null; })()`);
+      const headDraw = drawn?.find((q) => q.head) ?? null;
+      if (!headDraw) throw new Error(`the head is not among actor ${a.id}'s ${drawn?.length ?? 0} bone draws`);
+      Object.assign(record, { bones: drawn.length, paint: headDraw.paint, material: headDraw.material });
       const mesh = await evaluate("__sdfGame.skeletonMesh()");
       record.cache = mesh ? { entries: mesh.cacheEntries, totals: mesh.cacheTotals, stats: mesh.cacheStats } : null;
       record.gpu = await evaluate("__sdfGame.gpuDiagnostics()");
+      if (manifest.failed) delete manifest.failed[`${col.name}/${character}`];
       save();
     } catch (e) {
       failed++;

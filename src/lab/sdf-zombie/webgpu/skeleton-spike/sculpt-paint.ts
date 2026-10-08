@@ -1,7 +1,8 @@
-// THE SECOND PAINT of the sculpted skull (sculpt-variant.ts: `paint`, `full`). The first paint (mesh-appearance.ts)
+// THE SECOND PAINT of the sculpted skull (sculpt-variant.ts: `paint`, `full-1cm`, `full`, the default). The first paint (mesh-appearance.ts)
 // draws round dark sockets, a nose ellipse and two rows of square teeth. This one draws the face a human skull has,
 // from the second sculpt's own landmark table (mesh-skull-2.ts SKULL2_FACE), so it sits on the second sculpt's bone
-// (`full`) and stands in for that bone's shapes on the first sculpt (`paint`):
+// (`full`) and stands in for that bone's shapes on the first sculpt (`paint`). It is drawn on the characters it is
+// fitted to (sculpt-variant.ts sculptPaintOf); the others keep the first paint. What it draws:
 //   orbits with the sculpt's drooping outline, darker with depth, and a stained halo outside the rim;
 //   the pear-shaped nasal aperture;
 //   long separate teeth: crowns that narrow toward the gum, dark wedges between them, a dark gum line, root ridges

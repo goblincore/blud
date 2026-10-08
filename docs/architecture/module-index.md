@@ -158,10 +158,10 @@ Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite th
 - `webgpu/skeleton-spike/mesh-split.ts` — THE SKULL MESH UNDER A HEAD SPLIT: the shader side of head-split.ts's skull rule (skullSplitOf, skullPieceAt).
 - `webgpu/skeleton-spike/mesh.ts` — SKELETON REPRESENTATION COMPARISON — Task 2: cached segment-local bone meshes.
 - `webgpu/skeleton-spike/organ-reach.ts` — ORGANS AS MESH (2026-10-06): which organ segments a body's wounds expose.
-- `webgpu/skeleton-spike/sculpt-cache.ts` — The game's bone-mesh cache for a page's query string: a `?sculpt=` variant of the sculpted skull, else the skull `?skull=` chooses.
+- `webgpu/skeleton-spike/sculpt-cache.ts` — The game's bone-mesh cache for a page's query string: the skull resolveSkull (sculpt-variant.ts) chooses, built.
 - `webgpu/skeleton-spike/sculpt-fragments.ts` — The sculpted skull in pieces: a head mesh's triangles sorted into ten named fragments by where they sit in the head's normalized box, for the head…
-- `webgpu/skeleton-spike/sculpt-paint.ts` — THE SECOND PAINT of the sculpted skull (sculpt-variant.ts: `paint`, `full`).
-- `webgpu/skeleton-spike/sculpt-variant.ts` — The sculpted skull's look variants.
+- `webgpu/skeleton-spike/sculpt-paint.ts` — THE SECOND PAINT of the sculpted skull (sculpt-variant.ts: `paint`, `full-1cm`, `full`, the default).
+- `webgpu/skeleton-spike/sculpt-variant.ts` — Which skull a page draws: resolveSkull reads `?skull=` and `?sculpt=` and answers the skull, the sculpted skull's variant and its recipe.
 - `webgpu/skeleton-spike/selector.ts` — Mesh actor skeletons are the accepted forward default in dev and production.
 - `webgpu/skeleton-spike/skull-split-hit.ts` — A SHOT AT A SPLIT SKULL. The anatomical skull's plates are stored on the CLOSED head (skull-fracture.ts), and a split head draws them once per piece,…
 - `webgpu/skeleton-spike/volume-gpu.ts` — SKELETON REPRESENTATION COMPARISON — Task 3b: HOST side of the GPU volume path.

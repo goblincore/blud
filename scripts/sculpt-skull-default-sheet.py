@@ -2,6 +2,7 @@
 """The two sheets made when the sculpted skull, `full`, became the default skull.
 
     python3 scripts/sculpt-skull-default-sheet.py cast <frames dir> <out jpg> [column,column,...]
+                                              (default: classic,every-head,default,anatomical)
     python3 scripts/sculpt-skull-default-sheet.py cell <frames dir> <out jpg>
 
 `cast`: the frames of scripts/sculpt-skull-cast-look.mjs (<column>__<character>__<view>.png and cast.json). One row a
@@ -29,9 +30,10 @@ BOX = (240, 196, 60)
 WARN = (236, 120, 96)
 
 CAST_COLUMNS = {
-    'classic': ('?sculpt=classic', 'the first look: the first paint on every head'),
-    'default': ('no skull parameter', 'the page as it ships'),
-    'every-head': ('?sculpt=full&sculptheads=all', 'the second paint on every head'),
+    'classic': ('?sculpt=classic', 'the first look: the first paint'),
+    'every-head': ('?sculptheads=all', 'the second paint on every head'),
+    'default': ('no skull parameter: the default', 'the page as it ships'),
+    'anatomical': ('?skull=anatomical', 'the skull of 14 plates'),
 }
 CAST_VIEWS = [('clean-0p6-front', 'front'), ('clean-0p6-quarter', 'three-quarter')]
 CELL_ROWS = [('full-1cm', '?sculpt=full-1cm', 'the head at the 1 cm cell'), ('full', '?sculpt=full (the default)', 'the head at the 5 mm cell')]
@@ -79,14 +81,14 @@ def cast(frames, out, cols):
     for shot in shots.values():
         if shot['character'] not in characters:
             characters.append(shot['character'])
-    size, gutter, head = 300, 190, 96
+    size, gutter, head = (300 if len(cols) <= 3 else 232), 190, 96
     per = len(CAST_VIEWS)
     width = gutter + len(cols) * per * (size + PAD) + (len(cols) - 1) * 3 * PAD + PAD
     height = head + len(characters) * (size + PAD) + PAD
     img = Image.new('RGB', (width, height), BG)
     draw = ImageDraw.Draw(img)
     big, mid, small = font(24), font(16), font(13)
-    draw.text((PAD * 2, 8), 'Every humanoid\'s bare head bone: the first look, and the default', fill=INK, font=big)
+    draw.text((PAD * 2, 8), 'Every humanoid\'s bare head bone under each skull', fill=INK, font=big)
     draw.text((PAD * 2, 40), 'Flesh hidden, VHS off, 0.6 m, the eye level with the head (lowered for the shorter characters: the game\'s eye is 1.62 m up). Each tile is a 0.34 m window around the head.', fill=DIM, font=small)
     x_of = lambda c, v: gutter + c * (per * (size + PAD) + 3 * PAD) + v * (size + PAD) + PAD
     for c, col in enumerate(cols):
@@ -161,7 +163,7 @@ def cell(frames, out):
 def main():
     kind, frames, out = sys.argv[1], Path(sys.argv[2]), Path(sys.argv[3])
     if kind == 'cast':
-        cast(frames, out, sys.argv[4].split(',') if len(sys.argv) > 4 else ['classic', 'default'])
+        cast(frames, out, sys.argv[4].split(',') if len(sys.argv) > 4 else ['classic', 'every-head', 'default', 'anatomical'])
     elif kind == 'cell':
         cell(frames, out)
     else:

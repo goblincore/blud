@@ -1,7 +1,7 @@
 // scripts/head-burst-gate.mjs — what a gun round does to a zombie's head (head-burst.ts headShotRule,
 // decapitationRule; webgpu/game-head-shot.ts; the actor's pop). REAL rounds through __sdfGame.fire() and fireSlug()
-// on the bare ring page (/sdf-game.html, no ?level), frozen zombies, four boots. Three draw the default skull (no
-// skull parameter: the sculpted skull, `full`); the one whose checks are the anatomical skull's asks for it
+// on the bare ring page (/sdf-game.html, no ?level), frozen zombies, five boots. Three draw the default skull (no
+// skull parameter: the sculpted skull, `full`); the two whose checks are the anatomical skull's ask for it
 // (`?skull=anatomical`). Each boot checks that it draws the skull it means to.
 //
 // BOOT 1, the shipped rules (the default skull):
@@ -19,8 +19,9 @@
 //       anatomical skull's fourteen plates are all released as fragments, the head segment and its eyes are not
 //       drawn, and 2.5 s on nothing is left at the old head position.
 //   D0. popSwellS 0 bursts with no swell frame.
-//   SA, XA. S's skull and X, on the plates: a centred slug splits the head and the plates are drawn as clipped
-//       copies; a second pops it and the split skull's plates are thrown.
+// BOOT 1c, the ANATOMICAL skull again, the split and its pop on a page of their own:
+//   SA, XA. S's skull and X, on the plates: a centred slug splits the head and the skull is drawn as clipped
+//       copies on the plates' split material; a second pops it and the split skull's plates are thrown.
 // BOOT 2, the OPENING switched on by tuning (the slug head burst of 2026-10-02, not shipped): the scenarios this
 // gate had before 2026-10-07, unchanged but for `opening: true` in their tuning:
 //   P. with anyWeapon and alwaysSplit a pellet volley on a head opens it, once per shot.
@@ -35,7 +36,7 @@
 // BOOT 3, the pop on the default skull, on a page of its own:
 //   DS. the decapitating slug pops the head: the sculpted head mesh is thrown as ten fragments (sculpt-fragments.ts),
 //       the head segment and its eyes are not drawn, nothing is left at the old head position.
-// E. zero console errors / exceptions, over all four.
+// E. zero console errors / exceptions, over all five.
 // Photos are written to OUT for the look loop. Usage:
 //   export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up
 //   node scripts/head-burst-gate.mjs 5241 9241
@@ -518,9 +519,13 @@ try {
   const d0 = await evaluate(`(() => { const ok = __sdfGame.head.pop(${D0.id}, 0, 0, -1); return { ok, popping: __sdfGame.head.popping(${D0.id}), on: __sdfGame.flail.limbAlive(${D0.id}, "head") > 0 }; })()`);
   check(d0.ok && !d0.popping && !d0.on, `D0: with popSwellS 0 the head bursts at once: no swell, the head off in the same call (${JSON.stringify(d0)})`);
   await tune({ popSwellS: TUNING_DEFAULTS.popSwellS });
+  closeSession(S);
 
-  // -------- SA, XA. S's skull and X on the plates (boot 1 makes them on the default skull): the split head's plates
-  // are drawn as clipped copies, and the pop of a split head throws them.
+  // ======== BOOT 1c (?skull=anatomical): the split and its pop on the plates, on a page of their own (at most 32
+  // skull fragments are live at once, and D and D0 have thrown 28: a third pop on their page would count 4 new ones).
+  await boot("anatomical-split", "&skull=anatomical");
+  // -------- SA, XA. S's skull and X on the plates (boot 1 makes them on the default skull): the split head's skull
+  // is drawn as clipped copies, and the pop of a split head throws its plates.
   await tune({ splitFrac: CENTRE_FRAC });
   const SA = fresh();
   const saAim = await aimLine(SA.id, SHOT_D, 0);

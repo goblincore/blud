@@ -233,12 +233,13 @@ const F_EYE_D = 0.9;
 /** The flesh's opening for the forced landmark, as a share of its full angle: no flesh half covers a seated eye. */
 const M_THROWN = 1.8;
 /** An eye's shift on screen against skullWarpPoint's (px), the eye seen whole (eyesAgainstRule: the bone and the
- *  flesh out of the frame). Measured on the anatomical skull: worst 0.41 px on the forced head, at the kill's bone
- *  angle, and 0.15 px after chop 1; on the sculpted skull 0.27 and 0.43 px. The bound is 1.3 mm at the head (an eye
- *  drawn a twentieth short of its turn reads 3 px at the kill's bone angle).
- *  With the bone drawn the same measure reads the part of each eye its socket leaves in sight, 0.36 to 0.53 of it,
- *  and comes out 6.84 px on the anatomical skull and 3.33 px on the sculpted one: the gate reports that, and does not
- *  hold it. */
+ *  flesh out of the frame). Measured on the default skull (the sculpted one, `full`): worst 0.51 px on the forced
+ *  head, at the kill's bone angle, and 0.19 px after chop 1; on its first look 0.27 and 0.43 px; on the anatomical
+ *  skull 0.27 and 0.40 px. The bound is 1.3 mm at the head (an eye drawn a twentieth short of its turn reads 3 px at
+ *  the kill's bone angle).
+ *  With the bone drawn the same measure reads the part of each eye its socket leaves in sight (0.62 to 0.91 of it
+ *  on the default skull, whose orbits are the widest; 0.38 to 0.51 on the first look; 0.37 to 0.54 on the anatomical
+ *  skull) and comes out 7.13 px, 3.33 px and 7.02 px: the gate reports that, and does not hold it. */
 const M_SHIFT_PX = 2;
 /** The largest shift on the forced head must be at least this (px). Measured 58.2. */
 const M_FAR_PX = 40;
@@ -256,12 +257,12 @@ const seatsHere = () => M_SEATS_BY_SHAPE[S.shape] ?? die(`no eye seats for sculp
  *  of the mid-plane, 77 mm above the head centre and 51 mm in front of it. On the anatomical skull as fitted to the
  *  zombie each is in the frontal bone, 1 cm under its outer surface, 2.5 times the fracture's largest offset from the
  *  plane (so each is its own half's whatever the head's pattern), and at the kill's bone angle its half carries it
- *  64 mm; the sculpted skull is the larger one and holds them too. */
+ *  64 mm; the sculpted skull is the larger one, in either sculpt, and holds them too. */
 const M_MARKS = [[-0.016, 0.0767, 0.0514], [0.016, 0.0767, 0.0514]];
 /** A mark's disc on screen (px radius): all of it bone, or none of it. */
 const M_MARK_R = 3;
 /** A mark's turned place must be at least this far from its closed one on screen for "no bone left behind" to mean
- *  anything (px). Measured 101.6 px for both marks, on both skulls. */
+ *  anything (px). Measured 101.6 px for both marks, on every skull (the default, its first look, the anatomical). */
 const M_MARK_APART = 70;
 /** The fracture's line on screen: points of the old plane from M_GAP_FROM to M_GAP_TO above the hinge (m), every
  *  M_GAP_STEP. On the anatomical skull a level ray meets bone at each of them closed (the maxilla, the nasal bone, the
@@ -269,10 +270,16 @@ const M_MARK_APART = 70;
 const M_GAP_FROM = 0.03, M_GAP_TO = 0.16, M_GAP_STEP = 0.005;
 /** At least this share of the line's points are bone on the closed skull, and at most M_GAP_LEFT of those are still
  *  bone on the open one. Measured 25 of 27 on the anatomical skull (the other two look through its nose) and 27 of 27
- *  on the sculpted one; open, 0 on both. A copy drawn unclipped leaves every one of them bone. */
+ *  on the sculpted one, in the default and in its first look; open, 0 on all three. A copy drawn unclipped leaves
+ *  every one of them bone. */
 const M_GAP_BONE = 0.8;
 const M_GAP_LEFT = 0.05;
 // ---- P.
+/** The zombie P is made on: the pool's sixth (from 0: 5). Its on-screen measure (P_GONE: how much of a disc of the
+ *  frame changes when a plate leaves) counts pixels that change by a fixed step, and was set where that zombie
+ *  stands, under the room's lamp: measured 0.96 there, and 0.71 on the pool's third, which stands in the dark, with
+ *  every other measure of P the same to the digit. */
+const P_ZOMBIE = 5;
 /** The plate the slug takes off the closed head, and the plate the pellets take off the open one: the two
  *  cheekbones. Each is wholly its own half's (their boxes start 33 mm and 24 mm from the plane), and small: turned
  *  with its half, the + one stands clear of the box it has on the closed head. */
@@ -586,6 +593,9 @@ const stepOne = () => evaluate("__sdfGame.step(1, 1 / 60)");
 async function stepN(n) { for (let i = 0; i < n; i++) await stepOne(); }
 const yawOf = (dx, dz) => Math.atan2(dx, -dz);
 function fresh() { const z = pool.find((q) => !usedZ.has(q.id)); if (!z) die("ran out of fresh zombies"); usedZ.add(z.id); return z; }
+/** The pool's zombie number `i` (from 0), which must be fresh: a scenario whose pixel measures were set at one
+ *  zombie's place in the room (its lamp, its frozen pose) takes that zombie, whatever ran before it in the boot. */
+function freshAt(i) { const z = pool[i]; if (!z || usedZ.has(z.id)) die(`zombie ${i} of the pool is not there, or not fresh`); usedZ.add(z.id); return z; }
 const J = (v) => JSON.stringify(v);
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -851,7 +861,7 @@ const showSkeleton = (set) => evaluate(`__sdfGame.meshSkeletonShow(${J(set)})`);
  *      pixels; `bareBlobs`: how many blobs that pair differs in (2: nothing in the disc changes but the two eyes).
  *    `socket`: with the bone drawn, as the game draws it. An eye is a 38 mm ball seated in its socket, and the blob
  *      is the part the bone leaves in sight: a third to a half of it. That part's centroid is not the eye's centre,
- *      and the part is not the same one at every turn (0.53 of an eye on the closed anatomical skull, 0.45 at the
+ *      and the part is not the same one at every turn (on the anatomical skull 0.53 of an eye closed, 0.45 at the
  *      kill's bone angle), so its centroid does not travel with the eye. It shows that the eye is seen in its socket,
  *      and how much of it (`seen`: its pixels).
  *  `pred`: where skullWarpPoint puts the seats `seats` (closed-head world points) for the skull split of the DRAWN
@@ -1108,13 +1118,13 @@ function skullStageChecks(tag, suffix, m) {
   sheet(`M-skull-chopped${suffix}`, [{ img: lm1.img, c: lm1.c }]);
 }
 /** P. THE PLATES OF A SPLIT ANATOMICAL SKULL, on a boot that draws it. LAST in its boot: its fragments stay in the
- *  room. */
+ *  room. On the pool's zombie number P_ZOMBIE. */
 async function platesScenario() {
   // The first rounds go through __sdfGame.skullShot: the renderer's own fractureSkull, which a pellet's or a
   // slug's impact calls first, with a ray the gate lays, and nothing else of a hit (no wound, no shove: the head
   // stays where the matrices were read). The last is a real projectile (__sdfGame.slugFrom).
   if (run("P")) try {
-    const z = fresh(); const hc = await headOf(z.id), f = await frontOf(z.id), fr = await frameOf(z.id);
+    const z = freshAt(P_ZOMBIE); const hc = await headOf(z.id), f = await frontOf(z.id), fr = await frameOf(z.id);
     const cam = (await look(hc, HEAD_D, f)).pose; await stepN(SETTLE);
     const px0 = await headPx(z.id);
     const plates = await evaluate(`__sdfGame.skullPlates(${z.id})`);

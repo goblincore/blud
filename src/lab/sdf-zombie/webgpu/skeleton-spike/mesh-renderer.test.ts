@@ -612,7 +612,7 @@ describe('the head split: the skull is drawn once per piece that owns part of it
       renderer.dispose(); cache.dispose();
     });
 
-    it('without the kit (?skull=sculpt) the zombie\'s split skull is the sculpt\'s: its painted surface outside, the wall inside', () => {
+    it('without the kit (the sculpted skull, here in its first look) the zombie\'s split skull is the sculpt\'s: its painted surface outside, the wall inside', () => {
       const { cache, renderer } = make();
       const owner = { id: 1 };
       renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(warpOf('middle', 0, 0, 1)));
