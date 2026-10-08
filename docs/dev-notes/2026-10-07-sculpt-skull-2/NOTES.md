@@ -37,7 +37,9 @@ the bone cache it asks for.
 
 - `?skull=procedural` is an older name for `?skull=sculpt` and still works.
 - The anatomical skull is an asset. If it does not load, the page draws the default sculpted skull and the console
-  says so.
+  says so. A page that does not ask for it no longer requests the asset (`anatomical-skull.glb`, 1.3 MB): checked in
+  the browser, 0 requests on the default page and with `?sculpt=classic`, 1 with `?skull=anatomical`. The console
+  lines for an unknown or overruled value were read in the browser too.
 - `?skeleton=procedural`, the deferred renderer and bones in detached chunks are untouched: they never drew either
   mesh skull.
 - `__sdfGame.skeletonDiagnostics()` reports the skull in force (`skull`), the recipe in force (`sculpt`: which sculpt,
