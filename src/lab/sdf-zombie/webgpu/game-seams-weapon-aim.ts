@@ -10,7 +10,8 @@
 import type { GameContext } from './game-context';
 import { updateHud } from './game-hud';
 import { MAGAZINE_CAPACITY, RELOAD } from './game-viewmodel';
-import { aimAtNearestSurface, convergedDir, fire, muzzleWorld } from './game-weapon-rig';
+import { aimAtNearestSurface, aimDir, convergedDir, fire, muzzleWorld } from './game-weapon-rig';
+import { eyeOf } from './game-player';
 import { WEAPON_SLOTS, requestSlot, type WeaponSlot } from './game-weapon-slots';
 import { BOB, FREE_AIM } from './free-aim';
 import { predictSlugHitNow } from './game-hit-trace';
@@ -54,6 +55,9 @@ export function createWeaponAimSeams(ctx: GameContext) {
       const d = convergedDir(ctx, o);
       return { origin: o, dir: d };
     },
+    /** WHERE THE PLAYER IS AIMING right now: the eye and the crosshair's ray (the reticle's under free aim), the
+     *  two things a slug fired now would carry as its aim (game-weapon-rig.ts launchSlug). Read-only. */
+    aimRay: () => ({ eye: eyeOf(ctx.player.player), dir: aimDir(ctx) }),
     setReloadSpeed(x: number) { ctx.weapon.reloadSpeed = Math.max(0.01, x); updateHud(ctx); },
     setSlugMode(on: boolean) { ctx.weapon.slugMode = on; updateHud(ctx); },
     /** Gun craters' wet red lip (torn-lips.ts, plan Task 35): off = the SAME craters render stock,

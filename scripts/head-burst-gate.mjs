@@ -4,24 +4,38 @@
 // skull parameter: the sculpted skull, `full`); the two whose checks are the anatomical skull's ask for it
 // (`?skull=anatomical`). Each boot checks that it draws the skull it means to.
 //
-// BOOT 1, the shipped rules (the default skull):
+// A SLUG IS AIMED, NOT LAID. The split is a reward for a precise AIM from close to medium range: the rule reads the
+// crosshair's ray recorded as the gun fired (how far it passes from the head's centre, and from how far), not where
+// the slug lands, which is about 10 cm under the crosshair. So the split's scenarios lay the CROSSHAIR
+// (crosshairOn: the player placed in front of the face and turned so the reticle is on a point of the head; no
+// stance is solved for the slug), and each checks the aim the leaf recorded against the crosshair's ray read off the
+// page before the shot.
+//
+// BOOT 1, the shipped rules (the default skull), all on the shipped tuning:
 //   NP. pellet volleys on a head never open or split it: ordinary craters, no split, no head-leaf state, the head on.
-//   AIM. a slug fired with the crosshair on the head (no stance solving) is CENTRED by the shipped splitFrac and
-//       splits the head.
-//   O.  (splitFrac 0.35 from here, so "off centre" can be staged) an off-centre slug is an ORDINARY slug wound.
-//   S.  a centred slug SPLITS the head: the head split's state at the preset's full angle (both halves, or the one
-//       the slug landed on: the split's own rule), the pose's split turned that far, the skull drawn as clipped
-//       copies, the field open where a half was, its cut faces, the zombie alive.
-//   X.  a second centred slug on the split head POPS it: the sculpted skull's ten fragments are thrown.
-//   OFF. burstTune({ on: false }): a centred slug is an ordinary wound.
+//   AIM. a slug fired with the crosshair on the head's centre from 2 m is PRECISE (its recorded aim passes through
+//       the centre, its range is 2 m) though its own line runs most of a head radius off, and it splits the head,
+//       BOTH halves.
+//   O.  an IMPRECISE slug (the crosshair 6 cm over the head's centre, twice the precise zone's radius; the slug still
+//       lands on the head) is an ORDINARY slug wound.
+//   FAR. a PRECISE slug from beyond splitRangeM (the crosshair on the head's centre from 6 m) is an ORDINARY slug
+//       wound.
+//   S.  a precise slug whose crosshair is 2 cm to one side of the centre (inside the precise zone; an axe chop that
+//       far off the middle line peels one half) SPLITS the head, BOTH HALVES: the head split's state at the middle
+//       preset's two-sided full angle on the head's middle line, the pose's split turned that far both ways, the
+//       skull drawn as clipped copies for the rest and each half, the field open where each half was, its two cut
+//       faces, the zombie alive.
+//   X.  a slug on the split head POPS it WITHOUT precision (the crosshair 6 cm off the centre, in range): the
+//       sculpted skull's ten fragments are thrown.
+//   OFF. burstTune({ on: false }): a precise slug is an ordinary wound.
 // BOOT 1b, the ANATOMICAL skull (`?skull=anatomical`), the pop on a page of its own:
 //   D.  slugs at the neck until the head comes off: the head SWELLS for popSwellS and bursts, no flying head; the
 //       anatomical skull's fourteen plates are all released as fragments, the head segment and its eyes are not
 //       drawn, and 2.5 s on nothing is left at the old head position.
 //   D0. popSwellS 0 bursts with no swell frame.
 // BOOT 1c, the ANATOMICAL skull again, the split and its pop on a page of their own:
-//   SA, XA. S's skull and X, on the plates: a centred slug splits the head and the skull is drawn as clipped
-//       copies on the plates' split material; a second pops it and the split skull's plates are thrown.
+//   SA, XA. S's skull and X, on the plates: a precise slug splits the head and the skull is drawn as clipped
+//       copies on the plates' split material; a second slug pops it and the split skull's plates are thrown.
 // BOOT 2, the OPENING switched on by tuning (the slug head burst of 2026-10-02, not shipped): the scenarios this
 // gate had before 2026-10-07, unchanged but for `opening: true` in their tuning:
 //   P. with anyWeapon and alwaysSplit a pellet volley on a head opens it, once per shot.
@@ -49,6 +63,13 @@ const OUT = process.env.OUT ?? "docs/dev-notes/2026-10-02-head-burst/gate";
 const W = Number(process.env.W ?? 1280), H = Number(process.env.H ?? 800);
 const EYE_H = 1.62, STAND = 0.9, PHOTO_D = 0.55, SHOT_D = 2;
 const CENTRE_FRAC = 0.35, SWELL_PEAK_MIN = 0.2, SHARD_CHUNKS_MIN = 8, GLANCE_SHIFT = 0.07;
+// The crosshair's places: off the centre by twice the precise zone's radius (imprecise), a little to one side of it
+// (precise, and past the 15% of the half-width inside which an axe chop opens both halves), and the far stance.
+const IMPRECISE_M = 0.06, PRECISE_SIDE_M = 0.02, FAR_D = 6;
+// The split's and the pop's slugs are fired from straight in front of the face (0 degrees round the head from its
+// own forward): the split's plane holds the shot and the head's up axis, so that is the shot that parts the head
+// left and right. FAR's is fired from toward the room's centre, where there is room to stand 6 m off.
+const FRONT = 0;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
 const results = [];
@@ -195,6 +216,7 @@ async function boot(label, query = "") {
   pool = byRoom.get(ROOM);
   const room = (await evaluate("__sdfGame.rooms")).find((r) => r.id === ROOM);
   centre = [(room.bounds.minX + room.bounds.maxX) / 2, 0, (room.bounds.minZ + room.bounds.maxZ) / 2];
+  s.room = room.bounds;
   // Attached pieces (the flaps) are not drawn until the background gib warm is ready: wait for it.
   let wb = null;
   for (let i = 0; i < 400; i++) { wb = await evaluate("__sdfGame.warmBackground()"); if (wb.gib === "ready" || wb.gib === "failed") break; await sleep(500); if (i % 10 === 0) await evaluate("__sdfGame.step(1, 1 / 60)"); }
@@ -315,8 +337,21 @@ async function crosshairOn(id, dist, aim = [0, 0, 0], yawDeg = null) {
   const tt = (head[0] - o[0]) * d[0] + (head[1] - o[1]) * d[1] + (head[2] - o[2]) * d[2];
   const drop = 0.5 * SLUG_GRAVITY * (Math.max(0, tt) / SLUG_SPEED) ** 2;
   const cp = [o[0] + d[0] * tt, o[1] + d[1] * tt - drop, o[2] + d[2] * tt];
-  return { head, offset: Math.hypot(cp[0] - head[0], cp[1] - head[1], cp[2] - head[2]) / R, actor: pr.actorId };
+  // The crosshair's own ray, as a slug fired now would record it (__sdfGame.aimRay): how far it passes from the
+  // head's centre, in head radii, and how far the eye is from the head. The gate's own arithmetic, not the leaf's.
+  const ray = await evaluate("__sdfGame.aimRay()");
+  const ta = Math.max(0, (head[0] - ray.eye[0]) * ray.dir[0] + (head[1] - ray.eye[1]) * ray.dir[1] + (head[2] - ray.eye[2]) * ray.dir[2]);
+  const ap = [ray.eye[0] + ray.dir[0] * ta, ray.eye[1] + ray.dir[1] * ta, ray.eye[2] + ray.dir[2] * ta];
+  const inRoom = S.room ? ray.eye[0] > S.room.minX && ray.eye[0] < S.room.maxX && ray.eye[2] > S.room.minZ && ray.eye[2] < S.room.maxZ : null;
+  return { head, R, quat: fr.quat, offset: Math.hypot(cp[0] - head[0], cp[1] - head[1], cp[2] - head[2]) / R, actor: pr.actorId,
+    aimOffset: Math.hypot(ap[0] - head[0], ap[1] - head[1], ap[2] - head[2]) / R, rangeM: Math.hypot(ray.eye[0] - head[0], ray.eye[1] - head[1], ray.eye[2] - head[2]), inRoom };
 }
+/** The leaf's verdict carries the aim the slug was fired with: the same numbers the gate read off the crosshair
+ *  before the shot (to 0.02 head radii and 2 cm: the head does not move, the cast is frozen). */
+const aimKept = (v, aim) => !!v && v.aimOffset !== null && v.rangeM !== null && Math.abs(v.aimOffset - aim.aimOffset) < 0.02 && Math.abs(v.rangeM - aim.rangeM) < 0.02;
+const aimSays = (v) => (v ? `aim ${v.aimOffset === null ? null : v.aimOffset.toFixed(3)} head radii off centre from ${v.rangeM === null ? null : v.rangeM.toFixed(2)} m, the slug's own line ${v.offset.toFixed(3)}` : "no verdict");
+/** A unit vector of the head's own frame in the world (its right is [1, 0, 0]). */
+const headAxis = (q, v) => { const [x, y, z, w] = q, [a, b, c] = v, tx = 2 * (y * c - z * b), ty = 2 * (z * a - x * c), tz = 2 * (x * b - y * a); return [a + w * tx + y * tz - z * ty, b + w * ty + z * tx - x * tz, c + w * tz + x * ty - y * tx]; };
 const headOn = async (id) => (await evaluate(`__sdfGame.flail.limbAlive(${id}, "head")`)) > 0;
 const shotOf = (id) => evaluate(`__sdfGame.head.shot(${id})`);
 const splitOf = (id) => evaluate(`__sdfGame.headSplit(${id})`);
@@ -415,91 +450,125 @@ try {
   check(await headOn(NP.id), "NP: the head is still on");
   await stand(NP.id, 0.8); await capture("NP-pellets");
 
-  // -------- AIM. An aimed slug is centred by the shipped threshold.
+  // -------- AIM. A slug fired with the crosshair on the head's centre is precise, and splits the head, both halves.
+  check(TUNING_DEFAULTS.splitAim === "crosshair" && TUNING_DEFAULTS.splitFrac > 0.15 && TUNING_DEFAULTS.splitFrac <= 0.4 && TUNING_DEFAULTS.splitRangeM >= 3 && TUNING_DEFAULTS.splitRangeM <= 6 && TUNING_DEFAULTS.popPrecise === false,
+    `the shipped tuning: precision is the crosshair's (splitAim ${TUNING_DEFAULTS.splitAim}), within ${TUNING_DEFAULTS.splitFrac} head radii, from no farther than ${TUNING_DEFAULTS.splitRangeM} m; the pop of a split head needs no precision (popPrecise ${TUNING_DEFAULTS.popPrecise})`);
+  const presets = await evaluate(`import("/src/lab/sdf-zombie/head-split.ts").then((m) => m.HEAD_SPLIT.presets.middle)`);
   const AIM = fresh();
-  const aimed = await crosshairOn(AIM.id, SHOT_D, [0, 0, 0]);
-  note(`AIM: crosshair on the head's centre from ${SHOT_D} m: the slug's line passes ${aimed.offset.toFixed(3)} head radii from it (splitFrac ${TUNING_DEFAULTS.splitFrac}); it would hit actor ${aimed.actor}`);
+  const aimed = await crosshairOn(AIM.id, SHOT_D, [0, 0, 0], FRONT);
+  note(`AIM: crosshair on the head's centre from ${SHOT_D} m: its ray passes ${aimed.aimOffset.toFixed(3)} head radii from the centre (splitFrac ${TUNING_DEFAULTS.splitFrac}), the eye ${aimed.rangeM.toFixed(2)} m from the head; the slug's own line would pass ${aimed.offset.toFixed(3)} radii from it; it would hit actor ${aimed.actor}`);
   if (aimed.actor !== AIM.id) fail(`AIM: aim control: the slug would hit actor ${aimed.actor}, not ${AIM.id}`);
   await watchSlug(AIM.id, 8);
   const aimShot = await shotOf(AIM.id);
-  check(!!aimShot && aimShot.offset > 0.5 && aimShot.offset < TUNING_DEFAULTS.splitFrac, `AIM: the aimed slug's line ran ${aimShot?.offset?.toFixed(3)} head radii off centre: far from dead centre (the slug lands under the crosshair), and inside the shipped splitFrac ${TUNING_DEFAULTS.splitFrac}`);
-  check(aimShot?.rule === "split" && aimShot.took === true && (await splitOf(AIM.id)) !== null, `AIM: it splits the head (${JSON.stringify(aimShot)})`);
+  check(aimKept(aimShot, aimed) && aimShot.aimOffset < TUNING_DEFAULTS.splitFrac && aimShot.rangeM <= TUNING_DEFAULTS.splitRangeM,
+    `AIM: the slug carried the crosshair's ray it was fired with: ${aimSays(aimShot)} (the page's crosshair before the shot: ${aimed.aimOffset.toFixed(3)} radii, ${aimed.rangeM.toFixed(2)} m); precise (< ${TUNING_DEFAULTS.splitFrac}) and in range (<= ${TUNING_DEFAULTS.splitRangeM} m)`);
+  check(!!aimShot && aimShot.offset > 0.5, `AIM: the slug itself landed far from where the crosshair was: its own line ran ${aimShot?.offset?.toFixed(3)} head radii off centre (> 0.5; the slug lands under the crosshair), which no longer decides anything`);
+  const aimSt = await splitOf(AIM.id);
+  check(aimShot?.rule === "split" && aimShot.took === true && aimSt !== null, `AIM: it splits the head (${JSON.stringify(aimShot)})`);
+  check(aimSt?.preset === "middle" && aimSt.sides === 0 && aimSt.offset === 0 && Math.abs(aimSt.target - presets.maxBoth * TUNING_DEFAULTS.splitOpen) < 1e-12,
+    `AIM: both halves open, on the head's middle line: the middle preset, both sides, the plane through the head's centre, toward the two-sided full angle (${aimSt ? `${aimSt.preset} sides ${aimSt.sides} offset ${aimSt.offset} target ${aimSt.target} of ${presets.maxBoth}` : null})`);
 
-  // -------- O. an off-centre slug is ordinary (splitFrac 0.35, so a slug on the head can be off centre).
-  await tune({ splitFrac: CENTRE_FRAC });
+  // -------- O. an imprecise slug is ordinary: the crosshair IMPRECISE_M over the head's centre. The slug lands on
+  // the face (about 10 cm under the crosshair), nearer the centre than AIM's did.
   const O = fresh();
-  const oAim = await aimLine(O.id, SHOT_D, GLANCE_SHIFT);
+  const oAim = await crosshairOn(O.id, SHOT_D, [0, IMPRECISE_M, 0], FRONT);
+  if (oAim.actor !== O.id) fail(`O: aim control: the slug would hit actor ${oAim.actor}, not ${O.id}`);
   await watchSlug(O.id, 8);
   const oShot = await shotOf(O.id), oWounds = await headWounds(O.id);
   note(`O: verdict ${JSON.stringify(oShot)}; head wounds ${oWounds.map((w) => `${w.type} r${w.radius.toFixed(3)} ${w.shape}`).join(", ")}`);
-  check(oShot?.rule === "ordinary" && oShot.kind === "slug" && oShot.took === false && oShot.offset >= CENTRE_FRAC, `O: a slug ${oAim.offset.toFixed(3)} radii off centre is ordinary (offset ${oShot?.offset?.toFixed(3)} >= ${CENTRE_FRAC})`);
+  check(aimKept(oShot, oAim) && oShot.aimOffset >= TUNING_DEFAULTS.splitFrac && oShot.rangeM <= TUNING_DEFAULTS.splitRangeM,
+    `O: the crosshair was ${(IMPRECISE_M * 100).toFixed(0)} cm over the head's centre: ${aimSays(oShot)}; imprecise (>= ${TUNING_DEFAULTS.splitFrac}), in range`);
+  check(oShot?.rule === "ordinary" && oShot.kind === "slug" && oShot.took === false, `O: an imprecise slug on the head is ordinary, though its own line ran nearer the centre than AIM's (${oShot?.offset?.toFixed(3)} against ${aimShot?.offset?.toFixed(3)} radii)`);
   check(oWounds.length === 1 && oWounds[0].type === "blast" && oWounds[0].shape === "crater" && oWounds[0].headRegion === null && Math.abs(oWounds[0].radius - 0.16) < 1e-6, "O: it left one ordinary slug crater on the head (radius 0.16 m, no region, no cut)");
   check((await splitOf(O.id)) === null && (await hstate(O.id)) === null && await headOn(O.id), "O: no split, no head-leaf state, the head on");
-  await stand(O.id, PHOTO_D); await capture("O-off-centre");
+  await stand(O.id, PHOTO_D); await capture("O-imprecise");
 
-  // -------- S. a centred slug splits the head, to the full angle.
+  // -------- FAR. a precise slug from beyond the range is ordinary: the crosshair on the head's centre from FAR_D.
+  const FAR = fresh();
+  const farAim = await crosshairOn(FAR.id, FAR_D, [0, 0, 0]);
+  if (farAim.actor !== FAR.id) fail(`FAR: aim control: the slug would hit actor ${farAim.actor}, not ${FAR.id}`);
+  if (farAim.inRoom !== true) fail(`FAR: stance control: ${FAR_D} m from the head toward the room's centre puts the eye outside the room`);
+  await watchSlug(FAR.id, Math.ceil(FAR_D / SLUG_SPEED * 60) + 8);
+  const farShot = await shotOf(FAR.id), farWounds = await headWounds(FAR.id);
+  note(`FAR: verdict ${JSON.stringify(farShot)}; head wounds ${farWounds.map((w) => `${w.type} r${w.radius.toFixed(3)} ${w.shape}`).join(", ")}`);
+  check(aimKept(farShot, farAim) && farShot.aimOffset < TUNING_DEFAULTS.splitFrac && farShot.rangeM > TUNING_DEFAULTS.splitRangeM,
+    `FAR: the crosshair was on the head's centre from ${FAR_D} m: ${aimSays(farShot)}; precise (< ${TUNING_DEFAULTS.splitFrac}) and out of range (> ${TUNING_DEFAULTS.splitRangeM} m)`);
+  check(farShot?.rule === "ordinary" && farShot.kind === "slug" && farShot.took === false, `FAR: a precise slug from beyond the range is ordinary (${JSON.stringify(farShot)})`);
+  check(farWounds.length === 1 && farWounds[0].type === "blast" && farWounds[0].shape === "crater" && farWounds[0].headRegion === null
+    && (await splitOf(FAR.id)) === null && (await hstate(FAR.id)) === null && await headOn(FAR.id), "FAR: it left one ordinary slug crater on the head: no split, no head-leaf state, the head on");
+
+  // -------- S. a precise slug splits the head, both halves, to the full angle. The crosshair is PRECISE_SIDE_M to
+  // the head's own right of its centre: inside the precise zone, and farther off the middle line than the split's
+  // own rule opens both halves for (head-split.ts choosePreset, bothFrac of the half-width): handed that point, or
+  // the slug's impact, the split would peel one half.
   const S1 = fresh();
   await stand(S1.id, PHOTO_D); await capture("S-before");
-  const sAim = await aimLine(S1.id, SHOT_D, 0);
+  const sFrame = await evaluate(`__sdfGame.head.frame(${S1.id})`);
+  const sRight = headAxis(sFrame.quat, [1, 0, 0]), bothFrac = await evaluate(`import("/src/lab/sdf-zombie/head-split.ts").then((m) => m.HEAD_SPLIT.bothFrac)`);
+  const sAim = await crosshairOn(S1.id, SHOT_D, [sRight[0] * PRECISE_SIDE_M, sRight[1] * PRECISE_SIDE_M, sRight[2] * PRECISE_SIDE_M], FRONT);
+  if (sAim.actor !== S1.id) fail(`S: aim control: the slug would hit actor ${sAim.actor}, not ${S1.id}`);
   await watchSlug(S1.id, 8);
   const sShot = await shotOf(S1.id);
-  check(sShot?.rule === "split" && sShot.took === true && sShot.offset < CENTRE_FRAC, `S: a slug ${sAim.offset.toFixed(3)} radii off centre splits (verdict ${JSON.stringify(sShot)})`);
+  check(aimKept(sShot, sAim) && sShot.aimOffset < TUNING_DEFAULTS.splitFrac && sShot.aimOffset * sAim.R > bothFrac * sFrame.axes[0],
+    `S: the crosshair was ${(PRECISE_SIDE_M * 100).toFixed(0)} cm to one side of the head's centre: ${aimSays(sShot)}; precise (< ${TUNING_DEFAULTS.splitFrac}), and ${(sShot?.aimOffset * sAim.R * 1000).toFixed(1)} mm off the middle line, past the ${(bothFrac * sFrame.axes[0] * 1000).toFixed(1)} mm inside which a chop opens both halves`);
+  check(sShot?.rule === "split" && sShot.took === true, `S: a precise slug splits (verdict ${JSON.stringify(sShot)})`);
   await stepN(150);   // the split's spring settles (the head-split gate: within about 60 frames)
   const st = await splitOf(S1.id);
-  // The preset's full angle for what the slug opened: both halves when it landed on the head's middle line, one half
-  // when it landed to a side of it (head-split.ts choosePreset, the axe's own rule).
-  const presets = await evaluate(`import("/src/lab/sdf-zombie/head-split.ts").then((m) => m.HEAD_SPLIT.presets.middle)`);
-  const full = st ? (st.sides === 0 ? presets.maxBoth : presets.maxOne) : NaN;
-  check(st?.preset === "middle" && Math.abs(st.target - full * TUNING_DEFAULTS.splitOpen) < 1e-12 && st.angle === st.target && st.vel === 0,
-    `S: the head split's state: the middle preset (a slug from the front parts the head left and right), at the preset's full angle and at rest (${st ? `${st.preset} sides ${st.sides} angle ${st.angle} target ${st.target} of ${full}` : null})`);
+  // The two-sided full angle: a precise slug from the front always opens both halves.
+  const full = presets.maxBoth;
+  check(st?.preset === "middle" && st.sides === 0 && st.offset === 0 && Math.abs(st.target - full * TUNING_DEFAULTS.splitOpen) < 1e-12 && st.angle === st.target && st.vel === 0,
+    `S: the head split's state: the middle preset (a slug from the front parts the head left and right), BOTH halves, on the head's middle line, at the two-sided full angle and at rest (${st ? `${st.preset} sides ${st.sides} offset ${st.offset} angle ${st.angle} target ${st.target} of ${full}` : null})`);
   const warp = await evaluate(`(() => { const w = __sdfGame.zombie(${S1.id}).posed().split; return w ? { thetaP: w.thetaP, thetaM: w.thetaM, n: [...w.n] } : null; })()`);
-  const wantP = st && st.sides >= 0 ? st.angle : 0, wantM = st && st.sides <= 0 ? -st.angle : 0;
-  check(!!warp && warp.thetaP === wantP && warp.thetaM === wantM, `S: the pose's split turns ${st?.sides === 0 ? "both halves" : "the struck half"} that far (${warp ? `${warp.thetaP.toFixed(4)} / ${warp.thetaM.toFixed(4)}` : null}; wanted ${wantP} / ${wantM})`);
+  check(!!warp && !!st && st.angle > 0 && warp.thetaP === st.angle && warp.thetaM === -st.angle, `S: the pose's split turns both halves that far, opposite ways (${warp ? `${warp.thetaP.toFixed(4)} / ${warp.thetaM.toFixed(4)}` : null}; wanted ${st?.angle} / ${st ? -st.angle : null})`);
   await evaluate("__sdfGame.step(1, 0)");
   const drawn = await evaluate(`(() => { const d = __sdfGame.skullDrawn(${S1.id}); return d ? { bones: d.copies.filter((c) => !c.eye).length, eyes: d.copies.filter((c) => c.eye).length, pieces: [...new Set(d.copies.filter((c) => !c.eye).map((c) => c.piece))].sort() } : null; })()`);
-  const turned = st ? (st.sides === 0 ? [1, 2] : st.sides > 0 ? [1] : [2]) : [];
-  check(!!drawn && drawn.pieces.includes(0) && turned.every((p) => drawn.pieces.includes(p)), `S: the skull is drawn broken with the split: clipped copies for the rest and for each half that turned (${JSON.stringify(drawn)})`);
+  check(!!drawn && [0, 1, 2].every((p) => drawn.pieces.includes(p)), `S: the skull is drawn broken with the split: clipped copies for the rest and for BOTH halves (${JSON.stringify(drawn)})`);
   // The default skull's copies: the sculpted head's own mesh, on the bone's split material, under the second paint.
   const sCopies = await evaluate(`(() => { const d = __sdfGame.skullDrawn(${S1.id}), c = d ? d.copies.filter((q) => !q.eye) : []; return { n: c.length, heads: c.filter((q) => q.head).length, materials: [...new Set(c.map((q) => q.material))], paints: [...new Set(c.map((q) => q.paint))] }; })()`);
   check(sCopies.n > 0 && sCopies.heads === sCopies.n && sCopies.materials.length === 1 && sCopies.materials[0] === "skeleton-bone-split" && sCopies.paints.length === 1 && sCopies.paints[0] === 2,
     `S: every copy is the sculpted head's mesh, on the bone's split material under the second paint (${sCopies.heads} of ${sCopies.n} copies the head; ${sCopies.materials.join(", ")}; paint ${sCopies.paints.join(", ")})`);
-  // The field where a turned half used to be: 6 cm over the head's centre and to that half's side of the split's
-  // PLANE, which a one-sided split puts off the centre, through where the slug landed (head-split.ts choosePreset):
-  // 3.5 cm past it when both halves open, 2 cm when the smaller side peels alone (that side is the narrow one).
-  // Flesh on the closed head; empty now that the half has swung away.
-  const side = st && st.sides > 0 ? 1 : -1, past = st?.sides === 0 ? 0.035 : 0.02;
-  const there = await evaluate(`(async () => { const V = await import("/src/lab/sdf-zombie/validate.ts"); const f = __sdfGame.head.frame(${S1.id}), w = __sdfGame.zombie(${S1.id}).posed().split, b = __sdfGame.zombie(${S1.id}).posed();
+  // The field where each half used to be: 6 cm over the head's centre and 3.5 cm to each side of the split's plane,
+  // which runs through the head's centre. Flesh on the closed head; empty now that both halves have swung away.
+  const past = 0.035;
+  const thereOf = (side) => evaluate(`(async () => { const V = await import("/src/lab/sdf-zombie/validate.ts"); const f = __sdfGame.head.frame(${S1.id}), w = __sdfGame.zombie(${S1.id}).posed().split, b = __sdfGame.zombie(${S1.id}).posed();
     const c = [f.centre[0], f.centre[1] + 0.06, f.centre[2]];
     const s = w.d0 - (w.n[0] * c[0] + w.n[1] * c[1] + w.n[2] * c[2]) + ${side} * ${past};
     const q = [c[0] + w.n[0] * s, c[1] + w.n[1] * s, c[2] + w.n[2] * s];
     return { open: V.sdBody(q, b), closed: V.sdBodyClosed(q, b), offset: w.d0 - (w.n[0] * f.centre[0] + w.n[1] * f.centre[1] + w.n[2] * f.centre[2]) }; })()`);
-  check(there.closed < 0 && there.open > 0, `S: the field is open where the half was: ${(there.open * 1000).toFixed(1)} mm clear of any flesh, at a point ${(-there.closed * 1000).toFixed(1)} mm inside the closed head (${(past * 1000).toFixed(0)} mm past the split's plane, which is ${(there.offset * 1000).toFixed(1)} mm off the head's centre)`);
+  for (const side of [1, -1]) {
+    const there = await thereOf(side);
+    check(there.closed < 0 && there.open > 0, `S: the field is open where the ${side > 0 ? "+" : "-"} half was: ${(there.open * 1000).toFixed(1)} mm clear of any flesh, at a point ${(-there.closed * 1000).toFixed(1)} mm inside the closed head (${(past * 1000).toFixed(0)} mm to that side of the split's plane, which is ${(there.offset * 1000).toFixed(1)} mm off the head's centre)`);
+  }
   const faces = (await headWounds(S1.id)).filter((w) => w.shape === "cut" && (w.headRegion === "split+" || w.headRegion === "split-"));
-  check(faces.length === (st?.sides === 0 ? 2 : 1) && (await hstate(S1.id)) === null, `S: the slug's wound is the split's cut face${st?.sides === 0 ? "s" : ""} (${faces.length}), and the head leaf holds nothing for it (no opening)`);
+  check(faces.length === 2 && new Set(faces.map((w) => w.headRegion)).size === 2 && (await hstate(S1.id)) === null, `S: the slug's wound is the split's two cut faces, one per half (${faces.map((w) => w.headRegion).join(", ")}), and the head leaf holds nothing for it (no opening)`);
   await stand(S1.id, PHOTO_D); await capture("S-split");
   await evaluate("__sdfGame.freeze(false)"); await stepN(3);
   const alS1 = (await evaluate("__sdfGame.actorList()")).find((q) => q.id === S1.id);
   check(alS1?.phase === "standing" && await headOn(S1.id), `S: the zombie lives, its head on (thawed 3 frames: phase ${alS1?.phase})`);
   await evaluate("__sdfGame.freeze(true)");
 
-  // -------- X. a second centred slug on the split head pops it.
-  const xAim = await aimLine(S1.id, SHOT_D, 0);
+  // -------- X. a slug on the split head pops it, and needs no precision: the crosshair IMPRECISE_M over the
+  // centre again, where O's slug was an ordinary wound on a closed head.
+  const xAim = await crosshairOn(S1.id, SHOT_D, [0, IMPRECISE_M, 0], FRONT);
+  if (xAim.actor !== S1.id) fail(`X: aim control: the slug would hit actor ${xAim.actor}, not ${S1.id}`);
   const f0 = await fragments();
   const x = await watchSlug(S1.id, 24);
   const xShot = await shotOf(S1.id);
-  note(`X: line ${xAim.offset.toFixed(3)} radii off; verdict ${JSON.stringify(xShot)}; swell frames ${JSON.stringify(x.swell)}, head off on frame ${x.off}, ${(await fragments()) - f0} fragments`);
-  check(xShot?.rule === "pop" && xShot.took === true, `X: a centred slug on the split head is the pop's (${JSON.stringify(xShot)})`);
+  note(`X: ${aimSays(xShot)}; verdict ${JSON.stringify(xShot)}; swell frames ${JSON.stringify(x.swell)}, head off on frame ${x.off}, ${(await fragments()) - f0} fragments`);
+  check(aimKept(xShot, xAim) && xShot.aimOffset >= TUNING_DEFAULTS.splitFrac && xShot.rangeM <= TUNING_DEFAULTS.splitRangeM,
+    `X: the crosshair was ${(IMPRECISE_M * 100).toFixed(0)} cm over the split head's centre: ${aimSays(xShot)}; imprecise (>= ${TUNING_DEFAULTS.splitFrac}), in range`);
+  check(xShot?.rule === "pop" && xShot.took === true, `X: a slug on the split head is the pop's, precise or not (${JSON.stringify(xShot)})`);
   check(x.swell.length > 0 && x.off === x.swell[x.swell.length - 1] + 1 && !(await headOn(S1.id)), `X: the open head swells and bursts (swell on ${x.swell.length} frames, off on frame ${x.off})`);
   check((await fragments()) - f0 >= 10, `X: the split skull's pieces are thrown (${(await fragments()) - f0} fragments)`);
-  await tune({ splitFrac: TUNING_DEFAULTS.splitFrac });
 
   // -------- OFF. the master switch.
   await tune({ on: false });
   const OFF = fresh();
-  await aimLine(OFF.id, SHOT_D, 0);
+  const offAim = await crosshairOn(OFF.id, SHOT_D, [0, 0, 0], FRONT);
+  if (offAim.actor !== OFF.id) fail(`OFF: aim control: the slug would hit actor ${offAim.actor}, not ${OFF.id}`);
   await watchSlug(OFF.id, 8);
   check((await splitOf(OFF.id)) === null && (await hstate(OFF.id)) === null && (await headWounds(OFF.id)).some((w) => w.type === "blast" && w.shape === "crater"),
-    "OFF: with burstTune({ on: false }) a centred slug is an ordinary slug crater: no split, no opening");
+    "OFF: with burstTune({ on: false }) a precise slug is an ordinary slug crater: no split, no opening");
   await tune({ on: true });
   closeSession(S);
 
@@ -526,31 +595,30 @@ try {
   await boot("anatomical-split", "&skull=anatomical");
   // -------- SA, XA. S's skull and X on the plates (boot 1 makes them on the default skull): the split head's skull
   // is drawn as clipped copies, and the pop of a split head throws its plates.
-  await tune({ splitFrac: CENTRE_FRAC });
   const SA = fresh();
-  const saAim = await aimLine(SA.id, SHOT_D, 0);
+  const saAim = await crosshairOn(SA.id, SHOT_D, [0, 0, 0], FRONT);
+  if (saAim.actor !== SA.id) fail(`SA: aim control: the slug would hit actor ${saAim.actor}, not ${SA.id}`);
   await watchSlug(SA.id, 8);
   const saShot = await shotOf(SA.id);
-  check(saShot?.rule === "split" && saShot.took === true && saShot.offset < CENTRE_FRAC, `SA: a slug ${saAim.offset.toFixed(3)} radii off centre splits (verdict ${JSON.stringify(saShot)})`);
+  check(saShot?.rule === "split" && saShot.took === true && aimKept(saShot, saAim) && saShot.aimOffset < TUNING_DEFAULTS.splitFrac, `SA: a precise slug splits: ${aimSays(saShot)} (verdict ${JSON.stringify(saShot)})`);
   await stepN(150);
   const saSt = await splitOf(SA.id);
   await evaluate("__sdfGame.step(1, 0)");
   const saDrawn = await evaluate(`(() => { const d = __sdfGame.skullDrawn(${SA.id}); return d ? { bones: d.copies.filter((c) => !c.eye).length, eyes: d.copies.filter((c) => c.eye).length, pieces: [...new Set(d.copies.filter((c) => !c.eye).map((c) => c.piece))].sort(),
     materials: [...new Set(d.copies.filter((c) => !c.eye).map((c) => c.material))], heads: d.copies.filter((c) => !c.eye && c.head).length, paints: [...new Set(d.copies.filter((c) => !c.eye).map((c) => c.paint))] } : null; })()`);
-  const saTurned = saSt ? (saSt.sides === 0 ? [1, 2] : saSt.sides > 0 ? [1] : [2]) : [];
-  check(!!saDrawn && saDrawn.pieces.includes(0) && saTurned.length > 0 && saTurned.every((q) => saDrawn.pieces.includes(q)), `SA: the skull is drawn broken with the split: clipped copies for the rest and for each half that turned (${JSON.stringify(saDrawn)})`);
+  check(saSt?.sides === 0 && !!saDrawn && [0, 1, 2].every((q) => saDrawn.pieces.includes(q)), `SA: both halves open (sides ${saSt?.sides}) and the skull is drawn broken with the split: clipped copies for the rest and for both halves (${JSON.stringify(saDrawn)})`);
   check(!!saDrawn && saDrawn.bones > 0 && saDrawn.heads === saDrawn.bones && saDrawn.materials.length === 1 && saDrawn.materials[0] === "skeleton-plate-split" && saDrawn.paints.length === 1 && saDrawn.paints[0] === null,
     `SA: every copy is the anatomical skull's, on the plates' split material and under neither of the sculpted skull's paints (${saDrawn?.heads} of ${saDrawn?.bones} copies the head; ${saDrawn?.materials.join(", ")})`);
   await stand(SA.id, PHOTO_D); await capture("SA-split");
-  const xaAim = await aimLine(SA.id, SHOT_D, 0);
+  const xaAim = await crosshairOn(SA.id, SHOT_D, [0, IMPRECISE_M, 0], FRONT);
+  if (xaAim.actor !== SA.id) fail(`XA: aim control: the slug would hit actor ${xaAim.actor}, not ${SA.id}`);
   const fa0 = await fragments();
   const xa = await watchSlug(SA.id, 24);
   const xaShot = await shotOf(SA.id);
-  note(`XA: line ${xaAim.offset.toFixed(3)} radii off; verdict ${JSON.stringify(xaShot)}; swell frames ${JSON.stringify(xa.swell)}, head off on frame ${xa.off}, ${(await fragments()) - fa0} fragments`);
-  check(xaShot?.rule === "pop" && xaShot.took === true, `XA: a centred slug on the split head is the pop's (${JSON.stringify(xaShot)})`);
+  note(`XA: ${aimSays(xaShot)}; verdict ${JSON.stringify(xaShot)}; swell frames ${JSON.stringify(xa.swell)}, head off on frame ${xa.off}, ${(await fragments()) - fa0} fragments`);
+  check(xaShot?.rule === "pop" && xaShot.took === true && xaShot.aimOffset >= TUNING_DEFAULTS.splitFrac, `XA: a slug on the split head is the pop's, precise or not (${JSON.stringify(xaShot)})`);
   check(xa.swell.length > 0 && xa.off === xa.swell[xa.swell.length - 1] + 1 && !(await headOn(SA.id)), `XA: the open head swells and bursts (swell on ${xa.swell.length} frames, off on frame ${xa.off})`);
   check((await fragments()) - fa0 >= 10, `XA: the split skull's plates are thrown (${(await fragments()) - fa0} fragments)`);
-  await tune({ splitFrac: TUNING_DEFAULTS.splitFrac });
   closeSession(S);
 
   // ======== BOOT 2: the opening, switched on by tuning ========
