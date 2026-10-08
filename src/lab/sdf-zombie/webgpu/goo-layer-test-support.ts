@@ -10,6 +10,7 @@
 // are real Three objects, so assertions read state the layer itself built.
 
 import * as THREE from 'three/webgpu';
+import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { uniform } from 'three/tsl';
 import { createGooLayer, type GooLayer } from './goo-layer';
 import type { BloodSim, Droplet } from '../blood-sim';
@@ -24,8 +25,9 @@ export type GooLogEntry =
     kind: 'render';
     scene: THREE.Scene;
     /** Material of the first mesh in the scene (quad scenes carry exactly
-     *  one fullscreen quad; the density scene carries the instancer). */
-    material: THREE.Material | undefined;
+     *  one fullscreen quad; the density scene carries the instancer). Every
+     *  material this layer draws with is a MeshBasicNodeMaterial. */
+    material: MeshBasicNodeMaterial | undefined;
     /** The render target active when the call was made (null = canvas). */
     target: THREE.RenderTarget | null;
   }
@@ -86,7 +88,7 @@ export function createRecordingGooRenderer(width = 800, height = 600): {
       entries.push({
         kind: 'render',
         scene,
-        material: mesh?.material as THREE.Material | undefined,
+        material: mesh?.material as MeshBasicNodeMaterial | undefined,
         target: active,
       });
     },
