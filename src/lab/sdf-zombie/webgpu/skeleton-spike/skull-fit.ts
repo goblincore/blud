@@ -85,6 +85,9 @@ export interface SkullFitSpec {
    *  bone envelope (anatomical-skull.ts skullEyeLine), which is right where the head's bone is a skull-sized mass
    *  and wrong where it is a few beads, or reaches into a bun of hair. */
   eyeHs?: number;
+  /** Fit to the head's SKIN, its flesh without the painted prims (head-flesh.ts HeadFlesh.skin): for a head whose
+   *  hair is modelled as ordinary prims, so the skull is sized to the head under the hair and stays out of it. */
+  skin?: boolean;
 }
 
 /** The parameters `spec` fits with: its named fit's, with its own over them. Null for the envelope fit. */

@@ -21,13 +21,23 @@ import { boxReach } from '../../extent';
 import type { Primitive, Vec3 } from '../../types';
 import { bendCtrl } from '../../vec';
 
-export interface HeadFlesh {
+/** A flesh field of a head, in the head segment's frame. */
+export interface FleshField {
   /** The flesh's distance at a point of the head segment's frame, metres: negative inside. */
   distance(p: readonly [number, number, number]): number;
   /** Changes when a float that reaches the field changes: a fit cached against the flesh keys on it. */
   revision: string;
   /** The middle of a box that holds the flesh, in the same frame. */
   centre: Vec3;
+}
+
+export interface HeadFlesh extends FleshField {
+  /** THE SKIN: the same flesh without its painted prims (the ones authored with a colour of their own). On a head
+   *  whose hair is modelled as ordinary prims (a bob, a bun, a cap of hair: not strands, not a shell) that is the
+   *  head under the hair, and a skull fitted to it stays out of the hair. It also leaves out the small painted
+   *  features (a brow, a socket's dark oval), which stand on the skin and hold no bone. Every prim of it is one of
+   *  the whole flesh's, so a point inside it is inside the whole flesh. Null for a head with no unpainted flesh. */
+  skin: FleshField | null;
   /** THE FRAME THE FACE IS PAINTED IN, in the same frame as the flesh: the centre and half-axes of the head's fattest
    *  prim that is not a carve (game-zombie-face.ts headShape, whose units the face sheet is projected in:
    *  march/body/face.wgsl.ts hs). Painted or not, hair or flesh: on a head whose hair is its biggest mass that is
@@ -60,6 +70,16 @@ export function headFlesh(body: BuildResult, bound: BoundRig): HeadFlesh | null 
     if (pr.strand !== undefined || pr.shell !== undefined || pr.op === 'bone' || pr.op === 'organ') continue;
     prims.push({ ...pr, a: local.a, b: local.b, dead: undefined, orient: undefined });
   }
+  const whole = fieldOf(prims);
+  if (!whole) return null;
+  // A carve stays whatever its paint: without it the skin would stand where the whole flesh is cut away.
+  const plain = prims.filter(pr => pr.color === undefined || pr.op === 'sub' || pr.op === 'groove');
+  return { ...whole, skin: plain.length === prims.length ? whole : fieldOf(plain), sheet };
+}
+
+/** The field of `prims` (already in the head segment's frame), its revision and the middle of its box; null when
+ *  they hold nothing solid. */
+function fieldOf(prims: Primitive[]): FleshField | null {
   const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   let h = 2166136261 >>> 0;
   const mix = (n: number) => { h ^= n >>> 0; h = Math.imul(h, 16777619) >>> 0; };
@@ -79,10 +99,5 @@ export function headFlesh(body: BuildResult, bound: BoundRig): HeadFlesh | null 
   if (!Number.isFinite(lo[0]!)) return null;
   const centre: Vec3 = [(lo[0]! + hi[0]!) / 2, (lo[1]! + hi[1]!) / 2, (lo[2]! + hi[2]!) / 2];
   const flesh: Body = { prims, clusters: [{ id: 0, limb: 'head', start: 0, count: prims.length, center: centre, radius: 0, alive: true }] };
-  return {
-    distance: p => sdBodyClosed([p[0], p[1], p[2]], flesh),
-    revision: `${prims.length}:${(h >>> 0).toString(16)}`,
-    centre,
-    sheet,
-  };
+  return { distance: p => sdBodyClosed([p[0], p[1], p[2]], flesh), revision: `${prims.length}:${(h >>> 0).toString(16)}`, centre };
 }

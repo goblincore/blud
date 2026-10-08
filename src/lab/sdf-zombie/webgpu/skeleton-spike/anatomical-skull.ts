@@ -153,16 +153,18 @@ export class AnatomicalSkullKit {
    *  fit's own values where a character changes the named fit's. */
   #fleshed(source: BoneFieldSource): FittedSkull | null {
     const spec = this.fitOf(source.character), params = spec && skullFitParams(spec);
-    const flesh = params ? source.flesh : undefined;
-    if (!spec || !params || !flesh) return null;
-    const name = spec.fit, own = spec.params || spec.eyeHs !== undefined ? `:${JSON.stringify([spec.params ?? null, spec.eyeHs ?? null])}` : '';
+    const head = params ? source.flesh : undefined;
+    if (!spec || !params || !head) return null;
+    // The flesh the skull is fitted to: the head's, or its skin alone where the character asks.
+    const flesh = spec.skin && head.skin ? head.skin : head;
+    const name = spec.fit, own = spec.params || spec.eyeHs !== undefined || spec.skin ? `:${JSON.stringify([spec.params ?? null, spec.eyeHs ?? null, !!spec.skin])}` : '';
     const key = `${source.revision}|${flesh.revision}|${name}${own}`;
-    let head = this.#fitted.get(key);
-    if (head) return head;
+    let fitted = this.#fitted.get(key);
+    if (fitted) return fitted;
     const began = performance.now();
     // The eye line the orbits are held on: the painted eyes' height in the face sheet's frame where the character
     // says it, else the bone envelope's.
-    const eyeLine = spec.eyeHs !== undefined && flesh.sheet ? flesh.sheet.centre[1] + spec.eyeHs * flesh.sheet.axes[1] : skullEyeLine(source.bounds);
+    const eyeLine = spec.eyeHs !== undefined && head.sheet ? head.sheet.centre[1] + spec.eyeHs * head.sheet.axes[1] : skullEyeLine(source.bounds);
     const result = fitSkull(this.source.map(p => ({
       positions: p.geometry.getAttribute('position').array, normals: p.geometry.getAttribute('normal').array, face: SKULL_FACE_PIECES.has(p.id),
     })), p => flesh.distance(p), source.bounds, flesh.centre, params, params.eyes ? { ...SKULL_EYE_POINT, at: eyeLine } : SKULL_EYE_POINT);
@@ -185,14 +187,14 @@ export class AnatomicalSkullKit {
     geometry.computeBoundingSphere();
     // The eyes sit in the orbits of the plates as fitted, and are sized from them: they follow whatever the fit did.
     const front = frontDepth(pieces), orbits = skullOrbits(front);
-    head = { pieces, fit:{ name, result, min:whole.min.toArray() as Vec3, max:whole.max.toArray() as Vec3 },
+    fitted = { pieces, fit:{ name, result, min:whole.min.toArray() as Vec3, max:whole.max.toArray() as Vec3 },
       orbits, eyes: orbitEyePlacements(front, orbits, orbitEyeRadius(orbits)),
       mesh: { key:`${key}:anatomical-skull-1`, geometry, mesher:'asset',
         verts:geometry.getAttribute('position').count, tris:geometry.getIndex()!.count/3,
         bakeMs:performance.now()-began, overflow:false, clamped:false, droppedQuads:0 } };
-    this.#fitted.set(key,head);
-    this.made.push({ character: source.character, fit: name, ms: head.mesh.bakeMs });
-    return head;
+    this.#fitted.set(key,fitted);
+    this.made.push({ character: source.character, fit: name, ms: fitted.mesh.bakeMs });
+    return fitted;
   }
   dispose(): void {
     for (const h of this.#fitted.values()) {
