@@ -50,12 +50,42 @@ describe('offline anatomical skull asset',()=> {
     expect(bones(b)).toHaveLength(1);
     expect(renderer.explodeSkull(a,[head],[0,1,0])).toBe(13);
     expect(debris).toHaveLength(14);
+    // No frame with the skull and its thrown plates together: in the batches as they stand, before any update, a's
+    // plates and seated eyes are out (their instances at zero scale) and b's whole skull and eyes are untouched.
+    expect(bones(a)).toHaveLength(0);
+    expect(renderer.drawn.filter(d=>d.owner===a&&d.eye)).toHaveLength(0);
+    expect(bones(b)).toHaveLength(1);
+    expect(renderer.drawn.filter(d=>d.owner===b&&d.eye).length).toBeGreaterThan(0);
+    const live = (renderer.object.children.filter(c=>(c as THREE.InstancedMesh).isInstancedMesh) as THREE.InstancedMesh[])
+      .flatMap(mesh=>Array.from({length:mesh.count},(_,i)=>{const m=new THREE.Matrix4();mesh.getMatrixAt(i,m);return m.getMaxScaleOnAxis();}))
+      .filter(scale=>scale>0);
+    // What is left drawn is b's: one skull and its eyes.
+    expect(live).toHaveLength(1+renderer.drawn.filter(d=>d.owner===b&&d.eye).length);
     expect(renderer.explodeSkull(a,[head],[0,1,0])).toBe(0);
     renderer.update([[head],[head]],[a,b]);
     expect(bones(a)).toHaveLength(0);
     expect(bones(b)).toHaveLength(1);
     renderer.clear();
     expect(renderer.skullState(a).missing).toBe(0);
+    renderer.dispose();
+  });
+  it('a whole skull that pops is out of the batches in the same call, its seated eyes with it',()=> {
+    const body = buildBody(compileBlob(parseBlob(readFileSync('src/lab/sdf-zombie/characters/zombie.blob','utf8'))),DEFAULT_BUILD_OPTS);
+    const head = createSkeletonSources(body,bindRig(body),{character:'zombie'}).find(s=>s.segment==='head')!;
+    const cache = new SegmentMeshCache(undefined,undefined,new AnatomicalSkullKit(source,new THREE.Texture(),new THREE.Vector2(1,1)));
+    const debris: THREE.Object3D[] = [];
+    const renderer = createSegmentMeshRenderer(cache,0,undefined,object=>debris.push(object));
+    const a={},b={};
+    renderer.update([[head],[head]],[a,b]);
+    const of = (owner:object,eye:boolean)=>renderer.drawn.filter(d=>d.owner===owner&&!!d.eye===eye);
+    expect(of(a,false)).toHaveLength(1);
+    expect(of(a,true).length).toBeGreaterThan(0);
+    expect(renderer.explodeSkull(a,[head],[0,1,0])).toBe(14);
+    expect(debris).toHaveLength(14);
+    expect(of(a,false)).toHaveLength(0);
+    expect(of(a,true)).toHaveLength(0);
+    expect(of(b,false)).toHaveLength(1);
+    expect(of(b,true).length).toBeGreaterThan(0);
     renderer.dispose();
   });
   it.each(['zombie','soldier','cultist','cultist-cowled','bride','female','schoolgirl','schoolgirl-alt','schoolgirl-described','clown','clown-alt','juggernaut','bonewalker'])('fits %s behind intact flesh and shares geometry',character=> {

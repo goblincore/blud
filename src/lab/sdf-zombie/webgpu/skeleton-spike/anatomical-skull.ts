@@ -7,8 +7,10 @@
 // WHO DRAWS IT AND HOW IT IS FITTED is the kit's plan (SkullFitPlan): for each character a fit (skull-fit.ts
 // SkullFitSpec), or none, and that character keeps its sculpted bone. The game's plan comes from the one resolver
 // (sculpt-variant.ts resolveSkull, built into a kit by sculpt-cache.ts). A fit is made once for each head revision
-// and kept: head() makes it on the first ask, and the game asks at spawn (game-spawn.ts), not when the bone first
-// shows.
+// and kept: head() makes it on the first ask, and the game asks as a character's skeleton sources are built
+// (game-skeleton-actors.ts buildSkeletonSources: at spawn, and again for a body a sever re-derived), not when the
+// bone first shows. Every later ask for the same source object is one lookup and allocates nothing: the bone
+// renderer asks twice for each head in each frame.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -91,6 +93,11 @@ export function skullFitMatrix(bounds: BoneFieldSource['bounds'], raw: THREE.Box
 
 export class AnatomicalSkullKit {
   readonly #fitted = new Map<string,FittedSkull>();
+  /** The answer head() gave each source object (null: it draws no anatomical skull). A source is immutable for its
+   *  revision (contract.ts), so the answer is too. */
+  #bySource = new WeakMap<BoneFieldSource,FittedSkull | null>();
+  /** Characters already told that their flesh fit had no flesh to fit to (#fleshed). */
+  readonly #unfleshed = new Set<string>();
   /** Every fitted skull this kit has made, in order: whose, under which fit, and the wall time it took to make
    *  (the fit, its geometry, its orbits), milliseconds. One entry per head revision: a census of what a boot paid. */
   readonly made: { character: string; fit: SkullFitName; ms: number }[] = [];
@@ -118,6 +125,15 @@ export class AnatomicalSkullKit {
   }
   supports(source: BoneFieldSource): boolean { return source.segment === 'head' && this.fitOf(source.character) !== null; }
   head(source: BoneFieldSource): FittedSkull | null {
+    const kept = this.#bySource.get(source);
+    if (kept !== undefined) return kept;
+    const made = this.#make(source);
+    this.#bySource.set(source, made);
+    return made;
+  }
+  /** head() for a source object not seen before: the skull fitted to its flesh, else the envelope fit, each made
+   *  once for its revision. */
+  #make(source: BoneFieldSource): FittedSkull | null {
     if (!this.supports(source)) return null;
     const fleshed = this.#fleshed(source);
     if (fleshed) return fleshed;
@@ -152,22 +168,31 @@ export class AnatomicalSkullKit {
    *  plate at once, and everything a FittedSkull holds is made from that one result: each plate's geometry, its debris
    *  twin, its pivot and box, the triangles a shot is tested against, the merged skull, the whole skull's box, and
    *  the orbits and eye seats, which are found on the fitted plates. The fit is the flesh's as much as the bone's
-   *  (two bodies with one head bone and two faces are two fits), so it is kept under both revisions, and under the
-   *  fit's own values where a character changes the named fit's. */
+   *  (two bodies with one head bone and two faces are two fits), so it is kept under both revisions, under the
+   *  fit's own values where a character changes the named fit's, and under the eye line the orbits are held on: that
+   *  line is read off the face sheet's frame, the head's fattest prim, which may be painted hair or a strand that
+   *  neither revision holds (the skin leaves the painted prims out, the bone never had them).
+   *  A character planned a fit to the flesh whose head source carries none gets the envelope fit, with the eyes
+   *  where the sculpted skull seats them: the console says so once for the character, in any build. */
   #fleshed(source: BoneFieldSource): FittedSkull | null {
     const spec = this.fitOf(source.character), params = spec && skullFitParams(spec);
     const head = params ? source.flesh : undefined;
+    if (spec && params && !head && !this.#unfleshed.has(source.character)) {
+      this.#unfleshed.add(source.character);
+      console.warn(`[skull] ${source.character}: planned the fit '${spec.fit}' to its head's flesh, and its head source carries no flesh; it draws the envelope fit, its eyes at the sculpted skull's seats`);
+    }
     if (!spec || !params || !head) return null;
     // The flesh the skull is fitted to: the head's, or its skin alone where the character asks.
     const flesh = spec.skin && head.skin ? head.skin : head;
-    const name = spec.fit, own = spec.params || spec.eyeHs !== undefined || spec.skin ? `:${JSON.stringify([spec.params ?? null, spec.eyeHs ?? null, !!spec.skin])}` : '';
-    const key = `${source.revision}|${flesh.revision}|${name}${own}`;
-    let fitted = this.#fitted.get(key);
-    if (fitted) return fitted;
-    const began = performance.now();
     // The eye line the orbits are held on: the painted eyes' height in the face sheet's frame where the character
     // says it, else the bone envelope's.
     const eyeLine = spec.eyeHs !== undefined && head.sheet ? head.sheet.centre[1] + spec.eyeHs * head.sheet.axes[1] : skullEyeLine(source.bounds);
+    const name = spec.fit, own = spec.params || spec.eyeHs !== undefined || spec.skin ? `:${JSON.stringify([spec.params ?? null, spec.eyeHs ?? null, !!spec.skin])}` : '';
+    // (The eye line to a micrometre, as the revisions round their floats.)
+    const key = `${source.revision}|${flesh.revision}|${name}${own}|eye${Math.round(eyeLine * 1e6)}`;
+    let fitted = this.#fitted.get(key);
+    if (fitted) return fitted;
+    const began = performance.now();
     const result = fitSkull(this.source.map(p => ({
       positions: p.geometry.getAttribute('position').array, normals: p.geometry.getAttribute('normal').array, face: SKULL_FACE_PIECES.has(p.id),
     })), p => flesh.distance(p), source.bounds, flesh.centre, params, params.eyes ? { ...SKULL_EYE_POINT, at: eyeLine } : SKULL_EYE_POINT);
@@ -205,6 +230,7 @@ export class AnatomicalSkullKit {
       for (const p of h.pieces) { p.geometry.dispose(); p.debrisGeometry.dispose(); }
     }
     this.#fitted.clear();
+    this.#bySource = new WeakMap();
     for (const p of this.source) p.geometry.dispose();
     this.normalMap.dispose();
   }

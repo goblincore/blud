@@ -10,7 +10,8 @@ import {
   skullEyeLine, skullFitMatrix, type FittedSkull, type SkullFitName,
 } from './anatomical-skull';
 import { anatomicalSkullSource } from './anatomical-skull.fixture';
-import { SKULL_FITS, skullWarpAt, skullWarpJacobian, det3 } from './skull-fit';
+import { SKULL_FITS, skullFitParams, skullWarpAt, skullWarpJacobian, det3 } from './skull-fit';
+import { BALL_HEADS, ballHeadFit } from './skull-cast';
 import { parseBlob } from '../../blob-parse';
 import { compileBlob } from '../../blob-compile';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../../build-body';
@@ -41,12 +42,27 @@ const headOf = (character: string) => {
   }
   return b;
 };
+/** `SHIPPED` in place of a fit's name: the character's own fit as the game ships it (skull-cast.ts BALL_HEADS: a
+ *  named fit, to the skin, its orbits held on the painted eyes' line). Only the eight have one. */
+const SHIPPED = 'shipped';
+type FitOrShipped = SkullFitName | typeof SHIPPED;
 const fits = new Map<string, FittedSkull>();
-const fitOf = (character: string, fit: SkullFitName): FittedSkull => {
+const fitOf = (character: string, fit: FitOrShipped): FittedSkull => {
   const key = `${character}|${fit}`;
   let f = fits.get(key);
-  if (!f) { f = kitOf(fit).head(headOf(character).head)!; fits.set(key, f); }
+  if (!f) {
+    const kit = fit === SHIPPED ? new AnatomicalSkullKit(source, new THREE.Texture(), new THREE.Vector2(1, 1), ballHeadFit) : kitOf(fit);
+    f = kit.head(headOf(character).head)!; fits.set(key, f);
+  }
   return f;
+};
+/** What a fit of the suite below is made with, for `character`: its name, its parameters and the eye line its
+ *  orbits are held on. */
+const fitFacts = (character: string, fit: FitOrShipped) => {
+  const { head } = headOf(character);
+  if (fit !== SHIPPED) return { name: fit, params: SKULL_FITS[fit as Exclude<SkullFitName, 'envelope'>], eyeLine: skullEyeLine(head.bounds) };
+  const spec = BALL_HEADS[character]!.spec, sheet = head.flesh!.sheet!;
+  return { name: spec.fit, params: skullFitParams(spec)!, eyeLine: spec.eyeHs === undefined ? skullEyeLine(head.bounds) : sheet.centre[1] + spec.eyeHs * sheet.axes[1] };
 };
 const hash = (arrays: ArrayLike<number>[]): string => {
   let h = 2166136261 >>> 0;
@@ -116,13 +132,75 @@ describe('the default fit is the envelope fit, as it was', () => {
     expect((await createBoneMeshCache('?skull=sculpt&skullfit=snug', () => {})).skullKit).toBeNull();
     expect((await createBoneMeshCache('?skull=procedural&skullfit=tight', () => {})).skullKit).toBeNull();
   });
-  it('a head whose source carries no flesh gets the envelope fit under any name', () => {
-    const { head } = headOf('zombie');
-    const bare = Object.create(head) as BoneFieldSource;
-    Object.defineProperty(bare, 'flesh', { value: undefined });
-    const skull = kitOf('snug').head(bare)!;
-    expect(skull.fit).toBeNull();
-    expect(hash([skull.mesh.geometry.getAttribute('position').array])).toBe(hash([kitOf().head(head)!.mesh.geometry.getAttribute('position').array]));
+  it('a head whose source carries no flesh gets the envelope fit under any name, and the console says so once for the character', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const { head } = headOf('zombie');
+      const bareOf = () => { const b = Object.create(head) as BoneFieldSource; Object.defineProperty(b, 'flesh', { value: undefined }); return b; };
+      const kit = kitOf('snug');
+      const skull = kit.head(bareOf())!;
+      expect(skull.fit).toBeNull();
+      expect(skull.eyes).toBeNull();
+      expect(hash([skull.mesh.geometry.getAttribute('position').array])).toBe(hash([kitOf().head(head)!.mesh.geometry.getAttribute('position').array]));
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]![0])).toContain('zombie');
+      expect(String(warn.mock.calls[0]![0])).toContain("'snug'");
+      // Another head of the same character, and the same head again: no second line.
+      kit.head(bareOf()); kit.head(bareOf());
+      expect(warn).toHaveBeenCalledTimes(1);
+      // A head planned the envelope fit says nothing: it never wanted the flesh.
+      kitOf().head(bareOf());
+      expect(warn).toHaveBeenCalledTimes(1);
+      // A head that carries its flesh says nothing.
+      kitOf('snug').head(head);
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally { warn.mockRestore(); }
+  });
+});
+
+describe('a fit is kept for everything it was made from', () => {
+  /** The eight's own fits hold the orbits on an eye line read off the face sheet's frame: the head's fattest prim. */
+  const sheetPrim = (body: ReturnType<typeof buildBody>) => {
+    const head = bindRig(body).head!;
+    let best = -1, r = -Infinity;
+    for (const [index] of [...head.prims].sort((x, y) => x[0] - y[0])) {
+      const p = body.prims[index]!;
+      if (p.op === 'sub') continue;
+      const reach = p.radius * Math.max(...p.scale);
+      if (reach > r) { r = reach; best = index; }
+    }
+    return best;
+  };
+  const sourceOf = (body: ReturnType<typeof buildBody>, character: string) => createSkeletonSources(body, bindRig(body), { character }).find(s => s.segment === 'head')!;
+  /** A ball-headed character whose face sheet's prim is PAINTED (hair: left out of the skin the skull is fitted to). */
+  const painted = Object.keys(BALL_HEADS).find((character) => {
+    const { body } = headOf(character), spec = BALL_HEADS[character]!.spec;
+    return spec.skin === true && spec.eyeHs !== undefined && body.prims[sheetPrim(body)]!.color !== undefined;
+  })!;
+
+  it('TWO BODIES THAT DIFFER ONLY IN A PAINTED HEAD PRIM get two fitted skulls: the eye line is part of what the fit is kept under', () => {
+    expect(painted).toBeDefined();
+    const { body } = headOf(painted), at = sheetPrim(body), LIFT = 0.02;
+    // The same body with that one painted prim 2 cm higher.
+    const lifted = { ...body, prims: body.prims.map((p, i) => (i === at ? { ...p, a: [p.a[0], p.a[1] + LIFT, p.a[2]] as Vec3, b: [p.b[0], p.b[1] + LIFT, p.b[2]] as Vec3 } : p)) };
+    const a = sourceOf(body, painted), b = sourceOf(lifted, painted);
+    // Neither revision a fit was kept under sees the difference: the bone is the same, and the skin leaves the prim out.
+    expect(b.revision).toBe(a.revision);
+    expect(b.flesh!.skin!.revision).toBe(a.flesh!.skin!.revision);
+    // (The cultist's is his hood, a painted shell: the whole flesh leaves shells out too.)
+    if (body.prims[at]!.shell !== undefined) expect(b.flesh!.revision).toBe(a.flesh!.revision);
+    expect(b.flesh!.sheet!.centre[1] - a.flesh!.sheet!.centre[1]).toBeCloseTo(LIFT, 9);
+    const kit = new AnatomicalSkullKit(source, new THREE.Texture(), new THREE.Vector2(1, 1), ballHeadFit);
+    const first = kit.head(a)!, second = kit.head(b)!;
+    expect(second).not.toBe(first);
+    expect(kit.made).toHaveLength(2);
+    // The second skull's orbits are held on the lifted eye line.
+    const orbitY = (k: FittedSkull) => (k.orbits[0]!.centre[1] + k.orbits[1]!.centre[1]) / 2;
+    expect(orbitY(second) - orbitY(first)).toBeGreaterThan(LIFT / 2);
+    // And a third body equal to the first, a source object of its own, finds the first fit made.
+    expect(kit.head(sourceOf({ ...body, prims: [...body.prims] }, painted))).toBe(first);
+    expect(kit.made).toHaveLength(2);
+    kit.dispose();
   });
 });
 
@@ -152,12 +230,17 @@ describe('the asset\'s openings (SKULL_OPENINGS)', () => {
   });
 });
 
-describe.each(FLESH_FITS)('?skullfit=%s', fit => {
-  const params = SKULL_FITS[fit];
-  it.each(CHARACTERS)('%s: under the intact flesh by the margin, within the limits, nothing folded, every opening open', character => {
+// The four named fits on all thirteen humanoids, and THE FITS THE GAME SHIPS: each of the eight under its own.
+const SUITE: { label: string; fit: FitOrShipped; characters: string[] }[] = [
+  ...FLESH_FITS.map(fit => ({ label: `?skullfit=${fit}`, fit, characters: CHARACTERS })),
+  { label: 'the shipped fits of the eight (skull-cast.ts BALL_HEADS: snug, to the skin, on the painted eye line)', fit: SHIPPED, characters: Object.keys(BALL_HEADS) },
+];
+describe.each(SUITE)('$label', ({ fit, characters }) => {
+  it.each(characters)('%s: under the intact flesh by the margin, within the limits, nothing folded, every opening open', character => {
     const { body, head } = headOf(character);
     const skull = fitOf(character, fit), result = skull.fit!.result;
-    expect(skull.fit!.name).toBe(fit);
+    const { name, params, eyeLine } = fitFacts(character, fit);
+    expect(skull.fit!.name).toBe(name);
 
     // THE MARGIN, against the whole body's flesh at rest (the field the game's wounds and shots read), at every
     // distinct place of the fitted skull.
@@ -185,7 +268,7 @@ describe.each(FLESH_FITS)('?skullfit=%s', fit => {
     else expect(result.passes.length).toBeLessThanOrEqual(12);
     // Held by the eyes: the point between the orbits is on the head's middle plane, and on its eye line.
     expect(SKULL_EYE_POINT.x * s[0] + result.affine.offset[0]).toBeCloseTo((head.bounds.min[0] + head.bounds.max[0]) / 2, 9);
-    if (params.eyes) expect(SKULL_EYE_POINT.y * s[1] + result.affine.offset[1]).toBeCloseTo(skullEyeLine(head.bounds), 9);
+    if (params.eyes) expect(SKULL_EYE_POINT.y * s[1] + result.affine.offset[1]).toBeCloseTo(eyeLine, 9);
 
     // NOTHING FOLDED. The warp's Jacobian keeps its sign and does not collapse at any vertex. Every triangle keeps
     // its facing and a fair part of its area, against the same triangle sized and placed only. And a corner normal
@@ -243,7 +326,7 @@ describe.each(FLESH_FITS)('?skullfit=%s', fit => {
     }
   });
 
-  it.each(CHARACTERS)('%s: no seam opens, and one place stays one place', character => {
+  it.each(characters)('%s: no seam opens, and one place stays one place', character => {
     const skull = fitOf(character, fit), result = skull.fit!.result, s = result.affine.scale;
     // Inside a plate (a UV split, a hard edge): vertices at one place of the asset are at one place of the fit, and
     // those that shared a normal share one still.
@@ -287,12 +370,15 @@ describe.each(FLESH_FITS)('?skullfit=%s', fit => {
     // nearly the same way.
     expect(opened, 'the most a gap between two plates grew, metres').toBeLessThan(0.0001);
   });
+});
 
+describe.each(FLESH_FITS)('?skullfit=%s', fit => {
   it.each(CHARACTERS)('%s: the plates, their boxes and pivots, the shot test and the whole skull come from the one fit', character => {
     const { head } = headOf(character);
     const kit = kitOf(fit), skull = kit.head(head)!, result = skull.fit!.result;
     expect(kit.head(head)).toBe(skull);
-    expect(skull.mesh.key).toBe(`${head.revision}|${head.flesh!.revision}|${fit}:anatomical-skull-1`);
+    // Kept under the bone's revision, the flesh's, the fit's name and the eye line its orbits are held on.
+    expect(skull.mesh.key).toBe(`${head.revision}|${head.flesh!.revision}|${fit}|eye${Math.round(skullEyeLine(head.bounds) * 1e6)}:anatomical-skull-1`);
     expect(kit.size).toBe(1);
     const merged = skull.mesh.geometry.getAttribute('position').array, mergedNormal = skull.mesh.geometry.getAttribute('normal').array;
     const whole = new THREE.Box3();

@@ -98,6 +98,30 @@ describe('explodeSkull on a sculpted head', () => {
     renderer.dispose();
   });
 
+  it('a fragment carries its owner\'s light row, from whichever batch draws one of its bones: the head\'s own need not be drawn', () => {
+    const row = (t: Thrown) => {
+      const g = (t.object.children[0] as THREE.Mesh).geometry;
+      return [...Array.from(g.getAttribute('iLights').array as Float32Array), g.getAttribute('iFill').getX(0)];
+    };
+    const lights = (owner: unknown) => (owner === A ? { x: 1, y: 2, z: 3, w: 4 } : { x: 5, y: 6, z: 7, w: 8 }), A = {}, B = {};
+    // The head is drawn: its row.
+    const drawn = setup();
+    drawn.renderer.update([[head], [head]], [B, A]);
+    drawn.renderer.syncLights(lights as never, o => (o === A ? 0.5 : 0.25));
+    drawn.renderer.explodeSkull(A, [head], [0, 0, -1]);
+    for (const t of drawn.thrown) expect(row(t)).toEqual([1, 2, 3, 4, 0.5]);
+    drawn.renderer.dispose();
+    // Only another bone of the owner is drawn (the head was not handed to the update): that bone's row.
+    const other = createSkeletonSources(body, bound, { character: 'zombie' }).find(s => s.segment !== 'head' && s.kind !== 'organ')!;
+    const elsewhere = setup();
+    elsewhere.renderer.update([[other], [other]], [B, A], undefined, new Set([A, B]));
+    elsewhere.renderer.syncLights(lights as never, o => (o === A ? 0.5 : 0.25));
+    expect(bonesOf(elsewhere.renderer, A)).toHaveLength(1);
+    expect(elsewhere.renderer.explodeSkull(A, [head, other], [0, 0, -1])).toBe(SCULPT_FRAGMENT_IDS.length);
+    for (const t of elsewhere.thrown) expect(row(t)).toEqual([1, 2, 3, 4, 0.5]);
+    elsewhere.renderer.dispose();
+  });
+
   it('the cut is made once for a mesh and kept: a second head of the same mesh is thrown from the same prototypes', () => {
     const { renderer, thrown } = setup();
     const a = {}, b = {};

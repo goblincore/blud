@@ -196,6 +196,11 @@ export interface SegmentMeshCacheStats {
 
 export class SegmentMeshCache {
   readonly #map = new Map<string, SegmentMesh>();
+  /** The mesh get() gave each source object, and for an organ source the organ recipe it was built by (organ
+   *  sources follow `organMesh`; null for a bone). A source is immutable for its revision (contract.ts): a hit here
+   *  reads nothing of the source and allocates nothing, where the key is a string built from the carved source. The
+   *  bone renderer asks for every drawn segment in every frame. */
+  #bySource = new WeakMap<BoneFieldSource, { mesh: SegmentMesh; organMesh: OrganMeshSpec | null }>();
   #extractCount = 0;
   #extractMs = 0;
   #firstExtractAt: number | null = null;
@@ -229,12 +234,23 @@ export class SegmentMeshCache {
   }
 
   get(source: BoneFieldSource): SegmentMesh {
+    const kept = this.#bySource.get(source);
+    if (kept && (kept.organMesh === null || kept.organMesh === this.organMesh)) return kept.mesh;
+    const mesh = this.#find(source);
+    this.#bySource.set(source, { mesh, organMesh: source.kind === 'organ' ? this.organMesh : null });
+    return mesh;
+  }
+
+  /** get() for a source object not seen before (or an organ source under a new recipe): by key, extracting on the
+   *  first ask for a key. */
+  #find(source: BoneFieldSource): SegmentMesh {
     const skull = this.skullKit?.head(source);
     if (skull) return skull.mesh;
-    const key = this.keyOf(source);
+    const carved = meshBoneSource(source, this.sculpt.shape);
+    const key = `${carved.revision}@${source.kind === 'organ' ? organMeshKey(this.organMesh) : this.#cellOf(source, carved)}`;
     let m = this.#map.get(key);
     if (!m) {
-      m = extractSegmentMesh(source, this.#cellOf(source, meshBoneSource(source, this.sculpt.shape)), this.organMesh, this.sculpt.shape);
+      m = extractSegmentMesh(source, this.#cellOf(source, carved), this.organMesh, this.sculpt.shape);
       const at = performance.now();
       this.#extractCount++;
       this.#extractMs += m.bakeMs;
@@ -280,6 +296,7 @@ export class SegmentMeshCache {
   dispose(): void {
     for (const m of this.#map.values()) m.geometry.dispose();
     this.#map.clear();
+    this.#bySource = new WeakMap();
     this.skullKit?.dispose();
   }
 }
