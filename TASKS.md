@@ -16,10 +16,10 @@
   `scripts/frame-cost.mjs`). Built: (1) the held weapons and the arms shade the lights near the eye, not the level's
   69 (Night Train −2.5 to −6.1 ms a frame; the hitch on entering a carriage halved; `?nearlights=0` is the A/B);
   (2) the exact wound reach is the default (a switch that shipped off: −3 ms on a body with 32 wounds, −6 ms on a
-  chopped, split close-up, the picture the same to the bit). The Boiler Room after a fight is 37.6 → 33.4 ms and the
-  split close-up 38.5 → 32.6 ms: at the line with no margin. The bare arena after a fight is still 37 ms. Next, in
-  the notes' order: the props and kit on their room's lights, PR 35, the owner re-fold under cuts and the split, a
-  doorway test so other carriages are not drawn.
+  chopped, split close-up, the picture the same to the bit). **With PR 43's quad dispatch merged in, the three heavy
+  scenes are under 33.3 ms with margin:** Boiler Room after a fight 37.6 → 28.5 ms, the bare arena after a fight
+  37.4 → 24.8 ms, the chopped and split close-up 38.5 → 23.3 ms. Left for margin and smoothness: the props and kit
+  on their room's lights, a doorway test so other carriages are not drawn, the first shot's pipeline hitch.
 
 **Player melee: spike flail** (branch `claude/melee-weapon-design-7d1423`, PR #22) — [combat and gore](docs/tasks/combat-and-gore.md)
 - [~] **Flail v1.5b built; owner playtest pending.** Torn, splayed, wet-red lips on flail wounds; gun wounds get the

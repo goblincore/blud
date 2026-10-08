@@ -6,7 +6,7 @@ it up.
 ## State
 
 - **PR goblincore/blud#41** (draft), branch `claude/quizzical-williams-66ec4e`, on `main` at `06f2ef12` (the skull
-  stack, PR 39, and PR 40 are in). Head `9de3f337` plus this hand-off.
+  stack, PR 39, and PR 40 are in). Merged up with `main` at `030d9120` (PR 43) in `3560302e`.
 - **Built and verified:** `scripts/frame-cost.mjs` and the notes; the held weapons' near-light list
   (`near-light-pick.ts`, `near-lights.ts`, `viewmodel-lights.ts`; `?nearlights=0`); the exact wound reach as the
   shipped default (`zombie-gpu.ts` `SHIP_COUNTS2_Z`; `__sdfGame.setWoundExact(false)`).
@@ -14,10 +14,16 @@ it up.
   this was written. Read with `gh pr checks 41`.
 - **Waiting on the owner:** a playtest of both changes (the list of what to look at is at the end), and a pick from
   the ranking for what to build next.
-- **The goal:** the heavy scenes at a stable 30 fps (33.3 ms). Now: Boiler Room after a fight 33.4 ms, the chopped
-  and split close-up 32.6 ms (both at the line, no margin), the bare arena after a fight 37.2 ms (4 ms over).
+- **The goal:** the heavy scenes at a stable 30 fps (33.3 ms). **Met with margin after PR 43** (the quad crowd
+  dispatch as the default, merged into this branch at `3560302e`): Boiler Room after a fight 28.5 ms, the bare arena
+  after a fight 24.8 ms, the chopped and split close-up 23.3 ms. On boxes (`?crowddispatch=boxes`) the same branch
+  reads 31.7, 36.8 and 32.4 ms. NOTES has the table at its top.
 
 ## Next, in the ranking's order (none started)
+
+After PR 43 nothing below is needed to reach 33.3 ms in the measured scenes; it is margin and smoothness. Items 1, 4,
+6 and 7 do not depend on the crowd dispatch. Items 2, 3 and 5 were sized on boxes: re-measure on the quad first (the
+owner re-fold, item 3, already reads as no gain there).
 
 1. The props (light fixtures, pickups, spent shells) and the soldiers' kit on their room's lights: about 1 to 1.5 ms
    on Night Train. They still use three's default list (69 lights) or `kit-lights.ts`'s mirror of it. They do not

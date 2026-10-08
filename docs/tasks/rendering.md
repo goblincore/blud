@@ -23,6 +23,10 @@ refuses to run beside a stray game page and retakes a run when a fixed loop in t
   chop), −5.9 ms (+ the head split wide); the Boiler Room's march after a fight −1.9 ms. The float march target is
   the same to the bit on every wound stage tried and no `march-hash` pin moved; cut-wound gate 33 / 0, head-split
   111 / 0, axe 29 / 0, head-burst 130 / 0 on its second run (one flaky failure on its first, see the notes).
+- [x] **Re-measured after PR 43 (the quad dispatch as the default), merged into the branch:** Boiler Room after a
+  fight 28.5 ms, the bare arena after a fight 24.8 ms, the chopped and split close-up 23.3 ms (on boxes the same
+  branch reads 31.7, 36.8, 32.4). The goal's three scenes are under 33.3 ms with 5 to 10 ms to spare. The exact
+  wound reach still pays on the quad (+3.7 to +4.3 ms when switched back off); the owner re-fold is no lever there.
 - [ ] The props (fixtures, pickups, spent shells) and the soldiers' kit still shade the whole level's lights: about
   1 to 1.5 ms on Night Train. They do not change rooms, so a fixed list per room is enough.
 - [ ] PR 35 (the open head's and the cuts' bounds) holds on current `main` by its counters (−23 to −29% primitive

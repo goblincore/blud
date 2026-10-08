@@ -8,7 +8,34 @@ This note has the measurements, the ranking and each change's before and after. 
 `d6bb9967` (before the skull stack merged) unless a row says otherwise; `main` moved to `06f2ef12` during the pass
 (PR 39 and PR 40 merged), and the changes are built and measured on that.
 
-## Short version
+## Read this first: after PR 43 (the quad crowd dispatch is the default again), the goal is met with margin
+
+Everything below §0 was measured while the BOXES crowd dispatch was the default. PR 43 merged the same day and made
+the QUAD the default; this branch was merged up with it and the heavy scenes re-measured (two repeats, boots
+interleaved, quad against `?crowddispatch=boxes`; full table in [`matrix-after-pr43.md`](matrix-after-pr43.md)):
+
+| Heavy scene | This branch, quad (the default now) | This branch, boxes | `main` before this pass (boxes) |
+| --- | --- | --- | --- |
+| Night Train, Boiler Room after a fight (5 bodies, 24 wounds) | **28.8 / 28.2 ms** (march 19.7) | 31.3 / 32.1 | 37.6 |
+| Bare arena after a fight (6 bodies, 46 wounds) | **25.1 / 24.4 ms** (march 17.4) | 37.8 / 35.7 | 37.4 |
+| Close-up, 32 wounds + a torso chop + the head split wide | **22.8 / 23.8 ms** (march 18.4) | 32.2 / 32.6 | 38.5 |
+| Third class, walking in (8 bodies) | 19.5 / 18.5 ms | 20.9 / 21.8 | 26.0 |
+| Boiler Room, firing (7 bodies, 24 wounds) | 21.7 / 20.7 ms | 19.5 / 19.7 | 25.4 |
+
+- **All three heavy scenes are now 5 to 10 ms under 33.3 ms.** The quad takes 12 ms off the arena and 9 ms off the
+  split close-up, and 3 ms off the Boiler Room after a fight; it costs about 1 to 2 ms while firing in the Boiler Room.
+- `march-hash` on the merged tree: the no-flag boot is the quad canonical `0c71e712…` / `bf6836cd…`,
+  `MARCH_HASH_BOXES=1` `d7392d52…` / `76bd51aa…`, per-body `470ff0b3…` / `f618070e…`. No pin moved.
+- **The exact wound reach still pays on the quad**: switching it back off costs +3.65 ms (IQR 3.50 to 3.70) on the
+  split close-up and +4.32 ms (3.85 to 4.65) on the 32-pellet one (A/A ±0.3).
+- **The owner re-fold is no longer a lever on the quad**: switching it off reads +0.8 and +2.0 ms (slower), where
+  it returned 8 ms on boxes. §3.3's and the ranking's lines about it describe the boxes path.
+- §3.4's crowd figure (28 bodies: 63 to 70 ms) was the boxes dispatch too; PR 43's own sweep has the quad at 38 ms
+  for 24 bodies.
+- Not re-measured on the quad: the wound census of §3.3, PR 35's counters, the level-by-room probe (a polygon-pass
+  measure, so it should not depend on the dispatch).
+
+## 0. Short version (as measured before PR 43, on the boxes dispatch)
 
 | Heavy scene | Frame today | Over 33.3 ms by | What it is made of |
 | --- | --- | --- | --- |
@@ -440,6 +467,12 @@ interleaved, two repeats; frame p50 and the march pass, ms; full table in
 
 ## 6. The ranking: what closes the gap to 33.3 ms
 
+**After PR 43 there is no gap left in the three heavy scenes** (the section at the top). What follows is the ranking
+as it stood on the boxes dispatch; read it now as "where margin and smoothness can still be bought": items 2 (props
+and kit lights), 8 (the doorway test), 7 (bodies out of view) and 9 (the first shot's pipelines) do not depend on
+the dispatch. Items 3 to 6 are about the march on wounded bodies and should be re-measured on the quad before any
+is built.
+
 Where the heavy scenes stand with §5.1 in:
 
 | Heavy scene | Before | With §5.1 and §5.2 | Still over by | What is left in it |
@@ -458,7 +491,7 @@ march on wounded bodies. In order of evidence:
 | 1b | **The exact wound reach as the default** (§5.2) | every wounded body | −3 to −5 ms at 32 pellet wounds, −7 to −9 ms on the chopped, split close-up | built; alternation and bit parity | low: the same picture to the bit | none |
 | 2 | **The props and the kit on their room's lights** (fixtures, pickups, spent shells: 58 meshes on the default list; the soldiers' kit mirrors it too) | Night Train | −1 to −1.5 ms (the 58 meshes' ceiling is 1.5 ms; the kit is not measured) | §3.1 | low: they do not move between rooms, so a fixed list per room rebuilds nothing | none expected |
 | 3 | **Merge PR 35** (the open head's and the cuts' bounds) | cuts, open heads | −23 to −29% of the march's primitive folds on a chopped or split body; −1.5 ms on a clean open head by its own measure; not resolved on a heavily wounded one | §3.3 | low to medium: it predates the skull stack; its three gates and `march-hash` must be re-run on the merge | none (the same picture to the bit, or the same solid inside a smaller hull) |
-| 4 | **The owner re-fold under cuts and the split** (it is 8 ms of the split close-up, 2 to 3.6 ms of the chopped one) | the close-up, any chopped or split body | up to its ceiling; PR 35 already takes 23 to 29% of the primitive folds | §3.3 | medium to high: every bound in it carries an exactness argument | none intended |
+| 4 | **The owner re-fold under cuts and the split** (BOXES ONLY: on the quad, the default since PR 43, switching it off returns nothing; it was 8 ms of the split close-up on boxes) | the close-up, any chopped or split body | up to its ceiling; PR 35 already takes 23 to 29% of the primitive folds | §3.3 | medium to high: every bound in it carries an exactness argument | none intended |
 | 5 | **A wound index per region** (a per-tile or per-cluster mask of which wounds can reach it, written when a wound is stamped) | every wounded body | what is left after §5.2: 1.9M of 7.8M rows remain, so at most a few ms more | §3.3 | medium: a bound that is too tight is a hole in a body | none if the bound is exact |
 | 6 | **Bake craters into a rest-space volume per body** (the research pass's only route to a cost that does not grow with the count) | every wounded body | removes the dependence on count for craters | published practice (Claybook, Dreams); nothing measured here | high: days of work; rims limited by the volume's cell; cuts are too thin for it | crater rims softer unless the noise stays procedural |
 | 7 | **Pose, pack and upload only the bodies in view** | every level's CPU | −1 to −2.5 ms of tick | §3.2 | medium: the posed body has about 30 readers inside `game-actor.ts`; demos must replay to the same hash | none |
