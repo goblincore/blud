@@ -317,7 +317,8 @@ export function createWorldSeams(ctx: GameContext) {
     get ownerRefoldLimbs() { const z = refoldMode(ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0); return z > 3.5; },
     /** Wound EXACT FIXES (counts2.z + 8, 2026-09-21): d-aware per-row wound reach and the
      *  owner re-fold pre-scan (group spheres vs dmg + own bump amplitude). Value-preserving by
-     *  argument; composes with the re-fold mode. off = ship. */
+     *  argument and by measurement; composes with the re-fold mode. ON = ship since 2026-10-08
+     *  (zombie-gpu.ts SHIP_COUNTS2_Z has why); false is the old fixed 0.25 m reach, for the A/B. */
     setWoundExact(on: boolean) {
       for (const a of ctx.world.actors) {
         const z = a.view.uniforms.counts2.value.z;

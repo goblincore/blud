@@ -5,10 +5,21 @@
 > the area pages under [`docs/tasks/`](docs/tasks/), step-by-step plans in `docs/superpowers/plans/`,
 > and hand-offs in `docs/dev-notes/`.
 >
-> **Latest hand-offs:** [2026-10-05 the axe and the head split](docs/dev-notes/2026-10-04-head-split/HANDOFF.md) (branch `claude/head-cleaving-effect-ef9515`, PR goblincore/blud#31), [2026-10-01 design session — the egg (paused), the Flat's emergence, the game's shape, the retro-CGI look](docs/dev-notes/2026-10-01-design-session-handoff.md) (branch `claude/egg-shader-gooey-transitions-21fb04`, unmerged), [2026-10-01 Night Train ending — control room, egg, sequence system](docs/dev-notes/2026-10-01-night-train-ending-handoff.md) (branch `claude/train-monitor-transition-51f385`, unmerged; plan 4 next), [2026-09-29](docs/dev-notes/2026-09-29-handoff.md) (light layers, Boiler Room
+> **Latest hand-offs:** [2026-10-08 frame cost: the heavy scenes toward a stable 30 fps](docs/dev-notes/2026-10-08-frame-cost/HANDOFF.md) (branch `claude/quizzical-williams-66ec4e`, PR goblincore/blud#41), [2026-10-05 the axe and the head split](docs/dev-notes/2026-10-04-head-split/HANDOFF.md) (branch `claude/head-cleaving-effect-ef9515`, PR goblincore/blud#31), [2026-10-01 design session — the egg (paused), the Flat's emergence, the game's shape, the retro-CGI look](docs/dev-notes/2026-10-01-design-session-handoff.md) (branch `claude/egg-shader-gooey-transitions-21fb04`, unmerged), [2026-10-01 Night Train ending — control room, egg, sequence system](docs/dev-notes/2026-10-01-night-train-ending-handoff.md) (branch `claude/train-monitor-transition-51f385`, unmerged; plan 4 next), [2026-09-29](docs/dev-notes/2026-09-29-handoff.md) (light layers, Boiler Room
 > resize, zombie feet, level-list tier, march-hash on Chrome 154) and [2026-09-30 flail / head damage / wounds](docs/dev-notes/2026-09-30-flail-handoff/HANDOFF.md). Previous: [2026-09-27 Night Train](docs/dev-notes/2026-09-27-night-train-handoff.md).
 
 ## In flight / next
+
+**Frame cost: the heavy scenes at a stable 30 fps** (owner's goal, 2026-10-08) — [rendering](docs/tasks/rendering.md)
+- [~] **Measured and ranked 2026-10-08; two changes built (PR goblincore/blud#41), owner look pending.** The whole
+  frame attributed on six scenes ([notes](docs/dev-notes/2026-10-08-frame-cost/NOTES.md), driver
+  `scripts/frame-cost.mjs`). Built: (1) the held weapons and the arms shade the lights near the eye, not the level's
+  69 (Night Train −2.5 to −6.1 ms a frame; the hitch on entering a carriage halved; `?nearlights=0` is the A/B);
+  (2) the exact wound reach is the default (a switch that shipped off: −3 ms on a body with 32 wounds, −6 ms on a
+  chopped, split close-up, the picture the same to the bit). **With PR 43's quad dispatch merged in, the three heavy
+  scenes are under 33.3 ms with margin:** Boiler Room after a fight 37.6 → 28.5 ms, the bare arena after a fight
+  37.4 → 24.8 ms, the chopped and split close-up 38.5 → 23.3 ms. Left for margin and smoothness: the props and kit
+  on their room's lights, a doorway test so other carriages are not drawn, the first shot's pipeline hitch.
 
 **Player melee: spike flail** (branch `claude/melee-weapon-design-7d1423`, PR #22) — [combat and gore](docs/tasks/combat-and-gore.md)
 - [~] **Flail v1.5b built; owner playtest pending.** Torn, splayed, wet-red lips on flail wounds; gun wounds get the

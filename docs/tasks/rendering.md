@@ -2,6 +2,48 @@
 
 The march, temporal work, the upscaler, post, perf sessions. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## The whole frame: attribution and ranking, toward a stable 30 fps in the heavy scenes — 2026-10-08
+
+Notes, tables and the ranking: [`docs/dev-notes/2026-10-08-frame-cost/NOTES.md`](../dev-notes/2026-10-08-frame-cost/NOTES.md).
+Driver: `scripts/frame-cost.mjs` (per scene: the bench's passes mode live, counters, ablations by alternation; it
+refuses to run beside a stray game page and retakes a run when a fixed loop in the page reads slow).
+
+- [x] **Measured** on six scenes (Night Train's guards' van, third class and Boiler Room; the bare page's room 4 and
+  arena; a wounded, chopped, split close-up). Over 33.3 ms: the Boiler Room after a fight (39.3 ms), the arena after
+  a fight (37.4 ms), the close-up (36 ms). The post chain is about 1 ms; shadow maps and the skull meshes are under
+  the floor.
+- [x] **The held weapons and the arms shade the lights near the eye** (`near-light-pick.ts`, `near-lights.ts`,
+  `viewmodel-lights.ts`; `?nearlights=0` puts the old lists back). They shaded every light of the level: 69 on Night
+  Train. Night Train frames −2.5 to −6.1 ms; the first frame in a carriage 159 to 202 ms → 51 to 84 ms; no change on
+  the bare page. `march-hash` unmoved, flail gate 47 / 0, axe gate 29 / 0. **Owner look pending**
+  ([sheet](../dev-notes/2026-10-08-frame-cost/near-lights-look.jpg)).
+- [x] **The exact wound reach is the default** (`zombie-gpu.ts` `SHIP_COUNTS2_Z`; `__sdfGame.setWoundExact(false)` is
+  the old fixed 0.25 m). It shipped off since 2026-09-22 ("~0 gain" on bodies with 3 or 4 wounds). With 32 wounds on
+  a body: the walk folds 1.88M wound rows where it folded 7.79M; close-ups −3.1 ms (32 pellets), −3.1 ms (+ a torso
+  chop), −5.9 ms (+ the head split wide); the Boiler Room's march after a fight −1.9 ms. The float march target is
+  the same to the bit on every wound stage tried and no `march-hash` pin moved; cut-wound gate 33 / 0, head-split
+  111 / 0, axe 29 / 0, head-burst 130 / 0 on its second run (one flaky failure on its first, see the notes).
+- [x] **Re-measured after PR 43 (the quad dispatch as the default), merged into the branch:** Boiler Room after a
+  fight 28.5 ms, the bare arena after a fight 24.8 ms, the chopped and split close-up 23.3 ms (on boxes the same
+  branch reads 31.7, 36.8, 32.4). The goal's three scenes are under 33.3 ms with 5 to 10 ms to spare. The exact
+  wound reach still pays on the quad (+3.7 to +4.3 ms when switched back off); the owner re-fold is no lever there.
+- [ ] The props (fixtures, pickups, spent shells) and the soldiers' kit still shade the whole level's lights: about
+  1 to 1.5 ms on Night Train. They do not change rooms, so a fixed list per room is enough.
+- [ ] PR 35 (the open head's and the cuts' bounds) holds on current `main` by its counters (−23 to −29% primitive
+  folds on a chopped or split body). Re-run its gates on the skull stack, then merge.
+- [ ] Wounds up close are what is left: one zombie at 0.8 m read 25 ms untouched, 34 ms with 32 pellet wounds, 51
+  ms with a torso chop on top, 64 ms with the head split wide (per-frame fenced, before the exact reach). After it,
+  the owner re-fold is the largest part of a chopped or split body's extra cost (switching it off, a wrong frame,
+  returns 8 ms of the split close-up). Further out: a wound index per region, and baking craters into a rest-space
+  volume so the cost stops growing with the count.
+- [ ] Draw only the rooms the doorways show: standing in third class, 165 to 192 of 425 draw calls are other
+  carriages behind the end wall (about 3 ms there, 2 of it CPU; about 1 ms in the Boiler Room).
+- [ ] CPU: every actor of the level is posed, packed and uploaded each tick, in view or not (about 0.12 ms a body,
+  3.5 ms on Night Train). The visual set gates the upkeep around a body, not the body.
+- [ ] Hitches: the first shot of a boot builds 28 to 37 pipelines (worst frame 70 to 150 ms).
+- [ ] The light gate's "skull glows in the dark" check fails on `main` since the sculpted skull merged (1.56x against
+  1.5x); its own task.
+
 ## Native wgpu + ray tracing spikes — done 2026-10-08, answer: not faster
 
 - [x] The captured `sdf:march` pass replayed through wgpu 30 / Metal against the same pass in Chrome: 27.8 ms vs

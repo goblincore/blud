@@ -290,6 +290,7 @@ import { createFlareHarness } from './game-flare';
 import { createRodHarness } from './game-rod';
 import { createAxeHarness } from './game-axe';
 import { createFlail } from './game-flail';
+import { lightHeldMeshes, syncHeldLights } from './viewmodel-lights';
 import { createHeadDamage } from './game-head-damage';
 import { createHeadSplit } from './game-head-split';
 import { createHeadShot } from './game-head-shot';
@@ -1635,6 +1636,7 @@ async function main() {
     // The flail's and the axe's torch FILLs follow this frame's torch (viewmodel-lights.ts OWN LIGHT LIST).
     ctx.weapon.flail?.syncFill();
     ctx.weapon.axe?.syncFill();
+    syncHeldLights(ctx, camera);
     // The kit twin follows the flashlight's SWITCH like the spot and the bodies' beam do (night-train
     // starts dark until the coat-check pickup): ungated it lit kitted enemies at full strength first.
     ctx.lighting.flashlight.setKitBeamGain(ctx.vfx.beamTuning.gain * flashlightGate(ctx));
@@ -3705,6 +3707,8 @@ async function main() {
     // …and so were the flail's and the axe's own lists (viewmodel-lights.ts OWN LIGHT LIST).
     ctx.weapon.flail?.refreshLights();
     ctx.weapon.axe?.refreshLights();
+    // …and the gun, the arms and the shells take the near-light list from here on (viewmodel-lights.ts).
+    lightHeldMeshes(ctx);
     ctx.weapon.gunReady = true;
     resolveGunReady();
     mark('gun-ready');

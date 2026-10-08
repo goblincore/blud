@@ -26,6 +26,7 @@ import type { VoidRuntime } from './game-void';
 import type { Projectile } from './game-weapon';
 import type { ProbeLightingNode } from './probe-lighting-node';
 import type { LevelListLightingNode } from './level-list-node';
+import type { NearLights } from './near-lights';
 
 // ASSIGNED-ONCE HANDLES. The fields below are `const` in game-main.ts: created
 // once at their declaration and never reassigned. The original code therefore
@@ -57,6 +58,9 @@ export interface LightingState {
   dungeonOn: boolean;
   /** Beam + shadow rig; the codemod supplies the real flashlight. */
   flashlight: Flashlight;
+  /** The proxy lights the held weapons and the arms are lit by (near-lights.ts); null until the first viewmodel
+   *  light list is made, and always in deferred mode. */
+  nearLights: NearLights | null;
   /** Provider for the live projectile lists, or null before they exist. */
   liveTracers: (() => readonly Projectile[]) | null;
   /** Raw `?tracerlight` value; `'0'`/`'off'` zero the gain. */
@@ -105,6 +109,7 @@ export function makeLightingState(): LightingState {
     flickerLights: [],
     dungeonOn: true,
     flashlight: null as unknown as Flashlight,
+    nearLights: null,
     liveTracers: null,
     tracerLightParam: null,
     tracerLightGain: 0,
