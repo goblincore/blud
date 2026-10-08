@@ -20,18 +20,21 @@ import { SegmentVolumeBinding, createSegmentAtlasTexture } from './skeleton-spik
  *  (body reference change — mid-pose re-bind is a documented prototype
  *  approximation for limb local frames, re-measured in task 4). */
 export function buildSkeletonSources(ctx: GameContext, actor: ZombieActor, name: string) {
-  return ({
-  body: actor.body,
-  name,
-  sources: createSkeletonSources(actor.body, actor.boundRig(), {
+  const sources = createSkeletonSources(actor.body, actor.boundRig(), {
     character: name,
     rig: () => actor.boundRig().rig,
     bodyYaw: () => actor.pose().yaw,
     // Always built: the organ MODE decides whether they are drawn and whether the rows are packed, so a live
     // flip needs no rebuild (game-render-controls.ts applyOrganMode).
     organs: true,
-  }),
-});
+  });
+  // A character that draws the anatomical skull has it fitted to its head HERE, as its sources are built (at spawn;
+  // again for a body a sever re-derived), and not in the frame its bone first shows: a fit to the flesh takes 30 to
+  // 180 ms. It is made once per head revision (AnatomicalSkullKit.head keeps it), so every later actor of the same
+  // character finds it made.
+  const kit = ctx.render.segMeshCache?.skullKit, head = kit ? sources.find(s => s.segment === 'head') : undefined;
+  if (kit && head) kit.head(head);
+  return { body: actor.body, name, sources };
 }
 
 export function acquireVolumeAtlas(ctx: GameContext, actor: ZombieActor, sources: readonly BoneFieldSource[]) {

@@ -69,6 +69,29 @@ export const SKULL_FITS: Record<'affine' | 'mid' | 'snug' | 'tight', SkullFitPar
   tight: { share: 0.95, margin: 0.003, limit: 1.15, pull: 0.10, facePull: 0.04, radius: 0.30, eyes: true },
 };
 
+/** How a skull is fitted to a head, by name. 'envelope': fixed fractions of the head's BONE envelope
+ *  (anatomical-skull.ts skullFitMatrix), which reads no flesh. The others size it to the head's flesh (SKULL_FITS). */
+export const SKULL_FIT_NAMES = ['envelope', 'affine', 'mid', 'snug', 'tight'] as const;
+export type SkullFitName = (typeof SKULL_FIT_NAMES)[number];
+
+/** HOW ONE CHARACTER'S SKULL IS FITTED: a named fit, and what this head needs changed in it. */
+export interface SkullFitSpec {
+  fit: SkullFitName;
+  /** This head's own values for the named fit's parameters (a fit to the flesh only). */
+  params?: Partial<SkullFitParams>;
+  /** WHERE THE FACE IS: the height of the flesh's painted eyes on the head, in the units the face sheet is laid in
+   *  (head-flesh.ts HeadFlesh.sheet: 0 at the middle of the head's fattest prim, 1 at its top, -1 at its bottom).
+   *  A fit that holds the orbits on the eye line (`eyes`) holds them there. Not given: the eye line is read off the
+   *  bone envelope (anatomical-skull.ts skullEyeLine), which is right where the head's bone is a skull-sized mass
+   *  and wrong where it is a few beads, or reaches into a bun of hair. */
+  eyeHs?: number;
+}
+
+/** The parameters `spec` fits with: its named fit's, with its own over them. Null for the envelope fit. */
+export function skullFitParams(spec: Readonly<SkullFitSpec>): SkullFitParams | null {
+  return spec.fit === 'envelope' ? null : { ...SKULL_FITS[spec.fit], ...spec.params };
+}
+
 /** Stage 1's result: a point p of the asset goes to scale * p + offset (per axis). */
 export interface SkullAffine { scale: V3; offset: V3 }
 

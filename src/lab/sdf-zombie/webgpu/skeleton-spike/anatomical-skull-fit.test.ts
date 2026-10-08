@@ -7,7 +7,7 @@ import { describe, it, expect, vi } from 'vitest';
 import * as THREE from 'three';
 import {
   AnatomicalSkullKit, HUMANOID_SKULLS, SKULL_EYE_POINT, SKULL_FACE_PIECES, SKULL_FIT_NAMES, SKULL_OPENINGS, SKULL_PIECES,
-  skullEyeLine, skullFitMatrix, skullFitOf, type FittedSkull, type SkullFitName,
+  skullEyeLine, skullFitMatrix, type FittedSkull, type SkullFitName,
 } from './anatomical-skull';
 import { anatomicalSkullSource } from './anatomical-skull.fixture';
 import { SKULL_FITS, skullWarpAt, skullWarpJacobian, det3 } from './skull-fit';
@@ -22,6 +22,7 @@ import { meshEyePlacements } from './mesh-eyes';
 import { meshBoneSource } from './mesh-skull';
 import { SegmentMeshCache } from './mesh';
 import { createBoneMeshCache } from './sculpt-cache';
+import { resolveSkull } from './sculpt-variant';
 import { createSegmentMeshRenderer } from './mesh-renderer';
 import type { Vec3 } from '../../types';
 
@@ -102,15 +103,16 @@ describe('the default fit is the envelope fit, as it was', () => {
     expect(kitOf().head(guarded)).not.toBeNull();
     expect(() => kitOf('snug').head(guarded)).toThrow('the envelope fit read the flesh');
   });
-  it('?skullfit= names a fit; anything else, and no word at all, is the envelope fit; ?skull=sculpt has no kit to fit', async () => {
-    expect(skullFitOf('')).toBe('envelope');
-    expect(skullFitOf('?level=night-train')).toBe('envelope');
-    expect(skullFitOf('?skullfit=envelope')).toBe('envelope');
-    for (const name of FLESH_FITS) expect(skullFitOf(`?a=1&skullfit=${name}`)).toBe(name);
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    expect(skullFitOf('?skullfit=huge')).toBe('envelope');
-    expect(warn).toHaveBeenCalledTimes(1);
-    warn.mockRestore();
+  it('?skullfit= names a fit for whoever draws the anatomical skull; anything else, and no word at all, leaves the fits as they were; ?skull=sculpt has no kit to fit', async () => {
+    const zombieFit = (search: string) => resolveSkull(search).anatomical.zombie?.fit ?? null;
+    expect(zombieFit('?skull=anatomical')).toBe('envelope');
+    expect(zombieFit('?level=night-train&skull=anatomical')).toBe('envelope');
+    expect(zombieFit('?skull=anatomical&skullfit=envelope')).toBe('envelope');
+    for (const name of FLESH_FITS) expect(zombieFit(`?a=1&skull=anatomical&skullfit=${name}`)).toBe(name);
+    const unknown = resolveSkull('?skull=anatomical&skullfit=huge');
+    expect(unknown.anatomical.zombie!.fit).toBe('envelope');
+    expect(unknown.notes).toHaveLength(1);
+    expect(unknown.notes[0]).toContain('?skullfit=huge');
     expect((await createBoneMeshCache('?skull=sculpt&skullfit=snug', () => {})).skullKit).toBeNull();
     expect((await createBoneMeshCache('?skull=procedural&skullfit=tight', () => {})).skullKit).toBeNull();
   });

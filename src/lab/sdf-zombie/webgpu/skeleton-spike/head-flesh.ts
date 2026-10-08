@@ -28,6 +28,11 @@ export interface HeadFlesh {
   revision: string;
   /** The middle of a box that holds the flesh, in the same frame. */
   centre: Vec3;
+  /** THE FRAME THE FACE IS PAINTED IN, in the same frame as the flesh: the centre and half-axes of the head's fattest
+   *  prim that is not a carve (game-zombie-face.ts headShape, whose units the face sheet is projected in:
+   *  march/body/face.wgsl.ts hs). Painted or not, hair or flesh: on a head whose hair is its biggest mass that is
+   *  the hair. Null for a head with no such prim. */
+  sheet: { centre: Vec3; axes: Vec3 } | null;
 }
 
 /**
@@ -38,8 +43,20 @@ export function headFlesh(body: BuildResult, bound: BoundRig): HeadFlesh | null 
   const head = bound.head;
   if (!head) return null;
   const prims: Primitive[] = [];
+  // The face sheet's frame, as the game picks it: the fattest prim that is not a carve, the first of equals.
+  let sheet: { centre: Vec3; axes: Vec3 } | null = null, sheetR = -Infinity;
   for (const [index, local] of [...head.prims].sort((x, y) => x[0] - y[0])) {
     const pr = body.prims[index]!;
+    if (pr.op !== 'sub') {
+      const r = pr.radius * Math.max(pr.scale[0], pr.scale[1], pr.scale[2]);
+      if (r > sheetR) {
+        sheetR = r;
+        sheet = {
+          centre: [(local.a[0] + local.b[0]) / 2, (local.a[1] + local.b[1]) / 2, (local.a[2] + local.b[2]) / 2],
+          axes: [pr.radius * pr.scale[0], pr.radius * pr.scale[1], pr.radius * pr.scale[2]],
+        };
+      }
+    }
     if (pr.strand !== undefined || pr.shell !== undefined || pr.op === 'bone' || pr.op === 'organ') continue;
     prims.push({ ...pr, a: local.a, b: local.b, dead: undefined, orient: undefined });
   }
@@ -66,5 +83,6 @@ export function headFlesh(body: BuildResult, bound: BoundRig): HeadFlesh | null 
     distance: p => sdBodyClosed([p[0], p[1], p[2]], flesh),
     revision: `${prims.length}:${(h >>> 0).toString(16)}`,
     centre,
+    sheet,
   };
 }

@@ -86,6 +86,7 @@ import {
 } from './mesh-appearance';
 import {
   meshEyePlacements, meshEyeImpactIndices, MESH_EYE_EMISSION_WGSL, MESH_EYE_SURFACE_WGSL, MESH_EYE_VESSEL_WGSL,
+  type MeshEyePlacement,
 } from './mesh-eyes';
 import { ANATOMICAL_SKULL_NORMAL_WGSL, ANATOMICAL_SKULL_SURFACE_WGSL } from './anatomical-skull.wgsl';
 import { SCULPT_PAINT_SHAPE1, SCULPT_PAINT_SHAPE2, sculptPaintSources } from './sculpt-paint';
@@ -895,6 +896,11 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   };
 
   /** The live head of `sources` that carries the anatomical skull (undefined: none). */
+  /** A head's eye seats, head-local: the orbits of an anatomical skull fitted to the head's flesh (FittedSkull.eyes),
+   *  else the sculpted skull's sockets. The one answer for the seated eyes, their copies in a split head and the
+   *  ejected ones. */
+  const eyeSeats = (source: BoneFieldSource): readonly MeshEyePlacement[] =>
+    cache.skullKit?.head(source)?.eyes ?? meshEyePlacements(meshBoneSource(source, cache.sculpt.shape));
   const skullSourceOf = (sources: readonly BoneFieldSource[]) => sources.find(s=>s.segment==='head' && s.isLive() && cache.skullKit?.supports(s));
   /** What the world ray `point` + t `direction`, `reach` long, meets on `owner`'s anatomical skull where it is drawn
    *  (`hit` null: no bone), with the skull, its split and its damage as the ray found them. Null: no such skull. */
@@ -1071,7 +1077,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       else fractureSkull(owner,sources,point,direction,kind);
       const head = sources.find(s => s.segment === 'head' && s.isLive() && (s.character === 'zombie' || cache.skullKit?.supports(s)));
       if (!head) return 0;
-      const eyes = meshEyePlacements(meshBoneSource(head, cache.sculpt.shape));
+      const eyes = eyeSeats(head);
       const lost = absent.get(owner) ?? new Set<number>();
       absent.set(owner, lost);
       let count = 0;
@@ -1147,7 +1153,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
           if (slot!.keys[si] !== baked.key) {
             // Revision swap (anatomy/sever re-derive): the eye seats come from the new source.
             slot!.keys[si] = baked.key;
-            slot!.eyes[si] = [...meshEyePlacements(meshBoneSource(s, cache.sculpt.shape)).entries()].map(([index, e]) => ({ index, center: e.center, radius: e.radius }));
+            slot!.eyes[si] = [...eyeSeats(s).entries()].map(([index, e]) => ({ index, center: e.center, radius: e.radius }));
           }
           const eyes = (slot!.eyes[si] ?? []).filter(e => !lost?.has(e.index));
           stats.segments++;

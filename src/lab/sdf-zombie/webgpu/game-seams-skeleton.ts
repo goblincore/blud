@@ -19,6 +19,7 @@ import { traceProjectile } from './game-weapon';
 import { sdBody } from '../validate';
 import { splitLookOk, type SplitLookSet } from './skeleton-spike/mesh-split';
 import { sculptVariantOf } from './skeleton-spike/sculpt-variant';
+import { HUMANOIDS } from './skeleton-spike/skull-cast';
 
 /** The name of the organ mesh spec the segment mesh cache builds by (null without the mesh skeleton; 'custom' for a
  *  spec that is none of ORGAN_MESHES). */
@@ -30,6 +31,8 @@ function organMeshName(ctx: GameContext): OrganMeshName | 'custom' | null {
 }
 
 export function createSkeletonSeams(ctx: GameContext) {
+  /** The anatomical skull's kit on this page; null without one. */
+  const kitOf = () => ctx.render.segMeshCache?.skullKit ?? null;
   return {
     /** Bone tubes (2026-09-02-bone-tubes, task 5): OFF ships as the field's
      *  bones; ON draws every posed bone as an instanced polygonal tube and
@@ -215,11 +218,26 @@ export function createSkeletonSeams(ctx: GameContext) {
       const fitted = head && ctx.render.segMeshCache?.skullKit?.head(head);
       return fitted ? fitted.pieces.map(p => ({ id: p.id, pivot: [...p.pivot], min: [...p.min], max: [...p.max] })) : null;
     },
+    /** skeleton=mesh diagnostics: actor `id`'s eyes as this frame draws them, a closed head's or a split one's copies:
+     *  each one's world centre and radius (its instance matrix's) and the piece a copy is clipped to (null: a closed
+     *  draw). An actor that draws no eye: []. null without the mesh skeleton or the actor. */
+    meshEyes: (id: number) => {
+      const a = ctx.world.actors.find(q => q.id === id), r = ctx.render.segMeshRenderer;
+      if (!a || !r) return null;
+      return r.drawn.filter(d => d.owner === a && d.eye).map(d => ({
+        centre: [d.matrix.elements[12]!, d.matrix.elements[13]!, d.matrix.elements[14]!] as Vec3,
+        radius: d.matrix.getMaxScaleOnAxis(), piece: d.piece,
+      }));
+    },
     /** skeleton=mesh diagnostics: how the anatomical skull was fitted to actor `bodyId`'s head (`?skullfit=`,
      *  anatomical-skull.ts): the fit's name; for a fit to the flesh (skull-fit.ts) its axis scales and offset, the
      *  fitted skull's box in the head segment's frame, the furthest stage 2 moved a vertex (m), its passes, whether
-     *  it had to shrink the skull after them (1: no) and the fit's wall time (ms). The envelope fit answers its name
-     *  alone. null without the anatomical skull, the actor or its head. */
+     *  it had to shrink the skull after them (1: no) and the fit's wall time (ms); the flesh head it was sized to
+     *  (`flesh`: its deepest point and its reach from there to each side); the skull's own orbits and the eye seats
+     *  in them, head-local; `eyeHs`, the painted eye line the orbits were held on (null: the bone envelope's);
+     *  `madeMs`, the whole fitted skull's (the fit, its geometry, the orbits). The envelope fit answers its name
+     *  alone. null without the anatomical skull, the actor, its head, or for a character that draws its sculpted
+     *  bone. */
     skullFit: (bodyId?: number) => {
       const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId);
       const head = a && ctx.render.skeletonSources.get(a)?.sources.find(s => s.segment === 'head');
@@ -229,6 +247,10 @@ export function createSkeletonSeams(ctx: GameContext) {
       return f ? {
         name: f.name, scale: [...f.result.affine.scale], offset: [...f.result.affine.offset], min: [...f.min], max: [...f.max],
         maxMove: f.result.warp.maxMove, passes: f.result.passes.length, shrunk: f.result.shrunk, ms: f.result.ms,
+        flesh: { ...f.result.affine.flesh, centre: [...f.result.affine.flesh.centre] },
+        orbits: fitted.orbits.map(o => ({ centre: [...o.centre], radius: o.radius })),
+        eyes: (fitted.eyes ?? []).map(e => ({ center: [...e.center], radius: e.radius })),
+        eyeHs: ctx.render.segMeshCache!.skullKit!.fitOf(head!.character)?.eyeHs ?? null, madeMs: fitted.mesh.bakeMs,
       } : { name: 'envelope' as const };
     },
     /** skeleton=mesh diagnostics: one round at actor `bodyId`'s anatomical skull, through the renderer's own
@@ -278,16 +300,25 @@ export function createSkeletonSeams(ctx: GameContext) {
     /** Synchronous active-path proof for capture harnesses. */
     skeletonDiagnostics: () => ({
       requestedMode: ctx.render.skeletonMode,
-      // The skull in force: 'anatomical' when the plates are loaded and drawn, else 'sculpt' (the default, and what a
-      // page that asked for the plates draws when their asset did not load).
-      skull: ctx.render.segMeshCache?.skullKit ? 'anatomical' : 'sculpt',
+      // The page's skull in force: 'anatomical' when the plates are loaded and every humanoid draws them
+      // (`?skull=anatomical`), else 'sculpt': the default, where the characters `anatomical` lists draw the plates
+      // and every other its sculpted bone, and what any page draws when the plates' asset did not load.
+      skull: kitOf() && HUMANOIDS.every(name => kitOf()!.fitOf(name)) ? 'anatomical' : 'sculpt',
+      // Who draws the anatomical skull on this page, and under which fit: character to the fit's name (skull-fit.ts;
+      // the eight ball-headed humanoids by default, skull-cast.ts). Empty: nobody (no kit).
+      anatomical: Object.fromEntries(HUMANOIDS.flatMap(name => { const spec = kitOf()?.fitOf(name); return spec ? [[name, spec.fit]] : []; })),
       // The sculpted skull's recipe in force (sculpt-variant.ts): which sculpt, the head's extraction cell (null: the
       // cache's own) and which paint; and the variant that recipe is. The default is `full`:
       // { shape: 2, headCell: 0.005, paint: 2 }. Under the anatomical skull it is `classic`, which the other bones
       // are drawn with.
       sculpt: ctx.render.segMeshCache ? { ...ctx.render.segMeshCache.sculpt } : null,
       sculptVariant: ctx.render.segMeshCache ? sculptVariantOf(ctx.render.segMeshCache.sculpt) : null,
-      skullFit: ctx.render.segMeshCache?.skullKit?.fit ?? null,
+      // The one fit of a kit that fits every humanoid alike (`?skull=anatomical`: 'envelope', or `?skullfit=`'s);
+      // null for the default page, whose characters each have their own, and without a kit.
+      skullFit: kitOf()?.fit ?? null,
+      // Every skull the kit has fitted since boot: whose, under which fit, and how long it took to make (ms). One
+      // per head revision, made when the character's skeleton sources are built (game-skeleton-actors.ts).
+      skullFits: kitOf() ? kitOf()!.made.map(m => ({ ...m })) : [],
       activeMode: ctx.render.skeletonMode === 'volume'
         ? (ctx.render.skeletonVolumes.size > 0 ? 'volume' : 'procedural')
         : ctx.render.skeletonMode === 'mesh'

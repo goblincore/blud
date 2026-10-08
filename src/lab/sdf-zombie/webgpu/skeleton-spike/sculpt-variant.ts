@@ -1,11 +1,16 @@
 // src/lab/sdf-zombie/webgpu/skeleton-spike/sculpt-variant.ts
 //
-// Which skull a page draws: resolveSkull reads `?skull=` and `?sculpt=` and answers the skull, the sculpted skull's variant and its recipe.
+// Which skull a page draws, character by character: resolveSkull reads `?skull=`, `?sculpt=` and `?skullfit=` and answers the sculpted skull's variant and recipe, and who draws the anatomical skull under which fit.
 //
-// The game's skull is the SCULPTED one (the character's own bone, carved and painted) in the variant `full`. The
-// ANATOMICAL one (the modelled skull of 14 plates, anatomical-skull.ts) is drawn on request: `?skull=anatomical`.
-// `?sculpt=<name>` picks another variant of the sculpted skull. resolveSkull is the one place that decides; the bone
-// cache (sculpt-cache.ts), the renderer and the diagnostics all read its answer. Pure.
+// The game's skull is the SCULPTED one (the character's own bone, carved and painted) in the variant `full`, for the
+// characters whose head bone is a skull-sized mass. The eight humanoids whose head bone is a few balls draw the
+// ANATOMICAL one (the modelled skull of 14 plates, anatomical-skull.ts), each fitted to its own flesh
+// (skull-cast.ts BALL_HEADS). `?skull=anatomical` draws the plates on every humanoid, `?skull=sculpt` the sculpted
+// bone on every one, `?sculpt=<name>` another variant of the sculpted skull, `?skullfit=<name>` another fit of the
+// plates. resolveSkull is the one place that decides; the bone cache (sculpt-cache.ts), the renderer and the
+// diagnostics all read its answer. Pure.
+import { SKULL_FIT_NAMES, type SkullFitName, type SkullFitSpec } from './skull-fit';
+import { BALL_HEADS, HUMANOIDS } from './skull-cast';
 
 /** The sculpted skull's variants, by what each changes from `classic`:
  *   `classic`     the first sculpt at the bone cache's own cell under the first paint: the sculpted skull as it was
@@ -89,25 +94,53 @@ export function sculptVariantOf(recipe: Readonly<SculptRecipe>): SculptVariant |
 /** The two skulls. */
 export const SKULL_KINDS = ['sculpt', 'anatomical'] as const;
 export type SkullKind = (typeof SKULL_KINDS)[number];
-/** The skull a page draws when its query names none. */
+/** The skull a page draws when its query names none: the sculpted one, but for the characters `anatomical` names. */
 export const SKULL_DEFAULT: SkullKind = 'sculpt';
 
+/** The fit `?skull=anatomical` gives every humanoid when `?skullfit=` names none: fixed fractions of the head's bone
+ *  envelope, the anatomical skull as it was when it was every humanoid's. */
+export const SKULL_FIT_DEFAULT: SkullFitName = 'envelope';
+
 export interface SkullChoice {
+  /** The page's skull: 'anatomical' when `?skull=anatomical` asks for the plates on every humanoid, else 'sculpt'
+   *  (the default, where the characters `anatomical` names still draw the plates). */
   skull: SkullKind;
   /** The sculpted skull's variant. Under the anatomical skull it is `classic`: every bone but the head is drawn as
    *  it was when the anatomical skull was the default. */
   variant: SculptVariant;
   recipe: Readonly<SculptRecipe>;
+  /** WHO DRAWS THE ANATOMICAL SKULL, and how it is fitted to each: character to fit. A character it does not name
+   *  draws its sculpted bone. Empty: nobody does, and the page has no use for the plates' asset. */
+  anatomical: Readonly<Record<string, Readonly<SkullFitSpec>>>;
   /** One line for each thing the query asked for that was not understood, or was overruled. Empty for a query that
    *  names nothing, or only what it gets. */
   notes: readonly string[];
 }
 
+/** The skull `character` draws under `choice`: the anatomical one under a fit, or its sculpted bone (null). */
+export function anatomicalFitOf(choice: Pick<SkullChoice, 'anatomical'>, character: string): Readonly<SkullFitSpec> | null {
+  return Object.hasOwn(choice.anatomical, character) ? choice.anatomical[character]! : null;
+}
+
+const NOBODY: SkullChoice['anatomical'] = Object.freeze({});
+/** The eight, each under its own fit (skull-cast.ts). */
+const BALL_HEAD_FITS: SkullChoice['anatomical'] = Object.freeze(Object.fromEntries(Object.entries(BALL_HEADS).map(([name, head]) => [name, head.spec])));
+/** `who`, each under the plain named fit. */
+const everyOne = (who: readonly string[], fit: SkullFitName): SkullChoice['anatomical'] => {
+  const spec = Object.freeze({ fit });
+  return Object.freeze(Object.fromEntries(who.map(name => [name, spec])));
+};
+
 /** The skull a page's query string asks for.
- *   no `?skull=` and no `?sculpt=`     the sculpted skull, `full`;
- *   `?skull=sculpt`                    the same: `full` is the sculpted skull's look;
- *   `?skull=anatomical`                the anatomical skull;
- *   `?sculpt=<variant>`                the sculpted skull in that variant, whatever `?skull=` says;
+ *   no `?skull=` and no `?sculpt=`     the sculpted skull, `full`; the eight humanoids of skull-cast.ts BALL_HEADS
+ *                                      draw the anatomical skull, each under its own fit;
+ *   `?skull=sculpt`                    the sculpted skull, `full`, on EVERY character: the eight show their balls;
+ *   `?skull=anatomical`                the anatomical skull on every humanoid, under the envelope fit;
+ *   `?sculpt=<variant>`                the sculpted skull in that variant on every character, whatever `?skull=`
+ *                                      says;
+ *   `?skullfit=<name>`                 that fit, plain, for every character that draws the anatomical skull (the
+ *                                      eight by default, every humanoid under `?skull=anatomical`). Nothing where
+ *                                      nobody draws it;
  *   `?sculptheads=all`                 that variant's paint on every character's bones (the recipe's `everyHead`),
  *                                      for looking at a head the second paint is not fitted to. Nothing under the
  *                                      anatomical skull.
@@ -115,25 +148,37 @@ export interface SkullChoice {
  *  An empty value is no value. `?skull=procedural` is an older name for `?skull=sculpt`. */
 export function resolveSkull(search: string): SkullChoice {
   const params = new URLSearchParams(search), notes: string[] = [];
-  const skullParam = params.get('skull') || null, sculptParam = params.get('sculpt') || null;
+  const skullParam = params.get('skull') || null, sculptParam = params.get('sculpt') || null, fitParam = params.get('skullfit') || null;
   let variant: SculptVariant | null = null;
   if (sculptParam !== null) {
     if ((SCULPT_VARIANTS as readonly string[]).includes(sculptParam)) variant = sculptParam as SculptVariant;
     else notes.push(`?sculpt=${sculptParam} is not a variant of the sculpted skull (${SCULPT_VARIANTS.join(', ')}): passed over`);
   }
   let skull: SkullKind = SKULL_DEFAULT;
+  // The sculpted bone on every character: asked for by name, or by a variant of it.
+  let everySculpt = skullParam === 'sculpt' || skullParam === 'procedural';
   if (skullParam === 'anatomical') skull = 'anatomical';
-  else if (skullParam !== null && skullParam !== 'sculpt' && skullParam !== 'procedural') {
+  else if (skullParam !== null && !everySculpt) {
     notes.push(`?skull=${skullParam} is not a skull (${SKULL_KINDS.join(', ')}): passed over`);
   }
   if (variant !== null && skull === 'anatomical') {
     notes.push(`?skull=anatomical is overruled by ?sculpt=${variant}, which asks for the sculpted skull`);
     skull = 'sculpt';
   }
+  if (variant !== null) everySculpt = true;
+  let fit: SkullFitName | null = null;
+  if (fitParam !== null) {
+    if ((SKULL_FIT_NAMES as readonly string[]).includes(fitParam)) fit = fitParam as SkullFitName;
+    else notes.push(`?skullfit=${fitParam} is not a fit of the anatomical skull (${SKULL_FIT_NAMES.join(', ')}): passed over`);
+  }
   const headsParam = params.get('sculptheads') || null;
   if (headsParam !== null && headsParam !== 'all') notes.push(`?sculptheads=${headsParam} is not understood (all): passed over`);
-  if (skull === 'anatomical') return { skull, variant: 'classic', recipe: SCULPT_CLASSIC, notes };
+  if (skull === 'anatomical') return { skull, variant: 'classic', recipe: SCULPT_CLASSIC, anatomical: everyOne(HUMANOIDS, fit ?? SKULL_FIT_DEFAULT), notes };
+  if (fit !== null && everySculpt) notes.push(`?skullfit=${fit} has no skull to fit: every character draws its sculpted bone. Passed over`);
   variant ??= SCULPT_DEFAULT_VARIANT;
   const recipe = RECIPES[variant];
-  return { skull, variant, recipe: headsParam === 'all' && recipe.paint === 2 ? Object.freeze({ ...recipe, everyHead: true }) : recipe, notes };
+  return {
+    skull, variant, recipe: headsParam === 'all' && recipe.paint === 2 ? Object.freeze({ ...recipe, everyHead: true }) : recipe,
+    anatomical: everySculpt ? NOBODY : fit !== null ? everyOne(Object.keys(BALL_HEADS), fit) : BALL_HEAD_FITS, notes,
+  };
 }
