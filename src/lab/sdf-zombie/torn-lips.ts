@@ -97,6 +97,13 @@ export const WET_LIP_LOOK = {
 /** The gun's wet-lip intensity per round, stamped on the wound (game-actor.ts hit / hitSlug). */
 export const GUN_WET_LIP = { pellet: 1.0, slug: 1.0 } as const;
 
+/** The wet-lip intensity a `kind` round gets on THIS actor, from the actor flags: zombie-class
+ *  gore bodies only. The soldier keeps his own soldierWound stain and the soft target (cultist
+ *  robe) takes decals, so both are left stock — 0, which wetLipWound treats as no stamp. */
+export function gunWetLipFor(kind: keyof typeof GUN_WET_LIP, soldierDamage: boolean, softTarget: boolean): number {
+  return soldierDamage || softTarget ? 0 : GUN_WET_LIP[kind];
+}
+
 /** The A/B switch (`__sdfGame.setWetLip(false)`): off, the upload drops bit 4 so the SAME craters
  *  render stock (the wounds keep their wetLip value). Ships ON. */
 let wetLipOn = true;

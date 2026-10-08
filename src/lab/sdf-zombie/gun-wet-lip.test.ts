@@ -6,13 +6,12 @@
 // wounds, decals and burns never take it; the gun (not the soldier, not the soft target) stamps it.
 // The pixel proof is the GPU look loop in docs/dev-notes/2026-09-28-head-damage/torn-lips/gun-*.png.
 import { describe, expect, it } from 'vitest';
-import { GUN_WET_LIP, WET_LIP_LOOK, gunWetLipOn, setGunWetLip, wetLipUpload } from './torn-lips';
+import { GUN_WET_LIP, WET_LIP_LOOK, gunWetLipFor, gunWetLipOn, setGunWetLip, wetLipUpload } from './torn-lips';
 import { wetLipWound, type Wound } from './damage';
 import { WOUND_FLAG, woundFlagBits, writeWounds } from './webgpu/zombie-gpu';
 import { APPLY_WOUNDS, WOUND_MASK, MARCH_BODY, MARCH_TRACE_POST } from './webgpu/march.wgsl';
 import { MARCH_SURFACE } from './webgpu/deferred-sdf';
 import { NG_WOUNDS } from './webgpu/normal-gradient.wgsl';
-import actorSrc from './webgpu/game-actor.ts?raw';
 import viewSrc from './webgpu/character-view.ts?raw';
 
 const wound = (extra: Partial<Wound> = {}): Wound => ({ primIdx: 0, local: [0, 0, 0], radius: 0.055, type: 'pellet', ageSec: 0, ...extra });
@@ -70,9 +69,16 @@ describe('gun wet lip: who gets it', () => {
   });
   it('the gun stamps it on pellets and slugs, zombie-class bodies only', () => {
     expect(GUN_WET_LIP).toEqual({ pellet: 1, slug: 1 });
-    expect(actorSrc).toContain("gunWetLip(wound, 'pellet');");
-    expect(actorSrc).toContain("gunWetLip(wound, 'slug');");
-    expect(actorSrc).toContain('if (soldierDamage || softTarget) return;');
+    // Neither flag: both round kinds take the full intensity.
+    expect(gunWetLipFor('pellet', false, false)).toBe(1);
+    expect(gunWetLipFor('slug', false, false)).toBe(1);
+    // The soldier and the soft target stay stock, alone or together: 0 (wetLipWound no-ops).
+    expect(gunWetLipFor('pellet', true, false)).toBe(0);
+    expect(gunWetLipFor('slug', true, false)).toBe(0);
+    expect(gunWetLipFor('pellet', false, true)).toBe(0);
+    expect(gunWetLipFor('slug', false, true)).toBe(0);
+    expect(gunWetLipFor('pellet', true, true)).toBe(0);
+    expect(gunWetLipFor('slug', true, true)).toBe(0);
   });
 });
 
