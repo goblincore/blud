@@ -21,7 +21,7 @@ describe('__sdfGame.slugFrom', () => {
     expect(p.skulls).toBeUndefined();
     // No crosshair laid it: its recorded aim is its own line from its own start.
     expect(p.shot).toMatchObject({ weapon: 'slug', aim: { eye: [1, 1.6, 2] } });
-    const dir = (p.shot as { aim: { dir: number[] } }).aim.dir;
+    const dir = (p.shot as unknown as { aim: { dir: number[] } }).aim.dir;
     expect(dir[0]).toBe(0); expect(dir[1]).toBeCloseTo(0.6, 12); expect(dir[2]).toBeCloseTo(-0.8, 12);
   });
   it('refuses what is not a point and a direction of some length: false, and nothing in flight', () => {

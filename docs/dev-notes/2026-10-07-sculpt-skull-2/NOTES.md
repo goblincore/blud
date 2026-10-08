@@ -4,9 +4,146 @@ The game draws each humanoid's skull as a mesh under the SDF flesh; it shows whe
 There are two skulls. The **sculpted** one is the character's own bone field, carved and painted. The **anatomical**
 one is a modelled skull of 14 plates.
 
-This file has three parts, newest first: this one (the decision and what it changed), then
+This file has four parts, newest first:
+[the slug's split needs a precise aim](#the-slugs-split-is-a-reward-for-a-precise-shot-at-close-to-medium-range-2026-10-07-second-playtest),
+then the decision that made the sculpted skull the default (below it), then
 [the variants the owner chose from](#the-sculpted-skull-second-pass-variants-to-choose-from-2026-10-07), then
 [the gun and the zombie's head](#the-gun-and-the-zombies-head-2026-10-07-after-the-owners-playtest-of-sculptfull).
+
+---
+
+# The slug's split is a reward for a precise shot at close to medium range (2026-10-07, second playtest)
+
+The owner played the rules of the last part of this file and said: "the frontal slug shouldn't always open up the
+head: it should have to be a very precise hit. Also it should only happen at like medium to close range."
+
+## What was wrong
+
+A slug split a zombie's head when the slug's own line passed within 1.25 head radii of the head's centre. That is
+nearly every slug that lands on a head. It had to be that loose: the slug leaves from the muzzle, beside and under
+the eye, and lands about 10 cm under the crosshair, so with the crosshair dead on the head's centre the slug's line
+runs 0.9 to 1.0 head radii off. Where the slug went said almost nothing about how well the shot was aimed. And the
+split usually opened one half only, because the split was laid through where the slug landed.
+
+## The rule now
+
+`head-burst.ts` `headShotRule`, wired in `webgpu/game-head-shot.ts`. A slug that lands on a zombie's head:
+
+1. **Splits the head when the AIM was precise and the head was in range.** As the gun fires, the slug records the eye
+   and the crosshair's ray (the reticle's, under free aim): `game-weapon-rig.ts` `launchSlug`, carried on the slug's
+   provenance (`damage.ts` `ShotAim`). When the slug lands, the shot is **precise** if that ray passes within
+   `splitFrac` head radii of the head's centre, and **in range** if the head is within `splitRangeM` of that eye.
+   Where the slug itself lands decides nothing.
+2. **Opens both halves.** The split is laid on the head's middle line, not through the slug's impact, so a precise
+   slug from the front always parts the head left and right, 0.55 rad a half. From the side it takes the face off,
+   as before, where the slug landed.
+3. **Is an ordinary slug wound otherwise**: an imprecise slug, a precise one from too far, a slug with no recorded aim.
+4. **Pops a head that is already split wide, with no precision asked.** A head split to half its full angle or more
+   (`popSplitMin`; the slug's own split and the axe's first chop both count) is a wide-open target: any slug that
+   lands on it from within `splitRangeM` pops it. From farther it is an ordinary wound on the open head.
+
+Pellets are ordinary wounds, as before. The slug that cuts the head off still pops it, from any range.
+
+## The numbers
+
+| Tuning (`burstTuning`) | Ships | What it is |
+| --- | --- | --- |
+| `splitAim` | `'crosshair'` | What precision is measured on. `'slug'` is the old measure, the slug's own line. |
+| `splitFrac` | `0.3` | Precise: the crosshair's ray within this many head radii of the head's centre. 3.3 cm on the zombie, whose head radius is 10.9 cm. |
+| `splitRangeM` | `5` | In range: the head within this many metres of the eye at firing. 0 or less: no limit. |
+| `popPrecise` | `false` | `true`: the slug that pops a split head must be precise as well. |
+| `popSplitMin` | `0.5` | Unchanged: how wide a split must stand for a slug to pop it. |
+
+**What 0.3 means on screen.** Measured in the running game (`__sdfGame.flail.toScreen`, the lens included), in the
+game's 800 x 600 picture at the default field of view (58 degrees drawn, 46 at the centre of the lens). The precise
+zone is a disc on the head: 0.3 of the head's own radius at every range, 9% of the head's disc.
+
+| Range | The head's radius | The precise zone's radius | The zone across | Mouse counts from its centre to its edge (mouse look, 0.0022 rad a count) |
+| --- | --- | --- | --- | --- |
+| 1 m | 76.5 px | 23.1 px | 46 px | 14.9 |
+| 2 m | 38.5 px | 11.6 px | 23 px | 7.4 |
+| 3 m | 25.7 px | 7.7 px | 15 px | 5.0 |
+| 4 m | 19.3 px | 5.8 px | 12 px | 3.7 |
+| 5 m (the limit) | 15.4 px | 4.6 px | 9 px | 3.0 |
+| 6 m (out of range) | 12.8 px | 3.9 px | 8 px | 2.5 |
+
+At 0.25 the zone's radius would be 19.3, 9.6, 6.4, 4.8 and 3.9 px at 1 to 5 m; at 0.2, 15.4, 7.7, 5.1, 3.9 and
+3.1 px. 0.3 was kept: on the face it is the crosshair between the eyes or on the bridge of the nose, and at 4 to
+5 m it is already a target 9 to 12 pixels across that the mouse holds within 3 or 4 counts. A tighter zone is under
+8 pixels across at the edge of the range.
+
+**Why 5 m.** Night Train's carriages are 3.4 to 4.2 m wide and 10 to 18 m long (two rooms are 8 m wide); the ring
+testbed's rooms are 8 m square. Zombies close to arm's length, so the gun is used from the length of a carriage down
+to nothing. 5 m is a little more than a carriage's width and about a third of its length: a zombie that has come
+into the nearer part of the room. It is also where the precise zone falls under 10 pixels across; past it a
+"very precise" aim stops being something a player does on purpose. A slug takes 0.17 s to fly 5 m.
+
+Aimed slugs on frozen zombies, the crosshair on the head's centre from in front of the face
+(`.lab-tmp` probe, one zombie per range): at 1, 2 and 4 m the head split, both halves; at 5.00 m (a hair over the
+limit) and at 6 m the slug was an ordinary wound. The slug's own line ran 0.94 to 1.25 head radii off in all five.
+
+## What to know before playing it
+
+- **The shot is judged against where the head is when the slug arrives**, not where it was at the trigger. The
+  slug flies at 30 m/s: 0.07 s to 2 m, 0.17 s to 5 m. A zombie walking across the line of fire has to be led; one
+  walking at the player hardly moves off the ray. A zombie's head sways as it walks. Every number above is from
+  frozen zombies: in play the split will be rarer than they suggest. If it is too rare, `splitFrac` is the knob.
+- **Precision is where the crosshair is, with the slug landing somewhere else.** A precise shot between the eyes
+  lands its slug on the chin. If the head moves between the trigger and the impact so that the slug misses the head,
+  nothing splits, however good the aim.
+- **The pop is easier than before on a split head** (no centring at all, where it needed the slug's line within
+  1.25 radii), and now has a range.
+- **A slug put in flight by hand** (`__sdfGame.slugFrom`, a gate's tool) records its own line as its aim. A slug
+  with no recorded aim at all never splits or pops a head under `splitAim: 'crosshair'`.
+
+**To put the old slug split back:** `__sdfGame.head.burstTune({ splitAim: 'slug', splitFrac: 1.25, splitRangeM: 0, popPrecise: true })`.
+`__sdfGame.head.shot(id)` says what the rule made of the last round on a head, with the aim it was judged on
+(`aimOffset` in head radii, `rangeM`) beside the slug's own line (`offset`). `__sdfGame.aimRay()` reads the eye and
+the crosshair's ray a slug fired now would record.
+
+## The gate
+
+`scripts/head-burst-gate.mjs`: 80 checks before, 90 now, 0 failed. Its rules boot used to SOLVE a stance that put
+the slug's line where it wanted. It now lays the crosshair, from in front of the face, and fires; every scenario
+checks that the aim the leaf judged is the crosshair's ray read off the page before the shot. The whole rules boot
+runs on the shipped tuning (it used to lower `splitFrac` to 0.35 to stage an off-centre slug).
+
+| Scenario | Before | Now |
+| --- | --- | --- |
+| AIM | Crosshair on the centre: the slug's line is 0.5 to 1.25 radii off, inside the shipped `splitFrac` 1.25, and it splits. | The same shot. The recorded aim passes through the centre from 2 m (precise, in range); the slug's own line is still over 0.5 radii off, and decides nothing; it splits, and BOTH halves open on the middle line. |
+| O | `splitFrac` 0.35; the slug's line laid 7 cm beside the centre: ordinary. | Shipped tuning; the crosshair laid 6 cm over the centre (0.55 radii, imprecise): ordinary, one slug crater. Its own line (0.42 radii) ran nearer the centre than AIM's. |
+| FAR (new) | | The crosshair on the centre from 6 m (precise, out of range): ordinary, one slug crater. |
+| S | `splitFrac` 0.35; the slug's line laid through the centre: splits, both halves or the one the slug landed on. | Shipped tuning; the crosshair laid 2 cm to one side of the centre (precise; farther off the middle line than a chop may be to open both halves): splits, and both halves are required: the two-sided angle, the pose turned both ways, the skull's three clipped copies, the field open on both sides, two cut faces. |
+| X | A second slug laid through the centre pops the split head. | A slug with the crosshair 6 cm over the centre (imprecise, in range) pops it. |
+| OFF | The slug's line laid through the centre, `on: false`: ordinary. | The crosshair on the centre, `on: false`: ordinary. |
+| SA, XA (the plates) | As S and X, `splitFrac` 0.35. | As S and X now, shipped tuning; SA requires both halves. |
+
+Expectations that changed:
+
+| Check | Old | New | Why |
+| --- | --- | --- | --- |
+| AIM: the measure the split is granted on | the slug's line, over 0.5 and under 1.25 head radii | the aim, under 0.3 head radii, within 5 m; the slug's line still over 0.5 | Precision is the crosshair's now. |
+| O: what makes the slug ordinary | its line at or over 0.35 radii (a lowered `splitFrac`) | its aim at or over 0.3 radii (the shipped `splitFrac`) | The same. |
+| S, SA: which halves | both, or the one the slug landed on | both | The split is laid on the middle line. This is stricter. |
+| S: where the field is open | on the turned half's side | on both sides (one check became two) | The same. |
+| X, XA: the slug that pops | its line through the centre | any slug in range; the gate fires an imprecise one | The second stage needs no precision. |
+| The stance of AIM, O, S, X, OFF, SA, XA | toward the room's centre from the head | straight in front of the face | The middle preset is the split of a shot from the front. With a zombie more in the pool (FAR), S's zombie stood side-on to the room's centre and took the face preset, as the rule says it should. |
+
+No bound was loosened. The opening's boot, the decapitation boots and the pellet scenario are untouched. The
+head-split gate's H scenario (a slug at a head forced a quarter open is an ordinary wound) passes unchanged: a head
+only cracked takes any slug as an ordinary wound.
+
+## Not verified
+
+- Live play. A moving zombie, a walking player and free aim's dead zone were not tried; the numbers are frozen
+  zombies' and a centred reticle's.
+- Free aim's sensitivity in mouse counts (the table's counts are mouse look's).
+- `scripts/head-burst-look.mjs` had its two slug scenes changed to aim (a precise slug for `slug-split`, an imprecise
+  one for `slug-chin`) and was not run again; the sheet `look/burst-before-after.jpg` is the earlier rules'.
+
+---
+
+# The decision: the sculpted skull is the default
 
 ## The decision
 
@@ -525,6 +662,10 @@ makes the opening, pellets too, once per trigger pull) and `alwaysSplit` (every 
 however far off centre). So for four days every volley that touched a zombie's head stamped a 12 cm entry crater and
 a 14 cm exit crater on a head 22 cm deep. That is what the owner saw; "burst" was never something they asked a
 pellet to do.
+
+(Later the same day the split was made a reward for a precise aim from close range, and it now opens both halves:
+the first part of this file. Items 2 and 3 below, `splitFrac` 1.25 and "the slug's split is one-sided" are as this
+part was written.)
 
 **What a gun round does to a zombie's head now, in order** (`head-burst.ts headShotRule` and `decapitationRule`,
 wired in `webgpu/game-head-shot.ts`):

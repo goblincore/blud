@@ -334,7 +334,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-gib-spawn.ts` — Gib spawning and budgeting: scheduling gibs, retiring actors, carved pieces, the gib atlas loader and the per-frame gib piece budget.
 - `webgpu/game-grenade-launcher.ts` — Single-shot launcher timing.
 - `webgpu/game-head-damage.ts` — THE MELEE HEAD DAMAGE LEAF, v2 (spec docs/superpowers/specs/2026-09-28-melee-head-damage-design.md §15; plan Task 17).
-- `webgpu/game-head-shot.ts` — THE HEAD-SHOT LEAF: what a gun round does to a zombie's head besides an ordinary wound (head-burst.ts headShotRule): a centred slug splits the head…
+- `webgpu/game-head-shot.ts` — THE HEAD-SHOT LEAF: what a gun round does to a zombie's head besides an ordinary wound (head-burst.ts headShotRule): a precise slug from close to…
 - `webgpu/game-head-split.ts` — THE HEAD SPLIT LEAF (spec docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md §4-§5).
 - `webgpu/game-hit-trace.ts` — Slug and melee hit tracing, ceiling and chunk collider queries, on-screen body count and level probe-room stamping.
 - `webgpu/game-hud.ts` — The HUD text line: frame time, bodies on screen, room, weapon slot, ammo and render-mode flags, refreshed from the game context.

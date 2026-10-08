@@ -17,8 +17,9 @@
 - [~] **Melee head damage model v2 built; owner playtest pending** — regions, 3D eyes that pop, brain gib, jelly
   wobble, the skull deforms with the flesh. Gate `scripts/head-damage-gate.mjs`.
 - [~] **The gun and the zombie's head, redefined 2026-10-07; owner playtest pending** (branch `claude/sculpt-skull-2`).
-  Ordinary rounds leave ordinary wounds; a centred slug splits the head as the axe does; the slug that takes the head
-  off pops it (it swells for 0.12 s and bursts, the skull thrown as pieces); a centred slug on a split head pops it.
+  Ordinary rounds leave ordinary wounds; a slug aimed precisely (the crosshair within 3.3 cm of the head's centre) from
+  no farther than 5 m splits the head as the axe does, both halves; the slug that takes the head off pops it (it swells
+  for 0.12 s and bursts, the skull thrown as pieces); any slug from that range on a split head pops it.
   The slug head burst of 2026-10-02 (the "opening") is off, behind `burstTune({ opening: true })`. Gate
   `scripts/head-burst-gate.mjs`. [Notes and the before/after sheet](docs/dev-notes/2026-10-07-sculpt-skull-2/NOTES.md) ·
   [the opening's spec](docs/superpowers/specs/2026-10-02-slug-head-burst-design.md).
