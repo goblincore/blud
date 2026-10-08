@@ -1,5 +1,18 @@
 # Anatomical skull — 2026-10-06
 
+**The skull of eight humanoids by default since 2026-10-07 (later the same day).** The cultist, the cowled cultist,
+the bride, the female, the three schoolgirls and the bonewalker draw this skull on every page, each fitted to its
+own flesh, because their sculpted head bones are a few balls; the page loads its asset for them. The other five
+humanoids draw it only with `?skull=anatomical`, as the next paragraph says.
+
+**Opt-in since 2026-10-07.** The owner playtested this skull against the sculpted one and chose the sculpted skull
+as the game's default: it fills the head and reads better at the game's resolution, where this one is small in the
+zombie's head (56% of the sculpted skull's box volume) and harder to read. This skull is drawn with
+`?skull=anatomical`, and everything below still describes it; where the text says "by default" read "with
+`?skull=anatomical`", and `?skull=sculpt` no longer means the earlier skull (that is `?sculpt=classic`). The decision,
+the defaults and what each character draws now:
+[`../2026-10-07-sculpt-skull-2/NOTES.md`](../2026-10-07-sculpt-skull-2/NOTES.md).
+
 Implemented in `/Users/donny/.codex/worktrees/anatomical-skull/blud`. The primary checkout is unchanged. The user confirmed separate permission for the supplied source after its embedded WitmerLab / CC BY-NC-ND metadata was identified. Attribution is retained in the manifest and GLB extras.
 
 ## Asset

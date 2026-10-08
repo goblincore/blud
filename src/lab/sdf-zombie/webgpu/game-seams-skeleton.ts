@@ -18,6 +18,8 @@ import { segmentBoundSphere } from './skeleton-spike/organ-reach';
 import { traceProjectile } from './game-weapon';
 import { sdBody } from '../validate';
 import { splitLookOk, type SplitLookSet } from './skeleton-spike/mesh-split';
+import { sculptVariantOf } from './skeleton-spike/sculpt-variant';
+import { HUMANOIDS } from './skeleton-spike/skull-cast';
 
 /** The name of the organ mesh spec the segment mesh cache builds by (null without the mesh skeleton; 'custom' for a
  *  spec that is none of ORGAN_MESHES). */
@@ -29,6 +31,8 @@ function organMeshName(ctx: GameContext): OrganMeshName | 'custom' | null {
 }
 
 export function createSkeletonSeams(ctx: GameContext) {
+  /** The anatomical skull's kit on this page; null without one. */
+  const kitOf = () => ctx.render.segMeshCache?.skullKit ?? null;
   return {
     /** Bone tubes (2026-09-02-bone-tubes, task 5): OFF ships as the field's
      *  bones; ON draws every posed bone as an instanced polygonal tube and
@@ -173,7 +177,10 @@ export function createSkeletonSeams(ctx: GameContext) {
      *  was. `whole`: its draws that are not copies, in the same form with `piece` null. Every row names the material
      *  its batch is drawn on (mesh-renderer.ts SEGMENT_MATERIALS) and, when the bone is one plate of the anatomical
      *  skull (a skull that has lost plates is drawn plate by plate), the plate's id; `plate` is null for the whole
-     *  skull, any other bone and an eye. null without the mesh skeleton or the actor. */
+     *  skull, any other bone and an eye. `head`: the row draws the actor's head segment (the sculpted head's mesh, the
+     *  anatomical skull whole, or one of its plates). `paint`: the sculpted skull's paint its material draws (1 or 2;
+     *  null for an eye and for an anatomical plate). `character`: the actor's character, as its skeleton was built.
+     *  null without the mesh skeleton or the actor. */
     skullDrawn: (id: number) => {
       const a = ctx.world.actors.find(q => q.id === id), r = ctx.render.segMeshRenderer;
       if (!a || !r) return null;
@@ -183,14 +190,20 @@ export function createSkeletonSeams(ctx: GameContext) {
       // A split copy is drawn from its bone's twin geometry: instance data of its own on the bone's vertex data. The
       // shared position attribute says which plate either is.
       const plateOf = (g: THREE.BufferGeometry) => plates.find(p => p.geometry.getAttribute('position') === g.getAttribute('position'))?.id ?? null;
-      const materialOf = (g: THREE.BufferGeometry) => {
-        const batch = r.object.children.find(c => (c as THREE.InstancedMesh).geometry === g) as THREE.InstancedMesh | undefined;
-        return batch ? (batch.material as THREE.Material).name : null;
-      };
+      const batchOf = (g: THREE.BufferGeometry) => r.object.children.find(c => (c as THREE.InstancedMesh).geometry === g) as THREE.InstancedMesh | undefined;
+      const materialOf = (g: THREE.BufferGeometry) => (batchOf(g)?.material as THREE.Material | undefined)?.name ?? null;
+      const paintOf = (g: THREE.BufferGeometry) => ((batchOf(g)?.material as THREE.Material | undefined)?.userData.sculptPaint as 1 | 2 | undefined) ?? null;
+      // The head segment's mesh as cached (a split copy shares its position attribute, as a plate's does).
+      const headPosition = head && ctx.render.segMeshCache ? ctx.render.segMeshCache.get(head).geometry.getAttribute('position') : null;
+      const isHead = (g: THREE.BufferGeometry) => (headPosition !== null && g.getAttribute('position') === headPosition) || plateOf(g) !== null;
       const row = (d: (typeof mine)[number]) => ({
         eye: d.eye, piece: d.piece, matrix: d.matrix.toArray(), material: materialOf(d.geometry), plate: d.eye ? null : plateOf(d.geometry),
+        head: !d.eye && !d.organ && isHead(d.geometry), paint: d.eye || d.organ ? null : paintOf(d.geometry),
       });
-      return { draws: mine.length, copies: mine.filter(d => d.piece !== null).map(row), whole: mine.filter(d => d.piece === null).map(row) };
+      return {
+        draws: mine.length, copies: mine.filter(d => d.piece !== null).map(row), whole: mine.filter(d => d.piece === null).map(row),
+        character: ctx.render.skeletonSources.get(a)?.name ?? null,
+      };
     },
     meshEyeState: (bodyId?: number) => { const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId); return a && ctx.render.segMeshRenderer ? ctx.render.segMeshRenderer.eyeState(a) : null; },
     skullState: (bodyId?: number) => { const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q=>q.id===bodyId); return a && ctx.render.segMeshRenderer ? ctx.render.segMeshRenderer.skullState(a) : null; },
@@ -204,6 +217,45 @@ export function createSkeletonSeams(ctx: GameContext) {
       const head = a && ctx.render.skeletonSources.get(a)?.sources.find(s => s.segment === 'head');
       const fitted = head && ctx.render.segMeshCache?.skullKit?.head(head);
       return fitted ? fitted.pieces.map(p => ({ id: p.id, pivot: [...p.pivot], min: [...p.min], max: [...p.max] })) : null;
+    },
+    /** skeleton=mesh diagnostics: actor `id`'s eyes as this frame draws them, a closed head's or a split one's copies:
+     *  each one's world centre and radius (its instance matrix's) and the piece a copy is clipped to (null: a closed
+     *  draw). An actor that draws no eye: []. null without the mesh skeleton or the actor. */
+    meshEyes: (id: number) => {
+      const a = ctx.world.actors.find(q => q.id === id), r = ctx.render.segMeshRenderer;
+      if (!a || !r) return null;
+      return r.drawn.filter(d => d.owner === a && d.eye).map(d => ({
+        centre: [d.matrix.elements[12]!, d.matrix.elements[13]!, d.matrix.elements[14]!] as Vec3,
+        radius: d.matrix.getMaxScaleOnAxis(), piece: d.piece,
+      }));
+    },
+    /** skeleton=mesh diagnostics: how the anatomical skull was fitted to actor `bodyId`'s head (`?skullfit=`,
+     *  anatomical-skull.ts): the fit's name; for a fit to the flesh (skull-fit.ts) its axis scales and offset, the
+     *  fitted skull's box in the head segment's frame, the furthest stage 2 moved a vertex (m), its passes, whether
+     *  it had to shrink the skull after them (1: no) and the fit's wall time (ms); the flesh head it was sized to
+     *  (`flesh`: its deepest point and its reach from there to each side); the skull's own orbits and the eye seats
+     *  in them, head-local, and in the world as the head stands now (`world`); `eyeHs`, the eye line of the face the
+     *  orbits were held on, in the face sheet's units, and `eyeLine`, the same as a height in the head segment's
+     *  frame (null: the bone envelope's); `skin`: fitted to the skin alone; `madeMs`, the whole fitted skull's wall
+     *  time (the fit, its geometry, the orbits). The envelope fit answers its name
+     *  alone. null without the anatomical skull, the actor, its head, or for a character that draws its sculpted
+     *  bone. */
+    skullFit: (bodyId?: number) => {
+      const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === bodyId);
+      const head = a && ctx.render.skeletonSources.get(a)?.sources.find(s => s.segment === 'head');
+      const fitted = head && ctx.render.segMeshCache?.skullKit?.head(head);
+      if (!fitted) return null;
+      const f = fitted.fit, spec = ctx.render.segMeshCache!.skullKit!.fitOf(head!.character), sheet = head!.flesh?.sheet ?? null;
+      return f ? {
+        name: f.name, scale: [...f.result.affine.scale], offset: [...f.result.affine.offset], min: [...f.min], max: [...f.max],
+        maxMove: f.result.warp.maxMove, passes: f.result.passes.length, shrunk: f.result.shrunk, ms: f.result.ms,
+        flesh: { ...f.result.affine.flesh, centre: [...f.result.affine.flesh.centre] },
+        orbits: fitted.orbits.map(o => ({ centre: [...o.centre], radius: o.radius })),
+        eyes: (fitted.eyes ?? []).map(e => ({ center: [...e.center], radius: e.radius })),
+        eyeHs: spec?.eyeHs ?? null, eyeLine: spec?.eyeHs !== undefined && sheet ? sheet.centre[1] + spec.eyeHs * sheet.axes[1] : null,
+        skin: !!spec?.skin, madeMs: fitted.mesh.bakeMs,
+        world: { eyes: (fitted.eyes ?? []).map(e => head!.toWorld(e.center)), orbits: fitted.orbits.map(o => head!.toWorld(o.centre)) },
+      } : { name: 'envelope' as const };
     },
     /** skeleton=mesh diagnostics: one round at actor `bodyId`'s anatomical skull, through the renderer's own
      *  fractureSkull (mesh-renderer.ts: what a pellet's or a slug's impact calls first): the world ray `point` + t
@@ -231,10 +283,25 @@ export function createSkeletonSeams(ctx: GameContext) {
       if (!triple(point) || !triple(direction) || (reach !== undefined && !(Number.isFinite(reach) && reach > 0))) return false;
       return r.skullRay(a, ctx.render.skeletonSources.get(a)?.sources ?? [], [...point] as Vec3, [...direction] as Vec3, reach);
     },
-    /** The live skull-fragment mesh gibs (game-mesh-gibs.ts, tag 'skull'), oldest first: the plate each was, its
-     *  world position and its velocity. */
+    /** The live skull-fragment mesh gibs (game-mesh-gibs.ts, tag 'skull'), oldest first: the plate each was (an
+     *  anatomical plate, or a fragment of the sculpted head), its world position and its velocity, and the sculpted
+     *  skull's paint its material draws (1 or 2; null for an anatomical plate). */
     skullFragments: () => ctx.gibs.meshGibs.filter(g => g.tag === 'skull')
-      .map(g => ({ plate: g.object.name.replace(/^skull-fragment:/, ''), pos: [...g.state.pos], vel: [...g.state.vel] })),
+      .map(g => ({
+        plate: g.object.name.replace(/^skull-fragment:/, ''), pos: [...g.state.pos], vel: [...g.state.vel],
+        paint: (((g.object.children?.[0] as THREE.Mesh | undefined)?.material as THREE.Material | undefined)?.userData?.sculptPaint as 1 | 2 | undefined) ?? null,
+      })),
+    /** Gate seam: draw or hide the live skull-fragment gibs (drawn by default; a fragment thrown later is drawn). A
+     *  gate photographs a frame with them and the same frame without, and what changed is where they are on screen.
+     *  Returns how many there are. */
+    skullFragmentsShow: (on: boolean): number => {
+      let n = 0;
+      for (const g of ctx.gibs.meshGibs) if (g.tag === 'skull') { g.object.visible = !!on; n++; }
+      return n;
+    },
+    /** The sculpted skull's fragment cuts (mesh-renderer.ts fragmentStats): how many head meshes have been cut into
+     *  fragments for a pop, and how long the last cut took (ms). null without the mesh skeleton. */
+    skullFragmentCuts: () => ctx.render.segMeshRenderer?.fragmentStats() ?? null,
     explodeMeshSkull: (bodyId?: number) => {
       const a = bodyId === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q=>q.id===bodyId);
       return a && ctx.render.segMeshRenderer ? ctx.render.segMeshRenderer.explodeSkull(a,ctx.render.skeletonSources.get(a)?.sources ?? [],[0,1,0]) : 0;
@@ -245,7 +312,30 @@ export function createSkeletonSeams(ctx: GameContext) {
     /** Synchronous active-path proof for capture harnesses. */
     skeletonDiagnostics: () => ({
       requestedMode: ctx.render.skeletonMode,
-      skull: ctx.render.segMeshCache?.skullKit ? 'anatomical' : 'sculpt',
+      // The page's skull in force: 'anatomical' when the plates are loaded and every humanoid draws them
+      // (`?skull=anatomical`), else 'sculpt': the default, where the characters `anatomical` lists draw the plates
+      // and every other its sculpted bone, and what any page draws when the plates' asset did not load.
+      skull: kitOf() && HUMANOIDS.every(name => kitOf()!.fitOf(name)) ? 'anatomical' : 'sculpt',
+      // Who draws the anatomical skull on this page, and under which fit: character to the fit's name (skull-fit.ts;
+      // the eight ball-headed humanoids by default, skull-cast.ts). Empty: nobody (no kit).
+      anatomical: Object.fromEntries(HUMANOIDS.flatMap(name => { const spec = kitOf()?.fitOf(name); return spec ? [[name, spec.fit]] : []; })),
+      // The sculpted skull's recipe in force (sculpt-variant.ts): which sculpt, the head's extraction cell (null: the
+      // cache's own) and which paint; and the variant that recipe is. The default is `full`:
+      // { shape: 2, headCell: 0.005, paint: 2 }. Under the anatomical skull it is `classic`, which the other bones
+      // are drawn with.
+      sculpt: ctx.render.segMeshCache ? { ...ctx.render.segMeshCache.sculpt } : null,
+      sculptVariant: ctx.render.segMeshCache ? sculptVariantOf(ctx.render.segMeshCache.sculpt) : null,
+      // The one fit of a kit that fits every humanoid alike (`?skull=anatomical`: 'envelope', or `?skullfit=`'s);
+      // null for the default page, whose characters each have their own, and without a kit.
+      skullFit: kitOf()?.fit ?? null,
+      // Every skull the kit has fitted since boot: whose, under which fit, and how long it took to make (ms). One
+      // per head revision, made when the character's skeleton sources are built (game-skeleton-actors.ts).
+      skullFits: kitOf() ? kitOf()!.made.map(m => ({ ...m })) : [],
+      // How long the plates' asset took to load (request, parse, the kit's making; ms), and how long the boot stood
+      // waiting for it where the skeleton is built (the load is started as the boot begins and runs beside it);
+      // null on a page that did not load it.
+      skullAssetMs: kitOf()?.loadMs ?? null,
+      skullAssetWaitMs: kitOf()?.awaitedMs ?? null,
       activeMode: ctx.render.skeletonMode === 'volume'
         ? (ctx.render.skeletonVolumes.size > 0 ? 'volume' : 'procedural')
         : ctx.render.skeletonMode === 'mesh'

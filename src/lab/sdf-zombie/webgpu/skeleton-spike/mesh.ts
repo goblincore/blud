@@ -34,6 +34,7 @@ import type { BoneFieldSource } from './contract';
 import { sweepOrganTubes, type OrganTubeSpec } from './mesh-organ-tubes';
 import type { Vec3 } from '../../types';
 import type { AnatomicalSkullKit } from './anatomical-skull';
+import { SCULPT_CLASSIC, type SculptRecipe, type SculptShape } from './sculpt-variant';
 
 /** Extraction resolution. Matches BAKE_CELL (chunk-bake-geometry.ts): 1 cm
  *  cells are what the shipped bake pays for torn-flesh craters; the bone
@@ -100,9 +101,10 @@ export interface SegmentMesh {
  * band 0 (the TRUE surface — the Newton pull in extractHullSoup lands
  * vertices ON the field), distort 1 as in the chunk bake.
  * `organ` (an organ source only): how to mesh it. Omitted = surface nets at `cellSize`, as a bone.
+ * `shape`: which sculpt carves a head (mesh-skull.ts).
  */
-export function extractSegmentMesh(source: BoneFieldSource, cellSize = MESH_CELL, organ?: OrganMeshSpec): SegmentMesh {
-  source = meshBoneSource(source);
+export function extractSegmentMesh(source: BoneFieldSource, cellSize = MESH_CELL, organ?: OrganMeshSpec, shape: SculptShape = 1): SegmentMesh {
+  source = meshBoneSource(source, shape);
   const t0 = performance.now();
   const spec = source.kind === 'organ' ? organ : undefined;
   const key = `${source.revision}@${spec ? organMeshKey(spec) : cellSize}`;
@@ -194,6 +196,11 @@ export interface SegmentMeshCacheStats {
 
 export class SegmentMeshCache {
   readonly #map = new Map<string, SegmentMesh>();
+  /** The mesh get() gave each source object, and for an organ source the organ recipe it was built by (organ
+   *  sources follow `organMesh`; null for a bone). A source is immutable for its revision (contract.ts): a hit here
+   *  reads nothing of the source and allocates nothing, where the key is a string built from the carved source. The
+   *  bone renderer asks for every drawn segment in every frame. */
+  #bySource = new WeakMap<BoneFieldSource, { mesh: SegmentMesh; organMesh: OrganMeshSpec | null }>();
   #extractCount = 0;
   #extractMs = 0;
   #firstExtractAt: number | null = null;
@@ -203,26 +210,47 @@ export class SegmentMeshCache {
   /** How organ sources are meshed. Assignable: the next get() of an organ source keys (and builds) by the new spec,
    *  and the meshes of the old one stay cached until dispose(). */
   organMesh: OrganMeshSpec;
+  /** `sculpt`: the sculpted skull's recipe (sculpt-variant.ts): which sculpt carves a sculpted head, and the cell it
+   *  is extracted at. Omitted: `classic`, the first sculpt at the cache's own cell. The game never omits it: its
+   *  cache is built from the recipe resolveSkull chooses (sculpt-cache.ts). */
   constructor(
     readonly cellSize: number = MESH_CELL, organMesh: OrganMeshSpec = ORGAN_MESHES[ORGAN_MESH_DEFAULT],
-    readonly skullKit: AnatomicalSkullKit | null = null,
+    readonly skullKit: AnatomicalSkullKit | null = null, readonly sculpt: Readonly<SculptRecipe> = SCULPT_CLASSIC,
   ) {
     this.organMesh = organMesh;
+  }
+
+  /** The cell `source` is extracted at: the recipe's head cell for a head the sculpt carves, the cache's for
+   *  everything else. `carved` is the source after meshBoneSource. */
+  #cellOf(source: BoneFieldSource, carved: BoneFieldSource): number {
+    return carved !== source && this.sculpt.headCell !== null ? this.sculpt.headCell : this.cellSize;
   }
 
   keyOf(source: BoneFieldSource): string {
     const skull = this.skullKit?.head(source);
     if (skull) return skull.mesh.key;
-    return `${meshBoneSource(source).revision}@${source.kind === 'organ' ? organMeshKey(this.organMesh) : this.cellSize}`;
+    const carved = meshBoneSource(source, this.sculpt.shape);
+    return `${carved.revision}@${source.kind === 'organ' ? organMeshKey(this.organMesh) : this.#cellOf(source, carved)}`;
   }
 
   get(source: BoneFieldSource): SegmentMesh {
+    const kept = this.#bySource.get(source);
+    if (kept && (kept.organMesh === null || kept.organMesh === this.organMesh)) return kept.mesh;
+    const mesh = this.#find(source);
+    this.#bySource.set(source, { mesh, organMesh: source.kind === 'organ' ? this.organMesh : null });
+    return mesh;
+  }
+
+  /** get() for a source object not seen before (or an organ source under a new recipe): by key, extracting on the
+   *  first ask for a key. */
+  #find(source: BoneFieldSource): SegmentMesh {
     const skull = this.skullKit?.head(source);
     if (skull) return skull.mesh;
-    const key = this.keyOf(source);
+    const carved = meshBoneSource(source, this.sculpt.shape);
+    const key = `${carved.revision}@${source.kind === 'organ' ? organMeshKey(this.organMesh) : this.#cellOf(source, carved)}`;
     let m = this.#map.get(key);
     if (!m) {
-      m = extractSegmentMesh(source, this.cellSize, this.organMesh);
+      m = extractSegmentMesh(source, this.#cellOf(source, carved), this.organMesh, this.sculpt.shape);
       const at = performance.now();
       this.#extractCount++;
       this.#extractMs += m.bakeMs;
@@ -268,6 +296,7 @@ export class SegmentMeshCache {
   dispose(): void {
     for (const m of this.#map.values()) m.geometry.dispose();
     this.#map.clear();
+    this.#bySource = new WeakMap();
     this.skullKit?.dispose();
   }
 }

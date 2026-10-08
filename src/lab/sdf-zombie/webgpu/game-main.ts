@@ -67,7 +67,7 @@ import { createOuterHull } from './shell-hull-outer';
 import { makeGameContext } from './game-context';
 import { createBoneInstancer } from './bone-instancer';
 import { createSkeletonSources, type BoneFieldSource } from './skeleton-spike/contract';
-import { createSkullMeshCache } from './skeleton-spike/anatomical-skull';
+import { startBoneMeshCache } from './skeleton-spike/sculpt-cache';
 import { createSegmentMeshRenderer } from './skeleton-spike/mesh-renderer';
 import { resolveOrganMode, resolveSkeletonMode } from './skeleton-spike/selector';
 import { SegmentVolumeCache, buildSegmentAtlas, boneSegmentKeyMap } from './skeleton-spike/volume';
@@ -292,6 +292,7 @@ import { createAxeHarness } from './game-axe';
 import { createFlail } from './game-flail';
 import { createHeadDamage } from './game-head-damage';
 import { createHeadSplit } from './game-head-split';
+import { createHeadShot } from './game-head-shot';
 import { GAME_AA, GAME_AA_FADE_M, GAME_AA_NEAR, GAME_LAST_STEP_DEFAULT } from './game-march-accept';
 import { createBrainGib } from './game-brain-gib';
 import { clearMeshGibs, spawnMeshGib, stepMeshGibs } from './game-mesh-gibs';
@@ -451,6 +452,9 @@ async function main() {
   ctx.boot.marks = [];
   const mark = (n: string) => { ctx.boot.marks.push({ n, t: Math.round(performance.now()) }); };
   mark('main-start');
+  // The bone-mesh cache, and with it the anatomical skull's asset, starts loading now and is taken where the
+  // skeleton is built (sculpt-cache.ts startBoneMeshCache), unless the query already rules the mesh skeleton out.
+  ctx.render.boneCache = startBoneMeshCache(location.search, resolveSkeletonMode(location.search, { dev: import.meta.env.DEV, deferred: false }) === 'mesh');
   (window as unknown as Record<string, unknown>).__bootMarks = ctx.boot.marks;
   ctx.vfx.boundedWoundPreview = import.meta.env.DEV && new URLSearchParams(location.search).has('bounded-wounds');
   ctx.boot.mount = document.getElementById('app');
@@ -2533,7 +2537,9 @@ async function main() {
   if (import.meta.env.DEV && new URLSearchParams(location.search).get('skeleton') === 'mesh' && ctx.render.skeletonMode !== 'mesh') {
     console.warn('[sdf-game] skeleton=mesh refused (deferred mode) — procedural bones');
   }
-  ctx.render.segMeshCache = ctx.render.skeletonMode === 'mesh' ? await createSkullMeshCache(location.search) : null;
+  // The cache was started as main() began (ctx.render.boneCache): the plates' asset has been loading beside the boot.
+  ctx.render.segMeshCache = await ctx.render.boneCache.take(ctx.render.skeletonMode === 'mesh');
+  ctx.render.boneCache = null;
   // Organs as mesh (2026-10-06): on the mesh skeleton the organs are segment meshes too, and the body packs no
   // inside-flesh row. ?organs=sdf keeps them as field rows (the A/B reference); __sdfGame.setOrgans flips it live.
   ctx.render.organMode = resolveOrganMode(location.search, ctx.render.skeletonMode);
@@ -3361,6 +3367,16 @@ async function main() {
     splitOpen: a => ctx.weapon.headSplit?.isOpen(a) ?? false,
     // The modelled brain (game-brain-gib.ts), lit by the level's light list for the room it is thrown in.
     brain: createBrainGib(ctx, { lightsAt: p => ctx.world.levelLightLists.get(roomIdAt(p[0], p[2])) ?? null }),
+  });
+  // What a gun round does to a zombie's head besides an ordinary wound (game-head-shot.ts): a precisely aimed slug
+  // from close to medium range opens the head through the head split, a slug from that range pops a head already
+  // split wide; the burst opening stays behind its tuning.
+  ctx.weapon.headShot = createHeadShot(ctx, {
+    headShape,
+    split: ctx.weapon.headSplit,
+    headDamaged: a => ctx.weapon.headDamage?.has(a) ?? false,
+    opening: (a, point, dir, shot, kind) => ctx.weapon.headDamage?.burst(a, point, dir, shot, kind) ?? false,
+    bleed: (a, w, point, incoming) => registerCutBleed(ctx, a, w, 'slug', { point, incoming }),
   });
   // WEAPON SLOT 2's own subtree. Everything the grapeshot owns — the gun, both
   // orb hands, the muzzle flash, the smoke pool, the ejected/loaded cases and

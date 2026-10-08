@@ -219,6 +219,9 @@ export function tick(ctx: GameContext, dt: number) {
   // Damage transitions use their own clock; frozen pose captures must
   // still show a newly selected preset. Refresh exclusions as it grows.
   for (const a of ctx.world.actors) if (a.advanceWoundPreview(dt)) ctx.render.frozenHullBuilt = false;
+  // A head's pop swells on its own clock too (game-actor.ts advanceHeadPop), BEFORE the actors step, so this frame's
+  // pose carries this frame's swell; a frozen actor is re-posed by the call itself.
+  for (const a of ctx.world.actors) if (a.advanceHeadPop(dt)) ctx.render.frozenHullBuilt = false;
   // The head split's spring (game-head-split.ts), BEFORE the actors step: their step is what asks the split hook, so
   // this frame's pose carries this frame's angle. Outside the wanderFrozen branch: a frozen actor is re-posed by the
   // tick itself.
@@ -890,14 +893,17 @@ export function tick(ctx: GameContext, dt: number) {
           // the ring tail (a hit that also severs puts a stump there).
           if (!hitThisFrame.has(hitActor)) { hitActor.beginHits(); hitThisFrame.add(hitActor); }
           const hitTiming = ctx.telemetry.telemetry.begin();
-          if (ctx.render.segMeshRenderer) {
+          // A round on a zombie's head asks the head-shot leaf FIRST (game-head-shot.ts): a precisely aimed slug from
+          // close to medium range splits the head, a slug from that range pops a head already split wide, and the
+          // leaf takes the round. A round it takes is not an ordinary hit on the skull either: the skull's own hit
+          // path (impact: the eyes near the hit are ejected, the plate under it is damaged) is for the rounds the
+          // leaf declines (every pellet, an imprecise slug, a slug from too far, not the head, not the zombie), which
+          // then take the ordinary wound below. Routed by projectile kind, never by Wound.type (slugs stamp 'blast').
+          const burstHandled = !!ctx.weapon.headShot?.hit(hitActor, hitPoint, dirN, p.shot, p.kind);
+          if (!burstHandled && ctx.render.segMeshRenderer) {
             const sources = ctx.render.skeletonSources.get(hitActor)?.sources;
             if (sources) ctx.render.segMeshRenderer.impact(hitActor, sources, hitPoint, dirN, p.kind, { from, by: p });
           }
-          // A slug on a zombie's head bursts or ruptures it (game-head-damage.ts burst; while burstTuning.anyWeapon is
-          // on, pellets too, once per shot); anything the leaf declines (not the head, not the plain zombie, off) takes
-          // the ordinary path below. Routed by projectile kind, never by Wound.type (slugs stamp 'blast').
-          const burstHandled = !!ctx.weapon.headDamage?.burst(hitActor, hitPoint, dirN, p.shot, p.kind);
           const stamped = burstHandled ? null
             : p.kind === 'slug'
               ? hitActor.hitSlug(hitPoint, dirN, p.shot)

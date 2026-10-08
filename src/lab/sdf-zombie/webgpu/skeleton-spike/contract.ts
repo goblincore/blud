@@ -54,6 +54,7 @@ import { sdPrimitive } from '../../validate';
 import { boxReach, shellReach, strandReach } from '../../extent';
 import type { Primitive, Vec3 } from '../../types';
 import type { Quat } from '../../vec';
+import { headFlesh, type HeadFlesh } from './head-flesh';
 import { add, bendCtrl, len, normalize, qRotate, scale as vscale, sub } from '../../vec';
 
 /** The experiment selector. 'procedural' is the shipped field path and stays
@@ -120,6 +121,13 @@ export interface BoneFieldSource {
   /** False once the owning flesh cluster is severed (pack.ts drops those
    *  bone rows; a mesh/volume must drop the segment the same frame). */
   isLive(): boolean;
+  /**
+   * The head's own flesh at rest, in this segment's frame (head-flesh.ts): on
+   * the 'head' segment of a body whose rigid head carries flesh, absent on
+   * every other. A skull fitted to the flesh reads it (anatomical-skull.ts);
+   * nothing else does.
+   */
+  flesh?: HeadFlesh;
 }
 
 const qConj = (q: SegmentPose['quat']): Quat => [-q[0], -q[1], -q[2], q[3]];
@@ -382,6 +390,13 @@ export function createSkeletonSources(
       },
       isLive: () => def.members.every(bi => body.clusters[body.bonePrims[bi]!.cluster]?.alive),
     };
+    // Built on first read (most sources are never fitted against), and not
+    // enumerable: a copy of the source (mesh-skull.ts spreads one) neither
+    // builds it nor carries it.
+    if (def.key === 'head') {
+      let flesh: HeadFlesh | null | undefined;
+      Object.defineProperty(src, 'flesh', { get: () => (flesh === undefined ? (flesh = headFlesh(body, bound)) : flesh) ?? undefined });
+    }
     sources.push(src);
   }
   // Deterministic order: axial by key, head, limb by key, organ by key — independent of

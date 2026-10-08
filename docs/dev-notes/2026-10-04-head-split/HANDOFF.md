@@ -98,9 +98,13 @@ un-turned point along a ragged fracture edge that both halves share (one `jag` t
 twin), two-sided. The stage only advances (`SplitState.stage`), so a kick or a wobble swings the bone in proportion
 and never steps it. Driven from `view.splitDrawn`. Closed heads draw as before.
 
-**The skull is the anatomical one by default since 2026-10-06** (fourteen plates; `?skull=sculpt` is the sculpted
-skull this feature was built and playtested on). What that changed for the split, with every measurement:
-[`../2026-10-06-split-anatomical-skull/NOTES.md`](../2026-10-06-split-anatomical-skull/NOTES.md).
+**The skull is the sculpted one by default since 2026-10-07**, in its variant `full` (a second sculpt of the head
+and a second paint; the owner's pick after playtesting both skulls:
+[`../2026-10-07-sculpt-skull-2/NOTES.md`](../2026-10-07-sculpt-skull-2/NOTES.md)). `?sculpt=classic` is the sculpted
+skull this feature was built and playtested on. `?skull=anatomical` is the skull of fourteen plates, which was the
+default from 2026-10-06 to 2026-10-07; what it changed for the split, with every measurement:
+[`../2026-10-06-split-anatomical-skull/NOTES.md`](../2026-10-06-split-anatomical-skull/NOTES.md). The split draws
+all three.
 
 - **Two split materials.** The sculpted skull and the eyes are thin shells: a dark inner wall and a cut-bone rim. The
   anatomical plates have thickness and no painted wall: the plate's surface on both faces, cut bone within 4 mm of the
@@ -169,9 +173,9 @@ bash -c 'export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; 
 
 | Gate | Checks (as of 2026-10-05) | Notes |
 | --- | --- | --- |
-| `scripts/head-split-gate.mjs` | 100 (2026-10-06; 80 on 2026-10-05) | Scenarios S, W, K, O, L, F, M, P, R, A, H, J, B, T, C. Six boots: five on the anatomical skull (the default), one with `?skull=sculpt` that runs M alone. `ONLY=S,K` runs a subset (W and K need S). C holds the depth guard and its positive control, and checks which skull each boot drew. |
-| `scripts/axe-gate.mjs` | 27 | A, D, K, S, C, T. The 26th and 27th are the depth guard's positive control and the guard. |
-| `scripts/cut-wound-gate.mjs` | 30 | |
+| `scripts/head-split-gate.mjs` | 111 (2026-10-07; 100 on 2026-10-06; 80 on 2026-10-05) | Scenarios S, W, K, O, L, F, M, P, R, A, H, J, B, T, C. Seven boots: five on the default skull (the sculpted one, `full`), one with `?sculpt=classic` that runs M alone on the first look, one with `?skull=anatomical` that runs M on the plates and then P. `ONLY=S,K` runs a subset (W and K need S). C holds the depth guard and its positive control, and checks which skull each boot drew. |
+| `scripts/axe-gate.mjs` | 29 (27 before 2026-10-07) | A, D, K, S, C, T. Each of its two boots checks that it draws the default skull. The last two checks are the depth guard's positive control and the guard. |
+| `scripts/cut-wound-gate.mjs` | 33 (30 before 2026-10-07) | Each of its three boots checks that it draws the default skull. |
 
 - **Photos.** The head-split gate writes its sheets to `.lab-tmp/head-split-gate`; `SHEETS=1` rewrites the tracked
   ones in `gate/`. The other two write into TRACKED folders by default (`docs/dev-notes/2026-10-04-axe/gate`,

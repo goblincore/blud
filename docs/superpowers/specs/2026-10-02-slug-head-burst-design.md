@@ -1,6 +1,8 @@
 # Slug head burst (lethal burst + glancing rupture) — Design
 
-**Date:** 2026-10-02 · **Status:** design approved by owner in chat; plan not yet written
+**Date:** 2026-10-02 · **Status:** built 2026-10-02; **switched off by default 2026-10-07** after the owner's
+second playtest (it stays behind `burstTune({ opening: true })`; what a gun round does to a head now is in
+[the 2026-10-07 notes](../../dev-notes/2026-10-07-sculpt-skull-2/NOTES.md))
 **Branch:** `claude/head-explosion-effect-d6231e`
 **Follows:** [melee head damage](2026-09-28-melee-head-damage-design.md) (the region ladder, jelly wobble, dents, eye pop,
 brain gib). This spec reuses its machinery and does not change the flail ladder.

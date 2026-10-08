@@ -1,5 +1,11 @@
 # The head split on the anatomical skull (2026-10-06)
 
+**Since 2026-10-07 the anatomical skull is opt-in** (`?skull=anatomical`); the default is the sculpted skull, `full`
+([the decision](../2026-10-07-sculpt-skull-2/NOTES.md)). This file is a record of 2026-10-06, when the anatomical
+skull was the default: where it says "the default skull" it means the anatomical one, and its `?skull=sculpt` is
+`?sculpt=classic` today. Everything it describes still runs, and is still gated, on a page that asks for the
+anatomical skull.
+
 Branch `claude/split-anatomical-skull`, stacked on the anatomical skull's branch (`codex/anatomical-skull`, PR 32) after
 `main` (the axe and the head split, PR 31) was merged into it. Not pushed when this was written.
 

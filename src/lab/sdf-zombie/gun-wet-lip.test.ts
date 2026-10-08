@@ -6,6 +6,7 @@
 // wounds, decals and burns never take it; the gun (not the soldier, not the soft target) stamps it.
 // The pixel proof is the GPU look loop in docs/dev-notes/2026-09-28-head-damage/torn-lips/gun-*.png.
 import { describe, expect, it } from 'vitest';
+import { isGoreBody } from './motion-profile';
 import { GUN_WET_LIP, WET_LIP_LOOK, gunWetLipOn, setGunWetLip, wetLipUpload } from './torn-lips';
 import { wetLipWound, type Wound } from './damage';
 import { WOUND_FLAG, woundFlagBits, writeWounds } from './webgpu/zombie-gpu';
@@ -72,7 +73,12 @@ describe('gun wet lip: who gets it', () => {
     expect(GUN_WET_LIP).toEqual({ pellet: 1, slug: 1 });
     expect(actorSrc).toContain("gunWetLip(wound, 'pellet');");
     expect(actorSrc).toContain("gunWetLip(wound, 'slug');");
-    expect(actorSrc).toContain('if (soldierDamage || softTarget) return;');
+    // Who: the gore bodies (motion-profile.ts isGoreBody): not the soldier's family, not a soft target.
+    expect(actorSrc).toContain('const goreBody = isGoreBody(opts.profile);');
+    expect(actorSrc).toContain('if (!goreBody) return;');
+    expect(isGoreBody(undefined)).toBe(true);
+    expect(isGoreBody({ family: 'soldier' })).toBe(false);
+    expect(isGoreBody({ soft: true })).toBe(false);
   });
 });
 

@@ -67,6 +67,25 @@ describe('__sdfGame.skullSplit: the split skull\'s look, live', () => {
   });
 });
 
+describe('__sdfGame.meshEyes: an actor\'s eyes as this frame draws them', () => {
+  it('gives each eye\'s world centre, radius and piece; none for an actor that draws none; null without the renderer or the actor', () => {
+    const a = { id: 7 }, b = { id: 8 };
+    const at = (x: number, r: number) => new THREE.Matrix4().makeTranslation(x, 2, 3).scale(new THREE.Vector3(r, r, r));
+    const drawn = [
+      { owner: a, eye: false, piece: null, matrix: at(9, 1) }, { owner: a, eye: true, piece: null, matrix: at(-0.03, 0.019) },
+      { owner: a, eye: true, piece: 2, matrix: at(0.03, 0.019) }, { owner: b, eye: false, piece: null, matrix: at(5, 1) },
+    ];
+    const seams = createSkeletonSeams({ world: { actors: [a, b] }, render: { segMeshRenderer: { drawn } } } as unknown as GameContext);
+    const eyes = seams.meshEyes(7)!;
+    expect(eyes.map(e => e.piece)).toEqual([null, 2]);
+    expect(eyes.map(e => e.centre)).toEqual([[-0.03, 2, 3], [0.03, 2, 3]]);
+    for (const e of eyes) expect(e.radius).toBeCloseTo(0.019, 12);
+    expect(seams.meshEyes(8)).toEqual([]);
+    expect(seams.meshEyes(9)).toBeNull();
+    expect(createSkeletonSeams({ world: { actors: [a] }, render: { segMeshRenderer: null } } as unknown as GameContext).meshEyes(7)).toBeNull();
+  });
+});
+
 describe('__sdfGame.meshSkeletonShow: draw or hide the bone meshes and the eyes', () => {
   it('reads and sets the two flags; refuses what is not a boolean; null without the mesh skeleton', () => {
     const { seams, renderer, done } = make();
@@ -93,15 +112,18 @@ describe('__sdfGame.skullDrawn: an actor\'s split skull copies among this frame\
     const bone = geo(), boneSplit = geo(), eye = geo(), eyeSplit = geo();
     const draw = (owner: unknown, geometry: unknown, piece: 0 | 1 | 2 | null) => ({ owner, eye: geometry === eye || geometry === eyeSplit, piece, matrix: M, geometry });
     const drawn = [draw(a, bone, null), draw(a, boneSplit, 0), draw(a, boneSplit, 1), draw(a, boneSplit, 2), draw(a, eyeSplit, 1), draw(a, eyeSplit, 2), draw(b, bone, null), draw(b, eye, null)];
-    const children = [[bone, 'skeleton-bone'], [boneSplit, 'skeleton-bone-split'], [eye, 'skeleton-eye'], [eyeSplit, 'skeleton-eye-split']].map(([geometry, name]) => ({ geometry, material: { name } }));
+    // The bone materials say which paint they draw; the eyes' say nothing.
+    const children = [[bone, 'skeleton-bone', 1], [boneSplit, 'skeleton-bone-split', 2], [eye, 'skeleton-eye'], [eyeSplit, 'skeleton-eye-split']]
+      .map(([geometry, name, sculptPaint]) => ({ geometry, material: { name, userData: sculptPaint === undefined ? {} : { sculptPaint } } }));
     const seams = createSkeletonSeams({ world: { actors: [a, b] }, render: { segMeshRenderer: { drawn, object: { children } }, skeletonSources: new Map() } } as unknown as GameContext);
-    const row = (eyeRow: boolean, piece: number | null, material: string) => ({ eye: eyeRow, piece, matrix: m, material, plate: null });
+    const row = (eyeRow: boolean, piece: number | null, material: string, paint: 1 | 2 | null) => ({ eye: eyeRow, piece, matrix: m, material, plate: null, head: false, paint });
     expect(seams.skullDrawn(7)).toEqual({
       draws: 6,
-      copies: [row(false, 0, 'skeleton-bone-split'), row(false, 1, 'skeleton-bone-split'), row(false, 2, 'skeleton-bone-split'), row(true, 1, 'skeleton-eye-split'), row(true, 2, 'skeleton-eye-split')],
-      whole: [row(false, null, 'skeleton-bone')],
+      copies: [row(false, 0, 'skeleton-bone-split', 2), row(false, 1, 'skeleton-bone-split', 2), row(false, 2, 'skeleton-bone-split', 2), row(true, 1, 'skeleton-eye-split', null), row(true, 2, 'skeleton-eye-split', null)],
+      whole: [row(false, null, 'skeleton-bone', 1)],
+      character: null,
     });
-    expect(seams.skullDrawn(8)).toEqual({ draws: 2, copies: [], whole: [row(false, null, 'skeleton-bone'), row(true, null, 'skeleton-eye')] });
+    expect(seams.skullDrawn(8)).toEqual({ draws: 2, copies: [], whole: [row(false, null, 'skeleton-bone', 1), row(true, null, 'skeleton-eye', null)], character: null });
     expect(seams.skullDrawn(9)).toBeNull();
     expect(createSkeletonSeams({ world: { actors: [a] }, render: { segMeshRenderer: null } } as unknown as GameContext).skullDrawn(7)).toBeNull();
   });
@@ -113,15 +135,38 @@ describe('__sdfGame.skullDrawn: an actor\'s split skull copies among this frame\
     const pieces = [{ id: 'frontal', geometry: frontal }, { id: 'mandible', geometry: mandible }];
     const draw = (geometry: unknown, piece: 0 | 1 | 2 | null) => ({ owner: a, eye: geometry === eye, piece, matrix: M, geometry });
     const drawn = [draw(frontal, null), draw(mandibleTwin, 0), draw(mandibleTwin, 2), draw(merged, null), draw(eye, null)];
-    const children = [[frontal, 'skeleton-plate'], [mandibleTwin, 'skeleton-plate-split'], [eye, 'skeleton-eye']].map(([geometry, name]) => ({ geometry, material: { name } }));
+    const children = [[frontal, 'skeleton-plate'], [mandibleTwin, 'skeleton-plate-split'], [eye, 'skeleton-eye']].map(([geometry, name]) => ({ geometry, material: { name, userData: {} } }));
     const seams = createSkeletonSeams({
       world: { actors: [a] },
-      render: { segMeshRenderer: { drawn, object: { children } }, segMeshCache: { skullKit: { head: () => ({ pieces }) } }, skeletonSources: new Map([[a, { sources: [head] }]]) },
+      // The cache's mesh for the head is the merged skull.
+      render: { segMeshRenderer: { drawn, object: { children } }, segMeshCache: { skullKit: { head: () => ({ pieces }) }, get: () => ({ geometry: merged }) }, skeletonSources: new Map([[a, { name: 'zombie', sources: [head] }]]) },
     } as unknown as GameContext);
     const out = seams.skullDrawn(7)!;
     expect(out.copies.map(c => [c.plate, c.piece, c.material])).toEqual([['mandible', 0, 'skeleton-plate-split'], ['mandible', 2, 'skeleton-plate-split']]);
     // A geometry no batch draws (none here for the merged skull) has no material to name.
     expect(out.whole.map(c => [c.plate, c.eye, c.material])).toEqual([['frontal', false, 'skeleton-plate'], [null, false, null], [null, true, 'skeleton-eye']]);
+    // Every plate and the merged skull are the head; an eye is not. A plate's material draws neither paint.
+    expect(out.copies.map(c => [c.head, c.paint])).toEqual([[true, null], [true, null]]);
+    expect(out.whole.map(c => [c.head, c.paint])).toEqual([[true, null], [true, null], [false, null]]);
+    expect(out.character).toBe('zombie');
+  });
+  it('says which row is the sculpted head and which paint each bone is under', () => {
+    const a = { id: 7 }, head = { segment: 'head' }, headAt = {};
+    const headGeo = geo(headAt), headTwin = geo(headAt), limb = geo(), eye = geo();
+    const draw = (geometry: unknown, piece: 0 | 1 | 2 | null) => ({ owner: a, eye: geometry === eye, organ: false, piece, matrix: M, geometry });
+    const children = [[headGeo, 'skeleton-bone', 2], [headTwin, 'skeleton-bone-split', 2], [limb, 'skeleton-bone', 1], [eye, 'skeleton-eye']]
+      .map(([geometry, name, sculptPaint]) => ({ geometry, material: { name, userData: sculptPaint === undefined ? {} : { sculptPaint } } }));
+    const seamsOf = (drawn: unknown[]) => createSkeletonSeams({
+      world: { actors: [a] },
+      render: { segMeshRenderer: { drawn, object: { children } }, segMeshCache: { skullKit: null, get: () => ({ geometry: headGeo }) }, skeletonSources: new Map([[a, { name: 'cultist', sources: [head] }]]) },
+    } as unknown as GameContext);
+    const closed = seamsOf([draw(headGeo, null), draw(limb, null), draw(eye, null)]).skullDrawn(7)!;
+    expect(closed.whole.map(c => [c.head, c.paint, c.material])).toEqual([[true, 2, 'skeleton-bone'], [false, 1, 'skeleton-bone'], [false, null, 'skeleton-eye']]);
+    expect(closed.character).toBe('cultist');
+    // A split copy is drawn from the head's twin: the same position attribute, so it is the head too.
+    const open = seamsOf([draw(headTwin, 0), draw(headTwin, 1), draw(limb, null)]).skullDrawn(7)!;
+    expect(open.copies.map(c => [c.head, c.paint, c.material])).toEqual([[true, 2, 'skeleton-bone-split'], [true, 2, 'skeleton-bone-split']]);
+    expect(open.whole.map(c => [c.head, c.paint])).toEqual([[false, 1]]);
   });
 });
 
@@ -141,7 +186,7 @@ describe('__sdfGame.skullPlates / skullFragments: the anatomical skull\'s plates
     for (const k of ['pivot', 'min', 'max'] as const) expect(seams.skullPlates(7)![0]![k]).not.toBe(pieces[0]![k]);
     expect(seams.skullPlates(8)).toBeNull();   // no head segment
     expect(seams.skullPlates(9)).toBeNull();   // no such actor
-    expect(createSkeletonSeams(ctx(null)).skullPlates(7)).toBeNull();   // ?skull=sculpt
+    expect(createSkeletonSeams(ctx(null)).skullPlates(7)).toBeNull();   // the sculpted skull: no plates
     expect(createSkeletonSeams(ctx({ head: () => null })).skullPlates(7)).toBeNull();   // a head the kit does not fit
   });
   it('skullShot hands one round\'s ray to the renderer\'s fractureSkull with the actor\'s sources; refuses a ray or a round that is not one', () => {
@@ -175,13 +220,24 @@ describe('__sdfGame.skullPlates / skullFragments: the anatomical skull\'s plates
     expect(createSkeletonSeams({ world: { actors: [a] }, render: { segMeshRenderer: null } } as unknown as GameContext).skullRay(7, [1, 2, 3], [0, 0, -1])).toBeNull();
   });
   it('lists the skull fragments among the mesh gibs, oldest first, by plate', () => {
-    const gib = (tag: string, name: string, pos: number[], vel: number[]) => ({ tag, object: { name }, state: { pos, vel } });
-    const meshGibs = [gib('skull', 'skull-fragment:frontal', [1, 2, 3], [0, 4, 0]), gib('brain', 'brain', [5, 5, 5], [0, 0, 0]), gib('skull', 'skull-fragment:parietal-left', [2, 2, 2], [1, 1, 1])];
+    // A fragment is a group holding one mesh; a sculpted head's fragment is on a bone material that says its paint, an
+    // anatomical plate's on one that says none.
+    const gib = (tag: string, name: string, pos: number[], vel: number[], userData: object = {}) => ({ tag, object: { name, children: [{ material: { userData } }] }, state: { pos, vel } });
+    const meshGibs = [gib('skull', 'skull-fragment:frontal', [1, 2, 3], [0, 4, 0]), gib('brain', 'brain', [5, 5, 5], [0, 0, 0]), gib('skull', 'skull-fragment:parietal-left', [2, 2, 2], [1, 1, 1], { sculptPaint: 2 }), gib('skull', 'skull-fragment:mandible', [3, 3, 3], [0, 0, 1], { sculptPaint: 1 })];
     const seams = createSkeletonSeams({ gibs: { meshGibs } } as unknown as GameContext);
     expect(seams.skullFragments()).toEqual([
-      { plate: 'frontal', pos: [1, 2, 3], vel: [0, 4, 0] }, { plate: 'parietal-left', pos: [2, 2, 2], vel: [1, 1, 1] },
+      { plate: 'frontal', pos: [1, 2, 3], vel: [0, 4, 0], paint: null }, { plate: 'parietal-left', pos: [2, 2, 2], vel: [1, 1, 1], paint: 2 }, { plate: 'mandible', pos: [3, 3, 3], vel: [0, 0, 1], paint: 1 },
     ]);
     expect(seams.skullFragments()[0]!.pos).not.toBe(meshGibs[0]!.state.pos);
+  });
+  it('skullFragmentsShow hides and shows the skull fragments, and nothing else among the mesh gibs', () => {
+    const gib = (tag: string) => ({ tag, object: { name: tag, visible: true, children: [] }, state: { pos: [0, 0, 0], vel: [0, 0, 0] } });
+    const meshGibs = [gib('skull'), gib('brain'), gib('skull')];
+    const seams = createSkeletonSeams({ gibs: { meshGibs } } as unknown as GameContext);
+    expect(seams.skullFragmentsShow(false)).toBe(2);
+    expect(meshGibs.map(g => g.object.visible)).toEqual([false, true, false]);
+    expect(seams.skullFragmentsShow(true)).toBe(2);
+    expect(meshGibs.map(g => g.object.visible)).toEqual([true, true, true]);
   });
 });
 
