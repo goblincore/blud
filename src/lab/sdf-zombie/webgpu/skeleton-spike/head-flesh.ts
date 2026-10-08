@@ -7,7 +7,10 @@
 // places about the neck pivot, which is the frame the head's bone prims are given (contract.ts), folded as
 // sdBodyClosed folds a body. Two reasons it is not the whole body's field:
 //  - it is closed under the chin, where the body's flesh runs on into the neck, and it is the flesh that turns with
-//    the skull: bone held under it is covered in every pose of the head, not only at rest;
+//    the skull: bone held under it stays covered as the head turns and nods, not only at rest. NOT AS THE JAW OPENS:
+//    the field is the head's flesh at REST, and a head whose jaw prims swing with the gape (the bride's) moves them
+//    off the bone the fit left under them. Her cover falls from 6.5 mm at rest to 1.6 mm with the jaw 0.6 to 0.9 rad
+//    open (measured in review; no fit is made against the open pose);
 //  - it leaves out what is not head: a hair strand and a cloth shell (a hood, a veil) are flesh to the body's field,
 //    and a skull that filled a hood would stand outside the scalp. (A shell's clip plane is authored in the rest
 //    body's frame besides, and would cut in the wrong place here.)

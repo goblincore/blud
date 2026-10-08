@@ -1,8 +1,12 @@
 // scripts/head-burst-gate.mjs — what a gun round does to a zombie's head (head-burst.ts headShotRule,
 // decapitationRule; webgpu/game-head-shot.ts; the actor's pop). REAL rounds through __sdfGame.fire() and fireSlug()
-// on the bare ring page (/sdf-game.html, no ?level), frozen zombies, six boots. Four draw the default skull (no
+// on the bare ring page (/sdf-game.html, no ?level), frozen zombies, nine boots. Seven draw the default skull (no
 // skull parameter: the sculpted skull, `full`); the two whose checks are the anatomical skull's ask for it
 // (`?skull=anatomical`). Each boot checks that it draws the skull it means to.
+//
+// WHAT IS ON SCREEN IS CHECKED IN PIXELS, not only in the CPU's lists: a frame as the game draws it against the same
+// frame with one thing taken out (a body's flesh, the skull's fragment gibs) says where that thing is on screen. The
+// flesh is drawn by the march and is in no list: a lip left standing over a stump shows nowhere else.
 //
 // A SLUG IS AIMED, NOT LAID. The split is a reward for a precise AIM from close to medium range: the rule reads the
 // crosshair's ray recorded as the gun fired (how far it passes from the head's centre, and from how far), not where
@@ -15,7 +19,8 @@
 //   NP. pellet volleys on a head never open or split it: ordinary craters, no split, no head-leaf state, the head on.
 //   AIM. a slug fired with the crosshair on the head's centre from 2 m is PRECISE (its recorded aim passes through
 //       the centre, its range is 2 m) though its own line runs most of a head radius off, and it splits the head,
-//       BOTH halves.
+//       BOTH halves. The aim a slug records is the crosshair ON SCREEN: its ray, drawn through the frame's camera
+//       and lens, is at the picture's centre.
 //   O.  an IMPRECISE slug (the crosshair 6 cm over the head's centre, twice the precise zone's radius; the slug still
 //       lands on the head) is an ORDINARY slug wound.
 //   FAR. a PRECISE slug from beyond splitRangeM (the crosshair on the head's centre from 6 m) is an ORDINARY slug
@@ -24,10 +29,16 @@
 //       far off the middle line peels one half) SPLITS the head, BOTH HALVES: the head split's state at the middle
 //       preset's two-sided full angle on the head's middle line, the pose's split turned that far both ways, the
 //       skull drawn as clipped copies for the rest and each half, the field open where each half was, its two cut
-//       faces, the zombie alive.
+//       faces, the zombie alive. The splitting slug is not an ordinary hit on the skull: no eye is knocked out. ON
+//       SCREEN the head's middle line is flesh before the shot and the room behind it after, with a half of flesh
+//       to each side.
 //   X.  a slug on the split head POPS it WITHOUT precision (the crosshair 6 cm off the centre, in range): the
-//       sculpted skull's ten fragments are thrown.
+//       sculpted skull's ten fragments are thrown, and are ON SCREEN (the frame changes where they are when they
+//       are taken out of it).
 //   OFF. burstTune({ on: false }): a precise slug is an ordinary wound.
+// BOOT 1a, THE RANGES:
+//   R.  the crosshair on the head's centre from 1, 2, 4 and 4.9 m, and once 3 cm under it from 2 m: each aimed slug
+//       splits the head. Where the slug lands (about 10 cm under the crosshair) decides nothing.
 // BOOT 1b, the ANATOMICAL skull (`?skull=anatomical`), the pop on a page of its own:
 //   D.  slugs at the neck until the head comes off: the head SWELLS for popSwellS and bursts, no flying head; the
 //       anatomical skull's fourteen plates are all released as fragments, the head segment and its eyes are not
@@ -35,7 +46,8 @@
 //   D0. popSwellS 0 bursts with no swell frame.
 // BOOT 1c, the ANATOMICAL skull again, the split and its pop on a page of their own:
 //   SA, XA. S's skull and X, on the plates: a precise slug splits the head and the skull is drawn as clipped
-//       copies on the plates' split material; a second slug pops it and the split skull's plates are thrown.
+//       copies on the plates' split material, no plate broken and no eye knocked out by the slug that split it; a
+//       second slug pops it and the split skull's plates are thrown.
 // BOOT 2, the OPENING switched on by tuning (the slug head burst of 2026-10-02, not shipped): the scenarios this
 // gate had before 2026-10-07, unchanged but for `opening: true` in their tuning:
 //   P. with anyWeapon and alwaysSplit a pellet volley on a head opens it, once per shot.
@@ -49,7 +61,14 @@
 //   C. the flaps of a head share ONE attached piece (draws === 1). Frame time is reported, not gated.
 // BOOT 3, the pop on the default skull, on a page of its own:
 //   DS. the decapitating slug pops the head: the sculpted head mesh is thrown as ten fragments (sculpt-fragments.ts),
-//       the head segment and its eyes are not drawn, nothing is left at the old head position.
+//       the head segment and its eyes are not drawn, nothing is left at the old head position; and NOTHING FLOATS
+//       OVER THE STUMP: from four sides the old head's place on screen holds none of the body's flesh.
+// BOOT 3a, the flying heads:
+//   FS. with slugPop off the same slugs send the head flying, and nothing floats over the stump.
+//   FP. pellet volleys at the neck take the head off. What stands in the old head's place then is measured and not
+//       held: the neck's base is left on the shoulders, a collar of real flesh.
+// BOOT 3b, the lip rule switched off (`__sdfGame.head.stumpLips(false)`), the floating check's control:
+//   FL0. the same decapitation leaves the stump's lip standing in the slug's crater, and the check SEES it.
 // BOOT 4, the cultist (`?spawn=cultist`: every zombie slot a cultist), on the default skull. He is one of the eight
 // humanoids whose head bone is a few balls, and draws the ANATOMICAL skull fitted to his own flesh (skeleton-spike/
 // skull-cast.ts), while the page's skull stays the sculpted one:
@@ -58,7 +77,7 @@
 //       are level with his ember eyes and his eyes are drawn seated in them, sized from them; his head is drawn on
 //       the plates' material; real pellets at his face break a plate off; his head's pop releases all fourteen
 //       plates, and the sculpted skull's fragments are never cut.
-// E. zero console errors / exceptions, over all six.
+// E. zero console errors / exceptions, over all nine.
 // Photos are written to OUT for the look loop. Usage:
 //   export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up
 //   node scripts/head-burst-gate.mjs 5241 9241
@@ -79,7 +98,7 @@ const IMPRECISE_M = 0.06, PRECISE_SIDE_M = 0.02, FAR_D = 6;
 // left and right. FAR's is fired from toward the room's centre, where there is room to stand 6 m off.
 const FRONT = 0;
 // ONLY=rules,pop runs those boots alone (for a look at one scenario; the gate is the whole run, and says which boots
-// it ran). The boots: rules, ranges, anatomical, anatomical-split, opening, pop, lips-off, cultist.
+// it ran). The boots: rules, ranges, anatomical, anatomical-split, opening, pop, flying, lips-off, cultist.
 const ONLY = process.env.ONLY ? new Set(process.env.ONLY.split(",")) : null;
 const runs = (boot) => !ONLY || ONLY.has(boot);
 const ran = [];
@@ -459,9 +478,9 @@ const OVER_VIEWS = [["front", 0], ["left", 90], ["back", 180], ["right", -90]];
  *  with the body's flesh out of it. The count is the body's flesh pixels in THE OLD HEAD'S PLACE on screen: 7 cm to
  *  either side of the stump's centre and from 8 to 24 cm over it, where a headless body has nothing. That flesh is
  *  drawn by the march and is in no CPU list: a lip left standing in a crater's hole shows here and nowhere else.
- *  Returns the count from each side and the largest. */
-async function overStump(tag, id, front) {
-  await evaluate("__sdfGame.freeze(false)"); await stepN(14); await evaluate("__sdfGame.freeze(true)"); await stepN(2);
+ *  `thaw` false: the cast has been thawed since the sever already. Returns the count from each side and the largest. */
+async function overStump(tag, id, front, thaw = true) {
+  if (thaw) { await evaluate("__sdfGame.freeze(false)"); await stepN(14); await evaluate("__sdfGame.freeze(true)"); await stepN(2); }
   const stump = await stumpOf(id);
   if (!stump) { fail(`${tag}: no stump wound on actor ${id}`); return { max: Infinity, views: {}, stump: null }; }
   const c = stump.pos, views = {};
@@ -556,7 +575,9 @@ async function acrossHead(id, frame, name) {
 //   the pop's fragments: at least FRAGMENT_PX_MIN pixels change when the fragments are taken out of the frame;
 //   the old head's place (about 21,000 pixels from 0.8 m): at most OVER_MOST of them the body's flesh after a
 //   decapitation, and at least OVER_SEEN with the lip rule off (the floating piece, seen).
-const AIM_PX_MOST = 2, HALF_MIN = 6, FRAGMENT_PX_MIN = 300, OVER_MOST = 40, OVER_SEEN = 1000;
+// Measured when set: the aim 0.00 px off; 24 and 25 of 33 points a side; 5,422 pixels of fragments; 0 pixels in the old
+// head's place after the pop and after the slug's flying head; 1,388 to 2,614 with the rule off.
+const AIM_PX_MOST = 2, HALF_MIN = 12, FRAGMENT_PX_MIN = 1500, OVER_MOST = 40, OVER_SEEN = 1000;
 
 try {
   // ======== BOOT 1: the shipped rules ========
@@ -959,27 +980,35 @@ try {
   const dsOver = await overStump("DS", DS.id, dsFront);
   note(`DS: the stump is ${dsOver.stump ? `${(dsOver.stump.radius * 100).toFixed(1)} cm, its lip ${dsOver.stump.lip}` : null}; the body's flesh in the old head's place: ${JSON.stringify(dsOver.views)} px`);
   check(dsOver.max <= OVER_MOST, `DS: nothing floats over the stump after the pop: at most ${dsOver.max} px of the old head's place are the body's flesh, from any of four sides (<= ${OVER_MOST}; ${JSON.stringify(dsOver.views)})`);
-  // -------- FS. the slug's FLYING head (slugPop off): the same decapitation with no pop, and the same check.
+  closeSession(S);
+  }
+
+  // ======== BOOT 3a: THE FLYING HEADS, on a page of their own (a page's first zombie loses its head to the first
+  // slug at its neck; how many a later one takes depends on what the cast has been through).
+  if (runs("flying")) {
+  await boot("flying");
+  // -------- FS. the slug's flying head (slugPop off): the pop boot's decapitation with no pop.
   await tune({ slugPop: false });
   const FS = fresh();
   const fs = await takeHeadOff("FS", FS.id, "__sdfGame.fireSlug()", 0.06, SHOT_D, 40);
   const fsKinds = fs.at ? await evaluate(`__sdfGame.head.drawnNear(${fs.at[0]}, ${fs.at[1]}, ${fs.at[2]}, 3).chunks.map((c) => c.kind)`) : [];
   check(fs.rounds > 0 && fsKinds.includes("limb"), `FS: with slugPop off, slugs at the neck send the head flying (slug ${fs.rounds}; a limb chunk among the ${fsKinds.length} flying pieces)`);
-  await stepN(150);
-  const fsOver = await overStump("FS", FS.id, fs.front ?? [0, 0, 1]);
-  check(fsOver.max <= OVER_MOST, `FS: nothing floats over the stump after the flying head: at most ${fsOver.max} px of the old head's place are the body's flesh (<= ${OVER_MOST}; ${JSON.stringify(fsOver.views)}; the stump's lip ${fsOver.stump?.lip})`);
   await tune({ slugPop: TUNING_DEFAULTS.slugPop });
-  // -------- FP. a decapitation by PELLETS (both barrels at the neck from 1.2 m): measured, not held. The pellets'
-  // small craters cut the neck through and leave the neck's base standing on the shoulders, a collar of real flesh
-  // that reaches into the old head's place (docs/dev-notes/2026-10-07-sculpt-skull-2/NOTES.md); it is attached, and it
-  // is not a lip.
+  // -------- FP. a decapitation by PELLETS: both barrels at the neck from 1.2 m.
   const FP = fresh();
   const fp = await takeHeadOff("FP", FP.id, "__sdfGame.fire(2)", 0.1, 1.2, 0, 8);
+  check(fp.rounds > 0, `FP: pellet volleys at the neck take the head off (volley ${fp.rounds})`);
+  await stepN(150);
+  // One thaw for both bodies, then the old head's place over each stump.
+  const fsOver = await overStump("FS", FS.id, fs.front ?? [0, 0, 1]);
+  check(fsOver.max <= OVER_MOST, `FS: nothing floats over the stump after the slug's flying head: at most ${fsOver.max} px of the old head's place are the body's flesh (<= ${OVER_MOST}; ${JSON.stringify(fsOver.views)}; the stump's lip ${fsOver.stump?.lip})`);
+  // The pellets' decapitation is MEASURED, NOT HELD: their small craters cut the neck through and leave the neck's
+  // base standing on the shoulders, a collar of real flesh that reaches into the old head's place
+  // (docs/dev-notes/2026-10-07-sculpt-skull-2/NOTES.md). It is attached to the shoulders, and it is not a lip.
   if (fp.rounds > 0) {
-    await stepN(150);
-    const fpOver = await overStump("FP", FP.id, fp.front ?? [0, 0, 1]);
-    note(`FP (NOT HELD): after a decapitation by pellets (volley ${fp.rounds}) the body's flesh in the old head's place: ${JSON.stringify(fpOver.views)} px (the neck's base, left standing; the stump's lip ${fpOver.stump?.lip})`);
-  } else note("FP (NOT HELD): eight volleys at the neck did not take the head off");
+    const fpOver = await overStump("FP", FP.id, fp.front ?? [0, 0, 1], false);
+    note(`FP (NOT HELD): after a decapitation by pellets the body's flesh in the old head's place: ${JSON.stringify(fpOver.views)} px (the neck's base, left standing; the stump's lip ${fpOver.stump?.lip})`);
+  }
   closeSession(S);
   }
 

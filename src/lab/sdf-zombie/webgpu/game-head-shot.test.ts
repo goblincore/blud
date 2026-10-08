@@ -105,10 +105,11 @@ function headNow(f: ReturnType<typeof fixture>) {
 function gunSlug(f: ReturnType<typeof fixture>, dist: number, aim: Vec3 = [0, 0, 0]) {
   const { frame, face } = headNow(f);
   const fwd: Vec3 = [-face[0], 0, -face[2]], right: Vec3 = [-fwd[2], 0, fwd[0]], up: Vec3 = [0, 1, 0];
-  const target = frame.centre.map((v, k) => v + right[k]! * aim[0] + up[k]! * aim[1]) as Vec3;
-  const eye = target.map((v, k) => v - fwd[k]! * dist) as Vec3;
-  const muzzle = eye.map((v, k) => v + right[k]! * MUZZLE[0] + up[k]! * MUZZLE[1] + fwd[k]! * MUZZLE[2]) as Vec3;
-  const to = eye.map((v, k) => v + fwd[k]! * CONVERGE_M - muzzle[k]!) as Vec3, l = Math.hypot(...to);
+  const v3 = (f: (k: 0 | 1 | 2) => number): Vec3 => [f(0), f(1), f(2)];
+  const target = v3(k => frame.centre[k] + right[k] * aim[0] + up[k] * aim[1]);
+  const eye = v3(k => target[k] - fwd[k] * dist);
+  const muzzle = v3(k => eye[k] + right[k] * MUZZLE[0] + up[k] * MUZZLE[1] + fwd[k] * MUZZLE[2]);
+  const to = v3(k => eye[k] + fwd[k] * CONVERGE_M - muzzle[k]), l = Math.hypot(...to);
   const p = spawnSlug(muzzle, [to[0] / l, to[1] / l, to[2] / l], { eye, dir: fwd });
   const body = f.a.posed();
   for (let i = 0; i < 240; i++) {
@@ -117,7 +118,7 @@ function gunSlug(f: ReturnType<typeof fixture>, dist: number, aim: Vec3 = [0, 0,
     const hit = traceProjectile(from, p.pos, q => sdBody(q, body));
     if (!hit) continue;
     const v = Math.hypot(...p.vel);
-    return { point: hit, dir: p.vel.map(x => x / v) as Vec3, shot: p.shot!, under: frame.centre[1] - hit[1], reach: Math.hypot(...hsOf(frame, hit)), frame };
+    return { point: hit, dir: v3(k => p.vel[k] / v), shot: p.shot!, under: frame.centre[1] - hit[1], reach: Math.hypot(...hsOf(frame, hit)), frame };
   }
   return null;
 }

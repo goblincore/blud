@@ -67,7 +67,9 @@ export interface FittedSkull {
   orbits: SkullOrbit[];
   /** A skull fitted to the flesh: its eye seats, head-local, one in each orbit and sized from them. Null for the
    *  envelope fit, whose eyes stay where the sculpted skull seats them (mesh-eyes.ts), as they were before any skull
-   *  was fitted to the flesh. */
+   *  was fitted to the flesh. The seats are the skull's; whether an eye is DRAWN in them is the head's: a head the
+   *  sculpted skull seats no eye in (the bonewalker's, the described schoolgirl's) draws none here either
+   *  (mesh-renderer.ts eyeSeats). */
   eyes: MeshEyePlacement[] | null;
 }
 
