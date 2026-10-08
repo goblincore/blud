@@ -130,7 +130,10 @@ export function mergeImportLines(lines: readonly string[]): string[] {
       for (const el of b.elements) {
         const name = el.propertyName ? `${el.propertyName.text} as ${el.name.text}` : el.name.text;
         const typeOnly = blanket || el.isTypeOnly;
-        if (!e.named.some(n => n.name === name)) e.named.push({ name, typeOnly });
+        const seen = e.named.find(n => n.name === name);
+        // A value import of a name wins over a type-only one: `type X` then `X` must stay usable as a value.
+        if (seen) seen.typeOnly &&= typeOnly;
+        else e.named.push({ name, typeOnly });
       }
     }
   }

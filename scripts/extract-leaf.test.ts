@@ -8,6 +8,7 @@
 // rewrite rule.
 import { describe, it, expect } from 'vitest';
 import { extractLeaves, mergeModule } from './extract-leaf';
+import { mergeImportLines } from './lib/game-main-deps';
 
 /** A game-main.ts in miniature: one import line, one main() with a closure. */
 function fixture(body: string): string {
@@ -423,5 +424,12 @@ describe('extract-leaf: const arrow functions', () => {
     const r = extractLeaves(src(`  const applyHemi = () => { ctx.lighting.hemiBase = 1; };\n  const deps = { applyHemi };\n  void deps;`), ['applyHemi'], [], 'game-level-lights');
     expect(r.module).toContain('export function applyHemi(ctx: GameContext) {');
     expect(r.main).toContain('{ applyHemi: withCtx(ctx, applyHemi) }');
+  });
+
+  it('mergeImportLines: a value import of a name wins over a type-only one, in either order', () => {
+    expect(mergeImportLines(["import { type A } from './m';", "import { A, B } from './m';"]))
+      .toEqual(["import { A, B } from './m';"]);
+    expect(mergeImportLines(["import { A } from './m';", "import type { A } from './m';"]))
+      .toEqual(["import { A } from './m';"]);
   });
 });
