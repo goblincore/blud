@@ -13,6 +13,7 @@ import { RAY_WINDOW_BLOCK } from './blocks/setup/ray-window.wgsl';
 import { STEP_CONFIG_BLOCK } from './blocks/setup/step-config.wgsl';
 import { START_BOUNDS_BLOCK } from './blocks/setup/start-bounds.wgsl';
 import { DEBUG_COUNTERS_BLOCK } from './blocks/loop/debug-counters.wgsl';
+import { RAY_MASK_PROBE as RAYMASK } from '../raymask-flag';
 import { SPLIT_HIT_BLOCK } from './blocks/post/split-hit.wgsl';
 import { PRIM_MATERIAL_BLOCK } from './blocks/post/prim-material.wgsl';
 import { SHADING_NORMAL_BLOCK } from './blocks/post/shading-normal.wgsl';
@@ -112,7 +113,9 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(max(
   // probes) writes the globals again.
   var hitPiece = 0;
   var hitSplitF = 0.0;
-  for (var i = 0; i < 512; i = i + 1) {
+${RAYMASK ? `  // RAY-MASK PROBE (?raymask): the walk's samples all lie on this ray.
+  gMaskRo = camPos; gMaskInv = 1.0 / rd; gMaskOn = 1.0; gMaskSkip = 0.0;
+` : ''}  for (var i = 0; i < 512; i = i + 1) {
     if (i >= steps) { break; }
     if (debugCfg.x > 0.5) { gDebugSteps = gDebugSteps + 1.0; }
     // 0.0, not marchCfg.z: the field mapBody returns stays SMOOTH — the fbm

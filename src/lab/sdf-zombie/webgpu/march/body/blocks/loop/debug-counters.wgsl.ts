@@ -4,6 +4,8 @@
 // MOVE-ONLY: spliced back into its parent string by interpolation, so the
 // joined WGSL is byte-identical. See docs/dev-notes/2026-09-18-march-split/.
 
+import { RAY_MASK_PROBE as RAYMASK } from '../../../raymask-flag';
+
 export const DEBUG_COUNTERS_BLOCK = /* wgsl */ `  // OCCUPANCY MODE (debugCfg.x == 4, 2026-08-31). Returns RAW COUNTERS
   // instead of a colour, and — the whole point — returns BEFORE the discard,
   // so pixels that missed still write. Channels:
@@ -64,4 +66,9 @@ export const DEBUG_COUNTERS_BLOCK = /* wgsl */ `  // OCCUPANCY MODE (debugCfg.x 
   // g = exact procedural fallbacks. Returned before discard so misses count.
   if (debugCfg.x > 7.5 && debugCfg.x < 8.5) {
     return vec4<f32>(gDebugVolumeSamples, gDebugVolumeFallbacks, select(0.0, 1.0, hit), t);
-  }`;
+  }${RAYMASK ? `
+  // RAY-MASK PROBE (debugCfg.x == 21, ?raymask only): mode 13's walk counters with
+  // g = the folds whose prim box the ray never crosses (see foldGroup).
+  if (debugCfg.x > 20.5 && debugCfg.x < 21.5) {
+    return vec4<f32>(gDebugPrims, gMaskSkip, gDebugSteps + select(0.0, 1000.0, hit), t);
+  }` : ''}`;

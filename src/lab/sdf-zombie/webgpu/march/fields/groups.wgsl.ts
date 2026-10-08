@@ -7,7 +7,8 @@ import { REC_ANCHOR_BAND, REC_BURN, REC_CENTRE_SEED, REC_COUNTS, REC_COUNTS2, RE
 import { TILE_MAX_ENTRIES } from '../../tile-cull';
 import { MAX_WOUNDS } from '../../../damage';
 import { LIMB_ACCUMULATORS as LIMBS } from '../limbs-flag';
-import { ROW_PRIM_B, ROW_PRIM_BEND, ROW_PRIM_CLIP, ROW_PRIM_SCALE, ROW_PRIM_SHAPE, ROW_PRIM_SHELL, ROW_PRIM_WARP } from '../layout';
+import { RAY_MASK_PROBE as RAYMASK } from '../raymask-flag';
+import { ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_BEND, ROW_PRIM_CLIP, ROW_PRIM_SCALE, ROW_PRIM_SHAPE, ROW_PRIM_SHELL, ROW_PRIM_WARP } from '../layout';
 
 // The cull margin's 4.0 matters: smin scales k by 4 internally, so a cluster
 // still bends the surface from 4x the authored blendK away. Using the unscaled
@@ -68,7 +69,22 @@ export const FOLD_GROUP = /* wgsl */ `fn foldGroup(dIn: f32, p: vec3<f32>, data:
     // S.w: 0 add, 1 carve, 2 dead (severed mid-limb) — both skip the fold.
     if (S.w > 0.5) { continue; }
     if (gDebugMode > 0.5) { gDebugPrims = gDebugPrims + 1.0; }
-    let k = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_B} + band), 0).w;
+${RAYMASK ? `    // RAY-MASK PROBE (?raymask, debug mode 21): would a per-ray primitive mask
+    // have skipped this fold? Count it when the pixel's ray never crosses the
+    // prim's box, inflated by the fold's own cull margin (4k, times the group's
+    // distortion). Shaped prims (bend, shell, strand, box) are never counted:
+    // their reach is not this box. Counting only — d is untouched.
+    if (gDebugMode > 0.5 && gMaskOn > 0.5 && !shaped) {
+      let mA = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_A} + band), 0);
+      let mB = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_B} + band), 0);
+      let mR = select(mA.w * S.xyz, vec3<f32>(mA.w * max(S.x, max(S.y, S.z))), ori) + vec3<f32>(counts.w * 4.0 * grp.z);
+      let mLo = (min(mA.xyz, mB.xyz) - mR - gMaskRo) * gMaskInv;
+      let mHi = (max(mA.xyz, mB.xyz) + mR - gMaskRo) * gMaskInv;
+      let mN = min(mLo, mHi);
+      let mF = max(mLo, mHi);
+      if (max(max(mN.x, mN.y), max(mN.z, 0.0)) > min(mF.x, min(mF.y, mF.z))) { gMaskSkip = gMaskSkip + 1.0; }
+    }
+` : ''}    let k = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_B} + band), 0).w;
     var r2 = -1.0;
     var prof = 0.0;
     var cpos = vec3<f32>(0.0, 0.0, 0.0);
@@ -156,7 +172,12 @@ var<private> gFoldBestIdx: f32 = -1.0;
 // straight after its mapBody call. 1.0 default: groups without distortion
 // and the volume branch (which never folds) are exact no-ops.
 var<private> gFoldBestDistort: f32 = 1.0;
-${LIMBS ? `// PER-LIMB ACCUMULATORS (counts2.z mode 4, option 4 of the 2026-09-21 wound
+${RAYMASK ? `// RAY-MASK PROBE state (?raymask): the pixel's ray, set by MARCH_BODY before the walk.
+var<private> gMaskOn: f32 = 0.0;
+var<private> gMaskRo: vec3<f32>;
+var<private> gMaskInv: vec3<f32>;
+var<private> gMaskSkip: f32 = 0.0;
+` : ''}${LIMBS ? `// PER-LIMB ACCUMULATORS (counts2.z mode 4, option 4 of the 2026-09-21 wound
 // cost work): each cluster's own fold, built during the base fold, so the
 // owner re-fold needs no prim loops. mapBody resets them per slot.
 var<private> gLimbOn: f32 = 0.0;
