@@ -13,13 +13,14 @@
 // exactly what it did before. See docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
 import { describe, it, expect } from 'vitest';
+import * as THREE from 'three/webgpu';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
 import { readFileSync } from 'node:fs';
 import {
   GOO_TUNING, GOO_SURFACE_WGSL, GOO_ALPHA_WGSL, GOO_BLUR_WGSL,
   GOO_DENSITY_BLUE_IS_GUT_MASK,
 } from './goo-layer';
-import { gooLayerFixture, gooSim, gooDroplets, type GooLogEntry } from './goo-layer-test-support';
+import { gooLayerFixture, gooSim, gooDroplets, gooDensityMesh, type GooLogEntry } from './goo-layer-test-support';
 import type { BloodSim, Droplet } from '../blood-sim';
 import { createFxSeams } from './game-seams-fx';
 import type { GameContext } from './game-context';
@@ -1124,46 +1125,109 @@ describe('smooth reconstruction WGSL', () => {
   });
 });
 
-describe('smooth reconstruction wiring (source tripwires)', () => {
-  const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
-
-  it('defaults to the ORIGINAL path', () => {
-    expect(src).toContain("let reconstruction: GooReconstruction = 'original';");
-    expect(src).toMatch(/setReconstruction\(m: GooReconstruction\) \{ reconstruction = m; \}/);
+describe('smooth reconstruction wiring (live layer on a stub renderer)', () => {
+  it('defaults to the ORIGINAL path, and the setter round-trips', () => {
+    const f = gooLayerFixture();
+    expect(f.layer.reconstruction).toBe('original');
+    f.layer.setReconstruction('smooth');
+    expect(f.layer.reconstruction).toBe('smooth');
+    f.layer.setReconstruction('original');
+    expect(f.layer.reconstruction).toBe('original');
+    f.dispose();
   });
 
   it('the smooth DEPTH material blends coverage but never writes depth', () => {
     // The candidate's atomic depth-compositing change: coverage alpha, depth
     // test on (occlusion respected), depth write off (a fringe must not
-    // occlude the scene behind it). Scoped to the candidate table.
-    const block = src.slice(src.indexOf('function makeSmoothDepthMat'), src.indexOf('const smoothSurfMats'));
-    expect(block).toContain('vec4(shaded.xyz as never, cov.w as never)');
-    expect(block).toContain('m.depthNode = shaded.w as never;');
-    expect(block).toContain('m.depthTest = true;');
-    expect(block).toContain('m.depthWrite = false;');
-    expect(block).toContain('m.transparent = true;');
+    // occlude the scene behind it) — read off the composite the layer
+    // actually drew with in smooth + depth mode.
+    const f = gooLayerFixture();
+    f.layer.setReconstruction('smooth');
+    f.layer.setMode('depth');
+    f.render();
+    const m = f.log.draws().filter((r) => r.target === null).at(-1)!.material!;
+    expect(m.depthTest).toBe(true);
+    expect(m.depthWrite).toBe(false);
+    expect(m.transparent).toBe(true);
+    expect(m.depthNode).not.toBeNull();
+    // Contrast with the baseline depth material: it writes depth and draws
+    // opaque — so the flags above distinguish the two paths, not a default.
+    const g = gooLayerFixture();
+    g.layer.setMode('depth');
+    g.render();
+    const base = g.log.draws().filter((r) => r.target === null).at(-1)!.material!;
+    expect(base).not.toBe(m);
+    expect(base.depthWrite).toBe(true);
+    expect(base.transparent).toBeFalsy();
+    g.dispose();
+    f.dispose();
   });
 
   it('tracks the real composite destination for the coverage footprint', () => {
-    expect(src).toContain('lastOutputW = outputTarget ? outputTarget.width : renderer.domElement.width;');
-    expect(src).toContain('uCoverageTexels.value = densityTexelsPerOutputPixel(');
+    const f = gooLayerFixture();
+    f.layer.setSize(400, 300);
+    // Redirect the composite into an off-screen target (post-aa captures
+    // the frame this way): the diagnostics must report THAT as the output,
+    // because the smooth coverage ramp scales its feather by
+    // density-texels-per-OUTPUT-pixel.
+    const rt = new THREE.RenderTarget(123, 45);
+    f.layer.setOutputTarget(rt);
+    f.render();
+    const d = f.layer.densityDiagnostics;
+    expect(d.outputWidth).toBe(123);
+    expect(d.outputHeight).toBe(45);
+    expect(d.densityWidth).toBe(200);
+    expect(d.texelsPerOutputPixelX).toBeCloseTo(200 / 123, 9);
+    expect(d.texelsPerOutputPixelY).toBeCloseTo(150 / 45, 9);
+    // And the composite really drew there, not to the canvas.
+    expect(f.log.draws().filter((r) => r.target === null)).toHaveLength(0);
+    expect(f.log.draws().at(-1)!.target).toBe(rt);
+    // null restores the canvas as the destination.
+    f.layer.setOutputTarget(null);
+    f.render();
+    expect(f.layer.densityDiagnostics.outputWidth).toBe(800);
+    expect(f.layer.densityDiagnostics.outputHeight).toBe(600);
+    f.dispose();
   });
 
   it('extra connection blobs ride the SAME density instancer and cap', () => {
     // Strands and sheets are shaded by the existing wet surface pass because
-    // they are density quads, not a second flat material. They are posed
-    // after droplets/splats and inside the cap.
-    expect(src).toContain('setExtraBlobs(blobs: readonly GooDensityBlob[])');
-    // The cap now also honours the shutter selection (extras belong to the
-    // selected/blurred half), so the expression gained a gate.
-    expect(src).toContain('const extraBudget = selection !== null && !selection.extras');
-    expect(src).toContain('Math.min(extraCount, Math.max(0, particleCap - n));');
-    expect(src).toContain('extraHalfW[i] = b.halfW; extraHalfH[i] = b.halfH; extraRoll[i] = b.roll;');
-    expect(src).toContain('get extraBlobCount() { return extraCount; }');
+    // they are density quads, not a second flat material: they pose after
+    // droplets/splats, inside the cap, on the same instancer (liveCount is
+    // that instancer's count).
+    const f = gooLayerFixture();
+    f.layer.setExtraBlobs([
+      { x: 0, y: 1, z: -2, halfW: 0.1, halfH: 0.1, roll: 0 },
+      { x: 0.3, y: 1, z: -2.2, halfW: 0.2, halfH: 0.05, roll: 0.5, gut: 1 },
+    ]);
+    f.layer.sync(gooSim(3), f.camera);
+    expect(f.layer.liveCount).toBe(5);
+    // The gut flag rides the same per-instance attribute as droplets.
+    f.render(); // the density render exposes the instancer
+    const mesh = gooDensityMesh(f.log);
+    const gut = mesh.geometry.getAttribute('gutMask').array as Float32Array;
+    expect(mesh.count).toBe(5);
+    expect(Array.from(gut.slice(0, 5))).toEqual([0, 0, 0, 0, 1]);
+    // The cap still owns the whole roster: extras are dropped past it, not
+    // droplets.
+    f.layer.setParticleCap(4);
+    f.layer.sync(gooSim(3), f.camera);
+    expect(f.layer.liveCount).toBe(4);
+    // A selection that gates extras drops them entirely (they belong to the
+    // selected/blurred half of the shutter split).
+    f.layer.setParticleCap(1000);
+    f.layer.setSelection({ droplet: () => true, splats: true, extras: false });
+    f.layer.sync(gooSim(3), f.camera);
+    expect(f.layer.liveCount).toBe(3);
+    f.dispose();
   });
 
   it('defaults to no extras, so the shipped frame is unchanged', () => {
-    expect(src).toContain('let extraCount = 0;');
+    const f = gooLayerFixture();
+    expect(f.layer.extraBlobCount).toBe(0);
+    f.layer.sync(gooSim(2), f.camera);
+    expect(f.layer.liveCount).toBe(2); // nothing smuggled in
+    f.dispose();
   });
 });
 
