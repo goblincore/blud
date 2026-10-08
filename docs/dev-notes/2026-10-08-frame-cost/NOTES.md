@@ -185,7 +185,24 @@ A sampling CPU profile of 300 live frames in third class (`main`, 7 bodies in vi
   under the floor in every scene. The "4 to 9 ms per carriage for tube shadows" of 2026-09-28 was already corrected
   by the notes of 2026-09-29 (it is the tube spots shaded in the level's materials); these numbers agree.
 
-`PENDING: the level's draws by room, and static matrices (level-probe).`
+**The level's meshes by room** (`main` at `06f2ef12`, frozen frame, 8 alternations a leg; the level is 205 meshes
+and 119,897 triangles over 8 rooms, every one frustum-culled by three.js and none culled by room):
+
+| Hidden | Third class: frame | CPU submit | Draw calls | Boiler Room: frame | CPU submit | Draw calls |
+| --- | --- | --- | --- | --- | --- | --- |
+| A/A | −0.38 ms | −0.03 | | −0.45 ms | +0.15 | |
+| Every level mesh | −3.95 (IQR −4.30 to −3.75) | −2.90 | 425 → 211 | −2.67 (−3.00 to −2.15) | −1.87 | 289 → 139 |
+| The level meshes of OTHER rooms | **−3.02** (−3.15 to −2.50) | −2.13 | 425 → 233 | −1.02 (−1.85 to −0.25) | −0.82 | 289 → 173 |
+| Those beyond the player's room and its neighbours | **−3.10** (−3.20 to −2.60) | −1.90 | 425 → 260 | −0.85 (−1.25 to −0.40) | −0.28 | 289 → 193 |
+| The player's own room's | −0.78 | −0.27 | 425 → 379 | −1.23 | −1.38 | 289 → 188 |
+| Static matrices (`matrixAutoUpdate` off on the level) | +0.25, not resolved | +0.15 | | +0.05, not resolved | −0.07 | |
+
+- **Standing in third class, 165 to 192 of the frame's 425 draw calls are other carriages' walls and art**, straight
+  ahead down the train, inside the view frustum and behind the end wall. Not drawing them returns 3 ms there (2 ms of
+  it CPU) and about 1 ms in the Boiler Room. The carriages' doorways line up, so "beyond the neighbours" is not a
+  safe rule by itself: a far carriage can show as a sliver through two doorways. A portal test (a room is drawn
+  only if the view through the chain of doorways to it is not empty) is the exact form.
+- Freezing the level's matrices returns nothing: the cost in `updateMatrixWorld` is the walk, not the flag.
 
 ### 3.3 Wounds, up close
 
@@ -261,7 +278,24 @@ extra zombies, frozen.
   separately: the first is the same kind of mesh draw (9,947 triangles a head, under the floor); the second is a
   wound, and §3.3 is where wounds are counted.
 
-`PENDING: cold boot, main against PR 39.`
+### 4.1 Cold boot
+
+`scripts/boot-time.mjs` (its own dev server and a fresh Chrome profile per boot), `main` before the skull stack
+(`d6bb9967`) against `main` after it (`06f2ef12`), alternated, two rounds:
+
+| | `drawOnce` (the first real march draw), before | after | The whole warm-up, before | after |
+| --- | --- | --- | --- | --- |
+| Bare page | 1752, 2042 ms | 1983, 2309 ms | 47.5 s (the first boot of the session), 3.4 s | 2.8, 3.6 s |
+| Night Train | 4496, 4385 ms | 4397, 4701 ms | 17.3, 6.1 s | 5.5, 6.3 s |
+
+- **The skull stack adds about 0.25 s to the bare page's first draw** (+231 and +267 ms in the two rounds), which is
+  the notes' own figure for the two carved heads at 5 mm. On Night Train the difference is inside the spread (300 ms).
+- **Only the first boot of the session was cold**: 47.5 s of warm-up, nearly all pipeline compile. Every later boot,
+  fresh profile or not, warmed in 3 to 17 s: the system keeps compiled shaders outside the browser's profile. So a
+  truly cold boot is about 48 s on the bare page, measured once, and a "fresh profile" does not reproduce it. A
+  second cold pair was not available without clearing the system's cache, which I did not do.
+- The 1.3 MB skull asset's load was not separated from the rest (26 to 107 ms from the local dev server in PR 39's
+  notes and in this pass's boots; a real network would add the download).
 
 ## 5. Changes
 
@@ -366,9 +400,10 @@ So everything that is still over is the march on wounded bodies. In order of evi
 | 5 | **Fold wound rows for a region, not a sample** (a per-tile or per-cluster mask of which wounds can reach it, written when a wound is stamped) | every wounded body | bracketed by two measurements: all rows for everyone costs +10 ms (the early-out off), per-sample removal of 76% returns nothing resolved. A regional cut should land between | §3.3 | medium: a bound that is too tight is a hole in a body | none if the bound is exact |
 | 6 | **Bake craters into a rest-space volume per body** (the research pass's only route to a cost that does not grow with the count) | every wounded body | removes the dependence on count for craters | published practice (Claybook, Dreams); nothing measured here | high: days of work; rims limited by the volume's cell; cuts are too thin for it | crater rims softer unless the noise stays procedural |
 | 7 | **Pose, pack and upload only the bodies in view** | every level's CPU | −1 to −2.5 ms of tick | §3.2 | medium: the posed body has about 30 readers inside `game-actor.ts`; demos must replay to the same hash | none |
-| 8 | **The first shot's 29 pipelines** (70 to 150 ms, once a boot) and the rest of the entry hitch (50 to 85 ms) | stability | removes two visible stalls | §2.1, §5.1 | medium: the warm-up has to draw what a first shot creates without showing it; cold boot grows by whatever it compiles | none |
+| 8 | **Draw only the rooms the doorways show** (a portal test over the level's rooms; today every carriage ahead is drawn) | Night Train | −3 ms in third class (2 of it CPU), −1 ms in the Boiler Room | §3.2 | medium: a wrong test is a carriage popping in at a doorway | none if the test is exact |
+| 9 | **The first shot's 29 pipelines** (70 to 150 ms, once a boot) and the rest of the entry hitch (50 to 85 ms) | stability | removes two visible stalls | §2.1, §5.1 | medium: the warm-up has to draw what a first shot creates without showing it; cold boot grows by whatever it compiles | none |
 
-The CPU items (7, and the level's draw submission) return less in the heavy scenes than their milliseconds: those
+The CPU items (7, and the CPU share of 8) return less in the heavy scenes than their milliseconds: those
 frames are bound by the GPU (the GPU waits on the CPU for 0.8 to 2.4 ms after the slug, 3 to 6 ms while firing).
 
 **Not worth doing** (measured, with the number):
@@ -379,7 +414,9 @@ frames are bound by the GPU (the GPU waits on the CPU for 0.8 to 2.4 ms after th
 | Fewer or baked shadow maps; shadows off on bodies | re-renders 0.15 ms of CPU; sampling on bodies under the floor in all six scenes |
 | A level distance field or light cookies, for time | there is no shadow-map time to win back (above). Both may be worth having for the look (soft shadows and AO from the carriage on bodies without the 16-texture limit; shaped beams), judged as look work |
 | Not drawing intact heads; 1 cm skulls | half a million triangles change the polygon pass by under 0.1 ms |
+| Freezing the level's matrices | not resolved (+0.25 ms): the cost is the scene walk, not the flag |
 | Merging the gun's and the arms' 101 meshes; normal maps or parallax on them | under 1 ms of CPU; their cost was the light list, now fixed. Worth folding into the shotgun's own clean-up, not a perf item |
+| Early-Z (`?earlyz=1`) on the train scenes | third class walking in: march 12.5 → 12.0 ms, frame inside the floor; Boiler Room after the slug: march 23.1 → 24.6 ms. Its notes already say it only pays where bodies hide behind walls or each other |
 | The exact wound reach (`setWoundExact`), the per-ray wound list | −76% rows, no time resolved; the list costs 17 ms more here |
 | Goo, gib chunks, the bone and organ meshes | 0.3 to 1.5 ms, mostly under the floor |
 

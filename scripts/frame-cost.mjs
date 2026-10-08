@@ -18,6 +18,7 @@
 //   ring-room4 | ring-arena   the bare page's room 4 (4 zombies) and its arena (6 zombies, 2 soldiers).
 //   closeup   the bare page, frozen: one zombie at CLOSE_D m with two buckshot volleys, a torso chop and its head
 //       split open (two head chops). No fight; the passes are read on still frames.
+//   closeup-pellets | closeup-chop   the same body with the volleys only, and with the volleys and the torso chop.
 // Env: REPEATS (2), ABLATE=0 skips step 3, ALT_ROUNDS (8), ALT_K (10 frames a block), OUT (.lab-tmp/frame-cost),
 //   CLOSE_D (0.8), LOAD_MAX (6: a boot and every ablation leg wait for the 1-minute load average to fall to it),
 //   LOAD_BAD (8: a measure that ends above it is taken again, RETRIES (2) times), WARM=0 (no warm boots),
@@ -54,6 +55,8 @@ const SCENES = {
   "ring-room4": { query: "", room: 4 },
   "ring-arena": { query: "", room: 6 },
   closeup: { query: "frozen=1", closeup: true },
+  "closeup-pellets": { query: "frozen=1", closeup: true, chops: [] },
+  "closeup-chop": { query: "frozen=1", closeup: true, chops: [["R", "torso"]] },
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -153,7 +156,7 @@ async function arm() {
   await stepN(90);
 }
 /** The close-up: the nearest zombie of room 4 wounded, its head split, the eye CLOSE_D m from its chest. */
-async function stageCloseup() {
+async function stageCloseup(blows = [["R", "torso"], ["H", "head"], ["H", "head"]]) {
   await evaluate("__sdfGame.teleport(4)");
   await evaluate("__sdfGame.setInfiniteAmmo(true)");
   await evaluate("__sdfGame.freeze(false)"); await stepN(30); await evaluate("__sdfGame.freeze(true)");
@@ -180,11 +183,12 @@ async function stageCloseup() {
   // THE CHOPS ARE STRUCK FROM THE CLOSE STANCE: from the volleys' 2 m the axe does not reach and axeChop returns 0
   // (the first matrix of 2026-10-08 measured 32 pellet wounds and no cut for that reason).
   const chops = [];
-  for (const [side, target] of [["R", "torso"], ["H", "head"], ["H", "head"]]) { await look(CLOSE_D); chops.push(await evaluate(`__sdfGame.axeChop(${z.id}, "${side}", "${target}")`)); await relax(); }
+  for (const [side, target] of blows) { await look(CLOSE_D); chops.push(await evaluate(`__sdfGame.axeChop(${z.id}, "${side}", "${target}")`)); await relax(); }
   await look(CLOSE_D);
   await stepN(24);
   const split = await evaluate(`__sdfGame.headSplit(${z.id})`);
-  if (!split) throw new Error(`the close-up's head did not split: ${JSON.stringify({ chops, split })}`);
+  if (blows.some((b) => b[1] === "head") && !split) throw new Error(`the close-up's head did not split: ${JSON.stringify({ chops, split })}`);
+  if (chops.some((c) => !c)) throw new Error(`a chop of the close-up did not land: ${JSON.stringify(chops)}`);
   return { zombie: z.id, shots, chops, wounds: (await evaluate(`__sdfGame.actorWounds(${z.id})`))?.length ?? null, split };
 }
 
@@ -213,6 +217,8 @@ const ABLATIONS = [
   // 32-wound body) and the coarse early-out (ships ON; off, every sample folds every row).
   ["march: exact wound reach ON", "__sdfGame.setWoundExact(true)", "__sdfGame.setWoundExact(keep.woundExact)"],
   ["march: wound early-out off", "__sdfGame.setWoundEarlyOut(false)", "__sdfGame.setWoundEarlyOut(true)"],
+  // The owner re-fold: where a wound raised the field, the march folds the owner cluster's primitives again.
+  ["march: owner re-fold off", "__sdfGame.setOwnerRefold(false)", "__sdfGame.setOwnerRefold(keep.ownerRefold)"],
 ];
 /** LIGHTS=1 only, and LAST. Hiding a light takes it out of every lit material's light set: three re-keys those
  *  pipelines and builds each variant (the warm frames of a leg pay for it; an A/A leg straight after them still read
@@ -223,7 +229,7 @@ const LIGHT_ABLATIONS = [
   ["lights: every three.js light hidden", "fc.hide('all', (o) => o.isLight)", "fc.show('all')"],
   ["A/A control, after the light legs", "0", "0"],
 ];
-const KEEP = `({ vhs: __sdfGame.vhs, show: __sdfGame.meshSkeletonShow(), goo: !!(typeof __sdfGame.goo === "function" ? __sdfGame.goo() : __sdfGame.goo)?.enabled, layers: __sdfGame.layers(), woundCull: __sdfGame.woundCull, missCull: __sdfGame.missCull, woundExact: !!__sdfGame.woundExact, shell: __sdfGame.shell.enabled, occluder: __sdfGame.occluder })`;
+const KEEP = `({ vhs: __sdfGame.vhs, show: __sdfGame.meshSkeletonShow(), goo: !!(typeof __sdfGame.goo === "function" ? __sdfGame.goo() : __sdfGame.goo)?.enabled, layers: __sdfGame.layers(), woundCull: __sdfGame.woundCull, missCull: __sdfGame.missCull, woundExact: !!__sdfGame.woundExact, ownerRefold: __sdfGame.ownerRefold !== false, shell: __sdfGame.shell.enabled, occluder: __sdfGame.occluder })`;
 async function ablate() {
   await evaluate("__sdfGame.freeze(true)");
   await stepN(4);
@@ -268,7 +274,7 @@ async function runScene(spec, rep, lastTry, warmOnly = false) {
   out.boot = await boot(query, port ? Number(port) : VITE);
   if (sc.arm) await arm();
   let benchOpts;
-  if (sc.closeup) { out.stage = await stageCloseup(); benchOpts = "{ kind: 'closeup', closeupFrames: 240, mode: 'passes', chunkFrames: 4, warmup: 20 }"; }
+  if (sc.closeup) { out.stage = await stageCloseup(sc.chops); benchOpts = "{ kind: 'closeup', closeupFrames: 240, mode: 'passes', chunkFrames: 4, warmup: 20 }"; }
   else {
     benchOpts = `{ room: ${sc.room}, mode: 'passes', chunkFrames: 4, warmup: 30 }`;
     // THE ROOM IS ENTERED ONCE BEFORE THE FIGHT, the cast frozen and no sim time passing: three builds a material's
