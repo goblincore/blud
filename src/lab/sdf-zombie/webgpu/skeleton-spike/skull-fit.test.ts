@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   carryNormal, det3, fitSkull, measureFlesh, outermost, skullAffineFit, skullWarpAt, skullWarpJacobian, skullWarpPasses,
-  SKULL_FITS, type FleshField, type Mat3, type SkullFitParams, type SkullWarpPass, type V3,
+  SKULL_FITS, type FleshField, type Mat3, type SkullFitParams, type SkullWarpPass, type V3, skullFitParams,
 } from './skull-fit';
 
 /** A head of flesh for the tests: an ellipsoid of the given half axes about `c`, by the scaled-distance field the
@@ -95,6 +95,18 @@ describe('measuring the flesh and choosing who to ask', () => {
   });
 });
 
+describe('skullFitParams', () => {
+  it('a spec\'s own parameters stand over its named fit\'s; one named with no value does not blank the fit\'s', () => {
+    expect(skullFitParams({ fit: 'envelope' })).toBeNull();
+    expect(skullFitParams({ fit: 'snug' })).toEqual(SKULL_FITS.snug);
+    expect(skullFitParams({ fit: 'snug' })).not.toBe(SKULL_FITS.snug);
+    expect(skullFitParams({ fit: 'snug', params: { margin: 0.004 } })).toEqual({ ...SKULL_FITS.snug, margin: 0.004 });
+    expect(skullFitParams({ fit: 'snug', params: { margin: undefined, share: 0.7 } })).toEqual({ ...SKULL_FITS.snug, share: 0.7 });
+    expect(skullFitParams({ fit: 'snug', params: { eyes: false } })!.eyes).toBe(false);
+    expect(skullFitParams({ fit: 'snug', params: { pull: 0 } })!.pull).toBe(0);
+  });
+});
+
 describe('stage 1 (skullAffineFit) and stage 2 (skullWarpPasses) on a head that narrows to its crown', () => {
   // An egg: wide at mid height, the skull's own width is high up. The asset's box is centred on the origin.
   const egg: FleshField = p => {
@@ -170,5 +182,27 @@ describe('stage 1 (skullAffineFit) and stage 2 (skullWarpPasses) on a head that 
     expect(fit.shrunk).toBeLessThan(1);
     const out = fit.positions[0]!;
     for (let i = 0; i < out.length; i += 3) expect(ellipsoid([0, 0.08, 0], [0.06, 0.08, 0.06])([out[i]!, out[i + 1]!, out[i + 2]!]) + 0.006).toBeLessThanOrEqual(1e-6);
+  });
+  it('EVERY PLACE IS ASKED ONCE MORE AT THE END, whatever the passes concluded: a vertex that lacks its margin there shrinks the skull, with or without a stage 2', () => {
+    for (const params of [SKULL_FITS.snug, SKULL_FITS.affine]) {
+      // How many times a fit asks the field, and how many distinct places it has: the last of those asks are the
+      // final check, one a place.
+      let asked = 0;
+      const counted: FleshField = p => { asked++; return egg(p); };
+      const honest = fitSkull([plate], counted, envelope, [0, 0.08, 0], { ...params, eyes: false });
+      expect(honest.shrunk).toBe(1);
+      const places = new Set(Array.from({ length: positions.length / 3 }, (_, i) => `${positions[i * 3]},${positions[i * 3 + 1]},${positions[i * 3 + 2]}`)).size;
+      const total = asked;
+      expect(total).toBeGreaterThanOrEqual(places);
+      // A field that is 3 mm tighter by the time of that last check than it was while the skull was sized and
+      // warped (what a vertex skipped in error amounts to): the passes settled, and the skull does not hold.
+      let n = 0;
+      const shifting: FleshField = p => (++n > total - places ? egg(p) + 0.003 : egg(p));
+      const fit = fitSkull([plate], shifting, envelope, [0, 0.08, 0], { ...params, eyes: false });
+      expect(fit.shrunk, `pull ${params.pull}`).toBeLessThan(1);
+      expect(fit.shrunk).toBeGreaterThan(0.9);
+      const out = fit.positions[0]!;
+      for (let i = 0; i < out.length; i += 3) expect(egg([out[i]!, out[i + 1]!, out[i + 2]!]) + 0.003 + params.margin).toBeLessThanOrEqual(1e-6);
+    }
   });
 });

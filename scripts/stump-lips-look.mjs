@@ -209,7 +209,11 @@ async function measure(id, c, save) {
     const p0 = await toPx(c), p1 = await toPx(add(c, [0, 0.1, 0]));
     if (!p0 || !p1) continue;
     const pxPerM = (p0[1] - p1[1]) / 0.1;
-    out[name] = { pxPerM: +pxPerM.toFixed(1), ...floating(shown, hidden, p0, pxPerM) };
+    // The old head's place: 7 cm to either side of the point and 8 to 24 cm over it. A headless body has nothing there.
+    let overPx = 0;
+    for (let y = Math.max(0, Math.round(p0[1] - 0.24 * pxPerM)); y <= Math.round(p0[1] - 0.08 * pxPerM); y++)
+      for (let x = Math.max(0, Math.round(p0[0] - 0.07 * pxPerM)); x <= Math.min(shown.w - 1, Math.round(p0[0] + 0.07 * pxPerM)); x++) if (bodyPixel(shown, hidden, x, y)) overPx++;
+    out[name] = { pxPerM: +pxPerM.toFixed(1), overPx, ...floating(shown, hidden, p0, pxPerM) };
   }
   return out;
 }
@@ -288,7 +292,7 @@ for (const scene of SCENES) {
     manifest.about = about;
     console.log(`[${scene}] actor ${id}: ${limb ?? "nothing"} ${manifest.off ? "OFF" : "on"} after ${manifest.rounds ?? 0} rounds; wounds ${J(manifest.wounds.map((w) => [w.stump ? "STUMP" : `${w.type} ${w.shape}`, w.limb, w.alive ? "live" : "gone", w.r, `lip ${w.lip}`, w.pos]))}`);
     await record(scene, id, about, manifest);
-    const line = (m) => Object.entries(m).map(([k, v]) => `${k} ${v.floatPx} px (top ${v.topCm} cm) of ${v.bodyPx}`).join("; ");
+    const line = (m) => Object.entries(m).map(([k, v]) => `${k} over ${v.overPx}, floating ${v.floatPx} px (top ${v.topCm} cm) of ${v.bodyPx}`).join("; ");
     console.log(`[${scene}] floating over the point: ${line(manifest.views)}`);
     console.log(`[${scene}] with every lip at nothing: ${line(manifest.noLips)}`);
   } catch (e) { console.error(`FAIL [${scene}]: ${e.stack ?? e}`); process.exitCode = 1; manifest.error = String(e); }

@@ -52,6 +52,22 @@ function measure(character: string) {
   return { skull, fit, fill, head, body, size: [0, 1, 2].map(k => (fit.max[k]! - fit.min[k]!) * 1000) };
 }
 
+describe('the table is read-only, all the way down', () => {
+  it('BALL_HEADS, each entry, its spec and its measures are frozen: a reader cannot change what the next one gets', () => {
+    expect(Object.isFrozen(BALL_HEADS)).toBe(true);
+    for (const [name, entry] of Object.entries(BALL_HEADS)) {
+      expect(Object.isFrozen(entry), name).toBe(true);
+      expect(Object.isFrozen(entry.spec), name).toBe(true);
+      expect(Object.isFrozen(entry.fill), name).toBe(true);
+      expect(() => { (entry.spec as { eyeHs?: number }).eyeHs = 0; }, name).toThrow();
+      expect(() => { (entry.fill as { wide: number }).wide = 1; }, name).toThrow();
+      // A kit's plan hands out the entry's own spec.
+      expect(ballHeadFit(name)).toBe(entry.spec);
+    }
+    expect(() => { (BALL_HEADS as Record<string, unknown>).zombie = BALL_HEADS.cultist; }).toThrow();
+  });
+});
+
 describe('the eight ball-headed humanoids', () => {
   it('are eight of the thirteen humanoids, and none of them is a character whose bone the sculpted skull is fitted to', () => {
     expect(Object.keys(BALL_HEADS)).toEqual(['cultist', 'cultist-cowled', 'bride', 'female', 'schoolgirl', 'schoolgirl-alt', 'schoolgirl-described', 'bonewalker']);

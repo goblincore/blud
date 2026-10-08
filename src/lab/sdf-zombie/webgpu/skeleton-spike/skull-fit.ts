@@ -90,9 +90,13 @@ export interface SkullFitSpec {
   skin?: boolean;
 }
 
-/** The parameters `spec` fits with: its named fit's, with its own over them. Null for the envelope fit. */
+/** The parameters `spec` fits with: its named fit's, with its own over them (a parameter the spec names with no
+ *  value, `undefined`, is not one of its own: the named fit's stands). Null for the envelope fit. */
 export function skullFitParams(spec: Readonly<SkullFitSpec>): SkullFitParams | null {
-  return spec.fit === 'envelope' ? null : { ...SKULL_FITS[spec.fit], ...spec.params };
+  if (spec.fit === 'envelope') return null;
+  const params: SkullFitParams = { ...SKULL_FITS[spec.fit] };
+  for (const [key, value] of Object.entries(spec.params ?? {})) if (value !== undefined) (params as unknown as Record<string, unknown>)[key] = value;
+  return params;
 }
 
 /** Stage 1's result: a point p of the asset goes to scale * p + offset (per axis). */

@@ -230,6 +230,15 @@ describe('__sdfGame.skullPlates / skullFragments: the anatomical skull\'s plates
     ]);
     expect(seams.skullFragments()[0]!.pos).not.toBe(meshGibs[0]!.state.pos);
   });
+  it('skullFragmentsShow hides and shows the skull fragments, and nothing else among the mesh gibs', () => {
+    const gib = (tag: string) => ({ tag, object: { name: tag, visible: true, children: [] }, state: { pos: [0, 0, 0], vel: [0, 0, 0] } });
+    const meshGibs = [gib('skull'), gib('brain'), gib('skull')];
+    const seams = createSkeletonSeams({ gibs: { meshGibs } } as unknown as GameContext);
+    expect(seams.skullFragmentsShow(false)).toBe(2);
+    expect(meshGibs.map(g => g.object.visible)).toEqual([false, true, false]);
+    expect(seams.skullFragmentsShow(true)).toBe(2);
+    expect(meshGibs.map(g => g.object.visible)).toEqual([true, true, true]);
+  });
 });
 
 describe('__sdfGame.setOrgans / organs (organs as mesh, 2026-10-06)', () => {

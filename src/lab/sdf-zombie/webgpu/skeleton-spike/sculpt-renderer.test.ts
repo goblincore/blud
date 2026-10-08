@@ -18,7 +18,7 @@ import { headShape } from '../flame-anchors';
 import { meshBoneSource } from './mesh-skull';
 import { meshEyePlacements } from './mesh-eyes';
 import { SCULPT_VARIANTS, sculptPaintOf, sculptRecipe, type SculptVariant } from './sculpt-variant';
-import { createBoneMeshCache, SKULL_ASSET_WAIT_MS } from './sculpt-cache';
+import { createBoneMeshCache, startBoneMeshCache, SKULL_ASSET_WAIT_MS } from './sculpt-cache';
 import { AnatomicalSkullKit, type SkullFitPlan } from './anatomical-skull';
 import { BALL_HEADS, HUMANOIDS, ballHeadFit } from './skull-cast';
 import { createSkeletonSeams } from '../game-seams-skeleton';
@@ -210,6 +210,49 @@ describe('createBoneMeshCache', () => {
       expect(lines).toEqual([]);
       cache.dispose();
     }
+  });
+  it('a word of the query that was not honoured is said once, IN ANY BUILD: an unknown value, an overruled one', async () => {
+    for (const search of ['?skull=bones', '?sculpt=huge', '?skull=anatomical&sculpt=full', '?skull=anatomical&skullfit=huge']) {
+      const calls: [string, boolean | undefined][] = [];
+      const cache = await createBoneMeshCache(search, (line, always) => { calls.push([line, always]); }, loaded);
+      expect(calls, search).toHaveLength(1);
+      // `always`: the line is not kept to a dev build's console.
+      expect(calls[0]![1], search).toBe(true);
+      cache.dispose();
+    }
+  });
+  it('THE BOOT STARTS THE CACHE EARLY AND TAKES IT LATER (startBoneMeshCache): one cache made, at the start; a boot that draws no mesh skeleton disposes it', async () => {
+    const made: string[] = [], disposed: string[] = [];
+    let release: (() => void) | null = null;
+    const gate = new Promise<void>((ok) => { release = ok; });
+    const make = async (search: string) => {
+      made.push(search);
+      await gate;
+      const cache = new SegmentMeshCache(MESH_CELL, undefined, { ...kit, awaitedMs: null } as unknown as AnatomicalSkullKit, sculptRecipe('full'));
+      const dispose = cache.dispose.bind(cache);
+      cache.dispose = () => { disposed.push(search); dispose(); };
+      return cache;
+    };
+    // Started at once, before anyone takes it.
+    const early = startBoneMeshCache('?seed=1', true, make);
+    expect(made).toEqual(['?seed=1']);
+    const taking = early.take(true);
+    release!();
+    const cache = (await taking)!;
+    expect(made).toEqual(['?seed=1']);
+    expect(cache.skullKit!.awaitedMs).toBeGreaterThanOrEqual(0);
+    expect(disposed).toEqual([]);
+    // A boot that turns out not to draw the mesh skeleton: null, and the started cache is disposed.
+    const unused = startBoneMeshCache('?mode=deferred', true, make);
+    expect(await unused.take(false)).toBeNull();
+    await new Promise(r => setTimeout(r, 0));
+    expect(disposed).toEqual(['?mode=deferred']);
+    // A query that rules the mesh skeleton out starts nothing.
+    const none = startBoneMeshCache('?skeleton=procedural', false, make);
+    expect(made).toHaveLength(2);
+    expect(await none.take(false)).toBeNull();
+    expect(made).toHaveLength(2);
+    cache.dispose();
   });
   it.each(SCULPT_VARIANTS)('?sculpt=%s is the sculpted skull in that variant, whatever ?skull= says', async (variant) => {
     for (const search of [`?sculpt=${variant}`, `?skull=anatomical&sculpt=${variant}`, `?seed=1&sculpt=${variant}&skull=sculpt`]) {

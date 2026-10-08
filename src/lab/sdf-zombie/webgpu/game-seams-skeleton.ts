@@ -291,6 +291,14 @@ export function createSkeletonSeams(ctx: GameContext) {
         plate: g.object.name.replace(/^skull-fragment:/, ''), pos: [...g.state.pos], vel: [...g.state.vel],
         paint: (((g.object.children?.[0] as THREE.Mesh | undefined)?.material as THREE.Material | undefined)?.userData?.sculptPaint as 1 | 2 | undefined) ?? null,
       })),
+    /** Gate seam: draw or hide the live skull-fragment gibs (drawn by default; a fragment thrown later is drawn). A
+     *  gate photographs a frame with them and the same frame without, and what changed is where they are on screen.
+     *  Returns how many there are. */
+    skullFragmentsShow: (on: boolean): number => {
+      let n = 0;
+      for (const g of ctx.gibs.meshGibs) if (g.tag === 'skull') { g.object.visible = !!on; n++; }
+      return n;
+    },
     /** The sculpted skull's fragment cuts (mesh-renderer.ts fragmentStats): how many head meshes have been cut into
      *  fragments for a pop, and how long the last cut took (ms). null without the mesh skeleton. */
     skullFragmentCuts: () => ctx.render.segMeshRenderer?.fragmentStats() ?? null,
@@ -323,8 +331,11 @@ export function createSkeletonSeams(ctx: GameContext) {
       // Every skull the kit has fitted since boot: whose, under which fit, and how long it took to make (ms). One
       // per head revision, made when the character's skeleton sources are built (game-skeleton-actors.ts).
       skullFits: kitOf() ? kitOf()!.made.map(m => ({ ...m })) : [],
-      // How long the boot waited for the plates' asset (ms); null on a page that did not load it.
+      // How long the plates' asset took to load (request, parse, the kit's making; ms), and how long the boot stood
+      // waiting for it where the skeleton is built (the load is started as the boot begins and runs beside it);
+      // null on a page that did not load it.
       skullAssetMs: kitOf()?.loadMs ?? null,
+      skullAssetWaitMs: kitOf()?.awaitedMs ?? null,
       activeMode: ctx.render.skeletonMode === 'volume'
         ? (ctx.render.skeletonVolumes.size > 0 ? 'volume' : 'procedural')
         : ctx.render.skeletonMode === 'mesh'

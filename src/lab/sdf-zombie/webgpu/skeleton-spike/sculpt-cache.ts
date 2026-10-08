@@ -6,8 +6,9 @@ import { ANATOMICAL_SKULL_URL, loadAnatomicalSkull, type AnatomicalSkullKit, typ
 import { SegmentMeshCache } from './mesh';
 import { anatomicalFitOf, resolveSkull, sculptRecipe, SCULPT_DEFAULT_VARIANT } from './sculpt-variant';
 
-/** Says a line about a query that was not honoured, in a dev build's browser console; and, `always`, a line the
- *  page says in any build: the plates' asset did not load. */
+/** Says a line on the browser's console. `always`: in any build, which is how this module says each of its lines,
+ *  once: a word of the query that was not honoured (an unknown value, a value another overrules), and the plates'
+ *  asset that did not load. Without it, a dev build's console only. */
 export type SkullSay = (line: string, always?: boolean) => void;
 const consoleWarn: SkullSay = (line, always) => { if (always || import.meta.env.DEV) console.warn(`[skull] ${line}`); };
 
@@ -29,7 +30,7 @@ export async function createBoneMeshCache(
   waitMs: number = SKULL_ASSET_WAIT_MS,
 ): Promise<SegmentMeshCache> {
   const choice = resolveSkull(search);
-  for (const note of choice.notes) say(note);
+  for (const note of choice.notes) say(note, true);
   if (Object.keys(choice.anatomical).length === 0) return new SegmentMeshCache(undefined, undefined, null, choice.recipe);
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -43,4 +44,24 @@ export async function createBoneMeshCache(
     say(`the anatomical skull did not load (${error instanceof Error ? error.message : String(error)}): every character draws its sculpted bone (the sculpted skull, ${variant})`, true);
     return new SegmentMeshCache(undefined, undefined, null, choice.skull === 'anatomical' ? sculptRecipe(SCULPT_DEFAULT_VARIANT) : choice.recipe);
   } finally { clearTimeout(timer); }
+}
+
+/** THE BOOT'S CACHE, ASKED FOR EARLY. The plates' asset is a request and a parse the page need not stand still for:
+ *  the boot starts the cache as its first act (`mayMesh`: the query does not rule the mesh skeleton out) and takes
+ *  it where the skeleton is built, so the load runs beside everything between. take(false) is a boot that turned
+ *  out not to draw the mesh skeleton (deferred mode): the cache that was started is disposed when it arrives, and
+ *  the answer is null. take() also records how long the boot stood waiting on the kit (AnatomicalSkullKit.awaitedMs). */
+export function startBoneMeshCache(
+  search: string, mayMesh: boolean, make: (search: string) => Promise<SegmentMeshCache> = createBoneMeshCache,
+): { take(mesh: boolean): Promise<SegmentMeshCache | null> } {
+  const started = mayMesh ? make(search) : null;
+  return {
+    async take(mesh) {
+      if (!mesh) { void started?.then(cache => cache.dispose()); return null; }
+      const began = performance.now();
+      const cache = await (started ?? make(search));
+      if (cache.skullKit) cache.skullKit.awaitedMs = performance.now() - began;
+      return cache;
+    },
+  };
 }

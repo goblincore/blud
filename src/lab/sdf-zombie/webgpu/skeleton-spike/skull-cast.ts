@@ -22,6 +22,16 @@ export const HUMANOIDS = [
   'clown', 'clown-alt', 'juggernaut', 'bonewalker',
 ] as const;
 
+/** `value` and everything it holds, frozen: the table below is handed out by reference (a kit's plan answers with an
+ *  entry's own spec), and nothing that reads it may change what the next reader gets. */
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
+    for (const inner of Object.values(value)) deepFreeze(inner);
+    Object.freeze(value);
+  }
+  return value;
+}
+
 /** What a chosen fit measures on its character, at rest. Lengths in millimetres. */
 export interface SkullFill {
   /** The skull's box as a share of the head it was fitted to, across and front to back (the head's skin as the
@@ -70,7 +80,7 @@ export interface BallHead {
  *
  *  `tight` (3 mm kept) was not taken: it fills 3 to 6 points more and leaves the sculpted skulls' own thinnest cover
  *  over broad parts of these crania. */
-export const BALL_HEADS: Readonly<Record<string, BallHead>> = {
+export const BALL_HEADS: Readonly<Record<string, Readonly<BallHead>>> = deepFreeze({
   cultist: {
     spec: { fit: 'snug', skin: true, eyeHs: -0.139 }, paintedHs: -0.139,
     eyes: 'the ember prims in the hood (cultist.blob: at=0.50 on the skull bone)',
@@ -117,7 +127,7 @@ export const BALL_HEADS: Readonly<Record<string, BallHead>> = {
     fill: { wide: 0.75, deep: 0.68, cover: 6.0, eyesOff: -0.9, moved: 13.6 },
     short: 'a narrow head with a muzzle, 122 mm wide and 198 mm deep, its eyes high under the horns: the skull is as wide as the temples let it be there, and a skull\'s proportions keep it from reaching down the muzzle',
   },
-};
+});
 
 /** How `character`'s default skull is fitted; null for a character that draws its sculpted bone. */
 export function ballHeadFit(character: string): Readonly<SkullFitSpec> | null {

@@ -101,9 +101,12 @@ export class AnatomicalSkullKit {
   /** Every fitted skull this kit has made, in order: whose, under which fit, and the wall time it took to make
    *  (the fit, its geometry, its orbits), milliseconds. One entry per head revision: a census of what a boot paid. */
   readonly made: { character: string; fit: SkullFitName; ms: number }[] = [];
-  /** How long the page waited for the plates' asset (request, parse and the kit's making), milliseconds: set by
-   *  whoever loaded the kit for a page (sculpt-cache.ts); null for a kit nobody timed. */
+  /** How long the plates' asset took (request, parse and the kit's making), milliseconds: set by whoever loaded
+   *  the kit for a page (sculpt-cache.ts); null for a kit nobody timed. */
   loadMs: number | null = null;
+  /** How long the boot stood waiting for the kit where it needed it, milliseconds (sculpt-cache.ts
+   *  startBoneMeshCache: the load is started earlier and runs beside the boot); null for a kit nobody waited on. */
+  awaitedMs: number | null = null;
   /** One fit's name when the kit fits every humanoid alike; null for a kit with a plan of its own. */
   readonly fit: SkullFitName | null;
   readonly #plan: SkullFitPlan;

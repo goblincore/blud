@@ -99,6 +99,13 @@ describe('lipsAfterSever', () => {
     const out = lipsAfterSever([chest, holds, stump], PRIMS, HEADLESS, stump);
     expect(lips(out)).toEqual([1, 0, 0]);
     expect(out[0]).toBe(chest);
+    // AS THE GAME STAGED IT: the slug that cut the neck landed on the neck, the head's own flesh, which went with the
+    // head. Its carve is still a hole in the shoulders, 4 cm from the stump's centre: the stump's lip would stand in
+    // it. The chest's crater keeps its lip all the same.
+    const onNeck = crater(0, [0.019, -0.158, -0.025], 0.16, { rimScale: 0.3 });
+    const staged = lipsAfterSever([chest, onNeck, stump], PRIMS, HEADLESS, stump);
+    expect(lips(staged)).toEqual([1, 0, 0]);
+    expect(staged[0]).toBe(chest);
   });
 
   it('A SLUG CRATER BESIDE THE STUMP: both keep their lips', () => {

@@ -586,9 +586,10 @@ export function lipShareInHoles(centre: Vec3, ring: number, holes: readonly Carv
  * carves themselves and by nothing else:
  *   - the flesh the crater rides is gone: its prim is dead, or its prim's cluster is no longer alive;
  *   - THE STUMP OPENS IN A CRATER'S HOLE: at least LIP_HOLE_SHARE of the stump's lip shell lies inside the craters'
- *     carves (each a ball, floored by its depth slab where it has one). The stump loses its lip, which would stand
- *     in that hole; and each crater that by itself holds that share of the shell loses its own, whose near side
- *     stood on the limb: the two carves are one hole at the limb's root;
+ *     carves (each a ball, floored by its depth slab where it has one; the carve of a crater whose own flesh is gone
+ *     counts: it is still cut out of the body). The stump loses its lip, which would stand in that hole; and each
+ *     crater that by itself holds that share of the shell loses its own, whose near side stood on the limb: the two
+ *     carves are one hole at the limb's root;
  *   - THE CRATER IS IN THE BOWL: its centre lies inside the stump's carve. Its lip is raised about a point the bowl
  *     has removed.
  * Every other lip stays: a crater beside the stump keeps its lip and so does the stump (each carve takes only the
@@ -615,16 +616,18 @@ export function lipsAfterSever(
     return { centre: woundWorldPos(prims, w, bodyYaw), radius: w.radius, inward, depth: w.carveDepth ?? 0 };
   };
   const at = stump && prims[stump.primIdx] ? holeOf(stump) : null;
-  // The craters on live flesh whose carves the stump's lip shell may stand in, and that shell.
-  const live = at ? wounds.filter(w => w !== stump && carves(w) && prims[w.primIdx] && !gone(w)) : [];
-  const holes = live.map(holeOf);
+  // The craters whose carves the stump's lip shell may stand in, and that shell. A crater on flesh that is gone is
+  // one of them: its lip goes with the flesh, and its carve is still cut out of what the limb was joined to (the
+  // slug that takes a head off lands on the neck, the head's own flesh, and holds the stump's bowl).
+  const cutters = at ? wounds.filter(w => w !== stump && carves(w) && prims[w.primIdx]) : [];
+  const holes = cutters.map(holeOf);
   const shell = at && stump ? stump.radius * LIP_RING * WOUND_PROFILES[stump.type].rimOffsetScale : 0;
   const stumpHangs = !!at && lipShareInHoles(at.centre, shell, holes) >= LIP_HOLE_SHARE;
   let changed = false;
   const out = wounds.map((w) => {
     if (w === stump || !ring(w)) return w;
     let drop = gone(w);
-    const k = live.indexOf(w);
+    const k = cutters.indexOf(w);
     if (!drop && at && k >= 0) {
       const hole = holes[k]!;
       drop = inCarveHole(hole.centre, at) || lipShareInHoles(at.centre, shell, [hole]) >= LIP_HOLE_SHARE;
