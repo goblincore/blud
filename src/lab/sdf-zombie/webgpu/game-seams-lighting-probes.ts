@@ -25,6 +25,13 @@ export function createLightingProbeSeams(ctx: GameContext) {
       applyHemi(ctx); restampLevelProbes(ctx);
       return { weight: ctx.lighting.levelProbeWeight, gain: ctx.lighting.levelProbeGain };
     },
+    /** The near-light proxies (near-lights.ts): which real light each holds this frame, and how many lights each
+     *  held weapon's list shades. `on` false = `?nearlights=0` or deferred: the default list, every light. */
+    nearLights: () => ({
+      on: ctx.lighting.nearLights !== null,
+      slots: ctx.lighting.nearLights?.slots() ?? null,
+      heldList: ctx.weapon.heldLights?.list.getLights().length ?? null,
+    }),
     /** The cheap level tier: on/off, and per room the list indices its node shades (-1 = empty). */
     get levelListInfo() {
       return {

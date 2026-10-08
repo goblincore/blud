@@ -28,6 +28,7 @@
 import type { Rocket } from '../rockets';
 import type { FlareHarness } from './game-flare';
 import type { FlailWeapon } from './game-flail';
+import type { ViewmodelLights } from './viewmodel-lights';
 import type { HeadDamageLeaf } from './game-head-damage';
 import type { HeadSplitLeaf } from './game-head-split';
 import type { HeadShotLeaf } from './game-head-shot';
@@ -100,6 +101,10 @@ export interface WeaponState {
   axe: AxeHarness | null;
   /** Slot 1 (the spike flail, game-flail.ts); null until the aim rig exists. */
   flail: FlailWeapon | null;
+  /** The light list of everything else held under the view-model anchor (the shotgun, the arms, the shells, the
+   *  bundle, the launcher): viewmodel-lights.ts heldLights; null until the gun is in, in deferred mode and with
+   *  `?nearlights=0`. */
+  heldLights: ViewmodelLights | null;
   /** The melee head damage leaf (game-head-damage.ts): the flail's head-region hits; null until built. */
   headDamage: HeadDamageLeaf | null;
   /** The head split leaf (game-head-split.ts): the axe's head chops; null until built. */
@@ -235,6 +240,7 @@ export function makeWeaponState(): WeaponState {
     rod: null,
     axe: null,
     flail: null,
+    heldLights: null,
     headDamage: null,
     headSplit: null,
     headShot: null,
