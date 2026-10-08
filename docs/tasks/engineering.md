@@ -63,7 +63,10 @@ Tests, harnesses, the game-main decomposition, tooling, process notes. Part of t
   pin `game-main.ts` as text were repointed. Verified by `tsc`, vitest, a boot and `march-hash` (next row).
 - [x] Booted and gated at the merge with main (`6c2246ee`, 2026-10-07): Night Train boots to READY with 30 actors, the
   owner playtested, and `march-hash` room1 is the pinned canonical `d7392d52…` (repeat equal, wounded differs).
-- [ ] `extract-leaf` wrote a second `import { withCtx }` into `game-tick.ts` (removed by hand); fix the import merge.
+- [x] `extract-leaf` wrote a second `import { withCtx }` into `game-tick.ts` (2026-10-07; `tsc` TS2300, removed by
+  hand) — fixed: `mergeImportLines()` in `scripts/lib/game-main-deps.ts` merges the generated module's import lines
+  per specifier (the fixed game-context header, `importsFor()`'s re-inference of `withCtx`, and `--imports`), in the
+  new-module and append paths; tests pin one declaration each.
 - [ ] `game-tick.ts` is still one 1,190-line `tick()`. Split it into `system(ctx, dt)` calls in order: this is the
   ECS schedule. What is left in `main()` is ~5,500 lines of inline boot code and the `setDrawFn` closure.
 - [ ] Then folders, one quiet cluster at a time (`deferred-`, `post-`, `shutter-`, spike entrypoints first; `game-*`
