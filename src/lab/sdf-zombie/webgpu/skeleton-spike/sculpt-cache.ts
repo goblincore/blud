@@ -2,7 +2,7 @@
 //
 // The game's bone-mesh cache for a page's query string: the skull resolveSkull (sculpt-variant.ts) chooses, built.
 
-import { loadAnatomicalSkull, type AnatomicalSkullKit } from './anatomical-skull';
+import { ANATOMICAL_SKULL_URL, loadAnatomicalSkull, skullFitOf, type AnatomicalSkullKit } from './anatomical-skull';
 import { SegmentMeshCache } from './mesh';
 import { resolveSkull, sculptRecipe, SCULPT_DEFAULT_VARIANT } from './sculpt-variant';
 
@@ -15,7 +15,7 @@ const devWarn: SkullSay = line => { if (import.meta.env.DEV) console.warn(`[skul
  *  said once, here. The anatomical skull is an asset: when it does not load, the page draws the default sculpted
  *  skull and says so. `loadKit` loads it (the game's: loadAnatomicalSkull). */
 export async function createBoneMeshCache(
-  search: string, say: SkullSay = devWarn, loadKit: () => Promise<AnatomicalSkullKit> = loadAnatomicalSkull,
+  search: string, say: SkullSay = devWarn, loadKit: () => Promise<AnatomicalSkullKit> = () => loadAnatomicalSkull(ANATOMICAL_SKULL_URL, skullFitOf(search)),
 ): Promise<SegmentMeshCache> {
   const choice = resolveSkull(search);
   for (const note of choice.notes) say(note);

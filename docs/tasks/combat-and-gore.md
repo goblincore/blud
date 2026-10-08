@@ -49,6 +49,12 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
     other eight humanoids have no skull-shaped head bone and show balls where the anatomical skull drew a skull (the
     cultist is the one the levels spawn); and whether the carved heads need the 5 mm mesh.
     [Notes, the cast sheet and the cell pair](../dev-notes/2026-10-07-sculpt-skull-2/NOTES.md).
+  - **The anatomical skull's size (2026-10-07, branch `claude/anatomical-skull-fit`):** the owner found the skull
+    far too small in the zombie's head (0.56 of the sculpted skull's box volume; 43 mm wide in the female's 127 mm
+    head). A fit that sizes the skull to the head's flesh and pulls it in where it would poke through is behind
+    `?skullfit=affine|mid|snug|tight`; with no parameter the skull is byte for byte what it was. For the owner: which
+    fit ships, and whether per character (the female and the soldier read worse under the tighter ones).
+    [Notes, tables for all thirteen humanoids and look sheets](../dev-notes/2026-10-07-anatomical-skull-fit/NOTES.md).
   - **Gates (as of 2026-10-07):** `scripts/head-split-gate.mjs` (111 checks), `scripts/axe-gate.mjs` (29),
     `scripts/cut-wound-gate.mjs` (33), `scripts/head-burst-gate.mjs` (80). Each boot checks the skull it draws; the
     checks about the plates run on boots that ask for `?skull=anatomical`.

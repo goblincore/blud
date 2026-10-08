@@ -1199,7 +1199,12 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
               prepareGeometry(plate.geometry, s);
               drawBone(plate.geometry, plate.min, plate.max, plate.geometry.getAttribute('position').count, plate.geometry.index!.count / 3, owner, skull, scale);
             }
-          } else drawBone(baked.geometry, s.bounds.min, s.bounds.max, baked.verts, baked.tris, owner, skull, scale);
+          } else {
+            // The whole skull's box: the bone envelope holds the envelope fit, and a skull fitted to the flesh
+            // (FittedSkull.fit) brings its own, which may stand outside it.
+            const box = fitted?.fit ?? s.bounds;
+            drawBone(baked.geometry, box.min, box.max, baked.verts, baked.tris, owner, skull, scale);
+          }
           for (const e of eyes) {
             eyeM.copy(segM).multiply(tmpM.makeTranslation(e.center[0], e.center[1], e.center[2]))
               .multiply(tmpM.makeScale(e.radius, e.radius, e.radius));
