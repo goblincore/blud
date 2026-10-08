@@ -51,10 +51,21 @@ import { cutLipAmp, cutThreatWound, woundThreatMasks, type ThreatWound } from '.
 /** The shipped owner re-fold mode (counts2.z): 2 = the raiser gate (map-body.wgsl.ts).
  *  0 = the full re-fold it replaced; see game-seams-world.ts for the others. */
 export const SHIP_REFOLD_MODE = 2;
-/** The whole shipped counts2.z: the raiser gate + 32, the NORMAL HINT (calcNormal's taps
+/** The wound EXACT FIXES bit of counts2.z (map-body.wgsl.ts `exactFix`, wounds.wgsl.ts `gWoundExact`): a wound
+ *  row's reach uses the sample's own depth inside the body in place of a fixed 0.25 m, and the owner re-fold is
+ *  skipped where a pre-scan proves it must lose. Value-preserving by argument and by measurement. */
+export const WOUND_EXACT_BIT = 8;
+/** The whole shipped counts2.z: the raiser gate, + 32, the NORMAL HINT (calcNormal's taps
  *  re-fold only the limb that won at the hit; owner A/B 2026-09-22: no visible difference,
- *  -1.0 ms wounded melee). */
-export const SHIP_COUNTS2_Z = SHIP_REFOLD_MODE + 32;
+ *  -1.0 ms wounded melee), + 8, the wound EXACT FIXES (shipped 2026-10-08).
+ *
+ *  THE EXACT FIXES SHIPPED OFF FOR TWO WEEKS: on 2026-09-22 they measured "~0 gain" on melee bodies carrying 3 or 4
+ *  wounds. On a body with 32 (two buckshot volleys) every march step folded 19 wound rows, most of them reached only
+ *  through the fixed slack; with the fixes the walk folds 1.88M rows where it folded 7.79M, and the frame at 0.8 m is
+ *  3 to 5 ms shorter (7 to 9 ms with a torso chop and the head split wide). The float march target is the same to
+ *  the bit on every wound stage tried, colour and depth, and no `march-hash` pin moves
+ *  (docs/dev-notes/2026-10-08-frame-cost). `__sdfGame.setWoundExact(false)` is the old reach. */
+export const SHIP_COUNTS2_Z = SHIP_REFOLD_MODE + 32 + WOUND_EXACT_BIT;
 import { marchNormalRead, marchAnchorRead, marchMotionRead } from './march-private-reads';
 import { TEMPORAL_START_WGSL } from './temporal-start';
 import { createCrowdRecords, fallbackCrowdRecords, allocateSlot, MAX_CROWD_INSTANCES, type CrowdRecords } from './crowd-records';

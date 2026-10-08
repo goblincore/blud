@@ -26,7 +26,8 @@ What was found, largest first:
    the walls shade 16 to 22). 6 to 7.5 ms of a Night Train frame, 0.85 ms on the bare page. **Fixed** (§5.1): the
    frame in third class falls from 33.1 to 26.0 ms on the still frame, with no visible change.
 2. **Wounds, up close.** One zombie at 0.8 m: untouched 25 ms, 32 pellet wounds 34 ms, a torso chop on top 51 ms,
-   the head split wide on top of that 64 ms (per-frame fenced; §3.3). Open.
+   the head split wide on top of that 64 ms (per-frame fenced; §3.3). **A first part fixed** (§5.2): a switch that
+   already existed and shipped off returns 3 to 9 ms of it with the picture unchanged to the bit.
 3. **The CPU on Night Train is 15 to 20 ms**: about 9 ms submitting draws and 3.5 ms posing, packing and uploading
    all 30 bodies of the level whether or not they are in view (§3.4). Open.
 4. **Not worth optimising**: the post chain (FXAA, VHS and the upscale together are about 1 ms), level shadows on
@@ -223,17 +224,33 @@ frame; read the steps). The counters are exact and the same in every run.
 - **With 32 wounds a march step folds 19 wound rows and 6 body primitives.** Every wound's reach carries a fixed
   0.25 m of slack (`wounds.wgsl.ts`: a bound on how deep inside a limb a sample can be), so on a torso most wounds
   reach most samples.
-- **Removing rows per sample does not return time; removing them for everything does.** The existing exact-reach
-  switch (`setWoundExact`, ships off) cuts the walk's rows from 7.79M to 1.88M and the post-hit rows from 4.10M to
-  0.96M, and the frame reads 33.6 ms against 33.4 before and 38.0 in the A/A after it: not resolved. Turning the
-  coarse early-out OFF adds 25% rows (9.76M) and costs 10 ms. Both earlier cost passes found the same shape (a 78%
-  cut in organ evaluations bought a quarter of their time; −36% primitives bought −1.5 ms). The likely reason is that
-  fragments are shaded in groups and a group pays for its slowest member, so an exit only pays when its neighbours
-  take it too. *This is an inference from three measurements, not something verified in the GPU.*
-- **Cuts and the split cost more than their counters.** The split-wide frame folds fewer rows and primitives than the
-  32-pellet frame and costs 27 ms more. The census does not count a cut row's noise (a `noise3` and two `hash13`) or
-  the split's per-piece set-up (PR 35's notes, §5 item 3).
-- The per-ray wound list (`setWoundList`, ships off) changes no counter here and costs 17 ms more.
+- **The exact wound reach returns the rows AND the time** (`setWoundExact`; it shipped off since 2026-09-22, when it
+  measured "~0 gain" on bodies with 3 or 4 wounds). It cuts the walk's rows from 7.79M to 1.88M and the post-hit rows
+  from 4.10M to 0.96M on the 32-wound body. By alternation on three staged close-ups (new `main`, per-frame fenced,
+  8 rounds, two boots each; [`matrix-closeups.md`](matrix-closeups.md)):
+
+  | Leg | 32 pellet wounds | + a torso chop | + the head split wide |
+  | --- | --- | --- | --- |
+  | Base frame | 30.9 / 31.5 ms | 32.3 / 30.3 ms | 42.7 ms (the second boot's base was disturbed) |
+  | A/A | −0.20 / −0.25 | −0.97 / −0.80 | −1.12 / −1.10 |
+  | **Exact wound reach on** | **−2.72 / −5.28** | **−4.80 / −3.40** | **−7.02 / −9.18** |
+  | Wound early-out off | −0.30 / −0.05 | −1.85 / +1.35 | −0.40 / −0.90 |
+  | Owner re-fold off (a wrong frame: its ceiling) | −0.55 / −0.90 | −1.95 / −3.65 | −8.10 / −7.65 |
+  | Outer shell off | +16.5 / +13.2 | +9.7 / +8.6 | +17.7 / +14.5 |
+
+  **A correction.** A first version of this note read the exact reach as "no time resolved" and the early-out off
+  as "+10 ms", from single sequential `timeDraws` reads taken in a noisy stretch, and drew from them that work
+  skipped per sample does not pay on this GPU. The alternation says otherwise on both counts. The lesson is the
+  method's: one sequential read on this machine is not a measurement.
+- **The owner re-fold is most of what the split adds**: switching it off returns 8 ms of the split close-up's 42 (and 2
+  to 3.6 ms of the chopped one's). It cannot simply go (a raised arm's crater would erase the jaw), but it is where
+  PR 35's bounds work and any further work on the split should aim.
+- **Cuts and the split cost more than the row counter shows.** The split-wide frame folds fewer rows than the
+  32-pellet frame and costs more: a chop doubles the primitives folded per marched texel (38 → 84: the owner
+  re-fold), and a primitive fold costs about 5 ns here, not the 1.5 ns fitted in PR 35's notes. The census also
+  does not count a cut row's noise (a `noise3` and two `hash13`) or the split's per-piece set-up.
+- The per-ray wound list (`setWoundList`, ships off) changes no counter here and read 17 ms slower in one
+  sequential read (not re-measured by alternation).
 
 **PR 35 (the open head's cost pass) on current `main`.** It merges without a text conflict onto `d6bb9967` (the code
 reorganisation of PR 36 included). The same sequence on the merged tree, interleaved with `main`, two rounds:
@@ -378,26 +395,71 @@ directional light and takes a directional slot; not captured). A weapon picked u
 adopted within 2 s (120 frames), not at once: for that long it keeps the default list, as before. The owner has not
 seen it in play.
 
+### 5.2 The exact wound reach is the default (built)
+
+`zombie-gpu.ts` `SHIP_COUNTS2_Z` now carries the wound EXACT FIXES bit (`map-body.wgsl.ts` `exactFix`,
+`wounds.wgsl.ts` `gWoundExact`; written on 2026-09-21): a wound row's reach uses how deep inside the body the sample
+is in place of a fixed 0.25 m, and the owner re-fold is skipped where a pre-scan proves it must lose. No shader text
+changes (it is a uniform's value), so cold compile does not move. `__sdfGame.setWoundExact(false)` is the old reach.
+
+**Bit parity.** The float march target read with the switch off and on, the gates' pins set, on one body at each
+stage of §3.3 (untouched, 16 wounds, 32, + a torso chop, + the head cracked, + split wide): **0 of 120,000 texels
+differ, colour or depth, on five of the six stages.** On the sixth (straight after the second volley) the frame was
+still settling: two reads with the switch OFF already differed in 4 texels, and off against on in 8. The later
+stages hold the same 32 wounds and read 0.
+
+**Before and after** (the branch with §5.1 alone against the branch with this on top; two dev servers, boots
+interleaved, two repeats; frame p50 and the march pass, ms; full table in
+[`matrix-exact-reach.md`](matrix-exact-reach.md)):
+
+| Scene | Frame, before (rep 1 / rep 2) | After | Change | March, before → after |
+| --- | --- | --- | --- | --- |
+| Close-up, 32 pellet wounds | 29.6 / 29.8 | 26.6 / 26.6 | **−3.1** | 24.7 → 21.9 |
+| Close-up, + a torso chop | 27.1 / 27.3 | 24.1 / 24.0 | **−3.1** | 22.4 → 19.4 |
+| Close-up, + the head split wide | 38.5 / 38.5 | 32.3 / 32.9 | **−5.9** | 32.2 → 27.0 |
+| Bare arena, after a fight (6 bodies, 46 wounds) | 38.2 / 39.8 | 37.8 / 36.7 | −1.8 | 30.2 → 29.2 |
+| Boiler Room, after a fight (5 bodies, 24 wounds) | 37.2 / 35.1 | 33.6 / 33.2 | −2.8 | 24.4 → 22.5 |
+| Boiler Room and arena, walking in (no wounds) | 17.2 and 10.4 | 17.1 and 10.4 | 0 | the same |
+
+- It pays by wounds per body: 3 to 6 ms where one body carries 32, 1 to 2 ms where 46 are spread over six.
+- The Boiler Room's "before" read 2 to 4 ms higher in this run than in §5.1's (33.3 / 32.8 there): its takes here
+  were among the 8 the speed check sent back. The march's own time (−1.9 ms) is the steadier measure for that row.
+- The chopped, split close-up is now at 32.6 ms; it was 38.5.
+
+**Checks** (the branch with both changes, 2026-10-08):
+
+| Check | Result |
+| --- | --- |
+| Float march target, switch off against on, six wound stages | 0 of 120,000 texels differ on five; the sixth was not settled (above) |
+| `march-hash`, three modes | **no pin moved**, the three wounded pins among them (`76bd51aa…`, `bf6836cd…`, `f618070e…`) |
+| `scripts/cut-wound-gate.mjs` (`OUT=` scratch) | 33 checks, 0 failed |
+| `scripts/head-split-gate.mjs` (`OUT=` scratch) | 111 checks, 0 failed |
+| `scripts/axe-gate.mjs` (`OUT=` scratch) | 29 checks, 0 failed |
+| `scripts/head-burst-gate.mjs` (`OUT=` scratch) | **two full runs: 130 checks with 1 failed, then 130 with 0 failed.** The failure was "FS: nothing floats over the stump": its front view read 13,594 px once and 0 in the second run, in two runs of its boot alone, and on pristine `main`. A capture that raced, not a difference in the picture; the gate is not changed here |
+| `npm run typecheck` | clean |
+
 ## 6. The ranking: what closes the gap to 33.3 ms
 
 Where the heavy scenes stand with §5.1 in:
 
-| Heavy scene | Before | With §5.1 | Still over by | What is left in it |
+| Heavy scene | Before | With §5.1 and §5.2 | Still over by | What is left in it |
 | --- | --- | --- | --- | --- |
-| Boiler Room, after a fight | 37.6 ms | 33.1 ms | 0 (no margin) | march 23.5 of it: wounds |
-| Bare arena, after a fight (46 wounds) | 37.4 ms | 37.4 ms (no Night Train lights there) | 4.1 | march 30.1: wounds |
-| Close-up, 32 wounds + a torso chop + the head split wide | 36.2 ms | about the same | 2.9 | march 31.2: cuts and the split |
+| Boiler Room, after a fight | 37.6 ms | 33.4 ms | 0 (no margin) | march 22.5 of it: wounds |
+| Bare arena, after a fight (46 wounds) | 37.4 ms | 37.2 ms | 3.9 | march 29.2: six wounded bodies close |
+| Close-up, 32 wounds + a torso chop + the head split wide | 38.5 ms | 32.6 ms | 0 (no margin) | march 27.0: the split's re-folds |
 | Third class, walking in | 26.0 ms | 19.9 ms | under by 13 | |
 
-So everything that is still over is the march on wounded bodies. In order of evidence:
+Two of the three are at the line with nothing to spare and the arena is still 4 ms over; all of what is left is the
+march on wounded bodies. In order of evidence:
 
 | # | Candidate | Helps | Expected | Evidence | Risk | What changes on screen |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | **Near lights for the held meshes** (§5.1) | Night Train | −2.5 to −6.1 ms; entry hitch halved | built, measured | low | thin far glints on the barrels go; no tube shadow on the gun |
+| 1b | **The exact wound reach as the default** (§5.2) | every wounded body | −3 to −5 ms at 32 pellet wounds, −7 to −9 ms on the chopped, split close-up | built; alternation and bit parity | low: the same picture to the bit | none |
 | 2 | **The props and the kit on their room's lights** (fixtures, pickups, spent shells: 58 meshes on the default list; the soldiers' kit mirrors it too) | Night Train | −1 to −1.5 ms (the 58 meshes' ceiling is 1.5 ms; the kit is not measured) | §3.1 | low: they do not move between rooms, so a fixed list per room rebuilds nothing | none expected |
 | 3 | **Merge PR 35** (the open head's and the cuts' bounds) | cuts, open heads | −23 to −29% of the march's primitive folds on a chopped or split body; −1.5 ms on a clean open head by its own measure; not resolved on a heavily wounded one | §3.3 | low to medium: it predates the skull stack; its three gates and `march-hash` must be re-run on the merge | none (the same picture to the bit, or the same solid inside a smaller hull) |
-| 4 | **Find the cut's and the split's uncounted cost** (a torso chop adds 16 ms to a body with 32 wounds, the split wide another 26 ms, and neither shows in rows or primitives) | the close-up, any chopped body | unknown until attributed; the largest unexplained item | §3.3 | none to measure; the fixes it points at (the cut's noise confined to its rim, the split's per-piece set-up reused) are exact or near-exact | none intended |
-| 5 | **Fold wound rows for a region, not a sample** (a per-tile or per-cluster mask of which wounds can reach it, written when a wound is stamped) | every wounded body | bracketed by two measurements: all rows for everyone costs +10 ms (the early-out off), per-sample removal of 76% returns nothing resolved. A regional cut should land between | §3.3 | medium: a bound that is too tight is a hole in a body | none if the bound is exact |
+| 4 | **The owner re-fold under cuts and the split** (it is 8 ms of the split close-up, 2 to 3.6 ms of the chopped one) | the close-up, any chopped or split body | up to its ceiling; PR 35 already takes 23 to 29% of the primitive folds | §3.3 | medium to high: every bound in it carries an exactness argument | none intended |
+| 5 | **A wound index per region** (a per-tile or per-cluster mask of which wounds can reach it, written when a wound is stamped) | every wounded body | what is left after §5.2: 1.9M of 7.8M rows remain, so at most a few ms more | §3.3 | medium: a bound that is too tight is a hole in a body | none if the bound is exact |
 | 6 | **Bake craters into a rest-space volume per body** (the research pass's only route to a cost that does not grow with the count) | every wounded body | removes the dependence on count for craters | published practice (Claybook, Dreams); nothing measured here | high: days of work; rims limited by the volume's cell; cuts are too thin for it | crater rims softer unless the noise stays procedural |
 | 7 | **Pose, pack and upload only the bodies in view** | every level's CPU | −1 to −2.5 ms of tick | §3.2 | medium: the posed body has about 30 readers inside `game-actor.ts`; demos must replay to the same hash | none |
 | 8 | **Draw only the rooms the doorways show** (a portal test over the level's rooms; today every carriage ahead is drawn) | Night Train | −3 ms in third class (2 of it CPU), −1 ms in the Boiler Room | §3.2 | medium: a wrong test is a carriage popping in at a doorway | none if the test is exact |
@@ -417,7 +479,7 @@ frames are bound by the GPU (the GPU waits on the CPU for 0.8 to 2.4 ms after th
 | Freezing the level's matrices | not resolved (+0.25 ms): the cost is the scene walk, not the flag |
 | Merging the gun's and the arms' 101 meshes; normal maps or parallax on them | under 1 ms of CPU; their cost was the light list, now fixed. Worth folding into the shotgun's own clean-up, not a perf item |
 | Early-Z (`?earlyz=1`) on the train scenes | third class walking in: march 12.5 → 12.0 ms, frame inside the floor; Boiler Room after the slug: march 23.1 → 24.6 ms. Its notes already say it only pays where bodies hide behind walls or each other |
-| The exact wound reach (`setWoundExact`), the per-ray wound list | −76% rows, no time resolved; the list costs 17 ms more here |
+| The per-ray wound list (`setWoundList`) | changes no counter on the close-up; the exact reach already drops the rows it would |
 | Goo, gib chunks, the bone and organ meshes | 0.3 to 1.5 ms, mostly under the floor |
 
 **One wider observation.** Three of today's findings have the same shape: a system grew its own answer to "what is

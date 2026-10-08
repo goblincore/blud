@@ -212,10 +212,10 @@ const ABLATIONS = [
   ["march: miss cull off", "__sdfGame.setMissCull(false)", "__sdfGame.setMissCull(keep.missCull)"],
   ["march: outer shell off", "__sdfGame.setShell(false)", "__sdfGame.setShell(keep.shell)"],
   ["march: occluder off", "__sdfGame.setOccluder(false)", "__sdfGame.setOccluder(keep.occluder)"],
-  // Two switches that change how many wound rows a sample folds (counted by scripts' census, mode 13): the exact reach
-  // (ships OFF; on, a sample outside the body drops the rows whose crater and rim are out of range: -76% rows on a
-  // 32-wound body) and the coarse early-out (ships ON; off, every sample folds every row).
-  ["march: exact wound reach ON", "__sdfGame.setWoundExact(true)", "__sdfGame.setWoundExact(keep.woundExact)"],
+  // Two switches that change how many wound rows a sample folds (the march's census, mode 13): the exact reach (ships
+  // ON since 2026-10-08; off is the old fixed 0.25 m slack: 4 times the rows on a 32-wound body; on a tree from before
+  // that date this leg measures turning it ON) and the coarse early-out (ships ON; off, every sample folds every row).
+  ["march: exact wound reach flipped", "__sdfGame.setWoundExact(!keep.woundExact)", "__sdfGame.setWoundExact(keep.woundExact)"],
   ["march: wound early-out off", "__sdfGame.setWoundEarlyOut(false)", "__sdfGame.setWoundEarlyOut(true)"],
   // The owner re-fold: where a wound raised the field, the march folds the owner cluster's primitives again.
   ["march: owner re-fold off", "__sdfGame.setOwnerRefold(false)", "__sdfGame.setOwnerRefold(keep.ownerRefold)"],

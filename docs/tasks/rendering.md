@@ -17,14 +17,23 @@ refuses to run beside a stray game page and retakes a run when a fixed loop in t
   Train. Night Train frames −2.5 to −6.1 ms; the first frame in a carriage 159 to 202 ms → 51 to 84 ms; no change on
   the bare page. `march-hash` unmoved, flail gate 47 / 0, axe gate 29 / 0. **Owner look pending**
   ([sheet](../dev-notes/2026-10-08-frame-cost/near-lights-look.jpg)).
+- [x] **The exact wound reach is the default** (`zombie-gpu.ts` `SHIP_COUNTS2_Z`; `__sdfGame.setWoundExact(false)` is
+  the old fixed 0.25 m). It shipped off since 2026-09-22 ("~0 gain" on bodies with 3 or 4 wounds). With 32 wounds on
+  a body: the walk folds 1.88M wound rows where it folded 7.79M; close-ups −3.1 ms (32 pellets), −3.1 ms (+ a torso
+  chop), −5.9 ms (+ the head split wide); the Boiler Room's march after a fight −1.9 ms. The float march target is
+  the same to the bit on every wound stage tried and no `march-hash` pin moved; cut-wound gate 33 / 0, head-split
+  111 / 0, axe 29 / 0, head-burst 130 / 0 on its second run (one flaky failure on its first, see the notes).
 - [ ] The props (fixtures, pickups, spent shells) and the soldiers' kit still shade the whole level's lights: about
   1 to 1.5 ms on Night Train. They do not change rooms, so a fixed list per room is enough.
 - [ ] PR 35 (the open head's and the cuts' bounds) holds on current `main` by its counters (−23 to −29% primitive
   folds on a chopped or split body). Re-run its gates on the skull stack, then merge.
-- [ ] Wounds up close are what is left: one zombie at 0.8 m reads 25 ms untouched, 34 ms with 32 pellet wounds, 51
-  ms with a torso chop on top, 64 ms with the head split wide (per-frame fenced). A step folds 19 wound rows against
-  6 primitives; removing rows per sample returns nothing resolved, so the cut has to be per region (a mask per tile
-  or cluster) or baked. The cut's and the split's cost does not show in the counters and needs its own attribution.
+- [ ] Wounds up close are what is left: one zombie at 0.8 m read 25 ms untouched, 34 ms with 32 pellet wounds, 51
+  ms with a torso chop on top, 64 ms with the head split wide (per-frame fenced, before the exact reach). After it,
+  the owner re-fold is the largest part of a chopped or split body's extra cost (switching it off, a wrong frame,
+  returns 8 ms of the split close-up). Further out: a wound index per region, and baking craters into a rest-space
+  volume so the cost stops growing with the count.
+- [ ] Draw only the rooms the doorways show: standing in third class, 165 to 192 of 425 draw calls are other
+  carriages behind the end wall (about 3 ms there, 2 of it CPU; about 1 ms in the Boiler Room).
 - [ ] CPU: every actor of the level is posed, packed and uploaded each tick, in view or not (about 0.12 ms a body,
   3.5 ms on Night Train). The visual set gates the upkeep around a body, not the body.
 - [ ] Hitches: the first shot of a boot builds 28 to 37 pipelines (worst frame 70 to 150 ms).
