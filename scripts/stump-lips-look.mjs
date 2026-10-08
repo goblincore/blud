@@ -15,9 +15,10 @@
 //           hit for a lip (damage.ts rimScaleFor): the wounds a body has with a lip of nothing, or nearly.
 // Each scene is photographed AS THE GAME SHIPS (the default post chain, VHS on) from 1.3 m at the player's eye
 // height, from the front, both sides and the back, and CLEAN (VHS off) from 0.8 m; and MEASURED: a clean frame with
-// the body drawn against the same frame with the body's flesh and bone meshes out of it gives the body's own pixels,
-// and `top` is how far over the stump's centre the highest of them stands, in each view (within 13 cm either side
-// of the stump's centre on screen). A lip standing free over the stump raises it.
+// the body drawn against the same frame with the body's flesh and bone meshes out of it gives the body's own pixels
+// (a shadow leaving a lit wall is told apart by its colour), and `floatPx` counts those over the stump that are
+// joined to nothing (floating). The same again with every lip's height at nothing says whether what floats is lip or
+// flesh.
 //
 // Output: <out>/<scene>__<name>.png and <out>/<scene>.json (the wounds with their lips, the measures).
 // Usage (own servers): SCENES=float,chest node scripts/stump-lips-look.mjs <vite port> <cdp port> <out dir>
@@ -158,30 +159,78 @@ async function grab(name) {
   return decodePng(buf);
 }
 const VIEWS = [["front", 0], ["left", 90], ["back", 180], ["right", -90]];
-/** Photograph actor `id` about the world point `c`, and measure the body's own pixels over it. */
-async function record(scene, id, c, manifest) {
-  await ev("__sdfGame.setBleed(false)"); await stepN(3);
-  for (const [name, yaw] of VIEWS) { await camAt(c, yaw, 1.3); await grab(`${scene}__ships-${name}`); }
-  await ev("__sdfGame.setVhs(null)");
-  manifest.views = {};
+const lum = (img, i) => 0.2126 * img.data[i] + 0.7152 * img.data[i + 1] + 0.0722 * img.data[i + 2];
+/** A pixel the BODY draws: it changes when the body is taken out of the frame, and the change is not the body's
+ *  shadow leaving a lit surface (a shadow darkens every channel by one factor; flesh changes the colour). */
+function bodyPixel(shown, hidden, x, y) {
+  if (!differs(shown, hidden, x, y)) return false;
+  const i = (y * shown.w + x) * shown.ch, ls = lum(shown, i), lh = lum(hidden, i);
+  if (lh > 24 && ls < lh) {
+    const k = ls / lh;
+    if ([0, 1, 2].every((c) => Math.abs(shown.data[i + c] - hidden.data[i + c] * k) <= 10)) return false;
+  }
+  return true;
+}
+/** WHAT FLOATS OVER A POINT: in the window from 2 cm to 36 cm over `p0` (the point on screen) and 16 cm to either
+ *  side, the body's pixels that are not joined, inside the window, to the body's pixels on the window's bottom or
+ *  side edges. Returns their count, the body's pixels in the window, and how high over the point the highest
+ *  floating one stands (cm). */
+function floating(shown, hidden, p0, pxPerM) {
+  const x0 = Math.max(0, Math.round(p0[0] - 0.16 * pxPerM)), x1 = Math.min(shown.w - 1, Math.round(p0[0] + 0.16 * pxPerM));
+  const y0 = Math.max(0, Math.round(p0[1] - 0.36 * pxPerM)), y1 = Math.min(shown.h - 1, Math.round(p0[1] - 0.02 * pxPerM));
+  const w = x1 - x0 + 1, h = y1 - y0 + 1;
+  if (w <= 0 || h <= 0) return { floatPx: 0, bodyPx: 0, topCm: 0 };
+  const body = new Uint8Array(w * h), seen = new Uint8Array(w * h), stack = [];
+  let bodyPx = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (bodyPixel(shown, hidden, x0 + x, y0 + y)) { body[y * w + x] = 1; bodyPx++; }
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (body[y * w + x] && (y >= h - 3 || x === 0 || x === w - 1)) { seen[y * w + x] = 1; stack.push(y * w + x); }
+  while (stack.length) {
+    const i = stack.pop(), x = i % w, y = (i - x) / w;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      const j = ny * w + nx;
+      if (body[j] && !seen[j]) { seen[j] = 1; stack.push(j); }
+    }
+  }
+  let floatPx = 0, top = null;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (body[y * w + x] && !seen[y * w + x]) { floatPx++; top ??= (p0[1] - (y0 + y)) / pxPerM * 100; }
+  return { floatPx, bodyPx, topCm: top === null ? 0 : +top.toFixed(1) };
+}
+/** The body's own pixels about `c` from each view (clean frames, 0.8 m): what of them floats over the point. */
+async function measure(id, c, save) {
+  const out = {};
   for (const [name, yaw] of VIEWS) {
     await camAt(c, yaw, 0.8);
-    const shown = await grab(`${scene}__clean-${name}`);
+    const shown = await grab(save ? `${save}-${name}` : null);
     await fleshShown(id, false); await ev("__sdfGame.meshSkeletonShow({ bones: false, eyes: false, organs: false })");
     const hidden = await grab(null);
     await fleshShown(id, true); await ev("__sdfGame.meshSkeletonShow({ bones: true, eyes: true, organs: true })");
     const p0 = await toPx(c), p1 = await toPx(add(c, [0, 0.1, 0]));
     if (!p0 || !p1) continue;
-    const pxPerM = (p0[1] - p1[1]) / 0.1, half = Math.round(0.13 * pxPerM);
-    // The highest row over the point that holds a run of the body's own pixels (3 or more in the band).
-    let top = null, count = 0;
-    for (let y = Math.max(0, Math.round(p0[1] - 0.45 * pxPerM)); y < Math.round(p0[1]); y++) {
-      let n = 0;
-      for (let x = Math.max(0, Math.round(p0[0]) - half); x <= Math.min(shown.w - 1, Math.round(p0[0]) + half); x++) if (differs(shown, hidden, x, y)) n++;
-      if (n >= 3) { if (top === null) top = (p0[1] - y) / pxPerM; count += n; }
-    }
-    manifest.views[name] = { pxPerM: +pxPerM.toFixed(1), topCm: top === null ? 0 : +(top * 100).toFixed(1), bodyPx: count };
+    const pxPerM = (p0[1] - p1[1]) / 0.1;
+    out[name] = { pxPerM: +pxPerM.toFixed(1), ...floating(shown, hidden, p0, pxPerM) };
   }
+  return out;
+}
+/** Photograph actor `id` about the world point `c`, and measure what of the body floats over it: as it is, and with
+ *  every lip of the body's wounds taken down to nothing (the lip height uniform): what still floats then is flesh. */
+async function record(scene, id, c, manifest) {
+  await ev("__sdfGame.setBleed(false)"); await stepN(3);
+  for (const [name, yaw] of VIEWS) { await camAt(c, yaw, 1.3); await grab(`${scene}__ships-${name}`); }
+  await ev("__sdfGame.setVhs(null)");
+  manifest.views = await measure(id, c, `${scene}__clean`);
+  // Every lip of this body's wounds to nothing: the ring's own wounds, then one pellet crater stamped on a shin (it
+  // has no lip either), which makes the actor upload its wounds again.
+  const shin = add(await ev(`__sdfGame.actorLimbCenter(${id}, "torso")`), [0, -0.75, 0]);
+  await ev(`(() => { for (const w of __sdfGame.zombie(${id}).woundList()) w.rimScale = 0; return 1; })()`);
+  for (const dx of [0.08, -0.08, 0.12, -0.12]) {
+    const on = add(shin, mul([f[2], 0, -f[0]], dx)), from = add(on, mul(f, 0.8)), d = unit(sub(on, from));
+    if (await ev(`!!__sdfGame.stampWoundAt(${from[0]}, ${from[1]}, ${from[2]}, ${d[0]}, ${d[1]}, ${d[2]}, "pellet", ${id})`)) break;
+  }
+  await ev(`(() => { for (const w of __sdfGame.zombie(${id}).woundList()) w.rimScale = 0; return 1; })()`);
+  await stepN(2);
+  manifest.noLips = await measure(id, c, `${scene}__nolips`);
 }
 
 for (const scene of SCENES) {
@@ -201,26 +250,25 @@ for (const scene of SCENES) {
       for (; n < 8 && await limbOn(id, "head"); n++) { const cur = (await frameOf(id)) ?? fr; await shoot(add(cur.centre, [0, -0.06, 0]), 2, 40, "__sdfGame.fireSlug()"); }
       manifest.rounds = n;
     } else if (scene === "beside") {
-      // A slug's crater on the top of the right shoulder, 17 cm out from the neck.
-      const on = add(fr.centre, add(mul(right, 0.17), [0, -0.2, 0]));
-      manifest.stamped = await stamp(add(on, [0, 0.6, 0]), on, "slug");
+      // A slug's crater on the top of the right shoulder, 16 cm out from the neck (stamped from straight above).
+      const on = add(fr.centre, add(mul(right, 0.16), [0, -0.22, 0]));
+      manifest.stamped = await stamp(add(on, [0, 0.5, 0]), on, "slug");
       manifest.before = await woundsOf(id);
+      // Both barrels at the neck from 1.2 m, until the head comes off.
       let n = 0;
-      for (; n < 10 && await limbOn(id, "head"); n++) { const cur = (await frameOf(id)) ?? fr; await shoot(add(cur.centre, [0, -0.04, 0]), 2, 0, "__sdfGame.fire(2)"); }
+      for (; n < 6 && await limbOn(id, "head"); n++) { const cur = (await frameOf(id)) ?? fr; await shoot(add(cur.centre, [0, -0.1, 0]), 1.2, 0, "__sdfGame.fire(2)"); }
       manifest.rounds = n;
     } else if (scene === "arm") {
       limb = "armL";
-      const sh = await ev(`(() => { const p = __sdfGame.zombie(${id}).posed(); const c = p.clusters.find((q) => q.limb === "armL"), t = p.clusters.find((q) => q.limb === "torso"); const o = p.prims.slice(c.start, c.start + c.count).filter((q) => !q.dead && q.op !== "sub");
-        let best = null, bd = 1e9; for (const q of o) for (const e of [q.a, q.b]) { const d = Math.hypot(e[0] - t.center[0], e[1] - t.center[1], e[2] - t.center[2]); if (d < bd) { bd = d; best = [...e]; } } return best; })()`);
-      manifest.shoulder = sh;
-      // A slug's crater on the chest, 12 cm in from the shoulder toward the body's middle line and 6 cm under it.
-      const tc = await ev(`__sdfGame.actorLimbCenter(${id}, "torso")`);
-      const inward = unit([tc[0] - sh[0], 0, tc[2] - sh[2]]);
-      const on = add(sh, add(mul(inward, 0.12), [0, -0.06, 0]));
+      const arm = await ev(`__sdfGame.actorLimbCenter(${id}, "armL")`), tc = await ev(`__sdfGame.actorLimbCenter(${id}, "torso")`);
+      // A slug's crater on the chest, on the arm's side of the body's middle line and 12 cm over the torso's centre.
+      const side = unit([arm[0] - tc[0], 0, arm[2] - tc[2]]);
+      const on = add(tc, add(mul(side, 0.07), [0, 0.12, 0]));
       manifest.stamped = await stamp(add(on, mul(f, 0.8)), on, "slug");
       manifest.before = await woundsOf(id);
+      // Slugs at the middle of the left arm until a piece of it comes off (a stump is stamped).
       let n = 0;
-      for (; n < 8 && await limbOn(id, "armL"); n++) await shoot(sh, 2, 20, "__sdfGame.fireSlug()");
+      for (; n < 8 && !(await woundsOf(id)).some((w) => w.stump); n++) await shoot(await ev(`__sdfGame.actorLimbCenter(${id}, "armL")`), 2, 20, "__sdfGame.fireSlug()");
       manifest.rounds = n;
     } else if (scene === "thin") {
       limb = null;
@@ -233,14 +281,16 @@ for (const scene of SCENES) {
       about = tip;
     }
     await stepN(60); await thaw();
-    manifest.off = limb ? !(await limbOn(id, limb)) : null;
+    manifest.off = limb === "armL" ? (await woundsOf(id)).some((w) => w.stump) : limb ? !(await limbOn(id, limb)) : null;
     manifest.wounds = await woundsOf(id);
     const stump = [...manifest.wounds].reverse().find((w) => w.stump);
     about ??= stump ? stump.pos : (await ev(`__sdfGame.actorLimbCenter(${id}, "torso")`));
     manifest.about = about;
     console.log(`[${scene}] actor ${id}: ${limb ?? "nothing"} ${manifest.off ? "OFF" : "on"} after ${manifest.rounds ?? 0} rounds; wounds ${J(manifest.wounds.map((w) => [w.stump ? "STUMP" : `${w.type} ${w.shape}`, w.limb, w.alive ? "live" : "gone", w.r, `lip ${w.lip}`, w.pos]))}`);
     await record(scene, id, about, manifest);
-    console.log(`[${scene}] the body over the point: ${J(manifest.views)}`);
+    const line = (m) => Object.entries(m).map(([k, v]) => `${k} ${v.floatPx} px (top ${v.topCm} cm) of ${v.bodyPx}`).join("; ");
+    console.log(`[${scene}] floating over the point: ${line(manifest.views)}`);
+    console.log(`[${scene}] with every lip at nothing: ${line(manifest.noLips)}`);
   } catch (e) { console.error(`FAIL [${scene}]: ${e.stack ?? e}`); process.exitCode = 1; manifest.error = String(e); }
   finally { writeFileSync(`${OUT}/${scene}.json`, JSON.stringify(manifest, null, 1) + "\n"); close(); }
 }

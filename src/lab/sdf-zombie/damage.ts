@@ -529,10 +529,12 @@ export function woundCarveNormal(prims: Primitive[], wound: Wound, bodyYaw = 0):
   return add(add(scale(u, c[0]), scale(v, c[1])), scale(w, c[2]));
 }
 
-/** How far a crater's everted lip reaches from its centre, in its own radii: the shader centres the lip's ring at
- *  woundCfg.w x rimOffsetScale radii (1.15 x at most 1.12 for a torn wound) and gives it a width of woundCfg2.x radii
- *  (0.42) each way (march/fields/wounds.wgsl.ts). */
-export const LIP_REACH = 1.6;
+/** WHERE A CRATER'S EVERTED LIP STANDS, in its own radii from its centre: the shader raises the lip in a shell about
+ *  the wound's centre, at woundCfg.w (1.15) x the profile's rimOffsetScale radii (march/fields/wounds.wgsl.ts), about
+ *  0.42 radii thick each way. */
+export const LIP_RING = 1.15;
+/** A lip is taken when at least this share of its shell stands in a hole (lipsAfterSever). */
+export const LIP_HOLE_SHARE = 0.5;
 
 /** What lipsAfterSever leaves of a lip that would hang, as a share of the lip it had. */
 export const STUMP_LIP = 0;
@@ -542,28 +544,57 @@ let stumpLip: number = STUMP_LIP;
 export function setStumpLip(share: number): void { stumpLip = Math.min(1, Math.max(0, share)); }
 export function stumpLipShare(): number { return stumpLip; }
 
+/** Directions spread evenly over the sphere (a Fibonacci lattice): where lipShareInHoles samples a lip's shell. */
+const SHELL_DIRS: readonly Vec3[] = Array.from({ length: 128 }, (_, k) => {
+  const y = 1 - (2 * k + 1) / 128, r = Math.sqrt(1 - y * y), a = k * Math.PI * (3 - Math.sqrt(5));
+  return [r * Math.cos(a), y, r * Math.sin(a)] as Vec3;
+});
+
+/** A wound's carve in the world: its ball, and the slab that floors it (the inward unit and the depth along it; null:
+ *  the whole ball is carved). */
+export interface CarveHole { centre: Vec3; radius: number; inward: Vec3 | null; depth: number }
+/** `p` is inside the hole: in its ball, and above its floor. */
+export function inCarveHole(p: Vec3, h: CarveHole): boolean {
+  const v = sub(p, h.centre);
+  if (dot(v, v) >= h.radius * h.radius) return false;
+  return !h.inward || dot(v, h.inward) < h.depth;
+}
+/** THE SHARE OF A LIP'S SHELL THAT STANDS IN HOLES: of the sphere the lip is raised about (`centre`, `ring` metres
+ *  out), the part that lies inside any of `holes`. 0: the lip is clear of them; 1: all of it stands in removed flesh. */
+export function lipShareInHoles(centre: Vec3, ring: number, holes: readonly CarveHole[]): number {
+  if (holes.length === 0) return 0;
+  let inside = 0;
+  for (const d of SHELL_DIRS) {
+    const p: Vec3 = [centre[0] + d[0] * ring, centre[1] + d[1] * ring, centre[2] + d[2] * ring];
+    if (holes.some(h => inCarveHole(p, h))) inside++;
+  }
+  return inside / SHELL_DIRS.length;
+}
+
 /**
- * THE LIPS THAT WENT WITH THE LIMB. A crater's lip is flesh the shader ADDS in a ring round the crater, wherever the
- * ring passes within a few centimetres of the body's skin as it was BEFORE any wound (applyWounds' rimLocal reads the
- * un-wounded field). Carves do not hold it back: where another wound's carve has since taken that skin away, the lip
- * stays, standing in the hole. A sever makes exactly that hole: the stump wound is a deep bowl stamped where a
- * limb's root was, usually beside the craters that cut the limb off, and their lips (and the stump's own, when it
- * opens inside a bigger crater) were left hanging over the stump as a cup or an arc of flesh attached to nothing
- * (the owner, 2026-10-07: "a floating piece of the neck" over a headless zombie).
+ * THE LIPS THAT WENT WITH THE LIMB. A crater's lip is flesh the shader ADDS in a shell round the crater, wherever the
+ * shell passes within a few centimetres of the body's skin as it was BEFORE any wound (applyWounds' rimLocal reads the
+ * un-wounded field). An earlier wound's carve does not hold a later wound's lip back: where that carve has taken the
+ * skin away, the lip stays, standing in the hole. A sever makes exactly that: the stump wound is a deep bowl stamped
+ * last, where a limb's root was, often inside the crater that cut the limb off, and its lip was left standing in
+ * that crater's hole as a cup or an arc of flesh attached to nothing (the owner, 2026-10-07: "a floating piece of
+ * the neck" over a headless zombie). The crater's own lip, on the limb's side, stood on the limb, and is left over
+ * the bowl the same way.
  *
- * So after a sever, with `stump` the wound it stamped (null: none), a crater loses its lip (`rimScale` times the
- * stump lip share, 0 as shipped; its carve and its paint stay) when:
- *   - the flesh it rides is gone: its prim is dead, or its prim's cluster is no longer alive;
- *   - its lip's ring reaches into the stump's carve (centres closer than the stump's radius plus LIP_REACH of its own)
- *     and the stump's bowl takes flesh the crater had left: the bowl is not wholly inside the crater's own carve;
- * and the stump loses its own lip when its ring reaches into the carve of a crater at least as big as its bowl
- * (centres closer than that crater's radius plus LIP_REACH stump radii): a hole that wide leaves the stump's lip
- * standing free in it, while a pellet's 5.5 cm crater beside an 11 cm stump is a bite out of the bowl's edge that the
- * lip spans, and the stump keeps the red rim it always had. So of a stump and a crater that holds it (a slug's 16 cm
- * crater at the neck holds the head's 11 cm stump), the crater keeps its lip, which lines the one hole there is, and
- * the stump loses its own, which would stand in the middle of that hole. A crater holds the bowl only when its
- * carve is the whole sphere there (no floor nearer than its radius).
- * Decals carve nothing and are left alone; a cut has no ring.
+ * So after a sever, with `stump` the wound it stamped (null: none), a lip is taken (`rimScale` times the stump lip
+ * share, 0 as shipped; the carve and the paint stay) ONLY WHERE IT WOULD STAND IN REMOVED FLESH, judged on the
+ * carves themselves and by nothing else:
+ *   - the flesh the crater rides is gone: its prim is dead, or its prim's cluster is no longer alive;
+ *   - THE STUMP OPENS IN A CRATER'S HOLE: at least LIP_HOLE_SHARE of the stump's lip shell lies inside the craters'
+ *     carves (each a ball, floored by its depth slab where it has one). The stump loses its lip, which would stand
+ *     in that hole; and each crater that by itself holds that share of the shell loses its own, whose near side
+ *     stood on the limb: the two carves are one hole at the limb's root;
+ *   - THE CRATER IS IN THE BOWL: its centre lies inside the stump's carve. Its lip is raised about a point the bowl
+ *     has removed.
+ * Every other lip stays: a crater beside the stump keeps its lip and so does the stump (each carve takes only the
+ * part of the other's lip that lies inside it, and what is left stands on flesh), and a crater farther off is not
+ * looked at. There is no reach: a slug crater on the chest keeps its lip when the head comes off.
+ * Decals carve nothing and are left alone; a cut has no lip shell.
  * Returns `wounds` itself when nothing changes; a changed wound is a new object.
  */
 export function lipsAfterSever(
@@ -578,18 +609,25 @@ export function lipsAfterSever(
     return !!c && !c.alive;
   };
   const ring = (w: Wound): boolean => !w.decal && w.shape !== 'cut' && (w.rimScale ?? 1) > 0;
-  const at = stump && prims[stump.primIdx] ? woundWorldPos(prims, stump, bodyYaw) : null;
-  let stumpHangs = false;
+  const carves = (w: Wound): boolean => !w.decal && w.shape !== 'cut' && w.type !== 'burn';
+  const holeOf = (w: Wound): CarveHole => {
+    const inward = w.carveDepth !== undefined ? woundCarveNormal(prims, w, bodyYaw) : null;
+    return { centre: woundWorldPos(prims, w, bodyYaw), radius: w.radius, inward, depth: w.carveDepth ?? 0 };
+  };
+  const at = stump && prims[stump.primIdx] ? holeOf(stump) : null;
+  // The craters on live flesh whose carves the stump's lip shell may stand in, and that shell.
+  const live = at ? wounds.filter(w => w !== stump && carves(w) && prims[w.primIdx] && !gone(w)) : [];
+  const holes = live.map(holeOf);
+  const shell = at && stump ? stump.radius * LIP_RING * WOUND_PROFILES[stump.type].rimOffsetScale : 0;
+  const stumpHangs = !!at && lipShareInHoles(at.centre, shell, holes) >= LIP_HOLE_SHARE;
   let changed = false;
   const out = wounds.map((w) => {
     if (w === stump || !ring(w)) return w;
     let drop = gone(w);
-    if (at && stump && prims[w.primIdx]) {
-      const c = woundWorldPos(prims, w, bodyYaw);
-      const d = len(sub(c, at));
-      const holdsStump = d + stump.radius <= w.radius && (w.carveDepth ?? Infinity) >= w.radius;
-      if (d < stump.radius + w.radius * LIP_REACH && !holdsStump) drop = true;
-      if (d < w.radius + stump.radius * LIP_REACH && w.radius >= stump.radius) stumpHangs = true;
+    const k = live.indexOf(w);
+    if (!drop && at && k >= 0) {
+      const hole = holes[k]!;
+      drop = inCarveHole(hole.centre, at) || lipShareInHoles(at.centre, shell, [hole]) >= LIP_HOLE_SHARE;
     }
     if (!drop) return w;
     changed = true;

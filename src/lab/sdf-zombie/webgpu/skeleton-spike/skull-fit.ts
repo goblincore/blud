@@ -478,7 +478,8 @@ export interface SkullFitResult {
   normals: Float32Array[];
   affine: SkullAffineFit;
   passes: SkullWarpPass[];
-  /** A uniform shrink about the skull's centre applied after stage 2 because its passes ran out (1: none). */
+  /** A uniform shrink about the skull's centre applied at the end because some vertex lacked the margin: stage 2's
+   *  passes ran out, or the last check of every place found one short (1: none). */
   shrunk: number;
   /** What stage 2 did: the furthest a vertex moved (m), the share of the vertices that moved more than 0.1 mm, and
    *  the least and greatest of the Jacobian's determinant over the vertices (1: volume kept; <= 0: turned inside
@@ -520,12 +521,11 @@ export function fitSkull(
   const sized = new Float64Array(places.length);
   for (let i = 0; i < places.length; i++) sized[i] = places[i]! * affine.scale[i % 3]! + affine.offset[i % 3]!;
   const centre: V3 = [0, 1, 2].map(k => (min[k]! + max[k]!) / 2 * affine.scale[k]! + affine.offset[k]!) as V3;
-  let passes: SkullWarpPass[] = [], shrunk = 1;
+  let passes: SkullWarpPass[] = [];
   if (params.pull > 0) {
     const width = (max[0] - min[0]) * affine.scale[0];
     const warped = skullWarpPasses(sized, flesh, params.margin, params.radius * width, centre);
     passes = warped.passes;
-    if (!warped.settled) shrunk = -1;
   }
   const fitted = new Float64Array(places.length);
   const jacobians: Mat3[] = [];
@@ -546,17 +546,21 @@ export function fitSkull(
       j[5] * affine.scale[2], j[6] * affine.scale[0], j[7] * affine.scale[1], j[8] * affine.scale[2]]);
   }
   warp.moved /= count;
-  if (shrunk < 0) {
-    // The passes ran out: shrink the warped skull about its centre until the margin holds.
-    const holds = (f: number): boolean => {
-      const p: V3 = [0, 0, 0];
-      for (let i = 0; i < count; i++) {
-        for (let k = 0; k < 3; k++) p[k] = centre[k]! + (fitted[i * 3 + k]! - centre[k]!) * f;
-        if (flesh(p) + params.margin > 0) return false;
-      }
-      return true;
-    };
-    shrunk = 1;
+  // THE MARGIN IS CHECKED AT EVERY DISTINCT PLACE, ALWAYS, on the vertices as they will be handed back: once more
+  // per place than the passes asked (they skip a vertex whose last lack and travel say it still has its margin, and
+  // stage 1 alone measures the skull by its box). A fit runs once per character, so the check is cheap against what
+  // it guards. Where any place lacks the margin (the passes ran out, or a skipped vertex did not have it after
+  // all), the skull is shrunk about its centre until every place has it, and `shrunk` says by how much.
+  const holds = (f: number): boolean => {
+    const p: V3 = [0, 0, 0];
+    for (let i = 0; i < count; i++) {
+      for (let k = 0; k < 3; k++) p[k] = centre[k]! + (fitted[i * 3 + k]! - centre[k]!) * f;
+      if (flesh(p) + params.margin > 0) return false;
+    }
+    return true;
+  };
+  let shrunk = 1;
+  if (!holds(1)) {
     while (shrunk > 0.3 && !holds(shrunk)) shrunk *= 0.99;
     for (let i = 0; i < fitted.length; i++) fitted[i] = centre[i % 3]! + (fitted[i]! - centre[i % 3]!) * shrunk;
   }

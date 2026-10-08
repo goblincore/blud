@@ -273,6 +273,24 @@ describe('the renderer seats, ejects and splits the eyes from the same seats', (
     renderer.dispose();
   });
 
+  it('ORBIT EYES ONLY WHERE THE HEAD HAD EYES: a head the sculpted skull seats no eye in draws none on its fitted skull either (the bonewalker, the described schoolgirl)', () => {
+    // Which of the eight the sculpted skull seats eyes in, on each one's own bone.
+    const had = Object.fromEntries(Object.keys(BALL_HEADS).map(character => [character, meshEyePlacements(meshBoneSource(cast(character).head)).length]));
+    // Two of them have no bone where a seat is looked for (three beads, two beads): they never drew a mesh eye.
+    expect(had).toEqual({ cultist: 2, 'cultist-cowled': 2, bride: 2, female: 2, schoolgirl: 2, 'schoolgirl-alt': 2, 'schoolgirl-described': 0, bonewalker: 0 });
+    for (const character of ['bonewalker', 'schoolgirl-described', 'cultist']) {
+      const { head } = cast(character), kit = newKit(ballHeadFit), { renderer } = make(kit), owner = {};
+      // The fitted skull has its orbits and their seats either way; whether an eye is drawn in them is the head's.
+      expect(kit.head(head)!.eyes).toHaveLength(2);
+      renderer.update([[head]], [owner]);
+      expect(eyesOf(renderer, owner), character).toHaveLength(had[character]!);
+      // A shot at the face ejects no eye that was never there.
+      const front = head.toWorld([kit.head(head)!.eyes![0]!.center[0], kit.head(head)!.eyes![0]!.center[1], kit.head(head)!.fit!.max[2] + 0.02]);
+      expect(renderer.impact(owner, [head], front, [0, 0, -1], 'slug'), character).toBe(had[character]! > 0 ? 2 : 0);
+      renderer.dispose();
+    }
+  });
+
   it('a head the kit does not fit keeps the sculpt\'s seats under the kit too', () => {
     const kit = newKit(), { renderer } = make(kit), owner = {};
     const other = { ...head, character: 'ogre', revision: `${head.revision}:ogre` };

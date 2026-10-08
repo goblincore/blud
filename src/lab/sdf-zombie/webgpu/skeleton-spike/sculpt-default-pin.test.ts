@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
+import type { MeshBasicNodeMaterial, Node } from 'three/webgpu';
+import { createSegmentMeshRenderer } from './mesh-renderer';
+import { BONE_HASH_WGSL, BONE_NOISE_WGSL, BONE_SHADE_WGSL } from '../bone-instancer';
+import { BODY_LIGHTS } from '../march/body-lights.wgsl';
 import { AnatomicalSkullKit } from './anatomical-skull';
 import { anatomicalSkullSource } from './anatomical-skull.fixture';
 import { parseBlob } from '../../blob-parse';
@@ -14,7 +18,7 @@ import {
   MESH_BONE_SURFACE_WGSL, MESH_BONE_WET_WGSL, MESH_SKULL_CAVITY_WGSL, MESH_SOCKET_VESSEL_WGSL, MESH_TOOTH_ROW_WGSL,
 } from './mesh-appearance';
 import { createBoneMeshCache } from './sculpt-cache';
-import { SCULPT_PAINT_SHAPE2, sculptPaintSources } from './sculpt-paint';
+import { SCULPT_PAINT_SHAPE1, SCULPT_PAINT_SHAPE2, sculptPaintSources } from './sculpt-paint';
 import { SCULPT_CLASSIC, SCULPT_DEFAULT_VARIANT, SCULPT_FINE_CELL, resolveSkull, sculptRecipe } from './sculpt-variant';
 
 // TWO LOOKS OF THE SCULPTED SKULL ARE PINNED, by the zombie's and the soldier's head mesh bytes and the paint's shader
@@ -56,7 +60,33 @@ const DEFAULT = {
   zombie: { key: 'zombie:head:2:77b0c2d:skull-sculpt-2@0.005', verts: 9144, tris: 18296, bytes: '44f3c7f58b87817c' },
   soldier: { key: 'soldier:head:2:11a18b47:soldier-skull-sculpt-2@0.005', verts: 7056, tris: 14108, bytes: 'f470bb51944b39b1' },
   wgsl: '61ebace5c3abd470',
+  // Every WGSL text the default page's bone material reaches (the second paint, the bone hash and noise, the shade).
+  material: '22a19cc4defab95a',
 };
+/** The name a WGSL source declares first. */
+const nameOf = (src: string): string => /\bfn (\w+)/.exec(src)![1]!;
+/** EVERY WGSL FUNCTION TEXT A MATERIAL'S NODE REACHES: the functions it calls and everything they include, by the
+ *  name each declares. Two texts under one name fail here. */
+function wgslReached(root: Node): Map<string, string> {
+  type Fn = { code: string; includes?: readonly Fn[] };
+  const out = new Map<string, string>(), seen = new Set<Node>(), todo: Node[] = [root];
+  const take = (fn: Fn) => {
+    const name = nameOf(fn.code), had = out.get(name);
+    if (had !== undefined && had !== fn.code) throw new Error(`two texts of ${name}`);
+    if (had !== undefined) return;
+    out.set(name, fn.code);
+    for (const inc of fn.includes ?? []) take(inc);
+  };
+  while (todo.length) {
+    const n = todo.pop()!;
+    if (seen.has(n)) continue;
+    seen.add(n);
+    const fn = (n as Node & { functionNode?: Fn }).functionNode;
+    if (fn) take(fn);
+    for (const c of n.getChildren()) todo.push(c as Node);
+  }
+  return out;
+}
 
 describe('the default skull is pinned: the sculpted skull, full', () => {
   it('the default is `full`: the second sculpt, a 5 mm head cell, the second paint', () => {
@@ -105,6 +135,40 @@ describe('the default skull is pinned: the sculpted skull, full', () => {
 
   it('the second paint\'s shader text, as written for the second sculpt', () => {
     expect(hash(...sculptPaintSources(SCULPT_PAINT_SHAPE2))).toBe(DEFAULT.wgsl);
+  });
+
+  it('WHAT THE DEFAULT PAGE\'S BONE MATERIAL RECEIVED is that text: the WGSL its colour reaches, with the bone hash, the noise and the shade it includes', async () => {
+    // The page as it boots, the plates loaded: its cache, the renderer on it, the zombie's and the soldier's heads.
+    const cache = await createBoneMeshCache('', () => {}, plan => Promise.resolve(new AnatomicalSkullKit(anatomicalSkullSource(), new THREE.Texture(), new THREE.Vector2(1, 1), plan)));
+    const renderer = createSegmentMeshRenderer(cache);
+    const heads = BLOBS.map(([character, blob]) => headOf(character, blob));
+    renderer.update(heads.map(h => [h]), heads.map((_, id) => ({ id })));
+    const received = heads.map((head) => {
+      const batch = renderer.object.children.find(c => (c as THREE.InstancedMesh).geometry === cache.get(head).geometry) as THREE.InstancedMesh;
+      const material = batch.material as MeshBasicNodeMaterial;
+      expect([material.name, material.userData.sculptPaint]).toEqual(['skeleton-bone', 2]);
+      return { material, code: wgslReached(material.colorNode!) };
+    });
+    // One material for both heads, and what it reaches is the same text whichever head asks.
+    expect(received[1]!.material).toBe(received[0]!.material);
+    const code = received[0]!.code;
+    // Every function of the pinned second paint is there, text for text, in the second sculpt's layout, and none of
+    // the first sculpt's layout is.
+    const pinned = sculptPaintSources(SCULPT_PAINT_SHAPE2);
+    for (const src of pinned) expect(code.get(nameOf(src)), nameOf(src)).toBe(src);
+    for (const src of sculptPaintSources(SCULPT_PAINT_SHAPE1)) if (!pinned.includes(src)) expect([...code.values()]).not.toContain(src);
+    // With them, the bone hash and noise the paint calls, and the forward shade with the light list it includes.
+    const shared = [BONE_HASH_WGSL, BONE_NOISE_WGSL, BONE_SHADE_WGSL, BODY_LIGHTS];
+    for (const src of shared) expect(code.get(nameOf(src)), nameOf(src)).toBe(src);
+    // The shade is built with everything declared before it as an include (mesh-renderer.ts's chain), so the first
+    // paint's five functions ride into the shader's text as well. The second paint's material calls none of them
+    // (sculpt-renderer.test.ts holds the calls); they are part of the text it received, and of this pin.
+    const carried = [MESH_TOOTH_ROW_WGSL, MESH_SKULL_CAVITY_WGSL, MESH_SOCKET_VESSEL_WGSL, MESH_BONE_SURFACE_WGSL, MESH_BONE_WET_WGSL];
+    for (const src of carried) expect(code.get(nameOf(src)), nameOf(src)).toBe(src);
+    expect([...code.keys()].sort()).toEqual([...pinned, ...shared, ...carried].map(nameOf).sort());
+    // The pin: every one of those texts, in the order of their names.
+    expect(hash(...[...code.keys()].sort().map(k => code.get(k)!))).toBe(DEFAULT.material);
+    renderer.dispose(); cache.dispose();
   });
 });
 

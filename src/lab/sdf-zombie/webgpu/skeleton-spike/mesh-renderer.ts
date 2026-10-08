@@ -320,8 +320,14 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   // second paint is fitted to some characters' heads and not to others').
   const paint2 = cache.sculpt.paint === 2 ? (() => {
     const chain: ReturnType<typeof wgslFn>[] = fns.slice(0, 2);
-    for (const src of sculptPaintSources(cache.sculpt.shape === 2 ? SCULPT_PAINT_SHAPE2 : SCULPT_PAINT_SHAPE1)) chain.push(wgslFn(src, chain.slice()));
-    const [tiltFn, surface2Fn, wet2Fn] = [chain[10]!, chain[11]!, chain[12]!];
+    // The three the material calls, found by the name each source declares (the rest are their includes).
+    const named = new Map<string, ReturnType<typeof wgslFn>>();
+    for (const src of sculptPaintSources(cache.sculpt.shape === 2 ? SCULPT_PAINT_SHAPE2 : SCULPT_PAINT_SHAPE1)) {
+      const fn = wgslFn(src, chain.slice());
+      chain.push(fn);
+      named.set(/\bfn (\w+)/.exec(src)![1]!, fn);
+    }
+    const [tiltFn, surface2Fn, wet2Fn] = [named.get('sculptPaintNormal')!, named.get('sculptPaintSurface')!, named.get('sculptPaintWet')!];
     return {
       tilt: () => tiltFn({ p: positionWorld, n: normalWorld, feature: attribute('meshFeature', 'vec4') }) as unknown as Node<'vec4'> & { xyz: Node<'vec3'>; w: Node<'float'> },
       surface: (pWorld: unknown, foot: unknown) => surface2Fn({
