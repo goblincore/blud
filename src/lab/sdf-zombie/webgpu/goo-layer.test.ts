@@ -1,10 +1,25 @@
 // src/lab/sdf-zombie/webgpu/goo-layer.test.ts
 //
-// Nothing here compiles a shader — these are the same text guards
-// march.wgsl.test.ts applies, extended to the goo surface pass: the wgslFn
-// parse contract (source must start with `fn`, three's declarationRegexp is
-// ^-anchored) and the reserved-word lint on declarations. Plus value pins
-// on the tuning that the mist/goo split depends on.
+// Three kinds of test live here:
+//
+//   * WGSL text guards — the wgslFn parse contract (source must start with
+//     `fn`, three's declarationRegexp is ^-anchored) and the reserved-word
+//     lint on declarations, plus value pins on the tuning the mist/goo
+//     split depends on. These cannot execute in CI.
+//
+//   * Live-layer behavioural tests — the real createGooLayer over the
+//     recording stub renderer in goo-layer-test-support.ts (the trick
+//     goo-upload.test.ts proved: only GPU submission is stubbed). The
+//     describes named "(live layer on a stub renderer)" assert what the
+//     layer DID: which targets it drew to, in what order, with which
+//     material flags, under which clears.
+//
+//   * Remaining source tripwires — the tick-order pins on game-tick.ts /
+//     lab-main.ts (KEEP per the 2026-10-07 text-pin audit: tick() has no
+//     unit seam) and the two gut-mask colorNode regexes (a TSL-graph
+//     property the stub cannot see).
+//
+// Plus value pins on the tuning that the mist/goo split depends on.
 
 // NOTE (2026-09-17, game-main decomposition): the receivers pinned below moved
 // from main()-scope locals onto the GameContext (`gooLayer` -> `ctx.goo.layer`,
