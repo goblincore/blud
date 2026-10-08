@@ -21,6 +21,9 @@ import {
 } from './goo-layer';
 import { gooLayerFixture, gooSim, gooDroplets, type GooLogEntry } from './goo-layer-test-support';
 import type { BloodSim, Droplet } from '../blood-sim';
+import { createFxSeams } from './game-seams-fx';
+import type { GameContext } from './game-context';
+import type { GooLayer } from './goo-layer';
 
 /** The reserved words WGSL reserves even without implementing (spec appendix). */
 const RESERVED_WORDS = [
@@ -782,29 +785,34 @@ describe('goo upsample WGSL (item 1)', () => {
   });
 });
 
-describe('goo perf page seam (source tripwires)', () => {
+describe('goo perf page seam (createFxSeams over a recording layer)', () => {
   // The whole goo seam group moved out of the __sdfGame literal in the
-  // 2026-09-17 decomposition: `setGooPerf` into game-seams-spawn-goo.ts, and the
-  // `goo` getter plus setGooTuning/setGooCandidate into game-seams-fx.ts. Every
-  // pinned string below is byte-identical — only the holding file changed.
-  const src = readFileSync('src/lab/sdf-zombie/webgpu/game-seams-fx.ts', 'utf8');
-
+  // 2026-09-17 decomposition: `setGooPerf` into game-seams-spawn-goo.ts, and
+  // the `goo` getter plus setGooTuning/setGooCandidate into game-seams-fx.ts.
   it('keeps the perf seams OUT of setGooTuning', () => {
     // The goo panel's copy button emits setGooTuning keys; a perf lever in
-    // that schema would let a tuning paste silently move a bench seam.
-    //
-    // The end boundary used to be `setGooPerf(o: {`, which now lives in another
-    // file. `setGooCandidate(o: {` is the member that actually follows
-    // setGooTuning, so this slice is TIGHTER than the original rather than
-    // looser — it isolates setGooTuning's own block instead of everything up to
-    // setGooPerf.
-    const start = src.indexOf('setGooTuning(o: {');
-    const end = src.indexOf('setGooCandidate(o: {', start);
-    expect(start, 'setGooTuning must still be in game-main.ts').toBeGreaterThan(-1);
-    expect(end, 'setGooCandidate must follow setGooTuning').toBeGreaterThan(start);
-    const block = src.slice(start, end);
-    expect(block).not.toContain('surfaceAtDensityRes');
-    expect(block).not.toContain('minTexelRadius');
+    // that schema would let a tuning paste silently move a bench seam. Run
+    // the real setGooTuning against a layer that records every method call.
+    const calls: string[] = [];
+    const layer = new Proxy({} as Record<string, unknown>, {
+      get(_, key) { return () => { calls.push(String(key)); }; },
+    }) as unknown as GooLayer;
+    const ctx = {
+      boot: { handle: { scene: {}, camera: {} } },
+      goo: { layer },
+    } as unknown as GameContext;
+    createFxSeams(ctx).setGooTuning({
+      gloss: 120,
+      // Perf-lever keys the schema must not know about: if any of these
+      // ever routed to a setter, a pasted tuning would silently flip a
+      // bench seam.
+      surfaceAtDensityRes: true,
+      minTexelRadius: 4,
+      areaPriority: true,
+      passGate: { density: false },
+    } as never);
+    // The look knob lands (the recording works) and nothing else moves.
+    expect(calls).toEqual(['setGloss']);
   });
 });
 
