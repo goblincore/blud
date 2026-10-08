@@ -36,7 +36,7 @@ Each line is the first sentence of the module's header comment.
 | --- | --- | --- |
 | [webgpu/march/](#webgpumarch) | 54 | The SDF march shader, split by stage (WGSL). |
 | [webgpu/earlyz/](#webgpuearlyz) | 10 | Early-Z depth prepass for the march. |
-| [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 14 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
+| [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 16 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
 | [webgpu/upscale/](#webgpuupscale) | 8 | Upscaling of the low-res march target. |
 | [characters/](#characters) | 1 | Character bodies: `.blob` sources, generators and per-character data. |
 | [shared-wounds/](#shared-wounds) | 4 | Shared wound-field probe page. |
@@ -64,7 +64,7 @@ Each line is the first sentence of the module's header comment.
 | [AI and actors (logic)](#ai-and-actors-logic) | 11 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 9 | First-person mode, dynamite flight, explosions, rockets, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 8 | Blood simulation, probe grids, ambient. |
-| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 4 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
+| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 5 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
 
@@ -144,6 +144,8 @@ Early-Z depth prepass for the march.
 
 Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name).
 
+- `webgpu/skeleton-spike/anatomical-skull.ts` — Offline skull mesh loading and rigid-head fitting.
+- `webgpu/skeleton-spike/anatomical-skull.wgsl.ts` — Hand-written shading: real cavities/teeth come from geometry, not the old painted face masks.
 - `webgpu/skeleton-spike/contract.ts` — SKELETON REPRESENTATION COMPARISON — shared field contract (Task 1).
 - `webgpu/skeleton-spike/mesh-appearance.ts` — Appearance maths for the skeleton segment meshes: tissue patch classes, skull cavity, sockets, teeth, gloss mask, with matching WGSL.
 - `webgpu/skeleton-spike/mesh-eyes.ts` — Eye placement, shading and impact picking for the skull segment mesh, with matching WGSL for the vessel, surface and emission terms.
@@ -772,3 +774,4 @@ What fits no area above: the original WebGL lab shader, resolution scaling, samp
 - `curl-sample.ts` — CPU SIDE OF THE SHARED CURL VOLUME (2026-09-18 blood-curl-spike): a pure, THREE-FREE trilinear sampler over the packed `Uint8Array` from…
 - `depth-diff.ts` — Depth diff — comparing the INSIDE of the outline: per-pixel surface depth of the compiled body against the reference mesh, where both agree the…
 - `march.glsl.ts` — Shader source as strings.
+- `skull-fracture.ts` — Anatomical skull damage and ray selection.

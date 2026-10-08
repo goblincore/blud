@@ -1,0 +1,13 @@
+
+> blud@0.0.1 test
+> vitest run game-mesh-gibs
+
+
+ RUN  v2.1.9 /Users/donny/.codex/worktrees/anatomical-skull/blud
+
+ ✓ src/lab/sdf-zombie/webgpu/game-mesh-gibs.test.ts (2 tests) 12ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  12:13:07
+   Duration  1.83s (transform 678ms, setup 0ms, collect 985ms, tests 12ms, environment 280ms, prepare 99ms)

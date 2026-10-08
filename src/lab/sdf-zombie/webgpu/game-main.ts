@@ -67,7 +67,7 @@ import { createOuterHull } from './shell-hull-outer';
 import { makeGameContext } from './game-context';
 import { createBoneInstancer } from './bone-instancer';
 import { createSkeletonSources, type BoneFieldSource } from './skeleton-spike/contract';
-import { SegmentMeshCache } from './skeleton-spike/mesh';
+import { createSkullMeshCache } from './skeleton-spike/anatomical-skull';
 import { createSegmentMeshRenderer } from './skeleton-spike/mesh-renderer';
 import { resolveOrganMode, resolveSkeletonMode } from './skeleton-spike/selector';
 import { SegmentVolumeCache, buildSegmentAtlas, boneSegmentKeyMap } from './skeleton-spike/volume';
@@ -2533,7 +2533,7 @@ async function main() {
   if (import.meta.env.DEV && new URLSearchParams(location.search).get('skeleton') === 'mesh' && ctx.render.skeletonMode !== 'mesh') {
     console.warn('[sdf-game] skeleton=mesh refused (deferred mode) — procedural bones');
   }
-  ctx.render.segMeshCache = ctx.render.skeletonMode === 'mesh' ? new SegmentMeshCache() : null;
+  ctx.render.segMeshCache = ctx.render.skeletonMode === 'mesh' ? await createSkullMeshCache(location.search) : null;
   // Organs as mesh (2026-10-06): on the mesh skeleton the organs are segment meshes too, and the body packs no
   // inside-flesh row. ?organs=sdf keeps them as field rows (the A/B reference); __sdfGame.setOrgans flips it live.
   ctx.render.organMode = resolveOrganMode(location.search, ctx.render.skeletonMode);
@@ -2541,7 +2541,8 @@ async function main() {
   // skeleton out of the full-resolution polygonal pass and draw it into the
   // half-height field instead. Every other style just enables that layer in
   // pass 1, so this is a no-op for them.
-  ctx.render.segMeshRenderer = ctx.render.segMeshCache ? createSegmentMeshRenderer(ctx.render.segMeshCache, FIELD_MESH_LAYER, ctx.world.light?.list?.node) : null;
+  ctx.render.segMeshRenderer = ctx.render.segMeshCache ? createSegmentMeshRenderer(ctx.render.segMeshCache, FIELD_MESH_LAYER, ctx.world.light?.list?.node,
+    (object,pos,vel,angular,radius,support)=>ctx.boot.spawnMeshGib?.(object,pos,vel,angular,radius,{tag:'skull',restitution:0.25,support})) : null;
   /** A bone-mesh instance's owner picks (Task 11): the owner actor's bodyLights. Hoisted, so the
    *  per-frame syncLights call allocates nothing. */
   // `?.view?.`: an owner-less mesh slot (the renderer's fallback slot object) has no view.
@@ -3340,6 +3341,7 @@ async function main() {
   // spawner that assigns them is built further down.
   ctx.weapon.headDamage = createHeadDamage(ctx, {
     headShape,
+    crackSkull: (a,at,dir)=>ctx.render.segMeshRenderer?.fractureSkull(a,ctx.render.skeletonSources.get(a)?.sources ?? [],at,dir,'slug') ?? 0,
     gore: (a, pieces) => ctx.boot.onGoreDispatch?.(a, pieces),
     // The brain stage's blood (spec §14: it bleeds less, so the brain is seen). onHeadPop's volumetric burst at
     // HALF its reach: half the spawn radius (0.06, was 0.12), half the radial speed and 40% of the drops, with a

@@ -1,0 +1,4 @@
+lab-servers: starting vite on 5448
+lab-servers: starting chrome (headless) on debug port 9448
+PASS sculpt {"missing":0,"pieces":[]}
+PASS anatomical {"missing":1,"pieces":["frontal"]}

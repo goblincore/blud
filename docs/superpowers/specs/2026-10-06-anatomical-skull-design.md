@@ -1,0 +1,11 @@
+# Anatomical humanoid skull
+
+Use the supplied Downloads GLB for a simplified anatomically faithful humanoid skull. Preserve major anatomical bone boundaries, orbit and nasal cavities, mandible and dental silhouette. Budget: 10k triangles total, one normal atlas, stable names and per-piece pivots. Source metadata credits WitmerLab / CC BY-NC-ND 4.0; the user confirmed separate permission for this modified game asset on 2026-10-06. Preserve embedded provenance. The original and editable high reference stay outside public in ignored scratch; only the finished low mesh and manifest enter public assets.
+
+Review intact and exploded geometry in Blender. Game integration must share intact geometry across actors, fit within intact flesh, follow the head affine deformation, and preserve existing wound/sever behavior. Fracture selection and impulses belong in renderer-free tested modules. Do not add a texture march for details a normal bake can carry; real openings and fracture thickness require geometry.
+
+The delivered asset has 9,947 triangles, fourteen pieces and one embedded 1024-square normal atlas. Group minor palate/lacrimal bones into maxillae, lower teeth into mandible, and the small internal nasal bones into one core. Keep frontal, paired parietals, occipital, paired temporals, paired zygomatics, paired maxillae, upper teeth, mandible, cranial base and nasal core distinct.
+
+Make anatomical skulls the forward mesh default for the thirteen supported humanoid head sources. Retain `?skull=sculpt` for comparison and fall back to sculpt if loading fails. Deferred and procedural rendering, nonhumanoid heads and bones embedded in detached flesh chunks keep their existing path.
+
+Ray-test actual triangles in the posed head frame. A slug releases one plate; three pellets into that plate release it. Removed pieces cannot release twice. Head pops release every remaining plate. The melee brain stage uses the same fracture seam, with existing chip fallback when it cannot release a plate. Launch fragments through existing mesh-gib physics with deterministic impulses, shape supports and an independent bounded pool. Intact skulls stay one shared draw; only damaged heads split into per-piece draws.

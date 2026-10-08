@@ -62,7 +62,7 @@ import { meshBoneSource } from './mesh-skull';
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial, type Node } from 'three/webgpu';
 import {
-  attribute, wgslFn, mul, add, mix, float, texture, uniform, vec4, positionGeometry, positionWorld, normalWorld,
+  attribute, wgslFn, mul, add, mix, float, texture, uniform, vec4, vec2, uv, positionGeometry, positionWorld, normalWorld,
   cameraPosition, frontFacing, Fn, If,
 } from 'three/tsl';
 import {
@@ -81,6 +81,10 @@ import {
 import {
   meshEyePlacements, meshEyeImpactIndices, MESH_EYE_EMISSION_WGSL, MESH_EYE_SURFACE_WGSL, MESH_EYE_VESSEL_WGSL,
 } from './mesh-eyes';
+import { ANATOMICAL_SKULL_NORMAL_WGSL, ANATOMICAL_SKULL_SURFACE_WGSL } from './anatomical-skull.wgsl';
+import { damageSkull, explodeSkull, intactSkull, skullRayHit, skullPieceLaunch, type SkullDamage } from '../../skull-fracture';
+import type { FittedSkull } from './anatomical-skull';
+import type { Vec3 } from '../../types';
 import { HEAD_SPLIT, skullPieces, skullSplitOf, type SkullFollow, type SkullSplit, type SplitWarp } from '../../head-split';
 import {
   MESH_ORGAN_DETAIL_WGSL, MESH_ORGAN_HEIGHT_WGSL, MESH_ORGAN_SHADE_WGSL, MESH_ORGAN_SURFACE_WGSL, MESH_ORGAN_WET_WGSL,
@@ -192,6 +196,9 @@ export interface SegmentMeshRenderer {
   impact(owner: object, sources: readonly BoneFieldSource[], point: readonly [number, number, number], direction: readonly [number, number, number], kind: 'pellet' | 'slug'): number;
   stepDebris(dt: number): void;
   eyeState(owner: object): { missing: number[]; debris: number };
+  skullState(owner: object): { missing: number; pieces: string[] };
+  fractureSkull(owner: object, sources: readonly BoneFieldSource[], point: Vec3, direction: Vec3, kind: 'pellet' | 'slug'): number;
+  explodeSkull(owner: object, sources: readonly BoneFieldSource[], direction: Vec3): number;
   /** This frame's craters (world centre + radius) for the exposure gradient. */
   setWounds(wounds: ReadonlyArray<{ pos: readonly [number, number, number]; radius: number }>): void;
   /** Diagnostics: the exposure rows setWounds last uploaded (what the shader reads), as [x, y, z, radius]. */
@@ -225,7 +232,7 @@ export interface SegmentMeshRenderer {
  */
 /** `lightList`: the shared light-list storage node (ctx.world.light.list.node); omitted, the zero
  *  fallback is bound and lightListCfg.x stays 0. */
-export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, lightList?: unknown): SegmentMeshRenderer {
+export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, lightList?: unknown, spawnSkull?: (object: THREE.Object3D, pos: Vec3, vel: Vec3, angular: Vec3, radius: number, support: readonly {c:Vec3;r:number}[]) => void): SegmentMeshRenderer {
   const group = new THREE.Group();
   group.name = 'skeleton-segment-meshes';
   const extraM = new THREE.Matrix4();
@@ -270,17 +277,31 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     mul(mul(u.look.z, gloss), MESH_SPEC_SCALE),
     mul(mul(u.look.w, gloss), MESH_FRES_SCALE),
   );
-  const lightArgs = (surface: unknown, look: unknown) => ({
-    p: positionWorld, n: normalWorld, camPos: cameraPosition,
+  const lightArgs = (surface: unknown, look: unknown, normal: unknown = normalWorld) => ({
+    p: positionWorld, n: normal as never, camPos: cameraPosition,
     deepColor: u.deepColor, ambient: u.ambient, look: look as never,
     lightDir: u.lightDir, keyColor: u.keyColor, lightCfg: u.lightCfg,
     spotPos: u.spotPos, spotAxis: u.spotAxis, spotCfg: u.spotCfg, spotCfg2: u.spotCfg2, spotColor: u.spotColor,
     surfaceIn: surface as never,
     picks: picksAttr, lights: listNode, listOn: u.lightListCfg.x, fill: fillAttr,
   });
-  const lit = (surface: unknown, look: unknown) => vec4(shade(lightArgs(surface, look)) as never, 1.0);
+  const lit = (surface: unknown, look: unknown, normal: unknown = normalWorld) => vec4(shade(lightArgs(surface, look, normal)) as never, 1.0);
   const material = new MeshBasicNodeMaterial();
   material.colorNode = lit(surf, meshLook);
+  let skullMaterial: MeshBasicNodeMaterial | null = null;
+  if (cache.skullKit) {
+    const sf = wgslFn(ANATOMICAL_SKULL_SURFACE_WGSL, fns.slice(0,2));
+    const nf = wgslFn(ANATOMICAL_SKULL_NORMAL_WGSL);
+    const kit = cache.skullKit;
+    const skullSurface = sf({pWorld:positionWorld,pLocal:positionGeometry,boneColor:u.boneColor,deepColor:u.deepColor,
+      woundTex:texture(woundTex),woundCount:u.woundCount});
+    const skullNormal = nf({p:positionWorld,n:normalWorld,uv:uv(),texel:texture(kit.normalMap).xyz,
+      normalScale:vec2(kit.normalScale.x,kit.normalScale.y)});
+    skullMaterial = new MeshBasicNodeMaterial();
+    skullMaterial.colorNode = lit(skullSurface,vec4(u.look.x,u.look.y,mul(u.look.z,0.12),mul(u.look.w,0.10)),skullNormal);
+    skullMaterial.depthTest = true; skullMaterial.depthWrite = true;
+    skullMaterial.side = THREE.DoubleSide;
+  }
   // Eye shader chain: hash -> noise -> sclera vessels -> surface -> emission.
   // Reuse identical TSL nodes: shade already includes these dependencies.
   // Recreating them emits duplicate WGSL declarations in the eye pipeline.
@@ -487,7 +508,8 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
   const batchFor = (geometry: THREE.BufferGeometry, eye: boolean, split = false, organ = false): Batch => {
     let b = batches.get(geometry);
     if (!b) {
-      const mesh = new THREE.InstancedMesh(geometry, organ ? organMaterial : split ? (eye ? eyeSplitMaterial : splitMaterial) : (eye ? eyeMaterial : material), 16);
+      const closed = eye ? eyeMaterial : geometry.userData.anatomicalSkull ? skullMaterial! : material;
+      const mesh = new THREE.InstancedMesh(geometry, organ ? organMaterial : split ? (eye ? eyeSplitMaterial : splitMaterial) : closed, 16);
       mesh.name = organ ? 'skeleton-organs' : (eye ? 'skeleton-fleshy-eyes' : 'skeleton-segments') + (split ? '-split' : '');
       mesh.frustumCulled = false;
       mesh.layers.set(layer);
@@ -548,6 +570,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     drawn.length = 0;
     slots.length = 0;
     absent = new WeakMap();
+    skullDamage = new WeakMap();
     for (const d of debris) group.remove(d.mesh);
     debris.length = 0;
     stats.actors = stats.segments = stats.rigid = stats.limb = stats.hidden = 0;
@@ -597,12 +620,104 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     }
     return copies;
   };
+  /** Draw one bone geometry of the segment at segM, whose bone lies in the box `min`..`max` of the segment's frame:
+   *  once per piece of the split `skull` that owns part of that box (drawPieces; null: the closed draw). A split
+   *  geometry's vertices and triangles count once per copy. `scale` is segM's largest axis scale. */
+  const drawBone = (
+    geometry: THREE.BufferGeometry, min: readonly number[], max: readonly number[], verts: number, tris: number,
+    owner: unknown, skull: SkullSplit | null, scale: number,
+  ) => {
+    let radius = 0;
+    if (skull) {
+      centreV.set((min[0]! + max[0]!) / 2, (min[1]! + max[1]!) / 2, (min[2]! + max[2]!) / 2).applyMatrix4(segM);
+      radius = Math.hypot(max[0]! - min[0]!, max[1]! - min[1]!, max[2]! - min[2]!) / 2 * scale;
+    }
+    const copies = drawPieces(geometry, false, segM, owner, skull, centreV, radius);
+    stats.verts += verts * copies;
+    stats.tris += tris * copies;
+  };
+  let skullDamage = new WeakMap<object,SkullDamage>();
+  let extraOf: ((owner: object, segment: string) => ArrayLike<number> | null) | undefined;
+  const headMatrix = (owner: object, source: BoneFieldSource): THREE.Matrix4 => {
+    const p = source.pose();
+    const m = new THREE.Matrix4().compose(new THREE.Vector3(...p.origin),new THREE.Quaternion(...p.quat),one);
+    const extra = extraOf?.(owner,'head');
+    if (extra) m.premultiply(new THREE.Matrix4().fromArray(extra));
+    return m;
+  };
+  const detach = (owner: object, source: BoneFieldSource, skull: FittedSkull, indices: number[], direction: Vec3) => {
+    if (!spawnSkull || !skullMaterial) return;
+    const matrix = headMatrix(owner,source);
+    const centre = skull.mesh.geometry.boundingSphere!.center;
+    for (const index of indices) {
+      const piece = skull.pieces[index]!;
+      // Geometry has per-instance light attributes: free debris needs its own
+      // light row, so two victims in different rooms cannot overwrite it.
+      const geometry = piece.debrisGeometry.clone();
+      geometry.userData.ownedSkullDebris = true;
+      const mesh = new THREE.Mesh(geometry,skullMaterial);
+      ensureLights(geometry, 1, false);
+      for (const batch of batches.values()) {
+        const slot = batch.owners.indexOf(owner);
+        if (slot < 0) continue;
+        const lights = batch.mesh.geometry.getAttribute('iLights');
+        const fill = batch.mesh.geometry.getAttribute('iFill');
+        const target = geometry.getAttribute('iLights') as THREE.InstancedBufferAttribute;
+        target.setXYZW(0,lights.getX(slot),lights.getY(slot),lights.getZ(slot),lights.getW(slot));
+        (geometry.getAttribute('iFill') as THREE.InstancedBufferAttribute).setX(0,fill.getX(slot));
+        break;
+      }
+      mesh.layers.set(layer);
+      mesh.matrixAutoUpdate = false;
+      mesh.matrix.copy(matrix).setPosition(0,0,0);
+      const group = new THREE.Group(); group.name = `skull-fragment:${piece.id}`; group.add(mesh);
+      group.layers.set(layer);
+      const pivot = new THREE.Vector3(...piece.pivot).applyMatrix4(matrix);
+      const localDirection = new THREE.Vector3(...direction).transformDirection(matrix.clone().invert());
+      const launch = skullPieceLaunch(piece.pivot,centre.toArray() as Vec3,localDirection.toArray() as Vec3,index);
+      const velocity = new THREE.Vector3(...launch.velocity).transformDirection(matrix).multiplyScalar(Math.hypot(...launch.velocity));
+      const size = new THREE.Vector3(...piece.max).sub(new THREE.Vector3(...piece.min));
+      const scales = new THREE.Vector3().setFromMatrixScale(matrix);
+      const stretch = Math.max(scales.x,scales.y,scales.z);
+      // Actual extremal vertices in 26 directions approximate the convex
+      // support hull. Thin plates land on their surface, not a huge sphere.
+      const position = geometry.getAttribute('position');
+      const points = Array.from({length:position.count},(_,i)=>new THREE.Vector3(position.getX(i),position.getY(i),position.getZ(i)).applyMatrix4(mesh.matrix));
+      const support: {c:Vec3;r:number}[] = [];
+      const used = new Set<number>();
+      for(let x=-1;x<=1;x++)for(let y=-1;y<=1;y++)for(let z=-1;z<=1;z++) {
+        if(!x&&!y&&!z)continue;
+        const axis = new THREE.Vector3(x,y,z);let best=0,value=-Infinity;
+        points.forEach((p,i)=>{const d=p.dot(axis);if(d>value){value=d;best=i;}});
+        if(!used.has(best)){used.add(best);support.push({c:points[best]!.toArray() as Vec3,r:0.001});}
+      }
+      spawnSkull(group,pivot.toArray() as Vec3,velocity.toArray() as Vec3,launch.angular,Math.max(0.012,size.length()*.5*stretch),support);
+    }
+  };
 
+  const fractureSkull = (owner: object, sources: readonly BoneFieldSource[], point: Vec3, direction: Vec3, kind: 'pellet' | 'slug'): number => {
+      const skullSource = sources.find(s=>s.segment==='head' && s.isLive() && cache.skullKit?.supports(s));
+      const skull = skullSource && cache.skullKit?.head(skullSource);
+      if (skullSource && skull && spawnSkull) {
+        const inverse = headMatrix(owner,skullSource).invert();
+        const origin = new THREE.Vector3(...point).applyMatrix4(inverse).toArray() as Vec3;
+        const ray = new THREE.Vector3(...direction).transformDirection(inverse).toArray() as Vec3;
+        const before = skullDamage.get(owner) ?? intactSkull(skull.pieces.length);
+        const hit = skullRayHit(skull.pieces,before,origin,ray);
+        const result = damageSkull(before,hit,kind);
+        skullDamage.set(owner,result.state);
+        detach(owner,skullSource,skull,result.detached,[...direction] as Vec3);
+        return result.detached.length;
+      }
+      return 0;
+  };
   return {
     object: group,
     uniforms: u,
+    fractureSkull,
     impact(owner, sources, point, direction, kind) {
-      const head = sources.find(s => s.segment === 'head' && s.isLive() && s.character === 'zombie');
+      fractureSkull(owner,sources,point,direction,kind);
+      const head = sources.find(s => s.segment === 'head' && s.isLive() && (s.character === 'zombie' || cache.skullKit?.supports(s)));
       if (!head) return 0;
       const eyes = meshEyePlacements(meshBoneSource(head));
       const lost = absent.get(owner) ?? new Set<number>();
@@ -625,6 +740,18 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       }
       return count;
     },
+    skullState(owner) {
+      const missing = skullDamage.get(owner)?.missing ?? 0;
+      return { missing, pieces: cache.skullKit ? cache.skullKit.source.filter((_,i)=>missing & (1<<i)).map(p=>p.id) : [] };
+    },
+    explodeSkull(owner,sources,direction) {
+      const source = sources.find(s=>s.segment==='head' && cache.skullKit?.supports(s));
+      const skull = source && cache.skullKit?.head(source);
+      if (!source || !skull || !spawnSkull) return 0;
+      const result = explodeSkull(skullDamage.get(owner) ?? intactSkull(skull.pieces.length));
+      skullDamage.set(owner,result.state); detach(owner,source,skull,result.detached,direction);
+      return result.detached.length;
+    },
     eyeState(owner) { return { missing: [...(absent.get(owner) ?? [])], debris: debris.filter(d => d.owner === owner).length }; },
     stepDebris(dt) {
       const step = Math.min(Math.max(dt, 0), 0.05);
@@ -638,6 +765,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
       }
     },
     update(entries, owners, shown, exposed, extra, split, reach) {
+      extraOf = extra;
       stats.actors = entries.length;
       stats.segments = stats.rigid = stats.limb = stats.hidden = stats.organs = 0;
       stats.verts = stats.tris = 0;
@@ -699,17 +827,19 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
           // are the closed ones).
           const drawnSplit = split?.warp(owner as object, s.segment) ?? null;
           const skull = drawnSplit ? skullSplitOf(drawnSplit, splitLook.follow, split?.seed?.(owner as object) ?? 0) : null;
-          let radius = 0, scale = 1;
-          if (skull) {
-            const { min, max } = s.bounds;
-            centreV.set((min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2).applyMatrix4(segM);
-            scale = segM.getMaxScaleOnAxis();
-            radius = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]) / 2 * scale;
-          }
-          // What is drawn: a split segment's vertices and triangles once per copy.
-          const copies = drawPieces(baked.geometry, false, segM, owner, skull, centreV, radius);
-          stats.verts += baked.verts * copies;
-          stats.tris += baked.tris * copies;
+          const scale = skull ? segM.getMaxScaleOnAxis() : 1;
+          // An anatomical skull that has lost plates (skull-fracture.ts) is drawn as its surviving plates, each one
+          // a segment geometry of its own; whole, it is the one merged geometry `baked`.
+          const fitted = cache.skullKit?.head(s) ?? null;
+          const missing = fitted ? skullDamage.get(owner as object)?.missing ?? 0 : 0;
+          if (fitted && missing) {
+            for (let i = 0; i < fitted.pieces.length; i++) {
+              if (missing & (1 << i)) continue;
+              const plate = fitted.pieces[i]!;
+              prepareGeometry(plate.geometry, s);
+              drawBone(plate.geometry, plate.min, plate.max, plate.geometry.getAttribute('position').count, plate.geometry.index!.count / 3, owner, skull, scale);
+            }
+          } else drawBone(baked.geometry, s.bounds.min, s.bounds.max, baked.verts, baked.tris, owner, skull, scale);
           for (const e of eyes) {
             eyeM.copy(segM).multiply(tmpM.makeTranslation(e.center[0], e.center[1], e.center[2]))
               .multiply(tmpM.makeScale(e.radius, e.radius, e.radius));
@@ -806,6 +936,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     dispose() {
       clear();
       material.dispose();
+      skullMaterial?.dispose();
       eyeMaterial.dispose();
       organMaterial.dispose();
       splitMaterial.dispose();

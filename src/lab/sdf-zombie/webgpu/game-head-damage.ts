@@ -150,6 +150,8 @@ export interface HeadDamageDeps {
   burst(a: ZombieActor, at: Vec3, dir: Vec3): void;
   /** The modelled brain mesh (game-brain-gib.ts). Absent, or not loaded yet: the SDF brainPiece is thrown. */
   brain?: BrainGibLeaf;
+  /** Release an anatomical bone plate at the cracked region; zero keeps SDF chips. */
+  crackSkull?: (a: ZombieActor, point: Vec3, direction: Vec3) => number;
   /** Blood for a crater (registerBleed, at `kind`'s gout). */
   bleed(a: ZombieActor, w: Wound, point: Vec3, dir: Vec3, kind: 'pellet' | 'slug'): void;
   /** ctx.boot.attachPiece (absent before the chunk spawner exists: the pieces are then not drawn). */
@@ -607,7 +609,8 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
           // The whole brain is the modelled MESH (spec §14); the SDF brainPiece only while the GLB loads.
           const l = brainLaunch(c, dir, rand);
           const thrown = deps.brain?.throw(l.pos, l.vel, l.angVel) ?? false;
-          deps.gore(a, [...(thrown ? [] : [brainPiece(c, dir, rand)]), ...brainLumps(c, dir, rand), ...skullChips(c, dir, rand)]);
+          const cracked = deps.crackSkull?.(a,c,dir) ?? 0;
+          deps.gore(a, [...(thrown ? [] : [brainPiece(c, dir, rand)]), ...brainLumps(c, dir, rand), ...(cracked ? [] : skullChips(c, dir, rand))]);
           // Up, leaning out of the cracked region (0.4 × its outward normal). Straight out of a brow crack the burst
           // sprayed at the player and the brain went unseen behind streaks (smoke, b2-brain-3f).
           const outN = normalAt(field, c);
@@ -883,4 +886,3 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
     },
   };
 }
-

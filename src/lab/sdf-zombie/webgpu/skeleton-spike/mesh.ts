@@ -33,6 +33,7 @@ import { extractHullSoup, fitHullGrid, gradientOf } from '../surface-nets-cpu';
 import type { BoneFieldSource } from './contract';
 import { sweepOrganTubes, type OrganTubeSpec } from './mesh-organ-tubes';
 import type { Vec3 } from '../../types';
+import type { AnatomicalSkullKit } from './anatomical-skull';
 
 /** Extraction resolution. Matches BAKE_CELL (chunk-bake-geometry.ts): 1 cm
  *  cells are what the shipped bake pays for torn-flesh craters; the bone
@@ -78,9 +79,10 @@ export interface SegmentMesh {
   /** Segment-local indexed geometry, welded by exact position, smooth
    *  normals from computeVertexNormals (an organ's: see OrganMeshSpec). */
   geometry: THREE.BufferGeometry;
-  /** How the geometry was made: 'nets' (surface nets), or 'tubes' (an organ source swept from its prims; then the
-   *  geometry carries the `organTube` attribute). */
-  mesher: 'nets' | 'tubes';
+  /** How the geometry was made: 'nets' (surface nets), 'tubes' (an organ source swept from its prims; then the
+   *  geometry carries the `organTube` attribute), or 'asset' (an authored mesh fitted to the source: the anatomical
+   *  skull). */
+  mesher: 'nets' | 'tubes' | 'asset';
   verts: number;
   tris: number;
   /** CPU extraction cost, ms — reported, never asserted. */
@@ -201,15 +203,22 @@ export class SegmentMeshCache {
   /** How organ sources are meshed. Assignable: the next get() of an organ source keys (and builds) by the new spec,
    *  and the meshes of the old one stay cached until dispose(). */
   organMesh: OrganMeshSpec;
-  constructor(readonly cellSize: number = MESH_CELL, organMesh: OrganMeshSpec = ORGAN_MESHES[ORGAN_MESH_DEFAULT]) {
+  constructor(
+    readonly cellSize: number = MESH_CELL, organMesh: OrganMeshSpec = ORGAN_MESHES[ORGAN_MESH_DEFAULT],
+    readonly skullKit: AnatomicalSkullKit | null = null,
+  ) {
     this.organMesh = organMesh;
   }
 
   keyOf(source: BoneFieldSource): string {
+    const skull = this.skullKit?.head(source);
+    if (skull) return skull.mesh.key;
     return `${meshBoneSource(source).revision}@${source.kind === 'organ' ? organMeshKey(this.organMesh) : this.cellSize}`;
   }
 
   get(source: BoneFieldSource): SegmentMesh {
+    const skull = this.skullKit?.head(source);
+    if (skull) return skull.mesh;
     const key = this.keyOf(source);
     let m = this.#map.get(key);
     if (!m) {
@@ -230,7 +239,7 @@ export class SegmentMeshCache {
    *  view of the live map. */
   stats(): SegmentMeshCacheStats {
     return {
-      entries: this.#map.size,
+      entries: this.size,
       extractCount: this.#extractCount,
       extractMs: Math.round(this.#extractMs * 100) / 100,
       firstExtractAt: this.#firstExtractAt === null ? null : Math.round(this.#firstExtractAt * 100) / 100,
@@ -241,12 +250,12 @@ export class SegmentMeshCache {
   }
 
   get size(): number {
-    return this.#map.size;
+    return this.#map.size + (this.skullKit?.size ?? 0);
   }
 
   /** Total extracted vertices/triangles across live entries (diagnostics). */
   get totals(): { verts: number; tris: number } {
-    let verts = 0, tris = 0;
+    let { verts, tris } = this.skullKit?.totals ?? {verts:0,tris:0};
     for (const m of this.#map.values()) { verts += m.verts; tris += m.tris; }
     return { verts, tris };
   }
@@ -259,5 +268,6 @@ export class SegmentMeshCache {
   dispose(): void {
     for (const m of this.#map.values()) m.geometry.dispose();
     this.#map.clear();
+    this.skullKit?.dispose();
   }
 }

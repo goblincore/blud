@@ -502,6 +502,7 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
         const l = Math.hypot(dir[0], dir[1] + 0.6, dir[2]) || 1;
         spawnImpactGout(ctx.vfx.bloodSim, 'slug', at, [dir[0] / l, (dir[1] + 0.6) / l, dir[2] / l], rngStreams.bleed, ctx.boot.nextEmitterStream++);
         if (stumpWound) registerBleed(ctx, actor, stumpWound, 'stump');
+        ctx.render.segMeshRenderer?.explodeSkull(actor,ctx.render.skeletonSources.get(actor)?.sources ?? [],dir);
         ctx.boot.onGoreDispatch?.(actor, headPopDebris(head, dir, rngStreams.misc));
       },
     } : {}),

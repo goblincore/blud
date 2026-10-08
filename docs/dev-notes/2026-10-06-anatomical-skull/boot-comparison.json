@@ -1,0 +1,33 @@
+{
+  "baseCommit": "47db2bec9b596690381fbc9975c5942319e957e0",
+  "query": "seed=20261006&frozen=1",
+  "node": "/opt/homebrew/Cellar/node/25.9.0_1/bin/node",
+  "freshProfilePerRun": true,
+  "runs": [
+    {
+      "checkout": "base",
+      "run": "base-boot",
+      "drawOnce": 2512.2,
+      "warmMs": 3991
+    },
+    {
+      "checkout": "base",
+      "run": "base-boot-2",
+      "drawOnce": 5645.9,
+      "warmMs": 8661
+    },
+    {
+      "checkout": "anatomical",
+      "run": "new-boot",
+      "drawOnce": 4530.8,
+      "warmMs": 6701
+    },
+    {
+      "checkout": "anatomical",
+      "run": "new-boot-2",
+      "drawOnce": 3990.6,
+      "warmMs": 6139
+    }
+  ],
+  "interpretation": "Two samples each, high variance and overlapping ranges; no reliable performance verdict or steady-state GPU claim."
+}
