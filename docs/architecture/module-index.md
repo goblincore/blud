@@ -36,7 +36,7 @@ Each line is the first sentence of the module's header comment.
 | --- | --- | --- |
 | [webgpu/march/](#webgpumarch) | 54 | The SDF march shader, split by stage (WGSL). |
 | [webgpu/earlyz/](#webgpuearlyz) | 10 | Early-Z depth prepass for the march. |
-| [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 23 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
+| [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 27 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
 | [webgpu/upscale/](#webgpuupscale) | 8 | Upscaling of the low-res march target. |
 | [characters/](#characters) | 1 | Character bodies: `.blob` sources, generators and per-character data. |
 | [shared-wounds/](#shared-wounds) | 4 | Shared wound-field probe page. |
@@ -145,9 +145,10 @@ Early-Z depth prepass for the march.
 Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name).
 
 - `webgpu/skeleton-spike/anatomical-skull.fixture.ts` — THE REAL ANATOMICAL SKULL for the tests: public/assets/lab/anatomical-skull.glb read by hand (GLTFLoader decodes the atlas image through the DOM, and…
-- `webgpu/skeleton-spike/anatomical-skull.ts` — Offline skull mesh loading and rigid-head fitting.
+- `webgpu/skeleton-spike/anatomical-skull.ts` — The anatomical skull: loading its 14 plates and fitting them to a head, per character, with the eyes seated in the fitted orbits.
 - `webgpu/skeleton-spike/anatomical-skull.wgsl.ts` — Hand-written shading: real cavities/teeth come from geometry, not the old painted face masks.
 - `webgpu/skeleton-spike/contract.ts` — SKELETON REPRESENTATION COMPARISON — shared field contract (Task 1).
+- `webgpu/skeleton-spike/head-flesh.ts` — THE FLESH OF A HEAD, in the head segment's own frame at rest: what a skull fitted to the head has to stay under (skull-fit.ts).
 - `webgpu/skeleton-spike/mesh-appearance.ts` — Appearance maths for the skeleton segment meshes: tissue patch classes, skull cavity, sockets, teeth, gloss mask, with matching WGSL.
 - `webgpu/skeleton-spike/mesh-eyes.ts` — Eye placement, shading and impact picking for the skull segment mesh, with matching WGSL for the vessel, surface and emission terms.
 - `webgpu/skeleton-spike/mesh-organ-tubes.ts` — ORGANS, LOW-POLY (2026-10-07): an organ segment's mesh as SWEPT TUBES, one closed tube per organ prim, instead of a surface-nets extraction of their…
@@ -158,11 +159,14 @@ Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite th
 - `webgpu/skeleton-spike/mesh-split.ts` — THE SKULL MESH UNDER A HEAD SPLIT: the shader side of head-split.ts's skull rule (skullSplitOf, skullPieceAt).
 - `webgpu/skeleton-spike/mesh.ts` — SKELETON REPRESENTATION COMPARISON — Task 2: cached segment-local bone meshes.
 - `webgpu/skeleton-spike/organ-reach.ts` — ORGANS AS MESH (2026-10-06): which organ segments a body's wounds expose.
-- `webgpu/skeleton-spike/sculpt-cache.ts` — The game's bone-mesh cache for a page's query string: the skull resolveSkull (sculpt-variant.ts) chooses, built.
+- `webgpu/skeleton-spike/sculpt-cache.ts` — The game's bone-mesh cache for a page's query string: the skulls resolveSkull (sculpt-variant.ts) chooses, built.
 - `webgpu/skeleton-spike/sculpt-fragments.ts` — The sculpted skull in pieces: a head mesh's triangles sorted into ten named fragments by where they sit in the head's normalized box, for the head…
 - `webgpu/skeleton-spike/sculpt-paint.ts` — THE SECOND PAINT of the sculpted skull (sculpt-variant.ts: `paint`, `full-1cm`, `full`, the default).
-- `webgpu/skeleton-spike/sculpt-variant.ts` — Which skull a page draws: resolveSkull reads `?skull=` and `?sculpt=` and answers the skull, the sculpted skull's variant and its recipe.
+- `webgpu/skeleton-spike/sculpt-variant.ts` — Which skull a page draws, character by character: resolveSkull reads `?skull=`, `?sculpt=` and `?skullfit=` and answers the sculpted skull's variant…
 - `webgpu/skeleton-spike/selector.ts` — Mesh actor skeletons are the accepted forward default in dev and production.
+- `webgpu/skeleton-spike/skull-cast.ts` — The cast's skulls: which humanoids draw the anatomical skull in place of their sculpted head bone, and how it is fitted to each.
+- `webgpu/skeleton-spike/skull-fit.ts` — FITTING THE ANATOMICAL SKULL TO A HEAD'S FLESH, in two stages.
+- `webgpu/skeleton-spike/skull-orbits.ts` — Where an anatomical skull's eyes sit, and how big they are: in its own orbits, found on its own fitted triangles.
 - `webgpu/skeleton-spike/skull-split-hit.ts` — A SHOT AT A SPLIT SKULL. The anatomical skull's plates are stored on the CLOSED head (skull-fracture.ts), and a split head draws them once per piece,…
 - `webgpu/skeleton-spike/volume-gpu.ts` — SKELETON REPRESENTATION COMPARISON — Task 3b: HOST side of the GPU volume path.
 - `webgpu/skeleton-spike/volume.ts` — SKELETON REPRESENTATION COMPARISON — Task 3: cached segment-local bone distance GRIDS.

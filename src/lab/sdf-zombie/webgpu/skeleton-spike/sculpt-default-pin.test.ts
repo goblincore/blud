@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
+import { AnatomicalSkullKit } from './anatomical-skull';
+import { anatomicalSkullSource } from './anatomical-skull.fixture';
 import { parseBlob } from '../../blob-parse';
 import { compileBlob } from '../../blob-compile';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../../build-body';
@@ -82,6 +85,22 @@ describe('the default skull is pinned: the sculpted skull, full', () => {
       cache.dispose();
     }
     direct.geometry.dispose();
+  });
+
+  it.each(BLOBS)('%s: the same mesh on the default page WITH the plates loaded: the anatomical skull is the eight ball heads\', not his', async (character, blob) => {
+    // The page as it boots: the plates' asset loaded into a kit with the resolver's plan.
+    const cache = await createBoneMeshCache('', () => {}, plan => Promise.resolve(new AnatomicalSkullKit(anatomicalSkullSource(), new THREE.Texture(), new THREE.Vector2(1, 1), plan)));
+    const kit = cache.skullKit!, head = headOf(character, blob), pin = DEFAULT[character];
+    expect(kit).not.toBeNull();
+    expect(kit.fitOf(character)).toBeNull();
+    expect(kit.supports(head)).toBe(false);
+    expect(kit.head(head)).toBeNull();
+    expect(cache.keyOf(head)).toBe(pin.key);
+    expect(bytes(cache.get(head))).toBe(pin.bytes);
+    // And the kit made nothing for him.
+    expect(kit.made).toEqual([]);
+    expect(kit.fitOf('cultist')).toEqual(resolveSkull('').anatomical.cultist);
+    cache.dispose();
   });
 
   it('the second paint\'s shader text, as written for the second sculpt', () => {
