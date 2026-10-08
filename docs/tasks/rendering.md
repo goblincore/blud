@@ -2,6 +2,34 @@
 
 The march, temporal work, the upscaler, post, perf sessions. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Native wgpu + ray tracing spikes — done 2026-10-08, answer: not faster
+
+- [x] The captured `sdf:march` pass replayed through wgpu 30 / Metal against the same pass in Chrome: 27.8 ms vs
+  25.5 ms median (close-up, interleaved; inside the spread). No browser tax on the march, and naga's runtime checks are
+  worth ~0.5 ms. Tools `scripts/native-spike/`, `native/march-replay/`.
+  [Notes](../dev-notes/2026-10-08-native-wgpu-spike/NOTES.md).
+- [x] Hardware ray tracing tried (wgpu ray queries over a BVH of prim boxes, clean-room tracer on real prims): the BVH
+  lost to a plain slab-test loop in every scene (zombie x24: 2.10 ms vs 1.39 ms). The per-ray primitive list itself
+  beat group culling 2.5-4x there (4.37 -> 1.39 ms) and needs no ray tracing hardware.
+- [x] Per-ray primitive masks tried in the real march (`?raymask=apply`, flag-gated, text byte-identical without it): on
+  the tile-list path the zombie close-up got 0.6 ms SLOWER (13.3 -> 14.0 ms) and a 12-body crowd moved about -3 %, inside
+  the noise. The tile lists already leave only 10 % of the close-up's folds for a mask to skip. Picture parity not
+  established. Not worth pursuing as built.
+- [x] Owner's call 2026-10-08: the `apply` path and mode 22 removed, the `?raymask` counting probe (mode 21) kept.
+- [x] **Crowd dispatch default is `quad` again (owner's call, 2026-10-08).** Live `timeDraws`, bench distance scene,
+  boxes vs quad by spawned bodies: 0: 12.7 / 13.0 ms; 2: 15.8 / 19.0; 4: 31.0 / 16.6; 8: 69.1 / 23.8; 12: 109.5 / 23.8;
+  24: 236.9 / 38.3. Boxes cost about 10 ms a body in view (overlapping proxy boxes each re-march the pixel's whole tile
+  list; `frag_depth` defeats early-Z). The quad pays about 3 ms at 2 bodies, the range the 2026-09-15 recording that
+  chose boxes measured. `?crowddispatch=boxes` keeps the boxes. `march-hash`: the no-flag boot is now the quad canonical
+  `0c71e712…`; `MARCH_HASH_BOXES=1` pins boxes at `d7392d52…`; both run green. Sweep: `scripts/native-spike/crowd-dispatch.mjs`.
+- [x] Owner's calls after the playtest (2026-10-08): early-Z stays OFF and no per-frame dispatch. `?earlyz=1` does
+  nothing for the quad (a quad type never draws its front-face twin): doorway 23-25 ms with or without it, against
+  boxes 69-73 -> 54-55; pack 26-28 either way. A per-frame dispatch needs both programs warmed (a runtime switch
+  compiles the other one synchronously on first draw; cold crowd-ready time would roughly double) for about 3 ms at one
+  or two bodies of a type. If that 3 ms matters, aim at the quad's own low-count footprint instead.
+- [ ] For the Rust + wgpu release port: naga rejects the `ptr<storage, …>` parameters `wgslFn` emits (nine march
+  functions). `scripts/native-spike/naga-compat.mjs` is the mechanical rewrite.
+
 ## Early-Z for the SDF march (conservative depth), stage 1 — built behind `?earlyz=1`, owner look pending 2026-10-02
 
 - [x] Spec `docs/superpowers/specs/2026-10-01-sdf-march-early-z-design.md`, plan `docs/superpowers/plans/2026-10-01-sdf-march-early-z-stage-1.md`.

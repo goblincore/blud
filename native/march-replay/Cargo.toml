@@ -1,0 +1,19 @@
+[package]
+name = "march-replay"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# Native-renderer spike: replays a march pass captured from the browser
+# (scripts/native-spike/) through wgpu. Not part of the game build.
+[workspace]
+
+[dependencies]
+wgpu = "30"
+pollster = "0.4"
+serde_json = "1"
+winit = "0.30"
+png = "0.17"
+
+[profile.release]
+debug = 1
