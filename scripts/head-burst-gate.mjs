@@ -1,6 +1,6 @@
 // scripts/head-burst-gate.mjs — what a gun round does to a zombie's head (head-burst.ts headShotRule,
 // decapitationRule; webgpu/game-head-shot.ts; the actor's pop). REAL rounds through __sdfGame.fire() and fireSlug()
-// on the bare ring page (/sdf-game.html, no ?level), frozen zombies, five boots. Three draw the default skull (no
+// on the bare ring page (/sdf-game.html, no ?level), frozen zombies, six boots. Four draw the default skull (no
 // skull parameter: the sculpted skull, `full`); the two whose checks are the anatomical skull's ask for it
 // (`?skull=anatomical`). Each boot checks that it draws the skull it means to.
 //
@@ -50,7 +50,15 @@
 // BOOT 3, the pop on the default skull, on a page of its own:
 //   DS. the decapitating slug pops the head: the sculpted head mesh is thrown as ten fragments (sculpt-fragments.ts),
 //       the head segment and its eyes are not drawn, nothing is left at the old head position.
-// E. zero console errors / exceptions, over all five.
+// BOOT 4, the cultist (`?spawn=cultist`: every zombie slot a cultist), on the default skull. He is one of the eight
+// humanoids whose head bone is a few balls, and draws the ANATOMICAL skull fitted to his own flesh (skeleton-spike/
+// skull-cast.ts), while the page's skull stays the sculpted one:
+//   CU. the page lists him among the characters that draw the plates, under his fit, and the fit was made as he was
+//       spawned; his skull's box fills the share of his head the table states (0.8 or more each way); its orbits
+//       are level with his ember eyes and his eyes are drawn seated in them, sized from them; his head is drawn on
+//       the plates' material; real pellets at his face break a plate off; his head's pop releases all fourteen
+//       plates, and the sculpted skull's fragments are never cut.
+// E. zero console errors / exceptions, over all six.
 // Photos are written to OUT for the look loop. Usage:
 //   export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up
 //   node scripts/head-burst-gate.mjs 5241 9241
@@ -190,7 +198,7 @@ async function capture(name) {
 }
 // ---- Boot the bare ring page, frozen zombies -----------------------------------------------------------
 let centre = [0, 0, 0], pool = [], usedZ = new Set();
-async function boot(label, query = "") {
+async function boot(label, query = "", character = null) {
   usedZ = new Set();
   const s = await openSession(label);
   await send("Page.enable"); await send("Runtime.enable");
@@ -209,7 +217,10 @@ async function boot(label, query = "") {
   await evaluate("__sdfGame.setFreeAim(true)");
   await evaluate("__sdfGame.setAimPoint(0, 0)");
   for (let i = 0; i < 90; i++) await evaluate("__sdfGame.step(1, 1 / 60)");
-  const zs = (await evaluate("__sdfGame.actorList()")).filter((a) => a.kind === "zombie");
+  // The cast: the zombies, or (a `?spawn=` boot) the actors whose skeleton was built as `character`.
+  const zs = character === null ? (await evaluate("__sdfGame.actorList()")).filter((a) => a.kind === "zombie")
+    : await evaluate(`__sdfGame.actorList().filter((z) => __sdfGame.skullDrawn(z.id)?.character === ${JSON.stringify(character)})`);
+  if (!zs.length) die(`[${label}] no ${character ?? "zombie"} in the cast`);
   const byRoom = new Map();
   for (const z of zs) byRoom.set(z.room, [...(byRoom.get(z.room) ?? []), z]);
   const ROOM = [...byRoom.entries()].sort((a, b) => b[1].length - a[1].length)[0][0];
@@ -221,7 +232,7 @@ async function boot(label, query = "") {
   let wb = null;
   for (let i = 0; i < 400; i++) { wb = await evaluate("__sdfGame.warmBackground()"); if (wb.gib === "ready" || wb.gib === "failed") break; await sleep(500); if (i % 10 === 0) await evaluate("__sdfGame.step(1, 1 / 60)"); }
   if (wb?.gib !== "ready") die(`[${label}] the background gib warm is ${JSON.stringify(wb)}: attached pieces would never draw`);
-  console.log(`[${label}] ready; room ${ROOM} (${pool.length} zombies)`);
+  console.log(`[${label}] ready; room ${ROOM} (${pool.length} ${character ?? "zombie"}s)`);
   await skullCheck(label, /skull=anatomical/.test(query) ? "anatomical" : "sculpt");
 }
 /** THE SKULL A BOOT DRAWS (__sdfGame.skeletonDiagnostics): the anatomical plates on the boot that asks for them, the
@@ -763,6 +774,80 @@ try {
   check(fragPaints.length === 10 && fragPaints.every((q) => q === 2), `DS: every fragment keeps the head's paint, the second (${fragPaints.join(", ")})`);
   await evaluate(`__sdfGame.placePlayer({ x: ${dsAt[0] + (centre[0] - dsAt[0]) * 0.3}, z: ${dsAt[2] + (centre[2] - dsAt[2]) * 0.3}, yaw: ${yawOf(dsAt[0] - centre[0], dsAt[2] - centre[2])}, pitch: 0 })`);
   await stepOne(); await capture("DS-popped");
+  closeSession(S);
+
+  // ======== BOOT 4: the cultist, who draws a fitted anatomical skull on the default page ========
+  await boot("cultist", "&spawn=cultist", "cultist");
+  {
+    const diag = await evaluate("__sdfGame.skeletonDiagnostics()");
+    const table = await evaluate(`import("/src/lab/sdf-zombie/webgpu/skeleton-spike/skull-cast.ts").then((m) => ({ heads: Object.keys(m.BALL_HEADS), cultist: m.BALL_HEADS.cultist }))`);
+    const pieces = await evaluate(`import("/src/lab/sdf-zombie/webgpu/skeleton-spike/anatomical-skull.ts").then((m) => [...m.SKULL_PIECES])`);
+    check(JSON.stringify(Object.keys(diag.anatomical)) === JSON.stringify(table.heads) && diag.anatomical.cultist === table.cultist.spec.fit && diag.anatomical.zombie === undefined,
+      `CU: the default page draws the anatomical skull on the eight ball-headed humanoids and on nobody else, the cultist under his fit (${JSON.stringify(diag.anatomical)})`);
+    const made = diag.skullFits.filter((f) => f.character === "cultist");
+    check(made.length === 1 && made[0].fit === table.cultist.spec.fit, `CU: his skull was fitted once, as the cast was spawned and before any bone was drawn (${JSON.stringify(diag.skullFits)})`);
+    note(`CU: the fit took ${made[0]?.ms.toFixed(0)} ms, once for the six cultists of this boot`);
+    const asset = await evaluate(`(() => { const e = performance.getEntriesByType("resource").filter((r) => r.name.includes("anatomical-skull.glb")); return e.map((r) => ({ ms: +r.duration.toFixed(1), bytes: r.transferSize || r.encodedBodySize, decoded: r.decodedBodySize })); })()`);
+    note(`CU: the plates' asset on this boot: ${JSON.stringify(asset)}`);
+    check(asset.length === 1, `CU: the plates' asset was asked for once (${asset.length})`);
+    const CU = fresh();
+    const fit = await evaluate(`__sdfGame.skullFit(${CU.id})`);
+    const size = fit ? [0, 1, 2].map((k) => fit.max[k] - fit.min[k]) : [0, 0, 0];
+    const wide = fit ? size[0] / (2 * fit.flesh.half) : 0, deep = fit ? size[2] / (fit.flesh.front + fit.flesh.back) : 0;
+    check(!!fit && fit.name === "snug" && fit.skin === true && fit.eyeHs === table.cultist.spec.eyeHs && fit.shrunk === 1,
+      `CU: his skull is fitted to his skin under ${fit?.name}, its orbits held on his ember eyes' line (eyeHs ${fit?.eyeHs}; the table's ${table.cultist.spec.eyeHs})`);
+    check(wide >= 0.8 && deep >= 0.8 && Math.abs(wide - table.cultist.fill.wide) < 0.02 && Math.abs(deep - table.cultist.fill.deep) < 0.02,
+      `CU: its box fills the stated share of his head: ${(size[0] * 1000).toFixed(0)} x ${(size[1] * 1000).toFixed(0)} x ${(size[2] * 1000).toFixed(0)} mm, ${wide.toFixed(3)} of the head across and ${deep.toFixed(3)} front to back (the table: ${table.cultist.fill.wide} and ${table.cultist.fill.deep}; both 0.8 or more)`);
+    const orbitY = fit ? (fit.orbits[0].centre[1] + fit.orbits[1].centre[1]) / 2 : NaN;
+    check(!!fit && fit.orbits.length === 2 && fit.eyeLine !== null && Math.abs(orbitY - fit.eyeLine) <= 0.002,
+      `CU: its orbits are level with his ember eyes: ${((orbitY - fit?.eyeLine) * 1000).toFixed(2)} mm from their line (within 2 mm)`);
+    // The bones are drawn once something is exposed: a torso wound.
+    const fr = await evaluate(`__sdfGame.head.frame(${CU.id})`), f = headAxis(fr.quat, [0, 0, 1]);
+    let hit = false;
+    for (const drop of [0.45, 0.35, 0.55, 0.25, 0.7]) { hit = await evaluate(`__sdfGame.stampWoundAt(${fr.centre[0] + f[0] * 1.5}, ${fr.centre[1] - drop}, ${fr.centre[2] + f[2] * 1.5}, ${-f[0]}, 0, ${-f[2]}, "pellet", ${CU.id})`); if (hit) break; }
+    if (!hit) fail("CU: no torso wound landed");
+    await stand(CU.id, 0.8); await stepN(3);
+    const drawnCu = await evaluate(`(() => { const d = __sdfGame.skullDrawn(${CU.id}); const h = d ? d.whole.filter((q) => !q.eye && q.head) : []; return { heads: h.length, materials: [...new Set(h.map((q) => q.material))], paints: [...new Set(h.map((q) => q.paint))] }; })()`);
+    check(drawnCu.heads >= 1 && drawnCu.materials.length === 1 && drawnCu.materials[0] === "skeleton-plate" && drawnCu.paints[0] === null,
+      `CU: his head is drawn as the anatomical skull's plates, under neither of the sculpted skull's paints (${JSON.stringify(drawnCu)})`);
+    const eyes = await evaluate(`__sdfGame.meshEyes(${CU.id})`);
+    const eyeOk = !!fit && eyes?.length === 2 && eyes.every((e, i) => Math.hypot(e.centre[0] - fit.world.eyes[i][0], e.centre[1] - fit.world.eyes[i][1], e.centre[2] - fit.world.eyes[i][2]) < 1e-5 && Math.abs(e.radius - fit.eyes[i].radius) < 1e-6);
+    const inOrbit = !!fit && fit.eyes.length === 2 && fit.eyes.every((e, i) => Math.hypot(e.center[0] - fit.orbits[i].centre[0], e.center[1] - fit.orbits[i].centre[1]) < 0.25 * fit.orbits[i].radius && e.center[2] + e.radius < fit.orbits[i].centre[2]);
+    const sized = !!fit && fit.eyes.every((e) => Math.abs(e.radius / ((fit.orbits[0].radius + fit.orbits[1].radius) / 2) - 1.13) < 1e-6);
+    check(eyeOk && inOrbit && sized, `CU: his two eyes are drawn at the fitted skull's own seats, each within a quarter of its orbit's radius of the orbit's centre and behind its rim, and sized from the orbits (eye radius ${(fit?.eyes[0]?.radius * 1000).toFixed(1)} mm in orbits of ${fit?.orbits.map((o) => (o.radius * 1000).toFixed(1)).join(" and ")} mm; drawn ${JSON.stringify(eyes?.map((e) => e.centre.map((v) => +v.toFixed(3))))})`);
+    await capture("CU-fitted");
+    // A plate can be shot off: real pellet volleys at his face from 2 m (the crosshair 8 cm over the head's centre:
+    // a volley lands under it), until one breaks.
+    const frag0 = await fragments();
+    let volleys = 0, broken = [];
+    for (; volleys < 4 && broken.length === 0; volleys++) {
+      const aim = await crosshairOn(CU.id, SHOT_D, [0, 0.08, 0], FRONT);
+      if (aim.actor !== CU.id) fail(`CU: aim control: the volley is on actor ${aim.actor}, not ${CU.id}`);
+      let fired = false;
+      for (let i = 0; i < 6 && !fired; i++) { await evaluate("__sdfGame.refillShells()"); fired = await evaluate("__sdfGame.fire(1)"); if (!fired) await stepN(90); }
+      if (!fired) fail("CU: fire(1) never fired");
+      await stepN(30);
+      broken = (await evaluate(`__sdfGame.skullState(${CU.id})`)).pieces;
+    }
+    const flying = await evaluate("__sdfGame.skullFragments().map((q) => q.plate)");
+    check(broken.length >= 1 && broken.every((n) => pieces.includes(n)) && (await fragments()) - frag0 >= broken.length && flying.every((n) => pieces.includes(n)),
+      `CU: pellets at his face break a plate off his fitted skull: ${broken.join(", ")} after ${volleys} volley(s), thrown as ${(await fragments()) - frag0} fragment(s) (${flying.join(", ")})`);
+    check(await headOn(CU.id), "CU: his head is still on");
+    await stand(CU.id, 0.8); await capture("CU-plate-off");
+    // His pop (the soft target's own) releases every plate, and the sculpted skull's fragments are never cut.
+    const CP = fresh();
+    await stand(CP.id, 0.9);
+    const cp0 = await fragments();
+    const popped = await evaluate(`__sdfGame.head.pop(${CP.id}, 0, 0, -1)`);
+    let offAt = -1;
+    for (let k = 0; k < 30 && offAt < 0; k++) { await stepOne(); if (!(await headOn(CP.id))) offAt = k; }
+    const cpState = await evaluate(`__sdfGame.skullState(${CP.id})`), cpNames = await evaluate("__sdfGame.skullFragments().map((q) => q.plate)");
+    const cuts = await evaluate("__sdfGame.skullFragmentCuts()");
+    check(popped === true && offAt >= 0 && cpState.pieces.length === 14 && (await fragments()) - cp0 === 14,
+      `CU: his head's pop releases all fourteen plates of the fitted skull (popped ${popped}, the head off on frame ${offAt}; ${cpState.pieces.length} plates missing, ${(await fragments()) - cp0} fragments thrown)`);
+    check(cpNames.every((n) => pieces.includes(n)) && cuts.meshes === 0, `CU: every fragment is a plate, and the sculpted skull's fragments were never cut for him (${cuts.meshes} meshes cut)`);
+    await stepN(6); await capture("CU-popped");
+  }
 } finally { if (S) closeSession(S); }
 
 const errs = consoleEvents.filter((e) => e.type === "error" || e.type === "exception");

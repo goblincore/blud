@@ -95,12 +95,15 @@ describe('the flesh of a head (head-flesh.ts)', () => {
   });
 
   it('a head whose hair is ordinary prims has less skin than flesh: the schoolgirl\'s bob, the female\'s bun', () => {
-    for (const [character, up] of [['schoolgirl', 0.14], ['female', 0.2]] as const) {
+    for (const character of ['schoolgirl', 'female']) {
       const body = build(character), flesh = headFlesh(body, bindRig(body))!;
-      // A point high in the hair, on the head's middle plane: flesh, and not skin.
-      const sheet = flesh.sheet!, p: Vec3 = [sheet.centre[0], sheet.centre[1] + up, sheet.centre[2] - 0.03];
-      expect(flesh.distance(p), character).toBeLessThan(0);
-      expect(flesh.skin!.distance(p), character).toBeGreaterThan(0);
+      // Lattice points a centimetre or more inside the flesh and a centimetre or more outside the skin: in the hair.
+      let hair = 0;
+      for (let x = -0.14; x <= 0.14; x += 0.02) for (let y = -0.2; y <= 0.3; y += 0.02) for (let z = -0.16; z <= 0.16; z += 0.02) {
+        const p: Vec3 = [flesh.centre[0] + x, flesh.centre[1] + y, flesh.centre[2] + z];
+        if (flesh.distance(p) < -0.01 && flesh.skin!.distance(p) > 0.01) hair++;
+      }
+      expect(hair, character).toBeGreaterThan(3);
     }
   });
 });

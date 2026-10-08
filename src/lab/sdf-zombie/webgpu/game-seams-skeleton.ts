@@ -234,8 +234,10 @@ export function createSkeletonSeams(ctx: GameContext) {
      *  fitted skull's box in the head segment's frame, the furthest stage 2 moved a vertex (m), its passes, whether
      *  it had to shrink the skull after them (1: no) and the fit's wall time (ms); the flesh head it was sized to
      *  (`flesh`: its deepest point and its reach from there to each side); the skull's own orbits and the eye seats
-     *  in them, head-local; `eyeHs`, the painted eye line the orbits were held on (null: the bone envelope's);
-     *  `madeMs`, the whole fitted skull's (the fit, its geometry, the orbits). The envelope fit answers its name
+     *  in them, head-local, and in the world as the head stands now (`world`); `eyeHs`, the eye line of the face the
+     *  orbits were held on, in the face sheet's units, and `eyeLine`, the same as a height in the head segment's
+     *  frame (null: the bone envelope's); `skin`: fitted to the skin alone; `madeMs`, the whole fitted skull's wall
+     *  time (the fit, its geometry, the orbits). The envelope fit answers its name
      *  alone. null without the anatomical skull, the actor, its head, or for a character that draws its sculpted
      *  bone. */
     skullFit: (bodyId?: number) => {
@@ -243,14 +245,16 @@ export function createSkeletonSeams(ctx: GameContext) {
       const head = a && ctx.render.skeletonSources.get(a)?.sources.find(s => s.segment === 'head');
       const fitted = head && ctx.render.segMeshCache?.skullKit?.head(head);
       if (!fitted) return null;
-      const f = fitted.fit;
+      const f = fitted.fit, spec = ctx.render.segMeshCache!.skullKit!.fitOf(head!.character), sheet = head!.flesh?.sheet ?? null;
       return f ? {
         name: f.name, scale: [...f.result.affine.scale], offset: [...f.result.affine.offset], min: [...f.min], max: [...f.max],
         maxMove: f.result.warp.maxMove, passes: f.result.passes.length, shrunk: f.result.shrunk, ms: f.result.ms,
         flesh: { ...f.result.affine.flesh, centre: [...f.result.affine.flesh.centre] },
         orbits: fitted.orbits.map(o => ({ centre: [...o.centre], radius: o.radius })),
         eyes: (fitted.eyes ?? []).map(e => ({ center: [...e.center], radius: e.radius })),
-        eyeHs: ctx.render.segMeshCache!.skullKit!.fitOf(head!.character)?.eyeHs ?? null, madeMs: fitted.mesh.bakeMs,
+        eyeHs: spec?.eyeHs ?? null, eyeLine: spec?.eyeHs !== undefined && sheet ? sheet.centre[1] + spec.eyeHs * sheet.axes[1] : null,
+        skin: !!spec?.skin, madeMs: fitted.mesh.bakeMs,
+        world: { eyes: (fitted.eyes ?? []).map(e => head!.toWorld(e.center)), orbits: fitted.orbits.map(o => head!.toWorld(o.centre)) },
       } : { name: 'envelope' as const };
     },
     /** skeleton=mesh diagnostics: one round at actor `bodyId`'s anatomical skull, through the renderer's own
