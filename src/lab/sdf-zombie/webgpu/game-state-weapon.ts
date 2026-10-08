@@ -30,6 +30,7 @@ import type { FlareHarness } from './game-flare';
 import type { FlailWeapon } from './game-flail';
 import type { HeadDamageLeaf } from './game-head-damage';
 import type { HeadSplitLeaf } from './game-head-split';
+import type { HeadShotLeaf } from './game-head-shot';
 import type { LauncherView } from './game-launcher-view';
 import type * as THREE from 'three/webgpu';
 import type { Vec3 } from '../types';
@@ -103,6 +104,8 @@ export interface WeaponState {
   headDamage: HeadDamageLeaf | null;
   /** The head split leaf (game-head-split.ts): the axe's head chops; null until built. */
   headSplit: HeadSplitLeaf | null;
+  /** The head-shot leaf (game-head-shot.ts): what a gun round does to a zombie's head; null until built. */
+  headShot: HeadShotLeaf | null;
   /** Opt-in slot 4 FPV prototype, absent unless ?launcher=1. */
   launcher: LauncherView | null;
   /** The gun's own rig group; the codemod supplies the real group. */
@@ -234,6 +237,7 @@ export function makeWeaponState(): WeaponState {
     flail: null,
     headDamage: null,
     headSplit: null,
+    headShot: null,
     launcher: null,
     gunRig: unbuilt<THREE.Group>(),
     hingePivot: null,

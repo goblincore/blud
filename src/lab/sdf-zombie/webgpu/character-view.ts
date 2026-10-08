@@ -434,6 +434,8 @@ export function createWoundRing(): WoundRing {
         rows.map(w => w.radius),
         rows.map((w, i) => 'presetCut' in w && w.presetCut ? -1 : TYPE_ID[w.type] + Math.min(0.45, Math.max(0, torn[i]!.torn ? torn[i]!.ragged : w.ragged ?? 0))),
         rows.map(w => w.ageSec),
+        // A wound with no lip (rimScale 0: a cloth hole, a crater with no flesh behind it, a lip a sever took) uploads
+        // a height of exactly 0: the shader's lip term is then a bump of no height.
         rows.map((w, i) => WOUND_PROFILES[w.type].rimSplayScale * (w.rimScale ?? 1) * torn[i]!.splayMul),
         // META.w: the crater rim code reads it as an offset scale; cut wounds (flag 32) carry their sag there,
         // which requires Task 5's cut branch to skip the rim for them.

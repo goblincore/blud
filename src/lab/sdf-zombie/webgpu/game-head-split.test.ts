@@ -8,6 +8,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from '../build-body';
 import { makeZombie } from '../body';
+import { parseBlob } from '../blob-parse';
+import { compileBlob } from '../blob-compile';
+import { characterEntry } from '../character-registry';
 import { gibPlan } from '../gib-parts';
 import { sdBody } from '../validate';
 import { MAX_HEAD_WOUNDS, MAX_WOUNDS, pushWound, woundWorldPos, worldHitToWound, type Wound } from '../damage';
@@ -32,12 +35,16 @@ const made: { dispose(): void }[] = [];
 afterEach(() => { for (const r of made.splice(0)) r.dispose(); });
 
 /** A fresh zombie (never stepped: yaw 0, the head frame is the identity), its blasts recorded and its split hook and
- *  head re-poses observable. */
-function freshActor(id = 7) {
+ *  head re-poses observable. `character`: a registry character in its place, on its own motion profile and under its
+ *  own name, as game-spawn.ts makes it. */
+function freshActor(id = 7, character?: string) {
   // The view takes every call and keeps the eyes the split leaf hands it (setSplitEye; null takes the eye back).
   const eyes: (Vec3 | null)[] = [];
   const view = new Proxy({}, { get: (_t, k) => (k === 'setSplitEye' ? (e: Vec3 | null) => { eyes.push(e); } : () => {}) });
-  const a = createZombieActor({ id, room: 0, body: buildBody(makeZombie(), DEFAULT_BUILD_OPTS, {}), view: view as never,
+  const entry = character ? characterEntry(character) : null;
+  const a = createZombieActor({ id, room: 0, view: view as never,
+    body: entry ? buildBody(compileBlob(parseBlob(entry.src)), DEFAULT_BUILD_OPTS) : buildBody(makeZombie(), DEFAULT_BUILD_OPTS, {}),
+    ...(entry ? { profile: entry.profile, characterName: entry.name } : {}),
     start: [0, 0, 0], seed: 3, bounds: { minX: -5, maxX: 5, minZ: -5, maxZ: 5 }, furniture: [] });
   const seen = { blasts: [] as ActorBlastEffect[], reposes: 0, hook: null as ((p: BuildResult) => SplitWarp | null) | null, eyes };
   const blast = a.blast, repose = a.reposeHead, setHook = a.setHeadSplit;
@@ -47,8 +54,8 @@ function freshActor(id = 7) {
   return { a, seen };
 }
 
-function fixture(o: { headDamaged?: HeadSplitDeps['headDamaged']; frozen?: boolean; wobble?: WobbleParams } = {}) {
-  const { a, seen } = freshActor();
+function fixture(o: { headDamaged?: HeadSplitDeps['headDamaged']; frozen?: boolean; wobble?: WobbleParams; character?: string } = {}) {
+  const { a, seen } = freshActor(7, o.character);
   const ctx = {
     weapon: { aimRig: new THREE.Group(), viewModelAnchor: new THREE.Group(), slotState: makeWeaponSlotState('axe'), headSplit: null as unknown },
     player: { player: { yaw: 0, pitch: 0 } },
@@ -238,9 +245,9 @@ describe('the leaf: refusals', () => {
   });
   it('only the zombie has presets; an open head does not open again', () => {
     const f = fixture();
-    f.a.profileName = () => 'cultist';
+    f.a.characterName = () => 'cultist';
     expect(f.open(X, f.skinFrom(f.view.eye))).toBeNull();
-    f.a.profileName = () => 'zombie';
+    f.a.characterName = () => 'zombie';
     expect(f.open(X, f.skinFrom(f.view.eye))).not.toBeNull();
     const st = f.split.state(7);
     expect(f.open(Z, f.skinFrom(f.view.eye))).toBeNull();
@@ -787,6 +794,30 @@ describe('the axe drives the split (the real zombie)', () => {
     expect(f.seen.blasts.map(b => b.wounds[0]!.headRegion)).toEqual(Array.from({ length: AXE_HEAD.chopsToKill }, (_, i) => `axe-${i + 1}`));
     expect(f.seen.blasts.map(b => b.forceCollapse)).toEqual(Array.from({ length: AXE_HEAD.chopsToKill }, (_, i) => i === AXE_HEAD.chopsToKill - 1));
     expect('split' in f.a.posed()).toBe(false);
+  });
+
+  it('ONLY THE ZOMBIE SPLITS, by its character and not its motion profile: a head chop on a character that moves on the zombie\'s profile keeps part A', () => {
+    for (const character of ['female', 'clown', 'bonewalker']) {
+      const f = fixture({ character });
+      // It moves as the zombie does, and is not the zombie.
+      expect(f.a.profileName(), character).toBe('zombie');
+      expect(f.a.characterName(), character).toBe(character);
+      for (let i = 0; i < AXE_HEAD.chopsToKill; i++) expect(f.axe.chop(7, 'H', 'head'), character).toBe(1);
+      // No split: the leaf holds no state, the pose carries none, and no cut face was stamped.
+      expect(f.split.isOpen(f.a), character).toBe(false);
+      expect(f.split.state(7), character).toBeNull();
+      expect('split' in f.a.posed(), character).toBe(false);
+      expect(f.a.wounds().some(w => w.headRegion?.startsWith('split')), character).toBe(false);
+      // Part A: each chop is a head chop, counted, with its own head-tagged cut, and the last one kills.
+      expect(f.axe.debug().heads, character).toEqual({ 7: AXE_HEAD.chopsToKill });
+      expect(f.seen.blasts.map(b => b.wounds[0]!.headRegion), character).toEqual(Array.from({ length: AXE_HEAD.chopsToKill }, (_, i) => `axe-${i + 1}`));
+      expect(f.seen.blasts.map(b => b.forceCollapse), character).toEqual(Array.from({ length: AXE_HEAD.chopsToKill }, (_, i) => i === AXE_HEAD.chopsToKill - 1));
+      // The same body under the zombie's name would split: the name is what refuses it.
+      const g = fixture({ character });
+      g.a.characterName = () => 'zombie';
+      expect(g.axe.chop(7, 'H', 'head'), character).toBe(1);
+      expect(g.split.isOpen(g.a), character).toBe(true);
+    }
   });
 
   /** One real click with the eye at `eye`, aimed level along -z: the swing runs to its strike. Returns the strike. */

@@ -36,7 +36,7 @@ Each line is the first sentence of the module's header comment.
 | --- | --- | --- |
 | [webgpu/march/](#webgpumarch) | 54 | The SDF march shader, split by stage (WGSL). |
 | [webgpu/earlyz/](#webgpuearlyz) | 10 | Early-Z depth prepass for the march. |
-| [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 14 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
+| [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 27 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
 | [webgpu/upscale/](#webgpuupscale) | 8 | Upscaling of the low-res march target. |
 | [characters/](#characters) | 1 | Character bodies: `.blob` sources, generators and per-character data. |
 | [shared-wounds/](#shared-wounds) | 4 | Shared wound-field probe page. |
@@ -45,10 +45,10 @@ Each line is the first sentence of the module's header comment.
 | [Dev panels](#dev-panels) | 10 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 23 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 74 | Gameplay features wired into the game loop. |
+| [Game: feature modules](#game-feature-modules) | 76 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
-| [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 7 | Blood views, the goo layer, impact splashes. |
+| [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 8 | Blood views, the goo layer, impact splashes. |
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
 | [Levels and world](#levels-and-world) | 27 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
@@ -64,7 +64,7 @@ Each line is the first sentence of the module's header comment.
 | [AI and actors (logic)](#ai-and-actors-logic) | 11 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 9 | First-person mode, dynamite flight, explosions, rockets, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 8 | Blood simulation, probe grids, ambient. |
-| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 4 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
+| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 5 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
 
@@ -144,17 +144,30 @@ Early-Z depth prepass for the march.
 
 Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name).
 
+- `webgpu/skeleton-spike/anatomical-skull.fixture.ts` — THE REAL ANATOMICAL SKULL for the tests: public/assets/lab/anatomical-skull.glb read by hand (GLTFLoader decodes the atlas image through the DOM, and…
+- `webgpu/skeleton-spike/anatomical-skull.ts` — The anatomical skull: loading its 14 plates and fitting them to a head, per character, with the eyes seated in the fitted orbits.
+- `webgpu/skeleton-spike/anatomical-skull.wgsl.ts` — Hand-written shading: real cavities/teeth come from geometry, not the old painted face masks.
 - `webgpu/skeleton-spike/contract.ts` — SKELETON REPRESENTATION COMPARISON — shared field contract (Task 1).
+- `webgpu/skeleton-spike/head-flesh.ts` — THE FLESH OF A HEAD, in the head segment's own frame at rest: what a skull fitted to the head has to stay under (skull-fit.ts).
 - `webgpu/skeleton-spike/mesh-appearance.ts` — Appearance maths for the skeleton segment meshes: tissue patch classes, skull cavity, sockets, teeth, gloss mask, with matching WGSL.
 - `webgpu/skeleton-spike/mesh-eyes.ts` — Eye placement, shading and impact picking for the skull segment mesh, with matching WGSL for the vessel, surface and emission terms.
 - `webgpu/skeleton-spike/mesh-organ-tubes.ts` — ORGANS, LOW-POLY (2026-10-07): an organ segment's mesh as SWEPT TUBES, one closed tube per organ prim, instead of a surface-nets extraction of their…
 - `webgpu/skeleton-spike/mesh-organ.ts` — ORGANS AS MESH (2026-10-06): the organ mesh's material terms.
 - `webgpu/skeleton-spike/mesh-renderer.ts` — The forward-mode renderer for skeleton segment meshes: one pooled mesh per live bone segment per actor, posed from the bone contract.
+- `webgpu/skeleton-spike/mesh-skull-2.ts` — The second sculpt of the head's bone: the authored bone carved toward a human skull (brow, angular orbits, pear nose, cheek hollows, parted jaws).
 - `webgpu/skeleton-spike/mesh-skull.ts` — The mesh-skull sculpt: meshBoneSource adapts a bone field source into the carved skull and mandible, plus the skull art revision names.
 - `webgpu/skeleton-spike/mesh-split.ts` — THE SKULL MESH UNDER A HEAD SPLIT: the shader side of head-split.ts's skull rule (skullSplitOf, skullPieceAt).
 - `webgpu/skeleton-spike/mesh.ts` — SKELETON REPRESENTATION COMPARISON — Task 2: cached segment-local bone meshes.
 - `webgpu/skeleton-spike/organ-reach.ts` — ORGANS AS MESH (2026-10-06): which organ segments a body's wounds expose.
+- `webgpu/skeleton-spike/sculpt-cache.ts` — The game's bone-mesh cache for a page's query string: the skulls resolveSkull (sculpt-variant.ts) chooses, built.
+- `webgpu/skeleton-spike/sculpt-fragments.ts` — The sculpted skull in pieces: a head mesh's triangles sorted into ten named fragments by where they sit in the head's normalized box, for the head…
+- `webgpu/skeleton-spike/sculpt-paint.ts` — THE SECOND PAINT of the sculpted skull (sculpt-variant.ts: `paint`, `full-1cm`, `full`, the default).
+- `webgpu/skeleton-spike/sculpt-variant.ts` — Which skull a page draws, character by character: resolveSkull reads `?skull=`, `?sculpt=` and `?skullfit=` and answers the sculpted skull's variant…
 - `webgpu/skeleton-spike/selector.ts` — Mesh actor skeletons are the accepted forward default in dev and production.
+- `webgpu/skeleton-spike/skull-cast.ts` — The cast's skulls: which humanoids draw the anatomical skull in place of their sculpted head bone, and how it is fitted to each.
+- `webgpu/skeleton-spike/skull-fit.ts` — FITTING THE ANATOMICAL SKULL TO A HEAD'S FLESH, in two stages.
+- `webgpu/skeleton-spike/skull-orbits.ts` — Where an anatomical skull's eyes sit, and how big they are: in its own orbits, found on its own fitted triangles.
+- `webgpu/skeleton-spike/skull-split-hit.ts` — A SHOT AT A SPLIT SKULL. The anatomical skull's plates are stored on the CLOSED head (skull-fracture.ts), and a split head draws them once per piece,…
 - `webgpu/skeleton-spike/volume-gpu.ts` — SKELETON REPRESENTATION COMPARISON — Task 3b: HOST side of the GPU volume path.
 - `webgpu/skeleton-spike/volume.ts` — SKELETON REPRESENTATION COMPARISON — Task 3: cached segment-local bone distance GRIDS.
 - `webgpu/skeleton-spike/volume.wgsl.ts` — SKELETON REPRESENTATION COMPARISON — Task 3b: GPU atlas sampler for the baked segment-local bone distance grids (volume.ts).
@@ -325,6 +338,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-gib-spawn.ts` — Gib spawning and budgeting: scheduling gibs, retiring actors, carved pieces, the gib atlas loader and the per-frame gib piece budget.
 - `webgpu/game-grenade-launcher.ts` — Single-shot launcher timing.
 - `webgpu/game-head-damage.ts` — THE MELEE HEAD DAMAGE LEAF, v2 (spec docs/superpowers/specs/2026-09-28-melee-head-damage-design.md §15; plan Task 17).
+- `webgpu/game-head-shot.ts` — THE HEAD-SHOT LEAF: what a gun round does to a zombie's head besides an ordinary wound (head-burst.ts headShotRule): a precise slug from close to…
 - `webgpu/game-head-split.ts` — THE HEAD SPLIT LEAF (spec docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md §4-§5).
 - `webgpu/game-hit-trace.ts` — Slug and melee hit tracing, ceiling and chunk collider queries, on-screen body count and level probe-room stamping.
 - `webgpu/game-hud.ts` — The HUD text line: frame time, bodies on screen, room, weapon slot, ammo and render-mode flags, refreshed from the game context.
@@ -349,6 +363,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-rod.ts` — WEAPON SLOT 6: THE ROD (cut wounds M1, spec docs/superpowers/specs/2026-10-03-cut-wounds-design.md §5).
 - `webgpu/game-sequence.ts` — SCRIPTED SEQUENCES in the game (spec 2026-09-30-night-train-egg-ending-design.md §3).
 - `webgpu/game-skeleton-actors.ts` — An actor's skeleton resources: bone field sources, the shared volume atlas (acquire, release), binding and release.
+- `webgpu/game-skull-shots.ts` — A PROJECTILE AT BONE WITH NO FLESH IN FRONT OF IT.
 - `webgpu/game-spawn.ts` — Spawning the cast: spawnEnemy (body, view, march settings, skeleton, kit), spawnAll, rebuildCast, and the game's march constants.
 - `webgpu/game-telemetry-controls.ts` — The on-screen gameplay telemetry recorder widget: record, mark, save-to-disk and download buttons around a GameTelemetry log.
 - `webgpu/game-telemetry-scene.ts` — Telemetry scene helpers: capturing a frozen actor and camera snapshot, and the bench scene census (bodies, wounds, chunks, droplets).
@@ -426,6 +441,7 @@ Blood views, the goo layer, impact splashes.
 
 - `webgpu/blood-connections.ts` — OPTIONAL connected blood for the goo layer (blood-surface comparison task, 2026-09-13).
 - `webgpu/blood-view-gpu.ts` — Instanced billboard renderer for blood-sim: gooey specular droplets + flat floor splats.
+- `webgpu/goo-layer-test-support.ts` — Recording stub renderer and fixtures for the behavioural goo-layer tests: the real createGooLayer runs its real sync()/render() against this stub…
 - `webgpu/goo-layer.ts` — Screen-space metaball blood (gobs-and-goo spec §3): the viscous goo the billboard droplets could never sell.
 - `webgpu/goo-presets.ts` — THE GAME'S GOO DEFAULTS, in one importable place (blood-surface comparison task, 2026-09-13).
 - `webgpu/impact-splash-profiles.ts` — Sprite tuning is independent per weapon; existing events retain a snapshot.
@@ -684,7 +700,7 @@ Wound fields, severing, head damage and the head split, death states, melting, b
 - `cut-wound.ts` — CUT WOUNDS (spec docs/superpowers/specs/2026-10-03-cut-wounds-design.md §3-4).
 - `damage.ts` — The wound record and everything that stamps, locates and converts wounds on a body, including cloth wound handling.
 - `death-state.ts` — LIFE-STATE PRIMS (cultist hood, owner playtest 2026-09-24): "it would just probably cause the cowl to go from the 'hood' position to the 'not hood'…
-- `head-burst.ts` — SLUG HEAD BURST — the pure half (spec docs/superpowers/specs/2026-10-02-slug-head-burst-design.md §4).
+- `head-burst.ts` — WHAT A GUN ROUND DOES TO A ZOMBIE'S HEAD — the pure half.
 - `head-crown.ts` — SKULL AND BRAIN (spec §7, §14).
 - `head-damage.ts` — MELEE HEAD DAMAGE v2 (spec §15).
 - `head-deform.ts` — HEAD WOBBLE AND DENTS (spec §5; the plan's decision 1).
@@ -772,3 +788,4 @@ What fits no area above: the original WebGL lab shader, resolution scaling, samp
 - `curl-sample.ts` — CPU SIDE OF THE SHARED CURL VOLUME (2026-09-18 blood-curl-spike): a pure, THREE-FREE trilinear sampler over the packed `Uint8Array` from…
 - `depth-diff.ts` — Depth diff — comparing the INSIDE of the outline: per-pixel surface depth of the compiled body against the reference mesh, where both agree the…
 - `march.glsl.ts` — Shader source as strings.
+- `skull-fracture.ts` — Anatomical skull damage and ray selection.

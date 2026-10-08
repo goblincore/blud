@@ -1,10 +1,25 @@
 // src/lab/sdf-zombie/webgpu/goo-layer.test.ts
 //
-// Nothing here compiles a shader — these are the same text guards
-// march.wgsl.test.ts applies, extended to the goo surface pass: the wgslFn
-// parse contract (source must start with `fn`, three's declarationRegexp is
-// ^-anchored) and the reserved-word lint on declarations. Plus value pins
-// on the tuning that the mist/goo split depends on.
+// Three kinds of test live here:
+//
+//   * WGSL text guards — the wgslFn parse contract (source must start with
+//     `fn`, three's declarationRegexp is ^-anchored) and the reserved-word
+//     lint on declarations, plus value pins on the tuning the mist/goo
+//     split depends on. These cannot execute in CI.
+//
+//   * Live-layer behavioural tests — the real createGooLayer over the
+//     recording stub renderer in goo-layer-test-support.ts (the trick
+//     goo-upload.test.ts proved: only GPU submission is stubbed). The
+//     describes named "(live layer on a stub renderer)" assert what the
+//     layer DID: which targets it drew to, in what order, with which
+//     material flags, under which clears.
+//
+//   * Remaining source tripwires — the tick-order pins on game-tick.ts /
+//     lab-main.ts (KEEP per the 2026-10-07 text-pin audit: tick() has no
+//     unit seam) and the two gut-mask colorNode regexes (a TSL-graph
+//     property the stub cannot see).
+//
+// Plus value pins on the tuning that the mist/goo split depends on.
 
 // NOTE (2026-09-17, game-main decomposition): the receivers pinned below moved
 // from main()-scope locals onto the GameContext (`gooLayer` -> `ctx.goo.layer`,
@@ -13,12 +28,18 @@
 // exactly what it did before. See docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
 import { describe, it, expect } from 'vitest';
+import * as THREE from 'three/webgpu';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
 import { readFileSync } from 'node:fs';
 import {
   GOO_TUNING, GOO_SURFACE_WGSL, GOO_ALPHA_WGSL, GOO_BLUR_WGSL,
   GOO_DENSITY_BLUE_IS_GUT_MASK,
 } from './goo-layer';
+import { gooLayerFixture, gooSim, gooDroplets, gooDensityMesh, type GooLogEntry } from './goo-layer-test-support';
+import type { BloodSim, Droplet } from '../blood-sim';
+import { createFxSeams } from './game-seams-fx';
+import type { GameContext } from './game-context';
+import type { GooLayer } from './goo-layer';
 
 /** The reserved words WGSL reserves even without implementing (spec appendix). */
 const RESERVED_WORDS = [
@@ -103,30 +124,79 @@ describe('goo blur WGSL (X1.21.1: grapes→sheets)', () => {
   });
 });
 
-describe('goo blur wiring (source tripwires)', () => {
-  // render() needs a live WebGPURenderer, so the bypass path is pinned as
-  // text guards on the module source — the same discipline the WGSL tests
-  // apply to strings that cannot execute in CI. Cwd-relative (vitest runs
-  // from the repo root; import.meta.url is not a file URL under happy-dom).
-  const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
-
+describe('goo blur wiring (live layer on a stub renderer)', () => {
+  // The audit's finding: render() no longer needs a live WebGPURenderer —
+  // these run the real layer over the recording stub in
+  // goo-layer-test-support.ts and assert what it DID.
   it('bypasses both blur passes entirely at blurPx = 0', () => {
-    // One hoisted gate, three consequences: the two blur renders and the
-    // surface's choice of blurred-vs-raw texture. No degenerate copy pass.
-    expect(src).toContain('const blurred = uBlurPx.value > 0');
-    expect(src).toContain('if (blurred && passGate.blur) {');
-    expect(src).toContain("surfMats[mode][blurred ? 'blur' : 'raw']");
-    expect(src).toContain('void renderer.render(blurH.scene, quadCam)');
-    expect(src).toContain('void renderer.render(blurV.scene, quadCam)');
+    const f = gooLayerFixture();
+    f.render();
+    // With the default blurPx > 0 the chain is density -> blurH -> blurV ->
+    // composite: two intermediate targets between the density target and
+    // the canvas, and the composite draws the BLURRED material.
+    const drawn = f.log.drawnTargets();
+    expect(drawn).toHaveLength(4);
+    expect(drawn[0]).toBe(f.layer.debugTargets.density);
+    expect(drawn[1]).not.toBe(drawn[0]);
+    expect(drawn[2]).toBe(f.layer.debugTargets.blurred);
+    expect(drawn[3]).toBeNull();
+    const blurredMat = f.log.draws().at(-1)!.material;
+
+    f.log.reset();
+    f.layer.setBlurPx(0);
+    f.render();
+    // blurPx = 0: not even a degenerate copy pass — the only draws left are
+    // the density pass and the composite, and the composite switched to the
+    // RAW material (a texture binding is baked into the node graph, so
+    // raw-vs-blurred is a different material object).
+    expect(f.log.drawnTargets()).toEqual([f.layer.debugTargets.density, null]);
+    const rawMat = f.log.draws().at(-1)!.material;
+    expect(rawMat).not.toBe(blurredMat);
+
+    // Restoring the blur restores the blurred material: the pick is made
+    // per frame, not latched.
+    f.log.reset();
+    f.layer.setBlurPx(GOO_TUNING.blurPx);
+    f.render();
+    expect(f.log.draws().at(-1)!.material).toBe(blurredMat);
+    f.dispose();
   });
 
-  it('the surface reads the blurred buffer, and the pair rides the density size', () => {
-    // Same explicit-first-clear treatment as the density target (the
-    // lazy-init trap) and the same resize in setSize — now including task
-    // 4's low-res surface target.
-    expect(src).toContain('for (const t of [target, blurA, blurB, surfaceLow])');
-    expect(src).toContain('blurB.setSize(w, h)');
-    expect(src).toContain('surfaceLow.setSize(w, h)');
+  it('the blur pair and the low-res surface target ride the density size, with a lazy first clear', () => {
+    const f = gooLayerFixture();
+    f.layer.setSize(400, 300);
+    f.render();
+    const { density, blurred } = f.layer.debugTargets;
+    // densityScale 0.5: the density target and the blur pair live at half
+    // the SDF grid — one blur texel per density texel.
+    expect(density.width).toBe(200);
+    expect(density.height).toBe(150);
+    expect(blurred.width).toBe(200);
+    expect(blurred.height).toBe(150);
+    // First render: every (re)allocated target gets an explicit first clear
+    // — four distinct targets probed with the empty scene (density, blurA,
+    // blurB and the low-res surface target). A lazily-initialised texture
+    // inside the same encoder as the pass that samples it gets the whole
+    // WebGPU submit rejected, so this clear is load-bearing.
+    const firstInit = f.log.initClears();
+    expect(firstInit).toHaveLength(4);
+    expect(new Set(firstInit.map((r) => r.target)).size).toBe(4);
+    expect(firstInit.map((r) => r.target)).toContain(density);
+    expect(firstInit.map((r) => r.target)).toContain(blurred);
+    // Steady state: nothing re-clears...
+    f.log.reset();
+    f.render();
+    expect(f.log.initClears()).toHaveLength(0);
+    // ...and a resize re-arms the first clear (setSize reallocates the
+    // backing texture, so the lazy-init conflict would come back).
+    f.layer.setSize(800, 600);
+    f.log.reset();
+    f.render();
+    expect(f.log.initClears()).toHaveLength(4);
+    expect(density.width).toBe(400);
+    expect(blurred.width).toBe(400);
+    expect(blurred.height).toBe(300);
+    f.dispose();
   });
 });
 
@@ -235,32 +305,31 @@ describe('goo shading setters (blood-viscosity spec: clamp ranges)', () => {
   // The clamp trap, in test form: setThreshold was clamped at 0.95 while a
   // lone blob peaks near 1.0, so no reachable value could reject a single
   // droplet and three rounds of tuning were unwinnable. Every new setter gets
-  // its ceiling checked against the range the shader actually produces.
-  it('clamps all four setters to the range the shader actually produces', () => {
-    // Whitespace-tolerant (not pinned to one-line formatting) so a reformat
-    // doesn't break this, but still asserts the exact bounds per setter —
-    // absorb and gloss per the 2D prototype range, spec and rim previously
-    // unpinned entirely.
-    const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
-    const clamp = (fn: string, uniformName: string, lo: string, hi: string) => {
-      const re = new RegExp(
-        `${fn}\\(v\\)\\s*\\{\\s*${uniformName}\\.value\\s*=\\s*Math\\.max\\(${lo},\\s*Math\\.min\\(${hi},\\s*v\\)\\)\\s*;\\s*\\}`,
-      );
-      expect(src, `${fn} must clamp to [${lo}, ${hi}]`).toMatch(re);
-    };
-    clamp('setAbsorb', 'uAbsorb', '0', '3');
-    clamp('setSpec', 'uSpec', '0', '4');
-    // CEILING 220 -> 400 (2026-08-31). The owner's own tuning pass landed on
-    // gloss EXACTLY 220 — the old ceiling — which is the signature of a clamp
-    // capping intent rather than guarding a range. Same story for stretch
-    // (4 -> 8, pinned below). Both originals were guesses; do not "restore"
-    // them without measuring what the shader produces up there.
-    clamp('setGloss', 'uGloss', '8', '400');
-    clamp('setRim', 'uRim', '0', '1');
-    // shadowRed: the deep-red floor that stops absorption or a grazing light
-    // from driving blood to black. Ceiling 0.6 — past that the floor swamps
-    // the thickness gradient it exists to preserve.
-    clamp('setShadowRed', 'uShadowRed', '0', '0.6');
+  // its ceiling checked against the range the shader actually produces —
+  // read back through the layer's own getters on a live layer.
+  it('clamps all shading setters to the range the shader actually produces', () => {
+    const f = gooLayerFixture();
+    // absorb and gloss per the 2D prototype range; spec and rim previously
+    // unpinned entirely. Both ends of every range, via the getters the
+    // console's goo readout uses.
+    f.layer.setAbsorb(-1); expect(f.layer.absorb).toBe(0);
+    f.layer.setAbsorb(99); expect(f.layer.absorb).toBe(3);
+    f.layer.setSpec(-1); expect(f.layer.spec).toBe(0);
+    f.layer.setSpec(99); expect(f.layer.spec).toBe(4);
+    // CEILING 220 -> 400, FLOOR 8 (2026-08-31): the owner's own tuning pass
+    // landed on gloss EXACTLY 220 — the old ceiling — which is the signature
+    // of a clamp capping intent rather than guarding a range. Below ~8 the
+    // lobe is wider than the blob and the whole surface reads flat white.
+    f.layer.setGloss(1); expect(f.layer.gloss).toBe(8);
+    f.layer.setGloss(1e9); expect(f.layer.gloss).toBe(400);
+    f.layer.setRim(-1); expect(f.layer.rim).toBe(0);
+    f.layer.setRim(9); expect(f.layer.rim).toBe(1);
+    // shadowRed: the deep-red floor that stops absorption or a grazing
+    // light from driving blood to black. Ceiling 0.6 — past that the floor
+    // swamps the thickness gradient it exists to preserve.
+    f.layer.setShadowRed(-1); expect(f.layer.shadowRed).toBe(0);
+    f.layer.setShadowRed(9); expect(f.layer.shadowRed).toBe(0.6);
+    f.dispose();
   });
 });
 
@@ -287,18 +356,36 @@ describe('goo alpha WGSL (overlay mode)', () => {
   });
 });
 
-describe('goo overlay mode wiring (source tripwires)', () => {
-  const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
-
-  it('overlay materials neither test nor write depth, and are transparent', () => {
-    expect(src).toMatch(/m\.depthWrite = false;\s*\n\s*m\.depthTest = false;\s*\n\s*m\.transparent = true;/);
-  });
-
-  it('overlay materials do not bind a depthNode', () => {
+describe('goo overlay mode wiring (live layer on a stub renderer)', () => {
+  it('overlay materials neither test nor write depth, are transparent, and bind no depthNode', () => {
+    const f = gooLayerFixture();
+    // Default mode is overlay: the composite draws over the finished frame
+    // with no depth involvement. This DELETES the depth blocker rather than
+    // fixing it, so the flags below are the mode's whole contract — read
+    // off the material the composite actually drew with.
+    f.render();
+    const composite = f.log.draws().filter((r) => r.target === null).at(-1)!;
+    const m = composite.material!;
+    expect(m.depthWrite).toBe(false);
+    expect(m.depthTest).toBe(false);
+    expect(m.transparent).toBe(true);
     // Binding depthNode in overlay mode would silently reinstate the
-    // reconstruction this mode exists to delete.
-    const overlayFn = src.slice(src.indexOf('function makeOverlayMat'), src.indexOf('function makeDepthMat'));
-    expect(overlayFn).not.toContain('depthNode');
+    // reconstruction this mode exists to delete. (Unset node slots read
+    // back as null, not undefined.)
+    expect(m.depthNode).toBeNull();
+
+    // Contrast: the escape hatch restores depth interleaving — the composite
+    // material under setMode('depth') tests AND writes depth through a
+    // depthNode, so the flags above cannot pass vacuously.
+    f.layer.setMode('depth');
+    f.log.reset();
+    f.render();
+    const depthM = f.log.draws().filter((r) => r.target === null).at(-1)!.material!;
+    expect(depthM).not.toBe(m);
+    expect(depthM.depthTest).toBe(true);
+    expect(depthM.depthWrite).toBe(true);
+    expect(depthM.depthNode).toBeDefined();
+    f.dispose();
   });
 });
 
@@ -311,8 +398,8 @@ describe('goo sync wiring (the bug that hid the whole layer)', () => {
   // sweeps plus a depth-reconstruction investigation before anyone checked
   // whether the field had anything in it.
   //
-  // These are source tripwires, in the same style as the blur-wiring guards
-  // above: nothing here constructs a renderer.
+  // The first two tests are source tripwires on the tick order (KEEP per the
+  // audit: tick() has no unit seam); the third runs the layer live.
   it('the game page syncs AFTER the camera is final, so the quads billboard correctly', () => {
     const src = readFileSync('src/lab/sdf-zombie/webgpu/game-tick.ts', 'utf8');
     const cam = src.indexOf('ctx.boot.handle.camera.updateMatrixWorld();');
@@ -330,11 +417,23 @@ describe('goo sync wiring (the bug that hid the whole layer)', () => {
   it('the selection seam partitions droplets in BOTH sync fill paths', () => {
     // Shutter integration: the sharp/selected split is only exact if every
     // droplet fill path filters. One unfiltered loop would draw the selected
-    // blood twice (once sharp, once blurred).
-    const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
-    const filters = src.match(/if \(selection && !selection\.droplet\(d\)\) continue;/g) ?? [];
-    expect(filters.length).toBe(2);
-    expect(src).toContain('if (selection && !selection.droplet(d)) continue;');
+    // blood twice (once sharp, once blurred). liveCount is the layer's own
+    // diagnostic mirror of the instancer's count, so both insertion-order
+    // and area-priority paths are checked through the public API.
+    const f = gooLayerFixture();
+    const sim = gooSim(6, (i) => ({ kind: i % 3 === 0 ? 'mist' : (i % 3 === 1 ? 'drop' : 'gut') }), 2);
+    f.layer.setSelection({ droplet: (d) => d.kind === 'gut', splats: false, extras: false });
+    f.layer.sync(sim, f.camera);
+    expect(f.layer.liveCount).toBe(2); // only the gut droplets, no splats
+    f.layer.setAreaPriority(true);
+    f.layer.sync(sim, f.camera);
+    expect(f.layer.liveCount).toBe(2); // the area-priority path filters too
+    // Null selection restores the shipped one-pass pose: drops + guts ride
+    // the field, mist never does, and the splats come back.
+    f.layer.setSelection(null);
+    f.layer.sync(sim, f.camera);
+    expect(f.layer.liveCount).toBe(6); // 2 drops + 2 guts + 2 splats
+    f.dispose();
   });
 });
 
@@ -459,10 +558,9 @@ describe('gut mask wiring (source tripwires)', () => {
 });
 
 // -------------------------------------------------------------------------
-// CLOSE-UP TASK 4 — goo perf levers. Pure decision code is tested directly;
-// the render-path seams cannot run without a WebGPU device, so their OFF
-// defaults and the invariants that keep the shipped path intact are pinned
-// as source tripwires (the same discipline the blur-wiring guards use).
+// CLOSE-UP TASK 4 — goo perf levers. Pure decision code is tested directly
+// above; the render-path seams run live on the recording stub, asserting
+// their OFF defaults and the invariants that keep the shipped path intact.
 // -------------------------------------------------------------------------
 
 import {
@@ -554,49 +652,130 @@ describe('orderIndicesByAreaDesc (item 2b decision code)', () => {
   });
 });
 
-describe('goo perf seams (source tripwires)', () => {
-  const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
+describe('goo perf seams (live layer on a stub renderer)', () => {
+  /** First render entry at/after `idx` (narrows the union for the trace
+   *  tests below). */
+  const renderAfter = (entries: GooLogEntry[], idx: number) =>
+    entries.slice(idx + 1).find((e): e is Extract<GooLogEntry, { kind: 'render' }> => e.kind === 'render');
+  const clearAfter = (entries: GooLogEntry[], idx: number) =>
+    entries.slice(idx + 1).find((e): e is Extract<GooLogEntry, { kind: 'clear' }> => e.kind === 'clear');
+  const canvasMat = (f: ReturnType<typeof gooLayerFixture>) =>
+    f.log.draws().filter((r) => r.target === null).at(-1)!.material!;
 
   it('every lever defaults to the shipped state', () => {
-    expect(src).toContain('let surfaceAtDensityRes = false;');
-    expect(src).toContain('let minTexelRadius = 0;');
-    expect(src).toContain('let areaPriority = false;');
-    expect(src).toContain('let splatFadeTail = 0;');
-    expect(src).toContain('const passGate = { density: true, blur: true, surface: true };');
+    const f = gooLayerFixture();
+    expect(f.layer.surfaceAtDensityRes).toBe(false);
+    expect(f.layer.minTexelRadius).toBe(0);
+    expect(f.layer.areaPriority).toBe(false);
+    expect(f.layer.splatFadeTail).toBe(0);
+    expect(f.layer.passGate).toEqual({ density: true, blur: true, surface: true });
+    f.dispose();
   });
 
   it('the low DEPTH variant packs depth into the colour alpha, never depthNode', () => {
     // The shading pass must not depth-test (its own buffer is empty); the
-    // hardware depth test happens in the upsample against the scene.
-    const block = src.slice(src.indexOf('function makeLowDepthMat'), src.indexOf('const lowMats'));
-    expect(block).toContain('vec4(shaded.xyz as never, shaded.w as never)');
-    expect(block).toContain('m.depthWrite = false;');
-    expect(block).not.toContain('depthNode');
+    // hardware depth test happens in the upsample against the scene, per
+    // output pixel, from the value packed into .a.
+    const f = gooLayerFixture();
+    f.layer.setSurfaceAtDensityRes(true);
+    f.layer.setMode('depth');
+    f.render();
+    // The low pass is the draw made while the black-with-alpha-0 clear is
+    // active — see the next test for that clear's own contract.
+    const entries = f.log.entries;
+    const lowClear = entries.findIndex((e) => e.kind === 'clear' && e.color === 0 && e.alpha === 0);
+    expect(lowClear).toBeGreaterThan(-1);
+    const lowMat = renderAfter(entries, lowClear)!.material!;
+    expect(lowMat.depthWrite).toBe(false);
+    expect(lowMat.depthTest).toBe(false);
+    expect(lowMat.depthNode).toBeNull();
+    // The upsample that follows is where the interleaving contract lives:
+    // it binds a depthNode and writes/tests depth — so the low pass's flags
+    // above cannot pass vacuously.
+    const upMat = canvasMat(f);
+    expect(upMat).not.toBe(lowMat);
+    expect(upMat.depthNode).not.toBeNull();
+    expect(upMat.depthWrite).toBe(true);
+    expect(upMat.depthTest).toBe(true);
+    f.dispose();
   });
 
   it('the low pass clears black with ALPHA 0 — the upsample empty sentinel', () => {
     // A cleared alpha of 1 would be a depth of 1 (or an opaque, gut-masked
     // sludge) in every unshaded texel; the restored scene clear is the
     // background with alpha 1, so the low pass owns its clear explicitly.
-    expect(src).toContain('renderer.setClearColor(0x000000, 0);');
-    expect(src).toContain('renderer.setClearColor(prevClear, prevClearAlpha);');
+    const f = gooLayerFixture();
+    f.layer.setSurfaceAtDensityRes(true);
+    f.render();
+    const entries = f.log.entries;
+    const lowClear = entries.findIndex((e) => e.kind === 'clear' && e.color === 0 && e.alpha === 0);
+    expect(lowClear).toBeGreaterThan(-1);
+    const lowRender = entries.findIndex((e, i) => i > lowClear && e.kind === 'render');
+    // Restore: the renderer's previous colour AND alpha — 0x1a1116/1 is the
+    // stub's scene-background default, read back through getClearColor and
+    // getClearAlpha, not a value this test handed the layer.
+    expect(clearAfter(entries, lowRender)).toMatchObject({ kind: 'clear', color: 0x1a1116, alpha: 1 });
+    f.dispose();
   });
 
   it('passGate only skips work; it never changes what the kept passes read', () => {
-    // The surface must keep reading the BLURRED buffer when blurPx > 0 even
-    // when the blur passes are gate-skipped, so a gated surface leg times the
-    // same shader, not a cheaper raw-buffer one.
-    expect(src).toContain('const blurred = uBlurPx.value > 0;');
-    expect(src).toContain('if (blurred && passGate.blur) {');
-    expect(src).toContain('if (!passGate.surface) return;');
-    expect(src).toContain('if (passGate.density) void renderer.render(gooScene, camera);');
+    const f = gooLayerFixture();
+    f.render();
+    const blurredMat = canvasMat(f);
+    // Gating the blur OFF (blurPx still > 0): no renders to the blur pair —
+    // the only draws are the density pass and the composite — but the
+    // surface still draws the SAME blurred material, so a gated surface leg
+    // times the same shader, not a cheaper raw-buffer one.
+    f.log.reset();
+    f.layer.setPassGate({ blur: false });
+    f.render();
+    expect(f.log.drawnTargets()).toEqual([f.layer.debugTargets.density, null]);
+    expect(canvasMat(f)).toBe(blurredMat);
+    // What DOES switch the surface to the raw buffer is blurPx = 0 — the
+    // gate never changes what the kept passes read.
+    f.log.reset();
+    f.layer.setBlurPx(0);
+    f.render();
+    expect(canvasMat(f)).not.toBe(blurredMat);
+    // Gating the surface off: between() still runs (the host frame is
+    // intact) and nothing composites to the canvas after it.
+    f.log.reset();
+    let betweenRan = 0;
+    f.layer.setPassGate({ surface: false });
+    f.render(() => { betweenRan++; f.log.mark('between'); });
+    expect(betweenRan).toBe(1);
+    const markIdx = f.log.entries.findIndex((e) => e.kind === 'mark');
+    expect(f.log.entries.slice(markIdx).some((e) => e.kind === 'render' && e.target === null)).toBe(false);
+    f.dispose();
   });
 
   it('the minTexel skip is inert at 0 without touching the mist gates', () => {
-    expect(src).toContain('if (minTexelRadius <= 0) return false;');
-    // Both collection paths keep the mist/size gates ahead of any skip.
-    const drops = src.match(/if \(d\.kind === 'mist'\) continue;/g) ?? [];
-    expect(drops.length).toBe(2); // once per sync path
+    const f = gooLayerFixture();
+    f.layer.setSize(400, 300);
+    f.layer.setMinTexelRadius(0);
+    const sim = gooSim(5, (i): Partial<Droplet> => ({
+      kind: i === 1 ? 'mist' : 'drop',
+      ...(i === 4 ? { size: 0.01 } : {}), // under mistMaxSize: billboard mist
+    }));
+    for (const area of [false, true]) {
+      f.layer.setAreaPriority(area);
+      f.layer.sync(sim, f.camera);
+      // Both fill paths keep the mist and size gates ahead of any skip: of
+      // the five droplets only 0, 2 and 3 pose.
+      expect(f.layer.liveCount).toBe(3);
+    }
+    // The lever is live when on: a droplet 300 m away projects under one
+    // density texel and is skipped as pure overdraw; the near one stays.
+    f.layer.setMinTexelRadius(1);
+    f.layer.sync({
+      droplets: [
+        ...gooDroplets(1),
+        ...gooDroplets(1, (): Partial<Droplet> => ({ pos: [0, 1, -300] })),
+      ],
+      splats: [],
+    } as unknown as BloodSim, f.camera);
+    expect(f.layer.liveCount).toBe(1);
+    f.dispose();
   });
 });
 
@@ -622,29 +801,34 @@ describe('goo upsample WGSL (item 1)', () => {
   });
 });
 
-describe('goo perf page seam (source tripwires)', () => {
+describe('goo perf page seam (createFxSeams over a recording layer)', () => {
   // The whole goo seam group moved out of the __sdfGame literal in the
-  // 2026-09-17 decomposition: `setGooPerf` into game-seams-spawn-goo.ts, and the
-  // `goo` getter plus setGooTuning/setGooCandidate into game-seams-fx.ts. Every
-  // pinned string below is byte-identical — only the holding file changed.
-  const src = readFileSync('src/lab/sdf-zombie/webgpu/game-seams-fx.ts', 'utf8');
-
+  // 2026-09-17 decomposition: `setGooPerf` into game-seams-spawn-goo.ts, and
+  // the `goo` getter plus setGooTuning/setGooCandidate into game-seams-fx.ts.
   it('keeps the perf seams OUT of setGooTuning', () => {
     // The goo panel's copy button emits setGooTuning keys; a perf lever in
-    // that schema would let a tuning paste silently move a bench seam.
-    //
-    // The end boundary used to be `setGooPerf(o: {`, which now lives in another
-    // file. `setGooCandidate(o: {` is the member that actually follows
-    // setGooTuning, so this slice is TIGHTER than the original rather than
-    // looser — it isolates setGooTuning's own block instead of everything up to
-    // setGooPerf.
-    const start = src.indexOf('setGooTuning(o: {');
-    const end = src.indexOf('setGooCandidate(o: {', start);
-    expect(start, 'setGooTuning must still be in game-main.ts').toBeGreaterThan(-1);
-    expect(end, 'setGooCandidate must follow setGooTuning').toBeGreaterThan(start);
-    const block = src.slice(start, end);
-    expect(block).not.toContain('surfaceAtDensityRes');
-    expect(block).not.toContain('minTexelRadius');
+    // that schema would let a tuning paste silently move a bench seam. Run
+    // the real setGooTuning against a layer that records every method call.
+    const calls: string[] = [];
+    const layer = new Proxy({} as Record<string, unknown>, {
+      get(_, key) { return () => { calls.push(String(key)); }; },
+    }) as unknown as GooLayer;
+    const ctx = {
+      boot: { handle: { scene: {}, camera: {} } },
+      goo: { layer },
+    } as unknown as GameContext;
+    createFxSeams(ctx).setGooTuning({
+      gloss: 120,
+      // Perf-lever keys the schema must not know about: if any of these
+      // ever routed to a setter, a pasted tuning would silently flip a
+      // bench seam.
+      surfaceAtDensityRes: true,
+      minTexelRadius: 4,
+      areaPriority: true,
+      passGate: { density: false },
+    } as never);
+    // The look knob lands (the recording works) and nothing else moves.
+    expect(calls).toEqual(['setGloss']);
   });
 });
 
@@ -956,46 +1140,109 @@ describe('smooth reconstruction WGSL', () => {
   });
 });
 
-describe('smooth reconstruction wiring (source tripwires)', () => {
-  const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
-
-  it('defaults to the ORIGINAL path', () => {
-    expect(src).toContain("let reconstruction: GooReconstruction = 'original';");
-    expect(src).toMatch(/setReconstruction\(m: GooReconstruction\) \{ reconstruction = m; \}/);
+describe('smooth reconstruction wiring (live layer on a stub renderer)', () => {
+  it('defaults to the ORIGINAL path, and the setter round-trips', () => {
+    const f = gooLayerFixture();
+    expect(f.layer.reconstruction).toBe('original');
+    f.layer.setReconstruction('smooth');
+    expect(f.layer.reconstruction).toBe('smooth');
+    f.layer.setReconstruction('original');
+    expect(f.layer.reconstruction).toBe('original');
+    f.dispose();
   });
 
   it('the smooth DEPTH material blends coverage but never writes depth', () => {
     // The candidate's atomic depth-compositing change: coverage alpha, depth
     // test on (occlusion respected), depth write off (a fringe must not
-    // occlude the scene behind it). Scoped to the candidate table.
-    const block = src.slice(src.indexOf('function makeSmoothDepthMat'), src.indexOf('const smoothSurfMats'));
-    expect(block).toContain('vec4(shaded.xyz as never, cov.w as never)');
-    expect(block).toContain('m.depthNode = shaded.w as never;');
-    expect(block).toContain('m.depthTest = true;');
-    expect(block).toContain('m.depthWrite = false;');
-    expect(block).toContain('m.transparent = true;');
+    // occlude the scene behind it) — read off the composite the layer
+    // actually drew with in smooth + depth mode.
+    const f = gooLayerFixture();
+    f.layer.setReconstruction('smooth');
+    f.layer.setMode('depth');
+    f.render();
+    const m = f.log.draws().filter((r) => r.target === null).at(-1)!.material!;
+    expect(m.depthTest).toBe(true);
+    expect(m.depthWrite).toBe(false);
+    expect(m.transparent).toBe(true);
+    expect(m.depthNode).not.toBeNull();
+    // Contrast with the baseline depth material: it writes depth and draws
+    // opaque — so the flags above distinguish the two paths, not a default.
+    const g = gooLayerFixture();
+    g.layer.setMode('depth');
+    g.render();
+    const base = g.log.draws().filter((r) => r.target === null).at(-1)!.material!;
+    expect(base).not.toBe(m);
+    expect(base.depthWrite).toBe(true);
+    expect(base.transparent).toBeFalsy();
+    g.dispose();
+    f.dispose();
   });
 
   it('tracks the real composite destination for the coverage footprint', () => {
-    expect(src).toContain('lastOutputW = outputTarget ? outputTarget.width : renderer.domElement.width;');
-    expect(src).toContain('uCoverageTexels.value = densityTexelsPerOutputPixel(');
+    const f = gooLayerFixture();
+    f.layer.setSize(400, 300);
+    // Redirect the composite into an off-screen target (post-aa captures
+    // the frame this way): the diagnostics must report THAT as the output,
+    // because the smooth coverage ramp scales its feather by
+    // density-texels-per-OUTPUT-pixel.
+    const rt = new THREE.RenderTarget(123, 45);
+    f.layer.setOutputTarget(rt);
+    f.render();
+    const d = f.layer.densityDiagnostics;
+    expect(d.outputWidth).toBe(123);
+    expect(d.outputHeight).toBe(45);
+    expect(d.densityWidth).toBe(200);
+    expect(d.texelsPerOutputPixelX).toBeCloseTo(200 / 123, 9);
+    expect(d.texelsPerOutputPixelY).toBeCloseTo(150 / 45, 9);
+    // And the composite really drew there, not to the canvas.
+    expect(f.log.draws().filter((r) => r.target === null)).toHaveLength(0);
+    expect(f.log.draws().at(-1)!.target).toBe(rt);
+    // null restores the canvas as the destination.
+    f.layer.setOutputTarget(null);
+    f.render();
+    expect(f.layer.densityDiagnostics.outputWidth).toBe(800);
+    expect(f.layer.densityDiagnostics.outputHeight).toBe(600);
+    f.dispose();
   });
 
   it('extra connection blobs ride the SAME density instancer and cap', () => {
     // Strands and sheets are shaded by the existing wet surface pass because
-    // they are density quads, not a second flat material. They are posed
-    // after droplets/splats and inside the cap.
-    expect(src).toContain('setExtraBlobs(blobs: readonly GooDensityBlob[])');
-    // The cap now also honours the shutter selection (extras belong to the
-    // selected/blurred half), so the expression gained a gate.
-    expect(src).toContain('const extraBudget = selection !== null && !selection.extras');
-    expect(src).toContain('Math.min(extraCount, Math.max(0, particleCap - n));');
-    expect(src).toContain('extraHalfW[i] = b.halfW; extraHalfH[i] = b.halfH; extraRoll[i] = b.roll;');
-    expect(src).toContain('get extraBlobCount() { return extraCount; }');
+    // they are density quads, not a second flat material: they pose after
+    // droplets/splats, inside the cap, on the same instancer (liveCount is
+    // that instancer's count).
+    const f = gooLayerFixture();
+    f.layer.setExtraBlobs([
+      { x: 0, y: 1, z: -2, halfW: 0.1, halfH: 0.1, roll: 0 },
+      { x: 0.3, y: 1, z: -2.2, halfW: 0.2, halfH: 0.05, roll: 0.5, gut: 1 },
+    ]);
+    f.layer.sync(gooSim(3), f.camera);
+    expect(f.layer.liveCount).toBe(5);
+    // The gut flag rides the same per-instance attribute as droplets.
+    f.render(); // the density render exposes the instancer
+    const mesh = gooDensityMesh(f.log);
+    const gut = mesh.geometry.getAttribute('gutMask').array as Float32Array;
+    expect(mesh.count).toBe(5);
+    expect(Array.from(gut.slice(0, 5))).toEqual([0, 0, 0, 0, 1]);
+    // The cap still owns the whole roster: extras are dropped past it, not
+    // droplets.
+    f.layer.setParticleCap(4);
+    f.layer.sync(gooSim(3), f.camera);
+    expect(f.layer.liveCount).toBe(4);
+    // A selection that gates extras drops them entirely (they belong to the
+    // selected/blurred half of the shutter split).
+    f.layer.setParticleCap(1000);
+    f.layer.setSelection({ droplet: () => true, splats: true, extras: false });
+    f.layer.sync(gooSim(3), f.camera);
+    expect(f.layer.liveCount).toBe(3);
+    f.dispose();
   });
 
   it('defaults to no extras, so the shipped frame is unchanged', () => {
-    expect(src).toContain('let extraCount = 0;');
+    const f = gooLayerFixture();
+    expect(f.layer.extraBlobCount).toBe(0);
+    f.layer.sync(gooSim(2), f.camera);
+    expect(f.layer.liveCount).toBe(2); // nothing smuggled in
+    f.dispose();
   });
 });
 
@@ -1011,9 +1258,8 @@ describe('connection blob shape', () => {
 
 // -------------------------------------------------------------------------
 // PER-STREAM FUSION (blood-per-stream spike, 2026-09-18). The mechanism is
-// pure decision code (channel assignment + fuse ramp) plus one WGSL combine
-// pass; the render path itself needs a WebGPU device and is pinned as source
-// tripwires, the same discipline the rest of this file uses.
+// pure decision code (channel assignment + fuse ramp, tested above) plus one
+// WGSL combine pass; the render path runs live on the recording stub.
 // -------------------------------------------------------------------------
 
 describe('streamChannelFor (per-stream partition)', () => {
@@ -1123,12 +1369,12 @@ describe('goo combine WGSL', () => {
   });
 });
 
-describe('per-stream wiring (source tripwires)', () => {
-  const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
-
+describe('per-stream wiring (live layer on a stub renderer)', () => {
   it('defaults OFF, so the shipped stream-blind frame is byte-identical', () => {
-    expect(src).toContain('let perStreamOn = false;');
-    expect(src).toContain('let streamRampSec = 0;');
+    const f = gooLayerFixture();
+    expect(f.layer.perStream).toBe(false);
+    expect(f.layer.streamRamp).toBe(0);
+    f.dispose();
   });
 
   it('exposes the raw-channel diagnostic, default off', () => {
@@ -1138,31 +1384,111 @@ describe('per-stream wiring (source tripwires)', () => {
   });
 
   it('routes each instance into its stream channel and uploads the mask only while on', () => {
-    expect(src).toContain("const streamMask = attribute<'vec4'>('streamMask', 'vec4');");
-    expect(src).toContain("quads.geometry.setAttribute('streamMask', streamAttr);");
-    expect(src).toContain('if (perStreamOn) writeStreamMask(');
-    expect(src).toContain('if (perStreamOn && n > 0) {');
-    expect(src).toContain('streamAttr.addUpdateRange(0, n * 4);');
-    // The channel map is rebuilt every sync (channels are per-frame scratch).
-    expect(src).toContain('streamChannelMap.clear();');
+    const f = gooLayerFixture();
+    f.render(); // the density render exposes the instancer
+    const mesh = gooDensityMesh(f.log);
+    const streamAttr = mesh.geometry.getAttribute('streamMask') as THREE.InstancedBufferAttribute;
+    const streams = [7, 7, 8, 9];
+    // OFF: the mask attribute is never written or uploaded — the shipped
+    // upload path is untouched.
+    f.layer.sync(gooSim(4, (i): Partial<Droplet> => ({ stream: streams[i] })), f.camera);
+    expect(streamAttr.version).toBe(0);
+    expect(streamAttr.updateRanges).toEqual([]);
+    expect(Array.from(streamAttr.array.slice(0, 16))).toEqual(new Array(16).fill(0));
+    // ON: dedicated channels are assigned on first sight (0 and 1), the
+    // third-and-beyond stream shares channel 2, the mask uploads exactly
+    // the live range, and the ramp scales young droplets' density.
+    f.layer.setPerStream(true);
+    f.layer.setStreamRamp(0.5);
+    f.layer.sync(gooSim(4, (i): Partial<Droplet> => ({
+      stream: streams[i],
+      age: [0, 0.5, 9, 9][i], // age 0 sits at the ramp floor, the rest past it
+    })), f.camera);
+    const mask = Array.from(streamAttr.array.slice(0, 16));
+    expect(mask[0]).toBeCloseTo(0.35, 6); // float32 storage of the ramp floor
+    expect(mask.slice(1)).toEqual([
+      0, 0, 0, // (stream 7, channel 0, age 0 -> minFactor, asserted above)
+      1, 0, 0, 0, // stream 7 -> channel 0, ramp done
+      0, 1, 0, 0, // stream 8 -> channel 1
+      0, 0, 1, 0, // stream 9 -> shared channel 2
+    ]);
+    expect(streamAttr.version).toBe(1);
+    expect(streamAttr.updateRanges).toEqual([{ start: 0, count: 16 }]);
+    f.dispose();
   });
 
   it('runs the extra density/blur/combine passes only under the switch', () => {
-    expect(src).toContain('if (perStreamOn) {');
-    expect(src).toContain("setPassLabel('goo:stream-density');");
-    expect(src).toContain("setPassLabel('goo:stream-blur');");
-    expect(src).toContain("setPassLabel('goo:stream-combine');");
-    // The combine writes a field the surface reads; it uses the blurred pair
-    // when the canonical blur ran and the raw pair when it did not.
-    expect(src).toContain('const combineBlurMat = makeCombineMat(blurB.texture, streamBlurB.texture);');
-    expect(src).toContain('const combineRawMat = makeCombineMat(target.texture, streamTarget.texture);');
-    // The combine's orientation uniform is explicit and separable from uFlipY.
-    expect(src).toContain('const uStreamFlipY = uniform(1);');
-    expect(src).toContain('flipY: uStreamFlipY,');
+    const f = gooLayerFixture();
+    f.render();
+    // OFF: the only targets drawn are the canonical chain — density, the
+    // blur pair, and the composite onto the canvas.
+    const off = f.log.drawnTargets();
+    expect(off).toHaveLength(4);
+    expect(off.filter((t) => t === null)).toHaveLength(1);
+    f.layer.setPerStream(true);
+    f.log.reset();
+    f.render();
+    // ON adds exactly four targets — the packed stream density, its blur
+    // pair, and the combine's field — and still composites once.
+    const on = f.log.drawnTargets();
+    expect(on).toHaveLength(8);
+    expect(on.filter((t) => t === null)).toHaveLength(1);
+    expect(on.filter((t) => !off.includes(t))).toHaveLength(4);
+    // The canonical density pass and the stream density pass draw the SAME
+    // instancer through DIFFERENT materials: the stream pass routes each
+    // instance's falloff into its own channel.
+    const densityDraws = f.log.draws().filter((r) =>
+      r.scene.children.some((c) => (c as THREE.InstancedMesh).isInstancedMesh));
+    expect(densityDraws).toHaveLength(2);
+    expect(densityDraws[0]!.material).not.toBe(densityDraws[1]!.material);
+    expect(densityDraws[0]!.target).toBe(f.layer.debugTargets.density);
+    expect(densityDraws[1]!.target).not.toBe(densityDraws[0]!.target);
+    f.dispose();
   });
 
   it('the lazy first clear covers every new target (the submit-rejection trap)', () => {
-    expect(src).toContain('for (const t of [streamTarget, streamBlurA, streamBlurB, perStreamField])');
-    expect(src).toContain('streamTargetsNeedInit = true;');
+    // setSize reallocates the backing texture, and a lazily-initialised
+    // texture inside the same encoder as the pass that samples it gets the
+    // whole WebGPU submit rejected — so every new target must be explicitly
+    // cleared once after (re)allocation.
+    const f = gooLayerFixture();
+    f.layer.setPerStream(true);
+    f.render();
+    // First render: EIGHT explicit first clears — the four canonical
+    // targets plus the four per-stream targets, each a distinct target
+    // probed with the empty scene.
+    const initIdx = f.log.entries
+      .map((e, i) => (e.kind === 'render' && e.scene.children.length === 0 ? i : -1))
+      .filter((i) => i >= 0);
+    expect(initIdx).toHaveLength(8);
+    expect(new Set(initIdx.map((i) => (f.log.entries[i] as Extract<GooLogEntry, { kind: 'render' }>).target)).size).toBe(8);
+    // The four STREAM clears run under an explicit BLACK clear (a non-zero
+    // red channel is density) which is restored to the renderer's previous
+    // colour afterwards.
+    const clearsBefore = f.log.entries.slice(0, initIdx[4]!)
+      .filter((e): e is Extract<GooLogEntry, { kind: 'clear' }> => e.kind === 'clear');
+    expect(clearsBefore.at(-1)).toMatchObject({ color: 0 });
+    const clearAfter = f.log.entries.slice(initIdx[7]! + 1)
+      .find((e): e is Extract<GooLogEntry, { kind: 'clear' }> => e.kind === 'clear');
+    expect(clearAfter).toMatchObject({ color: 0x1a1116, alpha: 1 });
+    // Steady state: nothing re-clears.
+    f.log.reset();
+    f.render();
+    expect(f.log.initClears()).toHaveLength(0);
+    // A resize re-arms BOTH init blocks (setSize reallocates everything).
+    f.layer.setSize(400, 300);
+    f.log.reset();
+    f.render();
+    expect(f.log.initClears()).toHaveLength(8);
+    f.dispose();
+    // And the stream init is genuinely LAZY: turning the experiment on
+    // after the canonical targets are warm pays only the four new clears.
+    const g = gooLayerFixture();
+    g.render();
+    g.log.reset();
+    g.layer.setPerStream(true);
+    g.render();
+    expect(g.log.initClears()).toHaveLength(4);
+    g.dispose();
   });
 });

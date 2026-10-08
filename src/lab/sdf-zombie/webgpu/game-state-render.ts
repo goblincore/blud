@@ -140,6 +140,9 @@ export interface RenderState {
   organReach: Map<object, { pos: Vec3; radius: number }[]>;
   /** Mesh segment cache, or null outside mesh mode. */
   segMeshCache: SegmentMeshCache | null;
+  /** The bone-mesh cache as the boot started it (sculpt-cache.ts startBoneMeshCache): asked for as main() begins,
+   *  so the anatomical skull's asset loads beside the boot, and taken once where the skeleton is built. */
+  boneCache: { take(mesh: boolean): Promise<SegmentMeshCache | null> } | null;
   /** Mesh skeleton renderer, or null outside mesh mode. */
   segMeshRenderer: SegmentMeshRenderer | null;
   /** Per-actor built body and named bone sources (mesh mode). */
@@ -207,6 +210,7 @@ export function makeRenderState(): RenderState {
     organMode: 'sdf',
     organReach: new Map(),
     segMeshCache: null,
+    boneCache: null,
     segMeshRenderer: null,
     skeletonSources: new Map<ZombieActor, SkeletonSourceEntry>(),
     segVolumeCache: null,
@@ -249,6 +253,7 @@ export const RENDER_BINDINGS = {
   organMode: 'render.organMode',
   organReach: 'render.organReach',
   segMeshCache: 'render.segMeshCache',
+  boneCache: 'render.boneCache',
   segMeshRenderer: 'render.segMeshRenderer',
   skeletonSources: 'render.skeletonSources',
   segVolumeCache: 'render.segVolumeCache',

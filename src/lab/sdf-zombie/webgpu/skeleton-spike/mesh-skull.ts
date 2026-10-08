@@ -3,20 +3,30 @@
 // The mesh-skull sculpt: meshBoneSource adapts a bone field source into the carved skull and mandible, plus the skull art revision names.
 
 import type { BoneFieldSource, Point3 } from './contract';
+import { sculptSkull2, skull2JawOf } from './mesh-skull-2';
+import type { SculptShape } from './sculpt-variant';
 
 /** Mesh art revision is independent of the shared anatomy/volume contract. */
 export const MESH_SKULL_REVISION = 'skull-sculpt-1';
 export const SOLDIER_MESH_SKULL_REVISION = 'soldier-skull-sculpt-1';
+/** The second sculpt's revisions (mesh-skull-2.ts), per character as the first's are. */
+export const MESH_SKULL_2_REVISION = 'skull-sculpt-2';
+export const SOLDIER_MESH_SKULL_2_REVISION = 'soldier-skull-sculpt-2';
 
 /** Subtractive sculpt: every surviving point is inside the authored bone.
  * Coordinates are head-rigid AABB coordinates, +z forward. Finite-depth
  * recesses preserve a closed dark floor and the rear cranium; flat jaw planes
  * cut the round chin into a narrow mandible with distinct gonial corners.
- * Never pass this adapter to procedural or volume renderers. */
-export function meshBoneSource(source: BoneFieldSource): BoneFieldSource {
-  const revision = source.character === 'zombie' ? MESH_SKULL_REVISION
-    : source.character === 'soldier' ? SOLDIER_MESH_SKULL_REVISION : null;
+ * Never pass this adapter to procedural or volume renderers.
+ * `shape` 2 is the second sculpt (mesh-skull-2.ts: the same bone and frame, carved toward a human skull); omitted,
+ * the first, as ever. */
+export function meshBoneSource(source: BoneFieldSource, shape: SculptShape = 1): BoneFieldSource {
+  const zombie = source.character === 'zombie', soldier = source.character === 'soldier';
+  const revision = shape === 2
+    ? (zombie ? MESH_SKULL_2_REVISION : soldier ? SOLDIER_MESH_SKULL_2_REVISION : null)
+    : (zombie ? MESH_SKULL_REVISION : soldier ? SOLDIER_MESH_SKULL_REVISION : null);
   if (!revision || source.segment !== 'head' || source.revision.endsWith(`:${revision}`)) return source;
+  if (shape === 2) return sculptSkull2(source, revision, skull2JawOf(source.character)!);
   const { min, max } = source.bounds;
   const half = max.map((v, i) => (v - min[i]!) * 0.5);
   const scale = Math.min(...half);

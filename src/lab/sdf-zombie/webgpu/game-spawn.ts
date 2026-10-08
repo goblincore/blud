@@ -14,6 +14,8 @@ import { type BuildResult } from '../build-body';
 import { characterEntry } from '../character-registry';
 import { woundWorldPos, type Wound } from '../damage';
 import { headPopDebris } from '../head-pop';
+import { decapitationRule } from '../head-burst';
+import { HEAD_LEAF } from './game-head-damage';
 import { LIGHT_PRESETS } from '../material';
 import { hitFeedback } from '../player-hit-feedback';
 import { spawnRocket } from '../rockets';
@@ -418,7 +420,7 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
   const zombieId = ctx.boot.nextId++;
   rigGroup.userData.gameActorId = zombieId;
   const actor = createZombieActor({
-    id: zombieId, room: room.id, body: placed, view, character, start,
+    id: zombieId, room: room.id, body: placed, view, character, characterName: name, start,
     boundedWounds: ctx.vfx.boundedWoundPreview,
     // A SWORD profile (motion-profile.ts `melee.kind === 'sword'`, the
     // bride) gets the ring brain on SWORD_TUNING plus strike contact and
@@ -492,7 +494,14 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
     // the whole swollen head (blood-sim.ts burstVolume — the 10-bead point
     // burst read as a thin mist), a slug gout along the shot, the neck
     // bleeds, and the head itself flies apart (head-pop.ts).
-    ...(characterEntry(name).profile.soft ? {
+    // THE ZOMBIE'S POP (head-burst.ts decapitationRule): the same burst, when a slug takes its head off or a slug
+    // from close to medium range lands on its head already split wide (game-head-shot.ts). The zombie is the
+    // CHARACTER of that name, not every body on the zombie's motion profile. Its eyes are painted on the face sheet,
+    // so the debris' eyeballs take the sheet's glow colour. A pellet's decapitation stays the flying head (onSever).
+    ...(name === 'zombie' ? {
+      onDecapitate: ({ weapon }: { weapon: 'slug' | 'pellet' | 'other' }) => decapitationRule(weapon),
+    } : {}),
+    ...(characterEntry(name).profile.soft || name === 'zombie' ? {
       onHeadPop: (head: { origin: Vec3; prims: Primitive[] }, dir: Vec3, stumpWound: Wound | null) => {
         const at = head.origin;
         ctx.telemetry.telemetry.event('sever', { actor: actor.id, limb: 'head' });
@@ -502,7 +511,8 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
         const l = Math.hypot(dir[0], dir[1] + 0.6, dir[2]) || 1;
         spawnImpactGout(ctx.vfx.bloodSim, 'slug', at, [dir[0] / l, (dir[1] + 0.6) / l, dir[2] / l], rngStreams.bleed, ctx.boot.nextEmitterStream++);
         if (stumpWound) registerBleed(ctx, actor, stumpWound, 'stump');
-        ctx.boot.onGoreDispatch?.(actor, headPopDebris(head, dir, rngStreams.misc));
+        ctx.render.segMeshRenderer?.explodeSkull(actor,ctx.render.skeletonSources.get(actor)?.sources ?? [],dir);
+        ctx.boot.onGoreDispatch?.(actor, headPopDebris(head, dir, rngStreams.misc, name === 'zombie' ? HEAD_LEAF.iris : undefined));
       },
     } : {}),
   });
@@ -553,6 +563,7 @@ export function rebuildCast(ctx: GameContext): void {
   // Head damage state (and any dangling eye's piece) belongs to the old cast; so do its brain mesh gibs.
   ctx.weapon.headDamage?.reset();
   ctx.weapon.headSplit?.reset();
+  ctx.weapon.headShot?.reset();
   clearMeshGibs(ctx);
   ctx.world.soldierCorpses?.dispose();
   ctx.world.encounter.clear(); ctx.world.encounterHomes.clear();

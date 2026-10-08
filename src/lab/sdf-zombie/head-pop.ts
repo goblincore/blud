@@ -95,15 +95,16 @@ function spray(rand: () => number, bias: Vec3, biasW: number): Vec3 {
  * The debris for one popped head. `head` is the popped chunk (world-space
  * prims, origin at the head); `dir` the shot. Eyeballs sit where the head's
  * glowing prims were (their colour becomes the iris); a head with none gets
- * two at +-3 cm, amber.
+ * two at +-3 cm, in `iris` (amber when omitted; the zombie's eyes are painted
+ * on its face sheet, so its pop passes the sheet's glow colour).
  */
-export function headPopDebris(head: { origin: Vec3; prims: Primitive[] }, dir: Vec3, rand: () => number): GorePiece[] {
+export function headPopDebris(head: { origin: Vec3; prims: Primitive[] }, dir: Vec3, rand: () => number, iris: Vec3 = [1, 0.35, 0.05]): GorePiece[] {
   const out: GorePiece[] = [];
   const shot = norm([dir[0], 0, dir[2]]);
   const glows = head.prims.filter(p => (p.glow ?? 0) > 0).slice(0, 2);
   const eyes = glows.length === 2
     ? glows.map(p => ({ at: scale(add(p.a, p.b), 0.5), iris: p.color ?? [1, 0.35, 0.05] as Vec3 }))
-    : [-0.03, 0.03].map(x => ({ at: add(head.origin, [x, 0.02, 0.06]) as Vec3, iris: [1, 0.35, 0.05] as Vec3 }));
+    : [-0.03, 0.03].map(x => ({ at: add(head.origin, [x, 0.02, 0.06]) as Vec3, iris }));
 
   for (const e of eyes) {
     // Local frame: the iris faces `look`, the nerve trails out of the back.

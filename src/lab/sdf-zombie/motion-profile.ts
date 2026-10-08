@@ -92,6 +92,18 @@ export function isSoldierFamily(profile: Pick<MotionProfile, 'family'> | null | 
 }
 
 /**
+ * A GORE BODY takes a gun crater the way the zombie does: the wet red lip (torn-lips.ts wetLipWound) and, on its
+ * head, the low lip that lets the skull show (head-burst.ts burstTuning.headLip). It is every body that is neither
+ * on the soldier's damage model (the soldier family keeps its own soldierWound stain and stock lips) nor a soft
+ * target (the cloth-robed cultists take decals). No profile at all is the zombie's, a gore body. This is a rule
+ * about the BODY's flesh, so it is asked of the profile; the rules that belong to the zombie alone (the head split,
+ * the pop) ask the character's name instead.
+ */
+export function isGoreBody(profile: Pick<MotionProfile, 'family' | 'soft'> | null | undefined): boolean {
+  return !isSoldierFamily(profile) && !profile?.soft;
+}
+
+/**
  * Do the torso guards (rig.ts RigGuardSphere) apply to this profile? Only to an
  * UNARMED body: the zombie and the other bare-handed characters. Anything that
  * holds a prop or a gun, or carries one in a stance (the soldier family, the
