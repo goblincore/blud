@@ -89,8 +89,8 @@ describe('lipsAfterSever', () => {
   });
 
   it('A SLUG DECAPITATION WITH AN EARLIER CHEST CRATER: the chest crater keeps its lip, and the stump its own', () => {
-    // As staged: a slug crater on the chest, 17 cm from the stump's centre (16 cm under it). The reach the rule once
-    // had (the stump's radius plus 1.6 of the crater's, 37 cm) took both lips.
+    // As staged: a slug crater on the chest, 17 cm from the stump's centre (16 cm under it). A rule that judged by
+    // the distance between centres (the stump's radius plus 1.6 of the crater's is 37 cm) would take both lips.
     const stump = STUMP(), chest = slug([0.023, -0.162, 0.053]);
     const wounds = [chest, stump];
     expect(lipsAfterSever(wounds, PRIMS, HEADLESS, stump)).toBe(wounds);

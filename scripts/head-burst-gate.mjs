@@ -576,7 +576,8 @@ async function acrossHead(id, frame, name) {
 }
 // THE PIXEL CHECKS' BOUNDS, each beside the value this gate measured when it was set (screenshot pixels, 1280 x 800).
 //   the aim on screen: the recorded aim's ray, drawn, within AIM_PX_MOST of the crosshair's pixel;
-//   the split's halves: at least HALF_MIN of a side's 33 points are flesh;
+//   the split's halves: at least HALF_MIN of a side's 33 points are flesh (a closed head covers 14 of them, a head
+//   parted to its full angle 24 or 25: the bound stands between);
 //   the pop's fragments: at least FRAGMENT_PX_MIN pixels change when the fragments are taken out of the frame;
 //   the old head's place (about 21,000 pixels from 0.8 m): at most OVER_MOST of them the body's flesh after a
 //   decapitation, from the second-worst of four sides; and at least OVER_SEEN from every side with the lip rule off
@@ -584,7 +585,7 @@ async function acrossHead(id, frame, name) {
 // Measured when set: the aim 0.00 px off; 24 and 25 of 33 points a side; 5,422 and 5,451 pixels of fragments; in the
 // old head's place 0 or 1 pixel after the pop and after the slug's flying head from every side but one (61 and 63
 // from that one: a status light behind it); 1,388 to 2,615 with the rule off.
-const AIM_PX_MOST = 2, HALF_MIN = 12, FRAGMENT_PX_MIN = 1500, OVER_MOST = 40, OVER_SEEN = 1000;
+const AIM_PX_MOST = 2, HALF_MIN = 19, FRAGMENT_PX_MIN = 1500, OVER_MOST = 40, OVER_SEEN = 1000;
 
 try {
   // ======== BOOT 1: the shipped rules ========

@@ -14,8 +14,8 @@
 // burstTuning.splitRangeM of that eye. Where the slug itself lands does not decide it, so long as it stopped in the
 // head's own flesh (head-burst.ts onHeadPrim: the head limb's prims, the neck's included): it leaves from the muzzle
 // and lands about 10 cm under the crosshair, on the chin or under it. The older measure (burstTuning.splitAim
-// 'slug') is the slug's own line, and keeps the reach it always had: a landing point past BURST.maxHs of the head's
-// ellipsoid is the neck's or a shoulder's, and is not judged.
+// 'slug') is the slug's own line, and has a reach: a landing point past BURST.maxHs of the head's ellipsoid is the
+// neck's or a shoulder's, and is not judged.
 //
 // ONLY THE ZOMBIE: the character (ZombieActor.characterName), not the motion profile. Every character without a
 // profile of its own moves on the zombie's, and none of them has the split's presets or the pop.
