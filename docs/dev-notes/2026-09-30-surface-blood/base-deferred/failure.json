@@ -1,0 +1,7 @@
+{
+  "error": "Error: THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_416): Color target has no corresponding fragment stage output but writeMask (ColorWriteMask::(Red|Green|Blue|Alpha)) is not zero.\n - While validating targets[0] framebuffer output.\n - While validating fragment state.\n",
+  "events": [
+    "THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_416): Color target has no corresponding fragment stage output but writeMask (ColorWriteMask::(Red|Green|Blue|Alpha)) is not zero.\n - While validating targets[0] framebuffer output.\n - While validating fragment state.\n"
+  ],
+  "metrics": {}
+}

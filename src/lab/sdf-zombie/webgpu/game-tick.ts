@@ -1095,6 +1095,7 @@ export function tick(ctx: GameContext, dt: number) {
     }
     ctx.telemetry.telemetry.end('chunks-and-guts', chunkTiming);
     const bloodTiming = ctx.telemetry.telemetry.begin();
+    ctx.vfx.surfaceBlood?.advance(cdt);
     // BLEED — emitters spray (anchors recomputed from the CURRENT posed
     // prims, so droplets ride the walking body), flying chunks trail, and
     // the sim settles into splats. Runs even with the wander frozen: it is
@@ -1148,11 +1149,13 @@ export function tick(ctx: GameContext, dt: number) {
         ],
         cdt, rngStreams.bleed,
       );
-      stepBlood(ctx.vfx.bloodSim, cdt, rngStreams.bleed);
+      stepBlood(ctx.vfx.bloodSim, cdt, rngStreams.bleed, undefined,
+        ctx.vfx.surfaceBlood?.enabled ? ctx.vfx.surfaceBlood : undefined);
       // Re-pose every instance from sim state (billboards track the camera
       // even frozen — same contract as the lab's always-sync).
       ctx.vfx.bloodView.sync(ctx.vfx.bloodSim, ctx.boot.handle.camera);
     }
+    ctx.vfx.surfaceBlood?.sync();
     ctx.telemetry.telemetry.end('blood-simulation-and-sync', bloodTiming);
     ctx.telemetry.telemetry.lap('region', 'tick:post-blood');
     // The optional impact crown advances even with bleed off, so an event
