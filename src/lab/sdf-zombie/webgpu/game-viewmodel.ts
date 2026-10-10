@@ -97,11 +97,14 @@ const RELOAD_KEYS: readonly (ReloadPose & { t: number })[] = [
 ];
 
 export const FLASH = {
-  /** Visible window, seconds. Short on purpose: a muzzle flash that outlasts
-   *  two frames reads as a lamp, not a detonation. */
-  windowSec: 0.07,
-  /** Exponential decay rate. 60 gives ~2% left at the window's end. */
-  decay: 60,
+  /** Visible window, seconds: the muzzle LIGHT's. The flame jets' own timeline
+   *  is muzzle-flash.ts (MUZZLE_FLASH.windowSec); this is kept equal so the
+   *  light and the fire end together. Still short on purpose: a flash that
+   *  outlasts a few frames reads as a lamp, not a detonation. */
+  windowSec: 0.2,
+  /** Exponential decay rate. 25 leaves ~0.7% at the window's end and keeps the
+   *  light up through the flame's hold. */
+  decay: 25,
 } as const;
 
 export const MAGAZINE_CAPACITY = 2;
@@ -385,21 +388,45 @@ export function magazineAfterFire(shells: number, barrels: 1 | 2): number {
 // ——— Fire recoil ————————————————————————————————————————————————————————
 
 export const RECOIL = {
-  /** How long the weapon takes to come back to rest, seconds. Short: a
-   *  sawed-off snaps back, it does not wallow. */
-  durationSec: 0.26,
-  /** Peak travel straight back toward the eye, metres, per barrel. */
-  kickBack: 0.075,
-  /** Peak rise, metres, per barrel. */
-  kickUp: 0.030,
-  /** Peak muzzle-up rotation, degrees, per barrel. */
-  kickPitchDeg: 9.0,
-  /** Peak roll, degrees, per barrel — a single barrel is off-axis, so the gun
-   *  twists as well as lifts. */
-  kickRollDeg: 4.0,
+  /** How long the weapon takes to come back to rest, seconds. Equal to
+   *  GRAPESHOT.fireCooldownSec (0.45) so a shot's recoil has finished before the
+   *  next shot can start -- restarting the curve mid-return would snap the gun. */
+  durationSec: 0.45,
+  /** Peak travel straight back toward the eye, metres, for ONE barrel. */
+  kickBack: 0.10,
+  /** Peak rise, metres, for one barrel. */
+  kickUp: 0.028,
+  /** Peak muzzle-up rotation, degrees, for one barrel. */
+  kickPitchDeg: 5.5,
+  /** Peak roll, degrees, for one barrel -- a single barrel is off-axis, so the
+   *  gun twists as well as lifts. */
+  kickRollDeg: 5.0,
+  /** What both barrels together do to the single-barrel figures above. */
+  doubleBarrelGain: 1.5,
 } as const;
 
 export interface RecoilPose { dy: number; dz: number; pitch: number; roll: number; }
+
+/** The raw shape: the impulse response of a damped spring -- e^(-a t) sin(w t)
+ *  -- which is what a gun shoved by a charge actually does. It climbs for about
+ *  0.075 s (several frames at this scene's 30-40 ms), is back near rest by
+ *  0.25 s, and dips a few percent past rest before settling. A short
+ *  taper over the last 15% lands it exactly on rest. The first heavy curve
+ *  peaked at 0.04 s and was gone in 0.36 s: on screen for one or two frames. */
+function recoilShape(u: number): number {
+  const t = u * RECOIL.durationSec;
+  const taper = u < 0.85 ? 1 : 1 - ((u - 0.85) / 0.15) ** 2 * (3 - 2 * ((u - 0.85) / 0.15));
+  return Math.exp(-10 * t) * Math.sin(11 * t) * taper;
+}
+/** The shape's own peak, so the RECOIL numbers above are the peaks you SEE.
+ *  The first curve multiplied a fast attack by a decay that had already fallen
+ *  to a third by the time the attack finished, and its "3 cm / 9 degrees" was
+ *  really 1 cm / 3 degrees -- a recoil that was tuned and never arrived. */
+const RECOIL_SHAPE_PEAK = (() => {
+  let peak = 0;
+  for (let i = 0; i <= 2000; i++) peak = Math.max(peak, recoilShape(i / 2000));
+  return peak;
+})();
 
 /**
  * Weapon recoil at `t` seconds since the shot, scaled by how many barrels went
@@ -409,15 +436,13 @@ export interface RecoilPose { dy: number; dz: number; pitch: number; roll: numbe
  */
 export function fireRecoil(t: number, barrels: 1 | 2 = 1): RecoilPose {
   if (t < 0 || t >= RECOIL.durationSec) return { dy: 0, dz: 0, pitch: 0, roll: 0 };
-  const u = t / RECOIL.durationSec;
-  // Fast attack over the first ~12%, then decay with one small overshoot.
-  const attack = Math.min(1, u / 0.12);
-  const decay = Math.exp(-5.2 * u) * Math.cos(7.5 * u);
-  const s = attack * decay * (barrels === 2 ? 1.65 : 1);
+  const s = (recoilShape(t / RECOIL.durationSec) / RECOIL_SHAPE_PEAK) * (barrels === 2 ? RECOIL.doubleBarrelGain : 1);
   return {
     dy: RECOIL.kickUp * s,
     dz: RECOIL.kickBack * s,
-    pitch: -RECOIL.kickPitchDeg * s,
+    // POSITIVE rotation.x raises this model's muzzle (measured: the old negative sign
+    // took the bore from +1.8 to -8.8 degrees at the peak -- the barrel dropped).
+    pitch: RECOIL.kickPitchDeg * s,
     roll: RECOIL.kickRollDeg * s,
   };
 }

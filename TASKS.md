@@ -5,10 +5,21 @@
 > the area pages under [`docs/tasks/`](docs/tasks/), step-by-step plans in `docs/superpowers/plans/`,
 > and hand-offs in `docs/dev-notes/`.
 >
-> **Latest hand-off:** [2026-09-29 — start here](docs/dev-notes/2026-09-29-handoff.md) (light layers, Boiler Room
-> resize, zombie feet, march-hash on Chrome 154). Previous: [2026-09-27 Night Train](docs/dev-notes/2026-09-27-night-train-handoff.md).
+> **Latest hand-offs:** [2026-10-08 frame cost: the heavy scenes toward a stable 30 fps](docs/dev-notes/2026-10-08-frame-cost/HANDOFF.md) (branch `claude/quizzical-williams-66ec4e`, PR goblincore/blud#41), [2026-10-05 the axe and the head split](docs/dev-notes/2026-10-04-head-split/HANDOFF.md) (branch `claude/head-cleaving-effect-ef9515`, PR goblincore/blud#31), [2026-10-01 design session — the egg (paused), the Flat's emergence, the game's shape, the retro-CGI look](docs/dev-notes/2026-10-01-design-session-handoff.md) (branch `claude/egg-shader-gooey-transitions-21fb04`, unmerged), [2026-10-01 Night Train ending — control room, egg, sequence system](docs/dev-notes/2026-10-01-night-train-ending-handoff.md) (branch `claude/train-monitor-transition-51f385`, unmerged; plan 4 next), [2026-09-29](docs/dev-notes/2026-09-29-handoff.md) (light layers, Boiler Room
+> resize, zombie feet, level-list tier, march-hash on Chrome 154) and [2026-09-30 flail / head damage / wounds](docs/dev-notes/2026-09-30-flail-handoff/HANDOFF.md). Previous: [2026-09-27 Night Train](docs/dev-notes/2026-09-27-night-train-handoff.md).
 
 ## In flight / next
+
+**Frame cost: the heavy scenes at a stable 30 fps** (owner's goal, 2026-10-08) — [rendering](docs/tasks/rendering.md)
+- [~] **Measured and ranked 2026-10-08; two changes built (PR goblincore/blud#41), owner look pending.** The whole
+  frame attributed on six scenes ([notes](docs/dev-notes/2026-10-08-frame-cost/NOTES.md), driver
+  `scripts/frame-cost.mjs`). Built: (1) the held weapons and the arms shade the lights near the eye, not the level's
+  69 (Night Train −2.5 to −6.1 ms a frame; the hitch on entering a carriage halved; `?nearlights=0` is the A/B);
+  (2) the exact wound reach is the default (a switch that shipped off: −3 ms on a body with 32 wounds, −6 ms on a
+  chopped, split close-up, the picture the same to the bit). **With PR 43's quad dispatch merged in, the three heavy
+  scenes are under 33.3 ms with margin:** Boiler Room after a fight 37.6 → 28.5 ms, the bare arena after a fight
+  37.4 → 24.8 ms, the chopped and split close-up 38.5 → 23.3 ms. Left for margin and smoothness: the props and kit
+  on their room's lights, a doorway test so other carriages are not drawn, the first shot's pipeline hitch.
 
 **Player melee: spike flail** (branch `claude/melee-weapon-design-7d1423`, PR #22) — [combat and gore](docs/tasks/combat-and-gore.md)
 - [~] **Flail v1.5b built; owner playtest pending.** Torn, splayed, wet-red lips on flail wounds; gun wounds get the
@@ -16,6 +27,45 @@
   optimization pass (torn-wound cost, first-swing hitch, grey gib-blur smears). Gate `scripts/flail-gate.mjs`.
 - [~] **Melee head damage model v2 built; owner playtest pending** — regions, 3D eyes that pop, brain gib, jelly
   wobble, the skull deforms with the flesh. Gate `scripts/head-damage-gate.mjs`.
+- [~] **The gun and the zombie's head, redefined 2026-10-07; owner playtest pending** (branch `claude/sculpt-skull-2`).
+  Ordinary rounds leave ordinary wounds; a slug aimed precisely (the crosshair within 3.3 cm of the head's centre) from
+  no farther than 5 m splits the head as the axe does, both halves; the slug that takes the head off pops it (it swells
+  for 0.12 s and bursts, the skull thrown as pieces); any slug from that range on a split head pops it.
+  The slug head burst of 2026-10-02 (the "opening") is off, behind `burstTune({ opening: true })`. Gate
+  `scripts/head-burst-gate.mjs`. [Notes and the before/after sheet](docs/dev-notes/2026-10-07-sculpt-skull-2/NOTES.md) ·
+  [the opening's spec](docs/superpowers/specs/2026-10-02-slug-head-burst-design.md).
+
+**Cut wounds** — [combat and gore](docs/tasks/combat-and-gore.md)
+- [~] **Cut wounds M1 built 2026-10-04; owner playtested** — a cut wound shape, the rod (weapon slot 6), 32 wounds with merging.
+  Owner: "more excessive", so longer, wider, ragged cuts landed 2026-10-04. Their cost, investigated 2026-10-06: about 4 to 5 ms for three chops, not +22 ([notes](docs/dev-notes/2026-10-06-cut-cost/NOTES.md)); next for wound cost is organs to mesh (owner). M2 is the head split (next line).
+  Gate `scripts/cut-wound-gate.mjs` (33 checks). [Notes](docs/dev-notes/2026-10-03-cut-wounds/NOTES.md) · [handoff](docs/dev-notes/2026-10-03-cut-wounds/HANDOFF.md).
+- [~] **The axe (slot 7) and the head split built 2026-10-05; owner playtested; PR goblincore/blud#31** (branch
+  `claude/head-cleaving-effect-ef9515`) — a chop opens a zombie's head on a hinge: a wide crack, then split wide and alive, then
+  the kill. The halves wobble; the skull cracks, then splits. The wet film under the flashlight is the owner's pick (C, the boldest, 2026-10-06).
+  Debt: an open head costs about +4.4 ms at 0.6 m after a first cost pass and the cut-cost pass under it (2026-10-06, branch `claude/open-head-cost`: [notes](docs/dev-notes/2026-10-06-open-head-cost/NOTES.md); +6 to +8 ms before). Gates `scripts/head-split-gate.mjs` (111 checks, 2026-10-07), `scripts/axe-gate.mjs` (29).
+  **The anatomical skull is too small in the head (2026-10-07, branch `claude/anatomical-skull-fit`):** four fits that read the flesh are behind `?skullfit=affine|mid|snug|tight`. [Look sheets and tables](docs/dev-notes/2026-10-07-anatomical-skull-fit/NOTES.md).
+  **On the anatomical skull (2026-10-06, branch `claude/split-anatomical-skull`):** split plates have their own material, shots break them where they are drawn (bone standing in the open gap included), the gate runs on it and reads their pixels. Owner to decide: retune how far the bone opens ([sheets and notes](docs/dev-notes/2026-10-06-split-anatomical-skull/NOTES.md)).
+  [Spec](docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 10) · [handoff](docs/dev-notes/2026-10-04-head-split/HANDOFF.md) · [notes](docs/dev-notes/2026-10-04-head-split/NOTES.md).
+- [~] **The sculpted skull, `full`, is the default skull since 2026-10-07 (owner's pick); the anatomical skull is opt-in** (branch `claude/sculpt-skull-2`).
+  No parameter draws the sculpted skull's second sculpt and second paint; `?skull=anatomical` the 14 plates; `?sculpt=classic` the first look. Both looks are pinned by hash; the four capture gates run on the new default (head-split 111 checks, head-burst 130, axe 29, cut-wound 33).
+  The eight humanoids with no skull-shaped head bone (the cultist among them) draw the anatomical skull by default, each fitted to its own flesh with the eyes in the fitted orbits (2026-10-07). For the owner: the three schoolgirls' skulls sit 2 to 7 cm above their cartoon faces; and 1 cm against 5 mm for the head's mesh.
+  [Notes, the cast sheet and the cell pair](docs/dev-notes/2026-10-07-sculpt-skull-2/NOTES.md).
+  The light gate's "skull glows in the dark" check failed on it (1.56x against 1.5x) and was re-derived to 2.0 (2026-10-08): the low head lip and the paler paint moved the ratio, the bone's dark-room response did not change. For the owner: the skull is easier to see in a dark carriage than it was. [The before/after pair and the numbers](docs/dev-notes/2026-10-08-skull-dark-gate/NOTES.md).
+
+**Organs as mesh** — [rendering](docs/tasks/rendering.md)
+- [x] **Built 2026-10-06; the owner picked the `wet` look 2026-10-07; merged 2026-10-07 (PR 34).** On the mesh skeleton a zombie's organs are segment meshes, drawn
+  only where a wound reaches them; the body packs no inside-flesh row, so the march never calls `applyBones` (0
+  evaluations a frame against 869,688 on three torso chops; about 1 to 1.5 ms back at 0.9 m). `?organs=sdf` is the A/B.
+  The frame is GPU-bound (CPU about 4 ms); organs were about 1 ms of it. [Sheets](docs/dev-notes/2026-10-06-organs-mesh/look/).
+  Gate `scripts/organs-mesh-gate.mjs` (32 checks). [Spec](docs/superpowers/specs/2026-10-06-organs-mesh-design.md) ·
+  [notes](docs/dev-notes/2026-10-06-organs-mesh/NOTES.md).
+- [x] **Low-poly organs, built 2026-10-07; the owner picked the detail strength as shipped; merged 2026-10-07
+  (PR 37).** Each organ prim is a swept tube (analytic normals): the zombie's organs are 528
+  vertices / 1,024 triangles against 4,038 / 8,084, with the same silhouette (0.965 of the extraction's pixels). The
+  haustra and wrinkles are a bump in the organ shader over the tube's own coordinate; the crease between loops is a
+  baked shade. No frame-time change was measured (+0.62 ms, IQR -0.25 to 1.35): this is tidiness and room for more
+  organs. Gate: 37 checks. [Sheets](docs/dev-notes/2026-10-07-organs-lowpoly/look/) ·
+  [notes](docs/dev-notes/2026-10-07-organs-lowpoly/NOTES.md).
 
 **Night Train (level 1)** — [levels](docs/tasks/levels.md) (items 4a–4k)
 - [x] **Body lighting settled** (owner, 2026-09-28): LIGHT LAYERS panel (`light-layers.ts`) — every body-lighting
@@ -29,13 +79,14 @@
 - [ ] **Optimisation (owner 2026-09-29, in progress):** DONE — tube shadow maps 256²; every tube's omni spill list-only
   (−3 ms Boiler Room); the Boiler Room's second tube row list-only (+2 ms, not +10); the cost harness can now measure
   live tube shadows (`LIGHT_GATE_TUBE_SHADOW=1`). **Finding: the static/dynamic tube-shadow bake would save <1 ms — dropped.**
-  Left: level materials on the shared list (the ~3 ms of tube spots per carriage; largest job), retire paths the chosen
-  look leaves unused (needs owner sign-off on the look). Numbers: [optimisation-strategies.md](docs/dev-notes/2026-09-28-light-layers/optimisation-strategies.md).
+  Level materials on the shared list, cheap tier: **default ON (owner: no visible difference in play), ~free; `?levellist=0` opts out** ([notes](docs/dev-notes/2026-09-29-level-list/notes.md)). Left: retire paths the chosen look leaves unused
+  (needs owner sign-off on the look). Numbers: [optimisation-strategies.md](docs/dev-notes/2026-09-28-light-layers/optimisation-strategies.md).
 - [x] **Zombies float — fixed with real feet** (owner, 2026-09-29): the model stopped 0.199 m above the floor (legs too
   short for the hip, no foot bone). Thigh 0.46 / shin 0.50 and a foot bone with heel + sole: lowest point 0.004 m,
   height unchanged. [Notes + turntable](docs/dev-notes/2026-09-29-zombie-feet/notes.md). **Open:** feet a little
   small (~0.19 m; foot `len`), the walk with longer legs not yet judged in play; kit characters (soldier 0.10,
   juggernaut 0.11) assumed hidden by boots — verify.
+- [ ] **Ending: the control room, the egg, the montage** (owner, 2026-09-30, scope B) — [spec](docs/superpowers/specs/2026-09-30-night-train-egg-ending-design.md) · [blockout](docs/dev-notes/2026-09-30-egg-ending/). The cab becomes an 8 × 10 m control room with a nested, alive egg (red veiny outer, milky spotted inner, soft silhouette); contact starts a ~30 s abstract montage (jump cuts, the train seen as a sperm), then black and a title card. The Flat and the pull-back stay later. **Plans 1 (room), 2 (egg pass) and 3 (sequence system) built.** Egg look rework approved 2026-10-01 ([spec](docs/superpowers/specs/2026-10-01-egg-candled-caul-design.md)): a candled egg in a torn caul of wet flesh. The egg is **paused** (owner thinking). **In design (drafts awaiting the owner, 2026-10-01):** the Flat set and the screen emergence ([spec](docs/superpowers/specs/2026-10-01-flat-screen-emergence-design.md), [animatic](docs/dev-notes/2026-10-01-flat-emergence-lookdev/)), then goblin animation and the playable Flat; a [design statement](docs/game/design-statement-draft.md) for vision draft 4. **The room** ([look-dev](docs/dev-notes/2026-10-01-flat-room-lookdev/), 2026-10-01): castle stone for the bones, Giger's industrial decay for the veins, otaku cute for the stuff, and the machine's last stage as a "Giger iMac". **Goblin refinement pass**: phase 1 (body) done (owner-approved 2026-10-01); body grain (the face's texture on the body) done, reworked 2026-10-02 to one small octave of pitted relief after the owner saw big pixels ([spec](docs/superpowers/specs/2026-10-02-body-grain-design.md)); **armour (phase 2) built 2026-10-02, awaiting the owner's final look** ([spec](docs/superpowers/specs/2026-10-02-goblin-armour-design.md), [notes](docs/dev-notes/2026-10-02-goblin-armour/notes.md)); **held weapons, thin shotgun pass done 2026-10-02** ([notes](docs/dev-notes/2026-10-02-goblin-shotgun/notes.md)); **in-game gait (phase 4a) built 2026-10-02, awaiting the owner's look in motion** ([spec](docs/superpowers/specs/2026-10-02-goblin-gait-design.md), [notes](docs/dev-notes/2026-10-02-goblin-gait/notes.md)); **the Flat's poses (phase 4b first slice: pose layer, type, recoil, sit, stand, jolt) built 2026-10-03, awaiting the owner's look** ([spec](docs/superpowers/specs/2026-10-03-goblin-pose-layer-design.md), [notes](docs/dev-notes/2026-10-03-goblin-poses/notes.md)); next the vest and shorts, `reach`, game wiring, more weapons ([spec](docs/superpowers/specs/2026-10-01-goblin-refinement-design.md), [tasks](docs/tasks/characters.md)).
 - [ ] Check the beacon sweeps read on bodies under the owner's default; explain the light gate's `?lightlist=0` gib
   reading (0.296 vs 0.163 earlier, passes).
 - [x] **Optimisation pass** (owner), rounds 1–2: the frame was CPU-bound on draw calls. Static
@@ -59,12 +110,13 @@
 - [ ] Owner tuning: lightning (rate, peak, rim, grade), lamp moods, game-loop defaults.
 
 **Elsewhere** (see the area pages for the full lists)
+- [x] **Playtest fixes** (2026-10-02, branch `claude/shotgun-flail-weapon-bugs-4626b5`): the double-shotgun reload plays again on finite levels (two ammo initialisers raced; `resolveInfiniteAmmo`); flail hits no longer pull the torso off the thighs (stagger root offset now carries the hip sockets); zombie arms can no longer pass through the head (verlet `headKeepOut` in `rig.ts`) or the torso (per-ellipsoid `torsoGuards`, unarmed profiles only via `wantsTorsoGuards`; found after the hip fix let the lower torso slide into the upper arm on angled hits); the shotgun fires per-barrel flame jets (`muzzle-flash.ts`, `game-muzzle-flash.ts`) with a visible-but-modest recoil (`RECOIL`; double shot ~4 cm / ~8 deg, kept low because a high muzzle hides the wounds; hands ride the kick via `recoil-carry.ts`). The bare ring now reloads for people (unlimited reserve, two-shell magazine); automated browsers and `?ammo=unlimited` keep the no-reload default. Owner-confirmed on the flash; recoil strength is a tuning knob in `RECOIL`.
 - [~] **Grenade launcher** (2026-09-29): owner accepted the original M79-inspired gothic FPV model, fire/recoil and break-action reload with forestock grip (`?launcher=1` / slot 4). Next pass: arcing projectile, bounces, explosive/fragment damage and embedding in fleshy actors. [Source, controls and gates](docs/dev-notes/2026-09-29-grenade-launcher/notes.md).
 - [ ] Characters: the **Warbull** (cyber-minotaur: rockets, charge, disarm; second draft from the owner's reference plate) is in the arena, awaiting a local WAM kit build and playtest; the **Juggernaut** is playable
   (arena; owner playtest: works), armour aesthetic pass next;
-  Grenadier variant deferred; cultist perf pass and cloth feel (paused), bride polish —
+  Grenadier variant deferred; cultist perf pass and cloth feel (paused), the **bride is shelved** (2026-09-30; engine fixes merged, game-LOD work on branch `claude/bride-game-lod`) —
   [characters](docs/tasks/characters.md).
-- [ ] Rendering: merged crowd march, baked mesh LOD, corpse bake for every character —
+- [ ] Rendering: merged crowd march, baked mesh LOD, corpse bake for every character, early-Z stage 1 behind `?earlyz=1` (owner look pending) —
   [rendering](docs/tasks/rendering.md); the 0.25 march + checker work and telemetry v3 live in
   [combat and gore](docs/tasks/combat-and-gore.md) (older sections mixed topics).
 - [ ] Engineering: the rest of the `game-main.ts` decomposition (`tick`, `setDrawFn`, `spawnEnemy`) —
@@ -101,6 +153,7 @@ dated history page beside it (as [Gather dispatch R1](docs/tasks/rendering-gathe
 > only** — preserved for provenance, not current work. Do not treat historical
 > roadmap entries as in-flight.
 >
+> Which module owns what: [docs/architecture/module-index.md](docs/architecture/module-index.md) (generated).
 > Current vs. proposed source layout: [docs/architecture/repository-map.md](docs/architecture/repository-map.md).
 > Legacy dynamite/gibbing reference: [docs/reference/legacy-dynamite-gibbing.md](docs/reference/legacy-dynamite-gibbing.md).
 

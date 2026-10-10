@@ -21,10 +21,12 @@ import type * as THREE from 'three/webgpu';
 import type { Vec3 } from '../types';
 import type { LampMood } from './lamp-moods';
 import type { Flashlight } from './dungeon-lighting';
-import type { OutdoorRuntime } from './game-outdoor-leaves';
-import type { VoidRuntime } from './game-void-leaves';
+import type { OutdoorRuntime } from './game-outdoor';
+import type { VoidRuntime } from './game-void';
 import type { Projectile } from './game-weapon';
 import type { ProbeLightingNode } from './probe-lighting-node';
+import type { LevelListLightingNode } from './level-list-node';
+import type { NearLights } from './near-lights';
 
 // ASSIGNED-ONCE HANDLES. The fields below are `const` in game-main.ts: created
 // once at their declaration and never reassigned. The original code therefore
@@ -46,12 +48,19 @@ export interface LightingState {
   hemiBase: number;
   /** Room-probe lighting nodes, keyed by room id. */
   levelProbeNodes: Map<number, ProbeLightingNode>;
+  /** The cheap level tier (spec 2026-09-29-level-list-lighting-design.md): on by default, `?levellist=0` or `?lightlist=0` turns it off. Set at boot. */
+  levelListOn: boolean;
+  /** One node per room while it is on; writeLightList feeds each its picks. */
+  levelListNodes: Map<number, LevelListLightingNode>;
   /** Accent lights that pulse, each with its base power and phase. */
   flickerLights: { light: THREE.PointLight; base: number; phase: number; bowl?: THREE.MeshStandardMaterial; mood?: LampMood; room?: number; bowlMesh?: THREE.Mesh; fixture?: 'bulb' | 'tube' | 'beacon'; spin?: number; shadow?: boolean; gain?: number; tint?: Vec3 }[];
   /** Dungeon rig on/off; the gallery must render unchanged when false. */
   dungeonOn: boolean;
   /** Beam + shadow rig; the codemod supplies the real flashlight. */
   flashlight: Flashlight;
+  /** The proxy lights the held weapons and the arms are lit by (near-lights.ts); null until the first viewmodel
+   *  light list is made, and always in deferred mode. */
+  nearLights: NearLights | null;
   /** Provider for the live projectile lists, or null before they exist. */
   liveTracers: (() => readonly Projectile[]) | null;
   /** Raw `?tracerlight` value; `'0'`/`'off'` zero the gain. */
@@ -62,6 +71,10 @@ export interface LightingState {
   tracerLightSlots: number;
   /** Direct body-flash multiplier; 0 = off, bit-identical. */
   bodyFlashGain: number;
+  /** Task 11b: each actor's room fill factor this frame (roomFillFactor at its root, the factor
+   *  applyRoomFill scales its body fill by), written in the actor light loop; bones and gib chunks
+   *  scale their list-mode ambient by it. Keyed by actor; an unknown owner reads as 1. */
+  actorFill: WeakMap<object, number>;
   /** TASK-6 diagnostic: freezes the practical flicker phase. */
   clockFrozen: boolean;
   /** The flicker clock instant captured by `clockFrozen`. */
@@ -91,14 +104,18 @@ export function makeLightingState(): LightingState {
     levelProbeGain: -1,
     hemiBase: 0,
     levelProbeNodes: new Map<number, ProbeLightingNode>(),
+    levelListOn: false,
+    levelListNodes: new Map<number, LevelListLightingNode>(),
     flickerLights: [],
     dungeonOn: true,
     flashlight: null as unknown as Flashlight,
+    nearLights: null,
     liveTracers: null,
     tracerLightParam: null,
     tracerLightGain: 0,
     tracerLightSlots: 0,
     bodyFlashGain: 0.06,
+    actorFill: new WeakMap<object, number>(),
     clockFrozen: false,
     flickerClockFrozenAt: 0,
     bounceSpotParam: null,
@@ -118,6 +135,8 @@ export const LIGHTING_BINDINGS = {
   levelProbeGain: 'lighting.levelProbeGain',
   hemiBase: 'lighting.hemiBase',
   levelProbeNodes: 'lighting.levelProbeNodes',
+  levelListOn: 'lighting.levelListOn',
+  levelListNodes: 'lighting.levelListNodes',
   flickerLights: 'lighting.flickerLights',
   dungeonOn: 'lighting.dungeonOn',
   flashlight: 'lighting.flashlight',
@@ -126,6 +145,7 @@ export const LIGHTING_BINDINGS = {
   tracerLightGain: 'lighting.tracerLightGain',
   tracerLightSlots: 'lighting.tracerLightSlots',
   bodyFlashGain: 'lighting.bodyFlashGain',
+  actorFill: 'lighting.actorFill',
   lightClockFrozen: 'lighting.clockFrozen',
   flickerClockFrozenAt: 'lighting.flickerClockFrozenAt',
   bounceSpotParam: 'lighting.bounceSpotParam',

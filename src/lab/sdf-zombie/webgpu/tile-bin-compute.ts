@@ -60,7 +60,7 @@ import { TILE_MAX_ENTRIES, TILE_SIZE_PX, type TileGroupInput } from './tile-cull
 export const MAX_TILE_GROUPS = 2048;
 
 /** Floats per group record: [centre.xyz, radius], [start,count,distort,flags]
- *  (the ROW_GROUP_RANGE texel verbatim), [bodyIndex, 0, 0, 0]. Three vec4s —
+ *  (the ROW_GROUP_RANGE texel verbatim), [bodyIndex, cullOffset.xyz] (0 with no offset). Three vec4s —
  *  the same shape as one entry stream record, which is why kTileWrite copies
  *  records through unchanged. */
 export const GROUP_RECORD_SCALARS = 12;
@@ -102,6 +102,7 @@ export function packGroups(groups: TileGroupInput[], out: Float32Array): Float32
     out[o + 6] = s.distort;
     out[o + 7] = s.flags;
     out[o + 8] = s.bodyIndex;
+    if (s.cullOffset) { out[o + 9] = s.cullOffset[0]; out[o + 10] = s.cullOffset[1]; out[o + 11] = s.cullOffset[2]; }
   }
   return out;
 }

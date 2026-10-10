@@ -5,6 +5,11 @@
 // joined WGSL is byte-identical. See docs/dev-notes/2026-09-18-march-split/.
 
 import { SKIN_NORMAL } from '../light/skin-detail-proto';
+import { NG_REASON_SPLIT } from '../../../../normal-gradient-reference';
+import { SPLIT_ABL, ablWgsl } from '../../../../split-ablate';
+
+/** The region test the normal reads: split-hit's, or in an ablation build its own (analytic normals forced). */
+const SPLIT_IN = ablWgsl(`(splitIn && (splitAbl & ${SPLIT_ABL.analyticNormal}) == 0)`) || 'splitIn';
 
 export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the normal, scaled by (1 - max(gloss, metal)) at
   // the point of application: a polished or machined prim has no pits. The
@@ -29,7 +34,9 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
   // anchor must exist before the normal runs. restPoint and noiseLocal are
   // pure reads, so hoisting them cannot move a pixel, and the mode-0 branch
   // below is byte-for-byte the pre-task-2 call.
-  let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift), gBand);
+  // THE HEAD SPLIT: at pS, the hit piece's un-warped point (split-hit.wgsl.ts), where the rest rows are: the texture
+  // rides a half as it opens.
+  let anchor = restPoint(pS, data, hitBest, noiseLocal(pS, noiseShift), gBand);
   var n = vec3<f32>(0.0);
   var ng0 = vec3<f32>(0.0, 1.0, 0.0);
   var ngValid = false;
@@ -42,8 +49,14 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
   // now reads whatever slot the caller loaded, so the gradient is the hit
   // instance's own. The finite-difference path below remains the fallback for
   // unsupported fields and as the debug comparison.
+  // THE HEAD SPLIT: no analytic gradient inside an OPEN head's region sphere (splitIn). ngBody differentiates the
+  // closed body at the world point: it knows neither a half's turn nor the piece caps (the cut faces, and the rest's
+  // hinge-plane and ball caps, so a hit on the unmoved piece is out too). The finite-difference path below
+  // differentiates mapBody, which is the split field. The reason (normal-gradient-reference.ts NG_REASON_SPLIT) is
+  // reported only where the gradient was asked for: with the mode off the pixel reports what it always did.
   gNgDebugMask = u32(max(normalGradientCfg.z, 0.0));
-  if (normalGradientCfg.x > 0.5) {
+  if (normalGradientCfg.x > 0.5 && ${SPLIT_IN}) { ngReason = ${NG_REASON_SPLIT}; }
+  if (normalGradientCfg.x > 0.5 && !${SPLIT_IN}) {
     // counts2.z + 64: owned wounds may go analytic where no limb won the re-fold.
     gNgOwnedOk = select(0.0, 1.0, gInstCounts2.z % 128.0 > 63.5 && hitRefold == 0.0);
     let noiseAmplitude = marchCfg.z * (1.0 - max(gloss, metal));

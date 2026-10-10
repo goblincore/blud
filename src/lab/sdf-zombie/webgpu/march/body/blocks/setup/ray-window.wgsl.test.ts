@@ -13,7 +13,7 @@ describe('ported features reach the entry point', () => {
   it('discards on the accumulated-depth gate before marching and bounds tMax by it', () => {
     expect(MARCH_BODY).toContain('prevT: f32');
     expect(MARCH_BODY.indexOf('perfCfg: vec4<f32>')).toBeLessThan(MARCH_BODY.indexOf('prevT: f32'));
-    // The per-body conservative entry rides LAST (positional): centre from the
+    // The per-body conservative entry rides LAST in the signature: centre from the
     // mesh's model matrix, half extents from the bodyHalf uniform. Task 5
     // added the crowd proxy-box overrides: instCfg.y 0 selects the record's
     // gInstCentre/gInstHalf bit-identically, y 1 selects the attributes.

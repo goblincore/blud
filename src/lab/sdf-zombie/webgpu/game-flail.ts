@@ -14,30 +14,31 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import {
   clamp, dot, float, instanceIndex, length, materialColor, materialEmissive, materialMetalness, materialRoughness, max, mix,
-  mx_noise_float, normalView, normalize, positionGeometry, positionView, pow, smoothstep, uniform, varying, vec3, lights,
+  mx_noise_float, normalView, normalize, positionGeometry, positionView, pow, smoothstep, uniform, varying, vec3,
 } from 'three/tsl';
 import type { GameContext } from './game-context';
 import type { Vec3 } from '../types';
 import type { ZombieActor } from './game-actor';
-import { clothifyWound, tearWound, worldHitToWound, type Wound } from '../damage';
+import { clothifyWound, tearWound, unwarpHit, worldHitToWound, type Wound } from '../damage';
 import { flailTear, flailTearOn, setFlailTear } from '../torn-lips';
-import { fieldNormal, fleshBitCount, fleshBits, fleshBitsOn, fleshRand, setFleshBitsOn, swingBlow } from '../flesh-bits';
+import { craterFleshBits, fieldNormal, fleshBitsOn, fleshRand, setFleshBitsOn, swingBlow } from '../flesh-bits';
 import type { GorePiece } from '../head-pop';
 import { sdBody } from '../validate';
 import { slotLowerAmount, slotReady } from './game-weapon-slots';
-import { loopBlocksInput, ownsSlot } from './game-loop-leaves';
-import { BEND_R_VIEW } from './game-weapon-leaves';
+import { loopBlocksInput, ownsSlot } from './game-loop';
+import { BEND_R_VIEW } from './game-weapon-rig';
 import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms } from './game-arms';
 import {
   FLAIL_IMPACT, FLAIL_TIMING, cancelFlailSwing, comboSide, flailBallVel, flailPose, makeFlailSwing, stepFlailSwing,
   type FlailSide, type FlailSwing,
 } from './flail-swing';
-import { FLAIL_ARC_DEG, flailWound, headNeck, isHeadRegion, resolveStrike, type StrikeActor } from './flail-strike';
+import { FLAIL_ARC_DEG, flailWound, headNeck, isHeadRegion, resolveStrike, strikeActorsFrom } from './flail-strike';
 import {
   FLAIL_CHAIN_SIM, chainTeleported, drawChain, guideWeight, linkRest, makeChain, stepChainInPlace, type ChainState, type ChainStepOpts,
 } from './flail-chain';
 import { reticleNdc } from './fisheye';
-import { FLAIL_FILL_LAYER, GIB_BLUR_LAYER } from './gib-motion-blur';
+import { GIB_BLUR_LAYER } from './gib-motion-blur';
+import { createViewmodelLights } from './viewmodel-lights';
 import type { GibBlurSubject } from './gib-shutter-layer';
 import {
   FLAIL_BLUR, FLAIL_BLUR_IDS, ballMotionState, chainSegmentStates, flailBlurActive, makeMotionState,
@@ -132,15 +133,17 @@ export const FLAIL_BLOOD_LOOK = {
 export interface FlailDeps {
   eye(): Vec3;
   /** The aim ray's direction (world, unit): through the free-aim reticle when free aim is on, else the
-   *  view forward — the shotgun's own (game-weapon-leaves.ts aimDir). */
+   *  view forward — the shotgun's own (game-weapon-rig.ts aimDir). */
   aimDir(): Vec3;
-  /** Blood for a crater (game-world-leaves3 registerBleed). */
+  /** Blood for a crater (game-bleed registerBleed). */
   bleed(a: ZombieActor, wound: Wound, point: Vec3, incoming: Vec3): void;
   /** Gore pieces (ctx.boot.onGoreDispatch): the flying flesh bits (flesh-bits.ts). Absent: none thrown. */
   gore?(a: ZombieActor, pieces: GorePiece[]): void;
   /** The head damage model (game-head-damage.ts): a head-region hit goes here INSTEAD of the face crater
-   *  and blast below — it stamps its own ladder wounds, blasts with this swing's feel and bleeds. */
-  headHit?(a: ZombieActor, point: Vec3, dir: Vec3, feel: { meterCredit: number; shove: number; side: FlailSide; gain?: number }): void;
+   *  and blast below — it stamps its own ladder wounds, blasts with this swing's feel and bleeds. True: the
+   *  hit is taken (nothing more is stamped here). False: it declined (a split head, game-head-split.ts), and
+   *  the face crater below is stamped, as it is when this dep is absent. */
+  headHit?(a: ZombieActor, point: Vec3, dir: Vec3, feel: { meterCredit: number; shove: number; side: FlailSide; gain?: number }): boolean;
 }
 
 export interface FlailDebug {
@@ -279,101 +282,16 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
   const wood = new THREE.MeshStandardMaterial({ color: 0x4a2f1a, roughness: 0.8 });
   const iron = new THREE.MeshStandardMaterial({ color: 0x2c2b2a, metalness: 0.85, roughness: 0.5, envMap: env, envMapIntensity: 0.8 });
 
-  // ---- OWN LIGHT LIST (ported from the censer, commit 8c24de2a) -------------
-  // `material.lightsNode` REPLACES the scene's light list for that material
-  // (the level does this per room, game-main "LEVEL SURFACES"). The flail's
-  // list mirrors the default one — every light the camera sees whose whole
-  // ancestor chain is visible — EXCEPT the torch, which is swapped for the FILL
-  // (FLAIL_LOOK.flashFill). Re-listed on events, not polled: here (the level's
-  // lights and the flashlight exist before the flail) and via refreshLights()
-  // when game-main adds the muzzle flash with the gun. Forward route only
-  // (deferred has its own lighting).
-  const lightList = lights([]);
-  let listed: THREE.Light[] = [];
-  // THE FILL: on a layer no camera renders (so three's default per-camera lists
-  // skip it) and with `onlyRooms` empty (so the level's per-room lists skip it
-  // too — game-lighting-leaves levelSceneLights). Parented to the scene root,
-  // never hidden; its pose and intensity follow the torch every tick (syncFill).
-  const fill = new THREE.SpotLight(0xffffff, 0, 16, Math.PI * 0.12, 0.45, 0);
-  fill.name = 'flail-flash-fill';
-  fill.castShadow = false;
-  fill.layers.set(FLAIL_FILL_LAYER);
-  fill.userData.onlyRooms = new Set<number>();
-  fill.target.layers.set(FLAIL_FILL_LAYER);
-  const _fp = new THREE.Vector3();
+  // ---- OWN LIGHT LIST (ported from the censer, commit 8c24de2a; viewmodel-lights.ts) -------------
+  // The flail's materials light from a list that mirrors the scene's lights but swaps the torch for a dim FILL
+  // (FLAIL_LOOK.flashFill of its intensity): the torch rendered the brown haft white. Re-listed on events via
+  // refreshLights() (game-main adds the muzzle flash with the gun). Forward route only.
+  const vlights = createViewmodelLights(ctx, { name: 'flail-flash-fill', fillScale: FLAIL_LOOK.flashFill });
+  const lightList = vlights.list;
+  const relist = vlights.relist, ownLights = vlights.ownLights;
   function syncFill(): void {
     if (ctx.boot.deferredMode) return;
-    const spot = ctx.lighting.flashlight?.spot;
-    if (!spot || !spot.visible) { fill.intensity = 0; sheenU.value = FLAIL_BLOOD_LOOK.glintDark; return; }   // the torch is off in this rig (outdoor)
-    sheenU.value = 1;
-    spot.updateMatrixWorld();
-    spot.target.updateMatrixWorld();
-    fill.position.copy(spot.getWorldPosition(_fp));
-    fill.target.position.copy(spot.target.getWorldPosition(_fp));
-    fill.color.copy(spot.color);
-    fill.angle = spot.angle;
-    fill.penumbra = spot.penumbra;
-    fill.distance = spot.distance;
-    fill.intensity = spot.intensity * FLAIL_LOOK.flashFill;
-    fill.updateMatrixWorld();
-    fill.target.updateMatrixWorld();
-  }
-  if (!ctx.boot.deferredMode) ctx.boot.handle.scene.add(fill, fill.target);
-  const litMaterials = new Set<THREE.Material>();
-  const shownInTree = (o: THREE.Object3D): boolean => {
-    for (let p: THREE.Object3D | null = o; p; p = p.parent) if (!p.visible) return false;
-    return true;
-  };
-  /** Re-list; true when the list changed. */
-  function relist(): boolean {
-    if (ctx.boot.deferredMode) return false;
-    const next: THREE.Light[] = [];
-    const torch = ctx.lighting.flashlight;
-    const camera = ctx.boot.handle.camera;
-    ctx.boot.handle.scene.traverse((o) => {
-      const l = o as THREE.Light;
-      if (!l.isLight || l === torch?.spot || l === torch?.levelShadow) return;
-      if (l.layers.test(camera.layers) && shownInTree(l)) next.push(l);
-    });
-    if (fill.parent) next.push(fill);
-    if (next.length === listed.length && next.every((l, i) => l === listed[i])) return false;
-    listed = next;
-    lightList.setLights(next);
-    // setLights() does not bump the node's version, so the materials' cache keys
-    // would never change and three would never rebuild them with the new list:
-    // bump the node, then the materials (the censer's verified fix).
-    lightList.needsUpdate = true;
-    for (const m of litMaterials) m.needsUpdate = true;
-    return true;
-  }
-  const library = ctx.boot.handle.renderer.library as unknown as { fromMaterial(m: THREE.Material): THREE.NodeMaterial | null };
-  const lit = new Map<THREE.Material, THREE.Material>();
-  /** Point every mesh under `root` at the flail's own light list. */
-  function ownLights(root: THREE.Object3D): void {
-    if (ctx.boot.deferredMode) return;
-    const conv = (m: THREE.Material): THREE.Material => {
-      let nm = lit.get(m);
-      if (!nm) {
-        // A material that is ALREADY a node material (the goblin skin) may be
-        // shared with other meshes: give the flail its own copy rather than
-        // re-point someone else's lights.
-        const node = (m as THREE.NodeMaterial).isNodeMaterial
-          ? (m as THREE.NodeMaterial).clone() as THREE.NodeMaterial
-          : library.fromMaterial(m);
-        if (!node) return m;
-        node.lightsNode = lightList;
-        lit.set(m, node);
-        lit.set(node, node);
-        litMaterials.add(node);
-        nm = node;
-      }
-      return nm;
-    };
-    root.traverse((o) => {
-      const mesh = o as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      mesh.material = Array.isArray(mesh.material) ? mesh.material.map(conv) : conv(mesh.material);
-    });
+    sheenU.value = vlights.syncFill() ? 1 : FLAIL_BLOOD_LOOK.glintDark;   // the torch is off in this rig (outdoor)
   }
 
   // ---- BLOOD ON THE FLAIL (spec §14.1 item 7; flail-blood.ts holds the level) ----------------------
@@ -445,7 +363,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       node.needsUpdate = true;
       cache!.set(m, node);
       cache!.set(node, node);
-      litMaterials.add(node);
+      vlights.track(node);
       return node;
     };
     // The goblin hand hangs under the haft: never bloodied (skip its subtree, whichever loaded first).
@@ -590,22 +508,9 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
     const d = deps.aimDir();
     const aim: Vec3 = [eye[0] + d[0], eye[1] + d[1], eye[2] + d[2]];
     const aimYaw = Math.atan2(d[0], -d[2]);
-    const actors: StrikeActor[] = [];
+    const actors = strikeActorsFrom(ctx.world.actors);
     const heads: Record<number, Vec3> = {};
-    for (const a of ctx.world.actors) {
-      const posed = a.posed();
-      const c = posed.clusters.find(cc => cc.limb === 'torso')?.center;
-      if (!c) continue;
-      // THE HEAD MAGNET (spec §13.1): the live head cluster's centre NOW (the zombie lunges between click and
-      // strike) and the head's own field — sdBody over the head cluster(s) alone, so the same smooth unions and
-      // carves as the body, without the arms in front of the face.
-      const headClusters = posed.clusters.filter(cc => cc.limb === 'head' && cc.alive);
-      const head = headClusters.length > 0
-        ? { centre: [...headClusters[0]!.center] as Vec3, field: (q: Vec3) => sdBody(q, { prims: posed.prims, clusters: headClusters }) }
-        : undefined;
-      if (head) heads[a.id] = head.centre;
-      actors.push({ id: a.id, centre: c, field: q => sdBody(q, posed), head });
-    }
+    for (const a of actors) if (a.head) heads[a.id] = a.head.centre;
     const hits = resolveStrike(eye, aimYaw, aim, actors, FLAIL_ARC_DEG[side]);
     const struckHeads: Record<number, number> = {};
     const struckPoints: Record<number, Vec3> = {};
@@ -630,11 +535,15 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       // radius changes. With deps.headHit (the head damage model, game-head-damage.ts)
       // a head-region hit goes there instead and climbs its ladder (eye, cave, scalp,
       // brain) — still never a sever. headHits stays the flail's own counter.
-      const probe = worldHitToWound(posed.prims, h.point, FLAIL_FEEL.craterR, 'blast', yaw, field);
+      // Stamped (and the region read) at the UN-WARPED hit with the closed body's field (damage.ts unwarpHit: on a
+      // split head the prims and the head centre are the closed head's). `field` stays the body as it stands, for the
+      // world-space normal below; the shove, the head snap and the gore keep the world point.
+      const u = unwarpHit(posed, h.point);
+      const probe = worldHitToWound(posed.prims, u.hit, FLAIL_FEEL.craterR, 'blast', yaw, u.field);
       const headC = posed.clusters.find(c => c.limb === 'head' && c.alive)?.center ?? null;
       const neck = headNeck(posed.prims);
       // A magnet hit is on the head by construction (its point is on the head's own surface).
-      const region = !!h.magnet || isHeadRegion(posed.prims[probe.primIdx]?.limb, h.point, headC, neck?.root ?? null);
+      const region = !!h.magnet || isHeadRegion(posed.prims[probe.primIdx]?.limb, u.hit, headC, neck?.root ?? null);
       const spec = flailWound(region, FLAIL_FEEL.craterR, FLAIL_FEEL.severMul);
       if (region) headHits.set(a.id, (headHits.get(a.id) ?? 0) + 1);
       struckHeads[a.id] = headHits.get(a.id) ?? 0;
@@ -647,20 +556,21 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
         const m = FLAIL_IMPACT_FEEL.zombie.headSnapM * FLAIL_IMPACT_FEEL.sideScale[side];
         a.rigImpulse(h.point, [h.dir[0] * m, h.dir[1] * m, h.dir[2] * m]);
       };
-      // The head damage model takes every head-region hit (its ladder counts the same hits as headHits).
-      if (region && deps.headHit) {
-        deps.headHit(a, h.point, h.dir, { meterCredit: f.meterCredit, shove: f.shove, side, gain });
+      // The head damage model takes every head-region hit (its ladder counts the same hits as headHits), unless it
+      // declines one (false: the head is split open): that hit takes the plain crater below, at the un-warped point,
+      // still as a head hit (flailWound: the face crater, the head's share of the meter, head flesh).
+      if (region && deps.headHit?.(a, h.point, h.dir, { meterCredit: f.meterCredit, shove: f.shove, side, gain })) {
         snap();
         continue;
       }
-      const w = spec.radius === FLAIL_FEEL.craterR ? probe : worldHitToWound(posed.prims, h.point, spec.radius, 'blast', yaw, field);
+      const w = spec.radius === FLAIL_FEEL.craterR ? probe : worldHitToWound(posed.prims, u.hit, spec.radius, 'blast', yaw, u.field);
       w.severRadius = spec.severRadius;
       clothifyWound(posed.prims, w, 'heavy');
       // TORN LIPS (v1.5b, torn-lips.ts): the flail's craters are torn, hardest on the overhead.
       tearWound(w, flailTear(side));
       a.blast({
         wounds: [w],
-        meterCredit: f.meterCredit,
+        meterCredit: f.meterCredit * spec.meterScale,
         impulse: { at: h.point, vel: [h.dir[0] * f.shove, h.dir[1] * f.shove, h.dir[2] * f.shove] },
         reaction: 'blast',
         gain,
@@ -671,7 +581,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       if (fleshBitsOn() && deps.gore) {
         let fr = fleshStreams.get(a);
         if (!fr) { fr = fleshRand(a.id * 2); fleshStreams.set(a, fr); }
-        deps.gore(a, fleshBits(h.point, swingBlow(h.dir, side), fieldNormal(field, h.point), fleshBitCount('body', side, fr), fr));
+        deps.gore(a, craterFleshBits(spec.flesh, side, h.point, swingBlow(h.dir, side), fieldNormal(field, h.point), fr));
       }
     }
     if (hits.length > 0) {
@@ -1023,7 +933,8 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       const k = impactOutputs(impact).rig;
       rig.position.set(k.pos[0], -0.42 * lower + k.pos[1], 0.06 * lower + k.pos[2]);
       rig.rotation.set(THREE.MathUtils.degToRad(38) * lower + k.rot[0], k.rot[1], k.rot[2]);
-      rig.visible = lower < 0.999 && ownsSlot(ctx, 'flail');
+      // Hidden for a scripted sequence (game-sequence.ts); a hidden rig also cancels any swing in tick().
+      rig.visible = lower < 0.999 && ownsSlot(ctx, 'flail') && !ctx.world.sequence?.started;
     },
     timeScale(dt) {
       rawDt = dt;

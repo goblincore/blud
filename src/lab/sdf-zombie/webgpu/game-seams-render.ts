@@ -1,4 +1,8 @@
-import { applySdfScale } from './game-render-leaves';
+// src/lab/sdf-zombie/webgpu/game-seams-render.ts
+//
+// The window.__sdfGame render-pass members: chunk pass, occluder, cone, FXAA, smear, blast distort, half rate, bone look and depth gates.
+
+import { applySdfScale } from './game-render-controls';
 // src/lab/sdf-zombie/webgpu/game-seams-render.ts
 //
 // Members lifted verbatim out of game-main.ts's `window.__sdfGame` literal.
@@ -12,8 +16,8 @@ import { SCALE_LADDER, initialAdaptiveState, scaleForRung } from '../adaptive-sc
 import { type SscsTerms } from './post-sscs';
 import { type VhsPreset, type VhsTerms } from './post-vhs';
 import { woundWorldPos } from '../damage';
-import { applyBoneCullMode } from './game-render-leaves';
-import { applyBoneCull } from './game-render-leaves2';
+import { applyBoneCullMode } from './game-render-controls';
+import { applyBoneCull } from './game-bone-cull';
 import { type RefineTail } from './zombie-gpu';
 
 export function createRenderSeams(ctx: GameContext) {
@@ -81,16 +85,26 @@ export function createRenderSeams(ctx: GameContext) {
     get boneMesh() { return ctx.render.boneMesh; },
     skeletonMesh: () => ctx.render.segMeshRenderer ? { mode: ctx.render.skeletonMode, ...ctx.render.segMeshRenderer.stats, cacheEntries: ctx.render.segMeshCache!.size, cacheTotals: ctx.render.segMeshCache!.totals, cacheStats: ctx.render.segMeshCache!.stats() } : null,
     /** Perf round 2, task 5: the front-to-back per-body passes and their
-     *  accumulated-depth gate. OFF restores the single-pass march. */
-    setDepthGate(on: boolean) { ctx.render.sdfLayer.setDepthGate(on); },
+     *  accumulated-depth gate. OFF restores the single-pass march. Refused under
+     *  ?earlyz=1 (stage 1): its per-body pass list holds only each type's back batch. */
+    setDepthGate(on: boolean) {
+      if (on && ctx.crowd.earlyz.on) { console.warn('[earlyz] setDepthGate(true) refused: stage 1 has no front-batch depth gate'); return; }
+      ctx.render.sdfLayer.setDepthGate(on);
+    },
     get depthGate() { return ctx.render.sdfLayer.depthGate; },
     /** Close-up task 3: the quarter-res depth prepass and the march's
      *  consumption of it. OFF (ship default) is bit-identical to the
-     *  pre-task-3 frame; the census and the bench decide the flip. */
-    setDepthPrepass(on: boolean) { ctx.render.sdfLayer.setDepthPreEnabled(on); },
+     *  pre-task-3 frame; the census and the bench decide the flip. Refused under
+     *  ?earlyz=1 (stage 1): the prepass twin draws only each type's back batch. */
+    setDepthPrepass(on: boolean) {
+      if (on && ctx.crowd.earlyz.on) { console.warn('[earlyz] setDepthPrepass(true) refused: stage 1 prepass sees only the back batch'); return; }
+      ctx.render.sdfLayer.setDepthPreEnabled(on);
+    },
     /** MISS CULL (2026-09-22): the quarter-res prepass certifies empty 4x4 blocks and the
-     *  march discards them. Turns the prepass on with it (off leaves the prepass as it was). */
+     *  march discards them. Turns the prepass on with it (off leaves the prepass as it was).
+     *  Refused under ?earlyz=1 (stage 1), with the prepass. */
     setMissCull(on: boolean) {
+      if (on && ctx.crowd.earlyz.on) { console.warn('[earlyz] setMissCull(true) refused: needs the stage-1-unsafe prepass'); return; }
       if (on) ctx.render.sdfLayer.setDepthPreEnabled(true);
       ctx.render.sdfLayer.setDepthPreMissCull(on);
     },

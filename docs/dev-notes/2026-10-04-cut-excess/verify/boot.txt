@@ -1,0 +1,8 @@
+== new nonce 0.103266 load averages: 4.23 4.96 6.09
+{"drawOnce":1884.8,"warmMs":56997}
+== base nonce 0.103267 load averages: 4.94 5.07 6.06
+{"drawOnce":1749.2,"warmMs":45337}
+== new nonce 0.103268 load averages: 4.83 5.15 6.04
+{"drawOnce":2040.4,"warmMs":47509}
+== base nonce 0.103269 load averages: 3.98 4.87 5.88
+{"drawOnce":1815.9,"warmMs":47169}

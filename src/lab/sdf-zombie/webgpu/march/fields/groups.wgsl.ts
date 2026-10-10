@@ -3,10 +3,13 @@
 // Phase-1 split of march.wgsl.ts (2026-09-18): group fold and crowd instance state.
 // MOVE-ONLY: the WGSL text below is byte-identical to the original
 // file; see docs/dev-notes/2026-09-18-march-split/.
-import { REC_ANCHOR_BAND, REC_BURN, REC_CENTRE_SEED, REC_COUNTS, REC_COUNTS2, REC_FLASH, REC_GORE, REC_HALF_REV, REC_HEAD_QUAT, REC_HEAD_WCOUNT, REC_LIGHTS, REC_MELT, REC_NOISE_YAW, REC_VEC4S, REC_VOL_POSE0, REC_VOL_POSE1, REC_WIND_ALIVE, REC_WOUND_BOUND } from '../../crowd-records';
+import { REC_ANCHOR_BAND, REC_BURN, REC_CENTRE_SEED, REC_COUNTS, REC_COUNTS2, REC_FLASH, REC_GORE, REC_HALF_REV, REC_HEAD_QUAT, REC_HEAD_WCOUNT, REC_LIGHTS, REC_MELT, REC_NOISE_YAW, REC_SPLIT_A, REC_SPLIT_H, REC_SPLIT_N, REC_SPLIT_R, REC_VEC4S, REC_VOL_POSE0, REC_VOL_POSE1, REC_WIND_ALIVE, REC_WOUND_BOUND } from '../../crowd-records';
 import { TILE_MAX_ENTRIES } from '../../tile-cull';
+import { MAX_WOUNDS } from '../../../damage';
 import { LIMB_ACCUMULATORS as LIMBS } from '../limbs-flag';
-import { ROW_PRIM_B, ROW_PRIM_BEND, ROW_PRIM_CLIP, ROW_PRIM_SCALE, ROW_PRIM_SHAPE, ROW_PRIM_SHELL, ROW_PRIM_WARP } from '../layout';
+import { RAY_MASK_PROBE as RAYMASK } from '../raymask-flag';
+import { ablWgsl } from '../../split-ablate';
+import { ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_BEND, ROW_PRIM_CLIP, ROW_PRIM_SCALE, ROW_PRIM_SHAPE, ROW_PRIM_SHELL, ROW_PRIM_WARP } from '../layout';
 
 // The cull margin's 4.0 matters: smin scales k by 4 internally, so a cluster
 // still bends the surface from 4x the authored blendK away. Using the unscaled
@@ -67,7 +70,22 @@ export const FOLD_GROUP = /* wgsl */ `fn foldGroup(dIn: f32, p: vec3<f32>, data:
     // S.w: 0 add, 1 carve, 2 dead (severed mid-limb) — both skip the fold.
     if (S.w > 0.5) { continue; }
     if (gDebugMode > 0.5) { gDebugPrims = gDebugPrims + 1.0; }
-    let k = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_B} + band), 0).w;
+${RAYMASK ? `    // RAY-MASK PROBE (?raymask, debug mode 21): would a per-ray primitive mask
+    // have skipped this fold? Count it when the pixel's ray never crosses the
+    // prim's box, inflated by the fold's own cull margin (4k, times the group's
+    // distortion). Shaped prims (bend, shell, strand, box) are never counted:
+    // their reach is not this box. Counting only — d is untouched.
+    if (gDebugMode > 0.5 && gMaskOn > 0.5 && !shaped) {
+      let mA = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_A} + band), 0);
+      let mB = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_B} + band), 0);
+      let mR = select(mA.w * S.xyz, vec3<f32>(mA.w * max(S.x, max(S.y, S.z))), ori) + vec3<f32>(counts.w * 4.0 * grp.z);
+      let mLo = (min(mA.xyz, mB.xyz) - mR - gMaskRo) * gMaskInv;
+      let mHi = (max(mA.xyz, mB.xyz) + mR - gMaskRo) * gMaskInv;
+      let mN = min(mLo, mHi);
+      let mF = max(mLo, mHi);
+      if (max(max(mN.x, mN.y), max(mN.z, 0.0)) > min(mF.x, min(mF.y, mF.z))) { gMaskSkip = gMaskSkip + 1.0; }
+    }
+` : ''}    let k = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_B} + band), 0).w;
     var r2 = -1.0;
     var prof = 0.0;
     var cpos = vec3<f32>(0.0, 0.0, 0.0);
@@ -155,7 +173,12 @@ var<private> gFoldBestIdx: f32 = -1.0;
 // straight after its mapBody call. 1.0 default: groups without distortion
 // and the volume branch (which never folds) are exact no-ops.
 var<private> gFoldBestDistort: f32 = 1.0;
-${LIMBS ? `// PER-LIMB ACCUMULATORS (counts2.z mode 4, option 4 of the 2026-09-21 wound
+${RAYMASK ? `// RAY-MASK PROBE state (?raymask): the pixel's ray, set by MARCH_BODY before the walk.
+var<private> gMaskOn: f32 = 0.0;
+var<private> gMaskRo: vec3<f32>;
+var<private> gMaskInv: vec3<f32>;
+var<private> gMaskSkip: f32 = 0.0;
+` : ''}${LIMBS ? `// PER-LIMB ACCUMULATORS (counts2.z mode 4, option 4 of the 2026-09-21 wound
 // cost work): each cluster's own fold, built during the base fold, so the
 // owner re-fold needs no prim loops. mapBody resets them per slot.
 var<private> gLimbOn: f32 = 0.0;
@@ -235,15 +258,21 @@ var<private> gTileBand: array<f32, ${TILE_MAX_ENTRIES}>;
 // through the gWoundListOn gate. Private vars are per-invocation and start
 // at their INITIALISERS (never at a previous fragment's value), so the
 // cone/depth pre-pass chains — separate invocations that never run the
-// preload — keep gWoundListOn 0 and fold the full 16-wound loop, which is
+// preload — keep gWoundListOn 0 and fold the full MAX_WOUNDS-wound loop, which is
 // CONSERVATIVE by construction (the cone certifies emptiness against the
 // full field, and any correctly-binned list is a subset of it).
 var<private> gWoundListOn: f32 = 0.0;
 var<private> gWoundN: i32 = 0;
-var<private> gWoundList: array<i32, 16>;
+var<private> gWoundList: array<i32, ${MAX_WOUNDS}>;
 var<private> gSlot: i32 = 0;
 var<private> gBand: i32 = 0;
 var<private> gHitSlot: i32 = 0;
+// THE HEAD SPLIT (map-body.wgsl.ts): which piece of the hit slot won the union fold (0 = the unmoved rest, and every
+// closed body; 1 = the + half; 2 = the - half), and that piece's field BEFORE its caps: the closed head's depth at the
+// un-warped point (about 0 on outer skin, negative on a cut face). Written by every mapBody call, so a reader after
+// the march keeps its own copy.
+var<private> gHitPiece: i32 = 0;
+var<private> gHitSplitF: f32 = 0.0;
 // PINNED SLOT (crowd fix 2026-09-14). Once the hit instance is loaded, every
 // later mapBody call in the invocation (calcNormal's four taps, the AO and
 // scatter probes, wound/level shadow marches) still walks all the slots in
@@ -300,6 +329,16 @@ var<private> gInstBurn: vec4<f32> = vec4<f32>(0.0);
 // -1 empty; slot 0 the dominant light). Every SDF view is a crowd slot, so the
 // record is authoritative for single actors too.
 var<private> gInstLights: vec4<f32> = vec4<f32>(-1.0);
+// THE HEAD SPLIT (head-split.ts SplitWarp, world space; crowd-records.ts REC_SPLIT_*): N = (plane normal, thetaP),
+// H = (hinge point, d0), A = (hinge axis, thetaM), R = (region radius, spare). A closed head is a zero record and an
+// open one has a unit normal, so N alone says which: loadInstance sets gInstSplitOpen from it, and that flag is THE
+// open test for every reader. H, A and R are loaded only for an open slot and are STALE otherwise (another slot's):
+// read them behind gInstSplitOpen.
+var<private> gInstSplitOpen: bool = false;
+var<private> gInstSplitN: vec4<f32> = vec4<f32>(0.0);
+var<private> gInstSplitH: vec4<f32> = vec4<f32>(0.0);
+var<private> gInstSplitA: vec4<f32> = vec4<f32>(0.0);
+var<private> gInstSplitR: vec4<f32> = vec4<f32>(0.0);
 // The surface fire's emissive contribution, written in the surface prep and
 // read by the lighting tail, which is a separate WGSL export.
 var<private> gBurnEmit: vec3<f32> = vec3<f32>(0.0);
@@ -372,5 +411,22 @@ export const INSTANCE_STATE = /* wgsl */ `fn loadInstance(inst: ptr<storage, arr
   gInstEyeMask = vec4<f32>(1.0 - gore.y, 1.0 - gore.z, gore.w, 0.0);
   gInstBurn = (*inst)[base + ${REC_BURN}];
   gInstLights = (*inst)[base + ${REC_LIGHTS}];
+  gInstSplitN = (*inst)[base + ${REC_SPLIT_N}];
+  gInstSplitOpen = dot(gInstSplitN.xyz, gInstSplitN.xyz) > 0.5;
+  if (gInstSplitOpen) {
+    gInstSplitH = (*inst)[base + ${REC_SPLIT_H}];
+    gInstSplitA = (*inst)[base + ${REC_SPLIT_A}];
+    gInstSplitR = (*inst)[base + ${REC_SPLIT_R}];
+  }${ablWgsl(`
+  gInstSplitR = (*inst)[base + ${REC_SPLIT_R}];`)}
 }
 `;
+
+// THE HEAD SPLIT: p taken back by -theta about the hinge (point h, unit axis a), Rodrigues. head-split.ts moveBack /
+// rotAxis is the CPU mirror. A half that turned open by theta is the closed head's field read at this point.
+export const SPLIT_MOVE_BACK = /* wgsl */ `fn splitMoveBack(p: vec3<f32>, h: vec3<f32>, a: vec3<f32>, theta: f32) -> vec3<f32> {
+  let v = p - h;
+  let c = cos(-theta);
+  let s = sin(-theta);
+  return h + v * c + cross(a, v) * s + a * (dot(a, v) * (1.0 - c));
+}`;

@@ -1,9 +1,12 @@
 // src/lab/sdf-zombie/rig-bind.ts
+//
+// Binds a built body to a verlet rig and applies the rig pose back onto its primitives, with head, jaw and hem handling.
+
 import type { BuildResult } from './build-body';
 import type { ClusterInfo, Primitive, Vec3 } from './types';
 import type { Quat } from './vec';
 import { boxReach, shellReach, strandReach } from './extent';
-import { constrainRigBends, makeRig, type RigPoint, type RigState } from './rig';
+import { closestSegmentPoints, constrainRigBends, makeRig, type RigGuardLimb, type RigGuardSphere, type RigHeadKeepOut, type RigPoint, type RigState } from './rig';
 import { IK_TUNING, clampDir } from './ik';
 import { jointForBoneEnd, rotateYaw } from './gait';
 import { segmentQuat } from './rig-frames';
@@ -418,6 +421,10 @@ export function bindRig(body: BuildResult): BoundRig {
     }
   }
 
+  // THE HEAD KEEP-OUT (rig.ts RigHeadKeepOut): a capsule along the skull axis,
+  // sized from the head's own big spheres, that the arm segments may not enter.
+  if (head) rig.headKeepOut = buildHeadKeepOut(body, positions, head, indexOf, armBoneName);
+
   const bindPrim = (p: Primitive): PrimBind => {
     // `rigid`: both ends ride the DECLARED bone as one piece — offsets from
     // its head joint, turned by its segment rotation (the same frame an arm
@@ -439,9 +446,11 @@ export function bindRig(body: BuildResult): BoundRig {
     return binding;
   };
 
+  const primBinding = body.prims.map(bindPrim);
+  rig.torsoGuards = buildTorsoGuards(body, positions, primBinding, indexOf, armBoneName);
   return {
     rig,
-    binding: body.prims.map(bindPrim),
+    binding: primBinding,
     // BONE prims: torso and head bones bind BOTH ends to the ONE joint nearest
     // the bone's midpoint, so a rib is rigid with its spine segment. Per-end
     // nearest-joint binding put a rib's tip on a hip or shoulder joint (zombie:
@@ -853,4 +862,176 @@ export function impulseAt(bound: BoundRig, world: Vec3, delta: Vec3): BoundRig {
       points: bound.rig.points.map((p, i) => i === best ? { ...p, pos: add(p.pos, delta) } : p),
     }),
   };
+}
+
+
+/**
+ * Size the head capsule and list the arm segments that must stay out of it.
+ *
+ * The capsule comes from the head's CORE spheres (any whose effective radius is
+ * at least half the biggest: cranium and jaw, not the nose, brows or ears --
+ * those are small features an arm may brush). Each sphere is an ellipsoid
+ * (radius x its per-axis scale) and the skull axis is taken as the body's
+ * vertical: its horizontal reach is the capsule radius, its vertical reach sets
+ * how far up and down the end caps sit.
+ *
+ * A limb's required clearance is the head radius plus the limb's own, but never
+ * more than it ALREADY has at rest: a body authored with an arm touching its
+ * head must keep that pose, and a keep-out that pushed it would move every
+ * baseline for that character.
+ */
+function buildHeadKeepOut(
+  body: BuildResult,
+  positions: Vec3[],
+  head: HeadRigid,
+  indexOf: (p: Vec3) => number,
+  armBone: (b: BuildResult, part: 'upper' | 'fore', side: 'l' | 'r') => string | null,
+): RigHeadKeepOut | undefined {
+  const pv = positions[head.pivot]!;
+  const axis = head.restDir;
+  type Core = { t: number; perp: number; rp: number; ra: number };
+  const all: Core[] = [];
+  for (const i of head.prims.keys()) {
+    const p = body.prims[i]!;
+    if (p.dead || (p.op !== undefined && p.op !== 'add')) continue;
+    const sc = p.scale ?? [1, 1, 1];
+    const rp = p.radius * Math.max(Math.abs(sc[0]), Math.abs(sc[2]));
+    const ra = p.radius * Math.abs(sc[1]);
+    for (const e of [p.a, p.b]) {
+      const c = sub(e, pv), t = dot(c, axis);
+      all.push({ t, perp: len(sub(c, vscale(axis, t))), rp, ra });
+    }
+  }
+  if (all.length === 0) return undefined;
+  const biggest = Math.max(...all.map(c => c.rp));
+  const core = all.filter(c => c.rp >= biggest * 0.5);
+  const radius = Math.max(...core.map(c => c.perp + c.rp));
+  const lo = Math.min(...core.map(c => c.t - c.ra)), hi = Math.max(...core.map(c => c.t + c.ra));
+  let t0 = lo + radius, t1 = hi - radius;
+  if (t0 > t1) t0 = t1 = (lo + hi) / 2;
+  const capA = add(pv, vscale(axis, t0)), capB = add(pv, vscale(axis, t1));
+
+  const limbs = armKeepOutLimbs(body, positions, indexOf, armBone, capA, capB, radius);
+  return limbs.length > 0 ? { pivot: head.pivot, tip: head.tip, t0, t1, radius, limbs } : undefined;
+}
+
+
+/** The arm segments (upper, fore, and a `hand` bone when there is one) that a
+ *  capsule keep-out from `capA` to `capB` of radius `radius` guards. Each limb's
+ *  clearance is the capsule's radius plus the limb's, but never more than it
+ *  ALREADY has at rest (less 3 mm): a body authored with an arm touching its
+ *  head or torso keeps that pose, and float noise or the solver's own settling
+ *  must not nudge a limb sitting AT its authored distance. */
+function armKeepOutLimbs(
+  body: BuildResult,
+  positions: Vec3[],
+  indexOf: (p: Vec3) => number,
+  armBone: (b: BuildResult, part: 'upper' | 'fore', side: 'l' | 'r') => string | null,
+  capA: Vec3,
+  capB: Vec3,
+  radius: number,
+): RigHeadKeepOut['limbs'] {
+  const limbs: RigHeadKeepOut['limbs'] = [];
+  const radiusOf = (bone: string): number => {
+    let r = 0;
+    for (const p of body.prims) if (p.bone === bone && !p.dead && (p.op === undefined || p.op === 'add')) r = Math.max(r, p.radius);
+    return r;
+  };
+  const add1 = (boneName: string | null): void => {
+    const bone = boneName ? body.bones.get(boneName) : undefined;
+    if (!bone || !boneName) return;
+    const r = radiusOf(boneName);
+    const live = body.prims.some(p => p.bone === boneName && !p.dead && body.clusters[p.cluster]?.alive);
+    if (r <= 0 || !live) return;
+    const a = indexOf(bone.head), b = indexOf(bone.tail);
+    if (a === b) return;
+    const { s, t } = closestSegmentPoints(positions[a]!, positions[b]!, capA, capB);
+    const rest = len(sub(
+      add(positions[a]!, vscale(sub(positions[b]!, positions[a]!), s)),
+      add(capA, vscale(sub(capB, capA), t))));
+    limbs.push({ a, b, clearance: Math.max(0, Math.min(radius + r, rest - 0.003)) });
+  };
+  for (const side of ['l', 'r'] as const) {
+    add1(armBone(body, 'upper', side));
+    add1(armBone(body, 'fore', side));
+    if (body.bones.has(`hand.${side}`)) add1(`hand.${side}`);
+  }
+  return limbs;
+}
+
+/** Sample points along a limb, as fractions from `a` to `b`. The `a` end is the
+ *  joint rooted in the body (the shoulder), which is AT the torso by design. */
+const GUARD_SAMPLES = [0.25, 0.5, 0.75, 1] as const;
+
+/** Arm segments guarded at several points: for each, the distance to the sphere
+ *  centre `c` it must keep, `reach` + the limb's radius, capped at its REST
+ *  distance (less 3 mm) at that same point. */
+function armGuardLimbs(
+  body: BuildResult,
+  positions: Vec3[],
+  indexOf: (p: Vec3) => number,
+  armBone: (b: BuildResult, part: 'upper' | 'fore', side: 'l' | 'r') => string | null,
+  c: Vec3,
+  reach: number,
+): RigGuardLimb[] {
+  const out: RigGuardLimb[] = [];
+  const add1 = (boneName: string | null): void => {
+    const bone = boneName ? body.bones.get(boneName) : undefined;
+    if (!bone || !boneName) return;
+    let r = 0;
+    for (const p of body.prims) if (p.bone === boneName && !p.dead && (p.op === undefined || p.op === 'add')) r = Math.max(r, p.radius);
+    const live = body.prims.some(p => p.bone === boneName && !p.dead && body.clusters[p.cluster]?.alive);
+    if (r <= 0 || !live) return;
+    const a = indexOf(bone.head), b = indexOf(bone.tail);
+    if (a === b) return;
+    const A = positions[a]!, B = positions[b]!;
+    out.push({ a, b, samples: GUARD_SAMPLES.map(s => {
+      const rest = len(sub(add(A, vscale(sub(B, A), s)), c));
+      // + 1.5 cm: the arm prim's surface is not exactly on the rig segment (endpoint
+      // insets, the forearm's bend), and the rest cap below still wins at rest.
+      return { s, clearance: Math.max(0, Math.min(reach + r + 0.015, rest - 0.003)) };
+    }) });
+  };
+  for (const side of ['l', 'r'] as const) {
+    add1(armBone(body, 'upper', side));
+    add1(armBone(body, 'fore', side));
+    if (body.bones.has(`hand.${side}`)) add1(`hand.${side}`);
+  }
+  return out;
+}
+
+/**
+ * THE TORSO GUARDS: one sphere per torso-limb ellipsoid, on the joint and offset
+ * that ellipsoid is bound to, so the guard moves with the flesh it protects. A
+ * single spine capsule was tried first and could not do it: the zombie's four
+ * torso ellipsoids follow three different joints (chest, hips, pelvis), a hit
+ * moves them by different amounts, and one axis through them guards none exactly.
+ *
+ * Radius is the ellipsoid's widest horizontal reach (radius x max(|sx|, |sz|)):
+ * conservative in front of a thin chest, exact at its flanks, which is where the
+ * arms hang. Each limb's clearance is capped at its REST distance, as for the head.
+ */
+function buildTorsoGuards(
+  body: BuildResult,
+  positions: Vec3[],
+  binding: readonly PrimBind[],
+  indexOf: (p: Vec3) => number,
+  armBone: (b: BuildResult, part: 'upper' | 'fore', side: 'l' | 'r') => string | null,
+): RigGuardSphere[] | undefined {
+  const guards: RigGuardSphere[] = [];
+  body.prims.forEach((p, i) => {
+    if (p.limb !== 'torso' || p.dead || (p.op !== undefined && p.op !== 'add')) return;
+    const bind = binding[i]!;
+    if (bind.armFrame) return;                           // rigidly framed prims turn with their bone: not a plain offset
+    const sc = p.scale ?? [1, 1, 1];
+    const radius = p.radius * Math.max(Math.abs(sc[0]), Math.abs(sc[2]));
+    // A capsule-shaped torso prim: guard at its middle, reaching its half-length too.
+    const mid = vscale(add(p.a, p.b), 0.5);
+    const reach = radius + len(sub(p.b, p.a)) / 2;
+    const point = bind.a.point;
+    const offset: Vec3 = len(sub(p.b, p.a)) < 1e-6 ? bind.a.offset : sub(mid, positions[point]!);
+    const limbs = armGuardLimbs(body, positions, indexOf, armBone, add(positions[point]!, offset), reach);
+    if (limbs.length > 0) guards.push({ point, offset, limbs });
+  });
+  return guards.length > 0 ? guards : undefined;
 }

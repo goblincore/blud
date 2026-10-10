@@ -1,0 +1,4767 @@
+{
+ "shots": {
+  "old__soldier-face__ships-2p5": {
+   "col": "old",
+   "scene": "soldier-face",
+   "view": "ships-2p5",
+   "actor": 13,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    31.992994192556793,
+    1.62,
+    -8.314569097749356
+   ],
+   "target": [
+    31.998589009184,
+    1.8124107489177532,
+    -10.8145628373469
+   ],
+   "centre": [
+    640.4999999999986,
+    400.0058708350835
+   ],
+   "pxPerM": 348.09010598939705
+  },
+  "old__soldier-face__ships-1p0": {
+   "col": "old",
+   "scene": "soldier-face",
+   "view": "ships-1p0",
+   "actor": 13,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    31.996351082533117,
+    1.62,
+    -9.814565341507883
+   ],
+   "target": [
+    31.998589009184,
+    1.8124107489177532,
+    -10.8145628373469
+   ],
+   "centre": [
+    640.4999999999967,
+    400.0058708350836
+   ],
+   "pxPerM": 903.4196193824996
+  },
+  "old__soldier-face__clean-0p6": {
+   "col": "old",
+   "scene": "soldier-face",
+   "view": "clean-0p6",
+   "actor": 13,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    31.99724625319347,
+    1.62,
+    -9.93
+   ],
+   "target": [
+    31.998589009184,
+    1.8124107489177532,
+    -10.8145628373469
+   ],
+   "centre": [
+    639.8375115880151,
+    490.372966670542
+   ],
+   "pxPerM": 1024.4853888343648
+  },
+  "old__soldier-bare__ships-2p5-front": {
+   "col": "old",
+   "scene": "soldier-bare",
+   "view": "ships-2p5-front",
+   "actor": 14,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -4.5027650927409075
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    400.0023869034223
+   ],
+   "pxPerM": 373.59773757460005
+  },
+  "old__soldier-bare__ships-1p0-front": {
+   "col": "old",
+   "scene": "soldier-bare",
+   "view": "ships-1p0-front",
+   "actor": 14,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -6.0027650927409075
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    400.0023869034223
+   ],
+   "pxPerM": 892.7403994713825
+  },
+  "old__soldier-bare__ships-2p5-quarter": {
+   "col": "old",
+   "scene": "soldier-bare",
+   "view": "ships-2p5-quarter",
+   "actor": 14,
+   "dist": 2.5,
+   "yawDeg": 35,
+   "eye": [
+    35.68,
+    1.62,
+    -4.954884982018428
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    723.1583633645517,
+    395.8771581057377
+   ],
+   "pxPerM": 394.38444344459396
+  },
+  "old__soldier-bare__ships-1p0-quarter": {
+   "col": "old",
+   "scene": "soldier-bare",
+   "view": "ships-1p0-quarter",
+   "actor": 14,
+   "dist": 1,
+   "yawDeg": 35,
+   "eye": [
+    35.07357643635105,
+    1.62,
+    -6.183613048451916
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    400.00238690342104
+   ],
+   "pxPerM": 892.7403994713814
+  },
+  "old__soldier-bare__ships-0p8-jaw": {
+   "col": "old",
+   "scene": "soldier-bare",
+   "view": "ships-0p8-jaw",
+   "actor": 14,
+   "dist": 0.8,
+   "yawDeg": 35,
+   "eye": [
+    34.95886114908084,
+    1.62,
+    -6.347443457309714
+   ],
+   "target": [
+    34.5,
+    1.7286963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    400.00238690342275
+   ],
+   "pxPerM": 1127.734056156609
+  },
+  "old__soldier-bare__clean-0p6-front": {
+   "col": "old",
+   "scene": "soldier-bare",
+   "view": "clean-0p6-front",
+   "actor": 14,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -6.33
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    428.1169420459122
+   ],
+   "pxPerM": 1251.5089386430316
+  },
+  "old__soldier-bare__clean-0p6-quarter": {
+   "col": "old",
+   "scene": "soldier-bare",
+   "view": "clean-0p6-quarter",
+   "actor": 14,
+   "dist": 0.6,
+   "yawDeg": 35,
+   "eye": [
+    34.84414586181063,
+    1.62,
+    -6.33
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    766.4549160112036,
+    451.33134219325746
+   ],
+   "pxPerM": 1138.2945821897367
+  },
+  "old__soldier-bare__clean-0p45-jaw": {
+   "col": "old",
+   "scene": "soldier-bare",
+   "view": "clean-0p45-jaw",
+   "actor": 14,
+   "dist": 0.45,
+   "yawDeg": 35,
+   "eye": [
+    34.75810939635797,
+    1.62,
+    -6.33
+   ],
+   "target": [
+    34.5,
+    1.7286963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    865.0514460462134,
+    475.27578563187865
+   ],
+   "pxPerM": 1238.3572285453695
+  },
+  "old__zombie-burst__ships-2p5": {
+   "col": "old",
+   "scene": "zombie-burst",
+   "view": "ships-2p5",
+   "actor": 13,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    32,
+    1.62,
+    -7.993879543819272
+   ],
+   "target": [
+    32,
+    1.6194566618622188,
+    -10.493879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 376.5721305097594
+  },
+  "old__zombie-burst__ships-1p0": {
+   "col": "old",
+   "scene": "zombie-burst",
+   "view": "ships-1p0",
+   "actor": 13,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    32,
+    1.62,
+    -9.493879543819272
+   ],
+   "target": [
+    32,
+    1.6194566618622188,
+    -10.493879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.7350792420723
+  },
+  "old__zombie-burst__clean-0p6": {
+   "col": "old",
+   "scene": "zombie-burst",
+   "view": "clean-0p6",
+   "actor": 13,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    32,
+    1.62,
+    -9.893879543819272
+   ],
+   "target": [
+    32,
+    1.6194566618622188,
+    -10.493879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1545.4033508954
+  },
+  "old__zombie-chop1__ships-2p5": {
+   "col": "old",
+   "scene": "zombie-chop1",
+   "view": "ships-2p5",
+   "actor": 14,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -4.393879543819272
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 376.5721316942677
+  },
+  "old__zombie-chop1__ships-1p0": {
+   "col": "old",
+   "scene": "zombie-chop1",
+   "view": "ships-1p0",
+   "actor": 14,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -5.893879543819272
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.735080418697
+  },
+  "old__zombie-chop1__clean-0p6": {
+   "col": "old",
+   "scene": "zombie-chop1",
+   "view": "clean-0p6",
+   "actor": 14,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -6.293879543819273
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1545.403351756037
+  },
+  "old__zombie-chop2__ships-2p5": {
+   "col": "old",
+   "scene": "zombie-chop2",
+   "view": "ships-2p5",
+   "actor": 14,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -4.393879543819272
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 376.5721316943615
+  },
+  "old__zombie-chop2__ships-1p0": {
+   "col": "old",
+   "scene": "zombie-chop2",
+   "view": "ships-1p0",
+   "actor": 14,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -5.893879543819272
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.7350804187879
+  },
+  "old__zombie-chop2__clean-0p6": {
+   "col": "old",
+   "scene": "zombie-chop2",
+   "view": "clean-0p6",
+   "actor": 14,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -6.293879543819273
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1545.4033517561124
+  },
+  "old__zombie-bare__ships-2p5-front": {
+   "col": "old",
+   "scene": "zombie-bare",
+   "view": "ships-2p5-front",
+   "actor": 15,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    1.6061204561807279
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 376.5721316943615
+  },
+  "old__zombie-bare__ships-1p0-front": {
+   "col": "old",
+   "scene": "zombie-bare",
+   "view": "ships-1p0-front",
+   "actor": 15,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    0.10612045618072785
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.7350804187879
+  },
+  "old__zombie-bare__ships-2p5-quarter": {
+   "col": "old",
+   "scene": "zombie-bare",
+   "view": "ships-2p5-quarter",
+   "actor": 15,
+   "dist": 2.5,
+   "yawDeg": 35,
+   "eye": [
+    35.68,
+    1.62,
+    1.1540005669032072
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    723.3940628499337,
+    400.0126108593836
+   ],
+   "pxPerM": 397.95066421198544
+  },
+  "old__zombie-bare__ships-1p0-quarter": {
+   "col": "old",
+   "scene": "zombie-bare",
+   "view": "ships-1p0-quarter",
+   "actor": 15,
+   "dist": 1,
+   "yawDeg": 35,
+   "eye": [
+    35.07357643635105,
+    1.62,
+    -0.07472749953028035
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.7350804187924
+  },
+  "old__zombie-bare__ships-0p8-jaw": {
+   "col": "old",
+   "scene": "zombie-bare",
+   "view": "ships-0p8-jaw",
+   "actor": 15,
+   "dist": 0.8,
+   "yawDeg": 35,
+   "eye": [
+    34.95886114908084,
+    1.62,
+    -0.23855790838807867
+   ],
+   "target": [
+    34.5,
+    1.5494566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1170.7203639484696
+  },
+  "old__zombie-bare__clean-0p6-front": {
+   "col": "old",
+   "scene": "zombie-bare",
+   "view": "clean-0p6-front",
+   "actor": 15,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -0.29387954381927217
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1545.4033517561118
+  },
+  "old__zombie-bare__clean-0p6-quarter": {
+   "col": "old",
+   "scene": "zombie-bare",
+   "view": "clean-0p6-quarter",
+   "actor": 15,
+   "dist": 0.6,
+   "yawDeg": 35,
+   "eye": [
+    34.84414586181063,
+    1.62,
+    -0.33
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    699.7210298853663,
+    399.9234346557606
+   ],
+   "pxPerM": 1407.0237095752886
+  },
+  "old__zombie-bare__clean-0p45-jaw": {
+   "col": "old",
+   "scene": "zombie-bare",
+   "view": "clean-0p45-jaw",
+   "actor": 15,
+   "dist": 0.45,
+   "yawDeg": 35,
+   "eye": [
+    34.75810939635797,
+    1.62,
+    -0.33
+   ],
+   "target": [
+    34.5,
+    1.5494566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    809.1195640411884,
+    362.7164567892455
+   ],
+   "pxPerM": 1492.8411783853771
+  },
+  "shape__soldier-face__ships-2p5": {
+   "col": "shape",
+   "scene": "soldier-face",
+   "view": "ships-2p5",
+   "actor": 13,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    31.992994192556793,
+    1.62,
+    -8.314569097749356
+   ],
+   "target": [
+    31.998589009184,
+    1.8124107489177532,
+    -10.8145628373469
+   ],
+   "centre": [
+    640.4999999999986,
+    400.0058708350835
+   ],
+   "pxPerM": 348.09010598939705
+  },
+  "shape__soldier-face__ships-1p0": {
+   "col": "shape",
+   "scene": "soldier-face",
+   "view": "ships-1p0",
+   "actor": 13,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    31.996351082533117,
+    1.62,
+    -9.814565341507883
+   ],
+   "target": [
+    31.998589009184,
+    1.8124107489177532,
+    -10.8145628373469
+   ],
+   "centre": [
+    640.4999999999967,
+    400.0058708350836
+   ],
+   "pxPerM": 903.4196193824996
+  },
+  "shape__soldier-face__clean-0p6": {
+   "col": "shape",
+   "scene": "soldier-face",
+   "view": "clean-0p6",
+   "actor": 13,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    31.99724625319347,
+    1.62,
+    -9.93
+   ],
+   "target": [
+    31.998589009184,
+    1.8124107489177532,
+    -10.8145628373469
+   ],
+   "centre": [
+    639.8375115880151,
+    490.372966670542
+   ],
+   "pxPerM": 1024.4853888343648
+  },
+  "shape__soldier-bare__ships-2p5-front": {
+   "col": "shape",
+   "scene": "soldier-bare",
+   "view": "ships-2p5-front",
+   "actor": 14,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -4.5027650927409075
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    400.0023869034223
+   ],
+   "pxPerM": 373.59773757460005
+  },
+  "shape__soldier-bare__ships-1p0-front": {
+   "col": "shape",
+   "scene": "soldier-bare",
+   "view": "ships-1p0-front",
+   "actor": 14,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -6.0027650927409075
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    400.0023869034223
+   ],
+   "pxPerM": 892.7403994713825
+  },
+  "shape__soldier-bare__ships-2p5-quarter": {
+   "col": "shape",
+   "scene": "soldier-bare",
+   "view": "ships-2p5-quarter",
+   "actor": 14,
+   "dist": 2.5,
+   "yawDeg": 35,
+   "eye": [
+    35.68,
+    1.62,
+    -4.954884982018428
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    723.1583633645517,
+    395.8771581057377
+   ],
+   "pxPerM": 394.38444344459396
+  },
+  "shape__soldier-bare__ships-1p0-quarter": {
+   "col": "shape",
+   "scene": "soldier-bare",
+   "view": "ships-1p0-quarter",
+   "actor": 14,
+   "dist": 1,
+   "yawDeg": 35,
+   "eye": [
+    35.07357643635105,
+    1.62,
+    -6.183613048451916
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    400.00238690342104
+   ],
+   "pxPerM": 892.7403994713814
+  },
+  "shape__soldier-bare__ships-0p8-jaw": {
+   "col": "shape",
+   "scene": "soldier-bare",
+   "view": "ships-0p8-jaw",
+   "actor": 14,
+   "dist": 0.8,
+   "yawDeg": 35,
+   "eye": [
+    34.95886114908084,
+    1.62,
+    -6.347443457309714
+   ],
+   "target": [
+    34.5,
+    1.7286963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    400.00238690342275
+   ],
+   "pxPerM": 1127.734056156609
+  },
+  "shape__soldier-bare__clean-0p6-front": {
+   "col": "shape",
+   "scene": "soldier-bare",
+   "view": "clean-0p6-front",
+   "actor": 14,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -6.33
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    428.1169420459122
+   ],
+   "pxPerM": 1251.5089386430316
+  },
+  "shape__soldier-bare__clean-0p6-quarter": {
+   "col": "shape",
+   "scene": "soldier-bare",
+   "view": "clean-0p6-quarter",
+   "actor": 14,
+   "dist": 0.6,
+   "yawDeg": 35,
+   "eye": [
+    34.84414586181063,
+    1.62,
+    -6.33
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    766.4549160112036,
+    451.33134219325746
+   ],
+   "pxPerM": 1138.2945821897367
+  },
+  "shape__soldier-bare__clean-0p45-jaw": {
+   "col": "shape",
+   "scene": "soldier-bare",
+   "view": "clean-0p45-jaw",
+   "actor": 14,
+   "dist": 0.45,
+   "yawDeg": 35,
+   "eye": [
+    34.75810939635797,
+    1.62,
+    -6.33
+   ],
+   "target": [
+    34.5,
+    1.7286963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    865.0514460462134,
+    475.27578563187865
+   ],
+   "pxPerM": 1238.3572285453695
+  },
+  "shape__zombie-burst__ships-2p5": {
+   "col": "shape",
+   "scene": "zombie-burst",
+   "view": "ships-2p5",
+   "actor": 13,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    32,
+    1.62,
+    -7.993879543819272
+   ],
+   "target": [
+    32,
+    1.6194566618622188,
+    -10.493879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 376.5721305097594
+  },
+  "shape__zombie-burst__ships-1p0": {
+   "col": "shape",
+   "scene": "zombie-burst",
+   "view": "ships-1p0",
+   "actor": 13,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    32,
+    1.62,
+    -9.493879543819272
+   ],
+   "target": [
+    32,
+    1.6194566618622188,
+    -10.493879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.7350792420723
+  },
+  "shape__zombie-burst__clean-0p6": {
+   "col": "shape",
+   "scene": "zombie-burst",
+   "view": "clean-0p6",
+   "actor": 13,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    32,
+    1.62,
+    -9.893879543819272
+   ],
+   "target": [
+    32,
+    1.6194566618622188,
+    -10.493879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1545.4033508954
+  },
+  "shape__zombie-chop1__ships-2p5": {
+   "col": "shape",
+   "scene": "zombie-chop1",
+   "view": "ships-2p5",
+   "actor": 14,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -4.393879543819272
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 376.5721316942677
+  },
+  "shape__zombie-chop1__ships-1p0": {
+   "col": "shape",
+   "scene": "zombie-chop1",
+   "view": "ships-1p0",
+   "actor": 14,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -5.893879543819272
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.735080418697
+  },
+  "shape__zombie-chop1__clean-0p6": {
+   "col": "shape",
+   "scene": "zombie-chop1",
+   "view": "clean-0p6",
+   "actor": 14,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -6.293879543819273
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1545.403351756037
+  },
+  "shape__zombie-chop2__ships-2p5": {
+   "col": "shape",
+   "scene": "zombie-chop2",
+   "view": "ships-2p5",
+   "actor": 14,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -4.393879543819272
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 376.5721316943615
+  },
+  "shape__zombie-chop2__ships-1p0": {
+   "col": "shape",
+   "scene": "zombie-chop2",
+   "view": "ships-1p0",
+   "actor": 14,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -5.893879543819272
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.7350804187879
+  },
+  "shape__zombie-chop2__clean-0p6": {
+   "col": "shape",
+   "scene": "zombie-chop2",
+   "view": "clean-0p6",
+   "actor": 14,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -6.293879543819273
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1545.4033517561124
+  },
+  "shape__zombie-bare__ships-2p5-front": {
+   "col": "shape",
+   "scene": "zombie-bare",
+   "view": "ships-2p5-front",
+   "actor": 15,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    1.6061204561807279
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 376.5721316943615
+  },
+  "shape__zombie-bare__ships-1p0-front": {
+   "col": "shape",
+   "scene": "zombie-bare",
+   "view": "ships-1p0-front",
+   "actor": 15,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    0.10612045618072785
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.7350804187879
+  },
+  "shape__zombie-bare__ships-2p5-quarter": {
+   "col": "shape",
+   "scene": "zombie-bare",
+   "view": "ships-2p5-quarter",
+   "actor": 15,
+   "dist": 2.5,
+   "yawDeg": 35,
+   "eye": [
+    35.68,
+    1.62,
+    1.1540005669032072
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    723.3940628499337,
+    400.0126108593836
+   ],
+   "pxPerM": 397.95066421198544
+  },
+  "shape__zombie-bare__ships-1p0-quarter": {
+   "col": "shape",
+   "scene": "zombie-bare",
+   "view": "ships-1p0-quarter",
+   "actor": 15,
+   "dist": 1,
+   "yawDeg": 35,
+   "eye": [
+    35.07357643635105,
+    1.62,
+    -0.07472749953028035
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.7350804187924
+  },
+  "shape__zombie-bare__ships-0p8-jaw": {
+   "col": "shape",
+   "scene": "zombie-bare",
+   "view": "ships-0p8-jaw",
+   "actor": 15,
+   "dist": 0.8,
+   "yawDeg": 35,
+   "eye": [
+    34.95886114908084,
+    1.62,
+    -0.23855790838807867
+   ],
+   "target": [
+    34.5,
+    1.5494566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1170.7203639484696
+  },
+  "shape__zombie-bare__clean-0p6-front": {
+   "col": "shape",
+   "scene": "zombie-bare",
+   "view": "clean-0p6-front",
+   "actor": 15,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -0.29387954381927217
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1545.4033517561118
+  },
+  "shape__zombie-bare__clean-0p6-quarter": {
+   "col": "shape",
+   "scene": "zombie-bare",
+   "view": "clean-0p6-quarter",
+   "actor": 15,
+   "dist": 0.6,
+   "yawDeg": 35,
+   "eye": [
+    34.84414586181063,
+    1.62,
+    -0.33
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    699.7210298853663,
+    399.9234346557606
+   ],
+   "pxPerM": 1407.0237095752886
+  },
+  "shape__zombie-bare__clean-0p45-jaw": {
+   "col": "shape",
+   "scene": "zombie-bare",
+   "view": "clean-0p45-jaw",
+   "actor": 15,
+   "dist": 0.45,
+   "yawDeg": 35,
+   "eye": [
+    34.75810939635797,
+    1.62,
+    -0.33
+   ],
+   "target": [
+    34.5,
+    1.5494566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    809.1195640411884,
+    362.7164567892455
+   ],
+   "pxPerM": 1492.8411783853771
+  },
+  "shape-fine__soldier-face__ships-2p5": {
+   "col": "shape-fine",
+   "scene": "soldier-face",
+   "view": "ships-2p5",
+   "actor": 13,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    31.992994192556793,
+    1.62,
+    -8.314569097749356
+   ],
+   "target": [
+    31.998589009184,
+    1.8124107489177532,
+    -10.8145628373469
+   ],
+   "centre": [
+    640.4999999999986,
+    400.0058708350835
+   ],
+   "pxPerM": 348.09010598939705
+  },
+  "shape-fine__soldier-face__ships-1p0": {
+   "col": "shape-fine",
+   "scene": "soldier-face",
+   "view": "ships-1p0",
+   "actor": 13,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    31.996351082533117,
+    1.62,
+    -9.814565341507883
+   ],
+   "target": [
+    31.998589009184,
+    1.8124107489177532,
+    -10.8145628373469
+   ],
+   "centre": [
+    640.4999999999967,
+    400.0058708350836
+   ],
+   "pxPerM": 903.4196193824996
+  },
+  "shape-fine__soldier-face__clean-0p6": {
+   "col": "shape-fine",
+   "scene": "soldier-face",
+   "view": "clean-0p6",
+   "actor": 13,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    31.99724625319347,
+    1.62,
+    -9.93
+   ],
+   "target": [
+    31.998589009184,
+    1.8124107489177532,
+    -10.8145628373469
+   ],
+   "centre": [
+    639.8375115880151,
+    490.372966670542
+   ],
+   "pxPerM": 1024.4853888343648
+  },
+  "shape-fine__soldier-bare__ships-2p5-front": {
+   "col": "shape-fine",
+   "scene": "soldier-bare",
+   "view": "ships-2p5-front",
+   "actor": 14,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -4.5027650927409075
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    400.0023869034223
+   ],
+   "pxPerM": 373.59773757460005
+  },
+  "shape-fine__soldier-bare__ships-1p0-front": {
+   "col": "shape-fine",
+   "scene": "soldier-bare",
+   "view": "ships-1p0-front",
+   "actor": 14,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -6.0027650927409075
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    400.0023869034223
+   ],
+   "pxPerM": 892.7403994713825
+  },
+  "shape-fine__soldier-bare__ships-2p5-quarter": {
+   "col": "shape-fine",
+   "scene": "soldier-bare",
+   "view": "ships-2p5-quarter",
+   "actor": 14,
+   "dist": 2.5,
+   "yawDeg": 35,
+   "eye": [
+    35.68,
+    1.62,
+    -4.954884982018428
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    723.1583633645517,
+    395.8771581057377
+   ],
+   "pxPerM": 394.38444344459396
+  },
+  "shape-fine__soldier-bare__ships-1p0-quarter": {
+   "col": "shape-fine",
+   "scene": "soldier-bare",
+   "view": "ships-1p0-quarter",
+   "actor": 14,
+   "dist": 1,
+   "yawDeg": 35,
+   "eye": [
+    35.07357643635105,
+    1.62,
+    -6.183613048451916
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    400.00238690342104
+   ],
+   "pxPerM": 892.7403994713814
+  },
+  "shape-fine__soldier-bare__ships-0p8-jaw": {
+   "col": "shape-fine",
+   "scene": "soldier-bare",
+   "view": "ships-0p8-jaw",
+   "actor": 14,
+   "dist": 0.8,
+   "yawDeg": 35,
+   "eye": [
+    34.95886114908084,
+    1.62,
+    -6.347443457309714
+   ],
+   "target": [
+    34.5,
+    1.7286963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    400.00238690342275
+   ],
+   "pxPerM": 1127.734056156609
+  },
+  "shape-fine__soldier-bare__clean-0p6-front": {
+   "col": "shape-fine",
+   "scene": "soldier-bare",
+   "view": "clean-0p6-front",
+   "actor": 14,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -6.33
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    428.1169420459122
+   ],
+   "pxPerM": 1251.5089386430316
+  },
+  "shape-fine__soldier-bare__clean-0p6-quarter": {
+   "col": "shape-fine",
+   "scene": "soldier-bare",
+   "view": "clean-0p6-quarter",
+   "actor": 14,
+   "dist": 0.6,
+   "yawDeg": 35,
+   "eye": [
+    34.84414586181063,
+    1.62,
+    -6.33
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    766.4549160112036,
+    451.33134219325746
+   ],
+   "pxPerM": 1138.2945821897367
+  },
+  "shape-fine__soldier-bare__clean-0p45-jaw": {
+   "col": "shape-fine",
+   "scene": "soldier-bare",
+   "view": "clean-0p45-jaw",
+   "actor": 14,
+   "dist": 0.45,
+   "yawDeg": 35,
+   "eye": [
+    34.75810939635797,
+    1.62,
+    -6.33
+   ],
+   "target": [
+    34.5,
+    1.7286963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    865.0514460462134,
+    475.27578563187865
+   ],
+   "pxPerM": 1238.3572285453695
+  },
+  "shape-fine__zombie-burst__ships-2p5": {
+   "col": "shape-fine",
+   "scene": "zombie-burst",
+   "view": "ships-2p5",
+   "actor": 13,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    32,
+    1.62,
+    -7.993879543819272
+   ],
+   "target": [
+    32,
+    1.6194566618622188,
+    -10.493879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 376.5721305097594
+  },
+  "shape-fine__zombie-burst__ships-1p0": {
+   "col": "shape-fine",
+   "scene": "zombie-burst",
+   "view": "ships-1p0",
+   "actor": 13,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    32,
+    1.62,
+    -9.493879543819272
+   ],
+   "target": [
+    32,
+    1.6194566618622188,
+    -10.493879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.7350792420723
+  },
+  "shape-fine__zombie-burst__clean-0p6": {
+   "col": "shape-fine",
+   "scene": "zombie-burst",
+   "view": "clean-0p6",
+   "actor": 13,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    32,
+    1.62,
+    -9.893879543819272
+   ],
+   "target": [
+    32,
+    1.6194566618622188,
+    -10.493879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1545.4033508954
+  },
+  "shape-fine__zombie-chop1__ships-2p5": {
+   "col": "shape-fine",
+   "scene": "zombie-chop1",
+   "view": "ships-2p5",
+   "actor": 14,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -4.393879543819272
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 376.5721316942677
+  },
+  "shape-fine__zombie-chop1__ships-1p0": {
+   "col": "shape-fine",
+   "scene": "zombie-chop1",
+   "view": "ships-1p0",
+   "actor": 14,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -5.893879543819272
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.735080418697
+  },
+  "shape-fine__zombie-chop1__clean-0p6": {
+   "col": "shape-fine",
+   "scene": "zombie-chop1",
+   "view": "clean-0p6",
+   "actor": 14,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -6.293879543819273
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1545.403351756037
+  },
+  "shape-fine__zombie-chop2__ships-2p5": {
+   "col": "shape-fine",
+   "scene": "zombie-chop2",
+   "view": "ships-2p5",
+   "actor": 14,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -4.393879543819272
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 376.5721316943615
+  },
+  "shape-fine__zombie-chop2__ships-1p0": {
+   "col": "shape-fine",
+   "scene": "zombie-chop2",
+   "view": "ships-1p0",
+   "actor": 14,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -5.893879543819272
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.7350804187879
+  },
+  "shape-fine__zombie-chop2__clean-0p6": {
+   "col": "shape-fine",
+   "scene": "zombie-chop2",
+   "view": "clean-0p6",
+   "actor": 14,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -6.293879543819273
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1545.4033517561124
+  },
+  "shape-fine__zombie-bare__ships-2p5-front": {
+   "col": "shape-fine",
+   "scene": "zombie-bare",
+   "view": "ships-2p5-front",
+   "actor": 15,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    1.6061204561807279
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 376.5721316943615
+  },
+  "shape-fine__zombie-bare__ships-1p0-front": {
+   "col": "shape-fine",
+   "scene": "zombie-bare",
+   "view": "ships-1p0-front",
+   "actor": 15,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    0.10612045618072785
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.7350804187879
+  },
+  "shape-fine__zombie-bare__ships-2p5-quarter": {
+   "col": "shape-fine",
+   "scene": "zombie-bare",
+   "view": "ships-2p5-quarter",
+   "actor": 15,
+   "dist": 2.5,
+   "yawDeg": 35,
+   "eye": [
+    35.68,
+    1.62,
+    1.1540005669032072
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    723.3940628499337,
+    400.0126108593836
+   ],
+   "pxPerM": 397.95066421198544
+  },
+  "shape-fine__zombie-bare__ships-1p0-quarter": {
+   "col": "shape-fine",
+   "scene": "zombie-bare",
+   "view": "ships-1p0-quarter",
+   "actor": 15,
+   "dist": 1,
+   "yawDeg": 35,
+   "eye": [
+    35.07357643635105,
+    1.62,
+    -0.07472749953028035
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.7350804187924
+  },
+  "shape-fine__zombie-bare__ships-0p8-jaw": {
+   "col": "shape-fine",
+   "scene": "zombie-bare",
+   "view": "ships-0p8-jaw",
+   "actor": 15,
+   "dist": 0.8,
+   "yawDeg": 35,
+   "eye": [
+    34.95886114908084,
+    1.62,
+    -0.23855790838807867
+   ],
+   "target": [
+    34.5,
+    1.5494566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1170.7203639484696
+  },
+  "shape-fine__zombie-bare__clean-0p6-front": {
+   "col": "shape-fine",
+   "scene": "zombie-bare",
+   "view": "clean-0p6-front",
+   "actor": 15,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -0.29387954381927217
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1545.4033517561118
+  },
+  "shape-fine__zombie-bare__clean-0p6-quarter": {
+   "col": "shape-fine",
+   "scene": "zombie-bare",
+   "view": "clean-0p6-quarter",
+   "actor": 15,
+   "dist": 0.6,
+   "yawDeg": 35,
+   "eye": [
+    34.84414586181063,
+    1.62,
+    -0.33
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    699.7210298853663,
+    399.9234346557606
+   ],
+   "pxPerM": 1407.0237095752886
+  },
+  "shape-fine__zombie-bare__clean-0p45-jaw": {
+   "col": "shape-fine",
+   "scene": "zombie-bare",
+   "view": "clean-0p45-jaw",
+   "actor": 15,
+   "dist": 0.45,
+   "yawDeg": 35,
+   "eye": [
+    34.75810939635797,
+    1.62,
+    -0.33
+   ],
+   "target": [
+    34.5,
+    1.5494566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    809.1195640411884,
+    362.7164567892455
+   ],
+   "pxPerM": 1492.8411783853771
+  },
+  "paint__soldier-face__ships-2p5": {
+   "col": "paint",
+   "scene": "soldier-face",
+   "view": "ships-2p5",
+   "actor": 13,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    31.992994192556793,
+    1.62,
+    -8.314569097749356
+   ],
+   "target": [
+    31.998589009184,
+    1.8124107489177532,
+    -10.8145628373469
+   ],
+   "centre": [
+    640.4999999999986,
+    400.0058708350835
+   ],
+   "pxPerM": 348.09010598939705
+  },
+  "paint__soldier-face__ships-1p0": {
+   "col": "paint",
+   "scene": "soldier-face",
+   "view": "ships-1p0",
+   "actor": 13,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    31.996351082533117,
+    1.62,
+    -9.814565341507883
+   ],
+   "target": [
+    31.998589009184,
+    1.8124107489177532,
+    -10.8145628373469
+   ],
+   "centre": [
+    640.4999999999967,
+    400.0058708350836
+   ],
+   "pxPerM": 903.4196193824996
+  },
+  "paint__soldier-face__clean-0p6": {
+   "col": "paint",
+   "scene": "soldier-face",
+   "view": "clean-0p6",
+   "actor": 13,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    31.99724625319347,
+    1.62,
+    -9.93
+   ],
+   "target": [
+    31.998589009184,
+    1.8124107489177532,
+    -10.8145628373469
+   ],
+   "centre": [
+    639.8375115880151,
+    490.372966670542
+   ],
+   "pxPerM": 1024.4853888343648
+  },
+  "paint__soldier-bare__ships-2p5-front": {
+   "col": "paint",
+   "scene": "soldier-bare",
+   "view": "ships-2p5-front",
+   "actor": 14,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -4.5027650927409075
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    400.0023869034223
+   ],
+   "pxPerM": 373.59773757460005
+  },
+  "paint__soldier-bare__ships-1p0-front": {
+   "col": "paint",
+   "scene": "soldier-bare",
+   "view": "ships-1p0-front",
+   "actor": 14,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -6.0027650927409075
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    400.0023869034223
+   ],
+   "pxPerM": 892.7403994713825
+  },
+  "paint__soldier-bare__ships-2p5-quarter": {
+   "col": "paint",
+   "scene": "soldier-bare",
+   "view": "ships-2p5-quarter",
+   "actor": 14,
+   "dist": 2.5,
+   "yawDeg": 35,
+   "eye": [
+    35.68,
+    1.62,
+    -4.954884982018428
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    723.1583633645517,
+    395.8771581057377
+   ],
+   "pxPerM": 394.38444344459396
+  },
+  "paint__soldier-bare__ships-1p0-quarter": {
+   "col": "paint",
+   "scene": "soldier-bare",
+   "view": "ships-1p0-quarter",
+   "actor": 14,
+   "dist": 1,
+   "yawDeg": 35,
+   "eye": [
+    35.07357643635105,
+    1.62,
+    -6.183613048451916
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    400.00238690342104
+   ],
+   "pxPerM": 892.7403994713814
+  },
+  "paint__soldier-bare__ships-0p8-jaw": {
+   "col": "paint",
+   "scene": "soldier-bare",
+   "view": "ships-0p8-jaw",
+   "actor": 14,
+   "dist": 0.8,
+   "yawDeg": 35,
+   "eye": [
+    34.95886114908084,
+    1.62,
+    -6.347443457309714
+   ],
+   "target": [
+    34.5,
+    1.7286963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    400.00238690342275
+   ],
+   "pxPerM": 1127.734056156609
+  },
+  "paint__soldier-bare__clean-0p6-front": {
+   "col": "paint",
+   "scene": "soldier-bare",
+   "view": "clean-0p6-front",
+   "actor": 14,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -6.33
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    428.1169420459122
+   ],
+   "pxPerM": 1251.5089386430316
+  },
+  "paint__soldier-bare__clean-0p6-quarter": {
+   "col": "paint",
+   "scene": "soldier-bare",
+   "view": "clean-0p6-quarter",
+   "actor": 14,
+   "dist": 0.6,
+   "yawDeg": 35,
+   "eye": [
+    34.84414586181063,
+    1.62,
+    -6.33
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    766.4549160112036,
+    451.33134219325746
+   ],
+   "pxPerM": 1138.2945821897367
+  },
+  "paint__soldier-bare__clean-0p45-jaw": {
+   "col": "paint",
+   "scene": "soldier-bare",
+   "view": "clean-0p45-jaw",
+   "actor": 14,
+   "dist": 0.45,
+   "yawDeg": 35,
+   "eye": [
+    34.75810939635797,
+    1.62,
+    -6.33
+   ],
+   "target": [
+    34.5,
+    1.7286963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    865.0514460462134,
+    475.27578563187865
+   ],
+   "pxPerM": 1238.3572285453695
+  },
+  "paint__zombie-burst__ships-2p5": {
+   "col": "paint",
+   "scene": "zombie-burst",
+   "view": "ships-2p5",
+   "actor": 13,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    32,
+    1.62,
+    -7.993879543819272
+   ],
+   "target": [
+    32,
+    1.6194566618622188,
+    -10.493879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 376.5721305097594
+  },
+  "paint__zombie-burst__ships-1p0": {
+   "col": "paint",
+   "scene": "zombie-burst",
+   "view": "ships-1p0",
+   "actor": 13,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    32,
+    1.62,
+    -9.493879543819272
+   ],
+   "target": [
+    32,
+    1.6194566618622188,
+    -10.493879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.7350792420723
+  },
+  "paint__zombie-burst__clean-0p6": {
+   "col": "paint",
+   "scene": "zombie-burst",
+   "view": "clean-0p6",
+   "actor": 13,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    32,
+    1.62,
+    -9.893879543819272
+   ],
+   "target": [
+    32,
+    1.6194566618622188,
+    -10.493879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1545.4033508954
+  },
+  "paint__zombie-chop1__ships-2p5": {
+   "col": "paint",
+   "scene": "zombie-chop1",
+   "view": "ships-2p5",
+   "actor": 14,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -4.393879543819272
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 376.5721316942677
+  },
+  "paint__zombie-chop1__ships-1p0": {
+   "col": "paint",
+   "scene": "zombie-chop1",
+   "view": "ships-1p0",
+   "actor": 14,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -5.893879543819272
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.735080418697
+  },
+  "paint__zombie-chop1__clean-0p6": {
+   "col": "paint",
+   "scene": "zombie-chop1",
+   "view": "clean-0p6",
+   "actor": 14,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -6.293879543819273
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1545.403351756037
+  },
+  "paint__zombie-chop2__ships-2p5": {
+   "col": "paint",
+   "scene": "zombie-chop2",
+   "view": "ships-2p5",
+   "actor": 14,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -4.393879543819272
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 376.5721316943615
+  },
+  "paint__zombie-chop2__ships-1p0": {
+   "col": "paint",
+   "scene": "zombie-chop2",
+   "view": "ships-1p0",
+   "actor": 14,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -5.893879543819272
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.7350804187879
+  },
+  "paint__zombie-chop2__clean-0p6": {
+   "col": "paint",
+   "scene": "zombie-chop2",
+   "view": "clean-0p6",
+   "actor": 14,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -6.293879543819273
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1545.4033517561124
+  },
+  "paint__zombie-bare__ships-2p5-front": {
+   "col": "paint",
+   "scene": "zombie-bare",
+   "view": "ships-2p5-front",
+   "actor": 15,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    1.6061204561807279
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 376.5721316943615
+  },
+  "paint__zombie-bare__ships-1p0-front": {
+   "col": "paint",
+   "scene": "zombie-bare",
+   "view": "ships-1p0-front",
+   "actor": 15,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    0.10612045618072785
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.7350804187879
+  },
+  "paint__zombie-bare__ships-2p5-quarter": {
+   "col": "paint",
+   "scene": "zombie-bare",
+   "view": "ships-2p5-quarter",
+   "actor": 15,
+   "dist": 2.5,
+   "yawDeg": 35,
+   "eye": [
+    35.68,
+    1.62,
+    1.1540005669032072
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    723.3940628499337,
+    400.0126108593836
+   ],
+   "pxPerM": 397.95066421198544
+  },
+  "paint__zombie-bare__ships-1p0-quarter": {
+   "col": "paint",
+   "scene": "zombie-bare",
+   "view": "ships-1p0-quarter",
+   "actor": 15,
+   "dist": 1,
+   "yawDeg": 35,
+   "eye": [
+    35.07357643635105,
+    1.62,
+    -0.07472749953028035
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.7350804187924
+  },
+  "paint__zombie-bare__ships-0p8-jaw": {
+   "col": "paint",
+   "scene": "zombie-bare",
+   "view": "ships-0p8-jaw",
+   "actor": 15,
+   "dist": 0.8,
+   "yawDeg": 35,
+   "eye": [
+    34.95886114908084,
+    1.62,
+    -0.23855790838807867
+   ],
+   "target": [
+    34.5,
+    1.5494566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1170.7203639484696
+  },
+  "paint__zombie-bare__clean-0p6-front": {
+   "col": "paint",
+   "scene": "zombie-bare",
+   "view": "clean-0p6-front",
+   "actor": 15,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -0.29387954381927217
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1545.4033517561118
+  },
+  "paint__zombie-bare__clean-0p6-quarter": {
+   "col": "paint",
+   "scene": "zombie-bare",
+   "view": "clean-0p6-quarter",
+   "actor": 15,
+   "dist": 0.6,
+   "yawDeg": 35,
+   "eye": [
+    34.84414586181063,
+    1.62,
+    -0.33
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    699.7210298853663,
+    399.9234346557606
+   ],
+   "pxPerM": 1407.0237095752886
+  },
+  "paint__zombie-bare__clean-0p45-jaw": {
+   "col": "paint",
+   "scene": "zombie-bare",
+   "view": "clean-0p45-jaw",
+   "actor": 15,
+   "dist": 0.45,
+   "yawDeg": 35,
+   "eye": [
+    34.75810939635797,
+    1.62,
+    -0.33
+   ],
+   "target": [
+    34.5,
+    1.5494566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    809.1195640411884,
+    362.7164567892455
+   ],
+   "pxPerM": 1492.8411783853771
+  },
+  "full__soldier-face__ships-2p5": {
+   "col": "full",
+   "scene": "soldier-face",
+   "view": "ships-2p5",
+   "actor": 13,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    31.992994192556793,
+    1.62,
+    -8.314569097749356
+   ],
+   "target": [
+    31.998589009184,
+    1.8124107489177532,
+    -10.8145628373469
+   ],
+   "centre": [
+    640.4999999999986,
+    400.0058708350835
+   ],
+   "pxPerM": 348.09010598939705
+  },
+  "full__soldier-face__ships-1p0": {
+   "col": "full",
+   "scene": "soldier-face",
+   "view": "ships-1p0",
+   "actor": 13,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    31.996351082533117,
+    1.62,
+    -9.814565341507883
+   ],
+   "target": [
+    31.998589009184,
+    1.8124107489177532,
+    -10.8145628373469
+   ],
+   "centre": [
+    640.4999999999967,
+    400.0058708350836
+   ],
+   "pxPerM": 903.4196193824996
+  },
+  "full__soldier-face__clean-0p6": {
+   "col": "full",
+   "scene": "soldier-face",
+   "view": "clean-0p6",
+   "actor": 13,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    31.99724625319347,
+    1.62,
+    -9.93
+   ],
+   "target": [
+    31.998589009184,
+    1.8124107489177532,
+    -10.8145628373469
+   ],
+   "centre": [
+    639.8375115880151,
+    490.372966670542
+   ],
+   "pxPerM": 1024.4853888343648
+  },
+  "full__soldier-bare__ships-2p5-front": {
+   "col": "full",
+   "scene": "soldier-bare",
+   "view": "ships-2p5-front",
+   "actor": 14,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -4.5027650927409075
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    400.0023869034223
+   ],
+   "pxPerM": 373.59773757460005
+  },
+  "full__soldier-bare__ships-1p0-front": {
+   "col": "full",
+   "scene": "soldier-bare",
+   "view": "ships-1p0-front",
+   "actor": 14,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -6.0027650927409075
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    400.0023869034223
+   ],
+   "pxPerM": 892.7403994713825
+  },
+  "full__soldier-bare__ships-2p5-quarter": {
+   "col": "full",
+   "scene": "soldier-bare",
+   "view": "ships-2p5-quarter",
+   "actor": 14,
+   "dist": 2.5,
+   "yawDeg": 35,
+   "eye": [
+    35.68,
+    1.62,
+    -4.954884982018428
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    723.1583633645517,
+    395.8771581057377
+   ],
+   "pxPerM": 394.38444344459396
+  },
+  "full__soldier-bare__ships-1p0-quarter": {
+   "col": "full",
+   "scene": "soldier-bare",
+   "view": "ships-1p0-quarter",
+   "actor": 14,
+   "dist": 1,
+   "yawDeg": 35,
+   "eye": [
+    35.07357643635105,
+    1.62,
+    -6.183613048451916
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    400.00238690342104
+   ],
+   "pxPerM": 892.7403994713814
+  },
+  "full__soldier-bare__ships-0p8-jaw": {
+   "col": "full",
+   "scene": "soldier-bare",
+   "view": "ships-0p8-jaw",
+   "actor": 14,
+   "dist": 0.8,
+   "yawDeg": 35,
+   "eye": [
+    34.95886114908084,
+    1.62,
+    -6.347443457309714
+   ],
+   "target": [
+    34.5,
+    1.7286963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    400.00238690342275
+   ],
+   "pxPerM": 1127.734056156609
+  },
+  "full__soldier-bare__clean-0p6-front": {
+   "col": "full",
+   "scene": "soldier-bare",
+   "view": "clean-0p6-front",
+   "actor": 14,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -6.33
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    640.5,
+    428.1169420459122
+   ],
+   "pxPerM": 1251.5089386430316
+  },
+  "full__soldier-bare__clean-0p6-quarter": {
+   "col": "full",
+   "scene": "soldier-bare",
+   "view": "clean-0p6-quarter",
+   "actor": 14,
+   "dist": 0.6,
+   "yawDeg": 35,
+   "eye": [
+    34.84414586181063,
+    1.62,
+    -6.33
+   ],
+   "target": [
+    34.5,
+    1.7986963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    766.4549160112036,
+    451.33134219325746
+   ],
+   "pxPerM": 1138.2945821897367
+  },
+  "full__soldier-bare__clean-0p45-jaw": {
+   "col": "full",
+   "scene": "soldier-bare",
+   "view": "clean-0p45-jaw",
+   "actor": 14,
+   "dist": 0.45,
+   "yawDeg": 35,
+   "eye": [
+    34.75810939635797,
+    1.62,
+    -6.33
+   ],
+   "target": [
+    34.5,
+    1.7286963175317998,
+    -7.0027650927409075
+   ],
+   "centre": [
+    865.0514460462134,
+    475.27578563187865
+   ],
+   "pxPerM": 1238.3572285453695
+  },
+  "full__zombie-burst__ships-2p5": {
+   "col": "full",
+   "scene": "zombie-burst",
+   "view": "ships-2p5",
+   "actor": 13,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    32,
+    1.62,
+    -7.993879543819272
+   ],
+   "target": [
+    32,
+    1.6194566618622188,
+    -10.493879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 376.5721305097594
+  },
+  "full__zombie-burst__ships-1p0": {
+   "col": "full",
+   "scene": "zombie-burst",
+   "view": "ships-1p0",
+   "actor": 13,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    32,
+    1.62,
+    -9.493879543819272
+   ],
+   "target": [
+    32,
+    1.6194566618622188,
+    -10.493879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.7350792420723
+  },
+  "full__zombie-burst__clean-0p6": {
+   "col": "full",
+   "scene": "zombie-burst",
+   "view": "clean-0p6",
+   "actor": 13,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    32,
+    1.62,
+    -9.893879543819272
+   ],
+   "target": [
+    32,
+    1.6194566618622188,
+    -10.493879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1545.4033508954
+  },
+  "full__zombie-chop1__ships-2p5": {
+   "col": "full",
+   "scene": "zombie-chop1",
+   "view": "ships-2p5",
+   "actor": 14,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -4.393879543819272
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 376.5721316942677
+  },
+  "full__zombie-chop1__ships-1p0": {
+   "col": "full",
+   "scene": "zombie-chop1",
+   "view": "ships-1p0",
+   "actor": 14,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -5.893879543819272
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.735080418697
+  },
+  "full__zombie-chop1__clean-0p6": {
+   "col": "full",
+   "scene": "zombie-chop1",
+   "view": "clean-0p6",
+   "actor": 14,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -6.293879543819273
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1545.403351756037
+  },
+  "full__zombie-chop2__ships-2p5": {
+   "col": "full",
+   "scene": "zombie-chop2",
+   "view": "ships-2p5",
+   "actor": 14,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -4.393879543819272
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 376.5721316943615
+  },
+  "full__zombie-chop2__ships-1p0": {
+   "col": "full",
+   "scene": "zombie-chop2",
+   "view": "ships-1p0",
+   "actor": 14,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -5.893879543819272
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.7350804187879
+  },
+  "full__zombie-chop2__clean-0p6": {
+   "col": "full",
+   "scene": "zombie-chop2",
+   "view": "clean-0p6",
+   "actor": 14,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -6.293879543819273
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -6.893879543819272
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1545.4033517561124
+  },
+  "full__zombie-bare__ships-2p5-front": {
+   "col": "full",
+   "scene": "zombie-bare",
+   "view": "ships-2p5-front",
+   "actor": 15,
+   "dist": 2.5,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    1.6061204561807279
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 376.5721316943615
+  },
+  "full__zombie-bare__ships-1p0-front": {
+   "col": "full",
+   "scene": "zombie-bare",
+   "view": "ships-1p0-front",
+   "actor": 15,
+   "dist": 1,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    0.10612045618072785
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.7350804187879
+  },
+  "full__zombie-bare__ships-2p5-quarter": {
+   "col": "full",
+   "scene": "zombie-bare",
+   "view": "ships-2p5-quarter",
+   "actor": 15,
+   "dist": 2.5,
+   "yawDeg": 35,
+   "eye": [
+    35.68,
+    1.62,
+    1.1540005669032072
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    723.3940628499337,
+    400.0126108593836
+   ],
+   "pxPerM": 397.95066421198544
+  },
+  "full__zombie-bare__ships-1p0-quarter": {
+   "col": "full",
+   "scene": "zombie-bare",
+   "view": "ships-1p0-quarter",
+   "actor": 15,
+   "dist": 1,
+   "yawDeg": 35,
+   "eye": [
+    35.07357643635105,
+    1.62,
+    -0.07472749953028035
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 936.7350804187924
+  },
+  "full__zombie-bare__ships-0p8-jaw": {
+   "col": "full",
+   "scene": "zombie-bare",
+   "view": "ships-0p8-jaw",
+   "actor": 15,
+   "dist": 0.8,
+   "yawDeg": 35,
+   "eye": [
+    34.95886114908084,
+    1.62,
+    -0.23855790838807867
+   ],
+   "target": [
+    34.5,
+    1.5494566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1170.7203639484696
+  },
+  "full__zombie-bare__clean-0p6-front": {
+   "col": "full",
+   "scene": "zombie-bare",
+   "view": "clean-0p6-front",
+   "actor": 15,
+   "dist": 0.6,
+   "yawDeg": 0,
+   "eye": [
+    34.5,
+    1.62,
+    -0.29387954381927217
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    640.5,
+    400
+   ],
+   "pxPerM": 1545.4033517561118
+  },
+  "full__zombie-bare__clean-0p6-quarter": {
+   "col": "full",
+   "scene": "zombie-bare",
+   "view": "clean-0p6-quarter",
+   "actor": 15,
+   "dist": 0.6,
+   "yawDeg": 35,
+   "eye": [
+    34.84414586181063,
+    1.62,
+    -0.33
+   ],
+   "target": [
+    34.5,
+    1.6194566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    699.7210298853663,
+    399.9234346557606
+   ],
+   "pxPerM": 1407.0237095752886
+  },
+  "full__zombie-bare__clean-0p45-jaw": {
+   "col": "full",
+   "scene": "zombie-bare",
+   "view": "clean-0p45-jaw",
+   "actor": 15,
+   "dist": 0.45,
+   "yawDeg": 35,
+   "eye": [
+    34.75810939635797,
+    1.62,
+    -0.33
+   ],
+   "target": [
+    34.5,
+    1.5494566618622188,
+    -0.8938795438192721
+   ],
+   "centre": [
+    809.1195640411884,
+    362.7164567892455
+   ],
+   "pxPerM": 1492.8411783853771
+  }
+ },
+ "boots": {
+  "old/soldier": {
+   "url": "http://localhost:5261/sdf-game.html?seed=1&frozen=1&loader=0&skull=sculpt&spawn=soldier",
+   "wallS": 20.6,
+   "skull": "sculpt",
+   "sculpt": {
+    "shape": 1,
+    "headCell": null,
+    "paint": 1
+   },
+   "cast": "soldier",
+   "pool": 6,
+   "cache": {
+    "entries": 65,
+    "totals": {
+     "verts": 71726,
+     "tris": 143244
+    },
+    "stats": {
+     "entries": 65,
+     "extractCount": 65,
+     "extractMs": 1019.8,
+     "firstExtractAt": 8306.4,
+     "lastExtractAt": 9328.1,
+     "maxExtractMs": 267.4,
+     "maxExtractKey": "juggernaut:axial:2-3:14:13400984@0.01"
+    }
+   },
+   "warm": {
+    "gib": "ready",
+    "crowd": "ready"
+   },
+   "face": {
+    "actor": 13,
+    "volleys": 3,
+    "wounds": [
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.069,
+       1.612,
+       -10.721
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.004,
+       1.632,
+       -10.695
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.038,
+       1.629,
+       -10.753
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.017,
+       1.681,
+       -10.747
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       31.957,
+       1.673,
+       -10.81
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.056,
+       1.721,
+       -10.777
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       31.986,
+       1.625,
+       -10.727
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.01,
+       1.722,
+       -10.693
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       31.964,
+       1.73,
+       -10.74
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.002,
+       1.63,
+       -10.65
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.036,
+       1.737,
+       -10.759
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       31.952,
+       1.7,
+       -10.78
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.051,
+       1.63,
+       -10.677
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.066,
+       1.631,
+       -10.693
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.025,
+       1.76,
+       -10.737
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.068,
+       1.617,
+       -10.662
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.013,
+       1.639,
+       -10.668
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.026,
+       1.633,
+       -10.667
+      ]
+     }
+    ],
+    "head": null,
+    "phase": "standing"
+   },
+   "drawMs": [
+    27.8,
+    25.7,
+    26.3
+   ]
+  },
+  "old/zombie": {
+   "url": "http://localhost:5261/sdf-game.html?seed=1&frozen=1&loader=0&skull=sculpt",
+   "wallS": 13.8,
+   "skull": "sculpt",
+   "sculpt": {
+    "shape": 1,
+    "headCell": null,
+    "paint": 1
+   },
+   "cast": "zombie",
+   "pool": 6,
+   "cache": {
+    "entries": 85,
+    "totals": {
+     "verts": 89808,
+     "tris": 179480
+    },
+    "stats": {
+     "entries": 85,
+     "extractCount": 85,
+     "extractMs": 2418.5,
+     "firstExtractAt": 4232.4,
+     "lastExtractAt": 6652.8,
+     "maxExtractMs": 1331.7,
+     "maxExtractKey": "zombie:axial:1-2:33:76cc306a@0.01"
+    }
+   },
+   "warm": {
+    "gib": "ready",
+    "crowd": "ready"
+   },
+   "burst": {
+    "actor": 13,
+    "wounds": 2,
+    "head": {
+     "dead": false,
+     "burst": {
+      "kind": "lethal",
+      "outcome": "split",
+      "offset": 0.9327499026506259,
+      "severity": 0.9999999999999675,
+      "shards": 14,
+      "flaps": 0
+     }
+    }
+   },
+   "chops": [
+    {
+     "n": 1,
+     "returned": 1,
+     "split": {
+      "angle": 0.44000000000000006,
+      "phase": null
+     }
+    },
+    {
+     "n": 2,
+     "returned": 1,
+     "split": {
+      "angle": 0.55,
+      "phase": null
+     }
+    }
+   ]
+  },
+  "shape/soldier": {
+   "url": "http://localhost:5261/sdf-game.html?seed=1&frozen=1&loader=0&sculpt=shape&spawn=soldier",
+   "wallS": 15.2,
+   "skull": "sculpt",
+   "sculpt": {
+    "shape": 2,
+    "headCell": null,
+    "paint": 1
+   },
+   "cast": "soldier",
+   "pool": 6,
+   "cache": {
+    "entries": 65,
+    "totals": {
+     "verts": 71758,
+     "tris": 143312
+    },
+    "stats": {
+     "entries": 65,
+     "extractCount": 65,
+     "extractMs": 938.2,
+     "firstExtractAt": 5799.4,
+     "lastExtractAt": 6739.6,
+     "maxExtractMs": 252.9,
+     "maxExtractKey": "juggernaut:axial:2-3:14:13400984@0.01"
+    }
+   },
+   "warm": {
+    "gib": "ready",
+    "crowd": "ready"
+   },
+   "face": {
+    "actor": 13,
+    "volleys": 3,
+    "wounds": [
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.069,
+       1.612,
+       -10.721
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.004,
+       1.632,
+       -10.695
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.038,
+       1.629,
+       -10.753
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.017,
+       1.681,
+       -10.747
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       31.957,
+       1.673,
+       -10.81
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.056,
+       1.721,
+       -10.777
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       31.986,
+       1.625,
+       -10.727
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.01,
+       1.722,
+       -10.693
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       31.964,
+       1.73,
+       -10.74
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.002,
+       1.63,
+       -10.65
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.036,
+       1.737,
+       -10.759
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       31.952,
+       1.7,
+       -10.78
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.051,
+       1.63,
+       -10.677
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.066,
+       1.631,
+       -10.693
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.025,
+       1.76,
+       -10.737
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.068,
+       1.617,
+       -10.662
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.013,
+       1.639,
+       -10.668
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.026,
+       1.633,
+       -10.667
+      ]
+     }
+    ],
+    "head": null,
+    "phase": "standing"
+   },
+   "drawMs": [
+    22.8,
+    21.5,
+    21.4
+   ]
+  },
+  "shape/zombie": {
+   "url": "http://localhost:5261/sdf-game.html?seed=1&frozen=1&loader=0&sculpt=shape",
+   "wallS": 10.1,
+   "skull": "sculpt",
+   "sculpt": {
+    "shape": 2,
+    "headCell": null,
+    "paint": 1
+   },
+   "cast": "zombie",
+   "pool": 6,
+   "cache": {
+    "entries": 85,
+    "totals": {
+     "verts": 89858,
+     "tris": 179596
+    },
+    "stats": {
+     "entries": 85,
+     "extractCount": 85,
+     "extractMs": 1802.8,
+     "firstExtractAt": 3237.1,
+     "lastExtractAt": 5041.9,
+     "maxExtractMs": 988.2,
+     "maxExtractKey": "zombie:axial:1-2:33:76cc306a@0.01"
+    }
+   },
+   "warm": {
+    "gib": "ready",
+    "crowd": "ready"
+   },
+   "burst": {
+    "actor": 13,
+    "wounds": 2,
+    "head": {
+     "dead": false,
+     "burst": {
+      "kind": "lethal",
+      "outcome": "split",
+      "offset": 0.9327499026506259,
+      "severity": 0.9999999999999675,
+      "shards": 14,
+      "flaps": 0
+     }
+    }
+   },
+   "chops": [
+    {
+     "n": 1,
+     "returned": 1,
+     "split": {
+      "angle": 0.44000000000000006,
+      "phase": null
+     }
+    },
+    {
+     "n": 2,
+     "returned": 1,
+     "split": {
+      "angle": 0.55,
+      "phase": null
+     }
+    }
+   ]
+  },
+  "shape-fine/soldier": {
+   "url": "http://localhost:5261/sdf-game.html?seed=1&frozen=1&loader=0&sculpt=shape-fine&spawn=soldier",
+   "wallS": 12.7,
+   "skull": "sculpt",
+   "sculpt": {
+    "shape": 2,
+    "headCell": 0.005,
+    "paint": 1
+   },
+   "cast": "soldier",
+   "pool": 6,
+   "cache": {
+    "entries": 65,
+    "totals": {
+     "verts": 77096,
+     "tris": 153960
+    },
+    "stats": {
+     "entries": 65,
+     "extractCount": 65,
+     "extractMs": 873.4,
+     "firstExtractAt": 4546.9,
+     "lastExtractAt": 5420.1,
+     "maxExtractMs": 210.9,
+     "maxExtractKey": "juggernaut:axial:2-3:14:13400984@0.01"
+    }
+   },
+   "warm": {
+    "gib": "ready",
+    "crowd": "ready"
+   },
+   "face": {
+    "actor": 13,
+    "volleys": 3,
+    "wounds": [
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.069,
+       1.612,
+       -10.721
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.004,
+       1.632,
+       -10.695
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.038,
+       1.629,
+       -10.753
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.017,
+       1.681,
+       -10.747
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       31.957,
+       1.673,
+       -10.81
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.056,
+       1.721,
+       -10.777
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       31.986,
+       1.625,
+       -10.727
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.01,
+       1.722,
+       -10.693
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       31.964,
+       1.73,
+       -10.74
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.002,
+       1.63,
+       -10.65
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.036,
+       1.737,
+       -10.759
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       31.952,
+       1.7,
+       -10.78
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.051,
+       1.63,
+       -10.677
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.066,
+       1.631,
+       -10.693
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.025,
+       1.76,
+       -10.737
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.068,
+       1.617,
+       -10.662
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.013,
+       1.639,
+       -10.668
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.026,
+       1.633,
+       -10.667
+      ]
+     }
+    ],
+    "head": null,
+    "phase": "standing"
+   },
+   "drawMs": [
+    22.5,
+    21.4,
+    21.5
+   ]
+  },
+  "shape-fine/zombie": {
+   "url": "http://localhost:5261/sdf-game.html?seed=1&frozen=1&loader=0&sculpt=shape-fine",
+   "wallS": 10.5,
+   "skull": "sculpt",
+   "sculpt": {
+    "shape": 2,
+    "headCell": 0.005,
+    "paint": 1
+   },
+   "cast": "zombie",
+   "pool": 6,
+   "cache": {
+    "entries": 85,
+    "totals": {
+     "verts": 102102,
+     "tris": 204044
+    },
+    "stats": {
+     "entries": 85,
+     "extractCount": 85,
+     "extractMs": 1999.2,
+     "firstExtractAt": 3366,
+     "lastExtractAt": 5367.6,
+     "maxExtractMs": 1001.5,
+     "maxExtractKey": "zombie:axial:1-2:33:76cc306a@0.01"
+    }
+   },
+   "warm": {
+    "gib": "ready",
+    "crowd": "ready"
+   },
+   "burst": {
+    "actor": 13,
+    "wounds": 2,
+    "head": {
+     "dead": false,
+     "burst": {
+      "kind": "lethal",
+      "outcome": "split",
+      "offset": 0.9327499026506259,
+      "severity": 0.9999999999999675,
+      "shards": 14,
+      "flaps": 0
+     }
+    }
+   },
+   "chops": [
+    {
+     "n": 1,
+     "returned": 1,
+     "split": {
+      "angle": 0.44000000000000006,
+      "phase": null
+     }
+    },
+    {
+     "n": 2,
+     "returned": 1,
+     "split": {
+      "angle": 0.55,
+      "phase": null
+     }
+    }
+   ]
+  },
+  "paint/soldier": {
+   "url": "http://localhost:5261/sdf-game.html?seed=1&frozen=1&loader=0&sculpt=paint&spawn=soldier",
+   "wallS": 12.6,
+   "skull": "sculpt",
+   "sculpt": {
+    "shape": 1,
+    "headCell": null,
+    "paint": 2
+   },
+   "cast": "soldier",
+   "pool": 6,
+   "cache": {
+    "entries": 65,
+    "totals": {
+     "verts": 71726,
+     "tris": 143244
+    },
+    "stats": {
+     "entries": 65,
+     "extractCount": 65,
+     "extractMs": 805.1,
+     "firstExtractAt": 4598.3,
+     "lastExtractAt": 5403.2,
+     "maxExtractMs": 215,
+     "maxExtractKey": "juggernaut:axial:2-3:14:13400984@0.01"
+    }
+   },
+   "warm": {
+    "gib": "ready",
+    "crowd": "ready"
+   },
+   "face": {
+    "actor": 13,
+    "volleys": 3,
+    "wounds": [
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.069,
+       1.612,
+       -10.721
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.004,
+       1.632,
+       -10.695
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.038,
+       1.629,
+       -10.753
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.017,
+       1.681,
+       -10.747
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       31.957,
+       1.673,
+       -10.81
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.056,
+       1.721,
+       -10.777
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       31.986,
+       1.625,
+       -10.727
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.01,
+       1.722,
+       -10.693
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       31.964,
+       1.73,
+       -10.74
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.002,
+       1.63,
+       -10.65
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.036,
+       1.737,
+       -10.759
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       31.952,
+       1.7,
+       -10.78
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.051,
+       1.63,
+       -10.677
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.066,
+       1.631,
+       -10.693
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.025,
+       1.76,
+       -10.737
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.068,
+       1.617,
+       -10.662
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.013,
+       1.639,
+       -10.668
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.026,
+       1.633,
+       -10.667
+      ]
+     }
+    ],
+    "head": null,
+    "phase": "standing"
+   },
+   "drawMs": [
+    22.2,
+    21.5,
+    21.7
+   ]
+  },
+  "paint/zombie": {
+   "url": "http://localhost:5261/sdf-game.html?seed=1&frozen=1&loader=0&sculpt=paint",
+   "wallS": 10.1,
+   "skull": "sculpt",
+   "sculpt": {
+    "shape": 1,
+    "headCell": null,
+    "paint": 2
+   },
+   "cast": "zombie",
+   "pool": 6,
+   "cache": {
+    "entries": 85,
+    "totals": {
+     "verts": 89808,
+     "tris": 179480
+    },
+    "stats": {
+     "entries": 85,
+     "extractCount": 85,
+     "extractMs": 1782.2,
+     "firstExtractAt": 3239.7,
+     "lastExtractAt": 5021.8,
+     "maxExtractMs": 983,
+     "maxExtractKey": "zombie:axial:1-2:33:76cc306a@0.01"
+    }
+   },
+   "warm": {
+    "gib": "ready",
+    "crowd": "ready"
+   },
+   "burst": {
+    "actor": 13,
+    "wounds": 2,
+    "head": {
+     "dead": false,
+     "burst": {
+      "kind": "lethal",
+      "outcome": "split",
+      "offset": 0.9327499026506259,
+      "severity": 0.9999999999999675,
+      "shards": 14,
+      "flaps": 0
+     }
+    }
+   },
+   "chops": [
+    {
+     "n": 1,
+     "returned": 1,
+     "split": {
+      "angle": 0.44000000000000006,
+      "phase": null
+     }
+    },
+    {
+     "n": 2,
+     "returned": 1,
+     "split": {
+      "angle": 0.55,
+      "phase": null
+     }
+    }
+   ]
+  },
+  "full/soldier": {
+   "url": "http://localhost:5261/sdf-game.html?seed=1&frozen=1&loader=0&sculpt=full&spawn=soldier",
+   "wallS": 12.8,
+   "skull": "sculpt",
+   "sculpt": {
+    "shape": 2,
+    "headCell": 0.005,
+    "paint": 2
+   },
+   "cast": "soldier",
+   "pool": 6,
+   "cache": {
+    "entries": 65,
+    "totals": {
+     "verts": 77096,
+     "tris": 153960
+    },
+    "stats": {
+     "entries": 65,
+     "extractCount": 65,
+     "extractMs": 881.2,
+     "firstExtractAt": 4649.8,
+     "lastExtractAt": 5531.9,
+     "maxExtractMs": 212.1,
+     "maxExtractKey": "juggernaut:axial:2-3:14:13400984@0.01"
+    }
+   },
+   "warm": {
+    "gib": "ready",
+    "crowd": "ready"
+   },
+   "face": {
+    "actor": 13,
+    "volleys": 3,
+    "wounds": [
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.069,
+       1.612,
+       -10.721
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.004,
+       1.632,
+       -10.695
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.038,
+       1.629,
+       -10.753
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.017,
+       1.681,
+       -10.747
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       31.957,
+       1.673,
+       -10.81
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.056,
+       1.721,
+       -10.777
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       31.986,
+       1.625,
+       -10.727
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.01,
+       1.722,
+       -10.693
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       31.964,
+       1.73,
+       -10.74
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.002,
+       1.63,
+       -10.65
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.036,
+       1.737,
+       -10.759
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       31.952,
+       1.7,
+       -10.78
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.051,
+       1.63,
+       -10.677
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.066,
+       1.631,
+       -10.693
+      ]
+     },
+     {
+      "limb": "head",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.025,
+       1.76,
+       -10.737
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.068,
+       1.617,
+       -10.662
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.013,
+       1.639,
+       -10.668
+      ]
+     },
+     {
+      "limb": "torso",
+      "type": "pellet",
+      "shape": "crater",
+      "r": 0.055,
+      "pos": [
+       32.026,
+       1.633,
+       -10.667
+      ]
+     }
+    ],
+    "head": null,
+    "phase": "standing"
+   },
+   "drawMs": [
+    23.4,
+    21.4,
+    21.5
+   ]
+  },
+  "full/zombie": {
+   "url": "http://localhost:5261/sdf-game.html?seed=1&frozen=1&loader=0&sculpt=full",
+   "wallS": 10.7,
+   "skull": "sculpt",
+   "sculpt": {
+    "shape": 2,
+    "headCell": 0.005,
+    "paint": 2
+   },
+   "cast": "zombie",
+   "pool": 6,
+   "cache": {
+    "entries": 85,
+    "totals": {
+     "verts": 102102,
+     "tris": 204044
+    },
+    "stats": {
+     "entries": 85,
+     "extractCount": 85,
+     "extractMs": 2058.5,
+     "firstExtractAt": 3261.9,
+     "lastExtractAt": 5324.2,
+     "maxExtractMs": 1037.1,
+     "maxExtractKey": "zombie:axial:1-2:33:76cc306a@0.01"
+    }
+   },
+   "warm": {
+    "gib": "ready",
+    "crowd": "ready"
+   },
+   "burst": {
+    "actor": 13,
+    "wounds": 2,
+    "head": {
+     "dead": false,
+     "burst": {
+      "kind": "lethal",
+      "outcome": "split",
+      "offset": 0.9327499026506259,
+      "severity": 0.9999999999999675,
+      "shards": 14,
+      "flaps": 0
+     }
+    }
+   },
+   "chops": [
+    {
+     "n": 1,
+     "returned": 1,
+     "split": {
+      "angle": 0.44000000000000006,
+      "phase": null
+     }
+    },
+    {
+     "n": 2,
+     "returned": 1,
+     "split": {
+      "angle": 0.55,
+      "phase": null
+     }
+    }
+   ]
+  }
+ },
+ "errors": []
+}

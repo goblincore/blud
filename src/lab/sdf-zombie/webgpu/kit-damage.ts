@@ -1,10 +1,21 @@
+// src/lab/sdf-zombie/webgpu/kit-damage.ts
+//
+// Armor kit damage on skinned meshes: piece support and attachment checks, hit damage, shedding and the detached armor debris.
+
 import * as THREE from 'three/webgpu';
 import type { BuildResult } from '../build-body';
 import type { LimbId, Vec3 } from '../types';
 import { woundWorldPos, type Wound } from '../damage';
 import { kitShedFor, type ArmorSpec } from '../plate-armor';
 
-const boneKey = (s: string) => s.toLowerCase().replace(/[._]/g, '');
+// Memoised: attached() used to run this regex on every prim for every piece,
+// every frame. Bone names are a small closed set, so the cache stays tiny.
+const boneKeys = new Map<string, string>();
+const boneKey = (s: string) => {
+  let k = boneKeys.get(s);
+  if (k === undefined) { k = s.toLowerCase().replace(/[._]/g, ''); boneKeys.set(s, k); }
+  return k;
+};
 function boneLimb(name: string): LimbId {
   const k = boneKey(name), side = k.endsWith('l') ? 'L' : 'R';
   if (/clavicle|upperarm|forearm|hand/.test(k)) return `arm${side}`;
@@ -16,6 +27,8 @@ interface Piece {
   source: THREE.SkinnedMesh;
   indices: number[];
   bone: string;
+  /** kitSupportKey(bone), fixed at load. */
+  support: string;
   limb: LimbId;
   centre: THREE.Vector3;
   radius: number;
@@ -63,18 +76,40 @@ function piecesOf(mesh: THREE.SkinnedMesh): Piece[] {
     const joint=[...votes].sort((a,b)=>b[1]-a[1])[0]?.[0]??0;
     const bone=mesh.skeleton.bones[joint]?.name??'pelvis';
     const centre=bounds.getCenter(new THREE.Vector3());
-    return {source:mesh,indices:list,bone,limb:boneLimb(bone),centre,radius:bounds.getSize(point).length()*.5,
+    return {source:mesh,indices:list,bone,support:kitSupportKey(bone),limb:boneLimb(bone),centre,radius:bounds.getSize(point).length()*.5,
       armor:material?.name==='plate',released:false,damage:0};
   });
 }
 
-function attached(piece:Piece, body:BuildResult):boolean {
-  if(!body.clusters.some(c=>c.limb===piece.limb && c.alive)) return false;
-  // Boots have no flesh-foot primitive; their support is the shin. Shoulder
-  // plates may be weighted to a clavicle while the flesh starts at upperarm.
-  const key=boneKey(piece.bone).replace('foot','shin').replace('clavicle','upperarm');
-  const prims=body.prims.filter(p=>p.op!=='sub' && boneKey(p.bone??'')===key);
-  return prims.length===0 || prims.some(p=>!p.dead);
+/** The flesh bone a kit piece hangs from. Boots have no flesh-foot primitive;
+ * their support is the shin. Shoulder plates may be weighted to a clavicle
+ * while the flesh starts at upperarm. */
+export function kitSupportKey(bone:string):string {
+  return boneKey(bone).replace('foot','shin').replace('clavicle','upperarm');
+}
+
+/** One pass over the body per update: the limbs with a live cluster, and per
+ * support key whether any non-carve prim on that bone is still alive. Lets
+ * kitPieceAttached answer in O(1) what used to be a scan of every prim (with a
+ * regex per prim) for every kit piece, every frame. */
+export interface KitSupportIndex { liveLimbs:Set<LimbId>; boneAlive:Map<string,boolean> }
+export function kitSupportIndex(body:BuildResult):KitSupportIndex {
+  const liveLimbs=new Set<LimbId>();
+  for(const c of body.clusters) if(c.alive) liveLimbs.add(c.limb);
+  const boneAlive=new Map<string,boolean>();
+  for(const p of body.prims) {
+    if(p.op==='sub') continue;
+    const key=boneKey(p.bone??'');
+    boneAlive.set(key,(boneAlive.get(key)??false)||!p.dead);
+  }
+  return {liveLimbs,boneAlive};
+}
+
+/** A piece stays attached while its limb has a live cluster and its support
+ * bone has no non-carve prims or at least one live one. */
+export function kitPieceAttached(limb:LimbId, support:string, index:KitSupportIndex):boolean {
+  if(!index.liveLimbs.has(limb)) return false;
+  return index.boneAlive.get(support)??true;
 }
 
 /** Soldier-only kit damage. Missing anatomy always sheds its equipment;
@@ -151,13 +186,15 @@ export function createKitDamage(object:THREE.Object3D) {
       const changed=new Set<THREE.SkinnedMesh>();
       // Plate mode: a spark per plate impact, wherever the actor says it was.
       if(armor) for(const point of armor.hits) events.push({kind:'armor-hit',point,limb:'torso'});
+      let support:KitSupportIndex|undefined;
       for(const piece of pieces) {
         if(piece.released) continue;
         if(armor) {
           // Everything skinned to a shed plate's bones goes with it (matched by
           // bone): the plate islands, and what is mounted on them, so the
           // helmet's lenses and snout never hang in front of a bare face.
-          if(!attached(piece,body) || kitShedFor(armor.spec,armor.shed,piece.bone)) {
+          support??=kitSupportIndex(body);
+          if(!kitPieceAttached(piece.limb,piece.support,support) || kitShedFor(armor.spec,armor.shed,piece.bone)) {
             const point=bake(piece); changed.add(piece.source);
             if(piece.armor) events.push({kind:'armor-shed',point,limb:piece.limb});
           }
@@ -169,7 +206,8 @@ export function createKitDamage(object:THREE.Object3D) {
             piece.damage+=hit.weight; events.push({kind:'armor-hit',point:hit.point,limb:piece.limb});
           }
         }
-        if(!attached(piece,body) || piece.damage>=(piece.limb==='torso'?3:2)) {
+        support??=kitSupportIndex(body);
+        if(!kitPieceAttached(piece.limb,piece.support,support) || piece.damage>=(piece.limb==='torso'?3:2)) {
           const point=bake(piece); changed.add(piece.source);
           if(piece.armor) events.push({kind:'armor-shed',point,limb:piece.limb});
         }

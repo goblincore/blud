@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/webgpu/pickups.test.ts
 import { describe, expect, it } from 'vitest';
 import type { PickupDef } from './level-def';
-import { PICKUP, collectPickups, makeInventory, reloadFromReserve } from './pickups';
+import { PICKUP, collectPickups, makeInventory, reloadFromReserve, resolveInfiniteAmmo } from './pickups';
 import { VITALS, applyDamage, makeVitals } from './player-vitals';
 
 const at = (id: string, item: PickupDef['item'], x: number, z: number): PickupDef => ({ id, item, pos: [x, 0.2, z] });
@@ -79,4 +79,25 @@ describe('the flashlight pickup (dynamic light §2.1)', () => {
     expect(again.collected).toEqual([]);
   });
   it('starts false', () => { expect(makeInventory().flashlight).toBe(false); });
+});
+
+describe('resolveInfiniteAmmo', () => {
+  it('a finite level always runs the magazine down, whatever else is asked', () => {
+    for (const param of [null, 'finite', 'unlimited']) for (const bot of [false, true])
+      expect(resolveInfiniteAmmo(true, param, bot)).toBe(false);
+  });
+
+  it('the bare testbed reloads for a person (owner 2026-10-02: reload should show even with unlimited reserve)', () => {
+    expect(resolveInfiniteAmmo(false, null, false)).toBe(false);
+    expect(resolveInfiniteAmmo(false, 'finite', false)).toBe(false);
+  });
+
+  it('?ammo=unlimited restores the no-magazine testbed', () => {
+    expect(resolveInfiniteAmmo(false, 'unlimited', false)).toBe(true);
+  });
+
+  it('an automated browser keeps unlimited ammo unless it asks for the magazine (the gate scripts fire freely)', () => {
+    expect(resolveInfiniteAmmo(false, null, true)).toBe(true);
+    expect(resolveInfiniteAmmo(false, 'finite', true)).toBe(false);
+  });
 });

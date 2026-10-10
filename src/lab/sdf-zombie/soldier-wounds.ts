@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/soldier-wounds.ts
+//
+// Soldier visual wounds: turns the wound list into the craters the shader draws, with the ragged-crater toggle.
+
 import { MAX_WOUNDS, type Wound } from './damage';
 
 /** How ragged a single crater's edge is when it stands in for the lobes (radius grows by
@@ -19,7 +23,7 @@ export function soldierVisualWounds(wounds: readonly Wound[]): Wound[] {
   const out=[...real];
   for(let i=0;i<real.length && out.length<MAX_WOUNDS;i++) {
     const w=real[i]!;
-    if(w.injuryIgnored||w.type==='burn') continue;
+    if(w.injuryIgnored||w.type==='burn'||w.shape==='cut') continue;   // a cut is a slot: crater lobes would bowl it
     for(let lobe=0;lobe<3 && out.length<MAX_WOUNDS;lobe++) {
       const h=((w.primIdx+1)*1103515245+(Math.round(w.local[0]*1000)+4096)*12345+lobe*2654435761)>>>0;
       const angle=(h%6283)/1000, offset=w.radius*(.72+(h%11)/100);

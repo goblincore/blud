@@ -4,8 +4,10 @@
 import * as THREE from 'three/webgpu';
 import { storage } from 'three/tsl';
 import { DATA_ROWS } from './march.wgsl';
+import type { SplitWarp } from '../head-split';
+import { SPLIT_ABLATE, splitAblate } from './split-ablate';
 
-export const REC_VEC4S = 17;
+export const REC_VEC4S = 21;
 export const MAX_CROWD_INSTANCES = 64;
 
 export const REC_COUNTS = 0;        // primCount, clusterCount, carveCount, maxBlendK
@@ -13,7 +15,7 @@ export const REC_COUNTS2 = 1;       // boneCount, bareBones, ownerRefoldGate, wo
 export const REC_WOUND_BOUND = 2;   // xyz centre, w radius (1e9 = no cull)
 export const REC_ANCHOR_BAND = 3;   // bodyAnchor.xyz, w = band = slot * DATA_ROWS
 export const REC_WIND_ALIVE = 4;    // windDrift.xyz, w = 1 alive / 0 free slot
-export const REC_MELT = 5;          // meltCfg
+export const REC_MELT = 5;          // meltCfg: x melt, y motion-out, z skin detail k, w body grain
 export const REC_FLASH = 6;         // bodyFlash
 export const REC_NOISE_YAW = 7;     // noiseShift.xyz, w = bodyYaw
 export const REC_HEAD_WCOUNT = 8;   // headCentre.xyz, w = wound count
@@ -38,6 +40,13 @@ export const REC_BURN = 15;        // burn, burnSec, char, spare
  *  and the record is the one place a body's own picks can ride. The WGSL
  *  decodes with i32(floor(v)) and fract(v). */
 export const REC_LIGHTS = 16;      // 4 packed picks, -1 empty
+/** THE HEAD SPLIT (head-split.ts SplitWarp, world space): slots 17-20. Per-body for the same reason as REC_GORE.
+ *  A CLOSED head is four zero vec4s, and an open one carries a unit plane normal: the march reads slot 17 on every
+ *  body and takes a non-zero normal as "open" (loadInstance), so it reads the other three only then. */
+export const REC_SPLIT_N = 17;     // plane normal n.xyz, w = thetaP (the + side's angle, >= 0)
+export const REC_SPLIT_H = 18;     // hinge point h.xyz, w = d0 (the plane offset: s(q) = n.q - d0)
+export const REC_SPLIT_A = 19;     // hinge axis a.xyz, w = thetaM (the - side's angle, <= 0)
+export const REC_SPLIT_R = 20;     // x = r (the region sphere's radius about h), yzw spare
 
 function createRecordNode(attribute: THREE.StorageBufferAttribute, count: number) {
   return storage(attribute, 'vec4', count).toReadOnly();
@@ -62,6 +71,8 @@ export interface RecordSource {
   charAmount: number;
   /** Four packed light picks (`index + weight`, -1 empty). Omitted = none. */
   lights?: readonly number[];
+  /** The head split of the posed body this record draws (`posed.split`). Omitted or null = closed. */
+  split?: SplitWarp | null;
 }
 
 export interface CrowdRecords {
@@ -111,10 +122,27 @@ export function createCrowdRecords(capacity = MAX_CROWD_INSTANCES): CrowdRecords
       const lo = b + REC_LIGHTS * 4;
       floats[lo] = l?.[0] ?? -1; floats[lo + 1] = l?.[1] ?? -1;
       floats[lo + 2] = l?.[2] ?? -1; floats[lo + 3] = l?.[3] ?? -1;
+      // No split, or one with neither side turned, is the zero record (see REC_SPLIT_N).
+      const sp = s.split;
+      const so = b + REC_SPLIT_N * 4;
+      if (sp && (sp.thetaP !== 0 || sp.thetaM !== 0)) {
+        put4(so, sp.n, sp.thetaP);
+        put4(b + REC_SPLIT_H * 4, sp.h, sp.d0);
+        put4(b + REC_SPLIT_A * 4, sp.a, sp.thetaM);
+        const ro = b + REC_SPLIT_R * 4;
+        // .y: the ablation mask, in a `?splitablate` build only (split-ablate.ts); 0 on every shipped page.
+        floats[ro] = sp.r; floats[ro + 1] = SPLIT_ABLATE ? splitAblate.mask : 0; floats[ro + 2] = 0; floats[ro + 3] = 0;
+      } else {
+        floats.fill(0, so, b + (REC_SPLIT_R + 1) * 4);
+        if (SPLIT_ABLATE) floats[b + REC_SPLIT_R * 4 + 1] = splitAblate.mask;
+      }
       rec.dirty = true;
     },
     alive(slot, on) {
-      floats[slot * REC_VEC4S * 4 + REC_WIND_ALIVE * 4 + 3] = on ? 1 : 0;
+      const b = slot * REC_VEC4S * 4;
+      floats[b + REC_WIND_ALIVE * 4 + 3] = on ? 1 : 0;
+      // A freed slot keeps no split: whatever takes it next starts closed.
+      if (!on) floats.fill(0, b + REC_SPLIT_N * 4, b + (REC_SPLIT_R + 1) * 4);
       rec.dirty = true;
     },
     flush() { if (rec.dirty) { attribute.needsUpdate = true; rec.dirty = false; } },

@@ -9,13 +9,15 @@
 // REFERENCES, NOT POSITIONS (the spec's anchoring rule). An entry stores the
 // Wound object itself, not an index into the actor's wound ring: pushWound
 // evicts from the ring's head at MAX_WOUNDS, so an index silently re-aims at
-// the wrong wound the moment anything evicts. The Wound is an immutable
+// the wrong wound the moment anything evicts.
+// (A full ring can also MERGE a wound into a neighbour, damage.ts MERGE: the survivor is a new object.) The Wound is an immutable
 // snapshot (primIdx + prim-local offset) that woundWorldPos consumes against
 // the CURRENT posed prims every frame — blood rides the walking, staggering,
 // collapsing body for free.
 
 import { WOUND_BLEED, type BleedKind } from './blood-sim';
 import { woundCarveNormal, woundWorldPos, type Wound } from './damage';
+import { warpDir, warpPoint, type SplitWarp } from './head-split';
 import type { Primitive, Vec3 } from './types';
 import { dot, len, scale, sub } from './vec';
 
@@ -40,8 +42,11 @@ export interface BleedEntry {
 export class BleedRegistry {
   private entries: BleedEntry[] = [];
 
-  /** Oldest-first insertion order — live() returns a copy in this order. */
+  /** Oldest-first insertion order — live() returns a copy in this order. ONE EMITTER PER WOUND: registering a wound
+   *  that is already bleeding on this body restarts its emitter (a second blow into the same wound: the head split's
+   *  cut faces bleed again at every widening chop) instead of adding another, which would evict an older wound's. */
   register(bodyId: number, wound: Wound, kind: BleedKind, now: number): void {
+    this.entries = this.entries.filter(e => !(e.bodyId === bodyId && e.wound === wound));
     const mine = this.entries.filter(e => e.bodyId === bodyId);
     if (mine.length >= PER_BODY_EMITTER_CAP) {
       let oldest = mine[0]!;
@@ -79,6 +84,10 @@ export class BleedRegistry {
  * from the owning prim's axis through the anchor — for a shoulder stump
  * anchored on the torso that reads as the gush blowing away from the body,
  * which is the read that matters; the cone + gravity arc dominate anyway.
+ *
+ * A SPLIT HEAD (head-split.ts): wounds live on the closed head's prims, so a
+ * wound on an opened half is found there and then carried out with its half
+ * (warpPoint); the spray turns with it. Pass the posed body's `split`.
  */
 export function woundEmitAnchorAndNormal(
   prims: Primitive[], wound: Wound,
@@ -86,7 +95,17 @@ export function woundEmitAnchorAndNormal(
    *  wounds (every torso blob) have no axis to carry the turn, so without it
    *  the anchor stays viewer-fixed while the flesh turns (2026-09-02). */
   bodyYaw = 0,
+  /** The posed body's head split (`posed().split`); absent or null = closed. */
+  split?: SplitWarp | null,
 ): { anchor: Vec3; normal: Vec3 } {
+  const closed = closedAnchorAndNormal(prims, wound, bodyYaw);
+  if (!split) return closed;
+  const m = warpPoint(split, closed.anchor);
+  return { anchor: m.p, normal: warpDir(split, m.piece, closed.normal) };
+}
+
+/** The anchor and spray direction on the body as its prims say (the closed head). */
+function closedAnchorAndNormal(prims: Primitive[], wound: Wound, bodyYaw: number): { anchor: Vec3; normal: Vec3 } {
   const anchor = woundWorldPos(prims, wound, bodyYaw);
   const inward = woundCarveNormal(prims, wound, bodyYaw);
   if (inward) return { anchor, normal: scale(inward, -1) };

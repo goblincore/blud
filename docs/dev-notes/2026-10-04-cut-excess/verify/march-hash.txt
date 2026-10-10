@@ -1,0 +1,6 @@
+lab-servers: starting vite on 5241
+lab-servers: starting chrome (headless) on debug port 9241
+{"room1":"d7392d5234c98ddc1babb3b29860abc3a02ced84","room1-repeat":"d7392d5234c98ddc1babb3b29860abc3a02ced84","room1-wounded":"76bd51aa6eb281297999463529a0b782ce2b67f6"}
+{"room1":"d7392d5234c98ddc1babb3b29860abc3a02ced84","room1-repeat":"d7392d5234c98ddc1babb3b29860abc3a02ced84","room1-wounded":"76bd51aa6eb281297999463529a0b782ce2b67f6"}
+{"room1":"0c71e71267bad979dec5b906c461851ff5043068","room1-repeat":"0c71e71267bad979dec5b906c461851ff5043068","room1-wounded":"bf6836cdad769cdcbe584ece9becd9a7f5421f49"}
+{"room1":"470ff0b375adfdb48992adecf04e8915e814b3f7","room1-repeat":"470ff0b375adfdb48992adecf04e8915e814b3f7","room1-wounded":"f618070e78f99ee552243ba0c7680d24bbdeaf27"}

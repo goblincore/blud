@@ -72,7 +72,10 @@ export async function connectGame({ vite, cdp, width = 1280, height = 800, onFai
   };
   ws.onclose = () => hangup('websocket closed');
   ws.onerror = () => hangup('websocket error');
+  // ...and a send AFTER the socket closed must reject too: WebSocket.send on a CLOSING/CLOSED
+  // socket silently discards the frame, so the reply never comes and the caller hangs.
   const send = (method, params = {}) => new Promise((resolve, reject) => {
+    if (ws.readyState !== 1) { reject(new StageFail(`CDP ${method}: websocket not open (readyState ${ws.readyState}) — page gone`)); return; }
     const id = ++seq; pending.set(id, { resolve, reject }); ws.send(JSON.stringify({ id, method, params }));
   });
   const evaluate = async (expression, timeoutMs = 120_000) => {
@@ -124,13 +127,32 @@ export async function bootCloseupPage({ send, evaluate, url, fail = failHard }) 
  * Fourteen levers, EXPLICITLY — the value is that it does not trust the
  * page's boot state. If the page ships a new default, this pin holds the
  * scene fixed until the bench is consciously re-based.
+ *
+ * THE MARCH SCALE (re-based 2026-09-25). The shipped t16 upscale stage
+ * (default since 2026-09-13, 7305c35e) upscales exactly 2x from a 0.5 march.
+ * This pin used to set 1.0 (written 2026-09-04, before the stage shipped),
+ * which left the stage ON with input == output: the frame showed the top-left
+ * QUARTER of the march zoomed 2x ("skeleton, no flesh").
+ *   !! Every baseline/still captured through applyShipDefaults between
+ *   !! 2026-09-13 and 2026-09-25 on a page booted WITH the stage (no
+ *   !! ?upscale=0) was taken in that broken scale-1 + stage state and must be
+ *   !! re-based. Pages booted with ?upscale=0 (march-hash, march-parity,
+ *   !! views-smoke, refine-smoke, crowd-normal-probe) were native and valid.
+ * Now it follows the page's upscale boot: stage on (the shipped default) ->
+ * setSdfScale(0.5), the shipping state, stage untouched (model, CAS sharpen);
+ * stage off (the caller booted ?upscale=0 on purpose) -> 1.0, the historical
+ * native-march fixture those gates' goldens were taken at. The renderer now
+ * also guards the old mistake itself: setSdfScale(!= 0.5) with the stage on
+ * drops it to native (upscale-scale-guard.ts). Resolves to
+ * { sdfScale, upscale: upscaleInfo().on }.
  */
 export async function applyShipDefaults(evaluate) {
   return evaluate(`(() => {
+    const upscaleOn = __sdfGame.upscaleInfo().on;
     __sdfGame.setOccluder(false);
     __sdfGame.setCone(false);
     __sdfGame.setFxaa(true);
-    __sdfGame.setSdfScale(1.0);
+    __sdfGame.setSdfScale(upscaleOn ? 0.5 : 1.0);
     __sdfGame.setAdaptive(false);
     __sdfGame.setMarchSteps(96);
     __sdfGame.setShell(true);
@@ -141,7 +163,9 @@ export async function applyShipDefaults(evaluate) {
     __sdfGame.setHalfRate(false);
     __sdfGame.setFlatAlbedo(false);
     __sdfGame.setWoundTuning({ spillChance: 0 });
-    return 1;
+    const info = __sdfGame.upscaleInfo();
+    if (info.on !== upscaleOn) throw new Error('applyShipDefaults changed the upscale stage (' + upscaleOn + ' -> ' + info.on + ')');
+    return { sdfScale: upscaleOn ? 0.5 : 1.0, upscale: info.on };
   })()`);
 }
 

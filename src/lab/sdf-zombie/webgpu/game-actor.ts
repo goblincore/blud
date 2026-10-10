@@ -1,6 +1,6 @@
-import type { EncounterNavigation } from './encounter-navigation';
-import type { EncounterOrder } from './encounter-director';
 // src/lab/sdf-zombie/webgpu/game-actor.ts
+//
+// The zombie actor record for the game page, its combat and navigation step, damage handling, and furniture avoidance helpers.
 //
 // One wandering zombie in the game page: the lab's motion pipeline
 // (stepMotion -> stepRig -> applyRig -> view.update) wrapped per body, minus
@@ -19,6 +19,8 @@ import type { EncounterOrder } from './encounter-director';
 // its target is dropped, so the next step picks a fresh heading. A clamp,
 // not navigation.
 
+import type { EncounterNavigation } from './encounter-navigation';
+import type { EncounterOrder } from './encounter-director';
 import type { BuildResult } from '../build-body';
 import { bindRig, applyRig, headQuatOf, impulseAt, pinTips, type BoundRig } from '../rig-bind';
 import {
@@ -31,16 +33,17 @@ import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan 
 import { applyDeathState, hasDeathState } from '../death-state';
 import { inflateHead, SWELL_SEC } from '../head-pop';
 import {
-  MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos, clothDecal, wetLipWound,
+  MAX_WOUNDS, lipsAfterSever, pushWound, unwarpHit, WOUND_PROFILES, woundCarveNormal, woundWorldPos, clothDecal, wetLipWound,
   type Wound, type WoundType,
 } from '../damage';
-import { GUN_WET_LIP } from '../torn-lips';
+import type { SplitWarp } from '../head-split';
+import { burstTuning } from '../head-burst';
+import { GUN_WET_LIP, gunWetLipFor } from '../torn-lips';
 import { severLimb, severDistal, type SeverResult } from '../sever';
 import { soldierInjury, soldierArmCutAllowed, injuryPoints, SOLDIER_INJURY_TUNING } from '../soldier-damage';
 import { blastPlates, freshPlates, hitPlate, isShed, restHitPoint, shedPlates, type PlateState } from '../plate-armor';
 import { posedDetachedChunk } from '../detached-pose';
 import { cutLimbs, cutChains, chainOrder, jointPoint } from '../connectivity';
-import { sdBody } from '../validate';
 import type { LimbId, Primitive, Vec3 } from '../types';
 import {
   woundFromPellet, woundFromSlug,
@@ -54,11 +57,12 @@ import { makeRng, headingDir, type Rng, type WanderBounds } from '../wander';
 import { rotateYaw } from '../gait';
 import type { BrainPlayer } from '../brain';
 import { makeZombieMind, type EnemyMind } from './enemy-mind';
-import { isSoldierFamily, type MotionProfile } from '../motion-profile';
+import { isGoreBody, isSoldierFamily, wantsTorsoGuards, type MotionProfile } from '../motion-profile';
 import { BARREL_REST, INDEX_REST, barrelsDriven, stepBarrelIndex, stepBarrelSpin, type BarrelIndex, type BarrelSpin } from '../barrel-spin';
 import { lightsModeFor, statusLights, type StatusLights } from '../status-lights';
 import type { MotionFrame } from '../motion';
 import type { SwingVariant } from '../attack';
+import { SWORD_TUNING } from '../sword-swing';
 import type { MissingLimbs } from '../collapse';
 import type { ZombieGpuView } from './zombie-gpu';
 import { createWoundRing, type CharacterView, type WoundPointTransform } from './character-view';
@@ -392,9 +396,13 @@ export interface ZombieActor {
    *  source of truth for every decision field this interface reports. */
   mind(): EnemyMind;
   readonly kind: 'zombie' | 'soldier';
-  /** The motion profile's character name ('zombie' when none) — which
-   *  character this is, where `kind` is only which decision vocabulary. */
+  /** The MOTION PROFILE's name ('zombie' when none): how this body moves. Not which character it is: every
+   *  character without a profile of its own moves on the zombie's (motion-profile.ts motionProfileFor), so the
+   *  female, the schoolgirls, the bonewalker and the clowns all answer 'zombie' here. */
   profileName(): string;
+  /** WHICH CHARACTER this is: its name in the character registry (opts.characterName, else the CharacterView's
+   *  entry, else the profile's name). Rules that belong to one character ask this, never profileName(). */
+  characterName(): string;
   meleeCapable(): boolean;
   /** The LAST motion frame, or null before the first step. character-view's
    *  pose() reads `gun` (the held prop's transform) and `collapsed` (release
@@ -537,6 +545,21 @@ export interface ZombieActor {
   blast(effect: ActorBlastEffect): void;
   /** Melee head damage (game-head-damage.ts): a pure map applied to the posed body after every applyRig (the per-frame step and each hit's re-pose). null removes it. */
   setHeadDeform(fn: ((posed: BuildResult) => BuildResult) | null): void;
+  /** The head split (head-split.ts): after every applyRig and the head deform, `fn` gives the split for that pose in
+   *  world space, or null while the head is closed; it rides `posed().split`, so sdBody (every strike, shot and trace)
+   *  sees the opened halves. The prims stay the closed head's. null removes the hook. */
+  setHeadSplit(fn: ((posed: BuildResult) => SplitWarp | null) | null): void;
+  /** THE POP (head-pop.ts), for a body that has an onHeadPop: the head swells for `swellS` seconds (0: none) and then
+   *  bursts along `dir` (world): the head cluster is severed with no flying chunk, and onHeadPop gets the swollen
+   *  head for its burst, its debris and the skull's pieces. While it swells the head stays on, and no sever takes it.
+   *  False, and nothing done, when the head is already gone or already popping, or the body has no onHeadPop. */
+  beginHeadPop(dir: Vec3, swellS: number): boolean;
+  /** The head is swelling toward its pop. */
+  headPopping(): boolean;
+  /** The pop's own clock: advance the swell by `dt` and burst the head when it is spent. Called once a tick for
+   *  every actor, frozen or not (a frozen actor never steps: the gates), before the actors step; it re-poses the
+   *  actor itself. True while a pop is running or just burst (a frozen cast's hulls are then stale). */
+  advanceHeadPop(dt: number): boolean;
   /** Re-pose NOW so a changed head deform shows on a frame this actor did not step (a frozen actor:
    *  `?frozen=1`, the gates). Without it the posed and drawn head keep whatever the deform was at the
    *  last hit's re-pose — the wobble's peak squash, forever. The same refresh as blast()'s tail. */
@@ -586,6 +609,8 @@ export function createZombieActor(opts: {
    *  taking the two halves, and callers that HAVE a CharacterView hand it over
    *  as well, for the damage delegation in task 4b. */
   character?: CharacterView;
+  /** The character's name in the registry, for a caller with no CharacterView to hand over (characterName()). */
+  characterName?: string;
   /** Experimental fixed torso presets, off for the normal game. */
   boundedWounds?: boolean;
   start: Vec3;
@@ -613,6 +638,11 @@ export function createZombieActor(opts: {
    *  and calls this with the head's world centre, the shot direction and the
    *  neck's stump wound, for the caller's burst and bleed. */
   onHeadPop?: (head: { origin: Vec3; prims: Primitive[] }, dir: Vec3, stumpWound: Wound | null) => void;
+  /** A DECAPITATION ASKS FIRST. The wounds have cut the head off (the sever checks): `weapon` is what the hit that
+   *  did it was ('other': a blast, a blade, anything that is not a gun round), `dir` its direction (world). Answer
+   *  the seconds of swell to POP the head instead (beginHeadPop; 0 bursts at once), or null for the ordinary flying
+   *  head. Absent: always the flying head. Needs onHeadPop as well. */
+  onDecapitate?: (cause: { weapon: 'slug' | 'pellet' | 'other'; dir: Vec3 }) => number | null;
 }): ZombieActor {
   const { body, view } = opts;
   // Skin detail under the highlight shoulder, per character (skin-detail-proto.ts). Optional call:
@@ -652,14 +682,24 @@ export function createZombieActor(opts: {
   /** Melee head damage's per-actor head map (setHeadDeform), applied after
    *  every applyRig below. Null = the body exactly as the rig poses it. */
   let headDeform: ((p: BuildResult) => BuildResult) | null = null;
+  /** The head split's per-actor hook (setHeadSplit), asked after the deform on every re-pose. Null, or a null
+   *  answer = closed: the pose carries no `split` at all. */
+  let headSplit: ((p: BuildResult) => SplitWarp | null) | null = null;
   /** ActorBlastEffect.forceCollapse, latched until the next step() feeds it
    *  to the motion signals (collapse.ts latches the fall from there). */
   let forceCollapseNext = false;
-  /** The one re-pose: applyRig, then the head deform (if any). Every pose
-   *  site (the per-frame step, stampBlast, blast(), flushHitTail) calls it. */
+  /** THE POP in progress (beginHeadPop): seconds into the swell, its length, the burst's direction (world, unit or
+   *  zero). Null on every frame of ordinary play. `popClock` is the swell's wobble clock (head-pop.ts inflateHead). */
+  let pop: { t: number; dur: number; dir: Vec3 } | null = null;
+  let popClock = 0;
+  /** The one re-pose: applyRig, then the head deform (if any), then the pop's swell (if one is running), then the
+   *  head split (if open). Every pose site (the per-frame step, stampBlast, blast(), flushHitTail) calls it. */
   const repose = (): BuildResult => {
     const p = applyRig(current, bound, bodyYaw);
-    return headDeform ? headDeform(p) : p;
+    const d0 = headDeform ? headDeform(p) : p;
+    const d = pop ? inflateHead(d0, Math.min(1, pop.t / pop.dur), popClock) : d0;
+    const s = headSplit?.(d) ?? null;
+    return s ? { ...d, split: s } : d;
   };
   /**
    * THE RUPTURE WINDOW (gib-tear.ts). While this is set the march draws the
@@ -719,10 +759,14 @@ export function createZombieActor(opts: {
    */
   let lastPlayerPos: Vec3 | null = null;
   let bodyYaw = 0;
+  // (`entry?.`: a test's stand-in for the CharacterView may carry no entry.)
+  const characterName = opts.characterName ?? opts.character?.entry?.name ?? opts.profile?.name ?? 'zombie';
   const soldierDamage = isSoldierFamily(opts.profile);
   /** A soft target (MotionProfile.soft) dies to its first bullet or blast hit;
    *  set on the hit, turned into a forced collapse on the next step. */
   const softTarget = !!opts.profile?.soft;
+  /** Gun craters on this body take the wet red lip, and on its head the low lip (gunWetLip, headLip). */
+  const goreBody = isGoreBody(opts.profile);
   let softKilled = false;
   /** The killing hit's death (soft-death.ts planDeath): the style's throw is
    *  applied on the first collapsed sub-step, a stagger first stays up
@@ -1013,6 +1057,7 @@ export function createZombieActor(opts: {
       torsoWounds?.record(r.stumpWound, current, false);
       pendingWounds.push(r.stumpWound);
     }
+    dropSeveredLips(r.stumpWound);
     pendingSevered.push(limb);
     rebind();
     opts.onSever?.({
@@ -1041,8 +1086,18 @@ export function createZombieActor(opts: {
     return soldierArmCutAllowed(current, soldierWounds, limb, at, injuryTuning);
   }
 
-  /** HEAD POP: the head goes in a burst — no flying chunk (onHeadPop). */
-  function popHead() {
+  /** A sever has just stamped `stump` (or none): the craters whose lips would now hang over it lose them
+   *  (damage.ts lipsAfterSever), judged on the body as it is after the sever. */
+  function dropSeveredLips(stump: Wound | null) {
+    // The pose is the one the wounds were stamped on; which flesh is gone is the body's after the sever.
+    const prims = posed.prims.map((p, i) => (current.prims[i]?.dead && !p.dead ? { ...p, dead: true } : p));
+    const next = lipsAfterSever(woundRing.all(), prims, current.clusters, stump, bodyYaw);
+    if (next !== woundRing.all()) woundRing.set([...next]);
+  }
+
+  /** HEAD POP: the head goes in a burst — no flying chunk (onHeadPop). `dir`: the burst's direction (the soft
+   *  target's death throw when omitted). */
+  function popHead(dir: Vec3 = deathDir) {
     const head = current.clusters.find(c => c.limb === 'head');
     if (!head?.alive) return;
     const r = severLimb(current, 'head');
@@ -1052,9 +1107,47 @@ export function createZombieActor(opts: {
       woundRing.stamp(r.stumpWound, posed, bodyYaw);
       pendingWounds.push(r.stumpWound);
     }
+    dropSeveredLips(r.stumpWound);
     pendingSevered.push('head');
     rebind();
-    opts.onHeadPop?.(piece, deathDir, r.stumpWound);
+    opts.onHeadPop?.(piece, dir, r.stumpWound);
+  }
+
+  /** What every pose change outside step() ends with: the pose, the view, the head's rotation, the wound rows. */
+  function showPose() {
+    posed = repose();
+    view.update(drawnPose(), current);
+    view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
+    refreshWounds();
+  }
+
+  /** The pop's burst: from the FULLY swollen head (the debris is cut from it, whatever the swell's length), then
+   *  what is left is posed. */
+  function burstHead(dir: Vec3) {
+    pop = null;
+    posed = inflateHead(repose(), 1, popClock);
+    popHead(dir);
+    showPose();
+  }
+
+  function beginHeadPop(dir: Vec3, swellS: number): boolean {
+    if (pop || !opts.onHeadPop || !current.clusters.find(c => c.limb === 'head')?.alive) return false;
+    const l = Math.hypot(dir[0], dir[1], dir[2]);
+    const unit: Vec3 = l > 1e-9 ? [dir[0] / l, dir[1] / l, dir[2] / l] : [0, 0, 0];
+    popClock = 0;
+    if (!(swellS > 0)) { burstHead(unit); return true; }
+    pop = { t: 0, dur: swellS, dir: unit };
+    return true;
+  }
+
+  function advanceHeadPop(dt: number): boolean {
+    if (!pop) return false;
+    const step = Number.isFinite(dt) && dt > 0 ? dt : 0;
+    pop.t += step;
+    popClock += step;
+    if (pop.t >= pop.dur) burstHead(pop.dir);
+    else showPose();
+    return true;
   }
 
   /** The first (non-lethal) hit's reaction: the profile's violent throw-back
@@ -1073,13 +1166,21 @@ export function createZombieActor(opts: {
     return react;
   }
 
-  function runSeverChecks() {
+  function runSeverChecks(cause: 'slug' | 'pellet' | 'other' = 'other', dir: Vec3 = [0, 0, 0]) {
+    // A head the wounds have cut off asks first (opts.onDecapitate): popped, it is not detached here. While it swells
+    // it holds, whatever cuts the neck again.
+    const pops = (): boolean => {
+      if (pop) return true;
+      const swell = opts.onDecapitate?.({ weapon: cause, dir });
+      return swell !== null && swell !== undefined && beginHeadPop(dir, swell);
+    };
     const torsoC = current.clusters.find(c => c.limb === 'torso')?.center ?? [0, 1.1, 0] as Vec3;
     const injury = soldierDamage ? soldierInjury(current, soldierWounds, injuryTuning) : null;
     if (injury) soldierFatal ||= injury.fatal;
     const cuttingWounds = soldierDamage ? woundRing.all().filter(w => !w.injuryIgnored) : [...woundRing.all()];
     const fullCuts = [...new Set([...cutLimbs(current, cuttingWounds, torsoC).filter(limb => (!soldierDamage || soldierFatal || limb !== 'head') && allowArmCut(limb)), ...(injury?.sever ?? [])])];
     for (const limb of fullCuts) {
+      if (limb === 'head' && pops()) continue;
       detach(limb, severLimb(current, limb));
     }
     for (const cut of cutChains(current, soldierDamage ? cuttingWounds : [...woundRing.all()])) {
@@ -1406,6 +1507,12 @@ export function createZombieActor(opts: {
           ...(swingPin !== null
             ? { attack: swingPin }
             : think.attack !== null ? { attack: think.attack } : {}),
+          // The LUNGE surges the root (think.advance above) past planted
+          // feet: let the stance plants slide within reach while it runs.
+          // Absent on every other frame (motion.ts bit-identity contract).
+          ...(swingPin === null && think.attack?.variant === 'lunge'
+            ? { plantReach: SWORD_TUNING.lungePlantReach }
+            : {}),
         },
         signals,
         bound.rig.points, encounterOrder && encounterOrder.mode !== 'idle' && opts.navigation ? opts.navigation.bounds : opts.bounds, rng,
@@ -1469,7 +1576,8 @@ export function createZombieActor(opts: {
         if (!propReleaseRequested) { propReleaseRequested = true; opts.character?.releaseProp([hv[0], hv[1] + 0.8, hv[2]], opts.seed); }
       }
       let points = stepRig(
-        { ...bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw, posePins: f.posePins }, sdt,
+        { ...bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw, posePins: f.posePins,
+          torsoGuards: wantsTorsoGuards(opts.profile) ? bound.rig.torsoGuards : undefined }, sdt,
         {
           gravity: f.gravity,
           damping: 0.06,
@@ -1632,28 +1740,41 @@ export function createZombieActor(opts: {
   }
 
   function hit(hitWorld: Vec3, dirWorld: Vec3, shot?: import('../damage').ShotProvenance): Wound | null {
-    // Stamped at the live yaw `posed` was built with — see refreshWounds.
-    const field = posed;
-    const wound = woundFromPellet(field.prims, hitWorld, bodyYaw, p => sdBody(p, field));
+    // Stamped at the live yaw `posed` was built with — see refreshWounds — and
+    // in the UN-WARPED head (damage.ts unwarpHit): the shove, the reaction
+    // and the blood below keep the world hit.
+    const u = unwarpHit(posed, hitWorld);
+    const wound = woundFromPellet(posed.prims, u.hit, bodyYaw, u.field);
     wound.shot = shot;
     gunWetLip(wound, 'pellet');
+    headLip(wound);
     return applyProjectileHit(wound, hitWorld, dirWorld);
   }
 
   function hitSlug(hitWorld: Vec3, dirWorld: Vec3, shot?: import('../damage').ShotProvenance): Wound | null {
-    const field = posed;
-    const wound = woundFromSlug(field.prims, hitWorld, p => sdBody(p, field), bodyYaw);
+    const u = unwarpHit(posed, hitWorld);   // the un-warped head, as hit()
+    const wound = woundFromSlug(posed.prims, u.hit, u.field, bodyYaw);
     wound.shot = shot?.weapon === 'slug' ? shot : { weapon: 'slug' };
     gunWetLip(wound, 'slug');
+    headLip(wound);
     return applyProjectileHit(wound, hitWorld, dirWorld);
   }
 
-  /** WET RED LIP on a gun crater (torn-lips.ts, plan Task 35): the zombie-class gore bodies only.
-   *  The soldier keeps his own soldierWound stain and the soft target (cultist robe) takes decals,
-   *  so both are left stock; wetLipWound itself refuses cloth wounds and burns. */
+  /** A GUN CRATER ON THE HEAD KEEPS A LOW LIP (head-burst.ts burstTuning.headLip): the skull's face is 1 to 2 cm
+   *  under the skin, and a full lip walls it in. The head's prims and the neck's (the head limb), on every GORE
+   *  BODY (motion-profile.ts isGoreBody): the zombie and every character that is not of the soldier's family and
+   *  not a soft target. They all draw a skull under the head's flesh, and the lip hides it on each of them alike. */
+  function headLip(wound: Wound): void {
+    if (!goreBody || posed.prims[wound.primIdx]?.limb !== 'head') return;
+    wound.rimScale = (wound.rimScale ?? 1) * Math.max(0, burstTuning.headLip);
+    if (burstTuning.headTear > 0) wound.tear = Math.max(wound.tear ?? 0, Math.min(1, burstTuning.headTear));
+  }
+
+  /** WET RED LIP on a gun crater (torn-lips.ts, plan Task 35): the gore bodies only (motion-profile.ts isGoreBody).
+   *  The decision (anything but a gore body stays stock) is torn-lips.ts gunWetLipFor; wetLipWound itself refuses
+   *  the 0 it returns, and cloth wounds and burns. */
   function gunWetLip(wound: Wound, kind: keyof typeof GUN_WET_LIP): void {
-    if (soldierDamage || softTarget) return;
-    wetLipWound(wound, GUN_WET_LIP[kind]);
+    wetLipWound(wound, gunWetLipFor(kind, goreBody));
   }
 
   function stampBlast(blastWounds: readonly Wound[]): void {
@@ -1841,6 +1962,10 @@ export function createZombieActor(opts: {
    *  the actor's CURRENT posed body at call time. Returns the stamped wound. */
   let hitBatching = false;
   let hitPending = false;
+  /** What the gun rounds since the last hit tail were, for its sever checks: a slug among them makes the batch a
+   *  slug's (with that slug's direction); 'other' between tails. */
+  let hitCause: 'slug' | 'pellet' | 'other' = 'other';
+  let hitCauseDir: Vec3 = [0, 0, 0];
   /** Consecutive firearm trigger pulls, never individual pellets. Retain
    * dedup identities beyond the 1.5s combo window and after a full reaction. */
   function progressiveHit(wound: Wound): boolean {
@@ -1883,7 +2008,10 @@ export function createZombieActor(opts: {
     }
     pendingPelletHits = 0;
     pendingPelletShot = null;
-    runSeverChecks();
+    // The sever checks are told what this batch of rounds was: a slug's decapitation may pop the head.
+    const cause = hitCause, dir = hitCauseDir;
+    hitCause = 'other';
+    runSeverChecks(cause, dir);
     posed = repose();
     view.update(drawnPose(), current);
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
@@ -1925,6 +2053,8 @@ export function createZombieActor(opts: {
       if (r.absorbed) return absorbedHit(wound, hitWorld, dirWorld);
     }
     damageRevision++; bakePaused = false;
+    const bySlug = wound.shot?.weapon === 'slug';
+    if (bySlug || hitCause !== 'slug') { hitCause = bySlug ? 'slug' : 'pellet'; hitCauseDir = [...dirWorld] as Vec3; }
     const field = posed;
     // stamp() records the pre-impulse position for us — BEFORE the shove
     // below and before flushHitTail re-solves the pose, so it is the
@@ -2013,12 +2143,11 @@ export function createZombieActor(opts: {
 
   return {
     setHeadDeform: (fn) => { headDeform = fn; },
-    reposeHead: () => {
-      posed = repose();
-      view.update(drawnPose(), current);
-      view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
-      refreshWounds();
-    },
+    setHeadSplit: (fn) => { headSplit = fn; },
+    beginHeadPop,
+    headPopping: () => pop !== null,
+    advanceHeadPop,
+    reposeHead: showPose,
     id: opts.id,
     get room() { return actorRoom(); },
     get body() { return current; },
@@ -2031,6 +2160,10 @@ export function createZombieActor(opts: {
     beginTear: (at: Vec3, falloff: number, plan: RupturePlan) => {
       tear = { at: [...at] as Vec3, falloff, age: 0 };
       tearPlan = plan;
+      // The head split describes the CLEAN pose in world space, and rupturePosed spreads `posed`: it must not ride onto
+      // the regions as they pull apart. The split closes here (the plan's pieces are the closed head's prims anyway),
+      // and the split hook answers null for as long as the window runs (game-head-split.ts).
+      if (posed.split) posed = { ...posed, split: null };
       // Flesh-prim -> region, for the wound upload's rigid carry (refreshWounds).
       tearPrimRegion = new Int32Array(posed.prims.length).fill(-1);
       for (let r = 0; r < plan.pieces.length; r++) {
@@ -2193,6 +2326,7 @@ export function createZombieActor(opts: {
      *  from the n-th prim of the limb's chain (0 = root; for the head,
      *  1 leaves the neck on the body — the headshot-stump case). */
     profileName: () => opts.profile?.name ?? 'zombie',
+    characterName: () => characterName,
     debugSever: (limb: LimbId, at: 'full' | number = 'full') => {
       const cluster = current.clusters.find(c => c.limb === limb);
       if (!cluster?.alive) return false;

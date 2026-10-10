@@ -1,4 +1,7 @@
 // src/lab/sdf-zombie/sever.ts
+//
+// Severing and gibbing: splits a body into the remaining body plus chunk groups for a limb, a chain cut, or the whole body.
+
 import type { BuildResult } from './build-body';
 import type { LimbId, Primitive, Vec3 } from './types';
 import type { Wound } from './damage';

@@ -1,5 +1,5 @@
 // EACH BODY'S 4 LIGHTS (spec §4). Pure. A light's weight on a body is what it DELIVERS there,
-// by the presentation rules tuned with the owner on 2026-09-26 (game-dynamic-light-leaves.ts
+// by the presentation rules tuned with the owner on 2026-09-26 (game-dynamic-light.ts
 // presentingLamp, ported rule for rule and generalised to every kind):
 //  - spot coverage judged at the FEET (the visible pool; a chest-height cone is only ~1 m) for
 //    ceiling lights, at the CHEST (the body's pos) for a profile with coverAt 'chest' (the

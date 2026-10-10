@@ -4,6 +4,7 @@ import { packBody, PRIM_STRIDE, CLUSTER_STRIDE, GROUP_RADIUS_MAX, boundGroups, W
 import { parseBlob } from './blob-parse';
 import { compileBlob } from './blob-compile';
 import schoolgirlSrc from './characters/schoolgirl.blob?raw';
+import zombieSrc from './characters/zombie.blob?raw';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { bindRig, applyRig } from './rig-bind';
@@ -387,8 +388,13 @@ describe('metal — prof bit 4, value 16 (hard-surface task 2)', () => {
       [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,2,2,2]);
     expect(packedProf('dragon.blob')).toEqual(
       [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,3]);
+    // goblin.blob re-pinned 2026-10-02 (armour phase 2): the four flesh-foot prims (two per side) were removed because
+    // the kit's boots are the feet, so exactly four prof-0 entries left. No prof value changed: painting the pants and
+    // shirt does not touch the metal bit.
+    // 2026-10-03: the pelvis was reworked (one bar + gut blob became a squashed sphere, a gut blob and a mirrored glute pair): two
+    // more prof-0 entries, no prof value changed.
     expect(packedProf('goblin.blob')).toEqual(
-      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,3]);
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,3]);
     // Five plate boxes at 24 = box bit 3 (8) + metal bit 4 (16); the two
     // 2s are bent horns, the 3s chamfered+bent ones. Re-pinned when the
     // plates were authored `metal` — every other value is pre-metal.
@@ -781,6 +787,62 @@ describe('packBones (bone tubes)', () => {
     for (let i = body.prims.length; i < body.prims.length + p.boneCount; i++) {
       expect(p.primScale[i * PRIM_STRIDE + 3]).toBe(W_ORGAN);
     }
+  });
+});
+
+describe('packOrgans (organs as mesh, 2026-10-06)', () => {
+  // The mesh skeleton draws organs as segment meshes too, so its actors pack NO inside-flesh rows: boneCount 0 is
+  // counts2.x 0, and map-body never calls applyBones.
+  // The GAME zombie (characters/zombie.blob): body.ts ZOMBIE is the old hand-built def and has no organs.
+  const zombie = () => { const b = buildBody(compileBlob(parseBlob(zombieSrc)), DEFAULT_BUILD_OPTS); return applyRig(b, bindRig(b)); };
+  const arrays = (p: ReturnType<typeof packBody>) => Object.entries(p)
+    .filter(([, v]) => v instanceof Float32Array).map(([k, v]) => [k, Array.from(v as Float32Array)]);
+
+  it('the zombie really has organ prims (the fixture is not vacuous)', () => {
+    expect(zombie().bonePrims.filter(p => p.op === 'organ').length).toBe(8);
+  });
+
+  it('default and packOrgans:true are byte-identical', () => {
+    const body = zombie();
+    for (const boneCullMode of ['off', 'cluster', 'segment'] as const) {
+      for (const packBones of [true, false]) {
+        const a = packBody(body, undefined, { boneCullMode, packBones });
+        const b = packBody(body, undefined, { boneCullMode, packBones, packOrgans: true });
+        expect(b.boneCount).toBe(a.boneCount);
+        expect(arrays(b)).toEqual(arrays(a));
+      }
+    }
+  });
+
+  it('packBones:false + packOrgans:false packs no inside-flesh row in every cull mode', () => {
+    const body = zombie();
+    for (const boneCullMode of ['off', 'cluster', 'segment'] as const) {
+      const p = packBody(body, undefined, { boneCullMode, packBones: false, packOrgans: false });
+      expect(p.boneCount).toBe(0);
+      // No segment or cluster range may point at a row either.
+      for (let i = 0; i < p.boneSegmentRange.length; i += CLUSTER_STRIDE) expect(p.boneSegmentRange[i + 1]).toBe(0);
+      for (let i = 0; i < p.boneClusterRange.length; i += CLUSTER_STRIDE) expect(p.boneClusterRange[i + 1]).toBe(0);
+    }
+  });
+
+  it('packOrgans:false alone keeps the bone rows and drops every organ row', () => {
+    const body = zombie();
+    const bones = body.bonePrims.filter(p => p.op === 'bone' && body.clusters[p.cluster]?.alive).length;
+    const p = packBody(body, undefined, { packOrgans: false });
+    expect(p.boneCount).toBe(bones);
+    for (let i = body.prims.length; i < body.prims.length + p.boneCount; i++) {
+      expect(p.primScale[i * PRIM_STRIDE + 3]).toBe(W_BONE);
+    }
+  });
+
+  it('scratch reuse leaves no stale organ row behind', () => {
+    const body = zombie();
+    let scratch = packBody(body, undefined, { packBones: false, boneCullMode: 'segment' });
+    expect(scratch.boneCount).toBe(8);
+    scratch = packBody(body, undefined, { packBones: false, packOrgans: false, boneCullMode: 'segment' }, scratch);
+    const fresh = packBody(body, undefined, { packBones: false, packOrgans: false, boneCullMode: 'segment' });
+    expect(scratch.boneCount).toBe(0);
+    expect(arrays(scratch)).toEqual(arrays(fresh));
   });
 });
 

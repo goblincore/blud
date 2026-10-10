@@ -165,9 +165,10 @@ export class ProbeLightingNode extends THREE.LightingNode {
  * the test pins. Every entry adds into the same irradiance, so order does
  * not change the result.
  */
-export function levelLightsNode(sceneLights: readonly THREE.Light[], probe: ProbeLightingNode): THREE.LightsNode {
-  return lights([...sceneLights, probe as unknown as THREE.Light]);
+export function levelLightsNode(sceneLights: readonly THREE.Light[], probe: ProbeLightingNode, extras: readonly THREE.LightingNode[] = []): THREE.LightsNode {
+  return lights([...sceneLights, probe as unknown as THREE.Light, ...(extras as unknown as THREE.Light[])]);
 }
+
 
 /**
  * The gain that puts the grid's room-centre irradiance (mean over the six

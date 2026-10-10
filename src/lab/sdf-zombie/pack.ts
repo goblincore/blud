@@ -1,5 +1,8 @@
 // src/lab/sdf-zombie/pack.ts
-import type { BuiltBody, Primitive } from './types';
+//
+// Packs a built body into the flat float arrays the SDF shaders read, plus dead-prim marking and bound groups.
+
+import type { BuiltBody, Primitive, Vec3 } from './types';
 import { bendCtrl } from './vec';
 import { MAX_CLUSTERS, MAX_PRIMS, BONE_SEG_MAX } from './validate';
 import { boxReach, shellReach, strandReach } from './extent';
@@ -183,6 +186,14 @@ export interface PackOpts {
    */
   packBones?: boolean;
   /**
+   * Write organ rows (op 'organ') into the inside-flesh array. Default TRUE —
+   * the shipped layout, byte-identical rows. The mesh skeleton sets it FALSE
+   * along with packBones (organs as mesh, 2026-10-06): its actors' organs are
+   * segment meshes too, so the body packs NO inside-flesh row, boneCount is 0
+   * and the march never calls applyBones.
+   */
+  packOrgans?: boolean;
+  /**
    * Write the bone-cluster sphere + range texels (packBoneClusters). Default
    * FALSE — the old flat loop. ON, the BONE rows are grouped cluster by
    * cluster (then a tail for organs and limb-less bones) and each cluster's
@@ -206,6 +217,12 @@ export interface PackOpts {
 /** Optional scratch must be a previous packBody result owned by this caller.
  * Its arrays are overwritten, including ALL unused tails and disabled rows.
  * Omit scratch for an independent snapshot (the default API is unchanged). */
+const ZERO3 = [0, 0, 0] as const;
+/** One vec4 row write — the same Float32 stores as `.set([x, y, z, w], o)`. */
+function put4(dst: Float32Array, o: number, x: number, y: number, z: number, w: number): void {
+  dst[o] = x; dst[o + 1] = y; dst[o + 2] = z; dst[o + 3] = w;
+}
+
 export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {}, scratch?: PackedBody): PackedBody {
   const primA = scratch?.primA.fill(0) ?? new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primB = scratch?.primB.fill(0) ?? new Float32Array(MAX_PRIMS * PRIM_STRIDE);
@@ -241,13 +258,15 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
     //
     // w=2 (dead) outranks w=1 (carve): a mid-limb sever only ever kills add
     // prims, but if a carve ever went dead it must stop carving too.
-    primA.set([p.a[0], p.a[1], p.a[2], p.radius], o);
-    primB.set([p.b[0], p.b[1], p.b[2], p.blendK], o);
-    primScale.set([p.scale[0], p.scale[1], p.scale[2], w], o);
+    // Element writes, not .set([...]): the same Float32 stores without an
+    // array literal per row per prim (the hero re-packs every frame).
+    put4(primA, o, p.a[0], p.a[1], p.a[2], p.radius);
+    put4(primB, o, p.b[0], p.b[1], p.b[2], p.blendK);
+    put4(primScale, o, p.scale[0], p.scale[1], p.scale[2], w);
     // Identity default: sdPrim branches on |1 - w| so an unoriented prim
     // costs one compare. Only rig-posed skull prims ever carry a real quat.
     const q = p.orient;
-    primQuat.set(q ? [q[0], q[1], q[2], q[3]] : [0, 0, 0, 1], o);
+    if (q) put4(primQuat, o, q[0], q[1], q[2], q[3]); else put4(primQuat, o, 0, 0, 0, 1);
     // -1 for an untapered prim, which is the plain-capsule branch in coneCap.
     // A radiusB EQUAL to radius is still written as a taper: it is a
     // no-op geometrically, and rewriting it to -1 to save a branch would make
@@ -272,12 +291,10 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
     // box is rejected at compile time, so a box never sets that bit and the
     // xyz are never fetched for it. The w component is unread in every other
     // case — the shader loads this row as .xyz.
-    primBend.set(p.bend === undefined
-      ? [0, 0, 0, p.box ? p.box.round : 0]
-      : [...bendCtrl(p.a, p.b, p.bend), 0], o);
-    primColor.set(p.color === undefined
-      ? [0, 0, 0, 0]
-      : [p.color[0], p.color[1], p.color[2], 1 + (p.gloss ?? 0)], o);
+    if (p.bend === undefined) put4(primBend, o, 0, 0, 0, p.box ? p.box.round : 0);
+    else { const c = bendCtrl(p.a, p.b, p.bend); put4(primBend, o, c[0], c[1], c[2], 0); }
+    if (p.color === undefined) put4(primColor, o, 0, 0, 0, 0);
+    else put4(primColor, o, p.color[0], p.color[1], p.color[2], 1 + (p.gloss ?? 0));
     // Shell fold (2026-08-25): the row-array pair for a shell-clipped sheet.
     // Sets ROW_PRIM_SHELL (thickness, rim, clip offset, hasClip) and
     // ROW_PRIM_CLIP (clip normal, PLUS the per-prim glow in w). The shader
@@ -288,37 +305,27 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
     // above), and a glowing shell — a lit cable run authored as a sheet —
     // must glow exactly like a glowing capsule. (hard-surface task 3.)
     const sh = p.shell;
-    primShell.set(sh
-      ? [sh.thickness, sh.rim, sh.clipOffset, 1]
-      : [0, 0, 0, 0], o);
-    primClip.set(sh
-      ? [sh.clipNormal[0], sh.clipNormal[1], sh.clipNormal[2], p.glow ?? 0]
-      : [0, 0, 0, p.glow ?? 0], o);
+    if (sh) put4(primShell, o, sh.thickness, sh.rim, sh.clipOffset, 1); else put4(primShell, o, 0, 0, 0, 0);
+    if (sh) put4(primClip, o, sh.clipNormal[0], sh.clipNormal[1], sh.clipNormal[2], p.glow ?? 0);
+    else put4(primClip, o, 0, 0, 0, p.glow ?? 0);
     // WRINKLES. Its own row, for the reason ROW_PRIM_WARP's doc gives. Zeros
     // unless the author wrote `warp=`, and the shader's warp branch is gated
     // on both being non-zero, so an unwarped shell takes the exact same code
     // path it took before this row existed.
-    const wf = sh?.warpFreq ?? [0, 0, 0];
-    primWarp.set(sh
-      ? [sh.warpAmp ?? 0, wf[0]!, wf[1]!, wf[2]!]
-      : [0, 0, 0, 0], o);
+    if (sh) { const wf = sh.warpFreq ?? ZERO3; put4(primWarp, o, sh.warpAmp ?? 0, wf[0]!, wf[1]!, wf[2]!); }
+    else put4(primWarp, o, 0, 0, 0, 0);
     // The strand bundle's four parameters ride their own row (hairlock).
     // Zeros for everything else, so a body with no strand= packs rows
     // bit-identical to before the row existed.
-    primStrand.set(p.strand === undefined
-      ? [0, 0, 0, 0]
-      : [p.strand.count, p.strand.wave, p.strand.cycles, p.strand.fat], o);
-    primShape.set([
-      p.radiusB === undefined ? -1 : p.radiusB,
-      prof,
-      p.grooveDepth ?? 0, p.grooveWidth ?? 0,
-    ], o);
+    if (p.strand === undefined) put4(primStrand, o, 0, 0, 0, 0);
+    else put4(primStrand, o, p.strand.count, p.strand.wave, p.strand.cycles, p.strand.fat);
+    put4(primShape, o, p.radiusB === undefined ? -1 : p.radiusB, prof, p.grooveDepth ?? 0, p.grooveWidth ?? 0);
     // Rest endpoints (motion-polish task 6). A missing rest prim packs as
     // ZEROS — restA.w = 0 is the shader's 'unwritten' sentinel (a real prim
     // always has radius > 0), which falls back to the old noiseLocal anchor.
     if (rp) {
-      restA.set([rp.a[0], rp.a[1], rp.a[2], rp.radius], o);
-      restB.set([rp.b[0], rp.b[1], rp.b[2], rp.blendK], o);
+      put4(restA, o, rp.a[0], rp.a[1], rp.a[2], rp.radius);
+      put4(restB, o, rp.b[0], rp.b[1], rp.b[2], rp.blendK);
     }
   };
 
@@ -349,6 +356,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
   // same contract as prims.
   const restBones = (rest ?? body).bonePrims ?? [];
   const packBones = opts.packBones ?? true;
+  const packOrgans = opts.packOrgans ?? true;
   const boneCullMode = opts.boneCullMode ?? (opts.packBoneClusters ? 'cluster' : 'off');
   // One pair of texels per CLUSTER plus one tail texel (index MAX_CLUSTERS),
   // stored in the free columns of ROW_CLUSTER_BOUNDS / ROW_CLUSTER_RANGE —
@@ -384,6 +392,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
     (body.bonePrims ?? []).forEach((b, j) => {
       if (!body.clusters[b.cluster]?.alive) return;
       if (!packBones && b.op === 'bone') return;
+      if (!packOrgans && b.op === 'organ') return;
       let owner = -1;
       if (b.op !== 'organ') {
         for (let c = 0; c < body.clusters.length; c++) {
@@ -425,6 +434,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
     (body.bonePrims ?? []).forEach((b, j) => {
       if (!body.clusters[b.cluster]?.alive) return;
       if (!packBones && b.op === 'bone') return;
+      if (!packOrgans && b.op === 'organ') return;
       live.push({ b, j });
     });
     if (live.some(x => typeof x.b.boneSegment !== 'number')) {
@@ -471,6 +481,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
     (body.bonePrims ?? []).forEach((b, j) => {
       if (!body.clusters[b.cluster]?.alive) return;
       if (!packBones && b.op === 'bone') return;
+      if (!packOrgans && b.op === 'organ') return;
       writeBone(b, j);
     });
   }
@@ -582,8 +593,13 @@ export interface BoundGroup { start: number; count: number; center: [number, num
 
 /** Worst-case field-vs-Euclid distance ratio over a run of prims. */
 function distortOf(prims: Primitive[]): number {
+  return distortRange(prims, 0, prims.length);
+}
+/** distortOf over prims[s, e) without slicing. */
+function distortRange(prims: Primitive[], s: number, e: number): number {
   let f = 1;
-  for (const p of prims) {
+  for (let i = s; i < e; i++) {
+    const p = prims[i]!;
     if (p.op === 'sub' || p.op === 'groove') continue;
     const mx = Math.max(p.scale[0], p.scale[1], p.scale[2]);
     const mn = Math.min(p.scale[0], p.scale[1], p.scale[2]);
@@ -594,18 +610,54 @@ function distortOf(prims: Primitive[]): number {
 
 /** Bounding sphere of a run of prims — the same fit assignClusters uses. */
 function fitSphere(prims: Primitive[]): { center: [number, number, number]; radius: number } {
-  const solid = prims.filter(p => p.op !== 'sub');
-  const fitTo = solid.length > 0 ? solid : prims;
-  const sum: [number, number, number] = [0, 0, 0];
-  let pts = 0;
-  const pointsOf = (p: Primitive) =>
-    p.bend === undefined ? [p.a, p.b] : [p.a, p.b, bendCtrl(p.a, p.b, p.bend)];
-  for (const p of fitTo) for (const q of pointsOf(p)) { sum[0] += q[0]; sum[1] += q[1]; sum[2] += q[2]; pts++; }
-  const center: [number, number, number] = [sum[0] / pts, sum[1] / pts, sum[2] / pts];
+  return fitRange(prims, 0, prims.length);
+}
+
+/**
+ * fitSphere over prims[s, e) with no slices and no per-point arrays: the
+ * same additions in the same order, the same Math.hypot calls, so the result
+ * is bit-identical (pinned by pack-golden.test.ts). `ctrl`, when given, holds
+ * each prim's bendCtrl (a pure function of a, b, bend) at index i - ctrlBase,
+ * so boundGroups' growing-run refits compute it once per prim, not per refit.
+ */
+function fitRange(
+  prims: Primitive[], s: number, e: number,
+  ctrl?: (Vec3 | undefined)[], ctrlBase = 0,
+): { center: [number, number, number]; radius: number } {
+  // fitTo = the solid prims, or every prim when the run has no solid one.
+  let anySolid = false;
+  for (let i = s; i < e; i++) if (prims[i]!.op !== 'sub') { anySolid = true; break; }
+  const ctrlOf = (i: number, p: Primitive): Vec3 =>
+    ctrl ? ctrl[i - ctrlBase]! : bendCtrl(p.a, p.b, p.bend);
+  let sx = 0, sy = 0, sz = 0, pts = 0;
+  for (let i = s; i < e; i++) {
+    const p = prims[i]!;
+    if (anySolid && p.op === 'sub') continue;
+    sx += p.a[0]; sy += p.a[1]; sz += p.a[2];
+    sx += p.b[0]; sy += p.b[1]; sz += p.b[2];
+    pts += 2;
+    if (p.bend !== undefined) { const c = ctrlOf(i, p); sx += c[0]; sy += c[1]; sz += c[2]; pts++; }
+  }
+  return radiusAbout(prims, s, e, [sx / pts, sy / pts, sz / pts], anySolid, ctrl, ctrlBase);
+}
+
+/** How far a prim's surface reaches past its axis points (the fit's reach). */
+function primReach(p: Primitive): number {
+  return Math.max(p.radius, p.radiusB ?? p.radius) * boxReach(p.box) * strandReach(p.strand) * Math.max(p.scale[0], p.scale[1], p.scale[2])
+    + shellReach(p);
+}
+
+/** fitRange's radius pass about a given centre. `ctrl` / `reachOf`, when
+ *  given, hold bendCtrl / primReach per prim at index i - base. */
+function radiusAbout(
+  prims: Primitive[], s: number, e: number, center: [number, number, number], anySolid: boolean,
+  ctrl?: (Vec3 | undefined)[], base = 0, reachOf?: Float64Array,
+): { center: [number, number, number]; radius: number } {
   let radius = 0;
-  for (const p of fitTo) {
-    const reach = Math.max(p.radius, p.radiusB ?? p.radius) * boxReach(p.box) * strandReach(p.strand) * Math.max(p.scale[0], p.scale[1], p.scale[2])
-      + shellReach(p);
+  for (let i = s; i < e; i++) {
+    const p = prims[i]!;
+    if (anySolid && p.op === 'sub') continue;
+    const reach = reachOf ? reachOf[i - base]! : primReach(p);
     if (p.orient && Math.abs(1 - p.orient[3]) > 1e-6) {
       // An oriented prim rotates about its MIDPOINT, so its endpoints move:
       // bound by the rotation-invariant ball around the midpoint instead of
@@ -616,9 +668,11 @@ function fitSphere(prims: Primitive[]): { center: [number, number, number]; radi
       radius = Math.max(radius, d + half + reach);
       continue;
     }
-    for (const q of pointsOf(p)) {
-      const d = Math.hypot(q[0] - center[0], q[1] - center[1], q[2] - center[2]);
-      radius = Math.max(radius, d + reach);
+    radius = Math.max(radius, Math.hypot(p.a[0] - center[0], p.a[1] - center[1], p.a[2] - center[2]) + reach);
+    radius = Math.max(radius, Math.hypot(p.b[0] - center[0], p.b[1] - center[1], p.b[2] - center[2]) + reach);
+    if (p.bend !== undefined) {
+      const c = ctrl ? ctrl[i - base]! : bendCtrl(p.a, p.b, p.bend);
+      radius = Math.max(radius, Math.hypot(c[0] - center[0], c[1] - center[1], c[2] - center[2]) + reach);
     }
   }
   return { center, radius };
@@ -633,20 +687,52 @@ function fitSphere(prims: Primitive[]): { center: [number, number, number]; radi
  */
 export function boundGroups(prims: Primitive[], start: number, count: number): BoundGroup[] {
   const out: BoundGroup[] = [];
+  // Per-prim constants of the fit, computed once per cluster instead of once
+  // per refit of every growing run: bendCtrl and the reach are pure in the prim.
+  const ctrl: (Vec3 | undefined)[] = new Array(count);
+  const reach = new Float64Array(count);
+  for (let i = 0; i < count; i++) {
+    const p = prims[start + i]!;
+    ctrl[i] = p.bend === undefined ? undefined : bendCtrl(p.a, p.b, p.bend);
+    reach[i] = primReach(p);
+  }
+  // Running centroid sums of the open run, over ALL its prims and over its
+  // SOLID ones (fitRange's fitTo). Growing the run by one prim appends that
+  // prim's points to the same left-to-right accumulation a from-scratch fit
+  // performs, so the sums (and so the centre) are bit-identical to fitRange's.
+  const all = [0, 0, 0, 0], solid = [0, 0, 0, 0];
+  let anySolid = false;
+  const accumulate = (t: number[], p: Primitive, c: Vec3 | undefined) => {
+    t[0]! += p.a[0]; t[1]! += p.a[1]; t[2]! += p.a[2];
+    t[0]! += p.b[0]; t[1]! += p.b[1]; t[2]! += p.b[2];
+    t[3]! += 2;
+    if (c) { t[0]! += c[0]; t[1]! += c[1]; t[2]! += c[2]; t[3]!++; }
+  };
+  const add = (i: number) => {
+    const p = prims[i]!, c = ctrl[i - start];
+    accumulate(all, p, c);
+    if (p.op !== 'sub') { accumulate(solid, p, c); anySolid = true; }
+  };
+  const fitOpen = (gs: number, e: number) => {
+    const t = anySolid ? solid : all;
+    return radiusAbout(prims, gs, e, [t[0]! / t[3]!, t[1]! / t[3]!, t[2]! / t[3]!], anySolid, ctrl, start, reach);
+  };
   let gStart = start;
   let fit: { center: [number, number, number]; radius: number } | null = null;
   for (let i = start; i < start + count; i++) {
-    const run = prims.slice(gStart, i + 1);
-    const next = fitSphere(run);
+    add(i);
+    const next = fitOpen(gStart, i + 1);
     if (fit !== null && next.radius > GROUP_RADIUS_MAX) {
-      out.push({ start: gStart, count: i - gStart, ...fit, distort: distortOf(prims.slice(gStart, i)) });
+      out.push({ start: gStart, count: i - gStart, ...fit, distort: distortRange(prims, gStart, i) });
       gStart = i;
-      fit = fitSphere(prims.slice(gStart, i + 1));
+      all.fill(0); solid.fill(0); anySolid = false;
+      add(i);
+      fit = fitOpen(gStart, i + 1);
     } else {
       fit = next;
     }
   }
   if (fit !== null)
-    out.push({ start: gStart, count: start + count - gStart, ...fit, distort: distortOf(prims.slice(gStart, start + count)) });
+    out.push({ start: gStart, count: start + count - gStart, ...fit, distort: distortRange(prims, gStart, start + count) });
   return out;
 }

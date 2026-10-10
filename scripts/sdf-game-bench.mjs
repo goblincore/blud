@@ -28,6 +28,7 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { reportCensusDrift, reportFrameHashDrift } from './census-diff.mjs';
+import { doorwayPrelude } from './lib/earlyz-scenes.mjs';
 
 const VITE = Number(process.argv[2] ?? 5277);
 const CDP = Number(process.argv[3] ?? 9277);
@@ -58,7 +59,8 @@ const CROWD = Number(process.env.BENCH_CROWD ?? 0);
 const CROWD_SPACING = Number(process.env.BENCH_CROWD_SPACING ?? 1.2);
 // The distance scene packs 24 bodies into a 3.5 x 7 m strip, which needs the
 // tighter 0.9 m pitch (the room scene's 1.2 m default caps at 18 there). This
-// is the ``BENCH_CROWD_SPACING ?? 0.9`` the distance-task spec names.
+// is the ``BENCH_CROWD_SPACING ?? 0.9`` the distance-task spec names. The
+// doorway scene uses the same pitch (doorwayPrelude's own default is also 0.9).
 const DIST_CROWD_SPACING = Number(process.env.BENCH_CROWD_SPACING ?? 0.9);
 // BENCH_SCENE — the scene the crowd prelude builds. Default = the 7f room
 // grid (bodies spread from the room's spawn point). `distance` (perf task,
@@ -68,7 +70,17 @@ const DIST_CROWD_SPACING = Number(process.env.BENCH_CROWD_SPACING ?? 0.9);
 // many bodies at distance, not a screen-filling stack. It also pins the
 // player (`holdPlayer`) so the firefight's frame-0 teleport cannot overwrite
 // the placed pose and the walk input cannot drift the camera mid-leg.
+// `doorway` (early-Z, 2026-10-01) is scripts/lib/earlyz-scenes.mjs's
+// doorwayPrelude: the player in room 1 looking through the first tunnel that
+// touches room 1 at BENCH_CROWD bodies in the far room (body-behind-wall). It
+// teleports, places and freezes like `distance`, so it is held the same way.
+// Both staged scenes ignore the firefight's room: run them with BENCH_ROOMS=1.
 const SCENE = process.env.BENCH_SCENE ?? '';
+const HOLD_SCENE = SCENE === 'distance' || SCENE === 'doorway';
+if (HOLD_SCENE && CROWD > 0 && !(ROOM_IDS.length === 1 && ROOM_IDS[0] === 1)) {
+  console.warn(`WARN BENCH_SCENE=${SCENE} stages and holds the player in room 1; BENCH_ROOMS=${ROOM_IDS.join(',')} `
+    + 'repeats that one scene per room. Use BENCH_ROOMS=1.');
+}
 /** The distance scene, evaluated in-page after the leg overrides (spawn must
  *  come after a rebuild-inducing setCrowd — see the prelude comment below).
  *
@@ -111,7 +123,11 @@ function buildDistancePrelude() {
 const CROWD_PRELUDE = CROWD > 0
   ? (SCENE === 'distance'
     ? buildDistancePrelude()
-    : `__sdfGame.spawnCrowd('zombie', ${CROWD}, { spacing: ${CROWD_SPACING} })`)
+    : SCENE === 'doorway'
+      // Early-Z (2026-10-01): through the first tunnel touching room 1; with
+      // BENCH_QUERY=level=night-train that is the guards-van -> third-class door.
+      ? doorwayPrelude(CROWD, DIST_CROWD_SPACING)
+      : `__sdfGame.spawnCrowd('zombie', ${CROWD}, { spacing: ${CROWD_SPACING} })`)
   : '';
 // BENCH_CROWD_MAX — hard ceiling on BENCH_CROWD. The 24-body crowd path hung
 // the GPU for 330 s and corrupted the owner's display on 2026-09-14; this
@@ -122,6 +138,13 @@ const CROWD_MAX = Number(process.env.BENCH_CROWD_MAX ?? 24);
 // a 30 s evaluate timeout) the leg is ABORTED without the long run. A too-slow
 // scene must fail fast and visibly, never hold the GPU.
 const FRAME_CAP_MS = Number(process.env.BENCH_FRAME_CAP_MS ?? 250);
+// BENCH_PROBE_TIMEOUT_MS — the scripted probe's evaluate bound (default 30 s,
+// unchanged). The probe runs the whole 364-frame firefight, so 30 s is itself a
+// cap of ~80 ms a frame: a 12-16 body crowd that renders at ~95 ms (well under
+// BENCH_FRAME_CAP_MS) is aborted by the clock, not by the guard (measured
+// 2026-10-02: room-1 crowd 16 probe finished in 35 s at p50 94 ms). The early-Z
+// cost run raises it so the frame cap is the guard again. Demo probes keep 30 min.
+const PROBE_TIMEOUT_MS = Number(process.env.BENCH_PROBE_TIMEOUT_MS ?? 30_000);
 // BENCH_PASSES=1 — per-pass GPU timestamp attribution (gpu-pass-timing.ts).
 // Runs the matrix in the harness's 'passes' mode: the same fence-per-chunk
 // frame timing as throughput, PLUS every render/compute pass summed by its
@@ -381,8 +404,63 @@ console.log(`bench ${url}  (${W}x${H}, repeats=${REPEATS}, rooms=${ROOM_IDS.join
  * historical leg's boot changes.
  */
 function legUrl(name) {
-  const on = (LEGS[name] ?? ALL_LEGS[name] ?? {}).setCrowd;
-  return on === undefined ? url : `${url}&crowd=${on ? 1 : 0}`;
+  const leg = LEGS[name] ?? ALL_LEGS[name] ?? {};
+  let u = leg.setCrowd === undefined ? url : `${url}&crowd=${leg.setCrowd ? 1 : 0}`;
+  // `_query` (early-Z, 2026-10-01): a COMPILE-TIME page flag the leg needs at boot.
+  // Underscore keys are never called as __sdfGame setters (applyLeg skips them).
+  if (leg._query) u += `&${leg._query}`;
+  return u;
+}
+
+/**
+ * WAIT FOR THE BACKGROUND COMPILES (early-Z cost run, 2026-10-02). Since the
+ * defer-compile work (2026-09-19) the crowd march program and the gib variants
+ * compile AFTER the loader gate, and until the crowd job is `ready` the game
+ * draws the crowd on the PER-BODY fallback (game-main `crowdPath()`). A warm
+ * shader cache settles that in ~4 s, inside the old 2.5 s settle plus the boot
+ * poll; a COLD one (a new program, e.g. a compile-time flag's, or Metal cache
+ * churn) takes 22-46 s, and a leg timed in that window measures the per-body
+ * march while its row says crowd. So every boot waits, bounded, for the loader
+ * gate and for both jobs to settle, and a `failed` job fails the leg: it would
+ * be measuring the fallback. A boot without crowd types never starts the crowd
+ * job, so its `pending` is accepted there.
+ *
+ * BENCH_WARM_WAIT_MS (default 180 s) bounds the wait. A cold first boot of a
+ * flag-on page has taken up to 46 s. The leg watchdog (BENCH_LEG_TIMEOUT_MS,
+ * 420 s) covers boot + this wait + probe + run together, so a cold boot in front
+ * of a heavy scene (a 280 ms native frame runs ~250 s of probe + run) can trip
+ * the watchdog first: raise BENCH_LEG_TIMEOUT_MS with this.
+ */
+const WARM_WAIT_MS = Number(process.env.BENCH_WARM_WAIT_MS ?? 180_000);
+async function awaitWarmBackground(legName) {
+  progress.phase = 'boot:warm-background';
+  const t0 = Date.now();
+  let s = null;
+  for (;;) {
+    s = JSON.parse(await evaluate(`JSON.stringify({
+      gate: window.__warmGate ? window.__warmGate.phase : null,
+      bg: typeof __sdfGame.warmBackground === 'function' ? __sdfGame.warmBackground() : null,
+      crowd: typeof __sdfGame.crowdInfo === 'function'
+        ? (() => { const c = __sdfGame.crowdInfo(); return { on: !!c.on, types: (c.types || []).length }; })()
+        : null,
+    })`));
+    // No tracker on this page (an older build): nothing to wait for.
+    if (!s.bg) return;
+    if (s.gate !== null && s.gate !== 'ready') {
+      throw new Error(`loader gate settled '${s.gate}', not 'ready' — the background compiles never start`);
+    }
+    if (s.bg.gib === 'failed' || s.bg.crowd === 'failed') {
+      throw new Error(`background compile failed (${JSON.stringify(s.bg)}) — the leg would measure the fallback`);
+    }
+    const crowdApplies = !s.crowd || (s.crowd.on && s.crowd.types > 0);
+    if (s.gate === 'ready' && s.bg.gib === 'ready' && (s.bg.crowd === 'ready' || !crowdApplies)) break;
+    if (Date.now() - t0 > WARM_WAIT_MS) {
+      throw new Error(`background compiles not settled after ${(WARM_WAIT_MS / 1000).toFixed(0)} s: ${JSON.stringify(s)}`);
+    }
+    await sleep(500);
+  }
+  const waited = (Date.now() - t0) / 1000;
+  if (legName) console.log(`  [${legName}] warm: gate ${s.gate}, gib ${s.bg.gib}, crowd ${s.bg.crowd} (waited ${waited.toFixed(1)} s after __sdfGame)`);
 }
 
 /**
@@ -420,6 +498,7 @@ async function bootPage(settleMs = 5000, legName = null) {
     throw new Error('game page never booted (__sdfGame absent after 120s)');
   }
   if (backend !== 'webgpu') fail(`backend is ${backend}, not webgpu — a WebGL fallback bench means nothing here`);
+  await awaitWarmBackground(legName);
   // Settle: let the boot loop render and the shaders finish compiling before
   // anything is timed. First-use pipeline stalls are real.
   progress.phase = 'boot:settle';
@@ -629,6 +708,14 @@ const ALL_LEGS = {
   // pass on, slim tail, boot-default medium band.
   'probe-reference-ship': { setProbeOptimization: false, setUpscale: { trained: 't16-rgb-v32' }, setUpscaleSharpen: 0.5 },
   'upscale-ship': { setUpscale: { trained: 't16-rgb-v32' }, setUpscaleSharpen: 0.5 },
+  // EARLY-Z stage 1 (plan 2026-10-01). `earlyz` runs the harness's pinned native state:
+  // march scale 1.0, upscale stage off. Its control is `baseline`. The plan expected the seed
+  // to be refused there for field style, but the seed was ON in every `earlyz` leg of the
+  // 2026-10-02 cost run: ship-defaults' setUpscale(null) leaves field style 'off' (inferred
+  // from the seed gate), so `earlyz` vs `baseline` is native scale WITH the seed.
+  // `earlyz-upscale-ship` is the shipped upscaler boot, seed on; its control is `upscale-ship`.
+  earlyz: { _query: 'earlyz=1' },
+  'earlyz-upscale-ship': { _query: 'earlyz=1', setUpscale: { trained: 't16-rgb-v32' }, setUpscaleSharpen: 0.5 },
   'upscale-ship-high': { setRefine: true, setRefineTail: 'slim', setUpscale: { trained: 'r5b-s32-rgbn-headr-drop-int2' }, setUpscaleSharpen: 0.5 },
   'upscale-t16-rgb': { setUpscale: { trained: 't16-rgb-v32' } },
   'upscale-r5b-headr': { setRefine: true, setRefineTail: 'slim', setUpscale: { trained: 'r5b-s32-rgbn-headr-drop-int2' } },          // band = boot default (medium)
@@ -735,6 +822,7 @@ async function applyLeg(name) {
   // (setCrowd) settles before the crowd prelude below. The crowd seam is
   // present since Task 6; the guard remains for a page without it.
   for (const [fn, arg] of Object.entries(overrides)) {
+    if (fn.startsWith('_')) continue;
     if (fn === 'setCrowd' && !(await evaluate('typeof __sdfGame.setCrowd === "function"'))) continue;
     await evaluate(`__sdfGame.${fn}(${JSON.stringify(arg)})`);
   }
@@ -772,8 +860,37 @@ const WARMUP = Number(process.env.BENCH_WARMUP ?? 120);
 // index landed on the last element, i.e. it WAS the max.
 const CHUNK = Number(process.env.BENCH_CHUNK ?? 10);
 
+// THE PRECOMPILE / BENCH LOOP RACE (early-Z cost run, 2026-10-02) is fixed in the
+// page: `setUpscale({ trained })` resolves only after its stage precompile, which
+// now suspends the loop instead of rewriting bench()'s loop intent
+// (game-render-controls applyUpscaleAbMode). applyLeg awaits every override, so the
+// `awaitLoopResumed()` wait that stood here before each bench() call is gone.
+
+/**
+ * EARLY-Z STATE GUARD. A leg that boots `earlyz=1` must really run the path:
+ * `earlyzInfo().on` true (flag read, patch detected, not refused for the
+ * deferred route). Every other leg must run with the flag OFF. Otherwise a
+ * BENCH_QUERY=earlyz=0/1, a deferred boot or a failed detection would silently
+ * measure the wrong configuration under the leg's name. Fails the leg.
+ */
+async function checkEarlyzState(name) {
+  const wants = String((LEGS[name] ?? ALL_LEGS[name] ?? {})._query ?? '').includes('earlyz=1');
+  const info = JSON.parse(await evaluate('JSON.stringify(__sdfGame.earlyzInfo ? __sdfGame.earlyzInfo() : null)'));
+  if (wants) {
+    console.log(`  [${name}] earlyzInfo=${JSON.stringify(info)}`);
+    if (!info || info.on !== true) {
+      throw new Error(`early-Z leg ${name}: earlyzInfo().on is ${info ? info.on : 'absent'} `
+        + `(flag ${info ? info.flag : '-'}, reason ${info ? JSON.stringify(info.reason) : '-'}) — not measuring the flag`);
+    }
+  } else if (info && info.flag) {
+    throw new Error(`leg ${name} booted with the early-Z flag on (earlyzInfo().flag true) — check BENCH_QUERY`);
+  }
+}
+
 async function runLeg(name, room, mode) {
   progress.leg = name; progress.room = room; progress.mode = mode;
+  // Wall-clock bounds of the leg-run, so a row can be matched to the machine's load at the time.
+  const startedAt = new Date().toISOString();
   // Fresh page per run — see bootPage. Damage does not survive a reload,
   // which is the entire point. The leg name selects the crowd BOOT flag (see
   // legUrl): booting the leg's own dispatch keeps its setCrowd() override a
@@ -788,6 +905,7 @@ async function runLeg(name, room, mode) {
     `refine: __sdfGame.refineInfo ? __sdfGame.refineInfo().on : null })`,
   );
   console.log(`  [${name}] upscaleInfo().on=${JSON.parse(infoNote).up} refineInfo().on=${JSON.parse(infoNote).refine}`);
+  await checkEarlyzState(name);
   // run 5b: bodies-refined count + band, for legs that touch setRefineBand/setRefineTail.
   const legOverrides = LEGS[name] ?? ALL_LEGS[name] ?? {};
   if (/refine/i.test(name) || legOverrides.setRefine || legOverrides.setRefineBand || legOverrides.setRefineTail) {
@@ -813,8 +931,9 @@ async function runLeg(name, room, mode) {
   // scenario first, and its shots kill the crowd (at n=20 the measured run
   // then started with 2 of 21 bodies). The guard only needs the walk scene's
   // frame cost, which does not fire.
-  const holdOpt = SCENE === 'distance' ? ', holdPlayer: true' : '';
-  const probeNoShots = SCENE === 'distance' ? ', noShots: true' : '';
+  // The doorway scene (early-Z) is staged the same way and held the same way.
+  const holdOpt = HOLD_SCENE ? ', holdPlayer: true' : '';
+  const probeNoShots = HOLD_SCENE ? ', noShots: true' : '';
   // The recording replaces the scenario for the probe AND the measured run, so
   // the frame guard prices the fight that will actually be measured.
   const demoOpt = DEMO ? `, demo: ${DEMO_JSON}` : '';
@@ -824,7 +943,7 @@ async function runLeg(name, room, mode) {
       `__sdfGame.bench({ room: ${room}, mode: "passes", warmup: 4, chunkFrames: 2, label: ${JSON.stringify(`${label}-probe`)}${holdOpt}${probeNoShots}${demoOpt} })`,
       // A demo probe replays the whole recording, not a 6-frame smoke test, so
       // the 30 s scripted guard is far too tight.
-      DEMO ? 30 * 60_000 : 30_000,
+      DEMO ? 30 * 60_000 : PROBE_TIMEOUT_MS,
     );
   } catch (e) {
     return { aborted: 'frame-cap', probeP50: null, error: `probe evaluate failed: ${e?.message ?? e}` };
@@ -845,6 +964,7 @@ async function runLeg(name, room, mode) {
     progress.phase = 'demo-reset';
     await bootPage(2500, name);
     await applyLeg(name);
+    await checkEarlyzState(name);
     if (DEMO_PRE_JSON) await applyDemoPrelude();
   }
   // warmup 0 for a demo: the bench's warmup advances the sim through frame 0's
@@ -876,6 +996,14 @@ async function runLeg(name, room, mode) {
   r.perBodyTilesOn = await evaluate('typeof __sdfGame.tiles === "function" ? __sdfGame.tiles().enabled : null');
   r.crowdTilesOn = r.crowdInfo && r.crowdInfo.on === true ? !!r.crowdInfo.tilesOn : null;
   r.tilesOn = r.crowdInfo && r.crowdInfo.on === true ? r.crowdTilesOn : r.perBodyTilesOn;
+  // Early-Z legs: the state at the END of the measured run (seed on/off and the
+  // front/back batches of the last sync), next to the boot-time line above.
+  if (String(legOverrides._query ?? '').includes('earlyz=1')) {
+    r.earlyzInfo = JSON.parse(await evaluate('JSON.stringify(__sdfGame.earlyzInfo ? __sdfGame.earlyzInfo() : null)'));
+    console.log(`  [${name}] earlyzInfo(end of run)=${JSON.stringify(r.earlyzInfo)}`);
+  }
+  r.startedAt = startedAt;
+  r.endedAt = new Date().toISOString();
   return r;
 }
 
@@ -979,7 +1107,8 @@ for (let rep = 0; rep < REPEATS; rep++) {
       process.stdout.write(`  rep${rep} ${leg} room${room}: median ${r.overall.p50.toFixed(2)} ms (max chunk ${r.overall.max.toFixed(2)})\n`);
       if (PASSES && r.passes) {
         if (!r.passes.available) console.warn(`  WARN ${leg}/room${room}: no pass samples — timestamp tracking absent?`);
-        const top = Object.values(r.passes.overall.labels).slice(0, 4).map((l) => `${l.name} ${l.p50.toFixed(2)}`).join(', ');
+        const top = Object.values(r.passes.overall.labels).slice(0, 4)
+          .map((l) => `${l.name} ${l.p50.toFixed(2)} (n ${l.n}/${r.passes.overall.frames}, pf mean ${(r.passes.overall.frames > 0 ? (l.n * l.mean) / r.passes.overall.frames : 0).toFixed(2)})`).join(', ');
         process.stdout.write(`      passes: ${top}\n`);
       }
     }
@@ -1257,7 +1386,7 @@ function writePassReport() {
   const out = [];
   out.push('# Per-pass GPU attribution');
   out.push('');
-  out.push(`${W}x${H}, repeats=${REPEATS}, rooms=${ROOM_IDS.join(',')}${PRELUDE ? `, prelude: ${PRELUDE}` : ''}${QUERY ? `, query: ${QUERY}` : ''}`);
+  out.push(`${W}x${H}, repeats=${REPEATS}, rooms=${ROOM_IDS.join(',')}${PRELUDE ? `, prelude: ${PRELUDE}` : ''}${QUERY ? `, query: ${QUERY}` : ''}${CROWD ? `, crowd: ${CROWD}${SCENE ? ` (scene ${SCENE})` : ''}` : ''}${DEMO_PATH ? `, demo: ${DEMO_PATH}` : ''}`);
   out.push('');
   if (failures.length || abandoned || aborts.length) {
     if (abandoned) out.push(`**MATRIX ABANDONED EARLY: ${abandoned} — later legs were never attempted.**`);
@@ -1267,9 +1396,15 @@ function writePassReport() {
       + aborts.map((a) => `rep${a.rep} ${a.leg}/room${a.room} (probe p50 ${a.probeP50 ?? 'n/a'} ms)`).join(', '));
     out.push('');
   }
-  out.push('Pass ms = median over repeats of the per-frame GPU pass time p50 (overall,');
-  out.push('all segments). Share = of the labelled total. Gap = fenced frame p50 minus');
-  out.push('the labelled total: CPU submit, inter-pass bubbles, unlabelled work.');
+  out.push('p50 = median over repeats of the GPU pass time p50 (overall, all segments),');
+  out.push('taken over the frames where the pass RAN: n of F frames. A pass that is');
+  out.push('skipped on some frames (an empty march) has n < F, so two legs\' p50s compare');
+  out.push('only when their n match. pf mean = n x mean / F, the pass cost per stepped');
+  out.push('frame with skipped frames counted as 0: it adds across passes and compares');
+  out.push('across legs whatever n is (2026-10-02: a demo p50 "saving" of 44 % was 2081');
+  out.push('control samples against 3368 early-Z ones; the pf means were equal). Share =');
+  out.push('of the summed pf means. Gap = fenced frame p50 minus the GPU span p50: CPU');
+  out.push('submit, inter-pass bubbles, unlabelled work.');
   out.push('');
   const perSeg = {};
   for (const leg of Object.keys(LEGS)) {
@@ -1278,25 +1413,41 @@ function writePassReport() {
     const allLabels = [...new Set(rs.flatMap((r) => Object.keys(r.passes.overall.labels)))];
     const labels = allLabels.filter((l) => !l.startsWith('cpu:'));
     const cpuLabels = allLabels.filter((l) => l.startsWith('cpu:'));
+    const legRoom = (room) => results.filter((r) => r.leg === leg && r.room === room && r.passes?.available);
     const cell = (room, label) => {
-      const xs = results.filter((r) => r.leg === leg && r.room === room && r.passes?.available)
-        .map((r) => r.passes.overall.labels[label]?.p50 ?? 0);
+      const xs = legRoom(room).map((r) => r.passes.overall.labels[label]?.p50 ?? 0);
       return xs.length ? med(xs) : 0;
     };
+    // Per-frame mean (n x mean / F) and the sample count behind the p50.
+    const pfOf = (r, label) => {
+      const L = r.passes.overall.labels[label];
+      return L && r.passes.overall.frames > 0 ? (L.n * L.mean) / r.passes.overall.frames : 0;
+    };
+    const pf = (room, label) => { const xs = legRoom(room).map((r) => pfOf(r, label)); return xs.length ? med(xs) : 0; };
+    const nOf = (room, label) => {
+      const rs = legRoom(room);
+      if (!rs.length) return '-';
+      return `${med(rs.map((r) => r.passes.overall.labels[label]?.n ?? 0))}/${med(rs.map((r) => r.passes.overall.frames))}`;
+    };
     const totals = Object.fromEntries(ROOM_IDS.map((room) => [room, labels.reduce((n, l) => n + cell(room, l), 0)]));
+    const pfTotals = Object.fromEntries(ROOM_IDS.map((room) => [room, labels.reduce((n, l) => n + pf(room, l), 0)]));
+    const frameMean = Object.fromEntries(ROOM_IDS.map((room) => {
+      const xs = results.filter((r) => r.leg === leg && r.room === room).map((r) => r.overall.mean);
+      return [room, xs.length ? med(xs) : 0];
+    }));
     const frameP50 = Object.fromEntries(ROOM_IDS.map((room) => {
       const xs = results.filter((r) => r.leg === leg && r.room === room).map((r) => r.overall.p50);
       return [room, xs.length ? med(xs) : 0];
     }));
     // Order labels by their cost in the LAST room (the busiest), largest first.
     const last = ROOM_IDS[ROOM_IDS.length - 1];
-    labels.sort((a, b) => cell(last, b) - cell(last, a));
+    labels.sort((a, b) => pf(last, b) - pf(last, a));
     out.push(`## ${leg}`);
     out.push('');
-    out.push(`| pass | ${ROOM_IDS.map((r) => `room ${r} ms | share`).join(' | ')} |`);
-    out.push(`| --- | ${ROOM_IDS.map(() => '---: | ---:').join(' | ')} |`);
+    out.push(`| pass | ${ROOM_IDS.map((r) => `room ${r} p50 ms | n/F | pf mean ms | share`).join(' | ')} |`);
+    out.push(`| --- | ${ROOM_IDS.map(() => '---: | ---: | ---: | ---:').join(' | ')} |`);
     for (const l of labels) {
-      out.push(`| ${l} | ${ROOM_IDS.map((room) => { const v = cell(room, l); const t = totals[room]; return `${v.toFixed(2)} | ${t > 0 ? (100 * v / t).toFixed(0) : '0'}%`; }).join(' | ')} |`);
+      out.push(`| ${l} | ${ROOM_IDS.map((room) => { const v = pf(room, l); const t = pfTotals[room]; return `${cell(room, l).toFixed(2)} | ${nOf(room, l)} | ${v.toFixed(2)} | ${t > 0 ? (100 * v / t).toFixed(0) : '0'}%`; }).join(' | ')} |`);
     }
     // Per-label medians do not add: the "labelled total" is the sum of
     // medians (a share denominator), while the GPU SPAN row is the median of
@@ -1305,10 +1456,14 @@ function writePassReport() {
       const xs = results.filter((r) => r.leg === leg && r.room === room && r.passes?.available).map((r) => r.passes.overall.span.p50);
       return [room, xs.length ? med(xs) : 0];
     }));
-    out.push(`| **labelled total (sum of medians)** | ${ROOM_IDS.map((room) => `**${totals[room].toFixed(2)}** | 100%`).join(' | ')} |`);
-    out.push(`| GPU span p50 (first start → last end) | ${ROOM_IDS.map((room) => `${spanP50[room].toFixed(2)} | `).join(' | ')} |`);
-    out.push(`| fenced frame p50 | ${ROOM_IDS.map((room) => `${frameP50[room].toFixed(2)} | `).join(' | ')} |`);
-    out.push(`| gap (frame − span) | ${ROOM_IDS.map((room) => `${(frameP50[room] - spanP50[room]).toFixed(2)} | ${frameP50[room] > 0 ? (100 * (frameP50[room] - spanP50[room]) / frameP50[room]).toFixed(0) : '0'}% of frame`).join(' | ')} |`);
+    const spanMean = Object.fromEntries(ROOM_IDS.map((room) => {
+      const xs = legRoom(room).map((r) => r.passes.overall.span.mean);
+      return [room, xs.length ? med(xs) : 0];
+    }));
+    out.push(`| **labelled total** (sum of p50s / -, sum of pf means) | ${ROOM_IDS.map((room) => `**${totals[room].toFixed(2)}** | | **${pfTotals[room].toFixed(2)}** | 100%`).join(' | ')} |`);
+    out.push(`| GPU span (first start → last end): p50 / mean | ${ROOM_IDS.map((room) => `${spanP50[room].toFixed(2)} | | ${spanMean[room].toFixed(2)} | `).join(' | ')} |`);
+    out.push(`| fenced frame: p50 / mean | ${ROOM_IDS.map((room) => `${frameP50[room].toFixed(2)} | | ${frameMean[room].toFixed(2)} | `).join(' | ')} |`);
+    out.push(`| gap (frame − span), p50 | ${ROOM_IDS.map((room) => `${(frameP50[room] - spanP50[room]).toFixed(2)} | | | ${frameP50[room] > 0 ? (100 * (frameP50[room] - spanP50[room]) / frameP50[room]).toFixed(0) : '0'}% of frame`).join(' | ')} |`);
     out.push('');
     if (cpuLabels.length) {
       // CPU side, per stepped frame: tick (sim) and draw (encode + submit)
@@ -1331,25 +1486,28 @@ function writePassReport() {
       if (!rows.length) continue;
       const segLabels = [...new Set(rows.flatMap((s) => Object.keys(s.labels)))];
       const segCell = (l) => med(rows.map((s) => s.labels[l]?.p50 ?? 0));
+      const segPf = (l) => med(rows.map((s) => (s.labels[l] && s.frames > 0 ? (s.labels[l].n * s.labels[l].mean) / s.frames : 0)));
+      const segN = (l) => `${med(rows.map((s) => s.labels[l]?.n ?? 0))}/${med(rows.map((s) => s.frames))}`;
       const ranked = segLabels.map((l) => [l, segCell(l)]).sort((a, b) => b[1] - a[1]);
       const tot = ranked.reduce((n, [, v]) => n + v, 0);
       perSeg[`${leg}/${segName}`] = ranked;
       const cen = results.find((r) => r.leg === leg && r.room === last)?.segments.find((s) => s.name === segName)?.census;
       const cenTxt = cen ? ` — droplets ${cen.first.droplets ?? '-'}→${cen.last.droplets ?? '-'}, goo quads ${cen.first.gooQuads ?? '-'}→${cen.last.gooQuads ?? '-'}` : '';
-      out.push(`- **${segName}** (${tot.toFixed(2)} ms labelled${cenTxt}): ${ranked.slice(0, 5).map(([l, v]) => `${l} ${v.toFixed(2)}`).join(', ')}`);
+      out.push(`- **${segName}** (${tot.toFixed(2)} ms labelled${cenTxt}): ${ranked.slice(0, 5).map(([l, v]) => `${l} ${v.toFixed(2)} (n ${segN(l)}, pf mean ${segPf(l).toFixed(2)})`).join(', ')}`);
     }
     out.push('');
   }
-  out.push('## Repeatability (fenced frame p50 across repeats)');
+  out.push('## Repeatability (fenced frame across repeats)');
   out.push('');
-  out.push('| leg | room | reps | spread % of min |');
-  out.push('| --- | ---: | --- | ---: |');
+  out.push('| leg | room | reps p50 | spread % of min | reps mean |');
+  out.push('| --- | ---: | --- | ---: | --- |');
   for (const leg of Object.keys(LEGS)) {
     for (const room of ROOM_IDS) {
-      const xs = results.filter((r) => r.leg === leg && r.room === room).map((r) => r.overall.p50);
+      const rs = results.filter((r) => r.leg === leg && r.room === room);
+      const xs = rs.map((r) => r.overall.p50);
       if (!xs.length) continue;
       const mn = Math.min(...xs), mx = Math.max(...xs);
-      out.push(`| ${leg} | ${room} | ${xs.map((x) => x.toFixed(2)).join(' / ')} | ${mn > 0 ? (100 * (mx - mn) / mn).toFixed(0) : '0'}% |`);
+      out.push(`| ${leg} | ${room} | ${xs.map((x) => x.toFixed(2)).join(' / ')} | ${mn > 0 ? (100 * (mx - mn) / mn).toFixed(0) : '0'}% | ${rs.map((r) => r.overall.mean.toFixed(2)).join(' / ')} |`);
     }
   }
   out.push('');
@@ -1357,7 +1515,7 @@ function writePassReport() {
   console.log(text);
   writeFileSync(`${OUT}/passes.md`, text);
   writeFileSync(`${OUT}/passes.json`, JSON.stringify({
-    meta: { url, W, H, repeats: REPEATS, rooms: ROOM_IDS, backend, prelude: PRELUDE, when: new Date().toISOString() },
+    meta: { url, W, H, repeats: REPEATS, rooms: ROOM_IDS, backend, prelude: PRELUDE, crowd: CROWD, scene: SCENE, demo: DEMO_PATH, when: new Date().toISOString() },
     results, perSeg,
   }, null, 2));
   console.log(`wrote ${OUT}/passes.md and ${OUT}/passes.json`);

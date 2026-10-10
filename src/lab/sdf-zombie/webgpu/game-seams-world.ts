@@ -1,21 +1,23 @@
 // src/lab/sdf-zombie/webgpu/game-seams-world.ts
 //
+// The window.__sdfGame world members: zombie and encounter readouts, pose and wound debug, level info, gates, AA, and screen projection.
+//
 // Members lifted verbatim out of game-main.ts's `window.__sdfGame` literal.
 // Every one needed nothing but the GameContext, so this factory takes no deps.
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
 import { setChunkListGain } from './chunk-light-pick';
-import { roomIdAt } from './game-level-leaves';
+import { roomIdAt } from './game-level-rooms';
 import { CHUNK_OBJECT_LIGHT, type ChunkObjectLight } from './baked-chunks';
-import { forEachDrawnChunkMesh, type ChunkMeshSource } from './game-bake-leaves';
+import { forEachDrawnChunkMesh, type ChunkMeshSource } from './game-chunk-bake';
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { ATTACK_TUNING, type SwingVariant } from '../attack';
-import { woundCarveNormal, woundWorldPos } from '../damage';
+import { woundCarveNormal, woundDirToWorld, woundWorldPos } from '../damage';
 import { type Vec3 } from '../types';
 import { sdBody } from '../validate';
-import { openGate } from './game-level-leaves';
+import { openGate } from './game-level-rooms';
 import { RING_TUNING } from '../melee-ring';
 import { MOTION_TUNING } from '../motion';
 import { characterNames } from '../character-registry';
@@ -199,13 +201,25 @@ export function createWorldSeams(ctx: GameContext) {
       if (ndc.z > 1) return null;
       return { x: (ndc.x + 1) * 0.5 * width, y: (1 - ndc.y) * 0.5 * height };
     },
-    /** P3 capture: an actor's wounds in world space — the transform rendering uses. */
+    /** P3 capture: an actor's wounds in world space — the transform rendering uses. `shape` is 'cut' for a blade slot
+     *  (cut-wound.ts; `radius` is then its half-length, `kerf` its half-width), else 'crater'. `prim` / `limb`: the
+     *  primitive it rides (merges only join wounds on one prim). `dirWorld`: a cut's along-slot direction in world
+     *  space at the live yaw (null for a crater). `headRegion`: the wound's head tag, if any (an axe head chop's, a
+     *  split's cut face), and `headSlot`: 'keep' for a head-kept wound, which outlives the wound ring's cap. */
     actorWounds: (actorId: number) => {
       const a = ctx.world.actors.find((q) => q.id === actorId);
       if (!a) return [];
       const posed = a.posed();
       const yaw = a.pose().yaw;
-      return a.wounds().map((w) => ({ pos: woundWorldPos(posed.prims, w, yaw), radius: w.radius, type: w.type }));
+      return a.wounds().map((w) => ({
+        pos: woundWorldPos(posed.prims, w, yaw), radius: w.radius, type: w.type, shape: w.shape ?? 'crater', kerf: w.kerf ?? null,
+        prim: w.primIdx, limb: posed.prims[w.primIdx]?.limb ?? null,
+        dirWorld: w.shape === 'cut' && w.cutDir ? woundDirToWorld(posed.prims, w, w.cutDir, yaw) : null,
+        headRegion: w.headRegion ?? null, headSlot: w.headSlot ?? null,
+        // The carve's depth slab: how deep below the anchor it cuts and the inward unit it is measured along (world);
+        // null for a wound with no slab (the whole sphere is carved).
+        carveDepth: w.carveDepth ?? null, inward: woundCarveNormal(posed.prims, w, yaw), tear: w.tear ?? 0,
+      }));
     },
     /** P3 capture: every actor's head circle and wound circles, projected through the live camera to
      *  output px (row 0 = top); circles behind the camera are omitted. Call after a render, with the
@@ -303,7 +317,8 @@ export function createWorldSeams(ctx: GameContext) {
     get ownerRefoldLimbs() { const z = refoldMode(ctx.world.actors[0]?.view.uniforms.counts2.value.z ?? 0); return z > 3.5; },
     /** Wound EXACT FIXES (counts2.z + 8, 2026-09-21): d-aware per-row wound reach and the
      *  owner re-fold pre-scan (group spheres vs dmg + own bump amplitude). Value-preserving by
-     *  argument; composes with the re-fold mode. off = ship. */
+     *  argument and by measurement; composes with the re-fold mode. ON = ship since 2026-10-08
+     *  (zombie-gpu.ts SHIP_COUNTS2_Z has why); false is the old fixed 0.25 m reach, for the A/B. */
     setWoundExact(on: boolean) {
       for (const a of ctx.world.actors) {
         const z = a.view.uniforms.counts2.value.z;
@@ -533,7 +548,7 @@ export function createWorldSeams(ctx: GameContext) {
       const b = a.mind().debug();
       const p = a.pose().pos;
       return {
-        id: a.id, room: a.room, kind: a.kind, name: a.profileName(), phase:a.debug().phase, state: b.state, alert: b.alert,
+        id: a.id, room: a.room, kind: a.kind, name: a.profileName(), character: a.characterName(), phase:a.debug().phase, state: b.state, alert: b.alert,
         swingT: b.swingT, side: b.side, variant: b.variant,
         hasToken: a.debug().hasToken,
         aimT: b.aimT, cooldown: b.cooldown, sinceFire: a.sinceFire(),
@@ -669,6 +684,10 @@ export function createWorldSeams(ctx: GameContext) {
       bounds: { minX: r.minX, maxX: r.maxX, minZ: r.minZ, maxZ: r.maxZ },
     })),
     tunnels: ctx.world.level.tunnels.map(t => t.name),
+    /** Tunnel rects + axis (early-Z doorway scene, 2026-10-01). */
+    tunnelDefs: ctx.world.level.tunnels.map(t => ({
+      name: t.name, a: t.a, b: t.b, minX: t.minX, maxX: t.maxX, minZ: t.minZ, maxZ: t.maxZ, axis: t.axis,
+    })),
     furniture: ctx.world.level.furniture,
     /** Accent lights per room — capture/measurement seam (pair-shot framing). */
     accents: ctx.world.level.rooms.flatMap(r => r.accents.map(a => ({ room: r.id, ...a })))

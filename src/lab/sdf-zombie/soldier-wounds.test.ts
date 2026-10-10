@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { Wound } from './damage';
+import { MAX_WOUNDS, type Wound } from './damage';
 import { setRaggedCraters, soldierVisualWounds } from './soldier-wounds';
 
 const wound = (n: number): Wound => ({ primIdx:n, local:[n*.01,0,0], radius:.055, type:'pellet', ageSec:n, carveN:[0,0,1], carveDepth:.03 });
@@ -19,12 +19,20 @@ describe('soldier cosmetic wounds (the lobe path, off since ragged craters ship)
     expect(d+a[2]!.radius).toBeLessThan(input[0]!.radius*1.35);
   });
   it('never lets cosmetic lobes evict real wounds', () => {
-    const input=Array.from({length:16},(_,i)=>wound(i));
+    const input=Array.from({length:MAX_WOUNDS},(_,i)=>wound(i));
     expect(soldierVisualWounds(input)).toEqual(input);
   });
   it.each([[[0,0,1]],[[1,0,0]]])('offsets in the wound tangent plane for normal %j',(normal)=>{
     const w={...wound(3),carveN:normal as [number,number,number]},l=soldierVisualWounds([w])[1]!;
     const d=l.local.map((v,i)=>v-w.local[i]!) as [number,number,number];
     expect(d[0]*normal[0]!+d[1]*normal[1]!+d[2]*normal[2]!).toBeCloseTo(0,10);
+  });
+  it('spawns no lobes for a cut: they are crater-shaped and a cut is a slot', () => {
+    const cut: Wound = { ...wound(1), shape: 'cut', cutDir: [0, 1, 0], kerf: 0.01, radius: 0.12 };
+    expect(soldierVisualWounds([cut])).toEqual([cut]);
+    const out = soldierVisualWounds([cut, wound(2)]);
+    expect(out).toHaveLength(5);                 // the cut, the crater, and the crater's three lobes
+    expect(out.filter(w => w.injuryIgnored)).toHaveLength(3);
+    expect(out.slice(2).every(w => w.primIdx === 2)).toBe(true);
   });
 });

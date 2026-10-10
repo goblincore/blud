@@ -62,13 +62,24 @@ model goblin-kit
   style chunky
 
 palette
-  iron    #6e7378
   leather #4a3526
   brass   #9c7a38
   # Near-black, because a sunglass lens is almost all reflection — the COLOUR
   # barely matters and the shine is the whole read. kit-overlay.ts gives it the
   # lowest roughness and the highest env intensity of anything in the kit.
+  # Dark waxed leather for the boots, and a cloth grey for the gaiter cuffs.
+  boot    #2c2a28
+  # Same steel as `iron`; a separate name so the spikes have their own fit pin and (Task 7) their own wear.
+  plate   #6e7378
+  # Worn, rusted steel for the pads, lame, chest yoke, collar and knee plates (owner, 2026-10-02: "some kind of
+  # rust or wear on the metal"). Same steel as `iron`, but its own name so kit-overlay.ts can give it a duller finish
+  # than the owner's shiny iron without touching it. `iron` itself is no longer used by this kit.
+  rustplate #62676b
+  webbing #3b3f42
   glass   #14161a
+  # Glossy black plastic for the sunglass bridge and temple arms (LOOK `black` in kit-overlay.ts); its own
+  # name because `band` is the watch strap and the test pins that to the left wrist.
+  black   #17181a
   band    #1c1c20
   screen  #22282e
 
@@ -115,40 +126,62 @@ parts
   # test rather than one that has to guess which vertices are hidden. That is
   # goblin-kit.test.ts, and it reads the compiled mesh, not this text.
   mirror
-    # PAULDRON — a spherical SHELL over the shoulder orb, continuing into a
-    # flared skirt down the upper arm.
+    # PAULDRON — football-pad shoulders (owner, 2026-10-02, from the reference photo:
+    # big bulbous riveted metal shoulder pads). Rebuilt for the phase-1 body.
     #
-    # Not a dome cap on a tube, which is what this was and what the owner
-    # rejected: the orb punched straight through the plate. .blob's shoulder is
-    # a sphere of radius 0.054 m centred on the clavicle tail, reaching y=1.039,
-    # and the plate crowned at 1.020. WAM's `cap dome` is a SHALLOW cap — it
-    # extends about 0.44 of the ring's radius past the last ring, measured —
-    # so cresting the orb that way needs a ring 0.30 m across on a 1.30 m
-    # goblin. The shell is built explicitly instead: a free ray aimed along the
-    # arm, starting 0.070 m ABOVE the orb (a bone loft cannot start at t<0), with
-    # every ring set to the sphere's own cross-section at that distance —
-    # sqrt(R² - s²) for R = orb + 8 mm clearance — so the plate rides the orb
-    # instead of cutting through it. Past the equator it stops following the
-    # sphere and flares over the arm.
+    # THE BODY CHANGED UNDER THE OLD ONE. .blob's shoulder is now a round of r 0.0405 m
+    # (measured, measure.md; it was 0.054) centred on the clavicle tail at
+    # (0.078, 0.985, 0.054) m, and the arm axis is (0.366, -0.906, -0.209) (from the
+    # upperarm t0 -> t0.25 samples). The pad is a SHELL around that sphere, the same
+    # technique as before (a bone loft cannot start at t<0, so it is a free ray aimed
+    # along the arm, with each ring set from the shell's own profile), but BULBOUS on
+    # purpose: R = 0.060 m, 19.5 mm over the orb, where the old plate hugged it to 8 mm.
+    # That is the football-pad read.
     #
-    # The offset is 0.070 m back along the arm's unit direction
-    # (0.366, -0.906, -0.209), in height fractions. `pitch=12 tilt=22` re-aims
-    # the ray along that same arm axis — NOTE the pitch sign is WAM's, the
-    # negation of .blob's -12 (see the header).
+    # PROFILE. s is metres along the arm axis from the orb centre (negative = up toward
+    # the neck). Above the equator the rings follow the sphere, rho = sqrt(R^2 - s^2).
+    # Below it they follow an ellipse, rho = R sqrt(1 - (s/0.105)^2), tapering onto the
+    # arm, and the last ring flares to a lip (0.043) so the rim reads as an edge. The arm
+    # flesh at the rim is r 0.030, so the lip stands ~13 mm off it. ring w/d = 2 rho / 1.30:
+    #   s -0.054 rho .0262 | -0.040 .0447 | -0.020 .0566 | 0 .0600
+    #   s +0.025 .0583     | +0.050 .0528 | +0.072 .0437 | +0.085 .0430 (lip)
+    # The ray starts at s = -0.054: 0.054 m back along the arm from the orb centre, which is
+    # offset (-0.01976, 0.04892, 0.01129) m = (-0.0152, 0.0376, 0.0087) of height. It runs
+    # 0.139 m (0.1069 of height) to s +0.085, so ring t = (s + 0.054) / 0.139. `pitch=12
+    # tilt=22` re-aims the ray down the same arm axis (WAM's pitch sign is .blob's negated).
     #
-    # ITS INNER RIM IS BURIED IN THE CHEST, and that is forced, not sloppy. The
-    # orb is 108 mm across and sits 78 mm from the body axis, so ANY ring that
-    # encloses it reaches past the centreline; there is no shell that both
-    # covers the orb and clears the ribs. Real pauldrons tuck under the same
-    # way. goblin-kit.test.ts allows the tuck and bounds it.
-    loft pauldron bone=upperarm at=0.0 offset=(-0.0197,0.0487,0.0112) dir=down pitch=12 tilt=22 len=0.200 material=iron
-      ring 0.05 w=0.038 d=0.036
-      ring 0.15 w=0.083 d=0.080
-      ring 0.27 w=0.095 d=0.092
-      ring 0.40 w=0.080 d=0.078
-      ring 0.58 w=0.092 d=0.088
-      ring 0.78 w=0.086 d=0.082
+    # ITS INNER RIM IS STILL BURIED IN THE CHEST, forced as before: the shell is 120 mm
+    # across and its centre is 78 mm from the body axis, so it reaches x 0.018 where the
+    # chest wall is at ~0.056. Deepest vertex ~38 mm in, bounded in goblin-kit.test.ts.
+    # BIGGER (owner, 2026-10-02, with the yoke: "slightly oversized"): R 0.060 -> 0.066, the
+    # lower ellipse L 0.105 -> 0.115, lip at s +0.092. Profile now (s m, rho m):
+    #   s -0.060 .0275 | -0.044 .0492 | -0.022 .0622 | 0 .0660
+    #   s +0.026 .0643 | +0.052 .0589 | +0.078 .0485 | +0.092 .0470 (lip)
+    # Ray from s -0.060: offset (-0.02196, 0.05436, 0.01254) m = (-0.0169, 0.0418, 0.0096) of
+    # height, length 0.152 m = 0.1169, ring t = (s + 0.060) / 0.152. `side=0.005` moves every
+    # ring 6.5 mm outward so the bigger shell does not tuck deeper into the chest.
+    loft pauldron bone=upperarm at=0.0 offset=(-0.0169,0.0418,0.0096) dir=down pitch=12 tilt=22 len=0.1169 material=rustplate
+      ring 0.000 w=0.0423 d=0.0423 side=0.005
+      ring 0.105 w=0.0757 d=0.0757 side=0.005
+      ring 0.250 w=0.0957 d=0.0957 side=0.005
+      ring 0.395 w=0.1015 d=0.1015 side=0.005
+      ring 0.566 w=0.0989 d=0.0989 side=0.005
+      ring 0.737 w=0.0906 d=0.0906 side=0.005
+      ring 0.908 w=0.0746 d=0.0746 side=0.005
+      ring 1.000 w=0.0723 d=0.0723 side=0.005
       cap start=dome end=none
+
+    # PAULDRON LAME — the second, overlapping plate under the pad (the reference's pads
+    # are stacked), a flared band on the upper arm. Chain loft on the upperarm bone
+    # (0.235 m): t 0.30 is s 0.0705 m from the orb centre, so it starts inside the pad's
+    # last 15 mm and stands outside it (rho 0.047 vs the pad's 0.0437 there; coincident
+    # surfaces would z-fight). Arm flesh r 0.0295 at t0.5, so the narrowest ring (0.040)
+    # clears it by 10 mm. ring w/d = 2 rho / 1.30: rho .047, .050, .041.
+    loft lame bones=upperarm..upperarm material=rustplate
+      ring 0.30 w=0.0723 d=0.0723
+      ring 0.38 w=0.0769 d=0.0769
+      ring 0.52 w=0.0631 d=0.0631
+      cap start=none end=none
 
     # BRACER — a leather cuff. Flesh is 0.045 the whole way down the forearm.
     loft bracer bones=forearm..forearm material=leather
@@ -157,27 +190,93 @@ parts
       ring 0.84 w=0.062 d=0.062
       cap start=none end=none
 
-    # GREAVE — the same idea down the shin, stopping above the ankle.
-    loft greave bones=shin..shin material=iron
-      ring 0.14 w=0.078 d=0.078
-      ring 0.45 w=0.076 d=0.076
-      ring 0.72 w=0.070 d=0.070
+    # BOOT SHAFT, CUFF AND FOOT — rebuilt 2026-10-02 against the phase-1 body
+    # (owner: "the boots clip"). The old greave and boot were sized from a
+    # table 10-30% fatter than the sinew goblin (measure.md in
+    # docs/dev-notes/2026-10-02-goblin-armour/), so they stood proud of a
+    # shin that had shrunk. Every ring below is the MEASURED flesh (metres,
+    # marched from sdBody per limb cluster, see measure.md) divided by 1.30 and
+    # then scaled by 1.19: 8% for `style chunky`'s facet midpoints sitting at
+    # cos(22.5) = 92.4% of the nominal radius, and 10% so the smooth-min does
+    # not bulge through between ring samples. Boots are worn UNDER the painted
+    # trousers' hem, so the cuff just covers the paint seam.
+    #
+    # Shaft: the shin chain from t0.42 (y 0.31 m) to the ankle. Flesh w there:
+    # 0.0585 m at t0.42, 0.0530 at t0.60, 0.0489 at t0.75 (the thinnest point),
+    # and the ankle knob 0.0665 at t1.0.
+    loft bootshaft bones=shin..shin material=boot
+      ring 0.42 w=0.056 d=0.056
+      ring 0.60 w=0.051 d=0.051
+      ring 0.78 w=0.047 d=0.047
+      ring 0.92 w=0.054 d=0.054
+      ring 1.00 w=0.062 d=0.062
       cap start=none end=none
 
-    # BOOT — pointed, and lofted along a FREE RAY rather than the foot bone,
-    # because the foot's toe blob (`at=0.92`, deep=0.95) bulges past the bone's
-    # own tail. A boot ending at t=1.0 of the foot bone stops short of the toe
-    # it is supposed to cover. The ray is the foot bone continued: same origin
-    # (shin tail), same `dir=fwd`, a third longer.
-    loft boot bone=shin at=1.0 dir=fwd len=0.168 frame=up material=leather
-      ring 0.03 w=0.086 d=0.084
-      ring 0.28 w=0.076 d=0.062
-      ring 0.55 w=0.080 d=0.056
-      ring 0.78 w=0.062 d=0.040
-      ring 0.92 w=0.034 d=0.026
-      ring 1.00 w=0.012 d=0.010 tip
-      cap start=none end=point
+    # Cuff: a gaiter band that folds over the boot top, a little wider than the
+    # shaft and flaring out at the top edge so it reads as cloth over leather.
+    loft cuff bones=shin..shin material=webbing
+      ring 0.34 w=0.062 d=0.062
+      ring 0.40 w=0.066 d=0.066
+      ring 0.50 w=0.059 d=0.059
+      cap start=none end=none
+
+    # Foot: a free ray along the foot bone's direction starting 0.040 m BEHIND
+    # the ankle, because the flesh heel reaches z -0.037 m (ankle z -0.0062) and
+    # a loft cannot start at t<0 of a bone. Rings are by z (metres, ankle at
+    # -0.006): w is lateral, d is height (frame=up). Measured flesh width at
+    # the ring's z: heel 0.0345, ankle knob 0.0665, arch 0.052, ball 0.072, toe
+    # pad 0.074 (to z +0.146). The foot is a flat bar 0.04-0.05 m tall centred
+    # on y 0.157.
+    #   z -0.046 w .046 d .060 | -0.030 .062 .076 | -0.006 .080 .082
+    #   z +0.020 .074 .076     | +0.050 .066 .066 | +0.085 .088 .064
+    #   z +0.124 .092 .058     | +0.152 .070 .046 | +0.172 .040 .030 tip
+    loft boot bone=shin at=1.0 offset=(0,0,-0.0306) dir=fwd len=0.1677 frame=up material=boot
+      ring 0.00 w=0.0354 d=0.0462
+      ring 0.07 w=0.0477 d=0.0585
+      ring 0.18 w=0.0615 d=0.0631
+      ring 0.30 w=0.0569 d=0.0585
+      ring 0.44 w=0.0508 d=0.0508
+      ring 0.60 w=0.0677 d=0.0492
+      ring 0.78 w=0.0708 d=0.0446
+      ring 0.91 w=0.0538 d=0.0354
+      ring 1.00 w=0.0308 d=0.0231 tip
+      cap start=dome end=point
+
+    # KNEE PLATE — a squarish collar with the middle ring pushed forward so it
+    # reads as a kneecap, over the bend: a chain loft across thigh..shin, which
+    # WAM skins with blended weights at the joint (the ogre and clown kits do the
+    # same), so it follows the knee instead of creasing. The chain is 0.29 +
+    # 0.27 = 0.56 m, knee at t 0.518. Flesh w: 0.0700 m at thigh t0.9, 0.0774 at
+    # the knee, 0.066 at shin t0.15.
+    loft kneeplate bones=thigh..shin material=rustplate shape=squarish
+      ring 0.44 w=0.064 d=0.064
+      ring 0.52 w=0.076 d=0.080 fwd=0.006
+      ring 0.59 w=0.066 d=0.066
+      cap start=none end=none
   end
+
+  # PAULDRON SPIKES — LEFT PAD ONLY (owner, 2026-10-02: "kind of curious in adding some spikes
+  # on one or both of the pauldrons"). One side on purpose: it is a mismatched, scavenged look,
+  # and it is easy to mirror if the owner wants both (move these into the `mirror` block and
+  # use `on=pauldron`). They are outside the mirror block like the watch, pinned to upperarm.l.
+  #
+  # `on=pauldron.l` snaps each base to the pad's surface and sinks it in, so the spikes are flush
+  # by construction (WAM SPEC, "on="). The offsets are only rough aims, as that section says:
+  # points on the R 0.066 dome about the orb centre, in height fractions (metres / 1.30), toward
+  # (0.45, 0.86, 0) for the tall one and (0.50, 0.72, +/-0.47) for the front and back ones.
+  # `dir=side` starts each outward and `up=` bends it skyward, which gives a curved horn-like
+  # spike and sidesteps WAM's sweep taking no outward tilt of its own. Radii are height
+  # fractions: base ~21 mm radius on the tall one, tall spike, 0.075 f long, flankers 0.056 f. First pass was r 0.011/0.007 with up=35 per segment and rendered as thin flat blades; the second is chunkier and bends further up (55 + 40 degrees) so the tips stand upright like spikes.
+  # `plate` (not `iron`) so goblin-kit.test.ts's plate-fit pin does not have to cover the tips.
+  sweep spike_a bone=upperarm.l at=0.0 offset=(0.0235,0.045,0) dir=side on=pauldron.l material=plate
+    seg len=0.030 r=0.016 up=55
+    seg len=0.045 r=0.009 up=40 tip
+  sweep spike_b bone=upperarm.l at=0.0 offset=(0.0255,0.0367,0.024) dir=side on=pauldron.l material=plate
+    seg len=0.024 r=0.012 up=50
+    seg len=0.032 r=0.007 up=40 tip
+  sweep spike_c bone=upperarm.l at=0.0 offset=(0.0255,0.0367,-0.024) dir=side on=pauldron.l material=plate
+    seg len=0.024 r=0.012 up=50
+    seg len=0.032 r=0.007 up=40 tip
 
   # SMARTWATCH — LEFT WRIST ONLY, matching the FPV arm asset (goblin-arm.glb,
   # F-arm.1). Outside the mirror block and pinned to forearm.l so no .r copy
@@ -193,153 +292,210 @@ parts
   attach watchbody bone=forearm.l kind=box at=0.92 offset=(0,0,0.040) size=0.026 w=0.030 d=0.008 on=watchband material=band
   attach watchface bone=forearm.l kind=box at=0.92 offset=(0,0,0.048) size=0.020 w=0.024 d=0.002 on=watchbody material=screen
 
-  # BREASTPLATE — a cuirass over the ribs AND the belly, down to the belt.
+  # CHEST YOKE — the shallow plate between the pauldrons (owner, 2026-10-02: "football
+  # pads", not a cuirass). The old breastplate was a full tube from belt to collar, which
+  # is exactly what read as a metal shirt, and it was sized for a torso 10-30% fatter. The
+  # trunk is now a DARK PAINTED SHIRT in goblin.blob, so the armour only has to be the
+  # shoulder harness: this yoke closes the gap between the two pads over the upper chest
+  # and leaves the shirt (and, next task, the crossed bandoliers) showing below it.
   #
-  # It used to stop at the bottom of the chest bone, which left the whole gut
-  # bare: the owner's verdict was "kind of like a crop top". Lofted along the
-  # whole hips..chest CHAIN now rather than one bone, starting just above the
-  # belt (chain t 0.20 lands at hips t 0.74, and the belt tops out at 0.68).
+  # OVERSIZED ON PURPOSE (owner, 2026-10-02: "slightly oversized, like an XL instead of
+  # a small t-shirt"; the first fit read as a tight tee). So this is not flesh + a margin any
+  # more: it is a LOOSE plate that stands off the chest and flares toward the hem, flesh x
+  # 1.20 in width at the hem (the upper arms hang right beside the chest, so width is capped:
+  # the arm's inner edge is x 0.0915 at y 0.878 and 0.0685 at y 0.931 (measure.md), and the
+  # rings stay under it below the pad), x 1.28-1.36 in width higher up (hidden under the
+  # pads, and above the shoulders there is no arm), and x 1.38 in DEPTH, where nothing limits
+  # it. The hem drops to the bottom of the chest bone (y 0.837 m).
   #
-  # The profile is not a smooth taper and should not be: it swells over the
-  # gut, pinches at the waist, and swells again over the ribs, because that is
-  # where the flesh under it goes. Every w/d is measured off the .blob field —
-  # a plate that ignores the pinch either floats at the waist or cuts the
-  # belly.
-  loft breastplate bones=hips..chest material=iron frame=fwd
-    # +10 mm of margin over the measured flesh, not the 2-3 mm the other
-    # pieces use. The measurements are taken AT ring positions, and smooth-min
-    # bulges the torso BETWEEN them — so a plate sized to the samples is
-    # locally too tight and the belly pushes through it in green spots. The
-    # fit test cannot see this: it asks whether armour is inside flesh, and
-    # this is flesh outside armour. Coverage, not containment — the same
-    # distinction that hid the pauldron bug.
-    ring 0.20 w=0.156 d=0.208
-    ring 0.40 w=0.150 d=0.192
-    ring 0.60 w=0.130 d=0.156
-    ring 0.76 w=0.136 d=0.154
-    ring 0.90 w=0.128 d=0.136
-    ring 1.00 w=0.120 d=0.124
+  # Lofted on the chest bone alone (not a free ray: the bone is pitched 9 degrees and a
+  # vertical ray drifts off it), t 0.00-0.97 of the 0.150 m bone. Flesh (measure.md, torso
+  # cluster): chest t0 w 0.1516 d 0.1742, t0.25 0.1405 / 0.159, t0.50 0.124 / 0.140, t0.75
+  # 0.1175 / 0.1348, t0.95 0.1124 / 0.131. Rings = flesh x factor / 1.30. History: the first
+  # pass x1.10 had a scalloped edge and hairlines (the body grain's surface noise is a
+  # millimetre or two deep and z-fought with a plate that close), x1.18 fixed that and read
+  # as a tight tee, this is the loose version.
+  loft yoke bones=chest..chest frame=fwd material=rustplate
+    ring 0.30 w=0.1262 d=0.1425
+    ring 0.50 w=0.1126 d=0.1380
+    ring 0.70 w=0.1085 d=0.1400
+    ring 0.85 w=0.1058 d=0.1450
+    ring 0.94 w=0.1060 d=0.1560
+    ring 1.00 w=0.1010 d=0.1440
     cap start=none end=none
 
-  # SHADES — one bar across both eyes, NOT a mirrored pair.
-  #
-  # A mirror block would author two lenses and leave a gap over the nose; real
-  # sleek shades are a single sweep. Lofted along a free ray running `side`
-  # from a point offset to the goblin's right and forward of the face, so it
-  # crosses at eye height. That height is not a guess: the face sheet puts the
-  # eyes at eyeRise 0.44, which over a face spanning y 1.096..1.354 m lands at
-  # y=1.240 — skull t 0.51.
-  #
-  # `frame=up` pins the ring's axes so `d` is the lens HEIGHT and `w` the
-  # front-to-back thickness. Without it the frame flips somewhere along a
-  # near-horizontal path and half the bar stands at right angles to the rest.
-  # Thin in w, tall in d, pinched at the bridge and flared at the temples, with
-  # both ends drawn to a point — that pinch-flare-point profile is the whole
-  # difference between shades and a blindfold.
-  # t=0.45, not the 0.51 the eyeRise arithmetic gave. That put the bar on the
-  # BROW with both eyes glowing underneath it, which reads as a headband. The
-  # discrepancy is the face projection: the sheet's v runs over the projected
-  # ellipsoid, not linearly down the skull bone, so the painted eyes sit lower
-  # on the actual geometry than their uv suggests. Trust the render here.
-  loft shades bone=skull at=0.45 offset=(-0.094,0.004,0.086) dir=side len=0.188 frame=up material=glass
-    ring 0.00 w=0.016 d=0.024 tip
-    ring 0.10 w=0.023 d=0.046
-    ring 0.40 w=0.020 d=0.036
-    ring 0.60 w=0.020 d=0.036
-    ring 0.90 w=0.023 d=0.046
-    ring 1.00 w=0.016 d=0.024 tip
-    cap start=point end=point
-
-  # BELT — around the pelvis, above the widest part of the gut. Deliberately
-  # not at the fattest ring: a belt there reads as a stripe painted on the
-  # stomach, whereas one above it reads as something the stomach hangs over,
-  # which is the goblin note.
-  loft belt bones=hips..hips material=leather
-    ring 0.32 w=0.122 d=0.156
-    ring 0.54 w=0.134 d=0.182
-    ring 0.68 w=0.140 d=0.190
+  # COLLAR AND NECK-LINE (owner, 2026-10-02, looking at the render: "the chestplate should be
+  # extended up to the neck and have like a collar"; the first yoke stopped 0.1 m short and the
+  # shirt showed as a white block between its top edge and the neck). Three parts:
+  #   * the yoke now reaches the chest bone's tail, y 0.985 m, which is the neck's head at
+  #     (0, 0.985, 0.054). A first pass tapered the top rings in to the neck's width (0.0910 x
+  #     0.1010) and the painted shirt poked through the plate as white patches: the chest flesh is
+  #     still 0.1124 wide x 0.131 deep at t0.95 (measure.md), so the plate must stay >= 1.2x that
+  #     right up to the top (0.1060 x 0.1300, /1.30 of 0.1124 x 1.22 and 0.131 x 1.29) and narrow
+  #     only in the last ring. A second pass CLOSED THE TOP WITH `cap end=flat` and the fit test
+  #     caught it: that disc's centre vertex sits 52.8 mm inside the neck, and it would poke out
+  #     whenever the head moves against the chest (the goblin-kit header's rule: nothing
+  #     limb-wrapping is capped flat). It is not needed: the collar's base ring equals the
+  #     yoke's top ring, so the two lofts are one continuous shell.
+  #   * a stand-up COLLAR on the neck bone, a separate loft because a chain loft across the
+  #     chest->neck bend (26 degrees) with rings this wide folds in WAM (the belt did the same).
+  #     Neck flesh (measure.md "NECK", head-limb cluster): w 0.0800 d 0.0812 at the base (y 0.985),
+  #     0.0768 / 0.0840 at t0.25, 0.0732 / 0.0768 at t0.5 (y 1.052); the jaw starts at t~0.8, so the
+  #     collar tops out at t0.5. Its base ring matches the yoke's top ring (0.1010 x 0.1200) so the
+  #     two are one surface, then it drops to a LOOSE neck fit (x1.40) and FLARES to x1.70 at the rim
+  #     so it reads as a turned-out collar. /1.30: 0.1010 x 0.1200, 0.0900 x 0.1090, 0.0860 x 0.1010,
+  #     0.0957 x 0.1005. THE WAIST IS DEEPER THAN THE NECK on purpose: the chest flesh's rounded top
+  #     bulges forward to z 0.112-0.116 m at y 0.985-1.0 and 0.099 at y 1.02 (probed 2026-10-02, the
+  #     neck itself only reaches 0.094), so a neck-shaped waist (d 0.0900) left 0-4 mm of cover and
+  #     the shirt showed through as a white patch under the collar. d 0.1090 / 0.1010 puts the front
+  #     ~12 mm over that bulge.
+  #   THEN DEEPER STILL (same session): a probe of iron front z against flesh front z at x=0 gave
+  #     only 6-15 mm of cover over y 0.90-1.0 and, after the 7.6% an 8-sided ring loses at a facet
+  #     midpoint and the body grain's surface noise, the shirt still flashed through as a white
+  #     strip under the collar. The owner wants it oversized anyway, so the UPPER front now stands
+  #     off like the hem does (~35 mm): yoke d 0.1380 / 0.1400 / 0.1450 / 0.1560 / 0.1440 at t0.50 /
+  #     0.70 / 0.85 / 0.94 / 1.00, collar d 0.1440 / 0.1300 / 0.1180 / 0.1005 (base / 0.12 / 0.28 /
+  #     rim). Widths are unchanged: the hanging arms limit those, depth is free.
+  loft collar bone=neck at=0.0 offset=(0,-0.022,0) dir=up pitch=5 len=0.0778 frame=fwd material=rustplate
+    ring 0.000 w=0.0960 d=0.1380
+    ring 0.283 w=0.0990 d=0.1420
+    ring 0.443 w=0.0900 d=0.1300
+    ring 0.752 w=0.0860 d=0.1180
+    ring 1.000 w=0.0957 d=0.1005
     cap start=none end=none
 
-  # BUCKLE — brass on the front of the belt. NOT `on=belt`: that snaps the
-  # origin to the belt's surface and then sinks it in by an inset, which buried
-  # this so far that even its FRONT face measured 1 mm inside the goblin. It is
-  # placed by hand and checked by the fit test instead.
-  attach buckle bone=hips kind=box at=0.52 offset=(0,0,0.135) size=0.030 w=0.044 d=0.020 material=brass
+  # THE COLLAR OVERLAPS THE YOKE (found by the render, same session): the yoke rides the chest
+  # bone and the collar the neck bone, whose axes differ by ~26 degrees (chest +9, neck -17 in
+  # the kit skeleton), so two lofts whose end rings are the same size still meet at an ANGLE and
+  # leave a wedge-shaped gap at the front, which showed as a clean white rectangle of shirt. So
+  # the collar is a FREE RAY starting 0.022 of height (29 mm) BELOW the neck base, along the
+  # neck's world axis (`dir=up pitch=5`: a ray's pitch is world-referenced, and the spine1 +13,
+  # chest +9, neck -17 chain nets to +5), its first ring smaller than the yoke's top ring
+  # (0.0960 x 0.1380 against 0.1010 x 0.1440) so that part is buried inside the yoke, not
+  # fighting it. Length 0.0778 = 0.022 + the 0.0538 to neck t0.5. Ring t = (0.022 + neck-t x
+  # 0.1077) / 0.0778 for the neck rings above (neck base 0.283, t0.12 0.443, t0.28 0.752).
 
-  # FAULD — a short flared skirt of plate hanging off the belt. This replaces a
-  # cloth kilt that reached the knees; the owner's verdict was "way too long",
-  # and it also clipped both thighs at the hem and the gut at the waist.
+  # NO BANDOLIERS (owner, 2026-10-02, after seeing them: "its too busy"). They were two crossed
+  # leather straps (4 lofts) with 26 brass cartridges (box attaches), generated into this file;
+  # the X read clearly but crowded the chest. The generated lines are saved verbatim in
+  # docs/dev-notes/2026-10-02-goblin-armour/bandoliers-removed.wam.txt: paste them back in before
+  # the SHADES block to restore them (the derivation is in that folder's notes.md).
+
+  # SHADES — ROUND LENSES WITH EAR HOOKS (owner, 2026-10-02: "round lens sunglasses and give them
+  # ear hooks that go up to his ears"). They replace the single wrap-around bar the first
+  # version was; that read as a blindfold, and its justification (one sweep across both eyes, a
+  # mirror pair would leave a gap over the nose) is answered here by an explicit nose bridge.
   #
-  # Short is not just taste here. The thighs splay as they descend, so a skirt
-  # that hangs any distance has to flare very wide to clear them — by the knee
-  # it needs to be wider than the goblin's own belly. Stopping high keeps it
-  # plate-shaped instead of tent-shaped.
-  loft fauld bone=hips at=0.36 dir=down len=0.072 material=iron frame=fwd
-    ring 0.00 w=0.128 d=0.162
-    ring 0.55 w=0.158 d=0.196
-    ring 1.00 w=0.186 d=0.222
-    cap start=none end=none
-
-  # CLEAVER — a compound prop in its own clean local frame: haft along the
-  # group's +Y, blade above the grip. Aiming the GROUP is one number; rotating
-  # a hand-derived world angle for each of two lofts is three, and they have to
-  # agree. `dir=down pitch=-58` drops the blade forward of the fist.
-  group cleaver bone=hand.r at=1.0 dir=up pitch=16 yaw=-20
-    # BLADE-UP, HEAD NEAR THE FIST. Aimed `dir=down` with the blade at the far
-    # end of the haft — which is the obvious way to author "held point down" —
-    # this read as a SPADE from every angle: a long shaft with a flat paddle on
-    # the bottom is a shovel, whatever you call the material. A chopper's mass
-    # sits at the hand end. The haft now hangs BELOW the fist as a stub pommel
-    # and the head rises just above it.
-    #
-    # `yaw=-20` swings the head outward. Without it the blade sweeps through
-    # the fauld — kit-against-kit intersection, which nothing checks: the fit
-    # test measures armour against FLESH, and two pieces of plate occupying the
-    # same space are invisible to it.
-    loft haft at=(0,-0.058,0) dir=up len=0.140 material=leather
-      ring 0.00 w=0.024 d=0.024
-      ring 1.00 w=0.019 d=0.019
-      cap start=dome end=flat
-    loft blade at=(0,0.048,0) dir=up len=0.112 material=iron shape=box
-      # Tapering OUTWARD to the tip is what makes a cleaver read as a cleaver
-      # rather than a paddle: mass at the far edge, thin at the haft.
-      ring 0.00 w=0.038 d=0.014
-      ring 0.32 w=0.070 d=0.012
-      ring 0.74 w=0.090 d=0.010
-      ring 1.00 w=0.094 d=0.007
+  # Where things are (metres, measure.md "HEAD"): the skull bone at t0.45 is (0, 1.2239, 0.0037).
+  # The painted eyes sit at about x +/-0.045 and y 1.229 (the old bar's height, eyeballed in the
+  # lab because the face sheet's v does not run linearly down the skull). At y 1.24 the face's
+  # front surface is z 0.094 at x 0.045 and falls away to 0.0685 at x 0.07, while the nose
+  # bridge on the centreline is z 0.113: so a FLAT lens at z 0.122 clears the nose bridge by
+  # 9 mm and floats 28 mm off the cheek, which is what sunglasses on a hooked nose do. The head's
+  # half-width at y 1.24 is 0.0505 at z 0.09, 0.075 at z 0.06, 0.086 at z 0.03.
+  #
+  # LENS: a 16-sided disc (`sides=16`; the kit's `style chunky` is 8-sided, which would be a
+  # stop sign), 56 mm across (0.0431 of height) and 8 mm thick, a free ray along +z from
+  # (0.045, 1.229, 0.122): offset from skull t0.45 = (0.045, 0.0052, 0.1183) m /1.30 = (0.0346,
+  # 0.004, 0.091). Material `glass`, so kit-overlay's emissive keeps the goblin's red eyes
+  # reading through the lens (see its docstring). Mirrored, so both lenses.
+  #
+  # TEMPLE ARM: a sweep from the lens's outer edge (x 0.073) aimed back and OUTWARD, because
+  # the head is 0.075-0.086 half-wide behind the cheek and a straight-back arm would run
+  # into it. `dir=back yaw=-16` (a sweep takes no explicit vector, and a NEGATIVE yaw turns a
+  # back-pointing sweep toward +x; WAM flips yaw under mirroring) with a 6 degree rise: tan(16) = 0.28 gains 28 mm of x over 0.1 m (x 0.090 at z 0.06, 0.099
+  # at z 0.03, both >= 8 mm clear of the head), then a short bend UP (65 degrees, 20 mm) lifts it
+  # from y 1.239 to the ear base at y ~1.26 (the ear root is at skull t0.58, offset
+  # (0.086, 0.006, -0.006)), and a last small bend back hooks behind the ear. Radius 4.5 mm.
+  mirror
+    loft lens bone=skull at=0.45 offset=(0.0346,0.004,0.091) dir=fwd len=0.0062 frame=up sides=16 material=glass
+      ring 0.00 w=0.0431 d=0.0431
+      ring 1.00 w=0.0431 d=0.0431
       cap start=flat end=flat
+    sweep temple bone=skull at=0.45 offset=(0.0562,0.004,0.091) dir=back yaw=-16 sides=8 material=black
+      seg len=0.075 r=0.0035 up=6
+      seg len=0.016 r=0.0032 up=65
+      seg len=0.010 r=0.0030 back=35 tip
+  end
+  # NOSE BRIDGE — the one piece that spans the centreline: 30 mm between the lenses' inner
+  # edges (x +/-0.017), 6 mm above the lens centre and so 10 mm clear of the nose.
+  loft bridge bone=skull at=0.45 offset=(-0.0115,0.012,0.091) dir=side len=0.0230 sides=8 material=black
+    ring 0.00 w=0.0058 d=0.0058
+    ring 1.00 w=0.0058 d=0.0058
+    cap start=flat end=flat
+
+  # UTILITY BELT — AT THE WAIST, ON THE SPINE (2026-10-03, owner, seeing the seated pose: "when he sits his belt has all kinds of
+  # clipping issues where it doesn't really move with his waist"). It used to ride the HIPS bone at y 0.669-0.705 m, which is the
+  # hip joint's own height: a rigid hoop on the pelvis, so when the spine pitched forward the belly moved and the belt did not,
+  # and the thighs, which lie flat forward at exactly that height when he sits (the thigh top is y 0.751 at the hip), swung
+  # straight through it and its front pouches. Now it sits at the WAIST, the narrowest part of the torso (spine1 t0.45-0.79,
+  # y 0.766-0.812), skinned to `spine1` so it bends with the belly it wraps, and the pouches hang inside that band (their bottoms
+  # are at y 0.757, just over the thigh top). The paint seam between pants and shirt (y 0.705) is now below the belt: the tank
+  # top hangs untucked over the pants, a dirty wife-beater's natural line.
+  #
+  # RESIDUAL, HONEST: pitching the spine 20 degrees about the hip drops a point 0.085 m in front of the pivot by about 3 cm, so
+  # the belt front still settles to within ~1 cm of the thigh top when seated. The belly flesh meets the thigh there too, so
+  # the belt follows the belly instead of passing through it, but a rigid ring cannot fold; the lab frames say whether it reads.
+  #
+  # Sizes: the spine1 flesh sections from measure.md (torso cluster; nothing else reaches this high in x, the thigh tops end at
+  # y 0.751): t0.5 w 0.1409 d 0.1635 (centre +0.0058 forward of the bone axis), t0.25 0.1542 / 0.1748, t0.75 0.1462 / 0.1632,
+  # t1.0 0.1516 / 0.1742; interpolated at the ring heights. Rings = flesh x 1.10 / 1.30 (the facet margin and a hair of belt, as
+  # before), `fwd` carries the section's forward offset 0.0045 of height.
+  loft belt bones=spine1..spine1 material=leather
+    ring 0.45 w=0.1199 d=0.1396 fwd=0.0045
+    ring 0.62 w=0.1214 d=0.1383 fwd=0.0045
+    ring 0.79 w=0.1247 d=0.1396 fwd=0.0045
+    cap start=none end=none
+
+  # BUCKLE — brass, front centre, hand-placed (not `on=belt`, which buried the first one). NOTE an `attach` box HANGS DOWN from its
+  # anchor (found 2026-10-03: the pouches' tops sat at the anchor and their bodies dangled below the belt). spine1 t0.74 is y 0.8055 m
+  # (the box then spans 0.766-0.8055, exactly the belt band) with the bone axis at z 0.0224; the belt's front vertex is 0.1189 m
+  # forward, so the 0.026 m deep box is centred at z 0.1299 m = offset 0.0827 of height: front face 11 mm proud, back 2 mm inside.
+  attach buckle bone=spine1 kind=box at=0.74 offset=(0,0,0.0827) size=0.030 w=0.044 d=0.020 material=brass
+
+  # POUCHES — at the belt's FRONT CORNERS, anchored at the TOP of the belt band (spine1 t0.79, y 0.812 m) so they span 0.768-0.812
+  # and no longer dangle toward the thighs (their bottoms are over the 0.751 thigh top). The hanging forearm owns the flank (the
+  # soldier kit's lesson), so x stays at 0.062 m. At t0.79 the bone axis is z 0.0238 and the belt ellipse at x 0.062 is z 0.0881
+  # (0.0238 + 0.0058 + 0.0907 x sqrt(1 - (0.062/0.0811)^2)). The first pass centred them 7 mm outside that and their INNER
+  # corners sat 10.8 mm inside the belly (the octagonal belt and the flesh ellipse differ at a corner): centred at z 0.1078 m =
+  # offset 0.0646 of height the inner corners were still 2.6 mm in, so 0.0676 (z 0.1117 m); it measures 1+ mm clear. Boxes are 8 vertices each.
+  mirror
+    attach pouch bone=spine1 kind=box at=0.79 offset=(0.0477,0,0.0676) size=0.034 w=0.030 d=0.018 material=leather
   end
 
-  # SHIELD — a dished disc on the off hand. `dir=side` points the group's own
-  # +Y out along the arm, so the disc lies across it and the boss faces away
-  # from the goblin.
-  # SHIELD — `dir=fwd`, NOT `dir=side`. A group's aim points its local +Y, and
-  # the disc is lofted along that +Y, so the aim IS the shield's face normal.
-  # Pointed sideways the shield faces out along the arm and presents edge-on
-  # from the front — a thin sliver that reads as a coin, which is what the
-  # first version did. `yaw=-22` turns it slightly outward so it is not a flat
-  # circle head-on either.
-  group shield bone=hand.l at=1.0 dir=fwd yaw=-22
-    # Pushed forward along its own aim so the disc sits IN FRONT of the hip
-    # rather than through the thigh. A shield this size cannot hang beside a
-    # goblin's leg: the hand rests at y=0.47 with the thigh right behind it, so
-    # anything wider than a 5 cm buckler cuts the leg. Standing it off is the
-    # cheap fix; the real one is posing the arm, which needs the kit rigged.
-    loft face at=(0,0.035,0) dir=up len=0.030 material=iron
-      ring 0.00 w=0.146 d=0.146
-      ring 0.60 w=0.168 d=0.168
-      ring 1.00 w=0.132 d=0.132
-      cap start=dome end=flat
-    loft boss at=(0,0.065,0) dir=up len=0.030 material=brass
-      ring 0.00 w=0.052 d=0.052
-      ring 1.00 w=0.030 d=0.030
-      cap start=flat end=dome
-  end
+  # BACK POUCH — one, centred, on the flat back, top-anchored like the others (spans 0.7704-0.812): the belt's back vertex at t0.79
+  # is z -0.0611 m (0.0238 + 0.0058 - 0.0907); the box is centred 13.7 mm behind it, -0.0748 m = offset z -0.0758 of height.
+  attach backpouch bone=spine1 kind=box at=0.79 offset=(0,0,-0.0758) size=0.032 w=0.038 d=0.018 material=leather
+
+  # NO FAULD, CLEAVER OR BUCKLER (owner, 2026-10-02). The pelvic skirt clipped
+  # both thighs and the gut and is gone; the trousers are paint in goblin.blob.
+  # The cleaver and the buckler were retired by the goblin refinement spec
+  # (owner decision 2, 2026-10-01): phase 3 gives the goblin the player's
+  # weapons through the held-prop system, so there is no weapon in this kit.
 
 textures
-  texture iron base=#6e7378
-    gradient axis=v from=-0.12 to=0.18   # painted top-light on the plate
-    noise scale=0.10 amount=0.06         # hammered, not stamped
+  texture boot base=#2c2a28
+    streaks along=v amount=0.07
+    noise scale=0.14 amount=0.08
+    ao amount=0.22
+  texture webbing base=#3b3f42
+    noise scale=0.12 amount=0.10
+    ao amount=0.18
+  # RUST AND WEAR. WAM's texture ops are per-texel in a baked atlas; `spots` lays a coloured blotch where its noise
+  # crosses a threshold (density 0.55 was about a third of the surface and read as a few orange dots, so 0.90 / 0.55 covered most of it and read as a copper-plated yoke; the shipped 0.75 / 0.55 with #74401f is a notch duller), so two spot layers make rust: big orange-brown
+  # patches (scale 0.09 of height, ~12 cm) and a finer, darker pitting inside them (scale 0.03, seed 7). `ao` darkens
+  # the crevices where plates overlap (the lame under the pad), which is where real plate rusts first. Colours are
+  # eyeballed (#8a4a24 rust, #4d2a17 pit); they render darker and warmer under the lab's key, as every paint hex here does.
+  texture rustplate base=#62676b
+    gradient axis=v from=-0.12 to=0.18
+    noise scale=0.10 amount=0.14
+    spots scale=0.090 density=0.75 color=#74401f
+    spots scale=0.035 density=0.55 color=#4d2a17 seed=7
+    ao amount=0.30
+  texture plate base=#6e7378
+    gradient axis=v from=-0.12 to=0.18
+    noise scale=0.10 amount=0.06
+    spots scale=0.050 density=0.25 color=#7b4a2a
     ao amount=0.18
   texture leather base=#4a3526
     streaks along=v amount=0.09

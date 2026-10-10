@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/shared-wounds/probe.js
+//
+// Browser boot script for the shared-wounds probe page: sets up WebGPU and renders the wound presets for comparison.
+
 import { createPresetLibrary, createRegionState, advanceRegion, hitRegion } from './presets';
 import { PROBE_WGSL } from './probe.wgsl';
 async function boot() {

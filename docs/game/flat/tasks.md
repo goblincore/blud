@@ -16,8 +16,11 @@ superpowers spec/plan when they start; link it on the task.
   door, shelf, mattress) exist.
 - [ ] **F-D2 Prop list and stories.** Confirm the prop table (design §3); mark
   hero props and which get SDF variants. *Done when:* the table is final.
-- [ ] **F-D3 Mood board.** Basement light, CRT glow, cheap 90s bedsits, *Moon* /
+- [~] **F-D3 Mood board.** Basement light, CRT glow, cheap 90s bedsits, *Moon* /
   *UFO* rooms, the prerender look. *Done when:* one board, 15–30 images, with notes.
+  2026-10-01: the owner's direction is castle stone + Giger industrial decay + Tokyo otaku cute. A rendered
+  [room look-dev](../../dev-notes/2026-10-01-flat-room-lookdev/) sets the rule (stone for the bones, Giger for the
+  services, cute for the stuff) and shows the machine's last stage. It supersedes the basement and bedsit brief above.
 - [ ] **F-D4 Desk close-up spec.** Composition, props, the post-cold-open stain.
   *Deps:* F-D2. *Done when:* a paintover or blockout render of the shot.
 - [ ] **F-D5 Goblin scale.** Measure eye height, reach and step from the player
@@ -49,7 +52,7 @@ superpowers spec/plan when they start; link it on the task.
   *Deps:* F-T1, F-T2.
 - [ ] **F-T4 Input routing.** Room controls vs. FPS controls; what the mouse does
   while leaning in. *Deps:* F-T3.
-- [ ] **F-T5 Screen push-through (SDF).** The CRT glass bulges, an object pushes
+- [ ] **F-T5 Screen push-through.** *2026-10-01: a draft spec proposes a mesh membrane carrying a captured still instead of SDF, for the Night Train egg's emergence: [spec](../../superpowers/specs/2026-10-01-flat-screen-emergence-design.md) (draft, awaiting the owner).* Originally (SDF): The CRT glass bulges, an object pushes
   through and drops onto the desk wet; membrane settles; residue stays.
   *Deps:* F-T2. *Done when:* the cold-open CD push-through plays in the flat.
 - [ ] **F-T6 Room lighting.** Lamp, CRT glow driven by the FPS image, window.

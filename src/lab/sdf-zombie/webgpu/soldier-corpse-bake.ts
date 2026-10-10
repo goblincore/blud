@@ -1,8 +1,13 @@
+// src/lab/sdf-zombie/webgpu/soldier-corpse-bake.ts
+//
+// Soldier corpse baking: splits a dead soldier into head and body, and bakes the body into a static mesh while the head stays SDF.
+
 import * as THREE from 'three/webgpu';
 import type { ZombieActor } from './game-actor';
 import type { BuildResult } from '../build-body';
 import type { Vec3 } from '../types';
 import { woundWorldPos, woundCarveNormal } from '../damage';
+import { cutExposureSpheres } from '../cut-wound';
 import { createChunkBakeJobs } from './chunk-bake-jobs';
 import { unpackChunkBake } from './chunk-bake-buffers';
 import type { ChunkBakeData } from './chunk-bake-geometry';
@@ -33,12 +38,19 @@ export function soldierCorpseSnapshot(actor: ZombieActor): ChunkBakeData | null 
     body, flesh: body.prims, bones: body.bonePrims ?? [], centre, halfExtent,
     extent: Math.max(...halfExtent), cellSize: .015, quat: [0,0,0,1], gore: 0,
     carveK: u.woundCfg.value.y,
-    torn: actor.wounds().filter(w => body.prims[w.primIdx]?.limb !== 'head').map(w => {
+    torn: actor.wounds().filter(w => body.prims[w.primIdx]?.limb !== 'head').flatMap(w => {
       const prim = body.prims[w.primIdx];
       const owner = body.clusters.find(c => c.id === prim?.cluster);
-      return { at: woundWorldPos(body.prims,w,actor.pose().yaw), radius:w.radius,
+      const ownerBody = owner ? { prims:body.prims, clusters:[{...owner,alive:true}] } : undefined;
+      // A CUT is a slot, not a crater: its `radius` is the half-LENGTH, so baking it as one crater would carve a bowl the
+      // size of the whole slash. Bake its exposure chain instead (cut-wound.ts cutExposureSpheres: small stations that span
+      // skin to floor along the slot), as plain spheres (no slab): a groove of dimples, the closest this carve gets.
+      if (w.shape === 'cut') {
+        return cutExposureSpheres(body.prims,w,actor.pose().yaw).map(s => ({ at:s.pos, radius:s.radius, owner:ownerBody }));
+      }
+      return [{ at: woundWorldPos(body.prims,w,actor.pose().yaw), radius:w.radius,
         normal: woundCarveNormal(body.prims,w,actor.pose().yaw) ?? undefined, depth:w.carveDepth,
-        owner: owner ? { prims:body.prims, clusters:[{...owner,alive:true}] } : undefined };
+        owner: ownerBody }];
     }),
     look: { baseColor:col(u.baseColor.value),deepColor:col(u.deepColor.value),fatColor:col(u.fatColor.value),
       mottleColor:col(u.mottleColor.value),organColor:col(u.organColor.value),boneColor:col(u.boneColor.value),visceraColor:col(u.visceraColor.value),

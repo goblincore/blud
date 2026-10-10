@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/march.wgsl.ts
+//
+// The WGSL raymarch shader barrel: re-exports the layout, field, body and helper pieces under march/ that make up the SDF march.
+
 export * from './march/layout';
 export * from './march/math.wgsl';
 export * from './march/primitives.wgsl';
@@ -89,7 +93,7 @@ export * from './march/helpers';
 // Rows 8-9 (task 6, rest-space noise) diverge the same way, same reason.
 //
 // Wounds ride the SAME texture rather than a uniform array, which the GLSL
-// path had to use. MAX_WOUNDS (16) is comfortably under BASE_PRIM_STRIDE (128), so
+// path had to use. MAX_WOUNDS (32) is comfortably under BASE_PRIM_STRIDE (128), so
 // they fit in two more rows and the whole per-body payload stays one upload.
 //
 // TRANSLATION TRAPS, all of which bite silently:

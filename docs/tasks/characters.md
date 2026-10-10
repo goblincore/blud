@@ -2,6 +2,99 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Goblin refinement pass (body, kit, weapons, rig, animation) — phase 1 (body) done 2026-10-01
+
+The owner's complaints:
+- the armour kit clips and fits badly;
+- the buckler and the "axe" are poorly modelled and held nonsensically;
+- the body is a series of orbs and should be smoother;
+- the rig needs work and the animation needs an overhaul.
+
+The goblin is also the player character (the first-person arms copy its palette) and the star of the Flat's cutscenes,
+so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), likely causes:
+
+- **Orbs.**
+  - The ball joints are deliberate (`goblin.blob:252-278`): the nubs are 1.3–1.8× the shaft radius.
+  - The blends are 0.0014–0.005 and are then halved (`roundBlendScale` 0.5, `build-body.ts`), so fillets come out at about 3–10 mm. The zombie's median blend is 0.012, giving about 24 mm.
+  - The torso is five ellipsoids. The quality bar for the body is `zombie.blob` (tapered bars, no nubs).
+  - `goblin-blob.test.ts` pins arm daylight, so a fatter torso blend eats it.
+- **Kit.**
+  - `goblin-kit.wam`'s skeleton is a hand-copied transcription of the `.blob` (metres ÷ 1.30, pitch flipped).
+  - The skin is near rigid: 18 of 623 vertices are weighted to more than one joint, and the feet own none.
+  - The breastplate is rigid per ring. The pauldron is buried 36 mm by design.
+  - The tests check the rest pose only. There is no skeleton-parity test; `juggernaut-kit.test.ts:117` has one to copy.
+- **Buckler and cleaver.**
+  - Both are WAM groups, rigid to the hand bone. The cleaver is anchored at the fingertip (`hand.r at=1.0`).
+  - The hand has no roll and is one mitten ellipsoid, so there is no fist to grip with.
+  - The proper system exists and the goblin does not use it: `MotionProfile.prop` (`gripReach`, `fistOnGrip`), `carry.ts`, `webgpu/held-prop.ts`, `sword-swing.ts`.
+  - No shield or left-arm carry exists anywhere yet.
+- **Rig.** Two-point bones with no roll, and the known 8–10 cm foot stretch (below).
+- **Animation.**
+  - The goblin has none of its own: `motionProfileFor('goblin')` falls back to the zombie's SHAMBLE, with metres tuned for 0.96 m legs (the goblin's are 0.56 m) and the zombie's unarmed attacks.
+  - The bar is the soldier family (clip-derived gaits, planted footwork, carries).
+- **Also:** bone pitches above about 90° do not take in the look-dev pose overrides
+  ([room look-dev notes](../dev-notes/2026-10-01-flat-room-lookdev/notes.md)).
+
+- [x] **Spec** ([design](../superpowers/specs/2026-10-01-goblin-refinement-design.md), owner-approved structure,
+  2026-10-01). The goblin is the protagonist, seen armed in-game (no enemy AI). It holds **the player's weapons**; the buckler
+  and cleaver are retired. **The hands stay orbs** (an early-3D style). Body: **variant A, "sinew"**, picked from three
+  rendered variants ([look-dev](../dev-notes/2026-10-01-goblin-body-lookdev/)).
+- [x] **Phase 1, body:** re-authored to variant A (plan `docs/superpowers/plans/2026-10-01-goblin-body-phase1.md`):
+  continuous torso, tapered limbs, orbs only at the shoulders, hands, ankles and toes; the shoulder round is the arm's
+  `core`. All goblin-reading tests pass plus three new pins (the whole `src/lab/sdf-zombie/` suite: 6604 tests), the
+  pack golden is re-pinned, and `blob:render-check` exits 0. **Owner approved 2026-10-01** ("lgtm") from the lab
+  turntable ([frames](../dev-notes/2026-10-01-goblin-body-lookdev/lab/)); the profile (gut not reading in front) is
+  accepted as is.
+- [x] **Body grain** (owner, 2026-10-01: "apply the noise texture that is on his face to his body"):
+  [spec](../superpowers/specs/2026-10-02-body-grain-design.md), [plan](../superpowers/plans/2026-10-02-body-grain.md).
+  A palette `grain` in the face sheet's units: face-sized 3.5 mm cells, an albedo multiply and a bump in rest space; the goblin sets `grain 0.10`. **Owner approved 2026-10-02**
+  ("fine for now"), as built: coarse cell 0.012, `surfaceNoiseAmp` 0.22, the painted and wound fades kept
+  ([frames and numbers](../dev-notes/2026-10-02-body-grain/notes.md)). Built through dispatch (GLM 5.3 flash).
+  **Reworked 2026-10-02 after the owner saw it on the armoured goblin** ("it looks like big pixels ... keep them small,
+  fine if they disappear at distance, more like a bump map, like pitted pores"): the 1.2 cm coarse octave is removed (at
+  normal framing the fine cells are sub-pixel, so the coarse squares were all that showed) and the albedo swing is a
+  35% share of the face's while the tilt keeps the face's full strength. The body now has no grain beyond ~0.9 m in the
+  lab turntable. GPU `render-check` ok; the cold-boot and march-hash gates of the original build were NOT re-run for this
+  edit (shader text changed, 4 march-golden entries re-pinned; it removes code, so boot cost should only fall).
+- [~] **Phase 2, armour: built 2026-10-02, awaiting the owner's final look.** [Spec](../superpowers/specs/2026-10-02-goblin-armour-design.md) ·
+  [plan](../superpowers/plans/2026-10-02-goblin-armour.md) · [notes and frames](../dev-notes/2026-10-02-goblin-armour/notes.md).
+  Painted dark-grey pants and a dirty off-white tank top (paint on the SDF, so no clipping and wounds still work); mesh
+  boots, gaiter cuffs, knee plates, utility belt with pouches, football-pad pauldrons with a lame, left-pauldron spikes,
+  a loose (oversized) chest yoke to the neck with a flared collar, round sunglasses with ear hooks, rust and wear. Flesh
+  feet removed (the boot is the foot; restore lines are commented in `goblin.blob`). Cleaver and buckler removed (retired
+  by this spec). Bandoliers were built and removed ("too busy"; saved in the notes folder). Fit pinned in
+  `goblin-kit.test.ts` (tuck, loose-plate standoff, boot/cuff/belt standoff). Walk-pose clip check is by eye
+  (`BLOB_POSE=walk`), not a vertex-level skinned test. Open: Blender for hero-quality plate (owner's option, see notes).
+  The kit is rigid per bone, so the pads/yoke could be exported from Blender as separate skinned meshes.
+- [~] **Phase 3, held weapons: thin first pass done 2026-10-02** (owner: "keep it thin, shotgun first"). The goblin holds the
+  player's double-barrel shorty (`GOBLIN_PROFILE`, `shorty-double.glb` as a held prop, no model work), low and aim carries
+  checked from 8 yaws with no clipping. [Notes](../dev-notes/2026-10-02-goblin-shotgun/notes.md). Not done: other weapons
+  (the flail is the harder grip test), firing, goblin-specific carry angles (the soldier's are used), `chest` carry.
+  - `webgpu/goblin-skin.ts` keeps `forearmRadius` 0.028 and `forearmElbowRadius` 0.038, documented as the goblin's
+    forearm bar and elbow blob, which phase 1 removed (both constants are unreferenced). `handRadius` 0.046 is
+    hard-coded and must stay equal to `goblin.blob`'s hand.
+- [~] **Phase 4a, the in-game gait: built 2026-10-02, awaiting the owner's look in motion.** [Spec](../superpowers/specs/2026-10-02-goblin-gait-design.md) ·
+  [plan](../superpowers/plans/2026-10-02-goblin-gait.md) · [notes and frames](../dev-notes/2026-10-02-goblin-gait/notes.md).
+  "Scheming scamper": `GOBLIN_WALK`/`GOBLIN_RUN` in curve mode on the soldier's stride curves, retimed for 0.56 m legs
+  (cruise 1.19, run up to 2.77 m/s, derived and pinned), stooped (lean 12/18 degrees), carry arms for the shotgun. Foot
+  stretch measured: gone (flesh feet removed; only the neck cord stretches, +20 mm, under the collar). Only stills checked:
+  tempo, bob, skating and the feel in motion are the owner's gate. The curve source is swappable for a hand-authored clip
+  via `npm run gait:curves`.
+- [~] **Phase 4b, the Flat's authored poses and clips: first slice built 2026-10-03, awaiting the owner's look.**
+  [Spec](../superpowers/specs/2026-10-03-goblin-pose-layer-design.md) · [plan](../superpowers/plans/2026-10-03-goblin-pose-layer.md) ·
+  [notes and frames](../dev-notes/2026-10-03-goblin-poses/notes.md). A pure pose layer (`pose.ts`: bone-angle poses and keyed clips,
+  angle-space blending, ground-lock), the `cfg.pose` seam in `stepMotion` (writes the targets, pins every point), and the goblin's
+  `type`, `recoil`, `sit`, `stand`, `jolt` (`characters/goblin-poses.ts`), checked in the lab (`BLOB_POSE=pose:<name>`). **Still to do:**
+  `reach` (the Flat spec's fifth pose), the at-home vest and shorts, hands-on-keyboard contact, the game/sequence wiring, and the
+  authoring route for richer clips (the key list is the target for a Blender export; text for now). **Owner feedback fixed 2026-10-03:** the seated "diaper" (pelvis mass hung 17 cm below the hip joint; now a squashed sphere at the joint
+  plus glutes) and the belt clipping when seated (belt moved to the waist on `spine1`); both in the notes. **Not re-checked after the
+  pelvis change:** the walk, run and recoil poses. Open: the pale shirt lump at the lower back when the spine curls (notes). Original scope note: authoring route (Blender armature -> bone angles, or keyframes) Cautionary case: the bride (shelved
+  for janky animation and a sword clipping the body).
+  - `goblin.blob`'s neck vertebra bead (`blob head on neck at=0.30 ...`) is a zero-length head-limb prim, so
+    `rig-bind.ts` (`ridesHead`, ~line 388) binds it to the RIGID head: it is 94 mm below the skull pivot and will slide
+    19-47 mm into or off the neck as the head pitches. Make it a short bar (`bar head on neck from=0.28 to=0.32 ...`)
+    so it binds per end, and check with `__sdfLab.heroPosed()`. `female.blob:107` has the same pattern.
+
 ## Warbull (cyber-minotaur: flesh + bolted-in machinery, rockets + charge) — second draft from the owner's reference plate 2026-09-27, awaiting kit build + playtest
 
 - [x] **Second draft** (owner rejected the first as the existing bull brutes rescaled): a fresh body from
@@ -73,6 +166,51 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
   real player damage (health), sounds.
 - [ ] Room to grow: `MAX_PRIMS` is now 256 (landed on main, see below), so the Task 3 wish-list (third skirt
   tier, hair volume, veil hem, part sweeps) is unblocked; the next wall is 64 prims per cluster.
+
+## Bride — SHELVED 2026-09-30 (owner call; branch `claude/bride-game-lod` keeps everything)
+
+The owner's verdict after playtesting: she looks good, but the animation is janky, the two-handed sword clips
+through her own body (hard), and above all **she doesn't fit the game's fleshy, visceral identity**: after the
+game-LOD pass she is mostly mesh (lace dress, plate, boots) with a painted face, so little of her is the
+cratering, rupturing SDF flesh the game is built on. Not spawned by any level (`?spawn=bride` only). Revisit
+only if an idea below earns it.
+
+- [x] **Engine fixes split out and merged to main** (`22390b19`): `kit-bounds.ts` bone-sphere cull (kit pose was
+  ~75 ms/frame for a live armoured enemy: `SkinnedMesh.computeBoundingSphere` CPU-skins every vertex); O(1) kit
+  support index; allocation-free `pack.ts` (byte-pinned by `pack-golden`); the `setSdfScale` / upscaler mismatch
+  guard + `applyShipDefaults` pinning the shipping 0.5 scale (captures 2026-09-13..09-25 at scale 1 with the upscaler
+  on were broken: a 2x-zoomed corner); vite ignores `.lab-tmp`; the stocking band / thigh drip ride the thigh (the
+  lunge stretched them to 1.1 m); lunge foot planting (`plantReach`, inert unless set).
+- [ ] **On the branch only, not merged** (42 commits ahead of main at the merge `c3171913`): `bride-game.blob`
+  (registry `bride` = game LOD, `bride-hd` = the full-detail file for cutscene renders), 63 prims vs 94 (-52.9%
+  prim evaluations, census in `docs/dev-notes/2026-09-24-bride-perf/COST.md`), painted game face sheet with glowing
+  red eyes, cloth as breakable kit mesh (lace tears off without sparks), orb hands on both kits, the bride glow
+  (surface emissive packed in `meltCfg.w` by `glow-pack.ts` + cold room light `game-glow.ts`).
+- [x] **Kit-beam flashlight merged to main** (`88512f4a`, owner approved after playtest 2026-09-30): kits and enemy
+  held props are lit by a twin of the flashlight fitted to the SDF body beam (`mesh-beam-fit.ts`, `kit-lights.ts`;
+  kits used to get 28.6x albedo at 1 m against the bodies' 3.5x and clip to white). The twin follows the flashlight
+  gate (dark until the night-train torch pickup) and is skipped by `levelSceneLights`; `?kitbeam=0` restores the
+  old kit lighting. Not covered: the player's FPV gun/hands (separate glTF, still chrome-white under the beam).
+- [ ] **Why she was slow:** not her SDF prims (she was already ~0.5x a cultist per frame) but the kit CPU stall
+  above, then prim count for the GPU march (shells cost 3-5x their prim share: grouping, not count). Frozen
+  (`?frozen=1`) benches never run the kit loop: time LIVE legs too (`scripts/bride-timing-check.sh`).
+- [ ] **Known, unfixed:** animation jank; sword clips her body on the wind-up; the lunge glides her feet (no step);
+  one skull prim stretches ~8 cm in swings; lace still clips at melee range under the flashlight.
+- [ ] **Damage model (designed, not built):** she "comes apart at the seams" because she has no HP (zombie meter),
+  her limbs are 2-3x thinner than a zombie's against a fixed pellet sever radius (pellet-on-arm severs 47/50 vs
+  0/40), decoration prims act as fake joints (`connectivity.ts chainOrder` / `missingLimbs`), plate absorbs nothing
+  and corpses keep severing. Spec `docs/superpowers/specs/2026-09-25-bride-damage-toughness-design.md`, plan
+  `docs/superpowers/plans/2026-09-25-bride-damage-toughness.md` (both on the branch). **Main has since built much of
+  this** for the juggernaut: `plate-armor.ts` (per-plate HP, no wound while intact, shed at zero) and the soldier
+  family trait with regional injury: re-plan on those, do not build the plan's plate tasks. Owner direction for her
+  damage: blood on white (lace stains) + hit reactions that carry it (flinch on every hit, stagger on heavy hits
+  that cancels her swing, later angry recovery) + 3-4 death performances handing off to ragdoll, intact except
+  dynamite and headshots (kneeling bride as the signature).
+- [ ] **Ideas to revisit her:** (1) *the unveiling*: pristine until shot; the lace/plate tear off (built) to reveal
+  a raw, fused torso with the rib window and red seams from `bride.blob`: a one-day spike, judged in one
+  playtest; if it doesn't make her feel fleshy, leave her shelved. (2) make her a one-per-level *set piece* (chapel,
+  train car) with a scripted arrival and authored death, not a regular enemy. (3) keep her kit/face pipeline as a
+  pattern for a future mesh-heavy enemy.
 
 ## Prim ceiling 128 -> 256, per-body texture width — done 2026-09-24
 
@@ -189,3 +327,9 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
   visor band (the failure mode `face.ts` documents), and the red chest cabling reads as a flat band, not bundled loom.
 - [!] Its dispatch run CRASHED with dispatch-ui and committed nothing; the work was
   rescued off the worktree. `blob:render-check` has not been run on it.
+
+## Ideas
+
+- [ ] **A monster with dangling jelly-orange tubes** (owner, 2026-10-03): the slug-burst's scalp flaps (`head-flap.ts`,
+  the leaf's rim-hinged flap piece) read as wiggling orange tubes on the zombie, "quite creepy", so they are off there and
+  can be the signature of a new creature. See [build notes](../dev-notes/2026-10-02-head-burst/NOTES.md).

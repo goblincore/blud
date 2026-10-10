@@ -1,14 +1,16 @@
 // src/lab/sdf-zombie/zombie.ts
+//
+// The WebGL ZombieView (a ShaderMaterial raymarch of one body) and ChunkView (a gib chunk view), with their uniform upload.
+//
 import * as THREE from 'three';
 import type { BuildResult } from './build-body';
 import { packBody, PRIM_STRIDE, type PackedBody } from './pack';
 import { chunkPoint, squashFactors, type Chunk } from './gib-chunks';
-import { FRAG, VERT } from './march.glsl';
+import { FRAG, GLSL_MAX_WOUNDS, VERT } from './march.glsl';
 import { FLESH_PRESETS, LIGHT_PRESETS, type FleshMaterial, type LightPreset } from './material';
 import type { Primitive, Vec3 } from './types';
 import { sub } from './vec';
 import { chunkExtent, tornEndRadius } from './extent';
-import { MAX_WOUNDS } from './damage';
 
 export interface ZombieView {
   object: THREE.Object3D;
@@ -82,8 +84,8 @@ export function createZombieView(body: BuildResult): ZombieView {
       uKeyIntensity: { value: 2.4 },
       uFillIntensity: { value: 0.06 },
       uKeyColor: { value: new THREE.Color(1.0, 0.96, 0.92) },
-      uWound: { value: new Float32Array(16 * 4) },
-      uWoundMeta: { value: new Float32Array(16 * 4) },
+      uWound: { value: new Float32Array(GLSL_MAX_WOUNDS * 4) },
+      uWoundMeta: { value: new Float32Array(GLSL_MAX_WOUNDS * 4) },
       uWoundCount: { value: 0 },
       uWoundBlendK: { value: 0.015 },
       uRimSplay: { value: 0.55 },
@@ -145,12 +147,17 @@ export function createZombieView(body: BuildResult): ZombieView {
     setWounds(worldPositions, radii, types, ages, splayScales, offsetScales) {
       const w = material.uniforms.uWound!.value as Float32Array;
       const m = material.uniforms.uWoundMeta!.value as Float32Array;
-      const n = Math.min(worldPositions.length, 16);
+      // The ring (damage.ts MAX_WOUNDS) can be longer than this path's
+      // GLSL_MAX_WOUNDS uniform slots; the ring is oldest-first, so upload the
+      // NEWEST wounds — a fresh shot must always show.
+      const n = Math.min(worldPositions.length, GLSL_MAX_WOUNDS);
+      const first = worldPositions.length - n;
       for (let i = 0; i < n; i++) {
-        w.set([...worldPositions[i]!, radii[i]!], i * 4);
+        const j = first + i;
+        w.set([...worldPositions[j]!, radii[j]!], i * 4);
         // meta = (type, age, rimSplayScale, rimOffsetScale); scales default
         // to 1 so omitted callers keep the global woundCfg rim settings.
-        m.set([types[i]!, ages[i]!, splayScales?.[i] ?? 1, offsetScales?.[i] ?? 1], i * 4);
+        m.set([types[j]!, ages[j]!, splayScales?.[j] ?? 1, offsetScales?.[j] ?? 1], i * 4);
       }
       material.uniforms.uWoundCount!.value = n;
     },
@@ -213,8 +220,8 @@ export function createChunkView(
   const material = template.clone();
   // Material.clone() shares uniform VALUE references, so a chunk writing its
   // own wound array would scribble on the body's. Give it fresh buffers.
-  material.uniforms.uWound = { value: new Float32Array(MAX_WOUNDS * 4) };
-  material.uniforms.uWoundMeta = { value: new Float32Array(MAX_WOUNDS * 4) };
+  material.uniforms.uWound = { value: new Float32Array(GLSL_MAX_WOUNDS * 4) };
+  material.uniforms.uWoundMeta = { value: new Float32Array(GLSL_MAX_WOUNDS * 4) };
 
   // chunk.pos is the cluster centre at sever time, so this recentres the
   // severed limb's rest-space primitives around the chunk's own origin.

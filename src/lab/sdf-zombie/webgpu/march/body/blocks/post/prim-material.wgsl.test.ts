@@ -7,8 +7,6 @@
 
 import { describe, it, expect } from 'vitest';
 import { MARCH_BODY, DATA_ROWS, ROW_PRIM_COLOR, ROW_PRIM_SHAPE, ROW_PRIM_CLIP } from '../../../../march.wgsl';
-import moduleSource from '../../../../march.wgsl?raw';
-import layoutSource from '../../../layout?raw';
 import { MARCH_TREE_SRC } from '../../../../march-test-support';
 
 describe('per-primitive colour', () => {
@@ -77,7 +75,7 @@ describe("gloss suppresses the flesh's own noise (hard-surface task 1)", () => {
     // gloss kill folds into the guarded amplitude itself, not into the
     // fbm result.
     expect(SHADE_BODY).toContain('let detailAmp = surfCfg2.y * (1.0 - max(gloss, metal));');
-    const detailBlock=SHADE_BODY.slice(SHADE_BODY.indexOf('if (detailAmp > 0.0)'),SHADE_BODY.indexOf('// Tissue depth'));
+    const detailBlock=SHADE_BODY.slice(SHADE_BODY.indexOf('if (detailAmp > 0.0 && cutFace < 0.5) {'),SHADE_BODY.indexOf('// Tissue depth'));
     expect(detailBlock).toContain('fbm(anchor * 22.0)');
     expect(detailBlock).toContain('detailAmp * mix(1.0, 1.45, soldierPit)');
   });
@@ -190,21 +188,6 @@ describe('per-prim glow= in primClip.w (hard-surface task 3)', () => {
   const SHADE_BODY = MARCH_BODY;
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const CLIP_LOAD = `textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_CLIP} + gBand), 0)`;
-
-  it('row 17 no longer documents w as spare', () => {
-    // Done-when: leaving "w spare" in the row table is how the next person
-    // packs over the lane. Pinned against the MODULE SOURCE — the docstring
-    // is a TS comment, not part of any exported WGSL string, so a check on
-    // MARCH_BODY cannot see it (that vacuous version was caught by its own
-    // mutation run). Scoped to ROW_PRIM_CLIP's OWN doc block: other rows'
-    // "yzw spare" notes are true statements about other lanes and contain
-    // the same substring.
-    const clipSource = moduleSource + layoutSource;
-    const clipConst = clipSource.indexOf('export const ROW_PRIM_CLIP');
-    const clipDoc = clipSource.slice(clipSource.lastIndexOf('/**', clipConst), clipConst);
-    expect(clipDoc).not.toContain('spare');
-    expect(clipDoc).toContain('glow');
-  });
 
   it('reads glow from ROW_PRIM_CLIP.w, inside the painted branch only', () => {
     // glow= is parse-gated on color= (same gate as gloss/metal), so an

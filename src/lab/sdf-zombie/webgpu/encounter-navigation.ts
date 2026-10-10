@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/encounter-navigation.ts
+//
+// Static floor navigation for encounters: a grid path planner over rooms and tunnels that keeps actors clear of solid boxes.
+
 import type { Aabb, RoomDef, TunnelDef } from './game-level';
 import type { Vec3 } from '../types';
 import type { WanderBounds } from '../wander';

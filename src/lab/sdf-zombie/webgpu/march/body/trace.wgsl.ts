@@ -4,6 +4,7 @@
 // MOVE-ONLY: the WGSL text below is byte-identical to the original
 // file; see docs/dev-notes/2026-09-18-march-split/.
 import { WOUND_STEP_MUL } from '../layout';
+import { SPLIT_SHADE } from '../../../head-split';
 import { FACE_LAYER_WGSL } from './face.wgsl';
 import { TILE_PRELOAD_BLOCK } from './blocks/setup/tile-preload.wgsl';
 import { WOUND_LIST_BLOCK } from './blocks/setup/wound-list.wgsl';
@@ -12,12 +13,16 @@ import { RAY_WINDOW_BLOCK } from './blocks/setup/ray-window.wgsl';
 import { STEP_CONFIG_BLOCK } from './blocks/setup/step-config.wgsl';
 import { START_BOUNDS_BLOCK } from './blocks/setup/start-bounds.wgsl';
 import { DEBUG_COUNTERS_BLOCK } from './blocks/loop/debug-counters.wgsl';
+import { RAY_MASK_PROBE as RAYMASK } from '../raymask-flag';
+import { SPLIT_HIT_BLOCK } from './blocks/post/split-hit.wgsl';
 import { PRIM_MATERIAL_BLOCK } from './blocks/post/prim-material.wgsl';
 import { SHADING_NORMAL_BLOCK } from './blocks/post/shading-normal.wgsl';
 import { WOUND_MASKS_BLOCK } from './blocks/post/wound-masks.wgsl';
 import { TISSUE_BLOCK } from './blocks/post/tissue.wgsl';
+import { CUT_FACE_BLOCK } from './blocks/post/cut-face.wgsl';
 import { ORGAN_BLOCK } from './blocks/post/organ.wgsl';
 import { MOTTLE_BLOCK } from './blocks/post/mottle.wgsl';
+import { BODY_GRAIN_BLOCK } from './blocks/post/body-grain.wgsl';
 import { GORE_BLOCK } from './blocks/post/gore.wgsl';
 import { SOLDIER_MEAT_BLOCK } from './blocks/post/soldier-meat.wgsl';
 import { PAINT_CHAR_BLOCK } from './blocks/post/paint-char.wgsl';
@@ -27,7 +32,7 @@ import { MELT_BLOCK } from './blocks/post/melt.wgsl';
 /**
  * SECTION 2 of 4 — the trace: ray setup and pre-pass gates, the march loop,
  * the hit test, and the full post-hit MATERIAL chain (normal evaluation,
- * wound/char masks, tissue ramp, organ/mottle/gore, the face pass, painted
+ * wound/char masks, tissue ramp, organ/mottle/gore, the face pass, the body grain, painted
  * prims, char, melt). Everything here is light-independent, so the deferred
  * surface entry reuses this text verbatim. The debug early-returns and the
  * miss discard are part of the trace and behave identically in both entries.
@@ -73,15 +78,16 @@ ${START_BOUNDS_BLOCK}
 `;
 
 /** Run 5 (plan 2026-09-13-neural-upscale-run5-sdf-refine): the walk alone — from `var t` to the
- *  line before `if (!hit) { discard; }`. REFINE_LOOP replaces exactly this section. */
+ *  line before the miss branch (`if (!hit) {`). REFINE_LOOP replaces exactly this section. */
 export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(max(startT, shellIn), preStart), tempStart), bodyEntry), winFar), 0.0, tMax);
   var hit = false;
   var prevRadius = 0.0;
   var stepLen = 0.0;
   var clamped = false;
-  // UPPER-BOUND CULL (gCullRef): the previous sample's fold, its slot and t.
+  // UPPER-BOUND CULL (gCullRef): the previous sample's fold, its slot, its split piece and t.
   var cullFold = 1e9;
   var cullSlot = -1;
+  var cullPiece = 0;
   var cullT = 0.0;
   // Dominant prim at the last field sample (mapBody.y) — the hit pixel's
   // noise anchor reuses it instead of re-running the fold (task 6).
@@ -102,7 +108,14 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(max(
   // Which limb's re-fold won at the ACCEPTED sample (gRefoldWin, 0 = none), for
   // the NORMAL HINT around calcNormal. Re-assigned every iteration like the rest.
   var hitRefold = 0.0;
-  for (var i = 0; i < 512; i = i + 1) {
+  // THE HEAD SPLIT: the ACCEPTED sample's winning piece and that piece's field before its caps (gHitPiece,
+  // gHitSplitF), for the post-hit blocks. Copied here because every later mapBody call (the normal's taps, the
+  // probes) writes the globals again.
+  var hitPiece = 0;
+  var hitSplitF = 0.0;
+${RAYMASK ? `  // RAY-MASK PROBE (?raymask): the walk's samples all lie on this ray.
+  gMaskRo = camPos; gMaskInv = 1.0 / rd; gMaskOn = 1.0; gMaskSkip = 0.0;
+` : ''}  for (var i = 0; i < 512; i = i + 1) {
     if (i >= steps) { break; }
     if (debugCfg.x > 0.5) { gDebugSteps = gDebugSteps + 1.0; }
     // 0.0, not marchCfg.z: the field mapBody returns stays SMOOTH — the fbm
@@ -113,11 +126,13 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(max(
     gWalkStep = 1.0;
     gCullUB = select(1e9, cullFold + 3.0 * abs(t - cullT) + 0.002, i > 0 && cullFold < 1e8);
     gCullSlot = cullSlot;
+    gCullPiece = cullPiece;
     let dres = mapBody(camPos + rd * t, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
     gWalkStep = 0.0;
     gCullUB = 1e9;
     cullFold = gLastFold;
     cullSlot = gLastFoldSlot;
+    cullPiece = gLastFoldPiece;
     cullT = t;
     // WALK SKIP bookkeeping: a call that ran the re-fold refreshes the gap (0 if any
     // limb won); a call that skipped it keeps the decremented budget; a call where the
@@ -132,6 +147,11 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(max(
     hitBest = i32(dres.y);
     hitField = dres;
     hitRefold = gRefoldWin;
+    hitPiece = gHitPiece;
+    hitSplitF = gHitSplitF;
+    // An open slot's pieces each fold their own limbs: the hint is the HIT piece's win (none: 0), not the last
+    // piece's that won. A closed slot keeps gRefoldWin.
+    if (gInstSplitOpen && hitRefold != 0.0) { hitRefold = select(select(gRefoldBy.z, gRefoldBy.y, hitPiece == 1), gRefoldBy.x, hitPiece == 0); }
     // Shell displacement: inside a thin shell of the smooth surface, the
     // silhouette noise displaces the REAL field — bumpy outlines are back —
     // and stepping goes conservative because the noise breaks the Lipschitz
@@ -141,8 +161,21 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(max(
     let shellAmp = woundCfg2.z;
     var conservative = false;
     if (shellAmp > 0.0 && abs(d) < shellAmp * 4.0) {
-      d = d + fbm(restPoint(camPos + rd * t, data, i32(dres.y), noiseLocal(camPos + rd * t, noiseShift), gBand) * 3.0) * shellAmp;
-      conservative = true;
+      // THE HEAD SPLIT: the noise is glued to the flesh, so on a half that turned open it is read at this sample's
+      // own un-warped point (the piece mapBody just left in gHitPiece), and it fades out where a piece cap holds the
+      // field above the piece's own (d - gHitSplitF, the gap the post's cut-face gate reads; SPLIT_SHADE.shellLo /
+      // shellHi): a cut face is flat, and a sample over one is no shell sample at all (the walk stays relaxed).
+      // shellK is shellAmp for every closed body.
+      var shellP = camPos + rd * t;
+      var shellK = shellAmp;
+      if (gInstSplitOpen) {
+        if (gHitPiece != 0) { shellP = splitMoveBack(shellP, gInstSplitH.xyz, gInstSplitA.xyz, select(gInstSplitA.w, gInstSplitN.w, gHitPiece == 1)); }
+        shellK = shellAmp * (1.0 - smoothstep(${SPLIT_SHADE.shellLo}, ${SPLIT_SHADE.shellHi}, d - gHitSplitF));
+      }
+      if (shellK > 0.0) {
+        d = d + fbm(restPoint(shellP, data, i32(dres.y), noiseLocal(shellP, noiseShift), gBand) * 3.0) * shellK;
+        conservative = true;
+      }
     }
     // Near a wound (mapBody.z) the field is not a distance bound — see
     // applyWounds — so step UNDER-relaxed at 0.6, exactly as the noise shell
@@ -189,9 +222,10 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(max(
       // displaced (shell) or near-wound sample, only while approaching
       // (dPrev > d, so the ratio is < 1 and the series converges), and only
       // after a forward step (stepLen > 0 — a retraction's previous sample
-      // was inside the solid). hitField/hitBest still describe the sample the
-      // jump left, which is at most perfCfg.w * hitEps behind the accepted t
-      // — the same tolerance the plain accept already grants.
+      // was inside the solid). hitField/hitBest (and the head split's hitPiece /
+      // hitSplitF) still describe the sample the jump left, which is at most
+      // perfCfg.w * hitEps behind the accepted t — the same tolerance the
+      // plain accept already grants.
       if (perfCfg.w > 0.0 && !conservative && !nearWound && stepLen > 0.0 && prevRadius > radius) {
         let root = radius * stepLen / (prevRadius - radius);
         if (root < hitEps * perfCfg.w) {
@@ -307,7 +341,10 @@ export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) {
     // plane (nearer miss wins the depth test, any hit beats every miss) and alpha 1 (still a miss
     // to every reader). Off, this is the old discard exactly.
     if (gInstMelt.y > 1.5 && missNear < 16.0) { return vec4<f32>(missNear, -7.0, 0.0, -1.0); }
-    discard;
+    // THE RETURN (2026-10-06), as at the setup's discards: in WGSL a discard does not end the invocation, and with
+    // the return nothing below is entered on a garbage hit. It is NOT a speed-up. Measured on Apple's GPU: a
+    // discarded fragment already paid nothing for the code after its discard (head-split NOTES, 2026-10-06).
+    discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0);
   }
   // Reload the slot whose field won the union fold. Every post-hit row read
   // below (material, rest anchor, face, wound masks) is the HIT instance's.
@@ -346,16 +383,20 @@ export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) {
   let debugPrims = gDebugPrims;
 
   let p = camPos + rd * t;
+${SPLIT_HIT_BLOCK}
 ${PRIM_MATERIAL_BLOCK}
 ${SHADING_NORMAL_BLOCK}
 ${WOUND_MASKS_BLOCK}
 ${TISSUE_BLOCK}
+${CUT_FACE_BLOCK}
 
 ${ORGAN_BLOCK}
 
 ${MOTTLE_BLOCK}
 
 ${FACE_LAYER_WGSL}
+
+${BODY_GRAIN_BLOCK}
 
 ${GORE_BLOCK}
 

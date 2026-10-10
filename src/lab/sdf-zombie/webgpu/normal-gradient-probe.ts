@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/normal-gradient-probe.ts
+//
+// The browser GPU probe that compares the WGSL analytic normal gradients against CPU fixtures (capsules, blends, wounds) and shows the results.
+
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial, WebGPURenderer } from 'three/webgpu';
 import { uniform, texture, wgslFn } from 'three/tsl';
@@ -13,9 +17,11 @@ import {
   type NgReason,
   type V3,
 } from './normal-gradient-reference';
-import { buildNormalGradientFn, NORMAL_GRADIENT_PROBE, NORMAL_GRADIENT_HELPERS, NG_WOUND_LIP, NG_WOUNDS } from './normal-gradient.wgsl';
+import { buildNormalGradientFn, NORMAL_GRADIENT_PROBE } from './normal-gradient.wgsl';
 
-import { SMIN, SMAX, APPLY_WOUNDS, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, DATA_ROWS } from './march.wgsl';
+import { ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, DATA_ROWS } from './march.wgsl';
+import { MAX_WOUNDS } from '../damage';
+import { NG_WOUND_PROBE, probeWoundSources } from './normal-gradient-probe.wgsl';
 
 type V4 = [number, number, number, number];
 
@@ -304,23 +310,17 @@ async function main(): Promise<void> {
   };
   // Exercise the REAL production applyWounds alongside ngWounds with the
   // exact uploaded row adapter. The CPU scalar oracle below is independent.
-  const woundRows = new Float32Array(16 * DATA_ROWS * 4);
-  const woundTexture = new THREE.DataTexture(woundRows,16,DATA_ROWS,THREE.RGBAFormat,THREE.FloatType);
+  // One texel per wound slot: the fixture is as wide as the shader's wound loops.
+  const woundRows = new Float32Array(MAX_WOUNDS * DATA_ROWS * 4);
+  const woundTexture = new THREE.DataTexture(woundRows,MAX_WOUNDS,DATA_ROWS,THREE.RGBAFormat,THREE.FloatType);
   woundTexture.needsUpdate=true;
   const uCfg=uniform(new THREE.Vector4());
   const uCfg2=uniform(new THREE.Vector4());
   const uBound=uniform(new THREE.Vector4());
   const uPerf=uniform(new THREE.Vector4());
-  const sources=[SMIN,SMAX,APPLY_WOUNDS,...NORMAL_GRADIENT_HELPERS,NG_WOUND_LIP,NG_WOUNDS];
+  const sources=probeWoundSources();
   const chain=sources.reduce<ReturnType<typeof wgslFn>[]>((a,h)=>[...a,wgslFn(h,a.slice(-1))],[]);
-  const woundFn=wgslFn(`fn ngWoundProbe(p: vec3<f32>, base: vec4<f32>, data: texture_2d<f32>, cfg: vec4<f32>, cfg2: vec4<f32>, perf: vec4<f32>, bound: vec4<f32>, kind: f32) -> vec4<f32> {
-    let reset = ngReset();
-    let incoming = vec4<f32>(base.x + dot(base.yzw, p), base.yzw);
-    if (kind > 1.5) { let scalar = applyWounds(incoming.x, p, data, cfg, cfg2, perf, bound); return vec4<f32>(scalar.x, scalar.y, 0.0, 0.0); }
-    let result = ngWounds(incoming, p, data, cfg, cfg2, perf, bound);
-    if (kind > 0.5) { return vec4<f32>(f32(gNgReason), gNgLip, gNgNear, 0.0); }
-    return result;
-  }`,chain.slice(-1));
+  const woundFn=wgslFn(NG_WOUND_PROBE,chain.slice(-1));
   const woundMaterial=new MeshBasicNodeMaterial();
   woundMaterial.outputNode=woundFn({p:uP,base:uDgA,data:texture(woundTexture),cfg:uCfg,cfg2:uCfg2,perf:uPerf,bound:uBound,kind:uKind});
   woundMaterial.depthTest=false;woundMaterial.depthWrite=false;woundMaterial.blending=THREE.NoBlending;woundMaterial.toneMapped=false;
@@ -347,7 +347,7 @@ async function main(): Promise<void> {
       const base=c.base??[-.02,0,0,1] as V4;
       const baseAt=(q:V3)=>base[0]+q.reduce((v,x,i)=>v+x*base[i+1]!,0);
       woundRows.fill(0);
-      c.rows.forEach((r,i)=>{woundRows.set(r.w,(ROW_WOUND*16+i)*4);woundRows.set(r.meta,(ROW_WOUND_META*16+i)*4);woundRows.set(r.cap,(ROW_WOUND_CAP*16+i)*4);});
+      c.rows.forEach((r,i)=>{woundRows.set(r.w,(ROW_WOUND*MAX_WOUNDS+i)*4);woundRows.set(r.meta,(ROW_WOUND_META*MAX_WOUNDS+i)*4);woundRows.set(r.cap,(ROW_WOUND_CAP*MAX_WOUNDS+i)*4);});
       woundTexture.needsUpdate=true;
       uCfg.value.fromArray([c.rows.length,...cfg.slice(1)]);uCfg2.value.fromArray(cfg2);uBound.value.fromArray(bound);uPerf.value.fromArray(perf);
       uP.value.fromArray(p);uDgA.value.fromArray(base);

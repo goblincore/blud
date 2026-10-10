@@ -398,6 +398,12 @@ export interface MotionConfig {
   forceSpeed?: number;
   /** Hold this carry regardless of gait/fire state (lab captures). */
   carryOverride?: CarryName;
+  /** THE POSE LAYER (spec 2026-10-03-goblin-pose-layer-design.md): joint positions in RIG-POINT order and the REST world
+   *  frame (pose.ts poseJoints), already sampled for this frame. When present the rest targets ARE this pose (turned about
+   *  the pelvis line by the body yaw, then shifted, exactly like the rest targets) and every rig point is pinned, so the
+   *  Verlet rig neither lags nor sags. The gait, carry, aim and plant state still run (cheap, and it keeps their state warm) but
+   *  their targets are overwritten; a collapse ignores it. Enter it from a standstill: there is no blend from a moving gait. */
+  pose?: readonly Vec3[];
   /** Aim facing independent of travel, used by directed soldier movement. */
   faceHeading?: number;
   /** Melee swing: phase 0..1 plus which arm swings, throwing which variant
@@ -407,6 +413,15 @@ export interface MotionConfig {
    *  attack.ts's pose is exactly zero at phase 0 and 1, so setting either is
    *  also a no-op, just a slower one. */
   attack?: { phase: number; side: 'L' | 'R'; variant: SwingVariant };
+  /** REACH SLIDE, as a fraction of each leg's hip→knee→foot length: a stance
+   *  plant farther than this from its hip target slides along the floor to
+   *  stay at it (ik.ts stepPlant maxReach). For the frames the WIRING surges
+   *  the root past the legs (the sword lunge's 1.2 m advance) — the locked
+   *  feet otherwise drag the hips off the pelvis and hold them there.
+   *  ABSENT on every other frame and body: ordinary gaits reach 1.3-1.4x leg
+   *  length at toe-off by design, so this is not a general rule, and absent
+   *  is bit-identical to before the key existed. */
+  plantReach?: number;
 }
 
 /** What happened since the last frame — collected by the wiring between
@@ -502,6 +517,14 @@ const Z: Vec3 = [0, 0, 0];
 const ARM_JOINTS: ReadonlySet<GaitJointName> = new Set([
   'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR',
 ]);
+
+/** The joints that ride the pelvis through a stagger's ROOT offset. The root
+ *  offset used to move the `pelvis` point alone, so a lurch shoved the pelvis
+ *  and belly away from the tops of the thighs (a flail hit opened a 0.4-0.5 m
+ *  gap between torso and upper legs); `hips`, `hipL` and `hipR` are the pelvis
+ *  block's own sockets and must travel with it. Knees and feet stay put: they
+ *  are the planted contacts the leg IK works from. */
+const STAGGER_ROOT_RIDERS: ReadonlySet<GaitJointName> = new Set(['hips', 'hipL', 'hipR']);
 
 /** How much of the turn lean each joint takes — the upper body rolls into
  *  the turn, the legs stay planted under it. */
@@ -793,7 +816,7 @@ export function stepMotion(
       const minLane = name.startsWith('knee') ? .065 : .10;
       gaitOff = [authoredSide * Math.max(minLane, authoredSide * lateral) - base[0] + pivot[0], gaitOff[1], gaitOff[2]];
     }
-    const stagOff = name === 'pelvis' ? stagger.rootOffset : stagger.offsets[name] ?? Z;
+    const stagOff = name === 'pelvis' || STAGGER_ROOT_RIDERS.has(name) ? stagger.rootOffset : stagger.offsets[name] ?? Z;
     const s = ARM_JOINTS.has(name) ? armPresence : blend * strideScale;
     // BRANCHED, not `add(..., ZERO)`: adding zero would turn a -0 component
     // into +0 and break the lab's bit-identity pin for no benefit.
@@ -1193,11 +1216,14 @@ export function stepMotion(
   const footWorld = (i: number): Vec3 =>
     havePoints ? points[i]!.pos : targets[i]!;
   const plantStep = (
-    st: PlantState, stance: boolean, footIdx: number,
+    st: PlantState, stance: boolean, footIdx: number, hipIdx: number, lens: readonly [number, number],
   ): PlantState => stepPlant(st, {
     stance: stance && !release,
     footPos: footWorld(footIdx),
     groundY: joints.groundY,
+    ...(cfg.plantReach !== undefined
+      ? { hip: targets[hipIdx]!, maxReach: cfg.plantReach * (lens[0] + lens[1]) }
+      : {}),
   }, dt);
   // Pole bias for the leg solves: knees bow FORWARD, along the applied body
   // yaw (not wander.heading — the knee must agree with the turned body
@@ -1248,11 +1274,11 @@ export function stepMotion(
     }
   } else if (!collapsed) {
     if (!missingLegL) {
-      plantL = plantStep(plantL, gait.pose.stance.legL, idx.footL!);
+      plantL = plantStep(plantL, gait.pose.stance.legL, idx.footL!, idx.hipL!, joints.leg.L);
       plantLeg(plantL, 'hipL', 'kneeL', 'footL', joints.leg.L);
     }
     if (!missingLegR) {
-      plantR = plantStep(plantR, gait.pose.stance.legR, idx.footR!);
+      plantR = plantStep(plantR, gait.pose.stance.legR, idx.footR!, idx.hipR!, joints.leg.R);
       plantLeg(plantR, 'hipR', 'kneeR', 'footR', joints.leg.R);
     }
   }
@@ -1384,6 +1410,16 @@ export function stepMotion(
     fall.forEach((p, i) => { targets[i] = p; });
   }
 
+  // --- the pose layer -------------------------------------------------------
+  // After every other target writer (gait, carry, aim, plants, the soldier fall) so the authored pose has the last word.
+  const poseActive = cfg.pose !== undefined && cfg.pose.length === targets.length && !collapsed;
+  if (poseActive) {
+    cfg.pose!.forEach((p, i) => {
+      const spun = rotateYaw([p[0] - pivot[0], p[1], p[2] - pivot[2]], bodyYaw);
+      targets[i] = [pivot[0] + shift[0] + spun[0], spun[1], pivot[2] + shift[2] + spun[2]];
+    });
+  }
+
   const nextState: MotionState = {
     ...(fallPose ? { fallPose, fallFatal, fallImpact, fallStrength } : {}),
     wander, gait: gait.state, stagger: stagger.state,
@@ -1422,6 +1458,7 @@ export function stepMotion(
       // legs. The two lists are MERGED into one posePins (a second spread of
       // the key would silently drop the first).
       ...((): { posePins?: number[] } => {
+        if (poseActive) return { posePins: targets.map((_, i) => i) };
         const legs = footwork && !stagger.staggered && !soldierStagger.active && recoil.joint === null
           ? (['pelvis', 'hips', 'hipL', 'hipR', 'kneeL', 'kneeR', 'footL', 'footR', 'toeL', 'toeR'] as const) : [];
         // Never pin a MISSING arm's joints (a severed left arm under the

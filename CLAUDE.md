@@ -13,6 +13,7 @@ reference-only for behavior comparison (dynamite, gibbing).
 - **Status board:** [`TASKS.md`](TASKS.md) — the task wiki's front page: in flight, next, and an index
   of area pages under [`docs/tasks/`](docs/tasks/) (levels, characters, combat and gore, rendering,
   engineering, backlog). Keep the front page short; detail goes on the area pages.
+- **Which module owns what (generated, one line per module):** [`docs/architecture/module-index.md`](docs/architecture/module-index.md)
 - **Source map (current vs. proposed):** [`docs/architecture/repository-map.md`](docs/architecture/repository-map.md)
 - **Legacy dynamite/gibbing reference:** [`docs/reference/legacy-dynamite-gibbing.md`](docs/reference/legacy-dynamite-gibbing.md)
 - **Cross-harness agent context:** [`AGENTS.md`](AGENTS.md)
@@ -59,6 +60,12 @@ concepts** — do not conflate them.
 
 - Extracted Blood assets: dev placeholders only, never commit/ship.
 - Prefer focused tests; don't claim a build/test/GPU pass from lightweight checks.
+- **Do not run the full test suite locally.** Run `npm run typecheck` and
+  `npm run test:changed` (the tests beside the files your branch changed), or
+  `npx vitest run <path>`. CI runs everything on every push
+  (`.github/workflows/ci.yml`); read it with `gh run list --branch <branch>`.
+  A bare `npm test` is the quick suite (slow group left out); `npm run test:all`
+  is everything. The GPU gates are not in CI.
 - Plans start from [`docs/superpowers/plan-template.md`](docs/superpowers/plan-template.md):
   logic in pure renderer-free modules, rendering in hand-written WGSL (release
   is a Rust + wgpu port).

@@ -19,10 +19,12 @@ export const MARCH_BODY_LIGHT = /* wgsl */ `  // Runtime normal out (MARCH_NORMA
   // MOTION VECTORS step 2: the object-motion attachment for temporal accumulation. Off (one branch)
   // unless the per-instance switch gInstMelt.y (meltCfg.y, spare until 2026-09-22) is set — the
   // layer sets it only while accumulation is on, so the ship path never pays for prevPosed.
+  // (pS, the hit piece's un-warped point: the previous-frame rows are the closed head's, so this is the closed
+  // body's motion; the opening of a split is not in it.)
   gMarchMotion = vec4<f32>(0.0);
   if (gInstMelt.y > 0.5) {
     let mvPrev = prevPosed(anchor, data, hitBest, gBand);
-    if (mvPrev.w > 0.5) { gMarchMotion = vec4<f32>(mvPrev.xyz - p, 1.0); }
+    if (mvPrev.w > 0.5) { gMarchMotion = vec4<f32>(mvPrev.xyz - pS, 1.0); }
   }
   // NORMAL-OUTPUT MODE (debugCfg.x == 9, neural upscale normals capture,
   // 2026-09-12). The final shading normal (after the face bump) in WORLD space,
@@ -42,7 +44,7 @@ export const MARCH_BODY_LIGHT = /* wgsl */ `  // Runtime normal out (MARCH_NORMA
   if (debugCfg.x > 15.5 && debugCfg.x < 16.5) {
     let prev = prevPosed(anchor, data, hitBest, gBand);
     if (prev.w < 0.5) { return vec4<f32>(1.0, 0.0, 1.0, t); }
-    return vec4<f32>(clamp(vec3<f32>(0.5) + (prev.xyz - p) * 40.0, vec3<f32>(0.0), vec3<f32>(1.0)), t);
+    return vec4<f32>(clamp(vec3<f32>(0.5) + (prev.xyz - pS) * 40.0, vec3<f32>(0.0), vec3<f32>(1.0)), t);
   }
 ${FLASHLIGHT_BLOCK}
 ${LIGHT_LIST_BLOCK}

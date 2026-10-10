@@ -11,7 +11,7 @@
 // smoke are deliberately not here.
 
 import type { Vec3 } from '../types';
-import { clothifyWound, worldHitToWound, type Wound } from '../damage';
+import { clothifyWound, worldHitToWound, type ShotAim, type Wound } from '../damage';
 
 export const GRAPESHOT = {
   /** Pellets per barrel. The brief says ~8 and "err chunky". */
@@ -51,8 +51,9 @@ export const GRAPESHOT = {
   /** Minimum time between trigger pulls, seconds — two barrels is a
    *  hand-laid zip gun, not a semi-auto. */
   fireCooldownSec: 0.45,
-  /** Instant camera pitch kick per barrel, radians. Decays in game-main. */
-  kickRadPerBarrel: 0.035,
+  /** Instant camera pitch kick per barrel, radians. Decays in game-main. Up from
+   *  0.035 with the heavy gun recoil (2026-10-02): the camera follows the gun a little. */
+  kickRadPerBarrel: 0.05,
   /** Hit epsilon for the pellet trace, metres (surface within this = hit). */
   hitEps: 0.01,
   /** Max travel per trace sample, metres — under half a limb girth so a
@@ -125,6 +126,9 @@ export interface Projectile {
   radius: number;
   /** Which crater this projectile stamps on impact. */
   kind: 'pellet' | 'slug';
+  /** The actors whose skull this projectile has damaged a plate of, on an open head (skeleton-spike/
+   *  skull-split-hit.ts SkullStrikes): one plate of a skull at most. Unset until the first. */
+  skulls?: object[];
 }
 
 /**
@@ -212,15 +216,18 @@ export function spawnRound(origin: Vec3, aimDir: Vec3, seed: number): Projectile
 /**
  * One slug from the muzzle along `dir`. No spread — the whole point is a
  * single known ray the owner (and the placement gate) can trust.
+ * `aim` is where the player was aiming when it left (the eye and the
+ * crosshair's ray): it rides the slug's provenance, copied, and a slug
+ * given none carries none.
  */
-export function spawnSlug(origin: Vec3, dir: Vec3): Projectile {
+export function spawnSlug(origin: Vec3, dir: Vec3, aim?: ShotAim): Projectile {
   return {
     pos: [...origin] as Vec3,
     vel: [dir[0] * SLUG.speed, dir[1] * SLUG.speed, dir[2] * SLUG.speed],
     ageSec: 0,
     radius: SLUG.radius,
     kind: 'slug',
-    shot: { weapon: 'slug', shotId: nextShotId++ },
+    shot: { weapon: 'slug', shotId: nextShotId++, ...(aim ? { aim: { eye: [...aim.eye] as Vec3, dir: [...aim.dir] as Vec3 } } : {}) },
   };
 }
 

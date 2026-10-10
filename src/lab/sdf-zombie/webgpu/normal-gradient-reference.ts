@@ -1,7 +1,24 @@
+// src/lab/sdf-zombie/webgpu/normal-gradient-reference.ts
+//
+// CPU reference for the analytic normal gradient: capsule, smooth min and max, wound and finite-difference gradients, plus the reason codes.
+
 export type V3 = readonly [number, number, number];
 
 export type NgReason = 'ok' | 'unsupported' | 'degenerate' | 'hard-boundary'
   | 'owner-unstable' | 'wound-pending' | 'sampled-cache' | 'inactive';
+
+/** THE HEAD SPLIT's code, after NgReason's eight (0..7 in that order): the hit is inside an open head's region
+ *  sphere, where the march does not ask the analytic gradient at all (march/body/blocks/post/shading-normal.wgsl.ts). */
+export const NG_REASON_SPLIT = 8;
+/** How many reason codes the march reports (0..NG_REASON_SPLIT). */
+export const NG_REASON_CODES = NG_REASON_SPLIT + 1;
+/** Where a coverage reader counts a pixel of reason `code` whose dominant prim is `owner`: not at all (background, an
+ *  unknown code, no prim), apart as a split-region pixel (the closed body is the wrong oracle for it: its surface
+ *  there is a turned or capped piece), or against the body. */
+export function ngCoverageClass(code: number, owner: number): 'skip' | 'split' | 'body' {
+  if (!(code >= 0 && code < NG_REASON_CODES) || owner < 0) return 'skip';
+  return code === NG_REASON_SPLIT ? 'split' : 'body';
+}
 
 export interface Dg {
   d: number;

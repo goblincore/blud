@@ -53,6 +53,8 @@ function activeCharacterName(): string {
   return want && hasCharacter(want) ? want : 'zombie';
 }
 import { parseBlob } from '../blob-parse';
+import { makePoseRig, poseJoints, type PoseRig } from '../pose';
+import { posesFor } from '../pose-library';
 import { generateFaceSheet } from '../blob-face-sheet';
 import { compileBlob, compileFace, compileSheetImage } from '../blob-compile';
 import {
@@ -960,6 +962,8 @@ async function main() {
    *  steps — unlike setMotionEnabled(false), which snaps the rest pose back
    *  to the authored base (a turntable of a held pose showed the A-pose). */
   let poseHeld = false;
+  /** The pose layer's per-character skeleton data (pose.ts), built on first use. */
+  let poseRig: PoseRig | null = null;
   /** Seconds since the hero last fired; feeds the prop's muzzle rise. */
   let sinceFire = Infinity;
   const cruiseFor = (band: 'walk' | 'run') =>
@@ -4576,6 +4580,7 @@ async function main() {
      */
     holdPose(preset: 'walk' | 'run' | 'hip' | 'aim' | 'rest', frames = 90,
       swing?: { phase: number; variant: SwingVariant }) {
+      if (heroView.prop) heroView.prop.object.visible = true; // holdAuthoredPose hides it
       setWander(false);
       setMotionEnabled(true); // resetMotion: fresh state at the origin, poseHeld off
       forceSpeed = preset === 'walk' ? cruiseFor('walk') : preset === 'run' ? cruiseFor('run') : 0;
@@ -4597,6 +4602,37 @@ async function main() {
       poseHeld = true; // NOT setMotionEnabled(false): that rebinds to the authored rest
       forceSpeed = undefined; carryOverride = undefined;
       return lastMotionFrame ? { gait: lastMotionFrame.gaitName, carry: lastMotionFrame.carry } : null;
+    },
+    /**
+     * THE POSE LAYER (spec 2026-10-03-goblin-pose-layer-design.md): hold the named authored pose or clip of the ACTIVE character
+     * at clip time `t` seconds, stepped `frames` times at 1/60 with the body standing still, then frozen exactly like holdPose so
+     * the rig keeps it for capture. Returns the clip name and t, or null when this character has no such pose. The clip is
+     * sampled once at `t` (a held pose); to scrub a clip, call it again with another t.
+     */
+    holdAuthoredPose(name: string, t = 0, frames = 30) {
+      const clip = posesFor(activeCharacterName())[name];
+      const joints = heroMotion.motionJoints;
+      if (!clip || !joints) return null;
+      poseRig ??= makePoseRig(parseBlob(entry.src), joints.names, joints.base);
+      const pose = poseJoints(poseRig, clip, t);
+      // An authored pose holds NO gun: the prop is still driven by the carry system's own arm targets, which the pose overwrites, so
+      // left visible it floats away from the hands. (At home the goblin carries nothing.) holdPose shows it again.
+      if (heroView.prop) heroView.prop.object.visible = false;
+      setWander(false);
+      setMotionEnabled(true); // resetMotion: fresh state at the origin, poseHeld off
+      forceSpeed = 0; carryOverride = undefined;
+      const sig = heroSignals;
+      for (let i = 0; i < frames; i++) {
+        stepActorMotion(heroMotion, {
+          current, dt: 1 / 60, wander: false, armStyle, headingFollow, gazeFollow,
+          bounds: WANDER_BOUNDS, rng: motionRng, signals: sig,
+          profile: motionProfile, forceSpeed, carryOverride, pose,
+        });
+      }
+      sinceFire = Infinity;
+      poseHeld = true;
+      forceSpeed = undefined;
+      return { pose: clip.name, t };
     },
     /**
      * The X1.25 post chain (FXAA / temporal smear / sharp-bilinear upscale)

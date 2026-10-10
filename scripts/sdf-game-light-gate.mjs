@@ -25,6 +25,9 @@
 //      std, chroma bounds) and >= 2x the torch-off body (1.5x at 6 m). `?lightlist=0` at 2 m is
 //      reported.
 //   8. BONES (Task 11): the skull catches the muzzle flash and does not glow in the dark.
+//      LIGHT_GATE_ONLY_SKULL=1 runs the list boot's skull scene alone (the calibration loop, about 30 s);
+//      LIGHT_GATE_SKULL_QUERY adds to that boot's query (e.g. `&sculpt=classic`). With LIGHT_GATE_DEBUG it
+//      also prints what the disc and the ring hold (the bone's own pixels against the rest).
 //   9. GIBS (Task 12): a zombie blown up under a tube (default asset gibs, baked-chunk materials)
 //      in the list boot and a `?lightlist=0` boot, gib pixels (the pixels that change when the
 //      pieces are hidden in the same frame), tube then flashlight. List mode: the gib mean is no
@@ -187,7 +190,21 @@ const ringMean = (img, cx, cy, rIn, rOut) => {
 };
 /** Skull disc radius and hood ring radii, in units of the skull's projected half-width. */
 const SKULL_DISC = 0.7, RING_IN = 1.25, RING_OUT = 1.6;
-const SKULL_FLESH_MAX = 1.5;
+// SKULL_FLESH_MAX, RE-DERIVED 2026-10-08 (it was 1.5, set at Task 11b on a reading of 1.18x; the numbers and the
+// frames are in docs/dev-notes/2026-10-08-skull-dark-gate/NOTES.md). On main the ratio reads 1.54-1.56x (five boots)
+// with the bone's dark-room response as it was: every bone instance still carries the body's fill (0.250, asserted
+// below). Two changes of 2026-10-07 moved the number, and neither is lighting:
+//  - THE RING. It holds the head crater's raised lip, the shoulders and the room behind them (the zombie has no
+//    hood). A gun crater on a head keeps 0.3 of the stock lip now (head-burst.ts headLip), so the ring lost most of
+//    its wet lip: 0.071 -> 0.054 around an unchanged first-paint skull (0.067), 0.94x -> 1.24x.
+//  - THE DISC. The second paint (`full`, the owner's pick) is paler bone: 0.067 -> 0.083, 1.24x -> 1.56x. With the
+//    stock lip it reads 1.18x. On the same pixels in linear light it is 1.5x the first paint in the muzzle flash and
+//    1.2x in the dark, and the share that does not follow the room (the fresnel rim) is smaller than the first paint's.
+// What the check is for still stands clear of it: the bone ambient not following the room (fill forced to 1, the
+// Task 11b bug) reads 2.99x (2.31x under `?sculpt=classic`), and `?lightlist=0` 2.76x. The bound keeps the headroom
+// the first calibration left over its reading (1.5 / 1.18 = 1.27): 1.56 x 1.27 = 2.0, two thirds of the bug's reading.
+// A lip or paint change moves this ratio again: LIGHT_GATE_ONLY_SKULL=1 LIGHT_GATE_DEBUG=1 says which region moved.
+const SKULL_FLESH_MAX = 2.0;
 
 const settle = (ms = 700) => sleep(ms);
 
@@ -196,7 +213,7 @@ const lights = () => evaluate('__sdfGame.lights()');
 const roomLamps = (l, room) => l.lamps.filter((x) => x.room === room && x.mood !== 'fire' && !x.beacon);
 
 // LIGHT_GATE_ONLY_LIST=1 runs section 7 alone (the calibration loop).
-if (!process.env.LIGHT_GATE_ONLY_LIST && !process.env.LIGHT_GATE_ONLY_GIBS && !process.env.LIGHT_GATE_ONLY_COST && !process.env.LIGHT_GATE_ONLY_BEACONS) {
+if (!process.env.LIGHT_GATE_ONLY_LIST && !process.env.LIGHT_GATE_ONLY_GIBS && !process.env.LIGHT_GATE_ONLY_COST && !process.env.LIGHT_GATE_ONLY_BEACONS && !process.env.LIGHT_GATE_ONLY_SKULL) {
 // 1. DARK START — no flashlight until the coat check (carriage 4 of 8).
 if (!(await boot('level=night-train&frozen&nospawn&god'))) { console.error(consoleEvents.slice(-8)); fail('night-train did not boot'); }
 await evaluate(`document.getElementById('loader')?.classList.add('loader-hidden')`);
@@ -857,9 +874,10 @@ if (process.env.LIGHT_GATE_ONLY_COST) {
   process.exit(0);
 }
 
-if (!process.env.LIGHT_GATE_ONLY_LIST && !process.env.LIGHT_GATE_ONLY_GIBS) await beaconSection();
+const ONLY_SKULL = !!process.env.LIGHT_GATE_ONLY_SKULL;
+if (!process.env.LIGHT_GATE_ONLY_LIST && !process.env.LIGHT_GATE_ONLY_GIBS && !ONLY_SKULL) await beaconSection();
 
-await listBoot('level=night-train&frozen&god');
+await listBoot(`level=night-train&frozen&god${ONLY_SKULL ? process.env.LIGHT_GATE_SKULL_QUERY ?? '' : ''}`);
 const LL3 = await evaluate('__sdfGame.lightList()');
 if (!Array.isArray(LL3) || LL3.length === 0 || LL3.length > 32) fail(`lightList() in third class: ${JSON.stringify(LL3)?.slice(0, 300)}`);
 // The crowd fix: every crowd member carries its own picks (its record), not the type's.
@@ -873,15 +891,15 @@ if (!pa || !pb || pa.room !== pb.room || !pa.crowd || !pb.crowd || !(sep > 1.5))
 if (pa.picks[0].index < 0 || pb.picks[0].index < 0 || pa.picks[0].index === pb.picks[0].index) fail(`crowd pair share a dominant: ${JSON.stringify({ a: pa.picks, b: pb.picks })}`);
 const lit = picks.filter((p) => p.picks[0].index >= 0).length;
 pass(`shared list: ${LL3.length} lights in third class; crowd actors ${pa.id}/${pb.id} (room ${pa.room}, ${sep.toFixed(1)} m apart) dominants ${pa.picks[0].index} (w ${pa.picks[0].weight.toFixed(3)}) / ${pb.picks[0].index} (w ${pb.picks[0].weight.toFixed(3)}); ${lit}/${picks.length} bodies picked`);
-const listOn = process.env.LIGHT_GATE_ONLY_GIBS ? null : await listScenes('on');
-const nearOn = process.env.LIGHT_GATE_ONLY_GIBS ? null : await flashNear('on', FLASH_SWEEP_M);
+const listOn = process.env.LIGHT_GATE_ONLY_GIBS || ONLY_SKULL ? null : await listScenes('on');
+const nearOn = process.env.LIGHT_GATE_ONLY_GIBS || ONLY_SKULL ? null : await flashNear('on', FLASH_SWEEP_M);
 
 // 8. BONES READ THE SAME LIGHTS (plan 1, Task 11): the skull catches the muzzle flash. In the dark
 // coat check (nothing picks the body), a slug crater opens the face of the nearest actor to its
 // mesh skull; the player's muzzle flash (held by hand-stepping at dt 0) must be among the skull
 // instances' own picks (iLights = the owner's bodyLights), and the crater crop brightens. Before the
 // flash (Task 11b) the skull may not glow: its bone fill is the body's dark-room factor and the skull
-// disc is at most 1.5x the hood ring around it.
+// disc is at most SKULL_FLESH_MAX x the ring around it.
 // LIGHT_GATE_SHOT=<dir> keeps skull-noflash-<tag>.png / skull-flash-<tag>.png. The ?lightlist=0
 // boot runs the same scene for the record (the old key path: no picks, the flash rides the beam).
 async function skullScene(tag) {
@@ -918,6 +936,27 @@ async function skullScene(tag) {
   const hR = Math.hypot(he.x - hc.x, he.y - hc.y);
   const boneOff = ringMean(imgOff, hc.x, hc.y, 0, hR * SKULL_DISC);
   const fleshOff = ringMean(imgOff, hc.x, hc.y, hR * RING_IN, hR * RING_OUT);
+  // What the two regions hold (LIGHT_GATE_DEBUG; reported, never judged): the bone's own pixels are the ones that
+  // change when the bone meshes and the eyes are hidden in the same frame (skull-nobone-<tag>.png).
+  if (process.env.LIGHT_GATE_DEBUG) {
+    await evaluate('__sdfGame.meshSkeletonShow({ bones: false, eyes: false })');
+    await stepN(3, 0); await settle(300);
+    const bare = await shoot(`skull-nobone-${tag}`);
+    await evaluate('__sdfGame.meshSkeletonShow({ bones: true, eyes: true })');
+    await stepN(3, 0); await settle(300);
+    const acc = { discBone: [0, 0], discRest: [0, 0], ringBone: [0, 0], ringRest: [0, 0] };
+    for (let y = 0; y < imgOff.h; y++) for (let x = 0; x < imgOff.w; x++) {
+      const d = Math.hypot(x - hc.x, y - hc.y), k = (y * imgOff.w + x) * imgOff.ch;
+      const region = d <= hR * SKULL_DISC ? 'disc' : d >= hR * RING_IN && d <= hR * RING_OUT ? 'ring' : null;
+      if (!region) continue;
+      const bone = Math.abs(imgOff.data[k] - bare.data[k]) + Math.abs(imgOff.data[k + 1] - bare.data[k + 1]) + Math.abs(imgOff.data[k + 2] - bare.data[k + 2]) > 6;
+      const t = acc[region + (bone ? 'Bone' : 'Rest')];
+      t[0] += (imgOff.data[k] + imgOff.data[k + 1] + imgOff.data[k + 2]) / 765; t[1]++;
+    }
+    const regions = Object.fromEntries(Object.entries(acc).map(([name, [sum, n]]) => [name, { px: n, mean: n ? +(sum / n).toFixed(4) : null }]));
+    const drawn = await evaluate('(() => { const d = __sdfGame.skeletonDiagnostics(); return { skull: d.skull, sculpt: d.sculptVariant ?? null }; })()');
+    console.log('DBG skull regions', tag, JSON.stringify({ ...regions, ...drawn }));
+  }
   const woundsBefore = (await evaluate(`__sdfGame.actorWounds(${a.id})`)).length;
   // The flash alone (no shot: Night Train's player owns no shotgun here), the same flash clock fire() restarts.
   const fired = await evaluate('__sdfGame.muzzleFlash()');
@@ -946,7 +985,8 @@ async function skullScene(tag) {
   // applyRoomFill factor), so with nothing picking the body the skull may not sit far above the
   // flesh around it: skull disc mean <= SKULL_FLESH_MAX x the hood ring mean. Measured at Task 11b:
   // 1.73x before the fix (the ambient seeded once, at full), 1.18x after; ?lightlist=0 reads ~1.8x
-  // (the old path, untouched on purpose). Every bone instance carries the body's fill factor, < 1 in this dead room.
+  // (the old path, untouched on purpose). Those are the first paint's under the stock head lip; today's readings
+  // and the bound are at SKULL_FLESH_MAX. Every bone instance carries the body's fill factor, < 1 in this dead room.
   const fills = before.fill ?? [];
   if (!fills.length || fills.some((f) => !(f < 0.999)) || Math.max(...fills) - Math.min(...fills) > 1e-6) fail(`skull: bone fill not the owner's dark-room factor: ${JSON.stringify(fills)}`);
   if (!(boneOff <= fleshOff * SKULL_FLESH_MAX)) fail(`skull glows in the dark: skull ${boneOff.toFixed(3)} vs surrounding flesh ${fleshOff.toFixed(3)} (${(boneOff / fleshOff).toFixed(2)}x > ${SKULL_FLESH_MAX}x)`);
@@ -1077,6 +1117,7 @@ async function gibScene(tag) {
 }
 const ONLY_GIBS = !!process.env.LIGHT_GATE_ONLY_GIBS;
 const skullListOn = ONLY_GIBS ? null : await skullScene('on');
+if (ONLY_SKULL) { console.log(`PASS sdf-game-light-gate skull only (wall ${((Date.now() - T0) / 1000).toFixed(0)} s)`); process.exit(0); }
 const gibsOn = await gibScene('on');
 // Last in the list boot: it kills the third-class tubes.
 const torchOnly = ONLY_GIBS ? null : await flashTorchOnly();

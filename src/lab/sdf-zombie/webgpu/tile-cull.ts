@@ -38,7 +38,7 @@ export const TILE_MAX_ENTRIES = 64;
 /**
  * Texels per packed entry in the stream: bound sphere, then the
  * ROW_GROUP_RANGE-shaped pack (start, count, distort, flags), then meta
- * (bodyIndex in x). The middle texel is byte-for-byte the layout
+ * (bodyIndex in x, the per-step cull sphere's offset in yzw: TileGroupInput.cullOffset). The middle texel is byte-for-byte the layout
  * ROW_GROUP_RANGE already uses, so the shader's foldGroup consumes both
  * sources identically. THREE texels, not the two a minimal packing could
  * live with, because the per-step group-sphere cull must keep its sphere
@@ -78,6 +78,40 @@ export interface TileGroupInput {
    *  tapered/chamfered/bent. Dropped here, the tile path would fold a turned
    *  head world-axis and skip every shape row — silent wrong geometry. */
   flags: number;
+  /** THE PER-STEP CULL'S SPHERE, when it is not the sphere above (the head split, zombie-gpu.ts upload): that
+   *  sphere's centre minus this one's. `center` / `radius` is what the binner and the per-ray test read, a bound of
+   *  where the group's flesh can be on screen; mapBody's per-step cull tests a point in the group's own (closed)
+   *  frame and wants the tighter sphere it had before the bound grew. The march rebuilds it as
+   *  (center + cullOffset, radius - |cullOffset|): the largest sphere about that centre inside this one
+   *  (tile-preload.wgsl.ts). Absent = no offset: the sphere above, as for every body without a split. */
+  cullOffset?: [number, number, number];
+}
+
+/** What a bound that carries a cullOffset is padded by (m): the march rebuilds the cull sphere in float32 as
+ *  radius - |cullOffset|, and where the two spheres touch from inside that difference IS the closed radius, so a
+ *  rounding of a few 1e-8 m could leave it a hair short. Two microns is far over the rounding and far under
+ *  anything a bound's reader resolves. */
+export const TILE_CULL_PAD = 2e-6;
+
+/** A grown bound that keeps the group's own sphere for the per-step cull: `g` re-centred on `centre` with `radius`
+ *  (padded by TILE_CULL_PAD), its cullOffset pointing back at g's own centre. The rebuilt cull sphere
+ *  (tileCullSphere) holds g's sphere whenever the grown one does. */
+export function withCullSphere(g: TileGroupInput, centre: ArrayLike<number>, radius: number): TileGroupInput {
+  return {
+    ...g,
+    center: [centre[0]!, centre[1]!, centre[2]!],
+    radius: radius + TILE_CULL_PAD,
+    cullOffset: [g.center[0] - centre[0]!, g.center[1] - centre[1]!, g.center[2] - centre[2]!],
+  };
+}
+
+/** THE TWIN of tile-preload.wgsl.ts's rebuild, in float32 as the march computes it: the sphere mapBody's per-step
+ *  cull tests for this entry. */
+export function tileCullSphere(g: TileGroupInput): { center: [number, number, number]; radius: number } {
+  const f = Math.fround, o = g.cullOffset ?? [0, 0, 0];
+  const ox = f(o[0]), oy = f(o[1]), oz = f(o[2]);
+  const len = f(Math.sqrt(f(f(f(ox * ox) + f(oy * oy)) + f(oz * oz))));
+  return { center: [f(f(g.center[0]) + ox), f(f(g.center[1]) + oy), f(f(g.center[2]) + oz)], radius: f(f(g.radius) - len) };
 }
 
 export interface TileBinResult {
@@ -292,8 +326,11 @@ export class TileBinner {
           this.entries[e + 5] = g.count;
           this.entries[e + 6] = g.distort;
           this.entries[e + 7] = g.flags;
-          // Texel C: meta, bodyIndex in x (merged pass row band).
+          // Texel C: meta, bodyIndex in x (merged pass row band); yzw the per-step cull sphere's offset (0 = none).
           this.entries[e + 8] = g.bodyIndex;
+          this.entries[e + 9] = g.cullOffset?.[0] ?? 0;
+          this.entries[e + 10] = g.cullOffset?.[1] ?? 0;
+          this.entries[e + 11] = g.cullOffset?.[2] ?? 0;
         }
       }
     }
@@ -325,6 +362,7 @@ export class TileBinner {
         const n = this.headers[h + 1]!;
         if (i < 0 || i >= n) throw new Error(`entry ${i} out of range (tile has ${n})`);
         const o = (base + i) * TILE_STRIDE * 4;
+        const off: [number, number, number] = [this.entries[o + 9]!, this.entries[o + 10]!, this.entries[o + 11]!];
         return {
           bodyIndex: this.entries[o + 8]!,
           start: this.entries[o + 4]!,
@@ -333,6 +371,7 @@ export class TileBinner {
           flags: this.entries[o + 7]!,
           center: [this.entries[o]!, this.entries[o + 1]!, this.entries[o + 2]!],
           radius: this.entries[o + 3]!,
+          ...(off[0] !== 0 || off[1] !== 0 || off[2] !== 0 ? { cullOffset: off } : {}),
         };
       },
     };

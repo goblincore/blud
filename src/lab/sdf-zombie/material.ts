@@ -1,4 +1,7 @@
 // src/lab/sdf-zombie/material.ts
+//
+// Flesh material and light presets for the SDF renderer: the FleshMaterial shape, FLESH_PRESETS and LIGHT_PRESETS.
+
 import type { Vec3 } from './types';
 
 export interface FleshMaterial {
@@ -83,6 +86,22 @@ export interface FleshMaterial {
   /** 0 shades organ prims as plain bone, so the off-state is one knob
    *  rather than a rebuild. */
   organAmp: number;
+  /**
+   * Body grain: the face sheet's speckle on the rest of the body, in two
+   * octaves (body-grain.ts; spec docs/superpowers/specs/2026-10-02-body-grain-design.md).
+   * Hard-edged cells cut in REST space so they ride each limb: face-sized
+   * (3.5 mm) up close, 1.2 cm farther out. Each cell is an albedo multiply and
+   * a small normal tilt.
+   *
+   * The SAME UNITS as the face sheet's `grain` (blob-face-sheet.ts draws plain
+   * skin as 0.46 + (hash - 0.5) * 2 * grain): a character that sets one value in
+   * both gets one contrast on face and body.
+   *
+   * 0 skips the whole shader block, which is why every preset ships 0: like
+   * `mottleAmp`, turning it on is a per-character decision (a `.blob` `palette`
+   * line). The renderer carries it per body in meltCfg.w (applyMaterial).
+   */
+  grain: number;
 }
 
 export type FleshPresetName = 'henenlotter-latex' | 'wet-meat' | 'clay';
@@ -106,6 +125,7 @@ export const FLESH_PRESETS: Record<FleshPresetName, FleshMaterial> = {
     woundDepthAmp: 1,
     visceraColor: [0.28, 0.06, 0.10], visceraDepth: 0.045, visceraAmp: 1,
     organColor: [0.72, 0.32, 0.30], organAmp: 1,
+    grain: 0,
   },
   // Rotten meat: darker, broader highlight, veiny, more scatter.
   'wet-meat': {
@@ -122,6 +142,7 @@ export const FLESH_PRESETS: Record<FleshPresetName, FleshMaterial> = {
     woundDepthAmp: 1,
     visceraColor: [0.28, 0.06, 0.10], visceraDepth: 0.045, visceraAmp: 1,
     organColor: [0.72, 0.32, 0.30], organAmp: 1,
+    grain: 0,
   },
   // Claymation: matte, waxy, thumb-smushed.
   clay: {
@@ -138,6 +159,7 @@ export const FLESH_PRESETS: Record<FleshPresetName, FleshMaterial> = {
     woundDepthAmp: 1,
     visceraColor: [0.28, 0.06, 0.10], visceraDepth: 0.045, visceraAmp: 1,
     organColor: [0.72, 0.32, 0.30], organAmp: 1,
+    grain: 0,
   },
 };
 

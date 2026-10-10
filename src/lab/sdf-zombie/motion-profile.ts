@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, type ArmStyle, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, type ArmStyle, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { Vec3 } from './types';
@@ -89,6 +89,31 @@ export interface MotionProfile {
 /** True for the soldier and his variants (MotionProfile.family). */
 export function isSoldierFamily(profile: Pick<MotionProfile, 'family'> | null | undefined): boolean {
   return profile?.family === 'soldier';
+}
+
+/**
+ * A GORE BODY takes a gun crater the way the zombie does: the wet red lip (torn-lips.ts wetLipWound) and, on its
+ * head, the low lip that lets the skull show (head-burst.ts burstTuning.headLip). It is every body that is neither
+ * on the soldier's damage model (the soldier family keeps its own soldierWound stain and stock lips) nor a soft
+ * target (the cloth-robed cultists take decals). No profile at all is the zombie's, a gore body. This is a rule
+ * about the BODY's flesh, so it is asked of the profile; the rules that belong to the zombie alone (the head split,
+ * the pop) ask the character's name instead.
+ */
+export function isGoreBody(profile: Pick<MotionProfile, 'family' | 'soft'> | null | undefined): boolean {
+  return !isSoldierFamily(profile) && !profile?.soft;
+}
+
+/**
+ * Do the torso guards (rig.ts RigGuardSphere) apply to this profile? Only to an
+ * UNARMED body: the zombie and the other bare-handed characters. Anything that
+ * holds a prop or a gun, or carries one in a stance (the soldier family, the
+ * cultist's tommy gun, the bride's sword guard, the ogre's chainsaw, the
+ * juggernaut's chaingun, the warbull's launcher), puts its hands at or in front of
+ * the torso on purpose, and a guard that keeps arms off the torso would fight the
+ * authored pose and drag the prop off its grip.
+ */
+export function wantsTorsoGuards(profile: MotionProfile | null | undefined): boolean {
+  return !profile || (!profile.family && !profile.carries && !profile.prop && !profile.gunner && !profile.melee);
 }
 
 export interface FlailTuning {
@@ -309,8 +334,41 @@ export const BRIDE_PROFILE: MotionProfile = {
   melee: { kind: 'sword' },
 };
 
+/** The goblin, carrying the PLAYER'S shotgun (goblin refinement phase 3, owner decision 2 of 2026-10-01: "it holds the
+ *  player's weapons"; THIN FIRST PASS, 2026-10-02: one weapon, one stance, on the zombie's legs). Everything here is
+ *  the soldier's held-gun machinery (carry.ts, held-prop.ts) pointed at the goblin's rig; phase 4 replaces the gait.
+ *
+ *  THE PROP. `shorty-double.glb` is the first-person shotgun, and it already carries `Grip_Hand` (0, -0.074, -0.074)
+ *  and `Fore_Hand` (0, -0.045, 0.155) at exactly carry.ts's GUN_GRIP locators, so no third-person model is needed.
+ *  Its muzzle nodes sit at z 0.318 against GUN_GRIP.muzzle 0.41 (the soldier's longer gun); `muzzle()` reads the
+ *  constant, which only matters for gas and flash and nothing fires from the goblin yet.
+ *
+ *  `gripReach` 0.0396: the goblin's fist is an ORB centred 55% along its 0.072 m hand bone (goblin.blob `blob arm on
+ *  hand at=0.55 r=0.046`), and the rig's hand joint is the WRIST, so the grip seats 0.0396 m past it, in the middle of
+ *  the orb: the handle passes through the orb, the PS1 way (refinement spec decision 3). Same reasoning as the
+ *  ogre's 0.075 for his 0.15 m hand. */
+export const GOBLIN_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'goblin',
+  // Its own scamper (phase 4a, spec 2026-10-02-goblin-gait-design.md): the soldier's stride curves retimed for 0.56 m
+  // legs. SHAMBLE_CARRY, the phase-3 interim, stays exported (gait.ts) and pinned by its own test.
+  gait: { walk: GOBLIN_WALK, run: GOBLIN_RUN },
+  // Speeds come from the curves, not guesses (gait-from-clip.ts: speed = travel x legLen x freq / duty). Walk
+  // 0.888 x 0.56 x 1.5 / 0.625 = 1.19 m/s; run 0.663 x 0.56 x 2.1 / 0.281 = 2.77 m/s. Cruise is the WALK's speed, below
+  // runBand.from, so he marches instead of drifting toward the run (the soldier's overshoot lesson, see SOLDIER_PROFILE);
+  // 1.30 sits just above it.
+  runBand: { from: 1.30, to: 2.77 },
+  cruise: 1.19,
+  armStyle: 'carry',
+  // The soldier's carries; the goblin's arms are long (0.235 + 0.235 m on a 1.3 m body) and may want their own
+  // solve: the carry angles are relative to the authored hang. Judge in the lab turntable before tuning.
+  carries: { walk: 'low', run: 'low', fire: 'aim' },
+  prop: { url: '/assets/lab/shorty-double.glb', scale: 1, gripReach: 0.0396 },
+};
+
 const BY_NAME: Record<string, MotionProfile> = {
   zombie: ZOMBIE_PROFILE,
+  goblin: GOBLIN_PROFILE,
   soldier: SOLDIER_PROFILE,
   juggernaut: JUGGERNAUT_PROFILE,
   ogre: OGRE_PROFILE,

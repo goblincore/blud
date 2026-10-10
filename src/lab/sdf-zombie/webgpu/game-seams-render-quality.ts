@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-seams-render-quality.ts
 //
+// The window.__sdfGame render-quality members: FOV, impact splash, shell, upscale, SDF scale, fisheye and viewmodel FOV controls.
+//
 // Members lifted verbatim out of game-main.ts's `window.__sdfGame` literal.
 // Every one needed nothing but the GameContext, so this factory takes no deps.
 //
@@ -8,9 +10,9 @@
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { clampFovDeg } from './fisheye';
-import { applySdfScale, applyViewmodelFovScale, enableTrainedUpscale, fisheyeReport, sizeSdfLayer, updateUpscaleAbLabel } from './game-render-leaves';
-import { ensureImpactSplashLayer } from './game-vfx-leaves';
-import { shellAmpOf } from './game-world-leaves';
+import { applySdfScale, applyViewmodelFovScale, enableTrainedUpscale, fisheyeReport, sizeSdfLayer, updateUpscaleAbLabel } from './game-render-controls';
+import { ensureImpactSplashLayer } from './game-wound-vfx';
+import { shellAmpOf } from './game-hit-trace';
 import { impactSplashPresets, impactSplashProfiles, resolveImpactSplashProfile, type ImpactSplashProfile, type ImpactSplashWeapon } from './impact-splash-profiles';
 import { UPSCALE_SCALE, parseUpscaleConfig } from './upscale/upscale-model';
 import { runUpscaleSelfCheck } from './upscale/upscale-selfcheck';
@@ -64,7 +66,9 @@ export function createRenderQualitySeams(ctx: GameContext) {
      *  through applySdfScale (the game's own state). `null` turns the stage off and
      *  leaves the scale alone — callers restore it. `{ model }` = random weights (cost/parity
      *  only) and returns the info. `{ trained: '<name>' }` loads a trained export from the dev
-     *  model store and returns a PROMISE of the info (P3); it rejects if the model is missing or invalid. */
+     *  model store and returns a PROMISE of the info (P3); it rejects if the model is missing or invalid.
+     *  It resolves only after the new stage's passes are precompiled and the rAF loop is back in its
+     *  intended state, so `await setUpscale(...)` then `bench()` is safe. */
     setUpscale: (
       raw: { model?: string; layout?: string; inputs?: string; seed?: number; trained?: string } | null,
     ): UpscaleInfo | Promise<UpscaleInfo> => {
@@ -96,7 +100,10 @@ export function createRenderQualitySeams(ctx: GameContext) {
         shellAmp: shellAmpOf(ctx),
       };
     },
-    /** SDF-pass scale relative to the capped buffer (1.0 = 1:1). */
+    /** SDF-pass scale relative to the capped buffer (1.0 = 1:1). With the upscale stage on
+     *  (the shipped default), anything but its scale (0.5) drops the stage to NATIVE with a
+     *  one-time warning — see upscale/upscale-scale-guard.ts. Setting 0.5 again does not
+     *  re-enable it; the shipped state is setSdfScale(0.5) on a fresh boot. */
     setSdfScale: (v: number) => applySdfScale(ctx, v),
     // ---------------------------------------------------------------
     // THE FISHEYE. setFisheye(deg) sets the apparent vertical FOV at

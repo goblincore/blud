@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/game-telemetry-controls.ts
+//
+// The on-screen gameplay telemetry recorder widget: record, mark, save-to-disk and download buttons around a GameTelemetry log.
+
 import { GameTelemetry, type GameplayCapture } from './game-telemetry';
 
 async function saveLocal(capture: GameplayCapture): Promise<{ path: string }> {

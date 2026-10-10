@@ -3,9 +3,9 @@ import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { GameContext } from './game-context';
 import { aimArm } from './game-arms';
-import { SHOULDER_L_VIEW, SHOULDER_R_VIEW, BEND_L_VIEW, BEND_R_VIEW } from './game-weapon-leaves';
+import { SHOULDER_L_VIEW, SHOULDER_R_VIEW, BEND_L_VIEW, BEND_R_VIEW } from './game-weapon-rig';
 import { slotLowerAmount, slotReady } from './game-weapon-slots';
-import { loopBlocksInput } from './game-loop-leaves';
+import { loopBlocksInput } from './game-loop';
 import { flashPixels } from './flash-sprite';
 import {
   LAUNCHER, makeLauncherState, fireLauncher, reloadLauncher, stepLauncher,

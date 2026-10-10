@@ -43,8 +43,13 @@ export const MARCH_BODY = `fn marchBody${MARCH_BODY_PARAMS}${MARCH_IN_PACK}${MAR
  * Walk state the later sections actually READ is declared here too: t, hit, hitBest, hitField
  * and hitNearWound, each with the refine's real value. The walk's pure bookkeeping (step
  * counters, prevRadius, omega/overshoot state) has no reader past the walk and is absent.
+ *
+ * Each of the three discards returns (2026-10-06), as the setup's do: in WGSL a discard does not end the
+ * invocation, and without the return the text after it (the field call, the Newton steps, the shared post
+ * and light tail) stays reachable on a garbage point: after the weight test, on 0 / 0. Not a speed-up: on
+ * Apple's GPU a discarded fragment paid nothing for it (head-split NOTES, 2026-10-06).
  */
-export const REFINE_LOOP = /* wgsl */ `  if (refineCfg.x < 0.5) { discard; }
+export const REFINE_LOOP = /* wgsl */ `  if (refineCfg.x < 0.5) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
   // The march texel grid under this output pixel - coneFetch's mapping, screenUV times dims.
   let mDims = vec2<f32>(textureDimensions(marchTex, 0));
   let mMax = vec2<i32>(mDims) - vec2<i32>(1, 1);
@@ -73,7 +78,7 @@ export const REFINE_LOOP = /* wgsl */ `  if (refineCfg.x < 0.5) { discard; }
   // this output pixel's footprint that lies over THIS body's marched flesh. Below one half the pixel CENTRE sits over
   // misses, and a Newton-converged point there is on the silhouette's far side - a lit halo
   // outside the body - so the pixel is left to the net, which keeps owning that rim.
-  if (wsum < 0.5) { discard; }
+  if (wsum < 0.5) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
   // View depth to distance along THIS pixel's ray - cosRay is minus the view-space z of rd.
   var t = clamp((zsum / wsum) / max(cosRay, 1e-4), 0.0, tMax);
   var hit = false;
@@ -81,6 +86,9 @@ export const REFINE_LOOP = /* wgsl */ `  if (refineCfg.x < 0.5) { discard; }
   var hitNearWound = false;
   // The refine's own accepting sample decides the normal hint, like the walk's.
   var hitRefold = 0.0;
+  // The head split's piece at that sample, as the walk copies it.
+  var hitPiece = 0;
+  var hitSplitF = 0.0;
   var hitField = vec4<f32>(0.0);
   var pRef = camPos + rd * t;
   var dres = mapBody(pRef, data, vec4<f32>(0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
@@ -88,7 +96,7 @@ export const REFINE_LOOP = /* wgsl */ `  if (refineCfg.x < 0.5) { discard; }
   // PARAMS doc above - so at distance t a MARCH texel spans 2*t*aaCfg.x across and an
   // OUTPUT pixel, being half the march texel, spans t*aaCfg.x. This is the march texel.
   let texelFoot = 2.0 * t * aaCfg.x;
-  if (abs(dres.x) > refineCfg.y * max(texelFoot, 1e-4)) { discard; }
+  if (abs(dres.x) > refineCfg.y * max(texelFoot, 1e-4)) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
   for (var k = 0; k < i32(refineCfg.w); k = k + 1) {
     t = t + dres.x;
     pRef = camPos + rd * t;
@@ -99,6 +107,10 @@ export const REFINE_LOOP = /* wgsl */ `  if (refineCfg.x < 0.5) { discard; }
   hitField = dres;
   hitNearWound = dres.z > 0.5;
   hitRefold = gRefoldWin;
+  hitPiece = gHitPiece;
+  hitSplitF = gHitSplitF;
+  // (The hit piece's own win, as in the walk.)
+  if (gInstSplitOpen && hitRefold != 0.0) { hitRefold = select(select(gRefoldBy.z, gRefoldBy.y, hitPiece == 1), gRefoldBy.x, hitPiece == 0); }
   // t*aaCfg.x is one OUTPUT pixel's world footprint (the same framing as texelFoot above
   // and the PARAMS doc), so refineCfg.z scales the stencil in output-pixel footprints.
   // The floor exists because the footprint goes to zero at the near plane and a stencil

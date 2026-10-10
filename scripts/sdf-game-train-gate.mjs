@@ -5,7 +5,7 @@
 //   1. BOOT: night-train with its art, window glass and swaying pieces.
 //   2. WINDOWS: a dining-car window shows scenery that moves (two frames differ) and is not flat.
 //   3. SWAY: the camera roll varies over 2 s.
-//   4. WALK: an autopilot walk visits every room of the approved layout, van to cab.
+//   4. WALK: an autopilot walk visits every room of the approved layout, van to control room.
 //   5. COST: art off/on A/B at three poses (draw calls, fenced frame time); BUDGET.
 //
 // Usage: LAB_VITE_PORT=5295 LAB_CDP_PORT=9295 node scripts/sdf-game-train-gate.mjs
@@ -134,7 +134,7 @@ const shoot = async (name) => {
  *  the coat check the worst and the noisiest). An optimisation pass is next (owner): small-dressing
  *  shadows, one draw per piece, lights per room.
  *  Tightened back to +200 / +12 ms after static batching (2026-09-26: measured +61..+164 draws,
- *  +3.2..+5.8 ms; game-art-leaves.ts batchArt). */
+ *  +3.2..+5.8 ms; game-level-art.ts batchArt). */
 const BUDGET = { drawCalls: 200, frameMs: 12 };
 const stats = (img, fx0, fy0, fx1, fy1) => {
   const { w, h, ch, data } = img; const v = [];
@@ -186,7 +186,8 @@ const ROUTE = [
   // The Boiler Room is 8 x 28 m since 2026-09-28 (z -90..-118; z = -90 - u); the tender and cab moved 8 m north.
   ['boiler room, south', 0, -91.9], ['boiler room, west, past the favours', -3.0, -97.0], ['boiler room, by the pistons', -2.8, -104.0],
   ['boiler room, chill-out (east)', 3.0, -112.0], ['boiler room, DJ end', 0, -116.5], ['vestibule 6', 0, -118.6],
-  ['tender, south', 0.9, -121.5], ['tender, north', 0.9, -127.5], ['vestibule 7', 0, -129.8], ['cab', 0, -134.0],
+  ['tender, south', 0.9, -121.5], ['tender, north', 0.9, -127.5], ['vestibule 7', 0, -129.8], ['control room, door', 0, -132.0], ['control room, east aisle', 2.6, -134.5],
+  ['control room, before the CRT wall', 2.6, -138.8],
 ];
 if (!(await boot('level=night-train&frozen&nospawn'))) { console.error(consoleEvents.slice(-8)); fail('night-train (nospawn) did not boot'); }
 await evaluate('__sdfGame.setPose(0, -1, 0, 0)');
@@ -201,11 +202,11 @@ for (const [name, x, z] of ROUTE) {
   await evaluate('__sdfGame.walkCancel()');
   if (d > 0.8) fail(`walk: stuck before ${name} (${d.toFixed(2)} m short) at ${JSON.stringify((await evaluate('__sdfGame.pose()')).pos.map((v) => +v.toFixed(2)))}`);
 }
-if ((await evaluate('__sdfGame.room()')) !== 'cab') fail('walk ended outside the cab');
-pass(`walk: ${ROUTE.length} waypoints, every room from the baggage hold to the cab`);
+if ((await evaluate('__sdfGame.room()')) !== 'control-room') fail('walk ended outside the control room');
+pass(`walk: ${ROUTE.length} waypoints, every room from the baggage hold to the control room`);
 
 // 5. COST
-const POSES = { office: [0, -11, 0, 0], third: [0, -18, 0, 0], dining: [0, -37.2, 0, 0], coats: [1.2, -57, 0, 0], sleeper: [-1.3, -72.4, 0, 0], boiler: [0, -90.9, 0, 0] };
+const POSES = { office: [0, -11, 0, 0], third: [0, -18, 0, 0], dining: [0, -37.2, 0, 0], coats: [1.2, -57, 0, 0], sleeper: [-1.3, -72.4, 0, 0], boiler: [0, -90.9, 0, 0], control: [0, -131.4, 0, 0] };
 if (!(await boot('level=night-train&frozen'))) fail('night-train did not re-boot for the cost');
 await evaluate(`document.getElementById('loader')?.classList.add('loader-hidden')`);
 await evaluate('__sdfGame.freeze(true)');

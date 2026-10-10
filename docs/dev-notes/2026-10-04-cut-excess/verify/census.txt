@@ -1,0 +1,5 @@
+compile census: 2 cold boots, fresh profile each, out /private/tmp/claude-501/-Users-donny-Projects-blud--claude-worktrees-head-explosion-effect-d6231e/0c8648aa-4a74-4a0c-9738-f2580ca1ae80/scratchpad/verify/census.json
+run 1/2 @ 2026-10-04T18:00:00.934Z ... phase=ready warmMs=3543 drawOnce=2268.7999999523163 asyncFirst=748.7000000476837 entries=266 bootWall=6161 ms
+run 2/2 @ 2026-10-04T18:00:09.081Z ... phase=ready warmMs=4297 drawOnce=2369 asyncFirst=1413.8000000715256 entries=266 bootWall=6588 ms
+
+wrote /private/tmp/claude-501/-Users-donny-Projects-blud--claude-worktrees-head-explosion-effect-d6231e/0c8648aa-4a74-4a0c-9738-f2580ca1ae80/scratchpad/verify/census.json

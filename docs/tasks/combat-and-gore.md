@@ -2,6 +2,145 @@
 
 Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Cut wounds and the head split — designed 2026-10-03
+
+- [~] **The axe (slot 7) and the head split — built 2026-10-05; owner playtested; PR goblincore/blud#31 (branch
+  `claude/head-cleaving-effect-ef9515`). The wet film under the flashlight is the owner's pick (C, the boldest of `look/14-wet-variants.jpg`, 2026-10-06).** An H / R / L
+  chop combo, 1.8 m reach shared with the flail, its own light list. Body chops stamp cut wounds (kerf 0.025 since the
+  excess pass). Pose and look suggestions for the axe itself are left for the owner (spec section 9, axe notes).
+  - **The split.** A chop on a zombie's head flesh opens the head on a hinge, as real SDF geometry: the union of three
+    rigid capped pieces, the same field on the CPU and the GPU. Chop 1 opens it to a wide crack, chop 2 splits it wide
+    and the zombie lives, chop 3 kills with a kick (3 is tunable). An off-centre chop opens one side; `face` is rare. The
+    split stays open on the corpse, and later hits land on the opened halves.
+  - **With it:** the skull mesh cracks, then splits along a ragged edge; the halves wobble with the body; a wet film on
+    the raw surfaces glints under the flashlight (off: `SPLIT_SHADE.glisten.gain` 0).
+  - **Owner calls (2026-10-05):** the axe skips the thin crack; the wobble stays as tuned; the ragged face cuts stay (a
+    cut-face restyle was built and reverted, `d0d407d2`); optimise the open head later.
+  - **Behaviour change:** only a chop on head flesh is a head chop. Chops to the upper chest, the collar and the neck's
+    base are body chops now, for every character.
+  - **Debt:** an open head costs about +4.4 ms at 0.6 m (`middle` both sides; +3.2 ms one side) after a first cost
+    pass (2026-10-06, branch `claude/open-head-cost`, [notes](../dev-notes/2026-10-06-open-head-cost/NOTES.md); +6 to
+    +8 ms before it, and +0.6 to +1.6 ms at 2 m). A split is drawn closed past
+    12.7 m.
+  - **The `return` after the march's miss `discard`: landed 2026-10-06** (branch `claude/miss-discard-return`, off
+    `a2d61133`; with the refine twin's three). Bit-identical (six `march-hash` pins, the three gates, base against new
+    on 8 scenes). **No frame time and no compile time saved:** a probe showed that on Apple's GPU a discarded fragment
+    already paid nothing for the code after its `discard`. That reopens the depth fault's explanation (missed
+    fragments "running the tail"); its rule (`bodyLights` only under conditions every fragment shares), the pin and
+    the gates' depth guard stand. NOTES, "The miss discard's return".
+  - **Follow-ups, open:** the `gRefoldBy` cross-slot leak, something in the gap (a brain), the slug opening the
+    split, and the deferred game boot (`?renderer=deferred` draws no bodies on `a2d61133`; handoff follow-up 8). Full
+    lists: spec section 10.10.
+  - **On the anatomical skull (2026-10-06, branch `claude/split-anatomical-skull`):** split plates have their own
+    material, shots break them where an opened half draws them (bone standing in the open gap included, which no
+    flesh covers), and the gate runs on it and reads the plates' pixels. For the owner: retune how far the bone
+    opens? [Notes and look sheets](../dev-notes/2026-10-06-split-anatomical-skull/NOTES.md).
+  - **The sculpted skull, second pass (2026-10-07, branch `claude/sculpt-skull-2`):** after playtesting both skulls
+    the owner chose the old sculpted one as the base and asked for it to be more anatomical and frightening: the jaw
+    and teeth first, then the eye sockets, the nose opening, the brow ridge, cheekbones and hollows. Four variants
+    behind `?sculpt=`: `shape` (a second sculpt of the bone), `shape-fine` (the same at a 5 mm cell for the head),
+    `paint` (a second paint with separate teeth and a tilted shading normal) and `full` (both). The default sculpt
+    and the anatomical default are unchanged; the default sculpt's mesh bytes and shader text are pinned by hash. On
+    the sheets `full` is the best in every row, `paint` gives most of the face on the old bone, and the two `shape`
+    variants make the teeth worse under the old paint. For the owner: pick one.
+    [Notes and look sheets](../dev-notes/2026-10-07-sculpt-skull-2/NOTES.md).
+  - **The sculpted skull, `full`, is the default skull (2026-10-07, the owner's pick; branch `claude/sculpt-skull-2`):**
+    a page with no skull parameter draws it, `?skull=anatomical` draws the 14 plates, `?sculpt=classic` the first
+    look; one resolver decides (`skeleton-spike/sculpt-variant.ts`), and both looks are pinned by hash. The second
+    paint is drawn only on the characters it fits (zombie, soldier, juggernaut, the two clowns). For the owner: the
+    other eight humanoids have no skull-shaped head bone and show balls where the anatomical skull drew a skull (the
+    cultist is the one the levels spawn); and whether the carved heads need the 5 mm mesh.
+    [Notes, the cast sheet and the cell pair](../dev-notes/2026-10-07-sculpt-skull-2/NOTES.md).
+  - **The anatomical skull's size (2026-10-07, branch `claude/anatomical-skull-fit`):** the owner found the skull
+    far too small in the zombie's head (0.56 of the sculpted skull's box volume; 43 mm wide in the female's 127 mm
+    head). A fit that sizes the skull to the head's flesh and pulls it in where it would poke through is behind
+    `?skullfit=affine|mid|snug|tight`; with no parameter the skull is byte for byte what it was. For the owner: which
+    fit ships, and whether per character (the female and the soldier read worse under the tighter ones).
+    [Notes, tables for all thirteen humanoids and look sheets](../dev-notes/2026-10-07-anatomical-skull-fit/NOTES.md).
+  - **The eight ball-headed humanoids draw a fitted anatomical skull (2026-10-07, branch `claude/sculpt-skull-2`):**
+    the cultist, the cowled cultist, the bride, the female, the three schoolgirls and the bonewalker draw the 14
+    plates by default, each under its own fit (`skeleton-spike/skull-cast.ts`: `snug`, to the skin, the orbits held
+    on the painted eyes' line), with the eyes seated in the fitted orbits; the fit runs at spawn and the page loads
+    the asset. For the owner: the schoolgirls' cartoon faces sit 2 to 7 cm under the skull's orbits; the bride's
+    flesh is not drawn when spawned; `schoolgirl-alt` cannot be spawned.
+    [Notes, the table and the sheet](../dev-notes/2026-10-07-sculpt-skull-2/NOTES.md).
+  - **Gates (as of 2026-10-08):** `scripts/head-split-gate.mjs` (111 checks), `scripts/axe-gate.mjs` (29),
+    `scripts/cut-wound-gate.mjs` (33), `scripts/head-burst-gate.mjs` (130). Each boot checks the skull it draws; the
+    checks about the plates run on boots that ask for `?skull=anatomical`, and on a `?spawn=cultist` boot of the
+    default page for a fitted skull. The head-burst gate checks pixels as well as the CPU's lists: the split's gap
+    and halves, the pop's fragments, the aim against the crosshair, and that nothing floats over a stump.
+  - **After two reviews (2026-10-08):** the split and the pop are the zombie's by its character (not its motion
+    profile); a slug the head-shot rule takes no longer knocks the eyes out; an aimed slug is not refused by where it
+    lands; a sever takes a lip only where it would stand in removed flesh. For the owner: a slug's decapitation
+    leaves no raised rim at the neck (nothing floats there now); the bonewalker and the described schoolgirl draw no
+    mesh eyes again; a pellet decapitation still leaves the neck's base standing.
+
+  [Spec](../../docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 9: the axe as built; section 10:
+  the head split as built) · plans [A](../../docs/superpowers/plans/2026-10-04-axe-part-a.md) and
+  [B](../../docs/superpowers/plans/2026-10-04-head-split-part-b.md) ·
+  [handoff](../../docs/dev-notes/2026-10-04-head-split/HANDOFF.md) ·
+  [head split notes](../../docs/dev-notes/2026-10-04-head-split/NOTES.md) ·
+  [axe notes](../../docs/dev-notes/2026-10-04-axe/NOTES.md).
+
+- [~] **Cut wounds (axe / sword / chainsaw base) and a head that splits into two hinged halves.** M1 built 2026-10-04: cut
+  wounds + rod (slot 6) + 32 wounds with merging; owner playtested. M2 (the head split) built 2026-10-05, with the axe
+  (above). M3 (tuning) is open. Craters cannot make deep jagged cuts (owner, 2026-10-03). M1: a cut wound shape (blade
+  slot, jagged walls, lips) + a rod stand-in weapon; M2: the head split (authored presets, a split field in `mapBody`,
+  CPU mirror, skull mesh); M3: tuning.
+  - **The excess pass (2026-10-04, after the owner's "more excessive"):** longer, wider, ragged tapered cuts, bigger
+    lips, more blood. [Status](../../docs/dev-notes/2026-10-04-cut-excess/STATUS.md) ·
+    [before and after, and the decision](../../docs/dev-notes/2026-10-04-cut-excess/compare/NOTES.md).
+  - **Its two costs, investigated 2026-10-06** ([notes](../../docs/dev-notes/2026-10-06-cut-cost/NOTES.md), branch
+    `claude/cut-cost`): three axe chops cost about 4 to 5 ms at 0.9 m, not +22 ms (the axe gate's C "before" frame
+    draws no body); the +430 ms cold boot was not reproduced. Exact early exits take back 0.5 to 2.2 ms with the
+    picture unchanged. Open: `axe-gate.mjs` C needs a zero-time thawed step and the crowd-warm wait before its cost
+    line means anything; `setWoundList` drops the cuts on a walked body.
+  - [ ] **Organs to mesh** (owner, 2026-10-06: "they aren't even really that visible or noticeable atm"). The organ
+    fold is the largest single piece of what any wound costs per frame (about 2 of the 4.8 ms above; 870 k
+    organ-prim evaluations a frame in that scene). Its own task.
+
+  [Spec](../../docs/superpowers/specs/2026-10-03-cut-wounds-design.md) (section 11: as built) ·
+  [plan](../../docs/superpowers/plans/2026-10-03-cut-wounds-m1.md) · gate `scripts/cut-wound-gate.mjs` (30 checks) ·
+  [notes](../../docs/dev-notes/2026-10-03-cut-wounds/NOTES.md).
+
+## Slug head burst — designed 2026-10-02
+
+- [~] **Slug on the head: lethal burst (dead-centre) and glancing rupture (off-centre). Built 2026-10-02; owner playtest
+  pending.** Jelly rupture deform, skull shards, brain, blood and hinged torn scalp flaps (one draw); the head stays on
+  the body. Plain zombie only. [Spec](../../docs/superpowers/specs/2026-10-02-slug-head-burst-design.md) ·
+  [plan](../../docs/superpowers/plans/2026-10-02-slug-head-burst.md) ·
+  [notes](../../docs/dev-notes/2026-10-02-head-burst/NOTES.md) · gate `scripts/head-burst-gate.mjs`. Tune live with
+  `__sdfGame.head.burstTune({ centreFrac, swell, shardScale, flapCount, lethal, repeatStep, craterScale, splay, on })`.
+  Playtest 1 (2026-10-03): flaps off (orange tubes), a centred slug now splits the head open and the zombie lives, much harder to kill.
+  **Playtest 2 (2026-10-07): not what the owner wanted on every gun hit.** The opening is now OFF by default
+  (`burstTune({ opening: true, anyWeapon: true, alwaysSplit: true, slugSplit: false, slugPop: false, popOnSplit: false })`
+  puts the playtested behaviour back).
+- [~] **The gun and the zombie's head, redefined 2026-10-07; owner playtest pending.** Pellets and imprecise slugs
+  leave ordinary wounds. A slug splits the head through the head split (`webgpu/game-head-shot.ts`,
+  `head-burst.ts headShotRule`) when the AIM was precise and the head near: the crosshair's ray, recorded as the gun
+  fired, within `splitFrac` 0.3 head radii of the head's centre (3.3 cm), from no farther than `splitRangeM` 5 m. Both
+  halves open. The slug that cuts the head off pops it: a 0.12 s swell, then the burst, with the
+  skull thrown as pieces (the anatomical skull's 14 plates, or 10 fragments cut from the sculpted head mesh:
+  `skeleton-spike/sculpt-fragments.ts`). Any slug from within that range on a head split wide pops it. Gun craters on
+  the head keep a low lip so the skull's face stands out of the wound, and a sever takes the lips that
+  would hang over the stump. **Retuned 2026-10-08 after the owner's playtest** (the face came off too clean: bare bone
+  in a smooth round hole): `headLip` 0.3 -> 0.5 plus a new `headTear` 0.9 (the flail's torn look on gun head craters: a
+  ragged outline, petal lips, a wet red wall), and **eyes stay in the skull**: a round now has to land near an eye
+  to knock it out (`mesh-eyes.ts EYE_IMPACT_REACH`, pellet 5.5 cm / slug 8.5 cm from the eye's centre; it was 13.5 / 19 cm,
+  so one pellet on the chin ejected both). **Second pass, same day (owner: a pointblank slug still left clean ivory):** the sculpted
+  skull's paint gained `sculptCling` (`skeleton-spike/sculpt-paint.ts`, `SCULPT_CLING`): ragged, wet, red torn-flesh patches
+  stuck to a head's bone where a wound's exposure reaches it, thicker in the orbits and nose, none on the teeth, and the
+  head's wound stain 0.22 -> 0.38. The default skull's shader pin moved on purpose (`sculpt-default-pin.test.ts`). Not
+  yet on the first paint (`?sculpt=classic`, mesh-appearance.ts) or the anatomical plates' shader. **The juggernaut (the chaingunner) now wears the soldier's carved head** (`mesh-skull-2.ts isSoldierHead`: the carve, its revision and the steel-plate paint), where he was an uncarved ball; the clowns still are. Not yet owner-playtested. Tune live: `__sdfGame.head.burstTune({ headLip, headTear, slugSplit, splitAim, splitFrac,
+  splitRangeM, splitOpen, slugPop, popSwellS, popOnSplit, popPrecise })`.
+  [Notes, measurements, the precision table and the before/after sheet](../../docs/dev-notes/2026-10-07-sculpt-skull-2/NOTES.md) ·
+  gate `scripts/head-burst-gate.mjs` (103 checks). Open for the owner: the shot is judged against where the head is
+  when the slug arrives, so a crossing zombie has to be led and the split may be rare in live play (`splitFrac` is
+  the knob); and a zombie usually dies of slugs before one cuts its neck, so that pop is rare.
+- [ ] **Spike (separate, not started): shader-side burst/peel displacement field** (approach C of the same spec) for
+  truer jelly peeling flesh. New march WGSL, shared march cost, and a Rust port to carry; only after the composed
+  version has been played.
+
 ## Persistent surface blood candidate — 2026-09-30
 
 - [x] Opt-in `?surfaceblood=1` and “Surface blood · candidate” panel: airborne blood now deposits onto swept visible level triangles, including floor plates and walls. Marks survive clearing the airborne particles.
@@ -11,6 +150,8 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
 - [ ] Deferred validation blocked by a pipeline error reproduced on unchanged base. Animated actors, glass, footprints and body-drag tracks remain outside this candidate.
 
 ## Player melee: spike flail — designed 2026-09-26 (replaces the censer)
+
+**Hand-off (2026-09-30):** [what exists, traps, and the to-do list](../dev-notes/2026-09-30-flail-handoff/HANDOFF.md). PR #22 is merged.
 
 - [~] **Flail v1.5b built (2026-09-30); owner playtest pending.** Torn, splayed, wet-red lips on the flail's wounds; gun
   wounds (pellets, slugs) keep their crater shape but get the wet red lip (spec §14.2, plan Tasks 31 and 35). Flying

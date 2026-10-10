@@ -1,5 +1,8 @@
 // src/lab/sdf-zombie/types.ts
+//
+// Core SDF body data types: Vec3, primitive and body definitions, shell/box/strand params, limb ids, bones and built bodies.
 import type { Quat } from './vec';
+import type { SplitWarp } from './head-split';
 
 export type Vec3 = readonly [number, number, number];
 
@@ -484,4 +487,7 @@ export interface BuiltBody {
    * not alive).
    */
   bonePrims: Primitive[];
+  /** The head split for this pose (validate.ts Body.split; head-split.ts). Only a POSED body ever carries one: the
+   *  actor's split hook sets it after applyRig (game-actor.ts setHeadSplit). */
+  split?: SplitWarp | null;
 }

@@ -32,7 +32,7 @@ import { relaxRopeConstraints, type MissingLimbs } from './collapse';
 import type { ArmStyle } from './gait';
 import type { CarryName } from './carry';
 import type { SwingVariant } from './attack';
-import { isSoldierFamily, type MotionProfile } from './motion-profile';
+import { isSoldierFamily, wantsTorsoGuards, type MotionProfile } from './motion-profile';
 import { makeRng, type Rng, type WanderBounds } from './wander';
 import type { Wound } from './damage';
 import type { LimbId, Vec3 } from './types';
@@ -140,6 +140,8 @@ export interface ActorStepInput {
   /** A live swing (attack.ts's phase clock) — see MotionConfig.attack. Only
    *  forwarded when set, so callers without one step bit-identically. */
   attack?: { phase: number; side: 'L' | 'R'; variant: SwingVariant };
+  /** The pose layer's joint positions for this frame — see MotionConfig.pose. Only forwarded when set. */
+  pose?: readonly Vec3[];
 }
 
 /**
@@ -167,6 +169,7 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
         profile: input.profile, forceSpeed: input.forceSpeed,
         carryOverride: input.carryOverride,
         ...(input.attack ? { attack: input.attack } : {}),
+        ...(input.pose ? { pose: input.pose } : {}),
       },
       {
         dt: sdt,
@@ -198,7 +201,8 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
     m.lastBodyYaw = f.bodyYaw;
 
     let points = stepRig(
-      { ...m.bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw, posePins: f.posePins }, sdt,
+      { ...m.bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw, posePins: f.posePins,
+        torsoGuards: wantsTorsoGuards(input.profile) ? m.bound.rig.torsoGuards : undefined }, sdt,
       {
         gravity: f.gravity,
         damping: 0.06,

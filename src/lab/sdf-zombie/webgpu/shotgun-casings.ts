@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/shotgun-casings.ts
+//
+// Spent shotgun shell casings: the ejection cycle trigger and the instanced hull and brass meshes that fly out and settle.
+
 import * as THREE from 'three/webgpu';
 import type { Vec3 } from '../types';
 

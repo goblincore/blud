@@ -69,10 +69,15 @@ export const TILE_PRELOAD_BLOCK = /* wgsl */ `  // TILE-LIST PRELOAD (perf task 
           entryT = min(entryT, max(tcQ - sqrt(max(rQ * rQ - d2Q, 0.0)), 0.0));
         }
       }
-      gTileBounds[w] = b;
+      // THE PER-STEP CULL'S SPHERE. Everything above tested b, the bound of where this group's flesh can be on
+      // screen. mapBody's per-step cull tests a point in the group's own frame (an open head split's piece folds at
+      // its un-warped point), and takes the sphere the entry names by its offset (tile-cull.ts cullOffset): the
+      // largest sphere about b's centre + offset inside b. No offset (every body without a split) is b itself.
+      let entMeta = (*tileEnt)[lin + 2u];
+      gTileBounds[w] = vec4<f32>(b.xyz + entMeta.yzw, b.w - length(entMeta.yzw));
       gTileGrp[w] = g;
-      gTileBand[w] = (*tileEnt)[lin + 2u].x * ${DATA_ROWS}.0;
-      gTileSlot[w] = (*tileEnt)[lin + 2u].x;
+      gTileBand[w] = entMeta.x * ${DATA_ROWS}.0;
+      gTileSlot[w] = entMeta.x;
       w = w + 1;
     }
     gTileN = f32(w);

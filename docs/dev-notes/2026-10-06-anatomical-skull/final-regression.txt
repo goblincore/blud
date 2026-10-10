@@ -1,0 +1,29 @@
+
+> blud@0.0.1 test
+> vitest run skull-fracture anatomical-skull mesh-renderer mesh-eyes mesh-skull head-damage head-crown head-pop game-context-coverage game-main-deps
+
+
+ RUN  v2.1.9 /Users/donny/.codex/worktrees/anatomical-skull/blud
+
+ ✓ src/lab/sdf-zombie/head-damage.test.ts (26 tests) 8ms
+ ✓ scripts/lib/game-main-deps.test.ts (10 tests) 15ms
+ ✓ src/lab/sdf-zombie/head-pop.test.ts (5 tests) 3ms
+ ✓ src/lab/sdf-zombie/skull-fracture.test.ts (5 tests) 2ms
+ ✓ src/lab/sdf-zombie/webgpu/skeleton-spike/mesh-skull.test.ts (6 tests) 288ms
+ ✓ src/lab/sdf-zombie/head-crown.test.ts (3 tests) 2ms
+ ✓ scripts/game-context-coverage.test.ts (4 tests) 112ms
+ ✓ src/lab/sdf-zombie/webgpu/skeleton-spike/mesh-eyes.test.ts (13 tests) 359ms
+ ✓ src/lab/sdf-zombie/webgpu/skeleton-spike/mesh-renderer.test.ts (13 tests) 299ms
+ ✓ src/lab/sdf-zombie/webgpu/skeleton-spike/anatomical-skull.test.ts (15 tests) 6439ms
+   ✓ offline anatomical skull asset > fits cultist behind intact flesh and shares geometry 587ms
+   ✓ offline anatomical skull asset > fits cultist-cowled behind intact flesh and shares geometry 1965ms
+   ✓ offline anatomical skull asset > fits bride behind intact flesh and shares geometry 1154ms
+   ✓ offline anatomical skull asset > fits schoolgirl behind intact flesh and shares geometry 320ms
+   ✓ offline anatomical skull asset > fits schoolgirl-alt behind intact flesh and shares geometry 334ms
+   ✓ offline anatomical skull asset > fits schoolgirl-described behind intact flesh and shares geometry 397ms
+   ✓ offline anatomical skull asset > fits bonewalker behind intact flesh and shares geometry 312ms
+
+ Test Files  10 passed (10)
+      Tests  100 passed (100)
+   Start at  12:09:53
+   Duration  8.78s (transform 1.52s, setup 0ms, collect 6.34s, tests 7.53s, environment 2.76s, prepare 1.37s)

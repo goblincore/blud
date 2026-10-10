@@ -1,0 +1,85 @@
+// src/lab/sdf-zombie/head-damage-burst.test.ts
+import { describe, expect, it } from 'vitest';
+import { HEAD_REGIONS, REGION_TUNING, burstHit, headHit, makeHeadDamage, nearestSkullRegion } from './head-damage';
+
+const crownHs = [0, 0.95, 0] as const;
+const mid = () => 0.5;   // jitter 1
+
+describe('nearestSkullRegion', () => {
+  it('never returns an orbit', () => {
+    expect(nearestSkullRegion([...HEAD_REGIONS.orbitL] as [number, number, number])).toBe('cheekL');
+    expect(nearestSkullRegion([0, 0.95, 0])).toBe('crown');
+  });
+});
+
+describe('burstHit', () => {
+  it('lethal: the region is bare and fully cracked, the head is dead, brain and kill follow', () => {
+    const { state, events } = burstHit(makeHeadDamage(), { hs: crownHs, lethal: true });
+    expect(state.dead).toBe(true);
+    expect(state.flesh.crown).toBe(0);
+    expect(state.skull.crown).toBe(1);
+    expect(state.anchor.crown).toEqual([0, 0.95, 0]);
+    expect(events).toContainEqual({ kind: 'burst', lethal: true, region: 'crown' });
+    expect(events.some(e => e.kind === 'kill')).toBe(true);
+  });
+  it('glancing: bare + cracked to glanceSkull, brainLeak, alive, no kill', () => {
+    const { state, events } = burstHit(makeHeadDamage(), { hs: crownHs, lethal: false });
+    expect(state.dead).toBe(false);
+    expect(state.brainLeak).toBe(true);
+    expect(state.flesh.crown).toBeLessThan(REGION_TUNING.skullExposed);
+    expect(state.skull.crown).toBeCloseTo(REGION_TUNING.glanceSkull, 9);
+    expect(events).toContainEqual({ kind: 'burst', lethal: false, region: 'crown' });
+    expect(events.some(e => e.kind === 'kill')).toBe(false);
+  });
+  it('glancing then ONE ordinary hit on the same region kills (0.8 + 0.32 ≥ 1)', () => {
+    const a = burstHit(makeHeadDamage(), { hs: crownHs, lethal: false }).state;
+    const b = headHit(a, { hs: [...crownHs], strip: 0.55 }, mid);
+    expect(b.events.some(e => e.kind === 'kill')).toBe(true);
+    expect(b.state.dead).toBe(true);
+  });
+  it('a SECOND glancing slug on the same region kills (the first cracked it; a slug is itself a head hit)', () => {
+    const a = burstHit(makeHeadDamage(), { hs: crownHs, lethal: false }).state;
+    const b = burstHit(a, { hs: crownHs, lethal: false });
+    expect(b.state.dead).toBe(true);
+    expect(b.state.skull.crown).toBeCloseTo(REGION_TUNING.glanceSkull + REGION_TUNING.skullPerHit, 9);
+    expect(b.events.some(e => e.kind === 'kill')).toBe(true);
+  });
+  it('a gentler repeat step makes the zombie much harder to kill: 4 repeats at 0.04 survive, the 5th kills', () => {
+    let st = burstHit(makeHeadDamage(), { hs: crownHs, lethal: false, step: 0.04 }).state;
+    for (let i = 0; i < 4; i++) {
+      st = burstHit(st, { hs: crownHs, lethal: false, step: 0.04 }).state;
+      expect(st.dead).toBe(false);
+    }
+    expect(burstHit(st, { hs: crownHs, lethal: false, step: 0.04 }).state.dead).toBe(true);
+  });
+  it('glancing slugs on DIFFERENT regions each crack their own region and do not kill', () => {
+    const a = burstHit(makeHeadDamage(), { hs: crownHs, lethal: false }).state;
+    const b = burstHit(a, { hs: [...HEAD_REGIONS.cheekR], lethal: false });
+    expect(b.state.dead).toBe(false);
+    expect(b.state.skull.crown).toBeCloseTo(REGION_TUNING.glanceSkull, 9);
+    expect(b.state.skull.cheekR).toBeCloseTo(REGION_TUNING.glanceSkull, 9);
+  });
+  it('headHit keeps brainLeak (state is spread, not rebuilt)', () => {
+    const a = burstHit(makeHeadDamage(), { hs: crownHs, lethal: false }).state;
+    const b = headHit(a, { hs: [...HEAD_REGIONS.cheekR], strip: 0.4 }, mid);
+    expect(b.state.brainLeak).toBe(true);
+  });
+  it('a dangling eye snaps (both outcomes)', () => {
+    const s = { ...makeHeadDamage(), eyes: { L: 'dangling', R: 'painted' } as const };
+    const { state, events } = burstHit(s, { hs: crownHs, lethal: false });
+    expect(state.eyes.L).toBe('gone');
+    expect(events).toContainEqual({ kind: 'eye-snap', side: 'L' });
+  });
+  it('an already-dead head: state untouched, burst still reported (the corpse still ruptures)', () => {
+    const dead = burstHit(makeHeadDamage(), { hs: crownHs, lethal: true }).state;
+    const r = burstHit(dead, { hs: crownHs, lethal: true });
+    expect(r.state).toBe(dead);
+    expect(r.events).toEqual([{ kind: 'burst', lethal: true, region: 'crown' }]);
+  });
+  it('the input state is never mutated', () => {
+    const s = makeHeadDamage();
+    burstHit(s, { hs: crownHs, lethal: true });
+    expect(s.dead).toBe(false);
+    expect(s.skull.crown).toBe(0);
+  });
+});

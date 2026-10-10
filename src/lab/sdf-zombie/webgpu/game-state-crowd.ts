@@ -19,10 +19,24 @@
 import type { CrowdDispatch, CrowdType } from './crowd-type';
 import type { ZombieGpuView } from './zombie-gpu';
 
+/** EARLY-Z state for the boot (spec 2026-10-01). All false/empty with the flag off. */
+export interface EarlyzState {
+  /** `?earlyz=1` was on the URL (compile-time, D1). */
+  flag: boolean;
+  /** The r186 patch installed AND the browser compiled `frag_depth, greater` (D8). */
+  on: boolean;
+  /** Why early-Z is off, or (while `on`) the last early-Z problem seen, e.g. a front-mesh compile
+   *  failure; null when on and healthy or not requested. Scripts must read `on` and the crowd
+   *  warm state, not infer 'off' from `reason`. */
+  reason: string | null;
+  /** Uncaptured WebGPU errors seen since boot under the flag (first 20). */
+  gpuErrors: string[];
+}
+
 export interface CrowdState {
   /** Raw `?crowd` value; `'0'` opts out to the per-body path. */
   param: string | null;
-  /** `?crowddispatch=quad` selects the one-screen-quad dispatch; boxes otherwise. */
+  /** The one-screen-quad dispatch unless `?crowddispatch=boxes` (default since 2026-10-08). */
   dispatch: CrowdDispatch;
   /** True while the merged crowd march is the shipped path (`?crowd=0` disables). */
   on: boolean;
@@ -40,13 +54,15 @@ export interface CrowdState {
   segMetaWarned: boolean;
   /** True once the unsupported-refine warning has been logged, so it is logged once. */
   refineWarned: boolean;
+  /** Early-Z (spec 2026-10-01): set once at boot by bootEarlyz. */
+  earlyz: EarlyzState;
 }
 
 /** Every call returns a fresh object, maps and set included. */
 export function makeCrowdState(): CrowdState {
   return {
     param: null,
-    dispatch: 'boxes',
+    dispatch: 'quad',
     on: false,
     fallbackReason: null,
     types: new Map<string, CrowdType>(),
@@ -55,6 +71,7 @@ export function makeCrowdState(): CrowdState {
     volumeBound: new Set<CrowdType>(),
     segMetaWarned: false,
     refineWarned: false,
+    earlyz: { flag: false, on: false, reason: null, gpuErrors: [] },
   };
 }
 

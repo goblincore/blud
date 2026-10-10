@@ -6,6 +6,7 @@
 
 import { BEAM_WHITE_CLIP, BEAM_WHITE_LUM } from '../../../../light-shade';
 import { SKIN_POST, SKIN_PRE } from './skin-detail-proto';
+import { SPLIT_GLISTEN_BLOCK } from './split-glisten.wgsl';
 
 /** A WGSL f32 literal (always a decimal point). */
 const f = (x: number): string => (Number.isInteger(x) ? x.toFixed(1) : String(x));
@@ -85,7 +86,7 @@ export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A
                + scatter;
   // SHARED LIGHT LIST: the other 3 lights and every light's back rim (spec §5). Through AO, not
   // the wound/level shadow (those belong to the dominant). Zero when the list is off.
-  fleshLit = fleshLit + (listDiff * albedo + listSpec) * ao + listRim;
+  fleshLit = fleshLit + (listDiff * albedo + listSpec) * ao + listRim;${SPLIT_GLISTEN_BLOCK}
   // LIGHTNING SIDE RIM (owner, 2026-09-26: "a strong rim light on one side, like a coldish powerful
   // light from the side"). spotCfg2.w is the rim's strength, set by the game only while a window
   // light is live (lightDir then points at the window): a hard grazing edge on the side facing the

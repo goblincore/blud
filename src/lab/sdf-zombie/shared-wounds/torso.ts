@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/shared-wounds/torso.ts
+//
+// Torso wound regions built on the shared wound presets: region state, wound hits and the visual wound list.
+
 import type { BuildResult } from '../build-body';
 import { MAX_WOUNDS, woundWorldPos, type Wound } from '../damage';
 import { add, cross, dot, len, normalize, scale, sub } from '../vec';
@@ -37,7 +41,7 @@ function regionFor(w: Wound, rest: BuildResult): number {
   return (upper ? 0 : 2) + (front ? 0 : 1);
 }
 
-/** Four shared-preset regions; at most eight cutters and sixteen total rows. */
+/** Four shared-preset regions; at most eight cutters and MAX_WOUNDS total rows. */
 export function createTorsoWounds() {
   const regions: (Region | null)[] = Array(TORSO_REGION_COUNT).fill(null);
   let timeMs = 0;

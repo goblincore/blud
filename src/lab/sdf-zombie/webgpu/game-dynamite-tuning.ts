@@ -1,5 +1,7 @@
 // src/lab/sdf-zombie/webgpu/game-dynamite-tuning.ts
 //
+// Dynamite tuning panel hookup: applying tuning values to the game context, the chunk budget ceiling, and reading values back.
+//
 // Extracted from game-main.ts's main() closure. Each function takes the
 // GameContext explicitly instead of capturing main()'s scope.
 //

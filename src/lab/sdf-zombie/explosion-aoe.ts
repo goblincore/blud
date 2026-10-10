@@ -44,7 +44,7 @@
 import type { BuildResult } from './build-body';
 import type { LimbId, Primitive, Vec3 } from './types';
 import { add, len, scale, sub } from './vec';
-import { WOUND_PROFILES, worldHitToWound, MAX_WOUNDS, type Wound } from './damage';
+import { WOUND_PROFILES, unwarpHit, worldHitToWound, type Wound } from './damage';
 import { cutChains, cutLimbs, type ChainCut } from './connectivity';
 import { COLLAPSE_TUNING } from './collapse';
 import { sdBody, sdPrimitive, smin } from './validate';
@@ -76,14 +76,22 @@ const QUAKE_MAG_SCALE = 40;
 
 // ——— Lab-owned knobs ————————————————————————————————————————————————
 
+/** Wounds one blast stamps per body. It was the wound-ring size (MAX_WOUNDS)
+ *  while that was 16, and stays 16 now the ring is 32 (cut wounds M1,
+ *  2026-10-03). What that keeps the same is a blast's STAMPING: how many
+ *  wounds it writes and the sever/chain-cut results they produce. What it does
+ *  not keep: the ring no longer evicts the body's earlier wounds to make room,
+ *  so a body can hold up to MAX_WOUNDS live wounds after a blast, and its
+ *  per-body GPU wound cost can rise accordingly. */
+export const BLAST_WOUNDS_PER_BODY = 16;
+
 export const EXPLOSION_TUNING = {
   /** Sphere-trace step budget — lab-main raycastBody's 128-iteration cap. */
   traceSteps: 128,
   /** Surface-hit epsilon — raycastBody's 0.002 (also its minimum step). */
   traceEps: 0.002,
-  /** Hard cap on wounds per body: the shader's wound-ring size — a blast
-   *  can fill the ring but never needs more than it can hold. */
-  maxWoundsPerBody: MAX_WOUNDS,
+  /** Hard cap on wounds one blast stamps per body: BLAST_WOUNDS_PER_BODY. */
+  maxWoundsPerBody: BLAST_WOUNDS_PER_BODY,
   /** Hand-splash band as a fraction of radiusM — a FLOURISH, not the game's
    *  player damage: hands scar when the blast is genuinely too close
    *  (or the stick overcooks in-hand). 0.35 × 4.69 m ≈ 1.6 m. */
@@ -572,12 +580,17 @@ export function resolveExplosion(
       });
       continue;
     }
-    const wounds: Wound[] = hits.slice(0, T.maxWoundsPerBody).map(h =>
-      worldHitToWound(
-        body.prims, h.point,
+    // Each stamped in the UN-WARPED head (damage.ts unwarpHit: on a split
+    // head the traces above ran on the opened halves, the prims are the closed
+    // head's). No split: the hit and sdBody on the body, as before.
+    const wounds: Wound[] = hits.slice(0, T.maxWoundsPerBody).map((h) => {
+      const u = unwarpHit(body, h.point);
+      return worldHitToWound(
+        body.prims, u.hit,
         WOUND_PROFILES.blast.radius * h.falloff, 'blast', bodyYaw,
-        p => sdBody(p, body),
-      ));
+        u.field,
+      );
+    });
     // Entrails (2026-09-02): a blast over the TORSO opens a body cavity —
     // the same gate the slug path applies, read off the prim
     // worldHitToWound bound each wound to (its arg-min prim IS the struck

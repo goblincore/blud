@@ -230,6 +230,42 @@ describe('stepMotion — standing', () => {
     expect(travel).toBeGreaterThan(0.15);
   });
 
+  // plantReach (the bride's lunge, 2026-09-25): an opt-in reach slide for
+  // frames the wiring surges the root. It must be a pure no-op while the
+  // plants stay in reach — the ordinary zombie walk is bit-identical.
+  it('plantReach is bit-identical to its absence while plants stay in reach', () => {
+    const j = realJoints();
+    const plain = run(j, cruising(9), CFG_ON, 300);
+    const slack = run(j, cruising(9), { ...CFG_ON, plantReach: 10 }, 300);
+    expect(slack.frame).toEqual(plain.frame);
+    expect(slack.state).toEqual(plain.state);
+  });
+
+  it('plantReach carries stance feet with a surging root instead of stranding them', () => {
+    const j = realJoints();
+    const surge = (cfg: MotionConfig) => {
+      let state = makeMotionState(3, [0, 0, 0]);
+      let points = stubPoints(j);
+      let frame = stepMotion(state, j, cfg, NO_SIGNALS(), points, BOUNDS, makeRng(3)).frame;
+      let worst = 0;
+      for (let i = 0; i < 60; i++) {
+        // The wiring surges the root 1.2 m over frames 20-35 (a lunge).
+        if (i >= 20 && i < 35) state = { ...state, wander: { ...state.wander, pos: [0, 0, state.wander.pos[2] + 0.08] } };
+        points = frame.restPose.map(p => ({ pos: [p[0], p[1], p[2]] as Vec3, prev: p, pinned: false }));
+        const step = stepMotion(state, j, cfg, NO_SIGNALS(), points, BOUNDS, makeRng(3));
+        state = step.state;
+        frame = step.frame;
+        for (const [h, f, s] of [['hipL', 'footL', 'L'], ['hipR', 'footR', 'R']] as const)
+          { const r = len(sub(frame.restPose[j.index[f]]!, frame.restPose[j.index[h]]!)) / (j.leg[s][0] + j.leg[s][1]); worst = Math.max(worst, r); }
+      }
+      return worst;
+    };
+    const cfg: MotionConfig = { enabled: true, wander: false };
+    expect(surge(cfg)).toBeGreaterThan(1.3); // stranded: the targets tear the leg
+    // (1.002 on a lock-edge frame: the gait's own swing foot, captured as is.)
+    expect(surge({ ...cfg, plantReach: 1 })).toBeLessThan(1.01);
+  });
+
   it('missing leg skips that side entirely (no plant, no offsets)', () => {
     const j = realJoints();
     const sig = (i: number): MotionSignals => ({
