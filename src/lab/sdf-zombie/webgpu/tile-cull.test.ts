@@ -5,7 +5,7 @@ import {
   TILE_MAX_ENTRIES,
   TILE_SIZE_PX,
   TileBinner,
-  type TileGroupInput,
+  type TileGroupInput, TILE_CULL_PAD, tileCullSphere, withCullSphere,
 } from './tile-cull';
 
 /**
@@ -111,6 +111,21 @@ describe('TileBinner', () => {
     // The bound sphere rides the entry too — the shader's per-step cull
     // needs it (tiles cut the list; spheres still cut per-step work).
     expect(e.radius).toBeCloseTo(group().radius, 5);
+  });
+
+  it('carries a group\'s per-step cull offset on its entry, and none for a group without one', () => {
+    const r = binner().bin([group(), group({ start: 9, cullOffset: [0.25, -0.5, 0.125] })], straightCamera());
+    expect(r.entryAt(2, 2, 0)!.cullOffset).toBeUndefined();
+    expect(r.entryAt(2, 2, 1)!.cullOffset).toEqual([0.25, -0.5, 0.125]);
+    // The rebuilt cull sphere (the march's, in float32): the entry's own with no offset, else the largest sphere
+    // about centre + offset inside it.
+    const plain = group(), off = withCullSphere(group({ center: [0.1, 0, -4], radius: 0.2 }), [0, 0, -4], 0.5);
+    expect(tileCullSphere(plain)).toEqual({ center: plain.center.map(Math.fround), radius: Math.fround(plain.radius) });
+    const cull = tileCullSphere(off);
+    expect(off.radius).toBe(0.5 + TILE_CULL_PAD);
+    expect(cull.center[0]).toBeCloseTo(0.1, 6);
+    expect(cull.radius).toBeCloseTo(0.4, 5);
+    expect(cull.radius).toBeGreaterThanOrEqual(0.2);
   });
 
   it('clamps at the 64-entry cap and flags, never wrapping or throwing', () => {

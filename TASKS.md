@@ -37,12 +37,12 @@
 
 **Cut wounds** — [combat and gore](docs/tasks/combat-and-gore.md)
 - [~] **Cut wounds M1 built 2026-10-04; owner playtested** — a cut wound shape, the rod (weapon slot 6), 32 wounds with merging.
-  Owner: "more excessive", so longer, wider, ragged cuts landed 2026-10-04 (two costs open: [status](docs/dev-notes/2026-10-04-cut-excess/STATUS.md)). M2 is the head split (next line).
+  Owner: "more excessive", so longer, wider, ragged cuts landed 2026-10-04. Their cost, investigated 2026-10-06: about 4 to 5 ms for three chops, not +22 ([notes](docs/dev-notes/2026-10-06-cut-cost/NOTES.md)); next for wound cost is organs to mesh (owner). M2 is the head split (next line).
   Gate `scripts/cut-wound-gate.mjs` (33 checks). [Notes](docs/dev-notes/2026-10-03-cut-wounds/NOTES.md) · [handoff](docs/dev-notes/2026-10-03-cut-wounds/HANDOFF.md).
 - [~] **The axe (slot 7) and the head split built 2026-10-05; owner playtested; PR goblincore/blud#31** (branch
   `claude/head-cleaving-effect-ef9515`) — a chop opens a zombie's head on a hinge: a wide crack, then split wide and alive, then
   the kill. The halves wobble; the skull cracks, then splits. The wet film under the flashlight is the owner's pick (C, the boldest, 2026-10-06).
-  Debt: an open head costs about +6 to +8 ms at 0.6 m. Gates `scripts/head-split-gate.mjs` (111 checks, 2026-10-07), `scripts/axe-gate.mjs` (29).
+  Debt: an open head costs about +4.4 ms at 0.6 m after a first cost pass and the cut-cost pass under it (2026-10-06, branch `claude/open-head-cost`: [notes](docs/dev-notes/2026-10-06-open-head-cost/NOTES.md); +6 to +8 ms before). Gates `scripts/head-split-gate.mjs` (111 checks, 2026-10-07), `scripts/axe-gate.mjs` (29).
   **The anatomical skull is too small in the head (2026-10-07, branch `claude/anatomical-skull-fit`):** four fits that read the flesh are behind `?skullfit=affine|mid|snug|tight`. [Look sheets and tables](docs/dev-notes/2026-10-07-anatomical-skull-fit/NOTES.md).
   **On the anatomical skull (2026-10-06, branch `claude/split-anatomical-skull`):** split plates have their own material, shots break them where they are drawn (bone standing in the open gap included), the gate runs on it and reads their pixels. Owner to decide: retune how far the bone opens ([sheets and notes](docs/dev-notes/2026-10-06-split-anatomical-skull/NOTES.md)).
   [Spec](docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 10) · [handoff](docs/dev-notes/2026-10-04-head-split/HANDOFF.md) · [notes](docs/dev-notes/2026-10-04-head-split/NOTES.md).

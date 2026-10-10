@@ -4,6 +4,7 @@
 // point, its turn, the head frame turned with it, and the cut-face gate and depth. Spliced into MARCH_TRACE_POST right
 // after the world hit point, so marchBody, refineBody and the deferred marchSurface all run it.
 import { SPLIT_SHADE } from '../../../../../head-split';
+import { SPLIT_ABL, ablWgsl } from '../../../../split-ablate';
 
 export const SPLIT_HIT_BLOCK = /* wgsl */ `  // THE HEAD SPLIT. The hit is on ONE rigid piece of its body (hitPiece, the walk's copy of gHitPiece: 0 the unmoved
   // rest and every closed body, 1 / 2 a half turned open by splitTheta), and the body's wounds, rest rows, bones and
@@ -13,8 +14,9 @@ export const SPLIT_HIT_BLOCK = /* wgsl */ `  // THE HEAD SPLIT. The hit is on ON
   // normal's taps and the probes stay at the world point p.
   // A hit that is not on a turned half takes p, the record's frame and the identity themselves: h + R(a, 0)(p - h) is
   // not bit-equal to p, and a closed body must shade to the bit as it did.
-  var splitTheta = 0.0;
-  if (gInstSplitOpen && hitPiece != 0) { splitTheta = select(gInstSplitA.w, gInstSplitN.w, hitPiece == 1); }
+  var splitTheta = 0.0;${ablWgsl(`
+  let splitAbl = select(0, i32(gInstSplitR.y), gInstSplitOpen);`)}
+  if (gInstSplitOpen && hitPiece != 0${ablWgsl(` && (splitAbl & ${SPLIT_ABL.noPostHit}) == 0`)}) { splitTheta = select(gInstSplitA.w, gInstSplitN.w, hitPiece == 1); }
   var pS = p;
   var splitQ = vec4<f32>(0.0, 0.0, 0.0, 1.0);
   var faceCentre = gInstHeadCentre;
@@ -35,5 +37,5 @@ export const SPLIT_HIT_BLOCK = /* wgsl */ `  // THE HEAD SPLIT. The hit is on ON
   // block (cut-face.wgsl.ts) read it. cutDepth is how deep inside the closed body, as it is now, the hit lies at its
   // un-warped point: the depth the tissue ramp takes on a cut face, and the look block's.
   var cutFace = 0.0;
-  if (gInstSplitOpen) { cutFace = smoothstep(${SPLIT_SHADE.cutLo}, ${SPLIT_SHADE.cutHi}, hitField.x - hitSplitF); }
+  if (gInstSplitOpen${ablWgsl(` && (splitAbl & ${SPLIT_ABL.noPostHit}) == 0`)}) { cutFace = smoothstep(${SPLIT_SHADE.cutLo}, ${SPLIT_SHADE.cutHi}, hitField.x - hitSplitF); }
   let cutDepth = max(0.0, -hitSplitF);`;

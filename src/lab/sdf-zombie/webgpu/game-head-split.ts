@@ -102,6 +102,9 @@ export interface HeadSplitLeaf {
    *  three-number vectors. A repeatable motion for a frozen actor: what it does is the pure step's on the same
    *  list (head-split.ts stepSplit with wobbleDrive). */
   script(id: number, accs: readonly Vec3[] | null): boolean;
+  /** Dev seam (split-ablate.ts): re-pose every actor that holds a split and ask for the frozen hulls again, so the
+   *  bounds and the record are re-made under the switches as they stand now. */
+  refresh(): void;
   /** Drop every actor's state and hook (a cast rebuild / level reset). */
   reset(): void;
 }
@@ -237,6 +240,10 @@ export function createHeadSplit(ctx: GameContext, deps: HeadSplitDeps = {}): Hea
       if (accs !== null && !(Array.isArray(accs) && accs.every(v => Array.isArray(v) && v.length === 3))) return false;
       h.script = (accs ?? []).map(v => [v[0], v[1], v[2]] as Vec3);
       return true;
+    },
+    refresh() {
+      for (const a of heads.keys()) if (!tearing(a)) a.reposeHead();
+      hullsStale();
     },
     reset() {
       for (const a of heads.keys()) drop(a);

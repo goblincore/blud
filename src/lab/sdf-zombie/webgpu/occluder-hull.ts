@@ -48,6 +48,7 @@ import { SHADOW_HULL_LAYER } from './sdf-layer';
 import { strandReach } from '../extent';
 import type { BuiltBody, Vec3 } from '../types';
 import { splitFrame, splitHolds } from '../head-split';
+import { SPLIT_BOUND, boundsSplit } from './split-ablate';
 
 /**
  * How far each hull sphere is pulled in from the primitive that contains it.
@@ -218,7 +219,7 @@ export function buildHullInstances(
     // kept only if it holds no flesh of a turning half (splitHolds): below the hinge plane, outside the hold ball,
     // or wholly on a side that does not turn, the solid is where the closed prims put it, with its wounds where
     // `wounds` has them. The shadow hull (shrink >= 1) keeps the closed head: it casts the closed head's shadow.
-    const split = shrink < 1 ? splitFrame(body.split) : null;
+    const split = shrink < 1 ? splitFrame(boundsSplit(body.split, SPLIT_BOUND.hullInner)) : null;
     const clearOfSplit = (c: Vec3, r: number): boolean => !split || splitHolds(split, c, r + shellAmp) === 0;
 
     for (const p of body.prims) {

@@ -81,6 +81,10 @@ use `rho`, not `r`. The per-ray wound list is off for an open slot. **Past 12.7 
 reopens inside 0.9× that (11.4 m): beyond it the march's accept reach could draw the region shell as a false surface.
 `view.splitDrawn` is what the record really carries; anything else that draws the head must follow it, not the pose.
 The shipped accept numbers live in `webgpu/game-march-accept.ts`, and a test holds them under the margin.
+Since the cost pass (2026-10-06): a grown tile group names its own closed sphere for `mapBody`'s per-step cull
+(`webgpu/tile-cull.ts` `cullOffset`; the binner and the per-ray test keep the grown one), and the outer hull turns a
+TIGHT cover with each half (`webgpu/shell-hull-outer.ts` `ellipsoidChain`: a fine sphere chain along a plain
+ellipsoid's longest axis, padded by the face cut's lip, `SPLIT_HULL_LIP`).
 
 **Shading after the hit** (`webgpu/march/body/blocks/post/split-hit.wgsl.ts`, `webgpu/march/body/blocks/post/cut-face.wgsl.ts`).
 `split-hit` derives the hit's split state once: `splitTheta`, `pS` (the un-warped point), `splitQ`, `faceCentre` /
@@ -148,6 +152,7 @@ entries do. It does not walk the light list, and must not from inside its gate (
 | `slugFrom(origin, direction)` | one slug of the gun's own, put in flight where the caller says; the projectile loop steps and traces it (the gate's P) |
 | `meshSkeletonShow({ bones, eyes })` | hides or shows the bone meshes and the eyes (a shown / hidden pair tells bone pixels from flesh) |
 | `actorWounds(id)` | each wound, with `headSlot`, `headRegion` and a cut's `dirWorld` |
+| `splitAblate({ mask, boundsOff })` | the cost pass's switches (`webgpu/split-ablate.ts`): which bounds stay the closed head's, and on a `?splitablate` page the run-time shader switches. Every leg but 0 / 0 draws a wrong frame: cost only |
 
 ## How to run and verify
 
@@ -292,13 +297,17 @@ If a lurch reads as a hard stop, the wobble's dials are `max` and `gainSide`.
 
 All of it is accepted for now and none of it has been investigated. Numbers and conditions are in spec §10.9.
 
-- **An open head costs about +6 to +8 ms of frame time at 0.6 m** and about +0.6 to +1.6 ms at 2 m, against the same
-  head closed (headless, a 400 × 300 march target). Closed bodies read +0.1 to +0.3 ms at 0.6 m since B6,
+- **An open head costs about +4.4 to +4.7 ms of frame time at 0.6 m** (`middle` both sides; +3.2 to +3.6 ms with one
+  side; the lower figures with the cut-cost pass merged under it, 2026-10-07) against the same head closed, after
+  the cost pass of 2026-10-06 ([its notes](../2026-10-06-open-head-cost/NOTES.md):
+  the attribution, what was cut, what was measured and not built, what is left). Before it: +6 to +8 ms at 0.6 m
+  (+6.15 to +6.6 and +5.6 ms in the pass's own sessions) and about +0.6 to +1.6 ms at 2 m. Headless, a 400 × 300 march target. At 2 m the pass is not resolved by
+  timing; the walk's primitive evaluations fall 27%. Closed bodies read +0.1 to +0.3 ms at 0.6 m since B6,
   unattributed.
 - **Cold shader compile: +4.5 s** on B4's boot pair (45.0 → 49.5 s warm-up). Later pairs did not show that level
   again; it has not been re-measured against the tree before B4.
-- **A walking split head never rests,** so its bounds, hulls and record are re-made every tick. Only a corpse or a body
-  that stands still could cache them.
+- **A walking split head never rests,** so its bounds, hulls and record are re-made every tick. So are any walking
+  body's: the cost pass measured what the split adds to that (its notes, §4.3).
 - **`sdBody` costs about 2.7× inside the region** (CPU).
 - **The split skull's copies** cost +0.1 to +0.5 ms over the whole skull: a clipped copy is shaded in full.
 - **The anatomical skull's share of that cost is not measured.** On 2026-10-06 the gate's scene read +6.2 to +8.3 ms
@@ -309,13 +318,21 @@ All of it is accepted for now and none of it has been investigated. Numbers and 
   and three ray casts at the plates when the step passes inside the sphere. Not timed.
 - **The wet film** is six `noise3` taps and two `pow` per raw texel, and again in the refine twin. Its frame cost was
   not resolved (under 1 ms if anything).
-- **The cut excess pass:** cold boot about +430 ms (+136 to +936 ms over four pairs); three axe chops on one torso
-  add about +22 ms of frame time, against +4.3 ms before. First things to try: drop or cheapen the `woundMask` noise
-  and the pinch's `hash13` calls, tighten the cut's reach sphere, lower `AXE_CUT.halfLen` or the kerf.
+- **The cut excess pass** (investigated 2026-10-06, [notes](../2026-10-06-cut-cost/NOTES.md)): three axe chops on one
+  torso cost about 4 to 5 ms at 0.9 m (4.8 ms, IQR 4.2 to 5.2), not the +22 ms recorded here before. That figure was
+  the axe gate's C scenario, whose "before" frame draws no body flesh (a stale march view after K's thaw; the gate
+  also does not wait for the crowd warm). Do not quote the gate's C line as a cost; use `scripts/cut-cost.mjs`.
+  The "+430 ms cold boot" was not reproduced on a quiet machine. Branch `claude/cut-cost` takes back 0.5 to 2.2 ms
+  with exact early exits. What is left is the organ fold in every wound's near zone (about 2 ms of the 4.8): the
+  owner decided on 2026-10-06 that organs become mesh.
 
-Not tried, for the open head: a fixed piece order with a per-piece `continue` in place of the compare-swap sort;
+Measured and not built, for the open head (the cost pass's notes, §4): a bounding sphere per piece in the skip test
+(not a lower bound of the field), analytic normals in the region (the face cuts force the taps anyway), bounds for
+the wobble's envelope, a fixed piece order (30% more evaluations), turning only the head's prims. Not tried:
 flattening the pieces into the slot loop; for the skull copies, a branch in place of the select on the back face, and
-drawing piece 0 front-faced when its top is hidden. A tighter tile bound was tried, gained 0.2 ms, and was reverted.
+drawing piece 0 front-faced when its top is hidden. A tighter tile bound was tried in B5, gained 0.2 ms, and was
+reverted. **To measure any of it:** `scripts/open-head-cost.mjs` ([how](../2026-10-06-open-head-cost/NOTES.md)); read its census, not only its
+timings.
 Keep bookkeeping out of `mapBody`'s per-sample path: it is inlined about ten times, and one form of the re-fold
 report there cost 0.5 ms on every closed body.
 
@@ -346,7 +363,8 @@ report there cost 0.5 ms on every closed body.
 2. **`gRefoldBy` is indexed by piece, not slot.** In a crowd pixel another slot's re-fold win can leak into an open
    slot's normal hint. It never touches the field. The fix moves what closed crowd pixels compute, so it is its own
    task with its own `march-hash` re-pin.
-3. **Optimise the open head** (Debt, above).
+3. **Optimise the open head, second pass** ([the first pass's notes](../2026-10-06-open-head-cost/NOTES.md), §5: what is left, by size; §8: the
+   re-measure on top of the cut-wound cost pass, which bought 0.3 to 0.5 ms).
 4. **Something in the gap.** After the kill the skull is hollow and the room shows through the V. A whole brain mesh
    riding piece 0, drawn from `view.splitDrawn` like the skull, is the cheapest structural answer.
 5. **A baked split head** has no answer yet: a detached or baked head takes the mesh face layer with no split.

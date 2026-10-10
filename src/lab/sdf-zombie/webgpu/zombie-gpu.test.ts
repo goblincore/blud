@@ -25,6 +25,8 @@ import { packBody } from '../pack';
 import { FISHEYE_DEFAULTS } from './fisheye';
 import { GAME_AA, GAME_AA_FADE_M, GAME_AA_NEAR, GAME_LAST_STEP_DEFAULT } from './game-march-accept';
 import { headShape } from './flame-anchors';
+import { TILE_CULL_PAD, tileCullSphere } from './tile-cull';
+import { SPLIT_BOUND, splitAblate } from './split-ablate';
 import { BASE_PRIM_STRIDE, MAX_PRIMS } from '../validate';
 import { encodeSurfaceClass } from './deferred-surface';
 import type { Primitive } from '../types';
@@ -264,14 +266,32 @@ describe('the head split in the view\'s bounds', () => {
     expect(open.length).toBe(closedGroups.length);
     // The head's groups: each is the rule's sphere for its closed one, with the march's reach for that group; the
     // ones that grew hold their closed sphere. Ranges, distortion and flags ride along.
-    let grew = 0;
+    let grew = 0, tight = 0;
     for (const g of HEAD_GROUPS) {
       const c = closedGroups[g]!;
       const want = splitBound(frame, c.center, c.radius, k4 * Math.max(c.distort, 1));
-      expect({ centre: open[g]!.center, radius: open[g]!.radius }, `group ${g}`).toEqual({ centre: [...want.centre], radius: want.radius });
+      const grown = want.radius > c.radius;
+      // A grown sphere is padded (tile-cull.ts TILE_CULL_PAD) and names the group's own sphere for the per-step cull.
+      expect({ centre: open[g]!.center, radius: open[g]!.radius }, `group ${g}`).toEqual({ centre: [...want.centre], radius: want.radius + (grown ? TILE_CULL_PAD : 0) });
       expect(Math.hypot(...c.center.map((v, i) => v - open[g]!.center[i]!)) + c.radius).toBeLessThanOrEqual(open[g]!.radius + 1e-9);
-      expect({ ...open[g]!, center: 0, radius: 0 }).toEqual({ ...c, center: 0, radius: 0 });
-      if (open[g]!.radius > c.radius) grew++;
+      expect({ ...open[g]!, center: 0, radius: 0, cullOffset: 0 }).toEqual({ ...c, center: 0, radius: 0, cullOffset: 0 });
+      // THE PER-STEP CULL'S SPHERE, as the march rebuilds it in float32 (tileCullSphere): it holds the closed group's
+      // own sphere, so a cull on it is as sound as on the closed head, and it lies inside the grown one.
+      const cull = tileCullSphere(open[g]!);
+      const off = Math.hypot(...c.center.map((v, i) => v - cull.center[i]!));
+      expect(off + c.radius, `group ${g}: the cull sphere holds the closed one`).toBeLessThanOrEqual(cull.radius);
+      expect(cull.radius, `group ${g}: and is no larger than the grown one`).toBeLessThanOrEqual(open[g]!.radius);
+      if (grown) {
+        grew++;
+        expect(open[g]!.cullOffset).toEqual(c.center.map((v, i) => v - want.centre[i]!));
+        // Where the grown sphere is not the hold ball itself the two touch from inside: the cull sphere is the
+        // closed one to within the pad and float32's rounding.
+        if (want.radius > frame.rho + 1e-9) { expect(cull.radius - c.radius).toBeLessThan(1e-5); tight++; }
+        expect(cull.radius).toBeLessThan(open[g]!.radius);
+      } else {
+        expect(open[g]!.cullOffset).toBeUndefined();
+        expect(cull).toEqual({ center: c.center.map(Math.fround), radius: Math.fround(c.radius) });
+      }
     }
     expect(grew).toBeGreaterThan(0);
     // A leg's groups are the closed ones, untouched.
@@ -288,6 +308,30 @@ describe('the head split in the view\'s bounds', () => {
     view.update(body);
     expect(view.getTileGroups()).toEqual(closedGroups);
     expect(row(view, ROW_CLUSTER_BOUNDS, HEAD)).toEqual(closedHead);
+
+    // Every group of the body that grew, not only the head's (the neck and the shoulders reach the hold ball too):
+    // the same holds, and some of them touch the grown sphere from inside.
+    view.update({ ...body, split: warp });
+    const all = view.getTileGroups();
+    let others = 0;
+    for (let g = 0; g < all.length; g++) {
+      const c = closedGroups[g]!, cull = tileCullSphere(all[g]!);
+      expect(Math.hypot(...c.center.map((v, i) => v - cull.center[i]!)) + c.radius, `group ${g}`).toBeLessThanOrEqual(cull.radius);
+      if (all[g]!.cullOffset && !HEAD_GROUPS.includes(g)) { others++; if (cull.radius - c.radius < 1e-5) tight++; }
+    }
+    console.log(`tile groups under a full middle split: ${grew} of the head's ${HEAD_GROUPS.length} grew, ${others} others; ${tight} cull spheres are the closed sphere to 1e-5 m`);
+    expect(tight).toBeGreaterThan(0);
+
+    // The dev switch (split-ablate.ts SPLIT_BOUND.tileCull): the grown sphere with no cull sphere of its own, the
+    // tree before 2026-10-06.
+    splitAblate.boundsOff = SPLIT_BOUND.tileCull;
+    view.update({ ...body, split: warp });
+    for (const g of HEAD_GROUPS) {
+      const c = closedGroups[g]!, want = splitBound(frame, c.center, c.radius, k4 * Math.max(c.distort, 1));
+      expect(view.getTileGroups()[g]!.cullOffset).toBeUndefined();
+      expect(view.getTileGroups()[g]!.radius).toBe(want.radius);
+    }
+    splitAblate.boundsOff = 0;
     view.dispose();
   });
 

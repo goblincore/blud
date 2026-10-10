@@ -80,7 +80,9 @@ describe('bone fold (wound pass r2)', () => {
     // bone-only chunks and melting bodies fold the inside-flesh rows
     // without a wound. The bypass must never REPLACE the gate — an intact
     // body still skips the bone fold exactly.
-    expect(MAP_BODY).toMatch(/\(nearWound > 0\.5 \|\| counts2\.y > 0\.5\) && counts2\.x > 0\.0/);
+    // (A cut's SOFT near zone, cut-wound.ts CUT_NEAR, folds only under a raising carve: wounds.wgsl.test.ts pins the
+    // two near terms. A crater's zone reads 1 and passes the first.)
+    expect(MAP_BODY).toMatch(/\(nearWound > 0\.875 \|\| \(nearWound > 0\.5 && gWoundRaisers != 0u\) \|\| counts2\.y > 0\.5\) && counts2\.x > 0\.0/);
     expect(MAP_BODY).toContain('applyBones(dmg, p, data, counts, counts2.x, band, segVolumeAtlas, segVolumeMeta)');
     expect(MAP_BODY).toContain('let counts2 = gInstCounts2;');
     expect(MARCH_BODY).not.toMatch(/woundCfg2\.w[^;]*applyBones/);

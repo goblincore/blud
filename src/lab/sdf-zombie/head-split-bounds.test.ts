@@ -17,13 +17,14 @@ import { packBody } from './pack';
 import {
   REGION_MARGIN, SHELL_ACCEPT_FRAC, forcedSplit, headFrameOf, splitBound, splitDrawDistance, splitFrame, splitHoldBall,
   splitHolds, splitMaxAngle, splitNearReach, splitSphereImages, splitWarpOf, warpPoint,
-  type HeadFrame, type SplitPresetId, type SplitWarp,
+  type HeadFrame, type SplitPresetId, type SplitWarp, HEAD_SPLIT,
 } from './head-split';
 import { MARCH_BODY } from './webgpu/march.wgsl';
-import { cross, dot, len, normalize, qFromAxisAngle, sub } from './vec';
+import { cross, dot, len, normalize, qFromAxisAngle, qRotate, sub } from './vec';
 import type { Vec3 } from './types';
 import { headShape } from './webgpu/flame-anchors';
-import { buildOuterHullInstances } from './webgpu/shell-hull-outer';
+import { SPLIT_HULL_LIP, blendReach, buildOuterHullInstances, ellipsoidChain } from './webgpu/shell-hull-outer';
+import { SPLIT_BOUND, splitAblate } from './webgpu/split-ablate';
 import { HULL_SHRINK, SHADOW_HULL_INFLATE, buildHullInstances } from './webgpu/occluder-hull';
 import { FISHEYE_DEFAULTS } from './webgpu/fisheye';
 import { GAME_AA, GAME_AA_FADE_M, GAME_AA_NEAR, GAME_LAST_STEP_DEFAULT } from './webgpu/game-march-accept';
@@ -299,18 +300,104 @@ describe('the hulls follow the open head', () => {
     // The closed hull's skull sphere is fat (the largest semi-axis all round), so it is the halves' tips that escape it.
     expect(escapedClosed).toBeGreaterThan(10);
   });
-  it('the outer hull adds, for each sphere that holds flesh of a half, a copy turned with that half; a closed body gets none', () => {
+  it('the outer hull adds, for each sphere of a prim\'s cover that holds flesh of a half, a copy turned with that half; a closed body gets none', () => {
     const w = splitWarpOf(forcedSplit('face', 1, 0, 1)!, FRAME)!;
-    const closedHull = buildOuterHullInstances([POSED], { shellAmp: 0.004, margin: 0.01 });
-    const hull = buildOuterHullInstances([{ ...POSED, split: w }], { shellAmp: 0.004, margin: 0.01 });
-    const want = closedHull.flatMap(s => images(w, s.centre, s.radius).map(centre => ({ centre, radius: s.radius })));
-    expect(want.length).toBeGreaterThan(3);
-    expect(want.length).toBeLessThan(closedHull.length);   // the body below the hinge has no copies
+    const opts = { shellAmp: 0.004, margin: 0.01 };
+    const closedHull = buildOuterHullInstances([POSED], opts);
+    const hull = buildOuterHullInstances([{ ...POSED, split: w }], opts);
+    // The closed body's spheres come first, untouched: what does not turn is where it was.
+    expect(hull.slice(0, closedHull.length)).toEqual(closedHull);
+    // THE FIRST RULE (the dev switch SPLIT_BOUND.hullOld): a turned copy of each of those spheres.
+    const loose = closedHull.flatMap(s => images(w, s.centre, s.radius).map(centre => ({ centre, radius: s.radius })));
+    expect(loose.length).toBeGreaterThan(3);
+    expect(loose.length).toBeLessThan(closedHull.length);   // the body below the hinge has no copies
+    splitAblate.boundsOff = SPLIT_BOUND.hullOld;
+    expect(buildOuterHullInstances([{ ...POSED, split: w }], opts).slice(closedHull.length)).toEqual(loose);
+    splitAblate.boundsOff = 0;
+    // THE RULE: the copies are of each prim's COVER, a plain ellipsoid's being its tight chain (ellipsoidChain).
+    const pad = (p: (typeof POSED.prims)[number]) => blendReach(p.blendK ?? 0, p.blendProfile) + opts.shellAmp + opts.margin;
+    const plain = (p: (typeof POSED.prims)[number]) => p.a.every((v, i) => v === p.b[i]) && p.bend === undefined && p.box === undefined
+      && p.strand === undefined && p.shell === undefined && (p.radiusB === undefined || p.radiusB === p.radius);
+    const want: { centre: Vec3; radius: number }[] = [];
+    let at = 0, tight = 0, kept = 0;
+    for (const p of POSED.prims) {
+      if (p.op === 'sub' || p.op === 'groove' || p.dead || !POSED.clusters.find(c => c.id === p.cluster)?.alive) continue;
+      const own = buildOuterHullInstances([{ ...POSED, prims: [p] }], opts);
+      expect(closedHull.slice(at, at + own.length)).toEqual(own);
+      at += own.length;
+      // A plain ellipsoid's tight chain, padded by the face cut's lip as well, where it is slimmer than the prim's own
+      // sphere; otherwise the prim's own spheres.
+      const chain = plain(p) ? ellipsoidChain(p.a, [p.radius * p.scale[0], p.radius * p.scale[1], p.radius * p.scale[2]], p.orient, pad(p) + SPLIT_HULL_LIP) : null;
+      const slim = chain !== null && chain[0]!.radius < own[0]!.radius;
+      for (const s of slim ? chain : own) for (const centre of images(w, s.centre, s.radius)) { want.push({ centre, radius: s.radius }); if (slim) tight++; else if (plain(p)) kept++; }
+    }
+    expect(at).toBe(closedHull.length);
+    expect(tight).toBeGreaterThan(1);
+    // The lip is the face cut's own (HEAD_SPLIT.faceCalibre through cut-wound.ts cutLip's amplitude): 15.6 mm today.
+    expect(SPLIT_HULL_LIP).toBeCloseTo(HEAD_SPLIT.faceCalibre.kerf * 1.3, 12);
+    console.log(`outer hull copies (face, full): ${tight} of a tight chain, ${kept} of plain ellipsoids whose padded chain is no slimmer than their sphere; lip pad ${(SPLIT_HULL_LIP * 1000).toFixed(1)} mm`);
     expect(hull.slice(closedHull.length)).toEqual(want);
     expect(buildOuterHullInstances([{ ...POSED, split: null }])).toEqual(buildOuterHullInstances([POSED]));
     // Two bodies: only the split one's spheres are copied.
-    const two = buildOuterHullInstances([POSED, { ...POSED, split: w }], { shellAmp: 0.004, margin: 0.01 });
+    const two = buildOuterHullInstances([POSED, { ...POSED, split: w }], opts);
     expect(two.length).toBe(2 * closedHull.length + want.length);
+  });
+  it('a plain ellipsoid\'s tight chain holds the padded ellipsoid, in less room than its one sphere', () => {
+    const rnd = rng(4242);
+    let slimmer = 0;
+    for (let n = 0; n < 60; n++) {
+      const a0 = 0.01 + 0.15 * rnd(), a1 = 0.01 + 0.15 * rnd(), a2 = 0.01 + 0.15 * rnd();
+      const axes: Vec3 = n < 3 ? [a0, a0, a0] : [a0, a1, a2];       // spheres too
+      const pad = n % 4 === 0 ? 0 : 0.03 * rnd();
+      const orient = n % 3 === 0 ? undefined : qFromAxisAngle(normalize([rnd() - 0.5, rnd() - 0.5, rnd() - 0.5]), 3 * rnd());
+      const c: Vec3 = [rnd(), rnd(), rnd()];
+      const chain = ellipsoidChain(c, axes, orient, pad);
+      const big = Math.max(...axes), mid = [...axes].sort((x, y) => x - y)[1]!;
+      // Its spheres are the middle semi-axis's (plus the pad) to within 1%, all alike; one sphere for a sphere; and
+      // the chain reaches no more than 1% past the padded ellipsoid's tips.
+      for (const s of chain) { expect(s.radius).toBeGreaterThanOrEqual(mid + pad); expect(s.radius).toBeLessThan((mid + pad) * 1.01); expect(s.radius).toBe(chain[0]!.radius); }
+      if (big - mid < 1e-12) expect(chain.length).toBe(1);
+      expect(len(sub(chain[0]!.centre, chain[chain.length - 1]!.centre)) / 2 + chain[0]!.radius).toBeLessThan((big + pad) * 1.01);
+      if ((mid + pad) * 1.01 < (big + pad) * 1.13 * 0.9) slimmer++;
+      // Every point of the padded ellipsoid's surface (a surface point pushed out along its normal by the pad) and of
+      // its inside is in some sphere of the chain.
+      for (let i = 0; i < 400; i++) {
+        const u = normalize([rnd() - 0.5, rnd() - 0.5, rnd() - 0.5]), k = i % 2 ? 1 : Math.cbrt(rnd());
+        const local: Vec3 = [axes[0] * u[0] * k, axes[1] * u[1] * k, axes[2] * u[2] * k];
+        const nrm = normalize([u[0] / axes[0], u[1] / axes[1], u[2] / axes[2]]);
+        const out: Vec3 = [local[0] + nrm[0] * pad, local[1] + nrm[1] * pad, local[2] + nrm[2] * pad];
+        const world = orient ? qRotate(orient, out) : out;
+        const p: Vec3 = [c[0] + world[0], c[1] + world[1], c[2] + world[2]];
+        expect(sdSpheres(p, chain), `${n}: axes ${axes}, pad ${pad}`).toBeLessThanOrEqual(1e-12);
+      }
+    }
+    expect(slimmer).toBeGreaterThan(20);
+  });
+  it('the tight copies hold the opened halves with room to spare, in less of the hold ball than the loose ones', () => {
+    for (const [name, preset, sides, offset] of [['middle both', 'middle', 0, 0], ['middle one', 'middle', 1, 0.036], ['face', 'face', 1, 0]] as const) {
+      const w = splitWarpOf(forcedSplit(preset, sides, offset, 1)!, FRAME)!, ball = splitHoldBall(w);
+      const open: BuildResult = { ...POSED, split: w };
+      const hull = buildOuterHullInstances([open]);
+      splitAblate.boundsOff = SPLIT_BOUND.hullOld;
+      const loose = buildOuterHullInstances([open]);
+      splitAblate.boundsOff = 0;
+      const rnd = rng(31 + name.length);
+      let inNew = 0, inOld = 0, solid = 0, worst = Infinity;
+      for (let i = 0; i < 30000; i++) {
+        const p = inBall(rnd, ball.centre, ball.radius + 0.05);
+        // (Not a subset: a padded chain's end spheres reach a little past the one loose sphere along the long axis.)
+        const dNew = sdSpheres(p, hull), dOld = sdSpheres(p, loose);
+        if (dNew <= 0) inNew++;
+        if (dOld <= 0) inOld++;
+        if (sdBody(p, open) > 0) continue;
+        solid++;
+        expect(dNew, `${name}: ${p}`).toBeLessThanOrEqual(0);
+        worst = Math.min(worst, -dNew);
+      }
+      console.log(`outer hull, ${name}: the tight copies cover ${(100 * inNew / 30000).toFixed(1)}% of the hold ball's neighbourhood against ${(100 * inOld / 30000).toFixed(1)}% (${solid} solid samples, all inside; the shallowest ${(worst * 1000).toFixed(1)} mm in)`);
+      expect(solid).toBeGreaterThan(1500);
+      expect(inNew).toBeLessThan(inOld);
+    }
   });
   it('the split hull is far smaller on screen than a sphere round the whole hold ball', () => {
     // The share of the hold ball's volume the head's spheres and their copies cover (the rest is not marched).

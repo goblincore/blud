@@ -81,6 +81,13 @@ describe('packGroups', () => {
     expect(out[8]).toBe(4);   // bodyIndex
   });
 
+  it('writes the per-step cull sphere\'s offset after bodyIndex, and zeros with none', () => {
+    const out = new Float32Array(MAX_TILE_GROUPS * GROUP_RECORD_SCALARS);
+    packGroups([g(), g({ cullOffset: [0.25, -0.5, 0.125] })], out);
+    expect([...out.subarray(9, 12)]).toEqual([0, 0, 0]);
+    expect([...out.subarray(GROUP_RECORD_SCALARS + 9, GROUP_RECORD_SCALARS + 12)]).toEqual([0.25, -0.5, 0.125]);
+  });
+
   it('zeroes slots past the live groups so stale records cannot leak', () => {
     const out = new Float32Array(MAX_TILE_GROUPS * GROUP_RECORD_SCALARS);
     out.fill(42);

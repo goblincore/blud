@@ -7,6 +7,8 @@ import { LIMB_ACCUMULATORS as LIMBS } from './limbs-flag';
 import { MAX_CROWD_INSTANCES } from '../crowd-records';
 import { ROW_CLUSTER_BOUNDS, ROW_CLUSTER_GROUPS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE } from './layout';
 import { REGION_MARGIN } from '../../head-split';
+import { SPLIT_ABL, ablWgsl } from '../split-ablate';
+import { CUT_NEAR } from '../../cut-wound';
 
 export const MAP_BODY = /* wgsl */ `fn mapBody(pIn: vec3<f32>, data: texture_2d<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, volumeTex: texture_3d<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, segVolumeAtlas: texture_3d<f32>, segVolumeMeta: texture_2d<f32>, perfCfg: vec4<f32>, inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>) -> vec4<f32> {
   gRefoldWin = 0.0;
@@ -78,7 +80,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(pIn: vec3<f32>, data: texture_2d<
     // rigid motion of f cut by half-spaces and a ball, so the min is a continuous distance bound: the march, the cone
     // and every probe step through it as through any body. A piece is a vec3 (cap, theta, id); a CLOSED slot is the
     // one piece (-1e9, 0, 0) at pIn with no cap and no shell, which is the body exactly as before.
-    let splitOpen = gInstSplitOpen;
+    let splitOpen = gInstSplitOpen${ablWgsl(` && (i32(gInstSplitR.y) & ${SPLIT_ABL.closedField}) == 0`)};
     var splitShell = 1e9;
     var pcA = vec3<f32>(-1e9, 0.0, 0.0);
     var pcB = vec3<f32>(1e9, 0.0, 1.0);
@@ -418,7 +420,11 @@ ${LIMBS ? `      let savedBest = gFoldBest;
   // melting body sags off its own skeleton, and a bone-only chunk (a
   // released skeleton group) has no flesh and no wound to be near, so gated
   // it would march an EMPTY field.
-  if ((nearWound > 0.5 || counts2.y > 0.5) && counts2.x > 0.0) {
+  // A SOFT near zone (a cut's column, cut-wound.ts CUT_NEAR) asks more: the fold runs there only where some carve
+  // RAISED the field at p (gWoundRaisers, bit 0 for unowned wounds; the re-fold's own rows add to it, which only
+  // widens the test). The same containment carries it: a row inside the flesh can win the hard min only where the
+  // field stands above the pre-wound flesh, and a lip can only lower it. A crater's zone reads 1 and folds as before.
+  if ((nearWound > ${(1 + CUT_NEAR) / 2} || (nearWound > 0.5 && gWoundRaisers != 0u) || counts2.y > 0.5) && counts2.x > 0.0) {
     dmg = applyBones(dmg, p, data, counts, counts2.x, band, segVolumeAtlas, segVolumeMeta);
   }
   // bestIdx is read AFTER the bone fold so a bone that won the min is the
@@ -466,7 +472,8 @@ ${LIMBS ? `      let savedBest = gFoldBest;
       foldU = foldSlot;
       pieceU = i32(piece.z);
       splitFU = dmgFinal;
-    }
+    }${ablWgsl(`
+    if (splitOpen && (i32(gInstSplitR.y) & ${SPLIT_ABL.oneEval}) != 0) { break; }`)}
     }   // end of THE PIECE LOOP
     // The region shell bound C caps the slot's value only: it is at least the margin, so it is never the surface,
     // and the bookkeeping stays with the last piece or slot that won.

@@ -18,7 +18,9 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
     cut-face restyle was built and reverted, `d0d407d2`); optimise the open head later.
   - **Behaviour change:** only a chop on head flesh is a head chop. Chops to the upper chest, the collar and the neck's
     base are body chops now, for every character.
-  - **Debt:** an open head costs about +6 to +8 ms at 0.6 m and +0.6 to +1.6 ms at 2 m. A split is drawn closed past
+  - **Debt:** an open head costs about +4.4 ms at 0.6 m (`middle` both sides; +3.2 ms one side) after a first cost
+    pass (2026-10-06, branch `claude/open-head-cost`, [notes](../dev-notes/2026-10-06-open-head-cost/NOTES.md); +6 to
+    +8 ms before it, and +0.6 to +1.6 ms at 2 m). A split is drawn closed past
     12.7 m.
   - **The `return` after the march's miss `discard`: landed 2026-10-06** (branch `claude/miss-discard-return`, off
     `a2d61133`; with the refine twin's three). Bit-identical (six `march-hash` pins, the three gates, base against new
@@ -86,9 +88,16 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
   slot, jagged walls, lips) + a rod stand-in weapon; M2: the head split (authored presets, a split field in `mapBody`,
   CPU mirror, skull mesh); M3: tuning.
   - **The excess pass (2026-10-04, after the owner's "more excessive"):** longer, wider, ragged tapered cuts, bigger
-    lips, more blood. Two costs are open and not investigated: cold boot about +430 ms; three axe chops add about
-    +22 ms of frame time (+4.3 ms before). [Status](../../docs/dev-notes/2026-10-04-cut-excess/STATUS.md) ·
+    lips, more blood. [Status](../../docs/dev-notes/2026-10-04-cut-excess/STATUS.md) ·
     [before and after, and the decision](../../docs/dev-notes/2026-10-04-cut-excess/compare/NOTES.md).
+  - **Its two costs, investigated 2026-10-06** ([notes](../../docs/dev-notes/2026-10-06-cut-cost/NOTES.md), branch
+    `claude/cut-cost`): three axe chops cost about 4 to 5 ms at 0.9 m, not +22 ms (the axe gate's C "before" frame
+    draws no body); the +430 ms cold boot was not reproduced. Exact early exits take back 0.5 to 2.2 ms with the
+    picture unchanged. Open: `axe-gate.mjs` C needs a zero-time thawed step and the crowd-warm wait before its cost
+    line means anything; `setWoundList` drops the cuts on a walked body.
+  - [ ] **Organs to mesh** (owner, 2026-10-06: "they aren't even really that visible or noticeable atm"). The organ
+    fold is the largest single piece of what any wound costs per frame (about 2 of the 4.8 ms above; 870 k
+    organ-prim evaluations a frame in that scene). Its own task.
 
   [Spec](../../docs/superpowers/specs/2026-10-03-cut-wounds-design.md) (section 11: as built) ·
   [plan](../../docs/superpowers/plans/2026-10-03-cut-wounds-m1.md) · gate `scripts/cut-wound-gate.mjs` (30 checks) ·

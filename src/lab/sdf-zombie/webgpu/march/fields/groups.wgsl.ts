@@ -8,6 +8,7 @@ import { TILE_MAX_ENTRIES } from '../../tile-cull';
 import { MAX_WOUNDS } from '../../../damage';
 import { LIMB_ACCUMULATORS as LIMBS } from '../limbs-flag';
 import { RAY_MASK_PROBE as RAYMASK } from '../raymask-flag';
+import { ablWgsl } from '../../split-ablate';
 import { ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_BEND, ROW_PRIM_CLIP, ROW_PRIM_SCALE, ROW_PRIM_SHAPE, ROW_PRIM_SHELL, ROW_PRIM_WARP } from '../layout';
 
 // The cull margin's 4.0 matters: smin scales k by 4 internally, so a cluster
@@ -416,7 +417,8 @@ export const INSTANCE_STATE = /* wgsl */ `fn loadInstance(inst: ptr<storage, arr
     gInstSplitH = (*inst)[base + ${REC_SPLIT_H}];
     gInstSplitA = (*inst)[base + ${REC_SPLIT_A}];
     gInstSplitR = (*inst)[base + ${REC_SPLIT_R}];
-  }
+  }${ablWgsl(`
+  gInstSplitR = (*inst)[base + ${REC_SPLIT_R}];`)}
 }
 `;
 

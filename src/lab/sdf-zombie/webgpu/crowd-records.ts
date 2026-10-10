@@ -5,6 +5,7 @@ import * as THREE from 'three/webgpu';
 import { storage } from 'three/tsl';
 import { DATA_ROWS } from './march.wgsl';
 import type { SplitWarp } from '../head-split';
+import { SPLIT_ABLATE, splitAblate } from './split-ablate';
 
 export const REC_VEC4S = 21;
 export const MAX_CROWD_INSTANCES = 64;
@@ -129,9 +130,11 @@ export function createCrowdRecords(capacity = MAX_CROWD_INSTANCES): CrowdRecords
         put4(b + REC_SPLIT_H * 4, sp.h, sp.d0);
         put4(b + REC_SPLIT_A * 4, sp.a, sp.thetaM);
         const ro = b + REC_SPLIT_R * 4;
-        floats[ro] = sp.r; floats[ro + 1] = 0; floats[ro + 2] = 0; floats[ro + 3] = 0;
+        // .y: the ablation mask, in a `?splitablate` build only (split-ablate.ts); 0 on every shipped page.
+        floats[ro] = sp.r; floats[ro + 1] = SPLIT_ABLATE ? splitAblate.mask : 0; floats[ro + 2] = 0; floats[ro + 3] = 0;
       } else {
         floats.fill(0, so, b + (REC_SPLIT_R + 1) * 4);
+        if (SPLIT_ABLATE) floats[b + REC_SPLIT_R * 4 + 1] = splitAblate.mask;
       }
       rec.dirty = true;
     },
