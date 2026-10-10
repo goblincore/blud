@@ -56,7 +56,7 @@ Each line is the first sentence of the module's header comment.
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 7 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 31 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [SDF march renderer](#sdf-march-renderer) | 32 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 32 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 25 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
@@ -614,6 +614,7 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 - `webgpu/shell-hull.ts` — CPU iso-surface extraction for the shell-march spike.
 - `webgpu/shell-spike.wgsl.ts` — The shell-march entry for the hull+shell spike.
 - `webgpu/soft-fade.ts` — SHARED SOFT-PARTICLE DEPTH FADE (flame-polish task 1, extracted for the explosion-curl task).
+- `webgpu/split-ablate.ts` — THE OPEN HEAD'S COST, TAKEN APART (docs/dev-notes/2026-10-06-open-head-cost/NOTES.md; scripts/open-head-cost.mjs is the driver).
 - `webgpu/surface-nets-compute.ts` — GPU side of the hull extraction: buffers sized ONCE at the worst case, compute nodes built once, a per-frame extract() that moves only uniforms (the…
 - `webgpu/surface-nets-cpu.ts` — CPU REFERENCE for the surface-nets hull extraction (hull-refine spec §4).
 - `webgpu/surface-nets.wgsl.ts` — GPU surface-nets hull extraction (hull-refine spec §4; plan deviation 1 folds occupancy into the kernel prologue).
