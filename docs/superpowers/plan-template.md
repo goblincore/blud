@@ -39,8 +39,8 @@ headless-Chrome capture scripts (`scripts/*.mjs`).
     wall-clock in logic) and console/capture seams in plain data.
 - Work ONLY in your dispatch worktree. Never `git stash`. `node_modules` is
   symlinked — do not reinstall.
-- **Targeted tests only** (`npm test -- <names>`) plus `npx tsc --noEmit`.
-  Never the bare full suite.
+- **Targeted tests only** (`npm test -- <names>`, or `npm run test:changed`) plus `npm run typecheck`.
+  Never the full suite locally: CI runs it on every push (`gh run list --branch <branch>`).
 - **Headless capture only** — the in-app browser pane loses the WebGPU device.
   Capture scripts require `window.__warmGate.phase === 'ready'` and fail on
   renderer pipeline errors.

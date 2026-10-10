@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/skeleton-spike/mesh-eyes.ts
+//
+// Eye placement, shading and impact picking for the skull segment mesh, with matching WGSL for the vessel, surface and emission terms.
+
 import type { Vec3 } from '../../types';
 import type { BoneFieldSource } from './contract';
 import { boneNoise3 } from './mesh-appearance';
@@ -167,10 +171,16 @@ export const MESH_EYE_EMISSION_WGSL = /* wgsl */ `fn meshEyeEmission(p: vec3<f32
   return vec3<f32>(0.95, 0.05, 0.07) * glow;
 }`;
 
-/** A projectile impact must be local to the skull and near this eye. The
- * broader pellet reach models the shock of a shotgun hit without affecting
- * the far eye on a grazing side hit or any other actor. */
+/** How far from an eye's surface a round must land to knock it out of its socket, metres. The first reach was 0.135
+ * (pellet) and 0.19 (slug) from the eye's CENTRE: on a 0.2 m head that is the whole face, and the eye sits 5 cm behind
+ * the skin, so any one pellet anywhere on the face ejected BOTH eyes and the stripped skull was nearly always shown
+ * empty-socketed. Now a round has to land near the eye it takes: a pellet within about a hand-width of the eye's disc,
+ * a slug (a bigger shock) a little wider. Measured from the eye's centre, so the 5 cm of depth is inside it. */
+export const EYE_IMPACT_REACH = { pellet: 0.055, slug: 0.085 } as const;
+
+/** A projectile impact must be local to the skull and near this eye (EYE_IMPACT_REACH): a shot at one eye does not
+ * take the other, nor a hit on the cheek or the chin, nor one on the brow or crown. */
 export function meshEyeImpactIndices(eyes: readonly MeshEyePlacement[], hit: Vec3, kind: 'pellet' | 'slug'): number[] {
-  const reach = kind === 'slug' ? 0.19 : 0.135;
+  const reach = EYE_IMPACT_REACH[kind];
   return eyes.flatMap((eye, i) => Math.hypot(...eye.center.map((v, axis) => v - hit[axis]!)) <= reach + eye.radius ? [i] : []);
 }

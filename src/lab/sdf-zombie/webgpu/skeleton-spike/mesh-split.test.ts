@@ -9,9 +9,9 @@ import {
 import type { Vec3 } from '../../types';
 import { qFromAxisAngle } from '../../vec';
 import {
-  JAG_SEED, MESH_SPLIT_CLIP_WGSL, MESH_SPLIT_INSIDE_WGSL, MESH_SPLIT_JAG_LINES, MESH_SPLIT_JAG_WGSL, SPLIT_INSTANCE_ATTRS,
-  SPLIT_INSTANCE_FLOATS,
-  meshSplitJag, meshSplitJagMax, meshSplitKeep, meshSplitRim, packSplitInstance, skullJagAt,
+  JAG_SEED, MESH_SPLIT_CLIP_WGSL, MESH_SPLIT_CUT_BONE_WGSL, MESH_SPLIT_FRACTURE_WGSL, MESH_SPLIT_INSIDE_WGSL, MESH_SPLIT_JAG_LINES,
+  MESH_SPLIT_JAG_WGSL, MESH_SPLIT_SIDE_LINES, SPLIT_INSTANCE_ATTRS, SPLIT_INSTANCE_FLOATS,
+  meshSplitCutBone, meshSplitFracture, meshSplitJag, meshSplitJagMax, meshSplitKeep, meshSplitRim, packSplitInstance, skullJagAt,
 } from './mesh-split';
 
 const hash = (i: number, lane: number): number => { const x = Math.sin(i * 127.1 + lane * 311.7) * 43758.5453; return x - Math.floor(x); };
@@ -120,10 +120,45 @@ describe('the WGSL: one function per string, scalars and vectors only', () => {
     expect(MESH_SPLIT_CLIP_WGSL).toContain('return vec4<f32>(q, keep);');
     expect(MESH_SPLIT_INSIDE_WGSL).toContain('let edge = clamp((rim.w - keep) / max(rim.w, 1e-6) * 2.0, 0.0, 1.0);');
     expect(MESH_SPLIT_INSIDE_WGSL).toContain('return select(vec4<f32>(mix(inside, rim.xyz, edge), edge), surface, front > 0.5);');
-    for (const src of [MESH_SPLIT_JAG_WGSL, MESH_SPLIT_CLIP_WGSL, MESH_SPLIT_INSIDE_WGSL]) {
+    // The cut bone of a plate: the same share of the rim as the wall's, mixed into the surface whichever way it faces.
+    expect(MESH_SPLIT_CUT_BONE_WGSL).toContain('fn meshSplitCutBone(surface: vec4<f32>, keep: f32, rim: vec4<f32>) -> vec4<f32>');
+    expect(MESH_SPLIT_CUT_BONE_WGSL).toContain('let edge = clamp((rim.w - keep) / max(rim.w, 1e-6) * 2.0, 0.0, 1.0);');
+    expect(MESH_SPLIT_CUT_BONE_WGSL).toContain('return mix(surface, vec4<f32>(rim.xyz, 1.0), edge);');
+    expect(MESH_SPLIT_CUT_BONE_WGSL).not.toMatch(/front|inside/);
+    for (const src of [MESH_SPLIT_JAG_WGSL, MESH_SPLIT_CLIP_WGSL, MESH_SPLIT_FRACTURE_WGSL, MESH_SPLIT_INSIDE_WGSL, MESH_SPLIT_CUT_BONE_WGSL]) {
       expect(src.match(/\bfn /g)).toHaveLength(1);
-      expect(src).not.toMatch(/array<|\[|\bvar<|\bloop\b|\bfor\b/);
+      expect(src).not.toMatch(/array<|\[|\bvar<|\bloop\b|\bfor\b|\$\{|undefined/);
     }
+  });
+  it('the clip is this text, to the byte: the sculpted skull\'s split shader is built on it', () => {
+    expect(MESH_SPLIT_CLIP_WGSL).toBe(`fn meshSplitClip(pWorld: vec3<f32>, sn: vec4<f32>, sh: vec4<f32>, sa: vec4<f32>, sk: vec4<f32>, jag: vec4<f32>, shape: vec4<f32>) -> vec4<f32> {
+  // sn = (n, d0), sh = (h, this copy's angle), sa = (a, rho), sk = (piece, + turns, - turns, seed).
+  let rel = pWorld - sh.xyz;
+  let c = cos(sh.w);
+  let s = sin(sh.w);
+  let q = sh.xyz + rel * c - cross(sa.xyz, rel) * s + sa.xyz * (dot(sa.xyz, rel) * (1.0 - c));
+  let r = q - sh.xyz;
+  let up = dot(cross(sn.xyz, sa.xyz), r);
+  let side = dot(sn.xyz, q) - sn.w + meshSplitJag(vec2<f32>(dot(sa.xyz, r), up), sk.w, jag, shape);
+  let region = min(up, sa.w - length(r));
+  let dP = min(region, side);
+  let dM = min(region, -side);
+  let d0 = min(select(1e3, -dP, sk.y > 0.5), select(1e3, -dM, sk.z > 0.5));
+  let keep = select(select(d0, dP, sk.x > 0.5), dM, sk.x > 1.5);
+  return vec4<f32>(q, keep);
+}`);
+  });
+  it('the fracture\'s distance reads the clip\'s own side and region: the same lines, in both, once each', () => {
+    expect(MESH_SPLIT_SIDE_LINES).toEqual([
+      'let r = q - sh.xyz;',
+      'let up = dot(cross(sn.xyz, sa.xyz), r);',
+      'let side = dot(sn.xyz, q) - sn.w + meshSplitJag(vec2<f32>(dot(sa.xyz, r), up), sk.w, jag, shape);',
+      'let region = min(up, sa.w - length(r));',
+    ]);
+    const shared = `\n  ${MESH_SPLIT_SIDE_LINES.join('\n  ')}\n`;
+    for (const src of [MESH_SPLIT_CLIP_WGSL, MESH_SPLIT_FRACTURE_WGSL]) expect(src.split(shared)).toHaveLength(2);
+    // It is handed the clip's un-turned point and the clip's record, and is those lines and one more.
+    expect(MESH_SPLIT_FRACTURE_WGSL).toBe(`fn meshSplitFracture(q: vec3<f32>, sn: vec4<f32>, sh: vec4<f32>, sa: vec4<f32>, sk: vec4<f32>, jag: vec4<f32>, shape: vec4<f32>) -> f32 {${shared}  return max(abs(side), max(-region, 0.0));\n}`);
   });
 });
 
@@ -137,6 +172,95 @@ describe('meshSplitRim: the inner wall is cut bone near the break', () => {
     expect(meshSplitRim(w)).toBe(0);
     expect(meshSplitRim(0.05)).toBe(0);
     expect(meshSplitRim(1e-4, 0)).toBe(0);
+  });
+});
+
+describe('meshSplitCutBone: a plate with thickness is cut bone near the break, on both of its faces', () => {
+  const { color, width } = HEAD_SPLIT.skull.rim;
+  const surface = [0.31, 0.27, 0.2, 0.4] as const;
+  const cut = [...color, 1];
+  it('the rim\'s colour, fully exposed, to half the width; the plate\'s own surface from the width on', () => {
+    expect(meshSplitCutBone(surface, 0)).toEqual(cut);
+    expect(meshSplitCutBone(surface, width / 2)).toEqual(cut);
+    meshSplitCutBone(surface, width * 0.75).forEach((v, i) => expect(v, `lane ${i}`).toBeCloseTo((surface[i]! + cut[i]!) / 2, 12));
+    expect(meshSplitCutBone(surface, width)).toEqual([...surface]);
+    expect(meshSplitCutBone(surface, 0.05)).toEqual([...surface]);
+  });
+  it('its share is meshSplitRim\'s at every distance and width, and a width of 0 is no rim at all', () => {
+    for (const w of [width, 0.001, 0.012]) for (let i = 0; i <= 40; i++) {
+      const keep = w * 1.25 * i / 40, share = meshSplitRim(keep, w);
+      meshSplitCutBone(surface, keep, { color, width: w }).forEach((v, k) => expect(v, `width ${w} keep ${keep} lane ${k}`).toBeCloseTo(surface[k]! * (1 - share) + cut[k]! * share, 12));
+    }
+    expect(meshSplitCutBone(surface, 1e-4, { color, width: 0 })).toEqual([...surface]);
+    expect(meshSplitCutBone(surface, 0, { color, width: 0 })).toEqual([...surface]);
+  });
+});
+
+describe('meshSplitFracture: how far a bone point is from the ragged edge between the pieces, and from no other edge', () => {
+  const clean = { ...JAG, zigAmp: 0, chipAmp: 0 };
+  const along = (o: Vec3, d: Vec3, k: number): Vec3 => [o[0] + d[0] * k, o[1] + d[1] * k, o[2] + d[2] * k];
+  /** The point `up` above the hinge plane, `side` off the old plane and `al` along the hinge axis. */
+  const pointOf = (s: SkullSplit, up: number, side: number, al = 0.01): Vec3 => {
+    const { w, u } = s.frame;
+    // On the plane first: the hinge point is not on it when the plane is off centre.
+    const on = along(w.h, w.n, w.d0 - (w.h[0] * w.n[0] + w.h[1] * w.n[1] + w.h[2] * w.n[2]));
+    return along(along(along(on, u, up), w.n, side), w.a, al);
+  };
+  for (const [name, s] of CASES) {
+    it(`${name}: on a clean plane it is the distance to the plane above the hinge, and at least the depth under it`, () => {
+      for (const side of [0.03, 0.007, 0.0005, -0.0005, -0.02]) {
+        expect(meshSplitFracture(pointOf(s, 0.08, side), s, clean), `side ${side}`).toBeCloseTo(Math.abs(side), 9);
+        // Under the hinge plane there is no fracture: the nearest of it is up at the plane.
+        expect(meshSplitFracture(pointOf(s, -0.012, side), s, clean), `under, side ${side}`).toBeCloseTo(Math.max(Math.abs(side), 0.012), 9);
+      }
+      expect(meshSplitFracture(pointOf(s, 0.08, 0), s, clean)).toBeCloseTo(0, 9);
+    });
+    it(`${name}: it is 0 exactly where a point changes owner between the halves, with the real fracture`, () => {
+      const { w } = s.frame;
+      let crossings = 0;
+      for (let i = 0; i < 400; i++) {
+        const a = pointOf(s, 0.02 + hash(i, 8) * 0.12, -0.012, (hash(i, 9) - 0.5) * 0.12);
+        // Walk across the fracture along n: the owner flips where the distance passes through 0.
+        let lo = 0, hi = 0.024;
+        const owner = (t: number) => { const q = along(a, w.n, t); return skullPieceAt(s, q, skullJagAt(s, q)); };
+        if (owner(lo) === owner(hi)) continue;   // out of the hold ball: one owner all the way
+        for (let k = 0; k < 40; k++) { const mid = (lo + hi) / 2; if (owner(mid) === owner(lo)) lo = mid; else hi = mid; }
+        // The offset is the same all along n (a sheet over the plane), so the walk crosses the fracture once.
+        expect(Math.min(meshSplitFracture(along(a, w.n, lo), s), meshSplitFracture(along(a, w.n, hi), s))).toBeLessThan(1e-9);
+        crossings++;
+      }
+      expect(crossings).toBeGreaterThan(300);
+    });
+  }
+  it('the edges that are not the fracture take no rim: the clip\'s keep is 0 at the hinge plane, the fracture\'s distance is not', () => {
+    const [, s] = CASES[0]!, { w } = s.frame, width = HEAD_SPLIT.skull.rim.width;
+    // A point of the + half just above the hinge plane, 3 cm off the fracture: the upper teeth's line.
+    const q = pointOf(s, 0.0005, 0.03);
+    const p = add(w.h, rotAxis(sub(q, w.h), w.a, s.angleP));
+    const kept = meshSplitKeep(p, { w, rho: s.frame.rho, angle: s.angleP, piece: 1, turnP: true, turnM: true, seed: s.seed });
+    expect(kept.keep).toBeCloseTo(0.0005, 9);
+    expect(meshSplitRim(kept.keep, width)).toBe(1);
+    const far = meshSplitFracture(kept.q, s);
+    expect(far).toBeGreaterThan(0.03 - meshSplitJagMax());
+    expect(meshSplitRim(far, width)).toBe(0);
+    // The rest's side of that edge, just under the plane, likewise.
+    expect(meshSplitRim(meshSplitFracture(pointOf(s, -0.0005, 0.03), s), width)).toBe(0);
+    // And at the fracture itself the two agree: the half's nearest edge IS the fracture.
+    const near = pointOf(s, 0.08, 0.02);
+    for (let i = 0; i < 60; i++) {
+      const qn = along(near, w.n, -0.02 + i * 0.0002);
+      const k = meshSplitKeep(add(w.h, rotAxis(sub(qn, w.h), w.a, s.angleP)), { w, rho: s.frame.rho, angle: s.angleP, piece: 1, turnP: true, turnM: true, seed: s.seed });
+      expect(meshSplitFracture(qn, s)).toBeCloseTo(Math.abs(k.keep), 9);
+    }
+  });
+  it('it does not depend on the copy: the rest and the halves read one distance at one bone point', () => {
+    const s = CASES[1]![1];
+    const q = pointOf(s, 0.06, -0.002);
+    expect(meshSplitFracture(q, s)).toBe(meshSplitFracture(q, { frame: s.frame, seed: s.seed }));
+    // The rest owns the side that does not turn, and its edge there is the fracture.
+    expect(skullPieceAt(s, q, skullJagAt(s, q))).toBe(0);
+    const k = meshSplitKeep(q, { w: s.frame.w, rho: s.frame.rho, angle: 0, piece: 0, turnP: true, turnM: false, seed: s.seed });
+    expect(meshSplitFracture(q, s)).toBeCloseTo(k.keep, 9);
   });
 });
 

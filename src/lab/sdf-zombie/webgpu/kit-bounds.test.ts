@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';

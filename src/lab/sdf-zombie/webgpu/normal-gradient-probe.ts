@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/normal-gradient-probe.ts
+//
+// The browser GPU probe that compares the WGSL analytic normal gradients against CPU fixtures (capsules, blends, wounds) and shows the results.
+
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial, WebGPURenderer } from 'three/webgpu';
 import { uniform, texture, wgslFn } from 'three/tsl';

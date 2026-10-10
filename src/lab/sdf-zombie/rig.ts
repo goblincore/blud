@@ -1,4 +1,7 @@
 // src/lab/sdf-zombie/rig.ts
+//
+// The verlet rig solver: points, constraints, bend limits, head and guard keep-outs, and stepRig.
+
 import type { Vec3 } from './types';
 import { add, cross, dot, len, lerp, normalize, qFromAxisAngle, qFromTo, qRotate, scale, sub } from './vec';
 

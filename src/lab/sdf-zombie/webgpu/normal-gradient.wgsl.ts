@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/normal-gradient.wgsl.ts
+//
+// WGSL for the analytic normal gradient (probe, wounds, bones and body functions) and the builders that wrap it as three wgslFn nodes.
+
 import { wgslFn } from 'three/tsl';
 import {
   HELPERS, ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_SHAPE, ROW_PRIM_QUAT,

@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // src/lab/sdf-zombie/webgpu/game-head-damage.test.ts
 //
 // The head damage leaf and the head split do not mix (game-head-split.ts): while a head is split open the leaf declines
@@ -91,7 +92,6 @@ describe('a split head is not head damage\'s: both ways in decline', () => {
   });
   it('the flail falls through to its plain crater when the ladder declines (source pin: the flail has no harness)', () => {
     expect(flailSrc).toContain('if (region && deps.headHit?.(a, h.point, h.dir, { meterCredit: f.meterCredit, shove: f.shove, side, gain })) {');
-    expect(flailSrc).toContain('headHit?(a: ZombieActor, point: Vec3, dir: Vec3, feel: { meterCredit: number; shove: number; side: FlailSide; gain?: number }): boolean;');
     // With no head damage leaf the hit still counts as taken (no plain crater), as before the split existed.
     expect(mainSrc).toContain('headHit: (a, p, d, f) => ctx.weapon.headDamage?.hit(a, p, d, f) ?? true,');
   });

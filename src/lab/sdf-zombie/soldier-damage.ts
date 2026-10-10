@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/soldier-damage.ts
+//
+// Soldier injury rules: points per wound, per-class tuning tables, and which limbs sever, wound or down the soldier.
+
 import type { BuildResult } from './build-body';
 import type { MissingLimbs } from './collapse';
 import { woundWorldPos, type Wound } from './damage';

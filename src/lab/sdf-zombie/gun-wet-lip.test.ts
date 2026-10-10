@@ -6,14 +6,13 @@
 // wounds, decals and burns never take it; the gun (not the soldier, not the soft target) stamps it.
 // The pixel proof is the GPU look loop in docs/dev-notes/2026-09-28-head-damage/torn-lips/gun-*.png.
 import { describe, expect, it } from 'vitest';
-import { GUN_WET_LIP, WET_LIP_LOOK, gunWetLipOn, setGunWetLip, wetLipUpload } from './torn-lips';
+import { isGoreBody } from './motion-profile';
+import { GUN_WET_LIP, WET_LIP_LOOK, gunWetLipFor, gunWetLipOn, setGunWetLip, wetLipUpload } from './torn-lips';
 import { wetLipWound, type Wound } from './damage';
 import { WOUND_FLAG, woundFlagBits, writeWounds } from './webgpu/zombie-gpu';
 import { APPLY_WOUNDS, WOUND_MASK, MARCH_BODY, MARCH_TRACE_POST } from './webgpu/march.wgsl';
 import { MARCH_SURFACE } from './webgpu/deferred-sdf';
 import { NG_WOUNDS } from './webgpu/normal-gradient.wgsl';
-import actorSrc from './webgpu/game-actor.ts?raw';
-import seamSrc from './webgpu/game-seams-weapon-aim.ts?raw';
 import viewSrc from './webgpu/character-view.ts?raw';
 
 const wound = (extra: Partial<Wound> = {}): Wound => ({ primIdx: 0, local: [0, 0, 0], radius: 0.055, type: 'pellet', ageSec: 0, ...extra });
@@ -69,12 +68,18 @@ describe('gun wet lip: who gets it', () => {
     setGunWetLip(true);
     expect(viewSrc).toContain('rows.map(w => wetLipUpload(w)),');
   });
-  it('the gun stamps it on pellets and slugs, zombie-class bodies only; the seam A/Bs it', () => {
+  it('the gun stamps it on pellets and slugs, zombie-class bodies only', () => {
     expect(GUN_WET_LIP).toEqual({ pellet: 1, slug: 1 });
-    expect(actorSrc).toContain("gunWetLip(wound, 'pellet');");
-    expect(actorSrc).toContain("gunWetLip(wound, 'slug');");
-    expect(actorSrc).toContain('if (soldierDamage || softTarget) return;');
-    expect(seamSrc).toContain('setWetLip(on: boolean) {');
+    // A gore body takes the full intensity for both round kinds; anything else stays stock: 0, which
+    // wetLipWound treats as no stamp.
+    expect(gunWetLipFor('pellet', true)).toBe(GUN_WET_LIP.pellet);
+    expect(gunWetLipFor('slug', true)).toBe(GUN_WET_LIP.slug);
+    expect(gunWetLipFor('pellet', false)).toBe(0);
+    expect(gunWetLipFor('slug', false)).toBe(0);
+    // Who: the gore bodies (motion-profile.ts isGoreBody): not the soldier's family, not a soft target.
+    expect(isGoreBody(undefined)).toBe(true);
+    expect(isGoreBody({ family: 'soldier' })).toBe(false);
+    expect(isGoreBody({ soft: true })).toBe(false);
   });
 });
 

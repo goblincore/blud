@@ -1,4 +1,6 @@
 // src/lab/sdf-zombie/validate.ts
+//
+// Primitive and cluster limits, the CPU signed-distance evaluation of bodies, bone containment checks, noise helpers and body validation.
 import type { ClusterInfo, Primitive, Vec3 } from './types';
 import type { Quat } from './vec';
 import { boxReach, shellReach, strandReach } from './extent';

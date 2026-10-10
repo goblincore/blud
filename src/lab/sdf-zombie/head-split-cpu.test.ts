@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // src/lab/sdf-zombie/head-split-cpu.test.ts
 //
 // THE HEAD SPLIT'S CPU MIRROR (plan docs/superpowers/plans/2026-10-04-head-split-part-b.md), on the real posed zombie:
@@ -20,6 +21,7 @@ import {
   type HeadFrame, type SplitPresetId, type SplitState, type SplitWarp,
 } from './head-split';
 import { unwarpHit, woundDirToWorld, woundWorldPos, worldHitToWound, type Wound } from './damage';
+import { BURST_TUNING_DEFAULTS } from './head-burst';
 import { woundEmitAnchorAndNormal } from './bleed-registry';
 import { resolveExplosion } from './explosion-aoe';
 import { AXE_CALIBRE } from './webgpu/axe-strike';
@@ -377,7 +379,8 @@ describe('(f) the actor: the split hook and the gun paths', () => {
       expect(got.local).toEqual(want.local);
       expect(got.carveDepth).toBe(want.carveDepth);
       expect(got.carveN).toEqual(want.carveN);
-      expect(got.rimScale).toBe(want.rimScale);
+      // A gun crater on the zombie's head carries the head lip (game-actor.ts headLip): that share of the built wound's.
+      expect(got.rimScale).toBe((want.rimScale ?? 1) * BURST_TUNING_DEFAULTS.headLip);
       // On the closed prims the wound sits on the closed head's skin, not out where the half now is.
       const back = woundWorldPos(posed.prims, { ...got, local: want.local }, yaw);
       expect(Math.abs(closed(back))).toBeLessThan(2e-3);

@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // src/lab/sdf-zombie/webgpu/humanoid-spike-main.test.ts
 //
 // Task 7 Step 1 — the DOM-free spike controller contract. Every test here

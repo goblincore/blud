@@ -12,6 +12,8 @@
 
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three/webgpu';
+import type { MeshBasicNodeMaterial, Node } from 'three/webgpu';
+import { getCurrentStack, positionWorld, setCurrentStack, stack } from 'three/tsl';
 import { parseBlob } from '../../blob-parse';
 import { compileBlob } from '../../blob-compile';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../../build-body';
@@ -19,16 +21,20 @@ import { bindRig, applyRig } from '../../rig-bind';
 import zombieSrc from '../../characters/zombie.blob?raw';
 import { createSkeletonSources } from './contract';
 import { SegmentMeshCache } from './mesh';
-import { createSegmentMeshRenderer, segmentDrawn } from './mesh-renderer';
+import { SEGMENT_MATERIALS, createSegmentMeshRenderer, segmentDrawn } from './mesh-renderer';
 import { headQuatOf } from '../../rig-bind';
 import {
-  HEAD_SPLIT, forcedSplit, headFrameOf, skullFollow, skullSplitOf, skullWarpPoint, splitWarpOf,
-  type SplitPresetId, type SplitWarp,
+  HEAD_SPLIT, forcedSplit, headFrameOf, rotAxis, skullFollow, skullSplitOf, skullWarpPoint, splitWarpOf,
+  type SkullSplit, type SplitPresetId, type SplitWarp,
 } from '../../head-split';
 import { headShape } from '../flame-anchors';
 import { meshBoneSource } from './mesh-skull';
 import { meshEyePlacements } from './mesh-eyes';
-import { SPLIT_INSTANCE_ATTRS, SPLIT_INSTANCE_FLOATS, packSplitInstance } from './mesh-split';
+import { SPLIT_INSTANCE_ATTRS, SPLIT_INSTANCE_FLOATS, packSplitInstance, skullJagAt } from './mesh-split';
+import { AnatomicalSkullKit, SKULL_PIECES } from './anatomical-skull';
+import { anatomicalSkullSource } from './anatomical-skull.fixture';
+import { skullSplitRayHit, type SkullStrikes } from './skull-split-hit';
+import { intactSkull } from '../../skull-fracture';
 import type { Vec3 } from '../../types';
 
 const body = buildBody(compileBlob(parseBlob(zombieSrc)), DEFAULT_BUILD_OPTS);
@@ -517,5 +523,846 @@ describe('the head split: the skull is drawn once per piece that owns part of it
     renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
     expect(angleOf()).toBeCloseTo(w.thetaP * skullFollow(0.8), 9);
     renderer.dispose(); cache.dispose();
+  });
+
+  describe('on the anatomical skull (anatomical-skull.ts): a split plate keeps its own surface and normal map', () => {
+    /** A renderer on the real asset's kit, as the game's default cache has it. */
+    type Fragment = { name: string; pos: Vec3; vel: Vec3; angular: Vec3; radius: number; supports: number; matrix: THREE.Matrix4 };
+    const makeAnatomical = () => {
+      const normalMap = new THREE.Texture();
+      const kit = new AnatomicalSkullKit(anatomicalSkullSource(), normalMap, new THREE.Vector2(1, 1));
+      const cache = new SegmentMeshCache(undefined, undefined, kit);
+      // Every fragment the renderer hands the gib pool: where, how fast, and the fragment mesh's own matrix.
+      const fragments: Fragment[] = [];
+      const renderer = createSegmentMeshRenderer(cache, 0, undefined, (object, pos, vel, angular, radius, support) => {
+        fragments.push({ name: object.name.replace('skull-fragment:', ''), pos, vel, angular, radius, supports: support.length, matrix: (object.children[0] as THREE.Mesh).matrix.clone() });
+      });
+      return { cache, kit, normalMap, renderer, fragments };
+    };
+    // The same head under a name the kit does not fit: it keeps the extracted bone, in the same renderer.
+    const otherHead = createSkeletonSources(body, bound, { character: 'ghoul' }).find(s => s.segment === 'head')!;
+    type Drawn = R['drawn'][number];
+    const matOf = (r: R, d: Drawn) => (r.object.children.find(c => (c as THREE.InstancedMesh).geometry === d.geometry) as THREE.InstancedMesh).material as MeshBasicNodeMaterial;
+    type Graph = Node & { functionNode?: { code: string }; isTextureNode?: boolean; isVarNode?: boolean; intent?: boolean; value?: unknown; node?: Node; ifNode?: unknown };
+    /** Every node `roots` reach, not looking behind a node of `stop`. */
+    const reach = (roots: readonly Node[], stop: ReadonlySet<Node> = new Set()): Graph[] => {
+      const seen = new Set<Node>(), todo = [...roots];
+      while (todo.length) {
+        const n = todo.pop()!;
+        if (seen.has(n) || stop.has(n)) continue;
+        seen.add(n);
+        for (const c of n.getChildren()) todo.push(c as Node);
+      }
+      return [...seen] as Graph[];
+    };
+    /** The WGSL functions a graph calls, by name. */
+    const calls = (nodes: readonly Graph[]) => new Set(nodes.flatMap(n => (n.functionNode ? [/\bfn (\w+)/.exec(n.functionNode.code)![1]!] : [])));
+    const samples = (nodes: readonly Graph[], map: THREE.Texture) => nodes.some(n => n.isTextureNode === true && n.value === map);
+    /** A split material's colour as three builds it: the function's body run on a stack of its own. `held` are the
+     *  values declared ahead of the branch on the clip (real variables: an intent is written where it is first read),
+     *  `branch` what the branch stacks. */
+    const colourOf = (m: MeshBasicNodeMaterial) => {
+      const body = (m.colorNode as unknown as { node: { shaderNode: { jsFunc(): unknown } } }).node.shaderNode;
+      const was = getCurrentStack(), outer = stack();
+      try {
+        setCurrentStack(outer); body.jsFunc();
+        const nodes = outer.nodes as Graph[], at = nodes.findIndex(n => n.ifNode !== undefined);
+        expect(at).toBeGreaterThan(0);
+        const inner = stack();
+        setCurrentStack(inner); (nodes[at]!.ifNode as { jsFunc(): unknown }).jsFunc();
+        return { held: nodes.slice(0, at).filter(n => n.isVarNode === true && n.intent !== true), branch: inner.nodes as Graph[], rest: nodes.slice(at + 1) };
+      } finally { setCurrentStack(was); }
+    };
+    const allCalls = (m: MeshBasicNodeMaterial) => { const c = colourOf(m); return calls(reach([...c.held, ...c.branch])); };
+
+    it('the split copies are on the plates\' split material; a head the kit does not fit and every closed head keep theirs', () => {
+      const { cache, renderer } = makeAnatomical();
+      const open = { id: 1 }, shut = { id: 2 }, otherOpen = { id: 3 }, otherShut = { id: 4 };
+      const w = warpOf('middle', 0, 0, 1);
+      renderer.update([[headSrc], [headSrc], [otherHead], [otherHead]], [open, shut, otherOpen, otherShut], undefined, undefined, undefined,
+        { warp: (o, seg) => ((o === open || o === otherOpen) && seg === 'head' ? w : null) });
+      expect(segs(renderer, open).map(d => d.piece)).toEqual([0, 1, 2]);
+      expect(segs(renderer, shut).map(d => d.piece)).toEqual([null]);
+      expect(segs(renderer, otherOpen).map(d => d.piece)).toEqual([0, 1, 2]);
+      expect(segs(renderer, otherShut).map(d => d.piece)).toEqual([null]);
+      const mats = [open, shut, otherOpen, otherShut].map(o => { const m = new Set(segs(renderer, o).map(d => matOf(renderer, d))); expect(m.size).toBe(1); return [...m][0]!; });
+      const [plateSplit, plate, boneSplit, bone] = mats as [MeshBasicNodeMaterial, MeshBasicNodeMaterial, MeshBasicNodeMaterial, MeshBasicNodeMaterial];
+      expect(new Set(mats).size).toBe(4);
+      // Each is named for what it draws (the skullDrawn seam reports the name).
+      expect(mats.map(m => m.name)).toEqual([SEGMENT_MATERIALS.plateSplit, SEGMENT_MATERIALS.plate, SEGMENT_MATERIALS.boneSplit, SEGMENT_MATERIALS.bone]);
+      // Sidedness: the closed plates are two-sided already (they have thickness); so are their split copies. The clip
+      // is the split materials' alone.
+      expect(mats.map(m => m.side)).toEqual([THREE.DoubleSide, THREE.DoubleSide, THREE.DoubleSide, THREE.FrontSide]);
+      expect(mats.map(m => m.maskNode != null)).toEqual([true, false, true, false]);
+      // What each one paints with. The plates: their own surface and normal map, the cut-bone rim, no inner wall.
+      // The rim reads the fracture's own distance: the extracted bone and the eyes do not call it.
+      expect([...allCalls(plateSplit)].sort()).toEqual(['anatomicalSkullNormal', 'anatomicalSkullSurface', 'boneShade', 'meshSplitClip', 'meshSplitCutBone', 'meshSplitFracture']);
+      expect([...calls(reach([plate.colorNode!]))].sort()).toEqual(['anatomicalSkullNormal', 'anatomicalSkullSurface', 'boneShade']);
+      // The extracted bone: the painted surface, and the dark wall on its back faces.
+      expect([...allCalls(boneSplit)].sort()).toEqual(['boneShade', 'meshBoneSurface', 'meshBoneWet', 'meshSplitClip', 'meshSplitInside']);
+      expect([...calls(reach([bone.colorNode!]))].sort()).toEqual(['boneShade', 'meshBoneSurface', 'meshBoneWet']);
+      // The seated eyes are closed spheres: theirs is the eye split material, wall and all.
+      const eyeCopies = eyes(renderer, open);
+      expect(eyeCopies.map(d => d.piece).sort()).toEqual([1, 2]);
+      const eyeMats = new Set(eyeCopies.map(d => matOf(renderer, d)));
+      expect(eyeMats.size).toBe(1);
+      expect([...allCalls([...eyeMats][0]!)].sort()).toEqual(['boneShade', 'meshEyeEmission', 'meshEyeSurface', 'meshSplitClip', 'meshSplitInside']);
+      expect([[...eyeMats][0]!.name, matOf(renderer, eyes(renderer, shut)[0]!).name]).toEqual([SEGMENT_MATERIALS.eyeSplit, SEGMENT_MATERIALS.eye]);
+      expect(new Set(Object.values(SEGMENT_MATERIALS)).size).toBe(6);
+      renderer.dispose(); cache.dispose();
+    });
+
+    it('without the kit (the sculpted skull, here in its first look) the zombie\'s split skull is the sculpt\'s: its painted surface outside, the wall inside', () => {
+      const { cache, renderer } = make();
+      const owner = { id: 1 };
+      renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(warpOf('middle', 0, 0, 1)));
+      const m = matOf(renderer, segs(renderer, owner)[0]!);
+      expect(m).toBe(batch(renderer, 'skeleton-segments-split')!.material);
+      expect([...allCalls(m)].sort()).toEqual(['boneShade', 'meshBoneSurface', 'meshBoneWet', 'meshSplitClip', 'meshSplitInside']);
+      // Nothing of it needs to be ahead of the branch: no derivative, no sampled texture.
+      expect(colourOf(m).held.every(v => calls(reach([v.node!])).size === 0)).toBe(true);
+      renderer.dispose(); cache.dispose();
+    });
+
+    it('a skull with a plate missing: every surviving plate\'s copies are on the same split material, a plate the rest owns alone on the closed one', () => {
+      const { cache, renderer } = makeAnatomical();
+      const whole = { id: 1 }, struck = { id: 2 }, shut = { id: 3 };
+      let w = warpOf('middle', 0, 0, 1);
+      const hook = { warp: (o: object, seg: string) => (o !== shut && seg === 'head' ? w : null) };
+      const y = headSrc.bounds.min[1] + (headSrc.bounds.max[1] - headSrc.bounds.min[1]) * 0.75;
+      renderer.impact(struck, [headSrc], headSrc.toWorld([0, y, headSrc.bounds.max[2] + 0.03]), [0, 0, -1], 'slug');
+      expect(renderer.skullState(struck).pieces).toHaveLength(1);
+      renderer.update([[headSrc], [headSrc], [headSrc]], [whole, struck, shut], undefined, undefined, undefined, hook);
+      const plateSplit = matOf(renderer, segs(renderer, whole)[1]!), plate = matOf(renderer, segs(renderer, shut)[0]!);
+      expect(plateSplit).not.toBe(plate);
+      const plates = segs(renderer, struck);
+      // Thirteen plates are left, each drawn through one geometry: its own (closed), or its split twin.
+      expect(new Set(plates.map(d => d.geometry)).size).toBe(13);
+      for (const piece of [0, 1, 2]) expect(plates.filter(d => d.piece === piece).length, `piece ${piece}`).toBeGreaterThan(0);
+      for (const d of plates.filter(q => q.piece !== null)) {
+        expect(matOf(renderer, d)).toBe(plateSplit);
+        expect(d.geometry.userData.anatomicalSkull).toBe(true);
+        expect(d.geometry.getAttribute('uv')).toBeDefined();
+      }
+      // An off-centre split turns one side only: a plate of the far side is the rest's alone, one closed instance on
+      // the closed plates' material, as on a closed head.
+      w = warpOf('middle', 1, 0.04, 1);
+      renderer.update([[headSrc], [headSrc], [headSrc]], [whole, struck, shut], undefined, undefined, undefined, hook);
+      const oneSided = segs(renderer, struck), closed = oneSided.filter(d => d.piece === null);
+      expect(new Set(oneSided.map(d => d.geometry)).size).toBe(13);
+      expect(closed.length).toBeGreaterThan(0);
+      expect(oneSided.filter(d => d.piece === 1).length).toBeGreaterThan(0);
+      for (const d of oneSided) expect(matOf(renderer, d)).toBe(d.piece === null ? plate : plateSplit);
+      renderer.dispose(); cache.dispose();
+    });
+
+    it('the twin of a plate geometry shares its uv and says it is anatomical; an extracted bone\'s twin has neither', () => {
+      const { cache, renderer } = makeAnatomical();
+      const open = { id: 1 }, shut = { id: 2 }, otherOpen = { id: 3 };
+      const w = warpOf('middle', 0, 0, 1);
+      renderer.update([[headSrc], [headSrc], [otherHead]], [open, shut, otherOpen], undefined, undefined, undefined, { warp: (o, seg) => (o !== shut && seg === 'head' ? w : null) });
+      const base = segs(renderer, shut)[0]!.geometry, twin = segs(renderer, open)[0]!.geometry;
+      expect(twin).not.toBe(base);
+      expect(base.userData.anatomicalSkull).toBe(true);
+      expect(twin.userData.anatomicalSkull).toBe(true);
+      for (const name of ['position', 'normal', 'uv']) {
+        expect(base.getAttribute(name), name).toBeDefined();
+        expect(twin.getAttribute(name), name).toBe(base.getAttribute(name));
+      }
+      expect(twin.index).toBe(base.index);
+      expect(twin.getAttribute('iSplitN')).toBeDefined();
+      expect(base.getAttribute('iSplitN')).toBeUndefined();
+      const otherTwin = segs(renderer, otherOpen)[0]!.geometry;
+      expect(otherTwin.userData.anatomicalSkull).toBeUndefined();
+      expect(otherTwin.getAttribute('uv')).toBeUndefined();
+      renderer.dispose(); cache.dispose();
+    });
+
+    it('the normal map and its normal are taken ahead of the branch on the clip (a derivative or a sample inside it does not compile)', () => {
+      const { cache, normalMap, renderer } = makeAnatomical();
+      const owner = { id: 1 };
+      renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(warpOf('middle', 0, 0, 1)));
+      const { held, branch, rest } = colourOf(matOf(renderer, segs(renderer, owner)[0]!));
+      // Declared before the branch: the atlas sample, and the normal function (it takes dpdx / dpdy).
+      const ahead = reach(held.map(v => v.node!));
+      expect(samples(ahead, normalMap)).toBe(true);
+      expect(calls(ahead).has('anatomicalSkullNormal')).toBe(true);
+      // The branch reaches both only through those declared values; everything else of the colour is inside it.
+      const inside = reach(branch, new Set<Node>(held));
+      expect(samples(inside, normalMap)).toBe(false);
+      expect(calls(inside).has('anatomicalSkullNormal')).toBe(false);
+      for (const fn of ['anatomicalSkullSurface', 'meshSplitFracture', 'meshSplitCutBone', 'boneShade']) expect(calls(inside).has(fn), fn).toBe(true);
+      // And nothing is stacked after the branch.
+      expect(rest).toHaveLength(0);
+      renderer.dispose(); cache.dispose();
+    });
+
+    it('the split materials read their craters and the fracture at the clip\'s un-turned point, not at the fragment\'s own', () => {
+      const { cache, renderer } = makeAnatomical();
+      const open = { id: 1 }, shut = { id: 2 }, otherOpen = { id: 3 };
+      renderer.update([[headSrc], [headSrc], [otherHead]], [open, shut, otherOpen], undefined, undefined, undefined, { warp: (o, seg) => (o !== shut && seg === 'head' ? warpOf('middle', 0, 0, 1) : null) });
+      type Call = Graph & { parameters: Record<string, Graph & { components?: string }> };
+      /** The one call of the WGSL function `fn` among `nodes`. */
+      const callOf = (nodes: readonly Graph[], fn: string): Call => {
+        const found = nodes.filter(n => n.functionNode && new RegExp(`\\bfn ${fn}\\(`).test(n.functionNode.code));
+        expect(found, fn).toHaveLength(1);
+        return found[0] as Call;
+      };
+      const graphOf = (m: MeshBasicNodeMaterial) => { const c = colourOf(m); return reach([...c.held, ...c.branch]); };
+      /** `input` is the xyz of the clip call `clip`: the point q the fragment has on the closed head. */
+      const isClipPoint = (input: Graph & { components?: string }, clip: Call, what: string) => {
+        expect(input, what).not.toBe(positionWorld);
+        expect(input.components, what).toBe('xyz');
+        expect(input.node, what).toBe(clip);
+      };
+      // The plates: the surface's craters and the rim's fracture are both read at q.
+      const plateSplit = graphOf(matOf(renderer, segs(renderer, open)[0]!)), clip = callOf(plateSplit, 'meshSplitClip');
+      // The clip is the one thing taken at the fragment's own world position: it is what turns it back.
+      expect(clip.parameters.pWorld).toBe(positionWorld);
+      isClipPoint(callOf(plateSplit, 'anatomicalSkullSurface').parameters.pWorld!, clip, 'anatomicalSkullSurface pWorld');
+      isClipPoint(callOf(plateSplit, 'meshSplitFracture').parameters.q!, clip, 'meshSplitFracture q');
+      // The fracture takes the clip's own record and shape: the rim's edge is the edge that is cut.
+      for (const k of ['sn', 'sh', 'sa', 'sk', 'jag', 'shape']) expect(callOf(plateSplit, 'meshSplitFracture').parameters[k], k).toBe(clip.parameters[k]);
+      // The rim is cut by the fracture's distance, on the surface read there.
+      const cut = callOf(plateSplit, 'meshSplitCutBone');
+      expect(cut.parameters.keep).toBe(callOf(plateSplit, 'meshSplitFracture'));
+      expect(cut.parameters.surface).toBe(callOf(plateSplit, 'anatomicalSkullSurface'));
+      // The extracted bone's split copies read their surface at q as well; the closed materials at the fragment.
+      const boneSplit = graphOf(matOf(renderer, segs(renderer, otherOpen)[0]!));
+      isClipPoint(callOf(boneSplit, 'meshBoneSurface').parameters.pWorld!, callOf(boneSplit, 'meshSplitClip'), 'meshBoneSurface pWorld');
+      expect(callOf(reach([matOf(renderer, segs(renderer, shut)[0]!).colorNode!]), 'anatomicalSkullSurface').parameters.pWorld).toBe(positionWorld);
+      renderer.dispose(); cache.dispose();
+    });
+
+    describe('shots and pops (skull-split-hit.ts): a split skull breaks where it is drawn', () => {
+      const plateOf = (id: (typeof SKULL_PIECES)[number]) => SKULL_PIECES.indexOf(id);
+      const turnOf = (s: SkullSplit, piece: 0 | 1 | 2) => (piece === 1 ? s.angleP : piece === 2 ? s.angleM : 0);
+      /** A world point / direction of the closed head turned with `piece` of `s`. */
+      const turned = (s: SkullSplit, piece: 0 | 1 | 2, q: Vec3): Vec3 => { const h = s.frame.w.h, r = rotAxis([q[0] - h[0], q[1] - h[1], q[2] - h[2]], s.frame.w.a, turnOf(s, piece)); return [h[0] + r[0], h[1] + r[1], h[2] + r[2]]; };
+      const turnedDir = (s: SkullSplit, piece: 0 | 1 | 2, v: Vec3, back = false): Vec3 => rotAxis(v, s.frame.w.a, (back ? -1 : 1) * turnOf(s, piece));
+      const pivotOf = (kit: AnatomicalSkullKit, index: number): Vec3 => headSrc.toWorld(kit.head(headSrc)!.pieces[index]!.pivot) as Vec3;
+      /** A shot at plate `index` from outside: 8 cm out from its pivot, away from the middle of the skull, aimed back in. */
+      const shotAt = (kit: AnatomicalSkullKit, index: number): { from: Vec3; dir: Vec3 } => {
+        const c = headSrc.toWorld(kit.head(headSrc)!.mesh.geometry.boundingSphere!.center.toArray() as Vec3), p = pivotOf(kit, index);
+        const l = dist(p, c), out: Vec3 = [(p[0] - c[0]) / l, (p[1] - c[1]) / l, (p[2] - c[2]) / l];
+        return { from: [p[0] + out[0] * 0.08, p[1] + out[1] * 0.08, p[2] + out[2] * 0.08], dir: [-out[0], -out[1], -out[2]] };
+      };
+      // A slug and a pop on a CLOSED head, at the commit before the split hit path (185013b9): the fragments' numbers.
+      const SHOT = { at: [0.012, 0.75, 0.03] as const, dir: [0.1, -0.05, -1] as Vec3, pop: [0.3, 1, -0.2] as Vec3 };
+      const shotFrom = (): Vec3 => headSrc.toWorld([SHOT.at[0], headSrc.bounds.min[1] + (headSrc.bounds.max[1] - headSrc.bounds.min[1]) * SHOT.at[1], headSrc.bounds.max[2] + SHOT.at[2]]) as Vec3;
+      const CLOSED_HIT = {
+        name: 'frontal', pos: [-0.0017678514122962952, 1.6761581829266294, 0.15752368401636704],
+        vel: [0.18120214504298876, 2.219178579293895, -1.2372771863729517], angular: [-4, -5, -3], radius: 0.0820559321012967, supports: 21,
+      };
+      // The same on a head the deform has squashed and sheared (update's `extra`): the frame is not a rigid one.
+      const DEFORM = [1.04, 0, 0.0306, 0, 0, 0.93, 0, 0, 0.020800000000000003, 0, 1.02, 0, 0.002057998848876153, 0.10240168238186409, 0.000132691200842458, 1];
+      const DEFORMED_HIT = {
+        name: 'frontal', pos: [0.003495926007628441, 1.6612287925036295, 0.16075275264432057],
+        vel: [0.2130932842725212, 2.161517723867944, -1.3155943194326063], angular: [-4, -5, -3], radius: 0.08537510076547648, supports: 20,
+      };
+      const CLOSED_POP: [string, ...number[]][] = [
+        ['parietal-left', 0.034127441700547934, 1.680029430098985, 0.09428518246759995, 1.3534224041452743, 4.49522920009565, -0.8092684409141958],
+        ['parietal-right', -0.030553863383829594, 1.68049867511556, 0.09391405787219628, -0.048302747299369904, 4.528400429497599, -0.8254375560948451],
+        ['occipital', -0.0004677381366491318, 1.6427766668127521, 0.07854263652016744, 0.6033612503917037, 3.938303872707028, -1.693078282534083],
+        ['temporal-left', 0.038460231851786375, 1.6227990394906744, 0.10479984879394397, 1.9821276191478876, 3.200064064246558, -0.6936594838298211],
+        ['temporal-right', -0.042321838438510895, 1.629318675629948, 0.10504708699782714, -0.7556483495626023, 3.4258556502724167, -0.6629454054215106],
+        ['zygomatic-left', 0.03869788534939289, 1.6152027888672098, 0.15773712452401742, 1.5140844451751596, 3.083700840580665, 0.6255288218086192],
+        ['zygomatic-right', -0.047856830060482025, 1.6171956496761783, 0.15552216749539002, -0.40906763073245195, 3.1459148163244706, 0.5075966954459501],
+        ['maxilla-left', 0.018792094429954886, 1.5998500461207374, 0.1621944157396756, 1.061078361519395, 2.7198126831587834, 0.7454000455420053],
+        ['maxilla-right', -0.028177830507047474, 1.6024326604308232, 0.1618136575435601, -0.015844033605028843, 2.8011493507147462, 0.6957979909491157],
+        ['upper-teeth', -0.005672627128660679, 1.5744850618282005, 0.16326006483187303, 0.5128844648394382, 2.358639040202178, 0.5485402470380567],
+        ['mandible', -0.003372941166162491, 1.5718738181965097, 0.14409159198304042, 0.547135212637904, 2.1515267088896466, 0.27230006576121213],
+        ['cranial-base', -0.004300858825445175, 1.621132238440369, 0.13525700177898034, 0.36841829905357265, 2.9905996813475664, 0.9099539075331177],
+        ['nasal-core', -0.004722462967038155, 1.616156349562262, 0.16032654214551076, 0.48650525055925836, 3.044297485245297, 0.9411223018728531],
+      ];
+      const numbersOf = (f: Fragment) => ({ name: f.name, pos: f.pos, vel: f.vel, angular: f.angular, radius: f.radius, supports: f.supports });
+
+      it('a closed head is shot and popped exactly as before: the same plate, and the fragments\' numbers to the bit, with or without the split hook', () => {
+        for (const hook of [undefined, headOnly(null)]) {
+          const { cache, renderer, fragments } = makeAnatomical();
+          const owner = { id: 1 };
+          warpOf('middle', 0, 0, 1);   // the pose the other tests use: yaw 0
+          renderer.update([[headSrc]], [owner], undefined, undefined, undefined, hook);
+          expect(renderer.fractureSkull(owner, [headSrc], shotFrom(), SHOT.dir, 'slug')).toBe(1);
+          expect(renderer.skullState(owner).pieces).toEqual(['frontal']);
+          expect(fragments.map(numbersOf)).toEqual([CLOSED_HIT]);
+          expect(fragments[0]!.matrix.elements).toEqual(new THREE.Matrix4().elements);
+          fragments.length = 0;
+          expect(renderer.explodeSkull(owner, [headSrc], SHOT.pop)).toBe(13);
+          expect(fragments.map(f => [f.name, ...f.pos, ...f.vel])).toEqual(CLOSED_POP);
+          // The deformed head: the ray goes into the squashed frame, the fragment comes out of it.
+          renderer.clear(); fragments.length = 0;
+          renderer.update([[headSrc]], [owner], undefined, undefined, (_o, seg) => (seg === 'head' ? DEFORM : null), hook);
+          expect(renderer.fractureSkull(owner, [headSrc], shotFrom(), SHOT.dir, 'slug')).toBe(1);
+          expect(fragments.map(numbersOf)).toEqual([DEFORMED_HIT]);
+          renderer.dispose(); cache.dispose();
+        }
+      });
+
+      it('clear() forgets the last update\'s hooks: a shot before the next update is the closed head\'s, in the rigid pose', () => {
+        const { cache, kit, renderer, fragments } = makeAnatomical();
+        const owner = { id: 4 }, w = warpOf('middle', 0, 0, 1), s = skullSplitOf(w, null, owner.id)!;
+        const index = plateOf('temporal-right'), closedShot = shotAt(kit, index);
+        const from = turned(s, 2, closedShot.from), dir = turnedDir(s, 2, closedShot.dir);
+        const plain = makeAnatomical();
+        plain.renderer.update([[headSrc]], [owner]);
+        // Split and deformed: the ray at the turned plate meets it, and the closed head's own answer is another.
+        renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
+        expect(renderer.skullRay(owner, [headSrc], from, dir)?.plate).toBe('temporal-right');
+        expect(plain.renderer.skullRay(owner, [headSrc], from, dir)?.plate).not.toBe('temporal-right');
+        renderer.clear();
+        expect(renderer.skullRay(owner, [headSrc], from, dir)).toEqual(plain.renderer.skullRay(owner, [headSrc], from, dir));
+        expect(renderer.skullRay(owner, [headSrc], closedShot.from, closedShot.dir)).toEqual(plain.renderer.skullRay(owner, [headSrc], closedShot.from, closedShot.dir));
+        // The deform's affine goes the same way: the closed head's numbers, not the squashed head's.
+        renderer.update([[headSrc]], [owner], undefined, undefined, (_o, seg) => (seg === 'head' ? DEFORM : null), headOnly(w));
+        renderer.clear();
+        expect(renderer.fractureSkull(owner, [headSrc], shotFrom(), SHOT.dir, 'slug')).toBe(1);
+        expect(fragments.map(numbersOf)).toEqual([CLOSED_HIT]);
+        // And a pop is the closed head's.
+        fragments.length = 0;
+        expect(renderer.explodeSkull(owner, [headSrc], SHOT.pop)).toBe(13);
+        expect(fragments.map(f => [f.name, ...f.pos, ...f.vel])).toEqual(CLOSED_POP);
+        for (const r of [plain, { renderer, cache }]) { r.renderer.dispose(); r.cache.dispose(); }
+      });
+
+      it('a slug at a turned plate releases THAT plate, from its turned pivot, turned and launched with its piece', () => {
+        for (const [id, piece] of [['parietal-left', 1], ['temporal-right', 2]] as const) {
+          const { cache, kit, renderer, fragments } = makeAnatomical();
+          const owner = { id: 4 }, w = warpOf('middle', 0, 0, 1), s = skullSplitOf(w, null, owner.id)!;
+          renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
+          const index = plateOf(id), q = pivotOf(kit, index);
+          // The plate's pivot is the half's own, and the half has carried it centimetres from where the closed head has it.
+          const moved = skullWarpPoint(s, q, skullJagAt(s, q));
+          expect(moved.piece).toBe(piece);
+          expect(dist(moved.p, q)).toBeGreaterThan(0.03);
+          // The shot: at the plate where its copy is DRAWN (the closed shot, turned with the half).
+          const closedShot = shotAt(kit, index);
+          const from = turned(s, piece, closedShot.from), dir = turnedDir(s, piece, closedShot.dir);
+          expect(renderer.fractureSkull(owner, [headSrc], from, dir, 'slug')).toBe(1);
+          expect(renderer.skullState(owner).pieces).toEqual([id]);
+          expect(fragments.map(f => f.name)).toEqual([id]);
+          const f = fragments[0]!;
+          // Its position: the turned pivot (the brief's 1 mm; it is the same arithmetic, so far tighter).
+          expect(dist(f.pos, moved.p)).toBeLessThan(1e-9);
+          // Where the copy of that piece was drawn: the drawn copy's matrix puts the pivot there too.
+          const copy = segs(renderer, owner).find(d => d.piece === piece)!;
+          expect(dist(f.pos, at(copy.matrix, kit.head(headSrc)!.pieces[index]!.pivot))).toBeLessThan(1e-9);
+          // Its orientation: the copy's (the fragment mesh carries the matrix without its translation).
+          expect(f.matrix.elements.map(v => +v.toFixed(12))).toEqual(copy.matrix.clone().setPosition(0, 0, 0).elements.map(v => +v.toFixed(12)));
+          // Its launch: the closed head's launch for the un-turned shot, turned with the piece. A second renderer
+          // shoots the closed head with the closed shot.
+          const shut = makeAnatomical(), other = { id: 4 };
+          shut.renderer.update([[headSrc]], [other]);
+          expect(shut.renderer.fractureSkull(other, [headSrc], closedShot.from, closedShot.dir, 'slug')).toBe(1);
+          const g = shut.fragments[0]!;
+          expect(g.name).toBe(id);
+          expect(dist(f.pos, turned(s, piece, g.pos))).toBeLessThan(1e-9);
+          expect(dist(f.vel, turnedDir(s, piece, g.vel))).toBeLessThan(1e-9);
+          expect(f.angular).toEqual(g.angular);
+          expect(f.radius).toBeCloseTo(g.radius, 12);
+          // (Its support points are the turned fragment's extremes along the world's axes: another set of vertices.)
+          expect(f.supports).toBeGreaterThan(8);
+          // The closed head's own test of the split head's shot, the frame the hit path used to work in: that ray does
+          // not break this plate there. The bone it was aimed at has moved.
+          const stale = makeAnatomical();
+          stale.renderer.update([[headSrc]], [other]);
+          stale.renderer.fractureSkull(other, [headSrc], from, dir, 'slug');
+          expect(stale.fragments.map(x => x.name)).not.toContain(id);
+          for (const r of [shut, stale]) { r.renderer.dispose(); r.cache.dispose(); }
+          // The next update draws the split skull without the plate.
+          renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
+          expect(new Set(segs(renderer, owner).map(d => d.geometry)).size).toBe(13);
+          renderer.dispose(); cache.dispose();
+        }
+      });
+
+      it('pellets on a turned plate add up on that plate: the third releases it, from the turned pivot', () => {
+        const { cache, kit, renderer, fragments } = makeAnatomical();
+        const owner = { id: 2 }, w = warpOf('middle', 0, 0, 1), s = skullSplitOf(w, null, owner.id)!;
+        renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
+        const index = plateOf('parietal-right'), closedShot = shotAt(kit, index);
+        const from = turned(s, 2, closedShot.from), dir = turnedDir(s, 2, closedShot.dir);
+        expect(renderer.fractureSkull(owner, [headSrc], from, dir, 'pellet')).toBe(0);
+        expect(renderer.fractureSkull(owner, [headSrc], from, dir, 'pellet')).toBe(0);
+        expect(fragments).toHaveLength(0);
+        expect(renderer.fractureSkull(owner, [headSrc], from, dir, 'pellet')).toBe(1);
+        expect(fragments.map(f => f.name)).toEqual(['parietal-right']);
+        expect(dist(fragments[0]!.pos, turned(s, 2, pivotOf(kit, index)))).toBeLessThan(1e-9);
+        // Through the hole the same ray goes on to what is drawn behind it, or to nothing: never the missing plate.
+        renderer.fractureSkull(owner, [headSrc], from, dir, 'slug');
+        expect(fragments.slice(1).map(f => f.name)).not.toContain('parietal-right');
+        renderer.dispose(); cache.dispose();
+      });
+
+      it('a pop on a split head releases every surviving plate from its turned pivot, each with the piece that owns that pivot', () => {
+        const { cache, kit, renderer, fragments } = makeAnatomical();
+        const owner = { id: 4 }, w = warpOf('middle', 0, 0, 1), s = skullSplitOf(w, null, owner.id)!;
+        renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
+        // One plate is shot off first: the pop releases the other thirteen.
+        const lost = plateOf('temporal-left'), shot = shotAt(kit, lost);
+        expect(renderer.fractureSkull(owner, [headSrc], turned(s, 1, shot.from), turnedDir(s, 1, shot.dir), 'slug')).toBe(1);
+        fragments.length = 0;
+        expect(renderer.explodeSkull(owner, [headSrc], SHOT.pop)).toBe(13);
+        expect(fragments.map(f => f.name)).toEqual(SKULL_PIECES.filter((_, i) => i !== lost));
+        // The closed head's pop, for each piece's un-turned direction: a fragment of a half is that pop's, turned.
+        const closedPop = ([0, 1, 2] as const).map(piece => {
+          const shut = makeAnatomical(), other = { id: 4 };
+          shut.renderer.update([[headSrc]], [other]);
+          shut.renderer.explodeSkull(other, [headSrc], turnedDir(s, piece, SHOT.pop, true));
+          shut.renderer.dispose(); shut.cache.dispose();
+          return shut.fragments;
+        });
+        const owners = [0, 0, 0];
+        for (const f of fragments) {
+          const index = plateOf(f.name as (typeof SKULL_PIECES)[number]), q = pivotOf(kit, index), moved = skullWarpPoint(s, q, skullJagAt(s, q));
+          owners[moved.piece]!++;
+          expect(dist(f.pos, moved.p), f.name).toBeLessThan(1e-9);
+          const g = closedPop[moved.piece]!.find(x => x.name === f.name)!;
+          expect(dist(f.pos, turned(s, moved.piece, g.pos)), f.name).toBeLessThan(1e-9);
+          expect(dist(f.vel, turnedDir(s, moved.piece, g.vel)), f.name).toBeLessThan(1e-9);
+          expect(f.matrix.elements.map(v => +v.toFixed(12)), f.name).toEqual(
+            new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(...s.frame.w.a), turnOf(s, moved.piece)).multiply(g.matrix).elements.map(v => +v.toFixed(12)));
+        }
+        // At the kill's opening every plate's pivot is above the hinge plane: each goes with a half.
+        expect(owners[0]).toBe(0);
+        expect(owners[1]!).toBeGreaterThanOrEqual(3);
+        expect(owners[2]!).toBeGreaterThanOrEqual(3);
+        expect(renderer.explodeSkull(owner, [headSrc], SHOT.pop)).toBe(0);
+        renderer.dispose(); cache.dispose();
+      });
+
+      it('a one-sided split: the plates of the side that stays pop from the closed head\'s frame, to the bit; the turning side\'s from the turn', () => {
+        const { cache, kit, renderer, fragments } = makeAnatomical();
+        const owner = { id: 4 }, w = warpOf('middle', 1, 0.03, 1), s = skullSplitOf(w, null, owner.id)!;
+        expect(s.angleM).toBe(0);
+        renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
+        expect(renderer.explodeSkull(owner, [headSrc], SHOT.pop)).toBe(14);
+        const stays: string[] = [], turns: string[] = [];
+        for (const f of fragments) {
+          const q = pivotOf(kit, plateOf(f.name as (typeof SKULL_PIECES)[number])), moved = skullWarpPoint(s, q, skullJagAt(s, q));
+          expect(dist(f.pos, moved.p), f.name).toBeLessThan(1e-9);
+          (moved.piece === 0 ? stays : turns).push(f.name);
+          const closed = CLOSED_POP.find(row => row[0] === f.name);
+          if (moved.piece === 0 && closed) expect([f.name, ...f.pos, ...f.vel]).toEqual(closed);
+          if (moved.piece === 1) expect(dist(f.pos, q)).toBeGreaterThan(0.01);
+        }
+        expect(stays).toContain('parietal-right');
+        expect(stays).toContain('mandible');
+        expect(turns).toContain('temporal-left');
+        expect(turns).toContain('zygomatic-left');
+        renderer.dispose(); cache.dispose();
+      });
+
+      it('the fracture is the live one (splitLook.jag / jagShape): what the tuning seam sets is what a shot and a pop go by', () => {
+        const { cache, kit, renderer, fragments } = makeAnatomical();
+        const owner = { id: 4 }, w = warpOf('middle', 0, 0, 1), s = skullSplitOf(w, null, owner.id)!;
+        const wide = { ...HEAD_SPLIT.skull.jag, zigAmp: 0.012, wobble: 0.9 };
+        renderer.splitLook.jag.value.x = wide.zigAmp;
+        renderer.splitLook.jagShape.value.x = wide.wobble;
+        renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
+        const skull = kit.head(headSrc)!, whole = intactSkull(skull.pieces.length);
+        const frame = {
+          toLocal: (p: Vec3) => headSrc.toLocal(p) as Vec3, toWorld: (p: Vec3) => headSrc.toWorld(p) as Vec3,
+          dirToLocal: (v: Vec3): Vec3 => { const a = headSrc.toLocal(v), o = headSrc.toLocal([0, 0, 0]); return [a[0] - o[0], a[1] - o[1], a[2] - o[2]]; },
+        };
+        // Shots down onto the crown's edge where the + half's copy draws it: within a centimetre of the old plane,
+        // the band the wide fracture wanders over.
+        const { h, a, n } = s.frame.w, u = s.frame.u;
+        let moved = 0, broke = 0;
+        for (let i = 0; i < 60; i++) {
+          const al = -0.03 - (i % 20) * 0.004, off = -0.009 + Math.floor(i / 20) * 0.009;
+          const along = (k: 0 | 1 | 2) => h[k] + a[k] * al + n[k] * off + u[k] * 0.16;
+          const q: Vec3 = [along(0), along(1), along(2)];
+          const up = turnedDir(s, 1, u), p = turned(s, 1, q);
+          const from: Vec3 = [p[0] + up[0] * 0.06, p[1] + up[1] * 0.06, p[2] + up[2] * 0.06], dir: Vec3 = [-up[0], -up[1], -up[2]];
+          const want = skullSplitRayHit(skull.pieces, whole, s, frame, from, dir, wide);
+          const plain = skullSplitRayHit(skull.pieces, whole, s, frame, from, dir);
+          if (want?.plate !== plain?.plate || want?.piece !== plain?.piece) moved++;
+          // A fresh skull each shot: the hook seeds by id, so this owner breaks along the same fracture.
+          const fresh = { id: 4 };
+          fragments.length = 0;
+          expect(renderer.fractureSkull(fresh, [headSrc], from, dir, 'slug'), `shot ${i}`).toBe(want ? 1 : 0);
+          if (!want) continue;
+          broke++;
+          expect(fragments.map(f => f.name), `shot ${i}`).toEqual([SKULL_PIECES[want.plate]]);
+          expect(dist(fragments[0]!.pos, turned(s, want.piece, pivotOf(kit, want.plate))), `shot ${i}`).toBeLessThan(1e-9);
+        }
+        expect(broke).toBeGreaterThan(20);
+        // The default fracture would have answered otherwise for some of them.
+        expect(moved).toBeGreaterThan(3);
+        // The pop: each plate goes with the piece that owns its pivot by the wide fracture; some change halves for it.
+        fragments.length = 0;
+        expect(renderer.explodeSkull(owner, [headSrc], SHOT.pop)).toBe(14);
+        let swapped = 0;
+        for (const f of fragments) {
+          const q = pivotOf(kit, plateOf(f.name as (typeof SKULL_PIECES)[number]));
+          const byWide = skullWarpPoint(s, q, skullJagAt(s, q, wide)), byDefault = skullWarpPoint(s, q, skullJagAt(s, q));
+          expect(dist(f.pos, byWide.p), f.name).toBeLessThan(1e-9);
+          if (byWide.piece !== byDefault.piece) swapped++;
+        }
+        expect(swapped).toBeGreaterThan(0);
+        renderer.dispose(); cache.dispose();
+      });
+
+      describe('a projectile\'s step (skullShotCast): bone standing in an open head\'s gap has no flesh in front of it', () => {
+        const along = (from: Vec3, dir: Vec3, t: number): Vec3 => [from[0] + dir[0] * t, from[1] + dir[1] * t, from[2] + dir[2] * t];
+
+        it('a closed head: impact with a step is the old impact to the bit, a step with no flesh does nothing, and the projectile remembers nothing', () => {
+          for (const hook of [undefined, headOnly(null)]) {
+            const { cache, renderer, fragments } = makeAnatomical();
+            const owner = { id: 1 }, by: SkullStrikes = {};
+            warpOf('middle', 0, 0, 1);
+            renderer.update([[headSrc]], [owner], undefined, undefined, undefined, hook);
+            // A step that runs through the whole head and meets no flesh: nothing is cast.
+            const start = along(shotFrom(), SHOT.dir, -0.3 / Math.hypot(...SHOT.dir));
+            expect(renderer.skullPass(owner, [headSrc], start, along(start, SHOT.dir, 1), SHOT.dir, 'slug', by)).toBe(0);
+            expect(renderer.skullState(owner).pieces).toEqual([]);
+            // The flesh hit, with the step it came on: the plate and the fragment's numbers of the plain call.
+            const eyes = renderer.impact(owner, [headSrc], shotFrom(), SHOT.dir, 'slug', { from: start, by });
+            expect(renderer.skullState(owner).pieces).toEqual(['frontal']);
+            expect(fragments.map(numbersOf)).toEqual([CLOSED_HIT]);
+            expect(by.skulls).toBeUndefined();
+            // The eyes are impact's own business, step or no step.
+            const plain = makeAnatomical(), other = { id: 1 };
+            plain.renderer.update([[headSrc]], [other], undefined, undefined, undefined, hook);
+            expect(plain.renderer.impact(other, [headSrc], shotFrom(), SHOT.dir, 'slug')).toBe(eyes);
+            expect(plain.fragments.map(numbersOf)).toEqual([CLOSED_HIT]);
+            expect(plain.renderer.eyeState(other)).toEqual(renderer.eyeState(owner));
+            // A projectile that is said to have struck this skull is still cast at a closed head, as ever.
+            renderer.clear(); fragments.length = 0;
+            renderer.update([[headSrc]], [owner], undefined, undefined, undefined, hook);
+            renderer.impact(owner, [headSrc], shotFrom(), SHOT.dir, 'slug', { from: start, by: { skulls: [owner] } });
+            expect(fragments.map(numbersOf)).toEqual([CLOSED_HIT]);
+            for (const r of [plain, { renderer, cache }]) { r.renderer.dispose(); r.cache.dispose(); }
+          }
+        });
+
+        it('the sculpted skull (no kit) has no plates to cast, open or closed, with a step or without', () => {
+          const { cache, renderer } = make();
+          const owner = { id: 1 }, by: SkullStrikes = {}, w = warpOf('middle', 0, 0, 1);
+          renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
+          const start = along(shotFrom(), SHOT.dir, -0.3);
+          expect(renderer.skullPass(owner, [headSrc], start, along(start, SHOT.dir, 1), SHOT.dir, 'slug', by)).toBe(0);
+          renderer.impact(owner, [headSrc], shotFrom(), SHOT.dir, 'slug', { from: start, by });
+          expect(renderer.skullState(owner)).toEqual({ missing: 0, pieces: [] });
+          expect(by.skulls).toBeUndefined();
+          renderer.dispose(); cache.dispose();
+        });
+
+        it('a step with no flesh through an opened half\'s bone releases the plate drawn there, from its turned pivot; one that stops short releases nothing', () => {
+          for (const [id, piece] of [['parietal-left', 1], ['temporal-right', 2]] as const) {
+            const { cache, kit, renderer, fragments } = makeAnatomical();
+            const owner = { id: 4 }, w = warpOf('middle', 0, 0, 1), s = skullSplitOf(w, null, owner.id)!;
+            renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
+            const index = plateOf(id), closedShot = shotAt(kit, index);
+            // The shot is laid through the plate's pivot, 8 cm along it, and meets the plate's outer surface 44 mm
+            // along (the parietal) or 55 mm (the temporal). The step starts 30 cm further out.
+            const dir = turnedDir(s, piece, closedShot.dir), from = along(turned(s, piece, closedShot.from), dir, -0.3);
+            const pivot = turned(s, piece, pivotOf(kit, index));
+            expect(dist(along(from, dir, 0.38), pivot)).toBeLessThan(1e-9);
+            const surface = renderer.skullRay(owner, [headSrc], from, dir, 1)!;
+            expect([surface.plate, surface.piece]).toEqual([id, piece]);
+            expect(surface.distance).toBeGreaterThan(0.34);
+            expect(surface.distance).toBeLessThan(0.36);
+            // It ends 4 cm and more short of the bone: cast, and nothing met. The projectile has struck nothing.
+            const by: SkullStrikes = {};
+            expect(renderer.skullPass(owner, [headSrc], from, along(from, dir, 0.3), dir, 'slug', by)).toBe(0);
+            expect(renderer.skullState(owner).pieces).toEqual([]);
+            expect(by.skulls).toBeUndefined();
+            // Its next step runs through the bone.
+            expect(renderer.skullPass(owner, [headSrc], along(from, dir, 0.3), along(from, dir, 0.8), dir, 'slug', by)).toBe(1);
+            expect(renderer.skullState(owner).pieces).toEqual([id]);
+            expect(fragments.map(f => f.name)).toEqual([id]);
+            expect(dist(fragments[0]!.pos, pivot)).toBeLessThan(1e-9);
+            // Where the copy of that piece is drawn, turned as it is, and thrown as fractureSkull throws it.
+            const copy = segs(renderer, owner).find(d => d.piece === piece)!;
+            expect(dist(fragments[0]!.pos, at(copy.matrix, kit.head(headSrc)!.pieces[index]!.pivot))).toBeLessThan(1e-9);
+            expect(fragments[0]!.matrix.elements.map(v => +v.toFixed(12))).toEqual(copy.matrix.clone().setPosition(0, 0, 0).elements.map(v => +v.toFixed(12)));
+            const direct = makeAnatomical(), twin = { id: 4 };
+            direct.renderer.update([[headSrc]], [twin], undefined, undefined, undefined, headOnly(w));
+            expect(direct.renderer.fractureSkull(twin, [headSrc], turned(s, piece, closedShot.from), dir, 'slug')).toBe(1);
+            expect(numbersOf(fragments[0]!)).toEqual(numbersOf(direct.fragments[0]!));
+            direct.renderer.dispose(); direct.cache.dispose();
+            // The projectile remembers the skull: its later steps break nothing more of it, through bone or into flesh.
+            expect(by.skulls).toEqual([owner]);
+            expect(renderer.skullPass(owner, [headSrc], from, along(from, dir, 0.8), dir, 'slug', by)).toBe(0);
+            renderer.impact(owner, [headSrc], along(from, dir, 0.45), dir, 'slug', { from: along(from, dir, 0.3), by });
+            expect(renderer.skullState(owner).pieces).toEqual([id]);
+            expect(fragments).toHaveLength(1);
+            // Another projectile on the same line goes through the hole to what is drawn behind, or to nothing.
+            const next: SkullStrikes = {};
+            const more = renderer.skullPass(owner, [headSrc], from, along(from, dir, 0.8), dir, 'slug', next);
+            expect(fragments.slice(1).map(f => f.name)).not.toContain(id);
+            expect(next.skulls).toEqual(more ? [owner] : undefined);
+            renderer.dispose(); cache.dispose();
+          }
+        });
+
+        it('a step that passes the head and not its skull is not cast; pellets through the gap add up on the plate, one projectile one hit', () => {
+          const { cache, kit, renderer, fragments } = makeAnatomical();
+          const owner = { id: 2 }, w = warpOf('middle', 0, 0, 1), s = skullSplitOf(w, null, owner.id)!;
+          renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
+          const index = plateOf('parietal-right'), closedShot = shotAt(kit, index);
+          const dir = turnedDir(s, 2, closedShot.dir), from = along(turned(s, 2, closedShot.from), dir, -0.3);
+          // Two metres to the side, the same direction: nothing.
+          const aside: Vec3 = [from[0] + 2, from[1], from[2]];
+          expect(renderer.skullPass(owner, [headSrc], aside, along(aside, dir, 1), dir, 'slug', {})).toBe(0);
+          // Three pellets, each a projectile of its own; a pellet that has hit the plate does not hit it twice.
+          const first: SkullStrikes = {};
+          expect(renderer.skullPass(owner, [headSrc], from, along(from, dir, 0.5), dir, 'pellet', first)).toBe(0);
+          expect(first.skulls).toEqual([owner]);
+          expect(renderer.skullPass(owner, [headSrc], from, along(from, dir, 0.5), dir, 'pellet', first)).toBe(0);
+          expect(renderer.skullPass(owner, [headSrc], from, along(from, dir, 0.5), dir, 'pellet', {})).toBe(0);
+          expect(fragments).toHaveLength(0);
+          expect(renderer.skullPass(owner, [headSrc], from, along(from, dir, 0.5), dir, 'pellet', {})).toBe(1);
+          expect(fragments.map(f => f.name)).toEqual(['parietal-right']);
+          expect(dist(fragments[0]!.pos, turned(s, 2, pivotOf(kit, index)))).toBeLessThan(1e-9);
+          renderer.dispose(); cache.dispose();
+        });
+
+        it('skullRay answers what fractureSkull would meet, by the plate\'s id, and damages nothing', () => {
+          const { cache, kit, renderer, fragments } = makeAnatomical();
+          const owner = { id: 4 }, w = warpOf('middle', 0, 0, 1), s = skullSplitOf(w, null, owner.id)!;
+          renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
+          const closedShot = shotAt(kit, plateOf('temporal-right'));
+          const dir = turnedDir(s, 2, closedShot.dir), from = turned(s, 2, closedShot.from);
+          // The plate's outer surface is 55 mm along the shot: inside a bullet's reach. From 30 cm further out it is
+          // not, and is with a reach handed in.
+          const met = renderer.skullRay(owner, [headSrc], from, dir)!;
+          expect(met).toEqual({ plate: 'temporal-right', piece: 2, distance: expect.closeTo(0.0554, 4) });
+          expect(renderer.skullRay(owner, [headSrc], along(from, dir, -0.3), dir)).toBeNull();
+          expect(renderer.skullRay(owner, [headSrc], along(from, dir, -0.3), dir, 0.5)).toEqual({ plate: 'temporal-right', piece: 2, distance: expect.closeTo(met.distance + 0.3, 9) });
+          expect(renderer.skullState(owner)).toEqual({ missing: 0, pieces: [] });
+          expect(fragments).toHaveLength(0);
+          // And the shot itself then breaks that plate.
+          expect(renderer.fractureSkull(owner, [headSrc], from, dir, 'slug')).toBe(1);
+          expect(renderer.skullState(owner).pieces).toEqual(['temporal-right']);
+          expect(renderer.skullRay(owner, [headSrc], from, dir)?.plate).not.toBe('temporal-right');
+          // No anatomical skull, no answer.
+          const sculpt = make();
+          sculpt.renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
+          expect(sculpt.renderer.skullRay(owner, [headSrc], from, dir)).toBeNull();
+          sculpt.renderer.dispose(); sculpt.cache.dispose();
+          renderer.dispose(); cache.dispose();
+        });
+
+        it('a flesh hit on an open head is cast from the step\'s start: the bone in front of the flesh breaks, where the old ray from the flesh went on behind it', () => {
+          const { cache, kit, renderer, fragments } = makeAnatomical();
+          const owner = { id: 4 }, w = warpOf('middle', 0, 0, 1), s = skullSplitOf(w, null, owner.id)!;
+          renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
+          const index = plateOf('parietal-left'), closedShot = shotAt(kit, index);
+          const dir = turnedDir(s, 1, closedShot.dir), from = along(turned(s, 1, closedShot.from), dir, -0.3);
+          // The plate is 9.5 mm thick here, its outer surface 344 mm along the step and its inner 353 mm. The flesh is
+          // met 57 mm past the inner surface, on the far side of the bone.
+          expect(renderer.skullRay(owner, [headSrc], from, dir, 1)).toEqual({ plate: 'parietal-left', piece: 1, distance: expect.closeTo(0.3439, 4) });
+          const flesh = along(from, dir, 0.41);
+          // The old call, on a head of its own: from the flesh on. It does not break the plate the line met first.
+          const old = makeAnatomical(), other = { id: 4 };
+          old.renderer.update([[headSrc]], [other], undefined, undefined, undefined, headOnly(w));
+          old.renderer.impact(other, [headSrc], flesh, dir, 'slug');
+          expect(old.fragments.map(f => f.name)).not.toContain('parietal-left');
+          old.renderer.dispose(); old.cache.dispose();
+          const by: SkullStrikes = {};
+          renderer.impact(owner, [headSrc], flesh, dir, 'slug', { from, by });
+          expect(fragments.map(f => f.name)).toEqual(['parietal-left']);
+          expect(dist(fragments[0]!.pos, turned(s, 1, pivotOf(kit, index)))).toBeLessThan(1e-9);
+          expect(by.skulls).toEqual([owner]);
+          // The flesh in FRONT of the bone, 14 mm before it: the same plate the old call breaks.
+          const again = makeAnatomical(), third = { id: 4 }, near = along(from, dir, 0.33);
+          again.renderer.update([[headSrc]], [third], undefined, undefined, undefined, headOnly(w));
+          again.renderer.impact(third, [headSrc], near, dir, 'slug', { from, by: {} });
+          expect(again.fragments.map(numbersOf)).toEqual(fragments.map(numbersOf));
+          again.renderer.dispose(); again.cache.dispose();
+          renderer.dispose(); cache.dispose();
+        });
+
+        it('an open head whose bone does not turn (follow 0) is the whole skull standing in the gap: it is cast from the step\'s start too', () => {
+          const { cache, kit, renderer, fragments } = makeAnatomical();
+          const owner = { id: 4 }, w = warpOf('middle', 0, 0, 1);
+          renderer.splitLook.follow = 0;
+          renderer.update([[headSrc]], [owner], undefined, undefined, undefined, headOnly(w));
+          expect(segs(renderer, owner).map(d => d.piece)).toEqual([null]);
+          const index = plateOf('parietal-left'), shot = shotAt(kit, index), from = along(shot.from, shot.dir, -0.3);
+          expect(renderer.skullPass(owner, [headSrc], from, along(from, shot.dir, 0.5), shot.dir, 'slug', {})).toBe(1);
+          expect(fragments.map(f => f.name)).toEqual(['parietal-left']);
+          expect(dist(fragments[0]!.pos, pivotOf(kit, index))).toBeLessThan(1e-9);
+          renderer.dispose(); cache.dispose();
+        });
+      });
+    });
+  });
+});
+
+describe('organs as mesh (2026-10-06): organ sources draw on their own batch, only where a wound reaches them', () => {
+  const all = createSkeletonSources(body, bound, { character: 'zombie', organs: true, bodyYaw: () => bodyYaw });
+  const organSrc = all.filter(s => s.kind === 'organ');
+  const organsOf = (r: ReturnType<typeof createSegmentMeshRenderer>, owner: unknown) => r.drawn.filter(d => d.owner === owner && d.organ);
+  const belly = [{ pos: [0, 1.03, 0.12] as const, radius: 0.08 }];
+  const headShot = [{ pos: [0, 1.62, 0.1] as const, radius: 0.1 }];
+  const organMeshes = (r: ReturnType<typeof createSegmentMeshRenderer>) => r.object.children.filter(c => c.name === 'skeleton-organs') as THREE.InstancedMesh[];
+
+  it('organNeeded: exposed owner AND a reaching sphere; no reach list = no reach test', async () => {
+    const { organNeeded } = await import('./mesh-renderer');
+    const a = {}, b = {};
+    expect(organNeeded(a, undefined, undefined, [0, 0, 0], 0.1)).toBe(true);
+    expect(organNeeded(b, new Set([a]), undefined, [0, 0, 0], 0.1)).toBe(false);
+    expect(organNeeded(a, new Set([a]), null, [0, 0, 0], 0.1)).toBe(false);
+    expect(organNeeded(a, new Set([a]), [], [0, 0, 0], 0.1)).toBe(false);
+    expect(organNeeded(a, new Set([a]), [{ pos: [0.1, 0, 0], radius: 0.05 }], [0, 0, 0], 0.1)).toBe(true);
+    expect(organNeeded(a, new Set([a]), [{ pos: [1, 0, 0], radius: 0.05 }], [0, 0, 0], 0.1)).toBe(false);
+  });
+
+  it('a belly wound draws every organ segment once, on the organ material; a head wound and no wound draw none', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const gut = { id: 1 }, head = { id: 2 }, clean = { id: 3 };
+    bodyYaw = 0;
+    const reach = (o: object) => (o === gut ? belly : o === head ? headShot : null);
+    renderer.update([all, all, all], [gut, head, clean], undefined, new Set([gut, head]), undefined, undefined, reach);
+    expect(organSrc.length).toBeGreaterThan(0);
+    expect(organsOf(renderer, gut)).toHaveLength(organSrc.length);
+    expect(organsOf(renderer, head)).toHaveLength(0);
+    expect(organsOf(renderer, clean)).toHaveLength(0);
+    expect(renderer.stats.organs).toBe(organSrc.length);
+    // Their own batches: not the bone material, never a split copy, no eye.
+    const meshes = organMeshes(renderer);
+    expect(meshes).toHaveLength(organSrc.length);
+    const boneMesh = renderer.object.children.find(c => c.name === 'skeleton-segments') as THREE.InstancedMesh;
+    for (const m of meshes) {
+      expect(m.count).toBe(1);
+      expect(m.visible).toBe(true);
+      expect(m.material).not.toBe(boneMesh.material);
+      expect((m.material as THREE.Material).depthWrite).toBe(true);
+      expect(m.geometry.getAttribute('meshFeature')).toBeUndefined();
+    }
+    for (const d of organsOf(renderer, gut)) { expect(d.eye).toBe(false); expect(d.piece).toBeNull(); }
+    // The bones of the exposed owners still draw (the organ branch took nothing from them).
+    expect(renderer.drawn.filter(d => d.owner === head && !d.eye && !d.organ).length).toBeGreaterThan(3);
+    renderer.dispose();
+    cache.dispose();
+  });
+
+  it('the organ instance sits at its segment pose and follows the body yaw', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const owner = { id: 1 };
+    bodyYaw = 0;
+    renderer.update([all], [owner], undefined, new Set([owner]), undefined, undefined, () => belly);
+    const m0 = organsOf(renderer, owner).map(d => d.matrix.clone());
+    organSrc.forEach((s, k) => {
+      const p = s.pose();
+      expect(new THREE.Vector3().setFromMatrixPosition(m0[k]!).distanceTo(new THREE.Vector3(...p.origin))).toBeLessThan(1e-9);
+    });
+    bodyYaw = 1.2;
+    renderer.update([all], [owner], undefined, new Set([owner]), undefined, undefined, () => belly);
+    const q = new THREE.Quaternion(); organsOf(renderer, owner)[0]!.matrix.decompose(new THREE.Vector3(), q, new THREE.Vector3());
+    const q0 = new THREE.Quaternion(); m0[0]!.decompose(new THREE.Vector3(), q0, new THREE.Vector3());
+    expect(q.angleTo(q0)).toBeCloseTo(1.2, 3);
+    bodyYaw = 0;
+    renderer.dispose();
+    cache.dispose();
+  });
+
+  it('show.organs hides the organ batches and leaves the bones; a hidden (not shown) owner draws no organ', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const owner = { id: 1 };
+    renderer.show.organs = false;
+    renderer.update([all], [owner], undefined, new Set([owner]), undefined, undefined, () => belly);
+    for (const m of organMeshes(renderer)) expect(m.visible).toBe(false);
+    expect((renderer.object.children.find(c => c.name === 'skeleton-segments') as THREE.InstancedMesh).visible).toBe(true);
+    renderer.show.organs = true;
+    renderer.update([all], [owner], new Set<unknown>(), new Set([owner]), undefined, undefined, () => belly);
+    expect(organsOf(renderer, owner)).toHaveLength(0);
+    renderer.dispose();
+    cache.dispose();
+  });
+
+  it('a dead torso draws no organ; the bone-only source list draws none either', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const owner = { id: 1 };
+    const torso = body.bonePrims.find(b => b.op === 'organ')!.cluster;
+    const severed = { ...body, clusters: body.clusters.map((c, i) => (i === torso ? { ...c, alive: false } : c)) };
+    const sev = createSkeletonSources(severed, bound, { character: 'zombie', organs: true });
+    renderer.update([sev], [owner], undefined, new Set([owner]), undefined, undefined, () => belly);
+    expect(organsOf(renderer, owner)).toHaveLength(0);
+    renderer.update([sources], [owner], undefined, new Set([owner]), undefined, undefined, () => belly);
+    expect(organsOf(renderer, owner)).toHaveLength(0);
+    expect(renderer.stats.organs).toBe(0);
+    renderer.dispose();
+    cache.dispose();
+  });
+
+  it('setOrganLook takes a name or numbers and answers the values in force', async () => {
+    const { ORGAN_LOOKS } = await import('./mesh-organ');
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const close = (v: readonly number[]) => v.map(x => expect.closeTo(x, 6));
+    expect(renderer.setOrganLook('wet')).toEqual({ cfg: close(ORGAN_LOOKS.wet.cfg), gloss: close(ORGAN_LOOKS.wet.gloss), occ: close(ORGAN_LOOKS.wet.occ), detail: close(ORGAN_LOOKS.wet.detail), relief: close(ORGAN_LOOKS.wet.relief) });
+    expect(renderer.organLook.cfg.value.x).toBe(ORGAN_LOOKS.wet.cfg[0]);
+    expect(renderer.setOrganLook({ cfg: [0.1, 0.2, 0.3, 0] }).cfg).toEqual([0.1, 0.2, 0.3, 0]);
+    expect(renderer.setOrganLook({ occ: [0.5, 0.25, 0.125, 0] }).occ).toEqual([0.5, 0.25, 0.125, 0]);
+    expect(renderer.setOrganLook().gloss).toEqual(close(ORGAN_LOOKS.wet.gloss));
+    // The surface detail is part of the look: its own numbers, the rest left alone.
+    expect(renderer.setOrganLook({ detail: [0, 0, 0, 0.02] }).detail).toEqual(close([0, 0, 0, 0.02]));
+    expect(renderer.setOrganLook({ relief: [0.25, 0.5, 4, 0.005] }).relief).toEqual(close([0.25, 0.5, 4, 0.005]));
+    expect(renderer.setOrganLook().occ).toEqual([0.5, 0.25, 0.125, 0]);
+    renderer.dispose();
+    cache.dispose();
+  });
+
+  it('every organ geometry carries organTube: a swept mesh its own, an extracted one zeros with no crease (organs, low-poly)', async () => {
+    const { ORGAN_MESHES } = await import('./mesh');
+    const owner = { id: 1 };
+    for (const name of ['tubes', 'nets-10mm'] as const) {
+      const cache = new SegmentMeshCache(undefined, ORGAN_MESHES[name]);
+      const renderer = createSegmentMeshRenderer(cache);
+      renderer.update([all], [owner], undefined, new Set([owner]), undefined, undefined, () => belly);
+      const meshes = organMeshes(renderer);
+      expect(meshes).toHaveLength(organSrc.length);
+      for (const m of meshes) {
+        const tube = m.geometry.getAttribute('organTube'), n = m.geometry.getAttribute('position').count;
+        expect(tube.itemSize).toBe(4);
+        expect(tube.count).toBe(n);
+        const arr = tube.array as Float32Array;
+        if (name === 'tubes') {
+          // Tube coordinates: off the axis by a radius somewhere, and a crease somewhere on the coil.
+          let across = 0; for (let i = 0; i < n; i++) across = Math.max(across, Math.hypot(arr[i * 4 + 1]!, arr[i * 4 + 2]!));
+          expect(across).toBeGreaterThan(0.02);
+        } else {
+          for (let i = 0; i < n; i++) expect([arr[i * 4], arr[i * 4 + 1], arr[i * 4 + 2], arr[i * 4 + 3]]).toEqual([0, 0, 0, 1]);
+        }
+        // The organ pipeline's vertex buffers: position, normal, organTube, iLights, iFill (5 of WebGPU's 8; the
+        // instance matrix is a uniform buffer at this instance count).
+        expect(Object.keys(m.geometry.attributes).sort()).toEqual(['iFill', 'iLights', 'normal', 'organTube', 'position']);
+      }
+      renderer.dispose();
+      cache.dispose();
+    }
+  });
+
+  it('a change of organ mesh spec swaps the drawn geometry at the next update, and the old batch empties', async () => {
+    const { ORGAN_MESHES } = await import('./mesh');
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    const owner = { id: 1 };
+    const draw = () => { renderer.update([all], [owner], undefined, new Set([owner]), undefined, undefined, () => belly); return organsOf(renderer, owner); };
+    const vertsOf = (ds: ReturnType<typeof draw>) => ds.reduce((n, d) => n + d.geometry.getAttribute('position').count, 0);
+    const tubes = draw();
+    expect(vertsOf(tubes)).toBe(528);
+    cache.organMesh = ORGAN_MESHES['nets-5mm'];
+    const nets = draw();
+    expect(vertsOf(nets)).toBe(4038);
+    expect(nets.map(d => d.geometry)).not.toEqual(tubes.map(d => d.geometry));
+    // The tube batches are still in the scene (they idle out later), drawing nothing.
+    const live = organMeshes(renderer).filter(m => m.count > 0), idle = organMeshes(renderer).filter(m => m.count === 0);
+    expect(live).toHaveLength(organSrc.length);
+    expect(idle).toHaveLength(organSrc.length);
+    for (const m of idle) expect(m.visible).toBe(false);
+    cache.organMesh = ORGAN_MESHES.tubes;
+    expect(draw().map(d => d.geometry)).toEqual(tubes.map(d => d.geometry));
+    renderer.dispose();
+    cache.dispose();
   });
 });

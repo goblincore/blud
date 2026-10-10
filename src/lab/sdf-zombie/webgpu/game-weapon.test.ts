@@ -205,6 +205,14 @@ describe('woundFromPellet', () => {
 });
 
 describe('spawnSlug', () => {
+  it('carries the aim it is given, copied, and none when given none', () => {
+    const aim = { eye: [1, 1.62, 2] as [number, number, number], dir: [0, 0, -1] as [number, number, number] };
+    const shot = spawnSlug([1.2, 1.5, 1.5], [0, 0, -1], aim).shot;
+    expect(shot).toMatchObject({ weapon: 'slug', aim: { eye: [1, 1.62, 2], dir: [0, 0, -1] } });
+    aim.eye[0] = 9; aim.dir[2] = 9;
+    expect(shot).toMatchObject({ aim: { eye: [1, 1.62, 2], dir: [0, 0, -1] } });
+    expect(spawnSlug([0, 0, 0], [0, 0, -1]).shot).not.toHaveProperty('aim');
+  });
   it('uses distinct shot identities across slugs and shotgun volleys', () => {
     const first = spawnSlug([0, 0, 0], [0, 0, -1]).shot;
     const volley = spawnPellets([0, 0, 0], [0, 0, -1], 2, 123);

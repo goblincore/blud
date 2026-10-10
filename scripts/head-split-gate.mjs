@@ -26,9 +26,25 @@
 //   F. __sdfGame.forceSplit(id, "face", ...) folds the face half forward: a point of its cut face is where warpPoint
 //      puts it.
 //   M. THE SKULL: at the three real chops the bone's copies are drawn turned by the follow table's angle (their
-//      matrices), and after chop 1 each seated eye is on screen where skullWarpPoint puts it (the flesh out of the
-//      frame); the same landmark on a forced head at the bone angles of the table's three stages (a small, a middle
-//      and a wide one); and the closed skull on a closed head.
+//      matrices), and after chop 1 each seated eye is on screen where skullWarpPoint puts it (the flesh and the bone
+//      out of the frame: the whole of each eye is seen, not the part its socket shows); the same landmark on a forced
+//      head at the bone angles of the table's three stages (a small, a middle and a wide one), whose copies are drawn
+//      on the split material of the skull the boot draws, and whose BONE PIXELS (a shown / hidden pair of the bone
+//      alone) are where the split puts them and clipped: background along the fracture's line, bone where each half's
+//      brow is turned to and none where the closed head has it; and the closed skull on a closed head. The boots draw the
+//      DEFAULT skull: the sculpted one, `full` (no skull parameter; C checks what each boot draws). There M also checks
+//      that the copies are the sculpted head's own mesh under the second paint.
+//      M runs twice more, each on a boot of its own where the three chops are made for the skull alone, with nothing
+//      of S, W or K measured: on the sculpted skull's FIRST LOOK (?sculpt=classic: the first sculpt under the first
+//      paint, whose split material no other boot draws), and on the ANATOMICAL skull (?skull=anatomical).
+//   P. THE PLATES OF A SPLIT ANATOMICAL SKULL (the anatomical boot, last). A slug knocks a plate off a closed head; split, the
+//      head is drawn as its surviving plates' clipped copies, on the plates' split material, and the GPU reports no
+//      error. Three pellets at the + half's bone WHERE IT IS DRAWN (on a line that misses that plate's box on the
+//      closed head) release the plate drawn there, its fragment starts at the pivot as the + half's copy draws it, and
+//      ON SCREEN the frame changes where that plate was drawn and not where the closed head has it. Last, the same
+//      head at the axe's first chop, where the bone stands far inside the flesh: the gun's own slug, put in flight
+//      on a line through the frontal bone that meets no flesh of the actor (__sdfGame.slugFrom; the projectile loop
+//      steps and traces it), releases that plate from its turned pivot and leaves the actor no wound.
 //   C. cost: draw time, untouched, open and closed again, at 0.6 m and 2 m (with its spread, not gated); the
 //      instrument's floor over the run; THE DEPTH GUARD over every capture of the run (each body texel, placed in the
 //      world by its depth, lies in front of the camera and inside some actor's proxy box or gib chunk's sphere, and
@@ -59,8 +75,9 @@
 // The thaws let the body move, and a moving body swings the halves: after each, the cast frozen again, the gate
 // steps until the wobble is exactly at rest (restWobble) before it measures a rest angle.
 // A scenario that throws is a failed check of its own; the others still run, and the run ends in its summary.
-// ONLY=S,K (env) runs just those scenarios (W and K need S; M's really chopped measures need S, W and K). Unset runs
-// them all: the gate. The contact sheets go to .lab-tmp/head-split-gate; SHEETS=1 writes the tracked ones in
+// ONLY=S,K (env) runs just those scenarios (W and K need S; on the first boot M's really chopped measures need
+// S, W and K). Unset runs them all: the gate. The contact sheets go to .lab-tmp/head-split-gate; SHEETS=1 writes the
+// tracked ones in
 // docs/dev-notes/2026-10-04-head-split/gate (OUT=<dir> anywhere else).
 // Usage (bash, not zsh):
 //   export LAB_VITE_PORT=5241 LAB_CDP_PORT=9241; . scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up
@@ -215,9 +232,15 @@ const F_EYE_D = 0.9;
 // ---- M.
 /** The flesh's opening for the forced landmark, as a share of its full angle: no flesh half covers a seated eye. */
 const M_THROWN = 1.8;
-/** An eye's shift on screen against skullWarpPoint's (px). Measured worst 3.4 px on the forced head at the kill's
- *  bone angle (a quarter of the eye is behind its socket rim there), under 0.6 px at the two cracks. */
-const M_SHIFT_PX = 5;
+/** An eye's shift on screen against skullWarpPoint's (px), the eye seen whole (eyesAgainstRule: the bone and the
+ *  flesh out of the frame). Measured on the default skull (the sculpted one, `full`): worst 0.51 px on the forced
+ *  head, at the kill's bone angle, and 0.19 px after chop 1; on its first look 0.27 and 0.43 px; on the anatomical
+ *  skull 0.27 and 0.40 px. The bound is 1.3 mm at the head (an eye drawn a twentieth short of its turn reads 3 px at
+ *  the kill's bone angle).
+ *  With the bone drawn the same measure reads the part of each eye its socket leaves in sight (0.62 to 0.91 of it
+ *  on the default skull, whose orbits are the widest; 0.38 to 0.51 on the first look; 0.37 to 0.54 on the anatomical
+ *  skull) and comes out 7.13 px, 3.33 px and 7.02 px: the gate reports that, and does not hold it. */
+const M_SHIFT_PX = 2;
 /** The largest shift on the forced head must be at least this (px). Measured 58.2. */
 const M_FAR_PX = 40;
 /** The really chopped head's eyes must move at least this far at chop 1 (px). Measured 17.9: the copies' turn halved
@@ -225,8 +248,81 @@ const M_FAR_PX = 40;
 const M_CHOP_PX = 10;
 /** The drawn copies' turn (from their matrices) against the follow table's bone angle (rad). Measured 0 to 1e-9. */
 const M_ANGLE_TOL = 1e-6;
-/** The eye seats in the head frame (mesh-eyes.ts, the rest pose). */
-const M_SEATS = [[-0.0363, 0.0159, 0.0343], [0.0363, 0.0159, 0.0343]];
+/** The eye seats in the head frame (mesh-eyes.ts, the rest pose), by the sculpt the boot's bone cache carves the head
+ *  with (skeletonDiagnostics().sculpt.shape): the first sculpt's, which the anatomical skull's eyes share, and the
+ *  second's, whose orbits seat the eyes on the same line 1.0 mm further forward. */
+const M_SEATS_BY_SHAPE = { 1: [[-0.0363, 0.0159, 0.0343], [0.0363, 0.0159, 0.0343]], 2: [[-0.0363, 0.0159, 0.0353], [0.0363, 0.0159, 0.0353]] };
+const seatsHere = () => M_SEATS_BY_SHAPE[S.shape] ?? die(`no eye seats for sculpt shape ${S.shape}`);
+/** THE BONE'S OWN PIXELS (boneOnScreen). Two marks on the brow, in the head frame as the seats are: 16 mm either side
+ *  of the mid-plane, 77 mm above the head centre and 51 mm in front of it. On the anatomical skull as fitted to the
+ *  zombie each is in the frontal bone, 1 cm under its outer surface, 2.5 times the fracture's largest offset from the
+ *  plane (so each is its own half's whatever the head's pattern), and at the kill's bone angle its half carries it
+ *  64 mm; the sculpted skull is the larger one, in either sculpt, and holds them too. */
+const M_MARKS = [[-0.016, 0.0767, 0.0514], [0.016, 0.0767, 0.0514]];
+/** A mark's disc on screen (px radius): all of it bone, or none of it. */
+const M_MARK_R = 3;
+/** A mark's turned place must be at least this far from its closed one on screen for "no bone left behind" to mean
+ *  anything (px). Measured 101.6 px for both marks, on every skull (the default, its first look, the anatomical). */
+const M_MARK_APART = 70;
+/** The fracture's line on screen: points of the old plane from M_GAP_FROM to M_GAP_TO above the hinge (m), every
+ *  M_GAP_STEP. On the anatomical skull a level ray meets bone at each of them closed (the maxilla, the nasal bone, the
+ *  frontal up to 16 cm) and none of them open at the kill's bone angle. */
+const M_GAP_FROM = 0.03, M_GAP_TO = 0.16, M_GAP_STEP = 0.005;
+/** At least this share of the line's points are bone on the closed skull, and at most M_GAP_LEFT of those are still
+ *  bone on the open one. Measured 25 of 27 on the anatomical skull (the other two look through its nose) and 27 of 27
+ *  on the sculpted one, in the default and in its first look; open, 0 on all three. A copy drawn unclipped leaves
+ *  every one of them bone. */
+const M_GAP_BONE = 0.8;
+const M_GAP_LEFT = 0.05;
+// ---- P.
+/** The zombie P is made on: the pool's sixth (from 0: 5), the one it was on when it ran last in the second boot.
+ *  Its on-screen measure (P_GONE: how much of a disc of the frame changes when a plate leaves) counts screenshot
+ *  pixels that change by a fixed step, and was set at that zombie's place in the room: measured 0.89 there (0.96
+ *  when R, A and H ran before it on the same page), and 0.71 on the pool's third, whose photographs are darker, with
+ *  every other measure of P the same to the digit. */
+const P_ZOMBIE = 5;
+/** The plate the slug takes off the closed head, and the plate the pellets take off the open one: the two
+ *  cheekbones. Each is wholly its own half's (their boxes start 33 mm and 24 mm from the plane), and small: turned
+ *  with its half, the + one stands clear of the box it has on the closed head. */
+const P_FIRST = "zygomatic-right";
+const P_PLATE = "zygomatic-left";
+/** Each ray starts this far in front of its plate's pivot (m) and runs into the face. On the skull as fitted to the
+ *  zombie the bone is met 29.1 mm (the slug) and 31.9 mm (the pellets) along it; a round reaches 140 mm. */
+const P_BACK = 0.04;
+/** The pellets' line, taken as it stands into the closed head's frame, must run at least this clear of P_PLATE's box
+ *  there (m), so that a test in the closed head's frame cannot release that plate. Measured 10.2 mm with the bone
+ *  riding its flesh (follow 1, the scenario's). Worked out on the fitted skull, away from the game: 6.0 mm at the
+ *  shipped table's angle, and 0 at half the flesh's. */
+const P_CLEAR = 0.005;
+/** The fragment's start against the pivot as the + half's copy draws it (m: a hundredth of a millimetre; the two are
+ *  the same product of matrices, measured 0.0000 mm), and at least P_FAR from the closed head's pivot (measured
+ *  36.9 mm). */
+const P_AT = 1e-5;
+const P_FAR = 0.02;
+/** THE RELEASED PLATE ON SCREEN: the bone photographed before the pellets and after them (the fragment given P_FLY
+ *  frames to leave the picture), compared in a disc of P_DISC px about the pivot's screen point as the + half's copy
+ *  draws it, and about the closed head's. Where the plate was drawn at least P_GONE of the disc's pixels change;
+ *  where the closed head has it at most P_SAME. Measured 0.97 and 0.00, the two points 59.0 px apart. */
+const P_DISC = 8;
+const P_FLY = 30;
+const P_GONE = 0.8;
+const P_SAME = 0.05;
+/** THE SLUG THROUGH THE GAP. The plate it is laid at and the point of it, from the plate's pivot in the head
+ *  segment's frame (m): the frontal bone, 16 mm to the + side and 20 mm up, on the + half's copy. On the skull as
+ *  fitted to the zombie, with the flesh at the axe's first chop (25.2 degrees a half) and the bone at 7.6, a level
+ *  line from the front through it meets the frontal on the + half and no flesh at all, as its neighbours 4 mm
+ *  either side and 20 mm up and down do. */
+const P_GAP_PLATE = "frontal";
+const P_GAP_OFF = [0.016, 0.02, 0];
+/** The slug starts this far in front of that point (m) and its line must be clear of the actor's flesh for P_GAP_RUN
+ *  (m: two frames of a slug's flight), by the projectile loop's own trace. */
+const P_GAP_BACK = 0.3;
+const P_GAP_RUN = 1;
+/** Frames the slug is given to cross the head. It meets the bone on its first. */
+const P_GAP_FRAMES = 4;
+/** The fragment's start (its place one frame back along its velocity) against the pivot as the + half's copy draws it
+ *  (m: a hundredth of a millimetre, as P_AT). Measured 0.0000 mm. */
+const P_GAP_AT = 1e-5;
 // ---- R.
 /** The draw distance from the live uniforms must be at least this (m; measured 12.67): nearer, a split would close
  *  at a range where the head is still tens of pixels across. */
@@ -442,6 +538,7 @@ async function boot(label, extra = "") {
   await fetch(`http://localhost:${CDP}/json/activate/${s.tab.id}`);
   await send("Page.bringToFront");
   await send("Emulation.setDeviceMetricsOverride", { width: W, height: H, deviceScaleFactor: 1, mobile: false });
+  s.t0 = Date.now();
   await send("Page.navigate", { url: `http://localhost:${VITE}/sdf-game.html?seed=1&frozen=1&vhs=off&loader=0${extra}` });
   let backend = null;
   for (let i = 0; i < 240 && !backend; i++) { await sleep(500); try { backend = await evaluate("typeof window.__sdfGame === \"object\" ? window.__sdfGame.backend : null"); } catch { backend = null; } }
@@ -484,13 +581,22 @@ async function boot(label, extra = "") {
   usedZ = new Set();
   // Where the page stands the player: rooms away from the ring, out of its sight (J's walk is from here).
   spawn = await evaluate("__sdfGame.pose()");
-  console.log(`[${label}] ready; room ${ROOM} (${pool.length} zombies); warm ${JSON.stringify(wb)}`);
+  // The skull this boot draws: the sculpted one in a variant (the default: `full`; also what a page that asked for
+  // the plates falls back to when their asset does not load), or the anatomical plates (?skull=anatomical). And the
+  // sculpt its bone cache carves a head with, which seats the eyes.
+  const sd = await evaluate("__sdfGame.skeletonDiagnostics()");
+  s.skull = sd.skull; s.variant = sd.sculptVariant; s.shape = sd.sculpt.shape; s.paint = sd.sculpt.paint;
+  out.skulls[label] = s.skull === "anatomical" ? "anatomical" : `sculpt ${s.variant}`;
+  console.log(`[${label}] ready; room ${ROOM} (${pool.length} zombies); skull ${out.skulls[label]} (recipe ${JSON.stringify(sd.sculpt)}); warm ${JSON.stringify(wb)}`);
   console.log(`[${label}] pool yaws (deg): ${pool.map((z) => `${z.id}:${(z.yaw * 180 / Math.PI).toFixed(1)}`).join(" ")}`);
 }
 const stepOne = () => evaluate("__sdfGame.step(1, 1 / 60)");
 async function stepN(n) { for (let i = 0; i < n; i++) await stepOne(); }
 const yawOf = (dx, dz) => Math.atan2(dx, -dz);
 function fresh() { const z = pool.find((q) => !usedZ.has(q.id)); if (!z) die("ran out of fresh zombies"); usedZ.add(z.id); return z; }
+/** The pool's zombie number `i` (from 0), which must be fresh: a scenario whose pixel measures were set at one
+ *  zombie's place in the room (its lamp, its frozen pose) takes that zombie, whatever ran before it in the boot. */
+function freshAt(i) { const z = pool[i]; if (!z || usedZ.has(z.id)) die(`zombie ${i} of the pool is not there, or not fresh`); usedZ.add(z.id); return z; }
 const J = (v) => JSON.stringify(v);
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -574,7 +680,7 @@ function blobs(mask, minN = 12) {
 }
 const timeDraws = () => evaluate("__sdfGame.timeDraws(120)", 300000);
 
-const out = {};
+const out = { skulls: {}, wall: {} };
 /** An exception inside a scenario (or a boot) is that scenario's failed check: the others still run. */
 async function threw(what, e) {
   fail(`${what}: stopped by an exception, its remaining checks did not run (${String(e?.message ?? e).replace(/\s+/g, " ").slice(0, 300)})`);
@@ -637,9 +743,16 @@ const splitOf = (id) => evaluate(`(() => { const s = __sdfGame.zombie(${id}).pos
 const drawnOf = (id) => evaluate(`(() => { const s = __sdfGame.zombie(${id}).view.splitDrawn; return s ? { thetaP: s.thetaP, thetaM: s.thetaM } : null; })()`);
 /** Any slot of the actor's GPU record with an open split (a unit plane normal in lane 17 of 21 vec4s). */
 const recordOpen = (id) => evaluate(`(() => { const r = __sdfGame.zombie(${id}).view.records.floats; for (let q = 0; q * 84 < r.length; q++) { if (Math.hypot(r[q * 84 + 68], r[q * 84 + 69], r[q * 84 + 70]) > 0.5) return true; } return false; })()`);
-/** The skull: the bone angles head-split.ts gives the drawn split, and the actor's split copies among the bone draws. */
+/** The skull: the bone angles head-split.ts gives the drawn split, the actor's split copies among the bone draws, and
+ *  the materials its draws are on (`on`: the names, of its bone copies, its eye copies, and its bone and eyes drawn
+ *  whole). */
 const skullOf = (id) => evaluate(`(async () => { const H = ${HS}; const s = H.skullSplitOf(__sdfGame.zombie(${id}).view.splitDrawn, __sdfGame.skullSplit()?.follow ?? null);
-  const d = __sdfGame.skullDrawn(${id}); return { angleP: s ? s.angleP : 0, angleM: s ? s.angleM : 0, bones: d ? d.copies.filter((c) => !c.eye).length : null, eyes: d ? d.copies.filter((c) => c.eye).length : null, draws: d ? d.draws : null }; })()`);
+  const d = __sdfGame.skullDrawn(${id}), names = (rows, eye) => [...new Set(rows.filter((c) => c.eye === eye).map((c) => c.material))].sort();
+  return { angleP: s ? s.angleP : 0, angleM: s ? s.angleM : 0, bones: d ? d.copies.filter((c) => !c.eye).length : null, eyes: d ? d.copies.filter((c) => c.eye).length : null, draws: d ? d.draws : null,
+    on: d ? { bones: names(d.copies, false), eyes: names(d.copies, true), wholeBones: names(d.whole, false), wholeEyes: names(d.whole, true) } : null }; })()`);
+/** Actor `id`'s split bone copies: how many, how many of them are its head segment's own mesh, and the paints their
+ *  materials draw (skullDrawn's `head` and `paint`). */
+const copyPaints = (id) => evaluate(`(() => { const d = __sdfGame.skullDrawn(${id}), c = d ? d.copies.filter((q) => !q.eye) : []; return { copies: c.length, heads: c.filter((q) => q.head).length, paints: [...new Set(c.map((q) => q.paint))] }; })()`);
 const frameOf = (id) => evaluate(`__sdfGame.head.frame(${id})`);
 const warpOf = (id, q) => evaluate(`(async () => { const H = ${HS}; const r = H.warpPoint(__sdfGame.zombie(${id}).posed().split, ${J(q)}); return { p: r.p, piece: r.piece }; })()`);
 const unwarpOf = (id, p) => evaluate(`(async () => { const H = ${HS}, V = ${VA}; const posed = __sdfGame.zombie(${id}).posed(); const r = H.unwarpPoint(posed.split, ${J(p)}, (q) => V.sdBodyClosed(q, posed)); return { q: r.q, piece: r.piece }; })()`);
@@ -647,7 +760,8 @@ const force = async (id, preset, sides, offset, frac) => { const ok = await eval
 const chop = (id, side) => evaluate(`__sdfGame.axeChop(${id}, "${side}", "head")`);
 /** A frozen actor never steps, and the kill (forceCollapse) is consumed in its step: thaw `n` frames, then freeze. */
 const thaw = async (n) => { await evaluate("__sdfGame.freeze(false)"); await stepN(n); await evaluate("__sdfGame.freeze(true)"); };
-const diag = async (label) => { out.diag[label] = await evaluate("__sdfGame.gpuDiagnostics()"); };
+/** The end of a boot: its GPU diagnostics, and the wall clock it took (reported, not gated). */
+const diag = async (label) => { out.diag[label] = await evaluate("__sdfGame.gpuDiagnostics()"); out.wall[label] = +((Date.now() - S.t0) / 1000).toFixed(1); };
 
 /** THE GAP LINE of a head with a centred `middle` split: a segment across the old plane, through the head centre's
  *  height plus GAP_LEVER: G0 on the plane, n across it, u up from the hinge, fwd out of the face. `lever` is G0's
@@ -721,14 +835,15 @@ async function surfaceAtPoint(p, t, tol) {
 /** One head chop through the axeChop seam with its spring followed to rest: SPRING_FRAMES frames (1 s: play's
  *  strikes are at least 0.6 s apart, axe-swing.ts), the gap read each frame from `eyeW` (in the wedge; set again before
  *  every frame: above standing height the player falls with the sim). Frames in `photoAt` are photographed from
- *  the standing pose `photoCam`. */
-async function chopAndFollow(id, side, line, eyeW, photoCam = null, photoAt = []) {
+ *  the standing pose `photoCam`. `gap` false: the same chop and the same frames with no gap read (the skull's own
+ *  boot, chopsForSkull: a read draws a frame and steps nothing, so the head is where a reading boot leaves it). */
+async function chopAndFollow(id, side, line, eyeW, photoCam = null, photoAt = [], gap = true) {
   const n = await chop(id, side);
   const frames = [], photos = [];
   for (let i = 1; i <= SPRING_FRAMES; i++) {
     await camAt(eyeW, line.G0); await stepOne();
     const st = await stateOf(id);
-    frames.push({ i, angle: st ? st.angle : 0, gap: await gapRead(line, await readF(false)) });
+    frames.push({ i, angle: st ? st.angle : 0, gap: gap ? await gapRead(line, await readF(false)) : null });
     if (photoCam && photoAt.includes(i)) { await setCam(photoCam); await syncCam(); photos.push(await capture()); }
   }
   return { n, frames, photos, state: await stateOf(id) };
@@ -739,26 +854,55 @@ async function readFrom(eye, at) { await camAt(eye, at); await syncCam(); await 
 async function photo(cam) { if (Array.isArray(cam)) await camAt(cam[0], cam[1]); else await setCam(cam); await syncCam(); await settle(); return capture(); }
 const headPx = async (id) => toPx(add((await frameOf(id)).centre, [0, 0.03, 0]));
 const showSkeleton = (set) => evaluate(`__sdfGame.meshSkeletonShow(${J(set)})`);
-/** THE SKULL'S SEATED EYES ON SCREEN, against head-split.ts: the eyes' pixels (the frame with the eyes drawn against
- *  the same frame without them, inside the screen disc (c, R)), left to right, and where skullWarpPoint puts the
- *  seats `seats` (closed-head world points) for the skull split of the DRAWN split under `follow` (a share, or null:
- *  the follow table). */
-async function eyesAgainstRule(id, seats, follow, c, R) {
+/** THE SKULL'S SEATED EYES ON SCREEN, against head-split.ts. An eye's pixels are those that differ between the frame
+ *  with the eyes drawn and the same frame without them, inside the screen disc (c, R); the two largest blobs, left to
+ *  right. They are taken twice:
+ *    `eyes`: with THE BONE AND THE FLESH OUT OF THE FRAME (meshSkeletonShow, hideFlesh): nothing stands in front of
+ *      an eye, so the blob is the whole eye and its centroid the eye's centre on screen. The landmark. `whole`: its
+ *      pixels; `bareBlobs`: how many blobs that pair differs in (2: nothing in the disc changes but the two eyes).
+ *    `socket`: with the bone drawn, as the game draws it. An eye is a 38 mm ball seated in its socket, and the blob
+ *      is the part the bone leaves in sight: a third to a half of it. That part's centroid is not the eye's centre,
+ *      and the part is not the same one at every turn (on the anatomical skull 0.53 of an eye closed, 0.45 at the
+ *      kill's bone angle), so its centroid does not travel with the eye. It shows that the eye is seen in its socket,
+ *      and how much of it (`seen`: its pixels).
+ *  `pred`: where skullWarpPoint puts the seats `seats` (closed-head world points) for the skull split of the DRAWN
+ *  split under `follow` (a share, or null: the follow table). `img`: the frame as the game draws it. `fleshOut`: the
+ *  caller has taken the flesh out of the frame already, and puts it back. */
+async function eyesAgainstRule(id, seats, follow, c, R, fleshOut = false) {
   await evaluate(`__sdfGame.skullSplit({ follow: ${J(follow)} })`); await stepN(2); await syncCam(); await settle();
-  const img = await capture(); await showSkeleton({ eyes: false }); const hidden = await capture(); await showSkeleton({ eyes: true });
-  const eyes = blobs(diffMask(img, hidden, c, R)).slice(0, 2).sort((p, q) => p.cx - q.cx).map((e) => [e.cx, e.cy]);
+  const pair = async () => {
+    const shown = await capture(); await showSkeleton({ eyes: false }); const hidden = await capture(); await showSkeleton({ eyes: true });
+    const all = blobs(diffMask(shown, hidden, c, R));
+    return { shown, count: all.length, found: all.slice(0, 2).sort((p, q) => p.cx - q.cx) };
+  };
+  const drawn = await pair();
+  // The bone out (and the flesh), then the frame left to settle: the post chain mixes each frame with the ones before
+  // it (post-aa.ts, the smear), so what has just been hidden fades over the next few frames, and a pair taken at once
+  // differs all over the fading skull (40 147 px of it, measured, against an eye's 3000).
+  await showSkeleton({ bones: false });
+  let bare;
+  try { if (!fleshOut) await hideFlesh(id); await settle(); bare = await pair(); }
+  finally { await showSkeleton({ bones: true }); if (!fleshOut) { await showFlesh(id); await stepN(2); await syncCam(); await settle(); } }
   const pred = [];
   for (const q of seats) pred.push(await toPx(await evaluate(`(async () => { const H = ${HS}; const s = H.skullSplitOf(__sdfGame.zombie(${id}).view.splitDrawn, ${J(follow)}); return s ? H.skullWarpPoint(s, ${J(q)}).p : ${J(q)}; })()`)));
   pred.sort((p, q) => p[0] - q[0]);
-  return { img, eyes, pred, skull: await skullOf(id) };
+  return { img: drawn.shown, eyes: bare.found.map((e) => [e.cx, e.cy]), whole: bare.found.map((e) => e.n), bareBlobs: bare.count, socket: drawn.found.map((e) => [e.cx, e.cy]), seen: drawn.found.map((e) => e.n), pred, skull: await skullOf(id) };
 }
 /** How far each eye moved on screen from `base` to `now` against how far its seat's prediction moved: the worst
- *  difference (px), and the largest move (px). Infinity when an eye was not found. */
-function eyeShift(base, now) {
-  if (base.eyes.length !== 2 || now.eyes.length !== 2) return { worst: Infinity, far: 0, rows: [] };
-  const rows = [0, 1].map((k) => ({ movedPx: +d2(now.eyes[k], base.eyes[k]).toFixed(1), predictedPx: +d2(now.pred[k], base.pred[k]).toFixed(1),
-    shiftErrPx: +Math.hypot((now.eyes[k][0] - base.eyes[k][0]) - (now.pred[k][0] - base.pred[k][0]), (now.eyes[k][1] - base.eyes[k][1]) - (now.pred[k][1] - base.pred[k][1])).toFixed(2) }));
+ *  difference (px), and the largest move (px). Infinity when an eye was not found. `at` picks the blobs: the whole
+ *  eyes (the landmark), or `socket`, the parts seen with the bone drawn. */
+function eyeShift(base, now, at = "eyes") {
+  const a = base[at], b = now[at];
+  if (a.length !== 2 || b.length !== 2) return { worst: Infinity, far: 0, rows: [] };
+  const rows = [0, 1].map((k) => ({ movedPx: +d2(b[k], a[k]).toFixed(1), predictedPx: +d2(now.pred[k], base.pred[k]).toFixed(1),
+    shiftErrPx: +Math.hypot((b[k][0] - a[k][0]) - (now.pred[k][0] - base.pred[k][0]), (b[k][1] - a[k][1]) - (now.pred[k][1] - base.pred[k][1])).toFixed(2) }));
   return { worst: Math.max(...rows.map((r) => r.shiftErrPx)), far: Math.max(...rows.map((r) => r.movedPx)), rows };
+}
+/** What the sockets do to the eyes of `now` (reported, not gated): the share of each whole eye's pixels left in sight
+ *  with the bone drawn, and how far off the predicted shift from `base` the seen parts' centroids are (px). */
+function inSockets(base, now) {
+  const share = now.seen.length === 2 && now.whole.length === 2 ? [0, 1].map((k) => +(now.seen[k] / now.whole[k]).toFixed(2)) : null;
+  return { seenShare: share, seenPx: now.seen, wholePx: now.whole, seenShiftErrPx: eyeShift(base, now, "socket").rows.map((r) => r.shiftErrPx) };
 }
 /** The turn (rad) between two drawn world matrices (column-major 4 x 4, as skullDrawn gives them): the rotation
  *  angle of a x b^-1's upper 3 x 3. */
@@ -769,6 +913,23 @@ function turnBetween(a, b) {
     return ((i + j) % 2 ? -1 : 1) * (B[r[0]][c[0]] * B[r[1]][c[1]] - B[r[0]][c[1]] * B[r[1]][c[0]]) / det; }));
   let tr = 0; for (let i = 0; i < 3; i++) for (let k = 0; k < 3; k++) tr += A[i][k] * inv[k][i];
   return Math.acos(Math.max(-1, Math.min(1, (tr - 1) / 2)));
+}
+/** A point through a column-major 4 x 4 (as skullDrawn gives a draw's world matrix). */
+const xf = (m, p) => [m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12], m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13], m[2] * p[0] + m[6] * p[1] + m[10] * p[2] + m[14]];
+/** The inverse of an affine column-major 4 x 4, as a map of points. */
+function inverseOf(m) {
+  const a = [[m[0], m[4], m[8]], [m[1], m[5], m[9]], [m[2], m[6], m[10]]], t = [m[12], m[13], m[14]];
+  const det = a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1]) - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0]) + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
+  const inv = [0, 1, 2].map((i) => [0, 1, 2].map((j) => { const r = [0, 1, 2].filter((k) => k !== j), c = [0, 1, 2].filter((k) => k !== i);
+    return ((i + j) % 2 ? -1 : 1) * (a[r[0]][c[0]] * a[r[1]][c[1]] - a[r[0]][c[1]] * a[r[1]][c[0]]) / det; }));
+  return (p) => { const v = sub(p, t); return inv.map((row) => dot(row, v)); };
+}
+/** How clear of the box `min`..`max` the whole line o + t d runs (m; 0 = it enters the box): the least distance from
+ *  the box over the line's points within 0.3 m of o, a quarter of a millimetre apart. */
+function lineBoxGap(min, max, o, d) {
+  let gap = Infinity;
+  for (let i = -1200; i <= 1200; i++) { const q = add(o, mul(d, i * 0.00025)); gap = Math.min(gap, Math.hypot(...[0, 1, 2].map((k) => Math.max(min[k] - q[k], 0, q[k] - max[k])))); }
+  return gap;
 }
 /** The bone's turn AS DRAWN: from the matrices of actor `id`'s split skull copies, each half's against the rest's;
  *  and the follow table's bone angle for the split's state: the table's share at the state's stage / full, of the
@@ -800,23 +961,76 @@ const hideFlesh = (id) => evaluate(`(() => { const v = __sdfGame.zombie(${id}).v
   v.uniforms.bodyHalf.value.multiplyScalar(1e-4); v.object.scale.multiplyScalar(1e-4); v.syncRecord(); return 1; })()`);
 const showFlesh = (id) => evaluate(`(() => { const v = __sdfGame.zombie(${id}).view, k = window.__gateFlesh; v.uniforms.bodyHalf.value.copy(k.half); v.object.scale.copy(k.scale); v.syncRecord(); return 1; })()`);
 /** THE DRAWN BONE OF A REALLY CHOPPED HEAD AT REST: with the flesh out of the frame, each seated eye's shift from the
- *  whole skull (follow 0) to the follow table's split, against skullWarpPoint's. `cam` as photo() takes it. */
+ *  whole skull (follow 0) to the follow table's split, against skullWarpPoint's (eyesAgainstRule: the eyes with the
+ *  bone out of the frame too, and, reported, what the sockets leave of them). `cam` as photo() takes it. */
 async function boneLandmark(id, cam) {
-  const fr = await frameOf(id), seats = M_SEATS.map((l) => add(fr.centre, qRot(fr.quat, l))), w = await splitOf(id);
+  const fr = await frameOf(id), seats = seatsHere().map((l) => add(fr.centre, qRot(fr.quat, l))), w = await splitOf(id);
   if (Array.isArray(cam)) await camAt(cam[0], cam[1]); else await setCam(cam);
   await syncCam(); await hideFlesh(id);
   try {
     const c = await toPx(w.h), R = d2(c, await toPx(add(w.h, [0, w.r, 0])));
-    const base = await eyesAgainstRule(id, seats, 0, c, R), now = await eyesAgainstRule(id, seats, null, c, R);
-    return { ...eyeShift(base, now), img: now.img, c };
+    const base = await eyesAgainstRule(id, seats, 0, c, R, true), now = await eyesAgainstRule(id, seats, null, c, R, true);
+    return { ...eyeShift(base, now), img: now.img, c, sockets: inSockets(base, now), seenBoth: base.socket.length === 2 && now.socket.length === 2, alone: base.bareBlobs === 2 && now.bareBlobs === 2 };
   } finally { await evaluate("__sdfGame.skullSplit({ follow: null })"); await showFlesh(id); await stepN(2); }
 }
+/** The share of a mask's pixels that are set within `r` px of the screen point `p`. */
+function maskShare(mask, p, r) {
+  let n = 0, on = 0;
+  for (let y = Math.max(0, Math.floor(p[1] - r)); y <= Math.min(mask.h - 1, Math.ceil(p[1] + r)); y++) for (let x = Math.max(0, Math.floor(p[0] - r)); x <= Math.min(mask.w - 1, Math.ceil(p[0] + r)); x++)
+    if ((x + 0.5 - p[0]) ** 2 + (y + 0.5 - p[1]) ** 2 <= r * r) { n++; on += mask.m[y * mask.w + x]; }
+  return n ? on / n : 0;
+}
+/** THE BONE'S PIXELS in the screen disc (c, R), as the frame stands: those that differ between it and the same frame
+ *  with the bone meshes hidden. The caller has the flesh and the eyes out of the frame. The frame is left to settle
+ *  after each change (the post chain's smear, as eyesAgainstRule). `img`: the frame with the bone drawn. */
+async function boneMask(c, R) {
+  await syncCam(); await settle();
+  const img = await capture();
+  await showSkeleton({ bones: false });
+  let hidden;
+  try { await settle(); hidden = await capture(); } finally { await showSkeleton({ bones: true }); }
+  return { img, mask: diffMask(img, hidden, c, R) };
+}
+/** THE SPLIT SKULL'S BONE ON SCREEN: DRAWN WHERE THE SPLIT PUTS IT, AND CLIPPED. Read off the bone's own pixels
+ *  (boneMask), with the flesh and the eyes out of the frame, on the whole skull (follow 0) and with the bone turned by
+ *  `follow` x the flesh's angle:
+ *    the gap: the points of the old plane above the hinge (M_GAP_*). The closed skull's brow and nose run down that
+ *      line. Open, each of them must be background: both halves have swung clear of the plane, and each copy is
+ *      clipped to its own side of the fracture. A copy drawn unclipped leaves the whole skull standing there.
+ *    the marks: M_MARKS, a point of each half's brow. Closed, bone at its screen point. Open, bone at the screen point
+ *      of where skullWarpPoint puts it, and none at its closed one: the copy is drawn turned, and nothing of that half
+ *      is left where the closed head has it.
+ *  `w` the pose's split, `fr` the head frame, (c, R) the screen disc. Leaves the follow as the caller's to put back. */
+async function boneOnScreen(id, fr, w, follow, c, R) {
+  const marks = M_MARKS.map((l) => add(fr.centre, qRot(fr.quat, l))), u = cross(w.n, w.a), line = [];
+  for (let t = M_GAP_FROM; t <= M_GAP_TO + 1e-9; t += M_GAP_STEP) line.push(add(w.h, mul(u, t)));
+  await showSkeleton({ eyes: false }); await hideFlesh(id);
+  try {
+    const at = async (k) => { await evaluate(`__sdfGame.skullSplit({ follow: ${J(k)} })`); await stepN(2); return boneMask(c, R); };
+    const closed = await at(0), open = await at(follow);
+    // Where the rule puts each mark on the skull as it is drawn now: the fracture is this head's own (its id seeds it).
+    const turned = await evaluate(`(async () => { const H = ${HS}, M = await import("/src/lab/sdf-zombie/webgpu/skeleton-spike/mesh-split.ts");
+      const s = H.skullSplitOf(__sdfGame.zombie(${id}).view.splitDrawn, ${J(follow)}, ${id});
+      return ${J(marks)}.map((q) => { const r = H.skullWarpPoint(s, q, M.skullJagAt(s, q)); return { p: r.p, piece: r.piece }; }); })()`);
+    const linePx = []; for (const q of line) linePx.push(await toPx(q));
+    const wasBone = linePx.filter((p) => maskShare(closed.mask, p, 0.75) === 1), stillBone = wasBone.filter((p) => maskShare(open.mask, p, 0.75) > 0);
+    const rows = [];
+    for (let k = 0; k < marks.length; k++) {
+      const a = await toPx(marks[k]), b = await toPx(turned[k].p);
+      rows.push({ piece: turned[k].piece, movedPx: +d2(a, b).toFixed(1), closedAtClosed: +maskShare(closed.mask, a, M_MARK_R).toFixed(2),
+        openAtTurned: +maskShare(open.mask, b, M_MARK_R).toFixed(2), openAtClosed: +maskShare(open.mask, a, M_MARK_R).toFixed(2) });
+    }
+    return { img: open.img, closedImg: closed.img, line: linePx.length, wasBone: wasBone.length, stillBone: stillBone.length, marks: rows };
+  } finally { await showFlesh(id); await showSkeleton({ eyes: true }); await stepN(2); }
+}
 out.diag = {};
-let HEAD_SPLIT = null, AXE_HEAD = null;
-/** The live constants (the look pass retunes them: every prediction below is made from these, not from copies). */
+let HEAD_SPLIT = null, AXE_HEAD = null, MATS = null;
+/** The live constants (the look pass retunes them: every prediction below is made from these, not from copies), and
+ *  the bone materials' names (mesh-renderer.ts SEGMENT_MATERIALS). */
 const loadRules = async () => {
   HEAD_SPLIT = await evaluate(`(async () => JSON.parse(JSON.stringify((${HS}).HEAD_SPLIT)))()`);
   AXE_HEAD = await evaluate(`(async () => JSON.parse(JSON.stringify((await import("/src/lab/sdf-zombie/webgpu/axe-head.ts")).AXE_HEAD)))()`);
+  MATS = await evaluate(`(async () => ({ ...(await import("/src/lab/sdf-zombie/webgpu/skeleton-spike/mesh-renderer.ts")).SEGMENT_MATERIALS }))()`);
 };
 const SCEN = { "mid-both": ["middle", 0, 0], "mid-one": ["middle", 1, 0.04], "face": ["face", 1, 0] };
 /** From above and behind the head (b5's camera): 0.75 m behind, raised 0.45 m, pitched down. Shot under settle(). */
@@ -828,6 +1042,234 @@ async function topCam(hc, f) {
 }
 /** The region's disc on the march target: the hinge's texel and the region radius there. */
 async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(add(w.h, [0, w.r, 0]), t); return { c: H, R: d2(H, R) }; }
+const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+/** The materials the boot's skull is drawn on (mesh-renderer.ts SEGMENT_MATERIALS): its split copies', and whole. */
+const skullMaterials = () => (S.skull === "anatomical" ? { split: MATS.plateSplit, whole: MATS.plate, whose: "the anatomical plates'" } : { split: MATS.boneSplit, whole: MATS.bone, whose: "the sculpted skull's" });
+/** M (landmark, forced). The split skull on screen is head-split.ts's at ANY bone angle: each seated eye against
+ *  skullWarpPoint, the bone's share set by hand to a small, a middle and a wide angle. The flesh is thrown open past
+ *  its full angle so no flesh half covers a socket (a whole eye still reaches behind its flesh half: the landmark's
+ *  frames have the flesh out, eyesAgainstRule). And the materials the copies are drawn on. (M's measures on really
+ *  chopped heads are skullStageChecks.) `tag` labels the checks, `suffix` the sheet and the summary. */
+async function skullLandmarkForced(tag, suffix = "") {
+  const z = fresh(); const hc = await headOf(z.id), f = await frontOf(z.id), fr = await frameOf(z.id);
+  const cam = (await look(hc, HEAD_D, f)).pose;
+  const seats = seatsHere().map((l) => add(fr.centre, qRot(fr.quat, l)));
+  const ok = await force(z.id, "middle", 0, 0, M_THROWN), w = await splitOf(z.id);
+  // The bone angles the shipped table gives at its three stages (the thin crack, the wide crack, split wide), as
+  // shares of this flesh angle.
+  const MIDm = HEAD_SPLIT.presets.middle, fracs = HEAD_SPLIT.skull.follow.map((k) => k[0]);
+  const angles = await evaluate(`(async () => { const H = ${HS}; return ${J(fracs)}.map((x) => x * ${MIDm.maxBoth} * H.skullFollow(x)); })()`);
+  await setCam(cam); await stepN(SETTLE);
+  const c = await toPx(w.h), R = d2(c, await toPx(add(w.h, [0, w.r, 0])));
+  const base = await eyesAgainstRule(z.id, seats, 0, c, R), rows = [], tiles = [{ img: base.img, c }];
+  for (const bone of angles) {
+    const now = await eyesAgainstRule(z.id, seats, bone / w.thetaP, c, R);
+    rows.push({ bone, ...eyeShift(base, now), copies: now.skull.bones, on: now.skull.on, paints: await copyPaints(z.id), sockets: inSockets(base, now), seenBoth: now.socket.length === 2, bareBlobs: now.bareBlobs }); tiles.push({ img: now.img, c });
+  }
+  // The bone's own pixels, on the whole skull and at the widest of the three angles (the kill's).
+  let bone = null;
+  try { bone = await boneOnScreen(z.id, fr, w, angles.at(-1) / w.thetaP, c, R); }
+  finally { await evaluate("__sdfGame.skullSplit({ follow: null })"); await stepN(2); await syncCam(); await settle(); }
+  out[`mBone${suffix}`] = { boneRad: +angles.at(-1).toFixed(4), linePoints: bone.line, boneClosed: bone.wasBone, stillBoneOpen: bone.stillBone, marks: bone.marks };
+  out[`mLandmark${suffix}`] = rows.map((r) => ({ boneRad: +r.bone.toFixed(4), eyes: r.rows, sockets: r.sockets }));
+  note(`${tag}: ${J(out[`mLandmark${suffix}`])}`);
+  const worst = Math.max(...rows.map((r) => r.worst)), far = Math.max(...rows.map((r) => r.far));
+  check(ok && base.bareBlobs === 2 && rows.every((r) => r.bareBlobs === 2) && base.socket.length === 2 && rows.every((r) => r.seenBoth) && base.skull.bones === 0 && rows.every((r) => r.copies === 3),
+    `${tag}: both seated eyes found: alone with the bone and the flesh out of the frame (${[base.bareBlobs, ...rows.map((r) => r.bareBlobs)].join(", ")} blobs differ, 2 each time), and in their sockets with the bone drawn (${[base.seen, ...rows.map((r) => r.sockets.seenPx)].map((n) => n.join(" + ")).join(", ")} px seen of ${base.whole.join(" + ")}); the whole skull at follow 0 (${base.skull.bones} split copies), three copies when the bone turns (${rows.map((r) => r.copies).join(", ")})`);
+  check(worst <= M_SHIFT_PX && far >= M_FAR_PX, `${tag}: each eye moves on screen as skullWarpPoint says (the bone and the flesh out of the frame): worst ${worst.toFixed(2)} px off its predicted shift (<= ${M_SHIFT_PX} px), the largest shift ${far.toFixed(1)} px (>= ${M_FAR_PX} px)`);
+  note(`${tag}: (ungated) with the bone drawn, the part of each eye its socket leaves in sight is ${rows.map((r) => (r.sockets.seenShare ?? []).join(" / ")).join(", ")} of the eye at the three angles, and that part's centroid is ${rows.map((r) => r.sockets.seenShiftErrPx.join(" / ")).join(", ")} px off the same predicted shifts`);
+  // The materials: the bone's copies on the split material of the skull this boot draws, the eyes' on the eyes'; and
+  // whole (follow 0), on the closed ones. Only a head is ever drawn in copies; the actor's other bones, bare under
+  // the face cuts' exposure, are drawn whole on the bone material beside it.
+  const want = skullMaterials(), on = rows.map((r) => r.on), whole = base.skull.on;
+  check(on.every((o) => o && same(o.bones, [want.split]) && same(o.eyes, [MATS.eyeSplit]) && (S.skull !== "anatomical" || !o.wholeBones.includes(MATS.plate)))
+    && whole.bones.length === 0 && whole.wholeBones.includes(want.whole) && same(whole.wholeEyes, [MATS.eye]),
+    `${tag}: the split head's bone copies are drawn on ${want.whose} split material and its eyes' on the eyes' at all three angles (${on.map((o) => o && `${o.bones.join("+")}, ${o.eyes.join("+")}`).join("; ")}); whole, at follow 0, on the closed ones (${whole.wholeBones.join("+")}, ${whole.wholeEyes.join("+")})`);
+  // A sculpted skull's copies are the head's own mesh, under the paint the boot's recipe gives the zombie (the default:
+  // the second; the first look: the first). An anatomical skull's are under neither.
+  const wantPaint = S.skull === "anatomical" ? null : S.paint, paints = rows.map((r) => r.paints);
+  check(paints.every((q) => q && q.heads === q.copies && q.copies === 3 && same(q.paints, [wantPaint])),
+    `${tag}: every bone copy is the head's own mesh, drawn ${wantPaint === null ? "under neither of the sculpted skull's paints (the plates')" : `under the sculpted skull's paint ${wantPaint}`} at all three angles (${paints.map((q) => q && `${q.heads} of ${q.copies} the head, paint ${J(q.paints)}`).join("; ")})`);
+  // The bone on screen: the gap is open along the fracture's line, and each half's brow is where the rule turns it.
+  const apart = Math.min(...bone.marks.map((r) => r.movedPx));
+  check(bone.wasBone >= M_GAP_BONE * bone.line && bone.stillBone <= M_GAP_LEFT * bone.wasBone
+    && bone.marks.length === 2 && same(bone.marks.map((r) => r.piece).sort(), [1, 2]) && apart >= M_MARK_APART
+    && bone.marks.every((r) => r.closedAtClosed === 1 && r.openAtTurned === 1 && r.openAtClosed === 0),
+    `${tag}: the split skull's bone is on screen where the split puts it, and clipped (the flesh and the eyes out of the frame; bone pixels by a shown / hidden pair), at the kill's bone angle (${(angles.at(-1) * 180 / Math.PI).toFixed(1)} degrees a half): along the fracture's line above the hinge ${bone.wasBone} of ${bone.line} points are bone on the closed skull (>= ${M_GAP_BONE} of them) and ${bone.stillBone} of those are still bone on the open one (<= ${M_GAP_LEFT} of them); a mark on each half's brow is bone where skullWarpPoint turns it (${bone.marks.map((r) => r.openAtTurned).join(", ")} of its ${M_MARK_R} px disc; 1), ${bone.marks.map((r) => r.movedPx).join(" and ")} px from its closed place (>= ${M_MARK_APART} px), where the closed skull has bone (${bone.marks.map((r) => r.closedAtClosed).join(", ")}) and the open one none (${bone.marks.map((r) => r.openAtClosed).join(", ")}; 0)`);
+  sheet(`M-skull${suffix}`, tiles);
+  sheet(`M-bone${suffix}`, [{ img: bone.closedImg, c }, { img: bone.img, c }]);
+}
+/** M (really chopped). The skull at the three chops: a closed head draws the closed skull; at each stage the copies
+ *  are DRAWN turned by the follow table's bone angle for the split's state (their matrices); and after chop 1 each
+ *  seated eye is on screen where skullWarpPoint puts it (the flesh and the bone out of the frame). Chop 2 splits the
+ *  bone wide on a head the first flinch has bowed, so that stage's landmark is the forced head's, upright, at the
+ *  same bone angle. `m`: the closed skull, the skull and its drawn turn at the three stages (skullOf, boneDrawn), and
+ *  chop 1's landmark (boneLandmark). */
+function skullStageChecks(tag, suffix, m) {
+  const { closedSkull, got, drawn, lm1 } = m, deg = (r) => (r * 180 / Math.PI).toFixed(2);
+  out[`mStages${suffix}`] = { closed: closedSkull, stages: got, drawn, landmark: { worst: lm1.worst, far: lm1.far, rows: lm1.rows, sockets: lm1.sockets } };
+  check(closedSkull.bones === 0 && closedSkull.eyes === 0 && closedSkull.draws > 0 && closedSkull.angleP === 0,
+    `${tag}: a closed head draws the closed skull (${closedSkull.draws} bone draws for the actor, ${closedSkull.bones} split copies)`);
+  const turnOff = Math.max(...drawn.flatMap((d) => [[d.plus, d.ruleP], [d.minus, d.ruleM]].map(([t, rule]) => (t === null ? Infinity : Math.abs(t - rule)))));
+  check(turnOff <= M_ANGLE_TOL && drawn[0].rule > 0 && drawn[1].rule > drawn[0].rule && drawn[2].rule >= drawn[1].rule,
+    `${tag}: the bone is drawn turned by the follow table's angle at each chop, wider at chop 2 and no narrower after the kill: its copies' matrices give ${drawn.map((d) => `${deg(d.plus)} / ${deg(d.minus)}`).join(", ")} degrees (+ / - half) against ${drawn.map((d) => deg(d.rule)).join(", ")} (worst ${turnOff.toExponential(1)} rad off <= ${M_ANGLE_TOL})`);
+  check(got.every((g) => g.bones === 3 && g.eyes === 2), `${tag}: each stage draws the skull as three clipped copies and an eye a half (${got.map((g) => `${g.bones}+${g.eyes}`).join(", ")})`);
+  note(`${tag}: really chopped, the eyes after chop 1: ${J(lm1.rows)}; (ungated) with the bone drawn their sockets leave ${(lm1.sockets.seenShare ?? []).join(" / ")} of each in sight, that part's centroid ${lm1.sockets.seenShiftErrPx.join(" / ")} px off the same shifts`);
+  check(lm1.alone && lm1.seenBoth && lm1.worst <= M_SHIFT_PX && lm1.far >= M_CHOP_PX, `${tag}: on the really chopped head each seated eye is on screen where skullWarpPoint puts it (the bone and the flesh out of the frame, nothing but the two eyes differing: ${lm1.alone}; both seen in their sockets with the bone drawn: ${lm1.seenBoth}): worst ${lm1.worst.toFixed(2)} px off its shift after chop 1 (<= ${M_SHIFT_PX} px), which moves it ${lm1.far.toFixed(1)} px (>= ${M_CHOP_PX} px)`);
+  sheet(`M-skull-chopped${suffix}`, [{ img: lm1.img, c: lm1.c }]);
+}
+/** P. THE PLATES OF A SPLIT ANATOMICAL SKULL, on a boot that draws it. LAST in its boot: its fragments stay in the
+ *  room. On the pool's zombie number P_ZOMBIE. */
+async function platesScenario() {
+  // The first rounds go through __sdfGame.skullShot: the renderer's own fractureSkull, which a pellet's or a
+  // slug's impact calls first, with a ray the gate lays, and nothing else of a hit (no wound, no shove: the head
+  // stays where the matrices were read). The last is a real projectile (__sdfGame.slugFrom).
+  if (run("P")) try {
+    const z = freshAt(P_ZOMBIE); const hc = await headOf(z.id), f = await frontOf(z.id), fr = await frameOf(z.id);
+    const cam = (await look(hc, HEAD_D, f)).pose; await stepN(SETTLE);
+    const px0 = await headPx(z.id);
+    const plates = await evaluate(`__sdfGame.skullPlates(${z.id})`);
+    if (!plates) die(`no anatomical plates on this head (the boot draws the ${S.skull} skull)`);
+    const drawnNow = () => evaluate(`__sdfGame.skullDrawn(${z.id})`), stateNow = () => evaluate(`__sdfGame.skullState(${z.id})`);
+    const shotAt = (o, d, kind) => evaluate(`__sdfGame.skullShot(${z.id}, ${J(o)}, ${J(d)}, "${kind}")`);
+    const fragmentsOf = async (plate) => (await evaluate("__sdfGame.skullFragments()")).filter((q) => q.plate === plate);
+    const plateOf = (name) => plates.find((q) => q.id === name) ?? die(`the skull has no plate ${name}`);
+    /** The plates among an actor's bone draws, copies and whole. */
+    const platesOf = (d) => [...new Set([...d.copies, ...d.whole].filter((q) => q.plate).map((q) => q.plate))].sort();
+    const into = mul(qRot(fr.quat, [0, 0, 1]), -1), all = plates.map((q) => q.id);
+    // The photos: the bone alone (the flesh out of the frame), from the front.
+    const tiles = [];
+    const bonePhoto = async () => { await setCam(cam); await syncCam(); await hideFlesh(z.id); try { await settle(); tiles.push({ img: await capture(), c: px0 }); } finally { await showFlesh(z.id); await stepN(2); } };
+    // (1) A slug into the face at the CLOSED head's cheekbone, through its pivot: the closed head's own test.
+    const d0 = await drawnNow(), skull0 = d0.whole.find((q) => !q.eye && q.material === MATS.plate);
+    if (!skull0) die("the closed head's skull is not among the actor's draws");
+    const first = plateOf(P_FIRST), at0 = xf(skull0.matrix, first.pivot);
+    const released0 = await shotAt(sub(at0, mul(into, P_BACK)), into, "slug");
+    await stepN(2);
+    const st1 = await stateNow(), d1 = await drawnNow(), left1 = all.filter((n) => !st1.pieces.includes(n)).sort(), whole1 = d1.whole.filter((q) => q.plate);
+    check(released0 === 1 && same(st1.pieces, [P_FIRST]) && d1.copies.length === 0 && same(platesOf(d1), left1) && whole1.length === left1.length && whole1.every((q) => q.material === MATS.plate),
+      `P: a slug into the face at the closed head's ${P_FIRST} takes that plate off (released ${released0}, missing ${J(st1.pieces)}); the closed head is drawn as its ${left1.length} other plates, each whole on the plates' material (${whole1.length} draws, ${d1.copies.length} copies)`);
+    await bonePhoto();
+    // (2) The same head split: its surviving plates as clipped copies, nothing of the missing one, and no GPU error.
+    const ok = await force(z.id, "middle", 0, 0, 1);
+    await setCam(cam); await stepN(2);
+    const open1 = await drawnNow(), copies = open1.copies.filter((q) => !q.eye), eyeCopies = open1.copies.filter((q) => q.eye), whole2 = open1.whole.filter((q) => q.plate);
+    const perPiece = [0, 1, 2].map((k) => copies.filter((q) => q.piece === k).length);
+    await bonePhoto();
+    const gpu = await evaluate("__sdfGame.gpuDiagnostics()"), errsNow = consoleEvents.filter((e) => e.label === S.label && (e.type === "error" || e.type === "exception")).length;
+    out.p = { missing: st1.pieces, drawnPlates: platesOf(open1), copies: copies.length, perPiece, wholePlates: whole2.length, gpu, consoleErrors: errsNow };
+    check(ok && same(platesOf(open1), left1) && copies.every((q) => q.plate && q.material === MATS.plateSplit) && perPiece.every((n) => n > 0) && whole2.every((q) => q.material === MATS.plate)
+      && eyeCopies.length === 2 && eyeCopies.every((q) => q.material === MATS.eyeSplit),
+      `P: split with the plate missing, the head is drawn as its ${left1.length} surviving plates and nothing of ${P_FIRST}: ${platesOf(open1).length} plates in ${copies.length} clipped copies on the plates' split material (${perPiece.join(" / ")} of the rest, the + half, the - half) and ${whole2.length} whole; an eye a half on the eyes' split material (${eyeCopies.length})`);
+    check(!!gpu && !gpu.lost && gpu.uncapturedCount === 0 && errsNow === 0, `P: the GPU reports no error drawing it (no device loss, uncapturedCount ${gpu?.uncapturedCount}; ${errsNow} console errors or exceptions in this boot so far)`);
+    // (3) Three pellets at the + half's cheekbone WHERE IT IS DRAWN. The bone rides its flesh (follow 1, set by
+    // hand): the widest a bone is drawn, whatever the follow table says, so the turn carries the plate clear of the
+    // box it has on the closed head, and a test made in the closed head's frame could not release it.
+    await evaluate("__sdfGame.skullSplit({ follow: 1 })");
+    try {
+      await stepN(2);
+      await bonePhoto();
+      const d3 = await drawnNow(), M = {};
+      for (const q of d3.copies) if (!q.eye && !(q.piece in M)) M[q.piece] = q.matrix;
+      if (!M[0] || !M[1]) die(`no copy of the rest or of the + half among the bone draws (pieces ${Object.keys(M).join(", ")})`);
+      // The pivot as the + half's copy draws it, and as the closed head has it (the rest's copy is drawn with the
+      // closed head's matrix); the pellets' line through the first, into the face.
+      const pl = plateOf(P_PLATE), T = xf(M[1], pl.pivot), C = xf(M[0], pl.pivot), from = sub(T, mul(into, P_BACK));
+      const toHead = inverseOf(M[0]), o = toHead(from), clear = lineBoxGap(pl.min, pl.max, o, unit(sub(toHead(add(from, into)), o)));
+      const n0 = (await fragmentsOf(P_PLATE)).length, released = [];
+      for (let k = 0; k < 3; k++) released.push(await shotAt(from, into, "pellet"));
+      // No tick has passed: the fragment is where it was released.
+      const frags = await fragmentsOf(P_PLATE), st3 = await stateNow(), frag = frags[n0] ?? null;
+      const off = frag ? len(sub(frag.pos, T)) : Infinity, far = frag ? len(sub(frag.pos, C)) : 0;
+      Object.assign(out.p, { clearMm: +mm(clear), released, missingAfter: st3.pieces, fragment: frag, fromDrawnPivotMm: +(1000 * off).toFixed(4), fromClosedPivotMm: +mm(far), drawnPivotFromClosedMm: +mm(len(sub(T, C))) });
+      check(clear >= P_CLEAR && same(released, [0, 0, 1]) && same([...st3.pieces].sort(), [P_FIRST, P_PLATE].sort()),
+        `P: three pellets into the face at the + half's ${P_PLATE} where it is drawn, ${mm(len(sub(T, C)))} mm from its place on the closed head, release that plate on the third (released ${released.join(", ")}; missing ${J(st3.pieces)}); taken as it stands into the closed head's frame their line runs ${mm(clear)} mm clear of that plate's box (>= ${mm(P_CLEAR)} mm: a test there could not release it)`);
+      check(frags.length === n0 + 1 && off <= P_AT && far >= P_FAR,
+        `P: its fragment starts at the pivot as the + half's copy draws it: ${(1000 * off).toFixed(4)} mm off (<= ${(1000 * P_AT).toFixed(2)} mm), ${mm(far)} mm from the closed head's pivot (>= ${mm(P_FAR)} mm); ${frags.length - n0} fragment of that plate`);
+      await stepN(2);
+      const d4 = await drawnNow(), left3 = all.filter((n) => !st3.pieces.includes(n)).sort(), copies4 = d4.copies.filter((q) => !q.eye);
+      check(same(platesOf(d4), left3) && copies4.length > 0 && copies4.every((q) => q.material === MATS.plateSplit),
+        `P: the open head is drawn on without it: its ${left3.length} surviving plates in ${copies4.length} clipped copies, nothing of ${P_PLATE}`);
+      // (4) On screen: the frame changes where the plate was drawn, and not where the closed head has it. The
+      // fragment is given P_FLY frames to leave the picture first.
+      await stepN(P_FLY);
+      await bonePhoto();
+      const [before, after] = tiles.slice(-2).map((t) => t.img), pT = await toPx(T), pC = await toPx(C);
+      const changed = (c) => maskShare(diffMask(before, after, c, P_DISC + 1), c, P_DISC);
+      const gone = changed(pT), same0 = changed(pC), apartPx = d2(pT, pC);
+      Object.assign(out.p, { changedAtDrawnPivot: +gone.toFixed(3), changedAtClosedPivot: +same0.toFixed(3), pivotsApartPx: +apartPx.toFixed(1) });
+      check(gone >= P_GONE && same0 <= P_SAME && apartPx >= 2 * P_DISC,
+        `P: on screen (the bone alone, before the pellets and ${P_FLY} frames after them) the frame changes where the plate was drawn and not where the closed head has it: ${gone.toFixed(2)} of the ${P_DISC} px disc about the pivot as the + half's copy draws it (>= ${P_GONE}), ${same0.toFixed(2)} of the disc about the closed head's (<= ${P_SAME}), the two ${apartPx.toFixed(1)} px apart (>= ${2 * P_DISC} px)`);
+    } finally { await evaluate("__sdfGame.skullSplit({ follow: null })"); await stepN(2); }
+    // (5) A SLUG THROUGH THE OPEN V, AT BONE WITH NO FLESH ON ITS LINE. The same head at the axe's first chop: the
+    // bone opens far less than its flesh there and stands in the gap. The slug is the gun's own, put in flight on a
+    // line the gate lays (slugFrom), and the projectile loop does the rest: its flesh trace finds nothing of this
+    // actor, and the skull is cast along the slug's step.
+    {
+      const open5 = AXE_HEAD.openAngles[0], ok5 = await force(z.id, "middle", 0, 0, open5);
+      await setCam(cam); await stepN(2);
+      const d5 = await drawnNow(), M5 = {};
+      for (const q of d5.copies) if (!q.eye && !(q.piece in M5)) M5[q.piece] = q.matrix;
+      if (!M5[1]) die(`no copy of the + half among the bone draws (pieces ${Object.keys(M5).join(", ")})`);
+      const gp = plateOf(P_GAP_PLATE), aim = xf(M5[1], add(gp.pivot, P_GAP_OFF)), from5 = sub(aim, mul(into, P_GAP_BACK)), T5 = xf(M5[1], gp.pivot);
+      // What the line meets: bone (the renderer's own test, nothing damaged) and flesh (the loop's own trace).
+      const bone5 = await evaluate(`__sdfGame.skullRay(${z.id}, ${J(from5)}, ${J(into)}, ${P_GAP_RUN})`);
+      const flesh5 = await evaluate(`(async () => { const G = await import("/src/lab/sdf-zombie/webgpu/game-weapon.ts"), V = ${VA}; const posed = __sdfGame.zombie(${z.id}).posed(), o = ${J(from5)}, d = ${J(into)};
+        return G.traceProjectile(o, [o[0] + d[0] * ${P_GAP_RUN}, o[1] + d[1] * ${P_GAP_RUN}, o[2] + d[2] * ${P_GAP_RUN}], (q) => V.sdBody(q, posed)); })()`);
+      const sk5 = await skullOf(z.id), w5 = await splitOf(z.id), deg = (r) => (r * 180 / Math.PI).toFixed(1);
+      const wounds0 = (await woundsOf(z.id)).length, meter0 = await meterOf(z.id), n5 = (await fragmentsOf(P_GAP_PLATE)).length, st5 = await stateNow();
+      const fired = await evaluate(`__sdfGame.slugFrom(${J(from5)}, ${J(into)})`);
+      let frag5 = null, frame5 = 0;
+      for (let i = 1; i <= P_GAP_FRAMES; i++) { await stepOne(); const fs = await fragmentsOf(P_GAP_PLATE); if (!frag5 && fs.length > n5) { frag5 = fs[n5]; frame5 = i; } }
+      const st6 = await stateNow(), wounds1 = (await woundsOf(z.id)).length, meter1 = await meterOf(z.id);
+      const newly = st6.pieces.filter((n) => !st5.pieces.includes(n));
+      // A fragment is stepped in the frame it is released in: one frame back along its velocity is where it started.
+      const start5 = frag5 ? sub(frag5.pos, mul(frag5.vel, 1 / 60)) : null, off5 = start5 ? len(sub(start5, T5)) : Infinity;
+      Object.assign(out.p, { gap: { fleshDeg: w5 && +deg(w5.thetaP), boneDeg: +deg(sk5.angleP), from: from5, boneOnLine: bone5, fleshOnLine: flesh5, released: newly, frame: frame5, fragment: frag5, fromDrawnPivotMm: +(1000 * off5).toFixed(4), wounds: [wounds0, wounds1], meter: [meter0, meter1] } });
+      check(ok5 && fired === true && !!bone5 && bone5.plate === P_GAP_PLATE && bone5.piece === 1 && flesh5 === null && same(newly, [P_GAP_PLATE]) && frame5 === 1,
+        `P: a slug through the open V at bone with no flesh on its line releases that plate: the head at the axe's first chop (flesh ${w5 ? deg(w5.thetaP) : null} degrees a half, bone ${deg(sk5.angleP)}), the gun's slug put in flight ${mm(P_GAP_BACK)} mm in front of the + half's ${P_GAP_PLATE}; its line meets ${bone5 ? `${bone5.plate} on piece ${bone5.piece}, ${mm(bone5.distance)} mm out` : "no bone"} and ${flesh5 === null ? "no flesh" : "FLESH"} of the actor in ${P_GAP_RUN} m (the loop's own trace); released ${J(newly)} on frame ${frame5} of its flight`);
+      check(off5 <= P_GAP_AT && wounds1 === wounds0 && meter1 === meter0,
+        `P: that plate's fragment starts at the pivot as the + half's copy draws it (${(1000 * off5).toFixed(4)} mm off, <= ${(1000 * P_GAP_AT).toFixed(2)} mm), and the slug does nothing else to the actor: ${wounds0} wounds before and ${wounds1} after, its damage meter ${meter0} and ${meter1}`);
+      await stepN(P_FLY);
+      await bonePhoto();
+    }
+    sheet("P-plates", tiles);
+  } catch (e) { await threw("P", e); }
+}
+/** THE THREE REAL CHOPS, FOR THE SKULL ALONE: what skullStageChecks takes, on a boot that runs nothing of S, W or K.
+ *  The chops are theirs (from the eye in the wedge, each spring followed by the same chopAndFollow, the body thawed 3
+ *  frames after each and K_LATER after the kill, the halves at rest before a read), with no gap read on the way.
+ *  What runs between the chops is not shared: the first boot measures and checks at every stage (and stops where
+ *  ONLY says), and here a stage that goes wrong ends the scenario. */
+async function chopsForSkull(z) {
+  const hc = await headOf(z.id), f = await frontOf(z.id);
+  const front = (await look(hc, HEAD_D, f)).pose; await stepN(SETTLE);
+  const got = [], drawn = [];
+  let line = await gapLine(z.id), eyeW = wedgeEye(line);
+  await camAt(eyeW, line.G0); await syncCam(); await settle();
+  const closedSkull = await skullOf(z.id);
+  const aim = async () => { line = await gapLine(z.id); eyeW = wedgeEye(line); await camAt(eyeW, line.G0); await syncCam(); };
+  const landed = (n, side) => { if (n !== 1) die(`the ${side} chop did not land on the head`); };
+  const read = async () => { got.push(await skullOf(z.id)); drawn.push(await boneDrawn(z.id)); };
+  await aim(); landed((await chopAndFollow(z.id, "H", line, eyeW, null, [], false)).n, "H");
+  await read();
+  const lm1 = await boneLandmark(z.id, front);
+  await thaw(3);
+  if (await actorPhase(z.id) !== "standing" || await restWobble(z.id) < 0) die("the zombie did not stand at rest after chop 1");
+  await aim(); landed((await chopAndFollow(z.id, "R", line, eyeW, null, [], false)).n, "R");
+  await read();
+  await thaw(3);
+  if (await actorPhase(z.id) !== "standing" || await restWobble(z.id) < 0) die("the zombie did not stand at rest after chop 2");
+  await aim(); landed(await chop(z.id, "L"), "L");
+  await stepN(K_SWING); await thaw(3);
+  if (await actorPhase(z.id) === "standing") die("chop 3 did not kill");
+  await thaw(K_LATER);
+  if (await restWobble(z.id) < 0) die("the corpse's halves did not come to rest");
+  const lineK = await gapLine(z.id), eyeK = wedgeEye(lineK);
+  await camAt(eyeK, lineK.G0); await syncCam(); await settle();
+  await read();
+  return { closedSkull, got, drawn, lm1 };
+}
 {
   // ======== BOOT 1 (the shipped path): the three chops (S, W, K, the skull's stages of M), one side (O), later hits
   // (L), the face preset (F), the skull landmark (M), cost (C).
@@ -1010,30 +1452,9 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
       check(there && !closedThere && gone, `F: the march draws it there: a surface within ${mm(DEPTH_TOL)} mm of the cut face's point on the open head (${there}; on the closed head ${closedThere}), none left at the closed nose (${gone})`);
       sheet("F-face", [{ img: shot0, c: px0 }, { img: shot1, c: px0 }, { img: shot2, c: px2 ?? px0 }]);
     } catch (e) { await threw("F", e); }
-    // -------- M (landmark, forced). The split skull on screen is head-split.ts's at ANY bone angle: each seated eye
-    // against skullWarpPoint, the bone's share set by hand to a small, a middle and a wide angle. The flesh is thrown
-    // open past its full angle so no flesh half covers an eye. (M's measures on really chopped heads are with S.)
-    if (run("M")) try {
-      const z = fresh(); const hc = await headOf(z.id), f = await frontOf(z.id), fr = await frameOf(z.id);
-      const cam = (await look(hc, HEAD_D, f)).pose;
-      const seats = M_SEATS.map((l) => add(fr.centre, qRot(fr.quat, l)));
-      const ok = await force(z.id, "middle", 0, 0, M_THROWN), w = await splitOf(z.id);
-      // The bone angles the shipped table gives at its three stages (the thin crack, the wide crack, split wide), as
-      // shares of this flesh angle.
-      const MIDm = HEAD_SPLIT.presets.middle, fracs = HEAD_SPLIT.skull.follow.map((k) => k[0]);
-      const angles = await evaluate(`(async () => { const H = ${HS}; return ${J(fracs)}.map((x) => x * ${MIDm.maxBoth} * H.skullFollow(x)); })()`);
-      await setCam(cam); await stepN(SETTLE);
-      const c = await toPx(w.h), R = d2(c, await toPx(add(w.h, [0, w.r, 0])));
-      const base = await eyesAgainstRule(z.id, seats, 0, c, R), rows = [], tiles = [{ img: base.img, c }];
-      for (const bone of angles) { const now = await eyesAgainstRule(z.id, seats, bone / w.thetaP, c, R); rows.push({ bone, ...eyeShift(base, now), copies: now.skull.bones }); tiles.push({ img: now.img, c }); }
-      await evaluate("__sdfGame.skullSplit({ follow: null })"); await stepN(2);
-      out.mLandmark = rows.map((r) => ({ boneRad: +r.bone.toFixed(4), eyes: r.rows }));
-      note(`M: ${J(out.mLandmark)}`);
-      const worst = Math.max(...rows.map((r) => r.worst)), far = Math.max(...rows.map((r) => r.far));
-      check(ok && base.eyes.length === 2 && base.skull.bones === 0 && rows.every((r) => r.copies === 3), `M: both seated eyes found; the whole skull at follow 0 (${base.skull.bones} split copies), three copies when the bone turns (${rows.map((r) => r.copies).join(", ")})`);
-      check(worst <= M_SHIFT_PX && far >= M_FAR_PX, `M: each eye moves on screen as skullWarpPoint says: worst ${worst.toFixed(2)} px off its predicted shift (<= ${M_SHIFT_PX} px), the largest shift ${far.toFixed(1)} px (>= ${M_FAR_PX} px)`);
-      sheet("M-skull", tiles);
-    } catch (e) { await threw("M", e); }
+    // -------- M (landmark, forced): the split skull's seated eyes on screen at three bone angles, and the materials
+    // its copies are drawn on. (M's measures on really chopped heads are with S.)
+    if (run("M")) try { await skullLandmarkForced("M"); } catch (e) { await threw("M", e); }
     // -------- C. cost: an untouched head, then open against closed again, interleaved, 0.6 m and 2 m (reported with
     // its spread, not gated). "Closed again" is a closed head that carries the split's cut faces (the seam re-stamps
     // them at every force), so open minus closed is the split's own cost and closed minus untouched the face cuts'.
@@ -1166,25 +1587,8 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
         wk.push({ img: shotK, c: pxK ?? px0 });
       }
       if (wk.length) sheet("WK-widen-kill", wk);
-      // ---- M (really chopped). The skull at the three chops: a closed head draws the closed skull; at each stage the
-      // copies are DRAWN turned by the follow table's bone angle for the split's state (their matrices); and after
-      // chop 1 each seated eye is on screen where skullWarpPoint puts it (the flesh out of the frame). Chop 2 splits
-      // the bone wide on a head the first flinch has bowed: each half's shell hides its own eye from every eye the
-      // player can stand at (32.9 px off from the front, 40.0 from the wedge), so that stage's landmark is the forced
-      // head's, upright, at the same bone angle.
-      if (run("M") && sk2 && sk3) {
-        const got = [sk1, sk2, sk3], drawn = [bd1, bd2, bd3], deg = (r) => (r * 180 / Math.PI).toFixed(2);
-        out.mStages = { closed: closedSkull, stages: got, drawn, landmark: { worst: lm1.worst, far: lm1.far, rows: lm1.rows } };
-        check(closedSkull.bones === 0 && closedSkull.eyes === 0 && closedSkull.draws > 0 && closedSkull.angleP === 0,
-          `M: a closed head draws the closed skull (${closedSkull.draws} bone draws for the actor, ${closedSkull.bones} split copies)`);
-        const turnOff = Math.max(...drawn.flatMap((d) => [[d.plus, d.ruleP], [d.minus, d.ruleM]].map(([t, rule]) => (t === null ? Infinity : Math.abs(t - rule)))));
-        check(turnOff <= M_ANGLE_TOL && drawn[0].rule > 0 && drawn[1].rule > drawn[0].rule && drawn[2].rule >= drawn[1].rule,
-          `M: the bone is drawn turned by the follow table's angle at each chop, wider at chop 2 and no narrower after the kill: its copies' matrices give ${drawn.map((d) => `${deg(d.plus)} / ${deg(d.minus)}`).join(", ")} degrees (+ / - half) against ${drawn.map((d) => deg(d.rule)).join(", ")} (worst ${turnOff.toExponential(1)} rad off <= ${M_ANGLE_TOL})`);
-        check(got.every((g) => g.bones === 3 && g.eyes === 2), `M: each stage draws the skull as three clipped copies and an eye a half (${got.map((g) => `${g.bones}+${g.eyes}`).join(", ")})`);
-        note(`M: really chopped, the eyes after chop 1: ${J(lm1.rows)}`);
-        check(lm1.worst <= M_SHIFT_PX && lm1.far >= M_CHOP_PX, `M: on the really chopped head each seated eye is on screen where skullWarpPoint puts it: worst ${lm1.worst.toFixed(2)} px off its shift after chop 1 (<= ${M_SHIFT_PX} px), which moves it ${lm1.far.toFixed(1)} px (>= ${M_CHOP_PX} px)`);
-        sheet("M-skull-chopped", [{ img: lm1.img, c: lm1.c }]);
-      }
+      // ---- M (really chopped): the skull at the three chops.
+      if (run("M") && sk2 && sk3) skullStageChecks("M", "", { closedSkull, got: [sk1, sk2, sk3], drawn: [bd1, bd2, bd3], lm1 });
     } catch (e) { await threw("S / W / K", e); }
     await diag("chops");
   } catch (e) { await threw("boot 1", e); } finally { if (S) { closeSession(S); S = null; } }
@@ -1492,11 +1896,41 @@ async function regionDisc(w, t) { const H = await txOf(w.h, t), R = await txOf(a
     } catch (e) { await threw("J", e); }
     await diag("turned");
   } catch (e) { await threw("boot 5 (T, J)", e); } finally { if (S) { closeSession(S); S = null; } }
+  // ======== BOOT 6 (?sculpt=classic). M ON THE SCULPTED SKULL'S FIRST LOOK, and nothing else: its split copies' turn,
+  // count, materials and paint and the eyes' landmark, on the forced head and at the three real chops (chopsForSkull:
+  // the chops alone). No other boot draws the first sculpt, or a head on the first paint's split material.
+  if (run("M")) try {
+    await boot("classic", "&sculpt=classic"); await loadRules();
+    const tag = "M (the sculpted skull's first look)";
+    try { await skullLandmarkForced(tag, "-classic"); } catch (e) { await threw(`${tag}, the forced head`, e); }
+    try { skullStageChecks(tag, "-classic", await chopsForSkull(fresh())); } catch (e) { await threw(`${tag}, the chopped head`, e); }
+    await diag("classic");
+  } catch (e) { await threw("boot 6 (classic)", e); } finally { if (S) { closeSession(S); S = null; } }
+  // ======== BOOT 7 (?skull=anatomical). THE ANATOMICAL SKULL: M on it, the same two ways, and its plates (P, last:
+  // its fragments stay in the room).
+  if (run("M") || run("P")) try {
+    await boot("anatomical", "&skull=anatomical"); await loadRules();
+    const tag = "M (anatomical skull)";
+    if (run("M")) {
+      try { await skullLandmarkForced(tag, "-anatomical"); } catch (e) { await threw(`${tag}, the forced head`, e); }
+      try { skullStageChecks(tag, "-anatomical", await chopsForSkull(fresh())); } catch (e) { await threw(`${tag}, the chopped head`, e); }
+    }
+    await platesScenario();
+    await diag("anatomical");
+  } catch (e) { await threw("boot 7 (anatomical)", e); } finally { if (S) { closeSession(S); S = null; } }
 }
 check(FLOOR.colour <= FLOOR_COLOUR_MAX && FLOOR.depth <= FLOOR_DEPTH_MAX, `C: the instrument's floor over the run: the two reads of each of ${FLOOR.captures} settled captures differ by at most ${FLOOR.colour.toExponential(1)} in colour and ${FLOOR.depth.toExponential(1)} in clip depth (<= ${FLOOR_COLOUR_MAX}, ${FLOOR_DEPTH_MAX})`);
+/** The skull each boot means to draw: the default (the sculpted skull, `full`) unless its label says otherwise. */
+const SKULL_OF_BOOT = { classic: "sculpt classic", anatomical: "anatomical" }, SKULL_DEFAULT = "sculpt full";
+const wrongSkull = Object.entries(out.skulls).filter(([label, skull]) => skull !== (SKULL_OF_BOOT[label] ?? SKULL_DEFAULT));
+check(Object.keys(out.skulls).length > 0 && wrongSkull.length === 0, `C: every boot draws the skull it means to: the default (no skull parameter), which is the sculpted skull, full; the first look on the classic boot; the anatomical skull on the boot that asks for it (${Object.entries(out.skulls).map(([label, skull]) => `${label}: ${skull}`).join(", ")})`);
+note(`wall clock by boot (s, from the page's load to the boot's last check; ungated): ${Object.entries(out.wall).map(([label, t]) => `${label} ${t}`).join(", ")}`);
 const errs = consoleEvents.filter((e) => e.type === "error" || e.type === "exception");
 { const k = depthGuardControl(); check(depthGuardControlOk(k), `C: ${depthGuardControlLine(k)}`); }
-check(depthGuardOk(DEPTH), `C: ${depthGuardLine(DEPTH)}`);
+// A subset that read the march target nowhere (ONLY=M, ONLY=P) has nothing for the guard to look at: said, and not a
+// failed check. The gate itself, every scenario run, must have captures.
+if (ONLY && DEPTH.captures === 0) console.log(`\nC: THE DEPTH GUARD DID NOT RUN: this subset (ONLY=${[...ONLY].join(",")}) made no capture of the march target. Not counted.`);
+else check(depthGuardOk(DEPTH), `C: ${depthGuardLine(DEPTH)}`);
 check(errs.length === 0, `C: zero console errors or exceptions across the run (${errs.length}${errs.length ? ": " + J(errs.slice(0, 3)) : ""})`);
 const dirty = Object.entries(out.diag).filter(([, d]) => !d || d.lost || d.uncapturedCount !== 0);
 check(Object.keys(out.diag).length > 0 && dirty.length === 0, `C: gpuDiagnostics clean at the end of every boot (${Object.keys(out.diag).join(", ")}: no device loss, uncapturedCount 0${dirty.length ? "; DIRTY " + J(dirty) : ""})`);

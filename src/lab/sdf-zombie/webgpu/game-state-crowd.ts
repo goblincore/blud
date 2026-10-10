@@ -36,7 +36,7 @@ export interface EarlyzState {
 export interface CrowdState {
   /** Raw `?crowd` value; `'0'` opts out to the per-body path. */
   param: string | null;
-  /** `?crowddispatch=quad` selects the one-screen-quad dispatch; boxes otherwise. */
+  /** The one-screen-quad dispatch unless `?crowddispatch=boxes` (default since 2026-10-08). */
   dispatch: CrowdDispatch;
   /** True while the merged crowd march is the shipped path (`?crowd=0` disables). */
   on: boolean;
@@ -62,7 +62,7 @@ export interface CrowdState {
 export function makeCrowdState(): CrowdState {
   return {
     param: null,
-    dispatch: 'boxes',
+    dispatch: 'quad',
     on: false,
     fallbackReason: null,
     types: new Map<string, CrowdType>(),

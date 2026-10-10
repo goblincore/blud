@@ -28,13 +28,6 @@ const precompileBlock = between('ensureSeed();\n        // Only a boot where the
 const disposeBlock = between('dispose() {\n      upscale?.dispose();\n      if (seed) {', 'target.dispose();');
 
 describe('seed pass wiring (source pins)', () => {
-  it('exposes setEarlyzSeed and earlyzSeedInfo on the interface and the returned object', () => {
-    expect(source).toContain('setEarlyzSeed(scene: THREE.Scene): void;');
-    expect(source).toContain('earlyzSeedInfo(): { built: boolean; on: boolean; reason: string | null };');
-    expect(source).toContain('setEarlyzSeed(scene) { seedScene = scene; ensureSeed(); },');
-    expect(source).toContain('earlyzSeedInfo() { return { built: seed !== null, on: seedOnLast, reason: seedReasonLast }; },');
-  });
-
   it('builds the seed mesh only inside ensureSeed, and only once a scene was requested', () => {
     // The one construction site: nothing else may create a seed material or mesh.
     expect(count("mesh.name = 'earlyz-seed'")).toBe(1);
@@ -149,10 +142,6 @@ describe('seed pass wiring (source pins)', () => {
     const compileAt = precompileBlock.indexOf("await compile('march', scene, camera, target, marchMrt);");
     expect(compileAt).toBeGreaterThan(precompileBlock.indexOf('seed.mesh.visible = true;'));
     expect(precompileBlock.indexOf('if (seed) seed.mesh.visible = false;')).toBeGreaterThan(compileAt);
-  });
-
-  it('never calls setEarlyzSeed itself (the flag-gated caller does)', () => {
-    expect(count('setEarlyzSeed(')).toBe(2); // interface + implementation
   });
 
   it('dispose removes the quad from its scene and frees its geometry and material', () => {

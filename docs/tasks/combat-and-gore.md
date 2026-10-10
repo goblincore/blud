@@ -31,8 +31,49 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
   - **Follow-ups, open:** the `gRefoldBy` cross-slot leak, something in the gap (a brain), the slug opening the
     split, and the deferred game boot (`?renderer=deferred` draws no bodies on `a2d61133`; handoff follow-up 8). Full
     lists: spec section 10.10.
-  - **Gates (as of 2026-10-06):** `scripts/head-split-gate.mjs` (80 checks), `scripts/axe-gate.mjs` (27),
-    `scripts/cut-wound-gate.mjs` (30).
+  - **On the anatomical skull (2026-10-06, branch `claude/split-anatomical-skull`):** split plates have their own
+    material, shots break them where an opened half draws them (bone standing in the open gap included, which no
+    flesh covers), and the gate runs on it and reads the plates' pixels. For the owner: retune how far the bone
+    opens? [Notes and look sheets](../dev-notes/2026-10-06-split-anatomical-skull/NOTES.md).
+  - **The sculpted skull, second pass (2026-10-07, branch `claude/sculpt-skull-2`):** after playtesting both skulls
+    the owner chose the old sculpted one as the base and asked for it to be more anatomical and frightening: the jaw
+    and teeth first, then the eye sockets, the nose opening, the brow ridge, cheekbones and hollows. Four variants
+    behind `?sculpt=`: `shape` (a second sculpt of the bone), `shape-fine` (the same at a 5 mm cell for the head),
+    `paint` (a second paint with separate teeth and a tilted shading normal) and `full` (both). The default sculpt
+    and the anatomical default are unchanged; the default sculpt's mesh bytes and shader text are pinned by hash. On
+    the sheets `full` is the best in every row, `paint` gives most of the face on the old bone, and the two `shape`
+    variants make the teeth worse under the old paint. For the owner: pick one.
+    [Notes and look sheets](../dev-notes/2026-10-07-sculpt-skull-2/NOTES.md).
+  - **The sculpted skull, `full`, is the default skull (2026-10-07, the owner's pick; branch `claude/sculpt-skull-2`):**
+    a page with no skull parameter draws it, `?skull=anatomical` draws the 14 plates, `?sculpt=classic` the first
+    look; one resolver decides (`skeleton-spike/sculpt-variant.ts`), and both looks are pinned by hash. The second
+    paint is drawn only on the characters it fits (zombie, soldier, juggernaut, the two clowns). For the owner: the
+    other eight humanoids have no skull-shaped head bone and show balls where the anatomical skull drew a skull (the
+    cultist is the one the levels spawn); and whether the carved heads need the 5 mm mesh.
+    [Notes, the cast sheet and the cell pair](../dev-notes/2026-10-07-sculpt-skull-2/NOTES.md).
+  - **The anatomical skull's size (2026-10-07, branch `claude/anatomical-skull-fit`):** the owner found the skull
+    far too small in the zombie's head (0.56 of the sculpted skull's box volume; 43 mm wide in the female's 127 mm
+    head). A fit that sizes the skull to the head's flesh and pulls it in where it would poke through is behind
+    `?skullfit=affine|mid|snug|tight`; with no parameter the skull is byte for byte what it was. For the owner: which
+    fit ships, and whether per character (the female and the soldier read worse under the tighter ones).
+    [Notes, tables for all thirteen humanoids and look sheets](../dev-notes/2026-10-07-anatomical-skull-fit/NOTES.md).
+  - **The eight ball-headed humanoids draw a fitted anatomical skull (2026-10-07, branch `claude/sculpt-skull-2`):**
+    the cultist, the cowled cultist, the bride, the female, the three schoolgirls and the bonewalker draw the 14
+    plates by default, each under its own fit (`skeleton-spike/skull-cast.ts`: `snug`, to the skin, the orbits held
+    on the painted eyes' line), with the eyes seated in the fitted orbits; the fit runs at spawn and the page loads
+    the asset. For the owner: the schoolgirls' cartoon faces sit 2 to 7 cm under the skull's orbits; the bride's
+    flesh is not drawn when spawned; `schoolgirl-alt` cannot be spawned.
+    [Notes, the table and the sheet](../dev-notes/2026-10-07-sculpt-skull-2/NOTES.md).
+  - **Gates (as of 2026-10-08):** `scripts/head-split-gate.mjs` (111 checks), `scripts/axe-gate.mjs` (29),
+    `scripts/cut-wound-gate.mjs` (33), `scripts/head-burst-gate.mjs` (130). Each boot checks the skull it draws; the
+    checks about the plates run on boots that ask for `?skull=anatomical`, and on a `?spawn=cultist` boot of the
+    default page for a fitted skull. The head-burst gate checks pixels as well as the CPU's lists: the split's gap
+    and halves, the pop's fragments, the aim against the crosshair, and that nothing floats over a stump.
+  - **After two reviews (2026-10-08):** the split and the pop are the zombie's by its character (not its motion
+    profile); a slug the head-shot rule takes no longer knocks the eyes out; an aimed slug is not refused by where it
+    lands; a sever takes a lip only where it would stand in removed flesh. For the owner: a slug's decapitation
+    leaves no raised rim at the neck (nothing floats there now); the bonewalker and the described schoolgirl draw no
+    mesh eyes again; a pellet decapitation still leaves the neck's base standing.
 
   [Spec](../../docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 9: the axe as built; section 10:
   the head split as built) · plans [A](../../docs/superpowers/plans/2026-10-04-axe-part-a.md) and
@@ -71,6 +112,31 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
   [notes](../../docs/dev-notes/2026-10-02-head-burst/NOTES.md) · gate `scripts/head-burst-gate.mjs`. Tune live with
   `__sdfGame.head.burstTune({ centreFrac, swell, shardScale, flapCount, lethal, repeatStep, craterScale, splay, on })`.
   Playtest 1 (2026-10-03): flaps off (orange tubes), a centred slug now splits the head open and the zombie lives, much harder to kill.
+  **Playtest 2 (2026-10-07): not what the owner wanted on every gun hit.** The opening is now OFF by default
+  (`burstTune({ opening: true, anyWeapon: true, alwaysSplit: true, slugSplit: false, slugPop: false, popOnSplit: false })`
+  puts the playtested behaviour back).
+- [~] **The gun and the zombie's head, redefined 2026-10-07; owner playtest pending.** Pellets and imprecise slugs
+  leave ordinary wounds. A slug splits the head through the head split (`webgpu/game-head-shot.ts`,
+  `head-burst.ts headShotRule`) when the AIM was precise and the head near: the crosshair's ray, recorded as the gun
+  fired, within `splitFrac` 0.3 head radii of the head's centre (3.3 cm), from no farther than `splitRangeM` 5 m. Both
+  halves open. The slug that cuts the head off pops it: a 0.12 s swell, then the burst, with the
+  skull thrown as pieces (the anatomical skull's 14 plates, or 10 fragments cut from the sculpted head mesh:
+  `skeleton-spike/sculpt-fragments.ts`). Any slug from within that range on a head split wide pops it. Gun craters on
+  the head keep a low lip so the skull's face stands out of the wound, and a sever takes the lips that
+  would hang over the stump. **Retuned 2026-10-08 after the owner's playtest** (the face came off too clean: bare bone
+  in a smooth round hole): `headLip` 0.3 -> 0.5 plus a new `headTear` 0.9 (the flail's torn look on gun head craters: a
+  ragged outline, petal lips, a wet red wall), and **eyes stay in the skull**: a round now has to land near an eye
+  to knock it out (`mesh-eyes.ts EYE_IMPACT_REACH`, pellet 5.5 cm / slug 8.5 cm from the eye's centre; it was 13.5 / 19 cm,
+  so one pellet on the chin ejected both). **Second pass, same day (owner: a pointblank slug still left clean ivory):** the sculpted
+  skull's paint gained `sculptCling` (`skeleton-spike/sculpt-paint.ts`, `SCULPT_CLING`): ragged, wet, red torn-flesh patches
+  stuck to a head's bone where a wound's exposure reaches it, thicker in the orbits and nose, none on the teeth, and the
+  head's wound stain 0.22 -> 0.38. The default skull's shader pin moved on purpose (`sculpt-default-pin.test.ts`). Not
+  yet on the first paint (`?sculpt=classic`, mesh-appearance.ts) or the anatomical plates' shader. **The juggernaut (the chaingunner) now wears the soldier's carved head** (`mesh-skull-2.ts isSoldierHead`: the carve, its revision and the steel-plate paint), where he was an uncarved ball; the clowns still are. Not yet owner-playtested. Tune live: `__sdfGame.head.burstTune({ headLip, headTear, slugSplit, splitAim, splitFrac,
+  splitRangeM, splitOpen, slugPop, popSwellS, popOnSplit, popPrecise })`.
+  [Notes, measurements, the precision table and the before/after sheet](../../docs/dev-notes/2026-10-07-sculpt-skull-2/NOTES.md) ·
+  gate `scripts/head-burst-gate.mjs` (103 checks). Open for the owner: the shot is judged against where the head is
+  when the slug arrives, so a crossing zombie has to be led and the split may be rare in live play (`splitFrac` is
+  the knob); and a zombie usually dies of slugs before one cuts its neck, so that pop is rare.
 - [ ] **Spike (separate, not started): shader-side burst/peel displacement field** (approach C of the same spec) for
   truer jelly peeling flesh. New march WGSL, shared march cost, and a Rust port to carry; only after the composed
   version has been played.

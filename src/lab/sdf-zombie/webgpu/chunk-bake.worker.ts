@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/chunk-bake.worker.ts
+//
+// Web worker that bakes chunk geometry off the main thread and posts back transferable buffers.
+
 import { bakeChunkGeometry } from './chunk-bake-geometry';
 import { packChunkBake, chunkBakeTransfers } from './chunk-bake-buffers';
 import type { ChunkBakeRequest, ChunkBakeReply } from './chunk-bake-jobs';

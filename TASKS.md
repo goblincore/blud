@@ -5,10 +5,21 @@
 > the area pages under [`docs/tasks/`](docs/tasks/), step-by-step plans in `docs/superpowers/plans/`,
 > and hand-offs in `docs/dev-notes/`.
 >
-> **Latest hand-offs:** [2026-10-05 the axe and the head split](docs/dev-notes/2026-10-04-head-split/HANDOFF.md) (branch `claude/head-cleaving-effect-ef9515`, PR goblincore/blud#31), [2026-10-01 design session — the egg (paused), the Flat's emergence, the game's shape, the retro-CGI look](docs/dev-notes/2026-10-01-design-session-handoff.md) (branch `claude/egg-shader-gooey-transitions-21fb04`, unmerged), [2026-10-01 Night Train ending — control room, egg, sequence system](docs/dev-notes/2026-10-01-night-train-ending-handoff.md) (branch `claude/train-monitor-transition-51f385`, unmerged; plan 4 next), [2026-09-29](docs/dev-notes/2026-09-29-handoff.md) (light layers, Boiler Room
+> **Latest hand-offs:** [2026-10-08 frame cost: the heavy scenes toward a stable 30 fps](docs/dev-notes/2026-10-08-frame-cost/HANDOFF.md) (branch `claude/quizzical-williams-66ec4e`, PR goblincore/blud#41), [2026-10-05 the axe and the head split](docs/dev-notes/2026-10-04-head-split/HANDOFF.md) (branch `claude/head-cleaving-effect-ef9515`, PR goblincore/blud#31), [2026-10-01 design session — the egg (paused), the Flat's emergence, the game's shape, the retro-CGI look](docs/dev-notes/2026-10-01-design-session-handoff.md) (branch `claude/egg-shader-gooey-transitions-21fb04`, unmerged), [2026-10-01 Night Train ending — control room, egg, sequence system](docs/dev-notes/2026-10-01-night-train-ending-handoff.md) (branch `claude/train-monitor-transition-51f385`, unmerged; plan 4 next), [2026-09-29](docs/dev-notes/2026-09-29-handoff.md) (light layers, Boiler Room
 > resize, zombie feet, level-list tier, march-hash on Chrome 154) and [2026-09-30 flail / head damage / wounds](docs/dev-notes/2026-09-30-flail-handoff/HANDOFF.md). Previous: [2026-09-27 Night Train](docs/dev-notes/2026-09-27-night-train-handoff.md).
 
 ## In flight / next
+
+**Frame cost: the heavy scenes at a stable 30 fps** (owner's goal, 2026-10-08) — [rendering](docs/tasks/rendering.md)
+- [~] **Measured and ranked 2026-10-08; two changes built (PR goblincore/blud#41), owner look pending.** The whole
+  frame attributed on six scenes ([notes](docs/dev-notes/2026-10-08-frame-cost/NOTES.md), driver
+  `scripts/frame-cost.mjs`). Built: (1) the held weapons and the arms shade the lights near the eye, not the level's
+  69 (Night Train −2.5 to −6.1 ms a frame; the hitch on entering a carriage halved; `?nearlights=0` is the A/B);
+  (2) the exact wound reach is the default (a switch that shipped off: −3 ms on a body with 32 wounds, −6 ms on a
+  chopped, split close-up, the picture the same to the bit). **With PR 43's quad dispatch merged in, the three heavy
+  scenes are under 33.3 ms with margin:** Boiler Room after a fight 37.6 → 28.5 ms, the bare arena after a fight
+  37.4 → 24.8 ms, the chopped and split close-up 38.5 → 23.3 ms. Left for margin and smoothness: the props and kit
+  on their room's lights, a doorway test so other carriages are not drawn, the first shot's pipeline hitch.
 
 **Player melee: spike flail** (branch `claude/melee-weapon-design-7d1423`, PR #22) — [combat and gore](docs/tasks/combat-and-gore.md)
 - [~] **Flail v1.5b built; owner playtest pending.** Torn, splayed, wet-red lips on flail wounds; gun wounds get the
@@ -16,19 +27,45 @@
   optimization pass (torn-wound cost, first-swing hitch, grey gib-blur smears). Gate `scripts/flail-gate.mjs`.
 - [~] **Melee head damage model v2 built; owner playtest pending** — regions, 3D eyes that pop, brain gib, jelly
   wobble, the skull deforms with the flesh. Gate `scripts/head-damage-gate.mjs`.
-- [~] **Slug head burst built; owner playtest pending** — a slug through the head's centre bursts it (lethal, head stays
-  on, torn scalp flaps); off-centre it ruptures one side and the zombie lives. Gate `scripts/head-burst-gate.mjs`.
-  [Spec](docs/superpowers/specs/2026-10-02-slug-head-burst-design.md) · [notes](docs/dev-notes/2026-10-02-head-burst/NOTES.md).
+- [~] **The gun and the zombie's head, redefined 2026-10-07; owner playtest pending** (branch `claude/sculpt-skull-2`).
+  Ordinary rounds leave ordinary wounds; a slug aimed precisely (the crosshair within 3.3 cm of the head's centre) from
+  no farther than 5 m splits the head as the axe does, both halves; the slug that takes the head off pops it (it swells
+  for 0.12 s and bursts, the skull thrown as pieces); any slug from that range on a split head pops it.
+  The slug head burst of 2026-10-02 (the "opening") is off, behind `burstTune({ opening: true })`. Gate
+  `scripts/head-burst-gate.mjs`. [Notes and the before/after sheet](docs/dev-notes/2026-10-07-sculpt-skull-2/NOTES.md) ·
+  [the opening's spec](docs/superpowers/specs/2026-10-02-slug-head-burst-design.md).
 
 **Cut wounds** — [combat and gore](docs/tasks/combat-and-gore.md)
 - [~] **Cut wounds M1 built 2026-10-04; owner playtested** — a cut wound shape, the rod (weapon slot 6), 32 wounds with merging.
   Owner: "more excessive", so longer, wider, ragged cuts landed 2026-10-04. Their cost, investigated 2026-10-06: about 4 to 5 ms for three chops, not +22 ([notes](docs/dev-notes/2026-10-06-cut-cost/NOTES.md)); next for wound cost is organs to mesh (owner). M2 is the head split (next line).
-  Gate `scripts/cut-wound-gate.mjs` (30 checks). [Notes](docs/dev-notes/2026-10-03-cut-wounds/NOTES.md) · [handoff](docs/dev-notes/2026-10-03-cut-wounds/HANDOFF.md).
+  Gate `scripts/cut-wound-gate.mjs` (33 checks). [Notes](docs/dev-notes/2026-10-03-cut-wounds/NOTES.md) · [handoff](docs/dev-notes/2026-10-03-cut-wounds/HANDOFF.md).
 - [~] **The axe (slot 7) and the head split built 2026-10-05; owner playtested; PR goblincore/blud#31** (branch
   `claude/head-cleaving-effect-ef9515`) — a chop opens a zombie's head on a hinge: a wide crack, then split wide and alive, then
   the kill. The halves wobble; the skull cracks, then splits. The wet film under the flashlight is the owner's pick (C, the boldest, 2026-10-06).
-  Debt: an open head costs about +4.4 ms at 0.6 m after a first cost pass and the cut-cost pass under it (2026-10-06, branch `claude/open-head-cost`: [notes](docs/dev-notes/2026-10-06-open-head-cost/NOTES.md); +6 to +8 ms before). Gates `scripts/head-split-gate.mjs` (80 checks), `scripts/axe-gate.mjs` (27), as of 2026-10-05.
+  Debt: an open head costs about +4.4 ms at 0.6 m after a first cost pass and the cut-cost pass under it (2026-10-06, branch `claude/open-head-cost`: [notes](docs/dev-notes/2026-10-06-open-head-cost/NOTES.md); +6 to +8 ms before). Gates `scripts/head-split-gate.mjs` (111 checks, 2026-10-07), `scripts/axe-gate.mjs` (29).
+  **The anatomical skull is too small in the head (2026-10-07, branch `claude/anatomical-skull-fit`):** four fits that read the flesh are behind `?skullfit=affine|mid|snug|tight`. [Look sheets and tables](docs/dev-notes/2026-10-07-anatomical-skull-fit/NOTES.md).
+  **On the anatomical skull (2026-10-06, branch `claude/split-anatomical-skull`):** split plates have their own material, shots break them where they are drawn (bone standing in the open gap included), the gate runs on it and reads their pixels. Owner to decide: retune how far the bone opens ([sheets and notes](docs/dev-notes/2026-10-06-split-anatomical-skull/NOTES.md)).
   [Spec](docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 10) · [handoff](docs/dev-notes/2026-10-04-head-split/HANDOFF.md) · [notes](docs/dev-notes/2026-10-04-head-split/NOTES.md).
+- [~] **The sculpted skull, `full`, is the default skull since 2026-10-07 (owner's pick); the anatomical skull is opt-in** (branch `claude/sculpt-skull-2`).
+  No parameter draws the sculpted skull's second sculpt and second paint; `?skull=anatomical` the 14 plates; `?sculpt=classic` the first look. Both looks are pinned by hash; the four capture gates run on the new default (head-split 111 checks, head-burst 130, axe 29, cut-wound 33).
+  The eight humanoids with no skull-shaped head bone (the cultist among them) draw the anatomical skull by default, each fitted to its own flesh with the eyes in the fitted orbits (2026-10-07). For the owner: the three schoolgirls' skulls sit 2 to 7 cm above their cartoon faces; and 1 cm against 5 mm for the head's mesh.
+  [Notes, the cast sheet and the cell pair](docs/dev-notes/2026-10-07-sculpt-skull-2/NOTES.md).
+  The light gate's "skull glows in the dark" check failed on it (1.56x against 1.5x) and was re-derived to 2.0 (2026-10-08): the low head lip and the paler paint moved the ratio, the bone's dark-room response did not change. For the owner: the skull is easier to see in a dark carriage than it was. [The before/after pair and the numbers](docs/dev-notes/2026-10-08-skull-dark-gate/NOTES.md).
+
+**Organs as mesh** — [rendering](docs/tasks/rendering.md)
+- [x] **Built 2026-10-06; the owner picked the `wet` look 2026-10-07; merged 2026-10-07 (PR 34).** On the mesh skeleton a zombie's organs are segment meshes, drawn
+  only where a wound reaches them; the body packs no inside-flesh row, so the march never calls `applyBones` (0
+  evaluations a frame against 869,688 on three torso chops; about 1 to 1.5 ms back at 0.9 m). `?organs=sdf` is the A/B.
+  The frame is GPU-bound (CPU about 4 ms); organs were about 1 ms of it. [Sheets](docs/dev-notes/2026-10-06-organs-mesh/look/).
+  Gate `scripts/organs-mesh-gate.mjs` (32 checks). [Spec](docs/superpowers/specs/2026-10-06-organs-mesh-design.md) ·
+  [notes](docs/dev-notes/2026-10-06-organs-mesh/NOTES.md).
+- [x] **Low-poly organs, built 2026-10-07; the owner picked the detail strength as shipped; merged 2026-10-07
+  (PR 37).** Each organ prim is a swept tube (analytic normals): the zombie's organs are 528
+  vertices / 1,024 triangles against 4,038 / 8,084, with the same silhouette (0.965 of the extraction's pixels). The
+  haustra and wrinkles are a bump in the organ shader over the tube's own coordinate; the crease between loops is a
+  baked shade. No frame-time change was measured (+0.62 ms, IQR -0.25 to 1.35): this is tidiness and room for more
+  organs. Gate: 37 checks. [Sheets](docs/dev-notes/2026-10-07-organs-lowpoly/look/) ·
+  [notes](docs/dev-notes/2026-10-07-organs-lowpoly/NOTES.md).
 
 **Night Train (level 1)** — [levels](docs/tasks/levels.md) (items 4a–4k)
 - [x] **Body lighting settled** (owner, 2026-09-28): LIGHT LAYERS panel (`light-layers.ts`) — every body-lighting
@@ -116,6 +153,7 @@ dated history page beside it (as [Gather dispatch R1](docs/tasks/rendering-gathe
 > only** — preserved for provenance, not current work. Do not treat historical
 > roadmap entries as in-flight.
 >
+> Which module owns what: [docs/architecture/module-index.md](docs/architecture/module-index.md) (generated).
 > Current vs. proposed source layout: [docs/architecture/repository-map.md](docs/architecture/repository-map.md).
 > Legacy dynamite/gibbing reference: [docs/reference/legacy-dynamite-gibbing.md](docs/reference/legacy-dynamite-gibbing.md).
 

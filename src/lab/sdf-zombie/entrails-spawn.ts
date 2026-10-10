@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/entrails-spawn.ts
+//
+// The gut-rope spill rule: the per-calibre spill chance (off by default) and shouldSpill, which picks spawn, tear or none.
+
 import type { Wound } from './damage';
 
 /**

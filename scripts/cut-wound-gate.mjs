@@ -193,6 +193,10 @@ async function boot(label) {
   await evaluate(`(() => { for (const e of document.body.children) { if (/TUNING|DYNAMITE \\/ GIB|BLOOD \\+ GIB BLUR|Record \\[F8\\]/.test(e.innerText || "")) e.style.display = "none"; } return 1; })()`);
   s.rect = await evaluate(`(() => { const r = document.querySelector("#app canvas, canvas").getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`);
   await evaluate("__sdfGame.freeze(true)");
+  // The page names no skull, so it draws the default: the sculpted skull, `full`. Checked, so a change of default
+  // shows here and not as a drift in a pixel measure.
+  const sd = await evaluate("__sdfGame.skeletonDiagnostics()");
+  check(sd.skull === "sculpt" && sd.sculptVariant === "full", `[${label}] the page names no skull and draws the default: the sculpted skull, full (${sd.skull}, ${sd.sculptVariant}, ${JSON.stringify(sd.sculpt)})`);
   // Pixel measures: the practical-fire flicker pinned (two locked renders compare), no blood over the wound (the photos
   // judge the carve and its shading; the rod's own bleed is exercised in R, where it is switched back on), and free aim
   // OFF so the DOM reticle is not drawn over the cut (R turns it on for its setAimPoint sweep).

@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/game-telemetry.ts
+//
+// Opt-in, bounded live-play recorder (GameTelemetry): frame timings, phase spans, events and snapshots, with no GPU waits.
+
 import type { GpuFrameSummary } from './gpu-frame-summary';
 
 /** Opt-in, bounded live-play recorder. No GPU waits, reads or console writes. */

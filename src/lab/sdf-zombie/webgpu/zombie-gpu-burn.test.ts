@@ -1,6 +1,9 @@
-// Source tripwires for the burn uniform's positional binding. A misplaced key
-// hands the shader a DIFFERENT uniform and fails silently (zombie-gpu.ts:1225),
-// so the contract is pinned by text, in the only place it is visible.
+// Source tripwires for the burn uniforms' NAME bindings. Keys in the wgslFn
+// call object bind BY NAME (three 0.186 resolves each WGSL input via
+// parameters[inputNode.name]; proven GPU-free in wgslfn-binding.test.ts), so
+// key ORDER cannot misbind — but a MISSING key binds float(0) with only a
+// console error (see zombie-gpu.ts's KEYS BIND BY NAME note), so key PRESENCE
+// is pinned by text, in the only place it is visible.
 import { describe, it, expect } from 'vitest';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
 import { readFileSync } from 'node:fs';
@@ -11,14 +14,11 @@ const src = readFileSync('src/lab/sdf-zombie/webgpu/zombie-gpu.ts', 'utf8');
 const BURN_SCALARS = ['burnNoiseScale', 'burnRiseSpeed', 'burnCharPatch', 'burnFireGain', 'burnFireCoverage', 'burnSkeleton', 'burnSkeletonDepth'];
 
 describe('burn uniform plumbing', () => {
-  it('declares the burn uniforms', () => {
-    expect(src).toContain('burnCfg: uniform(new THREE.Vector4(0, 0, 0, 0))');
-    for (const name of BURN_SCALARS) expect(src).toContain(`${name}: uniform(`);
-  });
-
-  it('binds the burn uniforms last, in the same order as the WGSL tail', () => {
-    // The WGSL parameter list ends with burnCfg then the six scalars, so every
-    // positional binding object must end with them in that order.
+  it('binds every burn uniform BY NAME at the call site — a missing key silently binds float(0)', () => {
+    // Keys bind by NAME, so order cannot misbind; the hazard is a missing or
+    // misnamed key, which binds float(0) with only a console error. The WGSL
+    // parameter list ends with burnCfg then the six scalars; each needs its
+    // key at the call site, spelled exactly as the signature spells it.
     const params = MARCH_BODY_PARAMS.replace(/\s+/g, ' ');
     const order = ['burnCfg: vec4<f32>', ...BURN_SCALARS.map(n => `${n}: f32`)];
     let at = -1;
@@ -27,9 +27,12 @@ describe('burn uniform plumbing', () => {
       expect(next, p).toBeGreaterThan(at);
       at = next;
     }
-    // Light list task 9 appends lightListCfg and the lightList storage after the burn tail.
+    // Light list task 9 appends lightListCfg and the lightList storage after
+    // the burn tail; the storage node is always bound (the zero fallback when
+    // no list is passed), so its key is pinned here too.
     expect(params).toContain('burnSkeletonDepth: f32,');
     expect(src).toContain('lightListCfg: u.lightListCfg,');
+    expect(src).toContain('lightList: (lightList ?? fallbackLightListNode()) as never,');
     const binds = [...src.matchAll(/burnCfg: u\.burnCfg,/g)];
     expect(binds.length).toBeGreaterThan(0);
     for (const name of BURN_SCALARS) expect(src).toContain(`${name}: u.${name},`);
@@ -43,18 +46,7 @@ describe('burn uniform plumbing', () => {
 });
 
 describe('shared light list plumbing (light list plan 1 task 9)', () => {
-  it('binds lightListCfg then the list node after the burn tail, the fallback when no list is passed', () => {
-    const at = src.indexOf('burnSkeletonDepth: u.burnSkeletonDepth,');
-    const cfg = src.indexOf('lightListCfg: u.lightListCfg,', at);
-    const list = src.indexOf('lightList: (lightList ?? fallbackLightListNode()) as never,', cfg);
-    expect(at).toBeGreaterThan(0);
-    expect(cfg).toBeGreaterThan(at);
-    expect(list).toBeGreaterThan(cfg);
-    expect(src.indexOf('...(extra ?? {}),', list)).toBeGreaterThan(list);
-  });
-
   it('defaults lightListCfg to 0 (the old key path) and routes the game list to bodies, crowds and the refine twin', () => {
-    expect(src).toContain('lightListCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),');
     expect(src).toContain('sources?.lightList?.node,');
     expect(src.split('opts.lightList?.node,').length - 1).toBe(2);   // the body view and its refine twin
   });

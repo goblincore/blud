@@ -25,8 +25,8 @@ import { craterFleshBits, fieldNormal, fleshBitsOn, fleshRand, setFleshBitsOn, s
 import type { GorePiece } from '../head-pop';
 import { sdBody } from '../validate';
 import { slotLowerAmount, slotReady } from './game-weapon-slots';
-import { loopBlocksInput, ownsSlot } from './game-loop-leaves';
-import { BEND_R_VIEW } from './game-weapon-leaves';
+import { loopBlocksInput, ownsSlot } from './game-loop';
+import { BEND_R_VIEW } from './game-weapon-rig';
 import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms } from './game-arms';
 import {
   FLAIL_IMPACT, FLAIL_TIMING, cancelFlailSwing, comboSide, flailBallVel, flailPose, makeFlailSwing, stepFlailSwing,
@@ -133,9 +133,9 @@ export const FLAIL_BLOOD_LOOK = {
 export interface FlailDeps {
   eye(): Vec3;
   /** The aim ray's direction (world, unit): through the free-aim reticle when free aim is on, else the
-   *  view forward — the shotgun's own (game-weapon-leaves.ts aimDir). */
+   *  view forward — the shotgun's own (game-weapon-rig.ts aimDir). */
   aimDir(): Vec3;
-  /** Blood for a crater (game-world-leaves3 registerBleed). */
+  /** Blood for a crater (game-bleed registerBleed). */
   bleed(a: ZombieActor, wound: Wound, point: Vec3, incoming: Vec3): void;
   /** Gore pieces (ctx.boot.onGoreDispatch): the flying flesh bits (flesh-bits.ts). Absent: none thrown. */
   gore?(a: ZombieActor, pieces: GorePiece[]): void;
@@ -933,7 +933,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       const k = impactOutputs(impact).rig;
       rig.position.set(k.pos[0], -0.42 * lower + k.pos[1], 0.06 * lower + k.pos[2]);
       rig.rotation.set(THREE.MathUtils.degToRad(38) * lower + k.rot[0], k.rot[1], k.rot[2]);
-      // Hidden for a scripted sequence (game-sequence-leaves.ts); a hidden rig also cancels any swing in tick().
+      // Hidden for a scripted sequence (game-sequence.ts); a hidden rig also cancels any swing in tick().
       rig.visible = lower < 0.999 && ownsSlot(ctx, 'flail') && !ctx.world.sequence?.started;
     },
     timeScale(dt) {

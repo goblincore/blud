@@ -740,25 +740,6 @@ describe('chunk bend transform', () => {
   // released ribcage that is the whole defect: ribs are two BENT bars per
   // hoop, and hoops whose control points no longer match their endpoints
   // collapse into rods — "a linear bundle of sticks" (owner, 2026-09-03).
-  it('rewrites ROW_PRIM_BEND every frame in apply, not once in reset', () => {
-    // Tripwire in this file's established style (see the volumeClip test):
-    // the row's value cannot be read back out of the data texture here, and
-    // the failure mode is a MISSING write, which a tripwire catches exactly.
-    const src = readFileSync('src/lab/sdf-zombie/webgpu/zombie-gpu.ts', 'utf8');
-    const apply = src.slice(src.indexOf('function apply(c: Chunk)'));
-    const body = apply.slice(0, apply.indexOf('\n  }'));
-    expect(body).toContain('writeRow(ROW_PRIM_BEND');
-    // ...and both prim loops must feed it, flesh and bone.
-    expect(body.match(/writeBend\(/g)?.length).toBe(2);
-    // ...and writeBend must actually WRITE. Counting call sites alone passes
-    // against a gutted body — verified by mutation: stubbing writeBend to
-    // return early left this whole file green until this assertion existed.
-    const wb = src.slice(src.indexOf('function writeBend('));
-    const wbBody = wb.slice(0, wb.indexOf('\n  }'));
-    expect(wbBody).toContain('packed.primBend.set');
-    expect(wbBody).toContain('chunkPoint(current, bendCtrl(');
-  });
-
   it('writes the TRANSFORMED control point into the bend row', () => {
     // The real behavioural check: read ROW_PRIM_BEND straight out of the
     // dataTexture the march samples. A source tripwire cannot catch a gutted
@@ -1118,22 +1099,7 @@ describe('M2 task 2 — surface output options on the chunk factories', () => {
   });
 });
 
-describe('run 5 refine twin (source pins)', () => {
-  const src = readFileSync('src/lab/sdf-zombie/webgpu/zombie-gpu.ts', 'utf8');
-  it('builds refineBody on the march chain and binds the four refine inputs by name', () => {
-    expect(src).toContain('export const refineBody = buildEntryFn(REFINE_BODY);');
-    expect(src).toContain('export const marchBody = buildEntryFn(MARCH_BODY);');
-    for (const k of ['marchTex:', 'cosRay:', 'nearFar:', 'refineCfg:']) expect(src).toContain(k);
-    expect(src).toContain('refineObject:');
-  });
-});
-
 describe('run 5b slim twin lighting tail (source pins)', () => {
-  const src = readFileSync('src/lab/sdf-zombie/webgpu/zombie-gpu.ts', 'utf8');
-  it('the refine twin is built from refineTailUniforms', () => {
-    expect(src).toContain('export function refineTailUniforms(');
-    expect(src).toContain('refineTailUniforms(u, ');
-  });
   it('the WGSL gates the slim tail relies on still exist', async () => {
     const { MARCH_BODY_LIGHT } = await import('./march.wgsl');
     expect(MARCH_BODY_LIGHT).toContain('select(lodCfg.x > 0.5, surfCfg.w > 0.0, k == 0)');

@@ -1,4 +1,7 @@
 // src/lab/sdf-zombie/build-body.ts
+//
+// Builds a renderable body from a BodyDef: mirror, bone resolve, prim placement, clustering, validation, with overrides and a build cache.
+
 import type { BodyDef, BuiltBody, Primitive } from './types';
 import { CLUSTER_ORDER } from './types';
 import { expandMirror } from './mirror';

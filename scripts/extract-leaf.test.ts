@@ -8,6 +8,7 @@
 // rewrite rule.
 import { describe, it, expect } from 'vitest';
 import { extractLeaves, mergeModule } from './extract-leaf';
+import { mergeImportLines } from './lib/game-main-deps';
 
 /** A game-main.ts in miniature: one import line, one main() with a closure. */
 function fixture(body: string): string {
@@ -17,20 +18,20 @@ function fixture(body: string): string {
 describe('extract-leaf: signatures', () => {
   it('adds ctx and export to a GENERIC function declaration', () => {
     const src = fixture(`  function registerLit<T extends { id: string }>(m: T): T {\n    ctx.bake.seen.push(m.id);\n    return m;\n  }\n  registerLit({ id: 'a' });`);
-    const r = extractLeaves(src, ['registerLit'], [], 'game-bake-leaves');
+    const r = extractLeaves(src, ['registerLit'], [], 'game-chunk-bake');
     expect(r.module).toContain('export function registerLit<T extends { id: string }>(ctx: GameContext, m: T): T {');
     expect(r.main).toContain("registerLit(ctx, { id: 'a' })");
   });
 
   it('adds ctx to an async function, keeping the async keyword first', () => {
     const src = fixture(`  async function awaitBakes(n: number): Promise<void> {\n    ctx.bake.pending = n;\n  }\n  void awaitBakes(2);`);
-    const r = extractLeaves(src, ['awaitBakes'], [], 'game-bake-leaves');
+    const r = extractLeaves(src, ['awaitBakes'], [], 'game-chunk-bake');
     expect(r.module).toContain('export async function awaitBakes(ctx: GameContext, n: number): Promise<void> {');
   });
 
   it('gives a zero-parameter function ctx as its only parameter', () => {
     const src = fixture(`  function tick(): void {\n    ctx.render.frame++;\n  }\n  tick();`);
-    const r = extractLeaves(src, ['tick'], [], 'game-render-leaves');
+    const r = extractLeaves(src, ['tick'], [], 'game-render-controls');
     expect(r.module).toContain('export function tick(ctx: GameContext): void {');
     expect(r.main).toContain('tick(ctx);');
   });
@@ -39,14 +40,14 @@ describe('extract-leaf: signatures', () => {
 describe('extract-leaf: references passed as values', () => {
   it('wraps a SHORTHAND property ref with withCtx', () => {
     const src = fixture(`  function bodiesOnScreen(): number {\n    return ctx.world.actors.length;\n  }\n  const deps = { bodiesOnScreen };\n  void deps;`);
-    const r = extractLeaves(src, ['bodiesOnScreen'], [], 'game-world-leaves');
+    const r = extractLeaves(src, ['bodiesOnScreen'], [], 'game-hit-trace');
     expect(r.main).toContain('const deps = { bodiesOnScreen: withCtx(ctx, bodiesOnScreen) };');
     expect(r.bareRefs).toBe(1);
   });
 
   it('wraps a bare argument ref with withCtx, which is typed (no implicit any)', () => {
     const src = fixture(`  function pushProbeWeight(w: number): void {\n    ctx.probes.weight = w;\n  }\n  const api: unknown = { setProbeWeight: pushProbeWeight };\n  void api;`);
-    const r = extractLeaves(src, ['pushProbeWeight'], [], 'game-probes-leaves');
+    const r = extractLeaves(src, ['pushProbeWeight'], [], 'game-probe-weight');
     expect(r.main).toContain('setProbeWeight: withCtx(ctx, pushProbeWeight)');
     // No untyped rest wrapper anywhere — that is the shape that did not compile.
     expect(r.main).not.toContain('(...a) =>');
@@ -54,21 +55,21 @@ describe('extract-leaf: references passed as values', () => {
 
   it('imports withCtx into game-main exactly once when it wraps anything', () => {
     const src = fixture(`  function a(): void { ctx.render.frame++; }\n  function b(): void { ctx.render.frame--; }\n  const deps = { a, b };\n  void deps;`);
-    const r = extractLeaves(src, ['a', 'b'], [], 'game-render-leaves');
+    const r = extractLeaves(src, ['a', 'b'], [], 'game-render-controls');
     expect((r.main.match(/withCtx\(ctx, /g) ?? []).length).toBe(2);
     expect((r.main.match(/^import \{ withCtx \} from '\.\/game-context';$/gm) ?? []).length).toBe(1);
   });
 
   it('does not import withCtx when nothing is passed as a value', () => {
     const src = fixture(`  function a(): void { ctx.render.frame++; }\n  a();`);
-    const r = extractLeaves(src, ['a'], [], 'game-render-leaves');
+    const r = extractLeaves(src, ['a'], [], 'game-render-controls');
     expect(r.bareRefs).toBe(0);
     expect(r.main).not.toContain('withCtx');
   });
 
   it('leaves a same-named PROPERTY alone (only the free identifier is a ref)', () => {
     const src = fixture(`  function step(): void { ctx.render.frame++; }\n  step();\n  ctx.demo.step = 3;\n  const o = { step: 1 };\n  void o;`);
-    const r = extractLeaves(src, ['step'], [], 'game-render-leaves');
+    const r = extractLeaves(src, ['step'], [], 'game-render-controls');
     expect(r.main).toContain('ctx.demo.step = 3;');
     expect(r.main).toContain('const o = { step: 1 };');
   });
@@ -77,39 +78,39 @@ describe('extract-leaf: references passed as values', () => {
 describe('extract-leaf: the leaf check', () => {
   it('REFUSES a function that still closes over a main()-scope function', () => {
     const src = fixture(`  function ceilingAt(x: number): number { return x; }\n  function chunkCollidersAt(x: number): number {\n    return ceilingAt(x) + ctx.world.floor;\n  }\n  chunkCollidersAt(1);`);
-    expect(() => extractLeaves(src, ['chunkCollidersAt'], [], 'game-world-leaves'))
+    expect(() => extractLeaves(src, ['chunkCollidersAt'], [], 'game-hit-trace'))
       .toThrow(/chunkCollidersAt.*ceilingAt/s);
   });
 
   it('REFUSES a function that still closes over a main()-scope const', () => {
     const src = fixture(`  const ROOM_ID_BY_NAME = new Map<string, number>();\n  function playerRoomId(n: string): number {\n    return ROOM_ID_BY_NAME.get(n) ?? ctx.player.roomId;\n  }\n  playerRoomId('a');`);
-    expect(() => extractLeaves(src, ['playerRoomId'], [], 'game-player-leaves'))
+    expect(() => extractLeaves(src, ['playerRoomId'], [], 'game-player-input'))
       .toThrow(/ROOM_ID_BY_NAME/);
   });
 
   it('accepts it once the const travels along via --consts', () => {
     const src = fixture(`  const ROOM_ID_BY_NAME = new Map<string, number>();\n  function playerRoomId(n: string): number {\n    return ROOM_ID_BY_NAME.get(n) ?? ctx.player.roomId;\n  }\n  playerRoomId('a');`);
-    const r = extractLeaves(src, ['playerRoomId'], ['ROOM_ID_BY_NAME'], 'game-player-leaves');
+    const r = extractLeaves(src, ['playerRoomId'], ['ROOM_ID_BY_NAME'], 'game-player-input');
     expect(r.module).toContain('export const ROOM_ID_BY_NAME');
     expect(r.module).toContain('export function playerRoomId(ctx: GameContext, n: string): number {');
   });
 
   it('accepts co-moved functions calling each other, and passes ctx through', () => {
     const src = fixture(`  function inner(x: number): number { return x + ctx.world.floor; }\n  function outer(x: number): number { return inner(x); }\n  outer(1);`);
-    const r = extractLeaves(src, ['inner', 'outer'], [], 'game-world-leaves');
+    const r = extractLeaves(src, ['inner', 'outer'], [], 'game-hit-trace');
     expect(r.module).toContain('return inner(ctx, x);');
   });
 
   it('does not count locals, parameters or imports as free names', () => {
     const src = fixture(`  const shadowed = 1;\n  function f(shadowed: number): number {\n    const local = shadowed + 1;\n    return local + new THREE.Vector3().x + ctx.render.frame;\n  }\n  f(2);`);
-    const r = extractLeaves(src, ['f'], [], 'game-render-leaves');
+    const r = extractLeaves(src, ['f'], [], 'game-render-controls');
     expect(r.module).toContain('export function f(ctx: GameContext, shadowed: number): number {');
   });
 
   it('names EVERY offender, so one run plans the next wave', () => {
     const src = fixture(`  const A = 1;\n  function b(): number { return 2; }\n  function f(): number { return A + b() + ctx.render.frame; }\n  f();`);
     let msg = '';
-    try { extractLeaves(src, ['f'], [], 'game-render-leaves'); } catch (e) { msg = String(e); }
+    try { extractLeaves(src, ['f'], [], 'game-render-controls'); } catch (e) { msg = String(e); }
     expect(msg).toContain('A');
     expect(msg).toContain('b');
   });
@@ -123,40 +124,40 @@ describe('extract-leaf: --rebind', () => {
   const rebind = { scene: 'ctx.boot.handle.scene', camera: 'ctx.boot.handle.camera' };
 
   it('rewrites a rebound free name inside the moved body', () => {
-    const r = extractLeaves(src, ['sizeSdfLayer'], [], 'game-render-leaves', [], { rebind });
+    const r = extractLeaves(src, ['sizeSdfLayer'], [], 'game-render-controls', [], { rebind });
     expect(r.module).toContain('ctx.boot.handle.scene.add(ctx.render.layer);');
     expect(r.module).toContain('ctx.boot.handle.camera.updateProjectionMatrix();');
     expect(r.module).not.toMatch(/(^|[^.\w])scene\./m);
   });
 
   it('accepts the function as a leaf once its free names are rebound', () => {
-    expect(() => extractLeaves(src, ['sizeSdfLayer'], [], 'game-render-leaves')).toThrow(/scene/);
-    expect(() => extractLeaves(src, ['sizeSdfLayer'], [], 'game-render-leaves', [], { rebind })).not.toThrow();
+    expect(() => extractLeaves(src, ['sizeSdfLayer'], [], 'game-render-controls')).toThrow(/scene/);
+    expect(() => extractLeaves(src, ['sizeSdfLayer'], [], 'game-render-controls', [], { rebind })).not.toThrow();
   });
 
   it('leaves the call site in game-main alone', () => {
-    const r = extractLeaves(src, ['sizeSdfLayer'], [], 'game-render-leaves', [], { rebind });
+    const r = extractLeaves(src, ['sizeSdfLayer'], [], 'game-render-controls', [], { rebind });
     expect(r.main).toContain('const { scene, camera } = ');
   });
 
   it('does not touch a same-named property or local', () => {
     const s2 = fixture(`  const { scene, camera } = ctx.boot.handle;\n  void camera;\n  function f(): void {\n    const scene = ctx.render.frame;\n    ctx.demo.scene = scene;\n    void scene;\n  }\n  f();`);
-    const r = extractLeaves(s2, ['f'], [], 'game-render-leaves', [], { rebind });
+    const r = extractLeaves(s2, ['f'], [], 'game-render-controls', [], { rebind });
     expect(r.module).toContain('const scene = ctx.render.frame;');
     expect(r.module).toContain('ctx.demo.scene = scene;');
   });
 });
 
 describe('extract-leaf: appending to an existing module', () => {
-  // Wave 1 produced game-render-leaves2.ts / game-world-leaves3.ts purely
+  // Wave 1 produced game-bone-cull.ts / game-bleed.ts purely
   // because the writer could only create. A second call for the same slice must
   // land in the same file, merging imports rather than duplicating them.
   const first = fixture(`  function a(x: number): number { return x + ctx.render.frame; }\n  a(1);`);
 
   it('keeps the existing bodies and adds the new one', () => {
-    const r1 = extractLeaves(first, ['a'], [], 'game-render-leaves');
+    const r1 = extractLeaves(first, ['a'], [], 'game-render-controls');
     const second = fixture(`  function b(y: number): number { return y - ctx.render.frame; }\n  b(2);`);
-    const r2 = extractLeaves(second, ['b'], [], 'game-render-leaves', [], { existing: r1.module });
+    const r2 = extractLeaves(second, ['b'], [], 'game-render-controls', [], { existing: r1.module });
     expect(r2.module).toContain('export function a(ctx: GameContext, x: number): number');
     expect(r2.module).toContain('export function b(ctx: GameContext, y: number): number');
     // One header, one GameContext import.
@@ -167,16 +168,16 @@ describe('extract-leaf: appending to an existing module', () => {
   });
 
   it('merges named imports from the same module instead of repeating the line', () => {
-    const r1 = extractLeaves(first, ['a'], [], 'game-render-leaves', ["import { X } from './x';"]);
+    const r1 = extractLeaves(first, ['a'], [], 'game-render-controls', ["import { X } from './x';"]);
     const second = fixture(`  function b(y: number): number { return y - ctx.render.frame; }\n  b(2);`);
-    const r2 = extractLeaves(second, ['b'], [], 'game-render-leaves', ["import { Y } from './x';"], { existing: r1.module });
+    const r2 = extractLeaves(second, ['b'], [], 'game-render-controls', ["import { Y } from './x';"], { existing: r1.module });
     expect((r2.module.match(/from '\.\/x';/g) ?? []).length).toBe(1);
     expect(r2.module).toContain("import { X, Y } from './x';");
   });
 
   it('does not duplicate a body that is already there', () => {
-    const r1 = extractLeaves(first, ['a'], [], 'game-render-leaves');
-    const again = extractLeaves(first, ['a'], [], 'game-render-leaves', [], { existing: r1.module });
+    const r1 = extractLeaves(first, ['a'], [], 'game-render-controls');
+    const again = extractLeaves(first, ['a'], [], 'game-render-controls', [], { existing: r1.module });
     expect((again.module.match(/export function a\(/g) ?? []).length).toBe(1);
   });
 });
@@ -208,6 +209,61 @@ describe('extract-leaf: what the moved code needs to compile', () => {
     const r = extractLeaves(src, ['inner', 'outer'], [], 'game-x-leaves');
     expect(r.module).toContain("import { withCtx, type GameContext } from './game-context';");
     expect(r.module).toContain('{ inner: withCtx(ctx, inner) }');
+  });
+});
+
+describe('extract-leaf: one import declaration per specifier', () => {
+  // 2026-10-07, game-tick: the moved body wrapped a bare fn ref in withCtx, so
+  // the header imported `{ withCtx, type GameContext }` — and importsFor()
+  // ALSO re-inferred withCtx from game-main's own import of it (an earlier
+  // wave had put it there). Two declarations of one name, TS2300; the second
+  // line was removed by hand.
+  const src = [
+    "import * as THREE from 'three';",
+    "import { makeGameContext } from './game-context';",
+    "import { withCtx } from './game-context';",
+    '',
+    'export function main(): void {',
+    '  const ctx = makeGameContext();',
+    '  function inner(): number { return ctx.render.frame; }',
+    '  function outer(): unknown { return { inner }; }',
+    '  outer();',
+    '}',
+    '',
+  ].join('\n');
+  const gameCtxLines = (m: string): string[] =>
+    m.match(/^import .*?from '\.\/game-context';$/gm) ?? [];
+
+  it('writes ONE game-context import into a NEW module, carrying withCtx and the type', () => {
+    const r = extractLeaves(src, ['inner', 'outer'], [], 'game-tick');
+    const lines = gameCtxLines(r.module);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('withCtx');
+    expect(lines[0]).toContain('type GameContext');
+    // The wrap itself is untouched — only the import list is merged.
+    expect(r.module).toContain('withCtx(ctx, inner)');
+  });
+
+  it('keeps ONE game-context import when APPENDING to an existing module', () => {
+    // First wave into this module had no bare refs, so its header is the bare
+    // `import type` form; the second wave wraps and also re-infers withCtx.
+    const first = [
+      "import * as THREE from 'three';",
+      "import { makeGameContext } from './game-context';",
+      '',
+      'export function main(): void {',
+      '  const ctx = makeGameContext();',
+      '  function a(x: number): number { return x + ctx.render.frame; }',
+      '  a(1);',
+      '}',
+      '',
+    ].join('\n');
+    const r1 = extractLeaves(first, ['a'], [], 'game-tick');
+    const r2 = extractLeaves(src, ['inner', 'outer'], [], 'game-tick', [], { existing: r1.module });
+    const lines = gameCtxLines(r2.module);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('withCtx');
+    expect(lines[0]).toContain('type GameContext');
   });
 });
 
@@ -246,20 +302,20 @@ describe('extract-leaf: --consts on a multi-declarator statement', () => {
 
   it('moves BOTH declarators without corrupting the statement', () => {
     const r = extractLeaves(src(`  function boreFrameInRig(): number {\n    return _bfA.x + _bfB.y + ctx.weapon.bore;\n  }\n  boreFrameInRig();`),
-      ['boreFrameInRig'], ['_bfA', '_bfB'], 'game-weapon-leaves');
+      ['boreFrameInRig'], ['_bfA', '_bfB'], 'game-weapon-rig');
     expect(r.module).toContain('export const _bfA = new THREE.Vector3()');
     expect(r.module).toContain('export const _bfB = new THREE.Vector3()');
     // The declaration is gone from main() (it comes back as an import), and the
     // statement is not half-deleted.
     expect(r.main).not.toMatch(/const _bfA = /);
-    expect(r.main).toContain("import { _bfA, _bfB, boreFrameInRig } from './game-weapon-leaves';");
+    expect(r.main).toContain("import { _bfA, _bfB, boreFrameInRig } from './game-weapon-rig';");
     expect(r.main).not.toMatch(/const\s*,/);
     expect(r.main).not.toMatch(/,\s*;/);
   });
 
   it('keeps the declarators that were NOT requested in game-main', () => {
     const r = extractLeaves(src(`  function f(): number { return _bfA.x + ctx.weapon.bore; }\n  f();\n  void _bfB;`),
-      ['f'], ['_bfA'], 'game-weapon-leaves');
+      ['f'], ['_bfA'], 'game-weapon-rig');
     expect(r.module).toContain('export const _bfA = new THREE.Vector3()');
     expect(r.module).not.toContain('_bfB');
     expect(r.main).toContain('const _bfB = new THREE.Vector3();');
@@ -269,12 +325,12 @@ describe('extract-leaf: --consts on a multi-declarator statement', () => {
 
 describe('extract-leaf: a module never imports itself', () => {
   it('drops an inferred import whose specifier IS this module', () => {
-    // An earlier wave moved viewToRig into game-weapon-leaves, so game-main
+    // An earlier wave moved viewToRig into game-weapon-rig, so game-main
     // imports it back from there. A later function that calls it must not
     // re-import it into that same module.
     const src = [
       "import * as THREE from 'three';",
-      "import { viewToRig } from './game-weapon-leaves';",
+      "import { viewToRig } from './game-weapon-rig';",
       "import { makeGameContext } from './game-context';",
       '',
       'export function main(): void {',
@@ -286,8 +342,8 @@ describe('extract-leaf: a module never imports itself', () => {
       '}',
       '',
     ].join('\n');
-    const r = extractLeaves(src, ['viewDirToRig'], [], 'game-weapon-leaves');
-    expect(r.module).not.toContain("from './game-weapon-leaves'");
+    const r = extractLeaves(src, ['viewDirToRig'], [], 'game-weapon-rig');
+    expect(r.module).not.toContain("from './game-weapon-rig'");
   });
 });
 
@@ -299,15 +355,15 @@ describe('extract-leaf: types declared inside main()', () => {
     `import * as THREE from 'three';\nimport { makeGameContext } from './game-context';\n\nexport function main(): void {\n  const ctx = makeGameContext();\n  interface TracerView { mesh: THREE.Mesh; life: number }\n${body}\n}\n`;
 
   it('carries the type into the module and accepts the function as a leaf', () => {
-    const r = extractLeaves(src(`  function newTracerView(): TracerView {\n    return { mesh: ctx.weapon.quad, life: 0 };\n  }\n  newTracerView();`), ['newTracerView'], [], 'game-weapon-leaves');
+    const r = extractLeaves(src(`  function newTracerView(): TracerView {\n    return { mesh: ctx.weapon.quad, life: 0 };\n  }\n  newTracerView();`), ['newTracerView'], [], 'game-weapon-rig');
     expect(r.module).toContain('interface TracerView { mesh: THREE.Mesh; life: number }');
     expect(r.module).toContain('export function newTracerView(ctx: GameContext): TracerView {');
   });
 
   it('exports the carried type, so main() can keep annotating with it', () => {
-    const r = extractLeaves(src(`  function newTracerView(): TracerView {\n    return { mesh: ctx.weapon.quad, life: 0 };\n  }\n  const v: TracerView = newTracerView();\n  void v;`), ['newTracerView'], [], 'game-weapon-leaves');
+    const r = extractLeaves(src(`  function newTracerView(): TracerView {\n    return { mesh: ctx.weapon.quad, life: 0 };\n  }\n  const v: TracerView = newTracerView();\n  void v;`), ['newTracerView'], [], 'game-weapon-rig');
     expect(r.module).toContain('export interface TracerView');
-    expect(r.main).toContain("import { TracerView, newTracerView } from './game-weapon-leaves';");
+    expect(r.main).toContain("import { TracerView, newTracerView } from './game-weapon-rig';");
     expect(r.main).not.toContain('interface TracerView {');
   });
 });
@@ -318,7 +374,7 @@ describe('extract-leaf: shadowing and transitive types', () => {
     // `let fire: 0 | 1 | 2 = 0`. Rewriting the latter produced
     // `withCtx(ctx, fire) = a.barrels`, which is not even valid JS.
     const src = `import { makeGameContext } from './game-context';\n\nexport function main(): void {\n  const ctx = makeGameContext();\n  function fire(barrels: number): boolean {\n    return barrels > 0 && ctx.weapon.loaded;\n  }\n  fire(1);\n  {\n    let fire: 0 | 1 | 2 = 0;\n    fire = 2;\n    void fire;\n  }\n}\n`;
-    const r = extractLeaves(src, ['fire'], [], 'game-weapon-leaves');
+    const r = extractLeaves(src, ['fire'], [], 'game-weapon-rig');
     expect(r.main).toContain('let fire: 0 | 1 | 2 = 0;');
     expect(r.main).toContain('fire = 2;');
     expect(r.main).not.toContain('withCtx(ctx, fire) =');
@@ -328,7 +384,7 @@ describe('extract-leaf: shadowing and transitive types', () => {
 
   it('carries a type that the carried type itself references', () => {
     const src = `import * as THREE from 'three';\nimport { makeGameContext } from './game-context';\n\nexport function main(): void {\n  const ctx = makeGameContext();\n  interface ChunkTemplate { id: number }\n  interface BakedChunk { mesh: THREE.Mesh; tpl: ChunkTemplate }\n  function freeBaked(c: BakedChunk): void {\n    ctx.bake.freed.push(c.mesh);\n  }\n  freeBaked({ mesh: ctx.bake.probe, tpl: { id: 1 } });\n}\n`;
-    const r = extractLeaves(src, ['freeBaked'], [], 'game-bake-leaves');
+    const r = extractLeaves(src, ['freeBaked'], [], 'game-chunk-bake');
     expect(r.module).toContain('interface BakedChunk');
     expect(r.module).toContain('interface ChunkTemplate');
   });
@@ -341,7 +397,7 @@ describe('extract-leaf: const arrow functions', () => {
     `import * as THREE from 'three';\nimport { makeGameContext } from './game-context';\n\nexport function main(): void {\n  const ctx = makeGameContext();\n${body}\n}\n`;
 
   it('converts a block-bodied arrow into an exported function with ctx', () => {
-    const r = extractLeaves(src(`  const cancelChunkBake = () => {\n    ctx.bake.pending = 0;\n  };\n  cancelChunkBake();`), ['cancelChunkBake'], [], 'game-bake-leaves');
+    const r = extractLeaves(src(`  const cancelChunkBake = () => {\n    ctx.bake.pending = 0;\n  };\n  cancelChunkBake();`), ['cancelChunkBake'], [], 'game-chunk-bake');
     expect(r.module).toContain('export function cancelChunkBake(ctx: GameContext) {');
     expect(r.module).toContain('ctx.bake.pending = 0;');
     expect(r.main).toContain('cancelChunkBake(ctx);');
@@ -349,24 +405,31 @@ describe('extract-leaf: const arrow functions', () => {
   });
 
   it('gives an expression-bodied arrow a return, keeping its return type', () => {
-    const r = extractLeaves(src(`  const shellAmpOf = (): number => ctx.world.floor ?? 0;\n  shellAmpOf();`), ['shellAmpOf'], [], 'game-world-leaves');
+    const r = extractLeaves(src(`  const shellAmpOf = (): number => ctx.world.floor ?? 0;\n  shellAmpOf();`), ['shellAmpOf'], [], 'game-hit-trace');
     expect(r.module).toMatch(/export function shellAmpOf\(ctx: GameContext\): number \{\n\s*return ctx\.world\.floor \?\? 0;\n\}/);
   });
 
   it('keeps parameters and their types, after ctx', () => {
-    const r = extractLeaves(src(`  const gibAllowance = (remaining: number, left: number): number => remaining + left + ctx.gibs.budget;\n  gibAllowance(1, 2);`), ['gibAllowance'], [], 'game-gibs-leaves');
+    const r = extractLeaves(src(`  const gibAllowance = (remaining: number, left: number): number => remaining + left + ctx.gibs.budget;\n  gibAllowance(1, 2);`), ['gibAllowance'], [], 'game-gib-spawn');
     expect(r.module).toContain('export function gibAllowance(ctx: GameContext, remaining: number, left: number): number {');
     expect(r.main).toContain('gibAllowance(ctx, 1, 2);');
   });
 
   it('keeps async', () => {
-    const r = extractLeaves(src(`  const loadIt = async (n: string): Promise<void> => {\n    ctx.bake.pending = n.length;\n  };\n  void loadIt('a');`), ['loadIt'], [], 'game-bake-leaves');
+    const r = extractLeaves(src(`  const loadIt = async (n: string): Promise<void> => {\n    ctx.bake.pending = n.length;\n  };\n  void loadIt('a');`), ['loadIt'], [], 'game-chunk-bake');
     expect(r.module).toContain('export async function loadIt(ctx: GameContext, n: string): Promise<void> {');
   });
 
   it('moves an arrow that is only ever passed as a value, wrapped', () => {
-    const r = extractLeaves(src(`  const applyHemi = () => { ctx.lighting.hemiBase = 1; };\n  const deps = { applyHemi };\n  void deps;`), ['applyHemi'], [], 'game-lighting-leaves');
+    const r = extractLeaves(src(`  const applyHemi = () => { ctx.lighting.hemiBase = 1; };\n  const deps = { applyHemi };\n  void deps;`), ['applyHemi'], [], 'game-level-lights');
     expect(r.module).toContain('export function applyHemi(ctx: GameContext) {');
     expect(r.main).toContain('{ applyHemi: withCtx(ctx, applyHemi) }');
+  });
+
+  it('mergeImportLines: a value import of a name wins over a type-only one, in either order', () => {
+    expect(mergeImportLines(["import { type A } from './m';", "import { A, B } from './m';"]))
+      .toEqual(["import { A, B } from './m';"]);
+    expect(mergeImportLines(["import { A } from './m';", "import type { A } from './m';"]))
+      .toEqual(["import { A } from './m';"]);
   });
 });

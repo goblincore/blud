@@ -52,10 +52,21 @@ import { cutLipAmp, cutThreatWound, woundThreatMasks, type ThreatWound } from '.
 /** The shipped owner re-fold mode (counts2.z): 2 = the raiser gate (map-body.wgsl.ts).
  *  0 = the full re-fold it replaced; see game-seams-world.ts for the others. */
 export const SHIP_REFOLD_MODE = 2;
-/** The whole shipped counts2.z: the raiser gate + 32, the NORMAL HINT (calcNormal's taps
+/** The wound EXACT FIXES bit of counts2.z (map-body.wgsl.ts `exactFix`, wounds.wgsl.ts `gWoundExact`): a wound
+ *  row's reach uses the sample's own depth inside the body in place of a fixed 0.25 m, and the owner re-fold is
+ *  skipped where a pre-scan proves it must lose. Value-preserving by argument and by measurement. */
+export const WOUND_EXACT_BIT = 8;
+/** The whole shipped counts2.z: the raiser gate, + 32, the NORMAL HINT (calcNormal's taps
  *  re-fold only the limb that won at the hit; owner A/B 2026-09-22: no visible difference,
- *  -1.0 ms wounded melee). */
-export const SHIP_COUNTS2_Z = SHIP_REFOLD_MODE + 32;
+ *  -1.0 ms wounded melee), + 8, the wound EXACT FIXES (shipped 2026-10-08).
+ *
+ *  THE EXACT FIXES SHIPPED OFF FOR TWO WEEKS: on 2026-09-22 they measured "~0 gain" on melee bodies carrying 3 or 4
+ *  wounds. On a body with 32 (two buckshot volleys) every march step folded 19 wound rows, most of them reached only
+ *  through the fixed slack; with the fixes the walk folds 1.88M rows where it folded 7.79M, and the frame at 0.8 m is
+ *  3 to 5 ms shorter (7 to 9 ms with a torso chop and the head split wide). The float march target is the same to
+ *  the bit on every wound stage tried, colour and depth, and no `march-hash` pin moves
+ *  (docs/dev-notes/2026-10-08-frame-cost). `__sdfGame.setWoundExact(false)` is the old reach. */
+export const SHIP_COUNTS2_Z = SHIP_REFOLD_MODE + 32 + WOUND_EXACT_BIT;
 import { marchNormalRead, marchAnchorRead, marchMotionRead } from './march-private-reads';
 import { TEMPORAL_START_WGSL } from './temporal-start';
 import { createCrowdRecords, fallbackCrowdRecords, allocateSlot, MAX_CROWD_INSTANCES, type CrowdRecords } from './crowd-records';
@@ -174,6 +185,15 @@ export interface ZombieGpuView {
    * field for the instanced-tube renderer and counts2.x counts organs only.
    */
   setPackBones(on: boolean): void;
+  /**
+   * Flip the packOrgans layout (organs as mesh, 2026-10-06). Default TRUE —
+   * organ rows in the field. FALSE: the mesh skeleton draws this actor's
+   * organs as segment meshes, so with packBones also off the body packs NO
+   * inside-flesh row, counts2.x is 0 and the march never calls applyBones.
+   * A change re-packs the last uploaded body at once (a frozen frame flips
+   * without waiting for a pose update), as setBoneCullMode does.
+   */
+  setPackOrgans(on: boolean): void;
   /**
    * One bound sphere per flesh cluster's bone rows (packBoneClusters). Default
    * FALSE — the old flat bone loop, bit-identical. TRUE takes effect on the
@@ -1294,7 +1314,8 @@ export function createMarchMaterial(
   lastFrame?: LastFrameSource,
   // Run 5: extra named inputs for an entry whose signature extends MARCH_BODY's
   // (refineBody). Spread LAST into the call object; bound by name like every other
-  // input — the positional notes above concern the WGSL parameter list, not this spread.
+  // input. (The POSITIONALLY LAST notes above are about THIS FUNCTION'S OWN TS
+  // parameters — its callers pass them positionally — not the wgslFn call object.)
   extra?: Record<string, unknown>,
   // Run 5, POSITIONALLY LAST: share an EXISTING level-shadow TextureNode instead of
   // building a local one. Per-material nodes drift — the game's per-frame rebind
@@ -1377,12 +1398,16 @@ export function createMarchMaterial(
     spotPos: u.spotPos,
     spotAxis: u.spotAxis,
     spotCfg: u.spotCfg,
-    // ORDER MATTERS HERE. These are bound POSITIONALLY against the WGSL
-    // signature in march.wgsl.ts, not by name, so a key sitting in the wrong
-    // slot silently hands the shader a different uniform instead of failing.
-    // spotCfg2 was declared after spotColor here while the signature has it
-    // before, so every beam knob was reading spotColor's constant
-    // (0.94, 0.96, 1.0) and no slider did anything (2026-09-01).
+    // KEYS BIND BY NAME HERE, not by position. three 0.186 resolves every
+    // WGSL input through parameters[inputNode.name]
+    // (nodes/code/FunctionCallNode.js, generate — proven GPU-free in
+    // wgslfn-binding.test.ts), so a key's ORDER in this object cannot
+    // misbind it; only the ARRAY form — fn(a, b) — binds positionally, and
+    // this call is the object form. The real hazard is a MISSING or MISNAMED
+    // key: it binds float(0) with only a console error, GPU-only. (The
+    // 2026-09-01 beam fix reordered the two keys right below on an order
+    // theory; three 0.185.1 already bound objects by name, so the reorder
+    // was not what fixed it.)
     spotCfg2: u.spotCfg2,
     spotColor: u.spotColor,
     surfCfg: u.surfCfg,
@@ -1455,14 +1480,13 @@ export function createMarchMaterial(
           disabledValue: float(1e9),
         })
       : float(1e9),
-    // Perf round 2 seams. Bound POSITIONALLY last, matching the WGSL
-    // signature (see the ORDER MATTERS note above — a slot swap here
-    // silently hands the shader the wrong uniform).
+    // Perf round 2 seams. Bound BY NAME (see the KEYS BIND BY NAME note
+    // above) — the hazard is a missing key, which binds float(0) with only a
+    // console error.
     perfCfg: u.perfCfg,
-    // Accumulated-depth gate (perf round 2 task 5). Bound POSITIONALLY last —
-    // prevT sits AFTER perfCfg in MARCH_BODY's signature. 1e9 is the no-gate
-    // identity: a material built without a prev source marches exactly as
-    // before.
+    // Accumulated-depth gate (perf round 2 task 5), bound BY NAME. 1e9 is
+    // the no-gate identity: a material built without a prev source marches
+    // exactly as before.
     prevT: prev
       ? prevFetchNode({
           prevTex: texture(prev.texture),
@@ -1473,43 +1497,40 @@ export function createMarchMaterial(
           cosRay,
         })
       : float(1e9),
-    // Level-only shadow (perf round 2 task 7). Bound POSITIONALLY last —
-    // MARCH_BODY's tail is bodyCentre, bodyHalf, meltCfg, levelShadow*, in
-    // this order (see the ORDER MATTERS note above; a slot swap here silently
-    // hands the shader the wrong uniform).
+    // Level-only shadow (perf round 2 task 7), bound BY NAME in the same
+    // commit as the WGSL inputs (see the KEYS BIND BY NAME note above).
     levelShadowTex: levelShadowTexNode,
     levelShadowMatrix: u.levelShadowMatrix,
     levelShadowCfg: u.levelShadowCfg,
-    // Quarter-res depth prepass (close-up task 3) — POSITIONALLY LAST after
-    // windDrift, bound in the same commit as the WGSL input (the meltCfg
-    // rule). Without a source the fallback 1×1 texture and the all-zero cfg
+    // Quarter-res depth prepass (close-up task 3), bound BY NAME in the
+    // same commit as the WGSL input (the meltCfg rule). Without a source the
+    // fallback 1×1 texture and the all-zero cfg
     // keep the fetch at its "no start" identity — the disabled march is
     // bit-identical, and cfg.y (the block footprint) is only read after the
     // enabled test in DEPTH_PRE_FETCH's consumer.
     depthPreTex: texture(depthPre ? depthPre.texture : fallbackDepthPreTexture()),
     depthPreCfg: (depthPre ? depthPre.uniforms.cfg : fallbackDepthPreUniform()) as never,
     normalGradientCfg: u.normalGradientCfg,
-    // Static probe grid (lighting P3 step 1) — POSITIONALLY LAST, five
-    // slots after normalGradientCfg, bound in the same commit as the WGSL
-    // inputs (the meltCfg rule). probeCfg.x = 0 keeps every view that does
-    // not build a grid bit-identical.
+    // Static probe grid (lighting P3 step 1), bound BY NAME in the same
+    // commit as the WGSL inputs (the meltCfg rule). probeCfg.x = 0 keeps
+    // every view that does not build a grid bit-identical.
     probeTex: u.probeTex,
     probeMin: u.probeMin,
     probeInvExtent: u.probeInvExtent,
     probeDims: u.probeDims,
     probeCfg: u.probeCfg,
-    // Flashlight bounce spot (P4 step 1) — POSITIONALLY LAST, four slots
-    // after probeCfg, bound in the same commit as the WGSL inputs.
+    // Flashlight bounce spot (P4 step 1), bound BY NAME in the same commit
+    // as the WGSL inputs.
     bounceSpotPos: u.bounceSpotPos,
     bounceSpotNormal: u.bounceSpotNormal,
     bounceSpotRadiance: u.bounceSpotRadiance,
     bounceSpotCfg: u.bounceSpotCfg,
-    // GPU probe gather dynamic layer — POSITIONALLY LAST, two slots after
-    // bounceSpotCfg, bound in the same commit as the WGSL inputs.
+    // GPU probe gather dynamic layer, bound BY NAME in the same commit as
+    // the WGSL inputs.
     probeDyn: (probeDyn ?? fallbackProbeDyn()) as never,
     probeDynCfg: u.probeDynCfg,
-    // Temporal reprojection start — bound after probeDynCfg, in the same
-    // commit as the WGSL inputs.
+    // Temporal reprojection start, bound BY NAME in the same commit as the
+    // WGSL inputs.
     lastTex: texture(lastFrame ? lastFrame.texture : fallbackLastFrame().tex),
     lastInvVp: lastFrame ? lastFrame.uniforms.invVp : fallbackLastFrame().invVp,
     temporalCfg: lastFrame ? lastFrame.uniforms.cfg : fallbackLastFrame().cfg,
@@ -1520,9 +1541,9 @@ export function createMarchMaterial(
     instCfg: crowd?.instCfg ?? fallbackInstCfg(),
     instCentre: (crowd?.instCentre ?? fallbackInstCentre()) as never,
     instHalf: (crowd?.instHalf ?? fallbackInstHalf()) as never,
-    // BURNING BODY (flame lab) — POSITIONALLY LAST after instHalf, bound in
-    // the same commit as the WGSL inputs (the meltCfg rule). All-zero burnCfg
-    // keeps every view that does not ignite bit-identical.
+    // BURNING BODY (flame lab), bound BY NAME in the same commit as the
+    // WGSL inputs (the meltCfg rule). All-zero burnCfg keeps every view that
+    // does not ignite bit-identical.
     burnCfg: u.burnCfg,
     burnNoiseScale: u.burnNoiseScale,
     burnRiseSpeed: u.burnRiseSpeed,
@@ -1531,8 +1552,8 @@ export function createMarchMaterial(
     burnFireCoverage: u.burnFireCoverage,
     burnSkeleton: u.burnSkeleton,
     burnSkeletonDepth: u.burnSkeletonDepth,
-    // SHARED LIGHT LIST (plan 1 task 9) — POSITIONALLY LAST after
-    // burnSkeletonDepth, bound in the same commit as the WGSL inputs. The
+    // SHARED LIGHT LIST (plan 1 task 9), bound BY NAME in the same commit
+    // as the WGSL inputs. The
     // storage node is ALWAYS bound (the zero fallback when this view has no
     // list); lightListCfg.x = 0 keeps the old key path.
     lightListCfg: u.lightListCfg,
@@ -2486,6 +2507,8 @@ export function createZombieGpuView(
   // Bone tubes: FALSE once the instanced-tube renderer owns the bones — the
   // pack then writes ORGANS only and counts2.x counts organs.
   let packBones = opts.packBones ?? true;
+  // Organs as mesh: FALSE once the segment-mesh renderer owns this actor's organs.
+  let packOrgans = true;
   // Bone-cluster spheres (packBoneClusters): TRUE culls the inside-flesh
   // rows with one per-flesh-cluster sphere before folding them. 'off' (ship)
   // is the old flat loop; pack writes zero bone-cluster texels and the shader
@@ -2592,7 +2615,7 @@ export function createZombieGpuView(
   function upload(next: BuildResult, rest?: BuildResult, advanceMotion = false) {
     lastUploadNext = next;
     lastUploadRest = rest;
-    const p = packBody(next, rest, { packBones, boneCullMode }, uploadScratch);
+    const p = packBody(next, rest, { packBones, packOrgans, boneCullMode }, uploadScratch);
     uploadScratch = p;
     // The texture is sink.stride prims wide (sized from the body at creation,
     // or from the crowd type's first body). A body that outgrew it — a
@@ -2769,11 +2792,11 @@ export function createZombieGpuView(
           enabled: opts.cone.uniforms.chain,
         })
       : float(0),
-    // Bound POSITIONALLY last, matching CONE_MARCH's WGSL signature (the
-    // ORDER MATTERS note in createMarchMaterial). The cone twin sees the
-    // same seams the march does.
+    // Bound BY NAME (see the KEYS BIND BY NAME note in createMarchMaterial)
+    // — a missing key binds float(0) with only a console error. The cone
+    // twin sees the same seams the march does.
     perfCfg: u.perfCfg,
-    // Crowd stage a — POSITIONALLY LAST, matching CONE_MARCH's signature.
+    // Crowd stage a, bound BY NAME in the same commit as the WGSL inputs.
     // The cone marches the record field exactly like the main material.
     inst: records.node as never,
     instCfg,
@@ -2868,8 +2891,8 @@ export function createZombieGpuView(
       woundCfg: u.woundCfg,
       woundCfg2: u.woundCfg2,
       depthPreCfg: opts.depthPre.uniforms.cfg,
-      // Bound POSITIONALLY last, matching DEPTH_PREPASS_MARCH's WGSL
-      // signature (the ORDER MATTERS note in createMarchMaterial).
+      // Bound BY NAME (see the KEYS BIND BY NAME note in createMarchMaterial)
+      // — a missing key binds float(0) with only a console error.
       perfCfg: u.perfCfg,
       inst: records.node as never,
       instCfg,
@@ -2992,6 +3015,11 @@ export function createZombieGpuView(
     woundThreats() { return [...lastThreatMasks]; },
     get woundThreatMargin() { return lastThreatMargin; },
     setPackBones(on) { packBones = on; },
+    setPackOrgans(on) {
+      if (on === packOrgans) return;
+      packOrgans = on;
+      if (lastUploadNext) upload(lastUploadNext, lastUploadRest);
+    },
     setBoneCull(on) {
       // The boolean seam is the cluster mode — kept for the bench's
       // bone-cull-on leg and the parked branch's callers.

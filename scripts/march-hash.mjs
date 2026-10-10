@@ -90,7 +90,7 @@
 // room1 differed every boot, always within-boot deterministic. MARCH_HASH_DUMP
 // named the inputs — the body key and fill uniforms (spotCfg2.zw, lightCfg.y,
 // probeCfg.y) — and the clock behind them: the dynamic-light runtime
-// (game-dynamic-light-leaves.ts, bb1355b4 and follow-ups) keeps its OWN light
+// (game-dynamic-light.ts, bb1355b4 and follow-ups) keeps its OWN light
 // clock, `rt.time`, advanced by every sim step. Lamp moods (lampLevel), the
 // room light that applyRoomFill scales the fill by, the lamp presentingLamp
 // keys a body with (applyWindowKey), the tube swing and the storm schedule all
@@ -111,10 +111,12 @@ import { connectGame, applyShipDefaults, bootCloseupPage, stageCloseUp, sleep } 
 
 const VITE = Number(process.env.LAB_VITE_PORT ?? 5323);
 const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
-// CANONICAL VALUES (default = crowd, BOXES dispatch, RE-PINNED 2026-09-29 on
-// claude/night-train-9-27-handoff-d270c3, light clock pinned — see LIGHT CLOCK):
-//   shipped default (crowd, boxes, tiles on)        = d7392d5234c98ddc1babb3b29860abc3a02ced84
-//   crowd quad (?crowddispatch=quad, tiles on)      = 0c71e71267bad979dec5b906c461851ff5043068
+// CANONICAL VALUES (RE-PINNED 2026-09-29 on claude/night-train-9-27-handoff-d270c3,
+// light clock pinned — see LIGHT CLOCK). The shipped default has been the QUAD
+// dispatch since 2026-10-08 (game-main.ts); before that it was boxes, and the
+// two hashes below simply swapped which one the no-flag boot produces:
+//   shipped default (crowd, quad, tiles on)         = 0c71e71267bad979dec5b906c461851ff5043068
+//   crowd boxes (?crowddispatch=boxes, tiles on)    = d7392d5234c98ddc1babb3b29860abc3a02ced84
 //   per-body (?crowd=0, tiles off)                  = 470ff0b375adfdb48992adecf04e8915e814b3f7
 // Each reproduced on TWO boots (ports 5288/9288, headless) at cc23eb99.
 //
@@ -289,15 +291,18 @@ const PERBODY_HASH = '470ff0b375adfdb48992adecf04e8915e814b3f7';
 // gate is still one self-checking command after the default flip.
 const PERBODY = process.env.MARCH_HASH_PERBODY === '1';
 // MARCH_HASH_CROWD — the QUAD-dispatch gate: boots `?crowd=1&crowddispatch=quad`,
-// tiles on, and pins the quad canonical. The shipped default (boxes) is pinned
-// by DEFAULT_HASH whenever neither override is set and no extra query is given.
+// tiles on, and pins the quad canonical. The shipped default is the same
+// dispatch, so DEFAULT_HASH (no override, no extra query) is the same value.
+// MARCH_HASH_BOXES — the proxy-box dispatch, pinned to what was the default.
 const CROWD = process.env.MARCH_HASH_CROWD === '1';
+const BOXES = process.env.MARCH_HASH_BOXES === '1';
 const CROWD_HASH = '0c71e71267bad979dec5b906c461851ff5043068';
-const DEFAULT_HASH = 'd7392d5234c98ddc1babb3b29860abc3a02ced84';
+const BOXES_HASH = 'd7392d5234c98ddc1babb3b29860abc3a02ced84';
+const DEFAULT_HASH = CROWD_HASH;
 // MARCH_HASH_QUERY — extra query string appended to the boot URL, so a page
 // flag (e.g. `crowd=1`, `tiles-playtest`) can be hashed through this same gate.
 // MARCH_HASH_PERBODY forces `crowd=0` and wins over it.
-const EXTRA_QUERY = PERBODY ? '&crowd=0' : CROWD ? '&crowd=1&crowddispatch=quad' : (process.env.MARCH_HASH_QUERY ? `&${process.env.MARCH_HASH_QUERY}` : '');
+const EXTRA_QUERY = PERBODY ? '&crowd=0' : CROWD ? '&crowd=1&crowddispatch=quad' : BOXES ? '&crowddispatch=boxes' : (process.env.MARCH_HASH_QUERY ? `&${process.env.MARCH_HASH_QUERY}` : '');
 // MARCH_HASH_ROOM — which room's fill-screen close-up to stage. Room 1 is the
 // canonical gate; room 2 is the crowd-parity diagnostic (more bodies per type).
 const ROOM = Number(process.env.MARCH_HASH_ROOM ?? 1);
@@ -503,7 +508,10 @@ if (PERBODY && room1 !== PERBODY_HASH) {
 if (CROWD && room1 !== CROWD_HASH) {
   fail(`crowd canonical moved: room1=${room1} expected ${CROWD_HASH}`);
 }
-if (!PERBODY && !CROWD && !process.env.MARCH_HASH_QUERY && process.env.MARCH_HASH_TILES !== '0' && room1 !== DEFAULT_HASH) {
+if (BOXES && !PERBODY && !CROWD && room1 !== BOXES_HASH) {
+  fail(`boxes canonical moved: room1=${room1} expected ${BOXES_HASH}`);
+}
+if (!PERBODY && !CROWD && !BOXES && !process.env.MARCH_HASH_QUERY && process.env.MARCH_HASH_TILES !== '0' && room1 !== DEFAULT_HASH) {
   fail(`shipped-default canonical moved: room1=${room1} expected ${DEFAULT_HASH}`);
 }
 

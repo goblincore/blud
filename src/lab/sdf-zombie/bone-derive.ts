@@ -1,4 +1,7 @@
 // src/lab/sdf-zombie/bone-derive.ts
+//
+// Derives the bone capsule inside each flesh primitive, so deep wounds can reach bone.
+
 import type { PrimDef, ShellParams, Vec3 } from './types';
 
 /**

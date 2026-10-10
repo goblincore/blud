@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   HEAD_SPLIT, REGION_MARGIN, choosePreset, forcedSplit, headFrameOf, headLocalDir, headLocalPoint, kickSplit, makePointMotion,
-  makeSplitState, openSplit, pointAccel, punchSplit, skullFollow, skullFollowOk, skullPieceAt, skullPieces, skullSplitOf, skullWarpPoint,
+  makeSplitState, openSplit, pointAccel, punchSplit, skullFollow, skullFollowOk, skullPieceAngle, skullPieceAt, skullPieces, skullSplitOf, skullWarpPoint,
   splitFaceSegs, splitField, splitMassPoint, splitMaxAngle, splitWarpOf, stepSplit, unwarpDir, unwarpPoint, warpDir, warpPoint, widenSplit,
   wobbleDrive, wobbleLimits,
   type HeadFrame, type SplitState, type SplitWarp, type WobbleDrive, type WobbleParams,
@@ -878,7 +878,13 @@ describe('the skull split: the bone opens LESS than the flesh, in stages (the me
       expect(s.frame.w).toBe(w);
     }
     // One side: the still side's bone does not turn either.
+    // A piece's copy is turned by its own bone angle: the rest by none, a half that does not turn by none.
+    const two = skullSplitOf(both(1))!;
+    expect(([0, 1, 2] as const).map(piece => skullPieceAngle(two, piece))).toEqual([0, two.angleP, two.angleM]);
+    expect(two.angleP).toBeGreaterThan(0);
+    expect(two.angleM).toBe(-two.angleP);
     const one = skullSplitOf(open('middle', [0.06, 0, 0.1], 0.8))!;
+    expect(([0, 1, 2] as const).map(piece => skullPieceAngle(one, piece))).toEqual([0, one.angleP, 0]);
     expect(one.angleP).toBeGreaterThan(0);
     expect(one.angleM).toBe(0);
     expect(skullSplitOf(open('middle', [-0.06, 0, 0.1], 0.8))!.angleP).toBe(0);

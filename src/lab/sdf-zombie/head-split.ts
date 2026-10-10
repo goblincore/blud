@@ -660,6 +660,13 @@ export interface SkullSplit {
   seed: number;
 }
 
+/** The bone angle of a piece's copy (rad): 0 for the rest (piece 0), and for a half whose bone does not turn; angleP
+ *  for the + half (1), angleM for the - half (2). The draw, its per-instance record and the hit test all turn a copy
+ *  by this. */
+export function skullPieceAngle(split: SkullSplit, piece: 0 | 1 | 2): number {
+  return piece === 1 ? split.angleP : piece === 2 ? split.angleM : 0;
+}
+
 /** The bone's share of the flesh angle at flesh opening `frac`: HEAD_SPLIT.skull.follow's knots, straight lines between
  *  them, flat outside. */
 export function skullFollow(frac: number, knots: readonly (readonly [number, number])[] = HEAD_SPLIT.skull.follow): number {

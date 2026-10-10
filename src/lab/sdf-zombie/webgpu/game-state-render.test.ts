@@ -68,6 +68,6 @@ describe('RENDER_BINDINGS', () => {
   });
 
   it('covers every binding assigned to this slice', () => {
-    expect(Object.keys(RENDER_BINDINGS)).toHaveLength(35);
+    expect(Object.keys(RENDER_BINDINGS)).toHaveLength(38);
   });
 });
