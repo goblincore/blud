@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { Vec3 } from '../../types';
 import { SKULL2_FACE, skull2Orbit } from './mesh-skull-2';
 import {
-  SCULPT_BUMP, SCULPT_HEIGHT, SCULPT_PAINT_SHAPE1, SCULPT_PAINT_SHAPE2, SCULPT_TEETH_MAX, SCULPT_TOOTH,
-  sculptCavity, sculptHeight, sculptHeightGrad, sculptLines, sculptPaintNormal, sculptPaintSources, sculptPaintSurface,
+  SCULPT_BUMP, SCULPT_CLING, SCULPT_HEIGHT, SCULPT_PAINT_SHAPE1, SCULPT_PAINT_SHAPE2, SCULPT_TEETH_MAX, SCULPT_TOOTH,
+  sculptCavity, sculptCling, sculptHeight, sculptHeightGrad, sculptLines, sculptPaintNormal, sculptPaintSources, sculptPaintSurface,
   sculptPaintWet, sculptPaintWgsl, sculptRelief, sculptTeeth, type SculptPaintLayout,
 } from './sculpt-paint';
 
@@ -297,12 +297,58 @@ describe.each(LAYOUTS)('sculptPaintSurface and sculptPaintWet, %s', (_name, L) =
   });
 });
 
+describe.each(LAYOUTS)('sculptCling, %s: torn flesh left on a shot skull', (_name, L) => {
+  const o = SKULL2_FACE.orbit;
+  /** The mean cling over a patch of bone: `n` points scattered through the segment's local space at the face place `q`. */
+  const mean = (q: Vec3, w: number, expo: number, n = 400) => {
+    let sum = 0;
+    for (let i = 0; i < n; i++) sum += sculptCling(L, [0.0173 * i, 0.0091 * (i % 37), 0.0127 * (i % 53)], q, w, expo);
+    return sum / n;
+  };
+  const cheek: Vec3 = [0.75, -0.2, 0.5];
+  it('clean bone far from any wound has none', () => {
+    expect(mean(cheek, 1, 0)).toBe(0);
+    expect(mean([o.x, o.y, 0.4], 1, 0.1)).toBe(0);
+  });
+  it('a head near a wound carries patches, not a coat: some of the bone is clear and some is covered', () => {
+    const m = mean(cheek, 1, 1);
+    expect(m).toBeGreaterThan(0.12);
+    expect(m).toBeLessThan(0.6);
+  });
+  it('more of it the closer the wound, and more of it in the hollows where flesh holds', () => {
+    expect(mean(cheek, 1, 1)).toBeGreaterThan(mean(cheek, 1, 0.45));
+    expect(mean([o.x, o.y, 0.4], 1, 0.6)).toBeGreaterThan(mean(cheek, 1, 0.6));
+  });
+  it('a bone that is not a head, and the soldier\'s head, have none', () => {
+    expect(mean(cheek, 0, 1)).toBe(0);
+    expect(mean(cheek, 2, 1)).toBe(0);
+  });
+  it('the patches are red and wet: they redden the bone and give it a shine, and the teeth stay clean', () => {
+    const local: Vec3 = [0.0173 * 211, 0.0091 * (211 % 37), 0.0127 * (211 % 53)];
+    let found: Vec3 | null = null;
+    for (let i = 0; i < 400 && !found; i++) {
+      const p: Vec3 = [0.0173 * i, 0.0091 * (i % 37), 0.0127 * (i % 53)];
+      if (sculptCling(L, p, cheek, 1, 1) > 0.9) found = p;
+    }
+    expect(found).not.toBeNull();
+    const dry = sculptPaintSurface(L, found!, cheek, 1, BONE, DEEP, 0).albedo, wound = sculptPaintSurface(L, found!, cheek, 1, BONE, DEEP, 1).albedo;
+    expect(wound[0] - wound[1]).toBeGreaterThan((dry[0] - dry[1]) + 0.12);
+    expect(luma(wound)).toBeLessThan(luma(dry) * 0.6);
+    expect(sculptPaintWet(L, found!, cheek, 1, 1)).toBeGreaterThanOrEqual(0.75);
+    expect(sculptPaintWet(L, found!, cheek, 1, 0)).toBeLessThan(0.6);
+    void local;
+  });
+  it('is tuned by its table', () => {
+    expect(SCULPT_CLING.cover).toBeGreaterThan(SCULPT_CLING.byExpo + SCULPT_CLING.byCavity);
+  });
+});
+
 describe.each(LAYOUTS)('the WGSL, %s', (_name, L) => {
   const w = sculptPaintWgsl(L), sources = sculptPaintSources(L);
   const nameOf = (src: string) => /^fn (\w+)\(/.exec(src)![1]!;
   it('is one function per source, in an order where each calls only what came before it', () => {
     const names = sources.map(nameOf);
-    expect(names).toEqual(['sculptOrbit', 'sculptNose', 'sculptTeeth', 'sculptLines', 'sculptRelief', 'sculptCavity', 'sculptHeight', 'sculptHeightGrad', 'sculptPaintNormal', 'sculptPaintSurface', 'sculptPaintWet']);
+    expect(names).toEqual(['sculptOrbit', 'sculptNose', 'sculptTeeth', 'sculptLines', 'sculptRelief', 'sculptCavity', 'sculptCling', 'sculptHeight', 'sculptHeightGrad', 'sculptPaintNormal', 'sculptPaintSurface', 'sculptPaintWet']);
     const known = new Set(['boneHash', 'boneNoise']);
     sources.forEach((src, i) => {
       expect(src.match(/\bfn \w+\(/g)).toHaveLength(1);

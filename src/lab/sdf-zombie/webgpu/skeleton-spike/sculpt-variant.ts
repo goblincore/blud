@@ -68,8 +68,8 @@ export function sculptRecipe(variant: SculptVariant): Readonly<SculptRecipe> {
  *  zombie and the soldier. Every other character's head is its plain authored bone, with its own proportions, and the
  *  painted face sits on some and not on others (the cast sheet of 2026-10-07,
  *  docs/dev-notes/2026-10-07-sculpt-skull-2/look/cast-bare-heads.jpg):
- *   - the juggernaut's bone is the soldier's, larger and not carved: a ball 170 mm wide over a jaw. The orbits ring
- *     the eyes and the two tooth rows lie either side of the crease between the ball and the jaw;
+ *   - (the juggernaut's bone is the soldier's, larger: until 2026-10-08 it was drawn uncarved, a ball 170 mm wide over
+ *     a jaw. It now wears the soldier's carved head, mesh-skull-2.ts isSoldierHead, and is listed here as the soldier is);
  *   - the clown's and the clown-alt's is one round mass 176 mm wide: the face is whole on it, the orbits round the
  *     eyes.
  *  The cultist's, the cowled cultist's, the bride's, the female's, the three schoolgirls' and the bonewalker's head

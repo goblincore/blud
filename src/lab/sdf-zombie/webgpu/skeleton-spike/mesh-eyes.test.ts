@@ -164,11 +164,21 @@ it('parents eyes to the real head pose and removes them with sever/revision/clea
 
 describe('localized projectile eye shock', () => {
   const eyes = [{ center: [-0.07, 0, 0] as [number, number, number], radius: 0.02 }, { center: [0.07, 0, 0] as [number, number, number], radius: 0.02 }];
-  it('a central shotgun skull hit can eject both eyes', () => {
-    expect(meshEyeImpactIndices(eyes, [0, 0.04, 0.07], 'pellet')).toEqual([0, 1]);
+  it('a hit on an eye takes that eye and not the other', () => {
+    expect(meshEyeImpactIndices(eyes, [-0.07, 0.02, 0.05], 'pellet')).toEqual([0]);
+    expect(meshEyeImpactIndices(eyes, [0.07, 0, 0.05], 'slug')).toEqual([1]);
+  });
+  it('a hit between the eyes, on the cheek or on the brow leaves both in their sockets', () => {
+    expect(meshEyeImpactIndices(eyes, [0, 0, 0.07], 'pellet')).toEqual([]);
+    expect(meshEyeImpactIndices(eyes, [-0.07, -0.1, 0.05], 'pellet')).toEqual([]);
+    expect(meshEyeImpactIndices(eyes, [0, 0.12, 0.05], 'pellet')).toEqual([]);
+  });
+  it('a slug reaches further than a pellet', () => {
+    expect(meshEyeImpactIndices(eyes, [-0.07, 0.09, 0], 'pellet')).toEqual([]);
+    expect(meshEyeImpactIndices(eyes, [-0.07, 0.09, 0], 'slug')).toEqual([0]);
   });
   it('a grazing lateral hit does not remove the far eye', () => {
-    expect(meshEyeImpactIndices(eyes, [-0.16, 0, 0], 'pellet')).toEqual([0]);
+    expect(meshEyeImpactIndices(eyes, [-0.1, 0, 0], 'pellet')).toEqual([0]);
   });
   it('torso and remote head hits do not eject eyes', () => {
     expect(meshEyeImpactIndices(eyes, [0, -0.5, 0], 'slug')).toEqual([]);

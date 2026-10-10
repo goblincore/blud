@@ -64,9 +64,18 @@ export const BURST_TUNING_DEFAULTS = {
   /** THE LIP OF A HEAD CRATER, as a share of the stock everted lip (Wound.rimScale; game-actor.ts headLip). The stock
    *  lip stands 2.4 cm proud of the skin round a pellet crater and 4 cm round a slug's, and the skull's face lies 1 to
    *  2 cm UNDER the skin: seen from the side the bone sat 3 to 6 cm behind a wall of lip, and the shot face read flat.
-   *  0.3 leaves a 7 mm lip on a pellet crater and 12 mm on a slug's. 1 is the stock lip (the look before 2026-10-07).
+   *  0.3 (2026-10-07) left a 7 mm lip on a pellet crater and 12 mm on a slug's, and the owner's playtest found the face
+   *  came off too clean: bare bone in a smooth round hole, no flesh standing round it (2026-10-08). 0.5 with headTear 0.9
+   *  (the tear lifts the lip by 0.6 x its value, so the net is about 0.77 of stock) keeps the skull in view and gives
+   *  it a ragged, red, bleeding edge. 1 is the stock lip (the look before 2026-10-07), and headTear 0 the smooth edge.
    *  The zombie-class bodies only, as the wet lip is (the soldier and the cloth-robed keep their own). */
-  headLip: 0.3,
+  headLip: 0.5,
+  /** HOW TORN THE EDGE OF A HEAD CRATER IS (Wound.tear, torn-lips.ts), 0..1: the flail's torn look, a two-octave ragged
+   *  outline and petal-shaped lips over a wet red wall, on a gun crater. The low headLip keeps the skull in view; this
+   *  is what keeps the flesh round it from reading as a clean cookie-cutter hole (the owner, 2026-10-08: the face came
+   *  off too clean, the bone with no ragged, bleeding flesh at its edge). Tear also raises the lip by 0.6 x its value,
+   *  so it rides on top of headLip. 0 = the smooth round crater. */
+  headTear: 0.9,
 
   // ---- The slug split: a precise slug from close to medium range opens the head as the axe does.
   /** false: no slug splits a head. */

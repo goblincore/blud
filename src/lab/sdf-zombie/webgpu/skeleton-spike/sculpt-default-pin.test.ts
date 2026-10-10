@@ -59,9 +59,12 @@ const CLASSIC = {
 const DEFAULT = {
   zombie: { key: 'zombie:head:2:77b0c2d:skull-sculpt-2@0.005', verts: 9144, tris: 18296, bytes: '44f3c7f58b87817c' },
   soldier: { key: 'soldier:head:2:11a18b47:soldier-skull-sculpt-2@0.005', verts: 7056, tris: 14108, bytes: 'f470bb51944b39b1' },
-  wgsl: '61ebace5c3abd470',
+  // MOVED 2026-10-08 on purpose (the owner's playtest: a shot face showed clean ivory, "dirtier and messier"): the second
+  // paint gained sculptCling, torn flesh stuck to a head's bone near a wound, and its head wound stain went 0.22 -> 0.38.
+  // The head meshes above did not move. Before: wgsl 61ebace5c3abd470, material 22a19cc4defab95a.
+  wgsl: 'ed73609fd46628d7',
   // Every WGSL text the default page's bone material reaches (the second paint, the bone hash and noise, the shade).
-  material: '22a19cc4defab95a',
+  material: 'a6c2599add05ffc5',
 };
 /** The name a WGSL source declares first. */
 const nameOf = (src: string): string => /\bfn (\w+)/.exec(src)![1]!;

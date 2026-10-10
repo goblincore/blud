@@ -1767,6 +1767,7 @@ export function createZombieActor(opts: {
   function headLip(wound: Wound): void {
     if (!goreBody || posed.prims[wound.primIdx]?.limb !== 'head') return;
     wound.rimScale = (wound.rimScale ?? 1) * Math.max(0, burstTuning.headLip);
+    if (burstTuning.headTear > 0) wound.tear = Math.max(wound.tear ?? 0, Math.min(1, burstTuning.headTear));
   }
 
   /** WET RED LIP on a gun crater (torn-lips.ts, plan Task 35): the gore bodies only (motion-profile.ts isGoreBody).
