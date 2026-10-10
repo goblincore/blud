@@ -1,3 +1,7 @@
+// src/lab/sdf-zombie/webgpu/surface-blood-view.ts
+//
+// Persistent surface blood (opt-in, `?surfaceblood=1`): sweeps the blood sim's droplets against the level's meshes, keeps the stains as per-receiver decal geometry, and draws them lit.
+//
 import * as THREE from 'three/webgpu';
 import { attribute, normalLocal, transformNormalToView, uniform, uv, wgslFn, vec4, float, output } from 'three/tsl';
 import type { Vec3 } from '../types';

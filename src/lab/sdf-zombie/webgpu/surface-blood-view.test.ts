@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { createBloodSim } from '../blood-sim';

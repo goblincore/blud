@@ -56,14 +56,14 @@ Each line is the first sentence of the module's header comment.
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 7 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 32 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [SDF march renderer](#sdf-march-renderer) | 34 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 32 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 25 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
 | [Gibs and gore (logic)](#gibs-and-gore-logic) | 13 | Gib parts, launch, tearing, entrails, strands. |
 | [AI and actors (logic)](#ai-and-actors-logic) | 11 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 9 | First-person mode, dynamite flight, explosions, rockets, tracers. |
-| [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 8 | Blood simulation, probe grids, ambient. |
+| [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
 | [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 5 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
@@ -615,6 +615,8 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 - `webgpu/shell-spike.wgsl.ts` — The shell-march entry for the hull+shell spike.
 - `webgpu/soft-fade.ts` — SHARED SOFT-PARTICLE DEPTH FADE (flame-polish task 1, extracted for the explosion-curl task).
 - `webgpu/split-ablate.ts` — THE OPEN HEAD'S COST, TAKEN APART (docs/dev-notes/2026-10-06-open-head-cost/NOTES.md; scripts/open-head-cost.mjs is the driver).
+- `webgpu/surface-blood-view.ts` — Persistent surface blood (opt-in, `?surfaceblood=1`): sweeps the blood sim's droplets against the level's meshes, keeps the stains as per-receiver…
+- `webgpu/surface-blood.wgsl.ts` — Original procedural splatter masks, shared by the shader entrypoints.
 - `webgpu/surface-nets-compute.ts` — GPU side of the hull extraction: buffers sized ONCE at the worst case, compute nodes built once, a per-frame extract() that moves only uniforms (the…
 - `webgpu/surface-nets-cpu.ts` — CPU REFERENCE for the surface-nets hull extraction (hull-refine spec §4).
 - `webgpu/surface-nets.wgsl.ts` — GPU surface-nets hull extraction (hull-refine spec §4; plan deviation 1 folds occupancy into the kernel prologue).
@@ -777,6 +779,7 @@ Blood simulation, probe grids, ambient.
 
 - `ambient.ts` — Analytic chromatic ambient — the CPU mirror of `AMBIENT_AT` in `webgpu/ambient.wgsl.ts`.
 - `blood-sim.ts` — Pure droplet simulation for the lab's gib blood: FX_13-style burst at the gib instant, FX_27-style trails behind flying chunks, splat stamps on…
+- `blood-surface.ts` — Renderer-free collision, projection and stain state.
 - `blood-view.ts` — Instanced billboard renderer for blood-sim: gooey specular droplets + flat floor splats.
 - `flashlight-bounce.ts` — Flashlight bounce spot — the CPU side of the beam's lit patch as a disc light.
 - `probe-capsule-groups.ts` — Broad phase for the dynamic-light gather.
