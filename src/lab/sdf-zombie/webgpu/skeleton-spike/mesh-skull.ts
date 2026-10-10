@@ -3,7 +3,7 @@
 // The mesh-skull sculpt: meshBoneSource adapts a bone field source into the carved skull and mandible, plus the skull art revision names.
 
 import type { BoneFieldSource, Point3 } from './contract';
-import { sculptSkull2, skull2JawOf } from './mesh-skull-2';
+import { isSoldierHead, sculptSkull2, skull2JawOf } from './mesh-skull-2';
 import type { SculptShape } from './sculpt-variant';
 
 /** Mesh art revision is independent of the shared anatomy/volume contract. */
@@ -21,7 +21,7 @@ export const SOLDIER_MESH_SKULL_2_REVISION = 'soldier-skull-sculpt-2';
  * `shape` 2 is the second sculpt (mesh-skull-2.ts: the same bone and frame, carved toward a human skull); omitted,
  * the first, as ever. */
 export function meshBoneSource(source: BoneFieldSource, shape: SculptShape = 1): BoneFieldSource {
-  const zombie = source.character === 'zombie', soldier = source.character === 'soldier';
+  const zombie = source.character === 'zombie', soldier = isSoldierHead(source.character);
   const revision = shape === 2
     ? (zombie ? MESH_SKULL_2_REVISION : soldier ? SOLDIER_MESH_SKULL_2_REVISION : null)
     : (zombie ? MESH_SKULL_REVISION : soldier ? SOLDIER_MESH_SKULL_REVISION : null);

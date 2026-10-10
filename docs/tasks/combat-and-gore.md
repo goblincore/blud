@@ -113,8 +113,16 @@ Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part o
   halves open. The slug that cuts the head off pops it: a 0.12 s swell, then the burst, with the
   skull thrown as pieces (the anatomical skull's 14 plates, or 10 fragments cut from the sculpted head mesh:
   `skeleton-spike/sculpt-fragments.ts`). Any slug from within that range on a head split wide pops it. Gun craters on
-  the head keep a low lip (`headLip` 0.3) so the skull's face stands out of the wound, and a sever takes the lips that
-  would hang over the stump. Tune live: `__sdfGame.head.burstTune({ headLip, slugSplit, splitAim, splitFrac,
+  the head keep a low lip so the skull's face stands out of the wound, and a sever takes the lips that
+  would hang over the stump. **Retuned 2026-10-08 after the owner's playtest** (the face came off too clean: bare bone
+  in a smooth round hole): `headLip` 0.3 -> 0.5 plus a new `headTear` 0.9 (the flail's torn look on gun head craters: a
+  ragged outline, petal lips, a wet red wall), and **eyes stay in the skull**: a round now has to land near an eye
+  to knock it out (`mesh-eyes.ts EYE_IMPACT_REACH`, pellet 5.5 cm / slug 8.5 cm from the eye's centre; it was 13.5 / 19 cm,
+  so one pellet on the chin ejected both). **Second pass, same day (owner: a pointblank slug still left clean ivory):** the sculpted
+  skull's paint gained `sculptCling` (`skeleton-spike/sculpt-paint.ts`, `SCULPT_CLING`): ragged, wet, red torn-flesh patches
+  stuck to a head's bone where a wound's exposure reaches it, thicker in the orbits and nose, none on the teeth, and the
+  head's wound stain 0.22 -> 0.38. The default skull's shader pin moved on purpose (`sculpt-default-pin.test.ts`). Not
+  yet on the first paint (`?sculpt=classic`, mesh-appearance.ts) or the anatomical plates' shader. **The juggernaut (the chaingunner) now wears the soldier's carved head** (`mesh-skull-2.ts isSoldierHead`: the carve, its revision and the steel-plate paint), where he was an uncarved ball; the clowns still are. Not yet owner-playtested. Tune live: `__sdfGame.head.burstTune({ headLip, headTear, slugSplit, splitAim, splitFrac,
   splitRangeM, splitOpen, slugPop, popSwellS, popOnSplit, popPrecise })`.
   [Notes, measurements, the precision table and the before/after sheet](../../docs/dev-notes/2026-10-07-sculpt-skull-2/NOTES.md) ·
   gate `scripts/head-burst-gate.mjs` (103 checks). Open for the owner: the shot is judged against where the head is

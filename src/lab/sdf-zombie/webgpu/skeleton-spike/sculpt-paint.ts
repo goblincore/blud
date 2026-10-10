@@ -153,6 +153,26 @@ export function sculptCavity(L: SculptPaintLayout, q: Vec3, headFlag: number): [
   return [orbit, nose, mouth, halo];
 }
 
+/** FLESH LEFT CLINGING TO EXPOSED BONE (2026-10-08, the owner's playtest: a face shot off showed clean ivory, "it should be
+ *  dirtier and messier"). Ragged patches of torn tissue on a head's bone, where a wound's exposure reaches it: a two-octave
+ *  noise thresholded into chunky islands, more of them the closer the wound and in the places flesh holds (the orbits, the
+ *  nasal aperture and the stained halo round their rims). `cover` is the noise level at which a patch begins on plain bone
+ *  with no wound near, lowered by `byExpo` at a wound's heart and by `byCavity` in the hollows; `soft` is the patch edge's
+ *  width. Not a head, and not the soldier's (steel and his own stain): none. */
+export const SCULPT_CLING = { cover: 0.62, byExpo: 0.12, byCavity: 0.22, soft: 0.04, from: 0.12, to: 0.4 } as const;
+
+/** The share of the point that is torn flesh stuck to the bone (0..1): the patches' mask. `expo` the wound exposure
+ *  there (after its smoothstep). */
+export function sculptCling(L: SculptPaintLayout, pLocal: Vec3, q: Vec3, w: number, expo: number): number {
+  const headFlag = Math.min(w, 1), soldierHead = w >= 1.5 ? 1 : 0;
+  const n = boneNoise3([pLocal[0] * 22 + 8.3, pLocal[1] * 22 + 2.9, pLocal[2] * 22 + 14.1]) * 0.66
+    + boneNoise3([pLocal[0] * 61 + 3.3, pLocal[1] * 61 + 19.7, pLocal[2] * 61 + 6.1]) * 0.34;
+  const cav = sculptCavity(L, q, headFlag);
+  const hold = Math.max(cav[0], cav[1], cav[3]);
+  const t = SCULPT_CLING.cover - SCULPT_CLING.byExpo * expo - SCULPT_CLING.byCavity * hold;
+  return smoothstep(t, t + SCULPT_CLING.soft, n) * smoothstep(SCULPT_CLING.from, SCULPT_CLING.to, expo) * headFlag * (1 - soldierHead);
+}
+
 /** The painted height (m) at the normalized point: the teeth's crowns and root ridges, a lip on the orbit's rim, a
  *  groove in every line, and, by the layout's `relief`, the brow ridge, the cheekbones and the hollows. */
 export function sculptHeight(L: SculptPaintLayout, q: Vec3, headFlag: number): number {
@@ -261,9 +281,14 @@ export function sculptPaintSurface(
   albedo = mix3(albedo, [deepColor[0] * 0.05, deepColor[1] * 0.05, deepColor[2] * 0.05], cavity * 0.94);
 
   const stainW = smoothstep(0.18, 0.85, expo) * (0.55 + 0.45 * grain);
-  const stainStrength = mix(mix(0.55, 0.22, headFlag), 0.55, soldierHead);
+  const stainStrength = mix(mix(0.55, 0.38, headFlag), 0.55, soldierHead);
   albedo = mix3(albedo, mix3([deepColor[0] * 0.45, deepColor[1] * 0.45, deepColor[2] * 0.45], [0.28, 0.012, 0.02], grain), stainW * stainStrength);
   albedo = mix3(albedo, [0.42, 0.004, 0.008], soldierHead * stainW * 0.55);
+  // Torn flesh stuck to the bone: raw red, clotted dark where the grain says, a darker seam where a patch ends.
+  const cling = sculptCling(L, pLocal, q, w, expo) * (1 - crown * 0.9);
+  const meat = mix3([0.46, 0.035, 0.04], [0.15, 0.012, 0.018], smoothstep(0.35, 0.85, grain) * 0.7);
+  albedo = mix3(albedo, meat, cling * 0.92);
+  albedo = mix3(albedo, [0.08, 0.004, 0.006], cling * (1 - cling) * 2.4);
   return { albedo, cavity, crown };
 }
 
@@ -279,7 +304,8 @@ export function sculptPaintWet(L: SculptPaintLayout, pLocal: Vec3, q: Vec3, w: n
   const cav = sculptCavity(L, q, headFlag);
   const crown = sculptTeeth(L, q)[0] * smoothstep(0.05, 0.23, q[2]) * headFlag;
   gloss *= 1 - 0.97 * Math.max(cav[0], cav[1], cav[2] * (1 - crown));
-  return Math.max(gloss, crown * 0.85);
+  const cling = sculptCling(L, pLocal, q, w, expo) * (1 - crown * 0.9);
+  return Math.max(gloss, crown * 0.85, cling * 0.8);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -293,7 +319,7 @@ const f = (v: number) => (Number.isInteger(v) ? `${v}.0` : `${v}`);
 const arr = (v: readonly number[]) => `array<f32, ${SCULPT_TEETH_MAX + 1}>(${Array.from({ length: SCULPT_TEETH_MAX + 1 }, (_, i) => f(v[i] ?? v[v.length - 1]!)).join(', ')})`;
 
 export interface SculptPaintWgsl {
-  orbit: string; nose: string; teeth: string; lines: string; relief: string; cavity: string;
+  orbit: string; nose: string; teeth: string; lines: string; relief: string; cavity: string; cling: string;
   height: string; grad: string; normal: string; surface: string; wet: string;
 }
 
@@ -392,6 +418,14 @@ export function sculptPaintWgsl(L: SculptPaintLayout): SculptPaintWgsl {
   let halo = max(1.0 - smoothstep(0.0, 0.09, o), 1.0 - smoothstep(0.0, 0.06, n)) * front;
   return vec4<f32>(orbit, nose, mouth, halo);
 }`;
+  const C = SCULPT_CLING;
+  const cling = /* wgsl */ `fn sculptCling(pLocal: vec3<f32>, q: vec3<f32>, headFlag: f32, soldierHead: f32, expo: f32) -> f32 {
+  let n = boneNoise(pLocal * 22.0 + vec3<f32>(8.3, 2.9, 14.1)) * 0.66 + boneNoise(pLocal * 61.0 + vec3<f32>(3.3, 19.7, 6.1)) * 0.34;
+  let cav = sculptCavity(q, headFlag);
+  let hold = max(max(cav.x, cav.y), cav.w);
+  let t = ${f(C.cover)} - ${f(C.byExpo)} * expo - ${f(C.byCavity)} * hold;
+  return smoothstep(t, t + ${f(C.soft)}, n) * smoothstep(${f(C.from)}, ${f(C.to)}, expo) * headFlag * (1.0 - soldierHead);
+}`;
   const height = /* wgsl */ `fn sculptHeight(q: vec3<f32>, headFlag: f32) -> f32 {
   let front = smoothstep(0.05, 0.23, q.z) * headFlag;
   let o = sculptOrbit(abs(q.x), q.y);
@@ -489,9 +523,13 @@ export function sculptPaintWgsl(L: SculptPaintLayout): SculptPaintWgsl {
   albedo = mix(albedo, deepColor * 0.05, cavity * 0.94);
 
   let stainW = smoothstep(0.18, 0.85, expo) * (0.55 + 0.45 * grain);
-  let stainStrength = mix(mix(0.55, 0.22, headFlag), 0.55, soldierHead);
+  let stainStrength = mix(mix(0.55, 0.38, headFlag), 0.55, soldierHead);
   albedo = mix(albedo, mix(deepColor * 0.45, vec3<f32>(0.28, 0.012, 0.02), grain), stainW * stainStrength);
   albedo = mix(albedo, vec3<f32>(0.42, 0.004, 0.008), soldierHead * stainW * 0.55);
+  let cling = sculptCling(pLocal, q, headFlag, soldierHead, expo) * (1.0 - crown * 0.9);
+  let meat = mix(vec3<f32>(0.46, 0.035, 0.04), vec3<f32>(0.15, 0.012, 0.018), smoothstep(0.35, 0.85, grain) * 0.7);
+  albedo = mix(albedo, meat, cling * 0.92);
+  albedo = mix(albedo, vec3<f32>(0.08, 0.004, 0.006), cling * (1.0 - cling) * 2.4);
   return vec4<f32>(albedo, expo);
 }`;
   const wet = /* wgsl */ `fn sculptPaintWet(pLocal: vec3<f32>, feature: vec4<f32>, expo: f32) -> f32 {
@@ -505,13 +543,14 @@ export function sculptPaintWgsl(L: SculptPaintLayout): SculptPaintWgsl {
   let cav = sculptCavity(feature.xyz, headFlag);
   let crown = sculptTeeth(feature.xyz).x * smoothstep(0.05, 0.23, feature.z) * headFlag;
   gloss = gloss * (1.0 - 0.97 * max(max(cav.x, cav.y), cav.z * (1.0 - crown)));
-  return max(gloss, crown * 0.85);
+  let cling = sculptCling(pLocal, feature.xyz, headFlag, soldierHead, expo) * (1.0 - crown * 0.9);
+  return max(max(gloss, crown * 0.85), cling * 0.8);
 }`;
-  return { orbit, nose, teeth, lines, relief, cavity, height, grad, normal, surface, wet };
+  return { orbit, nose, teeth, lines, relief, cavity, cling, height, grad, normal, surface, wet };
 }
 
 /** A layout's functions in dependency order, for the renderer's include chain (after the hash and the noise). */
 export function sculptPaintSources(L: SculptPaintLayout): string[] {
   const w = sculptPaintWgsl(L);
-  return [w.orbit, w.nose, w.teeth, w.lines, w.relief, w.cavity, w.height, w.grad, w.normal, w.surface, w.wet];
+  return [w.orbit, w.nose, w.teeth, w.lines, w.relief, w.cavity, w.cling, w.height, w.grad, w.normal, w.surface, w.wet];
 }

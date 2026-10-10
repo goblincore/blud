@@ -36,7 +36,7 @@ describe('the skull tables agree with each other and with the registry', () => {
     const plates = Object.keys(BALL_HEADS), carved = carvedBy(2), painted = [...SECOND_PAINT_CHARACTERS].filter(c => !carved.includes(c));
     // The sets as they are, read from the code (the first sculpt carves the same characters as the second).
     expect(carved.sort()).toEqual(carvedBy(1).sort());
-    expect(carved.sort()).toEqual(['soldier', 'zombie']);
+    expect(carved.sort()).toEqual(['juggernaut', 'soldier', 'zombie']);   // the juggernaut wears the soldier's head (isSoldierHead)
     for (const c of carved) expect(SECOND_PAINT_CHARACTERS.has(c), c).toBe(true);
     // No name in two parts, none left over, none from outside.
     const all = [...plates, ...carved, ...painted];

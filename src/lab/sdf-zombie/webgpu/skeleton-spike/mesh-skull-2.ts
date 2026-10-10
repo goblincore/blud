@@ -138,9 +138,14 @@ export function skull2Raise(x: number, y: number, z: number): { brow: number; ma
   };
 }
 
+/** THE SOLDIER'S HEAD, worn by the soldier and the juggernaut (his bone is the soldier's scaled up: juggernaut.blob's
+ *  header, 2026-10-08, the owner: "just give him the soldier head"). Everything the sculpt keys on the soldier by name
+ *  (the carve, its revision, the steel plates and the heavier wound stain of the paint) asks this. */
+export const isSoldierHead = (character: string | undefined): boolean => character === 'soldier' || character === 'juggernaut';
+
 /** The table of a sculpted character (null: the second sculpt does not carve it). */
 export const skull2JawOf = (character: string): Skull2Jaw | null =>
-  character === 'zombie' ? SKULL2_ZOMBIE : character === 'soldier' ? SKULL2_SOLDIER : null;
+  character === 'zombie' ? SKULL2_ZOMBIE : isSoldierHead(character) ? SKULL2_SOLDIER : null;
 
 /** The second sculpt of a head source with the lower jaw `jaw`. `revision` is appended to the source's own, as the
  *  first sculpt's is. */

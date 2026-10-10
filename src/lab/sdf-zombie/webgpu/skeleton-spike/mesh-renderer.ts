@@ -93,6 +93,7 @@ import { SCULPT_PAINT_SHAPE1, SCULPT_PAINT_SHAPE2, sculptPaintSources } from './
 import { SKULL_REACH, damageSkull, explodeSkull, intactSkull, skullPieceLaunch, type SkullDamage } from '../../skull-fracture';
 import { fragmentVertexData, partitionSculptMesh } from './sculpt-fragments';
 import { sculptPaintOf } from './sculpt-variant';
+import { isSoldierHead } from './mesh-skull-2';
 import type { FittedSkull } from './anatomical-skull';
 import type { Vec3 } from '../../types';
 import { HEAD_SPLIT, skullPieceAngle, skullPieces, skullSplitOf, type SkullFollow, type SkullSplit, type SplitWarp } from '../../head-split';
@@ -727,7 +728,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0, li
     }
     geometry.userData.sculptPaint = sculptPaintOf(cache.sculpt, source.character);
     const feature = new Float32Array(pos.count * 4);
-    const isHead = source.segment === 'head' ? (source.character === 'soldier' ? 2 : 1) : 0;
+    const isHead = source.segment === 'head' ? (isSoldierHead(source.character) ? 2 : 1) : 0;
     for (let i = 0; i < pos.count; i++) {
       const q = meshAppearanceCoord(source.bounds, [pos.getX(i), pos.getY(i), pos.getZ(i)]);
       feature.set([q[0], q[1], q[2], isHead], i * 4);

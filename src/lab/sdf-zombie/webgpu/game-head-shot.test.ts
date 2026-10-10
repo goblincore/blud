@@ -629,6 +629,20 @@ describe('an ordinary gun crater on the head keeps a low lip', () => {
     const b = fixture().a.hit(at.on(FRONT), FRONT)!;
     expect(a.rimScale!).toBeCloseTo((b.rimScale ?? 1) * BURST_TUNING_DEFAULTS.headLip, 9);
   });
+  it('THE EDGE IS TORN (headTear): a head crater is ragged and bleeding at its rim, the torso\'s is not, and 0 is the smooth crater', () => {
+    expect(BURST_TUNING_DEFAULTS.headTear).toBeGreaterThan(0);
+    const f = fixture();
+    const head = f.a.hit(f.on(FRONT), FRONT)!;
+    const torso = f.a.hit(f.on(FRONT, [0, -0.45, 0]), FRONT)!;
+    expect(head.tear).toBeCloseTo(BURST_TUNING_DEFAULTS.headTear, 9);
+    expect(torso.tear ?? 0).toBe(0);
+    setBurstTuning({ slugSplit: false });
+    const g = fixture();
+    expect(g.a.hitSlug(g.on(FRONT), FRONT)!.tear).toBeCloseTo(BURST_TUNING_DEFAULTS.headTear, 9);
+    setBurstTuning({ headTear: 0 });
+    const h = fixture();
+    expect(h.a.hit(h.on(FRONT), FRONT)!.tear ?? 0).toBe(0);
+  });
 });
 
 describe('the last verdict', () => {
