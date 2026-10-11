@@ -39,12 +39,14 @@ describe('screen-emergence.wgsl', () => {
   it('the tear\'s radius is tearRadius\'s twin: the same harmonics, the same value at every angle', () => {
     for (const [a, k, ph] of TEAR_RAG) expect(W.SCR_TEAR).toContain(`${a} * sin(${k.toFixed(1)} * th + ${ph})`);
     expect(W.SCR_TEAR).toContain(`${TEAR_R_MAX}`);
-    // evaluate the shader's radius line in JS and hold it against the field's tearRadius
-    const line = W.SCR_TEAR.match(/let tr = (.*);/)![1]!.replace(/sin\(/g, 'Math.sin(').replace(/smoothstep\(0\.0, 1\.0, tear\)/g, 's');
-    const trJs = new Function('s', 'th', `return ${line};`) as (s: number, th: number) => number;
-    for (const tear of [0.1, 0.5, 1]) for (let th = -Math.PI; th <= Math.PI; th += 0.1) {
-      const p = { ...paramsAt(0), tear };
-      expect(trJs(smooth(tear), th)).toBeCloseTo(tearRadius(p, th), 6);
+    // evaluate the shader's radius lines (the knit's ellipse, the rag, the radius) in JS and hold them against the field's tearRadius
+    const body = W.SCR_TEAR.slice(W.SCR_TEAR.indexOf('let b = '), W.SCR_TEAR.indexOf('let dtr'))
+      .split('\n').filter(l => !/let dell/.test(l)).join('\n')
+      .replace(/\blet /g, 'const ').replace(/\b(sin|cos|sqrt)\(/g, 'Math.$1(').replace(/smoothstep\(0\.0, 1\.0, /g, 'sm(');
+    const trJs = new Function('s', 'th', 'heal', 'sm', `${body}\nreturn tr;`) as (s: number, th: number, heal: number, sm: (u: number) => number) => number;
+    for (const heal of [0, 0.2, 0.5, 1]) for (const tear of [0.1, 0.5, 1]) for (let th = -Math.PI; th <= Math.PI; th += 0.1) {
+      const p = { ...paramsAt(0), tear, heal };
+      expect(trJs(smooth(tear), th, heal, smooth), `heal=${heal} tear=${tear} th=${th.toFixed(1)}`).toBeCloseTo(tearRadius(p, th), 6);
     }
   });
 
@@ -106,6 +108,6 @@ describe('screen-emergence.wgsl', () => {
     // floor(t * DEPTH_Q) + alpha must keep the alpha's fraction at the box's far reach from a camera a few metres off (f32: 24 bits).
     const far = 8;
     expect(Math.log2(far * W.DEPTH_Q)).toBeLessThan(24 - 9);   // at least 9 bits (1/512) left for the coverage
-    expect(W.SCR_SHADE).toContain(`floor(h1.x * ${W.DEPTH_Q.toFixed(1)}) + clamp(alpha, 0.001, 0.999)`);
+    expect(W.SCR_SHADE).toContain(`floor(tHit * ${W.DEPTH_Q.toFixed(1)}) + clamp(alpha, 0.001, 0.999)`);
   });
 });

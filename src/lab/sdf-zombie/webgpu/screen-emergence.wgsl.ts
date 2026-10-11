@@ -31,8 +31,10 @@
 // just past the skin WITHOUT the sheet for what lies behind (the egg, the lip, else the CRT's dark tube or the room), and composite by the
 // sheet's opacity. Materials above 1.5 are opaque (scrSurface: 2 lip, 3 egg, 4 goo, 5 the tear's rim). Returns (straight colour, packed): packed = floor(t * DEPTH_Q) + alpha (alpha < 1), so ONE call carries the first hit's
 // distance for depthNode and the coverage; 0 on a miss.
-import { DOME_EXP, EGG, GLASS, PICTURE_TABLE_N, RIPPLE, SAC_BLEND, SAC_MAX, SKIN, TEAR_R_MAX, TEAR_RAG, THICK0 } from './emergence-field';
-import { GOO_BOUND0, N_BEADS, N_DRIPS, N_STRANDS, STRAND_POINTS } from './goo-strands';
+import {
+  DESK_Y, DOME_EXP, EGG, EGG_LEAVE, GLASS, PICTURE_TABLE_N, RIPPLE, SAC_BLEND, SAC_MAX, SKIN, SLUMP, TEAR_KNIT, TEAR_R_MAX, TEAR_RAG, THICK0, WRINKLE,
+} from './emergence-field';
+import { GOO_BOUND0, GOO_POOL0, N_BEADS, N_DRIPS, N_POOLS, N_STRANDS, STRAND_POINTS } from './goo-strands';
 
 const f = (n: number) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
 const v3 = (v: readonly number[]) => `vec3<f32>(${f(v[0]!)}, ${f(v[1]!)}, ${f(v[2]!)})`;
@@ -60,6 +62,14 @@ export const TEAR_FLOOR = -0.012;
 /** The goo's blends: among its own strands, beads and drips, and into the sheet, the egg and the lip (wide: it webs and necks), the
  *  latter at full width from a piece of radius `fullW` up (a strand's own radius) and narrower below it. */
 export const GOO_K = { self: 0.012, scene: 0.04, fullW: 0.006 } as const;
+/** The egg's light's hard shadow (the `goo shadow` switch): the extra march's step budget, where it starts off the surface, the distance from
+ *  the egg's surface that counts as reaching the light, and how much of the egg's light a shadow takes (1: all). */
+export const SHADOW = { steps: 32, lift: 0.004, reach: 0.012, depth: 0.85 } as const;
+/** The desk's slick: drawn this far above the desk top (so the desk mesh does not fight it), its edge's soft width and meniscus (m). */
+export const POOL_LIFT = 0.0015;
+export const POOL_EDGE = { soft: 0.002, meniscus: 0.012 } as const;
+/** The healed sheet: the picture's uv offset per unit of the wrinkle's slope (m), and the clear coat's gain with the heal. */
+export const HEAL_LOOK = { picWarp: 0.012, coat: 2.0 } as const;
 /** The goo row's layout (gooTexels): the strands' points, then the beads, then each drip's top and tip. */
 export const GOO_BEAD0 = N_STRANDS * STRAND_POINTS;
 export const GOO_DRIP0 = GOO_BEAD0 + N_BEADS;
@@ -81,18 +91,44 @@ export const SCR_SMIN = /* wgsl */ `fn scrSmin(a: f32, b: f32, k: f32) -> f32 {
   return min(a, b) - h * h * k * 0.25;
 }`;
 
+/** The healed sheet's wrinkle pattern at (x, y) (wrinkle in emergence-field.ts, unit envelope; q the normalised radius in the opening). */
+export const SCR_WRINKLE_PAT = /* wgsl */ `fn scrWrinklePat(x: f32, y: f32, lip: vec4<f32>) -> f32 {
+  let q = length(vec2<f32>(x / lip.x, y / lip.y));
+  if (q >= 1.0) { return 0.0; }
+  let rho = length(vec2<f32>(x, y));
+  let th = atan2(y, x);
+  let crease = sin(${f(WRINKLE.k)} * th + ${f(WRINKLE.warp)} * sin(${f(WRINKLE.warpF)} * rho)) * smoothstep(0.0, 1.0, rho / ${f(WRINKLE.core)});
+  let net = sin(${f(WRINKLE.fx)} * x + 2.0 * sin(${f(WRINKLE.fy)} * y)) * sin(${f(WRINKLE.fy)} * y + 1.7);
+  return (crease + ${f(WRINKLE.fine)} * net) * (1.0 - smoothstep(0.0, 1.0, (q - ${f(1 - WRINKLE.edge)}) / ${f(WRINKLE.edge)}));
+}`;
+
+/** The wrinkle on the sheet at (x, y): (height, d/dx, d/dy) in metres, the envelope wrinkleAmp's twin from the heal (0 before it). The slope is
+ *  a forward difference. Includes: scrWrinklePat. */
+export const SCR_WRINKLE = /* wgsl */ `fn scrWrinkle(x: f32, y: f32, lip: vec4<f32>, heal: f32) -> vec3<f32> {
+  if (heal <= 0.0) { return vec3<f32>(0.0); }
+  let h = clamp(heal, 0.0, 1.0);
+  let amp = ${f(WRINKLE.amp)} * (smoothstep(0.0, 1.0, (h - 0.3) / 0.25) * h * (1.0 - h) * 4.0 + 0.15 * h);
+  let e = 0.0012;
+  let w0 = scrWrinklePat(x, y, lip);
+  let wx = scrWrinklePat(x + e, y, lip);
+  let wy = scrWrinklePat(x, y + e, lip);
+  return vec3<f32>(w0, (wx - w0) / e, (wy - w0) / e) * amp;
+}`;
+
 /**
  * THE SHEET's heights at (x, y), the twin of sacZ in emergence-field.ts. p0 = (ripple, push, thin, lipBow), p1 = (tear, slump, heal, glow),
  * d = (sacExtent, eggCz, eggCy, lipZ) and lip = (hw, hh, smooth(lipBow), the tear tip's z: tearTip), computed on the CPU each frame from the field module so this
- * never re-derives eggCentre. Returns (sacZ, the dome plus the ripple, |grad| of that, q).
- * Includes: scrSmax.
+ * never re-derives eggCentre. Returns (sacZ, the dome plus the ripple, |grad| of that, q). Once the egg has left (slump above 0) the rise may go
+ * negative (the empty sheet dishes back behind the lip's rim), the egg's cap shrinks away with the sac's hold on it (eggHeld), and the heal
+ * adds the wrinkle (its slope added to the gradient's bound).
+ * Includes: scrSmax, scrWrinkle.
  */
 export const SCR_SAC = /* wgsl */ `fn sacZ(x: f32, y: f32, p0: vec4<f32>, p1: vec4<f32>, d: vec4<f32>, lip: vec4<f32>, tm: f32) -> vec4<f32> {
   let mx = x / lip.x;
   let my = y / lip.y;
   let q = max(length(vec2<f32>(mx, my)), 0.00001);
   let qc = min(q, 1.0);
-  let rise = max(0.0, d.x - d.w);
+  let rise = select(max(0.0, d.x - d.w), d.x - d.w, p1.y > 0.0);
   let u = 1.0 - qc;
   let s = u * u * (3.0 - 2.0 * u);
   var prof = 0.0;
@@ -106,14 +142,18 @@ export const SCR_SAC = /* wgsl */ `fn sacZ(x: f32, y: f32, p0: vec4<f32>, p1: ve
   let rip = ra * sin(ph) * (1.0 - qc);
   var drip = 0.0;
   if (q < 1.0) { drip = ra * (${f(RIPPLE.freq)} * cos(ph) * (1.0 - qc) - sin(ph)); }
-  let dome = d.w + rise * prof;
+  let wr = scrWrinkle(x, y, lip, p1.z);
+  let dome = d.w + rise * prof + wr.x;
   let gq = length(vec2<f32>(mx / lip.x, my / lip.y)) / q;
-  let slope = abs(rise * dprof + drip) * gq;
-  let ex = x / ${f(EGG.rx)};
-  let ey = (y - d.z) / ${f(EGG.ry)};
-  let qe = ex * ex + ey * ey;
+  let slope = abs(rise * dprof + drip) * gq + length(wr.yz);
+  let shrink = smoothstep(0.0, 1.0, p1.y / ${f(SLUMP.release)}) * ${f(EGG_LEAVE)};
   var wrapped = dome;
-  if (qe < 1.0) { wrapped = scrSmax(dome, d.y + ${f(EGG.rz)} * sqrt(1.0 - qe) + ${f(SKIN)}, ${f(SAC_BLEND.cap)}); }
+  if (shrink < ${f(EGG.rx)}) {
+    let ex = x / (${f(EGG.rx)} - shrink);
+    let ey = (y - d.z) / (${f(EGG.ry)} - shrink);
+    let qe = ex * ex + ey * ey;
+    if (qe < 1.0) { wrapped = scrSmax(dome, d.y + (${f(EGG.rz)} - shrink) * sqrt(1.0 - qe) + ${f(SKIN)}, ${f(SAC_BLEND.cap)}); }
+  }
   return vec4<f32>(wrapped + rip, dome + rip, slope, q);
 }`;
 
@@ -155,21 +195,29 @@ export const SCR_LIP = /* wgsl */ `fn scrLip(p: vec3<f32>, lip: vec4<f32>, lipZ:
 
 /**
  * THE TEAR at p: (the signed distance to the hole's ragged edge, positive outside the hole, the hole's radius there): a sphere round the tip
- * (0, 0, tipZ), its radius tearRadius's twin (TEAR_RAG's harmonics in the angle round the axis, grown by smooth(tear)). The radius's slope
- * in that angle is divided out (first order), and deep in the hole the distance is at least the smallest radius's, so rays through the
- * middle of the hole take long steps. (1000, 0) when closed.
+ * (0, 0, tipZ), its radius tearRadius's twin (TEAR_RAG's harmonics in the angle round the axis, grown by smooth(tear), and the KNIT's
+ * ellipse as it heals: knitFactor, the hole narrowing to a slit along TEAR_KNIT.angle). The radius's slope in that angle is divided out
+ * (first order), and deep in the hole the distance is at least the smallest radius's, so rays through the middle of the hole take long
+ * steps. (1000, 0) when closed.
  */
-export const SCR_TEAR = /* wgsl */ `fn scrTear(p: vec3<f32>, tear: f32, tipZ: f32) -> vec2<f32> {
+export const SCR_TEAR = /* wgsl */ `fn scrTear(p: vec3<f32>, tear: f32, tipZ: f32, heal: f32) -> vec2<f32> {
   let s = smoothstep(0.0, 1.0, tear);
   if (s <= 0.0) { return vec2<f32>(1000.0, 0.0); }
   let rho = length(vec3<f32>(p.xy, p.z - tipZ));
   let rxy = max(length(p.xy), 0.00001);
   let th = atan2(p.y, p.x);
-  let tr = ${f(TEAR_R_MAX)} * s * (1.0 + ${RAG});
-  let dtr = ${f(TEAR_R_MAX)} * s * (${DRAG});
+  let b = 1.0 - ${f(1 - TEAR_KNIT.minor)} * smoothstep(0.0, 1.0, heal / ${f(TEAR_KNIT.over)});
+  let kc = cos(th - ${f(TEAR_KNIT.angle)});
+  let ks = sin(th - ${f(TEAR_KNIT.angle)});
+  let kd = b * b * kc * kc + ks * ks;
+  let ell = b / sqrt(kd);
+  let dell = -b * ks * kc * (1.0 - b * b) / (kd * sqrt(kd));
+  let rag = 1.0 + ${RAG};
+  let tr = ${f(TEAR_R_MAX)} * s * rag * ell;
+  let dtr = ${f(TEAR_R_MAX)} * s * ((${DRAG}) * ell + rag * dell);
   let q = dtr / rxy;
   var hd = (rho - tr) / sqrt(1.0 + q * q);
-  hd = min(hd, rho - ${f(TEAR_R_MAX * RAG_MIN)} * s);
+  hd = min(hd, rho - ${f(TEAR_R_MAX * RAG_MIN)} * s * b);
   return vec2<f32>(hd, tr);
 }`;
 
@@ -257,7 +305,8 @@ export const SCR_GOO = /* wgsl */ `fn scrGoo(p: vec3<f32>, gooTex: texture_2d<f3
 /**
  * THE FIELD: (distance, material) at p. Materials: 1 the sheet, 2 the lip, 3 the egg, 4 the goo, 5 the tear's rim. `sheetOn` 0 leaves the
  * sheet out (the march behind the skin). The sheet's half-thickness is sheetThickness's twin (thinner with the stretch and `thin`), thicker
- * on the tear's rim. goo = the goo's bounding sphere (centre, radius; radius <= 0: no goo), gooTex its row of texels.
+ * on the tear's rim. goo = the goo's bounding sphere (centre, radius; radius <= 0: no goo), gooTex its row of texels. The egg's term in the
+ * sac shrinks away as the egg leaves (sacSolid's twin).
  * Includes: sacZ, scrOpening, scrLip, scrEllipsoid, scrSmin, scrSmax, scrTear, scrGoo.
  */
 export const SCR_MAP = /* wgsl */ `fn mapScr(p: vec3<f32>, p0: vec4<f32>, p1: vec4<f32>, d: vec4<f32>, lip: vec4<f32>, tm: f32, sheetOn: f32, gooTex: texture_2d<f32>, goo: vec4<f32>) -> vec2<f32> {
@@ -272,13 +321,17 @@ export const SCR_MAP = /* wgsl */ `fn mapScr(p: vec3<f32>, p0: vec4<f32>, p1: ve
     var inside = max(dome, foot);
     let behind = smoothstep(0.0, 1.0, (c.z - p.z) / ${f(SAC_BLEND.run)});
     let tent = mix(${f(SAC_BLEND.rest)}, ${f(SAC_BLEND.tent)}, smoothstep(0.0, 1.0, p0.y));
-    inside = scrSmin(inside, scrEllipsoid(p - c, ${EGG_R}) - ${f(SKIN)}, mix(${f(SAC_BLEND.cap)}, tent, behind));
+    // The egg in the sac, shrinking away inside the egg as it leaves (eggHeld): the membrane lets go of it.
+    let leave = smoothstep(0.0, 1.0, p1.y / ${f(SLUMP.release)}) * ${f(EGG_LEAVE)};
+    inside = scrSmin(inside, scrEllipsoid(p - c, ${EGG_R}) - ${f(SKIN)} + leave, mix(${f(SAC_BLEND.cap)}, tent, behind));
     inside = max(inside, ${f(SHEET_FLOOR)} - p.z);
-    // The tear: a ragged cylinder round the apex axis, above TEAR_FLOOR; its rim band thickens and rolls outward with the tear.
-    let tr = scrTear(p, p1.x, lip.w);
+    // The tear: a ragged sphere round the tip, above TEAR_FLOOR; its rim band thickens and rolls outward with the tear. As it knits shut
+    // in the heal the band fades out with the last of the hole (it would pop off as a pink disc at tear = 0).
+    let tr = scrTear(p, p1.x, lip.w, p1.z);
     let above = smoothstep(${f(TEAR_FLOOR)}, ${f(TEAR_FLOOR + 0.01)}, p.z);
     let hd = max(tr.x, 0.0);
-    let band = (1.0 - smoothstep(0.0, ${f(TEAR_RIM.band)}, hd)) * above;
+    let knitFade = 1.0 - (1.0 - smoothstep(0.0, 0.3, smoothstep(0.0, 1.0, p1.x))) * smoothstep(0.0, 0.05, p1.z);
+    let band = (1.0 - smoothstep(0.0, ${f(TEAR_RIM.band)}, hd)) * above * knitFade;
     let rollF = (1.0 - smoothstep(0.0, ${f(TEAR_RIM.rollW)}, hd)) * above;
     let roll = ${f(TEAR_RIM.roll)} * smoothstep(0.0, 1.0, p1.x) * rollF * rollF;
     let stretch = clamp(h.x / ${f(SAC_MAX)}, 0.0, 1.0) * (1.0 - min(h.w, 1.0) * 0.5);
@@ -326,6 +379,95 @@ export const SCR_MARCH = /* wgsl */ `fn scrMarch(ro: vec3<f32>, rd: vec3<f32>, t
     t = t + m.x;
   }
   return vec3<f32>(-1.0, 0.0, ${f(MAX_STEPS)});
+}`;
+
+/**
+ * THE EGG'S LIGHT'S HARD SHADOW at p (1 lit, 0 shadowed; `on` 0 gives 1): one extra march from p toward the egg's centre (the light) through
+ * the field WITHOUT the sheet (the goo and the lip cast), stopping lit within SHADOW.reach of the egg's surface. Skipped (lit) when the
+ * segment never comes within the goo's bounding sphere: nothing else stands between the egg and what it lights.
+ * Includes: mapScr, scrEllipsoid.
+ */
+export const SCR_SHADOW = /* wgsl */ `fn scrShadow(p: vec3<f32>, p0: vec4<f32>, p1: vec4<f32>, d: vec4<f32>, lip: vec4<f32>, tm: f32, gooTex: texture_2d<f32>, goo: vec4<f32>, on: f32) -> f32 {
+  if (on < 0.5 || goo.w <= 0.0) { return 1.0; }
+  let c = vec3<f32>(0.0, d.z, d.y);
+  let toC = c - p;
+  let L = length(toC);
+  if (L < 0.0001) { return 1.0; }
+  let rd = toC / L;
+  let oc = goo.xyz - p;
+  let tb = clamp(dot(oc, rd), 0.0, L);
+  if (length(oc - rd * tb) > goo.w) { return 1.0; }
+  var t = 0.0;
+  for (var i = 0; i < ${SHADOW.steps}; i = i + 1) {
+    let q = p + rd * t;
+    if (scrEllipsoid(q - c, ${EGG_R}) < ${f(SHADOW.reach)}) { return 1.0; }
+    let m = mapScr(q, p0, p1, d, lip, tm, 0.0, gooTex, goo);
+    if (m.x < 0.0006) { return 0.0; }
+    t = t + m.x;
+    if (t > L) { return 1.0; }
+  }
+  return 1.0;
+}`;
+
+/**
+ * THE DESK'S SLICK at (x, z) on the desk plane: (signed distance to the pools' wobbly edge, negative inside; its gradient x, z), the union
+ * of the discs in the goo row from GOO_POOL0 (goo-strands.ts's pools: the egg's slick, one per drip; w = 0 none). (1000, 0, 0) when none.
+ */
+export const SCR_POOL = /* wgsl */ `fn scrPool(x: f32, z: f32, gooTex: texture_2d<f32>) -> vec3<f32> {
+  var best = vec3<f32>(1000.0, 0.0, 0.0);
+  for (var i = 0; i < ${N_POOLS}; i = i + 1) {
+    let pl = textureLoad(gooTex, vec2<i32>(${GOO_POOL0} + i, 0), 0);
+    if (pl.w <= 0.0) { continue; }
+    let v = vec2<f32>(x - pl.x, z - pl.z);
+    let r = max(length(v), 0.00001);
+    let th = atan2(v.y, v.x);
+    let fi = f32(i);
+    let wob = pl.w * (1.0 + 0.1 * sin(5.0 * th + 1.3 + fi) + 0.05 * sin(11.0 * th + 0.4 + 2.0 * fi));
+    let dd = r - wob;
+    if (dd < best.x) { best = vec3<f32>(dd, v.x / r, v.y / r); }
+  }
+  return best;
+}`;
+
+/**
+ * The slick's colour at p (on the desk plane), straight: a near-black wet film that MIRRORS: the reflected ray is traced against the egg
+ * (ray-ellipsoid, analytic), so the egg's candled glow shows in its slick (strongest at grazing, Fresnel), a meniscus at its edge (pool =
+ * scrPool's) catching the clear coat's hard highlights from the lamp and the egg, and a warm glow soaked in at the egg's foot. `sh` the egg's
+ * light's shadow there (it takes the foot glow and the egg's highlight, not the reflection). Includes: scrLight.
+ */
+export const SCR_POOL_SHADE = /* wgsl */ `fn scrPoolShade(p: vec3<f32>, rd: vec3<f32>, pool: vec3<f32>, d: vec4<f32>, glow: f32, lamp: vec4<f32>, sh: f32, tm: f32) -> vec3<f32> {
+  let c = vec3<f32>(0.0, d.z, d.y);
+  let rim = 1.0 - smoothstep(0.0, ${f(POOL_EDGE.meniscus)}, -pool.x);
+  let rip = vec2<f32>(sin(p.x * 47.0 + 1.7 * sin(p.z * 31.0) + tm * 0.7), sin(p.z * 41.0 + 2.1 * sin(p.x * 23.0) - tm * 0.5)) * 0.012;
+  let n = normalize(vec3<f32>(pool.y * rim * 1.3 + rip.x, 1.0, pool.z * rim * 1.3 + rip.y));
+  let el = glow * mix(1.0, sh, ${f(SHADOW.depth)});
+  // the egg in the slick: the reflected ray against the ellipsoid
+  let r = reflect(rd, n);
+  let o = (p - c) / ${EGG_R};
+  let dv = r / ${EGG_R};
+  let qa = dot(dv, dv);
+  let qb = dot(o, dv);
+  let qc = dot(o, o) - 1.0;
+  let disc = qb * qb - qa * qc;
+  var refl = vec3<f32>(0.012, 0.01, 0.014);
+  if (disc > 0.0) {
+    let th = (-qb - sqrt(disc)) / qa;
+    if (th > 0.0) {
+      let ne = normalize((o + dv * th) / ${EGG_R});
+      let facing = max(dot(ne, -r), 0.0);
+      // the egg's own candling (scrSurface's core and hard rim), so the egg in the slick is the egg, not a dimmer twin
+      refl = vec3<f32>(1.0, 0.76, 0.5) * glow * (0.25 + 1.1 * pow(facing, 1.5))
+        + smoothstep(0.8, 0.84, 1.0 - facing) * vec3<f32>(1.0, 0.88, 0.72) * (0.25 + 0.6 * glow) + vec3<f32>(0.9, 0.8, 0.68) * 0.08;
+    }
+  }
+  let fres = 0.3 + 0.7 * pow(1.0 - max(dot(n, -rd), 0.0), 5.0);
+  let base = vec3<f32>(0.02, 0.008, 0.006);
+  // the egg's light here only lights (its highlight would double the traced reflection, and as a 9-degree cone on a big egg it smeared
+  // the whole slick orange)
+  let lit = scrLight(p, n, rd, lamp, vec4<f32>(c, 0.0), base, 2.0) + base * vec3<f32>(1.0, 0.45, 0.18) * el * 0.8 * max(dot(n, normalize(c - p)), 0.0);
+  let foot = length(vec2<f32>(p.x - c.x, p.z - c.z));
+  let soak = vec3<f32>(1.0, 0.46, 0.18) * el * 0.3 / (1.0 + pow(max(foot - ${f(EGG.rx * 0.4)}, 0.0) / 0.018, 2.0));
+  return lit + refl * fres + soak;
 }`;
 
 /** Veins, 0..1, from 2D coordinates on the skin (metres): a few wandering sine ridges and a fine net. */
@@ -401,17 +543,19 @@ export const SCR_LIGHT = /* wgsl */ `fn scrLight(p: vec3<f32>, n: vec3<f32>, rd:
  * core strongest where it faces the eye, a few faint vessels, a hard rim; the lip is the bezel's grey going to wet flesh-pink as it bows.
  * The GOO is milky, glossy mucus (the look-dev: clear strands read as dark specks against the glowing egg): an opaque off-white-pink base, a
  * wide soft fake subsurface warming it toward the egg, a hard white clear coat. The TEAR'S RIM is wet flesh, pinker at the very edge, lit
- * through from the egg, with the clear coat's hard highlight.
+ * through from the egg, with the clear coat's hard highlight. `sh` is the egg's light's shadow at p (scrShadow; 1 lit): it takes the egg's light
+ * off the goo, the rim and the lip (the egg's own glow is its own).
  * Includes: scrLight, scrVeins, scrTear, scrEllipsoid.
  */
-export const SCR_SURFACE = /* wgsl */ `fn scrSurface(p: vec3<f32>, n: vec3<f32>, rd: vec3<f32>, mat: f32, p1: vec4<f32>, d: vec4<f32>, lip: vec4<f32>, lamp: vec4<f32>) -> vec3<f32> {
+export const SCR_SURFACE = /* wgsl */ `fn scrSurface(p: vec3<f32>, n: vec3<f32>, rd: vec3<f32>, mat: f32, p1: vec4<f32>, d: vec4<f32>, lip: vec4<f32>, lamp: vec4<f32>, sh: f32) -> vec3<f32> {
   let c = vec3<f32>(0.0, d.z, d.y);
-  let glow = p1.w;
+  let glow = p1.w * mix(1.0, sh, ${f(SHADOW.depth)});
+  let glowE = p1.w;
   let toE = c - p;
   let dE = max(length(toE), 0.0001);
   let E = toE / dE;
   if (mat > 4.5) {
-    let edge = 1.0 - smoothstep(0.0, ${f(TEAR_RIM.band)}, max(scrTear(p, p1.x, lip.w).x, 0.0));
+    let edge = 1.0 - smoothstep(0.0, ${f(TEAR_RIM.band)}, max(scrTear(p, p1.x, lip.w, p1.z).x, 0.0));
     let base = mix(vec3<f32>(0.5, 0.15, 0.14), vec3<f32>(0.86, 0.38, 0.36), edge);
     let through = vec3<f32>(1.0, 0.38, 0.22) * glow * (0.25 + 0.75 * max(dot(-n, E), 0.0)) / (1.0 + dE * dE * 10.0) * (0.4 + 0.6 * edge);
     return scrLight(p, n, rd, lamp, vec4<f32>(c, glow * 0.6), base, 1.6) + through;
@@ -422,7 +566,9 @@ export const SCR_SURFACE = /* wgsl */ `fn scrSurface(p: vec3<f32>, n: vec3<f32>,
     let near = 1.0 / (1.0 + pow(max(scrEllipsoid(p - c, ${EGG_R}), 0.0) / 0.08, 2.0));
     let wrap = 0.5 + 0.5 * dot(n, E);
     let thru = pow(max(dot(rd, E), 0.0), 2.0);
-    let sss = vec3<f32>(1.0, 0.66, 0.48) * glow * near * (0.35 + 0.4 * wrap + 0.5 * thru);
+    // 0.8 (was 0.35) on the egg: the goo lying on or near the egg's glowing shell is lit through by it whichever way it faces (round two:
+    // the beads on the egg read as dark spots)
+    let sss = vec3<f32>(1.0, 0.7, 0.52) * glow * near * (0.8 + 0.4 * wrap + 0.5 * thru);
     let fres = pow(1.0 - max(dot(n, -rd), 0.0), 4.0);
     let base = vec3<f32>(0.82, 0.74, 0.7);
     return scrLight(p, n, rd, lamp, vec4<f32>(c, glow * 0.6), base, 1.5) + base * sss + vec3<f32>(0.9, 0.88, 0.85) * fres * 0.25;
@@ -430,10 +576,11 @@ export const SCR_SURFACE = /* wgsl */ `fn scrSurface(p: vec3<f32>, n: vec3<f32>,
   if (mat > 2.5) {
     let u = normalize((p - c) / ${EGG_R});
     let facing = max(dot(n, -rd), 0.0);
+    // Paler and cooler than the membrane's red-orange (round two: inside the tear the two read as one colour, so the hole did not read).
     let ves = scrVeins(vec2<f32>(atan2(u.x, u.z) * 0.12, u.y * 0.2));
-    let core = vec3<f32>(1.0, 0.52, 0.2) * glow * (0.25 + 1.1 * pow(facing, 1.5)) * (1.0 - 0.45 * ves);
-    let lit = scrLight(p, n, rd, lamp, vec4<f32>(c, 0.0), vec3<f32>(0.85, 0.62, 0.45) * 0.5, 1.0);
-    let rim = smoothstep(0.8, 0.84, 1.0 - facing) * vec3<f32>(1.0, 0.7, 0.45) * (0.25 + 0.6 * glow);
+    let core = vec3<f32>(1.0, 0.76, 0.5) * glowE * (0.25 + 1.1 * pow(facing, 1.5)) * (1.0 - 0.45 * ves);
+    let lit = scrLight(p, n, rd, lamp, vec4<f32>(c, 0.0), vec3<f32>(0.92, 0.84, 0.72) * 0.5, 1.0);
+    let rim = smoothstep(0.8, 0.84, 1.0 - facing) * vec3<f32>(1.0, 0.88, 0.72) * (0.25 + 0.6 * glowE);
     return core + lit + rim;
   }
   let pink = vec3<f32>(0.5, 0.16, 0.15);
@@ -443,35 +590,49 @@ export const SCR_SURFACE = /* wgsl */ `fn scrSurface(p: vec3<f32>, n: vec3<f32>,
 
 /**
  * THE SHEET at p (straight colour, opacity): glass showing the stretched picture while `thin` is low, veined translucent flesh lit from
- * behind by the egg as it thins and stretches; more transparent as `thin` rises. Includes: sacZ, scrPicture, scrVeins, scrLight.
+ * behind by the egg as it thins and stretches; more transparent as `thin` rises. The veins are TRIPLANAR (the front's stretched xy, and
+ * yz / xz on the sac's walls, weighted by the normal): a front projection alone smeared them into long seams along the walls (round one).
+ * Healing, the wrinkle's slope offsets the picture (distorted) and the clear coat strengthens (glistening). `sh` the egg's light's shadow.
+ * Includes: sacZ, scrPicture, scrVeins, scrLight, scrWrinkle.
  */
-export const SCR_SHEET = /* wgsl */ `fn scrSheet(p: vec3<f32>, n: vec3<f32>, rd: vec3<f32>, foot: f32, p0: vec4<f32>, p1: vec4<f32>, d: vec4<f32>, lip: vec4<f32>, tm: f32, lamp: vec4<f32>, picTab: texture_2d<f32>, scrTex: texture_2d<f32>, scrSamp: sampler) -> vec4<f32> {
+export const SCR_SHEET = /* wgsl */ `fn scrSheet(p: vec3<f32>, n: vec3<f32>, rd: vec3<f32>, foot: f32, p0: vec4<f32>, p1: vec4<f32>, d: vec4<f32>, lip: vec4<f32>, tm: f32, lamp: vec4<f32>, picTab: texture_2d<f32>, scrTex: texture_2d<f32>, scrSamp: sampler, sh: f32) -> vec4<f32> {
   let c = vec3<f32>(0.0, d.z, d.y);
-  let glow = p1.w;
+  let glow = p1.w * mix(1.0, sh, ${f(SHADOW.depth)});
   let h = sacZ(p.x, p.y, p0, p1, d, lip, tm);
   let th = smoothstep(0.0, 1.0, p0.z);
   let stretch = clamp(h.x / ${f(SAC_MAX)}, 0.0, 1.0);
   let flesh = clamp(max(th, stretch * 0.8), 0.0, 1.0);
-  let pic = scrPicture(p.x, p.y, lip, foot, picTab, scrTex, scrSamp);
-  let ves = scrVeins(vec2<f32>(p.x / lip.x * ${f(GLASS.hw)}, p.y / lip.y * ${f(GLASS.hh)}) * (1.0 + 0.6 * stretch));
-  let fleshCol = mix(vec3<f32>(0.45, 0.13, 0.11), vec3<f32>(0.22, 0.03, 0.04), ves);
+  let wr = scrWrinkle(p.x, p.y, lip, p1.z);
+  let pic = scrPicture(p.x + wr.y * ${f(HEAL_LOOK.picWarp)}, p.y + wr.z * ${f(HEAL_LOOK.picWarp)}, lip, foot, picTab, scrTex, scrSamp);
+  let wn = n * n;
+  let vXY = scrVeins(vec2<f32>(p.x / lip.x * ${f(GLASS.hw)}, p.y / lip.y * ${f(GLASS.hh)}) * (1.0 + 0.6 * stretch));
+  // the walls' projections turned 0.6 rad and scaled 1.7x: the veins' ridges are long wandering sines, and along a 0.7 m wall at 1x
+  // they ran its whole length as straight seams
+  let rw = mat2x2<f32>(0.825, 0.565, -0.565, 0.825) * 1.7;
+  let vYZ = scrVeins(rw * vec2<f32>(p.z + 0.31, p.y));
+  let vXZ = scrVeins(rw * vec2<f32>(p.x, p.z - 0.17));
+  let ves = (vXY * wn.z + vYZ * wn.x + vXZ * wn.y) / max(wn.x + wn.y + wn.z, 0.0001);
+  let fleshCol = mix(vec3<f32>(0.5, 0.12, 0.1), vec3<f32>(0.24, 0.03, 0.04), ves);
   let toE = c - p;
   let dE = max(length(toE), 0.0001);
   let back = max(dot(-n, toE / dE), 0.0);
-  let trans = vec3<f32>(1.0, 0.42, 0.16) * glow * (0.5 + 0.8 * back) / (1.0 + dE * dE * 10.0) * (1.0 - 0.7 * ves);
+  let trans = vec3<f32>(1.0, 0.34, 0.12) * glow * (0.5 + 0.8 * back) / (1.0 + dE * dE * 10.0) * (1.0 - 0.7 * ves);
   let emit = pic.rgb * (1.0 - 0.85 * flesh) + trans * flesh;
   let base = mix(vec3<f32>(0.006, 0.007, 0.008), fleshCol, flesh);
-  let col = emit + scrLight(p, n, rd, lamp, vec4<f32>(c, 0.0), base, 1.0);
+  let coat = 1.0 + ${f(HEAL_LOOK.coat)} * smoothstep(0.0, 1.0, p1.z);
+  let col = emit + scrLight(p, n, rd, lamp, vec4<f32>(c, 0.0), base, coat);
   let a = mix(1.0, mix(0.5, 0.85, ves), th);
   return vec4<f32>(col, a);
 }`;
 
 /**
  * THE PASS: eye and pos in the proxy's local (screen) frame; p0, p1, d, lip as sacZ; tm the clock; lamp (xyz, strength); cfg.x the pixel's
- * angular size (2 tan(fov / 2) / height); gooTex and goo as mapScr. Returns (straight colour, packed hit: floor(t * DEPTH_Q) + alpha, 0 on a
- * miss). Behind a translucent sheet with nothing else there, the eye meets the glass's backing: the picture, dim, warmed by the egg's glow
- * (round one's dark tube read as a hole once the tear opened).
- * Includes: scrMarch, scrNormal, scrSheet, scrSurface, scrOpening, scrPicture.
+ * angular size (2 tan(fov / 2) / height), cfg.y the debug view, cfg.z the goo shadow (scrShadow on the sheet, the goo and the slick);
+ * gooTex and goo as mapScr. Returns (straight colour, packed hit: floor(t * DEPTH_Q) + alpha, 0 on a miss). Behind a translucent sheet with
+ * nothing else there, the eye meets the glass's backing: the picture, dim, warmed by the egg's glow (round one's dark tube read as a hole
+ * once the tear opened). THE SLICK: where the ray meets the desk plane (POOL_LIFT above DESK_Y) before anything else and inside the pools,
+ * the slick is composited over what lies beyond, with its own depth.
+ * Includes: scrMarch, scrNormal, scrSheet, scrSurface, scrOpening, scrPicture, scrShadow, scrPool, scrPoolShade.
  */
 export const SCR_SHADE = /* wgsl */ `fn scrShade(eye: vec3<f32>, pos: vec3<f32>, p0: vec4<f32>, p1: vec4<f32>, d: vec4<f32>, lip: vec4<f32>, tm: f32, lamp: vec4<f32>, cfg: vec4<f32>, picTab: texture_2d<f32>, scrTex: texture_2d<f32>, scrSamp: sampler, gooTex: texture_2d<f32>, goo: vec4<f32>) -> vec4<f32> {
   let ro = eye;
@@ -489,21 +650,26 @@ export const SCR_SHADE = /* wgsl */ `fn scrShade(eye: vec3<f32>, pos: vec3<f32>,
     // Debug view (cfg.y = 1): red the first march's steps over the budget, green a hit, blue the material over 5; opaque, at the box.
     return vec4<f32>(h1.z / ${f(MAX_STEPS)}, select(0.0, 1.0, h1.x > 0.0), h1.y / 5.0, floor(t0 * ${f(DEPTH_Q)}) + 0.999);
   }
-  if (h1.x < 0.0) { return vec4<f32>(0.0); }
+  var col = vec3<f32>(0.0);
+  var alpha = 0.0;
+  var tHit = h1.x;
+  if (h1.x > 0.0) {
+  alpha = 1.0;
   let p = ro + rd * h1.x;
   let foot = h1.x * cfg.x;
-  var col = vec3<f32>(0.0);
-  var alpha = 1.0;
   if (h1.y < 1.5) {
     let n = scrNormal(p, p0, p1, d, lip, tm, 1.0, gooTex, goo);
-    let sk = scrSheet(p, n, rd, foot, p0, p1, d, lip, tm, lamp, picTab, scrTex, scrSamp);
+    let shS = scrShadow(p, p0, p1, d, lip, tm, gooTex, goo, cfg.z);
+    let sk = scrSheet(p, n, rd, foot, p0, p1, d, lip, tm, lamp, picTab, scrTex, scrSamp, shS);
     var behind = vec4<f32>(0.0);
     if (sk.a < 0.999) {
       let h2 = scrMarch(ro, rd, h1.x + 0.003, tf, p0, p1, d, lip, tm, 0.0, cfg.x, gooTex, goo);
       if (h2.x > 0.0) {
         let p2 = ro + rd * h2.x;
         let n2 = scrNormal(p2, p0, p1, d, lip, tm, 0.0, gooTex, goo);
-        behind = vec4<f32>(scrSurface(p2, n2, rd, h2.y, p1, d, lip, lamp), 1.0);
+        var sh2 = 1.0;
+        if (h2.y > 3.5 && h2.y < 4.5) { sh2 = scrShadow(p2 + n2 * ${f(SHADOW.lift)}, p0, p1, d, lip, tm, gooTex, goo, cfg.z); }
+        behind = vec4<f32>(scrSurface(p2, n2, rd, h2.y, p1, d, lip, lamp, sh2), 1.0);
       } else if (rd.z < 0.0) {
         let tt = (${f(SHEET_FLOOR)} - ro.z) / rd.z;
         let pf = ro + rd * tt;
@@ -518,7 +684,28 @@ export const SCR_SHADE = /* wgsl */ `fn scrShade(eye: vec3<f32>, pos: vec3<f32>,
     col = pre / max(alpha, 0.0001);
   } else {
     let n = scrNormal(p, p0, p1, d, lip, tm, 1.0, gooTex, goo);
-    col = scrSurface(p, n, rd, h1.y, p1, d, lip, lamp);
+    var sh = 1.0;
+    if (h1.y > 3.5 && h1.y < 4.5) { sh = scrShadow(p + n * ${f(SHADOW.lift)}, p0, p1, d, lip, tm, gooTex, goo, cfg.z); }
+    col = scrSurface(p, n, rd, h1.y, p1, d, lip, lamp, sh);
   }
-  return vec4<f32>(max(col, vec3<f32>(0.0)), floor(h1.x * ${f(DEPTH_Q)}) + clamp(alpha, 0.001, 0.999));
+  }
+  // The slick on the desk, in front of whatever the march found (or of nothing).
+  if (rd.y < 0.0) {
+    let tp = (${f(DESK_Y + POOL_LIFT)} - ro.y) / rd.y;
+    if (tp > t0 && tp < tf && (h1.x < 0.0 || tp < h1.x)) {
+      let pp = ro + rd * tp;
+      let pool = scrPool(pp.x, pp.z, gooTex);
+      let pa = 1.0 - smoothstep(${f(-POOL_EDGE.soft)}, ${f(POOL_EDGE.soft)}, pool.x);
+      if (pa > 0.001) {
+        let shP = scrShadow(pp + vec3<f32>(0.0, ${f(SHADOW.lift)}, 0.0), p0, p1, d, lip, tm, gooTex, goo, cfg.z);
+        let pc = scrPoolShade(pp, rd, pool, d, p1.w, lamp, shP, tm);
+        let pre = pc * pa + col * alpha * (1.0 - pa);
+        alpha = pa + alpha * (1.0 - pa);
+        col = pre / max(alpha, 0.0001);
+        tHit = tp;
+      }
+    }
+  }
+  if (alpha <= 0.0) { return vec4<f32>(0.0); }
+  return vec4<f32>(max(col, vec3<f32>(0.0)), floor(tHit * ${f(DEPTH_Q)}) + clamp(alpha, 0.001, 0.999));
 }`;
