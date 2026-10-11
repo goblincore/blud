@@ -13,7 +13,8 @@ import { SIT, TYPE, JOLT, RECOIL, TOUCH, REACH } from '../characters/goblin-pose
 export interface GoblinCut { clip: PoseClip; start: number }
 
 /** The clip cuts, in order (plan Task 5 step 3): `sit` plays 0 to 0.8 s and `type` holds until 3 s; `jolt` from 3.0 (the push);
- *  `recoil` from 6.6 (the sac's tear begins at 6.5); `touch` from 9.4; `reach` held from 10.8, the end of `touch`'s 1.4 s. Every clip
+ *  `recoil` from 6.6 (the sac's tear begins at 6.5); `touch` from 9.4; `reach` held from 11.6, the end of `touch`'s 2.2 s (Task 8: the
+ *  hands land once the egg has settled on the desk). Every clip
  *  starts on the pose the one before it ends on, so the cuts never pop (the test pins it). */
 export const GOBLIN_CUTS: readonly GoblinCut[] = [
   { clip: SIT, start: 0 },
@@ -21,7 +22,7 @@ export const GOBLIN_CUTS: readonly GoblinCut[] = [
   { clip: JOLT, start: 3.0 },
   { clip: RECOIL, start: 6.6 },
   { clip: TOUCH, start: 9.4 },
-  { clip: REACH, start: 10.8 },
+  { clip: REACH, start: 11.6 },
 ];
 
 /** The clip playing at sequence time `t` and the time inside it (`local`, seconds from the clip's start, never negative). Before 0 it is

@@ -30,7 +30,7 @@ describe('goblinClipAt', () => {
     }
     expect(names).toEqual(['sit', 'type', 'jolt', 'recoil', 'touch', 'reach']);
     expect(GOBLIN_CUTS.map(c => [c.clip.name, c.start])).toEqual(
-      [['sit', 0], ['type', 0.8], ['jolt', 3.0], ['recoil', 6.6], ['touch', 9.4], ['reach', 10.8]]);
+      [['sit', 0], ['type', 0.8], ['jolt', 3.0], ['recoil', 6.6], ['touch', 9.4], ['reach', 11.6]]);
   });
 
   it('the last clip is reach, held past the end', () => {
