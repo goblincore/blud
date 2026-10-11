@@ -51,7 +51,8 @@ describe('flat.art.glb budget (spec section 8)', () => {
   const prims = glb.meshes.flatMap(m => m.primitives);
   const triangles = prims.reduce((n, p) => n + (p.indices === undefined ? 0 : glb.accessors[p.indices]!.count / 3), 0);
 
-  it('at most 40 draw-call primitives', () => { expect(prims.length).toBeLessThanOrEqual(40); });
+  // Raised from 40: the iMac adds about nine materials (owner, 2026-10-11: look first, optimise later).
+  it('at most 60 draw-call primitives', () => { expect(prims.length).toBeLessThanOrEqual(60); });
   // Raised from 250 000 (owner, 2026-10-11): the look comes first; an optimisation pass follows.
   it('at most 400 000 triangles', () => { expect(triangles).toBeLessThanOrEqual(400_000); });
   it('the iMac shell is a blended material', () => {

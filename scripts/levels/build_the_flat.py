@@ -74,10 +74,11 @@ def main():
     sc["ammo"] = "infinite"
     C.use_dressing()
     M = materials.make()
-    from flat import giger, props, shell
+    from flat import giger, imac, props, shell
     shell.build(M)
     giger.build(M)
     props.build(M)
+    imac.build(M)
     build_markers_lights_collision()
     assert_scene()
     os.makedirs(os.path.dirname(OUT), exist_ok=True)

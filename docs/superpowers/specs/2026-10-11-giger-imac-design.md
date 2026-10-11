@@ -1,6 +1,6 @@
 # The Giger iMac in the engine — design
 
-**Date:** 2026-10-11 · **Status:** design approved by the owner (2026-10-11), plan next · **Branch:** `claude/flat-room` (stacked on slice 1) ·
+**Date:** 2026-10-11 · **Status:** built 2026-10-11, owner look pending ([notes](../../dev-notes/2026-10-11-flat-room/NOTES.md)) · **Branch:** `claude/flat-room` (stacked on slice 1) ·
 **Parent:** [the Flat's room in the engine](2026-10-11-flat-room-design.md) (section 11, follow-up 2) ·
 **Look-dev:** [`docs/dev-notes/2026-10-01-flat-room-lookdev/`](../../dev-notes/2026-10-01-flat-room-lookdev/notes.md) (`room.py` 881–1102 and the umbilicus at 1071; frames `imac.png`, `skull.png`) ·
 **Owner decisions (2026-10-11):** build the machine and its connection to the room (not the keyboard and mouse); the shell is alpha-blended; the WGSL shell is a separate, later spike.

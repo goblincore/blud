@@ -101,7 +101,7 @@ if (process.env.SHOTS === '1') {
   })()`);
   const YAW_SIGN = Number(process.env.YAW_SIGN ?? -1);          // flip to -1 if the shots face the wrong way (see Task 5 Step 4)
   const CAMS = { wide: [[-1.12, 0.17], [0.4, 2.8, 0.45]], shoulder: [[-0.32, 0.92], [0.16, 2.48, 0.62]], imac: [[0.8, 1.5], [0.08, 2.55, 0.62]], skull: [[-0.62, 2.12], [0.14, 2.58, 0.64]],
-    vault: [[0.12, 0.55], [0.12, 1.8, 2.5]], boiler: [[0.3, 1.2], [1.2, 3.3, 1.4]] };      // vault and boiler: the Giger layer (added in Task 9)
+    vault: [[0.12, 0.55], [0.12, 1.8, 2.5]], face: [[0.12, 1.55], [0.12, 2.3, 0.72]], boiler: [[0.3, 1.2], [1.2, 3.3, 1.4]] };      // vault and boiler: the Giger layer (added in Task 9)
   for (const [name, [[bx, by], [tx, ty, tz]]] of Object.entries(CAMS)) {
     const dx = tx - bx, dy = ty - by;                           // Blender space: +y is north
     const yaw = YAW_SIGN * Math.atan2(-dx, dy);                  // 0 when the target is straight north

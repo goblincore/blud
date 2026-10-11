@@ -1,7 +1,7 @@
 # scripts/levels/flat/props.py
 """The hero props, from docs/dev-notes/2026-10-01-flat-room-lookdev/room.py: the kotatsu and its quilt (705-707, 714-749), the futon and its
 duvet (1131-1147), the fridge (1263-1264), the bookshelf and its books (1209-1226, 1245-1247), the paper lantern, the fairy lights and the
-candle (1326-1367), plus a placeholder for the iMac. No clutter (plushies, posters, food, socks, gashapon): a later pass. Materials are
+candle (1326-1367); the iMac is flat/imac.py. No clutter (plushies, posters, food, socks, gashapon): a later pass. Materials are
 glTF PBR (flat/materials.py); lights are in flat_layout.py. Run inside Blender."""
 import math
 import random
@@ -138,13 +138,6 @@ def build_lights_as_objects():
     sphere('flame', (X0 + 0.12, 2.05, 1.51), 0.008, MT.FLAME, scale=(1, 1, 1.8))
 
 
-def build_imac_placeholder():
-    """The iMac's place: an amber, rounded body with a dark bezel (a stand-in for the translucent Giger iMac; spec section 11)."""
-    sphere('imac_guts_spike', (KX + 0.04, KY + 0.14, KTOP + 0.2), 0.10, MT.FLESH, seg=24)
-    sphere('imac_body', (KX + 0.04, KY + 0.14, KTOP + 0.2), 0.22, MT.SHELL, scale=(1.0, 1.15, 0.95), seg=32)
-    box('imac_bezel', (KX + 0.04, KY - 0.05, KTOP + 0.2), (0.34, 0.03, 0.3), MT.GUN, bevel=0.02)
-
-
 def build(m):
     global MT
     MT = m
@@ -154,4 +147,3 @@ def build(m):
     build_fridge()
     build_shelf()
     build_lights_as_objects()
-    build_imac_placeholder()

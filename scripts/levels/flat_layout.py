@@ -66,9 +66,9 @@ LIGHTS = [
     ("window", (WX, Y1 - 0.25, 1.4), (0.62, 0.74, 0.90), 3.0, {"fixture": "none"}),         # the only cool light (no shadow: the format allows it on tube fixtures only)
     ("lantern", (0.0, 1.05, CROWN - 0.62), (1.0, 0.36, 0.20), 2.0, {"fixture": "none"}),
     ("candle", (X0 + 0.14, 2.05, 1.53), (1.0, 0.65, 0.35), 1.0, {"fixture": "none"}),
-    ("amber", (KX + 0.03, IM_FRONT + 0.36, IM_Z - 0.06), (1.0, 0.50, 0.20), 1.6, {"fixture": "none"}),   # in the iMac's guts, behind the creature
-    ("amber2", (KX - 0.04, IM_FRONT + 0.14, IM_Z - 0.10), (1.0, 0.45, 0.20), 0.7, {"fixture": "none"}),   # in the guts, nearer the face
-    ("screen", (KX, IM_FRONT - 0.05, IM_Z + 0.05), (0.75, 0.80, 1.0), 1.0, {"fixture": "none"}),          # the screen's light into the room
+    ("amber", (KX + 0.03, IM_FRONT + 0.36, IM_Z - 0.06), (1.0, 0.50, 0.20), 0.35, {"fixture": "none"}),   # in the iMac's guts, behind the creature
+    ("amber2", (KX - 0.04, IM_FRONT + 0.14, IM_Z - 0.10), (1.0, 0.45, 0.20), 0.15, {"fixture": "none"}),   # in the guts, nearer the face
+    ("screen", (KX, IM_FRONT - 0.05, IM_Z + 0.05), (0.75, 0.80, 1.0), 0.25, {"fixture": "none"}),          # the screen's light into the room
 ]
 
 

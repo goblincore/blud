@@ -11,9 +11,9 @@
 ## In flight / next
 
 **The Flat's room in the engine** (owner, 2026-10-11) — [levels](docs/tasks/levels.md) (4o)
-- [~] **Slice 1 built 2026-10-11; the owner liked the first pass; next: the Giger iMac.** A walkable `?level=flat`: the last-stage room from the
-  look-dev (stone shell, Giger layer, hero props) through the Blender level route; 5 to 7 ms a frame, 32 draws, about 298k triangles.
-  [Notes and the engine-vs-look-dev sheet](docs/dev-notes/2026-10-11-flat-room/NOTES.md). Owed: the bone/spine/radiator look, an optimisation pass. [Spec](docs/superpowers/specs/2026-10-11-flat-room-design.md)
+- [~] **Slice 1 built 2026-10-11 (the owner liked it); the Giger iMac built the same day, owner look pending** (alpha-blended shell; the WGSL shell is a later spike). A walkable `?level=flat`: the last-stage room from the
+  look-dev (stone shell, Giger layer, hero props, the iMac) through the Blender level route; 40 draws, about 363k triangles, well under 33 ms.
+  [Notes and the engine-vs-look-dev sheet](docs/dev-notes/2026-10-11-flat-room/NOTES.md). Owed: the shell's depth and veins, the bone/spine/radiator look, an optimisation pass. [Spec](docs/superpowers/specs/2026-10-11-flat-room-design.md)
   (branch `claude/flat-room`). Separate task: the goblin to human height ([characters](docs/tasks/characters.md)).
 
 **Frame cost: the heavy scenes at a stable 30 fps** (owner's goal, 2026-10-08) — [rendering](docs/tasks/rendering.md)

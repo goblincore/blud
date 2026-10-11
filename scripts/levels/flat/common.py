@@ -169,12 +169,13 @@ def to_mesh(ob):
     return bpy.context.view_layer.objects.active
 
 
-def tube(name, pts, radii, material, res=4, cyclic=False):
-    """A beveled curve, converted to a mesh (the exporter only takes meshes)."""
+def tube(name, pts, radii, material, res=4, cyclic=False, res_u=12):
+    """A beveled curve, converted to a mesh (the exporter only takes meshes). res: the cross-section's bevel resolution; res_u: curve points per segment."""
     cu = bpy.data.curves.new(name, "CURVE")
     cu.dimensions = "3D"
     cu.bevel_depth = 1.0
     cu.bevel_resolution = res
+    cu.resolution_u = res_u
     cu.use_fill_caps = True
     sp = cu.splines.new("NURBS")
     sp.points.add(len(pts) - 1)

@@ -186,9 +186,9 @@ def periodic_noise(px, scale, seed):
 def make_shell(px=1024):
     """The iMac's amber shell (room.py giger_shell_material, 904-936): bile-amber glow with dark-red veins. UV u = round the body (tiles), v = along it."""
     th = periodic_noise(px, 5, 11)[..., None]
-    glow = lin_mix(np.array((1.0, 0.40, 0.12), np.float32), np.array((1.0, 0.70, 0.36), np.float32), th)
+    glow = lin_mix(np.array((0.95, 0.24, 0.05), np.float32), np.array((1.0, 0.50, 0.16), np.float32), th)      # deeper than the look-dev's numbers: the engine's lamps and alpha lighten it
     n1, n2 = periodic_noise(px, 14, 21), periodic_noise(px, 36, 22)
-    vein = np.maximum(np.clip(1 - np.abs(n1 - 0.5) / 0.035, 0, 1), np.clip(1 - np.abs(n2 - 0.5) / 0.02, 0, 1) * 0.8)[..., None]
+    vein = np.maximum(np.clip(1 - np.abs(n1 - 0.5) / 0.05, 0, 1), np.clip(1 - np.abs(n2 - 0.5) / 0.03, 0, 1) * 0.9)[..., None]
     col = glow * (1 - vein) + vein * np.array((0.28, 0.02, 0.02), np.float32)
     save(srgb(col), "shell_color.jpg")
 
@@ -204,7 +204,7 @@ def make_screen(px=(1024, 768)):
     im = np.asarray(Image.open(src).convert("RGB").resize(px, Image.LANCZOS), np.float32) / 255.0
     v = (np.arange(px[1])[:, None] + 0.5) / px[1]
     lines = 0.55 + 0.45 * (np.sin(v * 1300.0) + 1) / 2
-    save(np.clip(im * lines[..., None] * 1.35, 0, 1), "screen.jpg")
+    save(np.clip(np.power(im, 0.6) * lines[..., None] * 1.3, 0, 1), "screen.jpg")      # gamma 0.6 lifts the moody frame's shadows: a CRT glows
 
 
 if __name__ == "__main__":
