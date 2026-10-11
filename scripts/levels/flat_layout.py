@@ -105,8 +105,8 @@ LIGHTS = [
     ("amber", (KX + 0.03, IM_FRONT + 0.36, IM_Z - 0.06), (1.0, 0.50, 0.20), 0.35, {"fixture": "none"}),   # in the iMac's guts, behind the creature
     ("amber2", (KX - 0.04, IM_FRONT + 0.14, IM_Z - 0.10), (1.0, 0.45, 0.20), 0.15, {"fixture": "none"}),   # in the guts, nearer the face
     ("screen", (KX, IM_FRONT - 0.05, IM_Z + 0.05), (0.75, 0.80, 1.0), 0.25, {"fixture": "none"}),          # the screen's light into the room
-    ("hall", (X1 - 0.2, -0.45, 1.97), (1.0, 0.72, 0.42), 0.9, {"fixture": "none"}),                       # the sconce by the bathroom doorway
-    ("bath", (2.0, -1.0, 2.12), (0.85, 1.0, 0.82), 0.9, {"fixture": "none"}),                             # a bare bulb on the bathroom ceiling
+    ("hall", (0.55, -0.75, 2.05), (1.0, 0.72, 0.42), 1.4, {"fixture": "none"}),                            # the hall's light, toward its middle (the sconce by the doorway is the art for it)
+    ("bath", (2.0, -1.0, 2.12), (0.85, 1.0, 0.82), 1.4, {"fixture": "none"}),                             # a bare bulb on the bathroom ceiling
 ]
 
 

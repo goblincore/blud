@@ -1,6 +1,6 @@
 # The Flat's entry hall and bathroom — design
 
-**Date:** 2026-10-11 · **Status:** design approved by the owner (2026-10-11), plan next · **Branch:** `claude/flat-room` (stacked on the room and the iMac) ·
+**Date:** 2026-10-11 · **Status:** built 2026-10-11, owner look pending ([notes](../../dev-notes/2026-10-11-flat-room/NOTES.md)) · **Branch:** `claude/flat-room` (stacked on the room and the iMac) ·
 **Parent:** [the Flat's room in the engine](2026-10-11-flat-room-design.md) · **Flat design:** [`docs/game/flat/design.md`](../../game/flat/design.md) ·
 **Owner decisions (2026-10-11):** the flat is a small apartment, not one room; an entry hall south of the room with the front door and the bathroom off it;
 the bathroom has a claw-foot tub with a hand shower, a toilet, a sink and a mirror; the mirror is a framed dark polished glass for now (the real planar mirror is a later spike);
@@ -47,7 +47,7 @@ The player starts in the hall by the front door, facing north, so the flow is do
 and a low shoe cubby with a few shoes on the west wall; a wall sconce by the bathroom doorway; a stone rib and two vertebral conduits along the vault.
 
 **Bathroom** (its walls lined with small stained tile, a flat ceiling, a tile floor):
-- **A claw-foot cast-iron tub** along the east wall: a lofted rounded-rectangle shell (dark cast-iron outside, white enamel inside and on the rim) on four bone-and-bronze claws. Chrome taps and a riser with a hand shower at the south end; a chrome curtain ring overhead (no curtain yet).
+- **A claw-foot cast-iron tub** along the east wall: a lofted rounded-rectangle shell, all white enamel (the owner, 2026-10-11: not two-tone), on four bone-and-bronze claws. Chrome taps and a riser with a hand shower at the south end; a chrome curtain ring overhead (no curtain yet).
 - **A toilet** against the north wall (tank, lid, bowl, seat) and **a pedestal sink** on the south wall with chrome taps.
 - **The mirror** over the sink on the south wall: a stone-and-bone frame around a dark polished glass (a generated texture: a deep warm black, a vignette and a painted glint). It reads as a mirror from the doorway and
   reflects nothing yet.

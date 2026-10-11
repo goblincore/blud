@@ -88,3 +88,34 @@ constraint), 5 to 16 ms a frame at the start (the goal is under 33 ms; the gate'
 - The screen is a static frame, dimmer than the look-dev's glowing CRT. No keyboard, mouse or stickers (the goblin-at-the-kotatsu task).
 
 **Tuning knobs** (`flat/materials.py`, `flat_layout.py`): the shell's `alpha` and `emit`; `make_shell()`'s colours and vein widths; the three lamp powers; `make_screen()`'s gamma.
+
+## Update: the entry hall and the bathroom (2026-10-11)
+
+![The apartment: the hall through the arch, the front door, the bathroom doorway, the tub, the mirror, the sconce](apartment.jpg)
+
+Spec: [2026-10-11-flat-apartment-design.md](../../superpowers/specs/2026-10-11-flat-apartment-design.md) · plan: [2026-10-11-flat-apartment.md](../../superpowers/plans/2026-10-11-flat-apartment.md).
+The flat is a small apartment now: the room (unchanged), an **entry hall** south of it and a **bathroom** east of the hall, in one engine room of 4.45 × 5.6 m.
+
+**Plan view (Blender x east, y north):** the main room is y 0 to 3.6; its old south wall is an **arched passage** (1.2 m wide) into the hall (y -2 to 0, x -1.35 to 1.35); the **front door**
+(the closed arched oak door, moved) is on the hall's south wall; the **bathroom** (x 1.35 to 3.1, y -2 to 0) opens off the hall's east wall through a 0.8 × 1.9 m doorway with an oak architrave.
+The player starts in the hall by the front door, facing the room.
+
+**What is in it:** the hall has a stone rib and two vertebral conduits on the vault, an 8 cm genkan step (the player really steps up), an oak rail with four bone coat hooks, a low shoe cubby with slippers,
+and a wall sconce by the bathroom doorway. The bathroom has small pale-green tile on every wall, a dark checker floor, a flat tiled ceiling, a bare bulb, **a white claw-foot tub** (one enamel, inside and out) on
+bone-and-bronze claws with chrome taps, a riser and hand shower and a curtain ring overhead, a toilet, a pedestal sink, a **framed mirror of dark polished glass** over the sink (it reflects nothing yet), and a Giger pipe in the corner.
+
+**Numbers:** 50 draw primitives (the cap is 60), about 423 000 triangles (the cap is 500 000), a 21 MB `.glb`. The gate's frame readings were 15, 18 and 31 ms (the goal is under 33 ms) on a shared machine: one run came
+close, so the optimisation pass is now more than a nicety. The gate walks hall to room through the arch and hall to bathroom through the doorway, and probes the tub, toilet, sink, kotatsu, shelf and fridge as blockers.
+
+**Things learned:**
+- **The player's capsule is 1.75 m tall** (eye 1.62 m), and it stands 8 cm up on the genkan step: a 1.75 m doorway lintel blocked it. The bathroom doorway is 1.9 m (the impost course above is the lintel).
+- **The side walls stop at the vault's spring line (1.95 m)**, too low for an arch; the end walls rise to the vault, so the arched openings are in the south walls.
+- **The first hall rib's corbels sat in the bathroom doorway;** the rib is at y -1.7.
+- The format's 1.4 m minimum applies to doorways *between rooms*: the apartment is one room, with the partitions as collision `solids` and the walls as art.
+- The long walls have a hall segment each with its own texture, so the stone keeps its resolution (a 1024 px texture over 5.8 m would have been blurry).
+
+**Owner decisions recorded (2026-10-11):** the tub is all white; the mirror is dark polished glass for now and the real planar mirror is a later spike; **the "never show the goblin's face" rule is discarded**
+(the "covered mirror" lines in `docs/game/vision.md` and the covered-mirror row of the Flat design are superseded: the vision doc still says otherwise).
+
+**Open for the owner's eye:** the hall's west wall is dim (the hall light is toward its middle; a stronger one blows out the arch); the bathroom is green and gloomy by design (the bulb and the tile); the toilet's hole shows a few stray specks;
+the coat hooks are small. No door leaf on the bathroom doorway (it would collide with the fixtures); no curtain on the ring; nothing outside the front door.

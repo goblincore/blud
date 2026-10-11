@@ -79,13 +79,13 @@ def loft(name, rings, material, cap_first=False, cap_last=False):
 
 
 def claw_tub():
-    """A cast-iron tub (dark outside, white enamel inside and on the rim) on four bone-and-bronze claws."""
+    """A white enamelled tub (one white, inside and out: the owner, 2026-10-11) on four bone-and-bronze claws."""
     cx, cy, W, Ln = LAY.TUB
 
     def ring(z, inset):
         return (z, rr_loop(cx, cy, W - 2 * inset, Ln - 2 * inset, max(0.34 - inset, 0.05)))
 
-    loft('tub_outer', [ring(0.20, 0.07), ring(0.27, 0.02), ring(0.40, 0.0), ring(0.62, 0.0), ring(0.74, 0.012)], MT.CASTIRON, cap_first=True)
+    loft('tub_outer', [ring(0.20, 0.07), ring(0.27, 0.02), ring(0.40, 0.0), ring(0.62, 0.0), ring(0.74, 0.012)], MT.ENAMEL, cap_first=True)
     loft('tub_inner', [ring(0.74, 0.012), ring(0.755, 0.05), ring(0.70, 0.065), ring(0.36, 0.10), ring(0.27, 0.15)], MT.ENAMEL, cap_last=True)
     for sx in (-1, 1):
         for sy in (-1, 1):

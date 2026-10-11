@@ -67,5 +67,5 @@ describe('flat.art.glb budget (spec section 8)', () => {
     expect(shell?.alphaMode).toBe('BLEND');
   });
   // File size is not a constraint (owner, 2026-10-11): this only catches an accidental huge texture.
-  it('an art file under 20 MB', () => { expect(statSync('public/assets/levels/flat.art.glb').size).toBeLessThanOrEqual(20 * 1024 * 1024); });
+  it('an art file under 40 MB', () => { expect(statSync('public/assets/levels/flat.art.glb').size).toBeLessThanOrEqual(40 * 1024 * 1024); });
 });
