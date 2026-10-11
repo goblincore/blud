@@ -1,6 +1,6 @@
 # The screen emergence, lab spike — design
 
-**Date:** 2026-10-11 · **Status:** approved by the owner 2026-10-11, [plan written](../plans/2026-10-11-screen-emergence-lab-spike.md) · **Branch:** `claude/screen-emergence-lab` (stacked on `claude/goblin-human-height`, PR goblincore/blud#46: the spike needs the 1.70 m goblin) ·
+**Date:** 2026-10-11 · **Status:** built 2026-10-11, owner look pending ([notes](../../dev-notes/2026-10-11-screen-emergence/NOTES.md)); [plan](../plans/2026-10-11-screen-emergence-lab-spike.md) · **Branch:** `claude/screen-emergence-lab` (stacked on `claude/goblin-human-height`, PR goblincore/blud#46: the spike needs the 1.70 m goblin) ·
 **Parent:** [the Flat set and the screen emergence](2026-10-01-flat-screen-emergence-design.md) (draft 2; this spec is its first slice, and where they differ this one wins) ·
 **Look-dev:** [`docs/dev-notes/2026-10-01-flat-emergence-lookdev/`](../../dev-notes/2026-10-01-flat-emergence-lookdev/notes.md) (animatic, key frames, the P225f CRT blockout) ·
 **Ending it follows:** [the Night Train egg ending](2026-09-30-night-train-egg-ending-design.md) §6.
