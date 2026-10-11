@@ -1,6 +1,6 @@
 # The screen emergence, lab spike — design
 
-**Date:** 2026-10-11 · **Status:** approved by the owner 2026-10-11, plan not written · **Branch:** `claude/screen-emergence-lab` (stacked on `claude/goblin-human-height`, PR goblincore/blud#46: the spike needs the 1.70 m goblin) ·
+**Date:** 2026-10-11 · **Status:** approved by the owner 2026-10-11, [plan written](../plans/2026-10-11-screen-emergence-lab-spike.md) · **Branch:** `claude/screen-emergence-lab` (stacked on `claude/goblin-human-height`, PR goblincore/blud#46: the spike needs the 1.70 m goblin) ·
 **Parent:** [the Flat set and the screen emergence](2026-10-01-flat-screen-emergence-design.md) (draft 2; this spec is its first slice, and where they differ this one wins) ·
 **Look-dev:** [`docs/dev-notes/2026-10-01-flat-emergence-lookdev/`](../../dev-notes/2026-10-01-flat-emergence-lookdev/notes.md) (animatic, key frames, the P225f CRT blockout) ·
 **Ending it follows:** [the Night Train egg ending](2026-09-30-night-train-egg-ending-design.md) §6.
@@ -25,7 +25,7 @@ scrubbable, so the owner can judge and steer it before the plumbing exists. The 
 - A headless capture script that checks the WGSL compiles, captures a key frame per shot and lays them next to the animatic's key frames, and measures cost.
 
 **Out (later slices, none blocked by this one):** two scenes in one page; extending `ending-sequence.ts` (per-shot scene, camera kinds, cues); hooking the train ending's last montage frame to the pull-back; the early-stage Flat as a level state
-(CRT and vest instead of the Giger iMac); a live CRT picture (render-to-texture, F-T2); the final egg design (the egg is a stand-in, the egg design is paused); the goblin's vest and shorts as a kit (the spike uses the goblin's own skin; the armour stays off, as the owner decided for home);
+(CRT and vest instead of the Giger iMac); a live CRT picture (render-to-texture, F-T2); the final egg design (the egg is a stand-in, the egg design is paused); a WAM mesh kit for the home clothes (the owner chose SDF cloth, section 6);
 sound; the playable Flat.
 
 ## 3. Structure
@@ -102,5 +102,5 @@ comes to rest over it. The goblin's seat height against the CRT and the desk is 
 ## 9. Open for the owner (not blocking the plan)
 
 1. The egg's size and the sac's reach: "most of a metre" is the draft's number; the look rounds will tune it.
-2. Shirtless goblin for now (no vest kit in this slice): acceptable for a spike?
+2. ~~Shirtless goblin~~ Answered 2026-10-11: the home clothes are SDF cloth (a vest and shorts as `shell` prims, `goblin-home.blob`), in this slice.
 3. Where the sequence goes after this spike: the two-scene seam and the train hookup (the draft's §3.1 and §3.5), or the early-stage Flat first.
