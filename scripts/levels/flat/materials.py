@@ -13,11 +13,11 @@ import bpy
 TEX = os.path.abspath("assets-source/levels/flat-textures")
 
 
-def _image(nt, file, color=True):
+def _image(nt, file, color=True, extend=False):
     t = nt.nodes.new("ShaderNodeTexImage")
     t.image = bpy.data.images.load(os.path.join(TEX, file), check_existing=True)
     t.image.colorspace_settings.name = "sRGB" if color else "Non-Color"
-    t.extension = "REPEAT"
+    t.extension = "EXTEND" if extend else "REPEAT"     # EXTEND exports as CLAMP_TO_EDGE: the Bryce view and the screen must not tile
     return t
 
 
@@ -41,7 +41,7 @@ def pbr(name, color=(0.5, 0.5, 0.5), rough=0.8, metal=0.0, tex=None, normal=None
         nt.links.new(nm.outputs["Normal"], p.inputs["Normal"])
     if emit_tex:
         p.inputs["Base Color"].default_value = (0, 0, 0, 1)
-        nt.links.new(_image(nt, emit_tex).outputs["Color"], p.inputs["Emission Color"])
+        nt.links.new(_image(nt, emit_tex, extend=True).outputs["Color"], p.inputs["Emission Color"])
         p.inputs["Emission Strength"].default_value = 1.0
     elif emit:
         p.inputs["Emission Color"].default_value = (*emit, 1.0)

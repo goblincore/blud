@@ -14,6 +14,7 @@ import { moveAim } from './free-aim';
 import { PLAYER } from './game-player';
 import { roomIdAt } from './game-level-rooms';
 import { updateHud } from './game-hud';
+import { toggleFlashlight } from './game-dynamic-light';
 import { pushProbeWeight } from './game-probe-weight';
 import { applyUpscaleAbMode } from './game-render-controls';
 import { MAGAZINE_CAPACITY, RELOAD } from './game-viewmodel';
@@ -107,6 +108,7 @@ export function applyInputEdges(ctx: GameContext, next: Set<string>): void {
     if (ctx.weapon.slotState.live === 'launcher') ctx.weapon.launcher?.reload();
     else if (ctx.weapon.slotState.live === 'shotgun' && ctx.weapon.shells < MAGAZINE_CAPACITY && ctx.weapon.reloadAge > RELOAD.totalSec) startReload(ctx);
   }
+  if (pressed('KeyF')) toggleFlashlight(ctx);          // the flashlight, once the player has it
   if (pressed('KeyT')) {
     ctx.weapon.reloadSpeed = ctx.weapon.reloadSpeed === 1 ? 0.25 : ctx.weapon.reloadSpeed === 0.25 ? 0.1 : 1;
     updateHud(ctx);
