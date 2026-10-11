@@ -22,7 +22,12 @@
 # face level, arms hang long and slightly ahead, legs bow out at the thigh and
 # back in at the shin. None of that is animation — it is all rest pose.
 model goblin
-  height 1.30
+  # 1.70 m = the authored 1.30 m x `scale` 1.3077 (owner, 2026-10-11: the levels are scaled to the human player, so the goblin is near
+  # human height). Every number BELOW is still the authored 1.30 m value and every comment quoting a metre figure is in those authored
+  # units: the compiler multiplies the lot by `scale` (body-scale.ts). Fine surface detail (palette grain, mottle, the face sheet) is
+  # texture-space and does NOT scale, which is what keeps the body grain small.
+  height 1.70
+  scale 1.3077
   # humanoid | digitigrade. Checked, not decorative — see blob-checks.ts.
   stance humanoid
 

@@ -20,6 +20,8 @@ const names = jointNamesForBody(body);
 const base = bindRig(body).rig.restPose;
 const rig = makePoseRig(doc, names, base);
 const J = (name: string) => names.indexOf(name as never);
+// The segment lengths below are the authored 1.30 m figures; the .blob's `scale` line makes the compiled limbs K times longer.
+const K = doc.scale ?? 1;
 const SEGMENTS: [string, string, number][] = [
   ['shoulderL', 'elbowL', 0.235], ['elbowL', 'handL', 0.235], ['shoulderR', 'elbowR', 0.235], ['elbowR', 'handR', 0.235],
   ['hipL', 'kneeL', 0.290], ['kneeL', 'footL', 0.270], ['hipR', 'kneeR', 0.290], ['kneeR', 'footR', 0.270],
@@ -39,7 +41,7 @@ describe('goblin poses', () => {
     for (let k = 0; k <= 10; k++) {
       const j = poseJoints(rig, clip, (end * k) / 10);
       for (const [a, b, want] of SEGMENTS)
-        expect(len(sub(j[J(b)]!, j[J(a)]!)), `${clip.name} t=${(end * k) / 10} ${a}-${b}`).toBeCloseTo(want, 6);
+        expect(len(sub(j[J(b)]!, j[J(a)]!)), `${clip.name} t=${(end * k) / 10} ${a}-${b}`).toBeCloseTo(want * K, 6);
       expect(Math.min(j[J('footL')]![1], j[J('footR')]![1]), `${clip.name} ground`).toBeCloseTo(restGround, 9);
     }
   });
