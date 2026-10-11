@@ -74,9 +74,9 @@ def main():
     sc["ammo"] = "infinite"
     C.use_dressing()
     M = materials.make()
-    # --- skeleton: replaced by the real builders in Tasks 5-11 ---
-    from flat import shell
+    from flat import giger, shell
     shell.build(M)
+    giger.build(M)
     build_markers_lights_collision()
     assert_scene()
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
