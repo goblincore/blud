@@ -38,6 +38,8 @@ def build_markers_lights_collision():
     room["shell"] = "art"                           # the art is the room's look; the generated surfaces are not drawn
     for name, (bmin, bmax) in L.COLLISION.items():
         gbox("furniture", name, bmin, bmax, wire=True)
+    for name, (bmin, bmax) in L.SOLIDS.items():           # the walls inside the room box: collision only, the art draws them
+        gbox("solids", name, bmin, bmax, wire=True)
     start = bpy.data.objects.new("start", None)
     start.empty_display_type = "ARROWS"
     start.location = L.START[:3]
@@ -62,7 +64,7 @@ def assert_scene():
             raise SystemExit(f"{o.name}: only meshes may be in dressing (convert curves)")
     for img in bpy.data.images:
         assert max(img.size) <= 1024, f"{img.name} is {tuple(img.size)}"
-    for n in ("rooms", "furniture", "markers", "lights", "dressing"):
+    for n in ("rooms", "furniture", "solids", "markers", "lights", "dressing"):
         assert C.collection(n).all_objects, f"collection {n} is empty"
 
 

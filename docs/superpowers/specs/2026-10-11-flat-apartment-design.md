@@ -36,7 +36,7 @@ Blender space (x east, y north); the window is on the north wall of the main roo
 | Filler | x 1.35 to 3.1, y 0 to 3.6 | solid collision, never seen |
 
 **The passage** (the old south wall, y 0): an arch 1.2 m wide, springing at 1.55 m, with the door's stone surround on the hall side. **The front door** (y -2.0): the closed arched oak
-door, 0.8 m wide, springing at 1.65 m, unchanged. **The bathroom doorway** (the hall's east wall, x 1.35): 0.8 m wide, 1.75 m high, centred at y -1.1, with a wooden architrave. The leaf the
+door, 0.8 m wide, springing at 1.65 m, unchanged. **The bathroom doorway** (the hall's east wall, x 1.35): 0.8 m wide, 1.9 m high (the player's capsule is 1.75 m tall and stands 8 cm up on the genkan step), centred at y -1.1, with a wooden architrave. The leaf the
 owner was told would be "swung open" is dropped: in a bathroom this small it collides with the fixtures. A leaf (openable) is a later task.
 
 The player starts in the hall by the front door, facing north, so the flow is door, hall, arch, room.

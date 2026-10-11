@@ -79,6 +79,22 @@ for (const [name, { from, to, box }] of Object.entries(BLOCKERS)) {
   pass(`collision: stopped ${nearest.toFixed(2)} m short of the ${name} (the capsule radius is 0.3)`);
 }
 
+// 3b. REACH: the doorways are passable. Game space (x, z): the hall is z 0 to 2, the room z -3.6 to 0, the bathroom x 1.35 to 3.1.
+const REACH = {
+  'hall to room (through the arch)': { from: [0.12, 1.7], to: [0.12, -1.5] },
+  'hall to bathroom (through the doorway)': { from: [0.5, 1.1], to: [2.1, 1.1] },
+};
+for (const [name, { from, to }] of Object.entries(REACH)) {
+  await evaluate(`__sdfGame.setPose(${from[0]}, ${from[1]}, 0, 0)`);
+  await evaluate(`__sdfGame.walkTo(${to[0]}, ${to[1]})`);
+  await sleep(4500);
+  const [px, , pz] = (await evaluate('__sdfGame.pose()')).pos;
+  await evaluate('__sdfGame.walkCancel()');
+  const gap = Math.hypot(px - to[0], pz - to[1]);
+  if (gap > 0.45) fail(`${name}: stopped ${gap.toFixed(2)} m short of the target (a doorway is blocked?)`);
+  pass(`reach: ${name} (${gap.toFixed(2)} m from the target)`);
+}
+
 // 4. BUDGET
 await evaluate('__sdfGame.setPose(0.12, -0.6, 0, 0)');
 await sleep(800);
@@ -101,7 +117,8 @@ if (process.env.SHOTS === '1') {
   })()`);
   const YAW_SIGN = Number(process.env.YAW_SIGN ?? -1);          // flip to -1 if the shots face the wrong way (see Task 5 Step 4)
   const CAMS = { wide: [[-1.12, 0.17], [0.4, 2.8, 0.45]], shoulder: [[-0.32, 0.92], [0.16, 2.48, 0.62]], imac: [[0.8, 1.5], [0.08, 2.55, 0.62]], skull: [[-0.62, 2.12], [0.14, 2.58, 0.64]],
-    vault: [[0.12, 0.55], [0.12, 1.8, 2.5]], face: [[0.12, 1.55], [0.12, 2.3, 0.72]], window: [[1.15, 2.2], [0.12, 3.6, 1.1]], door: [[0.12, 1.15], [0.12, 0.0, 1.35]], boiler: [[0.3, 1.2], [1.2, 3.3, 1.4]] };      // vault and boiler: the Giger layer (added in Task 9)
+    vault: [[0.12, 0.55], [0.12, 1.8, 2.5]], face: [[0.12, 1.55], [0.12, 2.3, 0.72]], window: [[1.15, 2.2], [0.12, 3.6, 1.1]], door: [[0.12, 1.15], [0.12, 0.0, 1.35]],
+    hall: [[0.12, -1.75], [0.12, 1.5, 1.5]], door2: [[0.12, -0.3], [0.12, -2.0, 1.3]], bathdoor: [[0.3, -1.1], [2.2, -1.1, 1.1]], boiler: [[0.3, 1.2], [1.2, 3.3, 1.4]] };      // vault and boiler: the Giger layer (added in Task 9)
   for (const [name, [[bx, by], [tx, ty, tz]]] of Object.entries(CAMS)) {
     const dx = tx - bx, dy = ty - by;                           // Blender space: +y is north
     const yaw = YAW_SIGN * Math.atan2(-dx, dy);                  // 0 when the target is straight north

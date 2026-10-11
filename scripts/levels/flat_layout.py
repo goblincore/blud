@@ -25,7 +25,8 @@ DX, DHW, DSP = WX, 0.40, 1.65
 HY0 = -2.0                                       # the hall's south wall: the front door's plane
 BX1 = 3.1                                        # the bathroom's east wall
 PX, PHW, PSP = DX, 0.60, 1.55                    # the passage: the room's old south wall (y 0) opens through an arch 1.2 m wide, springing at 1.55 m
-BDY, BDHW, BDH = -1.1, 0.40, 1.75                # the bathroom doorway in the hall's east wall: centre y, half width, height
+BDY, BDHW, BDH = -1.1, 0.40, 1.90                # the bathroom doorway in the hall's east wall: centre y, half width, height (the player's capsule is 1.75 m tall and
+                                                 # stands 8 cm up on the genkan step: 1.75 hit the lintel; the impost course above, at about 1.9 m, is the lintel)
 GENKAN_Y, GENKAN_H = -1.3, 0.08                  # the hall's floor is stepped up 8 cm north of this line
 PART_T = 0.20                                    # the partition's thickness (the stone blocks are 0.16 deep; the bathroom's lining sits on the far side)
 TUB = (2.66, -1.075, 0.74, 1.54)                 # the claw-foot tub: centre x, centre y, width, length

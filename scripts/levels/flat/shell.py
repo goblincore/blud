@@ -18,6 +18,8 @@ WX, WH, WS, WSP, WDEPTH, FLOOR, RIBS, NICHE = LAY.WX, LAY.WH, LAY.WS, LAY.WSP, L
 vault_z = LAY.vault_z
 DX, DHW, DSP = LAY.DX, LAY.DHW, LAY.DSP
 DQB, DVB = 0.22, 0.20      # the quoin band and the voussoirs' depth round the doorway
+HY0, BX1, PX, PHW, PSP = LAY.HY0, LAY.BX1, LAY.PX, LAY.PHW, LAY.PSP        # the apartment: the hall's south wall, the bathroom's east wall, the passage
+BDY, BDHW, BDH = LAY.BDY, LAY.BDHW, LAY.BDH                               # the bathroom doorway in the hall's east wall
 M = None            # the materials namespace, set by build()
 
 def wall_hole_for(regions):
@@ -111,24 +113,34 @@ def arch_region(z, cx, hw, sp):
         return (cx - r, cx + r)
     return None
 
+def bathdoor_region(z):
+    """The bathroom doorway's forbidden interval along the hall's east wall (u is y) at height z, with a half-block margin; a lintel course stays above BDH."""
+    if z <= BDH + 0.04: return (BDY - BDHW - 0.10, BDY + BDHW + 0.10)
+    return None
+
 def build_walls():
+    # the west and east walls: a hall segment (its own texture, so the stone keeps its resolution) and the room segment; they meet at y = -0.1
+    ashlar('wall_wh', 'y', X0, +1, HY0 - 0.1, Y0 - 0.1, 0.0, SPRING - 0.08, 'wh', M.STONE_WH, seed=12)
+    ashlar('wall_eh', 'y', X1, -1, HY0 - 0.1, Y0 - 0.1, 0.0, SPRING - 0.08, 'eh', M.STONE_EH, holes=wall_hole_for([bathdoor_region]), seed=13, hole_rect=(BDY - BDHW, BDY + BDHW, 0.0, BDH))
     ashlar('wall_w', 'y', X0, +1, Y0 - 0.1, Y1 + 0.1, 0.0, SPRING - 0.08, 'w', M.STONE_W, holes=wall_hole_for([niche_region]), seed=2, hole_rect=(NICHE[0], NICHE[1], NICHE[2], NICHE[3]))
     ashlar('wall_e', 'y', X1, -1, Y0 - 0.1, Y1 + 0.1, 0.0, SPRING - 0.08, 'e', M.STONE_E, seed=3)
     ashlar('wall_n', 'x', Y1, -1, X0 - 0.1, X1 + 0.1, 0.0, CROWN + 0.1, 'n', M.STONE_N, top=vault_z, holes=wall_hole_for([window_region]), seed=4, hole_rect=(WX - WH, WX + WH, WS - 0.1, WSP + WH))
-    ashlar('wall_s', 'x', Y0, +1, X0 - 0.1, X1 + 0.1, 0.0, CROWN + 0.1, 's', M.STONE_S, top=vault_z, holes=wall_hole_for([lambda z: arch_region(z, DX, DHW, DSP)]), seed=5, hole_rect=(DX - DHW, DX + DHW, 0.0, DSP + DHW))
+    # the room's old south wall is the passage into the hall (an arch 1.2 m wide); the front door is in the hall's south wall
+    ashlar('wall_s', 'x', Y0, +1, X0 - 0.1, X1 + 0.1, 0.0, CROWN + 0.1, 's', M.STONE_S, top=vault_z, holes=wall_hole_for([lambda z: arch_region(z, PX, PHW, PSP)]), seed=5, hole_rect=(PX - PHW, PX + PHW, 0.0, PSP + PHW))
+    ashlar('wall_front', 'x', HY0, +1, X0 - 0.1, X1 + 0.1, 0.0, CROWN + 0.1, 's', M.STONE_S, top=vault_z, holes=wall_hole_for([lambda z: arch_region(z, DX, DHW, DSP)]), seed=14, hole_rect=(DX - DHW, DX + DHW, 0.0, DSP + DHW))
 
 def build_impost():
     for sx, nm in ((-1, 'w'), (1, 'e')):
-        box(f'impost_{nm}', (sx * (X1 - 0.03), Y1 / 2, SPRING - 0.045), (0.12, Y1 + 0.2, 0.09), M.STONE_DARK, bevel=0.02)
-        box(f'impost2_{nm}', (sx * (X1 - 0.01), Y1 / 2, SPRING - 0.11), (0.07, Y1 + 0.2, 0.05), M.STONE_DARK, bevel=0.012)
+        box(f'impost_{nm}', (sx * (X1 - 0.03), (Y1 + HY0) / 2, SPRING - 0.045), (0.12, Y1 - HY0 + 0.2, 0.09), M.STONE_DARK, bevel=0.02)
+        box(f'impost2_{nm}', (sx * (X1 - 0.01), (Y1 + HY0) / 2, SPRING - 0.11), (0.07, Y1 - HY0 + 0.2, 0.05), M.STONE_DARK, bevel=0.012)
 
 def vault():
     bm = bmesh.new(); uvl = bm.loops.layers.uv.new('UVMap')
-    nx, ny = 64, 40
+    nx, ny = 64, 70
     a0 = math.asin((X1 + 0.08) / RV)
     grid = []
     for j in range(ny + 1):
-        y = Y0 - 0.12 + (Y1 - Y0 + 0.24) * j / ny; row = []
+        y = HY0 - 0.12 + (Y1 - HY0 + 0.24) * j / ny; row = []
         for i in range(nx + 1):
             a = -a0 + 2 * a0 * i / nx
             row.append(bm.verts.new((RV * math.sin(a), y, CZ + RV * math.cos(a))))
@@ -138,7 +150,7 @@ def vault():
             f = bm.faces.new((grid[j][i], grid[j][i + 1], grid[j + 1][i + 1], grid[j + 1][i]))
             for l, (ii, jj) in zip(f.loops, ((i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1))):
                 a = -a0 + 2 * a0 * ii / nx
-                l[uvl].uv = ((RV * a) / 1.68, (Y0 - 0.12 + (Y1 - Y0 + 0.24) * jj / ny) / 0.96)
+                l[uvl].uv = ((RV * a) / 1.68, (HY0 - 0.12 + (Y1 - HY0 + 0.24) * jj / ny) / 0.96)
     o = obj_from_bm('vault', bm, M.VAULT, smooth=True, uv_size=0)
     return o
 def rib(y, w=0.17, d=0.11, n=11, seed=0):
@@ -159,6 +171,7 @@ def rib(y, w=0.17, d=0.11, n=11, seed=0):
 def build_ribs():
     for i, y in enumerate(RIBS):
         if y != 1.8: rib(y, seed=10 + i)        # the middle rib is the vertebral one (giger.py)
+    rib(-1.7, seed=9)                           # a stone rib over the entry hall (not at y -1.0: its corbels would sit in the bathroom doorway, y -1.5 to -0.7)
 
 def voussoirs():
     bm = bmesh.new(); lay = bm.faces.layers.float.new('rand'); rnd = random.Random(9)
@@ -254,7 +267,7 @@ def tatami(name, x0, x1, y0, y1, long_axis):
         for y in (y0 + 0.02, y1 - 0.02): box(name + f'_heri{y:.2f}', ((x0 + x1) / 2, y, 0.056), (x1 - x0 - 0.01, 0.034, 0.004), M.HERI)
 
 def build_floor():
-    box('flagstones', (0, Y1 / 2, -0.05), (X1 - X0 + 0.3, Y1 + 0.3, 0.1), M.FLAG, uv_size=1.8)
+    box('flagstones', (0, (Y1 + HY0) / 2, -0.05), (X1 - X0 + 0.3, Y1 - HY0 + 0.3, 0.1), M.FLAG, uv_size=1.8)
     tatami('tat_a', -1.35, -0.45, 0.0, 1.8, 'y')
     tatami('tat_b', -1.35, -0.45, 1.8, 3.6, 'y')
     tatami('tat_c', -0.45, 1.35, 0.0, 0.9, 'x')
@@ -346,8 +359,9 @@ def door_leaf(py):
 
 
 def build_arches():
-    arch_surround('door', DX, DHW, DSP, Y0, 19, True)
-    door_leaf(Y0)
+    arch_surround('passage', PX, PHW, PSP, Y0, 31, False)        # the passage's surround is on the hall side
+    arch_surround('door', DX, DHW, DSP, HY0, 19, True)
+    door_leaf(HY0)
 
 
 def build(m):
