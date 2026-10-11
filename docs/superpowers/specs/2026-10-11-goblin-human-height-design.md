@@ -1,6 +1,6 @@
 # The goblin at human height — design
 
-**Date:** 2026-10-11 · **Status:** approved by the owner 2026-10-11, plan written, not built · **Branch:** `claude/goblin-human-height` ·
+**Date:** 2026-10-11 · **Status:** built 2026-10-11, owner look pending ([notes](../../dev-notes/2026-10-11-goblin-human-height/NOTES.md)) · **Branch:** `claude/goblin-human-height` ·
 **Parents:** [goblin refinement](2026-10-01-goblin-refinement-design.md) (body, kit, gait, poses) · [the Flat's room](2026-10-11-flat-room-design.md) (follow-up: "the goblin to human height") ·
 **Task:** [`docs/tasks/characters.md`](../../tasks/characters.md) "Goblin to human height".
 **Owner decisions (2026-10-11):** the player is human-sized and the levels are scaled to them, so the goblin should be near human height, not 1.30 m; it is a **uniform scale-up** of the
