@@ -52,7 +52,8 @@ describe('flat.art.glb budget (spec section 8)', () => {
   const triangles = prims.reduce((n, p) => n + (p.indices === undefined ? 0 : glb.accessors[p.indices]!.count / 3), 0);
 
   it('at most 40 draw-call primitives', () => { expect(prims.length).toBeLessThanOrEqual(40); });
-  it('at most 250 000 triangles', () => { expect(triangles).toBeLessThanOrEqual(250_000); });
+  // Raised from 250 000 (owner, 2026-10-11): the look comes first; an optimisation pass follows.
+  it('at most 400 000 triangles', () => { expect(triangles).toBeLessThanOrEqual(400_000); });
   // File size is not a constraint (owner, 2026-10-11): this only catches an accidental huge texture.
   it('an art file under 20 MB', () => { expect(statSync('public/assets/levels/flat.art.glb').size).toBeLessThanOrEqual(20 * 1024 * 1024); });
 });

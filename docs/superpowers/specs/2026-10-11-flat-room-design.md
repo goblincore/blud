@@ -113,7 +113,7 @@ uses the engine's per-room light list; the plan checks the count against its per
 
 No precedent exists for a small closed room, so this is a proposal. It is checked, not assumed:
 
-- At most about 40 art draw calls, about 250 000 triangles, and textures of 1024 px or less.
+- At most about 40 art draw calls, about 400 000 triangles (raised from 250 000 by the owner, 2026-10-11: the look first, then an optimisation pass), and textures of 1024 px or less.
 - The frame holds under 33 ms (the 30 fps goal) in the room on the owner's machine.
 - The Wake's art cost +75 draws and +5 ms, Night Train's +200 and +12 ms, for reference.
 - File size is not a constraint (owner, 2026-10-11).
@@ -153,3 +153,5 @@ No precedent exists for a small closed room, so this is a proposal. It is checke
 4. **The clutter pass.**
 5. **Earlier stages as level `states`** (stage 1: rusted pipes and stone ribs), and the owner's "fleshier" design.
 6. **Camera transitions and the emergence scene** (F-T3, F-T5).
+7. **An optimisation pass** (owner, 2026-10-11): the conduits' rings and spines and the quilt are the heavy geometry; do it after the look is right.
+8. **The look of the bone rings, spines and the radiator** needs work (owner, 2026-10-11, after milestone 2): the cream rings and the radiator ribs read differently from the look-dev.
