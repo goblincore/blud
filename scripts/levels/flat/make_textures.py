@@ -172,6 +172,41 @@ def make_view():
     save(np.asarray(im, np.float32) / 255.0, "view.jpg")
 
 
+def periodic_noise(px, scale, seed):
+    """Band-limited noise that tiles in both axes (FFT-filtered), 0..1. `scale`: cycles across the image at the cutoff."""
+    rnd = np.random.default_rng(seed)
+    f = np.fft.fft2(rnd.standard_normal((px, px)))
+    fy = np.fft.fftfreq(px)[:, None] * px
+    fx = np.fft.fftfreq(px)[None, :] * px
+    f *= np.exp(-((np.hypot(fx, fy) / scale) ** 2))
+    n = np.real(np.fft.ifft2(f))
+    return (n - n.min()) / (n.max() - n.min())
+
+
+def make_shell(px=1024):
+    """The iMac's amber shell (room.py giger_shell_material, 904-936): bile-amber glow with dark-red veins. UV u = round the body (tiles), v = along it."""
+    th = periodic_noise(px, 5, 11)[..., None]
+    glow = lin_mix(np.array((1.0, 0.40, 0.12), np.float32), np.array((1.0, 0.70, 0.36), np.float32), th)
+    n1, n2 = periodic_noise(px, 14, 21), periodic_noise(px, 36, 22)
+    vein = np.maximum(np.clip(1 - np.abs(n1 - 0.5) / 0.035, 0, 1), np.clip(1 - np.abs(n2 - 0.5) / 0.02, 0, 1) * 0.8)[..., None]
+    col = glow * (1 - vein) + vein * np.array((0.28, 0.02, 0.02), np.float32)
+    save(srgb(col), "shell_color.jpg")
+
+
+def lin_mix(a, b, t):
+    return a * (1 - t) + b * t
+
+
+def make_screen(px=(1024, 768)):
+    """The screen: the Night Train frame with scanlines (room.py 939-952: sin over the height, 0.55 to 1.0) and a lift, standing in for emission strength 2.6
+    (the engine caps emission at 1). Needs screen-source.png (scripts/capture-flat-screen.sh)."""
+    src = os.path.join(OUT, "screen-source.png")
+    im = np.asarray(Image.open(src).convert("RGB").resize(px, Image.LANCZOS), np.float32) / 255.0
+    v = (np.arange(px[1])[:, None] + 0.5) / px[1]
+    lines = 0.55 + 0.45 * (np.sin(v * 1300.0) + 1) / 2
+    save(np.clip(im * lines[..., None] * 1.35, 0, 1), "screen.jpg")
+
+
 if __name__ == "__main__":
     for key in ("n", "e", "w", "s"):
         make_stone(f"wall_{key}", L.WALL_W[key], L.WALL_H, 1024, stains=L.STAINS[key] or None, seed={"n": 1, "e": 2, "w": 3, "s": 5}[key])
@@ -182,3 +217,5 @@ if __name__ == "__main__":
     make_quilt()
     make_books()
     make_view()
+    make_shell()
+    make_screen()
