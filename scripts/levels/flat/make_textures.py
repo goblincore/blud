@@ -224,9 +224,47 @@ def make_door(w=512, h=1024):
     save(srgb(col), "door_oak.jpg")
 
 
+def make_bath_tile(px=1024):
+    """Small square wall tiles, 10 cm each (one image is 1 m): a dingy pale green, a grey grout, grime. No damp band: the image repeats every metre."""
+    n = 10
+    x = (np.arange(px)[None, :] + 0.5) / px * n
+    y = (np.arange(px)[:, None] + 0.5) / px * n
+    fx, fy = x % 1.0, y % 1.0
+    d = np.minimum(np.minimum(fx, 1 - fx), np.minimum(fy, 1 - fy))
+    grout = np.clip(1 - d / 0.035, 0, 1)[..., None]
+    rnd = np.random.default_rng(8)
+    tint = (0.85 + 0.15 * rnd.random((n, n)))[np.floor(y).astype(int) % n, np.floor(x).astype(int) % n]
+    base = np.array((0.42, 0.50, 0.44), np.float32) * tint[..., None] * (0.75 + 0.25 * periodic_noise(px, 6, 31))[..., None]
+    col = base * (1 - grout) + grout * np.array((0.10, 0.10, 0.09), np.float32)
+    save(srgb(col), "bath_tile.jpg")
+
+
+def make_bath_floor(px=512):
+    """The bathroom floor: 20 cm tiles in a dark, grimy checker (one image is 1 m)."""
+    n = 5
+    x = (np.arange(px)[None, :] + 0.5) / px * n
+    y = (np.arange(px)[:, None] + 0.5) / px * n
+    checker = ((np.floor(x) + np.floor(y)) % 2)[..., None]
+    d = np.minimum(np.minimum(x % 1.0, 1 - x % 1.0), np.minimum(y % 1.0, 1 - y % 1.0))
+    grout = np.clip(1 - d / 0.03, 0, 1)[..., None]
+    base = np.array((0.07, 0.08, 0.07), np.float32) * (1 - checker) + np.array((0.15, 0.16, 0.14), np.float32) * checker
+    base = base * (0.7 + 0.3 * periodic_noise(px, 8, 41))[..., None]
+    save(srgb(base * (1 - grout) + grout * np.array((0.03, 0.03, 0.03), np.float32)), "bath_floor.jpg")
+
+
+def make_mirror_glass(w=256, h=384):
+    """The mirror's dark polished glass: a deep warm black, a vignette and two painted glints. It reflects nothing yet (the planar mirror is a later spike)."""
+    yy, xx = np.mgrid[0:h, 0:w]
+    u, v = xx / w, yy / h
+    vig = (0.55 + 0.45 * (1 - np.clip(np.hypot((u - 0.5) * 1.5, (v - 0.5) * 1.05), 0, 1)))[..., None]
+    glint = (np.exp(-((u + 0.6 * v - 0.55) / 0.08) ** 2) * 0.5 + np.exp(-((u + 0.6 * v - 0.95) / 0.03) ** 2) * 0.35)[..., None]
+    col = np.array((0.014, 0.011, 0.012), np.float32) * vig + glint * np.array((0.50, 0.40, 0.32), np.float32) * 0.45
+    save(srgb(col), "mirror_glass.jpg")
+
+
 if __name__ == "__main__":
-    for key in ("n", "e", "w", "s"):
-        make_stone(f"wall_{key}", L.WALL_W[key], L.WALL_H, 1024, stains=L.STAINS[key] or None, seed={"n": 1, "e": 2, "w": 3, "s": 5}[key])
+    for key in ("n", "e", "w", "s", "eh", "wh"):
+        make_stone(f"wall_{key}", L.WALL_W[key], L.WALL_H, 1024, stains=L.STAINS[key] or None, seed={"n": 1, "e": 2, "w": 3, "s": 5, "eh": 6, "wh": 7}[key])
     make_stone("vault", 1.68, 0.96, 1024, tint=(0.95, 0.93, 0.9), courses=(0.42, 0.24), damp=False)   # UV = metres / (1.68, 0.96)
     make_stone("flag", 1.8, 1.8, 1024, tint=(0.85, 0.85, 0.85), courses=(0.6, 0.45))                  # UV = metres / 1.8
     make_stone("dark", 1.0, 1.0, 512, tint=(0.8, 0.78, 0.74), damp=False)                              # UV = metres
@@ -237,3 +275,6 @@ if __name__ == "__main__":
     make_shell()
     make_screen()
     make_door()
+    make_bath_tile()
+    make_bath_floor()
+    make_mirror_glass()
