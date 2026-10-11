@@ -104,8 +104,7 @@ The player starts in the hall by the front door, facing the room.
 and a wall sconce by the bathroom doorway. The bathroom has small pale-green tile on every wall, a dark checker floor, a flat tiled ceiling, a bare bulb, **a white claw-foot tub** (one enamel, inside and out) on
 bone-and-bronze claws with chrome taps, a riser and hand shower and a curtain ring overhead, a toilet, a pedestal sink, a **framed mirror of dark polished glass** over the sink (it reflects nothing yet), and a Giger pipe in the corner.
 
-**Numbers:** 50 draw primitives (the cap is 60), about 423 000 triangles (the cap is 500 000), a 21 MB `.glb`. The gate's frame readings were 15, 18 and 31 ms (the goal is under 33 ms) on a shared machine: one run came
-close, so the optimisation pass is now more than a nicety. The gate walks hall to room through the arch and hall to bathroom through the doorway, and probes the tub, toilet, sink, kotatsu, shelf and fridge as blockers.
+**Numbers:** 50 draw primitives (the cap is 60), about 423 000 triangles (the cap is 500 000), a 21 MB `.glb`. **Frame cost, measured (see below): about 9 to 10 ms a frame, cheaper than a Night Train carriage;** the gate's single 31 ms reading was a noise spike (its median of 9 frames, taken right after a move, caught warm-up and load). The gate walks hall to room through the arch and hall to bathroom through the doorway, and probes the tub, toilet, sink, kotatsu, shelf and fridge as blockers.
 
 **Things learned:**
 - **The player's capsule is 1.75 m tall** (eye 1.62 m), and it stands 8 cm up on the genkan step: a 1.75 m doorway lintel blocked it. The bathroom doorway is 1.9 m (the impost course above is the lintel).
@@ -119,3 +118,23 @@ close, so the optimisation pass is now more than a nicety. The gate walks hall t
 
 **Open for the owner's eye:** the hall's west wall is dim (the hall light is toward its middle; a stronger one blows out the arch); the bathroom is green and gloomy by design (the bulb and the tile); the toilet's hole shows a few stray specks;
 the coat hooks are small. No door leaf on the bathroom doorway (it would collide with the fixtures); no curtain on the ring; nothing outside the front door.
+
+## Frame cost (2026-10-11)
+
+`scripts/flat-frame-cost.mjs` (a probe in the harness's style: baseline, variant, baseline blocks in one boot so load drift cancels; 1280 × 800; median of 15 drawn-and-fenced frames a block, 5 rounds):
+
+| Scene | Baseline median (range) | Draws |
+| --- | --- | --- |
+| The Flat: the hall at the front door, looking north | 10.5 ms (6.3 to 13.2) | 176 |
+| The Flat: the main room, wide | 9.1 ms (5.6 to 16.1) | 147 |
+| Night Train, third class (the reference, load 7.8) | 13.3 ms (7.7 to 20.9) | 299 |
+
+The Flat costs less than a Night Train carriage. **The earlier 31 ms was noise:** the gate's `timeDraws(9)` came straight after a pose change, so it caught pipeline warm-up and other jobs on this shared machine.
+This is without zombies, a march layer on screen or shader effects, which are what cost the real frames elsewhere.
+
+What the cost is (ceilings of what optimising each could return, taken from the alternation legs; the instrument's floor is about 0.5 to 1 ms, so only the large ones resolve):
+the level art as a whole is the bulk (hiding it all takes off 3.4 ms in the room view, 7.7 ms in the hall view); of its parts the conduits' rings and spines are the biggest single group (about 0.7 to 2.2 ms),
+then the stone walls (0.9 to 1.4 ms), the quilt (0.2 to 1.3 ms), the vault and flags (0.1 to 0.6 ms) and the books (0.2 to 0.5 ms). **The bathroom and the iMac's shell cost nothing measurable** (out of view in the hall shot; 0.0 to 0.2 ms in the room shot).
+VHS and FXAA are inside the noise. If a pass is ever wanted, the cheapest returns are fewer segments on the conduit rings, a lower-resolution quilt, and merging the near-duplicate stone materials.
+The gate's budget number now warms up and takes the median of three readings of 21 frames, which is steadier.
+

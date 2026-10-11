@@ -12,7 +12,7 @@
 
 **The Flat's room in the engine** (owner, 2026-10-11) — [levels](docs/tasks/levels.md) (4o)
 - [~] **Slice 1 built 2026-10-11 (the owner liked it); the Giger iMac built the same day, owner look pending** (alpha-blended shell; the WGSL shell is a later spike). A walkable `?level=flat`: the last-stage room from the
-  look-dev (stone shell, Giger layer, hero props, the iMac) through the Blender level route, grown into a small apartment (2026-10-11): an arched entry hall with the front door, and a bathroom with a white claw-foot tub, toilet, sink and a dark-glass mirror; 50 draws, about 423k triangles, 15 to 31 ms (the optimisation pass is now due).
+  look-dev (stone shell, Giger layer, hero props, the iMac) through the Blender level route, grown into a small apartment (2026-10-11): an arched entry hall with the front door, and a bathroom with a white claw-foot tub, toilet, sink and a dark-glass mirror; 50 draws, about 423k triangles, about 9 to 10 ms a frame measured (cheaper than a Night Train carriage; no pass needed).
   [Notes and the engine-vs-look-dev sheet](docs/dev-notes/2026-10-11-flat-room/NOTES.md). Owed: the shell's depth and veins, the bone/spine/radiator look, an optimisation pass. [Spec](docs/superpowers/specs/2026-10-11-flat-room-design.md)
   (branch `claude/flat-room`). Separate task: the goblin to human height ([characters](docs/tasks/characters.md)).
 

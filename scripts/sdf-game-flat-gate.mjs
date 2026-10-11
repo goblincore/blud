@@ -102,7 +102,10 @@ for (const [name, { from, to }] of Object.entries(REACH)) {
 await evaluate('__sdfGame.setPose(0.12, -0.6, 0, 0)');
 await sleep(800);
 const drawCalls = (await evaluate('__sdfGame.drawStats(true)')).drawCalls;
-const frameMs = await evaluate('__sdfGame.timeDraws(9)');
+await evaluate('__sdfGame.timeDraws(15)');                              // warm: the pipelines for what this pose sees (a first reading caught them: 31 ms once)
+const readings = [];
+for (let i = 0; i < 3; i++) readings.push(await evaluate('__sdfGame.timeDraws(21)'));
+const frameMs = readings.sort((a, b) => a - b)[1];                      // the median of three medians
 console.log(`budget: ${drawCalls} draw calls, ${frameMs.toFixed(2)} ms a frame`);
 if (frameMs > 33.3) fail(`frame ${frameMs.toFixed(2)} ms > 33.3 ms`);
 pass('budget: the frame holds under 33.3 ms');
