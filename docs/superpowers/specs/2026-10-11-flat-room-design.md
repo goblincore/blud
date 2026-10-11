@@ -80,7 +80,7 @@ blender --background assets-source/levels/flat.blend --python scripts/levels/exp
   Levels with art draw no `furniture` or `solids` boxes (collision only), so the art owns every visible surface.
 - **Start:** a `start` marker at the south end, facing the window.
 - **Window:** a static textured plane in the window opening showing the Bryce idyll
-  (`docs/dev-notes/2026-10-01-flat-emergence-lookdev/view-idyll.png`, downsized to 1024 px). Scrolling window views are
+  (`docs/dev-notes/2026-10-01-flat-emergence-lookdev/view-bryce-moody.png`, the one the look-dev sheet shows, downsized to 1024 px). Scrolling window views are
   Night Train work and are not needed here.
 - **Level properties:** `level_id` `flat`, `level_name` "The Flat", no enemies, no pickups, no weapons. `complete_on` defaults to
   `pickup.cd`, which this level never fires. The first plan task confirms that an unarmed level with no spawns, pickups or
