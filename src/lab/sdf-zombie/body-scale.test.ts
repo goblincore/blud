@@ -27,6 +27,14 @@ const DEF: BodyDef = {
 
 const K = 2;
 
+const deepFreeze = <T>(o: T): T => {
+  if (o && typeof o === 'object') {
+    Object.freeze(o);
+    for (const v of Object.values(o)) deepFreeze(v);
+  }
+  return o;
+};
+
 describe('scaleBodyDef', () => {
   it('is the identity at k = 1 (the same object, so nothing else pays for it)', () => {
     expect(scaleBodyDef(DEF, 1)).toBe(DEF);
@@ -37,9 +45,10 @@ describe('scaleBodyDef', () => {
   });
 
   it('does not mutate its input', () => {
-    const before = JSON.stringify(DEF);
-    scaleBodyDef(DEF, K);
-    expect(JSON.stringify(DEF)).toBe(before);
+    const frozen = deepFreeze(structuredClone(DEF));
+    const before = JSON.stringify(frozen);
+    expect(() => scaleBodyDef(frozen, K)).not.toThrow();
+    expect(JSON.stringify(frozen)).toBe(before);
   });
 
   it('scales the root and the bone lengths, lengthR and side; leaves directions, names and flags', () => {
@@ -93,5 +102,37 @@ describe('scaleBodyDef', () => {
     const p = scaleBodyDef(bare, K).prims[0]!;
     expect(Object.keys(p).sort()).toEqual(['at', 'blendK', 'bone', 'limb', 'radius', 'scale']);
     expect(p.radius).toBeCloseTo(0.2, 12);
+  });
+
+  it('scales EXACTLY the length fields: the whole scaled prim and shell equal the expected ones', () => {
+    const expectedShell = { thickness: 0.004, clipNormal: [0, 1, 0], clipOffset: 0.06, rim: 0.008, warpAmp: 0.02, warpFreq: [10, 0, 20] };
+    const expected = {
+      ...FULL_PRIM,
+      radius: 0.2, radiusB: 0.1, blendK: 0.04, bend: [0.02, 0.04, 0.06], grooveDepth: 0.008, grooveWidth: 0.01,
+      offset: [0.2, 0.4, 0.6], tip: [0.8, 1.0, 1.2], shell: expectedShell,
+    };
+    const out = scaleBodyDef(DEF, K);
+    expect(out.prims[0]).toEqual(expected);
+    expect(out.bonePrims![0]).toEqual({ ...expected, op: 'bone' });
+    expect(out.prims[0]!.shell).toEqual(expectedShell);
+  });
+
+  it('scales the shell in bonePrims as well as prims', () => {
+    const s = scaleBodyDef(DEF, K).bonePrims![0]!.shell!;
+    expect(s.thickness).toBeCloseTo(0.004, 12);
+    expect(s.clipOffset).toBeCloseTo(0.06, 12);
+    expect(s.warpFreq).toEqual([10, 0, 20]);
+  });
+
+  it('leaves bonePrims absent when the input has none', () => {
+    const { bonePrims: _omit, ...noBones } = DEF;
+    const out = scaleBodyDef(noBones, K);
+    expect('bonePrims' in out).toBe(false);
+    expect(out.prims[0]!.radius).toBeCloseTo(0.2, 12);
+  });
+
+  it('throws on a field that has no unit (a new PrimDef key that bypassed the type guard)', () => {
+    const rogue = { ...FULL_PRIM, mystery: 3 } as unknown as PrimDef;
+    expect(() => scaleBodyDef({ ...DEF, prims: [rogue] }, K)).toThrow(/no unit for field "mystery"/);
   });
 });

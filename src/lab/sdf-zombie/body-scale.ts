@@ -34,15 +34,19 @@ export const PRIM_UNITS = {
 
 const mul = (v: number | Vec3, f: number): number | Vec3 =>
   typeof v === 'number' ? v * f : [v[0] * f, v[1] * f, v[2] * f];
+const div = (v: number | Vec3, f: number): number | Vec3 =>
+  typeof v === 'number' ? v / f : [v[0] / f, v[1] / f, v[2] / f];
 
 function scaleFields<T extends object>(src: T, units: Record<keyof T, FieldUnit>, k: number): T {
   const from = src as Record<string, unknown>;
+  const table = units as Record<string, FieldUnit | undefined>;
   const out: Record<string, unknown> = { ...from };
-  for (const key of Object.keys(src) as (keyof T & string)[]) {
-    const unit = units[key];
+  for (const key of Object.keys(from)) {
+    const unit = table[key];
+    if (unit === undefined) throw new Error(`scaleBodyDef: no unit for field "${key}"`);
     const v = from[key];
     if (unit === 'same' || v === undefined) continue;
-    out[key] = mul(v as number | Vec3, unit === 'length' ? k : 1 / k);
+    out[key] = unit === 'length' ? mul(v as number | Vec3, k) : div(v as number | Vec3, k);
   }
   return out as T;
 }
