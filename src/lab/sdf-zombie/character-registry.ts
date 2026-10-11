@@ -16,6 +16,7 @@
 // fixes is a character that EXISTS as a .blob and was never registered.
 import zombieBlobSrc from './characters/zombie.blob?raw';
 import goblinBlobSrc from './characters/goblin.blob?raw';
+import goblinHomeBlobSrc from './characters/goblin-home.blob?raw';
 import clownBlobSrc from './characters/clown.blob?raw';
 import clownAltBlobSrc from './characters/clown-alt.blob?raw';
 import mouseBlobSrc from './characters/mouse.blob?raw';
@@ -140,6 +141,14 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   goblin: {
     name: 'goblin', src: goblinBlobSrc,
     kit: '/assets/lab/goblin-kit.gltf',
+    face: ZOMBIE_FLAT,
+    profile: motionProfileFor('goblin'),
+  },
+  // The goblin at home (the screen emergence lab): goblin.blob plus a vest and shorts of SDF `shell` cloth and bare feet, in one
+  // marked block (characters/goblin-home.test.ts guards the copy). No kit: the armour stays off at home. The goblin's own motion
+  // profile; the lab drives him with the pose layer, which overwrites every target.
+  'goblin-home': {
+    name: 'goblin-home', src: goblinHomeBlobSrc,
     face: ZOMBIE_FLAT,
     profile: motionProfileFor('goblin'),
   },

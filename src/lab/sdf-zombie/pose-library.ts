@@ -5,7 +5,8 @@
 import { GOBLIN_POSES } from './characters/goblin-poses';
 import type { PoseClip } from './pose';
 
-const LIBRARY: Readonly<Record<string, Readonly<Record<string, PoseClip>>>> = { goblin: GOBLIN_POSES };
+// goblin-home is the goblin's body plus cloth (same skeleton), so it takes the goblin's clips.
+const LIBRARY: Readonly<Record<string, Readonly<Record<string, PoseClip>>>> = { goblin: GOBLIN_POSES, 'goblin-home': GOBLIN_POSES };
 
 export function posesFor(character: string): Readonly<Record<string, PoseClip>> {
   return LIBRARY[character] ?? {};

@@ -1,0 +1,617 @@
+# Goblin — first port from the WAM cast (~/Projects/2026/horse/models/goblin.wam),
+# and the first character authored in .blob that was not the zombie.
+#
+# WAM builds bodies from `loft`s: a profile swept through rings along a bone
+# chain. .blob has no loft, so every ring becomes a `blob` at the same relative
+# position. That mapping is closer than it sounds — a ring IS an ellipse on a
+# bone, which is what a blob is — but two things do not survive it:
+#
+#   * WAM's `w`/`d` are FULL width and depth; a blob's `r` is a radius. So
+#     r = w/2, and deep = d/w to keep the cross-section's aspect.
+#   * WAM rings run over a bone CHAIN with t normalised across the whole chain;
+#     .blob prims ride ONE bone. Every `at` below was recomputed by walking the
+#     chain length. The torso chain is pelvis(0.14) + spine1(0.10) + chest(0.12)
+#     = 0.36, so WAM's t=0.58 lands 0.209 along, i.e. spine1 at 0.69.
+#
+#   (The torso no longer uses this ring mapping: it was rebuilt as three
+#   tapered bars on 2026-10-01; see the body block. The chain lengths above
+#   are the WAM port's, not this skeleton's.)
+#
+# Silhouette intent, carried over from the WAM file: stooped and scheming, not
+# standing at attention. Spine pitches forward, neck pitches back to bring the
+# face level, arms hang long and slightly ahead, legs bow out at the thigh and
+# back in at the shin. None of that is animation — it is all rest pose.
+model goblin-home
+  # 1.70 m = the authored 1.30 m x `scale` 1.3077 (owner, 2026-10-11: the levels are scaled to the human player, so the goblin is near
+  # human height). Every number BELOW is still the authored 1.30 m value and every comment quoting a metre figure is in those authored
+  # units: the compiler multiplies the lot by `scale` (body-scale.ts). Fine surface detail (palette grain, mottle, the face sheet) is
+  # texture-space and does NOT scale, which is what keeps the body grain small.
+  height 1.70
+  scale 1.3077
+  # humanoid | digitigrade. Checked, not decorative — see blob-checks.ts.
+  stance humanoid
+
+skeleton
+  # ELONGATED, not squat. The first pass put the hip at 0.425 of a 1.15 m body
+  # with 0.385 of leg under it, and the result was an egg with stumps: the
+  # torso was the whole silhouette and the limbs barely escaped it. Legs are
+  # now roughly half the standing height, the torso is longer and much
+  # narrower, and every limb segment is a distinct length rather than a blob.
+  root pelvis at 0.60 len=0.105
+
+  bone spine1 parent=pelvis dir=up pitch=13 len=0.135
+  bone chest  parent=spine1 dir=up pitch=9  len=0.150
+  # No-neck syndrome took four changes, and the non-obvious one was the head.
+  # facePrims centres the cranium partway along the skull bone, so an oversized
+  # headRadius on a short skull bone puts the bottom of that ellipsoid BELOW
+  # the neck's top — the head does not sit near the shoulders, it encloses the
+  # whole neck, and thinning the column cannot reveal something inside a
+  # sphere. Cranium size, skull length, neck length and the top of the chest (a
+  # cap blob until the 2026-10-01 rebuild, now the chest bar's tapered end) all
+  # move together; none of them works alone.
+  bone neck   parent=chest  dir=up pitch=-17 len=0.140
+  bone skull  parent=neck   dir=up pitch=-5  len=0.235
+
+  mirror
+    # WAM's own comment says the shoulder must land INSIDE the chest mass or
+    # "the arm floats free". Right for WAM, where the arm is a separate mesh
+    # that has to overlap to look attached — and exactly WRONG here, because in
+    # an SDF overlapping IS merging and smooth-min swallowed both arms whole.
+    # Overshooting is just as wrong: too far out and fusedOf goes POSITIVE, the
+    # core-to-core path leaves the flesh and the arm hangs on by nothing. The
+    # checks find both edges of a narrow band, and the band MOVES when the
+    # torso changes: narrowing the chest to fix the egg silhouette pushed the
+    # old shoulder reach outside the flesh and detached both arms outright
+    # (fusedOf +0.0076, and validateBody reported the clusters disconnected).
+    # Shoulder reach is a function of chest width, not a constant.
+    #
+    # And "attached" is not the target — DISTINCT is. At side 0.044 + len 0.050
+    # the shoulder sat at x 0.094 with a 0.044 nub, against a chest half-width
+    # of 0.086: most of the nub was buried and the arms melted into the torso
+    # even though every check passed. Fused is a floor, not the goal.
+    #
+    # Reach alone cannot fix it, though — measured sweep against the ORIGINAL
+    # wide torso: 0.046/0.050 left 5 mm of margin, 0.050/0.056 left 0.8 mm,
+    # 0.054/0.062 was already detached by fusedOf, and 0.058/0.068 was detached
+    # loudly enough that validateBody reported both arms disconnected. There is
+    # no reach that both attaches and clears a torso that wide.
+    #
+    # THE FIX WAS NOT ON THE ARM AT ALL — it was the torso's CROSS-SECTION.
+    # Reach, tilt and shoulder radius are all fighting one number: how far out
+    # in x the torso's flesh reaches at the height the arm is passing. The arm
+    # has to start inside that flesh (or it detaches) and then get outside it
+    # (or it melds), so every lever on the arm is trying to win a race the
+    # torso sets the length of. Measured on the wide torso, the upper arm's
+    # closest approach was 5.4 mm of air at its own midpoint and the forearm's
+    # was 18 mm — daylight so thin that at 1.30 m tall neither limb read as
+    # separate from any angle, on either the lit or the shadowed side.
+    #
+    # So the torso gave up width and took it back as DEPTH: every torso ring
+    # narrowed in x and grew its `deep` to match, which keeps the creature's
+    # bulk (it reads as a pot belly in profile, which is more goblin than the
+    # ovoid was) while vacating the exact axis the arms need. That freed the
+    # whole budget at once — with the gut at r=0.086 instead of 0.098 a modest
+    # tilt of 22 clears it, where 26+ was needed before and read as chicken
+    # wings. Measured after: 46 mm at the elbow, 44 mm at the forearm midpoint,
+    # 59 mm at the wrist. The clavicle came in to 0.036/0.042 in step, because
+    # shoulder reach is a function of chest width and the chest moved.
+    # (History: the torso and arms these numbers describe were rebuilt as
+    # tapered bars on 2026-10-01, see the body block. The narrow-x, deep-z rule
+    # still holds; the arm now measures 48.5 mm of daylight below the elbow.)
+    #
+    # The knock-on was free: the forearm no longer has to tuck in hard to keep
+    # the hands beside the hips, so tilt went -9 to -5, and the hands stopped
+    # sitting 12 mm INSIDE the thighs (clear(armL,legL) -0.0121 to +0.0227).
+    # The hips narrowed with them (side 0.072 to 0.058, tilt 7 to 5), which the
+    # elongated silhouette wanted anyway.
+    #
+    # characters/goblin-blob.test.ts pins all of this. Arm clearance is not
+    # something you can eyeball from the numbers in this file — it is an
+    # emergent property of the torso, the clavicle and both arm tilts at once,
+    # and it has now silently regressed twice.
+    bone clavicle parent=chest    side=0.036 dir=side  len=0.042
+    bone upperarm parent=clavicle dir=down pitch=-12 tilt=22 len=0.235
+    bone forearm  parent=upperarm dir=down pitch=11 tilt=-5 len=0.235
+    bone hand     parent=forearm  dir=down             len=0.072
+    # Long bowed legs: splay out at the thigh, back in at the shin, so the knee
+    # stands proud of the ankle line.
+    #
+    # PITCH SIGNS ARE FLIPPED FROM THE WAM SOURCE, deliberately. Ported
+    # verbatim (thigh pitch=-9, shin pitch=+11) they gave a digitigrade leg —
+    # thigh angling BACK and shin forward puts the knee behind the hip-to-ankle
+    # line, which reads as a kangaroo hock rather than a knee. In .blob a
+    # positive pitch always carries a bone toward +z, so a humanoid knee wants
+    # the opposite: thigh FORWARD, shin back, ankle ending up under the hip.
+    #
+    # This is also the rule the motion work already settled for the zombie —
+    # `ik.poleReflect` exists because an unconstrained FABRIK solve folded the
+    # knee backwards and kept it, which is the "cow walk" in that code's own
+    # comments. A character authored with a backward knee at rest would fight
+    # its own IK.
+    bone thigh    parent=pelvis   dir=down tilt=5  pitch=9  side=0.058 len=0.290
+    bone shin     parent=thigh    dir=down tilt=-7 pitch=-11 len=0.270
+    bone foot     parent=shin     dir=fwd              len=0.130
+  end
+
+body
+  # Torso: three continuous tapered bars (pelvis, spine, chest), rebuilt 2026-10-01.
+  #
+  # It used to be five ellipsoids stacked up the spine at blends of 0.004-0.005,
+  # and the owner's read was "a series of orbs" (2026-10-01): with blends that
+  # tight every ring stays a ring, and the outline pinched between them (a
+  # 20.5 mm dip in half-width at the spine/chest joint, between the spine ring
+  # and the lower chest ring; goblin-blob.test.ts now pins the deepest dip under
+  # 10 mm, and the rebuilt torso's deepest is its 5 mm waist). One bar per bone,
+  # tapered with r2 and blended at 0.014-0.016, is one mass: the smooth-min acts
+  # over a band about 3 cm wide (smin width = 4 x blend x roundBlendScale 0.5;
+  # build-body.ts, validate.ts). The body is the owner's pick of three rendered
+  # variants, "A, sinew": docs/dev-notes/2026-10-01-goblin-body-lookdev/.
+  #
+  # Still narrow in x and deep in z, for the reason the skeleton block gives:
+  # width in x is the budget the arms compete for. The chest's wide=1.00 leaves
+  # the upper arm 19.2 mm of daylight at 0.11 m (set by the upper-arm bar and
+  # the chest width, whatever the shoulder round's size); at the look-dev's
+  # wide=1.06 it was 14.99, just under the test's 15 mm line, so the pin
+  # failed. Do not widen x or shrink deep here without re-running the arm
+  # daylight pins in goblin-blob.test.ts.
+  #
+  # THE GUT HANGS IN FRONT. `deep=` scales a prim front and back alike, so a deep
+  # torso on the spine's own axis bulged at the back of the waist as much as at
+  # the belly (the look-dev's flaw). The pelvis and spine bars are pushed
+  # forward (+z; offsets are world axes) and the gut is its own blob further
+  # forward still, so the back stays flat enough for the spine to show: the
+  # front reaches 27 mm further than the back at the belly (pelvis at=0.8) and
+  # about 15 mm at the waist (spine1 at=0.3), measured on the bone axis
+  # 2026-10-01; goblin-blob.test.ts pins both (over 15 and 8 mm).
+  # Measured along the forward-leaning spine bones (spine1 pitch 13, chest 9),
+  # not in world profile: there the belly front sits 16 mm behind the chest front
+  # and the lower back (the pelvis/spine joint) is the furthest-back point. The
+  # owner accepted that profile on 2026-10-01; to make the gut read in profile,
+  # pin it in the world frame first (belly front vs chest front), then retune.
+  #
+  # These bar and gut values are not the look-dev's: they were retuned on
+  # 2026-10-01 (goblin refinement phase 1 plan) against the gut measurement
+  # above and the arm pins, keeping the look-dev's front silhouette (the back
+  # was flattened on purpose, by up to about 28 mm): pelvis r2 0.078 -> 0.074
+  # and deep 1.28 -> 1.10; spine r 0.076 -> 0.072 and deep 1.20 -> 1.08; chest
+  # deep 1.06 -> 1.12 and wide 1.06 -> 1.00; the gut blob is new.
+  # CLOTHES ARE PAINT (owner, 2026-10-02: dark fatigue-grey pants and, under the armour, "a
+  # dirty wife-beater undershirt", after the reference photo's soldier). `color=` replaces the
+  # flesh albedo wherever that prim is the nearest, so the pelvis (bar + gut blob) is the
+  # trousers and the spine1/chest bars and the six vertebra beads are the tank top: nothing to
+  # clip, wounds and gibbing still work because the flesh underneath is the same SDF, and
+  # removing the paint restores a bare goblin. The boundary sits where the pelvis and spine1
+  # bars meet (y 0.705 at rest), which the utility belt covers. Arms are bare, which is what
+  # makes it a tank top: the shoulder round and neck stay flesh.
+  #
+  # DIRT is tone, because paint is one colour per primitive: the chest bar is a dingy off-white
+  # (e9e7dd), the spine1 bar below it (the belly, where it would be sweated through and
+  # stained) is grimier (cfcab8), and the spine beads darker again (bab5a2) so they read as
+  # ridges under cloth, not green bumps through it. The body grain's mottle still rides
+  # over paint, so it is not flat. Hexes are eyeballed in the turntable, not measured: the
+  # renderer darkens low sRGB values hard (a first 4a4d50 pant read near black), so these are
+  # chosen to land on dingy white and fatigue grey on screen (the first cream ddd3b4 rendered as tan skin: the key is warm, so the source is kept NEUTRAL and the light does the yellowing), not to match a paint chip.
+  # Pants 7a7e82. Neck, arms, head, hands, ankle knob and feet stay flesh (boots cover the feet).
+  # PELVIS AND BUTT, REWORKED 2026-10-03 (owner, seeing the seated pose: "his pelvis dips below when he sits like he has a big
+  # diaper ... his pelvis and butt need some work"). The pelvis used to be ONE tapered bar from the root (y 0.60) to the hip joint
+  # (y 0.705) with a 68 mm round end cap, so 17 cm of mass hung below the hips. Standing, the thighs hid it; seated, the thighs lie
+  # flat forward at hip height (their underside is only 46 mm below the joint) and the pelvis dangled 8 cm under them. Now:
+  #   * the pelvis is a squashed sphere AT the hip joint (tall 0.72: its bottom is y 0.648, 57 mm under the joint, about the thigh
+  #     underside), so seated it sits flush on the thigh line;
+  #   * the gut blob rides at the joint too, 12 mm lower than before and 20 mm further forward, so
+  #     the belly keeps its +15 mm over the back (goblin-blob.test.ts) now that the back has a butt;
+  #   * a pair of GLUTES (`both`, mirrored in x), 38 mm either side of the spine and 50 mm behind it, at the hip joint's height
+  #     minus 3 cm: they are the seat, and from behind they are the cheeks the owner wants, with a 14 mm blend so they merge.
+  # The old bar's cap used to fill the crotch between the thighs; the legs now start at a narrow slit (thigh centres 0.116 m
+  # apart, r 0.046) under the pelvis, which is how legs meet a body. Measured by eye in the lab, rest and seated (frames in
+  # docs/dev-notes/2026-10-03-goblin-poses/).
+  blob torso on pelvis at=1.00 r=0.074 tall=0.72 deep=1.10 offset=(0,-0.004,0.012) blend=0.014 color=7a7e82
+  blob torso on pelvis at=1.00 r=0.060 tall=1.00 offset=(0,-0.012,0.050) blend=0.016 color=7a7e82
+  blob torso on pelvis at=1.00 r=0.050 offset=(0.038,-0.030,-0.046) blend=0.014 both color=7a7e82
+  bar  torso on spine1 from=0.00 to=1.00 r=0.072 r2=0.068 deep=1.08 offset=(0,0,0.010) blend=0.016 color=cfcab8
+  bar  torso on chest  from=0.00 to=0.95 r=0.068 r2=0.056 wide=1.00 deep=1.12 blend=0.016 color=e9e7dd
+
+  # Spine: vertebrae knuckling through the flat back (offsets are world axes;
+  # -z is the back), small and tightly blended so each reads as a bump under
+  # skin, not as an orb. Seated by measurement (2026-10-01): the chest beads
+  # (and the neck one, below) keep the look-dev's offsets, but the three on
+  # spine1 were moved onto the pushed-forward bars (the look-dev had -0.086,
+  # -0.084, -0.080). Each stands about 5-6 mm proud of the bare back at its
+  # height, except the one at the waist (spine1 at=0.55, 8.6 mm), where the
+  # back curves in and the spine should show.
+  blob torso on spine1 at=0.15 r=0.012 offset=(0,0,-0.072) blend=0.005 color=bab5a2
+  blob torso on spine1 at=0.55 r=0.012 offset=(0,0,-0.066) blend=0.005 color=bab5a2
+  blob torso on spine1 at=0.95 r=0.012 offset=(0,0,-0.072) blend=0.005 color=bab5a2
+  blob torso on chest  at=0.30 r=0.012 offset=(0,0,-0.068) blend=0.005 color=bab5a2
+  blob torso on chest  at=0.65 r=0.012 offset=(0,0,-0.062) blend=0.005 color=bab5a2
+  blob torso on chest  at=0.98 r=0.012 offset=(0,0,-0.056) blend=0.005 color=bab5a2
+
+  # Neck: one tapered column (0.040 at the collar to 0.033 under the skull), a
+  # pair of cords from the collarbone notch up the front of the neck to the
+  # base of the skull, converging (the sinew that makes a thin neck read as a
+  # neck rather than a pipe), and one more vertebra. Values from the look-dev
+  # variant A, owner-picked.
+  bar  head on neck from=0.00 to=1.00 r=0.040 r2=0.033 blend=0.010
+  blob head on neck at=0.05 r=0.009 r2=0.007 offset=(0.026,0.000,0.018) tip=(-0.012,0.120,-0.030) blend=0.006 both
+  blob head on neck at=0.30 r=0.010 offset=(0,0,-0.036) blend=0.005
+
+  # Ears: ONE tapered prim each, swept out and back to a point.
+  #
+  # This used to be two blobs apiece, and the comment here said why: "one
+  # ellipsoid cannot taper — it is round whatever you scale it to — so each ear
+  # is a flattened base plus a much smaller tip pushed further out and up."
+  # That is a description of the format's limit, not of an ear. The smooth-min
+  # between the two prims was doing the tapering, which meant the taper was a
+  # FILLET — convex, bulging out before it came back in — and the tip was still
+  # a small sphere. Mickey Mouse, which is what the owner called it.
+  #
+  # `r2=0.003` is a real point, and `tip=` sweeps it out and up out of a skull
+  # bone that runs straight up. `chamfer` creases the ear into the head instead
+  # of letting it melt in. The skull's own half-width is headRadius x headWidth
+  # = 0.121, so the base at x 0.086 sits INSIDE the cranium (which is what
+  # attaches it) and the point stands 52 mm clear.
+  blob head on skull at=0.58 r=0.036 r2=0.003 wide=0.80 deep=0.44 blend=0.0020 chamfer offset=(0.086,0.006,-0.006) tip=(0.087,0.104,-0.022) both
+
+  # Nose — A REAL HOOK, ONE PRIMITIVE.
+  #
+  # What was here: two tapered prims — a bridge running down and out from
+  # between the eyes, then a smaller hooked tip turning down off its end. That
+  # was itself an upgrade over the ORIGINAL two ellipsoids faked into a hook
+  # (which only read from the front), but it was still a chain: the joint
+  # between bridge and hook carried the bridge's own round base, and under the
+  # smooth-min the two segments read as a sausage with a kink rather than one
+  # curved nose.
+  #
+  # `bend=` makes the whole thing ONE primitive: a capsule swept along a
+  # quadratic Bezier from the bridge's start to the hook's point, control
+  # point pushed FORWARD of the chord so the curve goes out along the old
+  # bridge direction and then turns down — the bend is the goblin, and the
+  # round base at the old joint is gone entirely. The radius lerps along the
+  # CURVE now, and at the old joint (t ≈ 0.57) it reads 10 mm — the old hook
+  # prim's radius, so the silhouette keeps its slenderness through the turn.
+  #
+  # Aiming the bend: the chord midpoint sits at (0,-0.043,0.116) relative to
+  # the anchor; the control point wants to be where the bridge and hook
+  # TANGENTS intersect, at (0,-0.041,0.143) — so the displacement from the
+  # midpoint is (0, +0.002, +0.027). The apex bulges halfway out, ~13 mm
+  # forward of the chord, which is the hook.
+  #
+  # REACH still rules: the point sits at z=0.162, 44 mm proud of the
+  # cranium's 0.118 m semi-depth. SLENDER still rules: r=0.019 at the base
+  # (a fat base read as a bulb wearing a spike), r2=0.003 at the point.
+  blob head on skull at=0.47 r=0.019 r2=0.003 wide=0.80 blend=0.0016 chamfer offset=(0,-0.010,0.070) tip=(0,-0.066,0.092) bend=(0,0.002,0.027)
+
+  # BIG LIPS — a protruding muzzle, the cartoon-mouse read.
+  #
+  # The face SHEET already draws a mouth, but a painted mouth is flat: it
+  # cannot break the silhouette, so from any angle off dead-front the goblin
+  # had a smooth jaw with a dark smear on it. Lips are the one facial feature
+  # that has to be geometry, because the whole point of them is that they stick
+  # out.
+  #
+  # Two prims, creased against each other with `chamfer` rather than blended:
+  # a fillet between an upper and lower lip fuses them into one sausage, and
+  # the SEAM is what makes it read as a mouth. `wide` well above 1 spreads them
+  # across the face; `tall` well under 1 keeps each one a flat band rather than
+  # a ball.
+  #
+  # Sitting below the nose (skull at=0.47) and above the jaw, so all three
+  # features stack instead of competing for the same flesh.
+  # REACH, again: the cranium's semi-depth is 0.118, so lips whose front edge
+  # lands short of that are a texture with extra steps. These reach 0.130 —
+  # 12 mm proud, and deliberately no more.
+  #
+  # THE NOSE HAS TO STAY THE FACE'S LEAD. A first pass at r=0.040 / wide=1.70
+  # reached 0.142 and spread most of the way across the head, and the goblin
+  # turned into a cartoon mouse: the lips became the muzzle and the hooked nose
+  # read as part of it. The nose tips out at 0.162, so keeping the lips a clear
+  # 30 mm behind it is what preserves the hook as the silhouette's leading
+  # edge. Lips, not a snout.
+  #
+  # AND THEY HAVE TO SIT BELOW THE NOSE, which is not automatic. At skull 0.31
+  # the upper lip landed at y=1.194 and the nose tip at y=1.1935 — the same
+  # height — so smooth-min fused them into one broad snout with a spike on the
+  # front. The owner read it as "a big broad disk intersecting the nose", and
+  # that is exactly what two features competing for the same flesh looks like.
+  # Dropped to 0.12 — 5.6 cm of face between the nose tip and the upper lip.
+  # 0.23 was a first attempt and STILL merged: 2 cm is inside the reach of the
+  # nose's own blend plus the lips', so the two masses found each other anyway.
+  # Separation has to beat the sum of the blends, not just be nonzero.
+  #
+  # The jaw grew to make the room (jawDrop 0.072 to 0.104). Lengthening the
+  # lower face is the honest fix: cramming three features into a short muzzle
+  # is what forced them to overlap, and shrinking the lips instead just makes
+  # a goblin with no mouth.
+  #
+  # Their reach came down with the move. The cranium is an ellipsoid, so its
+  # semi-depth SHRINKS as you go lower — 0.108 at this height, not the 0.118 at
+  # the nose — and lips sized against the wrong number stick out too far.
+  blob head on skull at=0.12 r=0.028 r2=0.021 wide=1.25 tall=0.44 blend=0.0020 chamfer offset=(0,0.006,0.062) tip=(0,-0.006,0.044)
+  blob head on skull at=0.12 r=0.024 r2=0.018 wide=1.12 tall=0.42 blend=0.0016 chamfer offset=(0,-0.028,0.056) tip=(0,-0.018,0.038)
+
+  # THE MOUTH LINE — a groove, not a gap between two lumps.
+  #
+  # The crease between the lips was being faked by creasing the two lip prims
+  # against each other with `chamfer`, which only works while both lips exist,
+  # both touch, and the camera is near enough to front-on to see the join. A
+  # groove cuts a CHANNEL along where this primitive's surface crosses the
+  # assembled face, so the line is a line — it survives the lips changing size,
+  # and it reads from every angle.
+  #
+  # Wide and flat (`wide` up, `tall` right down) so its zero-set is a
+  # horizontal band across the muzzle. `depth`/`width` are millimetres: the
+  # channel is 5 mm across and bites 4 mm in, which on a 1.30 m goblin is a
+  # crease rather than a wound.
+  groove head on skull at=0.12 r=0.030 wide=1.30 tall=0.09 deep=1.10 depth=0.004 width=0.005 offset=(0,-0.014,0.060)
+
+  # ARMS AND LEGS: tapered bars, no ball joints (rebuilt 2026-10-01).
+  #
+  # Most joints used to be a nub 1.3-1.7x the shaft it joined (wrist and ankle
+  # about 1.1x), at blends of 0.0014-0.004, on purpose: "shoulder, elbow,
+  # wrist, hip, knee, ankle" as orbs. The owner's 2026-10-01 read was "a series
+  # of orbs", and the pick was variant A: each segment one bar tapering toward
+  # the hand or foot (r2), blended into the next at 0.010-0.014 (a smooth-min
+  # band 2-3 cm wide; see the torso block) so a joint is a soft transition. The
+  # orbs that stay are kept on purpose: the owner kept the hands as orbs, a
+  # throwback to early 3D games, and the small ankle knob and the toe pad come
+  # with variant A; the shoulder round is also the arm's core (below).
+  # goblin-blob.test.ts pins that no other point-blob comes back on a limb. All
+  # values below are look-dev variant A's.
+  #
+  # The shoulder round is the arm's `core`: the prim the fuse probe starts
+  # from (clusterCore in validate.ts). Without the mark the probe takes the
+  # cluster's fattest prim, and the hand (0.046 x deep 0.90 = 0.0414)
+  # out-ranks a slim shoulder: the probe then ran from the hand to the torso
+  # through air and fusedOf read +3.4 mm, though nothing had detached
+  # (daylight and validateBody were unchanged). Marked `core`, the look-dev's
+  # r 0.038 fuses at -2.7 mm. Do not "fix" a positive fusedOf by growing this
+  # orb; check which prim is the core first.
+  blob arm on clavicle at=1.00 r=0.038 blend=0.010 mirror core
+  bar  arm on upperarm from=0.00 to=1.00 r=0.031 r2=0.024 blend=0.010 mirror
+  bar  arm on forearm  from=0.00 to=1.00 r=0.027 r2=0.018 blend=0.010 mirror
+
+  # Big grabby hands: still orbs, still r 0.046. goblin-skin.ts hard-codes this
+  # radius (GOBLIN_SKIN.handRadius) for the player's first-person hands, and
+  # loadHold depends on it. Nothing links the two: change them together. Only
+  # the blend widened, 0.0034 -> 0.008, so the wrist runs into the hand
+  # instead of meeting it at a seam.
+  blob arm on hand at=0.55 r=0.046 deep=0.90 blend=0.008 mirror
+
+  # The legs wear the trousers' paint (see the torso block). The shin bar runs
+  # to the ankle, so the boot in goblin-kit.wam covers the seam.
+  bar  leg on thigh from=0.00 to=1.00 r=0.046 r2=0.031 blend=0.014 mirror color=7a7e82
+  bar  leg on shin  from=0.00 to=1.00 r=0.034 r2=0.021 blend=0.012 mirror color=7a7e82
+  # The ankle knob: small, kept as the early-3D accent where shin meets foot.
+  blob leg on shin  at=1.00 r=0.026 blend=0.008 mirror
+
+  # NO FLESH FOOT while the goblin wears the kit's boots (owner, 2026-10-02:
+  # "the boots clip"; the soldier made the same call on 2026-09-05). The boot
+  # IS the foot. In the walk pose the flesh foot swung out from under the boot
+  # sole (frames in docs/dev-notes/2026-10-02-goblin-armour/), because the rig
+  # moves the foot's SDF prims and the kit's rigid skin slightly differently
+  # (the known 8-10 cm foot stretch, refinement spec phase 4). The foot BONE
+  # stays: the boot is skinned to it. For a barefoot goblin, uncomment these
+  # two lines (they are the phase-1 body's feet, unchanged):
+  # Feet: a shaft forward along the foot bone and a toe pad, slimmed to the new
+  # shin (they were sized for the old 0.035 shin and 0.038 ankle nub). Splayed
+  # and a little oversized for the leg, which is what stops a long-legged
+  # creature reading as stilts. Values from the look-dev variant A.
+  # bar  leg on foot  from=0.05 to=0.80 r=0.028 r2=0.024 tall=0.80 blend=0.010 mirror
+  # blob leg on foot  at=0.92 r=0.034 wide=1.15 tall=0.70 deep=0.95 blend=0.008 mirror
+  # --- home clothes begin ---
+  # HOME CLOTHES AS SDF CLOTH (owner, 2026-10-11: "use the SDF cloth for this to make it look more fluid; with a mesh it's a bit more
+  # difficult"): a stained vest and grey shorts, the goblin at his desk with the armour kit off (the screen emergence lab). This block is
+  # the ONLY difference from goblin.blob (goblin-home.test.ts strips it and compares), so everything above stays the goblin's own: the
+  # painted tank top and trousers stay as the paint UNDER the cloth (the authoring skill's rule: flesh under a garment wears the garment's
+  # colour, so a bulge reads as cloth and never as skin through a tear). Numbers are authored (1.30 m) units like the rest of the file;
+  # world y and z below are the REST pose's, measured off the compiled bones and prims (blob:inspect, divided by `scale`).
+  #
+  # THE CLOTH: four shell lines, five prims (shells cost 3-5x their prim share; the plan caps the costume at 2-5 lines). Every shell is
+  # `rigid` on its bone, so it turns with that bone as one piece (the seated `type` pose pitches the chest 18 degrees and spine1 7 against
+  # rest, and lifts the thighs level), and its clip plane turns with it (rig-bind.ts poseShellPlane). Folds are `warp=`: amplitude in
+  # metres and per-axis frequency; a small y frequency makes them run DOWN the body, which is how a hanging vest and loose shorts drape.
+  #
+  # VEST, BELLY: an open-bottomed tube from the waist to the spine's bend. Flesh there spans z -0.068..+0.113 (the back, the bead ridge, the
+  # belly) and x +-0.072; the gut blob pushes the front to z 0.110 at the hem, so the base widens to r 0.098 at the bottom (x 0.098, z
+  # 0.116 half) and hangs 1-2 cm loose over the belly and the shorts' waist, like a singlet. Its top (r2 0.077, deep 1.18: z -0.062..0.120 at
+  # the bend) clears the last spine bead by 6 mm to the sheet's middle; its closed top cap sinks inside the chest shell and the flesh. Hem: y > 0.700,
+  # the waist (the paint's tank/trouser boundary is 0.705).
+  shell torso on spine1 at=0.0 offset=(0,-0.012,0.016) tip=(0,0.144,0.013) r=0.098 r2=0.077 wide=1.00 deep=1.18 thick=0.0035 clip=(0,-1,0) clipd=-0.700 rim=0.004 blend=0.006 color=e9e7dd warp=0.006 warpFreq=(30,5,30) rigid
+  # VEST, CHEST: the chest bar (r 0.068 to 0.056, deep 1.12) plus 6 mm, closed over the shoulders, so its top cap is the vest's shoulder
+  # straps and the shoulder rounds (x 0.04..0.116) come out of its sides as armholes. The plane keeps y < 1.020: it takes the cap's crown
+  # off round the neck (the neck is r 0.040 at y 0.985), a neck hole 8 mm clear of the skin with a rolled rim. The bottom is not clipped:
+  # it sits inside the belly shell. Same colour as the belly shell, so the overlap at the bend has no seam.
+  shell torso on chest at=0.0 offset=(0,0,-0.002) tip=(0,0.141,0.023) r=0.074 r2=0.064 wide=1.00 deep=1.16 thick=0.0035 clip=(0,1,0) clipd=1.020 rim=0.004 blend=0.006 color=e9e7dd warp=0.004 warpFreq=(34,5,34) rigid
+  # SHORTS, SEAT: a squat tube round the pelvis (the gut's front 0.110, the glutes' back -0.096 and sides 0.088), from the waist (its top
+  # cap sits inside the vest) down to y 0.650, level with the pelvis blob's flush seat (0.648, the 2026-10-03 rework), so seated it does
+  # not hang under the thighs (the diaper the owner rejected). The cheeks' lowest 2.5 cm (to 0.625) and their back diagonals press past
+  # it: the same grey paint, so they read as the cloth pulled over them. tall 0.80 keeps the base's round bottom near the hem.
+  shell torso on pelvis at=0.60 offset=(0,0,0.010) tip=(0,0.050,0) r=0.088 wide=1.07 tall=0.80 deep=1.12 thick=0.0035 clip=(0,-1,0) clipd=-0.650 rim=0.004 blend=0.006 color=7a7e82 warp=0.004 warpFreq=(34,8,34) rigid
+  # SHORTS, LEGS: a loose tube on each thigh from the hip to mid-thigh. The thigh is r 0.046 at the hip and 0.0385 at mid-thigh; the shell
+  # is 0.056 to 0.050, 10-12 mm loose, so it flares like a short's leg, and its closed top cap is the hip under the vest. The plane is
+  # square to the thigh (its normal the thigh's own direction, (0.025,-0.285,0.045)/0.29) through its midpoint (0.0705,0.5625,0.0225):
+  # the hem lies across the thigh, 0.145 m clear of the knee, standing and seated.
+  shell leg on thigh at=0.0 tip=(0.0145,-0.1655,0.026) r=0.056 r2=0.050 thick=0.0035 clip=(0.0863,-0.984,0.155) clipd=-0.5439 rim=0.004 blend=0.006 color=7a7e82 warp=0.004 warpFreq=(34,8,34) mirror rigid
+  # BARE LEGS UNDER THE SHORTS. goblin.blob paints the whole leg trouser grey (thigh and shin bars, above). A flesh coat 0.5 mm over each
+  # painted bar is the nearest prim at the skin, so the skin's colour wins (paint is per nearest prim); its blend of 0.003 grows the leg
+  # by under a millimetre. The thigh coat starts at 0.40, under the shorts' hem (0.50), and is `rigid` like the shorts: unrigged, its
+  # mid-thigh end bound to the hip and was left hanging under the lifted thigh in the seated pose (a prim stretched through the air).
+  bar  leg on thigh from=0.40 to=1.00 r=0.0405 r2=0.0315 blend=0.003 mirror rigid
+  bar  leg on shin  from=0.00 to=1.00 r=0.0345 r2=0.0215 blend=0.003 mirror
+  # BARE FEET. goblin.blob has none (the kit's boots are its feet) and its ankle joint sits at y 0.157, which the pose layer holds standing
+  # and seated, so the shin stops 0.157 above the floor. The shin runs on 0.48 of its length (0.130 m) past the ankle knob to y 0.030, a
+  # long lower leg the knob now sits on like an ankle bone; then the phase-1 foot (the commented lines above: the shaft along the foot bone
+  # and the toe pad), started 0.25 behind the ankle for a heel and dropped 0.135 so its sole (axis y 0.022, half-height 0.0224) meets the
+  # floor at y 0.0; 10 mm in toward the shin's lower end. `rigid` on the foot bone, which stays level in every goblin pose.
+  bar  leg on shin  from=1.00 to=1.48 r=0.022 r2=0.024 blend=0.010 mirror rigid
+  bar  leg on foot  from=-0.25 to=0.80 offset=(-0.010,-0.135,0) r=0.028 r2=0.024 tall=0.80 blend=0.010 mirror rigid
+  blob leg on foot  at=0.92 offset=(-0.010,-0.135,0) r=0.034 wide=1.15 tall=0.70 deep=0.95 blend=0.008 mirror rigid
+  # --- home clothes end ---
+
+# Wound pass r2: hidden bone, revealed by a wound — same two authored shapes
+# as the zombie, scaled to this body. The limb word is a REAL limb
+# (head|torso|arm|leg), not "bone": the grammar has no `bone` limb, and the
+# word is what gives the prim its cluster, i.e. which wounds can expose it.
+bones
+  ratio 0.38
+
+  # Cranium — a dome, not a scaled face ellipsoid. The face block is the
+  # default head, so the dome keeps the zombie's SIZE; only `at` moves, to
+  # hold the same 1.6 cm crown-ward offset on a skull bone 0.235 long (the
+  # zombie's is 0.16).
+  blob head on skull at=0.52 r=0.072 wide=0.88 tall=0.95 deep=0.86
+
+  # Ribcage — the same broad shallow plate as the zombie's, scaled to a
+  # narrow chest: the biggest chest blob was r=0.071 when this was sized (a bar
+  # from 0.068 tapering to 0.056 since the 2026-10-01 rebuild; the ratio holds)
+  # against the zombie's torso 0.150, so r scales by the same ratio
+  # (0.052 -> 0.025). Rides the `chest` bone — this torso is a three-bone
+  # chain (pelvis/spine1/chest) and the chest IS the ribcage; the gut below
+  # keeps its auto-derived bone.
+  bar torso on chest from=0.20 to=0.92 r=0.025 wide=1.45 deep=0.55
+
+# The head itself is facePrims(), not geometry authored here — .blob gets the
+# zombie's parameterised skull whatever character it is. Pushed toward goblin
+# proportions: a bigger cranium relative to a 1.15 m body, a jutting jaw for the
+# snout, and a heavier brow for the scowl. The pointed cranium taper and the
+# tusks in the WAM file have no analog at all.
+face
+  # THESE ARE DEFAULT_FACE's VALUES, ON PURPOSE.
+  #
+  # Until 2026-08-22 the lab discarded a .blob's own face block and built every
+  # character from DEFAULT_FACE — so this goblin has ALWAYS rendered as the
+  # gaunt default head, and every by-eye decision on it (the hooked nose's
+  # reach, the lips' height, the ears, the sunglasses' fit, the whole kit) was
+  # tuned against that head while this block sat unread.
+  #
+  # Wiring the block up correctly therefore CHANGED the goblin: the authored
+  # values are a wider, rounder, shallower-crowned skull (headWidth 0.96 vs
+  # 0.76, headHeight 1.02 vs 1.161), and under them the nose that reads as a
+  # sharp hook becomes a soft bump on a bloated face — it went from 57 mm proud
+  # of the cranium to 44 mm, on a head 26% wider.
+  #
+  # So the block is pinned to what this character has actually been reviewed
+  # and approved as. Re-shaping the goblin's skull is a real art decision and
+  # it drags the nose, lips and the entire kit fit with it; it should be done
+  # deliberately, not as a side effect of a bug fix.
+  headRadius 0.118
+  headWidth  0.76
+  headHeight 1.161
+  headDepth  0.894
+  jawWidth   0.748
+  jawHeight  0.861
+  jawDrop    0.076
+  jawJut     0.04
+  noseLength 0.007
+  noseWidth  0.379
+  noseDrop   0.009
+  browHeavy  0.008
+  browRise   0.045
+  headBlend  0.006
+
+# The goblin's own face, generated rather than inherited.
+#
+# Before this, every .blob character wore /assets/lab/zombie-face.png, because
+# a shared 64x64 greyscale sheet was the only way to have a face at all — which
+# is most of why this thing still read as "the zombie with different limbs".
+# The sheet is drawn from these numbers instead: features are DARKENINGS of a
+# grainy base, because the shader uses the sheet as an albedo multiplier.
+#
+# Small close-set eyes under a heavy slanted brow, and a wide down-turned mouth
+# — a scowl is mostly brow angle and mouth curve, not eye shape.
+sheet
+  eyeGap     0.44
+  eyeSize    0.070
+  eyeRise    0.44
+  eyeTilt    16
+  eyeSquash  1.70
+  # 0, not a pupil: a pupil darkens the very pixels the glow keys off, so it
+  # trades a pupil for a dimmer eye. See blob-face-sheet.ts.
+  eyePupil   0
+  browHeavy  0.90
+  browAngle  24
+  mouthWidth 0.54
+  # 0.63, not 0.73. The lips are GEOMETRY now, and the painted mouth has to
+  # land on them or the head wears two mouths — a dark smear on the jaw below a
+  # protruding pout. 0.63 is where the lip prims sit in face-space: they ride
+  # the skull at 0.31, which is 63% down a face spanning y 1.096..1.354.
+  mouthRise  0.80
+  mouthCurve -0.50
+  # A SEAM, not a slab. With no geometry to help, the sheet's mouth had to do
+  # all the work and was drawn thick; over a real pout that thickness just
+  # muddies the crease between the two lips.
+  mouthOpen  0.042
+  nostril    0.45
+  noseRidge  1.00
+  noseWide   0.062
+  noseLong   0.235
+  jawShade   0.55
+  grain      0.10
+  seed       5
+
+# The goblin's own flesh, rather than the lab's default preset.
+#
+# Before this block existed every .blob character wore whichever FLESH_PRESET
+# the panel had selected — one global object — so the whole cast rendered as
+# the same pink creature in different shapes, which is most of why the first
+# goblin read as "the zombie with different limbs" even after the skeleton was
+# entirely rebuilt. Colour does more work than proportion here.
+#
+# These are the field names of FleshMaterial (material.ts), not friendlier
+# aliases, for the reason the face block uses FaceParams' own names: an alias
+# table is a second list that drifts from the first. Anything not named here
+# keeps henenlotter-latex's value — a palette is a partial override, and the
+# base is a NAMED preset rather than the panel's current selection so the same
+# .blob renders the same in the lab, in a turntable capture and in the game.
+#
+# Linear RGB. These go through the output sRGB encode on the WebGPU path, which
+# lifts the low channels hard — that is why the green is much less saturated
+# here than it looks on screen, and why nudging blue up 0.02 does more than it
+# reads like it should.
+palette
+  baseColor     0.34 0.44 0.19
+  # Wounds stay red. A green creature bleeding green reads as a plant.
+  deepColor     0.46 0.09 0.09
+  charColor     0.06 0.07 0.05
+  # Clammy rather than latex-wet: a lower, broader highlight than the zombie's.
+  specIntensity 0.52
+  specRoughness 0.42
+  fresnelBoost  0.45
+  translucency  0.30
+  wetness       0.55
+  # THE ALBEDO MOTTLE. surfaceNoiseAmp already roughens the NORMAL, which reads
+  # as texture and never as colour, so under this lab's single broad key the
+  # creature was one flat tone whichever way it turned. This is the colour
+  # twin: fbm in REST space, so the blotches ride a limb through gait instead
+  # of swimming over it. Off (0) in every preset, because switching it on
+  # changes how a body looks and that is a per-character decision.
+  mottleAmp     0.65
+  # Low frequency on purpose — patches a hand-span across, not freckles. This
+  # is NOT cycles per metre: the shader's fbm multiplies its own input by 4 and
+  # 9 for its two octaves, so the number here is about a quarter of the
+  # frequency it looks like. The first pass used 5 and produced fine speckle
+  # that read as image noise; by ~10 it aliases outright.
+  mottleScale   1.6
+  # A browner, darker green than the base. Mottling toward something far from
+  # the base colour reads as dirt ON the creature rather than variation IN it.
+  mottleColor   0.21 0.19 0.06
+  # Skin texture: the body's micro-detail normal noise (fbm in rest space,
+  # features ~5-11 mm), raised from the inherited 0.06 (about 1 degree of tilt,
+  # ten times weaker than the face sheet's grain bump) to the wet-meat preset's
+  # 0.22. Owner, 2026-10-01: give the body the face's texture. This is the
+  # quick preview; it is bump only, so it reads as a pebbled skin rather than
+  # the face's speckle. A per-character `grain` (colour + bump, like the face)
+  # is the proper version, below. Owner, 2026-10-02: keep 0.22 with the grain
+  # ("fine for now"); 0.06 reads a cleaner speckle if the two ever stack too
+  # much (docs/dev-notes/2026-10-02-body-grain/, frame torso-on-n06).
+  surfaceNoiseAmp 0.22
+  # BODY GRAIN (body-grain.ts; spec docs/superpowers/specs/2026-10-02-body-grain-design.md):
+  # the face sheet's speckle on the rest of the body, in two octaves. Same
+  # units as the sheet block's `grain`, and the same value, so face and body
+  # carry one contrast: hard-edged rest-space cells, face-sized (3.5 mm) up
+  # close and 1.2 cm farther out, each an albedo multiply of up to +-22% and a
+  # bump matched to the face's relief. It fades out where the face sheet
+  # covers the head; each octave fades as its cells drop below ~1.5 SDF pixels
+  # (in the lab turntable the coarse octave is full out to ~1.5 m and gone by
+  # ~3 m).
+  grain         0.10

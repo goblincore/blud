@@ -10,7 +10,7 @@
 //
 // HOW THE GOBLIN IS HOSTED. The same pieces the flame lab and the WebGPU lab use, nothing more: `createLabRenderer`, `createSdfLayer`
 // (the march renders into its own target and composites over the polygonal pass with depth), `createPostAa` (sizes the layer; every
-// effect off), and `createCharacterView('goblin')`, fed by the actor pipeline (`makeActorMotion` / `stepActorMotion`) with the pose layer's
+// effect off), and `createCharacterView('goblin-home')` (the goblin in his home clothes; `?character=goblin` for the plain body), fed by the actor pipeline (`makeActorMotion` / `stepActorMotion`) with the pose layer's
 // joints (`MotionConfig.pose` pins every rig point, so one step per frame lands the pose exactly and a scrub is deterministic). The kit and
 // the shotgun are retired at birth: he is at home.
 //
@@ -76,6 +76,10 @@ const KNEE_CLEAR = 0.01;
 const DESK_FRONT_MIN_Z = EGG_REST[2] + EGG.rz + 0.005;
 /** The SDF pass's render scale (see `sdfLayer.setScale` in bootstrap). */
 const SDF_SCALE = 0.5;
+/** The goblin's cold rim/fill strength (spotCfg2.w, see where the key is aimed in bootstrap); `?rim=` overrides, 0 turns it off. */
+const GOBLIN_RIM = 1.5;
+/** The goblin's flat fill (lightCfg.y; the practical key preset's is 0.06), doubled-ish so his back is not black; `?fill=` overrides. */
+const GOBLIN_FILL = 0.10;
 /** The banker's lamp's foot on the desk (screen frame), and its bulb under the shade: the set's key light, and the SDF body's key direction. */
 const LAMP_AT: Vec3 = [-0.52, DESK_Y, 0.02];
 const LAMP_BULB: Vec3 = [LAMP_AT[0], DESK_Y + 0.27, LAMP_AT[2] + 0.06];
@@ -523,12 +527,17 @@ async function bootstrap(): Promise<void> {
   postAa.addSink(sdfLayer);
 
   // ——— The goblin ————————————————————————————————————————————————————————
-  const entry = characterEntry('goblin');
+  // At home he wears his home clothes: `goblin-home` (goblin.blob plus a vest and shorts of SDF `shell` cloth and bare feet, plan Task 10).
+  // `?character=goblin` puts the plain body back (no cloth, the shins ending in the air where the kit's boots would be): the A/B for the
+  // cloth's cost.
+  const character = q.get('character') === 'goblin' ? 'goblin' : 'goblin-home';
+  const entry = characterEntry(character);
+  say(`character: ${character}`);
   let face: FaceParams;
   try { face = { ...DEFAULT_FACE, ...compileFace(parseBlob(entry.src)) }; } catch { face = { ...DEFAULT_FACE }; }
   const errors: string[] = [];
   const view = createCharacterView({
-    name: 'goblin', start: [0, 0, 0], renderer, scene,
+    name: character, start: [0, 0, 0], renderer, scene,
     gpu: { cone: sdfLayer.cone, occluder: sdfLayer.occluder },
     errors, face,
   });
@@ -653,6 +662,13 @@ async function bootstrap(): Promise<void> {
     const chest = new THREE.Vector3(0, 0.95, 0.15);
     const d = lampW.sub(chest).normalize();
     gpu.uniforms.lightDir.value.set(d.x, d.y, d.z);
+    // A dim COLD RIM AND FILL, so he does not go to black from behind (the push and out shots look over his back, and the lamp alone keys
+    // him from the front-left). The march's built-in side rim (compose.wgsl.ts, spotCfg2.w): a cold grazing edge on the lamp's side plus a
+    // soft cold fill on the side facing the camera, whichever way it looks. No new light, no new pass: one uniform. The game's lamps
+    // drive it at about 0.35-1.2 (game-dynamic-light.ts BODY_LAMP_RIM); GOBLIN_RIM is chosen by eye at the push and out shots.
+    // And a little more of the preset's flat fill (key-coloured, so warm) under it: at the preset's 0.06 his back read near black.
+    gpu.uniforms.spotCfg2.value.w = num('rim') ?? GOBLIN_RIM;
+    gpu.uniforms.lightCfg.value.y = num('fill') ?? GOBLIN_FILL;
   }
 
   // ——— Sizing ————————————————————————————————————————————————————————————

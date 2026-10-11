@@ -61,10 +61,13 @@ function primBounds(p: Primitive): { minY: number; maxY: number; minZ: number; m
   };
 }
 
-/** Measures the seat off posed prims (pass the `type` pose's). Throws if the body has no hand, thigh or pelvis prims: the set cannot be
+/** Measures the seat off posed prims (pass the `type` pose's), the flesh only (cloth shells are skipped). Throws if the body has no hand, thigh or pelvis prims: the set cannot be
  *  placed without them, and a silent default is the guess this exists to replace. */
 export function measureSeat(prims: readonly Primitive[]): SeatMeasure {
-  const of = (re: RegExp) => prims.filter(p => p.bone !== undefined && re.test(p.bone));
+  // FLESH only: a `shell` (the home goblin's shorts, goblin-home.blob) bears no weight, and its bound here would be its UNCLIPPED base
+  // capsule, whose round end hangs centimetres past the cloth's hem (the pelvis shell's base reaches 5.5 cm under the flesh), so the
+  // seat would land under thin air.
+  const of = (re: RegExp) => prims.filter(p => p.bone !== undefined && !p.shell && re.test(p.bone));
   const hands = of(/^hand\.[lr]$/), thighs = of(/^thigh\.[lr]$/), pelvis = of(/^pelvis$/);
   if (!hands.length || !thighs.length || !pelvis.length) throw new Error('measureSeat: the posed body has no hand, thigh or pelvis prims');
   const hb = hands.map(primBounds), tb = thighs.map(primBounds), pb = pelvis.map(primBounds);

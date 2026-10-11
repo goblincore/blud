@@ -4,6 +4,7 @@
 // changes length at ANY sampled time (the angle-space blend's whole point), the feet stay on the ground, and the body stays one piece.
 import { describe, it, expect } from 'vitest';
 import goblinSrc from './goblin.blob?raw';
+import goblinHomeSrc from './goblin-home.blob?raw';
 import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace } from '../blob-compile';
 import { buildBody } from '../build-body';
@@ -14,11 +15,17 @@ import { makePoseRig, poseJoints } from '../pose';
 import { posesFor } from '../pose-library';
 import { GOBLIN_POSES } from './goblin-poses';
 
-const doc = parseBlob(goblinSrc);
-const body = buildBody(compileBlob(doc, compileFace(doc)));
-const names = jointNamesForBody(body);
-const base = bindRig(body).rig.restPose;
-const rig = makePoseRig(doc, names, base);
+// The goblin's body, and goblin-home's (the same skeleton plus cloth and bare feet: pose-library.ts gives it the goblin's clips, so the
+// clip checks below run on both).
+const rigFor = (src: string) => {
+  const doc = parseBlob(src);
+  const body = buildBody(compileBlob(doc, compileFace(doc)));
+  const names = jointNamesForBody(body);
+  const base = bindRig(body).rig.restPose;
+  return { doc, names, base, rig: makePoseRig(doc, names, base) };
+};
+const { doc, names, base, rig } = rigFor(goblinSrc);
+const home = rigFor(goblinHomeSrc);
 const J = (name: string) => names.indexOf(name as never);
 // The segment lengths below are the authored 1.30 m figures; the .blob's `scale` line makes the compiled limbs K times longer.
 const K = doc.scale ?? 1;
@@ -29,8 +36,9 @@ const SEGMENTS: [string, string, number][] = [
 const restGround = Math.min(base[J('footL')]![1], base[J('footR')]![1]);
 
 describe('goblin poses', () => {
-  it('are registered for the goblin and no one else', () => {
+  it('are registered for the goblin (and goblin-home, his body in home clothes) and no one else', () => {
     expect(posesFor('goblin')).toBe(GOBLIN_POSES);
+    expect(posesFor('goblin-home')).toBe(GOBLIN_POSES);
     expect(Object.keys(GOBLIN_POSES).sort()).toEqual(['jolt', 'reach', 'recoil', 'sit', 'stand', 'touch', 'type']);
     expect(posesFor('zombie')).toEqual({});
   });
@@ -43,6 +51,16 @@ describe('goblin poses', () => {
       for (const [a, b, want] of SEGMENTS)
         expect(len(sub(j[J(b)]!, j[J(a)]!)), `${clip.name} t=${(end * k) / 10} ${a}-${b}`).toBeCloseTo(want * K, 6);
       expect(Math.min(j[J('footL')]![1], j[J('footR')]![1]), `${clip.name} ground`).toBeCloseTo(restGround, 9);
+    }
+  });
+
+  it.each(Object.values(GOBLIN_POSES).map(c => [c.name, c] as const))('%s on goblin-home: the same joints as the goblin (the cloth moves no joint), so the same lengths and floor', (_n, clip) => {
+    expect(home.names).toEqual(names);
+    expect(home.base).toEqual(base);
+    const end = clip.keys[clip.keys.length - 1]!.t;
+    for (let k = 0; k <= 10; k++) {
+      const t = (end * k) / 10;
+      expect(poseJoints(home.rig, clip, t)).toEqual(poseJoints(rig, clip, t));
     }
   });
 

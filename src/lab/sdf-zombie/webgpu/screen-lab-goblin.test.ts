@@ -82,6 +82,19 @@ describe('measureSeat', () => {
     expect(m.kneeFrontZ).toBeCloseTo(0.44, 9);
     expect(m.kneeTopY).toBeCloseTo(0.59, 9);
   });
+  it('skips cloth: a shell on the pelvis or a thigh moves nothing (its bound is the unclipped base, not the hem)', () => {
+    const flesh = [
+      prim('hand.l', [0.2, 0.6, 0.7], [0.2, 0.6, 0.7], 0.05), prim('hand.r', [-0.2, 0.62, 0.7], [-0.2, 0.62, 0.7], 0.05),
+      prim('thigh.l', [0.08, 0.58, 0], [0.08, 0.55, 0.38], 0.06, 0.04), prim('thigh.r', [-0.08, 0.58, 0], [-0.08, 0.55, 0.38], 0.06, 0.04),
+      prim('pelvis', [0, 0.55, -0.06], [0, 0.55, -0.06], 0.07),
+    ];
+    const shell = { thickness: 0.004, clipNormal: [0, -1, 0] as const, clipOffset: -0.5, rim: 0.004 };
+    const cloth = [
+      { ...prim('pelvis', [0, 0.5, -0.06], [0, 0.56, -0.06], 0.12), shell },
+      { ...prim('thigh.l', [0.08, 0.58, 0], [0.08, 0.57, 0.2], 0.09, 0.08), shell },
+    ];
+    expect(measureSeat([...flesh, ...cloth])).toEqual(measureSeat(flesh));
+  });
   it('refuses a body without hands, thighs or pelvis rather than guessing', () => {
     expect(() => measureSeat([prim('chest', [0, 1, 0], [0, 1, 0], 0.2)])).toThrow();
   });
