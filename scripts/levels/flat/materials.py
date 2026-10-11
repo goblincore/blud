@@ -95,4 +95,14 @@ def make():
     M.MUCUS = pbr("mucus", (0.9, 0.82, 0.6), rough=0.02)
     M.SCREEN = pbr("screen", emit_tex="screen.jpg")
     M.OAKDOOR = pbr("door_oak", (1.0, 1.0, 1.0), rough=0.7, tex="door_oak.jpg")
+    # the hall and the bathroom
+    M.STONE_EH, M.STONE_WH = stone("stone_eh", "wall_eh"), stone("stone_wh", "wall_wh")
+    M.TILE = pbr("bath_tile", (1.0, 1.0, 1.0), rough=0.3, tex="bath_tile.jpg")
+    M.BATHFLOOR = pbr("bath_floor", (1.0, 1.0, 1.0), rough=0.35, tex="bath_floor.jpg")
+    M.ENAMEL = pbr("enamel", (0.80, 0.80, 0.76), rough=0.12)
+    M.CHROME = pbr("chrome", (0.80, 0.82, 0.85), rough=0.18, metal=0.55)          # not metal 1: the engine has no environment to reflect
+    M.BRONZE = pbr("bronze", (0.55, 0.30, 0.10), rough=0.4, metal=0.7)
+    M.CASTIRON = pbr("cast_iron", (0.025, 0.027, 0.03), rough=0.45, metal=0.6)
+    M.MIRROR = pbr("mirror_glass", (1.0, 1.0, 1.0), rough=0.06, metal=0.4, tex="mirror_glass.jpg")
+    M.BATHBULB = pbr("bath_bulb", (0.85, 1.0, 0.85), emit=(0.85, 1.0, 0.8))
     return M
