@@ -57,7 +57,7 @@ Each line is the first sentence of the module's header comment.
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 7 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
 | [SDF march renderer](#sdf-march-renderer) | 34 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
-| [Character authoring](#character-authoring) | 32 | The `.blob` language, body building, validation, silhouette fitting. |
+| [Character authoring](#character-authoring) | 33 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 25 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
 | [Gibs and gore (logic)](#gibs-and-gore-logic) | 13 | Gib parts, launch, tearing, entrails, strands. |
@@ -640,6 +640,7 @@ The `.blob` language, body building, validation, silhouette fitting.
 - `blob-face-sheet.ts` — A procedurally generated greyscale face sheet.
 - `blob-parse.ts` — The `.blob` text parser: tokenizes source lines and builds the BlobDoc that blob-compile consumes.
 - `body-grain.ts` — BODY GRAIN (spec docs/superpowers/specs/2026-10-02-body-grain-design.md; plan docs/superpowers/plans/2026-10-02-body-grain.md).
+- `body-scale.ts` — A uniform SCALE for a compiled body (spec docs/superpowers/specs/2026-10-11-goblin-human-height-design.md, section 3).
 - `body.ts` — The frozen hand-authored reference zombie BodyDef, with makeZombie to rebuild it for a given face.
 - `bone-derive.ts` — Derives the bone capsule inside each flesh primitive, so deep wounds can reach bone.
 - `build-body.ts` — Builds a renderable body from a BodyDef: mirror, bone resolve, prim placement, clustering, validation, with overrides and a build cache.
