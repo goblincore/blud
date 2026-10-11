@@ -94,4 +94,5 @@ def make():
     M.CD = pbr("cd", (0.75, 0.75, 0.78), rough=0.08, metal=1.0)
     M.MUCUS = pbr("mucus", (0.9, 0.82, 0.6), rough=0.02)
     M.SCREEN = pbr("screen", emit_tex="screen.jpg")
+    M.OAKDOOR = pbr("door_oak", (1.0, 1.0, 1.0), rough=0.7, tex="door_oak.jpg")
     return M

@@ -55,6 +55,9 @@ describe('flat.art.glb budget (spec section 8)', () => {
   it('at most 60 draw-call primitives', () => { expect(prims.length).toBeLessThanOrEqual(60); });
   // Raised from 250 000 (owner, 2026-10-11): the look comes first; an optimisation pass follows.
   it('at most 400 000 triangles', () => { expect(triangles).toBeLessThanOrEqual(400_000); });
+  it('the front door is built (an oak leaf in the south wall)', () => {
+    expect(glb.materials?.some(m => m.name === 'door_oak')).toBe(true);
+  });
   it('the iMac shell is a blended material', () => {
     const shell = glb.materials?.find(m => m.name === 'giger_shell');
     expect(shell?.alphaMode).toBe('BLEND');

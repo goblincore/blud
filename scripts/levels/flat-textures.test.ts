@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 
 const DIR = 'assets-source/levels/flat-textures';
 const STONES = ['wall_n', 'wall_e', 'wall_w', 'wall_s', 'vault', 'flag', 'dark'];
-const FILES = [...STONES.flatMap(s => [`${s}_color.jpg`, `${s}_normal.jpg`]), 'tatami.jpg', 'quilt.png', 'books.png', 'view.jpg', 'shell_color.jpg', 'screen.jpg'];
+const FILES = [...STONES.flatMap(s => [`${s}_color.jpg`, `${s}_normal.jpg`]), 'tatami.jpg', 'quilt.png', 'books.png', 'view.jpg', 'shell_color.jpg', 'screen.jpg', 'door_oak.jpg'];
 
 /** Width and height of a PNG (IHDR) or a JPEG (the first start-of-frame marker). */
 function imageSize(file: string): [number, number] {

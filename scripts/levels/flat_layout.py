@@ -17,6 +17,10 @@ RIBS = (0.9, 1.8, 2.7)                          # transverse ribs; the middle on
 
 WX, WH, WS, WSP, WDEPTH = 0.12, 0.36, 0.62, 1.42, 0.62   # window: centre x, half width, sill z, springing z, wall thickness
 KX, KY, KTOP = 0.12, 2.36, 0.44                 # kotatsu: centre and board top
+# The front door: a closed arched oak door in a stone surround, in the south wall on the window's axis (the end walls rise to the vault; the side walls stop
+# at the spring line, too low for an arch). Nothing is outside yet. DHW: half width; DSP: where the arch springs; the arch's crown is DSP + DHW.
+DX, DHW, DSP = WX, 0.40, 1.65
+
 # The Giger iMac (machine stage 3), on the kotatsu (room.py 881-885). Its face looks south, toward the player; the cranium sweeps north and up.
 IM_FRONT = KY - 0.06                            # the face's plane (y)
 IM_Z = KTOP + 0.235                             # the face's centre height
@@ -85,6 +89,8 @@ def check():
         assert not inside(START, box), f"start is inside {name}"
     assert WX - WH > X0 and WX + WH < X1, "window outside the north wall"
     assert WSP + WH < vault_z(WX), "window arch hits the vault"
+    assert DSP + DHW + 0.2 < vault_z(DX), "the door's arch and its surround hit the vault"
+    assert X0 + 0.3 < DX - DHW - 0.22 and DX + DHW + 0.22 < X1 - 0.3, "the door's surround leaves the south wall"
     for name, pos, col, power, _ in LIGHTS:
         assert inside(pos, ROOM_BOX), f"light {name} outside the room"
         assert all(0 <= c <= 1 for c in col) and power > 0

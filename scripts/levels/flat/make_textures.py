@@ -207,6 +207,23 @@ def make_screen(px=(1024, 768)):
     save(np.clip(np.power(im, 0.6) * lines[..., None] * 1.3, 0, 1), "screen.jpg")      # gamma 0.6 lifts the moody frame's shadows: a CRT glows
 
 
+def make_door(w=512, h=1024):
+    """Oak planks for the front door. One image is the leaf: 0.8 m wide, 2.05 m up to the arch's crown (so the aspect is 0.39). Six planks, each its own
+    tint, vertical grain, dark gaps between."""
+    n = 6
+    rnd = np.random.default_rng(5)
+    x = (np.arange(w)[None, :] + 0.5) / w
+    plank = np.minimum(np.floor(x * n), n - 1).astype(int)
+    tint = (0.75 + 0.5 * rnd.random(n))[plank]                                  # per-plank brightness, (1, w)
+    fine = periodic_noise(1024, 70, 3)[:96]                                   # fine across, stretched along the plank: vertical grain
+    grain = np.asarray(Image.fromarray((fine * 255).astype(np.uint8)).resize((w, h), Image.BICUBIC), np.float32) / 255.0
+    fx = (x * n) % 1.0
+    gap = np.clip(1 - np.minimum(fx, 1 - fx) / 0.018, 0, 1)                     # dark seams between planks
+    col = np.array((0.30, 0.14, 0.06), np.float32) * (tint * (0.55 + 0.9 * grain))[..., None]
+    col = col * (1 - gap[..., None]) + gap[..., None] * np.array((0.015, 0.008, 0.004), np.float32)
+    save(srgb(col), "door_oak.jpg")
+
+
 if __name__ == "__main__":
     for key in ("n", "e", "w", "s"):
         make_stone(f"wall_{key}", L.WALL_W[key], L.WALL_H, 1024, stains=L.STAINS[key] or None, seed={"n": 1, "e": 2, "w": 3, "s": 5}[key])
@@ -219,3 +236,4 @@ if __name__ == "__main__":
     make_view()
     make_shell()
     make_screen()
+    make_door()
