@@ -343,27 +343,30 @@ export const BRIDE_PROFILE: MotionProfile = {
  *  Its muzzle nodes sit at z 0.318 against GUN_GRIP.muzzle 0.41 (the soldier's longer gun); `muzzle()` reads the
  *  constant, which only matters for gas and flash and nothing fires from the goblin yet.
  *
- *  `gripReach` 0.0396: the goblin's fist is an ORB centred 55% along its 0.072 m hand bone (goblin.blob `blob arm on
- *  hand at=0.55 r=0.046`), and the rig's hand joint is the WRIST, so the grip seats 0.0396 m past it, in the middle of
- *  the orb: the handle passes through the orb, the PS1 way (refinement spec decision 3). Same reasoning as the
+ *  `gripReach` 0.0518: the goblin's fist is an ORB centred 55% along its 0.0942 m hand bone (goblin.blob `blob arm on
+ *  hand at=0.55 r=0.046`, authored at 1.30 m: bone 0.072 m, orb r 0.046 m, 55% along 0.0396 m; the model's `scale` 1.3077
+ *  makes them 0.0942 m, r 0.0602 m and 0.0518 m), and the rig's hand joint is the WRIST, so the grip seats 0.0518 m past it,
+ *  in the middle of the orb: the handle passes through the orb, the PS1 way (refinement spec decision 3). Same reasoning as the
  *  ogre's 0.075 for his 0.15 m hand. */
 export const GOBLIN_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
   name: 'goblin',
   // Its own scamper (phase 4a, spec 2026-10-02-goblin-gait-design.md): the soldier's stride curves retimed for 0.56 m
-  // legs. SHAMBLE_CARRY, the phase-3 interim, stays exported (gait.ts) and pinned by its own test.
+  // legs (0.7323 m since the 1.70 m rescale, 2026-10-11: cadence retuned in gait.ts). SHAMBLE_CARRY, the phase-3 interim,
+  // stays exported (gait.ts) and pinned by its own test.
   gait: { walk: GOBLIN_WALK, run: GOBLIN_RUN },
   // Speeds come from the curves, not guesses (gait-from-clip.ts: speed = travel x legLen x freq / duty). Walk
-  // 0.888 x 0.56 x 1.5 / 0.625 = 1.19 m/s; run 0.663 x 0.56 x 2.1 / 0.281 = 2.77 m/s. Cruise is the WALK's speed, below
+  // 0.888 x 0.7323 x 1.31 / 0.625 = 1.36 m/s; run 0.663 x 0.7323 x 1.84 / 0.281 = 3.18 m/s (leg length is the rig's thigh +
+  // shin, 0.7323 m at 1.70 m; it was 0.56 m, giving 1.19 and 2.77, before the rescale). Cruise is the WALK's speed, below
   // runBand.from, so he marches instead of drifting toward the run (the soldier's overshoot lesson, see SOLDIER_PROFILE);
-  // 1.30 sits just above it.
-  runBand: { from: 1.30, to: 2.77 },
-  cruise: 1.19,
+  // 1.48 sits just above it.
+  runBand: { from: 1.48, to: 3.18 },
+  cruise: 1.36,
   armStyle: 'carry',
-  // The soldier's carries; the goblin's arms are long (0.235 + 0.235 m on a 1.3 m body) and may want their own
+  // The soldier's carries; the goblin's arms are long (0.307 + 0.307 m on a 1.7 m body) and may want their own
   // solve: the carry angles are relative to the authored hang. Judge in the lab turntable before tuning.
   carries: { walk: 'low', run: 'low', fire: 'aim' },
-  prop: { url: '/assets/lab/shorty-double.glb', scale: 1, gripReach: 0.0396 },
+  prop: { url: '/assets/lab/shorty-double.glb', scale: 1, gripReach: 0.0518 },
 };
 
 const BY_NAME: Record<string, MotionProfile> = {
