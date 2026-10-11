@@ -28,6 +28,15 @@ const RECOIL_BONES: PoseKey['bones'] = {
   upperarm: { pitch: 150 }, forearm: { pitch: 172 }, hand: { pitch: 175 },
 };
 
+/** Reaching for the egg on the desk: the typing seat and hunch, one arm out and down toward the desk, the hand open over the egg. First-round
+ *  angles (2026-10-11), tuned in the screen lab against the egg's rest place (screen frame z 0.4 m, y about -0.1 m). */
+const REACH_BONES: PoseKey['bones'] = {
+  spine1: { pitch: 24 }, chest: { pitch: 30 }, neck: { pitch: 20 }, skull: { pitch: -4 },
+  thigh: { pitch: 86 }, shin: { pitch: -4 },
+  // 62 / 38 / 20: the arm leaves the shoulder forward and down (the typing pose's 40 / 80 / 70 folds it onto the keys; this unfolds it).
+  upperarm: { pitch: 62 }, forearm: { pitch: 38 }, hand: { pitch: 20 },
+};
+
 /** Held poses: one key each. */
 export const TYPE: PoseClip = { name: 'type', keys: [{ t: 0, bones: TYPE_BONES }] };
 export const RECOIL: PoseClip = { name: 'recoil', keys: [{ t: 0, bones: RECOIL_BONES }] };
@@ -51,6 +60,15 @@ export const JOLT: PoseClip = {
   keys: [{ t: 0, bones: TYPE_BONES }, { t: 0.25, bones: RECOIL_BONES, ease: 'smooth' }],
 };
 
+/** The reach pose held: the last frame of the sequence. */
+export const REACH: PoseClip = { name: 'reach', keys: [{ t: 0, bones: REACH_BONES }] };
+
+/** From the recoil's end (thrown back, arms up) to the reach: the arm comes down and forward onto the egg. 1.4 s, eased, eyeballed. */
+export const TOUCH: PoseClip = {
+  name: 'touch',
+  keys: [{ t: 0, bones: RECOIL_BONES }, { t: 1.4, bones: REACH_BONES, ease: 'smooth' }],
+};
+
 export const GOBLIN_POSES: Readonly<Record<string, PoseClip>> = {
-  type: TYPE, recoil: RECOIL, sit: SIT, stand: STAND, jolt: JOLT,
+  type: TYPE, recoil: RECOIL, sit: SIT, stand: STAND, jolt: JOLT, reach: REACH, touch: TOUCH,
 };

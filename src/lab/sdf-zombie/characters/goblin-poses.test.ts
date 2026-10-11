@@ -31,7 +31,7 @@ const restGround = Math.min(base[J('footL')]![1], base[J('footR')]![1]);
 describe('goblin poses', () => {
   it('are registered for the goblin and no one else', () => {
     expect(posesFor('goblin')).toBe(GOBLIN_POSES);
-    expect(Object.keys(GOBLIN_POSES).sort()).toEqual(['jolt', 'recoil', 'sit', 'stand', 'type']);
+    expect(Object.keys(GOBLIN_POSES).sort()).toEqual(['jolt', 'reach', 'recoil', 'sit', 'stand', 'touch', 'type']);
     expect(posesFor('zombie')).toEqual({});
   });
 
@@ -55,5 +55,15 @@ describe('goblin poses', () => {
     expect(near(poseJoints(rig, GOBLIN_POSES.sit!, 0.8), typeJ)).toBe(true);
     expect(near(poseJoints(rig, GOBLIN_POSES.stand!, 0), typeJ)).toBe(true);
     expect(near(poseJoints(rig, GOBLIN_POSES.stand!, 0.8), restJ)).toBe(true);
+  });
+
+  it('touch runs from the recoil pose to the reach pose, and reach lowers the hand below the shoulder and in front of the knee', () => {
+    const near = (a: readonly (readonly number[])[], b: readonly (readonly number[])[]) =>
+      a.every((p, i) => p.every((v, k) => Math.abs(v - b[i]![k]!) < 1e-9));
+    expect(near(poseJoints(rig, GOBLIN_POSES.touch!, 0), poseJoints(rig, GOBLIN_POSES.recoil!, 0))).toBe(true);
+    const reachEnd = poseJoints(rig, GOBLIN_POSES.reach!, 0);
+    expect(near(poseJoints(rig, GOBLIN_POSES.touch!, GOBLIN_POSES.touch!.keys[GOBLIN_POSES.touch!.keys.length - 1]!.t), reachEnd)).toBe(true);
+    expect(reachEnd[J('handL')]![1]).toBeLessThan(reachEnd[J('shoulderL')]![1]);
+    expect(reachEnd[J('handL')]![2]).toBeGreaterThan(reachEnd[J('kneeL')]![2] - 0.1);
   });
 });
