@@ -5,14 +5,14 @@
 // compiles is the page's console's job (node cannot compile it).
 import { describe, expect, it } from 'vitest';
 import { paramsAt, DURATION } from './emergence-timeline';
-import { EGG, GLASS, PICTURE_TABLE_N, SAC_MAX, SKIN, THICK0, RIPPLE, eggCentre, lipOpening, sacExtent } from './emergence-field';
+import { EGG, GLASS, PICTURE_TABLE_N, SAC_BLEND, SAC_MAX, SKIN, THICK0, RIPPLE, eggCentre, lipOpening, sacExtent } from './emergence-field';
 import * as W from './screen-emergence.wgsl';
 
 const STRINGS = Object.entries(W).filter(([k, v]) => k.startsWith('SCR_') && typeof v === 'string') as [string, string][];
 
 describe('screen-emergence.wgsl', () => {
   it('each string declares exactly one fn, first', () => {
-    expect(STRINGS.length).toBeGreaterThanOrEqual(18);
+    expect(STRINGS.length).toBeGreaterThanOrEqual(16);
     for (const [k, s] of STRINGS) {
       expect(s.trim().startsWith('fn '), k).toBe(true);
       expect(s.match(/^fn /gm), k).toHaveLength(1);
@@ -26,6 +26,9 @@ describe('screen-emergence.wgsl', () => {
     expect(W.SCR_SAC).toContain(`${RIPPLE.amp}`);
     expect(W.SCR_MAP).toContain(`${SAC_MAX}`);
     expect(W.SCR_MAP).toContain(`${THICK0}`);
+    // the sac solid's blends (sacBlend's twin): the cap in front of the equator, rest to tent behind it over run
+    for (const k of [SAC_BLEND.cap, SAC_BLEND.rest, SAC_BLEND.tent, SAC_BLEND.run]) expect(W.SCR_MAP).toContain(`${k}`);
+    expect(W.SCR_MAP).not.toContain('scrSwept');
     expect(W.SCR_OPENING).toContain(`${GLASS.hw}`);
     expect(W.SCR_PICTURE).toContain(`min(i32(floor(fi)), ${PICTURE_TABLE_N - 2})`);
     expect(W.SCR_MARCH).toContain(`i < ${W.MAX_STEPS}`);

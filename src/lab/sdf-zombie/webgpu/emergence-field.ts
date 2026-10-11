@@ -36,6 +36,8 @@ export const smooth = (u: number) => { const c = Math.min(1, Math.max(0, u)); re
 const lerp = (a: number, b: number, u: number) => a + (b - a) * u;
 /** Polynomial smooth maximum (iq), blend width k. */
 export const smax = (a: number, b: number, k: number) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.max(a, b) + h * h * k * 0.25; };
+/** Polynomial smooth minimum (iq), the same form. */
+export const smin = (a: number, b: number, k: number) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; };
 
 /** The egg's centre: pushing through the glass (x, y = 0), then slumping to the desk. */
 export function eggCentre(p: EmergenceParams): Vec3 {
@@ -60,18 +62,66 @@ export function lipOpening(p: EmergenceParams): { hw: number; hh: number; z: num
 /** The sac's apex height: grows with the push, sags to half when the egg leaves, sucks back with the heal. */
 export const sacExtent = (p: EmergenceParams) => SAC_MAX * smooth(p.push) * (1 - 0.5 * smooth(p.slump)) * (1 - smooth(p.heal));
 
+/** The dome's profile exponent: below 1 the dome is fuller than the smoothstep, so behind the egg's equator the sac's wall stays near the
+ *  egg's width and flares to the lip (0.75 in round one pinched it to a vase's neck under the tent blend). */
+export const DOME_EXP = 0.5;
 /** The dome's shape from the apex (q = 0) to the lip (q = 1). */
-const profile = (q: number) => (q >= 1 ? 0 : Math.pow(smooth(1 - q), 0.75));
+const profile = (q: number) => (q >= 1 ? 0 : Math.pow(smooth(1 - q), DOME_EXP));
 
-/** THE SHEET: a dome from the rim to the apex, smooth-maxed with the egg's front plus the skin, plus the ripple. `time` only feeds the ripple. */
+/** The ripple's height at normalised radius q (0 at the apex axis, 1 at the lip). */
+const rippleAt = (p: EmergenceParams, q: number, time: number) =>
+  p.ripple * RIPPLE.amp * Math.sin(RIPPLE.freq * Math.min(q, 1) - RIPPLE.speed * time) * (1 - Math.min(q, 1));
+
+/** THE DOME alone (the glass swelling, before the egg): the rim height at the opening, the sac's extent at the apex, plus the ripple. */
+export function domeZ(p: EmergenceParams, x: number, y: number, time = 0): number {
+  const lip = lipOpening(p);
+  const q = Math.hypot(x / lip.hw, y / lip.hh);
+  return lip.z + Math.max(0, sacExtent(p) - lip.z) * profile(q) + rippleAt(p, q, time);
+}
+
+/** THE SHEET's height seen from the front (the top of `sacSolid`): the dome smooth-maxed with the egg's front plus the skin, plus the ripple.
+ *  `time` only feeds the ripple. Inside the egg's silhouette it is the egg's front cap; outside it, the dome (the sac's tapering wall,
+ *  which curves back under the egg's equator, is an overhang a heightfield cannot hold: `sacSolid` has it). */
 export function sacZ(p: EmergenceParams, x: number, y: number, time = 0): number {
   const lip = lipOpening(p);
   const q = Math.hypot(x / lip.hw, y / lip.hh);
-  const dome = lip.z + Math.max(0, sacExtent(p) - lip.z) * profile(q);
+  const dome = domeZ({ ...p, ripple: 0 }, x, y);
   const f = eggFront(p, x, y);
-  const wrapped = f === null ? dome : smax(dome, f + SKIN, 0.04);
-  const ripple = p.ripple * RIPPLE.amp * Math.sin(RIPPLE.freq * Math.min(q, 1) - RIPPLE.speed * time) * (1 - Math.min(q, 1));
-  return wrapped + ripple;
+  const wrapped = f === null ? dome : smax(dome, f + SKIN, SAC_BLEND.cap);
+  return wrapped + rippleAt(p, q, time);
+}
+
+/** The sac solid's smooth-union blends. `cap` in front of the egg's equator (round the front cap); behind it the blend widens over `run`
+ *  metres to the TENT blend, `rest` before the push and `tent` at full push: that wide fillet curves the wall from the egg's equator back
+ *  to the dome and the lip, so the sac reads as a balloon on its neck, not as the egg's silhouette swept back to the glass (round one's
+ *  rigid tube). Narrow at rest, so the glass does not bulge toward the egg waiting in the tube. */
+export const SAC_BLEND = { cap: 0.04, rest: 0.02, tent: 0.12, run: 0.12 } as const;
+
+/** The blend at depth z, the egg's centre at depth cz. */
+export function sacBlend(push: number, z: number, cz: number): number {
+  const tent = lerp(SAC_BLEND.rest, SAC_BLEND.tent, smooth(push));
+  return lerp(SAC_BLEND.cap, tent, smooth((cz - z) / SAC_BLEND.run));
+}
+
+/** iq's approximate ellipsoid distance (centred at the origin, semi-axes r): the shader's scrEllipsoid. */
+export function ellipsoidDist(q: Vec3, r: Vec3): number {
+  const k0 = Math.hypot(q[0] / r[0], q[1] / r[1], q[2] / r[2]);
+  const k1 = Math.hypot(q[0] / (r[0] * r[0]), q[1] / (r[1] * r[1]), q[2] / (r[2] * r[2]));
+  return k1 < 1e-6 ? -Math.min(r[0], r[1], r[2]) : (k0 * (k0 - 1)) / k1;
+}
+
+/** THE SAC SOLID's signed distance at v (negative inside): the dome's heightfield (first-order distance, z - h over sqrt(1 + |grad h|^2))
+ *  smooth-unioned with the egg grown by the skin, blend `sacBlend`. The sheet is a thin shell round it. The shader's mapScr builds the same
+ *  solid (and clips it to the bezel's opening and floors it a little behind the glass, which this twin leaves out). */
+export function sacSolid(p: EmergenceParams, v: Vec3, time = 0): number {
+  const [x, y, z] = v, e = 1e-4;
+  const h = domeZ(p, x, y, time);
+  const gx = (domeZ(p, x + e, y, time) - domeZ(p, x - e, y, time)) / (2 * e);
+  const gy = (domeZ(p, x, y + e, time) - domeZ(p, x, y - e, time)) / (2 * e);
+  const dome = (z - h) / Math.sqrt(1 + gx * gx + gy * gy);
+  const c = eggCentre(p);
+  const egg = ellipsoidDist([x - c[0], y - c[1], z - c[2]], [EGG.rx, EGG.ry, EGG.rz]) - SKIN;
+  return smin(dome, egg, sacBlend(p.push, z, c[2]));
 }
 
 /** The sheet's half-thickness at (x, y): thinner with the stretch (the dome's height over the opening) and with `thin`; never gone. */

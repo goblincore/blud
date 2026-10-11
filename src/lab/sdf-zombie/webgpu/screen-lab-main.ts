@@ -41,8 +41,8 @@ import { makeRng } from '../wander';
 import { makePoseRig, poseJoints, type PoseRig } from '../pose';
 import { GLASS, DESK_Y, EGG, EGG_REST, PICTURE_TABLE_N, eggCentre, lipOpening, pictureTable, sacExtent, smooth } from './emergence-field';
 import {
-  DEPTH_Q, SCREEN_PROXY, SCR_ELLIPSE, SCR_ELLIPSOID, SCR_LIGHT, SCR_LIP, SCR_MAP, SCR_MARCH, SCR_NORMAL, SCR_OPENING, SCR_PICTURE,
-  SCR_ROUNDRECT, SCR_SAC, SCR_SHADE, SCR_SHEET, SCR_SMAX, SCR_SMIN, SCR_SURFACE, SCR_SWEPT, SCR_VEINS,
+  DEPTH_Q, SCREEN_PROXY, SCR_ELLIPSOID, SCR_LIGHT, SCR_LIP, SCR_MAP, SCR_MARCH, SCR_NORMAL, SCR_OPENING, SCR_PICTURE,
+  SCR_ROUNDRECT, SCR_SAC, SCR_SHADE, SCR_SHEET, SCR_SMAX, SCR_SMIN, SCR_SURFACE, SCR_VEINS,
 } from './screen-emergence.wgsl';
 import { SHOTS, DURATION, shotAt, paramsAt, type ShotId } from './emergence-timeline';
 import { goblinClipAt, measureSeat, type SeatMeasure } from './screen-lab-goblin';
@@ -326,12 +326,11 @@ function createScreenPass(pictureTex: THREE.Texture): ScreenPass {
   const fn = (src: string, deps: ReturnType<typeof wgslFn>[] = []) => wgslFn(src, deps.map(x => x as unknown as Include));
   const smaxF = fn(SCR_SMAX), sminF = fn(SCR_SMIN);
   const sacF = fn(SCR_SAC, [smaxF]);
-  const ellipsoidF = fn(SCR_ELLIPSOID), ellipseF = fn(SCR_ELLIPSE);
-  const sweptF = fn(SCR_SWEPT, [ellipsoidF, ellipseF]);
+  const ellipsoidF = fn(SCR_ELLIPSOID);
   const roundRectF = fn(SCR_ROUNDRECT);
   const openingF = fn(SCR_OPENING, [roundRectF]);
   const lipF = fn(SCR_LIP, [openingF]);
-  const mapF = fn(SCR_MAP, [sacF, sweptF, openingF, lipF, ellipsoidF, sminF]);
+  const mapF = fn(SCR_MAP, [sacF, openingF, lipF, ellipsoidF, sminF]);
   const normalF = fn(SCR_NORMAL, [mapF]);
   const marchF = fn(SCR_MARCH, [mapF]);
   const veinsF = fn(SCR_VEINS);

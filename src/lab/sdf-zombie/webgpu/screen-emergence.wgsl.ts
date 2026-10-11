@@ -8,12 +8,12 @@
 // box's LOCAL space: the host brings the eye and the fragment into it with modelWorldMatrixInverse, so the CRT may be turned any way.
 //
 // THE FIELD (mapScr, materials 1 sheet, 2 lip, 3 egg; 4 goo and 5 tear rim are Task 7's):
-//   * the SHEET is a thin shell, |inside| - thickness, round a solid "sac": the dome (sacZ's heightfield below the sheet, clipped to the
-//     opening) smooth-unioned with the egg SWEPT back along -z (the egg and the elliptic cylinder of its silhouette behind its equator) grown
-//     by the skin, floored a little behind the glass. That solid's boundary IS sacZ's surface (the field module's smax of the dome and the
-//     egg's front plus the skin), walls included: sacZ jumps from the egg's front to the dome at the egg's silhouette, which a heightfield
-//     shell (|z - sacZ| - thick) cannot see from the side (the rays would pass through the sac's side walls); the swept egg makes those walls
-//     real 3D distance. The dome's own heightfield distance is first-order, (z - h) / sqrt(1 + |grad h|^2), with the gradient analytic.
+//   * the SHEET is a thin shell, |inside| - thickness, round a solid "sac": the dome (the field's domeZ, clipped to the opening) smooth-
+//     unioned with the egg grown by the skin, floored a little behind the glass: the field module's sacSolid (its twin). The blend is
+//     sacBlend's: narrow round the egg's front cap, WIDE (SAC_BLEND.tent) behind its equator, so the wall curves from the equator back under
+//     the egg and out along the dome to the lip, a balloon on its neck. (Round one swept the egg's silhouette straight back to the glass:
+//     a rigid tube.) The solid's top seen from the front is sacZ (tested), so the picture, the thickness and the goo's anchors still read
+//     the heightfield. The dome's own distance is first-order, (z - h) / sqrt(1 + |grad h|^2), with the gradient analytic.
 //   * the LIP is a flared sleeve of rounded-rectangle section (the glass's shape, spec "a rounded rectangular rim"), from the bevel's foot
 //     at the glass plane out to the bowed rim at lipZ, rounded at the top. At rest it is a gasket hidden under the CRT mesh's bevel.
 //   * the EGG is iq's approximate ellipsoid distance.
@@ -23,7 +23,7 @@
 // just past the skin WITHOUT the sheet for what lies behind (the egg, the lip, else the CRT's dark tube or the room), and composite by the
 // sheet's opacity. Returns (straight colour, packed): packed = floor(t * DEPTH_Q) + alpha (alpha < 1), so ONE call carries the first hit's
 // distance for depthNode and the coverage; 0 on a miss.
-import { EGG, GLASS, PICTURE_TABLE_N, RIPPLE, SAC_MAX, SKIN, THICK0 } from './emergence-field';
+import { DOME_EXP, EGG, GLASS, PICTURE_TABLE_N, RIPPLE, SAC_BLEND, SAC_MAX, SKIN, THICK0 } from './emergence-field';
 
 const f = (n: number) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
 const v3 = (v: readonly number[]) => `vec3<f32>(${f(v[0]!)}, ${f(v[1]!)}, ${f(v[2]!)})`;
@@ -74,8 +74,8 @@ export const SCR_SAC = /* wgsl */ `fn sacZ(x: f32, y: f32, p0: vec4<f32>, p1: ve
   var prof = 0.0;
   var dprof = 0.0;
   if (q < 1.0 && s > 0.0) {
-    prof = pow(s, 0.75);
-    dprof = -0.75 * pow(max(s, 0.000001), -0.25) * 6.0 * u * (1.0 - u);
+    prof = pow(s, ${f(DOME_EXP)});
+    dprof = ${f(-DOME_EXP)} * pow(max(s, 0.000001), ${f(DOME_EXP - 1)}) * 6.0 * u * (1.0 - u);
   }
   let ph = ${f(RIPPLE.freq)} * qc - ${f(RIPPLE.speed)} * tm;
   let ra = p0.x * ${f(RIPPLE.amp)};
@@ -89,7 +89,7 @@ export const SCR_SAC = /* wgsl */ `fn sacZ(x: f32, y: f32, p0: vec4<f32>, p1: ve
   let ey = (y - d.z) / ${f(EGG.ry)};
   let qe = ex * ex + ey * ey;
   var wrapped = dome;
-  if (qe < 1.0) { wrapped = scrSmax(dome, d.y + ${f(EGG.rz)} * sqrt(1.0 - qe) + ${f(SKIN)}, 0.04); }
+  if (qe < 1.0) { wrapped = scrSmax(dome, d.y + ${f(EGG.rz)} * sqrt(1.0 - qe) + ${f(SKIN)}, ${f(SAC_BLEND.cap)}); }
   return vec4<f32>(wrapped + rip, dome + rip, slope, q);
 }`;
 
@@ -99,22 +99,6 @@ export const SCR_ELLIPSOID = /* wgsl */ `fn scrEllipsoid(p: vec3<f32>, r: vec3<f
   let k1 = length(p / (r * r));
   if (k1 < 0.000001) { return -min(r.x, min(r.y, r.z)); }
   return k0 * (k0 - 1.0) / k1;
-}`;
-
-/** The same approximation for an ellipse in the plane. */
-export const SCR_ELLIPSE = /* wgsl */ `fn scrEllipse(p: vec2<f32>, r: vec2<f32>) -> f32 {
-  let k0 = length(p / r);
-  let k1 = length(p / (r * r));
-  if (k1 < 0.000001) { return -min(r.x, r.y); }
-  return k0 * (k0 - 1.0) / k1;
-}`;
-
-/** The egg swept back along -z: the egg in front of its equator, the elliptic cylinder of its silhouette behind it. c is the egg's centre.
- *  Includes: scrEllipsoid, scrEllipse. */
-export const SCR_SWEPT = /* wgsl */ `fn scrSwept(p: vec3<f32>, c: vec3<f32>) -> f32 {
-  let q = p - c;
-  if (q.z > 0.0) { return scrEllipsoid(q, ${EGG_R}); }
-  return scrEllipse(q.xy, ${EGG_R}.xy);
 }`;
 
 /** A rounded rectangle's signed distance in the plane: half extents b, corner radius r. */
@@ -148,7 +132,7 @@ export const SCR_LIP = /* wgsl */ `fn scrLip(p: vec3<f32>, lip: vec4<f32>, lipZ:
 /**
  * THE FIELD: (distance, material) at p. Materials: 1 the sheet, 2 the lip, 3 the egg (4 goo and 5 the tear's rim: Task 7). `sheetOn` 0
  * leaves the sheet out (the march behind the skin). The sheet's half-thickness is sheetThickness's twin (thinner with the stretch and `thin`).
- * Includes: sacZ, scrSwept, scrOpening, scrLip, scrEllipsoid, scrSmin.
+ * Includes: sacZ, scrOpening, scrLip, scrEllipsoid, scrSmin.
  */
 export const SCR_MAP = /* wgsl */ `fn mapScr(p: vec3<f32>, p0: vec4<f32>, p1: vec4<f32>, d: vec4<f32>, lip: vec4<f32>, tm: f32, sheetOn: f32) -> vec2<f32> {
   let c = vec3<f32>(0.0, d.z, d.y);
@@ -160,7 +144,9 @@ export const SCR_MAP = /* wgsl */ `fn mapScr(p: vec3<f32>, p0: vec4<f32>, p1: ve
     let dome = (p.z - h.y) / sqrt(1.0 + h.z * h.z);
     let foot = scrOpening(p, lip, d.w) * 0.8;
     var inside = max(dome, foot);
-    inside = scrSmin(inside, scrSwept(p, c) - ${f(SKIN)}, 0.04);
+    let behind = smoothstep(0.0, 1.0, (c.z - p.z) / ${f(SAC_BLEND.run)});
+    let tent = mix(${f(SAC_BLEND.rest)}, ${f(SAC_BLEND.tent)}, smoothstep(0.0, 1.0, p0.y));
+    inside = scrSmin(inside, scrEllipsoid(p - c, ${EGG_R}) - ${f(SKIN)}, mix(${f(SAC_BLEND.cap)}, tent, behind));
     inside = max(inside, ${f(SHEET_FLOOR)} - p.z);
     let stretch = clamp(h.x / ${f(SAC_MAX)}, 0.0, 1.0) * (1.0 - min(h.w, 1.0) * 0.5);
     let thick = ${f(THICK0)} * (1.0 - 0.8 * max(stretch, smoothstep(0.0, 1.0, p0.z) * 0.6)) + 0.0006;

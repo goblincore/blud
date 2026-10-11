@@ -2,11 +2,25 @@
 import { describe, it, expect } from 'vitest';
 import { paramsAt, DURATION, type EmergenceParams } from './emergence-timeline';
 import {
-  DESK_Y, EGG, EGG_REST, GLASS, SKIN, SAC_MAX, PICTURE_TABLE_N, eggCentre, eggFront, lipOpening, pictureTable, pictureUV, sacExtent, sacZ, sheetThickness, tearRadius,
+  DESK_Y, EGG, EGG_REST, GLASS, SKIN, SAC_MAX, PICTURE_TABLE_N, SAC_BLEND, eggCentre, eggFront, lipOpening, pictureTable, pictureUV, sacBlend, sacExtent, sacSolid, sacZ, sheetThickness, tearRadius,
 } from './emergence-field';
 
 const REST: EmergenceParams = paramsAt(0);
 const at = (o: Partial<EmergenceParams>): EmergenceParams => ({ ...REST, ...o });
+/** The sac solid's half-width at depth z along (ax, ay) from (0, cy): the outermost inside point within 0.4 m, to the millimetre. */
+const halfWidth = (p: EmergenceParams, z: number, ax: number, ay: number, cy: number) => {
+  let w = 0;
+  for (let r = 0; r <= 0.4; r += 0.001) if (sacSolid(p, [ax * r, cy + ay * r, z]) <= 0) w = r;
+  return w;
+};
+/** The top of the sac solid above (x, y): scan down from in front of everything, then bisect. */
+const solidTop = (p: EmergenceParams, x: number, y: number) => {
+  let hi = 1.0;
+  while (hi > -0.2 && sacSolid(p, [x, y, hi - 0.002]) > 0) hi -= 0.002;
+  let lo = hi - 0.002;
+  for (let i = 0; i < 30; i++) { const m = 0.5 * (lo + hi); if (sacSolid(p, [x, y, m]) <= 0) lo = m; else hi = m; }
+  return lo;
+};
 
 describe('emergence field', () => {
   it('the sheet is flat at rest and meets the lip at the opening', () => {
@@ -40,6 +54,47 @@ describe('emergence field', () => {
         if (f === null) continue;
         expect(sacZ(p, x, y), `push=${i / 20} x=${x.toFixed(3)} y=${y.toFixed(3)}`).toBeGreaterThanOrEqual(f + SKIN - 1e-9);
       }
+    }
+  });
+
+  it('the sac solid holds the egg grown by the skin, its back half too', () => {
+    for (const push of [0.3, 0.6, 1]) {
+      const p = at({ push, lipBow: push }), c = eggCentre(p);
+      for (let i = 0; i < 12; i++) for (let j = 1; j < 12; j++) {
+        const th = (i / 12) * 2 * Math.PI, ph = (j / 12) * Math.PI;
+        const v: [number, number, number] = [c[0] + EGG.rx * Math.sin(ph) * Math.cos(th), c[1] + EGG.ry * Math.sin(ph) * Math.sin(th), c[2] + EGG.rz * Math.cos(ph)];
+        expect(sacSolid(p, v), `push=${push} th=${th.toFixed(2)} ph=${ph.toFixed(2)}`).toBeLessThanOrEqual(-SKIN + 1e-9);
+      }
+    }
+  });
+
+  it('the sac tapers from the egg\'s equator back to the lip: a rounded wall, not the egg swept back as a tube (round one)', () => {
+    const p = at({ push: 1, lipBow: 1 }), c = eggCentre(p), lo = lipOpening(p);
+    for (const [ax, ay, eggR] of [[1, 0, EGG.rx], [0, 1, EGG.ry]] as const) {
+      const wEq = halfWidth(p, c[2], ax, ay, c[1]);
+      expect(wEq, `axis ${ax},${ay}`).toBeGreaterThanOrEqual(eggR + SKIN - 0.002);
+      expect(wEq, `axis ${ax},${ay}`).toBeLessThan(eggR + SKIN + 0.02);
+      const ws: number[] = [];
+      for (let z = lo.z + 0.02; z <= c[2] + 1e-9; z += 0.01) ws.push(halfWidth(p, z, ax, ay, c[1]));
+      // a tube holds the equator's width all the way back to the glass; this wall leaves it by more than 3 cm...
+      expect(Math.max(...ws.map(w => Math.abs(w - wEq))), `axis ${ax},${ay}`).toBeGreaterThan(0.03);
+      // ...and gets there smoothly: no step between samples a centimetre apart
+      for (let i = 1; i < ws.length; i++) expect(Math.abs(ws[i]! - ws[i - 1]!), `axis ${ax},${ay} sample ${i}`).toBeLessThan(0.02);
+    }
+  });
+
+  it('the blend is the cap\'s in front of the equator, the tent\'s behind it at full push, narrow at rest', () => {
+    expect(sacBlend(1, 0.7, 0.55)).toBe(SAC_BLEND.cap);
+    expect(sacBlend(1, 0.55 - SAC_BLEND.run, 0.55)).toBeCloseTo(SAC_BLEND.tent, 12);
+    expect(sacBlend(0, -0.5, -0.25)).toBeCloseTo(SAC_BLEND.rest, 12);
+    expect(SAC_BLEND.tent).toBeGreaterThanOrEqual(0.1);
+  });
+
+  it('sacZ is the top of the sac solid where the sheet faces the front (the twins agree)', () => {
+    for (const push of [0.4, 0.7, 1]) {
+      const p = at({ push, lipBow: push }), c = eggCentre(p), lo = lipOpening(p);
+      const pts: [number, number][] = [[0, c[1]], [EGG.rx * 0.5, c[1]], [0, c[1] + EGG.ry * 0.6], [-EGG.rx * 0.7, c[1] - EGG.ry * 0.3], [lo.hw * 0.9, 0], [-lo.hw * 0.92, 0.02]];
+      for (const [x, y] of pts) expect(Math.abs(solidTop(p, x, y) - sacZ(p, x, y)), `push=${push} x=${x.toFixed(3)} y=${y.toFixed(3)}`).toBeLessThan(0.015);
     }
   });
 
