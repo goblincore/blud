@@ -96,7 +96,8 @@ export interface DynamicLightRuntime {
   /** The light clock: sim seconds (stops while the gate freezes the light clock). */
   time: number;
   lamps: Lamp[];
-  flashlight: { base: number; level: number; target: number; since: number };
+  /** `owned`: the player has the flashlight (a level with a flashlight pickup starts it dark and unowned); the F key toggles only an owned one. */
+  flashlight: { base: number; level: number; target: number; since: number; owned: boolean };
   storm: {
     seed: number; schedule: StormSchedule; flash: number; bolt: Bolt | null; intensity: number;
     /** Look tuning: a constant window light (intensity, side), or null for the storm. */
@@ -150,7 +151,7 @@ export function createDynamicLight(ctx: GameContext): DynamicLightRuntime {
   const rt: DynamicLightRuntime = {
     time: 0,
     lamps,
-    flashlight: { base: ctx.lighting.flashlight.spot.intensity, level: dark ? 0 : 1, target: dark ? 0 : 1, since: -1 },
+    flashlight: { base: ctx.lighting.flashlight.spot.intensity, level: dark ? 0 : 1, target: dark ? 0 : 1, since: -1, owned: !dark },
     storm: null,
     windowLights: new Map(),
     glass: null,
@@ -376,11 +377,21 @@ export function flashlightGate(ctx: GameContext): number {
 /** The flashlight pickup: switch it on (a short stuttering ramp). */
 export function switchOnFlashlight(ctx: GameContext): void {
   const rt = ctx.world.light;
-  if (!rt || rt.flashlight.target === 1) return;
+  if (!rt) return;
+  rt.flashlight.owned = true;
+  if (rt.flashlight.target === 1) return;
   rt.flashlight.target = 1;
   rt.flashlight.since = rt.time;
   ctx.lighting.flashlight.spot.shadow.autoUpdate = true;
   ctx.lighting.flashlight.levelShadow.shadow.autoUpdate = true;
+}
+
+/** The F key: the flashlight off at once, or on again with the stuttering ramp. Only once the player has it. */
+export function toggleFlashlight(ctx: GameContext): void {
+  const rt = ctx.world.light;
+  if (!rt || !rt.flashlight.owned) return;
+  if (rt.flashlight.target === 1) { rt.flashlight.target = 0; rt.flashlight.level = 0; }
+  else switchOnFlashlight(ctx);
 }
 
 /** A scripted lamp event for every lamp in a room (fires are left burning). */

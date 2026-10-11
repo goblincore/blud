@@ -24,7 +24,7 @@
 | `gates` | box meshes | `gate:<event>:<id>` | Solid until `<event>` fires |
 | `triggers` | box meshes | `trigger:<event>:<id>` | Custom property `once` (default true) |
 | `windows` | thin box meshes | `window:<view>:<id>` | Straddles exactly one room wall |
-| `lights` | point lights | any | Custom property `power` (default energy ÷ 10) |
+| `lights` | point lights | any | Custom properties: `power` (default energy ÷ 10); `fixture` (`bulb` default, `tube`, `beacon`, or `none`: no visible bulb, for a lamp the level's art draws) |
 | `markers` | empties | see below | +Y arrow is "forward" |
 | `dressing` | meshes, collection instances | any | **The level's art** ([mesh key](../../superpowers/specs/2026-09-24-level-mesh-key-design.md)): exported to `<id>.art.glb`, joined per room and material. One material per object. Custom props `room` (room id override; default: the room holding the object's centre) and `shadow` (false = casts none). Kit pieces are collection instances of collections linked from `assets-source/levels/kit.blend`; they export as GPU instances. Visual only: collision is the boxes |
 

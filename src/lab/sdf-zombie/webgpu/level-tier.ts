@@ -16,7 +16,7 @@ export const LEVEL_SPOT_DECAY = 1.2;
 /** three's PointLight default, which the level's accent points keep. */
 export const LEVEL_POINT_DECAY = 2;
 
-export interface LevelCheapInput { fixture?: 'bulb' | 'tube' | 'beacon'; mood?: string; shadow?: boolean }
+export interface LevelCheapInput { fixture?: 'bulb' | 'tube' | 'beacon' | 'none'; mood?: string; shadow?: boolean }
 
 /** The one rule for the tier: fire-mood lights and shadowless tubes. Beacons are shadowed sweeps: never. */
 export function isLevelCheap(a: LevelCheapInput): boolean {

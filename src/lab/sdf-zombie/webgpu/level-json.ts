@@ -338,10 +338,10 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
       mood = LAMP_MOODS.find(m => m === o.mood);
       if (!mood) errors.push(`lights[${i}].mood: must be one of ${LAMP_MOODS.join(', ')}`);
     }
-    let fixture: 'bulb' | 'tube' | 'beacon' | undefined;
+    let fixture: 'bulb' | 'tube' | 'beacon' | 'none' | undefined;
     if (o.fixture !== undefined) {
-      if (o.fixture === 'bulb' || o.fixture === 'tube' || o.fixture === 'beacon') fixture = o.fixture;
-      else errors.push(`lights[${i}].fixture: must be bulb, tube or beacon`);
+      if (o.fixture === 'bulb' || o.fixture === 'tube' || o.fixture === 'beacon' || o.fixture === 'none') fixture = o.fixture;
+      else errors.push(`lights[${i}].fixture: must be bulb, tube, beacon or none`);
     }
     let spin: number | undefined;
     if (o.spin !== undefined) {

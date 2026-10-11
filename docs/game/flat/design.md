@@ -30,7 +30,7 @@ that fits the goblin (world law 5).
  │                                                  │
  │  CD shelf ▯▯▯      rug ▒▒▒▒▒         stereo ◫    │
  │                                                  │
- │  mirror ▮ (covered)                              │
+ │  mirror ▮ (bathroom: plain)                      │
  │                     desk ▬▬▬▬▬ + CRT ▣ + printer  │
  │  bathroom?                chair ⌂                │
  └──────── front door ▯ (mail slot) ────────────────┘
@@ -66,7 +66,7 @@ that fits the goblin (world law 5).
 | **Pipes** | Carry the Party's music | Late: breathe | Medium |
 | **Bucket under a leak** | The building above is wet | No | Medium |
 | **High window** | Only feet and light | No | Medium |
-| **Covered mirror** | The face is never shown | Late-game event | Medium |
+| **Mirror** (in the bathroom) | Plain: the goblin's face may be shown (the "never shown" rule, and the cover, were discarded 2026-10-11) | Late-game event (to re-decide) | Medium |
 | **Rug** | First decoration spot | No | Low |
 | **Magazine** (*CD-ROM INFERNO*) | Where the demo disc came from | No | Low |
 
