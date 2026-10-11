@@ -707,7 +707,7 @@ export function parseBlob(src: string): BlobDoc {
   const lines = tokenize(src);
   const s: ParseState = {
     doc: {
-      name: '', height: null, stance: null, rootBone: '', rootHeight: 0, rootLen: 0.14,
+      name: '', height: null, scale: null, stance: null, rootBone: '', rootHeight: 0, rootLen: 0.14,
       bones: [], parts: [], bonesBlock: null, bonesTrivia: [], face: null, faceTrivia: [], sheet: null, sheetImage: null, sheetTrivia: [],
       palette: null, paletteTrivia: [], structure: [], trailingTrivia: [],
     },
@@ -722,6 +722,14 @@ export function parseBlob(src: string): BlobDoc {
 
     if (head === 'model') { s.doc.name = rest[0] ?? ''; section = 'model'; s.doc.structure.push(l); continue; }
     if (head === 'height' && section === 'model') { s.doc.height = Number(rest[0]); s.doc.structure.push(l); continue; }
+    if (head === 'scale' && section === 'model') {
+      const k = Number(rest[0]);
+      if (!(k > 0) || !Number.isFinite(k))
+        throw new BlobError(`scale must be a positive number, got "${rest[0] ?? ''}"`, l.line, l.indent + 1);
+      s.doc.scale = k;
+      s.doc.structure.push(l);
+      continue;
+    }
     if (head === 'stance' && section === 'model') {
       const v = rest[0];
       if (v !== 'humanoid' && v !== 'digitigrade')

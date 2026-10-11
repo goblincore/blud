@@ -514,3 +514,28 @@ ${inMirror ? '  end\n' : ''}`;
     expect(() => parseBlob(src('bone spine parent=pelvis dir=up len=0.40 lenR=0.45', false))).toThrow(/lenR/);
   });
 });
+
+describe('model scale', () => {
+  const MINI = (scaleLine: string) => `model mini
+  height 1.00
+${scaleLine}
+skeleton
+  root pelvis at 0.50 len=0.10
+  bone spine parent=pelvis dir=up pitch=13 len=0.20
+
+body
+  blob torso on spine at=0.50 r=0.05 offset=(0.01,0.02,0.03) blend=0.01
+`;
+
+  it('reads a positive scale in the model block', () => {
+    expect(parseBlob(MINI('  scale 1.5')).scale).toBe(1.5);
+  });
+
+  it('is null when the model declares none', () => {
+    expect(parseBlob(MINI('')).scale).toBeNull();
+  });
+
+  it.each(['0', '-1', 'abc', ''])('rejects scale "%s" with the line number', bad => {
+    expect(() => parseBlob(MINI(`  scale ${bad}`))).toThrow(/^3:3: scale must be a positive number/);
+  });
+});
