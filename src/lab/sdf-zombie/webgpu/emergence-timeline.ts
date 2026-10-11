@@ -38,7 +38,8 @@ export const CURVES: Curves = {
   thin: [{ t: 0, v: 0 }, { t: 2.5, v: 0 }, { t: 3.5, v: 0.15, ease: 'smooth' }, { t: 6.5, v: 1, ease: 'smooth' }, { t: 11.5, v: 1 }, { t: DURATION, v: 0.2, ease: 'smooth' }],
   lipBow: [{ t: 0, v: 0 }, { t: 2.5, v: 0 }, { t: 6.5, v: 1, ease: 'smooth' }, { t: 11.5, v: 1 }, { t: DURATION, v: 0.25, ease: 'smooth' }],
   tear: [{ t: 0, v: 0 }, { t: 6.5, v: 0 }, { t: 7, v: 0.15, ease: 'smooth' }, { t: 8, v: 0.6, ease: 'smooth' }, { t: 9, v: 1, ease: 'smooth' }, { t: 11.5, v: 1 }, { t: 13.5, v: 0, ease: 'smooth' }, { t: DURATION, v: 0 }],
-  slump: [{ t: 0, v: 0 }, { t: 9, v: 0 }, { t: 11.5, v: 1, ease: 'smooth' }, { t: DURATION, v: 1 }],
+  // linear: the egg's fall eases itself (emergence-field's SLUMP: carried back, let go, an ease-in drop and a settle)
+  slump: [{ t: 0, v: 0 }, { t: 9, v: 0 }, { t: 11.5, v: 1 }, { t: DURATION, v: 1 }],
   heal: [{ t: 0, v: 0 }, { t: 11.5, v: 0 }, { t: DURATION, v: 1, ease: 'smooth' }],
   glow: [{ t: 0, v: 0.2 }, { t: 2.5, v: 0.3, ease: 'smooth' }, { t: 6.5, v: 1, ease: 'smooth' }, { t: DURATION, v: 1 }],
 };

@@ -2,7 +2,9 @@
 import { describe, it, expect } from 'vitest';
 import { paramsAt, DURATION, type EmergenceParams } from './emergence-timeline';
 import {
-  DESK_Y, EGG, EGG_REST, GLASS, SKIN, SAC_MAX, PICTURE_TABLE_N, SAC_BLEND, eggCentre, eggFront, lipOpening, pictureTable, pictureUV, sacBlend, sacExtent, sacSolid, sacZ, sheetThickness, tearEdge, tearRadius, tearTip,
+  DESK_Y, EGG, EGG_REST, GLASS, KEYBOARD_CONTACT, KEYBOARD_TOP, KEYBOARD_Z, SKIN, SAC_MAX, PICTURE_TABLE_N, SAC_BLEND, SLUMP, TEAR_KNIT, dripFloor, eggCentre,
+  eggFront, eggHeld, keyboardShove, lipOpening, pictureTable, pictureUV, sacBlend, sacExtent, sacSolid, sacZ, sheetThickness, tearEdge, tearRadius, tearTip,
+  wrinkleAmp,
 } from './emergence-field';
 
 const REST: EmergenceParams = paramsAt(0);
@@ -115,7 +117,7 @@ describe('emergence field', () => {
   it('the slumped egg rests on the desk top, in front of the glass and short of the goblin\'s knees', () => {
     expect(EGG_REST[1] - EGG.ry).toBeCloseTo(DESK_Y, 12);
     expect(EGG_REST[2] - EGG.rz).toBeGreaterThan(0);          // its back is in front of the glass plane
-    expect(EGG_REST[2] + EGG.rz).toBeLessThan(0.36 + 1e-9);    // its front is on the lab's desk (front edge 0.36; the knees at about 0.38)
+    expect(EGG_REST[2] + EGG.rz).toBeLessThan(0.365 + 1e-9);   // its front is on the lab's desk (front edge 0.365; the knees at about 0.38)
   });
 
   it('the sheet thins as it stretches and is never gone', () => {
@@ -153,6 +155,59 @@ describe('emergence field', () => {
       }
     }
     expect(tearEdge(REST, 1)).toEqual(tearTip(REST));
+  });
+
+  it('the egg leaves the sac: the sac holds it until the slump, lets go by SLUMP.release, and the empty sheet dishes back behind it', () => {
+    expect(eggHeld(at({ slump: 0 }))).toBe(1);
+    expect(eggHeld(at({ slump: SLUMP.release }))).toBe(0);
+    const out = at({ push: 1, lipBow: 1, tear: 1, slump: 1 }), c = eggCentre(out);
+    // points just outside the egg's front cap are no longer inside the sac solid (it used to wrap the egg wherever it went)
+    for (const [ux, uy] of [[0, 0], [0.4, 0.2], [-0.3, -0.3]] as const) {
+      const x = ux * EGG.rx, y = c[1] + uy * EGG.ry, f = eggFront(out, x, y)!;
+      expect(sacSolid(out, [x, y, f + SKIN * 0.5]), `${ux},${uy}`).toBeGreaterThan(0);
+    }
+    // the sheet's middle is behind the egg's back (a real gap for the strands), and below the bowed lip's rim
+    expect(sacZ(out, 0, 0)).toBeLessThan(c[2] - EGG.rz * 0.5);
+    expect(sacZ(out, 0, 0)).toBeLessThan(lipOpening(out).z);
+  });
+
+  it('the egg falls onto the desk: carried back, an ease-in drop that never goes below the desk, a small settle, then rest', () => {
+    let prevY = 0, prevZ = Infinity, landV = 0;
+    for (let i = 0; i <= 200; i++) {
+      const s = i / 200, c = eggCentre(at({ push: 1, slump: s }));
+      expect(c[1] - EGG.ry, `s=${s}`).toBeGreaterThanOrEqual(DESK_Y - 1e-9);
+      expect(c[2], `s=${s}`).toBeLessThanOrEqual(prevZ + 1e-12);
+      if (s <= SLUMP.land) { expect(c[1]).toBeLessThanOrEqual(prevY + 1e-12); landV = prevY - c[1]; }
+      prevY = c[1]; prevZ = c[2];
+    }
+    expect(landV).toBeGreaterThan(0);                                          // still falling when it lands (ease-in)
+    expect(eggCentre(at({ push: 1, slump: 1 }))).toEqual(EGG_REST);
+  });
+
+  it('the landing egg shoves the keyboard out from under it, and the drips land on whichever top is under them', () => {
+    { const k = keyboardShove(at({ slump: 0 })); expect(Math.abs(k.dx) + Math.abs(k.yaw)).toBe(0); }
+    expect(eggCentre(at({ push: 1, slump: KEYBOARD_CONTACT }))[1] - EGG.ry).toBeCloseTo(KEYBOARD_TOP, 9);
+    expect(dripFloor(at({ slump: 0 }), 0, KEYBOARD_Z)).toBe(KEYBOARD_TOP);
+    expect(dripFloor(at({ slump: 1 }), 0, KEYBOARD_Z)).toBe(DESK_Y);
+    // once shoved, no part of the keyboard is under the resting egg's footprint at key height
+    for (let th = 0; th < 2 * Math.PI; th += 0.2) for (const r of [0, 0.05, 0.09])
+      expect(dripFloor(at({ slump: 1 }), EGG_REST[0] + r * Math.cos(th), EGG_REST[2] + r * Math.sin(th))).toBe(DESK_Y);
+  });
+
+  it('the healed sheet wrinkles: none before the heal, most mid-heal, a faint residual after, and it still meets the lip', () => {
+    expect(wrinkleAmp(at({ heal: 0 }))).toBe(0);
+    const mid = wrinkleAmp(at({ heal: 0.5 })), end = wrinkleAmp(at({ heal: 1 }));
+    expect(mid).toBeGreaterThan(3 * end);
+    expect(end).toBeGreaterThan(0);
+    const p = paramsAt(13);
+    expect(sacZ(p, GLASS.hw * 1.0001 * lipOpening(p).hw / GLASS.hw, 0)).toBeCloseTo(lipOpening(p).z, 6);
+  });
+
+  it('the tear knits shut: as it heals it narrows to a slit along TEAR_KNIT.angle instead of shrinking as a circle', () => {
+    const along = (heal: number) => tearRadius(at({ tear: 0.6, heal }), TEAR_KNIT.angle);
+    const across = (heal: number) => tearRadius(at({ tear: 0.6, heal }), TEAR_KNIT.angle + Math.PI / 2);
+    expect(along(1)).toBeCloseTo(along(0), 12);
+    expect(across(1) / along(1)).toBeLessThan(0.5 * across(0) / along(0));
   });
 
   it('the picture mapping is the identity at rest, runs 0..1 monotonically, and stretches when pushed', () => {

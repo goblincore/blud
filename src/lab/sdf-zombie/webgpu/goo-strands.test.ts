@@ -1,7 +1,9 @@
 // src/lab/sdf-zombie/webgpu/goo-strands.test.ts
 import { describe, it, expect } from 'vitest';
 import { DURATION } from './emergence-timeline';
-import { N_STRANDS, N_BEADS, N_DRIPS, STRAND_POINTS, gooAt, gooTexels, GOO_BOUND0, GOO_TEXELS } from './goo-strands';
+import { DESK_Y, EGG, eggCentre, ellipsoidDist } from './emergence-field';
+import { paramsAt } from './emergence-timeline';
+import { N_STRANDS, N_BEADS, N_DRIPS, N_POOLS, STRAND_POINTS, gooAt, gooTexels, GOO_BOUND0, GOO_POOL0, GOO_TEXELS } from './goo-strands';
 
 const dist = (a: readonly number[], b: readonly number[]) => Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!);
 
@@ -54,6 +56,42 @@ describe('goo strands', () => {
     const len = (d: { length: number }) => d.length;
     expect(Math.max(...late.drips.map(len))).toBeGreaterThan(Math.max(...early.drips.map(len)));
     for (const d of late.drips) expect(d.length).toBeLessThanOrEqual(0.25);
+  });
+
+  it('drips stop at their floor (the keyboard\'s top, or the desk\'s once the keyboard is shoved) and never pass through it', () => {
+    for (let t = 8; t <= DURATION; t += 0.25) for (const d of gooAt(t).drips) {
+      if (d.length === 0) continue;
+      expect(d.tip[1] - d.radius * 1.6, `t=${t}`).toBeGreaterThanOrEqual(d.floor - 1e-9);
+    }
+    expect(gooAt(DURATION).drips.every(d => d.floor === DESK_Y)).toBe(true);
+  });
+
+  it('the slick: nothing before the egg lands, a pool under it after, and drip pools only on the desk', () => {
+    expect(gooAt(10).pools.every(p => p.radius === 0)).toBe(true);
+    const g = gooAt(DURATION), c = eggCentre(paramsAt(DURATION));
+    expect(g.pools).toHaveLength(N_POOLS);
+    expect(g.pools[0]!.radius).toBeGreaterThan(EGG.rx);
+    expect(g.pools[0]!.centre).toEqual([c[0], DESK_Y, c[2]]);
+    const tex = gooTexels(g);
+    expect(tex[GOO_POOL0 * 4 + 3]).toBeCloseTo(g.pools[0]!.radius, 6);
+    expect(GOO_POOL0 + N_POOLS).toBeLessThanOrEqual(GOO_TEXELS);
+  });
+
+  it('a strand\'s egg end stays on the egg\'s surface as the egg moves', () => {
+    for (const t of [8.5, 9.5, 10.5, 11.2, 11.8]) {
+      const g = gooAt(t), c = eggCentre(paramsAt(t));
+      for (const s of g.strands.filter(s => s.live)) {
+        const b = s.points[STRAND_POINTS - 1]!;
+        expect(Math.abs(ellipsoidDist([b[0] - c[0], b[1] - c[1], b[2] - c[2]], [EGG.rx, EGG.ry, EGG.rz])), `t=${t}`).toBeLessThan(1e-3);
+      }
+    }
+  });
+
+  it('once the egg is out the strands cross a real gap, and in the heal they let go and thin away before the tear closes', () => {
+    const c = eggCentre(paramsAt(11.5));
+    const clear = gooAt(11.5).strands.filter(s => s.live && s.points.filter(p => ellipsoidDist([p[0] - c[0], p[1] - c[1], p[2] - c[2]], [EGG.rx, EGG.ry, EGG.rz]) > s.radius).length >= 4);
+    expect(clear.length).toBeGreaterThanOrEqual(3);
+    expect(gooAt(13.5).strands.every(s => s.radius < 1e-3)).toBe(true);
   });
 
   it('a strand and its beads thicken in after it forms instead of popping in at full radius', () => {

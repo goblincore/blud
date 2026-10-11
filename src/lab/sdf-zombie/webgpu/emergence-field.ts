@@ -20,7 +20,21 @@ export const EGG = { rx: 0.175, ry: 0.225, rz: 0.175, z0: -0.25, z1: 0.55 } as c
  *  (z 0.09 to 0.25 in the lab's set). 0.4 hung it over the goblin's knees (z about 0.38) and past the desk's front edge; the lab's desk top
  *  reaches the egg's front (EGG_REST z + EGG.rz, 0.355) so it lies on wood. */
 export const DESK_Y = -0.32;
-export const EGG_REST: Vec3 = [0, DESK_Y + EGG.ry, 0.18];
+/** 0.185 (was 0.18): 5 mm forward, so the egg's back presses less into the CRT's bevel at the chin (about 1.4 cm into the face plane at the
+ *  lip ring before, 0.9 after); the desk's front edge follows (the lab page reaches it to the egg's front plus 5 mm) and the knees keep 1.6 cm. */
+export const EGG_REST: Vec3 = [0, DESK_Y + EGG.ry, 0.185];
+/** THE SET'S DESK TOP (Task 8: the drips land on it and the egg shoves it): the CRT's face stands FRAME_FACE_Z proud of the glass; the
+ *  keyboard (thickness `t`, depth `d`, width `w`, its key rows `keys` proud of it) lies `gap` in front of the face. The lab page builds them
+ *  from these. */
+export const FRAME_FACE_Z = 0.03;
+export const KEYBOARD = { t: 0.03, d: 0.16, w: 0.46, gap: 0.06, keys: 0.008 } as const;
+export const KEYBOARD_Z = FRAME_FACE_Z + KEYBOARD.gap + KEYBOARD.d / 2;
+export const KEYBOARD_TOP = DESK_Y + KEYBOARD.t + KEYBOARD.keys;
+/** The egg lands on the keyboard's middle (its bottom meets the key rows at this slump, before it reaches the desk), and shoves it aside:
+ *  `dx` metres along x and `yaw` radians round y, over `run` of the slump from `lead` before the contact. Toward -x (the lamp's side) with
+ *  its far end swung toward the room (+yaw) so it clears the lamp's foot: +x put it across the settle camera's lens. */
+export const KEYBOARD_SHOVE = { dx: -0.36, yaw: 0.35, lead: 0.02, run: 0.12 } as const;
+
 /** The sac's apex at full push: the egg's front plus the skin (about 0.73 m, "most of a metre"). */
 export const SAC_MAX = EGG.z1 + EGG.rz + SKIN;
 /** The sheet's half-thickness at rest (m), and the tear's largest radius. */
@@ -39,18 +53,50 @@ export const smax = (a: number, b: number, k: number) => { const h = Math.max(k 
 /** Polynomial smooth minimum (iq), the same form. */
 export const smin = (a: number, b: number, k: number) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; };
 
-/** The egg's centre: pushing through the glass (x, y = 0), then slumping to the desk. */
+/** THE SLUMP (Task 8): the sac recoils back toward the glass carrying the egg (`back`: its z reaches the rest place by this much of the slump),
+ *  lets go of it (`release`: the egg is out of the sac solid by then), and the egg FALLS onto the desk: its drop starts at `fall0` and lands at
+ *  `land`, ease-in (a fall), then a small settling bounce of `bounce` metres. The timeline's slump is linear; the easing lives here. */
+export const SLUMP = { back: 0.8, release: 0.55, fall0: 0.25, land: 0.85, bounce: 0.008 } as const;
+
+/** The egg's centre: pushing through the glass (x, y = 0), then carried back by the recoiling sac and falling onto the desk. */
 export function eggCentre(p: EmergenceParams): Vec3 {
   const z = lerp(EGG.z0, EGG.z1, smooth(p.push));
-  const s = smooth(p.slump);
-  return [0, lerp(0, EGG_REST[1], s), lerp(z, EGG_REST[2], s)];
+  const s = Math.min(1, Math.max(0, p.slump));
+  const zb = smooth(s / SLUMP.back);
+  const u = Math.min(1, Math.max(0, (s - SLUMP.fall0) / (SLUMP.land - SLUMP.fall0)));
+  const v = Math.min(1, Math.max(0, (s - SLUMP.land) / (1 - SLUMP.land)));
+  const hop = SLUMP.bounce * Math.sin(Math.PI * v) * (1 - v);
+  return [0, EGG_REST[1] * u * u + hop, lerp(z, EGG_REST[2], zb)];
 }
 
-/** The egg's front surface depth at (x, y), or null outside its silhouette. */
-export function eggFront(p: EmergenceParams, x: number, y: number): number | null {
+/** The slump at which the falling egg's bottom reaches the keyboard's top (SLUMP's ease-in fall, solved). */
+export const KEYBOARD_CONTACT = SLUMP.fall0 + (SLUMP.land - SLUMP.fall0) * Math.sqrt((KEYBOARD_TOP + EGG.ry) / EGG_REST[1]);
+/** The keyboard's place: (dx, yaw), shoved aside by the landing egg. */
+export function keyboardShove(p: EmergenceParams): { dx: number; yaw: number } {
+  const u = smooth((p.slump - KEYBOARD_CONTACT + KEYBOARD_SHOVE.lead) / KEYBOARD_SHOVE.run);
+  return { dx: KEYBOARD_SHOVE.dx * u, yaw: KEYBOARD_SHOVE.yaw * u };
+}
+/** The height a drip lands at above (x, z): the keyboard's top where the (shoved) keyboard is, else the desk's. */
+export function dripFloor(p: EmergenceParams, x: number, z: number): number {
+  const { dx, yaw } = keyboardShove(p);
+  const X = x - dx, Z = z - KEYBOARD_Z, c = Math.cos(yaw), s = Math.sin(yaw);
+  const lx = c * X - s * Z, lz = s * X + c * Z;
+  return Math.abs(lx) <= KEYBOARD.w / 2 && Math.abs(lz) <= KEYBOARD.d / 2 ? KEYBOARD_TOP : DESK_Y;
+}
+
+/** How much the sac still holds the egg: 1 until the slump starts, 0 once the egg is out (SLUMP.release). The sac solid's egg term shrinks
+ *  inward by (1 - held) * EGG_LEAVE (gone past the egg's smallest radius), so the membrane stops wrapping the egg and the egg is a free body. */
+export const eggHeld = (p: EmergenceParams) => 1 - smooth(p.slump / SLUMP.release);
+export const EGG_LEAVE = 0.2;
+
+/** The egg's front surface depth at (x, y), or null outside its silhouette. `shrink` (m) takes that much off every semi-axis (the sac's
+ *  egg term as the egg leaves it). */
+export function eggFront(p: EmergenceParams, x: number, y: number, shrink = 0): number | null {
   const c = eggCentre(p);
-  const q = (x / EGG.rx) ** 2 + ((y - c[1]) / EGG.ry) ** 2;
-  return q >= 1 ? null : c[2] + EGG.rz * Math.sqrt(1 - q);
+  const rx = EGG.rx - shrink, ry = EGG.ry - shrink, rz = EGG.rz - shrink;
+  if (rx <= 0 || rz <= 0) return null;
+  const q = (x / rx) ** 2 + ((y - c[1]) / ry) ** 2;
+  return q >= 1 ? null : c[2] + rz * Math.sqrt(1 - q);
 }
 
 /** The lip: the opening's half sizes widened by the bow, and the rim's height. */
@@ -59,8 +105,28 @@ export function lipOpening(p: EmergenceParams): { hw: number; hh: number; z: num
   return { hw: GLASS.hw * (1 + LIP.openX * b), hh: GLASS.hh * (1 + LIP.openY * b), z: LIP.bowZ * b };
 }
 
-/** The sac's apex height: grows with the push, sags to half when the egg leaves, sucks back with the heal. */
-export const sacExtent = (p: EmergenceParams) => SAC_MAX * smooth(p.push) * (1 - 0.5 * smooth(p.slump)) * (1 - smooth(p.heal));
+/** The sac's apex height: grows with the push; when the egg leaves, the empty sac recoils back to SAC_EMPTY of its reach (BELOW the bowed
+ *  lip's rim: the sheet dishes back into the screen behind the egg, so the strands cross a real gap); sucks back with the heal. */
+export const SAC_EMPTY = 0.05;
+export const sacExtent = (p: EmergenceParams) => SAC_MAX * smooth(p.push) * (1 - (1 - SAC_EMPTY) * smooth(p.slump)) * (1 - smooth(p.heal));
+
+/** THE HEALED SHEET's wrinkle (Task 8): a high-frequency crumple on the sheet's z: radial creases drawn in toward the middle where it sucked
+ *  back, crossed by a finer net. Amplitude (m) `amp` times wrinkleAmp's envelope; it fades within `edge` of the opening (so the sheet still
+ *  meets the lip) and within `core` m of the axis (the creases' singularity). The shader's scrWrinkle is this twin. */
+export const WRINKLE = { amp: 0.004, k: 13, warp: 2.5, warpF: 40, fx: 62, fy: 47, fine: 0.45, edge: 0.2, core: 0.05 } as const;
+/** The wrinkle's envelope: peaks mid-heal (heal (1 - heal) 4, ramped in from heal 0.3 to 0.55) plus a faint residual 0.15 heal so the healed
+ *  sheet stays crumpled. */
+export const wrinkleAmp = (p: EmergenceParams) => {
+  const h = Math.min(1, Math.max(0, p.heal));
+  return WRINKLE.amp * (smooth((h - 0.3) / 0.25) * h * (1 - h) * 4 + 0.15 * h);
+};
+/** The wrinkle's pattern at (x, y) on a unit envelope (q is the normalised radius in the opening). */
+export function wrinkle(x: number, y: number, q: number): number {
+  const rho = Math.hypot(x, y), th = Math.atan2(y, x);
+  const crease = Math.sin(WRINKLE.k * th + WRINKLE.warp * Math.sin(WRINKLE.warpF * rho)) * smooth(rho / WRINKLE.core);
+  const net = Math.sin(WRINKLE.fx * x + 2 * Math.sin(WRINKLE.fy * y)) * Math.sin(WRINKLE.fy * y + 1.7);
+  return (crease + WRINKLE.fine * net) * (1 - smooth((q - (1 - WRINKLE.edge)) / WRINKLE.edge));
+}
 
 /** The dome's profile exponent: below 1 the dome is fuller than the smoothstep, so behind the egg's equator the sac's wall stays near the
  *  egg's width and flares to the lip (0.75 in round one pinched it to a vase's neck under the tent blend). */
@@ -76,7 +142,10 @@ const rippleAt = (p: EmergenceParams, q: number, time: number) =>
 export function domeZ(p: EmergenceParams, x: number, y: number, time = 0): number {
   const lip = lipOpening(p);
   const q = Math.hypot(x / lip.hw, y / lip.hh);
-  return lip.z + Math.max(0, sacExtent(p) - lip.z) * profile(q) + rippleAt(p, q, time);
+  // The rise may go NEGATIVE once the egg has left: the empty sheet dishes back behind the bowed lip's rim (sucked back into the frame).
+  const rise = sacExtent(p) - lip.z;
+  const wr = p.heal > 0 && q < 1 ? wrinkleAmp(p) * wrinkle(x, y, q) : 0;
+  return lip.z + (p.slump > 0 ? rise : Math.max(0, rise)) * profile(q) + rippleAt(p, q, time) + wr;
 }
 
 /** THE SHEET's height seen from the front (the top of `sacSolid`): the dome smooth-maxed with the egg's front plus the skin, plus the ripple.
@@ -86,7 +155,7 @@ export function sacZ(p: EmergenceParams, x: number, y: number, time = 0): number
   const lip = lipOpening(p);
   const q = Math.hypot(x / lip.hw, y / lip.hh);
   const dome = domeZ({ ...p, ripple: 0 }, x, y);
-  const f = eggFront(p, x, y);
+  const f = eggFront(p, x, y, (1 - eggHeld(p)) * EGG_LEAVE);
   const wrapped = f === null ? dome : smax(dome, f + SKIN, SAC_BLEND.cap);
   return wrapped + rippleAt(p, q, time);
 }
@@ -120,7 +189,7 @@ export function sacSolid(p: EmergenceParams, v: Vec3, time = 0): number {
   const gy = (domeZ(p, x, y + e, time) - domeZ(p, x, y - e, time)) / (2 * e);
   const dome = (z - h) / Math.sqrt(1 + gx * gx + gy * gy);
   const c = eggCentre(p);
-  const egg = ellipsoidDist([x - c[0], y - c[1], z - c[2]], [EGG.rx, EGG.ry, EGG.rz]) - SKIN;
+  const egg = ellipsoidDist([x - c[0], y - c[1], z - c[2]], [EGG.rx, EGG.ry, EGG.rz]) - SKIN + (1 - eggHeld(p)) * EGG_LEAVE;
   return smin(dome, egg, sacBlend(p.push, z, c[2]));
 }
 
@@ -134,13 +203,25 @@ export function sheetThickness(p: EmergenceParams, x: number, y: number): number
 /** The tear's raggedness: harmonics (amplitude, frequency in theta, phase). The shader's scrTear is built from this table. */
 export const TEAR_RAG: readonly (readonly [number, number, number])[] = [[0.22, 5, 1.3], [0.12, 11, 0.4], [0.06, 23, 2.1]];
 
-/** The tear's radius around the tip (the sheet's apex axis) at angle `theta`: grows with `tear`, ragged by a deterministic harmonic sum. */
+/** THE KNIT (Task 8): as the sheet heals the tear closes as a wound does, not as a shrinking circle: its edges draw together across
+ *  `angle` (radians round the axis) first, so the hole narrows to a slit along that angle and then zips shut. `minor` is the slit's width
+ *  (as a fraction of its length) at full knit; the knit runs with the heal over `over` of it. */
+export const TEAR_KNIT = { angle: 0.35, minor: 0.12, over: 0.45 } as const;
+/** The knit's polar radius factor at angle theta (an ellipse of axes 1 and b through the tip, b from 1 to TEAR_KNIT.minor). */
+export function knitFactor(heal: number, theta: number): number {
+  const b = 1 - (1 - TEAR_KNIT.minor) * smooth(heal / TEAR_KNIT.over);
+  const c = Math.cos(theta - TEAR_KNIT.angle), s = Math.sin(theta - TEAR_KNIT.angle);
+  return b / Math.sqrt(b * b * c * c + s * s);
+}
+
+/** The tear's radius around the tip (the sheet's apex axis) at angle `theta`: grows with `tear`, ragged by a deterministic harmonic sum,
+ *  narrowed to a slit by the knit as it heals. */
 export function tearRadius(p: EmergenceParams, theta: number): number {
   const t = smooth(p.tear);
   if (t === 0) return 0;
   let rag = 1;
   for (const [a, k, ph] of TEAR_RAG) rag += a * Math.sin(k * theta + ph);
-  return TEAR_R_MAX * t * rag;
+  return TEAR_R_MAX * t * rag * knitFactor(p.heal, theta);
 }
 
 /** The tear's tip: the sheet's apex, on the apex axis (x, y) = (0, 0). The tear is a ragged SPHERE round it (radius tearRadius at the angle
@@ -165,7 +246,7 @@ export function tearEdge(p: EmergenceParams, theta: number, time = 0): Vec3 {
  *  radius i / (N - 1), the cumulative arclength of the dome profile normalised to its total. At rest it is the identity. The shader reads this table. */
 export function pictureTable(p: EmergenceParams): Float32Array {
   const n = PICTURE_TABLE_N, lip = lipOpening(p);
-  const rise = Math.max(0, sacExtent(p) - lip.z), span = 0.5 * (lip.hw + lip.hh);
+  const rise = Math.abs(sacExtent(p) - lip.z), span = 0.5 * (lip.hw + lip.hh);
   const out = new Float32Array(n);
   let acc = 0;
   const speed = (q: number) => { const e = 1e-4, d = (profile(Math.min(1, q + e)) - profile(Math.max(0, q - e))) / (Math.min(1, q + e) - Math.max(0, q - e)); return Math.hypot(1, (rise * d) / span); };
