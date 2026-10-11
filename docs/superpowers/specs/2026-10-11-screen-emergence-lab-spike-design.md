@@ -79,7 +79,7 @@ The page's clock is the only source of `t` (scrubbing is deterministic: the stra
 
 ## 6. The goblin
 
-The real SDF goblin (`goblin.blob`, 1.70 m since PR #46) in its skin and without armour (decision 7 of the draft: at home it wears a stained vest and shorts; the vest and shorts kit is not part of this spike, so it is shirtless for now and flagged in the notes).
+The real SDF goblin in its skin and without armour, as `goblin-home` (`goblin.blob`'s 1.70 m body since PR #46, plus a vest and shorts as `shell` cloth: decision 7 of the draft, "a stained vest and shorts" at home, and the owner's 2026-10-11 choice of SDF cloth over a mesh kit because it reads more fluid; the plan's Task 10).
 It sits at the desk by a pose clip (`sit` into `type`), and the existing `jolt` and `recoil` are used as built. The new `REACH` and `TOUCH` are angle-only keys in the same table (so the pose layer's tests and the "keys name real bones" check cover them): the arm swings out and down past the egg and the hand
 comes to rest over it. The goblin's seat height against the CRT and the desk is set in the lab page from the goblin's measured joints, not guessed. The face rule is discarded (owner, 2026-10-11), so the cameras are free, but the shots stay behind the shoulder line where the hunch and the ears against the glow read best.
 
