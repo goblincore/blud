@@ -21,6 +21,15 @@ KX, KY, KTOP = 0.12, 2.36, 0.44                 # kotatsu: centre and board top
 # at the spring line, too low for an arch). Nothing is outside yet. DHW: half width; DSP: where the arch springs; the arch's crown is DSP + DHW.
 DX, DHW, DSP = WX, 0.40, 1.65
 
+# --- The apartment (spec 2026-10-11-flat-apartment-design.md): the flat grows south (an entry hall) and east (a bathroom) of the room.
+HY0 = -2.0                                       # the hall's south wall: the front door's plane
+BX1 = 3.1                                        # the bathroom's east wall
+PX, PHW, PSP = DX, 0.60, 1.55                    # the passage: the room's old south wall (y 0) opens through an arch 1.2 m wide, springing at 1.55 m
+BDY, BDHW, BDH = -1.1, 0.40, 1.75                # the bathroom doorway in the hall's east wall: centre y, half width, height
+GENKAN_Y, GENKAN_H = -1.3, 0.08                  # the hall's floor is stepped up 8 cm north of this line
+PART_T = 0.20                                    # the partition's thickness (the stone blocks are 0.16 deep; the bathroom's lining sits on the far side)
+TUB = (2.66, -1.075, 0.74, 1.54)                 # the claw-foot tub: centre x, centre y, width, length
+
 # The Giger iMac (machine stage 3), on the kotatsu (room.py 881-885). Its face looks south, toward the player; the cranium sweeps north and up.
 IM_FRONT = KY - 0.06                            # the face's plane (y)
 IM_Z = KTOP + 0.235                             # the face's centre height
@@ -48,12 +57,16 @@ STAINS = {
     "w": [(2.3 + 0.1, 1.8, 0.06, 1.7, 1.0), (2.77 + 0.1, 0.88, 0.1, 0.5, 0.6), (1.0 + 0.1, 1.9, 0.05, 0.8, 0.5)],
     "s": [],
 }
+WALL_W["eh"] = WALL_W["wh"] = 2.0               # the hall segments of the west and east walls: y from HY0 - 0.1 to -0.1 (they meet the room segments there)
+WALL_U0["eh"] = WALL_U0["wh"] = HY0 - 0.1
+STAINS["eh"] = [(0.8, 1.7, 0.05, 0.6, 0.7), (1.5, 0.45, 0.04, 0.4, 0.6)]
+STAINS["wh"] = [(1.3, 1.9, 0.06, 0.9, 0.8)]
 
-# The player starts at the south end, facing the window (yaw 0 faces +y here, -z in game space).
-START = (0.12, 0.55, 0.0)                       # x, y, z (z is the floor)
+# The player starts in the entry hall by the front door, facing north (yaw 0 faces +y here, -z in game space).
+START = (0.12, -1.55, 0.0)                      # x, y, z (z is the floor)
 
 # Collision boxes ("furniture"): name -> ((minx, miny, minz), (maxx, maxy, maxz)).
-ROOM_BOX = ((X0, Y0, 0.0), (X1, Y1, round(CROWN, 3)))
+ROOM_BOX = ((X0, HY0, 0.0), (BX1, Y1, round(CROWN, 3)))
 COLLISION = {
     # The engine's capsule steps up onto a box lower than about 0.5 m (least-penetration push-out), so the kotatsu's collider is
     # taller than its board: the player cannot climb the table. The futon stays low on purpose: a cushion you walk over.
@@ -62,6 +75,24 @@ COLLISION = {
     "fridge": ((-1.29, 3.04, 0.0), (-0.79, 3.56, 0.92)),
     "counter": ((0.79, 3.07, 0.0), (1.35, 3.59, 0.83)),
     "shelf": ((SH_X0, SH_Y0, 0.0), (X1, SH_Y1, SH_H)),
+    # the apartment (fixtures are at least 0.6 m high so the player cannot climb them; the genkan step is meant to be stepped onto)
+    "genkan": ((X0, GENKAN_Y, 0.0), (X1, -0.16, GENKAN_H)),
+    "cubby": ((X0, -1.75, 0.0), (X0 + 0.32, -0.85, 0.6)),
+    "tub": ((TUB[0] - TUB[2] / 2, TUB[1] - TUB[3] / 2, 0.0), (TUB[0] + TUB[2] / 2, TUB[1] + TUB[3] / 2, 0.75)),
+    "toilet": ((1.64, -0.72, 0.0), (2.06, 0.0, 0.85)),
+    "sink": ((1.60, -2.0, 0.0), (2.12, -1.68, 0.90)),
+}
+
+# Solids: the walls inside the room box (collision only; the art draws them). The filler is the block east of the room (never seen); the partition is the
+# hall's east wall with the bathroom doorway cut out; the passage's two halves and its lintel are the room's old south wall.
+SOLIDS = {
+    "filler": ((X1 - 0.02, 0.0, 0.0), (BX1, Y1, round(CROWN, 3))),
+    "partition_s": ((X1 - 0.02, HY0, 0.0), (X1 + PART_T, BDY - BDHW, round(CROWN, 3))),
+    "partition_n": ((X1 - 0.02, BDY + BDHW, 0.0), (X1 + PART_T, 0.0, round(CROWN, 3))),
+    "partition_lintel": ((X1 - 0.02, BDY - BDHW, BDH), (X1 + PART_T, BDY + BDHW, round(CROWN, 3))),
+    "passage_w": ((X0, -0.16, 0.0), (PX - PHW, 0.02, round(CROWN, 3))),
+    "passage_e": ((PX + PHW, -0.16, 0.0), (X1, 0.02, round(CROWN, 3))),
+    "passage_lintel": ((PX - PHW, -0.16, PSP + PHW), (PX + PHW, 0.02, round(CROWN, 3))),
 }
 
 # Point lights: (name, position, colour, power, extra custom properties). Powers are starting values, tuned in Task 8.
@@ -73,6 +104,8 @@ LIGHTS = [
     ("amber", (KX + 0.03, IM_FRONT + 0.36, IM_Z - 0.06), (1.0, 0.50, 0.20), 0.35, {"fixture": "none"}),   # in the iMac's guts, behind the creature
     ("amber2", (KX - 0.04, IM_FRONT + 0.14, IM_Z - 0.10), (1.0, 0.45, 0.20), 0.15, {"fixture": "none"}),   # in the guts, nearer the face
     ("screen", (KX, IM_FRONT - 0.05, IM_Z + 0.05), (0.75, 0.80, 1.0), 0.25, {"fixture": "none"}),          # the screen's light into the room
+    ("hall", (X1 - 0.2, -0.45, 1.97), (1.0, 0.72, 0.42), 0.9, {"fixture": "none"}),                       # the sconce by the bathroom doorway
+    ("bath", (2.0, -1.0, 2.12), (0.85, 1.0, 0.82), 0.9, {"fixture": "none"}),                             # a bare bulb on the bathroom ceiling
 ]
 
 
@@ -98,6 +131,21 @@ def check():
         assert 1.0 < w <= 4.0
         for u, z, spread, length, strength in STAINS[k]:
             assert 0 <= u <= w and 0 <= z <= WALL_H, (k, u, z)
+    def overlaps(a, b):
+        return all(a[0][i] < b[1][i] and b[0][i] < a[1][i] for i in range(3))
+    for name, box in SOLIDS.items():
+        assert inside(box[0], ROOM_BOX, 1e-6) and inside(box[1], ROOM_BOX, 1e-6), f"solid {name} leaves the room"
+        assert not inside(START, box), f"start is inside {name}"
+    bath_door = ((X1, BDY - BDHW + 0.02, 0.0), (X1 + PART_T, BDY + BDHW - 0.02, BDH - 0.02))
+    passage = ((PX - PHW + 0.02, -0.16, 0.0), (PX + PHW - 0.02, 0.02, PSP))
+    for name, box in {**COLLISION, **SOLIDS}.items():
+        if name != "genkan":
+            assert not overlaps(box, bath_door), f"{name} blocks the bathroom doorway"
+            assert not overlaps(box, passage), f"{name} blocks the passage"
+    assert PSP + PHW + 0.2 < vault_z(PX), "the passage's arch and its surround hit the vault"
+    assert -0.16 > BDY + BDHW and BDY - BDHW > HY0 + 0.2, "the bathroom doorway runs off the hall's wall"
+    assert TUB[0] + TUB[2] / 2 < BX1 and TUB[1] - TUB[3] / 2 > HY0, "the tub leaves the bathroom"
+    assert X1 + PART_T < TUB[0] - TUB[2] / 2 - 0.5, "the tub is too close to the doorway"
     print("flat_layout: ok")
 
 
