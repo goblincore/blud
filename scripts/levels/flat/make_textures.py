@@ -1,0 +1,179 @@
+# scripts/levels/flat/make_textures.py
+"""Textures for the Flat. Plain python3 (Pillow, numpy), not Blender:
+
+    python3 scripts/levels/flat/make_textures.py
+
+Writes PNGs of 1024 px or less into assets-source/levels/flat-textures/ (the exporter refuses larger).
+Stone colour and normal come from the kit's baked Bryce rock (assets-source/levels/kit-textures/rock-color.png, one tile = 1 m)
+and the wet and rust runs of the look-dev's stain maps (docs/dev-notes/2026-10-01-flat-room-lookdev/room.py 228-253).
+PNG row 0 is the TOP of the image (the highest z).
+"""
+import os
+import subprocess
+import sys
+
+import numpy as np
+from PIL import Image
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, ".."))
+import flat_layout as L  # noqa: E402
+
+ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
+ROCK = os.path.join(ROOT, "assets-source/levels/kit-textures/rock-color.png")
+LOOKDEV = os.path.join(ROOT, "docs/dev-notes/2026-10-01-flat-room-lookdev")
+IDYLL = os.path.join(ROOT, "docs/dev-notes/2026-10-01-flat-emergence-lookdev/view-bryce-moody.png")
+OUT = os.path.join(ROOT, "assets-source/levels/flat-textures")
+CASTLE = np.array((1.6, 1.55, 1.45), np.float32)       # the baked rock is dark; castle stone a step lighter (room.py 266)
+
+
+def save(arr, name):
+    os.makedirs(OUT, exist_ok=True)
+    Image.fromarray((np.clip(arr, 0, 1) * 255).astype(np.uint8)).save(os.path.join(OUT, name))
+    print("wrote", name, arr.shape[1], "x", arr.shape[0])
+
+
+def rock():
+    return np.asarray(Image.open(ROCK).convert("RGB"), np.float32) / 255.0
+
+
+def lin(c):
+    """sRGB to linear light: the look-dev's colour maths (tints, mixes) ran in linear, so ours does too."""
+    return np.power(c, 2.2)
+
+
+def srgb(c):
+    return np.power(np.clip(c, 0, 1), 1 / 2.2)
+
+
+def tile_to(img, w_m, h_m, px):
+    """The 1 m rock tile repeated to cover w_m x h_m metres in a px x px image (anisotropic when w_m != h_m)."""
+    tw, th = max(1, round(px / w_m)), max(1, round(px / h_m))
+    tile = np.asarray(Image.fromarray((img * 255).astype(np.uint8)).resize((tw, th), Image.LANCZOS), np.float32) / 255.0
+    return np.tile(tile, (int(np.ceil(px / th)), int(np.ceil(px / tw)), 1))[:px, :px]
+
+
+def smooth_noise(px, cells, seed):
+    g = np.random.default_rng(seed).random((cells + 1, cells + 1)).astype(np.float32)
+    return np.asarray(Image.fromarray((g * 255).astype(np.uint8)).resize((px, px), Image.BICUBIC), np.float32) / 255.0
+
+
+def stain_map(w_m, h_m, sources, seed, ppm=200):
+    """Wet (R) and rust (G) runs down a wall, in z-up rows (row 0 = z 0). Ported from room.py 228-253, then resized."""
+    W, H = int(w_m * ppm), int(h_m * ppm)
+    img = np.zeros((H, W, 2), np.float32)
+    rnd = np.random.default_rng(seed)
+    for (u, z, spread, length, strength) in sources:
+        for _ in range(int(40 * spread / 0.1) + 8):
+            x = int((u + rnd.normal(0, spread)) * ppm)
+            top = int((z + rnd.normal(0, 0.03)) * ppm)
+            run = int(length * ppm * rnd.uniform(0.3, 1.0))
+            wpx = int(rnd.integers(1, 4))
+            rust = rnd.uniform(0.0, 1.0)
+            for yy in range(max(0, top - run), min(H, top)):
+                t = (top - yy) / max(run, 1)
+                a = strength * (1 - t) ** 1.5 * rnd.uniform(0.6, 1.0)
+                x0, x1 = max(0, x - wpx), min(W, x + wpx)
+                if x0 < x1:
+                    img[yy, x0:x1, 0] = np.maximum(img[yy, x0:x1, 0], a)
+                    img[yy, x0:x1, 1] = np.maximum(img[yy, x0:x1, 1], a * rust)
+                x += int(rnd.integers(-1, 2)) if rnd.random() < 0.08 else 0
+        yy, xx = np.mgrid[0:H, 0:W]
+        d = np.sqrt(((xx / ppm - u) / (spread * 2.5)) ** 2 + ((yy / ppm - z) / (spread * 2.0)) ** 2)
+        img[..., 0] = np.maximum(img[..., 0], strength * 0.6 * np.clip(1 - d, 0, 1))
+    k = 3                                                   # soften across the run (room.py 249-251)
+    for c in (0, 1):
+        cs = np.cumsum(np.pad(img[..., c], ((0, 0), (k, k)), mode="edge"), axis=1)
+        img[..., c] = (cs[:, 2 * k:] - cs[:, :-2 * k]) / (2 * k)
+    return img
+
+
+def normal_from_height(h, strength):
+    """Tangent-space normal (OpenGL, +green up) from a height field whose row 0 is the top."""
+    gy, gx = np.gradient(h)
+    n = np.dstack((-gx * strength, gy * strength, np.ones_like(h)))
+    n /= np.linalg.norm(n, axis=2, keepdims=True)
+    return n * 0.5 + 0.5
+
+
+def make_stone(name, w_m, h_m, px=1024, tint=(1.0, 1.0, 1.0), courses=None, stains=None, damp=True, seed=0):
+    """name_color.png and name_normal.png: castle stone over a w_m x h_m metre area (z up, row 0 the top)."""
+    base = tile_to(rock(), w_m, h_m, px)
+    col = np.clip(lin(base) * np.array(tint, np.float32) * CASTLE, 0, 1)
+    height = base.mean(axis=2)
+    zz = (1.0 - (np.arange(px)[:, None] + 0.5) / px) * h_m * np.ones((1, px), np.float32)      # metres above the base
+    xx = (np.arange(px)[None, :] + 0.5) / px * w_m * np.ones((px, 1), np.float32)
+    if courses:
+        bw, bh = courses
+        row = np.floor(zz / bh)
+        fx = ((xx + (row % 2) * bw * 0.5) / bw) % 1.0
+        fy = (zz / bh) % 1.0
+        d = np.minimum.reduce([fx * bw, (1 - fx) * bw, fy * bh, (1 - fy) * bh])               # metres to the nearest mortar line
+        mortar = np.clip(1.0 - d / 0.012, 0, 1)
+        col = col * (1 - 0.9 * mortar[..., None]) + mortar[..., None] * np.array((0.03, 0.028, 0.025), np.float32) * 0.9
+        height = height - 0.6 * mortar
+    if damp:
+        dz = np.clip((0.55 - zz) / 0.5, 0, 1) * 0.75 * (0.3 + 0.7 * smooth_noise(px, 12, seed + 7))
+        col = col * (1 - dz[..., None]) + dz[..., None] * np.array((0.025, 0.032, 0.018), np.float32)
+    if stains:
+        st = stain_map(w_m, h_m, stains, seed)
+        st = np.stack([np.asarray(Image.fromarray(st[..., c]).resize((px, px), Image.BICUBIC), np.float32) for c in (0, 1)], axis=2)
+        st = np.flipud(st)                                                                     # z-up rows -> PNG rows
+        rust, wet = st[..., 1:2], st[..., 0:1] * 0.85
+        col = col * (1 - rust) + rust * np.array((0.2, 0.075, 0.02), np.float32)
+        col = col * (1 - wet) + wet * np.array((0.018, 0.016, 0.01), np.float32)
+    save(srgb(col), f"{name}_color.png")
+    save(normal_from_height(height, 6.0), f"{name}_normal.png")
+
+
+def make_tatami(px=512):
+    """Aged igusa straw: fine weave lines (one tile is 0.9 m), faded green-gold (room.py 327-342)."""
+    n = smooth_noise(px, 8, 3)[..., None]
+    col = np.array((0.24, 0.20, 0.08), np.float32) * (1 - n) + np.array((0.42, 0.40, 0.18), np.float32) * n
+    u = (np.arange(px)[None, :] / px * 90) % 1.0
+    line = (np.abs(u - 0.5) * 2) ** 3 * 0.55
+    col = col * (1 - line[..., None]) + line[..., None] * np.array((0.16, 0.13, 0.05), np.float32)
+    save(srgb(col * np.ones((px, 1, 1), np.float32)), "tatami.png")
+
+
+def make_quilt(px=512):
+    """The kawaii quilt: the look-dev's own tile if textures.py runs here (it wants Hiragino for the posters), else a plain pink one."""
+    tmp = os.path.join(ROOT, ".lab-tmp", "flat-quilt")
+    os.makedirs(tmp, exist_ok=True)
+    subprocess.run([sys.executable, os.path.join(LOOKDEV, "textures.py"), tmp], check=False, capture_output=True)
+    src = os.path.join(tmp, "quilt.png")
+    if os.path.exists(src):
+        arr = np.asarray(Image.open(src).convert("RGB").resize((px, px), Image.LANCZOS), np.float32) / 255.0
+    else:
+        yy, xx = np.mgrid[0:px, 0:px] / px
+        dots = (np.sin(xx * 6.283 * 6) * np.sin(yy * 6.283 * 6) > 0.6).astype(np.float32)[..., None]
+        arr = np.array((0.95, 0.72, 0.8), np.float32) * (1 - dots) + dots * np.array((1.0, 0.95, 0.97), np.float32)
+    save(arr, "quilt.png")
+
+
+def make_books():
+    """An 8-stripe palette (room.py SPINES, 1209-1215 neighbourhood): a book's UVs point at its stripe."""
+    pal = [(0.85, 0.1, 0.15), (0.1, 0.25, 0.7), (0.95, 0.8, 0.2), (0.15, 0.6, 0.35), (0.95, 0.95, 0.92), (0.1, 0.1, 0.12),
+           (0.9, 0.45, 0.65), (0.4, 0.75, 0.95), (0.6, 0.2, 0.7)]
+    arr = np.zeros((16, 9 * 16, 3), np.float32)
+    for i, c in enumerate(pal):
+        arr[:, i * 16:(i + 1) * 16] = c
+    save(srgb(arr), "books.png")
+
+
+def make_view():
+    im = Image.open(IDYLL).convert("RGB")
+    im.thumbnail((1024, 1024), Image.LANCZOS)
+    save(np.asarray(im, np.float32) / 255.0, "view.png")
+
+
+if __name__ == "__main__":
+    for key in ("n", "e", "w", "s"):
+        make_stone(f"wall_{key}", L.WALL_W[key], L.WALL_H, 1024, stains=L.STAINS[key] or None, seed={"n": 1, "e": 2, "w": 3, "s": 5}[key])
+    make_stone("vault", 1.68, 0.96, 1024, tint=(0.95, 0.93, 0.9), courses=(0.42, 0.24), damp=False)   # UV = metres / (1.68, 0.96)
+    make_stone("flag", 1.8, 1.8, 1024, tint=(0.85, 0.85, 0.85), courses=(0.6, 0.45))                  # UV = metres / 1.8
+    make_stone("dark", 1.0, 1.0, 512, tint=(0.8, 0.78, 0.74), damp=False)                              # UV = metres
+    make_tatami()
+    make_quilt()
+    make_books()
+    make_view()
