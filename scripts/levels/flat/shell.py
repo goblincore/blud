@@ -102,20 +102,20 @@ def niche_region(z):
     if z0 - 0.04 <= z <= z1 + 0.04: return (y0 - 0.02, y1 + 0.02)
     return None
 
-def door_region(z):
-    """The doorway's forbidden interval along the south wall at height z: the window_region's twin, from the floor."""
-    if z <= DSP: return (DX - DHW - DQB, DX + DHW + DQB)
-    if z <= DSP + DHW + DVB:
-        hw = math.sqrt(max(0.0, (DHW + DVB) ** 2 - (z - DSP) ** 2))
-        hw = max(hw, DHW + DQB) if z < DSP + 0.12 else hw
-        return (DX - hw, DX + hw)
+def arch_region(z, cx, hw, sp):
+    """The forbidden interval along an end wall at height z for an arched opening centred on cx (half width hw, springing at sp): the window_region's twin, from the floor."""
+    if z <= sp: return (cx - hw - DQB, cx + hw + DQB)
+    if z <= sp + hw + DVB:
+        r = math.sqrt(max(0.0, (hw + DVB) ** 2 - (z - sp) ** 2))
+        r = max(r, hw + DQB) if z < sp + 0.12 else r
+        return (cx - r, cx + r)
     return None
 
 def build_walls():
     ashlar('wall_w', 'y', X0, +1, Y0 - 0.1, Y1 + 0.1, 0.0, SPRING - 0.08, 'w', M.STONE_W, holes=wall_hole_for([niche_region]), seed=2, hole_rect=(NICHE[0], NICHE[1], NICHE[2], NICHE[3]))
     ashlar('wall_e', 'y', X1, -1, Y0 - 0.1, Y1 + 0.1, 0.0, SPRING - 0.08, 'e', M.STONE_E, seed=3)
     ashlar('wall_n', 'x', Y1, -1, X0 - 0.1, X1 + 0.1, 0.0, CROWN + 0.1, 'n', M.STONE_N, top=vault_z, holes=wall_hole_for([window_region]), seed=4, hole_rect=(WX - WH, WX + WH, WS - 0.1, WSP + WH))
-    ashlar('wall_s', 'x', Y0, +1, X0 - 0.1, X1 + 0.1, 0.0, CROWN + 0.1, 's', M.STONE_S, top=vault_z, holes=wall_hole_for([door_region]), seed=5, hole_rect=(DX - DHW, DX + DHW, 0.0, DSP + DHW))
+    ashlar('wall_s', 'x', Y0, +1, X0 - 0.1, X1 + 0.1, 0.0, CROWN + 0.1, 's', M.STONE_S, top=vault_z, holes=wall_hole_for([lambda z: arch_region(z, DX, DHW, DSP)]), seed=5, hole_rect=(DX - DHW, DX + DHW, 0.0, DSP + DHW))
 
 def build_impost():
     for sx, nm in ((-1, 'w'), (1, 'e')):
@@ -291,36 +291,37 @@ def view_plane():
     o["shadow"] = False
 
 
-def door_surround():
-    """Voussoirs round the arch and quoins up the jambs, on the south wall's outer side (the window's twin, from the floor)."""
-    bm = bmesh.new(); lay = bm.faces.layers.float.new('rand'); rnd = random.Random(19)
-    n = 9; r0, r1 = DHW, DHW + DVB; yA, yB = Y0 + 0.02, Y0 - 0.17
+def arch_surround(name, cx, hw, sp, py, seed, threshold):
+    """Voussoirs round an arch and quoins up its jambs, on the outer (-y) side of the wall at y = py (the window's twin, from the floor); `threshold` adds a stone sill."""
+    bm = bmesh.new(); lay = bm.faces.layers.float.new('rand'); rnd = random.Random(seed)
+    n = 9; r0, r1 = hw, hw + DVB; yA, yB = py + 0.02, py - 0.17
     for k in range(n):
         a0 = math.pi * k / n + 0.006; a1 = math.pi * (k + 1) / n - 0.006
         rr = r1 + rnd.uniform(-0.03, 0.02)
-        pts = [(DX + math.cos(a) * r, DSP + math.sin(a) * r) for a, r in ((a0, r0), (a1, r0), (a1, rr), (a0, rr))]
+        pts = [(cx + math.cos(a) * r, sp + math.sin(a) * r) for a, r in ((a0, r0), (a1, r0), (a1, rr), (a0, rr))]
         vs = [bm.verts.new((x, yA, z)) for x, z in pts] + [bm.verts.new((x, yB, z)) for x, z in pts]
         rv = rnd.random()
         for f in [(0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)]:
             ff = bm.faces.new([vs[i] for i in f]); ff[lay] = rv
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     C.planar_uv(bm, 'x', LAY.WALL_U0['s'], LAY.WALL_W['s'], LAY.WALL_H)
-    obj_from_bm('door_voussoirs', bm, M.STONE_S, bevel=0.012, uv_size=0)
-    bm = bmesh.new(); lay = bm.faces.layers.float.new('rand'); rnd = random.Random(23)
+    obj_from_bm(f'{name}_voussoirs', bm, M.STONE_S, bevel=0.012, uv_size=0)
+    bm = bmesh.new(); lay = bm.faces.layers.float.new('rand'); rnd = random.Random(seed + 4)
     for sx in (-1, 1):
         z = 0.0
-        while z < DSP - 0.02:
-            h = min(rnd.uniform(0.2, 0.27), DSP - z)
-            bm_cube(bm, (DX + sx * (DHW + DQB / 2), Y0 - 0.09, z + h / 2), (DQB - 0.012, 0.19, h - 0.012), None, lay, rnd.random())
+        while z < sp - 0.02:
+            h = min(rnd.uniform(0.2, 0.27), sp - z)
+            bm_cube(bm, (cx + sx * (hw + DQB / 2), py - 0.09, z + h / 2), (DQB - 0.012, 0.19, h - 0.012), None, lay, rnd.random())
             z += h
     C.planar_uv(bm, 'x', LAY.WALL_U0['s'], LAY.WALL_W['s'], LAY.WALL_H)
-    obj_from_bm('door_quoins', bm, M.STONE_S, bevel=0.012, uv_size=0)
-    box('door_threshold', (DX, Y0 - 0.07, 0.015), (2 * DHW + 0.16, 0.2, 0.03), M.STONE_DARK, bevel=0.01)
+    obj_from_bm(f'{name}_quoins', bm, M.STONE_S, bevel=0.012, uv_size=0)
+    if threshold:
+        box(f'{name}_threshold', (cx, py - 0.07, 0.015), (2 * hw + 0.16, 0.2, 0.03), M.STONE_DARK, bevel=0.01)
 
 
-def door_leaf():
+def door_leaf(py):
     """The closed door: an arched oak slab recessed in the opening, three iron straps with rivets, a ring handle and a mail slot. Nothing is outside yet."""
-    yf, yb = Y0 - 0.04, Y0 - 0.10                         # the room-side face and the back face
+    yf, yb = py - 0.04, py - 0.10                         # the room-side face and the back face
     r = DHW - 0.004
     prof = [(DX - r, 0.0), (DX + r, 0.0)] + [(DX + r * math.cos(k / 16 * math.pi), DSP + r * math.sin(k / 16 * math.pi)) for k in range(17)]
     bm = bmesh.new(); uvl = bm.loops.layers.uv.new('UVMap')
@@ -344,9 +345,9 @@ def door_leaf():
     box('door_mailslot', (DX, yf - 0.003, 1.22), (0.26, 0.01, 0.034), M.DARKGLASS, bevel=0.002)
 
 
-def build_door():
-    door_surround()
-    door_leaf()
+def build_arches():
+    arch_surround('door', DX, DHW, DSP, Y0, 19, True)
+    door_leaf(Y0)
 
 
 def build(m):
@@ -354,7 +355,7 @@ def build(m):
     M = m
     random.seed(11)
     build_walls()
-    build_door()
+    build_arches()
     build_impost()
     vault()
     build_ribs()
