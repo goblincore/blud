@@ -318,13 +318,15 @@ describe('kit geometry', () => {
     expect(t.length % 9).toBe(0);
     expect(t.length / 9).toBeGreaterThan(100);
     // Bind space is rest world space: the goblin's kit sits on a standing
-    // 1.30 m body, so its vertices lie between the floor and the crown. If
-    // skinning were needed these would be nowhere near.
+    // 1.70 m body (1.30 m authored, times the .blob's `scale`, K), so its
+    // vertices lie between the floor and the crown. If skinning were needed
+    // these would be nowhere near.
     let minY = Infinity, maxY = -Infinity;
     for (let i = 1; i < t.length; i += 3) { minY = Math.min(minY, t[i]!); maxY = Math.max(maxY, t[i]!); }
     expect(minY).toBeGreaterThan(-0.02);
     expect(maxY).toBeGreaterThan(0.5);
-    expect(maxY).toBeLessThan(1.35);
+    const K = parseBlob(readFileSync('src/lab/sdf-zombie/characters/goblin.blob', 'utf8')).scale ?? 1;
+    expect(maxY).toBeLessThan(1.35 * K);
   });
 
   // The bug this guards: a plate shows a DRESSED character, so scoring bare
