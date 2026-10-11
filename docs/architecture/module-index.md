@@ -27,6 +27,7 @@ Each line is the first sentence of the module's header comment.
 | `/sdf-lab-webgpu-bench.html` | `webgpu/spike-main.ts` |
 | `/sdf-lab-webgpu.html` | `webgpu/lab-main.ts` |
 | `/sdf-lab.html` | `lab-main.ts` |
+| `/sdf-screen-lab.html` | `webgpu/screen-lab-main.ts` |
 | `/sdf-shell-spike.html` | `webgpu/shell-spike-main.ts` |
 | `/shared-wounds-probe.html` | `shared-wounds/probe.js` |
 
@@ -41,14 +42,14 @@ Each line is the first sentence of the module's header comment.
 | [characters/](#characters) | 1 | Character bodies: `.blob` sources, generators and per-character data. |
 | [shared-wounds/](#shared-wounds) | 4 | Shared wound-field probe page. |
 | [gait-curves/](#gait-curves) | 2 | Baked gait curve data. |
-| [Entrypoints and labs](#entrypoints-and-labs) | 19 | One module per HTML page; see the entrypoint table above. |
+| [Entrypoints and labs](#entrypoints-and-labs) | 20 | One module per HTML page; see the entrypoint table above. |
 | [Dev panels](#dev-panels) | 10 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 23 | `window.__sdfGame` members, read by the gate and capture scripts. |
 | [Game: feature modules](#game-feature-modules) | 76 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
-| [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 8 | Blood views, the goo layer, impact splashes. |
+| [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
 | [Levels and world](#levels-and-world) | 27 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
@@ -56,7 +57,7 @@ Each line is the first sentence of the module's header comment.
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 7 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 34 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [SDF march renderer](#sdf-march-renderer) | 37 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 33 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 25 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
@@ -229,6 +230,7 @@ One module per HTML page; see the entrypoint table above.
 - `webgpu/lab-renderer.ts` — A WebGPU renderer for the SDF lab ONLY.
 - `webgpu/normal-gradient-playtest.ts` — A developer playtest panel that toggles the analytic normal-gradient mode and its debug view in a running game.
 - `webgpu/normal-gradient-probe.ts` — The browser GPU probe that compares the WGSL analytic normal gradients against CPU fixtures (capsules, blends, wounds) and shows the results.
+- `webgpu/screen-lab-main.ts` — THE SCREEN EMERGENCE LAB (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md, plan Task 5): a standalone, scrubbable page…
 - `webgpu/shell-spike-main.ts` — Shell-march spike: rasterise a slightly-inflated hull of the character and sphere-trace the SAME SDF field only within [entry, exit] of that hull.
 - `webgpu/spike-main.ts` — WebGPU Phase 0 spike — the go/no-go for the whole migration.
 
@@ -445,6 +447,7 @@ Blood views, the goo layer, impact splashes.
 - `webgpu/goo-layer-test-support.ts` — Recording stub renderer and fixtures for the behavioural goo-layer tests: the real createGooLayer runs its real sync()/render() against this stub…
 - `webgpu/goo-layer.ts` — Screen-space metaball blood (gobs-and-goo spec §3): the viscous goo the billboard droplets could never sell.
 - `webgpu/goo-presets.ts` — THE GAME'S GOO DEFAULTS, in one importable place (blood-surface comparison task, 2026-09-13).
+- `webgpu/goo-strands.ts` — THE GOO (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md, section 4): strands between the torn lip and the egg, beads…
 - `webgpu/impact-splash-profiles.ts` — Sprite tuning is independent per weapon; existing events retain a snapshot.
 - `webgpu/impact-splash-sprites.ts` — Instanced billboard sprites for impact splashes: a procedural splash atlas and normal atlas, and the lit node material that draws them.
 - `webgpu/impact-splash.ts` — Procedural, opt-in wound burst.
@@ -596,6 +599,8 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 
 - `webgpu/curl-volume-node.ts` — THE SHARED CURL VOLUME, TSL SIDE (extracted from flame-cards.ts for the explosion-curl task).
 - `webgpu/curl-volume.ts` — CURL-NOISE VOLUME (flame-polish plan task 2, 2026-09-18): a small seeded 64^3 RGBA8 3D texture whose RGB is a divergence-free vector field and whose…
+- `webgpu/emergence-field.ts` — THE SCREEN EMERGENCE's field, CPU twin (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md, section 4).
+- `webgpu/emergence-timeline.ts` — THE SCREEN EMERGENCE's cue curves (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md, section 5): from a time `t` in…
 - `webgpu/field-render.ts` — INTERLACED FIELD RENDERING — the pure math.
 - `webgpu/hull-refine-view.ts` — Wraps a shipped body/chunk view so it can be drawn EITHER through its own proxy-box march (unchanged) OR through a per-frame surface-nets hull whose…
 - `webgpu/march-private-reads.ts` — The ONE wgslFn node that carries MARCH_NORMAL_OUT — and with it the march body's module-scope privates `gMarchNormal` and `gMarchAnchor` — plus the…
@@ -609,6 +614,7 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 - `webgpu/normal-gradient-support.ts` — Support checks for the analytic normal gradient: which bodies and primitives are supported, owner stability and hit point reconstruction.
 - `webgpu/normal-gradient.wgsl.ts` — WGSL for the analytic normal gradient (probe, wounds, bones and body functions) and the builders that wrap it as three wgslFn nodes.
 - `webgpu/occluder-hull.ts` — A conservative INNER hull of the bodies, rasterised so the march can stop early where something solid already covers the ray.
+- `webgpu/screen-lab-goblin.ts` — THE SCREEN LAB's goblin, pure half (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md section 6, plan Task 5): which pose…
 - `webgpu/sdf-layer.ts` — Renders the raymarched bodies into their own render target, at their own resolution, and composites the result back over the polygonal scene.
 - `webgpu/shell-hull-outer.ts` — A conservative OUTER hull of the bodies — geometry guaranteed to CONTAIN the real surface — rasterised so the march can start where the body starts…
 - `webgpu/shell-hull.ts` — CPU iso-surface extraction for the shell-march spike.

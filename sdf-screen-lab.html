@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Blud - screen emergence lab</title>
+<style>
+  body { margin: 0; background: #07060a; color: #eee; font: 13px monospace; overflow: hidden; }
+  #app { width: 100vw; height: 100vh; }
+  #status {
+    position: fixed; top: 8px; left: 8px; z-index: 10;
+    background: rgba(0,0,0,0.78); padding: 8px 10px; border: 1px solid #444;
+    font-size: 11px; line-height: 1.6; color: #bbb; max-width: 46vw;
+  }
+  #status b { color: #d88; font-weight: normal; }
+  #stats {
+    position: fixed; top: 8px; right: 8px; z-index: 10;
+    background: rgba(0,0,0,0.68); padding: 8px 10px; border: 1px solid #444;
+    font-size: 11px; line-height: 1.6; color: #9cf; white-space: pre;
+  }
+  #controls {
+    position: fixed; bottom: 8px; left: 8px; right: 8px; z-index: 10;
+    background: rgba(0,0,0,0.72); padding: 6px 10px; border: 1px solid #444;
+    font-size: 11px; line-height: 1.8; color: #bbb;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  }
+  #controls input[type=range] { flex: 1 1 320px; min-width: 200px; }
+  #controls button, #controls select { font: 11px monospace; background: #222; color: #ddd; border: 1px solid #555; padding: 2px 6px; }
+  #controls button.on { background: #523; border-color: #a66; color: #fdd; }
+  #controls label { white-space: nowrap; }
+  #t-read { min-width: 5em; color: #fc9; }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="status">booting…</div>
+  <div id="stats"></div>
+  <div id="controls">
+    <input id="t" type="range" min="0" max="14.5" step="0.01" value="0" />
+    <span id="t-read">t 0.00</span>
+    <button id="play">Play</button>
+    <select id="speed">
+      <option value="0.25">0.25x</option>
+      <option value="0.5">0.5x</option>
+      <option value="1" selected>1x</option>
+    </select>
+    <span id="shots"></span>
+    <button id="free">Free camera</button>
+    <label><input id="goo-shadow" type="checkbox" checked /> goo shadow</label>
+    <label><input id="pass-on" type="checkbox" checked /> pass on</label>
+  </div>
+  <script type="module" src="/src/lab/sdf-zombie/webgpu/screen-lab-main.ts"></script>
+</body>
+</html>
