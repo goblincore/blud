@@ -218,16 +218,6 @@ describe('goblin-kit.gltf fits goblin.blob', () => {
   // Measured 2026-10-02: shaft 6.4-7.9 mm off the flesh (the whole height), cuff 10.6-14.1 mm (it flares over the boot
   // top on purpose). The bounds sit ~2 mm above those, so a ring that goes loose by one table-row fails and the next
   // body change has to re-measure rather than pass quietly.
-  it('PROBE belt', () => {
-    const belt = groups.get('leather')!.filter(v => v[1] > 0.64 && v[1] < 0.74 && Math.abs(v[0]) < 0.095);
-    const ds = belt.map(v => sdBody(v, body));
-    console.log('belt', belt.length, Math.min(...ds).toFixed(4), Math.max(...ds).toFixed(4));
-    belt.map((v, i) => ({ v, d: ds[i]! })).sort((a, b) => a.d - b.d).slice(0, 4)
-      .forEach(o => console.log('low', o.v.map(n => n.toFixed(3)).join(','), o.d.toFixed(4)));
-    const bk = groups.get('brass')!.map(v => sdBody(v, body));
-    console.log('brass', Math.min(...bk).toFixed(4), Math.max(...bk).toFixed(4));
-  });
-
   it('boot shaft and cuff hug the leg without floating', () => {
     const shaft = standoff('boot');
     expect(shaft.n, 'shaft vertices measured').toBeGreaterThan(20);

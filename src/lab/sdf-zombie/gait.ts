@@ -351,10 +351,11 @@ export const GOBLIN_WALK: GaitProfile = {
   // in the first walk frames (2026-10-02, walk-40/55/70 side): 12 is eyeballed from them, the owner's "scheming" is a
   // forward-hunched creature.
   torsoLean: 12,
-  swayAmp: 0.025,
+  // 0.033 and 0.039 below are the metre figures of the 1.30 m goblin (0.025, 0.03) x 1.3077 (2026-10-11): both are metres, not angles.
+  swayAmp: 0.033,
   shoulderSway: 0.45,
   // The carry table owns the arms (the shotgun); this only rides the shoulders.
-  armSwing: 0.03,
+  armSwing: 0.039,
   asymJitter: 0.08,
   // 0.4 (owner, 2026-10-02: "his head leans a bit too much to the side"). Measured by the ear-line in the held walk and
   // run (every 4 frames over a cycle): at 1 the head rolled +-9.5 / +-11 degrees, at 0.3 +-2.3 / +-2.9, so 0.4 should be

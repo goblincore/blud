@@ -12,7 +12,7 @@
   Body grain, mottle and the face sheet are texture-space and do not scale, so the grain stays small.
 - **`goblin-kit.wam`:** `height 1.70`, kit rebuilt (`scripts/build-wam-kit.sh goblin`). Every kit dimension was a height fraction, so nothing else moved; the kit's clearance pins pass at exactly K times the old measured standoffs (brass 11.3-47.9 mm, was 8.7-36.6 mm).
 - **Cadence, speeds and grip** (all eyeballed starting values, spec section 4): `GOBLIN_WALK.strideFreq` 1.5 to 1.31 Hz, `GOBLIN_RUN.strideFreq` 2.1 to 1.84 Hz (x0.874, a pendulum's period goes with the root of its length),
-  `cruise` 1.19 to 1.36 m/s, `runBand` 1.30..2.77 to 1.48..3.18, `gripReach` 0.0396 to 0.0518 m. Leg length measured on the compiled body: 0.7323 m (thigh 0.3792 + shin 0.3531), arms 0.3073 m each, hand bone 0.0942 m.
+  `cruise` 1.19 to 1.36 m/s, `runBand` 1.30..2.77 to 1.48..3.18, `gripReach` 0.0396 to 0.0518 m, and the two metre-valued sway fields `swayAmp` 0.025 to 0.033 and `armSwing` 0.03 to 0.039 (the plan had them as angles and ratios; they are metres). Leg length measured on the compiled body: 0.7323 m (thigh 0.3792 + shin 0.3531), arms 0.3073 m each, hand bone 0.0942 m.
 - **Not changed:** the first-person arms, the pose library (angles only), the shotgun model (a human-sized goblin holds the player's gun at its modelled size), the carry angles (relative to the authored hang, so a uniform scale carries them),
   the `GUN_GRIP` locators in `carry.ts` (the gun's own metres).
 
@@ -30,14 +30,20 @@
 | `characters/goblin-kit.test.ts` | the tuck, the boot shaft, the belt window and drop, the buckle, the cuff, the plate fit |
 | `silhouette.test.ts` | the kit's top height bound (1.35 m to 1.35 K) |
 | `goblin-gait.test.ts`, `goblin-held-gun.test.ts` | the leg length the speeds are derived from, the grip pin |
+| `__snapshots__/pack-golden.test.ts.snap` | the goblin's packed-bytes pin, re-pinned (`npx vitest run -u src/lab/sdf-zombie/pack-golden.test.ts`, darwin/arm64 only, not run in CI); the other 27 characters' hashes are unchanged |
 
-A leftover in `goblin-kit.test.ts`: a "PROBE belt" test with no assertions that only logs, and whose y window is unscaled (it now finds 0 vertices). Delete it or scale its window when someone next touches the file.
+The no-assertion "PROBE belt" test in `goblin-kit.test.ts` (a leftover from 2026-10-02 that only logged) is deleted.
 
 ## What to look at (the owner's gate)
 
 1. **The armour fit at the new size.** Front and side frames show pauldrons, belt, bracers, greaves and boots seated with no gaps or clipping at turntable resolution; a close look is the owner's.
 2. **The gait in motion.** Cadence 1.31 and 1.84 Hz are dynamic-similarity starting values, not tuned by eye. Walk 1.36 m/s, run 3.18 m/s.
 3. **The proportions.** It is the same goblin scaled uniformly, so the head and ears read bigger in absolute terms; the owner chose this over re-proportioning to a human adult.
+
+## Authoring tools now print scaled metres
+
+With a `scale k` line, `scripts/blob-rings.ts`, `scripts/blob-measure.ts` and the other fit tools build from `compileBlob`, so the metres they print and suggest are the COMPILED (k times) values. Divide by k before pasting a
+number into the file, whose numbers are the authored ones (the authoring skill says the same).
 
 ## Verification tooling gotchas
 

@@ -65,7 +65,7 @@ A pendulum's period goes with the square root of its length, so a leg that grows
 | `runBand.from` | 1.30 | 1.48 | cruise × 1.09, the same margin as now |
 | `prop.gripReach` | 0.0396 m | 0.0518 m | × 1.3077 (the fist orb scales with the hand) |
 
-The torso lean and sway amplitudes are angles and ratios and stay. The held shotgun is the player's model and is not scaled: a human-sized goblin holds it like a human.
+The torso lean and the shoulder sway are angles and ratios and stay; `swayAmp` and `armSwing` are metres and are scaled by K (0.033 and 0.039). The held shotgun is the player's model and is not scaled: a human-sized goblin holds it like a human.
 
 ## 5. Verification
 

@@ -44,7 +44,7 @@ The look-dev's dimensions are kept. Game space is Y up; Blender maps (x, y, z) t
 | Kotatsu | centre (0.12, 2.36), board top 0.44 m |
 | Eye height | the engine's default (1.75 m); no engine change |
 
-The player is human-sized and the levels are scaled to them (doorways and portals 2.2 m). The goblin stays 1.30 m for now.
+The player is human-sized and the levels are scaled to them (doorways and portals 2.2 m). The goblin stays 1.30 m for now (superseded 2026-10-11: it is now 1.70 m, see the [goblin height spec](2026-10-11-goblin-human-height-design.md)).
 The owner's view is that the goblin should become human-sized (it is the player character, and the levels are scaled to
 the player); that is a separate task (§11), and the room does not depend on it.
 
