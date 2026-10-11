@@ -17,6 +17,11 @@ RIBS = (0.9, 1.8, 2.7)                          # transverse ribs; the middle on
 
 WX, WH, WS, WSP, WDEPTH = 0.12, 0.36, 0.62, 1.42, 0.62   # window: centre x, half width, sill z, springing z, wall thickness
 KX, KY, KTOP = 0.12, 2.36, 0.44                 # kotatsu: centre and board top
+# The Giger iMac (machine stage 3), on the kotatsu (room.py 881-885). Its face looks south, toward the player; the cranium sweeps north and up.
+IM_FRONT = KY - 0.06                            # the face's plane (y)
+IM_Z = KTOP + 0.235                             # the face's centre height
+IM_LEN = 0.56                                   # the face to the tip of the cranium
+IM_W, IM_H = 0.185, 0.18                        # half width, half height at the face
 NICHE = (2.42, 3.12, 0.92, 1.62)                # west wall niche: y0, y1, z0, z1
 SH_X0, SH_Y0, SH_Y1, SH_H = X1 - 0.27, 1.55, 2.95, 1.55   # the bookshelf (east wall)
 
@@ -61,7 +66,9 @@ LIGHTS = [
     ("window", (WX, Y1 - 0.25, 1.4), (0.62, 0.74, 0.90), 3.0, {"fixture": "none"}),         # the only cool light (no shadow: the format allows it on tube fixtures only)
     ("lantern", (0.0, 1.05, CROWN - 0.62), (1.0, 0.36, 0.20), 2.0, {"fixture": "none"}),
     ("candle", (X0 + 0.14, 2.05, 1.53), (1.0, 0.65, 0.35), 1.0, {"fixture": "none"}),
-    ("amber", (KX, KY + 0.14, 0.75), (1.0, 0.62, 0.20), 1.6, {"fixture": "none"}),                    # where the iMac will sit
+    ("amber", (KX + 0.03, IM_FRONT + 0.36, IM_Z - 0.06), (1.0, 0.50, 0.20), 1.6, {"fixture": "none"}),   # in the iMac's guts, behind the creature
+    ("amber2", (KX - 0.04, IM_FRONT + 0.14, IM_Z - 0.10), (1.0, 0.45, 0.20), 0.7, {"fixture": "none"}),   # in the guts, nearer the face
+    ("screen", (KX, IM_FRONT - 0.05, IM_Z + 0.05), (0.75, 0.80, 1.0), 1.0, {"fixture": "none"}),          # the screen's light into the room
 ]
 
 
