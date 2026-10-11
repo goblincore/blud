@@ -62,6 +62,9 @@ await evaluate('__sdfGame.freeze(true)');
 const BLOCKERS = {                                           // [from x, z], [to x, z], the footprint {x0, x1, z0, z1} of flat_layout.COLLISION
   kotatsu: { from: [0.12, -0.6], to: [0.12, -2.4], box: { x0: -0.29, x1: 0.53, z0: -2.77, z1: -1.95 } },
   shelf: { from: [0.5, -2.2], to: [1.25, -2.2], box: { x0: 1.08, x1: 1.35, z0: -2.95, z1: -1.55 } },
+  tub: { from: [1.75, 1.1], to: [2.8, 1.1], box: { x0: 2.29, x1: 3.03, z0: 0.305, z1: 1.845 } },
+  toilet: { from: [1.85, 1.3], to: [1.85, 0.2], box: { x0: 1.64, x1: 2.06, z0: 0.0, z1: 0.72 } },
+  sink: { from: [1.85, 0.9], to: [1.85, 1.9], box: { x0: 1.60, x1: 2.12, z0: 1.68, z1: 2.0 } },
   fridge: { from: [-0.9, -2.4], to: [-1.04, -3.3], box: { x0: -1.29, x1: -0.79, z0: -3.56, z1: -3.04 } },
 };
 for (const [name, { from, to, box }] of Object.entries(BLOCKERS)) {
@@ -118,7 +121,7 @@ if (process.env.SHOTS === '1') {
   const YAW_SIGN = Number(process.env.YAW_SIGN ?? -1);          // flip to -1 if the shots face the wrong way (see Task 5 Step 4)
   const CAMS = { wide: [[-1.12, 0.17], [0.4, 2.8, 0.45]], shoulder: [[-0.32, 0.92], [0.16, 2.48, 0.62]], imac: [[0.8, 1.5], [0.08, 2.55, 0.62]], skull: [[-0.62, 2.12], [0.14, 2.58, 0.64]],
     vault: [[0.12, 0.55], [0.12, 1.8, 2.5]], face: [[0.12, 1.55], [0.12, 2.3, 0.72]], window: [[1.15, 2.2], [0.12, 3.6, 1.1]], door: [[0.12, 1.15], [0.12, 0.0, 1.35]],
-    hall: [[0.12, -1.75], [0.12, 1.5, 1.5]], door2: [[0.12, -0.3], [0.12, -2.0, 1.3]], bathdoor: [[0.3, -1.1], [2.2, -1.1, 1.1]], boiler: [[0.3, 1.2], [1.2, 3.3, 1.4]] };      // vault and boiler: the Giger layer (added in Task 9)
+    hall: [[0.12, -1.75], [0.12, 1.5, 1.5]], bath: [[1.65, -1.1], [2.8, -1.1, 0.9]], tub: [[1.7, -0.9], [2.66, -1.4, 0.6]], mirror: [[1.75, -0.8], [1.86, -2.0, 1.5]], toilet: [[2.05, -1.3], [1.85, -0.3, 0.6]], door2: [[0.12, -0.3], [0.12, -2.0, 1.3]], bathdoor: [[0.3, -1.1], [2.2, -1.1, 1.1]], boiler: [[0.3, 1.2], [1.2, 3.3, 1.4]] };      // vault and boiler: the Giger layer (added in Task 9)
   for (const [name, [[bx, by], [tx, ty, tz]]] of Object.entries(CAMS)) {
     const dx = tx - bx, dy = ty - by;                           // Blender space: +y is north
     const yaw = YAW_SIGN * Math.atan2(-dx, dy);                  // 0 when the target is straight north
