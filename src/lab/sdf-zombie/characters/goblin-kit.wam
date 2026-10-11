@@ -19,8 +19,8 @@
 # skeleton moves and this does not, the plate floats. Two conversions apply
 # and neither is optional:
 #
-#   * UNITS. WAM lengths are fractions of `height`; .blob's are metres. Every
-#     number here is the .blob metre value / 1.30.
+#   * UNITS. WAM lengths are fractions of `height`; .blob's are metres. Every number here is the AUTHORED .blob metre value / 1.30. The
+#     .blob now compiles at `scale 1.3077` (1.70 m, 2026-10-11), and this file's `height` is 1.70, so the fractions still land on the same joints.
 #   * PITCH SIGN ON `down` BONES. WAM's pitch tips an `up` bone forward and a
 #     `down` bone BACKWARD; .blob's always carries toward +z. So `up` bones
 #     (spine1, chest, neck, skull) share their pitch verbatim, and every `down`
@@ -55,7 +55,7 @@
 # geometry floats 0.174 above the ground (there are no feet here). A warning
 # about anything else is real.
 model goblin-kit
-  height 1.30
+  height 1.70
   # chunky = 8-sided lofts. Faceted plate against smooth raymarched flesh is
   # the contrast this experiment is for — if it reads as cheap rather than
   # deliberate, this is the first knob to try at `smooth`.

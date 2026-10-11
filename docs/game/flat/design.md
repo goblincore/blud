@@ -21,7 +21,8 @@ lived-in. **It can never be left.**
 ## 2. Layout (draft)
 
 Roughly 4 × 5 m. The furniture is goblin-sized: the one space in the game
-that fits the goblin (world law 5).
+that fits the goblin (world law 5). (2026-10-11: the goblin is now human height, 1.70 m, and the built Flat is
+human-scaled; see the [goblin height spec](../../superpowers/specs/2026-10-11-goblin-human-height-design.md).)
 
 ```
  ┌──────────── high window (feet pass) ────────────┐

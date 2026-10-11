@@ -319,6 +319,7 @@ guess, and guesses are what `blob:measure` exists to replace.
   but lands in the *head* cluster — wrong fold group, wrong bounding sphere.
   A carve on a non-head limb is a grammar gap to raise, not to route around.
 - `wide`/`tall`/`deep` scale a part's axes; omitted axes default to 1.
+- A `scale <k>` line in the `model` block (e.g. the goblin's `scale 1.3077`) multiplies every LENGTH of the compiled body by k (`body-scale.ts`); the file's own numbers stay the authored ones. The measuring and fitting scripts (`blob-rings`, `blob-measure`, ...) print COMPILED metres, so divide what they suggest by k before pasting it into the file.
 - **`clearOf` (the interpenetration check in `blob-checks.ts`) samples along a
   primitive's own shaft, spaced to its effective radius.** For a primitive
   whose `length / effRadius` exceeds 32 the spacing can't keep up, so it warns

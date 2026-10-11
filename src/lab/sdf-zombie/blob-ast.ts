@@ -180,6 +180,11 @@ export interface BlobDoc {
   name: string;
   height: number | null;
   /**
+   * Uniform scale applied to every length when the document is COMPILED (body-scale.ts), or null for 1. `height` stays a label; with a
+   * scale it reads authored height times scale. Parsed from a `scale <k>` line in the `model` block.
+   */
+  scale: number | null;
+  /**
    * Declared knee fold, or null when the document says nothing.
    *
    * NULL RATHER THAN A DEFAULT OF `humanoid`, which is what this was. Stance is

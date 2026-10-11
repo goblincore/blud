@@ -4,13 +4,18 @@
 // Pins the RELATIONSHIPS the numbers must keep, not the numbers: the speeds come from the clip curves the profile
 // borrows, so retuning the cadence in the turntable must keep cruise, the run band and the curves in step.
 import { describe, it, expect } from 'vitest';
+import goblinSrc from './characters/goblin.blob?raw';
+import { parseBlob } from './blob-parse';
 import { motionProfileFor } from './motion-profile';
 import { GOBLIN_WALK, GOBLIN_RUN, SHAMBLE, makeGaitState, stepGait, type GaitSkew } from './gait';
 import { SOLDIER_WALK } from './gait-curves/soldier-walk';
 import { SOLDIER_RUN } from './gait-curves/soldier-run';
 import type { GaitCurves } from './gait-curves';
 
-const LEG = 0.29 + 0.27; // goblin.blob thigh + shin, metres
+// goblin.blob thigh + shin as AUTHORED (1.30 m), times the model's `scale` K: the rig's leg is 0.7323 m, which is the length the
+// gait multiplies its curves by (gait.ts legLen).
+const K = parseBlob(goblinSrc).scale ?? 1;
+const LEG = (0.29 + 0.27) * K;
 /** gait-from-clip.ts's formula: the speed the stride implies for this body. */
 const implied = (c: GaitCurves, freq: number) => {
   const duty = c.L.stance.filter(Boolean).length / c.n;

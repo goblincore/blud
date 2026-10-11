@@ -14,6 +14,7 @@ import { DEFAULT_FACE, facePrims, type FaceParams } from './face';
 const ZERO_FREQ: Vec3 = [0, 0, 0];
 import { DEFAULT_SHEET, type FaceSheetParams } from './blob-face-sheet';
 import { FLESH_PRESETS, type FleshMaterial } from './material';
+import { scaleBodyDef } from './body-scale';
 
 /**
  * The only valid `.blob` face parameter names — every key of `FaceParams`,
@@ -486,11 +487,13 @@ export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
 
   const prims: PrimDef[] = doc.parts.map(partToPrim);
 
-  return {
+  const def: BodyDef = {
     name: doc.name,
     root: [0, doc.rootHeight, 0],
     bones,
-    prims: [...prims, ...facePrims(face)],
+    // facePrims() tags each prim for its own tests (`tag`), which is not a PrimDef field; scaleBodyDef rejects fields it has no unit for,
+    // and nothing reads the tag off a compiled body, so it is dropped here.
+    prims: [...prims, ...facePrims(face).map(({ tag: _tag, ...p }): PrimDef => p)],
     // Authored bones (a `bones` block) compile through the SAME partToPrim
     // path as body parts, then get `op: 'bone'` forced on: they are bones no
     // matter which words placed them. A line may opt into viscera with the
@@ -511,4 +514,7 @@ export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
           ...(doc.bonesBlock.ratio === null ? {} : { boneRatio: doc.bonesBlock.ratio }),
         }),
   };
+
+  // The model's `scale` line (1 when absent) is applied once, here, after the face prims are in, so everything downstream sees metres.
+  return scaleBodyDef(def, doc.scale ?? 1);
 }
