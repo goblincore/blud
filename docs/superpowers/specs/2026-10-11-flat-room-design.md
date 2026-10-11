@@ -1,6 +1,6 @@
 # The Flat's room in the engine — design
 
-**Date:** 2026-10-11 · **Status:** design approved by the owner (2026-10-11), plan next · **Branch:** `claude/flat-room` ·
+**Date:** 2026-10-11 · **Status:** slice 1 built 2026-10-11 ([notes](../../dev-notes/2026-10-11-flat-room/NOTES.md)); the owner liked it and asked for the Giger iMac next · **Branch:** `claude/flat-room` ·
 **Look-dev:** [`docs/dev-notes/2026-10-01-flat-room-lookdev/`](../../dev-notes/2026-10-01-flat-room-lookdev/notes.md) ·
 **Flat design:** [`docs/game/flat/design.md`](../../game/flat/design.md) · **Tasks:** [`docs/game/flat/tasks.md`](../../game/flat/tasks.md) (F-A1, F-T1) ·
 **Level format:** [level-format design](2026-09-23-level-format-design.md), [level mesh key](2026-09-24-level-mesh-key-design.md) ·
