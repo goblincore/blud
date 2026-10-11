@@ -94,6 +94,10 @@ so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), like
     `rig-bind.ts` (`ridesHead`, ~line 388) binds it to the RIGID head: it is 94 mm below the skull pivot and will slide
     19-47 mm into or off the neck as the head pitches. Make it a short bar (`bar head on neck from=0.28 to=0.32 ...`)
     so it binds per end, and check with `__sdfLab.heroPosed()`. `female.blob:107` has the same pattern.
+- [ ] **Goblin to human height** (owner, 2026-10-11: the player is human-sized and the levels are scaled to them, so the goblin
+  should be near human height, not 1.30 m). Its own spec and plan. `height 1.30` in `goblin.blob` is a label: the proportions are
+  absolute metres, and the WAM kit (a hand-copied transcription, metres ÷ 1.30), the armour, the gait, the poses, the held-weapon
+  carries and their tests are all tuned at 1.30. Not blocking the Flat's room ([spec](../superpowers/specs/2026-10-11-flat-room-design.md)).
 
 ## Warbull (cyber-minotaur: flesh + bolted-in machinery, rockets + charge) — second draft from the owner's reference plate 2026-09-27, awaiting kit build + playtest
 

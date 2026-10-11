@@ -10,6 +10,11 @@
 
 ## In flight / next
 
+**The Flat's room in the engine** (owner, 2026-10-11) — [levels](docs/tasks/levels.md) (4o)
+- [~] **Spec written; plan next.** A walkable `?level=flat`: the last-stage room from the look-dev (stone shell, Giger layer, hero
+  props), through the Blender level route. First slice is the shell. [Spec](docs/superpowers/specs/2026-10-11-flat-room-design.md)
+  (branch `claude/flat-room`). Separate task: the goblin to human height ([characters](docs/tasks/characters.md)).
+
 **Frame cost: the heavy scenes at a stable 30 fps** (owner's goal, 2026-10-08) — [rendering](docs/tasks/rendering.md)
 - [~] **Measured and ranked 2026-10-08; two changes built (PR goblincore/blud#41), owner look pending.** The whole
   frame attributed on six scenes ([notes](docs/dev-notes/2026-10-08-frame-cost/NOTES.md), driver
