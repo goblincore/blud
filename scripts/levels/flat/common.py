@@ -158,6 +158,17 @@ def torus(name, c, R, r, material, rot=(0, 0, 0), scale=(1, 1, 1), uv_size=1.0):
     return _finish(o, material, uv_size)
 
 
+def to_mesh(ob):
+    """Convert a curve or metaball object (already linked into a collection) to a mesh object; returns the mesh object."""
+    bpy.context.view_layer.update()
+    for o in bpy.context.view_layer.objects:
+        o.select_set(False)
+    ob.select_set(True)
+    bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.convert(target="MESH")
+    return bpy.context.view_layer.objects.active
+
+
 def tube(name, pts, radii, material, res=4, cyclic=False):
     """A beveled curve, converted to a mesh (the exporter only takes meshes)."""
     cu = bpy.data.curves.new(name, "CURVE")
@@ -176,13 +187,7 @@ def tube(name, pts, radii, material, res=4, cyclic=False):
     ob = bpy.data.objects.new(name, cu)
     ob.data.materials.append(material)
     dressing().objects.link(ob)
-    bpy.context.view_layer.update()
-    for o in bpy.context.view_layer.objects:
-        o.select_set(False)
-    ob.select_set(True)
-    bpy.context.view_layer.objects.active = ob
-    bpy.ops.object.convert(target="MESH")
-    return bpy.context.view_layer.objects.active
+    return to_mesh(ob)
 
 
 def catmull(pts, n_per=12):

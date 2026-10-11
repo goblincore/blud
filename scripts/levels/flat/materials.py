@@ -86,7 +86,13 @@ def make():
     M.FLAME = pbr("flame", (1, 0.8, 0.4), emit=(1.0, 0.7, 0.3))
     M.VIEW = pbr("view", emit_tex="view.jpg")
     M.AMBER = pbr("amber_placeholder", (1.0, 0.55, 0.15), rough=0.3, emit=(1.0, 0.5, 0.12))
-    # --- the alpha spike (Task 1 of the iMac plan) ---
-    M.SHELL = pbr("giger_shell", (1.0, 0.55, 0.22), rough=0.25, alpha=0.45)
-    M.GUTS = pbr("giger_guts", (0.75, 0.32, 0.26), rough=0.3, emit=(0.75, 0.25, 0.1))
+    M.SHELL = pbr("giger_shell", (1.0, 1.0, 1.0), rough=0.25, tex="shell_color.jpg", alpha=0.45)     # alpha-blended: the guts show through
+    M.FLESH = pbr("flesh", (0.75, 0.32, 0.26), rough=0.3)
+    M.LIPS = pbr("lips", (0.55, 0.10, 0.13), rough=0.15)
+    M.TONGUE = pbr("tongue", (0.62, 0.16, 0.2), rough=0.12)
+    M.DARKGLASS = pbr("darkglass", (0.01, 0.01, 0.012), rough=0.08)
+    M.BEZEL = pbr("bezel", (0.03, 0.03, 0.035), rough=0.35)
+    M.CD = pbr("cd", (0.75, 0.75, 0.78), rough=0.08, metal=1.0)
+    M.MUCUS = pbr("mucus", (0.9, 0.82, 0.6), rough=0.02)
+    M.SCREEN = pbr("screen", emit_tex="screen.jpg")
     return M
