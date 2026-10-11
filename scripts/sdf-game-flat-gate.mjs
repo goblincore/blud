@@ -93,7 +93,7 @@ if (process.env.SHOTS === '1') {
     __sdfGame.setFlashlight(false);
     return 1;
   })()`);
-  const YAW_SIGN = Number(process.env.YAW_SIGN ?? 1);          // flip to -1 if the shots face the wrong way (see Task 5 Step 4)
+  const YAW_SIGN = Number(process.env.YAW_SIGN ?? -1);          // flip to -1 if the shots face the wrong way (see Task 5 Step 4)
   const CAMS = { wide: [[-1.12, 0.17], [0.4, 2.8, 0.45]], shoulder: [[-0.32, 0.92], [0.16, 2.48, 0.62]], imac: [[0.8, 1.5], [0.08, 2.55, 0.62]], skull: [[-0.62, 2.12], [0.14, 2.58, 0.64]] };
   for (const [name, [[bx, by], [tx, ty, tz]]] of Object.entries(CAMS)) {
     const dx = tx - bx, dy = ty - by;                           // Blender space: +y is north

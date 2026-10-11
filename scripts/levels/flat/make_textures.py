@@ -24,7 +24,7 @@ ROCK = os.path.join(ROOT, "assets-source/levels/kit-textures/rock-color.png")
 LOOKDEV = os.path.join(ROOT, "docs/dev-notes/2026-10-01-flat-room-lookdev")
 IDYLL = os.path.join(ROOT, "docs/dev-notes/2026-10-01-flat-emergence-lookdev/view-bryce-moody.png")
 OUT = os.path.join(ROOT, "assets-source/levels/flat-textures")
-CASTLE = np.array((1.6, 1.55, 1.45), np.float32)       # the baked rock is dark; castle stone a step lighter (room.py 266)
+CASTLE = np.array((1.45, 1.45, 1.45), np.float32)     # castle stone a step lighter than the baked rock (room.py 266 used 1.6/1.55/1.45; the engine's warm ambient wants it neutral)
 
 
 def save(arr, name):

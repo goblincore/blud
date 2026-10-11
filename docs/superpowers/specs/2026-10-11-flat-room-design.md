@@ -113,9 +113,10 @@ uses the engine's per-room light list; the plan checks the count against its per
 
 No precedent exists for a small closed room, so this is a proposal. It is checked, not assumed:
 
-- At most about 40 art draw calls, about 250 000 triangles, an art `.glb` of 8 MB or less, and textures of 1024 px or less.
+- At most about 40 art draw calls, about 250 000 triangles, and textures of 1024 px or less.
 - The frame holds under 33 ms (the 30 fps goal) in the room on the owner's machine.
 - The Wake's art cost +75 draws and +5 ms, Night Train's +200 and +12 ms, for reference.
+- File size is not a constraint (owner, 2026-10-11).
 
 ## 9. Verification
 
