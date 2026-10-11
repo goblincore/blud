@@ -535,7 +535,7 @@ body
     expect(parseBlob(MINI('')).scale).toBeNull();
   });
 
-  it.each(['0', '-1', 'abc', ''])('rejects scale "%s" with the line number', bad => {
+  it.each(['0', '-1', 'abc', '', '1.5x', 'Infinity'])('rejects scale "%s" with the line number', bad => {
     expect(() => parseBlob(MINI(`  scale ${bad}`))).toThrow(/^3:3: scale must be a positive number/);
   });
 });

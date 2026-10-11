@@ -630,6 +630,11 @@ body
     for (let i = 1; i < base.prims.length; i++) expect(big.prims[i]!.radius).toBeCloseTo(base.prims[i]!.radius * 2, 12);
   });
 
+  it('drops the face prims\' tag', () => {
+    // facePrims() tags prims for its own tests; compileBlob drops the tag (scaleBodyDef has no unit for it).
+    expect(compileBlob(parseBlob(src(''))).prims.every(p => !('tag' in p))).toBe(true);
+  });
+
   it('is unchanged without a scale line', () => {
     expect(compileBlob(parseBlob(src('')))).toEqual(compileBlob(parseBlob(src('  scale 1'))));
   });
