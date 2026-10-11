@@ -113,7 +113,7 @@ Adding to this list is cheap. Removing from it needs a real reason.
 - Who knocks, who sends the mail, how they know.
 - Whether the Host's heartbeat and the knock are the same thing.
 - Whether anything can go *into* the screen.
-- The goblin's face. At most: hands, a shadow, a covered mirror.
+- ~~The goblin's face. At most: hands, a shadow, a covered mirror.~~ **Decided 2026-10-11 (owner): the goblin's face may be shown.** The rule is discarded; the Flat's bathroom has a plain mirror (dark polished glass for now; the real planar mirror, with the goblin in it, is a later spike).
 - Who runs the Line, where it started, and how a train flies.
 - What the Stoker is, and what it is feeding the fire with (you can see; it's never said).
 
@@ -166,10 +166,10 @@ never jump scares.
 
 ## 7. The Flat
 
-- **Small and specific:** one main room (maybe a tiny bathroom): desk and CRT,
+- **Small and specific:** a small apartment (2026-10-11: a main room, an entry hall and a tiny bathroom, all built): desk and CRT,
   a chair too big for a goblin, a mattress, the CD shelf, pipes that carry the
   music, a bucket under a leak, a high window showing only passing feet, a
-  covered mirror, and the front door.
+  a mirror (plain since 2026-10-11; it was a covered one), and the front door.
 - **The door never lets you out,** and refuses differently per phase: the
   goblin turns back as if it forgot why it got up; the door opens onto the same
   room; the door is soft.
