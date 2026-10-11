@@ -43,7 +43,7 @@ describe('flat.level.json', () => {
 
 type Accessor = { count: number };
 type Primitive = { indices?: number; material?: number };
-type Gltf = { accessors: Accessor[]; meshes: { primitives: Primitive[] }[]; materials?: unknown[] };
+type Gltf = { accessors: Accessor[]; meshes: { primitives: Primitive[] }[]; materials?: { name?: string; alphaMode?: string }[] };
 
 describe('flat.art.glb budget (spec section 8)', () => {
   const bytes = new Uint8Array(readFileSync('public/assets/levels/flat.art.glb'));
@@ -54,6 +54,10 @@ describe('flat.art.glb budget (spec section 8)', () => {
   it('at most 40 draw-call primitives', () => { expect(prims.length).toBeLessThanOrEqual(40); });
   // Raised from 250 000 (owner, 2026-10-11): the look comes first; an optimisation pass follows.
   it('at most 400 000 triangles', () => { expect(triangles).toBeLessThanOrEqual(400_000); });
+  it('the iMac shell is a blended material', () => {
+    const shell = glb.materials?.find(m => m.name === 'giger_shell');
+    expect(shell?.alphaMode).toBe('BLEND');
+  });
   // File size is not a constraint (owner, 2026-10-11): this only catches an accidental huge texture.
   it('an art file under 20 MB', () => { expect(statSync('public/assets/levels/flat.art.glb').size).toBeLessThanOrEqual(20 * 1024 * 1024); });
 });

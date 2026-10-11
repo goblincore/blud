@@ -140,7 +140,8 @@ def build_lights_as_objects():
 
 def build_imac_placeholder():
     """The iMac's place: an amber, rounded body with a dark bezel (a stand-in for the translucent Giger iMac; spec section 11)."""
-    sphere('imac_body', (KX + 0.04, KY + 0.14, KTOP + 0.2), 0.22, MT.AMBER, scale=(1.0, 1.15, 0.95), seg=32)
+    sphere('imac_guts_spike', (KX + 0.04, KY + 0.14, KTOP + 0.2), 0.10, MT.GUTS, seg=24)
+    sphere('imac_body', (KX + 0.04, KY + 0.14, KTOP + 0.2), 0.22, MT.SHELL, scale=(1.0, 1.15, 0.95), seg=32)
     box('imac_bezel', (KX + 0.04, KY - 0.05, KTOP + 0.2), (0.34, 0.03, 0.3), MT.GUN, bevel=0.02)
 
 

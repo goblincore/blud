@@ -21,8 +21,9 @@ def _image(nt, file, color=True):
     return t
 
 
-def pbr(name, color=(0.5, 0.5, 0.5), rough=0.8, metal=0.0, tex=None, normal=None, normal_strength=1.0, emit=None, emit_tex=None):
-    """color: (r, g, b); tex/normal: file names in TEX; emit: (r, g, b) at strength 1; emit_tex: a file shown as emission."""
+def pbr(name, color=(0.5, 0.5, 0.5), rough=0.8, metal=0.0, tex=None, normal=None, normal_strength=1.0, emit=None, emit_tex=None, alpha=1.0):
+    """color: (r, g, b); tex/normal: file names in TEX; emit: (r, g, b) at strength 1; emit_tex: a file shown as emission;
+    alpha < 1 exports as glTF alphaMode BLEND (Blender 5.2 does this for any Principled alpha below 1)."""
     m = bpy.data.materials.new(name)
     m.use_nodes = True
     nt = m.node_tree
@@ -30,6 +31,7 @@ def pbr(name, color=(0.5, 0.5, 0.5), rough=0.8, metal=0.0, tex=None, normal=None
     p.inputs["Base Color"].default_value = (*color, 1.0)
     p.inputs["Roughness"].default_value = rough
     p.inputs["Metallic"].default_value = metal
+    p.inputs["Alpha"].default_value = alpha
     if tex:
         nt.links.new(_image(nt, tex).outputs["Color"], p.inputs["Base Color"])
     if normal:
@@ -84,4 +86,7 @@ def make():
     M.FLAME = pbr("flame", (1, 0.8, 0.4), emit=(1.0, 0.7, 0.3))
     M.VIEW = pbr("view", emit_tex="view.jpg")
     M.AMBER = pbr("amber_placeholder", (1.0, 0.55, 0.15), rough=0.3, emit=(1.0, 0.5, 0.12))
+    # --- the alpha spike (Task 1 of the iMac plan) ---
+    M.SHELL = pbr("giger_shell", (1.0, 0.55, 0.22), rough=0.25, alpha=0.45)
+    M.GUTS = pbr("giger_guts", (0.75, 0.32, 0.26), rough=0.3, emit=(0.75, 0.25, 0.1))
     return M
