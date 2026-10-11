@@ -131,12 +131,34 @@ export function sheetThickness(p: EmergenceParams, x: number, y: number): number
   return THICK0 * (1 - 0.8 * Math.max(stretch, smooth(p.thin) * 0.6)) + 0.0006;
 }
 
+/** The tear's raggedness: harmonics (amplitude, frequency in theta, phase). The shader's scrTear is built from this table. */
+export const TEAR_RAG: readonly (readonly [number, number, number])[] = [[0.22, 5, 1.3], [0.12, 11, 0.4], [0.06, 23, 2.1]];
+
 /** The tear's radius around the tip (the sheet's apex axis) at angle `theta`: grows with `tear`, ragged by a deterministic harmonic sum. */
 export function tearRadius(p: EmergenceParams, theta: number): number {
   const t = smooth(p.tear);
   if (t === 0) return 0;
-  const rag = 1 + 0.22 * Math.sin(5 * theta + 1.3) + 0.12 * Math.sin(11 * theta + 0.4) + 0.06 * Math.sin(23 * theta + 2.1);
+  let rag = 1;
+  for (const [a, k, ph] of TEAR_RAG) rag += a * Math.sin(k * theta + ph);
   return TEAR_R_MAX * t * rag;
+}
+
+/** The tear's tip: the sheet's apex, on the apex axis (x, y) = (0, 0). The tear is a ragged SPHERE round it (radius tearRadius at the angle
+ *  round the axis): on the front cap that is a near-circular opening, and it runs back down the sac's walls the way a tear in a membrane
+ *  does, not as round one's straight cut along z (a cylinder grazes the walls in long slivers). The shader reads the tip's z from the page. */
+export const tearTip = (p: EmergenceParams, time = 0): Vec3 => [0, 0, sacZ(p, 0, 0, time)];
+
+/** The point of the tear's edge on the sheet at angle `theta` round the axis: on sacZ, where the distance from the tip crosses tearRadius
+ *  (bisection along the ray from the axis; the distance grows outward). Where the sheet drops down the sac's wall at the egg's silhouette
+ *  (sacZ jumps there) the crossing is AT the wall: the edge sits on the silhouette. The goo's strands leave the lip here. A closed tear gives
+ *  the tip. */
+export function tearEdge(p: EmergenceParams, theta: number, time = 0): Vec3 {
+  const tip = tearTip(p, time), R = tearRadius(p, theta), cx = Math.cos(theta), cy = Math.sin(theta);
+  if (R <= 0) return tip;
+  const out = (r: number) => Math.hypot(r, sacZ(p, r * cx, r * cy, time) - tip[2]) > R;
+  let lo = 0, hi = R;
+  for (let i = 0; i < 10; i++) { const m = 0.5 * (lo + hi); if (out(m)) hi = m; else lo = m; }
+  return [lo * cx, lo * cy, sacZ(p, lo * cx, lo * cy, time)];
 }
 
 /** THE PICTURE: the sheet stretches, so the picture is read through a radial table: entry i is the picture radius (0..1) at normalised sheet

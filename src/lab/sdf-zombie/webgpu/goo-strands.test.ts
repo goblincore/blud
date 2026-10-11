@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/webgpu/goo-strands.test.ts
 import { describe, it, expect } from 'vitest';
 import { DURATION } from './emergence-timeline';
-import { N_STRANDS, N_BEADS, N_DRIPS, STRAND_POINTS, gooAt, gooTexels, GOO_TEXELS } from './goo-strands';
+import { N_STRANDS, N_BEADS, N_DRIPS, STRAND_POINTS, gooAt, gooTexels, GOO_BOUND0, GOO_TEXELS } from './goo-strands';
 
 const dist = (a: readonly number[], b: readonly number[]) => Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!);
 
@@ -56,9 +56,43 @@ describe('goo strands', () => {
     for (const d of late.drips) expect(d.length).toBeLessThanOrEqual(0.25);
   });
 
+  it('a strand and its beads thicken in after it forms instead of popping in at full radius', () => {
+    const seen = new Set<number>();
+    for (let t = 7; t <= 10; t += 1 / 60) {
+      gooAt(t).strands.forEach((s, i) => {
+        if (!s.live || seen.has(i)) return;
+        seen.add(i);
+        expect(s.radius, `strand ${i} at t=${t.toFixed(3)}`).toBeLessThan(0.0015);
+        // its beads (bead b rides strand b % N_STRANDS) are as thin
+        gooAt(t).beads.forEach((b, bi) => { if (bi % N_STRANDS === i) expect(b.radius, `bead ${bi} at t=${t.toFixed(3)}`).toBeLessThan(0.003); });
+      });
+    }
+    expect(seen.size).toBe(N_STRANDS);
+  });
+
   it('packs into the fixed texel count the shader reads', () => {
     const tex = gooTexels(gooAt(9));
     expect(tex).toHaveLength(GOO_TEXELS * 4);
-    expect(N_STRANDS * STRAND_POINTS + N_BEADS + 2 * N_DRIPS).toBeLessThanOrEqual(GOO_TEXELS);
+    expect(GOO_BOUND0 + N_STRANDS + 2).toBeLessThanOrEqual(GOO_TEXELS);
+  });
+
+  it('the bounds hold their pieces: each strand\'s points, the beads and the drips, radii included', () => {
+    for (const t of [7.5, 9, 10.5, 12, 14]) {
+      const tex = gooTexels(gooAt(t));
+      const tx = (i: number) => [tex[i * 4]!, tex[i * 4 + 1]!, tex[i * 4 + 2]!, tex[i * 4 + 3]!];
+      const holds = (bi: number, a: number, b: number) => {
+        const B = tx(bi);
+        for (let i = a; i < b; i++) {
+          const s = tx(i);
+          if (s[3]! <= 0) continue;
+          expect(B[3], `t=${t} bound ${bi}`).toBeGreaterThan(0);
+          expect(dist(s, B) + s[3]!, `t=${t} texel ${i} in bound ${bi}`).toBeLessThanOrEqual(B[3]! + 1e-6);
+        }
+      };
+      for (let s = 0; s < N_STRANDS; s++) holds(GOO_BOUND0 + s, s * STRAND_POINTS, (s + 1) * STRAND_POINTS);
+      const b0 = N_STRANDS * STRAND_POINTS;
+      holds(GOO_BOUND0 + N_STRANDS, b0, b0 + N_BEADS);
+      holds(GOO_BOUND0 + N_STRANDS + 1, b0 + N_BEADS, b0 + N_BEADS + 2 * N_DRIPS);
+    }
   });
 });

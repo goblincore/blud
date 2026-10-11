@@ -4,7 +4,7 @@
 // sliding along them, and drips off the bezel's lower rim. Pure and deterministic: `gooAt(t)` re-runs a small Verlet sim from t = 0 in fixed steps,
 // with the anchors read from the timeline and the field at every step, so a scrub and a playback show the same frame (the page never keeps state).
 import { paramsAt, DURATION, type EmergenceParams } from './emergence-timeline';
-import { EGG, GLASS, eggCentre, lipOpening, sacZ, tearRadius, type Vec3 } from './emergence-field';
+import { EGG, GLASS, eggCentre, lipOpening, tearEdge, tearRadius, type Vec3 } from './emergence-field';
 
 export const N_STRANDS = 6;
 export const STRAND_POINTS = 6;
@@ -38,9 +38,11 @@ const BEAD_U0 = Array.from({ length: N_BEADS }, () => 0.2 + R() * 0.6);
 
 /** Where strand i leaves the tear's lip (on the sheet) and where it lands on the egg, at the state `p` and time `t`. */
 function anchors(p: EmergenceParams, i: number, t: number): { a: Vec3; b: Vec3 } {
-  const th = STRAND_THETA[i]!, r = Math.max(0.02, tearRadius(p, th));
-  const x = r * Math.cos(th), y = r * Math.sin(th);
-  const a: Vec3 = [x, y, sacZ(p, x, y, t)];
+  const th = STRAND_THETA[i]!;
+  // on the tear's edge (the field's tearEdge: on the sheet, at the tear's radius from the tip), never closer to the axis than 2 cm
+  const e = tearEdge(p, th, t), re = Math.hypot(e[0], e[1]);
+  const r = Math.max(0.02, re), x = re > 0 ? (e[0] / re) * r : r * Math.cos(th), y = re > 0 ? (e[1] / re) * r : r * Math.sin(th);
+  const a: Vec3 = [x, y, e[2]];
   const c = eggCentre(p);
   // the egg end: a point on the egg's near surface, on the same side of the egg as the tear point
   const ex = (x / Math.max(r, 1e-3)) * EGG.rx * 0.55, ey = c[1] + (y / Math.max(r, 1e-3)) * EGG.ry * 0.55;
@@ -79,6 +81,11 @@ function stepSim(sim: Sim, p: EmergenceParams, t: number): void {
   }
 }
 
+/** A strand (and its beads) thickens from nothing over BIRTH_S after it forms (it is born on the chord at full length: at full radius it
+ *  popped in one frame). */
+const BIRTH_S = 0.35;
+const birth = (age: number) => { const u = Math.min(1, Math.max(0, age / BIRTH_S)); return u * u * (3 - 2 * u); };
+
 /** The goo at time `t` (seconds): re-run from 0 in fixed steps, deterministic. */
 export function gooAt(t: number): Goo {
   const tt = Math.min(Math.max(t, 0), DURATION);
@@ -90,14 +97,14 @@ export function gooAt(t: number): Goo {
     const live = sim.born[i]! && sim.pts[i]!.length === STRAND_POINTS;
     const P = live ? sim.pts[i]!.map(v => [...v] as Vec3) : [];
     const chord = live ? Math.hypot(P[0]![0] - P[P.length - 1]![0], P[0]![1] - P[P.length - 1]![1], P[0]![2] - P[P.length - 1]![2]) : 0;
-    return { live, points: P, segMax: live ? Math.max((chord * STRAND_SLACK[i]!) / (STRAND_POINTS - 1), 0) * 1.5 + 1e-3 : 0, radius: 0.006 - 0.0025 * Math.min(1, p.heal * 2) };
+    return { live, points: P, segMax: live ? Math.max((chord * STRAND_SLACK[i]!) / (STRAND_POINTS - 1), 0) * 1.5 + 1e-3 : 0, radius: (0.006 - 0.0025 * Math.min(1, p.heal * 2)) * birth(tt - STRAND_START[i]!) };
   });
   const beads: Bead[] = BEAD_STRAND.map((si, bi) => {
     const s = strands[si]!;
     if (!s.live) return { pos: [0, -9, 0] as Vec3, radius: 0 };
     const u = Math.min(0.95, Math.max(0.05, BEAD_U0[bi]! + 0.08 * Math.sin(tt * 0.9 + bi)));
     const f = u * (STRAND_POINTS - 1), k = Math.min(STRAND_POINTS - 2, Math.floor(f)), w = f - k, A = s.points[k]!, B = s.points[k + 1]!;
-    return { pos: [A[0] + (B[0] - A[0]) * w, A[1] + (B[1] - A[1]) * w, A[2] + (B[2] - A[2]) * w] as Vec3, radius: 0.011 };
+    return { pos: [A[0] + (B[0] - A[0]) * w, A[1] + (B[1] - A[1]) * w, A[2] + (B[2] - A[2]) * w] as Vec3, radius: 0.011 * birth(tt - STRAND_START[si]!) };
   });
   const lip = lipOpening(p);
   const drips: Drip[] = Array.from({ length: N_DRIPS }, (_, i) => {
@@ -109,13 +116,36 @@ export function gooAt(t: number): Goo {
   return { strands, beads, drips };
 }
 
-/** The goo as a row of RGBA32F texels for the shader: strand points (xyz + radius), then the beads, then each drip's top and tip; unused texels are w = 0. */
+/** Where the bounds start in the texel row: one per strand, then one for all the beads, then one for all the drips. */
+export const GOO_BOUND0 = N_STRANDS * STRAND_POINTS + N_BEADS + 2 * N_DRIPS;
+
+/** A bounding sphere (centre, radius) round spheres given as [x, y, z, r] (r > 0 only); radius 0 when there are none. */
+function bound(spheres: readonly (readonly number[])[]): [number, number, number, number] {
+  const live = spheres.filter(s => s[3]! > 0);
+  if (live.length === 0) return [0, -9, 0, 0];
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (const s of live) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k]!, s[k]! - s[3]!); hi[k] = Math.max(hi[k]!, s[k]! + s[3]!); }
+  const c = [0, 1, 2].map(k => (lo[k]! + hi[k]!) / 2);
+  let r = 0;
+  for (const s of live) r = Math.max(r, Math.hypot(s[0]! - c[0]!, s[1]! - c[1]!, s[2]! - c[2]!) + s[3]!);
+  return [c[0]!, c[1]!, c[2]!, r];
+}
+
+/** The goo as a row of RGBA32F texels for the shader: strand points (xyz + radius), then the beads, then each drip's top and tip (unused
+ *  texels are w = 0), then from GOO_BOUND0 a bounding sphere per strand, one for the beads and one for the drips (w = 0: empty), so the
+ *  shader skips whole strands it cannot reach. A tapered capsule or round cone lies inside the spheres at its ends' hull, so these hold them. */
 export function gooTexels(g: Goo): Float32Array {
   const out = new Float32Array(GOO_TEXELS * 4);
   let n = 0;
   const put = (v: readonly number[], r: number) => { out[n * 4] = v[0]!; out[n * 4 + 1] = v[1]!; out[n * 4 + 2] = v[2]!; out[n * 4 + 3] = r; n++; };
+  const sph = (i: number) => [out[i * 4]!, out[i * 4 + 1]!, out[i * 4 + 2]!, out[i * 4 + 3]!];
   for (const s of g.strands) for (let k = 0; k < STRAND_POINTS; k++) s.live ? put(s.points[k]!, s.radius) : put([0, -9, 0], 0);
   for (const b of g.beads) put(b.pos, b.radius);
   for (const d of g.drips) { put(d.top, d.length > 0 ? d.radius : 0); put(d.tip, d.length > 0 ? d.radius * 1.6 : 0); }
+  const range = (a: number, b: number) => Array.from({ length: b - a }, (_, i) => sph(a + i));
+  for (let i = 0; i < N_STRANDS; i++) { const b = bound(range(i * STRAND_POINTS, (i + 1) * STRAND_POINTS)); put(b, b[3]); }
+  const b0 = N_STRANDS * STRAND_POINTS, d0 = b0 + N_BEADS;
+  { const b = bound(range(b0, d0)); put(b, b[3]); }
+  { const b = bound(range(d0, d0 + 2 * N_DRIPS)); put(b, b[3]); }
   return out;
 }

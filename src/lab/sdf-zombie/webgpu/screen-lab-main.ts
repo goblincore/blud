@@ -4,7 +4,9 @@
 // scrubbable page with the set (the P225f CRT, the desk, the lamp, the tower, the room), the REAL SDF goblin seated at the desk, posed from
 // the clock by the pose layer, and THE SCREEN PASS: the march (screen-emergence.wgsl.ts) on a proxy box in the screen's frame, drawn in the
 // SDF layer's late scene with its own depth (createScreenPass). `pass on` / `?nopass=1` / `__screenLab.setPass` swap it for the placeholder
-// glass (the Night Train still, flat); `?passdebug=1` / `setPassDebug` shows the march's steps, hits and materials.
+// glass (the Night Train still, flat); `?passdebug=1` / `setPassDebug` shows the march's steps, hits and materials. The goo (plan Task 7)
+// is goo-strands.ts's sim uploaded as a texel row each frame from 7 s on, cached per t; `?nogoo=1` / `setGoo` leaves it out (its cost);
+// `setOrbit` points the free camera (the look checks' front and side views).
 //
 // HOW THE GOBLIN IS HOSTED. The same pieces the flame lab and the WebGPU lab use, nothing more: `createLabRenderer`, `createSdfLayer`
 // (the march renders into its own target and composites over the polygonal pass with depth), `createPostAa` (sizes the layer; every
@@ -39,11 +41,12 @@ import { makeActorMotion, stepActorMotion, emptyActorSignals } from '../actor';
 import { MOTION_TUNING } from '../motion';
 import { makeRng } from '../wander';
 import { makePoseRig, poseJoints, type PoseRig } from '../pose';
-import { GLASS, DESK_Y, EGG, EGG_REST, PICTURE_TABLE_N, eggCentre, lipOpening, pictureTable, sacExtent, smooth } from './emergence-field';
+import { GLASS, DESK_Y, EGG, EGG_REST, PICTURE_TABLE_N, eggCentre, lipOpening, pictureTable, sacExtent, smooth, tearTip } from './emergence-field';
 import {
-  DEPTH_Q, SCREEN_PROXY, SCR_ELLIPSOID, SCR_LIGHT, SCR_LIP, SCR_MAP, SCR_MARCH, SCR_NORMAL, SCR_OPENING, SCR_PICTURE,
-  SCR_ROUNDRECT, SCR_SAC, SCR_SHADE, SCR_SHEET, SCR_SMAX, SCR_SMIN, SCR_SURFACE, SCR_VEINS,
+  DEPTH_Q, GOO_K, SCREEN_PROXY, SCR_CAPSULE, SCR_ELLIPSOID, SCR_GOO, SCR_LIGHT, SCR_LIP, SCR_MAP, SCR_MARCH, SCR_NORMAL, SCR_OPENING,
+  SCR_PICTURE, SCR_ROUNDCONE, SCR_ROUNDRECT, SCR_SAC, SCR_SHADE, SCR_SHEET, SCR_SMAX, SCR_SMIN, SCR_SURFACE, SCR_TEAR, SCR_VEINS,
 } from './screen-emergence.wgsl';
+import { GOO_BOUND0, GOO_TEXELS, gooAt, gooTexels } from './goo-strands';
 import { SHOTS, DURATION, shotAt, paramsAt, type ShotId } from './emergence-timeline';
 import { goblinClipAt, measureSeat, type SeatMeasure } from './screen-lab-goblin';
 import {
@@ -307,6 +310,8 @@ function buildDeskAndRoom(parent: THREE.Object3D, L: SetLayout, floorY: number):
 // The screen pass (plan Task 6): the march on a proxy box in the screen's frame, drawn in the SDF layer's late scene
 // ---------------------------------------------------------------------------
 type Include = NonNullable<Parameters<typeof wgslFn>[1]>[number];
+/** The goo exists from the tear's first strand (7.2 s); before this the page uploads nothing and never runs the sim. */
+const GOO_FROM = 7;
 /** The lamp's strength in the pass (the set's PointLight is 1.6 at the bulb; the pass's falloff is its own, tuned by eye). */
 const PASS_LAMP = 1.4;
 
@@ -316,6 +321,8 @@ interface ScreenPass {
   update(t: number, camera: THREE.PerspectiveCamera, heightPx: number): void;
   /** The march's debug view (steps red, hit green, material blue): `?passdebug=1` or the seam's setPassDebug. */
   setDebug(on: boolean): void;
+  /** The goo off (nothing uploaded, the bound empty): `?nogoo=1` or the seam's setGoo, so its cost can be read. */
+  setGooOn(on: boolean): void;
 }
 
 /** The proxy box and its material. The box's geometry is built in the screen frame (its local space IS the screen's), so the mesh only has
@@ -330,20 +337,30 @@ function createScreenPass(pictureTex: THREE.Texture): ScreenPass {
   const roundRectF = fn(SCR_ROUNDRECT);
   const openingF = fn(SCR_OPENING, [roundRectF]);
   const lipF = fn(SCR_LIP, [openingF]);
-  const mapF = fn(SCR_MAP, [sacF, openingF, lipF, ellipsoidF, sminF]);
+  const tearF = fn(SCR_TEAR);
+  const capsuleF = fn(SCR_CAPSULE), roundConeF = fn(SCR_ROUNDCONE);
+  const gooF = fn(SCR_GOO, [capsuleF, roundConeF, sminF]);
+  const mapF = fn(SCR_MAP, [sacF, openingF, lipF, ellipsoidF, sminF, smaxF, tearF, gooF]);
   const normalF = fn(SCR_NORMAL, [mapF]);
   const marchF = fn(SCR_MARCH, [mapF]);
   const veinsF = fn(SCR_VEINS);
   const pictureF = fn(SCR_PICTURE);
   const lightF = fn(SCR_LIGHT);
-  const surfaceF = fn(SCR_SURFACE, [lightF, veinsF]);
+  const surfaceF = fn(SCR_SURFACE, [lightF, veinsF, tearF, ellipsoidF]);
   const sheetF = fn(SCR_SHEET, [sacF, pictureF, veinsF, lightF]);
-  const shade = fn(SCR_SHADE, [marchF, normalF, sheetF, surfaceF, openingF]);
+  const shade = fn(SCR_SHADE, [marchF, normalF, sheetF, surfaceF, openingF, pictureF]);
 
   const table = new Float32Array(PICTURE_TABLE_N);
   const tableTex = new THREE.DataTexture(table, PICTURE_TABLE_N, 1, THREE.RedFormat, THREE.FloatType);
   tableTex.magFilter = THREE.NearestFilter; tableTex.minFilter = THREE.NearestFilter; tableTex.generateMipmaps = false;
   tableTex.needsUpdate = true;
+
+  // The goo: gooTexels(gooAt(t)) as a 64 x 1 RGBA32F row (textureLoad), and its bounding sphere (radius <= 0: none).
+  const gooData = new Float32Array(GOO_TEXELS * 4);
+  const gooTex = new THREE.DataTexture(gooData, GOO_TEXELS, 1, THREE.RGBAFormat, THREE.FloatType);
+  gooTex.magFilter = THREE.NearestFilter; gooTex.minFilter = THREE.NearestFilter; gooTex.generateMipmaps = false;
+  gooTex.needsUpdate = true;
+  const uGoo = uniform(new THREE.Vector4(0, 0, 0, -1));
 
   const uP0 = uniform(new THREE.Vector4()), uP1 = uniform(new THREE.Vector4());
   const uD = uniform(new THREE.Vector4()), uLip = uniform(new THREE.Vector4(GLASS.hw, GLASS.hh, 0, 0));
@@ -354,7 +371,7 @@ function createScreenPass(pictureTex: THREE.Texture): ScreenPass {
   const res = shade({
     eye: modelWorldMatrixInverse.mul(vec4(cameraPosition, 1.0)).xyz, pos: positionLocal,
     p0: uP0, p1: uP1, d: uD, lip: uLip, tm: uTime, lamp: uLamp, cfg: uCfg,
-    picTab: texture(tableTex), scrTex: pic, scrSamp: pic,
+    picTab: texture(tableTex), scrTex: pic, scrSamp: pic, gooTex: texture(gooTex), goo: uGoo,
   }) as unknown as { xyz: never; w: ReturnType<typeof float> };
   // The packed hit: floor(t * DEPTH_Q) + coverage. t is in the local frame, which has the world's scale (the screen group is unscaled).
   const tq = floor(res.w);
@@ -381,19 +398,45 @@ function createScreenPass(pictureTex: THREE.Texture): ScreenPass {
   proxy.frustumCulled = false;
 
   let debugView = false;
+  /** gooAt replays the sim from t = 0 (about 7 ms warm): only from GOO_FROM on (nothing exists before), and once per distinct t, so a
+   *  paused scrub does not recompute. */
+  let gooT = NaN;
+  let gooOn = true;
+  const setGoo = (t: number) => {
+    const live = gooOn && t >= GOO_FROM;
+    const key = live ? t : -1;
+    if (key === gooT) return;
+    gooT = key;
+    if (live) gooData.set(gooTexels(gooAt(t))); else gooData.fill(0);
+    gooTex.needsUpdate = true;
+    // The bound: the texels' box grown by their radii, then the blends' reach.
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    let any = false;
+    for (let i = 0; i < GOO_BOUND0; i++) {
+      const w = gooData[i * 4 + 3]!;
+      if (w <= 0) continue;
+      any = true;
+      for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k]!, gooData[i * 4 + k]! - w); hi[k] = Math.max(hi[k]!, gooData[i * 4 + k]! + w); }
+    }
+    if (!any) { uGoo.value.set(0, 0, 0, -1); return; }
+    const half = Math.hypot(hi[0]! - lo[0]!, hi[1]! - lo[1]!, hi[2]! - lo[2]!) / 2;
+    uGoo.value.set((lo[0]! + hi[0]!) / 2, (lo[1]! + hi[1]!) / 2, (lo[2]! + hi[2]!) / 2, half + GOO_K.self * 0.25 + GOO_K.scene);
+  };
   return {
     proxy,
     setDebug(on) { debugView = on; },
+    setGooOn(on) { gooOn = on; gooT = NaN; },
     update(t, camera, heightPx) {
       const p = paramsAt(t);
       uP0.value.set(p.ripple, p.push, p.thin, p.lipBow);
       uP1.value.set(p.tear, p.slump, p.heal, p.glow);
       const c = eggCentre(p), lo = lipOpening(p);
       uD.value.set(sacExtent(p), c[2], c[1], lo.z);
-      uLip.value.set(lo.hw, lo.hh, smooth(p.lipBow), 0);
+      uLip.value.set(lo.hw, lo.hh, smooth(p.lipBow), tearTip(p, t)[2]);
       (uTime as unknown as { value: number }).value = t;
       table.set(pictureTable(p));
       tableTex.needsUpdate = true;
+      setGoo(t);
       uCfg.value.x = (2 * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1, heightPx);
       uCfg.value.y = debugView ? 1 : 0;
     },
@@ -410,6 +453,10 @@ interface ScreenLabSeam {
   setPass(on: boolean): void;
   setGooShadow(on: boolean): void;
   setPassDebug(on: boolean): void;
+  /** The goo in the pass on or off (for its cost; `?nogoo=1`). */
+  setGoo(on: boolean): void;
+  /** The free camera's orbit (yaw, pitch in radians, distance in metres; round the point in front of the glass), switching to it. */
+  setOrbit(yaw: number, pitch: number, dist: number): void;
   timeDraws(n: number): Promise<number>;
   readonly t: number;
   /** The set as measured off the goblin, once built. */
@@ -435,7 +482,7 @@ async function bootstrap(): Promise<void> {
   const num = (k: string) => { const v = q.get(k); return v !== null && Number.isFinite(Number(v)) ? Number(v) : null; };
 
   const seam: ScreenLabSeam = {
-    ready: false, setT: () => {}, setShot: () => {}, setPass: () => {}, setGooShadow: () => {}, setPassDebug: () => {},
+    ready: false, setT: () => {}, setShot: () => {}, setPass: () => {}, setGooShadow: () => {}, setPassDebug: () => {}, setGoo: () => {}, setOrbit: () => {},
     timeDraws: async () => NaN, t: 0, layout: null, probe: () => null,
   };
   (window as unknown as { __screenLab: ScreenLabSeam }).__screenLab = seam;
@@ -579,6 +626,7 @@ async function bootstrap(): Promise<void> {
   pass.proxy.quaternion.copy(screen.quaternion);
   sdfLayer.lateScene.add(pass.proxy);
   pass.setDebug(q.get('passdebug') === '1');
+  pass.setGooOn(q.get('nogoo') !== '1');
 
   // The goblin's key light: from the lamp's side and above, warm (the practical preset's colour stays; only the direction follows the set).
   {
@@ -701,6 +749,8 @@ async function bootstrap(): Promise<void> {
   seam.setPass = (on: boolean) => { passOn = on; syncUi(); };
   seam.setGooShadow = (on: boolean) => { gooShadow = on; syncUi(); };
   seam.setPassDebug = (on: boolean) => pass.setDebug(on);
+  seam.setGoo = (on: boolean) => pass.setGooOn(on);
+  seam.setOrbit = (yaw: number, pitch: number, dist: number) => { orbit.yaw = yaw; orbit.pitch = pitch; orbit.dist = dist; free = true; syncUi(); };
   seam.timeDraws = async (n: number) => {
     // Hand-stepped frames behind a GPU fence (lab-renderer's step/resolveGpu): wall ms per frame, the compositor out of the loop.
     handle.setLoopRunning(false);

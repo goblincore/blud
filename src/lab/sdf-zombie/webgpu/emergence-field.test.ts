@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { paramsAt, DURATION, type EmergenceParams } from './emergence-timeline';
 import {
-  DESK_Y, EGG, EGG_REST, GLASS, SKIN, SAC_MAX, PICTURE_TABLE_N, SAC_BLEND, eggCentre, eggFront, lipOpening, pictureTable, pictureUV, sacBlend, sacExtent, sacSolid, sacZ, sheetThickness, tearRadius,
+  DESK_Y, EGG, EGG_REST, GLASS, SKIN, SAC_MAX, PICTURE_TABLE_N, SAC_BLEND, eggCentre, eggFront, lipOpening, pictureTable, pictureUV, sacBlend, sacExtent, sacSolid, sacZ, sheetThickness, tearEdge, tearRadius, tearTip,
 } from './emergence-field';
 
 const REST: EmergenceParams = paramsAt(0);
@@ -132,6 +132,27 @@ describe('emergence field', () => {
       for (let i = 0; i <= 20; i++) { const r = tearRadius(at({ tear: i / 20 }), th); expect(r).toBeGreaterThanOrEqual(prev); prev = r; }
       expect(prev).toBeGreaterThan(0.1);
     }
+  });
+
+  it('the tear\'s edge lies on the sheet, at the tear\'s radius from the tip on the apex axis', () => {
+    for (const t of [7.2, 8, 9, 10.5]) {
+      const p = paramsAt(t), tip = tearTip(p, t);
+      expect(tip[0]).toBe(0); expect(tip[1]).toBe(0);
+      expect(tip[2]).toBeCloseTo(sacZ(p, 0, 0, t), 12);
+      for (let th = 0; th < 2 * Math.PI; th += 0.4) {
+        const e = tearEdge(p, th, t);
+        expect(e[2], `t=${t} th=${th.toFixed(1)}`).toBeCloseTo(sacZ(p, e[0], e[1], t), 9);
+        // at the tear's radius from the tip, or (where the sheet drops down the wall at the egg's silhouette) at that wall: just inside
+        // the point is within the radius, just outside it is beyond
+        const R = tearRadius(p, th), r = Math.hypot(e[0], e[1]);
+        const dAt = (rr: number) => Math.hypot(rr, sacZ(p, rr * Math.cos(th), rr * Math.sin(th), t) - tip[2]);
+        const onSphere = Math.abs(dAt(r) - R) < 0.002;
+        const atWall = dAt(r) <= R + 1e-9 && dAt(r + 0.001) > R;
+        expect(onSphere || atWall, `t=${t} th=${th.toFixed(1)} r=${r.toFixed(4)} d=${dAt(r).toFixed(4)} R=${R.toFixed(4)}`).toBe(true);
+        expect(Math.atan2(e[1], e[0])).toBeCloseTo(Math.atan2(Math.sin(th), Math.cos(th)), 6);
+      }
+    }
+    expect(tearEdge(REST, 1)).toEqual(tearTip(REST));
   });
 
   it('the picture mapping is the identity at rest, runs 0..1 monotonically, and stretches when pushed', () => {
