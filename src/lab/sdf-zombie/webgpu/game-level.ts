@@ -57,7 +57,8 @@ export interface AccentLight {
   /** Dynamic light §2.5: the lamp's ambient mood (absent: steady). */
   mood?: LampMood;
   /** The visible fixture: a bulb (absent) or a fluorescent tube (Night Train, 2026-09-26). */
-  fixture?: 'bulb' | 'tube' | 'beacon';
+  /** `none`: no visible bulb (the level's art draws the lamp). */
+  fixture?: 'bulb' | 'tube' | 'beacon' | 'none';
   /** rev/s about the vertical, sign = direction (beacons). */
   spin?: number;
   /** A tube's spot casts a shadow unless this is false (each shadow map costs a sampled texture, and a

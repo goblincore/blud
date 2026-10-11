@@ -28,8 +28,13 @@ CASTLE = np.array((1.6, 1.55, 1.45), np.float32)       # the baked rock is dark;
 
 
 def save(arr, name):
+    """PNG, or JPEG for `.jpg` names: the embedded art file stays small, and 4:4:4 keeps a normal map's channels clean."""
     os.makedirs(OUT, exist_ok=True)
-    Image.fromarray((np.clip(arr, 0, 1) * 255).astype(np.uint8)).save(os.path.join(OUT, name))
+    im = Image.fromarray((np.clip(arr, 0, 1) * 255).astype(np.uint8))
+    if name.endswith(".jpg"):
+        im.save(os.path.join(OUT, name), quality=90, subsampling=0)
+    else:
+        im.save(os.path.join(OUT, name))
     print("wrote", name, arr.shape[1], "x", arr.shape[0])
 
 
@@ -97,7 +102,7 @@ def normal_from_height(h, strength):
 
 
 def make_stone(name, w_m, h_m, px=1024, tint=(1.0, 1.0, 1.0), courses=None, stains=None, damp=True, seed=0):
-    """name_color.png and name_normal.png: castle stone over a w_m x h_m metre area (z up, row 0 the top)."""
+    """name_color.jpg and name_normal.jpg: castle stone over a w_m x h_m metre area (z up, row 0 the top)."""
     base = tile_to(rock(), w_m, h_m, px)
     col = np.clip(lin(base) * np.array(tint, np.float32) * CASTLE, 0, 1)
     height = base.mean(axis=2)
@@ -122,8 +127,8 @@ def make_stone(name, w_m, h_m, px=1024, tint=(1.0, 1.0, 1.0), courses=None, stai
         rust, wet = st[..., 1:2], st[..., 0:1] * 0.85
         col = col * (1 - rust) + rust * np.array((0.2, 0.075, 0.02), np.float32)
         col = col * (1 - wet) + wet * np.array((0.018, 0.016, 0.01), np.float32)
-    save(srgb(col), f"{name}_color.png")
-    save(normal_from_height(height, 6.0), f"{name}_normal.png")
+    save(srgb(col), f"{name}_color.jpg")
+    save(normal_from_height(height, 6.0), f"{name}_normal.jpg")
 
 
 def make_tatami(px=512):
@@ -133,7 +138,7 @@ def make_tatami(px=512):
     u = (np.arange(px)[None, :] / px * 90) % 1.0
     line = (np.abs(u - 0.5) * 2) ** 3 * 0.55
     col = col * (1 - line[..., None]) + line[..., None] * np.array((0.16, 0.13, 0.05), np.float32)
-    save(srgb(col * np.ones((px, 1, 1), np.float32)), "tatami.png")
+    save(srgb(col * np.ones((px, 1, 1), np.float32)), "tatami.jpg")
 
 
 def make_quilt(px=512):
@@ -164,7 +169,7 @@ def make_books():
 def make_view():
     im = Image.open(IDYLL).convert("RGB")
     im.thumbnail((1024, 1024), Image.LANCZOS)
-    save(np.asarray(im, np.float32) / 255.0, "view.png")
+    save(np.asarray(im, np.float32) / 255.0, "view.jpg")
 
 
 if __name__ == "__main__":

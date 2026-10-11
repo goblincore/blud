@@ -8,11 +8,19 @@ import { describe, expect, it } from 'vitest';
 
 const DIR = 'assets-source/levels/flat-textures';
 const STONES = ['wall_n', 'wall_e', 'wall_w', 'wall_s', 'vault', 'flag', 'dark'];
-const FILES = [...STONES.flatMap(s => [`${s}_color.png`, `${s}_normal.png`]), 'tatami.png', 'quilt.png', 'books.png', 'view.png'];
+const FILES = [...STONES.flatMap(s => [`${s}_color.jpg`, `${s}_normal.jpg`]), 'tatami.jpg', 'quilt.png', 'books.png', 'view.jpg'];
 
-function pngSize(file: string): [number, number] {
+/** Width and height of a PNG (IHDR) or a JPEG (the first start-of-frame marker). */
+function imageSize(file: string): [number, number] {
   const b = readFileSync(`${DIR}/${file}`);
-  return [b.readUInt32BE(16), b.readUInt32BE(20)];
+  if (b.readUInt32BE(0) === 0x89504e47) return [b.readUInt32BE(16), b.readUInt32BE(20)];
+  let i = 2;
+  while (i < b.length) {
+    const marker = b[i + 1];
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) return [b.readUInt16BE(i + 7), b.readUInt16BE(i + 5)];
+    i += 2 + b.readUInt16BE(i + 2);
+  }
+  throw new Error(`${file}: no JPEG frame header`);
 }
 
 describe('flat textures', () => {
@@ -21,11 +29,11 @@ describe('flat textures', () => {
   });
   it('none is over 1024 px on a side', () => {
     for (const f of FILES) {
-      const [w, h] = pngSize(f);
+      const [w, h] = imageSize(f);
       expect(Math.max(w, h), f).toBeLessThanOrEqual(1024);
     }
   });
   it('a stone colour and its normal are the same size', () => {
-    for (const s of STONES) expect(pngSize(`${s}_color.png`)).toEqual(pngSize(`${s}_normal.png`));
+    for (const s of STONES) expect(imageSize(`${s}_color.jpg`)).toEqual(imageSize(`${s}_normal.jpg`));
   });
 });

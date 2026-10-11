@@ -46,7 +46,9 @@ START = (0.12, 0.55, 0.0)                       # x, y, z (z is the floor)
 # Collision boxes ("furniture"): name -> ((minx, miny, minz), (maxx, maxy, maxz)).
 ROOM_BOX = ((X0, Y0, 0.0), (X1, Y1, round(CROWN, 3)))
 COLLISION = {
-    "kotatsu": ((KX - 0.41, KY - 0.41, 0.0), (KX + 0.41, KY + 0.41, KTOP)),
+    # The engine's capsule steps up onto a box lower than about 0.5 m (least-penetration push-out), so the kotatsu's collider is
+    # taller than its board: the player cannot climb the table. The futon stays low on purpose: a cushion you walk over.
+    "kotatsu": ((KX - 0.41, KY - 0.41, 0.0), (KX + 0.41, KY + 0.41, 0.9)),
     "futon": ((-1.325, 0.3, 0.0), (-0.475, 2.2, 0.15)),
     "fridge": ((-1.29, 3.04, 0.0), (-0.79, 3.56, 0.92)),
     "counter": ((0.79, 3.07, 0.0), (1.35, 3.59, 0.83)),
@@ -54,11 +56,12 @@ COLLISION = {
 }
 
 # Point lights: (name, position, colour, power, extra custom properties). Powers are starting values, tuned in Task 8.
+# fixture "none": the engine draws no bulb (the room's art is the lamp: the lantern, the candle, the iMac, the window).
 LIGHTS = [
-    ("window", (WX, Y1 - 0.25, 1.4), (0.62, 0.74, 0.90), 3.0, {"shadow": True}),     # the only cool light
-    ("lantern", (0.0, 1.05, CROWN - 0.62), (1.0, 0.36, 0.20), 2.0, {}),
-    ("candle", (X0 + 0.14, 2.05, 1.53), (1.0, 0.65, 0.35), 1.0, {}),
-    ("amber", (KX, KY + 0.14, 0.75), (1.0, 0.62, 0.20), 1.6, {}),                    # where the iMac will sit
+    ("window", (WX, Y1 - 0.25, 1.4), (0.62, 0.74, 0.90), 3.0, {"fixture": "none"}),         # the only cool light (no shadow: the format allows it on tube fixtures only)
+    ("lantern", (0.0, 1.05, CROWN - 0.62), (1.0, 0.36, 0.20), 2.0, {"fixture": "none"}),
+    ("candle", (X0 + 0.14, 2.05, 1.53), (1.0, 0.65, 0.35), 1.0, {"fixture": "none"}),
+    ("amber", (KX, KY + 0.14, 0.75), (1.0, 0.62, 0.20), 1.6, {"fixture": "none"}),                    # where the iMac will sit
 ]
 
 

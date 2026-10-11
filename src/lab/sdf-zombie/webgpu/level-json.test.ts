@@ -219,6 +219,26 @@ describe('parseLevelJson: beacon fixture (Boiler Room beacons spec)', () => {
   it('still rejects an unknown fixture', () => {
     const f = fixture('two-rooms');
     f.lights[0].fixture = 'lamp';
-    expect(() => parseLevelJson(f)).toThrow('lights[0].fixture: must be bulb, tube or beacon');
+    expect(() => parseLevelJson(f)).toThrow('lights[0].fixture: must be bulb, tube, beacon or none');
+  });
+});
+
+describe('parseLevelJson: none fixture (a light whose lamp the level art draws)', () => {
+  it('reads a light with no visible bulb', () => {
+    const f = fixture('two-rooms');
+    f.lights[0].fixture = 'none';
+    const L = parseLevelJson(f);
+    expect(L.rooms[0]!.accents[0]).toMatchObject({ fixture: 'none' });
+  });
+
+  it('a none fixture does not turn and takes no shadow', () => {
+    const f = fixture('two-rooms');
+    f.lights[0].fixture = 'none';
+    f.lights[0].spin = 0.7;
+    expect(() => parseLevelJson(f)).toThrow('lights[0].spin: only a beacon fixture turns');
+    const g = fixture('two-rooms');
+    g.lights[0].fixture = 'none';
+    g.lights[0].shadow = false;
+    expect(() => parseLevelJson(g)).toThrow('lights[0].shadow: only a tube fixture takes it');
   });
 });

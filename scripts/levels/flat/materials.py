@@ -48,15 +48,15 @@ def pbr(name, color=(0.5, 0.5, 0.5), rough=0.8, metal=0.0, tex=None, normal=None
 
 
 def stone(name, key, rough=0.82):
-    return pbr(name, tex=f"{key}_color.png", normal=f"{key}_normal.png", rough=rough, normal_strength=0.8)
+    return pbr(name, tex=f"{key}_color.jpg", normal=f"{key}_normal.jpg", rough=rough, normal_strength=0.8)
 
 
 def make():
     M = SimpleNamespace()
     # stone (colour and normal from the textures; rough 0.82 as the look-dev)
     M.STONE_N, M.STONE_E, M.STONE_W, M.STONE_S = (stone(f"stone_{k}", f"wall_{k}") for k in "news")
-    M.STONE = M.STONE_DARK                                # the sink counter top (a 1 m tile, not a wall-sized texture)
     M.STONE_DARK = stone("stone_dark", "dark")
+    M.STONE = M.STONE_DARK                                # the sink counter top (a 1 m tile, not a wall-sized texture)
     M.VAULT = stone("vault", "vault")
     M.FLAG = stone("flagstone", "flag")
     M.MORTAR = pbr("mortar", (0.05, 0.045, 0.04), rough=0.95)
@@ -67,7 +67,7 @@ def make():
     M.BONE = pbr("bone", (0.58, 0.52, 0.40), rough=0.38)
     M.GASKET = pbr("gasket", (0.42, 0.10, 0.09), rough=0.25)
     # the floor and the soft goods
-    M.TATAMI = pbr("tatami", tex="tatami.png", rough=0.62)
+    M.TATAMI = pbr("tatami", tex="tatami.jpg", rough=0.62)
     M.HERI = pbr("heri", (0.02, 0.03, 0.025), rough=0.7)
     M.KOTATSU = pbr("kotatsu_board", (0.32, 0.17, 0.08), rough=0.3)
     M.QUILT = pbr("quilt", tex="quilt.png", rough=0.9)
@@ -82,6 +82,6 @@ def make():
     M.BULBS = [pbr(f"bulb{k}", c, emit=c) for k, c in enumerate(((1, 0.6, 0.8), (0.6, 0.9, 1), (1, 0.9, 0.5), (0.7, 1, 0.7)))]
     M.WAX = pbr("wax", (0.92, 0.88, 0.75), rough=0.5)
     M.FLAME = pbr("flame", (1, 0.8, 0.4), emit=(1.0, 0.7, 0.3))
-    M.VIEW = pbr("view", emit_tex="view.png")
+    M.VIEW = pbr("view", emit_tex="view.jpg")
     M.AMBER = pbr("amber_placeholder", (1.0, 0.55, 0.15), rough=0.3, emit=(1.0, 0.5, 0.12))
     return M

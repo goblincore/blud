@@ -863,9 +863,10 @@ async function main() {
       ctx.world.accentGroup.add(pl);
       // A visible source. Without it the light has no cause and reads as a bug.
       // A fluorescent tube (Night Train) runs along the carriage; a bulb is the old bowl. A beacon
-      // has no bowl: the dynamic-light leaf builds its housing (makeBeacon).
+      // has no bowl: the dynamic-light leaf builds its housing (makeBeacon). `none` has no bowl either:
+      // the level's art draws the lamp (the Flat's lantern, candle and window).
       const tubeGeo = a.fixture === 'tube' ? new THREE.CylinderGeometry(0.035, 0.035, 1.3, 10).rotateX(Math.PI / 2) : null;
-      const bowl = a.fixture === 'beacon' ? null : new THREE.Mesh(
+      const bowl = a.fixture === 'beacon' || a.fixture === 'none' ? null : new THREE.Mesh(
         tubeGeo ?? new THREE.IcosahedronGeometry(0.16, 1),
         new THREE.MeshStandardMaterial({
           color: new THREE.Color(a.color[0], a.color[1], a.color[2]),
