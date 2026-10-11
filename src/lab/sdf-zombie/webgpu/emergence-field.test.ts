@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { paramsAt, DURATION, type EmergenceParams } from './emergence-timeline';
 import {
-  EGG, GLASS, SKIN, SAC_MAX, PICTURE_TABLE_N, eggCentre, eggFront, lipOpening, pictureTable, pictureUV, sacExtent, sacZ, sheetThickness, tearRadius,
+  DESK_Y, EGG, EGG_REST, GLASS, SKIN, SAC_MAX, PICTURE_TABLE_N, eggCentre, eggFront, lipOpening, pictureTable, pictureUV, sacExtent, sacZ, sheetThickness, tearRadius,
 } from './emergence-field';
 
 const REST: EmergenceParams = paramsAt(0);
@@ -55,6 +55,12 @@ describe('emergence field', () => {
     expect(onDesk[1]).toBeLessThan(inSac[1]);
     expect(onDesk[2]).toBeLessThan(inSac[2]);
     expect(eggCentre(paramsAt(DURATION))).toEqual(onDesk);
+  });
+
+  it('the slumped egg rests on the desk top, in front of the glass and short of the goblin\'s knees', () => {
+    expect(EGG_REST[1] - EGG.ry).toBeCloseTo(DESK_Y, 12);
+    expect(EGG_REST[2] - EGG.rz).toBeGreaterThan(0);          // its back is in front of the glass plane
+    expect(EGG_REST[2] + EGG.rz).toBeLessThan(0.36 + 1e-9);    // its front is on the lab's desk (front edge 0.36; the knees at about 0.38)
   });
 
   it('the sheet thins as it stretches and is never gone', () => {

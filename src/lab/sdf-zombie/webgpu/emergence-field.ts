@@ -16,9 +16,11 @@ export const GLASS = { hw: 0.203, hh: 0.1525 } as const;
 export const SKIN = 0.006;
 /** The stand-in egg (bigger than the glass, owner): semi-axes, and the centre's depth behind the glass at rest and at full push. */
 export const EGG = { rx: 0.175, ry: 0.225, rz: 0.175, z0: -0.25, z1: 0.55 } as const;
-/** The desk's top below the glass centre, and where the slumped egg rests. */
+/** The desk's top below the glass centre, and where the slumped egg rests: ON the desk, in front of the glass, overhanging the keyboard
+ *  (z 0.09 to 0.25 in the lab's set). 0.4 hung it over the goblin's knees (z about 0.38) and past the desk's front edge; the lab's desk top
+ *  reaches the egg's front (EGG_REST z + EGG.rz, 0.355) so it lies on wood. */
 export const DESK_Y = -0.32;
-export const EGG_REST: Vec3 = [0, DESK_Y + EGG.ry, 0.4];
+export const EGG_REST: Vec3 = [0, DESK_Y + EGG.ry, 0.18];
 /** The sac's apex at full push: the egg's front plus the skin (about 0.73 m, "most of a metre"). */
 export const SAC_MAX = EGG.z1 + EGG.rz + SKIN;
 /** The sheet's half-thickness at rest (m), and the tear's largest radius. */

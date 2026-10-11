@@ -34,9 +34,12 @@ import { makeActorMotion, stepActorMotion, emptyActorSignals } from '../actor';
 import { MOTION_TUNING } from '../motion';
 import { makeRng } from '../wander';
 import { makePoseRig, poseJoints, type PoseRig } from '../pose';
-import { GLASS, DESK_Y } from './emergence-field';
-import { SHOTS, DURATION, shotAt, type ShotId } from './emergence-timeline';
+import { GLASS, DESK_Y, EGG, EGG_REST, eggCentre } from './emergence-field';
+import { SHOTS, DURATION, shotAt, paramsAt, type ShotId } from './emergence-timeline';
 import { goblinClipAt, measureSeat, type SeatMeasure } from './screen-lab-goblin';
+import {
+  GAME_AA, GAME_AA_FADE_M, GAME_AA_NEAR, GAME_LAST_STEP_DEFAULT, GAME_RELAX, GAME_HULL_EXIT_BOUND, GAME_WOUND_EARLY_OUT, GAME_OMEGA, GAME_WOUND_STEP,
+} from './game-march-accept';
 import type { Vec3 } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -53,9 +56,13 @@ const FRAME_FACE_Z = 0.03;
 const KEYBOARD = { t: 0.03, d: 0.16, w: 0.46, gap: 0.06 } as const;
 /** The desk top's thickness and its back edge (screen frame z, behind the CRT's 0.47 m housing). */
 const DESK = { t: 0.035, backZ: -0.62, hw: 0.78 } as const;
-/** The desk's front edge sits this far in front of the keyboard's front edge, and must clear the knees by at least KNEE_CLEAR. */
+/** The desk's front edge sits at least this far in front of the keyboard's front edge, and must clear the knees by at least KNEE_CLEAR. */
 const DESK_LIP = 0.04;
 const KNEE_CLEAR = 0.01;
+/** ...and reaches at least the slumped egg's front (screen z 0.355: EGG_REST z + EGG.rz, plus 5 mm), so the egg rests on wood. */
+const DESK_FRONT_MIN_Z = EGG_REST[2] + EGG.rz + 0.005;
+/** The SDF pass's render scale (see `sdfLayer.setScale` in bootstrap). */
+const SDF_SCALE = 0.5;
 /** The banker's lamp's foot on the desk (screen frame), and its bulb under the shade: the set's key light, and the SDF body's key direction. */
 const LAMP_AT: Vec3 = [-0.52, DESK_Y, 0.02];
 const LAMP_BULB: Vec3 = [LAMP_AT[0], DESK_Y + 0.27, LAMP_AT[2] + 0.06];
@@ -213,7 +220,8 @@ function layoutFrom(m: SeatMeasure): SetLayout {
   const glassZ = m.handZ + keyboardZ;                          // world z of the glass: the keyboard's centre lies under the hands
   const toScreenZ = (zw: number) => glassZ - zw;
   const kbFrontW = m.handZ - KEYBOARD.d / 2;
-  const deskFrontW = kbFrontW - DESK_LIP;
+  // World z grows toward the screen, so the desk front reaching further toward the goblin is the SMALLER world z.
+  const deskFrontW = Math.min(kbFrontW - DESK_LIP, glassZ - DESK_FRONT_MIN_Z);
   const kneeClearance = deskFrontW - m.kneeFrontZ;
   return {
     glassY, glassZ, keyboardZ,
@@ -299,6 +307,8 @@ interface ScreenLabSeam {
   readonly t: number;
   /** The set as measured off the goblin, once built. */
   layout: SetLayout | null;
+  /** The hands' centres and the egg's centre at the current `t`, in the screen frame (metres): the reach check. */
+  probe(): { hands: Record<string, Vec3>; egg: Vec3 } | null;
 }
 
 async function bootstrap(): Promise<void> {
@@ -319,7 +329,7 @@ async function bootstrap(): Promise<void> {
 
   const seam: ScreenLabSeam = {
     ready: false, setT: () => {}, setShot: () => {}, setPass: () => {}, setGooShadow: () => {},
-    timeDraws: async () => NaN, t: 0, layout: null,
+    timeDraws: async () => NaN, t: 0, layout: null, probe: () => null,
   };
   (window as unknown as { __screenLab: ScreenLabSeam }).__screenLab = seam;
 
@@ -333,6 +343,9 @@ async function bootstrap(): Promise<void> {
   scene.add(new THREE.HemisphereLight(0x2a3550, 0x0c0a08, 0.35));
 
   const sdfLayer = createSdfLayer(renderer);
+  // The SDF pass's render scale: 0.5 of the canvas (the layer's default is 0.7). With the game's march the goblin alone at `glass-gives`
+  // (1280 x 800, his forearm filling a third of the frame) measured 47 ms at 0.7 and 25 ms at 0.5 (plan Task 6); `?sdfscale=` overrides.
+  sdfLayer.setScale(Math.min(1, Math.max(0.2, num('sdfscale') ?? SDF_SCALE)));
   const postAa = createPostAa(renderer);
   postAa.addSink(sdfLayer);
 
@@ -352,6 +365,19 @@ async function bootstrap(): Promise<void> {
   for (const e of [...errors, ...view.body.errors]) say(`goblin: ${e}`, true);
   // Skin as the game's (game-spawn.ts): the .blob's own palette under the practical key, the face sheet's projection and texture.
   gpu.applyMaterial(view.palette ?? FLESH_PRESETS['henenlotter-latex'], LIGHT_PRESETS['practical-hard-key']);
+  // THE GAME'S MARCH, not the lab's (game-spawn.ts spawns every body with these): plain sphere tracing (step multiplier 1.0, no
+  // relaxation), the hull-exit bound, the wound early-out and its 1.0 step, the last-step secant accept at 4, and the footprint accept
+  // (aaCfg.y, near-distance fade aaCfg.z/w; aaCfg.x, one pixel, is refreshed every frame). Measured on this page (plan Task 6): the goblin
+  // alone at `glass-gives` went from 61-62 ms (steady; 82-88 on a cold first run) to 47-48 ms at the layer's 0.7 scale.
+  {
+    const u = gpu.uniforms;
+    u.woundCfg2.value.y = GAME_RELAX;
+    u.perfCfg.value.set(GAME_HULL_EXIT_BOUND, GAME_WOUND_EARLY_OUT, GAME_WOUND_STEP, GAME_LAST_STEP_DEFAULT);
+    u.marchCfg.value.y = GAME_OMEGA;
+    u.aaCfg.value.y = GAME_AA;
+    (u.aaCfg.value as unknown as { z: number; w: number }).z = GAME_AA_NEAR;
+    (u.aaCfg.value as unknown as { z: number; w: number }).w = GAME_AA_FADE_M;
+  }
   {
     const sheetC = compileCharacterSheet(entry);
     const f = sheetC.face;
@@ -397,8 +423,10 @@ async function bootstrap(): Promise<void> {
     });
     return clip.name;
   };
+  let lastPosed: ReturnType<typeof applyRig> | null = null;
   const upload = () => {
     const posed = applyRig(current, motion.bound, motion.lastBodyYaw);
+    lastPosed = posed;
     gpu.update(posed, current);
     gpu.setRootShift(0, 0, motion.lastBodyYaw);
     const skull = headShape(posed);
@@ -574,6 +602,17 @@ async function bootstrap(): Promise<void> {
     }
   };
   Object.defineProperty(seam, 't', { get: () => t });
+  seam.probe = () => {
+    if (!lastPosed) return null;
+    const toScreen = new THREE.Matrix4().copy(screen.matrixWorld).invert();
+    const hands: Record<string, Vec3> = {};
+    for (const p of lastPosed.prims) {
+      if (!p.bone || !/^hand\.[lr]$/.test(p.bone)) continue;
+      const v = new THREE.Vector3((p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2).applyMatrix4(toScreen);
+      hands[p.bone] = [v.x, v.y, v.z];
+    }
+    return { hands, egg: eggCentre(paramsAt(t)) };
+  };
 
   // ——— The frame ——————————————————————————————————————————————————————————
   const statsEl = document.getElementById('stats')!;
@@ -599,7 +638,7 @@ async function bootstrap(): Promise<void> {
     if (tickMs.length > 90) tickMs.shift();
     gpu.setTime(t);
     applyCamera();
-    gpu.uniforms.aaCfg.value.x = Math.tan((camera.fov * Math.PI) / 360) / Math.max(1, sdfLayer.targetSize.height);
+    gpu.uniforms.aaCfg.value.x = sdfLayer.pixelConeK;
     const sorted = [...frameMs].sort((a, b) => a - b);
     const med = sorted[Math.floor(sorted.length / 2)] ?? 0;
     const tick = [...tickMs].sort((a, b) => a - b)[Math.floor(tickMs.length / 2)] ?? 0;
