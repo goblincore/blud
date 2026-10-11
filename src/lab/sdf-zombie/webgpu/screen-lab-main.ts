@@ -1,9 +1,10 @@
 // src/lab/sdf-zombie/webgpu/screen-lab-main.ts
 //
-// THE SCREEN EMERGENCE LAB (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md, plan Task 5): a standalone,
-// scrubbable page with the set (the P225f CRT, the desk, the lamp, the tower, the room), a placeholder glass showing the Night Train still,
-// and the REAL SDF goblin seated at the desk, posed from the clock by the pose layer. The screen pass (the march on the proxy box) is a
-// later task; its switches are here already so the page's controls and its headless seam do not change when it lands.
+// THE SCREEN EMERGENCE LAB (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md, plan Tasks 5 and 6): a standalone,
+// scrubbable page with the set (the P225f CRT, the desk, the lamp, the tower, the room), the REAL SDF goblin seated at the desk, posed from
+// the clock by the pose layer, and THE SCREEN PASS: the march (screen-emergence.wgsl.ts) on a proxy box in the screen's frame, drawn in the
+// SDF layer's late scene with its own depth (createScreenPass). `pass on` / `?nopass=1` / `__screenLab.setPass` swap it for the placeholder
+// glass (the Night Train still, flat); `?passdebug=1` / `setPassDebug` shows the march's steps, hits and materials.
 //
 // HOW THE GOBLIN IS HOSTED. The same pieces the flame lab and the WebGPU lab use, nothing more: `createLabRenderer`, `createSdfLayer`
 // (the march renders into its own target and composites over the polygonal pass with depth), `createPostAa` (sizes the layer; every
@@ -19,6 +20,10 @@
 //
 // The goblin is the 1.70 m body: thigh 0.379 m, shin 0.353 m, upper arm 0.307 m, forearm 0.307 m.
 import * as THREE from 'three/webgpu';
+import {
+  cameraPosition, cameraProjectionMatrix, cameraViewMatrix, float, floor, modelWorldMatrixInverse, normalize, positionLocal, positionWorld,
+  texture, uniform, vec4, wgslFn,
+} from 'three/tsl';
 import { createLabRenderer } from './lab-renderer';
 import { createSdfLayer, SDF_LAYER, CONE_LAYER } from './sdf-layer';
 import { createCharacterView, compileCharacterSheet } from './character-view';
@@ -34,7 +39,11 @@ import { makeActorMotion, stepActorMotion, emptyActorSignals } from '../actor';
 import { MOTION_TUNING } from '../motion';
 import { makeRng } from '../wander';
 import { makePoseRig, poseJoints, type PoseRig } from '../pose';
-import { GLASS, DESK_Y, EGG, EGG_REST, eggCentre } from './emergence-field';
+import { GLASS, DESK_Y, EGG, EGG_REST, PICTURE_TABLE_N, eggCentre, lipOpening, pictureTable, sacExtent, smooth } from './emergence-field';
+import {
+  DEPTH_Q, SCREEN_PROXY, SCR_ELLIPSE, SCR_ELLIPSOID, SCR_LIGHT, SCR_LIP, SCR_MAP, SCR_MARCH, SCR_NORMAL, SCR_OPENING, SCR_PICTURE,
+  SCR_ROUNDRECT, SCR_SAC, SCR_SHADE, SCR_SHEET, SCR_SMAX, SCR_SMIN, SCR_SURFACE, SCR_SWEPT, SCR_VEINS,
+} from './screen-emergence.wgsl';
 import { SHOTS, DURATION, shotAt, paramsAt, type ShotId } from './emergence-timeline';
 import { goblinClipAt, measureSeat, type SeatMeasure } from './screen-lab-goblin';
 import {
@@ -295,6 +304,104 @@ function buildDeskAndRoom(parent: THREE.Object3D, L: SetLayout, floorY: number):
 }
 
 // ---------------------------------------------------------------------------
+// The screen pass (plan Task 6): the march on a proxy box in the screen's frame, drawn in the SDF layer's late scene
+// ---------------------------------------------------------------------------
+type Include = NonNullable<Parameters<typeof wgslFn>[1]>[number];
+/** The lamp's strength in the pass (the set's PointLight is 1.6 at the bulb; the pass's falloff is its own, tuned by eye). */
+const PASS_LAMP = 1.4;
+
+interface ScreenPass {
+  proxy: THREE.Mesh;
+  /** Per frame: the timeline's parameters at `t` and the field's derived values, the picture table, the pixel size. */
+  update(t: number, camera: THREE.PerspectiveCamera, heightPx: number): void;
+  /** The march's debug view (steps red, hit green, material blue): `?passdebug=1` or the seam's setPassDebug. */
+  setDebug(on: boolean): void;
+}
+
+/** The proxy box and its material. The box's geometry is built in the screen frame (its local space IS the screen's), so the mesh only has
+ *  to copy the screen group's place; the march runs in local space (modelWorldMatrixInverse brings the eye in), so the CRT may turn. Back
+ *  faces, so the eye may be inside the box (the close shots are). Premultiplied blending (three multiplies the straight colour by alpha),
+ *  and the first hit's REAL depth through depthNode, so the goblin, the desk and the CRT housing occlude it and are occluded by it. */
+function createScreenPass(pictureTex: THREE.Texture): ScreenPass {
+  const fn = (src: string, deps: ReturnType<typeof wgslFn>[] = []) => wgslFn(src, deps.map(x => x as unknown as Include));
+  const smaxF = fn(SCR_SMAX), sminF = fn(SCR_SMIN);
+  const sacF = fn(SCR_SAC, [smaxF]);
+  const ellipsoidF = fn(SCR_ELLIPSOID), ellipseF = fn(SCR_ELLIPSE);
+  const sweptF = fn(SCR_SWEPT, [ellipsoidF, ellipseF]);
+  const roundRectF = fn(SCR_ROUNDRECT);
+  const openingF = fn(SCR_OPENING, [roundRectF]);
+  const lipF = fn(SCR_LIP, [openingF]);
+  const mapF = fn(SCR_MAP, [sacF, sweptF, openingF, lipF, ellipsoidF, sminF]);
+  const normalF = fn(SCR_NORMAL, [mapF]);
+  const marchF = fn(SCR_MARCH, [mapF]);
+  const veinsF = fn(SCR_VEINS);
+  const pictureF = fn(SCR_PICTURE);
+  const lightF = fn(SCR_LIGHT);
+  const surfaceF = fn(SCR_SURFACE, [lightF, veinsF]);
+  const sheetF = fn(SCR_SHEET, [sacF, pictureF, veinsF, lightF]);
+  const shade = fn(SCR_SHADE, [marchF, normalF, sheetF, surfaceF, openingF]);
+
+  const table = new Float32Array(PICTURE_TABLE_N);
+  const tableTex = new THREE.DataTexture(table, PICTURE_TABLE_N, 1, THREE.RedFormat, THREE.FloatType);
+  tableTex.magFilter = THREE.NearestFilter; tableTex.minFilter = THREE.NearestFilter; tableTex.generateMipmaps = false;
+  tableTex.needsUpdate = true;
+
+  const uP0 = uniform(new THREE.Vector4()), uP1 = uniform(new THREE.Vector4());
+  const uD = uniform(new THREE.Vector4()), uLip = uniform(new THREE.Vector4(GLASS.hw, GLASS.hh, 0, 0));
+  const uTime = uniform(0);
+  const uLamp = uniform(new THREE.Vector4(...LAMP_BULB, PASS_LAMP));
+  const uCfg = uniform(new THREE.Vector4(0.001, 0, 0, 0));
+  const pic = texture(pictureTex);
+  const res = shade({
+    eye: modelWorldMatrixInverse.mul(vec4(cameraPosition, 1.0)).xyz, pos: positionLocal,
+    p0: uP0, p1: uP1, d: uD, lip: uLip, tm: uTime, lamp: uLamp, cfg: uCfg,
+    picTab: texture(tableTex), scrTex: pic, scrSamp: pic,
+  }) as unknown as { xyz: never; w: ReturnType<typeof float> };
+  // The packed hit: floor(t * DEPTH_Q) + coverage. t is in the local frame, which has the world's scale (the screen group is unscaled).
+  const tq = floor(res.w);
+  const alpha = res.w.sub(tq);
+  const hitW = cameraPosition.add(normalize(positionWorld.sub(cameraPosition)).mul(tq.div(DEPTH_Q)));
+  const clip = cameraProjectionMatrix.mul(cameraViewMatrix.mul(vec4(hitW, 1.0)));
+  const mat = new THREE.MeshBasicNodeMaterial();
+  mat.colorNode = vec4(res.xyz, alpha);
+  mat.depthNode = alpha.greaterThan(0.0).select(clip.z.div(clip.w), float(1.0));
+  mat.transparent = true;
+  mat.premultipliedAlpha = true;
+  mat.blending = THREE.NormalBlending;
+  mat.depthWrite = true;
+  mat.depthTest = true;
+  mat.side = THREE.BackSide;
+  mat.fog = false;
+  mat.name = 'screen-emergence-pass';
+
+  const [x0, y0, z0] = SCREEN_PROXY.min, [x1, y1, z1] = SCREEN_PROXY.max;
+  const geo = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0);
+  geo.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+  const proxy = new THREE.Mesh(geo, mat);
+  proxy.name = 'screen-emergence-proxy';
+  proxy.frustumCulled = false;
+
+  let debugView = false;
+  return {
+    proxy,
+    setDebug(on) { debugView = on; },
+    update(t, camera, heightPx) {
+      const p = paramsAt(t);
+      uP0.value.set(p.ripple, p.push, p.thin, p.lipBow);
+      uP1.value.set(p.tear, p.slump, p.heal, p.glow);
+      const c = eggCentre(p), lo = lipOpening(p);
+      uD.value.set(sacExtent(p), c[2], c[1], lo.z);
+      uLip.value.set(lo.hw, lo.hh, smooth(p.lipBow), 0);
+      (uTime as unknown as { value: number }).value = t;
+      table.set(pictureTable(p));
+      tableTex.needsUpdate = true;
+      uCfg.value.x = (2 * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1, heightPx);
+      uCfg.value.y = debugView ? 1 : 0;
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // The page
 // ---------------------------------------------------------------------------
 interface ScreenLabSeam {
@@ -303,6 +410,7 @@ interface ScreenLabSeam {
   setShot(id: ShotId): void;
   setPass(on: boolean): void;
   setGooShadow(on: boolean): void;
+  setPassDebug(on: boolean): void;
   timeDraws(n: number): Promise<number>;
   readonly t: number;
   /** The set as measured off the goblin, once built. */
@@ -328,7 +436,7 @@ async function bootstrap(): Promise<void> {
   const num = (k: string) => { const v = q.get(k); return v !== null && Number.isFinite(Number(v)) ? Number(v) : null; };
 
   const seam: ScreenLabSeam = {
-    ready: false, setT: () => {}, setShot: () => {}, setPass: () => {}, setGooShadow: () => {},
+    ready: false, setT: () => {}, setShot: () => {}, setPass: () => {}, setGooShadow: () => {}, setPassDebug: () => {},
     timeDraws: async () => NaN, t: 0, layout: null, probe: () => null,
   };
   (window as unknown as { __screenLab: ScreenLabSeam }).__screenLab = seam;
@@ -466,6 +574,13 @@ async function bootstrap(): Promise<void> {
   glass.name = 'placeholder-glass';
   screen.add(glass);
 
+  // The screen pass: the proxy in the SDF layer's late scene (after the flesh composite, depth-tested against it), placed as the screen.
+  const pass = createScreenPass(pictureTex);
+  pass.proxy.position.copy(screen.position);
+  pass.proxy.quaternion.copy(screen.quaternion);
+  sdfLayer.lateScene.add(pass.proxy);
+  pass.setDebug(q.get('passdebug') === '1');
+
   // The goblin's key light: from the lamp's side and above, warm (the practical preset's colour stays; only the direction follows the set).
   {
     const lampW = new THREE.Vector3(...LAMP_BULB).applyMatrix4(screen.matrixWorld);
@@ -584,9 +699,9 @@ async function bootstrap(): Promise<void> {
     if (!s) throw new Error(`unknown shot ${id}`);
     t = s.start; free = false; syncUi();
   };
-  // The pass lands in a later task: the switches are stored and shown, nothing draws from them yet.
   seam.setPass = (on: boolean) => { passOn = on; syncUi(); };
   seam.setGooShadow = (on: boolean) => { gooShadow = on; syncUi(); };
+  seam.setPassDebug = (on: boolean) => pass.setDebug(on);
   seam.timeDraws = async (n: number) => {
     // Hand-stepped frames behind a GPU fence (lab-renderer's step/resolveGpu): wall ms per frame, the compositor out of the loop.
     handle.setLoopRunning(false);
@@ -638,11 +753,15 @@ async function bootstrap(): Promise<void> {
     if (tickMs.length > 90) tickMs.shift();
     gpu.setTime(t);
     applyCamera();
+    // The pass on, the placeholder glass off (and back).
+    pass.proxy.visible = passOn;
+    glass.visible = !passOn;
+    if (passOn) pass.update(t, camera, renderer.domElement.height);
     gpu.uniforms.aaCfg.value.x = sdfLayer.pixelConeK;
     const sorted = [...frameMs].sort((a, b) => a - b);
     const med = sorted[Math.floor(sorted.length / 2)] ?? 0;
     const tick = [...tickMs].sort((a, b) => a - b)[Math.floor(tickMs.length / 2)] ?? 0;
-    statsEl.textContent = `frame ${med.toFixed(1)} ms (median, rAF)  pose+upload ${tick.toFixed(2)} ms cpu\nt ${t.toFixed(2)} / ${DURATION}\nshot ${shotAt(t).id}${free ? ' (free cam)' : ''}\nclip ${clipName}\npass ${passOn ? 'on' : 'off'} (not built yet)  goo shadow ${gooShadow ? 'on' : 'off'}`;
+    statsEl.textContent = `frame ${med.toFixed(1)} ms (median, rAF)  pose+upload ${tick.toFixed(2)} ms cpu\nt ${t.toFixed(2)} / ${DURATION}\nshot ${shotAt(t).id}${free ? ' (free cam)' : ''}\nclip ${clipName}\npass ${passOn ? 'on' : 'off'}  goo shadow ${gooShadow ? 'on' : 'off'}`;
   });
   handle.setDrawFn(() => {
     postAa.render(() => sdfLayer.render(scene, camera));
@@ -652,7 +771,7 @@ async function bootstrap(): Promise<void> {
     }
   });
   syncUi();
-  say(`goblin: ${current.prims.length} prims; the pass is not built yet (a later task)`);
+  say(`goblin: ${current.prims.length} prims; the screen pass ${passOn ? 'on' : 'off (?nopass=1)'}`);
 }
 
 bootstrap().catch((err) => {
