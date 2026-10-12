@@ -125,3 +125,56 @@ describe('pose: the feet', () => {
     });
   });
 });
+
+describe('pose: floor height and one-sided keys', () => {
+  it('a lock-free key moves the whole pose by root.y (a floor pose sets its own height: the lock would hold the ankle at its standing height)', () => {
+    const free: PoseClip = { name: 'free', keys: [{ t: 0, bones: TYPE_BONES, groundLock: false }] };
+    const low: PoseClip = { name: 'low', keys: [{ t: 0, bones: TYPE_BONES, groundLock: false, root: { y: -0.5 } }] };
+    const a = poseJoints(rig, free, 0), b = poseJoints(rig, low, 0);
+    a.forEach((p, i) => { expect(b[i]![1]).toBeCloseTo(p[1] - 0.5, 9); expect(b[i]![0]).toBeCloseTo(p[0], 9); });
+  });
+
+  it('root.y blends between keys like x and z', () => {
+    const clip: PoseClip = { name: 'drop', keys: [
+      { t: 0, bones: {}, groundLock: false }, { t: 1, bones: {}, groundLock: false, root: { y: -0.4 } }] };
+    expect(at(poseJoints(rig, clip, 0.5), 'pelvis')[1]).toBeCloseTo(at(base, 'pelvis')[1] - 0.2, 9);
+  });
+
+  it('a `.l` / `.r` key turns that side only; the other side keeps the shared key, and the right side mirrors the angles', () => {
+    const both: PoseClip = { name: 'both', keys: [{ t: 0, bones: { upperarm: { pitch: 40 } } }] };
+    const other: PoseClip = { name: 'other', keys: [{ t: 0, bones: { upperarm: { pitch: -20, tilt: 50 } } }] };
+    const split: PoseClip = { name: 'split', keys: [{ t: 0, bones: { upperarm: { pitch: 40 }, 'upperarm.r': { pitch: -20, tilt: 50 } } }] };
+    const a = poseJoints(rig, both, 0), o = poseJoints(rig, other, 0), s = poseJoints(rig, split, 0);
+    for (const n of ['shoulderL', 'elbowL', 'handL']) at(s, n).forEach((v, k) => expect(v, n).toBeCloseTo(at(a, n)[k]!, 9));
+    for (const n of ['shoulderR', 'elbowR', 'handR']) at(s, n).forEach((v, k) => expect(v, n).toBeCloseTo(at(o, n)[k]!, 9));
+    // the right side's tilt splays it OUTWARD (toward -x), as the shared key's would
+    expect(at(s, 'elbowR')[0]).toBeLessThan(at(s, 'shoulderR')[0] - 0.05);
+    for (const [p, q, want] of SEGMENTS) expect(len(sub(at(s, q), at(s, p)))).toBeCloseTo(want * K, 6);
+  });
+
+  it('a one-sided key blends in angle space too (the limb keeps its length mid-blend)', () => {
+    const clip: PoseClip = { name: 'reach-r', keys: [
+      { t: 0, bones: {} }, { t: 1, bones: { 'upperarm.r': { pitch: 150 }, 'forearm.r': { pitch: 160 } } }] };
+    for (const t of [0.25, 0.5, 0.75]) {
+      const j = poseJoints(rig, clip, t);
+      for (const [p, q, want] of SEGMENTS) expect(len(sub(at(j, q), at(j, p))), `${p}-${q} t=${t}`).toBeCloseTo(want * K, 6);
+    }
+    expect(at(poseJoints(rig, clip, 1), 'handR')[1]).toBeGreaterThan(at(base, 'shoulderR')[1]);
+    at(poseJoints(rig, clip, 1), 'handL').forEach((v, k) => expect(v).toBeCloseTo(at(base, 'handL')[k]!, 9));
+  });
+
+  it('a `fwd` bone (the foot) turns as a whole: + pitch tips the toe down, + tilt swings it outward; its length holds; un-keyed it stays put', () => {
+    const ankle = (j: readonly Vec3[]) => at(j, 'footL'), toe = (j: readonly Vec3[]) => at(j, 'toeL');
+    const footLen = len(sub(toe(base), ankle(base)));
+    const down = poseJoints(rig, { name: 'pointed', keys: [{ t: 0, bones: { foot: { pitch: 90 } } }] }, 0);
+    const d = sub(toe(down), ankle(down));
+    expect(len(d)).toBeCloseTo(footLen, 9);
+    expect(d[1]).toBeCloseTo(-footLen, 9);
+    const out = poseJoints(rig, { name: 'out', keys: [{ t: 0, bones: { foot: { tilt: 90 } } }] }, 0);
+    const o = sub(toe(out), ankle(out)), oR = sub(at(out, 'toeR'), at(out, 'footR'));
+    expect(o[0]).toBeCloseTo(footLen, 9);
+    expect(oR[0]).toBeCloseTo(-footLen, 9);
+    const rest = poseJoints(rig, REST, 0);
+    toe(rest).forEach((v, k) => expect(v).toBeCloseTo(toe(base)[k]!, 9));
+  });
+});

@@ -32,10 +32,13 @@ export interface BoneAngle { pitch?: number; tilt?: number }
 export interface PoseKey {
   /** Seconds from the clip's start. */
   t: number;
-  /** BASE bone names (`thigh`, not `thigh.l`): a mirrored bone takes the angle on both sides, as in the .blob. */
+  /** BASE bone names (`thigh`, not `thigh.l`): a mirrored bone takes the angle on both sides, as in the .blob. A SIDE name
+   *  (`thigh.l`, `upperarm.r`) overrides that side alone (a cross-legged sit, one hand reaching): its angles are written as the left
+   *  side's are, and the right side mirrors them like the .blob's own `.r` copy (+ tilt splays it outward, toward -x). */
   bones: Record<string, BoneAngle>;
-  /** Metres added to the whole skeleton, in the rest frame. x/z only: y is the ground-lock's job (below). */
-  root?: { x?: number; z?: number };
+  /** Metres added to the whole skeleton, in the rest frame. x/z always; y only when the key opts out of the ground lock (a floor
+   *  pose sets its own height: the lock would hold the lower ankle at its STANDING height). */
+  root?: { x?: number; y?: number; z?: number };
   /** Put the lower foot on the rest ground height (default true): sitting lowers the pelvis instead of lifting the feet. */
   groundLock?: boolean;
   /** Easing INTO this key from the previous one. Default 'linear'. */
@@ -82,6 +85,20 @@ export function makePoseRig(doc: BlobDoc, names: readonly GaitJointName[], base:
   };
 }
 
+/** A bone's direction from its angles: the .blob's own dirVector, except for a `fwd` bone (the foot), whose pitch the .blob cannot turn
+ *  (dirVector's pitch acts on the vertical part and a `fwd` bone has none: it would only shorten it). Here a `fwd` bone turns as a whole:
+ *  + pitch tips its tip DOWN (the toes pointed), + tilt swings it toward +x (outward on the left), so a floor pose can lay the foot along
+ *  the shin. At 0 / 0 it is the .blob's (0, 0, 1), and every `fwd` bone in the roster is authored at 0 / 0, so an un-keyed foot is
+ *  unchanged. */
+function poseDir(dir: BlobBone['dir'], pitchDeg: number, tiltDeg: number): Vec3 {
+  if (dir !== 'fwd') return dirVector(dir, pitchDeg, tiltDeg);
+  const p = (pitchDeg * Math.PI) / 180, t = (tiltDeg * Math.PI) / 180;
+  return [Math.cos(p) * Math.sin(t), -Math.sin(p), Math.cos(p) * Math.cos(t)];
+}
+
+/** Does the key name any bone by side (`thigh.l`)? Most keys do not, and skip the per-side pass. */
+const hasSided = (key: PoseKey) => Object.keys(key.bones).some(n => /\.[lr]$/.test(n));
+
 const smooth01 = (x: number) => { const t = Math.min(1, Math.max(0, x)); return t * t * (3 - 2 * t); };
 const lerp = (a: number, b: number, f: number) => a + (b - a) * f;
 
@@ -105,21 +122,34 @@ function bracket(clip: PoseClip, t: number): { a: PoseKey; b: PoseKey; f: number
  */
 export function poseJoints(rig: PoseRig, clip: PoseClip, t: number): Vec3[] {
   const { a, b, f } = bracket(clip, t);
-  const angle = (key: PoseKey, bone: BlobBone) => ({
-    pitch: key.bones[bone.name]?.pitch ?? bone.pitchDeg,
-    tilt: key.bones[bone.name]?.tilt ?? bone.tiltDeg,
+  // A side name (`thigh.l`) wins over the shared one (`thigh`), which wins over the rest angle.
+  const angle = (key: PoseKey, bone: BlobBone, side?: string) => ({
+    pitch: (side ? key.bones[side]?.pitch : undefined) ?? key.bones[bone.name]?.pitch ?? bone.pitchDeg,
+    tilt: (side ? key.bones[side]?.tilt : undefined) ?? key.bones[bone.name]?.tilt ?? bone.tiltDeg,
   });
 
   const bones = rig.def.bones.map(db => {
     const doc = rig.docBones.get(db.name);
     if (!doc) return db; // the root bone: always straight up
     const pa = angle(a, doc), pb = angle(b, doc);
-    return { ...db, dir: dirVector(doc.dir, lerp(pa.pitch, pb.pitch, f), lerp(pa.tilt, pb.tilt, f)) };
+    return { ...db, dir: poseDir(doc.dir, lerp(pa.pitch, pb.pitch, f), lerp(pa.tilt, pb.tilt, f)) };
   });
 
   const rx = lerp(a.root?.x ?? 0, b.root?.x ?? 0, f);
+  const ry = lerp(a.root?.y ?? 0, b.root?.y ?? 0, f);
   const rz = lerp(a.root?.z ?? 0, b.root?.z ?? 0, f);
   const expanded = expandMirror({ ...rig.def, bones, prims: [], bonePrims: [] });
+  // One-sided keys (`thigh.l`): re-aim that side's expanded bone. The right copy mirrors in x, as expandMirror does.
+  if (hasSided(a) || hasSided(b)) {
+    expanded.bones = expanded.bones.map(eb => {
+      const m = /^(.*)\.([lr])$/.exec(eb.name);
+      const doc = m ? rig.docBones.get(m[1]!) : undefined;
+      if (!m || !doc || !(eb.name in a.bones || eb.name in b.bones)) return eb;
+      const pa = angle(a, doc, eb.name), pb = angle(b, doc, eb.name);
+      const d = poseDir(doc.dir, lerp(pa.pitch, pb.pitch, f), lerp(pa.tilt, pb.tilt, f));
+      return { ...eb, dir: m[2] === 'r' ? [-d[0], d[1], d[2]] : d };
+    });
+  }
   const resolved: Map<string, ResolvedBone> = resolveBones(
     expanded.bones, [expanded.root[0] + rx, expanded.root[1], expanded.root[2] + rz]);
 
@@ -127,7 +157,7 @@ export function poseJoints(rig: PoseRig, clip: PoseClip, t: number): Vec3[] {
 
   // The lock follows whichever key the blend is nearer, so a clip can leave the ground (a jump) and come back.
   const lock = (f < 0.5 ? a : b).groundLock !== false;
-  if (!lock) return joints.map(p => [p[0], p[1], p[2]] as Vec3);
+  if (!lock) return joints.map(p => [p[0], p[1] + ry, p[2]] as Vec3);
   const dy = rig.groundY - Math.min(joints[rig.footL]![1], joints[rig.footR]![1]);
   return joints.map(p => [p[0], p[1] + dy, p[2]] as Vec3);
 }

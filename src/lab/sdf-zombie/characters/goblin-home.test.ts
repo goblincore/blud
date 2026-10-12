@@ -38,7 +38,7 @@ describe('goblin-home.blob', () => {
     expect(shells.every(p => p.bone === 'spine1' || p.bone === 'chest' || p.bone === 'pelvis' || p.bone === 'thigh')).toBe(true);
   });
 
-  it('stands on bare feet: the soles reach the floor (y 0) standing and in every pose clip, seated included', () => {
+  it('stands on bare feet: the soles reach the floor (y 0) standing and in every standing or chair pose clip, seated included', () => {
     // goblin.blob's ankle is 0.157 m (authored) up and has no flesh foot (the kit's boots were the feet); the home block's feet reach down
     // from it. The pose layer holds the ankle at its rest height, so the sole must stay on the floor through every clip.
     const doc = parseBlob(homeSrc);
@@ -58,7 +58,8 @@ describe('goblin-home.blob', () => {
     };
     expect(Math.abs(lowestFoot(null))).toBeLessThan(0.005);
     const rig = makePoseRig(doc, names, bindRig(body).rig.restPose);
-    for (const clip of Object.values(GOBLIN_POSES)) {
+    // The FLOOR clips (lock off: he sits on a cushion at the kotatsu) are checked against the floor and the cushion in goblin-poses.test.ts.
+    for (const clip of Object.values(GOBLIN_POSES).filter(c => !c.keys.every(k => k.groundLock === false))) {
       const end = clip.keys[clip.keys.length - 1]!.t;
       for (let k = 0; k <= 4; k++) expect(Math.abs(lowestFoot(poseJoints(rig, clip, (end * k) / 4))), `${clip.name} k=${k}`).toBeLessThan(0.005);
     }
