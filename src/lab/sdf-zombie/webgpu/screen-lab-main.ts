@@ -508,7 +508,17 @@ async function bootstrap(): Promise<void> {
   };
   (window as unknown as { __screenLab: ScreenLabSeam }).__screenLab = seam;
 
-  const handle = await createLabRenderer(mount, { mode: 'fit', maxW: 1280, maxH: 800 });
+  // The render size: a FIXED buffer, 640 x 480 by default (a light preview: the owner's machine heats up at 1280 x 800). `?res=1280x800`
+  // (or the select in the controls) brings the full size back; the headless check and the cost numbers in the notes use 1280x800.
+  const resParam = /^(\d{3,4})x(\d{3,4})$/.exec(q.get('res') ?? '');
+  const [renderW, renderH] = resParam ? [Number(resParam[1]), Number(resParam[2])] : [640, 480];
+  const resSel = document.getElementById('res') as HTMLSelectElement | null;
+  if (resSel) {
+    resSel.value = `${renderW}x${renderH}`;
+    if (resSel.value !== `${renderW}x${renderH}`) resSel.add(new Option(`${renderW}x${renderH}`, `${renderW}x${renderH}`, true, true));
+    resSel.addEventListener('change', () => { const u = new URL(location.href); u.searchParams.set('res', resSel.value); location.href = u.toString(); });
+  }
+  const handle = await createLabRenderer(mount, { mode: 'fixed', width: renderW, height: renderH });
   const { scene, camera, renderer } = handle;
   say(`backend: ${handle.backend}`, handle.backend !== 'webgpu');
   // A dark room: drop the lab renderer's sun and ambient; the lamp, the screen's glow and a dim street-blue fill light the set.
@@ -518,9 +528,9 @@ async function bootstrap(): Promise<void> {
   scene.add(new THREE.HemisphereLight(0x2a3550, 0x0c0a08, 0.35));
 
   const sdfLayer = createSdfLayer(renderer);
-  // The SDF pass's render scale: 0.5 of the canvas (the layer's default is 0.7). With the game's march the goblin alone at `glass-gives`
+  // The SDF pass's render scale: 0.5 of a 1280-wide canvas (the layer's default is 0.7), i.e. about 640 SDF pixels across whatever the canvas size (1.0 at 640 x 480). With the game's march the goblin alone at `glass-gives`
   // (1280 x 800, his forearm filling a third of the frame) measured 47 ms at 0.7 and 25 ms at 0.5 (plan Task 6); `?sdfscale=` overrides.
-  sdfLayer.setScale(Math.min(1, Math.max(0.2, num('sdfscale') ?? SDF_SCALE)));
+  sdfLayer.setScale(Math.min(1, Math.max(0.2, num('sdfscale') ?? Math.min(1, SDF_SCALE * 1280 / renderW))));
   const postAa = createPostAa(renderer);
   postAa.addSink(sdfLayer);
 

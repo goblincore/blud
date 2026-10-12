@@ -60,7 +60,7 @@ await fetch(`http://localhost:${CDP}/json/activate/${tab.id}`);
 await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
 
 // 1. COMPILE
-await send('Page.navigate', { url: `http://localhost:${VITE}/sdf-screen-lab.html?nopass=0` });
+await send('Page.navigate', { url: `http://localhost:${VITE}/sdf-screen-lab.html?nopass=0&res=1280x800` });
 let ready = false;
 for (let i = 0; i < 240 && !ready; i++) {
   await sleep(500);
