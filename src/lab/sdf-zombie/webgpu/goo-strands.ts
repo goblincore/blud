@@ -8,8 +8,10 @@
 // (always on the surface as the egg falls), the strands get slack and sag across the gap; late in the heal each strand LETS GO of the lip
 // (its lip end falls free) and thins away. The drips stop at the desk top or the (shoved) keyboard's (emergence-field's dripFloor) and what
 // keeps coming POOLS: a slick under the egg once it lands and a small one under each drip that reaches the desk, uploaded as discs.
+// LOOK ROUND 1: the drips hang in front of the CRT's chin (DRIP_FACE_Z), never inside the housing as the lip relaxes back, and retract with
+// the heal (DRIP_RETRACT); their pools stay. `dripsAt` runs the drips alone (the housing test scans every 0.05 s with it).
 import { paramsAt, DURATION, type EmergenceParams } from './emergence-timeline';
-import { DESK_Y, EGG, GLASS, SLUMP, dripFloor, eggCentre, eggHeld, ellipsoidDist, lipOpening, smooth, tearEdge, tearRadius, type Vec3 } from './emergence-field';
+import { DESK_Y, EGG, FRAME_FACE_Z, GLASS, SLUMP, dripFloor, eggCentre, eggHeld, ellipsoidDist, lipOpening, smooth, tearEdge, tearRadius, type Vec3 } from './emergence-field';
 
 export const N_STRANDS = 6;
 export const STRAND_POINTS = 6;
@@ -52,9 +54,10 @@ const LETGO_S = 0.7;
 /** Extra slack (fraction of the chord) once the egg is out: the strands sag across the gap. */
 const FREE_SLACK = 0.18;
 /** The drip's tip is this many times its radius; it rests on the floor. */
-const DRIP_TIP = 1.6;
-/** The egg's slick: its radius once spread (m), how long (slump) it takes to spread after the landing, and how far it creeps with the heal. */
-const POOL = { r: 0.215, spread: 0.2, creep: 0.25, drip: 0.03, dripFill: 0.08 } as const;
+export const DRIP_TIP = 1.6;
+/** The egg's slick: its radius once spread (m; 80% of round one's 0.215 with the egg), how long (slump) it takes to spread after the
+ *  landing, and how far it creeps with the heal. */
+const POOL = { r: 0.172, spread: 0.2, creep: 0.25, drip: 0.03, dripFill: 0.08 } as const;
 
 /** Where strand i leaves the tear's lip (on the sheet) and where it lands on the egg, at the state `p` and time `t`. */
 function anchors(p: EmergenceParams, i: number, t: number): { a: Vec3; b: Vec3 } {
@@ -85,28 +88,81 @@ function onEgg(c: Vec3, v: Vec3): Vec3 {
 
 /** The sim's state: strand points, their previous positions, whether each is born, its rope segment length (frozen when it lets go), and each
  *  drip's length (it creeps toward its target, so a floor moving away under it does not snap it longer in one frame). */
-interface Sim { pts: Vec3[][]; prev: Vec3[][]; born: boolean[]; seg: number[]; drip: number[] }
+interface Sim { pts: Vec3[][]; prev: Vec3[][]; born: boolean[]; seg: number[]; drip: DripSim }
+/** The drips' own state: each drip's length, and the pool each has fed on the desk (its radius only grows; its centre is fixed where it
+ *  formed, so it does not slide back with the relaxing lip, and it stays when the drip retracts). */
+interface DripSim { len: number[]; poolR: number[]; poolC: (Vec3 | null)[] }
+const newDripSim = (): DripSim => ({ len: Array(N_DRIPS).fill(0), poolR: Array(N_DRIPS).fill(0), poolC: Array(N_DRIPS).fill(null) });
 
 /** A drip's free growth (m) at `age` seconds, before any floor. */
 const dripGrowth = (age: number) => (age <= 0 ? 0 : Math.min(DRIP_MAX, 0.04 * age + 0.012 * age * age));
-/** A drip's top (on the bezel's lower rim) and the room below it to its floor (the tip sphere resting on it). */
+/** A drip's top (on the bezel's lower rim, but never behind DRIP_FACE_Z: outside the chin) and the room below it to its floor (the tip sphere
+ *  resting on it). */
 function dripRoom(p: EmergenceParams, i: number): { top: Vec3; floor: number; room: number } {
   const lip = lipOpening(p);
-  const top: Vec3 = [DRIP_X[i]!, -lip.hh, lip.z];
+  const top: Vec3 = [DRIP_X[i]!, -lip.hh, Math.max(lip.z, DRIP_FACE_Z)];
   const floor = dripFloor(p, top[0], top[2]);
   return { top, floor, room: Math.max(0, top[1] - floor - DRIP_R * DRIP_TIP) };
 }
-const DRIP_R = 0.008;
+export const DRIP_R = 0.008;
+/** THE RETRACT (look round 1: the drips clipped into the CRT's chin once the lip relaxed back behind its face): over this span of the heal
+ *  each drip's length eases to zero from the bottom up (its tip rising to its top, never lengthening again) and it thins (radius times the
+ *  square root of what is left); the pool it fed stays. After it, no drip. */
+export const DRIP_RETRACT = [0.15, 0.7] as const;
+/** The drip's top never goes behind this z: the CRT frame's face plus the drip's fattest radius (the tip's) plus 4 mm, so the whole drip
+ *  hangs in front of the chin even as the lip's rim relaxes back behind the face late in the heal. */
+export const DRIP_FACE_Z = FRAME_FACE_Z + DRIP_R * DRIP_TIP + 0.004;
+/** What is left of the drips at `p`: 1 before the retract, easing to 0 across DRIP_RETRACT. */
+export const dripLeft = (p: EmergenceParams) => 1 - smooth((p.heal - DRIP_RETRACT[0]) / (DRIP_RETRACT[1] - DRIP_RETRACT[0]));
 /** A strand's radius at full thickness (it thins with the heal: gooAt). */
 const STRAND_R = 0.006;
 /** How fast a drip may lengthen toward its target (m/s): a floor sliding away lets it slump down, it does not jump. */
 const DRIP_CREEP = 0.25;
 
-function stepSim(sim: Sim, p: EmergenceParams, t: number): void {
+function stepDrips(ds: DripSim, p: EmergenceParams, t: number): void {
+  const retracting = p.heal >= DRIP_RETRACT[0];
   for (let i = 0; i < N_DRIPS; i++) {
-    const target = Math.min(dripGrowth(t - DRIP_START[i]!), dripRoom(p, i).room);
-    sim.drip[i] = target < sim.drip[i]! ? target : Math.min(target, sim.drip[i]! + DRIP_CREEP * DT);
+    const { top, floor, room } = dripRoom(p, i), growth = dripGrowth(t - DRIP_START[i]!);
+    const target = Math.min(growth, room) * dripLeft(p);
+    ds.len[i] = target < ds.len[i]! || retracting ? Math.min(target, ds.len[i]!) : Math.min(target, ds.len[i]! + DRIP_CREEP * DT);
+    // its pool: fed while it rests on the DESK (not the keyboard) by what keeps coming after it touched (its free growth past its room)
+    const r = floor === DESK_Y && ds.len[i]! >= room - 1e-6 ? POOL.drip * smooth((growth - room) / POOL.dripFill) : 0;
+    if (r > ds.poolR[i]!) { ds.poolR[i] = r; ds.poolC[i] ??= [top[0], DESK_Y, top[2]]; }
   }
+}
+
+/** The drips and their pools (from the drip state at the end of the run). */
+function dripsOut(ds: DripSim, p: EmergenceParams): { drips: Drip[]; pools: Pool[] } {
+  const radius = DRIP_R * Math.sqrt(dripLeft(p));
+  const drips: Drip[] = Array.from({ length: N_DRIPS }, (_, i) => {
+    const { top, floor } = dripRoom(p, i);
+    const length = ds.len[i]!;
+    return { length, top, tip: [top[0], top[1] - length, top[2]], radius, floor };
+  });
+  const pools: Pool[] = Array.from({ length: N_DRIPS }, (_, i) => {
+    const c = ds.poolC[i];
+    if (c) return { centre: [...c] as Vec3, radius: ds.poolR[i]! };
+    const { top } = dripRoom(p, i);
+    return { centre: [top[0], DESK_Y, top[2]], radius: 0 };
+  });
+  return { drips, pools };
+}
+
+/** The steps' times up to `tt`: fixed DT steps, the last one at tt itself. */
+function stepTimes(t: number): { tt: number; steps: number } {
+  const tt = Math.min(Math.max(t, 0), DURATION);
+  return { tt, steps: Math.floor(tt / DT) };
+}
+
+/** The drips and the pools they leave at time `t` (gooAt's drips and pools after the egg's slick, without the strands' sim: cheap). */
+export function dripsAt(t: number): { drips: Drip[]; pools: Pool[] } {
+  const { tt, steps } = stepTimes(t), ds = newDripSim();
+  for (let s = 0; s <= steps; s++) { const ts = s === steps ? tt : s * DT; stepDrips(ds, paramsAt(ts), ts); }
+  return dripsOut(ds, paramsAt(tt));
+}
+
+function stepSim(sim: Sim, p: EmergenceParams, t: number): void {
+  stepDrips(sim.drip, p, t);
   for (let i = 0; i < N_STRANDS; i++) {
     const freed = t >= STRAND_LETGO[i]!;
     if (freed && !sim.born[i]) continue;
@@ -163,12 +219,11 @@ const life = (i: number, t: number) => birth(t - STRAND_START[i]!) * (1 - smooth
 
 /** The goo at time `t` (seconds): re-run from 0 in fixed steps, deterministic. */
 export function gooAt(t: number): Goo {
-  const tt = Math.min(Math.max(t, 0), DURATION);
+  const { tt, steps } = stepTimes(t);
   const sim: Sim = {
     pts: Array.from({ length: N_STRANDS }, () => []), prev: Array.from({ length: N_STRANDS }, () => []), born: Array(N_STRANDS).fill(false),
-    seg: Array(N_STRANDS).fill(0), drip: Array(N_DRIPS).fill(0),
+    seg: Array(N_STRANDS).fill(0), drip: newDripSim(),
   };
-  const steps = Math.floor(tt / DT);
   for (let s = 0; s <= steps; s++) { const ts = s === steps ? tt : s * DT; stepSim(sim, paramsAt(ts), ts); }
   const p = paramsAt(tt);
   const strands: Strand[] = Array.from({ length: N_STRANDS }, (_, i) => {
@@ -183,22 +238,11 @@ export function gooAt(t: number): Goo {
     const f = u * (STRAND_POINTS - 1), k = Math.min(STRAND_POINTS - 2, Math.floor(f)), w = f - k, A = s.points[k]!, B = s.points[k + 1]!;
     return { pos: [A[0] + (B[0] - A[0]) * w, A[1] + (B[1] - A[1]) * w, A[2] + (B[2] - A[2]) * w] as Vec3, radius: 0.011 * life(si, tt) };
   });
-  const drips: Drip[] = Array.from({ length: N_DRIPS }, (_, i) => {
-    const { top, floor } = dripRoom(p, i);
-    const length = sim.drip[i]!;
-    return { length, top, tip: [top[0], top[1] - length, top[2]], radius: DRIP_R, floor };
-  });
-  // THE POOLS: the egg's slick spreads once it lands and creeps with the heal; each drip that reaches the DESK (not the keyboard) feeds a
-  // small one with what keeps coming after it touched (its free growth past the room it had).
+  const { drips, pools: dripPools } = dripsOut(sim.drip, p);
+  // THE POOLS: the egg's slick spreads once it lands and creeps with the heal; then the drips' (dripsOut).
   const c = eggCentre(p);
   const land = smooth((p.slump - SLUMP.land + 0.03) / POOL.spread);
-  const pools: Pool[] = [{ centre: [c[0], DESK_Y, c[2]], radius: POOL.r * land * (1 + POOL.creep * smooth(p.heal)) }];
-  for (let i = 0; i < N_DRIPS; i++) {
-    const { top, floor, room } = dripRoom(p, i);
-    const excess = dripGrowth(tt - DRIP_START[i]!) - room;
-    const r = floor === DESK_Y && drips[i]!.length >= room - 1e-6 ? POOL.drip * smooth(excess / POOL.dripFill) : 0;
-    pools.push({ centre: [top[0], DESK_Y, top[2]], radius: r });
-  }
+  const pools: Pool[] = [{ centre: [c[0], DESK_Y, c[2]], radius: POOL.r * land * (1 + POOL.creep * smooth(p.heal)) }, ...dripPools];
   return { strands, beads, drips, pools };
 }
 

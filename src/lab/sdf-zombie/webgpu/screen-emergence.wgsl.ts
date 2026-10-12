@@ -39,7 +39,7 @@ import { GOO_BOUND0, GOO_POOL0, N_BEADS, N_DRIPS, N_POOLS, N_STRANDS, STRAND_POI
 const f = (n: number) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
 const v3 = (v: readonly number[]) => `vec3<f32>(${f(v[0]!)}, ${f(v[1]!)}, ${f(v[2]!)})`;
 
-/** The proxy box in the screen frame: the glass, the sac's whole reach (0.73 m) and the slumped egg on the desk. */
+/** The proxy box in the screen frame: the glass, the sac's whole reach (SAC_MAX, 0.65 m) and the slumped egg on the desk. */
 export const SCREEN_PROXY = { min: [-0.5, -0.5, -0.1], max: [0.5, 0.5, 0.95] } as const;
 /** The march's step budget (spec: a fixed 64 and an early-out on the box). */
 export const MAX_STEPS = 64;

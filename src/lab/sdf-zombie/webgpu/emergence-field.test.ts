@@ -33,9 +33,9 @@ describe('emergence field', () => {
     expect(sacZ(p, 0, 0)).toBeGreaterThan(0.5);
   });
 
-  it('the apex reaches most of a metre at full push (owner: "most of a metre is fine")', () => {
-    expect(SAC_MAX).toBeGreaterThan(0.7);
-    expect(SAC_MAX).toBeLessThan(0.8);
+  it('the apex reaches about 0.65 m at full push (look round 1: the egg is 80%, its reach kept within 0.62..0.70)', () => {
+    expect(SAC_MAX).toBeGreaterThan(0.62);
+    expect(SAC_MAX).toBeLessThan(0.7);
     expect(sacZ(at({ push: 1 }), 0, 0)).toBeGreaterThanOrEqual(SAC_MAX - 0.02);
   });
 

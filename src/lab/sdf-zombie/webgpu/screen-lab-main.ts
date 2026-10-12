@@ -42,7 +42,7 @@ import { MOTION_TUNING } from '../motion';
 import { makeRng } from '../wander';
 import { makePoseRig, poseJoints, type PoseRig } from '../pose';
 import {
-  GLASS, DESK_Y, EGG, EGG_REST, FRAME_FACE_Z, KEYBOARD, KEYBOARD_Z, PICTURE_TABLE_N, ellipsoidDist, eggCentre, keyboardShove, lipOpening, pictureTable,
+  GLASS, CRT_FRAME as CRT, DESK_Y, EGG, EGG_REST, FRAME_BOTTOM, FRAME_FACE_Z, KEYBOARD, KEYBOARD_Z, PICTURE_TABLE_N, ellipsoidDist, eggCentre, keyboardShove, lipOpening, pictureTable,
   sacExtent, smooth, tearTip,
 } from './emergence-field';
 import {
@@ -61,18 +61,16 @@ import type { Vec3 } from '../types';
 // ---------------------------------------------------------------------------
 // The P225f (docs/dev-notes/2026-10-01-flat-emergence-lookdev/crt_p225f.py), in the screen frame.
 // ---------------------------------------------------------------------------
-/** The front frame (w, h), its depth, and the chin under the glass (the blockout's FW, FH, FD, CHIN). */
-const CRT = { fw: 0.5, fh: 0.47, fd: 0.065, chin: 0.11 } as const;
-/** The frame's bottom: the chin below the glass's lower edge. The pedestal fills from the desk up to it. */
-const FRAME_BOTTOM = -(CRT.chin + GLASS.hh);
-// The frame's front face (FRAME_FACE_Z, the bevel's depth, 0.03 in the blockout) and the keyboard (KEYBOARD: thickness, depth, width, the gap
-// to the CRT's face, its key rows) are emergence-field's: the drips land on the keyboard and the egg shoves it (plan Task 8).
+// The front frame (CRT_FRAME: w, h, its depth, the chin under the glass; FRAME_BOTTOM, the chin below the glass's lower edge, which the
+// pedestal fills up to) is emergence-field's: the drips are kept in front of the chin. So are the frame's front face (FRAME_FACE_Z, the
+// bevel's depth, 0.03 in the blockout) and the keyboard (KEYBOARD: thickness, depth, width, the gap to the CRT's face, its key rows): the
+// drips land on the keyboard and the egg shoves it (plan Task 8).
 /** The desk top's thickness and its back edge (screen frame z, behind the CRT's 0.47 m housing). */
 const DESK = { t: 0.035, backZ: -0.62, hw: 0.78 } as const;
 /** The desk's front edge sits at least this far in front of the keyboard's front edge, and must clear the knees by at least KNEE_CLEAR. */
 const DESK_LIP = 0.04;
 const KNEE_CLEAR = 0.01;
-/** ...and reaches at least the slumped egg's front (screen z 0.36: EGG_REST z + EGG.rz, plus 5 mm), so the egg rests on wood. */
+/** ...and reaches at least the slumped egg's front (EGG_REST z + EGG.rz, plus 5 mm: screen z 0.33 for the 80% egg), so the egg rests on wood. */
 const DESK_FRONT_MIN_Z = EGG_REST[2] + EGG.rz + 0.005;
 /** The SDF pass's render scale (see `sdfLayer.setScale` in bootstrap). */
 const SDF_SCALE = 0.5;

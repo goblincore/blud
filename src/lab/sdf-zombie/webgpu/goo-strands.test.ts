@@ -1,11 +1,15 @@
 // src/lab/sdf-zombie/webgpu/goo-strands.test.ts
 import { describe, it, expect } from 'vitest';
 import { DURATION } from './emergence-timeline';
-import { DESK_Y, EGG, eggCentre, ellipsoidDist } from './emergence-field';
+import { DESK_Y, EGG, FRAME_BOTTOM, FRAME_FACE_Z, FRAME_TOP, eggCentre, ellipsoidDist } from './emergence-field';
 import { paramsAt } from './emergence-timeline';
-import { N_STRANDS, N_BEADS, N_DRIPS, N_POOLS, STRAND_POINTS, gooAt, gooTexels, GOO_BOUND0, GOO_POOL0, GOO_TEXELS } from './goo-strands';
+import {
+  DRIP_R, DRIP_RETRACT, DRIP_TIP, N_STRANDS, N_BEADS, N_DRIPS, N_POOLS, STRAND_POINTS, dripsAt, gooAt, gooTexels, GOO_BOUND0, GOO_POOL0, GOO_TEXELS,
+} from './goo-strands';
 
 const dist = (a: readonly number[], b: readonly number[]) => Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!);
+/** The 0.05 s grid over the whole run (integer steps, so no float drift in t). */
+const GRID = Array.from({ length: Math.round(DURATION / 0.05) + 1 }, (_, i) => Math.min(DURATION, i * 0.05));
 
 describe('goo strands', () => {
   it('has nothing before the tear opens', () => {
@@ -64,6 +68,70 @@ describe('goo strands', () => {
       expect(d.tip[1] - d.radius * 1.6, `t=${t}`).toBeGreaterThanOrEqual(d.floor - 1e-9);
     }
     expect(gooAt(DURATION).drips.every(d => d.floor === DESK_Y)).toBe(true);
+  });
+
+  it('dripsAt is gooAt\'s drips and drip pools (the cheap twin the housing test scans with)', () => {
+    for (const t of [8.5, 11.5, 12.6, 13.2, 14.5]) {
+      const g = gooAt(t), d = dripsAt(t);
+      expect(JSON.stringify(d.drips), `t=${t}`).toBe(JSON.stringify(g.drips));
+      expect(JSON.stringify(d.pools), `t=${t}`).toBe(JSON.stringify(g.pools.slice(1)));
+    }
+  });
+
+  it('a drip is never inside the CRT housing: it hangs straight down in front of the chin\'s face, radii included, at every time', () => {
+    let seen = 0;
+    for (const t of GRID) for (const [i, d] of dripsAt(t).drips.entries()) {
+      if (d.length <= 0) continue;
+      seen++;
+      expect(d.tip[0], `t=${t} drip ${i}`).toBe(d.top[0]);
+      expect(d.tip[2], `t=${t} drip ${i}`).toBe(d.top[2]);
+      // anchored on the OUTSIDE of the chin: its top at least the fattest radius (the tip's) plus 4 mm in front of the face
+      expect(d.top[2], `t=${t} drip ${i}`).toBeGreaterThanOrEqual(FRAME_FACE_Z + DRIP_R * DRIP_TIP + 0.004 - 1e-12);
+      // the whole round cone, top sphere to tip sphere: where its height overlaps the frame's, its back is in front of the face
+      const yLo = d.tip[1] - d.radius * DRIP_TIP, yHi = d.top[1] + d.radius;
+      if (yHi >= FRAME_BOTTOM && yLo <= FRAME_TOP) expect(d.top[2] - d.radius * DRIP_TIP, `t=${t} drip ${i}`).toBeGreaterThanOrEqual(FRAME_FACE_Z);
+    }
+    expect(seen).toBeGreaterThan(100);
+  });
+
+  it('drips retract with the heal: from the bottom up (the tip rising, the drip thinning), gone by the heal\'s DRIP_RETRACT end', () => {
+    const [h0, h1] = DRIP_RETRACT;
+    const win = GRID.filter(t => paramsAt(t).heal >= h0);
+    // they were there when it began
+    expect(dripsAt(win[0]!).drips.every(d => d.length > 0.03)).toBe(true);
+    let prev = dripsAt(win[0]!).drips;
+    for (const t of win.slice(1)) {
+      const cur = dripsAt(t).drips, heal = paramsAt(t).heal;
+      for (let i = 0; i < N_DRIPS; i++) {
+        const a = prev[i]!, b = cur[i]!;
+        expect(b.length, `t=${t} drip ${i}`).toBeLessThanOrEqual(a.length + 1e-12);
+        if (b.length > 0) {
+          expect(b.radius, `t=${t} drip ${i}`).toBeLessThanOrEqual(a.radius + 1e-12);
+          expect(b.tip[1], `t=${t} drip ${i}`).toBeGreaterThanOrEqual(a.tip[1] - 1e-12);
+        }
+        if (heal >= h1) expect(b.length, `t=${t} drip ${i}`).toBe(0);
+      }
+      prev = cur;
+    }
+    // thinner mid-way, and nothing left for the shader after the heal
+    const mid = win.find(t => paramsAt(t).heal >= (h0 + h1) / 2)!;
+    for (const d of dripsAt(mid).drips) { expect(d.length).toBeGreaterThan(0); expect(d.radius).toBeLessThan(DRIP_R); }
+    const tex = gooTexels(gooAt(DURATION));
+    const d0 = N_STRANDS * STRAND_POINTS + N_BEADS;
+    for (let k = 0; k < 2 * N_DRIPS; k++) expect(tex[(d0 + k) * 4 + 3]).toBe(0);
+  });
+
+  it('the pools the drips leave on the desk stay where they formed after the drips retract', () => {
+    const first: ({ r: number; c: number[] } | null)[] = Array(N_DRIPS).fill(null);
+    for (const t of GRID) dripsAt(t).pools.forEach((p, i) => {
+      const f = first[i] ?? null;
+      if (f === null) { if (p.radius > 0) first[i] = { r: p.radius, c: [...p.centre] }; return; }
+      expect(p.radius, `t=${t} pool ${i}`).toBeGreaterThanOrEqual(f.r);
+      expect(p.centre, `t=${t} pool ${i}`).toEqual(f.c);
+      f.r = p.radius;
+    });
+    expect(first.filter(f => f !== null).length).toBeGreaterThanOrEqual(2);
+    expect(gooAt(DURATION).pools.slice(1).filter(p => p.radius > 0).length).toBeGreaterThanOrEqual(2);
   });
 
   it('the slick: nothing before the egg lands, a pool under it after, and drip pools only on the desk', () => {

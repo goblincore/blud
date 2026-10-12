@@ -14,19 +14,30 @@ export type Vec3 = [number, number, number];
 export const GLASS = { hw: 0.203, hh: 0.1525 } as const;
 /** The sac's skin: the sheet stands this far in front of the egg's surface. */
 export const SKIN = 0.006;
-/** The stand-in egg (bigger than the glass, owner): semi-axes, and the centre's depth behind the glass at rest and at full push. */
-export const EGG = { rx: 0.175, ry: 0.225, rz: 0.175, z0: -0.25, z1: 0.55 } as const;
+/** The stand-in egg (still taller than the glass, so the lip gives; look round 1: 80% of round one's 0.175 x 0.225 x 0.175, "the egg is too
+ *  big"): semi-axes, and the centre's depth at rest and at full push. `z0` keeps the egg's front where round one's was at rest (7.5 cm behind
+ *  the glass, so the glass's first bulge comes as before); `z1` keeps the sac's reach (SAC_MAX = z1 + rz + SKIN) at about 0.65 m, within
+ *  0.62..0.70: the owner said the egg was too big, not the reach. */
+export const EGG = { rx: 0.14, ry: 0.18, rz: 0.14, z0: -0.215, z1: 0.5 } as const;
 /** The desk's top below the glass centre, and where the slumped egg rests: ON the desk, in front of the glass, overhanging the keyboard
  *  (z 0.09 to 0.25 in the lab's set). 0.4 hung it over the goblin's knees (z about 0.38) and past the desk's front edge; the lab's desk top
- *  reaches the egg's front (EGG_REST z + EGG.rz, 0.355) so it lies on wood. */
+ *  reaches the egg's front (EGG_REST z + EGG.rz: 0.325 for the 80% egg, 0.36 for round one's) so it lies on wood. */
 export const DESK_Y = -0.32;
 /** 0.185 (was 0.18): 5 mm forward, so the egg's back presses less into the CRT's bevel at the chin (about 1.4 cm into the face plane at the
- *  lip ring before, 0.9 after); the desk's front edge follows (the lab page reaches it to the egg's front plus 5 mm) and the knees keep 1.6 cm. */
+ *  lip ring before, 0.9 after); the desk's front edge follows (the lab page reaches it to the egg's front plus 5 mm) and the knees keep 1.6 cm.
+ *  The 80% egg's back is at z 0.045, in front of the face (Task C re-derives z for the floor-level table). */
 export const EGG_REST: Vec3 = [0, DESK_Y + EGG.ry, 0.185];
 /** THE SET'S DESK TOP (Task 8: the drips land on it and the egg shoves it): the CRT's face stands FRAME_FACE_Z proud of the glass; the
  *  keyboard (thickness `t`, depth `d`, width `w`, its key rows `keys` proud of it) lies `gap` in front of the face. The lab page builds them
  *  from these. */
 export const FRAME_FACE_Z = 0.03;
+/** The P225f's front frame (docs/dev-notes/2026-10-01-flat-emergence-lookdev/crt_p225f.py, the blockout's FW, FH, FD, CHIN): its width and
+ *  height, the side band's depth, and the chin under the glass. The lab page builds the housing from these; the drips are kept in front
+ *  of it (goo-strands' DRIP_FACE_Z). */
+export const CRT_FRAME = { fw: 0.5, fh: 0.47, fd: 0.065, chin: 0.11 } as const;
+/** The frame's bottom (the chin below the glass's lower edge) and top, in the screen frame. */
+export const FRAME_BOTTOM = -(CRT_FRAME.chin + GLASS.hh);
+export const FRAME_TOP = FRAME_BOTTOM + CRT_FRAME.fh;
 export const KEYBOARD = { t: 0.03, d: 0.16, w: 0.46, gap: 0.06, keys: 0.008 } as const;
 export const KEYBOARD_Z = FRAME_FACE_Z + KEYBOARD.gap + KEYBOARD.d / 2;
 export const KEYBOARD_TOP = DESK_Y + KEYBOARD.t + KEYBOARD.keys;
@@ -35,13 +46,14 @@ export const KEYBOARD_TOP = DESK_Y + KEYBOARD.t + KEYBOARD.keys;
  *  its far end swung toward the room (+yaw) so it clears the lamp's foot: +x put it across the settle camera's lens. */
 export const KEYBOARD_SHOVE = { dx: -0.36, yaw: 0.35, lead: 0.02, run: 0.12 } as const;
 
-/** The sac's apex at full push: the egg's front plus the skin (about 0.73 m, "most of a metre"). */
+/** The sac's apex at full push: the egg's front plus the skin (0.646 m; round one's bigger egg reached 0.73). */
 export const SAC_MAX = EGG.z1 + EGG.rz + SKIN;
-/** The sheet's half-thickness at rest (m), and the tear's largest radius. */
+/** The sheet's half-thickness at rest (m), and the tear's largest radius (80% of round one's 0.17, with the egg). */
 export const THICK0 = 0.004;
-export const TEAR_R_MAX = 0.17;
-/** The lip: how far it bows out in z and how much the opening widens (fractions of the glass) at full bow. */
-export const LIP = { bowZ: 0.1, openX: 0.3, openY: 0.5 } as const;
+export const TEAR_R_MAX = 0.136;
+/** The lip: how far it bows out in z and how much the opening widens (fractions of the glass) at full bow. `openY` gives only what the egg
+ *  needs (its half height 1.02x the egg's ry at full bow, as round one's 0.5 gave the bigger egg): 0.2 for the 80% egg. */
+export const LIP = { bowZ: 0.1, openX: 0.3, openY: 0.2 } as const;
 export const RIPPLE = { amp: 0.012, freq: 24, speed: 9 } as const;
 /** The picture table's size (entries 0..N-1 cover normalised radius 0..1). */
 export const PICTURE_TABLE_N = 33;
