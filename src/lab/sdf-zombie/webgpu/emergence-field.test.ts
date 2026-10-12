@@ -4,7 +4,7 @@ import { paramsAt, DURATION, type EmergenceParams } from './emergence-timeline';
 import {
   DESK_Y, EGG, EGG_REST, GLASS, KEYBOARD_CONTACT, KEYBOARD_TOP, KEYBOARD_Z, SKIN, SAC_MAX, PICTURE_TABLE_N, SAC_BLEND, SLUMP, TEAR_KNIT, dripFloor, eggCentre,
   eggFront, eggHeld, keyboardShove, lipOpening, pictureTable, pictureUV, sacBlend, sacExtent, sacSolid, sacZ, sheetThickness, tearEdge, tearRadius, tearTip,
-  wrinkleAmp,
+  wrinkleAmp, FIGURE_BLOBS, FIGURE_DRIFT, SHELL, VEIN_TREE, figureAt,
 } from './emergence-field';
 
 const REST: EmergenceParams = paramsAt(0);
@@ -221,5 +221,48 @@ describe('emergence field', () => {
     // the apex stretches: the picture's centre covers more sheet, so the first steps cover LESS picture than at rest
     expect(pushed[4]!).toBeLessThan(rest[4]!);
     expect(pictureUV(REST, 0.1, -0.05)).toEqual([0.1 / GLASS.hw, -0.05 / GLASS.hh]);
+  });
+
+  it('the egg\'s figure stays inside the shell, drifts visibly from second to second, and never darts', () => {
+    const steps: number[] = [];
+    for (let t = 0; t <= 60; t += 0.05) {
+      const fig = figureAt(t);
+      expect(fig).toHaveLength(FIGURE_BLOBS.length);
+      fig.forEach((c, i) => {
+        // each blob's 1.5-sigma box (corners and all: conservative) stays inside the egg
+        const sc = FIGURE_BLOBS[i]!.sc;
+        for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+          const q = [c[0] + 1.5 * sx * sc[0], c[1] + 1.5 * sy * sc[1], c[2] + 1.5 * sz * sc[2]];
+          expect((q[0]! / EGG.rx) ** 2 + (q[1]! / EGG.ry) ** 2 + (q[2]! / EGG.rz) ** 2, `t=${t.toFixed(2)} blob ${i}`).toBeLessThan(1);
+        }
+      });
+      const a = figureAt(t)[0]!, b = figureAt(t + 1)[0]!;
+      steps.push(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]));
+      // continuous: a 50 ms step moves it at most 5 mm
+      const n = figureAt(t + 0.05)[0]!;
+      expect(Math.hypot(a[0] - n[0], a[1] - n[1], a[2] - n[2])).toBeLessThan(0.005);
+    }
+    steps.sort((x, y) => x - y);
+    // two frames a second apart: the body has moved 2 cm or more nine times in ten (the owner: "you can see something moving"), and
+    // never more than 7 cm (a drift, not a dart)
+    expect(steps[Math.floor(steps.length * 0.1)]!).toBeGreaterThan(0.02);
+    expect(steps[steps.length - 1]!).toBeLessThan(0.07);
+    expect(FIGURE_DRIFT.axes).toHaveLength(3);
+  });
+
+  it('the shell\'s speckles are 3 to 9 mm across and fit their cells; the vein tree tapers and its branches spread within a sector', () => {
+    expect(2 * SHELL.rMin).toBeGreaterThanOrEqual(0.003);
+    expect(2 * SHELL.rMax).toBeLessThanOrEqual(0.009);
+    expect(SHELL.rMax).toBeLessThanOrEqual(SHELL.cell / 2);           // scrSpots searches only the 2 x 2 x 2 nearest cells
+    expect(SHELL.pepper.r).toBeLessThanOrEqual(SHELL.pepper.cell / 2);
+    expect(SHELL.density + SHELL.fat).toBeLessThanOrEqual(1);
+    expect(VEIN_TREE.taper).toBeLessThan(1);
+    for (let k = 1; k < VEIN_TREE.forks.length; k++) {
+      expect(VEIN_TREE.forks[k]!).toBeGreaterThan(VEIN_TREE.forks[k - 1]!);
+      expect(VEIN_TREE.spread[k]!).toBeLessThan(VEIN_TREE.spread[k - 1]!);
+    }
+    // the leaves' nominal places (the trunk's jitter and the spreads, before the meander, which the shader clamps) lie inside the trunk's
+    // sector, so the one-sector distance is the nearest vein
+    expect(0.08 + VEIN_TREE.spread.reduce((a, b) => a + b, 0)).toBeLessThan(0.5);
   });
 });

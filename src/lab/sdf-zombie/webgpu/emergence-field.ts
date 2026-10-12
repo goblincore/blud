@@ -282,3 +282,72 @@ export function pictureUV(p: EmergenceParams, x: number, y: number): [number, nu
   const s = (q <= 1 ? g : q) / q;
   return [(mx * s) * (lip.hw / GLASS.hw), (my * s) * (lip.hh / GLASS.hh)];
 }
+
+// ---------------------------------------------------------------------------
+// THE EGG'S LOOK (look round 1, Task B): an EGGSHELL, not glass. The owner: "a less shiny glass appearance and a more speckled kind of egg
+// appearance overall; in intense light underneath or against it you can see something moving, but otherwise it's less glass and more egg
+// shell." The shader's scrShell, scrSpeckle and scrFigure are built from these tables.
+// ---------------------------------------------------------------------------
+
+/** The shell's surface: `base` the cream albedo, `speck` the speckles' brown; speckles sit one per `cell` (m) cube at most, present with
+ *  probability `density`, rising by `fat` toward the egg's top (the blunt end, it stands on it); their radius runs `rMin`..`rMax` (3 to 9 mm
+ *  across), weighted to the small; `pepper` a finer, fainter layer (cell, radius, density); `grain` the fine shell texture's albedo
+ *  amplitude, `mottle` the broad tone variation; `wrap` the diffuse's wrap (a soft terminator, not the glass's hard one); the highlight is
+ *  broad and dim (`specPow`, `spec`): no clear coat; `deskFill` the warm bounce off the lamp-lit desk on its underside (so away from the
+ *  lamp it stays cream, not the street fill's grey). */
+export const SHELL = {
+  base: [0.93, 0.88, 0.76], speck: [0.4, 0.23, 0.12], cell: 0.011, density: 0.55, fat: 0.3, rMin: 0.0015, rMax: 0.0045,
+  pepper: { cell: 0.005, r: 0.0012, density: 0.5, amt: 0.5 }, grain: 0.07, mottle: 0.06, wrap: 0.6, specPow: 10, spec: 0.07, deskFill: [0.07, 0.045, 0.028],
+} as const;
+/** The shell's TRANSMISSION: light from behind the egg (relative to the eye) comes through it warm (`col`). `back` the lamp's backlight
+ *  gain, its lobe `backPow` and the normal's `distort` (the lobe widens toward the silhouette); `thick` the falloff per metre of the chord
+ *  the eye's ray makes through the egg (the thin edge glows most); `centre` the glow through the middle when the lamp is straight behind
+ *  the egg from the eye (the lobe `centrePow` of that alignment: candling); `leak` the shadow side's general translucency. The egg's OWN light (the
+ *  timeline's glow, a light at its centre) shows through by `inner` while the sac holds it, falling to `innerOut` of that once it is out
+ *  (on the desk it is an eggshell, the figure showing only in a strong light behind or under it); `below` the light from under it: the
+ *  desk's bounce of the lamp (`bounce`) and the pool's warm soak, lighting it through its foot within `belowR` m. */
+export const SHELL_LIGHT = {
+  col: [1.0, 0.56, 0.26], back: 0.9, backPow: 6, distort: 0.35, thick: 9, centre: 0.8, centrePow: 12, leak: 0.08, inner: 0.75, innerOut: 0.04,
+  below: 0.6, bounce: 0.35, belowR: 0.06,
+} as const;
+
+/** THE FIGURE inside the egg: Gaussian blobs (centre offset from the figure's origin, scales; metres), each darkening the light coming
+ *  through the shell by `depth` times its line integral along the eye's ray (closed form, as the control room's egg's eggGauss): a body, a
+ *  head and a limb that flexes. It only shows where the shell glows (it darkens the transmitted light, never the lit surface). */
+export const FIGURE_BLOBS = [
+  { pos: [0, -0.018, 0], sc: [0.03, 0.042, 0.03] },
+  { pos: [0.02, 0.034, 0.006], sc: [0.025, 0.025, 0.025] },
+  { pos: [-0.03, -0.034, 0.01], sc: [0.011, 0.026, 0.011] },
+] as const;
+export const FIGURE_DEPTH = 44;
+/** The figure's DRIFT round the egg's centre: a slow Lissajous per axis (amplitude m, frequency rad/s, phase), so in two frames a second
+ *  apart it has visibly moved (2 to 4 cm) while staying well inside the shell; the head nods (`nod`: amplitude in m along x and z at its
+ *  own frequency) and the limb flexes (`flex`: its offset scaled by 1 + amp sin(freq t)). */
+export const FIGURE_DRIFT = {
+  axes: [[0.03, 1.13, 0.4], [0.026, 0.87, 1.9], [0.022, 1.31, 2.7]],
+  nod: [0.012, 1.7, 0.6], flex: [0.3, 2.3, 0.2],
+} as const;
+
+/** The figure's three blobs' centres at time t, offsets from the egg's centre (the shader's scrFigure, its twin, builds the same terms). */
+export function figureAt(t: number): Vec3[] {
+  const o = FIGURE_DRIFT.axes.map(([a, w, ph]) => a * Math.sin(w * t + ph)) as Vec3;
+  const [na, nw, nph] = FIGURE_DRIFT.nod, [fa, fw, fph] = FIGURE_DRIFT.flex;
+  const nod = na * Math.sin(nw * t + nph), flex = 1 + fa * Math.sin(fw * t + fph);
+  const [b, h, l] = FIGURE_BLOBS;
+  return [
+    [o[0] + b.pos[0], o[1] + b.pos[1], o[2] + b.pos[2]],
+    [o[0] + h.pos[0] + nod, o[1] + h.pos[1], o[2] + h.pos[2] + 0.6 * nod],
+    [o[0] + l.pos[0] * flex, o[1] + l.pos[1] * flex, o[2] + l.pos[2] * flex],
+  ];
+}
+
+/** THE MEMBRANE'S VEINS: a branching tree, not round one's long sine curves. `n` trunks round the axis from the lip, each forking three times
+ *  at `forks` (fractions of the way from the lip to the apex, jittered by `jitter`), each fork opening over `open` of that way, the children
+ *  spreading by `spread` (fractions of the trunk's sector) and narrowing by `taper`; a child of fork k ENDS with probability `ends[k]`
+ *  somewhere within `reach` after its fork (so the fine branches are twigs, not all running on to the apex); widths in metres from `w0`,
+ *  thinning toward the apex (`apexThin`) and with the sheet's thinning (`thinThin`); `wander` the branches' sideways meander (fraction of the
+ *  sector; the shader keeps every branch inside its trunk's sector, so where the meanders add up a branch runs along the sector's edge). */
+export const VEIN_TREE = {
+  n: 7, w0: 0.007, forks: [0.16, 0.36, 0.56], jitter: 0.1, open: 0.07, spread: [0.2, 0.1, 0.05], ends: [0, 0.35, 0.6], reach: [0.1, 0.32],
+  taper: 0.68, wander: 0.11, apexThin: 0.5, thinThin: 0.45,
+} as const;

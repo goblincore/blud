@@ -48,7 +48,7 @@ import {
 import {
   DEPTH_Q, GOO_K, SCREEN_PROXY, SCR_CAPSULE, SCR_ELLIPSOID, SCR_GOO, SCR_LIGHT, SCR_LIP, SCR_MAP, SCR_MARCH, SCR_NORMAL, SCR_OPENING,
   SCR_PICTURE, SCR_POOL, SCR_POOL_SHADE, SCR_ROUNDCONE, SCR_ROUNDRECT, SCR_SAC, SCR_SHADE, SCR_SHADOW, SCR_SHEET, SCR_SMAX, SCR_SMIN, SCR_SURFACE,
-  SCR_TEAR, SCR_VEINS, SCR_WRINKLE, SCR_WRINKLE_PAT,
+  SCR_TEAR, SCR_VEINS, SCR_WRINKLE, SCR_WRINKLE_PAT, SCR_GAUSS, SCR_FIGURE, SCR_FIG_TAU, SCR_SPOTS, SCR_SHELL, SCR_EGG_INNER,
 } from './screen-emergence.wgsl';
 import { GOO_BOUND0, GOO_TEXELS, gooAt, gooTexels } from './goo-strands';
 import { SHOTS, DURATION, shotAt, paramsAt, type ShotId } from './emergence-timeline';
@@ -359,12 +359,15 @@ function createScreenPass(pictureTex: THREE.Texture): ScreenPass {
   const veinsF = fn(SCR_VEINS);
   const pictureF = fn(SCR_PICTURE);
   const lightF = fn(SCR_LIGHT);
-  const surfaceF = fn(SCR_SURFACE, [lightF, veinsF, tearF, ellipsoidF]);
+  const figTauF = fn(SCR_FIG_TAU, [fn(SCR_FIGURE), fn(SCR_GAUSS)]);
+  const shellF = fn(SCR_SHELL, [fn(SCR_SPOTS), figTauF]);
+  const eggInnerF = fn(SCR_EGG_INNER);
+  const surfaceF = fn(SCR_SURFACE, [lightF, tearF, ellipsoidF, shellF, eggInnerF]);
   const sheetF = fn(SCR_SHEET, [sacF, pictureF, veinsF, lightF, wrinkleF]);
   const shadowF = fn(SCR_SHADOW, [mapF, ellipsoidF]);
   const poolF = fn(SCR_POOL);
   const poolShadeF = fn(SCR_POOL_SHADE, [lightF]);
-  const shade = fn(SCR_SHADE, [marchF, normalF, sheetF, surfaceF, openingF, pictureF, shadowF, poolF, poolShadeF]);
+  const shade = fn(SCR_SHADE, [marchF, normalF, sheetF, surfaceF, openingF, pictureF, shadowF, poolF, poolShadeF, eggInnerF]);
 
   const table = new Float32Array(PICTURE_TABLE_N);
   const tableTex = new THREE.DataTexture(table, PICTURE_TABLE_N, 1, THREE.RedFormat, THREE.FloatType);
