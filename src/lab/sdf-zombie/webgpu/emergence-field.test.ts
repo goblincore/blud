@@ -5,6 +5,7 @@ import {
   COAT, DESK_Y, EGG, EGG_REST, FRAME_FACE_Z, GLASS, KEYBOARD_RECT, KEYBOARD_TOP, KEYBOARD_Z, SKIN, SAC_MAX, PICTURE_TABLE_N, SAC_BLEND, SLUMP, TEAR_KNIT,
   coatCoverage, coatEggBlob, coatThickness, dripFloor, eggCentre, eggFront, eggHeld, lipOpening, pictureTable, pictureUV, sacBlend, sacExtent, sacSolid, sacZ,
   sheetThickness, tearEdge, tearRadius, tearTip, wrinkleAmp, FIGURE_BLOBS, FIGURE_DRIFT, SHELL, VEIN_TREE, figureAt,
+  BEZEL, CAPILLARY, FLESH_LOOK, LIP_FLESH, bezelZ, fleshAmount, hueDeg, lipPulse,
 } from './emergence-field';
 import * as FIELD from './emergence-field';
 
@@ -311,5 +312,76 @@ describe('emergence field', () => {
     // the leaves' nominal places (the trunk's jitter and the spreads, before the meander, which the shader clamps) lie inside the trunk's
     // sector, so the one-sector distance is the nearest vein
     expect(0.08 + VEIN_TREE.spread.reduce((a, b) => a + b, 0)).toBeLessThan(0.5);
+  });
+
+  it('the flesh is ONE family (the third notes: the goo is the membrane\'s substance): the tissue, the rims\' pink and the goo thin and thick within 15 degrees of hue; the goo milkier as it thickens', () => {
+    const G = FLESH_LOOK.goo;
+    const family = [FLESH_LOOK.maroon, FLESH_LOOK.red, FLESH_LOOK.pink, FLESH_LOOK.deep, FLESH_LOOK.capillary, G.thin, G.thick].map(hueDeg);
+    // hue is circular: measure every pair's angular gap
+    for (const a of family) for (const b of family) expect(Math.min(Math.abs(a - b), 360 - Math.abs(a - b))).toBeLessThanOrEqual(15);
+    // red, not orange: within 20 degrees of pure red and never more than 10 toward orange (the albedos lean crimson: the warm lamp brings
+    // them back to red on screen); the light through thin flesh (a hand over a torch) may lean red-orange, 25
+    for (const h of family) expect(h <= 10 || h >= 340, `hue ${h.toFixed(1)}`).toBe(true);
+    const gh = hueDeg(FLESH_LOOK.glow);
+    expect(Math.min(gh, 360 - gh)).toBeLessThanOrEqual(25);
+    // the vessels are darker than the tissue and lean purple (blue over green)
+    const lum = (c: readonly number[]) => 0.2126 * c[0]! + 0.7152 * c[1]! + 0.0722 * c[2]!;
+    expect(lum(FLESH_LOOK.vein)).toBeLessThan(lum(FLESH_LOOK.capillary));
+    expect(lum(FLESH_LOOK.capillary)).toBeLessThan(lum(FLESH_LOOK.red));
+    expect(FLESH_LOOK.vein[2]).toBeGreaterThan(FLESH_LOOK.vein[1]);
+    // thin goo is deeper and more saturated than thick goo (milky)
+    const sat = (c: readonly number[]) => (Math.max(...c) - Math.min(...c)) / Math.max(...c);
+    expect(lum(G.thin)).toBeLessThan(lum(G.thick));
+    expect(sat(G.thin)).toBeGreaterThan(sat(G.thick));
+    expect(G.milk.drip).toBeLessThan(G.milk.strand);
+    expect(G.milk.strand).toBeLessThan(G.milk.bead);
+    expect(G.milk.coat[0]).toBeLessThan(G.milk.coat[1]);
+    for (const k of [G.milk.drip, G.milk.strand, G.milk.bead, G.milk.pool, ...G.milk.coat]) { expect(k).toBeGreaterThanOrEqual(0); expect(k).toBeLessThanOrEqual(1); }
+    // the flesh's sheet is translucent but no longer glass
+    expect(FLESH_LOOK.alpha[0]).toBeGreaterThanOrEqual(0.85);
+    expect(FLESH_LOOK.alpha[0]).toBeLessThan(FLESH_LOOK.alpha[1]);
+    expect(FLESH_LOOK.alpha[1]).toBeLessThan(1);
+  });
+
+  it('the membrane turns to flesh continuously: glass at rest, flesh from the crowning to the end (through the heal), no step over 0.1 in 50 ms', () => {
+    const at = (t: number, stretch: number) => fleshAmount(paramsAt(t), stretch);
+    expect(at(0, 0)).toBe(0);
+    for (let t = 6.5; t <= DURATION; t += 0.05) expect(at(t, 0), `t=${t.toFixed(2)}`).toBeGreaterThan(0.95);
+    for (const st of [0, 0.5, 1]) for (let t = 0; t + 0.05 <= DURATION; t += 0.05) {
+      const a = at(t, st), b = at(t + 0.05, st);
+      expect(Math.abs(b - a), `t=${t.toFixed(2)} stretch=${st}`).toBeLessThan(0.1);
+      expect(a).toBeGreaterThanOrEqual(0); expect(a).toBeLessThanOrEqual(1);
+    }
+    // the stretch alone brings it up (the sac's front before the sheet has thinned)
+    expect(at(3, 1)).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it('the lip\'s pulse is a slow, small double beat; the bezel rises from the glass\'s edge to the face; the capillaries are fine', () => {
+    const P = LIP_FLESH.pulse;
+    let mx = 0, mn = 1;
+    for (let t = 0; t < 3 * P.period; t += 0.01) {
+      const v = lipPulse(t);
+      expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThanOrEqual(1);
+      expect(lipPulse(t + P.period)).toBeCloseTo(v, 6);                               // periodic
+      expect(Math.abs(lipPulse(t + 0.01) - v)).toBeLessThan(0.25);                    // smooth at 100 Hz
+      mx = Math.max(mx, v); mn = Math.min(mn, v);
+    }
+    expect(mx).toBeGreaterThan(0.95); expect(mn).toBeLessThan(0.02);
+    // two beats per period: count the local maxima above 0.3
+    let peaks = 0;
+    for (let t = 0.01; t < P.period; t += 0.005) if (lipPulse(t) > 0.3 && lipPulse(t) > lipPulse(t - 0.005) && lipPulse(t) >= lipPulse(t + 0.005)) peaks++;
+    expect(peaks).toBe(2);
+    expect(P.period).toBeGreaterThanOrEqual(1);                                       // slow
+    expect(P.amp).toBeLessThanOrEqual(0.15);                                          // subtle
+    // the bezel: the glass's edge (its foot) to the face's flat, monotone
+    expect(bezelZ(0)).toBeCloseTo(BEZEL.footZ, 9);
+    expect(bezelZ(0.1)).toBeCloseTo(FRAME_FACE_Z, 9);
+    for (let u = 0; u < 0.05; u += 0.001) expect(bezelZ(u + 0.001)).toBeGreaterThanOrEqual(bezelZ(u));
+    // the capillary net is finer than the trunks' spacing (7 round the axis: CAPILLARY.around is many cells per trunk), its vessels thin
+    expect(CAPILLARY.around / VEIN_TREE.n).toBeGreaterThan(6);
+    expect(CAPILLARY.w).toBeLessThan(0.1);
+    expect(CAPILLARY.weak).toBeLessThan(1);
+    expect(VEIN_TREE.bulge).toBeGreaterThan(0);
+    expect(VEIN_TREE.bulgeW).toBeLessThan(VEIN_TREE.forks[1]! - VEIN_TREE.forks[0]!);
   });
 });

@@ -142,23 +142,83 @@ export function coatThickness(blobs: readonly CoatBlob[], x: number, z: number):
   return Math.max(0, cap - COAT.thresh);
 }
 
-/** THE GOO'S LOOK: one palette and one shading (the shader's scrGooShade) for every piece of goo: the strands, the beads, the drips, the
- *  runs off the keyboard, the slicks on the desk and the keyboard's coat (the owner's second notes: "i dont get why the drips are white, they
- *  should be the same color as the rest of the goo"). Round two's goo had a near-white albedo (0.82, 0.74, 0.7) and so took the colour of
- *  whatever lit it: the drips beside the landed egg, under the lamp AND the egg's light AND a subsurface floor of 0.8 of the egg's glow,
- *  clipped to cream-white; the strands in the tear's shade went the street fill's blue-grey; the slick was a different stuff altogether, a
- *  near-black mirror. Now: `base` the albedo (the milky off-white-pink, a little deeper so the lights do not clip it to white), `sss` the
- *  subsurface tint (light through the goo comes out warm), `lampSss` how much of the lamp comes through it (wrapped and from behind),
- *  `eggSss` how much of the egg's light comes through it near the egg (falling off over `eggNear` m from the shell), `eggOut` the egg's light
- *  on the goo once it is out of the sac (an eggshell then: SHELL_LIGHT.innerOut's logic, not as far), `ambient` the goo's own tint everywhere
- *  (so its shaded side stays goo-coloured), `coat` the clear coat's hard highlights (scrLight's), `sheen` a grazing sheen, `env` the wet
- *  surface's broad reflection of the glowing screen (colour `envCol`, lobe `envPow` round the direction to the glass's centre); the coat on
- *  the keyboard is `film` opaque where thin (the keys show through) to `filmThick` where thick; the slicks mirror the egg by `mirror` of
- *  the Fresnel. The base is pinker than the keyboard's beige so the coat reads on it. */
-export const GOO_LOOK = {
-  base: [0.7, 0.47, 0.44], sss: [1.0, 0.56, 0.42], lampSss: 0.3, eggSss: 0.55, eggNear: 0.08, eggOut: 0.2, ambient: 0.05,
-  coat: 1.5, sheen: 0.12, env: 0.45, envCol: [1.0, 0.5, 0.3], envPow: 4, film: 0.8, filmThick: 0.97, mirror: 0.6,
+/** THE FLESH: ONE palette (linear RGB) for the membrane, the lip sleeve, the tear's rim AND every piece of goo, because the goo IS the
+ *  membrane's own substance (the owner's third notes, 2026-10-13: "i don't understand the drips still, they still seem a different color"
+ *  and "maybe the screen membrane should take on a more visceral organ red blood quality, like it transitions to a more fleshy veiny look,
+ *  especially the raised rectangular border emboss of the monitor that extends out"). Round two's goo was a milky grey-pink (0.7, 0.47,
+ *  0.44) beside an orange-glass membrane: sampled at t 11.6 the drips were hue 2 to 6 degrees but saturation 0.34 against the membrane's
+ *  0.62, a dusky mauve against orange.
+ *
+ *  THE FLESH (the shader's scrFlesh): `maroon` thick or shadowed flesh, `red` the base blood-and-flesh red, `pink` the swollen lip's and the
+ *  rims' red-pink; `vein` the trunks' dark red-purple, `capillary` the fine vessels' (darkening the flesh by `capAmt`); light coming THROUGH
+ *  it from the egg is `glow` where it is thin (a hand over a torch: red-orange) and `deep` through thick flesh; `sss` the tint light takes
+ *  under the skin, `lampSss` the lamp's wrapped share, `ambient` its own warmth; `coat` the wet clear coat's hard highlights (scrLight's),
+ *  `sheen` a grazing wet sheen; `alpha` the sheet's opacity once it is flesh, between the vessels and over one (round two's 0.5 to 0.85
+ *  read as glass).
+ *
+ *  THE GOO (the shader's scrGooShade): the same stuff, thickness-dependent: `thin` thin goo's colour (a strand, a drip: a deeper red-pink,
+ *  translucent), `thick` thick goo's (a glob, the coat: paler, milky pink), mixed by each piece's `milk` (0 thin .. 1 thick: the strands
+ *  scaled by their radius over their full one, the beads, the drips and runs, the slicks, the coat from its thin edge to its thick middle);
+ *  `lampSss` how much of the lamp comes through it, `thruThin` how much more comes through thin goo; `eggSss` how much of the egg's light
+ *  comes through it near the egg (over `eggNear` m of its shell), `eggOut` the egg's light on it once out of the sac (round two's: kept),
+ *  `ambient`, `coat`, `sheen` as the flesh's; `env` the wet surface's broad reflection of the (fleshy, glowing) screen in the flesh's
+ *  `glow`, lobe `envPow`; the coat on the keyboard is `film` opaque where thin to `filmThick` where thick; the slicks mirror the egg by
+ *  `mirror` of the Fresnel. */
+export const FLESH_LOOK = {
+  maroon: [0.16, 0.01, 0.026], red: [0.5, 0.04, 0.06], pink: [0.7, 0.15, 0.2], vein: [0.11, 0.005, 0.045], capillary: [0.26, 0.015, 0.045],
+  glow: [0.9, 0.1, 0.05], deep: [0.42, 0.018, 0.025], sss: [1.0, 0.26, 0.26], lampSss: 0.25, ambient: 0.035, coat: 2.2, sheen: 0.18, capAmt: 0.5,
+  alpha: [0.92, 0.98],
+  goo: {
+    thin: [0.55, 0.06, 0.1], thick: [0.8, 0.4, 0.46],
+    milk: { strand: 0.3, bead: 0.65, drip: 0.12, pool: 0.5, coat: [0.55, 1.0] },
+    lampSss: 0.3, thruThin: 0.6, eggSss: 0.55, eggNear: 0.08, eggOut: 0.2, ambient: 0.05,
+    coat: 1.5, sheen: 0.12, env: 0.4, envPow: 4, film: 0.8, filmThick: 0.97, mirror: 0.6,
+  },
 } as const;
+
+/** The membrane's FLESH amount at a point (0 glass with the picture .. 1 wet organ flesh): it comes up as the sheet thins (`thin`) and
+ *  stretches (`stretch`, the sheet's height over SAC_MAX), and once the egg is out (`slump` past a half) it stays, through the heal, as
+ *  `thin` falls back (the healed sheet is wrinkled, glistening flesh, the picture a faint ghost): continuous in t, no pop. The shader's
+ *  scrSheet builds the same expression. */
+export const fleshAmount = (p: EmergenceParams, stretch: number) =>
+  Math.min(1, Math.max(smooth(p.thin), 0.8 * stretch, smooth(Math.min(1, 2 * p.slump))));
+
+/** THE LIP'S FLESH (the third notes: the raised rounded-rectangular sleeve the owner "was originally against", now with the visceral
+ *  treatment): as it bows its tube swells by `swell` (1 + swell at full bow), pulses (`pulse`: a slow double beat, `period` s, its two
+ *  beats at phases `beats` [phase, width, height], swelling the tube by `amp` and brightening the flesh by `glow` at full bow), and its
+ *  rim rolls out into a broad fleshy edge (the tube `roll` times fatter over the top `rollW` m). Its veins are the membrane's tree
+ *  (scrVeins) repeated `veinRep` times round the ring, running up the sleeve; where it meets the bezel's grey plastic it darkens to
+ *  `seamDark` within `seamW` m of the bevel (flesh growing over the bezel: a soft, wet, darker line, not a gasket). */
+export const LIP_FLESH = {
+  swell: 0.5, roll: 0.45, rollW: 0.03, veinRep: 4, seamW: 0.009, seamDark: 0.3,
+  pulse: { period: 1.6, amp: 0.1, glow: 0.18, beats: [[0.0, 0.06, 1.0], [0.21, 0.07, 0.55]] },
+} as const;
+
+/** The lip's pulse at `time`: 0..1, a double beat each LIP_FLESH.pulse.period seconds (Gaussian bumps in the period's phase). */
+export function lipPulse(time: number): number {
+  const P = LIP_FLESH.pulse, ph = time / P.period - Math.floor(time / P.period);
+  let v = 0;
+  for (const [at, w, h] of P.beats) v += h * Math.exp(-(((ph - at) / w) ** 2)) + h * Math.exp(-(((ph - at - 1) / w) ** 2));
+  return Math.min(1, v);
+}
+
+/** THE BEZEL (the CRT's face, screen-lab-main.ts buildCrt): its sloped bevel rises from the glass's edge (`foot` m outside it, at z `footZ`)
+ *  to the face's flat (`rimX`, `rimY` m outside the glass's edge, at FRAME_FACE_Z). bezelZ is its height at `u` m outside the glass's
+ *  edge: where the lip's flesh meets the plastic. */
+export const BEZEL = { foot: 0.002, footZ: 0.002, rimX: 0.025, rimY: 0.0225 } as const;
+export function bezelZ(u: number): number {
+  const rim = 0.5 * (BEZEL.rimX + BEZEL.rimY);
+  return BEZEL.footZ + (FRAME_FACE_Z - BEZEL.footZ) * Math.min(1, Math.max(0, (u - BEZEL.foot) / (rim - BEZEL.foot)));
+}
+
+/** A colour's hue in degrees (0..360) after the sRGB transfer, as a screen shows it; the palette's tests hold the flesh to one family. */
+export function hueDeg(c: readonly number[]): number {
+  const [r, g, b] = c.map(v => (v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055)) as [number, number, number];
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  if (d === 0) return 0;
+  const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return (h * 60 + 360) % 360;
+}
 
 /** The share of the keyboard's top the coat covers (a 47 x 17 grid of its footprint): 0..1. */
 export function coatCoverage(blobs: readonly CoatBlob[]): number {
@@ -423,8 +483,17 @@ export function figureAt(t: number): Vec3[] {
  *  spreading by `spread` (fractions of the trunk's sector) and narrowing by `taper`; a child of fork k ENDS with probability `ends[k]`
  *  somewhere within `reach` after its fork (so the fine branches are twigs, not all running on to the apex); widths in metres from `w0`,
  *  thinning toward the apex (`apexThin`) and with the sheet's thinning (`thinThin`); `wander` the branches' sideways meander (fraction of the
- *  sector; the shader keeps every branch inside its trunk's sector, so where the meanders add up a branch runs along the sector's edge). */
+ *  sector; the shader keeps every branch inside its trunk's sector, so where the meanders add up a branch runs along the sector's edge).
+ *  The third notes made it bolder (w0 7 to 16 mm, thinning less toward the apex and with the sheet) and gave each fork a small BULGE: the
+ *  vessel swells by `bulge` (1 + bulge times its width) within `bulgeW` of the fork's middle. */
 export const VEIN_TREE = {
-  n: 7, w0: 0.007, forks: [0.16, 0.36, 0.56], jitter: 0.1, open: 0.07, spread: [0.2, 0.1, 0.05], ends: [0, 0.35, 0.6], reach: [0.1, 0.32],
-  taper: 0.68, wander: 0.11, apexThin: 0.5, thinThin: 0.45,
+  n: 7, w0: 0.016, forks: [0.16, 0.36, 0.56], jitter: 0.1, open: 0.07, spread: [0.2, 0.1, 0.05], ends: [0, 0.35, 0.6], reach: [0.1, 0.32],
+  taper: 0.68, wander: 0.11, apexThin: 0.4, thinThin: 0.25, bulge: 0.7, bulgeW: 0.035,
 } as const;
+
+/** The FINE CAPILLARIES between the trunks (the third notes: "fine capillaries between them filling the surface like a membrane"): the edges
+ *  of a jittered cell grid (a Voronoi net) laid on the sheet, `around` cells round the sac's axis (periodic) by `along` from the lip to the
+ *  apex; `lip` the same on the lip's sleeve (round the ring, up the sleeve); `w` a vessel's half width in cells, `mean` the share of a cell
+ *  they cover, strength weighted (the filtered tone when a cell is under a few pixels); `weak` the faintest vessel's strength (each pair
+ *  of cells draws its own between it and 1, and its width between 0.5 and 1.5 w); `warp` the net's meander (cells). */
+export const CAPILLARY = { around: 72, along: 22, lip: [150, 8], w: 0.03, weak: 0.15, mean: 0.07, warp: 0.3 } as const;

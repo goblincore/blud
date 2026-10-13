@@ -5,7 +5,7 @@
 // compiles is the page's console's job (node cannot compile it).
 import { describe, expect, it } from 'vitest';
 import { paramsAt, DURATION } from './emergence-timeline';
-import { COAT, GOO_LOOK, KEYBOARD_BODY_TOP, KEYBOARD_RECT, coatThickness, EGG, FIGURE_BLOBS, FIGURE_DEPTH, FIGURE_DRIFT, GLASS, PICTURE_TABLE_N, SAC_BLEND, SAC_MAX, SHELL, SHELL_LIGHT, SKIN, SLUMP, TEAR_RAG, TEAR_R_MAX, THICK0, RIPPLE, VEIN_TREE, eggCentre, figureAt, lipOpening, sacExtent, smooth, tearRadius } from './emergence-field';
+import { BEZEL, CAPILLARY, COAT, FLESH_LOOK, LIP_FLESH, KEYBOARD_BODY_TOP, lipPulse, KEYBOARD_RECT, coatThickness, EGG, FIGURE_BLOBS, FIGURE_DEPTH, FIGURE_DRIFT, GLASS, PICTURE_TABLE_N, SAC_BLEND, SAC_MAX, SHELL, SHELL_LIGHT, SKIN, SLUMP, TEAR_RAG, TEAR_R_MAX, THICK0, RIPPLE, VEIN_TREE, eggCentre, figureAt, lipOpening, sacExtent, smooth, tearRadius } from './emergence-field';
 import { GOO_BOUND0, GOO_COAT0, GOO_TEXELS, N_BEADS, N_COAT, N_CONES, N_DRIPS, N_RUNS, N_STRANDS, STRAND_POINTS, gooAt } from './goo-strands';
 import * as W from './screen-emergence.wgsl';
 
@@ -67,7 +67,7 @@ describe('screen-emergence.wgsl', () => {
 
   it('the tear\'s rim and the goo have their materials and shading (4 goo, 5 rim; scrShade sends them to scrSurface)', () => {
     expect(W.SCR_MAP).toContain('select(1.0, 5.0, band > 0.001)');
-    expect(W.SCR_MAP).toContain('4.0, g < best.x');
+    expect(W.SCR_MAP).toContain('4.0 + 0.4 * gw.z, g < best.x');                // the goo's milk rides in the material's fraction, under 4.5
     expect(W.SCR_MAP).toContain(`${W.GOO_K.scene} * clamp(gw.y / ${W.GOO_K.fullW}`);
     expect(W.SCR_SURFACE).toContain('mat > 4.5');
     expect(W.SCR_SURFACE).toContain('mat > 3.5');
@@ -97,9 +97,11 @@ describe('screen-emergence.wgsl', () => {
       expect(c[1] + EGG.ry, `t=${t}`).toBeLessThan(y1);
       expect(c[2] + EGG.rz + SKIN + THICK0, `t=${t}`).toBeLessThan(z1);
       expect(sacExtent(p) + THICK0, `t=${t}`).toBeLessThan(z1);
-      expect(lo.hw + W.OPEN_PAD + 2 * W.LIP_R, `t=${t}`).toBeLessThan(x1);
-      expect(-(lo.hw + W.OPEN_PAD + 2 * W.LIP_R), `t=${t}`).toBeGreaterThan(x0);
-      expect(lo.hh + W.OPEN_PAD + 2 * W.LIP_R, `t=${t}`).toBeLessThan(y1);
+      // the lip's tube at its fattest: swollen, at the top of a beat, on its rolled rim
+      expect(lo.hw + W.OPEN_PAD + 2 * W.LIP_R_MAX, `t=${t}`).toBeLessThan(x1);
+      expect(-(lo.hw + W.OPEN_PAD + 2 * W.LIP_R_MAX), `t=${t}`).toBeGreaterThan(x0);
+      expect(lo.hh + W.OPEN_PAD + 2 * W.LIP_R_MAX, `t=${t}`).toBeLessThan(y1);
+      expect(lo.z + 2 * W.LIP_R_MAX, `t=${t}`).toBeLessThan(z1);
     }
     expect(W.SHEET_FLOOR).toBeGreaterThan(z0);
     expect(EGG.rx).toBeLessThan(x1);
@@ -115,7 +117,7 @@ describe('screen-emergence.wgsl', () => {
   it('the egg is an eggshell (look round 1): scrSurface sends it to scrShell, which has speckles and no vessels, rim or clear coat', () => {
     const egg = W.SCR_SURFACE.slice(W.SCR_SURFACE.indexOf('if (mat > 2.5)'));
     expect(egg).toContain('scrShell(p, n, rd, c, lamp, scrEggInner(p1), tm, foot)');
-    expect(W.SCR_SURFACE).not.toContain('scrVeins');
+    expect(egg.slice(0, egg.indexOf('let grey = '))).not.toContain('scrVeins');   // the egg's branch (the lip's flesh, after it, has vessels)
     expect(W.SCR_SHELL).not.toContain('scrVeins');
     expect(W.SCR_SHELL).not.toContain('scrLight');                       // no hard terminator, no clear coat
     expect(W.SCR_SHELL).not.toContain('smoothstep(0.8, 0.84');            // round two's hard bright rim
@@ -151,28 +153,65 @@ describe('screen-emergence.wgsl', () => {
     expect(c[2]![0]).toBeCloseTo(o[0]! + b2.pos[0] * (1 + fa * Math.sin(fw * t + fp)), 12);
   });
 
-  it('every piece of goo is ONE substance: the strands, beads, drips and runs, the slicks and the keyboard\'s coat all shade through scrGooShade from GOO_LOOK', () => {
+  it('every piece of goo is ONE substance with the membrane: the goo shades through scrGooShade, the membrane, the lip and the tear\'s rim through scrFlesh, all from FLESH_LOOK', () => {
     const f = (n: number) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
     const v = (p: readonly number[]) => `vec3<f32>(${p.map(f).join(', ')})`;
-    // the one shading reads the palette
-    expect(W.SCR_GOO_SHADE).toContain(`let base = ${v(GOO_LOOK.base)}`);
-    expect(W.SCR_GOO_SHADE).toContain(`base * ${v(GOO_LOOK.sss)}`);
-    expect(W.SCR_GOO_SHADE).toContain(`scrLight(p, n, rd, lamp, vec4<f32>(c, eggL * 0.6), base, ${f(GOO_LOOK.coat)})`);
-    for (const k of [GOO_LOOK.lampSss, GOO_LOOK.eggSss, GOO_LOOK.eggNear, GOO_LOOK.ambient, GOO_LOOK.sheen, GOO_LOOK.env, GOO_LOOK.envPow]) expect(W.SCR_GOO_SHADE).toContain(f(k));
-    expect(W.SCR_GOO_SHADE).toContain(v(GOO_LOOK.envCol));
-    // the strands, beads, drips and runs (material 4), the slicks and the coat all call it; the egg's light on goo is one function
+    const G = FLESH_LOOK.goo;
+    // the goo's one shading reads the flesh's palette: its thin and thick colours mixed by the milk, the flesh's subsurface tint and glow
+    expect(W.SCR_GOO_SHADE).toContain(`let base = mix(${v(G.thin)}, ${v(G.thick)}, mk)`);
+    expect(W.SCR_GOO_SHADE).toContain(`base * ${v(FLESH_LOOK.sss)}`);
+    expect(W.SCR_GOO_SHADE).toContain(`${v(FLESH_LOOK.glow)} * ${f(G.env)}`);
+    expect(W.SCR_GOO_SHADE).toContain(`scrLight(p, n, rd, lamp, vec4<f32>(c, eggL * 0.6), base, ${f(G.coat)})`);
+    for (const k of [G.lampSss, G.thruThin, G.eggSss, G.eggNear, G.ambient, G.sheen, G.env, G.envPow]) expect(W.SCR_GOO_SHADE).toContain(f(k));
+    // the strands, beads, drips and runs (material 4, the milk in its fraction), the slicks and the coat all call it; each piece's milk
+    // comes from the one table
     const goo = W.SCR_SURFACE.slice(W.SCR_SURFACE.indexOf('if (mat > 3.5)'), W.SCR_SURFACE.indexOf('if (mat > 2.5)'));
     expect(goo).toContain('scrGooShade(p, n, rd, c, lamp, scrGooEggL(p1)');
-    expect(W.SCR_POOL_SHADE).toContain('scrGooShade(p, n, rd, c, lamp, 0.0)');
-    expect(W.SCR_SHADE).toContain('scrGooShade(pc, nc, rd, vec3<f32>(0.0, d.z, d.y), lamp, scrGooEggL(p1))');
-    expect(W.SCR_GOO_EGG_L).toContain(`mix(1.0, ${f(GOO_LOOK.eggOut)}, smoothstep(0.0, 1.0, p1.y / ${f(SLUMP.release)}))`);
-    // no other goo colour anywhere: round two's near-white goo albedo, its white sheen and the slick's near-black film are gone
+    expect(goo).toContain('(mat - 4.0) / 0.4)');
+    for (const k of [G.milk.strand, G.milk.bead, G.milk.drip]) expect(W.SCR_GOO).toContain(`mk = ${f(k)}`);
+    expect(W.SCR_POOL_SHADE).toContain(`scrGooShade(p, n, rd, c, lamp, 0.0, ${f(G.milk.pool)})`);
+    expect(W.SCR_SHADE).toContain(`scrGooShade(pc, nc, rd, vec3<f32>(0.0, d.z, d.y), lamp, scrGooEggL(p1), mix(${f(G.milk.coat[0])}, ${f(G.milk.coat[1])},`);
+    expect(W.SCR_GOO_EGG_L).toContain(`mix(1.0, ${f(G.eggOut)}, smoothstep(0.0, 1.0, p1.y / ${f(SLUMP.release)}))`);
+    // the membrane, the lip and the tear's rim are the same flesh: scrFlesh, which reads the palette
+    for (const k of ['maroon', 'red', 'pink', 'vein', 'capillary', 'deep', 'glow', 'sss'] as const) expect(W.SCR_FLESH, k).toContain(v(FLESH_LOOK[k]));
+    expect(W.SCR_SHEET).toContain('scrFlesh(p, n, rd, c, lamp, glow, vec4<f32>(thinF, ves, cap, 0.0)');
+    // fleshAmount's twin (the same three terms: thin, the stretch, the slump)
+    expect(W.SCR_SHEET).toContain('let flesh = min(1.0, max(max(th, 0.8 * stretch), smoothstep(0.0, 1.0, min(2.0 * p1.y, 1.0))));');
+    const lipSrc = W.SCR_SURFACE.slice(W.SCR_SURFACE.indexOf('let grey = '));
+    expect(lipSrc).toContain('scrFlesh(p, n, rd, c, lamp, glow, vec4<f32>(');
+    expect(lipSrc).toContain('scrVeins(');
+    expect(lipSrc).toContain('scrCapillary(');
+    expect(lipSrc).toContain('scrLipPulse(tm)');
+    const rim = W.SCR_SURFACE.slice(W.SCR_SURFACE.indexOf('if (mat > 4.5)'), W.SCR_SURFACE.indexOf('if (mat > 3.5)'));
+    expect(rim).toContain('scrFlesh(');
+    // no other flesh or goo colour anywhere: round two's near-white goo, its white sheen, the slick's near-black film, the old milky goo, the
+    // membrane's orange glow and old flesh, the lip's and the rim's old pinks are gone, and the palette's colours live only in their shaders
     for (const [k, src] of STRINGS) {
-      expect(src, k).not.toContain('vec3<f32>(0.82, 0.74, 0.7)');
-      expect(src, k).not.toContain('vec3<f32>(0.9, 0.88, 0.85)');
-      expect(src, k).not.toContain('vec3<f32>(0.02, 0.008, 0.006)');
-      if (k !== 'SCR_GOO_SHADE' && k !== 'SCR_POOL_SHADE') expect(src, k).not.toContain(v(GOO_LOOK.base));
+      for (const old of [[0.82, 0.74, 0.7], [0.9, 0.88, 0.85], [0.02, 0.008, 0.006], [0.7, 0.47, 0.44], [1.0, 0.56, 0.42], [1.0, 0.34, 0.12],
+        [0.5, 0.12, 0.1], [0.24, 0.03, 0.04], [0.5, 0.16, 0.15], [0.5, 0.15, 0.14], [0.86, 0.38, 0.36], [1.0, 0.38, 0.22]]) expect(src, k).not.toContain(v(old));
+      if (k !== 'SCR_GOO_SHADE' && k !== 'SCR_POOL_SHADE') { expect(src, k).not.toContain(v(G.thin)); expect(src, k).not.toContain(v(G.thick)); }
+      if (k !== 'SCR_FLESH') for (const c of ['red', 'pink', 'vein', 'capillary', 'deep'] as const) expect(src, `${k} ${c}`).not.toContain(v(FLESH_LOOK[c]));
     }
+  });
+
+  it('the lip is flesh: it swells and pulses (lipPulse\'s twin), rolls a broad rim, and its seam follows the bezel', () => {
+    const f = (n: number) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
+    expect(W.SCR_LIP).toContain(`(1.0 + ${f(LIP_FLESH.swell)} * lip.z)`);
+    expect(W.SCR_LIP).toContain(`(1.0 + ${f(LIP_FLESH.pulse.amp)} * scrLipPulse(tm) * lip.z)`);
+    expect(W.SCR_LIP).toContain(`(1.0 + ${f(LIP_FLESH.roll)} * lip.z * smoothstep(zb - ${f(LIP_FLESH.rollW)}, zb, p.z))`);
+    expect(W.SCR_LIP).toContain('let dw = abs(d2 - r);');                   // the inner face stays on the opening: the sheet still meets it
+    expect(W.SCR_MAP).toContain('scrLip(p, lip, d.w, tm)');
+    expect(W.LIP_R_MAX).toBeCloseTo(W.LIP_R * (1 + LIP_FLESH.swell) * (1 + LIP_FLESH.pulse.amp) * (1 + LIP_FLESH.roll), 12);
+    // evaluate the shader's pulse in JS and hold it against lipPulse
+    const body = W.SCR_LIP_PULSE.slice(W.SCR_LIP_PULSE.indexOf('let ph'), W.SCR_LIP_PULSE.lastIndexOf('}'))
+      .replace(/\blet /g, 'const ').replace(/\bvar /g, 'let ').replace(/fract\(([^;]*)\);/, 'fr($1);').replace(/\b(exp|min)\(/g, 'Math.$1(');
+    const pJs = new Function('tm', 'fr', body) as (tm: number, fr: (x: number) => number) => number;
+    for (let t = 0; t < 6; t += 0.037) expect(pJs(t, x => x - Math.floor(x)), `t=${t.toFixed(3)}`).toBeCloseTo(lipPulse(t), 9);
+    // the seam: bezelZ's twin, from the BEZEL table, over the glass's edge distance
+    const lipSrc = W.SCR_SURFACE.slice(W.SCR_SURFACE.indexOf('let grey = '));
+    expect(lipSrc).toContain(`${f(0.5 * (BEZEL.rimX + BEZEL.rimY) - BEZEL.foot)}, 0.0, 1.0)`);
+    expect(lipSrc).toContain(`smoothstep(0.0, ${f(LIP_FLESH.seamW)}, p.z - bz)`);
+    expect(lipSrc).toContain(`${f(CAPILLARY.lip[0])}`);
   });
 
   it('the keyboard\'s coat is coatThickness\'s twin and its march stays in its slab over the keyboard', () => {
@@ -202,8 +241,8 @@ describe('screen-emergence.wgsl', () => {
     expect(KEYBOARD_BODY_TOP).toBeGreaterThan(W.SCREEN_PROXY.min[1]);
     expect(KEYBOARD_RECT.z0).toBeGreaterThan(W.SCREEN_PROXY.min[2]); expect(KEYBOARD_RECT.z1).toBeLessThan(W.SCREEN_PROXY.max[2]);
     // translucent where thin (the keys show), nearly opaque where thick
-    expect(GOO_LOOK.film).toBeLessThan(GOO_LOOK.filmThick);
-    expect(GOO_LOOK.filmThick).toBeLessThan(1);
+    expect(FLESH_LOOK.goo.film).toBeLessThan(FLESH_LOOK.goo.filmThick);
+    expect(FLESH_LOOK.goo.filmThick).toBeLessThan(1);
   });
 
   it('the membrane\'s veins are VEIN_TREE\'s branching tree, not round one\'s sine ridges', () => {
@@ -214,6 +253,13 @@ describe('screen-emergence.wgsl', () => {
     for (const s0 of VEIN_TREE.forks) expect(W.SCR_VEINS).toContain(`${f(s0)} + ${f(VEIN_TREE.jitter)} *`);
     expect(W.SCR_VEINS.match(/side\d = select/g)).toHaveLength(VEIN_TREE.forks.length);
     expect(W.SCR_VEINS).toContain('cen = clamp(cen, 0.03, 0.97)');
-    expect(W.SCR_SHEET).toContain('scrVeins(atan2(p.y, p.x), sv, length(p.xy)');
+    expect(W.SCR_SHEET).toContain('scrVeins(ang, sv, rho');
+    // bolder since the third notes, bulging at each fork
+    expect(W.SCR_VEINS.match(/bul = max\(bul, /g)).toHaveLength(VEIN_TREE.forks.length);
+    expect(W.SCR_VEINS).toContain(`(1.0 + ${f(VEIN_TREE.bulge)} * bul)`);
+    // the capillaries between the trunks, periodic round the axis (the period is the cell count round it)
+    expect(W.SCR_SHEET).toContain(`${f(CAPILLARY.around)}, foot / cellM)`);
+    expect(W.SCR_CAPILLARY).toContain('c.x - period * floor(c.x / period)');
+    expect(W.SCR_CAPILLARY).toContain(`${f(CAPILLARY.mean)}, smoothstep(`);
   });
 });

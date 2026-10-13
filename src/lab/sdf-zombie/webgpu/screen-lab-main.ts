@@ -52,7 +52,7 @@ import {
   DEPTH_Q, GOO_K, SCREEN_PROXY, SCR_CAPSULE, SCR_ELLIPSOID, SCR_GOO, SCR_LIGHT, SCR_LIP, SCR_MAP, SCR_MARCH, SCR_NORMAL, SCR_OPENING,
   SCR_PICTURE, SCR_POOL, SCR_POOL_SHADE, SCR_ROUNDCONE, SCR_ROUNDRECT, SCR_SAC, SCR_SHADE, SCR_SHADOW, SCR_SHEET, SCR_SMAX, SCR_SMIN, SCR_SURFACE,
   SCR_TEAR, SCR_VEINS, SCR_WRINKLE, SCR_WRINKLE_PAT, SCR_GAUSS, SCR_FIGURE, SCR_FIG_TAU, SCR_SPOTS, SCR_SHELL, SCR_EGG_INNER, SCR_GOO_SHADE,
-  SCR_GOO_EGG_L, SCR_COAT, SCR_COAT_H,
+  SCR_GOO_EGG_L, SCR_COAT, SCR_COAT_H, SCR_CAPILLARY, SCR_FLESH, SCR_LIP_PULSE,
 } from './screen-emergence.wgsl';
 import { GOO_BOUND0, GOO_TEXELS, gooAt, gooTexels } from './goo-strands';
 import { SHOTS, DURATION, shotAt, paramsAt, type ShotId } from './emergence-timeline';
@@ -346,7 +346,8 @@ function createScreenPass(pictureTex: THREE.Texture): ScreenPass {
   const ellipsoidF = fn(SCR_ELLIPSOID);
   const roundRectF = fn(SCR_ROUNDRECT);
   const openingF = fn(SCR_OPENING, [roundRectF]);
-  const lipF = fn(SCR_LIP, [openingF]);
+  const lipPulseF = fn(SCR_LIP_PULSE);
+  const lipF = fn(SCR_LIP, [openingF, lipPulseF]);
   const tearF = fn(SCR_TEAR);
   const capsuleF = fn(SCR_CAPSULE), roundConeF = fn(SCR_ROUNDCONE);
   const gooF = fn(SCR_GOO, [capsuleF, roundConeF, sminF]);
@@ -354,6 +355,7 @@ function createScreenPass(pictureTex: THREE.Texture): ScreenPass {
   const normalF = fn(SCR_NORMAL, [mapF]);
   const marchF = fn(SCR_MARCH, [mapF]);
   const veinsF = fn(SCR_VEINS);
+  const capillaryF = fn(SCR_CAPILLARY);
   const gooEggLF = fn(SCR_GOO_EGG_L);
   const coatHF = fn(SCR_COAT_H);
   const coatF = fn(SCR_COAT, [coatHF]);
@@ -363,8 +365,9 @@ function createScreenPass(pictureTex: THREE.Texture): ScreenPass {
   const shellF = fn(SCR_SHELL, [fn(SCR_SPOTS), figTauF]);
   const eggInnerF = fn(SCR_EGG_INNER);
   const gooShadeF = fn(SCR_GOO_SHADE, [lightF, ellipsoidF]);
-  const surfaceF = fn(SCR_SURFACE, [lightF, tearF, shellF, eggInnerF, gooShadeF, gooEggLF]);
-  const sheetF = fn(SCR_SHEET, [sacF, pictureF, veinsF, lightF, wrinkleF]);
+  const fleshF = fn(SCR_FLESH, [lightF]);
+  const surfaceF = fn(SCR_SURFACE, [lightF, tearF, shellF, eggInnerF, gooShadeF, gooEggLF, fleshF, veinsF, capillaryF, lipPulseF, roundRectF]);
+  const sheetF = fn(SCR_SHEET, [sacF, pictureF, veinsF, capillaryF, fleshF, lightF, wrinkleF]);
   const shadowF = fn(SCR_SHADOW, [mapF, ellipsoidF]);
   const poolF = fn(SCR_POOL);
   const poolShadeF = fn(SCR_POOL_SHADE, [gooShadeF]);

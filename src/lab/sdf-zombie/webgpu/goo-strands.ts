@@ -149,7 +149,7 @@ export const DRIP_FACE_Z = FRAME_FACE_Z + DRIP_R * DRIP_TIP + 0.004;
 /** What is left of the drips at `p`: 1 before the retract, easing to 0 across DRIP_RETRACT. */
 export const dripLeft = (p: EmergenceParams) => 1 - smooth((p.heal - DRIP_RETRACT[0]) / (DRIP_RETRACT[1] - DRIP_RETRACT[0]));
 /** A strand's radius at full thickness (it thins with the heal: gooAt). */
-const STRAND_R = 0.006;
+export const STRAND_R = 0.006;
 /** How fast a drip may lengthen toward its target (m/s): a floor sliding away lets it slump down, it does not jump. */
 const DRIP_CREEP = 0.25;
 
