@@ -104,3 +104,7 @@ comes to rest over it. The goblin's seat height against the CRT and the desk is 
 1. The egg's size and the sac's reach: "most of a metre" is the draft's number; the look rounds will tune it.
 2. ~~Shirtless goblin~~ Answered 2026-10-11: the home clothes are SDF cloth (a vest and shorts as `shell` prims, `goblin-home.blob`), in this slice.
 3. Where the sequence goes after this spike: the two-scene seam and the train hookup (the draft's §3.1 and §3.5), or the early-stage Flat first.
+
+## 10. Addendum: look round 1 (2026-10-12/13)
+
+The owner's first notes changed the set and the goblin's choreography and the egg's look; the spec above is otherwise as built. See the [plan](../plans/2026-10-12-screen-emergence-look-round-1.md) and the [notes](../../dev-notes/2026-10-11-screen-emergence/NOTES.md). In short: the set is the Flat's floor-level kotatsu (no desk or chair; the CRT, keyboard and lamp on the board; the goblin cross-legged on a cushion); the goblin leans back and scoots away to let the egg out (no raised arms) and kneels forward to touch it; the egg is a smaller (0.123 x 0.158 x 0.123 m) matte speckled eggshell, with a shape that moves inside and shows only in strong backlight; the membrane's veins branch; one goo colour; the egg lands on the keyboard, which stays put and is coated in goo; the lab page renders at 640 x 480 by default.

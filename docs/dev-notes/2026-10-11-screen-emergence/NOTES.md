@@ -3,7 +3,7 @@
 **Spec:** [`2026-10-11-screen-emergence-lab-spike-design.md`](../../superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md) · **Plan:** [`2026-10-11-screen-emergence-lab-spike.md`](../../superpowers/plans/2026-10-11-screen-emergence-lab-spike.md) ·
 **Parent draft:** [`2026-10-01-flat-screen-emergence-design.md`](../../superpowers/specs/2026-10-01-flat-screen-emergence-design.md) · **Look-dev it follows:** [`2026-10-01-flat-emergence-lookdev`](../2026-10-01-flat-emergence-lookdev/notes.md).
 
-**Sheet:** [`sheet.jpg`](sheet.jpg): the old Blender animatic on top, then one lab frame per shot (glass gives t 2.0, push 5.5, crowning 8.0, out 10.0, settle 13.0), from the headless check below.
+**Sheet:** [`sheet.jpg`](sheet.jpg): the old Blender animatic on top, then one lab frame per shot (glass gives t 2.0, push 5.5, crowning 8.0, out 10.0, settle 13.0), from the headless check below. **It shows the state after look round 1** (below); the first round's sheet is in the PR #47 history.
 **The home clothes:** [`home-clothes.jpg`](home-clothes.jpg) (front, side, back at rest; and seated).
 
 ## What is built
@@ -66,3 +66,29 @@ The curve keys in `emergence-timeline.ts` (timing and amounts); `SAC_BLEND`, `DO
 ## Out of scope, still (the spec's list)
 
 Two scenes in one page; extending `ending-sequence.ts`; hooking the Night Train montage's last frame to the pull-back; the early-stage Flat as a level state (CRT and vest instead of the Giger iMac); a live CRT picture; the final egg (paused); sound; the playable Flat.
+
+## Look round 1 (2026-10-12 and 2026-10-13): the owner's notes and what changed
+
+Plan: [`2026-10-12-screen-emergence-look-round-1.md`](../../superpowers/plans/2026-10-12-screen-emergence-look-round-1.md).
+
+| The owner's note | What was done |
+| --- | --- |
+| The drips clip into the monitor after they recede | The drips hang from the lip's lower rim, which relaxes up and back during the heal, so they ended inside the chin. They are now anchored on the outside of the chin face (`DRIP_FACE_Z`), retract from `heal` 0.15 to 0.7 (the tip rising, the radius thinning), and never lie inside the housing (a test checks a 0.05 s grid). The pools they leave stay |
+| The drips are white; they should be the colour of the rest of the goo | The goo base was near-white, so each piece took the colour of whatever lit it (the drips got the lamp, the egg's light and a white sheen). Strands, beads, drips, runs, the slick and the keyboard coat now share one palette (`GOO_LOOK` in `emergence-field.ts`) and one shading function (`scrGooShade`); the egg's light on goo drops once the egg is on the table; a test pins that every goo path uses it. The tear's rim stays flesh-pink |
+| The egg is too big; still a bit smaller | 0.175 x 0.225 x 0.175 to 0.14 x 0.18 x 0.14 to **0.123 x 0.158 x 0.123 m** (0.70 of the original). The sac's reach stays about 0.65 m (`SAC_MAX` 0.646); the lip still gives (opened half-height 1.02 x the egg's `ry`) |
+| The strands, "the lines across the egg", look like random lines; a less shiny, more speckled eggshell; something moving visible only in intense light | The egg is an **eggshell**: matte cream, brown speckles (3 to 9 mm, denser at the blunt end), fine grain, a broad dim highlight, no glass glint, no outline, no lines. **Backlit translucency**: where the lamp is behind it, under it, or the egg's own light is strong (in the sac), the shell glows warm and a dim shape (three Gaussian blobs: body, a nodding head, a flexing limb) drifts inside; side-lit it is opaque. The membrane keeps veins but they are now a **branching tree** (7 trunks forking 3 times, thinning toward the apex and with `thin`) |
+| The goblin should back away to let it out, not raise his arm | `jolt`/`recoil` are no longer used. He leans back (0.9 s) and scoots 0.55 m back on his cushion as the glass swells, braced on straight arms behind him, and stays back through the push, tear and out; as the egg lands he comes forward onto his knees and puts a hand on it. A test checks his arms are never above his shoulders at any `t`, and that he stays more than 0.3 m clear of the sac from 3.45 to 10.4 s |
+| The desk and elevated chair do not match the apartment (floor level) | The set is the Flat's **low kotatsu**: the board is **0.385 m** above the floor he sits on (`flat_layout.py`'s `KTOP` 0.44 is measured from the room box's floor, and the tatami top is 0.055 above it), 0.82 m square, a quilted skirt; he is cross-legged on a plump zabuton; the tower is on the floor; no chair, no desk |
+| I do not want the keyboard to move out of the way; covered in egg goo when the egg comes out | `keyboardShove` is deleted. The egg lands **on** the keyboard (`EGG_REST` y = key tops + `ry`); a glossy goo coat spreads over the keys (0 before 10 s, 0.40 at 11, 0.72 at 11.5, 0.87 at the end), the keys faintly visible through it; drips land on the keys; three runs go over its front edge onto the board and leave pools |
+| Render at 640x480 for previewing (the machine gets hot) | The page renders a fixed 640 x 480 by default; the controls have a res select (800x600, 1280x800) and `?res=` does the same. The headless check keeps 1280 x 800 (`&res=1280x800`) |
+
+**Cost after the round** (`npm run emergence:check`, 1280x800, one run on a loaded machine): push 19.5 ms with the pass off and on (the pass adds 0.1 ms); at crowning the pass adds about 4.5 ms (the pass-off reading at crowning that run was not meaningful). A previous run of the same check read 73 to 129 ms with another Chrome rendering the page, so treat all of these as indicative; a quiet-machine re-measure is still owed.
+
+### Two findings worth carrying forward
+
+- **The lab page was not rendering the poses the tests checked.** `stepActorMotion` pins the rig to the pose, but two later passes (`pinTips`, which hangs hand tips and toes at their rest offsets, and `constrainRigBends`, the knee and elbow stops) folded the crossed shins and dropped the hands, so the page measured the board 4 cm low while the tests, which pin the rig straight to the joints, passed. The fix is local to the lab (`pinToPose` in `screen-lab-goblin.ts`, with a test that the page's path and the tests' path give identical flesh). `actor.ts` is unchanged, so `lab-main.ts` pose captures and the actor path generally still have it: a separate task.
+- **`pose.ts` gained** one-sided keys, a `root.y` for keys that turn the ground lock off, and a `fwd` foot that turns as a whole (all backward compatible; tests pin it).
+
+### Still open after the round
+
+The glass-gives shot never shows him on the floor (the push-wide shot is the first view that does); he is large in the out shot; the right foot sits ~6.7 cm inside the left thigh (hidden by the flesh union); the hands are the goblin's green orbs, so "flat" hands read as balls; the runs off the keyboard edge look stiff, like pegs; the slick catches large white highlights from the lamp; seen from low the coat reads as a thin film; the figure inside the egg is soft and slightly purple; the veins thin to about a pixel at crowning; the settle preset is partly backlit so the egg is peachy there (the owner may want less); he is dark from behind; the cloth's neck, folds and feet (Task 10's list); a quiet-machine cost re-measure.
