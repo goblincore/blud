@@ -180,6 +180,67 @@ describe('goblin poses', () => {
     expect(Math.abs(lowest(cr, /^hand\.l$/) - KOTATSU.top)).toBeLessThan(0.003);
   });
 
+  // THE HANDS (the owner's note, 2026-10-13: "the hands clip into the floor a bit too much and maybe bend a bit too acutely or look too
+  // disconnected to the wrist/forearm"). The hand is goblin-home's ORB (`blob arm on hand at=0.55 r=0.046 deep=0.90`, 0.060 m compiled),
+  // and the rig does NOT carry it along the hand bone: rig-bind turns only upper-arm and forearm prims with their bone (ARM_BONE_RE), so the
+  // orb binds to its nearest joint, the hand TIP, with its rest offset in WORLD axes: it always sits 0.45 x 0.0942 = 4.24 cm straight ABOVE
+  // the hand tip, whatever the hand bone's angle. The hand bone itself draws nothing. So what the eye reads as the wrist is the forearm
+  // against the line from the wrist joint to the ORB's centre (`bend` below), and the orb is joined to the arm only while that centre is
+  // close to the wrist (`reach`): the forearm ends in a 2.35 cm cap, so past 6.0 + 2.35 = 8.4 cm the ball floats free of it, and past
+  // about 7 cm the junction pinches to a neck narrower than the wrist. Before this fit: floor-type 32.6 degrees and 79.7 mm (an 11 mm
+  // neck), brace-back 77.5 degrees and 95.1 mm (a 1.1 cm GAP between the forearm and the ball), lean-back up to 106 degrees.
+  const orbOf = (ps: Primitive[], s: 'l' | 'r') => { const h = ps.find(p => p.bone === `hand.${s}`)!; return { c: h.a.map((v, k) => (v + h.b[k]!) / 2) as unknown as Vec3, r: h.radius, ry: h.radius * h.scale[1] }; };
+  const ang = (a: Vec3, b: Vec3) => Math.acos(Math.max(-1, Math.min(1, (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (len(a) * len(b))))) * 180 / Math.PI;
+  /** The visible wrist: the forearm's direction against the wrist-to-orb line (degrees), and the orb centre's distance from the wrist. */
+  const wrist = (j: readonly Vec3[], ps: Primitive[], s: 'l' | 'r') => {
+    const S = s.toUpperCase(), w = j[J('hand' + S)]!, o = orbOf(ps, s).c;
+    return { bend: ang(sub(w, j[J('elbow' + S)]!), sub(o, w)), reach: len(sub(o, w)) };
+  };
+  const PLAYED = FLOOR;
+
+  it('contact poses: each hand ball rests ON its surface (floor-type: the key tops; brace-back: the floor), no more than 3 mm in or 5 mm off', () => {
+    const keyTop = KOTATSU.top + KEYBOARD.t + KEYBOARD.keys;
+    for (const [name, surface] of [['floor-type', keyTop], ['brace-back', 0]] as const) {
+      const ps = flesh(poseJoints(home.rig, GOBLIN_POSES[name]!, 0));
+      for (const s of ['l', 'r'] as const) {
+        const o = orbOf(ps, s), gap = o.c[1] - o.ry - surface;
+        expect(gap, `${name} hand.${s}: the ball's underside over its surface`).toBeGreaterThan(-0.003);
+        expect(gap, `${name} hand.${s}`).toBeLessThan(0.005);
+      }
+    }
+  });
+
+  it('contact poses: the wrist reads straight-ish and joined (the forearm within 40 degrees of the wrist-to-ball line, the ball centre within 7.2 cm of the wrist)', () => {
+    for (const name of ['floor-type', 'brace-back']) {
+      const j = poseJoints(home.rig, GOBLIN_POSES[name]!, 0), ps = flesh(j);
+      for (const s of ['l', 'r'] as const) {
+        const w = wrist(j, ps, s);
+        expect(w.bend, `${name} hand.${s} wrist bend`).toBeLessThan(40);
+        expect(w.reach, `${name} hand.${s} ball centre from the wrist`).toBeLessThan(0.072);
+      }
+    }
+    // braced on STRAIGHT arms (the same action as before): the elbow within 20 degrees of straight
+    const j = poseJoints(home.rig, GOBLIN_POSES['brace-back']!, 0);
+    for (const S of ['L', 'R']) expect(ang(sub(j[J('elbow' + S)]!, j[J('shoulder' + S)]!), sub(j[J('hand' + S)]!, j[J('elbow' + S)]!))).toBeLessThan(20);
+  });
+
+  it.each(PLAYED.map(c => [c.name, c] as const))('%s: the wrist never bends past 60 degrees at any sampled time', (_n, clip) => {
+    const end = endOf(clip);
+    for (let k = 0; k <= 60; k++) {
+      const t = (end * k) / 60, j = poseJoints(home.rig, clip, t), ps = flesh(j);
+      for (const s of ['l', 'r'] as const) expect(wrist(j, ps, s).bend, `${clip.name} t=${t.toFixed(3)} hand.${s}`).toBeLessThan(60);
+    }
+  });
+
+  it.each(['floor-type', 'lean-back', 'brace-back'].map(n => [n, GOBLIN_POSES[n]!] as const))('%s: the ball never comes off the forearm (its centre within 8 cm of the wrist: the forearm\'s cap still inside it)', (_n, clip) => {
+    // crawl-in and crawl-reach are left out: the egg-reach beat is being replaced (the owner, 2026-10-13), and their reach hand runs to 8.4 cm.
+    const end = endOf(clip);
+    for (let k = 0; k <= 60; k++) {
+      const t = (end * k) / 60, j = poseJoints(home.rig, clip, t), ps = flesh(j);
+      for (const s of ['l', 'r'] as const) expect(wrist(j, ps, s).reach, `${clip.name} t=${t.toFixed(3)} hand.${s}`).toBeLessThan(0.08);
+    }
+  });
+
   it('lean-back runs floor-type to brace-back and crawl-in brace-back to crawl-reach (the cuts in the screen lab never pop)', () => {
     const at = (name: string, t: number) => poseJoints(rig, GOBLIN_POSES[name]!, t);
     expect(near(at('lean-back', 0), at('floor-type', 0))).toBe(true);

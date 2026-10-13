@@ -12,6 +12,7 @@ import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace } from '../blob-compile';
 import { buildBody } from '../build-body';
 import { bindRig, applyRig } from '../rig-bind';
+import { sdBody } from '../validate';
 import { jointNamesForBody } from '../gait';
 import { makePoseRig, poseJoints } from '../pose';
 import { FLOOR_SEAT } from '../characters/goblin-poses';
@@ -157,7 +158,7 @@ describe('the floor-level set and the goblin on it', () => {
     expect(KEYBOARD_RECT.x1).toBeLessThan(L.tableHalfW - 0.1);
   });
 
-  it('typing: the hand balls rest on the keys, inside the keyboard; the forearms rest on the board\'s front edge', () => {
+  it('typing: the hand balls rest on the keys, inside the keyboard; the forearms pass over the board\'s front edge, clear of it', () => {
     const ps = fleshOf(jointsAt(1.0));
     for (const s of ['l', 'r']) {
       const b = ball(ps, `hand.${s}`), c = toScreen(b.c);
@@ -171,8 +172,11 @@ describe('the floor-level set and the goblin on it', () => {
         const sc = toScreen(q.q);
         if (sc[2] - q.r < L.tableFrontZ) low = Math.min(low, sc[1] - q.ry - DESK_Y);
       }
+      // Clear of it, no longer resting on it (the hands round, 2026-10-13): with the ball hanging below the wrist (the rig keeps the orb 4.24
+      // cm over the hand tip) a forearm that rose from the edge to the keys bent the wrist 60 degrees; the arms now come in higher and the
+      // forearms pass about 5 cm over the edge. Not ABOVE the shoulders (the arms test).
       expect(low, `forearm.${s} over the board`).toBeGreaterThan(-0.001);
-      expect(low).toBeLessThan(0.01);
+      expect(low).toBeLessThan(0.08);
     }
   });
 
@@ -230,6 +234,69 @@ describe('the floor-level set and the goblin on it', () => {
       expect(Math.abs(el[1] - hl.ry - DESK_Y), `t=${t} the left hand on the board`).toBeLessThan(0.004);
       expect(el[2]).toBeLessThan(L.tableFrontZ - hl.r);
       expect(Math.abs(el[0])).toBeGreaterThan(KEYBOARD_RECT.x1 + hl.r * 0.5);   // beside the keyboard, not on its goo
+    }
+  });
+});
+
+describe('the hands (the owner, 2026-10-13: "the hands clip into the floor a bit too much and maybe bend a bit too acutely or look too disconnected")', () => {
+  // goblin-home's hand is an orb that the rig hangs 4.24 cm over the hand TIP in world axes (rig-bind turns only upper-arm and forearm prims
+  // with their bones): goblin-poses.test.ts has the whole story. Here the contacts are read off the posed FLESH (sdBody, the field the page
+  // marches) in the lab's own layout, and the wrist over the whole sequence.
+  const posedBody = (joints: readonly Vec3[]) => {
+    const bound = bindRig(body);
+    bound.rig.points = bound.rig.points.map((p, i) => ({ ...p, pos: joints[i]!, prev: joints[i]! }));
+    return applyRig(body, bound, 0);
+  };
+  /** The flesh's signed gap to the plane y = Y round (x, z): the least sdBody over a 8 cm patch of the plane (negative: sunk into it). */
+  const planeGap = (b: ReturnType<typeof posedBody>, Y: number, x: number, z: number) => {
+    let m = Infinity;
+    for (let i = -10; i <= 10; i++) for (let k = -10; k <= 10; k++) m = Math.min(m, sdBody([x + i * 0.004, Y, z + k * 0.004], b));
+    return m;
+  };
+  const visibleWrist = (j: readonly Vec3[], ps: Primitive[], s: 'l' | 'r') => {
+    const S = s.toUpperCase(), w = j[J('hand' + S)]!, e = j[J('elbow' + S)]!, o = ball(ps, `hand.${s}`).c;
+    const f = [w[0] - e[0], w[1] - e[1], w[2] - e[2]], u = [o[0] - w[0], o[1] - w[1], o[2] - w[2]];
+    const c = (f[0]! * u[0]! + f[1]! * u[1]! + f[2]! * u[2]!) / (Math.hypot(...f) * Math.hypot(...u));
+    return { bend: Math.acos(Math.max(-1, Math.min(1, c))) * 180 / Math.PI, reach: Math.hypot(...u) };
+  };
+
+  it('typing (t 1): the flesh of each hand ball meets the key tops, no more than 3 mm in or 5 mm off', () => {
+    const j = jointsAt(1), b = posedBody(j), keyTopW = KEYBOARD_TOP + L.glassY;
+    for (const s of ['l', 'r'] as const) {
+      const c = ball(fleshOf(j), `hand.${s}`).c, g = planeGap(b, keyTopW, c[0], c[2]);
+      expect(g, `hand.${s}`).toBeGreaterThan(-0.003);
+      expect(g, `hand.${s}`).toBeLessThan(0.005);
+    }
+  });
+
+  it('braced back: the flesh of each hand ball meets the floor behind the cushion, wherever the scoot leaves him (0, 0.2 m and the full 0.55 m back)', () => {
+    // The scoot only slides him (and the cushion) along z, so the contact is the pose's own: checked at the page's offset and at the
+    // shorter pushback planned next (about 0.2 m).
+    const pose = poseJoints(rig, goblinClipAt(6).clip, 0);
+    for (const dz of [0, -0.2, GOBLIN_ROOT.back]) {
+      const j = pose.map(p => [p[0], p[1], p[2] + dz] as Vec3), b = posedBody(j), ps = fleshOf(j);
+      for (const s of ['l', 'r'] as const) {
+        const h = ball(ps, `hand.${s}`), g = planeGap(b, 0, h.c[0], h.c[2]);
+        expect(g, `dz ${dz} hand.${s}`).toBeGreaterThan(-0.003);
+        expect(g, `dz ${dz} hand.${s}`).toBeLessThan(0.005);
+        expect(h.c[2] - dz + h.r, `dz ${dz} hand.${s} behind the cushion`).toBeLessThan(FLOOR_SEAT.z[0]);
+      }
+    }
+    expect(goblinClipAt(6).clip.name).toBe('brace-back');
+  });
+
+  it('the wrist reads straight-ish at the contacts (t 1 typing, t 5 braced: under 40 degrees, the ball within 7.2 cm of the wrist) and never bends past 60 degrees', () => {
+    for (const t of [1, 5]) {
+      const j = jointsAt(t), ps = fleshOf(j);
+      for (const s of ['l', 'r'] as const) {
+        const w = visibleWrist(j, ps, s);
+        expect(w.bend, `t=${t} hand.${s} bend`).toBeLessThan(40);
+        expect(w.reach, `t=${t} hand.${s} reach`).toBeLessThan(0.072);
+      }
+    }
+    for (const t of GRID(0, DURATION, 0.02)) {
+      const j = jointsAt(t), ps = fleshOf(j);
+      for (const s of ['l', 'r'] as const) expect(visibleWrist(j, ps, s).bend, `t=${t.toFixed(2)} hand.${s}`).toBeLessThan(60);
     }
   });
 });
