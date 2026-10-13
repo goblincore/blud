@@ -14,22 +14,17 @@ export type Vec3 = [number, number, number];
 export const GLASS = { hw: 0.203, hh: 0.1525 } as const;
 /** The sac's skin: the sheet stands this far in front of the egg's surface. */
 export const SKIN = 0.006;
-/** The stand-in egg (still taller than the glass, so the lip gives; look round 1: 80% of round one's 0.175 x 0.225 x 0.175, "the egg is too
- *  big"): semi-axes, and the centre's depth at rest and at full push. `z0` keeps the egg's front where round one's was at rest (7.5 cm behind
- *  the glass, so the glass's first bulge comes as before); `z1` keeps the sac's reach (SAC_MAX = z1 + rz + SKIN) at about 0.65 m, within
- *  0.62..0.70: the owner said the egg was too big, not the reach. */
-export const EGG = { rx: 0.14, ry: 0.18, rz: 0.14, z0: -0.215, z1: 0.5 } as const;
-/** The desk's top below the glass centre, and where the slumped egg rests: ON the desk, in front of the glass, overhanging the keyboard
- *  (z 0.09 to 0.25 in the lab's set). 0.4 hung it over the goblin's knees (z about 0.38) and past the desk's front edge; the lab's desk top
- *  reaches the egg's front (EGG_REST z + EGG.rz: 0.325 for the 80% egg, 0.36 for round one's) so it lies on wood. */
+/** The stand-in egg (still taller than the glass, so the lip gives, just: 0.316 m against 0.305): look round 1 made it 80% of round one's
+ *  0.175 x 0.225 x 0.175 ("the egg is too big"), the owner's second notes (2026-10-13) 88% of that ("maybe still a bit smaller"): 0.70 of
+ *  round one. Semi-axes, and the centre's depth at rest and at full push. `z0` keeps the egg's front where round one's was at rest (7.5 cm
+ *  behind the glass, so the glass's first bulge comes as before); `z1` keeps the sac's reach (SAC_MAX = z1 + rz + SKIN) at 0.646 m, the 80%
+ *  egg's: the owner asked for a smaller egg, not a shorter push. */
+export const EGG = { rx: 0.123, ry: 0.158, rz: 0.123, z0: -0.198, z1: 0.517 } as const;
+/** The desk's top below the glass centre. The slumped egg rests ON THE KEYBOARD (the owner's second notes: the keyboard is not shoved out of
+ *  the way, it is covered in egg goo): see EGG_REST. */
 export const DESK_Y = -0.32;
-/** 0.185 (was 0.18): 5 mm forward, so the egg's back presses less into the CRT's bevel at the chin (about 1.4 cm into the face plane at the
- *  lip ring before, 0.9 after); the desk's front edge follows (the lab page reaches it to the egg's front plus 5 mm) and the knees keep 1.6 cm.
- *  The 80% egg's back is at z 0.045, in front of the face (Task C re-derives z for the floor-level table). */
-export const EGG_REST: Vec3 = [0, DESK_Y + EGG.ry, 0.185];
-/** THE SET'S DESK TOP (Task 8: the drips land on it and the egg shoves it): the CRT's face stands FRAME_FACE_Z proud of the glass; the
- *  keyboard (thickness `t`, depth `d`, width `w`, its key rows `keys` proud of it) lies `gap` in front of the face. The lab page builds them
- *  from these. */
+/** THE SET'S DESK TOP: the CRT's face stands FRAME_FACE_Z proud of the glass; the keyboard (thickness `t`, depth `d`, width `w`, its key rows
+ *  `keys` proud of it) lies `gap` in front of the face. The lab page builds them from these. */
 export const FRAME_FACE_Z = 0.03;
 /** The P225f's front frame (docs/dev-notes/2026-10-01-flat-emergence-lookdev/crt_p225f.py, the blockout's FW, FH, FD, CHIN): its width and
  *  height, the side band's depth, and the chin under the glass. The lab page builds the housing from these; the drips are kept in front
@@ -40,20 +35,25 @@ export const FRAME_BOTTOM = -(CRT_FRAME.chin + GLASS.hh);
 export const FRAME_TOP = FRAME_BOTTOM + CRT_FRAME.fh;
 export const KEYBOARD = { t: 0.03, d: 0.16, w: 0.46, gap: 0.06, keys: 0.008 } as const;
 export const KEYBOARD_Z = FRAME_FACE_Z + KEYBOARD.gap + KEYBOARD.d / 2;
-export const KEYBOARD_TOP = DESK_Y + KEYBOARD.t + KEYBOARD.keys;
-/** The egg lands on the keyboard's middle (its bottom meets the key rows at this slump, before it reaches the desk), and shoves it aside:
- *  `dx` metres along x and `yaw` radians round y, over `run` of the slump from `lead` before the contact. Toward -x (the lamp's side) with
- *  its far end swung toward the room (+yaw) so it clears the lamp's foot: +x put it across the settle camera's lens. */
-export const KEYBOARD_SHOVE = { dx: -0.36, yaw: 0.35, lead: 0.02, run: 0.12 } as const;
+/** The keyboard's body top (between the key rows) and the key rows' top. */
+export const KEYBOARD_BODY_TOP = DESK_Y + KEYBOARD.t;
+export const KEYBOARD_TOP = KEYBOARD_BODY_TOP + KEYBOARD.keys;
+/** The keyboard's footprint on the desk (x and z extents). It never moves (the owner: "i dont want the keyboard to move out the way"). */
+export const KEYBOARD_RECT = { x0: -KEYBOARD.w / 2, x1: KEYBOARD.w / 2, z0: KEYBOARD_Z - KEYBOARD.d / 2, z1: KEYBOARD_Z + KEYBOARD.d / 2 } as const;
+export const onKeyboard = (x: number, z: number) => x >= KEYBOARD_RECT.x0 && x <= KEYBOARD_RECT.x1 && z >= KEYBOARD_RECT.z0 && z <= KEYBOARD_RECT.z1;
+/** Where the slumped egg rests: ON THE KEYBOARD, its bottom on the key rows (the contact 1.5 cm in front of the keyboard's middle), its back
+ *  3.2 cm in front of the CRT's face at the chin (z 0.062), its front over the keyboard's front edge (z 0.308). z 0.185 as before. */
+export const EGG_REST: Vec3 = [0, KEYBOARD_TOP + EGG.ry, 0.185];
 
-/** The sac's apex at full push: the egg's front plus the skin (0.646 m; round one's bigger egg reached 0.73). */
+/** The sac's apex at full push: the egg's front plus the skin (0.646 m, the 80% egg's; round one's bigger egg reached 0.73). */
 export const SAC_MAX = EGG.z1 + EGG.rz + SKIN;
-/** The sheet's half-thickness at rest (m), and the tear's largest radius (80% of round one's 0.17, with the egg). */
+/** The sheet's half-thickness at rest (m), and the tear's largest radius (scaled with the egg: 0.70 of round one's 0.17). */
 export const THICK0 = 0.004;
-export const TEAR_R_MAX = 0.136;
+export const TEAR_R_MAX = 0.12;
 /** The lip: how far it bows out in z and how much the opening widens (fractions of the glass) at full bow. `openY` gives only what the egg
- *  needs (its half height 1.02x the egg's ry at full bow, as round one's 0.5 gave the bigger egg): 0.2 for the 80% egg. */
-export const LIP = { bowZ: 0.1, openX: 0.3, openY: 0.2 } as const;
+ *  needs (its half height 1.02x the egg's ry at full bow, as round one's 0.5 gave the bigger egg): 0.2 for the 80% egg, 0.06 for this one
+ *  (0.1617 against ry 0.158: the lip just gives). */
+export const LIP = { bowZ: 0.1, openX: 0.3, openY: 0.06 } as const;
 export const RIPPLE = { amp: 0.012, freq: 24, speed: 9 } as const;
 /** The picture table's size (entries 0..N-1 cover normalised radius 0..1). */
 export const PICTURE_TABLE_N = 33;
@@ -66,7 +66,7 @@ export const smax = (a: number, b: number, k: number) => { const h = Math.max(k 
 export const smin = (a: number, b: number, k: number) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; };
 
 /** THE SLUMP (Task 8): the sac recoils back toward the glass carrying the egg (`back`: its z reaches the rest place by this much of the slump),
- *  lets go of it (`release`: the egg is out of the sac solid by then), and the egg FALLS onto the desk: its drop starts at `fall0` and lands at
+ *  lets go of it (`release`: the egg is out of the sac solid by then), and the egg FALLS onto the keyboard: its drop starts at `fall0` and lands at
  *  `land`, ease-in (a fall), then a small settling bounce of `bounce` metres. The timeline's slump is linear; the easing lives here. */
 export const SLUMP = { back: 0.8, release: 0.55, fall0: 0.25, land: 0.85, bounce: 0.008 } as const;
 
@@ -81,19 +81,76 @@ export function eggCentre(p: EmergenceParams): Vec3 {
   return [0, EGG_REST[1] * u * u + hop, lerp(z, EGG_REST[2], zb)];
 }
 
-/** The slump at which the falling egg's bottom reaches the keyboard's top (SLUMP's ease-in fall, solved). */
-export const KEYBOARD_CONTACT = SLUMP.fall0 + (SLUMP.land - SLUMP.fall0) * Math.sqrt((KEYBOARD_TOP + EGG.ry) / EGG_REST[1]);
-/** The keyboard's place: (dx, yaw), shoved aside by the landing egg. */
-export function keyboardShove(p: EmergenceParams): { dx: number; yaw: number } {
-  const u = smooth((p.slump - KEYBOARD_CONTACT + KEYBOARD_SHOVE.lead) / KEYBOARD_SHOVE.run);
-  return { dx: KEYBOARD_SHOVE.dx * u, yaw: KEYBOARD_SHOVE.yaw * u };
+/** The height a drip (or a let-go strand) lands at above (x, z): the keyboard's top where the keyboard is (it never moves), else the desk's. */
+export function dripFloor(x: number, z: number): number {
+  return onKeyboard(x, z) ? KEYBOARD_TOP : DESK_Y;
 }
-/** The height a drip lands at above (x, z): the keyboard's top where the (shoved) keyboard is, else the desk's. */
-export function dripFloor(p: EmergenceParams, x: number, z: number): number {
-  const { dx, yaw } = keyboardShove(p);
-  const X = x - dx, Z = z - KEYBOARD_Z, c = Math.cos(yaw), s = Math.sin(yaw);
-  const lx = c * X - s * Z, lz = s * X + c * Z;
-  return Math.abs(lx) <= KEYBOARD.w / 2 && Math.abs(lz) <= KEYBOARD.d / 2 ? KEYBOARD_TOP : DESK_Y;
+
+/** THE GOO COAT on the keyboard (the owner's second notes: "covered in egg goo when the egg comes out"): a heightfield of goo over the
+ *  keyboard's body top, the sum of round bumps (a blob of radius r and peak h is h (1 - (d / r)^2)^2), saturating softly at `max`
+ *  (max (1 - exp(-sum / max))) and cut at `thresh` so its edge is a rounded, blobby line where the sum crosses it; it stays `inset` inside
+ *  the keyboard's edges. Where it is under KEYBOARD.keys thick the key rows stand out of it. Its blobs: the EGG's, at the egg's contact,
+ *  growing over the slump from `egg.s0` (t 10.5 s, as the egg falls and sheds goo) to `egg.s1` (t 11.4 s, just after it lands), spreading
+ *  by `creep` more with the heal; and one per DRIP that lands on the keys (goo-strands: radius and peak `drip.r`, `drip.h` at full feed,
+ *  fed by the drip's growth past its room over `drip.fill` metres, its centre fixed where it formed). Each blob's radius is LOBED round its
+ *  centre (`lobes`: amplitude, frequency in the angle, phase, the phase shifted by 1.7 per blob), so the coat's edge is goo's, not a circle. */
+export const COAT = {
+  thresh: 0.003, max: 0.02, inset: 0.002, creep: 0.2, lobes: [[0.16, 3, 0.7], [0.08, 7, 2.1]],
+  egg: { r: 0.21, h: 0.045, s0: 0.6, s1: 0.95 },
+  drip: { r: 0.06, h: 0.016, fill: 0.06 },
+} as const;
+/** A bump of the coat's heightfield: its centre on the keyboard (x, z), radius and peak (0: none). */
+export interface CoatBlob { x: number; z: number; r: number; h: number }
+
+/** The egg's blob: at its contact (EGG_REST's x, z), growing with the slump over COAT.egg.s0..s1, creeping with the heal. */
+export function coatEggBlob(p: EmergenceParams): CoatBlob {
+  const g = smooth((p.slump - COAT.egg.s0) / (COAT.egg.s1 - COAT.egg.s0));
+  return { x: EGG_REST[0], z: EGG_REST[2], r: COAT.egg.r * g * (1 + COAT.creep * smooth(p.heal)), h: COAT.egg.h * g };
+}
+
+/** The coat's thickness above the keyboard's body top at (x, z): 0 off the keyboard and where no blob reaches. The shader's scrCoatH is its twin. */
+export function coatThickness(blobs: readonly CoatBlob[], x: number, z: number): number {
+  const R = KEYBOARD_RECT;
+  const inside = Math.min(x - R.x0, R.x1 - x, z - R.z0, R.z1 - z);
+  if (inside <= 0) return 0;
+  let sum = 0;
+  blobs.forEach((b, i) => {
+    if (b.r <= 0 || b.h <= 0) return;
+    const a = Math.atan2(z - b.z, x - b.x);
+    let lobe = 1;
+    for (const [amp, k, ph] of COAT.lobes) lobe += amp * Math.sin(k * a + ph + 1.7 * i);
+    const r = b.r * lobe, u = Math.min(1, ((x - b.x) ** 2 + (z - b.z) ** 2) / (r * r));
+    sum += b.h * (1 - u) * (1 - u);
+  });
+  const cap = COAT.max * (1 - Math.exp(-sum / COAT.max)) * smooth(inside / COAT.inset);
+  return Math.max(0, cap - COAT.thresh);
+}
+
+/** THE GOO'S LOOK: one palette and one shading (the shader's scrGooShade) for every piece of goo: the strands, the beads, the drips, the
+ *  runs off the keyboard, the slicks on the desk and the keyboard's coat (the owner's second notes: "i dont get why the drips are white, they
+ *  should be the same color as the rest of the goo"). Round two's goo had a near-white albedo (0.82, 0.74, 0.7) and so took the colour of
+ *  whatever lit it: the drips beside the landed egg, under the lamp AND the egg's light AND a subsurface floor of 0.8 of the egg's glow,
+ *  clipped to cream-white; the strands in the tear's shade went the street fill's blue-grey; the slick was a different stuff altogether, a
+ *  near-black mirror. Now: `base` the albedo (the milky off-white-pink, a little deeper so the lights do not clip it to white), `sss` the
+ *  subsurface tint (light through the goo comes out warm), `lampSss` how much of the lamp comes through it (wrapped and from behind),
+ *  `eggSss` how much of the egg's light comes through it near the egg (falling off over `eggNear` m from the shell), `eggOut` the egg's light
+ *  on the goo once it is out of the sac (an eggshell then: SHELL_LIGHT.innerOut's logic, not as far), `ambient` the goo's own tint everywhere
+ *  (so its shaded side stays goo-coloured), `coat` the clear coat's hard highlights (scrLight's), `sheen` a grazing sheen, `env` the wet
+ *  surface's broad reflection of the glowing screen (colour `envCol`, lobe `envPow` round the direction to the glass's centre); the coat on
+ *  the keyboard is `film` opaque where thin (the keys show through) to `filmThick` where thick; the slicks mirror the egg by `mirror` of
+ *  the Fresnel. The base is pinker than the keyboard's beige so the coat reads on it. */
+export const GOO_LOOK = {
+  base: [0.7, 0.47, 0.44], sss: [1.0, 0.56, 0.42], lampSss: 0.3, eggSss: 0.55, eggNear: 0.08, eggOut: 0.2, ambient: 0.05,
+  coat: 1.5, sheen: 0.12, env: 0.45, envCol: [1.0, 0.5, 0.3], envPow: 4, film: 0.8, filmThick: 0.97, mirror: 0.6,
+} as const;
+
+/** The share of the keyboard's top the coat covers (a 47 x 17 grid of its footprint): 0..1. */
+export function coatCoverage(blobs: readonly CoatBlob[]): number {
+  const R = KEYBOARD_RECT, NX = 47, NZ = 17;
+  let n = 0;
+  for (let i = 0; i < NX; i++) for (let k = 0; k < NZ; k++)
+    if (coatThickness(blobs, R.x0 + ((i + 0.5) / NX) * (R.x1 - R.x0), R.z0 + ((k + 0.5) / NZ) * (R.z1 - R.z0)) > 0) n++;
+  return n / (NX * NZ);
 }
 
 /** How much the sac still holds the egg: 1 until the slump starts, 0 once the egg is out (SLUMP.release). The sac solid's egg term shrinks
@@ -313,11 +370,12 @@ export const SHELL_LIGHT = {
 
 /** THE FIGURE inside the egg: Gaussian blobs (centre offset from the figure's origin, scales; metres), each darkening the light coming
  *  through the shell by `depth` times its line integral along the eye's ray (closed form, as the control room's egg's eggGauss): a body, a
- *  head and a limb that flexes. It only shows where the shell glows (it darkens the transmitted light, never the lit surface). */
+ *  head and a limb that flexes. It only shows where the shell glows (it darkens the transmitted light, never the lit surface). Sized for the
+ *  egg: 0.88 of the 80% egg's (the second notes' smaller egg), the drift kept. */
 export const FIGURE_BLOBS = [
-  { pos: [0, -0.018, 0], sc: [0.03, 0.042, 0.03] },
-  { pos: [0.02, 0.034, 0.006], sc: [0.025, 0.025, 0.025] },
-  { pos: [-0.03, -0.034, 0.01], sc: [0.011, 0.026, 0.011] },
+  { pos: [0, -0.016, 0], sc: [0.026, 0.037, 0.026] },
+  { pos: [0.014, 0.026, 0.004], sc: [0.021, 0.021, 0.021] },
+  { pos: [-0.026, -0.03, 0.009], sc: [0.01, 0.023, 0.01] },
 ] as const;
 export const FIGURE_DEPTH = 44;
 /** The figure's DRIFT round the egg's centre: a slow Lissajous per axis (amplitude m, frequency rad/s, phase), so in two frames a second

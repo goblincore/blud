@@ -42,15 +42,16 @@ import { MOTION_TUNING } from '../motion';
 import { makeRng } from '../wander';
 import { makePoseRig, poseJoints, type PoseRig } from '../pose';
 import {
-  GLASS, CRT_FRAME as CRT, DESK_Y, EGG, EGG_REST, FRAME_BOTTOM, FRAME_FACE_Z, KEYBOARD, KEYBOARD_Z, PICTURE_TABLE_N, ellipsoidDist, eggCentre, keyboardShove, lipOpening, pictureTable,
+  GLASS, CRT_FRAME as CRT, DESK_Y, EGG, EGG_REST, FRAME_BOTTOM, FRAME_FACE_Z, KEYBOARD, KEYBOARD_Z, PICTURE_TABLE_N, ellipsoidDist, eggCentre, lipOpening, pictureTable,
   sacExtent, smooth, tearTip,
 } from './emergence-field';
 import {
   DEPTH_Q, GOO_K, SCREEN_PROXY, SCR_CAPSULE, SCR_ELLIPSOID, SCR_GOO, SCR_LIGHT, SCR_LIP, SCR_MAP, SCR_MARCH, SCR_NORMAL, SCR_OPENING,
   SCR_PICTURE, SCR_POOL, SCR_POOL_SHADE, SCR_ROUNDCONE, SCR_ROUNDRECT, SCR_SAC, SCR_SHADE, SCR_SHADOW, SCR_SHEET, SCR_SMAX, SCR_SMIN, SCR_SURFACE,
-  SCR_TEAR, SCR_VEINS, SCR_WRINKLE, SCR_WRINKLE_PAT, SCR_GAUSS, SCR_FIGURE, SCR_FIG_TAU, SCR_SPOTS, SCR_SHELL, SCR_EGG_INNER,
+  SCR_TEAR, SCR_VEINS, SCR_WRINKLE, SCR_WRINKLE_PAT, SCR_GAUSS, SCR_FIGURE, SCR_FIG_TAU, SCR_SPOTS, SCR_SHELL, SCR_EGG_INNER, SCR_GOO_SHADE,
+  SCR_GOO_EGG_L, SCR_COAT, SCR_COAT_H,
 } from './screen-emergence.wgsl';
-import { GOO_BOUND0, GOO_TEXELS, gooAt, gooTexels } from './goo-strands';
+import { GOO_BOUND0, GOO_TEXELS, POOL_REACH, gooAt, gooTexels } from './goo-strands';
 import { SHOTS, DURATION, shotAt, paramsAt, type ShotId } from './emergence-timeline';
 import { goblinClipAt, measureSeat, type SeatMeasure } from './screen-lab-goblin';
 import {
@@ -64,14 +65,15 @@ import type { Vec3 } from '../types';
 // The front frame (CRT_FRAME: w, h, its depth, the chin under the glass; FRAME_BOTTOM, the chin below the glass's lower edge, which the
 // pedestal fills up to) is emergence-field's: the drips are kept in front of the chin. So are the frame's front face (FRAME_FACE_Z, the
 // bevel's depth, 0.03 in the blockout) and the keyboard (KEYBOARD: thickness, depth, width, the gap to the CRT's face, its key rows): the
-// drips land on the keyboard and the egg shoves it (plan Task 8).
+// drips land on the keyboard, the egg lands on it, and the pass draws the goo coat over it (the owner's second notes: it never moves).
 /** The desk top's thickness and its back edge (screen frame z, behind the CRT's 0.47 m housing). */
 const DESK = { t: 0.035, backZ: -0.62, hw: 0.78 } as const;
 /** The desk's front edge sits at least this far in front of the keyboard's front edge, and must clear the knees by at least KNEE_CLEAR. */
 const DESK_LIP = 0.04;
 const KNEE_CLEAR = 0.01;
-/** ...and reaches at least the slumped egg's front (EGG_REST z + EGG.rz, plus 5 mm: screen z 0.33 for the 80% egg), so the egg rests on wood. */
-const DESK_FRONT_MIN_Z = EGG_REST[2] + EGG.rz + 0.005;
+/** ...and reaches at least the egg's slick round the keyboard (EGG_REST z + POOL_REACH, plus 5 mm: screen z 0.363), so the goo lies on wood
+ *  (the egg itself rests on the keyboard, its front at 0.308). */
+const DESK_FRONT_MIN_Z = EGG_REST[2] + Math.max(EGG.rz, POOL_REACH) + 0.005;
 /** The SDF pass's render scale (see `sdfLayer.setScale` in bootstrap). */
 const SDF_SCALE = 0.5;
 /** The goblin's cold rim/fill strength (spotCfg2.w, see where the key is aimed in bootstrap); `?rim=` overrides, 0 turns it off. */
@@ -250,9 +252,8 @@ function layoutFrom(m: SeatMeasure): SetLayout {
   };
 }
 
-/** The desk, the keyboard, the tower, the lamp, the chair and the room. Returns the keyboard (a group centred on its footprint, so the page
- *  can shove it aside where the egg lands: emergence-field's keyboardShove). */
-function buildDeskAndRoom(parent: THREE.Object3D, L: SetLayout, floorY: number): THREE.Group {
+/** The desk, the keyboard (it never moves: the egg lands on it and the pass coats it in goo), the tower, the lamp, the chair and the room. */
+function buildDeskAndRoom(parent: THREE.Object3D, L: SetLayout, floorY: number): void {
   const wood = std(0x4a3222, 0.7), beige = std(0xcfc3a4, 0.55), beigeDark = std(0xa99d80, 0.6), metal = std(0x2b2b2e, 0.4, 0.6);
   // The desk: the top, from just in front of the keyboard back past the CRT, and four legs to the floor.
   const deskD = L.deskFrontZ - DESK.backZ;
@@ -313,7 +314,6 @@ function buildDeskAndRoom(parent: THREE.Object3D, L: SetLayout, floorY: number):
   side.rotation.y = Math.PI / 2;
   side.position.set(-1.3, floorY + 1.3, 1.2);
   parent.add(side);
-  return keyboard;
 }
 
 // ---------------------------------------------------------------------------
@@ -357,24 +357,28 @@ function createScreenPass(pictureTex: THREE.Texture): ScreenPass {
   const normalF = fn(SCR_NORMAL, [mapF]);
   const marchF = fn(SCR_MARCH, [mapF]);
   const veinsF = fn(SCR_VEINS);
+  const gooEggLF = fn(SCR_GOO_EGG_L);
+  const coatHF = fn(SCR_COAT_H);
+  const coatF = fn(SCR_COAT, [coatHF]);
   const pictureF = fn(SCR_PICTURE);
   const lightF = fn(SCR_LIGHT);
   const figTauF = fn(SCR_FIG_TAU, [fn(SCR_FIGURE), fn(SCR_GAUSS)]);
   const shellF = fn(SCR_SHELL, [fn(SCR_SPOTS), figTauF]);
   const eggInnerF = fn(SCR_EGG_INNER);
-  const surfaceF = fn(SCR_SURFACE, [lightF, tearF, ellipsoidF, shellF, eggInnerF]);
+  const gooShadeF = fn(SCR_GOO_SHADE, [lightF, ellipsoidF]);
+  const surfaceF = fn(SCR_SURFACE, [lightF, tearF, shellF, eggInnerF, gooShadeF, gooEggLF]);
   const sheetF = fn(SCR_SHEET, [sacF, pictureF, veinsF, lightF, wrinkleF]);
   const shadowF = fn(SCR_SHADOW, [mapF, ellipsoidF]);
   const poolF = fn(SCR_POOL);
-  const poolShadeF = fn(SCR_POOL_SHADE, [lightF]);
-  const shade = fn(SCR_SHADE, [marchF, normalF, sheetF, surfaceF, openingF, pictureF, shadowF, poolF, poolShadeF, eggInnerF]);
+  const poolShadeF = fn(SCR_POOL_SHADE, [gooShadeF]);
+  const shade = fn(SCR_SHADE, [marchF, normalF, sheetF, surfaceF, openingF, pictureF, shadowF, poolF, poolShadeF, eggInnerF, gooEggLF, coatF, coatHF, gooShadeF]);
 
   const table = new Float32Array(PICTURE_TABLE_N);
   const tableTex = new THREE.DataTexture(table, PICTURE_TABLE_N, 1, THREE.RedFormat, THREE.FloatType);
   tableTex.magFilter = THREE.NearestFilter; tableTex.minFilter = THREE.NearestFilter; tableTex.generateMipmaps = false;
   tableTex.needsUpdate = true;
 
-  // The goo: gooTexels(gooAt(t)) as a 64 x 1 RGBA32F row (textureLoad), and its bounding sphere (radius <= 0: none).
+  // The goo: gooTexels(gooAt(t)) as a GOO_TEXELS x 1 RGBA32F row (textureLoad), and its bounding sphere (radius <= 0: none).
   const gooData = new Float32Array(GOO_TEXELS * 4);
   const gooTex = new THREE.DataTexture(gooData, GOO_TEXELS, 1, THREE.RGBAFormat, THREE.FloatType);
   gooTex.magFilter = THREE.NearestFilter; gooTex.minFilter = THREE.NearestFilter; gooTex.generateMipmaps = false;
@@ -647,7 +651,7 @@ async function bootstrap(): Promise<void> {
   scene.add(screen);
   screen.updateMatrixWorld(true);
   buildCrt(screen);
-  const keyboard = buildDeskAndRoom(screen, layout, floorY);
+  buildDeskAndRoom(screen, layout, floorY);
 
   // The placeholder glass: the Night Train still, flat at z = 0, a hair of emission so it reads as a lit tube. The pass replaces it.
   const pictureTex = new THREE.TextureLoader().load('/assets/lab/screen-source.png',
@@ -861,12 +865,6 @@ async function bootstrap(): Promise<void> {
     if (tickMs.length > 90) tickMs.shift();
     gpu.setTime(t);
     applyCamera();
-    // The keyboard, shoved aside where the egg lands (the drips' floor follows it: emergence-field's dripFloor).
-    {
-      const k = keyboardShove(paramsAt(t));
-      keyboard.position.x = k.dx;
-      keyboard.rotation.y = k.yaw;
-    }
     // The pass on, the placeholder glass off (and back).
     pass.proxy.visible = passOn;
     glass.visible = !passOn;

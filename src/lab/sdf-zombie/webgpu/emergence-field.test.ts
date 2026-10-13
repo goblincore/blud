@@ -2,10 +2,11 @@
 import { describe, it, expect } from 'vitest';
 import { paramsAt, DURATION, type EmergenceParams } from './emergence-timeline';
 import {
-  DESK_Y, EGG, EGG_REST, GLASS, KEYBOARD_CONTACT, KEYBOARD_TOP, KEYBOARD_Z, SKIN, SAC_MAX, PICTURE_TABLE_N, SAC_BLEND, SLUMP, TEAR_KNIT, dripFloor, eggCentre,
-  eggFront, eggHeld, keyboardShove, lipOpening, pictureTable, pictureUV, sacBlend, sacExtent, sacSolid, sacZ, sheetThickness, tearEdge, tearRadius, tearTip,
-  wrinkleAmp, FIGURE_BLOBS, FIGURE_DRIFT, SHELL, VEIN_TREE, figureAt,
+  COAT, DESK_Y, EGG, EGG_REST, FRAME_FACE_Z, GLASS, KEYBOARD_RECT, KEYBOARD_TOP, KEYBOARD_Z, SKIN, SAC_MAX, PICTURE_TABLE_N, SAC_BLEND, SLUMP, TEAR_KNIT,
+  coatCoverage, coatEggBlob, coatThickness, dripFloor, eggCentre, eggFront, eggHeld, lipOpening, pictureTable, pictureUV, sacBlend, sacExtent, sacSolid, sacZ,
+  sheetThickness, tearEdge, tearRadius, tearTip, wrinkleAmp, FIGURE_BLOBS, FIGURE_DRIFT, SHELL, VEIN_TREE, figureAt,
 } from './emergence-field';
+import * as FIELD from './emergence-field';
 
 const REST: EmergenceParams = paramsAt(0);
 const at = (o: Partial<EmergenceParams>): EmergenceParams => ({ ...REST, ...o });
@@ -33,7 +34,7 @@ describe('emergence field', () => {
     expect(sacZ(p, 0, 0)).toBeGreaterThan(0.5);
   });
 
-  it('the apex reaches about 0.65 m at full push (look round 1: the egg is 80%, its reach kept within 0.62..0.70)', () => {
+  it('the apex reaches about 0.65 m at full push (the egg is 0.70 of round one\'s, its reach kept within 0.62..0.70)', () => {
     expect(SAC_MAX).toBeGreaterThan(0.62);
     expect(SAC_MAX).toBeLessThan(0.7);
     expect(sacZ(at({ push: 1 }), 0, 0)).toBeGreaterThanOrEqual(SAC_MAX - 0.02);
@@ -102,11 +103,13 @@ describe('emergence field', () => {
 
   it('the egg is bigger than the glass, so the lip has to give', () => {
     expect(2 * EGG.ry).toBeGreaterThan(2 * GLASS.hh);
+    // the owner's second notes: 0.123 x 0.158 x 0.123
+    expect([EGG.rx, EGG.ry, EGG.rz]).toEqual([0.123, 0.158, 0.123]);
     expect(lipOpening(at({ lipBow: 1 })).hh).toBeGreaterThanOrEqual(EGG.ry * 0.99);
     expect(lipOpening(REST).hh).toBe(GLASS.hh);
   });
 
-  it('the egg slumps from the sac to the desk and stays there', () => {
+  it('the egg slumps from the sac to the keyboard and stays there', () => {
     const inSac = eggCentre(at({ push: 1, slump: 0 }));
     const onDesk = eggCentre(at({ push: 1, slump: 1 }));
     expect(onDesk[1]).toBeLessThan(inSac[1]);
@@ -114,10 +117,11 @@ describe('emergence field', () => {
     expect(eggCentre(paramsAt(DURATION))).toEqual(onDesk);
   });
 
-  it('the slumped egg rests on the desk top, in front of the glass and short of the goblin\'s knees', () => {
-    expect(EGG_REST[1] - EGG.ry).toBeCloseTo(DESK_Y, 12);
-    expect(EGG_REST[2] - EGG.rz).toBeGreaterThan(0);          // its back is in front of the glass plane
-    expect(EGG_REST[2] + EGG.rz).toBeLessThan(0.365 + 1e-9);   // its front is on the lab's desk (front edge 0.365; the knees at about 0.38)
+  it('the slumped egg rests ON the keyboard (its bottom on the key rows, over the keyboard), in front of the CRT\'s face and short of the knees', () => {
+    expect(EGG_REST[1] - EGG.ry).toBeCloseTo(KEYBOARD_TOP, 12);
+    expect(dripFloor(EGG_REST[0], EGG_REST[2])).toBe(KEYBOARD_TOP);    // its lowest point is over the keyboard, not the desk
+    expect(EGG_REST[2] - EGG.rz).toBeGreaterThan(FRAME_FACE_Z + 0.02); // its back is 2 cm or more in front of the CRT's face (at the chin)
+    expect(EGG_REST[2] + EGG.rz).toBeLessThan(0.365 + 1e-9);           // its front is short of the lab's desk front (0.365; the knees about 0.38)
   });
 
   it('the sheet thins as it stretches and is never gone', () => {
@@ -132,7 +136,8 @@ describe('emergence field', () => {
       expect(tearRadius(at({ tear: 0 }), th)).toBe(0);
       let prev = -1;
       for (let i = 0; i <= 20; i++) { const r = tearRadius(at({ tear: i / 20 }), th); expect(r).toBeGreaterThanOrEqual(prev); prev = r; }
-      expect(prev).toBeGreaterThan(0.1);
+      // fully open it is most of the egg's width at every angle (0.1 m for the 80% egg; this bound scales with the egg)
+      expect(prev).toBeGreaterThan(0.7 * EGG.rx);
     }
   });
 
@@ -171,11 +176,11 @@ describe('emergence field', () => {
     expect(sacZ(out, 0, 0)).toBeLessThan(lipOpening(out).z);
   });
 
-  it('the egg falls onto the desk: carried back, an ease-in drop that never goes below the desk, a small settle, then rest', () => {
+  it('the egg falls onto the keyboard: carried back, an ease-in drop that never goes below the key rows, a small settle, then rest', () => {
     let prevY = 0, prevZ = Infinity, landV = 0;
     for (let i = 0; i <= 200; i++) {
       const s = i / 200, c = eggCentre(at({ push: 1, slump: s }));
-      expect(c[1] - EGG.ry, `s=${s}`).toBeGreaterThanOrEqual(DESK_Y - 1e-9);
+      expect(c[1] - EGG.ry, `s=${s}`).toBeGreaterThanOrEqual(KEYBOARD_TOP - 1e-9);
       expect(c[2], `s=${s}`).toBeLessThanOrEqual(prevZ + 1e-12);
       if (s <= SLUMP.land) { expect(c[1]).toBeLessThanOrEqual(prevY + 1e-12); landV = prevY - c[1]; }
       prevY = c[1]; prevZ = c[2];
@@ -184,14 +189,53 @@ describe('emergence field', () => {
     expect(eggCentre(at({ push: 1, slump: 1 }))).toEqual(EGG_REST);
   });
 
-  it('the landing egg shoves the keyboard out from under it, and the drips land on whichever top is under them', () => {
-    { const k = keyboardShove(at({ slump: 0 })); expect(Math.abs(k.dx) + Math.abs(k.yaw)).toBe(0); }
-    expect(eggCentre(at({ push: 1, slump: KEYBOARD_CONTACT }))[1] - EGG.ry).toBeCloseTo(KEYBOARD_TOP, 9);
-    expect(dripFloor(at({ slump: 0 }), 0, KEYBOARD_Z)).toBe(KEYBOARD_TOP);
-    expect(dripFloor(at({ slump: 1 }), 0, KEYBOARD_Z)).toBe(DESK_Y);
-    // once shoved, no part of the keyboard is under the resting egg's footprint at key height
-    for (let th = 0; th < 2 * Math.PI; th += 0.2) for (const r of [0, 0.05, 0.09])
-      expect(dripFloor(at({ slump: 1 }), EGG_REST[0] + r * Math.cos(th), EGG_REST[2] + r * Math.sin(th))).toBe(DESK_Y);
+  it('the keyboard never moves (no shove): a drip lands on its top over its footprint and on the desk elsewhere, at every time', () => {
+    expect('keyboardShove' in FIELD).toBe(false);
+    expect('KEYBOARD_SHOVE' in FIELD).toBe(false);
+    expect(dripFloor(0, KEYBOARD_Z)).toBe(KEYBOARD_TOP);
+    expect(dripFloor(KEYBOARD_RECT.x1 - 1e-4, KEYBOARD_RECT.z0 + 1e-4)).toBe(KEYBOARD_TOP);
+    expect(dripFloor(0, KEYBOARD_RECT.z0 - 1e-4)).toBe(DESK_Y);             // between the CRT's face and the keyboard
+    expect(dripFloor(0, KEYBOARD_RECT.z1 + 1e-4)).toBe(DESK_Y);             // in front of it
+    expect(dripFloor(KEYBOARD_RECT.x1 + 1e-4, KEYBOARD_Z)).toBe(DESK_Y);
+    expect(KEYBOARD_RECT.z0).toBeGreaterThan(FRAME_FACE_Z);
+  });
+
+  it('the keyboard\'s goo coat: none until the egg starts to fall past t 10.5 s, then it only grows; thickest round the egg, on the keyboard only', () => {
+    expect(coatEggBlob(paramsAt(10.4)).r).toBe(0);
+    let prev = 0;
+    for (let t = 9; t <= DURATION + 1e-9; t += 0.1) {
+      const b = coatEggBlob(paramsAt(t));
+      expect(b.r, `t=${t.toFixed(1)}`).toBeGreaterThanOrEqual(prev - 1e-12);
+      prev = b.r;
+      expect([b.x, b.z]).toEqual([EGG_REST[0], EGG_REST[2]]);
+    }
+    const blobs = [coatEggBlob(paramsAt(13))];
+    const at0 = coatThickness(blobs, EGG_REST[0], EGG_REST[2]);
+    expect(at0).toBeGreaterThan(0.008);                                    // over the key rows round the egg: the keys are under the goo
+    expect(at0).toBeLessThanOrEqual(COAT.max);
+    // thinner away from the egg, gone off the keyboard
+    expect(coatThickness(blobs, EGG_REST[0] + 0.15, EGG_REST[2])).toBeLessThan(at0);
+    expect(coatThickness(blobs, KEYBOARD_RECT.x1 - 0.01, KEYBOARD_RECT.z0 + 0.01)).toBe(0);
+    for (const [x, z] of [[0, KEYBOARD_RECT.z1 + 0.001], [0, KEYBOARD_RECT.z0 - 0.001], [KEYBOARD_RECT.x0 - 0.001, KEYBOARD_Z]] as const)
+      expect(coatThickness(blobs, x, z)).toBe(0);
+    // it reaches the keyboard's front edge in front of the egg (where the runs go over it)
+    expect(coatThickness(blobs, 0, KEYBOARD_RECT.z1 - 0.006)).toBeGreaterThan(0.002);
+  });
+
+  it('the coat\'s coverage of the keyboard: 0 before the egg falls, growing, most of the keys by the settle', () => {
+    expect(coatCoverage([coatEggBlob(paramsAt(10.4))])).toBe(0);
+    let prev = 0;
+    for (let t = 10.4; t <= DURATION + 1e-9; t += 0.2) {
+      const c = coatCoverage([coatEggBlob(paramsAt(t))]);
+      expect(c, `t=${t.toFixed(1)}`).toBeGreaterThanOrEqual(prev - 1e-12);
+      expect(c).toBeLessThanOrEqual(1);
+      prev = c;
+    }
+    expect(coatCoverage([coatEggBlob(paramsAt(11.5))])).toBeGreaterThan(0.25);
+    expect(coatCoverage([coatEggBlob(paramsAt(13))])).toBeGreaterThan(0.45);
+    // a drip's blob adds to it
+    const egg = coatEggBlob(paramsAt(11.5));
+    expect(coatCoverage([egg, { x: -0.16, z: KEYBOARD_RECT.z0 + 0.02, r: COAT.drip.r, h: COAT.drip.h }])).toBeGreaterThan(coatCoverage([egg]));
   });
 
   it('the healed sheet wrinkles: none before the heal, most mid-heal, a faint residual after, and it still meets the lip', () => {

@@ -6,21 +6,32 @@
 //
 // OUT AND HEAL (plan Task 8): once the egg leaves the sac each strand's egg end moves to the point of the egg's surface FACING its lip end
 // (always on the surface as the egg falls), the strands get slack and sag across the gap; late in the heal each strand LETS GO of the lip
-// (its lip end falls free) and thins away. The drips stop at the desk top or the (shoved) keyboard's (emergence-field's dripFloor) and what
-// keeps coming POOLS: a slick under the egg once it lands and a small one under each drip that reaches the desk, uploaded as discs.
+// (its lip end falls free) and thins away. The drips stop at the desk top or the keyboard's (emergence-field's dripFloor) and what keeps
+// coming POOLS: a slick under the egg once it lands and a small one under each drip that reaches the desk, uploaded as discs.
 // LOOK ROUND 1: the drips hang in front of the CRT's chin (DRIP_FACE_Z), never inside the housing as the lip relaxes back, and retract with
 // the heal (DRIP_RETRACT); their pools stay. `dripsAt` runs the drips alone (the housing test scans every 0.05 s with it).
+// THE SECOND NOTES (2026-10-13): the keyboard never moves and is COVERED IN EGG GOO: a drip that lands on the keys feeds a blob of the
+// keyboard's coat (emergence-field's COAT: its egg blob plus one per drip), and where the coat reaches the keyboard's front edge goo RUNS
+// over it to the desk (N_RUNS short drips, each leaving a small pool).
 import { paramsAt, DURATION, type EmergenceParams } from './emergence-timeline';
-import { DESK_Y, EGG, FRAME_FACE_Z, GLASS, SLUMP, dripFloor, eggCentre, eggHeld, ellipsoidDist, lipOpening, smooth, tearEdge, tearRadius, type Vec3 } from './emergence-field';
+import {
+  COAT, DESK_Y, EGG, FRAME_FACE_Z, GLASS, KEYBOARD_BODY_TOP, KEYBOARD_RECT, KEYBOARD_TOP, SLUMP, coatEggBlob, coatThickness, dripFloor, eggCentre, eggHeld,
+  ellipsoidDist, lipOpening, smooth, tearEdge, tearRadius, type CoatBlob, type Vec3,
+} from './emergence-field';
 
 export const N_STRANDS = 6;
 export const STRAND_POINTS = 6;
 export const N_BEADS = 8;
 export const N_DRIPS = 4;
-/** The pools on the desk: the egg's slick, then one per drip. */
-export const N_POOLS = 1 + N_DRIPS;
-/** One texel per strand point, bead and drip end, the bounds, then the pools: the shader reads a row of RGBA32F texels of this width. */
-export const GOO_TEXELS = 72;
+/** The runs of goo over the keyboard's front edge to the desk. */
+export const N_RUNS = 3;
+/** The pools on the desk: the egg's slick, then one per drip, then one per run. */
+export const N_POOLS = 1 + N_DRIPS + N_RUNS;
+/** The keyboard coat's blobs: the egg's, then one per drip. */
+export const N_COAT = 1 + N_DRIPS;
+/** One texel per strand point, bead and drip or run end, the bounds, the pools, then the coat's blobs: the shader reads a row of RGBA32F
+ *  texels of this width. */
+export const GOO_TEXELS = 96;
 const DT = 1 / 60;
 const GRAVITY = -2.2;           // m/s^2, softened (mucus, not water)
 const DRIP_MAX = 0.25;          // m (before the floor clamps it)
@@ -32,7 +43,8 @@ export interface Bead { pos: Vec3; radius: number }
 export interface Drip { length: number; top: Vec3; tip: Vec3; radius: number; floor: number }
 /** A wet disc on the desk top (y = DESK_Y), centre and radius (0: none). */
 export interface Pool { centre: Vec3; radius: number }
-export interface Goo { strands: Strand[]; beads: Bead[]; drips: Drip[]; pools: Pool[] }
+/** `runs`: the goo running over the keyboard's front edge (drips from the edge to the desk); `coat`: the keyboard coat's blobs (COAT). */
+export interface Goo { strands: Strand[]; beads: Bead[]; drips: Drip[]; runs: Drip[]; pools: Pool[]; coat: CoatBlob[] }
 
 // A tiny deterministic generator so the strands' angles, lags and sags are fixed per index (mulberry32).
 function rng(seed: number): () => number {
@@ -55,9 +67,20 @@ const LETGO_S = 0.7;
 const FREE_SLACK = 0.18;
 /** The drip's tip is this many times its radius; it rests on the floor. */
 export const DRIP_TIP = 1.6;
-/** The egg's slick: its radius once spread (m; 80% of round one's 0.215 with the egg), how long (slump) it takes to spread after the
+/** The egg's slick on the desk round the keyboard (the egg rests on the keyboard; the slick is what ran off it): its radius once spread (m;
+ *  0.12, so that crept and wobbled it stays on the lab desk short of the knees: POOL_REACH), how long (slump) it takes to spread after the
  *  landing, and how far it creeps with the heal. */
-const POOL = { r: 0.172, spread: 0.2, creep: 0.25, drip: 0.03, dripFill: 0.08 } as const;
+const POOL = { r: 0.12, spread: 0.2, creep: 0.25, drip: 0.03, dripFill: 0.08 } as const;
+/** The furthest the egg's slick reaches from its centre: its spread radius, crept, and the shader's edge wobble (scrPool: up to 1.15x). The
+ *  lab page brings the desk's front edge out to it, so the slick lies on wood. */
+export const POOL_REACH = POOL.r * (1 + POOL.creep) * 1.15;
+/** THE RUNS over the keyboard's front edge: at x `RUN_X`, each starts when the coat at the edge (`probe` m inside it) is `h0` thick, hangs
+ *  from just over the edge (radius `r`, its tip DRIP_TIP times that) and grows at `rate` + `acc` age (m/s, m/s^2) to the desk, where it pools
+ *  (radius up to `pool`, fed over `fill` m of growth past its room). They stay through the heal (the keyboard stays covered). */
+export const RUN = { r: 0.006, probe: 0.006, h0: 0.0025, rate: 0.03, acc: 0.04, pool: 0.022, fill: 0.02 } as const;
+export const RUN_X = [-0.085, 0.02, 0.1] as const;
+/** Each run's radius as a share of RUN.r (they are not all alike). */
+export const RUN_W = [1.0, 0.7, 0.85] as const;
 
 /** Where strand i leaves the tear's lip (on the sheet) and where it lands on the egg, at the state `p` and time `t`. */
 function anchors(p: EmergenceParams, i: number, t: number): { a: Vec3; b: Vec3 } {
@@ -91,8 +114,19 @@ function onEgg(c: Vec3, v: Vec3): Vec3 {
 interface Sim { pts: Vec3[][]; prev: Vec3[][]; born: boolean[]; seg: number[]; drip: DripSim }
 /** The drips' own state: each drip's length, and the pool each has fed on the desk (its radius only grows; its centre is fixed where it
  *  formed, so it does not slide back with the relaxing lip, and it stays when the drip retracts). */
-interface DripSim { len: number[]; poolR: number[]; poolC: (Vec3 | null)[] }
-const newDripSim = (): DripSim => ({ len: Array(N_DRIPS).fill(0), poolR: Array(N_DRIPS).fill(0), poolC: Array(N_DRIPS).fill(null) });
+interface DripSim {
+  len: number[]; poolR: number[]; poolC: (Vec3 | null)[];
+  /** each drip's coat blob on the keys (its feed 0..1 only grows, its centre fixed where it formed) */
+  coatF: number[]; coatC: ([number, number] | null)[];
+  /** each run's start time (NaN: not yet), length and pool radius */
+  runT0: number[]; runLen: number[]; runPoolR: number[];
+  /** the last step's time */
+  lastT: number;
+}
+const newDripSim = (): DripSim => ({
+  len: Array(N_DRIPS).fill(0), poolR: Array(N_DRIPS).fill(0), poolC: Array(N_DRIPS).fill(null), coatF: Array(N_DRIPS).fill(0), coatC: Array(N_DRIPS).fill(null),
+  runT0: Array(N_RUNS).fill(NaN), runLen: Array(N_RUNS).fill(0), runPoolR: Array(N_RUNS).fill(0), lastT: 0,
+});
 
 /** A drip's free growth (m) at `age` seconds, before any floor. */
 const dripGrowth = (age: number) => (age <= 0 ? 0 : Math.min(DRIP_MAX, 0.04 * age + 0.012 * age * age));
@@ -101,7 +135,7 @@ const dripGrowth = (age: number) => (age <= 0 ? 0 : Math.min(DRIP_MAX, 0.04 * ag
 function dripRoom(p: EmergenceParams, i: number): { top: Vec3; floor: number; room: number } {
   const lip = lipOpening(p);
   const top: Vec3 = [DRIP_X[i]!, -lip.hh, Math.max(lip.z, DRIP_FACE_Z)];
-  const floor = dripFloor(p, top[0], top[2]);
+  const floor = dripFloor(top[0], top[2]);
   return { top, floor, room: Math.max(0, top[1] - floor - DRIP_R * DRIP_TIP) };
 }
 export const DRIP_R = 0.008;
@@ -121,18 +155,51 @@ const DRIP_CREEP = 0.25;
 
 function stepDrips(ds: DripSim, p: EmergenceParams, t: number): void {
   const retracting = p.heal >= DRIP_RETRACT[0];
+  ds.lastT = t;
   for (let i = 0; i < N_DRIPS; i++) {
     const { top, floor, room } = dripRoom(p, i), growth = dripGrowth(t - DRIP_START[i]!);
     const target = Math.min(growth, room) * dripLeft(p);
     ds.len[i] = target < ds.len[i]! || retracting ? Math.min(target, ds.len[i]!) : Math.min(target, ds.len[i]! + DRIP_CREEP * DT);
-    // its pool: fed while it rests on the DESK (not the keyboard) by what keeps coming after it touched (its free growth past its room)
-    const r = floor === DESK_Y && ds.len[i]! >= room - 1e-6 ? POOL.drip * smooth((growth - room) / POOL.dripFill) : 0;
-    if (r > ds.poolR[i]!) { ds.poolR[i] = r; ds.poolC[i] ??= [top[0], DESK_Y, top[2]]; }
+    // where it lands it leaves goo, fed by what keeps coming after it touched (its free growth past its room): a pool on the DESK, a blob of
+    // the coat on the KEYBOARD
+    const resting = ds.len[i]! >= room - 1e-6;
+    if (resting && floor === DESK_Y) {
+      const r = POOL.drip * smooth((growth - room) / POOL.dripFill);
+      if (r > ds.poolR[i]!) { ds.poolR[i] = r; ds.poolC[i] ??= [top[0], DESK_Y, top[2]]; }
+    } else if (resting && floor === KEYBOARD_TOP) {
+      const f = smooth((growth - room) / COAT.drip.fill);
+      if (f > ds.coatF[i]!) { ds.coatF[i] = f; ds.coatC[i] ??= [top[0], top[2]]; }
+    }
+  }
+  // the runs: once the coat reaches the keyboard's front edge at a run's x, goo runs over it to the desk and pools there
+  const blobs = coatBlobs(ds, p);
+  for (let i = 0; i < N_RUNS; i++) {
+    if (Number.isNaN(ds.runT0[i]!) && coatThickness(blobs, RUN_X[i]!, KEYBOARD_RECT.z1 - RUN.probe) >= RUN.h0) ds.runT0[i] = t;
+    if (Number.isNaN(ds.runT0[i]!)) continue;
+    const growth = runGrowth(t - ds.runT0[i]!), room = runRoom(i);
+    ds.runLen[i] = Math.min(growth, room);
+    if (growth >= room) ds.runPoolR[i] = Math.max(ds.runPoolR[i]!, RUN.pool * RUN_W[i]! * smooth((growth - room) / RUN.fill));
   }
 }
 
-/** The drips and their pools (from the drip state at the end of the run). */
-function dripsOut(ds: DripSim, p: EmergenceParams): { drips: Drip[]; pools: Pool[] } {
+/** A run's free growth (m) at `age` seconds. */
+const runGrowth = (age: number) => (age <= 0 ? 0 : RUN.rate * age + RUN.acc * age * age);
+/** A run's top: on the keyboard's front edge (its sphere over the edge's corner, its fat tip clinging to the front face: the tip sphere
+ *  reaches 40% of its radius into it), and the room below it to the desk (its tip resting on the desk). */
+const runR = (i: number) => RUN.r * RUN_W[i]!;
+const runTop = (i: number): Vec3 => [RUN_X[i]!, KEYBOARD_BODY_TOP - 0.25 * runR(i), KEYBOARD_RECT.z1 + 0.6 * runR(i) * DRIP_TIP];
+export const runRoom = (i: number) => KEYBOARD_BODY_TOP - 0.25 * runR(i) - DESK_Y - runR(i) * DRIP_TIP;
+
+/** The coat's blobs from the drip state at `p`: the egg's, then each drip's. */
+function coatBlobs(ds: DripSim, p: EmergenceParams): CoatBlob[] {
+  return [coatEggBlob(p), ...ds.coatC.map((c, i) => (c ? { x: c[0], z: c[1], r: COAT.drip.r * ds.coatF[i]!, h: COAT.drip.h * ds.coatF[i]! } : { x: 0, z: 0, r: 0, h: 0 }))];
+}
+
+/** What the drips leave: the drips, the runs, their pools on the desk (the drips' then the runs') and the keyboard coat's blobs. */
+export interface DripsOut { drips: Drip[]; runs: Drip[]; pools: Pool[]; coat: CoatBlob[] }
+
+/** The drips, the runs and what they leave (from the drip state at the end of the run). */
+function dripsOut(ds: DripSim, p: EmergenceParams): DripsOut {
   const radius = DRIP_R * Math.sqrt(dripLeft(p));
   const drips: Drip[] = Array.from({ length: N_DRIPS }, (_, i) => {
     const { top, floor } = dripRoom(p, i);
@@ -145,7 +212,17 @@ function dripsOut(ds: DripSim, p: EmergenceParams): { drips: Drip[]; pools: Pool
     const { top } = dripRoom(p, i);
     return { centre: [top[0], DESK_Y, top[2]], radius: 0 };
   });
-  return { drips, pools };
+  const runs: Drip[] = Array.from({ length: N_RUNS }, (_, i) => {
+    const top = runTop(i), length = ds.runLen[i]!;
+    // it thickens in over its first 0.3 s (born at full radius it popped)
+    const age = Number.isNaN(ds.runT0[i]!) ? 0 : ds.lastT - ds.runT0[i]!;
+    return { length, top, tip: [top[0], top[1] - length, top[2]], radius: runR(i) * smooth(age / 0.3), floor: DESK_Y };
+  });
+  const runPools: Pool[] = Array.from({ length: N_RUNS }, (_, i) => {
+    const top = runTop(i);
+    return { centre: [top[0], DESK_Y, top[2]], radius: ds.runPoolR[i]! };
+  });
+  return { drips, runs, pools: [...pools, ...runPools], coat: coatBlobs(ds, p) };
 }
 
 /** The steps' times up to `tt`: fixed DT steps, the last one at tt itself. */
@@ -154,8 +231,9 @@ function stepTimes(t: number): { tt: number; steps: number } {
   return { tt, steps: Math.floor(tt / DT) };
 }
 
-/** The drips and the pools they leave at time `t` (gooAt's drips and pools after the egg's slick, without the strands' sim: cheap). */
-export function dripsAt(t: number): { drips: Drip[]; pools: Pool[] } {
+/** The drips, the runs and what they leave at time `t` (gooAt's drips, runs, coat and pools after the egg's slick, without the strands' sim:
+ *  cheap). */
+export function dripsAt(t: number): DripsOut {
   const { tt, steps } = stepTimes(t), ds = newDripSim();
   for (let s = 0; s <= steps; s++) { const ts = s === steps ? tt : s * DT; stepDrips(ds, paramsAt(ts), ts); }
   return dripsOut(ds, paramsAt(tt));
@@ -196,7 +274,8 @@ function stepSim(sim: Sim, p: EmergenceParams, t: number): void {
           const g = [d[0] / EGG.rx ** 2, d[1] / EGG.ry ** 2, d[2] / EGG.rz ** 2], gl = Math.hypot(g[0]!, g[1]!, g[2]!) || 1;
           for (let j = 0; j < 3; j++) v[j] = v[j]! + (g[j]! / gl) * (STRAND_R - sd);
         }
-        if (v[1] < DESK_Y + STRAND_R) v[1] = DESK_Y + STRAND_R;
+        const fl = dripFloor(v[0], v[2]) + STRAND_R;          // the desk, or the keyboard's top (it never moves)
+        if (v[1] < fl) v[1] = fl;
       }
     }
     for (let it = 0; it < ITER; it++) for (let k = 0; k < STRAND_POINTS - 1; k++) {
@@ -238,18 +317,22 @@ export function gooAt(t: number): Goo {
     const f = u * (STRAND_POINTS - 1), k = Math.min(STRAND_POINTS - 2, Math.floor(f)), w = f - k, A = s.points[k]!, B = s.points[k + 1]!;
     return { pos: [A[0] + (B[0] - A[0]) * w, A[1] + (B[1] - A[1]) * w, A[2] + (B[2] - A[2]) * w] as Vec3, radius: 0.011 * life(si, tt) };
   });
-  const { drips, pools: dripPools } = dripsOut(sim.drip, p);
+  const { drips, runs, pools: dripPools, coat } = dripsOut(sim.drip, p);
   // THE POOLS: the egg's slick spreads once it lands and creeps with the heal; then the drips' (dripsOut).
   const c = eggCentre(p);
   const land = smooth((p.slump - SLUMP.land + 0.03) / POOL.spread);
   const pools: Pool[] = [{ centre: [c[0], DESK_Y, c[2]], radius: POOL.r * land * (1 + POOL.creep * smooth(p.heal)) }, ...dripPools];
-  return { strands, beads, drips, pools };
+  return { strands, beads, drips, runs, pools, coat };
 }
 
-/** Where the bounds start in the texel row: one per strand, then one for all the beads, then one for all the drips. */
-export const GOO_BOUND0 = N_STRANDS * STRAND_POINTS + N_BEADS + 2 * N_DRIPS;
+/** The round cones in the texel row: the drips, then the runs (the shader draws them alike). */
+export const N_CONES = N_DRIPS + N_RUNS;
+/** Where the bounds start in the texel row: one per strand, then one for all the beads, then one for all the drips and runs. */
+export const GOO_BOUND0 = N_STRANDS * STRAND_POINTS + N_BEADS + 2 * N_CONES;
 /** Where the pools start: centre and radius per texel (w = 0: none). */
 export const GOO_POOL0 = GOO_BOUND0 + N_STRANDS + 2;
+/** Where the keyboard coat's blobs start: (x, peak, z, radius) per texel (w = 0: none). */
+export const GOO_COAT0 = GOO_POOL0 + N_POOLS;
 
 /** A bounding sphere (centre, radius) round spheres given as [x, y, z, r] (r > 0 only); radius 0 when there are none. */
 function bound(spheres: readonly (readonly number[])[]): [number, number, number, number] {
@@ -263,9 +346,10 @@ function bound(spheres: readonly (readonly number[])[]): [number, number, number
   return [c[0]!, c[1]!, c[2]!, r];
 }
 
-/** The goo as a row of RGBA32F texels for the shader: strand points (xyz + radius), then the beads, then each drip's top and tip (unused
- *  texels are w = 0), then from GOO_BOUND0 a bounding sphere per strand, one for the beads and one for the drips (w = 0: empty), so the
- *  shader skips whole strands it cannot reach. A tapered capsule or round cone lies inside the spheres at its ends' hull, so these hold them. */
+/** The goo as a row of RGBA32F texels for the shader: strand points (xyz + radius), then the beads, then each drip's and then each run's top
+ *  and tip (unused texels are w = 0), then from GOO_BOUND0 a bounding sphere per strand, one for the beads and one for the drips and runs
+ *  (w = 0: empty), so the shader skips whole strands it cannot reach (a tapered capsule or round cone lies inside the spheres at its ends'
+ *  hull, so these hold them); from GOO_POOL0 the pools (centre, radius); from GOO_COAT0 the coat's blobs (x, peak, z, radius). */
 export function gooTexels(g: Goo): Float32Array {
   const out = new Float32Array(GOO_TEXELS * 4);
   let n = 0;
@@ -273,12 +357,13 @@ export function gooTexels(g: Goo): Float32Array {
   const sph = (i: number) => [out[i * 4]!, out[i * 4 + 1]!, out[i * 4 + 2]!, out[i * 4 + 3]!];
   for (const s of g.strands) for (let k = 0; k < STRAND_POINTS; k++) s.live ? put(s.points[k]!, s.radius) : put([0, -9, 0], 0);
   for (const b of g.beads) put(b.pos, b.radius);
-  for (const d of g.drips) { put(d.top, d.length > 0 ? d.radius : 0); put(d.tip, d.length > 0 ? d.radius * DRIP_TIP : 0); }
+  for (const d of [...g.drips, ...g.runs]) { put(d.top, d.length > 0 ? d.radius : 0); put(d.tip, d.length > 0 ? d.radius * DRIP_TIP : 0); }
   const range = (a: number, b: number) => Array.from({ length: b - a }, (_, i) => sph(a + i));
   for (let i = 0; i < N_STRANDS; i++) { const b = bound(range(i * STRAND_POINTS, (i + 1) * STRAND_POINTS)); put(b, b[3]); }
   const b0 = N_STRANDS * STRAND_POINTS, d0 = b0 + N_BEADS;
   { const b = bound(range(b0, d0)); put(b, b[3]); }
-  { const b = bound(range(d0, d0 + 2 * N_DRIPS)); put(b, b[3]); }
+  { const b = bound(range(d0, d0 + 2 * N_CONES)); put(b, b[3]); }
   for (const pl of g.pools) put(pl.centre, pl.radius);
+  for (const c of g.coat) put([c.x, c.h, c.z], c.r > 0 && c.h > 0 ? c.r : 0);
   return out;
 }

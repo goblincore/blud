@@ -5,8 +5,8 @@
 // compiles is the page's console's job (node cannot compile it).
 import { describe, expect, it } from 'vitest';
 import { paramsAt, DURATION } from './emergence-timeline';
-import { EGG, FIGURE_BLOBS, FIGURE_DEPTH, FIGURE_DRIFT, GLASS, PICTURE_TABLE_N, SAC_BLEND, SAC_MAX, SHELL, SHELL_LIGHT, SKIN, SLUMP, TEAR_RAG, TEAR_R_MAX, THICK0, RIPPLE, VEIN_TREE, eggCentre, figureAt, lipOpening, sacExtent, smooth, tearRadius } from './emergence-field';
-import { GOO_BOUND0, GOO_TEXELS, N_BEADS, N_DRIPS, N_STRANDS, STRAND_POINTS, gooAt } from './goo-strands';
+import { COAT, GOO_LOOK, KEYBOARD_BODY_TOP, KEYBOARD_RECT, coatThickness, EGG, FIGURE_BLOBS, FIGURE_DEPTH, FIGURE_DRIFT, GLASS, PICTURE_TABLE_N, SAC_BLEND, SAC_MAX, SHELL, SHELL_LIGHT, SKIN, SLUMP, TEAR_RAG, TEAR_R_MAX, THICK0, RIPPLE, VEIN_TREE, eggCentre, figureAt, lipOpening, sacExtent, smooth, tearRadius } from './emergence-field';
+import { GOO_BOUND0, GOO_COAT0, GOO_TEXELS, N_BEADS, N_COAT, N_CONES, N_DRIPS, N_RUNS, N_STRANDS, STRAND_POINTS, gooAt } from './goo-strands';
 import * as W from './screen-emergence.wgsl';
 
 const STRINGS = Object.entries(W).filter(([k, v]) => k.startsWith('SCR_') && typeof v === 'string') as [string, string][];
@@ -54,7 +54,8 @@ describe('screen-emergence.wgsl', () => {
     expect(W.SCR_GOO).toContain(`s < ${N_STRANDS}`);
     expect(W.SCR_GOO).toContain(`s * ${STRAND_POINTS}`);
     expect(W.SCR_GOO).toContain(`i < ${N_BEADS}`);
-    expect(W.SCR_GOO).toContain(`i < ${N_DRIPS}`);
+    expect(W.SCR_GOO).toContain(`i < ${N_CONES}`);                       // the drips and then the runs, as round cones
+    expect(N_CONES).toBe(N_DRIPS + N_RUNS);
     expect(W.GOO_BEAD0).toBe(N_STRANDS * STRAND_POINTS);
     expect(W.GOO_DRIP0).toBe(W.GOO_BEAD0 + N_BEADS);
     expect(W.SCR_GOO).toContain(`${GOO_BOUND0} + s`);
@@ -70,7 +71,6 @@ describe('screen-emergence.wgsl', () => {
     expect(W.SCR_MAP).toContain(`${W.GOO_K.scene} * clamp(gw.y / ${W.GOO_K.fullW}`);
     expect(W.SCR_SURFACE).toContain('mat > 4.5');
     expect(W.SCR_SURFACE).toContain('mat > 3.5');
-    expect(W.SCR_SURFACE).toContain('vec3<f32>(0.82, 0.74, 0.7)');
     expect(W.SCR_SHADE).toContain('h1.y < 1.5');
     expect(W.SCR_MAP).toContain(`(1.0 + ${W.TEAR_RIM.thicken} * band)`);
   });
@@ -79,7 +79,8 @@ describe('screen-emergence.wgsl', () => {
     const [x0, y0, z0] = W.SCREEN_PROXY.min, [x1, y1, z1] = W.SCREEN_PROXY.max;
     for (let t = 7; t <= DURATION; t += 0.5) {
       const g = gooAt(t);
-      const pts = [...g.strands.filter(s => s.live).flatMap(s => s.points), ...g.beads.filter(b => b.radius > 0).map(b => b.pos), ...g.drips.filter(d => d.length > 0).flatMap(d => [d.top, d.tip])];
+      const pts = [...g.strands.filter(s => s.live).flatMap(s => s.points), ...g.beads.filter(b => b.radius > 0).map(b => b.pos),
+        ...[...g.drips, ...g.runs].filter(d => d.length > 0).flatMap(d => [d.top, d.tip])];
       for (const p of pts) {
         expect(p[0], `t=${t}`).toBeGreaterThan(x0); expect(p[0], `t=${t}`).toBeLessThan(x1);
         expect(p[1], `t=${t}`).toBeGreaterThan(y0); expect(p[1], `t=${t}`).toBeLessThan(y1);
@@ -148,6 +149,61 @@ describe('screen-emergence.wgsl', () => {
     const t = 1.3, c = figureAt(t), o = FIGURE_DRIFT.axes.map(([a, w, ph]) => a * Math.sin(w * t + ph));
     expect(c[0]![1]).toBeCloseTo(o[1]! + b0.pos[1], 12);
     expect(c[2]![0]).toBeCloseTo(o[0]! + b2.pos[0] * (1 + fa * Math.sin(fw * t + fp)), 12);
+  });
+
+  it('every piece of goo is ONE substance: the strands, beads, drips and runs, the slicks and the keyboard\'s coat all shade through scrGooShade from GOO_LOOK', () => {
+    const f = (n: number) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
+    const v = (p: readonly number[]) => `vec3<f32>(${p.map(f).join(', ')})`;
+    // the one shading reads the palette
+    expect(W.SCR_GOO_SHADE).toContain(`let base = ${v(GOO_LOOK.base)}`);
+    expect(W.SCR_GOO_SHADE).toContain(`base * ${v(GOO_LOOK.sss)}`);
+    expect(W.SCR_GOO_SHADE).toContain(`scrLight(p, n, rd, lamp, vec4<f32>(c, eggL * 0.6), base, ${f(GOO_LOOK.coat)})`);
+    for (const k of [GOO_LOOK.lampSss, GOO_LOOK.eggSss, GOO_LOOK.eggNear, GOO_LOOK.ambient, GOO_LOOK.sheen, GOO_LOOK.env, GOO_LOOK.envPow]) expect(W.SCR_GOO_SHADE).toContain(f(k));
+    expect(W.SCR_GOO_SHADE).toContain(v(GOO_LOOK.envCol));
+    // the strands, beads, drips and runs (material 4), the slicks and the coat all call it; the egg's light on goo is one function
+    const goo = W.SCR_SURFACE.slice(W.SCR_SURFACE.indexOf('if (mat > 3.5)'), W.SCR_SURFACE.indexOf('if (mat > 2.5)'));
+    expect(goo).toContain('scrGooShade(p, n, rd, c, lamp, scrGooEggL(p1)');
+    expect(W.SCR_POOL_SHADE).toContain('scrGooShade(p, n, rd, c, lamp, 0.0)');
+    expect(W.SCR_SHADE).toContain('scrGooShade(pc, nc, rd, vec3<f32>(0.0, d.z, d.y), lamp, scrGooEggL(p1))');
+    expect(W.SCR_GOO_EGG_L).toContain(`mix(1.0, ${f(GOO_LOOK.eggOut)}, smoothstep(0.0, 1.0, p1.y / ${f(SLUMP.release)}))`);
+    // no other goo colour anywhere: round two's near-white goo albedo, its white sheen and the slick's near-black film are gone
+    for (const [k, src] of STRINGS) {
+      expect(src, k).not.toContain('vec3<f32>(0.82, 0.74, 0.7)');
+      expect(src, k).not.toContain('vec3<f32>(0.9, 0.88, 0.85)');
+      expect(src, k).not.toContain('vec3<f32>(0.02, 0.008, 0.006)');
+      if (k !== 'SCR_GOO_SHADE' && k !== 'SCR_POOL_SHADE') expect(src, k).not.toContain(v(GOO_LOOK.base));
+    }
+  });
+
+  it('the keyboard\'s coat is coatThickness\'s twin and its march stays in its slab over the keyboard', () => {
+    const f = (n: number) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
+    expect(W.SCR_COAT_H).toContain(`i < ${N_COAT}`);
+    expect(W.SCR_COAT_H).toContain(`${GOO_COAT0} + i`);
+    expect(GOO_COAT0 + N_COAT).toBeLessThanOrEqual(GOO_TEXELS);
+    for (const k of [COAT.max, COAT.thresh, COAT.inset, KEYBOARD_RECT.x0, KEYBOARD_RECT.x1, KEYBOARD_RECT.z0, KEYBOARD_RECT.z1]) expect(W.SCR_COAT_H).toContain(f(k));
+    expect(W.SCR_COAT_H).toContain(`${f(COAT.max)} * (1.0 - exp(-sum / ${f(COAT.max)})) * smoothstep(0.0, 1.0, inside / ${f(COAT.inset)})`);
+    expect(W.SCR_COAT_H).toContain(`max(0.0, cap - ${f(COAT.thresh)})`);
+    for (const [amp, k, ph] of COAT.lobes) expect(W.SCR_COAT_H).toContain(`${f(amp)} * sin(${f(k)} * a + ${f(ph)} + 1.7 * f32(i))`);
+    // evaluate the shader's heightfield in JS (the loop's body over a blob list) and hold it against coatThickness
+    const body = W.SCR_COAT_H.slice(W.SCR_COAT_H.indexOf('let inside'), W.SCR_COAT_H.lastIndexOf('}'))
+      .replace(/\blet /g, 'const ').replace(/\bvar /g, 'let ')
+      .replace(/for \(let i = 0; i < \d+; i = i \+ 1\) \{\n    const b = textureLoad\([^\n]*\n/, 'for (let i = 0; i < B.length; i++) { const b = B[i];\n').replace(/f32\(i\)/g, 'i').replace(/b\.w/g, 'b.r').replace(/b\.y/g, 'b.h')
+      .replace(/\b(sin|exp|atan2|min|max)\(/g, 'Math.$1(').replace(/smoothstep\(0\.0, 1\.0, /g, 'sm(').replace(/if \((.*?)\) \{ return (.*?); \}/g, 'if ($1) return $2;')
+      .replace(/if \(b\.r <= 0\.0\) \{ continue; \}/, 'if (b.r <= 0) continue;');
+    const hJs = new Function('x', 'z', 'B', 'sm', body) as (x: number, z: number, B: readonly { x: number; z: number; r: number; h: number }[], sm: (u: number) => number) => number;
+    const blobs = [{ x: 0, z: 0.185, r: 0.2, h: 0.04 }, { x: -0.12, z: 0.1, r: 0.05, h: 0.015 }, { x: 0.1, z: 0.1, r: 0, h: 0 }];
+    for (let x = KEYBOARD_RECT.x0 - 0.01; x <= KEYBOARD_RECT.x1 + 0.01; x += 0.023) for (let z = KEYBOARD_RECT.z0 - 0.01; z <= KEYBOARD_RECT.z1 + 0.01; z += 0.011)
+      expect(hJs(x, z, blobs, smooth), `x=${x.toFixed(3)} z=${z.toFixed(3)}`).toBeCloseTo(coatThickness(blobs, x, z), 9);
+    expect(W.SCR_COAT).toContain(`${f(KEYBOARD_BODY_TOP)}, ${f(KEYBOARD_RECT.z0)}`);
+    expect(W.SCR_COAT).toContain(`${f(KEYBOARD_BODY_TOP + COAT.max)}, ${f(KEYBOARD_RECT.z1)}`);
+    expect(W.SCR_COAT).toContain(`i <= ${W.COAT_STEPS}`);
+    // the coat's slab lies inside the proxy box
+    expect(KEYBOARD_RECT.x0).toBeGreaterThan(W.SCREEN_PROXY.min[0]); expect(KEYBOARD_RECT.x1).toBeLessThan(W.SCREEN_PROXY.max[0]);
+    expect(KEYBOARD_BODY_TOP).toBeGreaterThan(W.SCREEN_PROXY.min[1]);
+    expect(KEYBOARD_RECT.z0).toBeGreaterThan(W.SCREEN_PROXY.min[2]); expect(KEYBOARD_RECT.z1).toBeLessThan(W.SCREEN_PROXY.max[2]);
+    // translucent where thin (the keys show), nearly opaque where thick
+    expect(GOO_LOOK.film).toBeLessThan(GOO_LOOK.filmThick);
+    expect(GOO_LOOK.filmThick).toBeLessThan(1);
   });
 
   it('the membrane\'s veins are VEIN_TREE\'s branching tree, not round one\'s sine ridges', () => {
