@@ -1,8 +1,9 @@
 // src/lab/sdf-zombie/webgpu/screen-lab-main.ts
 //
 // THE SCREEN EMERGENCE LAB (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md, plan Tasks 5 and 6): a standalone,
-// scrubbable page with the set (the P225f CRT, the desk, the lamp, the tower, the room), the REAL SDF goblin seated at the desk, posed from
-// the clock by the pose layer, and THE SCREEN PASS: the march (screen-emergence.wgsl.ts) on a proxy box in the screen's frame, drawn in the
+// scrubbable page with the set (the P225f CRT, the Flat's low kotatsu with the keyboard and the lamp on it, the tower on the floor beside
+// it, a zabuton, the tatami: look round 1 made it floor level like the apartment), the REAL SDF goblin cross-legged on the cushion, posed
+// from the clock by the pose layer and slid back along the floor and forward again (screen-lab-goblin.ts goblinRootAt), and THE SCREEN PASS: the march (screen-emergence.wgsl.ts) on a proxy box in the screen's frame, drawn in the
 // SDF layer's late scene with its own depth (createScreenPass). `pass on` / `?nopass=1` / `__screenLab.setPass` swap it for the placeholder
 // glass (the Night Train still, flat); `?passdebug=1` / `setPassDebug` shows the march's steps, hits and materials. The goo (plan Task 7)
 // is goo-strands.ts's sim uploaded as a texel row each frame from 7 s on, cached per t; `?nogoo=1` / `setGoo` leaves it out (its cost);
@@ -16,9 +17,10 @@
 //
 // FRAMES. The goblin lives in his own frame (the floor at y 0, the hips over the origin, facing +z): the motion system's. The set is built
 // in THE SCREEN'S frame (origin at the glass centre, +x right, +y up, +z out of the glass toward the room, metres; emergence-field.ts),
-// as children of `screen`, a group turned to face him. Where the group sits is MEASURED off the goblin posed in `type` (measureSeat): the
-// keyboard's top under his palms, the desk's top a keyboard below it (so the glass centre is `DESK_Y` above that), the chair's seat under
-// his pelvis, the desk's front edge clear of his knees. Nothing about the seat is typed in.
+// as children of `screen`, a group turned to face him. Where the group sits is MEASURED off the goblin posed in `floor-type` (measureSeat,
+// floorLayout): the keyboard's top under his palms, the board a keyboard below it (so the glass centre is `DESK_Y` above that), the
+// keyboard under his hands, the cushion's top under his pelvis; the page reports the measured board height against the Flat's (KOTATSU).
+// The zabuton lives in HIS frame (not the screen's) and slides with his scoot.
 //
 // The goblin is the 1.70 m body: thigh 0.379 m, shin 0.353 m, upper arm 0.307 m, forearm 0.307 m.
 import * as THREE from 'three/webgpu';
@@ -42,8 +44,8 @@ import { MOTION_TUNING } from '../motion';
 import { makeRng } from '../wander';
 import { makePoseRig, poseJoints, type PoseRig } from '../pose';
 import {
-  GLASS, CRT_FRAME as CRT, DESK_Y, EGG, EGG_REST, FRAME_BOTTOM, FRAME_FACE_Z, KEYBOARD, KEYBOARD_Z, PICTURE_TABLE_N, ellipsoidDist, eggCentre, lipOpening, pictureTable,
-  sacExtent, smooth, tearTip,
+  GLASS, CRT_FRAME as CRT, DESK_Y, EGG, FRAME_BOTTOM, FRAME_FACE_Z, KEYBOARD, KEYBOARD_Z, KOTATSU, PICTURE_TABLE_N, ellipsoidDist, eggCentre, lipOpening,
+  pictureTable, sacExtent, smooth, tearTip,
 } from './emergence-field';
 import {
   DEPTH_Q, GOO_K, SCREEN_PROXY, SCR_CAPSULE, SCR_ELLIPSOID, SCR_GOO, SCR_LIGHT, SCR_LIP, SCR_MAP, SCR_MARCH, SCR_NORMAL, SCR_OPENING,
@@ -51,9 +53,10 @@ import {
   SCR_TEAR, SCR_VEINS, SCR_WRINKLE, SCR_WRINKLE_PAT, SCR_GAUSS, SCR_FIGURE, SCR_FIG_TAU, SCR_SPOTS, SCR_SHELL, SCR_EGG_INNER, SCR_GOO_SHADE,
   SCR_GOO_EGG_L, SCR_COAT, SCR_COAT_H,
 } from './screen-emergence.wgsl';
-import { GOO_BOUND0, GOO_TEXELS, POOL_REACH, gooAt, gooTexels } from './goo-strands';
+import { GOO_BOUND0, GOO_TEXELS, gooAt, gooTexels } from './goo-strands';
 import { SHOTS, DURATION, shotAt, paramsAt, type ShotId } from './emergence-timeline';
-import { goblinClipAt, measureSeat, type SeatMeasure } from './screen-lab-goblin';
+import { FLOOR_SEAT } from '../characters/goblin-poses';
+import { floorLayout, goblinClipAt, goblinRootAt, measureSeat, pinToPose, type FloorLayout } from './screen-lab-goblin';
 import {
   GAME_AA, GAME_AA_FADE_M, GAME_AA_NEAR, GAME_LAST_STEP_DEFAULT, GAME_RELAX, GAME_HULL_EXIT_BOUND, GAME_WOUND_EARLY_OUT, GAME_OMEGA, GAME_WOUND_STEP,
 } from './game-march-accept';
@@ -66,23 +69,22 @@ import type { Vec3 } from '../types';
 // pedestal fills up to) is emergence-field's: the drips are kept in front of the chin. So are the frame's front face (FRAME_FACE_Z, the
 // bevel's depth, 0.03 in the blockout) and the keyboard (KEYBOARD: thickness, depth, width, the gap to the CRT's face, its key rows): the
 // drips land on the keyboard, the egg lands on it, and the pass draws the goo coat over it (the owner's second notes: it never moves).
-/** The desk top's thickness and its back edge (screen frame z, behind the CRT's 0.47 m housing). */
-const DESK = { t: 0.035, backZ: -0.62, hw: 0.78 } as const;
-/** The desk's front edge sits at least this far in front of the keyboard's front edge, and must clear the knees by at least KNEE_CLEAR. */
-const DESK_LIP = 0.04;
-const KNEE_CLEAR = 0.01;
-/** ...and reaches at least the egg's slick round the keyboard (EGG_REST z + POOL_REACH, plus 5 mm: screen z 0.363), so the goo lies on wood
- *  (the egg itself rests on the keyboard, its front at 0.308). */
-const DESK_FRONT_MIN_Z = EGG_REST[2] + Math.max(EGG.rz, POOL_REACH) + 0.005;
+// The kotatsu (KOTATSU: the board's height, size and skirt) and its front edge (TABLE_FRONT_Z, past the egg's slick) are the field's too.
+/** The wall behind the kotatsu (screen frame z: behind the CRT's 0.47 m housing, which overhangs the board's back by 5 cm). */
+const WALL_Z = -0.62;
 /** The SDF pass's render scale (see `sdfLayer.setScale` in bootstrap). */
 const SDF_SCALE = 0.5;
 /** The goblin's cold rim/fill strength (spotCfg2.w, see where the key is aimed in bootstrap); `?rim=` overrides, 0 turns it off. */
 const GOBLIN_RIM = 1.5;
 /** The goblin's flat fill (lightCfg.y; the practical key preset's is 0.06), doubled-ish so his back is not black; `?fill=` overrides. */
 const GOBLIN_FILL = 0.10;
-/** The banker's lamp's foot on the desk (screen frame), and its bulb under the shade: the set's key light, and the SDF body's key direction. */
-const LAMP_AT: Vec3 = [-0.52, DESK_Y, 0.02];
+/** The banker's lamp's foot on the board (screen frame), and its bulb under the shade: the set's key light, and the SDF body's key
+ *  direction. Look round 1: beside the CRT on the kotatsu's left (the 0.82 m board has no room where the wide desk had it, x -0.52), its
+ *  shade shorter (LAMP_SHADE_L, 0.26 on the desk) so it stays over the board and clear of the CRT's side; his left hand lands on the board
+ *  in front of it at the end. */
+const LAMP_AT: Vec3 = [-0.35, DESK_Y, 0.02];
 const LAMP_BULB: Vec3 = [LAMP_AT[0], DESK_Y + 0.27, LAMP_AT[2] + 0.06];
+const LAMP_SHADE_L = 0.17;
 
 // ---------------------------------------------------------------------------
 // Camera presets, in the screen frame: an eye, a look-at and a vertical fov (plan Task 5 step 4).
@@ -90,19 +92,25 @@ const LAMP_BULB: Vec3 = [LAMP_AT[0], DESK_Y + 0.27, LAMP_AT[2] + 0.06];
 interface Preset { eye: Vec3; at: Vec3; fov: number }
 /** The push cuts wider inside its shot, at this time. */
 const PUSH_WIDE_AT = 4.5;
+/** Look round 1 (the floor-level set, the goblin backing away): the owner did not like the goblin filling the push shot, so the push opens
+ *  three-quarter on the screen with him leaning away at the frame's edge and cuts to a wide profile, him small on the floor well back from
+ *  the sac. Where he is in the screen frame (floorLayout, goblinRootAt): typing, his hips at z 0.87 and the top of his head 0.3 m over the
+ *  glass centre; slid back, his hips at z 1.42 and his hands on the floor at 1.9; kneeling and reaching, his hips at 0.94. */
 const PRESETS: Record<ShotId | 'push-wide', Preset> = {
-  // Close, low, front-right of the screen: outside his right forearm (x 0.19 in the screen frame), which crosses the frame's left edge.
-  'glass-gives': { eye: [0.45, -0.14, 0.42], at: [-0.06, 0, 0], fov: 42 },
-  // The push starts on the same framing, then cuts wider at 4.5 s: above and behind his right shoulder, over the chair's back.
-  push: { eye: [0.45, -0.14, 0.42], at: [-0.06, 0, 0], fov: 42 },
-  'push-wide': { eye: [0.85, 0.6, 1.55], at: [0, -0.05, 0.3], fov: 50 },
-  // Crowning: close again, backed off to the right to clear the sac's 0.73 m and his raised arms.
-  crowning: { eye: [0.75, -0.05, 0.75], at: [0, 0, 0.35], fov: 45 },
-  // Out: behind and to the goblin's left (screen -x), high enough to see over the chair, so the egg slumps toward the lens.
-  out: { eye: [-0.75, 0.55, 1.6], at: [0.05, -0.2, 0.35], fov: 46 },
-  // Settle: low, front-right of the egg (his right, outside his knee), across the egg in its slick to the healing screen and his right hand
-  // on the egg's flank. Round two's [0.7, -0.2, 0.0] sat level with the glass and the CRT's frame filled a third of the frame.
-  settle: { eye: [0.66, -0.12, 0.6], at: [-0.04, -0.1, 0.12], fov: 50 },
+  // Close on the screen from low front-right, over the board in front of his right hand (his hands at the frame's bottom right).
+  'glass-gives': { eye: [0.42, -0.12, 0.4], at: [-0.06, -0.02, 0], fov: 42 },
+  // The push opens three-quarter on the bulging screen from the front-right, in front of him: he has backed off out of the frame...
+  push: { eye: [0.72, -0.12, 0.62], at: [-0.04, -0.1, 0.08], fov: 46 },
+  // ...and cuts wide: a profile from his right, 2.4 m off, the whole kotatsu, the sac coming into the room and him small on the floor
+  // well back from it.
+  'push-wide': { eye: [2.4, 0.12, 1.05], at: [0, -0.3, 0.78], fov: 44 },
+  // Crowning: close on the tear from the egg's right side (he is behind the lens).
+  crowning: { eye: [0.62, -0.05, 0.72], at: [0, 0, 0.32], fov: 45 },
+  // Out: high behind and to his left, 3 m back, past him to the egg slumping onto the keyboard (he is in the lower foreground).
+  out: { eye: [-1.4, 0.7, 3.0], at: [0.05, -0.3, 0.4], fov: 40 },
+  // Settle: low over the board's front-right, in front of him (he kneels behind the lens): the egg in its goo on the keyboard, the
+  // healing screen, his right arm coming in from the frame's right to rest a hand on the egg.
+  settle: { eye: [0.72, -0.06, 0.58], at: [-0.05, -0.16, 0.14], fov: 46 },
 };
 const presetAt = (t: number): Preset => {
   const s = shotAt(t).id;
@@ -215,68 +223,42 @@ function buildCrt(parent: THREE.Object3D): void {
   cyl(0.1, neckH, front, [0, DESK_Y + 0.025 + neckH / 2, pedZ], parent, 0.1, 48);
 }
 
-interface SetLayout {
-  /** The glass centre, in the goblin's world frame. */
-  glassY: number;
-  glassZ: number;
-  /** In the screen frame: the keyboard's centre z (emergence-field's KEYBOARD_Z), the desk's front edge z, the seat's top y and its z span. */
-  keyboardZ: number;
-  deskFrontZ: number;
-  seatY: number;
-  seatZ0: number;
-  seatZ1: number;
-  /** The goblin's hands' half span (keyboard width check). */
-  handHalfSpan: number;
-  kneeClearance: number;
-}
-
-/** The set from the measured seat (see the header): the glass's place in the goblin's frame and the furniture in the screen's. */
-function layoutFrom(m: SeatMeasure): SetLayout {
-  const deskTopW = m.palmY - KEYBOARD.t;                       // desk top, world y (floor 0)
-  const glassY = deskTopW - DESK_Y;                            // the glass centre is -DESK_Y above the desk top
-  const keyboardZ = KEYBOARD_Z;                                  // screen z of the keyboard's centre
-  const glassZ = m.handZ + keyboardZ;                          // world z of the glass: the keyboard's centre lies under the hands
-  const toScreenZ = (zw: number) => glassZ - zw;
-  const kbFrontW = m.handZ - KEYBOARD.d / 2;
-  // World z grows toward the screen, so the desk front reaching further toward the goblin is the SMALLER world z.
-  const deskFrontW = Math.min(kbFrontW - DESK_LIP, glassZ - DESK_FRONT_MIN_Z);
-  const kneeClearance = deskFrontW - m.kneeFrontZ;
-  return {
-    glassY, glassZ, keyboardZ,
-    deskFrontZ: toScreenZ(deskFrontW),
-    seatY: m.seatY - glassY,
-    seatZ0: toScreenZ(m.seatBackZ - 0.03),
-    seatZ1: toScreenZ(Math.min(m.kneeFrontZ - 0.12, m.seatBackZ + 0.46)),
-    handHalfSpan: m.handHalfSpan,
-    kneeClearance,
-  };
-}
-
-/** The desk, the keyboard (it never moves: the egg lands on it and the pass coats it in goo), the tower, the lamp, the chair and the room. */
-function buildDeskAndRoom(parent: THREE.Object3D, L: SetLayout, floorY: number): void {
-  const wood = std(0x4a3222, 0.7), beige = std(0xcfc3a4, 0.55), beigeDark = std(0xa99d80, 0.6), metal = std(0x2b2b2e, 0.4, 0.6);
-  // The desk: the top, from just in front of the keyboard back past the CRT, and four legs to the floor.
-  const deskD = L.deskFrontZ - DESK.backZ;
-  box(DESK.hw * 2, DESK.t, deskD, wood, [0, DESK_Y - DESK.t / 2, DESK.backZ + deskD / 2], parent);
-  const legH = DESK_Y - DESK.t - floorY;
-  for (const sx of [-1, 1]) for (const z of [DESK.backZ + 0.05, L.deskFrontZ - 0.05])
-    box(0.05, legH, 0.05, wood, [sx * (DESK.hw - 0.05), floorY + legH / 2, z], parent);
-  // The keyboard under the hands, and its key rows: a group at the keyboard's centre on the desk top.
+/** The kotatsu, the keyboard on it (it never moves: the egg lands on it and the pass coats it in goo), the lamp, the tower on the floor
+ *  beside it, the tatami floor and the walls, in the screen frame, from the measured layout (screen-lab-goblin.ts floorLayout). The zabuton
+ *  is not here: it rides with the goblin (buildZabuton). */
+function buildKotatsuAndRoom(parent: THREE.Object3D, L: FloorLayout): void {
+  const floorY = L.floorY;
+  const wood = std(0x5a3b26, 0.6), woodDark = std(0x2e1f15, 0.7), quilt = std(0x6b2a2a, 0.9), quiltDark = std(0x3e1a1c, 0.95);
+  const beige = std(0xcfc3a4, 0.55), beigeDark = std(0xa99d80, 0.6);
+  // The board: the kotatsu's top, from behind the CRT's pedestal to its front edge (TABLE_FRONT_Z, past the egg's slick).
+  const d = L.tableFrontZ - L.tableBackZ, cz = (L.tableFrontZ + L.tableBackZ) / 2, w = L.tableHalfW * 2;
+  box(w, KOTATSU.t, d, wood, [0, DESK_Y - KOTATSU.t / 2, cz], parent);
+  // Under the board: the quilt's short skirt (the Flat's kotatsu futon, tucked up clear of his knees) inset from the edges, a dark heater
+  // frame, and four short legs to the floor at the corners.
+  const under = DESK_Y - KOTATSU.t, sk = KOTATSU.skirt, ins = KOTATSU.inset;
+  for (const sz of [-1, 1]) box(w - 2 * ins, sk, 0.02, quilt, [0, under - sk / 2, cz + sz * (d / 2 - ins)], parent);
+  for (const sx of [-1, 1]) box(0.02, sk, d - 2 * ins, quilt, [sx * (w / 2 - ins), under - sk / 2, cz], parent);
+  box(w - 0.2, 0.03, d - 0.2, quiltDark, [0, under - 0.015, cz], parent);
+  const legH = under - floorY;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1])
+    box(0.05, legH, 0.05, woodDark, [sx * (w / 2 - 0.06), floorY + legH / 2, cz + sz * (d / 2 - 0.06)], parent);
+  // The keyboard under the hands, and its key rows: a group at the keyboard's centre on the board.
   const keyboard = new THREE.Group();
   keyboard.name = 'keyboard';
-  keyboard.position.set(0, DESK_Y, L.keyboardZ);
+  keyboard.position.set(0, DESK_Y, KEYBOARD_Z);
   parent.add(keyboard);
   box(KEYBOARD.w, KEYBOARD.t, KEYBOARD.d, beige, [0, KEYBOARD.t / 2, 0], keyboard);
   for (let r = 0; r < 5; r++) box(KEYBOARD.w - 0.04, KEYBOARD.keys, 0.022, beigeDark, [0, KEYBOARD.t + KEYBOARD.keys / 2, -KEYBOARD.d / 2 + 0.025 + r * 0.027], keyboard);
-  // The beige tower, on the desk to the screen's right.
-  box(0.19, 0.42, 0.44, beige, [0.52, DESK_Y + 0.21, -0.22], parent);
-  box(0.15, 0.012, 0.004, beigeDark, [0.52, DESK_Y + 0.33, -0.22 + 0.222], parent);
-  // The banker's lamp, low on the desk's left: a brass base and stem, a green glass shade, a warm point light under it.
+  // The beige tower, on the floor to the kotatsu's right (the screen's +x), its face toward the room.
+  const towerX = L.tableHalfW + 0.16;
+  box(0.19, 0.42, 0.44, beige, [towerX, floorY + 0.21, -0.12], parent);
+  box(0.15, 0.012, 0.004, beigeDark, [towerX, floorY + 0.33, -0.12 + 0.222], parent);
+  // The banker's lamp on the board's left, beside the CRT: a brass base and stem, a green glass shade, a warm point light under it.
   const brass = std(0x9a7a3a, 0.35, 0.8), shade = std(0x1f5a32, 0.35, 0.1, 0x0a2a14, 0.6);
   const lampAt = LAMP_AT;
-  cyl(0.08, 0.02, brass, [lampAt[0], DESK_Y + 0.01, lampAt[2]], parent);
+  cyl(0.07, 0.02, brass, [lampAt[0], DESK_Y + 0.01, lampAt[2]], parent);
   cyl(0.012, 0.3, brass, [lampAt[0], DESK_Y + 0.17, lampAt[2]], parent);
-  const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.26, 24, 1, true, 0, Math.PI), shade);
+  const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, LAMP_SHADE_L, 24, 1, true, 0, Math.PI), shade);
   sh.material.side = THREE.DoubleSide;
   sh.rotation.set(0, 0, Math.PI / 2);
   sh.position.set(lampAt[0], DESK_Y + 0.33, lampAt[2] + 0.04);
@@ -288,32 +270,46 @@ function buildDeskAndRoom(parent: THREE.Object3D, L: SetLayout, floorY: number):
   const glowLight = new THREE.PointLight(0x9fb7ff, 0.7, 0, 2);
   glowLight.position.set(0, 0, 0.25);
   parent.add(glowLight);
-  // The chair: a tall office seat under the pelvis (top at the measured seat height), a back, a post and a five-star base.
-  const vinyl = std(0x1c1a1c, 0.5);
-  const seatD = Math.abs(L.seatZ1 - L.seatZ0), seatZ = (L.seatZ0 + L.seatZ1) / 2, seatT = 0.07;
-  box(0.5, seatT, seatD, vinyl, [0, L.seatY - seatT / 2, seatZ], parent);
-  const backZ = Math.max(L.seatZ0, L.seatZ1) + 0.05;
-  box(0.46, 0.4, 0.06, vinyl, [0, L.seatY + 0.28, backZ], parent);
-  box(0.05, 0.2, 0.03, metal, [0, L.seatY + 0.05, backZ - 0.01], parent);
-  const postH = L.seatY - seatT - floorY - 0.06;
-  cyl(0.025, postH, metal, [0, floorY + 0.06 + postH / 2, seatZ], parent);
-  for (let k = 0; k < 5; k++) {
-    const a = (k / 5) * Math.PI * 2;
-    const arm = box(0.3, 0.025, 0.04, metal, [Math.cos(a) * 0.15, floorY + 0.05, seatZ + Math.sin(a) * 0.15], parent);
-    arm.rotation.y = -a;
-  }
-  // The room: a floor, the wall behind the desk, a wall to the left; dark.
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(6, 6), std(0x2a2420, 0.95));
+  // The room: a tatami floor (straw-brown mats, 0.9 x 1.8 m, their seams dark), the wall behind the kotatsu, a wall to the left; dark.
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(6, 6), std(0x5c4f2e, 0.92));
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(0, floorY, 0.8);
   parent.add(floor);
+  const seam = std(0x2a2414, 0.95);
+  for (let k = -3; k <= 3; k++) box(0.012, 0.002, 6, seam, [k * 0.9 + 0.45, floorY + 0.001, 0.8], parent);
+  for (let k = -1; k <= 2; k++) box(6, 0.002, 0.012, seam, [0, floorY + 0.001, k * 1.8 + 0.25], parent);
   const wall = new THREE.Mesh(new THREE.PlaneGeometry(6, 2.6), std(0x2d2a2c, 0.95));
-  wall.position.set(0, floorY + 1.3, DESK.backZ - 0.02);
+  wall.position.set(0, floorY + 1.3, WALL_Z);
   parent.add(wall);
   const side = new THREE.Mesh(new THREE.PlaneGeometry(4, 2.6), std(0x29262a, 0.95));
   side.rotation.y = Math.PI / 2;
   side.position.set(-1.3, floorY + 1.3, 1.2);
   parent.add(side);
+}
+
+/** The zabuton (goblin-poses' FLOOR_SEAT, in the goblin's own frame: the floor at y 0, he faces +z), its top at the measured seat: a slab
+ *  with a rolled rim so it reads soft, and a tuft at its middle. The page slides it with his scoot (he shoves himself back on it). */
+function buildZabuton(scene: THREE.Object3D, top: number): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'zabuton';
+  const [x0, x1] = FLOOR_SEAT.x, [z0, z1] = FLOOR_SEAT.z, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, r = top / 2;
+  const cloth = std(0x3b2a52, 0.85), tuft = std(0x8a6a2a, 0.6);
+  scene.add(g);
+  box(x1 - x0 - 2 * r, top, z1 - z0 - 2 * r, cloth, [cx, r, cz], g);
+  for (const sz of [-1, 1]) {
+    const m = new THREE.Mesh(new THREE.CapsuleGeometry(r, x1 - x0 - 2 * r, 6, 12), cloth);
+    m.rotation.z = Math.PI / 2;
+    m.position.set(cx, r, cz + sz * ((z1 - z0) / 2 - r));
+    g.add(m);
+  }
+  for (const sx of [-1, 1]) {
+    const m = new THREE.Mesh(new THREE.CapsuleGeometry(r, z1 - z0 - 2 * r, 6, 12), cloth);
+    m.rotation.x = Math.PI / 2;
+    m.position.set(cx + sx * ((x1 - x0) / 2 - r), r, cz);
+    g.add(m);
+  }
+  cyl(0.012, 0.006, tuft, [cx, top + 0.002, cz], g);
+  return g;
 }
 
 // ---------------------------------------------------------------------------
@@ -487,7 +483,7 @@ interface ScreenLabSeam {
   timeDraws(n: number): Promise<number>;
   readonly t: number;
   /** The set as measured off the goblin, once built. */
-  layout: SetLayout | null;
+  layout: FloorLayout | null;
   /** The hands' centres and the egg's centre at the current `t`, in the screen frame (metres), each hand's centre's distance to the egg's
    *  surface (the ellipsoid distance; negative inside) and its flesh's (that less the hand prim's radius): the reach check. */
   probe(): { hands: Record<string, Vec3>; egg: Vec3; handToSurface: Record<string, number>; handFleshGap: Record<string, number> } | null;
@@ -611,13 +607,22 @@ async function bootstrap(): Promise<void> {
   const bounds = { minX: -1, maxX: 1, minZ: -1, maxZ: 1 };
   // The goblin's own profile minus the prop (no fist closed on a grip that is not there); the pose overwrites every target anyway.
   const profile = { ...entry.profile, prop: undefined };
+  // The pose at t, slid along the floor by his scoot (goblinRootAt: he shoves back from the table as the glass gives, and comes forward on
+  // his knees once the egg is out). The joints carry the offset, so the pinned rig, the flesh and the cone follow; `rootDz` feeds the
+  // noise root shift (the skin's texture rides with him) and the zabuton.
+  let rootDz = 0;
   const poseAt = (t: number) => {
     const { clip, local } = goblinClipAt(t);
+    rootDz = goblinRootAt(t);
+    const posedJ = poseJoints(poseRig, clip, local);
+    const joints = rootDz === 0 ? posedJ : posedJ.map(j => [j[0], j[1], j[2] + rootDz] as Vec3);
     stepActorMotion(motion, {
       current, dt: 1 / 60, wander: false, armStyle: undefined,
       headingFollow: MOTION_TUNING.headingFollow, gazeFollow: MOTION_TUNING.gazeFollow,
-      bounds, rng, signals, profile, forceSpeed: 0, pose: poseJoints(poseRig, clip, local),
+      bounds, rng, signals, profile, forceSpeed: 0, pose: joints,
     });
+    // The pose is exact (pinTips and the bend stops after the rig step would re-hang the hands and feet and fold the crossed shins).
+    motion.bound = pinToPose(motion.bound, joints);
     return clip.name;
   };
   let lastPosed: ReturnType<typeof applyRig> | null = null;
@@ -625,7 +630,7 @@ async function bootstrap(): Promise<void> {
     const posed = applyRig(current, motion.bound, motion.lastBodyYaw);
     lastPosed = posed;
     gpu.update(posed, current);
-    gpu.setRootShift(0, 0, motion.lastBodyYaw);
+    gpu.setRootShift(0, rootDz, motion.lastBodyYaw);
     const skull = headShape(posed);
     if (skull) gpu.setHeadShape(skull.centre, skull.axes);
     gpu.setHeadRotation(headQuatOf(motion.bound, motion.lastBodyYaw) ?? [0, 0, 0, 1]);
@@ -633,15 +638,16 @@ async function bootstrap(): Promise<void> {
   };
 
   // ——— Measure the seat off the typing pose, then build the set from it —————
-  for (let i = 0; i < 3; i++) poseAt(2.0); // `type` held
+  for (let i = 0; i < 3; i++) poseAt(1.0); // `floor-type` held (no scoot yet)
   const seat = measureSeat(upload().prims);
-  const layout = layoutFrom(seat);
+  const layout = floorLayout(seat);
   seam.layout = layout;
-  const floorY = -layout.glassY; // the floor in the screen frame
-  say(`seat (measured, type pose): palms ${seat.palmY.toFixed(3)} m, seat ${seat.seatY.toFixed(3)} m, hands z ${seat.handZ.toFixed(3)}, knees z ${seat.kneeFrontZ.toFixed(3)} / top ${seat.kneeTopY.toFixed(3)}`);
-  say(`set: glass centre ${layout.glassY.toFixed(3)} m above the floor, ${layout.glassZ.toFixed(3)} m in front of the hips; desk top ${(layout.glassY + DESK_Y).toFixed(3)} m; knee clearance ${layout.kneeClearance.toFixed(3)} m`,
-    layout.kneeClearance < KNEE_CLEAR);
+  say(`seat (measured, floor-type): palms ${seat.palmY.toFixed(3)} m, seat ${seat.seatY.toFixed(3)} m, hands z ${seat.handZ.toFixed(3)}, knees top ${seat.kneeTopY.toFixed(3)}`);
+  say(`set: glass centre ${layout.glassY.toFixed(3)} m above the floor, ${layout.glassZ.toFixed(3)} m in front of the hips; kotatsu top ${layout.tableTopY.toFixed(3)} m (the Flat's ${KOTATSU.top}); knee clearance ${layout.kneeClearance.toFixed(3)} m; cushion top ${layout.seatTopY.toFixed(3)} m (authored ${FLOOR_SEAT.top})`,
+    Math.abs(layout.tableTopY - KOTATSU.top) > 0.005 || Math.abs(layout.seatTopY - FLOOR_SEAT.top) > 0.005 || layout.kneeClearance < 0.01);
   if (layout.handHalfSpan > KEYBOARD.w / 2) say(`hands (±${layout.handHalfSpan.toFixed(3)}) wider than the keyboard`, true);
+  // The zabuton, in his frame, its top at the measured seat; slid with his scoot every frame.
+  const zabuton = buildZabuton(scene, layout.seatTopY);
 
   // The screen frame: turned to face the goblin (he faces +z, the glass faces +z in its own frame), the glass at the measured place.
   const screen = new THREE.Group();
@@ -651,7 +657,7 @@ async function bootstrap(): Promise<void> {
   scene.add(screen);
   screen.updateMatrixWorld(true);
   buildCrt(screen);
-  buildDeskAndRoom(screen, layout, floorY);
+  buildKotatsuAndRoom(screen, layout);
 
   // The placeholder glass: the Night Train still, flat at z = 0, a hair of emission so it reads as a lit tube. The pass replaces it.
   const pictureTex = new THREE.TextureLoader().load('/assets/lab/screen-source.png',
@@ -710,7 +716,7 @@ async function bootstrap(): Promise<void> {
   let clipName = '';
 
   // The free camera: an orbit round a point in front of the glass, in world.
-  // The free camera starts on the goblin's right (world -x), a little toward the desk: the seat, the hands on the keys, the glass in profile.
+  // The free camera starts on the goblin's right (world -x), a little toward the kotatsu: the cushion, the hands on the keys, the glass in profile.
   const orbit = { yaw: -1.25, pitch: 0.38, dist: 2.0, target: new THREE.Vector3(0, layout.glassY - 0.1, layout.glassZ * 0.5) };
   const eyeW = new THREE.Vector3(), atW = new THREE.Vector3();
   let lastFov = camera.fov;
@@ -861,6 +867,7 @@ async function bootstrap(): Promise<void> {
     const c0 = performance.now();
     clipName = poseAt(t);
     upload();
+    zabuton.position.z = rootDz;
     tickMs.push(performance.now() - c0);
     if (tickMs.length > 90) tickMs.shift();
     gpu.setTime(t);

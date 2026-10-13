@@ -3,12 +3,12 @@ import { describe, it, expect } from 'vitest';
 import { DURATION } from './emergence-timeline';
 import {
   COAT, DESK_Y, EGG, EGG_REST, FRAME_BOTTOM, FRAME_FACE_Z, FRAME_TOP, KEYBOARD_RECT, KEYBOARD_TOP, coatCoverage, coatThickness, dripFloor, eggCentre,
-  ellipsoidDist, onKeyboard,
+  ellipsoidDist, onKeyboard, KOTATSU, TABLE_FRONT_Z,
 } from './emergence-field';
 import { paramsAt } from './emergence-timeline';
 import {
   DRIP_R, DRIP_RETRACT, DRIP_TIP, N_CONES, N_COAT, N_RUNS, N_STRANDS, N_BEADS, N_DRIPS, N_POOLS, RUN, RUN_W, STRAND_POINTS, dripsAt, gooAt, gooTexels, GOO_BOUND0,
-  GOO_COAT0, GOO_POOL0, GOO_TEXELS,
+  GOO_COAT0, GOO_POOL0, GOO_TEXELS, POOL_REACH,
 } from './goo-strands';
 
 const dist = (a: readonly number[], b: readonly number[]) => Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!);
@@ -216,6 +216,22 @@ describe('goo strands', () => {
       expect(tex[(GOO_COAT0 + i) * 4 + 3]).toBeCloseTo(b.r > 0 && b.h > 0 ? b.r : 0, 6);
     });
     expect(g.coat[0]!.r).toBeGreaterThan(COAT.egg.r * 0.99);
+  });
+
+  it('every pool, its edge wobble included (scrPool: up to 1.15x), lies on the kotatsu\'s board (look round 1: the floor-level set)', () => {
+    // The board: KOTATSU.w wide, from TABLE_FRONT_Z back KOTATSU.d. POOL_REACH is the egg's slick at its widest; the page builds the board here.
+    expect(EGG_REST[2] + POOL_REACH).toBeLessThan(TABLE_FRONT_Z);
+    for (const t of GRID.filter((_, i) => i % 10 === 0).concat(DURATION)) {
+      const { pools, runs, drips } = gooAt(t);
+      for (const p of pools) {
+        if (p.radius <= 0) continue;
+        const r = p.radius * 1.15;
+        expect(p.centre[2] + r, `t=${t} pool front`).toBeLessThan(TABLE_FRONT_Z);
+        expect(p.centre[2] - r).toBeGreaterThan(TABLE_FRONT_Z - KOTATSU.d);
+        expect(Math.abs(p.centre[0]) + r).toBeLessThan(KOTATSU.w / 2);
+      }
+      for (const d of [...runs, ...drips]) if (d.length > 0) expect(d.tip[2] + d.radius * DRIP_TIP, `t=${t} drip/run tip`).toBeLessThan(TABLE_FRONT_Z);
+    }
   });
 
   it('a strand\'s egg end stays on the egg\'s surface as the egg moves', () => {
