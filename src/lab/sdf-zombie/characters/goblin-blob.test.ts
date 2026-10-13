@@ -19,6 +19,7 @@ import { checkStance, clearOf, daylightOf, fusedOf } from '../blob-checks';
 import { sdBody } from '../validate';
 import { lerp } from '../vec';
 import type { Vec3 } from '../types';
+import { measureProfile, PROFILE_TOL } from './goblin-head-profile';
 
 const doc = parseBlob(src);
 const built = () => buildBody(compileBlob(doc, compileFace(doc)));
@@ -220,5 +221,13 @@ describe('goblin.blob', () => {
       (p.bone === 'clavicle' && p.at === 1) || (p.bone === 'shin' && p.at === 1);
     const orbs = doc.parts.filter(p => p.kind === 'blob' && (p.limb === 'arm' || p.limb === 'leg'));
     expect(orbs.filter(p => !allowed(p)).map(p => `${p.bone} at=${p.at}`)).toEqual([]);
+  });
+});
+
+describe('goblin head rest profile (expression pass)', () => {
+  // Pinned BEFORE the jaw split (see goblin-head-profile.ts). The split must leave the approved silhouette where it was.
+  it.each(measureProfile(built()).map(m => [m.probe.name, m] as const))('%s is within 3 mm of the approved head', (_n, m) => {
+    expect(Number.isFinite(m.got), 'probe starts inside the flesh and leaves it').toBe(true);
+    expect(Math.abs(m.got - m.probe.want)).toBeLessThanOrEqual(PROFILE_TOL);
   });
 });
