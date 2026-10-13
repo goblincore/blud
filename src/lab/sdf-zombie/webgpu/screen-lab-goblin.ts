@@ -10,48 +10,47 @@
 import type { PoseClip } from '../pose';
 import type { Primitive, Vec3 } from '../types';
 import type { BoundRig } from '../rig-bind';
-import { BRACE_BACK, CRAWL_IN, CRAWL_REACH, FLOOR_TYPE, LEAN_BACK } from '../characters/goblin-poses';
+import { BRACE_BACK, FLOOR_TYPE, LEAN_BACK, SIT_UP_LOOK } from '../characters/goblin-poses';
 import { DESK_Y, KEYBOARD, KEYBOARD_Z, KOTATSU, TABLE_FRONT_Z } from './emergence-field';
 
 export interface GoblinCut { clip: PoseClip; start: number }
 
-/** The clip cuts, in order (look round 1, Task C step 3): `floor-type` (cross-legged at the kotatsu, typing) until the glass starts to
- *  give; `lean-back` from 2.3 (0.9 s: he leans away onto his hands as the glass swells, while goblinRootAt slides him back); `brace-back`
- *  held through the push, the tear and the egg coming out; `crawl-in` from 10.4 (1.8 s: up onto his hands and knees and forward; the egg
- *  lands at about 11.1 s and settles by 11.5); `crawl-reach` held from 12.2 (the right hand resting on the settled egg). Every clip starts
- *  on the pose the one before it ends on, so the cuts never pop (the test pins it). No clip raises his arms: round one's `jolt` / `recoil`
- *  (the owner: "the raise-the-arm thing looks weird") stay registered but are not played. */
+/** The clip cuts, in order (look round 1, Task C step 3; the owner's third notes, Task E): `floor-type` (cross-legged at the kotatsu,
+ *  typing) until the glass starts to give; `lean-back` from 2.3 (0.9 s: he leans away onto his hands as the glass swells, while goblinRootAt
+ *  pushes him back a little); `brace-back` (a slight lean back on his hands, watching the sac) held through the push, the tear and the egg
+ *  coming out; `sit-up-look` from 10.4 (1.6 s: he sits up, his hands onto his knees, his head down at the egg as it lands, about 11.2 s;
+ *  done by 12.0) and held to the end, looking at the egg; the player takes over after. Every clip starts on the pose the one before it
+ *  ends on, so the cuts never pop (the test pins it). No clip raises his arms or reaches for the egg: round one's `jolt` / `recoil` /
+ *  `touch` / `reach` and look round 1's crawl to the egg are gone from the sequence (the owner: "we don't need to animate his hands
+ *  raising to touch it"). */
 export const GOBLIN_CUTS: readonly GoblinCut[] = [
   { clip: FLOOR_TYPE, start: 0 },
   { clip: LEAN_BACK, start: 2.3 },
   { clip: BRACE_BACK, start: 3.2 },
-  { clip: CRAWL_IN, start: 10.4 },
-  { clip: CRAWL_REACH, start: 12.2 },
+  { clip: SIT_UP_LOOK, start: 10.4 },
 ];
 
 /** The clip playing at sequence time `t` and the time inside it (`local`, seconds from the clip's start, never negative). Before 0 it is
- *  `floor-type` at 0; after the end `crawl-reach` holds. */
+ *  `floor-type` at 0; after the end `sit-up-look` holds its last key. */
 export function goblinClipAt(t: number): { clip: PoseClip; local: number } {
   let cut = GOBLIN_CUTS[0]!;
   for (const c of GOBLIN_CUTS) if (t >= c.start) cut = c;
   return { clip: cut.clip, local: Math.max(0, t - cut.start) };
 }
 
-/** THE SCOOT: his offset along the floor (his own z, + toward the table), metres. He slides back `back` (0.55 m: the sac reaches 0.65 m
- *  into the room and he ends 0.4 m clear of it) over `scoot` as he leans away, holds there through the push, the tear and the egg coming
- *  out, and comes `reach - back` (0.15 m) forward over `crawl` while crawl-in carries his hips a further 0.33 m forward onto his knees:
- *  0.48 m in all, his right hand landing on the egg. Eased both ways. THE CUSHION GOES WITH HIM (the page moves it by this offset): he
- *  shoves himself back on it over the tatami and kneels up on its front edge, so it is under him all the way. */
-export const GOBLIN_ROOT = { back: -0.55, reach: -0.4, scoot: [2.3, 3.45] as const, crawl: [10.4, 12.2] as const } as const;
+/** THE PUSHBACK: his offset along the floor (his own z, + toward the table), metres. He pushes himself back `back` (0.2 m) on his cushion
+ *  over `scoot` as he leans away, and stays there to the end (he sits up where he is to look). Eased. The owner's third notes: "the goblin
+ *  slides back too far too; it's more like a slight pushback and lean back" (it was 0.55 m, and 0.15 m forward again for the crawl to the
+ *  egg). THE CUSHION GOES WITH HIM (the page moves it by this offset). */
+export const GOBLIN_ROOT = { back: -0.2, scoot: [2.3, 3.45] as const } as const;
 
 const smooth01 = (x: number) => { const u = Math.min(1, Math.max(0, x)); return u * u * (3 - 2 * u); };
 
-/** The scoot at sequence time `t` (GOBLIN_ROOT). Pure and continuous; 0 while he types, never past `back`. */
+/** The pushback at sequence time `t` (GOBLIN_ROOT). Pure and continuous; 0 while he types, never past `back`. */
 export function goblinRootAt(t: number): number {
   const R = GOBLIN_ROOT;
   if (t <= R.scoot[0]) return 0;
-  if (t < R.crawl[0]) return R.back * smooth01((t - R.scoot[0]) / (R.scoot[1] - R.scoot[0]));
-  return R.back + (R.reach - R.back) * smooth01((t - R.crawl[0]) / (R.crawl[1] - R.crawl[0]));
+  return R.back * smooth01((t - R.scoot[0]) / (R.scoot[1] - R.scoot[0]));
 }
 
 /** What the set is built from, measured on the goblin posed in `floor-type` (world metres, the body's own frame: the floor at y 0, the

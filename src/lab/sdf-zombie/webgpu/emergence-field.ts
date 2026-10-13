@@ -17,9 +17,10 @@ export const SKIN = 0.006;
 /** The stand-in egg (still taller than the glass, so the lip gives, just: 0.316 m against 0.305): look round 1 made it 80% of round one's
  *  0.175 x 0.225 x 0.175 ("the egg is too big"), the owner's second notes (2026-10-13) 88% of that ("maybe still a bit smaller"): 0.70 of
  *  round one. Semi-axes, and the centre's depth at rest and at full push. `z0` keeps the egg's front where round one's was at rest (7.5 cm
- *  behind the glass, so the glass's first bulge comes as before); `z1` keeps the sac's reach (SAC_MAX = z1 + rz + SKIN) at 0.646 m, the 80%
- *  egg's: the owner asked for a smaller egg, not a shorter push. */
-export const EGG = { rx: 0.123, ry: 0.158, rz: 0.123, z0: -0.198, z1: 0.517 } as const;
+ *  behind the glass, so the glass's first bulge comes as before); `z1` sets the sac's reach (SAC_MAX = z1 + rz + SKIN): 0.449 m since the
+ *  owner's third notes (2026-10-13: "the egg extends a bit too far before it goes back in"; it was 0.646, z1 0.517). At full push the egg's
+ *  centre is 0.32 m out, its back 0.20 m out, past the bowed lip's 0.10: the sac still hangs the egg on a short neck. */
+export const EGG = { rx: 0.123, ry: 0.158, rz: 0.123, z0: -0.198, z1: 0.32 } as const;
 /** The table's top below the glass centre (the CRT's pedestal: its chin, FRAME_BOTTOM, stands 5.75 cm over the board). The slumped egg
  *  rests ON THE KEYBOARD (the owner's second notes: the keyboard is not shoved out of the way, it is covered in egg goo): see EGG_REST. The
  *  name is round one's (a desk); since look round 1 the table is the kotatsu (KOTATSU). */
@@ -60,7 +61,7 @@ export const EGG_REST: Vec3 = [0, KEYBOARD_TOP + EGG.ry, 0.185];
  *  types (screen-lab-goblin.test). Round two's desk front was set the same way. */
 export const TABLE_FRONT_Z = 0.365;
 
-/** The sac's apex at full push: the egg's front plus the skin (0.646 m, the 80% egg's; round one's bigger egg reached 0.73). */
+/** The sac's apex at full push: the egg's front plus the skin (0.449 m: the third notes' shorter push; 0.646 before, round one's 0.73). */
 export const SAC_MAX = EGG.z1 + EGG.rz + SKIN;
 /** The sheet's half-thickness at rest (m), and the tear's largest radius (scaled with the egg: 0.70 of round one's 0.17). */
 export const THICK0 = 0.004;
@@ -213,8 +214,11 @@ export function wrinkle(x: number, y: number, q: number): number {
 }
 
 /** The dome's profile exponent: below 1 the dome is fuller than the smoothstep, so behind the egg's equator the sac's wall stays near the
- *  egg's width and flares to the lip (0.75 in round one pinched it to a vase's neck under the tent blend). */
-export const DOME_EXP = 0.5;
+ *  egg's width and flares to the lip (0.75 in round one pinched it to a vase's neck under the tent blend). 0.85 since the third notes'
+ *  shorter push (0.5 before): with the egg only 0.32 m out the fuller dome reached past the egg's equator (the sac 2.3 cm wider than the egg
+ *  there, a funnel round it with no neck); 0.85 with the tent's 0.10 keeps the bulb on a neck (the wall 3.5 cm in from the equator behind
+ *  it, top and bottom; round one's longer push had 4.2). */
+export const DOME_EXP = 0.85;
 /** The dome's shape from the apex (q = 0) to the lip (q = 1). */
 const profile = (q: number) => (q >= 1 ? 0 : Math.pow(smooth(1 - q), DOME_EXP));
 
@@ -248,7 +252,7 @@ export function sacZ(p: EmergenceParams, x: number, y: number, time = 0): number
  *  metres to the TENT blend, `rest` before the push and `tent` at full push: that wide fillet curves the wall from the egg's equator back
  *  to the dome and the lip, so the sac reads as a balloon on its neck, not as the egg's silhouette swept back to the glass (round one's
  *  rigid tube). Narrow at rest, so the glass does not bulge toward the egg waiting in the tube. */
-export const SAC_BLEND = { cap: 0.04, rest: 0.02, tent: 0.12, run: 0.12 } as const;
+export const SAC_BLEND = { cap: 0.04, rest: 0.02, tent: 0.1, run: 0.12 } as const;
 
 /** The blend at depth z, the egg's centre at depth cz. */
 export function sacBlend(push: number, z: number, cz: number): number {

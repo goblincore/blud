@@ -3,7 +3,7 @@
 // THE SCREEN EMERGENCE LAB (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md, plan Tasks 5 and 6): a standalone,
 // scrubbable page with the set (the P225f CRT, the Flat's low kotatsu with the keyboard and the lamp on it, the tower on the floor beside
 // it, a zabuton, the tatami: look round 1 made it floor level like the apartment), the REAL SDF goblin cross-legged on the cushion, posed
-// from the clock by the pose layer and slid back along the floor and forward again (screen-lab-goblin.ts goblinRootAt), and THE SCREEN PASS: the march (screen-emergence.wgsl.ts) on a proxy box in the screen's frame, drawn in the
+// from the clock by the pose layer and pushed back a little along the floor (screen-lab-goblin.ts goblinRootAt), and THE SCREEN PASS: the march (screen-emergence.wgsl.ts) on a proxy box in the screen's frame, drawn in the
 // SDF layer's late scene with its own depth (createScreenPass). `pass on` / `?nopass=1` / `__screenLab.setPass` swap it for the placeholder
 // glass (the Night Train still, flat); `?passdebug=1` / `setPassDebug` shows the march's steps, hits and materials. The goo (plan Task 7)
 // is goo-strands.ts's sim uploaded as a texel row each frame from 7 s on, cached per t; `?nogoo=1` / `setGoo` leaves it out (its cost);
@@ -486,7 +486,8 @@ interface ScreenLabSeam {
   /** The set as measured off the goblin, once built. */
   layout: FloorLayout | null;
   /** The hands' centres and the egg's centre at the current `t`, in the screen frame (metres), each hand's centre's distance to the egg's
-   *  surface (the ellipsoid distance; negative inside) and its flesh's (that less the hand prim's radius): the reach check. */
+   *  surface (the ellipsoid distance; negative inside) and its flesh's (that less the hand prim's radius): the hands stay off the egg (he
+   *  only looks at it since the owner's third notes). */
   probe(): { hands: Record<string, Vec3>; egg: Vec3; handToSurface: Record<string, number>; handFleshGap: Record<string, number> } | null;
 }
 
@@ -630,8 +631,8 @@ async function bootstrap(): Promise<void> {
   const bounds = { minX: -1, maxX: 1, minZ: -1, maxZ: 1 };
   // The goblin's own profile minus the prop (no fist closed on a grip that is not there); the pose overwrites every target anyway.
   const profile = { ...entry.profile, prop: undefined };
-  // The pose at t, slid along the floor by his scoot (goblinRootAt: he shoves back from the table as the glass gives, and comes forward on
-  // his knees once the egg is out). The joints carry the offset, so the pinned rig, the flesh and the cone follow; `rootDz` feeds the
+  // The pose at t, slid along the floor by his scoot (goblinRootAt: he pushes himself back a little from the table as the glass gives, and
+  // sits up there to look at the egg). The joints carry the offset, so the pinned rig, the flesh and the cone follow; `rootDz` feeds the
   // noise root shift (the skin's texture rides with him) and the zabuton.
   let rootDz = 0;
   const poseAt = (t: number) => {

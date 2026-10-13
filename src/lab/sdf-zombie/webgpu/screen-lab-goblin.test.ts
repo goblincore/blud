@@ -2,22 +2,23 @@
 //
 // The screen lab's goblin (screen-lab-goblin.ts) against the plan's boundaries and the real goblin-home body: the clips come in the
 // sequence's order, `local` restarts at 0 at every cut and never goes negative, the clip before a cut has finished playing when the cut
-// lands, the POSE does not jump at any cut, the scoot (goblinRootAt) is continuous and bounded, and, on the floor-level set laid out from
-// the measured typing pose (floorLayout): the board is the Flat's kotatsu height, the arms never rise above the shoulders, nothing goes
-// through the board, its skirt, the floor, the cushion, the keyboard or the egg, he is well clear of the sac while it pushes, and his hands
-// land on the keys, the floor, the board and the egg.
+// lands, the POSE does not jump at any cut, the pushback (goblinRootAt) is continuous and bounded, and, on the floor-level set laid out
+// from the measured typing pose (floorLayout): the board is the Flat's kotatsu height, the arms never rise above the shoulders, nothing goes
+// through the board, its skirt, the floor, the cushion, the keyboard or the egg, he is clear of the sac while it pushes, his hands land on
+// the keys, the floor and his knees (never the egg), and his HEAD looks at the sac while he leans back and at the egg once it has landed.
 import { describe, it, expect } from 'vitest';
 import goblinHomeSrc from '../characters/goblin-home.blob?raw';
 import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace } from '../blob-compile';
 import { buildBody } from '../build-body';
-import { bindRig, applyRig } from '../rig-bind';
+import { bindRig, applyRig, headQuatOf } from '../rig-bind';
+import { qRotate } from '../vec';
 import { sdBody } from '../validate';
 import { jointNamesForBody } from '../gait';
 import { makePoseRig, poseJoints } from '../pose';
 import { FLOOR_SEAT } from '../characters/goblin-poses';
 import { DURATION, paramsAt } from './emergence-timeline';
-import { DESK_Y, EGG, EGG_REST, KEYBOARD_RECT, KEYBOARD_TOP, KOTATSU, eggCentre, ellipsoidDist, sacExtent } from './emergence-field';
+import { DESK_Y, EGG, EGG_REST, KEYBOARD_RECT, KEYBOARD_TOP, KOTATSU, SLUMP, eggCentre, ellipsoidDist, sacExtent } from './emergence-field';
 import { GOBLIN_CUTS, GOBLIN_ROOT, floorLayout, goblinClipAt, goblinRootAt, measureSeat, pinToPose, type FloorLayout } from './screen-lab-goblin';
 import { characterEntry } from '../character-registry';
 import { makeActorMotion, stepActorMotion, emptyActorSignals } from '../actor';
@@ -65,24 +66,40 @@ const eggGap = (q: Vec3, t: number) => {
   const c = eggCentre(paramsAt(t)), s = toScreen(q);
   return ellipsoidDist([s[0] - c[0], s[1] - c[1], s[2] - c[2]], [EGG.rx, EGG.ry, EGG.rz]);
 };
+/** The screen frame back to the goblin's world. */
+const toWorldOf = (s: Vec3): Vec3 => [-s[0], s[1] + L.glassY, L.glassZ - s[2]];
+/** The head as the page turns it: the rigid head's rotation (headQuatOf on the pinned rig, its gaze cone clamp included) applied to the
+ *  face's rest forward (+z), from the head's centre (midway between the neck and head joints). */
+const headAt = (joints: readonly Vec3[]) => {
+  const bound = pinToPose(bindRig(body), joints);
+  const q = headQuatOf(bound, 0)!, n = joints[J('neck')]!, h = joints[J('head')]!;
+  return { fwd: qRotate(q, [0, 0, 1]), c: [(n[0] + h[0]) / 2, (n[1] + h[1]) / 2, (n[2] + h[2]) / 2] as Vec3 };
+};
+/** His flesh's least clearance from the egg's surface from 7 s on (he only looks at it: measured 0.46 m, his skull at 12 s), from the
+ *  apex's plane while the sac pushes (his nearest flesh: 0.32 m, the left shin at 6.5 s), and his head's centre from the apex (0.72 m). */
+const MIN_EGG_GAP = 0.35, MIN_SAC_GAP = 0.25, MIN_HEAD_GAP = 0.6;
 const GRID = (a: number, b: number, dt: number) => Array.from({ length: Math.round((b - a) / dt) + 1 }, (_, i) => Math.min(b, a + i * dt));
 
 describe('goblinClipAt', () => {
-  it('plays floor-type, lean-back, brace-back, crawl-in, crawl-reach in that order, cut where the plan says', () => {
+  it('plays floor-type, lean-back, brace-back, sit-up-look in that order, cut where the plan says', () => {
     const seen: string[] = [];
     for (let t = 0; t <= DURATION; t += 0.01) {
       const n = goblinClipAt(t).clip.name;
       if (seen[seen.length - 1] !== n) seen.push(n);
     }
-    expect(seen).toEqual(['floor-type', 'lean-back', 'brace-back', 'crawl-in', 'crawl-reach']);
+    expect(seen).toEqual(['floor-type', 'lean-back', 'brace-back', 'sit-up-look']);
     expect(GOBLIN_CUTS.map(c => [c.clip.name, c.start])).toEqual(
-      [['floor-type', 0], ['lean-back', 2.3], ['brace-back', 3.2], ['crawl-in', 10.4], ['crawl-reach', 12.2]]);
+      [['floor-type', 0], ['lean-back', 2.3], ['brace-back', 3.2], ['sit-up-look', 10.4]]);
+    // the sit-up starts about 10.4 s and is done by about 12.0 s (then he holds, looking)
+    expect(clipEnd(GOBLIN_CUTS[3]!.clip)).toBeCloseTo(1.6, 9);
   });
 
-  it('the last clip is crawl-reach, held past the end; the page no longer plays the chair or arms-up clips', () => {
-    expect(goblinClipAt(DURATION).clip.name).toBe('crawl-reach');
-    expect(goblinClipAt(DURATION + 5).clip.name).toBe('crawl-reach');
-    for (const c of GOBLIN_CUTS) expect(['sit', 'type', 'jolt', 'recoil', 'touch', 'reach']).not.toContain(c.clip.name);
+  it('the last clip is sit-up-look, held past the end; the page plays no chair, arms-up or reach-for-the-egg clip', () => {
+    expect(goblinClipAt(DURATION).clip.name).toBe('sit-up-look');
+    expect(goblinClipAt(DURATION + 5).clip.name).toBe('sit-up-look');
+    const held = poseJoints(rig, goblinClipAt(12.0).clip, goblinClipAt(12.0).local), end = poseJoints(rig, goblinClipAt(DURATION).clip, goblinClipAt(DURATION).local);
+    held.forEach((p, i) => { for (const k of [0, 1, 2]) expect(Math.abs(p[k]! - end[i]![k]!)).toBeLessThan(1e-9); });   // settled by 12.0, held
+    for (const c of GOBLIN_CUTS) expect(['sit', 'type', 'jolt', 'recoil', 'touch', 'reach', 'crawl-in', 'crawl-reach']).not.toContain(c.clip.name);
   });
 
   it('local is never negative, even before 0', () => {
@@ -120,14 +137,12 @@ describe('goblinClipAt', () => {
   });
 });
 
-describe('goblinRootAt (the scoot back and the crawl in)', () => {
-  it('is 0 while he types, all the way back through the push, tear and out, then part way in for the reach', () => {
+describe('goblinRootAt (the slight pushback)', () => {
+  it('is 0 while he types, then a slight pushback (about 0.2 m; the owner: "slides back too far") held to the end', () => {
     for (const t of [-1, 0, 1, 2.3]) expect(goblinRootAt(t)).toBe(0);
-    for (const t of [3.45, 5, 8, 10.4]) expect(goblinRootAt(t)).toBeCloseTo(GOBLIN_ROOT.back, 9);
-    for (const t of [12.2, 13, DURATION, DURATION + 3]) expect(goblinRootAt(t)).toBeCloseTo(GOBLIN_ROOT.reach, 9);
-    expect(GOBLIN_ROOT.back).toBeCloseTo(-0.55, 9);
-    expect(GOBLIN_ROOT.reach).toBeLessThan(0);
-    expect(GOBLIN_ROOT.reach).toBeGreaterThan(GOBLIN_ROOT.back);
+    for (const t of [3.45, 5, 8, 10.4, 12, 13, DURATION, DURATION + 3]) expect(goblinRootAt(t)).toBeCloseTo(GOBLIN_ROOT.back, 9);
+    expect(GOBLIN_ROOT.back).toBeLessThan(-0.15);
+    expect(GOBLIN_ROOT.back).toBeGreaterThan(-0.25);
   });
 
   it('is continuous and bounded (no step over 1 mm in 1 ms; never in front of where he sat, never past the scoot)', () => {
@@ -210,31 +225,58 @@ describe('the floor-level set and the goblin on it', () => {
     }
   });
 
-  it('nothing of him goes into the egg at any t (the right hand ball rests ON it at the end)', () => {
+  it('nothing of him goes into the egg at any t, and his hands stay well off it (he looks; he does not touch it)', () => {
     for (const t of GRID(7, DURATION, 0.05)) for (const p of fleshOf(jointsAt(t))) for (const { q, rMin } of samples(p))
-      expect(eggGap(q, t) - rMin, `t=${t.toFixed(2)} ${p.bone}`).toBeGreaterThan(-0.004);
+      expect(eggGap(q, t) - rMin, `t=${t.toFixed(2)} ${p.bone}`).toBeGreaterThan(MIN_EGG_GAP);
   });
 
-  it('he is well back from the sac while it pushes, tears and lets the egg out (not close-up: the owner)', () => {
-    let closest = Infinity;
+  it('he is clear of the sac while it pushes, tears and lets the egg out (a slight pushback, not close-up: the owner)', () => {
+    // With the shorter push (the apex 0.45 m out) and the 0.2 m pushback his nearest flesh stays MIN_SAC_GAP short of the apex's plane,
+    // and his head MIN_HEAD_GAP from the apex itself (round one's 0.65 m push needed the 0.55 m slide to keep him 0.3 m clear).
+    let closest = Infinity, headGap = Infinity;
     for (const t of GRID(3.45, 10.4, 0.1)) {
       const reach = sacExtent(paramsAt(t));
       for (const p of fleshOf(jointsAt(t))) for (const { q, r } of samples(p)) closest = Math.min(closest, toScreen(q)[2] - r - reach);
+      const h = toScreen(headAt(jointsAt(t)).c);
+      headGap = Math.min(headGap, Math.hypot(h[0], h[1], h[2] - reach));
     }
-    expect(closest).toBeGreaterThan(0.3);
+    expect(closest).toBeGreaterThan(MIN_SAC_GAP);
+    expect(headGap).toBeGreaterThan(MIN_HEAD_GAP);
   });
 
-  it('braced back: the hand balls are on the floor behind him; reaching: the right hand rests on the egg, the left on the board', () => {
+  it('braced back: the hand balls are on the floor behind him; sitting up: the hand balls rest over his knees', () => {
     const back = fleshOf(jointsAt(6.0));
     for (const s of ['l', 'r']) { const b = ball(back, `hand.${s}`); expect(Math.abs(b.c[1] - b.ry)).toBeLessThan(0.004); }
-    for (const t of [12.2, 13, 14, DURATION]) {
-      const ps = fleshOf(jointsAt(t)), hr = ball(ps, 'hand.r'), hl = ball(ps, 'hand.l');
-      expect(Math.abs(eggGap(hr.c, t) - hr.rMin), `t=${t} the right hand's flesh to the egg`).toBeLessThan(0.005);
-      const el = toScreen(hl.c);
-      expect(Math.abs(el[1] - hl.ry - DESK_Y), `t=${t} the left hand on the board`).toBeLessThan(0.004);
-      expect(el[2]).toBeLessThan(L.tableFrontZ - hl.r);
-      expect(Math.abs(el[0])).toBeGreaterThan(KEYBOARD_RECT.x1 + hl.r * 0.5);   // beside the keyboard, not on its goo
+    for (const t of [12.0, 13, DURATION]) {
+      const j = jointsAt(t), ps = fleshOf(j);
+      for (const s of ['l', 'r'] as const) {
+        const b = ball(ps, `hand.${s}`), knee = j[J('knee' + s.toUpperCase())]!;
+        expect(Math.hypot(b.c[0] - knee[0], b.c[2] - knee[2]), `t=${t} hand.${s} over the knee`).toBeLessThan(0.08);
+        expect(b.c[1]).toBeGreaterThan(knee[1]);
+      }
     }
+  });
+
+  // THE HEAD AIM (the owner's third notes: "his head doesn't appear to be looking at the egg when he sits up a bit to presumably take a
+  // look"). The head is the rig's rigid head: rig-bind's headQuatOf turns the face's rest forward (+z) with the skull, CLAMPED to a cone
+  // round its rest direction (28.6 degrees: the IK gaze limit), exactly as the page sets it (gpu.setHeadRotation). The angle is from the
+  // head's centre (midway between the neck and head joints) to the target's centre.
+  const aim = (t: number, target: Vec3) => {
+    const h = headAt(jointsAt(t)), w = toWorldOf(target), d: Vec3 = [w[0] - h.c[0], w[1] - h.c[1], w[2] - h.c[2]];
+    const c = (h.fwd[0] * d[0] + h.fwd[1] * d[1] + h.fwd[2] * d[2]) / (Math.hypot(...h.fwd) * Math.hypot(...d));
+    return Math.acos(Math.max(-1, Math.min(1, c))) * 180 / Math.PI;
+  };
+
+  it('looks at the egg from the moment it has landed (about 11.2 s) to the end: the head\'s forward axis within 10 degrees of its centre', () => {
+    // the slump runs 9 to 11.5 s (emergence-timeline); the egg lands at SLUMP.land of it
+    expect(9 + 2.5 * SLUMP.land).toBeLessThan(11.2);
+    for (const t of GRID(11.2, DURATION, 0.05)) expect(aim(t, eggCentre(paramsAt(t))), `t=${t.toFixed(2)}`).toBeLessThan(10);
+    // pitched DOWN at it (the egg sits on the keyboard, well below his eyes)
+    expect(headAt(jointsAt(DURATION)).fwd[1]).toBeLessThan(-0.25);
+  });
+
+  it('watches the sac while leaning back (3.5 to 10 s): the head\'s forward axis within 15 degrees of the sac\'s apex', () => {
+    for (const t of GRID(3.5, 10, 0.05)) expect(aim(t, [0, 0, sacExtent(paramsAt(t))]), `t=${t.toFixed(2)}`).toBeLessThan(15);
   });
 });
 
@@ -269,11 +311,10 @@ describe('the hands (the owner, 2026-10-13: "the hands clip into the floor a bit
     }
   });
 
-  it('braced back: the flesh of each hand ball meets the floor behind the cushion, wherever the scoot leaves him (0, 0.2 m and the full 0.55 m back)', () => {
-    // The scoot only slides him (and the cushion) along z, so the contact is the pose's own: checked at the page's offset and at the
-    // shorter pushback planned next (about 0.2 m).
+  it('braced back: the flesh of each hand ball meets the floor behind the cushion, wherever the pushback leaves him (0, 0.1 m and the page\'s 0.2 m back)', () => {
+    // The pushback only slides him (and the cushion) along z, so the contact is the pose's own.
     const pose = poseJoints(rig, goblinClipAt(6).clip, 0);
-    for (const dz of [0, -0.2, GOBLIN_ROOT.back]) {
+    for (const dz of [0, -0.1, GOBLIN_ROOT.back]) {
       const j = pose.map(p => [p[0], p[1], p[2] + dz] as Vec3), b = posedBody(j), ps = fleshOf(j);
       for (const s of ['l', 'r'] as const) {
         const h = ball(ps, `hand.${s}`), g = planeGap(b, 0, h.c[0], h.c[2]);
@@ -285,8 +326,27 @@ describe('the hands (the owner, 2026-10-13: "the hands clip into the floor a bit
     expect(goblinClipAt(6).clip.name).toBe('brace-back');
   });
 
-  it('the wrist reads straight-ish at the contacts (t 1 typing, t 5 braced: under 40 degrees, the ball within 7.2 cm of the wrist) and never bends past 60 degrees', () => {
-    for (const t of [1, 5]) {
+  it('sitting up (t 12 on): the flesh of each hand ball rests on his knee, no more than 3 mm in or 5 mm off (the rest of the body, the arms left out)', () => {
+    for (const t of [12, DURATION]) {
+      const j = jointsAt(t), b = posedBody(j), ps = fleshOf(j);
+      const noArms = { ...b, prims: b.prims.map(p => (/^(upperarm|forearm|hand)\.[lr]$/.test(p.bone ?? '') ? { ...p, dead: true } : p)) };
+      for (const s of ['l', 'r'] as const) {
+        const h = ps.find(p => p.bone === `hand.${s}`)!, c = ball(ps, `hand.${s}`).c;
+        // the least distance from the ball's surface (the hand prim's radius and scale) to the body's field without the arms (the ball is joined to its own forearm)
+        let g = Infinity;
+        for (let i = 0; i <= 12; i++) for (let k = 0; k < 24; k++) {
+          const th = (i / 12) * Math.PI, ph = (k / 24) * 2 * Math.PI;
+          const q: Vec3 = [c[0] + h.radius * h.scale[0] * Math.sin(th) * Math.cos(ph), c[1] - h.radius * h.scale[1] * Math.cos(th), c[2] + h.radius * h.scale[2] * Math.sin(th) * Math.sin(ph)];
+          g = Math.min(g, sdBody(q, noArms));
+        }
+        expect(g, `t=${t} hand.${s}`).toBeGreaterThan(-0.003);
+        expect(g, `t=${t} hand.${s}`).toBeLessThan(0.005);
+      }
+    }
+  });
+
+  it('the wrist reads straight-ish at the contacts (t 1 typing, t 5 braced, t 13 sitting up: under 40 degrees, the ball within 7.2 cm of the wrist) and never bends past 60 degrees', () => {
+    for (const t of [1, 5, 13]) {
       const j = jointsAt(t), ps = fleshOf(j);
       for (const s of ['l', 'r'] as const) {
         const w = visibleWrist(j, ps, s);

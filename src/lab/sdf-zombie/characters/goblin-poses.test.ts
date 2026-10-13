@@ -3,8 +3,8 @@
 // The goblin's pose data (goblin-poses.ts) against the real skeleton: every clip resolves, its keys are in order, and no limb
 // changes length at ANY sampled time (the angle-space blend's whole point), the feet stay on the ground, and the body stays one piece.
 // The FLOOR clips (look round 1: he sits on a zabuton at the low kotatsu) set their own height, so for them "on the ground" is read off
-// the posed flesh: nothing under the floor or into the cushion, the pelvis (or the knees) ON the cushion, the arms never above the
-// shoulders.
+// the posed flesh: nothing under the floor or into the cushion, the pelvis ON the cushion, the arms never above the shoulders, the hand
+// balls resting on what they rest on with a straight-ish wrist.
 import { describe, it, expect } from 'vitest';
 import goblinSrc from './goblin.blob?raw';
 import goblinHomeSrc from './goblin-home.blob?raw';
@@ -70,8 +70,8 @@ describe('goblin poses', () => {
     expect(posesFor('goblin')).toBe(GOBLIN_POSES);
     expect(posesFor('goblin-home')).toBe(GOBLIN_POSES);
     expect(Object.keys(GOBLIN_POSES).sort()).toEqual(
-      ['brace-back', 'crawl-in', 'crawl-reach', 'floor-type', 'jolt', 'lean-back', 'reach', 'recoil', 'sit', 'stand', 'touch', 'type']);
-    expect(FLOOR.map(c => c.name).sort()).toEqual(['brace-back', 'crawl-in', 'crawl-reach', 'floor-type', 'lean-back']);
+      ['brace-back', 'floor-type', 'jolt', 'lean-back', 'reach', 'recoil', 'sit', 'sit-up-look', 'stand', 'touch', 'type']);
+    expect(FLOOR.map(c => c.name).sort()).toEqual(['brace-back', 'floor-type', 'lean-back', 'sit-up-look']);
     expect(posesFor('zombie')).toEqual({});
   });
 
@@ -145,8 +145,8 @@ describe('goblin poses', () => {
     }
   });
 
-  it('sitting (floor-type, brace-back and the lean between): the pelvis rests ON the cushion top', () => {
-    for (const clip of [GOBLIN_POSES['floor-type']!, GOBLIN_POSES['brace-back']!, GOBLIN_POSES['lean-back']!]) {
+  it('sitting (every floor clip: he never leaves the cushion): the pelvis rests ON the cushion top', () => {
+    for (const clip of FLOOR) {
       const end = endOf(clip);
       for (let k = 0; k <= 10; k++) {
         const t = (end * k) / 10;
@@ -168,16 +168,28 @@ describe('goblin poses', () => {
     expect(kneeTop).toBeLessThan(KOTATSU.top - KOTATSU.t - KOTATSU.skirt - 0.03); // lower than the board's quilted skirt, 3 cm to spare
   });
 
-  it('brace-back: the hand balls are flat on the floor behind the cushion; crawl-reach: the knees on the cushion, the left hand on the board', () => {
-    const bb = flesh(poseJoints(home.rig, GOBLIN_POSES['brace-back']!, 0));
+  it('brace-back: a SLIGHT lean back (the owner\'s third notes): the trunk 15 to 25 degrees back, the hand balls flat on the floor just behind the cushion, not a crab', () => {
+    const j = poseJoints(home.rig, GOBLIN_POSES['brace-back']!, 0), bb = flesh(j);
+    const hips = j[J('hips')]!, chest = j[J('chest')]!, lean = Math.atan2(hips[2] - chest[2], chest[1] - hips[1]) * 180 / Math.PI;
+    expect(lean).toBeGreaterThan(15);
+    expect(lean).toBeLessThan(25);
     for (const s of ['l', 'r']) {
       const hand = bb.find(p => p.bone === `hand.${s}`)!;
       expect(Math.abs(lowest([hand], /./))).toBeLessThan(0.003);
       expect(hand.a[2] + hand.radius).toBeLessThan(FLOOR_SEAT.z[0]);
+      expect(hand.a[2]).toBeGreaterThan(-0.5);   // 0.45 m behind the hips (the crab had them 0.57 back on straight arms)
     }
-    const cr = flesh(poseJoints(home.rig, GOBLIN_POSES['crawl-reach']!, 0));
-    expect(Math.abs(lowest(cr, /^(thigh|shin)\.l$/) - FLOOR_SEAT.top)).toBeLessThan(0.003);
-    expect(Math.abs(lowest(cr, /^hand\.l$/) - KOTATSU.top)).toBeLessThan(0.003);
+  });
+
+  it('sit-up-look: sitting up (the trunk within 10 degrees of upright), the hand balls over the knees, no hand anywhere near the board', () => {
+    const j = poseJoints(home.rig, GOBLIN_POSES['sit-up-look']!, endOf(GOBLIN_POSES['sit-up-look']!)), ps = flesh(j);
+    const hips = j[J('hips')]!, chest = j[J('chest')]!;
+    expect(Math.abs(Math.atan2(hips[2] - chest[2], chest[1] - hips[1]) * 180 / Math.PI)).toBeLessThan(10);
+    for (const s of ['l', 'r']) {
+      const S = s.toUpperCase(), o = orbOf(ps, s as 'l' | 'r'), knee = j[J('knee' + S)]!;
+      expect(Math.hypot(o.c[0] - knee[0], o.c[2] - knee[2])).toBeLessThan(0.08);
+      expect(o.c[1] - o.ry).toBeLessThan(KOTATSU.top - 0.1);
+    }
   });
 
   // THE HANDS (the owner's note, 2026-10-13: "the hands clip into the floor a bit too much and maybe bend a bit too acutely or look too
@@ -211,17 +223,23 @@ describe('goblin poses', () => {
   });
 
   it('contact poses: the wrist reads straight-ish and joined (the forearm within 40 degrees of the wrist-to-ball line, the ball centre within 7.2 cm of the wrist)', () => {
-    for (const name of ['floor-type', 'brace-back']) {
-      const j = poseJoints(home.rig, GOBLIN_POSES[name]!, 0), ps = flesh(j);
+    for (const name of ['floor-type', 'brace-back', 'sit-up-look']) {
+      const t = endOf(GOBLIN_POSES[name]!);
+      const j = poseJoints(home.rig, GOBLIN_POSES[name]!, t), ps = flesh(j);
       for (const s of ['l', 'r'] as const) {
         const w = wrist(j, ps, s);
         expect(w.bend, `${name} hand.${s} wrist bend`).toBeLessThan(40);
         expect(w.reach, `${name} hand.${s} ball centre from the wrist`).toBeLessThan(0.072);
       }
     }
-    // braced on STRAIGHT arms (the same action as before): the elbow within 20 degrees of straight
+    // braced on BENT arms since the slight lean back (third notes): the elbows bent 30 to 70 degrees (50), well under the shoulders
     const j = poseJoints(home.rig, GOBLIN_POSES['brace-back']!, 0);
-    for (const S of ['L', 'R']) expect(ang(sub(j[J('elbow' + S)]!, j[J('shoulder' + S)]!), sub(j[J('hand' + S)]!, j[J('elbow' + S)]!))).toBeLessThan(20);
+    for (const S of ['L', 'R']) {
+      const bend = ang(sub(j[J('elbow' + S)]!, j[J('shoulder' + S)]!), sub(j[J('hand' + S)]!, j[J('elbow' + S)]!));
+      expect(bend).toBeGreaterThan(30);
+      expect(bend).toBeLessThan(70);
+      expect(j[J('shoulder' + S)]![1] - j[J('elbow' + S)]![1]).toBeGreaterThan(0.08);
+    }
   });
 
   it.each(PLAYED.map(c => [c.name, c] as const))('%s: the wrist never bends past 60 degrees at any sampled time', (_n, clip) => {
@@ -232,8 +250,7 @@ describe('goblin poses', () => {
     }
   });
 
-  it.each(['floor-type', 'lean-back', 'brace-back'].map(n => [n, GOBLIN_POSES[n]!] as const))('%s: the ball never comes off the forearm (its centre within 8 cm of the wrist: the forearm\'s cap still inside it)', (_n, clip) => {
-    // crawl-in and crawl-reach are left out: the egg-reach beat is being replaced (the owner, 2026-10-13), and their reach hand runs to 8.4 cm.
+  it.each(FLOOR.map(c => [c.name, c] as const))('%s: the ball never comes off the forearm (its centre within 8 cm of the wrist: the forearm\'s cap still inside it)', (_n, clip) => {
     const end = endOf(clip);
     for (let k = 0; k <= 60; k++) {
       const t = (end * k) / 60, j = poseJoints(home.rig, clip, t), ps = flesh(j);
@@ -241,11 +258,10 @@ describe('goblin poses', () => {
     }
   });
 
-  it('lean-back runs floor-type to brace-back and crawl-in brace-back to crawl-reach (the cuts in the screen lab never pop)', () => {
+  it('lean-back runs floor-type to brace-back and sit-up-look starts on brace-back (the cuts in the screen lab never pop)', () => {
     const at = (name: string, t: number) => poseJoints(rig, GOBLIN_POSES[name]!, t);
     expect(near(at('lean-back', 0), at('floor-type', 0))).toBe(true);
     expect(near(at('lean-back', endOf(GOBLIN_POSES['lean-back']!)), at('brace-back', 0))).toBe(true);
-    expect(near(at('crawl-in', 0), at('brace-back', 0))).toBe(true);
-    expect(near(at('crawl-in', endOf(GOBLIN_POSES['crawl-in']!)), at('crawl-reach', 0))).toBe(true);
+    expect(near(at('sit-up-look', 0), at('brace-back', 0))).toBe(true);
   });
 });

@@ -6,6 +6,11 @@
 //
 // The two held poses are the Flat look-dev's (docs/dev-notes/2026-10-01-flat-emergence-lookdev/notes.md, TYPE and RECOIL), kept
 // as the starting values; every change from them is commented with the lab frame that asked for it.
+//
+// THE CHAIR-ERA CLIPS (type, recoil, sit, stand, jolt, reach, touch) are round one's desk-and-chair sequence. They stay registered (the
+// pose library and its tests use them) but the screen lab no longer plays any of them: since look round 1 it plays the FLOOR clips below
+// (screen-lab-goblin.ts GOBLIN_CUTS), and since the owner's third notes (2026-10-13) the sequence ends with him sitting up and looking at
+// the egg, no hand on it. Where their comments speak of the egg and the screen lab, that is the old desk's egg.
 import type { BoneAngle, PoseClip, PoseKey } from '../pose';
 
 /** Seated at the desk, hunched toward the screen, hands on the keys: the pull-back shot's goblin. */
@@ -63,12 +68,11 @@ export const JOLT: PoseClip = {
   keys: [{ t: 0, bones: TYPE_BONES }, { t: 0.25, bones: RECOIL_BONES, ease: 'smooth' }],
 };
 
-/** The reach pose held: the last frame of the sequence. */
+/** The reach pose held: round one's last frame (the chair-era sequence; not played since look round 1). */
 export const REACH: PoseClip = { name: 'reach', keys: [{ t: 0, bones: REACH_BONES }] };
 
-/** From the recoil's end (thrown back, arms up) to the reach: the arms come down from over his head onto the egg. 2.2 s, eased: the hands
- *  arrive as the egg settles on the desk (it lands at about 11.1 s in the screen lab and bounces until 11.5; touch runs 9.4 to 11.6), so
- *  they come down on it from above and never meet it in the air (1.4 s put them through the falling egg). */
+/** From the recoil's end (thrown back, arms up) to the reach: the arms come down from over his head onto the egg. 2.2 s, eased (round
+ *  one's desk timing: the egg landed about 11.1 s and touch ran 9.4 to 11.6; not played since look round 1). */
 export const TOUCH: PoseClip = {
   name: 'touch',
   keys: [{ t: 0, bones: RECOIL_BONES }, { t: 2.2, bones: REACH_BONES, ease: 'smooth' }],
@@ -86,7 +90,7 @@ export const TOUCH: PoseClip = {
 // They leave the GROUND LOCK off and set their own height (`root.y`): the lock holds the lower ankle at its STANDING height (0.205 m on
 // the 1.70 m body), a whole shin above a cushion. The goblin's lower leg runs on 0.17 m past the ankle knob and the foot hangs under it
 // (goblin-home.blob's bare feet), so the floor poses turn the FOOT too (pose.ts: a `fwd` bone turns as a whole) to lie along the shin.
-// The pose layer is mirrored, so the cross-legged sit and the one-handed reach use one-sided keys (`shin.l`, `upperarm.r`).
+// The pose layer is mirrored, so the cross-legged sit uses one-sided keys (`shin.l`, `shin.r`).
 //
 // THE HANDS (the hands round, 2026-10-13; the owner: "the hands clip into the floor a bit too much and maybe bend a bit too acutely or
 // look too disconnected to the wrist/forearm"). goblin-home's hand is an ORB (r 0.060 m compiled) and the rig does NOT carry it along the
@@ -109,11 +113,8 @@ export const FLOOR_SEAT = { top: 0.08, x: [-0.275, 0.275] as const, z: [-0.2, 0.
 /** The root's lift for a pelvis resting on FLOOR_SEAT.top: the pelvis flesh is 0.105 m under the hip joints (and the pelvis bone stays
  *  upright whatever the spine does), the standing hips are at 0.922 m. */
 const SEATED_Y = FLOOR_SEAT.top + 0.105 - 0.922;
-/** The kneeling root's lift and its shift forward over the cushion (solved: the knees' flesh on FLOOR_SEAT.top at z 0.30, the thighs
- *  near upright, so the hip joints are 0.502 m up and 0.33 m forward). */
-const KNEEL_ROOT = { y: -0.4195, z: 0.33 } as const;
 
-/** The cross-legged legs, shared by floor-type and brace-back: the thighs out 48 degrees from forward and 6 down (the knees 0.145 m up,
+/** The cross-legged legs, shared by every floor pose (he never uncrosses them): the thighs out 48 degrees from forward and 6 down (the knees 0.145 m up,
  *  0.356 m out, 0.25 forward: past the cushion's sides, off the floor), the left lower leg crossed IN FRONT (its end at x -0.16, z 0.22)
  *  and the right one behind it, both lying on the cushion; the feet turned along the shins, on their outer edges about 2 cm over the
  *  cushion. (Kept from the first floor-pose pass: it holds up on the flesh. The right foot tucks UNDER the left thigh, its flesh inside the
@@ -123,9 +124,6 @@ const CROSSED_LEGS: PoseKey['bones'] = {
   'shin.l': { pitch: -3.6, tilt: -86.6 }, 'shin.r': { pitch: -27.3, tilt: -86.7 },
   foot: { pitch: 12, tilt: 171 },
 };
-/** Kneeling on the cushion's front (the knees' flesh on its top), the hips over the knees, the lower legs back along the cushion rising 7
- *  degrees and the feet turned down behind it, toes on the floor. */
-const KNEEL_LEGS: PoseKey['bones'] = { thigh: { pitch: -4.5, tilt: 3.6 }, shin: { pitch: -97, tilt: 0 }, foot: { pitch: 97, tilt: 0 } };
 
 /** Cross-legged on the cushion, hunched at the kotatsu, typing (spine 10 + 15, the neck 20 and the skull back 10 to keep the face on the
  *  screen): the hand balls ON the key tops (their flesh at the keyboard's top, 0.423 m: the board 0.385 plus the keyboard), 0.695 m in
@@ -142,34 +140,34 @@ const FLOOR_TYPE_BONES: PoseKey['bones'] = {
   upperarm: { pitch: 59.4, tilt: 38.9 }, forearm: { pitch: 68.9, tilt: -138.6 }, hand: { pitch: 41.5, tilt: -13.9 },
 };
 
-/** Leaning back on straight arms (the elbows bent 5 degrees), the hand balls on the floor 0.57 m behind the hips and 0.29 m out (behind
- *  the cushion), the spine back 18 + 22, the head brought forward again (neck 12) to watch the screen; the legs still crossed. The arms
- *  never rise: the elbows hang 0.22 m under the shoulders. The hands round (2026-10-13) kept the shoulders and elbows and ran each arm
- *  straight on to the floor, the ball hanging off the wrist in line with the forearm (3 degrees, 5.9 cm out) with its underside on the
- *  floor (0.8 mm); the ball moved 4 cm further back. The contact is the pose's own: the page's scoot only slides him and the cushion along
- *  the floor, so it holds whatever the pushback distance (screen-lab-goblin.test checks 0, 0.2 m and 0.55 m). */
+/** THE SLIGHT LEAN BACK (the owner's third notes, 2026-10-13: "it's more like a slight pushback and lean back"; it was a crab on straight
+ *  arms, the hands 0.57 m behind the hips, the page sliding him 0.55 m back): the trunk leans back 20 degrees (spine 18 + 22; the line
+ *  from the hips to the chest joint), the hand balls on the floor 0.45 m behind the hips and 0.30 m out (just behind the cushion), the
+ *  elbows bent 50 degrees and pointing back and out, 13 cm under the shoulders; each ball hangs off its wrist nearly in line with the
+ *  forearm (5 degrees, 5.3 cm out) with its underside on the floor (the hands round's contact rules). The head is brought forward again
+ *  (neck 12, the skull level) to watch the sac: its forward axis within 8 degrees of the sac's apex from 3.5 s to 10 s at the page's 0.2 m
+ *  pushback (screen-lab-goblin.test). The contact is the pose's own: the scoot only slides him and the cushion along the floor. */
 const BRACE_BACK_BONES: PoseKey['bones'] = {
   ...CROSSED_LEGS,
-  spine1: { pitch: -18 }, chest: { pitch: -22 }, neck: { pitch: 12 }, skull: { pitch: -4 },
-  upperarm: { pitch: -37.9, tilt: 22.3 }, forearm: { pitch: -43.4, tilt: 21.7 }, hand: { pitch: -24.1, tilt: 11.3 },
+  spine1: { pitch: -18 }, chest: { pitch: -22 }, neck: { pitch: 12 }, skull: { pitch: 0 },
+  upperarm: { pitch: -43.9, tilt: 53.4 }, forearm: { pitch: -17.5, tilt: 2.7 }, hand: { pitch: -10, tilt: 4 },
 };
 
-/** Up on his knees, leaning in (spine 28 + 28, the head bowed toward the egg): the LEFT hand planted on the kotatsu's board beside the
- *  keyboard (its ball's flesh on the board, 7 cm in from the front edge, 0.31 m out: the arm nearly straight, leaning on it), the RIGHT
- *  hand's ball resting on the egg's near flank (the elbow low, the forearm rising onto it). Fitted with the egg where the screen lab puts it
- *  (EGG_REST on the keyboard, the set laid out from floor-type: screen-lab-goblin.ts) and his root 0.40 m back (goblinRootAt at the end);
- *  screen-lab-goblin.test reads the contact. */
-const CRAWL_REACH_BONES: PoseKey['bones'] = {
-  ...KNEEL_LEGS,
-  spine1: { pitch: 28 }, chest: { pitch: 28 }, neck: { pitch: 8 }, skull: { pitch: -20 },
-  'upperarm.l': { pitch: 24, tilt: 33.7 }, 'forearm.l': { pitch: 57.8, tilt: 25.2 }, 'hand.l': { pitch: 58, tilt: -20 },
-  'upperarm.r': { pitch: 12.3, tilt: 20.9 }, 'forearm.r': { pitch: 58.2, tilt: -118 }, 'hand.r': { pitch: 60, tilt: -20 },
+/** SITTING UP TO LOOK (the third notes: "his head doesn't appear to be looking at the egg when he sits up a bit"; "we don't need to animate
+ *  his hands raising to touch it": the sequence ends with him looking, then the player takes over). Sitting up on the cushion, the legs
+ *  still crossed, the trunk upright and a little forward (6 degrees; spine 4 + 8), the neck bowed 20 and the skull pitched 17 so the
+ *  head's forward axis points at the egg resting on the keyboard (EGG_REST), 22 degrees down: under 1 degree off its centre at the page's
+ *  0.2 m pushback. The hand balls rest on his knees (on the thighs' flesh just inside the knee joints), the elbows bent back and down, 18
+ *  cm under the shoulders; the wrist 16 degrees, the ball 6.5 cm out. The head angle is inside the rig's head cone (rig-bind headQuatOf
+ *  clamps the head to 28.6 degrees round its rest direction: skull -33.6 .. +23.6), so the page renders it as authored. */
+const SIT_UP_LOOK_BONES: PoseKey['bones'] = {
+  ...CROSSED_LEGS,
+  spine1: { pitch: 4 }, chest: { pitch: 8 }, neck: { pitch: 20 }, skull: { pitch: 17 },
+  upperarm: { pitch: -30.9, tilt: 46.8 }, forearm: { pitch: 73, tilt: 17.9 }, hand: { pitch: 35, tilt: 6 },
 };
 
 const seated = (t: number, bones: PoseKey['bones'], ease?: PoseKey['ease']): PoseKey =>
   ({ t, bones, groundLock: false, root: { y: SEATED_Y }, ...(ease ? { ease } : {}) });
-const kneeling = (t: number, bones: PoseKey['bones'], ease?: PoseKey['ease']): PoseKey =>
-  ({ t, bones, groundLock: false, root: KNEEL_ROOT, ...(ease ? { ease } : {}) });
 /** A cross-legged key: the crossed legs, a spine (spine1, chest, neck, skull) and the arms (both sides alike). */
 const crossed = (spine: readonly [number, number, number, number], upperarm: BoneAngle, forearm: BoneAngle, hand: BoneAngle): PoseKey['bones'] => ({
   ...CROSSED_LEGS,
@@ -179,17 +177,16 @@ const crossed = (spine: readonly [number, number, number, number], upperarm: Bon
 
 export const FLOOR_TYPE: PoseClip = { name: 'floor-type', keys: [seated(0, FLOOR_TYPE_BONES)] };
 export const BRACE_BACK: PoseClip = { name: 'brace-back', keys: [seated(0, BRACE_BACK_BONES)] };
-export const CRAWL_REACH: PoseClip = { name: 'crawl-reach', keys: [kneeling(0, CRAWL_REACH_BONES)] };
 
-/** Typing -> braced back (0.9 s; the plan's 0.7 s swung his elbows at 3.5 m/s, a jerk): the glass swells and he leans away onto his
- *  hands while the page slides him back on his cushion (goblinRootAt: 0.55 m over 1.15 s). A straight angle blend would sweep the hands down through the board's edge, so the hands follow
- *  solved waypoints, each placed in the lab's world at its time (the scoot included): they lift 2 cm off the keys and come back 4 cm
- *  (0.19), pull back over the board and clear of its edge, still under the shoulders (0.39), drop past his knees outside the cushion
- *  (0.59), swing back behind it low (0.75), and land flat on the floor behind him (0.9, brace-back). The spine straightens and leans back
- *  over the same time. Tilts are written so each blend turns the short way. The hands round (2026-10-13) re-aimed the hands at every key
- *  so the balls stay on the forearms' line (the wrist under 45 degrees all the way; 106 before), and added 0.84: the arms straighten
- *  onto the floor from there, the balls 2 cm up and 3 cm short of their place (straight from 0.75 the straightening arms swept the balls
- *  2 cm through the floor before they landed). */
+/** Typing -> leaning back (0.9 s; the plan's 0.7 s swung his elbows at 3.5 m/s, a jerk): the glass swells and he leans away onto his
+ *  hands while the page pushes him back on his cushion (goblinRootAt: 0.2 m over 1.15 s). A straight angle blend would sweep the hands
+ *  down through the board's edge, so the hands follow solved waypoints, each placed in the lab's world at its time (the scoot included):
+ *  they lift 2 cm off the keys and come back 4 cm (0.19), pull back over the board and clear of its edge, still under the shoulders (0.39),
+ *  drop past his knees outside the cushion (0.59), swing back behind it low (0.75), and come down onto the floor behind him (0.84,
+ *  0.9: brace-back). The spine straightens and leans back over the same time. Tilts are written so each blend turns the short way. The
+ *  hands round (2026-10-13) re-aimed the hands at every key so the balls stay on the forearms' line (the wrist under 45 degrees all the
+ *  way); the third notes' slight lean back re-solved 0.75 and 0.84 for the nearer hands (0.45 m behind the hips, not 0.57) and the shorter
+ *  pushback (the balls 2 cm and 0 cm over the floor there, 3 cm short of their place at 0.84). */
 export const LEAN_BACK: PoseClip = {
   name: 'lean-back',
   keys: [
@@ -197,46 +194,28 @@ export const LEAN_BACK: PoseClip = {
     seated(0.19, crossed([12, 16, 19, -10], { pitch: 57.9, tilt: 23.1 }, { pitch: 64.5, tilt: -171.8 }, { pitch: 47.6, tilt: -4.3 }), 'smooth'),
     seated(0.39, crossed([6, 8, 17, -9], { pitch: 28.7, tilt: 37.8 }, { pitch: 51.7, tilt: -156.1 }, { pitch: 52.2, tilt: -24.3 })),
     seated(0.59, crossed([-6, -8, 14, -6], { pitch: -36.5, tilt: 48.6 }, { pitch: 74.5, tilt: 20.2 }, { pitch: 19, tilt: 1.9 })),
-    seated(0.75, crossed([-13, -16, 13, -5], { pitch: -53.5, tilt: 59.8 }, { pitch: 12, tilt: 6.3 }, { pitch: 0, tilt: 0 })),
-    seated(0.84, crossed([-16, -20, 12, -4], { pitch: -45.7, tilt: 37.2 }, { pitch: -37.4, tilt: 13.6 }, { pitch: -8.4, tilt: 2.8 })),
+    seated(0.75, crossed([-12, -15, 13, -2], { pitch: -68.4, tilt: 61.8 }, { pitch: 3.2, tilt: 21.5 }, { pitch: 0, tilt: 16 })),
+    seated(0.84, crossed([-16, -20, 12, -1], { pitch: -44.9, tilt: 56.1 }, { pitch: -20.4, tilt: 4.2 }, { pitch: -10, tilt: 4 })),
     seated(0.9, BRACE_BACK_BONES, 'smooth'),
   ],
 };
 
-/** Braced back -> kneeling and reaching (1.8 s), once the egg is out: he sits up and lifts his hands (0.45), rolls forward onto his hands
- *  as his hips come up and his legs uncross and fold back under him (0.75), crawls onto his knees on the cushion's front with his hands
- *  reaching down ahead, in front of the table (1.05), comes up with the left hand over the board's front edge and the right on its way to
- *  the egg (1.4), and settles into the reach: the left hand onto the board, the right onto the egg (1.8). The page brings him 0.15 m
- *  forward over the same time (goblinRootAt). The legs' waypoints (0.75, 1.05) are the first pass's (an angle blend straight from crossed
- *  legs to a kneel swung the feet 0.39 m through the floor); the arms at 1.4 and 1.8 are solved for the kotatsu and the egg. The egg lands
- *  about 0.7 s in (11.1 s), while he is coming forward on his hands; his hands reach it after it has settled. The end key is crawl-reach
- *  with the shin and foot written the other way round (the same directions), so the blend from 1.4 turns the short way. The hands round
- *  (2026-10-13) re-aimed the hands at 0.45, 0.75 and 1.05 (the wrist 77 degrees at 1.05 before, 41 now); 1.4 and the reach itself are
- *  left as they were (the egg-reach beat is being replaced). */
-export const CRAWL_IN: PoseClip = {
-  name: 'crawl-in',
+/** Leaning back -> sitting up to look (1.6 s), once the egg is out: he lifts his hands off the floor and brings them round outside his
+ *  hips as his trunk comes up (0.45; the head already turning down), sits up with his head on the egg and his hands over his knees (0.8:
+ *  the egg lands about now, 11.2 s in the screen lab, and the head is on it from here), and settles them onto his knees (1.6, sit-up-look's
+ *  pose, held to the end). The legs stay crossed; the page's pushback holds (goblinRootAt). Replaces round one's crawl-in / crawl-reach
+ *  (onto his knees and a hand on the egg: the owner, 2026-10-13, "we don't need to animate his hands raising to touch it"). */
+export const SIT_UP_LOOK: PoseClip = {
+  name: 'sit-up-look',
   keys: [
     seated(0, BRACE_BACK_BONES),
-    seated(0.45, crossed([6, 8, 10, -8], { pitch: -49.4, tilt: -10.3 }, { pitch: 8.4, tilt: 73 }, { pitch: -25, tilt: 45 }), 'smooth'),
-    { t: 0.75, groundLock: false, root: { y: -0.4514, z: 0.18 }, bones: {
-      spine1: { pitch: 40 }, chest: { pitch: 42 }, neck: { pitch: -6 }, skull: { pitch: -12 },
-      thigh: { pitch: 20.1, tilt: 23.9 }, 'shin.l': { pitch: -53.5, tilt: -111.8 }, 'shin.r': { pitch: -55.5, tilt: -90 },
-      'foot.l': { pitch: 51, tilt: 147 }, 'foot.r': { pitch: 42, tilt: 162 },
-      upperarm: { pitch: 9.6, tilt: 16.4 }, forearm: { pitch: 9.7, tilt: 16.2 }, hand: { pitch: 0, tilt: 0 } } },
-    { t: 1.05, groundLock: false, root: { y: -0.4127, z: 0.33 }, bones: {
-      spine1: { pitch: 52 }, chest: { pitch: 52 }, neck: { pitch: -18 }, skull: { pitch: -14 },
-      thigh: { pitch: -4.5, tilt: 5.2 }, shin: { pitch: -83.7, tilt: -180 }, foot: { pitch: 81, tilt: 162 },
-      upperarm: { pitch: 1.7, tilt: 7.6 }, forearm: { pitch: 1.8, tilt: 7.5 }, hand: { pitch: 0, tilt: 0 } } },
-    kneeling(1.4, {
-      thigh: { pitch: -4.5, tilt: 3.6 }, shin: { pitch: -83.2, tilt: -180 }, foot: { pitch: 78, tilt: 162 },
-      spine1: { pitch: 32 }, chest: { pitch: 32 }, neck: { pitch: 4 }, skull: { pitch: -15 },
-      'upperarm.l': { pitch: -8.8, tilt: 38.4 }, 'forearm.l': { pitch: 73.1, tilt: 25.3 }, 'hand.l': { pitch: 57.6, tilt: -21.8 },
-      'upperarm.r': { pitch: -9.9, tilt: 28.5 }, 'forearm.r': { pitch: 56.5, tilt: -106.3 }, 'hand.r': { pitch: 61.7, tilt: -18.4 } }),
-    kneeling(1.8, { ...CRAWL_REACH_BONES, shin: { pitch: -83, tilt: -180 }, foot: { pitch: 83, tilt: 180 } }, 'smooth'),
+    seated(0.45, crossed([-8, -10, 16, 8], { pitch: -60.7, tilt: 53.6 }, { pitch: 23.5, tilt: 23.4 }, { pitch: 15, tilt: 16 }), 'smooth'),
+    seated(0.8, crossed([1, 4, 19, 17], { pitch: -50.5, tilt: 46.2 }, { pitch: 65.5, tilt: 41.5 }, { pitch: 40, tilt: 18 })),
+    seated(1.6, SIT_UP_LOOK_BONES, 'smooth'),
   ],
 };
 
 export const GOBLIN_POSES: Readonly<Record<string, PoseClip>> = {
   type: TYPE, recoil: RECOIL, sit: SIT, stand: STAND, jolt: JOLT, reach: REACH, touch: TOUCH,
-  'floor-type': FLOOR_TYPE, 'brace-back': BRACE_BACK, 'crawl-reach': CRAWL_REACH, 'lean-back': LEAN_BACK, 'crawl-in': CRAWL_IN,
+  'floor-type': FLOOR_TYPE, 'brace-back': BRACE_BACK, 'lean-back': LEAN_BACK, 'sit-up-look': SIT_UP_LOOK,
 };

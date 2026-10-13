@@ -31,12 +31,12 @@ describe('emergence field', () => {
     expect(sacZ(REST, GLASS.hw, 0)).toBeCloseTo(0, 12);
     const p = at({ push: 1 });
     expect(sacZ(p, GLASS.hw * 1.0001, 0)).toBeCloseTo(lipOpening(p).z, 3);   // outside the (unbowed) lip it is the rim height
-    expect(sacZ(p, 0, 0)).toBeGreaterThan(0.5);
+    expect(sacZ(p, 0, 0)).toBeGreaterThan(0.4);
   });
 
-  it('the apex reaches about 0.65 m at full push (the egg is 0.70 of round one\'s, its reach kept within 0.62..0.70)', () => {
-    expect(SAC_MAX).toBeGreaterThan(0.62);
-    expect(SAC_MAX).toBeLessThan(0.7);
+  it('the apex reaches about 0.45 m at full push (the owner\'s third notes: "extends a bit too far"; within 0.40..0.50, 0.65 before)', () => {
+    expect(SAC_MAX).toBeGreaterThan(0.4);
+    expect(SAC_MAX).toBeLessThan(0.5);
     expect(sacZ(at({ push: 1 }), 0, 0)).toBeGreaterThanOrEqual(SAC_MAX - 0.02);
   });
 
@@ -81,6 +81,9 @@ describe('emergence field', () => {
       for (let z = lo.z + 0.02; z <= c[2] + 1e-9; z += 0.01) ws.push(halfWidth(p, z, ax, ay, c[1]));
       // a tube holds the equator's width all the way back to the glass; this wall leaves it by more than 3 cm...
       expect(Math.max(...ws.map(w => Math.abs(w - wEq))), `axis ${ax},${ay}`).toBeGreaterThan(0.03);
+      // ...it is a bulb on a NECK (top and bottom, where the egg nearly fills the opening's height): the wall behind the equator draws in
+      // by 2.5 cm or more before it flares to the lip (the third notes' shorter push; a fuller dome swallowed the neck)
+      if (ay === 1) expect(Math.min(...ws), 'the neck').toBeLessThan(wEq - 0.025);
       // ...and gets there smoothly: no step between samples a centimetre apart
       for (let i = 1; i < ws.length; i++) expect(Math.abs(ws[i]! - ws[i - 1]!), `axis ${ax},${ay} sample ${i}`).toBeLessThan(0.02);
     }
