@@ -36,6 +36,7 @@ import { headShape } from './flame-anchors';
 import { characterEntry } from '../character-registry';
 import { parseBlob } from '../blob-parse';
 import { compileFace } from '../blob-compile';
+import { generateFaceSheet } from '../blob-face-sheet';
 import { DEFAULT_FACE, type FaceParams } from '../face';
 import { FLESH_PRESETS, LIGHT_PRESETS } from '../material';
 import { applyRig, headQuatOf } from '../rig-bind';
@@ -556,7 +557,8 @@ async function bootstrap(): Promise<void> {
   view.retireEquipment();
   const gpu = view.gpu;
   for (const e of [...errors, ...view.body.errors]) say(`goblin: ${e}`, true);
-  // Skin as the game's (game-spawn.ts): the .blob's own palette under the practical key, the face sheet's projection and texture.
+  // Skin as the game's (game-spawn.ts): the .blob's own palette under the practical key, the face sheet's projection, and his own face
+  // generated from the sheet block (below; the lab's loadGeneratedFace).
   gpu.applyMaterial(view.palette ?? FLESH_PRESETS['henenlotter-latex'], LIGHT_PRESETS['practical-hard-key']);
   // THE GAME'S MARCH, not the lab's (game-spawn.ts spawns every body with these): plain sphere tracing (step multiplier 1.0, no
   // relaxation), the hull-exit bound, the wound early-out and its 1.0 step, the last-step secant accept at 4, and the footprint accept
@@ -573,14 +575,35 @@ async function bootstrap(): Promise<void> {
   }
   {
     const sheetC = compileCharacterSheet(entry);
-    const f = sheetC.face;
-    const tex = new THREE.TextureLoader().load(f.url);
-    tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.generateMipmaps = false; tex.flipY = true;
-    const [x, y, w, h, sw, shh] = f.rect;
-    gpu.setFaceTexture(tex, new THREE.Vector4(w / sw, h / shh, x / sw, y / shh), f.mean);
+    const sheet = sheetC.sheet;
+    if (sheet) {
+      // HIS OWN FACE: generated from the .blob's `sheet` block (eyes, brow, mouth, nose, grain), as the lab's loadGeneratedFace and the
+      // flame lab do. `sheetC.face` is the registry's face slot, which for the goblin is the SHARED zombie sheet (ZOMBIE_FLAT): worn here
+      // it put the zombie's flat face and red eyes on him. The generator writes greyscale rows from the top-left; expanded to RGBA (the
+      // shader reads tex.rgb: a RedFormat upload renders the head red) and flipped here (a DataTexture gets no flipY), whole-image atlas.
+      const gen = generateFaceSheet(sheet, 64);
+      const rgba = new Uint8Array(gen.size * gen.size * 4);
+      for (let y = 0; y < gen.size; y++) {
+        const src = (gen.size - 1 - y) * gen.size;
+        for (let x = 0; x < gen.size; x++) {
+          const v = gen.pixels[src + x]!;
+          const o = (y * gen.size + x) * 4;
+          rgba[o] = v; rgba[o + 1] = v; rgba[o + 2] = v; rgba[o + 3] = 255;
+        }
+      }
+      const tex = new THREE.DataTexture(rgba, gen.size, gen.size, THREE.RGBAFormat);
+      tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.generateMipmaps = false; tex.flipY = false;
+      tex.needsUpdate = true;
+      gpu.setFaceTexture(tex, new THREE.Vector4(1, 1, 0, 0), gen.mean);
+    } else {
+      const f = sheetC.face;
+      const tex = new THREE.TextureLoader().load(f.url);
+      tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.generateMipmaps = false; tex.flipY = true;
+      const [x, y, w, h, sw, shh] = f.rect;
+      gpu.setFaceTexture(tex, new THREE.Vector4(w / sw, h / shh, x / sw, y / shh), f.mean);
+    }
     const u = gpu.uniforms;
     u.faceCfg.value.x = 1; u.faceCfg.value.y = 1.0;
-    const sheet = sheetC.sheet;
     if (sheet) {
       u.faceProj.value.set(sheet.projScaleX, sheet.projScaleY, sheet.projCentreX, sheet.projCentreY);
       u.faceCfg.value.set(sheet.enabled ? (sheet.decal > 0.5 ? 2 : sheet.blendLuma > 0.5 ? 3 : 1) : 0, sheet.texStrength, sheet.faceForward, sheet.texRelief);
