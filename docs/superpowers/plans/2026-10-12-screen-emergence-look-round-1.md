@@ -55,3 +55,23 @@
 ### Task D: notes, sheet, push
 
 - [ ] Re-run `npm run emergence:check`, copy the new sheet over `docs/dev-notes/2026-10-11-screen-emergence/sheet.jpg` (resize to 1400 px wide, JPEG), add a "Look round 1 (2026-10-12)" section to `NOTES.md` (what changed per note, the decisions above, what is still open), update the spec's section list with a short addendum pointing at this plan, regenerate the module index, push, and update the PR #47 description (a short "Look round 1" paragraph). Read CI via `mcp__ccd_pr__get_status`; do not poll.
+
+---
+
+## Owner's second notes (2026-10-13) and the revised order
+
+6. "redo task C from scratch."
+7. "i dont get why the drips are white, i guess they should be the same color as the rest of the goo."
+8. "the egg is okay but maybe still a bit smaller."
+9. "i dont want the keyboard to move out the way, i think it would be cool if it were covered in egg goo when the egg comes out."
+
+**Order now:** Task A2 (below), then Task C from scratch with these changes folded in (the egg at its new size on the table; the keyboard stays where it is and is goo-coated; no `keyboardShove`), then Task D.
+
+### Task A2: one goo colour, a smaller egg, and the keyboard covered in goo (no shoving)
+
+**Files:** `webgpu/emergence-field.ts`, `webgpu/goo-strands.ts` (+ tests), `webgpu/screen-emergence.wgsl.ts` (+ test), `webgpu/screen-lab-main.ts` (the keyboard's group).
+
+- [ ] **Step 1: One goo colour.** Audit how strands, beads, drips, the egg's pool/slick and the tear's rim are coloured in the shader (materials 4, 5 and the pool's own shading). The owner sees the drips as white and the rest of the goo as a different colour: make every piece of goo (strands, beads, drips, the pool/slick, and the goo coat in Step 3) use one shared goo palette and one shading function (a `GOO_LOOK` table in `emergence-field.ts`: base colour, subsurface tint, highlight strength), with the existing milky off-white-pink as the base unless the audit shows a better match to the tear's wet-flesh rim; the tear's rim (flesh) may stay a pinker flesh tone but the drips must read as the same stuff as the strands. Say what the difference was (e.g. the drips lit differently or by different terms) and what you unified. A test pins that all goo materials read the same palette constants.
+- [ ] **Step 2: A smaller egg.** `EGG` semi-axes 0.14 x 0.18 x 0.14 -> 0.123 x 0.158 x 0.123 (about 88% of today's size, 0.70 of the original), re-deriving everything that depends on it as in Task A (`z0`, `z1` so `SAC_MAX` stays between 0.58 and 0.66, `LIP.openY` so the lip still gives (the egg is 0.316 m tall against the 0.305 m glass: it just barely needs the lip now; keep the sac reading as a bulb), `TEAR_R_MAX`, `POOL.r`, `EGG_REST`'s y). Tests' bounds move only where the property still holds; say which.
+- [ ] **Step 3: The keyboard stays and is covered in egg goo.** Remove `keyboardShove` (the keyboard no longer slides or yaws: delete the function, its use in the page and the tests that pin it, and say so). The egg now lands ON the keyboard's back half or beside it so the keyboard is in the splash: choose by looking, but the keyboard must not move and the egg must not clip into the keys visibly (the egg may rest on top of the keyboard: its centre y is the keyboard's top plus `ry`). The goo coats the keyboard: a glossy goo layer over the keyboard's top face drawn by the pass (a rounded-blobby patch over the keyboard's footprint, thicker toward the egg and where the drips land, with the same goo palette/shading as everything else, a hard clear-coat highlight, and the keys faintly visible through it), growing from t about 10.5 s as the egg falls and the drips land, with a few drips running off the keyboard's front edge and onto the table. Replace the old `dripFloor`/pool logic that assumed the keyboard moved: drips that land on the keyboard stop at its top and feed the coat; drips elsewhere stop at the table. Keep the egg's pool on the table around its foot. Pure parts (the coat's coverage as a function of `t`, its footprint, the drips' landing heights) in `emergence-field.ts`/`goo-strands.ts` with tests; the WGSL draws it.
+- [ ] **Step 4: Look and commit.** Screenshots at t = 9, 10, 10.5, 11, 12, 13 from the front-right and a low side view into `.lab-tmp/screen-lab/ra2/` (use `?res=1280x800` for captures); read the console. Does the keyboard read as covered in goo (and not moved)? Do all the goo pieces now read as one substance? Commit `feat(emergence): one goo colour; the egg is smaller still; the keyboard is covered in goo, not shoved`.
