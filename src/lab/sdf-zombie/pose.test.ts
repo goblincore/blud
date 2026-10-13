@@ -178,3 +178,19 @@ describe('pose: floor height and one-sided keys', () => {
     toe(rest).forEach((v, k) => expect(v).toBeCloseTo(toe(base)[k]!, 9));
   });
 });
+
+describe('pose: a `fwd` bone with authored angles', () => {
+  it('stays where the compiled body puts it when no key names it (the .blob ignores pitch/tilt on `fwd`; the pose layer must too, at rest)', () => {
+    // No .blob in the roster authors angles on a `fwd` bone today; this pins that one that did would still pose its un-keyed foot at the
+    // compiled rest (the rig's joints are matched to it), and that a key turns it the pose layer's way.
+    const src = goblinSrc.replace(/bone foot(\s+)parent=shin(\s+)dir=fwd/, 'bone foot$1parent=shin$2dir=fwd pitch=30 tilt=20');
+    expect(src).not.toBe(goblinSrc);
+    const d2 = parseBlob(src);
+    const b2 = buildBody(compileBlob(d2, compileFace(d2)));
+    const base2 = bindRig(b2).rig.restPose as readonly Vec3[];
+    const rig2 = makePoseRig(d2, jointNamesForBody(b2), base2);
+    poseJoints(rig2, REST, 0).forEach((p, i) => p.forEach((v, k) => expect(v).toBeCloseTo(base2[i]![k]!, 9)));
+    const keyed = poseJoints(rig2, { name: 'down', keys: [{ t: 0, bones: { foot: { pitch: 90 } } }] }, 0);
+    expect(at(keyed, 'toeL')[1]).toBeLessThan(at(keyed, 'footL')[1] - 0.1);
+  });
+});

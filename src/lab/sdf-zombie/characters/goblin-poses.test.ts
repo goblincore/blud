@@ -16,8 +16,8 @@ import { jointNamesForBody } from '../gait';
 import { len, sub } from '../vec';
 import { makePoseRig, poseJoints } from '../pose';
 import { posesFor } from '../pose-library';
-import { GOBLIN_POSES, FLOOR_SEAT, KOTATSU_TOP } from './goblin-poses';
-import { KEYBOARD } from '../webgpu/emergence-field';
+import { GOBLIN_POSES, FLOOR_SEAT } from './goblin-poses';
+import { KEYBOARD, KOTATSU } from '../webgpu/emergence-field';
 import type { PoseClip } from '../pose';
 import type { Primitive, Vec3 } from '../types';
 
@@ -155,20 +155,20 @@ describe('goblin poses', () => {
     }
   });
 
-  it('floor-type: the hand balls rest on the key tops, the forearms on the table top, the knees under it', () => {
-    const ps = flesh(poseJoints(home.rig, GOBLIN_POSES['floor-type']!, 0));
-    const keyTop = KOTATSU_TOP + KEYBOARD.t + KEYBOARD.keys;
-    for (const s of ['l', 'r']) {
-      expect(Math.abs(lowest(ps, new RegExp(`^hand\\.${s}$`)) - keyTop)).toBeLessThan(0.003);
-      const fore = lowest(ps, new RegExp(`^forearm\\.${s}$`));
-      expect(fore).toBeGreaterThan(KOTATSU_TOP - 0.002);
-      expect(fore).toBeLessThan(KOTATSU_TOP + 0.012);
+  it('floor-type: the hand balls rest on the key tops (the kotatsu plus the keyboard), the elbows hang by his sides, the knees lower than the skirt', () => {
+    const j = poseJoints(home.rig, GOBLIN_POSES['floor-type']!, 0), ps = flesh(j);
+    const keyTop = KOTATSU.top + KEYBOARD.t + KEYBOARD.keys;
+    for (const s of ['l', 'r']) expect(Math.abs(lowest(ps, new RegExp(`^hand\\.${s}$`)) - keyTop)).toBeLessThan(0.003);
+    for (const s of ['L', 'R']) {
+      // dropped, not winged out on the board (the first pass's): well under the shoulder and close in to it
+      expect(j[J('shoulder' + s)]![1] - j[J('elbow' + s)]![1]).toBeGreaterThan(0.12);
+      expect(Math.abs(j[J('elbow' + s)]![0] - j[J('shoulder' + s)]![0])).toBeLessThan(0.1);
     }
     const kneeTop = Math.max(...ps.filter(p => /^(thigh|shin)\./.test(p.bone!)).flatMap(p => samples(p).map(s => s.q[1] + s.r)));
-    expect(kneeTop).toBeLessThan(KOTATSU_TOP - 0.15); // a 0.035 m board and a heater frame under it still clear
+    expect(kneeTop).toBeLessThan(KOTATSU.top - KOTATSU.t - KOTATSU.skirt - 0.03); // lower than the board's quilted skirt, 3 cm to spare
   });
 
-  it('brace-back: the hand balls are flat on the floor behind the cushion; crawl-reach: the knees on the cushion, the left hand on the table', () => {
+  it('brace-back: the hand balls are flat on the floor behind the cushion; crawl-reach: the knees on the cushion, the left hand on the board', () => {
     const bb = flesh(poseJoints(home.rig, GOBLIN_POSES['brace-back']!, 0));
     for (const s of ['l', 'r']) {
       const hand = bb.find(p => p.bone === `hand.${s}`)!;
@@ -177,7 +177,7 @@ describe('goblin poses', () => {
     }
     const cr = flesh(poseJoints(home.rig, GOBLIN_POSES['crawl-reach']!, 0));
     expect(Math.abs(lowest(cr, /^(thigh|shin)\.l$/) - FLOOR_SEAT.top)).toBeLessThan(0.003);
-    expect(Math.abs(lowest(cr, /^hand\.l$/) - KOTATSU_TOP)).toBeLessThan(0.003);
+    expect(Math.abs(lowest(cr, /^hand\.l$/) - KOTATSU.top)).toBeLessThan(0.003);
   });
 
   it('lean-back runs floor-type to brace-back and crawl-in brace-back to crawl-reach (the cuts in the screen lab never pop)', () => {

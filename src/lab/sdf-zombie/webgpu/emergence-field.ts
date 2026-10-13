@@ -20,9 +20,17 @@ export const SKIN = 0.006;
  *  behind the glass, so the glass's first bulge comes as before); `z1` keeps the sac's reach (SAC_MAX = z1 + rz + SKIN) at 0.646 m, the 80%
  *  egg's: the owner asked for a smaller egg, not a shorter push. */
 export const EGG = { rx: 0.123, ry: 0.158, rz: 0.123, z0: -0.198, z1: 0.517 } as const;
-/** The desk's top below the glass centre. The slumped egg rests ON THE KEYBOARD (the owner's second notes: the keyboard is not shoved out of
- *  the way, it is covered in egg goo): see EGG_REST. */
+/** The table's top below the glass centre (the CRT's pedestal: its chin, FRAME_BOTTOM, stands 5.75 cm over the board). The slumped egg
+ *  rests ON THE KEYBOARD (the owner's second notes: the keyboard is not shoved out of the way, it is covered in egg goo): see EGG_REST. The
+ *  name is round one's (a desk); since look round 1 the table is the kotatsu (KOTATSU). */
 export const DESK_Y = -0.32;
+/** THE FLOOR-LEVEL SET (look round 1, Task C; the owner: "the apartment will be sitting floor level"): the Flat's own low kotatsu,
+ *  scripts/levels/flat_layout.py and flat/props.py. Its board's top is KTOP 0.44 above the ROOM BOX's floor, but the tatami's top (FLOOR)
+ *  is 0.055 above that, so the board stands `top` 0.385 m over the floor he sits on; it is 0.82 m square (`w`, `d`; the Flat's collider)
+ *  and `t` 0.025 thick (props.py's board). Under it hangs a short quilted skirt (`skirt` deep, `inset` in from the board's edges: the Flat's
+ *  kotatsu futon, tucked up so it clears his knees). The lab page builds it; the screen lab's layout (screen-lab-goblin.ts floorLayout)
+ *  checks the MEASURED typing pose puts the board here. */
+export const KOTATSU = { top: 0.385, w: 0.82, d: 0.82, t: 0.025, skirt: 0.07, inset: 0.02 } as const;
 /** THE SET'S DESK TOP: the CRT's face stands FRAME_FACE_Z proud of the glass; the keyboard (thickness `t`, depth `d`, width `w`, its key rows
  *  `keys` proud of it) lies `gap` in front of the face. The lab page builds them from these. */
 export const FRAME_FACE_Z = 0.03;
@@ -42,8 +50,15 @@ export const KEYBOARD_TOP = KEYBOARD_BODY_TOP + KEYBOARD.keys;
 export const KEYBOARD_RECT = { x0: -KEYBOARD.w / 2, x1: KEYBOARD.w / 2, z0: KEYBOARD_Z - KEYBOARD.d / 2, z1: KEYBOARD_Z + KEYBOARD.d / 2 } as const;
 export const onKeyboard = (x: number, z: number) => x >= KEYBOARD_RECT.x0 && x <= KEYBOARD_RECT.x1 && z >= KEYBOARD_RECT.z0 && z <= KEYBOARD_RECT.z1;
 /** Where the slumped egg rests: ON THE KEYBOARD, its bottom on the key rows (the contact 1.5 cm in front of the keyboard's middle), its back
- *  3.2 cm in front of the CRT's face at the chin (z 0.062), its front over the keyboard's front edge (z 0.308). z 0.185 as before. */
+ *  3.2 cm in front of the CRT's face at the chin (z 0.062), its front over the keyboard's front edge (z 0.308). z 0.185 as before: look round
+ *  1's floor-level set re-derived it and kept it (the keyboard, the CRT and the egg keep their places in the screen frame; the kotatsu's
+ *  board reaches TABLE_FRONT_Z, past the egg's slick, so the egg, its goo coat, the runs off the keyboard's front and their pools all lie on
+ *  the board). */
 export const EGG_REST: Vec3 = [0, KEYBOARD_TOP + EGG.ry, 0.185];
+/** The kotatsu board's front edge (the screen frame's z; the edge nearest him): just past the egg's slick (goo-strands POOL_REACH from
+ *  EGG_REST, 0.3575, plus 7.5 mm), so every pool of goo lies on the board (goo-strands.test pins it). His forearms rest on this edge as he
+ *  types (screen-lab-goblin.test). Round two's desk front was set the same way. */
+export const TABLE_FRONT_Z = 0.365;
 
 /** The sac's apex at full push: the egg's front plus the skin (0.646 m, the 80% egg's; round one's bigger egg reached 0.73). */
 export const SAC_MAX = EGG.z1 + EGG.rz + SKIN;

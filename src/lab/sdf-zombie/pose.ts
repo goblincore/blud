@@ -88,10 +88,12 @@ export function makePoseRig(doc: BlobDoc, names: readonly GaitJointName[], base:
 /** A bone's direction from its angles: the .blob's own dirVector, except for a `fwd` bone (the foot), whose pitch the .blob cannot turn
  *  (dirVector's pitch acts on the vertical part and a `fwd` bone has none: it would only shorten it). Here a `fwd` bone turns as a whole:
  *  + pitch tips its tip DOWN (the toes pointed), + tilt swings it toward +x (outward on the left), so a floor pose can lay the foot along
- *  the shin. At 0 / 0 it is the .blob's (0, 0, 1), and every `fwd` bone in the roster is authored at 0 / 0, so an un-keyed foot is
- *  unchanged. */
-function poseDir(dir: BlobBone['dir'], pitchDeg: number, tiltDeg: number): Vec3 {
-  if (dir !== 'fwd') return dirVector(dir, pitchDeg, tiltDeg);
+ *  the shin. At 0 / 0 it is the .blob's (0, 0, 1). At the bone's own REST angles it is always the .blob's dirVector (whatever a .blob
+ *  authors on a `fwd` bone, which the compiler ignores), so an un-keyed foot stays exactly where the compiled body put it (the rig's
+ *  joints are matched to it: makePoseRig). */
+function poseDir(bone: BlobBone, pitchDeg: number, tiltDeg: number): Vec3 {
+  const dir = bone.dir;
+  if (dir !== 'fwd' || (pitchDeg === bone.pitchDeg && tiltDeg === bone.tiltDeg)) return dirVector(dir, pitchDeg, tiltDeg);
   const p = (pitchDeg * Math.PI) / 180, t = (tiltDeg * Math.PI) / 180;
   return [Math.cos(p) * Math.sin(t), -Math.sin(p), Math.cos(p) * Math.cos(t)];
 }
@@ -132,7 +134,7 @@ export function poseJoints(rig: PoseRig, clip: PoseClip, t: number): Vec3[] {
     const doc = rig.docBones.get(db.name);
     if (!doc) return db; // the root bone: always straight up
     const pa = angle(a, doc), pb = angle(b, doc);
-    return { ...db, dir: poseDir(doc.dir, lerp(pa.pitch, pb.pitch, f), lerp(pa.tilt, pb.tilt, f)) };
+    return { ...db, dir: poseDir(doc, lerp(pa.pitch, pb.pitch, f), lerp(pa.tilt, pb.tilt, f)) };
   });
 
   const rx = lerp(a.root?.x ?? 0, b.root?.x ?? 0, f);
@@ -146,7 +148,7 @@ export function poseJoints(rig: PoseRig, clip: PoseClip, t: number): Vec3[] {
       const doc = m ? rig.docBones.get(m[1]!) : undefined;
       if (!m || !doc || !(eb.name in a.bones || eb.name in b.bones)) return eb;
       const pa = angle(a, doc, eb.name), pb = angle(b, doc, eb.name);
-      const d = poseDir(doc.dir, lerp(pa.pitch, pb.pitch, f), lerp(pa.tilt, pb.tilt, f));
+      const d = poseDir(doc, lerp(pa.pitch, pb.pitch, f), lerp(pa.tilt, pb.tilt, f));
       return { ...eb, dir: m[2] === 'r' ? [-d[0], d[1], d[2]] : d };
     });
   }
