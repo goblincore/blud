@@ -109,9 +109,10 @@ const PRESETS: Record<ShotId | 'push-wide', Preset> = {
   crowning: { eye: [0.62, -0.05, 0.72], at: [0, 0, 0.32], fov: 45 },
   // Out: high behind and to his left, 3 m back, past him to the egg slumping onto the keyboard (he is in the lower foreground).
   out: { eye: [-1.4, 0.7, 3.0], at: [0.05, -0.3, 0.4], fov: 40 },
-  // Settle: low over the board's front-right, in front of him (he kneels behind the lens): the egg in its goo on the keyboard, the
-  // healing screen, his right arm coming in from the frame's right to rest a hand on the egg.
-  settle: { eye: [0.72, -0.06, 0.58], at: [-0.05, -0.16, 0.14], fov: 46 },
+  // Settle (the owner's third notes: the sequence ends with him sitting up and looking at the egg): low from his front-right, three-quarter
+  // on his face (his head at about (0, 0.17, 0.92), looking down at the egg on the keyboard at (0, -0.12, 0.19)), so his head and the egg in
+  // its goo are in frame together, the healing screen beyond the egg.
+  settle: { eye: [1.15, 0.04, 0.02], at: [0, -0.07, 0.52], fov: 42 },
 };
 const presetAt = (t: number): Preset => {
   const s = shotAt(t).id;
