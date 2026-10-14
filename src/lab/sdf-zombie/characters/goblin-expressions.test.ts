@@ -7,6 +7,11 @@ import { JAW_MAX_GAPE } from '../jaw';
 import { compileSheet } from '../blob-compile';
 import { parseBlob } from '../blob-parse';
 import goblinSrc from './goblin.blob?raw';
+import { buildBody } from '../build-body';
+import { compileBlob, compileFace } from '../blob-compile';
+import { makeActorMotion, stepActorMotion, emptyActorSignals } from '../actor';
+import { makeRng } from '../wander';
+import { motionProfileFor } from '../motion-profile';
 
 const authored = compileSheet(parseBlob(goblinSrc))!;
 
@@ -49,5 +54,41 @@ describe('goblin expressions', () => {
     expect(shout.jawGape).toBeGreaterThan(0.35);
     expect(scowl.sheet.mouthCurve).toBeGreaterThan(authored.mouthCurve);   // frown
     expect(scowl.sheet.browAngle).toBeGreaterThan(authored.browAngle);
+  });
+});
+
+describe('the motion path takes an expression gape', () => {
+  const doc = parseBlob(goblinSrc);
+  const body = buildBody(compileBlob(doc, compileFace(doc)));
+  const run = (jawGape: number | undefined) => {
+    const m = makeActorMotion(body, { seed: 3 });
+    const rng = makeRng(3);
+    let f = null as ReturnType<typeof stepActorMotion>;
+    for (let i = 0; i < 30; i++) {
+      f = stepActorMotion(m, {
+        current: body, dt: 1 / 60, wander: false, armStyle: undefined, headingFollow: 0, gazeFollow: 0,
+        bounds: { minX: -50, maxX: 50, minZ: -50, maxZ: 50 }, rng, signals: emptyActorSignals(),
+        profile: motionProfileFor('goblin'), forceSpeed: 0,
+        ...(jawGape === undefined ? {} : { jawGape }),
+      });
+    }
+    return { f: f!, m };
+  };
+
+  it('reaches MotionFrame.jawGape and the rig, and no input leaves it 0', () => {
+    const open = run(0.3);
+    expect(open.f.jawGape).toBeCloseTo(0.3, 9);
+    expect(open.m.bound.rig.jawGape).toBeCloseTo(0.3, 9);
+    expect(run(undefined).f.jawGape).toBe(0);
+  });
+
+  // The goblin's jaw lever hangs nearly straight down from the hinge, so opening swings the chin point mostly BACK toward
+  // the throat (~7 cm at 0.5) and only a few mm down in world y: measure both, not a 1 cm drop.
+  it('pins the jaw point lower than, and well away from, the shut jaw', () => {
+    const shut = run(undefined), open = run(0.5);
+    const J = shut.m.motionJoints!.index.jaw!;
+    const a = open.m.bound.rig.points[J]!.pos, b = shut.m.bound.rig.points[J]!.pos;
+    expect(a[1]).toBeLessThan(b[1] - 0.002);
+    expect(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])).toBeGreaterThan(0.03);
   });
 });

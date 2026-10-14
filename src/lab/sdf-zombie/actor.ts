@@ -142,6 +142,8 @@ export interface ActorStepInput {
   attack?: { phase: number; side: 'L' | 'R'; variant: SwingVariant };
   /** The pose layer's joint positions for this frame — see MotionConfig.pose. Only forwarded when set. */
   pose?: readonly Vec3[];
+  /** The expression layer's jaw gape (rad) for this frame — see MotionConfig.jawGape. Only forwarded when set. */
+  jawGape?: number;
 }
 
 /**
@@ -170,6 +172,7 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
         carryOverride: input.carryOverride,
         ...(input.attack ? { attack: input.attack } : {}),
         ...(input.pose ? { pose: input.pose } : {}),
+        ...(input.jawGape ? { jawGape: input.jawGape } : {}),
       },
       {
         dt: sdt,

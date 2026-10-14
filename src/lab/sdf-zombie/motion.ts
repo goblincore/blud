@@ -404,6 +404,9 @@ export interface MotionConfig {
    *  Verlet rig neither lags nor sags. The gait, carry, aim and plant state still run (cheap, and it keeps their state warm) but
    *  their targets are overwritten; a collapse ignores it. Enter it from a standstill: there is no blend from a moving gait. */
   pose?: readonly Vec3[];
+  /** The EXPRESSION layer's jaw gape in radians (expression.ts `actuate`). It opens the jaw like the bride's sword swing does and
+   *  the wider of the two wins. Undefined or 0 changes nothing. */
+  jawGape?: number;
   /** Aim facing independent of travel, used by directed soldier movement. */
   faceHeading?: number;
   /** Melee swing: phase 0..1 plus which arm swings, throwing which variant
@@ -1351,8 +1354,10 @@ export function stepMotion(
   // chases it; only the clamp says where the drawn head is.
   let jawGape = 0;
   if (joints.jaw && idx.jaw !== undefined && idx.neck !== undefined && idx.head !== undefined) {
-    jawGape = attack && cfg.attack && profile.melee?.kind === 'sword' && isSwordVariant(cfg.attack.variant)
+    const swingGape = attack && cfg.attack && profile.melee?.kind === 'sword' && isSwordVariant(cfg.attack.variant)
       ? jawGapeAt(cfg.attack.phase, cfg.attack.variant) : 0;
+    // The expression layer's gape (expression.ts) opens the jaw too; whichever is wider wins.
+    jawGape = Math.max(swingGape, cfg.jawGape ?? 0);
     const at = (i: number): Vec3 => (havePoints ? points[i]!.pos : targets[i]!);
     const dir = clampDir(normalize(sub(at(idx.head), at(idx.neck))), rotateYaw(joints.jaw.restDir, bodyYaw),
       IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
