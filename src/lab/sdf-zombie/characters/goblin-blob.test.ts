@@ -20,6 +20,8 @@ import { sdBody } from '../validate';
 import { lerp } from '../vec';
 import type { Vec3 } from '../types';
 import { measureProfile, PROFILE_TOL } from './goblin-head-profile';
+import { bindRig, applyRig } from '../rig-bind';
+import { makeActorMotion } from '../actor';
 
 const doc = parseBlob(src);
 const built = () => buildBody(compileBlob(doc, compileFace(doc)));
@@ -229,5 +231,38 @@ describe('goblin head rest profile (expression pass)', () => {
   it.each(measureProfile(built()).map(m => [m.probe.name, m] as const))('%s is within 3 mm of the approved head', (_n, m) => {
     expect(Number.isFinite(m.got), 'probe starts inside the flesh and leaves it').toBe(true);
     expect(Math.abs(m.got - m.probe.want)).toBeLessThanOrEqual(PROFILE_TOL);
+  });
+});
+
+describe('goblin jaw (expression pass)', () => {
+  const body = built();
+
+  it('has a jaw bone: a carrier from the skull pivot down and forward to the chin, below the lips', () => {
+    const jaw = body.bones.get('jaw');
+    expect(jaw, 'bone jaw').toBeDefined();
+    const pivot = body.bones.get('skull')!.head;
+    expect(jaw!.head).toEqual(pivot);
+    expect(jaw!.tail[1]).toBeLessThan(1.10); // under the lower lip (y 1.09-1.129)
+    expect(jaw!.tail[2]).toBeGreaterThan(0.07); // forward of the skull axis
+  });
+
+  it('is a named motion joint, so the rig can pin it', () => {
+    const m = makeActorMotion(body, { seed: 1 });
+    expect(m.motionJoints, 'goblin still builds motion joints').not.toBeNull();
+    expect(m.motionJoints!.index.jaw, 'jaw joint index').toBeDefined();
+    expect(m.motionJoints!.jaw, 'jaw rest geometry').toBeDefined();
+  });
+
+  it('only the `on jaw` prims open (lower lip and chin mass); everything else stays', () => {
+    const bound = bindRig(body);
+    const shut = applyRig(body, bound, 0);
+    const open = applyRig(body, { ...bound, rig: { ...bound.rig, jawGape: 0.15 } }, 0);
+    const moved = body.prims.map((_, i) => Math.hypot(
+      shut.prims[i]!.a[0] - open.prims[i]!.a[0], shut.prims[i]!.a[1] - open.prims[i]!.a[1], shut.prims[i]!.a[2] - open.prims[i]!.a[2]));
+    body.prims.forEach((p, i) => {
+      if (p.bone === 'jaw') expect(moved[i], `jaw prim ${i}`).toBeGreaterThan(0.008);
+      else expect(moved[i], `${p.bone} prim ${i}`).toBe(0);
+    });
+    expect(body.prims.filter(p => p.bone === 'jaw').length, 'lower lip + chin mass (+ lower teeth once Task 3 lands)').toBeGreaterThanOrEqual(2);
   });
 });

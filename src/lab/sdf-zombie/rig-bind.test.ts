@@ -593,7 +593,9 @@ describe('applyRig — rigid head membership is SHAPE-BLIND (2026-09-06)', () =>
     // a capsule that runs chest→neck tears its chest end loose.
     const body = goblin();
     const bound = bindRig(body);
-    const skullPts = new Set([bound.head!.pivot, bound.head!.tip]);
+    // The jaw's rig point (goblin.blob grew a `jaw` carrier, expression pass 2026-10-13) is a HEAD point too: it sits under
+    // the nose, so the nose capsule's far end is nearer it than the skull's tip; bindRig never binds a non-`on jaw` prim to it.
+    const skullPts = new Set([bound.head!.pivot, bound.head!.tip, ...(bound.head!.jaw ? [bound.head!.jaw.point] : [])]);
     const spanning = body.prims
       .map((p, i) => ({ p, i }))
       .filter(({ p }) => p.limb === 'head' && len(sub(p.a, p.b)) >= 1e-9)

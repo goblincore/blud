@@ -46,6 +46,11 @@ skeleton
   # move together; none of them works alone.
   bone neck   parent=chest  dir=up pitch=-17 len=0.140
   bone skull  parent=neck   dir=up pitch=-5  len=0.235
+  # THE JAW (expression pass, 2026-10-13). Not a hinge bone: a CARRIER for one kinematic rig point, exactly as the bride's
+  # (bride.blob, bone jaw; jaw.ts). It hangs off the skull's pivot to the chin so gait.ts can name its tail `jaw`. The jaw
+  # ROTATES about jaw.ts's JAW_HINGE on the skull axis, and rig-bind turns every prim declared `on jaw` by the gape. Rest tail
+  # is (0, 1.0875, 0.0898): below and in front of the lower lip.
+  bone jaw    parent=neck   dir=up pitch=112 len=0.083
 
   mirror
     # WAM's own comment says the shoulder must land INSIDE the chest mass or
@@ -322,7 +327,14 @@ body
   # semi-depth SHRINKS as you go lower — 0.108 at this height, not the 0.118 at
   # the nose — and lips sized against the wrong number stick out too far.
   blob head on skull at=0.12 r=0.028 r2=0.021 wide=1.25 tall=0.44 blend=0.0020 chamfer offset=(0,0.006,0.062) tip=(0,-0.006,0.044)
-  blob head on skull at=0.12 r=0.024 r2=0.018 wide=1.12 tall=0.42 blend=0.0016 chamfer offset=(0,-0.028,0.056) tip=(0,-0.018,0.038)
+  blob head on jaw at=1.0 r=0.024 r2=0.018 wide=1.12 tall=0.42 blend=0.0016 chamfer offset=(0,0.0312,-0.0234) tip=(0,-0.018,0.038)
+  # THE CHIN (expression pass): the lower part of what used to be the jaw ellipsoid, on the jaw bone so it opens with the gape.
+  # Centre (0, 1.1067, 0.0531), semi-axes 0.061 x 0.031 x 0.046: its top (y 1.137 on the axis, about 6 mm over the mouth seam)
+  # is buried inside the shortened upper mass, so at rest the two read as one surface and the front of the face lands within
+  # 2.5 mm of the approved profile at every pinned probe; at a gape of 0.15 rad the front between y 1.095 and 1.12 falls back by
+  # up to 25 mm. Do not raise it further (the bride's lesson, jaw.ts): a top cap that pokes out above the upper mass swings down
+  # WITH the jaw and fills the opening with skin. Tuned with scripts/goblin-head-profile.ts.
+  blob head on jaw at=1.0 r=0.0462 wide=1.33 tall=0.664 deep=1.0 blend=0.010 offset=(0,0.0192,-0.0367)
 
   # THE MOUTH LINE — a groove, not a gap between two lumps.
   #
@@ -445,9 +457,17 @@ face
   headHeight 1.161
   headDepth  0.894
   jawWidth   0.748
-  jawHeight  0.861
-  jawDrop    0.076
-  jawJut     0.04
+  # EXPRESSION PASS (2026-10-13): the jaw trio below is NOT default any more. The face block's jaw ellipsoid used to run from the
+  # cheeks down to the chin as one rigid mass; the mouth has to hinge, so this ellipsoid is SHORTENED FROM BELOW (jawHeight 0.861
+  # to 0.537) and the chin is a separate mass `on jaw` in the body block. Centre (0, 1.1496, 0.0487), semi-height 0.049: bottom
+  # y 1.100 on the axis, curving up to about y 1.115 at the front, so the lips' corner of the face still hinges. Drop and jut stay
+  # within 2-5 mm of the old 0.076 / 0.04 ON PURPOSE: a first plan (jawHeight 0.571, jawDrop 0.049, jawJut 0.073) ended the mass
+  # at y 1.122 but had to push it 33 mm forward to keep the mouth line's reach, and that filled the gap under the nose solid
+  # (front silhouette +40 mm at y 1.155-1.175: the snout the lips' comment warns about). The top drops to 1.199, inside the
+  # cranium. The rest silhouette is pinned by goblin-blob.test.ts ("head rest profile").
+  jawHeight  0.537
+  jawDrop    0.0743
+  jawJut     0.045
   noseLength 0.007
   noseWidth  0.379
   noseDrop   0.009
