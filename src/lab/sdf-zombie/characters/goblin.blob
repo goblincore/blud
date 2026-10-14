@@ -351,6 +351,50 @@ body
   # crease rather than a wound.
   groove head on skull at=0.12 r=0.030 wide=1.30 tall=0.09 deep=1.10 depth=0.004 width=0.005 offset=(0,-0.014,0.060)
 
+  # THE MOUTH'S INSIDE AND THE TEETH (expression pass, 2026-10-13; owner: "a toothy evil grin", jagged and uneven with two
+  # fangs). Everything below is buried when the jaw is shut (goblin-blob.test.ts pins both ends of every one inside the
+  # tooth-free flesh) and shows only as the gape drops the chin mass away from the upper face mass. The real mouth: the upper
+  # mass's underside runs from y 1.100 on the axis up to about 1.1125 at z 0.10 and 1.116 at the corners; the jaw's own
+  # flesh (chin + lower lip) tops out at 1.128 (axis, z 0.095) falling to 1.1165 (x 0.028, z 0.10). So at rest the two
+  # OVERLAP by ~12 mm at the centre and ~3 mm at the corners, and a lower tooth only clears the upper mass once the jaw has
+  # dropped that far (about gape 0.3); the upper row shows from gape 0.15.
+  #
+  # Three traps found tuning these (each would have passed the endpoint test):
+  #  - BLEND. The plan's `blend=0.002 chamfer` bridges anything within 4k = 8 mm, and the teeth fold BEFORE the face
+  #    block's prims (body-block head prims always come first in the head cluster): they chamfered into the lips and chin
+  #    and grew skin up to 4 mm out through the rest face. Teeth are hard: `blend=0.0002`, no chamfer.
+  #  - THE GROOVE. It cuts 4 mm of FIELD, and at the mouth corners (x 0.030-0.035, y 1.126-1.128) that reaches back to
+  #    z 0.097: roots at y 1.124 broke through it. Upper roots sit at y 1.120-1.123, under the groove's band.
+  #  - PAINT. Paint is the hit's nearest prim (validate.ts nearestPrim). The skin at the corners (x 0.03-0.036,
+  #    y 1.106-1.114) is a blend fillet with every real prim 5-8 mm away, so a lower-corner tooth root 5 mm off painted it
+  #    ivory at rest. The corner lower teeth lean forward like small tusks, roots 6 mm further back.
+  # Checked with a rest-skin paint sweep (no tooth or interior prim paints at gape 0) and a field diff (max rest-skin shift
+  # 0.1 mm, inside the groove).
+  #
+  # The inside is a dark wet bar on the skull, 5-6 cm behind the lips' front (the bride's trick, bride.blob): never the
+  # nearest prim to the rest skin, so it paints nothing at rest, and it is the throat once the jaw drops (it paints from
+  # gape 0.3).
+  bar  head on skull from=0.0 to=0.0 offset=(-0.030,-0.0126,0.0491) tip=(0.060,0,0) r=0.010 tall=1.6 blend=0.003 color=2a0608 gloss=0.85
+  #
+  # Upper row: five small teeth of uneven length and two longer fangs (the 2nd and 6th), spaced so each reads as a tooth against
+  # the dark rather than a yellow clump (the cultist's 8-tooth first try). Pointed (r2), hanging from inside the upper mass
+  # (roots y 1.120-1.123) to tips at y 1.100-1.109, 3-12 mm below its underside, tilted a few mm forward; z 0.093-0.102, 1.5 cm
+  # behind the rest lips. No colour variation and no grain: the owner wants fine surface detail kept small.
+  blob head on skull at=0.0 r=0.0045 r2=0.0010 blend=0.0002 offset=(-0.032,0.0014,0.0751) tip=(0,-0.012,0.005) color=8f8266 gloss=0.15
+  blob head on skull at=0.0 r=0.0062 r2=0.0010 blend=0.0002 offset=(-0.022,0.0024,0.0801) tip=(0,-0.021,0.006) color=8f8266 gloss=0.15
+  blob head on skull at=0.0 r=0.0045 r2=0.0010 blend=0.0002 offset=(-0.011,0.0044,0.0851) tip=(0,-0.018,0.003) color=8f8266 gloss=0.15
+  blob head on skull at=0.0 r=0.0045 r2=0.0010 blend=0.0002 offset=(-0.001,0.0044,0.0861) tip=(0,-0.015,0.003) color=8f8266 gloss=0.15
+  blob head on skull at=0.0 r=0.0045 r2=0.0010 blend=0.0002 offset=(0.010,0.0044,0.0851) tip=(0,-0.019,0.003) color=8f8266 gloss=0.15
+  blob head on skull at=0.0 r=0.0062 r2=0.0010 blend=0.0002 offset=(0.022,0.0024,0.0801) tip=(0,-0.020,0.006) color=8f8266 gloss=0.15
+  blob head on skull at=0.0 r=0.0045 r2=0.0010 blend=0.0002 offset=(0.032,0.0014,0.0751) tip=(0,-0.011,0.005) color=8f8266 gloss=0.15
+  # Lower row, on the jaw: four small teeth jutting up between the upper ones, tips 4-9 mm above the jaw's own flesh
+  # (y 1.121-1.130) and buried in the upper mass when shut. The middle two stand at z 0.098-0.104; the corner two lean
+  # forward from roots at z 0.088 (see PAINT above).
+  blob head on jaw at=1.0 r=0.0045 r2=0.0010 blend=0.0002 offset=(-0.027,0.0175,-0.0019) tip=(0,0.016,0.011) color=8f8266 gloss=0.15
+  blob head on jaw at=1.0 r=0.0055 r2=0.0010 blend=0.0002 offset=(-0.009,0.0245,0.0081) tip=(0,0.018,0.006) color=8f8266 gloss=0.15
+  blob head on jaw at=1.0 r=0.0050 r2=0.0010 blend=0.0002 offset=(0.011,0.0245,0.0081) tip=(0,0.015,0.006) color=8f8266 gloss=0.15
+  blob head on jaw at=1.0 r=0.0045 r2=0.0010 blend=0.0002 offset=(0.028,0.0175,-0.0019) tip=(0,0.017,0.011) color=8f8266 gloss=0.15
+
   # ARMS AND LEGS: tapered bars, no ball joints (rebuilt 2026-10-01).
   #
   # Most joints used to be a nub 1.3-1.7x the shaft it joined (wrist and ankle

@@ -16,7 +16,7 @@ import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace, compilePalette, compileSheet } from '../blob-compile';
 import { buildBody } from '../build-body';
 import { checkStance, clearOf, daylightOf, fusedOf } from '../blob-checks';
-import { sdBody } from '../validate';
+import { nearestPrim, sdBody } from '../validate';
 import { lerp } from '../vec';
 import type { Vec3 } from '../types';
 import { measureProfile, PROFILE_TOL } from './goblin-head-profile';
@@ -210,8 +210,12 @@ describe('goblin.blob', () => {
     expect(painted('torso', 'pelvis').length, 'pelvis trousers').toBeGreaterThan(0);
     expect(painted('torso', 'spine1').length, 'undershirt').toBeGreaterThan(0);
     expect(painted('torso', 'chest').length, 'undershirt chest').toBeGreaterThan(0);
-    for (const l of ['arm', 'head'])
-      expect(doc.parts.filter(p => p.limb === l && p.color != null).length, `${l} stays flesh`).toBe(0);
+    expect(doc.parts.filter(p => p.limb === 'arm' && p.color != null).length, 'arm stays flesh').toBe(0);
+    // The head's only paint is inside the mouth (expression pass): 11 teeth and the dark interior bar, all buried at rest
+    // (see 'goblin teeth and mouth interior' below).
+    const headPaint = doc.parts.filter(p => p.limb === 'head' && p.color != null);
+    expect(headPaint.length, 'head stays flesh but for the 11 teeth and the mouth interior').toBe(12);
+    expect(headPaint.every(p => p.bone === 'skull' || p.bone === 'jaw'), 'mouth paint rides the skull or the jaw').toBe(true);
   });
 
   // No ball joints on the limbs. The orbs that stay are a style the owner kept (early 3D): the hands, the shoulder
@@ -264,5 +268,64 @@ describe('goblin jaw (expression pass)', () => {
       else expect(moved[i], `${p.bone} prim ${i}`).toBe(0);
     });
     expect(body.prims.filter(p => p.bone === 'jaw').length, 'lower lip + chin mass (+ lower teeth once Task 3 lands)').toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('goblin teeth and mouth interior (expression pass)', () => {
+  // Found by their colour markers, not by bone: the chin and the lower lip are `on jaw` too, so the teeth are the prims the
+  // full goblin has that the same .blob with the marked lines stripped does not.
+  const TOOTH = /color=8f8266 gloss=0\.15/;
+  const INTERIOR = /color=2a0608/;
+  const bodyOf = (text: string) => buildBody(compileBlob(parseBlob(text), compileFace(parseBlob(text))));
+  const full = bodyOf(src);
+  const bare = bodyOf(src.split('\n').filter(l => !TOOTH.test(l) && !INTERIOR.test(l)).join('\n'));
+  const same = (p: { a: Vec3; b: Vec3 }, q: { a: Vec3; b: Vec3 }) =>
+    p.a.every((v, k) => Math.abs(v - q.a[k]!) < 1e-9) && p.b.every((v, k) => Math.abs(v - q.b[k]!) < 1e-9);
+  const teeth = full.prims.filter(p => !bare.prims.some(q => same(p, q)));
+
+  it('has 11 teeth plus the mouth interior bar, 5 small and 2 fangs above, 4 small below', () => {
+    expect(full.errors).toEqual([]);
+    expect(teeth.length).toBe(12); // 11 teeth + 1 interior bar
+    const upper = teeth.filter(p => p.bone === 'skull');
+    const lower = teeth.filter(p => p.bone === 'jaw');
+    expect(upper.length, 'upper: 7 teeth + the interior bar').toBe(8);
+    expect(lower.length, 'lower teeth').toBe(4);
+  });
+
+  it('every tooth and the interior bar is buried at rest: both ends are inside the tooth-free flesh', () => {
+    for (const p of teeth) {
+      expect(sdBody(p.a, bare), `end a of ${p.bone} prim`).toBeLessThan(-0.0005);
+      expect(sdBody(p.b, bare), `end b of ${p.bone} prim`).toBeLessThan(-0.0005);
+    }
+  });
+
+  it('adding them does not move the head profile', () => {
+    for (const m of measureProfile(full)) expect(Math.abs(m.got - m.probe.want), m.probe.name).toBeLessThanOrEqual(PROFILE_TOL);
+  });
+
+  // Buried ends are not enough: paint goes to the hit's NEAREST prim, and the mouth corners are a blend fillet with every
+  // real prim 5-8 mm away, so a buried tooth can still paint the rest skin ivory (the first tuning pass did). Sweep the face
+  // from the front (1 mm grid over the mouth, sphere-traced along -z) and read which prim paints each hit.
+  const painters = (gape: number): Set<number> => {
+    const bound = bindRig(full);
+    const b = gape === 0 ? full : applyRig(full, { ...bound, rig: { ...bound.rig, jawGape: gape } }, 0);
+    const hit = new Set<number>();
+    for (let x = -0.05; x <= 0.0501; x += 0.001) for (let y = 1.07; y <= 1.15; y += 0.001) {
+      let z = 0.16;
+      while (z > -0.02) { const d = sdBody([x, y, z], b); if (d < 0.0002) break; z -= Math.max(d * 0.8, 0.0002); }
+      if (z > -0.02) hit.add(nearestPrim([x, y, z + 0.0002], b));
+    }
+    return hit;
+  };
+  const toothIndices = teeth.map(p => full.prims.indexOf(p));
+
+  it('paints nothing when the jaw is shut: no tooth and not the interior is the nearest prim anywhere on the rest face', () => {
+    const rest = painters(0);
+    for (const i of toothIndices) expect(rest.has(i), `prim ${i} (${full.prims[i]!.bone}, x ${full.prims[i]!.a[0]}) paints the rest skin`).toBe(false);
+  });
+
+  it('shows when the jaw drops: every tooth and the interior paint part of the face at a 0.3 rad gape', () => {
+    const open = painters(0.3);
+    for (const i of toothIndices) expect(open.has(i), `prim ${i} (${full.prims[i]!.bone}, x ${full.prims[i]!.a[0]}) never shows`).toBe(true);
   });
 });
