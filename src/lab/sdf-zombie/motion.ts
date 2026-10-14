@@ -278,7 +278,7 @@ export function makeMotionJoints(
     },
     neck: [d('chest', 'neck'), d('neck', 'head')],
     ...(index.jaw === undefined ? {} : {
-      jaw: jawRestOf(baseRest[index.neck!]!, baseRest[index.head!]!, baseRest[index.jaw]!) }),
+      jaw: jawRestOf(baseRest[index.neck!]!, baseRest[index.head!]!, baseRest[index.jaw]!, body.bones.get('jaw')?.jawHinge) }),
     groundY: Math.min(baseRest[index.footL!]![1], baseRest[index.footR!]![1]),
     pelvis: [baseRest[index.pelvis!]![0], 0, baseRest[index.pelvis!]![2]],
     ropes: collapseRopes(names, baseRest),

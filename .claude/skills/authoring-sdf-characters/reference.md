@@ -103,6 +103,19 @@ bone forearm parent=upperarm dir=down tilt=6 pitch=10 len=0.26 lenR=0.30
 The bride's sword forearm. `makeMotionJoints` measures `arm.L`/`arm.R`
 separately, so the rig carries the difference.
 
+## Where the jaw hinges: `hinge=` (added 2026-10-14)
+
+A `jaw` bone (bride, goblin) opens by ROTATING its `on jaw` prims about a hinge
+on the skull axis (jaw.ts). The default, `JAW_HINGE.at` 0.30 of the skull, is
+the bride's upper lip line. `hinge=<0..1>` on the jaw bone moves it for one
+body; it is an error on any other bone. Put it at the MOUTH LINE: a hinge well
+above the lips (the goblin's was 5.6 cm above) swings the lower jaw back into
+the throat instead of dropping it.
+
+```
+bone jaw parent=neck dir=up pitch=112 len=0.083 hinge=0.06
+```
+
 ## Curved primitives: `bend=`
 
 Horns, tusks, tails, claws, curved fingers, ribs, hooked noses. Before this

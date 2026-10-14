@@ -514,3 +514,29 @@ ${inMirror ? '  end\n' : ''}`;
     expect(() => parseBlob(src('bone spine parent=pelvis dir=up len=0.40 lenR=0.45', false))).toThrow(/lenR/);
   });
 });
+
+describe('parseBlob — hinge= (per-body jaw hinge, goblin expression pass)', () => {
+  const src = (line: string) => `model t
+  height 1.0
+
+skeleton
+  root pelvis at 0.5
+  bone neck parent=pelvis dir=up len=0.10
+  bone skull parent=neck dir=up len=0.20
+  ${line}
+`;
+
+  it('reads hinge on the jaw bone', () => {
+    const b = parseBlob(src('bone jaw parent=neck dir=up pitch=112 len=0.08 hinge=0.06')).bones.find(x => x.name === 'jaw')!;
+    expect(b.hinge).toBe(0.06);
+  });
+
+  it('leaves hinge undefined when absent (the shared JAW_HINGE applies)', () => {
+    expect(parseBlob(src('bone jaw parent=neck dir=up len=0.08')).bones.find(x => x.name === 'jaw')!.hinge).toBeUndefined();
+  });
+
+  it('rejects hinge on any bone but the jaw, and outside 0..1', () => {
+    expect(() => parseBlob(src('bone brow parent=skull dir=up len=0.05 hinge=0.2'))).toThrow(/hinge/);
+    expect(() => parseBlob(src('bone jaw parent=neck dir=up len=0.08 hinge=1.5'))).toThrow(/hinge/);
+  });
+});

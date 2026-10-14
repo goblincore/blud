@@ -355,10 +355,17 @@ function parseSkeletonLine(l: BlobLine, s: ParseState): void {
     const lenR = strArg(l, 'lenR') === null ? undefined : numArg(l, 'lenR');
     if (lenR !== undefined && !s.inMirror)
       throw new BlobError('lenR= only applies to a bone inside a mirror block', l.line, l.indent + 1);
+    // `hinge=` moves the JAW's hinge along the skull (jaw.ts). Only the jaw bone hinges, so anywhere else it is a mistake.
+    const hinge = strArg(l, 'hinge') === null ? undefined : numArg(l, 'hinge');
+    if (hinge !== undefined && name !== 'jaw')
+      throw new BlobError('hinge= only applies to the jaw bone', l.line, l.indent + 1);
+    if (hinge !== undefined && !(hinge >= 0 && hinge <= 1))
+      throw new BlobError('hinge= is a fraction along the skull bone, 0..1', l.line, l.indent + 1);
     s.doc.bones.push({
       name, parent, dir: dirArg(l),
       pitchDeg: numArg(l, 'pitch', 0), tiltDeg: numArg(l, 'tilt', 0),
-      len: numArg(l, 'len'), ...(lenR === undefined ? {} : { lenR }), side: numArg(l, 'side', 0),
+      len: numArg(l, 'len'), ...(lenR === undefined ? {} : { lenR }), ...(hinge === undefined ? {} : { hinge }),
+      side: numArg(l, 'side', 0),
       at: strArg(l, 'at') === null ? null : numArg(l, 'at'),
       mirror: s.inMirror, src: l,
     } satisfies BlobBone);

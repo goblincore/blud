@@ -43,6 +43,12 @@ export interface BlobBone {
    * differ (the bride's longer sword forearm). Absent means symmetric.
    */
   lenR?: number;
+  /**
+   * `hinge=` — the `jaw` bone only: where the jaw hinges, as a fraction along the skull bone (jaw.ts JAW_HINGE.at). Absent means
+   * the shared default (0.30, tuned on the bride's skull). The goblin's lip line sits at 0.05 of its skull, 5.6 cm under the
+   * default hinge, so its jaw swung back into the throat as it opened (expression pass, Task 3b).
+   */
+  hinge?: number;
   side: number;
   mirror: boolean;
   at: number | null;

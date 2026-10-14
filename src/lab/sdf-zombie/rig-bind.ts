@@ -416,7 +416,7 @@ export function bindRig(body: BuildResult): BoundRig {
         const jp = new Set<number>(), jb = new Set<number>();
         body.prims.forEach((p, i) => { if (p.bone === 'jaw' && prims.has(i)) jp.add(i); });
         body.bonePrims.forEach((p, i) => { if (p.bone === 'jaw' && bones.has(i)) jb.add(i); });
-        head.jaw = { point: jawTip, rest: jawRestOf(skull.head, skull.tail, jawBone.tail), prims: jp, bones: jb };
+        head.jaw = { point: jawTip, rest: jawRestOf(skull.head, skull.tail, jawBone.tail, jawBone.jawHinge), prims: jp, bones: jb };
       }
     }
   }

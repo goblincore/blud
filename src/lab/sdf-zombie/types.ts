@@ -112,6 +112,8 @@ export interface BoneDef {
   side?: number;
   /** When true, expands into `<name>.l` and `<name>.r`. */
   mirror?: boolean;
+  /** The `jaw` bone only: the jaw's hinge as a fraction along the skull bone (jaw.ts). Absent = JAW_HINGE.at. */
+  jawHinge?: number;
 }
 
 export interface PrimDef {
@@ -461,6 +463,8 @@ export interface ClusterInfo {
 export interface ResolvedBone {
   head: Vec3;
   tail: Vec3;
+  /** Carried from BoneDef.jawHinge (the `jaw` bone only). */
+  jawHinge?: number;
 }
 
 export interface BuiltBody {
