@@ -56,6 +56,10 @@ import { parseBlob } from '../blob-parse';
 import { makePoseRig, poseJoints, type PoseRig } from '../pose';
 import { posesFor } from '../pose-library';
 import { generateFaceSheet, sheetToRgba } from '../blob-face-sheet';
+import {
+  REST_CHANNELS, expressionAt, actuate, blinkLid, withBlink, sheetKey, type ExpressionClip,
+} from '../expression';
+import { expressionsFor } from '../expression-library';
 import { compileBlob, compileFace, compileSheetImage } from '../blob-compile';
 import {
   DEFAULT_FACE, FACE_PRESETS, pickFace, type FaceParams,
@@ -964,6 +968,40 @@ async function main() {
   /** THE EXPRESSION LAYER's jaw gape (rad, jaw.ts). The spike sets it by hand (`__sdfLab.setJawGape`); Task 9 drives it from
    *  clips. It rides on top of the motion's own gape (the bride's sword swing): the larger wins. */
   let exprGape = 0;
+  /** The active character's expression clips and its authored sheet (the neutral), or null when it has none. `entry` and
+   *  `compileCharacterSheet` are the ones loadGeneratedFace uses. */
+  const exprSet = expressionsFor(activeCharacterName());
+  const exprBase = exprSet ? compileCharacterSheet(entry).sheet : null;
+  let exprClip: ExpressionClip | null = null;
+  let exprT = 0;            // seconds into the clip
+  let exprPlaying = false;  // advance exprT with the frame clock
+  let exprClock = 0;        // seconds, for blinks
+  let blinkStart = -1;      // exprClock when the last blink began
+  let exprLidHold = 0;      // a lid value held for a capture (a blink frame)
+  let exprKey = '';         // sheetKey of the sheet last uploaded
+
+  /** Refill the generated face sheet's texture in place from new params; no-op when the face is a PNG or a decal. */
+  function refreshSheet(params: Parameters<typeof generateFaceSheet>[0]) {
+    if (!faceSheet || !generatedRgba || (faceSheet.tex.image as { data?: unknown } | null)?.data !== generatedRgba) return;
+    const gen = generateFaceSheet(params, 64);
+    sheetToRgba(gen, generatedRgba);
+    faceSheet.tex.needsUpdate = true;
+    faceSheet.mean = gen.mean;
+    for (const v of [view, ...crowd]) v.setFaceTexture(faceSheet.tex, faceSheet.atlas, gen.mean);
+  }
+
+  /** One expression tick: advance the clock, sample the clip, set the jaw gape, regenerate the sheet only if it changed. */
+  function stepExpression(dt: number) {
+    if (!exprSet || !exprBase) return;
+    exprClock += dt;
+    if (exprPlaying) exprT += dt;
+    const base = exprClip ? expressionAt(exprClip, exprT) : REST_CHANNELS;
+    const lid = Math.max(blinkLid(exprClock, blinkStart), exprLidHold);
+    const act = actuate(withBlink(base, lid), exprBase, exprSet.tuning);
+    exprGape = act.jawGape;
+    const key = sheetKey(act.sheet);
+    if (key !== exprKey) { exprKey = key; refreshSheet(act.sheet); }
+  }
   /** The pose layer's per-character skeleton data (pose.ts), built on first use. */
   let poseRig: PoseRig | null = null;
   /** Seconds since the hero last fired; feeds the prop's muzzle rise. */
@@ -2686,6 +2724,7 @@ async function main() {
         bounds: WANDER_BOUNDS, rng: motionRng, signals: heroSignals,
         profile: { ...motionProfile, cruise: cruiseFor(speedBand) },
         forceSpeed, carryOverride,
+        jawGape: exprGape,
       });
       lastMotionFrame = f;
       // shot/forcedCollapse/fire are values — read the drained state back.
@@ -2737,6 +2776,7 @@ async function main() {
     // the flesh reddens on the SAME number that sags it — and at twice the
     // rate, so the colour leads the collapse.
     view.setMelt(meltState ? meltState.t : 0);
+    stepExpression(dt);
     // The expression layer's gape: statue mode and held captures never run the motion step that would set rig.jawGape.
     const boundForPose = exprGape > (heroMotion.bound.rig.jawGape ?? 0)
       ? { ...heroMotion.bound, rig: { ...heroMotion.bound.rig, jawGape: exprGape } }
@@ -3624,6 +3664,15 @@ async function main() {
       postAa.setSharpUpscale(!postAa.sharpUpscale);
       sharpBtn.textContent = `sharp upscale: ${postAa.sharpUpscale ? 'on' : 'off'}`;
     });
+
+  // The expression layer (spec 2026-10-13-goblin-expressions-design.md): play a clip from its first key, or blink.
+  if (exprSet) {
+    const exprBox = addSection(panelEl, 'expression');
+    for (const name of Object.keys(exprSet.clips)) {
+      addButton(exprBox, name, () => { exprClip = exprSet.clips[name]!; exprT = 0; exprPlaying = true; exprLidHold = 0; });
+    }
+    addButton(exprBox, 'blink', () => { blinkStart = exprClock; });
+  }
 
   // Motion (X1.22): master + wander toggles, the forced-collapse hook for
   // the K key's panel twin, and the live damage-meter readout.
@@ -4611,6 +4660,29 @@ async function main() {
     },
     /** Hand-set the jaw gape (rad), clamped to jaw.ts's JAW_MAX_GAPE. Statue and held captures both honour it. */
     setJawGape(g: number) { exprGape = Math.max(0, Math.min(JAW_MAX_GAPE, Number.isFinite(g) ? g : 0)); },
+    /** Names of the active character's expressions, or []. */
+    expressionNames(): string[] { return exprSet ? Object.keys(exprSet.clips) : []; },
+    /**
+     * THE EXPRESSION LAYER (spec 2026-10-13-goblin-expressions-design.md): hold the named expression of the ACTIVE character at clip
+     * time `t` seconds (default 10: past every clip's end, i.e. fully formed), optionally with the lid held at `lid` (a blink frame).
+     * Applies the sheet immediately. Returns the name, t and gape, or null when this character has no such expression.
+     */
+    holdExpression(name: string, t = 10, lid = 0) {
+      const clip = exprSet?.clips[name];
+      if (!exprSet || !clip) return null;
+      exprClip = clip; exprT = t; exprPlaying = false; blinkStart = -1; exprLidHold = lid;
+      stepExpression(0);
+      return { expression: clip.name, t, jawGape: exprGape };
+    },
+    /** Play the named expression from its first key, advancing with the frame clock. */
+    playExpression(name: string) {
+      const clip = exprSet?.clips[name];
+      if (!clip) return null;
+      exprClip = clip; exprT = 0; exprPlaying = true; exprLidHold = 0;
+      return { expression: clip.name };
+    },
+    /** Blink now. */
+    blink() { blinkStart = exprClock; },
     /**
      * THE POSE LAYER (spec 2026-10-03-goblin-pose-layer-design.md): hold the named authored pose or clip of the ACTIVE character
      * at clip time `t` seconds, stepped `frames` times at 1/60 with the body standing still, then frozen exactly like holdPose so

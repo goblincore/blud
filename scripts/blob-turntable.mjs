@@ -229,6 +229,15 @@ console.log('pose:', poseResult);
 if (process.env.BLOB_GAPE !== undefined) {
   await evaluate(`window.__sdfLab.setJawGape(${Number(process.env.BLOB_GAPE)})`);
 }
+// BLOB_EXPR=<name>[:<t>[:<lid>]] holds one of the character's expressions (lab-main's holdExpression): t in seconds into the clip
+// (default 10, fully formed), lid 0..1 held shut for a blink frame. e.g. BLOB_EXPR=grin, BLOB_EXPR=neutral:10:1.
+if (process.env.BLOB_EXPR) {
+  const [exprName, exprT = '10', exprLid = '0'] = process.env.BLOB_EXPR.split(':');
+  const held = await evaluate(`JSON.stringify(window.__sdfLab.holdExpression(${JSON.stringify(exprName)}, ${Number(exprT)}, ${Number(exprLid)}))`);
+  console.log('expression:', held);
+  if (!held || held === 'null') fail(`no expression "${exprName}" for this character`);
+  await sleep(500);
+}
 await sleep(4000);
 // A held WALK/RUN pose steps the treadmill from the origin, and the body's
 // torso is no longer where the pre-pose focusBody() aimed: the ogre's stomp
