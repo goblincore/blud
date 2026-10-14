@@ -2,35 +2,6 @@
 
 The march, temporal work, the upscaler, post, perf sessions. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
-## Moved from the front page — 2026-10-14
-
-Verbatim from [TASKS.md](../../TASKS.md) when the front page was trimmed back toward its ~120-line limit (the front page keeps a
-one- or two-line summary of each). Dated as they were written.
-
-- [~] **Measured and ranked 2026-10-08; two changes built (PR goblincore/blud#41), owner look pending.** The whole
-  frame attributed on six scenes ([notes](../dev-notes/2026-10-08-frame-cost/NOTES.md), driver
-  `scripts/frame-cost.mjs`). Built: (1) the held weapons and the arms shade the lights near the eye, not the level's
-  69 (Night Train −2.5 to −6.1 ms a frame; the hitch on entering a carriage halved; `?nearlights=0` is the A/B);
-  (2) the exact wound reach is the default (a switch that shipped off: −3 ms on a body with 32 wounds, −6 ms on a
-  chopped, split close-up, the picture the same to the bit). **With PR 43's quad dispatch merged in, the three heavy
-  scenes are under 33.3 ms with margin:** Boiler Room after a fight 37.6 → 28.5 ms, the bare arena after a fight
-  37.4 → 24.8 ms, the chopped and split close-up 38.5 → 23.3 ms. Left for margin and smoothness: the props and kit
-  on their room's lights, a doorway test so other carriages are not drawn, the first shot's pipeline hitch.
-
-- [x] **Built 2026-10-06; the owner picked the `wet` look 2026-10-07; merged 2026-10-07 (PR 34).** On the mesh skeleton a zombie's organs are segment meshes, drawn
-  only where a wound reaches them; the body packs no inside-flesh row, so the march never calls `applyBones` (0
-  evaluations a frame against 869,688 on three torso chops; about 1 to 1.5 ms back at 0.9 m). `?organs=sdf` is the A/B.
-  The frame is GPU-bound (CPU about 4 ms); organs were about 1 ms of it. [Sheets](../dev-notes/2026-10-06-organs-mesh/look/).
-  Gate `scripts/organs-mesh-gate.mjs` (32 checks). [Spec](../superpowers/specs/2026-10-06-organs-mesh-design.md) ·
-  [notes](../dev-notes/2026-10-06-organs-mesh/NOTES.md).
-- [x] **Low-poly organs, built 2026-10-07; the owner picked the detail strength as shipped; merged 2026-10-07
-  (PR 37).** Each organ prim is a swept tube (analytic normals): the zombie's organs are 528
-  vertices / 1,024 triangles against 4,038 / 8,084, with the same silhouette (0.965 of the extraction's pixels). The
-  haustra and wrinkles are a bump in the organ shader over the tube's own coordinate; the crease between loops is a
-  baked shade. No frame-time change was measured (+0.62 ms, IQR -0.25 to 1.35): this is tidiness and room for more
-  organs. Gate: 37 checks. [Sheets](../dev-notes/2026-10-07-organs-lowpoly/look/) ·
-  [notes](../dev-notes/2026-10-07-organs-lowpoly/NOTES.md).
-
 ## The whole frame: attribution and ranking, toward a stable 30 fps in the heavy scenes — 2026-10-08
 
 Notes, tables and the ranking: [`docs/dev-notes/2026-10-08-frame-cost/NOTES.md`](../dev-notes/2026-10-08-frame-cost/NOTES.md).
