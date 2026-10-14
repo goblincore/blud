@@ -494,6 +494,26 @@ Send the six frames (`gape-0`, `gape-0.15`, `gape-0.5`, front and 45 degrees) to
 
 ---
 
+### Task 3b: Bold lips: rebuild the mouth around real, coloured lips (owner direction, 2026-10-13)
+
+Added after the Task 4 spike. Finding: with the lips and profile held fixed, the jaw split put the mouth opening in the muzzle's bevel at the chin (y 1.10-1.115), 2-3 cm below the lips and the painted mouth, so the teeth hide in shadow (frames: `docs/dev-notes/2026-10-13-goblin-expressions/spike-close/`). The owner's reading was the same ("hard to see any teeth ... a big bevel to make the lips") and asked for the lips to become a defining trait: real lips, a different colour and texture, maybe lipstick. Decision (owner, 2026-10-13): **bold lips, lipstick red** ("try option 1 and see how that goes"), not full option C.
+
+**Goal:** the mouth opens BETWEEN two real lips at the lip line (about y 1.13), the upper lip on the skull and the lower lip on the jaw, with the teeth behind them clearly visible at gape 0.15; lips are bigger, defined and painted dark glossy lipstick red/plum.
+
+**Files:** `src/lab/sdf-zombie/characters/goblin.blob`, `goblin-blob.test.ts`, `goblin-head-profile.ts` (re-pin), possibly `goblin-kit.test.ts` windows only if a kit vertex near the head fails (re-tune geometry first), frames and notes under `docs/dev-notes/2026-10-13-goblin-expressions/lips/`.
+
+**Allowed to change (the owner invited a new look):** the two lip prims (bigger, `color=`, `gloss=`), the face-block jaw trio (so the skull-side mass ends at the upper lip's underside and the chin mass on the jaw carries from the lower lip down), the chin mass, the groove (it may move or go if the lips' crease does its job), the teeth and interior bar positions (re-place them behind the lips), the goblin's `sheet` mouth (`mouthRise`, `mouthWidth`, `mouthOpen`, `mouthCurve`: the painted mouth is now redundant and must not read as a second mouth), and the profile pins in `goblin-head-profile.ts` (re-pin deliberately with a comment saying why).
+
+**Must keep:** the nose the face's lead (the nose tip's front stays at least 1 cm ahead of the lips' front; the old comments warn the lips turned into a snout and a "cartoon mouse" when they reached the nose), ears, cranium, brow, kit fit (`goblin-kit.test.ts`), all non-profile pins in `goblin-blob.test.ts` (arm daylight, fuse, head size), the buried-at-rest teeth tests, every other character's tests untouched. Lip colour: `color=` is the albedo replacement per nearest prim; the renderer darkens low sRGB values hard and the key light is warm, so tune the hex by eye on frames (start near `9a2a3c`, `gloss=0.6`), not by number. Fine surface detail stays small.
+
+- [ ] **Step 1:** Re-read the Task 4 close frames and `goblin.blob`'s lips/jaw/face block. Write down the lip line y, the lips' front z and the nose tip z in the notes.
+- [ ] **Step 2:** Edit `goblin.blob`: bigger, defined lips (upper on skull, lower on jaw) with `color=` and `gloss=`; move the skull/jaw mass seam to the lip line; re-place teeth and the interior bar behind the lips; adjust the sheet's painted mouth. Keep the teeth tests' structure (11 teeth, buried at rest).
+- [ ] **Step 3:** Render with `LAB_VITE_PORT=5281 LAB_CDP_PORT=9281 BLOB_DIST=0.3 BLOB_TARGET_Y=1.14 BLOB_PITCH=0.05 BLOB_GAPE=<g> npm run blob:shot -- goblin <scratch>/lips-<g> 2` for g = 0, 0.15, 0.3, 0.5. READ the frames. Iterate geometry/colour (up to ten rounds) until: at gape 0 the lips read as lips and the mouth is closed with no tooth showing; at 0.15 a dark opening between the lips shows the upper teeth and fangs clearly; at 0.5 a wide open mouth with a dark inside and no skin cap; the nose still leads in the 45-degree view.
+- [ ] **Step 4:** Re-pin `goblin-head-profile.ts` to the new head (CLI exit 0) and run `npx vitest run src/lab/sdf-zombie/characters/goblin-blob.test.ts src/lab/sdf-zombie/characters/goblin-kit.test.ts src/lab/sdf-zombie/characters/goblin-poses.test.ts src/lab/sdf-zombie/rig-bind.test.ts src/lab/sdf-zombie/pack.test.ts` and `npm run typecheck`.
+- [ ] **Step 5:** Keep the frames (front and 45 degrees for each gape) in `docs/dev-notes/2026-10-13-goblin-expressions/lips/`, write what changed and what you see into the notes, commit.
+
+---
+
 ### Task 5: The sheet learns to blink, and to upload in place
 
 `eyeSquash` is declared and defaulted in `FaceSheetParams` but never read by `generateFaceSheet` (the eye uses a hard-coded `* 1.25`), so it cannot drive a blink; wiring it in would silently change the goblin's approved eyes (its authored `eyeSquash 1.70` has never taken effect). A NEW param, `eyeLid`, default 0, leaves every character's sheet unchanged. Also factor the RGBA conversion so the lab can refresh a texture in place.
