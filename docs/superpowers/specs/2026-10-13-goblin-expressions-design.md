@@ -49,6 +49,9 @@ could use it.
   nose, lips, sunglasses and the kit with it). The jaw split must not move the rest-pose silhouette.
 - **The goblin wears round sunglasses** in the kit (eyes are hidden in the game). Brows and mouth carry the expression;
   the blink and lids are visible only without the kit, as in the lab.
+- **`eyeSquash` is dead** (found 2026-10-13, Task 5): it is declared and defaulted in `FaceSheetParams` but `generateFaceSheet`
+  never reads it (the eye uses a fixed 1.25), so the goblin's authored `eyeSquash 1.70` has never applied. The blink uses a new
+  `eyeLid` param (default 0, no existing sheet changes); wiring `eyeSquash` in would change every character's eyes (an owner call).
 - **Pose layer:** `pose.ts` keys BONE angles only. `jawGape` is a separate scalar, which is also how the bride's gape
   travels (never read back off the jaw point, which is one step stale).
 
@@ -60,7 +63,8 @@ could use it.
 |---|---|---|---|
 | `src/lab/sdf-zombie/expression.ts` | pure, new | channels, keyed clips, `expressionAt(clip, t)`, `actuate(channels, rest)` | `blob-face-sheet.ts` (types only) |
 | `src/lab/sdf-zombie/characters/goblin-expressions.ts` | data, new | `NEUTRAL`, `GRIN`, `SCOWL`, `SHOUT`, `BLINK` clips and the goblin's actuator tuning | `expression.ts` |
-| `characters/goblin.blob` | data | `bone jaw`, jaw split, teeth, mouth interior | existing jaw system |
+| `characters/goblin.blob` | data | `bone jaw` (with its own `hinge=0.06`), jaw split, teeth, mouth interior; since Task 3b the mouth opens at the lip line (groove removed; upper ridge, cheek-fill pair, mouth-corner pair and a dark floor added, about 5 net head prims) | existing jaw system, per-body hinge |
+| `jaw.ts`, `blob-parse.ts`, `resolve.ts`, `rig-bind.ts`, `motion.ts` | glue (as built) | `hinge=<0..1>` on a `.blob` jaw bone overrides the bride's `JAW_HINGE.at` for that body (`jawRestOf(..., hingeAt)`); absent, the bride's 0.30 | `jaw.ts` |
 | motion wiring (`motion.ts`, `actor.ts`) | glue | an `expression` input feeds `MotionFrame.jawGape` | `expression.ts`, `jaw.ts` |
 | `lab-main.ts` | glue | in-place sheet update, expression panel, play | `expression.ts` |
 
@@ -89,10 +93,15 @@ C (later) adds a third output, per-prim morph deltas, without touching clips or 
 
 - `goblin.blob` gains `bone jaw parent=neck` as a carrier, the bride's way (a carrier with a named tail; the jaw rotates
   about `JAW_HINGE`, not the bone's head). The hinge height will be re-tuned for the goblin's lip line in the spike.
+  *(As built, 2026-10-14: the shared `JAW_HINGE` sat 5.6 cm above the goblin's lips and swung its jaw back into the throat
+  from about 0.3 rad, so the hinge became PER BODY: `hinge=` on the `.blob` jaw bone, the goblin's at 0.06, y 1.1326, the lip
+  line. The bride keeps 0.30.)*
 - **Jaw split.** The face block's lower-face ellipsoid is replaced by two mass prims on the same line and taper (the bride's
   split): the upper part stays on the skull, the lower part rides the jaw. They start below the lip line so the top cap does
   not swing down and fill the opening. A pin keeps the rest silhouette (profile and front) within a few millimetres of today's.
   The lower lip prim and the chin ride the jaw. The mouth groove stays on the skull. Exact numbers are for the spike.
+  *(As built: the spike put the opening at the chin, below the painted mouth, so Task 3b moved the seam to the lip line and
+  removed the groove, which also cut the teeth; see `docs/dev-notes/2026-10-13-goblin-expressions/grin/NOTES-grin.md`.)*
 - **Teeth.** About 11 prims on the skull (upper) and the jaw (lower): about 5 upper and 4 lower small teeth of uneven length
   plus two longer fangs. Roots 3-5 mm inside the flesh, pointed, chamfered, dirty ivory, low gloss (the cultist's lesson:
   clean ivory under the key light reads yellow). Closed, the lips cover them, with fang tips allowed to just touch the lip line.
@@ -115,16 +124,25 @@ prims on a character that is already heavier than the zombie (the goblin-home ac
 screen lab, spread over all added prims with no single trim saving more than 0.8 ms). The plan measures the delta with the
 repo's frame-cost tooling and trims by count before shipping. Teeth near the camera only matter close up, so a cheap
 distance gate on the tooth prims is an option if the number is too high.
+*(As measured 2026-10-14, Task 11: the head went from 40 to 58 prims (teeth 11, the Task 3b lip-line prims, the floor and
+throat bar), and a face close-up in the lab from 54 to 101 ms a frame (+47; +32 at 0.8 m, +5 at 2.4 m). The buried teeth and
+interior are about 30 ms of it, paid at rest. Not trimmed; the trims are listed in the notes for the owner.)*
 
 ## Risks and how the plan handles them
 
 1. **A small gape may not read as a grin.** The lips are static prims, so a grin cannot lift the lip off the teeth. Task 1 is a
    look-dev spike that decides it with frames. If gape plus a darker mouth and a wider sheet mouth does not read, the
    fallback inside A is a small lip-offset channel (the upper lip prims riding a second tiny carrier); if that fails, the
-   owner's own fallback is C.
+   owner's own fallback is C. *(As built: the gape did not read until Task 3b moved the opening to the lip line; after it the
+   teeth read at 0.15 rad. The lip-offset channel was not needed. C was pre-approved as an escalation (a minimal per-prim
+   morph) but NOT built; the reasons it may still be wanted (the grin's corners do not curl up, the opening is a box from about
+   0.3 rad, the lower teeth are small) are open items in the notes.)*
 2. **The jaw split can change the approved head.** Pinned by a silhouette test against the current head.
-3. **A new bone changes the skeleton.** `goblin-kit.wam` transcribes `goblin.blob`'s skeleton by hand and a parity test caught
-   the bride's `jaw` the same way. The kit's skeleton gains the bone (geometry unchanged), as Task 13 did for the bride.
+3. **A new bone changes the skeleton.** *(Corrected 2026-10-14.)* The goblin has no kit skeleton-parity test (the bride's
+   `bride-kit.test.ts` has one; `goblin-kit.test.ts` does not). The `.wam` gets the transcribed `jaw` line for consistency
+   (`bone jaw parent=neck dir=up pitch=112 len=0.0638`, the blob's 0.083 / 1.30) and the glTF is rebuilt with
+   `scripts/build-wam-kit.sh goblin` when WAM is installed: done in the jaw-bone commit, vertex data byte-identical, the only
+   new node `jaw`.
 4. **`rig-bind` `ridesHead` trap:** any zero-length blob in the head limb rides the rigid head transform about the skull pivot
    even if declared on the neck (the goblin's neck vertebra bead already has this latent bug). New teeth must be real
    short bars or blobs with a tip, never accidental points on the wrong bone.
@@ -138,7 +156,7 @@ distance gate on the tooth prims is an option if the number is too high.
 - **Pure tests:** `expression.test.ts` (interpolation, held ends, blink overlay composition, `actuate` mapping, mouth-curve
   sign, rest = authored sheet unchanged).
 - **Blob tests:** `goblin-blob.test.ts` pins still pass (arm daylight, fuse, head size); new pins for the jaw split silhouette
-  and the tooth prims riding the right bones; the kit skeleton-parity test passes with the jaw bone.
+  and the tooth prims riding the right bones. (The goblin has no kit skeleton-parity test; see Risks 3.)
 - **Commands:** `npm run typecheck`, `npm run test:changed`, `npx vitest run <path>`. Never the full suite.
 - **Look-dev (the owner judges):** `npm run blob:shot -- goblin` (own `LAB_VITE_PORT`/`LAB_CDP_PORT`, never the owner's
   5173) for a turntable, plus a sheet of the expressions (front and three-quarter, with and without the sunglasses) in

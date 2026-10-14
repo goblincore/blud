@@ -38,7 +38,7 @@ Each line is the first sentence of the module's header comment.
 | [webgpu/earlyz/](#webgpuearlyz) | 10 | Early-Z depth prepass for the march. |
 | [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 27 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
 | [webgpu/upscale/](#webgpuupscale) | 8 | Upscaling of the low-res march target. |
-| [characters/](#characters) | 1 | Character bodies: `.blob` sources, generators and per-character data. |
+| [characters/](#characters) | 3 | Character bodies: `.blob` sources, generators and per-character data. |
 | [shared-wounds/](#shared-wounds) | 4 | Shared wound-field probe page. |
 | [gait-curves/](#gait-curves) | 2 | Baked gait curve data. |
 | [Entrypoints and labs](#entrypoints-and-labs) | 19 | One module per HTML page; see the entrypoint table above. |
@@ -64,7 +64,7 @@ Each line is the first sentence of the module's header comment.
 | [AI and actors (logic)](#ai-and-actors-logic) | 11 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 9 | First-person mode, dynamite flight, explosions, rockets, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
-| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 5 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
+| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 7 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
 
@@ -190,6 +190,8 @@ Upscaling of the low-res march target.
 
 Character bodies: `.blob` sources, generators and per-character data.
 
+- `characters/goblin-expressions.ts` — The goblin's expressions (expression pass, spec docs/superpowers/specs/2026-10-13-goblin-expressions-design.md): the tuning table that maps channels…
+- `characters/goblin-head-profile.ts` — The goblin head's REST profile as seven reach probes, measured 2026-10-13 on the head BEFORE the jaw split (expression pass,…
 - `characters/goblin-poses.ts` — The goblin's authored poses and clips (goblin refinement phase 4b, spec docs/superpowers/specs/2026-10-03-goblin-pose-layer-design.md).
 
 ## shared-wounds/
@@ -794,5 +796,7 @@ What fits no area above: the original WebGL lab shader, resolution scaling, samp
 - `adaptive-scale.ts` — Dynamic resolution for the SDF layer: keep the frame inside a budget by trading raymarch resolution, which is the one lever whose cost is exactly…
 - `curl-sample.ts` — CPU SIDE OF THE SHARED CURL VOLUME (2026-09-18 blood-curl-spike): a pure, THREE-FREE trilinear sampler over the packed `Uint8Array` from…
 - `depth-diff.ts` — Depth diff — comparing the INSIDE of the outline: per-pixel surface depth of the compiled body against the reference mesh, where both agree the…
+- `expression-library.ts` — Which expression clips (and which tuning) each character has, by the name the lab and the game use for it.
+- `expression.ts` — THE EXPRESSION LAYER's pure half (spec docs/superpowers/specs/2026-10-13-goblin-expressions-design.md, plan…
 - `march.glsl.ts` — Shader source as strings.
 - `skull-fracture.ts` — Anatomical skull damage and ray selection.

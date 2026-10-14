@@ -10,6 +10,15 @@
 
 ## In flight / next
 
+**The goblin's face moves** (owner, 2026-10-13) — [characters](docs/tasks/characters.md)
+- [~] **Built 2026-10-13/14, owner look pending.** A jaw bone with its own hinge (`hinge=0.06` at the lip line), the mouth opening at the
+  lip line, 11 jagged teeth with two fangs, and keyed expression clips (neutral, grin, scowl, shout, plus a blink) driving the jaw and the
+  generated face sheet. Judged in the lab (`?character=goblin`, panel section "expression"; `BLOB_EXPR=grin npm run blob:shot -- goblin`;
+  `scripts/goblin-expression-sheet.sh`). [Notes and the expression sheet](docs/dev-notes/2026-10-13-goblin-expressions/NOTES.md) ·
+  [spec](docs/superpowers/specs/2026-10-13-goblin-expressions-design.md) · [plan](docs/superpowers/plans/2026-10-13-goblin-expressions.md).
+  Open for the owner: is the grin evil enough (the kit's sunglasses hide the brows and eyes); the box-shaped mouth and the puffier rest jaw
+  (approach C, per-prim morphs, pre-approved but not built); surprise and sneer; the screen-lab wiring after PRs #46/#47. Cost: +47 ms a frame on a face close-up in the lab (54 -> 101; the buried teeth and interior are 30 of it), not trimmed.
+
 **The Flat's room in the engine** (owner, 2026-10-11) — [levels](docs/tasks/levels.md) (4o)
 - [~] **Slice 1 built 2026-10-11 (the owner liked it); the Giger iMac built the same day, owner look pending** (alpha-blended shell; the WGSL shell is a later spike). A walkable `?level=flat`: the last-stage room from the
   look-dev (stone shell, Giger layer, hero props, the iMac) through the Blender level route, grown into a small apartment (2026-10-11): an arched entry hall with the front door, and a bathroom with a white claw-foot tub, toilet, sink and a dark-glass mirror; 50 draws, about 423k triangles, about 9 to 10 ms a frame measured (cheaper than a Night Train carriage; no pass needed).
@@ -17,15 +26,8 @@
   (branch `claude/flat-room`). Separate task: the goblin to human height ([characters](docs/tasks/characters.md)).
 
 **Frame cost: the heavy scenes at a stable 30 fps** (owner's goal, 2026-10-08) — [rendering](docs/tasks/rendering.md)
-- [~] **Measured and ranked 2026-10-08; two changes built (PR goblincore/blud#41), owner look pending.** The whole
-  frame attributed on six scenes ([notes](docs/dev-notes/2026-10-08-frame-cost/NOTES.md), driver
-  `scripts/frame-cost.mjs`). Built: (1) the held weapons and the arms shade the lights near the eye, not the level's
-  69 (Night Train −2.5 to −6.1 ms a frame; the hitch on entering a carriage halved; `?nearlights=0` is the A/B);
-  (2) the exact wound reach is the default (a switch that shipped off: −3 ms on a body with 32 wounds, −6 ms on a
-  chopped, split close-up, the picture the same to the bit). **With PR 43's quad dispatch merged in, the three heavy
-  scenes are under 33.3 ms with margin:** Boiler Room after a fight 37.6 → 28.5 ms, the bare arena after a fight
-  37.4 → 24.8 ms, the chopped and split close-up 38.5 → 23.3 ms. Left for margin and smoothness: the props and kit
-  on their room's lights, a doorway test so other carriages are not drawn, the first shot's pipeline hitch.
+- [~] **Measured and ranked 2026-10-08; two changes built (PR goblincore/blud#41), owner look pending.** With PR 43's quad dispatch
+  merged the three heavy scenes are under 33.3 ms with margin. [Notes](docs/dev-notes/2026-10-08-frame-cost/NOTES.md); the full entry is on the rendering page.
 
 **Player melee: spike flail** (branch `claude/melee-weapon-design-7d1423`, PR #22) — [combat and gore](docs/tasks/combat-and-gore.md)
 - [~] **Flail v1.5b built; owner playtest pending.** Torn, splayed, wet-red lips on flail wounds; gun wounds get the
@@ -33,85 +35,31 @@
   optimization pass (torn-wound cost, first-swing hitch, grey gib-blur smears). Gate `scripts/flail-gate.mjs`.
 - [~] **Melee head damage model v2 built; owner playtest pending** — regions, 3D eyes that pop, brain gib, jelly
   wobble, the skull deforms with the flesh. Gate `scripts/head-damage-gate.mjs`.
-- [~] **The gun and the zombie's head, redefined 2026-10-07; owner playtest pending** (branch `claude/sculpt-skull-2`).
-  Ordinary rounds leave ordinary wounds; a slug aimed precisely (the crosshair within 3.3 cm of the head's centre) from
-  no farther than 5 m splits the head as the axe does, both halves; the slug that takes the head off pops it (it swells
-  for 0.12 s and bursts, the skull thrown as pieces); any slug from that range on a split head pops it.
-  The slug head burst of 2026-10-02 (the "opening") is off, behind `burstTune({ opening: true })`. Gate
-  `scripts/head-burst-gate.mjs`. [Notes and the before/after sheet](docs/dev-notes/2026-10-07-sculpt-skull-2/NOTES.md) ·
-  [the opening's spec](docs/superpowers/specs/2026-10-02-slug-head-burst-design.md).
+- [~] **The gun and the zombie's head, redefined 2026-10-07; owner playtest pending** (branch `claude/sculpt-skull-2`): a precise
+  close slug splits the head as the axe does, the slug that takes the head off pops it. The full entry is on the combat page.
 
 **Cut wounds** — [combat and gore](docs/tasks/combat-and-gore.md)
-- [~] **Cut wounds M1 built 2026-10-04; owner playtested** — a cut wound shape, the rod (weapon slot 6), 32 wounds with merging.
-  Owner: "more excessive", so longer, wider, ragged cuts landed 2026-10-04. Their cost, investigated 2026-10-06: about 4 to 5 ms for three chops, not +22 ([notes](docs/dev-notes/2026-10-06-cut-cost/NOTES.md)); next for wound cost is organs to mesh (owner). M2 is the head split (next line).
-  Gate `scripts/cut-wound-gate.mjs` (33 checks). [Notes](docs/dev-notes/2026-10-03-cut-wounds/NOTES.md) · [handoff](docs/dev-notes/2026-10-03-cut-wounds/HANDOFF.md).
-- [~] **The axe (slot 7) and the head split built 2026-10-05; owner playtested; PR goblincore/blud#31** (branch
-  `claude/head-cleaving-effect-ef9515`) — a chop opens a zombie's head on a hinge: a wide crack, then split wide and alive, then
-  the kill. The halves wobble; the skull cracks, then splits. The wet film under the flashlight is the owner's pick (C, the boldest, 2026-10-06).
-  Debt: an open head costs about +4.4 ms at 0.6 m after a first cost pass and the cut-cost pass under it (2026-10-06, branch `claude/open-head-cost`: [notes](docs/dev-notes/2026-10-06-open-head-cost/NOTES.md); +6 to +8 ms before). Gates `scripts/head-split-gate.mjs` (111 checks, 2026-10-07), `scripts/axe-gate.mjs` (29).
-  **The anatomical skull is too small in the head (2026-10-07, branch `claude/anatomical-skull-fit`):** four fits that read the flesh are behind `?skullfit=affine|mid|snug|tight`. [Look sheets and tables](docs/dev-notes/2026-10-07-anatomical-skull-fit/NOTES.md).
-  **On the anatomical skull (2026-10-06, branch `claude/split-anatomical-skull`):** split plates have their own material, shots break them where they are drawn (bone standing in the open gap included), the gate runs on it and reads their pixels. Owner to decide: retune how far the bone opens ([sheets and notes](docs/dev-notes/2026-10-06-split-anatomical-skull/NOTES.md)).
-  [Spec](docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 10) · [handoff](docs/dev-notes/2026-10-04-head-split/HANDOFF.md) · [notes](docs/dev-notes/2026-10-04-head-split/NOTES.md).
-- [~] **The sculpted skull, `full`, is the default skull since 2026-10-07 (owner's pick); the anatomical skull is opt-in** (branch `claude/sculpt-skull-2`).
-  No parameter draws the sculpted skull's second sculpt and second paint; `?skull=anatomical` the 14 plates; `?sculpt=classic` the first look. Both looks are pinned by hash; the four capture gates run on the new default (head-split 111 checks, head-burst 130, axe 29, cut-wound 33).
-  The eight humanoids with no skull-shaped head bone (the cultist among them) draw the anatomical skull by default, each fitted to its own flesh with the eyes in the fitted orbits (2026-10-07). For the owner: the three schoolgirls' skulls sit 2 to 7 cm above their cartoon faces; and 1 cm against 5 mm for the head's mesh.
-  [Notes, the cast sheet and the cell pair](docs/dev-notes/2026-10-07-sculpt-skull-2/NOTES.md).
-  The light gate's "skull glows in the dark" check failed on it (1.56x against 1.5x) and was re-derived to 2.0 (2026-10-08): the low head lip and the paler paint moved the ratio, the bone's dark-room response did not change. For the owner: the skull is easier to see in a dark carriage than it was. [The before/after pair and the numbers](docs/dev-notes/2026-10-08-skull-dark-gate/NOTES.md).
+- [~] **Cut wounds M1 (2026-10-04), the axe and the head split (2026-10-05, PR goblincore/blud#31), the sculpted skull as the default
+  (2026-10-07), owner-playtested.** The open owner calls (the skull's fit, how far the bone opens, the open head's cost) are in the full entries on the combat page.
 
 **Organs as mesh** — [rendering](docs/tasks/rendering.md)
-- [x] **Built 2026-10-06; the owner picked the `wet` look 2026-10-07; merged 2026-10-07 (PR 34).** On the mesh skeleton a zombie's organs are segment meshes, drawn
-  only where a wound reaches them; the body packs no inside-flesh row, so the march never calls `applyBones` (0
-  evaluations a frame against 869,688 on three torso chops; about 1 to 1.5 ms back at 0.9 m). `?organs=sdf` is the A/B.
-  The frame is GPU-bound (CPU about 4 ms); organs were about 1 ms of it. [Sheets](docs/dev-notes/2026-10-06-organs-mesh/look/).
-  Gate `scripts/organs-mesh-gate.mjs` (32 checks). [Spec](docs/superpowers/specs/2026-10-06-organs-mesh-design.md) ·
-  [notes](docs/dev-notes/2026-10-06-organs-mesh/NOTES.md).
-- [x] **Low-poly organs, built 2026-10-07; the owner picked the detail strength as shipped; merged 2026-10-07
-  (PR 37).** Each organ prim is a swept tube (analytic normals): the zombie's organs are 528
-  vertices / 1,024 triangles against 4,038 / 8,084, with the same silhouette (0.965 of the extraction's pixels). The
-  haustra and wrinkles are a bump in the organ shader over the tube's own coordinate; the crease between loops is a
-  baked shade. No frame-time change was measured (+0.62 ms, IQR -0.25 to 1.35): this is tidiness and room for more
-  organs. Gate: 37 checks. [Sheets](docs/dev-notes/2026-10-07-organs-lowpoly/look/) ·
-  [notes](docs/dev-notes/2026-10-07-organs-lowpoly/NOTES.md).
+- [x] **Merged 2026-10-07 (PRs 34 and 37):** organs as segment meshes (the owner's `wet` look), then low-poly swept tubes. Full entries on the rendering page.
 
 **Night Train (level 1)** — [levels](docs/tasks/levels.md) (items 4a–4k)
-- [x] **Body lighting settled** (owner, 2026-09-28): LIGHT LAYERS panel (`light-layers.ts`) — every body-lighting
-  change since the melee branch behind a live switch. Default = the owner's pick: the list on; with the torch lit,
-  the old per-pixel beam under the list; S-curve off. `?layers=none` is the melee look. [Hand-off](docs/dev-notes/2026-09-28-light-layers/notes.md).
-- [x] **Boiler Room resize to 8 × 28 m** (2026-09-28): kit, level, gates, look sheet, cost — all PASS; +60 draws /
-  +6.7 ms art, beacons +1.05 ms. [Notes + sheets](docs/dev-notes/2026-09-28-boiler-resize/notes.md). **Owner calls, done 2026-09-29** ([notes + sheets](docs/dev-notes/2026-09-29-boiler-calls/notes.md)): second tube row (8 tubes;
-  only 4 cast shadows — WebGPU's 16-texture limit), `DISCO.count` 144, and a `beaconTorch` look switch for beacon
-  weight on torch-lit bodies (**2.5, owner's pick**). Frame cost of the extra
-  spots not yet measured (needs a quiet machine).
+- [x] **Done 2026-09-28/29** (full entries on the levels page): body light layers; the Boiler Room at 8 × 28 m (the extra spots' cost
+  unmeasured); real zombie feet (open: the feet a little small, kit characters' boots unverified).
 - [ ] **Optimisation (owner 2026-09-29, in progress):** DONE — tube shadow maps 256²; every tube's omni spill list-only
   (−3 ms Boiler Room); the Boiler Room's second tube row list-only (+2 ms, not +10); the cost harness can now measure
   live tube shadows (`LIGHT_GATE_TUBE_SHADOW=1`). **Finding: the static/dynamic tube-shadow bake would save <1 ms — dropped.**
   Level materials on the shared list, cheap tier: **default ON (owner: no visible difference in play), ~free; `?levellist=0` opts out** ([notes](docs/dev-notes/2026-09-29-level-list/notes.md)). Left: retire paths the chosen look leaves unused
   (needs owner sign-off on the look). Numbers: [optimisation-strategies.md](docs/dev-notes/2026-09-28-light-layers/optimisation-strategies.md).
-- [x] **Zombies float — fixed with real feet** (owner, 2026-09-29): the model stopped 0.199 m above the floor (legs too
-  short for the hip, no foot bone). Thigh 0.46 / shin 0.50 and a foot bone with heel + sole: lowest point 0.004 m,
-  height unchanged. [Notes + turntable](docs/dev-notes/2026-09-29-zombie-feet/notes.md). **Open:** feet a little
-  small (~0.19 m; foot `len`), the walk with longer legs not yet judged in play; kit characters (soldier 0.10,
-  juggernaut 0.11) assumed hidden by boots — verify.
 - [ ] **Ending: the control room, the egg, the montage** (owner, 2026-09-30, scope B) — [spec](docs/superpowers/specs/2026-09-30-night-train-egg-ending-design.md) · [blockout](docs/dev-notes/2026-09-30-egg-ending/). The cab becomes an 8 × 10 m control room with a nested, alive egg (red veiny outer, milky spotted inner, soft silhouette); contact starts a ~30 s abstract montage (jump cuts, the train seen as a sperm), then black and a title card. The Flat and the pull-back stay later. **Plans 1 (room), 2 (egg pass) and 3 (sequence system) built.** Egg look rework approved 2026-10-01 ([spec](docs/superpowers/specs/2026-10-01-egg-candled-caul-design.md)): a candled egg in a torn caul of wet flesh. The egg is **paused** (owner thinking). **In design (drafts awaiting the owner, 2026-10-01):** the Flat set and the screen emergence ([spec](docs/superpowers/specs/2026-10-01-flat-screen-emergence-design.md), [animatic](docs/dev-notes/2026-10-01-flat-emergence-lookdev/)), then goblin animation and the playable Flat; a [design statement](docs/game/design-statement-draft.md) for vision draft 4. **The room** ([look-dev](docs/dev-notes/2026-10-01-flat-room-lookdev/), 2026-10-01): castle stone for the bones, Giger's industrial decay for the veins, otaku cute for the stuff, and the machine's last stage as a "Giger iMac". **Goblin refinement pass**: phase 1 (body) done (owner-approved 2026-10-01); body grain (the face's texture on the body) done, reworked 2026-10-02 to one small octave of pitted relief after the owner saw big pixels ([spec](docs/superpowers/specs/2026-10-02-body-grain-design.md)); **armour (phase 2) built 2026-10-02, awaiting the owner's final look** ([spec](docs/superpowers/specs/2026-10-02-goblin-armour-design.md), [notes](docs/dev-notes/2026-10-02-goblin-armour/notes.md)); **held weapons, thin shotgun pass done 2026-10-02** ([notes](docs/dev-notes/2026-10-02-goblin-shotgun/notes.md)); **in-game gait (phase 4a) built 2026-10-02, awaiting the owner's look in motion** ([spec](docs/superpowers/specs/2026-10-02-goblin-gait-design.md), [notes](docs/dev-notes/2026-10-02-goblin-gait/notes.md)); **the Flat's poses (phase 4b first slice: pose layer, type, recoil, sit, stand, jolt) built 2026-10-03, awaiting the owner's look** ([spec](docs/superpowers/specs/2026-10-03-goblin-pose-layer-design.md), [notes](docs/dev-notes/2026-10-03-goblin-poses/notes.md)); next the vest and shorts, `reach`, game wiring, more weapons ([spec](docs/superpowers/specs/2026-10-01-goblin-refinement-design.md), [tasks](docs/tasks/characters.md)).
 - [ ] Check the beacon sweeps read on bodies under the owner's default; explain the light gate's `?lightlist=0` gib
   reading (0.296 vs 0.163 earlier, passes).
-- [x] **Optimisation pass** (owner), rounds 1–2: the frame was CPU-bound on draw calls. Static
-  batching of the art (`batchArt`), the bone-exposure cull (unwounded enemies draw only their eyes)
-  and instanced bone meshes took third class from ~440 to ~300 draws; bones + eyes ~3 draws; art
-  +61..+164 draws / +3..+6 ms (budget +200 / +12 ms). The tube cones (shadowed spots) cost ~4–9 ms
-  per carriage; part 3's shared light list is where that is won back.
-- [~] **Part 3: haze + volumetric light, folded with hybrid lighting** — one shared light list with
-  shadows read by the level shaders and the SDF march. **Plan 1 is done and merged to local main
-  (owner: the pale baseline is fine; gibs have no fresnel)** ([dev note](docs/dev-notes/2026-09-27-shared-light-list/notes.md), A/B pairs inside):
-  bodies, crowds, bones and gibs each light from their own 4 picks (`?lightlist=0` = the old key).
-  Cost +0.0..0.4 ms against a +1.5 ms budget. The self-shadow was rejected (ships off). Open: tube
-  shadow maps at 256² (indistinguishable, no saving — owner call), deleting the old path
-  (`?lightlist=0`), then plan 2 (level materials on the list) — see [rendering](docs/tasks/rendering.md).
-- [x] **Boiler Room emergency beacons** (4j): two red sweeping ceiling beacons with hard shadows come
-  on as the strobe ends; +0.75 ms frame / +1.12 ms GPU ([dev note + sheet](docs/dev-notes/2026-09-27-boiler-room-beacons/notes.md)).
-  Owner look pending: a body in the beam blows out flat red (tone the beacon down on bodies?).
-- [x] **Boiler Room disco ball** (4k): mirror tiles and 96 stars sweeping the room, white at the party,
-  flashing with the strobe, red pulses as the beacons pass the ball; ~0 ms ([dev note + sheet](docs/dev-notes/2026-09-27-disco-ball/notes.md)).
+- [x] **Done 2026-09-27** (full entries on the levels page): the art draw-call pass, the Boiler Room beacons (open: a body in the
+  beam blows out red) and its disco ball.
+- [~] **Part 3: haze + volumetric light, folded with hybrid lighting**: plan 1 done and merged; open: the tube shadow maps at 256²,
+  deleting `?lightlist=0`, then plan 2. The full entry is on the levels page.
 - [ ] Keys + locked doors (coloured placeholders); encounters (wake-up triggers), the Stoker.
 - [ ] Owner tuning: lightning (rate, peak, rim, grade), lamp moods, game-loop defaults.
 

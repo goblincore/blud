@@ -94,6 +94,23 @@ so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), like
     `rig-bind.ts` (`ridesHead`, ~line 388) binds it to the RIGID head: it is 94 mm below the skull pivot and will slide
     19-47 mm into or off the neck as the head pitches. Make it a short bar (`bar head on neck from=0.28 to=0.32 ...`)
     so it binds per end, and check with `__sdfLab.heroPosed()`. `female.blob:107` has the same pattern.
+- [~] **Facial expressions: built 2026-10-13/14, awaiting the owner's look.** [Notes, the expression sheet and the
+  tuning frames](../dev-notes/2026-10-13-goblin-expressions/NOTES.md) · [spec](../superpowers/specs/2026-10-13-goblin-expressions-design.md) ·
+  [plan](../superpowers/plans/2026-10-13-goblin-expressions.md). Built: a `jaw` carrier bone with the lower face split onto it and its
+  own hinge (`hinge=0.06` on the bone, at the lip line: the hinge is per body now, `jaw.ts`/`blob-parse.ts`/`rig-bind.ts`); the mouth
+  opening at the lip line (Task 3b: the groove gone, an upper ridge, cheek fill, mouth corners and a dark floor added); 11 jagged teeth
+  with two fangs, buried at rest; the pure `expression.ts` (channels, keyed clips, blink overlay, `actuate` to a jaw gape and face-sheet
+  overrides); the goblin's clips in `characters/goblin-expressions.ts` (neutral, grin, scowl, shout; tuned by eye 2026-10-14); the lab
+  panel section "expression", `__sdfLab.holdExpression`/`playExpression`/`blink`/`setJawGape`, `BLOB_EXPR`/`BLOB_GAPE` captures and
+  `scripts/goblin-expression-sheet.sh`; `MotionConfig.jawGape` for the actor path. Cost, measured 2026-10-14 in the lab: +47 ms a frame on a face close-up (54 -> 101 ms), +5 ms
+  at 2.4 m; the teeth and interior, buried at rest, are about 30 ms of it (notes: trims listed, none applied).
+  - [ ] Owner look: is the grin evil enough? The kit's round sunglasses cover the painted brows and eyes from the front, so with
+    the kit on the expressions differ by the jaw and teeth alone ([notes](../dev-notes/2026-10-13-goblin-expressions/NOTES.md)).
+  - [ ] Owner call: approach C (a small per-prim morph, pre-approved as an escalation, not built): the grin's corners do not curl up,
+    the opening is box-shaped from about 0.3 rad, the lower teeth are small; and the rest face's lower jaw reads puffier than the
+    pre-expression head ([notes](../dev-notes/2026-10-13-goblin-expressions/NOTES.md)).
+  - [ ] Surprise and sneer (clip data); the screen-emergence lab wiring after PRs #46/#47.
+  - [ ] Decide whether to fix the dead `eyeSquash` in `generateFaceSheet` for every character (it would change every face's eyes).
 - [ ] **Goblin to human height** (owner, 2026-10-11: the player is human-sized and the levels are scaled to them, so the goblin
   should be near human height, not 1.30 m). Its own spec and plan. `height 1.30` in `goblin.blob` is a label: the proportions are
   absolute metres, and the WAM kit (a hand-copied transcription, metres ÷ 1.30), the armour, the gait, the poses, the held-weapon

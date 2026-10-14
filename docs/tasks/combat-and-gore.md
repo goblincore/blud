@@ -2,6 +2,35 @@
 
 Weapons, gibs, blood, burning, decapitation, shot visuals, the viewmodel. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Moved from the front page — 2026-10-14
+
+Verbatim from [TASKS.md](../../TASKS.md) when the front page was trimmed back toward its ~120-line limit (the front page keeps a
+one- or two-line summary of each). Dated as they were written.
+
+- [~] **The gun and the zombie's head, redefined 2026-10-07; owner playtest pending** (branch `claude/sculpt-skull-2`).
+  Ordinary rounds leave ordinary wounds; a slug aimed precisely (the crosshair within 3.3 cm of the head's centre) from
+  no farther than 5 m splits the head as the axe does, both halves; the slug that takes the head off pops it (it swells
+  for 0.12 s and bursts, the skull thrown as pieces); any slug from that range on a split head pops it.
+  The slug head burst of 2026-10-02 (the "opening") is off, behind `burstTune({ opening: true })`. Gate
+  `scripts/head-burst-gate.mjs`. [Notes and the before/after sheet](../dev-notes/2026-10-07-sculpt-skull-2/NOTES.md) ·
+  [the opening's spec](../superpowers/specs/2026-10-02-slug-head-burst-design.md).
+
+- [~] **Cut wounds M1 built 2026-10-04; owner playtested** — a cut wound shape, the rod (weapon slot 6), 32 wounds with merging.
+  Owner: "more excessive", so longer, wider, ragged cuts landed 2026-10-04. Their cost, investigated 2026-10-06: about 4 to 5 ms for three chops, not +22 ([notes](../dev-notes/2026-10-06-cut-cost/NOTES.md)); next for wound cost is organs to mesh (owner). M2 is the head split (next line).
+  Gate `scripts/cut-wound-gate.mjs` (33 checks). [Notes](../dev-notes/2026-10-03-cut-wounds/NOTES.md) · [handoff](../dev-notes/2026-10-03-cut-wounds/HANDOFF.md).
+- [~] **The axe (slot 7) and the head split built 2026-10-05; owner playtested; PR goblincore/blud#31** (branch
+  `claude/head-cleaving-effect-ef9515`) — a chop opens a zombie's head on a hinge: a wide crack, then split wide and alive, then
+  the kill. The halves wobble; the skull cracks, then splits. The wet film under the flashlight is the owner's pick (C, the boldest, 2026-10-06).
+  Debt: an open head costs about +4.4 ms at 0.6 m after a first cost pass and the cut-cost pass under it (2026-10-06, branch `claude/open-head-cost`: [notes](../dev-notes/2026-10-06-open-head-cost/NOTES.md); +6 to +8 ms before). Gates `scripts/head-split-gate.mjs` (111 checks, 2026-10-07), `scripts/axe-gate.mjs` (29).
+  **The anatomical skull is too small in the head (2026-10-07, branch `claude/anatomical-skull-fit`):** four fits that read the flesh are behind `?skullfit=affine|mid|snug|tight`. [Look sheets and tables](../dev-notes/2026-10-07-anatomical-skull-fit/NOTES.md).
+  **On the anatomical skull (2026-10-06, branch `claude/split-anatomical-skull`):** split plates have their own material, shots break them where they are drawn (bone standing in the open gap included), the gate runs on it and reads their pixels. Owner to decide: retune how far the bone opens ([sheets and notes](../dev-notes/2026-10-06-split-anatomical-skull/NOTES.md)).
+  [Spec](../superpowers/specs/2026-10-04-axe-and-head-split-design.md) (section 10) · [handoff](../dev-notes/2026-10-04-head-split/HANDOFF.md) · [notes](../dev-notes/2026-10-04-head-split/NOTES.md).
+- [~] **The sculpted skull, `full`, is the default skull since 2026-10-07 (owner's pick); the anatomical skull is opt-in** (branch `claude/sculpt-skull-2`).
+  No parameter draws the sculpted skull's second sculpt and second paint; `?skull=anatomical` the 14 plates; `?sculpt=classic` the first look. Both looks are pinned by hash; the four capture gates run on the new default (head-split 111 checks, head-burst 130, axe 29, cut-wound 33).
+  The eight humanoids with no skull-shaped head bone (the cultist among them) draw the anatomical skull by default, each fitted to its own flesh with the eyes in the fitted orbits (2026-10-07). For the owner: the three schoolgirls' skulls sit 2 to 7 cm above their cartoon faces; and 1 cm against 5 mm for the head's mesh.
+  [Notes, the cast sheet and the cell pair](../dev-notes/2026-10-07-sculpt-skull-2/NOTES.md).
+  The light gate's "skull glows in the dark" check failed on it (1.56x against 1.5x) and was re-derived to 2.0 (2026-10-08): the low head lip and the paler paint moved the ratio, the bone's dark-room response did not change. For the owner: the skull is easier to see in a dark carriage than it was. [The before/after pair and the numbers](../dev-notes/2026-10-08-skull-dark-gate/NOTES.md).
+
 ## Cut wounds and the head split — designed 2026-10-03
 
 - [~] **The axe (slot 7) and the head split — built 2026-10-05; owner playtested; PR goblincore/blud#31 (branch

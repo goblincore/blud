@@ -2,6 +2,42 @@
 
 Night Train, the Wake, the Void and menu, level format, game design. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Moved from the front page — 2026-10-14
+
+Verbatim from [TASKS.md](../../TASKS.md) when the front page was trimmed back toward its ~120-line limit (the front page keeps a
+one- or two-line summary of each). Dated as they were written.
+
+- [x] **Body lighting settled** (owner, 2026-09-28): LIGHT LAYERS panel (`light-layers.ts`) — every body-lighting
+  change since the melee branch behind a live switch. Default = the owner's pick: the list on; with the torch lit,
+  the old per-pixel beam under the list; S-curve off. `?layers=none` is the melee look. [Hand-off](../dev-notes/2026-09-28-light-layers/notes.md).
+- [x] **Boiler Room resize to 8 × 28 m** (2026-09-28): kit, level, gates, look sheet, cost — all PASS; +60 draws /
+  +6.7 ms art, beacons +1.05 ms. [Notes + sheets](../dev-notes/2026-09-28-boiler-resize/notes.md). **Owner calls, done 2026-09-29** ([notes + sheets](../dev-notes/2026-09-29-boiler-calls/notes.md)): second tube row (8 tubes;
+  only 4 cast shadows — WebGPU's 16-texture limit), `DISCO.count` 144, and a `beaconTorch` look switch for beacon
+  weight on torch-lit bodies (**2.5, owner's pick**). Frame cost of the extra
+  spots not yet measured (needs a quiet machine).
+- [x] **Zombies float — fixed with real feet** (owner, 2026-09-29): the model stopped 0.199 m above the floor (legs too
+  short for the hip, no foot bone). Thigh 0.46 / shin 0.50 and a foot bone with heel + sole: lowest point 0.004 m,
+  height unchanged. [Notes + turntable](../dev-notes/2026-09-29-zombie-feet/notes.md). **Open:** feet a little
+  small (~0.19 m; foot `len`), the walk with longer legs not yet judged in play; kit characters (soldier 0.10,
+  juggernaut 0.11) assumed hidden by boots — verify.
+- [x] **Optimisation pass** (owner), rounds 1–2: the frame was CPU-bound on draw calls. Static
+  batching of the art (`batchArt`), the bone-exposure cull (unwounded enemies draw only their eyes)
+  and instanced bone meshes took third class from ~440 to ~300 draws; bones + eyes ~3 draws; art
+  +61..+164 draws / +3..+6 ms (budget +200 / +12 ms). The tube cones (shadowed spots) cost ~4–9 ms
+  per carriage; part 3's shared light list is where that is won back.
+- [~] **Part 3: haze + volumetric light, folded with hybrid lighting** — one shared light list with
+  shadows read by the level shaders and the SDF march. **Plan 1 is done and merged to local main
+  (owner: the pale baseline is fine; gibs have no fresnel)** ([dev note](../dev-notes/2026-09-27-shared-light-list/notes.md), A/B pairs inside):
+  bodies, crowds, bones and gibs each light from their own 4 picks (`?lightlist=0` = the old key).
+  Cost +0.0..0.4 ms against a +1.5 ms budget. The self-shadow was rejected (ships off). Open: tube
+  shadow maps at 256² (indistinguishable, no saving — owner call), deleting the old path
+  (`?lightlist=0`), then plan 2 (level materials on the list) — see [rendering](../tasks/rendering.md).
+- [x] **Boiler Room emergency beacons** (4j): two red sweeping ceiling beacons with hard shadows come
+  on as the strobe ends; +0.75 ms frame / +1.12 ms GPU ([dev note + sheet](../dev-notes/2026-09-27-boiler-room-beacons/notes.md)).
+  Owner look pending: a body in the beam blows out flat red (tone the beacon down on bodies?).
+- [x] **Boiler Room disco ball** (4k): mirror tiles and 96 stars sweeping the room, white at the party,
+  flashing with the strobe, red pulses as the beacons pass the ball; ~0 ms ([dev note + sheet](../dev-notes/2026-09-27-disco-ball/notes.md)).
+
 ## New game flow restructure — design approved 2026-09-24
 
 **Hand-off:** [2026-09-27 night train](../../docs/dev-notes/2026-09-27-night-train-handoff.md) — next: the Boiler Room resize (4l), the flashlight feel (4m).
