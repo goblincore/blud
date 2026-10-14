@@ -109,6 +109,13 @@ export interface FaceSheetParams {
    */
   eyeSquash: number;
   /**
+   * Eyelid closure, 0 (open) to 1 (shut): squeezes each eye's height, so a blink is a bright disc thinning to a slit. The
+   * EXPRESSION layer's blink channel (expression.ts) writes it. A new param instead of wiring `eyeSquash` in: that one is declared
+   * and defaulted but generateFaceSheet has never read it (the eye uses a fixed 1.25), so reading it now would change every
+   * authored eye, the goblin's 1.70 included. Default 0 leaves every character's sheet bit-identical.
+   */
+  eyeLid: number;
+  /**
    * A dark pupil inside the bright eye, as a fraction of eye radius.
    *
    * **This fights the glow, and usually loses.** The shader's emissive mask is
@@ -227,6 +234,7 @@ export const DEFAULT_SHEET: FaceSheetParams = {
   projSpherical: 0,
   faceForward: 1,
   eyeSquash: 1.25,
+  eyeLid: 0,
   eyePupil: 0,
   eyeRise: 0.42,
   eyeTilt: 8,
@@ -326,7 +334,7 @@ export function generateFaceSheet(
       // cannot push the surrounding tone past white and smear the glow.
       if (p.eyeSize > 0) {
         const ey = eyeY + (sx - eyeDX) * tilt;
-        const d = Math.hypot(sx - eyeDX, (y - ey) * 1.25);
+        const d = Math.hypot(sx - eyeDX, ((y - ey) * 1.25) / Math.max(1 - p.eyeLid, 0.08));
         // Soft edge scaled to the EYE, not to the texel grid. An absolute
         // `soft * 2.5` (~0.059 uv) is wider than a small eye's own radius, so
         // the eye is all edge and never reaches full brightness anywhere —
@@ -421,4 +429,23 @@ export function generateFaceSheet(
   }
 
   return { pixels, size, mean: total / (size * size * 255) };
+}
+
+/**
+ * The sheet as the bytes a three.js RGBA DataTexture takes: four equal channels (the shader reads `tex.rgb`, so a one-channel
+ * upload renders the head blood red; see lab-main's loadGeneratedFace), opaque, with the rows FLIPPED because a DataTexture is not
+ * given three's flipY at upload. generateFaceSheet keeps writing top-left rows. Pass `out` to refill a texture's buffer in place.
+ */
+export function sheetToRgba(gen: GeneratedSheet, out?: Uint8Array): Uint8Array {
+  const n = gen.size;
+  const rgba = out ?? new Uint8Array(n * n * 4);
+  for (let y = 0; y < n; y++) {
+    const src = (n - 1 - y) * n;
+    for (let x = 0; x < n; x++) {
+      const v = gen.pixels[src + x]!;
+      const o = (y * n + x) * 4;
+      rgba[o] = v; rgba[o + 1] = v; rgba[o + 2] = v; rgba[o + 3] = 255;
+    }
+  }
+  return rgba;
 }

@@ -121,3 +121,45 @@ describe('generateFaceSheet', () => {
     for (const b of wild.pixels) expect(b).toBeGreaterThanOrEqual(0), expect(b).toBeLessThanOrEqual(255);
   });
 });
+
+import { sheetToRgba } from './blob-face-sheet';
+
+describe('eyeLid', () => {
+  const GLOW = 224; // 0.88 * 255: the shader's emissive threshold
+  const lit = (s: ReturnType<typeof generateFaceSheet>) => s.pixels.reduce((n, b) => n + (b >= GLOW ? 1 : 0), 0);
+
+  it('defaults to 0, and a closed lid shrinks the lit eye without removing it', () => {
+    expect(DEFAULT_SHEET.eyeLid).toBe(0);
+    const open = generateFaceSheet(DEFAULT_SHEET);
+    const shut = generateFaceSheet({ ...DEFAULT_SHEET, eyeLid: 0.9 });
+    expect(lit(open)).toBeGreaterThan(0);
+    expect(lit(shut)).toBeGreaterThan(0);
+    expect(lit(shut)).toBeLessThan(lit(open));
+  });
+
+  it('eyeLid 0 is the same sheet as before the param existed', () => {
+    const a = generateFaceSheet(DEFAULT_SHEET);
+    const b = generateFaceSheet({ ...DEFAULT_SHEET, eyeLid: 0 });
+    expect(Array.from(a.pixels)).toEqual(Array.from(b.pixels));
+  });
+});
+
+describe('sheetToRgba', () => {
+  it('writes four equal channels, opaque, rows flipped so the buffer reads bottom-up', () => {
+    const s = generateFaceSheet(DEFAULT_SHEET, 16);
+    const rgba = sheetToRgba(s);
+    expect(rgba).toHaveLength(16 * 16 * 4);
+    for (const [x, y] of [[0, 0], [5, 3], [15, 15]] as const) {
+      const src = s.pixels[(15 - y) * 16 + x]!;
+      const o = (y * 16 + x) * 4;
+      expect([rgba[o], rgba[o + 1], rgba[o + 2], rgba[o + 3]]).toEqual([src, src, src, 255]);
+    }
+  });
+
+  it('fills a caller-supplied buffer in place', () => {
+    const s = generateFaceSheet(DEFAULT_SHEET, 16);
+    const buf = new Uint8Array(16 * 16 * 4);
+    expect(sheetToRgba(s, buf)).toBe(buf);
+    expect(buf[3]).toBe(255);
+  });
+});

@@ -55,7 +55,7 @@ function activeCharacterName(): string {
 import { parseBlob } from '../blob-parse';
 import { makePoseRig, poseJoints, type PoseRig } from '../pose';
 import { posesFor } from '../pose-library';
-import { generateFaceSheet } from '../blob-face-sheet';
+import { generateFaceSheet, sheetToRgba } from '../blob-face-sheet';
 import { compileBlob, compileFace, compileSheetImage } from '../blob-compile';
 import {
   DEFAULT_FACE, FACE_PRESETS, pickFace, type FaceParams,
@@ -670,6 +670,9 @@ async function main() {
    * the sheet has to reach all of them, and only one of them may dispose it.
    */
   let faceSheet: { tex: THREE.Texture; atlas: THREE.Vector4; mean: number } | null = null;
+  /** The RGBA buffer behind the generated face sheet's DataTexture, kept so the expression layer can refill it in place. Null
+   *  while the face is a PNG or decal. */
+  let generatedRgba: Uint8Array | null = null;
   /**
    * What faceCfg.x is set to when the face is on: 1 = multiplier sheet,
    * 2 = decal (a baked colour image pasted on as albedo). Owned here rather
@@ -699,6 +702,7 @@ async function main() {
       atlas: new THREE.Vector4(w / sheetW, h / sheetH, x / sheetW, y / sheetH),
       mean: def.mean,
     };
+    generatedRgba = null;
     for (const v of [view, ...crowd]) v.setFaceTexture(tex, faceSheet.atlas, def.mean);
   }
 
@@ -758,6 +762,7 @@ async function main() {
     tex.flipY = true;
     faceSheet?.tex.dispose();
     faceSheet = { tex, atlas: new THREE.Vector4(1, 1, 0, 0), mean: 1 };
+    generatedRgba = null;
     faceMode = mode;
     for (const v of [view, ...crowd]) v.setFaceTexture(tex, faceSheet.atlas, 1);
     applyMeanOf(tex);
@@ -824,15 +829,7 @@ async function main() {
     // the mouth belongs. generateFaceSheet keeps writing top-left rows,
     // matching the registry's rect convention and staying easy to assert on;
     // the flip lives here, at the one place that uploads.
-    const rgba = new Uint8Array(gen.size * gen.size * 4);
-    for (let y = 0; y < gen.size; y++) {
-      const src = (gen.size - 1 - y) * gen.size;
-      for (let x = 0; x < gen.size; x++) {
-        const v = gen.pixels[src + x]!;
-        const o = (y * gen.size + x) * 4;
-        rgba[o] = v; rgba[o + 1] = v; rgba[o + 2] = v; rgba[o + 3] = 255;
-      }
-    }
+    const rgba = sheetToRgba(gen);
     const tex = new THREE.DataTexture(rgba, gen.size, gen.size, THREE.RGBAFormat);
     tex.magFilter = THREE.NearestFilter;
     tex.minFilter = THREE.NearestFilter;
@@ -845,6 +842,7 @@ async function main() {
 
     faceSheet?.tex.dispose();
     faceSheet = { tex, atlas: new THREE.Vector4(1, 1, 0, 0), mean: gen.mean };
+    generatedRgba = rgba;
     for (const v of [view, ...crowd]) v.setFaceTexture(tex, faceSheet.atlas, gen.mean);
     return true;
   }
