@@ -107,6 +107,7 @@ import { add, sub } from '../vec';
 import { makeChunk, stepChunk, type Chunk, type ChunkKind } from '../gib-chunks';
 import { chunkExtent } from '../extent';
 import { simplifyBody } from '../simplify';
+import { JAW_MAX_GAPE } from '../jaw';
 import { CIG_EMBER_HOT, STICK_IN_HAND, buildHandPrims } from '../hands';
 import {
   EMPTY_FPV_INPUT, clipBundlePresented, enterFpvMode, exitFpvMode, forceThrow,
@@ -962,6 +963,9 @@ async function main() {
    *  steps — unlike setMotionEnabled(false), which snaps the rest pose back
    *  to the authored base (a turntable of a held pose showed the A-pose). */
   let poseHeld = false;
+  /** THE EXPRESSION LAYER's jaw gape (rad, jaw.ts). The spike sets it by hand (`__sdfLab.setJawGape`); Task 9 drives it from
+   *  clips. It rides on top of the motion's own gape (the bride's sword swing): the larger wins. */
+  let exprGape = 0;
   /** The pose layer's per-character skeleton data (pose.ts), built on first use. */
   let poseRig: PoseRig | null = null;
   /** Seconds since the hero last fired; feeds the prop's muzzle rise. */
@@ -2735,7 +2739,11 @@ async function main() {
     // the flesh reddens on the SAME number that sags it — and at twice the
     // rate, so the colour leads the collapse.
     view.setMelt(meltState ? meltState.t : 0);
-    const posed = applyRig(current, heroMotion.bound, heroMotion.lastBodyYaw);
+    // The expression layer's gape: statue mode and held captures never run the motion step that would set rig.jawGape.
+    const boundForPose = exprGape > (heroMotion.bound.rig.jawGape ?? 0)
+      ? { ...heroMotion.bound, rig: { ...heroMotion.bound.rig, jawGape: exprGape } }
+      : heroMotion.bound;
+    const posed = applyRig(current, boundForPose, heroMotion.lastBodyYaw);
     lastPosed = posed;
     // Polygon halves ride the rig — one pose() call drives kit and prop from
     // the same rig solve (the block itself lives in character-view.ts, moved
@@ -4603,6 +4611,8 @@ async function main() {
       forceSpeed = undefined; carryOverride = undefined;
       return lastMotionFrame ? { gait: lastMotionFrame.gaitName, carry: lastMotionFrame.carry } : null;
     },
+    /** Hand-set the jaw gape (rad), clamped to jaw.ts's JAW_MAX_GAPE. Statue and held captures both honour it. */
+    setJawGape(g: number) { exprGape = Math.max(0, Math.min(JAW_MAX_GAPE, Number.isFinite(g) ? g : 0)); },
     /**
      * THE POSE LAYER (spec 2026-10-03-goblin-pose-layer-design.md): hold the named authored pose or clip of the ACTIVE character
      * at clip time `t` seconds, stepped `frames` times at 1/60 with the body standing still, then frozen exactly like holdPose so

@@ -225,6 +225,10 @@ const poseResult = await evaluate(`(() => {
   return JSON.stringify(window.__sdfLab.holdPose(${JSON.stringify(POSE)}, ${POSE_FRAMES}${SWING ? ', ' + JSON.stringify(SWING) : ''}));
 })()`);
 console.log('pose:', poseResult);
+// BLOB_GAPE=<rad> holds the jaw open that far (lab-main's setJawGape): the expression pass's spike, before expressions exist.
+if (process.env.BLOB_GAPE !== undefined) {
+  await evaluate(`window.__sdfLab.setJawGape(${Number(process.env.BLOB_GAPE)})`);
+}
 await sleep(4000);
 // A held WALK/RUN pose steps the treadmill from the origin, and the body's
 // torso is no longer where the pre-pose focusBody() aimed: the ogre's stomp
