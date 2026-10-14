@@ -968,6 +968,9 @@ async function main() {
   /** THE EXPRESSION LAYER's jaw gape (rad, jaw.ts). The spike sets it by hand (`__sdfLab.setJawGape`); Task 9 drives it from
    *  clips. It rides on top of the motion's own gape (the bride's sword swing): the larger wins. */
   let exprGape = 0;
+  /** A hand-set gape (`__sdfLab.setJawGape`, BLOB_GAPE captures) that wins over the clips until an expression is held or played.
+   *  Without it stepExpression overwrote the hand-set value with the clip's (0 at neutral) on the very next frame. */
+  let gapeHold: number | null = null;
   /** The active character's expression clips and its authored sheet (the neutral), or null when it has none. `entry` and
    *  `compileCharacterSheet` are the ones loadGeneratedFace uses. */
   const exprSet = expressionsFor(activeCharacterName());
@@ -998,7 +1001,7 @@ async function main() {
     const base = exprClip ? expressionAt(exprClip, exprT) : REST_CHANNELS;
     const lid = Math.max(blinkLid(exprClock, blinkStart), exprLidHold);
     const act = actuate(withBlink(base, lid), exprBase, exprSet.tuning);
-    exprGape = act.jawGape;
+    exprGape = gapeHold ?? act.jawGape;
     const key = sheetKey(act.sheet);
     if (key !== exprKey) { exprKey = key; refreshSheet(act.sheet); }
   }
@@ -4658,8 +4661,8 @@ async function main() {
       forceSpeed = undefined; carryOverride = undefined;
       return lastMotionFrame ? { gait: lastMotionFrame.gaitName, carry: lastMotionFrame.carry } : null;
     },
-    /** Hand-set the jaw gape (rad), clamped to jaw.ts's JAW_MAX_GAPE. Statue and held captures both honour it. */
-    setJawGape(g: number) { exprGape = Math.max(0, Math.min(JAW_MAX_GAPE, Number.isFinite(g) ? g : 0)); },
+    /** Hand-set the jaw gape (rad), clamped to jaw.ts's JAW_MAX_GAPE. Statue and held captures both honour it; it holds over the expression clips until holdExpression/playExpression. */
+    setJawGape(g: number) { exprGape = gapeHold = Math.max(0, Math.min(JAW_MAX_GAPE, Number.isFinite(g) ? g : 0)); },
     /** Names of the active character's expressions, or []. */
     expressionNames(): string[] { return exprSet ? Object.keys(exprSet.clips) : []; },
     /**
@@ -4670,7 +4673,7 @@ async function main() {
     holdExpression(name: string, t = 10, lid = 0) {
       const clip = exprSet?.clips[name];
       if (!exprSet || !clip) return null;
-      exprClip = clip; exprT = t; exprPlaying = false; blinkStart = -1; exprLidHold = lid;
+      exprClip = clip; exprT = t; exprPlaying = false; blinkStart = -1; exprLidHold = lid; gapeHold = null;
       stepExpression(0);
       return { expression: clip.name, t, jawGape: exprGape };
     },
@@ -4678,7 +4681,7 @@ async function main() {
     playExpression(name: string) {
       const clip = exprSet?.clips[name];
       if (!clip) return null;
-      exprClip = clip; exprT = 0; exprPlaying = true; exprLidHold = 0;
+      exprClip = clip; exprT = 0; exprPlaying = true; exprLidHold = 0; gapeHold = null;
       return { expression: clip.name };
     },
     /** Blink now. */
