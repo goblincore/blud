@@ -61,7 +61,7 @@ so crowning with the home goblin reads about 33 ms. A machine under load moves a
 
 ## Knobs for the look rounds
 
-The curve keys in `emergence-timeline.ts` (timing and amounts); `SAC_BLEND`, `DOME_EXP`, `LIP`, `TEAR_RAG`, `SLUMP`, `WRINKLE` in `emergence-field.ts`; the goo's blend, radii, milkiness and the strand slack in `goo-strands.ts` / the WGSL; the egg's colour and the membrane's; the cloth lines in `goblin-home.blob`.
+The curve keys in `emergence-timeline.ts` (timing and amounts; the goblin's cues follow them); `GOBLIN_LAGS`, `GOBLIN_ROOT` and `GOBLIN_FPS` in `screen-lab-goblin.ts` (his reaction beats, pushback and frame rate); `SAC_BLEND`, `DOME_EXP`, `LIP`, `TEAR_RAG`, `SLUMP`, `WRINKLE` in `emergence-field.ts`; the goo's blend, radii, milkiness and the strand slack in `goo-strands.ts` / the WGSL; the egg's colour and the membrane's; the cloth lines in `goblin-home.blob`.
 
 ## Out of scope, still (the spec's list)
 
@@ -105,3 +105,38 @@ Plan: [`2026-10-12-screen-emergence-look-round-1.md`](../../superpowers/plans/20
 ### Still open after the round
 
 The glass-gives shot never shows him on the floor (the push-wide shot is the first view that does); he is large in the out shot; the right foot sits ~6.7 cm inside the left thigh (hidden by the flesh union); the hands are the goblin's green orbs, so "flat" hands read as balls; the runs off the keyboard edge look stiff, like pegs; the slick catches large white highlights from the lamp; seen from low the coat reads as a thin film; the figure inside the egg is soft and slightly purple; he is dark from behind; the cloth's neck, folds and feet (Task 10's list); a quiet-machine cost re-measure (Task F's flesh adds the capillary net and a second vein evaluation on the lip; the one reading on a loaded machine, pass off 43 to 78 ms between runs, could not separate it). After Task F: from a distance the lip's glossy sleeve can read as a red rubber tube (its veins show from the side and close up); the healed sheet catches one big hard lamp highlight (a cream "J" in the front-right view at 14.4 s) off its wrinkles; at 4 s the half-turned sheet is a dark red glass with the picture in it (the transition); the healed lip at lipBow 0.25 is half grey, half flesh.
+
+## The goblin reacts a beat after the egg (2026-10-14)
+
+The owner: "the animation timing between the egg and the goblin backing up is a bit too off and could use some maybe tweening of motion, though I want to preserve an element of awkwardness to the animation and movement like early amateur CGI."
+
+**What was off, measured.** His cues were hard-coded times unrelated to the egg: he started leaning back at 2.30 s, while the sac first stands 3 cm past the glass at 3.00 s (10 cm at 3.69 s), so he flinched at nothing; and he began to sit up at 10.40 s, while the egg was still in the sac and only landed at 11.125 s. His fastest move was a snap: the hand tips at 3.67 m/s as they swung back past his knees (the elbows 2.48 m/s).
+
+**Now his cues are derived** (`goblinCues()` in `screen-lab-goblin.ts`, pure): the bulge is the first time `sacExtent(paramsAt(t))` passes `GOBLIN_LAGS.bulgeSeen`, and the landing is the first time the slump reaches `SLUMP.land`, where `eggCentre` puts the egg down at its rest height (the settle bounce after it means `y == rest` holds only for an instant, so the slump is the monotonic test; a test checks it against `eggCentre`). His reactions are those events plus a lag, so retuning the egg's curves moves him with it (a test shifts the push and slump keys a second later, and his cues follow).
+
+| | event | before | after |
+| --- | --- | --- | --- |
+| the sac 3 cm past the glass (bulge seen) | 3.00 | | |
+| the sac 10 cm past the glass | 3.69 | | |
+| **flinch** (the lean-back starts) | | 2.30 (0.70 s *before* the bulge) | **3.35** (bulge + 0.35) |
+| pushback (scoot) | | 2.30 to 3.45 | 3.35 to 4.60 |
+| braced (the lean-back ends) | | 3.20 | 4.35 |
+| the push's peak / the tear starts to open | 6.49 / 6.50 | braced | braced |
+| **the egg lands** on the keyboard | 11.125 | | |
+| **sit-up starts** | | 10.40 (0.73 s *before* the landing) | **11.625** (landing + 0.5) |
+| sit-up ends (hands settled on his knees) | | 12.00 | 13.025 |
+| head on the egg (within 3 degrees, to the end) | | 10.91 | 12.18 (inside the sit-up) |
+| the heal starts | 11.50 | | |
+
+**The knobs.** `GOBLIN_LAGS = { bulgeSeen: 0.03 m, flinch: 0.35 s, sitUp: 0.5 s }`; the lean-back is 1.0 s (`LEAN_BACK`), the pushback 0.2 m over `GOBLIN_ROOT.scoot` 1.25 s from the flinch, the sit-up 1.4 s (`SIT_UP_LOOK`). From the start to the flinch nothing of him moves (the hold: he is frozen at the keys while the glass domes), then the lean-back starts at full speed (a linear first segment, no ease-in). He holds the brace, still, from 4.60 through the push, the tear, the egg's fall and half a second past its landing.
+
+**Tween, kept awkward.** The lean-back's keys are re-spaced so every segment moves the hands at about 2 m/s (the long swing past his knees got 0.33 s instead of 0.20, the swing behind him 0.26 instead of 0.16) and the segments are linear: a constant speed that changes at each key, stiff and mechanical, no overshoot, follow-through or secondary motion; only the last 0.07 s eases into the brace. The sit-up is plain smoothstep, linear, smoothstep (keys 0.4 / 0.72 / 1.4): his head comes down onto the egg at the middle key, then the hands settle. Peak joint speeds, smooth clock: hands 3.67 to **2.25 m/s**, elbows 2.48 to **1.56**, head (neck) 0.76 to **0.57** (a test holds every joint under 2.5 m/s).
+
+**The limited frame rate.** His body (the pose clip's clock and the pushback) steps at **`GOBLIN_FPS` = 15** poses a second (`stepClock`: `floor(local * 15) / 15`, counted from each clip's start, and passed through once the clip has ended so its last key is never skipped); the egg, the goo, the screen pass and the camera stay smooth. **`?fps=0`** gives the smooth clock for comparison (`/sdf-screen-lab.html?fps=0`), `?fps=8` or `?fps=24` any other rate; the page's status line prints the rate and the cue times. The tests check the motion on the smooth clock (every pose of the stepped one is a smooth pose under one frame old), that the stepped pose and pushback are constant within each frame, and that every clip still reaches its end pose.
+
+**Clearances that moved.** Because he now waits a beat, the sac is closer when he leaves the keys: his nearest flesh is 4.3 cm short of the apex's plane at 3.45 s (his hands lifting off the keys; it was 9.3 cm, at 2.30) and a test holds it over 3 cm; the sac is low and central, so this is the apex's plane, not a touch. The sac-clearance window is now the brace to the sit-up (4.60 to 11.625), the sac-watching window the brace to 10 s. From the landing to the sit-up's end his head is within 11.4 degrees of the egg (still braced, looking where the sac was; the test allows 30), and within 10 degrees from the sit-up's end (0.2 degrees at the end).
+
+**What the frames show** (`.lab-tmp/screen-lab/rg/strip.png`, a fixed side view at 3.00, 3.35, 4.20, 6.50, 11.125, 11.625, 13.025, before over after; `preset-strip.png`, the page's own push shot at 3.00 to 4.20): before, he is already leaned back at 3.00 with no bulge in sight, and sitting up with the egg still on its way down at 11.125. After, he is still typing at 3.00 and 3.35 while the glass domes and darkens red in front of him (the push shot shows the dome clearly; from the side it is only a sliver at 3.35), his hands have left the keys by 3.7, he is mid-lean at 4.20 as the red sac swells, braced at the tear, still braced as the egg lands and half a second later, and sitting up looking down at it by 13.0. The order now reads as cause and effect. At 15 fps the lean-back is 15 poses and the sit-up 21, visibly steppy in playback; the constant-speed linear segments give the stiff, slightly mechanical early-CG feel the owner asked to keep. `emergence:check`'s settle key time (13.0) is 0.025 s before the sit-up's end (nearly settled), so the check's times are unchanged.
+
+
+`npm run emergence:check` after the retime: the page compiled with no console or WebGPU errors and the five shots are fine (the settle shot at 13.0 has him sat up, hands on his knees, looking down at the egg), but the cost gate FAILED on a loaded machine (pass-off baselines 69 to 82 ms against the usual ~20; the pass's added cost read 3 then 15 ms at push and 65 then 87 ms at crowning between two attempts). This change touches no shader or screen-pass code, only the goblin's clock, so the cost reading is load noise; a quiet-machine re-measure is still owed (as above).

@@ -11,46 +11,111 @@ import type { PoseClip } from '../pose';
 import type { Primitive, Vec3 } from '../types';
 import type { BoundRig } from '../rig-bind';
 import { BRACE_BACK, FLOOR_TYPE, LEAN_BACK, SIT_UP_LOOK } from '../characters/goblin-poses';
-import { DESK_Y, KEYBOARD, KEYBOARD_Z, KOTATSU, TABLE_FRONT_Z } from './emergence-field';
+import { CURVES, DURATION, paramsAt, type Curves } from './emergence-timeline';
+import { DESK_Y, KEYBOARD, KEYBOARD_Z, KOTATSU, SLUMP, TABLE_FRONT_Z, sacExtent } from './emergence-field';
 
 export interface GoblinCut { clip: PoseClip; start: number }
 
-/** The clip cuts, in order (look round 1, Task C step 3; the owner's third notes, Task E): `floor-type` (cross-legged at the kotatsu,
- *  typing) until the glass starts to give; `lean-back` from 2.3 (0.9 s: he leans away onto his hands as the glass swells, while goblinRootAt
- *  pushes him back a little); `brace-back` (a slight lean back on his hands, watching the sac) held through the push, the tear and the egg
- *  coming out; `sit-up-look` from 10.4 (1.6 s: he sits up, his hands onto his knees, his head down at the egg as it lands, about 11.2 s;
- *  done by 12.0) and held to the end, looking at the egg; the player takes over after. Every clip starts on the pose the one before it
+/** CAUSE AND EFFECT (the owner, 2026-10-14: "the animation timing between the egg and the goblin backing up is a bit too off"): his cues
+ *  are not authored times, they are the egg's EVENTS (read off the timeline's curves and the field's sac and egg) plus a human beat. Retune
+ *  the egg's curves and he follows. The lags, the knobs:
+ *  - `bulgeSeen`: how far the sac's apex must stand out past the glass plane (sacExtent, m) before he notices it. At 3 cm the swelling
+ *    reads in the push-wide shot; the glass's ripple before it does not startle him (he keeps typing through it).
+ *  - `flinch`: the DEAD BEAT from noticing to his first move (s). Nothing of him moves in it (the hold), then the lean-back starts abruptly
+ *    (a linear first segment: no ease-in). A late, startled reaction.
+ *  - `sitUp`: from the egg's landing on the keyboard to his sitting up to look at it (s): he sits up AFTER it lands, never before. */
+export const GOBLIN_LAGS = { bulgeSeen: 0.03, flinch: 0.35, sitUp: 0.5 } as const;
+
+/** The egg's events and his reactions (sequence seconds). `braced`: the lean-back has ended on `brace-back` (he holds it through the push,
+ *  the tear and the egg coming out). `scootEnd`: his pushback is done. `sitUpDone`: `sit-up-look`'s last key (his head is on the egg from
+ *  its middle key on, the hands then settle onto his knees). */
+export interface GoblinCues {
+  bulgeSeen: number; land: number;
+  flinch: number; braced: number; scootEnd: number; sitUp: number; sitUpDone: number;
+}
+
+const clipEnd = (c: PoseClip) => c.keys[c.keys.length - 1]!.t;
+
+/** The first time in [t0, t1] where `pred` turns true (scanned at `step`, then halved to 1e-7 s); NaN if it never does. */
+function firstTime(pred: (t: number) => boolean, t0: number, t1: number, step = 0.01): number {
+  if (pred(t0)) return t0;
+  for (let hi = t0 + step; hi < t1 + step; hi += step) {
+    const h = Math.min(hi, t1);
+    if (!pred(h)) continue;
+    let lo = h - step, top = h;
+    while (top - lo > 1e-7) { const m = (lo + top) / 2; if (pred(m)) top = m; else lo = m; }
+    return top;
+  }
+  return NaN;
+}
+
+/** The cues from the egg's curves (default: the timeline's). Pure. The bulge: the first time the sac's apex is `bulgeSeen` past the glass.
+ *  The landing: the first time the slump reaches SLUMP.land, where emergence-field's eggCentre puts the egg's centre down at its rest
+ *  height on the keyboard (its fall ends there; the settling bounce after it is under a centimetre, so `y == rest` is only an instant and
+ *  the slump is the monotonic test; the test checks eggCentre against it). Throws if the curves never bulge or never land the egg. */
+export function goblinCues(curves: Curves = CURVES): GoblinCues {
+  const bulgeSeen = firstTime(t => sacExtent(paramsAt(t, curves)) > GOBLIN_LAGS.bulgeSeen, 0, DURATION);
+  const land = firstTime(t => paramsAt(t, curves).slump >= SLUMP.land, 0, DURATION);
+  if (!Number.isFinite(bulgeSeen) || !Number.isFinite(land)) throw new Error('goblinCues: the curves never bulge the sac or never land the egg');
+  const flinch = bulgeSeen + GOBLIN_LAGS.flinch, sitUp = land + GOBLIN_LAGS.sitUp;
+  return { bulgeSeen, land, flinch, braced: flinch + clipEnd(LEAN_BACK), scootEnd: flinch + GOBLIN_ROOT.scoot, sitUp, sitUpDone: sitUp + clipEnd(SIT_UP_LOOK) };
+}
+
+/** THE PUSHBACK: his offset along the floor (his own z, + toward the table), metres. He pushes himself back `back` (0.2 m) on his cushion
+ *  over `scoot` seconds from the flinch (a little longer than the 1.0 s lean-back, as before: 1.15 s against 0.9), plain smoothstep, and
+ *  stays there to the end (he sits up where he is to look). The owner's third notes: "the goblin slides back too far too; it's more like a
+ *  slight pushback and lean back" (it was 0.55 m, and 0.15 m forward again for the crawl to the egg). THE CUSHION GOES WITH HIM (the page
+ *  moves it by this offset). */
+export const GOBLIN_ROOT = { back: -0.2, scoot: 1.25 } as const;
+
+/** The cues on the timeline's own curves (what the page plays). */
+export const GOBLIN_CUES: GoblinCues = goblinCues();
+
+/** The clip cuts, in order, at the cues (look round 1, Task C step 3; the third notes, Task E; the 2026-10-14 retime): `floor-type`
+ *  (cross-legged at the kotatsu, typing, still) until the flinch; `lean-back` (1.0 s: he leans away onto his hands while goblinRootAt pushes
+ *  him back a little); `brace-back` (a slight lean back on his hands, watching the sac) held through the push, the tear and the egg coming
+ *  out and falling; `sit-up-look` from half a second after the egg lands (1.4 s: he sits up, his head comes down onto the egg and his hands
+ *  settle onto his knees) and held to the end, looking at it; the player takes over after. Every clip starts on the pose the one before it
  *  ends on, so the cuts never pop (the test pins it). No clip raises his arms or reaches for the egg: round one's `jolt` / `recoil` /
  *  `touch` / `reach` and look round 1's crawl to the egg are gone from the sequence (the owner: "we don't need to animate his hands
  *  raising to touch it"). */
 export const GOBLIN_CUTS: readonly GoblinCut[] = [
   { clip: FLOOR_TYPE, start: 0 },
-  { clip: LEAN_BACK, start: 2.3 },
-  { clip: BRACE_BACK, start: 3.2 },
-  { clip: SIT_UP_LOOK, start: 10.4 },
+  { clip: LEAN_BACK, start: GOBLIN_CUES.flinch },
+  { clip: BRACE_BACK, start: GOBLIN_CUES.braced },
+  { clip: SIT_UP_LOOK, start: GOBLIN_CUES.sitUp },
 ];
 
-/** The clip playing at sequence time `t` and the time inside it (`local`, seconds from the clip's start, never negative). Before 0 it is
- *  `floor-type` at 0; after the end `sit-up-look` holds its last key. */
-export function goblinClipAt(t: number): { clip: PoseClip; local: number } {
-  let cut = GOBLIN_CUTS[0]!;
-  for (const c of GOBLIN_CUTS) if (t >= c.start) cut = c;
-  return { clip: cut.clip, local: Math.max(0, t - cut.start) };
+/** THE LIMITED FRAME RATE (the owner: "preserve an element of awkwardness ... like early amateur CGI"): the page shows his BODY at this
+ *  many poses a second, each held until the next (the egg, the goo and the camera stay smooth). `?fps=` overrides it; `?fps=0` is the smooth
+ *  clock, for comparison. */
+export const GOBLIN_FPS = 15;
+
+/** A clip's clock stepped to `fps` (`floor(local * fps) / fps`, counted from the clip's own start so every clip begins on a frame), except
+ *  that once `local` reaches the clip's `end` it is passed through: the last key's pose is always shown at the clip's end, never skipped by
+ *  the stepping. `fps` 0 (or less): the smooth clock. */
+export function stepClock(local: number, end: number, fps: number): number {
+  if (!(fps > 0) || local >= end) return local;
+  return Math.floor(local * fps + 1e-9) / fps;
 }
 
-/** THE PUSHBACK: his offset along the floor (his own z, + toward the table), metres. He pushes himself back `back` (0.2 m) on his cushion
- *  over `scoot` as he leans away, and stays there to the end (he sits up where he is to look). Eased. The owner's third notes: "the goblin
- *  slides back too far too; it's more like a slight pushback and lean back" (it was 0.55 m, and 0.15 m forward again for the crawl to the
- *  egg). THE CUSHION GOES WITH HIM (the page moves it by this offset). */
-export const GOBLIN_ROOT = { back: -0.2, scoot: [2.3, 3.45] as const } as const;
+/** The clip playing at sequence time `t` and the time inside it (`local`, seconds from the clip's start, never negative), stepped to
+ *  `fps` poses a second (stepClock; the default 0 is the smooth clock the tests check the motion on). Before 0 it is `floor-type` at 0;
+ *  after the end `sit-up-look` holds its last key. */
+export function goblinClipAt(t: number, fps = 0): { clip: PoseClip; local: number } {
+  let cut = GOBLIN_CUTS[0]!;
+  for (const c of GOBLIN_CUTS) if (t >= c.start) cut = c;
+  return { clip: cut.clip, local: stepClock(Math.max(0, t - cut.start), clipEnd(cut.clip), fps) };
+}
 
 const smooth01 = (x: number) => { const u = Math.min(1, Math.max(0, x)); return u * u * (3 - 2 * u); };
 
-/** The pushback at sequence time `t` (GOBLIN_ROOT). Pure and continuous; 0 while he types, never past `back`. */
-export function goblinRootAt(t: number): number {
-  const R = GOBLIN_ROOT;
-  if (t <= R.scoot[0]) return 0;
-  return R.back * smooth01((t - R.scoot[0]) / (R.scoot[1] - R.scoot[0]));
+/** The pushback at sequence time `t` (GOBLIN_ROOT, from the flinch), stepped like the clips (`fps`, default smooth). Pure; continuous on
+ *  the smooth clock; 0 while he types, never past `back`. */
+export function goblinRootAt(t: number, fps = 0): number {
+  const s = t - GOBLIN_CUES.flinch;
+  if (s <= 0) return 0;
+  return GOBLIN_ROOT.back * smooth01(stepClock(s, GOBLIN_ROOT.scoot, fps) / GOBLIN_ROOT.scoot);
 }
 
 /** What the set is built from, measured on the goblin posed in `floor-type` (world metres, the body's own frame: the floor at y 0, the

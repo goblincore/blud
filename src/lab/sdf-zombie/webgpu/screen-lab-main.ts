@@ -57,7 +57,7 @@ import {
 import { GOO_BOUND0, GOO_TEXELS, gooAt, gooTexels } from './goo-strands';
 import { SHOTS, DURATION, shotAt, paramsAt, type ShotId } from './emergence-timeline';
 import { FLOOR_SEAT } from '../characters/goblin-poses';
-import { floorLayout, goblinClipAt, goblinRootAt, measureSeat, pinToPose, type FloorLayout } from './screen-lab-goblin';
+import { GOBLIN_CUES, GOBLIN_FPS, floorLayout, goblinClipAt, goblinRootAt, measureSeat, pinToPose, type FloorLayout } from './screen-lab-goblin';
 import {
   GAME_AA, GAME_AA_FADE_M, GAME_AA_NEAR, GAME_LAST_STEP_DEFAULT, GAME_RELAX, GAME_HULL_EXIT_BOUND, GAME_WOUND_EARLY_OUT, GAME_OMEGA, GAME_WOUND_STEP,
 } from './game-march-accept';
@@ -635,13 +635,18 @@ async function bootstrap(): Promise<void> {
   const bounds = { minX: -1, maxX: 1, minZ: -1, maxZ: 1 };
   // The goblin's own profile minus the prop (no fist closed on a grip that is not there); the pose overwrites every target anyway.
   const profile = { ...entry.profile, prop: undefined };
-  // The pose at t, slid along the floor by his scoot (goblinRootAt: he pushes himself back a little from the table as the glass gives, and
-  // sits up there to look at the egg). The joints carry the offset, so the pinned rig, the flesh and the cone follow; `rootDz` feeds the
-  // noise root shift (the skin's texture rides with him) and the zabuton.
+  // The pose at t, slid along the floor by his scoot (goblinRootAt: he pushes himself back a little from the table a beat after the sac
+  // bulges, and sits up there to look at the egg once it has landed: GOBLIN_CUES). The joints carry the offset, so the pinned rig, the flesh
+  // and the cone follow; `rootDz` feeds the noise root shift (the skin's texture rides with him) and the zabuton.
+  // HIS LIMITED FRAME RATE: his body (the clip's clock and the pushback) steps at GOBLIN_FPS poses a second, early-CG style, while the egg,
+  // the goo and the camera run smooth; `?fps=0` is the smooth clock for comparison, `?fps=N` any other rate.
+  const goblinFps = Math.max(0, num('fps') ?? GOBLIN_FPS);
+  const c = GOBLIN_CUES;
+  say(`goblin: ${goblinFps > 0 ? `${goblinFps} fps` : 'smooth'}; bulge ${c.bulgeSeen.toFixed(2)} s, flinch ${c.flinch.toFixed(2)}, braced ${c.braced.toFixed(2)}, egg lands ${c.land.toFixed(2)}, sits up ${c.sitUp.toFixed(2)} to ${c.sitUpDone.toFixed(2)}`);
   let rootDz = 0;
   const poseAt = (t: number) => {
-    const { clip, local } = goblinClipAt(t);
-    rootDz = goblinRootAt(t);
+    const { clip, local } = goblinClipAt(t, goblinFps);
+    rootDz = goblinRootAt(t, goblinFps);
     const posedJ = poseJoints(poseRig, clip, local);
     const joints = rootDz === 0 ? posedJ : posedJ.map(j => [j[0], j[1], j[2] + rootDz] as Vec3);
     stepActorMotion(motion, {

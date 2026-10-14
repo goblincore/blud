@@ -178,40 +178,45 @@ const crossed = (spine: readonly [number, number, number, number], upperarm: Bon
 export const FLOOR_TYPE: PoseClip = { name: 'floor-type', keys: [seated(0, FLOOR_TYPE_BONES)] };
 export const BRACE_BACK: PoseClip = { name: 'brace-back', keys: [seated(0, BRACE_BACK_BONES)] };
 
-/** Typing -> leaning back (0.9 s; the plan's 0.7 s swung his elbows at 3.5 m/s, a jerk): the glass swells and he leans away onto his
- *  hands while the page pushes him back on his cushion (goblinRootAt: 0.2 m over 1.15 s). A straight angle blend would sweep the hands
- *  down through the board's edge, so the hands follow solved waypoints, each placed in the lab's world at its time (the scoot included):
- *  they lift 2 cm off the keys and come back 4 cm (0.19), pull back over the board and clear of its edge, still under the shoulders (0.39),
- *  drop past his knees outside the cushion (0.59), swing back behind it low (0.75), and come down onto the floor behind him (0.84,
- *  0.9: brace-back). The spine straightens and leans back over the same time. Tilts are written so each blend turns the short way. The
- *  hands round (2026-10-13) re-aimed the hands at every key so the balls stay on the forearms' line (the wrist under 45 degrees all the
- *  way); the third notes' slight lean back re-solved 0.75 and 0.84 for the nearer hands (0.45 m behind the hips, not 0.57) and the shorter
- *  pushback (the balls 2 cm and 0 cm over the floor there, 3 cm short of their place at 0.84). */
+/** Typing -> leaning back (1.0 s), the flinch: the sac bulges and, a beat later, he leans away onto his hands while the page pushes him
+ *  back on his cushion (goblinRootAt: 0.2 m over 1.25 s). A straight angle blend would sweep the hands down through the board's edge, so
+ *  the hands follow solved waypoints, each placed in the lab's world at its time (the scoot included): they lift 2 cm off the keys and come
+ *  back 4 cm, pull back over the board and clear of its edge, still under the shoulders, drop past his knees outside the cushion, swing
+ *  back behind it low, and come down onto the floor behind him (brace-back). The spine straightens and leans back over the same time. Tilts
+ *  are written so each blend turns the short way. The hands round (2026-10-13) re-aimed the hands at every key so the balls stay on the
+ *  forearms' line (the wrist under 45 degrees all the way); the third notes' slight lean back re-solved the last two waypoints for the
+ *  nearer hands (0.45 m behind the hips, not 0.57) and the shorter pushback.
+ *  THE TIMING (the owner, 2026-10-14: tween it, but keep the awkwardness of early amateur CGI): the keys are spaced so every segment moves
+ *  the hands at about 2 m/s (the 0.9 s version swung them past his knees at 3.6 m/s, a snap), the segments LINEAR (a constant speed that
+ *  changes at each key: stiff, mechanical, no overshoot or follow-through) and the first one starting at full speed (the flinch begins
+ *  abruptly after a dead still beat: screen-lab-goblin GOBLIN_LAGS), only the last 0.07 s eased into the brace. */
 export const LEAN_BACK: PoseClip = {
   name: 'lean-back',
   keys: [
     seated(0, FLOOR_TYPE_BONES),
-    seated(0.19, crossed([12, 16, 19, -10], { pitch: 57.9, tilt: 23.1 }, { pitch: 64.5, tilt: -171.8 }, { pitch: 47.6, tilt: -4.3 }), 'smooth'),
-    seated(0.39, crossed([6, 8, 17, -9], { pitch: 28.7, tilt: 37.8 }, { pitch: 51.7, tilt: -156.1 }, { pitch: 52.2, tilt: -24.3 })),
-    seated(0.59, crossed([-6, -8, 14, -6], { pitch: -36.5, tilt: 48.6 }, { pitch: 74.5, tilt: 20.2 }, { pitch: 19, tilt: 1.9 })),
-    seated(0.75, crossed([-12, -15, 13, -2], { pitch: -68.4, tilt: 61.8 }, { pitch: 3.2, tilt: 21.5 }, { pitch: 0, tilt: 16 })),
-    seated(0.84, crossed([-16, -20, 12, -1], { pitch: -44.9, tilt: 56.1 }, { pitch: -20.4, tilt: 4.2 }, { pitch: -10, tilt: 4 })),
-    seated(0.9, BRACE_BACK_BONES, 'smooth'),
+    seated(0.1, crossed([12, 16, 19, -10], { pitch: 57.9, tilt: 23.1 }, { pitch: 64.5, tilt: -171.8 }, { pitch: 47.6, tilt: -4.3 })),
+    seated(0.25, crossed([6, 8, 17, -9], { pitch: 28.7, tilt: 37.8 }, { pitch: 51.7, tilt: -156.1 }, { pitch: 52.2, tilt: -24.3 })),
+    seated(0.58, crossed([-6, -8, 14, -6], { pitch: -36.5, tilt: 48.6 }, { pitch: 74.5, tilt: 20.2 }, { pitch: 19, tilt: 1.9 })),
+    seated(0.84, crossed([-12, -15, 13, -2], { pitch: -68.4, tilt: 61.8 }, { pitch: 3.2, tilt: 21.5 }, { pitch: 0, tilt: 16 })),
+    seated(0.93, crossed([-16, -20, 12, -1], { pitch: -44.9, tilt: 56.1 }, { pitch: -20.4, tilt: 4.2 }, { pitch: -10, tilt: 4 })),
+    seated(1.0, BRACE_BACK_BONES, 'smooth'),
   ],
 };
 
-/** Leaning back -> sitting up to look (1.6 s), once the egg is out: he lifts his hands off the floor and brings them round outside his
- *  hips as his trunk comes up (0.45; the head already turning down), sits up with his head on the egg and his hands over his knees (0.8:
- *  the egg lands about now, 11.2 s in the screen lab, and the head is on it from here), and settles them onto his knees (1.6, sit-up-look's
- *  pose, held to the end). The legs stay crossed; the page's pushback holds (goblinRootAt). Replaces round one's crawl-in / crawl-reach
- *  (onto his knees and a hand on the egg: the owner, 2026-10-13, "we don't need to animate his hands raising to touch it"). */
+/** Leaning back -> sitting up to look (1.4 s), half a second after the egg has landed (screen-lab-goblin GOBLIN_LAGS): he lifts his hands
+ *  off the floor and brings them round outside his hips as his trunk comes up (0.4, plain smoothstep; the head already turning down),
+ *  sits up with his head on the egg and his hands over his knees (0.72, a linear segment: the head locks onto the egg here), and settles
+ *  them onto his knees (1.4, sit-up-look's pose, held to the end). Each segment stops dead or starts at full speed at its key (no
+ *  follow-through: the early-CG stiffness the owner wants kept). The legs stay crossed; the page's pushback holds (goblinRootAt). Replaces
+ *  round one's crawl-in / crawl-reach (onto his knees and a hand on the egg: the owner, 2026-10-13, "we don't need to animate his hands
+ *  raising to touch it"). */
 export const SIT_UP_LOOK: PoseClip = {
   name: 'sit-up-look',
   keys: [
     seated(0, BRACE_BACK_BONES),
-    seated(0.45, crossed([-8, -10, 16, 8], { pitch: -60.7, tilt: 53.6 }, { pitch: 23.5, tilt: 23.4 }, { pitch: 15, tilt: 16 }), 'smooth'),
-    seated(0.8, crossed([1, 4, 19, 17], { pitch: -50.5, tilt: 46.2 }, { pitch: 65.5, tilt: 41.5 }, { pitch: 40, tilt: 18 })),
-    seated(1.6, SIT_UP_LOOK_BONES, 'smooth'),
+    seated(0.4, crossed([-8, -10, 16, 8], { pitch: -60.7, tilt: 53.6 }, { pitch: 23.5, tilt: 23.4 }, { pitch: 15, tilt: 16 }), 'smooth'),
+    seated(0.72, crossed([1, 4, 19, 17], { pitch: -50.5, tilt: 46.2 }, { pitch: 65.5, tilt: 41.5 }, { pitch: 40, tilt: 18 })),
+    seated(1.4, SIT_UP_LOOK_BONES, 'smooth'),
   ],
 };
 
