@@ -48,9 +48,14 @@ skeleton
   bone skull  parent=neck   dir=up pitch=-5  len=0.235
   # THE JAW (expression pass, 2026-10-13). Not a hinge bone: a CARRIER for one kinematic rig point, exactly as the bride's
   # (bride.blob, bone jaw; jaw.ts). It hangs off the skull's pivot to the chin so gait.ts can name its tail `jaw`. The jaw
-  # ROTATES about jaw.ts's JAW_HINGE on the skull axis, and rig-bind turns every prim declared `on jaw` by the gape. Rest tail
+  # ROTATES about a hinge on the skull axis (jaw.ts), and rig-bind turns every prim declared `on jaw` by the gape. Rest tail
   # is (0, 1.0875, 0.0898): below and in front of the lower lip.
-  bone jaw    parent=neck   dir=up pitch=112 len=0.083
+  # `hinge=0.06` (Task 3b, 2026-10-14): the hinge sits 0.06 along the skull, y 1.1326, ON THE LIP LINE, 2 cm behind the axis. The
+  # shared default (jaw.ts JAW_HINGE, 0.30) is the bride's upper lip; on this skull it is 5.6 cm above the lips, and the jaw
+  # lever then hangs almost straight down from it, so opening swung the chin back into the throat (at the shout's 0.6 rad the
+  # lower jaw vanished into the neck; frames docs/dev-notes/2026-10-13-goblin-expressions/grin/). At the lip line the lower lip
+  # drops instead: at 0.5 rad its middle falls 5.1 cm and moves back 1.7 (the shared hinge: 4.7 and 4.5; goblin-blob.test.ts).
+  bone jaw    parent=neck   dir=up pitch=112 len=0.083 hinge=0.06
 
   mirror
     # WAM's own comment says the shoulder must land INSIDE the chest mass or
@@ -327,73 +332,84 @@ body
   # semi-depth SHRINKS as you go lower — 0.108 at this height, not the 0.118 at
   # the nose — and lips sized against the wrong number stick out too far.
   blob head on skull at=0.12 r=0.028 r2=0.021 wide=1.25 tall=0.44 blend=0.0020 chamfer offset=(0,0.006,0.062) tip=(0,-0.006,0.044)
-  blob head on jaw at=1.0 r=0.024 r2=0.018 wide=1.12 tall=0.42 blend=0.0016 chamfer offset=(0,0.0312,-0.0234) tip=(0,-0.018,0.038)
-  # THE CHIN (expression pass): the lower part of what used to be the jaw ellipsoid, on the jaw bone so it opens with the gape.
-  # Centre (0, 1.1067, 0.0531), semi-axes 0.061 x 0.031 x 0.046: its top (y 1.137 on the axis, about 6 mm over the mouth seam)
-  # is buried inside the shortened upper mass, so at rest the two read as one surface and the front of the face lands within
-  # 2.5 mm of the approved profile at every pinned probe; at a gape of 0.15 rad the front between y 1.095 and 1.12 falls back by
-  # up to 25 mm. Do not raise it further (the bride's lesson, jaw.ts): a top cap that pokes out above the upper mass swings down
-  # WITH the jaw and fills the opening with skin. Tuned with scripts/goblin-head-profile.ts.
-  blob head on jaw at=1.0 r=0.0462 wide=1.33 tall=0.664 deep=1.0 blend=0.010 offset=(0,0.0192,-0.0367)
+  # THE MOUTH OPENS AT THE LIP LINE (Task 3b, 2026-10-14; owner: "the main thing is getting a viable toothy grin with teeth").
+  # Task 2's split left the skull-side mass hanging to y 1.10 at the front, so the opening appeared in the chin's bevel 2-3 cm
+  # under the lips and the teeth hid behind skin. Now the SEAM is the lip line, y ~1.133: everything above it is the skull's
+  # (the shortened face-block jaw ellipsoid, the upper lip, the upper ridge below) and everything under it is the jaw's (the
+  # lower lip, the chin, the corners, the floor). Rest front within 2.5 mm of the approved profile except at y 1.13, where the
+  # groove used to cut (goblin-head-profile.ts says why that pin moved).
+  #
+  # Lower lip: a BENT bar along the dental arch (was a front-to-back pout capsule whose front sloped down to y 1.10: it was the
+  # chin's shelf, not a lip). Top y 1.1335, meeting the upper ridge's underside; front z 0.122, 1.5 cm behind the upper lip's
+  # (an overbite). Flesh, about the old lip's size; no colour (the owner does not want painted lips).
+  blob head on jaw at=1.0 r=0.010 tall=0.90 blend=0.0016 chamfer offset=(-0.026,0.037,0.0102) tip=(0.052,0,0) bend=(0,0,0.024)
+  # THE CHIN: the lower part of what used to be the jaw ellipsoid. Centre (0, 1.1025, 0.053), semi-axes 0.061 x 0.026 x 0.058.
+  # Its top (1.128 on the axis) is LOWER than Task 2's (1.137) and must stay under the floor's top (below): once the jaw tips
+  # open, a chin top above the floor shows as a lit band of skin inside the mouth (it did, at 1.131). Its front makes the chin's
+  # reach (y 1.09), its underside the chin's underside; both are profile pins, so retune it with the CLI.
+  blob head on jaw at=1.0 r=0.0462 wide=1.33 tall=0.56 deep=1.25 blend=0.010 offset=(0,0.0150,-0.0368)
 
-  # THE MOUTH LINE — a groove, not a gap between two lumps.
-  #
-  # The crease between the lips was being faked by creasing the two lip prims
-  # against each other with `chamfer`, which only works while both lips exist,
-  # both touch, and the camera is near enough to front-on to see the join. A
-  # groove cuts a CHANNEL along where this primitive's surface crosses the
-  # assembled face, so the line is a line — it survives the lips changing size,
-  # and it reads from every angle.
-  #
-  # Wide and flat (`wide` up, `tall` right down) so its zero-set is a
-  # horizontal band across the muzzle. `depth`/`width` are millimetres: the
-  # channel is 5 mm across and bites 4 mm in, which on a 1.30 m goblin is a
-  # crease rather than a wound.
-  groove head on skull at=0.12 r=0.030 wide=1.30 tall=0.09 deep=1.10 depth=0.004 width=0.005 offset=(0,-0.014,0.060)
+  # UPPER RIDGE (the upper gum, skull): a flat bent bar along the arch, x +-0.045, y 1.133-1.145, front z 0.117 at the middle.
+  # The shortened jaw ellipsoid recedes to z ~0.10 just above the seam; without this the sides of the face between the upper
+  # lip and the seam were 1 cm deep and the tooth roots showed through at rest. Its flat underside is the mouth's top edge:
+  # the upper teeth hang from it.
+  blob head on skull at=0.0 r=0.011 tall=0.55 blend=0.002 offset=(-0.034,0.0204,0.0811) tip=(0.068,0,0) bend=(0,0,0.024)
+  # CHEEK FILL (skull, both sides), at x 0.046, y 1.122: the jaw/skull seam wraps round the side of the face and left a 4 mm
+  # waist in the front silhouette at y 1.12. This fills it (silhouette back within 1 mm of the approved head at every height).
+  blob head on skull at=0.0 r=0.012 blend=0.006 offset=(0.046,0.0034,0.0271) both
+  # MOUTH CORNERS (jaw, both sides), at x 0.037, y 1.124: the lowered chin left the corners open at rest (the throat bar showed
+  # there). They drop with the jaw, so they never plug the opening.
+  blob head on jaw at=1.0 r=0.010 blend=0.004 offset=(0.037,0.0365,-0.0048) both
+  # THE FLOOR (jaw): a dark flat disc behind the lower lip, top y 1.131, z 0.046-0.106, the lower teeth rooted in it. With the
+  # hinge on the lip line the opening jaw TIPS its top toward the viewer, and without a floor the chin's top showed through the
+  # open mouth as lit green skin. Dark like the throat bar and buried at rest the same way (goblin-blob.test.ts).
+  blob head on jaw at=1.0 r=0.030 wide=0.88 tall=0.30 deep=1.6 blend=0.002 offset=(0,0.0365,-0.0318) color=2a0608 gloss=0.05
+
+  # NO GROOVE ANY MORE (Task 3b). A groove at y 1.1327 drew the mouth line from 2026-08 to Task 3b, but a groove cuts 4 mm of
+  # FIELD from every prim in the head cluster, teeth included: once the jaw opened, it bit the upper teeth in half right where
+  # they show (sdBody +1.1 mm on a tooth's axis). The line is now the real seam between the lips plus the painted sheet mouth.
 
   # THE MOUTH'S INSIDE AND THE TEETH (expression pass, 2026-10-13; owner: "a toothy evil grin", jagged and uneven with two
   # fangs). Everything below is buried when the jaw is shut (goblin-blob.test.ts pins both ends of every one inside the
-  # tooth-free flesh) and shows only as the gape drops the chin mass away from the upper face mass. The real mouth: the upper
-  # mass's underside runs from y 1.100 on the axis up to about 1.1125 at z 0.10 and 1.116 at the corners; the jaw's own
-  # flesh (chin + lower lip) tops out at 1.128 (axis, z 0.095) falling to 1.1165 (x 0.028, z 0.10). So at rest the two
-  # OVERLAP by ~12 mm at the centre and ~3 mm at the corners, and a lower tooth only clears the upper mass once the jaw has
-  # dropped that far (about gape 0.3); the upper row shows from gape 0.15.
+  # tooth-free flesh) and shows only as the gape drops the jaw side away from the skull side at the lip line (Task 3b): the
+  # whole upper row shows from gape 0.15 (pinned), the lower row from about 0.3.
   #
   # Three traps found tuning these (each would have passed the endpoint test):
   #  - BLEND. The plan's `blend=0.002 chamfer` bridges anything within 4k = 8 mm, and the teeth fold BEFORE the face
   #    block's prims (body-block head prims always come first in the head cluster): they chamfered into the lips and chin
   #    and grew skin up to 4 mm out through the rest face. Teeth are hard: `blend=0.0002`, no chamfer.
-  #  - THE GROOVE. It cuts 4 mm of FIELD, and at the mouth corners (x 0.030-0.035, y 1.126-1.128) that reaches back to
-  #    z 0.097: roots at y 1.124 broke through it. Upper roots sit at y 1.120-1.123, under the groove's band.
+  #  - THE GROOVE (since removed, see above). It cut 4 mm of FIELD, teeth included.
   #  - PAINT. Paint is the hit's nearest prim (validate.ts nearestPrim). The skin at the corners (x 0.03-0.036,
   #    y 1.106-1.114) is a blend fillet with every real prim 5-8 mm away, so a lower-corner tooth root 5 mm off painted it
   #    ivory at rest. The corner lower teeth lean forward like small tusks, roots 6 mm further back.
-  # Checked with a rest-skin paint sweep (no tooth or interior prim paints at gape 0) and a field diff (max rest-skin shift
-  # 0.1 mm, inside the groove).
+  # Checked with a rest-skin paint sweep (no tooth or interior prim paints at gape 0).
   #
-  # The inside is a dark wet bar on the skull, 5-6 cm behind the lips' front (the bride's trick, bride.blob): never the
-  # nearest prim to the rest skin, so it paints nothing at rest, and it is the throat once the jaw drops (it paints from
-  # gape 0.3).
-  bar  head on skull from=0.0 to=0.0 offset=(-0.030,-0.0126,0.0491) tip=(0.060,0,0) r=0.010 tall=1.6 blend=0.003 color=2a0608 gloss=0.85
+  # The inside is a dark bar on the skull (the bride's trick, bride.blob), the throat: x +-0.041, y 1.090-1.138, z 0.060-0.084,
+  # 4-6 cm behind the lips' front. Never the nearest prim to the rest skin, so it paints nothing at rest; it is what shows
+  # between and behind the upper teeth from the first millimetre of gape. Task 3b moved it up and forward to the new seam,
+  # made it tall enough to meet the floor (a gap between the two showed a lit band of skin), and took its gloss down (0.85 lit
+  # the bar's ends as grey edges framing the mouth).
+  bar  head on skull from=0.0 to=0.0 offset=(-0.029,-0.0046,0.0591) tip=(0.058,0,0) r=0.012 tall=2.0 blend=0.003 color=2a0608 gloss=0.05
   #
   # Upper row: five small teeth of uneven length and two longer fangs (the 2nd and 6th), spaced so each reads as a tooth against
-  # the dark rather than a yellow clump (the cultist's 8-tooth first try). Pointed (r2), hanging from inside the upper mass
-  # (roots y 1.120-1.123) to tips at y 1.100-1.109, 3-12 mm below its underside, tilted a few mm forward; z 0.093-0.102, 1.5 cm
-  # behind the rest lips. No colour variation and no grain: the owner wants fine surface detail kept small.
-  blob head on skull at=0.0 r=0.0045 r2=0.0010 blend=0.0002 offset=(-0.032,0.0014,0.0751) tip=(0,-0.012,0.005) color=8f8266 gloss=0.15
-  blob head on skull at=0.0 r=0.0062 r2=0.0010 blend=0.0002 offset=(-0.022,0.0024,0.0801) tip=(0,-0.021,0.006) color=8f8266 gloss=0.15
-  blob head on skull at=0.0 r=0.0045 r2=0.0010 blend=0.0002 offset=(-0.011,0.0044,0.0851) tip=(0,-0.018,0.003) color=8f8266 gloss=0.15
-  blob head on skull at=0.0 r=0.0045 r2=0.0010 blend=0.0002 offset=(-0.001,0.0044,0.0861) tip=(0,-0.015,0.003) color=8f8266 gloss=0.15
-  blob head on skull at=0.0 r=0.0045 r2=0.0010 blend=0.0002 offset=(0.010,0.0044,0.0851) tip=(0,-0.019,0.003) color=8f8266 gloss=0.15
-  blob head on skull at=0.0 r=0.0062 r2=0.0010 blend=0.0002 offset=(0.022,0.0024,0.0801) tip=(0,-0.020,0.006) color=8f8266 gloss=0.15
-  blob head on skull at=0.0 r=0.0045 r2=0.0010 blend=0.0002 offset=(0.032,0.0014,0.0751) tip=(0,-0.011,0.005) color=8f8266 gloss=0.15
-  # Lower row, on the jaw: four small teeth jutting up between the upper ones, tips 4-9 mm above the jaw's own flesh
-  # (y 1.121-1.130) and buried in the upper mass when shut. The middle two stand at z 0.098-0.104; the corner two lean
-  # forward from roots at z 0.088 (see PAINT above).
-  blob head on jaw at=1.0 r=0.0045 r2=0.0010 blend=0.0002 offset=(-0.027,0.0175,-0.0019) tip=(0,0.016,0.011) color=8f8266 gloss=0.15
-  blob head on jaw at=1.0 r=0.0055 r2=0.0010 blend=0.0002 offset=(-0.009,0.0245,0.0081) tip=(0,0.018,0.006) color=8f8266 gloss=0.15
-  blob head on jaw at=1.0 r=0.0050 r2=0.0010 blend=0.0002 offset=(0.011,0.0245,0.0081) tip=(0,0.015,0.006) color=8f8266 gloss=0.15
-  blob head on jaw at=1.0 r=0.0045 r2=0.0010 blend=0.0002 offset=(0.028,0.0175,-0.0019) tip=(0,0.017,0.011) color=8f8266 gloss=0.15
+  # the dark rather than a yellow clump (the cultist's 8-tooth first try). Pointed (r2), hanging from inside the upper ridge
+  # (roots y 1.137-1.138) to tips at y 1.119-1.125 (fangs 1.111-1.113), 1-2.5 cm below the seam, tilted a few mm forward;
+  # z 0.095-0.107, 2 cm behind the rest lips; a little thicker than Task 3's (r 0.005-0.0068) so the visible half reads at
+  # gape 0.15. No colour variation and no grain: the owner wants fine surface detail kept small.
+  blob head on skull at=0.0 r=0.005 r2=0.0010 blend=0.0002 offset=(-0.031,0.0184,0.0821) tip=(0,-0.013,0.003) color=8f8266 gloss=0.15
+  blob head on skull at=0.0 r=0.0068 r2=0.0010 blend=0.0002 offset=(-0.021,0.0194,0.0861) tip=(0,-0.027,0.005) color=8f8266 gloss=0.15
+  blob head on skull at=0.0 r=0.0055 r2=0.0010 blend=0.0002 offset=(-0.011,0.0194,0.0891) tip=(0,-0.017,0.004) color=8f8266 gloss=0.15
+  blob head on skull at=0.0 r=0.005 r2=0.0010 blend=0.0002 offset=(-0.001,0.0194,0.0901) tip=(0,-0.015,0.004) color=8f8266 gloss=0.15
+  blob head on skull at=0.0 r=0.0055 r2=0.0010 blend=0.0002 offset=(0.01,0.0194,0.0891) tip=(0,-0.019,0.004) color=8f8266 gloss=0.15
+  blob head on skull at=0.0 r=0.0068 r2=0.0010 blend=0.0002 offset=(0.021,0.0194,0.0861) tip=(0,-0.025,0.005) color=8f8266 gloss=0.15
+  blob head on skull at=0.0 r=0.005 r2=0.0010 blend=0.0002 offset=(0.031,0.0184,0.0821) tip=(0,-0.012,0.003) color=8f8266 gloss=0.15
+  # Lower row, on the jaw: four small teeth jutting up between the upper ones from the floor (roots y 1.121-1.122), tips at
+  # y 1.138-1.141, buried in the upper ridge when shut. z 0.085-0.095: BEHIND the lower lip, or the tipped-open jaw shows them
+  # as brown studs poking out of the lip's top.
+  blob head on jaw at=1.0 r=0.0048 r2=0.0010 blend=0.0002 offset=(-0.026,0.0335,-0.0048) tip=(0,0.017,0.005) color=8f8266 gloss=0.15
+  blob head on jaw at=1.0 r=0.0058 r2=0.0010 blend=0.0002 offset=(-0.009,0.0345,0.0002) tip=(0,0.019,0.005) color=8f8266 gloss=0.15
+  blob head on jaw at=1.0 r=0.0052 r2=0.0010 blend=0.0002 offset=(0.011,0.0345,0.0002) tip=(0,0.017,0.005) color=8f8266 gloss=0.15
+  blob head on jaw at=1.0 r=0.0048 r2=0.0010 blend=0.0002 offset=(0.027,0.0335,-0.0048) tip=(0,0.018,0.005) color=8f8266 gloss=0.15
 
   # ARMS AND LEGS: tapered bars, no ball joints (rebuilt 2026-10-01).
   #
@@ -509,8 +525,11 @@ face
   # at y 1.122 but had to push it 33 mm forward to keep the mouth line's reach, and that filled the gap under the nose solid
   # (front silhouette +40 mm at y 1.155-1.175: the snout the lips' comment warns about). The top drops to 1.199, inside the
   # cranium. The rest silhouette is pinned by goblin-blob.test.ts ("head rest profile").
-  jawHeight  0.537
-  jawDrop    0.0743
+  # TASK 3b (2026-10-14) shortened it again, 0.537 -> 0.467 and drop 0.0743 -> 0.0589: centre (0, 1.165, 0.0487), semi-height
+  # 0.043, so its underside clears y 1.132 everywhere in front of z 0.10 and the mouth can open at the lip line. The front just
+  # above the seam that it gave up is the upper ridge's (body block).
+  jawHeight  0.467
+  jawDrop    0.0589
   jawJut     0.045
   noseLength 0.007
   noseWidth  0.379
@@ -540,17 +559,18 @@ sheet
   eyePupil   0
   browHeavy  0.90
   browAngle  24
-  mouthWidth 0.54
-  # 0.63, not 0.73. The lips are GEOMETRY now, and the painted mouth has to
-  # land on them or the head wears two mouths — a dark smear on the jaw below a
-  # protruding pout. 0.63 is where the lip prims sit in face-space: they ride
-  # the skull at 0.31, which is 63% down a face spanning y 1.096..1.354.
-  mouthRise  0.80
-  mouthCurve -0.50
-  # A SEAM, not a slab. With no geometry to help, the sheet's mouth had to do
-  # all the work and was drawn thick; over a real pout that thickness just
-  # muddies the crease between the two lips.
-  mouthOpen  0.042
+  mouthWidth 0.40
+  # The lips are GEOMETRY, and the painted mouth has to land on them or the head
+  # wears two mouths. TASK 3b put it ON THE REAL SEAM: the sheet maps face-space
+  # y to world y through the cranium (headShape; faceProj 0.58/0.56), so rise
+  # 0.805 with curve -0.15 puts the centre at y 1.1335 (the seam) and the
+  # corners 4 mm higher; width 0.40 is the opening's +-0.04 m. It used to be a
+  # 0.54-wide smile arc centred 5 mm under the seam with corners 6 mm over it.
+  mouthRise  0.805
+  mouthCurve -0.15
+  # A SEAM, not a slab: +-7 mm (was +-1 cm). Paint never darkens the teeth or the
+  # inside (a coloured prim replaces the sheet), only the lips around them.
+  mouthOpen  0.030
   nostril    0.45
   noseRidge  1.00
   noseWide   0.062

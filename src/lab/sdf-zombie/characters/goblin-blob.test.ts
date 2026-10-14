@@ -211,10 +211,10 @@ describe('goblin.blob', () => {
     expect(painted('torso', 'spine1').length, 'undershirt').toBeGreaterThan(0);
     expect(painted('torso', 'chest').length, 'undershirt chest').toBeGreaterThan(0);
     expect(doc.parts.filter(p => p.limb === 'arm' && p.color != null).length, 'arm stays flesh').toBe(0);
-    // The head's only paint is inside the mouth (expression pass): 11 teeth and the dark interior bar, all buried at rest
-    // (see 'goblin teeth and mouth interior' below).
+    // The head's only paint is inside the mouth (expression pass): 11 teeth, the dark throat bar and (Task 3b) the jaw's dark
+    // floor, all buried at rest (see 'goblin teeth and mouth interior' below). The lips stay flesh: the owner rejected painted lips.
     const headPaint = doc.parts.filter(p => p.limb === 'head' && p.color != null);
-    expect(headPaint.length, 'head stays flesh but for the 11 teeth and the mouth interior').toBe(12);
+    expect(headPaint.length, 'head stays flesh but for the 11 teeth and the mouth interior').toBe(13);
     expect(headPaint.every(p => p.bone === 'skull' || p.bone === 'jaw'), 'mouth paint rides the skull or the jaw').toBe(true);
   });
 
@@ -250,6 +250,31 @@ describe('goblin jaw (expression pass)', () => {
     expect(jaw!.tail[2]).toBeGreaterThan(0.07); // forward of the skull axis
   });
 
+  // Task 3b: the shared hinge (jaw.ts JAW_HINGE, 0.30 of the skull: the BRIDE's upper lip) sits 5.6 cm above this face's lip line,
+  // so the goblin's jaw swung back into its throat as it opened. Its own `hinge=0.06` puts the hinge at the lip line.
+  it('hinges at its own lip line (hinge=0.06), and rig-bind and the motion joints agree', () => {
+    const skull = body.bones.get('skull')!;
+    expect(body.bones.get('jaw')!.jawHinge).toBe(0.06);
+    const bound = bindRig(body);
+    const hinge = bound.head!.jaw!.rest.hinge;
+    expect(skull.head[1] + hinge[1]).toBeCloseTo(1.1326, 3); // the lip line
+    const m = makeActorMotion(body, { seed: 1 });
+    m.motionJoints!.jaw!.hinge.forEach((v, k) => expect(v).toBeCloseTo(hinge[k]!, 9));
+  });
+
+  it('opening wide drops the lower lip rather than swinging it back into the throat', () => {
+    const bound = bindRig(body);
+    const lip = body.prims.findIndex(p => p.bone === 'jaw' && p.blendProfile === 'chamfer');
+    expect(lip, 'the chamfered lower lip').toBeGreaterThanOrEqual(0);
+    const shut = applyRig(body, bound, 0).prims[lip]!;
+    const open = applyRig(body, { ...bound, rig: { ...bound.rig, jawGape: 0.5 } }, 0).prims[lip]!;
+    const mid = (p: { a: Vec3; b: Vec3 }) => lerp(p.a, p.b, 0.5);
+    const drop = mid(shut)[1] - mid(open)[1], back = mid(shut)[2] - mid(open)[2];
+    // Measured 2026-10-14: drop 5.1 cm, back 1.7. The shared hinge gave 4.7 and 4.5: as far back as down.
+    expect(drop).toBeGreaterThan(0.045);
+    expect(back).toBeLessThan(drop * 0.5);
+  });
+
   it('is a named motion joint, so the rig can pin it', () => {
     const m = makeActorMotion(body, { seed: 1 });
     expect(m.motionJoints, 'goblin still builds motion joints').not.toBeNull();
@@ -282,14 +307,18 @@ describe('goblin teeth and mouth interior (expression pass)', () => {
   const same = (p: { a: Vec3; b: Vec3 }, q: { a: Vec3; b: Vec3 }) =>
     p.a.every((v, k) => Math.abs(v - q.a[k]!) < 1e-9) && p.b.every((v, k) => Math.abs(v - q.b[k]!) < 1e-9);
   const teeth = full.prims.filter(p => !bare.prims.some(q => same(p, q)));
+  // The tooth paint (8f8266) as linear RGB, to tell a tooth from an interior prim.
+  const TOOTH_RGB = (p: { color?: Vec3 }) => p.color !== undefined && p.color[0] > 0.2 && p.color[0] < 0.35;
 
-  it('has 11 teeth plus the mouth interior bar, 5 small and 2 fangs above, 4 small below', () => {
+  it('has 11 teeth plus the mouth interior (throat bar and jaw floor), 5 small and 2 fangs above, 4 small below', () => {
     expect(full.errors).toEqual([]);
-    expect(teeth.length).toBe(12); // 11 teeth + 1 interior bar
+    // Task 3b added the dark FLOOR on the jaw: with the lowered hinge the open jaw tips its top toward the viewer.
+    expect(teeth.length).toBe(13); // 11 teeth + the throat bar + the floor
     const upper = teeth.filter(p => p.bone === 'skull');
     const lower = teeth.filter(p => p.bone === 'jaw');
-    expect(upper.length, 'upper: 7 teeth + the interior bar').toBe(8);
-    expect(lower.length, 'lower teeth').toBe(4);
+    expect(upper.length, 'upper: 7 teeth + the throat bar').toBe(8);
+    expect(lower.length, 'lower: 4 teeth + the floor').toBe(5);
+    expect(teeth.filter(p => TOOTH_RGB(p)).length, 'teeth').toBe(11);
   });
 
   it('every tooth and the interior bar is buried at rest: both ends are inside the tooth-free flesh', () => {
@@ -327,5 +356,14 @@ describe('goblin teeth and mouth interior (expression pass)', () => {
   it('shows when the jaw drops: every tooth and the interior paint part of the face at a 0.3 rad gape', () => {
     const open = painters(0.3);
     for (const i of toothIndices) expect(open.has(i), `prim ${i} (${full.prims[i]!.bone}, x ${full.prims[i]!.a[0]}) never shows`).toBe(true);
+  });
+
+  // THE GRIN (Task 3b): the mouth opens AT THE LIP LINE, so a small gape already bares the whole upper row. Before 3b the opening
+  // sat in the chin's bevel 2-3 cm lower and the upper row stayed hidden behind the upper face mass at 0.15.
+  it('bares every upper tooth at the grin gape (0.15 rad)', () => {
+    const grin = painters(0.15);
+    const upperTeeth = toothIndices.filter(i => full.prims[i]!.bone === 'skull' && TOOTH_RGB(full.prims[i]!));
+    expect(upperTeeth.length).toBe(7);
+    for (const i of upperTeeth) expect(grin.has(i), `upper tooth x ${full.prims[i]!.a[0]} hidden at 0.15`).toBe(true);
   });
 });

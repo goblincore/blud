@@ -395,8 +395,10 @@ describe('metal — prof bit 4, value 16 (hard-surface task 2)', () => {
     // more prof-0 entries, no prof value changed.
     // 2026-10-14 (expression pass): +1 prof-0 for the chin mass split onto the jaw (Task 2, which missed this pin) and +12
     // prof-0 for the 11 teeth and the mouth-interior bar (Task 3; plain blends, no chamfer, so no prof bit). No prof value changed.
+    // 2026-10-14 (Task 3b, the mouth moved to the lip line): the groove (0) is gone; +5 prof-0 (cheek-fill pair, mouth-corner
+    // pair, the jaw's dark floor); the lower lip became a bent chamfered bar (1 -> 3); +1 bent upper ridge (2). No metal bit.
     expect(packedProf('goblin.blob')).toEqual(
-      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,3]);
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,2,3,3]);
     // Five plate boxes at 24 = box bit 3 (8) + metal bit 4 (16); the two
     // 2s are bent horns, the 3s chamfered+bent ones. Re-pinned when the
     // plates were authored `metal` — every other value is pre-metal.

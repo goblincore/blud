@@ -24,7 +24,10 @@ export const PROFILE_PROBES: readonly ProfileProbe[] = [
   // Front of the face, x = 0, going forward from the head's axis: chin, lower lip, mouth groove.
   { name: 'front y1.09 (chin)', from: [0, 1.09, 0], dir: [0, 0, 1], want: 0.1025 },
   { name: 'front y1.11 (lower lip)', from: [0, 1.11, 0], dir: [0, 0, 1], want: 0.118 },
-  { name: 'front y1.13 (groove)', from: [0, 1.13, 0], dir: [0, 0, 1], want: 0.116 },
+  // RE-PINNED 2026-10-14 (Task 3b, the grin): 0.116 -> 0.121. The groove that cut a 5 mm channel here is gone (it carved the
+  // teeth whenever the jaw opened) and the mouth now opens AT this line, so the lips meet here instead of a groove. The painted
+  // sheet mouth draws the line now. Name kept so the history reads.
+  { name: 'front y1.13 (groove)', from: [0, 1.13, 0], dir: [0, 0, 1], want: 0.121 },
   // Half-width of the face at three heights, going out from the axis.
   { name: 'half-width y1.10', from: [0, 1.10, 0.03], dir: [1, 0, 0], want: 0.054 },
   { name: 'half-width y1.15', from: [0, 1.15, 0.03], dir: [1, 0, 0], want: 0.074 },

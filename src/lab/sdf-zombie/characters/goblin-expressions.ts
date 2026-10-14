@@ -5,7 +5,8 @@
 // judged in the lab frames (docs/dev-notes/2026-10-13-goblin-expressions/); each change from the first values is commented with
 // the frame that asked for it.
 //
-// The goblin's authored `sheet` block is the neutral: mouthCurve -0.50 is ALREADY a smile arc by the sheet's sign (the scowl read
+// The goblin's authored `sheet` block is the neutral: mouthCurve -0.15 (-0.50 before Task 3b put the painted mouth on the real
+// seam, flatter) is ALREADY a slight smile arc by the sheet's sign (the scowl read
 // comes from the lips and brows), so `smile` pulls it further negative and `lipCurl` pushes it positive past zero into a frown.
 import type { ExpressionClip, ExpressionTuning } from '../expression';
 
