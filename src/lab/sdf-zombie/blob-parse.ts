@@ -182,6 +182,10 @@ function parseGlossArg(l: BlobLine, painted: boolean): number | null {
   return g;
 }
 
+/** One word per channel AND side: `browDown+:` and `browDown-:` (one-sided, Task 16) are two words for one channel, legal together. */
+const sameMorphChannel = (a: PrimMorph, b: PrimMorph) => a.channel === b.channel && (a.sign ?? 0) === (b.sign ?? 0);
+const signWord = (m: PrimMorph) => (m.sign === 1 ? '+' : m.sign === -1 ? '-' : '');
+
 /** Every `morph=<channel>:<terms>` word on the line (goblin expressions Task 12; morph.ts has the grammar), one per channel.
  *  Each error names the word's column. */
 function parseMorphArgs(l: BlobLine): PrimMorph[] {
@@ -194,8 +198,8 @@ function parseMorphArgs(l: BlobLine): PrimMorph[] {
     } catch (e) {
       throw new BlobError((e as Error).message, l.line, wordCol(l, idx));
     }
-    if (out.some(o => o.channel === m.channel))
-      throw new BlobError(`morph=${m.channel}: appears twice on one line; put all its terms in one word`, l.line, wordCol(l, idx));
+    if (out.some(o => sameMorphChannel(o, m)))
+      throw new BlobError(`morph=${m.channel}${signWord(m)}: appears twice on one line; put all its terms in one word`, l.line, wordCol(l, idx));
     out.push(m);
   });
   return out;
@@ -696,8 +700,8 @@ function parseNamedNumberLine(
     rest.slice(1).forEach((w, i) => {
       let m: PrimMorph;
       try { m = parseMorph(w); } catch (e) { throw new BlobError((e as Error).message, l.line, wordCol(l, i + 2)); }
-      if (morphs.some(o => o.channel === m.channel))
-        throw new BlobError(`face morph ${tag}: channel ${m.channel} appears twice on one line`, l.line, wordCol(l, i + 2));
+      if (morphs.some(o => sameMorphChannel(o, m)))
+        throw new BlobError(`face morph ${tag}: channel ${m.channel}${signWord(m)} appears twice on one line`, l.line, wordCol(l, i + 2));
       morphs.push(m);
     });
     if (s.doc.faceMorphs.some(f => f.tag === tag))

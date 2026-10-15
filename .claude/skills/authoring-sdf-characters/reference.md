@@ -131,6 +131,24 @@ channel, terms concatenated, each at most once:
 | `bend(dx,dy,dz)` | adds to the bend (a bar along the arch sags: its ends curl up) |
 | `*k` | radius (and `r2`) times `k` |
 | `*(sx,sy,sz)` | `wide`/`tall`/`deep` times these |
+| `blend*k` | `blend=` times `k` (a ball pushed out on a smile MELTS into the cheek instead of sitting on it as a knob) |
+
+**One-sided channels** (added 2026-10-15, goblin Task 16): `smile` and `browDown`
+run -1..1 and a plain morph runs backwards at a negative weight. When the two
+signs want different shapes, write `<channel>+:` and/or `<channel>-:` (legal
+together on one line): each applies only on its own side of zero, by the
+weight's magnitude, so `browDown-:(0,0.005,0)` lifts 5 mm at browDown -1 and
+does nothing on a scowl. A point prim can GROW a chord on one side
+(`(-0.012,0,0)tip(0.024,0,0)bend(0,-0.016,0)`: the goblin's brow ridge knits into a
+V) without the other side growing it too.
+
+**Morphs and the skin noise.** The shader anchors the skin noise (bump, grain,
+mottle) in each surface point's dominant prim's REST frame. A morphed prim
+moved away from that rest leaves a thin dark seam along its outline on screen
+(not in the field, so a CPU check will not see it) unless the upload's rest is
+the MORPHED rest: `rig-bind.ts` `morphedRest(rest, weights)`, which the lab's
+hero upload uses. Any other path that renders morphs (an actor in the game)
+must pass it too.
 
 ```
 # the goblin's mouth corners push out and up on a smile, and grow a little

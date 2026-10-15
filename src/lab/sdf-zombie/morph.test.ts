@@ -19,6 +19,18 @@ describe('parseMorph', () => {
     });
   });
 
+  // Task 16: a one-sided channel and a blend factor.
+  it('reads a one-sided channel (`+`/`-`) and a blend factor', () => {
+    expect(parseMorph('browDown+:(0,-0.006,0.003)bend(0,-0.008,0)')).toEqual({
+      channel: 'browDown', sign: 1, move: [0, -0.006, 0.003], bend: [0, -0.008, 0],
+    });
+    expect(parseMorph('browDown-:(0,0.005,0)')).toEqual({ channel: 'browDown', sign: -1, move: [0, 0.005, 0] });
+    expect(parseMorph('smile:(0.004,0,0)*0.6blend*2.5')).toEqual({ channel: 'smile', move: [0.004, 0, 0], radius: 0.6, blend: 2.5 });
+    expect(() => parseMorph('smile:blend*0')).toThrow(/blend factor must be above zero/);
+    expect(() => parseMorph('smile:blend*2blend*3')).toThrow(/twice/);
+    expect(() => parseMorph('grin+:(0,0,0)')).toThrow(/unknown morph channel "grin"/);
+  });
+
   it('rejects an unknown channel, naming the legal set', () => {
     expect(() => parseMorph('grin:(0,0,0)')).toThrow(/unknown morph channel "grin".*gape.*smile.*browDown.*lipCurl.*lid/);
   });
@@ -74,6 +86,28 @@ describe('morphOf', () => {
     expect(morphOf([{ channel: 'smile', radius: 3 }], { smile: -1 })!.radius).toBe(0);
   });
 
+  it('a one-sided morph applies on its own side of zero by the magnitude, and not at all on the other', () => {
+    const down: PrimMorph = { channel: 'browDown', sign: 1, move: [0, -0.006, 0], bend: [0, -0.008, 0] };
+    const up: PrimMorph = { channel: 'browDown', sign: -1, move: [0, 0.005, 0], scale: [1.1, 1, 1] };
+    const d = morphOf([down, up], { browDown: 0.5 })!;
+    expect(d.da).toEqual([0, -0.003, 0]);
+    expect(d.bend).toEqual([0, -0.004, 0]);
+    expect(d.scale).toEqual([1, 1, 1]);
+    const u = morphOf([down, up], { browDown: -1 })!;
+    expect(u.da).toEqual([0, 0.005, 0]);
+    expect(u.bend).toBeNull();
+    expect(u.scale[0]).toBeCloseTo(1.1, 12);
+    // Only the other side's morph: nothing moves, and the neutral guarantee holds (null, not a zero result).
+    expect(morphOf([down], { browDown: -1 })).toBeNull();
+    expect(morphOf([up], { browDown: 0.7 })).toBeNull();
+  });
+
+  it('scales the blend factor linearly and floors it at zero', () => {
+    expect(morphOf([{ channel: 'smile', blend: 3 }], { smile: 0.5 })!.blend).toBeCloseTo(2, 12);
+    expect(morphOf([{ channel: 'smile', blend: 3 }], { smile: -1 })!.blend).toBe(0);
+    expect(morphOf([{ channel: 'smile', radius: 2 }], { smile: 1 })!.blend).toBe(1);
+  });
+
   it('adds the offsets and multiplies the factors of several channels', () => {
     const r = morphOf([
       { channel: 'smile', move: [0.01, 0, 0], radius: 2 },
@@ -105,6 +139,12 @@ describe('morphShape', () => {
     const s = morphShape(unbent, r);
     expect(s.bend).toEqual([0, -0.002, 0]);
     expect('radiusB' in s).toBe(false);
+  });
+
+  it('scales the blend when a morph blends, and leaves it exactly alone when none does', () => {
+    const p = { ...prim, blendK: 0.004 };
+    expect(morphShape(p, morphOf([{ channel: 'smile', blend: 2.5 }], { smile: 1 })!).blendK).toBeCloseTo(0.01, 12);
+    expect(morphShape(p, morphOf([{ channel: 'smile', radius: 2 }], { smile: 1 })!).blendK).toBe(0.004);
   });
 
   it('leaves the bend alone when no morph bends', () => {

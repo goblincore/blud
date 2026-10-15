@@ -569,6 +569,19 @@ describe('parseBlob — morph= (per-prim face morphs, goblin expressions Task 12
       'blob torso on pelvis at=0.5 r=0.1 morph=smile:*1.1 morph=smile:(0,0.001,0)'))).toThrow(/appears twice/);
   });
 
+  // Task 16: one word per channel AND side, so a one-sided pair is legal; the same side twice is not.
+  it('takes browDown+ and browDown- on one line, but not the same side twice', () => {
+    const line = (w: string) => PAINTED.replace('blob torso on pelvis at=0.5 r=0.1', `blob torso on pelvis at=0.5 r=0.1 ${w}`);
+    const torso = parseBlob(line('morph=browDown+:(0,-0.006,0) morph=browDown-:(0,0.005,0)')).parts.find(x => x.limb === 'torso')!;
+    expect(torso.morphs).toEqual([
+      { channel: 'browDown', sign: 1, move: [0, -0.006, 0] },
+      { channel: 'browDown', sign: -1, move: [0, 0.005, 0] },
+    ]);
+    expect(() => parseBlob(line('morph=browDown+:*1.1 morph=browDown+:(0,0.001,0)'))).toThrow(/browDown\+: appears twice/);
+    expect(() => parseBlob(`${PAINTED}face\n  browHeavy 0.008\n  morph brow browDown-:(0,0.004,0) browDown-:*1.1\n`))
+      .toThrow(/browDown- appears twice/);
+  });
+
   it('only moves a blob or a bar', () => {
     expect(() => parseBlob(PAINTED.replace('blob torso on pelvis at=0.5 r=0.1',
       'blob torso on pelvis at=0.5 r=0.1\n  carve on skull at=0.5 r=0.02 morph=smile:*1.1'))).toThrow(/only moves a blob or a bar, not a carve/);
