@@ -404,8 +404,10 @@ describe('metal — prof bit 4, value 16 (hard-surface task 2)', () => {
     // 2026-10-15 (Task 14, the teeth became mesh in goblin-cinematic-kit.wam): -11 prof-0 for the 11 tooth prims removed; nothing
     // else moved: checked when re-pinning, the variant's pack-golden hash (now 2e5d52c91ee41b5a) is exactly the hash of the Task 13
     // .blob (7587c2a0) with its 11 tooth lines deleted.
+    // 2026-10-15 (Task 18, the cartoon grin): +2 prof-2 for the bent cheek-roll pair (buried at rest); nothing else moved (the
+    // re-pinned pack-golden hash 871a9afd1a714c6b is exactly 2e5d52c91ee41b5a again with the pair's line deleted; checked).
     expect(packedProf('goblin-cinematic.blob')).toEqual(
-      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,2,3,3]);
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,2,2,2,3,3]);
     // Five plate boxes at 24 = box bit 3 (8) + metal bit 4 (16); the two
     // 2s are bent horns, the 3s chamfered+bent ones. Re-pinned when the
     // plates were authored `metal` — every other value is pre-metal.

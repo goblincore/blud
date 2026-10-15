@@ -21,6 +21,9 @@ import { bindRig, applyRig, kitFrames, morphedRest } from '../rig-bind';
 import { boneFrames } from '../rig-frames';
 import { jawTargetAt } from '../jaw';
 import { makeActorMotion } from '../actor';
+import { actuate, expressionAt } from '../expression';
+import { compileSheet } from '../blob-compile';
+import { GOBLIN_EXPRESSIONS, GOBLIN_EXPRESSION_TUNING } from './goblin-expressions';
 
 const doc = parseBlob(src);
 const built = () => buildBody(compileBlob(doc, compileFace(doc)));
@@ -392,9 +395,12 @@ describe('goblin-cinematic mesh teeth (Tasks 14, 17): the kit\'s teeth follow th
     for (const t of teeth) expect(showsFromFront(withGape(0.3), t), `${t.bone} x ${t.rest[0]![0].toFixed(3)}`).toBe(true);
   });
 
-  // Task 15: the grin's jaw barely opens (0.12 rad); the lips' lift and the corners' pull show the teeth.
-  it('the grin (morphs on, gape 0.12) still bares every upper tooth', () => {
-    const grin = withGape(0.12, { gape: 0.2, smile: 1, browDown: 0.8, lipCurl: 0, lid: 0, squint: 0.8 });
+  // Task 15: the grin's jaw barely opens (0.12 rad); the lips' lift and the corners' pull show the teeth. Task 18: the clip's own
+  // peak now (0.18 rad, the cartoon morphs, the head squashed, the teeth riding the squash).
+  it('the grin (the clip\'s peak: morphs on, the head squashed) still bares every upper tooth', () => {
+    const peak = actuate(expressionAt(GOBLIN_EXPRESSIONS.grin!, 99), compileSheet(doc)!, GOBLIN_EXPRESSION_TUNING);
+    expect(peak.morphs.squash).toBeGreaterThan(0);
+    const grin = withGape(peak.jawGape, peak.morphs);
     for (const t of teeth.filter(t => t.bone === 'skull')) expect(showsFromFront(grin, t), `upper x ${t.rest[0]![0].toFixed(3)}`).toBe(true);
   });
 
@@ -499,8 +505,10 @@ describe('goblin-cinematic mesh teeth (Tasks 14, 17): the kit\'s teeth follow th
 describe('goblin face morphs (Task 12: the smile widens the chin, pushes the cheeks and corners, lifts the upper lip)', () => {
   const doc = parseBlob(src);
   const body = buildBody(compileBlob(doc, compileFace(doc)));
-  // Without every morph: the `morph=` words and the face block's `morph <tag>` lines (Task 15).
-  const stripped = src.replace(/ morph=\S+/g, '').replace(/^  morph .*\n/gm, '');
+  // Without every morph: the `morph=` words and the face block's `morph <tag>` lines (Task 15), and the cheek-roll pair (Task 18:
+  // the only prims added for an expression, buried at rest).
+  const BAND = /^  blob head on skull at=0\.0 r=0\.003 .*\n/m;
+  const stripped = src.replace(BAND, '').replace(/ morph=\S+/g, '').replace(/^  morph .*\n/gm, '');
   const plainDoc = parseBlob(stripped);
   const plain = buildBody(compileBlob(plainDoc, compileFace(plainDoc)));
   const bound = bindRig(body);
@@ -512,33 +520,42 @@ describe('goblin face morphs (Task 12: the smile widens the chin, pushes the che
     return t;
   }));
 
-  it('morphs existing prims only, on the smile alone: the same prims as the .blob without its morph words', () => {
-    expect(body.prims.length).toBe(plain.prims.length);
-    body.prims.forEach((p, i) => {
+  it('morphs existing prims only, on the smile alone: the same prims as the .blob without its morph words (and the cheek rolls)', () => {
+    const bandless = buildBody(compileBlob(parseBlob(src.replace(BAND, '')), compileFace(parseBlob(src.replace(BAND, '')))));
+    expect(bandless.prims.length).toBe(plain.prims.length);
+    expect(body.prims.length, 'Task 18: + the cheek-roll pair').toBe(plain.prims.length + 2);
+    bandless.prims.forEach((p, i) => {
       const { morphs: _m, ...rest } = p;
       expect(rest, `prim ${i}`).toEqual(plain.prims[i]);
     });
     const morphed = body.prims.filter(p => p.morphs);
     const smiles = morphed.filter(p => p.morphs!.every(m => m.channel === 'smile'));
-    // Task 15 added the throat bar (it widens with the opening).
-    expect(smiles.length, 'upper lip, lower lip, chin, upper ridge, cheek pair, corner pair, throat bar').toBe(9);
+    // Task 15 added the throat bar (it widens with the opening); Task 18 the hooked nose (it lifts) and the cheek-roll pair.
+    expect(smiles.length, 'upper lip, lower lip, chin, upper ridge, cheek pair, corner pair, throat bar, nose, roll pair').toBe(12);
     // Task 15: the two GENERATED face prims carry the eye area's morphs (face block `morph <tag>` lines).
     // (Built prims do not keep facePrims' tags: the two are the only skull prims morphed on anything but the smile.)
     const eyeArea = morphed.filter(p => !p.morphs!.every(m => m.channel === 'smile')).map(p => p.morphs!.map(m => m.channel).sort());
     // Task 16: the brow ridge's browDown is two ONE-SIDED words (browDown+ knits it into a V, browDown- lifts it).
-    expect(eyeArea).toEqual([['squint'], ['browDown', 'browDown', 'squint']]);
-    expect(morphed.length).toBe(11);
+    expect(eyeArea).toEqual([['squint', 'smile'].sort(), ['browDown', 'browDown', 'squint']]);
+    expect(morphed.length).toBe(14);
   });
 
   it('weights 0 pose exactly as the body without any morph (rest, and the jaw open)', () => {
     const plainBound = bindRig(plain);
     for (const gape of [0, 0.3]) {
       const zero = applyRig(body, { ...bound, rig: { ...bound.rig, jawGape: gape,
-        morphs: { gape: 0, smile: 0, browDown: 0, lipCurl: 0, lid: 0, squint: 0 } } }, 0);
+        morphs: { gape: 0, smile: 0, browDown: 0, lipCurl: 0, lid: 0, squint: 0, squash: 0 } } }, 0);
+      // The cheek rolls are extra prims (Task 18): compare the rest without them, and the rolls with their own rest.
       const none = applyRig(plain, { ...plainBound, rig: { ...plainBound.rig, jawGape: gape } }, 0);
-      zero.prims.forEach((p, i) => {
-        const { morphs: _m, ...rest } = p;
-        expect(rest, `prim ${i}`).toEqual(none.prims[i]);
+      const bare = applyRig(body, { ...bound, rig: { ...bound.rig, jawGape: gape } }, 0);
+      expect(zero).toEqual(bare);
+      const rolls = new Set(body.prims.map((p, i) => [p, i] as const).filter(([p]) => p.radius === 0.003).map(([, i]) => i));
+      expect(rolls.size).toBe(2);
+      // (`src` is the .blob line, which the rolls' line shifts.)
+      zero.prims.filter((_p, i) => !rolls.has(i)).forEach((p, i) => {
+        const { morphs: _m, src: _s, ...rest } = p;
+        const { src: _t, ...want } = none.prims[i]!;
+        expect(rest, `prim ${i}`).toEqual(want);
       });
     }
   });
@@ -636,4 +653,73 @@ describe('goblin face morphs (Task 12: the smile widens the chin, pushes the che
     for (const y of [1.07, 1.08]) expect(reachX(on, y) - reachX(off, y), `y ${y}`).toBeGreaterThan(0.007);
   });
   // 'The grin still bares every upper tooth' is a mesh-teeth test now (Task 14, the block above).
+});
+
+// TASK 18 (owner on PR #48: "make his face distort more, like when he grins it should be a bit cartoonish and exaggerated", with a
+// 3D emoji evil grin as the look reference): harder smile morphs, a cheek-roll pair along the nasolabial line, and the head
+// squash (squash.ts). Measured at the grin CLIP's peak, as the lab plays it.
+describe('the cartoon grin (Task 18): a crescent mouth, cheek rolls, the head squashed', () => {
+  const body = built();
+  const bound = bindRig(body);
+  const peak = (name: string) => actuate(expressionAt(GOBLIN_EXPRESSIONS[name]!, 99), compileSheet(doc)!, GOBLIN_EXPRESSION_TUNING);
+  const at = (name: string) => { const a = peak(name); return { ...bound, rig: { ...bound.rig, jawGape: a.jawGape, morphs: a.morphs } }; };
+  const rest = applyRig(body, bound, 0), grin = applyRig(body, at('grin'), 0);
+  const lip = body.prims.findIndex(p => p.bone === 'jaw' && p.bend !== undefined && !p.color);
+  const rolls = body.prims.map((p, i) => [p, i] as const).filter(([p]) => p.radius === 0.003 && p.bone === 'skull').map(([, i]) => i);
+  const halfWidth = (b: typeof body, y: number) => Math.max(...[0, 0.02, 0.04, 0.06].map(z => {
+    let t = 0; if (sdBody([0, y, z], b) > 0) return 0;
+    while (t < 0.25 && sdBody([t, y, z], b) <= 0) t += 0.0005;
+    return t;
+  }));
+
+  it('the grin\'s mouth (the lower lip, end to end, outer edges) is at least 1.8x the neutral\'s', () => {
+    const width = (b: typeof body) => { const p = b.prims[lip]!; return Math.abs(p.b[0] - p.a[0]) + 2 * p.radius * p.scale[0]; };
+    expect(width(grin) / width(rest)).toBeGreaterThanOrEqual(1.8); // measured 0.0720 -> 0.2047 m (x2.84)
+  });
+
+  it('the corners (the lower lip\'s ends) ride at least 15 mm higher than at rest, gape and all', () => {
+    for (const k of ['a', 'b'] as const) expect(grin.prims[lip]![k][1] - rest.prims[lip]![k][1], k).toBeGreaterThan(0.015); // 33 mm
+  });
+
+  it('the head is at least 10% wider at the grin\'s peak (the cranium, above the cheeks and below the ears)', () => {
+    for (const y of [1.19, 1.2, 1.21]) expect(halfWidth(grin, y) / halfWidth(rest, y), `y ${y}`).toBeGreaterThanOrEqual(1.1); // x1.15
+  });
+
+  it('surprise stretches it instead: narrower and taller', () => {
+    const s = applyRig(body, at('surprise'), 0);
+    expect(halfWidth(s, 1.2)).toBeLessThan(halfWidth(rest, 1.2) * 0.95);
+    const top = (b: typeof body) => { let y = 1.25; while (sdBody([0, y, 0], b) <= 0) y += 0.0005; return y; };
+    expect(top(s)).toBeGreaterThan(top(rest) + 0.003);
+  });
+
+  it('the cheek rolls are buried at rest (a millimetre or more inside the rest of the flesh) and come out on the smile', () => {
+    expect(rolls.length).toBe(2);
+    const bandless = buildBody(compileBlob(parseBlob(src.replace(/^  blob head on skull at=0\.0 r=0\.003 .*\n/m, '')),
+      compileFace(parseBlob(src.replace(/^  blob head on skull at=0\.0 r=0\.003 .*\n/m, '')))));
+    for (const i of rolls) {
+      const p = body.prims[i]!;
+      for (let k = 0; k <= 10; k++) {
+        const t = k / 10, mid = scale(add(p.a, p.b), 0.5), c = add(mid, p.bend!);
+        const q = add(add(scale(p.a, (1 - t) ** 2), scale(c, 2 * t * (1 - t))), scale(p.b, t * t));
+        expect(sdBody(q, bandless) + p.radius, `roll ${i} t ${t}`).toBeLessThan(-0.001);
+      }
+      // At the grin it is 4.5x as thick and stands proud of the face it was buried in.
+      expect(grin.prims[i]!.radius / p.radius).toBeGreaterThanOrEqual(4.5);
+      expect(nearestPrim(add(grin.prims[i]!.a, [0, 0, grin.prims[i]!.radius * 0.9]), grin), 'the roll is the surface in front of it').toBe(i);
+    }
+  });
+
+  it('the noise anchor follows the squash too: every face point maps to itself at the grin (statue, jaw shut)', () => {
+    const w = { ...peak('grin').morphs, gape: 0 };
+    const b = applyRig(body, { ...bound, rig: { ...bound.rig, morphs: w } }, 0), restM = morphedRest(body, w, bound.head);
+    let worst = 0, bare = 0;
+    for (let x = 0; x <= 0.06; x += 0.012) for (let y = 1.1; y <= 1.29; y += 0.012) {
+      let z = 0.25; while (z > 0 && sdBody([x, y, z], b) > 0) z -= 0.0005; if (z <= 0) continue;
+      const p: Vec3 = [x, y, z];
+      worst = Math.max(worst, len(sub(restSpacePoint(p, b, restM), p)));
+      bare = Math.max(bare, len(sub(restSpacePoint(p, b, morphedRest(body, { ...w, squash: 0 }, bound.head)), p)));
+    }
+    expect(bare, 'without the squash in the anchor it is off by the squash').toBeGreaterThan(0.004);
+    expect(worst).toBeLessThan(1e-6);
+  });
 });
