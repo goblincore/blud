@@ -377,6 +377,12 @@ body
   # FOLLOW-UP"): it now bows OUT round the mouth corner like a "(" (passing ~1 cm outside it) and ends below and outside it, so
   # the corner tucks under it; it used to cross BEHIND the lip's end, which then hooked up past it.
   blob head on skull at=0.0 r=0.003 blend=0.0015 offset=(0.024,0.0494,0.0671) tip=(0.024,-0.044,-0.038) bend=(0.004,0.004,0) both morph=smile:(0.004,0.0029,0.026)tip(0.0176,0.0048,0.0083)bend(0.0412,0.0047,-0.0029)*2.4blend*1.5
+  # THE FURROW (Task 19, the evil grin; owner: "a variant like an 'evil grin' where the brows angle more inward to produce a furrow";
+  # skull, both sides): a short upright bar at each inner brow head (the corrugator bunching), from the V's knot up and a little in.
+  # At rest a 2.8 mm thread buried 6 mm inside the glabella (goblin-cinematic-blob.test.ts: every point at least 1 mm under the rest
+  # flesh); on `furrow` it comes forward to stand proud of the dropped brow ridge (browDown) and fattens, its small blend leaving a
+  # crease where the pair meet at the midline and where each meets the ridge: the furrow is the valley between two bulges, not a cut.
+  blob head on skull at=0.0 r=0.0028 blend=0.0012 offset=(0.012,0.1204,0.0871) tip=(-0.001,0.014,0) both morph=furrow:(-0.001,-0.002,0.0265)*1.8
   # MOUTH CORNERS (jaw, both sides), at x 0.037, y 1.124: the lowered chin left the corners open at rest (the throat bar showed
   # there). They drop with the jaw, so they never plug the opening.
   blob head on jaw at=1.0 r=0.010 blend=0.004 offset=(0.037,0.0365,-0.0048) both morph=smile:(0.0256,0.0504,-0.0114)*0.9blend*3
@@ -636,8 +642,11 @@ face
   #  Frames: docs/dev-notes/2026-10-13-goblin-expressions/polish/ (eyes-before-after.png).
   # TASK 18: the cheek mass also rises on the SMILE (up 6 mm, forward 2, 6% wider, 8% less tall: its underside climbs ~9 mm, the
   # cheeks bunch into the eyes), and browDown+ is heavier (10 mm lower, a 12 mm V, 25% taller) for the reference's overhanging V.
+  # TASK 19 (the evil grin's furrow): `furrow` dips the V's middle 7 mm more and narrows the bar 8%, so the brows angle down and in
+  # toward the nose (the inner brow 8 mm lower and 10 mm forward at the evil grin's peak); the inner-brow bulge pair in the body
+  # block stands on it. Frames: docs/dev-notes/2026-10-13-goblin-expressions/evil-grin/.
   morph jaw squint:(0,0.005,0.0015)*(1.05,1.12,1.03) smile:(0,0.006,0.002)*(1.06,0.92,1)
-  morph brow browDown+:(-0.014,-0.010,0.002)tip(0.028,0,0)bend(0,-0.024,0.008)*(0.8,1.25,1.05)blend*1.6 browDown-:(0,0.005,-0.0015)*(1,0.85,1)blend*2.5 squint:(0,-0.0015,0)
+  morph brow browDown+:(-0.014,-0.010,0.002)tip(0.028,0,0)bend(0,-0.024,0.008)*(0.8,1.25,1.05)blend*1.6 browDown-:(0,0.005,-0.0015)*(1,0.85,1)blend*2.5 squint:(0,-0.0015,0) furrow:bend(0,-0.014,0)*(0.92,1,1)
 
 # The goblin's own face, generated rather than inherited.
 #

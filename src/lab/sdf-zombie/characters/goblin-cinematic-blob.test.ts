@@ -508,7 +508,9 @@ describe('goblin face morphs (Task 12: the smile widens the chin, pushes the che
   // Without every morph: the `morph=` words and the face block's `morph <tag>` lines (Task 15), and the cheek-roll pair (Task 18:
   // the only prims added for an expression, buried at rest).
   const BAND = /^  blob head on skull at=0\.0 r=0\.003 .*\n/m;
-  const stripped = src.replace(BAND, '').replace(/ morph=\S+/g, '').replace(/^  morph .*\n/gm, '');
+  // Task 19: the furrow pair (the inner-brow bulges), the other prims added for an expression, buried at rest.
+  const FURROW = /^  blob head on skull at=0\.0 r=0\.0028 .*morph=furrow.*\n/m;
+  const stripped = src.replace(BAND, '').replace(FURROW, '').replace(/ morph=\S+/g, '').replace(/^  morph .*\n/gm, '');
   const plainDoc = parseBlob(stripped);
   const plain = buildBody(compileBlob(plainDoc, compileFace(plainDoc)));
   const bound = bindRig(body);
@@ -521,9 +523,10 @@ describe('goblin face morphs (Task 12: the smile widens the chin, pushes the che
   }));
 
   it('morphs existing prims only, on the smile alone: the same prims as the .blob without its morph words (and the cheek rolls)', () => {
-    const bandless = buildBody(compileBlob(parseBlob(src.replace(BAND, '')), compileFace(parseBlob(src.replace(BAND, '')))));
+    const bare = src.replace(BAND, '').replace(FURROW, '');
+    const bandless = buildBody(compileBlob(parseBlob(bare), compileFace(parseBlob(bare))));
     expect(bandless.prims.length).toBe(plain.prims.length);
-    expect(body.prims.length, 'Task 18: + the cheek-roll pair').toBe(plain.prims.length + 2);
+    expect(body.prims.length, 'Task 18: + the cheek-roll pair; Task 19: + the furrow pair').toBe(plain.prims.length + 4);
     bandless.prims.forEach((p, i) => {
       const { morphs: _m, ...rest } = p;
       expect(rest, `prim ${i}`).toEqual(plain.prims[i]);
@@ -534,23 +537,27 @@ describe('goblin face morphs (Task 12: the smile widens the chin, pushes the che
     expect(smiles.length, 'upper lip, lower lip, chin, upper ridge, cheek pair, corner pair, throat bar, nose, roll pair').toBe(12);
     // Task 15: the two GENERATED face prims carry the eye area's morphs (face block `morph <tag>` lines).
     // (Built prims do not keep facePrims' tags: the two are the only skull prims morphed on anything but the smile.)
-    const eyeArea = morphed.filter(p => !p.morphs!.every(m => m.channel === 'smile')).map(p => p.morphs!.map(m => m.channel).sort());
-    // Task 16: the brow ridge's browDown is two ONE-SIDED words (browDown+ knits it into a V, browDown- lifts it).
-    expect(eyeArea).toEqual([['squint', 'smile'].sort(), ['browDown', 'browDown', 'squint']]);
-    expect(morphed.length).toBe(14);
+    const eyeArea = morphed.filter(p => !p.morphs!.every(m => m.channel === 'smile' || m.channel === 'furrow'))
+      .map(p => p.morphs!.map(m => m.channel).sort());
+    // Task 16: the brow ridge's browDown is two ONE-SIDED words (browDown+ knits it into a V, browDown- lifts it); Task 19: and a
+    // furrow word (the V pulled deeper).
+    expect(eyeArea).toEqual([['squint', 'smile'].sort(), ['browDown', 'browDown', 'furrow', 'squint']]);
+    expect(morphed.filter(p => p.morphs!.every(m => m.channel === 'furrow')).length, 'the furrow pair').toBe(2);
+    expect(morphed.length).toBe(16);
   });
 
   it('weights 0 pose exactly as the body without any morph (rest, and the jaw open)', () => {
     const plainBound = bindRig(plain);
     for (const gape of [0, 0.3]) {
       const zero = applyRig(body, { ...bound, rig: { ...bound.rig, jawGape: gape,
-        morphs: { gape: 0, smile: 0, browDown: 0, lipCurl: 0, lid: 0, squint: 0, squash: 0 } } }, 0);
-      // The cheek rolls are extra prims (Task 18): compare the rest without them, and the rolls with their own rest.
+        morphs: { gape: 0, smile: 0, browDown: 0, lipCurl: 0, lid: 0, squint: 0, squash: 0, furrow: 0 } } }, 0);
+      // The cheek rolls (Task 18) and the furrow pair (Task 19) are extra prims: compare the rest without them.
       const none = applyRig(plain, { ...plainBound, rig: { ...plainBound.rig, jawGape: gape } }, 0);
       const bare = applyRig(body, { ...bound, rig: { ...bound.rig, jawGape: gape } }, 0);
       expect(zero).toEqual(bare);
-      const rolls = new Set(body.prims.map((p, i) => [p, i] as const).filter(([p]) => p.radius === 0.003).map(([, i]) => i));
-      expect(rolls.size).toBe(2);
+      const rolls = new Set(body.prims.map((p, i) => [p, i] as const)
+        .filter(([p]) => p.radius === 0.003 || p.morphs?.every(m => m.channel === 'furrow')).map(([, i]) => i));
+      expect(rolls.size).toBe(4);
       // (`src` is the .blob line, which the rolls' line shifts.)
       zero.prims.filter((_p, i) => !rolls.has(i)).forEach((p, i) => {
         const { morphs: _m, src: _s, ...rest } = p;
@@ -732,5 +739,80 @@ describe('the cartoon grin (Task 18): a crescent mouth, cheek rolls, the head sq
     }
     expect(bare, 'without the squash in the anchor it is off by the squash').toBeGreaterThan(0.004);
     expect(worst).toBeLessThan(1e-6);
+  });
+});
+
+// TASK 19 (owner on PR #48: "a variant like an 'evil grin' where the brows angle more inward to produce a furrow"): the `furrow`
+// channel. The brow ridge's V is pulled deeper (its face-block morph line) and a pair of inner-brow bulges, buried at rest, comes
+// forward on top of the dropped ridge with a crease between them at the midline. Measured at the evil-grin CLIP's peak.
+describe('the furrow (Task 19): the evil grin knits its brows', () => {
+  const body = built();
+  const bound = bindRig(body);
+  const peak = (name: string) => actuate(expressionAt(GOBLIN_EXPRESSIONS[name]!, 99), compileSheet(doc)!, GOBLIN_EXPRESSION_TUNING);
+  const at = (morphs: Record<string, number>, gape: number) => applyRig(body, { ...bound, rig: { ...bound.rig, jawGape: gape, morphs } }, 0);
+  const evilPeak = peak('evil-grin');
+  const evil = at(evilPeak.morphs, evilPeak.jawGape);
+  const unknit = at({ ...evilPeak.morphs, furrow: 0 }, evilPeak.jawGape);
+  const pair = body.prims.map((p, i) => [p, i] as const).filter(([p]) => p.morphs?.every(m => m.channel === 'furrow')).map(([, i]) => i);
+  const traceZ = (b: typeof body, x: number, y: number) => {
+    let z = 0.25; for (let k = 0; k < 300 && z > 0; k++) { const d = sdBody([x, y, z], b); if (d < 0.00005) break; z -= Math.max(d * 0.9, 0.00005); }
+    return z;
+  };
+  const PRINT = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env.FURROW_PRINT;
+
+  it('is one mirrored pair on the skull, buried at rest (a millimetre or more inside the rest of the flesh)', () => {
+    expect(pair.length).toBe(2);
+    const without = src.replace(/^  blob head on skull at=0\.0 r=0\.0028 .*morph=furrow.*\n/m, '');
+    const bare = buildBody(compileBlob(parseBlob(without), compileFace(parseBlob(without))));
+    for (const i of pair) {
+      const p = body.prims[i]!;
+      expect(p.bone).toBe('skull');
+      for (let k = 0; k <= 10; k++) {
+        const q = lerp(p.a, p.b, k / 10);
+        expect(sdBody(q, bare) + p.radius, `prim ${i} t ${k / 10}`).toBeLessThan(-0.001);
+      }
+    }
+  });
+
+  it('at the evil grin the pair is the surface in front of the glabella, and a crease runs down the midline between them', () => {
+    for (const i of pair) {
+      const g = evil.prims[i]!, mid = scale(add(g.a, g.b), 0.5);
+      expect(nearestPrim([mid[0], mid[1], traceZ(evil, mid[0], mid[1])], evil), `prim ${i}`).toBe(i);
+    }
+    // The crease: the face's front at the midline sits well behind the bulges either side of it (sphere-traced, posed).
+    for (const y of [1.2475, 1.25, 1.2525]) {
+      const mid = traceZ(evil, 0, y), side = Math.max(traceZ(evil, 0.011, y), traceZ(evil, -0.011, y));
+      if (PRINT) console.log(`y ${y}: midline ${(mid * 1000).toFixed(1)} side ${(side * 1000).toFixed(1)}`);
+      expect(side - mid, `y ${y}`).toBeGreaterThan(0.0025);
+    }
+  });
+
+  it('the furrow pulls the brow ridge\'s V deeper: the inner brow comes lower and forward (the brows angle more inward)', () => {
+    const ridge = (b: typeof body, x: number) => {
+      let best = { y: 0, z: -1 };
+      for (let y = 1.22; y < 1.30; y += 0.0005) { const z = traceZ(b, x, y); if (z > best.z) best = { y, z }; }
+      return best;
+    };
+    const inner = 0.024, outer = 0.045;
+    const ki = ridge(evil, inner), ui = ridge(unknit, inner), ko = ridge(evil, outer), uo = ridge(unknit, outer);
+    if (PRINT) console.log(`inner ${ui.y.toFixed(4)}/${ui.z.toFixed(4)} -> ${ki.y.toFixed(4)}/${ki.z.toFixed(4)}; outer ${uo.y.toFixed(4)} -> ${ko.y.toFixed(4)}`);
+    expect(ki.y, 'inner end lower').toBeLessThan(ui.y - 0.002);
+    expect(ui.y - ki.y, 'more at the inner end than the outer').toBeGreaterThan(uo.y - ko.y);
+  });
+
+  it('the grin (no furrow) poses exactly as before Task 19: the pair stays buried and nothing else moves', () => {
+    const g = peak('grin');
+    expect(g.morphs.furrow).toBe(0);
+    const posed = at(g.morphs, g.jawGape);
+    const without = src.replace(/^  blob head on skull at=0\.0 r=0\.0028 .*morph=furrow.*\n/m, '').replace(/ furrow:\S+/, '');
+    const wb = buildBody(compileBlob(parseBlob(without), compileFace(parseBlob(without))));
+    const wposed = applyRig(wb, { ...bindRig(wb), rig: { ...bindRig(wb).rig, jawGape: g.jawGape, morphs: g.morphs } }, 0);
+    const keep = posed.prims.filter((_p, i) => !pair.includes(i));
+    expect(keep.length).toBe(wposed.prims.length);
+    keep.forEach((p, i) => {
+      const { morphs: _m, src: _s, ...rest } = p;
+      const { morphs: _n, src: _t, ...want } = wposed.prims[i]!;
+      expect(rest, `prim ${i}`).toEqual(want);
+    });
   });
 });

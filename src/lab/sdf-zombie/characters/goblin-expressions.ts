@@ -52,6 +52,9 @@ export const GOBLIN_EXPRESSION_TUNING: ExpressionTuning = {
   browShift: 0.02,
   browRaiseEye: 0.15,
   browLidTop: 0.35,
+  // THE FURROW (Task 19, the evil grin): the painted creases between the brows at full strength on furrow 1 (the `furrow` morphs on
+  // the .blob's brow ridge and inner-brow bulges are the geometry; this is the paint that sharpens the crease between them).
+  furrowSheet: 1,
 };
 
 const key = (t: number, channels: ExpressionClip['keys'][number]['channels'], ease?: 'smooth') =>
@@ -75,6 +78,19 @@ const GRIN: ExpressionClip = {
     // corners ride 3 cm up into the cheek rolls, the eyes are slits under a V brow (docs/dev-notes/.../cartoon/).
     key(0.3, { gape: 0.12, smile: 0.7, browDown: 0.4, squint: 0.3, squash: 0.4 }, 'smooth'),
     key(0.6, { gape: 0.25, smile: 1, browDown: 0.8, squint: 0.8, squash: 1 }, 'smooth'),
+  ],
+};
+
+/** The EVIL grin (Task 19; owner on PR #48: "a variant like an 'evil grin' where the brows angle more inward to produce a furrow"):
+ *  the grin's mouth on the grin's timing, key for key, with the brows driven all the way down (browDown 1, the grin's 0.8), a
+ *  FURROW between them (furrow 1: the brow ridge's V pulled deeper and the inner-brow bulges with a crease between them, painted
+ *  creases on the sheet) and the eyes a touch narrower (squint 0.9, the grin's 0.8). `grin` stays as it was. */
+const EVIL_GRIN: ExpressionClip = {
+  name: 'evil-grin',
+  keys: [
+    key(0, {}),
+    key(0.3, { gape: 0.12, smile: 0.7, browDown: 0.5, squint: 0.35, squash: 0.4, furrow: 0.5 }, 'smooth'),
+    key(0.6, { gape: 0.25, smile: 1, browDown: 1, squint: 0.9, squash: 1, furrow: 1 }, 'smooth'),
   ],
 };
 
@@ -103,7 +119,8 @@ const SCOWL: ExpressionClip = {
   name: 'scowl',
   // gape 0.18 -> 0.24 (0.108 -> 0.144 rad; Task 10, tuning/scowl-shout-gape.png): at 0.18 the slit showed tooth tips but the fangs
   // did not stand out from the small teeth; at 0.24 they do, still well short of the grin's 0.204 rad.
-  keys: [key(0, {}), key(0.3, { browDown: 1, lipCurl: 0.8, gape: 0.24 }, 'smooth')],
+  // furrow 0.8 (Task 19): the scowl knits its brows too (the evil grin's furrow, a little less).
+  keys: [key(0, {}), key(0.3, { browDown: 1, lipCurl: 0.8, gape: 0.24, furrow: 0.8 }, 'smooth')],
 };
 
 /** A shout: the jaw wide open, the brows pulled in. */
@@ -115,5 +132,5 @@ const SHOUT: ExpressionClip = {
 };
 
 export const GOBLIN_EXPRESSIONS: Readonly<Record<string, ExpressionClip>> = {
-  neutral: NEUTRAL, grin: GRIN, smile: SMILE, scowl: SCOWL, shout: SHOUT, surprise: SURPRISE,
+  neutral: NEUTRAL, grin: GRIN, 'evil-grin': EVIL_GRIN, smile: SMILE, scowl: SCOWL, shout: SHOUT, surprise: SURPRISE,
 };

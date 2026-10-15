@@ -23,7 +23,7 @@ describe('goblin expressions', () => {
     expect(expressionsFor('goblin-cinematic')?.clips).toBe(GOBLIN_EXPRESSIONS);
     expect(expressionsFor('goblin-cinematic')?.tuning).toBe(GOBLIN_EXPRESSION_TUNING);
     expect(expressionsFor('goblin')).toBeNull();
-    expect(Object.keys(GOBLIN_EXPRESSIONS).sort()).toEqual(['grin', 'neutral', 'scowl', 'shout', 'smile', 'surprise']);
+    expect(Object.keys(GOBLIN_EXPRESSIONS).sort()).toEqual(['evil-grin', 'grin', 'neutral', 'scowl', 'shout', 'smile', 'surprise']);
     expect(expressionsFor('zombie')).toBeNull();
   });
 
@@ -108,6 +108,49 @@ describe('the grin is a smile, not surprise (Task 15)', () => {
     expect(surprise.jawGape).toBeGreaterThan(grin.jawGape * 2);
     // Task 18: and the head stretches (narrower, taller) where the grin squashes it.
     expect(surprise.morphs.squash).toBeLessThan(0);
+  });
+});
+
+// Task 19 (owner: "a variant like an 'evil grin' where the brows angle more inward to produce a furrow"): `grin` stays as it is;
+// `evil-grin` is its mouth with the brows driven harder down and in, a furrow between them and the eyes a touch narrower.
+describe('the evil grin: the grin\'s mouth, knitted brows (Task 19)', () => {
+  const GLOW = 224;
+  const lit = (sheet: typeof authored) => generateFaceSheet(sheet, 64).pixels.reduce((n, b) => n + (b >= GLOW ? 1 : 0), 0);
+  const peak = (name: string) => actuate(expressionAt(GOBLIN_EXPRESSIONS[name]!, 99), authored, GOBLIN_EXPRESSION_TUNING);
+  const grin = peak('grin'), evil = peak('evil-grin'), scowl = peak('scowl');
+
+  it('has the grin\'s mouth exactly: the same gape, smile, squash and lip curl, on the same timing', () => {
+    for (const c of ['gape', 'smile', 'squash', 'lipCurl'] as const) expect(evil.morphs[c], c).toBe(grin.morphs[c]);
+    expect(evil.jawGape).toBe(grin.jawGape);
+    expect(GOBLIN_EXPRESSIONS['evil-grin']!.keys.map(k => k.t)).toEqual(GOBLIN_EXPRESSIONS.grin!.keys.map(k => k.t));
+  });
+
+  it('brows all the way down, a full furrow, the eyes a touch narrower than the grin\'s', () => {
+    expect(evil.morphs.browDown).toBe(1);
+    expect(evil.morphs.furrow).toBe(1);
+    expect(evil.morphs.squint).toBeGreaterThan(grin.morphs.squint);
+    expect(evil.morphs.squint).toBeLessThanOrEqual(1);
+    expect(evil.sheet.browFurrow).toBeGreaterThan(0.5);
+    expect(lit(evil.sheet)).toBeLessThanOrEqual(lit(grin.sheet));
+  });
+
+  it('the grin itself is unchanged: no furrow, no painted furrow', () => {
+    expect(grin.morphs.furrow).toBe(0);
+    expect(grin.sheet.browFurrow).toBe(0);
+    expect(grin.morphs.browDown).toBe(0.8);
+  });
+
+  it('the scowl knits its brows too', () => {
+    expect(scowl.morphs.furrow).toBeGreaterThanOrEqual(0.7);
+    expect(scowl.morphs.furrow).toBeLessThanOrEqual(0.9);
+    expect(scowl.sheet.browFurrow).toBeGreaterThan(0);
+  });
+
+  it('every channel stays in range through the clip, furrow included', () => {
+    for (const clip of Object.values(GOBLIN_EXPRESSIONS)) for (let k = 0; k <= 10; k++) {
+      const c = expressionAt(clip, (clip.keys.at(-1)!.t * k) / 10);
+      expect(c.furrow, clip.name).toBeGreaterThanOrEqual(0); expect(c.furrow, clip.name).toBeLessThanOrEqual(1);
+    }
   });
 });
 
