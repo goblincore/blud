@@ -4,6 +4,97 @@ Spec: [`docs/superpowers/specs/2026-10-13-goblin-expressions-design.md`](../../s
 Plan: [`docs/superpowers/plans/2026-10-13-goblin-expressions.md`](../../superpowers/plans/2026-10-13-goblin-expressions.md).
 Task 3b's own notes (the mouth moved to the lip line, the per-body hinge): [`grin/NOTES-grin.md`](grin/NOTES-grin.md).
 
+## Task 16 (2026-10-15): a brow ridge that moves, a clean grin (Part A, the teeth, moved to a Blender task)
+
+Owner on the Task 15 clip: the brow "shape doesnt" change when the painted brows move (screenshot 1), and "weird shape stuff
+happening in the grin" (screenshot 2: a round knob at the mouth corner, a separate cheek bump, a pinched lower lip with dark
+crease lines). Part A (teeth with character) was withdrawn mid-task: the teeth will be sculpted in Blender. Nothing in the kit,
+its glTF, `kit-overlay.ts` or the tooth tests changed; the teeth in these frames are Task 14's.
+
+**The clip:** [`polish/goblin-polish-anim.mp4`](polish/goblin-polish-anim.mp4), 12 fps, grin front, grin three-quarter (yaw 0.7),
+scowl front, surprise front (`BLOB_EXPR_SWEEP=0:0.92`, 24 frames, `BLOB_DIST=0.3 BLOB_TARGET_Y=1.17 BLOB_PITCH=0.05`, the last
+frame held 1.5 s). Stills in [`polish/`](polish/): `grin-before-after.png` (grin peak, yaw 0 / 0.35 / 0.7 / 1.2, mouth framing
+`TARGET_Y 1.14`), `grin-peak-yaw*.png` and `grin-peak-below-yaw0.5.png` (pitch -0.3), `eyes-before-after.png` (neutral, grin,
+scowl, surprise, front and 0.7, `TARGET_Y 1.2`), `markers-grin.png`, `noise-anchor-seam.png`, `cpu-field-corner-before-after.png`,
+`gape-seam.png`.
+
+### The finding that mattered: the dark lines were the skin noise, not the shape
+
+The grin's "dark crease lines" and a thin dark outline that traced the brow ridge as soon as it moved are not in the field: a CPU
+raymarch of the same pose (`cpu-field-corner-before-after.png`, `sdBody` normals) is smooth there, and the field is
+Lipschitz-clean (max |grad| 0.96 round the brow). They come from the **rest-space noise anchor** (motion-polish task 6): the
+shader maps every surface sample into its DOMINANT prim's rest frame to look up the skin noise (normal bump, grain, mottle), and
+packBody's rest row for a MORPHED prim was its un-morphed rest. So wherever the dominant prim changed from a morphed prim to an
+unmoved neighbour, the noise jumped by the morph's move (up to 7 mm) and drew a seam. **Fix:** `rig-bind.ts` `morphedRest(rest,
+weights)` moves each morphed prim's rest endpoints by its morph (returns the rest body itself when nothing weighs anything, so every
+other body uploads exactly as before); the lab's hero upload passes it (`lab-main.ts`, the melt branch too). Pinned: with
+`morphedRest` every face point maps to itself at statue with the grin's morphs on (bare rest: off by more than 5 mm).
+`noise-anchor-seam.png` is the same dropped brow before and after.
+
+**Not fixed, and now more visible: the same seam at the JAW.** The `on jaw` prims rotate by the gape, so the skull-side and
+jaw-side rest frames disagree along the lip line's side seam by the gape's swing: measured 8.4 mm of anchor jump at y 1.117 on
+the cheek's side at the grin's 0.12 rad, 0 at gape 0 (`gape-seam.png`: the thin dark line running back from the mouth corner at
+three-quarter goes away with the gape at 0, every morph kept). It predates Task 16 (any gape, the shout most), but the corner knob
+and the cheek ball used to sit over it. Fixing it is a renderer/anchor decision (e.g. anchoring the jaw prims' noise in the head's
+frame, which makes the chin's texture slide as the jaw opens), so it is left for the owner.
+
+### Part B: the brow ridge moves
+
+- **`morph.ts`: one-sided channels and a blend term.** The ridge is ONE generated ellipsoid across both eyes, and the two signs
+  want different shapes (a V on browDown 1, a lift on -1), which a linear morph cannot give. `<channel>+:` / `<channel>-:` apply
+  only on their own side of zero, by the magnitude (legal together on one line; plain `<channel>:` stays linear). `blend*k`
+  scales the prim's blend with the weight. Weight 0 still returns null (nothing moves, nothing packs differently).
+- **The goblin's line** (`face` block): `browDown+:(-0.012,-0.007,0.001)tip(0.024,0,0)bend(0,-0.016,0.006)*(0.78,1.1,1)blend*1.6`
+  turns the point ellipsoid into a 2.4 cm bar bent into a V (the middle 8 mm under its ends, forward 3 mm) that knits into the nose,
+  7 mm lower, x-scale cut so it is no wider; `browDown-:(0,0.005,-0.0015)*(1,0.85,1)blend*2.5` lifts and thins it; squint keeps
+  its 1.5 mm.
+- **Measured** (the ridge line = the face's most forward point over the eye, sphere-traced): browDown 1 lowers it **15 mm by the
+  nose (x 0.015), 11 mm at x 0.03, 7.5 mm at the outer end (x 0.045)** and brings it **5-6 mm forward**; surprise lifts it 4 mm.
+  Travel between surprise and scowl: **19 / 15 / 11.5 mm** (pin: more than 10 mm; the plan asked for 6; Task 15's linear morph
+  gave about 6). The V is pinned too (the middle drops at least 2 mm more than the outer end). The cranium does not swallow it (the
+  lowered ridge's front, z 0.110-0.122, stays ahead of the cranium's, about 0.105 on the axis at that height).
+- **What I see** (`eyes-before-after.png`): grin and scowl, front: the ridge comes down and in, meets the nose bridge in a V, and
+  the eyes sit in its shadow under a heavy shelf: the brow now scowls with the paint instead of hovering above it. At 0.7 it is a
+  low, forward ledge over the eye that melts into the temple. Surprise: the ridge rides up and thins, more forehead and lit skin
+  over bigger eyes. Neutral unchanged.
+
+### Part C: the grin's shapes
+
+Marker frames (`markers-grin.png`: lower lip blue, chin magenta, corners red, cheek fill yellow, upper ridge cyan, upper lip orange)
+named them:
+
+| owner's shape | cause | fix |
+|---|---|---|
+| round knob at the mouth corner | the mouth-corner pair: a 6.5 mm ball pushed 13 mm out to the lower lip's end, blend 0.004 | its smile morph melts it, `blend*3`, out 12 / up 4 / back 8, x0.85 |
+| separate round cheek bump | the cheek fill: a 14 mm ball pushed up 9 mm, blend 0.006 | `blend*2.5`, up 6 (not 9) so it keeps covering the seam it fills, x1.25 |
+| pinched/folded lower lip with dark crease lines | the creases were the noise-anchor seam at every morphed prim's edge (above); the "pinch" was the lip's end meeting the corner knob | `morphedRest`; the knob's removal |
+
+- **What I see** (`grin-before-after.png`, `grin-peak-yaw*.png`): front, the same wide toothy crescent; at 0.35 and 0.7 the knob
+  and the cheek ball are gone, the lower lip rolls round into the corner and the cheek in one surface; at 1.2 the corner is a
+  soft fold instead of a ball beside the lip. From below (`grin-peak-below-yaw0.5.png`) the lower face is one smooth mass. The
+  grin's read holds: the eyes' slits (sheet, untouched), the crescent, the teeth. What is left: the thin jaw seam line back from
+  the corner at three-quarter (the gape's noise seam, above) and the lower lip still reads as a rolled lip over a round chin (the
+  rest face's "puck", Task 10).
+- Pinned: the corners' and cheek fill's blend at least 2.5x their rest at the grin; the existing pins hold (mouth width x1.44,
+  chin, cheek rise, every upper tooth bared at the grin, gape 0.12).
+
+### Checks
+
+- Rest face bit-identical: weights 0 move nothing (pinned), pack-golden untouched, `scripts/goblin-head-profile.ts` all 7 probes
+  ok and unchanged; the base goblin's four files are byte-identical to `f81e5b10`.
+- Tests: `npm run typecheck`; `npm run test:changed` 27 files, 669 tests passed; the targeted list (morph, blob-parse,
+  goblin-cinematic-blob, goblin-expressions, expression, rig-bind, pack, pack-golden, blob-face-sheet, goblin-blob, goblin-kit,
+  bride-blob, bride-kit, character-registry) passed. No golden re-recorded.
+- Cost: not re-measured. Weights 0 change no packed byte; with weights on, the brow prim becomes a bent bar (the shader's Bezier
+  branch, more expensive per sample than the plain ellipsoid) and three blends grow, on the face close-up only while browDown > 0.
+
+### Open items (Task 16)
+
+1. **The jaw's noise seam** (above): a renderer/anchor call for the owner.
+2. **The actor path** (`ActorStepInput.morphs` in the game) does not pass `morphedRest` yet; only the lab's hero does. As far as I found nothing in
+   the game carries morphs today; whoever puts the cinematic goblin in a scene with expressions must pass it.
+3. Part A (teeth) is now a Blender task.
+
 ## Task 15 (2026-10-15): a smile that does not read as surprise
 
 Owner, on the grin clip: "it doesnt really read as a smile ... smiling involves also movement of the eye area where the eyes would

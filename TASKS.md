@@ -31,6 +31,10 @@
   eye gets an arched cheek lid; browDown lowers a heavy inward-slanted upper lid), face-block `morph <tag>` lines (cheeks rise 5-9 mm,
   the brow ridge drops), the grin's jaw down to 0.12 rad with a wider mouth (lower lip 0.072 -> 0.104 m); new `smile` and `surprise`
   clips. Grin eye 24% of neutral. Owner look pending ([clip and frames](docs/dev-notes/2026-10-13-goblin-expressions/smile/)).
+  **Task 16 (2026-10-15): the brow ridge moves; the grin's knob and cheek ball melt.** One-sided morphs (`browDown+`/`browDown-`) and
+  `blend*k`; the ridge knits into a V (19 mm of travel by the nose between surprise and scowl); the dark crease lines were the skin
+  noise's rest anchor (fixed: `morphedRest`); the jaw's own noise seam at a gape is open. Teeth (Part A) moved to a Blender task.
+  Owner look pending ([clip and frames](docs/dev-notes/2026-10-13-goblin-expressions/polish/)).
 
 **The Flat's room in the engine** (owner, 2026-10-11) — [levels](docs/tasks/levels.md) (4o)
 - [~] **Slice 1 built 2026-10-11 (the owner liked it); the Giger iMac built the same day, owner look pending** (alpha-blended shell; the WGSL shell is a later spike). A walkable `?level=flat`: the last-stage room from the
