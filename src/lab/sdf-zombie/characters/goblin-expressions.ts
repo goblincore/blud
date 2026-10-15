@@ -32,6 +32,24 @@ export const GOBLIN_EXPRESSION_TUNING: ExpressionTuning = {
   gapeMouthOpen: -0.02,
   // 0.01 -> 0.015 (Task 10, tuning/paint-locate.png): with the shallower U the arms are short; a touch thicker so they survive the grain.
   smileMouthOpen: 0.015,
+  // THE EYES (Task 15, owner on the grin clip: "smiling involves also movement of the eye area where the eyes would have to get
+  // smaller with the cheeks and eyelids closing more ... it actually reads more like surprise"). The eye is ~6x5 texels of a 64x64
+  // sheet, so every number here was judged on frames (docs/dev-notes/2026-10-13-goblin-expressions/smile/):
+  //  - squint does NOT squash the eye (squintLid 0: a squashed eye read as a dash, "asleep"); it raises an ARCHED lower lid
+  //    (squintCheek: the smiling eye's dome "^ ^") and levels the slanted eye (squintTilt -14: the authored 16 deg slant made the
+  //    dome lopsided) while the eye grows 10% (squintEyeSize -0.1) so the dome keeps a readable rim.
+  //  - the EVIL part is browDown: it lowers a heavy upper lid that slants down toward the nose (browLidTop), so the grin's eye is a
+  //    tapering slit under V brows while the friendly smile (brows not down) keeps the dome.
+  //  - browShift slides the painted brow with browDown (down for the grin and scowl, up for surprise); a raised brow opens the eye
+  //    (browRaiseEye: surprise's eyes are 42% bigger on the sheet than neutral's).
+  squintLid: 0,
+  squintCheek: 0.58,
+  squintEyeSize: -0.1,
+  squintBrow: 0.015,
+  squintTilt: -14,
+  browShift: 0.02,
+  browRaiseEye: 0.15,
+  browLidTop: 0.35,
 };
 
 const key = (t: number, channels: ExpressionClip['keys'][number]['channels'], ease?: 'smooth') =>
@@ -40,13 +58,36 @@ const key = (t: number, channels: ExpressionClip['keys'][number]['channels'], ea
 /** The authored face. */
 const NEUTRAL: ExpressionClip = { name: 'neutral', keys: [key(0, {})] };
 
-/** The toothy evil grin: jaw parted just enough to show the teeth, the mouth pulled wide and up, the brows down. */
+/** The evil grin (Task 15 rework): a SMILE, not an open mouth. The jaw barely parts (0.2 x 0.6 = 0.12 rad: the teeth show by the
+ *  lower lip's sag and the corners' pull, morphs), the mouth goes wide, the cheeks rise into the eyes (squint) and the brows come
+ *  down and in (the evil part: a heavy, inward-slanted upper lid). The mouth leads and the eyes follow, so the squint lands as the
+ *  grin spreads. */
 const GRIN: ExpressionClip = {
   name: 'grin',
-  // gape 0.28 -> 0.34 (0.168 -> 0.204 rad; Task 10, tuning/grin-gape-sweep.png): at 0.2 the teeth are a clenched stubby row (a
-  // grimace), at 0.4 the fangs hang long but the corner gap opens into a dark notch at 45 degrees; 0.34 shows the fangs' length.
-  // browDown 0.35 -> 1 (Task 10, tuning/brow-nokit.png): an evil grin needs the scowl's brows, not a friendly raised-neutral.
-  keys: [key(0, {}), key(0.4, { gape: 0.34, smile: 1, browDown: 1 }, 'smooth')],
+  // Before Task 15: one key at 0.4, gape 0.34 (0.204 rad), smile 1, browDown 1 and nothing at the eyes: the owner read the clip as
+  // SURPRISE (a dropping jaw is most of what moved).
+  keys: [
+    key(0, {}),
+    key(0.3, { gape: 0.12, smile: 0.7, browDown: 0.4, squint: 0.3 }, 'smooth'),
+    key(0.6, { gape: 0.2, smile: 1, browDown: 0.8, squint: 0.8 }, 'smooth'),
+  ],
+};
+
+/** A friendly smile (Task 15, for comparison with the grin): the same smile and squint with the jaw nearly shut and the brows NOT
+ *  down (a touch raised). */
+const SMILE: ExpressionClip = {
+  name: 'smile',
+  keys: [
+    key(0, {}),
+    key(0.3, { gape: 0.04, smile: 0.7, squint: 0.3, browDown: -0.1 }, 'smooth'),
+    key(0.6, { gape: 0.08, smile: 1, squint: 1, browDown: -0.2 }, 'smooth'),
+  ],
+};
+
+/** Surprise (Task 15): the control the grin must NOT look like. The jaw drops, the brows go up, the eyes open; no smile, no squint. */
+const SURPRISE: ExpressionClip = {
+  name: 'surprise',
+  keys: [key(0, {}), key(0.35, { gape: 0.5, browDown: -1 }, 'smooth')],
 };
 
 /** Menace: brows down hard, the lip curled into a frown, the jaw just parted to bare the fangs. */
@@ -66,5 +107,5 @@ const SHOUT: ExpressionClip = {
 };
 
 export const GOBLIN_EXPRESSIONS: Readonly<Record<string, ExpressionClip>> = {
-  neutral: NEUTRAL, grin: GRIN, scowl: SCOWL, shout: SHOUT,
+  neutral: NEUTRAL, grin: GRIN, smile: SMILE, scowl: SCOWL, shout: SHOUT, surprise: SURPRISE,
 };

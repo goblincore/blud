@@ -5,6 +5,7 @@ import { expressionsFor } from '../expression-library';
 import { expressionAt, actuate, CHANNEL_NAMES } from '../expression';
 import { JAW_MAX_GAPE } from '../jaw';
 import { compileSheet } from '../blob-compile';
+import { generateFaceSheet } from '../blob-face-sheet';
 import { parseBlob } from '../blob-parse';
 // The CINEMATIC goblin's face (Task 13): the base goblin.blob has no jaw, teeth or morphs.
 import goblinSrc from './goblin-cinematic.blob?raw';
@@ -22,7 +23,7 @@ describe('goblin expressions', () => {
     expect(expressionsFor('goblin-cinematic')?.clips).toBe(GOBLIN_EXPRESSIONS);
     expect(expressionsFor('goblin-cinematic')?.tuning).toBe(GOBLIN_EXPRESSION_TUNING);
     expect(expressionsFor('goblin')).toBeNull();
-    expect(Object.keys(GOBLIN_EXPRESSIONS).sort()).toEqual(['grin', 'neutral', 'scowl', 'shout']);
+    expect(Object.keys(GOBLIN_EXPRESSIONS).sort()).toEqual(['grin', 'neutral', 'scowl', 'shout', 'smile', 'surprise']);
     expect(expressionsFor('zombie')).toBeNull();
   });
 
@@ -39,6 +40,7 @@ describe('goblin expressions', () => {
       expect(c.gape).toBeGreaterThanOrEqual(0); expect(c.gape).toBeLessThanOrEqual(1);
       expect(Math.abs(c.smile)).toBeLessThanOrEqual(1);
       expect(Math.abs(c.browDown)).toBeLessThanOrEqual(1);
+      expect(c.squint).toBeGreaterThanOrEqual(0); expect(c.squint).toBeLessThanOrEqual(1);
     }
   });
 
@@ -58,6 +60,49 @@ describe('goblin expressions', () => {
     expect(shout.jawGape).toBeGreaterThan(0.35);
     expect(scowl.sheet.mouthCurve).toBeGreaterThan(authored.mouthCurve);   // frown
     expect(scowl.sheet.browAngle).toBeGreaterThan(authored.browAngle);
+  });
+});
+
+// Task 15 (owner on the old grin clip: "it actually reads more like surprise"): a smile is the eyes and cheeks as much as the
+// mouth. The grin keeps the jaw nearly shut and narrows the eyes; surprise is its opposite and must stay so.
+describe('the grin is a smile, not surprise (Task 15)', () => {
+  const GLOW = 224;
+  const lit = (sheet: typeof authored) => generateFaceSheet(sheet, 64).pixels.reduce((n, b) => n + (b >= GLOW ? 1 : 0), 0);
+  const peak = (name: string) => actuate(expressionAt(GOBLIN_EXPRESSIONS[name]!, 99), authored, GOBLIN_EXPRESSION_TUNING);
+  const grin = peak('grin'), smile = peak('smile'), surprise = peak('surprise');
+
+  it('the grin barely opens the jaw (at most 0.12 rad at its peak) and smiles with the eyes: squint, brows down', () => {
+    expect(grin.jawGape).toBeLessThanOrEqual(0.12 + 1e-9);
+    expect(grin.morphs.smile).toBe(1);
+    expect(grin.morphs.squint).toBeGreaterThanOrEqual(0.7);
+    expect(grin.morphs.squint).toBeLessThanOrEqual(0.9);
+    expect(grin.morphs.browDown).toBeGreaterThanOrEqual(0.6);
+    // The jaw never opens past its peak on the way in.
+    const end = GOBLIN_EXPRESSIONS.grin!.keys.at(-1)!.t;
+    for (let k = 0; k <= 20; k++)
+      expect(actuate(expressionAt(GOBLIN_EXPRESSIONS.grin!, (end * k) / 20), authored, GOBLIN_EXPRESSION_TUNING).jawGape).toBeLessThanOrEqual(0.12 + 1e-9);
+  });
+
+  it('the grin\'s lit eye is at most 60% of the neutral\'s on the sheet; the friendly smile narrows it too', () => {
+    const n0 = lit(authored);
+    expect(lit(grin.sheet)).toBeLessThanOrEqual(n0 * 0.6);
+    expect(lit(smile.sheet)).toBeLessThan(n0);
+  });
+
+  it('the friendly smile keeps the brows up and the jaw nearly shut; the evil grin\'s upper lid comes down, the smile\'s does not', () => {
+    expect(smile.morphs.browDown).toBeLessThanOrEqual(0);
+    expect(smile.jawGape).toBeLessThan(0.06);
+    expect(grin.sheet.eyeLidTop).toBeGreaterThan(0);
+    expect(smile.sheet.eyeLidTop).toBe(0);
+  });
+
+  it('surprise is the opposite: the jaw drops, the brows go up, the eyes open WIDER than neutral, no smile, no squint', () => {
+    expect(surprise.jawGape).toBeGreaterThan(0.25);
+    expect(surprise.morphs.squint).toBe(0);
+    expect(surprise.morphs.smile).toBe(0);
+    expect(surprise.sheet.browDrop).toBeLessThan(0);
+    expect(lit(surprise.sheet)).toBeGreaterThan(lit(authored));
+    expect(surprise.jawGape).toBeGreaterThan(grin.jawGape * 2);
   });
 });
 

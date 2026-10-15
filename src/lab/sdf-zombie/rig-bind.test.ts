@@ -809,8 +809,9 @@ describe('bindRig — limb prims bind within their own limb', () => {
 describe('applyRig — per-prim morphs (goblin expressions Task 12)', () => {
   // A goblin with morphs injected on three kinds of prim: a skull-owned face prim (bent, the upper ridge), a jaw prim (the lower
   // lip) and an off-head prim (the left upper-arm bar). The CINEMATIC goblin (Task 13): only it has a jaw and the upper ridge.
-  // Its OWN morph words stripped (it has smile morphs since Task 12), so only the injected ones act.
-  const plain = buildBody(compileBlob(parseBlob(goblinCinematicSrc.replace(/ morph=\S+/g, ''))));
+  // Its OWN morphs stripped (the smile's `morph=` words since Task 12, the face block's `morph <tag>` lines since Task 15), so
+  // only the injected ones act.
+  const plain = buildBody(compileBlob(parseBlob(goblinCinematicSrc.replace(/ morph=\S+/g, '').replace(/^  morph .*\n/gm, ''))));
   const ridge = plain.prims.findIndex(p => p.bone === 'skull' && p.bend !== undefined && Math.abs(p.a[1] - 1.1394) < 0.01 && !p.color);
   const lip = plain.prims.findIndex(p => p.bone === 'jaw' && p.bend !== undefined && !p.color);
   const arm = plain.prims.findIndex(p => p.bone === 'upperarm.l');
@@ -840,9 +841,10 @@ describe('applyRig — per-prim morphs (goblin expressions Task 12)', () => {
       const ref = shapeOf(pose(plain, plainBound, rig, yaw));
       expect(shapeOf(pose(body, bound, rig, yaw))).toBe(ref);
       expect(shapeOf(pose(body, bound, { ...rig, morphs: {} }, yaw))).toBe(ref);
-      expect(shapeOf(pose(body, bound, { ...rig, morphs: { gape: 0, smile: 0, browDown: 0, lipCurl: 0, lid: 0 } }, yaw))).toBe(ref);
-      // A weight on a channel these prims do not declare moves nothing either.
-      expect(shapeOf(pose(body, bound, { ...rig, morphs: { browDown: 1 } }, yaw))).toBe(ref);
+      expect(shapeOf(pose(body, bound, { ...rig, morphs: { gape: 0, smile: 0, browDown: 0, lipCurl: 0, lid: 0, squint: 0 } }, yaw))).toBe(ref);
+      // A weight on a channel these prims do not declare moves nothing either (`lid`, the blink, is sheet-only; browDown moved
+      // the brow ridge from Task 15, so it is no longer the undeclared one).
+      expect(shapeOf(pose(body, bound, { ...rig, morphs: { lid: 1 } }, yaw))).toBe(ref);
     }
   });
 
