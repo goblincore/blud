@@ -583,8 +583,9 @@ face
   #    ridge 7 mm lower and 1 mm forward, x-scale x0.78 so the bar is no wider than the old ellipsoid, a touch taller (x1.1), and
   #    its blend x1.6 so the bar's blunt ends melt into the temples. (The dark outline round the dropped ridge in the first frames
   #    was NOT this shape: it was the skin noise's rest anchor jumping at the moved prim's edge; rig-bind.ts morphedRest fixed it.)
-  #    Ridge line (the face's most forward point over the eye): 18 mm lower by the nose, 13.5 mm at the outer end, up to 6 mm
-  #    further forward (goblin-cinematic-blob.test.ts pins the travel, the V and the overhang).
+  #    Ridge line (the face's most forward point over the eye) at browDown 1: 15 mm lower by the nose (x 0.015), 7.5 mm at the
+  #    outer end (x 0.045), 5-6 mm further forward; surprise lifts it 4 mm, so 19 / 11.5 mm of travel between the two
+  #    (goblin-cinematic-blob.test.ts pins the travel, the V and the overhang).
   #  - browDown- (surprise -1, smile -0.2): up 5 mm, back 1.5, 15% thinner, blend x2.5 (a softer top edge into the forehead).
   #  Frames: docs/dev-notes/2026-10-13-goblin-expressions/polish/ (eyes-before-after.png).
   morph jaw squint:(0,0.005,0.0015)*(1.05,1.12,1.03)
