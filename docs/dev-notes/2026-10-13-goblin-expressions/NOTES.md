@@ -101,6 +101,40 @@ lower lip covers it); in the surprise two or three lower pegs stand on the floor
   two prims (the .blob with that line deleted hashes to the old pin, checked); pack.test.ts's prof row +2 (bent, 2).
 - Rounds: eight capture rounds (2-frame stills), the CPU marker render (each prim its own colour) to name what made each shape.
 
+### Follow-up: the grin's mouth corner at three-quarter (2026-10-15)
+
+Owner, on the grin's corner at 45 degrees: "this area still looks quite messed up" (a fat lower lip hooking up and round past the
+corner like a beak, a dark hole at the side between the lip's end, the roll and the cheek fill, the roll and the corner as two
+lumps, a shelf under the chin). Marker renders (a CPU raymarch of the posed grin painting each prim a fixed colour, plus a flat
+"flesh / dark interior" shade of the same pose, which reproduced the GPU's hole and hook exactly) named the causes: the **lower
+lip's ends** sat at x +-0.090 (squashed), 4.4 cm up and 2.6 cm back, which is OUTSIDE the face's side at that height (the head
+without the mouth prims ends at x ~0.08), so the band wrapped round the side; the **corner pair** followed it out there; the
+**cheek roll's** far end crossed BEHIND the lip's end; and the **throat bar's** ends (x +-0.075) reached the side of the face, so
+its dark showed through the gap between the three (the hole). Fixed by re-authoring the smile morphs only (no prim added, rest
+bit-identical): each was SOLVED for a posed target at the grin's peak (the squash and the gape are affine there, so the morph is
+the inverse of the target). The lip's ends now sit on the face's front at (+-0.070, 1.160, 0.092), the roll bows out round the
+corner like a "(" and caps it, the corners plug the crescent's end from behind, the fill backs both, the throat stops at
+x +-0.056, the ridge's ends are buried in the cheek, the upper lip lifts 6 mm (not 3) and the chin is taller and shallower (it
+slopes into the neck). The .blob's "TASK 18 FOLLOW-UP" comment has every number.
+
+- **What I see** ([`cartoon/corner-before-after.png`](cartoon/corner-before-after.png): front, 45, 90 degrees, before above;
+  [`cartoon/grin-corner-fix.mp4`](cartoon/grin-corner-fix.mp4): the grin clip at yaw 0 and 0.7). Front: still a toothy crescent
+  with upturned corners framed by the rolls, slits and V brow; the crescent is a little narrower (the lip 2.30x the neutral's end
+  to end, was 2.84x) and the side holes that showed beside the corners at the front are gone. 45 degrees (and yaw 0.5 / 0.9): the
+  lip runs up into the corner and tucks under the roll, which arcs over it with a dark crease line: one fold, no hole, no hook.
+  Profile: a clean mouth line with the roll a soft bulge; no hook, no dark slit. The friendly `smile` lost its side hole too.
+- **What is left:** (1) the jaw's noise-anchor seam (Task 16's open item) is now the most visible line at three-quarter and in
+  profile: a thin dark line running back from the corner along the jaw, and a faint second outline inside the roll where a jaw
+  prim (the corner pair) meets the skull's roll; the hole and the hook used to sit on top of it. It needs the renderer/anchor call,
+  not authoring. (2) The chin-to-neck junction is rounder but the jaw's underside still reads as a shadowed band over the thin
+  neck at 45 degrees. (3) The crease round the roll is a hard dark outline from the corner up to the nose wing; it reads as the
+  crease the reference has, but it is darker than the rest of the face's shading.
+- **Pins:** none re-pinned. Measured: mouth width x2.30 (>= 1.8), corner rise 35.5 mm (>= 15), head +14.7% (unchanged), chin
+  +9.5 / +9.0 mm a side at y 1.10 / 1.11 (> 7; was 14.5 / 18.5), the rolls buried at rest and showing at the grin. Head-profile
+  CLI identical, pack-golden untouched, base goblin's four files empty against `f81e5b10`. Targeted list (goblin-cinematic-blob,
+  goblin-expressions, pack, pack-golden, goblin-blob, rig-bind) 297 passed; `npm run test:changed` 28 files, 696 passed;
+  typecheck clean.
+
 ### Open items (Task 18)
 
 1. **Cost not measured.** The roll pair adds two prims to the head cluster that are paid at rest (buried); on the grin the rolls
