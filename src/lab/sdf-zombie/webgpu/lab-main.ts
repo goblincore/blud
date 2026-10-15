@@ -59,6 +59,7 @@ import { generateFaceSheet, sheetToRgba } from '../blob-face-sheet';
 import {
   REST_CHANNELS, expressionAt, actuate, blinkLid, withBlink, sheetKey, type ExpressionClip,
 } from '../expression';
+import type { MorphWeights } from '../morph';
 import { expressionsFor } from '../expression-library';
 import { compileBlob, compileFace, compileSheetImage } from '../blob-compile';
 import {
@@ -971,6 +972,9 @@ async function main() {
   /** A hand-set gape (`__sdfLab.setJawGape`, BLOB_GAPE captures) that wins over the clips until an expression is held or played.
    *  Without it stepExpression overwrote the hand-set value with the clip's (0 at neutral) on the very next frame. */
   let gapeHold: number | null = null;
+  /** THE EXPRESSION LAYER's per-prim morph weights (morph.ts; Task 12), from `actuate`, or null for a character without
+   *  expressions. All zero at neutral, which moves nothing. */
+  let exprMorphs: MorphWeights | null = null;
   /** The active character's expression clips and its authored sheet (the neutral), or null when it has none. `entry` and
    *  `compileCharacterSheet` are the ones loadGeneratedFace uses. */
   const exprSet = expressionsFor(activeCharacterName());
@@ -1002,6 +1006,7 @@ async function main() {
     const lid = Math.max(blinkLid(exprClock, blinkStart), exprLidHold);
     const act = actuate(withBlink(base, lid), exprBase, exprSet.tuning);
     exprGape = gapeHold ?? act.jawGape;
+    exprMorphs = act.morphs;
     const key = sheetKey(act.sheet);
     if (key !== exprKey) { exprKey = key; refreshSheet(act.sheet); }
   }
@@ -2728,6 +2733,7 @@ async function main() {
         profile: { ...motionProfile, cruise: cruiseFor(speedBand) },
         forceSpeed, carryOverride,
         jawGape: exprGape,
+        ...(exprMorphs ? { morphs: exprMorphs } : {}),
       });
       lastMotionFrame = f;
       // shot/forcedCollapse/fire are values — read the drained state back.
@@ -2780,9 +2786,12 @@ async function main() {
     // rate, so the colour leads the collapse.
     view.setMelt(meltState ? meltState.t : 0);
     stepExpression(dt);
-    // The expression layer's gape: statue mode and held captures never run the motion step that would set rig.jawGape.
-    const boundForPose = exprGape > (heroMotion.bound.rig.jawGape ?? 0)
-      ? { ...heroMotion.bound, rig: { ...heroMotion.bound.rig, jawGape: exprGape } }
+    // The expression layer's gape and morph weights: statue mode and held captures never run the motion step that would set
+    // rig.jawGape / rig.morphs.
+    const gapeOver = exprGape > (heroMotion.bound.rig.jawGape ?? 0);
+    const boundForPose = gapeOver || exprMorphs
+      ? { ...heroMotion.bound, rig: { ...heroMotion.bound.rig,
+        ...(gapeOver ? { jawGape: exprGape } : {}), ...(exprMorphs ? { morphs: exprMorphs } : {}) } }
       : heroMotion.bound;
     const posed = applyRig(current, boundForPose, heroMotion.lastBodyYaw);
     lastPosed = posed;

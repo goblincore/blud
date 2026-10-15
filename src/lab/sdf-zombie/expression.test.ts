@@ -96,6 +96,12 @@ describe('actuate', () => {
     expect(actuate({ ...REST_CHANNELS, lid: 0.6 }, DEFAULT_SHEET, TUNING).sheet.eyeLid).toBeCloseTo(0.6, 9);
   });
 
+  it('hands on the clamped channels as the morph weights, all zero at rest', () => {
+    expect(actuate(REST_CHANNELS, DEFAULT_SHEET, TUNING).morphs).toEqual(REST_CHANNELS);
+    expect(actuate({ gape: 7, smile: -3, browDown: 0.4, lipCurl: -1, lid: 2 }, DEFAULT_SHEET, TUNING).morphs)
+      .toEqual({ gape: 1, smile: -1, browDown: 0.4, lipCurl: 0, lid: 1 });
+  });
+
   it('never touches what it does not animate', () => {
     const s = actuate({ ...REST_CHANNELS, smile: 1, gape: 1, browDown: 1, lid: 1 }, DEFAULT_SHEET, TUNING).sheet;
     for (const k of ['eyeGap', 'eyeSize', 'grain', 'seed', 'nostril', 'jawShade'] as const) expect(s[k]).toBe(DEFAULT_SHEET[k]);

@@ -804,3 +804,80 @@ describe('bindRig — limb prims bind within their own limb', () => {
     });
   }
 });
+
+describe('applyRig — per-prim morphs (goblin expressions Task 12)', () => {
+  // A goblin with morphs injected on three kinds of prim: a skull-owned face prim (bent, the upper ridge), a jaw prim (the lower
+  // lip) and an off-head prim (the left upper-arm bar).
+  const plain = buildBody(compileBlob(parseBlob(goblinSrc)));
+  const ridge = plain.prims.findIndex(p => p.bone === 'skull' && p.bend !== undefined && Math.abs(p.a[1] - 1.1394) < 0.01 && !p.color);
+  const lip = plain.prims.findIndex(p => p.bone === 'jaw' && p.bend !== undefined && !p.color);
+  const arm = plain.prims.findIndex(p => p.bone === 'upperarm.l');
+  const MOVE: Vec3 = [0.004, 0.003, -0.002], TIP: Vec3 = [0.006, 0, 0], BEND: Vec3 = [0, -0.008, 0];
+  const morphs = new Map<number, Primitive['morphs']>([
+    [ridge, [{ channel: 'smile', move: MOVE, bend: BEND, radius: 1.2 }]],
+    [lip, [{ channel: 'smile', move: MOVE, tip: TIP, scale: [1.1, 1, 1] }]],
+    [arm, [{ channel: 'gape', move: MOVE, tip: TIP }]],
+  ]);
+  const body: BuildResult = { ...plain, prims: plain.prims.map((p, i) => (morphs.has(i) ? { ...p, morphs: morphs.get(i)! } : p)) };
+  const bound = bindRig(body);
+  const plainBound = bindRig(plain);
+  const pose = (b: BuildResult, br: ReturnType<typeof bindRig>, rig: Partial<typeof br.rig>, yaw = 0) =>
+    applyRig(b, { ...br, rig: { ...br.rig, ...rig } }, yaw);
+  // Everything the field and the packer read, without the morph data itself.
+  const shapeOf = (b: BuildResult) => JSON.stringify(b.prims.map(({ morphs: _m, ...p }) => p)) + JSON.stringify(b.clusters);
+
+  it('finds the three prims it morphs', () => {
+    expect(ridge).toBeGreaterThanOrEqual(0);
+    expect(lip).toBeGreaterThanOrEqual(0);
+    expect(arm).toBeGreaterThanOrEqual(0);
+    expect(bound.head!.prims.has(ridge) && bound.head!.jaw!.prims.has(lip)).toBe(true);
+  });
+
+  it('NEUTRAL IS BIT-IDENTICAL: no weights, or every weight 0, poses exactly as the body without morphs (rest, gape, yaw)', () => {
+    for (const [rig, yaw] of [[{}, 0], [{ jawGape: 0.3 }, 0], [{ jawGape: 0.2 }, 0.7]] as const) {
+      const ref = shapeOf(pose(plain, plainBound, rig, yaw));
+      expect(shapeOf(pose(body, bound, rig, yaw))).toBe(ref);
+      expect(shapeOf(pose(body, bound, { ...rig, morphs: {} }, yaw))).toBe(ref);
+      expect(shapeOf(pose(body, bound, { ...rig, morphs: { gape: 0, smile: 0, browDown: 0, lipCurl: 0, lid: 0 } }, yaw))).toBe(ref);
+      // A weight on a channel these prims do not declare moves nothing either.
+      expect(shapeOf(pose(body, bound, { ...rig, morphs: { browDown: 1 } }, yaw))).toBe(ref);
+    }
+  });
+
+  // At weight 1 a morph is the same as authoring the prim moved: rebuild the body with the deltas baked into the REST geometry
+  // and pose it the same way. That proves the order: the delta lands before the gape opens the jaw and before any turn.
+  const baked = (w: number): BuildResult => ({ ...plain, prims: plain.prims.map((p, i) => {
+    if (i === ridge) return { ...p, a: add(p.a, vscale(MOVE, w)), b: add(p.b, vscale(MOVE, w)), bend: add(p.bend!, vscale(BEND, w)), radius: p.radius * (1 + w * 0.2) };
+    if (i === lip) return { ...p, a: add(p.a, vscale(MOVE, w)), b: add(p.b, vscale(add(MOVE, TIP), w)), scale: [p.scale[0] * (1 + w * 0.1), p.scale[1], p.scale[2]] as Vec3 };
+    if (i === arm) return { ...p, a: add(p.a, vscale(MOVE, w)), b: add(p.b, vscale(add(MOVE, TIP), w)) };
+    return p;
+  }) });
+  const close = (got: Primitive, want: Primitive, what: string) => {
+    for (const k of ['a', 'b'] as const) got[k].forEach((v, j) => expect(v, `${what} ${k}[${j}]`).toBeCloseTo(want[k][j]!, 10));
+    expect(got.radius, `${what} radius`).toBeCloseTo(want.radius, 12);
+    got.scale.forEach((v, j) => expect(v, `${what} scale`).toBeCloseTo(want.scale[j]!, 12));
+    if (want.bend) got.bend!.forEach((v, j) => expect(v, `${what} bend`).toBeCloseTo(want.bend![j]!, 10));
+    if (want.orient) got.orient!.forEach((v, j) => expect(v, `${what} orient`).toBeCloseTo(want.orient![j]!, 12));
+  };
+
+  it('a weight moves the rest geometry before the gape and the head turn: the same as authoring the prim moved', () => {
+    const w = 0.75;
+    const ref = baked(w), refBound = bindRig(ref);
+    const tipMoved = { points: bound.rig.points.map((p, i) => (i === bound.head!.tip ? { ...p, pos: add(p.pos, [0.05, 0, -0.02]) as Vec3 } : p)) };
+    for (const [rig, yaw] of [[{}, 0], [{ jawGape: 0.35 }, 0], [{ jawGape: 0.2, ...tipMoved }, 0.7]] as const) {
+      const got = pose(body, bound, { ...rig, morphs: { smile: w, gape: w } }, yaw);
+      const want = pose(ref, refBound, rig, yaw);
+      for (const i of [ridge, lip, arm]) close(got.prims[i]!, want.prims[i]!, `prim ${i} ${JSON.stringify(rig).slice(0, 20)}`);
+      // and nothing else moved
+      got.prims.forEach((p, i) => { if (i !== ridge && i !== lip && i !== arm) expect(p.a, `prim ${i}`).toEqual(want.prims[i]!.a); });
+    }
+  });
+
+  it('refits the cluster bounds around a morphed prim', () => {
+    const big: BuildResult = { ...plain, prims: plain.prims.map((p, i) => (i === arm ? { ...p, morphs: [{ channel: 'smile', move: [0, 0, 0.5] }] } : p)) };
+    const out = applyRig(big, { ...bindRig(big), rig: { ...bindRig(big).rig, morphs: { smile: 1 } } });
+    const c = out.clusters.find(k => arm >= k.start && arm < k.start + k.count)!;
+    const p = out.prims[arm]!;
+    expect(len(sub(p.a, c.center)) + p.radius).toBeLessThanOrEqual(c.radius + 1e-9);
+  });
+});

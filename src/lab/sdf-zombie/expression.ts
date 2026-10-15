@@ -4,9 +4,12 @@
 // docs/superpowers/plans/2026-10-13-goblin-expressions.md): keyed clips of named face CHANNELS, and the one function that turns
 // channels into what a mechanism needs.
 //
+// THREE OUTPUTS (Task 12 added the third): a jaw gape (rad), overrides on the authored face sheet, and the per-prim MORPH weights
+// (morph.ts): the channels themselves, clamped, which rig-bind's applyRig uses to move every prim that declares a `morph=`.
+//
 // A CHANNEL describes the face, never the mechanism: `gape` is how open the mouth is, `smile` is how far the corners are pulled up,
-// and so on. `actuate` is where a channel becomes a jaw angle or a sheet parameter, so a different mechanism (per-prim morph
-// targets, approach C in the spec) is one more output of that function and clips never change.
+// and so on. `actuate` is where a channel becomes a jaw angle, a sheet parameter or a morph weight, so a mechanism is one more
+// output of that function and clips never change (the per-prim morphs, approach C, arrived exactly that way).
 //
 // A CLIP has the same shape as pose.ts's PoseClip: timed keys, a channel a key does not mention takes its rest value (0), one key
 // holds, `ease: 'smooth'` eases INTO a key from the previous one. Time is passed in; nothing here reads a clock (determinism, and
@@ -64,6 +67,8 @@ export interface Actuation {
   jawGape: number;
   /** The authored sheet with this frame's overrides. Never mutates its input. */
   sheet: FaceSheetParams;
+  /** Per-prim morph weights (morph.ts), for rig.morphs: every channel, clamped to its range. All 0 at rest, which moves nothing. */
+  morphs: Channels;
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -113,6 +118,7 @@ export function actuate(channels: Channels, base: FaceSheetParams, tuning: Expre
   const grin = Math.max(smile, 0);
   return {
     jawGape: gape * tuning.maxGape,
+    morphs: { gape, smile, browDown, lipCurl, lid },
     sheet: {
       ...base,
       mouthCurve: base.mouthCurve - smile * tuning.smileCurve + lipCurl * tuning.curlCurve,

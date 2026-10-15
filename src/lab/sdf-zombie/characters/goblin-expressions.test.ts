@@ -12,6 +12,7 @@ import { compileBlob, compileFace } from '../blob-compile';
 import { makeActorMotion, stepActorMotion, emptyActorSignals } from '../actor';
 import { makeRng } from '../wander';
 import { motionProfileFor } from '../motion-profile';
+import type { MorphWeights } from '../morph';
 
 const authored = compileSheet(parseBlob(goblinSrc))!;
 
@@ -39,9 +40,10 @@ describe('goblin expressions', () => {
     }
   });
 
-  it('neutral is the authored face: no gape, the sheet unchanged', () => {
+  it('neutral is the authored face: no gape, the sheet unchanged, every morph weight 0', () => {
     const a = actuate(expressionAt(GOBLIN_EXPRESSIONS.neutral!, 5), authored, GOBLIN_EXPRESSION_TUNING);
     expect(a.jawGape).toBe(0);
+    for (const name of CHANNEL_NAMES) expect(a.morphs[name], name).toBe(0);
     expect(a.sheet).toEqual({ ...authored, eyeLid: 0 });
   });
 
@@ -60,20 +62,30 @@ describe('goblin expressions', () => {
 describe('the motion path takes an expression gape', () => {
   const doc = parseBlob(goblinSrc);
   const body = buildBody(compileBlob(doc, compileFace(doc)));
-  const run = (jawGape: number | undefined) => {
+  const run = (jawGape: number | undefined, morphs?: (i: number) => MorphWeights | undefined) => {
     const m = makeActorMotion(body, { seed: 3 });
     const rng = makeRng(3);
     let f = null as ReturnType<typeof stepActorMotion>;
     for (let i = 0; i < 30; i++) {
+      const w = morphs?.(i);
       f = stepActorMotion(m, {
         current: body, dt: 1 / 60, wander: false, armStyle: undefined, headingFollow: 0, gazeFollow: 0,
         bounds: { minX: -50, maxX: 50, minZ: -50, maxZ: 50 }, rng, signals: emptyActorSignals(),
         profile: motionProfileFor('goblin'), forceSpeed: 0,
         ...(jawGape === undefined ? {} : { jawGape }),
+        ...(w ? { morphs: w } : {}),
       });
     }
     return { f: f!, m };
   };
+
+  // Task 12: the morph weights ride the actor path straight onto the rig applyRig reads (motion never needs them).
+  it('writes the morph weights onto the rig each frame, and drops them when the caller stops', () => {
+    const grin = actuate(expressionAt(GOBLIN_EXPRESSIONS.grin!, 99), authored, GOBLIN_EXPRESSION_TUNING).morphs;
+    expect(run(undefined, () => grin).m.bound.rig.morphs).toEqual(grin);
+    expect(run(undefined, i => (i < 29 ? grin : undefined)).m.bound.rig.morphs).toBeUndefined();
+    expect('morphs' in run(undefined).m.bound.rig).toBe(false);
+  });
 
   it('reaches MotionFrame.jawGape and the rig, and no input leaves it 0', () => {
     const open = run(0.3);

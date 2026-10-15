@@ -11,6 +11,7 @@ import { IK_TUNING, clampDir } from './ik';
 import { jointForBoneEnd, rotateYaw } from './gait';
 import { segmentQuat } from './rig-frames';
 import { JAW_MAX_GAPE, jawOrient, jawRestOf, openAboutHinge, type JawRest } from './jaw';
+import { morphOf, morphShape, type MorphResult } from './morph';
 import {
   add, bendCtrl, cross, dot, len, normalize, qRotate, qMul,
   scale as vscale, sub,
@@ -586,7 +587,18 @@ function poseShellPlane(rest: Primitive, posedA: Vec3, q: Quat): NonNullable<Pri
 
 export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): BuildResult {
   const pos = bound.rig.points;
-  const rigid = bound.head ? headTransform(bound.head, pos, bodyYaw, bound.rig.headFollowsRig, bound.rig.jawGape) : null;
+  // PER-PRIM MORPHS (morph.ts, goblin expressions Task 12): the rig's channel weights move a prim's REST geometry before any
+  // rotation. Only prims that carry morphs AND have a nonzero weight get an entry; every other prim (every prim of every body
+  // when rig.morphs is absent or all zero) takes exactly the pre-morph path below, so a neutral face poses bit-identically.
+  let morphed: Map<number, MorphResult> | null = null;
+  const weights = bound.rig.morphs;
+  if (weights) {
+    body.prims.forEach((p, i) => {
+      const m = p.morphs ? morphOf(p.morphs, weights) : null;
+      if (m) (morphed ??= new Map()).set(i, m);
+    });
+  }
+  const rigid = bound.head ? headTransform(bound.head, pos, bodyYaw, bound.rig.headFollowsRig, bound.rig.jawGape, morphed) : null;
   // Every rib/vertebra on an axial segment uses the same rotation. Derive it
   // once per applyRig call; a cache lasting across calls would retain a stale
   // pose after Verlet, yaw changes, or a collapse. Check restDir too because
@@ -639,11 +651,19 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       // A jaw prim turns by the head AND the gape (jaw.ts jawOrient).
       const q = rigid.jawPrims.has(i) ? rigid.jawQ : rigid.q;
       const a = add(rigid.origin, face.a);
-      return { ...p, a, b: add(rigid.origin, face.b), orient: q,
-        ...(p.bend ? { bend: qRotate(q, p.bend) } : {}),
+      // A morph's radius/scale/bend (its endpoints already moved in headTransform, before the gape and the head's turn).
+      const m = morphed?.get(i);
+      const shaped = m ? morphShape(p, m) : p;
+      return { ...shaped, a, b: add(rigid.origin, face.b), orient: q,
+        ...(shaped.bend ? { bend: qRotate(q, shaped.bend) } : {}),
         ...(p.shell ? { shell: poseShellPlane(p, a, q) } : {}) };
     }
-    return posePrimitive(p, bound.binding[i]!);
+    const bind = bound.binding[i]!;
+    const m = morphed?.get(i);
+    if (!m) return posePrimitive(p, bind);
+    // Off the head, the morph moves the bind offsets (rest frame, joint-relative) before the segment rotation turns them.
+    return posePrimitive(morphShape(p, m), {
+      ...bind, a: { ...bind.a, offset: add(bind.a.offset, m.da) }, b: { ...bind.b, offset: add(bind.b.offset, m.db) } });
   });
 
   // Bones pose in the SAME pass with the SAME machinery — a bone left at rest
@@ -761,6 +781,7 @@ export function refitClusters(prims: Primitive[], clusters: ClusterInfo[]): Clus
  */
 function headTransform(
   h: HeadRigid, pos: readonly RigPoint[], bodyYaw = 0, followRig = false, jawGape = 0,
+  morphed: ReadonlyMap<number, MorphResult> | null = null,
 ): {
   origin: Vec3;
   prims: Map<number, { a: Vec3; b: Vec3 }>;
@@ -798,9 +819,15 @@ function headTransform(
   const open = (i: number, set: ReadonlySet<number> | undefined, v: Vec3): Vec3 =>
     gape !== 0 && jaw && set?.has(i) ? openAboutHinge(jaw.rest, v, gape) : v;
 
+  // A morphed prim's rest endpoints move first (morph.ts): then the gape opens them about the hinge and the head turns them, so a
+  // morphed lip still drops with the jaw and turns with the head. Unmorphed prims take the exact old arithmetic.
   const prims = new Map<number, { a: Vec3; b: Vec3 }>();
-  h.prims.forEach((rest, i) => prims.set(i, {
-    a: qRotate(q, open(i, jaw?.prims, rest.a)), b: qRotate(q, open(i, jaw?.prims, rest.b)) }));
+  h.prims.forEach((rest, i) => {
+    const m = morphed?.get(i);
+    const ra = m ? add(rest.a, m.da) : rest.a;
+    const rb = m ? add(rest.b, m.db) : rest.b;
+    prims.set(i, { a: qRotate(q, open(i, jaw?.prims, ra)), b: qRotate(q, open(i, jaw?.prims, rb)) });
+  });
   const bones = new Map<number, { a: Vec3; b: Vec3 }>();
   h.bones.forEach((rest, i) => bones.set(i, {
     a: qRotate(q, open(i, jaw?.bones, rest.a)), b: qRotate(q, open(i, jaw?.bones, rest.b)) }));
