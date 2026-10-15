@@ -168,3 +168,61 @@ interior are about 30 ms of it, paid at rest. Not trimmed; the trims are listed 
 Surprise and sneer (data additions later); the screen-emergence lab wiring (follow-up after #46 and #47); per-prim morph
 targets (approach C, only if the owner rejects the A result); other characters; sound; the first-person game's face (the
 goblin appears there as arms only).
+
+## Amendment (2026-10-15, plan Task 12): per-prim face morphs, a minimal approach C
+
+**Why.** Owner, on the Task 10 sheet: "we might have to distort the face further like when smiling i feel his face geometry isnt
+changing enough like his chins n stuff should get wider" (pre-approved in Task 3b: "if we have to distort or animate other
+elements of his face geometry of course that is fine since its SDF"). The jaw rotation and the painted sheet cannot widen a
+chin, push the cheeks out or curl the mouth's corners up; moving the prims themselves can.
+
+**What a morph is.** A per-prim, per-channel delta at weight 1, scaled linearly by the channel's weight `w` (any real `w`; the
+channels arrive clamped by `actuate`, so `smile` may be negative and then runs the delta backwards):
+
+- `move` (m, world axes of the REST pose, like `offset=`): added to BOTH endpoints, `w * move`;
+- `tip` (m): added to the far endpoint `b` only, on top of `move` (a bar along the dental arch widens by moving its ends apart);
+- `bend` (m): added to the Bezier control displacement (absent bend counts as zero), so a bar along the arch can sag in the
+  middle (its ends curl up relative to it);
+- `radius` factor `k`: `r` (and `r2`) times `1 + w (k - 1)`, floored at 0;
+- `scale` factors `(sx, sy, sz)`: `wide/tall/deep` each times `1 + w (s - 1)`, floored at 0.
+
+Several morphs on one prim (different channels) add their offsets and multiply their factors. One channel per prim at most once.
+
+**The `.blob` syntax.** One word per channel, any number of words per prim line (`blob`/`bar` only; an error on `carve`,
+`groove`, `shell` and in the `bones` block):
+
+```
+morph=<channel>:<term><term>...
+  (dx,dy,dz)        move both ends
+  tip(dx,dy,dz)     move the far end only
+  bend(dx,dy,dz)    add to the bend
+  *k                radius factor
+  *(sx,sy,sz)       wide/tall/deep factors
+```
+
+e.g. `morph=smile:(0.006,0.004,0)*1.2`, `morph=smile:(-0.006,0.003,0)tip(0.012,0,0)bend(0,-0.008,0)`. Channel names are
+`expression.ts` `CHANNEL_NAMES` (an unknown one is a parse error naming the legal set, the parser's usual voice). `both` and
+`mirror` reflect `move`, `tip` and `bend` in x on the second copy exactly as they reflect `offset`, `tip` and `bend`.
+
+**Where it applies.** `applyRig` (rig-bind.ts), to the prim's REST geometry before any rotation: for a rigid-head prim the
+pivot-relative rest endpoints get the deltas before the jaw opens them about the hinge and before the head's rotation, so a
+morphed lip still opens with the gape and turns with the head; for any other prim the bind offsets get them before the segment
+rotation. Radius, scale and bend change on the posed prim (the bend is then turned by the same rotation as the endpoints).
+Cluster bounds are refit from the posed prims as for any pose. Bone prims never morph.
+
+**How the weights travel.** Like `jawGape`: `RigState.morphs` (optional record channel -> weight) is what `applyRig` reads.
+`actuate` returns `morphs` (its clamped channels) next to `jawGape` and the sheet. The lab's statue path writes them onto the
+bound rig it poses with (`boundForPose`), and the actor path takes `ActorStepInput.morphs` and writes them onto the rig it
+steps. Motion does not need them (`jawGape` goes through `motion.ts` only because the jaw POINT is pinned there), so
+`MotionConfig`/`MotionFrame` do not carry them.
+
+**Neutral stays bit-identical.** The morph data rides on `PrimDef`/`Primitive` (`morphs?`), which `packBody` never reads, so the
+packed bytes of every body are unchanged at rest. In `applyRig`, a prim whose morphs all have weight 0 (or no weights at all,
+every character but a goblin with an expression) takes the exact pre-morph code path: no arithmetic, the same objects.
+`pack-golden.test.ts` (every character, rest and posed), `goblin-blob.test.ts` and `rig-bind.test.ts` prove it.
+
+**Pure core.** `morph.ts`: the types, `parseMorph` (string -> `PrimMorph`), `mirrorMorph`, and `morphOf(morphs, weights)`
+(the summed deltas and factors, or null when nothing moves) plus `morphShape` (radius/scale/bend of a prim under a result).
+No renderer, own tests. The goblin's morphs are authored by eye on the grin close-up (the smile): the chin widens and drops a
+little, the cheek-fill and mouth-corner pairs push out and up, the upper lip lifts a few millimetres. The face block's jaw
+ellipsoid is not a `.blob` prim and cannot morph.
