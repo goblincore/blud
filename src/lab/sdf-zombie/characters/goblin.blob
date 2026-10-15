@@ -370,7 +370,7 @@ body
   # they show (sdBody +1.1 mm on a tooth's axis). The line is now the real seam between the lips plus the painted sheet mouth.
 
   # THE MOUTH'S INSIDE AND THE TEETH (expression pass, 2026-10-13; owner: "a toothy evil grin", jagged and uneven with two
-  # fangs). Everything below is buried when the jaw is shut (goblin-blob.test.ts pins both ends of every one inside the
+  # fangs; Task 12 made them brighter, see the upper row). Everything below is buried when the jaw is shut (goblin-blob.test.ts pins both ends of every one inside the
   # tooth-free flesh) and shows only as the gape drops the jaw side away from the skull side at the lip line (Task 3b): the
   # whole upper row shows from gape 0.15 (pinned), the lower row from about 0.3.
   #
@@ -396,20 +396,30 @@ body
   # (roots y 1.137-1.138) to tips at y 1.119-1.125 (fangs 1.111-1.113), 1-2.5 cm below the seam, tilted a few mm forward;
   # z 0.095-0.107, 2 cm behind the rest lips; a little thicker than Task 3's (r 0.005-0.0068) so the visible half reads at
   # gape 0.15. No colour variation and no grain: the owner wants fine surface detail kept small.
-  blob head on skull at=0.0 r=0.005 r2=0.0010 blend=0.0002 offset=(-0.031,0.0184,0.0821) tip=(0,-0.013,0.003) color=8f8266 gloss=0.15
-  blob head on skull at=0.0 r=0.0068 r2=0.0010 blend=0.0002 offset=(-0.021,0.0194,0.0861) tip=(0,-0.027,0.005) color=8f8266 gloss=0.15
-  blob head on skull at=0.0 r=0.0055 r2=0.0010 blend=0.0002 offset=(-0.011,0.0194,0.0891) tip=(0,-0.017,0.004) color=8f8266 gloss=0.15
-  blob head on skull at=0.0 r=0.005 r2=0.0010 blend=0.0002 offset=(-0.001,0.0194,0.0901) tip=(0,-0.015,0.004) color=8f8266 gloss=0.15
-  blob head on skull at=0.0 r=0.0055 r2=0.0010 blend=0.0002 offset=(0.01,0.0194,0.0891) tip=(0,-0.019,0.004) color=8f8266 gloss=0.15
-  blob head on skull at=0.0 r=0.0068 r2=0.0010 blend=0.0002 offset=(0.021,0.0194,0.0861) tip=(0,-0.025,0.005) color=8f8266 gloss=0.15
-  blob head on skull at=0.0 r=0.005 r2=0.0010 blend=0.0002 offset=(0.031,0.0184,0.0821) tip=(0,-0.012,0.003) color=8f8266 gloss=0.15
+  # BRIGHTER TEETH (Task 12, 2026-10-15; owner: "light the teeth somehow or make them brighter, hard to see them"). They were the
+  # cultist's dirty ivory, `color=8f8266 gloss=0.15`, and in the grin close-up they rendered as brown pegs at a mean luma of 26
+  # (of 255): the mouth is a cavity, so the field AO sits on its 0.35 floor and the key reaches them only from the front. Now a
+  # light, near-neutral ivory (the warm key yellows it; kept neutral for the reason the clothes' comment gives), a little more
+  # gloss, and a FAINT glow (0.15: 15% of the lit colour is replaced by the flat albedo, so a tooth in the cavity's shade still
+  # reads; prim glow costs nothing, it is a row field). Measured on the grin close-up (tooth pixels from a marker render, docs/
+  # dev-notes/2026-10-13-goblin-expressions/teeth/): tooth luma 26 -> 82 front, 33 -> 93 at 45 degrees; teeth/gap ratio 2.9 -> 9.4
+  # front, 0.95 -> 2.2 at 45 degrees (the gap there is the interior's grey specular sheen). glow 0.3 flattened the row into a
+  # clump; glow 0 left the 45-degree ratio at 2.0. goblin-blob.test.ts finds the teeth by this exact paint string, and
+  # pack.test.ts counts the 11 glowing prims.
+  blob head on skull at=0.0 r=0.005 r2=0.0010 blend=0.0002 offset=(-0.031,0.0184,0.0821) tip=(0,-0.013,0.003) color=e0d8c0 gloss=0.35 glow=0.15
+  blob head on skull at=0.0 r=0.0068 r2=0.0010 blend=0.0002 offset=(-0.021,0.0194,0.0861) tip=(0,-0.027,0.005) color=e0d8c0 gloss=0.35 glow=0.15
+  blob head on skull at=0.0 r=0.0055 r2=0.0010 blend=0.0002 offset=(-0.011,0.0194,0.0891) tip=(0,-0.017,0.004) color=e0d8c0 gloss=0.35 glow=0.15
+  blob head on skull at=0.0 r=0.005 r2=0.0010 blend=0.0002 offset=(-0.001,0.0194,0.0901) tip=(0,-0.015,0.004) color=e0d8c0 gloss=0.35 glow=0.15
+  blob head on skull at=0.0 r=0.0055 r2=0.0010 blend=0.0002 offset=(0.01,0.0194,0.0891) tip=(0,-0.019,0.004) color=e0d8c0 gloss=0.35 glow=0.15
+  blob head on skull at=0.0 r=0.0068 r2=0.0010 blend=0.0002 offset=(0.021,0.0194,0.0861) tip=(0,-0.025,0.005) color=e0d8c0 gloss=0.35 glow=0.15
+  blob head on skull at=0.0 r=0.005 r2=0.0010 blend=0.0002 offset=(0.031,0.0184,0.0821) tip=(0,-0.012,0.003) color=e0d8c0 gloss=0.35 glow=0.15
   # Lower row, on the jaw: four small teeth jutting up between the upper ones from the floor (roots y 1.121-1.122), tips at
   # y 1.138-1.141, buried in the upper ridge when shut. z 0.085-0.095: BEHIND the lower lip, or the tipped-open jaw shows them
   # as brown studs poking out of the lip's top.
-  blob head on jaw at=1.0 r=0.0048 r2=0.0010 blend=0.0002 offset=(-0.026,0.0335,-0.0048) tip=(0,0.017,0.005) color=8f8266 gloss=0.15
-  blob head on jaw at=1.0 r=0.0058 r2=0.0010 blend=0.0002 offset=(-0.009,0.0345,0.0002) tip=(0,0.019,0.005) color=8f8266 gloss=0.15
-  blob head on jaw at=1.0 r=0.0052 r2=0.0010 blend=0.0002 offset=(0.011,0.0345,0.0002) tip=(0,0.017,0.005) color=8f8266 gloss=0.15
-  blob head on jaw at=1.0 r=0.0048 r2=0.0010 blend=0.0002 offset=(0.027,0.0335,-0.0048) tip=(0,0.018,0.005) color=8f8266 gloss=0.15
+  blob head on jaw at=1.0 r=0.0048 r2=0.0010 blend=0.0002 offset=(-0.026,0.0335,-0.0048) tip=(0,0.017,0.005) color=e0d8c0 gloss=0.35 glow=0.15
+  blob head on jaw at=1.0 r=0.0058 r2=0.0010 blend=0.0002 offset=(-0.009,0.0345,0.0002) tip=(0,0.019,0.005) color=e0d8c0 gloss=0.35 glow=0.15
+  blob head on jaw at=1.0 r=0.0052 r2=0.0010 blend=0.0002 offset=(0.011,0.0345,0.0002) tip=(0,0.017,0.005) color=e0d8c0 gloss=0.35 glow=0.15
+  blob head on jaw at=1.0 r=0.0048 r2=0.0010 blend=0.0002 offset=(0.027,0.0335,-0.0048) tip=(0,0.018,0.005) color=e0d8c0 gloss=0.35 glow=0.15
 
   # ARMS AND LEGS: tapered bars, no ball joints (rebuilt 2026-10-01).
   #

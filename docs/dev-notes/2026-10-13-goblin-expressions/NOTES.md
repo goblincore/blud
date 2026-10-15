@@ -9,7 +9,7 @@ Task 3b's own notes (the mouth moved to the lip line, the per-body hinge): [`gri
 The goblin's face moves. `goblin.blob` has a `jaw` carrier bone (the bride's jaw system) with **its own hinge** (`hinge=0.06` on
 the bone, y 1.1326, the lip line); the lower face (lower lip, chin, mouth corners, a dark mouth floor) rides it, and the
 mouth opens AT THE LIP LINE (Task 3b: the groove is gone, an upper ridge, a cheek-fill pair, a mouth-corner pair and the floor
-were added). Eleven jagged teeth (5 small upper, 2 upper fangs, 4 small lower; `color=8f8266 gloss=0.15`) and a dark throat
+were added). Eleven jagged teeth (5 small upper, 2 upper fangs, 4 small lower; `color=8f8266 gloss=0.15`, brightened in Task 12) and a dark throat
 bar are buried in the flesh at rest. The pure `expression.ts` turns keyed clips of five face channels (`gape`, `smile`,
 `browDown`, `lipCurl`, `lid`) into a jaw gape (radians) and overrides on the goblin's authored face sheet; `blinkLid`/`withBlink`
 overlay a blink on any expression. The goblin's tuning and clips (neutral, grin, scowl, shout) are data in
@@ -152,6 +152,43 @@ Cheapest trims, in order of what they would save for what they cost the look (ow
 
 For scale: the goblin is the protagonist seen in cutscenes and the screen lab (the first-person game shows only its arms), so the
 close-up is the shot that matters for it, and it is a worst case (the face fills the frame).
+
+## Task 12 (2026-10-15): brighter teeth
+
+Owner, on the Task 10 sheet: "its better. maybe we should like light the teeth somehow or make them brighter - hard to see them
+tbh". Frames in [`teeth/`](teeth/) (same framing as the sheet, ports 5301/9301).
+
+**What changed:** the 11 teeth went from `color=8f8266 gloss=0.15` (the cultist's dirty ivory) to `color=e0d8c0 gloss=0.35
+glow=0.15`: a light, near-neutral ivory (the warm key yellows it), a little more gloss, and a faint per-prim glow (15% of the
+lit colour replaced by the flat albedo; free, it is a field of the prim's row). Nothing else moved: same geometry, the interior
+untouched (its front-view gap is already near black, luma 9).
+
+**Why they were dark:** the mouth is a cavity, so the field AO sits on its 0.35 floor inside it and the key reaches the teeth only
+from the front; a 0.27-linear brown under that rendered at a mean luma of 26 of 255.
+
+**The number** (`teeth/before-after-front.png`, `teeth/before-after-45.png`: before, after with the kit, after without). Tooth
+pixels and gap pixels come from a MARKER render of the same shot (the teeth repainted `color=ff00ff glow=1`, the throat bar and the
+floor `color=00ffff glow=1`, the file restored afterwards), each mask eroded by a pixel; the gap is the interior pixels inside the
+teeth's bounding box; luma is Rec. 709 on the 8-bit frame.
+
+| grin close-up | tooth luma before -> after | gap luma | ratio before -> after |
+|---|---|---|---|
+| kit, front | 26.5 -> 82.4 | 9.3 -> 8.7 | 2.86 -> **9.42** |
+| kit, 45 degrees | 32.7 -> 93.4 | 34.4 -> 43.1 | 0.95 -> **2.17** |
+| no kit, front | 26.6 -> 82.3 | 9.3 -> 9.6 | 2.87 -> **8.58** |
+| no kit, 45 degrees | 32.4 -> 93.8 | 34.5 -> 41.3 | 0.94 -> **2.27** |
+| shout, kit, front / 45 | 25.7 -> 84.8 / 35.5 -> 104.5 | 4.4 / 9.5 | 5.8 -> 17.4 / 3.7 -> 10.3 |
+
+At 45 degrees the "gap" between the grin's teeth is not dark: it is the interior's grey specular sheen (painted prims keep the
+flesh's wetness, so a near-black albedo still takes a white highlight at a grazing angle) plus a little spill from the teeth.
+That is why the 45-degree ratio only just clears 2. Variants tried (`teeth/glow-sweep-front.png`, top to bottom glow 0, 0.15,
+0.3, all `e0d8c0 gloss=0.35`): glow 0 gave 6.8 front but 1.98 at 45 degrees; glow 0.3 flattened the row toward a pale clump
+(9.5 / 2.6). 0.15 keeps each tooth's shading and its own outline.
+
+**What I see:** front, each of the seven upper teeth and both fangs is a separate pale peg with a dark gap on either side; the
+fangs read as the longest. At 45 degrees the row is pale and visible under the overhanging lip; the gaps between teeth are grey
+rather than black. In the shout the four lower teeth now read as small pale teeth along the floor instead of brown studs.
+Neutral is unchanged (the teeth are buried; `goblin-blob.test.ts` still pins that no tooth paints the rest face).
 
 ## How to run
 

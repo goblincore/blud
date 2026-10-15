@@ -299,7 +299,8 @@ describe('goblin jaw (expression pass)', () => {
 describe('goblin teeth and mouth interior (expression pass)', () => {
   // Found by their colour markers, not by bone: the chin and the lower lip are `on jaw` too, so the teeth are the prims the
   // full goblin has that the same .blob with the marked lines stripped does not.
-  const TOOTH = /color=8f8266 gloss=0\.15/;
+  // The tooth paint string, the ONE place the tests name it (Task 12 brightened the teeth from `color=8f8266 gloss=0.15`).
+  const TOOTH = /color=e0d8c0 gloss=0\.35 glow=0\.15/;
   const INTERIOR = /color=2a0608/;
   const bodyOf = (text: string) => buildBody(compileBlob(parseBlob(text), compileFace(parseBlob(text))));
   const full = bodyOf(src);
@@ -307,8 +308,8 @@ describe('goblin teeth and mouth interior (expression pass)', () => {
   const same = (p: { a: Vec3; b: Vec3 }, q: { a: Vec3; b: Vec3 }) =>
     p.a.every((v, k) => Math.abs(v - q.a[k]!) < 1e-9) && p.b.every((v, k) => Math.abs(v - q.b[k]!) < 1e-9);
   const teeth = full.prims.filter(p => !bare.prims.some(q => same(p, q)));
-  // The tooth paint (8f8266) as linear RGB, to tell a tooth from an interior prim.
-  const TOOTH_RGB = (p: { color?: Vec3 }) => p.color !== undefined && p.color[0] > 0.2 && p.color[0] < 0.35;
+  // A tooth from an interior prim by its paint: the teeth are light ivory (red 0.75 linear), the interior near-black (0.02).
+  const TOOTH_RGB = (p: { color?: Vec3 }) => p.color !== undefined && p.color[0] > 0.5;
 
   it('has 11 teeth plus the mouth interior (throat bar and jaw floor), 5 small and 2 fangs above, 4 small below', () => {
     expect(full.errors).toEqual([]);

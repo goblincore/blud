@@ -510,6 +510,9 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
   //                  cultist-cowled variant likewise
   //   warbull     2  two red eyes under the brow (2026-09-27, the
   //                  reference plate's); pinned in warbull-blob.test.ts
+  //   goblin     11  its teeth, a FAINT 0.15 glow so they read inside the
+  //                  mouth's shade (goblin expressions Task 12, 2026-10-15);
+  //                  found by their paint string in goblin-blob.test.ts
   const GLOW_PRIMS: Record<string, number> = {
     'minotaur.blob': 2,
     'gargoyle.blob': 2,
@@ -521,6 +524,7 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
     'cultist.blob': 2,
     'cultist-cowled.blob': 2,
     'warbull.blob': 2,
+    'goblin.blob': 11,
   };
 
   it('every shipped character packs primClip.w all-zero EXCEPT the named glow authors, at their exact authored count', () => {
