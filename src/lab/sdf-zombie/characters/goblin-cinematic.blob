@@ -339,7 +339,7 @@ body
   # Their reach came down with the move. The cranium is an ellipsoid, so its
   # semi-depth SHRINKS as you go lower — 0.108 at this height, not the 0.118 at
   # the nose — and lips sized against the wrong number stick out too far.
-  blob head on skull at=0.12 r=0.028 r2=0.021 wide=1.25 tall=0.44 blend=0.0020 chamfer offset=(0,0.006,0.062) tip=(0,-0.006,0.044) morph=smile:(0,0.003,-0.001)*(1.4,1,1)
+  blob head on skull at=0.12 r=0.028 r2=0.021 wide=1.25 tall=0.44 blend=0.0020 chamfer offset=(0,0.006,0.062) tip=(0,-0.006,0.044) morph=smile:(0,0.006,-0.001)*(1.4,1,1)
   # THE MOUTH OPENS AT THE LIP LINE (Task 3b, 2026-10-14; owner: "the main thing is getting a viable toothy grin with teeth").
   # Task 2's split left the skull-side mass hanging to y 1.10 at the front, so the opening appeared in the chin's bevel 2-3 cm
   # under the lips and the teeth hid behind skin. Now the SEAM is the lip line, y ~1.133: everything above it is the skull's
@@ -350,21 +350,21 @@ body
   # Lower lip: a BENT bar along the dental arch (was a front-to-back pout capsule whose front sloped down to y 1.10: it was the
   # chin's shelf, not a lip). Top y 1.1335, meeting the upper ridge's underside; front z 0.122, 1.5 cm behind the upper lip's
   # (an overbite). Flesh, about the old lip's size; no colour (the owner does not want painted lips).
-  blob head on jaw at=1.0 r=0.010 tall=0.90 blend=0.0016 chamfer offset=(-0.026,0.037,0.0102) tip=(0.052,0,0) bend=(0,0,0.024) morph=smile:(-0.052,0.044,-0.026)tip(0.104,0,0)bend(0,-0.115,0.060)*1.1
+  blob head on jaw at=1.0 r=0.010 tall=0.90 blend=0.0016 chamfer offset=(-0.026,0.037,0.0102) tip=(0.052,0,0) bend=(0,0,0.024) morph=smile:(-0.0349,0.0451,-0.0161)tip(0.0697,0,0)bend(0,-0.1169,0.0377)*1.1
   # THE CHIN: the lower part of what used to be the jaw ellipsoid. Centre (0, 1.1025, 0.053), semi-axes 0.061 x 0.026 x 0.058.
   # Its top (1.128 on the axis) is LOWER than Task 2's (1.137) and must stay under the floor's top (below): once the jaw tips
   # open, a chin top above the floor shows as a lit band of skin inside the mouth (it did, at 1.131). Its front makes the chin's
   # reach (y 1.09), its underside the chin's underside; both are profile pins, so retune it with the CLI.
-  blob head on jaw at=1.0 r=0.0462 wide=1.33 tall=0.56 deep=1.25 blend=0.010 offset=(0,0.0150,-0.0368) morph=smile:(0,0.006,-0.006)*(1.15,0.95,1.0)
+  blob head on jaw at=1.0 r=0.0462 wide=1.33 tall=0.56 deep=1.25 blend=0.010 offset=(0,0.0150,-0.0368) morph=smile:(0,0.002,0.004)*(1.15,1.2,0.85)
 
   # UPPER RIDGE (the upper gum, skull): a flat bent bar along the arch, x +-0.045, y 1.133-1.145, front z 0.117 at the middle.
   # The shortened jaw ellipsoid recedes to z ~0.10 just above the seam; without this the sides of the face between the upper
   # lip and the seam were 1 cm deep and the tooth roots showed through at rest. Its flat underside is the mouth's top edge:
   # the upper teeth hang from it.
-  blob head on skull at=0.0 r=0.011 tall=0.55 blend=0.002 offset=(-0.034,0.0204,0.0811) tip=(0.068,0,0) bend=(0,0,0.024) morph=smile:(-0.038,0.036,-0.020)tip(0.076,0,0)bend(0,-0.072,0.040)
+  blob head on skull at=0.0 r=0.011 tall=0.55 blend=0.002 offset=(-0.034,0.0204,0.0811) tip=(0.068,0,0) bend=(0,0,0.024) morph=smile:(-0.0251,0.0297,-0.0215)tip(0.0503,0,0)bend(0,-0.0587,0.0427)
   # CHEEK FILL (skull, both sides), at x 0.046, y 1.122: the jaw/skull seam wraps round the side of the face and left a 4 mm
   # waist in the front silhouette at y 1.12. This fills it (silhouette back within 1 mm of the approved head at every height).
-  blob head on skull at=0.0 r=0.012 blend=0.006 offset=(0.046,0.0034,0.0271) both morph=smile:(0.016,0.012,0.008)*1.25blend*2.5
+  blob head on skull at=0.0 r=0.012 blend=0.006 offset=(0.046,0.0034,0.0271) both morph=smile:(0.0149,0.0162,0.0287)*1.4blend*2.5
   # THE CHEEK ROLLS (Task 18, the cartoon grin; skull, both sides): a bent bar along the nasolabial line, from beside the nose wing
   # (x 0.024, y 1.17) down and out past the mouth corner. At rest it is a 3 mm thread buried 2-4 cm inside the cheek mass and the
   # cheek fill (goblin-cinematic-blob.test.ts: every point at least 1 mm under the rest flesh; the head-profile CLI unchanged). On
@@ -373,11 +373,13 @@ body
   # 2026-10-15, on the first cartoon clip: "the rolls are too puffy ... those jowls"): it was 4.8 cm forward and 4.5x (r 13.5 mm),
   # and with the cheek fill's x1.6 the lower face read as a ring of jowls; cartoon/rolls-toned-down.png is the after.
   # The reference's strongest single cue. Two prims (the plan allowed four): one roll reads from the front and at 3/4; a jaw-side
-  # second roll round the chin was not needed once the lower lip itself became the fat lower band.
-  blob head on skull at=0.0 r=0.003 blend=0.0015 offset=(0.024,0.0494,0.0671) tip=(0.024,-0.044,-0.038) bend=(0.004,0.004,0) both morph=smile:(0.004,0.003,0.026)tip(0.020,-0.010,-0.012)bend(0.008,0.006,0.006)*2.4
+  # second roll round the chin was not needed once the lower lip itself became the fat lower band. CORNER FIX (below, "TASK 18
+  # FOLLOW-UP"): it now bows OUT round the mouth corner like a "(" (passing ~1 cm outside it) and ends below and outside it, so
+  # the corner tucks under it; it used to cross BEHIND the lip's end, which then hooked up past it.
+  blob head on skull at=0.0 r=0.003 blend=0.0015 offset=(0.024,0.0494,0.0671) tip=(0.024,-0.044,-0.038) bend=(0.004,0.004,0) both morph=smile:(0.004,0.0029,0.026)tip(0.0176,0.0048,0.0083)bend(0.0412,0.0047,-0.0029)*2.4blend*1.5
   # MOUTH CORNERS (jaw, both sides), at x 0.037, y 1.124: the lowered chin left the corners open at rest (the throat bar showed
   # there). They drop with the jaw, so they never plug the opening.
-  blob head on jaw at=1.0 r=0.010 blend=0.004 offset=(0.037,0.0365,-0.0048) both morph=smile:(0.042,0.044,-0.016)*0.9blend*3
+  blob head on jaw at=1.0 r=0.010 blend=0.004 offset=(0.037,0.0365,-0.0048) both morph=smile:(0.0256,0.0504,-0.0114)*0.9blend*3
   # THE FLOOR (jaw): a dark flat disc behind the lower lip, top y 1.131, z 0.046-0.106, the lower teeth rooted in it. With the
   # hinge on the lip line the opening jaw TIPS its top toward the viewer, and without a floor the chin's top showed through the
   # open mouth as lit green skin. Dark like the throat bar and buried at rest the same way (goblin-cinematic-blob.test.ts).
@@ -429,6 +431,27 @@ body
   #    showed as lit skin inside the opening). UPPER LIP: 40% wider. NOSE (the hook, above): up 6 mm and its point 6 mm shorter.
   #  - CHEEK FILL: out 1.6, up 1.2, forward 0.8, x1.25 (was out 2.4, up 1.8, forward 1.2, x1.6 until the owner called the jowls): it plugs the side of the face behind the cheek roll (without it the open
   #    corner showed as a dark pocket from the side).
+  # TASK 18 FOLLOW-UP, THE CORNER (owner, on the grin's mouth corner at three-quarter: "this area still looks quite messed up").
+  # Marker frames (each prim its own colour, CPU and GPU) named it: the lower lip's ENDS sat at x +-0.090 (squashed), 4.4 cm up
+  # and 2.6 cm back, i.e. OUTSIDE the face's side (the head without the mouth prims ends at x ~0.08 there): the fat band hooked
+  # up and round the side like a beak; the corner pair followed it out there; the cheek roll's far end crossed BEHIND the lip's
+  # end (two lumps), and the throat bar's ends (x +-0.075) reached the side of the face, so its dark showed through the gap
+  # between the lip's end, the roll and the cheek fill (the hole). The numbers below were SOLVED for posed targets at the grin's
+  # peak (smile 1, squash 1, gape 0.15 rad; positions after the squash), the morph words are their inverse:
+  #  - LOWER LIP: ends at (+-0.070, 1.160, 0.092) (were +-0.090, 1.161, 0.082), the middle at (0, 1.102, 0.116): the U ends on
+  #    the face's front, where the cheek roll caps it. End to end 2.30x the neutral's (was 2.84; the pin asks 1.8).
+  #  - UPPER RIDGE: ends at (+-0.068, 1.174, 0.076), 6 mm lower and inside the cheek mass (they were poking out above the roll).
+  #  - MOUTH CORNERS: at (0.072, 1.166, 0.082), just behind where the lip and the ridge meet: they plug the crescent's end from
+  #    inside and the side, and are never the surface you see.
+  #  - CHEEK ROLL: same nose end, bows out round the corner (passing ~(0.082, 1.162, 0.094)) to (0.080, 1.140, 0.080); blend x1.5.
+  #  - CHEEK FILL: at (0.070, 1.146, 0.072), x1.4 (was (0.071, 1.142, 0.050), x1.25): it backs the roll and the corner, so
+  #    nothing behind them is open.
+  #  - THROAT BAR: ends at x +-0.056 (were 0.075), inside the crescent, never at the side.
+  #  - UPPER LIP: up 6 mm (was 3): the narrower crescent keeps its height at the front.
+  #  - CHIN: up 2 mm and forward 4 (was up 6, back 6), 20% taller and 15% shallower (was 5% shorter): a rounder jaw that slopes
+  #    into the neck instead of a flat shelf over it; still 15% wider (+9.5 / +9.0 mm a side at y 1.10 / 1.11).
+  # Rest unchanged (morph words only: weights 0 pack bit-identically, the head-profile CLI prints the same). Frames:
+  # docs/dev-notes/2026-10-13-goblin-expressions/cartoon/corner-before-after.png, grin-corner-fix.mp4.
 
   # NO GROOVE ANY MORE (Task 3b). A groove at y 1.1327 drew the mouth line from 2026-08 to Task 3b, but a groove cuts 4 mm of
   # FIELD from every prim in the head cluster, teeth included: once the jaw opened, it bit the upper teeth in half right where
@@ -453,7 +476,7 @@ body
   # between and behind the upper teeth (mesh, the kit) from the first millimetre of gape. Task 3b moved it up and forward to the new seam,
   # made it tall enough to meet the floor (a gap between the two showed a lit band of skin), and took its gloss down (0.85 lit
   # the bar's ends as grey edges framing the mouth).
-  bar  head on skull from=0.0 to=0.0 offset=(-0.029,-0.0046,0.0591) tip=(0.058,0,0) r=0.012 tall=2.0 blend=0.003 color=2a0608 gloss=0.05 morph=smile:(-0.036,0.026,-0.012)tip(0.072,0,0)bend(0,-0.050,0.030)*(1,1.3,1)
+  bar  head on skull from=0.0 to=0.0 offset=(-0.029,-0.0046,0.0591) tip=(0.058,0,0) r=0.012 tall=2.0 blend=0.003 color=2a0608 gloss=0.05 morph=smile:(-0.0197,0.0286,-0.009)tip(0.0394,0,0)bend(0,-0.0565,0.0248)*(1,1.3,1)
   #
   # THE TEETH ARE MESH NOW (Task 14, 2026-10-15; owner: "lets do the mesh teeth, only in the cinematic variant"). The eleven
   # tooth prims that stood here (5 small upper and 2 fangs on the skull, 4 small lower on the jaw; `color=e0d8c0 gloss=0.35

@@ -651,8 +651,9 @@ describe('goblin face morphs (Task 12: the smile widens the chin, pushes the che
   it('the grin widens the lower face by most of a centimetre a side at the chin (owner: "his chins n stuff should get wider")', () => {
     const on = grin(true), off = grin(false);
     // Measured at y 1.10-1.11 since the chin LIFTS on the smile (owner on the cartoon grin: "the bottom neck area is messed up": the
-    // chin used to drop 6 mm and grow 40% wide onto the armour collar, hiding the neck). Lifted, the widening sits higher: +14.5 /
-    // +18.5 mm a side there; at y 1.07-1.08 the lifted chin is now ABOVE the probe.
+    // chin used to drop 6 mm and grow 40% wide onto the armour collar, hiding the neck). Lifted, the widening sits higher; at y 1.07-1.08
+    // the lifted chin is ABOVE the probe. Measured +9.5 / +9.0 mm a side at y 1.10 / 1.11 since the Task 18 corner fix (the chin
+    // taller and shallower, the lower lip's ends no longer out at the face's side); +14.5 / +18.5 mm before it.
     for (const y of [1.10, 1.11]) expect(reachX(on, y) - reachX(off, y), `y ${y}`).toBeGreaterThan(0.007);
   });
   // 'The grin still bares every upper tooth' is a mesh-teeth test now (Task 14, the block above).
@@ -677,11 +678,11 @@ describe('the cartoon grin (Task 18): a crescent mouth, cheek rolls, the head sq
 
   it('the grin\'s mouth (the lower lip, end to end, outer edges) is at least 1.8x the neutral\'s', () => {
     const width = (b: typeof body) => { const p = b.prims[lip]!; return Math.abs(p.b[0] - p.a[0]) + 2 * p.radius * p.scale[0]; };
-    expect(width(grin) / width(rest)).toBeGreaterThanOrEqual(1.8); // measured 0.0720 -> 0.2047 m (x2.84)
+    expect(width(grin) / width(rest)).toBeGreaterThanOrEqual(1.8); // measured 0.0720 -> 0.1653 m (x2.30; x2.84 before the corner fix pulled the lip's ends in off the face's side)
   });
 
   it('the corners (the lower lip\'s ends) ride at least 15 mm higher than at rest, gape and all', () => {
-    for (const k of ['a', 'b'] as const) expect(grin.prims[lip]![k][1] - rest.prims[lip]![k][1], k).toBeGreaterThan(0.015); // 33 mm
+    for (const k of ['a', 'b'] as const) expect(grin.prims[lip]![k][1] - rest.prims[lip]![k][1], k).toBeGreaterThan(0.015); // 35.5 mm
   });
 
   it('the head is at least 10% wider at the grin\'s peak (the cranium, above the cheeks and below the ears)', () => {
