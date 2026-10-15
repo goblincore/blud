@@ -23,6 +23,10 @@
   on the grin the mouth opens as an upturned U, the chin widens ~1 cm a side, the cheeks bunch ([frames](docs/dev-notes/2026-10-13-goblin-expressions/morphs/)).
   Open for the owner: the new grin (the corner knob at 45 degrees, how much chin); the shout's box mouth (gape morphs tried, dropped);
   surprise and sneer; the screen-lab wiring after PRs #46/#47. Cost (the cinematic goblin only, since Task 13): +47 ms a frame on a face close-up in the lab (54 -> 101; the buried teeth and interior are 30 of it), not trimmed; Task 12 added nothing measurable, and skipping the buried mouth at rest would save ~29 ms (sketched, owner's call).
+  **Task 14 (2026-10-15, owner): the teeth are MESH** in `goblin-cinematic-kit.wam` (11 sweeps on `skull`/`jaw`; the SDF tooth prims
+  are gone); rig-bind `kitFrames` gives a kit's jaw bone the SDF jaw's exact transform (hinge, gape, head). Whiter and sharper (tooth/gap
+  luma 10.7 -> 21.5 front), thinner than the SDF pegs read, lower row barely shows in the shout; face close-up cost about -20 to -28 ms at rest and -31 ms on the grin (quiet boots; the machine was noisy). Owner look pending
+  ([notes](docs/dev-notes/2026-10-13-goblin-expressions/NOTES.md), [frames](docs/dev-notes/2026-10-13-goblin-expressions/mesh-teeth/)).
 
 **The Flat's room in the engine** (owner, 2026-10-11) — [levels](docs/tasks/levels.md) (4o)
 - [~] **Slice 1 built 2026-10-11 (the owner liked it); the Giger iMac built the same day, owner look pending** (alpha-blended shell; the WGSL shell is a later spike). A walkable `?level=flat`: the last-stage room from the

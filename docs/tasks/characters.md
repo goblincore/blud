@@ -115,6 +115,12 @@ so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), like
     `actuate` outputs the weights; neutral packs bit-identically). The goblin's `smile` morphs 8 existing prims: the opening becomes an
     upturned U, the chin ~1 cm a side wider, the cheeks bunch. Open: the corner knob at 45 degrees and how much chin; the shout's box
     (gape morphs tried and dropped); the rest face's puffier lower jaw is unchanged ([notes](../dev-notes/2026-10-13-goblin-expressions/NOTES.md)).
+  - [~] **Task 14 (2026-10-15), built, owner look pending: the teeth are MESH** in `goblin-cinematic-kit.wam` (7 sweeps on `skull`,
+    4 on `jaw`, the SDF teeth's layout; material `tooth`), the 11 SDF tooth prims removed (the throat bar and floor stay). rig-bind.ts
+    `kitFrames` poses a kit's `jaw` bone with the `on jaw` prims' own transform (a bone frame turns about the skull pivot, not the
+    hinge: 1-4 mm off in motion, not opening at all in the lab statue path); tested exact. The SDF hides the buried teeth by depth.
+    Tooth/gap luma 10.7 -> 21.5 front, 3.3 -> 7.6 at 45 degrees; the teeth cover a third of the pixels the SDF pegs did. Cost on the face close-up: about -20 to -28 ms at rest, -31 ms on the grin (quiet boots; a noisy first batch is in the notes).
+    Open: stouter teeth or a more visible lower row if wanted ([notes](../dev-notes/2026-10-13-goblin-expressions/NOTES.md)).
   - [ ] Surprise and sneer (clip data); the screen-emergence lab wiring after PRs #46/#47.
   - [ ] Decide whether to fix the dead `eyeSquash` in `generateFaceSheet` for every character (it would change every face's eyes).
 - [ ] **Goblin to human height** (owner, 2026-10-11: the player is human-sized and the levels are scaled to them, so the goblin
