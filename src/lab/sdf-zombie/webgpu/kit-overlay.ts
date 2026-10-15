@@ -206,6 +206,12 @@ const LOOK: Record<string, {
   // status-lights.ts (heartbeat, strobe, drop-outs), and 1 is this look.
   led:  { metalness: 0.10, roughness: 0.20, envIntensity: 0.80, emissive: [1.0, 0.12, 0.05], emissiveIntensity: 1.4 },
   core: { metalness: 0.10, roughness: 0.15, envIntensity: 1.00, emissive: [1.0, 0.62, 0.18], emissiveIntensity: 1.6 },
+
+  // The cinematic goblin's TEETH (goblin-cinematic-kit.wam, goblin expressions Task 14): near-white ivory enamel, dielectric, a
+  // mild gloss (enamel is wet and smooth, but a tight hot highlight on eleven small cones reads as a row of beads) and a modest
+  // env so the shadow side inside the mouth does not fall to black. No glow: the SDF teeth needed one inside the cavity's AO,
+  // polygons are lit by the scene's key directly.
+  tooth: { metalness: 0.0, roughness: 0.38, envIntensity: 0.55 },
 };
 
 /** Materials glow() drives, by WAM material name. The juggernaut's `lens`

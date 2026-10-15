@@ -32,7 +32,7 @@ exports[`packBody byte pin > gnasher.blob packs the pinned bytes 1`] = `"279b0d2
 
 exports[`packBody byte pin > goblin.blob packs the pinned bytes 1`] = `"41812d68d01256d7"`;
 
-exports[`packBody byte pin > goblin-cinematic.blob packs the pinned bytes 1`] = `"fdd6c28ddf941d0d"`;
+exports[`packBody byte pin > goblin-cinematic.blob packs the pinned bytes 1`] = `"2e5d52c91ee41b5a"`;
 
 exports[`packBody byte pin > juggernaut.blob packs the pinned bytes 1`] = `"6eaa93748006d298"`;
 

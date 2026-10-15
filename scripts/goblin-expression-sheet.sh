@@ -2,7 +2,8 @@
 # A contact sheet of the CINEMATIC goblin's expressions (goblin-cinematic: the goblin with the face rig, Task 13; the base goblin
 # has no expressions): front and three-quarter, one blob:shot per expression, plus a blink frame, with its kit on. That kit has
 # BARE EYES (no sunglasses), so the kit-on row already shows the painted eyes and brows; the kit-hidden row (NOKIT=1) only takes
-# the armour collar out of the frame and is off by default (before Task 13 it was the only way to see the eyes).
+# the armour collar out of the frame and is off by default (before Task 13 it was the only way to see the eyes). Since Task 14 the
+# TEETH are kit too (mesh), so the kit-hidden row shows a toothless mouth.
 #   scripts/goblin-expression-sheet.sh [outDir]
 #   LAB_VITE_PORT=5291 LAB_CDP_PORT=9291 scripts/goblin-expression-sheet.sh
 #   LAB_TMP=/some/scratch scripts/goblin-expression-sheet.sh      # Chrome profile and server logs elsewhere (sandboxes)

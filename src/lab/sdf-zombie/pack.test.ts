@@ -401,8 +401,11 @@ describe('metal — prof bit 4, value 16 (hard-surface task 2)', () => {
     // the mouth-interior bar (Task 3; plain blends, no chamfer, so no prof bit). No prof value changed.
     // 2026-10-14 (Task 3b, the mouth moved to the lip line): the groove (0) is gone; +5 prof-0 (cheek-fill pair, mouth-corner
     // pair, the jaw's dark floor); the lower lip became a bent chamfered bar (1 -> 3); +1 bent upper ridge (2). No metal bit.
+    // 2026-10-15 (Task 14, the teeth became mesh in goblin-cinematic-kit.wam): -11 prof-0 for the 11 tooth prims removed; nothing
+    // else moved: checked when re-pinning, the variant's pack-golden hash (now 2e5d52c91ee41b5a) is exactly the hash of the Task 13
+    // .blob (7587c2a0) with its 11 tooth lines deleted.
     expect(packedProf('goblin-cinematic.blob')).toEqual(
-      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,2,3,3]);
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,2,3,3]);
     // Five plate boxes at 24 = box bit 3 (8) + metal bit 4 (16); the two
     // 2s are bent horns, the 3s chamfered+bent ones. Re-pinned when the
     // plates were authored `metal` — every other value is pre-metal.
@@ -514,10 +517,9 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
   //                  cultist-cowled variant likewise
   //   warbull     2  two red eyes under the brow (2026-09-27, the
   //                  reference plate's); pinned in warbull-blob.test.ts
-  //   goblin-cinematic 11  its teeth, a FAINT 0.15 glow so they read inside
-  //                  the mouth's shade (goblin expressions Task 12, 2026-10-15);
-  //                  found by their paint string in goblin-cinematic-blob.test.ts.
-  //                  The base goblin has no teeth (Task 13) and no glow.
+  //   (goblin-cinematic had 11: its SDF teeth' faint 0.15 glow, Task 12. The
+  //                  teeth are mesh in its kit since Task 14 (2026-10-15), so it
+  //                  has no glow prim any more; the base goblin never had one.)
   const GLOW_PRIMS: Record<string, number> = {
     'minotaur.blob': 2,
     'gargoyle.blob': 2,
@@ -529,7 +531,6 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
     'cultist.blob': 2,
     'cultist-cowled.blob': 2,
     'warbull.blob': 2,
-    'goblin-cinematic.blob': 11,
   };
 
   it('every shipped character packs primClip.w all-zero EXCEPT the named glow authors, at their exact authored count', () => {
