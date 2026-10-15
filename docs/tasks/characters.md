@@ -106,9 +106,12 @@ so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), like
   at 2.4 m; the teeth and interior, buried at rest, are about 30 ms of it (notes: trims listed, none applied).
   - [ ] Owner look: is the grin evil enough? The kit's round sunglasses cover the painted brows and eyes from the front, so with
     the kit on the expressions differ by the jaw and teeth alone ([notes](../dev-notes/2026-10-13-goblin-expressions/NOTES.md)).
-  - [ ] Owner call: approach C (a small per-prim morph, pre-approved as an escalation, not built): the grin's corners do not curl up,
-    the opening is box-shaped from about 0.3 rad, the lower teeth are small; and the rest face's lower jaw reads puffier than the
-    pre-expression head ([notes](../dev-notes/2026-10-13-goblin-expressions/NOTES.md)).
+  - [~] **Task 12 (2026-10-15), built, owner look pending:** the teeth brighter (`color=e0d8c0 gloss=0.35 glow=0.15`; grin tooth/gap luma
+    ratio 2.9 -> 9.4 front, 0.95 -> 2.2 at 45 degrees, 3.2 with the morphs) and approach C as a small per-prim morph mechanism
+    (`morph=<channel>:<terms>` on a `.blob` blob/bar, pure `morph.ts`, `applyRig` moves the rest geometry before the jaw and head;
+    `actuate` outputs the weights; neutral packs bit-identically). The goblin's `smile` morphs 8 existing prims: the opening becomes an
+    upturned U, the chin ~1 cm a side wider, the cheeks bunch. Open: the corner knob at 45 degrees and how much chin; the shout's box
+    (gape morphs tried and dropped); the rest face's puffier lower jaw is unchanged ([notes](../dev-notes/2026-10-13-goblin-expressions/NOTES.md)).
   - [ ] Surprise and sneer (clip data); the screen-emergence lab wiring after PRs #46/#47.
   - [ ] Decide whether to fix the dead `eyeSquash` in `generateFaceSheet` for every character (it would change every face's eyes).
 - [ ] **Goblin to human height** (owner, 2026-10-11: the player is human-sized and the levels are scaled to them, so the goblin

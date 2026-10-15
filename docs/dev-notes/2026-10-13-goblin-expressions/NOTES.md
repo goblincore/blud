@@ -232,6 +232,41 @@ without): the curled corners close the side notch, so the 45-degree gap is darke
 - `goblin-expressions.ts` needed no retune: the painted sheet's smile was already invisible in the frames, the geometry does the
   job now.
 
+## Task 12 cost (2026-10-15)
+
+Same method as Task 11 (`__sdfLab.benchGpu()` legs on `?character=goblin`, 1380 x 820 headless, `sdfScale` 0.7, kit on, the face
+close-up `setCam(0, 0.05, 0.3, 1.14)`, the expression held with `holdExpression`), with three files alternated boot by boot:
+BEFORE = `goblin.blob` at `bb702620` (pre-Task 12), AFTER = this branch's head (brighter teeth + morphs), SKIP = AFTER with the 11
+teeth, the throat bar and the floor deleted (what "skip the buried teeth and interior while the jaw is shut" would draw at rest).
+**The machine was NOT quiet:** another session ran an iOS simulator through part of it (load average up to 90; the same file read
+98 ms in one boot and 181 in another). Ten boots per variant over three sessions; each cell is the median over boots of each boot's
+median leg, with the range:
+
+| face close-up | before Task 12 | after Task 12 | skip the buried mouth (at rest) |
+|---|---|---|---|
+| neutral (rest) | 121.1 (106.6-180.8) | 118.1 (98.1-140.7) | **89.5** (78.2-110.9) |
+| grin | 147.1 (114.4-192.5) | 132.9 (112.7-188.1) | - |
+| shout | 124.8 (114.2-183.4, 6 boots) | 118.0 (108.7-181.1, 6 boots) | - |
+
+In the two quiet rounds (load under 3) the pairs were 128/118 vs 120/120 (rest) and 132/126 vs 126/126 (grin).
+
+- **Task 12 itself costs nothing measurable.** At rest the geometry is identical (the morph data is not packed; the teeth only
+  changed paint), and the grin with the morphs is no slower than the grin without them (if anything faster in the medians; within
+  the noise). The absolute numbers sit about 20% over Task 11's 101 ms for the same "before" file: a hotter, busier machine.
+- **The skip idea is worth about 29 ms at rest** on the close-up (118 -> 89.5, a quarter of the frame), the same size Task 11's
+  ablation found (99.8 -> 70.3). Not implemented (owner's go-ahead needed).
+- The 0.8 m head camera was also measured in the first session, but its spread (47-102 ms for one file) makes it unusable.
+
+**Sketch of the skip (not built).** The engine already has the switch: a prim with `dead` packs `primScale.w = 2` and every field
+(the shader's add fold, the carve pass, the CPU mirror) skips it without disturbing the fold order (pack.ts `W_DEAD`, used by
+mid-limb severs). So: (1) a `.blob` bare word, e.g. `open` (or `when=open`), on the 11 teeth, the throat bar and the floor,
+carried like `when=` to `Primitive.whenOpen`; (2) in `applyRig`, mark those prims `dead` while the face is EXACTLY neutral
+(`rig.jawGape` 0 and every morph weight 0; any nonzero gape or smile brings them back that frame, so the first millimetre of
+opening still shows teeth); (3) pinned by the existing buried-at-rest tests (they prove nothing changes visually) plus a new one
+that every `open` prim is dead at rest and alive at gape 0.001. Two caveats: a dead row still costs the loop a flag check, so the
+saving may be a little under the deletion's 29 ms (measure it the same way); and the goblin's packed bytes at rest WOULD change
+(the dead flags), so `pack-golden` re-pins once, deliberately. The near-distance gate (Task 11's trim 2) would stack on top.
+
 ## How to run
 
 - The lab: `?character=goblin` on `/sdf-lab-webgpu.html`, panel section "expression" (hold, play, blink).
@@ -248,7 +283,7 @@ without): the curled corners close the side notch, so the 45-degree gap is darke
 
 1. **Is the grin evil enough?** It is a toothy snarl, not a smile (see the assessment). With the sunglasses on, only the jaw
    and teeth carry the expressions.
-2. **Approach C, the pre-approved per-prim morph, was NOT built.** Task 3b found the teeth read without it, and Task 10 was
+2. *(Task 12 built it, see "the smile moves the face"; what is left: the corner knob at 45 degrees, how much chin, the shout's box.)* **Approach C, the pre-approved per-prim morph, was NOT built.** Task 3b found the teeth read without it, and Task 10 was
    numbers only. The reasons it may still be wanted, all observed in the frames: the grin's corners do not curl up (the sheet
    cannot paint above the seam, and nothing in the geometry lifts them); the opening is box-shaped from about 0.3 rad; the lower
    teeth are small; and cheeks bunching on a smile would be the obvious next cue. The pre-approved shape: a `.blob` prim may
@@ -262,3 +297,6 @@ without): the curled corners close the side notch, so the 45-degree gap is darke
 6. The dead `eyeSquash` (fix for every character, or leave).
 7. **The cost: +47 ms a frame on a face close-up** (see Frame cost). The first trim (skip the buried teeth and interior while the
    jaw is shut) should give about 30 ms back with no visible change; it needs your go-ahead and a small engine change.
+8. **Task 12:** the teeth are light ivory with a faint glow now (tooth/gap 9.4 front); the smile morphs are a first by-eye pass, judge
+   `morphs/grin-before-after.png`. Task 12 cost nothing measurable; the skip of the buried mouth at rest is worth about 29 ms on the
+   close-up (sketch in "Task 12 cost"), waiting for your go-ahead.
