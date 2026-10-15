@@ -11,7 +11,7 @@ import { IK_TUNING, clampDir } from './ik';
 import { jointForBoneEnd, rotateYaw } from './gait';
 import { boneFrames, segmentQuat, type BoneFrame3 } from './rig-frames';
 import { JAW_MAX_GAPE, jawOrient, jawRestOf, openAboutHinge, type JawRest } from './jaw';
-import { morphOf, morphShape, type MorphResult } from './morph';
+import { morphOf, morphShape, type MorphResult, type MorphWeights } from './morph';
 import {
   add, bendCtrl, cross, dot, len, normalize, qRotate, qMul,
   scale as vscale, sub,
@@ -560,6 +560,28 @@ export function pinTips(
  * anchored to the ROTATED rest gaze, so turning the body does not clamp the
  * head back to the authored facing.
  */
+/**
+ * THE MORPHED REST (goblin expressions Task 16): the rest body with every morphed prim's endpoints moved by its morph, for the
+ * rest-space noise anchor ONLY (packBody's `rest`, the restA/restB rows). The shader maps each surface sample into its DOMINANT
+ * prim's rest frame; a morphed prim's posed midpoint is its rest midpoint plus the morph's move, so against the bare rest body
+ * the skin noise (the normal bump, the grain, the mottle) jumped by that move wherever the dominant prim changed from a morphed
+ * prim to an unmoved neighbour: a thin dark seam traced the brow ridge's outline when it dropped, and the grin's corners and
+ * lower lip. Anchoring to the morphed rest makes the two frames agree at every boundary (the skin texture stays put in the
+ * head's frame while the prim moves under it, which reads as the same flesh). Returns `rest` ITSELF when no prim has a live
+ * morph, so every body without weights uploads exactly as before.
+ */
+export function morphedRest<B extends { prims: Primitive[] }>(rest: B, weights: MorphWeights | undefined): B {
+  if (!weights) return rest;
+  let prims: Primitive[] | null = null;
+  rest.prims.forEach((p, i) => {
+    const m = p.morphs ? morphOf(p.morphs, weights) : null;
+    if (!m) return;
+    prims ??= rest.prims.slice();
+    prims[i] = { ...p, a: add(p.a, m.da), b: add(p.b, m.db) };
+  });
+  return prims ? { ...rest, prims } : rest;
+}
+
 /**
  * A SHELL's clip plane is authored in REST model space (`clip=(0,-1,0)
  * clipd=-0.719` is "keep above rest height 0.719"), and it used to be packed

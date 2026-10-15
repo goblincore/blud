@@ -13,11 +13,11 @@ import baseKitJson from '../../../../public/assets/lab/goblin-kit.gltf?raw';
 import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace } from '../blob-compile';
 import { buildBody } from '../build-body';
-import { nearestPrim, sdBody } from '../validate';
+import { nearestPrim, restSpacePoint, sdBody } from '../validate';
 import { add, dot, len, lerp, normalize, qFromAxisAngle, qRotate, sub, scale, type Quat } from '../vec';
 import type { Vec3 } from '../types';
 import { measureProfile, CINEMATIC_PROFILE_PROBES, GOBLIN_PROFILE_PROBES, PROFILE_TOL } from './goblin-head-profile';
-import { bindRig, applyRig, kitFrames } from '../rig-bind';
+import { bindRig, applyRig, kitFrames, morphedRest } from '../rig-bind';
 import { boneFrames } from '../rig-frames';
 import { jawTargetAt } from '../jaw';
 import { makeActorMotion } from '../actor';
@@ -466,7 +466,8 @@ describe('goblin face morphs (Task 12: the smile widens the chin, pushes the che
     // Task 15: the two GENERATED face prims carry the eye area's morphs (face block `morph <tag>` lines).
     // (Built prims do not keep facePrims' tags: the two are the only skull prims morphed on anything but the smile.)
     const eyeArea = morphed.filter(p => !p.morphs!.every(m => m.channel === 'smile')).map(p => p.morphs!.map(m => m.channel).sort());
-    expect(eyeArea).toEqual([['squint'], ['browDown', 'squint']]);
+    // Task 16: the brow ridge's browDown is two ONE-SIDED words (browDown+ knits it into a V, browDown- lifts it).
+    expect(eyeArea).toEqual([['squint'], ['browDown', 'browDown', 'squint']]);
     expect(morphed.length).toBe(11);
   });
 
@@ -507,6 +508,49 @@ describe('goblin face morphs (Task 12: the smile widens the chin, pushes the che
   it('browDown brings the brow ridge down: the face under it fills forward at y 1.26', () => {
     const rest = posed(), bd = posed({ browDown: 1 });
     for (const x of [0.02, 0.035, 0.05]) expect(frontZ(bd, x, 1.26) - frontZ(rest, x, 1.26), `x ${x}`).toBeGreaterThan(0.0025);
+  });
+
+  // TASK 16 (owner: "although his 'eye brows' move his actual brow shape doesnt"). The ridge over the eyes is the face block's
+  // generated `brow` prim; its morph line now knits it into a V on browDown (lower, forward, the middle dipping toward the nose)
+  // and lifts it on browDown -1 (surprise). The ridge line = the height where the face is furthest forward over the eye.
+  const ridgeY = (b: typeof body, x: number) => {
+    let best = { y: 0, z: -1 };
+    for (let y = 1.22; y < 1.32; y += 0.0005) { const z = frontZ(b, x, y); if (z > best.z) best = { y, z }; }
+    return best;
+  };
+  it('the brow ridge follows browDown: it travels 6 mm or more in height between surprise (-1) and the scowl (+1)', () => {
+    for (const x of [0.015, 0.03, 0.045]) {
+      const up = ridgeY(posed({ browDown: -1 }), x), rest = ridgeY(posed(), x), down = ridgeY(posed({ browDown: 1 }), x);
+      // measured 18 / 17 / 13.5 mm at x 0.015 / 0.03 / 0.045 (Task 15's linear 3 mm a unit gave 5.5-6.5)
+      expect(up.y - down.y, `x ${x}: travel`).toBeGreaterThan(0.010);
+      expect(up.y, `x ${x}: surprise lifts it`).toBeGreaterThan(rest.y + 0.002);
+      expect(down.y, `x ${x}: browDown lowers it`).toBeLessThan(rest.y - 0.008);
+      // and pushes it forward into an overhang
+      expect(down.z, `x ${x}: browDown pushes it forward`).toBeGreaterThan(rest.z + 0.003);
+    }
+    // The V: on browDown the middle (by the nose) drops further than the outer end.
+    const rest = posed(), down = posed({ browDown: 1 });
+    expect(ridgeY(rest, 0.015).y - ridgeY(down, 0.015).y).toBeGreaterThan(ridgeY(rest, 0.045).y - ridgeY(down, 0.045).y + 0.002);
+  });
+
+  // TASK 16: the skin noise (normal bump, grain, mottle) is anchored in each surface point's DOMINANT prim's rest frame. Against the
+  // bare rest body a morphed prim's frame is off by its move, so the noise jumped where the dominant prim changed: a thin dark
+  // seam traced the dropped brow ridge and the grin's corners on screen (not in the field). rig-bind morphedRest moves the morphed
+  // prims' rest endpoints with them; with the head unturned and the jaw shut, every surface point then maps to itself.
+  it('the noise anchor has no seam at a morphed prim\'s edge: with morphedRest every face point maps to itself (statue, jaw shut)', () => {
+    const w = { browDown: 1, squint: 0.8, smile: 1 };
+    const b = posed(w), restM = morphedRest(body, w);
+    let worstMorphed = 0, worstBare = 0;
+    for (let x = 0; x <= 0.06; x += 0.006) for (let y = 1.1; y <= 1.29; y += 0.006) {
+      const z = frontZ(b, x, y); if (z <= 0) continue;
+      const p: Vec3 = [x, y, z];
+      worstMorphed = Math.max(worstMorphed, len(sub(restSpacePoint(p, b, restM), p)));
+      worstBare = Math.max(worstBare, len(sub(restSpacePoint(p, b, body), p)));
+    }
+    expect(worstBare, 'the bare rest is off by the morphs\' moves (the seam)').toBeGreaterThan(0.005);
+    expect(worstMorphed).toBeLessThan(1e-6);
+    expect(morphedRest(body, {}), 'no weights: the rest body itself').toBe(body);
+    expect(morphedRest(body, undefined)).toBe(body);
   });
 
   it('the grin widens the lower face by most of a centimetre a side at the chin (owner: "his chins n stuff should get wider")', () => {

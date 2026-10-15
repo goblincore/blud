@@ -565,10 +565,21 @@ face
   # narrowing is the sheet's (expression.ts `squint`); this is the flesh around it.
   #  - jaw (the face block's jaw ellipsoid: the cheeks under the eyes and the upper muzzle): on squint the cheeks RISE and fill,
   #    up 3 mm with its height x1.07 (the top climbs 6 mm toward the eyes, the bottom at the lip line stays) and 4% wider.
-  #  - brow (the ridge over the eyes): down 3 mm and 1.5 mm forward on browDown (a heavier ledge, more shadow on the eyes; a raised
-  #    brow, negative, lifts it), down 1.5 mm on squint.
+  #  - brow (the ridge over the eyes): down 1.5 mm on squint. Its browDown is TASK 16's (below).
+  # TASK 16 (owner: "although his 'eye brows' move his actual brow shape doesnt"; Task 15 moved it 3 mm a unit, linear). The ridge
+  # is ONE ellipsoid across both eyes, so its morphs are one-sided (morph.ts `browDown+`/`browDown-`): the two signs want different
+  # shapes and only one of them may grow a chord.
+  #  - browDown+ (grin 0.8, scowl 1, shout 0.5): the point ellipsoid becomes a 2.4 cm bar along x (move -12 mm, tip +24 mm) bent
+  #    DOWN 16 mm and forward 6 at the middle (bend: the middle dips 8 mm under the ends, a V that knits into the nose), the whole
+  #    ridge 7 mm lower and 1 mm forward, x-scale x0.78 so the bar is no wider than the old ellipsoid, a touch taller (x1.1), and
+  #    its blend x1.6 so the bar's blunt ends melt into the temples. (The dark outline round the dropped ridge in the first frames
+  #    was NOT this shape: it was the skin noise's rest anchor jumping at the moved prim's edge; rig-bind.ts morphedRest fixed it.)
+  #    Ridge line (the face's most forward point over the eye): 18 mm lower by the nose, 13.5 mm at the outer end, up to 6 mm
+  #    further forward (goblin-cinematic-blob.test.ts pins the travel, the V and the overhang).
+  #  - browDown- (surprise -1, smile -0.2): up 5 mm, back 1.5, 15% thinner, blend x2.5 (a softer top edge into the forehead).
+  #  Frames: docs/dev-notes/2026-10-13-goblin-expressions/polish/ (eyes-before-after.png).
   morph jaw squint:(0,0.005,0.0015)*(1.05,1.12,1.03)
-  morph brow browDown:(0,-0.003,0.0015) squint:(0,-0.0015,0)
+  morph brow browDown+:(-0.012,-0.007,0.001)tip(0.024,0,0)bend(0,-0.016,0.006)*(0.78,1.1,1)blend*1.6 browDown-:(0,0.005,-0.0015)*(1,0.85,1)blend*2.5 squint:(0,-0.0015,0)
 
 # The goblin's own face, generated rather than inherited.
 #

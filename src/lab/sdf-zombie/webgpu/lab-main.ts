@@ -84,7 +84,7 @@ import { createBloodSim, burst, emitTrails, stepBlood, addScraps } from '../bloo
 import { createBloodView } from './blood-view-gpu';
 import { createGooLayer } from './goo-layer';
 import { cutChains, cutLimbs } from '../connectivity';
-import { bindRig, applyRig, impulseAt, headQuatOf } from '../rig-bind';
+import { bindRig, applyRig, impulseAt, headQuatOf, morphedRest } from '../rig-bind';
 import { stepRig } from '../rig';
 import { relaxRopeConstraints, type MissingLimbs } from '../collapse';
 import { applyMelt, applyMeltOrgans, endpointHeights, meltInitBody, remeltClusters, stepMelt, type MeltState } from '../melt';
@@ -2819,12 +2819,16 @@ async function main() {
     // upload, the face projection and the wounds all read; do not call
     // applyMelt again further down.
     let frameBody = posed;
+    // The noise anchor's rest follows the face morphs (rig-bind morphedRest, goblin Task 16): against the bare rest a morphed
+    // prim's skin noise jumped at its outline (a dark seam round the dropped brow ridge, the grin's corners). `current` itself
+    // when no morph weighs anything.
+    const restForNoise = morphedRest(current, boundForPose.rig.morphs);
     if (meltState) {
       // Bones fall out FIRST: a group released this frame must not also be
       // uploaded in the body's bone rows, or it renders twice.
       releaseMeltBones(posed);
       const pp = applyMelt(posed.prims, meltState);
-      const cp = applyMelt(current.prims, meltState);
+      const cp = applyMelt(restForNoise.prims, meltState);
       // Released groups leave the body's bone rows (they are chunks now).
       // Organs (op 'organ') are never released — they are soft and melt
       // with the flesh (task 7). Bone fold is a hard min, so filtering
@@ -2857,7 +2861,7 @@ async function main() {
           bonePrims: meltBoneRows(current.bonePrims) },
       );
     } else {
-      view.update(posed, current);
+      view.update(posed, restForNoise);
     }
     if (sdfLayer.occluderEnabled) occluderHull.update([posed, ...crowdBodies()], woundSpheres(posed.prims));
     // Frozen: pin the shader clock so the eye-glow flicker (and anything else
