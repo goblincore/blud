@@ -355,7 +355,7 @@ body
   # Its top (1.128 on the axis) is LOWER than Task 2's (1.137) and must stay under the floor's top (below): once the jaw tips
   # open, a chin top above the floor shows as a lit band of skin inside the mouth (it did, at 1.131). Its front makes the chin's
   # reach (y 1.09), its underside the chin's underside; both are profile pins, so retune it with the CLI.
-  blob head on jaw at=1.0 r=0.0462 wide=1.33 tall=0.56 deep=1.25 blend=0.010 offset=(0,0.0150,-0.0368) morph=smile:(0,-0.006,-0.004)*(1.4,1.25,1.05)
+  blob head on jaw at=1.0 r=0.0462 wide=1.33 tall=0.56 deep=1.25 blend=0.010 offset=(0,0.0150,-0.0368) morph=smile:(0,0.006,-0.006)*(1.15,0.95,1.0)
 
   # UPPER RIDGE (the upper gum, skull): a flat bent bar along the arch, x +-0.045, y 1.133-1.145, front z 0.117 at the middle.
   # The shortened jaw ellipsoid recedes to z ~0.10 just above the seam; without this the sides of the face between the upper
@@ -364,15 +364,17 @@ body
   blob head on skull at=0.0 r=0.011 tall=0.55 blend=0.002 offset=(-0.034,0.0204,0.0811) tip=(0.068,0,0) bend=(0,0,0.024) morph=smile:(-0.038,0.036,-0.020)tip(0.076,0,0)bend(0,-0.072,0.040)
   # CHEEK FILL (skull, both sides), at x 0.046, y 1.122: the jaw/skull seam wraps round the side of the face and left a 4 mm
   # waist in the front silhouette at y 1.12. This fills it (silhouette back within 1 mm of the approved head at every height).
-  blob head on skull at=0.0 r=0.012 blend=0.006 offset=(0.046,0.0034,0.0271) both morph=smile:(0.024,0.018,0.012)*1.6blend*2.5
+  blob head on skull at=0.0 r=0.012 blend=0.006 offset=(0.046,0.0034,0.0271) both morph=smile:(0.016,0.012,0.008)*1.25blend*2.5
   # THE CHEEK ROLLS (Task 18, the cartoon grin; skull, both sides): a bent bar along the nasolabial line, from beside the nose wing
   # (x 0.024, y 1.17) down and out past the mouth corner. At rest it is a 3 mm thread buried 2-4 cm inside the cheek mass and the
   # cheek fill (goblin-cinematic-blob.test.ts: every point at least 1 mm under the rest flesh; the head-profile CLI unchanged). On
-  # the smile it comes 4.8 cm forward and swings its far end out to x 0.07, y 1.11, bows out, and grows 4.5x (r 13.5 mm): a fat
-  # roll framing the grin from the nose to below the corner, its small blend (1.5 mm) leaving a crease where it meets the cheek.
+  # the smile it comes 2.6 cm forward and swings its far end out and down, bows out, and grows 2.4x (r 7.2 mm): a roll framing the
+  # grin from the nose to below the corner, its small blend (1.5 mm) leaving a crease where it meets the cheek. TONED DOWN (owner,
+  # 2026-10-15, on the first cartoon clip: "the rolls are too puffy ... those jowls"): it was 4.8 cm forward and 4.5x (r 13.5 mm),
+  # and with the cheek fill's x1.6 the lower face read as a ring of jowls; cartoon/rolls-toned-down.png is the after.
   # The reference's strongest single cue. Two prims (the plan allowed four): one roll reads from the front and at 3/4; a jaw-side
   # second roll round the chin was not needed once the lower lip itself became the fat lower band.
-  blob head on skull at=0.0 r=0.003 blend=0.0015 offset=(0.024,0.0494,0.0671) tip=(0.024,-0.044,-0.038) bend=(0.004,0.004,0) both morph=smile:(0.006,0.004,0.048)tip(0.031,-0.016,-0.020)bend(0.016,0.010,0.010)*4.5
+  blob head on skull at=0.0 r=0.003 blend=0.0015 offset=(0.024,0.0494,0.0671) tip=(0.024,-0.044,-0.038) bend=(0.004,0.004,0) both morph=smile:(0.004,0.003,0.026)tip(0.020,-0.010,-0.012)bend(0.008,0.006,0.006)*2.4
   # MOUTH CORNERS (jaw, both sides), at x 0.037, y 1.124: the lowered chin left the corners open at rest (the throat bar showed
   # there). They drop with the jaw, so they never plug the opening.
   blob head on jaw at=1.0 r=0.010 blend=0.004 offset=(0.037,0.0365,-0.0048) both morph=smile:(0.042,0.044,-0.016)*0.9blend*3
@@ -425,7 +427,7 @@ body
   #    beyond the face's side: a dark slit showed in profile.)
   #  - MOUTH CORNERS: out 4.2, up 4.4, to the lower lip's ends. CHIN: 40% wider and 25% taller, 6 mm lower (higher, its top
   #    showed as lit skin inside the opening). UPPER LIP: 40% wider. NOSE (the hook, above): up 6 mm and its point 6 mm shorter.
-  #  - CHEEK FILL: out 2.4, up 1.8, forward 1.2, x1.6: it plugs the side of the face behind the cheek roll (without it the open
+  #  - CHEEK FILL: out 1.6, up 1.2, forward 0.8, x1.25 (was out 2.4, up 1.8, forward 1.2, x1.6 until the owner called the jowls): it plugs the side of the face behind the cheek roll (without it the open
   #    corner showed as a dark pocket from the side).
 
   # NO GROOVE ANY MORE (Task 3b). A groove at y 1.1327 drew the mouth line from 2026-08 to Task 3b, but a groove cuts 4 mm of

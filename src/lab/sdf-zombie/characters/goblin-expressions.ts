@@ -74,7 +74,7 @@ const GRIN: ExpressionClip = {
     // spreads, and the jaw opens to 0.18 rad (was 0.12): the crescent's height. It still reads as a grin, not surprise: the
     // corners ride 3 cm up into the cheek rolls, the eyes are slits under a V brow (docs/dev-notes/.../cartoon/).
     key(0.3, { gape: 0.12, smile: 0.7, browDown: 0.4, squint: 0.3, squash: 0.4 }, 'smooth'),
-    key(0.6, { gape: 0.3, smile: 1, browDown: 0.8, squint: 0.8, squash: 1 }, 'smooth'),
+    key(0.6, { gape: 0.25, smile: 1, browDown: 0.8, squint: 0.8, squash: 1 }, 'smooth'),
   ],
 };
 

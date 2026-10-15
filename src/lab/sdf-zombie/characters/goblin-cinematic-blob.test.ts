@@ -650,7 +650,10 @@ describe('goblin face morphs (Task 12: the smile widens the chin, pushes the che
 
   it('the grin widens the lower face by most of a centimetre a side at the chin (owner: "his chins n stuff should get wider")', () => {
     const on = grin(true), off = grin(false);
-    for (const y of [1.07, 1.08]) expect(reachX(on, y) - reachX(off, y), `y ${y}`).toBeGreaterThan(0.007);
+    // Measured at y 1.10-1.11 since the chin LIFTS on the smile (owner on the cartoon grin: "the bottom neck area is messed up": the
+    // chin used to drop 6 mm and grow 40% wide onto the armour collar, hiding the neck). Lifted, the widening sits higher: +14.5 /
+    // +18.5 mm a side there; at y 1.07-1.08 the lifted chin is now ABOVE the probe.
+    for (const y of [1.10, 1.11]) expect(reachX(on, y) - reachX(off, y), `y ${y}`).toBeGreaterThan(0.007);
   });
   // 'The grin still bares every upper tooth' is a mesh-teeth test now (Task 14, the block above).
 });
@@ -703,9 +706,16 @@ describe('the cartoon grin (Task 18): a crescent mouth, cheek rolls, the head sq
         const q = add(add(scale(p.a, (1 - t) ** 2), scale(c, 2 * t * (1 - t))), scale(p.b, t * t));
         expect(sdBody(q, bandless) + p.radius, `roll ${i} t ${t}`).toBeLessThan(-0.001);
       }
-      // At the grin it is 4.5x as thick and stands proud of the face it was buried in.
-      expect(grin.prims[i]!.radius / p.radius).toBeGreaterThanOrEqual(4.5);
-      expect(nearestPrim(add(grin.prims[i]!.a, [0, 0, grin.prims[i]!.radius * 0.9]), grin), 'the roll is the surface in front of it').toBe(i);
+      // At the grin it is 2.4x as thick (toned down from 4.5: owner, "too puffy ... those jowls") and stands proud of the face it
+      // was buried in SOMEWHERE along its length: the toned-down roll tucks under the cheek fill at its nose end, so probe the curve.
+      const g = grin.prims[i]!;
+      expect(g.radius / p.radius).toBeGreaterThanOrEqual(2.4);
+      const gc = add(scale(add(g.a, g.b), 0.5), g.bend!);
+      const shows = Array.from({ length: 11 }, (_, k) => k / 10).some(t => {
+        const q = add(add(scale(g.a, (1 - t) ** 2), scale(gc, 2 * t * (1 - t))), scale(g.b, t * t));
+        return nearestPrim(add(q, [0, 0, g.radius * 0.9]), grin) === i;
+      });
+      expect(shows, 'the roll is the surface in front of it somewhere along its length').toBe(true);
     }
   });
 
