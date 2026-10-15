@@ -4,6 +4,100 @@ Spec: [`docs/superpowers/specs/2026-10-13-goblin-expressions-design.md`](../../s
 Plan: [`docs/superpowers/plans/2026-10-13-goblin-expressions.md`](../../superpowers/plans/2026-10-13-goblin-expressions.md).
 Task 3b's own notes (the mouth moved to the lip line, the per-body hinge): [`grin/NOTES-grin.md`](grin/NOTES-grin.md).
 
+## Task 15 (2026-10-15): a smile that does not read as surprise
+
+Owner, on the grin clip: "it doesnt really read as a smile ... smiling involves also movement of the eye area where the eyes would
+have to get smaller with the cheeks and eyelids closing more, like the animation feels like its just opening the mouth, it actually
+reads more like surprise". Right: the old clip dropped the jaw to 0.204 rad and nothing moved above the mouth.
+
+**The clip:** [`smile/goblin-smile-anim.mp4`](smile/goblin-smile-anim.mp4), 12 fps, four panels: grin front, grin three-quarter
+(yaw 0.7), the friendly smile front, surprise front (`BLOB_EXPR=<name> BLOB_EXPR_SWEEP=0:0.92`, 24 frames, `BLOB_DIST=0.3
+BLOB_TARGET_Y=1.17 BLOB_PITCH=0.05`: 1.17 rather than 1.14 so the whole face, eyes included, sits in the frame; the last frame is
+held 1.5 s). Stills in [`smile/`](smile/) (`*-mid` is the middle of the clip, `*-end` its end; `grin-old-vs-new.png` is the old grin
+beside the new one, front and three-quarter; `eyes-neutral-grin-smile-surprise.png`, `mouth-marker-old-vs-new.png`). The contact
+sheet [`frames/index.html`](frames/index.html) was re-shot with smile and surprise added (kit-on row; the `*-nokit/` directories
+there are still the 2026-10-14 sunglasses-era frames).
+
+### What changed
+
+- **`expression.ts`: a `squint` channel** (0..1; `lid` keeps meaning blink), returned in `morphs` too. `actuate` maps it through
+  optional tuning fields: `squintCheek` (sheet `eyeCheek`), `squintLid` (`eyeLid`), `squintEyeSize`, `squintTilt`, `squintBrow`
+  (`browDrop`); and browDown now also drives `browShift` (`browDrop`, both signs), `browLidTop` (`eyeLidTop`, positive browDown only)
+  and `browRaiseEye` (the eye grows on a NEGATIVE browDown). A tuning without them changes nothing (another character's clips).
+- **`blob-face-sheet.ts`: three params, all default 0, every authored sheet pinned bit-identical** (FNV hashes of all 15 characters'
+  64x64 sheets taken before the change): `eyeCheek` cuts the eye from below with an ARCHED lower lid (highest in the middle, so the
+  eye becomes a dome, "^ ^") and darkens a crease under it (the cheek's top); `eyeLidTop` cuts it from above with a straight lid that
+  sits lower at the inner corner (an angry, inward-slanted upper lid); `browDrop` slides the painted brow down (or up).
+- **Face-block morph lines** (`blob-ast/parse/compile.ts`): the brow ridge and the cheeks are GENERATED face prims (face.ts
+  facePrims) with no `.blob` line, so `morph=` could not reach them. `morph <tag> <channel>:<terms>` in the `face` block now carries
+  their morphs (tags `head`, `jaw`, `brow`, `nose`); never packed. The goblin: `morph jaw squint:(0,0.005,0.0015)*(1.05,1.12,1.03)`
+  (the face block's jaw ellipsoid IS the cheek mass under the eyes: it rises and fills, its bottom at the lip line stays) and
+  `morph brow browDown:(0,-0.003,0.0015) squint:(0,-0.0015,0)`. The authoring skill's reference documents it.
+- **Wider smile morphs** (`goblin-cinematic.blob`, "TASK 15" under "THE SMILE MOVES THE FACE"): lower lip ends out 17 mm (was 6),
+  its sag 4.5 mm (was 7: the deep U read as a dropped jaw); corners out 13 / up 4 (were up 8: they plugged the opening's ends);
+  cheek fill and upper ridge further out; the throat bar widens 8 mm a side so the widened corners show dark.
+- **Clips** (`goblin-expressions.ts`): `grin` = smile 0.7 / squint 0.3 / browDown 0.4 / gape 0.12 at 0.3 s, then smile 1 / squint
+  0.8 / browDown 0.8 / gape 0.2 (0.12 rad) at 0.6 s; new `smile` (friendly: squint 1, browDown -0.2, gape 0.08 = 0.048 rad) and
+  `surprise` (gape 0.5 = 0.30 rad, browDown -1, no smile or squint). `scowl` and `shout` keep their keys; through browDown their eyes
+  now take the heavy upper lid and their brows drop (`frames/scowl`, `frames/shout`: a glare; I think that helps both).
+- Tuning: `squintLid 0, squintCheek 0.58, squintEyeSize -0.1, squintBrow 0.015, squintTilt -14, browShift 0.02, browRaiseEye 0.15,
+  browLidTop 0.35` (why each, in the file).
+
+### The numbers
+
+Eye = red glow pixels above y 440 in the 1380 x 820 frame (both eyes front, the near eye at three-quarter); sheet = texels over the
+0.88 glow threshold on the 64 x 64 sheet.
+
+| | front px | % neutral | 3/4 px | % | sheet texels | % |
+|---|---|---|---|---|---|---|
+| neutral | 4122 | 100 | 2909 | 100 | 57 | 100 |
+| **grin, peak** | **1001** | **24** | **667** | **23** | 19 | 33 |
+| grin, mid-clip (frame 12) | 1944 | 47 | | | | |
+| smile, peak | 2506 | 61 | 1767 | 61 | 36 | 63 |
+| surprise, peak | 5373 | **130** | | | 81 | 142 |
+| scowl / shout | 2516 / 3082 | 61 / 75 | | | 37 / 48 | |
+
+- **Gape:** the grin's peak is 0.12 rad (0.2 x maxGape 0.6; pinned, and never higher on the way in); was 0.204. Smile 0.048,
+  surprise 0.30.
+- **Mouth width:** the lower lip, end to end (its outer edges, CPU, `applyRig`): neutral 0.0720 m -> grin 0.1036 m, **x1.44**
+  (pinned > 1.2). Rendered opening on a marker frame (the throat bar and floor painted glowing magenta, the files restored after):
+  old grin 198 x 88 px (6543 px), new grin **236 x 49 px** (3055 px): **19% wider than the old grin's opening and 44% less tall**, a
+  crescent instead of a D. (Neutral has no opening to measure; its painted seam line spans the whole lower face, so a rendered
+  "neutral width" would be the jaw's width, not the mouth's: hence the lip measure.)
+- **Cheeks:** at squint 1 the face comes forward 4.6-9.4 mm at y 1.17-1.19 under the eyes (pinned > 4.5 mm); browDown 1 fills the face
+  under the brow ridge 1.6-3.4 mm at y 1.25-1.26 (pinned > 2.5). Weights 0: identical pose to the body without any morph (pinned),
+  pack-golden untouched, `scripts/goblin-head-profile.ts` all 7 probes ok and unchanged.
+
+### What I see (the clip and the stills)
+
+- **Grin, front:** the mouth spreads into a wide, shallow crescent with the upper row and fangs in it (clenched-teeth grin), and as it
+  spreads the eyes close down from a glowing oval to a tapering slit, thicker at the outer end and pinched down toward the nose, under
+  a darker brow. It reads as a sly, evil grin. It does NOT read as surprise any more: the opening is short and wide, the eyes get
+  smaller instead of bigger. Beside the old grin (`grin-old-vs-new.png`) the difference is plain.
+- **Grin, three-quarter:** the slit eye and the toothy crescent read; the cheek fills a little under the eye (subtle at this size; the
+  side view shows the bulge better than the three-quarter). The lower lip's corner still bunches into a knob (Task 12's).
+- **Smile (friendly):** the eyes become "^ ^" domes with a crease under them: clearly happy eyes. The MOUTH barely changes from the
+  front (a thin line with the tooth tips, gape 0.048 rad); the smile is carried almost entirely by the eyes. If it should read at a
+  distance, it needs more lower-lip sag or a little more gape.
+- **Surprise:** the jaw drops into the box mouth, both eyes grow to big ovals and the brows lift. Side by side with the grin they are
+  opposites, which is the point of the control.
+- **Scowl / shout:** the eyes are now cut flat on top (a glare); neither looks worse.
+
+### What is still wrong / open
+
+1. **The eye is ~6 x 5 texels of a 64 x 64 sheet**, so every lid shape is a few pixel steps and the clip's eye changes in visible
+   jumps (texel by texel) rather than smoothly. A finer sheet would change every character's grain; a per-character sheet size would
+   be the fix if the steps bother you.
+2. **The grin's eye may be too closed** (24% of neutral; the goal was <= 60%): it keeps its glow and its slant, but `browLidTop`
+   0.28-0.3 gives a fatter slit (sheet 35-40%) if you want more eye.
+3. The friendly smile's mouth (above). The grin's corners go OUT more than UP: the "corners up" read comes from the crescent and the
+   cheeks, not from the corners rising above the seam (the upper ridge is flat).
+4. The cheek rise is real (up to 9 mm) but subtle on camera next to the painted eye change.
+5. Rounds: nine capture rounds, more than the six the plan allows for numbers; the first two were the eye model itself (a symmetric
+   squash read as asleep), not tuning.
+6. Cost: not re-measured. Weights 0 change no packed byte; with weights on, two more prims are morphed (the face block's) and the
+   throat bar; no new prims.
+
 ## Task 14 (2026-10-15): mesh teeth in the cinematic kit
 
 Owner: make the teeth POLYGON MESH in `goblin-cinematic-kit` (the 11 SDF tooth prims cost about 23 ms on a face close-up and

@@ -27,6 +27,10 @@
   are gone); rig-bind `kitFrames` gives a kit's jaw bone the SDF jaw's exact transform (hinge, gape, head). Whiter and sharper (tooth/gap
   luma 10.7 -> 21.5 front), thinner than the SDF pegs read, lower row barely shows in the shout; face close-up cost about -20 to -28 ms at rest and -31 ms on the grin (quiet boots; the machine was noisy). Owner look pending
   ([notes](docs/dev-notes/2026-10-13-goblin-expressions/NOTES.md), [frames](docs/dev-notes/2026-10-13-goblin-expressions/mesh-teeth/)).
+  **Task 15 (2026-10-15, owner: the grin "reads more like surprise"): the grin smiles with its EYES.** A `squint` channel (the sheet's
+  eye gets an arched cheek lid; browDown lowers a heavy inward-slanted upper lid), face-block `morph <tag>` lines (cheeks rise 5-9 mm,
+  the brow ridge drops), the grin's jaw down to 0.12 rad with a wider mouth (lower lip 0.072 -> 0.104 m); new `smile` and `surprise`
+  clips. Grin eye 24% of neutral. Owner look pending ([clip and frames](docs/dev-notes/2026-10-13-goblin-expressions/smile/)).
 
 **The Flat's room in the engine** (owner, 2026-10-11) — [levels](docs/tasks/levels.md) (4o)
 - [~] **Slice 1 built 2026-10-11 (the owner liked it); the Giger iMac built the same day, owner look pending** (alpha-blended shell; the WGSL shell is a later spike). A walkable `?level=flat`: the last-stage room from the

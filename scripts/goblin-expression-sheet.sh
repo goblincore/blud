@@ -21,8 +21,8 @@ mkdir -p "$OUT"
 export BLOB_DIST="${BLOB_DIST:-0.3}" BLOB_TARGET_Y="${BLOB_TARGET_Y:-1.14}" BLOB_PITCH="${BLOB_PITCH:-0.05}"
 # The kit is the only skinned mesh group in the lab scene; hiding it is a capture-time probe, nothing in the lab changes.
 HIDE_KIT='window.__sdfLab.scene.children.filter(c => { let sk = 0; c.traverse(o => { if (o.isSkinnedMesh) sk++; }); return sk > 0; }).map(c => (c.visible = false, c.children.length))'
-# label:BLOB_EXPR (name[:t[:lid]]); blink is the neutral held fully formed with the lid shut.
-SHOTS=("neutral:neutral" "grin:grin" "scowl:scowl" "shout:shout" "blink:neutral:10:1")
+# label:BLOB_EXPR (name[:t[:lid]]); blink is the neutral held fully formed with the lid shut. smile and surprise: Task 15.
+SHOTS=("neutral:neutral" "grin:grin" "smile:smile" "surprise:surprise" "scowl:scowl" "shout:shout" "blink:neutral:10:1")
 SUFFIXES=("")
 if [ "${NOKIT:-0}" = 1 ]; then SUFFIXES+=("-nokit"); fi
 shoot() { # <dir> <expr> [probe]

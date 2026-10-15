@@ -121,7 +121,14 @@ so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), like
     hinge: 1-4 mm off in motion, not opening at all in the lab statue path); tested exact. The SDF hides the buried teeth by depth.
     Tooth/gap luma 10.7 -> 21.5 front, 3.3 -> 7.6 at 45 degrees; the teeth cover a third of the pixels the SDF pegs did. Cost on the face close-up: about -20 to -28 ms at rest, -31 ms on the grin (quiet boots; a noisy first batch is in the notes).
     Open: stouter teeth or a more visible lower row if wanted ([notes](../dev-notes/2026-10-13-goblin-expressions/NOTES.md)).
-  - [ ] Surprise and sneer (clip data); the screen-emergence lab wiring after PRs #46/#47.
+  - [~] **Task 15 (2026-10-15), built, owner look pending: a grin that does not read as surprise.** `expression.ts` `squint`
+    channel (sheet `eyeCheek` arched lower lid, `eyeLidTop` heavy upper lid on browDown, `browDrop`; all default 0, every authored
+    sheet pinned bit-identical); face-block `morph <tag> <channel>:<terms>` lines morph the generated face prims (the cheeks rise
+    and fill on squint, the brow ridge drops on browDown); the grin's gape 0.204 -> 0.12 rad with wider smile morphs; new clips
+    `smile` (friendly) and `surprise` (the control). Grin lit eye 24% of neutral, rendered opening 198 -> 236 px and half as tall.
+    Open: the eye is ~6x5 sheet texels, so its shapes are coarse; the friendly smile's mouth barely moves from the front
+    ([notes](../dev-notes/2026-10-13-goblin-expressions/NOTES.md), [frames](../dev-notes/2026-10-13-goblin-expressions/smile/)).
+  - [ ] Sneer (clip data); the screen-emergence lab wiring after PRs #46/#47. (Surprise: Task 15.)
   - [ ] Decide whether to fix the dead `eyeSquash` in `generateFaceSheet` for every character (it would change every face's eyes).
 - [ ] **Goblin to human height** (owner, 2026-10-11: the player is human-sized and the levels are scaled to them, so the goblin
   should be near human height, not 1.30 m). Its own spec and plan. `height 1.30` in `goblin.blob` is a label: the proportions are
