@@ -446,6 +446,7 @@ function partToPrim(p: BlobPart): PrimDef {
       ...(p.core ? { core: true } : {}),
       ...(p.rigid ? { rigid: true } : {}),
       ...(p.when ? { when: p.when } : {}),
+      ...(p.morphs.length > 0 ? { morphs: p.morphs } : {}),
       ...(p.kind === 'shell'
         ? {
             shell: {

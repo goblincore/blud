@@ -3,6 +3,7 @@
 // Core SDF body data types: Vec3, primitive and body definitions, shell/box/strand params, limb ids, bones and built bodies.
 import type { Quat } from './vec';
 import type { SplitWarp } from './head-split';
+import type { PrimMorph } from './morph';
 
 export type Vec3 = readonly [number, number, number];
 
@@ -295,6 +296,12 @@ export interface PrimDef {
    */
   when?: 'alive' | 'dead';
   /**
+   * PER-PRIM MORPHS (goblin expressions Task 12; morph.ts): a delta per face channel that the channel's weight
+   * (RigState.morphs) scales, applied by applyRig to the rest geometry before any rotation. Absent, or every weight 0, changes
+   * nothing. `.blob`: `morph=<channel>:<terms>`. NEVER packed: packBody does not read it, so a body's bytes do not depend on it.
+   */
+  morphs?: readonly PrimMorph[];
+  /**
    * When set, this primitive is a thin clipped SHELL (cloth, not mass): the
    * closed base capsule's field is thinned to `abs(d) - thickness`, clipped
    * against `clipNormal`/`clipOffset`, with the cut edge rounded by `rim`.
@@ -440,6 +447,8 @@ export interface Primitive {
   rigid?: boolean;
   /** See PrimDef.when. */
   when?: 'alive' | 'dead';
+  /** See PrimDef.morphs. Carried through mirror and resolve; applyRig reads it, packBody never does. */
+  morphs?: readonly PrimMorph[];
   /** See PrimDef.shell. Carried through mirror, resolve and the rig untouched. */
   shell?: ShellParams;
   /** See PrimDef.box. Carried through mirror, resolve and the rig untouched. */

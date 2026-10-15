@@ -116,6 +116,36 @@ the throat instead of dropping it.
 bone jaw parent=neck dir=up pitch=112 len=0.083 hinge=0.06
 ```
 
+## Face morphs: `morph=<channel>:<terms>` (added 2026-10-15)
+
+A `blob` or `bar` can MOVE with a face channel (`expression.ts` CHANNEL_NAMES:
+`gape smile browDown lipCurl lid`): the expression layer's weight for that
+channel scales the delta linearly, applied to the REST geometry before the jaw
+opens and the head turns (morph.ts, rig-bind.ts applyRig). One word per
+channel, terms concatenated, each at most once:
+
+| term | does, at weight 1 |
+|---|---|
+| `(dx,dy,dz)` | moves both ends (metres, world axes at rest, like `offset=`) |
+| `tip(dx,dy,dz)` | moves the far end only, on top of the move (widen a bar along the arch) |
+| `bend(dx,dy,dz)` | adds to the bend (a bar along the arch sags: its ends curl up) |
+| `*k` | radius (and `r2`) times `k` |
+| `*(sx,sy,sz)` | `wide`/`tall`/`deep` times these |
+
+```
+# the goblin's mouth corners push out and up on a smile, and grow a little
+blob head on jaw at=1.0 r=0.010 blend=0.004 offset=(0.037,0.0365,-0.0048) both morph=smile:(0.004,0.005,0)*1.1
+```
+
+`both`/`mirror` reflect the move, tip and bend in x on the second copy. An
+unknown channel, the same channel twice on a line, a factor of 0 or less, or a
+`morph=` on a carve/groove/shell or in the `bones` block is a parse error.
+Weight 0 (and every character without an expression layer) moves nothing: the
+morph data is never packed, so a neutral face renders bit-identically. A morph
+is a pose, not a re-sculpt: judge it by frames at the expression it serves, and
+keep the deltas to millimetres (a cheek pushed 6 mm out leaves a waist where it
+was; check the fillet with a capture).
+
 ## Curved primitives: `bend=`
 
 Horns, tusks, tails, claws, curved fingers, ribs, hooked noses. Before this

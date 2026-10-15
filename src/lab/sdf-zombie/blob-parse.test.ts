@@ -540,3 +540,41 @@ skeleton
     expect(() => parseBlob(src('bone jaw parent=neck dir=up len=0.08 hinge=1.5'))).toThrow(/hinge/);
   });
 });
+
+describe('parseBlob — morph= (per-prim face morphs, goblin expressions Task 12)', () => {
+  it('reads every morph= word on a line, one per channel', () => {
+    const src = PAINTED.replace('blob torso on pelvis at=0.5 r=0.1',
+      'blob torso on pelvis at=0.5 r=0.1 morph=smile:(0.006,0.004,0)*1.2 morph=gape:tip(0,-0.01,0)');
+    const torso = parseBlob(src).parts.find(x => x.limb === 'torso')!;
+    expect(torso.morphs).toEqual([
+      { channel: 'smile', move: [0.006, 0.004, 0], radius: 1.2 },
+      { channel: 'gape', tip: [0, -0.01, 0] },
+    ]);
+  });
+
+  it('a line without morph= has none', () => {
+    expect(parseBlob(PAINTED).parts.every(p => p.morphs.length === 0)).toBe(true);
+  });
+
+  it('rejects an unknown channel and a malformed value with the line, in the parser voice', () => {
+    const bad = (w: string) => () => parseBlob(PAINTED.replace('blob torso on pelvis at=0.5 r=0.1', `blob torso on pelvis at=0.5 r=0.1 ${w}`));
+    expect(bad('morph=grin:(0,0,0)')).toThrow(BlobError);
+    expect(bad('morph=grin:(0,0,0)')).toThrow(/unknown morph channel "grin"/);
+    expect(bad('morph=smile:(0,0)')).toThrow(/three numbers/);
+    try { bad('morph=smile:*0')(); } catch (e) { expect((e as BlobError).line).toBe(10); }
+  });
+
+  it('rejects the same channel twice on one line', () => {
+    expect(() => parseBlob(PAINTED.replace('blob torso on pelvis at=0.5 r=0.1',
+      'blob torso on pelvis at=0.5 r=0.1 morph=smile:*1.1 morph=smile:(0,0.001,0)'))).toThrow(/appears twice/);
+  });
+
+  it('only moves a blob or a bar', () => {
+    expect(() => parseBlob(PAINTED.replace('blob torso on pelvis at=0.5 r=0.1',
+      'blob torso on pelvis at=0.5 r=0.1\n  carve on skull at=0.5 r=0.02 morph=smile:*1.1'))).toThrow(/only moves a blob or a bar, not a carve/);
+  });
+
+  it('is rejected in a bones block', () => {
+    expect(() => parseBlob(`${PAINTED}bones\n  blob head on skull at=0.5 r=0.02 morph=smile:*1.1\n`)).toThrow(/bones block/);
+  });
+});

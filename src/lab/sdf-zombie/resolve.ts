@@ -125,6 +125,9 @@ export function placePrims(
       // pass — placePrims rebuilds prims field-by-field, so an attribute
       // that isn't copied here silently never reaches the field.
       ...(p.strand === undefined ? {} : { strand: p.strand }),
+      // The morphs ride through placement too (morph.ts): they are deltas in the rest pose's world axes, applied by applyRig
+      // to wherever placement put the prim. Forgetting this line would make every morph= silently do nothing.
+      ...(p.morphs === undefined ? {} : { morphs: p.morphs }),
     };
   });
 }

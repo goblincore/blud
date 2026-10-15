@@ -4,6 +4,7 @@
 
 import { type BlobBone, type BlobDoc, type BlobLine, type BlobPart, type BlobPartKind, type BlobStance, BlobError } from './blob-ast';
 import { STRAND_DEFAULT_CYCLES, STRAND_DEFAULT_FAT, STRAND_DEFAULT_WAVE } from './strand';
+import { parseMorph, type PrimMorph } from './morph';
 
 /**
  * A `BlobLine[]` with one extra property: the comment/blank trivia that
@@ -179,6 +180,25 @@ function parseGlossArg(l: BlobLine, painted: boolean): number | null {
   if (g < 0 || g > 1) throw new BlobError(`gloss= is 0..1, got ${g}`, l.line, l.indent + 1);
   if (!painted) throw new BlobError('gloss= only means something on a coloured primitive; add color=rrggbb', l.line, l.indent + 1);
   return g;
+}
+
+/** Every `morph=<channel>:<terms>` word on the line (goblin expressions Task 12; morph.ts has the grammar), one per channel.
+ *  Each error names the word's column. */
+function parseMorphArgs(l: BlobLine): PrimMorph[] {
+  const out: PrimMorph[] = [];
+  l.words.forEach((w, idx) => {
+    if (!w.startsWith('morph=')) return;
+    let m: PrimMorph;
+    try {
+      m = parseMorph(w.slice('morph='.length));
+    } catch (e) {
+      throw new BlobError((e as Error).message, l.line, wordCol(l, idx));
+    }
+    if (out.some(o => o.channel === m.channel))
+      throw new BlobError(`morph=${m.channel}: appears twice on one line; put all its terms in one word`, l.line, wordCol(l, idx));
+    out.push(m);
+  });
+  return out;
 }
 
 /** The bare word `metal`, and only beside a `color=` — same gate and same
@@ -531,8 +551,13 @@ function parseBodyLine(l: BlobLine, s: ParseState, into: BlobPart[]): void {
     strandWave: numArg(l, 'wave', STRAND_DEFAULT_WAVE),
     strandCycles: numArg(l, 'cycles', STRAND_DEFAULT_CYCLES),
     strandFat: numArg(l, 'fat', STRAND_DEFAULT_FAT),
+    // `morph=<channel>:<terms>`: per-channel deltas the expression layer's weights scale (morph.ts). Gated to blob/bar below.
+    morphs: parseMorphArgs(l),
     src: l,
   } satisfies BlobPart;
+
+  if (part.morphs.length > 0 && kind !== 'blob' && kind !== 'bar')
+    throw new BlobError(`morph= only moves a blob or a bar, not a ${kind}`, l.line, l.indent + 1);
 
   if (kind === 'shell') {
     if (part.thickness <= 0)
@@ -600,6 +625,9 @@ function parseBonesLine(l: BlobLine, s: ParseState): void {
     throw new BlobError(
       'strand= is not supported in a bones block — the bone fold does not '
       + 'read strand rows (hair is flesh, not bone)', l.line, l.indent + 1);
+  // morph= on a bone would do nothing: applyRig morphs flesh prims only (a face expression moves skin, not the skull).
+  if (added.morphs.length > 0)
+    throw new BlobError('morph= is not supported in a bones block (expressions move flesh, not bone)', l.line, l.indent + 1);
 }
 
 /**

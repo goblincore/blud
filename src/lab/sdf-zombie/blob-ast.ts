@@ -2,6 +2,8 @@
 //
 // The `.blob` document model: line records with their comments, bones, parts, stance and the BlobError type.
 
+import type { PrimMorph } from './morph';
+
 /**
  * One significant source line, with the trivia that preceded it.
  *
@@ -168,6 +170,8 @@ export interface BlobPart {
   strandWave: number;
   strandCycles: number;
   strandFat: number;
+  /** `morph=<channel>:<terms>` words, one per channel (goblin expressions Task 12; morph.ts). Empty = none. */
+  morphs: PrimMorph[];
   src: BlobLine;
 }
 
