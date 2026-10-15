@@ -71,8 +71,11 @@ describe('the grin is a smile, not surprise (Task 15)', () => {
   const peak = (name: string) => actuate(expressionAt(GOBLIN_EXPRESSIONS[name]!, 99), authored, GOBLIN_EXPRESSION_TUNING);
   const grin = peak('grin'), smile = peak('smile'), surprise = peak('surprise');
 
-  it('the grin barely opens the jaw (at most 0.12 rad at its peak) and smiles with the eyes: squint, brows down', () => {
-    expect(grin.jawGape).toBeLessThanOrEqual(0.12 + 1e-9);
+  // Task 18 (the cartoon grin) opened it to 0.18 rad: the crescent's height is the jaw's, its width and upturned corners the
+  // smile morphs', and the whole head squashes (wider, shorter).
+  it('the grin opens the jaw part way (at most 0.18 rad at its peak), squashes the head and smiles with the eyes: squint, brows down', () => {
+    expect(grin.jawGape).toBeLessThanOrEqual(0.18 + 1e-9);
+    expect(grin.morphs.squash).toBeGreaterThanOrEqual(0.8);
     expect(grin.morphs.smile).toBe(1);
     expect(grin.morphs.squint).toBeGreaterThanOrEqual(0.7);
     expect(grin.morphs.squint).toBeLessThanOrEqual(0.9);
@@ -80,7 +83,7 @@ describe('the grin is a smile, not surprise (Task 15)', () => {
     // The jaw never opens past its peak on the way in.
     const end = GOBLIN_EXPRESSIONS.grin!.keys.at(-1)!.t;
     for (let k = 0; k <= 20; k++)
-      expect(actuate(expressionAt(GOBLIN_EXPRESSIONS.grin!, (end * k) / 20), authored, GOBLIN_EXPRESSION_TUNING).jawGape).toBeLessThanOrEqual(0.12 + 1e-9);
+      expect(actuate(expressionAt(GOBLIN_EXPRESSIONS.grin!, (end * k) / 20), authored, GOBLIN_EXPRESSION_TUNING).jawGape).toBeLessThanOrEqual(0.18 + 1e-9);
   });
 
   it('the grin\'s lit eye is at most 60% of the neutral\'s on the sheet; the friendly smile narrows it too', () => {
@@ -103,6 +106,8 @@ describe('the grin is a smile, not surprise (Task 15)', () => {
     expect(surprise.sheet.browDrop).toBeLessThan(0);
     expect(lit(surprise.sheet)).toBeGreaterThan(lit(authored));
     expect(surprise.jawGape).toBeGreaterThan(grin.jawGape * 2);
+    // Task 18: and the head stretches (narrower, taller) where the grin squashes it.
+    expect(surprise.morphs.squash).toBeLessThan(0);
   });
 });
 

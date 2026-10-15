@@ -18,10 +18,12 @@ export const GOBLIN_EXPRESSION_TUNING: ExpressionTuning = {
   maxGape: 0.6,
   // 0.9 -> 0.35 (Task 10, tuning/paint-locate.png): at 0.9 the grin's painted U bottomed out ~2.8 cm under the seam, ON the lower lip
   // (a dark band across it, a second mouth when it shows). At 0.35 the U's middle falls inside the opening and only its arms show.
-  smileCurve: 0.35,
+  // 0.35 -> 0.6, smileWiden 0.5 -> 0.7, smileMouthOpen 0.015 -> 0.03 (Task 18, the cartoon grin): the lower lip now sags far below
+  // the seam, so a deeper, wider, thicker painted U lies inside the dark opening and its arms darken the crescent's upturned ends.
+  smileCurve: 0.6,
   // 0.25 -> 0.5 (Task 10, tuning/paint-locate.png): the arms only show OUTSIDE the opening (x +-4 cm); wider paint gives them room to
   // rise from the opening's lower corners to the seam (the only "corners up" the sheet can draw: its corners sit at mouthRise).
-  smileWiden: 0.5,
+  smileWiden: 0.7,
   curlCurve: 1.0,
   curlNarrow: 0.25,
   // 10 -> 25 deg and 0.2 -> 0.3 (Task 10, tuning/brow-nokit.png): at 10 the scowl's brows were indistinguishable from the neutral's
@@ -31,7 +33,7 @@ export const GOBLIN_EXPRESSION_TUNING: ExpressionTuning = {
   browHeavy: 0.3,
   gapeMouthOpen: -0.02,
   // 0.01 -> 0.015 (Task 10, tuning/paint-locate.png): with the shallower U the arms are short; a touch thicker so they survive the grain.
-  smileMouthOpen: 0.015,
+  smileMouthOpen: 0.03,
   // THE EYES (Task 15, owner on the grin clip: "smiling involves also movement of the eye area where the eyes would have to get
   // smaller with the cheeks and eyelids closing more ... it actually reads more like surprise"). The eye is ~6x5 texels of a 64x64
   // sheet, so every number here was judged on frames (docs/dev-notes/2026-10-13-goblin-expressions/smile/):
@@ -68,8 +70,11 @@ const GRIN: ExpressionClip = {
   // SURPRISE (a dropping jaw is most of what moved).
   keys: [
     key(0, {}),
-    key(0.3, { gape: 0.12, smile: 0.7, browDown: 0.4, squint: 0.3 }, 'smooth'),
-    key(0.6, { gape: 0.2, smile: 1, browDown: 0.8, squint: 0.8 }, 'smooth'),
+    // Task 18 (owner: "when he grins it should be a bit cartoonish and exaggerated"): the head squashes (wider, shorter) as the grin
+    // spreads, and the jaw opens to 0.18 rad (was 0.12): the crescent's height. It still reads as a grin, not surprise: the
+    // corners ride 3 cm up into the cheek rolls, the eyes are slits under a V brow (docs/dev-notes/.../cartoon/).
+    key(0.3, { gape: 0.12, smile: 0.7, browDown: 0.4, squint: 0.3, squash: 0.4 }, 'smooth'),
+    key(0.6, { gape: 0.3, smile: 1, browDown: 0.8, squint: 0.8, squash: 1 }, 'smooth'),
   ],
 };
 
@@ -79,15 +84,18 @@ const SMILE: ExpressionClip = {
   name: 'smile',
   keys: [
     key(0, {}),
-    key(0.3, { gape: 0.04, smile: 0.7, squint: 0.3, browDown: -0.1 }, 'smooth'),
-    key(0.6, { gape: 0.08, smile: 1, squint: 1, browDown: -0.2 }, 'smooth'),
+    // Task 18: half the grin's squash (a happy cartoon squash too).
+    key(0.3, { gape: 0.04, smile: 0.7, squint: 0.3, browDown: -0.1, squash: 0.25 }, 'smooth'),
+    key(0.6, { gape: 0.08, smile: 1, squint: 1, browDown: -0.2, squash: 0.5 }, 'smooth'),
   ],
 };
 
 /** Surprise (Task 15): the control the grin must NOT look like. The jaw drops, the brows go up, the eyes open; no smile, no squint. */
 const SURPRISE: ExpressionClip = {
   name: 'surprise',
-  keys: [key(0, {}), key(0.35, { gape: 0.5, browDown: -1 }, 'smooth')],
+  // Task 18: the head STRETCHES (squash -0.6: narrower, taller), the opposite of the grin's squash, and the jaw drops further
+  // (gape 0.5 -> 0.65, 0.39 rad) so it stays more than twice the grin's new 0.18.
+  keys: [key(0, {}), key(0.35, { gape: 0.65, browDown: -1, squash: -0.6 }, 'smooth')],
 };
 
 /** Menace: brows down hard, the lip curled into a frown, the jaw just parted to bare the fangs. */
