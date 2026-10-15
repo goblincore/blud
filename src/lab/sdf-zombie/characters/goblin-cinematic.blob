@@ -364,10 +364,10 @@ body
   blob head on skull at=0.0 r=0.011 tall=0.55 blend=0.002 offset=(-0.034,0.0204,0.0811) tip=(0.068,0,0) bend=(0,0,0.024) morph=smile:(-0.013,0.004,0)tip(0.026,0,0)bend(0,-0.008,0)
   # CHEEK FILL (skull, both sides), at x 0.046, y 1.122: the jaw/skull seam wraps round the side of the face and left a 4 mm
   # waist in the front silhouette at y 1.12. This fills it (silhouette back within 1 mm of the approved head at every height).
-  blob head on skull at=0.0 r=0.012 blend=0.006 offset=(0.046,0.0034,0.0271) both morph=smile:(0.006,0.009,0.003)*1.2
+  blob head on skull at=0.0 r=0.012 blend=0.006 offset=(0.046,0.0034,0.0271) both morph=smile:(0.006,0.006,0.002)*1.25blend*2.5
   # MOUTH CORNERS (jaw, both sides), at x 0.037, y 1.124: the lowered chin left the corners open at rest (the throat bar showed
   # there). They drop with the jaw, so they never plug the opening.
-  blob head on jaw at=1.0 r=0.010 blend=0.004 offset=(0.037,0.0365,-0.0048) both morph=smile:(0.013,0.004,-0.009)*0.65
+  blob head on jaw at=1.0 r=0.010 blend=0.004 offset=(0.037,0.0365,-0.0048) both morph=smile:(0.012,0.004,-0.008)*0.85blend*3
   # THE FLOOR (jaw): a dark flat disc behind the lower lip, top y 1.131, z 0.046-0.106, the lower teeth rooted in it. With the
   # hinge on the lip line the opening jaw TIPS its top toward the viewer, and without a floor the chin's top showed through the
   # open mouth as lit green skin. Dark like the throat bar and buried at rest the same way (goblin-cinematic-blob.test.ts).
@@ -397,6 +397,15 @@ body
   #  - MOUTH CORNERS: out 13 mm, up 4, back 9 (was up 8, out 2), x0.65: up 8 they plugged the opening's ends.
   #  - CHEEK FILL: out 6, up 9, forward 3, x1.2 (was 3/7/1, x1.15). UPPER RIDGE: ends out 13 (tip 26), up 4, middle down 1.
   #  - THROAT BAR: ends out 8 mm each (it is what shows dark at the widened corners).
+  # TASK 16 (owner, screenshot 2: "some weird shape stuff happening in the grin"). Marker frames (each prim painted its own colour)
+  # put names on it: the round KNOB at the mouth corner was the corner pair (a 6.5 mm ball pushed 13 mm out to the lower lip's
+  # end, blend 0.004), the separate CHEEK BUMP was the cheek fill (a 14 mm ball pushed up 9 mm, blend 0.006), and the dark crease
+  # lines were NOT geometry (the CPU field is smooth there): they were the skin noise's rest-space anchor jumping at the edge of
+  # every morphed prim (fixed in rig-bind.ts morphedRest, used by the lab's upload). Now both pairs MELT on the smile (morph.ts
+  # `blend*k`) instead of sitting on the face as balls:
+  #  - MOUTH CORNERS: out 12, up 4, back 8 (was 13/4/9), x0.85 (was 0.65: a melted corner needs the volume to fill the corner),
+  #    blend x3.
+  #  - CHEEK FILL: out 6, up 6, forward 2 (was up 9, forward 3: it rose clear of the seam it fills), x1.25, blend x2.5.
 
   # NO GROOVE ANY MORE (Task 3b). A groove at y 1.1327 drew the mouth line from 2026-08 to Task 3b, but a groove cuts 4 mm of
   # FIELD from every prim in the head cluster, teeth included: once the jaw opened, it bit the upper teeth in half right where

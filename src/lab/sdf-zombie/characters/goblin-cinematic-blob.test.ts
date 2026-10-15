@@ -553,6 +553,18 @@ describe('goblin face morphs (Task 12: the smile widens the chin, pushes the che
     expect(morphedRest(body, undefined)).toBe(body);
   });
 
+  // TASK 16 (owner's screenshot 2: "some weird shape stuff happening in the grin"): the mouth corner pair and the cheek fill are
+  // small balls on a smile; pushed out they stood off the face as a knob at the corner and a separate round bump on the cheek.
+  // Their smile morphs now MELT them (blend*k), so they read as the corner and the cheek pushing up, not as balls.
+  it('the smile melts the mouth corners and the cheek fill into the face (their blend at least 2.5x at the grin)', () => {
+    const g = grin(true);
+    const corners = body.prims.map((p, i) => [p, i] as const).filter(([p]) => p.bone === 'jaw' && p.radius === 0.010 && !p.bend && p.morphs);
+    const cheeks = body.prims.map((p, i) => [p, i] as const).filter(([p]) => p.bone === 'skull' && p.radius === 0.012 && p.morphs && !p.color);
+    expect(corners.length).toBe(2);
+    expect(cheeks.length).toBe(2);
+    for (const [p, i] of [...corners, ...cheeks]) expect(g.prims[i]!.blendK / p.blendK, `prim ${i}`).toBeGreaterThanOrEqual(2.5);
+  });
+
   it('the grin widens the lower face by most of a centimetre a side at the chin (owner: "his chins n stuff should get wider")', () => {
     const on = grin(true), off = grin(false);
     for (const y of [1.07, 1.08]) expect(reachX(on, y) - reachX(off, y), `y ${y}`).toBeGreaterThan(0.007);
