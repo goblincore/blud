@@ -4,6 +4,82 @@ Spec: [`docs/superpowers/specs/2026-10-13-goblin-expressions-design.md`](../../s
 Plan: [`docs/superpowers/plans/2026-10-13-goblin-expressions.md`](../../superpowers/plans/2026-10-13-goblin-expressions.md).
 Task 3b's own notes (the mouth moved to the lip line, the per-body hinge): [`grin/NOTES-grin.md`](grin/NOTES-grin.md).
 
+## Task 19 (2026-10-15): an evil grin with a brow furrow
+
+Owner on PR #48: "a variant like an 'evil grin' where the brows angle more inward to produce a furrow". `grin` stays exactly as it
+was; `evil-grin` is a new clip beside it, and `scowl` gets the furrow too.
+
+**The clip:** [`evil-grin/evil-grin-anim.mp4`](evil-grin/evil-grin-anim.mp4), 12 fps, three panels: grin front, evil-grin front,
+evil-grin at yaw 0.7 (`BLOB_EXPR=<name> BLOB_EXPR_SWEEP=0:0.92 BLOB_YAW=<yaw>`, 24 frames, `BLOB_DIST=0.36 BLOB_TARGET_Y=1.17
+BLOB_PITCH=0.05`, last frame held 1.5 s). Stills: [`evil-grin/grin-vs-evil-grin-close.png`](evil-grin/grin-vs-evil-grin-close.png)
+(eye/brow close-up, `BLOB_DIST=0.3 BLOB_TARGET_Y=1.2`; front above, 45 degrees below; grin left, evil grin right),
+[`evil-grin/grin-vs-evil-grin-face.png`](evil-grin/grin-vs-evil-grin-face.png) (the same at the whole-face distance),
+[`evil-grin/scowl-before-after.png`](evil-grin/scowl-before-after.png) (scowl without and with its furrow, front).
+
+### What was built
+
+- **`expression.ts`: a `furrow` channel** (0..1, clamped, in `CHANNEL_NAMES`/`REST_CHANNELS`, handed on in `morphs`). `actuate`
+  maps it to the sheet through an optional tuning field `furrowSheet` (absent: no paint); the geometry is the character's own
+  `furrow` morph words. `sheetKey` includes `browFurrow`. Rest and weight 0 hand back the authored sheet exactly.
+- **`blob-face-sheet.ts`: `browFurrow`** (default 0; every authored sheet's FNV pin unchanged): two short dark vertical creases at
+  sheet x 0.5 +- 0.026 (one texel column each on the 64 sheet, about 5 mm either side of the midline on the goblin) from the brows'
+  inner ends down to the top of the nose ridge, fading at both ends, and the painted brows' inner ends pulled down up to 0.03 uv. A
+  first version also lightened the strip between the creases (the pinched bulge); on the GPU that read as a raised tab, so it went.
+- **`goblin-cinematic.blob`, one `both` line (2 prims):** a short upright bar at each inner brow head (r 2.8 mm, from the V's knot up
+  and a little in), buried 6 mm inside the glabella at rest; `morph=furrow:(-0.001,-0.002,0.0265)*1.8` brings it forward onto the
+  dropped brow ridge and fattens it to 5 mm, with a small blend (1.2 mm) so the pair leaves a crease where they meet at the midline.
+- **The brow ridge's face-block line** gains `furrow:bend(0,-0.014,0)*(0.92,1,1)`: on top of browDown's V the middle dips 7 mm more
+  and the bar is 8% narrower, so the brows angle down and in toward the nose.
+- **Clips** (`goblin-expressions.ts`): `evil-grin` = the grin's keys and timing with browDown 1 (grin 0.8), furrow 1 and squint 0.9
+  (grin 0.8) at the peak (0.5 / 0.5 / 0.35 at the mid key); the mouth (gape, smile, squash) is the grin's to the bit (tested).
+  `scowl` gets furrow 0.8. Tuning `furrowSheet: 1`.
+
+### The numbers (CPU, at the evil-grin clip's peak; pinned in goblin-cinematic-blob.test.ts unless noted)
+
+| | |
+|---|---|
+| crease depth (the face's front at the midline vs at x +-0.011, y 1.2475-1.2525) | **3.1-3.9 mm** (pin > 2.5) |
+| inner brow (x 0.024) ridge line, furrow 0 -> 1 | **8 mm lower** (1.2460 -> 1.2380) and **10 mm forward**; the outer end (x 0.045) 1.5 mm lower |
+| the pair at rest | at least 1 mm under the rest flesh along its length (pinned); the head-profile CLI prints exactly what it did |
+| grin (furrow 0) | every prim but the pair poses exactly as the .blob without the furrow line and word (pinned) |
+| sheet eye (texels over the glow threshold, not pinned) | neutral 57, grin 19, **evil grin 14**, scowl 37 |
+
+### What I see
+
+- **Grin vs evil grin, front** (both distances): the same crescent mouth, teeth and cheek rolls. Above it the evil grin's brows come
+  down and knot over the nose root, the knot sits lower and heavier, the eyes are narrower red slits (smaller than the grin's), and
+  two short dark vertical creases stand between the brows: the "11" of a frown. At the close-up the creases are two texel-wide dark
+  lines (the 64 sheet's grain; they read as lines, not as a slot); at the whole-face distance they still read as a small vertical
+  furrow mark between the brows. The geometric crease between the bulges is subtle from the front under the top-front key light (the
+  lit lobes either side of it show more than the valley); the paint carries the front read, the geometry the three-quarter.
+- **45 degrees / yaw 0.7:** the clearest difference. The grin's brow is a smooth ledge; the evil grin's inner brow bunches into a
+  knot over the nose root with a crease line in it, so the brow overhang ends in a frowning lump. It does not look like a hole or a
+  wound; at yaw 0.7 it can read as a slightly knobbly bump on the brow's end (a round knob more than a crease from that side).
+- **Scowl:** the same knot and a fainter pair of creases (0.8); a mild addition, it does not change the scowl's character.
+- Rounds: three GPU capture rounds (plus the scowl and the final clips). Round 1 (bulges 1 mm proud of the ridge) had no geometric
+  crease (the brow ridge's large browDown blend filled the valley); round 2 pushed them 4 mm forward and apart (crease 3.5-4 mm) and
+  dropped the paint's light strip; round 3 took 2 mm off the bulges' forward move (the knob at yaw 0.7 barely changed: most of it is
+  the ridge's deeper V). A smaller ridge blend under furrow was tried on the CPU and dropped: the whole ridge thinned and the pair
+  stood off it as separate lumps.
+
+### Checks
+
+- Tests: expression, blob-face-sheet, morph, blob-parse, goblin-cinematic-blob, goblin-expressions, rig-bind, pack, pack-golden,
+  goblin-blob, bride-blob: 507 passed. `npm run typecheck` clean. `npm run test:changed` 28 files, 715 passed.
+- **Golden re-recorded:** pack-golden `goblin-cinematic.blob` `871a9afd1a714c6b -> 711d0e9b041b9a72`, only for the furrow pair's
+  line (the .blob with that line deleted hashes to the old pin, checked; the brow's `furrow:` word is a face-block morph, never
+  packed); pack.test.ts's prof row +2 prof-0.
+- Rest profile CLI byte-identical; the base goblin's four files empty against `f81e5b10`.
+
+### Open items (Task 19)
+
+1. **The owner's look.** In particular whether the paint creases are too graphic at the close-up (one texel column each; weaker or
+   absent is `furrowSheet` < 1) and whether the inner-brow knot at three-quarter is too lumpy (it is mostly the ridge's deeper V:
+   the brow line's `furrow:bend` y).
+2. The painted brows' inner ends are pulled down, but under the ridge's shadow they barely show (as since Task 10); the "inward
+   angle" is carried by the ridge's V, the heavy inward-slanted upper lid (browDown 1) and the narrower eye.
+3. Cost not measured: two more prims buried in the head cluster at rest (straight blobs, the cheapest kind).
+
 ## Task 18 (2026-10-15): a cartoon grin: head squash, cheek rolls, harder morphs
 
 Owner on PR #48: "i think we need to figure out a way to make his face distort more, like when he grins it should be a bit
