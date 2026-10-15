@@ -368,3 +368,48 @@ describe('goblin teeth and mouth interior (expression pass)', () => {
     for (const i of upperTeeth) expect(grin.has(i), `upper tooth x ${full.prims[i]!.a[0]} hidden at 0.15`).toBe(true);
   });
 });
+
+describe('goblin face morphs (Task 12: the smile widens the chin, pushes the cheeks and corners, lifts the upper lip)', () => {
+  const doc = parseBlob(src);
+  const body = buildBody(compileBlob(doc, compileFace(doc)));
+  const stripped = src.replace(/ morph=\S+/g, '');
+  const plainDoc = parseBlob(stripped);
+  const plain = buildBody(compileBlob(plainDoc, compileFace(plainDoc)));
+  const bound = bindRig(body);
+  const grin = (morphs: boolean) => applyRig(body, { ...bound, rig: { ...bound.rig, jawGape: 0.204,
+    ...(morphs ? { morphs: { gape: 0.34, smile: 1, browDown: 1, lipCurl: 0, lid: 0 } } : {}) } }, 0);
+  const reachX = (b: typeof body, y: number) => Math.max(...[0.02, 0.04, 0.06, 0.08].map(z => {
+    let t = 0; if (sdBody([0, y, z], b) > 0) return 0;
+    while (t < 0.2 && sdBody([t, y, z], b) <= 0) t += 0.0005;
+    return t;
+  }));
+
+  it('morphs existing prims only, on the smile alone: the same prims as the .blob without its morph words', () => {
+    expect(body.prims.length).toBe(plain.prims.length);
+    body.prims.forEach((p, i) => {
+      const { morphs: _m, ...rest } = p;
+      expect(rest, `prim ${i}`).toEqual(plain.prims[i]);
+    });
+    const morphed = body.prims.filter(p => p.morphs);
+    expect(morphed.length, 'upper lip, lower lip, chin, upper ridge, cheek pair, corner pair').toBe(8);
+    for (const p of morphed) expect(p.morphs!.map(m => m.channel)).toEqual(['smile']);
+  });
+
+  it('the grin widens the lower face by most of a centimetre a side at the chin (owner: "his chins n stuff should get wider")', () => {
+    const on = grin(true), off = grin(false);
+    for (const y of [1.07, 1.08]) expect(reachX(on, y) - reachX(off, y), `y ${y}`).toBeGreaterThan(0.007);
+  });
+
+  it('the grin still bares every upper tooth (front rays over the mouth, as the teeth tests sweep it)', () => {
+    const on = grin(true);
+    const teeth = on.prims.map((p, i) => [p, i] as const).filter(([p]) => p.bone === 'skull' && p.color !== undefined && p.color[0] > 0.5);
+    expect(teeth.length).toBe(7);
+    const hit = new Set<number>();
+    for (let x = -0.05; x <= 0.0501; x += 0.001) for (let y = 1.09; y <= 1.15; y += 0.001) {
+      let z = 0.16;
+      while (z > -0.02) { const d = sdBody([x, y, z], on); if (d < 0.0002) break; z -= Math.max(d * 0.8, 0.0002); }
+      if (z > -0.02) hit.add(nearestPrim([x, y, z + 0.0002], on));
+    }
+    for (const [p, i] of teeth) expect(hit.has(i), `upper tooth x ${p.a[0].toFixed(3)}`).toBe(true);
+  });
+});

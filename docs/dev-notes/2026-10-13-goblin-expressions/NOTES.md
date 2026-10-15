@@ -190,6 +190,48 @@ fangs read as the longest. At 45 degrees the row is pale and visible under the o
 rather than black. In the shout the four lower teeth now read as small pale teeth along the floor instead of brown studs.
 Neutral is unchanged (the teeth are buried; `goblin-blob.test.ts` still pins that no tooth paints the rest face).
 
+## Task 12 (2026-10-15): the smile moves the face (per-prim morphs)
+
+Owner: "we might have to distort the face further like when smiling i feel his face geometry isnt changing enough like his
+chins n stuff should get wider". Approach C, minimal, as the spec's 2026-10-15 amendment describes: a `.blob` prim may carry
+`morph=<channel>:<terms>` (`(dx,dy,dz)` move, `tip(...)`, `bend(...)`, `*k` radius, `*(sx,sy,sz)` axes); `morph.ts` is the pure
+core; `applyRig` moves the prim's REST geometry by the channel's weight before the jaw opens and the head turns; `actuate`
+returns its clamped channels as `morphs`, which the lab's statue path and the actor path (`ActorStepInput.morphs`) put on
+`rig.morphs`. At weight 0 nothing moves: the morph data is never packed, `pack-golden.test.ts` did not move when the morph words
+were added, and `rig-bind.test.ts` proves no-weight and zero-weight poses identical to a body without morphs (rest, open jaw,
+turned body). Frames in [`morphs/`](morphs/).
+
+**What moves on `smile`** (8 existing prims, none added; `morphs/which-prim.png` paints each a colour, neutral left, grin right):
+the lower lip (blue: ends out and back, the middle sagging 7 mm under them, thinner), the mouth corners (red: up 8 mm and back
+8, smaller), the chin (magenta: 12% wider, 3 mm lower), the cheek fill (yellow: up 7, out 3, bigger), the upper ridge (cyan:
+ends up 2 mm, out 4) and the upper lip (orange: up 2 mm, 8% wider). The numbers and why are in `goblin.blob` ("THE SMILE MOVES
+THE FACE").
+
+**Measured** (CPU field, grin pose, gape 0.204 rad, front half-width of the head from the axis): with the morphs vs the same grin
+without them, +10.5 mm a side at y 1.07, +9.5 at 1.08, +7 at 1.09 (the chin); -2.5 mm at 1.11 (the corners tuck back).
+`goblin-blob.test.ts` pins more than 7 mm at 1.07-1.08, the same prims as the `.blob` without its morph words, and every upper tooth
+still bared. The teeth/gap ratio of the grin (Task 12 A's method) is 9.3 front / 3.2 at 45 degrees with the kit (10.6 / 3.4
+without): the curled corners close the side notch, so the 45-degree gap is darker than before.
+
+**What I see** (`morphs/grin-before-after.png`: left the grin with only the brighter teeth, right with the morphs; rows front kit,
+45 degrees kit, front no kit):
+
+- **Front: it reads as a SMILE now.** The opening is a U: the lower lip sags in the middle and its ends turn up into the corners,
+  which sit level with the upper row's roots; the upper row and both fangs hang over a dark crescent. The lower face is visibly
+  wider than the neutral's (the chin ring sticks out past the cheeks). With the sunglasses on, this is the first expression whose
+  mouth SHAPE differs from the others, not only the gape.
+- **45 degrees:** the side notch (the dark gap at the mouth's corner) is gone; the corner turns up into a small knob with a dark
+  crease round it (the corner prim against the lower lip's chamfer), and the cheek bunches above it as a separate round bump. It
+  reads as a cartoon grin with jowls; the knob and its crease are the least natural part.
+- **The chin is a ring.** Widening it makes the lower face read as a fat roll (the "puck" the Task 10 notes describe, wider). It
+  is what the owner asked for ("chins wider"), but it is a lot of chin; `*(1.12,1,1)` is the knob to turn.
+- **The shout and the scowl do not change** (no `gape`/`lipCurl`/`browDown` morphs). Two `gape` morphs to round the shout's box
+  were tried (the upper ridge arched, the corners in and up, the lower lip sagging): `morphs/shout-gape-try.png` (left without,
+  right with). The top stayed flat (the face block's ellipsoid makes that edge, and it cannot morph), the corners swallowed the two
+  outer lower teeth, and at the grin's 0.34 gape the opening became a V. Dropped.
+- `goblin-expressions.ts` needed no retune: the painted sheet's smile was already invisible in the frames, the geometry does the
+  job now.
+
 ## How to run
 
 - The lab: `?character=goblin` on `/sdf-lab-webgpu.html`, panel section "expression" (hold, play, blink).
