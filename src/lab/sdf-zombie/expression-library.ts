@@ -11,7 +11,8 @@ export interface ExpressionSet {
 }
 
 const LIBRARY: Readonly<Record<string, ExpressionSet>> = {
-  goblin: { clips: GOBLIN_EXPRESSIONS, tuning: GOBLIN_EXPRESSION_TUNING },
+  // The CINEMATIC goblin only (Task 13, owner 2026-10-15): the base goblin has no jaw, teeth or morphs, so no expressions.
+  'goblin-cinematic': { clips: GOBLIN_EXPRESSIONS, tuning: GOBLIN_EXPRESSION_TUNING },
 };
 
 export function expressionsFor(character: string): ExpressionSet | null {

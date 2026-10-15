@@ -6,7 +6,8 @@ import { expressionAt, actuate, CHANNEL_NAMES } from '../expression';
 import { JAW_MAX_GAPE } from '../jaw';
 import { compileSheet } from '../blob-compile';
 import { parseBlob } from '../blob-parse';
-import goblinSrc from './goblin.blob?raw';
+// The CINEMATIC goblin's face (Task 13): the base goblin.blob has no jaw, teeth or morphs.
+import goblinSrc from './goblin-cinematic.blob?raw';
 import { buildBody } from '../build-body';
 import { compileBlob, compileFace } from '../blob-compile';
 import { makeActorMotion, stepActorMotion, emptyActorSignals } from '../actor';
@@ -17,9 +18,10 @@ import type { MorphWeights } from '../morph';
 const authored = compileSheet(parseBlob(goblinSrc))!;
 
 describe('goblin expressions', () => {
-  it('are registered for the goblin and no one else', () => {
-    expect(expressionsFor('goblin')?.clips).toBe(GOBLIN_EXPRESSIONS);
-    expect(expressionsFor('goblin')?.tuning).toBe(GOBLIN_EXPRESSION_TUNING);
+  it('are registered for the cinematic goblin and no one else (not the base goblin: Task 13)', () => {
+    expect(expressionsFor('goblin-cinematic')?.clips).toBe(GOBLIN_EXPRESSIONS);
+    expect(expressionsFor('goblin-cinematic')?.tuning).toBe(GOBLIN_EXPRESSION_TUNING);
+    expect(expressionsFor('goblin')).toBeNull();
     expect(Object.keys(GOBLIN_EXPRESSIONS).sort()).toEqual(['grin', 'neutral', 'scowl', 'shout']);
     expect(expressionsFor('zombie')).toBeNull();
   });
@@ -71,7 +73,7 @@ describe('the motion path takes an expression gape', () => {
       f = stepActorMotion(m, {
         current: body, dt: 1 / 60, wander: false, armStyle: undefined, headingFollow: 0, gazeFollow: 0,
         bounds: { minX: -50, maxX: 50, minZ: -50, maxZ: 50 }, rng, signals: emptyActorSignals(),
-        profile: motionProfileFor('goblin'), forceSpeed: 0,
+        profile: motionProfileFor('goblin-cinematic'), forceSpeed: 0,
         ...(jawGape === undefined ? {} : { jawGape }),
         ...(w ? { morphs: w } : {}),
       });

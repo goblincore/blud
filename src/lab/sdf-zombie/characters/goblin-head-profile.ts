@@ -4,7 +4,11 @@
 // docs/superpowers/plans/2026-10-13-goblin-expressions.md). The split puts the lower face on a `jaw` bone; the owner approved the
 // head as it stood, so at rest the silhouette has to land where it did. Each probe walks from a point INSIDE the flesh along a
 // direction until the field turns positive (the same 0.5 mm march goblin-blob.test.ts's `reach` uses) and reports the distance.
-// Used by goblin-blob.test.ts and scripts/goblin-head-profile.ts (the tuning loop).
+// Used by goblin-head-profile.test.ts, goblin-cinematic-blob.test.ts and scripts/goblin-head-profile.ts (the tuning loop).
+//
+// TWO SETS SINCE TASK 13 (2026-10-15): the face rig moved to goblin-cinematic.blob and the base goblin.blob went back to its
+// pre-expression head (f81e5b10). GOBLIN_PROFILE_PROBES are the original Task 1 pins, which the base goblin must keep;
+// CINEMATIC_PROFILE_PROBES are the variant's, the same probes with the one Task 3b re-pin (the mouth line).
 import { sdBody } from '../validate';
 import type { BuildResult } from '../build-body';
 import type { Vec3 } from '../types';
@@ -20,7 +24,22 @@ export interface ProfileProbe {
   want: number;
 }
 
-export const PROFILE_PROBES: readonly ProfileProbe[] = [
+/** The base goblin's head (goblin.blob), as pinned before the jaw split: these numbers never move. */
+export const GOBLIN_PROFILE_PROBES: readonly ProfileProbe[] = [
+  // Front of the face, x = 0, going forward from the head's axis: chin, lower lip, mouth groove.
+  { name: 'front y1.09 (chin)', from: [0, 1.09, 0], dir: [0, 0, 1], want: 0.1025 },
+  { name: 'front y1.11 (lower lip)', from: [0, 1.11, 0], dir: [0, 0, 1], want: 0.118 },
+  { name: 'front y1.13 (groove)', from: [0, 1.13, 0], dir: [0, 0, 1], want: 0.116 },
+  // Half-width of the face at three heights, going out from the axis.
+  { name: 'half-width y1.10', from: [0, 1.10, 0.03], dir: [1, 0, 0], want: 0.054 },
+  { name: 'half-width y1.15', from: [0, 1.15, 0.03], dir: [1, 0, 0], want: 0.074 },
+  { name: 'half-width y1.20', from: [0, 1.20, 0.03], dir: [1, 0, 0], want: 0.0855 },
+  // The underside of the chin, going down.
+  { name: 'chin underside', from: [0, 1.10, 0.07], dir: [0, -1, 0], want: 0.029 },
+];
+
+/** The cinematic goblin's head (goblin-cinematic.blob): the base pins with the mouth line re-pinned by Task 3b. */
+export const CINEMATIC_PROFILE_PROBES: readonly ProfileProbe[] = [
   // Front of the face, x = 0, going forward from the head's axis: chin, lower lip, mouth groove.
   { name: 'front y1.09 (chin)', from: [0, 1.09, 0], dir: [0, 0, 1], want: 0.1025 },
   { name: 'front y1.11 (lower lip)', from: [0, 1.11, 0], dir: [0, 0, 1], want: 0.118 },
@@ -45,6 +64,11 @@ export function reachOf(body: BuildResult, p: Vec3, d: Vec3, max = 0.3): number 
   return NaN;
 }
 
-export function measureProfile(body: BuildResult): { probe: ProfileProbe; got: number }[] {
-  return PROFILE_PROBES.map(probe => ({ probe, got: reachOf(body, probe.from, probe.dir) }));
+/** The probe set for a .blob `model` name: the cinematic goblin's, or the base goblin's for anything else. */
+export function profileProbesFor(model: string): readonly ProfileProbe[] {
+  return model === 'goblin-cinematic' ? CINEMATIC_PROFILE_PROBES : GOBLIN_PROFILE_PROBES;
+}
+
+export function measureProfile(body: BuildResult, probes: readonly ProfileProbe[]): { probe: ProfileProbe; got: number }[] {
+  return probes.map(probe => ({ probe, got: reachOf(body, probe.from, probe.dir) }));
 }

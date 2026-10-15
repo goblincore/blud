@@ -4,6 +4,7 @@ import { bindRig, applyRig, headQuatOf, pinTips, HEAD_RIGID_TUNING } from './rig
 import { IK_TUNING } from './ik';
 import { headingDir } from './wander';
 import goblinSrc from './characters/goblin.blob?raw';
+import goblinCinematicSrc from './characters/goblin-cinematic.blob?raw';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { stepRig } from './rig';
@@ -593,9 +594,7 @@ describe('applyRig — rigid head membership is SHAPE-BLIND (2026-09-06)', () =>
     // a capsule that runs chest→neck tears its chest end loose.
     const body = goblin();
     const bound = bindRig(body);
-    // The jaw's rig point (goblin.blob grew a `jaw` carrier, expression pass 2026-10-13) is a HEAD point too: it sits under
-    // the nose, so the nose capsule's far end is nearer it than the skull's tip; bindRig never binds a non-`on jaw` prim to it.
-    const skullPts = new Set([bound.head!.pivot, bound.head!.tip, ...(bound.head!.jaw ? [bound.head!.jaw.point] : [])]);
+    const skullPts = new Set([bound.head!.pivot, bound.head!.tip]);
     const spanning = body.prims
       .map((p, i) => ({ p, i }))
       .filter(({ p }) => p.limb === 'head' && len(sub(p.a, p.b)) >= 1e-9)
@@ -807,9 +806,9 @@ describe('bindRig — limb prims bind within their own limb', () => {
 
 describe('applyRig — per-prim morphs (goblin expressions Task 12)', () => {
   // A goblin with morphs injected on three kinds of prim: a skull-owned face prim (bent, the upper ridge), a jaw prim (the lower
-  // lip) and an off-head prim (the left upper-arm bar).
-  // The goblin with its OWN morph words stripped (it has smile morphs since Task 12), so only the injected ones act.
-  const plain = buildBody(compileBlob(parseBlob(goblinSrc.replace(/ morph=\S+/g, ''))));
+  // lip) and an off-head prim (the left upper-arm bar). The CINEMATIC goblin (Task 13): only it has a jaw and the upper ridge.
+  // Its OWN morph words stripped (it has smile morphs since Task 12), so only the injected ones act.
+  const plain = buildBody(compileBlob(parseBlob(goblinCinematicSrc.replace(/ morph=\S+/g, ''))));
   const ridge = plain.prims.findIndex(p => p.bone === 'skull' && p.bend !== undefined && Math.abs(p.a[1] - 1.1394) < 0.01 && !p.color);
   const lip = plain.prims.findIndex(p => p.bone === 'jaw' && p.bend !== undefined && !p.color);
   const arm = plain.prims.findIndex(p => p.bone === 'upperarm.l');

@@ -393,11 +393,15 @@ describe('metal — prof bit 4, value 16 (hard-surface task 2)', () => {
     // shirt does not touch the metal bit.
     // 2026-10-03: the pelvis was reworked (one bar + gut blob became a squashed sphere, a gut blob and a mirrored glute pair): two
     // more prof-0 entries, no prof value changed.
-    // 2026-10-14 (expression pass): +1 prof-0 for the chin mass split onto the jaw (Task 2, which missed this pin) and +12
-    // prof-0 for the 11 teeth and the mouth-interior bar (Task 3; plain blends, no chamfer, so no prof bit). No prof value changed.
+    expect(packedProf('goblin.blob')).toEqual(
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,3]);
+    // goblin-cinematic.blob (goblin expressions Task 13, 2026-10-15): the goblin with the face rig, whose head the expression pass
+    // changed (this was goblin.blob's pin until the base goblin went back to f81e5b10). From the base goblin's row:
+    // 2026-10-14 (expression pass): +1 prof-0 for the chin mass split onto the jaw (Task 2) and +12 prof-0 for the 11 teeth and
+    // the mouth-interior bar (Task 3; plain blends, no chamfer, so no prof bit). No prof value changed.
     // 2026-10-14 (Task 3b, the mouth moved to the lip line): the groove (0) is gone; +5 prof-0 (cheek-fill pair, mouth-corner
     // pair, the jaw's dark floor); the lower lip became a bent chamfered bar (1 -> 3); +1 bent upper ridge (2). No metal bit.
-    expect(packedProf('goblin.blob')).toEqual(
+    expect(packedProf('goblin-cinematic.blob')).toEqual(
       [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,2,3,3]);
     // Five plate boxes at 24 = box bit 3 (8) + metal bit 4 (16); the two
     // 2s are bent horns, the 3s chamfered+bent ones. Re-pinned when the
@@ -510,9 +514,10 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
   //                  cultist-cowled variant likewise
   //   warbull     2  two red eyes under the brow (2026-09-27, the
   //                  reference plate's); pinned in warbull-blob.test.ts
-  //   goblin     11  its teeth, a FAINT 0.15 glow so they read inside the
-  //                  mouth's shade (goblin expressions Task 12, 2026-10-15);
-  //                  found by their paint string in goblin-blob.test.ts
+  //   goblin-cinematic 11  its teeth, a FAINT 0.15 glow so they read inside
+  //                  the mouth's shade (goblin expressions Task 12, 2026-10-15);
+  //                  found by their paint string in goblin-cinematic-blob.test.ts.
+  //                  The base goblin has no teeth (Task 13) and no glow.
   const GLOW_PRIMS: Record<string, number> = {
     'minotaur.blob': 2,
     'gargoyle.blob': 2,
@@ -524,7 +529,7 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
     'cultist.blob': 2,
     'cultist-cowled.blob': 2,
     'warbull.blob': 2,
-    'goblin.blob': 11,
+    'goblin-cinematic.blob': 11,
   };
 
   it('every shipped character packs primClip.w all-zero EXCEPT the named glow authors, at their exact authored count', () => {

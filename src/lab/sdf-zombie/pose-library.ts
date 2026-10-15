@@ -5,7 +5,8 @@
 import { GOBLIN_POSES } from './characters/goblin-poses';
 import type { PoseClip } from './pose';
 
-const LIBRARY: Readonly<Record<string, Readonly<Record<string, PoseClip>>>> = { goblin: GOBLIN_POSES };
+// goblin-cinematic is the goblin with the face rig (goblin expressions Task 13): the same skeleton, so the same clips.
+const LIBRARY: Readonly<Record<string, Readonly<Record<string, PoseClip>>>> = { goblin: GOBLIN_POSES, 'goblin-cinematic': GOBLIN_POSES };
 
 export function posesFor(character: string): Readonly<Record<string, PoseClip>> {
   return LIBRARY[character] ?? {};

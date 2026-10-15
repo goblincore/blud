@@ -100,9 +100,6 @@ skeleton
   bone chest  parent=spine1 dir=up pitch=9  len=0.1154
   bone neck   parent=chest  dir=up pitch=-17 len=0.1077
   bone skull  parent=neck   dir=up pitch=-5  len=0.1808
-  # THE JAW (goblin.blob, expression pass): a point-carrier from the skull pivot to the chin. No kit piece rides it; it is
-  # transcribed so the skeleton matches the .blob. Up bone: pitch verbatim; 0.083 m / 1.30.
-  bone jaw    parent=neck   dir=up pitch=112 len=0.0638
   mirror
     bone clavicle parent=chest    side=0.0277 dir=side len=0.0323
     # pitch NEGATED from .blob's -12 — see the header.

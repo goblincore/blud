@@ -46,16 +46,6 @@ skeleton
   # move together; none of them works alone.
   bone neck   parent=chest  dir=up pitch=-17 len=0.140
   bone skull  parent=neck   dir=up pitch=-5  len=0.235
-  # THE JAW (expression pass, 2026-10-13). Not a hinge bone: a CARRIER for one kinematic rig point, exactly as the bride's
-  # (bride.blob, bone jaw; jaw.ts). It hangs off the skull's pivot to the chin so gait.ts can name its tail `jaw`. The jaw
-  # ROTATES about a hinge on the skull axis (jaw.ts), and rig-bind turns every prim declared `on jaw` by the gape. Rest tail
-  # is (0, 1.0875, 0.0898): below and in front of the lower lip.
-  # `hinge=0.06` (Task 3b, 2026-10-14): the hinge sits 0.06 along the skull, y 1.1326, ON THE LIP LINE, 2 cm behind the axis. The
-  # shared default (jaw.ts JAW_HINGE, 0.30) is the bride's upper lip; on this skull it is 5.6 cm above the lips, and the jaw
-  # lever then hangs almost straight down from it, so opening swung the chin back into the throat (at the shout's 0.6 rad the
-  # lower jaw vanished into the neck; frames docs/dev-notes/2026-10-13-goblin-expressions/grin/). At the lip line the lower lip
-  # drops instead: at 0.5 rad its middle falls 5.1 cm and moves back 1.7 (the shared hinge: 4.7 and 4.5; goblin-blob.test.ts).
-  bone jaw    parent=neck   dir=up pitch=112 len=0.083 hinge=0.06
 
   mirror
     # WAM's own comment says the shoulder must land INSIDE the chest mass or
@@ -331,112 +321,23 @@ body
   # Their reach came down with the move. The cranium is an ellipsoid, so its
   # semi-depth SHRINKS as you go lower — 0.108 at this height, not the 0.118 at
   # the nose — and lips sized against the wrong number stick out too far.
-  blob head on skull at=0.12 r=0.028 r2=0.021 wide=1.25 tall=0.44 blend=0.0020 chamfer offset=(0,0.006,0.062) tip=(0,-0.006,0.044) morph=smile:(0,0.002,-0.001)*(1.08,1,1)
-  # THE MOUTH OPENS AT THE LIP LINE (Task 3b, 2026-10-14; owner: "the main thing is getting a viable toothy grin with teeth").
-  # Task 2's split left the skull-side mass hanging to y 1.10 at the front, so the opening appeared in the chin's bevel 2-3 cm
-  # under the lips and the teeth hid behind skin. Now the SEAM is the lip line, y ~1.133: everything above it is the skull's
-  # (the shortened face-block jaw ellipsoid, the upper lip, the upper ridge below) and everything under it is the jaw's (the
-  # lower lip, the chin, the corners, the floor). Rest front within 2.5 mm of the approved profile except at y 1.13, where the
-  # groove used to cut (goblin-head-profile.ts says why that pin moved).
-  #
-  # Lower lip: a BENT bar along the dental arch (was a front-to-back pout capsule whose front sloped down to y 1.10: it was the
-  # chin's shelf, not a lip). Top y 1.1335, meeting the upper ridge's underside; front z 0.122, 1.5 cm behind the upper lip's
-  # (an overbite). Flesh, about the old lip's size; no colour (the owner does not want painted lips).
-  blob head on jaw at=1.0 r=0.010 tall=0.90 blend=0.0016 chamfer offset=(-0.026,0.037,0.0102) tip=(0.052,0,0) bend=(0,0,0.024) morph=smile:(-0.006,0.001,-0.005)tip(0.012,0,0)bend(0,-0.014,0.010)*0.85
-  # THE CHIN: the lower part of what used to be the jaw ellipsoid. Centre (0, 1.1025, 0.053), semi-axes 0.061 x 0.026 x 0.058.
-  # Its top (1.128 on the axis) is LOWER than Task 2's (1.137) and must stay under the floor's top (below): once the jaw tips
-  # open, a chin top above the floor shows as a lit band of skin inside the mouth (it did, at 1.131). Its front makes the chin's
-  # reach (y 1.09), its underside the chin's underside; both are profile pins, so retune it with the CLI.
-  blob head on jaw at=1.0 r=0.0462 wide=1.33 tall=0.56 deep=1.25 blend=0.010 offset=(0,0.0150,-0.0368) morph=smile:(0,-0.003,0.002)*(1.12,1,1)
+  blob head on skull at=0.12 r=0.028 r2=0.021 wide=1.25 tall=0.44 blend=0.0020 chamfer offset=(0,0.006,0.062) tip=(0,-0.006,0.044)
+  blob head on skull at=0.12 r=0.024 r2=0.018 wide=1.12 tall=0.42 blend=0.0016 chamfer offset=(0,-0.028,0.056) tip=(0,-0.018,0.038)
 
-  # UPPER RIDGE (the upper gum, skull): a flat bent bar along the arch, x +-0.045, y 1.133-1.145, front z 0.117 at the middle.
-  # The shortened jaw ellipsoid recedes to z ~0.10 just above the seam; without this the sides of the face between the upper
-  # lip and the seam were 1 cm deep and the tooth roots showed through at rest. Its flat underside is the mouth's top edge:
-  # the upper teeth hang from it.
-  blob head on skull at=0.0 r=0.011 tall=0.55 blend=0.002 offset=(-0.034,0.0204,0.0811) tip=(0.068,0,0) bend=(0,0,0.024) morph=smile:(-0.004,0.002,0)tip(0.008,0,0)bend(0,-0.006,0)
-  # CHEEK FILL (skull, both sides), at x 0.046, y 1.122: the jaw/skull seam wraps round the side of the face and left a 4 mm
-  # waist in the front silhouette at y 1.12. This fills it (silhouette back within 1 mm of the approved head at every height).
-  blob head on skull at=0.0 r=0.012 blend=0.006 offset=(0.046,0.0034,0.0271) both morph=smile:(0.003,0.008,0.003)*1.15
-  # MOUTH CORNERS (jaw, both sides), at x 0.037, y 1.124: the lowered chin left the corners open at rest (the throat bar showed
-  # there). They drop with the jaw, so they never plug the opening.
-  blob head on jaw at=1.0 r=0.010 blend=0.004 offset=(0.037,0.0365,-0.0048) both morph=smile:(0.002,0.008,-0.008)*0.75
-  # THE FLOOR (jaw): a dark flat disc behind the lower lip, top y 1.131, z 0.046-0.106, the lower teeth rooted in it. With the
-  # hinge on the lip line the opening jaw TIPS its top toward the viewer, and without a floor the chin's top showed through the
-  # open mouth as lit green skin. Dark like the throat bar and buried at rest the same way (goblin-blob.test.ts).
-  blob head on jaw at=1.0 r=0.030 wide=0.88 tall=0.30 deep=1.6 blend=0.002 offset=(0,0.0365,-0.0318) color=2a0608 gloss=0.05
-
-  # THE SMILE MOVES THE FACE (Task 12, 2026-10-15; owner: "when smiling i feel his face geometry isnt changing enough like his
-  # chins n stuff should get wider"). The `morph=smile:` words above move existing prims by the expression's smile weight
-  # (morph.ts; rig-bind applyRig moves the REST geometry before the jaw opens and the head turns); at smile 0 nothing moves and
-  # the head packs bit-identically. No prim was added. Tuned by eye on the grin close-up (docs/dev-notes/2026-10-13-goblin-
-  # expressions/morphs/, which-prim.png colours each one):
-  #  - LOWER LIP: ends out 6 mm (tip 12 mm) and back 5 mm, the middle sagging 7 mm under them (bend y -14 mm; bend z +10 mm keeps
-  #    the middle where it was in depth), thinned to 0.85: the opening becomes a U whose corners turn up. This is the smile.
-  #  - MOUTH CORNERS: up 8 mm and back 8 mm, shrunk to 0.75. Pushed OUT (the first try) they read as two balls beside the mouth at
-  #    45 degrees; shrunk to 0.6 the side notch reopened. 0.75 closes it; a small knob with a crease is left (the lower lip's
-  #    chamfer), which reads as the corner bunching.
-  #  - CHIN: 12% wider (the x semi-axis 0.0614 -> 0.0688) and 3 mm lower: the lower face is ~1 cm a side wider at y 1.07-1.08.
-  #  - CHEEK FILL: up 7 mm, out 3, forward 1, radius x1.15: the cheeks bunch over the corners (a visible bump at 45 degrees).
-  #  - UPPER RIDGE: ends up 2 mm and out 4 (tip 8), the middle down 1 (bend): the upper edge follows the smile line.
-  #  - UPPER LIP: up 2 mm, back 1, 8% wider.
-  # gape morphs to round the shout's box were tried and dropped (morphs/shout-gape-try.png: the corners swallowed two lower teeth
-  # and the grin's opening turned into a V).
-
-  # NO GROOVE ANY MORE (Task 3b). A groove at y 1.1327 drew the mouth line from 2026-08 to Task 3b, but a groove cuts 4 mm of
-  # FIELD from every prim in the head cluster, teeth included: once the jaw opened, it bit the upper teeth in half right where
-  # they show (sdBody +1.1 mm on a tooth's axis). The line is now the real seam between the lips plus the painted sheet mouth.
-
-  # THE MOUTH'S INSIDE AND THE TEETH (expression pass, 2026-10-13; owner: "a toothy evil grin", jagged and uneven with two
-  # fangs; Task 12 made them brighter, see the upper row). Everything below is buried when the jaw is shut (goblin-blob.test.ts pins both ends of every one inside the
-  # tooth-free flesh) and shows only as the gape drops the jaw side away from the skull side at the lip line (Task 3b): the
-  # whole upper row shows from gape 0.15 (pinned), the lower row from about 0.3.
+  # THE MOUTH LINE — a groove, not a gap between two lumps.
   #
-  # Three traps found tuning these (each would have passed the endpoint test):
-  #  - BLEND. The plan's `blend=0.002 chamfer` bridges anything within 4k = 8 mm, and the teeth fold BEFORE the face
-  #    block's prims (body-block head prims always come first in the head cluster): they chamfered into the lips and chin
-  #    and grew skin up to 4 mm out through the rest face. Teeth are hard: `blend=0.0002`, no chamfer.
-  #  - THE GROOVE (since removed, see above). It cut 4 mm of FIELD, teeth included.
-  #  - PAINT. Paint is the hit's nearest prim (validate.ts nearestPrim). The skin at the corners (x 0.03-0.036,
-  #    y 1.106-1.114) is a blend fillet with every real prim 5-8 mm away, so a lower-corner tooth root 5 mm off painted it
-  #    ivory at rest. The corner lower teeth lean forward like small tusks, roots 6 mm further back.
-  # Checked with a rest-skin paint sweep (no tooth or interior prim paints at gape 0).
+  # The crease between the lips was being faked by creasing the two lip prims
+  # against each other with `chamfer`, which only works while both lips exist,
+  # both touch, and the camera is near enough to front-on to see the join. A
+  # groove cuts a CHANNEL along where this primitive's surface crosses the
+  # assembled face, so the line is a line — it survives the lips changing size,
+  # and it reads from every angle.
   #
-  # The inside is a dark bar on the skull (the bride's trick, bride.blob), the throat: x +-0.041, y 1.090-1.138, z 0.060-0.084,
-  # 4-6 cm behind the lips' front. Never the nearest prim to the rest skin, so it paints nothing at rest; it is what shows
-  # between and behind the upper teeth from the first millimetre of gape. Task 3b moved it up and forward to the new seam,
-  # made it tall enough to meet the floor (a gap between the two showed a lit band of skin), and took its gloss down (0.85 lit
-  # the bar's ends as grey edges framing the mouth).
-  bar  head on skull from=0.0 to=0.0 offset=(-0.029,-0.0046,0.0591) tip=(0.058,0,0) r=0.012 tall=2.0 blend=0.003 color=2a0608 gloss=0.05
-  #
-  # Upper row: five small teeth of uneven length and two longer fangs (the 2nd and 6th), spaced so each reads as a tooth against
-  # the dark rather than a yellow clump (the cultist's 8-tooth first try). Pointed (r2), hanging from inside the upper ridge
-  # (roots y 1.137-1.138) to tips at y 1.119-1.125 (fangs 1.111-1.113), 1-2.5 cm below the seam, tilted a few mm forward;
-  # z 0.095-0.107, 2 cm behind the rest lips; a little thicker than Task 3's (r 0.005-0.0068) so the visible half reads at
-  # gape 0.15. No colour variation and no grain: the owner wants fine surface detail kept small.
-  # BRIGHTER TEETH (Task 12, 2026-10-15; owner: "light the teeth somehow or make them brighter, hard to see them"). They were the
-  # cultist's dirty ivory, `color=8f8266 gloss=0.15`, and in the grin close-up they rendered as brown pegs at a mean luma of 26
-  # (of 255): the mouth is a cavity, so the field AO sits on its 0.35 floor and the key reaches them only from the front. Now a
-  # light, near-neutral ivory (the warm key yellows it; kept neutral for the reason the clothes' comment gives), a little more
-  # gloss, and a FAINT glow (0.15: 15% of the lit colour is replaced by the flat albedo, so a tooth in the cavity's shade still
-  # reads; prim glow costs nothing, it is a row field). Measured on the grin close-up (tooth pixels from a marker render, docs/
-  # dev-notes/2026-10-13-goblin-expressions/teeth/): tooth luma 26 -> 82 front, 33 -> 93 at 45 degrees; teeth/gap ratio 2.9 -> 9.4
-  # front, 0.95 -> 2.2 at 45 degrees (the gap there is the interior's grey specular sheen). glow 0.3 flattened the row into a
-  # clump; glow 0 left the 45-degree ratio at 2.0. goblin-blob.test.ts finds the teeth by this exact paint string, and
-  # pack.test.ts counts the 11 glowing prims.
-  blob head on skull at=0.0 r=0.005 r2=0.0010 blend=0.0002 offset=(-0.031,0.0184,0.0821) tip=(0,-0.013,0.003) color=e0d8c0 gloss=0.35 glow=0.15
-  blob head on skull at=0.0 r=0.0068 r2=0.0010 blend=0.0002 offset=(-0.021,0.0194,0.0861) tip=(0,-0.027,0.005) color=e0d8c0 gloss=0.35 glow=0.15
-  blob head on skull at=0.0 r=0.0055 r2=0.0010 blend=0.0002 offset=(-0.011,0.0194,0.0891) tip=(0,-0.017,0.004) color=e0d8c0 gloss=0.35 glow=0.15
-  blob head on skull at=0.0 r=0.005 r2=0.0010 blend=0.0002 offset=(-0.001,0.0194,0.0901) tip=(0,-0.015,0.004) color=e0d8c0 gloss=0.35 glow=0.15
-  blob head on skull at=0.0 r=0.0055 r2=0.0010 blend=0.0002 offset=(0.01,0.0194,0.0891) tip=(0,-0.019,0.004) color=e0d8c0 gloss=0.35 glow=0.15
-  blob head on skull at=0.0 r=0.0068 r2=0.0010 blend=0.0002 offset=(0.021,0.0194,0.0861) tip=(0,-0.025,0.005) color=e0d8c0 gloss=0.35 glow=0.15
-  blob head on skull at=0.0 r=0.005 r2=0.0010 blend=0.0002 offset=(0.031,0.0184,0.0821) tip=(0,-0.012,0.003) color=e0d8c0 gloss=0.35 glow=0.15
-  # Lower row, on the jaw: four small teeth jutting up between the upper ones from the floor (roots y 1.121-1.122), tips at
-  # y 1.138-1.141, buried in the upper ridge when shut. z 0.085-0.095: BEHIND the lower lip, or the tipped-open jaw shows them
-  # as brown studs poking out of the lip's top.
-  blob head on jaw at=1.0 r=0.0048 r2=0.0010 blend=0.0002 offset=(-0.026,0.0335,-0.0048) tip=(0,0.017,0.005) color=e0d8c0 gloss=0.35 glow=0.15
-  blob head on jaw at=1.0 r=0.0058 r2=0.0010 blend=0.0002 offset=(-0.009,0.0345,0.0002) tip=(0,0.019,0.005) color=e0d8c0 gloss=0.35 glow=0.15
-  blob head on jaw at=1.0 r=0.0052 r2=0.0010 blend=0.0002 offset=(0.011,0.0345,0.0002) tip=(0,0.017,0.005) color=e0d8c0 gloss=0.35 glow=0.15
-  blob head on jaw at=1.0 r=0.0048 r2=0.0010 blend=0.0002 offset=(0.027,0.0335,-0.0048) tip=(0,0.018,0.005) color=e0d8c0 gloss=0.35 glow=0.15
+  # Wide and flat (`wide` up, `tall` right down) so its zero-set is a
+  # horizontal band across the muzzle. `depth`/`width` are millimetres: the
+  # channel is 5 mm across and bites 4 mm in, which on a 1.30 m goblin is a
+  # crease rather than a wound.
+  groove head on skull at=0.12 r=0.030 wide=1.30 tall=0.09 deep=1.10 depth=0.004 width=0.005 offset=(0,-0.014,0.060)
 
   # ARMS AND LEGS: tapered bars, no ball joints (rebuilt 2026-10-01).
   #
@@ -544,20 +445,9 @@ face
   headHeight 1.161
   headDepth  0.894
   jawWidth   0.748
-  # EXPRESSION PASS (2026-10-13): the jaw trio below is NOT default any more. The face block's jaw ellipsoid used to run from the
-  # cheeks down to the chin as one rigid mass; the mouth has to hinge, so this ellipsoid is SHORTENED FROM BELOW (jawHeight 0.861
-  # to 0.537) and the chin is a separate mass `on jaw` in the body block. Centre (0, 1.1496, 0.0487), semi-height 0.049: bottom
-  # y 1.100 on the axis, curving up to about y 1.115 at the front, so the lips' corner of the face still hinges. Drop and jut stay
-  # within 2-5 mm of the old 0.076 / 0.04 ON PURPOSE: a first plan (jawHeight 0.571, jawDrop 0.049, jawJut 0.073) ended the mass
-  # at y 1.122 but had to push it 33 mm forward to keep the mouth line's reach, and that filled the gap under the nose solid
-  # (front silhouette +40 mm at y 1.155-1.175: the snout the lips' comment warns about). The top drops to 1.199, inside the
-  # cranium. The rest silhouette is pinned by goblin-blob.test.ts ("head rest profile").
-  # TASK 3b (2026-10-14) shortened it again, 0.537 -> 0.467 and drop 0.0743 -> 0.0589: centre (0, 1.165, 0.0487), semi-height
-  # 0.043, so its underside clears y 1.132 everywhere in front of z 0.10 and the mouth can open at the lip line. The front just
-  # above the seam that it gave up is the upper ridge's (body block).
-  jawHeight  0.467
-  jawDrop    0.0589
-  jawJut     0.045
+  jawHeight  0.861
+  jawDrop    0.076
+  jawJut     0.04
   noseLength 0.007
   noseWidth  0.379
   noseDrop   0.009
@@ -586,18 +476,17 @@ sheet
   eyePupil   0
   browHeavy  0.90
   browAngle  24
-  mouthWidth 0.40
-  # The lips are GEOMETRY, and the painted mouth has to land on them or the head
-  # wears two mouths. TASK 3b put it ON THE REAL SEAM: the sheet maps face-space
-  # y to world y through the cranium (headShape; faceProj 0.58/0.56), so rise
-  # 0.805 with curve -0.15 puts the centre at y 1.1335 (the seam) and the
-  # corners 4 mm higher; width 0.40 is the opening's +-0.04 m. It used to be a
-  # 0.54-wide smile arc centred 5 mm under the seam with corners 6 mm over it.
-  mouthRise  0.805
-  mouthCurve -0.15
-  # A SEAM, not a slab: +-7 mm (was +-1 cm). Paint never darkens the teeth or the
-  # inside (a coloured prim replaces the sheet), only the lips around them.
-  mouthOpen  0.030
+  mouthWidth 0.54
+  # 0.63, not 0.73. The lips are GEOMETRY now, and the painted mouth has to
+  # land on them or the head wears two mouths — a dark smear on the jaw below a
+  # protruding pout. 0.63 is where the lip prims sit in face-space: they ride
+  # the skull at 0.31, which is 63% down a face spanning y 1.096..1.354.
+  mouthRise  0.80
+  mouthCurve -0.50
+  # A SEAM, not a slab. With no geometry to help, the sheet's mouth had to do
+  # all the work and was drawn thick; over a real pout that thickness just
+  # muddies the crease between the two lips.
+  mouthOpen  0.042
   nostril    0.45
   noseRidge  1.00
   noseWide   0.062

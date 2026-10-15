@@ -27,8 +27,9 @@ const SEGMENTS: [string, string, number][] = [
 const restGround = Math.min(base[J('footL')]![1], base[J('footR')]![1]);
 
 describe('goblin poses', () => {
-  it('are registered for the goblin and no one else', () => {
+  it('are registered for the goblin (and its cinematic variant, the same skeleton plus a jaw) and no one else', () => {
     expect(posesFor('goblin')).toBe(GOBLIN_POSES);
+    expect(posesFor('goblin-cinematic')).toBe(GOBLIN_POSES);
     expect(Object.keys(GOBLIN_POSES).sort()).toEqual(['jolt', 'recoil', 'sit', 'stand', 'type']);
     expect(posesFor('zombie')).toEqual({});
   });
