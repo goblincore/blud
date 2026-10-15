@@ -4,6 +4,113 @@ Spec: [`docs/superpowers/specs/2026-10-13-goblin-expressions-design.md`](../../s
 Plan: [`docs/superpowers/plans/2026-10-13-goblin-expressions.md`](../../superpowers/plans/2026-10-13-goblin-expressions.md).
 Task 3b's own notes (the mouth moved to the lip line, the per-body hinge): [`grin/NOTES-grin.md`](grin/NOTES-grin.md).
 
+## Task 18 (2026-10-15): a cartoon grin: head squash, cheek rolls, harder morphs
+
+Owner on PR #48: "i think we need to figure out a way to make his face distort more, like when he grins it should be a bit
+cartoonish and exaggerated", with a stock 3D-emoji evil grin as a look reference (not in the repo). Decision: harder morphs, a
+cheek-roll band and a head squash; a shader grin-warp only if this cannot get there.
+
+**The clip:** [`cartoon/goblin-cartoon-anim.mp4`](cartoon/goblin-cartoon-anim.mp4), 12 fps, 2x2: grin front, grin three-quarter
+(yaw 0.7), grin profile (yaw 1.45), surprise front (`BLOB_EXPR=<name> BLOB_EXPR_SWEEP=0:0.92`, 24 frames, `BLOB_DIST=0.36
+BLOB_TARGET_Y=1.17 BLOB_PITCH=0.05`, last frame held 1.5 s). Stills in [`cartoon/`](cartoon/): `grin-before-after.png` (neutral,
+the Task 16/17 grin, this grin; front), `grin-peak-front.png`, `grin-peak-yaw0.7.png`, `grin-peak-profile.png`,
+`surprise-peak-front.png`, `others.png` (grin mid-clip, the friendly smile, scowl, shout).
+
+### What was built
+
+- **Part A, the squash** (`squash.ts`, pure; `08c54355`). A signed channel `squash` (expression.ts, -1..1, carried in the morph
+  record) and one affine map of the whole rigid head, `x -> c + S (x - c)`, `S = diag(1 + 0.15 w, 1 - 0.08 w, 1 + 0.05 w)`, about
+  the skull bone's middle (`SQUASH_CENTRE_AT` 0.5, about the eyes) in the head's rest frame. Each head prim's endpoints move and
+  its scale and bend multiply by S: that is the EXACT affine image of the prim (the field divides the query by the prim's scale),
+  pinned on six prim kinds (squash.test.ts: every surface point lands on the squashed prim's surface to 1e-9). applyRig applies it
+  to every rigid-head prim and head bone after the morphs and before the gape and the turn, and the jaw opens about the SQUASHED
+  hinge, so the squashed head is exactly a head authored that way (rig-bind.test.ts). Weight 0 or absent takes the old path
+  untouched (bride, cinematic goblin, zombie: prims, bones, clusters, kit frames and the noise anchor bit-identical).
+  - **The kit's teeth** do not scale; they ride: `kitFrames` moves the `skull` and `jaw` frames by the squash's move at the mouth
+    (the centroid of the `on jaw` prims) and opens the jaw about the squashed hinge. Without it the teeth would sit ~9 mm low
+    and 4 mm back at the grin's squash 1. What is left is the squash's spread between the mouth centre and a tooth (pinned to the
+    exact formula): 2-4 mm sideways at the outer teeth; the row does not widen. Not visible in the frames.
+  - **The face sheet** needed nothing: the lab's projection is the posed cranium's centre and axes (`headShape`), which the squash
+    moves and scales the same way, so the painted eyes stay on the squashed face (they do, in every frame).
+  - **The noise anchor:** `morphedRest(rest, weights, head)` squashes the anchor's rest too (lab-main passes the head), or the
+  skin noise would jump by the squash's move between neighbouring prims (the Task 16 seam again; pinned: every face point maps
+  to itself at the grin, statue, jaw shut).
+- **Part B, the cheek rolls** (`goblin-cinematic.blob`, one `both` line: 2 prims). A bent bar along the nasolabial line, from
+  beside the nose wing down and out past the corner. At rest a 3 mm thread 2-4 cm inside the cheek (pinned: every point at least
+  1 mm under the rest flesh; the head-profile CLI prints exactly what it printed before); on the smile it comes 4.8 cm forward,
+  swings its far end out to x 0.07, bows out and grows 4.5x (r 13.5 mm), blend 1.5 mm: a fat roll framing the grin with a crease
+  where it meets the cheek. A jaw-side second pair was not needed: the lower lip became the fat lower band.
+- **Part C, harder morphs** (the .blob's "TASK 18" comment lists every number): the lower lip's ends out 5.2 cm and UP 4.4 cm
+  with a deep U (2.84x the neutral's width, end to end), the upper ridge's ends up 3.6 cm (the crescent's top edge curving up),
+  the throat bar widened, raised and bowed (the crescent's dark arms), the corners to the lip's ends, the chin 40% wider, the upper
+  lip 40% wider, the hook of the nose lifted 6 mm, the cheek mass rising on the smile (into the eyes), the cheek fill plugging the
+  side of the face behind the roll, and the browDown V heavier (10 mm lower, a 12 mm V). The painted smile U is deeper, wider and
+  thicker (it now lies inside the opening, and its arms darken the crescent's ends).
+- **Clips** (`goblin-expressions.ts`): grin squash 0.4 -> 1 and gape 0.2 -> 0.3 (0.12 -> 0.18 rad: the crescent's height);
+  friendly smile squash 0.5; surprise squash -0.6 (narrower, taller) with gape 0.5 -> 0.65 so it stays more than twice the
+  grin's. Scowl and shout unchanged (they take only the heavier brow).
+
+### The numbers (CPU, `applyRig` at the grin clip's peak; pinned in goblin-cinematic-blob.test.ts)
+
+| pin | wanted | got |
+|---|---|---|
+| mouth width (lower lip, outer edges) | >= 1.8x neutral | 0.0720 -> 0.2047 m, **x2.84** |
+| corner rise (the lip's ends) | >= 15 mm | **+33 mm** (morph ~+44, the gape takes ~-17, the squash ~+6) |
+| head width at the grin peak (half-width, y 1.19-1.21) | >= +10% | **+14.7%** (y 1.20: 0.0885 -> 0.1015) |
+| surprise | narrower, taller | narrower by > 5% at y 1.2, top more than 3 mm higher |
+| weights 0 / squash 0 | bit-identical | yes (prims, bones, clusters, kit frames, anchor) |
+| rest profile CLI | unchanged | byte-identical output, 7/7 ok |
+| base goblin (`git diff f81e5b10 -- goblin.blob goblin-kit.wam goblin-kit.gltf goblin-blob.test.ts`) | empty | empty |
+
+Neutral before vs after on the GPU: 2073 of 1.1 M pixels differ by more than 8/255, scattered single pixels over the whole frame
+including the armour (capture noise, not the face).
+
+### Compared with the reference (honestly)
+
+What matches: the mouth is a wide crescent whose corners swing up into fat cheek rolls with a crease round them (the reference's
+strongest cue), the head squashes wider and shorter as it grins, the eyes are slits under a heavier V brow, and the upper teeth
+hang in a dark opening. At three-quarter it reads as a big cartoon grin with jowls; in profile the roll bulges out of the cheek.
+
+What does not: (1) the dark opening spans about half the face's width at the front (the rolls frame a bit more), not the reference's
+85-90%, because the goblin's
+long hooked nose and the cheek mass own the middle of the face and the opening cannot cut into them; (2) the corners reach the
+nose tip's height, not the eyes'; (3) the teeth fill only the middle third of the crescent (eleven mesh teeth that do not widen;
+the reference has two full rows); (4) the eyes are painted slits a few texels wide, nothing like the reference's big glaring eyes;
+(5) the opening's top edge is flat in the middle (the upper lip and the nose sit there).
+
+What a shader grin-warp would add: a screen- or head-space warp could bend the whole lower face along a smile curve (the
+mouth's middle down, its corners up toward the eyes) and stretch the opening across the face's full width, which no amount of
+prim moving can do while the nose and cheek masses sit where they are; it could also widen the teeth with the mouth. It would
+cost a WGSL change and the noise/paint anchoring would have to follow it.
+
+### The Blender teeth (commits `addefccb`, `28b743d6`, unverified until these frames)
+
+They render: cream/ivory pegs with darker stained roots, visibly stouter than Task 14's cones, the two fangs longest. In the
+grin they hang from the upper edge in the middle of the crescent with dark on either side; nothing floats, nothing pokes through
+the lips at three-quarter or profile, and they follow the squash and the gape. The lower row does not show in the grin (the fat
+lower lip covers it); in the surprise two or three lower pegs stand on the floor. Neutral: no tooth shows. Their tests pass
+(buried at rest, every upper tooth bared at the grin clip's peak).
+
+### Checks
+
+- `npm run typecheck` clean (it also fixed a pre-existing bare `process.env` error in goblin-cinematic-blob.test.ts);
+  `npm run test:changed` 28 files, 696 passed; the targeted list (morph, blob-parse, blob-face-sheet, goblin-blob, goblin-kit,
+  bride-blob, bride-kit, character-registry, expression, squash, rig-bind, pack, pack-golden, goblin-cinematic-blob,
+  goblin-expressions) 534 passed. Module index regenerated (squash.ts).
+- **Golden re-recorded:** pack-golden `goblin-cinematic.blob` `2e5d52c91ee41b5a -> 871a9afd1a714c6b`, only for the cheek-roll pair's
+  two prims (the .blob with that line deleted hashes to the old pin, checked); pack.test.ts's prof row +2 (bent, 2).
+- Rounds: eight capture rounds (2-frame stills), the CPU marker render (each prim its own colour) to name what made each shape.
+
+### Open items (Task 18)
+
+1. **Cost not measured.** The roll pair adds two prims to the head cluster that are paid at rest (buried); on the grin the rolls
+   and several morphed prims are bent bars. Expect a few ms on a face close-up; measure before shipping a cutscene.
+2. The friendly `smile` now also wears the big rolls and the crescent (smile 1 drives them); it reads as a toothy happy grin.
+   If it should be gentler, it needs its own smaller smile weight (e.g. 0.6).
+3. The grin's jaw noise seam (Task 16) is unchanged; at 0.18 rad it is a little larger.
+4. The rest of the gap to the reference (width across the nose, corners up to the eyes, teeth across the crescent) is the
+   shader-warp decision above.
+
 ## Task 16 (2026-10-15): a brow ridge that moves, a clean grin (Part A, the teeth, moved to a Blender task)
 
 Owner on the Task 15 clip: the brow "shape doesnt" change when the painted brows move (screenshot 1), and "weird shape stuff
