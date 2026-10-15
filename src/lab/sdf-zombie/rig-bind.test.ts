@@ -808,7 +808,8 @@ describe('bindRig — limb prims bind within their own limb', () => {
 describe('applyRig — per-prim morphs (goblin expressions Task 12)', () => {
   // A goblin with morphs injected on three kinds of prim: a skull-owned face prim (bent, the upper ridge), a jaw prim (the lower
   // lip) and an off-head prim (the left upper-arm bar).
-  const plain = buildBody(compileBlob(parseBlob(goblinSrc)));
+  // The goblin with its OWN morph words stripped (it has smile morphs since Task 12), so only the injected ones act.
+  const plain = buildBody(compileBlob(parseBlob(goblinSrc.replace(/ morph=\S+/g, ''))));
   const ridge = plain.prims.findIndex(p => p.bone === 'skull' && p.bend !== undefined && Math.abs(p.a[1] - 1.1394) < 0.01 && !p.color);
   const lip = plain.prims.findIndex(p => p.bone === 'jaw' && p.bend !== undefined && !p.color);
   const arm = plain.prims.findIndex(p => p.bone === 'upperarm.l');

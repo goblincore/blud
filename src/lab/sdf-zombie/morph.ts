@@ -1,9 +1,10 @@
 // src/lab/sdf-zombie/morph.ts
 //
-// PER-PRIM MORPHS (goblin expressions Task 12, a minimal approach C; spec docs/superpowers/specs/2026-10-13-goblin-expressions-
-// design.md, "Amendment (2026-10-15)"). A prim may carry a delta per face CHANNEL (expression.ts CHANNEL_NAMES) that a channel
-// weight scales linearly: move both ends, move the far end, add to the bend, scale the radius, scale wide/tall/deep. The jaw's
-// rotation and the painted sheet cannot widen a chin or curl a mouth corner up; moving the prims can.
+// PER-PRIM MORPHS: a per-prim delta per face channel that the expression layer's weight scales (goblin expressions Task 12, a
+// minimal approach C; spec docs/superpowers/specs/2026-10-13-goblin-expressions-design.md, "Amendment (2026-10-15)"). Channels
+// are expression.ts CHANNEL_NAMES; the weight scales linearly: move both ends, move the far end, add to the bend, scale the
+// radius, scale wide/tall/deep. The jaw's rotation and the painted sheet cannot widen a chin or curl a mouth corner up; moving
+// the prims can.
 //
 // Pure: plain data in, plain data out, no renderer. rig-bind.ts applyRig is the one consumer that moves prims; blob-parse.ts
 // parses the `.blob` word (`morph=<channel>:<terms>`) through parseMorph; mirror.ts reflects the second copy through mirrorMorph.
