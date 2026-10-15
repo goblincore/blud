@@ -2797,8 +2797,10 @@ async function main() {
     lastPosed = posed;
     // Polygon halves ride the rig — one pose() call drives kit and prop from
     // the same rig solve (the block itself lives in character-view.ts, moved
-    // verbatim).
-    heroView.pose(current, heroMotion.bound, heroMotion.lastBodyYaw, sinceFire,
+    // verbatim). boundForPose, not heroMotion.bound: the kit's jaw bone opens by
+    // the same gape the `on jaw` prims got (rig-bind kitFrames; goblin
+    // expressions Task 14), and in statue mode only that copy carries it.
+    heroView.pose(current, boundForPose, heroMotion.lastBodyYaw, sinceFire,
       heroMotion.motionState ? lastMotionFrame : null, dt, MOTION_SEED);
     // Rest-space noise anchor (motion-polish task 6): `current` is the
     // authored, un-rigged body — the rest pose the noise texture is baked

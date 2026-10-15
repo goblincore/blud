@@ -1,6 +1,8 @@
 // src/lab/sdf-zombie/rig-bind.test.ts
 import { describe, it, expect } from 'vitest';
-import { bindRig, applyRig, headQuatOf, pinTips, HEAD_RIGID_TUNING } from './rig-bind';
+import { bindRig, applyRig, headQuatOf, kitFrames, pinTips, HEAD_RIGID_TUNING } from './rig-bind';
+import { boneFrames } from './rig-frames';
+import brideSrc from './characters/bride.blob?raw';
 import { IK_TUNING } from './ik';
 import { headingDir } from './wander';
 import goblinSrc from './characters/goblin.blob?raw';
@@ -879,5 +881,49 @@ describe('applyRig — per-prim morphs (goblin expressions Task 12)', () => {
     const c = out.clusters.find(k => arm >= k.start && arm < k.start + k.count)!;
     const p = out.prims[arm]!;
     expect(len(sub(p.a, c.center)) + p.radius).toBeLessThanOrEqual(c.radius + 1e-9);
+  });
+});
+
+describe('kitFrames — a kit\'s jaw bone takes the `on jaw` prims\' own transform (goblin expressions Task 14)', () => {
+  // A kit vertex skinned to a bone is drawn at frame.pos + frame.quat * (v - bone head). For the jaw that must equal what applyRig
+  // does to an `on jaw` prim's rest endpoint (the hinge, the gape, the head's clamped turn and drift), for every rest point.
+  const headTilted = (bound: ReturnType<typeof bindRig>, angle: number, yaw: number) => {
+    const h = bound.head!, pivot = bound.rig.points[h.pivot]!.pos;
+    const qT: Quat = [Math.sin(angle / 2), 0, 0, Math.cos(angle / 2)], qY: Quat = [0, Math.sin(yaw / 2), 0, Math.cos(yaw / 2)];
+    const points = bound.rig.points.map((p, i) => {
+      const q = i === h.tip ? add(pivot, qRotate(qT, sub(p.pos, pivot))) : p.pos;
+      return { ...p, pos: yaw ? qRotate(qY, q) : q };
+    });
+    return { ...bound, rig: { ...bound.rig, points } };
+  };
+  for (const [name, src] of [['bride', brideSrc], ['goblin-cinematic', goblinCinematicSrc]] as const) {
+    it(`${name}: every jaw prim endpoint, at gapes 0-0.6, head level, nodded, past the cone, body turned`, () => {
+      const doc = parseBlob(src);
+      const body = buildBody(compileBlob(doc));
+      const bound = bindRig(body);
+      const jaw = body.bones.get('jaw')!;
+      const jp = [...bound.head!.jaw!.prims];
+      expect(jp.length).toBeGreaterThan(0);
+      for (const gape of [0, 0.1, 0.3, 0.6]) for (const [angle, yaw] of [[0, 0], [0.3, 0], [0.9, 0], [0.25, 1.1]] as const) {
+        const b = headTilted({ ...bound, rig: { ...bound.rig, jawGape: gape } }, angle, yaw);
+        const f = kitFrames(body, b, yaw).get('jaw')!;
+        const posed = applyRig(body, b, yaw);
+        for (const i of jp) for (const k of ['a', 'b'] as const) {
+          const drawn = add(f.pos, qRotate(f.quat, sub(body.prims[i]![k], jaw.head)));
+          expect(len(sub(drawn, posed.prims[i]![k])), `prim ${i}.${k}, gape ${gape}, tilt ${angle}, yaw ${yaw}`).toBeLessThan(1e-9);
+        }
+      }
+    });
+  }
+
+  it('every other bone, and every body without a jaw, is exactly boneFrames', () => {
+    const goblin = buildBody(compileBlob(parseBlob(goblinSrc)));
+    const gb = bindRig(goblin);
+    expect(kitFrames(goblin, gb, 0.4)).toEqual(boneFrames(goblin, gb, 0.4));
+    const bride = buildBody(compileBlob(parseBlob(brideSrc)));
+    const bb = bindRig(bride), open = { ...bb, rig: { ...bb.rig, jawGape: 0.4 } };
+    const k = kitFrames(bride, open, 0), p = boneFrames(bride, open, 0);
+    expect([...k.keys()]).toEqual([...p.keys()]);
+    for (const [n, f] of p) if (n !== 'jaw') expect(k.get(n), n).toEqual(f);
   });
 });

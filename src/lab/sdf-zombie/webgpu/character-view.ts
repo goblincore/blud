@@ -32,9 +32,8 @@ import { checkStance } from '../blob-checks';
 import { buildBody, BodyBuildCache, DEFAULT_BUILD_OPTS, type BodyOverride, type BuildResult } from '../build-body';
 import { makeZombie } from '../body';
 import { translateBody } from '../translate';
-import { boneFrames } from '../rig-frames';
 import { rotateYaw } from '../gait';
-import type { BoundRig } from '../rig-bind';
+import { kitFrames, type BoundRig } from '../rig-bind';
 import type { MotionFrame } from '../motion';
 import { DEFAULT_FACE, type FaceParams } from '../face';
 import type { FleshMaterial } from '../material';
@@ -671,7 +670,9 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
         ejection.update(sinceFire, false);
         return;
       }
-      const frames = boneFrames(body, bound, bodyYaw);
+      // kitFrames = boneFrames, but a jaw bone takes the `on jaw` prims' own transform (rig-bind.ts; the cinematic goblin's lower
+      // teeth): pass the bound applyRig was given, gape included.
+      const frames = kitFrames(body, bound, bodyYaw);
       const armorSpec = entry.profile.armor?.spec;
       const events=kit?.pose(frames, { body: damageBody ?? body, wounds: wounds.all(), bodyYaw, dt,
         armor: armor && armorSpec ? { spec: armorSpec, shed: armor.shed, hits: armor.hits } : null }) ?? [];

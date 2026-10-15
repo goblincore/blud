@@ -4,6 +4,53 @@ Spec: [`docs/superpowers/specs/2026-10-13-goblin-expressions-design.md`](../../s
 Plan: [`docs/superpowers/plans/2026-10-13-goblin-expressions.md`](../../superpowers/plans/2026-10-13-goblin-expressions.md).
 Task 3b's own notes (the mouth moved to the lip line, the per-body hinge): [`grin/NOTES-grin.md`](grin/NOTES-grin.md).
 
+## Task 14 (2026-10-15): mesh teeth in the cinematic kit
+
+Owner: make the teeth POLYGON MESH in `goblin-cinematic-kit` (the 11 SDF tooth prims cost about 23 ms on a face close-up and
+were hard to light). The base goblin and every other character stay as they are.
+
+### Investigation (written before building)
+
+**How the kit is posed.** `character-view.ts` `pose()` calls `boneFrames(body, bound, bodyYaw)` (rig-frames.ts) and hands the
+frames to `kit.pose()` (kit-overlay.ts), which writes each bone node's `matrixWorld` as `compose(frame.pos, frame.quat)`. A
+frame is the bone's HEAD rig point plus `segmentQuat(restDir, head->tail, yaw)`: the shortest arc that turns the bone's rest
+direction onto its posed one, about the bone's head. three skins a vertex as `matrixWorld * inverseBind * v`, and WAM's inverse
+binds are translations to the kit bone's rest head, so a vertex skinned to a bone lands at `frame.pos + frame.quat * (v - head)`.
+
+**The catch, measured** (`goblin-cinematic.blob`, a lower tooth root at (-0.026, 1.121, 0.085); the kit's jaw bone head is the
+skull pivot, (0, 1.1186, 0.0129), the same point as the .blob's within 0.04 mm; the SDF hinge is at (0, 1.1326, -0.0083)). The
+`on jaw` prims get `origin + qHead * (hinge + qGape * (v - pivot - hinge))` (rig-bind `headTransform`: `openAboutHinge`, then the
+head's rigid turn). Against that, a kit vertex skinned to `jaw` is:
+
+| gape (rad) | lab statue path (captures, held expressions) | motion path |
+|---|---|---|
+| 0.1 | 9.4 mm off | 1.3 mm off |
+| 0.3 | 28.1 mm off | 3.1 mm off |
+| 0.5 | 46.6 mm off | 3.9 mm off |
+
+Two separate problems. (1) In the lab's statue path (every capture, every held expression) the gape never reaches the rig: lab-main
+puts it on a copy of the bound (`boundForPose`) that only `applyRig` sees, and `heroView.pose` gets `heroMotion.bound`, whose jaw
+point sits at rest, so the kit jaw would not open at all. (2) In the motion path the jaw point IS opened about the hinge
+(motion.ts pins it to `jawTargetAt`), but the kit's frame is then the shortest arc about the jaw bone's head (the skull pivot,
+1.4 cm lower and 2.1 cm forward of the hinge), which is a different rotation of a different point: the lower teeth would drift
+1-4 mm off the lip, the catch the plan names.
+
+**Depth.** The kit DOES depth-test against the SDF (kit-overlay.ts and sdf-layer.ts headers): the kit draws on the default layer
+with depth writes, the march writes its depth into the target's alpha, and the composite quad feeds that to `depthNode` with depth
+testing on. So a tooth polygon behind the rest face fails against the flesh and does not show, exactly as the armour's buried
+inner rims do. The one caveat is the seam's resolution: the SDF layer is drawn at `sdfScale` (0.7 in the lab) and upscaled
+pixelated, so the flesh's depth edge is quantised to its pixels; a tooth only millimetres behind the skin at a silhouette could
+flicker through. The teeth sit 1.5-2 cm behind the lips' front and their tips inside the upper ridge, so no visibility toggle is
+planned; the rest frames and a kit-vertex burial test decide it.
+
+**What to build (the smallest mechanism).** Give the kit's `jaw` bone the SDF jaw's own transform: `pos = origin + qHead *
+openAboutHinge(jawHead - pivot)`, `quat = qHead * qGape` (jaw.ts `jawOrient`), with `origin`, `qHead` and the clamped gape taken
+from the same computation `headTransform` does. Then `pos + quat * (v - jawHead)` equals the jaw prims' transform for EVERY rest
+point v (a rigid motion is fixed by one point and its rotation). One exported function in rig-bind.ts, used by `boneFrames` for
+the `jaw` bone of a body whose bound head has a jaw, and lab-main hands `heroView.pose` the same `boundForPose` that `applyRig`
+gets. No other kit has a vertex weighted to `jaw` (the bride's kit carries the bone line with no geometry on it), so no other
+character can change.
+
 ## Task 13 (2026-10-15): the face rig moved to `goblin-cinematic`; the base goblin went back
 
 Owner: "we would have a base goblin without the facial head complexity" and "the cinematic goblin has bare eyes (no

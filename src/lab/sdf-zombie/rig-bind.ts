@@ -9,7 +9,7 @@ import { boxReach, shellReach, strandReach } from './extent';
 import { closestSegmentPoints, constrainRigBends, makeRig, type RigGuardLimb, type RigGuardSphere, type RigHeadKeepOut, type RigPoint, type RigState } from './rig';
 import { IK_TUNING, clampDir } from './ik';
 import { jointForBoneEnd, rotateYaw } from './gait';
-import { segmentQuat } from './rig-frames';
+import { boneFrames, segmentQuat, type BoneFrame3 } from './rig-frames';
 import { JAW_MAX_GAPE, jawOrient, jawRestOf, openAboutHinge, type JawRest } from './jaw';
 import { morphOf, morphShape, type MorphResult } from './morph';
 import {
@@ -793,6 +793,33 @@ function headTransform(
   jawPrims: ReadonlySet<number>;
   jawBones: ReadonlySet<number>;
 } {
+  const { origin, q, gape } = headPose(h, pos, bodyYaw, followRig, jawGape);
+  const jaw = h.jaw;
+  const open = (i: number, set: ReadonlySet<number> | undefined, v: Vec3): Vec3 =>
+    gape !== 0 && jaw && set?.has(i) ? openAboutHinge(jaw.rest, v, gape) : v;
+
+  // A morphed prim's rest endpoints move first (morph.ts): then the gape opens them about the hinge and the head turns them, so a
+  // morphed lip still drops with the jaw and turns with the head. Unmorphed prims take the exact old arithmetic.
+  const prims = new Map<number, { a: Vec3; b: Vec3 }>();
+  h.prims.forEach((rest, i) => {
+    const m = morphed?.get(i);
+    const ra = m ? add(rest.a, m.da) : rest.a;
+    const rb = m ? add(rest.b, m.db) : rest.b;
+    prims.set(i, { a: qRotate(q, open(i, jaw?.prims, ra)), b: qRotate(q, open(i, jaw?.prims, rb)) });
+  });
+  const bones = new Map<number, { a: Vec3; b: Vec3 }>();
+  h.bones.forEach((rest, i) => bones.set(i, {
+    a: qRotate(q, open(i, jaw?.bones, rest.a)), b: qRotate(q, open(i, jaw?.bones, rest.b)) }));
+  return { origin, prims, bones, q, jawQ: jawOrient(q, gape),
+    jawPrims: jaw?.prims ?? EMPTY_SET, jawBones: jaw?.bones ?? EMPTY_SET };
+}
+const EMPTY_SET: ReadonlySet<number> = new Set();
+
+/** The rigid head's pose this frame: the unit's origin, its clamped rotation and the clamped gape (headTransform's first half;
+ *  kitFrames poses the kit's jaw bone from the SAME numbers). */
+function headPose(
+  h: HeadRigid, pos: readonly RigPoint[], bodyYaw: number, followRig: boolean, jawGape: number,
+): { origin: Vec3; q: Quat; gape: number } {
   const pivot = pos[h.pivot]!.pos;
   const tip = pos[h.tip]!.pos;
   const dir = normalize(sub(tip, pivot));
@@ -814,27 +841,34 @@ function headTransform(
 
   // THE GAPE (rig.jawGape, from motion.ts): the `on jaw` prims open about
   // the hinge in the head's REST frame, then turn with the head. No jaw: shut.
-  const jaw = h.jaw;
-  const gape = jaw && Number.isFinite(jawGape) ? Math.max(0, Math.min(JAW_MAX_GAPE, jawGape)) : 0;
-  const open = (i: number, set: ReadonlySet<number> | undefined, v: Vec3): Vec3 =>
-    gape !== 0 && jaw && set?.has(i) ? openAboutHinge(jaw.rest, v, gape) : v;
-
-  // A morphed prim's rest endpoints move first (morph.ts): then the gape opens them about the hinge and the head turns them, so a
-  // morphed lip still drops with the jaw and turns with the head. Unmorphed prims take the exact old arithmetic.
-  const prims = new Map<number, { a: Vec3; b: Vec3 }>();
-  h.prims.forEach((rest, i) => {
-    const m = morphed?.get(i);
-    const ra = m ? add(rest.a, m.da) : rest.a;
-    const rb = m ? add(rest.b, m.db) : rest.b;
-    prims.set(i, { a: qRotate(q, open(i, jaw?.prims, ra)), b: qRotate(q, open(i, jaw?.prims, rb)) });
-  });
-  const bones = new Map<number, { a: Vec3; b: Vec3 }>();
-  h.bones.forEach((rest, i) => bones.set(i, {
-    a: qRotate(q, open(i, jaw?.bones, rest.a)), b: qRotate(q, open(i, jaw?.bones, rest.b)) }));
-  return { origin, prims, bones, q, jawQ: jawOrient(q, gape),
-    jawPrims: jaw?.prims ?? EMPTY_SET, jawBones: jaw?.bones ?? EMPTY_SET };
+  const gape = h.jaw && Number.isFinite(jawGape) ? Math.max(0, Math.min(JAW_MAX_GAPE, jawGape)) : 0;
+  return { origin, q, gape };
 }
-const EMPTY_SET: ReadonlySet<number> = new Set();
+
+/**
+ * The per-bone frames a skinned KIT is posed with (character-view.ts -> kit-overlay.ts `pose`): rig-frames.ts `boneFrames`, except
+ * the `jaw` bone of a body whose rigid head has a jaw, which takes the `on jaw` prims' own transform (goblin expressions Task 14,
+ * the cinematic goblin's mesh lower teeth).
+ *
+ * WHY. A frame is a bone's head point plus the shortest arc that turns its rest direction onto its posed one, ABOUT THAT HEAD. The
+ * jaw prims instead open about the per-body HINGE by the gape scalar and then turn with the head (headTransform), and the jaw bone's
+ * head is the skull pivot, 1.4 cm below and 2.1 cm in front of the goblin's hinge: kit vertices on the jaw drifted 1.3-3.9 mm off
+ * the lip in the motion path at gapes 0.1-0.5, and in the lab's statue path (where only applyRig sees the gape) they did not open
+ * at all. Here the jaw frame is `pos = origin + qHead * openAboutHinge(jawHead - pivot)`, `quat = qHead * qGape` (jawOrient), so
+ * `pos + quat * (v - jawHead)` IS the jaw prims' transform of every rest point v (a rigid motion is fixed by one point and its
+ * rotation). Pass the bound applyRig is given (the gape on `rig.jawGape`).
+ *
+ * Every other bone, and every body without a jaw, is exactly boneFrames. No kit but goblin-cinematic's weights a vertex to `jaw`.
+ */
+export function kitFrames(body: BuildResult, bound: BoundRig, bodyYaw: number): Map<string, BoneFrame3> {
+  const frames = boneFrames(body, bound, bodyYaw);
+  const h = bound.head, jawBone = body.bones.get('jaw'), skull = body.bones.get('skull');
+  if (!h?.jaw || !jawBone || !skull || !frames.has('jaw')) return frames;
+  const { origin, q, gape } = headPose(h, bound.rig.points, bodyYaw, bound.rig.headFollowsRig ?? false, bound.rig.jawGape ?? 0);
+  const at = openAboutHinge(h.jaw.rest, sub(jawBone.head, skull.head), gape);
+  frames.set('jaw', { pos: add(origin, qRotate(q, at)), quat: jawOrient(q, gape) });
+  return frames;
+}
 
 /**
  * The rigid head's CURRENT clamped rotation (the same quaternion applyRig
