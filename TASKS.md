@@ -13,14 +13,16 @@
 **The goblin's face moves** (owner, 2026-10-13) — [characters](docs/tasks/characters.md)
 - [~] **Built 2026-10-13/14, owner look pending.** A jaw bone with its own hinge (`hinge=0.06` at the lip line), the mouth opening at the
   lip line, 11 jagged teeth with two fangs, and keyed expression clips (neutral, grin, scowl, shout, plus a blink) driving the jaw and the
-  generated face sheet. Judged in the lab (`?character=goblin`, panel section "expression"; `BLOB_EXPR=grin npm run blob:shot -- goblin`;
+  generated face sheet. **Task 13 (2026-10-15, owner): all of it lives on the CINEMATIC variant `goblin-cinematic` (bare eyes, no
+  sunglasses); the base `goblin` is back to its pre-expression head and cost (`f81e5b10`).** Judged in the lab
+  (`?character=goblin-cinematic`, panel section "expression"; `BLOB_EXPR=grin npm run blob:shot -- goblin-cinematic`;
   `scripts/goblin-expression-sheet.sh`). [Notes and the expression sheet](docs/dev-notes/2026-10-13-goblin-expressions/NOTES.md) ·
   [spec](docs/superpowers/specs/2026-10-13-goblin-expressions-design.md) · [plan](docs/superpowers/plans/2026-10-13-goblin-expressions.md).
   **Task 12 (2026-10-15, owner feedback on the sheet):** brighter teeth (light ivory, a faint glow; tooth/gap luma 2.9 -> 9.4 front)
   and per-prim face MORPHS (`morph=<channel>:<terms>` in `.blob`, pure `morph.ts`, applied in `applyRig`; neutral packs bit-identically):
   on the grin the mouth opens as an upturned U, the chin widens ~1 cm a side, the cheeks bunch ([frames](docs/dev-notes/2026-10-13-goblin-expressions/morphs/)).
   Open for the owner: the new grin (the corner knob at 45 degrees, how much chin); the shout's box mouth (gape morphs tried, dropped);
-  surprise and sneer; the screen-lab wiring after PRs #46/#47. Cost: +47 ms a frame on a face close-up in the lab (54 -> 101; the buried teeth and interior are 30 of it), not trimmed; Task 12 added nothing measurable, and skipping the buried mouth at rest would save ~29 ms (sketched, owner's call).
+  surprise and sneer; the screen-lab wiring after PRs #46/#47. Cost (the cinematic goblin only, since Task 13): +47 ms a frame on a face close-up in the lab (54 -> 101; the buried teeth and interior are 30 of it), not trimmed; Task 12 added nothing measurable, and skipping the buried mouth at rest would save ~29 ms (sketched, owner's call).
 
 **The Flat's room in the engine** (owner, 2026-10-11) — [levels](docs/tasks/levels.md) (4o)
 - [~] **Slice 1 built 2026-10-11 (the owner liked it); the Giger iMac built the same day, owner look pending** (alpha-blended shell; the WGSL shell is a later spike). A walkable `?level=flat`: the last-stage room from the

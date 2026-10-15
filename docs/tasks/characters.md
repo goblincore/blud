@@ -94,7 +94,10 @@ so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), like
     `rig-bind.ts` (`ridesHead`, ~line 388) binds it to the RIGID head: it is 94 mm below the skull pivot and will slide
     19-47 mm into or off the neck as the head pitches. Make it a short bar (`bar head on neck from=0.28 to=0.32 ...`)
     so it binds per end, and check with `__sdfLab.heroPosed()`. `female.blob:107` has the same pattern.
-- [~] **Facial expressions: built 2026-10-13/14, awaiting the owner's look.** [Notes, the expression sheet and the
+- [~] **Facial expressions: built 2026-10-13/14, awaiting the owner's look. Since Task 13 (2026-10-15) they are the CINEMATIC
+  goblin's only: `goblin-cinematic` (`goblin-cinematic.blob`, `goblin-cinematic-kit.wam` with bare eyes, no sunglasses) carries the
+  jaw, teeth, morphs and clips below; the base `goblin` is back to `f81e5b10` (pre-expression head and cost); PR #47's `goblin-home`
+  can adopt the variant (notes, Task 13 section).** [Notes, the expression sheet and the
   tuning frames](../dev-notes/2026-10-13-goblin-expressions/NOTES.md) · [spec](../superpowers/specs/2026-10-13-goblin-expressions-design.md) ·
   [plan](../superpowers/plans/2026-10-13-goblin-expressions.md). Built: a `jaw` carrier bone with the lower face split onto it and its
   own hinge (`hinge=0.06` on the bone, at the lip line: the hinge is per body now, `jaw.ts`/`blob-parse.ts`/`rig-bind.ts`); the mouth
@@ -104,8 +107,8 @@ so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), like
   panel section "expression", `__sdfLab.holdExpression`/`playExpression`/`blink`/`setJawGape`, `BLOB_EXPR`/`BLOB_GAPE` captures and
   `scripts/goblin-expression-sheet.sh`; `MotionConfig.jawGape` for the actor path. Cost, measured 2026-10-14 in the lab: +47 ms a frame on a face close-up (54 -> 101 ms), +5 ms
   at 2.4 m; the teeth and interior, buried at rest, are about 30 ms of it (notes: trims listed, none applied).
-  - [ ] Owner look: is the grin evil enough? The kit's round sunglasses cover the painted brows and eyes from the front, so with
-    the kit on the expressions differ by the jaw and teeth alone ([notes](../dev-notes/2026-10-13-goblin-expressions/NOTES.md)).
+  - [ ] Owner look: is the grin evil enough? (Before Task 13 the kit's round sunglasses covered the painted brows and eyes from the
+    front, so with the kit on the expressions differed by the jaw and teeth alone; the cinematic kit has bare eyes.) ([notes](../dev-notes/2026-10-13-goblin-expressions/NOTES.md)).
   - [~] **Task 12 (2026-10-15), built, owner look pending:** the teeth brighter (`color=e0d8c0 gloss=0.35 glow=0.15`; grin tooth/gap luma
     ratio 2.9 -> 9.4 front, 0.95 -> 2.2 at 45 degrees, 3.2 with the morphs) and approach C as a small per-prim morph mechanism
     (`morph=<channel>:<terms>` on a `.blob` blob/bar, pure `morph.ts`, `applyRig` moves the rest geometry before the jaw and head;

@@ -4,6 +4,37 @@ Spec: [`docs/superpowers/specs/2026-10-13-goblin-expressions-design.md`](../../s
 Plan: [`docs/superpowers/plans/2026-10-13-goblin-expressions.md`](../../superpowers/plans/2026-10-13-goblin-expressions.md).
 Task 3b's own notes (the mouth moved to the lip line, the per-body hinge): [`grin/NOTES-grin.md`](grin/NOTES-grin.md).
 
+## Task 13 (2026-10-15): the face rig moved to `goblin-cinematic`; the base goblin went back
+
+Owner: "we would have a base goblin without the facial head complexity" and "the cinematic goblin has bare eyes (no
+sunglasses)". **Everything below this section that says `goblin.blob` describes what is now `goblin-cinematic.blob`.**
+
+What is where now:
+
+| piece | where |
+|---|---|
+| base goblin (lab, game, first-person arms) | `goblin.blob`, `goblin-kit.wam`, `public/assets/lab/goblin-kit.gltf`, `goblin-blob.test.ts`: **byte-identical to `f81e5b10`** (`git diff f81e5b10 -- <those four>` is empty). No jaw bone, no teeth, no morphs, no expressions, the sunglasses on, the pre-expression head and cost. pack-golden `goblin.blob` is back to `41812d68d01256d7`. |
+| the face rig | `characters/goblin-cinematic.blob` (`model goblin-cinematic`): the expression-pass goblin.blob as of `c3f72173`, unchanged but for its header, the model line and test references. Packs to `fdd6c28ddf941d0d`, the hash goblin.blob had before Task 13, so it IS that goblin. |
+| its kit | `characters/goblin-cinematic-kit.wam` -> `public/assets/lab/goblin-cinematic-kit.gltf` (`scripts/build-wam-kit.sh goblin-cinematic`): the goblin kit with the `jaw` bone line and WITHOUT the round lenses, the ear-hook temple arms, the nose bridge and their `glass`/`black` materials (9870 -> 6792 vertices). A change to the armour in `goblin-kit.wam` has to be copied here. |
+| registry and libraries | `character-registry.ts` `goblin-cinematic` (its kit, `motionProfileFor('goblin-cinematic')` = `GOBLIN_PROFILE`, listed in motion-profile.ts `BY_NAME` because lab-main looks the profile up by name); `pose-library.ts` gives it `GOBLIN_POSES`; `expression-library.ts` keys the clips `goblin-cinematic` only (`expressionsFor('goblin')` is null). |
+| tests | the expression-pass tests moved from `goblin-blob.test.ts` to `goblin-cinematic-blob.test.ts`, which also pins that the variant is the base goblin below the neck (every non-head prim and every bone but `jaw` equal), that the base goblin has no jaw/morph/hinge/head paint and keeps the ORIGINAL head profile, and that the cinematic kit has no lens/frame material. `goblin-head-profile.ts` has two probe sets (`GOBLIN_PROFILE_PROBES`, the Task 1 pins; `CINEMATIC_PROFILE_PROBES`, the Task 3b mouth re-pin); `scripts/goblin-head-profile.ts [file.blob] [--probes goblin|goblin-cinematic]` picks by the file's `model` line. `rig-bind.test.ts`'s morph block and `goblin-expressions.test.ts` read the variant; `pack.test.ts` pins both prof rows and moves the 11 glowing teeth to `goblin-cinematic.blob`. |
+| captures | `?character=goblin-cinematic`; `scripts/goblin-expression-sheet.sh` shoots `goblin-cinematic` (`CHARACTER=` to change it); its kit-hidden row is off by default now (`NOKIT=1` adds it) because the kit no longer hides the eyes. |
+
+Frames ([`cinematic/`](cinematic/), `BLOB_DIST=0.3 BLOB_TARGET_Y=1.14 BLOB_PITCH=0.05`, 8-frame turntable, frame-00 front,
+frame-01 45 degrees): `cin-grin/` and `cin-neutral/` (the variant), `base/` (the base goblin, no expression). Measured in the eye
+band (y 40-300, x 380-1000 of the 1380x820 frame): red-eye pixels / neutral-grey (lens and frame) pixels are base front 0 /
+33067, base 45 2596 / 21628; cinematic neutral front 4155 / 1700, 45 2819 / 18; grin front 4225 / 1701, 45 2729 / 74. The
+cinematic face is bare: both red eyes show from the front and nothing grey but the nose's highlight is left. The grin reads
+as it did in Task 12 (the upper row and fangs over the dark gap, the lower lip pushed down into a U); the brows still barely
+read even bare (Task 10's finding). The base frame shows the pre-expression mouth (the pursed, sculpted crease and the tapered
+chin of `tuning/rest-before-after.png`'s "before" panel), not the expression pass's rounded lower roll.
+
+**Adopting it in PR #47's `goblin-home`** (not on this branch): `goblin-home` is the Flat's cinematic goblin. Either point its
+registry entry at `goblin-cinematic.blob` and `goblin-cinematic-kit.gltf` (and add `'goblin-home'` to `expression-library.ts`,
+`pose-library.ts` and motion-profile.ts `BY_NAME` next to `goblin-cinematic`), or, if `goblin-home` has its own .blob edits,
+carry the face block over: the `jaw` bone line with `hinge=0.06`, the head block from the lower lip to the teeth, the `face`
+block's jaw trio and the `morph=` words, then the kit's `jaw` bone line. `goblin-cinematic-blob.test.ts` is the checklist.
+
 ## What was built
 
 The goblin's face moves. `goblin.blob` has a `jaw` carrier bone (the bride's jaw system) with **its own hinge** (`hinge=0.06` on
