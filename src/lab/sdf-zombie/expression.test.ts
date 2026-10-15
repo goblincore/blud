@@ -4,7 +4,7 @@ import {
   REST_CHANNELS, expressionAt, blinkLid, withBlink, actuate, sheetKey,
   type ExpressionClip, type ExpressionTuning,
 } from './expression';
-import { DEFAULT_SHEET } from './blob-face-sheet';
+import { DEFAULT_SHEET, generateFaceSheet } from './blob-face-sheet';
 
 const TUNING: ExpressionTuning = {
   maxGape: 0.6, smileCurve: 1, smileWiden: 0.25, curlCurve: 0.8, curlNarrow: 0.25,
@@ -98,13 +98,70 @@ describe('actuate', () => {
 
   it('hands on the clamped channels as the morph weights, all zero at rest', () => {
     expect(actuate(REST_CHANNELS, DEFAULT_SHEET, TUNING).morphs).toEqual(REST_CHANNELS);
-    expect(actuate({ gape: 7, smile: -3, browDown: 0.4, lipCurl: -1, lid: 2 }, DEFAULT_SHEET, TUNING).morphs)
-      .toEqual({ gape: 1, smile: -1, browDown: 0.4, lipCurl: 0, lid: 1 });
+    expect(actuate({ gape: 7, smile: -3, browDown: 0.4, lipCurl: -1, lid: 2, squint: 3 }, DEFAULT_SHEET, TUNING).morphs)
+      .toEqual({ gape: 1, smile: -1, browDown: 0.4, lipCurl: 0, lid: 1, squint: 1 });
+    expect(actuate({ ...REST_CHANNELS, squint: -2 }, DEFAULT_SHEET, TUNING).morphs.squint).toBe(0);
   });
 
   it('never touches what it does not animate', () => {
     const s = actuate({ ...REST_CHANNELS, smile: 1, gape: 1, browDown: 1, lid: 1 }, DEFAULT_SHEET, TUNING).sheet;
     for (const k of ['eyeGap', 'eyeSize', 'grain', 'seed', 'nostril', 'jawShade'] as const) expect(s[k]).toBe(DEFAULT_SHEET[k]);
+  });
+});
+
+// Task 15: a smile is not only a mouth. `squint` is the cheek rising and the lids narrowing (0..1); `lid` keeps meaning blink.
+describe('squint (Task 15)', () => {
+  const SQ: ExpressionTuning = { ...TUNING, squintLid: 0.35, squintCheek: 0.7, squintEyeSize: 0.2, squintBrow: 0.02, squintTilt: 6 };
+  const GLOW = 224;
+  const lit = (sheet: typeof DEFAULT_SHEET) => generateFaceSheet({ ...sheet, grain: 0 }, 128).pixels.reduce((n, b) => n + (b >= GLOW ? 1 : 0), 0);
+
+  it('is a channel at rest 0, and rest leaves the sheet authored even with squint tuning', () => {
+    expect(REST_CHANNELS.squint).toBe(0);
+    expect(actuate(REST_CHANNELS, DEFAULT_SHEET, SQ).sheet).toEqual(DEFAULT_SHEET);
+  });
+
+  it('the eye gets smaller as squint rises: lit eye texels fall monotonically', () => {
+    const n = [0, 0.25, 0.5, 0.75, 1].map(q => lit(actuate({ ...REST_CHANNELS, squint: q }, DEFAULT_SHEET, SQ).sheet));
+    for (let i = 1; i < n.length; i++) expect(n[i]!).toBeLessThan(n[i - 1]!);
+    expect(n[4]!).toBeLessThan(n[0]! * 0.6);
+  });
+
+  it('writes the lids, the cheek, the eye size, the tilt and the brow by its tuning, and clamps to 0..1', () => {
+    const s = actuate({ ...REST_CHANNELS, squint: 1 }, DEFAULT_SHEET, SQ).sheet;
+    expect(s.eyeLid).toBeCloseTo(0.35, 9);
+    expect(s.eyeCheek).toBeCloseTo(0.7, 9);
+    expect(s.eyeSize).toBeCloseTo(DEFAULT_SHEET.eyeSize * 0.8, 9);
+    expect(s.eyeTilt).toBeCloseTo(DEFAULT_SHEET.eyeTilt + 6, 9);
+    expect(s.browDrop).toBeCloseTo(0.02, 9);
+    expect(actuate({ ...REST_CHANNELS, squint: 5 }, DEFAULT_SHEET, SQ).sheet).toEqual(s);
+    expect(actuate({ ...REST_CHANNELS, squint: -5 }, DEFAULT_SHEET, SQ).sheet).toEqual(DEFAULT_SHEET);
+  });
+
+  it('a blink still shuts a squinting eye: the lid is the larger of the two', () => {
+    expect(actuate({ ...REST_CHANNELS, squint: 1, lid: 1 }, DEFAULT_SHEET, SQ).sheet.eyeLid).toBe(1);
+    expect(actuate({ ...REST_CHANNELS, squint: 1, lid: 0.1 }, DEFAULT_SHEET, SQ).sheet.eyeLid).toBeCloseTo(0.35, 9);
+  });
+
+  it('without squint tuning (another character) squint changes no sheet param', () => {
+    expect(actuate({ ...REST_CHANNELS, squint: 1 }, DEFAULT_SHEET, TUNING).sheet).toEqual(DEFAULT_SHEET);
+  });
+});
+
+// Task 15: the brow moves with browDown (down for a scowl, up for surprise), and a raised brow opens the eye a touch.
+describe('browDown moves the brow and a raised brow widens the eye (Task 15)', () => {
+  const T: ExpressionTuning = { ...TUNING, browShift: 0.02, browRaiseEye: 0.15, browLidTop: 0.5 };
+  it('slides the painted brow down for positive browDown and up for negative', () => {
+    expect(actuate({ ...REST_CHANNELS, browDown: 1 }, DEFAULT_SHEET, T).sheet.browDrop).toBeCloseTo(0.02, 9);
+    expect(actuate({ ...REST_CHANNELS, browDown: -1 }, DEFAULT_SHEET, T).sheet.browDrop).toBeCloseTo(-0.02, 9);
+  });
+  it('a brow pressed DOWN lowers the heavy upper lid; a raised one does not', () => {
+    expect(actuate({ ...REST_CHANNELS, browDown: 0.8 }, DEFAULT_SHEET, T).sheet.eyeLidTop).toBeCloseTo(0.4, 9);
+    expect(actuate({ ...REST_CHANNELS, browDown: -1 }, DEFAULT_SHEET, T).sheet.eyeLidTop).toBe(0);
+    expect(actuate({ ...REST_CHANNELS, browDown: 1 }, DEFAULT_SHEET, TUNING).sheet.eyeLidTop).toBe(0);
+  });
+  it('only a RAISED brow grows the eye', () => {
+    expect(actuate({ ...REST_CHANNELS, browDown: -1 }, DEFAULT_SHEET, T).sheet.eyeSize).toBeCloseTo(DEFAULT_SHEET.eyeSize * 1.15, 9);
+    expect(actuate({ ...REST_CHANNELS, browDown: 1 }, DEFAULT_SHEET, T).sheet.eyeSize).toBe(DEFAULT_SHEET.eyeSize);
   });
 });
 
@@ -114,5 +171,8 @@ describe('sheetKey', () => {
     expect(sheetKey({ ...DEFAULT_SHEET, mouthCurve: DEFAULT_SHEET.mouthCurve + 1e-6 })).toBe(a);
     expect(sheetKey({ ...DEFAULT_SHEET, mouthCurve: DEFAULT_SHEET.mouthCurve + 0.02 })).not.toBe(a);
     expect(sheetKey({ ...DEFAULT_SHEET, eyeLid: 0.5 })).not.toBe(a);
+    for (const k of ['eyeCheek', 'eyeLidTop', 'browDrop'] as const) expect(sheetKey({ ...DEFAULT_SHEET, [k]: 0.02 }), k).not.toBe(a);
+    expect(sheetKey({ ...DEFAULT_SHEET, eyeSize: DEFAULT_SHEET.eyeSize + 0.002 })).not.toBe(a);
+    expect(sheetKey({ ...DEFAULT_SHEET, eyeTilt: DEFAULT_SHEET.eyeTilt + 1 })).not.toBe(a);
   });
 });

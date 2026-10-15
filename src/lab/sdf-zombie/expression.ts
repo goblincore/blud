@@ -20,14 +20,15 @@
 // the face's own sense (positive smiles), so `actuate` SUBTRACTS it from mouthCurve.
 import type { FaceSheetParams } from './blob-face-sheet';
 
-export const CHANNEL_NAMES = ['gape', 'smile', 'browDown', 'lipCurl', 'lid'] as const;
+export const CHANNEL_NAMES = ['gape', 'smile', 'browDown', 'lipCurl', 'lid', 'squint'] as const;
 export type ChannelName = typeof CHANNEL_NAMES[number];
 
 /** Every channel, resolved. Ranges: gape 0..1; smile -1..1 (negative frowns); browDown -1..1 (negative raises); lipCurl 0..1;
- *  lid 0..1 (1 is shut). */
+ *  lid 0..1 (1 is shut: the BLINK); squint 0..1 (Task 15: the cheeks rise into the lower lids and the eyes narrow, what makes a
+ *  smile a smile and not an open mouth). */
 export type Channels = Record<ChannelName, number>;
 
-export const REST_CHANNELS: Readonly<Channels> = { gape: 0, smile: 0, browDown: 0, lipCurl: 0, lid: 0 };
+export const REST_CHANNELS: Readonly<Channels> = { gape: 0, smile: 0, browDown: 0, lipCurl: 0, lid: 0, squint: 0 };
 
 export interface ExpressionKey {
   /** Seconds from the clip's start. */
@@ -60,6 +61,25 @@ export interface ExpressionTuning {
   gapeMouthOpen: number;
   /** mouthOpen added per unit of positive smile. */
   smileMouthOpen: number;
+  // THE EYES (Task 15; owner: "smiling involves also movement of the eye area where the eyes would have to get smaller with the
+  // cheeks and eyelids closing more"). All optional: a tuning without them leaves the eyes and the brow's height alone.
+  /** eyeLid (both lids, evenly) per unit squint. The blink's `lid` still wins when it is larger. */
+  squintLid?: number;
+  /** eyeCheek (the lower lid pushed up into an arch) per unit squint. */
+  squintCheek?: number;
+  /** Fraction of eyeSize removed per unit squint. */
+  squintEyeSize?: number;
+  /** browDrop (sheet uv, down) per unit squint: the squint pulls the brow toward the eye. */
+  squintBrow?: number;
+  /** Degrees added to eyeTilt per unit squint (positive lifts the outer corners). */
+  squintTilt?: number;
+  /** browDrop (sheet uv) per unit browDown, both signs: positive browDown slides the brow down, negative lifts it. */
+  browShift?: number;
+  /** Fraction of eyeSize ADDED per unit of NEGATIVE browDown (a raised brow opens the eye: surprise). */
+  browRaiseEye?: number;
+  /** eyeLidTop (the heavy, inward-slanted upper lid) per unit of POSITIVE browDown: a brow pressed down narrows the eye from
+   *  above. This is what makes a squinting grin EVIL rather than friendly (the friendly smile's brows are not down). */
+  browLidTop?: number;
 }
 
 export interface Actuation {
@@ -115,10 +135,20 @@ export function actuate(channels: Channels, base: FaceSheetParams, tuning: Expre
   const browDown = clamp(channels.browDown, -1, 1);
   const lipCurl = clamp(channels.lipCurl, 0, 1);
   const lid = clamp(channels.lid, 0, 1);
+  const squint = clamp(channels.squint, 0, 1);
   const grin = Math.max(smile, 0);
+  const raise = Math.max(-browDown, 0);
+  // The eye params are only written when they move, so a rest frame (or a tuning without the Task 15 fields) hands back the
+  // authored numbers exactly, not the same numbers through arithmetic.
+  const squintLid = squint * (tuning.squintLid ?? 0);
+  const eyeScale = (1 - squint * (tuning.squintEyeSize ?? 0)) * (1 + raise * (tuning.browRaiseEye ?? 0));
+  const tilt = squint * (tuning.squintTilt ?? 0);
+  const cheek = squint * (tuning.squintCheek ?? 0);
+  const drop = squint * (tuning.squintBrow ?? 0) + browDown * (tuning.browShift ?? 0);
+  const lidTop = Math.max(browDown, 0) * (tuning.browLidTop ?? 0);
   return {
     jawGape: gape * tuning.maxGape,
-    morphs: { gape, smile, browDown, lipCurl, lid },
+    morphs: { gape, smile, browDown, lipCurl, lid, squint },
     sheet: {
       ...base,
       mouthCurve: base.mouthCurve - smile * tuning.smileCurve + lipCurl * tuning.curlCurve,
@@ -126,14 +156,24 @@ export function actuate(channels: Channels, base: FaceSheetParams, tuning: Expre
       mouthOpen: Math.max(0, base.mouthOpen + gape * tuning.gapeMouthOpen + grin * tuning.smileMouthOpen),
       browAngle: base.browAngle + browDown * tuning.browAngle,
       browHeavy: clamp(base.browHeavy + browDown * tuning.browHeavy, 0, 1.2),
-      eyeLid: Math.max(base.eyeLid, lid),
+      eyeLid: Math.max(base.eyeLid, lid, squintLid),
+      ...(eyeScale === 1 ? {} : { eyeSize: base.eyeSize * eyeScale }),
+      ...(tilt === 0 ? {} : { eyeTilt: base.eyeTilt + tilt }),
+      ...(cheek === 0 ? {} : { eyeCheek: clamp(base.eyeCheek + cheek, 0, 1) }),
+      ...(drop === 0 ? {} : { browDrop: base.browDrop + drop }),
+      ...(lidTop === 0 ? {} : { eyeLidTop: clamp(base.eyeLidTop + lidTop, 0, 1) }),
     },
   };
 }
 
-/** A string that changes when (and only when) a sheet param this layer animates moves by more than 0.005: the lab regenerates the
- *  texture only when it does. */
+/** A string that changes when (and only when) a sheet param this layer animates moves by more than 0.005 (eyeSize: 0.0005): the lab
+ *  regenerates the texture only when it does. */
 export function sheetKey(s: FaceSheetParams): string {
   const q = (v: number) => Math.round(v * 200);
-  return [s.mouthCurve, s.mouthWidth, s.mouthOpen, s.browAngle, s.browHeavy, s.eyeLid].map(q).join(',');
+  // eyeSize is a small number (0.07): a finer quantum, 0.0005, so a squint's few-percent shrink is not lost.
+  return [
+    ...[s.mouthCurve, s.mouthWidth, s.mouthOpen, s.browAngle, s.browHeavy, s.eyeLid, s.eyeCheek, s.eyeLidTop, s.browDrop, s.eyeTilt]
+      .map(q),
+    Math.round(s.eyeSize * 2000),
+  ].join(',');
 }

@@ -163,3 +163,105 @@ describe('sheetToRgba', () => {
     expect(buf[3]).toBe(255);
   });
 });
+
+// GOBLIN EXPRESSIONS TASK 15 (the smile's eyes): `eyeCheek` (the cheek pushes the lower lid up into an arch) and `browDrop`
+// (the painted brow slides toward the eye). Both default to 0 and must leave every authored sheet bit-identical.
+import { compileSheet } from './blob-compile';
+import { parseBlob } from './blob-parse';
+
+describe('eyeCheek and browDrop (Task 15)', () => {
+  const GLOW = 224;
+  const litPx = (s: ReturnType<typeof generateFaceSheet>) => {
+    const out: Array<[number, number]> = [];
+    s.pixels.forEach((b, i) => { if (b >= GLOW) out.push([i % s.size, Math.floor(i / s.size)]); });
+    return out;
+  };
+  const flat: FaceSheetParams = { ...DEFAULT_SHEET, grain: 0 };
+
+  it('default to 0', () => {
+    expect(DEFAULT_SHEET.eyeCheek).toBe(0);
+    expect(DEFAULT_SHEET.browDrop).toBe(0);
+    expect(DEFAULT_SHEET.eyeLidTop).toBe(0);
+  });
+
+  it('eyeCheek eats the eye from BELOW: fewer lit texels, the top edge kept, the lit centroid higher', () => {
+    const open = litPx(generateFaceSheet(flat, 128));
+    const cheek = litPx(generateFaceSheet({ ...flat, eyeCheek: 0.6 }, 128));
+    expect(cheek.length).toBeGreaterThan(0);
+    expect(cheek.length).toBeLessThan(open.length * 0.75);
+    const top = (px: Array<[number, number]>) => Math.min(...px.map(p => p[1]));
+    const meanY = (px: Array<[number, number]>) => px.reduce((n, p) => n + p[1], 0) / px.length;
+    expect(top(cheek)).toBe(top(open));          // the upper lid did not move
+    expect(meanY(cheek)).toBeLessThan(meanY(open)); // what is left sits higher: the lower lid rose
+  });
+
+  it('eyeCheek shrinks the eye monotonically', () => {
+    const n = [0, 0.3, 0.6, 1].map(c => litPx(generateFaceSheet({ ...flat, eyeCheek: c }, 128)).length);
+    for (let i = 1; i < n.length; i++) expect(n[i]!).toBeLessThan(n[i - 1]!);
+  });
+
+  it('eyeCheek arches the lower lid: the middle of the eye loses more height than its sides', () => {
+    // Column heights of lit texels across the left eye, rest vs cheek: the drop is largest at the eye's centre column.
+    const size = 128;
+    const colHeight = (s: ReturnType<typeof generateFaceSheet>, u: number) => {
+      const x = Math.floor(u * size);
+      let n = 0;
+      for (let y = 0; y < size; y++) if (s.pixels[y * size + x]! >= GLOW) n++;
+      return n;
+    };
+    const rest = generateFaceSheet({ ...flat, eyeTilt: 0 }, size);
+    const cheek = generateFaceSheet({ ...flat, eyeTilt: 0, eyeCheek: 0.7 }, size);
+    const cx = 0.5 - DEFAULT_SHEET.eyeGap / 2;
+    const side = DEFAULT_SHEET.eyeSize * 0.6;
+    const loss = (u: number) => colHeight(rest, u) - colHeight(cheek, u);
+    expect(loss(cx)).toBeGreaterThan(loss(cx - side));
+    expect(loss(cx)).toBeGreaterThan(loss(cx + side));
+  });
+
+  it('eyeLidTop eats the eye from ABOVE, more at the inner corner: the bottom kept, the inner side shorter than the outer', () => {
+    const size = 128;
+    const f = { ...flat, eyeTilt: 0 };
+    const open = litPx(generateFaceSheet(f, size));
+    const top = litPx(generateFaceSheet({ ...f, eyeLidTop: 0.5 }, size));
+    expect(top.length).toBeGreaterThan(0);
+    expect(top.length).toBeLessThan(open.length * 0.8);
+    const bottom = (px: Array<[number, number]>) => Math.max(...px.map(p => p[1]));
+    expect(bottom(top)).toBe(bottom(open));
+    // Left eye (x < 0.5): its inner corner is the right-hand side.
+    const cx = 0.5 - DEFAULT_SHEET.eyeGap / 2, side = DEFAULT_SHEET.eyeSize * 0.55;
+    const colH = (px: Array<[number, number]>, u: number) => px.filter(p => p[0] === Math.floor(u * size)).length;
+    expect(colH(top, cx + side)).toBeLessThan(colH(top, cx - side));
+  });
+
+  it('browDrop moves the brow band down the sheet', () => {
+    const browRow = (drop: number) => {
+      const s = generateFaceSheet({ ...flat, browDrop: drop, eyeSize: 0, noseRidge: 0, nostril: 0, mouthOpen: 0, jawShade: 0 }, 128);
+      const x = Math.floor((0.5 - DEFAULT_SHEET.eyeGap / 2) * 128);
+      let best = 0, dark = 255;
+      for (let y = 0; y < 128; y++) { const b = s.pixels[y * 128 + x]!; if (b < dark) { dark = b; best = y; } }
+      return best / 128;
+    };
+    expect(browRow(0.03)).toBeGreaterThan(browRow(0) + 0.02);
+  });
+
+  // Hashes of every character's generated sheet taken BEFORE eyeCheek/browDrop existed (FNV-1a over the 64x64 pixels).
+  it('every authored sheet is bit-identical to before the params existed', () => {
+    const RAW = import.meta.glob('./characters/*.blob', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+    const fnv = (b: Uint8Array) => {
+      let h = 0x811c9dc5;
+      for (const x of b) { h ^= x; h = Math.imul(h, 0x01000193) >>> 0; }
+      return h.toString(16).padStart(8, '0');
+    };
+    const PINNED: Record<string, string> = {
+      DEFAULT: '4a05bb6b', 'clown.blob': 'c165a082', 'clown-alt.blob': 'c165a082', 'cyclops.blob': '2e2a5e7e',
+      'goblin.blob': 'a004a128', 'goblin-cinematic.blob': '56d68e7f', 'mouse.blob': 'd07a38f1',
+    };
+    expect(fnv(generateFaceSheet(DEFAULT_SHEET).pixels)).toBe(PINNED.DEFAULT);
+    for (const [path, src] of Object.entries(RAW)) {
+      const s = compileSheet(parseBlob(src));
+      if (!s || s.decal >= 0.5) continue;
+      const name = path.replace('./characters/', '');
+      expect(fnv(generateFaceSheet(s).pixels), name).toBe(PINNED[name] ?? PINNED.DEFAULT);
+    }
+  });
+});
