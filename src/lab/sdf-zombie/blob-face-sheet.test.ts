@@ -244,6 +244,58 @@ describe('eyeCheek and browDrop (Task 15)', () => {
     expect(browRow(0.03)).toBeGreaterThan(browRow(0) + 0.02);
   });
 
+  // TASK 19 (the evil grin's furrow): `browFurrow` paints two short vertical creases between the brows, above the nose bridge, and
+  // pulls the painted brows' inner ends down toward them. Default 0: every authored sheet bit-identical (the FNV pins below).
+  describe('browFurrow (Task 19)', () => {
+    const size = 128;
+    const bare: FaceSheetParams = { ...flat, eyeSize: 0, noseRidge: 0, nostril: 0, mouthOpen: 0, jawShade: 0 };
+    const px = (s: ReturnType<typeof generateFaceSheet>, u: number, v: number) =>
+      s.pixels[Math.floor(v * size) * size + Math.floor(u * size)]!;
+    // The glabella: between the brows' inner ends and above the nose bridge.
+    const eyeY = DEFAULT_SHEET.eyeRise;
+    const rows = Array.from({ length: 6 }, (_, k) => eyeY - 0.10 + k * 0.01);
+
+    it('defaults to 0, and 0 is the sheet without it', () => {
+      expect(DEFAULT_SHEET.browFurrow).toBe(0);
+      expect(Array.from(generateFaceSheet({ ...DEFAULT_SHEET, browFurrow: 0 }).pixels))
+        .toEqual(Array.from(generateFaceSheet(DEFAULT_SHEET).pixels));
+    });
+
+    it('paints two vertical creases either side of the midline: darker than the skin between them and than the rest sheet', () => {
+      const off = generateFaceSheet(bare, size), on = generateFaceSheet({ ...bare, browFurrow: 1 }, size);
+      for (const v of rows) for (const side of [-1, 1]) {
+        const crease = 0.5 + side * 0.026;
+        expect(px(on, crease, v), `v ${v} side ${side}`).toBeLessThan(px(off, crease, v) - 40);
+        expect(px(on, crease, v), `v ${v} side ${side}: a crease, not one dark patch`).toBeLessThan(px(on, 0.5, v) - 40);
+      }
+    });
+
+    it('the creases are short: nothing changes well above the brows or below the nose bridge', () => {
+      const off = generateFaceSheet(bare, size), on = generateFaceSheet({ ...bare, browFurrow: 1 }, size);
+      for (const v of [eyeY - 0.22, eyeY + 0.06, eyeY + 0.15])
+        for (const u of [0.474, 0.5, 0.526]) expect(px(on, u, v), `u ${u} v ${v}`).toBe(px(off, u, v));
+    });
+
+    it('pulls the painted brows\' inner ends down (the outer ends stay)', () => {
+      const browRow = (furrow: number, sx: number) => {
+        const s = generateFaceSheet({ ...bare, browFurrow: furrow }, size);
+        const x = Math.floor((0.5 - sx) * size);
+        let best = 0, dark = 255;
+        for (let y = 0; y < Math.floor(eyeY * size); y++) { const b = s.pixels[y * size + x]!; if (b < dark) { dark = b; best = y; } }
+        return best / size;
+      };
+      const inner = DEFAULT_SHEET.eyeGap / 2 - 0.06, outer = DEFAULT_SHEET.eyeGap / 2 + 0.08;
+      expect(browRow(1, inner)).toBeGreaterThan(browRow(0, inner) + 0.012);
+      expect(Math.abs(browRow(1, outer) - browRow(0, outer))).toBeLessThan(0.008);
+    });
+
+    it('is monotonic: more furrow, darker creases', () => {
+      const at = (f: number) => px(generateFaceSheet({ ...bare, browFurrow: f }, size), 0.526, eyeY - 0.07);
+      expect(at(0.5)).toBeLessThan(at(0));
+      expect(at(1)).toBeLessThan(at(0.5));
+    });
+  });
+
   // Hashes of every character's generated sheet taken BEFORE eyeCheek/browDrop existed (FNV-1a over the 64x64 pixels).
   it('every authored sheet is bit-identical to before the params existed', () => {
     const RAW = import.meta.glob('./characters/*.blob', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;

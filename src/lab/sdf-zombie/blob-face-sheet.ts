@@ -169,6 +169,13 @@ export interface FaceSheetParams {
    * brow down; a surprised face lifts it. Default 0 leaves every sheet bit-identical.
    */
   browDrop: number;
+  /**
+   * A FURROW between the brows (goblin expressions Task 19, the evil grin's knit brows), 0 (none) to 1: two short dark vertical
+   * creases either side of the midline, from the brows' inner ends down to the nose bridge (the "11" a frown cuts above the nose),
+   * and the painted brows' inner ends pulled down toward them. The
+   * expression layer's `furrow` channel writes it. Default 0 leaves every character's sheet bit-identical.
+   */
+  browFurrow: number;
   /** Mouth width, fraction of sheet width. */
   mouthWidth: number;
   /** Vertical mouth position. */
@@ -263,6 +270,7 @@ export const DEFAULT_SHEET: FaceSheetParams = {
   browHeavy: 0.55,
   browAngle: 14,
   browDrop: 0,
+  browFurrow: 0,
   mouthWidth: 0.40,
   mouthRise: 0.72,
   mouthCurve: -0.25,
@@ -343,10 +351,22 @@ export function generateFaceSheet(
       // Brow: a slanted bar above the eye line. The CREASE under it does the
       // work, same lesson as face.ts's geometric brow.
       if (p.browHeavy > 0) {
-        const browY = eyeY - 0.085 - (sx - eyeDX) * browSlant + p.browDrop;
+        let browY = eyeY - 0.085 - (sx - eyeDX) * browSlant + p.browDrop;
+        // The furrow (Task 19) pulls the inner ends down toward the creases, most at the inner end, nothing past the eye's centre.
+        // Skipped at 0 (bit-identical sheets).
+        if (p.browFurrow > 0) browY += p.browFurrow * 0.03 * Math.min(Math.max((eyeDX - sx) / 0.08, 0), 1);
         const d = Math.abs(y - browY);
         const inSpan = falloff(Math.abs(sx - eyeDX * 0.95), 0.115, 0.05);
         v -= p.browHeavy * 0.30 * falloff(d, 0.030, 0.028) * inSpan;
+      }
+
+      // The furrow's creases (Task 19): two short vertical dark lines either side of the midline, from the brows' inner ends down to
+      // the top of the nose bridge (eyeY - 0.03, where the nose's ridge starts). A crease, not a gash: each line is about a texel wide
+      // on the 64 sheet and fades out at both ends. (A lighter strip between them read as a raised tab on the GPU: dropped.)
+      if (p.browFurrow > 0) {
+        const top = eyeY - 0.125, bot = eyeY - 0.025;
+        const span = falloff(Math.abs(y - (top + bot) / 2), (bot - top) / 2, 0.025);
+        v -= p.browFurrow * 0.34 * falloff(Math.abs(sx - 0.026), 0.010, 0.010) * span;
       }
 
       // Eyes: the BRIGHT feature, because brightness is what the shader's

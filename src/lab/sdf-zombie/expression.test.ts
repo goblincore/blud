@@ -98,8 +98,8 @@ describe('actuate', () => {
 
   it('hands on the clamped channels as the morph weights, all zero at rest', () => {
     expect(actuate(REST_CHANNELS, DEFAULT_SHEET, TUNING).morphs).toEqual(REST_CHANNELS);
-    expect(actuate({ gape: 7, smile: -3, browDown: 0.4, lipCurl: -1, lid: 2, squint: 3, squash: 4 }, DEFAULT_SHEET, TUNING).morphs)
-      .toEqual({ gape: 1, smile: -1, browDown: 0.4, lipCurl: 0, lid: 1, squint: 1, squash: 1 });
+    expect(actuate({ gape: 7, smile: -3, browDown: 0.4, lipCurl: -1, lid: 2, squint: 3, squash: 4, furrow: 2 }, DEFAULT_SHEET, TUNING).morphs)
+      .toEqual({ gape: 1, smile: -1, browDown: 0.4, lipCurl: 0, lid: 1, squint: 1, squash: 1, furrow: 1 });
     expect(actuate({ ...REST_CHANNELS, squint: -2 }, DEFAULT_SHEET, TUNING).morphs.squint).toBe(0);
     // Task 18: squash is signed (+ wider and shorter, - narrower and taller), clamped to -1..1, and never touches the sheet.
     expect(actuate({ ...REST_CHANNELS, squash: -3 }, DEFAULT_SHEET, TUNING).morphs.squash).toBe(-1);
@@ -165,6 +165,38 @@ describe('browDown moves the brow and a raised brow widens the eye (Task 15)', (
   it('only a RAISED brow grows the eye', () => {
     expect(actuate({ ...REST_CHANNELS, browDown: -1 }, DEFAULT_SHEET, T).sheet.eyeSize).toBeCloseTo(DEFAULT_SHEET.eyeSize * 1.15, 9);
     expect(actuate({ ...REST_CHANNELS, browDown: 1 }, DEFAULT_SHEET, T).sheet.eyeSize).toBe(DEFAULT_SHEET.eyeSize);
+  });
+});
+
+// Task 19 (owner: "an 'evil grin' where the brows angle more inward to produce a furrow"): `furrow` (0..1) knits the brows into a
+// furrow: painted creases between them (sheet `browFurrow`, through the tuning's optional `furrowSheet`) and the per-prim morphs
+// (the brow ridge's V, the inner-brow bulges) by its clamped weight.
+describe('furrow (Task 19)', () => {
+  const F: ExpressionTuning = { ...TUNING, furrowSheet: 0.9 };
+
+  it('is a channel at rest 0, and rest leaves the sheet authored even with furrow tuning', () => {
+    expect(REST_CHANNELS.furrow).toBe(0);
+    expect(actuate(REST_CHANNELS, DEFAULT_SHEET, F).sheet).toEqual(DEFAULT_SHEET);
+    expect(actuate(REST_CHANNELS, DEFAULT_SHEET, F).morphs.furrow).toBe(0);
+  });
+
+  it('writes browFurrow by its tuning, clamped to 0..1, and hands the clamped weight on as a morph', () => {
+    expect(actuate({ ...REST_CHANNELS, furrow: 1 }, DEFAULT_SHEET, F).sheet.browFurrow).toBeCloseTo(0.9, 9);
+    expect(actuate({ ...REST_CHANNELS, furrow: 0.5 }, DEFAULT_SHEET, F).sheet.browFurrow).toBeCloseTo(0.45, 9);
+    expect(actuate({ ...REST_CHANNELS, furrow: 7 }, DEFAULT_SHEET, F).morphs.furrow).toBe(1);
+    expect(actuate({ ...REST_CHANNELS, furrow: 7 }, DEFAULT_SHEET, F).sheet.browFurrow).toBeCloseTo(0.9, 9);
+    expect(actuate({ ...REST_CHANNELS, furrow: -2 }, DEFAULT_SHEET, F).morphs.furrow).toBe(0);
+    expect(actuate({ ...REST_CHANNELS, furrow: -2 }, DEFAULT_SHEET, F).sheet).toEqual(DEFAULT_SHEET);
+  });
+
+  it('touches nothing else on the sheet, and without furrow tuning (another character) changes no sheet param', () => {
+    const s = actuate({ ...REST_CHANNELS, furrow: 1 }, DEFAULT_SHEET, F).sheet;
+    expect({ ...s, browFurrow: DEFAULT_SHEET.browFurrow }).toEqual(DEFAULT_SHEET);
+    expect(actuate({ ...REST_CHANNELS, furrow: 1 }, DEFAULT_SHEET, TUNING).sheet).toEqual(DEFAULT_SHEET);
+  });
+
+  it('the sheet key sees it', () => {
+    expect(sheetKey({ ...DEFAULT_SHEET, browFurrow: 0.02 })).not.toBe(sheetKey(DEFAULT_SHEET));
   });
 });
 
