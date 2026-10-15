@@ -1568,6 +1568,20 @@ What makes the reference read (the controller's analysis, check it against the i
 
 ---
 
+### Task 19: An evil grin variant with a brow furrow (owner request on PR #48, 2026-10-15)
+
+Owner: "do you think its also possible to have like a variant like an 'evil grin' where the brows angle more inward to produce a furrow". Agreed approach (the controller proposed it; the owner did not object): keep `grin` as it is and add an `evil-grin` clip with the same mouth, the brows driven harder DOWN and INWARD and a FURROW between them; `scowl` gets the furrow too.
+
+1. **A `furrow` channel** (0..1) in `expression.ts` (CHANNEL_NAMES, REST_CHANNELS, `actuate`, clamped, returned in `morphs`), tests first. Two layers:
+   - **Painted:** a new face-sheet param (e.g. `browFurrow`, default 0 so every character's sheet stays bit-identical: the FNV pins in `blob-face-sheet.test.ts`) that draws two or three short dark vertical creases between the brows, above the nose bridge, and pulls the painted brows' inner ends down and together; `actuate` maps `furrow` to it.
+   - **Geometry:** two small bulges at the inner ends of the brow ridge (procerus/corrugator), buried at rest, that push up, forward and inward on `furrow` so a real crease forms between them; and a stronger inward pull of the brow ridge's V (`morph brow furrow:...` on the face block's brow ridge). At most 2 new prims (one `both` line). Weights 0 bit-identical (rest pins, pack bytes only change by the new prims' line: re-record the variant's pack-golden and pack prof row and explain).
+2. **Clips** (`goblin-expressions.ts`, cinematic only): `evil-grin` = the grin's peak plus browDown 1, furrow 1, squint ~0.9 (eyes a touch narrower), same mouth; `scowl` adds furrow ~0.8. Update the clip-name tests.
+3. **Judge** with a front close-up of the eyes/brow (BLOB_DIST=0.3, BLOB_TARGET_Y=1.2) and the whole face (BLOB_DIST=0.36, BLOB_TARGET_Y=1.17), front and 45 degrees: grin vs evil-grin side by side; the furrow must read from the front at the close-up and at the whole-face distance; it must not look like a wound or a hole (keep it a crease). Clip at the end: grin vs evil-grin front, evil-grin 3/4. Deliver to `docs/dev-notes/2026-10-13-goblin-expressions/evil-grin/` and a NOTES.md section.
+
+**Rules:** targeted tests only; own ports (`LAB_VITE_PORT=5401 LAB_CDP_PORT=9401`); never 5173; one capture at a time (the owner's machine is slow); no Blender; commits end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`; do not push; base goblin unchanged.
+
+---
+
 ## Self-review (spec coverage, placeholders, types)
 
 - **Spec coverage:** channels, clips, `expressionAt`, `actuate`, `sheetKey` (Task 6); goblin data and library (Task 7); jaw bone, split, teeth, interior (Tasks 2-3); motion wiring (Task 8); in-place sheet update, panel, driver API (Tasks 5, 9); look-dev spike and gate (Task 4); frames, notes, cost, `TASKS.md`, `characters.md` (Tasks 10-11); risks: the grin-may-not-read risk is Task 4's gate, the split-changes-the-head risk is Task 1's pins, the kit/skeleton risk is Task 2 step 6 (and corrected in the spec in Task 11), the `ridesHead` trap is covered by Task 3's buried pins and the jaw test, the "fine detail stays small" constraint is in the teeth comments and uses flat colour, the pose-layer inexactness is avoided by judging at rest.
