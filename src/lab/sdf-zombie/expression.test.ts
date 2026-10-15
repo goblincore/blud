@@ -98,9 +98,12 @@ describe('actuate', () => {
 
   it('hands on the clamped channels as the morph weights, all zero at rest', () => {
     expect(actuate(REST_CHANNELS, DEFAULT_SHEET, TUNING).morphs).toEqual(REST_CHANNELS);
-    expect(actuate({ gape: 7, smile: -3, browDown: 0.4, lipCurl: -1, lid: 2, squint: 3 }, DEFAULT_SHEET, TUNING).morphs)
-      .toEqual({ gape: 1, smile: -1, browDown: 0.4, lipCurl: 0, lid: 1, squint: 1 });
+    expect(actuate({ gape: 7, smile: -3, browDown: 0.4, lipCurl: -1, lid: 2, squint: 3, squash: 4 }, DEFAULT_SHEET, TUNING).morphs)
+      .toEqual({ gape: 1, smile: -1, browDown: 0.4, lipCurl: 0, lid: 1, squint: 1, squash: 1 });
     expect(actuate({ ...REST_CHANNELS, squint: -2 }, DEFAULT_SHEET, TUNING).morphs.squint).toBe(0);
+    // Task 18: squash is signed (+ wider and shorter, - narrower and taller), clamped to -1..1, and never touches the sheet.
+    expect(actuate({ ...REST_CHANNELS, squash: -3 }, DEFAULT_SHEET, TUNING).morphs.squash).toBe(-1);
+    expect(actuate({ ...REST_CHANNELS, squash: 0.8 }, DEFAULT_SHEET, TUNING).sheet).toEqual(DEFAULT_SHEET);
   });
 
   it('never touches what it does not animate', () => {

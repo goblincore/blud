@@ -12,6 +12,7 @@ import { jointForBoneEnd, rotateYaw } from './gait';
 import { boneFrames, segmentQuat, type BoneFrame3 } from './rig-frames';
 import { JAW_MAX_GAPE, jawOrient, jawRestOf, openAboutHinge, type JawRest } from './jaw';
 import { morphOf, morphShape, type MorphResult, type MorphWeights } from './morph';
+import { SQUASH_CENTRE_AT, squashAxes, squashMove, squashPoint, squashRestPrim, squashShape } from './squash';
 import {
   add, bendCtrl, cross, dot, len, normalize, qRotate, qMul,
   scale as vscale, sub,
@@ -570,7 +571,9 @@ export function pinTips(
  * head's frame while the prim moves under it, which reads as the same flesh). Returns `rest` ITSELF when no prim has a live
  * morph, so every body without weights uploads exactly as before.
  */
-export function morphedRest<B extends { prims: Primitive[] }>(rest: B, weights: MorphWeights | undefined): B {
+export function morphedRest<B extends { prims: Primitive[] }>(
+  rest: B, weights: MorphWeights | undefined, head: HeadRigid | null = null,
+): B {
   if (!weights) return rest;
   let prims: Primitive[] | null = null;
   rest.prims.forEach((p, i) => {
@@ -579,6 +582,21 @@ export function morphedRest<B extends { prims: Primitive[] }>(rest: B, weights: 
     prims ??= rest.prims.slice();
     prims[i] = { ...p, a: add(p.a, m.da), b: add(p.b, m.db) };
   });
+  // THE SQUASH (Task 18, squash.ts) moves every head prim, so the anchor follows it the same way: each head prim's (morphed) rest
+  // endpoints squashed about the head centre, in the rest body's own frame (the centre = the prim's rest point minus its
+  // pivot-relative bind point, plus the pivot-relative centre). Without it the noise jumped by the squash's move between
+  // neighbouring prims, the morph seam again. Pass the bound's head; without one (or without a squash weight) nothing here moves.
+  const s = head ? squashAxes(weights.squash) : null;
+  if (s && head) {
+    const c = vscale(head.restTip, SQUASH_CENTRE_AT);
+    head.prims.forEach((bind, i) => {
+      const p = (prims ?? rest.prims)[i];
+      if (!p) return;
+      const cw = add(sub(rest.prims[i]!.a, bind.a), c);
+      prims ??= rest.prims.slice();
+      prims[i] = { ...p, a: squashPoint(p.a, cw, s), b: squashPoint(p.b, cw, s) };
+    });
+  }
   return prims ? { ...rest, prims } : rest;
 }
 
@@ -620,7 +638,11 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       if (m) (morphed ??= new Map()).set(i, m);
     });
   }
-  const rigid = bound.head ? headTransform(bound.head, pos, bodyYaw, bound.rig.headFollowsRig, bound.rig.jawGape, morphed) : null;
+  // THE SQUASH (goblin expressions Task 18, squash.ts): the morph record's `squash` weight squashes every rigid-head prim about the
+  // head centre, after its morph and before the gape and the head's turn. Null (no weight, weight 0) leaves the old path exactly.
+  const squash = bound.head ? squashAxes(weights?.squash) : null;
+  const rigid = bound.head
+    ? headTransform(bound.head, pos, bodyYaw, bound.rig.headFollowsRig, bound.rig.jawGape, morphed, squash) : null;
   // Every rib/vertebra on an axial segment uses the same rotation. Derive it
   // once per applyRig call; a cache lasting across calls would retain a stale
   // pose after Verlet, yaw changes, or a collapse. Check restDir too because
@@ -675,10 +697,16 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       const a = add(rigid.origin, face.a);
       // A morph's radius/scale/bend (its endpoints already moved in headTransform, before the gape and the head's turn).
       const m = morphed?.get(i);
-      const shaped = m ? morphShape(p, m) : p;
+      const morphedShape = m ? morphShape(p, m) : p;
+      // The squash's scale and bend (its endpoints moved in headTransform); a shell's clip plane is squashed in the REST frame
+      // before it is posed (the centre in world rest = the prim's rest point minus its pivot-relative bind, plus the centre).
+      const sq = rigid.squash;
+      const shaped = sq ? squashShape(morphedShape, sq.s) : morphedShape;
+      const shellRest = sq && p.shell
+        ? squashRestPrim(p, add(sub(p.a, bound.head!.prims.get(i)!.a), sq.c), sq.s) : p;
       return { ...shaped, a, b: add(rigid.origin, face.b), orient: q,
         ...(shaped.bend ? { bend: qRotate(q, shaped.bend) } : {}),
-        ...(p.shell ? { shell: poseShellPlane(p, a, q) } : {}) };
+        ...(p.shell ? { shell: poseShellPlane(shellRest, a, q) } : {}) };
     }
     const bind = bound.binding[i]!;
     const m = morphed?.get(i);
@@ -713,8 +741,9 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       : `limb:${p.limb}:${bound.boneBinding[i]!.a.point}-${bound.boneBinding[i]!.b.point}`);
     if (face && rigid) {
       const q = rigid.jawBones.has(i) ? rigid.jawQ : rigid.q;
-      return { ...p, a: add(rigid.origin, face.a), b: add(rigid.origin, face.b), orient: q,
-        ...(p.bend ? { bend: qRotate(q, p.bend) } : {}), boneSegment };
+      const shaped = rigid.squash ? squashShape(p, rigid.squash.s) : p;
+      return { ...shaped, a: add(rigid.origin, face.a), b: add(rigid.origin, face.b), orient: q,
+        ...(shaped.bend ? { bend: qRotate(q, shaped.bend) } : {}), boneSegment };
     }
     if (frame) {
       // Same composition as headTransform: the known body yaw first (the
@@ -803,7 +832,7 @@ export function refitClusters(prims: Primitive[], clusters: ClusterInfo[]): Clus
  */
 function headTransform(
   h: HeadRigid, pos: readonly RigPoint[], bodyYaw = 0, followRig = false, jawGape = 0,
-  morphed: ReadonlyMap<number, MorphResult> | null = null,
+  morphed: ReadonlyMap<number, MorphResult> | null = null, squash: Vec3 | null = null,
 ): {
   origin: Vec3;
   prims: Map<number, { a: Vec3; b: Vec3 }>;
@@ -814,26 +843,34 @@ function headTransform(
   jawQ: Quat;
   jawPrims: ReadonlySet<number>;
   jawBones: ReadonlySet<number>;
+  /** The squash this frame (centre, pivot-relative, and axes), or null. */
+  squash: { c: Vec3; s: Vec3 } | null;
 } {
   const { origin, q, gape } = headPose(h, pos, bodyYaw, followRig, jawGape);
   const jaw = h.jaw;
+  // Squashed, the jaw opens about the SQUASHED hinge: the squashed head is then exactly a head authored that way, the lip line
+  // stays the seam at every gape.
+  const sq = squash ? { c: vscale(h.restTip, SQUASH_CENTRE_AT), s: squash } : null;
+  const jawRest = jaw && sq ? { ...jaw.rest, hinge: squashPoint(jaw.rest.hinge, sq.c, sq.s) } : jaw?.rest;
   const open = (i: number, set: ReadonlySet<number> | undefined, v: Vec3): Vec3 =>
-    gape !== 0 && jaw && set?.has(i) ? openAboutHinge(jaw.rest, v, gape) : v;
+    gape !== 0 && jawRest && set?.has(i) ? openAboutHinge(jawRest, v, gape) : v;
+  const squashed = (v: Vec3): Vec3 => sq ? squashPoint(v, sq.c, sq.s) : v;
 
-  // A morphed prim's rest endpoints move first (morph.ts): then the gape opens them about the hinge and the head turns them, so a
-  // morphed lip still drops with the jaw and turns with the head. Unmorphed prims take the exact old arithmetic.
+  // A morphed prim's rest endpoints move first (morph.ts), then the squash (squash.ts) takes the whole head: then the gape opens
+  // them about the hinge and the head turns them, so a morphed lip still drops with the jaw and turns with the head. Unmorphed,
+  // unsquashed prims take the exact old arithmetic.
   const prims = new Map<number, { a: Vec3; b: Vec3 }>();
   h.prims.forEach((rest, i) => {
     const m = morphed?.get(i);
-    const ra = m ? add(rest.a, m.da) : rest.a;
-    const rb = m ? add(rest.b, m.db) : rest.b;
+    const ra = squashed(m ? add(rest.a, m.da) : rest.a);
+    const rb = squashed(m ? add(rest.b, m.db) : rest.b);
     prims.set(i, { a: qRotate(q, open(i, jaw?.prims, ra)), b: qRotate(q, open(i, jaw?.prims, rb)) });
   });
   const bones = new Map<number, { a: Vec3; b: Vec3 }>();
   h.bones.forEach((rest, i) => bones.set(i, {
-    a: qRotate(q, open(i, jaw?.bones, rest.a)), b: qRotate(q, open(i, jaw?.bones, rest.b)) }));
+    a: qRotate(q, open(i, jaw?.bones, squashed(rest.a))), b: qRotate(q, open(i, jaw?.bones, squashed(rest.b))) }));
   return { origin, prims, bones, q, jawQ: jawOrient(q, gape),
-    jawPrims: jaw?.prims ?? EMPTY_SET, jawBones: jaw?.bones ?? EMPTY_SET };
+    jawPrims: jaw?.prims ?? EMPTY_SET, jawBones: jaw?.bones ?? EMPTY_SET, squash: sq };
 }
 const EMPTY_SET: ReadonlySet<number> = new Set();
 
@@ -881,13 +918,34 @@ function headPose(
  * rotation). Pass the bound applyRig is given (the gape on `rig.jawGape`).
  *
  * Every other bone, and every body without a jaw, is exactly boneFrames. No kit but goblin-cinematic's weights a vertex to `jaw`.
+ *
+ * THE SQUASH (Task 18, squash.ts): the kit's rigid parts do not scale with the head; they RIDE it. With a squash weight the `skull`
+ * and `jaw` frames move by the squash's move at the mouth (the centroid of the `on jaw` prims' rest midpoints, where the teeth
+ * are), and the jaw opens about the squashed hinge as the prims do, so the teeth stay in the squashed mouth (a tooth 3-4 cm off
+ * the middle is then off by the squash's spread there, 2-4 mm sideways: they do not widen).
  */
 export function kitFrames(body: BuildResult, bound: BoundRig, bodyYaw: number): Map<string, BoneFrame3> {
   const frames = boneFrames(body, bound, bodyYaw);
   const h = bound.head, jawBone = body.bones.get('jaw'), skull = body.bones.get('skull');
   if (!h?.jaw || !jawBone || !skull || !frames.has('jaw')) return frames;
   const { origin, q, gape } = headPose(h, bound.rig.points, bodyYaw, bound.rig.headFollowsRig ?? false, bound.rig.jawGape ?? 0);
-  const at = openAboutHinge(h.jaw.rest, sub(jawBone.head, skull.head), gape);
+  const s = squashAxes(bound.rig.morphs?.squash);
+  let hinge = h.jaw.rest;
+  let shift: Vec3 = [0, 0, 0];
+  if (s) {
+    const c = vscale(h.restTip, SQUASH_CENTRE_AT);
+    hinge = { ...hinge, hinge: squashPoint(hinge.hinge, c, s) };
+    let mx = 0, my = 0, mz = 0, n = 0;
+    for (const i of h.jaw.prims) {
+      const r = h.prims.get(i);
+      if (!r) continue;
+      mx += (r.a[0] + r.b[0]) / 2; my += (r.a[1] + r.b[1]) / 2; mz += (r.a[2] + r.b[2]) / 2; n++;
+    }
+    if (n > 0) shift = squashMove([mx / n, my / n, mz / n], c, s);
+    const sk = frames.get('skull');
+    if (sk) frames.set('skull', { pos: add(sk.pos, qRotate(sk.quat, shift)), quat: sk.quat });
+  }
+  const at = openAboutHinge(hinge, s ? add(sub(jawBone.head, skull.head), shift) : sub(jawBone.head, skull.head), gape);
   frames.set('jaw', { pos: add(origin, qRotate(q, at)), quat: jawOrient(q, gape) });
   return frames;
 }

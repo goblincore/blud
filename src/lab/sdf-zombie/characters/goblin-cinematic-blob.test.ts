@@ -585,7 +585,7 @@ describe('goblin face morphs (Task 12: the smile widens the chin, pushes the che
   it('the brow ridge follows browDown: it travels 6 mm or more in height between surprise (-1) and the scowl (+1)', () => {
     for (const x of [0.015, 0.03, 0.045]) {
       const up = ridgeY(posed({ browDown: -1 }), x), rest = ridgeY(posed(), x), down = ridgeY(posed({ browDown: 1 }), x);
-      if (process.env.RIDGE_PRINT) console.log(`x ${x}: up ${up.y.toFixed(4)}/${up.z.toFixed(4)} rest ${rest.y.toFixed(4)}/${rest.z.toFixed(4)} down ${down.y.toFixed(4)}/${down.z.toFixed(4)}`);
+      if ((globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env.RIDGE_PRINT) console.log(`x ${x}: up ${up.y.toFixed(4)}/${up.z.toFixed(4)} rest ${rest.y.toFixed(4)}/${rest.z.toFixed(4)} down ${down.y.toFixed(4)}/${down.z.toFixed(4)}`);
       // measured (sphere-traced): travel 19 / 15 / 11.5 mm at x 0.015 / 0.03 / 0.045 (Task 15's linear 3 mm a unit gave about 6);
       // browDown 1 lowers it 15 / 11 / 7.5 mm and brings it 6 / 5.6 / 5.4 mm forward; surprise lifts it 4 mm
       expect(up.y - down.y, `x ${x}: travel`).toBeGreaterThan(0.010);

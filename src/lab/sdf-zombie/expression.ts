@@ -5,7 +5,8 @@
 // channels into what a mechanism needs.
 //
 // THREE OUTPUTS (Task 12 added the third): a jaw gape (rad), overrides on the authored face sheet, and the per-prim MORPH weights
-// (morph.ts): the channels themselves, clamped, which rig-bind's applyRig uses to move every prim that declares a `morph=`.
+// (morph.ts): the channels themselves, clamped, which rig-bind's applyRig uses to move every prim that declares a `morph=`. The
+// `squash` weight (Task 18) rides the same record: applyRig squashes the whole rigid head by it (squash.ts).
 //
 // A CHANNEL describes the face, never the mechanism: `gape` is how open the mouth is, `smile` is how far the corners are pulled up,
 // and so on. `actuate` is where a channel becomes a jaw angle, a sheet parameter or a morph weight, so a mechanism is one more
@@ -20,15 +21,16 @@
 // the face's own sense (positive smiles), so `actuate` SUBTRACTS it from mouthCurve.
 import type { FaceSheetParams } from './blob-face-sheet';
 
-export const CHANNEL_NAMES = ['gape', 'smile', 'browDown', 'lipCurl', 'lid', 'squint'] as const;
+export const CHANNEL_NAMES = ['gape', 'smile', 'browDown', 'lipCurl', 'lid', 'squint', 'squash'] as const;
 export type ChannelName = typeof CHANNEL_NAMES[number];
 
 /** Every channel, resolved. Ranges: gape 0..1; smile -1..1 (negative frowns); browDown -1..1 (negative raises); lipCurl 0..1;
  *  lid 0..1 (1 is shut: the BLINK); squint 0..1 (Task 15: the cheeks rise into the lower lids and the eyes narrow, what makes a
- *  smile a smile and not an open mouth). */
+ *  smile a smile and not an open mouth); squash -1..1 (Task 18: the WHOLE head wider and shorter on +, narrower and taller on -,
+ *  the cartoon's squash and stretch; squash.ts, applied by rig-bind's applyRig through the morph weights). */
 export type Channels = Record<ChannelName, number>;
 
-export const REST_CHANNELS: Readonly<Channels> = { gape: 0, smile: 0, browDown: 0, lipCurl: 0, lid: 0, squint: 0 };
+export const REST_CHANNELS: Readonly<Channels> = { gape: 0, smile: 0, browDown: 0, lipCurl: 0, lid: 0, squint: 0, squash: 0 };
 
 export interface ExpressionKey {
   /** Seconds from the clip's start. */
@@ -136,6 +138,7 @@ export function actuate(channels: Channels, base: FaceSheetParams, tuning: Expre
   const lipCurl = clamp(channels.lipCurl, 0, 1);
   const lid = clamp(channels.lid, 0, 1);
   const squint = clamp(channels.squint, 0, 1);
+  const squash = clamp(channels.squash, -1, 1);
   const grin = Math.max(smile, 0);
   const raise = Math.max(-browDown, 0);
   // The eye params are only written when they move, so a rest frame (or a tuning without the Task 15 fields) hands back the
@@ -148,7 +151,7 @@ export function actuate(channels: Channels, base: FaceSheetParams, tuning: Expre
   const lidTop = Math.max(browDown, 0) * (tuning.browLidTop ?? 0);
   return {
     jawGape: gape * tuning.maxGape,
-    morphs: { gape, smile, browDown, lipCurl, lid, squint },
+    morphs: { gape, smile, browDown, lipCurl, lid, squint, squash },
     sheet: {
       ...base,
       mouthCurve: base.mouthCurve - smile * tuning.smileCurve + lipCurl * tuning.curlCurve,

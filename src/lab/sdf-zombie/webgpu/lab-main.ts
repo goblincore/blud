@@ -2821,8 +2821,8 @@ async function main() {
     let frameBody = posed;
     // The noise anchor's rest follows the face morphs (rig-bind morphedRest, goblin Task 16): against the bare rest a morphed
     // prim's skin noise jumped at its outline (a dark seam round the dropped brow ridge, the grin's corners). `current` itself
-    // when no morph weighs anything.
-    const restForNoise = morphedRest(current, boundForPose.rig.morphs);
+    // when no morph weighs anything. The head (Task 18) so the squash moves the anchor too.
+    const restForNoise = morphedRest(current, boundForPose.rig.morphs, boundForPose.head);
     if (meltState) {
       // Bones fall out FIRST: a group released this frame must not also be
       // uploaded in the body's bone rows, or it renders twice.
