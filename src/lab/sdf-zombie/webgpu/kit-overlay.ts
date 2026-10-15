@@ -207,10 +207,13 @@ const LOOK: Record<string, {
   led:  { metalness: 0.10, roughness: 0.20, envIntensity: 0.80, emissive: [1.0, 0.12, 0.05], emissiveIntensity: 1.4 },
   core: { metalness: 0.10, roughness: 0.15, envIntensity: 1.00, emissive: [1.0, 0.62, 0.18], emissiveIntensity: 1.6 },
 
-  // The cinematic goblin's TEETH (goblin-cinematic-kit.wam, goblin expressions Task 14): near-white ivory enamel, dielectric, a
-  // mild gloss (enamel is wet and smooth, but a tight hot highlight on eleven small cones reads as a row of beads) and a modest
-  // env so the shadow side inside the mouth does not fall to black. No glow: the SDF teeth needed one inside the cavity's AO,
-  // polygons are lit by the scene's key directly.
+  // The cinematic goblin's TEETH (goblin expressions Task 14; sculpted in Blender since Task 17, assets-source/goblin-teeth/,
+  // merged into goblin-cinematic-kit.gltf by scripts/merge-kit-teeth.mjs). Their albedo is the primitive's COLOR_0 (warm dirty
+  // ivory, stained toward the gum; three's GLTFLoader turns vertexColors on, the material's base colour is white). Dielectric,
+  // a mild gloss (enamel is wet and smooth, but a tight hot highlight on eleven small teeth reads as a row of beads) and a
+  // modest env so the shadow side inside the mouth does not fall to black. The env is also the brightness knob: 0.9 lifts the
+  // grin's teeth from luma ~158 to ~191 (and toward a pale plastic sheen); 0.55 keeps the beige the owner preferred. No glow:
+  // the SDF teeth needed one inside the cavity's AO, polygons are lit by the scene's key directly.
   tooth: { metalness: 0.0, roughness: 0.38, envIntensity: 0.55 },
 };
 

@@ -3,8 +3,9 @@
 # GOBLIN-CINEMATIC KIT (goblin expressions Task 13, 2026-10-15). A copy of goblin-kit.wam for goblin-cinematic.blob, the goblin
 # with the face rig, with two differences: the skeleton carries the `jaw` bone line (the .blob has it), and there are NO
 # SUNGLASSES (owner: "the cinematic goblin has bare eyes (no sunglasses)"): the round lenses, their ear-hook temple arms and the
-# nose bridge are gone, and their two materials with them. Task 14 (2026-10-15) adds a third: the TEETH are mesh here (see the
-# TEETH block at the end of `parts`), not SDF prims in the .blob. Everything else is goblin-kit.wam's, so a change to the armour there
+# nose bridge are gone, and their two materials with them. Task 14 (2026-10-15) adds a third: the TEETH are mesh in this KIT, not SDF
+# prims in the .blob; since Task 17 they are sculpted in Blender and merged into the compiled glTF after WAM (see "THE TEETH" at the
+# end of `parts`). Everything else is goblin-kit.wam's, so a change to the armour there
 # has to be made here too (goblin-cinematic-blob.test.ts pins that the two .blob skeletons agree below the head). The comments
 # below are goblin-kit.wam's and say `goblin.blob`; for this kit read goblin-cinematic.blob (same skeleton plus the jaw).
 #
@@ -84,9 +85,7 @@ palette
   # NO `glass` OR `black`: they were the sunglasses' lens and frame, and the cinematic goblin has bare eyes (see the header).
   band    #1c1c20
   screen  #22282e
-  # The teeth (Task 14): a near-white ivory, kept close to neutral because the lab's warm key yellows it (the SDF teeth' lesson,
-  # goblin-cinematic.blob "BRIGHTER TEETH"). kit-overlay.ts LOOK `tooth` gives it a mild gloss.
-  tooth   #e8e2d2
+  # NO `tooth`: the teeth's material is added by scripts/merge-kit-teeth.mjs with the Blender teeth (Task 17, see "THE TEETH").
 
 skeleton
   # `hips` HAS NO COUNTERPART IN goblin.blob, and leaving it out is a silent
@@ -106,7 +105,8 @@ skeleton
   bone neck   parent=chest  dir=up pitch=-17 len=0.1077
   bone skull  parent=neck   dir=up pitch=-5  len=0.1808
   # THE JAW (goblin-cinematic.blob, expression pass): a point-carrier from the skull pivot to the chin, transcribed so the skeleton
-  # matches the .blob. Up bone: pitch verbatim; 0.083 m / 1.30. The four LOWER TEETH are skinned to it (Task 14). Its head is the
+  # matches the .blob. Up bone: pitch verbatim; 0.083 m / 1.30. The four LOWER TEETH are skinned to it (Task 14; merged in after WAM
+  # since Task 17). Its head is the
   # skull pivot, NOT the jaw's hinge, so a plain bone frame would swing them about the wrong point: rig-bind.ts `kitFrames` gives
   # this bone the `on jaw` prims' own transform instead (the hinge, the gape, the head's turn).
   bone jaw    parent=neck   dir=up pitch=112 len=0.0638
@@ -434,46 +434,14 @@ parts
   # is z -0.0611 m (0.0238 + 0.0058 - 0.0907); the box is centred 13.7 mm behind it, -0.0748 m = offset z -0.0758 of height.
   attach backpouch bone=spine1 kind=box at=0.79 offset=(0,0,-0.0758) size=0.032 w=0.038 d=0.018 material=leather
 
-  # THE TEETH (goblin expressions Task 14, owner 2026-10-15: "lets do the mesh teeth, only in the cinematic variant"). They were 11
-  # SDF prims in goblin-cinematic.blob: about 23 ms on a face close-up (an ablation, NOTES.md "Frame cost"), buried flesh for nothing
-  # while the jaw is shut, and lit only by what reached into the mouth's cavity. As polygons they have their own material, the
-  # scene's ordinary lighting, and they cost a few hundred vertices. The SDF throat bar and dark floor stay in the .blob as the
-  # mouth's inside.
-  #
-  # THE SAME LAYOUT AS THE SDF TEETH, transcribed from their resolved prims: each sweep's root is the prim's `a` and it runs along
-  # the prim's `tip` (the forward lean is the pitch: a `down` sweep tips BACK on +pitch, so the upper row's forward lean is
-  # negative) for the prim's length plus its 1 mm rounded end, to a point. r is the prim's root radius. Offsets are from the SKULL
-  # PIVOT (both bones' head: `at=0.0`), in height fractions, as (prim point - the .blob's pivot (0, 1.11858, 0.01290)) / 1.30, so
-  # the vertex lands where the .blob put the prim even though the kit's own pivot is a few hundredths of a millimetre off it (the
-  # kit renders each bone at the .blob's rig point). Upper row: five small teeth and two longer fangs (the 2nd and the 6th),
-  # hanging from inside the upper ridge (roots y 1.137-1.138) to tips 1-2.7 cm lower; on the SKULL. Lower row: four small teeth
-  # standing up from the floor (roots y 1.121-1.122), 1.5 cm behind the lower lip's front; on the JAW.
-  #
-  # BURIED WHEN SHUT, by the SDF's depth: the kit depth-tests against the raymarched flesh (kit-overlay.ts), and at rest every tooth
-  # vertex is inside the flesh (goblin-cinematic-blob.test.ts), so nothing shows until the gape opens the lip line.
-  # `sides=10` is 8 sides on a sweep (it takes two off).
-  sweep tooth_u1 bone=skull at=0.0 offset=(-0.02385,0.01415,0.06315) dir=down pitch=-13.0 sides=10 material=tooth
-    seg len=0.01103 r=0.00385 tip
-  sweep tooth_u2 bone=skull at=0.0 offset=(-0.01615,0.01492,0.06623) dir=down pitch=-10.5 sides=10 material=tooth
-    seg len=0.02189 r=0.00523 tip
-  sweep tooth_u3 bone=skull at=0.0 offset=(-0.00846,0.01492,0.06854) dir=down pitch=-13.2 sides=10 material=tooth
-    seg len=0.0142 r=0.00423 tip
-  sweep tooth_u4 bone=skull at=0.0 offset=(-0.00077,0.01492,0.06931) dir=down pitch=-14.9 sides=10 material=tooth
-    seg len=0.01271 r=0.00385 tip
-  sweep tooth_u5 bone=skull at=0.0 offset=(0.00769,0.01492,0.06854) dir=down pitch=-11.9 sides=10 material=tooth
-    seg len=0.0157 r=0.00423 tip
-  sweep tooth_u6 bone=skull at=0.0 offset=(0.01615,0.01492,0.06623) dir=down pitch=-11.3 sides=10 material=tooth
-    seg len=0.02038 r=0.00523 tip
-  sweep tooth_u7 bone=skull at=0.0 offset=(0.02385,0.01415,0.06315) dir=down pitch=-14.0 sides=10 material=tooth
-    seg len=0.01028 r=0.00385 tip
-  sweep tooth_l1 bone=jaw at=0.0 offset=(-0.02,0.00185,0.0555) dir=up pitch=16.4 sides=10 material=tooth
-    seg len=0.0144 r=0.00369 tip
-  sweep tooth_l2 bone=jaw at=0.0 offset=(-0.00692,0.00262,0.05935) dir=up pitch=14.7 sides=10 material=tooth
-    seg len=0.01588 r=0.00446 tip
-  sweep tooth_l3 bone=jaw at=0.0 offset=(0.00846,0.00262,0.05935) dir=up pitch=16.4 sides=10 material=tooth
-    seg len=0.0144 r=0.004 tip
-  sweep tooth_l4 bone=jaw at=0.0 offset=(0.02077,0.00185,0.0555) dir=up pitch=15.5 sides=10 material=tooth
-    seg len=0.01514 r=0.00369 tip
+  # THE TEETH ARE NOT IN THIS FILE (goblin expressions Task 17, owner 2026-10-15: "sculpt the teeth in Blender"). Task 14 had 11 WAM
+  # `sweep`s here (8-sided cones at the SDF teeth's roots, `tooth #e8e2d2`); the owner found them "very meshy and simple bright". The
+  # teeth are now sculpted procedurally in Blender (assets-source/goblin-teeth/goblin_teeth.py -> goblin-teeth.glb: stouter, a neck
+  # and a crown, sabre fangs, a broken one, vertex-coloured dirty ivory) and scripts/merge-kit-teeth.mjs adds them to the COMPILED
+  # glTF as one more skinned primitive with its own `tooth` material: the upper seven weighted 1 to `skull`, the lower four to `jaw`
+  # (rig-bind.ts `kitFrames` gives that bone the `on jaw` prims' transform). scripts/build-wam-kit.sh goblin-cinematic runs the merge
+  # after WAM, so a rebuild keeps them. Leaving the sweeps out also gives the armour back its 6x6 texture atlas (27 parts; Task 14's
+  # 38 parts had re-baked it into 7x7 smaller cells). The layout (roots, leans, which bone) is the SDF teeth's, in the generator.
 
   # NO FAULD, CLEAVER OR BUCKLER (owner, 2026-10-02). The pelvic skirt clipped
   # both thighs and the gut and is gone; the trousers are paint in goblin.blob.
