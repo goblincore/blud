@@ -235,6 +235,13 @@ export interface BlobDoc {
    */
   bonesTrivia: BlobLine[];
   face: Record<string, number> | null;
+  /**
+   * `morph <tag> <channel>:<terms>...` lines in the `face` block (goblin expressions Task 15): per-prim morphs (morph.ts) on the
+   * GENERATED face prims, which no `.blob` line owns, so `morph=` cannot reach them: `head` (the cranium), `jaw` (the face block's
+   * jaw ellipsoid: the cheeks and the upper muzzle), `brow` (the brow ridge), `nose`. compileBlob attaches them to the prim with
+   * that tag. Never packed (like every morph), so a body without weights is unchanged. The lines ride `faceTrivia` for the emitter.
+   */
+  faceMorphs: Array<{ tag: string; morphs: PrimMorph[]; line: number; col: number }>;
   faceTrivia: BlobLine[];
   /**
    * A `sheet` block's parameters, or null when the character did not declare

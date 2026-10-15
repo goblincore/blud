@@ -685,6 +685,27 @@ function parseNamedNumberLine(
     s.doc.sheetTrivia.push(l);
     return;
   }
+  // `morph <tag> <channel>:<terms>...` (Task 15): morphs on a generated face prim. The tag is checked against the generated prims
+  // in compileBlob (whether `brow`/`nose` exist depends on the numbers); the terms are morph.ts's, one word per channel.
+  if (what === 'face' && head === 'morph') {
+    const tag = rest[0];
+    if (tag === undefined || rest.length < 2)
+      throw new BlobError('face morph expects a prim tag and at least one <channel>:<terms>, e.g. morph brow squint:(0,-0.003,0)',
+        l.line, wordCol(l, 0));
+    const morphs: PrimMorph[] = [];
+    rest.slice(1).forEach((w, i) => {
+      let m: PrimMorph;
+      try { m = parseMorph(w); } catch (e) { throw new BlobError((e as Error).message, l.line, wordCol(l, i + 2)); }
+      if (morphs.some(o => o.channel === m.channel))
+        throw new BlobError(`face morph ${tag}: channel ${m.channel} appears twice on one line`, l.line, wordCol(l, i + 2));
+      morphs.push(m);
+    });
+    if (s.doc.faceMorphs.some(f => f.tag === tag))
+      throw new BlobError(`face morph ${tag}: one line per prim; put every channel on it`, l.line, wordCol(l, 1));
+    s.doc.faceMorphs.push({ tag, morphs, line: l.line, col: wordCol(l, 1) });
+    s.doc.faceTrivia.push(l);
+    return;
+  }
   const v = Number(rest[0]);
   if (!Number.isFinite(v))
     throw new BlobError(`${what} parameter "${head}" is not a number`, l.line, wordCol(l, 1));
@@ -743,7 +764,7 @@ export function parseBlob(src: string): BlobDoc {
   const s: ParseState = {
     doc: {
       name: '', height: null, stance: null, rootBone: '', rootHeight: 0, rootLen: 0.14,
-      bones: [], parts: [], bonesBlock: null, bonesTrivia: [], face: null, faceTrivia: [], sheet: null, sheetImage: null, sheetTrivia: [],
+      bones: [], parts: [], bonesBlock: null, bonesTrivia: [], face: null, faceMorphs: [], faceTrivia: [], sheet: null, sheetImage: null, sheetTrivia: [],
       palette: null, paletteTrivia: [], structure: [], trailingTrivia: [],
     },
     known: new Set<string>(),

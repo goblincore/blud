@@ -578,3 +578,42 @@ describe('parseBlob — morph= (per-prim face morphs, goblin expressions Task 12
     expect(() => parseBlob(`${PAINTED}bones\n  blob head on skull at=0.5 r=0.02 morph=smile:*1.1\n`)).toThrow(/bones block/);
   });
 });
+
+// Task 15: the generated face prims (cranium, jaw ellipsoid, brow ridge, nose) have no `.blob` line, so a face-block line carries
+// their morphs, and compileBlob attaches them by tag.
+describe('face block — morph <tag> (goblin expressions Task 15)', () => {
+  const FACE = `${PAINTED}face\n  browHeavy 0.008\n  morph brow squint:(0,-0.003,0.001) browDown:(0,-0.002,0)*1.1\n  morph jaw squint:*(1.04,1.06,1)\n`;
+
+  it('reads one line per prim tag, one word per channel', () => {
+    const doc = parseBlob(FACE);
+    expect(doc.faceMorphs.map(f => f.tag)).toEqual(['brow', 'jaw']);
+    expect(doc.faceMorphs[0]!.morphs).toEqual([
+      { channel: 'squint', move: [0, -0.003, 0.001] },
+      { channel: 'browDown', move: [0, -0.002, 0], radius: 1.1 },
+    ]);
+    expect(doc.face).toEqual({ browHeavy: 0.008 });
+  });
+
+  it('attaches the morphs to the generated prim with that tag, and to no other', async () => {
+    const { compileBlob } = await import('./blob-compile');
+    const prims = compileBlob(parseBlob(FACE)).prims as Array<{ tag?: string; morphs?: unknown[] }>;
+    expect(prims.find(p => p.tag === 'brow')!.morphs).toHaveLength(2);
+    expect(prims.find(p => p.tag === 'jaw')!.morphs).toHaveLength(1);
+    expect(prims.find(p => p.tag === 'head')!.morphs).toBeUndefined();
+  });
+
+  it('rejects a tag the face does not generate, a missing channel, a bad word and a second line for one tag', async () => {
+    const { compileBlob } = await import('./blob-compile');
+    expect(() => compileBlob(parseBlob(`${PAINTED}face\n  morph chin squint:(0,0.001,0)\n`))).toThrow(/no generated face prim "chin"/);
+    // browHeavy 0 turns the brow ridge off, so there is no `brow` to morph.
+    expect(() => compileBlob(parseBlob(`${PAINTED}face\n  browHeavy 0\n  morph brow squint:(0,0.001,0)\n`))).toThrow(/"brow"/);
+    expect(() => parseBlob(`${PAINTED}face\n  morph brow\n`)).toThrow(/prim tag and at least one/);
+    expect(() => parseBlob(`${PAINTED}face\n  morph brow grin:(0,0,0)\n`)).toThrow(/unknown morph channel/);
+    expect(() => parseBlob(`${PAINTED}face\n  morph brow squint:*1.1\n  morph brow smile:*1.1\n`)).toThrow(/one line per prim/);
+  });
+
+  it('round-trips through the emitter unchanged', async () => {
+    const { emitBlob } = await import('./blob-emit');
+    expect(emitBlob(parseBlob(FACE))).toBe(FACE);
+  });
+});

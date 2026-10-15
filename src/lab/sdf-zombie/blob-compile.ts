@@ -471,6 +471,21 @@ function partToPrim(p: BlobPart): PrimDef {
     } satisfies PrimDef;
 }
 
+/** The face block's `morph <tag> ...` lines (Task 15) attached to the generated face prims by tag. A tag the face does not
+ *  generate (an unknown name, or `brow`/`nose` turned off by its numbers) is an error at the morph line. */
+function withFaceMorphs(prims: ReturnType<typeof facePrims>, doc: BlobDoc): PrimDef[] {
+  if (doc.faceMorphs.length === 0) return prims;
+  for (const f of doc.faceMorphs) {
+    if (!prims.some(p => p.tag === f.tag))
+      throw new BlobError(`face morph: no generated face prim "${f.tag}" (this face has ${prims.map(p => p.tag).join(', ')})`,
+        f.line, f.col);
+  }
+  return prims.map(p => {
+    const f = doc.faceMorphs.find(m => m.tag === p.tag);
+    return f ? { ...p, morphs: f.morphs } : p;
+  });
+}
+
 export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
   const bones: BoneDef[] = [
     { name: doc.rootBone, parent: null, dir: [0, 1, 0], length: doc.rootLen },
@@ -492,7 +507,7 @@ export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
     name: doc.name,
     root: [0, doc.rootHeight, 0],
     bones,
-    prims: [...prims, ...facePrims(face)],
+    prims: [...prims, ...withFaceMorphs(facePrims(face), doc)],
     // Authored bones (a `bones` block) compile through the SAME partToPrim
     // path as body parts, then get `op: 'bone'` forced on: they are bones no
     // matter which words placed them. A line may opt into viscera with the

@@ -119,7 +119,7 @@ bone jaw parent=neck dir=up pitch=112 len=0.083 hinge=0.06
 ## Face morphs: `morph=<channel>:<terms>` (added 2026-10-15)
 
 A `blob` or `bar` can MOVE with a face channel (`expression.ts` CHANNEL_NAMES:
-`gape smile browDown lipCurl lid`): the expression layer's weight for that
+`gape smile browDown lipCurl lid squint`): the expression layer's weight for that
 channel scales the delta linearly, applied to the REST geometry before the jaw
 opens and the head turns (morph.ts, rig-bind.ts applyRig). One word per
 channel, terms concatenated, each at most once:
@@ -145,6 +145,21 @@ morph data is never packed, so a neutral face renders bit-identically. A morph
 is a pose, not a re-sculpt: judge it by frames at the expression it serves, and
 keep the deltas to millimetres (a cheek pushed 6 mm out leaves a waist where it
 was; check the fillet with a capture).
+
+**The generated face prims** (the cranium, the face block's jaw ellipsoid, the
+brow ridge, the nose: `face.ts` facePrims) have no `.blob` line, so their morphs
+go in the `face` block, one line per prim tag (`head`, `jaw`, `brow`, `nose`),
+one `<channel>:<terms>` word per channel (added 2026-10-15, goblin Task 15):
+
+```
+face
+  morph jaw  squint:(0,0.005,0.0015)*(1.05,1.12,1.03)   # the cheeks rise into the eyes
+  morph brow browDown:(0,-0.003,0.0015) squint:(0,-0.0015,0)
+```
+
+A tag the face does not generate (or `brow`/`nose` turned off by `browHeavy`/
+`noseLength` near 0) is a compile error at that line; a second line for one tag
+is a parse error. Same neutral guarantee: never packed.
 
 ## Curved primitives: `bend=`
 
