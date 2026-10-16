@@ -584,8 +584,9 @@ describe('goblin face morphs (Task 12: the smile widens the chin, pushes the che
     const sets = new Map<string, number>();
     for (const p of morphed) { const k = [...new Set(p.morphs!.map(m => m.channel))].sort().join('+'); sets.set(k, (sets.get(k) ?? 0) + 1); }
     expect(Object.fromEntries(sets)).toEqual({
-      // chin, the cheek-fill pair, the throat bar, the nose (Task 12-18's smile)
-      smile: 5,
+      // chin, the cheek-fill pair, the throat bar, the nose (Task 12-18's smile); Task 21: + the throat fill under the chin, which
+      // follows the chin's smile (a new prim, so it is in `plain` too: the prim count above is unchanged)
+      smile: 6,
       // Task 20: the lower lip and the floor also part on a wide gape (the shout bares the lower row: the lip drops 15 mm and comes
       // 10 mm forward of the teeth, the floor drops behind them)
       'gape+smile': 2,
@@ -599,7 +600,7 @@ describe('goblin face morphs (Task 12: the smile widens the chin, pushes the che
       // Task 19: the inner-brow bulge pair
       furrow: 2,
     });
-    expect(morphed.length).toBe(17);
+    expect(morphed.length).toBe(18);
   });
 
   it('weights 0 pose exactly as the body without any morph (rest, and the jaw open)', () => {

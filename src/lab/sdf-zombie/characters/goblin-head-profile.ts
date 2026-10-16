@@ -8,7 +8,8 @@
 //
 // TWO SETS SINCE TASK 13 (2026-10-15): the face rig moved to goblin-cinematic.blob and the base goblin.blob went back to its
 // pre-expression head (f81e5b10). GOBLIN_PROFILE_PROBES are the original Task 1 pins, which the base goblin must keep;
-// CINEMATIC_PROFILE_PROBES are the variant's, the same probes with the one Task 3b re-pin (the mouth line).
+// CINEMATIC_PROFILE_PROBES are the variant's, the same probes with the Task 3b re-pin (the mouth line) and, since Task 21, the
+// chin underside swapped for two throat probes (the throat fill under the chin: eight probes).
 import { sdBody } from '../validate';
 import type { BuildResult } from '../build-body';
 import type { Vec3 } from '../types';
@@ -51,8 +52,13 @@ export const CINEMATIC_PROFILE_PROBES: readonly ProfileProbe[] = [
   { name: 'half-width y1.10', from: [0, 1.10, 0.03], dir: [1, 0, 0], want: 0.054 },
   { name: 'half-width y1.15', from: [0, 1.15, 0.03], dir: [1, 0, 0], want: 0.074 },
   { name: 'half-width y1.20', from: [0, 1.20, 0.03], dir: [1, 0, 0], want: 0.0855 },
-  // The underside of the chin, going down.
-  { name: 'chin underside', from: [0, 1.10, 0.07], dir: [0, -1, 0], want: 0.029 },
+  // RE-PINNED 2026-10-16 (Task 21, owner: "there's still this like disk neck throat bulge thing going on that i would like to
+  // smooth out/remove"): the 'chin underside' probe (down from (0, 1.10, 0.07), 0.029) measured the flat shelf that WAS the disc.
+  // The throat fill (goblin-cinematic.blob, under the chin) tapers the chin into the neck, so that ray now runs on down the
+  // throat's front and never leaves the flesh. Replaced by the throat line itself: its front at y 1.07 (was 0.069, the neck's
+  // front just under the shelf) and its half-width at y 1.075 (was 0.0385). The base goblin keeps its 'chin underside' pin.
+  { name: 'throat front y1.07', from: [0, 1.07, 0], dir: [0, 0, 1], want: 0.086 },
+  { name: 'throat half-width y1.075', from: [0, 1.075, 0.03], dir: [1, 0, 0], want: 0.0455 },
 ];
 
 /** Distance from `p` along unit `d` to where the body's field turns positive, 0.5 mm steps. NaN if `p` starts outside the

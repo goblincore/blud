@@ -409,8 +409,12 @@ describe('metal — prof bit 4, value 16 (hard-surface task 2)', () => {
     // 2026-10-15 (Task 19, the evil grin's furrow): +2 prof-0 for the inner-brow bulge pair (straight, unchamfered, buried at rest);
     // nothing else moved (the re-pinned pack-golden hash 711d0e9b041b9a72 is exactly 871a9afd1a714c6b with the pair's line deleted;
     // the brow ridge's `furrow:` word is a face-block morph, never packed).
+    // 2026-10-16 (Task 21, the throat disc): +1 prof-0 for the throat fill under the chin (a straight tapered blob, unchamfered);
+    // the chin's width (wide 1.33 -> 1.25) moves bytes but no prof value. Checked: the re-pinned pack-golden hash 41ba4e6df21e9e19
+    // is exactly 711d0e9b041b9a72 again with the fill's line deleted and the chin's wide put back (deleting the line alone gives
+    // 0782d4922d59abfc: the chin).
     expect(packedProf('goblin-cinematic.blob')).toEqual(
-      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,2,2,2,3,3]);
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,2,2,2,3,3]);
     // Five plate boxes at 24 = box bit 3 (8) + metal bit 4 (16); the two
     // 2s are bent horns, the 3s chamfered+bent ones. Re-pinned when the
     // plates were authored `metal` — every other value is pre-metal.

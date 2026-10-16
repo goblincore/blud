@@ -355,7 +355,21 @@ body
   # Its top (1.128 on the axis) is LOWER than Task 2's (1.137) and must stay under the floor's top (below): once the jaw tips
   # open, a chin top above the floor shows as a lit band of skin inside the mouth (it did, at 1.131). Its front makes the chin's
   # reach (y 1.09), its underside the chin's underside; both are profile pins, so retune it with the CLI.
-  blob head on jaw at=1.0 r=0.0462 wide=1.33 tall=0.56 deep=1.25 blend=0.010 offset=(0,0.0150,-0.0368) morph=smile:(0,-0.004,0.004)*(1.1,1.1,0.85)
+  # TASK 21 (owner: "there's still this like disk neck throat bulge thing going on that i would like to smooth out/remove"): this
+  # flattened ellipsoid WAS the disc. A CPU marker render (each prim its own colour) put its flat underside straight onto the thin
+  # neck column (`bar head on neck`, r 0.033 under the skull): a 12 cm wide puck on a 6.6 cm stick, the concave corner between them
+  # in shadow (the dark rim; it shows at neutral, gape 0, so it is geometry and shading, not the jaw's noise-anchor seam). Now 6%
+  # narrower (wide 1.33 -> 1.25, x semi-axis 0.0577) and the THROAT FILL below tapers it into the neck.
+  blob head on jaw at=1.0 r=0.0462 wide=1.25 tall=0.56 deep=1.25 blend=0.010 offset=(0,0.0150,-0.0368) morph=smile:(0,-0.004,0.004)*(1.1,1.1,0.85)
+  # THE THROAT FILL (Task 21; jaw): a tapered blob from inside the chin's underside (centre (0, 1.0855, 0.0528), r 32 mm, x1.5 wide)
+  # down and back to inside the neck's front (r 16 mm at (0, 1.0655, 0.0358)), blend 12 mm: the chin's underside becomes a cone
+  # into the throat instead of a flat shelf. The front at x 0 now slopes 0.104 (y 1.09) -> 0.094 (1.08) -> 0.085 (1.07) -> 0.077
+  # (1.055, the neck) where it dropped 0.104 -> 0.082 -> 0.069 in 2 cm; the half-width tapers 0.060 -> 0.041 over 1.09-1.06 instead
+  # of 0.054 -> 0.037 inside 1.5 cm. Its lower end is buried in the neck (front 0.052 against the neck's 0.068), so the neck below
+  # y 1.04 (within 0.5 mm) and the armour collar are untouched. On the JAW so it opens with the chin (a skull/neck fill would stay behind as a
+  # bulge when the jaw drops); a wide gape swings its lower end back and up into the neck. It follows the chin's smile (down 4 mm,
+  # 10% wider). The jaw's noise seam (Task 16) now falls where the fill meets the neck (y ~1.05) instead of the chin's rim.
+  blob head on jaw at=1.0 r=0.032 r2=0.016 wide=1.5 blend=0.012 offset=(0,-0.002,-0.037) tip=(0,-0.020,-0.017) morph=smile:(0,-0.004,0.003)*(1.1,1,1)
 
   # UPPER RIDGE (the upper gum, skull): a flat bent bar along the arch, x +-0.045, y 1.133-1.145, front z 0.117 at the middle.
   # The shortened jaw ellipsoid recedes to z ~0.10 just above the seam; without this the sides of the face between the upper
