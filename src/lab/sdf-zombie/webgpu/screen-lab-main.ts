@@ -11,9 +11,11 @@
 //
 // HOW THE GOBLIN IS HOSTED. The same pieces the flame lab and the WebGPU lab use, nothing more: `createLabRenderer`, `createSdfLayer`
 // (the march renders into its own target and composites over the polygonal pass with depth), `createPostAa` (sizes the layer; every
-// effect off), and `createCharacterView('goblin-home')` (the goblin in his home clothes; `?character=goblin` for the plain body), fed by the actor pipeline (`makeActorMotion` / `stepActorMotion`) with the pose layer's
-// joints (`MotionConfig.pose` pins every rig point, so one step per frame lands the pose exactly and a scrub is deterministic). The kit and
-// the shotgun are retired at birth: he is at home.
+// effect off), and THE GOBLIN PUPPET (goblin-puppet.ts, shared with the game: emergence in the Flat, plan Task 4): `goblin-cinematic-home`
+// (the cinematic head with the face rig, in his home clothes; `?character=goblin-home` for the old body, `?character=goblin` for the plain
+// one), built with this page's SDF layer, skinned as the game skins a body, posed from the clock by the actor pipeline with the pose
+// layer's joints (`MotionConfig.pose` pins every rig point, so one step per frame lands the pose exactly and a scrub is deterministic),
+// his face driven (rest channels and scheduled blinks until plan Task 5's cues). The kit and the shotgun are retired at birth: he is at home.
 //
 // FRAMES. The goblin lives in his own frame (the floor at y 0, the hips over the origin, facing +z): the motion system's. The set is built
 // in THE SCREEN'S frame (origin at the glass centre, +x right, +y up, +z out of the glass toward the room, metres; emergence-field.ts),
@@ -25,21 +27,8 @@
 // The goblin is the 1.70 m body: thigh 0.379 m, shin 0.353 m, upper arm 0.307 m, forearm 0.307 m.
 import * as THREE from 'three/webgpu';
 import { createLabRenderer } from './lab-renderer';
-import { createSdfLayer, SDF_LAYER, CONE_LAYER } from './sdf-layer';
-import { createCharacterView, compileCharacterSheet } from './character-view';
+import { createSdfLayer } from './sdf-layer';
 import { createPostAa } from './post-aa';
-import { headShape } from './flame-anchors';
-import { characterEntry } from '../character-registry';
-import { parseBlob } from '../blob-parse';
-import { compileFace } from '../blob-compile';
-import { generateFaceSheet } from '../blob-face-sheet';
-import { DEFAULT_FACE, type FaceParams } from '../face';
-import { FLESH_PRESETS, LIGHT_PRESETS } from '../material';
-import { applyRig, headQuatOf } from '../rig-bind';
-import { makeActorMotion, stepActorMotion, emptyActorSignals } from '../actor';
-import { MOTION_TUNING } from '../motion';
-import { makeRng } from '../wander';
-import { makePoseRig, poseJoints, type PoseRig } from '../pose';
 import {
   GLASS, EGG, KEYBOARD, KOTATSU, ellipsoidDist, eggCentre,
 } from './emergence-field';
@@ -49,10 +38,10 @@ import {
 } from './screen-set';
 import { SHOTS, DURATION, shotAt, paramsAt, type ShotId } from './emergence-timeline';
 import { FLOOR_SEAT } from '../characters/goblin-poses';
-import { GOBLIN_CUES, GOBLIN_FPS, floorLayout, goblinClipAt, goblinRootAt, measureSeat, pinToPose, type FloorLayout } from './screen-lab-goblin';
-import {
-  GAME_AA, GAME_AA_FADE_M, GAME_AA_NEAR, GAME_LAST_STEP_DEFAULT, GAME_RELAX, GAME_HULL_EXIT_BOUND, GAME_WOUND_EARLY_OUT, GAME_OMEGA, GAME_WOUND_STEP,
-} from './game-march-accept';
+import { GOBLIN_CUES, GOBLIN_FPS, floorLayout, measureSeat, type FloorLayout } from './screen-lab-goblin';
+import { GOBLIN_FILL, GOBLIN_PUPPET_CHARACTER, GOBLIN_RIM, createGoblinPuppet } from './goblin-puppet';
+import { expressionsFor } from '../expression-library';
+import { expressionAt, type Channels } from '../expression';
 import type { Vec3 } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -66,10 +55,8 @@ import type { Vec3 } from '../types';
 // The kotatsu (KOTATSU: the board's height, size and skirt) and its front edge (TABLE_FRONT_Z, past the egg's slick) are the field's too.
 /** The SDF pass's render scale (see `sdfLayer.setScale` in bootstrap). */
 const SDF_SCALE = 0.5;
-/** The goblin's cold rim/fill strength (spotCfg2.w, see where the key is aimed in bootstrap); `?rim=` overrides, 0 turns it off. */
-const GOBLIN_RIM = 1.5;
-/** The goblin's flat fill (lightCfg.y; the practical key preset's is 0.06), doubled-ish so his back is not black; `?fill=` overrides. */
-const GOBLIN_FILL = 0.10;
+// The goblin's cold rim/fill (GOBLIN_RIM, spotCfg2.w) and flat fill (GOBLIN_FILL, lightCfg.y) are the puppet's (goblin-puppet.ts);
+// `?rim=` and `?fill=` override them here, `?rim=0` turns the rim off.
 
 // ---------------------------------------------------------------------------
 // Camera presets, in the screen frame: an eye, a look-at and a vertical fov (plan Task 5 step 4).
@@ -118,6 +105,9 @@ interface ScreenLabSeam {
   /** The free camera's orbit (yaw, pitch in radians, distance in metres; round the point in front of the glass, or round `at`, a point in
    *  the screen frame), switching to it. */
   setOrbit(yaw: number, pitch: number, dist: number, at?: Vec3): void;
+  /** Hold one of the character's expression clips at its end pose (a look-dev override of the puppet's channels; null: back to the
+   *  scene's own). `?expr=<clip>` does the same at load. Returns false when the character has no such clip. */
+  setExpression(name: string | null): boolean;
   timeDraws(n: number): Promise<number>;
   readonly t: number;
   /** The set as measured off the goblin, once built. */
@@ -145,7 +135,7 @@ async function bootstrap(): Promise<void> {
   const num = (k: string) => { const v = q.get(k); return v !== null && Number.isFinite(Number(v)) ? Number(v) : null; };
 
   const seam: ScreenLabSeam = {
-    ready: false, setT: () => {}, setShot: () => {}, setPass: () => {}, setGooShadow: () => {}, setPassDebug: () => {}, setGoo: () => {}, setOrbit: () => {},
+    ready: false, setT: () => {}, setShot: () => {}, setPass: () => {}, setGooShadow: () => {}, setPassDebug: () => {}, setGoo: () => {}, setOrbit: () => {}, setExpression: () => false,
     timeDraws: async () => NaN, t: 0, layout: null, probe: () => null,
   };
   (window as unknown as { __screenLab: ScreenLabSeam }).__screenLab = seam;
@@ -177,135 +167,39 @@ async function bootstrap(): Promise<void> {
   postAa.addSink(sdfLayer);
 
   // ——— The goblin ————————————————————————————————————————————————————————
-  // At home he wears his home clothes: `goblin-home` (goblin.blob plus a vest and shorts of SDF `shell` cloth and bare feet, plan Task 10).
-  // `?character=goblin` puts the plain body back (no cloth, the shins ending in the air where the kit's boots would be): the A/B for the
-  // cloth's cost.
-  const character = q.get('character') === 'goblin' ? 'goblin' : 'goblin-home';
-  const entry = characterEntry(character);
+  // THE PUPPET (goblin-puppet.ts, shared with the game): `goblin-cinematic-home` by default, the cinematic head (jaw, morphs, the generated
+  // face, expressions) in goblin-home's vest, shorts and bare feet. `?character=goblin-home` puts the old body back (the A/B for the head),
+  // `?character=goblin` the plain one (no cloth, the shins ending in the air where the kit's boots would be). He lives in his own frame (the
+  // puppet's placement stays at the origin on this page); his body steps at GOBLIN_FPS poses a second, early-CG style, while the egg, the
+  // goo and the camera run smooth; `?fps=0` is the smooth clock for comparison, `?fps=N` any other rate.
+  const charParam = q.get('character');
+  const character = charParam === 'goblin' || charParam === 'goblin-home' ? charParam : GOBLIN_PUPPET_CHARACTER;
   say(`character: ${character}`);
-  let face: FaceParams;
-  try { face = { ...DEFAULT_FACE, ...compileFace(parseBlob(entry.src)) }; } catch { face = { ...DEFAULT_FACE }; }
   const errors: string[] = [];
-  const view = createCharacterView({
-    name: character, start: [0, 0, 0], renderer, scene,
+  const puppet = createGoblinPuppet({
+    renderer, parent: scene, character, errors,
     gpu: { cone: sdfLayer.cone, occluder: sdfLayer.occluder },
-    errors, face,
   });
-  // At home: no armour kit, no shotgun. Retiring at birth makes the in-flight glTF loads dispose themselves on arrival.
-  view.retireEquipment();
-  const gpu = view.gpu;
-  for (const e of [...errors, ...view.body.errors]) say(`goblin: ${e}`, true);
-  // Skin as the game's (game-spawn.ts): the .blob's own palette under the practical key, the face sheet's projection, and his own face
-  // generated from the sheet block (below; the lab's loadGeneratedFace).
-  gpu.applyMaterial(view.palette ?? FLESH_PRESETS['henenlotter-latex'], LIGHT_PRESETS['practical-hard-key']);
-  // THE GAME'S MARCH, not the lab's (game-spawn.ts spawns every body with these): plain sphere tracing (step multiplier 1.0, no
-  // relaxation), the hull-exit bound, the wound early-out and its 1.0 step, the last-step secant accept at 4, and the footprint accept
-  // (aaCfg.y, near-distance fade aaCfg.z/w; aaCfg.x, one pixel, is refreshed every frame). Measured on this page (plan Task 6): the goblin
-  // alone at `glass-gives` went from 61-62 ms (steady; 82-88 on a cold first run) to 47-48 ms at the layer's 0.7 scale.
-  {
-    const u = gpu.uniforms;
-    u.woundCfg2.value.y = GAME_RELAX;
-    u.perfCfg.value.set(GAME_HULL_EXIT_BOUND, GAME_WOUND_EARLY_OUT, GAME_WOUND_STEP, GAME_LAST_STEP_DEFAULT);
-    u.marchCfg.value.y = GAME_OMEGA;
-    u.aaCfg.value.y = GAME_AA;
-    (u.aaCfg.value as unknown as { z: number; w: number }).z = GAME_AA_NEAR;
-    (u.aaCfg.value as unknown as { z: number; w: number }).w = GAME_AA_FADE_M;
-  }
-  {
-    const sheetC = compileCharacterSheet(entry);
-    const sheet = sheetC.sheet;
-    if (sheet) {
-      // HIS OWN FACE: generated from the .blob's `sheet` block (eyes, brow, mouth, nose, grain), as the lab's loadGeneratedFace and the
-      // flame lab do. `sheetC.face` is the registry's face slot, which for the goblin is the SHARED zombie sheet (ZOMBIE_FLAT): worn here
-      // it put the zombie's flat face and red eyes on him. The generator writes greyscale rows from the top-left; expanded to RGBA (the
-      // shader reads tex.rgb: a RedFormat upload renders the head red) and flipped here (a DataTexture gets no flipY), whole-image atlas.
-      const gen = generateFaceSheet(sheet, 64);
-      const rgba = new Uint8Array(gen.size * gen.size * 4);
-      for (let y = 0; y < gen.size; y++) {
-        const src = (gen.size - 1 - y) * gen.size;
-        for (let x = 0; x < gen.size; x++) {
-          const v = gen.pixels[src + x]!;
-          const o = (y * gen.size + x) * 4;
-          rgba[o] = v; rgba[o + 1] = v; rgba[o + 2] = v; rgba[o + 3] = 255;
-        }
-      }
-      const tex = new THREE.DataTexture(rgba, gen.size, gen.size, THREE.RGBAFormat);
-      tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.generateMipmaps = false; tex.flipY = false;
-      tex.needsUpdate = true;
-      gpu.setFaceTexture(tex, new THREE.Vector4(1, 1, 0, 0), gen.mean);
-    } else {
-      const f = sheetC.face;
-      const tex = new THREE.TextureLoader().load(f.url);
-      tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.generateMipmaps = false; tex.flipY = true;
-      const [x, y, w, h, sw, shh] = f.rect;
-      gpu.setFaceTexture(tex, new THREE.Vector4(w / sw, h / shh, x / sw, y / shh), f.mean);
-    }
-    const u = gpu.uniforms;
-    u.faceCfg.value.x = 1; u.faceCfg.value.y = 1.0;
-    if (sheet) {
-      u.faceProj.value.set(sheet.projScaleX, sheet.projScaleY, sheet.projCentreX, sheet.projCentreY);
-      u.faceCfg.value.set(sheet.enabled ? (sheet.decal > 0.5 ? 2 : sheet.blendLuma > 0.5 ? 3 : 1) : 0, sheet.texStrength, sheet.faceForward, sheet.texRelief);
-      u.faceCfg2.value.x = sheet.projSpherical;
-      u.faceCfg2.value.z = sheet.eyeGlowCut;
-      u.faceCfg2.value.w = sheet.eyeGlowAmp;
-      u.faceGlowRedOnly.value = sheet.eyeGlowRedOnly;
-    } else {
-      u.faceProj.value.set(0.45, 0.58, 0.5, 0.56);
-    }
-  }
-  gpu.object.layers.set(SDF_LAYER);
-  gpu.coneObject.layers.set(CONE_LAYER);
-  scene.add(gpu.object);
-  scene.add(gpu.coneObject);
-
-  // The pose layer on the goblin's own skeleton, and the actor pipeline that pins the rig to it.
-  const current = view.body;
-  const motion = makeActorMotion(current, { seed: 1709 });
-  if (!motion.motionJoints) throw new Error('the goblin has no motion joints: the pose layer cannot drive him');
-  const poseRig: PoseRig = makePoseRig(parseBlob(entry.src), motion.motionJoints.names, motion.motionJoints.base);
-  const rng = makeRng(1709);
-  const signals = emptyActorSignals();
-  const bounds = { minX: -1, maxX: 1, minZ: -1, maxZ: 1 };
-  // The goblin's own profile minus the prop (no fist closed on a grip that is not there); the pose overwrites every target anyway.
-  const profile = { ...entry.profile, prop: undefined };
-  // The pose at t, slid along the floor by his scoot (goblinRootAt: he pushes himself back a little from the table a beat after the sac
-  // bulges, and sits up there to look at the egg once it has landed: GOBLIN_CUES). The joints carry the offset, so the pinned rig, the flesh
-  // and the cone follow; `rootDz` feeds the noise root shift (the skin's texture rides with him) and the zabuton.
-  // HIS LIMITED FRAME RATE: his body (the clip's clock and the pushback) steps at GOBLIN_FPS poses a second, early-CG style, while the egg,
-  // the goo and the camera run smooth; `?fps=0` is the smooth clock for comparison, `?fps=N` any other rate.
+  for (const e of errors) say(`goblin: ${e}`, true);
   const goblinFps = Math.max(0, num('fps') ?? GOBLIN_FPS);
   const c = GOBLIN_CUES;
-  say(`goblin: ${goblinFps > 0 ? `${goblinFps} fps` : 'smooth'}; bulge ${c.bulgeSeen.toFixed(2)} s, flinch ${c.flinch.toFixed(2)}, braced ${c.braced.toFixed(2)}, egg lands ${c.land.toFixed(2)}, sits up ${c.sitUp.toFixed(2)} to ${c.sitUpDone.toFixed(2)}`);
-  let rootDz = 0;
-  const poseAt = (t: number) => {
-    const { clip, local } = goblinClipAt(t, goblinFps);
-    rootDz = goblinRootAt(t, goblinFps);
-    const posedJ = poseJoints(poseRig, clip, local);
-    const joints = rootDz === 0 ? posedJ : posedJ.map(j => [j[0], j[1], j[2] + rootDz] as Vec3);
-    stepActorMotion(motion, {
-      current, dt: 1 / 60, wander: false, armStyle: undefined,
-      headingFollow: MOTION_TUNING.headingFollow, gazeFollow: MOTION_TUNING.gazeFollow,
-      bounds, rng, signals, profile, forceSpeed: 0, pose: joints,
-    });
-    // The pose is exact (pinTips and the bend stops after the rig step would re-hang the hands and feet and fold the crossed shins).
-    motion.bound = pinToPose(motion.bound, joints);
-    return clip.name;
+  say(`goblin: ${goblinFps > 0 ? `${goblinFps} fps` : 'smooth'}; bulge ${c.bulgeSeen.toFixed(2)} s, flinch ${c.flinch.toFixed(2)}, braced ${c.braced.toFixed(2)}, egg lands ${c.land.toFixed(2)}, sits up ${c.sitUp.toFixed(2)} to ${c.sitUpDone.toFixed(2)}${puppet.hasExpressions ? '; face: rest, scheduled blinks' : ''}`);
+  let pixelConeK: number | undefined;
+  // A held expression (look-dev: `?expr=` / `__screenLab.setExpression`), the clip's last key; null leaves the puppet's default (rest).
+  const exprClips = expressionsFor(character)?.clips ?? {};
+  let heldExpr: Channels | null = null;
+  const holdExpression = (name: string | null) => {
+    const clip = name ? exprClips[name] : undefined;
+    heldExpr = clip ? expressionAt(clip, clip.keys[clip.keys.length - 1]!.t) : null;
+    return !name || !!clip;
   };
-  let lastPosed: ReturnType<typeof applyRig> | null = null;
-  const upload = () => {
-    const posed = applyRig(current, motion.bound, motion.lastBodyYaw);
-    lastPosed = posed;
-    gpu.update(posed, current);
-    gpu.setRootShift(0, rootDz, motion.lastBodyYaw);
-    const skull = headShape(posed);
-    if (skull) gpu.setHeadShape(skull.centre, skull.axes);
-    gpu.setHeadRotation(headQuatOf(motion.bound, motion.lastBodyYaw) ?? [0, 0, 0, 1]);
-    return posed;
-  };
+  if (q.get('expr') && !holdExpression(q.get('expr'))) say(`unknown ?expr=${q.get('expr')} (${Object.keys(exprClips).join(', ') || 'no expressions'})`, true);
+  /** The pose at t (the puppet's step: the clip, the scoot, the face, the upload). */
+  const stepGoblin = (t: number) => puppet.step(t, 1 / 60, { fps: goblinFps, pixelConeK, ...(heldExpr ? { channelsAt: () => heldExpr! } : {}) });
 
   // ——— Measure the seat off the typing pose, then build the set from it —————
-  for (let i = 0; i < 3; i++) poseAt(1.0); // `floor-type` held (no scoot yet)
-  const seat = measureSeat(upload().prims);
+  for (let i = 0; i < 2; i++) stepGoblin(1.0); // `floor-type` held (no scoot yet)
+  const seat = measureSeat(stepGoblin(1.0).prims);
   const layout = floorLayout(seat);
   seam.layout = layout;
   say(`seat (measured, floor-type): palms ${seat.palmY.toFixed(3)} m, seat ${seat.seatY.toFixed(3)} m, hands z ${seat.handZ.toFixed(3)}, knees top ${seat.kneeTopY.toFixed(3)}`);
@@ -355,14 +249,12 @@ async function bootstrap(): Promise<void> {
     const lampW = new THREE.Vector3(...LAMP_BULB).applyMatrix4(screen.matrixWorld);
     const chest = new THREE.Vector3(0, 0.95, 0.15);
     const d = lampW.sub(chest).normalize();
-    gpu.uniforms.lightDir.value.set(d.x, d.y, d.z);
     // A dim COLD RIM AND FILL, so he does not go to black from behind (the push and out shots look over his back, and the lamp alone keys
     // him from the front-left). The march's built-in side rim (compose.wgsl.ts, spotCfg2.w): a cold grazing edge on the lamp's side plus a
     // soft cold fill on the side facing the camera, whichever way it looks. No new light, no new pass: one uniform. The game's lamps
     // drive it at about 0.35-1.2 (game-dynamic-light.ts BODY_LAMP_RIM); GOBLIN_RIM is chosen by eye at the push and out shots.
     // And a little more of the preset's flat fill (key-coloured, so warm) under it: at the preset's 0.06 his back read near black.
-    gpu.uniforms.spotCfg2.value.w = num('rim') ?? GOBLIN_RIM;
-    gpu.uniforms.lightCfg.value.y = num('fill') ?? GOBLIN_FILL;
+    puppet.setLighting({ dir: [d.x, d.y, d.z], rim: num('rim') ?? GOBLIN_RIM, fill: num('fill') ?? GOBLIN_FILL });
   }
 
   // ——— Sizing ————————————————————————————————————————————————————————————
@@ -498,8 +390,10 @@ async function bootstrap(): Promise<void> {
       handle.setLoopRunning(true);
     }
   };
+  seam.setExpression = holdExpression;
   Object.defineProperty(seam, 't', { get: () => t });
   seam.probe = () => {
+    const lastPosed = puppet.posed;
     if (!lastPosed) return null;
     const toScreen = new THREE.Matrix4().copy(screen.matrixWorld).invert();
     const hands: Record<string, Vec3> = {};
@@ -538,18 +432,17 @@ async function bootstrap(): Promise<void> {
       syncUi();
     }
     const c0 = performance.now();
-    clipName = poseAt(t);
-    upload();
-    zabuton.position.z = rootDz;
+    pixelConeK = sdfLayer.pixelConeK;
+    stepGoblin(t);
+    clipName = puppet.clipName;
+    zabuton.position.z = puppet.rootDz;
     tickMs.push(performance.now() - c0);
     if (tickMs.length > 90) tickMs.shift();
-    gpu.setTime(t);
     applyCamera();
     // The pass on, the placeholder glass off (and back).
     pass.proxy.visible = passOn;
     glass.visible = !passOn;
     if (passOn) updateScreenPass(pass, t, { camera, heightPx: renderer.domElement.height, debug: passDebug, gooShadow, goo: gooOn });
-    gpu.uniforms.aaCfg.value.x = sdfLayer.pixelConeK;
     const sorted = [...frameMs].sort((a, b) => a - b);
     const med = sorted[Math.floor(sorted.length / 2)] ?? 0;
     const tick = [...tickMs].sort((a, b) => a - b)[Math.floor(tickMs.length / 2)] ?? 0;
@@ -563,7 +456,7 @@ async function bootstrap(): Promise<void> {
     }
   });
   syncUi();
-  say(`goblin: ${current.prims.length} prims; the screen pass ${passOn ? 'on' : 'off (?nopass=1)'}`);
+  say(`goblin: ${puppet.body.prims.length} prims; the screen pass ${passOn ? 'on' : 'off (?nopass=1)'}`);
 }
 
 bootstrap().catch((err) => {
