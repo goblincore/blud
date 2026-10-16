@@ -133,17 +133,25 @@ describe('the evil grin: the grin\'s mouth, knitted brows (Task 19)', () => {
     for (const name of ['smile', 'scowl', 'shout', 'surprise', 'neutral']) expect(peak(name).morphs.sneer, name).toBe(0);
   });
 
-  it('brows all the way down, a full furrow, the eyes thinner than the grin\'s', () => {
+  it('brows all the way down, a full furrow, a heavier upper lid than the grin\'s over a flatter lower lid', () => {
     expect(evil.morphs.browDown).toBe(1);
     expect(evil.morphs.furrow).toBe(1);
-    expect(evil.morphs.squint).toBeGreaterThan(grin.morphs.squint);
-    expect(evil.morphs.squint).toBeLessThanOrEqual(1);
+    // Task 21 (owner: "make the evil grin's eyes a bit bigger - they are like definitely too small"): RE-PINNED, the evil grin
+    // squints LESS than the grin now (0.5 vs 0.8; was 0.9 > 0.8). Less squint is a lower lid that arches up less (a glare under
+    // the heavy upper lid, not the grin's happy dome), which is what gives the eye its size back.
+    expect(evil.morphs.squint).toBeLessThan(grin.morphs.squint);
+    expect(evil.morphs.squint).toBeGreaterThanOrEqual(0.4);
     // Task 20: the painted creases SOFTER (owner: graphic one-texel lines): half strength, the geometry carries the furrow
     expect(evil.sheet.browFurrow).toBeGreaterThan(0.4);
     expect(evil.sheet.browFurrow).toBeLessThan(0.7);
     // and the knitted brow presses the upper lid down a little more than browDown alone (furrowLidTop)
     expect(evil.sheet.eyeLidTop).toBeGreaterThan(grin.sheet.eyeLidTop);
-    expect(lit(evil.sheet)).toBeLessThan(lit(grin.sheet)); // measured 12 vs 19 texels (both eyes; neutral 57)
+    // Task 21 RE-PIN (was: smaller than the grin's, 12 vs 19 texels): about the grin's size, 0.8x to 1.4x, and still well under
+    // neutral's. Measured 23 vs 19 (both eyes; neutral 57).
+    const n0 = lit(authored), e = lit(evil.sheet), g = lit(grin.sheet);
+    expect(e).toBeGreaterThanOrEqual(g * 0.8);
+    expect(e).toBeLessThanOrEqual(g * 1.4);
+    expect(e).toBeLessThan(n0 * 0.5);
   });
 
   it('the grin itself is unchanged: no furrow, no painted furrow', () => {

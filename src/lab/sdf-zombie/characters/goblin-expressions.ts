@@ -59,8 +59,9 @@ export const GOBLIN_EXPRESSION_TUNING: ExpressionTuning = {
   // inner-brow bulges are the geometry; this is the paint that sharpens the crease between them). 1 -> 0.55 (Task 20; owner: the
   // one-texel lines read graphic): half-strength creases, the geometry (pushed further) carries the furrow.
   furrowSheet: 0.55,
-  // Task 20 (push the evil grin further): a knitted brow also presses the upper lid down, so the evil grin's eye is a thinner slit
-  // than the grin's (sheet: 12 lit texels for both eyes against the grin's 19; more than ~0.05 cuts the 6x5-texel eye to a dot).
+  // Task 20 (push the evil grin further): a knitted brow also presses the upper lid down (more than ~0.05 cuts the 6x5-texel eye
+  // to a dot). With the evil grin's squint at 0.9 that made its eyes 12 lit texels against the grin's 19, which the owner found
+  // "definitely too small"; Task 21 kept this and lowered the clip's squint instead (23 texels; see EVIL_GRIN).
   furrowLidTop: 0.03,
 };
 
@@ -97,13 +98,18 @@ const GRIN: ExpressionClip = {
  *  FURROW between them (furrow 1: the brow ridge's V pulled deeper and the inner-brow bulges with a crease between them, painted
  *  creases on the sheet) and the eyes narrower (squint 0.9, the grin's 0.8). Task 20 (owner: "can you push the evil grin further"):
  *  a SNEER on top of the grin's mouth (the upper lip curled off the fangs, lopsided, the corners hiked), the furrow's geometry pushed
- *  further, its paint softer, and the knitted brow pressing the lid down (furrowLidTop). */
+ *  further, its paint softer, and the knitted brow pressing the lid down (furrowLidTop). Task 21 (owner: "make the evil grin's eyes
+ *  a bit bigger - they are like definitely too small"): squint 0.9 -> 0.5 (mid key 0.4 -> 0.3), BELOW the grin's 0.8. The squint
+ *  is the smiling cheek pushing the lower lid up into a dome; with less of it the heavy upper lid (browDown 1 + furrowLidTop) sits
+ *  over a flatter lower lid: a glare, not a happy "^". Sheet: 23 lit texels for both eyes (grin 19, neutral 57; was 12); on the GPU
+ *  (red pixels, eye close-up) about the grin's front-on, 0.75x at 45 degrees (the knitted brow ridge hides the outer end). 0.65
+ *  (21 texels) was tried first: 0.6x the grin's on the GPU, the low sheet number lying about what the brow ridge leaves showing. */
 const EVIL_GRIN: ExpressionClip = {
   name: 'evil-grin',
   keys: [
     key(0, {}),
-    key(0.3, { gape: 0.06, smile: 0.7, browDown: 0.5, squint: 0.4, squash: 0.25, furrow: 0.5, sneer: 0.4 }, 'smooth'),
-    key(0.6, { gape: 0.12, smile: 1, browDown: 1, squint: 0.9, squash: 0.5, furrow: 1, sneer: 1 }, 'smooth'),
+    key(0.3, { gape: 0.06, smile: 0.7, browDown: 0.5, squint: 0.3, squash: 0.25, furrow: 0.5, sneer: 0.4 }, 'smooth'),
+    key(0.6, { gape: 0.12, smile: 1, browDown: 1, squint: 0.5, squash: 0.5, furrow: 1, sneer: 1 }, 'smooth'),
   ],
 };
 
