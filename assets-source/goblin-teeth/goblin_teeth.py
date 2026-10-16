@@ -8,15 +8,20 @@
 # --export writes assets-source/goblin-teeth/goblin-teeth.glb next to this file (or --out <path>).
 # The glb then goes into the kit: scripts/merge-kit-teeth.mjs (run by scripts/build-wam-kit.sh goblin-cinematic).
 #
+# HEADLESS (Task 20; no live Blender session, no window, no viewport renders):
+#   /Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup -P assets-source/goblin-teeth/goblin_teeth.py [-- --out <path>]
+# In background mode it always exports (about 3 s); the same script and Blender give the same glb bytes.
+#
 # FRAME. Every number below is in the KIT'S / .blob's frame: metres, Y up, +Z forward (the goblin faces +Z), the goblin standing at
 # the origin. Blender is Z-up, so a point (x, y, z) is built at Blender (x, -z, y), which the glTF exporter (export_yup) turns back
-# into (x, y, z). The layout is the SDF teeth's (goblin-cinematic.blob at 7587c2a0, resolved; the same table is in
-# goblin-cinematic-blob.test.ts as SDF_TEETH): each tooth's ROOT `a` (inside the upper ridge or the jaw floor) and the point `b` its
-# axis aims at. The tooth grows from `a` along a->b; `length` scales that run.
+# into (x, y, z). Each tooth has a ROOT `a` (inside the upper ridge or the jaw's flesh) and the point `b` its axis aims at; the tooth
+# grows from `a` along a->b; `length` scales that run. Since Task 20 `a` and `b` are computed by THE LAYOUT below (until then they
+# were the old SDF teeth's 11 roots).
 #
 # A TOOTH is a loft: RINGS cross-sections along a bent centre line, SIDES points each, closed by a dome at the root (inside the gum)
-# and a point (or a chip) at the tip. Per tooth: the root radius `r` (5.6-6 mm for the small ones, 8.2-8.4 the fangs; the SDF prims
-# were 5-6.8 and the WAM cones ran them linearly to a point, so the STOUTNESS is in the profile: a NECK pinch at the gum (`neck`,
+# and a point (or a chip) at the tip. Per tooth: the root radius `r` (4.8-6.2 mm since Task 20, set by the rows' spacing: about half
+# the distance to the neighbour, so a row reads as a row of teeth and not a comb; Task 17's 11 were 5.6-8.4), the STOUTNESS in the
+# profile: a NECK pinch at the gum (`neck`,
 # default NECK), a crown SWELL (`swell` at `swellAt`) and a slow taper (`taper` < 1 stays fat longer, > 1 needles) to a blunt tip
 # radius `tipR`, optionally ROUNDED off like a dome (`round` 0..1)); the cross-section's depth/width `flat` (incisors are blades,
 # fangs ovals); a sabre `bend` (tip offset, fraction of the length, along the tooth's own depth axis: + back into the mouth, and
@@ -37,56 +42,162 @@ HERE = os.path.dirname(os.path.abspath(globals().get('__file__') or globals().ge
 OUT = ARGS[ARGS.index('--out') + 1] if '--out' in ARGS else os.path.join(HERE, 'goblin-teeth.glb')
 SEED = 17
 COLL = 'GoblinTeeth'
-RINGS = 12          # cross-sections from the root dome to the tip
-SIDES = 12          # points per cross-section
-NECK = 0.28         # how much a tooth pinches in at the gum (0 = a plain cone)
+RINGS = 10          # cross-sections from the root dome to the tip (12 until Task 20: 16 teeth now, so a lighter ring count)
+SIDES = 10          # points per cross-section
+NECK = 0.10         # how much a tooth pinches in at the gum (0 = a plain cone; 0.28 until Task 20's broader, blockier rows)
 
-# ---- the teeth: the SDF layout (a, b) plus each tooth's character -----------------------------------------------------------
-# Upper row, x from the goblin's right (-x) to its left: u0 small, u1 FANG, u2, u3, u4, u5 FANG, u6 small. Lower row l0..l3.
-# The fangs are the 2nd and the 6th upper and must reach lowest (the tests pin it).
-TEETH = [
-    # A stubby, crooked peg leaning out.
-    dict(name='tooth_u0', a=(-0.031, 1.1370, 0.0950), b=(-0.031, 1.1240, 0.0980), length=1.35, r=0.0056, flat=0.66,
-         swell=0.14, swellAt=0.45, taper=0.75, tipR=0.50, bend=0.05, bendX=-0.10, twist=-14, lean=-12,
-         round=0.8, chip=None, bump=0.00020, ridge=0.00012, yellow=0.10, dirt=0.40),
-    # The right fang: a long, swollen sabre that curves back, a little worn at the point.
-    dict(name='tooth_u1', a=(-0.021, 1.1380, 0.0990), b=(-0.021, 1.1110, 0.1040), length=1.15, r=0.0084, flat=0.80,
-         swell=0.22, swellAt=0.32, taper=1.15, tipR=0.07, bend=0.18, bendX=-0.14, twist=8, lean=4,
-         chip=None, bump=0.00025, ridge=0.00018, yellow=0.08, dirt=0.40),
-    # A broad, twisted blade: crooked in its socket, a flat chisel end.
-    dict(name='tooth_u2', a=(-0.011, 1.1380, 0.1020), b=(-0.011, 1.1210, 0.1060), length=1.3, r=0.0060, flat=0.55,
-         swell=0.10, swellAt=0.45, taper=0.8, tipR=0.45, bend=0.04, bendX=0.0, twist=40, lean=10,
-         round=0.6, chip=dict(t=0.86, tilt=12, roll=-15), bump=0.00022, ridge=0.00010, yellow=0.0, dirt=0.30),
-    # The middle one is BROKEN: a diagonal snap across its lower third.
-    dict(name='tooth_u3', a=(-0.001, 1.1380, 0.1030), b=(-0.001, 1.1230, 0.1070), length=1.4, r=0.0058, flat=0.60,
-         swell=0.10, swellAt=0.42, taper=0.8, tipR=0.25, bend=0.03, bendX=0.0, twist=-6, lean=-3,
-         chip=dict(t=0.62, tilt=32, roll=-40), bump=0.00022, ridge=0.00010, yellow=0.06, dirt=0.45),
-    # Slim, pointed, and leaning hard on the fang beside it.
-    dict(name='tooth_u4', a=(0.010, 1.1380, 0.1020), b=(0.010, 1.1190, 0.1060), length=1.05, r=0.0058, flat=0.70,
-         swell=0.12, swellAt=0.40, taper=1.1, tipR=0.14, bend=0.06, bendX=0.14, twist=-18, lean=16,
-         chip=None, bump=0.00020, ridge=0.00012, yellow=0.14, dirt=0.30),
-    # The left fang: a little shorter and straighter than the right, its point snapped off.
-    dict(name='tooth_u5', a=(0.021, 1.1380, 0.0990), b=(0.021, 1.1130, 0.1040), length=1.12, r=0.0082, flat=0.84,
-         swell=0.18, swellAt=0.32, taper=1.0, tipR=0.10, bend=0.12, bendX=0.08, twist=-10, lean=-5,
-         chip=dict(t=0.88, tilt=-42, roll=25), bump=0.00025, ridge=0.00016, yellow=0.04, dirt=0.40),
-    # A worn, bulbous stub.
-    dict(name='tooth_u6', a=(0.031, 1.1370, 0.0950), b=(0.031, 1.1250, 0.0980), length=1.2, r=0.0058, flat=0.78,
-         swell=0.20, swellAt=0.5, taper=0.7, tipR=0.55, bend=0.02, bendX=-0.04, twist=12, lean=16,
-         round=0.9, chip=None, bump=0.00025, ridge=0.00008, yellow=0.18, dirt=0.55),
-    # Lower row: tusky pegs standing up off the floor; the outer two lean out like small tusks.
-    dict(name='tooth_l0', a=(-0.026, 1.1210, 0.0851), b=(-0.026, 1.1380, 0.0901), length=1.35, r=0.0066, flat=0.78,
-         swell=0.15, swellAt=0.22, taper=1.0, tipR=0.14, bend=0.10, bendX=-0.30, twist=10, lean=12,
-         chip=None, bump=0.00022, ridge=0.00012, yellow=0.12, dirt=0.40),
-    dict(name='tooth_l1', a=(-0.009, 1.1220, 0.0901), b=(-0.009, 1.1410, 0.0951), length=1.2, r=0.0074, flat=0.66,
-         swell=0.12, swellAt=0.2, taper=0.7, tipR=0.30, bend=0.05, bendX=0.04, twist=-20, lean=-6,
-         round=0.5, chip=dict(t=0.84, tilt=20, roll=30), bump=0.00025, ridge=0.00014, yellow=0.06, dirt=0.40),
-    dict(name='tooth_l2', a=(0.011, 1.1220, 0.0901), b=(0.011, 1.1390, 0.0951), length=1.1, r=0.0068, flat=0.62,
-         swell=0.12, swellAt=0.25, taper=0.65, tipR=0.40, bend=0.04, bendX=0.0, twist=24, lean=8,
-         round=0.8, chip=None, bump=0.00022, ridge=0.00010, yellow=0.14, dirt=0.45),
-    dict(name='tooth_l3', a=(0.027, 1.1210, 0.0851), b=(0.027, 1.1390, 0.0901), length=1.3, r=0.0064, flat=0.80,
-         swell=0.15, swellAt=0.22, taper=1.0, tipR=0.14, bend=0.10, bendX=0.28, twist=-8, lean=-12,
-         chip=None, bump=0.00022, ridge=0.00012, yellow=0.08, dirt=0.35),
+# ---- THE LAYOUT (Task 20, owner on PR #48: "when he grins there's this dark gap ... cartoonishly his teeth would be bigger and take
+# up the space"; decision: TWO BIG ROWS with a thin dark band between them, like the emoji reference).
+#
+# Task 17 put 11 teeth at the old SDF teeth's roots (7 upper in the middle third of the mouth, 4 small lower ones the fat lower lip
+# hid). Now 8 upper (two fangs) and 8 lower (two small canines), bigger and packed edge to edge, each row spanning the grin's opening
+# (x +-0.039, the opening's own width: past |x| ~0.04 the mouth corners' flesh covers everything, see REST_FRONT): the upper row
+# hangs from the upper ridge's underside, the lower row stands on the lower lip's top edge and follows its U, and the two meet
+# along a SMILE LINE with a thin dark band between them (2.6 mm in the middle).
+#
+# The rows are laid out WHERE THEY SHOW, in the grin clip's peak pose (goblin-expressions.ts `grin`: gape 0.12 = 0.072 rad, smile
+# 1, squash 0.5), from the posed lips' curves (goblin-cinematic.blob's smile morphs put the upper ridge's centre line on
+# y = 1.168 - 0.016 (1 - (x/0.064)^2), z = 0.073 + 0.035 (1 - (x/0.064)^2) and the lower lip's on y = 1.150 - 0.051 (1 - (x/0.070)^2),
+# z = 0.084 + 0.028 (1 - (x/0.070)^2); the lip's top edge is measured, LIP_TOP), and carried back to the REST frame through that pose's kit frames (rig-bind.ts kitFrames:
+# the skull frame is only shifted by the squash's move at the mouth; the jaw frame also turns by the gape about the hinge). So at
+# rest the rows sit where the shut mouth's flesh buries them (goblin-cinematic-blob.test.ts pins it, 0.5 mm or more inside), and
+# at the grin they fill the opening. If the grin's lips or its gape/squash change, re-derive these (GRIN_* below).
+GRIN_HEAD = (0.0, 1.1185759, 0.0129015)                         # the skull pivot = the kit's skull and jaw bone heads, at rest
+GRIN_SKULL = (0.0, 1.1232097, 0.0147414)                        # kitFrames(skull).pos at the grin's peak (quat identity)
+GRIN_JAW = (0.0, 1.1215655, 0.0137074)                          # kitFrames(jaw).pos at the grin's peak
+GRIN_JAW_Q = (0.0359922, 0.0, 0.0, 0.9993521)                   # kitFrames(jaw).quat (x, y, z, w): the gape, 0.072 rad about +x
+
+
+def ridge_y(x): return 1.168 - 0.016 * max(0.0, 1 - (x / 0.064) ** 2)          # upper ridge centre line (posed, grin)
+def ridge_z(x): return 0.073 + 0.035 * max(0.0, 1 - (x / 0.064) ** 2)
+def lip_y(x): return 1.150 - 0.051 * max(0.0, 1 - (x / 0.070) ** 2)            # lower lip centre line (posed, grin)
+def lip_z(x): return 0.084 + 0.028 * max(0.0, 1 - (x / 0.070) ** 2)
+def under(x): return ridge_y(x) - 0.0045                                       # the ridge's underside (thinned on the smile: ~5 mm)
+# The lower lip's top edge as the front sees it, MEASURED on the posed grin (a bent bar's top climbs with its slope, so it is not the
+# centre line plus a radius): x -> y, linear between.
+LIP_TOP = [(0.0, 1.1090), (0.005, 1.1095), (0.01, 1.1105), (0.015, 1.1125), (0.02, 1.1150), (0.025, 1.1170), (0.03, 1.1195),
+           (0.035, 1.1220), (0.04, 1.1260), (0.045, 1.1345), (0.05, 1.1450), (0.055, 1.1490), (0.06, 1.1515)]
+
+
+def lip_top(x):
+    x = abs(x)
+    for (x0, y0), (x1, y1) in zip(LIP_TOP, LIP_TOP[1:]):
+        if x <= x1: return y0 + (y1 - y0) * (x - x0) / (x1 - x0)
+    return LIP_TOP[-1][1]
+
+
+# The smile line: the dark band's middle, 42% of the way up the opening (the upper row gets the bigger share, as in the reference).
+def smile_y(x): return lip_top(x) + 0.42 * max(0.004, under(x) - lip_top(x))
+def band(x): return 0.0013 * (1 - 0.30 * min(1.0, abs(x) / 0.05))                # half the dark band: 1.3 mm in the middle, 0.9 at the ends
+
+
+# THE SHUT MOUTH'S FRONT: the rest face's most-recessed front z over y 1.115-1.165, per |x| (measured on goblin-cinematic.blob at
+# rest). The mouth corners are a pinch (z drops from 0.091 at x 0.045 to 0.058 at 0.05), so no tooth can live past |x| ~0.043:
+# every tooth is pushed back until its outer side sits at least 1.5 mm behind this (the tests then pin 0.5 mm of flesh over it).
+REST_FRONT = [(0.000, 0.1203), (0.005, 0.1200), (0.010, 0.1188), (0.015, 0.1173), (0.020, 0.1144), (0.025, 0.1116), (0.030, 0.1083),
+              (0.035, 0.1036), (0.040, 0.0966), (0.045, 0.0909), (0.050, 0.0581)]
+
+
+def rest_front(x):
+    x = abs(x)
+    for (x0, y0), (x1, y1) in zip(REST_FRONT, REST_FRONT[1:]):
+        if x <= x1: return y0 + (y1 - y0) * (x - x0) / (x1 - x0)
+    return REST_FRONT[-1][1]
+
+
+def qrot(q, v):
+    x, y, z, w = q
+    ix, iy, iz, iw = w * v[0] + y * v[2] - z * v[1], w * v[1] + z * v[0] - x * v[2], w * v[2] + x * v[1] - y * v[0], -x * v[0] - y * v[1] - z * v[2]
+    return (ix * w + iw * -x + iy * -z - iz * -y, iy * w + iw * -y + iz * -x - ix * -z, iz * w + iw * -z + ix * -y - iy * -x)
+
+
+def to_rest(p, upper):
+    """A point placed in the grin's posed frame -> the kit's rest frame (the inverse of the grin's kit frame for that bone)."""
+    if upper:
+        return tuple(GRIN_HEAD[k] + p[k] - GRIN_SKULL[k] for k in range(3))
+    qi = (-GRIN_JAW_Q[0], -GRIN_JAW_Q[1], -GRIN_JAW_Q[2], GRIN_JAW_Q[3])
+    r = qrot(qi, tuple(p[k] - GRIN_JAW[k] for k in range(3)))
+    return tuple(GRIN_HEAD[k] + r[k] for k in range(3))
+
+
+# How much the side teeth fan out with the crescent (1 = square to the smile line). Fully square read as spikes slanting in at the
+# corners; a third keeps them nearly upright, as cartoon teeth are.
+FAN = 0.35
+
+
+def placed(x, upper, reach=0.0, root=0.004, dz=0.0, r=0.005, flat=0.7):
+    """Root `a` and tip `b` (rest frame) of a tooth centred at x: an upper tooth from `root` above the ridge's underside down to the
+    band's top edge (`reach` further, e.g. a fang crossing the band), a lower one from `root` below the lip's top up to the band's
+    bottom edge. The axis leans with the smile line by FAN (the side teeth fan out a little with the crescent), with a small rake."""
+    e = 0.002
+    slope = (smile_y(x + e) - smile_y(x - e)) / (2 * e) * FAN
+    n = (-slope, 1.0)
+    l = math.hypot(*n); n = (n[0] / l, n[1] / l)                               # the smile line's up-normal (x, y)
+    if upper:
+        z = ridge_z(x) - 0.0015 + dz
+        top = under(x) + root
+        bot = smile_y(x) + band(x) - reach
+        h = top - bot
+        a = (x + n[0] * h * 0.5, top, z - 0.001)                                # root leans back into the gum a touch
+        b = (x - n[0] * h * 0.5, bot, z + 0.001)
+    else:
+        z = min(lip_z(x) - 0.0105, ridge_z(x) - 0.0045) + dz
+        bot = lip_top(x) - root
+        top = smile_y(x) - band(x) - reach
+        h = top - bot
+        a = (x - n[0] * h * 0.5, bot, z - 0.0015)
+        b = (x + n[0] * h * 0.5, top, z + 0.0015)
+    a, b = to_rest(a, upper), to_rest(b, upper)
+    # buried at rest: the crown's front (centre + depth half) and its outer side behind the shut mouth's front
+    lim = min(rest_front(x), rest_front(abs(x) + r * 1.15 + 0.003)) - r * flat * 1.1 - 0.0022
+    back = max(0.0, max(a[2], b[2]) - lim)
+    return (a[0], a[1], a[2] - back), (b[0], b[1], b[2] - back)
+
+
+# Each tooth's CHARACTER (the Task 17 vocabulary, see the header): stout, never two alike. x is the posed centre; the rows are a
+# little uneven on purpose (a goblin's teeth are not a dentist's). `reach` lengthens a tooth past the band (the fangs cross it).
+UPPER = [
+    # the goblin's right (-x) to its left. A fifth pair further out (x +-0.0395) was tried: the mouth corners' flesh covers it at
+    # the grin from the front and at three-quarter, and the shut mouth's pinch at the corners leaves no room for it further forward.
+    dict(x=-0.0340, r=0.0052, flat=0.66, swell=0.12, swellAt=0.45, taper=0.6, tipR=0.58, bend=0.04, bendX=0.0, twist=18, lean=7, round=0.6, chip=dict(t=0.88, tilt=14, roll=-20), yellow=0.10, dirt=0.40),
+    # the right FANG: a long, swollen sabre that crosses the band, curving back
+    dict(x=-0.0255, r=0.0052, flat=0.80, swell=0.22, swellAt=0.32, taper=1.1, tipR=0.08, bend=0.16, bendX=-0.10, twist=8, lean=4, reach=0.0105, yellow=0.08, dirt=0.40),
+    dict(x=-0.0160, r=0.0055, flat=0.56, swell=0.10, swellAt=0.45, taper=0.5, tipR=0.66, bend=0.04, bendX=0.0, twist=-22, lean=-7, round=0.6, yellow=0.04, dirt=0.30),
+    # the two middle incisors: broad chisels; the left one is BROKEN, a diagonal snap across its lower third
+    dict(x=-0.0055, r=0.0062, flat=0.52, swell=0.08, swellAt=0.45, taper=0.45, tipR=0.72, bend=0.03, bendX=0.0, twist=-6, lean=-3, round=0.5, yellow=0.02, dirt=0.30),
+    dict(x=0.0055, r=0.0061, flat=0.54, swell=0.08, swellAt=0.42, taper=0.45, tipR=0.70, bend=0.03, bendX=0.0, twist=5, lean=4, chip=dict(t=0.74, tilt=30, roll=-38), yellow=0.06, dirt=0.40),
+    dict(x=0.0160, r=0.0055, flat=0.60, swell=0.12, swellAt=0.40, taper=0.6, tipR=0.50, bend=0.06, bendX=0.10, twist=-16, lean=12, round=0.4, yellow=0.14, dirt=0.30),
+    # the left FANG: a little shorter and straighter than the right, its point snapped off
+    dict(x=0.0255, r=0.0051, flat=0.84, swell=0.18, swellAt=0.32, taper=1.0, tipR=0.10, bend=0.12, bendX=0.08, twist=-10, lean=-5, reach=0.0125, chip=dict(t=0.92, tilt=-42, roll=25), yellow=0.04, dirt=0.40),
+    dict(x=0.0340, r=0.0052, flat=0.68, swell=0.14, swellAt=0.5, taper=0.5, tipR=0.66, bend=0.03, bendX=0.05, twist=12, lean=-9, round=0.8, yellow=0.16, dirt=0.50),
 ]
+LOWER = [
+    dict(x=-0.0345, r=0.0049, flat=0.74, swell=0.12, swellAt=0.35, taper=0.55, tipR=0.60, bend=0.05, bendX=0.0, twist=-14, lean=8, round=0.6, yellow=0.16, dirt=0.50),
+    # the right lower CANINE: a small tusk leaning out, its point standing into the band
+    dict(x=-0.0255, r=0.0049, flat=0.80, swell=0.16, swellAt=0.25, taper=1.0, tipR=0.14, bend=0.10, bendX=-0.25, twist=10, lean=10, reach=0.0030, yellow=0.12, dirt=0.40),
+    dict(x=-0.0160, r=0.0054, flat=0.60, swell=0.10, swellAt=0.3, taper=0.5, tipR=0.64, bend=0.04, bendX=0.0, twist=-18, lean=-6, round=0.6, chip=dict(t=0.88, tilt=20, roll=30), yellow=0.06, dirt=0.40),
+    dict(x=-0.0055, r=0.0057, flat=0.56, swell=0.10, swellAt=0.3, taper=0.45, tipR=0.70, bend=0.03, bendX=0.0, twist=8, lean=3, round=0.7, yellow=0.08, dirt=0.35),
+    dict(x=0.0055, r=0.0056, flat=0.58, swell=0.10, swellAt=0.3, taper=0.5, tipR=0.66, bend=0.03, bendX=0.0, twist=-12, lean=-4, round=0.6, yellow=0.12, dirt=0.40),
+    dict(x=0.0160, r=0.0053, flat=0.62, swell=0.12, swellAt=0.3, taper=0.55, tipR=0.62, bend=0.04, bendX=0.04, twist=22, lean=8, round=0.8, yellow=0.14, dirt=0.45),
+    # the left lower CANINE
+    dict(x=0.0255, r=0.0048, flat=0.80, swell=0.15, swellAt=0.25, taper=1.0, tipR=0.16, bend=0.10, bendX=0.25, twist=-8, lean=-10, reach=0.0025, yellow=0.08, dirt=0.35),
+    dict(x=0.0345, r=0.0048, flat=0.76, swell=0.14, swellAt=0.35, taper=0.55, tipR=0.62, bend=0.04, bendX=0.02, twist=16, lean=-6, round=0.7, yellow=0.18, dirt=0.55),
+]
+_DEF = dict(chip=None, bump=0.00020, ridge=0.00010, reach=0.0, length=1.0)
+
+
+def teeth():
+    out = []
+    for row, specs, upper in (('u', UPPER, True), ('l', LOWER, False)):
+        for k, t in enumerate(specs):
+            spec = {**_DEF, **t}
+            spec['a'], spec['b'] = placed(spec['x'], upper, spec['reach'], root=0.008 if upper else 0.004, r=spec['r'], flat=spec['flat'])
+            spec['name'] = 'tooth_%s%02d' % (row, k)
+            out.append(spec)
+    return out
+
+
+TEETH = teeth()
 
 # Colours, sRGB 0..1 (stored as byte colour, which Blender treats as sRGB; the exporter writes COLOR_0 linear). Warm dirty ivory at
 # the crown, a yellow-brown stain toward the gum. Lit by the lab (kit-overlay.ts LOOK `tooth`) the crown renders about (180,157,111)
@@ -292,5 +403,7 @@ def export(objs, path=OUT):
 
 if __name__ == '__main__':
     objs = build()
-    if '--export' in ARGS:
+    # Headless (`Blender -b -P <this>`) always exports: that is how the glb is made (Task 20: no live Blender session needed). In a
+    # live Blender it exports only when asked (--export), so a look-dev run just rebuilds the collection.
+    if bpy.app.background or '--export' in ARGS:
         print('wrote', export(objs))

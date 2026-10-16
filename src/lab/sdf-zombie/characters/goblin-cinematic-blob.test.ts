@@ -200,12 +200,12 @@ describe('goblin-cinematic mouth interior (SDF) and teeth (MESH in the kit since
   });
 });
 
-// THE MESH TEETH (Task 14; sculpted in Blender since Task 17). assets-source/goblin-teeth/goblin_teeth.py builds 11 teeth at the SDF
-// teeth's old roots (7 upper on `skull`, 4 lower on `jaw`) and scripts/merge-kit-teeth.mjs adds them to the compiled kit as one
-// skinned `tooth` primitive with vertex colours. Read from the COMPILED glTF, posed the way the lab poses it: rig-bind `kitFrames`
+// THE MESH TEETH (Task 14; sculpted in Blender since Task 17; two rows since Task 20). assets-source/goblin-teeth/goblin_teeth.py
+// (run headless) builds 16 teeth, 8 upper on `skull` and 8 lower on `jaw`, laid out where the grin clip's lips put the opening, and
+// scripts/merge-kit-teeth.mjs adds them to the compiled kit as one skinned `tooth` primitive with vertex colours. Read from the COMPILED glTF, posed the way the lab poses it: rig-bind `kitFrames`
 // (the jaw bone takes the `on jaw` prims' transform) and three's skinning, `frame.pos + frame.quat * (v - kit bone head)` (WAM's
 // inverse binds are translations to each bone's rest head).
-describe('goblin-cinematic mesh teeth (Tasks 14, 17): the kit\'s teeth follow the SDF face', () => {
+describe('goblin-cinematic mesh teeth (Tasks 14, 17, 20): the kit\'s teeth follow the SDF face', () => {
   type Acc = { bufferView: number; byteOffset?: number; count: number; type: string; componentType: number };
   const g = JSON.parse(kitJson) as {
     buffers: { uri: string }[]; bufferViews: { byteOffset?: number }[]; accessors: Acc[];
@@ -271,10 +271,12 @@ describe('goblin-cinematic mesh teeth (Tasks 14, 17): the kit\'s teeth follow th
   const withGape = (gape: number, morphs?: Record<string, number>) =>
     ({ ...bound, rig: { ...bound.rig, jawGape: gape, ...(morphs ? { morphs } : {}) } });
 
-  it('has 11 teeth: 7 upper rigid on the skull, 4 lower rigid on the jaw; the inverse binds are translations', () => {
-    expect(teeth.length).toBe(11);
-    expect(teeth.filter(t => t.bone === 'skull').length).toBe(7);
-    expect(teeth.filter(t => t.bone === 'jaw').length).toBe(4);
+  // TASK 20 (owner: "when he grins there's this dark gap ... cartoonishly his teeth would be bigger and take up the space"): two big
+  // rows, 8 upper (two fangs) on the skull and 8 lower (two small canines) on the jaw, regenerated headless from goblin_teeth.py.
+  it('has 16 teeth: 8 upper rigid on the skull, 8 lower rigid on the jaw; the inverse binds are translations', () => {
+    expect(teeth.length).toBe(16);
+    expect(teeth.filter(t => t.bone === 'skull').length).toBe(8);
+    expect(teeth.filter(t => t.bone === 'jaw').length).toBe(8);
     for (const t of teeth) for (const i of t.ix) expect(Math.max(...weights[i]!), 'one bone, weight 1').toBeCloseTo(1, 6);
     for (const m of ibm) [0, 5, 10, 15].forEach((d, k) => expect(m[d], `ibm diag ${k}`).toBe(1));
     for (const m of ibm) [1, 2, 3, 4, 6, 7, 8, 9, 11].forEach(o => expect(m[o]).toBe(0));
@@ -293,7 +295,7 @@ describe('goblin-cinematic mesh teeth (Tasks 14, 17): the kit\'s teeth follow th
       expect(n, `${t.bone} tooth at x ${t.rest[0]![0].toFixed(3)}`).toBeGreaterThanOrEqual(150);
       expect(n).toBeLessThanOrEqual(400);
     }
-    expect(tris.length / 3).toBeLessThan(4000);
+    expect(tris.length / 3).toBeLessThan(4000); // 3246 (Task 17's 11: 3096)
     const mat = g.materials[prim.material]! as { pbrMetallicRoughness?: { baseColorFactor?: number[]; baseColorTexture?: unknown } };
     expect(mat.pbrMetallicRoughness?.baseColorTexture, 'no texture: the colour is per vertex').toBeUndefined();
     expect(mat.pbrMetallicRoughness?.baseColorFactor).toEqual([1, 1, 1, 1]);
@@ -316,59 +318,32 @@ describe('goblin-cinematic mesh teeth (Tasks 14, 17): the kit\'s teeth follow th
     }
   });
 
-  // The SDF teeth these replace (goblin-cinematic.blob at 7587c2a0, resolved): root `a`, tip `b`, root radius. The Blender teeth
-  // (Task 17) grow from the same roots along the same leans, but they are their own shapes: per-tooth lengths, bends, leans, a
-  // broken one; so the pins are the root, the bone, the reach and the girth, not the old cone's exact point.
-  const SDF_TEETH: [Vec3, Vec3, number][] = [
-    [[-0.031, 1.1370, 0.0950], [-0.031, 1.1240, 0.0980], 0.005],
-    [[-0.021, 1.1380, 0.0990], [-0.021, 1.1110, 0.1040], 0.0068],
-    [[-0.011, 1.1380, 0.1020], [-0.011, 1.1210, 0.1060], 0.0055],
-    [[-0.001, 1.1380, 0.1030], [-0.001, 1.1230, 0.1070], 0.005],
-    [[0.010, 1.1380, 0.1020], [0.010, 1.1190, 0.1060], 0.0055],
-    [[0.021, 1.1380, 0.0990], [0.021, 1.1130, 0.1040], 0.0068],
-    [[0.031, 1.1370, 0.0950], [0.031, 1.1250, 0.0980], 0.005],
-    [[-0.026, 1.1210, 0.0851], [-0.026, 1.1380, 0.0901], 0.0048],
-    [[-0.009, 1.1220, 0.0901], [-0.009, 1.1410, 0.0951], 0.0058],
-    [[0.011, 1.1220, 0.0901], [0.011, 1.1390, 0.0951], 0.0052],
-    [[0.027, 1.1210, 0.0851], [0.027, 1.1390, 0.0901], 0.0048],
-  ];
-  it('keeps the SDF teeth\'s layout, stouter: each root at the old root, the same bone, a comparable reach, a fuller body', () => {
-    const rest = kitFrames(body, bound, 0);
-    const used = new Set<(typeof teeth)[number]>();
-    for (const [a, b, r] of SDF_TEETH) {
-      const dir = normalize(sub(b, a)), run = len(sub(b, a)) + 0.001;
-      const drawn = (t: (typeof teeth)[number]) => t.rest.map(v => skinned(rest, t.bone, v));
-      // the tooth whose vertex centroid is nearest the old prim's middle
-      const mid = scale(add(a, b), 0.5);
-      const centroid = (t: (typeof teeth)[number]) => scale(drawn(t).reduce((m, v) => add(m, v), [0, 0, 0] as Vec3), 1 / t.rest.length);
-      const t = teeth.reduce((m, t) => len(sub(centroid(t), mid)) < len(sub(centroid(m), mid)) ? t : m);
-      expect(used.has(t), `one tooth per prim (x ${a[0]})`).toBe(false);
-      used.add(t);
-      expect(t.bone, `bone of the tooth at x ${a[0]}`).toBe(a[1] > 1.13 ? 'skull' : 'jaw');
-      const vs = drawn(t), along = vs.map(v => dot(sub(v, a), dir));
-      const rootEnd = Math.min(...along), reach = Math.max(...along);
-      // the root dome sits on the old root, at most 6 mm back into the gum along the old axis, and within 3 mm of that axis
-      expect(rootEnd, `root of the tooth at x ${a[0]}`).toBeLessThanOrEqual(0.0005);
-      expect(rootEnd).toBeGreaterThan(-0.006);
-      const rootPt = vs[along.indexOf(rootEnd)]!;
-      expect(len(sub(sub(rootPt, a), scale(dir, rootEnd))), `root off-axis at x ${a[0]}`).toBeLessThan(0.004);
-      // the reach: 0.75-1.6x the old prim's (a broken tooth is shorter, the lower row grew to show over the floor)
-      expect(reach / run, `reach of the tooth at x ${a[0]}`).toBeGreaterThan(0.75);
-      expect(reach / run).toBeLessThan(1.6);
-      // STOUTER (owner: "stouter teeth is a yes"). The WAM cone thinned linearly from its root; a sculpted tooth keeps its body: at
-      // half its reach it is at least 1.25x as wide side to side as the old cone was at that point (measured 2026-10-15: 1.32 the
-      // slim one leaning on the left fang, 1.7-1.8 the fangs, 2.0-3.4 the rest), and its widest is at least 0.85x the old root's
-      // diameter (0.91-1.2: the neck pinches in at the gum, so the row's 1 cm spacing still parts the crowns).
-      const xs = vs.filter((_, k) => along[k]! > 0 && along[k]! < reach / 2).map(v => v[0]);
-      const half = reach / 2, slab = vs.filter((_, k) => Math.abs(along[k]! - half) < reach / 12).map(v => v[0]);
-      const cone = 2 * r * Math.max(0, 1 - half / run);
-      expect((Math.max(...slab) - Math.min(...slab)) / cone, `girth at half reach, tooth at x ${a[0]}`).toBeGreaterThan(1.25);
-      expect((Math.max(...xs) - Math.min(...xs)) / (2 * r), `widest, tooth at x ${a[0]}`).toBeGreaterThan(0.85);
+  // The grin clip's peak, as the lab plays it (the teeth are laid out for it: goblin_teeth.py THE LAYOUT).
+  const grinAct = actuate(expressionAt(GOBLIN_EXPRESSIONS.grin!, 99), compileSheet(doc)!, GOBLIN_EXPRESSION_TUNING);
+  const grinBound = withGape(grinAct.jawGape, grinAct.morphs);
+  const grinBody = applyRig(body, grinBound, 0);
+
+  it('two rows that span the opening, packed edge to edge, the fangs longest (Task 20 layout)', () => {
+    for (const bone of ['skull', 'jaw']) {
+      const row = teeth.filter(t => t.bone === bone).map(t => {
+        const ps = posedSamples(grinBound, t), xs = ps.map(p => p[0]);
+        return { lo: Math.min(...xs), hi: Math.max(...xs), mid: (Math.min(...xs) + Math.max(...xs)) / 2, ys: ps.map(p => p[1]) };
+      }).sort((a, b) => a.mid - b.mid);
+      // the row runs across the opening (which ends near x +-0.04 at the grin), both sides
+      expect(row[0]!.lo, `${bone} row, the goblin's right`).toBeLessThan(-0.036);
+      expect(row.at(-1)!.hi, `${bone} row, its left`).toBeGreaterThan(0.036);
+      // packed: neighbours' crowns touch or overlap in x (no comb of pegs with gaps between them)
+      for (let k = 1; k < row.length; k++) expect(row[k]!.lo - row[k - 1]!.hi, `${bone} gap ${k}`).toBeLessThan(0.0015);
+      // big: every tooth at least 7 mm wide
+      for (const t of row) expect(t.hi - t.lo, `${bone} tooth at ${t.mid.toFixed(3)}`).toBeGreaterThan(0.007);
+      if (bone === 'skull') {
+        // the 2nd and 7th of the 8 are the fangs: each reaches at least 3 mm below both its neighbours (the smile line curves up
+        // toward the corners, so "longest" is against the neighbours, not the middle incisors)
+        const tips = row.map(t => Math.min(...t.ys));
+        if ((globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env.TEETH_PRINT) console.log(row.map(t => `${t.mid.toFixed(4)}: ${t.lo.toFixed(4)}..${t.hi.toFixed(4)} tip ${Math.min(...t.ys).toFixed(4)}`).join('\n'));
+        for (const f of [1, 6]) expect(tips[f]!, `fang ${f}`).toBeLessThan(Math.min(tips[f - 1]!, tips[f + 1]!) - 0.003);
+      }
     }
-    const lowest = (i: number) => teeth.filter(t => t.bone === 'skull')[i]!.rest.reduce((m, v) => Math.min(m, v[1]), 9);
-    const tips = [0, 1, 2, 3, 4, 5, 6].map(lowest);
-    expect(Math.min(tips[1]!, tips[5]!), 'the fangs reach lowest').toBeLessThan(Math.min(...tips.filter((_, i) => i !== 1 && i !== 5)) - 0.004);
-    expect(Math.max(tips[1]!, tips[5]!), 'both fangs').toBeLessThan(Math.min(...tips.filter((_, i) => i !== 1 && i !== 5)) - 0.004);
   });
 
   it('every tooth is inside the shut mouth\'s flesh at rest (the SDF\'s depth hides it from any angle)', () => {
@@ -378,7 +353,7 @@ describe('goblin-cinematic mesh teeth (Tasks 14, 17): the kit\'s teeth follow th
       worst = Math.max(worst, d);
       expect(d, `${t.bone} tooth at x ${t.rest[0]![0].toFixed(3)}: (${p.map(v => v.toFixed(4)).join(', ')})`).toBeLessThan(-0.0005);
     }
-    expect(worst).toBeLessThan(-0.0005);
+    expect(worst).toBeLessThan(-0.0005); // measured -1.7 mm (the outer upper pair)
   });
 
   // Seen from the front: some surface point of the tooth is outside the posed flesh and a ray from the camera side (+z) reaches it.
@@ -390,18 +365,78 @@ describe('goblin-cinematic mesh teeth (Tasks 14, 17): the kit\'s teeth follow th
       return true;
     });
 
-  it('bares every upper tooth at the grin gape (0.15 rad), and every tooth at 0.3', () => {
-    for (const t of teeth.filter(t => t.bone === 'skull')) expect(showsFromFront(withGape(0.15), t), `upper x ${t.rest[0]![0].toFixed(3)}`).toBe(true);
-    for (const t of teeth) expect(showsFromFront(withGape(0.3), t), `${t.bone} x ${t.rest[0]![0].toFixed(3)}`).toBe(true);
+  // Task 20: the grin opens with the LIPS (a 0.072 rad gape), and both rows show from the front: every one of the 16 teeth.
+  it('the grin (the clip\'s peak: morphs on, the head squashed) bares every tooth of both rows from the front', () => {
+    expect(grinAct.morphs.squash).toBeGreaterThan(0);
+    for (const t of teeth) expect(showsFromFront(grinBound, t, grinBody), `${t.bone} x ${t.rest[0]![0].toFixed(3)}`).toBe(true);
   });
 
-  // Task 15: the grin's jaw barely opens (0.12 rad); the lips' lift and the corners' pull show the teeth. Task 18: the clip's own
-  // peak now (0.18 rad, the cartoon morphs, the head squashed, the teeth riding the squash).
-  it('the grin (the clip\'s peak: morphs on, the head squashed) still bares every upper tooth', () => {
-    const peak = actuate(expressionAt(GOBLIN_EXPRESSIONS.grin!, 99), compileSheet(doc)!, GOBLIN_EXPRESSION_TUNING);
-    expect(peak.morphs.squash).toBeGreaterThan(0);
-    const grin = withGape(peak.jawGape, peak.morphs);
-    for (const t of teeth.filter(t => t.bone === 'skull')) expect(showsFromFront(grin, t), `upper x ${t.rest[0]![0].toFixed(3)}`).toBe(true);
+  it('a wide-open jaw (0.3 rad, no smile) still bares the upper row\'s middle six', () => {
+    const open = withGape(0.3), ob = applyRig(body, open, 0);
+    const upper = teeth.filter(t => t.bone === 'skull').sort((a, b) => a.rest[0]![0] - b.rest[0]![0]).slice(1, 7);
+    for (const t of upper) expect(showsFromFront(open, t, ob), `upper x ${t.rest[0]![0].toFixed(3)}`).toBe(true);
+  });
+
+  // A small orthographic render of the posed head WITH the kit's teeth: the teeth rasterised into a depth buffer, the SDF
+  // sphere-traced per pixel, the nearer wins (the lab's polygon pass depth-tests against the march exactly so). Classes per pixel:
+  // tooth (upper or lower), the dark inside (the painted throat bar and floor), skin. `poke` counts tooth pixels lying on the OUTER
+  // skin: skin that faces the camera within 2 mm behind the tooth, i.e. a tooth showing through a lip rather than in the opening.
+  const render = (b: typeof bound, posedBody: typeof body, yaw: number, res = 0.001) => {
+    const fwd: Vec3 = [Math.sin(yaw), 0, Math.cos(yaw)], right: Vec3 = [Math.cos(yaw), 0, -Math.sin(yaw)];
+    const X0 = -0.05, Y1 = 1.16, NX = 100, NY = 60;
+    const depth = new Float64Array(NX * NY).fill(-1e9), row = new Uint8Array(NX * NY);
+    for (const t of teeth) {
+      const f = kitFrames(body, b, 0).get(t.bone)!, h = kitHead.get(t.bone)!;
+      const P = (v: Vec3) => { const q = add(f.pos, qRotate(f.quat as Quat, sub(v, h))); return [(dot(q, right) - X0) / res, (Y1 - q[1]) / res, dot(q, fwd)]; };
+      for (const [i, j, k] of samplesOf(t).filter(s => s[0] !== s[1])) {
+        const [A, B, C] = [pos[i!]!, pos[j!]!, pos[k!]!].map(P) as number[][];
+        const den = (B![1]! - C![1]!) * (A![0]! - C![0]!) + (C![0]! - B![0]!) * (A![1]! - C![1]!);
+        if (Math.abs(den) < 1e-12) continue;
+        for (let y = Math.max(0, Math.floor(Math.min(A![1]!, B![1]!, C![1]!))); y <= Math.min(NY - 1, Math.ceil(Math.max(A![1]!, B![1]!, C![1]!))); y++)
+          for (let x = Math.max(0, Math.floor(Math.min(A![0]!, B![0]!, C![0]!))); x <= Math.min(NX - 1, Math.ceil(Math.max(A![0]!, B![0]!, C![0]!))); x++) {
+            const w0 = ((B![1]! - C![1]!) * (x + 0.5 - C![0]!) + (C![0]! - B![0]!) * (y + 0.5 - C![1]!)) / den;
+            const w1 = ((C![1]! - A![1]!) * (x + 0.5 - C![0]!) + (A![0]! - C![0]!) * (y + 0.5 - C![1]!)) / den;
+            if (w0 < 0 || w1 < 0 || 1 - w0 - w1 < 0) continue;
+            const z = w0 * A![2]! + w1 * B![2]! + (1 - w0 - w1) * C![2]!;
+            if (z > depth[y * NX + x]!) { depth[y * NX + x] = z; row[y * NX + x] = t.bone === 'skull' ? 1 : 2; }
+          }
+      }
+    }
+    const n = { upper: 0, lower: 0, dark: 0, poke: 0 };
+    for (let y = 0; y < NY; y++) for (let x = 0; x < NX; x++) {
+      const u = X0 + (x + 0.5) * res, v = Y1 - (y + 0.5) * res, o: Vec3 = [right[0] * u + fwd[0] * 0.3, v, right[2] * u + fwd[2] * 0.3];
+      let t = 0, p = o, hit = false;
+      for (let k = 0; k < 200 && t < 0.5; k++) { p = [o[0] - fwd[0] * t, v, o[2] - fwd[2] * t]; const d = sdBody(p, posedBody); if (d < 0.0002) { hit = true; break; } t += Math.max(d * 0.9, 0.0002); }
+      const sd = hit ? dot(p, fwd) : -1e9, at = y * NX + x;
+      if (depth[at]! > sd + 0.0001) {
+        if (row[at] === 1) n.upper++; else n.lower++;
+        if (hit && depth[at]! - sd < 0.002 && posedBody.prims[nearestPrim(p, posedBody)]!.color === undefined) {
+          const e = 0.0003, gx = sdBody(add(p, [e, 0, 0]), posedBody) - sdBody(sub(p, [e, 0, 0]), posedBody), gz = sdBody(add(p, [0, 0, e]), posedBody) - sdBody(sub(p, [0, 0, e]), posedBody);
+          const gy = sdBody(add(p, [0, e, 0]), posedBody) - sdBody(sub(p, [0, e, 0]), posedBody);
+          if ((gx * fwd[0] + gz * fwd[2]) / Math.hypot(gx, gy, gz) > 0.6) n.poke++;
+        }
+      } else if (hit && posedBody.prims[nearestPrim(p, posedBody)]!.color !== undefined) n.dark++;
+    }
+    return n;
+  };
+
+  // THE PIN the plan asks for: the dark shows only as a thin band between the rows (and the gaps between teeth), at most about a
+  // third of the opening; both rows are on show. Measured 2026-10-16 (0.4 mm render): dark 0.30, upper 4869 / lower 4800 px; the
+  // Task 18 grin: dark 0.38 with the lower row a fifth of the upper's.
+  it('the grin\'s opening is mostly teeth: the dark inside is at most a third of it, and both rows show (front)', () => {
+    const n = render(grinBound, grinBody, 0);
+    const open = n.upper + n.lower + n.dark;
+    expect(n.dark / open, JSON.stringify(n)).toBeLessThanOrEqual(0.34);
+    expect(n.upper / open).toBeGreaterThan(0.25);
+    expect(n.lower / open).toBeGreaterThan(0.25);
+  });
+
+  // "Not clipping or whatever" (owner): no tooth shows through a lip or the cheek at any yaw, only in the opening.
+  it('no tooth lies on the outer skin at the grin, front, three-quarter (both sides) or profile', () => {
+    for (const yaw of [0, 0.785, -0.785, 1.57]) {
+      const n = render(grinBound, grinBody, yaw);
+      expect(n.poke / Math.max(1, n.upper + n.lower), `yaw ${yaw}: ${JSON.stringify(n)}`).toBeLessThan(0.01);
+    }
   });
 
   // THE CATCH (plan Task 14). The SDF `on jaw` prims open about the per-body HINGE by the gape and then turn with the head; a plain
