@@ -6,8 +6,11 @@
 //
 // WHAT IT DOES, per the lab page as it was:
 //  - BUILDS the view (createCharacterView) with the SDF layer's dependencies the caller hands in (`deps.gpu`: the page's `cone` and
-//    `occluder`; the game's cone, occluder, shell, prev, lastFrame, depthPre, refine...), and RETIRES the kit and the gun at birth (he is
-//    at home; for goblin-cinematic-home that also means no mesh teeth, see its .blob header).
+//    `occluder`; the game's cone, occluder, shell, prev, lastFrame, depthPre, refine...), UNARMED (he is at home: no gun), and RETIRES
+//    the kit at birth unless the registry lends the character only a part of one (`kitOnly`): goblin-cinematic-home wears the cinematic
+//    kit's mesh TEETH alone, scaled to his 1.70 m (plan Task 4b; character-registry.ts), posed every step from the same bound the flesh
+//    is (rig-bind kitFrames through the view's pose: the lower row rides the jaw's gape). The teeth are polygons on the DEFAULT layer,
+//    attached to `deps.parent` as the view attaches every kit, depth-tested against the march.
 //  - SKINS it as the game does (game-spawn.ts): the .blob's own palette under the practical key, THE GAME'S MARCH accept constants
 //    (game-march-accept.ts; the lab page's last-step value, GAME_LAST_STEP_DEFAULT), and HIS OWN FACE generated from the .blob's `sheet`
 //    block (the registry's face slot is the shared zombie sheet: worn here it put the zombie's flat face and red eyes on him), with the
@@ -66,7 +69,8 @@ export interface GoblinPuppetDeps {
   /** createCharacterView's `gpu` option: the SDF layer's dependencies (createZombieGpuView's opts), or a function of the built body. The
    *  lab page passes `{ cone: sdfLayer.cone, occluder: sdfLayer.occluder }`; the game passes what game-spawn.ts's viewGpuOpts does. */
   gpu: CharacterViewOpts['gpu'];
-  /** Where the SDF proxy and its twins go (the scene the SDF layer renders; their layers are set here). Nothing else attaches: no kit. */
+  /** Where the SDF proxy and its twins go (the scene the SDF layer renders; their layers are set here), and the teeth kit (the default
+   *  layer; its bones are posed in WORLD space, so `parent` must carry no transform of its own). */
   parent: THREE.Object3D;
   /** The character (default GOBLIN_PUPPET_CHARACTER). Any goblin with the goblin's skeleton: `goblin-home` is the old body (no face rig). */
   character?: string;
@@ -119,9 +123,10 @@ export function createGoblinPuppet(deps: GoblinPuppetDeps): GoblinPuppet {
   const errors = deps.errors ?? [];
   let face: FaceParams;
   try { face = { ...DEFAULT_FACE, ...compileFace(parseBlob(entry.src)) }; } catch { face = { ...DEFAULT_FACE }; }
-  const view = createCharacterView({ name: character, start: [0, 0, 0], renderer: deps.renderer, scene: deps.parent, gpu: deps.gpu, errors, face });
-  // At home: no armour kit, no shotgun. Retiring at birth makes the in-flight glTF loads dispose themselves on arrival.
-  view.retireEquipment();
+  const view = createCharacterView({ name: character, start: [0, 0, 0], renderer: deps.renderer, scene: deps.parent, gpu: deps.gpu, errors, face, unarmed: true });
+  // At home: no shotgun (unarmed), and no armour kit: a whole kit is retired at birth (its in-flight glTF disposes itself on arrival).
+  // A borrowed part of one stays (goblin-cinematic-home: the teeth).
+  if (!entry.kitOnly) view.retireEquipment();
   const gpu = view.gpu;
   for (const e of view.body.errors) errors.push(e);
 
@@ -214,6 +219,7 @@ export function createGoblinPuppet(deps: GoblinPuppetDeps): GoblinPuppet {
   let posed: BuildResult | null = null;
   let clipName = '';
   let rootDz = 0;
+  let visible = true;
 
   return {
     character, view, gpu, body: current, errors,
@@ -270,6 +276,12 @@ export function createGoblinPuppet(deps: GoblinPuppetDeps): GoblinPuppet {
       gpu.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
       gpu.setTime(t);
       if (opts.pixelConeK !== undefined) gpu.uniforms.aaCfg.value.x = opts.pixelConeK;
+      // The teeth (once their glTF is in): the view poses its kit from kitFrames of the REST body and this bound (gape and squash
+      // included), the same transform the `on jaw` prims took in applyRig above. No gun, so no fire clock and no motion frame.
+      if (view.kit) {
+        view.kit.object.visible = visible;
+        view.pose(current, bound, bodyYaw, Infinity, null, 1 / 60, 0);
+      }
       return p;
     },
     setPlacement(pos, y) { position = [pos[0], pos[1], pos[2]]; yaw = y; },
@@ -279,6 +291,8 @@ export function createGoblinPuppet(deps: GoblinPuppetDeps): GoblinPuppet {
       if (l.fill !== undefined) gpu.uniforms.lightCfg.value.y = l.fill;
     },
     setVisible(on) {
+      visible = on;
+      if (view.kit) view.kit.object.visible = on;
       gpu.object.visible = on;
       gpu.coneObject.visible = on;
       if (gpu.depthPreObject) gpu.depthPreObject.visible = on;

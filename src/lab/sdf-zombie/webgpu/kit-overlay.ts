@@ -261,6 +261,106 @@ export interface KitOverlay {
 }
 
 /**
+ * A kit BORROWED for one part (emergence in the Flat, plan Task 4b: goblin-cinematic-home wears only the TEETH of the 1.30 m
+ * goblin-cinematic-kit.gltf, on his 1.70 m body). Absent fields: the whole kit at its own size, as before.
+ */
+export interface KitLoadOpts {
+  /** Keep only the meshes whose material is named here (one glTF primitive = one three mesh = one material); the rest are dropped
+   *  at load, before anything is looked up or bound. */
+  only?: readonly string[];
+  /** The body is this many times the size the kit was built for: every bone frame is composed with this uniform scale, which scales
+   *  each vertex's offset from its bone's head (skinning: frame * inverseBind * v = pos + scale * q * (v - bindHead)). The bone
+   *  positions come from the rig, so they are the body's already. 1 = the kit's own size. */
+  scale?: number;
+}
+
+/** Drops (and disposes) every mesh under `root` whose material is not named in `only`. Pure scene-graph work: no renderer. */
+export function keepKitMaterials(root: THREE.Object3D, only: readonly string[]): void {
+  const keep = new Set(only);
+  const drop: THREE.Mesh[] = [];
+  const keptMaps = new Set<THREE.Texture>();
+  root.traverse(o => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    if (mats.some(m => keep.has(m.name))) {
+      for (const m of mats) { const map = (m as THREE.MeshStandardMaterial).map; if (map) keptMaps.add(map); }
+    } else drop.push(mesh);
+  });
+  for (const mesh of drop) {
+    mesh.removeFromParent();
+    mesh.geometry.dispose();
+    for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+      const map = (m as THREE.MeshStandardMaterial).map;
+      if (map && !keptMaps.has(map)) map.dispose();
+      m.dispose();
+    }
+  }
+}
+
+/** A kit's bones, readied to be posed by absolute world matrices (bindKitBones; poseKitBones). */
+export interface KitBones {
+  /** Parent before child (traverse order). */
+  ordered: THREE.Bone[];
+  /** Each bone's BIND-local matrix (translation only in a WAM export), for the bones the rig has no frame for. */
+  bindLocal: Map<THREE.Bone, THREE.Matrix4>;
+  /** By three's sanitised node name (kitBoneKey). */
+  byKey: Map<string, THREE.Bone>;
+}
+
+/**
+ * Bones are driven by absolute world matrices, so three's own hierarchy update must not overwrite them. Captures each bone's
+ * BIND-local matrix first (translation only in a WAM export) for the no-frame fallback.
+ */
+export function bindKitBones(root: THREE.Object3D): KitBones {
+  const bindLocal = new Map<THREE.Bone, THREE.Matrix4>();
+  const ordered: THREE.Bone[] = [];
+  root.traverse(o => {
+    if (!(o as THREE.Bone).isBone) return;
+    const b = o as THREE.Bone;
+    b.updateMatrix();
+    bindLocal.set(b, b.matrix.clone());
+    b.matrixAutoUpdate = false;
+    b.matrixWorldAutoUpdate = false;
+    ordered.push(b); // traverse is parent-before-child
+  });
+  // GLTFLoader sanitises node names (`clavicle.l` -> `claviclel`), so frames
+  // keyed by blob bone name are matched through kitBoneKey, never by b.name.
+  const byKey = new Map<string, THREE.Bone>();
+  for (const b of ordered) byKey.set(b.name, b);
+  return { ordered, bindLocal, byKey };
+}
+
+const _pos = new THREE.Vector3(), _q = new THREE.Quaternion(), _one = new THREE.Vector3(1, 1, 1), _scl = new THREE.Vector3();
+const _frameFor = new Map<THREE.Bone, { pos: Vec3; quat: readonly number[] }>();
+
+/**
+ * Writes every bone's matrixWorld from the rig's frames (KitOverlay.pose's doc): a bone with a frame is (frame.pos, frame.quat,
+ * `scale`); a bone without takes its parent's world matrix composed with its own bind-local matrix (so its bind offset is scaled
+ * with the parent's). `scale` 1 is the unscaled kit, composed exactly as before KitLoadOpts existed.
+ */
+export function poseKitBones(bones: KitBones, frames: ReadonlyMap<string, { pos: Vec3; quat: readonly number[] }>, scale = 1): void {
+  _frameFor.clear();
+  for (const [name, f] of frames) {
+    const b = bones.byKey.get(kitBoneKey(name));
+    if (b) _frameFor.set(b, f);
+  }
+  const s = scale === 1 ? _one : _scl.set(scale, scale, scale);
+  for (const b of bones.ordered) {
+    const f = _frameFor.get(b);
+    if (f) {
+      _pos.set(f.pos[0], f.pos[1], f.pos[2]);
+      _q.set(f.quat[0]!, f.quat[1]!, f.quat[2]!, f.quat[3]!);
+      b.matrixWorld.compose(_pos, _q, s);
+    } else {
+      const parentWorld = (b.parent as THREE.Object3D | null)?.matrixWorld;
+      if (parentWorld) b.matrixWorld.multiplyMatrices(parentWorld, bones.bindLocal.get(b)!);
+    }
+  }
+  _frameFor.clear();
+}
+
+/**
  * Loads a WAM-compiled glTF and returns it ready to place.
  *
  * The .gltf is self-contained — WAM base64s both the buffer and the texture
@@ -275,9 +375,11 @@ export interface KitOverlay {
  */
 export async function loadKit(
   url: string, renderer: THREE.WebGPURenderer, root: Vec3 = [0, 0, 0],
-  breakable = false,
+  breakable = false, opts: KitLoadOpts = {},
 ): Promise<KitOverlay> {
   const gltf = await new GLTFLoader().loadAsync(url);
+  if (opts.only) keepKitMaterials(gltf.scene, opts.only);
+  const kitScale = opts.scale ?? 1;
 
   // A specular-only environment for the KIT ALONE, not `scene.environment`.
   //
@@ -290,6 +392,7 @@ export async function loadKit(
   // Assigned per-material rather than to the scene so the floor and the
   // reference cube, which are MeshStandardMaterial too, keep the look every
   // previous capture was judged against.
+  // (A kit loaded with `only` has already lost its other meshes here: keepKitMaterials above.)
   const pmrem = new THREE.PMREMGenerator(renderer);
   const room = new RoomEnvironment();
   const environment = pmrem.fromScene(room, 0.04);
@@ -334,51 +437,20 @@ export async function loadKit(
     }
   });
 
-  // Bones are driven by absolute world matrices, so three's own hierarchy
-  // update must not overwrite them. Capture each bone's BIND-local matrix
-  // first (translation only in a WAM export) for the no-frame fallback.
-  const bindLocal = new Map<THREE.Bone, THREE.Matrix4>();
-  const ordered: THREE.Bone[] = [];
-  gltf.scene.traverse(o => {
-    if (!(o as THREE.Bone).isBone) return;
-    const b = o as THREE.Bone;
-    b.updateMatrix();
-    bindLocal.set(b, b.matrix.clone());
-    b.matrixAutoUpdate = false;
-    b.matrixWorldAutoUpdate = false;
-    ordered.push(b); // traverse is parent-before-child
-  });
+  const kitBones = bindKitBones(gltf.scene);
   object.updateMatrixWorld(true);
   // Bind-pose pad per skinned mesh, then an initial sphere so three never
   // finds boundingSphere null and falls back to its per-vertex skinning.
+  // A scaled kit's bone matrices scale every offset from a bone's origin by
+  // kitScale, so its pad does too (kit-bounds.ts's bound assumes unit scale).
   const skinBounds = skinned.map(precomputeKitBounds);
+  if (kitScale !== 1) for (const b of skinBounds) b.pad *= kitScale;
   skinned.forEach((mesh, i) => updateKitBounds(mesh, skinBounds[i]!));
 
-  const tmpPos = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1);
-  // GLTFLoader sanitises node names (`clavicle.l` -> `claviclel`), so frames
-  // keyed by blob bone name are matched through kitBoneKey, never by b.name.
-  const byKey = new Map<string, THREE.Bone>();
-  for (const b of ordered) byKey.set(b.name, b);
-  const frameFor = new Map<THREE.Bone, { pos: Vec3; quat: readonly number[] }>();
   const damageView = breakable ? createKitDamage(object) : null;
   const debris = damageView?.debris ?? new THREE.Group();
   const pose: KitOverlay['pose'] = (frames, damage) => {
-    frameFor.clear();
-    for (const [name, f] of frames) {
-      const b = byKey.get(kitBoneKey(name));
-      if (b) frameFor.set(b, f);
-    }
-    for (const b of ordered) {
-      const f = frameFor.get(b);
-      if (f) {
-        tmpPos.set(f.pos[0], f.pos[1], f.pos[2]);
-        tmpQ.set(f.quat[0]!, f.quat[1]!, f.quat[2]!, f.quat[3]!);
-        b.matrixWorld.compose(tmpPos, tmpQ, one);
-      } else {
-        const parentWorld = (b.parent as THREE.Object3D | null)?.matrixWorld;
-        if (parentWorld) b.matrixWorld.multiplyMatrices(parentWorld, bindLocal.get(b)!);
-      }
-    }
+    poseKitBones(kitBones, frames, kitScale);
     // Three caches the skinned bounds on first render. Our world-space bone
     // motion leaves the mesh transform stationary, so that cached sphere
     // stayed behind as the soldier walked away. Camera turns then culled his

@@ -564,6 +564,9 @@ export interface CharacterViewOpts {
   /** Bone-thickness ratio override — see buildCharacterBody. Game-only today
    *  (the wound panel drives it); undefined leaves the .blob's own value. */
   boneRatio?: number;
+  /** No held prop (the goblin at home, goblin-puppet.ts): the profile's gun, its muzzle flash and brass are never made; the kit
+   *  still loads. Absent: armed as the profile says. */
+  unarmed?: boolean;
 }
 
 /**
@@ -607,27 +610,30 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   /** Sim seconds this view has posed, for the default idle heartbeat. */
   let lightsClock = 0;
   const wounds = createWoundRing();
-  const muzzleFlash = entry.profile.prop && opts.effectsScene ? createMuzzleFlash() : null;
+  const armed = opts.unarmed !== true;
+  const muzzleFlash = armed && entry.profile.prop && opts.effectsScene ? createMuzzleFlash() : null;
   const armorSparks = entry.armoured === true && opts.effectsScene ? createArmorSparks() : null;
   if (muzzleFlash) opts.effectsScene!.add(muzzleFlash.object);
   if (armorSparks) opts.effectsScene!.add(armorSparks.object);
   const chaingun = entry.profile.gunner?.weapon === 'chaingun';
   // The warbull's launcher throws no brass: its rockets leave nothing behind.
-  const casings = isSoldierFamily(entry.profile) && entry.profile.gunner?.weapon !== 'rocket'
+  const casings = armed && isSoldierFamily(entry.profile) && entry.profile.gunner?.weapon !== 'rocket'
     ? (chaingun ? createShotgunCasings(256, 0xc8963c) : createShotgunCasings()) : null;
   const ejection = createEjectionCycle();
   const ejectOrigin = new THREE.Vector3(), ejectRight = new THREE.Vector3();
   if (casings) opts.scene.add(casings.object);
   const kitUrl = entry.kit;
   if (kitUrl) {
-    loadKit(kitUrl, opts.renderer, [0, 0, 0], entry.armoured === true)
+    const kitLoad = entry.kitOnly || entry.kitScale !== undefined ? loadKit(kitUrl, opts.renderer, [0, 0, 0], entry.armoured === true,
+      { only: entry.kitOnly, scale: entry.kitScale }) : loadKit(kitUrl, opts.renderer, [0, 0, 0], entry.armoured === true);
+    kitLoad
       .then(k => {
         if (disposed || equipmentRetired) { k.dispose(); return; }
         kit = k; applyKitBeam(k.object); opts.scene.add(k.object, k.debris);
       })
       .catch(e => console.error(`[kit] ${kitUrl} failed to load; rendering the body undressed`, e));
   }
-  if (entry.profile.prop) {
+  if (armed && entry.profile.prop) {
     loadHeldProp(entry.profile.prop.url, opts.renderer)
       .then(p => {
         if (disposed || equipmentRetired) { p.dispose(); return; }

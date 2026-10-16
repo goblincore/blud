@@ -63,3 +63,33 @@ describe('gib equipment retirement', () => {
     view.dispose();
   });
 });
+
+describe('a borrowed kit part and an unarmed view (goblin-cinematic-home: the teeth, plan Task 4b)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('loads the registry\'s kit with its `kitOnly` and `kitScale`; unarmed, the held prop never loads', async () => {
+    const kit = attachment();
+    vi.mocked(loadKit).mockResolvedValue(kit as never);
+    const scene = new THREE.Scene();
+    const view = createCharacterView({
+      name: 'goblin-cinematic-home', start: [0, 0, 0], scene, errors: [], unarmed: true,
+      renderer: {} as THREE.WebGPURenderer, gpu: {} as never,
+    });
+    expect(loadKit).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(loadKit).mock.calls[0]!.slice(0, 1)).toEqual(['/assets/lab/goblin-cinematic-kit.gltf']);
+    expect(vi.mocked(loadKit).mock.calls[0]![4]).toEqual({ only: ['tooth'], scale: 1.3077 });
+    expect(loadHeldProp).not.toHaveBeenCalled();
+    await Promise.resolve();
+    expect(view.kit).toBe(kit);
+    expect(kit.object.parent).toBe(scene);
+    view.dispose();
+  });
+
+  it('a whole kit keeps the four-argument load it always had (the soldier)', () => {
+    vi.mocked(loadKit).mockResolvedValue(attachment() as never);
+    vi.mocked(loadHeldProp).mockResolvedValue(attachment() as never);
+    soldier(new THREE.Scene()).dispose();
+    expect(vi.mocked(loadKit).mock.calls[0]!.length).toBe(4);
+    expect(loadHeldProp).toHaveBeenCalledTimes(1);
+  });
+});

@@ -116,9 +116,11 @@ describe('character-registry', () => {
   });
 
   // emergence in the Flat, plan Task 4 (2026-10-16): the cinematic head in goblin-home's clothes.
-  it('goblin-cinematic-home is the cinematic goblin at home: no kit, the goblin\'s gait and poses, the cinematic\'s expressions; it builds and moves', () => {
+  // Task 4b: no armour, but the cinematic kit's TEETH alone, scaled to his 1.70 m (characters/goblin-cinematic-home-teeth.test.ts).
+  it('goblin-cinematic-home is the cinematic goblin at home: only the kit\'s teeth, the goblin\'s gait and poses, the cinematic\'s expressions; it builds and moves', () => {
     const e = characterEntry('goblin-cinematic-home');
-    expect(e.kit).toBeUndefined();
+    expect(e.kit).toBe(characterEntry('goblin-cinematic').kit);
+    expect(e.kitOnly).toEqual(['tooth']);
     expect(e.profile).toBe(GOBLIN_PROFILE);
     expect(posesFor('goblin-cinematic-home')).toBe(posesFor('goblin'));
     expect(expressionsFor('goblin-cinematic-home')?.clips).toBe(expressionsFor('goblin-cinematic')?.clips);
