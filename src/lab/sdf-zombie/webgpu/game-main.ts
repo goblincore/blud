@@ -109,6 +109,7 @@ import { loadLevelArt, placeLevelArt } from './game-level-art';
 import { adoptLateFx, applyTrainCamera, createTrain, createTrainSeams, lightSteam, stepTrain } from './game-train';
 import { adoptDiscoFx, createDisco, createDiscoSeams, stepDisco } from './game-disco';
 import { adoptEggFx, createEgg, createEggSeams, stepEgg } from './game-egg';
+import { adoptEmergenceFx, createEmergence, createEmergenceSeams, emergenceLevelReady } from './game-emergence';
 import { applyBodyLights, lightListOn, pickBodyFor, scratchPickBody, setLightListOn, torchLane, writeLightList } from './game-light-list';
 import { adoptLightFx, applyRoomFill, applySelfShadow, roomFillFactor, applyStormBodyKey, applyWindowKey, releaseWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light';
 import { VITALS, segmentHitsCapsule } from './player-vitals';
@@ -972,6 +973,9 @@ async function main() {
   createDisco(ctx);
   // The control room's egg (after the level art exists; before the light lists: unlit).
   createEgg(ctx);
+  // The egg emerging from the CRT in the Flat (flat-early, or ?emergence=1): the set on the kotatsu joins the level group here, before
+  // the light lists, so the room's lights light it.
+  createEmergence(ctx);
 
   (globalThis as Record<string, unknown>).__dungeon = {
     setDungeon(on: boolean) { ctx.lighting.dungeonOn = on; applyRig(ctx, on ? DUNGEON_RIG : GALLERY_RIG); },
@@ -1273,6 +1277,7 @@ async function main() {
   adoptLightFx(ctx);
   adoptDiscoFx(ctx);
   adoptEggFx(ctx);
+  adoptEmergenceFx(ctx);
   if (ctx.render.refineWanted) ctx.render.sdfLayer.setRefine(true);
   ctx.render.postAa.addSink(ctx.render.sdfLayer);
 
@@ -4174,6 +4179,8 @@ async function main() {
     },
   }).then((gate) => {
     (window as unknown as Record<string, unknown>).__warmGate = { phase: gate.phase, timedOut: gate.timedOut };
+    // The emergence's autostart clock (?emergence=1) starts now, whatever the outcome: the game is playable either way.
+    emergenceLevelReady(ctx);
     if (gate.phase !== 'ready') console.warn(`[warm] loader gate settled ${gate.phase}${gate.timedOut ? ' (after the 15 s bound)' : ''}`);
     // THE BACKGROUND SET (defer-compile task, 2026-09-19). The loader is gone
     // (or failed) and the loop is released, so the crowd and gib/chunk programs
@@ -5906,6 +5913,7 @@ async function main() {
     createDynamicLightSeams(ctx),
     createDiscoSeams(ctx),
     createEggSeams(ctx),
+    createEmergenceSeams(ctx),
     createDebugProbeSeams(ctx, { clearDepthProbes, countDescendants, nodeDepth, round2 }),
     createBenchSeams(ctx, { awaitBakes: withCtx(ctx, awaitBakes), bodiesOnScreen: withCtx(ctx, bodiesOnScreen), demoScenarioOf: withCtx(ctx, demoScenarioOf), performBenchAction: withCtx(ctx, performBenchAction) }),
     createRenderDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), camera }),
