@@ -37,6 +37,7 @@ import {
   LAMP_BULB, beigeMaterials, buildCrt, buildKeyboard, buildLamp, buildScreenGlow, buildTableAndRoom, buildZabuton,
 } from './screen-set';
 import { SHOTS, DURATION, shotAt, paramsAt, type ShotId } from './emergence-timeline';
+import { PUSH_WIDE_AT } from './emergence-camera';
 import { FLOOR_SEAT } from '../characters/goblin-poses';
 import { GOBLIN_CUES, GOBLIN_FPS, floorLayout, measureSeat, type FloorLayout } from './screen-lab-goblin';
 import { GOBLIN_FILL, GOBLIN_PUPPET_CHARACTER, GOBLIN_RIM, createGoblinPuppet } from './goblin-puppet';
@@ -63,8 +64,7 @@ const SDF_SCALE = 0.5;
 // Camera presets, in the screen frame: an eye, a look-at and a vertical fov (plan Task 5 step 4).
 // ---------------------------------------------------------------------------
 interface Preset { eye: Vec3; at: Vec3; fov: number }
-/** The push cuts wider inside its shot, at this time. */
-const PUSH_WIDE_AT = 4.5;
+// The push cuts wider inside its shot at PUSH_WIDE_AT (emergence-camera.ts, shared with the game's Flat presets).
 /** Look round 1 (the floor-level set, the goblin backing away): the owner did not like the goblin filling the push shot, so the push opens
  *  three-quarter on the screen with him leaning away at the frame's edge and cuts to a wide profile, him small on the floor well back from
  *  the sac. Where he is in the screen frame (floorLayout, goblinRootAt): typing, his hips at z 0.87 and the top of his head 0.3 m over the
