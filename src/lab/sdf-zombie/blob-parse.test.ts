@@ -539,3 +539,123 @@ body
     expect(() => parseBlob(MINI(`  scale ${bad}`))).toThrow(/^3:3: scale must be a positive number/);
   });
 });
+
+describe('parseBlob — hinge= (per-body jaw hinge, goblin expression pass)', () => {
+  const src = (line: string) => `model t
+  height 1.0
+
+skeleton
+  root pelvis at 0.5
+  bone neck parent=pelvis dir=up len=0.10
+  bone skull parent=neck dir=up len=0.20
+  ${line}
+`;
+
+  it('reads hinge on the jaw bone', () => {
+    const b = parseBlob(src('bone jaw parent=neck dir=up pitch=112 len=0.08 hinge=0.06')).bones.find(x => x.name === 'jaw')!;
+    expect(b.hinge).toBe(0.06);
+  });
+
+  it('leaves hinge undefined when absent (the shared JAW_HINGE applies)', () => {
+    expect(parseBlob(src('bone jaw parent=neck dir=up len=0.08')).bones.find(x => x.name === 'jaw')!.hinge).toBeUndefined();
+  });
+
+  it('rejects hinge on any bone but the jaw, and outside 0..1', () => {
+    expect(() => parseBlob(src('bone brow parent=skull dir=up len=0.05 hinge=0.2'))).toThrow(/hinge/);
+    expect(() => parseBlob(src('bone jaw parent=neck dir=up len=0.08 hinge=1.5'))).toThrow(/hinge/);
+  });
+});
+
+describe('parseBlob — morph= (per-prim face morphs, goblin expressions Task 12)', () => {
+  it('reads every morph= word on a line, one per channel', () => {
+    const src = PAINTED.replace('blob torso on pelvis at=0.5 r=0.1',
+      'blob torso on pelvis at=0.5 r=0.1 morph=smile:(0.006,0.004,0)*1.2 morph=gape:tip(0,-0.01,0)');
+    const torso = parseBlob(src).parts.find(x => x.limb === 'torso')!;
+    expect(torso.morphs).toEqual([
+      { channel: 'smile', move: [0.006, 0.004, 0], radius: 1.2 },
+      { channel: 'gape', tip: [0, -0.01, 0] },
+    ]);
+  });
+
+  it('a line without morph= has none', () => {
+    expect(parseBlob(PAINTED).parts.every(p => p.morphs.length === 0)).toBe(true);
+  });
+
+  it('rejects an unknown channel and a malformed value with the line, in the parser voice', () => {
+    const bad = (w: string) => () => parseBlob(PAINTED.replace('blob torso on pelvis at=0.5 r=0.1', `blob torso on pelvis at=0.5 r=0.1 ${w}`));
+    expect(bad('morph=grin:(0,0,0)')).toThrow(BlobError);
+    expect(bad('morph=grin:(0,0,0)')).toThrow(/unknown morph channel "grin"/);
+    expect(bad('morph=smile:(0,0)')).toThrow(/three numbers/);
+    try { bad('morph=smile:*0')(); } catch (e) { expect((e as BlobError).line).toBe(10); }
+  });
+
+  it('rejects the same channel twice on one line', () => {
+    expect(() => parseBlob(PAINTED.replace('blob torso on pelvis at=0.5 r=0.1',
+      'blob torso on pelvis at=0.5 r=0.1 morph=smile:*1.1 morph=smile:(0,0.001,0)'))).toThrow(/appears twice/);
+  });
+
+  // Task 16: one word per channel AND side, so a one-sided pair is legal; the same side twice is not.
+  it('takes browDown+ and browDown- on one line, but not the same side twice', () => {
+    const line = (w: string) => PAINTED.replace('blob torso on pelvis at=0.5 r=0.1', `blob torso on pelvis at=0.5 r=0.1 ${w}`);
+    const torso = parseBlob(line('morph=browDown+:(0,-0.006,0) morph=browDown-:(0,0.005,0)')).parts.find(x => x.limb === 'torso')!;
+    expect(torso.morphs).toEqual([
+      { channel: 'browDown', sign: 1, move: [0, -0.006, 0] },
+      { channel: 'browDown', sign: -1, move: [0, 0.005, 0] },
+    ]);
+    expect(() => parseBlob(line('morph=browDown+:*1.1 morph=browDown+:(0,0.001,0)'))).toThrow(/browDown\+: appears twice/);
+    expect(() => parseBlob(`${PAINTED}face\n  browHeavy 0.008\n  morph brow browDown-:(0,0.004,0) browDown-:*1.1\n`))
+      .toThrow(/browDown- appears twice/);
+  });
+
+  it('only moves a blob or a bar', () => {
+    expect(() => parseBlob(PAINTED.replace('blob torso on pelvis at=0.5 r=0.1',
+      'blob torso on pelvis at=0.5 r=0.1\n  carve on skull at=0.5 r=0.02 morph=smile:*1.1'))).toThrow(/only moves a blob or a bar, not a carve/);
+  });
+
+  it('is rejected in a bones block', () => {
+    expect(() => parseBlob(`${PAINTED}bones\n  blob head on skull at=0.5 r=0.02 morph=smile:*1.1\n`)).toThrow(/bones block/);
+  });
+});
+
+// Task 15: the generated face prims (cranium, jaw ellipsoid, brow ridge, nose) have no `.blob` line, so a face-block line carries
+// their morphs, and compileBlob attaches them by tag.
+describe('face block — morph <tag> (goblin expressions Task 15)', () => {
+  const FACE = `${PAINTED}face\n  browHeavy 0.008\n  morph brow squint:(0,-0.003,0.001) browDown:(0,-0.002,0)*1.1\n  morph jaw squint:*(1.04,1.06,1)\n`;
+
+  it('reads one line per prim tag, one word per channel', () => {
+    const doc = parseBlob(FACE);
+    expect(doc.faceMorphs.map(f => f.tag)).toEqual(['brow', 'jaw']);
+    expect(doc.faceMorphs[0]!.morphs).toEqual([
+      { channel: 'squint', move: [0, -0.003, 0.001] },
+      { channel: 'browDown', move: [0, -0.002, 0], radius: 1.1 },
+    ]);
+    expect(doc.face).toEqual({ browHeavy: 0.008 });
+  });
+
+  it('attaches the morphs to the generated prim with that tag, and to no other', async () => {
+    const { compileBlob } = await import('./blob-compile');
+    // compileBlob drops the generated prims' `tag` after attaching the morphs (scaleBodyDef has no unit for it), so the
+    // face prims are found by order: facePrims emits head, jaw, brow (then nose) after the body's own prims.
+    const prims = compileBlob(parseBlob(FACE)).prims as Array<{ tag?: string; morphs?: unknown[] }>;
+    expect(prims.every(p => !('tag' in p))).toBe(true);
+    const morphed = prims.filter(p => p.morphs);
+    expect(morphed.map(p => p.morphs!.length)).toEqual([1, 2]); // jaw (squint), brow (squint, browDown), in facePrims order
+    const first = prims.findIndex(p => p.morphs); // the jaw: facePrims emits the head just before it
+    expect(prims[first - 1]!.morphs).toBeUndefined();
+  });
+
+  it('rejects a tag the face does not generate, a missing channel, a bad word and a second line for one tag', async () => {
+    const { compileBlob } = await import('./blob-compile');
+    expect(() => compileBlob(parseBlob(`${PAINTED}face\n  morph chin squint:(0,0.001,0)\n`))).toThrow(/no generated face prim "chin"/);
+    // browHeavy 0 turns the brow ridge off, so there is no `brow` to morph.
+    expect(() => compileBlob(parseBlob(`${PAINTED}face\n  browHeavy 0\n  morph brow squint:(0,0.001,0)\n`))).toThrow(/"brow"/);
+    expect(() => parseBlob(`${PAINTED}face\n  morph brow\n`)).toThrow(/prim tag and at least one/);
+    expect(() => parseBlob(`${PAINTED}face\n  morph brow grin:(0,0,0)\n`)).toThrow(/unknown morph channel/);
+    expect(() => parseBlob(`${PAINTED}face\n  morph brow squint:*1.1\n  morph brow smile:*1.1\n`)).toThrow(/one line per prim/);
+  });
+
+  it('round-trips through the emitter unchanged', async () => {
+    const { emitBlob } = await import('./blob-emit');
+    expect(emitBlob(parseBlob(FACE))).toBe(FACE);
+  });
+});

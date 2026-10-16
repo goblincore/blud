@@ -2,6 +2,7 @@
 
 **Date:** 2026-10-01 · **Status:** **draft 2, for the owner's review.** Draft 1 was written while the owner was away; the
 owner's feedback (same day) is folded in and marked *owner*. What is still *proposed* waits for a yes. Not built.
+**First slice (2026-10-11): the [lab spike](2026-10-11-screen-emergence-lab-spike-design.md)** (owner-approved: the screen pass, the timeline and the goblin on one lab page; the owner decided the goblin touches the egg, answering open question 2).
 **Kind:** design. **Part 1 of 3** of the monitor-room work (§0). **Follows:** the [ending spec](2026-09-30-night-train-egg-ending-design.md)
 §6 ("pull back out of the big CRT to the desk and the goblin playing; the egg pushes out of the glass, wet").
 **Look-dev:** [Blender animatic, the Flat blockout, the SDF goblin in Blender, the CRT](../../dev-notes/2026-10-01-flat-emergence-lookdev/).

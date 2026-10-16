@@ -225,6 +225,19 @@ const poseResult = await evaluate(`(() => {
   return JSON.stringify(window.__sdfLab.holdPose(${JSON.stringify(POSE)}, ${POSE_FRAMES}${SWING ? ', ' + JSON.stringify(SWING) : ''}));
 })()`);
 console.log('pose:', poseResult);
+// BLOB_GAPE=<rad> holds the jaw open that far (lab-main's setJawGape): the expression pass's spike, before expressions exist.
+if (process.env.BLOB_GAPE !== undefined) {
+  await evaluate(`window.__sdfLab.setJawGape(${Number(process.env.BLOB_GAPE)})`);
+}
+// BLOB_EXPR=<name>[:<t>[:<lid>]] holds one of the character's expressions (lab-main's holdExpression): t in seconds into the clip
+// (default 10, fully formed), lid 0..1 held shut for a blink frame. e.g. BLOB_EXPR=grin, BLOB_EXPR=neutral:10:1.
+if (process.env.BLOB_EXPR) {
+  const [exprName, exprT = '10', exprLid = '0'] = process.env.BLOB_EXPR.split(':');
+  const held = await evaluate(`JSON.stringify(window.__sdfLab.holdExpression(${JSON.stringify(exprName)}, ${Number(exprT)}, ${Number(exprLid)}))`);
+  console.log('expression:', held);
+  if (!held || held === 'null') fail(`no expression "${exprName}" for this character`);
+  await sleep(500);
+}
 await sleep(4000);
 // A held WALK/RUN pose steps the treadmill from the origin, and the body's
 // torso is no longer where the pre-pose focusBody() aimed: the ogre's stomp
@@ -420,8 +433,21 @@ if (WOUNDS > 0) {
   // The sweep needs the loop running.
 }
 
+// BLOB_EXPR_SWEEP=<t0>:<t1> (with BLOB_EXPR=<name>) steps the expression clip from t0 to t1 seconds across the frames at a FIXED
+// yaw (BLOB_YAW radians, default 0 = the face) instead of orbiting: the frames are an animation, deterministic frame by frame
+// (holdExpression at each clip time), e.g. BLOB_EXPR=grin BLOB_EXPR_SWEEP=0:0.6 with 18 frames, then ffmpeg them into a clip.
+const EXPR_SWEEP = process.env.BLOB_EXPR && process.env.BLOB_EXPR_SWEEP
+  ? process.env.BLOB_EXPR_SWEEP.split(':').map(Number) : null;
+const EXPR_YAW = Number(process.env.BLOB_YAW ?? 0);
+
 for (let i = 0; i < FRAMES; i++) {
-  const yaw = (WIND_SWEEP || ANCHOR_SWEEP) ? 0 : (i / FRAMES) * Math.PI * 2;
+  const yaw = EXPR_SWEEP ? EXPR_YAW : (WIND_SWEEP || ANCHOR_SWEEP) ? 0 : (i / FRAMES) * Math.PI * 2;
+  if (EXPR_SWEEP) {
+    const [t0, t1] = EXPR_SWEEP;
+    const t = FRAMES > 1 ? t0 + ((t1 - t0) * i) / (FRAMES - 1) : t1;
+    const [exprName] = process.env.BLOB_EXPR.split(':');
+    await evaluate(`window.__sdfLab.holdExpression(${JSON.stringify(exprName)}, ${t}, 0)`);
+  }
   await evaluate(`(() => { window.__sdfLab.setCam(${yaw}, ${PITCH}, ${DIST}, ${TARGET_Y}); return true; })()`);
   if (WIND_SWEEP) {
     await evaluate(`(() => { window.__sdfLab.setWindOffset(${WIND[0] * i}, ${WIND[1] * i}, ${WIND[2] * i}); return true; })()`);

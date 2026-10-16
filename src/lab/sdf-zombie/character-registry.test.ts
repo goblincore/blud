@@ -4,6 +4,12 @@ import {
   CHARACTERS, characterEntry, characterNames, hasCharacter,
 } from './character-registry';
 import { parseBlob } from './blob-parse';
+import { compileBlob, compileFace } from './blob-compile';
+import { buildBody } from './build-body';
+import { makeActorMotion } from './actor';
+import { GOBLIN_PROFILE } from './motion-profile';
+import { expressionsFor } from './expression-library';
+import { posesFor } from './pose-library';
 
 /** Every PNG actually shipped under public/assets/lab, as the SERVED url
  *  ("/assets/lab/faces/soldier-face.png") — which is the form the registry
@@ -91,6 +97,33 @@ describe('character-registry', () => {
   it('the registry is the single list — no name appears twice', () => {
     const names = characterNames();
     expect(new Set(names).size).toBe(names.length);
+  });
+
+  // goblin expressions Task 13 (2026-10-15): the face rig lives on the cinematic variant only.
+  it('goblin-cinematic is the goblin with the face rig: its kit, the goblin\'s gait and poses, the expressions; it builds and moves', () => {
+    const e = characterEntry('goblin-cinematic');
+    expect(e.kit).toBe('/assets/lab/goblin-cinematic-kit.gltf');
+    expect(e.profile).toBe(GOBLIN_PROFILE);
+    expect(posesFor('goblin-cinematic')).toBe(posesFor('goblin'));
+    expect(expressionsFor('goblin-cinematic')).not.toBeNull();
+    expect(expressionsFor('goblin')).toBeNull();
+    const doc = parseBlob(e.src);
+    const body = buildBody(compileBlob(doc, compileFace(doc)));
+    expect(body.errors).toEqual([]);
+    const m = makeActorMotion(body, { seed: 1 });
+    expect(m.motionJoints, 'goblin-cinematic builds motion joints').not.toBeNull();
+    expect(m.motionJoints!.index.jaw, 'with the jaw joint').toBeDefined();
+  });
+
+  it('the base goblin has no face rig: no jaw bone, no morph word, no jaw joint', () => {
+    const e = characterEntry('goblin');
+    expect(/\bmorph=/.test(e.src)).toBe(false);
+    const doc = parseBlob(e.src);
+    const body = buildBody(compileBlob(doc, compileFace(doc)));
+    expect(body.bones.has('jaw')).toBe(false);
+    const m = makeActorMotion(body, { seed: 1 });
+    expect(m.motionJoints).not.toBeNull();
+    expect(m.motionJoints!.index.jaw).toBeUndefined();
   });
 
   it('includes every character the lab shipped', () => {

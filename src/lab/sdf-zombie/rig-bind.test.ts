@@ -1,9 +1,13 @@
 // src/lab/sdf-zombie/rig-bind.test.ts
 import { describe, it, expect } from 'vitest';
-import { bindRig, applyRig, headQuatOf, pinTips, HEAD_RIGID_TUNING } from './rig-bind';
+import { bindRig, applyRig, headQuatOf, kitFrames, morphedRest, pinTips, HEAD_RIGID_TUNING } from './rig-bind';
+import { SQUASH_CENTRE_AT, squashAxes, squashMove, squashPoint, squashRestPrim } from './squash';
+import { boneFrames } from './rig-frames';
+import brideSrc from './characters/bride.blob?raw';
 import { IK_TUNING } from './ik';
 import { headingDir } from './wander';
 import goblinSrc from './characters/goblin.blob?raw';
+import goblinCinematicSrc from './characters/goblin-cinematic.blob?raw';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { stepRig } from './rig';
@@ -799,6 +803,220 @@ describe('bindRig — limb prims bind within their own limb', () => {
           if (!ring.has(e.point)) bad.push(`${p.limb}/${p.bone} line ${p.src} end ${end}`);
       });
       expect(bad).toEqual([]);
+    });
+  }
+});
+
+describe('applyRig — per-prim morphs (goblin expressions Task 12)', () => {
+  // A goblin with morphs injected on three kinds of prim: a skull-owned face prim (bent, the upper ridge), a jaw prim (the lower
+  // lip) and an off-head prim (the left upper-arm bar). The CINEMATIC goblin (Task 13): only it has a jaw and the upper ridge.
+  // Its OWN morphs stripped (the smile's `morph=` words since Task 12, the face block's `morph <tag>` lines since Task 15), so
+  // only the injected ones act.
+  const plain = buildBody(compileBlob(parseBlob(goblinCinematicSrc.replace(/ morph=\S+/g, '').replace(/^  morph .*\n/gm, ''))));
+  const ridge = plain.prims.findIndex(p => p.bone === 'skull' && p.bend !== undefined && Math.abs(p.a[1] - 1.1394) < 0.01 && !p.color);
+  const lip = plain.prims.findIndex(p => p.bone === 'jaw' && p.bend !== undefined && !p.color);
+  const arm = plain.prims.findIndex(p => p.bone === 'upperarm.l');
+  const MOVE: Vec3 = [0.004, 0.003, -0.002], TIP: Vec3 = [0.006, 0, 0], BEND: Vec3 = [0, -0.008, 0];
+  const morphs = new Map<number, Primitive['morphs']>([
+    [ridge, [{ channel: 'smile', move: MOVE, bend: BEND, radius: 1.2 }]],
+    [lip, [{ channel: 'smile', move: MOVE, tip: TIP, scale: [1.1, 1, 1] }]],
+    [arm, [{ channel: 'gape', move: MOVE, tip: TIP }]],
+  ]);
+  const body: BuildResult = { ...plain, prims: plain.prims.map((p, i) => (morphs.has(i) ? { ...p, morphs: morphs.get(i)! } : p)) };
+  const bound = bindRig(body);
+  const plainBound = bindRig(plain);
+  const pose = (b: BuildResult, br: ReturnType<typeof bindRig>, rig: Partial<typeof br.rig>, yaw = 0) =>
+    applyRig(b, { ...br, rig: { ...br.rig, ...rig } }, yaw);
+  // Everything the field and the packer read, without the morph data itself.
+  const shapeOf = (b: BuildResult) => JSON.stringify(b.prims.map(({ morphs: _m, ...p }) => p)) + JSON.stringify(b.clusters);
+
+  it('finds the three prims it morphs', () => {
+    expect(ridge).toBeGreaterThanOrEqual(0);
+    expect(lip).toBeGreaterThanOrEqual(0);
+    expect(arm).toBeGreaterThanOrEqual(0);
+    expect(bound.head!.prims.has(ridge) && bound.head!.jaw!.prims.has(lip)).toBe(true);
+  });
+
+  it('NEUTRAL IS BIT-IDENTICAL: no weights, or every weight 0, poses exactly as the body without morphs (rest, gape, yaw)', () => {
+    for (const [rig, yaw] of [[{}, 0], [{ jawGape: 0.3 }, 0], [{ jawGape: 0.2 }, 0.7]] as const) {
+      const ref = shapeOf(pose(plain, plainBound, rig, yaw));
+      expect(shapeOf(pose(body, bound, rig, yaw))).toBe(ref);
+      expect(shapeOf(pose(body, bound, { ...rig, morphs: {} }, yaw))).toBe(ref);
+      expect(shapeOf(pose(body, bound, { ...rig, morphs: { gape: 0, smile: 0, browDown: 0, lipCurl: 0, lid: 0, squint: 0 } }, yaw))).toBe(ref);
+      // A weight on a channel these prims do not declare moves nothing either (`lid`, the blink, is sheet-only; browDown moved
+      // the brow ridge from Task 15, so it is no longer the undeclared one).
+      expect(shapeOf(pose(body, bound, { ...rig, morphs: { lid: 1 } }, yaw))).toBe(ref);
+    }
+  });
+
+  // At weight 1 a morph is the same as authoring the prim moved: rebuild the body with the deltas baked into the REST geometry
+  // and pose it the same way. That proves the order: the delta lands before the gape opens the jaw and before any turn.
+  const baked = (w: number): BuildResult => ({ ...plain, prims: plain.prims.map((p, i) => {
+    if (i === ridge) return { ...p, a: add(p.a, vscale(MOVE, w)), b: add(p.b, vscale(MOVE, w)), bend: add(p.bend!, vscale(BEND, w)), radius: p.radius * (1 + w * 0.2) };
+    if (i === lip) return { ...p, a: add(p.a, vscale(MOVE, w)), b: add(p.b, vscale(add(MOVE, TIP), w)), scale: [p.scale[0] * (1 + w * 0.1), p.scale[1], p.scale[2]] as Vec3 };
+    if (i === arm) return { ...p, a: add(p.a, vscale(MOVE, w)), b: add(p.b, vscale(add(MOVE, TIP), w)) };
+    return p;
+  }) });
+  const close = (got: Primitive, want: Primitive, what: string) => {
+    for (const k of ['a', 'b'] as const) got[k].forEach((v, j) => expect(v, `${what} ${k}[${j}]`).toBeCloseTo(want[k][j]!, 10));
+    expect(got.radius, `${what} radius`).toBeCloseTo(want.radius, 12);
+    got.scale.forEach((v, j) => expect(v, `${what} scale`).toBeCloseTo(want.scale[j]!, 12));
+    if (want.bend) got.bend!.forEach((v, j) => expect(v, `${what} bend`).toBeCloseTo(want.bend![j]!, 10));
+    if (want.orient) got.orient!.forEach((v, j) => expect(v, `${what} orient`).toBeCloseTo(want.orient![j]!, 12));
+  };
+
+  it('a weight moves the rest geometry before the gape and the head turn: the same as authoring the prim moved', () => {
+    const w = 0.75;
+    const ref = baked(w), refBound = bindRig(ref);
+    const tipMoved = { points: bound.rig.points.map((p, i) => (i === bound.head!.tip ? { ...p, pos: add(p.pos, [0.05, 0, -0.02]) as Vec3 } : p)) };
+    for (const [rig, yaw] of [[{}, 0], [{ jawGape: 0.35 }, 0], [{ jawGape: 0.2, ...tipMoved }, 0.7]] as const) {
+      const got = pose(body, bound, { ...rig, morphs: { smile: w, gape: w } }, yaw);
+      const want = pose(ref, refBound, rig, yaw);
+      for (const i of [ridge, lip, arm]) close(got.prims[i]!, want.prims[i]!, `prim ${i} ${JSON.stringify(rig).slice(0, 20)}`);
+      // and nothing else moved
+      got.prims.forEach((p, i) => { if (i !== ridge && i !== lip && i !== arm) expect(p.a, `prim ${i}`).toEqual(want.prims[i]!.a); });
+    }
+  });
+
+  it('refits the cluster bounds around a morphed prim', () => {
+    const big: BuildResult = { ...plain, prims: plain.prims.map((p, i) => (i === arm ? { ...p, morphs: [{ channel: 'smile', move: [0, 0, 0.5] }] } : p)) };
+    const out = applyRig(big, { ...bindRig(big), rig: { ...bindRig(big).rig, morphs: { smile: 1 } } });
+    const c = out.clusters.find(k => arm >= k.start && arm < k.start + k.count)!;
+    const p = out.prims[arm]!;
+    expect(len(sub(p.a, c.center)) + p.radius).toBeLessThanOrEqual(c.radius + 1e-9);
+  });
+});
+
+describe('kitFrames — a kit\'s jaw bone takes the `on jaw` prims\' own transform (goblin expressions Task 14)', () => {
+  // A kit vertex skinned to a bone is drawn at frame.pos + frame.quat * (v - bone head). For the jaw that must equal what applyRig
+  // does to an `on jaw` prim's rest endpoint (the hinge, the gape, the head's clamped turn and drift), for every rest point.
+  const headTilted = (bound: ReturnType<typeof bindRig>, angle: number, yaw: number) => {
+    const h = bound.head!, pivot = bound.rig.points[h.pivot]!.pos;
+    const qT: Quat = [Math.sin(angle / 2), 0, 0, Math.cos(angle / 2)], qY: Quat = [0, Math.sin(yaw / 2), 0, Math.cos(yaw / 2)];
+    const points = bound.rig.points.map((p, i) => {
+      const q = i === h.tip ? add(pivot, qRotate(qT, sub(p.pos, pivot))) : p.pos;
+      return { ...p, pos: yaw ? qRotate(qY, q) : q };
+    });
+    return { ...bound, rig: { ...bound.rig, points } };
+  };
+  for (const [name, src] of [['bride', brideSrc], ['goblin-cinematic', goblinCinematicSrc]] as const) {
+    it(`${name}: every jaw prim endpoint, at gapes 0-0.6, head level, nodded, past the cone, body turned`, () => {
+      const doc = parseBlob(src);
+      const body = buildBody(compileBlob(doc));
+      const bound = bindRig(body);
+      const jaw = body.bones.get('jaw')!;
+      const jp = [...bound.head!.jaw!.prims];
+      expect(jp.length).toBeGreaterThan(0);
+      for (const gape of [0, 0.1, 0.3, 0.6]) for (const [angle, yaw] of [[0, 0], [0.3, 0], [0.9, 0], [0.25, 1.1]] as const) {
+        const b = headTilted({ ...bound, rig: { ...bound.rig, jawGape: gape } }, angle, yaw);
+        const f = kitFrames(body, b, yaw).get('jaw')!;
+        const posed = applyRig(body, b, yaw);
+        for (const i of jp) for (const k of ['a', 'b'] as const) {
+          const drawn = add(f.pos, qRotate(f.quat, sub(body.prims[i]![k], jaw.head)));
+          expect(len(sub(drawn, posed.prims[i]![k])), `prim ${i}.${k}, gape ${gape}, tilt ${angle}, yaw ${yaw}`).toBeLessThan(1e-9);
+        }
+      }
+    });
+  }
+
+  it('every other bone, and every body without a jaw, is exactly boneFrames', () => {
+    const goblin = buildBody(compileBlob(parseBlob(goblinSrc)));
+    const gb = bindRig(goblin);
+    expect(kitFrames(goblin, gb, 0.4)).toEqual(boneFrames(goblin, gb, 0.4));
+    const bride = buildBody(compileBlob(parseBlob(brideSrc)));
+    const bb = bindRig(bride), open = { ...bb, rig: { ...bb.rig, jawGape: 0.4 } };
+    const k = kitFrames(bride, open, 0), p = boneFrames(bride, open, 0);
+    expect([...k.keys()]).toEqual([...p.keys()]);
+    for (const [n, f] of p) if (n !== 'jaw') expect(k.get(n), n).toEqual(f);
+  });
+});
+
+describe('applyRig — the head SQUASH (goblin expressions Task 18, squash.ts)', () => {
+  // The morph record's `squash` weight squashes every rigid-head prim about the head centre (SQUASH_CENTRE_AT of the skull, in the
+  // head's rest frame), after the morphs and before the gape and the turn; the jaw opens about the squashed hinge.
+  const bodies = [['bride', brideSrc], ['goblin-cinematic', goblinCinematicSrc], ['zombie', zombieSrc]] as const;
+  const shapeOf = (b: BuildResult) =>
+    JSON.stringify(b.prims.map(({ morphs: _m, ...p }) => p)) + JSON.stringify(b.bonePrims) + JSON.stringify(b.clusters);
+  const pose = (b: BuildResult, br: ReturnType<typeof bindRig>, rig: Partial<typeof br.rig>, yaw = 0) =>
+    applyRig(b, { ...br, rig: { ...br.rig, ...rig } }, yaw);
+
+  for (const [name, src] of bodies) {
+    it(`${name}: squash 0 (and no squash) is bit-identical: prims, bones, clusters, kit frames and the noise anchor`, () => {
+      const body = buildBody(compileBlob(parseBlob(src)));
+      const bound = bindRig(body);
+      for (const [rig, yaw] of [[{}, 0], [{ jawGape: 0.3 }, 0], [{ jawGape: 0.2 }, 0.7]] as const) {
+        const ref = shapeOf(pose(body, bound, rig, yaw));
+        expect(shapeOf(pose(body, bound, { ...rig, morphs: { squash: 0 } }, yaw))).toBe(ref);
+        const k = kitFrames(body, { ...bound, rig: { ...bound.rig, ...rig, morphs: { squash: 0 } } }, yaw);
+        expect(k).toEqual(kitFrames(body, { ...bound, rig: { ...bound.rig, ...rig } }, yaw));
+      }
+      expect(morphedRest(body, { squash: 0 }, bound.head)).toBe(body);
+      expect(morphedRest(body, { squash: Number.NaN }, bound.head)).toBe(body);
+    });
+  }
+
+  for (const [name, src] of bodies.slice(0, 2)) {
+    const body = buildBody(compileBlob(parseBlob(src)));
+    const bound = bindRig(body);
+    const h = bound.head!;
+    const pivot = bound.rig.points[h.pivot]!.pos;
+    const c = add(pivot, vscale(h.restTip, SQUASH_CENTRE_AT));
+    const near = (got: Vec3, want: Vec3, what: string) => got.forEach((v, j) => expect(v, `${what}[${j}]`).toBeCloseTo(want[j]!, 10));
+
+    it(`${name}: at statue with the jaw shut every head prim and head bone is the exact squashed image; nothing else moves`, () => {
+      for (const w of [0.8, -0.6]) {
+        const s = squashAxes(w)!;
+        const off = pose(body, bound, {}), on = pose(body, bound, { morphs: { squash: w } });
+        expect(h.prims.size).toBeGreaterThan(4);
+        expect(Math.max(...[...h.prims.keys()].map(i => len(sub(on.prims[i]!.a, off.prims[i]!.a)))), 'the head moved').toBeGreaterThan(0.005);
+        on.prims.forEach((p, i) => {
+          if (!h.prims.has(i)) { expect(p, `prim ${i}`).toEqual(off.prims[i]); return; }
+          const want = squashRestPrim(off.prims[i]!, c, s);
+          near(p.a, want.a, `prim ${i} a`); near(p.b, want.b, `prim ${i} b`);
+          near(p.scale, want.scale, `prim ${i} scale`);
+          if (want.bend) near(p.bend!, want.bend, `prim ${i} bend`);
+          expect(p.radius).toBe(off.prims[i]!.radius);
+        });
+        on.bonePrims.forEach((p, i) => {
+          if (!h.bones.has(i)) { expect(p, `bone ${i}`).toEqual(off.bonePrims[i]); return; }
+          const want = squashRestPrim(off.bonePrims[i]!, c, s);
+          near(p.a, want.a, `bone ${i} a`); near(p.scale, want.scale, `bone ${i} scale`);
+        });
+      }
+    });
+
+    it(`${name}: the jaw opens about the SQUASHED hinge (the squashed head is a head authored that way)`, () => {
+      const s = squashAxes(0.8)!, gape = 0.3;
+      const hinge = add(pivot, squashPoint(h.jaw!.rest.hinge, vscale(h.restTip, SQUASH_CENTRE_AT), s));
+      const shut = pose(body, bound, { morphs: { squash: 0.8 } }), open = pose(body, bound, { jawGape: gape, morphs: { squash: 0.8 } });
+      const g: Quat = [Math.sin(gape / 2), 0, 0, Math.cos(gape / 2)];
+      for (const i of h.jaw!.prims) for (const k of ['a', 'b'] as const)
+        near(open.prims[i]![k], add(hinge, qRotate(g, sub(shut.prims[i]![k], hinge))), `jaw prim ${i}.${k}`);
+    });
+
+    it(`${name}: the kit's skull and jaw frames ride the squash at the mouth (their parts move, they do not scale)`, () => {
+      const s = squashAxes(0.8)!;
+      const cRel = vscale(h.restTip, SQUASH_CENTRE_AT);
+      // The mouth anchor: the centroid of the `on jaw` prims' rest midpoints (pivot-relative).
+      const jp = [...h.jaw!.prims];
+      const anchor = vscale(jp.reduce((m, i) => add(m, vscale(add(h.prims.get(i)!.a, h.prims.get(i)!.b), 0.5)), [0, 0, 0] as Vec3), 1 / jp.length);
+      const jawHead = body.bones.get('jaw')!.head, skullHead = body.bones.get('skull')!.head;
+      for (const [gape, angle] of [[0, 0], [0.25, 0], [0.25, 0.3]] as const) {
+        const qT: Quat = [Math.sin(angle / 2), 0, 0, Math.cos(angle / 2)];
+        const points = bound.rig.points.map((p, i) => (i === h.tip ? { ...p, pos: add(pivot, qRotate(qT, sub(p.pos, pivot))) } : p));
+        const b = { ...bound, rig: { ...bound.rig, points, jawGape: gape, morphs: { squash: 0.8 } } };
+        const frames = kitFrames(body, b, 0), posed = applyRig(body, b, 0);
+        for (const [bone, set, head] of [['jaw', h.jaw!.prims, jawHead], ['skull', new Set([...h.prims.keys()].filter(i => !h.jaw!.prims.has(i))), skullHead]] as const) {
+          const f = frames.get(bone)!;
+          for (const i of set) {
+            const e = body.prims[i]!.a, eRel = h.prims.get(i)!.a;
+            const drawn = add(f.pos, qRotate(f.quat, sub(e, head)));
+            // A rigid part is off the squashed flesh by the squash's spread between the anchor and itself, exactly.
+            const spread = len(sub(squashMove(anchor, cRel, s), squashMove(eRel, cRel, s)));
+            expect(len(sub(drawn, posed.prims[i]!.a)), `${bone} prim ${i}, gape ${gape}, nod ${angle}`).toBeCloseTo(spread, 9);
+          }
+        }
+      }
     });
   }
 });

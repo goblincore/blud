@@ -4,6 +4,7 @@
 
 import { type BlobBone, type BlobDoc, type BlobLine, type BlobPart, type BlobPartKind, type BlobStance, BlobError } from './blob-ast';
 import { STRAND_DEFAULT_CYCLES, STRAND_DEFAULT_FAT, STRAND_DEFAULT_WAVE } from './strand';
+import { parseMorph, type PrimMorph } from './morph';
 
 /**
  * A `BlobLine[]` with one extra property: the comment/blank trivia that
@@ -181,6 +182,29 @@ function parseGlossArg(l: BlobLine, painted: boolean): number | null {
   return g;
 }
 
+/** One word per channel AND side: `browDown+:` and `browDown-:` (one-sided, Task 16) are two words for one channel, legal together. */
+const sameMorphChannel = (a: PrimMorph, b: PrimMorph) => a.channel === b.channel && (a.sign ?? 0) === (b.sign ?? 0);
+const signWord = (m: PrimMorph) => (m.sign === 1 ? '+' : m.sign === -1 ? '-' : '');
+
+/** Every `morph=<channel>:<terms>` word on the line (goblin expressions Task 12; morph.ts has the grammar), one per channel.
+ *  Each error names the word's column. */
+function parseMorphArgs(l: BlobLine): PrimMorph[] {
+  const out: PrimMorph[] = [];
+  l.words.forEach((w, idx) => {
+    if (!w.startsWith('morph=')) return;
+    let m: PrimMorph;
+    try {
+      m = parseMorph(w.slice('morph='.length));
+    } catch (e) {
+      throw new BlobError((e as Error).message, l.line, wordCol(l, idx));
+    }
+    if (out.some(o => sameMorphChannel(o, m)))
+      throw new BlobError(`morph=${m.channel}${signWord(m)}: appears twice on one line; put all its terms in one word`, l.line, wordCol(l, idx));
+    out.push(m);
+  });
+  return out;
+}
+
 /** The bare word `metal`, and only beside a `color=` — same gate and same
  *  reasoning as gloss: the shader keys both off the painted-prim row, so on
  *  flesh the word would shade nothing. */
@@ -355,10 +379,17 @@ function parseSkeletonLine(l: BlobLine, s: ParseState): void {
     const lenR = strArg(l, 'lenR') === null ? undefined : numArg(l, 'lenR');
     if (lenR !== undefined && !s.inMirror)
       throw new BlobError('lenR= only applies to a bone inside a mirror block', l.line, l.indent + 1);
+    // `hinge=` moves the JAW's hinge along the skull (jaw.ts). Only the jaw bone hinges, so anywhere else it is a mistake.
+    const hinge = strArg(l, 'hinge') === null ? undefined : numArg(l, 'hinge');
+    if (hinge !== undefined && name !== 'jaw')
+      throw new BlobError('hinge= only applies to the jaw bone', l.line, l.indent + 1);
+    if (hinge !== undefined && !(hinge >= 0 && hinge <= 1))
+      throw new BlobError('hinge= is a fraction along the skull bone, 0..1', l.line, l.indent + 1);
     s.doc.bones.push({
       name, parent, dir: dirArg(l),
       pitchDeg: numArg(l, 'pitch', 0), tiltDeg: numArg(l, 'tilt', 0),
-      len: numArg(l, 'len'), ...(lenR === undefined ? {} : { lenR }), side: numArg(l, 'side', 0),
+      len: numArg(l, 'len'), ...(lenR === undefined ? {} : { lenR }), ...(hinge === undefined ? {} : { hinge }),
+      side: numArg(l, 'side', 0),
       at: strArg(l, 'at') === null ? null : numArg(l, 'at'),
       mirror: s.inMirror, src: l,
     } satisfies BlobBone);
@@ -524,8 +555,13 @@ function parseBodyLine(l: BlobLine, s: ParseState, into: BlobPart[]): void {
     strandWave: numArg(l, 'wave', STRAND_DEFAULT_WAVE),
     strandCycles: numArg(l, 'cycles', STRAND_DEFAULT_CYCLES),
     strandFat: numArg(l, 'fat', STRAND_DEFAULT_FAT),
+    // `morph=<channel>:<terms>`: per-channel deltas the expression layer's weights scale (morph.ts). Gated to blob/bar below.
+    morphs: parseMorphArgs(l),
     src: l,
   } satisfies BlobPart;
+
+  if (part.morphs.length > 0 && kind !== 'blob' && kind !== 'bar')
+    throw new BlobError(`morph= only moves a blob or a bar, not a ${kind}`, l.line, l.indent + 1);
 
   if (kind === 'shell') {
     if (part.thickness <= 0)
@@ -593,6 +629,9 @@ function parseBonesLine(l: BlobLine, s: ParseState): void {
     throw new BlobError(
       'strand= is not supported in a bones block — the bone fold does not '
       + 'read strand rows (hair is flesh, not bone)', l.line, l.indent + 1);
+  // morph= on a bone would do nothing: applyRig morphs flesh prims only (a face expression moves skin, not the skull).
+  if (added.morphs.length > 0)
+    throw new BlobError('morph= is not supported in a bones block (expressions move flesh, not bone)', l.line, l.indent + 1);
 }
 
 /**
@@ -648,6 +687,27 @@ function parseNamedNumberLine(
     s.doc.sheet ??= {};
     s.doc.sheetImage = file;
     s.doc.sheetTrivia.push(l);
+    return;
+  }
+  // `morph <tag> <channel>:<terms>...` (Task 15): morphs on a generated face prim. The tag is checked against the generated prims
+  // in compileBlob (whether `brow`/`nose` exist depends on the numbers); the terms are morph.ts's, one word per channel.
+  if (what === 'face' && head === 'morph') {
+    const tag = rest[0];
+    if (tag === undefined || rest.length < 2)
+      throw new BlobError('face morph expects a prim tag and at least one <channel>:<terms>, e.g. morph brow squint:(0,-0.003,0)',
+        l.line, wordCol(l, 0));
+    const morphs: PrimMorph[] = [];
+    rest.slice(1).forEach((w, i) => {
+      let m: PrimMorph;
+      try { m = parseMorph(w); } catch (e) { throw new BlobError((e as Error).message, l.line, wordCol(l, i + 2)); }
+      if (morphs.some(o => sameMorphChannel(o, m)))
+        throw new BlobError(`face morph ${tag}: channel ${m.channel}${signWord(m)} appears twice on one line`, l.line, wordCol(l, i + 2));
+      morphs.push(m);
+    });
+    if (s.doc.faceMorphs.some(f => f.tag === tag))
+      throw new BlobError(`face morph ${tag}: one line per prim; put every channel on it`, l.line, wordCol(l, 1));
+    s.doc.faceMorphs.push({ tag, morphs, line: l.line, col: wordCol(l, 1) });
+    s.doc.faceTrivia.push(l);
     return;
   }
   const v = Number(rest[0]);
@@ -708,7 +768,7 @@ export function parseBlob(src: string): BlobDoc {
   const s: ParseState = {
     doc: {
       name: '', height: null, scale: null, stance: null, rootBone: '', rootHeight: 0, rootLen: 0.14,
-      bones: [], parts: [], bonesBlock: null, bonesTrivia: [], face: null, faceTrivia: [], sheet: null, sheetImage: null, sheetTrivia: [],
+      bones: [], parts: [], bonesBlock: null, bonesTrivia: [], face: null, faceMorphs: [], faceTrivia: [], sheet: null, sheetImage: null, sheetTrivia: [],
       palette: null, paletteTrivia: [], structure: [], trailingTrivia: [],
     },
     known: new Set<string>(),

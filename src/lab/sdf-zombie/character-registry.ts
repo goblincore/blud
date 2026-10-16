@@ -16,6 +16,8 @@
 // fixes is a character that EXISTS as a .blob and was never registered.
 import zombieBlobSrc from './characters/zombie.blob?raw';
 import goblinBlobSrc from './characters/goblin.blob?raw';
+import goblinHomeBlobSrc from './characters/goblin-home.blob?raw';
+import goblinCinematicBlobSrc from './characters/goblin-cinematic.blob?raw';
 import clownBlobSrc from './characters/clown.blob?raw';
 import clownAltBlobSrc from './characters/clown-alt.blob?raw';
 import mouseBlobSrc from './characters/mouse.blob?raw';
@@ -142,6 +144,23 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     kit: '/assets/lab/goblin-kit.gltf',
     face: ZOMBIE_FLAT,
     profile: motionProfileFor('goblin'),
+  },
+  // The goblin at home (the screen emergence lab): goblin.blob plus a vest and shorts of SDF `shell` cloth and bare feet, in one
+  // marked block (characters/goblin-home.test.ts guards the copy). No kit: the armour stays off at home. The goblin's own motion
+  // profile; the lab drives him with the pose layer, which overwrites every target.
+  'goblin-home': {
+    name: 'goblin-home', src: goblinHomeBlobSrc,
+    face: ZOMBIE_FLAT,
+    profile: motionProfileFor('goblin'),
+  },
+  // The goblin with the FACE RIG (jaw, teeth, smile morphs, expression clips) and bare eyes, for the cinematic shots
+  // (goblin expressions Task 13). The base goblin above keeps its pre-expression head and cost. Same gait, held gun and
+  // poses as the goblin (motion-profile.ts and pose-library.ts list it under its own name).
+  'goblin-cinematic': {
+    name: 'goblin-cinematic', src: goblinCinematicBlobSrc,
+    kit: '/assets/lab/goblin-cinematic-kit.gltf',
+    face: ZOMBIE_FLAT,
+    profile: motionProfileFor('goblin-cinematic'),
   },
   clown: {
     name: 'clown', src: clownBlobSrc,
