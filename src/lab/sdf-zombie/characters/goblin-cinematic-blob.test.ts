@@ -522,7 +522,7 @@ describe('goblin face morphs (Task 12: the smile widens the chin, pushes the che
     return t;
   }));
 
-  it('morphs existing prims only, on the smile alone: the same prims as the .blob without its morph words (and the cheek rolls)', () => {
+  it('morphs existing prims only: the same prims as the .blob without its morph words (and the cheek rolls, the furrow pair)', () => {
     const bare = src.replace(BAND, '').replace(FURROW, '');
     const bandless = buildBody(compileBlob(parseBlob(bare), compileFace(parseBlob(bare))));
     expect(bandless.prims.length).toBe(plain.prims.length);
@@ -531,19 +531,24 @@ describe('goblin face morphs (Task 12: the smile widens the chin, pushes the che
       const { morphs: _m, ...rest } = p;
       expect(rest, `prim ${i}`).toEqual(plain.prims[i]);
     });
+    // Which channels move which prims (built prims do not keep facePrims' tags; the two face-block prims are the ones with squint):
     const morphed = body.prims.filter(p => p.morphs);
-    const smiles = morphed.filter(p => p.morphs!.every(m => m.channel === 'smile'));
-    // Task 15 added the throat bar (it widens with the opening); Task 18 the hooked nose (it lifts) and the cheek-roll pair.
-    expect(smiles.length, 'upper lip, lower lip, chin, upper ridge, cheek pair, corner pair, throat bar, nose, roll pair').toBe(12);
-    // Task 15: the two GENERATED face prims carry the eye area's morphs (face block `morph <tag>` lines).
-    // (Built prims do not keep facePrims' tags: the two are the only skull prims morphed on anything but the smile.)
-    const eyeArea = morphed.filter(p => !p.morphs!.every(m => m.channel === 'smile' || m.channel === 'furrow'))
-      .map(p => p.morphs!.map(m => m.channel).sort());
-    // Task 16: the brow ridge's browDown is two ONE-SIDED words (browDown+ knits it into a V, browDown- lifts it); Task 19: and a
-    // furrow word (the V pulled deeper).
-    expect(eyeArea).toEqual([['squint', 'smile'].sort(), ['browDown', 'browDown', 'furrow', 'squint']]);
-    expect(morphed.filter(p => p.morphs!.every(m => m.channel === 'furrow')).length, 'the furrow pair').toBe(2);
-    expect(morphed.length).toBe(16);
+    const sets = new Map<string, number>();
+    for (const p of morphed) { const k = [...new Set(p.morphs!.map(m => m.channel))].sort().join('+'); sets.set(k, (sets.get(k) ?? 0) + 1); }
+    expect(Object.fromEntries(sets)).toEqual({
+      // chin, the cheek-fill pair, the throat bar, the nose, the mouth-corner pair, the cheek-roll pair (Task 12-18's smile)
+      smile: 9,
+      // Task 20: the lower lip and the floor also part on a wide gape (the shout bares the lower row: the lip drops 15 mm and comes
+      // 10 mm forward of the teeth, the floor drops behind them)
+      // Task 20: the upper ridge and the upper lip lift a little on a wide gape
+      'gape+smile': 4,
+      // Task 15: the face block's cheek mass (smile since Task 18); its brow ridge (browDown one-sided twice, Task 16; furrow, Task 19)
+      'smile+squint': 1,
+      'browDown+furrow+squint': 1,
+      // Task 19: the inner-brow bulge pair
+      furrow: 2,
+    });
+    expect(morphed.length).toBe(17);
   });
 
   it('weights 0 pose exactly as the body without any morph (rest, and the jaw open)', () => {
@@ -655,13 +660,19 @@ describe('goblin face morphs (Task 12: the smile widens the chin, pushes the che
     for (const [p, i] of [...corners, ...cheeks]) expect(g.prims[i]!.blendK / p.blendK, `prim ${i}`).toBeGreaterThanOrEqual(2.5);
   });
 
-  it('the grin widens the lower face by most of a centimetre a side at the chin (owner: "his chins n stuff should get wider")', () => {
+  // TASK 20 (owner: "there's something a little too chipmunky about his overall grin"): the chin no longer balloons on the smile.
+  // Task 12 widened it on the owner's "his chins n stuff should get wider" (+9.5 / +9.0 mm a side at y 1.10 / 1.11 after the Task 18
+  // corner fix, +14.5 / +18.5 before it, pinned over 7 mm); with the cheek fill's puff and the squash's widening, that wide round
+  // lower face was most of the chipmunk. Now the chin is 10% wider on the smile (was 15%) and drops 4 mm under the lower lip, which
+  // goes down to bare the lower row: measured +1.5 mm a side at y 1.10 and -4 mm at y 1.11 (where the lower lip used to bulge out
+  // over the chin it now sits lower and further in), no wider anywhere there than 4 mm.
+  it('the grin keeps the lower face its own width at the chin (no chipmunk jowls): within -5..+4 mm a side at y 1.10-1.11', () => {
     const on = grin(true), off = grin(false);
-    // Measured at y 1.10-1.11 since the chin LIFTS on the smile (owner on the cartoon grin: "the bottom neck area is messed up": the
-    // chin used to drop 6 mm and grow 40% wide onto the armour collar, hiding the neck). Lifted, the widening sits higher; at y 1.07-1.08
-    // the lifted chin is ABOVE the probe. Measured +9.5 / +9.0 mm a side at y 1.10 / 1.11 since the Task 18 corner fix (the chin
-    // taller and shallower, the lower lip's ends no longer out at the face's side); +14.5 / +18.5 mm before it.
-    for (const y of [1.10, 1.11]) expect(reachX(on, y) - reachX(off, y), `y ${y}`).toBeGreaterThan(0.007);
+    for (const y of [1.10, 1.11]) {
+      const d = reachX(on, y) - reachX(off, y);
+      expect(d, `y ${y}`).toBeLessThan(0.004);
+      expect(d, `y ${y}`).toBeGreaterThan(-0.005);
+    }
   });
   // 'The grin still bares every upper tooth' is a mesh-teeth test now (Task 14, the block above).
 });
@@ -692,8 +703,13 @@ describe('the cartoon grin (Task 18): a crescent mouth, cheek rolls, the head sq
     for (const k of ['a', 'b'] as const) expect(grin.prims[lip]![k][1] - rest.prims[lip]![k][1], k).toBeGreaterThan(0.015); // 35.5 mm
   });
 
-  it('the head is at least 10% wider at the grin\'s peak (the cranium, above the cheeks and below the ears)', () => {
-    for (const y of [1.19, 1.2, 1.21]) expect(halfWidth(grin, y) / halfWidth(rest, y), `y ${y}`).toBeGreaterThanOrEqual(1.1); // x1.15
+  // Task 20 (the chipmunk): the grin squashes half as hard (squash 1 -> 0.5: 7.5% wider, 4% shorter), so the lower face no longer
+  // spreads into jowls; the head still widens as it grins (it was pinned at 10%, measured 15%).
+  it('the head is at least 6% wider at the grin\'s peak (the cranium, above the cheeks and below the ears)', () => {
+    for (const y of [1.19, 1.2, 1.21]) {
+      expect(halfWidth(grin, y) / halfWidth(rest, y), `y ${y}`).toBeGreaterThanOrEqual(1.06); // x1.07
+      expect(halfWidth(grin, y) / halfWidth(rest, y), `y ${y}: not the old chipmunk squash`).toBeLessThan(1.1);
+    }
   });
 
   it('surprise stretches it instead: narrower and taller', () => {
@@ -714,10 +730,12 @@ describe('the cartoon grin (Task 18): a crescent mouth, cheek rolls, the head sq
         const q = add(add(scale(p.a, (1 - t) ** 2), scale(c, 2 * t * (1 - t))), scale(p.b, t * t));
         expect(sdBody(q, bandless) + p.radius, `roll ${i} t ${t}`).toBeLessThan(-0.001);
       }
-      // At the grin it is 2.4x as thick (toned down from 4.5: owner, "too puffy ... those jowls") and stands proud of the face it
-      // was buried in SOMEWHERE along its length: the toned-down roll tucks under the cheek fill at its nose end, so probe the curve.
+      // At the grin it is 1.7x as thick (toned down from 4.5: owner, "too puffy ... those jowls"; from 2.4 in Task 20, the chipmunk:
+      // the crease stays, the puff goes) and stands proud of the face it was buried in SOMEWHERE along its length: the roll tucks
+      // under the cheek fill at its nose end, so probe the curve.
       const g = grin.prims[i]!;
-      expect(g.radius / p.radius).toBeGreaterThanOrEqual(2.4);
+      expect(g.radius / p.radius).toBeGreaterThanOrEqual(1.7);
+      expect(g.radius / p.radius).toBeLessThan(2);
       const gc = add(scale(add(g.a, g.b), 0.5), g.bend!);
       const shows = Array.from({ length: 11 }, (_, k) => k / 10).some(t => {
         const q = add(add(scale(g.a, (1 - t) ** 2), scale(gc, 2 * t * (1 - t))), scale(g.b, t * t));

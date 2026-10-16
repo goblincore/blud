@@ -71,11 +71,14 @@ describe('the grin is a smile, not surprise (Task 15)', () => {
   const peak = (name: string) => actuate(expressionAt(GOBLIN_EXPRESSIONS[name]!, 99), authored, GOBLIN_EXPRESSION_TUNING);
   const grin = peak('grin'), smile = peak('smile'), surprise = peak('surprise');
 
-  // Task 18 (the cartoon grin) opened it to 0.18 rad: the crescent's height is the jaw's, its width and upturned corners the
-  // smile morphs', and the whole head squashes (wider, shorter).
-  it('the grin opens the jaw part way (at most 0.18 rad at its peak), squashes the head and smiles with the eyes: squint, brows down', () => {
-    expect(grin.jawGape).toBeLessThanOrEqual(0.18 + 1e-9);
-    expect(grin.morphs.squash).toBeGreaterThanOrEqual(0.8);
+  // Task 18 (the cartoon grin) opened it to 0.18 rad and squashed the head fully. Task 20 (owner: the dark gap under the teeth,
+  // "something a little too chipmunky"): the grin opens with the LIPS (the smile morphs lift the upper lip and pull the lower one
+  // down off the lower row), the jaw only 0.05-0.08 rad, and the head squashes half as hard.
+  it('the grin opens with the lips (the jaw 0.05-0.08 rad at its peak), squashes the head a little and smiles with the eyes', () => {
+    expect(grin.jawGape).toBeGreaterThanOrEqual(0.05);
+    expect(grin.jawGape).toBeLessThanOrEqual(0.08);
+    expect(grin.morphs.squash).toBeGreaterThanOrEqual(0.4);
+    expect(grin.morphs.squash).toBeLessThanOrEqual(0.6);
     expect(grin.morphs.smile).toBe(1);
     expect(grin.morphs.squint).toBeGreaterThanOrEqual(0.7);
     expect(grin.morphs.squint).toBeLessThanOrEqual(0.9);
@@ -83,7 +86,7 @@ describe('the grin is a smile, not surprise (Task 15)', () => {
     // The jaw never opens past its peak on the way in.
     const end = GOBLIN_EXPRESSIONS.grin!.keys.at(-1)!.t;
     for (let k = 0; k <= 20; k++)
-      expect(actuate(expressionAt(GOBLIN_EXPRESSIONS.grin!, (end * k) / 20), authored, GOBLIN_EXPRESSION_TUNING).jawGape).toBeLessThanOrEqual(0.18 + 1e-9);
+      expect(actuate(expressionAt(GOBLIN_EXPRESSIONS.grin!, (end * k) / 20), authored, GOBLIN_EXPRESSION_TUNING).jawGape).toBeLessThanOrEqual(0.08);
   });
 
   it('the grin\'s lit eye is at most 60% of the neutral\'s on the sheet; the friendly smile narrows it too', () => {
