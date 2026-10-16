@@ -402,7 +402,7 @@ import { ENGAGED_RADIUS, FORE_HAND_REST, GRIP_HAND_REST, GUN_REST, SPRITE_TRAIL_
 const DEFAULT_PROBE_WEIGHT = 0.75;
 
 /**
- * RESOLUTION RUNGS — the owner picks with ?res=. All 4:3 except the legacy
+ * RESOLUTION RUNGS — the owner picks with ?res= (960, 800, 640, 320). All 4:3 except the legacy
  * '960' (the old fit-aspect 960x540 cap, kept so before/after numbers are
  * comparable). Default 800x600 per the owner's "capped at 800x600".
  *
@@ -415,6 +415,8 @@ const RES_RUNGS = {
   '960': { mode: 'fit', maxW: 960, maxH: 540 },
   '800': { mode: 'fixed', width: 800, height: 600 },
   '640': { mode: 'fixed', width: 640, height: 480 },
+  // 320x240 (owner 2026-10-16: a very low rung to look at scenes on a busy machine): the SDF march renders 1:1 with it.
+  '320': { mode: 'fixed', width: 320, height: 240 },
 } as const satisfies Record<string, RenderCap>;
 type ResRung = keyof typeof RES_RUNGS;
 /** `?graphics=high` (owner 2026-09-13): which SHIPPED_UPSCALE entry the boot loads. A BOOT

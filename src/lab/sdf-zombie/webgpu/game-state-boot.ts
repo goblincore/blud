@@ -50,7 +50,7 @@ export interface AttachedPiece {
 import type { WarmBackgroundTracker } from './warm-background';
 
 /** `game-main.ts`'s local `RES_RUNGS` keys (`?res=`); not exported there. */
-type ResRung = '960' | '800' | '640';
+type ResRung = '960' | '800' | '640' | '320';
 
 /** `game-main.ts`'s local `GraphicsLevel` (`?graphics=high`); not exported. */
 type GraphicsLevel = 'default' | 'high';
