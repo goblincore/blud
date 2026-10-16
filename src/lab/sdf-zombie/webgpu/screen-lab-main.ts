@@ -4,7 +4,7 @@
 // scrubbable page with the set (the P225f CRT, the Flat's low kotatsu with the keyboard and the lamp on it, the tower on the floor beside
 // it, a zabuton, the tatami: look round 1 made it floor level like the apartment), the REAL SDF goblin cross-legged on the cushion, posed
 // from the clock by the pose layer and pushed back a little along the floor (screen-lab-goblin.ts goblinRootAt), and THE SCREEN PASS: the march (screen-emergence.wgsl.ts) on a proxy box in the screen's frame, drawn in the
-// SDF layer's late scene with its own depth (createScreenPass). `pass on` / `?nopass=1` / `__screenLab.setPass` swap it for the placeholder
+// SDF layer's late scene with its own depth (screen-pass.ts createScreenPass / updateScreenPass, shared with the game). `pass on` / `?nopass=1` / `__screenLab.setPass` swap it for the placeholder
 // glass (the Night Train still, flat); `?passdebug=1` / `setPassDebug` shows the march's steps, hits and materials. The goo (plan Task 7)
 // is goo-strands.ts's sim uploaded as a texel row each frame from 7 s on, cached per t; `?nogoo=1` / `setGoo` leaves it out (its cost);
 // `setOrbit` points the free camera (the look checks' front and side views).
@@ -24,10 +24,6 @@
 //
 // The goblin is the 1.70 m body: thigh 0.379 m, shin 0.353 m, upper arm 0.307 m, forearm 0.307 m.
 import * as THREE from 'three/webgpu';
-import {
-  cameraPosition, cameraProjectionMatrix, cameraViewMatrix, float, floor, modelWorldMatrixInverse, normalize, positionLocal, positionWorld,
-  texture, uniform, vec4, wgslFn,
-} from 'three/tsl';
 import { createLabRenderer } from './lab-renderer';
 import { createSdfLayer, SDF_LAYER, CONE_LAYER } from './sdf-layer';
 import { createCharacterView, compileCharacterSheet } from './character-view';
@@ -45,16 +41,9 @@ import { MOTION_TUNING } from '../motion';
 import { makeRng } from '../wander';
 import { makePoseRig, poseJoints, type PoseRig } from '../pose';
 import {
-  GLASS, CRT_FRAME as CRT, DESK_Y, EGG, FRAME_BOTTOM, FRAME_FACE_Z, KEYBOARD, KEYBOARD_Z, KOTATSU, PICTURE_TABLE_N, ellipsoidDist, eggCentre, lipOpening,
-  pictureTable, sacExtent, smooth, tearTip,
+  GLASS, CRT_FRAME as CRT, DESK_Y, EGG, FRAME_BOTTOM, FRAME_FACE_Z, KEYBOARD, KEYBOARD_Z, KOTATSU, ellipsoidDist, eggCentre,
 } from './emergence-field';
-import {
-  DEPTH_Q, GOO_K, SCREEN_PROXY, SCR_CAPSULE, SCR_ELLIPSOID, SCR_GOO, SCR_LIGHT, SCR_LIP, SCR_MAP, SCR_MARCH, SCR_NORMAL, SCR_OPENING,
-  SCR_PICTURE, SCR_POOL, SCR_POOL_SHADE, SCR_ROUNDCONE, SCR_ROUNDRECT, SCR_SAC, SCR_SHADE, SCR_SHADOW, SCR_SHEET, SCR_SMAX, SCR_SMIN, SCR_SURFACE,
-  SCR_TEAR, SCR_VEINS, SCR_WRINKLE, SCR_WRINKLE_PAT, SCR_GAUSS, SCR_FIGURE, SCR_FIG_TAU, SCR_SPOTS, SCR_SHELL, SCR_EGG_INNER, SCR_GOO_SHADE,
-  SCR_GOO_EGG_L, SCR_COAT, SCR_COAT_H, SCR_CAPILLARY, SCR_FLESH, SCR_LIP_PULSE,
-} from './screen-emergence.wgsl';
-import { GOO_BOUND0, GOO_TEXELS, gooAt, gooTexels } from './goo-strands';
+import { PASS_LAMP, createScreenPass, updateScreenPass } from './screen-pass';
 import { SHOTS, DURATION, shotAt, paramsAt, type ShotId } from './emergence-timeline';
 import { FLOOR_SEAT } from '../characters/goblin-poses';
 import { GOBLIN_CUES, GOBLIN_FPS, floorLayout, goblinClipAt, goblinRootAt, measureSeat, pinToPose, type FloorLayout } from './screen-lab-goblin';
@@ -315,162 +304,6 @@ function buildZabuton(scene: THREE.Object3D, top: number): THREE.Group {
 }
 
 // ---------------------------------------------------------------------------
-// The screen pass (plan Task 6): the march on a proxy box in the screen's frame, drawn in the SDF layer's late scene
-// ---------------------------------------------------------------------------
-type Include = NonNullable<Parameters<typeof wgslFn>[1]>[number];
-/** The goo exists from the tear's first strand (7.2 s); before this the page uploads nothing and never runs the sim. */
-const GOO_FROM = 7;
-/** The lamp's strength in the pass (the set's PointLight is 1.6 at the bulb; the pass's falloff is its own, tuned by eye). */
-const PASS_LAMP = 1.4;
-
-interface ScreenPass {
-  proxy: THREE.Mesh;
-  /** Per frame: the timeline's parameters at `t` and the field's derived values, the picture table, the pixel size. */
-  update(t: number, camera: THREE.PerspectiveCamera, heightPx: number): void;
-  /** The march's debug view (steps red, hit green, material blue): `?passdebug=1` or the seam's setPassDebug. */
-  setDebug(on: boolean): void;
-  /** The goo off (nothing uploaded, the bound empty): `?nogoo=1` or the seam's setGoo, so its cost can be read. */
-  setGooOn(on: boolean): void;
-  /** The egg's light's hard shadow (scrShadow) on the goo, the sheet and the slick: the `goo shadow` checkbox. */
-  setShadow(on: boolean): void;
-}
-
-/** The proxy box and its material. The box's geometry is built in the screen frame (its local space IS the screen's), so the mesh only has
- *  to copy the screen group's place; the march runs in local space (modelWorldMatrixInverse brings the eye in), so the CRT may turn. Back
- *  faces, so the eye may be inside the box (the close shots are). Premultiplied blending (three multiplies the straight colour by alpha),
- *  and the first hit's REAL depth through depthNode, so the goblin, the desk and the CRT housing occlude it and are occluded by it. */
-function createScreenPass(pictureTex: THREE.Texture): ScreenPass {
-  const fn = (src: string, deps: ReturnType<typeof wgslFn>[] = []) => wgslFn(src, deps.map(x => x as unknown as Include));
-  const smaxF = fn(SCR_SMAX), sminF = fn(SCR_SMIN);
-  const wrinkleF = fn(SCR_WRINKLE, [fn(SCR_WRINKLE_PAT)]);
-  const sacF = fn(SCR_SAC, [smaxF, wrinkleF]);
-  const ellipsoidF = fn(SCR_ELLIPSOID);
-  const roundRectF = fn(SCR_ROUNDRECT);
-  const openingF = fn(SCR_OPENING, [roundRectF]);
-  const lipPulseF = fn(SCR_LIP_PULSE);
-  const lipF = fn(SCR_LIP, [openingF, lipPulseF]);
-  const tearF = fn(SCR_TEAR);
-  const capsuleF = fn(SCR_CAPSULE), roundConeF = fn(SCR_ROUNDCONE);
-  const gooF = fn(SCR_GOO, [capsuleF, roundConeF, sminF]);
-  const mapF = fn(SCR_MAP, [sacF, openingF, lipF, ellipsoidF, sminF, smaxF, tearF, gooF]);
-  const normalF = fn(SCR_NORMAL, [mapF]);
-  const marchF = fn(SCR_MARCH, [mapF]);
-  const veinsF = fn(SCR_VEINS);
-  const capillaryF = fn(SCR_CAPILLARY);
-  const gooEggLF = fn(SCR_GOO_EGG_L);
-  const coatHF = fn(SCR_COAT_H);
-  const coatF = fn(SCR_COAT, [coatHF]);
-  const pictureF = fn(SCR_PICTURE);
-  const lightF = fn(SCR_LIGHT);
-  const figTauF = fn(SCR_FIG_TAU, [fn(SCR_FIGURE), fn(SCR_GAUSS)]);
-  const shellF = fn(SCR_SHELL, [fn(SCR_SPOTS), figTauF]);
-  const eggInnerF = fn(SCR_EGG_INNER);
-  const gooShadeF = fn(SCR_GOO_SHADE, [lightF, ellipsoidF]);
-  const fleshF = fn(SCR_FLESH, [lightF]);
-  const surfaceF = fn(SCR_SURFACE, [lightF, tearF, shellF, eggInnerF, gooShadeF, gooEggLF, fleshF, veinsF, capillaryF, lipPulseF, roundRectF]);
-  const sheetF = fn(SCR_SHEET, [sacF, pictureF, veinsF, capillaryF, fleshF, lightF, wrinkleF]);
-  const shadowF = fn(SCR_SHADOW, [mapF, ellipsoidF]);
-  const poolF = fn(SCR_POOL);
-  const poolShadeF = fn(SCR_POOL_SHADE, [gooShadeF]);
-  const shade = fn(SCR_SHADE, [marchF, normalF, sheetF, surfaceF, openingF, pictureF, shadowF, poolF, poolShadeF, eggInnerF, gooEggLF, coatF, coatHF, gooShadeF]);
-
-  const table = new Float32Array(PICTURE_TABLE_N);
-  const tableTex = new THREE.DataTexture(table, PICTURE_TABLE_N, 1, THREE.RedFormat, THREE.FloatType);
-  tableTex.magFilter = THREE.NearestFilter; tableTex.minFilter = THREE.NearestFilter; tableTex.generateMipmaps = false;
-  tableTex.needsUpdate = true;
-
-  // The goo: gooTexels(gooAt(t)) as a GOO_TEXELS x 1 RGBA32F row (textureLoad), and its bounding sphere (radius <= 0: none).
-  const gooData = new Float32Array(GOO_TEXELS * 4);
-  const gooTex = new THREE.DataTexture(gooData, GOO_TEXELS, 1, THREE.RGBAFormat, THREE.FloatType);
-  gooTex.magFilter = THREE.NearestFilter; gooTex.minFilter = THREE.NearestFilter; gooTex.generateMipmaps = false;
-  gooTex.needsUpdate = true;
-  const uGoo = uniform(new THREE.Vector4(0, 0, 0, -1));
-
-  const uP0 = uniform(new THREE.Vector4()), uP1 = uniform(new THREE.Vector4());
-  const uD = uniform(new THREE.Vector4()), uLip = uniform(new THREE.Vector4(GLASS.hw, GLASS.hh, 0, 0));
-  const uTime = uniform(0);
-  const uLamp = uniform(new THREE.Vector4(...LAMP_BULB, PASS_LAMP));
-  const uCfg = uniform(new THREE.Vector4(0.001, 0, 0, 0));
-  const pic = texture(pictureTex);
-  const res = shade({
-    eye: modelWorldMatrixInverse.mul(vec4(cameraPosition, 1.0)).xyz, pos: positionLocal,
-    p0: uP0, p1: uP1, d: uD, lip: uLip, tm: uTime, lamp: uLamp, cfg: uCfg,
-    picTab: texture(tableTex), scrTex: pic, scrSamp: pic, gooTex: texture(gooTex), goo: uGoo,
-  }) as unknown as { xyz: never; w: ReturnType<typeof float> };
-  // The packed hit: floor(t * DEPTH_Q) + coverage. t is in the local frame, which has the world's scale (the screen group is unscaled).
-  const tq = floor(res.w);
-  const alpha = res.w.sub(tq);
-  const hitW = cameraPosition.add(normalize(positionWorld.sub(cameraPosition)).mul(tq.div(DEPTH_Q)));
-  const clip = cameraProjectionMatrix.mul(cameraViewMatrix.mul(vec4(hitW, 1.0)));
-  const mat = new THREE.MeshBasicNodeMaterial();
-  mat.colorNode = vec4(res.xyz, alpha);
-  mat.depthNode = alpha.greaterThan(0.0).select(clip.z.div(clip.w), float(1.0));
-  mat.transparent = true;
-  mat.premultipliedAlpha = true;
-  mat.blending = THREE.NormalBlending;
-  mat.depthWrite = true;
-  mat.depthTest = true;
-  mat.side = THREE.BackSide;
-  mat.fog = false;
-  mat.name = 'screen-emergence-pass';
-
-  const [x0, y0, z0] = SCREEN_PROXY.min, [x1, y1, z1] = SCREEN_PROXY.max;
-  const geo = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0);
-  geo.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
-  const proxy = new THREE.Mesh(geo, mat);
-  proxy.name = 'screen-emergence-proxy';
-  proxy.frustumCulled = false;
-
-  let debugView = false;
-  let shadowOn = true;
-  /** gooAt replays the sim from t = 0 (about 7 ms warm): only from GOO_FROM on (nothing exists before), and once per distinct t, so a
-   *  paused scrub does not recompute. */
-  let gooT = NaN;
-  let gooOn = true;
-  const setGoo = (t: number) => {
-    const live = gooOn && t >= GOO_FROM;
-    const key = live ? t : -1;
-    if (key === gooT) return;
-    gooT = key;
-    if (live) gooData.set(gooTexels(gooAt(t))); else gooData.fill(0);
-    gooTex.needsUpdate = true;
-    // The bound: the texels' box grown by their radii, then the blends' reach.
-    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
-    let any = false;
-    for (let i = 0; i < GOO_BOUND0; i++) {
-      const w = gooData[i * 4 + 3]!;
-      if (w <= 0) continue;
-      any = true;
-      for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k]!, gooData[i * 4 + k]! - w); hi[k] = Math.max(hi[k]!, gooData[i * 4 + k]! + w); }
-    }
-    if (!any) { uGoo.value.set(0, 0, 0, -1); return; }
-    const half = Math.hypot(hi[0]! - lo[0]!, hi[1]! - lo[1]!, hi[2]! - lo[2]!) / 2;
-    uGoo.value.set((lo[0]! + hi[0]!) / 2, (lo[1]! + hi[1]!) / 2, (lo[2]! + hi[2]!) / 2, half + GOO_K.self * 0.25 + GOO_K.scene);
-  };
-  return {
-    proxy,
-    setDebug(on) { debugView = on; },
-    setShadow(on) { shadowOn = on; },
-    setGooOn(on) { gooOn = on; gooT = NaN; },
-    update(t, camera, heightPx) {
-      const p = paramsAt(t);
-      uP0.value.set(p.ripple, p.push, p.thin, p.lipBow);
-      uP1.value.set(p.tear, p.slump, p.heal, p.glow);
-      const c = eggCentre(p), lo = lipOpening(p);
-      uD.value.set(sacExtent(p), c[2], c[1], lo.z);
-      uLip.value.set(lo.hw, lo.hh, smooth(p.lipBow), tearTip(p, t)[2]);
-      (uTime as unknown as { value: number }).value = t;
-      table.set(pictureTable(p));
-      tableTex.needsUpdate = true;
-      setGoo(t);
-      uCfg.value.x = (2 * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1, heightPx);
-      uCfg.value.y = debugView ? 1 : 0;
-      uCfg.value.z = shadowOn ? 1 : 0;
-    },
-  };
-}
-
-// ---------------------------------------------------------------------------
 // The page
 // ---------------------------------------------------------------------------
 interface ScreenLabSeam {
@@ -703,12 +536,13 @@ async function bootstrap(): Promise<void> {
   screen.add(glass);
 
   // The screen pass: the proxy in the SDF layer's late scene (after the flesh composite, depth-tested against it), placed as the screen.
-  const pass = createScreenPass(pictureTex);
+  // The pass (screen-pass.ts, shared with the game) takes the set's lamp; its switches are this page's state, handed in every frame.
+  const pass = createScreenPass(pictureTex, { lampBulb: LAMP_BULB, lampStrength: PASS_LAMP });
   pass.proxy.position.copy(screen.position);
   pass.proxy.quaternion.copy(screen.quaternion);
   sdfLayer.lateScene.add(pass.proxy);
-  pass.setDebug(q.get('passdebug') === '1');
-  pass.setGooOn(q.get('nogoo') !== '1');
+  let passDebug = q.get('passdebug') === '1';
+  let gooOn = q.get('nogoo') !== '1';
 
   // The goblin's key light: from the lamp's side and above, warm (the practical preset's colour stays; only the direction follows the set).
   {
@@ -836,9 +670,9 @@ async function bootstrap(): Promise<void> {
     t = s.start; free = false; syncUi();
   };
   seam.setPass = (on: boolean) => { passOn = on; syncUi(); };
-  seam.setGooShadow = (on: boolean) => { gooShadow = on; pass.setShadow(on); syncUi(); };
-  seam.setPassDebug = (on: boolean) => pass.setDebug(on);
-  seam.setGoo = (on: boolean) => pass.setGooOn(on);
+  seam.setGooShadow = (on: boolean) => { gooShadow = on; syncUi(); };
+  seam.setPassDebug = (on: boolean) => { passDebug = on; };
+  seam.setGoo = (on: boolean) => { gooOn = on; };
   seam.setOrbit = (yaw: number, pitch: number, dist: number, at?: Vec3) => {
     orbit.yaw = yaw; orbit.pitch = pitch; orbit.dist = dist; free = true;
     if (at) orbit.target.set(...at).applyMatrix4(screen.matrixWorld);
@@ -908,7 +742,7 @@ async function bootstrap(): Promise<void> {
     // The pass on, the placeholder glass off (and back).
     pass.proxy.visible = passOn;
     glass.visible = !passOn;
-    if (passOn) pass.update(t, camera, renderer.domElement.height);
+    if (passOn) updateScreenPass(pass, t, { camera, heightPx: renderer.domElement.height, debug: passDebug, gooShadow, goo: gooOn });
     gpu.uniforms.aaCfg.value.x = sdfLayer.pixelConeK;
     const sorted = [...frameMs].sort((a, b) => a - b);
     const med = sorted[Math.floor(sorted.length / 2)] ?? 0;

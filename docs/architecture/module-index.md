@@ -57,7 +57,7 @@ Each line is the first sentence of the module's header comment.
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 7 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 38 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [SDF march renderer](#sdf-march-renderer) | 39 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 33 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 25 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
@@ -618,6 +618,7 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 - `webgpu/occluder-hull.ts` — A conservative INNER hull of the bodies, rasterised so the march can stop early where something solid already covers the ray.
 - `webgpu/screen-emergence.wgsl.ts` — THE SCREEN EMERGENCE's march and shading (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md section 4; plan Task 6, round…
 - `webgpu/screen-lab-goblin.ts` — THE SCREEN LAB's goblin, pure half (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md section 6, plan Task 5; look round 1,…
+- `webgpu/screen-pass.ts` — THE SCREEN PASS, shared by the lab page (screen-lab-main.ts) and the game (plan 2026-10-16-emergence-in-the-flat.md Task 2): the march…
 - `webgpu/sdf-layer.ts` — Renders the raymarched bodies into their own render target, at their own resolution, and composites the result back over the polygonal scene.
 - `webgpu/shell-hull-outer.ts` — A conservative OUTER hull of the bodies — geometry guaranteed to CONTAIN the real surface — rasterised so the march can start where the body starts…
 - `webgpu/shell-hull.ts` — CPU iso-surface extraction for the shell-march spike.
