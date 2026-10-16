@@ -4,6 +4,50 @@ Spec: [`docs/superpowers/specs/2026-10-13-goblin-expressions-design.md`](../../s
 Plan: [`docs/superpowers/plans/2026-10-13-goblin-expressions.md`](../../superpowers/plans/2026-10-13-goblin-expressions.md).
 Task 3b's own notes (the mouth moved to the lip line, the per-body hinge): [`grin/NOTES-grin.md`](grin/NOTES-grin.md).
 
+## Task 21 (2026-10-16): bigger evil-grin eyes, no throat disc
+
+Owner: "make the evil grin's eyes a bit bigger - they are like definitely too small ... other than that there's still this like disk
+neck throat bulge thing going on that i would like to smooth out/remove". Stills in [`final/`](final/) (columns front, 45, 90
+degrees; the 90 column is mostly the pauldron's spikes at this framing): `throat-neutral-before-after.png` and
+`throat-grin-before-after.png` (`BLOB_DIST=0.42 BLOB_TARGET_Y=1.08 BLOB_PITCH=0`), `throat-close-before-after.png` (neutral and grin,
+`BLOB_DIST=0.28 BLOB_TARGET_Y=1.11 BLOB_PITCH=-0.1`, slightly from below, the owner's angle), `throat-cpu-markers.png` (a CPU
+raymarch, shaded and with each prim its own colour), `evil-grin-eyes-before-after.png` (`BLOB_DIST=0.3 BLOB_TARGET_Y=1.2`, with
+the grin for reference), `others-after.png` (evil grin, shout, surprise at the whole-face framing).
+
+- **The eyes** (`3f462c5c`): the evil grin squinted HARDER than the grin (0.9 vs 0.8) on top of its heavier upper lid. Squint 0.9 ->
+  **0.5** (mid key 0.4 -> 0.3); browDown 1 and `furrowLidTop` 0.03 kept, so the upper lid is still the grin's plus the furrow's. With
+  less squint the lower lid arches up less: a heavy lid over a flatter lower lid, a glare rather than the grin's happy dome. Sheet
+  (lit texels, both eyes): **12 -> 23** (grin 19, neutral 57). On the GPU (red pixels on the eye close-up) the evil eye is now
+  1081 vs the grin's 1022 front-on and 693 vs 910 at 45 degrees (was 339 / 358). The sheet count alone misleads: squint 0.65 (21
+  texels) was tried first and was 0.6x the grin's on the GPU, the knitted brow ridge covering the outer end. Re-pinned: the evil eye
+  0.8x-1.4x the grin's and under half the neutral's; the evil grin squints less than the grin. `scowl` (furrow 0.8) is unchanged.
+- **The disc** (`c62cf1a6`): the CPU marker render named it: the chin mass (`blob head on jaw at=1.0 r=0.0462 wide=1.33 tall=0.56
+  ...`, a flattened ellipsoid 12 cm wide) sat with its flat underside on the 6.6 cm neck column, a concave corner in shadow under
+  it. The rim showed at neutral (gape 0), so it is geometry and shading, not the jaw's noise-anchor seam. Fix: ONE new prim on
+  the jaw, the **throat fill**, a tapered blob from inside the chin's underside down and back into the neck's front (r 32 -> 16 mm,
+  x1.5 wide, blend 12 mm, following the chin's smile), and the chin 6% narrower (wide 1.25). Measured at rest, x 0: the throat's
+  front goes 0.104 (y 1.09) -> 0.094 -> 0.085 (1.07) -> 0.077 (1.055) where it used to drop 0.104 -> 0.082 -> 0.069 in 2 cm;
+  the half-width tapers 0.060 -> 0.041 over y 1.09-1.06. The neck below y 1.04 is unchanged to 0.5 mm, so the collar is too. The
+  lips, the gape, the squash and the floor did not move, so the teeth generator's `GRIN_*` needed nothing (the buried/bared tests
+  pass as before); no Blender.
+- **What I see:** neutral, front: the jaw now narrows into the neck in a soft funnel instead of a shelf with a dark line under it;
+  45 degrees and from below: no puck, the chin slopes into the throat. Grin: the same, the lower jaw reads as one mass tapering into
+  the neck, no flat underside. Shout and surprise: the dropped jaw is a deeper mass running into the collar (it already sat on the
+  collar before); no flesh through the armour in any frame. Evil grin: slits about the grin's size under the knitted V, still mean;
+  the difference from the grin is still mostly the brows (the owner said as much).
+- **Re-pinned deliberately:** the cinematic head-profile 'chin underside' probe (the shelf that was the disc) became 'throat front
+  y1.07' (0.086) and 'throat half-width y1.075' (0.0455); the other six cinematic probes and all of the base goblin's are unchanged
+  (CLI 8/8 ok). pack-golden `goblin-cinematic.blob` `711d0e9b041b9a72 -> 41ba4e6df21e9e19`: exactly the old hash with the fill's line
+  deleted and the chin's `wide` put back (deleting the line alone gives `0782d4922d59abfc`, the chin); pack.test's prof row +1
+  prof-0; the morph-channel table smile 5 -> 6. Base goblin: `git diff f81e5b10 -- goblin.blob goblin-kit.wam goblin-kit.gltf
+  goblin-blob.test.ts` empty.
+- **Checks:** the targeted list (goblin-cinematic-blob, goblin-expressions, expression, blob-face-sheet, morph, rig-bind, pack,
+  pack-golden, goblin-blob, goblin-kit, bride-blob, bride-kit, character-registry, squash, blob-parse) 559 passed; `npm run
+  typecheck` clean; `npm run test:changed` 28 files, 721 passed. Captures on 5421/9421 only, one at a time; five GPU rounds plus the
+  eye variants, most shape iteration on the CPU render.
+- **Open:** the jaw's noise-anchor seam (Task 16) is unchanged in kind; at the grin's small gape it is not visible in these frames.
+  Cost not measured (one more head prim, a tapered blob, paid at rest).
+
 ## Task 20 (2026-10-16): two big rows of teeth, a de-chipmunked grin, a stronger evil grin
 
 Owner on PR #48: "can you push the evil grin further. also when he grins there's this dark gap - i guess its because his bottom
