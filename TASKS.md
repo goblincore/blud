@@ -36,6 +36,10 @@
   noise's rest anchor (fixed: `morphedRest`); the jaw's own noise seam at a gape is open. Teeth (Part A) moved to a Blender task.
   Owner look pending ([clip and frames](docs/dev-notes/2026-10-13-goblin-expressions/polish/)).
   **Task 19 (2026-10-15, owner): an `evil-grin` clip beside the unchanged `grin`**: a `furrow` channel (painted creases, inner-brow bulges, a deeper brow V); scowl gets it too. Owner look pending ([clip and stills](docs/dev-notes/2026-10-13-goblin-expressions/evil-grin/)).
+  **Task 20 (2026-10-16, owner: the grin's dark gap, "too chipmunky", "push the evil grin further")**: two big rows of teeth (8+8,
+  generated headless in Blender), the grin opens with the lips (0.072 rad; dark 0.48 -> 0.21 of the opening), less puff and half the
+  squash, and the evil grin gets a lopsided `sneer`, a deeper furrow with softer paint and thinner eyes. Owner look pending
+  ([clip and stills](docs/dev-notes/2026-10-13-goblin-expressions/teeth-rows/)).
 
 **The Flat's room in the engine** (owner, 2026-10-11) — [levels](docs/tasks/levels.md) (4o)
 - [~] **Slice 1 built 2026-10-11 (the owner liked it); the Giger iMac built the same day, owner look pending** (alpha-blended shell; the WGSL shell is a later spike). A walkable `?level=flat`: the last-stage room from the
