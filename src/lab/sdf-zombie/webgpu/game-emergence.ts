@@ -41,6 +41,7 @@ import {
 import { registerSequence, totalDuration, type Sequence } from './ending-sequence';
 import { startSequence, type SequenceRuntime } from './game-sequence';
 import type { GpuViewOpts } from './zombie-gpu';
+import type { SdfLayer } from './sdf-layer';
 import { rotateYaw } from '../gait';
 import type { Vec3 } from '../types';
 
@@ -165,22 +166,27 @@ export function createEmergence(ctx: GameContext): EmergenceRuntime | null {
   return rt;
 }
 
-/** The SDF layer's dependencies for the puppet's view, as game-spawn.ts hands them to a body (without the game's per-actor extras: the
+/** The slice of the SDF layer the puppet's view binds. */
+export type PuppetLayerDeps = Pick<SdfLayer, 'cone' | 'occluder' | 'prev' | 'lastFrame' | 'depthPre' | 'refineSource'>;
+
+/** The SDF layer's dependencies for the puppet's view, as game-spawn.ts hands them to a body, less the game's per-actor extras (the
  *  tile playtest binding, the shared light list, the dynamic probes and the level shadow, which the per-actor loop feeds every frame and
- *  the puppet, lit the lab's way, does not use). */
-function puppetGpuOpts(ctx: GameContext): GpuViewOpts {
-  if (ctx.boot.deferredMode) return { output: 'surface', shadowReceiver: 'level-only' };
-  const L = ctx.render.sdfLayer;
-  // `?emergencegpu=lab`: only what the lab page hands its puppet (the cone and the occluder), for an A/B against the game's set.
-  if (new URLSearchParams(location.search).get('emergencegpu') === 'lab') return { cone: L.cone, occluder: L.occluder };
+ *  the puppet, lit the lab's way, does not use) and LESS THE OUTER-HULL SHELL. The shell (shell-hull-outer.ts, on by default) is built
+ *  every tick from `ctx.world.actors` only (game-tick.ts); the puppet is not an actor, so no hull instance ever covered him, his march
+ *  read shellOut 0 at every pixel of his proxy and discarded them all (hull-bounds.wgsl.ts `shellOut <= 0`): the goblin was never drawn
+ *  in the game (measured: 0 march-target hits with the shell on, 4022 with it off, at t 5.5). Without a shell source the march takes
+ *  the fetch identities (shellIn 0, shellOut 1e9), as on the lab page. `lab: true` (`?emergencegpu=lab`) binds only what the lab page
+ *  hands its puppet (the cone and the occluder), for an A/B against the game's set. */
+export function puppetGpuOpts(layer: PuppetLayerDeps, mode: { deferred: boolean; lab: boolean }): GpuViewOpts {
+  if (mode.deferred) return { output: 'surface', shadowReceiver: 'level-only' };
+  if (mode.lab) return { cone: layer.cone, occluder: layer.occluder };
   return {
-    cone: L.cone,
-    occluder: L.occluder,
-    shell: { entry: L.shellEntry.texture, exit: L.shellExit.texture, uniforms: L.shellEntry.uniforms },
-    prev: L.prev,
-    lastFrame: L.lastFrame,
-    depthPre: L.depthPre,
-    refine: L.refineSource ?? undefined,
+    cone: layer.cone,
+    occluder: layer.occluder,
+    prev: layer.prev,
+    lastFrame: layer.lastFrame,
+    depthPre: layer.depthPre,
+    refine: layer.refineSource ?? undefined,
   };
 }
 
@@ -193,7 +199,10 @@ export function adoptEmergenceFx(ctx: GameContext): void {
   late.add(rt.pass.proxy);
   let puppet: GoblinPuppet;
   try {
-    puppet = createGoblinPuppet({ renderer: ctx.boot.handle.renderer, gpu: puppetGpuOpts(ctx), parent: rt.puppetParent, errors: rt.errors });
+    const gpu = puppetGpuOpts(ctx.render.sdfLayer, {
+      deferred: ctx.boot.deferredMode, lab: new URLSearchParams(location.search).get('emergencegpu') === 'lab',
+    });
+    puppet = createGoblinPuppet({ renderer: ctx.boot.handle.renderer, gpu, parent: rt.puppetParent, errors: rt.errors });
   } catch (e) {
     rt.errors.push(`puppet: ${e instanceof Error ? e.message : String(e)}`);
     console.error('[emergence] the goblin puppet failed to build', e);
