@@ -571,12 +571,15 @@ describe('goblin face morphs (Task 12: the smile widens the chin, pushes the che
     const sets = new Map<string, number>();
     for (const p of morphed) { const k = [...new Set(p.morphs!.map(m => m.channel))].sort().join('+'); sets.set(k, (sets.get(k) ?? 0) + 1); }
     expect(Object.fromEntries(sets)).toEqual({
-      // chin, the cheek-fill pair, the throat bar, the nose, the mouth-corner pair, the cheek-roll pair (Task 12-18's smile)
-      smile: 9,
+      // chin, the cheek-fill pair, the throat bar, the nose (Task 12-18's smile)
+      smile: 5,
       // Task 20: the lower lip and the floor also part on a wide gape (the shout bares the lower row: the lip drops 15 mm and comes
       // 10 mm forward of the teeth, the floor drops behind them)
-      // Task 20: the upper ridge and the upper lip lift a little on a wide gape
-      'gape+smile': 4,
+      'gape+smile': 2,
+      // Task 20: the upper ridge and the upper lip lift a little on a wide gape, and curl off the fangs on the evil grin's sneer
+      'gape+smile+sneer': 2,
+      // Task 20: the mouth-corner pair and the cheek-roll pair hike on the sneer
+      'smile+sneer': 4,
       // Task 15: the face block's cheek mass (smile since Task 18); its brow ridge (browDown one-sided twice, Task 16; furrow, Task 19)
       'smile+squint': 1,
       'browDown+furrow+squint': 1,
@@ -590,7 +593,7 @@ describe('goblin face morphs (Task 12: the smile widens the chin, pushes the che
     const plainBound = bindRig(plain);
     for (const gape of [0, 0.3]) {
       const zero = applyRig(body, { ...bound, rig: { ...bound.rig, jawGape: gape,
-        morphs: { gape: 0, smile: 0, browDown: 0, lipCurl: 0, lid: 0, squint: 0, squash: 0, furrow: 0 } } }, 0);
+        morphs: { gape: 0, smile: 0, browDown: 0, lipCurl: 0, lid: 0, squint: 0, squash: 0, furrow: 0, sneer: 0 } } }, 0);
       // The cheek rolls (Task 18) and the furrow pair (Task 19) are extra prims: compare the rest without them.
       const none = applyRig(plain, { ...plainBound, rig: { ...plainBound.rig, jawGape: gape } }, 0);
       const bare = applyRig(body, { ...bound, rig: { ...bound.rig, jawGape: gape } }, 0);

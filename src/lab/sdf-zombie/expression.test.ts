@@ -98,8 +98,8 @@ describe('actuate', () => {
 
   it('hands on the clamped channels as the morph weights, all zero at rest', () => {
     expect(actuate(REST_CHANNELS, DEFAULT_SHEET, TUNING).morphs).toEqual(REST_CHANNELS);
-    expect(actuate({ gape: 7, smile: -3, browDown: 0.4, lipCurl: -1, lid: 2, squint: 3, squash: 4, furrow: 2 }, DEFAULT_SHEET, TUNING).morphs)
-      .toEqual({ gape: 1, smile: -1, browDown: 0.4, lipCurl: 0, lid: 1, squint: 1, squash: 1, furrow: 1 });
+    expect(actuate({ gape: 7, smile: -3, browDown: 0.4, lipCurl: -1, lid: 2, squint: 3, squash: 4, furrow: 2, sneer: 5 }, DEFAULT_SHEET, TUNING).morphs)
+      .toEqual({ gape: 1, smile: -1, browDown: 0.4, lipCurl: 0, lid: 1, squint: 1, squash: 1, furrow: 1, sneer: 1 });
     expect(actuate({ ...REST_CHANNELS, squint: -2 }, DEFAULT_SHEET, TUNING).morphs.squint).toBe(0);
     // Task 18: squash is signed (+ wider and shorter, - narrower and taller), clamped to -1..1, and never touches the sheet.
     expect(actuate({ ...REST_CHANNELS, squash: -3 }, DEFAULT_SHEET, TUNING).morphs.squash).toBe(-1);
@@ -197,6 +197,35 @@ describe('furrow (Task 19)', () => {
 
   it('the sheet key sees it', () => {
     expect(sheetKey({ ...DEFAULT_SHEET, browFurrow: 0.02 })).not.toBe(sheetKey(DEFAULT_SHEET));
+  });
+
+  // Task 20 (owner: "can you push the evil grin further"): a knitted brow also presses the upper lid down, so the evil grin's eyes are
+  // thinner than the grin's. Optional, like every eye field: a tuning without it leaves the lid to browDown alone.
+  it('furrowLidTop: the furrow lowers the heavy upper lid on top of browDown\'s, clamped; absent, nothing', () => {
+    const L: ExpressionTuning = { ...F, browLidTop: 0.35, furrowLidTop: 0.2 };
+    expect(actuate({ ...REST_CHANNELS, browDown: 1, furrow: 1 }, DEFAULT_SHEET, L).sheet.eyeLidTop).toBeCloseTo(0.55, 9);
+    expect(actuate({ ...REST_CHANNELS, furrow: 0.5 }, DEFAULT_SHEET, L).sheet.eyeLidTop).toBeCloseTo(0.1, 9);
+    expect(actuate({ ...REST_CHANNELS, browDown: 1, furrow: 1 }, DEFAULT_SHEET, { ...L, furrowLidTop: 5 }).sheet.eyeLidTop).toBe(1);
+    expect(actuate({ ...REST_CHANNELS, furrow: 1 }, DEFAULT_SHEET, F).sheet.eyeLidTop).toBe(DEFAULT_SHEET.eyeLidTop);
+    expect(actuate(REST_CHANNELS, DEFAULT_SHEET, L).sheet).toEqual(DEFAULT_SHEET);
+  });
+});
+
+// Task 20 (owner: "push the evil grin further"): `sneer` (0..1) is the evil grin's mouth on top of the grin's: the upper lip curled
+// off the fangs and the corners hiked higher, lopsided. GEOMETRY ONLY (the character's `morph=sneer:` words): it never touches the
+// sheet, and it is handed on clamped like every other morph weight.
+describe('sneer (Task 20)', () => {
+  it('is a channel at rest 0 that touches no sheet param and is handed on clamped to 0..1', () => {
+    expect(REST_CHANNELS.sneer).toBe(0);
+    expect(actuate({ ...REST_CHANNELS, sneer: 1 }, DEFAULT_SHEET, TUNING).sheet).toEqual(DEFAULT_SHEET);
+    expect(actuate({ ...REST_CHANNELS, sneer: 0.6 }, DEFAULT_SHEET, TUNING).morphs.sneer).toBeCloseTo(0.6, 9);
+    expect(actuate({ ...REST_CHANNELS, sneer: 3 }, DEFAULT_SHEET, TUNING).morphs.sneer).toBe(1);
+    expect(actuate({ ...REST_CHANNELS, sneer: -1 }, DEFAULT_SHEET, TUNING).morphs.sneer).toBe(0);
+  });
+
+  it('a clip that never names it leaves it at 0', () => {
+    const clip: ExpressionClip = { name: 'x', keys: [{ t: 0, channels: { smile: 1 } }] };
+    expect(expressionAt(clip, 0).sneer).toBe(0);
   });
 });
 

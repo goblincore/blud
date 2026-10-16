@@ -119,7 +119,7 @@ bone jaw parent=neck dir=up pitch=112 len=0.083 hinge=0.06
 ## Face morphs: `morph=<channel>:<terms>` (added 2026-10-15)
 
 A `blob` or `bar` can MOVE with a face channel (`expression.ts` CHANNEL_NAMES:
-`gape smile browDown lipCurl lid squint squash furrow`; `squash` also squashes
+`gape smile browDown lipCurl lid squint squash furrow sneer`; `squash` also squashes
 the whole rigid head, squash.ts): the expression layer's weight for that
 channel scales the delta linearly, applied to the REST geometry before the jaw
 opens and the head turns (morph.ts, rig-bind.ts applyRig). One word per

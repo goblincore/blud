@@ -20,6 +20,9 @@ export const GOBLIN_EXPRESSION_TUNING: ExpressionTuning = {
   // (a dark band across it, a second mouth when it shows). At 0.35 the U's middle falls inside the opening and only its arms show.
   // 0.35 -> 0.6, smileWiden 0.5 -> 0.7, smileMouthOpen 0.015 -> 0.03 (Task 18, the cartoon grin): the lower lip now sags far below
   // the seam, so a deeper, wider, thicker painted U lies inside the dark opening and its arms darken the crescent's upturned ends.
+  // 0.6 -> 0.04, smileWiden 0.7 -> 0.3, smileMouthOpen 0.03 -> 0 (Task 20, two rows of teeth): the opening is filled with teeth now
+  // and the lower lip sits lower, so the painted U only ever landed on the lip, a dark line under the lower row. Kept a hair above 0
+  // so a smile still curves the painted seam the right way (the mouth's own paint at rest is untouched).
   smileCurve: 0.04,
   // 0.25 -> 0.5 (Task 10, tuning/paint-locate.png): the arms only show OUTSIDE the opening (x +-4 cm); wider paint gives them room to
   // rise from the opening's lower corners to the seam (the only "corners up" the sheet can draw: its corners sit at mouthRise).
@@ -52,9 +55,13 @@ export const GOBLIN_EXPRESSION_TUNING: ExpressionTuning = {
   browShift: 0.02,
   browRaiseEye: 0.15,
   browLidTop: 0.35,
-  // THE FURROW (Task 19, the evil grin): the painted creases between the brows at full strength on furrow 1 (the `furrow` morphs on
-  // the .blob's brow ridge and inner-brow bulges are the geometry; this is the paint that sharpens the crease between them).
-  furrowSheet: 1,
+  // THE FURROW (Task 19, the evil grin): the painted creases between the brows (the `furrow` morphs on the .blob's brow ridge and
+  // inner-brow bulges are the geometry; this is the paint that sharpens the crease between them). 1 -> 0.55 (Task 20; owner: the
+  // one-texel lines read graphic): half-strength creases, the geometry (pushed further) carries the furrow.
+  furrowSheet: 0.55,
+  // Task 20 (push the evil grin further): a knitted brow also presses the upper lid down, so the evil grin's eye is a thinner slit
+  // than the grin's (sheet: 12 lit texels for both eyes against the grin's 19; more than ~0.05 cuts the 6x5-texel eye to a dot).
+  furrowLidTop: 0.03,
 };
 
 const key = (t: number, channels: ExpressionClip['keys'][number]['channels'], ease?: 'smooth') =>
@@ -76,6 +83,10 @@ const GRIN: ExpressionClip = {
     // Task 18 (owner: "when he grins it should be a bit cartoonish and exaggerated"): the head squashes (wider, shorter) as the grin
     // spreads, and the jaw opens to 0.18 rad (was 0.12): the crescent's height. It still reads as a grin, not surprise: the
     // corners ride 3 cm up into the cheek rolls, the eyes are slits under a V brow (docs/dev-notes/.../cartoon/).
+    // Task 20 (owner: "this dark gap ... something a little too chipmunky"): gape 0.25 -> 0.12 (0.072 rad) and squash 1 -> 0.5. The
+    // grin opens with the LIPS now (the .blob's smile morphs lift the upper lip and pull the lower one down off the lower row), so
+    // the two rows of teeth fill the opening and the dark is a thin band between them; half the squash is half the jowls
+    // (docs/dev-notes/.../teeth-rows/). The kit's teeth are laid out for this pose (goblin_teeth.py GRIN_*).
     key(0.3, { gape: 0.06, smile: 0.7, browDown: 0.4, squint: 0.3, squash: 0.25 }, 'smooth'),
     key(0.6, { gape: 0.12, smile: 1, browDown: 0.8, squint: 0.8, squash: 0.5 }, 'smooth'),
   ],
@@ -84,13 +95,15 @@ const GRIN: ExpressionClip = {
 /** The EVIL grin (Task 19; owner on PR #48: "a variant like an 'evil grin' where the brows angle more inward to produce a furrow"):
  *  the grin's mouth on the grin's timing, key for key, with the brows driven all the way down (browDown 1, the grin's 0.8), a
  *  FURROW between them (furrow 1: the brow ridge's V pulled deeper and the inner-brow bulges with a crease between them, painted
- *  creases on the sheet) and the eyes a touch narrower (squint 0.9, the grin's 0.8). `grin` stays as it was. */
+ *  creases on the sheet) and the eyes narrower (squint 0.9, the grin's 0.8). Task 20 (owner: "can you push the evil grin further"):
+ *  a SNEER on top of the grin's mouth (the upper lip curled off the fangs, lopsided, the corners hiked), the furrow's geometry pushed
+ *  further, its paint softer, and the knitted brow pressing the lid down (furrowLidTop). */
 const EVIL_GRIN: ExpressionClip = {
   name: 'evil-grin',
   keys: [
     key(0, {}),
-    key(0.3, { gape: 0.06, smile: 0.7, browDown: 0.5, squint: 0.35, squash: 0.25, furrow: 0.5 }, 'smooth'),
-    key(0.6, { gape: 0.12, smile: 1, browDown: 1, squint: 0.9, squash: 0.5, furrow: 1 }, 'smooth'),
+    key(0.3, { gape: 0.06, smile: 0.7, browDown: 0.5, squint: 0.4, squash: 0.25, furrow: 0.5, sneer: 0.4 }, 'smooth'),
+    key(0.6, { gape: 0.12, smile: 1, browDown: 1, squint: 0.9, squash: 0.5, furrow: 1, sneer: 1 }, 'smooth'),
   ],
 };
 

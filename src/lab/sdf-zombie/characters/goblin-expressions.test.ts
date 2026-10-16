@@ -122,19 +122,28 @@ describe('the evil grin: the grin\'s mouth, knitted brows (Task 19)', () => {
   const peak = (name: string) => actuate(expressionAt(GOBLIN_EXPRESSIONS[name]!, 99), authored, GOBLIN_EXPRESSION_TUNING);
   const grin = peak('grin'), evil = peak('evil-grin'), scowl = peak('scowl');
 
-  it('has the grin\'s mouth exactly: the same gape, smile, squash and lip curl, on the same timing', () => {
+  // Task 20 (owner: "can you push the evil grin further"): the grin's mouth plus its own SNEER (the upper lip curled off the fangs,
+  // lopsided, the corners hiked); the grin has none.
+  it('has the grin\'s mouth (the same gape, smile, squash and lip curl, on the same timing) plus a full sneer', () => {
     for (const c of ['gape', 'smile', 'squash', 'lipCurl'] as const) expect(evil.morphs[c], c).toBe(grin.morphs[c]);
     expect(evil.jawGape).toBe(grin.jawGape);
     expect(GOBLIN_EXPRESSIONS['evil-grin']!.keys.map(k => k.t)).toEqual(GOBLIN_EXPRESSIONS.grin!.keys.map(k => k.t));
+    expect(evil.morphs.sneer).toBe(1);
+    expect(grin.morphs.sneer).toBe(0);
+    for (const name of ['smile', 'scowl', 'shout', 'surprise', 'neutral']) expect(peak(name).morphs.sneer, name).toBe(0);
   });
 
-  it('brows all the way down, a full furrow, the eyes a touch narrower than the grin\'s', () => {
+  it('brows all the way down, a full furrow, the eyes thinner than the grin\'s', () => {
     expect(evil.morphs.browDown).toBe(1);
     expect(evil.morphs.furrow).toBe(1);
     expect(evil.morphs.squint).toBeGreaterThan(grin.morphs.squint);
     expect(evil.morphs.squint).toBeLessThanOrEqual(1);
-    expect(evil.sheet.browFurrow).toBeGreaterThan(0.5);
-    expect(lit(evil.sheet)).toBeLessThanOrEqual(lit(grin.sheet));
+    // Task 20: the painted creases SOFTER (owner: graphic one-texel lines): half strength, the geometry carries the furrow
+    expect(evil.sheet.browFurrow).toBeGreaterThan(0.4);
+    expect(evil.sheet.browFurrow).toBeLessThan(0.7);
+    // and the knitted brow presses the upper lid down a little more than browDown alone (furrowLidTop)
+    expect(evil.sheet.eyeLidTop).toBeGreaterThan(grin.sheet.eyeLidTop);
+    expect(lit(evil.sheet)).toBeLessThan(lit(grin.sheet)); // measured 12 vs 19 texels (both eyes; neutral 57)
   });
 
   it('the grin itself is unchanged: no furrow, no painted furrow', () => {
