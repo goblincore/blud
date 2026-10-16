@@ -383,7 +383,8 @@ describe('goblin-cinematic mesh teeth (Tasks 14, 17, 20): the kit\'s teeth follo
   // skin: skin that faces the camera within 2 mm behind the tooth, i.e. a tooth showing through a lip rather than in the opening.
   const render = (b: typeof bound, posedBody: typeof body, yaw: number, res = 0.001) => {
     const fwd: Vec3 = [Math.sin(yaw), 0, Math.cos(yaw)], right: Vec3 = [Math.cos(yaw), 0, -Math.sin(yaw)];
-    const X0 = -0.05, Y1 = 1.16, NX = 100, NY = 60;
+    // the window follows the mouth (x 0, z ~0.10) round as the view turns
+    const X0 = -0.05 - 0.10 * Math.sin(yaw), Y1 = 1.16, NX = 100, NY = 60;
     const depth = new Float64Array(NX * NY).fill(-1e9), row = new Uint8Array(NX * NY);
     for (const t of teeth) {
       const f = kitFrames(body, b, 0).get(t.bone)!, h = kitHead.get(t.bone)!;
@@ -431,11 +432,23 @@ describe('goblin-cinematic mesh teeth (Tasks 14, 17, 20): the kit\'s teeth follo
     expect(n.lower / open).toBeGreaterThan(0.25);
   });
 
-  // "Not clipping or whatever" (owner): no tooth shows through a lip or the cheek at any yaw, only in the opening.
-  it('no tooth lies on the outer skin at the grin, front, three-quarter (both sides) or profile', () => {
+  // "Not clipping or whatever" (owner): no tooth shows through a lip or the cheek at any yaw, only in the opening. And the shout,
+  // whose wide-open jaw carries the lower row away from the skull's flesh (the outer lower pair sits back and short for it: set
+  // flush with its neighbours its crowns came out through the mouth-corner balls; 49-71 skin pixels in the 0.6 mm render).
+  it('no tooth lies on the outer skin at the grin (front, three-quarter both sides, profile), the evil grin or the shout', () => {
     for (const yaw of [0, 0.785, -0.785, 1.57]) {
       const n = render(grinBound, grinBody, yaw);
-      expect(n.poke / Math.max(1, n.upper + n.lower), `yaw ${yaw}: ${JSON.stringify(n)}`).toBeLessThan(0.01);
+      if ((globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env.TEETH_PRINT) console.log(`grin yaw ${yaw}`, n);
+      expect(n.poke / Math.max(1, n.upper + n.lower), `grin, yaw ${yaw}: ${JSON.stringify(n)}`).toBeLessThan(0.01);
+    }
+    for (const name of ['evil-grin', 'shout']) {
+      const a = actuate(expressionAt(GOBLIN_EXPRESSIONS[name]!, 99), compileSheet(doc)!, GOBLIN_EXPRESSION_TUNING);
+      const b = withGape(a.jawGape, a.morphs), pb = applyRig(body, b, 0);
+      for (const yaw of [0, 0.785]) {
+        const n = render(b, pb, yaw);
+        expect(n.poke / Math.max(1, n.upper + n.lower), `${name}, yaw ${yaw}: ${JSON.stringify(n)}`).toBeLessThan(0.015);
+        expect(n.upper + n.lower, `${name}, yaw ${yaw}: the teeth are in the window`).toBeGreaterThan(300);
+      }
     }
   });
 

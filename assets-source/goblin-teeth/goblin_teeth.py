@@ -128,7 +128,7 @@ FAN = 0.35
 def placed(x, upper, reach=0.0, root=0.004, dz=0.0, r=0.005, flat=0.7):
     """Root `a` and tip `b` (rest frame) of a tooth centred at x: an upper tooth from `root` above the ridge's underside down to the
     band's top edge (`reach` further, e.g. a fang crossing the band), a lower one from `root` below the lip's top up to the band's
-    bottom edge. The axis leans with the smile line by FAN (the side teeth fan out a little with the crescent), with a small rake."""
+    bottom edge (`reach` further up). A negative reach shortens a tooth. The axis leans with the smile line by FAN (the side teeth fan out a little with the crescent), with a small rake."""
     e = 0.002
     slope = (smile_y(x + e) - smile_y(x - e)) / (2 * e) * FAN
     n = (-slope, 1.0)
@@ -143,7 +143,7 @@ def placed(x, upper, reach=0.0, root=0.004, dz=0.0, r=0.005, flat=0.7):
     else:
         z = min(lip_z(x) - 0.0105, ridge_z(x) - 0.0045) + dz
         bot = lip_top(x) - root
-        top = smile_y(x) - band(x) - reach
+        top = smile_y(x) - band(x) + reach
         h = top - bot
         a = (x - n[0] * h * 0.5, bot, z - 0.0015)
         b = (x + n[0] * h * 0.5, top, z + 0.0015)
@@ -172,7 +172,9 @@ UPPER = [
     dict(x=0.0340, r=0.0052, flat=0.68, swell=0.14, swellAt=0.5, taper=0.5, tipR=0.66, bend=0.03, bendX=0.05, twist=12, lean=-9, round=0.8, yellow=0.16, dirt=0.50),
 ]
 LOWER = [
-    dict(x=-0.0345, r=0.0049, flat=0.74, swell=0.12, swellAt=0.35, taper=0.55, tipR=0.60, bend=0.05, bendX=0.0, twist=-14, lean=8, round=0.6, yellow=0.16, dirt=0.50),
+    # the outer pair sits a little further back (dz): on a wide gape the lower lip's ends come forward past it, and set flush with
+    # its neighbours its crown came out through the lip's end in the shout and the scowl
+    dict(x=-0.0345, dz=-0.004, reach=-0.004, r=0.0049, flat=0.74, swell=0.12, swellAt=0.35, taper=0.55, tipR=0.60, bend=0.05, bendX=0.0, twist=-14, lean=8, round=0.6, yellow=0.16, dirt=0.50),
     # the right lower CANINE: a small tusk leaning out, its point standing into the band
     dict(x=-0.0255, r=0.0049, flat=0.80, swell=0.16, swellAt=0.25, taper=1.0, tipR=0.14, bend=0.10, bendX=-0.25, twist=10, lean=10, reach=0.0030, yellow=0.12, dirt=0.40),
     dict(x=-0.0160, r=0.0054, flat=0.60, swell=0.10, swellAt=0.3, taper=0.5, tipR=0.64, bend=0.04, bendX=0.0, twist=-18, lean=-6, round=0.6, chip=dict(t=0.88, tilt=20, roll=30), yellow=0.06, dirt=0.40),
@@ -181,9 +183,9 @@ LOWER = [
     dict(x=0.0160, r=0.0053, flat=0.62, swell=0.12, swellAt=0.3, taper=0.55, tipR=0.62, bend=0.04, bendX=0.04, twist=22, lean=8, round=0.8, yellow=0.14, dirt=0.45),
     # the left lower CANINE
     dict(x=0.0255, r=0.0048, flat=0.80, swell=0.15, swellAt=0.25, taper=1.0, tipR=0.16, bend=0.10, bendX=0.25, twist=-8, lean=-10, reach=0.0025, yellow=0.08, dirt=0.35),
-    dict(x=0.0345, r=0.0048, flat=0.76, swell=0.14, swellAt=0.35, taper=0.55, tipR=0.62, bend=0.04, bendX=0.02, twist=16, lean=-6, round=0.7, yellow=0.18, dirt=0.55),
+    dict(x=0.0345, dz=-0.004, reach=-0.004, r=0.0048, flat=0.76, swell=0.14, swellAt=0.35, taper=0.55, tipR=0.62, bend=0.04, bendX=0.02, twist=16, lean=-6, round=0.7, yellow=0.18, dirt=0.55),
 ]
-_DEF = dict(chip=None, bump=0.00020, ridge=0.00010, reach=0.0, length=1.0)
+_DEF = dict(chip=None, bump=0.00020, ridge=0.00010, reach=0.0, length=1.0, dz=0.0)
 
 
 def teeth():
@@ -191,7 +193,7 @@ def teeth():
     for row, specs, upper in (('u', UPPER, True), ('l', LOWER, False)):
         for k, t in enumerate(specs):
             spec = {**_DEF, **t}
-            spec['a'], spec['b'] = placed(spec['x'], upper, spec['reach'], root=0.008 if upper else 0.004, r=spec['r'], flat=spec['flat'])
+            spec['a'], spec['b'] = placed(spec['x'], upper, spec['reach'], root=0.008 if upper else 0.004, dz=spec['dz'], r=spec['r'], flat=spec['flat'])
             spec['name'] = 'tooth_%s%02d' % (row, k)
             out.append(spec)
     return out
