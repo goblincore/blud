@@ -18,6 +18,7 @@ import zombieBlobSrc from './characters/zombie.blob?raw';
 import goblinBlobSrc from './characters/goblin.blob?raw';
 import goblinHomeBlobSrc from './characters/goblin-home.blob?raw';
 import goblinCinematicBlobSrc from './characters/goblin-cinematic.blob?raw';
+import goblinCinematicHomeBlobSrc from './characters/goblin-cinematic-home.blob?raw';
 import clownBlobSrc from './characters/clown.blob?raw';
 import clownAltBlobSrc from './characters/clown-alt.blob?raw';
 import mouseBlobSrc from './characters/mouse.blob?raw';
@@ -161,6 +162,15 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     kit: '/assets/lab/goblin-cinematic-kit.gltf',
     face: ZOMBIE_FLAT,
     profile: motionProfileFor('goblin-cinematic'),
+  },
+  // The cinematic goblin AT HOME (emergence in the Flat, plan Task 4): goblin-cinematic.blob (the face rig) plus goblin-home's cloth
+  // block and bare feet, at the goblin's 1.70 m (characters/goblin-cinematic-home.test.ts guards the copy). No kit, as goblin-home: the
+  // armour stays off at home, which also leaves out the cinematic's mesh teeth (they live in its 1.30 m kit). The cinematic's gait,
+  // poses and expressions (motion-profile.ts, pose-library.ts, expression-library.ts list it under its own name).
+  'goblin-cinematic-home': {
+    name: 'goblin-cinematic-home', src: goblinCinematicHomeBlobSrc,
+    face: ZOMBIE_FLAT,
+    profile: motionProfileFor('goblin-cinematic-home'),
   },
   clown: {
     name: 'clown', src: clownBlobSrc,

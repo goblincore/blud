@@ -34,6 +34,8 @@ exports[`packBody byte pin > goblin.blob packs the pinned bytes 1`] = `"76d8bdc7
 
 exports[`packBody byte pin > goblin-cinematic.blob packs the pinned bytes 1`] = `"41ba4e6df21e9e19"`;
 
+exports[`packBody byte pin > goblin-cinematic-home.blob packs the pinned bytes 1`] = `"453eedc5ff443034"`;
+
 exports[`packBody byte pin > goblin-home.blob packs the pinned bytes 1`] = `"dd36ac3cfef903ac"`;
 
 exports[`packBody byte pin > juggernaut.blob packs the pinned bytes 1`] = `"6eaa93748006d298"`;
