@@ -10,6 +10,37 @@
 
 ## In flight / next
 
+**The goblin's face moves** (owner, 2026-10-13) — [characters](docs/tasks/characters.md)
+- [~] **Built 2026-10-13/14, owner look pending.** A jaw bone with its own hinge (`hinge=0.06` at the lip line), the mouth opening at the
+  lip line, 11 jagged teeth with two fangs, and keyed expression clips (neutral, grin, scowl, shout, plus a blink) driving the jaw and the
+  generated face sheet. **Task 13 (2026-10-15, owner): all of it lives on the CINEMATIC variant `goblin-cinematic` (bare eyes, no
+  sunglasses); the base `goblin` is back to its pre-expression head and cost (`f81e5b10`).** Judged in the lab
+  (`?character=goblin-cinematic`, panel section "expression"; `BLOB_EXPR=grin npm run blob:shot -- goblin-cinematic`;
+  `scripts/goblin-expression-sheet.sh`). [Notes and the expression sheet](docs/dev-notes/2026-10-13-goblin-expressions/NOTES.md) ·
+  [spec](docs/superpowers/specs/2026-10-13-goblin-expressions-design.md) · [plan](docs/superpowers/plans/2026-10-13-goblin-expressions.md).
+  **Task 12 (2026-10-15, owner feedback on the sheet):** brighter teeth (light ivory, a faint glow; tooth/gap luma 2.9 -> 9.4 front)
+  and per-prim face MORPHS (`morph=<channel>:<terms>` in `.blob`, pure `morph.ts`, applied in `applyRig`; neutral packs bit-identically):
+  on the grin the mouth opens as an upturned U, the chin widens ~1 cm a side, the cheeks bunch ([frames](docs/dev-notes/2026-10-13-goblin-expressions/morphs/)).
+  Open for the owner: the new grin (the corner knob at 45 degrees, how much chin); the shout's box mouth (gape morphs tried, dropped);
+  surprise and sneer; the screen-lab wiring after PRs #46/#47. Cost (the cinematic goblin only, since Task 13): +47 ms a frame on a face close-up in the lab (54 -> 101; the buried teeth and interior are 30 of it), not trimmed; Task 12 added nothing measurable, and skipping the buried mouth at rest would save ~29 ms (sketched, owner's call).
+  **Task 14 (2026-10-15, owner): the teeth are MESH** in `goblin-cinematic-kit.wam` (11 sweeps on `skull`/`jaw`; the SDF tooth prims
+  are gone); rig-bind `kitFrames` gives a kit's jaw bone the SDF jaw's exact transform (hinge, gape, head). Whiter and sharper (tooth/gap
+  luma 10.7 -> 21.5 front), thinner than the SDF pegs read, lower row barely shows in the shout; face close-up cost about -20 to -28 ms at rest and -31 ms on the grin (quiet boots; the machine was noisy). Owner look pending
+  ([notes](docs/dev-notes/2026-10-13-goblin-expressions/NOTES.md), [frames](docs/dev-notes/2026-10-13-goblin-expressions/mesh-teeth/)).
+  **Task 15 (2026-10-15, owner: the grin "reads more like surprise"): the grin smiles with its EYES.** A `squint` channel (the sheet's
+  eye gets an arched cheek lid; browDown lowers a heavy inward-slanted upper lid), face-block `morph <tag>` lines (cheeks rise 5-9 mm,
+  the brow ridge drops), the grin's jaw down to 0.12 rad with a wider mouth (lower lip 0.072 -> 0.104 m); new `smile` and `surprise`
+  clips. Grin eye 24% of neutral. Owner look pending ([clip and frames](docs/dev-notes/2026-10-13-goblin-expressions/smile/)).
+  **Task 16 (2026-10-15): the brow ridge moves; the grin's knob and cheek ball melt.** One-sided morphs (`browDown+`/`browDown-`) and
+  `blend*k`; the ridge knits into a V (19 mm of travel by the nose between surprise and scowl); the dark crease lines were the skin
+  noise's rest anchor (fixed: `morphedRest`); the jaw's own noise seam at a gape is open. Teeth (Part A) moved to a Blender task.
+  Owner look pending ([clip and frames](docs/dev-notes/2026-10-13-goblin-expressions/polish/)).
+  **Task 19 (2026-10-15, owner): an `evil-grin` clip beside the unchanged `grin`**: a `furrow` channel (painted creases, inner-brow bulges, a deeper brow V); scowl gets it too. Owner look pending ([clip and stills](docs/dev-notes/2026-10-13-goblin-expressions/evil-grin/)).
+  **Task 20 (2026-10-16, owner: the grin's dark gap, "too chipmunky", "push the evil grin further")**: two big rows of teeth (8+8,
+  generated headless in Blender), the grin opens with the lips (0.072 rad; dark 0.48 -> 0.21 of the opening), less puff and half the
+  squash, and the evil grin gets a lopsided `sneer`, a deeper furrow with softer paint and thinner eyes. Owner look pending
+  ([clip and stills](docs/dev-notes/2026-10-13-goblin-expressions/teeth-rows/)).
+
 **The Flat's room in the engine** (owner, 2026-10-11) — [levels](docs/tasks/levels.md) (4o)
 - [~] **Slice 1 built 2026-10-11 (the owner liked it); the Giger iMac built the same day, owner look pending** (alpha-blended shell; the WGSL shell is a later spike). A walkable `?level=flat`: the last-stage room from the
   look-dev (stone shell, Giger layer, hero props, the iMac) through the Blender level route, grown into a small apartment (2026-10-11): an arched entry hall with the front door, and a bathroom with a white claw-foot tub, toilet, sink and a dark-glass mirror; 50 draws, about 423k triangles, about 9 to 10 ms a frame measured (cheaper than a Night Train carriage; no pass needed).

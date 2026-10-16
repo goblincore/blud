@@ -109,6 +109,26 @@ export interface FaceSheetParams {
    */
   eyeSquash: number;
   /**
+   * Eyelid closure, 0 (open) to 1 (shut): squeezes each eye's height, so a blink is a bright disc thinning to a slit. The
+   * EXPRESSION layer's blink channel (expression.ts) writes it. A new param instead of wiring `eyeSquash` in: that one is declared
+   * and defaulted but generateFaceSheet has never read it (the eye uses a fixed 1.25), so reading it now would change every
+   * authored eye, the goblin's 1.70 included. Default 0 leaves every character's sheet bit-identical.
+   */
+  eyeLid: number;
+  /**
+   * The cheek pushing the LOWER lid up (goblin expressions Task 15, the smile's eyes), 0 (none) to 1: the eye's lower edge is
+   * cut by an ARCHED lid, highest in the middle, so the lit eye becomes a dome (the "^ ^" of a smiling eye) and a faint crease
+   * (the cheek's top) darkens the skin just under it. `eyeLid` closes both lids evenly; this moves only the lower one. The
+   * expression layer's `squint` channel writes it. Default 0 leaves every character's sheet bit-identical.
+   */
+  eyeCheek: number;
+  /**
+   * A heavy UPPER lid (Task 15, the evil grin's and the scowl's glare), 0 (none) to 1: the eye's top is cut by a straight lid that
+   * sits lower at the INNER corner (the brow pressing down and in), so the eye reads as a narrowed, angry almond rather than a
+   * squashed disc (`eyeLid`, the blink) or a smiling dome (`eyeCheek`). Default 0 leaves every sheet bit-identical.
+   */
+  eyeLidTop: number;
+  /**
    * A dark pupil inside the bright eye, as a fraction of eye radius.
    *
    * **This fights the glow, and usually loses.** The shader's emissive mask is
@@ -144,6 +164,18 @@ export interface FaceSheetParams {
   browHeavy: number;
   /** Brow slant in degrees. Positive angles the inner ends DOWN — a scowl. */
   browAngle: number;
+  /**
+   * How far the painted brow slides DOWN toward the eye, in sheet uv (negative raises it). Task 15: a squint and a scowl pull the
+   * brow down; a surprised face lifts it. Default 0 leaves every sheet bit-identical.
+   */
+  browDrop: number;
+  /**
+   * A FURROW between the brows (goblin expressions Task 19, the evil grin's knit brows), 0 (none) to 1: two short dark vertical
+   * creases either side of the midline, from the brows' inner ends down to the nose bridge (the "11" a frown cuts above the nose),
+   * and the painted brows' inner ends pulled down toward them. The
+   * expression layer's `furrow` channel writes it. Default 0 leaves every character's sheet bit-identical.
+   */
+  browFurrow: number;
   /** Mouth width, fraction of sheet width. */
   mouthWidth: number;
   /** Vertical mouth position. */
@@ -227,6 +259,9 @@ export const DEFAULT_SHEET: FaceSheetParams = {
   projSpherical: 0,
   faceForward: 1,
   eyeSquash: 1.25,
+  eyeLid: 0,
+  eyeCheek: 0,
+  eyeLidTop: 0,
   eyePupil: 0,
   eyeRise: 0.42,
   eyeTilt: 8,
@@ -234,6 +269,8 @@ export const DEFAULT_SHEET: FaceSheetParams = {
   eyeGlintSize: 0.30,
   browHeavy: 0.55,
   browAngle: 14,
+  browDrop: 0,
+  browFurrow: 0,
   mouthWidth: 0.40,
   mouthRise: 0.72,
   mouthCurve: -0.25,
@@ -314,10 +351,22 @@ export function generateFaceSheet(
       // Brow: a slanted bar above the eye line. The CREASE under it does the
       // work, same lesson as face.ts's geometric brow.
       if (p.browHeavy > 0) {
-        const browY = eyeY - 0.085 - (sx - eyeDX) * browSlant;
+        let browY = eyeY - 0.085 - (sx - eyeDX) * browSlant + p.browDrop;
+        // The furrow (Task 19) pulls the inner ends down toward the creases, most at the inner end, nothing past the eye's centre.
+        // Skipped at 0 (bit-identical sheets).
+        if (p.browFurrow > 0) browY += p.browFurrow * 0.03 * Math.min(Math.max((eyeDX - sx) / 0.08, 0), 1);
         const d = Math.abs(y - browY);
         const inSpan = falloff(Math.abs(sx - eyeDX * 0.95), 0.115, 0.05);
         v -= p.browHeavy * 0.30 * falloff(d, 0.030, 0.028) * inSpan;
+      }
+
+      // The furrow's creases (Task 19): two short vertical dark lines either side of the midline, from the brows' inner ends down to
+      // the top of the nose bridge (eyeY - 0.03, where the nose's ridge starts). A crease, not a gash: each line is about a texel wide
+      // on the 64 sheet and fades out at both ends. (A lighter strip between them read as a raised tab on the GPU: dropped.)
+      if (p.browFurrow > 0) {
+        const top = eyeY - 0.125, bot = eyeY - 0.025;
+        const span = falloff(Math.abs(y - (top + bot) / 2), (bot - top) / 2, 0.025);
+        v -= p.browFurrow * 0.34 * falloff(Math.abs(sx - 0.026), 0.010, 0.010) * span;
       }
 
       // Eyes: the BRIGHT feature, because brightness is what the shader's
@@ -326,14 +375,36 @@ export function generateFaceSheet(
       // cannot push the surrounding tone past white and smear the glow.
       if (p.eyeSize > 0) {
         const ey = eyeY + (sx - eyeDX) * tilt;
-        const d = Math.hypot(sx - eyeDX, (y - ey) * 1.25);
+        const lidH = Math.max(1 - p.eyeLid, 0.08);
+        const d = Math.hypot(sx - eyeDX, ((y - ey) * 1.25) / lidH);
         // Soft edge scaled to the EYE, not to the texel grid. An absolute
         // `soft * 2.5` (~0.059 uv) is wider than a small eye's own radius, so
         // the eye is all edge and never reaches full brightness anywhere —
         // which puts it under the shader's 0.88 glow threshold and the eyes
         // simply do not light. Capping the edge at a third of the radius keeps
         // a solid core no matter how small the eye is authored.
-        const k = falloff(d, p.eyeSize, Math.min(soft * 2.5, p.eyeSize * 0.33));
+        const edge = Math.min(soft * 2.5, p.eyeSize * 0.33);
+        let k = falloff(d, p.eyeSize, edge);
+        // The cheek's lower lid (Task 15). In the eye's own units (ux across, -1..1; vy down, +1 = its lower edge) the lid sits at
+        // lidV, which rises with eyeCheek and is highest in the middle (an arch), so what is left of the eye is a dome. A crease
+        // follows just under the lid: the top of the risen cheek. Skipped entirely at 0 (bit-identical sheets).
+        // The heavy upper lid (Task 15) is the same idea from above: a straight lid, lower at the inner corner (ux < 0 is toward
+        // the nose, because sx is mirrored), so the eye narrows into an angry almond.
+        if (p.eyeCheek > 0 || p.eyeLidTop > 0) {
+          const semiH = (p.eyeSize * lidH) / 1.25;
+          const ux = (sx - eyeDX) / p.eyeSize;
+          const vy = (y - ey) / semiH;
+          if (p.eyeCheek > 0) {
+            const lidV = 1 - 1.6 * p.eyeCheek * (1 - 0.9 * Math.min(ux * ux, 1));
+            k *= falloff(vy, lidV, edge / semiH);
+            const crease = falloff(Math.abs(vy - lidV - 0.45), 0.22, 0.35) * falloff(Math.abs(ux), 1.05, 0.35);
+            v -= p.eyeCheek * 0.22 * crease;
+          }
+          if (p.eyeLidTop > 0) {
+            const topV = -1 + 1.5 * p.eyeLidTop * (1 - 1.1 * Math.max(-1, Math.min(1, ux)));
+            k *= falloff(-vy, -topV, edge / semiH);
+          }
+        }
         v = v * (1 - k) + p.eyeGlow * k;
         // Catchlight: a small bright dot in the upper-outward corner, so the
         // eye reads as a painted ball rather than an empty socket. Mixed in
@@ -421,4 +492,23 @@ export function generateFaceSheet(
   }
 
   return { pixels, size, mean: total / (size * size * 255) };
+}
+
+/**
+ * The sheet as the bytes a three.js RGBA DataTexture takes: four equal channels (the shader reads `tex.rgb`, so a one-channel
+ * upload renders the head blood red; see lab-main's loadGeneratedFace), opaque, with the rows FLIPPED because a DataTexture is not
+ * given three's flipY at upload. generateFaceSheet keeps writing top-left rows. Pass `out` to refill a texture's buffer in place.
+ */
+export function sheetToRgba(gen: GeneratedSheet, out?: Uint8Array): Uint8Array {
+  const n = gen.size;
+  const rgba = out ?? new Uint8Array(n * n * 4);
+  for (let y = 0; y < n; y++) {
+    const src = (n - 1 - y) * n;
+    for (let x = 0; x < n; x++) {
+      const v = gen.pixels[src + x]!;
+      const o = (y * n + x) * 4;
+      rgba[o] = v; rgba[o + 1] = v; rgba[o + 2] = v; rgba[o + 3] = 255;
+    }
+  }
+  return rgba;
 }

@@ -447,6 +447,7 @@ function partToPrim(p: BlobPart): PrimDef {
       ...(p.core ? { core: true } : {}),
       ...(p.rigid ? { rigid: true } : {}),
       ...(p.when ? { when: p.when } : {}),
+      ...(p.morphs.length > 0 ? { morphs: p.morphs } : {}),
       ...(p.kind === 'shell'
         ? {
             shell: {
@@ -471,6 +472,21 @@ function partToPrim(p: BlobPart): PrimDef {
     } satisfies PrimDef;
 }
 
+/** The face block's `morph <tag> ...` lines (Task 15) attached to the generated face prims by tag. A tag the face does not
+ *  generate (an unknown name, or `brow`/`nose` turned off by its numbers) is an error at the morph line. */
+function withFaceMorphs(prims: ReturnType<typeof facePrims>, doc: BlobDoc): PrimDef[] {
+  if (doc.faceMorphs.length === 0) return prims;
+  for (const f of doc.faceMorphs) {
+    if (!prims.some(p => p.tag === f.tag))
+      throw new BlobError(`face morph: no generated face prim "${f.tag}" (this face has ${prims.map(p => p.tag).join(', ')})`,
+        f.line, f.col);
+  }
+  return prims.map(p => {
+    const f = doc.faceMorphs.find(m => m.tag === p.tag);
+    return f ? { ...p, morphs: f.morphs } : p;
+  });
+}
+
 export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
   const bones: BoneDef[] = [
     { name: doc.rootBone, parent: null, dir: [0, 1, 0], length: doc.rootLen },
@@ -480,6 +496,7 @@ export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
       dir: dirVector(b.dir, b.pitchDeg, b.tiltDeg),
       length: b.len,
       ...(b.lenR === undefined ? {} : { lengthR: b.lenR }),
+      ...(b.hinge === undefined ? {} : { jawHinge: b.hinge }),
       side: b.side,
       mirror: b.mirror,
     } satisfies BoneDef)),
@@ -492,8 +509,8 @@ export function compileBlob(doc: BlobDoc, face = compileFace(doc)): BodyDef {
     root: [0, doc.rootHeight, 0],
     bones,
     // facePrims() tags each prim for its own tests (`tag`), which is not a PrimDef field; scaleBodyDef rejects fields it has no unit for,
-    // and nothing reads the tag off a compiled body, so it is dropped here.
-    prims: [...prims, ...facePrims(face).map(({ tag: _tag, ...p }): PrimDef => p)],
+    // and nothing reads the tag off a compiled body, so it is dropped here (after the face-block `morph <tag>` lines have used it).
+    prims: [...prims, ...withFaceMorphs(facePrims(face), doc).map(p => { const { tag: _tag, ...rest } = p as PrimDef & { tag?: string }; return rest as PrimDef; })],
     // Authored bones (a `bones` block) compile through the SAME partToPrim
     // path as body parts, then get `op: 'bone'` forced on: they are bones no
     // matter which words placed them. A line may opt into viscera with the

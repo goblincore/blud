@@ -3,6 +3,7 @@
 // Expands the authored left-side primitives and bones of a BodyDef into both sides.
 
 import type { BodyDef, BoneDef, LimbBase, LimbId, PrimDef } from './types';
+import { mirrorMorph } from './morph';
 
 /** A prim after mirror expansion: bone name is concrete, limb is a concrete cluster. */
 export interface ExpandedPrim extends Omit<PrimDef, 'limb' | 'mirror' | 'mirrorOffset'> {
@@ -130,7 +131,10 @@ export function expandMirror(def: BodyDef): ExpandedBody {
       // copies negates the authored side too, so a horn pair curves the same
       // way AND neither one curves the way the .blob asked for.
       prims.push({ ...rest, offset: [o[0], o[1], o[2]], limb: side, mirrored: true });
-      prims.push({ ...rest, offset: [-o[0], o[1], o[2]], ...(flipT ? { tip: flipT } : {}), ...(flipB ? { bend: flipB } : {}), ...(flipC ? { shell: flipC } : {}), limb: side, mirrored: true });
+      // The morphs reflect with them (morph.ts mirrorMorph): a mouth-corner pair whose smile pushes one corner OUT would push
+      // its twin inward across the mouth.
+      const flipM = rest.morphs?.map(mirrorMorph);
+      prims.push({ ...rest, offset: [-o[0], o[1], o[2]], ...(flipT ? { tip: flipT } : {}), ...(flipB ? { bend: flipB } : {}), ...(flipC ? { shell: flipC } : {}), ...(flipM ? { morphs: flipM } : {}), limb: side, mirrored: true });
       continue;
     }
 
@@ -154,6 +158,7 @@ export function expandMirror(def: BodyDef): ExpandedBody {
       ...(t ? { tip: [-t[0], t[1], t[2]] as const } : {}),
       ...(bn ? { bend: [-bn[0], bn[1], bn[2]] as const } : {}),
       ...(cn ? { shell: { ...rest.shell!, clipNormal: [-cn[0], cn[1], cn[2]] as const } } : {}),
+      ...(rest.morphs ? { morphs: rest.morphs.map(mirrorMorph) } : {}),
     });
   }
 

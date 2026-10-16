@@ -2,6 +2,8 @@
 //
 // The `.blob` document model: line records with their comments, bones, parts, stance and the BlobError type.
 
+import type { PrimMorph } from './morph';
+
 /**
  * One significant source line, with the trivia that preceded it.
  *
@@ -43,6 +45,12 @@ export interface BlobBone {
    * differ (the bride's longer sword forearm). Absent means symmetric.
    */
   lenR?: number;
+  /**
+   * `hinge=` — the `jaw` bone only: where the jaw hinges, as a fraction along the skull bone (jaw.ts JAW_HINGE.at). Absent means
+   * the shared default (0.30, tuned on the bride's skull). The goblin's lip line sits at 0.05 of its skull, 5.6 cm under the
+   * default hinge, so its jaw swung back into the throat as it opened (expression pass, Task 3b).
+   */
+  hinge?: number;
   side: number;
   mirror: boolean;
   at: number | null;
@@ -162,6 +170,8 @@ export interface BlobPart {
   strandWave: number;
   strandCycles: number;
   strandFat: number;
+  /** `morph=<channel>:<terms>` words, one per channel (goblin expressions Task 12; morph.ts). Empty = none. */
+  morphs: PrimMorph[];
   src: BlobLine;
 }
 
@@ -230,6 +240,13 @@ export interface BlobDoc {
    */
   bonesTrivia: BlobLine[];
   face: Record<string, number> | null;
+  /**
+   * `morph <tag> <channel>:<terms>...` lines in the `face` block (goblin expressions Task 15): per-prim morphs (morph.ts) on the
+   * GENERATED face prims, which no `.blob` line owns, so `morph=` cannot reach them: `head` (the cranium), `jaw` (the face block's
+   * jaw ellipsoid: the cheeks and the upper muzzle), `brow` (the brow ridge), `nose`. compileBlob attaches them to the prim with
+   * that tag. Never packed (like every morph), so a body without weights is unchanged. The lines ride `faceTrivia` for the emitter.
+   */
+  faceMorphs: Array<{ tag: string; morphs: PrimMorph[]; line: number; col: number }>;
   faceTrivia: BlobLine[];
   /**
    * A `sheet` block's parameters, or null when the character did not declare

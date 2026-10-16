@@ -12,6 +12,7 @@ const FULL_PRIM: Required<PrimDef> = {
   color: [0.1, 0.2, 0.3], gloss: 0.5, metal: true, glow: 0.3, core: true, rigid: true, when: 'dead',
   shell: { thickness: 0.002, clipNormal: [0, 1, 0], clipOffset: 0.03, rim: 0.004, warpAmp: 0.01, warpFreq: [20, 0, 40] },
   box: { round: 0.25 }, strand: { count: 5, wave: 0.2, cycles: 2, fat: 0.5 },
+  morphs: [{ channel: 'smile', sign: 1, move: [0.01, 0.02, 0.03], tip: [0.04, 0.05, 0.06], bend: [0.001, 0.002, 0.003], radius: 1.2, scale: [1.1, 1, 0.9], blend: 2 }],
 };
 
 const DEF: BodyDef = {
@@ -73,6 +74,17 @@ describe('scaleBodyDef', () => {
     }
   });
 
+  // Goblin expressions: a face morph's moves are metres (they scale), its radius/scale/blend terms are factors (they do not).
+  it('scales a face morph\'s moves and leaves its factors', () => {
+    const m = scaleBodyDef(DEF, K).prims[0]!.morphs![0]!;
+    expect(m).toEqual({ channel: 'smile', sign: 1, move: [0.02, 0.04, 0.06], tip: [0.08, 0.1, 0.12], bend: [0.002, 0.004, 0.006], radius: 1.2, scale: [1.1, 1, 0.9], blend: 2 });
+  });
+
+  it('leaves the jaw bone\'s hinge (a fraction along the skull) alone', () => {
+    const def: BodyDef = { ...DEF, bones: [...DEF.bones, { name: 'jaw', parent: 'pelvis', dir: [0, 1, 0], length: 0.08, jawHinge: 0.06 }] };
+    expect(scaleBodyDef(def, K).bones[2]).toEqual({ name: 'jaw', parent: 'pelvis', dir: [0, 1, 0], length: 0.16, jawHinge: 0.06 });
+  });
+
   it('scales the shell lengths and DIVIDES its wrinkle frequency (radians per metre)', () => {
     const s = scaleBodyDef(DEF, K).prims[0]!.shell!;
     expect(s.thickness).toBeCloseTo(0.004, 12);
@@ -110,6 +122,7 @@ describe('scaleBodyDef', () => {
       ...FULL_PRIM,
       radius: 0.2, radiusB: 0.1, blendK: 0.04, bend: [0.02, 0.04, 0.06], grooveDepth: 0.008, grooveWidth: 0.01,
       offset: [0.2, 0.4, 0.6], tip: [0.8, 1.0, 1.2], shell: expectedShell,
+      morphs: [{ channel: 'smile', sign: 1, move: [0.02, 0.04, 0.06], tip: [0.08, 0.1, 0.12], bend: [0.002, 0.004, 0.006], radius: 1.2, scale: [1.1, 1, 0.9], blend: 2 }],
     };
     const out = scaleBodyDef(DEF, K);
     expect(out.prims[0]).toEqual(expected);

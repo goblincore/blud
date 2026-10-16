@@ -12,6 +12,16 @@
 # art rather than an extracted placeholder.
 #
 # Set WAM_DIR if your checkout is elsewhere.
+#
+# POST-WAM MERGES. A kit may carry meshes WAM cannot author, merged into the
+# compiled glTF after WAM by a deterministic script (both sources committed):
+#
+#   goblin-cinematic  the TEETH (goblin expressions Task 17): sculpted in
+#                     Blender by assets-source/goblin-teeth/goblin_teeth.py ->
+#                     goblin-teeth.glb, added by scripts/merge-kit-teeth.mjs as
+#                     one skinned primitive (upper row on `skull`, lower on
+#                     `jaw`) with its own `tooth` material and vertex colours.
+#                     The .wam has no teeth; without this step the kit has none.
 set -euo pipefail
 
 NAME="${1:?usage: build-wam-kit.sh <character>}"
@@ -31,6 +41,11 @@ OUT="$REPO/public/assets/lab/$NAME-kit"
 # The sheets are review material, not assets — they would otherwise sit in
 # public/ and get served.
 rm -f "$OUT"_sheet.png "$OUT"_tex.png "$OUT"_viewer.json "$OUT"_bones.png
+
+case "$NAME" in
+  goblin-cinematic)
+    node "$REPO/scripts/merge-kit-teeth.mjs" "$OUT.gltf" "$REPO/assets-source/goblin-teeth/goblin-teeth.glb" ;;
+esac
 
 echo "wrote $OUT.gltf"
 # A kit's skeleton is a TRANSCRIPTION of the character's .blob skeleton, in

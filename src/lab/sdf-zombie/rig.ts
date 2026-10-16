@@ -3,6 +3,7 @@
 // The verlet rig solver: points, constraints, bend limits, head and guard keep-outs, and stepRig.
 
 import type { Vec3 } from './types';
+import type { MorphWeights } from './morph';
 import { add, cross, dot, len, lerp, normalize, qFromAxisAngle, qFromTo, qRotate, scale, sub } from './vec';
 
 export interface RigPoint { pos: Vec3; prev: Vec3; pinned: boolean }
@@ -65,6 +66,9 @@ export interface RigState {
    *  a read of the jaw point: the pivot moves ~2.5 cm a step at a walk, and
    *  an angle measured off a point one step stale is off by ~0.2 rad. */
   jawGape?: number;
+  /** PER-PRIM MORPH weights by face channel (morph.ts; goblin expressions Task 12), from expression.ts `actuate`: applyRig moves
+   *  every prim that declares a morph by its channel's weight. Absent, or every weight 0, changes nothing. */
+  morphs?: MorphWeights;
   /** Per-point multiplier on the rest pull (absent = 1 everywhere). A CLOTH
    *  pendulum point (the cultist's `hem`) springs to its target far more
    *  loosely than a joint, so it lags and overshoots instead of snapping. */

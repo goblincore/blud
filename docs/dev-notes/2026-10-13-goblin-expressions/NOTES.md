@@ -1,0 +1,1075 @@
+# Goblin facial expressions: notes (2026-10-13/14)
+
+Spec: [`docs/superpowers/specs/2026-10-13-goblin-expressions-design.md`](../../superpowers/specs/2026-10-13-goblin-expressions-design.md).
+Plan: [`docs/superpowers/plans/2026-10-13-goblin-expressions.md`](../../superpowers/plans/2026-10-13-goblin-expressions.md).
+Task 3b's own notes (the mouth moved to the lip line, the per-body hinge): [`grin/NOTES-grin.md`](grin/NOTES-grin.md).
+
+## Task 21 (2026-10-16): bigger evil-grin eyes, no throat disc
+
+Owner: "make the evil grin's eyes a bit bigger - they are like definitely too small ... other than that there's still this like disk
+neck throat bulge thing going on that i would like to smooth out/remove". Stills in [`final/`](final/) (columns front, 45, 90
+degrees; the 90 column is mostly the pauldron's spikes at this framing): `throat-neutral-before-after.png` and
+`throat-grin-before-after.png` (`BLOB_DIST=0.42 BLOB_TARGET_Y=1.08 BLOB_PITCH=0`), `throat-close-before-after.png` (neutral and grin,
+`BLOB_DIST=0.28 BLOB_TARGET_Y=1.11 BLOB_PITCH=-0.1`, slightly from below, the owner's angle), `throat-cpu-markers.png` (a CPU
+raymarch, shaded and with each prim its own colour), `evil-grin-eyes-before-after.png` (`BLOB_DIST=0.3 BLOB_TARGET_Y=1.2`, with
+the grin for reference), `others-after.png` (evil grin, shout, surprise at the whole-face framing).
+
+- **The eyes** (`3f462c5c`): the evil grin squinted HARDER than the grin (0.9 vs 0.8) on top of its heavier upper lid. Squint 0.9 ->
+  **0.5** (mid key 0.4 -> 0.3); browDown 1 and `furrowLidTop` 0.03 kept, so the upper lid is still the grin's plus the furrow's. With
+  less squint the lower lid arches up less: a heavy lid over a flatter lower lid, a glare rather than the grin's happy dome. Sheet
+  (lit texels, both eyes): **12 -> 23** (grin 19, neutral 57). On the GPU (red pixels on the eye close-up) the evil eye is now
+  1081 vs the grin's 1022 front-on and 693 vs 910 at 45 degrees (was 339 / 358). The sheet count alone misleads: squint 0.65 (21
+  texels) was tried first and was 0.6x the grin's on the GPU, the knitted brow ridge covering the outer end. Re-pinned: the evil eye
+  0.8x-1.4x the grin's and under half the neutral's; the evil grin squints less than the grin. `scowl` (furrow 0.8) is unchanged.
+- **The disc** (`c62cf1a6`): the CPU marker render named it: the chin mass (`blob head on jaw at=1.0 r=0.0462 wide=1.33 tall=0.56
+  ...`, a flattened ellipsoid 12 cm wide) sat with its flat underside on the 6.6 cm neck column, a concave corner in shadow under
+  it. The rim showed at neutral (gape 0), so it is geometry and shading, not the jaw's noise-anchor seam. Fix: ONE new prim on
+  the jaw, the **throat fill**, a tapered blob from inside the chin's underside down and back into the neck's front (r 32 -> 16 mm,
+  x1.5 wide, blend 12 mm, following the chin's smile), and the chin 6% narrower (wide 1.25). Measured at rest, x 0: the throat's
+  front goes 0.104 (y 1.09) -> 0.094 -> 0.085 (1.07) -> 0.077 (1.055) where it used to drop 0.104 -> 0.082 -> 0.069 in 2 cm;
+  the half-width tapers 0.060 -> 0.041 over y 1.09-1.06. The neck below y 1.04 is unchanged to 0.5 mm, so the collar is too. The
+  lips, the gape, the squash and the floor did not move, so the teeth generator's `GRIN_*` needed nothing (the buried/bared tests
+  pass as before); no Blender.
+- **What I see:** neutral, front: the jaw now narrows into the neck in a soft funnel instead of a shelf with a dark line under it;
+  45 degrees and from below: no puck, the chin slopes into the throat. Grin: the same, the lower jaw reads as one mass tapering into
+  the neck, no flat underside. Shout and surprise: the dropped jaw is a deeper mass running into the collar (it already sat on the
+  collar before); no flesh through the armour in any frame. Evil grin: slits about the grin's size under the knitted V, still mean;
+  the difference from the grin is still mostly the brows (the owner said as much).
+- **Re-pinned deliberately:** the cinematic head-profile 'chin underside' probe (the shelf that was the disc) became 'throat front
+  y1.07' (0.086) and 'throat half-width y1.075' (0.0455); the other six cinematic probes and all of the base goblin's are unchanged
+  (CLI 8/8 ok). pack-golden `goblin-cinematic.blob` `711d0e9b041b9a72 -> 41ba4e6df21e9e19`: exactly the old hash with the fill's line
+  deleted and the chin's `wide` put back (deleting the line alone gives `0782d4922d59abfc`, the chin); pack.test's prof row +1
+  prof-0; the morph-channel table smile 5 -> 6. Base goblin: `git diff f81e5b10 -- goblin.blob goblin-kit.wam goblin-kit.gltf
+  goblin-blob.test.ts` empty.
+- **Checks:** the targeted list (goblin-cinematic-blob, goblin-expressions, expression, blob-face-sheet, morph, rig-bind, pack,
+  pack-golden, goblin-blob, goblin-kit, bride-blob, bride-kit, character-registry, squash, blob-parse) 559 passed; `npm run
+  typecheck` clean; `npm run test:changed` 28 files, 721 passed. Captures on 5421/9421 only, one at a time; five GPU rounds plus the
+  eye variants, most shape iteration on the CPU render.
+- **Open:** the jaw's noise-anchor seam (Task 16) is unchanged in kind; at the grin's small gape it is not visible in these frames.
+  Cost not measured (one more head prim, a tapered blob, paid at rest).
+
+## Task 20 (2026-10-16): two big rows of teeth, a de-chipmunked grin, a stronger evil grin
+
+Owner on PR #48: "can you push the evil grin further. also when he grins there's this dark gap - i guess its because his bottom
+teeth dont cover that space ... cartoonishly his teeth would be bigger and take up the space ... there's something a little too
+chipmunky about his overall grin." Decisions: two big rows with a thin dark band between them (the emoji reference), background
+Blender is fine.
+
+**The clip:** [`teeth-rows/teeth-rows-anim.mp4`](teeth-rows/teeth-rows-anim.mp4), 12 fps, three panels: grin front, evil-grin
+front, evil-grin at yaw 0.7 (`BLOB_EXPR=<name> BLOB_EXPR_SWEEP=0:0.92 BLOB_YAW=<yaw>`, 24 frames, `BLOB_DIST=0.36 BLOB_TARGET_Y=1.17
+BLOB_PITCH=0.05`, last frame held 1.5 s). Stills in [`teeth-rows/`](teeth-rows/) (before = Task 19's head, `6e414f02`; columns
+front, 45, 90 degrees): `grin-before-after.png` and `evil-grin-before-after.png` (whole face), `mouth-before-after.png` (mouth
+close-up, `BLOB_DIST=0.3 BLOB_TARGET_Y=1.14`; grin and evil grin), `brow-before-after.png` (`TARGET_Y 1.2`), `markers-before-after.png`
+(the teeth painted magenta, the dark inside cyan, grin front), `others.png` (smile, scowl, shout, surprise, neutral after).
+
+### What was built
+
+- **Part A, the teeth** (`ed8c10b3`). `assets-source/goblin-teeth/goblin_teeth.py` now LAYS OUT the rows instead of copying the old
+  SDF teeth's 11 roots: 8 upper (two long fangs, one broken incisor) on `skull`, 8 lower (two small canines) on `jaw`, broad
+  blocky crowns (neck pinch 0.28 -> 0.10, slow tapers, root radius about half the spacing so neighbours touch). The rows are placed
+  where they show, in the grin clip's peak pose: the upper row hangs from the posed upper ridge's underside, the lower row stands
+  on the posed lower lip's MEASURED top edge (a bent bar's top climbs with its slope), the two meet along a smile line 42% up the
+  opening with a 2.6 mm dark band, and each tooth is carried back to the rest frame through the grin's kit frames (`GRIN_*`: the
+  skull frame is only shifted by the squash, the jaw frame also turned by the gape). Then each is pushed back behind the shut
+  mouth's front (`REST_FRONT`, measured), so it is buried at rest. **Headless:** `Blender -b --factory-startup -P goblin_teeth.py`
+  exports the glb itself (about 3 s, byte-reproducible); no live Blender session was touched. `scripts/build-wam-kit.sh
+  goblin-cinematic` (WAM, then the merge) reproduces the committed kit byte for byte; the armour's vertices, normals, skin
+  weights, UVs and atlas are byte-identical. 16 teeth, 3246 triangles (Task 17's 11: 3096).
+  - **The shout** (`4370d528`): checking every clip for teeth over the outer skin found the outer lower pair's crowns coming out
+    through the mouth-corner balls in the shout and the scowl (the wide-open jaw carries the lower row away from the skull flesh that
+    buries it at rest); that pair now sits 4 mm further back and 4 mm shorter. The same check found `reach` had the wrong sign on
+    the lower row (the two canines were shorter than their neighbours, not longer): fixed.
+  - **Why the rows stop at x +-0.04:** the shut mouth's corners are a pinch (the rest face's front drops from z 0.091 at x 0.045 to
+    0.058 at 0.05), so a tooth further out cannot be buried at rest; and at the grin the mouth corners' flesh covers that region
+    anyway. A fifth upper pair at +-0.0395 was built and dropped: it never showed, front or three-quarter. The rows span the
+    opening (+-0.04), which is what the opening is: it is not the 85% of the face the reference has (Task 18's notes say why).
+  - **The squash:** the teeth do not widen with the head (kitFrames moves the frames by the squash at the mouth). At the grin's
+    halved squash the mismatch at the outer teeth is about 2 mm inward; not visible.
+- **Part B, the grin opens with the lips** (`6dfe7deb`). Clip: gape 0.25 -> 0.12 (**0.072 rad**, was 0.15) and squash 1 -> 0.5. The
+  smile morphs were re-solved for posed targets at the new peak (the Task 18 follow-up's method): the upper ridge's middle 9 mm
+  higher and 20% thinner, the upper lip up 14 mm and back 6 (was 6 / 1) and only 10% wider (was 40%), the lower lip pulled DOWN
+  off the lower row (its middle's top at y 1.109, a shallower U with its ends at y 1.150 instead of 1.165 so its arms no longer
+  cover the side teeth, radius x0.75, was x1.1), the dark floor down 20 mm and back 24 (its front stood in front of the lower row;
+  at 12 mm a sliver of it still showed through the lip/chin seam as a dark line under the teeth: the marker frames caught it), the
+  chin 4 mm down (was up 2), the throat bar's ends in to x +-0.041. A wide GAPE (shout, surprise, scowl) also drops the lower lip
+  15 mm and 10 forward of the teeth, drops the floor behind them and lifts the upper lip and ridge 5-6 mm: the rows are laid out
+  for the grin, higher in the jaw than Task 17's, and without it the shout hid its lower row (with a 12 mm drop and no forward
+  move the lower crowns poked out through the lip's top as studs: fixed). The painted smile U is all but off (smileCurve 0.6 ->
+  0.04, smileWiden 0.7 -> 0.3, smileMouthOpen 0.03 -> 0): it only ever landed on the lip.
+- **Part C, less chipmunk** (`6dfe7deb`). The chipmunk was the PUFF: the wide upper-lip pad, the cheek fill's and the rolls' volume,
+  the squash's wide jowls, the chin's widening, and small teeth bunched in the middle. Now: the cheek fill x1.1 (was x1.4), the
+  rolls x1.7 (was x2.4; the crease stays), the face block's cheek mass 3% NARROWER on the smile (was 6% wider), the chin 10% wider
+  (was 15%), the upper lip 10% wider (was 40%), the squash halved. Measured at the grin's peak (front half-width, CPU):
+
+  | | rest | Task 19 grin | Task 20 grin |
+  |---|---|---|---|
+  | y 1.20 (cranium) | 0.0885 | 0.1015 (+14.7%) | **0.0950 (+7.3%)** |
+  | y 1.14 (cheeks at the mouth) | 0.0710 | 0.0880 (+24%) | **0.0790 (+11%)** |
+  | y 1.10 (lower face) | 0.0610 | 0.0800 (+31%) | **0.0725 (+19%)** |
+  | mouth (the lower lip, end to end) | 1x | x2.30 | **x2.17** |
+  | corners (the lip's ends) above rest | | 35.5 mm | **23.7 mm** (pin >= 15) |
+
+  The corner fix holds: no side hole at the front or three-quarter (one opened at yaw 0.7 below the cheek fill when the fill
+  shrank, the throat bar's end showing through; pulling the bar's ends in closed it), no hook.
+- **Part D, the evil grin** (`8c2d40e7`). `expression.ts` gained a `sneer` channel (0..1, geometry only) and an optional
+  `furrowLidTop` tuning field (the furrow presses the upper lid down too); tests first. The evil grin = the grin's mouth plus
+  **sneer 1**: the upper ridge lifts lopsided (+4 mm at the goblin's right end, +14 mm at its left, the left fang bared), the upper
+  lip 8 mm, the corners and the cheek rolls 8-10 mm. **Brows:** the brow ridge's furrow word now drops it 3 mm, dips the V 11 mm
+  (was 7) and narrows it 12% (was 8%); the inner-brow bulges come further forward, x2.1 (was x1.8). **Paint softer:** furrowSheet
+  1 -> 0.55 (the creases half as dark: the owner found the one-texel lines graphic; the geometry carries the furrow now).
+  **Eyes:** furrowLidTop 0.03 and squint 0.9 (grin 0.8): 12 lit sheet texels for both eyes against the grin's 19 (neutral 57); more
+  lid than that cuts the 6x5-texel eye to a dot (tried: 0.06-0.15 read as two red dots, not slits).
+
+### The numbers
+
+| | before (Task 19) | after |
+|---|---|---|
+| grin gape at the peak | 0.15 rad | **0.072 rad** (pin 0.05-0.08) |
+| dark / opening, GPU marker frame (front, mouth close-up) | 0.48 | **0.21** (evil grin 0.19) |
+| dark / opening, CPU z-buffered render (front, 1 mm) | 0.37 | **0.285** (pin <= 0.34; evil 0.27) |
+| tooth pixels on the marker frame | 4973 | **8209** (+65%) |
+| lower row / upper row visible (CPU, 1 mm) | 206 / 780 px | **766 / 826 px** |
+| teeth buried at rest (worst) | 1.7 mm inside | **1.7 mm inside** (pin 0.5) |
+| tooth pixels over the outer skin (CPU, 0.6 mm; of 3000-4800 tooth pixels), yaw 0 / 45 / -45 | | grin **11 / 0 / 4**, evil grin 40 / 9 / 18, shout 5 / 0 / 0, scowl 0, surprise 8 / 0 / 0 (pin < 1-1.5%) |
+| evil grin: crease depth / inner brow lowered by the furrow | 3.1-3.9 mm / 8 mm | **2.8-3.5 mm / 10.5 mm, 9.5 mm forward** |
+
+Rest face unchanged: the head-profile CLI prints exactly what it printed before (7/7 ok), weights 0 pose exactly as before (pinned),
+no prim added, so pack-golden and the pack prof rows are untouched. Base goblin: `git diff f81e5b10 -- goblin.blob goblin-kit.wam
+goblin-kit.gltf goblin-blob.test.ts` empty.
+
+### What I see
+
+- **Grin, front:** a wide mouth full of teeth: the upper row of eight (two fangs) hangs from a thin upper lip, the lower row of
+  eight stands on the lower lip, and the dark is a thin wavy band between them plus the slots beside the fangs. It reads as a toothy
+  cartoon grin, much closer to the reference's two rows than the old dark hole. The face is narrower: the jowls and the round lower
+  face are mostly gone, the cheeks still bunch a little beside the corners (the rolls, the crease kept). The upper lip above the
+  teeth is still a shadowed overhang (the goblin's overbite; at the top light it reads as a grey band).
+- **Grin, 45 degrees:** both rows show under the lip, the corner is one fold with the roll over it (no hole, no hook, no tooth
+  through the cheek). **90 degrees:** in the GPU profile the cheek hides the teeth; an orthographic CPU profile shows the front
+  upper teeth between the parted lips, in the opening; nothing pokes out of the skin.
+- **Evil grin:** clearly meaner than the grin, front and three-quarter: the brows come lower and knot over the nose in a deeper V,
+  the eyes are thin red slits under them (small: the sheet's limit), the upper lip curls up on the goblin's left baring that fang,
+  the corners ride higher. The painted creases between the brows are faint now; the furrow is mostly the knot's shading. At the
+  whole-face distance the difference is the brow and the eyes more than the sneer (the sneer is a few millimetres of lip).
+- **Smile, shout, scowl, surprise** (`others.png`): the friendly smile now bares both rows too (it shares the smile morphs, gape
+  0.048 rad); the shout and the surprise show the upper row and the lower crowns just over the dropped lower lip (small, like the
+  old "studs"); the scowl a clenched slit of upper teeth; neutral no tooth anywhere.
+- **The clip:** the rows appear as the lips part and the band opens as the gape eases in; no tooth visibly crosses another in the
+  frames I looked at (8, 14, 23).
+
+### Checks
+
+- Tests: the targeted list (goblin-cinematic-blob, goblin-expressions, expression, morph, rig-bind, pack, pack-golden,
+  blob-face-sheet, goblin-blob, goblin-kit, bride-blob, bride-kit, character-registry, squash, blob-parse) 558 passed;
+  `npm run typecheck` clean; `npm run test:changed` 28 files, 720 passed. No golden re-recorded.
+- **Re-pinned deliberately** (each says why in the test): 11 -> 16 teeth and the old-roots layout test replaced by the rows test
+  (span, packing, width, fangs) and the opening/poke render tests; "every upper tooth at 0.15 rad without the smile" became "every
+  tooth of both rows at the grin's peak" and "the upper middle six at 0.3 rad"; head width at the peak >= 6% (was >= 10%: the
+  squash halved); the chin widening within -5..+4 mm a side (was > 7 mm: the jowls); cheek rolls >= 1.7x (was 2.4x); the
+  morph-channel table (gape and sneer words); the grin's gape 0.05-0.08 rad and squash 0.4-0.6 (was <= 0.18 rad, >= 0.8); the
+  evil grin's mouth = the grin's plus sneer 1, its furrow paint 0.4-0.7, its eye smaller than the grin's.
+- Captures on 5411/9411 only, one at a time; six GPU tuning rounds (2-8-frame stills, plus single checks of the shout and the
+  painted line) and the final stills, markers and clip. Most iteration was on the CPU: a z-buffered orthographic render of the
+  posed SDF WITH the kit's teeth (scratch tool, the same method as the two new render pins) and a morph solver for posed targets.
+
+### Open items (Task 20)
+
+1. **The owner's look**, in particular: the upper lip's shadowed overhang above the upper row (the overbite; lifting it further
+   exposes the roof of the mouth), whether the evil grin's eyes are now too small, and whether the sneer should be bigger.
+2. The rows are laid out for the grin's pose: change the grin's lips, gape or squash and `goblin_teeth.py`'s `GRIN_*` constants,
+   lip curves and `LIP_TOP` table must be re-derived (the tests will say: the opening/visibility pins fail).
+3. The teeth do not widen with the squash (rigid skin); at squash 0.5 it is about 2 mm at the outer teeth. A scale on the kit's
+   skull/jaw frames would make it exact if the squash ever comes back up.
+4. The jaw's noise-anchor seam (Task 16) is unchanged; a thin line still runs back from the corner at three-quarter.
+5. Cost not re-measured: no prim added, 16 teeth instead of 11 (+150 triangles).
+
+## Task 19 (2026-10-15): an evil grin with a brow furrow
+
+Owner on PR #48: "a variant like an 'evil grin' where the brows angle more inward to produce a furrow". `grin` stays exactly as it
+was; `evil-grin` is a new clip beside it, and `scowl` gets the furrow too.
+
+**The clip:** [`evil-grin/evil-grin-anim.mp4`](evil-grin/evil-grin-anim.mp4), 12 fps, three panels: grin front, evil-grin front,
+evil-grin at yaw 0.7 (`BLOB_EXPR=<name> BLOB_EXPR_SWEEP=0:0.92 BLOB_YAW=<yaw>`, 24 frames, `BLOB_DIST=0.36 BLOB_TARGET_Y=1.17
+BLOB_PITCH=0.05`, last frame held 1.5 s). Stills: [`evil-grin/grin-vs-evil-grin-close.png`](evil-grin/grin-vs-evil-grin-close.png)
+(eye/brow close-up, `BLOB_DIST=0.3 BLOB_TARGET_Y=1.2`; front above, 45 degrees below; grin left, evil grin right),
+[`evil-grin/grin-vs-evil-grin-face.png`](evil-grin/grin-vs-evil-grin-face.png) (the same at the whole-face distance),
+[`evil-grin/scowl-before-after.png`](evil-grin/scowl-before-after.png) (scowl without and with its furrow, front).
+
+### What was built
+
+- **`expression.ts`: a `furrow` channel** (0..1, clamped, in `CHANNEL_NAMES`/`REST_CHANNELS`, handed on in `morphs`). `actuate`
+  maps it to the sheet through an optional tuning field `furrowSheet` (absent: no paint); the geometry is the character's own
+  `furrow` morph words. `sheetKey` includes `browFurrow`. Rest and weight 0 hand back the authored sheet exactly.
+- **`blob-face-sheet.ts`: `browFurrow`** (default 0; every authored sheet's FNV pin unchanged): two short dark vertical creases at
+  sheet x 0.5 +- 0.026 (one texel column each on the 64 sheet, about 5 mm either side of the midline on the goblin) from the brows'
+  inner ends down to the top of the nose ridge, fading at both ends, and the painted brows' inner ends pulled down up to 0.03 uv. A
+  first version also lightened the strip between the creases (the pinched bulge); on the GPU that read as a raised tab, so it went.
+- **`goblin-cinematic.blob`, one `both` line (2 prims):** a short upright bar at each inner brow head (r 2.8 mm, from the V's knot up
+  and a little in), buried 6 mm inside the glabella at rest; `morph=furrow:(-0.001,-0.002,0.0265)*1.8` brings it forward onto the
+  dropped brow ridge and fattens it to 5 mm, with a small blend (1.2 mm) so the pair leaves a crease where they meet at the midline.
+- **The brow ridge's face-block line** gains `furrow:bend(0,-0.014,0)*(0.92,1,1)`: on top of browDown's V the middle dips 7 mm more
+  and the bar is 8% narrower, so the brows angle down and in toward the nose.
+- **Clips** (`goblin-expressions.ts`): `evil-grin` = the grin's keys and timing with browDown 1 (grin 0.8), furrow 1 and squint 0.9
+  (grin 0.8) at the peak (0.5 / 0.5 / 0.35 at the mid key); the mouth (gape, smile, squash) is the grin's to the bit (tested).
+  `scowl` gets furrow 0.8. Tuning `furrowSheet: 1`.
+
+### The numbers (CPU, at the evil-grin clip's peak; pinned in goblin-cinematic-blob.test.ts unless noted)
+
+| | |
+|---|---|
+| crease depth (the face's front at the midline vs at x +-0.011, y 1.2475-1.2525) | **3.1-3.9 mm** (pin > 2.5) |
+| inner brow (x 0.024) ridge line, furrow 0 -> 1 | **8 mm lower** (1.2460 -> 1.2380) and **10 mm forward**; the outer end (x 0.045) 1.5 mm lower |
+| the pair at rest | at least 1 mm under the rest flesh along its length (pinned); the head-profile CLI prints exactly what it did |
+| grin (furrow 0) | every prim but the pair poses exactly as the .blob without the furrow line and word (pinned) |
+| sheet eye (texels over the glow threshold, not pinned) | neutral 57, grin 19, **evil grin 14**, scowl 37 |
+
+### What I see
+
+- **Grin vs evil grin, front** (both distances): the same crescent mouth, teeth and cheek rolls. Above it the evil grin's brows come
+  down and knot over the nose root, the knot sits lower and heavier, the eyes are narrower red slits (smaller than the grin's), and
+  two short dark vertical creases stand between the brows: the "11" of a frown. At the close-up the creases are two texel-wide dark
+  lines (the 64 sheet's grain; they read as lines, not as a slot); at the whole-face distance they still read as a small vertical
+  furrow mark between the brows. The geometric crease between the bulges is subtle from the front under the top-front key light (the
+  lit lobes either side of it show more than the valley); the paint carries the front read, the geometry the three-quarter.
+- **45 degrees / yaw 0.7:** the clearest difference. The grin's brow is a smooth ledge; the evil grin's inner brow bunches into a
+  knot over the nose root with a crease line in it, so the brow overhang ends in a frowning lump. It does not look like a hole or a
+  wound; at yaw 0.7 it can read as a slightly knobbly bump on the brow's end (a round knob more than a crease from that side).
+- **Scowl:** the same knot and a fainter pair of creases (0.8); a mild addition, it does not change the scowl's character.
+- Rounds: three GPU capture rounds (plus the scowl and the final clips). Round 1 (bulges 1 mm proud of the ridge) had no geometric
+  crease (the brow ridge's large browDown blend filled the valley); round 2 pushed them 4 mm forward and apart (crease 3.5-4 mm) and
+  dropped the paint's light strip; round 3 took 2 mm off the bulges' forward move (the knob at yaw 0.7 barely changed: most of it is
+  the ridge's deeper V). A smaller ridge blend under furrow was tried on the CPU and dropped: the whole ridge thinned and the pair
+  stood off it as separate lumps.
+
+### Checks
+
+- Tests: expression, blob-face-sheet, morph, blob-parse, goblin-cinematic-blob, goblin-expressions, rig-bind, pack, pack-golden,
+  goblin-blob, bride-blob: 507 passed. `npm run typecheck` clean. `npm run test:changed` 28 files, 715 passed.
+- **Golden re-recorded:** pack-golden `goblin-cinematic.blob` `871a9afd1a714c6b -> 711d0e9b041b9a72`, only for the furrow pair's
+  line (the .blob with that line deleted hashes to the old pin, checked; the brow's `furrow:` word is a face-block morph, never
+  packed); pack.test.ts's prof row +2 prof-0.
+- Rest profile CLI byte-identical; the base goblin's four files empty against `f81e5b10`.
+
+### Open items (Task 19)
+
+1. **The owner's look.** In particular whether the paint creases are too graphic at the close-up (one texel column each; weaker or
+   absent is `furrowSheet` < 1) and whether the inner-brow knot at three-quarter is too lumpy (it is mostly the ridge's deeper V:
+   the brow line's `furrow:bend` y).
+2. The painted brows' inner ends are pulled down, but under the ridge's shadow they barely show (as since Task 10); the "inward
+   angle" is carried by the ridge's V, the heavy inward-slanted upper lid (browDown 1) and the narrower eye.
+3. Cost not measured: two more prims buried in the head cluster at rest (straight blobs, the cheapest kind).
+
+## Task 18 (2026-10-15): a cartoon grin: head squash, cheek rolls, harder morphs
+
+Owner on PR #48: "i think we need to figure out a way to make his face distort more, like when he grins it should be a bit
+cartoonish and exaggerated", with a stock 3D-emoji evil grin as a look reference (not in the repo). Decision: harder morphs, a
+cheek-roll band and a head squash; a shader grin-warp only if this cannot get there.
+
+**The clip:** [`cartoon/goblin-cartoon-anim.mp4`](cartoon/goblin-cartoon-anim.mp4), 12 fps, 2x2: grin front, grin three-quarter
+(yaw 0.7), grin profile (yaw 1.45), surprise front (`BLOB_EXPR=<name> BLOB_EXPR_SWEEP=0:0.92`, 24 frames, `BLOB_DIST=0.36
+BLOB_TARGET_Y=1.17 BLOB_PITCH=0.05`, last frame held 1.5 s). Stills in [`cartoon/`](cartoon/): `grin-before-after.png` (neutral,
+the Task 16/17 grin, this grin; front), `grin-peak-front.png`, `grin-peak-yaw0.7.png`, `grin-peak-profile.png`,
+`surprise-peak-front.png`, `others.png` (grin mid-clip, the friendly smile, scowl, shout).
+
+### What was built
+
+- **Part A, the squash** (`squash.ts`, pure; `08c54355`). A signed channel `squash` (expression.ts, -1..1, carried in the morph
+  record) and one affine map of the whole rigid head, `x -> c + S (x - c)`, `S = diag(1 + 0.15 w, 1 - 0.08 w, 1 + 0.05 w)`, about
+  the skull bone's middle (`SQUASH_CENTRE_AT` 0.5, about the eyes) in the head's rest frame. Each head prim's endpoints move and
+  its scale and bend multiply by S: that is the EXACT affine image of the prim (the field divides the query by the prim's scale),
+  pinned on six prim kinds (squash.test.ts: every surface point lands on the squashed prim's surface to 1e-9). applyRig applies it
+  to every rigid-head prim and head bone after the morphs and before the gape and the turn, and the jaw opens about the SQUASHED
+  hinge, so the squashed head is exactly a head authored that way (rig-bind.test.ts). Weight 0 or absent takes the old path
+  untouched (bride, cinematic goblin, zombie: prims, bones, clusters, kit frames and the noise anchor bit-identical).
+  - **The kit's teeth** do not scale; they ride: `kitFrames` moves the `skull` and `jaw` frames by the squash's move at the mouth
+    (the centroid of the `on jaw` prims) and opens the jaw about the squashed hinge. Without it the teeth would sit ~9 mm low
+    and 4 mm back at the grin's squash 1. What is left is the squash's spread between the mouth centre and a tooth (pinned to the
+    exact formula): 2-4 mm sideways at the outer teeth; the row does not widen. Not visible in the frames.
+  - **The face sheet** needed nothing: the lab's projection is the posed cranium's centre and axes (`headShape`), which the squash
+    moves and scales the same way, so the painted eyes stay on the squashed face (they do, in every frame).
+  - **The noise anchor:** `morphedRest(rest, weights, head)` squashes the anchor's rest too (lab-main passes the head), or the
+  skin noise would jump by the squash's move between neighbouring prims (the Task 16 seam again; pinned: every face point maps
+  to itself at the grin, statue, jaw shut).
+- **Part B, the cheek rolls** (`goblin-cinematic.blob`, one `both` line: 2 prims). A bent bar along the nasolabial line, from
+  beside the nose wing down and out past the corner. At rest a 3 mm thread 2-4 cm inside the cheek (pinned: every point at least
+  1 mm under the rest flesh; the head-profile CLI prints exactly what it printed before); on the smile it comes 4.8 cm forward,
+  swings its far end out to x 0.07, bows out and grows 4.5x (r 13.5 mm), blend 1.5 mm: a fat roll framing the grin with a crease
+  where it meets the cheek. A jaw-side second pair was not needed: the lower lip became the fat lower band.
+- **Part C, harder morphs** (the .blob's "TASK 18" comment lists every number): the lower lip's ends out 5.2 cm and UP 4.4 cm
+  with a deep U (2.84x the neutral's width, end to end), the upper ridge's ends up 3.6 cm (the crescent's top edge curving up),
+  the throat bar widened, raised and bowed (the crescent's dark arms), the corners to the lip's ends, the chin 40% wider, the upper
+  lip 40% wider, the hook of the nose lifted 6 mm, the cheek mass rising on the smile (into the eyes), the cheek fill plugging the
+  side of the face behind the roll, and the browDown V heavier (10 mm lower, a 12 mm V). The painted smile U is deeper, wider and
+  thicker (it now lies inside the opening, and its arms darken the crescent's ends).
+- **Clips** (`goblin-expressions.ts`): grin squash 0.4 -> 1 and gape 0.2 -> 0.3 (0.12 -> 0.18 rad: the crescent's height);
+  friendly smile squash 0.5; surprise squash -0.6 (narrower, taller) with gape 0.5 -> 0.65 so it stays more than twice the
+  grin's. Scowl and shout unchanged (they take only the heavier brow).
+
+### The numbers (CPU, `applyRig` at the grin clip's peak; pinned in goblin-cinematic-blob.test.ts)
+
+| pin | wanted | got |
+|---|---|---|
+| mouth width (lower lip, outer edges) | >= 1.8x neutral | 0.0720 -> 0.2047 m, **x2.84** |
+| corner rise (the lip's ends) | >= 15 mm | **+33 mm** (morph ~+44, the gape takes ~-17, the squash ~+6) |
+| head width at the grin peak (half-width, y 1.19-1.21) | >= +10% | **+14.7%** (y 1.20: 0.0885 -> 0.1015) |
+| surprise | narrower, taller | narrower by > 5% at y 1.2, top more than 3 mm higher |
+| weights 0 / squash 0 | bit-identical | yes (prims, bones, clusters, kit frames, anchor) |
+| rest profile CLI | unchanged | byte-identical output, 7/7 ok |
+| base goblin (`git diff f81e5b10 -- goblin.blob goblin-kit.wam goblin-kit.gltf goblin-blob.test.ts`) | empty | empty |
+
+Neutral before vs after on the GPU: 2073 of 1.1 M pixels differ by more than 8/255, scattered single pixels over the whole frame
+including the armour (capture noise, not the face).
+
+### Compared with the reference (honestly)
+
+What matches: the mouth is a wide crescent whose corners swing up into fat cheek rolls with a crease round them (the reference's
+strongest cue), the head squashes wider and shorter as it grins, the eyes are slits under a heavier V brow, and the upper teeth
+hang in a dark opening. At three-quarter it reads as a big cartoon grin with jowls; in profile the roll bulges out of the cheek.
+
+What does not: (1) the dark opening spans about half the face's width at the front (the rolls frame a bit more), not the reference's
+85-90%, because the goblin's
+long hooked nose and the cheek mass own the middle of the face and the opening cannot cut into them; (2) the corners reach the
+nose tip's height, not the eyes'; (3) the teeth fill only the middle third of the crescent (eleven mesh teeth that do not widen;
+the reference has two full rows); (4) the eyes are painted slits a few texels wide, nothing like the reference's big glaring eyes;
+(5) the opening's top edge is flat in the middle (the upper lip and the nose sit there).
+
+What a shader grin-warp would add: a screen- or head-space warp could bend the whole lower face along a smile curve (the
+mouth's middle down, its corners up toward the eyes) and stretch the opening across the face's full width, which no amount of
+prim moving can do while the nose and cheek masses sit where they are; it could also widen the teeth with the mouth. It would
+cost a WGSL change and the noise/paint anchoring would have to follow it.
+
+### The Blender teeth (commits `addefccb`, `28b743d6`, unverified until these frames)
+
+They render: cream/ivory pegs with darker stained roots, visibly stouter than Task 14's cones, the two fangs longest. In the
+grin they hang from the upper edge in the middle of the crescent with dark on either side; nothing floats, nothing pokes through
+the lips at three-quarter or profile, and they follow the squash and the gape. The lower row does not show in the grin (the fat
+lower lip covers it); in the surprise two or three lower pegs stand on the floor. Neutral: no tooth shows. Their tests pass
+(buried at rest, every upper tooth bared at the grin clip's peak).
+
+### Checks
+
+- `npm run typecheck` clean (it also fixed a pre-existing bare `process.env` error in goblin-cinematic-blob.test.ts);
+  `npm run test:changed` 28 files, 696 passed; the targeted list (morph, blob-parse, blob-face-sheet, goblin-blob, goblin-kit,
+  bride-blob, bride-kit, character-registry, expression, squash, rig-bind, pack, pack-golden, goblin-cinematic-blob,
+  goblin-expressions) 534 passed. Module index regenerated (squash.ts).
+- **Golden re-recorded:** pack-golden `goblin-cinematic.blob` `2e5d52c91ee41b5a -> 871a9afd1a714c6b`, only for the cheek-roll pair's
+  two prims (the .blob with that line deleted hashes to the old pin, checked); pack.test.ts's prof row +2 (bent, 2).
+- Rounds: eight capture rounds (2-frame stills), the CPU marker render (each prim its own colour) to name what made each shape.
+
+### Follow-up: the grin's mouth corner at three-quarter (2026-10-15)
+
+Owner, on the grin's corner at 45 degrees: "this area still looks quite messed up" (a fat lower lip hooking up and round past the
+corner like a beak, a dark hole at the side between the lip's end, the roll and the cheek fill, the roll and the corner as two
+lumps, a shelf under the chin). Marker renders (a CPU raymarch of the posed grin painting each prim a fixed colour, plus a flat
+"flesh / dark interior" shade of the same pose, which reproduced the GPU's hole and hook exactly) named the causes: the **lower
+lip's ends** sat at x +-0.090 (squashed), 4.4 cm up and 2.6 cm back, which is OUTSIDE the face's side at that height (the head
+without the mouth prims ends at x ~0.08), so the band wrapped round the side; the **corner pair** followed it out there; the
+**cheek roll's** far end crossed BEHIND the lip's end; and the **throat bar's** ends (x +-0.075) reached the side of the face, so
+its dark showed through the gap between the three (the hole). Fixed by re-authoring the smile morphs only (no prim added, rest
+bit-identical): each was SOLVED for a posed target at the grin's peak (the squash and the gape are affine there, so the morph is
+the inverse of the target). The lip's ends now sit on the face's front at (+-0.070, 1.160, 0.092), the roll bows out round the
+corner like a "(" and caps it, the corners plug the crescent's end from behind, the fill backs both, the throat stops at
+x +-0.056, the ridge's ends are buried in the cheek, the upper lip lifts 6 mm (not 3) and the chin is taller and shallower (it
+slopes into the neck). The .blob's "TASK 18 FOLLOW-UP" comment has every number.
+
+- **What I see** ([`cartoon/corner-before-after.png`](cartoon/corner-before-after.png): front, 45, 90 degrees, before above;
+  [`cartoon/grin-corner-fix.mp4`](cartoon/grin-corner-fix.mp4): the grin clip at yaw 0 and 0.7). Front: still a toothy crescent
+  with upturned corners framed by the rolls, slits and V brow; the crescent is a little narrower (the lip 2.30x the neutral's end
+  to end, was 2.84x) and the side holes that showed beside the corners at the front are gone. 45 degrees (and yaw 0.5 / 0.9): the
+  lip runs up into the corner and tucks under the roll, which arcs over it with a dark crease line: one fold, no hole, no hook.
+  Profile: a clean mouth line with the roll a soft bulge; no hook, no dark slit. The friendly `smile` lost its side hole too.
+- **What is left:** (1) the jaw's noise-anchor seam (Task 16's open item) is now the most visible line at three-quarter and in
+  profile: a thin dark line running back from the corner along the jaw, and a faint second outline inside the roll where a jaw
+  prim (the corner pair) meets the skull's roll; the hole and the hook used to sit on top of it. It needs the renderer/anchor call,
+  not authoring. (2) The chin-to-neck junction is rounder but the jaw's underside still reads as a shadowed band over the thin
+  neck at 45 degrees. (3) The crease round the roll is a hard dark outline from the corner up to the nose wing; it reads as the
+  crease the reference has, but it is darker than the rest of the face's shading.
+- **Pins:** none re-pinned. Measured: mouth width x2.30 (>= 1.8), corner rise 35.5 mm (>= 15), head +14.7% (unchanged), chin
+  +9.5 / +9.0 mm a side at y 1.10 / 1.11 (> 7; was 14.5 / 18.5), the rolls buried at rest and showing at the grin. Head-profile
+  CLI identical, pack-golden untouched, base goblin's four files empty against `f81e5b10`. Targeted list (goblin-cinematic-blob,
+  goblin-expressions, pack, pack-golden, goblin-blob, rig-bind) 297 passed; `npm run test:changed` 28 files, 696 passed;
+  typecheck clean.
+
+### Open items (Task 18)
+
+1. **Cost not measured.** The roll pair adds two prims to the head cluster that are paid at rest (buried); on the grin the rolls
+   and several morphed prims are bent bars. Expect a few ms on a face close-up; measure before shipping a cutscene.
+2. The friendly `smile` now also wears the big rolls and the crescent (smile 1 drives them); it reads as a toothy happy grin.
+   If it should be gentler, it needs its own smaller smile weight (e.g. 0.6).
+3. The grin's jaw noise seam (Task 16) is unchanged; at 0.18 rad it is a little larger.
+4. The rest of the gap to the reference (width across the nose, corners up to the eyes, teeth across the crescent) is the
+   shader-warp decision above.
+
+## Task 16 (2026-10-15): a brow ridge that moves, a clean grin (Part A, the teeth, moved to a Blender task)
+
+Owner on the Task 15 clip: the brow "shape doesnt" change when the painted brows move (screenshot 1), and "weird shape stuff
+happening in the grin" (screenshot 2: a round knob at the mouth corner, a separate cheek bump, a pinched lower lip with dark
+crease lines). Part A (teeth with character) was withdrawn mid-task: the teeth will be sculpted in Blender. Nothing in the kit,
+its glTF, `kit-overlay.ts` or the tooth tests changed; the teeth in these frames are Task 14's.
+
+**The clip:** [`polish/goblin-polish-anim.mp4`](polish/goblin-polish-anim.mp4), 12 fps, grin front, grin three-quarter (yaw 0.7),
+scowl front, surprise front (`BLOB_EXPR_SWEEP=0:0.92`, 24 frames, `BLOB_DIST=0.3 BLOB_TARGET_Y=1.17 BLOB_PITCH=0.05`, the last
+frame held 1.5 s). Stills in [`polish/`](polish/): `grin-before-after.png` (grin peak, yaw 0 / 0.35 / 0.7 / 1.2, mouth framing
+`TARGET_Y 1.14`), `grin-peak-yaw*.png` and `grin-peak-below-yaw0.5.png` (pitch -0.3), `eyes-before-after.png` (neutral, grin,
+scowl, surprise, front and 0.7, `TARGET_Y 1.2`), `markers-grin.png`, `noise-anchor-seam.png`, `cpu-field-corner-before-after.png`,
+`gape-seam.png`.
+
+### The finding that mattered: the dark lines were the skin noise, not the shape
+
+The grin's "dark crease lines" and a thin dark outline that traced the brow ridge as soon as it moved are not in the field: a CPU
+raymarch of the same pose (`cpu-field-corner-before-after.png`, `sdBody` normals) is smooth there, and the field is
+Lipschitz-clean (max |grad| 0.96 round the brow). They come from the **rest-space noise anchor** (motion-polish task 6): the
+shader maps every surface sample into its DOMINANT prim's rest frame to look up the skin noise (normal bump, grain, mottle), and
+packBody's rest row for a MORPHED prim was its un-morphed rest. So wherever the dominant prim changed from a morphed prim to an
+unmoved neighbour, the noise jumped by the morph's move (up to 7 mm) and drew a seam. **Fix:** `rig-bind.ts` `morphedRest(rest,
+weights)` moves each morphed prim's rest endpoints by its morph (returns the rest body itself when nothing weighs anything, so every
+other body uploads exactly as before); the lab's hero upload passes it (`lab-main.ts`, the melt branch too). Pinned: with
+`morphedRest` every face point maps to itself at statue with the grin's morphs on (bare rest: off by more than 5 mm).
+`noise-anchor-seam.png` is the same dropped brow before and after.
+
+**Not fixed, and now more visible: the same seam at the JAW.** The `on jaw` prims rotate by the gape, so the skull-side and
+jaw-side rest frames disagree along the lip line's side seam by the gape's swing: measured 8.4 mm of anchor jump at y 1.117 on
+the cheek's side at the grin's 0.12 rad, 0 at gape 0 (`gape-seam.png`: the thin dark line running back from the mouth corner at
+three-quarter goes away with the gape at 0, every morph kept). It predates Task 16 (any gape, the shout most), but the corner knob
+and the cheek ball used to sit over it. Fixing it is a renderer/anchor decision (e.g. anchoring the jaw prims' noise in the head's
+frame, which makes the chin's texture slide as the jaw opens), so it is left for the owner.
+
+### Part B: the brow ridge moves
+
+- **`morph.ts`: one-sided channels and a blend term.** The ridge is ONE generated ellipsoid across both eyes, and the two signs
+  want different shapes (a V on browDown 1, a lift on -1), which a linear morph cannot give. `<channel>+:` / `<channel>-:` apply
+  only on their own side of zero, by the magnitude (legal together on one line; plain `<channel>:` stays linear). `blend*k`
+  scales the prim's blend with the weight. Weight 0 still returns null (nothing moves, nothing packs differently).
+- **The goblin's line** (`face` block): `browDown+:(-0.012,-0.007,0.001)tip(0.024,0,0)bend(0,-0.016,0.006)*(0.78,1.1,1)blend*1.6`
+  turns the point ellipsoid into a 2.4 cm bar bent into a V (the middle 8 mm under its ends, forward 3 mm) that knits into the nose,
+  7 mm lower, x-scale cut so it is no wider; `browDown-:(0,0.005,-0.0015)*(1,0.85,1)blend*2.5` lifts and thins it; squint keeps
+  its 1.5 mm.
+- **Measured** (the ridge line = the face's most forward point over the eye, sphere-traced): browDown 1 lowers it **15 mm by the
+  nose (x 0.015), 11 mm at x 0.03, 7.5 mm at the outer end (x 0.045)** and brings it **5-6 mm forward**; surprise lifts it 4 mm.
+  Travel between surprise and scowl: **19 / 15 / 11.5 mm** (pin: more than 10 mm; the plan asked for 6; Task 15's linear morph
+  gave about 6). The V is pinned too (the middle drops at least 2 mm more than the outer end). The cranium does not swallow it (the
+  lowered ridge's front, z 0.110-0.122, stays ahead of the cranium's, about 0.105 on the axis at that height).
+- **What I see** (`eyes-before-after.png`): grin and scowl, front: the ridge comes down and in, meets the nose bridge in a V, and
+  the eyes sit in its shadow under a heavy shelf: the brow now scowls with the paint instead of hovering above it. At 0.7 it is a
+  low, forward ledge over the eye that melts into the temple. Surprise: the ridge rides up and thins, more forehead and lit skin
+  over bigger eyes. Neutral unchanged.
+
+### Part C: the grin's shapes
+
+Marker frames (`markers-grin.png`: lower lip blue, chin magenta, corners red, cheek fill yellow, upper ridge cyan, upper lip orange)
+named them:
+
+| owner's shape | cause | fix |
+|---|---|---|
+| round knob at the mouth corner | the mouth-corner pair: a 6.5 mm ball pushed 13 mm out to the lower lip's end, blend 0.004 | its smile morph melts it, `blend*3`, out 12 / up 4 / back 8, x0.85 |
+| separate round cheek bump | the cheek fill: a 14 mm ball pushed up 9 mm, blend 0.006 | `blend*2.5`, up 6 (not 9) so it keeps covering the seam it fills, x1.25 |
+| pinched/folded lower lip with dark crease lines | the creases were the noise-anchor seam at every morphed prim's edge (above); the "pinch" was the lip's end meeting the corner knob | `morphedRest`; the knob's removal |
+
+- **What I see** (`grin-before-after.png`, `grin-peak-yaw*.png`): front, the same wide toothy crescent; at 0.35 and 0.7 the knob
+  and the cheek ball are gone, the lower lip rolls round into the corner and the cheek in one surface; at 1.2 the corner is a
+  soft fold instead of a ball beside the lip. From below (`grin-peak-below-yaw0.5.png`) the lower face is one smooth mass. The
+  grin's read holds: the eyes' slits (sheet, untouched), the crescent, the teeth. What is left: the thin jaw seam line back from
+  the corner at three-quarter (the gape's noise seam, above) and the lower lip still reads as a rolled lip over a round chin (the
+  rest face's "puck", Task 10).
+- Pinned: the corners' and cheek fill's blend at least 2.5x their rest at the grin; the existing pins hold (mouth width x1.44,
+  chin, cheek rise, every upper tooth bared at the grin, gape 0.12).
+
+### Checks
+
+- Rest face bit-identical: weights 0 move nothing (pinned), pack-golden untouched, `scripts/goblin-head-profile.ts` all 7 probes
+  ok and unchanged; the base goblin's four files are byte-identical to `f81e5b10`.
+- Tests: `npm run typecheck`; `npm run test:changed` 27 files, 669 tests passed; the targeted list (morph, blob-parse,
+  goblin-cinematic-blob, goblin-expressions, expression, rig-bind, pack, pack-golden, blob-face-sheet, goblin-blob, goblin-kit,
+  bride-blob, bride-kit, character-registry) passed. No golden re-recorded.
+- Cost: not re-measured. Weights 0 change no packed byte; with weights on, the brow prim becomes a bent bar (the shader's Bezier
+  branch, more expensive per sample than the plain ellipsoid) and three blends grow, on the face close-up only while browDown > 0.
+
+### Open items (Task 16)
+
+1. **The jaw's noise seam** (above): a renderer/anchor call for the owner.
+2. **The actor path** (`ActorStepInput.morphs` in the game) does not pass `morphedRest` yet; only the lab's hero does. As far as I found nothing in
+   the game carries morphs today; whoever puts the cinematic goblin in a scene with expressions must pass it.
+3. Part A (teeth) is now a Blender task.
+
+## Task 15 (2026-10-15): a smile that does not read as surprise
+
+Owner, on the grin clip: "it doesnt really read as a smile ... smiling involves also movement of the eye area where the eyes would
+have to get smaller with the cheeks and eyelids closing more, like the animation feels like its just opening the mouth, it actually
+reads more like surprise". Right: the old clip dropped the jaw to 0.204 rad and nothing moved above the mouth.
+
+**The clip:** [`smile/goblin-smile-anim.mp4`](smile/goblin-smile-anim.mp4), 12 fps, four panels: grin front, grin three-quarter
+(yaw 0.7), the friendly smile front, surprise front (`BLOB_EXPR=<name> BLOB_EXPR_SWEEP=0:0.92`, 24 frames, `BLOB_DIST=0.3
+BLOB_TARGET_Y=1.17 BLOB_PITCH=0.05`: 1.17 rather than 1.14 so the whole face, eyes included, sits in the frame; the last frame is
+held 1.5 s). Stills in [`smile/`](smile/) (`*-mid` is the middle of the clip, `*-end` its end; `grin-old-vs-new.png` is the old grin
+beside the new one, front and three-quarter; `eyes-neutral-grin-smile-surprise.png`, `mouth-marker-old-vs-new.png`). The contact
+sheet [`frames/index.html`](frames/index.html) was re-shot with smile and surprise added (kit-on row; the `*-nokit/` directories
+there are still the 2026-10-14 sunglasses-era frames).
+
+### What changed
+
+- **`expression.ts`: a `squint` channel** (0..1; `lid` keeps meaning blink), returned in `morphs` too. `actuate` maps it through
+  optional tuning fields: `squintCheek` (sheet `eyeCheek`), `squintLid` (`eyeLid`), `squintEyeSize`, `squintTilt`, `squintBrow`
+  (`browDrop`); and browDown now also drives `browShift` (`browDrop`, both signs), `browLidTop` (`eyeLidTop`, positive browDown only)
+  and `browRaiseEye` (the eye grows on a NEGATIVE browDown). A tuning without them changes nothing (another character's clips).
+- **`blob-face-sheet.ts`: three params, all default 0, every authored sheet pinned bit-identical** (FNV hashes of all 15 characters'
+  64x64 sheets taken before the change): `eyeCheek` cuts the eye from below with an ARCHED lower lid (highest in the middle, so the
+  eye becomes a dome, "^ ^") and darkens a crease under it (the cheek's top); `eyeLidTop` cuts it from above with a straight lid that
+  sits lower at the inner corner (an angry, inward-slanted upper lid); `browDrop` slides the painted brow down (or up).
+- **Face-block morph lines** (`blob-ast/parse/compile.ts`): the brow ridge and the cheeks are GENERATED face prims (face.ts
+  facePrims) with no `.blob` line, so `morph=` could not reach them. `morph <tag> <channel>:<terms>` in the `face` block now carries
+  their morphs (tags `head`, `jaw`, `brow`, `nose`); never packed. The goblin: `morph jaw squint:(0,0.005,0.0015)*(1.05,1.12,1.03)`
+  (the face block's jaw ellipsoid IS the cheek mass under the eyes: it rises and fills, its bottom at the lip line stays) and
+  `morph brow browDown:(0,-0.003,0.0015) squint:(0,-0.0015,0)`. The authoring skill's reference documents it.
+- **Wider smile morphs** (`goblin-cinematic.blob`, "TASK 15" under "THE SMILE MOVES THE FACE"): lower lip ends out 17 mm (was 6),
+  its sag 4.5 mm (was 7: the deep U read as a dropped jaw); corners out 13 / up 4 (were up 8: they plugged the opening's ends);
+  cheek fill and upper ridge further out; the throat bar widens 8 mm a side so the widened corners show dark.
+- **Clips** (`goblin-expressions.ts`): `grin` = smile 0.7 / squint 0.3 / browDown 0.4 / gape 0.12 at 0.3 s, then smile 1 / squint
+  0.8 / browDown 0.8 / gape 0.2 (0.12 rad) at 0.6 s; new `smile` (friendly: squint 1, browDown -0.2, gape 0.08 = 0.048 rad) and
+  `surprise` (gape 0.5 = 0.30 rad, browDown -1, no smile or squint). `scowl` and `shout` keep their keys; through browDown their eyes
+  now take the heavy upper lid and their brows drop (`frames/scowl`, `frames/shout`: a glare; I think that helps both).
+- Tuning: `squintLid 0, squintCheek 0.58, squintEyeSize -0.1, squintBrow 0.015, squintTilt -14, browShift 0.02, browRaiseEye 0.15,
+  browLidTop 0.35` (why each, in the file).
+
+### The numbers
+
+Eye = red glow pixels above y 440 in the 1380 x 820 frame (both eyes front, the near eye at three-quarter); sheet = texels over the
+0.88 glow threshold on the 64 x 64 sheet.
+
+| | front px | % neutral | 3/4 px | % | sheet texels | % |
+|---|---|---|---|---|---|---|
+| neutral | 4122 | 100 | 2909 | 100 | 57 | 100 |
+| **grin, peak** | **1001** | **24** | **667** | **23** | 19 | 33 |
+| grin, mid-clip (frame 12) | 1944 | 47 | | | | |
+| smile, peak | 2506 | 61 | 1767 | 61 | 36 | 63 |
+| surprise, peak | 5373 | **130** | | | 81 | 142 |
+| scowl / shout | 2516 / 3082 | 61 / 75 | | | 37 / 48 | |
+
+- **Gape:** the grin's peak is 0.12 rad (0.2 x maxGape 0.6; pinned, and never higher on the way in); was 0.204. Smile 0.048,
+  surprise 0.30.
+- **Mouth width:** the lower lip, end to end (its outer edges, CPU, `applyRig`): neutral 0.0720 m -> grin 0.1036 m, **x1.44**
+  (pinned > 1.2). Rendered opening on a marker frame (the throat bar and floor painted glowing magenta, the files restored after):
+  old grin 198 x 88 px (6543 px), new grin **236 x 49 px** (3055 px): **19% wider than the old grin's opening and 44% less tall**, a
+  crescent instead of a D. (Neutral has no opening to measure; its painted seam line spans the whole lower face, so a rendered
+  "neutral width" would be the jaw's width, not the mouth's: hence the lip measure.)
+- **Cheeks:** at squint 1 the face comes forward 4.6-9.4 mm at y 1.17-1.19 under the eyes (pinned > 4.5 mm); browDown 1 fills the face
+  under the brow ridge 1.6-3.4 mm at y 1.25-1.26 (pinned > 2.5). Weights 0: identical pose to the body without any morph (pinned),
+  pack-golden untouched, `scripts/goblin-head-profile.ts` all 7 probes ok and unchanged.
+
+### What I see (the clip and the stills)
+
+- **Grin, front:** the mouth spreads into a wide, shallow crescent with the upper row and fangs in it (clenched-teeth grin), and as it
+  spreads the eyes close down from a glowing oval to a tapering slit, thicker at the outer end and pinched down toward the nose, under
+  a darker brow. It reads as a sly, evil grin. It does NOT read as surprise any more: the opening is short and wide, the eyes get
+  smaller instead of bigger. Beside the old grin (`grin-old-vs-new.png`) the difference is plain.
+- **Grin, three-quarter:** the slit eye and the toothy crescent read; the cheek fills a little under the eye (subtle at this size; the
+  side view shows the bulge better than the three-quarter). The lower lip's corner still bunches into a knob (Task 12's).
+- **Smile (friendly):** the eyes become "^ ^" domes with a crease under them: clearly happy eyes. The MOUTH barely changes from the
+  front (a thin line with the tooth tips, gape 0.048 rad); the smile is carried almost entirely by the eyes. If it should read at a
+  distance, it needs more lower-lip sag or a little more gape.
+- **Surprise:** the jaw drops into the box mouth, both eyes grow to big ovals and the brows lift. Side by side with the grin they are
+  opposites, which is the point of the control.
+- **Scowl / shout:** the eyes are now cut flat on top (a glare); neither looks worse.
+
+### What is still wrong / open
+
+1. **The eye is ~6 x 5 texels of a 64 x 64 sheet**, so every lid shape is a few pixel steps and the clip's eye changes in visible
+   jumps (texel by texel) rather than smoothly. A finer sheet would change every character's grain; a per-character sheet size would
+   be the fix if the steps bother you.
+2. **The grin's eye may be too closed** (24% of neutral; the goal was <= 60%): it keeps its glow and its slant, but `browLidTop`
+   0.28-0.3 gives a fatter slit (sheet 35-40%) if you want more eye.
+3. The friendly smile's mouth (above). The grin's corners go OUT more than UP: the "corners up" read comes from the crescent and the
+   cheeks, not from the corners rising above the seam (the upper ridge is flat).
+4. The cheek rise is real (up to 9 mm) but subtle on camera next to the painted eye change.
+5. Rounds: nine capture rounds, more than the six the plan allows for numbers; the first two were the eye model itself (a symmetric
+   squash read as asleep), not tuning.
+6. Cost: not re-measured. Weights 0 change no packed byte; with weights on, two more prims are morphed (the face block's) and the
+   throat bar; no new prims.
+
+## Task 14 (2026-10-15): mesh teeth in the cinematic kit
+
+Owner: make the teeth POLYGON MESH in `goblin-cinematic-kit` (the 11 SDF tooth prims cost about 23 ms on a face close-up and
+were hard to light). The base goblin and every other character stay as they are.
+
+### Investigation (written before building)
+
+**How the kit is posed.** `character-view.ts` `pose()` calls `boneFrames(body, bound, bodyYaw)` (rig-frames.ts) and hands the
+frames to `kit.pose()` (kit-overlay.ts), which writes each bone node's `matrixWorld` as `compose(frame.pos, frame.quat)`. A
+frame is the bone's HEAD rig point plus `segmentQuat(restDir, head->tail, yaw)`: the shortest arc that turns the bone's rest
+direction onto its posed one, about the bone's head. three skins a vertex as `matrixWorld * inverseBind * v`, and WAM's inverse
+binds are translations to the kit bone's rest head, so a vertex skinned to a bone lands at `frame.pos + frame.quat * (v - head)`.
+
+**The catch, measured** (`goblin-cinematic.blob`, a lower tooth root at (-0.026, 1.121, 0.085); the kit's jaw bone head is the
+skull pivot, (0, 1.1186, 0.0129), the same point as the .blob's within 0.04 mm; the SDF hinge is at (0, 1.1326, -0.0083)). The
+`on jaw` prims get `origin + qHead * (hinge + qGape * (v - pivot - hinge))` (rig-bind `headTransform`: `openAboutHinge`, then the
+head's rigid turn). Against that, a kit vertex skinned to `jaw` is:
+
+| gape (rad) | lab statue path (captures, held expressions) | motion path |
+|---|---|---|
+| 0.1 | 9.4 mm off | 1.3 mm off |
+| 0.3 | 28.1 mm off | 3.1 mm off |
+| 0.5 | 46.6 mm off | 3.9 mm off |
+
+Two separate problems. (1) In the lab's statue path (every capture, every held expression) the gape never reaches the rig: lab-main
+puts it on a copy of the bound (`boundForPose`) that only `applyRig` sees, and `heroView.pose` gets `heroMotion.bound`, whose jaw
+point sits at rest, so the kit jaw would not open at all. (2) In the motion path the jaw point IS opened about the hinge
+(motion.ts pins it to `jawTargetAt`), but the kit's frame is then the shortest arc about the jaw bone's head (the skull pivot,
+1.4 cm lower and 2.1 cm forward of the hinge), which is a different rotation of a different point: the lower teeth would drift
+1-4 mm off the lip, the catch the plan names.
+
+**Depth.** The kit DOES depth-test against the SDF (kit-overlay.ts and sdf-layer.ts headers): the kit draws on the default layer
+with depth writes, the march writes its depth into the target's alpha, and the composite quad feeds that to `depthNode` with depth
+testing on. So a tooth polygon behind the rest face fails against the flesh and does not show, exactly as the armour's buried
+inner rims do. The one caveat is the seam's resolution: the SDF layer is drawn at `sdfScale` (0.7 in the lab) and upscaled
+pixelated, so the flesh's depth edge is quantised to its pixels; a tooth only millimetres behind the skin at a silhouette could
+flicker through. The teeth sit 1.5-2 cm behind the lips' front and their tips inside the upper ridge, so no visibility toggle is
+planned; the rest frames and a kit-vertex burial test decide it.
+
+**What to build (the smallest mechanism).** Give the kit's `jaw` bone the SDF jaw's own transform: `pos = origin + qHead *
+openAboutHinge(jawHead - pivot)`, `quat = qHead * qGape` (jaw.ts `jawOrient`), with `origin`, `qHead` and the clamped gape taken
+from the same computation `headTransform` does. Then `pos + quat * (v - jawHead)` equals the jaw prims' transform for EVERY rest
+point v (a rigid motion is fixed by one point and its rotation). One exported function in rig-bind.ts, used by `boneFrames` for
+the `jaw` bone of a body whose bound head has a jaw, and lab-main hands `heroView.pose` the same `boundForPose` that `applyRig`
+gets. No other kit has a vertex weighted to `jaw` (the bride's kit carries the bone line with no geometry on it), so no other
+character can change.
+
+### What was built
+
+- **The mechanism** (`49d88e2f`): rig-bind.ts `kitFrames(body, bound, bodyYaw)` = `boneFrames`, except the `jaw` frame of a body
+  whose rigid head has a jaw, which is computed from `headPose` (headTransform's first half, factored out unchanged: the origin with
+  its bounded drift, the CLAMPED head rotation, the clamped gape). character-view.ts poses kits with it; lab-main.ts passes
+  `boundForPose` (the bound with the expression's gape and morphs) to `heroView.pose`. Tests: rig-bind.test.ts (every `on jaw` prim
+  endpoint of the bride and the cinematic goblin is carried exactly, 1e-9 m, at gapes 0-0.6 with the head level, nodded, past the
+  cone and the body turned; every other bone and every jawless body is exactly `boneFrames`).
+- **The teeth** (`f8d8e278`; `goblin-cinematic-kit.wam`, the TEETH block): 11 `sweep`s, one segment each to a point, 8 sides; 7 on `skull` (fangs
+  the 2nd and 6th), 4 on `jaw`; transcribed from the SDF prims' resolved geometry (root = the prim's `a`, along its `tip` for its
+  length plus the 1 mm rounded end, root radius = the prim's `r`), offsets from the .blob's pivot so they draw where the prims were.
+  Material `tooth`, `#e8e2d2`, kit-overlay.ts LOOK `tooth` (dielectric, roughness 0.38, env 0.55, no glow). +121 vertices, 176
+  triangles; the 849 armour vertices, normals and skin weights are byte-identical. **One side effect:** WAM bakes one texture-atlas
+  cell per PART, and 27 -> 38 parts took the grid from 6x6 to 7x7, so the armour's rust/leather textures are re-baked into cells of
+  146 px instead of 170 (UVs moved; texel colour at the armour's vertices differs by 1.5/255 on average, 17 at most). Not visible
+  in the frames I looked at; to undo it the teeth would have to be at most 9 parts.
+- **The .blob**: the 11 tooth prims are gone (the throat bar and the floor stay); the comments say where the teeth went.
+  pack-golden `goblin-cinematic.blob` `fdd6c28ddf941d0d -> 2e5d52c91ee41b5a`, which is exactly the hash of the Task 13 .blob with its
+  11 tooth lines deleted (checked with a scratch test before re-pinning); pack.test.ts: the prof row loses 11 zeros, and the variant
+  leaves the glow allowlist (its 11 glowing prims were the teeth). The base goblin is untouched (`git diff f81e5b10 -- goblin.blob
+  goblin-kit.wam goblin-kit.gltf goblin-blob.test.ts` is empty).
+- **Tests** (goblin-cinematic-blob.test.ts): the SDF-teeth tests became mesh tests that read the COMPILED glTF and pose it as the lab
+  does (`kitFrames` + three's skinning `pos + quat * (v - kit bone head)`, the heads from the inverse binds): 11 teeth, 7 rigid on the
+  skull and 4 on the jaw; each tooth's point within 1 mm and its root ring within 0.5 mm of the old prim; **buried at rest: every
+  vertex and triangle centroid at least 0.5 mm inside the flesh (measured: the worst is 1.7 mm inside)**; every upper tooth bared from
+  the front at gape 0.15 and every tooth at 0.3; the grin (morphs on) still bares every upper tooth; **the drift test: a lower-tooth
+  vertex (each tooth's point and a root corner) against a 1 mm SDF probe prim authored `on jaw` at the same drawn rest point, under
+  `applyRig`, at gapes 0.1 / 0.3 / 0.5 with the head level, nodded 0.3, tilted 0.4 sideways, the body turned 1.1 rad, and the head
+  past its cone: worst 6.5e-10 m** (the plan's bar was 0.5 mm); the upper row against a skull probe the same way inside the cone; and
+  the catch itself pinned (a plain bone frame is > 1 mm off at 0.1, > 3 mm at 0.5 in the motion path; 9.6 / 47 mm in the statue
+  path). The mouth-interior tests (buried, paints nothing at rest, shows at 0.3) stay SDF tests.
+
+**Depth, verified:** the neutral frames front and 45 degrees show no tooth ([`mesh-teeth/neutral-before-after.png`](mesh-teeth/neutral-before-after.png)),
+so the SDF face hides the buried mesh as the investigation expected; no visibility toggle was built.
+
+### The number: teeth against the gap (Task 12's marker method)
+
+Marker renders of the same shots ([`mesh-teeth/markers-grin.png`](mesh-teeth/markers-grin.png)): the mesh teeth repainted flat
+magenta in the page (a `BLOB_PROBE` that sets the kit's `tooth` material black with a magenta emissive), the SDF teeth (before)
+`color=ff00ff glow=1`, the throat bar and the floor `color=00ffff glow=1` in both; masks eroded a pixel; the gap is the interior
+pixels inside the teeth's bounding box; Rec. 709 luma of the normal frame. Before = the Task 13 files (`7587c2a0`: SDF teeth, the
+kit without teeth), after = this branch, both the cinematic goblin with the kit, `BLOB_DIST=0.3 BLOB_TARGET_Y=1.14 BLOB_PITCH=0.05`.
+
+| shot | tooth px before -> after | tooth luma before -> after | gap luma before -> after | ratio before -> after |
+|---|---|---|---|---|
+| grin, front | 4758 -> 1316 | 81.9 -> 177.4 | 7.6 -> 8.2 | 10.7 -> **21.5** |
+| grin, 45 degrees | 2857 -> 1003 | 93.7 -> 167.4 | 28.4 -> 22.1 | 3.3 -> **7.6** |
+| shout, front | 5104 -> 1267 | 82.0 -> 170.0 | 4.4 -> 6.2 | 18.6 -> **27.2** |
+| shout, 45 degrees | 2891 -> 884 | 106.3 -> 161.6 | 8.9 -> 10.6 | 11.9 -> **15.2** |
+
+(The "before" ratios are this variant's, without sunglasses; Task 12 measured 9.4 / 2.2 on the goblin with them, 9.3 / 3.2 with the
+morphs.) **Each tooth is twice as bright and the ratio is 2-2.3x better, but the teeth cover a quarter to a third of the pixels they
+did.** The marker frames show why: an SDF tooth painted the flesh nearest to it too (paint is the nearest prim), so the gum around
+each root and the floor round the lower teeth read as tooth; the SDF teeth also rendered at the SDF layer's 0.7 scale and looked
+fatter. The mesh shows only the geometry: the same roots, lengths and radii, but as slim pointed cones.
+
+### What the frames show ([`mesh-teeth/`](mesh-teeth/): `grin/`, `shout/`, `neutral/` frame-00 front, frame-01 45 degrees; `before-after-*.png`)
+
+- **Grin, front:** seven separate white, sharp, pointed upper teeth over the dark gap, the two fangs longest; the lower row shows as
+  three or four small bright points standing on the dark floor. Crisper and whiter than the SDF teeth, which were fat beige pegs with
+  rounded ends. It reads as a row of FANGS: more evil, less "teeth in a gum". The polygons are drawn at full resolution against the
+  pixelated SDF (the armour's contrast, now in the mouth).
+- **Grin, 45 degrees:** the upper row hangs as white spikes under the lip, the lower tips glint on the floor; clearly readable.
+- **Shout:** the upper row is a clean jagged white fringe across the box mouth; **the lower teeth are only small bright tips just
+  above the lower lip and the floor's edge** (front), a couple of glints at 45 degrees. The SDF version's four "studs" were mostly
+  painted floor; the real geometry sits behind the lower lip as authored. If the lower row should read in the shout, lengthen it or
+  bring it 3-4 mm forward (`tooth_l*` in the .wam): owner's call.
+- **Neutral:** no tooth anywhere, front or 45 degrees.
+- The lower teeth sit on the floor and behind the lip in every open frame: in the statue path they would have stayed at their rest
+  pose (about 4.5 cm from where the floor goes at the shout's 0.48 rad) without `kitFrames`.
+
+### Cost (face close-up, Task 11/12 method)
+
+Same method as Task 11/12: `__sdfLab.benchGpu()` legs (hand-stepped, 20-frame chunks with the queue full, `hiddenSteps` 0 on every
+leg) on `?character=goblin-cinematic`, headless Chrome at 1380 x 820, `sdfScale` 0.7, the kit on, statue mode,
+`setCam(0, 0.05, 0.3, 1.14)`, three legs per expression (`holdExpression('neutral')`, then `'grin'`) per boot. BEFORE = the Task 13
+files (`7587c2a0`: the .blob with the 11 SDF teeth, the kit without teeth) copied over the working files, AFTER = this branch; the
+two alternated boot by boot (order flipped each round) and the files were restored afterwards (checked with `cmp`). A cell is the
+median over boots of each boot's median leg (ms per frame), with the range.
+
+**The machine was NOT quiet for the first batch** (6 rounds; load average 3-5 at first, then up to 43 while other sessions ran: one
+file read 95 ms in one boot and 191 in another), so that batch says little. The second batch (4 rounds, load 1.4-3, then 1.5 in
+the last two) is the one to trust:
+
+| face close-up | before (SDF teeth, 58 prims) | after (mesh teeth, 47 prims) | delta |
+|---|---|---|---|
+| neutral, quiet batch | 121.6 (119.4-123.1) | 101.0 (94.0-132.6) | **-20.6** |
+| grin, quiet batch | 131.4 (129.8-149.6) | 100.1 (98.6-103.6) | **-31.3** |
+| neutral, quietest two rounds (load 1.5) | 122.6 / 122.2 | 95.5 / 94.0 | -27 / -28 |
+| neutral, all 10 boots (noisy) | 129.3 (119.4-170.8) | 117.6 (94.0-190.7) | -11.7 |
+| grin, all 10 boots (noisy) | 141.2 (105.9-206.3) | 112.1 (98.6-174.8) | -29.1 |
+
+So the mesh teeth give back **about 20-28 ms at rest and about 30 ms on the grin** on the face close-up, the size Task 11's
+ablation put on the 11 SDF teeth (23 ms). The polygons cost nothing measurable. The absolute numbers sit above Task 11's (101 ms
+then for the expression-pass head) because the machine runs hotter today; the deltas are what to read. The after-neutral range
+includes one 132.6 ms boot in the quiet batch (round 2, its three legs 131.8-135.0, while the before boots either side read 119-125)
+that I cannot explain beyond noise; the other three after-neutral boots read 94.0-106.5. The dark floor and throat bar (about 7 ms) are still SDF and still paid at rest.
+
+### Open items (Task 14)
+
+1. **The look (owner):** the teeth are now slim, white, sharp cones (the SDF prims' own radii); the SDF pegs read fatter because
+   paint bled onto the gum and the SDF layer is chunkier. Stouter teeth are one number per sweep (`r=`, or a two-segment profile that
+   stays wide longer) in `goblin-cinematic-kit.wam`. The lower row barely shows in the shout (tips over the lip): lengthen it or bring
+   it forward if it should read.
+2. **The kit's SKULL frame is not the SDF head's past the head's cone.** `boneFrames` turns the skull bone by the raw pivot->tip
+   direction; the SDF face uses the CLAMPED one (and a bounded drift). Inside the cone they agree exactly (tested); outside it the
+   upper teeth (and every skull-skinned kit piece on any character, e.g. the base goblin's sunglasses) would leave the face. Pre-existing;
+   `kitFrames` could give the skull the same `headPose` treatment (one more line), but that changes every kit's head past the cone,
+   so it is left for a decision.
+3. **The armour's atlas re-bake** (27 -> 38 WAM parts, cells 170 -> 146 px): no visible change in the frames; noted in case the
+   rust is ever judged up close.
+4. Hiding the kit (`NOKIT=1` in the expression sheet, the BLOB_PROBE that hides SkinnedMeshes) now hides the teeth too.
+5. The skip of the buried mouth at rest (Task 12's sketch) is now worth only the floor and the throat bar, about 7 ms.
+
+## Task 13 (2026-10-15): the face rig moved to `goblin-cinematic`; the base goblin went back
+
+Owner: "we would have a base goblin without the facial head complexity" and "the cinematic goblin has bare eyes (no
+sunglasses)". **Everything below this section that says `goblin.blob` describes what is now `goblin-cinematic.blob`.**
+
+What is where now:
+
+| piece | where |
+|---|---|
+| base goblin (lab, game, first-person arms) | `goblin.blob`, `goblin-kit.wam`, `public/assets/lab/goblin-kit.gltf`, `goblin-blob.test.ts`: **byte-identical to `f81e5b10`** (`git diff f81e5b10 -- <those four>` is empty). No jaw bone, no teeth, no morphs, no expressions, the sunglasses on, the pre-expression head and cost. pack-golden `goblin.blob` is back to `41812d68d01256d7`. |
+| the face rig | `characters/goblin-cinematic.blob` (`model goblin-cinematic`): the expression-pass goblin.blob as of `c3f72173`, unchanged but for its header, the model line and test references. Packs to `fdd6c28ddf941d0d`, the hash goblin.blob had before Task 13, so it IS that goblin. |
+| its kit | `characters/goblin-cinematic-kit.wam` -> `public/assets/lab/goblin-cinematic-kit.gltf` (`scripts/build-wam-kit.sh goblin-cinematic`): the goblin kit with the `jaw` bone line and WITHOUT the round lenses, the ear-hook temple arms, the nose bridge and their `glass`/`black` materials (9870 -> 6792 vertices). A change to the armour in `goblin-kit.wam` has to be copied here. Since Task 14 it also carries the TEETH (mesh). |
+| registry and libraries | `character-registry.ts` `goblin-cinematic` (its kit, `motionProfileFor('goblin-cinematic')` = `GOBLIN_PROFILE`, listed in motion-profile.ts `BY_NAME` because lab-main looks the profile up by name); `pose-library.ts` gives it `GOBLIN_POSES`; `expression-library.ts` keys the clips `goblin-cinematic` only (`expressionsFor('goblin')` is null). |
+| tests | the expression-pass tests moved from `goblin-blob.test.ts` to `goblin-cinematic-blob.test.ts`, which also pins that the variant is the base goblin below the neck (every non-head prim and every bone but `jaw` equal), that the base goblin has no jaw/morph/hinge/head paint and keeps the ORIGINAL head profile, and that the cinematic kit has no lens/frame material. `goblin-head-profile.ts` has two probe sets (`GOBLIN_PROFILE_PROBES`, the Task 1 pins; `CINEMATIC_PROFILE_PROBES`, the Task 3b mouth re-pin); `scripts/goblin-head-profile.ts [file.blob] [--probes goblin|goblin-cinematic]` picks by the file's `model` line. `rig-bind.test.ts`'s morph block and `goblin-expressions.test.ts` read the variant; `pack.test.ts` pins both prof rows and moves the 11 glowing teeth to `goblin-cinematic.blob`. |
+| captures | `?character=goblin-cinematic`; `scripts/goblin-expression-sheet.sh` shoots `goblin-cinematic` (`CHARACTER=` to change it); its kit-hidden row is off by default now (`NOKIT=1` adds it) because the kit no longer hides the eyes. |
+
+Frames ([`cinematic/`](cinematic/), `BLOB_DIST=0.3 BLOB_TARGET_Y=1.14 BLOB_PITCH=0.05`, 8-frame turntable, frame-00 front,
+frame-01 45 degrees): `cin-grin/` and `cin-neutral/` (the variant), `base/` (the base goblin, no expression). Measured in the eye
+band (y 40-300, x 380-1000 of the 1380x820 frame): red-eye pixels / neutral-grey (lens and frame) pixels are base front 0 /
+33067, base 45 2596 / 21628; cinematic neutral front 4155 / 1700, 45 2819 / 18; grin front 4225 / 1701, 45 2729 / 74. The
+cinematic face is bare: both red eyes show from the front and nothing grey but the nose's highlight is left. The grin reads
+as it did in Task 12 (the upper row and fangs over the dark gap, the lower lip pushed down into a U); the brows still barely
+read even bare (Task 10's finding). The base frame shows the pre-expression mouth (the pursed, sculpted crease and the tapered
+chin of `tuning/rest-before-after.png`'s "before" panel), not the expression pass's rounded lower roll.
+
+**Adopting it in PR #47's `goblin-home`** (not on this branch): `goblin-home` is the Flat's cinematic goblin. Either point its
+registry entry at `goblin-cinematic.blob` and `goblin-cinematic-kit.gltf` (and add `'goblin-home'` to `expression-library.ts`,
+`pose-library.ts` and motion-profile.ts `BY_NAME` next to `goblin-cinematic`), or, if `goblin-home` has its own .blob edits,
+carry the face block over: the `jaw` bone line with `hinge=0.06`, the head block from the lower lip to the teeth, the `face`
+block's jaw trio and the `morph=` words, then the kit's `jaw` bone line. `goblin-cinematic-blob.test.ts` is the checklist.
+
+## What was built
+
+The goblin's face moves. `goblin.blob` has a `jaw` carrier bone (the bride's jaw system) with **its own hinge** (`hinge=0.06` on
+the bone, y 1.1326, the lip line); the lower face (lower lip, chin, mouth corners, a dark mouth floor) rides it, and the
+mouth opens AT THE LIP LINE (Task 3b: the groove is gone, an upper ridge, a cheek-fill pair, a mouth-corner pair and the floor
+were added). Eleven jagged teeth (5 small upper, 2 upper fangs, 4 small lower; `color=8f8266 gloss=0.15`, brightened in Task 12) and a dark throat
+bar are buried in the flesh at rest. The pure `expression.ts` turns keyed clips of five face channels (`gape`, `smile`,
+`browDown`, `lipCurl`, `lid`) into a jaw gape (radians) and overrides on the goblin's authored face sheet; `blinkLid`/`withBlink`
+overlay a blink on any expression. The goblin's tuning and clips (neutral, grin, scowl, shout) are data in
+`characters/goblin-expressions.ts`, registered in `expression-library.ts`. The lab regenerates the 64x64 face sheet in place
+only when its quantised params change (`sheetToRgba`), rides `rig.jawGape`, and has a panel section, an `__sdfLab` API and
+capture env vars; the actor path takes `MotionConfig.jawGape`. No new WGSL.
+
+## The contact sheet (final, 2026-10-14)
+
+[`frames/index.html`](frames/index.html), made by `scripts/goblin-expression-sheet.sh` (camera 0.3 m from the mouth line,
+`BLOB_DIST=0.3 BLOB_TARGET_Y=1.14 BLOB_PITCH=0.05`; the plan's 0.7 m framing makes the mouth too small to judge). Each
+expression has `frame-00.png` (front) and `frame-01.png` (45 degrees), with the kit (`<name>/`, as the goblin ships) and
+without it (`<name>-nokit/`; the kit is the sunglasses AND the armour, so those frames show bare shoulders). What I see:
+
+| frame | gape (rad) | what it looks like |
+|---|---|---|
+| `neutral` | 0 | Closed, no tooth anywhere. A thin straight mouth line under the upper lip; the lower face is a rounded roll (see "the rest face" below). |
+| `grin` | 0.204 | The upper row and both fangs hang long over a dark gap, the lower lip pushed down. Reads as a toothy snarl or leer: menacing rather than friendly, but not a SMILE: nothing turns up at the corners, and at 45 degrees the dropped lower jaw looks slack. |
+| `scowl` | 0.144 | A narrower dark slit with the fang tips standing out of the row: bared, clenched teeth. With the kit on it differs from the grin by the gape alone. |
+| `shout` | 0.48 | A wide dark mouth, the upper row on top, the four lower teeth as studs along the floor's front edge, the lower jaw dropped about 5 cm. Clearly a shout; the opening is a box (flat top, flat floor, straight sides). |
+| `blink` | 0 | From the front: nothing (the sunglasses cover the eyes). At 45 degrees the red eye beside the lens is shut to a slit (two red texels left at its corners). Without the kit both eyes shut, each leaving two red texels at its corners. |
+
+Teeth at rest: none shows in `neutral` or `blink`, front or 45 degrees, with or without the kit.
+
+## Tuning by eye (Task 10)
+
+Only numbers in `characters/goblin-expressions.ts` changed; each change carries a comment naming the frame that asked for it
+(the frames are in [`tuning/`](tuning/)). Two rounds on the grin, one each on the scowl and the shout:
+
+- **The grin's painted U** (`smileCurve 0.9 -> 0.35`, `smileWiden 0.25 -> 0.5`, `smileMouthOpen 0.01 -> 0.015`;
+  [`tuning/paint-locate.png`](tuning/paint-locate.png)). Painting the grin's mouth 2.7x thick showed where it lands: at 0.9 the
+  U bottomed out about 2.8 cm under the seam, ON the lower lip, a dark band across it (a second mouth whenever it shows).
+  The sheet cannot paint corners ABOVE the seam (the formula pins the corners at `mouthRise` and moves the middle), so the
+  best it can do is a shallow, wide U whose middle falls inside the opening and whose arms rise outside it. Honestly: at
+  normal thickness those arms are lost in the grain and the cheek's shadow; I cannot see them in the final frames. The
+  change mostly removes the lower-lip band.
+- **The brows** (`browAngle 10 -> 25` deg per unit, `browHeavy 0.2 -> 0.3`; grin `browDown 0.35 -> 1`;
+  [`tuning/brow-nokit.png`](tuning/brow-nokit.png), [`tuning/kit-hides-brows.png`](tuning/kit-hides-brows.png)). At 10 deg
+  the scowl's brows were indistinguishable from the neutral's EVEN WITHOUT THE KIT (the brow ridge's own shadow swamps the
+  paint); at 30 an angry slash over each eye reads. **With the kit on, the round sunglasses cover the painted brows
+  completely from the front**: the brows carry nothing in the shipped look.
+- **The grin's gape** (`0.28 -> 0.34`, 0.168 -> 0.204 rad; [`tuning/grin-gape-sweep.png`](tuning/grin-gape-sweep.png)): at
+  0.12 rad the teeth are a stubby clenched row (a grimace), at 0.24 the fangs hang long but the side seam opens into a dark
+  notch at 45 degrees; 0.204 shows the fangs' length.
+- **The scowl's gape** (`0.18 -> 0.24`, 0.108 -> 0.144 rad) and **the shout's** (`1 -> 0.8`, 0.6 -> 0.48 rad;
+  [`tuning/scowl-shout-gape.png`](tuning/scowl-shout-gape.png)): the scowl's fangs did not stand out from the small teeth; the
+  shout at 0.6 rad dropped the lower jaw about 6 cm onto the collar, a nutcracker at 45 degrees.
+
+`npx vitest run src/lab/sdf-zombie/characters/goblin-expressions.test.ts`: 10 passed after every round.
+
+## Candid assessment
+
+- **Is the grin evil?** It is menacing, not friendly, but it is not a grin: it reads as a toothy snarl or leer. Everything
+  that would make it a SMILE is out of reach of numbers in `goblin-expressions.ts`: the painted brows are under the sunglasses,
+  the painted mouth cannot lift its corners above the seam, and the geometry (lips, corners, cheeks) does not move except by
+  the jaw's rotation. **With the kit on, the four expressions differ by the jaw and the teeth alone.**
+- **The rest face is puffier than the pre-expression head** ([`tuning/rest-before-after.png`](tuning/rest-before-after.png),
+  the head of `f81e5b10` rendered beside today's neutral at the same framing): before, the mouth was a sculpted, pursed,
+  slightly smiling crease and the chin tapered into it; now the mouth is a thin line and the lower face reads as a separate
+  rounded roll ("puck") with a crease under the lower lip, as if rolled under it; at 45 degrees the chin is a rounded blob
+  rather than a taper. The head-profile pins still hold (every probe within 2.5 mm, one re-pinned), so this is shape and
+  shading the probes do not see, not a silhouette change. It came with Task 3b's lip-line seam.
+- **The opening is a box** from about 0.3 rad (flat top from the upper ridge, flat floor, near-vertical corner walls): the
+  shout reads as a puppet's or a nutcracker's mouth rather than a lipped one.
+- **At 45 degrees the side seam shows**: a dark notch at the mouth's corner in the grin and the scowl, and a thin line back
+  along the cheek at big gapes.
+- **The lower teeth are small**: they barely show in the grin and read as four studs in the shout.
+- **The eyes and the blink** only show at 45 degrees (one red eye beside a lens) or without the kit.
+
+## The spike and the owner's gate (Task 4, then Task 3b)
+
+The Task 4 spike ([`spike/`](spike/), [`spike-close/`](spike-close/)) put the opening in the muzzle's bevel at the chin
+(y 1.10-1.115), 2-3 cm below the lips and the painted mouth, so the teeth hid in shadow. The owner saw the same ("hard to see
+any teeth ... a big bevel to make the lips"), floated big lipstick-red lips, then backtracked: "the main thing is getting a
+viable toothy grin with teeth". Task 3b moved the mouth to the lip line with natural flesh lips about today's size; after it
+every upper tooth shows at 0.15 rad ([`grin/NOTES-grin.md`](grin/NOTES-grin.md)).
+
+## `eyeSquash` is dead
+
+`blob-face-sheet.ts` declares and defaults `eyeSquash` in `FaceSheetParams`, but `generateFaceSheet` never reads it (the eye's
+vertical scale is a fixed 1.25), so the goblin's authored `eyeSquash 1.70` has never taken effect. The blink uses a new `eyeLid`
+param instead (default 0, so no existing sheet changes). Wiring `eyeSquash` in would change every character's eyes: an owner
+decision.
+
+## The jaw hinge is per body now
+
+The plan assumed the bride's global `JAW_HINGE` (0.30 of the skull, her upper lip line). For the goblin that sits about 5.6 cm
+above the lip line: the jaw lever hung straight down from it and opening swung the chin back into the throat (at 0.5 rad the
+lower lip's middle dropped 4.7 cm and moved back 4.5 cm; at the old 0.6 rad shout the lower jaw vanished into the neck,
+[`grin/old-hinge/`](grin/old-hinge/)). Task 3b added a **per-body hinge**: `hinge=<0..1>` on a `.blob` jaw bone (an error on
+any other bone), carried by `blob-parse.ts` -> `BoneDef`/`ResolvedBone.jawHinge` (`resolve.ts`) -> `jaw.ts` `jawRestOf(..., hingeAt)`,
+which `rig-bind.ts` and `motion.ts` both call. The goblin uses `hinge=0.06` (y 1.1326, 2 cm behind the skull axis): at 0.5 rad
+the lower lip now drops 5.1 cm and moves back 1.7. Bodies without `hinge=` keep `JAW_HINGE` exactly (the bride is unchanged).
+
+## The kit
+
+`goblin-kit.wam` got the transcribed jaw line (`bone jaw parent=neck dir=up pitch=112 len=0.0638`, the blob's 0.083 / 1.30) and
+`public/assets/lab/goblin-kit.gltf` WAS rebuilt with WAM in the jaw-bone commit (`6f550a08`): vertex data byte-identical, the only
+new node `jaw`. The goblin has no kit skeleton-parity test (the bride's kit test has one); `goblin-kit.test.ts` passes.
+
+## Frame cost (Task 11)
+
+**The expressions made the goblin's head much more expensive: +47 ms a frame on a face close-up (54 -> 101 ms, +86%), far over
+the plan's 1.5 ms line.** Nothing was trimmed (the plan says not without the owner).
+
+How it was measured. `scripts/frame-cost.mjs` has no goblin scene (its close-up is a zombie on the game page), so this is the lab's
+own `__sdfLab.benchGpu()` (hand-stepped frames, wall clock per chunk of 20 with the queue full, `hiddenSteps` 0 on every leg),
+headless Chrome at 1380 x 820, `sdfScale` 0.7, the kit on, on this M3. A scratch driver booted `?character=goblin` and took three
+`benchGpu` legs per camera; the BEFORE is `goblin.blob` from `f81e5b10` copied over the file, the AFTER is HEAD; boots
+alternated after/before three times (load average 2-5) and the file was restored with `git checkout --` (the tree is clean).
+Each cell is the median over the boots of each boot's median leg (ms per frame):
+
+| camera | before (40 prims) | after, rest (58 prims) | after, grin | after, shout | delta at rest |
+|---|---|---|---|---|---|
+| face close-up (0.3 m, the sheet's framing) | 54.1 (53.9-54.2) | 100.7 (99.9-101.5) | 87.3 | 95.6 | **+46.6** |
+| head (0.8 m, 45 degrees) | 42.0 (41.6-42.9) | 74.5 (74.2-75.1) | 73.4 | 64.4 | **+32.5** |
+| whole body (2.4 m) | 10.1 (9.4-10.2) | 15.6 (14.6-16.1) | 13.3 | 14.1 | **+5.4** |
+
+The boot-to-boot spread is under 2 ms for every cell; the three legs inside one boot spread more (the fastest about 10-25% under the median).
+The whole-body rest leg is the first measured in each boot; its grin and shout legs read 2 ms lower, so +5.4 may be a little high.
+
+Where it goes (an ablation, two more alternated boots of four variants, rest pose; the variant files were scratch copies):
+
+| variant | prims | close-up | head |
+|---|---|---|---|
+| after (HEAD) | 58 | 99.8 | 74.7 |
+| without the 11 teeth | 47 | 77.1 | 57.6 |
+| without the teeth, the floor and the throat bar | 45 | 70.3 | 52.3 |
+| before (`f81e5b10`) | 40 | 54.3 | 41.2 |
+
+So on the close-up: **the teeth about 23 ms, the dark floor and throat bar about 7 ms, and the jaw split plus Task 3b's lip-line
+prims (net +5) about 16 ms.** All of it is paid at rest, where the teeth and the interior are buried and draw nothing.
+
+Cheapest trims, in order of what they would save for what they cost the look (owner's call):
+1. **Skip the teeth and the interior when the jaw is shut** (gape 0 shows none of them; pinned): about 30 ms back on a close-up at
+   rest, no visual change. Needs a per-prim "only when open" flag or a cull in the rig output, not a `.blob` edit.
+2. A near-distance gate on the same prims (the plan's idea), on top of 1.
+3. Fewer teeth (the plan's list: the two outer upper small teeth, then two lower): roughly 2 ms each on a close-up.
+4. Look at why the 5 net lip-line prims cost 16 ms (overlapping blends on the face's front: they sit where every face ray ends).
+
+For scale: the goblin is the protagonist seen in cutscenes and the screen lab (the first-person game shows only its arms), so the
+close-up is the shot that matters for it, and it is a worst case (the face fills the frame).
+
+## Task 12 (2026-10-15): brighter teeth
+
+Owner, on the Task 10 sheet: "its better. maybe we should like light the teeth somehow or make them brighter - hard to see them
+tbh". Frames in [`teeth/`](teeth/) (same framing as the sheet, ports 5301/9301).
+
+**What changed:** the 11 teeth went from `color=8f8266 gloss=0.15` (the cultist's dirty ivory) to `color=e0d8c0 gloss=0.35
+glow=0.15`: a light, near-neutral ivory (the warm key yellows it), a little more gloss, and a faint per-prim glow (15% of the
+lit colour replaced by the flat albedo; free, it is a field of the prim's row). Nothing else moved: same geometry, the interior
+untouched (its front-view gap is already near black, luma 9).
+
+**Why they were dark:** the mouth is a cavity, so the field AO sits on its 0.35 floor inside it and the key reaches the teeth only
+from the front; a 0.27-linear brown under that rendered at a mean luma of 26 of 255.
+
+**The number** (`teeth/before-after-front.png`, `teeth/before-after-45.png`: before, after with the kit, after without). Tooth
+pixels and gap pixels come from a MARKER render of the same shot (the teeth repainted `color=ff00ff glow=1`, the throat bar and the
+floor `color=00ffff glow=1`, the file restored afterwards), each mask eroded by a pixel; the gap is the interior pixels inside the
+teeth's bounding box; luma is Rec. 709 on the 8-bit frame.
+
+| grin close-up | tooth luma before -> after | gap luma | ratio before -> after |
+|---|---|---|---|
+| kit, front | 26.5 -> 82.4 | 9.3 -> 8.7 | 2.86 -> **9.42** |
+| kit, 45 degrees | 32.7 -> 93.4 | 34.4 -> 43.1 | 0.95 -> **2.17** |
+| no kit, front | 26.6 -> 82.3 | 9.3 -> 9.6 | 2.87 -> **8.58** |
+| no kit, 45 degrees | 32.4 -> 93.8 | 34.5 -> 41.3 | 0.94 -> **2.27** |
+| shout, kit, front / 45 | 25.7 -> 84.8 / 35.5 -> 104.5 | 4.4 / 9.5 | 5.8 -> 17.4 / 3.7 -> 10.3 |
+
+At 45 degrees the "gap" between the grin's teeth is not dark: it is the interior's grey specular sheen (painted prims keep the
+flesh's wetness, so a near-black albedo still takes a white highlight at a grazing angle) plus a little spill from the teeth.
+That is why the 45-degree ratio only just clears 2. Variants tried (`teeth/glow-sweep-front.png`, top to bottom glow 0, 0.15,
+0.3, all `e0d8c0 gloss=0.35`): glow 0 gave 6.8 front but 1.98 at 45 degrees; glow 0.3 flattened the row toward a pale clump
+(9.5 / 2.6). 0.15 keeps each tooth's shading and its own outline.
+
+**What I see:** front, each of the seven upper teeth and both fangs is a separate pale peg with a dark gap on either side; the
+fangs read as the longest. At 45 degrees the row is pale and visible under the overhanging lip; the gaps between teeth are grey
+rather than black. In the shout the four lower teeth now read as small pale teeth along the floor instead of brown studs.
+Neutral is unchanged (the teeth are buried; `goblin-blob.test.ts` still pins that no tooth paints the rest face).
+
+## Task 12 (2026-10-15): the smile moves the face (per-prim morphs)
+
+Owner: "we might have to distort the face further like when smiling i feel his face geometry isnt changing enough like his
+chins n stuff should get wider". Approach C, minimal, as the spec's 2026-10-15 amendment describes: a `.blob` prim may carry
+`morph=<channel>:<terms>` (`(dx,dy,dz)` move, `tip(...)`, `bend(...)`, `*k` radius, `*(sx,sy,sz)` axes); `morph.ts` is the pure
+core; `applyRig` moves the prim's REST geometry by the channel's weight before the jaw opens and the head turns; `actuate`
+returns its clamped channels as `morphs`, which the lab's statue path and the actor path (`ActorStepInput.morphs`) put on
+`rig.morphs`. At weight 0 nothing moves: the morph data is never packed, `pack-golden.test.ts` did not move when the morph words
+were added, and `rig-bind.test.ts` proves no-weight and zero-weight poses identical to a body without morphs (rest, open jaw,
+turned body). Frames in [`morphs/`](morphs/).
+
+**What moves on `smile`** (8 existing prims, none added; `morphs/which-prim.png` paints each a colour, neutral left, grin right):
+the lower lip (blue: ends out and back, the middle sagging 7 mm under them, thinner), the mouth corners (red: up 8 mm and back
+8, smaller), the chin (magenta: 12% wider, 3 mm lower), the cheek fill (yellow: up 7, out 3, bigger), the upper ridge (cyan:
+ends up 2 mm, out 4) and the upper lip (orange: up 2 mm, 8% wider). The numbers and why are in `goblin.blob` ("THE SMILE MOVES
+THE FACE").
+
+**Measured** (CPU field, grin pose, gape 0.204 rad, front half-width of the head from the axis): with the morphs vs the same grin
+without them, +10.5 mm a side at y 1.07, +9.5 at 1.08, +7 at 1.09 (the chin); -2.5 mm at 1.11 (the corners tuck back).
+`goblin-blob.test.ts` pins more than 7 mm at 1.07-1.08, the same prims as the `.blob` without its morph words, and every upper tooth
+still bared. The teeth/gap ratio of the grin (Task 12 A's method) is 9.3 front / 3.2 at 45 degrees with the kit (10.6 / 3.4
+without): the curled corners close the side notch, so the 45-degree gap is darker than before.
+
+**What I see** (`morphs/grin-before-after.png`: left the grin with only the brighter teeth, right with the morphs; rows front kit,
+45 degrees kit, front no kit):
+
+- **Front: it reads as a SMILE now.** The opening is a U: the lower lip sags in the middle and its ends turn up into the corners,
+  which sit level with the upper row's roots; the upper row and both fangs hang over a dark crescent. The lower face is visibly
+  wider than the neutral's (the chin ring sticks out past the cheeks). With the sunglasses on, this is the first expression whose
+  mouth SHAPE differs from the others, not only the gape.
+- **45 degrees:** the side notch (the dark gap at the mouth's corner) is gone; the corner turns up into a small knob with a dark
+  crease round it (the corner prim against the lower lip's chamfer), and the cheek bunches above it as a separate round bump. It
+  reads as a cartoon grin with jowls; the knob and its crease are the least natural part.
+- **The chin is a ring.** Widening it makes the lower face read as a fat roll (the "puck" the Task 10 notes describe, wider). It
+  is what the owner asked for ("chins wider"), but it is a lot of chin; `*(1.12,1,1)` is the knob to turn.
+- **The shout and the scowl do not change** (no `gape`/`lipCurl`/`browDown` morphs). Two `gape` morphs to round the shout's box
+  were tried (the upper ridge arched, the corners in and up, the lower lip sagging): `morphs/shout-gape-try.png` (left without,
+  right with). The top stayed flat (the face block's ellipsoid makes that edge, and it cannot morph), the corners swallowed the two
+  outer lower teeth, and at the grin's 0.34 gape the opening became a V. Dropped.
+- `goblin-expressions.ts` needed no retune: the painted sheet's smile was already invisible in the frames, the geometry does the
+  job now.
+
+## Task 12 cost (2026-10-15)
+
+Same method as Task 11 (`__sdfLab.benchGpu()` legs on `?character=goblin`, 1380 x 820 headless, `sdfScale` 0.7, kit on, the face
+close-up `setCam(0, 0.05, 0.3, 1.14)`, the expression held with `holdExpression`), with three files alternated boot by boot:
+BEFORE = `goblin.blob` at `bb702620` (pre-Task 12), AFTER = this branch's head (brighter teeth + morphs), SKIP = AFTER with the 11
+teeth, the throat bar and the floor deleted (what "skip the buried teeth and interior while the jaw is shut" would draw at rest).
+**The machine was NOT quiet:** another session ran an iOS simulator through part of it (load average up to 90; the same file read
+98 ms in one boot and 181 in another). Ten boots per variant over three sessions; each cell is the median over boots of each boot's
+median leg, with the range:
+
+| face close-up | before Task 12 | after Task 12 | skip the buried mouth (at rest) |
+|---|---|---|---|
+| neutral (rest) | 121.1 (106.6-180.8) | 118.1 (98.1-140.7) | **89.5** (78.2-110.9) |
+| grin | 147.1 (114.4-192.5) | 132.9 (112.7-188.1) | - |
+| shout | 124.8 (114.2-183.4, 6 boots) | 118.0 (108.7-181.1, 6 boots) | - |
+
+In the two quiet rounds (load under 3) the pairs were 128/118 vs 120/120 (rest) and 132/126 vs 126/126 (grin).
+
+- **Task 12 itself costs nothing measurable.** At rest the geometry is identical (the morph data is not packed; the teeth only
+  changed paint), and the grin with the morphs is no slower than the grin without them (if anything faster in the medians; within
+  the noise). The absolute numbers sit about 20% over Task 11's 101 ms for the same "before" file: a hotter, busier machine.
+- **The skip idea is worth about 29 ms at rest** on the close-up (118 -> 89.5, a quarter of the frame), the same size Task 11's
+  ablation found (99.8 -> 70.3). Not implemented (owner's go-ahead needed).
+- The 0.8 m head camera was also measured in the first session, but its spread (47-102 ms for one file) makes it unusable.
+
+**Sketch of the skip (not built).** The engine already has the switch: a prim with `dead` packs `primScale.w = 2` and every field
+(the shader's add fold, the carve pass, the CPU mirror) skips it without disturbing the fold order (pack.ts `W_DEAD`, used by
+mid-limb severs). So: (1) a `.blob` bare word, e.g. `open` (or `when=open`), on the 11 teeth, the throat bar and the floor,
+carried like `when=` to `Primitive.whenOpen`; (2) in `applyRig`, mark those prims `dead` while the face is EXACTLY neutral
+(`rig.jawGape` 0 and every morph weight 0; any nonzero gape or smile brings them back that frame, so the first millimetre of
+opening still shows teeth); (3) pinned by the existing buried-at-rest tests (they prove nothing changes visually) plus a new one
+that every `open` prim is dead at rest and alive at gape 0.001. Two caveats: a dead row still costs the loop a flag check, so the
+saving may be a little under the deletion's 29 ms (measure it the same way); and the goblin's packed bytes at rest WOULD change
+(the dead flags), so `pack-golden` re-pins once, deliberately. The near-distance gate (Task 11's trim 2) would stack on top.
+
+## How to run
+
+- The lab: `?character=goblin` on `/sdf-lab-webgpu.html`, panel section "expression" (hold, play, blink).
+- Console: `__sdfLab.holdExpression('grin', t = 10, lid = 0)`, `__sdfLab.playExpression('grin')`, `__sdfLab.blink()`,
+  `__sdfLab.setJawGape(0.2)` (a hand-set gape holds until an expression is held or played), `__sdfLab.expressionNames()`.
+- Captures: `BLOB_EXPR=grin npm run blob:shot -- goblin <out> 2` (`BLOB_EXPR=<name>[:<t>[:<lid>]]`, e.g. `neutral:10:1` for a
+  blink); `BLOB_GAPE=0.3` for a raw gape. Use your own `LAB_VITE_PORT`/`LAB_CDP_PORT`; never the owner's 5173.
+- The sheet: `LAB_VITE_PORT=5291 LAB_CDP_PORT=9291 scripts/goblin-expression-sheet.sh [outDir]` (about 3.5 minutes;
+  `NOKIT=0` skips the kit-hidden row).
+- Tests: `npx vitest run src/lab/sdf-zombie/expression.test.ts src/lab/sdf-zombie/characters/goblin-expressions.test.ts
+  src/lab/sdf-zombie/characters/goblin-blob.test.ts`.
+
+## Open items for the owner
+
+1. **Is the grin evil enough?** It is a toothy snarl, not a smile (see the assessment). With the sunglasses on, only the jaw
+   and teeth carry the expressions.
+2. *(Task 12 built it, see "the smile moves the face"; what is left: the corner knob at 45 degrees, how much chin, the shout's box.)* **Approach C, the pre-approved per-prim morph, was NOT built.** Task 3b found the teeth read without it, and Task 10 was
+   numbers only. The reasons it may still be wanted, all observed in the frames: the grin's corners do not curl up (the sheet
+   cannot paint above the seam, and nothing in the geometry lifts them); the opening is box-shaped from about 0.3 rad; the lower
+   teeth are small; and cheeks bunching on a smile would be the obvious next cue. The pre-approved shape: a `.blob` prim may
+   declare a morph (channel + offset and/or radius scale), `applyRig` applies it by the channel's weight, `actuate` outputs
+   the weights; neutral stays bit-identical.
+3. **The rest face's lower jaw is puffier** than the pre-expression head ([`tuning/rest-before-after.png`](tuning/rest-before-after.png)).
+   Acceptable, or should the lower lip and chin be re-sculpted toward the old taper?
+4. **The brows**: tuned stronger for the no-kit look; invisible with the kit. Raise them above the lenses (`browRise` or the
+   brow block), or accept that the goblin's expressions are all mouth?
+5. Surprise and sneer (clip data only); the screen-emergence lab wiring after PRs #46/#47.
+6. The dead `eyeSquash` (fix for every character, or leave).
+7. **The cost: +47 ms a frame on a face close-up** (see Frame cost). The first trim (skip the buried teeth and interior while the
+   jaw is shut) should give about 30 ms back with no visible change; it needs your go-ahead and a small engine change.
+8. **Task 12:** the teeth are light ivory with a faint glow now (tooth/gap 9.4 front); the smile morphs are a first by-eye pass, judge
+   `morphs/grin-before-after.png`. Task 12 cost nothing measurable; the skip of the buried mouth at rest is worth about 29 ms on the
+   close-up (sketch in "Task 12 cost"), waiting for your go-ahead.

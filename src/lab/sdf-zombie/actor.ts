@@ -36,6 +36,7 @@ import { isSoldierFamily, wantsTorsoGuards, type MotionProfile } from './motion-
 import { makeRng, type Rng, type WanderBounds } from './wander';
 import type { Wound } from './damage';
 import type { LimbId, Vec3 } from './types';
+import type { MorphWeights } from './morph';
 
 /** Same shape as hero-side woundedLimbs(): present-but-hurt limbs. */
 export interface WoundedLimbs {
@@ -142,6 +143,12 @@ export interface ActorStepInput {
   attack?: { phase: number; side: 'L' | 'R'; variant: SwingVariant };
   /** The pose layer's joint positions for this frame — see MotionConfig.pose. Only forwarded when set. */
   pose?: readonly Vec3[];
+  /** The expression layer's jaw gape (rad) for this frame — see MotionConfig.jawGape. Only forwarded when set. */
+  jawGape?: number;
+  /** The expression layer's per-prim MORPH weights for this frame (expression.ts `actuate` -> morph.ts): written straight onto the
+   *  rig applyRig poses with (RigState.morphs). Motion never reads them (the gape goes through motion.ts only because the jaw POINT
+   *  is pinned there). Absent leaves the rig without weights, which moves nothing. */
+  morphs?: MorphWeights;
 }
 
 /**
@@ -170,6 +177,7 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
         carryOverride: input.carryOverride,
         ...(input.attack ? { attack: input.attack } : {}),
         ...(input.pose ? { pose: input.pose } : {}),
+        ...(input.jawGape ? { jawGape: input.jawGape } : {}),
       },
       {
         dt: sdt,
@@ -224,7 +232,9 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
     }
     m.bound = {
       ...m.bound,
-      rig: constrainRigBends({ ...m.bound.rig, points, headFollowsRig: isSoldierFamily(input.profile) && f.collapsed, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape },
+      rig: constrainRigBends({ ...m.bound.rig, points, headFollowsRig: isSoldierFamily(input.profile) && f.collapsed, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape,
+        // This frame's weights, or none: a caller that stops passing them must not leave last frame's face behind.
+        ...(input.morphs || m.bound.rig.morphs ? { morphs: input.morphs } : {}) },
         f.collapsed ? f.floorY : undefined),
     };
     // Fire kicks: point shoves THROUGH the rig, after the bend constraints

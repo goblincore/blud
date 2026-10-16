@@ -66,9 +66,10 @@ const near = (a: readonly (readonly number[])[], b: readonly (readonly number[])
   a.every((p, i) => p.every((v, k) => Math.abs(v - b[i]![k]!) < eps));
 
 describe('goblin poses', () => {
-  it('are registered for the goblin (and goblin-home, his body in home clothes) and no one else', () => {
+  it('are registered for the goblin (and goblin-home, his body in home clothes; and goblin-cinematic, the same skeleton plus a jaw) and no one else', () => {
     expect(posesFor('goblin')).toBe(GOBLIN_POSES);
     expect(posesFor('goblin-home')).toBe(GOBLIN_POSES);
+    expect(posesFor('goblin-cinematic')).toBe(GOBLIN_POSES);
     expect(Object.keys(GOBLIN_POSES).sort()).toEqual(
       ['brace-back', 'floor-type', 'jolt', 'lean-back', 'reach', 'recoil', 'sit', 'sit-up-look', 'stand', 'touch', 'type']);
     expect(FLOOR.map(c => c.name).sort()).toEqual(['brace-back', 'floor-type', 'lean-back', 'sit-up-look']);
