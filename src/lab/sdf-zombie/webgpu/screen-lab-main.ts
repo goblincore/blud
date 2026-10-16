@@ -41,6 +41,7 @@ import { FLOOR_SEAT } from '../characters/goblin-poses';
 import { GOBLIN_CUES, GOBLIN_FPS, floorLayout, measureSeat, type FloorLayout } from './screen-lab-goblin';
 import { GOBLIN_FILL, GOBLIN_PUPPET_CHARACTER, GOBLIN_RIM, createGoblinPuppet } from './goblin-puppet';
 import { expressionsFor } from '../expression-library';
+import { expressionCues, expressionChannelsAt } from './emergence-expressions';
 import { expressionAt, type Channels } from '../expression';
 import type { Vec3 } from '../types';
 
@@ -112,10 +113,10 @@ interface ScreenLabSeam {
   readonly t: number;
   /** The set as measured off the goblin, once built. */
   layout: FloorLayout | null;
-  /** The hands' centres and the egg's centre at the current `t`, in the screen frame (metres), each hand's centre's distance to the egg's
+  /** `head`: the skull prims' mean centre, same frame. The hands' centres and the egg's centre at the current `t`, in the screen frame (metres), each hand's centre's distance to the egg's
    *  surface (the ellipsoid distance; negative inside) and its flesh's (that less the hand prim's radius): the hands stay off the egg (he
    *  only looks at it since the owner's third notes). */
-  probe(): { hands: Record<string, Vec3>; egg: Vec3; handToSurface: Record<string, number>; handFleshGap: Record<string, number> } | null;
+  probe(): { hands: Record<string, Vec3>; egg: Vec3; handToSurface: Record<string, number>; handFleshGap: Record<string, number>; head: Vec3 | null } | null;
 }
 
 async function bootstrap(): Promise<void> {
@@ -183,7 +184,7 @@ async function bootstrap(): Promise<void> {
   for (const e of errors) say(`goblin: ${e}`, true);
   const goblinFps = Math.max(0, num('fps') ?? GOBLIN_FPS);
   const c = GOBLIN_CUES;
-  say(`goblin: ${goblinFps > 0 ? `${goblinFps} fps` : 'smooth'}; bulge ${c.bulgeSeen.toFixed(2)} s, flinch ${c.flinch.toFixed(2)}, braced ${c.braced.toFixed(2)}, egg lands ${c.land.toFixed(2)}, sits up ${c.sitUp.toFixed(2)} to ${c.sitUpDone.toFixed(2)}${puppet.hasExpressions ? '; face: rest, scheduled blinks' : ''}`);
+  say(`goblin: ${goblinFps > 0 ? `${goblinFps} fps` : 'smooth'}; bulge ${c.bulgeSeen.toFixed(2)} s, flinch ${c.flinch.toFixed(2)}, braced ${c.braced.toFixed(2)}, egg lands ${c.land.toFixed(2)}, sits up ${c.sitUp.toFixed(2)} to ${c.sitUpDone.toFixed(2)}${puppet.hasExpressions ? '; face: expression cues (' + expressionCues(c).map(e => `${e.clip} ${e.from.toFixed(2)}`).join(', ') + '), scheduled blinks' : ''}`);
   let pixelConeK: number | undefined;
   // A held expression (look-dev: `?expr=` / `__screenLab.setExpression`), the clip's last key; null leaves the puppet's default (rest).
   const exprClips = expressionsFor(character)?.clips ?? {};
@@ -194,8 +195,10 @@ async function bootstrap(): Promise<void> {
     return !name || !!clip;
   };
   if (q.get('expr') && !holdExpression(q.get('expr'))) say(`unknown ?expr=${q.get('expr')} (${Object.keys(exprClips).join(', ') || 'no expressions'})`, true);
+  // His face through the sequence (emergence-expressions.ts: the clips by his body cues, built once); a held clip (look-dev) overrides it.
+  const faceCues = expressionCues(GOBLIN_CUES);
   /** The pose at t (the puppet's step: the clip, the scoot, the face, the upload). */
-  const stepGoblin = (t: number) => puppet.step(t, 1 / 60, { fps: goblinFps, pixelConeK, ...(heldExpr ? { channelsAt: () => heldExpr! } : {}) });
+  const stepGoblin = (t: number) => puppet.step(t, 1 / 60, { fps: goblinFps, pixelConeK, channelsAt: heldExpr ? () => heldExpr! : (tt: number) => expressionChannelsAt(tt, faceCues) });
 
   // ——— Measure the seat off the typing pose, then build the set from it —————
   for (let i = 0; i < 2; i++) stepGoblin(1.0); // `floor-type` held (no scoot yet)
@@ -411,7 +414,16 @@ async function bootstrap(): Promise<void> {
       handToSurface[k] = ellipsoidDist([h[0] - egg[0], h[1] - egg[1], h[2] - egg[2]], [EGG.rx, EGG.ry, EGG.rz]);
       handFleshGap[k] = handToSurface[k]! - handR[k]!;
     }
-    return { hands, egg, handToSurface, handFleshGap };
+    // The head's centre (the mean of the skull prims' centres; null when the body has none): where the look checks aim the close-up.
+    const skull = lastPosed.prims.filter(p => p.bone === 'skull' || p.bone === 'head');
+    let head: Vec3 | null = null;
+    if (skull.length) {
+      const m = new THREE.Vector3();
+      for (const p of skull) m.add(new THREE.Vector3((p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2));
+      m.multiplyScalar(1 / skull.length).applyMatrix4(toScreen);
+      head = [m.x, m.y, m.z];
+    }
+    return { hands, egg, handToSurface, handFleshGap, head };
   };
 
   // ——— The frame ——————————————————————————————————————————————————————————
