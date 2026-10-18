@@ -13,7 +13,7 @@
 //  - THE GOBLIN PUPPET (goblin-puppet.ts), built in adoptEmergenceFx from the SDF layer's dependencies as game-spawn.ts passes them to a
 //    body (legacy: cone, occluder, shell, prev, lastFrame, depthPre, refine; deferred: the surface output and the router's registrations),
 //    under an identity-transform group in the scene; the seat measured off his typing pose as the lab page does (measureSeat,
-//    floorLayout) and his frame placed from it; lit as the lab lights him (the key toward the banker's lamp, GOBLIN_RIM, GOBLIN_FILL:
+//    floorLayout) and his frame placed from it; lit with the key toward the banker's lamp, a flat fill and NO rim (GAME_RIM, GAME_FILL:
 //    the old key path, not the level's light list). Hidden except while the sequence plays (the boot warm flips hidden objects visible
 //    to compile them, so his pipeline is built behind the loader).
 //  - THE SEQUENCE (emergence-camera.ts sequenceFor, registered with ending-sequence.ts registerSequence) on the game's sequence system:
@@ -32,7 +32,7 @@ import { DESK_Y, GLASS, KOTATSU, TABLE_FRONT_Z, eggCentre } from './emergence-fi
 import { DURATION, paramsAt } from './emergence-timeline';
 import { createScreenPass, updateScreenPass, type ScreenPass } from './screen-pass';
 import { LAMP_BULB, buildCrt, buildKeyboard, buildLamp, buildZabuton } from './screen-set';
-import { GOBLIN_FILL, GOBLIN_RIM, createGoblinPuppet, type GoblinPuppet } from './goblin-puppet';
+import { createGoblinPuppet, type GoblinPuppet } from './goblin-puppet';
 import { GOBLIN_CUES, GOBLIN_FPS, floorLayout, measureSeat, type FloorLayout } from './screen-lab-goblin';
 import { expressionChannelsAt, expressionCues, type ExpressionCue } from './emergence-expressions';
 import {
@@ -190,6 +190,14 @@ export function puppetGpuOpts(layer: PuppetLayerDeps, mode: { deferred: boolean;
   };
 }
 
+/** His lighting in the room (owner look 2026-10-18: "a weird white fuzzy cobweb material around him"). The puppet's cold rim (GOBLIN_RIM 1.5,
+ *  compose.wgsl.ts spotCfg2.w: pow(1 - n.v, 4) x the key side, rimC up to 1.3, not clamped) is tuned in the lab at 640 x 480; on the
+ *  unstable normals of a silhouette at the game's 320 x 240 it throws white HDR sparks onto the air round him and across his chest and
+ *  arms (A/B in one boot: gone at rim 0, worse with the footprint accept off). No rim, and a fill of 0.30 (was 0.10) so his back reads
+ *  against the room's warm lamp. The lab page keeps GOBLIN_RIM / GOBLIN_FILL. */
+const GAME_RIM = 0;
+const GAME_FILL = 0.30;
+
 /** Once the SDF layer exists (before the per-room light lists): the pass into its late scene, the puppet built from its dependencies,
  *  the seat measured, the zabuton. */
 export function adoptEmergenceFx(ctx: GameContext): void {
@@ -235,7 +243,7 @@ export function adoptEmergenceFx(ctx: GameContext): void {
     const c = rotateYaw([0, 0.95, 0.15], rt.goblinYaw);
     const chest: Vec3 = [rt.goblinOrigin[0] + c[0], rt.goblinOrigin[1] + c[1], rt.goblinOrigin[2] + c[2]];
     const d = new THREE.Vector3(lamp[0] - chest[0], lamp[1] - chest[1], lamp[2] - chest[2]).normalize();
-    puppet.setLighting({ dir: [d.x, d.y, d.z], rim: num('emergencerim') ?? GOBLIN_RIM, fill: num('emergencefill') ?? GOBLIN_FILL });
+    puppet.setLighting({ dir: [d.x, d.y, d.z], rim: num('emergencerim') ?? GAME_RIM, fill: num('emergencefill') ?? GAME_FILL });
   }
   // The zabuton in his frame (its top at the measured seat), flattened into the level group like the set; slid with his scoot.
   {
@@ -434,6 +442,8 @@ export function createEmergenceSeams(ctx: GameContext) {
         autostart: rt.autostart, ready: rt.ready, errors: [...rt.errors],
       };
     },
+    /** The goblin puppet itself (null before it is built): for tuning his uniforms from the console (`.gpu.uniforms`, `setLighting`). */
+    emergencePuppet: () => ctx.world.emergence?.puppet ?? null,
     startEmergence: () => startEmergence(ctx),
     skipEmergence: () => {
       const rt = ctx.world.emergence, mine = mineOf(ctx);
