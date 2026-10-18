@@ -1,6 +1,6 @@
 # The egg emerges in the Flat (in the level, in the game): design
 
-**Date:** 2026-10-16 · **Status:** approved by the owner 2026-10-16, plan written, not built · **Branch:** `claude/emergence-in-the-flat` (stacked on `claude/screen-emergence-lab`, PR goblincore/blud#47, which merged the expressions work, PR #48) ·
+**Date:** 2026-10-16 · **Status:** built 2026-10-18, owner look pending ([notes](../../dev-notes/2026-10-16-emergence-in-the-flat/NOTES.md)) · **Branch:** `claude/emergence-in-the-flat` (stacked on `claude/screen-emergence-lab`, PR goblincore/blud#47, which merged the expressions work, PR #48) ·
 **Parents:** [the screen emergence lab spike](2026-10-11-screen-emergence-lab-spike-design.md) (the pass, the timeline, the goblin choreography, built and in look rounds) · [goblin facial expressions](2026-10-13-goblin-expressions-design.md) (the `goblin-cinematic` head, expression clips) · [the Flat in the engine](2026-10-11-flat-room-design.md) ·
 [the screen emergence draft](2026-10-01-flat-screen-emergence-design.md) §3.1 (two scenes in one page: this spec does not need it) ·
 **Owner (2026-10-16):** "it would be cool to see the egg transition in the actual level space"; the first look is a **debug-triggered scene in the Flat** (not the train hookup, not just the pass on the iMac); keep the machine light (render at 320 x 240, no heavy tasks); the lab page stays the tweaking bench.
