@@ -599,3 +599,43 @@ bones
     expect(doc.bonesTrivia.map(l => l.words[0])).toEqual(['ratio']);
   });
 });
+
+describe('compileBlob with a model scale', () => {
+  const src = (scale: string) => `model mini
+  height 1.00
+${scale}
+skeleton
+  root pelvis at 0.50 len=0.10
+  bone spine parent=pelvis dir=up pitch=13 len=0.20
+
+body
+  blob torso on spine at=0.50 r=0.05 offset=(0.01,0.02,0.03) blend=0.01
+`;
+
+  it('multiplies the lengths by the scale: root, bone lengths, radius, offset, blend', () => {
+    const base = compileBlob(parseBlob(src('')));
+    const big = compileBlob(parseBlob(src('  scale 2')));
+    expect(big.root).toEqual([0, base.root[1] * 2, 0]);
+    expect(big.bones.map(b => b.length)).toEqual(base.bones.map(b => b.length * 2));
+    expect(big.prims[0]!.radius).toBeCloseTo(base.prims[0]!.radius * 2, 12);
+    expect(big.prims[0]!.offset).toEqual([0.02, 0.04, 0.06]);
+    expect(big.prims[0]!.blendK).toBeCloseTo(0.02, 12);
+    expect(big.prims[0]!.at).toBe(base.prims[0]!.at);
+  });
+
+  it('scales the generated face prims with the body', () => {
+    const base = compileBlob(parseBlob(src('')));
+    const big = compileBlob(parseBlob(src('  scale 2')));
+    expect(big.prims.length).toBe(base.prims.length);
+    for (let i = 1; i < base.prims.length; i++) expect(big.prims[i]!.radius).toBeCloseTo(base.prims[i]!.radius * 2, 12);
+  });
+
+  it('drops the face prims\' tag', () => {
+    // facePrims() tags prims for its own tests; compileBlob drops the tag (scaleBodyDef has no unit for it).
+    expect(compileBlob(parseBlob(src(''))).prims.every(p => !('tag' in p))).toBe(true);
+  });
+
+  it('is unchanged without a scale line', () => {
+    expect(compileBlob(parseBlob(src('')))).toEqual(compileBlob(parseBlob(src('  scale 1'))));
+  });
+});

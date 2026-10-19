@@ -76,7 +76,7 @@ so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), like
 - [~] **Phase 4a, the in-game gait: built 2026-10-02, awaiting the owner's look in motion.** [Spec](../superpowers/specs/2026-10-02-goblin-gait-design.md) ·
   [plan](../superpowers/plans/2026-10-02-goblin-gait.md) · [notes and frames](../dev-notes/2026-10-02-goblin-gait/notes.md).
   "Scheming scamper": `GOBLIN_WALK`/`GOBLIN_RUN` in curve mode on the soldier's stride curves, retimed for 0.56 m legs
-  (cruise 1.19, run up to 2.77 m/s, derived and pinned), stooped (lean 12/18 degrees), carry arms for the shotgun. Foot
+  (cruise 1.19, run up to 2.77 m/s, derived and pinned; retimed 2026-10-11 for the 1.70 m goblin: 0.73 m legs, cruise 1.36, run up to 3.18 m/s), stooped (lean 12/18 degrees), carry arms for the shotgun. Foot
   stretch measured: gone (flesh feet removed; only the neck cord stretches, +20 mm, under the collar). Only stills checked:
   tempo, bob, skating and the feel in motion are the owner's gate. The curve source is swappable for a hand-authored clip
   via `npm run gait:curves`.
@@ -94,10 +94,10 @@ so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), like
     `rig-bind.ts` (`ridesHead`, ~line 388) binds it to the RIGID head: it is 94 mm below the skull pivot and will slide
     19-47 mm into or off the neck as the head pitches. Make it a short bar (`bar head on neck from=0.28 to=0.32 ...`)
     so it binds per end, and check with `__sdfLab.heroPosed()`. `female.blob:107` has the same pattern.
-- [ ] **Goblin to human height** (owner, 2026-10-11: the player is human-sized and the levels are scaled to them, so the goblin
-  should be near human height, not 1.30 m). Its own spec and plan. `height 1.30` in `goblin.blob` is a label: the proportions are
-  absolute metres, and the WAM kit (a hand-copied transcription, metres ÷ 1.30), the armour, the gait, the poses, the held-weapon
-  carries and their tests are all tuned at 1.30. Not blocking the Flat's room ([spec](../superpowers/specs/2026-10-11-flat-room-design.md)).
+- [~] **Goblin to human height: built 2026-10-11, owner look pending** (owner: the player is human-sized and the levels are scaled to them; 1.70 m, a uniform 1.3077 scale-up).
+  [Spec](../superpowers/specs/2026-10-11-goblin-human-height-design.md) · [plan](../superpowers/plans/2026-10-11-goblin-human-height.md) · [notes and before-and-after sheet](../dev-notes/2026-10-11-goblin-human-height/NOTES.md).
+  A `scale <k>` line in a `.blob`'s `model` block, applied at compile by a typed `scaleBodyDef`; `goblin.blob` `scale 1.3077`, the WAM kit rebuilt at `height 1.70`, cadence 1.31 / 1.84 Hz, `cruise` 1.36, run to 3.18 m/s,
+  `gripReach` 0.0518. Gate: the armour fit and the gait in motion (the cadence is an eyeballed starting value).
 
 ## Warbull (cyber-minotaur: flesh + bolted-in machinery, rockets + charge) — second draft from the owner's reference plate 2026-09-27, awaiting kit build + playtest
 

@@ -20,6 +20,8 @@ const bound = bindRig(body);
 const names = jointNamesForBody(body);
 const base = bound.rig.restPose as readonly Vec3[];
 const rig = makePoseRig(doc, names, base);
+// The lengths pinned below are the goblin's authored 1.30 m figures; the .blob's `scale` line makes the compiled body K times bigger.
+const K = doc.scale ?? 1;
 const at = (joints: readonly Vec3[], name: string): Vec3 => {
   const i = names.indexOf(name as never);
   if (i < 0) throw new Error(`no joint ${name}`);
@@ -56,7 +58,7 @@ describe('pose: skeleton kinematics', () => {
 
   it.each([['type', TYPE], ['recoil', RECOIL]])('%s keeps every limb segment at its bone length', (_n, clip) => {
     const j = poseJoints(rig, clip, 0);
-    for (const [a, b, want] of SEGMENTS) expect(len(sub(at(j, b), at(j, a))), `${a}-${b}`).toBeCloseTo(want, 6);
+    for (const [a, b, want] of SEGMENTS) expect(len(sub(at(j, b), at(j, a))), `${a}-${b}`).toBeCloseTo(want * K, 6);
   });
 
   it('resolves pitches above 90 degrees (the recoil throws the arms up)', () => {
@@ -68,7 +70,7 @@ describe('pose: skeleton kinematics', () => {
 
   it('thigh pitch 86 puts the knee in front of the hip and the shin hangs from it', () => {
     const j = poseJoints(rig, TYPE, 0);
-    expect(at(j, 'kneeL')[2] - at(j, 'hipL')[2]).toBeGreaterThan(0.25); // the 0.29 m thigh lies almost flat, forward
+    expect(at(j, 'kneeL')[2] - at(j, 'hipL')[2]).toBeGreaterThan(0.25 * K); // the 0.29 m thigh lies almost flat, forward
     expect(at(j, 'footL')[1]).toBeLessThan(at(j, 'kneeL')[1]);          // shin down
   });
 });
@@ -81,7 +83,7 @@ describe('pose: blending is in angle space', () => {
 
   it('keeps the arm its full length half way through a swing (a position lerp would give 0.707 of it)', () => {
     const j = poseJoints(rig, SWING, 0.5);
-    expect(len(sub(at(j, 'elbowL'), at(j, 'shoulderL')))).toBeCloseTo(0.235, 6);
+    expect(len(sub(at(j, 'elbowL'), at(j, 'shoulderL')))).toBeCloseTo(0.235 * K, 6);
   });
 
   it('is the first key before it, the last key after it, and the eased fraction between', () => {

@@ -89,6 +89,10 @@ describe('emitBlob', () => {
       '  blob head on skull at=0.5 r=0.02\n';
     expect(emitBlob(parseBlob(withBones))).toBe(withBones);
   });
+  it('round-trips a scale line', () => {
+    const text = 'model mini\n  height 1.00\n  scale 1.3077\nskeleton\n  root pelvis at 0.50 len=0.10\n\nbody\n';
+    expect(emitBlob(parseBlob(text))).toBe(text.trimEnd() + '\n');
+  });
 });
 
 describe('palette override', () => {

@@ -21,11 +21,15 @@ import { lerp } from '../vec';
 import type { Vec3 } from '../types';
 
 const doc = parseBlob(src);
+// The authored numbers (and every threshold below) are at the goblin's authored 1.30 m; the .blob's `scale` line makes the compiled body bigger (1.70 m).
+// A pin that is a LENGTH is the authored figure times K, so tightening or loosening one stays a visible choice.
+// (Comments below quote the authored figures: authored units, times K in the code.)
+const K = doc.scale ?? 1;
 const built = () => buildBody(compileBlob(doc, compileFace(doc)));
 const limb = (b: ReturnType<typeof built>, l: string) => b.clusters.find(c => c.limb === l)!;
 // Distance from p along the unit direction d to the body's surface (where the field turns positive), in 0.5 mm steps.
 // Throws if p starts outside the body or the ray never leaves it: either would read as a plausible width.
-const reach = (b: ReturnType<typeof built>, p: Vec3, d: Vec3, max = 0.3): number => {
+const reach = (b: ReturnType<typeof built>, p: Vec3, d: Vec3, max = 0.3 * K): number => {
   if (sdBody(p, b) > 0) throw new Error(`reach: start (${p.join(', ')}) is outside the body`);
   for (let t = 0; t < max; t += 0.0005)
     if (sdBody([p[0] + d[0] * t, p[1] + d[1] * t, p[2] + d[2] * t], b) > 0) return t;
@@ -103,8 +107,8 @@ describe('goblin.blob', () => {
     // at 43.6 mm on the ball-jointed body, 48.5 mm on the 2026-10-01 rebuild;
     // 30 mm is roughly where separation became visible from every yaw
     // in the turntable rather than only on the shadowed side.
-    expect(daylightOf(b, limb(b, arm), limb(b, 'torso'), shoulder, 0.235))
-      .toBeGreaterThan(0.030);
+    expect(daylightOf(b, limb(b, arm), limb(b, 'torso'), shoulder, 0.235 * K))
+      .toBeGreaterThan(0.030 * K);
   });
 
   it.each(['armL', 'armR'] as const)('%s upper arm emerges from the chest', arm => {
@@ -116,8 +120,8 @@ describe('goblin.blob', () => {
     // down from the look-dev's 1.06, is what keeps it above 15 mm: at 1.06 it
     // read 14.99). The failure this catches is the whole upper arm descending
     // INSIDE the ribcage, which is what tilt=7 did before.
-    expect(daylightOf(b, limb(b, arm), limb(b, 'torso'), shoulder, 0.11))
-      .toBeGreaterThan(0.015);
+    expect(daylightOf(b, limb(b, arm), limb(b, 'torso'), shoulder, 0.11 * K))
+      .toBeGreaterThan(0.015 * K);
   });
 
   // ...but still attached. The opposite failure, and equally easy to trip:
@@ -136,7 +140,7 @@ describe('goblin.blob', () => {
   // visible intersection the moment the walk cycle swung either limb.
   it.each([['armL', 'legL'], ['armR', 'legR']] as const)('%s does not pass through %s', (a, l) => {
     const b = built();
-    expect(clearOf(b, limb(b, a), limb(b, l))).toBeGreaterThan(0.010);
+    expect(clearOf(b, limb(b, a), limb(b, l))).toBeGreaterThan(0.010 * K);
   });
 
   // The elongated silhouette is the whole art direction — an earlier pass read
@@ -179,7 +183,7 @@ describe('goblin.blob', () => {
       const dip = Math.min(Math.max(...width.slice(0, i + 1)), Math.max(...width.slice(i))) - w;
       deepest = Math.max(deepest, dip);
     });
-    expect(deepest).toBeLessThan(0.010);
+    expect(deepest).toBeLessThan(0.010 * K);
   });
 
   // deep= scales a prim front and back alike, so a deep torso on the spine's own axis bulges at the back of the
@@ -192,8 +196,8 @@ describe('goblin.blob', () => {
     const b = built();
     const gut = (p: Vec3) => reach(b, p, [0, 0, 1]) - reach(b, p, [0, 0, -1]);
     const belly = boneAt(b, 'pelvis', 0.8), lowSpine = boneAt(b, 'spine1', 0.3);
-    expect(gut(belly)).toBeGreaterThan(0.015);
-    expect(gut(lowSpine)).toBeGreaterThan(0.008);
+    expect(gut(belly)).toBeGreaterThan(0.015 * K);
+    expect(gut(lowSpine)).toBeGreaterThan(0.008 * K);
   });
 
   // THE CLOTHES ARE PAINT (owner, 2026-10-02). Pants on the hips and legs, a dark shirt on the trunk, so the kit has no

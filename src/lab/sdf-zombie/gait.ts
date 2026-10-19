@@ -333,26 +333,29 @@ export const SHAMBLE_CARRY: GaitProfile = { ...SHAMBLE, name: 'shamble-carry', a
 /** The goblin's SCAMPER (owner, 2026-10-02: "scheming scamper"; goblin refinement phase 4a, spec
  *  docs/superpowers/specs/2026-10-02-goblin-gait-design.md): quick short light steps on a stooped body. CURVE MODE on the
  *  soldier's sampled walk, whose stride shape (thigh and knee angles per phase, hip bob) is normalised by leg length, so
- *  the goblin's 0.56 m legs (thigh 0.29 + shin 0.27, against the soldier's 0.84) just work. In curve mode strideLen,
+ *  the goblin's 0.73 m legs (thigh 0.379 + shin 0.353, against the soldier's 0.84) just work. In curve mode strideLen,
  *  footLift, kneeBend, kneeLift, kneeTrack, footPush, stanceDuty and bobAmp are UNUSED for the legs and root (see CURVE
  *  MODE above), so the character is cadence, lean, sway and arms. To use a hand-authored goblin walk instead, run a
  *  skinned clip through `npm run gait:curves` and put it in `curves`; nothing else changes. */
 export const GOBLIN_WALK: GaitProfile = {
   ...SHAMBLE,
   name: 'goblin-walk',
-  // 1.5 Hz: the soldier's 0.9375 x 1.6. A pendulum's period goes with sqrt(length), so 0.56/0.84 alone gives x1.22; the
-  // scamper is the rest. At the clip's travel 0.888 leg-lengths and duty 0.625 this implies 0.888 x 0.56 x 1.5 / 0.625 =
-  // 1.19 m/s (motion-profile.ts takes its cruise from it). Eyeballed starting value: tune in the turntable.
-  strideFreq: 1.5,
+  // 1.31 Hz: the soldier's 0.9375 x 1.4. A pendulum's period goes with sqrt(length), so 0.73/0.84 alone gives x1.07; the
+  // scamper is the rest. At the clip's travel 0.888 leg-lengths and duty 0.625 this implies 0.888 x 0.7323 x 1.31 / 0.625 =
+  // 1.36 m/s (motion-profile.ts takes its cruise from it). Eyeballed starting value: tune in the turntable.
+  // 2026-10-11: the goblin grew 1.3077x (1.30 m to 1.70 m, legs 0.56 m to 0.7323 m); cadence is x0.874 (a pendulum's period
+  // goes with the root of its length), eyeballed, tune in the turntable. It was 1.5 Hz at 1.30 m.
+  strideFreq: 1.31,
   curves: SOLDIER_WALK,
   // The stoop. The .blob already hunches at rest, so this is commitment toward the heading. 8 read as an upright soldier
   // in the first walk frames (2026-10-02, walk-40/55/70 side): 12 is eyeballed from them, the owner's "scheming" is a
   // forward-hunched creature.
   torsoLean: 12,
-  swayAmp: 0.025,
+  // 0.033 and 0.039 below are the metre figures of the 1.30 m goblin (0.025, 0.03) x 1.3077 (2026-10-11): both are metres, not angles.
+  swayAmp: 0.033,
   shoulderSway: 0.45,
   // The carry table owns the arms (the shotgun); this only rides the shoulders.
-  armSwing: 0.03,
+  armSwing: 0.039,
   asymJitter: 0.08,
   // 0.4 (owner, 2026-10-02: "his head leans a bit too much to the side"). Measured by the ear-line in the held walk and
   // run (every 4 frames over a cycle): at 1 the head rolled +-9.5 / +-11 degrees, at 0.3 +-2.3 / +-2.9, so 0.4 should be
@@ -361,13 +364,14 @@ export const GOBLIN_WALK: GaitProfile = {
   armStyle: 'carry',
 };
 
-/** The goblin's run: the soldier's run curves at a higher cadence and a deeper lean. 2.1 Hz on the clip's travel 0.663
- *  and duty 0.281 implies 0.663 x 0.56 x 2.1 / 0.281 = 2.77 m/s (the soldier's run is 2.97 on a 2.04 m body: a small
- *  creature's legs are quick). Eyeballed starting values. */
+/** The goblin's run: the soldier's run curves at a higher cadence and a deeper lean. 1.84 Hz on the clip's travel 0.663
+ *  and duty 0.281 implies 0.663 x 0.7323 x 1.84 / 0.281 = 3.18 m/s (the soldier's run is 2.97 on a 2.04 m body: a small
+ *  creature's legs are quick). Eyeballed starting values. 2026-10-11: the goblin grew 1.3077x; cadence is x0.874 (a
+ *  pendulum's period goes with the root of its length), eyeballed, tune in the turntable. It was 2.1 Hz at 1.30 m. */
 export const GOBLIN_RUN: GaitProfile = {
   ...GOBLIN_WALK,
   name: 'goblin-run',
-  strideFreq: 2.1,
+  strideFreq: 1.84,
   curves: SOLDIER_RUN,
   torsoLean: 18,
   shoulderSway: 0.5,

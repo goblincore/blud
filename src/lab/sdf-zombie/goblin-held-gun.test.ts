@@ -10,6 +10,8 @@
 import { describe, it, expect } from 'vitest';
 // @ts-expect-error — node:fs available in vitest via happy-dom/node (the repo's convention, silhouette.test.ts)
 import { readFileSync } from 'node:fs';
+import goblinSrc from './characters/goblin.blob?raw';
+import { parseBlob } from './blob-parse';
 import { motionProfileFor } from './motion-profile';
 import { GUN_GRIP } from './carry';
 
@@ -31,8 +33,10 @@ describe('goblin held shotgun', () => {
 
   it("holds the player's shorty with the handle through the hand orb", () => {
     expect(p.prop?.url).toBe('/assets/lab/shorty-double.glb');
-    // goblin.blob: `blob arm on hand at=0.55` on a 0.072 m hand bone, so the orb centre is 0.0396 m past the wrist.
-    expect(p.prop?.gripReach).toBeCloseTo(0.55 * 0.072, 4);
+    // goblin.blob: `blob arm on hand at=0.55` on a hand bone authored at 0.072 m, so the orb centre is 0.0396 m past the wrist
+    // as authored; the model's `scale` K makes both lengths K times bigger (0.0518 m on the 0.0942 m bone).
+    const K = parseBlob(goblinSrc).scale ?? 1;
+    expect(p.prop?.gripReach).toBeCloseTo(0.55 * 0.072 * K, 4);
   });
 
   it("the shorty's grip and fore-end nodes sit exactly on the shared GUN_GRIP locators", () => {
