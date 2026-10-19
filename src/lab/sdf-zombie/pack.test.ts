@@ -395,6 +395,26 @@ describe('metal — prof bit 4, value 16 (hard-surface task 2)', () => {
     // more prof-0 entries, no prof value changed.
     expect(packedProf('goblin.blob')).toEqual(
       [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,3]);
+    // goblin-cinematic.blob (goblin expressions Task 13, 2026-10-15): the goblin with the face rig, whose head the expression pass
+    // changed (this was goblin.blob's pin until the base goblin went back to f81e5b10). From the base goblin's row:
+    // 2026-10-14 (expression pass): +1 prof-0 for the chin mass split onto the jaw (Task 2) and +12 prof-0 for the 11 teeth and
+    // the mouth-interior bar (Task 3; plain blends, no chamfer, so no prof bit). No prof value changed.
+    // 2026-10-14 (Task 3b, the mouth moved to the lip line): the groove (0) is gone; +5 prof-0 (cheek-fill pair, mouth-corner
+    // pair, the jaw's dark floor); the lower lip became a bent chamfered bar (1 -> 3); +1 bent upper ridge (2). No metal bit.
+    // 2026-10-15 (Task 14, the teeth became mesh in goblin-cinematic-kit.wam): -11 prof-0 for the 11 tooth prims removed; nothing
+    // else moved: checked when re-pinning, the variant's pack-golden hash (now 2e5d52c91ee41b5a) is exactly the hash of the Task 13
+    // .blob (7587c2a0) with its 11 tooth lines deleted.
+    // 2026-10-15 (Task 18, the cartoon grin): +2 prof-2 for the bent cheek-roll pair (buried at rest); nothing else moved (the
+    // re-pinned pack-golden hash 871a9afd1a714c6b is exactly 2e5d52c91ee41b5a again with the pair's line deleted; checked).
+    // 2026-10-15 (Task 19, the evil grin's furrow): +2 prof-0 for the inner-brow bulge pair (straight, unchamfered, buried at rest);
+    // nothing else moved (the re-pinned pack-golden hash 711d0e9b041b9a72 is exactly 871a9afd1a714c6b with the pair's line deleted;
+    // the brow ridge's `furrow:` word is a face-block morph, never packed).
+    // 2026-10-16 (Task 21, the throat disc): +1 prof-0 for the throat fill under the chin (a straight tapered blob, unchamfered);
+    // the chin's width (wide 1.33 -> 1.25) moves bytes but no prof value. Checked: the re-pinned pack-golden hash 41ba4e6df21e9e19
+    // is exactly 711d0e9b041b9a72 again with the fill's line deleted and the chin's wide put back (deleting the line alone gives
+    // 0782d4922d59abfc: the chin).
+    expect(packedProf('goblin-cinematic.blob')).toEqual(
+      [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,2,2,2,3,3]);
     // Five plate boxes at 24 = box bit 3 (8) + metal bit 4 (16); the two
     // 2s are bent horns, the 3s chamfered+bent ones. Re-pinned when the
     // plates were authored `metal` — every other value is pre-metal.
@@ -506,6 +526,9 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
   //                  cultist-cowled variant likewise
   //   warbull     2  two red eyes under the brow (2026-09-27, the
   //                  reference plate's); pinned in warbull-blob.test.ts
+  //   (goblin-cinematic had 11: its SDF teeth' faint 0.15 glow, Task 12. The
+  //                  teeth are mesh in its kit since Task 14 (2026-10-15), so it
+  //                  has no glow prim any more; the base goblin never had one.)
   const GLOW_PRIMS: Record<string, number> = {
     'minotaur.blob': 2,
     'gargoyle.blob': 2,

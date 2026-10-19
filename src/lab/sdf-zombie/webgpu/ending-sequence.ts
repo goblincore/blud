@@ -113,3 +113,16 @@ export const SEQUENCES: Readonly<Record<string, Sequence>> = {
     ],
   },
 };
+
+/** Sequences built at runtime (the emergence in the Flat: its shots are placed through the level's kotatsu, emergence-camera.ts), by id. */
+const REGISTERED: Record<string, Sequence> = {};
+
+/** Make `seq` startable by id (a registered id shadows a SEQUENCES one; registering again replaces it). */
+export function registerSequence(seq: Sequence): void {
+  REGISTERED[seq.id] = seq;
+}
+
+/** The sequence `id`: a registered one, else SEQUENCES'. */
+export function sequenceById(id: string): Sequence | undefined {
+  return REGISTERED[id] ?? SEQUENCES[id];
+}

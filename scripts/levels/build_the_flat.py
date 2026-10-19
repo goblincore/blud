@@ -5,6 +5,11 @@
     blender --background --factory-startup --python scripts/levels/build_the_flat.py
     blender --background assets-source/levels/flat.blend --python scripts/levels/export_level.py -- public/assets/levels/flat.level.json
 
+The early stage (flat-early: the same apartment without the Giger iMac, spec 2026-10-16-emergence-in-the-flat-design.md):
+
+    FLAT_STAGE=early blender --background --factory-startup --python scripts/levels/build_the_flat.py
+    blender --background assets-source/levels/flat-early.blend --python scripts/levels/export_level.py -- public/assets/levels/flat-early.level.json
+
 Blender space (x, y, z), z up; north (the window) is +y; game (x, y, z) = Blender (x, z, -y).
 """
 import os
@@ -18,7 +23,9 @@ import flat_layout as L  # noqa: E402
 from flat import common as C  # noqa: E402
 from flat import materials  # noqa: E402
 
-OUT = os.path.abspath("assets-source/levels/flat.blend")
+STAGE = os.environ.get("FLAT_STAGE", "late")     # late: the Flat with the Giger iMac; early: flat-early, without it (flat_layout.STAGES)
+LEVEL_ID = L.level_id_for(STAGE)
+OUT = os.path.abspath(f"assets-source/levels/{LEVEL_ID}.blend")
 
 
 def gbox(collection, name, bmin, bmax, wire=False):
@@ -44,7 +51,7 @@ def build_markers_lights_collision():
     start.empty_display_type = "ARROWS"
     start.location = L.START[:3]
     C.collection("markers").objects.link(start)     # rotation 0: the +y arrow faces north, the window
-    for name, pos, color, power, extra in L.LIGHTS:
+    for name, pos, color, power, extra in L.lights_for(STAGE):
         data = bpy.data.lights.new(name, "POINT")
         data.color = color
         data.energy = power * 10.0
@@ -71,7 +78,7 @@ def assert_scene():
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     sc = bpy.context.scene
-    sc["level_id"] = "flat"
+    sc["level_id"] = LEVEL_ID
     sc["level_name"] = "The Flat"
     sc["ammo"] = "infinite"
     C.use_dressing()
@@ -80,7 +87,8 @@ def main():
     shell.build(M)
     giger.build(M)
     props.build(M)
-    imac.build(M)
+    if STAGE == "late":
+        imac.build(M)        # the iMac with its umbilicus, hoses and wall collar (all in imac.py); the early stage has none of it
     bath.build(M)
     hall.build(M)
     build_markers_lights_collision()

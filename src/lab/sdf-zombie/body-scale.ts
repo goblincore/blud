@@ -8,17 +8,25 @@
 // THE GUARD. Each table below is `satisfies Record<keyof T, Unit>`: adding a field to PrimDef, BoneDef or ShellParams fails the typecheck
 // until someone decides here whether it is a length. A silent default would resize the body wrongly in a way no test of today's fields sees.
 import type { BodyDef, BoneDef, PrimDef, ShellParams, Vec3 } from './types';
+import type { PrimMorph } from './morph';
 
 /** `length`: metres, multiplied. `perLength`: radians per metre, divided. `same`: not a length. */
 export type FieldUnit = 'length' | 'perLength' | 'same';
 
 export const BONE_UNITS = {
   name: 'same', parent: 'same', dir: 'same', length: 'length', lengthR: 'length', side: 'length', mirror: 'same',
+  // The jaw's hinge (goblin expressions): a FRACTION along the skull bone, not a distance.
+  jawHinge: 'same',
 } as const satisfies Record<keyof BoneDef, FieldUnit>;
 
 export const SHELL_UNITS = {
   thickness: 'length', clipNormal: 'same', clipOffset: 'length', rim: 'length', warpAmp: 'length', warpFreq: 'perLength',
 } as const satisfies Record<keyof ShellParams, FieldUnit>;
+
+/** A face morph (morph.ts, goblin expressions): its moves are metres, its radius/scale/blend terms are factors. */
+export const MORPH_UNITS = {
+  channel: 'same', sign: 'same', move: 'length', tip: 'length', bend: 'length', radius: 'same', scale: 'same', blend: 'same',
+} as const satisfies Record<keyof PrimMorph, FieldUnit>;
 
 export const PRIM_UNITS = {
   bone: 'same', src: 'same', at: 'same', capTo: 'same',
@@ -30,6 +38,8 @@ export const PRIM_UNITS = {
   color: 'same', gloss: 'same', metal: 'same', glow: 'same', core: 'same', rigid: 'same', when: 'same',
   // `shell` is recursed into below (SHELL_UNITS); `box` and `strand` hold fractions and counts only.
   shell: 'same', box: 'same', strand: 'same',
+  // `morphs` is recursed into below (MORPH_UNITS).
+  morphs: 'same',
 } as const satisfies Record<keyof PrimDef, FieldUnit>;
 
 const mul = (v: number | Vec3, f: number): number | Vec3 =>
@@ -53,7 +63,8 @@ function scaleFields<T extends object>(src: T, units: Record<keyof T, FieldUnit>
 
 function scalePrim(p: PrimDef, k: number): PrimDef {
   const out = scaleFields(p, PRIM_UNITS, k);
-  return p.shell ? { ...out, shell: scaleFields(p.shell, SHELL_UNITS, k) } : out;
+  const shelled = p.shell ? { ...out, shell: scaleFields(p.shell, SHELL_UNITS, k) } : out;
+  return p.morphs ? { ...shelled, morphs: p.morphs.map(m => scaleFields(m, MORPH_UNITS, k)) } : shelled;
 }
 
 /** The body at `k` times its authored size: the same object when k is 1, a new one otherwise (the input is never mutated). */

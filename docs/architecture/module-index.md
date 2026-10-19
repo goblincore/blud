@@ -27,6 +27,7 @@ Each line is the first sentence of the module's header comment.
 | `/sdf-lab-webgpu-bench.html` | `webgpu/spike-main.ts` |
 | `/sdf-lab-webgpu.html` | `webgpu/lab-main.ts` |
 | `/sdf-lab.html` | `lab-main.ts` |
+| `/sdf-screen-lab.html` | `webgpu/screen-lab-main.ts` |
 | `/sdf-shell-spike.html` | `webgpu/shell-spike-main.ts` |
 | `/shared-wounds-probe.html` | `shared-wounds/probe.js` |
 
@@ -38,17 +39,17 @@ Each line is the first sentence of the module's header comment.
 | [webgpu/earlyz/](#webgpuearlyz) | 10 | Early-Z depth prepass for the march. |
 | [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 27 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
 | [webgpu/upscale/](#webgpuupscale) | 8 | Upscaling of the low-res march target. |
-| [characters/](#characters) | 1 | Character bodies: `.blob` sources, generators and per-character data. |
+| [characters/](#characters) | 3 | Character bodies: `.blob` sources, generators and per-character data. |
 | [shared-wounds/](#shared-wounds) | 4 | Shared wound-field probe page. |
 | [gait-curves/](#gait-curves) | 2 | Baked gait curve data. |
-| [Entrypoints and labs](#entrypoints-and-labs) | 19 | One module per HTML page; see the entrypoint table above. |
+| [Entrypoints and labs](#entrypoints-and-labs) | 20 | One module per HTML page; see the entrypoint table above. |
 | [Dev panels](#dev-panels) | 10 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 23 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 76 | Gameplay features wired into the game loop. |
+| [Game: feature modules](#game-feature-modules) | 77 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
-| [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 8 | Blood views, the goo layer, impact splashes. |
+| [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
 | [Levels and world](#levels-and-world) | 27 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
@@ -56,7 +57,7 @@ Each line is the first sentence of the module's header comment.
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 7 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 34 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [SDF march renderer](#sdf-march-renderer) | 44 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 33 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 25 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
@@ -64,7 +65,7 @@ Each line is the first sentence of the module's header comment.
 | [AI and actors (logic)](#ai-and-actors-logic) | 11 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 9 | First-person mode, dynamite flight, explosions, rockets, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
-| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 5 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
+| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 9 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
 
@@ -190,6 +191,8 @@ Upscaling of the low-res march target.
 
 Character bodies: `.blob` sources, generators and per-character data.
 
+- `characters/goblin-expressions.ts` — The goblin's expressions (expression pass, spec docs/superpowers/specs/2026-10-13-goblin-expressions-design.md): the tuning table that maps channels…
+- `characters/goblin-head-profile.ts` — The goblin head's REST profile as seven reach probes, measured 2026-10-13 on the head BEFORE the jaw split (expression pass,…
 - `characters/goblin-poses.ts` — The goblin's authored poses and clips (goblin refinement phase 4b, spec docs/superpowers/specs/2026-10-03-goblin-pose-layer-design.md).
 
 ## shared-wounds/
@@ -229,6 +232,7 @@ One module per HTML page; see the entrypoint table above.
 - `webgpu/lab-renderer.ts` — A WebGPU renderer for the SDF lab ONLY.
 - `webgpu/normal-gradient-playtest.ts` — A developer playtest panel that toggles the analytic normal-gradient mode and its debug view in a running game.
 - `webgpu/normal-gradient-probe.ts` — The browser GPU probe that compares the WGSL analytic normal gradients against CPU fixtures (capsules, blends, wounds) and shows the results.
+- `webgpu/screen-lab-main.ts` — THE SCREEN EMERGENCE LAB (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md, plan Tasks 5 and 6): a standalone, scrubbable…
 - `webgpu/shell-spike-main.ts` — Shell-march spike: rasterise a slightly-inflated hull of the character and sphere-trace the SAME SDF field only within [entry, exit] of that hull.
 - `webgpu/spike-main.ts` — WebGPU Phase 0 spike — the go/no-go for the whole migration.
 
@@ -332,6 +336,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-dynamite-throw.ts` — Dynamite bundle helpers: taking the prop, throwing it, hit tests against bodies, and the explosion light.
 - `webgpu/game-dynamite-tuning.ts` — Dynamite tuning panel hookup: applying tuning values to the game context, the chunk budget ceiling, and reading values back.
 - `webgpu/game-egg.ts` — THE CONTROL ROOM'S EGG in the game (spec 2026-09-30-night-train-egg-ending-design.md §2): finds the plan-1 placeholder egg in the level art (material…
+- `webgpu/game-emergence.ts` — THE EGG EMERGES IN THE FLAT (plan docs/superpowers/plans/2026-10-16-emergence-in-the-flat.md Task 7; spec…
 - `webgpu/game-flail.ts` — WEAPON SLOT 1: THE SPIKE FLAIL (spec docs/superpowers/specs/2026-09-26-spike-flail-design.md).
 - `webgpu/game-flare.ts` — WEAPON SLOT 5: THE FLARE TEST HARNESS (2026-09-18), lifted beside game-main.ts.
 - `webgpu/game-gib-actor.ts` — Gibbing a whole actor (gibActor: chunks, blood, blast profile, retire) and spawning the gibs scheduled for later frames.
@@ -351,7 +356,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-light-list.ts` — THE SHARED LIGHT LIST, GAME SIDE (Shared Light List plan 1, Task 6).
 - `webgpu/game-loader-status.ts` — Boot helper for the game page: updating the loader status text.
 - `webgpu/game-loop.ts` — THE GAME LOOP in the game (docs/superpowers/plans/2026-09-26-game-loop.md): health and damage, death and restart, pickups and loadout, finite ammo,…
-- `webgpu/game-march-accept.ts` — THE MARCH'S ACCEPT LAW AS THE GAME SHIPS IT: the numbers game-main writes into every body view's aaCfg.y/z/w and perfCfg.w.
+- `webgpu/game-march-accept.ts` — THE MARCH'S ACCEPT LAW AS THE GAME SHIPS IT: the numbers game-main writes into every body view's aaCfg.y/z/w and perfCfg.w, and the march's step…
 - `webgpu/game-menu-dom.ts` — The Esc menu overlay. Esc already releases pointer lock (the browser does that); this shows a panel whenever the pointer is free after the first…
 - `webgpu/game-menu.ts` — The Esc menu's decisions, as pure functions: where New game starts, which levels the dev picker offers, the URL that starts one, and when the menu…
 - `webgpu/game-mesh-gibs.ts` — MESH GIBS (melee head damage, plan Task 11; spec §14 decision 3).
@@ -445,6 +450,7 @@ Blood views, the goo layer, impact splashes.
 - `webgpu/goo-layer-test-support.ts` — Recording stub renderer and fixtures for the behavioural goo-layer tests: the real createGooLayer runs its real sync()/render() against this stub…
 - `webgpu/goo-layer.ts` — Screen-space metaball blood (gobs-and-goo spec §3): the viscous goo the billboard droplets could never sell.
 - `webgpu/goo-presets.ts` — THE GAME'S GOO DEFAULTS, in one importable place (blood-surface comparison task, 2026-09-13).
+- `webgpu/goo-strands.ts` — THE GOO (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md, section 4): strands between the torn lip and the egg, beads…
 - `webgpu/impact-splash-profiles.ts` — Sprite tuning is independent per weapon; existing events retain a snapshot.
 - `webgpu/impact-splash-sprites.ts` — Instanced billboard sprites for impact splashes: a procedural splash atlas and normal atlas, and the lit node material that draws them.
 - `webgpu/impact-splash.ts` — Procedural, opt-in wound burst.
@@ -596,7 +602,13 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 
 - `webgpu/curl-volume-node.ts` — THE SHARED CURL VOLUME, TSL SIDE (extracted from flame-cards.ts for the explosion-curl task).
 - `webgpu/curl-volume.ts` — CURL-NOISE VOLUME (flame-polish plan task 2, 2026-09-18): a small seeded 64^3 RGBA8 3D texture whose RGB is a divergence-free vector field and whose…
+- `webgpu/emergence-camera.ts` — THE EMERGENCE'S CAMERAS IN THE FLAT, and the view the player takes over at the end (plan 2026-10-16-emergence-in-the-flat Task 7; spec…
+- `webgpu/emergence-expressions.ts` — THE GOBLIN'S FACE through the emergence (spec docs/superpowers/specs/2026-10-16-emergence-in-the-flat-design.md): which of the goblin's expression…
+- `webgpu/emergence-field.ts` — THE SCREEN EMERGENCE's field, CPU twin (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md, section 4).
+- `webgpu/emergence-placement.ts` — Where the screen frame (origin at the glass centre, +x right, +y up, +z out of the screen toward the room, metres: emergence-field.ts) sits in the…
+- `webgpu/emergence-timeline.ts` — THE SCREEN EMERGENCE's cue curves (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md, section 5): from a time `t` in…
 - `webgpu/field-render.ts` — INTERLACED FIELD RENDERING — the pure math.
+- `webgpu/goblin-puppet.ts` — THE GOBLIN PUPPET (emergence in the Flat, plan Task 4; spec docs/superpowers/specs/2026-10-16-emergence-in-the-flat-design.md): the SDF goblin of the…
 - `webgpu/hull-refine-view.ts` — Wraps a shipped body/chunk view so it can be drawn EITHER through its own proxy-box march (unchanged) OR through a per-frame surface-nets hull whose…
 - `webgpu/march-private-reads.ts` — The ONE wgslFn node that carries MARCH_NORMAL_OUT — and with it the march body's module-scope privates `gMarchNormal` and `gMarchAnchor` — plus the…
 - `webgpu/march-test-support.ts` — Shared fixtures for the march shader-text tests (split out of march.wgsl.test.ts by march split task 3, 2026-09-19).
@@ -609,6 +621,10 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 - `webgpu/normal-gradient-support.ts` — Support checks for the analytic normal gradient: which bodies and primitives are supported, owner stability and hit point reconstruction.
 - `webgpu/normal-gradient.wgsl.ts` — WGSL for the analytic normal gradient (probe, wounds, bones and body functions) and the builders that wrap it as three wgslFn nodes.
 - `webgpu/occluder-hull.ts` — A conservative INNER hull of the bodies, rasterised so the march can stop early where something solid already covers the ray.
+- `webgpu/screen-emergence.wgsl.ts` — THE SCREEN EMERGENCE's march and shading (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md section 4; plan Task 6, round…
+- `webgpu/screen-lab-goblin.ts` — THE SCREEN LAB's goblin, pure half (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md section 6, plan Task 5; look round 1,…
+- `webgpu/screen-pass.ts` — THE SCREEN PASS, shared by the lab page (screen-lab-main.ts) and the game (plan 2026-10-16-emergence-in-the-flat.md Task 2): the march…
+- `webgpu/screen-set.ts` — THE EMERGENCE SET (moved out of screen-lab-main.ts, plan 2026-10-16-emergence-in-the-flat Task 3): the polygonal pieces the egg comes out among,…
 - `webgpu/sdf-layer.ts` — Renders the raymarched bodies into their own render target, at their own resolution, and composites the result back over the polygonal scene.
 - `webgpu/shell-hull-outer.ts` — A conservative OUTER hull of the bodies — geometry guaranteed to CONTAIN the real surface — rasterised so the march can start where the body starts…
 - `webgpu/shell-hull.ts` — CPU iso-surface extraction for the shell-march spike.
@@ -795,5 +811,9 @@ What fits no area above: the original WebGL lab shader, resolution scaling, samp
 - `adaptive-scale.ts` — Dynamic resolution for the SDF layer: keep the frame inside a budget by trading raymarch resolution, which is the one lever whose cost is exactly…
 - `curl-sample.ts` — CPU SIDE OF THE SHARED CURL VOLUME (2026-09-18 blood-curl-spike): a pure, THREE-FREE trilinear sampler over the packed `Uint8Array` from…
 - `depth-diff.ts` — Depth diff — comparing the INSIDE of the outline: per-pixel surface depth of the compiled body against the reference mesh, where both agree the…
+- `expression-library.ts` — Which expression clips (and which tuning) each character has, by the name the lab and the game use for it.
+- `expression.ts` — THE EXPRESSION LAYER's pure half (spec docs/superpowers/specs/2026-10-13-goblin-expressions-design.md, plan…
 - `march.glsl.ts` — Shader source as strings.
+- `morph.ts` — PER-PRIM MORPHS: a per-prim delta per face channel that the expression layer's weight scales (goblin expressions Task 12, a minimal approach C; spec…
 - `skull-fracture.ts` — Anatomical skull damage and ray selection.
+- `squash.ts` — HEAD SQUASH AND STRETCH (goblin expressions Task 18; owner on PR #48: "make his face distort more, like when he grins it should be a bit cartoonish…

@@ -45,9 +45,11 @@ export interface JawRest {
   jaw: Vec3;
 }
 
-export function jawRestOf(skullHead: Vec3, skullTail: Vec3, jawTail: Vec3): JawRest {
+/** `hingeAt` overrides JAW_HINGE.at for one body (the `.blob` jaw bone's `hinge=`, ResolvedBone.jawHinge): the bride's 0.30 is her
+ *  upper lip line, but a skull whose mouth sits lower needs the hinge lower too, or the jaw swings back instead of dropping. */
+export function jawRestOf(skullHead: Vec3, skullTail: Vec3, jawTail: Vec3, hingeAt: number = JAW_HINGE.at): JawRest {
   const axis = sub(skullTail, skullHead);
-  const t = JAW_HINGE.at;
+  const t = hingeAt;
   return {
     restDir: normalize(axis),
     hinge: [axis[0] * t, axis[1] * t, axis[2] * t - JAW_HINGE.back],

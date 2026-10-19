@@ -25,6 +25,7 @@ import type { LoopRuntime } from './game-loop';
 import type { TrainRuntime } from './game-train';
 import type { DiscoRuntime } from './game-disco';
 import type { EggRuntime } from './game-egg';
+import type { EmergenceRuntime } from './game-emergence';
 import type { SequenceRuntime } from './game-sequence';
 import type * as THREE from 'three/webgpu';
 import type { Vec3 } from '../types';
@@ -77,6 +78,9 @@ export interface WorldState {
   disco: DiscoRuntime | null;
   /** The control room's egg: the real one (WGSL pass) replacing the placeholder; null without one. */
   egg: EggRuntime | null;
+  /** The egg emerging from the CRT in the Flat (game-emergence.ts): the set, the screen pass, the goblin puppet and the sequence; null
+   *  unless `?emergence=1` or the level is flat-early. */
+  emergence: EmergenceRuntime | null;
   /** The running scripted sequence (the Night Train ending); null until one starts. */
   sequence: SequenceRuntime | null;
   /** Collision boxes for the level — the same list the player and gibs clamp
@@ -141,6 +145,7 @@ export function makeWorldState(): WorldState {
     light: null,
     disco: null,
     egg: null,
+    emergence: null,
     sequence: null,
     colliders: [],
     actors: [],
@@ -180,6 +185,7 @@ export const WORLD_BINDINGS = {
   light: 'world.light',
   disco: 'world.disco',
   egg: 'world.egg',
+  emergence: 'world.emergence',
   sequence: 'world.sequence',
   colliders: 'world.colliders',
   actors: 'world.actors',
