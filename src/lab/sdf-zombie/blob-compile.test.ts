@@ -639,3 +639,36 @@ body
     expect(compileBlob(parseBlob(src('')))).toEqual(compileBlob(parseBlob(src('  scale 1'))));
   });
 });
+
+describe('morph= through compile, mirror and placement (goblin expressions Task 12)', () => {
+  const SRC = `model morphy
+  height 1.0
+skeleton
+  root pelvis at 0.5 len=0.1
+  bone neck parent=pelvis dir=up len=0.1
+  bone skull parent=neck dir=up len=0.2
+  mirror
+    bone arm parent=pelvis side=0.1 dir=down len=0.2
+  end
+body
+  blob torso on pelvis at=0.5 r=0.1
+  blob head on skull at=0.3 r=0.02 offset=(0.04,0,0.05) both morph=smile:(0.006,0.004,0.001)bend(0.002,-0.003,0)*1.2
+  bar arm on arm from=0.0 to=1.0 r=0.03 mirror morph=gape:tip(0.01,0,0)
+`;
+  const body = buildBody(compileBlob(parseBlob(SRC)), DEFAULT_BUILD_OPTS);
+
+  it('carries the morphs to the built prims, reflecting move/tip/bend in x on the second copy', () => {
+    const cheeks = body.prims.filter(p => p.limb === 'head' && p.morphs);
+    expect(cheeks.length).toBe(2);
+    const [left, right] = cheeks[0]!.a[0] > 0 ? [cheeks[0]!, cheeks[1]!] : [cheeks[1]!, cheeks[0]!];
+    expect(left.morphs).toEqual([{ channel: 'smile', move: [0.006, 0.004, 0.001], bend: [0.002, -0.003, 0], radius: 1.2 }]);
+    expect(right.morphs).toEqual([{ channel: 'smile', move: [-0.006, 0.004, 0.001], bend: [-0.002, -0.003, 0], radius: 1.2 }]);
+    const arms = body.prims.filter(p => p.bone?.startsWith('arm.'));
+    const tipX = (p: typeof arms[number]) => p.morphs![0]!.tip![0];
+    expect(arms.map(p => [p.bone, tipX(p)]).sort()).toEqual([['arm.l', 0.01], ['arm.r', -0.01]]);
+  });
+
+  it('a prim without morph= carries no morphs key at all', () => {
+    expect(body.prims.filter(p => p.limb === 'torso').every(p => !('morphs' in p))).toBe(true);
+  });
+});

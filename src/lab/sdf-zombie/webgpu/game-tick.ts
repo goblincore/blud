@@ -49,6 +49,7 @@ import { PLAYER, eyeOf, stepPlayer, type MoveInput } from './game-player';
 import { applyInputFrame } from './game-player-input';
 import { gibBlurSubjects } from './game-render-controls';
 import { applySequenceCamera, stepSequence } from './game-sequence';
+import { applyEmergenceCamera, stepEmergence } from './game-emergence';
 import { applyTrainCamera, lightSteam, stepTrain } from './game-train';
 import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell, extractStage, extractorOffset, fireRecoil, insertStage, loadCarry, loadHold, reloadPhaseAt, reloadPose, stagedShellCenter, supportHandPose, topLeverAngle, type HandDelta, type HandHold } from './game-viewmodel';
 import { stepVoid } from './game-void';
@@ -132,6 +133,8 @@ export function tick(ctx: GameContext, dt: number) {
   stepEgg(ctx);
   stepLoop(ctx, dt);
   stepSequence(ctx, dt);
+  // The emergence in the Flat (after stepSequence: this step's clock, and the hand-off the step its sequence finishes).
+  stepEmergence(ctx, dt);
   ctx.telemetry.telemetry.lap('region', 'tick:input-player');
   // BLAST REFRACTION ages on SIM time, like every other sim clock — never
   // wall time — so a frozen capture advances it exactly one frame per step and
@@ -1207,6 +1210,7 @@ export function tick(ctx: GameContext, dt: number) {
   applyTrainCamera(ctx, ctx.boot.handle.camera);
   applyDeathCamera(ctx, ctx.boot.handle.camera);
   applySequenceCamera(ctx, ctx.boot.handle.camera);
+  applyEmergenceCamera(ctx, ctx.boot.handle.camera);
   ctx.boot.handle.camera.updateMatrixWorld();
 
   // Optional impact crown: rebuild from the current event times after the

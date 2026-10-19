@@ -372,6 +372,10 @@ export const GOBLIN_PROFILE: MotionProfile = {
 const BY_NAME: Record<string, MotionProfile> = {
   zombie: ZOMBIE_PROFILE,
   goblin: GOBLIN_PROFILE,
+  // The goblin with the face rig (goblin expressions Task 13): the same body below the neck, so the same gait and gun.
+  'goblin-cinematic': GOBLIN_PROFILE,
+  // ...and in his home clothes (emergence in the Flat, plan Task 4): the same body again.
+  'goblin-cinematic-home': GOBLIN_PROFILE,
   soldier: SOLDIER_PROFILE,
   juggernaut: JUGGERNAUT_PROFILE,
   ogre: OGRE_PROFILE,

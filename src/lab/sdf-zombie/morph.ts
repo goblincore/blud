@@ -1,0 +1,175 @@
+// src/lab/sdf-zombie/morph.ts
+//
+// PER-PRIM MORPHS: a per-prim delta per face channel that the expression layer's weight scales (goblin expressions Task 12, a
+// minimal approach C; spec docs/superpowers/specs/2026-10-13-goblin-expressions-design.md, "Amendment (2026-10-15)"). Channels
+// are expression.ts CHANNEL_NAMES; the weight scales linearly: move both ends, move the far end, add to the bend, scale the
+// radius, scale wide/tall/deep. The jaw's rotation and the painted sheet cannot widen a chin or curl a mouth corner up; moving
+// the prims can.
+//
+// SIGNED CHANNELS (Task 16): smile and browDown run -1..1, and a linear morph moves a prim the opposite way at the opposite sign,
+// which is right for a brow that drops and lifts but wrong whenever the two signs want DIFFERENT shapes (the brow ridge knits
+// into a V on browDown 1 and arches on browDown -1, and only ONE of those may grow its chord). A channel written `browDown+:` or
+// `browDown-:` applies only on that side of zero, by the weight's magnitude (`browDown-:(0,0.005,0)` lifts 5 mm at browDown -1).
+// A plain `browDown:` keeps the linear rule on both sides.
+//
+// Pure: plain data in, plain data out, no renderer. rig-bind.ts applyRig is the one consumer that moves prims; blob-parse.ts
+// parses the `.blob` word (`morph=<channel>:<terms>`) through parseMorph; mirror.ts reflects the second copy through mirrorMorph.
+//
+// THE NEUTRAL GUARANTEE: morphOf returns null unless some morph has a nonzero finite weight, and a null result means the caller
+// takes its pre-morph path untouched (no arithmetic at all), so every body without weights renders and packs bit-identically.
+import { CHANNEL_NAMES, type ChannelName } from './expression';
+import type { Vec3 } from './types';
+
+/** One channel's delta on one prim, at weight 1. Absent terms do nothing. */
+export interface PrimMorph {
+  channel: ChannelName;
+  /** One-sided (`<channel>+:` / `<channel>-:`): applies only while the weight has this sign, by its magnitude. Absent: linear. */
+  sign?: 1 | -1;
+  /** Added to BOTH endpoints (m, the rest pose's world axes, like `offset=`). */
+  move?: Vec3;
+  /** Added to the far endpoint `b` only, on top of `move` (m). */
+  tip?: Vec3;
+  /** Added to the Bezier control displacement (m); an unbent prim counts as bend 0. */
+  bend?: Vec3;
+  /** Radius factor at weight 1: r (and r2) times 1 + w (k - 1). */
+  radius?: number;
+  /** wide/tall/deep factors at weight 1: each times 1 + w (s - 1). */
+  scale?: Vec3;
+  /** Blend factor at weight 1: blendK times 1 + w (k - 1) (Task 16: a smile's corner melts into the cheek instead of sitting on it). */
+  blend?: number;
+}
+
+/** Channel weights, as `actuate` hands them on (RigState.morphs). A channel it omits weighs 0. */
+export type MorphWeights = Readonly<Partial<Record<ChannelName, number>>>;
+
+/** The summed effect of a prim's morphs at some weights. */
+export interface MorphResult {
+  /** Offset of endpoint a. */
+  da: Vec3;
+  /** Offset of endpoint b (da plus the tip terms). */
+  db: Vec3;
+  /** Added to the bend; null when no morph bends (the prim's bend is then left exactly as it was). */
+  bend: Vec3 | null;
+  /** Radius factor (floored at 0). */
+  radius: number;
+  /** wide/tall/deep factors (each floored at 0). */
+  scale: Vec3;
+  /** Blend factor (floored at 0); 1 when no morph blends. */
+  blend: number;
+}
+
+const NUM = '[-+]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?';
+const TERM = new RegExp(`^(?:(tip|bend)?\\(([^()]*)\\)|\\*\\(([^()]*)\\)|\\*(${NUM})|blend\\*(${NUM}))`);
+
+function vec3Of(raw: string, what: string): Vec3 {
+  const parts = raw.split(',');
+  const v = parts.map(s => (s.trim() === '' ? Number.NaN : Number(s)));
+  if (v.length !== 3 || v.some(x => !Number.isFinite(x)))
+    throw new Error(`morph ${what} needs three numbers, (x,y,z), got "(${raw})"`);
+  return [v[0]!, v[1]!, v[2]!];
+}
+
+/**
+ * `<channel>:<terms>` (the value of a `.blob` `morph=` word) -> a PrimMorph. Terms, concatenated in any order, each at most once:
+ * `(dx,dy,dz)` move, `tip(dx,dy,dz)`, `bend(dx,dy,dz)`, `*k` radius, `*(sx,sy,sz)` scale, `blend*k` blend. The channel may end in
+ * `+` or `-` (one-sided, see the header). Throws a plain Error whose message the parser wraps with the line.
+ */
+export function parseMorph(raw: string): PrimMorph {
+  const colon = raw.indexOf(':');
+  if (colon === -1) throw new Error(`morph= is channel:terms, e.g. morph=smile:(0.004,0.002,0)*1.1; got "${raw}"`);
+  const head = raw.slice(0, colon);
+  const signed = head.endsWith('+') ? 1 : head.endsWith('-') ? -1 : 0;
+  const name = signed ? head.slice(0, -1) : head;
+  if (!(CHANNEL_NAMES as readonly string[]).includes(name))
+    throw new Error(`unknown morph channel "${name}" (one of ${CHANNEL_NAMES.join('|')}, optionally ending in + or -)`);
+  const out: PrimMorph = { channel: name as ChannelName, ...(signed ? { sign: signed as 1 | -1 } : {}) };
+  let rest = raw.slice(colon + 1);
+  if (rest === '') throw new Error(`morph=${name}: needs at least one term: (dx,dy,dz), tip(...), bend(...), *k, *(sx,sy,sz) or blend*k`);
+  const once = (key: keyof Omit<PrimMorph, 'channel'>) => {
+    if (out[key] !== undefined) throw new Error(`morph=${name}: gives its ${key} twice`);
+  };
+  while (rest !== '') {
+    const m = TERM.exec(rest);
+    if (!m) throw new Error(`morph=${name}: cannot read "${rest}" (terms: (dx,dy,dz), tip(...), bend(...), *k, *(sx,sy,sz), blend*k)`);
+    if (m[2] !== undefined) {
+      const key = (m[1] ?? 'move') as 'move' | 'tip' | 'bend';
+      once(key);
+      out[key] = vec3Of(m[2], key);
+    } else if (m[3] !== undefined) {
+      once('scale');
+      const s = vec3Of(m[3], 'scale');
+      if (s.some(x => x <= 0)) throw new Error(`morph=${name}: scale factors must be above zero, got (${m[3]})`);
+      out.scale = s;
+    } else if (m[5] !== undefined) {
+      once('blend');
+      const k = Number(m[5]);
+      if (!(k > 0)) throw new Error(`morph=${name}: the blend factor must be above zero, got ${m[5]}`);
+      out.blend = k;
+    } else {
+      once('radius');
+      const k = Number(m[4]);
+      if (!(k > 0)) throw new Error(`morph=${name}: the radius factor must be above zero, got ${m[4]}`);
+      out.radius = k;
+    }
+    rest = rest.slice(m[0].length);
+  }
+  return out;
+}
+
+const flipX = (v: Vec3): Vec3 => [-v[0], v[1], v[2]];
+
+/** The x-reflected twin, for the second copy of a `both`/`mirror` line (mirror.ts reflects offset, tip and bend the same way). */
+export function mirrorMorph(m: PrimMorph): PrimMorph {
+  return {
+    ...m,
+    ...(m.move ? { move: flipX(m.move) } : {}),
+    ...(m.tip ? { tip: flipX(m.tip) } : {}),
+    ...(m.bend ? { bend: flipX(m.bend) } : {}),
+  };
+}
+
+/** The summed deltas and factors of a prim's morphs at these weights, or null when no morph has a nonzero finite weight. */
+export function morphOf(morphs: readonly PrimMorph[] | undefined, weights: MorphWeights | undefined): MorphResult | null {
+  if (!morphs || !weights) return null;
+  let live = false;
+  let ax = 0, ay = 0, az = 0, tx = 0, ty = 0, tz = 0;
+  let bend: [number, number, number] | null = null;
+  let radius = 1, blend = 1;
+  const scale: [number, number, number] = [1, 1, 1];
+  for (const m of morphs) {
+    const raw = weights[m.channel];
+    if (raw === undefined || raw === 0 || !Number.isFinite(raw)) continue;
+    // One-sided: the weight's magnitude on its own side of zero, nothing on the other.
+    const w = m.sign ? Math.max(0, m.sign * raw) : raw;
+    if (w === 0) continue;
+    live = true;
+    if (m.move) { ax += w * m.move[0]; ay += w * m.move[1]; az += w * m.move[2]; }
+    if (m.tip) { tx += w * m.tip[0]; ty += w * m.tip[1]; tz += w * m.tip[2]; }
+    if (m.bend) {
+      bend ??= [0, 0, 0];
+      bend[0] += w * m.bend[0]; bend[1] += w * m.bend[1]; bend[2] += w * m.bend[2];
+    }
+    if (m.radius !== undefined) radius *= Math.max(0, 1 + w * (m.radius - 1));
+    if (m.scale) for (let k = 0; k < 3; k++) scale[k] = scale[k]! * Math.max(0, 1 + w * (m.scale[k]! - 1));
+    if (m.blend !== undefined) blend *= Math.max(0, 1 + w * (m.blend - 1));
+  }
+  if (!live) return null;
+  return { da: [ax, ay, az], db: [ax + tx, ay + ty, az + tz], bend, radius, scale, blend };
+}
+
+/** A prim's radius, radiusB, scale, bend and blend under a morph result. Untapered stays untapered, unbent stays unbent unless a
+ *  morph bends, the blend is left exactly as it was unless a morph blends; nothing else on the prim is touched. */
+export function morphShape<P extends { radius: number; radiusB?: number; scale: Vec3; bend?: Vec3; blendK?: number }>(p: P, r: MorphResult): P {
+  const out: P = {
+    ...p,
+    radius: p.radius * r.radius,
+    scale: [p.scale[0] * r.scale[0], p.scale[1] * r.scale[1], p.scale[2] * r.scale[2]],
+  };
+  if (p.radiusB !== undefined) out.radiusB = p.radiusB * r.radius;
+  if (r.blend !== 1 && p.blendK !== undefined) out.blendK = p.blendK * r.blend;
+  if (r.bend) {
+    const b = p.bend ?? [0, 0, 0];
+    out.bend = [b[0] + r.bend[0], b[1] + r.bend[1], b[2] + r.bend[2]];
+  }
+  return out;
+}

@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/webgpu/ending-sequence.test.ts
 
 import { describe, expect, it } from 'vitest';
-import { FLASH_S, SEQUENCES, cameraAt, overlayAt, shotAt, totalDuration, type Sequence, type Vec3 } from './ending-sequence';
+import { FLASH_S, SEQUENCES, cameraAt, overlayAt, registerSequence, sequenceById, shotAt, totalDuration, type Sequence, type Vec3 } from './ending-sequence';
 
 const ending = SEQUENCES.ending!;
 const START = { eye: [0, 1.5, -132] as Vec3, look: [0, 1.5, -133] as Vec3 };
@@ -83,5 +83,16 @@ describe('overlayAt', () => {
   });
   it('a hard cut never flashes', () => {
     expect(overlayAt(flashy, 0).alpha).toBe(0);
+  });
+});
+
+describe('registerSequence', () => {
+  it('makes a runtime-built sequence startable by id; SEQUENCES stays as authored', () => {
+    expect(sequenceById('test-registered')).toBeUndefined();
+    const seq: Sequence = { id: 'test-registered', endEvent: 'test.end', shots: [{ id: 'a', duration: 1, cut: 'hard', camera: { kind: 'hold' } }] };
+    registerSequence(seq);
+    expect(sequenceById('test-registered')).toBe(seq);
+    expect(sequenceById('ending')).toBe(SEQUENCES.ending);
+    expect(SEQUENCES['test-registered']).toBeUndefined();
   });
 });

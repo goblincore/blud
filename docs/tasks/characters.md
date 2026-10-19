@@ -98,6 +98,47 @@ so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), like
   [Spec](../superpowers/specs/2026-10-11-goblin-human-height-design.md) · [plan](../superpowers/plans/2026-10-11-goblin-human-height.md) · [notes and before-and-after sheet](../dev-notes/2026-10-11-goblin-human-height/NOTES.md).
   A `scale <k>` line in a `.blob`'s `model` block, applied at compile by a typed `scaleBodyDef`; `goblin.blob` `scale 1.3077`, the WAM kit rebuilt at `height 1.70`, cadence 1.31 / 1.84 Hz, `cruise` 1.36, run to 3.18 m/s,
   `gripReach` 0.0518. Gate: the armour fit and the gait in motion (the cadence is an eyeballed starting value).
+- [~] **Facial expressions: built 2026-10-13/14, awaiting the owner's look. Since Task 13 (2026-10-15) they are the CINEMATIC
+  goblin's only: `goblin-cinematic` (`goblin-cinematic.blob`, `goblin-cinematic-kit.wam` with bare eyes, no sunglasses) carries the
+  jaw, teeth, morphs and clips below; the base `goblin` is back to `f81e5b10` (pre-expression head and cost); PR #47's `goblin-home`
+  can adopt the variant (notes, Task 13 section).** [Notes, the expression sheet and the
+  tuning frames](../dev-notes/2026-10-13-goblin-expressions/NOTES.md) · [spec](../superpowers/specs/2026-10-13-goblin-expressions-design.md) ·
+  [plan](../superpowers/plans/2026-10-13-goblin-expressions.md). Built: a `jaw` carrier bone with the lower face split onto it and its
+  own hinge (`hinge=0.06` on the bone, at the lip line: the hinge is per body now, `jaw.ts`/`blob-parse.ts`/`rig-bind.ts`); the mouth
+  opening at the lip line (Task 3b: the groove gone, an upper ridge, cheek fill, mouth corners and a dark floor added); 11 jagged teeth
+  with two fangs, buried at rest; the pure `expression.ts` (channels, keyed clips, blink overlay, `actuate` to a jaw gape and face-sheet
+  overrides); the goblin's clips in `characters/goblin-expressions.ts` (neutral, grin, scowl, shout; tuned by eye 2026-10-14); the lab
+  panel section "expression", `__sdfLab.holdExpression`/`playExpression`/`blink`/`setJawGape`, `BLOB_EXPR`/`BLOB_GAPE` captures and
+  `scripts/goblin-expression-sheet.sh`; `MotionConfig.jawGape` for the actor path. Cost, measured 2026-10-14 in the lab: +47 ms a frame on a face close-up (54 -> 101 ms), +5 ms
+  at 2.4 m; the teeth and interior, buried at rest, are about 30 ms of it (notes: trims listed, none applied).
+  - [ ] Owner look: is the grin evil enough? (Before Task 13 the kit's round sunglasses covered the painted brows and eyes from the
+    front, so with the kit on the expressions differed by the jaw and teeth alone; the cinematic kit has bare eyes.) ([notes](../dev-notes/2026-10-13-goblin-expressions/NOTES.md)).
+  - [~] **Task 12 (2026-10-15), built, owner look pending:** the teeth brighter (`color=e0d8c0 gloss=0.35 glow=0.15`; grin tooth/gap luma
+    ratio 2.9 -> 9.4 front, 0.95 -> 2.2 at 45 degrees, 3.2 with the morphs) and approach C as a small per-prim morph mechanism
+    (`morph=<channel>:<terms>` on a `.blob` blob/bar, pure `morph.ts`, `applyRig` moves the rest geometry before the jaw and head;
+    `actuate` outputs the weights; neutral packs bit-identically). The goblin's `smile` morphs 8 existing prims: the opening becomes an
+    upturned U, the chin ~1 cm a side wider, the cheeks bunch. Open: the corner knob at 45 degrees and how much chin; the shout's box
+    (gape morphs tried and dropped); the rest face's puffier lower jaw is unchanged ([notes](../dev-notes/2026-10-13-goblin-expressions/NOTES.md)).
+  - [~] **Task 14 (2026-10-15), built, owner look pending: the teeth are MESH** in `goblin-cinematic-kit.wam` (7 sweeps on `skull`,
+    4 on `jaw`, the SDF teeth's layout; material `tooth`), the 11 SDF tooth prims removed (the throat bar and floor stay). rig-bind.ts
+    `kitFrames` poses a kit's `jaw` bone with the `on jaw` prims' own transform (a bone frame turns about the skull pivot, not the
+    hinge: 1-4 mm off in motion, not opening at all in the lab statue path); tested exact. The SDF hides the buried teeth by depth.
+    Tooth/gap luma 10.7 -> 21.5 front, 3.3 -> 7.6 at 45 degrees; the teeth cover a third of the pixels the SDF pegs did. Cost on the face close-up: about -20 to -28 ms at rest, -31 ms on the grin (quiet boots; a noisy first batch is in the notes).
+    Open: stouter teeth or a more visible lower row if wanted ([notes](../dev-notes/2026-10-13-goblin-expressions/NOTES.md)).
+  - [~] **Task 15 (2026-10-15), built, owner look pending: a grin that does not read as surprise.** `expression.ts` `squint`
+    channel (sheet `eyeCheek` arched lower lid, `eyeLidTop` heavy upper lid on browDown, `browDrop`; all default 0, every authored
+    sheet pinned bit-identical); face-block `morph <tag> <channel>:<terms>` lines morph the generated face prims (the cheeks rise
+    and fill on squint, the brow ridge drops on browDown); the grin's gape 0.204 -> 0.12 rad with wider smile morphs; new clips
+    `smile` (friendly) and `surprise` (the control). Grin lit eye 24% of neutral, rendered opening 198 -> 236 px and half as tall.
+    Open: the eye is ~6x5 sheet texels, so its shapes are coarse; the friendly smile's mouth barely moves from the front
+    ([notes](../dev-notes/2026-10-13-goblin-expressions/NOTES.md), [frames](../dev-notes/2026-10-13-goblin-expressions/smile/)).
+  - [ ] Sneer (clip data); the screen-emergence lab wiring after PRs #46/#47. (Surprise: Task 15.)
+  - [ ] Decide whether to fix the dead `eyeSquash` in `generateFaceSheet` for every character (it would change every face's eyes).
+  - [ ] **1.70 m for the cinematic variant** (merged into PR #47's branch 2026-10-16): `goblin-cinematic` is still authored and
+    built at 1.30 m (no `scale` line; its kit and Blender teeth at 1.30), while `goblin` and `goblin-home` here are 1.70. To match:
+    add `scale 1.3077`, rebuild `goblin-cinematic-kit` at `height 1.70`, regenerate the teeth (their layout is derived from the
+    grin's pose: `goblin_teeth.py` headless), and check `scaleBodyDef` accepts the face rig's `morphs`/`hinge` fields; or move the
+    face rig into `goblin-home` ([notes](../dev-notes/2026-10-13-goblin-expressions/NOTES.md), Task 13 section).
 
 ## Warbull (cyber-minotaur: flesh + bolted-in machinery, rockets + charge) — second draft from the owner's reference plate 2026-09-27, awaiting kit build + playtest
 

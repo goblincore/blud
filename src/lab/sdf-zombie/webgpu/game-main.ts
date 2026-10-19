@@ -109,6 +109,7 @@ import { loadLevelArt, placeLevelArt } from './game-level-art';
 import { adoptLateFx, applyTrainCamera, createTrain, createTrainSeams, lightSteam, stepTrain } from './game-train';
 import { adoptDiscoFx, createDisco, createDiscoSeams, stepDisco } from './game-disco';
 import { adoptEggFx, createEgg, createEggSeams, stepEgg } from './game-egg';
+import { adoptEmergenceFx, createEmergence, createEmergenceSeams, emergenceLevelReady } from './game-emergence';
 import { applyBodyLights, lightListOn, pickBodyFor, scratchPickBody, setLightListOn, torchLane, writeLightList } from './game-light-list';
 import { adoptLightFx, applyRoomFill, applySelfShadow, roomFillFactor, applyStormBodyKey, applyWindowKey, releaseWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light';
 import { VITALS, segmentHitsCapsule } from './player-vitals';
@@ -402,7 +403,7 @@ import { ENGAGED_RADIUS, FORE_HAND_REST, GRIP_HAND_REST, GUN_REST, SPRITE_TRAIL_
 const DEFAULT_PROBE_WEIGHT = 0.75;
 
 /**
- * RESOLUTION RUNGS — the owner picks with ?res=. All 4:3 except the legacy
+ * RESOLUTION RUNGS — the owner picks with ?res= (960, 800, 640, 320). All 4:3 except the legacy
  * '960' (the old fit-aspect 960x540 cap, kept so before/after numbers are
  * comparable). Default 800x600 per the owner's "capped at 800x600".
  *
@@ -415,6 +416,8 @@ const RES_RUNGS = {
   '960': { mode: 'fit', maxW: 960, maxH: 540 },
   '800': { mode: 'fixed', width: 800, height: 600 },
   '640': { mode: 'fixed', width: 640, height: 480 },
+  // 320x240 (owner 2026-10-16: a very low rung to look at scenes on a busy machine): the SDF march renders 1:1 with it.
+  '320': { mode: 'fixed', width: 320, height: 240 },
 } as const satisfies Record<string, RenderCap>;
 type ResRung = keyof typeof RES_RUNGS;
 /** `?graphics=high` (owner 2026-09-13): which SHIPPED_UPSCALE entry the boot loads. A BOOT
@@ -970,6 +973,9 @@ async function main() {
   createDisco(ctx);
   // The control room's egg (after the level art exists; before the light lists: unlit).
   createEgg(ctx);
+  // The egg emerging from the CRT in the Flat (flat-early, or ?emergence=1): the set on the kotatsu joins the level group here, before
+  // the light lists, so the room's lights light it.
+  createEmergence(ctx);
 
   (globalThis as Record<string, unknown>).__dungeon = {
     setDungeon(on: boolean) { ctx.lighting.dungeonOn = on; applyRig(ctx, on ? DUNGEON_RIG : GALLERY_RIG); },
@@ -1271,6 +1277,7 @@ async function main() {
   adoptLightFx(ctx);
   adoptDiscoFx(ctx);
   adoptEggFx(ctx);
+  adoptEmergenceFx(ctx);
   if (ctx.render.refineWanted) ctx.render.sdfLayer.setRefine(true);
   ctx.render.postAa.addSink(ctx.render.sdfLayer);
 
@@ -4172,6 +4179,8 @@ async function main() {
     },
   }).then((gate) => {
     (window as unknown as Record<string, unknown>).__warmGate = { phase: gate.phase, timedOut: gate.timedOut };
+    // The emergence's autostart clock (?emergence=1) starts now, whatever the outcome: the game is playable either way.
+    emergenceLevelReady(ctx);
     if (gate.phase !== 'ready') console.warn(`[warm] loader gate settled ${gate.phase}${gate.timedOut ? ' (after the 15 s bound)' : ''}`);
     // THE BACKGROUND SET (defer-compile task, 2026-09-19). The loader is gone
     // (or failed) and the loop is released, so the crowd and gib/chunk programs
@@ -5904,6 +5913,7 @@ async function main() {
     createDynamicLightSeams(ctx),
     createDiscoSeams(ctx),
     createEggSeams(ctx),
+    createEmergenceSeams(ctx),
     createDebugProbeSeams(ctx, { clearDepthProbes, countDescendants, nodeDepth, round2 }),
     createBenchSeams(ctx, { awaitBakes: withCtx(ctx, awaitBakes), bodiesOnScreen: withCtx(ctx, bodiesOnScreen), demoScenarioOf: withCtx(ctx, demoScenarioOf), performBenchAction: withCtx(ctx, performBenchAction) }),
     createRenderDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), camera }),

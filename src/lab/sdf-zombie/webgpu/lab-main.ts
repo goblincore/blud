@@ -55,7 +55,12 @@ function activeCharacterName(): string {
 import { parseBlob } from '../blob-parse';
 import { makePoseRig, poseJoints, type PoseRig } from '../pose';
 import { posesFor } from '../pose-library';
-import { generateFaceSheet } from '../blob-face-sheet';
+import { generateFaceSheet, sheetToRgba } from '../blob-face-sheet';
+import {
+  REST_CHANNELS, expressionAt, actuate, blinkLid, withBlink, sheetKey, type ExpressionClip,
+} from '../expression';
+import type { MorphWeights } from '../morph';
+import { expressionsFor } from '../expression-library';
 import { compileBlob, compileFace, compileSheetImage } from '../blob-compile';
 import {
   DEFAULT_FACE, FACE_PRESETS, pickFace, type FaceParams,
@@ -79,7 +84,7 @@ import { createBloodSim, burst, emitTrails, stepBlood, addScraps } from '../bloo
 import { createBloodView } from './blood-view-gpu';
 import { createGooLayer } from './goo-layer';
 import { cutChains, cutLimbs } from '../connectivity';
-import { bindRig, applyRig, impulseAt, headQuatOf } from '../rig-bind';
+import { bindRig, applyRig, impulseAt, headQuatOf, morphedRest } from '../rig-bind';
 import { stepRig } from '../rig';
 import { relaxRopeConstraints, type MissingLimbs } from '../collapse';
 import { applyMelt, applyMeltOrgans, endpointHeights, meltInitBody, remeltClusters, stepMelt, type MeltState } from '../melt';
@@ -107,6 +112,7 @@ import { add, sub } from '../vec';
 import { makeChunk, stepChunk, type Chunk, type ChunkKind } from '../gib-chunks';
 import { chunkExtent } from '../extent';
 import { simplifyBody } from '../simplify';
+import { JAW_MAX_GAPE } from '../jaw';
 import { CIG_EMBER_HOT, STICK_IN_HAND, buildHandPrims } from '../hands';
 import {
   EMPTY_FPV_INPUT, clipBundlePresented, enterFpvMode, exitFpvMode, forceThrow,
@@ -669,6 +675,9 @@ async function main() {
    * the sheet has to reach all of them, and only one of them may dispose it.
    */
   let faceSheet: { tex: THREE.Texture; atlas: THREE.Vector4; mean: number } | null = null;
+  /** The RGBA buffer behind the generated face sheet's DataTexture, kept so the expression layer can refill it in place. Null
+   *  while the face is a PNG or decal. */
+  let generatedRgba: Uint8Array | null = null;
   /**
    * What faceCfg.x is set to when the face is on: 1 = multiplier sheet,
    * 2 = decal (a baked colour image pasted on as albedo). Owned here rather
@@ -698,6 +707,7 @@ async function main() {
       atlas: new THREE.Vector4(w / sheetW, h / sheetH, x / sheetW, y / sheetH),
       mean: def.mean,
     };
+    generatedRgba = null;
     for (const v of [view, ...crowd]) v.setFaceTexture(tex, faceSheet.atlas, def.mean);
   }
 
@@ -757,6 +767,7 @@ async function main() {
     tex.flipY = true;
     faceSheet?.tex.dispose();
     faceSheet = { tex, atlas: new THREE.Vector4(1, 1, 0, 0), mean: 1 };
+    generatedRgba = null;
     faceMode = mode;
     for (const v of [view, ...crowd]) v.setFaceTexture(tex, faceSheet.atlas, 1);
     applyMeanOf(tex);
@@ -823,15 +834,7 @@ async function main() {
     // the mouth belongs. generateFaceSheet keeps writing top-left rows,
     // matching the registry's rect convention and staying easy to assert on;
     // the flip lives here, at the one place that uploads.
-    const rgba = new Uint8Array(gen.size * gen.size * 4);
-    for (let y = 0; y < gen.size; y++) {
-      const src = (gen.size - 1 - y) * gen.size;
-      for (let x = 0; x < gen.size; x++) {
-        const v = gen.pixels[src + x]!;
-        const o = (y * gen.size + x) * 4;
-        rgba[o] = v; rgba[o + 1] = v; rgba[o + 2] = v; rgba[o + 3] = 255;
-      }
-    }
+    const rgba = sheetToRgba(gen);
     const tex = new THREE.DataTexture(rgba, gen.size, gen.size, THREE.RGBAFormat);
     tex.magFilter = THREE.NearestFilter;
     tex.minFilter = THREE.NearestFilter;
@@ -844,6 +847,7 @@ async function main() {
 
     faceSheet?.tex.dispose();
     faceSheet = { tex, atlas: new THREE.Vector4(1, 1, 0, 0), mean: gen.mean };
+    generatedRgba = rgba;
     for (const v of [view, ...crowd]) v.setFaceTexture(tex, faceSheet.atlas, gen.mean);
     return true;
   }
@@ -962,6 +966,50 @@ async function main() {
    *  steps — unlike setMotionEnabled(false), which snaps the rest pose back
    *  to the authored base (a turntable of a held pose showed the A-pose). */
   let poseHeld = false;
+  /** THE EXPRESSION LAYER's jaw gape (rad, jaw.ts). The spike sets it by hand (`__sdfLab.setJawGape`); Task 9 drives it from
+   *  clips. It rides on top of the motion's own gape (the bride's sword swing): the larger wins. */
+  let exprGape = 0;
+  /** A hand-set gape (`__sdfLab.setJawGape`, BLOB_GAPE captures) that wins over the clips until an expression is held or played.
+   *  Without it stepExpression overwrote the hand-set value with the clip's (0 at neutral) on the very next frame. */
+  let gapeHold: number | null = null;
+  /** THE EXPRESSION LAYER's per-prim morph weights (morph.ts; Task 12), from `actuate`, or null for a character without
+   *  expressions. All zero at neutral, which moves nothing. */
+  let exprMorphs: MorphWeights | null = null;
+  /** The active character's expression clips and its authored sheet (the neutral), or null when it has none. `entry` and
+   *  `compileCharacterSheet` are the ones loadGeneratedFace uses. */
+  const exprSet = expressionsFor(activeCharacterName());
+  const exprBase = exprSet ? compileCharacterSheet(entry).sheet : null;
+  let exprClip: ExpressionClip | null = null;
+  let exprT = 0;            // seconds into the clip
+  let exprPlaying = false;  // advance exprT with the frame clock
+  let exprClock = 0;        // seconds, for blinks
+  let blinkStart = -1;      // exprClock when the last blink began
+  let exprLidHold = 0;      // a lid value held for a capture (a blink frame)
+  let exprKey = '';         // sheetKey of the sheet last uploaded
+
+  /** Refill the generated face sheet's texture in place from new params; no-op when the face is a PNG or a decal. */
+  function refreshSheet(params: Parameters<typeof generateFaceSheet>[0]) {
+    if (!faceSheet || !generatedRgba || (faceSheet.tex.image as { data?: unknown } | null)?.data !== generatedRgba) return;
+    const gen = generateFaceSheet(params, 64);
+    sheetToRgba(gen, generatedRgba);
+    faceSheet.tex.needsUpdate = true;
+    faceSheet.mean = gen.mean;
+    for (const v of [view, ...crowd]) v.setFaceTexture(faceSheet.tex, faceSheet.atlas, gen.mean);
+  }
+
+  /** One expression tick: advance the clock, sample the clip, set the jaw gape, regenerate the sheet only if it changed. */
+  function stepExpression(dt: number) {
+    if (!exprSet || !exprBase) return;
+    exprClock += dt;
+    if (exprPlaying) exprT += dt;
+    const base = exprClip ? expressionAt(exprClip, exprT) : REST_CHANNELS;
+    const lid = Math.max(blinkLid(exprClock, blinkStart), exprLidHold);
+    const act = actuate(withBlink(base, lid), exprBase, exprSet.tuning);
+    exprGape = gapeHold ?? act.jawGape;
+    exprMorphs = act.morphs;
+    const key = sheetKey(act.sheet);
+    if (key !== exprKey) { exprKey = key; refreshSheet(act.sheet); }
+  }
   /** The pose layer's per-character skeleton data (pose.ts), built on first use. */
   let poseRig: PoseRig | null = null;
   /** Seconds since the hero last fired; feeds the prop's muzzle rise. */
@@ -2684,6 +2732,8 @@ async function main() {
         bounds: WANDER_BOUNDS, rng: motionRng, signals: heroSignals,
         profile: { ...motionProfile, cruise: cruiseFor(speedBand) },
         forceSpeed, carryOverride,
+        jawGape: exprGape,
+        ...(exprMorphs ? { morphs: exprMorphs } : {}),
       });
       lastMotionFrame = f;
       // shot/forcedCollapse/fire are values — read the drained state back.
@@ -2735,12 +2785,22 @@ async function main() {
     // the flesh reddens on the SAME number that sags it — and at twice the
     // rate, so the colour leads the collapse.
     view.setMelt(meltState ? meltState.t : 0);
-    const posed = applyRig(current, heroMotion.bound, heroMotion.lastBodyYaw);
+    stepExpression(dt);
+    // The expression layer's gape and morph weights: statue mode and held captures never run the motion step that would set
+    // rig.jawGape / rig.morphs.
+    const gapeOver = exprGape > (heroMotion.bound.rig.jawGape ?? 0);
+    const boundForPose = gapeOver || exprMorphs
+      ? { ...heroMotion.bound, rig: { ...heroMotion.bound.rig,
+        ...(gapeOver ? { jawGape: exprGape } : {}), ...(exprMorphs ? { morphs: exprMorphs } : {}) } }
+      : heroMotion.bound;
+    const posed = applyRig(current, boundForPose, heroMotion.lastBodyYaw);
     lastPosed = posed;
     // Polygon halves ride the rig — one pose() call drives kit and prop from
     // the same rig solve (the block itself lives in character-view.ts, moved
-    // verbatim).
-    heroView.pose(current, heroMotion.bound, heroMotion.lastBodyYaw, sinceFire,
+    // verbatim). boundForPose, not heroMotion.bound: the kit's jaw bone opens by
+    // the same gape the `on jaw` prims got (rig-bind kitFrames; goblin
+    // expressions Task 14), and in statue mode only that copy carries it.
+    heroView.pose(current, boundForPose, heroMotion.lastBodyYaw, sinceFire,
       heroMotion.motionState ? lastMotionFrame : null, dt, MOTION_SEED);
     // Rest-space noise anchor (motion-polish task 6): `current` is the
     // authored, un-rigged body — the rest pose the noise texture is baked
@@ -2759,12 +2819,16 @@ async function main() {
     // upload, the face projection and the wounds all read; do not call
     // applyMelt again further down.
     let frameBody = posed;
+    // The noise anchor's rest follows the face morphs (rig-bind morphedRest, goblin Task 16): against the bare rest a morphed
+    // prim's skin noise jumped at its outline (a dark seam round the dropped brow ridge, the grin's corners). `current` itself
+    // when no morph weighs anything. The head (Task 18) so the squash moves the anchor too.
+    const restForNoise = morphedRest(current, boundForPose.rig.morphs, boundForPose.head);
     if (meltState) {
       // Bones fall out FIRST: a group released this frame must not also be
       // uploaded in the body's bone rows, or it renders twice.
       releaseMeltBones(posed);
       const pp = applyMelt(posed.prims, meltState);
-      const cp = applyMelt(current.prims, meltState);
+      const cp = applyMelt(restForNoise.prims, meltState);
       // Released groups leave the body's bone rows (they are chunks now).
       // Organs (op 'organ') are never released — they are soft and melt
       // with the flesh (task 7). Bone fold is a hard min, so filtering
@@ -2797,7 +2861,7 @@ async function main() {
           bonePrims: meltBoneRows(current.bonePrims) },
       );
     } else {
-      view.update(posed, current);
+      view.update(posed, restForNoise);
     }
     if (sdfLayer.occluderEnabled) occluderHull.update([posed, ...crowdBodies()], woundSpheres(posed.prims));
     // Frozen: pin the shader clock so the eye-glow flicker (and anything else
@@ -3618,6 +3682,15 @@ async function main() {
       postAa.setSharpUpscale(!postAa.sharpUpscale);
       sharpBtn.textContent = `sharp upscale: ${postAa.sharpUpscale ? 'on' : 'off'}`;
     });
+
+  // The expression layer (spec 2026-10-13-goblin-expressions-design.md): play a clip from its first key, or blink.
+  if (exprSet) {
+    const exprBox = addSection(panelEl, 'expression');
+    for (const name of Object.keys(exprSet.clips)) {
+      addButton(exprBox, name, () => { exprClip = exprSet.clips[name]!; exprT = 0; exprPlaying = true; exprLidHold = 0; });
+    }
+    addButton(exprBox, 'blink', () => { blinkStart = exprClock; });
+  }
 
   // Motion (X1.22): master + wander toggles, the forced-collapse hook for
   // the K key's panel twin, and the live damage-meter readout.
@@ -4603,6 +4676,31 @@ async function main() {
       forceSpeed = undefined; carryOverride = undefined;
       return lastMotionFrame ? { gait: lastMotionFrame.gaitName, carry: lastMotionFrame.carry } : null;
     },
+    /** Hand-set the jaw gape (rad), clamped to jaw.ts's JAW_MAX_GAPE. Statue and held captures both honour it; it holds over the expression clips until holdExpression/playExpression. */
+    setJawGape(g: number) { exprGape = gapeHold = Math.max(0, Math.min(JAW_MAX_GAPE, Number.isFinite(g) ? g : 0)); },
+    /** Names of the active character's expressions, or []. */
+    expressionNames(): string[] { return exprSet ? Object.keys(exprSet.clips) : []; },
+    /**
+     * THE EXPRESSION LAYER (spec 2026-10-13-goblin-expressions-design.md): hold the named expression of the ACTIVE character at clip
+     * time `t` seconds (default 10: past every clip's end, i.e. fully formed), optionally with the lid held at `lid` (a blink frame).
+     * Applies the sheet immediately. Returns the name, t and gape, or null when this character has no such expression.
+     */
+    holdExpression(name: string, t = 10, lid = 0) {
+      const clip = exprSet?.clips[name];
+      if (!exprSet || !clip) return null;
+      exprClip = clip; exprT = t; exprPlaying = false; blinkStart = -1; exprLidHold = lid; gapeHold = null;
+      stepExpression(0);
+      return { expression: clip.name, t, jawGape: exprGape };
+    },
+    /** Play the named expression from its first key, advancing with the frame clock. */
+    playExpression(name: string) {
+      const clip = exprSet?.clips[name];
+      if (!clip) return null;
+      exprClip = clip; exprT = 0; exprPlaying = true; exprLidHold = 0; gapeHold = null;
+      return { expression: clip.name };
+    },
+    /** Blink now. */
+    blink() { blinkStart = exprClock; },
     /**
      * THE POSE LAYER (spec 2026-10-03-goblin-pose-layer-design.md): hold the named authored pose or clip of the ACTIVE character
      * at clip time `t` seconds, stepped `frames` times at 1/60 with the body standing still, then frozen exactly like holdPose so

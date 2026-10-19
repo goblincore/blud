@@ -103,6 +103,83 @@ bone forearm parent=upperarm dir=down tilt=6 pitch=10 len=0.26 lenR=0.30
 The bride's sword forearm. `makeMotionJoints` measures `arm.L`/`arm.R`
 separately, so the rig carries the difference.
 
+## Where the jaw hinges: `hinge=` (added 2026-10-14)
+
+A `jaw` bone (bride, goblin-cinematic) opens by ROTATING its `on jaw` prims about a hinge
+on the skull axis (jaw.ts). The default, `JAW_HINGE.at` 0.30 of the skull, is
+the bride's upper lip line. `hinge=<0..1>` on the jaw bone moves it for one
+body; it is an error on any other bone. Put it at the MOUTH LINE: a hinge well
+above the lips (the goblin's was 5.6 cm above) swings the lower jaw back into
+the throat instead of dropping it.
+
+```
+bone jaw parent=neck dir=up pitch=112 len=0.083 hinge=0.06
+```
+
+## Face morphs: `morph=<channel>:<terms>` (added 2026-10-15)
+
+A `blob` or `bar` can MOVE with a face channel (`expression.ts` CHANNEL_NAMES:
+`gape smile browDown lipCurl lid squint squash furrow sneer`; `squash` also squashes
+the whole rigid head, squash.ts): the expression layer's weight for that
+channel scales the delta linearly, applied to the REST geometry before the jaw
+opens and the head turns (morph.ts, rig-bind.ts applyRig). One word per
+channel, terms concatenated, each at most once:
+
+| term | does, at weight 1 |
+|---|---|
+| `(dx,dy,dz)` | moves both ends (metres, world axes at rest, like `offset=`) |
+| `tip(dx,dy,dz)` | moves the far end only, on top of the move (widen a bar along the arch) |
+| `bend(dx,dy,dz)` | adds to the bend (a bar along the arch sags: its ends curl up) |
+| `*k` | radius (and `r2`) times `k` |
+| `*(sx,sy,sz)` | `wide`/`tall`/`deep` times these |
+| `blend*k` | `blend=` times `k` (a ball pushed out on a smile MELTS into the cheek instead of sitting on it as a knob) |
+
+**One-sided channels** (added 2026-10-15, goblin Task 16): `smile` and `browDown`
+run -1..1 and a plain morph runs backwards at a negative weight. When the two
+signs want different shapes, write `<channel>+:` and/or `<channel>-:` (legal
+together on one line): each applies only on its own side of zero, by the
+weight's magnitude, so `browDown-:(0,0.005,0)` lifts 5 mm at browDown -1 and
+does nothing on a scowl. A point prim can GROW a chord on one side
+(`(-0.012,0,0)tip(0.024,0,0)bend(0,-0.016,0)`: the goblin's brow ridge knits into a
+V) without the other side growing it too.
+
+**Morphs and the skin noise.** The shader anchors the skin noise (bump, grain,
+mottle) in each surface point's dominant prim's REST frame. A morphed prim
+moved away from that rest leaves a thin dark seam along its outline on screen
+(not in the field, so a CPU check will not see it) unless the upload's rest is
+the MORPHED rest: `rig-bind.ts` `morphedRest(rest, weights)`, which the lab's
+hero upload uses. Any other path that renders morphs (an actor in the game)
+must pass it too.
+
+```
+# the goblin's mouth corners push out and up on a smile, and grow a little
+blob head on jaw at=1.0 r=0.010 blend=0.004 offset=(0.037,0.0365,-0.0048) both morph=smile:(0.004,0.005,0)*1.1
+```
+
+`both`/`mirror` reflect the move, tip and bend in x on the second copy. An
+unknown channel, the same channel twice on a line, a factor of 0 or less, or a
+`morph=` on a carve/groove/shell or in the `bones` block is a parse error.
+Weight 0 (and every character without an expression layer) moves nothing: the
+morph data is never packed, so a neutral face renders bit-identically. A morph
+is a pose, not a re-sculpt: judge it by frames at the expression it serves, and
+keep the deltas to millimetres (a cheek pushed 6 mm out leaves a waist where it
+was; check the fillet with a capture).
+
+**The generated face prims** (the cranium, the face block's jaw ellipsoid, the
+brow ridge, the nose: `face.ts` facePrims) have no `.blob` line, so their morphs
+go in the `face` block, one line per prim tag (`head`, `jaw`, `brow`, `nose`),
+one `<channel>:<terms>` word per channel (added 2026-10-15, goblin Task 15):
+
+```
+face
+  morph jaw  squint:(0,0.005,0.0015)*(1.05,1.12,1.03)   # the cheeks rise into the eyes
+  morph brow browDown:(0,-0.003,0.0015) squint:(0,-0.0015,0)
+```
+
+A tag the face does not generate (or `brow`/`nose` turned off by `browHeavy`/
+`noseLength` near 0) is a compile error at that line; a second line for one tag
+is a parse error. Same neutral guarantee: never packed.
+
 ## Curved primitives: `bend=`
 
 Horns, tusks, tails, claws, curved fingers, ribs, hooked noses. Before this
