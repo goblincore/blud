@@ -19,9 +19,9 @@
 //  - THE SEQUENCE (emergence-camera.ts sequenceFor, registered with ending-sequence.ts registerSequence) on the game's sequence system:
 //    the camera override, the gun and HUD hidden, input blocked, its clock on the sim step. `?emergence=1` starts it 2 s (sim time)
 //    after the level is ready (emergenceLevelReady, from the warm gate). While it plays the viewmodel's orb hands are hidden (the sequence
-//    runtime hides only the gun) and the flashlight is held off (its hot spot, riding the player's camera, blew the close shots out).
+//    runtime hides only the gun) and the flashlight is held off (its hot spot, riding the player's camera, blew the close shots out) and left off at the hand-off.
 //  - THE HAND-OFF at its end: the puppet hidden, the player stood on his spot looking at the egg (emergence-camera.ts handoffFor), the
-//    sequence runtime cleared (its overlay, the HUD back, the fov restored, the hands and the flashlight as they were) so input returns
+//    sequence runtime cleared (its overlay, the HUD back, the fov restored, the hands back; the flashlight stays off) so input returns
 //    and it can run again, and for RISE_S the view rises from his seated eye to the player's own (applyEmergenceCamera, after
 //    applySequenceCamera).
 // Seams: `__sdfGame.emergence()`, `startEmergence()`, `skipEmergence()`, `emergenceSetT(t, hold = true)`.
@@ -85,9 +85,6 @@ export interface EmergenceRuntime {
   zabuton: { mesh: THREE.Mesh; base: THREE.Vector3 }[];
   faceCues: ExpressionCue[];
   deferredRegistered: boolean;
-  /** The flashlight as it was when the sequence started (it is held off while the sequence plays: from the sequence's cameras its hot
-   *  spot blew the close shots out), restored at the hand-off. */
-  torch: { level: number; target: number } | null;
   /** The last step's CPU cost (ms): the puppet's pose and upload, the pass's update (the goo replay among it). */
   cpuMs: { puppet: number; pass: number };
   errors: string[];
@@ -160,7 +157,7 @@ export function createEmergence(ctx: GameContext): EmergenceRuntime | null {
     phase: 'idle', t: 0, hold: null, seq, handoff: handoffFor(placement), rise: null,
     setMeshes, glass, pass, puppet: null, puppetParent, layout: null,
     goblinOrigin: toWorld(placement, [0, -NOMINAL_GLASS.y, NOMINAL_GLASS.z]), goblinYaw: placement.yaw + Math.PI,
-    zabuton: [], faceCues: expressionCues(GOBLIN_CUES), deferredRegistered: false, torch: null, cpuMs: { puppet: 0, pass: 0 }, errors: [],
+    zabuton: [], faceCues: expressionCues(GOBLIN_CUES), deferredRegistered: false, cpuMs: { puppet: 0, pass: 0 }, errors: [],
   };
   ctx.world.emergence = rt;
   return rt;
@@ -286,8 +283,6 @@ export function startEmergence(ctx: GameContext): boolean {
   if (!rt?.puppet || rt.phase === 'playing') return false;
   if (!startSequence(ctx, EMERGENCE_SEQUENCE_ID)) return false;
   rt.phase = 'playing';
-  const torch = ctx.world.light?.flashlight;
-  rt.torch = torch ? { level: torch.level, target: torch.target } : null;
   rt.t = 0;
   rt.hold = null;
   rt.rise = null;
@@ -308,9 +303,7 @@ function handOff(ctx: GameContext, rt: EmergenceRuntime, mine: SequenceRuntime |
   rt.hold = null;
   rt.puppet?.setVisible(false);
   setViewmodelHands(ctx, true);
-  const torch = ctx.world.light?.flashlight;
-  if (torch && rt.torch) { torch.level = rt.torch.level; torch.target = rt.torch.target; }
-  rt.torch = null;
+  // The flashlight stays OFF after the hand-off (owner 2026-10-19): the Flat is lit by its own lamps; the player can switch it back on.
   const h = rt.handoff, p = ctx.player.player;
   p.pos[0] = h.feet[0]; p.pos[1] = h.feet[1]; p.pos[2] = h.feet[2];
   p.vel[0] = 0; p.vel[1] = 0; p.vel[2] = 0;

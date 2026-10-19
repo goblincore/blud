@@ -6,7 +6,7 @@
 //   3. SHOTS: the clock held at the five key times (glass-gives 2.0, push 5.5, crowning 8.0, out 10.0, settle 13.0) -> OUT/shot-<id>.png; FAIL
 //      unless the proxy is visible at each and the puppet is visible at each.
 //   4. HAND-OFF: skipEmergence, then FAIL unless the phase is done, the sequence is inactive, the puppet is hidden and the player stands on the
-//      hand-off spot (within 0.3 m) after the rise.
+//      hand-off spot (within 0.3 m) after the rise, and the flashlight is off.
 //   5. COST: the runtime's CPU ms for the puppet and the pass, and the widest frame gap while the sequence ran. RECORDED, not gated.
 //   6. SHEET: OUT/sheet.jpg — the five frames, labelled (Pillow, python3 -I).
 // Usage: bash scripts/flat-emergence-check.sh        (starts its own servers). Direct: node scripts/flat-emergence-check.mjs <vitePort> <cdpPort> <outDir>
@@ -104,6 +104,8 @@ st = await evaluate('__sdfGame.emergence()');
 if (st.phase !== 'done') fail(`the hand-off did not finish (phase ${st.phase})`);
 if (st.sequenceActive) fail('the sequence is still active after the hand-off');
 if (st.puppetVisible) fail('the puppet is still visible after the hand-off');
+const torch = await evaluate('__sdfGame.lights() && __sdfGame.lights().flashlight');
+if (torch !== null && torch !== undefined && torch > 0.01) fail(`the flashlight is on after the hand-off (level ${torch})`);
 const [fx, , fz] = st.handoff.feet, [px, , pz] = st.player.pos;
 const off = Math.hypot(px - fx, pz - fz);
 if (off > 0.3) fail(`the player stands ${off.toFixed(2)} m from the hand-off spot (${st.player.pos} vs ${st.handoff.feet})`);

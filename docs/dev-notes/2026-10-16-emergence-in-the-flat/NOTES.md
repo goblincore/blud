@@ -27,7 +27,7 @@ The egg-out-of-the-monitor scene plays in the real game, in the Flat, on a debug
 
 `npm run dev`, then `/sdf-game.html?level=flat-early&emergence=1&res=320` (drop `res=320` for the normal flow). It autostarts 2 s after the level is ready; the first boot on a cold shader cache takes 1.5 to 3 minutes. `?emergence=0` turns it off. Console seams: `__sdfGame.startEmergence()` (replay), `skipEmergence()`, `emergenceSetT(t, hold = true)` (hold the clock to look at one moment), `emergence()` (state), `emergencePuppet()` (his view, for tuning uniforms). URL overrides: `?emergencerim=`, `?emergencefill=`, `?emergencegpu=lab`. The lab page (`/sdf-screen-lab.html`) is still the tweaking bench and uses the same pass, set and puppet.
 
-**The hand-off** (about 14.5 s): the puppet vanishes; the pass and the egg stay (the egg sits on the keyboard in its goo); the player stands at (0.12, 0, -1.455) facing the egg, the eye rising from his seated height to standing over 1.2 s; input is released. The viewmodel's orb hands are hidden and the flashlight held off while the sequence plays.
+**The hand-off** (about 14.5 s): the puppet vanishes; the pass and the egg stay (the egg sits on the keyboard in its goo); the player stands at (0.12, 0, -1.455) facing the egg, the eye rising from his seated height to standing over 1.2 s; input is released. The viewmodel's orb hands are hidden and the flashlight held off while the sequence plays (and it stays off after).
 
 **Rebuilding `flat-early`** (about 19 MB of art; rebuild when `build_the_flat.py` changes): `FLAT_STAGE=early blender --background --factory-startup --python scripts/levels/build_the_flat.py`, then export through `scripts/levels/export_level.py`. The late Flat's export is not byte-identical when rebuilt (triangle order), so only rebuild the stage you changed.
 
@@ -47,7 +47,7 @@ Recorded, not gated. CPU per frame in the game: puppet 1.1 to 1.7 ms, pass under
 
 - **The vest speckles at 320 x 240** (a thin cloth shell under a pixel); clean in the normal flow.
 - **The goblin is still dark from behind** in the push shot (the key is the lamp's direction; the room is warm and dim); fill 0.30 helps, a proper room light would be better.
-- **Flashlight:** held off during the sequence and back on at the hand-off, where it blows out close shots. The owner decides whether the Flat keeps it.
+- **Flashlight:** held off during the sequence and left off at the hand-off (owner 2026-10-19); the player can switch it back on.
 - **Deferred render mode is untested** (the puppet registers lazily in `stepEmergence`).
 - **His march is not shell-bounded** (the outer-hull shell is built from the actors only; binding it discards every pixel, so `puppetGpuOpts` leaves it out): a possible cost.
 - **Teeth and the grin** cannot be judged at 320 x 240.
@@ -55,12 +55,9 @@ Recorded, not gated. CPU per frame in the game: puppet 1.1 to 1.7 ms, pass under
 - The hand orb attaches 4.24 cm above the hand tip and does not follow the hand bone (an engine and owner call, untouched); the game's `faceFor` zombie-face bug (`game-wound-vfx.ts`) is untouched; the armour kit's sunglasses are off at home.
 - Out of scope, as the spec says: the Night Train hookup and the two-scene seam, a world trigger for the sequence, a live CRT picture, an openable front door, the later stages of the Flat, sound.
 
-## Owner questions
+## Owner decisions (2026-10-19)
 
-1. **The hand-off spot:** standing at the cushion's place looking at the egg. Right, or somewhere else (up and walking, at the door)?
-2. **The expression cues** (surprise at the flinch, shout through the tear, scowl as he lands, grin as he sits up): the timing and which clips.
-3. **The camera shots:** the five cuts and their positions (all inside the 2.7 m room).
-4. **The flashlight** at the hand-off.
+The hand-off spot (at the cushion's place, looking at the egg) is fine; the expression cue timings are fine for now; the five camera shots are fine; the flashlight stays off after the hand-off.
 
 ## How to check it
 
