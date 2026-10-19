@@ -108,6 +108,30 @@ LIGHTS = [
     ("hall", (0.55, -0.75, 2.05), (1.0, 0.72, 0.42), 1.4, {"fixture": "none"}),                            # the hall's light, toward its middle (the sconce by the doorway is the art for it)
     ("bath", (2.0, -1.0, 2.12), (0.85, 1.0, 0.82), 1.4, {"fixture": "none"}),                             # a bare bulb on the bathroom ceiling
 ]
+LATE_LIGHTS = LIGHTS
+
+# The stages of the machine (spec 2026-10-16-emergence-in-the-flat-design.md): "late" is the Flat above (the Giger iMac, the machine's last stage, on the
+# kotatsu); "early" is the same apartment WITHOUT the iMac (level id flat-early), where the game builds a plain CRT, a keyboard and a banker's lamp on the
+# kotatsu at runtime (screen-set.ts, placed by emergence-placement.ts). The build reads the stage from the env FLAT_STAGE (default late).
+STAGES = ("late", "early")
+IMAC_LIGHTS = ("amber", "amber2", "screen")
+EARLY_EXTRA_LIGHTS = [
+    # the banker's lamp's bulb at the kotatsu (the scene's LAMP_BULB through the placement: game (-0.23, 0.71, -2.235)); warm, about the candle's power
+    ("lamp", (-0.23, 2.235, 0.71), (1.0, 0.68, 0.38), 0.8, {"fixture": "none"}),
+    # the CRT's glow, just in front of where its glass will be (game (0.12, 0.76, -2.065)); cool blue-white, weak (the iMac's screen light was 0.25)
+    ("crt", (0.12, 2.065, 0.76), (0.70, 0.80, 1.0), 0.25, {"fixture": "none"}),
+]
+EARLY_LIGHTS = [l for l in LATE_LIGHTS if l[0] not in IMAC_LIGHTS] + EARLY_EXTRA_LIGHTS
+
+
+def lights_for(stage):
+    assert stage in STAGES, f"FLAT_STAGE must be one of {STAGES}, not {stage!r}"
+    return LATE_LIGHTS if stage == "late" else EARLY_LIGHTS
+
+
+def level_id_for(stage):
+    assert stage in STAGES, f"FLAT_STAGE must be one of {STAGES}, not {stage!r}"
+    return "flat" if stage == "late" else "flat-early"
 
 
 def inside(p, box, pad=0.0):
@@ -125,9 +149,18 @@ def check():
     assert WSP + WH < vault_z(WX), "window arch hits the vault"
     assert DSP + DHW + 0.2 < vault_z(DX), "the door's arch and its surround hit the vault"
     assert X0 + 0.3 < DX - DHW - 0.22 and DX + DHW + 0.22 < X1 - 0.3, "the door's surround leaves the south wall"
-    for name, pos, col, power, _ in LIGHTS:
-        assert inside(pos, ROOM_BOX), f"light {name} outside the room"
-        assert all(0 <= c <= 1 for c in col) and power > 0
+    for stage in STAGES:
+        lights = lights_for(stage)
+        names = [l[0] for l in lights]
+        assert len(set(names)) == len(names), f"{stage}: duplicate light names"
+        assert len(lights) <= 16, f"{stage}: more lights than the engine's deferred cap"
+        for name, pos, col, power, extra in lights:
+            assert inside(pos, ROOM_BOX), f"light {name} outside the room"
+            assert all(0 <= c <= 1 for c in col) and power > 0
+            assert extra.get("fixture") == "none", f"light {name}: the art (or the runtime set) is the lamp"
+    early = [l[0] for l in EARLY_LIGHTS]
+    assert not set(IMAC_LIGHTS) & set(early) and {"lamp", "crt"} <= set(early), "the early stage swaps the iMac's lights for the lamp and the CRT"
+    assert level_id_for("late") == "flat" and level_id_for("early") == "flat-early"
     for k, w in WALL_W.items():
         assert 1.0 < w <= 4.0
         for u, z, spread, length, strength in STAINS[k]:

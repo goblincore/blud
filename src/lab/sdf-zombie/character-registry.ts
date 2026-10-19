@@ -18,6 +18,7 @@ import zombieBlobSrc from './characters/zombie.blob?raw';
 import goblinBlobSrc from './characters/goblin.blob?raw';
 import goblinHomeBlobSrc from './characters/goblin-home.blob?raw';
 import goblinCinematicBlobSrc from './characters/goblin-cinematic.blob?raw';
+import goblinCinematicHomeBlobSrc from './characters/goblin-cinematic-home.blob?raw';
 import clownBlobSrc from './characters/clown.blob?raw';
 import clownAltBlobSrc from './characters/clown-alt.blob?raw';
 import mouseBlobSrc from './characters/mouse.blob?raw';
@@ -70,6 +71,10 @@ export interface CharacterEntry {
    *  every frame the hero loop re-poses it from rig-frames.ts's per-bone
    *  transforms (see the `kit?.pose(frames)` call). */
   kit?: string;
+  /** A kit BORROWED for one part: only these materials of `kit` are loaded (kit-overlay.ts KitLoadOpts.only). Absent: all of it. */
+  kitOnly?: readonly string[];
+  /** The body is this many times the size `kit` was built for (kit-overlay.ts KitLoadOpts.scale). Absent: 1. */
+  kitScale?: number;
   /** The kit's `plate` pieces are ARMOUR: hits on them spark, and enough hits
    *  shed the piece (webgpu/kit-damage.ts). Was hard-coded to the soldier. */
   armoured?: boolean;
@@ -161,6 +166,20 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     kit: '/assets/lab/goblin-cinematic-kit.gltf',
     face: ZOMBIE_FLAT,
     profile: motionProfileFor('goblin-cinematic'),
+  },
+  // The cinematic goblin AT HOME (emergence in the Flat, plan Task 4): goblin-cinematic.blob (the face rig) plus goblin-home's cloth
+  // block and bare feet, at the goblin's 1.70 m (characters/goblin-cinematic-home.test.ts guards the copy). The armour stays off at
+  // home, but the cinematic's mesh TEETH live in its 1.30 m kit (one skinned glTF, the `tooth` primitive beside the armour's), so he
+  // borrows that kit's teeth alone, scaled by the .blob's own `scale` about each bone (plan Task 4b; characters/
+  // goblin-cinematic-home-teeth.test.ts pins them in his mouth). The cinematic's gait, poses and expressions (motion-profile.ts,
+  // pose-library.ts, expression-library.ts list it under its own name).
+  'goblin-cinematic-home': {
+    name: 'goblin-cinematic-home', src: goblinCinematicHomeBlobSrc,
+    kit: '/assets/lab/goblin-cinematic-kit.gltf',
+    kitOnly: ['tooth'],
+    kitScale: 1.3077,
+    face: ZOMBIE_FLAT,
+    profile: motionProfileFor('goblin-cinematic-home'),
   },
   clown: {
     name: 'clown', src: clownBlobSrc,

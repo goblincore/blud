@@ -13,7 +13,7 @@
 import * as THREE from 'three/webgpu';
 import type { GameContext } from './game-context';
 import { EGG } from './egg-look';
-import { SEQUENCES, cameraAt, overlayAt, shotAt, totalDuration, type CameraPose, type CameraStart, type Sequence, type Vec3 } from './ending-sequence';
+import { cameraAt, overlayAt, shotAt, totalDuration, type CameraPose, type CameraStart, type Sequence, type Vec3, sequenceById } from './ending-sequence';
 
 export interface SequenceRuntime {
   seq: Sequence;
@@ -51,9 +51,10 @@ function paint(rt: SequenceRuntime): void {
   rt.text.textContent = o.text ?? '';
 }
 
-/** Start sequence `id` (the `sequence.<id>` level command). False when unknown or one already ran. */
+/** Start sequence `id` (the `sequence.<id>` level command, or a registered one: registerSequence). False when unknown or one already
+ *  ran (a runtime that hands the view back clears ctx.world.sequence at its end, game-emergence.ts, so it can run again). */
 export function startSequence(ctx: GameContext, id: string): boolean {
-  const seq = SEQUENCES[id];
+  const seq = sequenceById(id);
   if (!seq || ctx.world.sequence?.started) return false;
   const el = document.createElement('div');
   el.setAttribute('style', 'position:fixed; inset:0; z-index:44; pointer-events:none; opacity:0; background:#000;'

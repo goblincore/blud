@@ -2504,6 +2504,17 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
         if (detailScene) await compile('detail', detailScene, quadCam, detailTarget);
         if (refineViewScene && refineViewTarget) await compile('refine-view', refineViewScene, quadCam, refineViewTarget);
         await compile('composite', quadScene, quadCam, outputTarget);
+        // --- the late effects (SdfLayer.lateScene): drawn over the composite into the same target as render() draws them. They are
+        // hidden until their moment (the egg, the screen emergence pass), so flip them visible across the compile: a hidden mesh is
+        // skipped, and its pipeline was then built in the middle of the first frame it showed (a half-second freeze at the start of
+        // the emergence on a cold shader cache).
+        if (lateScene.children.length > 0) {
+          const flipped: THREE.Object3D[] = [];
+          lateScene.traverse((o) => { if (!o.visible) { flipped.push(o); o.visible = true; } });
+          lateScene.fog = scene.fog;
+          try { await compile('late-fx', lateScene, camera, fieldStyle === 'frame' ? fieldFull : outputTarget); }
+          finally { for (const o of flipped) o.visible = false; }
+        }
         // --- the upscale stage's passes --------------------------------------
         if (upscale) n += await upscale.precompile(renderer, quadCam);
       } finally {

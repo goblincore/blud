@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/expression.test.ts
 import { describe, it, expect } from 'vitest';
 import {
-  REST_CHANNELS, expressionAt, blinkLid, withBlink, actuate, sheetKey,
+  REST_CHANNELS, expressionAt, blinkLid, withBlink, actuate, sheetKey, blinkStarts, scheduledBlinkLid, BLINK_SCHEDULE,
   type ExpressionClip, type ExpressionTuning,
 } from './expression';
 import { DEFAULT_SHEET, generateFaceSheet } from './blob-face-sheet';
@@ -238,5 +238,30 @@ describe('sheetKey', () => {
     for (const k of ['eyeCheek', 'eyeLidTop', 'browDrop'] as const) expect(sheetKey({ ...DEFAULT_SHEET, [k]: 0.02 }), k).not.toBe(a);
     expect(sheetKey({ ...DEFAULT_SHEET, eyeSize: DEFAULT_SHEET.eyeSize + 0.002 })).not.toBe(a);
     expect(sheetKey({ ...DEFAULT_SHEET, eyeTilt: DEFAULT_SHEET.eyeTilt + 1 })).not.toBe(a);
+  });
+});
+
+describe('scheduledBlinkLid (the puppet\'s blinks: deterministic from t, no state)', () => {
+  it('is a pure function of t: the same t gives the same lid, in any order', () => {
+    const ts = Array.from({ length: 400 }, (_, i) => i * 0.0371);
+    const fwd = ts.map(t => scheduledBlinkLid(t));
+    const back = [...ts].reverse().map(t => scheduledBlinkLid(t)).reverse();
+    expect(back).toEqual(fwd);
+  });
+  it('blinks about once a period, never twice at once, each one a full blinkLid', () => {
+    const starts = blinkStarts(0, 30);
+    expect(starts.length).toBeGreaterThanOrEqual(Math.floor(30 / BLINK_SCHEDULE.period) - 1);
+    expect(starts.length).toBeLessThanOrEqual(Math.ceil(30 / BLINK_SCHEDULE.period) + 1);
+    for (let i = 1; i < starts.length; i++) expect(starts[i]! - starts[i - 1]!).toBeGreaterThan(BLINK_SCHEDULE.dur * 2);
+    for (const s of starts) {
+      expect(scheduledBlinkLid(s + BLINK_SCHEDULE.dur * 0.4)).toBeCloseTo(1, 9);
+      expect(scheduledBlinkLid(s - 1e-6)).toBe(0);
+    }
+    // between blinks the eyes are open
+    expect(scheduledBlinkLid(starts[0]! + BLINK_SCHEDULE.dur + 0.01)).toBe(0);
+  });
+  it('is open before 0 and at 0 unless a blink starts there', () => {
+    expect(scheduledBlinkLid(-1)).toBe(0);
+    expect(scheduledBlinkLid(0)).toBe(0);
   });
 });

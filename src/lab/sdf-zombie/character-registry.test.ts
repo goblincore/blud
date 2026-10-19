@@ -115,6 +115,23 @@ describe('character-registry', () => {
     expect(m.motionJoints!.index.jaw, 'with the jaw joint').toBeDefined();
   });
 
+  // emergence in the Flat, plan Task 4 (2026-10-16): the cinematic head in goblin-home's clothes.
+  // Task 4b: no armour, but the cinematic kit's TEETH alone, scaled to his 1.70 m (characters/goblin-cinematic-home-teeth.test.ts).
+  it('goblin-cinematic-home is the cinematic goblin at home: only the kit\'s teeth, the goblin\'s gait and poses, the cinematic\'s expressions; it builds and moves', () => {
+    const e = characterEntry('goblin-cinematic-home');
+    expect(e.kit).toBe(characterEntry('goblin-cinematic').kit);
+    expect(e.kitOnly).toEqual(['tooth']);
+    expect(e.profile).toBe(GOBLIN_PROFILE);
+    expect(posesFor('goblin-cinematic-home')).toBe(posesFor('goblin'));
+    expect(expressionsFor('goblin-cinematic-home')?.clips).toBe(expressionsFor('goblin-cinematic')?.clips);
+    expect(expressionsFor('goblin-cinematic-home')?.tuning).toBe(expressionsFor('goblin-cinematic')?.tuning);
+    const doc = parseBlob(e.src);
+    const body = buildBody(compileBlob(doc, compileFace(doc)));
+    expect(body.errors).toEqual([]);
+    const m = makeActorMotion(body, { seed: 1 });
+    expect(m.motionJoints!.index.jaw, 'with the jaw joint').toBeDefined();
+  });
+
   it('the base goblin has no face rig: no jaw bone, no morph word, no jaw joint', () => {
     const e = characterEntry('goblin');
     expect(/\bmorph=/.test(e.src)).toBe(false);

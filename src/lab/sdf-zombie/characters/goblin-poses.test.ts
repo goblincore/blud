@@ -70,6 +70,7 @@ describe('goblin poses', () => {
     expect(posesFor('goblin')).toBe(GOBLIN_POSES);
     expect(posesFor('goblin-home')).toBe(GOBLIN_POSES);
     expect(posesFor('goblin-cinematic')).toBe(GOBLIN_POSES);
+    expect(posesFor('goblin-cinematic-home')).toBe(GOBLIN_POSES);
     expect(Object.keys(GOBLIN_POSES).sort()).toEqual(
       ['brace-back', 'floor-type', 'jolt', 'lean-back', 'reach', 'recoil', 'sit', 'sit-up-look', 'stand', 'touch', 'type']);
     expect(FLOOR.map(c => c.name).sort()).toEqual(['brace-back', 'floor-type', 'lean-back', 'sit-up-look']);

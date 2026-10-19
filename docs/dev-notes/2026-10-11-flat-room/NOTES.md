@@ -52,6 +52,8 @@ blender --background assets-source/levels/flat.blend --python scripts/levels/exp
 SHOTS=1 bash scripts/sdf-game-flat-gate.sh      # boot, collision, budget, six shots into .lab-tmp/flat/
 ```
 
+The early stage (`flat-early`, see "Update: flat-early" below): the same two Blender commands with `FLAT_STAGE=early` and the `flat-early` paths.
+
 ## Next
 
 1. **The Giger iMac**: the translucent amber shell, the screen, the legs (the spec's section 11 item 2).
@@ -138,3 +140,28 @@ then the stone walls (0.9 to 1.4 ms), the quilt (0.2 to 1.3 ms), the vault and f
 VHS and FXAA are inside the noise. If a pass is ever wanted, the cheapest returns are fewer segments on the conduit rings, a lower-resolution quilt, and merging the near-duplicate stone materials.
 The gate's budget number now warms up and takes the median of three readings of 21 frames, which is steadier.
 
+## Update: flat-early, the Flat without the Giger iMac (2026-10-16)
+
+The egg-out-of-the-monitor scene (spec [`2026-10-16-emergence-in-the-flat-design.md`](../../superpowers/specs/2026-10-16-emergence-in-the-flat-design.md)) happens at the machine's FIRST stage, a plain CRT, so the
+apartment has an early stage without the iMac: `?level=flat-early`. The game's art is merged per room and material, so the iMac cannot be hidden at runtime; the early stage is a
+second build of the same script. The CRT, the keyboard, the banker's lamp and the cushion are built at runtime by the game (`screen-set.ts`), not in Blender.
+
+```bash
+FLAT_STAGE=early blender --background --factory-startup --python scripts/levels/build_the_flat.py      # -> assets-source/levels/flat-early.blend
+blender --background assets-source/levels/flat-early.blend --python scripts/levels/export_level.py -- public/assets/levels/flat-early.level.json   # + flat-early.art.glb
+```
+
+- **The flag:** `FLAT_STAGE` (`late`, the default, is the Flat as before; `early` is `flat-early`). `flat_layout.py` holds both light lists (`lights_for(stage)`, `level_id_for(stage)`);
+  its `check()` checks both.
+- **Dropped:** `imac.build` entirely: the shell, the face, bezel and screen, the mouth (lips, slot, tongue, CD, drool), the gills, the skull-frame, the creature and its vessels, the
+  handle and crest, the six legs, the umbilicus with its wall collar by the window, and the two hoses. The materials only it uses are gone from the GLB: `giger_shell`, `screen`, `cd`,
+  `bezel`, `mucus`, `tongue` (`lips`, `flesh`, `darkglass`, `gunmetal`, `gasket`, `bone` stay: the slippers, the toilet bowl, the conduits and the boiler use them). The iMac's lights
+  `amber`, `amber2` and `screen` are dropped. Everything in `giger.build` (conduits, boiler, radiator, collars) belongs to the room and stays.
+- **Added:** two lights, both `fixture: "none"`: `lamp` (the banker's lamp's bulb, Blender (-0.23, 2.235, 0.71) = game (-0.23, 0.71, -2.235), colour (1.0, 0.68, 0.38), power 0.8) and
+  `crt` (the screen's glow just in front of the glass, Blender (0.12, 2.065, 0.76) = game (0.12, 0.76, -2.065), colour (0.70, 0.80, 1.0), power 0.25, the iMac's screen light's power).
+  First values; tune them in the game with the set in place.
+- **Unchanged:** the room box, the collision, the solids, the start (the hall, game (0.12, 0, 1.55), facing north), the kotatsu board (its top at 0.44 m, the test checks it).
+- **Budget:** 44 primitives, about 357 000 triangles (the late Flat: 50, 423 000); the GLB is about 18.9 MB, the .blend about 3.2 MB. Test: `level-json.flat-early.test.ts`.
+- **The late stage is not byte-reproducible:** a rebuild of the late Flat on 2026-10-16 (same Blender 5.2.0) gave an identical `flat.level.json`, identical GLB JSON and vertex data, but
+  13 primitives' index buffers came out with the same triangles in a different order (glTF exporter nondeterminism), and the .blend differs byte-wise. The committed late files were restored;
+  a later rebuild of the late stage is a real change only if its GLB JSON or triangle sets differ.

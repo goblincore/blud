@@ -136,6 +136,37 @@ export function blinkLid(t: number, start: number, dur = 0.16): number {
   return u < 0.4 ? u / 0.4 : (1 - u) / 0.6;
 }
 
+/** A blink schedule with no state (emergence in the Flat, plan Task 4: the shared goblin puppet blinks from the sequence clock, so a
+ *  scrub or a replay lands the same lids): one blink per `period` seconds, its start jittered inside the first `jitter` of the period
+ *  by a hash of the period's index, each one `dur` long (blinkLid's shape). The jitter keeps the starts at least 1 - jitter of a period
+ *  apart, which is far more than a blink. */
+export const BLINK_SCHEDULE = { period: 3.6, jitter: 0.6, dur: 0.18 } as const;
+
+/** The k-th period's blink start (k >= 0), from a small integer hash in [0, 1). */
+function blinkStartOf(k: number, s: typeof BLINK_SCHEDULE): number {
+  let h = Math.imul(k + 0x9e37, 0x85ebca6b) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35) >>> 0;
+  h = (h ^ (h >>> 16)) >>> 0;
+  return (k + s.jitter * (h / 4294967296)) * s.period;
+}
+
+/** Every scheduled blink start in [t0, t1). */
+export function blinkStarts(t0: number, t1: number, s: typeof BLINK_SCHEDULE = BLINK_SCHEDULE): number[] {
+  const out: number[] = [];
+  for (let k = Math.max(0, Math.floor(t0 / s.period) - 1); k * s.period < t1; k++) {
+    const b = blinkStartOf(k, s);
+    if (b >= t0 && b < t1) out.push(b);
+  }
+  return out;
+}
+
+/** The scheduled blink's lid at time t (0 before 0, between blinks, and at each blink's ends). */
+export function scheduledBlinkLid(t: number, s: typeof BLINK_SCHEDULE = BLINK_SCHEDULE): number {
+  if (!(t > 0)) return 0;
+  const k = Math.floor(t / s.period);
+  return Math.max(blinkLid(t, blinkStartOf(k, s), s.dur), k > 0 ? blinkLid(t, blinkStartOf(k - 1, s), s.dur) : 0);
+}
+
 /** Overlay a blink on any expression: the lid is the larger of the two, everything else is untouched. */
 export function withBlink(base: Channels, blink: number): Channels {
   return { ...base, lid: Math.max(base.lid, blink) };

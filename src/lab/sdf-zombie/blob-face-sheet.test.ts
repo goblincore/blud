@@ -304,10 +304,10 @@ describe('eyeCheek and browDrop (Task 15)', () => {
       for (const x of b) { h ^= x; h = Math.imul(h, 0x01000193) >>> 0; }
       return h.toString(16).padStart(8, '0');
     };
-    // goblin-home (PR #47) copies the goblin's sheet block, so it renders the goblin's sheet exactly.
+    // goblin-home (PR #47) copies the goblin's sheet block, so it renders the goblin's sheet exactly; goblin-cinematic-home the cinematic's.
     const PINNED: Record<string, string> = {
       DEFAULT: '4a05bb6b', 'clown.blob': 'c165a082', 'clown-alt.blob': 'c165a082', 'cyclops.blob': '2e2a5e7e',
-      'goblin.blob': 'a004a128', 'goblin-home.blob': 'a004a128', 'goblin-cinematic.blob': '56d68e7f', 'mouse.blob': 'd07a38f1',
+      'goblin.blob': 'a004a128', 'goblin-home.blob': 'a004a128', 'goblin-cinematic.blob': '56d68e7f', 'goblin-cinematic-home.blob': '56d68e7f', 'mouse.blob': 'd07a38f1',
     };
     expect(fnv(generateFaceSheet(DEFAULT_SHEET).pixels)).toBe(PINNED.DEFAULT);
     for (const [path, src] of Object.entries(RAW)) {

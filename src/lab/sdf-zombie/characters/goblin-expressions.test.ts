@@ -22,6 +22,8 @@ describe('goblin expressions', () => {
   it('are registered for the cinematic goblin and no one else (not the base goblin: Task 13)', () => {
     expect(expressionsFor('goblin-cinematic')?.clips).toBe(GOBLIN_EXPRESSIONS);
     expect(expressionsFor('goblin-cinematic')?.tuning).toBe(GOBLIN_EXPRESSION_TUNING);
+    expect(expressionsFor('goblin-cinematic-home')?.clips).toBe(GOBLIN_EXPRESSIONS);
+    expect(expressionsFor('goblin-cinematic-home')?.tuning).toBe(GOBLIN_EXPRESSION_TUNING);
     expect(expressionsFor('goblin')).toBeNull();
     expect(Object.keys(GOBLIN_EXPRESSIONS).sort()).toEqual(['evil-grin', 'grin', 'neutral', 'scowl', 'shout', 'smile', 'surprise']);
     expect(expressionsFor('zombie')).toBeNull();
