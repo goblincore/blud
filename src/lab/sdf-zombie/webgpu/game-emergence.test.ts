@@ -4,8 +4,11 @@
 // outer-hull shell, which the game builds every tick from ctx.world.actors only; he is not an actor, so no hull instance covered him,
 // the march read shellOut 0 at every pixel of his proxy and discarded them all (hull-bounds.wgsl.ts): the goblin was never drawn in
 // the Flat (0 march-target hits with the shell on, 4022 with it off, held at t 5.5, 320x240 boot).
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { puppetGpuOpts, type PuppetLayerDeps } from './game-emergence';
+
+// game-dynamic-light.ts reads `location` at import (not importable in node); the puppet's lighting path is not under test here.
+vi.mock('./game-dynamic-light', () => ({ applyRoomFill: () => {}, applySelfShadow: () => {}, applyWindowKey: () => {} }));
 
 const layer = {
   cone: { tag: 'cone' }, occluder: { tag: 'occluder' }, prev: { tag: 'prev' }, lastFrame: { tag: 'lastFrame' },
