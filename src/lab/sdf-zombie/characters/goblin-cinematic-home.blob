@@ -610,17 +610,22 @@ body
   # rest, and lifts the thighs level), and its clip plane turns with it (rig-bind.ts poseShellPlane). Folds are `warp=`: amplitude in
   # metres and per-axis frequency; a small y frequency makes them run DOWN the body, which is how a hanging vest and loose shorts drape.
   #
+  # VEST LOOK (owner look 2026-10-20, in the Flat at 320 x 240): the two vest shells are 5.5 mm thick (authored; 7.2 mm at 1.70 m; was 3.5) and
+  # the cloth cfcdc0 (was e9e7dd). A 3.5 mm shell is about a pixel at 320 x 240 and the march hit or missed it pixel by pixel, so the
+  # green flesh and the white cloth dithered into a speckle; the thicker shell is solid. The old off-white then blew out under the room's
+  # lamp (the settle shot), so it is a worn grey-white.
+  #
   # VEST, BELLY: an open-bottomed tube from the waist to the spine's bend. Flesh there spans z -0.068..+0.113 (the back, the bead ridge, the
   # belly) and x +-0.072; the gut blob pushes the front to z 0.110 at the hem, so the base widens to r 0.098 at the bottom (x 0.098, z
   # 0.116 half) and hangs 1-2 cm loose over the belly and the shorts' waist, like a singlet. Its top (r2 0.077, deep 1.18: z -0.062..0.120 at
   # the bend) clears the last spine bead by 6 mm to the sheet's middle; its closed top cap sinks inside the chest shell and the flesh. Hem: y > 0.700,
   # the waist (the paint's tank/trouser boundary is 0.705).
-  shell torso on spine1 at=0.0 offset=(0,-0.012,0.016) tip=(0,0.144,0.013) r=0.098 r2=0.077 wide=1.00 deep=1.18 thick=0.0035 clip=(0,-1,0) clipd=-0.700 rim=0.004 blend=0.006 color=e9e7dd warp=0.006 warpFreq=(30,5,30) rigid
+  shell torso on spine1 at=0.0 offset=(0,-0.012,0.016) tip=(0,0.144,0.013) r=0.098 r2=0.077 wide=1.00 deep=1.18 thick=0.0055 clip=(0,-1,0) clipd=-0.700 rim=0.004 blend=0.006 color=cfcdc0 warp=0.006 warpFreq=(30,5,30) rigid
   # VEST, CHEST: the chest bar (r 0.068 to 0.056, deep 1.12) plus 6 mm, closed over the shoulders, so its top cap is the vest's shoulder
   # straps and the shoulder rounds (x 0.04..0.116) come out of its sides as armholes. The plane keeps y < 1.020: it takes the cap's crown
   # off round the neck (the neck is r 0.040 at y 0.985), a neck hole 8 mm clear of the skin with a rolled rim. The bottom is not clipped:
   # it sits inside the belly shell. Same colour as the belly shell, so the overlap at the bend has no seam.
-  shell torso on chest at=0.0 offset=(0,0,-0.002) tip=(0,0.141,0.023) r=0.074 r2=0.064 wide=1.00 deep=1.16 thick=0.0035 clip=(0,1,0) clipd=1.020 rim=0.004 blend=0.006 color=e9e7dd warp=0.004 warpFreq=(34,5,34) rigid
+  shell torso on chest at=0.0 offset=(0,0,-0.002) tip=(0,0.141,0.023) r=0.074 r2=0.064 wide=1.00 deep=1.16 thick=0.0055 clip=(0,1,0) clipd=1.020 rim=0.004 blend=0.006 color=cfcdc0 warp=0.004 warpFreq=(34,5,34) rigid
   # SHORTS, SEAT: a squat tube round the pelvis (the gut's front 0.110, the glutes' back -0.096 and sides 0.088), from the waist (its top
   # cap sits inside the vest) down to y 0.650, level with the pelvis blob's flush seat (0.648, the 2026-10-03 rework), so seated it does
   # not hang under the thighs (the diaper the owner rejected). The cheeks' lowest 2.5 cm (to 0.625) and their back diagonals press past

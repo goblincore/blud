@@ -3,7 +3,8 @@
 // The cinematic goblin at home (emergence in the Flat, plan Task 4): goblin-cinematic.blob (the face rig: jaw, mouth, morphs, the
 // expression clips) plus goblin-home.blob's block of `shell` cloth (vest, shorts) and bare feet. The file is a COPY, so a guard keeps it in
 // step with BOTH sources: remove the home-clothes block, put the cinematic's 1.30 m header back in place of the marked home-scale block, and
-// rename the model, and it must equal goblin-cinematic.blob; and its home-clothes block must be goblin-home.blob's, line for line.
+// rename the model, and it must equal goblin-cinematic.blob; and its home-clothes block must be goblin-home.blob's, line for line, except the
+// vest's LOOK (VEST_LOOK: its comment paragraph, the two vest shells' thickness and their cloth colour; owner look in the Flat 2026-10-20).
 //
 // THE SCALE. goblin-cinematic.blob is still authored AND built at 1.30 m (its kit and mesh teeth were built there), while goblin and
 // goblin-home are the 1.70 m body (`scale 1.3077`). The screen emergence set and the Flat are fitted to the 1.70 m goblin (the seat measured
@@ -26,6 +27,11 @@ import type { Vec3 } from '../types';
 
 const BEGIN = '  # --- home clothes begin ---', END = '  # --- home clothes end ---';
 const SCALE_BEGIN = '  # --- home scale begin ---', SCALE_END = '  # --- home scale end ---';
+/** The vest's look in the Flat: goblin-home.blob has the 3.5 mm shells in e9e7dd; the Flat's goblin has 5.5 mm shells in cfcdc0 (and a comment). */
+const withoutVestLook = (text: string) => text
+  .replace(/  # VEST LOOK[\s\S]*?\n  #\n/, '')
+  .replaceAll('thick=0.0055', 'thick=0.0035')
+  .replaceAll('color=cfcdc0', 'color=e9e7dd');
 /** The marked block [begin, end] inclusive of its trailing newline. */
 const block = (s: string, b: string, e: string) => {
   const i = s.indexOf(b), j = s.indexOf(e);
@@ -37,7 +43,7 @@ describe('goblin-cinematic-home.blob', () => {
     const clothes = block(src, BEGIN, END);
     expect(clothes.i).toBeGreaterThan(0);
     expect(clothes.j).toBeGreaterThan(clothes.i);
-    expect(clothes.text).toBe(block(homeSrc, BEGIN, END).text);
+    expect(withoutVestLook(clothes.text)).toBe(block(homeSrc, BEGIN, END).text);
     let stripped = src.slice(0, clothes.i) + src.slice(clothes.end);
     const sc = block(stripped, SCALE_BEGIN, SCALE_END);
     expect(sc.i).toBeGreaterThan(0);
