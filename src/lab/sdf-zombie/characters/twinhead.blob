@@ -224,7 +224,9 @@ body
   bar  arm on forearm  from=0.40 to=1.00 r=0.070 blend=0.006 mirror color=474b52 metal gloss=0.6
   # THE SPIKE (left only): one round cone to a true point, 0.75 m past the
   # wrist. A single prim is the cheapest weapon in the cast.
-  bar  arm on hand from=0.00 to=0.00 tip=(0.02,-0.40,0.62) r=0.055 r2=0.000 blend=0.004 chamfer side=l color=4a4d52 metal gloss=0.8
+  # Spike core only: the visible spike is the kit's sculpted mesh (hand.l|spike, make_spike.py), steel to rust
+  # to blood. This half-length core stays inside it.
+  bar  arm on hand from=0.00 to=0.00 tip=(0.01,-0.20,0.31) r=0.040 r2=0.000 blend=0.004 chamfer side=l color=8a8d92 metal gloss=0.8
 
   # ============================================================
   # SCARS — raised red welts (owner: "the red crack scar lines ... apply that
@@ -268,9 +270,10 @@ body
   # Ankle ball (inside the kit's), bridging shin core to foot core: without
   # it the foot core floated 50 mm clear of the leg (blob-checks strandedOf).
   blob leg on shin  at=1.00 r=0.055 blend=0.006 mirror color=3a3e45 metal gloss=0.6
-  # Foot core: inside the kit's foot wedge, its top (0.113) overlapping the
-  # ankle ball's bottom (0.105).
-  bar  leg on foot  from=-0.15 to=0.75 r=0.042 wide=2.00 tall=0.90 box round=0.25 blend=0.006 offset=(0,-0.085,0) mirror color=3a3e45 metal gloss=0.6
+  # Foot core: inside the kit's sculpted hoof (instep + toes), its top (0.115)
+  # overlapping the ankle ball's bottom (0.105). Wider, it showed as a black
+  # slab between the toes.
+  bar  leg on foot  from=0.00 to=0.50 r=0.030 wide=1.60 tall=1.00 box round=0.25 blend=0.006 offset=(0,-0.075,0) mirror color=3a3e45 metal gloss=0.6
 
 face
   headRadius 0.001

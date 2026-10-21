@@ -58,7 +58,7 @@ exports[`packBody byte pin > strand-fixture.blob packs the pinned bytes 1`] = `"
 
 exports[`packBody byte pin > thin-fixture.blob packs the pinned bytes 1`] = `"3bd8a1982310efc6"`;
 
-exports[`packBody byte pin > twinhead.blob packs the pinned bytes 1`] = `"4c2c17e2ab0113b0"`;
+exports[`packBody byte pin > twinhead.blob packs the pinned bytes 1`] = `"b5ff117c5016b078"`;
 
 exports[`packBody byte pin > warbull.blob packs the pinned bytes 1`] = `"f9a2b1a4424c020a"`;
 
