@@ -4,7 +4,9 @@
 // (scripts/bake-body-normal.ts folds these lines into the body and bakes the difference into
 // twinhead-body-n.png; nothing here is ever raymarched, so detail is free at runtime).
 //
-//   npx tsx scripts/twinhead-detail-gen.ts && npx tsx scripts/bake-body-normal.ts twinhead
+//   npx tsx scripts/twinhead-detail-gen.ts && npx tsx scripts/bake-body-normal.ts twinhead 512 256 \
+//     --limb upperarm.l:0:1:0.17:96 --limb forearm.l:0:0.5:0.13:48 --limb upperarm.r:0:1:0.17:96 --limb forearm.r:0:0.5:0.13:48
+//   (about 15 min, nearly all of it the torso; the arm regions take seconds)
 //
 // WHY GENERATED. Detail has to sit ON the skin: a ridge 2 mm proud reads, one 6 mm under it does nothing and
 // one 6 mm out floats. So every element is placed by probing the marched torso (sdBody along a ray toward the
@@ -118,11 +120,39 @@ section('back: spinal erectors either side of a deep spinal groove, and the shou
 for (const s of [1, -1]) ridge([[1.16, s * 168], [1.30, s * 167], [1.44, s * 168], [1.56, s * 170]], 0.030, 0.008, 0.008);
 for (const s of [1, -1]) ridge([[1.66, s * 148], [1.60, s * 140], [1.52, s * 134]], 0.012, 0.004, 0.004);
 
-section('veins: meandering, raised, down each flank and over the lower belly');
-ridge([[1.47, 70], [1.40, 66], [1.36, 70], [1.29, 63], [1.24, 66], [1.19, 58]], 0.0038, 0.0016, 0.0012);
-ridge([[1.45, -74], [1.38, -69], [1.31, -72], [1.26, -64], [1.20, -60]], 0.0036, 0.0016, 0.0012);
-ridge([[1.30, 26], [1.24, 30], [1.19, 24], [1.15, 28]], 0.0032, 0.0014, 0.0012);
-ridge([[1.62, -24], [1.58, -34], [1.53, -30]], 0.0032, 0.0014, 0.0012);
+// Varicose veins (owner: "varicose veins prominently"): thick, tortuous, knotted. The first thin meandering
+// veins (r 3.5 mm, 1.6 mm proud) did not read in the bake. Each trunk is a seeded serpentine walk down the skin,
+// thick and well proud, with bulging knots along it and a couple of branches peeling off.
+section('varicose veins: thick serpentine trunks with knots and branches');
+let seed = 1337;
+const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+function varicose(y0: number, th0: number, y1: number, dth: number, r: number, proud: number, branches: number, depth = 0) {
+  // A smooth meander sampled densely: alternating sides per sample (the first pass) baked as sharp zigzags.
+  const n = Math.max(6, Math.round((y0 - y1) / 0.011));
+  const pts: [number, number][] = [];
+  let th = th0, phase = rnd() * 6.28;
+  const amp = (4 + rnd() * 2) * (r / 0.006);
+  for (let i = 0; i <= n; i++) {
+    const y = y0 + (y1 - y0) * (i / n);
+    pts.push([y, th + amp * Math.sin(phase)]);
+    phase += 0.75 + rnd() * 0.5;
+    th += dth / n + (rnd() - 0.5) * 1.2;
+  }
+  ridge(pts, r, proud, 0.0016);
+  for (let i = 1; i < pts.length - 1; i++)   // knots: bulges every other bend
+    if (rnd() < 0.22) { const [y, t] = pts[i]!; lump(y, t, r * (1.5 + rnd() * 0.6), proud * 1.35, 0.002); }
+  for (let b = 0; b < branches; b++) {
+    const [y, t] = pts[1 + Math.floor(rnd() * (pts.length - 3))]!;
+    const side = rnd() < 0.5 ? -1 : 1;
+    if (depth < 1) varicose(y, t, y - 0.06 - rnd() * 0.06, side * (14 + rnd() * 12), r * 0.65, proud * 0.75, 1, depth + 1);
+  }
+}
+for (const s of [1, -1]) {
+  varicose(1.50, s * 68, 1.16, -s * 14, 0.0062, 0.0042, 2);   // down the flank, toward the waist
+  varicose(1.44, s * 38, 1.18, s * 6, 0.0055, 0.0038, 2);    // over the belly, outboard of the abs
+  varicose(1.62, s * 48, 1.50, s * 10, 0.0048, 0.0032, 1);   // across the upper chest toward the armpit
+  varicose(1.58, s * 140, 1.20, s * 8, 0.0060, 0.0040, 2);   // over the lats on the back
+}
 
 section('agitated flesh: clustered swellings round the cup seam and the chest scar');
 const LUMPS: [number, number, number][] = [
@@ -131,6 +161,77 @@ const LUMPS: [number, number, number][] = [
   [1.58, 30, 0.006], [1.55, 20, 0.007], [1.52, 25, 0.005], [1.61, 40, 0.005], [1.50, 16, 0.006],
 ];
 for (const [y, th, r] of LUMPS) lump(y, th, r, r * 0.55, 0.004);
+
+// ---------------------------------------------------------------- arms
+// The arms have their own normal-map regions (a cylinder round each bone; bake-body-normal.ts). Their detail is
+// placed on the ARM skin (the arm clusters alone) and bound to the arm bone it lies on, one side at a time.
+const armBody = { ...built, clusters: built.clusters.map(c => ({ ...c, alive: c.limb === 'armL' || c.limb === 'armR' })) } as typeof built;
+const cross = (a: V, b: V): V => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const dotv = (a: V, b: V) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+/** Arm skin round bone `b` at fraction t and angle ph (deg; 0 = the bone frame's front, +90 = outward). */
+function armSkin(b: string, t: number, ph: number): { p: V; n: V } {
+  const { head, tail } = bones.get(b)!;
+  const u = norm(sub(tail, head));
+  const fw = norm(sub([0, 0, 1], mul(u, u[2])));
+  const s = cross(fw, u);                     // the bake's frame: s = f x axis
+  const out = b.endsWith('.r') ? -1 : 1;      // s points +x; outward is +x on .l, -x on .r
+  const a = ph * Math.PI / 180;
+  const dir = norm(add(mul(fw, Math.cos(a)), mul(s, out * Math.sin(a))));
+  const axis = add(head, mul(sub(tail, head), t));
+  let r = 0.3, p = add(axis, mul(dir, r));
+  for (let i = 0; i < 300; i++) {
+    const d = sdBody(p, armBody);
+    if (Math.abs(d) < 1e-4) break;
+    r -= Math.max(Math.abs(d) * 0.9, 2e-4) * Math.sign(d);
+    p = add(axis, mul(dir, r));
+  }
+  const e = 6e-4, d0 = sdBody(p, armBody);
+  const n = norm([sdBody(add(p, [e, 0, 0]), armBody) - d0, sdBody(add(p, [0, e, 0]), armBody) - d0, sdBody(add(p, [0, 0, e]), armBody) - d0]);
+  return { p, n };
+}
+function armBoneT(b: string, p: V): { t: number; at: V } {
+  const { head, tail } = bones.get(b)!;
+  const d = sub(tail, head);
+  const t = Math.min(1, Math.max(0, dotv(sub(p, head), d) / dotv(d, d)));
+  return { t, at: add(head, mul(d, t)) };
+}
+function armVaricose(b: string, t0: number, t1: number, ph0: number, dph: number, r: number, proud: number, branches: number, depth = 0) {
+  const [bone, side] = b.split('.') as [string, string];
+  const n = Math.max(8, Math.round(Math.abs(t1 - t0) * 70));
+  // A long, lazy meander (wavelength ~10 cm, swing ~1 cm): the first pass (~3.5 cm, ~1.4 cm) read as crumpled skin.
+  let phase = rnd() * 6.28;
+  const amp = 4.5 + rnd() * 3;
+  const S: { c: V; t: number; ph: number; rr: number }[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = t0 + (t1 - t0) * (i / n), ph = ph0 + dph * (i / n) + amp * Math.sin(phase);
+    phase += 0.22 + rnd() * 0.14;
+    const k = Math.sin(Math.PI * Math.min(1, (i / n) * 1.1 + 0.05));   // taper at the ends
+    const rr = r * (0.55 + 0.45 * k), sk = armSkin(b, t, ph);
+    S.push({ c: add(sk.p, mul(sk.n, proud * (0.6 + 0.4 * k) - rr)), t, ph, rr });
+  }
+  for (let i = 0; i + 1 < S.length; i++) {
+    const A = S[i]!.c, B = S[i + 1]!.c, { t, at } = armBoneT(b, A);
+    out.push(`  bar  arm on ${bone} from=${f(t)} to=${f(t)} offset=${fv(sub(A, at))} tip=${fv(sub(B, A))} r=${f(S[i]!.rr)} r2=${f(S[i + 1]!.rr)} blend=0.0016 side=${side}`);
+  }
+  for (let i = 2; i < S.length - 2; i++) if (rnd() < 0.18) {
+    const sk = armSkin(b, S[i]!.t, S[i]!.ph), kr = S[i]!.rr * (1.5 + rnd() * 0.6);
+    const c = add(sk.p, mul(sk.n, proud * 1.3 - kr)), { t, at } = armBoneT(b, c);
+    out.push(`  blob arm on ${bone} at=${f(t)} offset=${fv(sub(c, at))} r=${f(kr)} blend=0.002 side=${side}`);
+  }
+  for (let k = 0; k < branches && depth < 1; k++) {
+    const s0 = S[2 + Math.floor(rnd() * (S.length - 5))]!;
+    armVaricose(b, s0.t, Math.min(0.95, s0.t + 0.18 + rnd() * 0.15), s0.ph, (rnd() < 0.5 ? -1 : 1) * (30 + rnd() * 25), r * 0.65, proud * 0.75, 1, depth + 1);
+  }
+}
+section('arm varicose veins: down the biceps, the outer arm and the back of each upper arm; the forearm flesh');
+for (const sd of ['l', 'r']) {
+  armVaricose(`upperarm.${sd}`, 0.06, 0.94, 10, 15, 0.0065, 0.0045, 1);
+  armVaricose(`upperarm.${sd}`, 0.10, 0.90, 85, -20, 0.0058, 0.0040, 1);
+  armVaricose(`upperarm.${sd}`, 0.12, 0.88, 170, 25, 0.0055, 0.0038, 1);
+  armVaricose(`forearm.${sd}`, 0.02, 0.38, 20, 30, 0.0055, 0.0038, 1);
+  armVaricose(`forearm.${sd}`, 0.03, 0.36, -110, -25, 0.0050, 0.0035, 1);
+}
 
 writeFileSync(resolve(ROOT, 'src/lab/sdf-zombie/characters/twinhead.detail'), out.join('\n') + '\n');
 console.log(`twinhead-detail-gen: ${out.filter(l => /^\s+(bar|blob)/.test(l)).length} detail prims`);

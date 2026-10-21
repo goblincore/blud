@@ -15,6 +15,17 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
   the marched prims (torso 47 -> 35).
 - [x] **Profile** `TWINHEAD_PROFILE`: gore body, STOMP, launcher carries, rocket gunner; the cannon prop is an
   invisible aim frame. `?spawn=twinhead` / `__sdfGame.spawnDebugCharacter('twinhead')`.
+- [x] **Sculpted machinery** (2026-10-21): every kit part below the head rebuilt in the demon skull's style.
+  - pauldron, thigh and shin carapaces, skull-cap knees, talon feet, pelvic girdle, vertebral column, back pod
+  - a steel-to-blood fluted spike
+  - generator scripts on `assets-source/twinhead-kit/kit_sculpt.py`.
+
+  The style and loop for the next biomech enemy are in
+  [biomech-style.md](../../.claude/skills/authoring-sdf-characters/biomech-style.md). Prominent varicose veins are
+  in the torso normal map.
+- [ ] **Kit optimization**: about 145k triangles. Bake the sculpt detail to normal maps on low-poly cages (2-4k per part).
+- [ ] Owner idea: an axe head instead of (or on) the spike.
+- [ ] Cannon arm and forearm sleeves are still box/drum parts; redo them in the style.
 - [ ] **Spike melee**: a combined mind (cannon at range, spike stab close); today he only shoots.
 - [ ] Owner review in game: normal-map strength and detail, wound tones; not yet checked past the lab.
 - [ ] Normal maps on limbs (needs a per-bone cylinder region); frame-cost measurement with the bench.

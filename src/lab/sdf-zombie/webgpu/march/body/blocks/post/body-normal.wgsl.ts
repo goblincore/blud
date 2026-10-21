@@ -13,74 +13,127 @@
 // two prims, which the rigid per-segment torso frames keep small). scripts/bake-body-normal.ts authors the
 // texture in exactly this frame.
 //
-// THE FRAME. u = the angle round the vertical axis through (axisX, axisZ) in rest space (0.5 = facing
-// +z), v = rest height between yMin and yMax (v = 1 at yMax, the image's top row). Tangent = d/du (round
-// the axis), bitangent = rest +y, normal = the shading normal. The texel is a tangent-space normal
-// (rgb = t, b, n mapped from -1..1). The tangent frame is rotated from rest to world by the INVERSE of
-// restPoint's rotation (restPoint maps world -> rest with q; rest -> world is conj(q)), then made
-// orthonormal against the current shading normal, so the bake's relief lands on whatever the march
-// computed rather than replacing it.
+// REGIONS (2026-10-21, limb maps). The texture is an atlas of cylindrical projections, each round a REST-space
+// segment head -> tail and baked into its own band of rows; row 0 is the region table (scripts/bake-body-normal.ts
+// THE HEADER: texel 0 = 'B', 'N', version, count; five texels per region of 16-bit pairs). Region 0 is the torso,
+// a vertical segment, taken only by hits on torso prims (bodyNormAxis z, w): an arm swinging through the torso's
+// height band must not be painted with chest. Limb regions are taken by the other hits whose rest point lies
+// along their segment within rMax of it, the nearest axis winning. Because the test is on the REST point, a limb
+// in any pose finds its own region.
 //
-// SCOPE: only hits whose dominant prim is in [primStart, primEnd) - the torso cluster - take the map, so
-// an arm swinging through the torso's height band is not painted with chest. Masked like the grain:
-// off the face sheet, gloss and metal, painted prims, wounds and cut faces.
+// THE FRAME, per region, which the bake writes in: A = the axis, f = rest +z made perpendicular to A, s = f x A.
+// u = atan2(r.s, r.f) / 2pi + 0.5 for the radial r, the band row = row0 + t * rows (t along head -> tail).
+// Tangent = s cos th - f sin th (round the axis), bitangent = n x tangent (toward the head), normal = the shading
+// normal; the texel is a tangent-space normal (rgb = t, b, n from -1..1). For the torso (A = -y) this is the
+// original projection. The tangent frame is rotated from rest to world by the INVERSE of restPoint's rotation
+// (restPoint maps world -> rest with q; rest -> world is conj(q)), then made orthonormal against the current
+// shading normal, so the bake's relief lands on whatever the march computed rather than replacing it.
 //
-// COST: once per lit pixel, never in the walk or the field. Four textureLoad taps (a manual bilinear: the
-// march has no sampler, see shade-helpers.wgsl.ts texel) and the same rows restPoint reads. bodyNormCfg.x
-// = 0 - every character that does not declare a body map - skips the block entirely, so those bodies
-// shade exactly as before. Locals carry an `nmap` prefix (the REFINE_LOOP name-collision rule the grain
-// test pins).
+// Masked like the grain: off the face sheet, gloss and metal, painted prims, wounds and cut faces.
+//
+// COST: once per lit pixel, never in the walk or the field: the region table (five taps a region, a handful of
+// regions), four textureLoad taps for a manual bilinear (the march has no sampler, see shade-helpers.wgsl.ts
+// texel) and the rows restPoint reads. bodyNormCfg.x = 0 - every character that does not declare a body map -
+// skips the block entirely, so those bodies shade exactly as before. Locals carry an `nmap` prefix (the
+// REFINE_LOOP name-collision rule the grain test pins).
 import { ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B } from '../../../layout';
 
-export const BODY_NORMAL_BLOCK = /* wgsl */ `  // BODY NORMAL MAP (body-normal.wgsl.ts): the character's baked torso
-  // relief, projected round the torso in rest space. bodyNormCfg x strength,
-  // y rest yMin, z rest yMax; bodyNormAxis x,y the rest axis x and z, z,w the
-  // torso prim range. Strength 0 skips the block.
+/** A 16-bit value from a header texel's byte pair (textureLoad gives bytes / 255). */
+const u16 = (pair: string) => `(round(${pair}.x * 255.0) * 256.0 + round(${pair}.y * 255.0))`;
+/** A header position: the 16-bit value mapped back from -2.5..2.5 m. */
+const pos16 = (pair: string) => `(${u16(pair)} / 65535.0 * 5.0 - 2.5)`;
+
+export const BODY_NORMAL_BLOCK = /* wgsl */ `  // BODY NORMAL MAP (body-normal.wgsl.ts): the character's baked relief, an
+  // atlas of cylindrical projections round rest-space segments, the region
+  // table in the texture's header row. bodyNormCfg x strength; bodyNormAxis
+  // z,w the torso prim range (region 0's hits). Strength 0 skips the block.
   let nmapStr = bodyNormCfg.x;
-  if (nmapStr > 0.0 && hitBest >= i32(bodyNormAxis.z) && hitBest < i32(bodyNormAxis.w)) {
+  if (nmapStr > 0.0) {
     let nmapMask = (1.0 - faceSheetCover) * (1.0 - max(gloss, metal)) * (1.0 - painted)
       * clamp(1.0 - wm, 0.0, 1.0) * (1.0 - cutFace);
-    let nmapRad = vec2<f32>(anchor.x - bodyNormAxis.x, anchor.z - bodyNormAxis.y);
-    let nmapV = (anchor.y - bodyNormCfg.y) / max(bodyNormCfg.z - bodyNormCfg.y, 1e-4);
     let nmapRa = textureLoad(data, vec2<i32>(hitBest, ${ROW_REST_A} + gBand), 0);
-    if (nmapMask > 0.0 && nmapV > 0.0 && nmapV < 1.0 && dot(nmapRad, nmapRad) > 1e-8 && nmapRa.w > 0.0) {
-      // Bilinear over textureLoad: u wraps (it is an angle), v clamps.
-      let nmapDim = vec2<f32>(textureDimensions(bodyNormTex, 0));
-      let nmapU = atan2(nmapRad.x, nmapRad.y) * 0.15915494 + 0.5;
-      let nmapP = vec2<f32>(nmapU * nmapDim.x - 0.5, (1.0 - nmapV) * nmapDim.y - 0.5);
-      let nmapI = floor(nmapP);
-      let nmapF = nmapP - nmapI;
-      let nmapW = i32(nmapDim.x);
-      let nmapH = i32(nmapDim.y);
-      let nmapX0 = ((i32(nmapI.x) % nmapW) + nmapW) % nmapW;
-      let nmapX1 = (nmapX0 + 1) % nmapW;
-      let nmapY0 = clamp(i32(nmapI.y), 0, nmapH - 1);
-      let nmapY1 = clamp(i32(nmapI.y) + 1, 0, nmapH - 1);
-      let nmapTex = mix(
-        mix(textureLoad(bodyNormTex, vec2<i32>(nmapX0, nmapY0), 0), textureLoad(bodyNormTex, vec2<i32>(nmapX1, nmapY0), 0), nmapF.x),
-        mix(textureLoad(bodyNormTex, vec2<i32>(nmapX0, nmapY1), 0), textureLoad(bodyNormTex, vec2<i32>(nmapX1, nmapY1), 0), nmapF.x),
-        nmapF.y).xyz * 2.0 - 1.0;
-      // restPoint's world -> rest rotation, rebuilt from the same rows; its
-      // conjugate carries the rest-space tangent frame to world.
-      let nmapRb = textureLoad(data, vec2<i32>(hitBest, ${ROW_REST_B} + gBand), 0).xyz;
-      let nmapPa = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_A} + gBand), 0).xyz;
-      let nmapPb = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_B} + gBand), 0).xyz;
-      var nmapQ = vec4<f32>(0.0, 0.0, 0.0, 1.0);
-      let nmapO = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_QUAT} + gBand), 0);
-      if (abs(1.0 - nmapO.w) > 1e-6) { nmapQ = vec4<f32>(-nmapO.xyz, nmapO.w); }
-      let nmapAxP = nmapPb - nmapPa;
-      let nmapAxR = nmapRb - nmapRa.xyz;
-      if (length(nmapAxP) > 1e-6 && length(nmapAxR) > 1e-6) {
-        nmapQ = qMulQ(qFromToV(qRot(nmapQ, normalize(nmapAxP)), normalize(nmapAxR)), nmapQ);
+    let nmapHdr = textureLoad(bodyNormTex, vec2<i32>(0, 0), 0) * 255.0;
+    if (nmapMask > 0.0 && nmapRa.w > 0.0 && round(nmapHdr.x) == 66.0 && round(nmapHdr.y) == 78.0) {
+      let nmapTorso = hitBest >= i32(bodyNormAxis.z) && hitBest < i32(bodyNormAxis.w);
+      let nmapCount = min(i32(round(nmapHdr.w)), 16);
+      var nmapBestD = 1e9;
+      var nmapBA = vec3<f32>(0.0, -1.0, 0.0);
+      var nmapBRad = vec3<f32>(0.0);
+      var nmapBT = 0.0;
+      var nmapBRow0 = 0.0;
+      var nmapBRows = 0.0;
+      for (var nmapI = 0; nmapI < nmapCount; nmapI++) {
+        let nmapX = 1 + 5 * nmapI;
+        let nmapE0 = textureLoad(bodyNormTex, vec2<i32>(nmapX, 0), 0);
+        let nmapE1 = textureLoad(bodyNormTex, vec2<i32>(nmapX + 1, 0), 0);
+        let nmapE2 = textureLoad(bodyNormTex, vec2<i32>(nmapX + 2, 0), 0);
+        let nmapE3 = textureLoad(bodyNormTex, vec2<i32>(nmapX + 3, 0), 0);
+        let nmapE4 = textureLoad(bodyNormTex, vec2<i32>(nmapX + 4, 0), 0);
+        let nmapKind = ${u16('nmapE4.zw')};
+        if ((nmapKind < 0.5) != nmapTorso) { continue; }
+        let nmapHd = vec3<f32>(${pos16('nmapE0.xy')}, ${pos16('nmapE0.zw')}, ${pos16('nmapE1.xy')});
+        let nmapTl = vec3<f32>(${pos16('nmapE1.zw')}, ${pos16('nmapE2.xy')}, ${pos16('nmapE2.zw')});
+        let nmapAx = nmapTl - nmapHd;
+        let nmapT = dot(anchor - nmapHd, nmapAx) / max(dot(nmapAx, nmapAx), 1e-8);
+        if (nmapT <= 0.0 || nmapT >= 1.0) { continue; }
+        let nmapRadV = anchor - (nmapHd + nmapAx * nmapT);
+        let nmapD = length(nmapRadV);
+        if (nmapKind > 0.5 && nmapD > ${pos16('nmapE3.xy')}) { continue; }
+        if (nmapD < nmapBestD) {
+          nmapBestD = nmapD;
+          nmapBA = nmapAx;
+          nmapBRad = nmapRadV;
+          nmapBT = nmapT;
+          nmapBRow0 = ${u16('nmapE3.zw')};
+          nmapBRows = ${u16('nmapE4.xy')};
+        }
       }
-      let nmapQi = vec4<f32>(-nmapQ.xyz, nmapQ.w);
-      let nmapRn = normalize(nmapRad);
-      let nmapT = qRot(nmapQi, vec3<f32>(nmapRn.y, 0.0, -nmapRn.x));
-      let nmapTo = normalize(nmapT - n * dot(nmapT, n));
-      let nmapBo = cross(n, nmapTo);
-      // The texel's tangent components, scaled by strength and the mask,
-      // over its normal component: a tangent-space normal applied to n.
-      let nmapAmt = nmapStr * nmapMask / max(nmapTex.z, 0.2);
-      n = normalize(n + (nmapTo * nmapTex.x + nmapBo * nmapTex.y) * nmapAmt);
+      if (nmapBestD < 1e8 && nmapBestD > 1e-4 && nmapBRows > 0.0) {
+        let nmapA = normalize(nmapBA);
+        let nmapF = normalize(vec3<f32>(0.0, 0.0, 1.0) - nmapA * nmapA.z);
+        let nmapS = cross(nmapF, nmapA);
+        let nmapRn = nmapBRad / nmapBestD;
+        let nmapCo = dot(nmapRn, nmapF);
+        let nmapSi = dot(nmapRn, nmapS);
+        // Bilinear over textureLoad: u wraps (it is an angle), the row clamps
+        // inside the region's own band.
+        let nmapDim = vec2<f32>(textureDimensions(bodyNormTex, 0));
+        let nmapU = atan2(nmapSi, nmapCo) * 0.15915494 + 0.5;
+        let nmapP = vec2<f32>(nmapU * nmapDim.x - 0.5, nmapBRow0 + nmapBT * nmapBRows - 0.5);
+        let nmapIp = floor(nmapP);
+        let nmapFr = nmapP - nmapIp;
+        let nmapW = i32(nmapDim.x);
+        let nmapLo = i32(nmapBRow0);
+        let nmapHi = i32(nmapBRow0 + nmapBRows) - 1;
+        let nmapX0 = ((i32(nmapIp.x) % nmapW) + nmapW) % nmapW;
+        let nmapX1 = (nmapX0 + 1) % nmapW;
+        let nmapY0 = clamp(i32(nmapIp.y), nmapLo, nmapHi);
+        let nmapY1 = clamp(i32(nmapIp.y) + 1, nmapLo, nmapHi);
+        let nmapTex = mix(
+          mix(textureLoad(bodyNormTex, vec2<i32>(nmapX0, nmapY0), 0), textureLoad(bodyNormTex, vec2<i32>(nmapX1, nmapY0), 0), nmapFr.x),
+          mix(textureLoad(bodyNormTex, vec2<i32>(nmapX0, nmapY1), 0), textureLoad(bodyNormTex, vec2<i32>(nmapX1, nmapY1), 0), nmapFr.x),
+          nmapFr.y).xyz * 2.0 - 1.0;
+        // restPoint's world -> rest rotation, rebuilt from the same rows; its
+        // conjugate carries the rest-space tangent frame to world.
+        let nmapRb = textureLoad(data, vec2<i32>(hitBest, ${ROW_REST_B} + gBand), 0).xyz;
+        let nmapPa = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_A} + gBand), 0).xyz;
+        let nmapPb = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_B} + gBand), 0).xyz;
+        var nmapQ = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+        let nmapO = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_QUAT} + gBand), 0);
+        if (abs(1.0 - nmapO.w) > 1e-6) { nmapQ = vec4<f32>(-nmapO.xyz, nmapO.w); }
+        let nmapAxP = nmapPb - nmapPa;
+        let nmapAxR = nmapRb - nmapRa.xyz;
+        if (length(nmapAxP) > 1e-6 && length(nmapAxR) > 1e-6) {
+          nmapQ = qMulQ(qFromToV(qRot(nmapQ, normalize(nmapAxP)), normalize(nmapAxR)), nmapQ);
+        }
+        let nmapQi = vec4<f32>(-nmapQ.xyz, nmapQ.w);
+        let nmapTg = qRot(nmapQi, nmapS * nmapCo - nmapF * nmapSi);
+        let nmapTo = normalize(nmapTg - n * dot(nmapTg, n));
+        let nmapBo = cross(n, nmapTo);
+        // The texel's tangent components, scaled by strength and the mask,
+        // over its normal component: a tangent-space normal applied to n.
+        let nmapAmt = nmapStr * nmapMask / max(nmapTex.z, 0.2);
+        n = normalize(n + (nmapTo * nmapTex.x + nmapBo * nmapTex.y) * nmapAmt);
+      }
     }
   }`;

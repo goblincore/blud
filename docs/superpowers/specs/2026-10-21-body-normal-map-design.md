@@ -45,9 +45,29 @@ veins, fibres and swellings are exactly the detail that is expensive as prims an
 loads (NoColorSpace, no flip — row 0 is the band's top) and computes the torso prim range; `game-spawn.ts` and
 the lab hero call `setBodyNormal`.
 
+## Limb regions (added 2026-10-21, same day)
+
+Owner: veins expected on the arms too. Each region is now a cylinder round a REST-space segment, baked into its
+own band of rows of one atlas; the torso is region 0, a vertical segment, which is exactly the original
+projection.
+
+- **Bake.** `bake-body-normal.ts ... --limb bone:t0:t1:rMax:rows` adds a limb region round that bone's segment
+  t0..t1. Only that limb's cluster is marched, and each row marches only the prims within reach of its axis point,
+  so arm rows are cheap.
+- **The table lives in the texture.** Row 0 is a header: `'B','N',version,count`, then five texels per region of
+  16-bit pairs (head, tail, rMax, row0, rows, kind). So the march inputs did not change: same three, same
+  positions, no new pins.
+- **Runtime selection.** Torso-prim hits take region 0. Other hits take the limb region whose segment their
+  rest point lies along, within rMax, nearest axis first. The test is on the rest point, so a limb in any pose
+  finds its own region and a swinging arm never picks up chest.
+- **Frame per region.** A = axis, f = rest +z made perpendicular to A, s = f x A; u = atan2(r.s, r.f).
+- **Arm detail.** The twinhead's arm detail (varicose veins) is placed on the arm skin by
+  `twinhead-detail-gen.ts`, using `side=` prims on the arm bones.
+
 ## Limits, known
 
-- Torso only. Limbs would each need their own cylinder (round the bone's rest axis) — a second region type.
+- A limb region is one straight segment per bone: a strongly bent prim (a hooked horn) drifts off its cylinder.
+  Joint areas are covered by whichever adjacent segment is nearer.
 - The projection is a single vertical cylinder: surfaces facing straight up or down (the tops of the traps)
   get stretched texels.
 - March-resolution: the map is applied in the march, not in the output-resolution detail pass, so after

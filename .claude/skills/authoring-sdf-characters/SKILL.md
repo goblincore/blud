@@ -26,6 +26,12 @@ as intended, not clutter:
 bone spine parent=pelvis dir=up pitch=6.842773 len=0.34
 ```
 
+## Biomechanical enemies: read `biomech-style.md`
+
+For a flesh-and-machine enemy (the twinhead and its kin), the machinery is sculpted kit mesh in the demon
+skull's style, never boxes. Flesh detail goes in a baked body normal map. `biomech-style.md` (beside this file)
+has the rules, the Blender toolkit (`assets-source/twinhead-kit/kit_sculpt.py`) and the loop.
+
 ## The loop
 
 1. **Get the reference as geometry.** The convention is
