@@ -183,3 +183,14 @@ describe('the hand-off', () => {
     expect(riseAt(2)).toBe(1);
   });
 });
+
+describe('sequenceFor fade-in', () => {
+  it('only the first shot opens from black, when asked', () => {
+    const plain = sequenceFor(P);
+    expect(plain.shots.every(s => s.fadeInS === undefined)).toBe(true);
+    const faded = sequenceFor(P, undefined, { fadeInS: 0.8 });
+    expect(faded.shots[0]!.fadeInS).toBe(0.8);
+    expect(faded.shots.slice(1).every(s => s.fadeInS === undefined)).toBe(true);
+    expect(faded.shots.map(s => s.duration)).toEqual(plain.shots.map(s => s.duration));
+  });
+});

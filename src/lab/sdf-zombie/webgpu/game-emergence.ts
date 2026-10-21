@@ -38,7 +38,9 @@ import { expressionChannelsAt, expressionCues, type ExpressionCue } from './emer
 import {
   EMERGENCE_SEQUENCE_ID, RISE_S, handoffFor, presetAt, riseAt, sequenceFor, type Handoff,
 } from './emergence-camera';
-import { registerSequence, totalDuration, type Sequence } from './ending-sequence';
+import { overlayAt, registerSequence, totalDuration, type Sequence } from './ending-sequence';
+import { clearCrtPicture, loadCrtPicture, sessionStore } from './crt-handoff';
+import { emergenceEntry } from './emergence-entry';
 import { startSequence, type SequenceRuntime } from './game-sequence';
 import type { GpuViewOpts } from './zombie-gpu';
 import type { SdfLayer } from './sdf-layer';
@@ -59,9 +61,13 @@ export type EmergencePhase = 'idle' | 'playing' | 'done';
 
 export interface EmergenceRuntime {
   placement: Placement;
-  /** `?emergence=1`: start AUTOSTART_S after the level is ready. */
+  /** `?emergence=1` (or `from=night-train`): start autostartDelayS after the level is ready. */
   autostart: boolean;
   autostarted: boolean;
+  /** The autostart's delay after the level is ready (s): quick when arriving from the Night Train. */
+  autostartDelayS: number;
+  /** Which picture the CRT shows: the one stored by the Night Train, or the lab's still. */
+  picture: 'night-train' | 'still';
   ready: boolean;
   sinceReady: number;
   phase: EmergencePhase;
@@ -125,8 +131,12 @@ export function createEmergence(ctx: GameContext): EmergenceRuntime | null {
   const lampLight = buildLamp(screen);
   lampLight.removeFromParent();   // the level's own `lamp` light sits at the bulb
   lampLight.dispose();
-  const picture = new THREE.TextureLoader().load(PICTURE_URL, undefined, undefined,
-    () => console.error(`[emergence] picture ${PICTURE_URL} failed to load`));
+  const entry = emergenceEntry(location.search);
+  const store = entry.fromTrain ? sessionStore() : null;
+  const stored = store ? loadCrtPicture(store) : null;
+  if (store) clearCrtPicture(store);
+  const picture = new THREE.TextureLoader().load(stored ?? PICTURE_URL, undefined, undefined,
+    () => console.error(`[emergence] picture ${stored ? 'from the night train' : PICTURE_URL} failed to load`));
   picture.colorSpace = THREE.SRGBColorSpace;
   const glass = new THREE.Mesh(new THREE.PlaneGeometry(GLASS.hw * 2, GLASS.hh * 2), new THREE.MeshBasicMaterial({ map: picture }));
   glass.name = 'emergence.placeholder-glass';
@@ -151,10 +161,10 @@ export function createEmergence(ctx: GameContext): EmergenceRuntime | null {
   puppetParent.name = 'emergence.puppet';
   ctx.boot.handle.scene.add(puppetParent);   // identity: the teeth's bones are posed in world space
 
-  const seq = sequenceFor(placement);
+  const seq = sequenceFor(placement, undefined, { fadeInS: entry.fadeInS });
   registerSequence(seq);
   const rt: EmergenceRuntime = {
-    placement, autostart: param === '1', autostarted: false, ready: false, sinceReady: 0,
+    placement, autostart: entry.autostart, autostarted: false, autostartDelayS: entry.delayS, picture: stored ? 'night-train' : 'still', ready: false, sinceReady: 0,
     phase: 'idle', t: 0, hold: null, seq, handoff: handoffFor(placement), rise: null,
     setMeshes, glass, pass, puppet: null, puppetParent, layout: null,
     goblinOrigin: toWorld(placement, [0, -NOMINAL_GLASS.y, NOMINAL_GLASS.z]), goblinYaw: placement.yaw + Math.PI,
@@ -373,7 +383,7 @@ export function stepEmergence(ctx: GameContext, dt: number): void {
   }
   if (rt.autostart && !rt.autostarted && rt.ready && rt.phase === 'idle') {
     rt.sinceReady += dt;
-    if (rt.sinceReady >= AUTOSTART_S) { rt.autostarted = true; startEmergence(ctx); }
+    if (rt.sinceReady >= rt.autostartDelayS) { rt.autostarted = true; startEmergence(ctx); }
   }
   if (rt.phase === 'playing') {
     const mine = mineOf(ctx);
@@ -462,6 +472,8 @@ export function createEmergenceSeams(ctx: GameContext) {
         rising: rt.rise !== null,
         player: { pos: r3(p.pos), yaw: +p.yaw.toFixed(4), pitch: +p.pitch.toFixed(4) },
         cpuMs: { puppet: +rt.cpuMs.puppet.toFixed(2), pass: +rt.cpuMs.pass.toFixed(2) },
+        picture: rt.picture,
+        overlayAlpha: rt.phase === 'playing' ? +overlayAt(rt.seq, rt.t).alpha.toFixed(3) : null,
         autostart: rt.autostart, ready: rt.ready, errors: [...rt.errors],
       };
     },

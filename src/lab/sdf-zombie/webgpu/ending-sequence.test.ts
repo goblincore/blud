@@ -96,3 +96,20 @@ describe('registerSequence', () => {
     expect(SEQUENCES['test-registered']).toBeUndefined();
   });
 });
+
+describe('fadeInS: a shot that opens from black', () => {
+  const seq: Sequence = { id: 't', endEvent: 'e', shots: [
+    { id: 'a', duration: 4, cut: 'hard' as const, camera: { kind: 'hold' as const }, fadeInS: 1 },
+    { id: 'b', duration: 2, cut: 'hard' as const, camera: { kind: 'hold' as const } },
+  ] };
+  it('is black at the start, clear after fadeInS, monotone between', () => {
+    expect(overlayAt(seq, 0).alpha).toBe(1);
+    expect(overlayAt(seq, 1).alpha).toBe(0);
+    expect(overlayAt(seq, 3).alpha).toBe(0);
+    let prev = 1;
+    for (let t = 0; t <= 1; t += 0.1) { const a = overlayAt(seq, t).alpha; expect(a).toBeLessThanOrEqual(prev + 1e-12); prev = a; }
+  });
+  it('a later shot without fadeInS is unchanged', () => {
+    expect(overlayAt(seq, 4.5).alpha).toBe(0);
+  });
+});

@@ -29,6 +29,8 @@ export interface Shot {
   cut: CutKind;
   camera: CameraSpec;
   overlay?: OverlaySpec;
+  /** The shot opens black and clears over this many seconds (eased). */
+  fadeInS?: number;
 }
 
 export interface Sequence {
@@ -98,7 +100,8 @@ export function overlayAt(seq: Sequence, t: number): OverlayAt {
   // A flash cut is white at alpha 1, falling linearly to the shot's own overlay alpha over FLASH_S.
   const k = shot.cut === 'flash' ? Math.max(0, 1 - local / FLASH_S) : 0;
   if (k > 0) return { rgb: [1, 1, 1], alpha: base.alpha + (1 - base.alpha) * k, text: base.text ?? null };
-  return { rgb: base.rgb, alpha: base.alpha, text: base.text ?? null };
+  const fade = shot.fadeInS && shot.fadeInS > 0 ? 1 - ease(local / shot.fadeInS) : 0;
+  return { rgb: base.rgb, alpha: Math.max(base.alpha, fade), text: base.text ?? null };
 }
 
 /** Every sequence the game knows, by id. A level starts one with the event `sequence.<id>`. */

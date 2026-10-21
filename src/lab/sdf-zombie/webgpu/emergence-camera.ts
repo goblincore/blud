@@ -87,8 +87,11 @@ export function shotsFor(placement: Placement, centreFov = GAME_CENTRE_FOV): Seq
 }
 
 /** The emergence as a sequence for the game's sequence system (registerSequence). */
-export function sequenceFor(placement: Placement, centreFov = GAME_CENTRE_FOV): Sequence {
-  return { id: EMERGENCE_SEQUENCE_ID, endEvent: EMERGENCE_END_EVENT, shots: shotsFor(placement, centreFov) };
+export function sequenceFor(placement: Placement, centreFov = GAME_CENTRE_FOV, opts: { fadeInS?: number } = {}): Sequence {
+  const shots = [...shotsFor(placement, centreFov)];
+  // Only the first shot opens from black (arriving from the Night Train).
+  if (opts.fadeInS && shots[0]) shots[0] = { ...shots[0], fadeInS: opts.fadeInS };
+  return { id: EMERGENCE_SEQUENCE_ID, endEvent: EMERGENCE_END_EVENT, shots };
 }
 
 // ---------------------------------------------------------------------------
