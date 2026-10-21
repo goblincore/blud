@@ -50,3 +50,12 @@ vertex colours. Replaced the three box plates + bolts. Tune shape at the `capC`/
 4. Spike melee mind; normal maps on limbs; frame-cost bench; in-game check of all of this.
 5. Re-run `npm run typecheck`, `npm run test:changed`, `npx vitest run src/lab/sdf-zombie/pack-golden.test.ts -u`
    after .blob edits, then commit + push.
+
+## Update 2026-10-21 (later): legs, pelvis, spine, spike, limb normal maps
+
+- All machinery below the head is sculpted by `assets-source/twinhead-kit/make_body_armour.py` and `make_spike.py`
+  on the shared `kit_sculpt.py`. Style rules: `.claude/skills/authoring-sdf-characters/biomech-style.md`.
+- Body normal map = atlas of regions (torso + upperarm/forearm per side); bake command in
+  `scripts/twinhead-detail-gen.ts`'s header (~22 min, nearly all torso).
+- Open: kit optimization (~145k tris -> normal-map-baked cages), cannon arm/forearm sleeves still boxes, owner
+  idea of an axe head, spike melee mind, pauldron clipping in motion, in-game check.

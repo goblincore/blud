@@ -28,7 +28,9 @@ SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TA
 - [ ] Cannon arm and forearm sleeves are still box/drum parts; redo them in the style.
 - [ ] **Spike melee**: a combined mind (cannon at range, spike stab close); today he only shoots.
 - [ ] Owner review in game: normal-map strength and detail, wound tones; not yet checked past the lab.
-- [ ] Normal maps on limbs (needs a per-bone cylinder region); frame-cost measurement with the bench.
+- [x] Normal maps on limbs (2026-10-21): per-bone cylinder regions in one atlas, the table in the header row; the
+  twinhead's arms carry varicose veins. See the spec's "Limb regions".
+- [ ] Frame-cost measurement with the bench.
 
 ## Goblin refinement pass (body, kit, weapons, rig, animation) — phase 1 (body) done 2026-10-01
 
