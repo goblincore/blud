@@ -15,6 +15,7 @@ import {
 } from './level-def';
 import { LAMP_MOODS, type LampMood } from './lamp-moods';
 import { BEACON } from './beacon';
+import { parseOnComplete } from './level-bridge';
 import {
   EDGE_STYLES, GROUND_NAMES, SKYLINE_NAMES, SKY_NAMES,
   type EdgeStyle, type GroundName, type SkyName, type SkylineName,
@@ -27,7 +28,7 @@ const MAX_STAIR_RISE = 3;
 
 /** Allowed keys per element (spec §4). `states` is allowed on every element. */
 const KEYS: Record<string, readonly string[]> = {
-  top: ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'palette', 'states', 'skyline', 'rooms', 'tunnels',
+  top: ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'onComplete', 'palette', 'states', 'skyline', 'rooms', 'tunnels',
     'stairs', 'furniture', 'solids', 'gates', 'triggers', 'windows', 'lights', 'start', 'spawns', 'graves',
     'pickups', 'bells', 'portals', 'art', 'cues'],
   palette: ['wall', 'floor', 'ceil', 'tunnel', 'solid'],
@@ -100,6 +101,7 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
   if (j.ammo !== undefined && j.ammo !== 'infinite' && j.ammo !== 'finite') errors.push('ammo: finite or infinite');
   const loadout = j.loadout === undefined ? [] : (Array.isArray(j.loadout) ? j.loadout : []).map((w, i) => str(w, `loadout[${i}]`));
   const completeOn = typeof j.completeOn === 'string' && j.completeOn ? j.completeOn : 'pickup.cd';
+  const onComplete = parseOnComplete(j.onComplete, errors);
 
   const oneOf = <T extends string>(v: string, known: readonly T[], what: string, where: string): v is T => {
     if ((known as readonly string[]).includes(v)) return true;
@@ -476,7 +478,7 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
   if (art !== null || rooms.some(r => r.shell === 'art')) requires.push('art');
 
   return {
-    id, name, ammo, palette, loadout, completeOn, state, states, requires, skyline,
+    id, name, ammo, palette, loadout, completeOn, onComplete, state, states, requires, skyline,
     rooms, tunnels, stairs, furniture, solids, gates, triggers, cues, windows,
     playerStart, spawns, graves, pickups, bells, portals, art,
   };

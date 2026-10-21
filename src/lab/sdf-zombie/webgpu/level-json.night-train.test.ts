@@ -127,6 +127,10 @@ describe('night-train dynamic light (dynamic light spec §3)', () => {
     ]);
     expect(t.triggers.map(tr => [tr.event, tr.once]).sort()).toEqual([['egg.touch', true], ['light.blackout.room.4', true], ['light.strobe.room.5', true]]);
     expect(t.completeOn).toBe('ending.end');
+    expect(t.onComplete).toEqual({
+      goto: 'flat-early', params: 'emergence=1&from=night-train',
+      bridge: { kind: 'card', rgb: [0, 0, 0], text: 'NIGHT TRAIN', holdS: 2.5 },
+    });
   });
   it('two red emergency beacons in the Boiler Room (room 5), dead until the strobe ends', () => {
     const b = room('boiler-room');

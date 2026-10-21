@@ -40,6 +40,9 @@ CUES = [("pickup.flashlight", ["light.die.room.6", "alert.room.6"]),
         ("egg.touch", ["sequence.ending"])]   # touching the egg starts the ending sequence (ending plan 3)
 # The level completes when the ending sequence ends (ending-sequence.ts SEQUENCES.ending.endEvent); the CD is a collectible.
 COMPLETE_ON = "ending.end"
+# Where the level hands over when it completes (spec 2026-10-21): the Flat, behind a black card with the title.
+ON_COMPLETE = {"goto": "flat-early", "params": "emergence=1&from=night-train",
+               "bridge": {"kind": "card", "rgb": [0, 0, 0], "text": "NIGHT TRAIN", "holdS": 2.5}}
 CARRIAGES = [
     dict(rid=1, name="guards-van", w=3.6, L=16.0, h=2.8,
          walls=[(-1.8, -1.7, 5.5, 5.5 + T), (-0.3, 1.8, 5.5, 5.5 + T),        # hold | cage, door west
@@ -189,6 +192,7 @@ def placed():
 
 def to_level() -> dict:
     doc = {"version": 1, "id": "night-train", "name": "Night Train", "ammo": "finite", "loadout": ["melee"], "completeOn": COMPLETE_ON,
+           "onComplete": ON_COMPLETE,
            "rooms": [], "tunnels": [], "furniture": [], "solids": [], "gates": [], "triggers": [], "lights": [],
            "spawns": [], "pickups": [], "cues": [{"on": on, "emit": list(emit)} for on, emit in CUES]}
     prev = None

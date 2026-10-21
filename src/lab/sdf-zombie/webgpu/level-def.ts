@@ -17,6 +17,7 @@ import {
   type RoomDef, type TunnelDef,
 } from './game-level';
 import { SKY_PRESETS, type EdgeStyle, type GroundName, type SkyName, type SkylineName } from './outdoor-presets';
+import type { OnComplete } from './level-bridge';
 
 export const LEVEL_WALL_T = 0.3;
 /** Spec §3: validation and opening-detection tolerance, metres. */
@@ -100,6 +101,8 @@ export interface LevelDef {
   palette: LevelPalette;
   loadout: string[];
   completeOn: string;
+  /** Where the level hands over when `completeOn` fires (spec 2026-10-21): null = the LEVEL COMPLETE overlay, as before. */
+  onComplete?: OnComplete | null;
   /** The state this LevelDef was filtered to, and every state the file declares. */
   state: string;
   states: string[];

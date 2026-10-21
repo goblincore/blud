@@ -242,3 +242,21 @@ describe('parseLevelJson: none fixture (a light whose lamp the level art draws)'
     expect(() => parseLevelJson(g)).toThrow('lights[0].shadow: only a tube fixture takes it');
   });
 });
+
+describe('parseLevelJson: onComplete (spec 2026-10-21)', () => {
+  const withOnComplete = (oc: unknown) => ({ ...fixture('two-rooms'), onComplete: oc });
+  it('is null when absent (today\'s behaviour: the LEVEL COMPLETE overlay)', () => {
+    expect(parseLevelJson(fixture('two-rooms')).onComplete).toBeNull();
+  });
+  it('parses goto, params and a card bridge', () => {
+    const L = parseLevelJson(withOnComplete({ goto: 'flat-early', params: 'emergence=1&from=night-train',
+      bridge: { kind: 'card', rgb: [0, 0, 0], text: 'NIGHT TRAIN', holdS: 2.5 } }));
+    expect(L.onComplete).toEqual({ goto: 'flat-early', params: 'emergence=1&from=night-train',
+      bridge: { kind: 'card', rgb: [0, 0, 0], text: 'NIGHT TRAIN', holdS: 2.5 } });
+  });
+  it('refuses a goto that is not a level id, an unknown bridge kind and an unknown key', () => {
+    expect(() => parseLevelJson(withOnComplete({ goto: '../x' }))).toThrow(/onComplete\.goto/);
+    expect(() => parseLevelJson(withOnComplete({ goto: 'a', bridge: { kind: 'movie' } }))).toThrow(/onComplete\.bridge\.kind/);
+    expect(() => parseLevelJson(withOnComplete({ goto: 'a', extra: 1 }))).toThrow(/unknown key extra/);
+  });
+});

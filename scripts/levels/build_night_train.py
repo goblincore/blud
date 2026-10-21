@@ -21,7 +21,7 @@ import sys
 import bpy
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from night_train_layout import BEACON_RED, CARRIAGES, COLD, COMPLETE_ON, CUES, FIRE, LIGHT_POWER, VESTIBULE, lamps, placed  # noqa: E402
+from night_train_layout import BEACON_RED, CARRIAGES, COLD, COMPLETE_ON, CUES, FIRE, LIGHT_POWER, ON_COMPLETE, VESTIBULE, lamps, placed  # noqa: E402
 
 ROOT = os.path.abspath("assets-source/levels")
 ARGV = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
@@ -51,6 +51,7 @@ SC["ammo"] = "finite"
 SC["loadout"] = "melee"
 SC["cues"] = json.dumps(CUES)
 SC["complete_on"] = COMPLETE_ON
+SC["on_complete"] = json.dumps(ON_COMPLETE)
 
 COLLS = {}
 

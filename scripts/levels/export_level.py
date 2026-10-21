@@ -208,6 +208,8 @@ def main():
         doc["loadout"] = csv(scene["loadout"])
     if scene.get("complete_on"):
         doc["completeOn"] = scene["complete_on"]
+    if scene.get("on_complete"):
+        doc["onComplete"] = json.loads(scene["on_complete"])
     if scene.get("states"):
         doc["states"] = csv(scene["states"])
     if scene.get("cues"):

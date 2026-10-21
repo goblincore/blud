@@ -7,6 +7,20 @@
     "melee"
   ],
   "completeOn": "ending.end",
+  "onComplete": {
+    "goto": "flat-early",
+    "params": "emergence=1&from=night-train",
+    "bridge": {
+      "kind": "card",
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "text": "NIGHT TRAIN",
+      "holdS": 2.5
+    }
+  },
   "cues": [
     {
       "on": "pickup.flashlight",
