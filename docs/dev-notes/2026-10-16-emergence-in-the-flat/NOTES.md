@@ -3,7 +3,7 @@
 **Spec:** [`2026-10-16-emergence-in-the-flat-design.md`](../../superpowers/specs/2026-10-16-emergence-in-the-flat-design.md) · **Plan:** [`2026-10-16-emergence-in-the-flat.md`](../../superpowers/plans/2026-10-16-emergence-in-the-flat.md) · **Branch:** `claude/emergence-in-the-flat`, stacked on `claude/screen-emergence-lab` (PR goblincore/blud#47).
 **Parent notes:** [the lab spike](../2026-10-11-screen-emergence/NOTES.md) (the pass, the timeline, look rounds) · [goblin expressions](../2026-10-13-goblin-expressions/) · [goblin human height](../2026-10-11-goblin-human-height/).
 
-**Sheet:** [`sheet.jpg`](sheet.jpg): the five key frames (glass gives 2.0, push 5.5, crowning 8.0, out 10.0, settle 13.0) at 320 x 240, from `npm run flat-emergence:check`. 320 x 240 is the hardest case: the vest's cloth shell (about 4.6 mm) is under a pixel there and speckles whatever the lighting; the default flow (400 x 300 march, the trained t16 upscaler to 800 x 600) is clean.
+**Sheet:** [`sheet.jpg`](sheet.jpg): the five key frames (glass gives 2.0, push 5.5, crowning 8.0, out 10.0, settle 13.0) at 320 x 240, from `npm run flat-emergence:check`. 320 x 240 is the hardest case; the default flow (400 x 300 march, the trained t16 upscaler to 800 x 600) is cleaner still. The sheet was re-taken 2026-10-20 after the lighting and vest changes below.
 
 ## What was built
 
@@ -33,7 +33,10 @@ The egg-out-of-the-monitor scene plays in the real game, in the Flat, on a debug
 
 ## Lighting (the look round after the first run, 2026-10-18)
 
-The owner saw a "weird white fuzzy cobweb" round the goblin. It was his cold rim (`GOBLIN_RIM` 1.5, `compose.wgsl.ts`: `pow(1 - n.v, 4)` times the key side, unclamped): on the unstable normals of a silhouette at 320 x 240 it throws white HDR sparks onto the air round him. One boot, A/B through the `emergencePuppet()` seam: gone at rim 0, worse with the footprint accept off. The game now lights him with no rim and a fill of 0.30 (was 0.10), `GAME_RIM`/`GAME_FILL` in `game-emergence.ts`. The lab page keeps `GOBLIN_RIM`/`GOBLIN_FILL` and may show the same sparkle at low resolution. He is still lit by a key aimed at the lamp, not by the level's light list (the list is off by default in the game; the actors use `applyWindowKey` and `applyRoomFill`).
+The owner saw a "weird white fuzzy cobweb" round the goblin. It was his cold rim (`GOBLIN_RIM` 1.5, `compose.wgsl.ts`: `pow(1 - n.v, 4)` times the key side, unclamped): on the unstable normals of a silhouette at 320 x 240 it throws white HDR sparks onto the air round him. One boot, A/B through the `emergencePuppet()` seam: gone at rim 0, worse with the footprint accept off. The game now lights him with no rim and a fill of 0.30 (was 0.10), `GAME_RIM`/`GAME_FILL` in `game-emergence.ts`. The lab page keeps `GOBLIN_RIM`/`GOBLIN_FILL` and may show the same sparkle at low resolution. 
+**Room-lamp key (2026-10-20, owner: "light the goblin properly from the room's lamps").** Each step the puppet takes the game's own path for a body off the shared light list (the list is off by default): `applyWindowKey` (direction, strength and flicker of the lamp that presents him), `applyRoomFill`, `applySelfShadow`, from his place in the room (`litFromRoom`, `game-emergence.ts`). The Flat's lamps are deep orange: at the lamp's full colour his green skin went brown, so his key takes the lamp's colour at 0.25 (`KEY_TINT`; `?emergencetint=`). `?emergencekey=0` keeps the old fixed key aimed at the banker's lamp, for an A/B. Effect: the vest no longer blows out to white at the settle, and his hands read in the typing shot. From behind (the 10 s cut) he is still dark: the lamp is in front of him.
+
+**The vest (2026-10-20).** The speckle across his chest was the 3.5 mm cloth shell hit or missed pixel by pixel at 320 x 240 (the green flesh and white cloth dithered). The two vest shells are now 5.5 mm authored (7.2 mm at 1.70 m) and solid; the old e9e7dd cloth then blew out under the lamp, so it is cfcdc0, a worn grey-white. `goblin-cinematic-home.blob` only; `goblin-cinematic-home.test.ts` allows this one documented difference from `goblin-home.blob`; the pack golden is re-pinned. The painted tank top under the cloth (shared with the cinematic source) stays e9e7dd.
 
 ## The first-show stall
 
@@ -45,8 +48,7 @@ Recorded, not gated. CPU per frame in the game: puppet 1.1 to 1.7 ms, pass under
 
 ## Known issues and open items
 
-- **The vest speckles at 320 x 240** (a thin cloth shell under a pixel); clean in the normal flow.
-- **The goblin is still dark from behind** in the push shot (the key is the lamp's direction; the room is warm and dim); fill 0.30 helps, a proper room light would be better.
+- **He is dark from behind** in the out shot (10 s): the lamp is in front of him; fill 0.30 and the lamp key help.
 - **Flashlight:** held off during the sequence and left off at the hand-off (owner 2026-10-19); the player can switch it back on.
 - **Deferred render mode is untested** (the puppet registers lazily in `stepEmergence`).
 - **His march is not shell-bounded** (the outer-hull shell is built from the actors only; binding it discards every pixel, so `puppetGpuOpts` leaves it out): a possible cost.

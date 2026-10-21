@@ -42,6 +42,7 @@ import { registerSequence, totalDuration, type Sequence } from './ending-sequenc
 import { startSequence, type SequenceRuntime } from './game-sequence';
 import type { GpuViewOpts } from './zombie-gpu';
 import type { SdfLayer } from './sdf-layer';
+import { applyRoomFill, applySelfShadow, applyWindowKey } from './game-dynamic-light';
 import { rotateYaw } from '../gait';
 import type { Vec3 } from '../types';
 
@@ -194,6 +195,34 @@ export function puppetGpuOpts(layer: PuppetLayerDeps, mode: { deferred: boolean;
  *  against the room's warm lamp. The lab page keeps GOBLIN_RIM / GOBLIN_FILL. */
 const GAME_RIM = 0;
 const GAME_FILL = 0.30;
+/** His key follows the room's lamps as a zombie's does (owner 2026-10-20: "light the goblin properly from the room's lamps"): each step
+ *  the game's own path for a body that is not on the shared light list (the default): applyWindowKey (the key toward the lamp that
+ *  presents him, its colour and live level, flicker included), applyRoomFill (the fill follows the room's lamps) and applySelfShadow,
+ *  from his place in the room. `?emergencekey=0` keeps the fixed key aimed at the banker's lamp (the lab's), for an A/B. */
+const ROOM_KEY = typeof location === 'undefined' || new URLSearchParams(location.search).get('emergencekey') !== '0';
+/** spotCfg2's x, y, z as the puppet was built (applyWindowKey ADDS the lamp's key to z each call: it is re-based every step, as the
+ *  game's actor loop re-writes spotCfg2 before it). */
+const keyBase = new WeakMap<GoblinPuppet, { spot: [number, number, number]; color: THREE.Color }>();
+/** How much of the lamp's COLOUR his key takes (0 = the preset's own colour, 1 = the lamp's, as a zombie's). The Flat's lamps are a deep
+ *  orange: at 1 it turned his green skin to brown (look 2026-10-20), so he takes the lamp's direction, strength and flicker and only a
+ *  little of its colour. `?emergencetint=` overrides it. */
+const KEY_TINT = 0.25;
+
+/** The game's key, fill and self-shadow for the puppet, by his place in the room. The rim stays GAME_RIM (applyWindowKey writes a lamp rim). */
+function litFromRoom(ctx: GameContext, rt: EmergenceRuntime, puppet: GoblinPuppet): void {
+  const u = puppet.gpu.uniforms;
+  let base = keyBase.get(puppet);
+  if (!base) { base = { spot: [u.spotCfg2.value.x, u.spotCfg2.value.y, u.spotCfg2.value.z], color: u.keyColor.value.clone() }; keyBase.set(puppet, base); }
+  u.spotCfg2.value.set(base.spot[0], base.spot[1], base.spot[2], GAME_RIM);
+  const o = rt.goblinOrigin;
+  applyWindowKey(ctx, u as never, [o[0], o[1], o[2]]);
+  // The lamp's direction, strength and flicker, a little of its colour.
+  const tint = new URLSearchParams(location.search).get('emergencetint');
+  u.keyColor.value.copy(base.color).lerp(u.keyColor.value.clone(), tint !== null && Number.isFinite(Number(tint)) ? Number(tint) : KEY_TINT);
+  applyRoomFill(ctx, u as never, o[0], o[2]);
+  applySelfShadow(u as never);
+  u.spotCfg2.value.w = GAME_RIM;
+}
 
 /** Once the SDF layer exists (before the per-room light lists): the pass into its late scene, the puppet built from its dependencies,
  *  the seat measured, the zabuton. */
@@ -267,6 +296,7 @@ function stepPuppet(ctx: GameContext, rt: EmergenceRuntime, puppet: GoblinPuppet
     channelsAt: (tt: number) => expressionChannelsAt(tt, rt.faceCues),
     pixelConeK: ctx.render.sdfLayer?.pixelConeK,
   });
+  if (ROOM_KEY) litFromRoom(ctx, rt, puppet);
   // The zabuton rides his scoot (along his +z, turned by his yaw).
   const o = rotateYaw([0, 0, puppet.rootDz], rt.goblinYaw);
   for (const z of rt.zabuton) z.mesh.position.set(z.base.x + o[0], z.base.y + o[1], z.base.z + o[2]);
