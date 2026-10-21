@@ -25,6 +25,11 @@
 //   * a part MAY carry vertex colours (COLOR_0, e.g. baked ambient occlusion):
 //     they multiply the albedo (three turns vertexColors on for a primitive
 //     with COLOR_0). Within one material, parts without colours get white.
+//   * a part MAY carry a float `_glow` attribute (Blender: a POINT attribute
+//     named `_glow`, exported with export_attributes): baked light from a
+//     glowing part onto its neighbours, 0..1. It passes through as `_glow`;
+//     kit-overlay.ts turns it into emission for the materials that ask
+//     (GLOW_FROM_ATTRIBUTE). Parts without it get 0.
 //
 // WHAT IT WRITES: joint nodes named after the bones, each at its bone's HEAD
 // (translation-only, parented as the .blob is), inverse binds that are pure
@@ -115,7 +120,7 @@ function local(n: { matrix?: M4; translation?: V3; rotation?: number[]; scale?: 
 }
 const I: M4 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 
-interface Batch { pos: number[]; nrm: number[]; joint: number[]; idx: number[]; color: number[]; vcol: number[]; hasVcol: boolean }
+interface Batch { pos: number[]; nrm: number[]; joint: number[]; idx: number[]; color: number[]; vcol: number[]; hasVcol: boolean; glow: number[]; hasGlow: boolean }
 const batches = new Map<string, Batch>();
 let parts = 0;
 function walk(ni: number, parent: M4) {
@@ -134,11 +139,14 @@ function walk(ni: number, parent: M4) {
       const mi = p.material;
       const m = mi === undefined ? { name: 'iron' } : gj.materials[mi];
       const key: string = m.name;
-      const b = batches.get(key) ?? { pos: [], nrm: [], joint: [], idx: [], color: m.pbrMetallicRoughness?.baseColorFactor ?? [1, 1, 1, 1], vcol: [], hasVcol: false };
+      const b = batches.get(key) ?? { pos: [], nrm: [], joint: [], idx: [], color: m.pbrMetallicRoughness?.baseColorFactor ?? [1, 1, 1, 1], vcol: [], hasVcol: false, glow: [], hasGlow: false };
       batches.set(key, b);
       const P = read(p.attributes.POSITION), N = read(p.attributes.NORMAL);
       const C = p.attributes.COLOR_0 !== undefined ? read(p.attributes.COLOR_0) : null;
       if (C) b.hasVcol = true;
+      const G = p.attributes._GLOW ?? p.attributes._glow;
+      const Gd = G !== undefined ? read(G) : null;
+      if (Gd) b.hasGlow = true;
       const base = b.pos.length / 3;
       for (let i = 0; i < P.n; i++) {
         const [x, y, z] = [P.data[i * 3]!, P.data[i * 3 + 1]!, P.data[i * 3 + 2]!];
@@ -157,6 +165,7 @@ function walk(ni: number, parent: M4) {
           const k = ct === 5126 ? 1 : ct === 5123 ? 1 / 65535 : 1 / 255;
           b.vcol.push(C.data[i * C.comps]! * k, C.data[i * C.comps + 1]! * k, C.data[i * C.comps + 2]! * k);
         } else b.vcol.push(1, 1, 1);
+        b.glow.push(Gd ? Gd.data[i]! : 0);
       }
       for (const k of read(p.indices).data) b.idx.push(base + k);
     }
@@ -197,8 +206,9 @@ for (const [mname, b] of [...batches].sort(([a], [c]) => a.localeCompare(c))) {
   const WEIGHTS_0 = acc(push(Buffer.from(weights.buffer), 34962), 5126, n, 'VEC4');
   const indices = acc(push(Buffer.from(new Uint32Array(b.idx).buffer), 34963), 5125, b.idx.length, 'SCALAR');
   const COLOR_0 = b.hasVcol ? acc(push(f32(b.vcol), 34962), 5126, n, 'VEC3') : undefined;
+  const GLOW = b.hasGlow ? acc(push(f32(b.glow), 34962), 5126, n, 'SCALAR') : undefined;
   materials.push({ name: mname, pbrMetallicRoughness: { baseColorFactor: b.color, metallicFactor: 0.7, roughnessFactor: 0.3 } });
-  primitives.push({ attributes: { POSITION, NORMAL, JOINTS_0, WEIGHTS_0, ...(COLOR_0 !== undefined ? { COLOR_0 } : {}) }, indices, material: materials.length - 1 });
+  primitives.push({ attributes: { POSITION, NORMAL, JOINTS_0, WEIGHTS_0, ...(COLOR_0 !== undefined ? { COLOR_0 } : {}), ...(GLOW !== undefined ? { _glow: GLOW } : {}) }, indices, material: materials.length - 1 });
 }
 const ibm: number[] = [];
 for (const k of order) { const h = heads.get(k)!; ibm.push(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -h[0], -h[1], -h[2], 1); }

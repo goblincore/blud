@@ -125,10 +125,11 @@ body
   # to under each head. Thin stalks read as a puppet (owner, first look:
   # "a lil too goofy"); a brute's neck is as wide as his jaw.
   bar  head on neck  from=0.40 to=0.40 offset=(-0.05,0,0) tip=(-0.12,0.19,0.06) r=0.085 r2=0.068 blend=0.016
-  # The machine twin's neck rises BEHIND the skull's full lower jaw into its
-  # base (end (0.175, 1.963, 0.105), under the steel collar): further back
-  # than the human twin's, or it would show through the open jaw.
-  bar  head on neck  from=0.40 to=0.40 offset=(0.05,0,0) tip=(0.125,0.20,-0.03) r=0.085 r2=0.062 blend=0.016
+  # The machine twin's neck is a STUMP (end (0.17, 1.893, 0.125)): it stops
+  # under the skull's jaw and a twisted cable bundle (kit) runs from a collar
+  # on it up into the skull base. Run up into the skull, it poked out behind
+  # it as a lump of meat (owner, 2026-10-21: the gap needs work).
+  bar  head on neck  from=0.40 to=0.40 offset=(0.05,0,0) tip=(0.12,0.13,-0.01) r=0.085 r2=0.064 blend=0.016
 
 
   # ---- RIGHT head (-x), the "human" twin ----

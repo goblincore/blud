@@ -42,6 +42,7 @@
 // mesh; moving the object is the correct and only way to move it.
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { attribute, vec3 } from 'three/tsl';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { setMaterialEnvironment } from './material-environment';
 import { createKitDamage, type KitArmorInput, type KitDamageEvent } from './kit-damage';
@@ -225,6 +226,23 @@ const LOOK: Record<string, {
   // 0.16) the room reflection lit the sockets as brightly as the brow and the whole head read as one flat grey
   // (owner, 2026-10-21); a rougher, dimmer reflection lets the cavities stay dark.
   skullmetal: { metalness: 0.62, roughness: 0.34, envIntensity: 0.55 },
+  // Its two eyes: HOT, not a tint. There is no bloom in this renderer, so a glow reads only when the emissive is
+  // far above the lit surface round it; at led's 1.4 they read as "just pale red" (owner, 2026-10-21). The light they
+  // throw onto the skull is GLOW_FROM_ATTRIBUTE below, baked, because a real light per enemy is not affordable here
+  // (adding a light re-keys the LightsNode and rebuilds every pipeline; game-dynamic-light.ts's rule).
+  eyeglow: { metalness: 0.0, roughness: 0.5, envIntensity: 0.2, emissive: [1.0, 0.10, 0.03], emissiveIntensity: 7.0 },
+};
+
+/**
+ * BAKED GLOW: materials whose emission is a per-vertex `_glow` attribute (0..1, scripts/blender-kit.ts) times a
+ * colour and gain: the light a glowing part throws on its neighbours, baked in Blender (falloff from the source,
+ * facing and occlusion), so the twinhead's eye sockets fill with red and it spills onto the brow and cheekbones.
+ * Such a material is rebuilt as a MeshStandardNodeMaterial so its emissive can read the attribute.
+ */
+const GLOW_FROM_ATTRIBUTE: Record<string, { color: [number, number, number]; gain: number }> = {
+  // Redder and less flat than the first pass (owner: "pale red"; then the sockets read as an even orange): the
+  // colour is nearly pure red so tone mapping does not push it to orange, and the bake's falloff is steep.
+  skullmetal: { color: [1.0, 0.045, 0.015], gain: 2.0 },
 };
 
 /** Materials glow() drives, by WAM material name. The juggernaut's `lens`
@@ -423,6 +441,18 @@ export async function loadKit(
     // Both sides matter: a pauldron is a shell seen from outside AND from
     // under the arm, and a kilt authored with open caps has no back face at
     // all, so a single-sided material makes it vanish from half the turntable.
+    const glowSpec = (o as THREE.Mesh).isMesh && !Array.isArray((o as THREE.Mesh).material)
+      ? GLOW_FROM_ATTRIBUTE[((o as THREE.Mesh).material as THREE.Material).name] : undefined;
+    if (glowSpec && (o as THREE.Mesh).geometry.getAttribute('_glow')) {
+      const old = (o as THREE.Mesh).material as THREE.MeshStandardMaterial;
+      const nm = new THREE.MeshStandardNodeMaterial();
+      nm.name = old.name;
+      nm.color.copy(old.color);
+      nm.vertexColors = old.vertexColors;
+      nm.emissiveNode = vec3(...glowSpec.color).mul(attribute('_glow', 'float')).mul(glowSpec.gain);
+      (o as THREE.Mesh).material = nm;
+      old.dispose();
+    }
     const m = (o as THREE.Mesh).material;
     for (const mat of Array.isArray(m) ? m : m ? [m] : []) {
       mat.side = THREE.DoubleSide;
@@ -430,7 +460,7 @@ export async function loadKit(
       const look = breakable && mat.name === 'plate'
         ? { metalness: 0.70, roughness: 0.24, envIntensity: 0.90 }
         : LOOK[mat.name] ?? LOOK_DEFAULT;
-      if (std.isMeshStandardMaterial) {
+      if (std.isMeshStandardMaterial || (std as unknown as { isMeshStandardNodeMaterial?: boolean }).isMeshStandardNodeMaterial) {
         std.metalness = look.metalness;
         std.roughness = look.roughness;
         setMaterialEnvironment(std, env);
