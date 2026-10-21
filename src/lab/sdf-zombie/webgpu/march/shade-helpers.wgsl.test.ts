@@ -80,9 +80,11 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // depth, same positional rule.
     // +2 shared light list (lightListCfg, lightList storage) after burnSkeletonDepth
     // — light list plan 1 task 9, same positional rule.
-    expect(names.length).toBe(101);
+    // +3 body normal map (bodyNormTex, bodyNormCfg, bodyNormAxis) after lightList
+    // — twinhead 2026-10-21, same positional rule.
+    expect(names.length).toBe(104);
     expect(names).toContain('faceGlowRedOnly');
-    expect(names.slice(-31)).toEqual([
+    expect(names.slice(-34)).toEqual([
       'depthPreTex', 'depthPreCfg', 'normalGradientCfg',
       'probeTex', 'probeMin', 'probeInvExtent', 'probeDims', 'probeCfg',
       'bounceSpotPos', 'bounceSpotNormal', 'bounceSpotRadiance', 'bounceSpotCfg',
@@ -91,6 +93,7 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
       'burnCfg', 'burnNoiseScale', 'burnRiseSpeed', 'burnCharPatch', 'burnFireGain',
       'burnFireCoverage', 'burnSkeleton', 'burnSkeletonDepth',
       'lightListCfg', 'lightList',
+      'bodyNormTex', 'bodyNormCfg', 'bodyNormAxis',
     ]);
     // The temporal start folds in AFTER preStart, with bodyEntry as the
     // sixth lower-bound term (see the other pin above for the argument).
@@ -119,16 +122,19 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // flame lab task 5: the burn tail (5 slots) follows THEM — burn is per-view,
     // so the per-instance params stay directly ahead of it.
     // light list task 9: lightListCfg and the lightList storage follow the burn tail.
-    expect(names.indexOf('instCfg')).toBe(names.length - 13);
-    expect(names.indexOf('inst')).toBe(names.length - 14);
-    expect(names.indexOf('instCentre')).toBe(names.length - 12);
-    expect(names.indexOf('instHalf')).toBe(names.length - 11);
-    expect(names.indexOf('burnCfg')).toBe(names.length - 10);
-    expect(names.indexOf('burnFireGain')).toBe(names.length - 6);
-    expect(names.indexOf('burnFireCoverage')).toBe(names.length - 5);
-    expect(names.indexOf('burnSkeleton')).toBe(names.length - 4);
-    expect(names.indexOf('burnSkeletonDepth')).toBe(names.length - 3);
-    expect(names.indexOf('lightListCfg')).toBe(names.length - 2);
-    expect(names.indexOf('lightList')).toBe(names.length - 1);
+    // body normal map (twinhead 2026-10-21): bodyNormTex, bodyNormCfg, bodyNormAxis follow the light list.
+    expect(names.indexOf('instCfg')).toBe(names.length - 16);
+    expect(names.indexOf('inst')).toBe(names.length - 17);
+    expect(names.indexOf('instCentre')).toBe(names.length - 15);
+    expect(names.indexOf('instHalf')).toBe(names.length - 14);
+    expect(names.indexOf('burnCfg')).toBe(names.length - 13);
+    expect(names.indexOf('burnFireGain')).toBe(names.length - 9);
+    expect(names.indexOf('burnFireCoverage')).toBe(names.length - 8);
+    expect(names.indexOf('burnSkeleton')).toBe(names.length - 7);
+    expect(names.indexOf('burnSkeletonDepth')).toBe(names.length - 6);
+    expect(names.indexOf('lightListCfg')).toBe(names.length - 5);
+    expect(names.indexOf('lightList')).toBe(names.length - 4);
+    expect(names.indexOf('bodyNormTex')).toBe(names.length - 3);
+    expect(names.indexOf('bodyNormAxis')).toBe(names.length - 1);
   });
 });

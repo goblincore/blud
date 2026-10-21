@@ -311,6 +311,32 @@ export const WARBULL_PROFILE: MotionProfile = {
   charger: true,
 };
 
+/** The twinhead (characters/twinhead.blob): a two-headed strogg conversion
+ *  with a cannon for a right forearm and an impaling spike for a left. NOT a
+ *  soldier-family member: his torso, arms and heads are bare meat, so he is
+ *  a GORE BODY (isGoreBody) and takes the zombie's wet craters; the machine
+ *  legs are his kit. The warbull's STOMP and one-handed launcher carries (the
+ *  cannon hangs forward-down on the walk and comes up level to fire), on
+ *  ROCKET_TUNING for now. The spike's melee mind is a follow-up: today he
+ *  shoots, and the spike is his silhouette. */
+export const TWINHEAD_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'twinhead',
+  gait: { walk: STOMP, run: STOMP },
+  runBand: { from: Infinity, to: Infinity },
+  // Between the warbull (0.85) and the zombie (1.15): heavy machine legs.
+  cruise: 0.95,
+  turnRate: 2.0,
+  carries: { walk: 'launcherLow', run: 'launcherLow', fire: 'launcher' },
+  // The cannon is KIT (assets-source/twinhead-kit/, rigid on forearm.r), so
+  // it is on his arm in every view; this prop is only the aim frame — a
+  // .glb of the three empties (GunRoot/Grip_Hand/Muzzle/Fore_Hand), no mesh.
+  // Scale 1.12 is the one the kit cannon was seated with (Grip_Hand on the
+  // wrist), so the prop's Muzzle lands on the barrel's mouth, 0.55 m out.
+  prop: { url: '/assets/lab/twinhead-cannon.glb', scale: 1.12 },
+  gunner: { weapon: 'rocket' },
+};
+
 /** The bride: a slow STALK in a high sword guard; the point trails on the
  *  run. Melee only — the sword mind (enemy-mind.ts) swings it. */
 export const BRIDE_PROFILE: MotionProfile = {
@@ -382,6 +408,7 @@ const BY_NAME: Record<string, MotionProfile> = {
   cultist: CULTIST_PROFILE,
   bride: BRIDE_PROFILE,
   warbull: WARBULL_PROFILE,
+  twinhead: TWINHEAD_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

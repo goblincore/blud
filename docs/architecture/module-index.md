@@ -35,7 +35,7 @@ Each line is the first sentence of the module's header comment.
 
 | Area | Modules | What is there |
 | --- | --- | --- |
-| [webgpu/march/](#webgpumarch) | 55 | The SDF march shader, split by stage (WGSL). |
+| [webgpu/march/](#webgpumarch) | 56 | The SDF march shader, split by stage (WGSL). |
 | [webgpu/earlyz/](#webgpuearlyz) | 10 | Early-Z depth prepass for the march. |
 | [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 27 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
 | [webgpu/upscale/](#webgpuupscale) | 8 | Upscaling of the low-res march target. |
@@ -57,7 +57,7 @@ Each line is the first sentence of the module's header comment.
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 7 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 44 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [SDF march renderer](#sdf-march-renderer) | 45 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 33 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 25 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
@@ -82,6 +82,7 @@ The SDF march shader, split by stage (WGSL).
 - `webgpu/march/body/blocks/light/split-glisten.wgsl.ts` — THE OPENED HEAD GLISTENS (the head split; head-split.ts SPLIT_SHADE.glisten holds its numbers).
 - `webgpu/march/body/blocks/loop/debug-counters.wgsl.ts` — Task-3 split of the march body (2026-09-19): raw-counter debug modes returned before the miss discard.
 - `webgpu/march/body/blocks/post/body-grain.wgsl.ts` — BODY GRAIN (spec docs/superpowers/specs/2026-10-02-body-grain-design.md; plan docs/superpowers/plans/2026-10-02-body-grain.md): the face sheet's…
+- `webgpu/march/body/blocks/post/body-normal.wgsl.ts` — BODY NORMAL MAP (spec docs/superpowers/specs/2026-10-21-body-normal-map-design.md): a per-character tangent-space normal texture projected…
 - `webgpu/march/body/blocks/post/burn.wgsl.ts` — Task-3 split of the march body (2026-09-19): burning body, soot and skeleton show-through (post-hit material).
 - `webgpu/march/body/blocks/post/cut-face.wgsl.ts` — THE CUT FACE'S LOOK (the head split; head-split.ts SPLIT_SHADE holds its numbers).
 - `webgpu/march/body/blocks/post/gore.wgsl.ts` — Task-3 split of the march body (2026-09-19): gore mask (post-hit material).
@@ -600,6 +601,7 @@ Benchmarks, demo record/replay, frame hashes, GPU timing.
 
 The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation.
 
+- `webgpu/body-normal-load.ts` — Load a character's BODY NORMAL MAP (character-registry.ts `bodyNormal`; spec docs/superpowers/specs/2026-10-21-body-normal-map-design.md) and turn it…
 - `webgpu/curl-volume-node.ts` — THE SHARED CURL VOLUME, TSL SIDE (extracted from flame-cards.ts for the explosion-curl task).
 - `webgpu/curl-volume.ts` — CURL-NOISE VOLUME (flame-polish plan task 2, 2026-09-18): a small seeded 64^3 RGBA8 3D texture whose RGB is a divergence-free vector field and whose…
 - `webgpu/emergence-camera.ts` — THE EMERGENCE'S CAMERAS IN THE FLAT, and the view the player takes over at the end (plan 2026-10-16-emergence-in-the-flat Task 7; spec…

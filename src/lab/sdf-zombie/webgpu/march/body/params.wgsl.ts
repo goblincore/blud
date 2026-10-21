@@ -286,6 +286,15 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   // the same slot order in zombie-gpu.ts. NO COLONS and NO PARENS in this
   // comment either.
   lightListCfg: vec4<f32>,
-  lightList: ptr<storage, array<vec4<f32>>, read>
+  lightList: ptr<storage, array<vec4<f32>>, read>,
+  // Body normal map - twinhead 2026-10-21 - POSITIONALLY LAST after lightList.
+  // bodyNormTex is the character's baked torso relief, bodyNormCfg x strength
+  // and y z the rest height band, bodyNormAxis x y the rest axis and z w the
+  // torso prim range. Strength 0 skips the block so every body that does not
+  // declare a map shades bit-identically. Bound BY NAME in zombie-gpu.ts in
+  // the same commit. NO COLONS and NO PARENS in this comment either.
+  bodyNormTex: texture_2d<f32>,
+  bodyNormCfg: vec4<f32>,
+  bodyNormAxis: vec4<f32>
 ) -> vec4<f32> {
 `;

@@ -1,0 +1,329 @@
+# TWINHEAD — a biomechanical conversion: two human torsos' worth of meat
+# grafted onto one machine pelvis, two heads on one yoke. Owner brief
+# (2026-10-21): "fleshy like the zombie, biomechanical horror, Quake 2 strogg
+# but with dual heads; one arm a spike impaling weapon for melee, the other a
+# powerful cannon; pelvis/legs mechanical pneumatic metal like the strogg
+# gladiator, torso and arms and the two heads mostly flesh."
+#
+# AUTHORED FROM THE BRIEF. There is no reference mesh or plate, so blob:measure
+# and blob:rings do not apply; every number below is a design decision and its
+# comment says why.
+#
+# PERFORMANCE IS A DESIGN INPUT. The cast's costly bodies (schoolgirl,
+# cyclops) are costly because they fold many prims per pixel over a large
+# screen area. So: few, LARGE flesh masses with the silhouette doing the work;
+# the legs and pelvis are a handful of hard metal boxes (cheap, crisp, and the
+# kit's pistons hang off them); fine machinery is polygon kit, never prims.
+#
+# THE THREE BEATS, in order of distance:
+#   1. TWO HEADS. Conjoined at the root of the neck, splaying apart above it,
+#      sunk between a brute's traps. Both ride the ONE central skull bone as
+#      offset prims (rig-bind.ts ridesHead: head prims whose ends bind to the
+#      skull's rig points move as the one rigid head), so the pair turns and
+#      nods together like one animal and no engine change is needed.
+#   2. THE ASYMMETRIC ARMS. Right forearm: a cannon (the held prop, warbull
+#      road). Left forearm: a long metal impaling spike, ONE tapered prim.
+#   3. MEAT ON A MACHINE. A hunched, heavy flesh torso sitting in a hard metal
+#      pelvic cup, on thick metal legs. The seam is the read.
+model twinhead
+  # Head crowns ~2.10. Over the juggernaut's shoulders, under the warbull: a
+  # mid-heavy, not a boss.
+  height 2.10
+  stance humanoid
+
+skeleton
+  # Hip line 1.12 (root 1.00 + len 0.12): long machine legs under a short,
+  # heavy torso.
+  root pelvis at 1.00 len=0.12
+
+  # A strong forward hunch (the gladiator's): the chest leans over the hips,
+  # so the heads sit FORWARD of the pelvis in profile.
+  bone spine1 parent=pelvis dir=up pitch=10 len=0.22
+  bone chest  parent=spine1 dir=up pitch=16 len=0.30
+  bone spine2 parent=chest  dir=up pitch=10 len=0.10
+  # The neck pitches back so the faces look at the horizon, not the floor.
+  bone neck   parent=spine2 dir=up pitch=-5 len=0.10
+  # The CENTRAL skull: the pivot both heads ride. No prim sits on its axis
+  # except the conjoined root.
+  bone skull  parent=neck   dir=up pitch=0  len=0.24
+
+  mirror
+    # Shoulder socket ~0.31 out at y ~1.76: high, so the heads sink between
+    # the trap masses (the no-neck brute read, twice over).
+    bone clavicle parent=spine2   side=0.06 dir=side tilt=10 len=0.26
+    bone upperarm parent=clavicle dir=down tilt=20 pitch=4 len=0.38
+    # Forearms carried FORWARD (pitch 40): both weapons point at the player.
+    bone forearm  parent=upperarm dir=down tilt=6 pitch=40 len=0.30
+    bone hand     parent=forearm  dir=down pitch=40 len=0.12
+    bone thigh    parent=pelvis side=0.20 dir=down tilt=4 pitch=12 len=0.48
+    bone shin     parent=thigh  dir=down tilt=2 pitch=-10 len=0.50
+    bone foot     parent=shin   dir=fwd len=0.24
+  end
+
+body
+  # ============================================================
+  # PELVIS — machine. A hard cup the flesh sits in.
+  # ============================================================
+  blob torso on pelvis at=0.70 r=0.17 wide=1.40 tall=0.70 deep=1.05 box round=0.35 blend=0.006 color=474b52 metal gloss=0.6
+
+  # ============================================================
+  # TORSO — flesh. Five big masses; the silhouette is the V of the yoke
+  # over a narrow waist rising out of the metal cup.
+  # ============================================================
+  bar  torso on spine1 from=0.15 to=0.95 r=0.16 wide=1.15 deep=0.95 blend=0.020
+  bar  torso on chest  from=0.05 to=0.85 r=0.21 wide=1.25 deep=0.95 blend=0.025 core
+  # Lats / back: carries the width up to the armpit behind the cage.
+  bar  torso on chest  from=0.30 to=1.00 r=0.19 wide=1.35 deep=0.80 offset=(0,0,-0.07) blend=0.030
+  # MUSCLE DEFINITION (owner: "more definition with the muscles"): the big
+  # masses here are prims with a TIGHT blend, so a crease survives between
+  # them; the fine separations are the baked body normal map (see below).
+  # Pecs: flat high slabs; blend 0.012 (was 0.020) keeps the sternum crease
+  # between them and a shadow line along their underside.
+  blob torso on chest  at=0.85 offset=(0.12,0,0.15) r=0.13 wide=1.20 tall=0.75 deep=0.55 blend=0.012 both
+  # The ABS, SERRATUS, ribs, pec fibres, spinal columns and veins are NOT
+  # marched: they live in twinhead.detail and are baked into the body normal
+  # map (scripts/bake-body-normal.ts -> twinhead-body-n.png), so they cost
+  # shading only. The masses above stay as prims because they make the
+  # silhouette.
+  # Traps: the yoke the two necks rise out of.
+  blob torso on spine2 at=0.60 offset=(0.17,0,-0.03) r=0.16 wide=1.30 tall=1.00 deep=0.95 blend=0.025 both
+  # RAW FLESH WHERE METAL GOES IN (owner: "having more like erupting
+  # agitated flesh is good"). Each is a swollen pink-red lip round the
+  # entry with a darker wet core standing just proud of it (the core sits
+  # 0.012 further out, so as the nearest prim it paints the centre). Painted
+  # prims replace the mottle, which is the point: these read as raw.
+  # Neck cable ports: the kit's cables end at (+-0.12, 1.875, 0.098), on the
+  # back of each neck. Torso limb, so they ride the neck bone axially rather
+  # than the rigid head.
+  blob torso on neck at=1.00 offset=(0.120,0.052,-0.030) r=0.030 deep=0.60 blend=0.010 both color=b4706e gloss=0.75
+  blob torso on neck at=1.00 offset=(0.120,0.052,-0.044) r=0.016 deep=0.70 blend=0.006 both color=5a1a1c gloss=0.9
+  # The human twin's feed tube goes into the top of its trap at
+  # (-0.245, 1.815, 0.045): the lip faces UP, the core 0.012 higher.
+  blob torso on spine2 at=1.00 offset=(-0.245,0.091,-0.093) r=0.028 tall=0.60 blend=0.010 color=b4706e gloss=0.75
+  blob torso on spine2 at=1.00 offset=(-0.245,0.103,-0.093) r=0.014 tall=0.70 blend=0.006 color=5a1a1c gloss=0.9
+  # The meat OVERFLOWS the pelvic cup: swollen raw lumps bulging over the
+  # kit's brass rim (y 1.19-1.23, half-width 0.33 x 0.25), so the seam
+  # between machine and body is a wound. LUMPS, uneven, not one roll: a
+  # single ring read as a red rubber belt (first look, 2026-10-21).
+  blob torso on spine1 at=0.45 offset=(0.000,0.010,0.150) r=0.090 wide=1.60 tall=0.55 deep=0.80 blend=0.016 color=a86a68 gloss=0.45
+  blob torso on spine1 at=0.40 offset=(0.215,0.000,0.060) r=0.085 wide=0.90 tall=0.60 deep=1.40 blend=0.016 color=8e4648 gloss=0.455
+  blob torso on spine1 at=0.42 offset=(-0.225,0.008,0.020) r=0.095 wide=0.85 tall=0.55 deep=1.50 blend=0.016 color=a86a68 gloss=0.45
+  blob torso on spine1 at=0.40 offset=(0.120,-0.004,-0.150) r=0.080 wide=1.30 tall=0.55 deep=0.80 blend=0.016 color=9c5a5a gloss=0.45
+  blob torso on spine1 at=0.44 offset=(-0.110,0.006,-0.160) r=0.075 wide=1.25 tall=0.60 deep=0.80 blend=0.016 color=7a3436 gloss=0.455
+  # The hump behind the yoke.
+  blob torso on spine2 at=0.30 offset=(0,0,-0.12) r=0.20 wide=1.40 tall=0.80 deep=0.80 blend=0.030
+
+  # ============================================================
+  # HEADS — two, on the one skull bone.
+  # ============================================================
+  # The conjoined root: one fused mass both necks grow from. TORSO limb, not
+  # head: the face sheet projects round the head cluster's FATTEST prim, and
+  # this (r x 1.5 = 0.165) would win and centre the decal on the neck. As
+  # torso it also stays on the body when the heads come off.
+  blob torso on neck at=0.50 r=0.11 wide=1.50 tall=0.80 deep=0.95 blend=0.020
+  # Necks: thick and short, from the root (0.05, 1.76) up, OUT and FORWARD
+  # to under each head. Thin stalks read as a puppet (owner, first look:
+  # "a lil too goofy"); a brute's neck is as wide as his jaw.
+  bar  head on neck  from=0.40 to=0.40 offset=(-0.05,0,0) tip=(-0.12,0.19,0.06) r=0.085 r2=0.068 blend=0.016
+  # The machine twin's neck stops lower and further back (end (0.17, 1.913,
+  # 0.135), front z 0.195): at the human twin's length its end showed
+  # THROUGH the metal skull's lower face, which sits at z ~0.27.
+  bar  head on neck  from=0.40 to=0.40 offset=(0.05,0,0) tip=(0.12,0.15,0.00) r=0.085 r2=0.064 blend=0.016
+
+
+  # ---- RIGHT head (-x), the "human" twin ----
+  # GAUNT, not round. The first heads were smooth eggs with a muzzle-like
+  # jaw and two big red dots, and read as cartoon apes ("a lil too goofy").
+  # What reads as a strogg skull is planes and hollows: a long narrow
+  # cranium, a heavy brow ledge, cheekbones proud of sunken cheeks, and a
+  # lipless gash of a mouth; the decal (sheet block) paints the rest.
+  # Cranium: brow (-0.18, 2.035, 0.205) back, up and a touch OUT to the
+  # occiput; narrow (wide 0.88) so the face has sides, not a ball.
+  bar  head on skull from=0.88 to=0.88 offset=(-0.18,0,0.075) tip=(-0.03,0.05,-0.15) r=0.084 r2=0.070 wide=0.88 blend=0.010
+  # Jaw: a wedge under the brow, not a snout (front z 0.285).
+  blob head on skull at=0.51 offset=(-0.18,0,0.095) r=0.060 wide=0.92 tall=0.88 deep=1.00 blend=0.008
+  # Cheekbones: hard ridges under the sockets running back to the ears.
+  bar  head on skull from=0.76 to=0.76 offset=(-0.225,0,0.142) tip=(-0.030,-0.004,-0.060) r=0.017 blend=0.003 chamfer
+  bar  head on skull from=0.76 to=0.76 offset=(-0.135,0,0.142) tip=(0.026,-0.004,-0.060) r=0.017 blend=0.003 chamfer
+  # Brow ledge, bent DOWN in the middle (bend pushes the control point;
+  # the curve dips half of it) for the scowl.
+  bar  head on skull from=0.95 to=0.95 offset=(-0.115,0,0.145) tip=(-0.130,0,-0.010) bend=(0,-0.022,0.012) r=0.021 blend=0.003 chamfer
+  # EARS: goblin points, swept back and up from behind each cheekbone. One
+  # tapered, bent prim each, flattened across (wide 0.45) into a blade so
+  # they read as ears from the front and as points in profile. The outer
+  # one is big; the inner one, crowded by the twin, smaller and steeper.
+  # (Human twin only: the machine twin's skull has horns.)
+  bar  head on skull from=0.84 to=0.84 offset=(-0.250,0,0.060) tip=(-0.085,0.075,-0.110) bend=(-0.015,-0.020,0) r=0.026 r2=0.000 wide=0.45 blend=0.005 chamfer
+  bar  head on skull from=0.84 to=0.84 offset=(-0.110,0,0.060) tip=(0.035,0.090,-0.080) bend=(0.008,-0.015,0) r=0.020 r2=0.000 wide=0.45 blend=0.005 chamfer
+  # Mouth: a lipless gash across the jaw front; the kit's teeth sit in it.
+  carve on skull at=0.51 r=0.030 wide=1.50 tall=0.55 deep=1.20 offset=(-0.18,-0.004,0.150) hard
+  # FACE PRIM, the decal's target: r 0.090 x tall 1.10 = 0.099 makes it the
+  # head cluster's fattest prim (lab-main.ts headShape), so the sheet below
+  # projects round it and only it — the machine twin is 4.5 semi-axes away,
+  # outside the decal's reach. It gives the face a flat front (z 0.291).
+  # deep 0.72 (front z 0.275, was 0.291 at 0.90): at full depth its front
+  # WAS the nose, so the mid-face bulged into a snout; now the brow, cheek
+  # ridges and jaw stand proud of it and the nasal wound sits in a hollow.
+  blob head on skull at=0.80 offset=(-0.180,-0.015,0.080) r=0.090 wide=0.88 tall=1.10 deep=0.72 blend=0.008
+  # Eyes: small embers at the bottom of the decal's painted sockets, sunk
+  # so only a glint stands proud.
+  blob head on skull at=0.80 offset=(-0.150,0,0.150) r=0.007 blend=0.002 color=ff4a1a glow=0.7
+  blob head on skull at=0.80 offset=(-0.210,0,0.150) r=0.007 blend=0.002 color=ff4a1a glow=0.7
+  # THE NOSE IS A WOUND (owner: the painted nose hole "looks a bit too
+  # simple, like it should look more like a gaping wound with pink and red
+  # around it"). A TORN hole: three overlapping hard carves, so the opening
+  # is ragged and lopsided rather than a drilled circle, dark at any angle.
+  # The raw red rim round it is the DECAL's (make-twinhead-face.py), drawn
+  # wider than the hole so the carve does not eat it. Two things were tried
+  # and dropped: painted lips (a painted prim owns every surface point it is
+  # nearest to, so they became one flat red disc over the mid-face) and
+  # unpainted swellings round the hole (a pig's snout).
+  # Centre (-0.18, 1.981, 0.29).
+  carve on skull at=0.80 r=0.013 wide=0.95 tall=1.35 deep=1.60 offset=(-0.180,-0.035,0.165) hard
+  carve on skull at=0.80 r=0.009 deep=1.60 offset=(-0.187,-0.022,0.166) hard
+  carve on skull at=0.80 r=0.008 deep=1.60 offset=(-0.172,-0.047,0.166) hard
+  # ...and the crown torn open on its outer side: bone showing through a
+  # hole in the scalp, with two burr holes drilled in it (the conversion's
+  # surgery). A painted bone plate standing just proud of the cranium.
+  blob head on skull at=1.08 offset=(-0.215,0,-0.010) r=0.048 wide=0.75 tall=0.55 deep=1.10 blend=0.002 color=cfc2a2 gloss=0.35
+  carve on skull at=1.12 r=0.010 offset=(-0.238,0,0.010) hard
+  carve on skull at=1.10 r=0.009 offset=(-0.232,0,-0.035) hard
+
+  # ---- LEFT head (+x), the machine twin ----
+  # The whole head IS the kit's: a gunmetal demon skull cut from the owner's
+  # reference sculpt (~/Downloads/skeleton-demon-mesh.glb, its head scaled
+  # 0.80 onto this pivot; assets-source/twinhead-kit/), horns, a steel collar
+  # where the neck goes in, and TWO glowing red eyes (kit `led`) seated in
+  # the recesses under the brow at x 0.152 / 0.214, y 2.044 (the reference
+  # texture's lit texels sit 3 cm lower, and eyes there read as being on
+  # the cheekbones). A single off-centre optic read as "weird" and a centred cyclops
+  # was not liked either; two procedural skulls and a rod mandible were
+  # rejected before that. The skull is CLOSED (a shrunken
+  # convex core nested inside the sculpt), so no flesh is authored here at
+  # all: the machine twin's neck (above) ends inside it.
+
+  # ============================================================
+  # ARMS — flesh to the elbow, machine below.
+  # ============================================================
+  blob arm on clavicle at=1.00 r=0.14 blend=0.020 mirror core
+  bar  arm on upperarm from=0.00 to=0.95 r=0.11 r2=0.09 blend=0.014 mirror
+  blob arm on upperarm at=0.50 offset=(0,0,0.03) r=0.09 tall=1.60 blend=0.015 mirror
+  # Forearm stub: the flesh ends a third of the way down, into the sleeve.
+  bar  arm on forearm  from=0.00 to=0.45 r=0.085 r2=0.072 blend=0.012 mirror
+  # Swollen meat bulging out of each elbow collar (the kit's brass ring at
+  # forearm 0.36-0.44): three lumps round the stub, outer, inner and front.
+  blob arm on forearm  at=0.34 offset=(0.072,0.004,-0.010) r=0.030 blend=0.010 mirror color=b4706e gloss=0.75
+  blob arm on forearm  at=0.34 offset=(-0.068,0.000,0.000) r=0.026 blend=0.010 mirror color=8c3a3e gloss=0.8
+  blob arm on forearm  at=0.36 offset=(0.000,0.030,0.064) r=0.028 blend=0.010 mirror color=a05a5c gloss=0.8
+  # Sleeve core: metal, under the kit's housings.
+  bar  arm on forearm  from=0.40 to=1.00 r=0.070 blend=0.006 mirror color=474b52 metal gloss=0.6
+  # THE SPIKE (left only): one round cone to a true point, 0.75 m past the
+  # wrist. A single prim is the cheapest weapon in the cast.
+  bar  arm on hand from=0.00 to=0.00 tip=(0.02,-0.40,0.62) r=0.055 r2=0.000 blend=0.004 chamfer side=l color=4a4d52 metal gloss=0.8
+
+  # ============================================================
+  # SCARS — raised red welts (owner: "the red crack scar lines ... apply that
+  # to the body"). The body has no texture to paint, so each crack is a
+  # chain of thin painted bars whose axis sits 2.8 mm under the skin with r
+  # 0.0042: ~1.4 mm stands proud, and that strip of surface is the bar's
+  # (the nearest prim paints), so it reads as a thin red line, not a tube.
+  # PLACED BY PROBE, not by eye: each point is found by marching sdBody
+  # along a ray to the skin, each segment bowed to follow it (bend capped
+  # at 6 mm). Regenerate from the probe if the torso masses move. Lines
+  # carry a trailing `SCAR` comment so the probe can skip them.
+  bar  torso on spine2 from=0.6728 to=0.6728 offset=(0.1419,-0.0283,0.1606) tip=(-0.022,-0.0487,0.0299) bend=(0.0045,-0.0009,0.0038) r=0.0034 r2=0.0036 blend=0.0015 color=a4161c gloss=0.9   # SCAR chest
+  bar  torso on chest from=1 to=1 offset=(0.1199,-0.0108,0.2022) tip=(-0.0414,-0.0538,-0.0002) bend=(0.0042,-0.0001,0.0043) r=0.0042 r2=0.0036 blend=0.0015 color=a4161c gloss=0.9   # SCAR chest
+  bar  torso on chest from=0.9787 to=0.9787 offset=(0.0785,-0.0584,0.2037) tip=(0.012,-0.0537,-0.0234) bend=(0.0035,0.001,0.0048) r=0.0042 r2=0.0036 blend=0.0015 color=a4161c gloss=0.9   # SCAR chest
+  bar  torso on chest from=0.7851 to=0.7851 offset=(0.0904,-0.0563,0.1963) tip=(-0.047,-0.051,-0.0244) bend=(-0.0014,0.0015,-0.0056) r=0.0042 r2=0.0036 blend=0.0015 color=a4161c gloss=0.9   # SCAR chest
+  bar  torso on chest from=0.9787 to=0.9787 offset=(0.0785,-0.0584,0.2037) tip=(-0.0521,-0.0245,-0.0148) bend=(0.0029,0.0014,0.002) r=0.0027 r2=0.0029 blend=0.0015 color=a4161c gloss=0.9   # SCAR chest-branch
+  bar  torso on chest from=0.8864 to=0.8864 offset=(0.0264,-0.0564,0.1966) tip=(-0.02,-0.0198,-0.0092) bend=(0.0008,0.0021,0.001) r=0.0034 r2=0.0029 blend=0.0015 color=a4161c gloss=0.9   # SCAR chest-branch
+  bar  torso on chest from=0.4584 to=0.4584 offset=(-0.185,-0.0382,0.1334) tip=(0.0452,-0.0599,0.0118) bend=(-0.0042,0.0013,0.0011) r=0.0034 r2=0.0036 blend=0.0015 color=a4161c gloss=0.9   # SCAR flank
+  bar  torso on chest from=0.2773 to=0.2773 offset=(-0.1398,-0.0459,0.1602) tip=(0.041,-0.065,-0.0019) bend=(-0.0028,0.0014,0.0012) r=0.0042 r2=0.0036 blend=0.0015 color=a4161c gloss=0.9   # SCAR flank
+  bar  torso on spine1 from=1 to=1 offset=(-0.0987,-0.0309,0.1812) tip=(-0.0217,-0.0612,-0.0139) bend=(0.0026,0.0005,-0.0054) r=0.0042 r2=0.0036 blend=0.0015 color=a4161c gloss=0.9   # SCAR flank
+  bar  torso on spine1 from=0.7195 to=0.7195 offset=(-0.1204,-0.0314,0.178) tip=(0.0355,-0.0526,-0.0041) bend=(-0.0034,0.0005,0.0049) r=0.0042 r2=0.0036 blend=0.0015 color=a4161c gloss=0.9   # SCAR flank
+  bar  torso on spine2 from=0 to=0 offset=(0.1623,0.0348,-0.2441) tip=(-0.0905,-0.0594,-0.0202) bend=(0.0028,0.0003,-0.0053) r=0.0034 r2=0.0036 blend=0.0015 color=a4161c gloss=0.9   # SCAR back
+  bar  torso on chest from=0.6781 to=0.6781 offset=(0.0719,0.0682,-0.2377) tip=(0.0324,-0.0604,0.013) bend=(0.0003,0.0007,0.001) r=0.0042 r2=0.0036 blend=0.0015 color=a4161c gloss=0.9   # SCAR back
+  bar  torso on chest from=0.4966 to=0.4966 offset=(0.1042,0.0601,-0.2097) tip=(-0.0671,-0.0607,-0.0235) bend=(0,-0.0012,0.0017) r=0.0042 r2=0.0036 blend=0.0015 color=a4161c gloss=0.9   # SCAR back
+  bar  torso on chest from=0.2805 to=0.2805 offset=(0.0371,0.0618,-0.2154) tip=(0.0353,-0.0596,-0.0056) bend=(0.0011,-0.0009,-0.0031) r=0.0042 r2=0.0036 blend=0.0015 color=a4161c gloss=0.9   # SCAR back
+  bar  arm on upperarm from=0.2533 to=0.2533 offset=(-0.05,0.0257,0.1008) tip=(0.0153,-0.0642,0.019) r=0.0038 r2=0.0032 blend=0.0015 color=a4161c gloss=0.9 side=r   # SCAR arm
+  bar  arm on upperarm from=0.4016 to=0.4016 offset=(-0.0156,0.0143,0.1159) tip=(-0.0476,-0.0565,-0.0095) r=0.0038 r2=0.0032 blend=0.0015 color=a4161c gloss=0.9 side=r   # SCAR arm
+  bar  arm on upperarm from=0.582 to=0.582 offset=(-0.0398,0.022,0.1016) tip=(0.0161,-0.0637,0.0021) r=0.0038 r2=0.0032 blend=0.0015 color=a4161c gloss=0.9 side=r   # SCAR arm
+
+  # ============================================================
+  # LEGS — machine. These are only the CORES: thin dark metal the polygon
+  # kit (assets-source/twinhead-kit/) encloses — drums, plates, pistons,
+  # the clawed foot. They exist so the legs take hits, cast the body's SDF
+  # shadow and fuse the leg clusters; sized to stay INSIDE the kit's
+  # housings (the first pass at r 0.09 showed as black slabs between plates).
+  # ============================================================
+  blob leg on thigh at=0.00 r=0.085 blend=0.006 mirror core color=3a3e45 metal gloss=0.6
+  bar  leg on thigh from=0.08 to=0.92 r=0.060 wide=1.20 deep=1.10 box round=0.30 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  blob leg on shin  at=0.00 r=0.068 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  leg on shin  from=0.08 to=0.92 r=0.052 wide=1.15 deep=1.20 box round=0.30 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  # Ankle ball (inside the kit's), bridging shin core to foot core: without
+  # it the foot core floated 50 mm clear of the leg (blob-checks strandedOf).
+  blob leg on shin  at=1.00 r=0.055 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  # Foot core: inside the kit's foot wedge, its top (0.113) overlapping the
+  # ankle ball's bottom (0.105).
+  bar  leg on foot  from=-0.15 to=0.75 r=0.042 wide=2.00 tall=0.90 box round=0.25 blend=0.006 offset=(0,-0.085,0) mirror color=3a3e45 metal gloss=0.6
+
+face
+  headRadius 0.001
+  headWidth  1.0
+  headHeight 1.0
+  headDepth  1.0
+  jawWidth   1.0
+  jawHeight  1.0
+  jawDrop    0
+  jawJut     0
+  noseLength 0
+  noseWidth  1.0
+  noseDrop   0
+  browHeavy  0
+  browRise   0
+  headBlend  0.006
+
+palette
+  baseColor     0.44 0.30 0.28
+  deepColor     0.50 0.08 0.08
+  charColor     0.09 0.07 0.07
+  specIntensity 0.70
+  specRoughness 0.30
+  fresnelBoost  0.60
+  translucency  0.25
+  wetness       0.60
+  # 0.045 (was 0.07): the bump noise was busy enough to blur the muscle
+  # separations (pec crease, abs grid, serratus) into general lumpiness.
+  surfaceNoiseAmp    0.045
+  silhouetteNoiseAmp 0.015
+  mottleAmp     0.35
+  mottleScale   1.8
+  mottleColor   0.22 0.24 0.14
+  # Fine hard-edged speckle (body-grain.ts): pores, pitting and scar dots
+  # that give the bare faces surface detail up close without a decal (a
+  # decal can only land on ONE head prim; this lands on both).
+  grain         0.14
+
+# The human twin's face: scripts/make-twinhead-face.py (sockets, nasal
+# cavity, stitched lipless mouth, scars, pitting) at MULTIPLY. Projection
+# solved in head space of the face prim (centre (-0.18, 2.000, 0.210),
+# semi-axes 0.0792 x 0.099 x 0.0648) on two features:
+#   eyes: image x 0.38 / 0.62 onto the embers at x -0.150 / -0.210,
+#     hs.x -+0.379: scaleX 0.12 / 0.379 = 0.317;
+#   rows: eye row (image y 0.40 -> uv.y 0.60) onto y 2.015, hs.y 0.152;
+#     mouth row (uv.y 0.30) onto the gash at y 1.941, hs.y -0.596:
+#     scaleY 0.30 / 0.748 = 0.401, centreY 0.60 - 0.152 x 0.401 = 0.539.
+# Nothing in the texture glows: the embers are prims.
+sheet
+  image       twinhead-face.png
+  decal       0
+  # Plain-rgb multiply (the default 1 multiplies by LUMINANCE only, which
+  # turned the nose wound's raw red rim into a grey smudge). The sheet's
+  # colour is deliberate: reds for the wound and the gums, dark ink elsewhere.
+  blendLuma   0
+  projScaleX  0.317
+  projScaleY  0.401
+  projCentreX 0.50
+  projCentreY 0.539
+  eyeGlowCut  0.99
+  eyeGlowAmp  0

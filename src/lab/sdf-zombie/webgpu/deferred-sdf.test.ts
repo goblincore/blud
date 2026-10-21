@@ -67,7 +67,7 @@ describe('surface-entry wgslFn parse contract', () => {
     }
   });
 
-  it('the real parser sees EXACTLY marchBody’s 101 inputs, in the same order — one binding block serves both', () => {
+  it('the real parser sees EXACTLY marchBody’s 104 inputs, in the same order — one binding block serves both', () => {
     // marchSurface shares MARCH_BODY_PARAMS textually, so createMarchMaterial's
     // positional binding cannot drift between the modes. Running the REAL
     // parser (not a grep) also proves no comment phantom crept into the shared
@@ -89,7 +89,7 @@ describe('surface-entry wgslFn parse contract', () => {
     // +1 burnSkeleton (flame lab fix pass task 3) after burnFireCoverage.
     // +1 skeletonDepth (flame polish task 4) after burnSkeleton.
     // +2 shared light list (lightListCfg, lightList storage) after burnSkeletonDepth — plan 1 task 9.
-    expect(legacy.length).toBe(101); // plus sampled-skeleton atlas and metadata textures; +1 meatCfg (2026-09-12)
+    expect(legacy.length).toBe(104); // plus sampled-skeleton atlas and metadata textures; +1 meatCfg (2026-09-12); +3 body normal map (2026-10-21)
     expect(legacy).toContain('faceGlowRedOnly');
     expect(surface).toEqual(legacy);
   });

@@ -26,6 +26,7 @@
 
 // From 'three/webgpu', never 'three'. Two copies of three means the node
 // system cannot see the lights and every standard material renders black.
+import { bodyNormalMap, loadBodyNormal } from './body-normal-load';
 import * as THREE from 'three/webgpu';
 import { createLabRenderer } from './lab-renderer';
 import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER } from './sdf-layer';
@@ -398,6 +399,14 @@ async function main() {
 
   const view = heroView.gpu;
   view.applyMaterial(flesh, LIGHT_PRESETS[light]);
+  // The character's baked BODY NORMAL MAP (body-normal-load.ts), hero only.
+  {
+    const spec = characterEntry(activeCharacterName()).bodyNormal;
+    if (spec) {
+      void loadBodyNormal(spec).then(l => view.setBodyNormal(l.tex, bodyNormalMap(spec, l.meta, heroView.body) ?? undefined))
+        .catch(err => console.error('[lab] body normal map failed to load', err));
+    }
+  }
   // Everything raymarched lives on SDF_LAYER, so the two render passes are a
   // camera layer mask apart rather than an object list to keep in sync.
   view.object.layers.set(SDF_LAYER);

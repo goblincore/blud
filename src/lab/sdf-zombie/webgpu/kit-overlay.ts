@@ -215,6 +215,11 @@ const LOOK: Record<string, {
   // grin's teeth from luma ~158 to ~191 (and toward a pale plastic sheen); 0.55 keeps the beige the owner preferred. No glow:
   // the SDF teeth needed one inside the cavity's AO, polygons are lit by the scene's key directly.
   tooth: { metalness: 0.0, roughness: 0.38, envIntensity: 0.55 },
+
+  // The twinhead's metal skull (assets-source/twinhead-kit/): the dark backs of its empty eye socket and nasal
+  // cavity. A HOLE must not shine: any sheen on these spheres read as a pair of black eyeballs in the sockets (Blender
+  // preview, 2026-10-21). Fully rough, almost no env, near-black albedo.
+  void: { metalness: 0.0, roughness: 1.0, envIntensity: 0.05 },
 };
 
 /** Materials glow() drives, by WAM material name. The juggernaut's `lens`

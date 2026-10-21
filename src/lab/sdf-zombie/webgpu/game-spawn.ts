@@ -46,6 +46,7 @@ import { VITALS } from './player-vitals';
 import { rngStreams, seedFromUnit } from './rng';
 import { CONE_LAYER, DEPTH_PREPASS_LAYER, REFINE_LAYER, SDF_LAYER } from './sdf-layer';
 import { type GpuViewOpts } from './zombie-gpu';
+import { bodyNormalMap, loadBodyNormal } from './body-normal-load';
 
 // The march's step settings (GAME_RELAX, GAME_HULL_EXIT_BOUND, GAME_WOUND_EARLY_OUT, GAME_OMEGA, GAME_WOUND_STEP) live in
 // game-march-accept.ts beside the accept law, so a lab page can run the game's march without importing the game; re-exported here.
@@ -248,6 +249,13 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
     ? { tex: ctx.vfx.faceTex, atlas: ctx.vfx.faceAtlas, mean: ZOMBIE_FLAT.mean }
     : faceFor(ctx, name);
   view.setFaceTexture(face.tex, face.atlas, face.mean);
+  // The character's baked BODY NORMAL MAP, if it has one (body-normal-load.ts). Async: the body shades without
+  // it for the frames the PNG takes to arrive, then the crowd type picks it up from this view by reference.
+  const bodyNormalSpec = characterEntry(name).bodyNormal;
+  if (bodyNormalSpec) {
+    void loadBodyNormal(bodyNormalSpec).then(l => view.setBodyNormal(l.tex, bodyNormalMap(bodyNormalSpec, l.meta, placed) ?? undefined))
+      .catch(err => console.error(`[sdf-game] ${name}: body normal map failed to load`, err));
+  }
   view.uniforms.faceCfg.value.x = 1;
   view.uniforms.faceCfg.value.y = 1.0;
   // The character's OWN projection when its .blob declares a sheet block;
