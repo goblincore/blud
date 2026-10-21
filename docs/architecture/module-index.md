@@ -46,7 +46,7 @@ Each line is the first sentence of the module's header comment.
 | [Dev panels](#dev-panels) | 10 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 23 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 78 | Gameplay features wired into the game loop. |
+| [Game: feature modules](#game-feature-modules) | 79 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
@@ -57,7 +57,7 @@ Each line is the first sentence of the module's header comment.
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 7 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 44 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [SDF march renderer](#sdf-march-renderer) | 45 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 33 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 25 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
@@ -325,6 +325,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-chunk-pieces.ts` — Chunk gib pieces: creating, dressing and releasing a piece view, spawning a chunk piece, and gibbing chunk meat and baked pieces.
 - `webgpu/game-crowd-queries.ts` — Crowd queries: the live body of a crowd type nearest the player, and the set of actors whose bone can show.
 - `webgpu/game-crowd-types.ts` — Crowd helper for the game page: lazily creating the one CrowdType per character and spawn room.
+- `webgpu/game-crt-capture.ts` — Capture the canvas for the Flat's CRT (spec 2026-10-21 §3.2).
 - `webgpu/game-deferred-lights.ts` — THE SHARED GAME LIGHT LIST (hybrid deferred M2, spec docs/superpowers/specs/2026-09-06-hybrid-deferred-m2-design.md).
 - `webgpu/game-deferred-renderer.ts` — THE GAME'S DEFERRED FRAME COORDINATOR (hybrid deferred M2 task 5, spec docs/superpowers/specs/2026-09-06-hybrid-deferred-m2-design.md).
 - `webgpu/game-deferred-scene.ts` — THE GAME SCENE ROUTER (hybrid deferred M2 task 3, spec docs/superpowers/specs/2026-09-06-hybrid-deferred-m2-design.md).
@@ -602,6 +603,7 @@ Benchmarks, demo record/replay, frame hashes, GPU timing.
 
 The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation.
 
+- `webgpu/crt-handoff.ts` — THE CRT'S PICTURE ACROSS THE PAGE HOP (spec 2026-10-21 §3.2).
 - `webgpu/curl-volume-node.ts` — THE SHARED CURL VOLUME, TSL SIDE (extracted from flame-cards.ts for the explosion-curl task).
 - `webgpu/curl-volume.ts` — CURL-NOISE VOLUME (flame-polish plan task 2, 2026-09-18): a small seeded 64^3 RGBA8 3D texture whose RGB is a divergence-free vector field and whose…
 - `webgpu/emergence-camera.ts` — THE EMERGENCE'S CAMERAS IN THE FLAT, and the view the player takes over at the end (plan 2026-10-16-emergence-in-the-flat Task 7; spec…

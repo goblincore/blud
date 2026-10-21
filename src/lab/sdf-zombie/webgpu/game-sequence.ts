@@ -13,6 +13,7 @@
 import * as THREE from 'three/webgpu';
 import type { GameContext } from './game-context';
 import { EGG } from './egg-look';
+import { requestCrtCapture } from './game-crt-capture';
 import { cameraAt, overlayAt, shotAt, totalDuration, type CameraPose, type CameraStart, type Sequence, type Vec3, sequenceById } from './ending-sequence';
 
 export interface SequenceRuntime {
@@ -23,6 +24,8 @@ export interface SequenceRuntime {
   /** Running; false once the end event is queued. */
   active: boolean;
   finished: boolean;
+  /** The Night Train's pull has asked for the CRT capture (once). */
+  captured?: boolean;
   shotIndex: number;
   /** The player's view when the sequence began (captured by the first camera pass). */
   start: CameraStart | null;
@@ -86,6 +89,8 @@ export function stepSequence(ctx: GameContext, dt: number): void {
     ctx.telemetry.telemetry.event('sequence-shot', { id: rt.seq.id, shot: at.shot.id });
   }
   paint(rt);
+  // The Night Train's ending: the last frame of the pull (the egg filling the view) is the Flat's CRT picture (spec 2026-10-21 §3.2).
+  if (rt.seq.id === 'ending' && at.shot.id === 'pull' && at.u >= 0.96 && !rt.captured) { rt.captured = true; requestCrtCapture(ctx); }
   if (at.finished) {
     rt.active = false;
     rt.finished = true;
