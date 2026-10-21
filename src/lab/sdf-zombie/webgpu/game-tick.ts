@@ -50,6 +50,7 @@ import { applyInputFrame } from './game-player-input';
 import { gibBlurSubjects } from './game-render-controls';
 import { applySequenceCamera, stepSequence } from './game-sequence';
 import { applyEmergenceCamera, stepEmergence } from './game-emergence';
+import { stepBridgeRuntime } from './game-bridge';
 import { applyTrainCamera, lightSteam, stepTrain } from './game-train';
 import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell, extractStage, extractorOffset, fireRecoil, insertStage, loadCarry, loadHold, reloadPhaseAt, reloadPose, stagedShellCenter, supportHandPose, topLeverAngle, type HandDelta, type HandHold } from './game-viewmodel';
 import { stepVoid } from './game-void';
@@ -135,6 +136,7 @@ export function tick(ctx: GameContext, dt: number) {
   stepSequence(ctx, dt);
   // The emergence in the Flat (after stepSequence: this step's clock, and the hand-off the step its sequence finishes).
   stepEmergence(ctx, dt);
+  stepBridgeRuntime(ctx, dt);
   ctx.telemetry.telemetry.lap('region', 'tick:input-player');
   // BLAST REFRACTION ages on SIM time, like every other sim clock — never
   // wall time — so a frozen capture advances it exactly one frame per step and

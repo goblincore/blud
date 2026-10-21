@@ -15,6 +15,7 @@ import { PLAYER } from './game-player';
 import { MAGAZINE_CAPACITY } from './game-viewmodel';
 import { requestSlot, type WeaponSlot } from './game-weapon-slots';
 import { startSequence } from './game-sequence';
+import { startBridge } from './game-bridge';
 import { switchOnFlashlight, runLightCommand } from './game-dynamic-light';
 import { commandsFor, expandCues, gatesOpenedBy, makeTriggerState, stepTriggers, type LevelCommand, type TriggerState } from './level-events';
 import { collectPickups, makeInventory, reloadFromReserve, type Inventory } from './pickups';
@@ -171,6 +172,9 @@ function runLevelCommand(ctx: GameContext, cmd: LevelCommand): void {
   const rt = ctx.world.loop!;
   if (cmd.kind === 'complete') {
     rt.done = true;
+    // A level that says where it hands over (spec 2026-10-21) runs its bridge and hops; the rest show the overlay as before.
+    const onc = ctx.world.level.def?.onComplete;
+    if (onc && startBridge(ctx, onc)) return;
     rt.el.complete.style.display = 'grid';
     document.exitPointerLock?.();
   }

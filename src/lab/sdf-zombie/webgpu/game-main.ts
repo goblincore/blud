@@ -110,6 +110,7 @@ import { adoptLateFx, applyTrainCamera, createTrain, createTrainSeams, lightStea
 import { adoptDiscoFx, createDisco, createDiscoSeams, stepDisco } from './game-disco';
 import { adoptEggFx, createEgg, createEggSeams, stepEgg } from './game-egg';
 import { adoptEmergenceFx, createEmergence, createEmergenceSeams, emergenceLevelReady } from './game-emergence';
+import { createBridgeSeams } from './game-bridge';
 import { applyBodyLights, lightListOn, pickBodyFor, scratchPickBody, setLightListOn, torchLane, writeLightList } from './game-light-list';
 import { adoptLightFx, applyRoomFill, applySelfShadow, roomFillFactor, applyStormBodyKey, applyWindowKey, releaseWindowKey, createDynamicLight, createDynamicLightSeams, flashlightGate, stepDynamicLight } from './game-dynamic-light';
 import { VITALS, segmentHitsCapsule } from './player-vitals';
@@ -5914,6 +5915,7 @@ async function main() {
     createDiscoSeams(ctx),
     createEggSeams(ctx),
     createEmergenceSeams(ctx),
+    createBridgeSeams(ctx),
     createDebugProbeSeams(ctx, { clearDepthProbes, countDescendants, nodeDepth, round2 }),
     createBenchSeams(ctx, { awaitBakes: withCtx(ctx, awaitBakes), bodiesOnScreen: withCtx(ctx, bodiesOnScreen), demoScenarioOf: withCtx(ctx, demoScenarioOf), performBenchAction: withCtx(ctx, performBenchAction) }),
     createRenderDiagSeams(ctx, { bodiesOnScreen: withCtx(ctx, bodiesOnScreen), camera }),

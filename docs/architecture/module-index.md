@@ -46,13 +46,13 @@ Each line is the first sentence of the module's header comment.
 | [Dev panels](#dev-panels) | 10 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 23 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 77 | Gameplay features wired into the game loop. |
+| [Game: feature modules](#game-feature-modules) | 78 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
-| [Levels and world](#levels-and-world) | 27 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
+| [Levels and world](#levels-and-world) | 28 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
 | [Actors and crowd (render)](#actors-and-crowd-render) | 19 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
@@ -319,6 +319,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-bleed.ts` — Gut rope stepping, and registering wound and cut bleeds on actors.
 - `webgpu/game-bone-cull.ts` — Toggling bone culling, and re-stamping the level probes.
 - `webgpu/game-brain-gib.ts` — THE BRAIN MESH (melee head damage, plan Task 11; spec §14 decision 3).
+- `webgpu/game-bridge.ts` — THE BRIDGE RUNTIME (spec 2026-10-21 §3.1): when a level completes and declares `onComplete`, show its bridge card, hold it, then hop the page to the…
 - `webgpu/game-burning.ts` — IN-GAME BURNING (2026-09-18 flare test harness), lifted beside game-main.ts rather than into its closure (the decomposition's rule for new features).
 - `webgpu/game-chunk-bake.ts` — Chunk bake and draw helpers: lit chunk materials, drawn chunk mesh iteration, picking, the gore showcase and bake completion.
 - `webgpu/game-chunk-pieces.ts` — Chunk gib pieces: creating, dressing and releasing a piece view, spawning a chunk piece, and gibbing chunk meat and baked pieces.
@@ -518,6 +519,7 @@ Level definitions, kits, the train, the disco, the egg, sky, encounters.
 - `webgpu/kit-damage.ts` — Armor kit damage on skinned meshes: piece support and attachment checks, hit damage, shedding and the detached armor debris.
 - `webgpu/kit-overlay.ts` — The POLYGON half of a character: armour, clothing, and hard props, authored in WAM (a text→glTF mesh compiler) and laid over the raymarched flesh.
 - `webgpu/level-art.ts` — LEVEL ART (the mesh key, spec 2026-09-24-level-mesh-key-design.md) as pure decisions: where a level's art file lives, which room lights a mesh, the…
+- `webgpu/level-bridge.ts` — THE BRIDGE BETWEEN LEVELS (spec 2026-10-21-night-train-to-flat-design.md §3.1): a level's `onComplete` says where the player goes when the level…
 - `webgpu/level-def.ts` — LEVEL FORMAT v1 — types and the generation rules.
 - `webgpu/level-events.ts` — LEVEL EVENTS. Triggers fire string events when the player walks in; gates open on events; a small vocabulary of events turns into commands the game…
 - `webgpu/level-json.ts` — LEVEL FORMAT v1 — parse, validate, filter to one state, derive capabilities.
