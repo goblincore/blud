@@ -125,10 +125,10 @@ body
   # to under each head. Thin stalks read as a puppet (owner, first look:
   # "a lil too goofy"); a brute's neck is as wide as his jaw.
   bar  head on neck  from=0.40 to=0.40 offset=(-0.05,0,0) tip=(-0.12,0.19,0.06) r=0.085 r2=0.068 blend=0.016
-  # The machine twin's neck stops lower and further back (end (0.17, 1.913,
-  # 0.135), front z 0.195): at the human twin's length its end showed
-  # THROUGH the metal skull's lower face, which sits at z ~0.27.
-  bar  head on neck  from=0.40 to=0.40 offset=(0.05,0,0) tip=(0.12,0.15,0.00) r=0.085 r2=0.064 blend=0.016
+  # The machine twin's neck rises BEHIND the skull's full lower jaw into its
+  # base (end (0.175, 1.963, 0.105), under the steel collar): further back
+  # than the human twin's, or it would show through the open jaw.
+  bar  head on neck  from=0.40 to=0.40 offset=(0.05,0,0) tip=(0.125,0.20,-0.03) r=0.085 r2=0.062 blend=0.016
 
 
   # ---- RIGHT head (-x), the "human" twin ----
@@ -190,17 +190,21 @@ body
   carve on skull at=1.10 r=0.009 offset=(-0.232,0,-0.035) hard
 
   # ---- LEFT head (+x), the machine twin ----
-  # The whole head IS the kit's: a gunmetal demon skull cut from the owner's
-  # reference sculpt (~/Downloads/skeleton-demon-mesh.glb, its head scaled
-  # 0.80 onto this pivot; assets-source/twinhead-kit/), horns, a steel collar
-  # where the neck goes in, and TWO glowing red eyes (kit `led`) seated in
-  # the recesses under the brow at x 0.152 / 0.214, y 2.044 (the reference
-  # texture's lit texels sit 3 cm lower, and eyes there read as being on
-  # the cheekbones). A single off-centre optic read as "weird" and a centred cyclops
-  # was not liked either; two procedural skulls and a rod mandible were
-  # rejected before that. The skull is CLOSED (a shrunken
-  # convex core nested inside the sculpt), so no flesh is authored here at
-  # all: the machine twin's neck (above) ends inside it.
+  # The whole head IS the kit's: a gunmetal demon skull from the owner's
+  # reference sculpt (~/Downloads/skeleton-demon-mesh.glb), RECONSTRUCTED rather
+  # than cut from the surface: the whole sculpt voxel-remeshed into one closed
+  # solid (it is one connected mesh, skull fused to spine), then the head carved
+  # out with boolean volumes drawn against a measured side profile (behind the
+  # jaw and under the occiput: the atlas and shoulder bar go), keeping the FULL
+  # lower jaw down to its chin point. EYE SOCKETS carved in as slanted hollows
+  # (owner's mock-up), a small `led` ember on the back wall of each; the
+  # sculpt's painted eyes are recoloured plain bone. Colour is vertex colours
+  # (Cycles AO times the sculpt's texture darkness, re-projected); kit-overlay
+  # `skullmetal` keeps the reflection dim so the sockets stay dark. Seated at
+  # 0.80, pitched 12 degrees face-up and lifted so the jaw clears the traps.
+  # Rejected on the way: two procedural skulls, a rod mandible, placed eye
+  # spheres, surface cuts (ragged, no jaw), cuts that took the chin. No flesh
+  # is authored here: the machine twin's neck (above) ends in the skull base.
 
   # ============================================================
   # ARMS — flesh to the elbow, machine below.

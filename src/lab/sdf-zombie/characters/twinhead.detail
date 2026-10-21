@@ -48,33 +48,11 @@
   bar  torso on chest from=0.1815 to=0.1815 offset=(-0.2333,-0.0234,0.0816) tip=(-0.0339,-0.0081,-0.085) bend=(-0.0079,0.0008,-0.0007) r=0.006 blend=0.002
   bar  torso on chest from=0.0774 to=0.0774 offset=(-0.2673,-0.0015,0.0052) tip=(0.0147,-0.0136,-0.0915) bend=(-0.0077,0.0007,-0.002) r=0.006 blend=0.002
 
-  # ---- pec fibres: a fan of striations from the sternum to the armpit ----
-  bar  torso on chest from=0.7791 to=0.7791 offset=(0.0251,-0.055,0.1917) tip=(0.0871,0.0124,0.0149) bend=(0.0025,0.0036,0.0013) r=0.0045 blend=0.0015
-  bar  torso on chest from=0.8326 to=0.8326 offset=(0.1122,-0.058,0.2021) tip=(0.1326,0.0805,-0.0137) bend=(0.0052,0.0003,0.0061) r=0.0045 blend=0.0015
-  bar  torso on chest from=0.8767 to=0.8767 offset=(0.0258,-0.0564,0.1966) tip=(0.0923,0.0148,0.0148) bend=(0.0037,0.0022,0.0037) r=0.0045 blend=0.0015
-  bar  torso on chest from=0.9377 to=0.9377 offset=(0.1182,-0.0592,0.2064) tip=(0.1256,0.0572,-0.0277) bend=(0.0053,0.0001,0.006) r=0.0045 blend=0.0015
-  bar  torso on chest from=0.9608 to=0.9608 offset=(0.0274,-0.0561,0.1957) tip=(0.0928,0.0195,0.0132) bend=(0.0045,0.0007,0.0061) r=0.0045 blend=0.0015
-  bar  torso on chest from=1 to=1 offset=(0.1202,-0.0479,0.2057) tip=(0.1223,0.0338,-0.0333) bend=(0.0054,-0.0002,0.0059) r=0.0045 blend=0.0015
-  bar  torso on chest from=1 to=1 offset=(0.0277,-0.0421,0.1949) tip=(0.0909,0.024,0.0089) bend=(0.0043,-0.0007,0.0055) r=0.0045 blend=0.0015
-  bar  torso on chest from=1 to=1 offset=(0.1186,-0.0181,0.2039) tip=(0.122,0.0097,-0.0332) bend=(0.0054,-0.0006,0.0059) r=0.0045 blend=0.0015
-  bar  torso on chest from=1 to=1 offset=(0.0273,-0.0167,0.192) tip=(0.0874,0.0272,0.0016) bend=(0.0044,-0.0021,0.0063) r=0.0045 blend=0.0015
-  bar  torso on spine2 from=0.4394 to=0.4394 offset=(0.1147,-0.0328,0.186) tip=(0.1238,-0.0131,-0.0248) bend=(0.0053,-0.0009,0.0059) r=0.0045 blend=0.0015
-  bar  torso on chest from=0.7795 to=0.7795 offset=(-0.0251,-0.055,0.1918) tip=(-0.0872,0.0124,0.0147) bend=(-0.0025,0.0036,0.0012) r=0.0045 blend=0.0015
-  bar  torso on chest from=0.8326 to=0.8326 offset=(-0.1123,-0.058,0.2021) tip=(-0.1325,0.0805,-0.0137) bend=(-0.0052,0.0003,0.0061) r=0.0045 blend=0.0015
-  bar  torso on chest from=0.8732 to=0.8732 offset=(-0.0265,-0.0563,0.1962) tip=(-0.0916,0.0157,0.0156) bend=(-0.0038,0.0022,0.0042) r=0.0045 blend=0.0015
-  bar  torso on chest from=0.9377 to=0.9377 offset=(-0.1182,-0.0592,0.2065) tip=(-0.1256,0.0572,-0.0277) bend=(-0.0053,0.0001,0.006) r=0.0045 blend=0.0015
-  bar  torso on chest from=0.9616 to=0.9616 offset=(-0.0274,-0.0564,0.1965) tip=(-0.0927,0.0195,0.0124) bend=(-0.0042,0.0007,0.0052) r=0.0045 blend=0.0015
-  bar  torso on chest from=1 to=1 offset=(-0.1202,-0.0479,0.2057) tip=(-0.1223,0.0338,-0.0333) bend=(-0.0054,-0.0002,0.0059) r=0.0045 blend=0.0015
-  bar  torso on chest from=1 to=1 offset=(-0.0277,-0.0421,0.1958) tip=(-0.0914,0.0234,0.0077) bend=(-0.0042,-0.0007,0.0052) r=0.0045 blend=0.0015
-  bar  torso on chest from=1 to=1 offset=(-0.1192,-0.0187,0.2035) tip=(-0.1214,0.0103,-0.0328) bend=(-0.0054,-0.0006,0.0059) r=0.0045 blend=0.0015
-  bar  torso on chest from=1 to=1 offset=(-0.0274,-0.0167,0.1929) tip=(-0.0873,0.0272,0.0008) bend=(-0.0041,-0.0021,0.0055) r=0.0045 blend=0.0015
-  bar  torso on spine2 from=0.4394 to=0.4394 offset=(-0.1147,-0.0328,0.186) tip=(-0.1238,-0.0131,-0.0248) bend=(-0.0053,-0.0009,0.0059) r=0.0045 blend=0.0015
-
-  # ---- sternum: a groove between the pecs (two ridges either side of it) ----
-  bar  torso on chest from=1 to=1 offset=(0.0182,-0.0072,0.1841) tip=(0.0025,-0.066,0.0017) bend=(0.0028,-0.0003,0.0075) r=0.01 blend=0.003
-  bar  torso on chest from=0.9361 to=0.9361 offset=(0.0207,-0.0548,0.1911) tip=(-0.0045,-0.059,-0.0234) bend=(0.0007,0.0063,0.0049) r=0.01 blend=0.003
-  bar  torso on chest from=1 to=1 offset=(-0.0184,-0.0073,0.1848) tip=(-0.0025,-0.0659,0.0018) bend=(-0.0031,-0.0003,0.0074) r=0.01 blend=0.003
-  bar  torso on chest from=0.9369 to=0.9369 offset=(-0.0208,-0.055,0.1918) tip=(0.0047,-0.0591,-0.0241) bend=(-0.0023,0.0059,0.0049) r=0.01 blend=0.003
+  # ---- nipples: an areola disc and a nipple on each pec, low and outboard of its centre ----
+  blob torso on chest at=0.8962 offset=(0.1002,-0.0588,0.2049) r=0.017 deep=0.30 blend=0.004
+  blob torso on chest at=0.8954 offset=(0.1001,-0.0594,0.2071) r=0.0055 blend=0.002
+  blob torso on chest at=0.8962 offset=(-0.1003,-0.0588,0.205) r=0.017 deep=0.30 blend=0.004
+  blob torso on chest at=0.8954 offset=(-0.1001,-0.0594,0.2071) r=0.0055 blend=0.002
 
   # ---- back: spinal erectors either side of a deep spinal groove, and the shoulder-blade ridges ----
   bar  torso on spine1 from=0.082 to=0.082 offset=(0.0533,0.029,-0.1644) tip=(-0.0065,0.1386,0.0266) bend=(0.0033,-0.0073,0.0007) r=0.03 blend=0.008

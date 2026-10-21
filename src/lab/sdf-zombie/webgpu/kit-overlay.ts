@@ -220,6 +220,11 @@ const LOOK: Record<string, {
   // cavity. A HOLE must not shine: any sheen on these spheres read as a pair of black eyeballs in the sockets (Blender
   // preview, 2026-10-21). Fully rough, almost no env, near-black albedo.
   void: { metalness: 0.0, roughness: 1.0, envIntensity: 0.05 },
+  // The twinhead's demon skull: gunmetal whose DEPTH is its baked vertex colours (ambient occlusion times the
+  // reference texture's own crevice darkness, assets-source/twinhead-kit/). Under `plate`'s look (env 1.15, rough
+  // 0.16) the room reflection lit the sockets as brightly as the brow and the whole head read as one flat grey
+  // (owner, 2026-10-21); a rougher, dimmer reflection lets the cavities stay dark.
+  skullmetal: { metalness: 0.62, roughness: 0.34, envIntensity: 0.55 },
 };
 
 /** Materials glow() drives, by WAM material name. The juggernaut's `lens`

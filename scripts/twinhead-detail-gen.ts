@@ -105,13 +105,14 @@ section('ribs: four arcs showing through the flank between the serratus and the 
 for (const s of [1, -1]) for (const y of [1.50, 1.455, 1.41, 1.365])
   ridge([[y, s * 72], [y - 0.008, s * 92], [y - 0.022, s * 112]], 0.006, 0.002, 0.002);
 
-section('pec fibres: a fan of striations from the sternum to the armpit');
-for (const s of [1, -1]) for (const k of [0, 1, 2, 3, 4]) {
-  const y0 = 1.505 + k * 0.026;
-  ridge([[y0, s * 6], [y0 + 0.012 + k * 0.004, s * 24], [1.60 + k * 0.006, s * 46]], 0.0045, 0.0012, 0.0015);
+// No pec fibres and no sternum ridges: a fan of striations across each pec and two ridges down the sternum
+// read as bandage stripes and a seam (owner, first in-lab look 2026-10-21). The pecs' own marched masses already
+// make the sternum valley and the underline.
+section('nipples: an areola disc and a nipple on each pec, low and outboard of its centre');
+for (const s of [1, -1]) {
+  lump(1.535, s * 21, 0.017, 0.0015, 0.004, ' deep=0.30', 0.017 * 0.30);
+  lump(1.535, s * 21, 0.0055, 0.0042, 0.002);
 }
-section('sternum: a groove between the pecs (two ridges either side of it)');
-for (const s of [1, -1]) ridge([[1.62, s * 4], [1.55, s * 4.5], [1.49, s * 4]], 0.010, 0.002, 0.003);
 
 section('back: spinal erectors either side of a deep spinal groove, and the shoulder-blade ridges');
 for (const s of [1, -1]) ridge([[1.16, s * 168], [1.30, s * 167], [1.44, s * 168], [1.56, s * 170]], 0.030, 0.008, 0.008);
