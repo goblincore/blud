@@ -153,16 +153,20 @@ if 'pistons' in PARTS:
         plain_part(rod, 'chrome', f'{bone}.l|rod')
 
 # ---------------------------------------------------------------- wires: coloured cables wound round the leg (the reference figure)
+try:
+    WIRE_MATS                                                   # a kit's common.py may recolour them (the flayer: red, purple)
+except NameError:
+    WIRE_MATS = ('yellow', 'blue')
 if 'wires' in PARTS:
     drop(['thigh.l|wire', 'thigh.r|wire', 'shin.l|wire', 'shin.r|wire'])
     clear_work()
     F = BoneFrame(HIP, KNEE)
     prof = lambda t: math.exp(-((t - 0.40) / 0.36) ** 2)
     w = tube('w', helix(F, 0.30, 0.82, 0.9, lambda t: 0.058 + 0.026 * prof(t), lambda t: 0.062 + 0.018 * prof(t), 0.009, phase=D(40)), [0.0055] * 121, segs=8)
-    plain_part(w, 'yellow', 'thigh.l|wireY')
+    plain_part(w, WIRE_MATS[0], 'thigh.l|wireY')
     F = BoneFrame(KNEE, HOCK)
     prof = lambda t: math.exp(-((t - 0.22) / 0.34) ** 2)
     w = tube('w', helix(F, 0.16, 0.80, 1.3, lambda t: 0.040 + 0.020 * prof(t), lambda t: 0.046 + 0.014 * prof(t), 0.008, phase=D(200)), [0.005] * 121, segs=8)
-    plain_part(w, 'blue', 'shin.l|wireB')
+    plain_part(w, WIRE_MATS[1], 'shin.l|wireB')
     w = tube('w', helix(F, 0.10, 0.55, 0.7, lambda t: 0.040 + 0.020 * prof(t), lambda t: 0.046 + 0.014 * prof(t), 0.008, phase=D(20)), [0.0045] * 121, segs=8)
-    plain_part(w, 'yellow', 'shin.l|wireY')
+    plain_part(w, WIRE_MATS[0], 'shin.l|wireY')

@@ -44,6 +44,7 @@ import gargoyleBlobSrc from './characters/gargoyle.blob?raw';
 import cyberdemonBlobSrc from './characters/cyberdemon.blob?raw';
 import twinheadBlobSrc from './characters/twinhead.blob?raw';
 import butcherBlobSrc from './characters/butcher.blob?raw';
+import flayerBlobSrc from './characters/flayer.blob?raw';
 import bloatmawBlobSrc from './characters/bloatmaw.blob?raw';
 import gnasherBlobSrc from './characters/gnasher.blob?raw';
 import ogreBlobSrc from './characters/ogre.blob?raw';
@@ -52,7 +53,7 @@ import cultistBlobSrc from './characters/cultist.blob?raw';
 import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
 import brideBlobSrc from './characters/bride.blob?raw';
 import {
-  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, BUTCHER_PROFILE, motionProfileFor, type MotionProfile,
+  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, BUTCHER_PROFILE, FLAYER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
 
 /** A face sheet's texture and its crop. `mean` is the level the shader
@@ -332,6 +333,16 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     bodyNormal: { url: '/assets/lab/butcher-body-n.png', meta: '/assets/lab/butcher-body-n.json', strength: 1 },
     face: bakedFace('butcher-face.png'),
     profile: BUTCHER_PROFILE,
+  },
+  // The second zombie conversion (flayer.blob's header): the butcher's skeleton
+  // and legs, gaunt and flayed, a saw-sickle for a left hand, a visored helmet.
+  flayer: {
+    name: 'flayer', src: flayerBlobSrc,
+    kit: '/assets/lab/flayer-kit.gltf',
+    // Ribs, spine and veins on the gaunt torso and arms (characters/flayer.detail, baked; never marched).
+    bodyNormal: { url: '/assets/lab/flayer-body-n.png', meta: '/assets/lab/flayer-body-n.json', strength: 1 },
+    face: bakedFace('flayer-face.png'),
+    profile: FLAYER_PROFILE,
   },
   cyberdemon: {
     name: 'cyberdemon', src: cyberdemonBlobSrc,

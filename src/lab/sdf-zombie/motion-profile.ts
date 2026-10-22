@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, SHAMBLE_CARRY, PROWL, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, type ArmStyle, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, PROWL, PROWL_QUICK, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, type ArmStyle, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { Vec3 } from './types';
@@ -358,6 +358,22 @@ export const BUTCHER_PROFILE: MotionProfile = {
   armWeapon: { side: 'R', damage: 25 },
 };
 
+/** The flayer (characters/flayer.blob): the second zombie conversion, gaunt and
+ *  flayed, with a saw-sickle grafted on for the LEFT hand and a visored
+ *  helmet. The butcher's skeleton, legs and PROWL; quicker and a little less
+ *  brutal per hit. */
+export const FLAYER_PROFILE: MotionProfile = {
+  ...BUTCHER_PROFILE,
+  name: 'flayer',
+  gait: { walk: PROWL_QUICK, run: PROWL_QUICK },
+  // 1.55: lighter and quicker than the butcher, on a 2.0 Hz prowl to keep the
+  // stride inside the leg's sweep (gait.ts PROWL_QUICK; butcher-blob.test.ts).
+  cruise: 1.55,
+  // The sickle is on the LEFT forearm (kit foreArm.l|blade). 20: a lighter
+  // blade than the butcher's axe (25), still twice a bite.
+  armWeapon: { side: 'L', damage: 20 },
+};
+
 /** The bride: a slow STALK in a high sword guard; the point trails on the
  *  run. Melee only — the sword mind (enemy-mind.ts) swings it. */
 export const BRIDE_PROFILE: MotionProfile = {
@@ -431,6 +447,7 @@ const BY_NAME: Record<string, MotionProfile> = {
   warbull: WARBULL_PROFILE,
   twinhead: TWINHEAD_PROFILE,
   butcher: BUTCHER_PROFILE,
+  flayer: FLAYER_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

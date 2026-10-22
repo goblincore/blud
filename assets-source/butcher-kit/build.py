@@ -1,6 +1,9 @@
-# Headless build of the butcher kit (the shared Blender window may belong to another session):
+# Headless build of a biomech zombie kit (the shared Blender window may belong to another session):
 #   Blender -b assets-source/butcher-kit/butcher-kit.blend --python assets-source/butcher-kit/build.py -- \
 #       [make_legs.py[:part,part] ...] [--export] [--preview OUTDIR] [--focus=x,y,z,size]
+# Any kit: open ITS .blend (e.g. assets-source/flayer-kit/flayer-kit.blend). Make scripts resolve in that .blend's
+# folder first, then here (so the flayer runs the butcher's make_legs.py), and --export writes <name>-parts.glb
+# beside the .blend.
 # Runs kit_sculpt.py + butcher_common.py, then each make script (optionally with a PARTS subset), saves the .blend,
 # optionally exports `mech` to butcher-parts.glb (vertex colours + attributes, as biomech-style.md says) and renders
 # workbench previews (front, side, back, three-quarter) of the whole kit or a focus box.
@@ -8,10 +11,19 @@ import bpy, sys, os, math
 from mathutils import Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+KIT = os.path.dirname(bpy.data.filepath)
+KIT_NAME = os.path.basename(bpy.data.filepath).replace('-kit.blend', '')
+
+
+def find(script):
+    for d in (KIT, HERE):
+        if os.path.exists(os.path.join(d, script)): return os.path.join(d, script)
+    raise FileNotFoundError(script)
 argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
-G = {'__name__': '__main__'}
+G = {'__name__': '__main__', 'find': find}
 exec(open(os.path.join(HERE, '../twinhead-kit/kit_sculpt.py')).read(), G)
 exec(open(os.path.join(HERE, 'butcher_common.py')).read(), G)
+if os.path.exists(os.path.join(KIT, 'common.py')): exec(open(os.path.join(KIT, 'common.py')).read(), G)
 
 COLOURS = {'yellow': (0.80, 0.55, 0.04), 'blue': (0.05, 0.16, 0.55), 'red': (0.45, 0.02, 0.02), 'purple': (0.25, 0.05, 0.35),
            'cable': (0.04, 0.04, 0.045), 'leather': (0.10, 0.06, 0.04)}
@@ -34,7 +46,7 @@ while i < len(argv):
         script, _, parts = a.partition(':')
         G.pop('PARTS', None)
         if parts: G['PARTS'] = set(parts.split(','))
-        exec(open(os.path.join(HERE, script)).read(), G)
+        exec(open(find(script)).read(), G)
         print('BUILT', a)
     i += 1
 
@@ -46,7 +58,7 @@ print('TRIS', sum(sum(len(p.vertices) - 2 for p in o.data.polygons) for o in mec
 if export:
     for o in bpy.context.view_layer.objects: o.select_set(False)
     for o in mech.all_objects: o.hide_set(False); o.select_set(True)
-    bpy.ops.export_scene.gltf(filepath=os.path.join(HERE, 'butcher-parts.glb'), use_selection=True, export_format='GLB',
+    bpy.ops.export_scene.gltf(filepath=os.path.join(KIT, f'{KIT_NAME}-parts.glb'), use_selection=True, export_format='GLB',
                               export_vertex_color='ACTIVE', export_attributes=True, export_apply=True)
     print('EXPORTED')
 

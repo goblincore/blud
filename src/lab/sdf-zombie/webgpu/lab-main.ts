@@ -4675,7 +4675,7 @@ async function main() {
           current, dt: 1 / 60, wander: false, armStyle, headingFollow, gazeFollow,
           bounds: WANDER_BOUNDS, rng: motionRng, signals: sig,
           profile: motionProfile, forceSpeed, carryOverride,
-          ...(swing && i >= frames - 30 ? { attack: { phase: swing.phase, side: 'R' as const, variant: swing.variant } } : {}),
+          ...(swing && i >= frames - 30 ? { attack: { phase: swing.phase, side: motionProfile.armWeapon?.side ?? 'R', variant: swing.variant } } : {}),   // an arm weapon swings its own arm (motion-profile.ts armWeapon)
         });
         lastMotionFrame = f;
         if (f) sinceFire = f.kicks.length ? 0 : sinceFire + 1 / 60;

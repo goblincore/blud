@@ -399,6 +399,10 @@ export const PROWL: GaitProfile = {
   swayAmp: 0.035,
 };
 
+/** The flayer's prowl: PROWL at 2.0 Hz for its faster 1.55 m/s cruise (0.43 m per stance; at PROWL's 1.8 Hz the
+ *  knee flattened to 27 mm off the hip-to-hock line, butcher-blob.test.ts). */
+export const PROWL_QUICK: GaitProfile = { ...PROWL, name: 'prowl-quick', strideFreq: 2.0 };
+
 /** The bride's STALK: the soldier's march clip slowed and lengthened for her
  *  long legs, with a hip sway the `hem` pendulum picks up and a slight
  *  forward lean. Carry-style arms (the sword owns them). */

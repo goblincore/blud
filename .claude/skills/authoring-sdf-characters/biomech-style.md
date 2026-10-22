@@ -179,11 +179,30 @@ Spines rake down the BACK ridge of the tibia, toes splay forward with talons, an
 - Collars and other small fused bits still need `decimate`. Undecimated brass collars were 60% of the first
   butcher kit's 250k triangles.
 
+### A second variant on the same frame (the flayer)
+
+The flayer (`characters/flayer.blob`, kit `assets-source/flayer-kit/`) reuses the butcher's skeleton exactly, so
+its legs are the butcher's leg kit rebuilt (`make_legs.py`, with wires recoloured by the kit's `common.py`) and the
+gait work carries over. What makes it a different enemy at a glance:
+
+- **A different silhouette class:** gaunt (the zombie's own masses) against the butcher's pumped bruiser. A dorsal
+  ridge of long raked spines replaces the back pump.
+- **A different weapon on the other arm:** a long serrated sickle on the left, with a saw wheel in a bony guard. A
+  thin blade vanishes from the front, so give it width: 11 cm at the root, not 6.
+- **A different head:** a bony helmet over the upper face with a glowing visor slit (the `led` look, emissive 1.4;
+  `eyeglow` at 7 is for pinpoints), cheek guards, and curled horn "ears". The flayed jaw below is the decal's job.
+  Fit the shell to probes of the head: crown, front at three heights, back and sides, 10-16 mm clear.
+- **Faster means quicker steps, not longer ones.** At 1.55 m/s the 1.8 Hz prowl flattened the knee, so the flayer
+  walks a 2.0 Hz `PROWL_QUICK`. Re-run the walk pin whenever cruise changes.
+- The lab's `holdPose` swing preview (`BLOB_SWING`) swings `armWeapon.side`, so a left-armed weapon is judged on
+  the right arm.
+
 ### Practicalities
 
 - **The Blender MCP window may belong to another session** (it held the teratoma's file). Run the kit headless:
   `Blender -b assets-source/butcher-kit/butcher-kit.blend --python assets-source/butcher-kit/build.py -- make_legs.py:femur,tibia --export --preview <dir>`.
-  `build.py` runs the make scripts, saves, exports `mech` and renders workbench previews.
+  `build.py` runs the make scripts, saves, exports `mech` and renders workbench previews. It serves any kit: open
+  that kit's `.blend`, and scripts resolve in its folder first, then `butcher-kit/`.
 - `blob:shot` reuses ANY lab on its port, including another worktree's Vite, so pass your own
   `LAB_VITE_PORT`/`LAB_CDP_PORT`.
 - A face-block head can wear a generated decal: solve `projScale`/`projCentre` in the head space of the face

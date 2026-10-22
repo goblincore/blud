@@ -8,9 +8,11 @@
 //     forward of the hip-to-hock line and the hock stays BEHIND the knee-to-toe line. The plant IK's pole bias bows
 //     the knee forward (ik.ts solvePlantedLeg); a leg whose backward joint were the KNEE would be flipped by it.
 // It also pins the arm weapon's wiring (motion-profile.ts armWeapon). Whether it reads as a dog's hind leg is
-// a question for frames, not this file.
+// a question for frames, not this file. The FLAYER (flayer.blob) shares this skeleton and legs at a faster cruise,
+// so the walk is pinned for both.
 import { describe, it, expect } from 'vitest';
 import src from './butcher.blob?raw';
+import flayerSrc from './flayer.blob?raw';
 import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace } from '../blob-compile';
 import { buildBody } from '../build-body';
@@ -19,8 +21,9 @@ import { makeActorMotion, stepActorMotion, emptyActorSignals } from '../actor';
 import { makeRng } from '../wander';
 import type { Vec3 } from '../types';
 
-const doc = parseBlob(src);
-const body = buildBody(compileBlob(doc, compileFace(doc)));
+const build = (text: string) => { const doc = parseBlob(text); return buildBody(compileBlob(doc, compileFace(doc))); };
+const body = build(src);
+const BODIES = { butcher: body, flayer: build(flayerSrc) };
 const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 
 /** Signed forward offset (along `fwd`) of `mid` from the straight line a -> b, at mid's height. */
@@ -44,11 +47,12 @@ describe('butcher — digitigrade legs on the zombie leg bones', () => {
     expect(foot.tail[1], 'toe joint at the floor').toBeLessThan(0.05);
   });
 
-  it('the zigzag survives walking through the real motion pipeline', () => {
+  it.each(['butcher', 'flayer'] as const)('%s: the zigzag survives walking through the real motion pipeline', (name) => {
+    const body = BODIES[name];
     const m = makeActorMotion(body, { seed: 7 });
     expect(m.motionJoints, 'every rig point must map to a gait joint').not.toBeNull();
     const J = m.motionJoints!.index;
-    const profile = characterEntry('butcher').profile;
+    const profile = characterEntry(name).profile;
     const rng = makeRng(7);
     let minKnee = Infinity, maxHock = -Infinity;
     for (let i = 0; i < 360; i++) {
@@ -79,5 +83,13 @@ describe('butcher — the grafted axe', () => {
     // No held prop: the axe is kit on foreArm.r, carried by the arm's own swing.
     expect(p.prop).toBeUndefined();
     expect(p.melee).toBeUndefined();
+  });
+});
+
+describe('flayer — the grafted sickle', () => {
+  it('builds clean on the butcher\'s skeleton and swings the LEFT arm', () => {
+    expect(BODIES.flayer.errors).toEqual([]);
+    for (const [k, b] of body.bones) expect(BODIES.flayer.bones.get(k), k).toEqual(b);
+    expect(characterEntry('flayer').profile.armWeapon).toEqual({ side: 'L', damage: 20 });
   });
 });
