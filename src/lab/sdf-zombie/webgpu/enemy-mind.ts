@@ -338,7 +338,7 @@ export function makeHoundMind(tuning: BrainTuning = HOUND_TUNING.brain): EnemyMi
 }
 
 /** The GIBBET's two attacks (characters/gibbet.blob, hound-attack.ts): up close, the hound mind on GIBBET_TUNING
- *  STABS with both spiked front legs (jaw-less contact on the thrust); at range, it SQUIRTS. A seen, alerted player
+ *  STABS with both spiked front legs (jaw-less contact on the thrust); at range, it SQUIRTS. A seen player it is alert to
  *  between squirtBand.min and .max, with the squirt off cooldown and no stab running, starts one: the body halts and
  *  turns to face, the sac swings back and forward (the `squirt` pose), and `fire` goes up for the one frame the glob
  *  leaves (squirtFires). game-actor fires it from the sac's drip (MotionProfile.spit) and game-spawn lobs bile.ts's
@@ -373,7 +373,9 @@ export function makeGibbetMind(): EnemyMind {
       }
       const out = melee.step(input);
       const p = input.player;
-      if (!out.attack && p && input.alerted && input.lineOfSight !== false && cooldown <= 0) {
+      // The brain's own ALERT (it has noticed the player), not input.alerted, which is only "a shot was fired in
+      // this room this frame".
+      if (!out.attack && p && melee.debug().alert && input.lineOfSight !== false && cooldown <= 0) {
         const dist = Math.hypot(p.x - input.self.x, p.z - input.self.z);
         if (dist >= T.squirtBand.min && dist <= T.squirtBand.max) {
           squirtT = 0; prev = 0;
