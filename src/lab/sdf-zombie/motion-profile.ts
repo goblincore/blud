@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, type ArmStyle, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, type ArmStyle, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { Vec3 } from './types';
@@ -63,7 +63,7 @@ export interface MotionProfile {
   /** A MELEE-WEAPON enemy: the game gives it that weapon's mind
    *  (enemy-mind.ts makeSwordMind) and motion.ts drives the held prop through
    *  the swing (sword-swing.ts). Absent = the zombie's unarmed swing. */
-  melee?: { kind: 'sword' };
+  melee?: { kind: 'sword' | 'bite' };
   /** A SOFT target: any bullet or blast hit kills it outright (the game
    *  forces the collapse on the first hit). The cultist is soft; the zombie
    *  and soldier soak hits and exist to show off the gore. Burns do not count
@@ -113,7 +113,10 @@ export function isGoreBody(profile: Pick<MotionProfile, 'family' | 'soft'> | nul
  * authored pose and drag the prop off its grip.
  */
 export function wantsTorsoGuards(profile: MotionProfile | null | undefined): boolean {
-  return !profile || (!profile.family && !profile.carries && !profile.prop && !profile.gunner && !profile.melee);
+  // A quadruped's arms are its front legs: they swing under the brisket on
+  // purpose, and the plants own them.
+  return !profile || (!profile.family && !profile.carries && !profile.prop && !profile.gunner && !profile.melee
+    && profile.armStyle !== 'foreleg');
 }
 
 export interface FlailTuning {
@@ -337,6 +340,22 @@ export const TWINHEAD_PROFILE: MotionProfile = {
   gunner: { weapon: 'rocket' },
 };
 
+/** The gorehound (characters/gorehound.blob): a heavy biomech quadruped. Its
+ *  arms are its front legs, walked by GOREHOUND's 'foreleg' style and planted
+ *  like feet. Melee, unarmed: the zombie mind closes and swings, which on
+ *  this body is a lunge with the maw (attack.ts). Faster than the zombie
+ *  (1.15 m/s) and quick to turn: a hound runs you down. */
+export const GOREHOUND_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'gorehound',
+  gait: { walk: GOREHOUND, run: GOREHOUND },
+  runBand: { from: Infinity, to: Infinity },
+  cruise: 1.3,
+  turnRate: 3.0,
+  armStyle: 'foreleg',
+  melee: { kind: 'bite' },
+};
+
 /** The bride: a slow STALK in a high sword guard; the point trails on the
  *  run. Melee only — the sword mind (enemy-mind.ts) swings it. */
 export const BRIDE_PROFILE: MotionProfile = {
@@ -409,6 +428,7 @@ const BY_NAME: Record<string, MotionProfile> = {
   bride: BRIDE_PROFILE,
   warbull: WARBULL_PROFILE,
   twinhead: TWINHEAD_PROFILE,
+  gorehound: GOREHOUND_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

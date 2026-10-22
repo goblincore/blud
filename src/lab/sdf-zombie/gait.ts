@@ -28,8 +28,11 @@ import { SOLDIER_RUN } from './gait-curves/soldier-run';
 const TAU = Math.PI * 2;
 const Z: Vec3 = [0, 0, 0];
 
-/** The three authored arm styles — see GAIT_TUNING.armStyle. */
-export type ArmStyle = 'swing' | 'reach' | 'carry';
+/** The authored arm styles — see GAIT_TUNING.armStyle. 'foreleg' is a
+ *  QUADRUPED's front pair: the arms are walked exactly like the legs (lift,
+ *  reach, plant, push) on the hind leg's clock shifted by the profile's
+ *  `forePhase`, and motion.ts plants the paw (the hand joint) like a foot. */
+export type ArmStyle = 'swing' | 'reach' | 'carry' | 'foreleg';
 
 // ---------------------------------------------------------------------------
 // Joint schema — one name per rig point.
@@ -199,7 +202,25 @@ export interface GaitLimbs {
 export type GaitProfile = {
   -readonly [K in keyof typeof GAIT_TUNING]: (typeof GAIT_TUNING)[K] extends number ? number
     : (typeof GAIT_TUNING)[K] extends string ? string : (typeof GAIT_TUNING)[K];
-} & { armStyle: ArmStyle; curves?: GaitCurves };
+} & {
+  armStyle: ArmStyle; curves?: GaitCurves;
+  /** 'foreleg' only: how far (fraction of a stride) each front leg's clock
+   *  LAGS the hind leg on its own side. 0.25 is a dog's walk (lateral
+   *  sequence: LH, LF, RH, RF, each a quarter apart), 0.5 a trot (diagonal
+   *  pairs land together), 0 a pace. Default 0.25. */
+  forePhase?: number;
+  /** Where the swing LANDS, as a fraction of strideLen ahead of the rest
+   *  position (0..1). Absent/0 = the shamble's sin(pi u) arc, which sets the
+   *  foot down exactly under the hip, so every stance spends its whole
+   *  travel BEHIND the hip. A quadruped's front leg is near-vertical with
+   *  little slack, so it must land ahead or the stance overstretches it:
+   *  the arc becomes (1 - a) sin(pi u) + a sin(pi u / 2). */
+  landAhead?: number;
+  /** 'foreleg' only: the elbow's BACKWARD bow during the swing (m). A dog's
+   *  elbow points back, so the front leg folds the opposite way to the
+   *  knee's forward bow (kneeBend). Default: kneeBend. */
+  elbowBow?: number;
+};
 
 export const SHAMBLE: GaitProfile = GAIT_TUNING as unknown as GaitProfile;
 
@@ -393,6 +414,42 @@ export const STALK: GaitProfile = {
   armSwing: 0.02,
 };
 
+/** The GOREHOUND's walk (characters/gorehound.blob): a heavy QUADRUPED. The
+ *  arms are its front legs ('foreleg': walked like legs on the hind clock a
+ *  quarter-stride later, a dog's lateral-sequence walk, LH LF RH RF), and
+ *  motion.ts plants both pairs. Quick, short steps (2.0 Hz): every stance is
+ *  locked to the floor while the root travels, so at 1.3 m/s a stance covers
+ *  1.3 x 0.55 / 2.0 = 0.36 m, which the near-vertical foreleg (0.59 m drop,
+ *  0.65 m chain) only survives because each swing LANDS 0.18 m ahead
+ *  (landAhead) and the stance straddles the shoulder. The weight is in the
+ *  root: a deep bob and a forward rock at each footfall, little side sway
+ *  (four legs do not waddle). */
+export const GOREHOUND: GaitProfile = {
+  ...SHAMBLE,
+  name: 'gorehound',
+  strideFreq: 2.0,
+  stanceDuty: 0.55,
+  strideLen: 0.30,
+  landAhead: 0.6,
+  footLift: 0.13,
+  footPush: 0.05,
+  kneeBend: 0.08,
+  kneeLift: 0.05,
+  kneeTrack: 0.5,
+  elbowBow: 0.07,
+  swayAmp: 0.022,
+  shoulderSway: 0.6,
+  bobAmp: 0.03,
+  rockAmp: 0.018,
+  headBob: 0.4,
+  armSwing: 0,
+  elbowFlex: 0,
+  asymJitter: 0.08,
+  armStyle: 'foreleg',
+  forePhase: 0.25,
+  torsoLean: 0,
+};
+
 /** Lerp every numeric knob; strings (name, armStyle) snap at w = 0.5 so the
  *  hands never hover between two grips. */
 export function blendProfiles(a: GaitProfile, b: GaitProfile, w: number): GaitProfile {
@@ -481,6 +538,9 @@ export interface GaitPose {
   phase: number;
   /** Which feet are currently planted. */
   stance: { legL: boolean; legR: boolean };
+  /** 'foreleg' style only: which FRONT paws are planted (motion.ts locks
+   *  them to the floor as it does the feet). */
+  foreStance?: { armL: boolean; armR: boolean };
   /** True while in one-leg hop-limp (exactly one leg missing). */
   hop: boolean;
 }
@@ -526,6 +586,13 @@ function stanceProgress(phi: number, duty: number): { stance: boolean; u: number
   if (p < duty) return { stance: true, u: 0, v: p / duty };
   const swing = 1 - duty;
   return { stance: false, u: swing <= 0 ? 0 : (p - duty) / swing, v: 0 };
+}
+
+/** The swing's forward reach (x strideLen) for a gait that lands AHEAD
+ *  (GaitProfile.landAhead = a): sin(pi u) blended toward a quarter wave, so
+ *  it rises from 0, peaks, and sets down at `a` instead of at 0. */
+function arcAhead(u: number, a: number): number {
+  return (1 - a) * Math.sin(Math.PI * u) + a * Math.sin(Math.PI * u / 2);
 }
 
 // ---------------------------------------------------------------------------
@@ -658,7 +725,7 @@ export function stepGait(
     const swing = Math.sin(Math.PI * u);
     if (!onGround) {
       const lift = T.footLift * sideScale * (1 - damage * T.damageLiftScale);
-      const reach = T.strideLen * sideScale * swing;
+      const reach = T.strideLen * sideScale * (T.landAhead ? arcAhead(u, T.landAhead) : swing);
       return {
         foot: [0, lift * swing, reach],
         // The knee tracks half the foot's reach PLUS a forward bow, so it
@@ -671,6 +738,27 @@ export function stepGait(
     return { foot: [0, 0, -T.footPush * sideScale * Math.sin(Math.PI * v)], knee: Z, stance: true };
   };
 
+  // One FRONT LEG ('foreleg' style): the leg function's swing/stance shape on
+  // the same-side hind clock delayed by forePhase, so the four feet fall in
+  // sequence instead of in pairs. The paw (the hand joint) lifts and reaches
+  // in the swing and drags back in the stance; motion.ts locks it to the
+  // floor while it is planted. The elbow tracks the reach but bows BACKWARD.
+  const forePhase = T.forePhase ?? 0.25;
+  const elbowBow = T.elbowBow ?? T.kneeBend;
+  const foreStance = { armL: false, armR: false };
+  const foreleg = (legPhi: number, side: 'L' | 'R', sideScale: number): { elbow: Vec3; hand: Vec3 } => {
+    const { stance: onGround, u, v } = stanceProgress(legPhi - forePhase * TAU, duty(side));
+    if (side === 'L') foreStance.armL = onGround; else foreStance.armR = onGround;
+    if (onGround) return { elbow: Z, hand: [0, 0, -T.footPush * sideScale * Math.sin(Math.PI * v)] };
+    const swing = Math.sin(Math.PI * u);
+    const lift = T.footLift * sideScale * (1 - damage * T.damageLiftScale);
+    const reach = T.strideLen * sideScale * (T.landAhead ? arcAhead(u, T.landAhead) : swing);
+    return {
+      hand: [0, lift * swing, reach],
+      elbow: [0, 0.6 * lift * swing, T.kneeTrack * reach - elbowBow * sideScale * swing],
+    };
+  };
+
   // One arm. 'swing': the hand swings opposite the ipsilateral leg.
   // 'reach': NO offsets here — the pivot spec (below) drives the arm, so the
   // chain rotates rigidly about the shoulder instead of dragging it out of
@@ -681,6 +769,7 @@ export function stepGait(
     if (missing) return { elbow: Z, hand: Z };
     const wounded = side === 'L' ? woundedArmL : woundedArmR;
     const aSide = side === 'L' ? aL : aR;
+    if (armStyle === 'foreleg') return foreleg(legPhi, side, aSide * (wounded ? T.woundedSwingScale : 1));
     if (armStyle !== 'swing') return { elbow: Z, hand: Z };
     const boost = (side === 'L' ? missingArmR : missingArmL) ? T.missingArmSwingBoost : 1;
     const sideScale = aSide * boost * (wounded ? T.woundedArmSwingScale : 1);
@@ -774,6 +863,7 @@ export function stepGait(
       lean: T.torsoLean * Math.PI / 180,
       phase: p,
       stance: { legL: legA.stance, legR: legB.stance },
+      ...(armStyle === 'foreleg' ? { foreStance } : {}),
       hop,
     },
   };

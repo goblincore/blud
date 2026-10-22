@@ -1,0 +1,174 @@
+# THE GOREHOUND — a four-legged biomech mutant: dog crossed with frog, built
+# for WEIGHT. Two references, mixed (2026-10-22, owner brief):
+#   - the Quake 2 parasite: the hunched quadruped silhouette, metal legs, a
+#     fleshy head. Owner: "too froggy and light" on its own.
+#   - the Doom 3 pinky: the mass. A shoulder hump higher than the head, a
+#     barrel belly, fat folds rolling over the neck and the haunch.
+# So: squat and heavy, flesh draped over machine limbs. Biomech house style
+# (.claude/skills/authoring-sdf-characters/biomech-style.md): the flesh is
+# SDF, the muscle and veins are a baked body normal map, the machinery
+# (lower legs, paws, spine ridge, jaw pistons, teeth) is sculpted kit mesh on
+# thin painted cores here.
+#
+# THE RIG IS THE BIPED'S, WALKED ON ALL FOURS. Every bone keeps a standard
+# name so the gait, plants, sever and gore all resolve (gait.ts JOINT_AT):
+#   - the arms ARE the front legs. GOREHOUND's gait (gait.ts) walks them with
+#     the 'foreleg' arm style: the leg's lift/reach/plant on the hind clock a
+#     quarter-stride later, and motion.ts locks each paw to the floor with
+#     the elbow pole pointing BACKWARD (a dog's elbow);
+#   - the hind leg is the butcher's trick (PR #54): thigh = femur raked
+#     forward to the stifle, shin = tibia raked back to the HOCK (the gait's
+#     `foot` joint, where the plant locks), foot = the long metatarsal. The
+#     plant IK bows the knee forward, and so does a dog's stifle.
+#
+# No `stance` line: the format's digitigrade test is a 2-D chord test a real
+# dog's hind leg fails (see houndcorpse's notes), and this leg is neither of
+# the two shapes it knows.
+model gorehound
+  height 1.20
+
+skeleton
+  # Hip line at 0.84 (root 0.74 + len 0.10; children attach at the TAIL).
+  root pelvis at 0.74 len=0.10
+
+  # THE BACK LINE, croup to muzzle (a child starts at its parent's tail):
+  #   hips    (0, 0.840, 0)
+  #   spine -> (0, 1.019, 0.552)  withers: 72 deg = rising toward the front,
+  #                                so the hump sits higher than the rump (pinky)
+  #   chest -> (0, 0.935, 0.733)  neck base: 115 = falling away forward
+  #   neck  -> (0, 0.921, 0.892)  atlas: nearly level
+  #   skull -> (0, 0.862, 1.227)  muzzle: 10 deg down, the head slung LOW
+  bone spine parent=pelvis dir=up pitch=72  len=0.58
+  bone chest parent=spine  dir=up pitch=115 len=0.20
+  bone neck  parent=chest  dir=up pitch=95  len=0.16
+  bone skull parent=neck   dir=up pitch=100 len=0.34
+  # The lower jaw: from the atlas forward-down to the chin (0, 0.809, 1.170).
+  # hinge=0.12 puts the pivot near the BACK of the skull axis: a frog's mouth
+  # corner is far back under the eye, so the whole maw swings open.
+  bone jaw   parent=neck   dir=up pitch=112 len=0.30 hinge=0.12
+
+  mirror
+    # The SCAPULA, from the withers down and out to the shoulder joint at
+    # (0.154, 0.835, 0.552). dir=side: tilt swings it toward -y.
+    bone clavicle parent=spine    dir=side tilt=-50 len=0.24
+    # Humerus down and BACK to the elbow (0.154, 0.552, 0.402), radius down
+    # and forward to the wrist (0.154, 0.246, 0.526), then the long metal
+    # metacarpal paw sloping forward to the toes on the floor. Shoulder to
+    # wrist is 0.59 m against a 0.65 m chain (91%): the elbow has room to
+    # fold (the houndcorpse's 99% "table leg" lesson).
+    bone upperarm parent=clavicle dir=down pitch=-28 tilt=4 len=0.32
+    bone forearm  parent=upperarm dir=down pitch=22        len=0.33
+    bone hand     parent=forearm  dir=down pitch=48        len=0.32
+    # Femur forward-down to the stifle (0.17, 0.572, 0.209), tibia back-down
+    # to the hock (0.17, 0.351, -0.036), metatarsal near-vertical to the toes.
+    # Hip to hock 0.49 m against 0.67 m: a deep crouch, the coiled leap.
+    bone thigh parent=pelvis side=0.17 dir=down pitch=38 tilt=3 len=0.34
+    bone shin  parent=thigh  dir=down pitch=-48         len=0.33
+    bone foot  parent=shin   dir=down pitch=10          len=0.32
+  end
+
+body
+  # --- TORSO: flesh. Pinky mass on a short back. -----------------------------
+  # The haunch: the rump's round mass over the hips, pulled back of the hip
+  # line so the tail end reads heavy and low.
+  blob torso on pelvis at=1.00 r=0.20 wide=1.25 tall=0.95 deep=1.15 offset=(0,-0.02,-0.05) blend=0.030 core
+  # The barrel: a fat bar along the back, sagging (offset down); the belly
+  # blob under it hangs to y ~0.54, BELOW the stifle (0.57). Round 1 hung it
+  # at 0.62 and the render read as a sausage on stilts: the visible leg under
+  # the body is what makes it light, so the mass comes DOWN to meet the legs.
+  bar  torso on spine from=0.10 to=0.75 r=0.20 r2=0.22 wide=1.18 tall=1.05 offset=(0,-0.06,0) blend=0.035
+  blob torso on spine at=0.45 r=0.20 wide=1.25 tall=0.95 deep=1.35 offset=(0,-0.20,0) blend=0.045
+  # THE HUMP: the pinky's shoulders, higher than the head (top ~1.18 against
+  # the cranium's ~1.06), so the head reads slung under it.
+  blob torso on spine at=0.95 r=0.22 wide=1.28 tall=0.85 deep=1.05 offset=(0,-0.03,0) blend=0.035
+  # Shoulder masses over each scapula, where the forelimb's flesh comes from.
+  blob torso on spine at=0.92 r=0.14 wide=0.90 tall=1.15 deep=1.10 offset=(0.165,-0.10,0.03) blend=0.030 both
+  # The brisket: a deep chest hanging between the forelegs, forward of them.
+  blob torso on chest at=0.60 r=0.20 wide=1.15 tall=1.15 deep=1.00 offset=(0,-0.16,0.01) blend=0.035
+  # The bull neck: as wide as the head, so there is no waist behind the skull.
+  bar  torso on neck from=0.00 to=1.00 r=0.15 wide=1.30 tall=1.05 blend=0.030
+  # The dewlap: a slack jowl of throat hanging under the neck.
+  blob torso on neck at=0.65 r=0.10 wide=1.25 tall=1.00 deep=1.20 offset=(0,-0.10,0) blend=0.030
+  # FAT FOLDS (pinky): three rolls across the nape behind the skull and one
+  # over the croup. Bars laid ACROSS the back (tip in x), sagging at the
+  # ends (bend), small blend so each roll keeps its crease.
+  bar  torso on chest from=0.20 to=0.20 offset=(-0.16,0.075,0) tip=(0.32,0,0) bend=(0,0.035,0) r=0.050 wide=1.00 deep=1.20 blend=0.012
+  bar  torso on chest from=0.75 to=0.75 offset=(-0.15,0.055,0) tip=(0.30,0,0) bend=(0,0.030,0) r=0.045 wide=1.00 deep=1.20 blend=0.012
+  bar  torso on neck  from=0.45 to=0.45 offset=(-0.14,0.095,0) tip=(0.28,0,0) bend=(0,0.028,0) r=0.040 wide=1.00 deep=1.20 blend=0.010
+  bar  torso on pelvis from=1.00 to=1.00 offset=(-0.19,0.13,-0.10) tip=(0.38,0,0) bend=(0,0.050,0) r=0.050 wide=1.00 deep=1.30 blend=0.014
+
+  # --- HEAD: a low, WIDE frog-dog skull. ------------------------------------
+  # The cranium: low and broad (0.32 m across, only 0.18 tall).
+  blob head on skull at=0.22 r=0.15 wide=1.35 tall=0.75 deep=1.10 offset=(0,0.060,0) blend=0.020 core
+  # The upper jaw: a flat spade, wider than the cranium — the frog.
+  blob head on skull at=0.72 r=0.145 wide=1.55 tall=0.55 deep=1.20 blend=0.018
+  # Brow ridges, heavy, hooding the eyes.
+  blob head on skull at=0.36 r=0.055 wide=1.30 tall=0.70 deep=1.10 offset=(0.105,0.100,0) blend=0.012 both
+  # The cheeks: the wide mouth's corners, swollen.
+  blob head on skull at=0.28 r=0.095 wide=0.95 tall=1.05 deep=1.10 offset=(0.175,-0.060,0) blend=0.020 both
+  # The gullet: dark wet red inside the maw, ADDITIVE (no carve), only seen
+  # once the jaw drops (the teratoma's additive-maw lesson).
+  blob head on skull at=0.47 r=0.095 wide=1.40 tall=0.60 deep=1.40 offset=(0,-0.085,0) blend=0.010 color=3a0c0e gloss=0.9
+  # Eyes: small, deep under the brow, the only glow on the body.
+  blob head on skull at=0.40 r=0.019 offset=(0.124,0.074,0.036) blend=0.002 color=ffb030 glow=0.8 both
+
+  # The lower jaw: a wide flat mandible and a chin, riding the jaw bone. Its
+  # top sits ~17 mm under the upper jaw at rest, so the maw is ajar and the
+  # kit teeth show; the bite swings it open about the hinge.
+  blob head on jaw at=0.62 r=0.125 wide=1.60 tall=0.50 deep=1.30 offset=(0,-0.090,0) blend=0.016
+  blob head on jaw at=1.00 r=0.075 wide=1.30 tall=0.80 deep=1.00 offset=(0,-0.065,0.010) blend=0.014
+  # The tongue: a fat red slab on the floor of the mouth.
+  blob head on jaw at=0.58 r=0.068 wide=1.40 tall=0.45 deep=1.80 offset=(0,-0.040,0) blend=0.008 color=8c2a2e gloss=0.85
+
+  # --- FORELEGS: muscled flesh to the elbow, machine below. -------------------
+  blob arm on clavicle at=1.00 r=0.14 blend=0.025 mirror core
+  bar  arm on upperarm from=0.00 to=1.00 r=0.130 r2=0.095 blend=0.020 mirror
+  # The triceps, a slab of muscle bulging out behind the humerus.
+  blob arm on upperarm at=0.50 r=0.100 tall=1.50 offset=(0,0,-0.045) blend=0.020 mirror
+  # Machine core (the kit sleeves it): radius strut and the metacarpal paw.
+  blob arm on forearm at=0.00 r=0.070 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  arm on forearm from=0.05 to=0.95 r=0.050 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  blob arm on hand at=0.00 r=0.058 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  arm on hand from=0.05 to=0.90 r=0.040 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+
+  # --- HIND LEGS: a haunch of flesh on a machine leg. -----------------------
+  blob leg on thigh at=0.00 r=0.15 blend=0.025 mirror core
+  bar  leg on thigh from=0.05 to=0.95 r=0.145 r2=0.090 deep=1.20 blend=0.020 mirror
+  blob leg on shin at=0.00 r=0.070 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  leg on shin from=0.05 to=0.95 r=0.050 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  blob leg on foot at=0.00 r=0.058 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  leg on foot from=0.05 to=0.90 r=0.040 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+
+face
+  # No generated face: the head is prims and kit (twinhead's blanking block).
+  headRadius 0.001
+  headWidth  1.0
+  headHeight 1.0
+  headDepth  1.0
+  jawWidth   1.0
+  jawHeight  1.0
+  jawDrop    0
+  jawJut     0
+  noseLength 0
+  noseWidth  1.0
+  noseDrop   0
+  browHeavy  0
+  browRise   0
+  headBlend  0.006
+
+palette
+  # Pinky flesh: pale, pink-tan, wet, mottled with a sick green-grey.
+  baseColor     0.52 0.34 0.31
+  deepColor     0.55 0.10 0.09
+  charColor     0.09 0.07 0.07
+  specIntensity 0.70
+  specRoughness 0.32
+  fresnelBoost  0.60
+  translucency  0.28
+  wetness       0.65
+  surfaceNoiseAmp    0.045
+  silhouetteNoiseAmp 0.015
+  mottleAmp     0.35
+  mottleScale   1.8
+  mottleColor   0.24 0.24 0.16
+  grain         0.14

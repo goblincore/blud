@@ -74,6 +74,7 @@ import {
   COLLAPSE_TUNING, collapseRopes, makeCollapseState, stepCollapse,
 } from './collapse';
 import { attackPose, type AttackPose, type SwingVariant } from './attack';
+import { houndGapeAt, houndPose, isHoundVariant, pounceAirborne } from './hound-attack';
 import { isSwordVariant, jawGapeAt, swordCarryAt } from './sword-swing';
 import { jawRestOf, jawTargetAt, type JawRest } from './jaw';
 
@@ -322,6 +323,10 @@ export interface MotionState {
   fallStrength?: number;
   plantL: PlantState;
   plantR: PlantState;
+  /** A quadruped's FRONT paw plants ('foreleg' arm style only; absent on
+   *  every biped, so their states are unchanged). */
+  plantHandL?: PlantState;
+  plantHandR?: PlantState;
   stanceBlend?: number;
   footwork?: SoldierFootwork;
   walkPosture?: number;
@@ -775,7 +780,9 @@ export function stepMotion(
   // stagger composes — see attack.ts's header. A collapsed body never swings.
   const attack: AttackPose | null =
     cfg.attack !== undefined && !collapsed
-      ? attackPose(cfg.attack.phase, cfg.attack.side, cfg.attack.variant)
+      ? isHoundVariant(cfg.attack.variant)
+        ? houndPose(cfg.attack.phase, cfg.attack.variant)
+        : attackPose(cfg.attack.phase, cfg.attack.side, cfg.attack.variant)
       : null;
 
   // --- assemble the standing rest targets ----------------------------------
@@ -1285,6 +1292,37 @@ export function stepMotion(
       plantLeg(plantR, 'hipR', 'kneeR', 'footR', joints.leg.R);
     }
   }
+  // A quadruped's front paws ('foreleg' arm style): the same lock-and-solve
+  // as the feet on the shoulder->elbow->paw chain, with two differences. The
+  // floor plane is the paws' own rest height (the wrist sits higher than the
+  // hock), and the pole is BACKWARD: a dog's elbow points behind it.
+  let plantHandL = state.plantHandL;
+  let plantHandR = state.plantHandR;
+  const fore = gait.pose.foreStance;
+  if (fore && !collapsed && !footwork && idx.handL !== undefined && idx.handR !== undefined) {
+    const handGround = Math.min(joints.base[idx.handL]![1], joints.base[idx.handR]![1]);
+    const elbowPole = scale(legPole, -1);
+    const airborne = !!attack && !!cfg.attack && pounceAirborne(cfg.attack.phase, cfg.attack.variant);
+    for (const side of ['L', 'R'] as const) {
+      if (sig.missing[side === 'L' ? 'armL' : 'armR']) continue;
+      const hand = idx[`hand${side}`]!, elbow = idx[`elbow${side}`]!, shoulder = idx[`shoulder${side}`]!;
+      const st = stepPlant((side === 'L' ? plantHandL : plantHandR) ?? makePlant(), {
+        // A pounce throws both paws off the floor (hound-attack.ts).
+        stance: (side === 'L' ? fore.armL : fore.armR) && !release && !airborne,
+        footPos: footWorld(hand),
+        groundY: handGround,
+        // The reach slide, always on: the paws sit 0.55 m ahead of the yaw
+        // pivot (the pelvis), so a turn swings a locked paw far out of the
+        // foreleg's reach; it slides along the floor instead of hauling the
+        // shoulder after it.
+        hip: targets[shoulder]!, maxReach: 1.02 * (joints.arm[side][0] + joints.arm[side][1]),
+      }, dt);
+      if (side === 'L') plantHandL = st; else plantHandR = st;
+      const solved = solvePlantedLeg(targets[shoulder]!, targets[elbow]!, targets[hand]!, st, joints.arm[side], SOLVE, elbowPole);
+      targets[elbow] = solved.knee;
+      targets[hand] = solved.foot;
+    }
+  }
 
   // --- secondary points follow their parents --------------------------------
   // Hand tips and toes are rigid with the hand/foot: whatever the arm and
@@ -1355,7 +1393,8 @@ export function stepMotion(
   let jawGape = 0;
   if (joints.jaw && idx.jaw !== undefined && idx.neck !== undefined && idx.head !== undefined) {
     const swingGape = attack && cfg.attack && profile.melee?.kind === 'sword' && isSwordVariant(cfg.attack.variant)
-      ? jawGapeAt(cfg.attack.phase, cfg.attack.variant) : 0;
+      ? jawGapeAt(cfg.attack.phase, cfg.attack.variant)
+      : attack && cfg.attack && isHoundVariant(cfg.attack.variant) ? houndGapeAt(cfg.attack.phase, cfg.attack.variant) : 0;
     // The expression layer's gape (expression.ts) opens the jaw too; whichever is wider wins.
     jawGape = Math.max(swingGape, cfg.jawGape ?? 0);
     const at = (i: number): Vec3 => (havePoints ? points[i]!.pos : targets[i]!);
@@ -1430,7 +1469,10 @@ export function stepMotion(
     wander, gait: gait.state, stagger: stagger.state,
     ...(soldierReact || state.soldierStagger ? { soldierStagger: soldierStagger.state } : {}),
     collapse: collapse.state,
-    plantL, plantR, aim, recoil, bodyYaw, blend, stanceBlend, footwork, walkPosture, mobilityPosture,
+    plantL, plantR,
+    ...(plantHandL === undefined ? {} : { plantHandL }),
+    ...(plantHandR === undefined ? {} : { plantHandR }),
+    aim, recoil, bodyYaw, blend, stanceBlend, footwork, walkPosture, mobilityPosture,
     protectiveCrouchSec, protectiveCrouchPosture,
     runWeight: rw,
     fireHold,
