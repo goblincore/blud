@@ -42,8 +42,30 @@ Keep the marched prim count low (the twinhead's torso: 35). Push detail to the n
 - Mottled, scarred, agitated: clustered swellings round seams, thin red crack scars (`# SCAR` bars), wounds as
   torn carves plus a decal stain. Painted lips made flat discs; swellings made a pig snout.
 - **Muscle definition and varicose veins come from the normal map**, on the torso and on each flesh limb
-  (`--limb bone:t0:t1:rMax:rows` regions; arm detail is generated on the arm skin with `side=` prims). Veins have to be thick and knotted to
-  read: about 6 mm thick, 4 mm proud, serpentine, with knots and branches. Thinner ones vanished in the bake.
+  (`--limb bone:t0:t1:rMax:rows` regions; arm detail is generated on the arm skin with `side=` prims).
+
+### Varicose veins that read (three attempts on the twinhead)
+
+| Attempt | Result | Lesson |
+| --- | --- | --- |
+| r 3.5 mm, 1.6 mm proud, a few hand-placed points | vanished in the bake | too thin and too low to survive a 512-px map |
+| alternate sides of the trunk every 22 mm sample | baked as sharp **zigzags**, "ZZZ" stitch marks | a straight bar between alternating points is a zigzag, not a meander |
+| a sine meander, ~3.5 cm wavelength, ~1.4 cm swing | read as **crumpled skin** on the arms | too short a wavelength and too much swing for the limb's size |
+| a sine meander, **~10 cm wavelength, ~1 cm swing**, 5-11 mm samples | ropey, branching veins | **this is the recipe** |
+
+The recipe (`armVaricose` / `varicose` in `scripts/twinhead-detail-gen.ts`):
+- **Size and density:** trunks 5-6.5 mm thick, 3.5-4.5 mm proud. Sample every 5-11 mm along the path, so each
+  bar is short and the curve stays smooth. Taper the radius toward both ends (55% to 100%).
+- **The meander:** offset the trunk by `amp * sin(phase)`, with `phase` advancing a little and a little randomly
+  per sample (about 0.22-0.36 rad on arms), plus a slow drift in angle. Never alternate sides per sample.
+- **Knots:** a bulge (1.5-2.1 times the radius, 30% prouder) at about one sample in five or six. More than that
+  and the vein reads as beads.
+- **Branches:** one per trunk on limbs, two on the torso; each branch is 65% as thick and peels off at 30-55 deg.
+- **Placement:** probe the skin per sample (march the plain body along a ray), sink the bar so its top stands
+  `proud` out, and bind it to the nearest bone. Check by measuring each prim's top against the plain skin; it
+  should sit 2-5 mm out.
+- **Where:** down the flanks into the waist, outboard of the abs, across the upper chest to the armpit, over the
+  lats, and down the biceps, outer arm and back of each upper arm and the forearm flesh.
 - Faces are a generated decal (`decal 0`, `blendLuma 0` for colour) on the head's fattest prim.
 - A machine head is all kit mesh; the flesh neck stops short and cables fill the gap.
 
