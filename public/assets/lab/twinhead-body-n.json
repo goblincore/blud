@@ -1,0 +1,98 @@
+{
+  "generator": "scripts/bake-body-normal.ts",
+  "character": "twinhead",
+  "width": 512,
+  "height": 545,
+  "version": 2,
+  "yMin": 0.965,
+  "yMax": 1.9051,
+  "axisX": -0.0058,
+  "axisZ": 0.102,
+  "regions": [
+    {
+      "label": "torso",
+      "kind": "torso",
+      "head": [
+        -0.0058,
+        1.9051,
+        0.102
+      ],
+      "tail": [
+        -0.0058,
+        0.965,
+        0.102
+      ],
+      "rMax": 0,
+      "row0": 1,
+      "rows": 256
+    },
+    {
+      "label": "upperarm.l",
+      "kind": "limb",
+      "head": [
+        0.3161,
+        1.7687,
+        0.1383
+      ],
+      "tail": [
+        0.4457,
+        1.4125,
+        0.1648
+      ],
+      "rMax": 0.17,
+      "row0": 257,
+      "rows": 96
+    },
+    {
+      "label": "forearm.l",
+      "kind": "limb",
+      "head": [
+        0.4457,
+        1.4125,
+        0.1648
+      ],
+      "tail": [
+        0.4577,
+        1.2982,
+        0.2612
+      ],
+      "rMax": 0.13,
+      "row0": 353,
+      "rows": 48
+    },
+    {
+      "label": "upperarm.r",
+      "kind": "limb",
+      "head": [
+        -0.3161,
+        1.7687,
+        0.1383
+      ],
+      "tail": [
+        -0.4457,
+        1.4125,
+        0.1648
+      ],
+      "rMax": 0.17,
+      "row0": 401,
+      "rows": 96
+    },
+    {
+      "label": "forearm.r",
+      "kind": "limb",
+      "head": [
+        -0.4457,
+        1.4125,
+        0.1648
+      ],
+      "tail": [
+        -0.4577,
+        1.2982,
+        0.2612
+      ],
+      "rMax": 0.13,
+      "row0": 497,
+      "rows": 48
+    }
+  ]
+}

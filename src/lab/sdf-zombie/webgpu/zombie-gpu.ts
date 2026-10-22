@@ -166,6 +166,12 @@ export interface ZombieGpuView {
    * out from under its neighbours. The caller owns the lifecycle.
    */
   setFaceTexture(tex: THREE.Texture, atlas: THREE.Vector4, mean: number): void;
+  /**
+   * The character's BODY NORMAL MAP (march/body/blocks/post/body-normal.wgsl.ts): a tangent-space torso relief
+   * projected round the rest-space axis. `null` (or strength 0) switches it off and the body shades exactly as
+   * before. Like the face sheet the texture is shared across a character's bodies; the caller owns it.
+   */
+  setBodyNormal(tex: THREE.Texture | null, map?: BodyNormalMap): void;
   /** Per-eye painted glow (melee head damage v2): false switches that eye's glow off (a popped eye). 'L' is
    *  the face sheet's IMAGE-left eye (hs.x < 0), which is the zombie's own RIGHT eye. */
   setEyeGlow(side: 'L' | 'R', on: boolean): void;
@@ -386,6 +392,28 @@ export function setMotionOutAll(on: boolean): void { motionOutAll = on; }
  *  its closest approach instead of discarding (MARCH_TRACE_POST). Implies the motion write (> 0.5). */
 let edgeOutAll = false;
 export function setEdgeOutAll(on: boolean): void { edgeOutAll = on; }
+
+/** Where a body normal map lands (setBodyNormal): strength, the rest-space height band and axis the texture is
+ *  projected round (scripts/bake-body-normal.ts writes them beside the PNG), and the prim index range of the
+ *  torso cluster, the only prims whose hits take the map. */
+export interface BodyNormalMap {
+  strength: number;
+  yMin: number;
+  yMax: number;
+  axisX: number;
+  axisZ: number;
+  primStart: number;
+  primEnd: number;
+}
+
+let blankBodyNorm: THREE.DataTexture | null = null;
+/** The flat tangent-space normal (0, 0, 1): bound wherever no body map is, so the input always exists. */
+export function blankBodyNormalTexture(): THREE.DataTexture {
+  if (blankBodyNorm) return blankBodyNorm;
+  blankBodyNorm = new THREE.DataTexture(new Uint8Array([128, 128, 255, 255]), 1, 1, THREE.RGBAFormat);
+  blankBodyNorm.needsUpdate = true;
+  return blankBodyNorm;
+}
 
 export function blankFaceTexture(): THREE.DataTexture {
   const tex = new THREE.DataTexture(
@@ -787,6 +815,12 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  param); 0 (the default everywhere until task 10) takes the old key path,
      *  unchanged. yzw spare. */
     lightListCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
+    /** BODY NORMAL MAP (body-normal.wgsl.ts): the baked torso relief, flat by default. */
+    bodyNormTex: texture(blankBodyNormalTexture()),
+    /** x strength (0 skips the block: every body without a map), y z the rest height band. w spare. */
+    bodyNormCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
+    /** x y the rest-space projection axis (x, z), z w the torso prim range [start, end). */
+    bodyNormAxis: uniform(new THREE.Vector4(0, 0, 0, 0)),
   };
 }
 
@@ -1558,6 +1592,11 @@ export function createMarchMaterial(
     // list); lightListCfg.x = 0 keeps the old key path.
     lightListCfg: u.lightListCfg,
     lightList: (lightList ?? fallbackLightListNode()) as never,
+    // BODY NORMAL MAP, bound BY NAME in the same commit as the WGSL inputs.
+    // bodyNormCfg.x = 0 (every body without a map) skips the block.
+    bodyNormTex: u.bodyNormTex,
+    bodyNormCfg: u.bodyNormCfg,
+    bodyNormAxis: u.bodyNormAxis,
     ...(extra ?? {}),
   }) as unknown as Swizzled;
 
@@ -3131,6 +3170,16 @@ export function createZombieGpuView(
       u.faceAtlas.value.copy(atlas);
       u.faceCfg2.value.y = mean;
     },
+    setBodyNormal(tex, map) {
+      if (!tex || !map || !(map.strength > 0)) {
+        u.bodyNormTex.value = blankBodyNormalTexture();
+        u.bodyNormCfg.value.set(0, 0, 0, 0);
+        return;
+      }
+      u.bodyNormTex.value = tex;
+      u.bodyNormCfg.value.set(map.strength, map.yMin, map.yMax, 0);
+      u.bodyNormAxis.value.set(map.axisX, map.axisZ, map.primStart, map.primEnd);
+    },
     setEyeGlow(side, on) {
       if (side === 'L') u.faceEyeMask.value.x = on ? 1 : 0;
       else u.faceEyeMask.value.y = on ? 1 : 0;
@@ -3400,6 +3449,8 @@ export function createChunkGpuView(
   let morphBox: { min: Vec3; max: Vec3 } | null = null;
 
   function copyTemplateLook() {
+    // NOT the body normal map: a chunk packs a SUBSET of the body's prims, so the template's torso prim range
+    // would point at the wrong prims. A gib keeps bodyNormCfg.x = 0 and its flat default texture.
     u.faceTex.value = template.faceTex.value;
     u.baseColor.value.copy(template.baseColor.value);
     u.deepColor.value.copy(template.deepColor.value);

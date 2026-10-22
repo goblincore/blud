@@ -2,6 +2,36 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Twinhead (two-headed strogg: cannon arm + impaling spike, machine legs) — first pass 2026-10-21
+
+- [x] **Body** `characters/twinhead.blob`: hunched flesh torso on a machine pelvis, two heads on ONE central skull
+  bone (extra skull bones break the gait), human twin with a generated face decal (`scripts/make-twinhead-face.py`,
+  `blendLuma 0`), torn nasal wound, pointed ears; red scar welts placed by surface probe. `?character=twinhead`.
+- [x] **Kit** from Blender, not WAM: `scripts/blender-kit.ts` skins `<bone>|<part>` meshes rigidly to the .blob
+  skeleton (`assets-source/twinhead-kit/`). Machine legs, pelvis cup, arm sleeves, back rack, cannon (on forearm.r),
+  and the machine twin's head: a demon skull cut from the owner's reference sculpt, two `led` eyes.
+- [x] **Body normal maps** (new engine feature): [spec](../superpowers/specs/2026-10-21-body-normal-map-design.md).
+  Torso relief baked from `characters/twinhead.detail` by `scripts/bake-body-normal.ts`; abs/serratus moved out of
+  the marched prims (torso 47 -> 35).
+- [x] **Profile** `TWINHEAD_PROFILE`: gore body, STOMP, launcher carries, rocket gunner; the cannon prop is an
+  invisible aim frame. `?spawn=twinhead` / `__sdfGame.spawnDebugCharacter('twinhead')`.
+- [x] **Sculpted machinery** (2026-10-21): every kit part below the head rebuilt in the demon skull's style.
+  - pauldron, thigh and shin carapaces, skull-cap knees, talon feet, pelvic girdle, vertebral column, back pod
+  - a steel-to-blood fluted spike
+  - generator scripts on `assets-source/twinhead-kit/kit_sculpt.py`.
+
+  The style and loop for the next biomech enemy are in
+  [biomech-style.md](../../.claude/skills/authoring-sdf-characters/biomech-style.md). Prominent varicose veins are
+  in the torso normal map.
+- [ ] **Kit optimization**: about 145k triangles. Bake the sculpt detail to normal maps on low-poly cages (2-4k per part).
+- [ ] Owner idea: an axe head instead of (or on) the spike.
+- [ ] Cannon arm and forearm sleeves are still box/drum parts; redo them in the style.
+- [ ] **Spike melee**: a combined mind (cannon at range, spike stab close); today he only shoots.
+- [ ] Owner review in game: normal-map strength and detail, wound tones; not yet checked past the lab.
+- [x] Normal maps on limbs (2026-10-21): per-bone cylinder regions in one atlas, the table in the header row; the
+  twinhead's arms carry varicose veins. See the spec's "Limb regions".
+- [ ] Frame-cost measurement with the bench.
+
 ## Goblin refinement pass (body, kit, weapons, rig, animation) — phase 1 (body) done 2026-10-01
 
 The owner's complaints:

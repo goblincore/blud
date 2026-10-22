@@ -23,6 +23,7 @@ import { CUT_FACE_BLOCK } from './blocks/post/cut-face.wgsl';
 import { ORGAN_BLOCK } from './blocks/post/organ.wgsl';
 import { MOTTLE_BLOCK } from './blocks/post/mottle.wgsl';
 import { BODY_GRAIN_BLOCK } from './blocks/post/body-grain.wgsl';
+import { BODY_NORMAL_BLOCK } from './blocks/post/body-normal.wgsl';
 import { GORE_BLOCK } from './blocks/post/gore.wgsl';
 import { SOLDIER_MEAT_BLOCK } from './blocks/post/soldier-meat.wgsl';
 import { PAINT_CHAR_BLOCK } from './blocks/post/paint-char.wgsl';
@@ -397,6 +398,8 @@ ${MOTTLE_BLOCK}
 ${FACE_LAYER_WGSL}
 
 ${BODY_GRAIN_BLOCK}
+
+${BODY_NORMAL_BLOCK}
 
 ${GORE_BLOCK}
 

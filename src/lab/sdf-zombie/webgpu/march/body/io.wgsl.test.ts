@@ -37,7 +37,7 @@ describe('MarchIn io (phase-2 task 2)', () => {
     expect(pairs(structBody)).toEqual(VALUE_PARAMS);
   });
 
-  it('excludes exactly the 14 handle/pointer parameters — no more, no fewer', () => {
+  it('excludes exactly the 15 handle/pointer parameters — no more, no fewer', () => {
     const all = pairs(M.MARCH_BODY_PARAMS);
     const valueNames = new Set(VALUE_PARAMS.map((p) => p.name));
     const excluded = all.filter((p) => !valueNames.has(p.name)).map((p) => p.name);
@@ -46,21 +46,22 @@ describe('MarchIn io (phase-2 task 2)', () => {
       [
         'data', 'volumeTex', 'faceTex', 'segVolumeAtlas', 'segVolumeMeta',
         'tileHdr', 'tileEnt', 'levelShadowTex', 'depthPreTex', 'probeTex',
-        'probeDyn', 'lastTex', 'inst', 'lightList',
+        'probeDyn', 'lastTex', 'inst', 'lightList', 'bodyNormTex',
       ].sort(),
     );
     // The struct must not carry a handle head under any spelling.
     expect(VALUE_PARAMS.every((p) => /^(vec|mat|[fiu]32|bool)/.test(p.type))).toBe(true);
   });
 
-  it('the shared light list rides last - lightListCfg the final struct field, lightList the final positional', () => {
+  it('the shared light list, then the body normal map, ride last', () => {
     const all = pairs(M.MARCH_BODY_PARAMS);
-    expect(all.slice(-2).map((p) => p.name)).toEqual(['lightListCfg', 'lightList']);
-    expect(all.at(-2)!.type).toBe('vec4<f32>');
-    expect(M.MARCH_BODY_PARAMS).toContain('lightList: ptr<storage, array<vec4<f32>>, read>\n) -> vec4<f32> {');
-    expect(VALUE_PARAMS[VALUE_PARAMS.length - 1]!.name).toBe('lightListCfg');
+    expect(all.slice(-5).map((p) => p.name)).toEqual(['lightListCfg', 'lightList', 'bodyNormTex', 'bodyNormCfg', 'bodyNormAxis']);
+    expect(all.at(-1)!.type).toBe('vec4<f32>');
+    expect(M.MARCH_BODY_PARAMS).toContain('bodyNormAxis: vec4<f32>\n) -> vec4<f32> {');
+    expect(VALUE_PARAMS.slice(-3).map((p) => p.name)).toEqual(['lightListCfg', 'bodyNormCfg', 'bodyNormAxis']);
     expect(M.MARCH_IN_STRUCT).toContain('// (lightList stays positional — a storage pointer)');
-    expect(all).toHaveLength(101);
+    expect(M.MARCH_IN_STRUCT).toContain('// (bodyNormTex stays positional — a texture)');
+    expect(all).toHaveLength(104);
   });
 
   it('the pack statement names exactly the struct fields, in field order', () => {

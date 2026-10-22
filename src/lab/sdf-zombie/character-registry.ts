@@ -14,6 +14,7 @@
 // The URL-param guard is a different thing and stays: ?character=garbage must
 // fall back gracefully, which is what hasCharacter() is for. The bug this
 // fixes is a character that EXISTS as a .blob and was never registered.
+import type { BodyNormalSpec } from './webgpu/body-normal-load';
 import zombieBlobSrc from './characters/zombie.blob?raw';
 import goblinBlobSrc from './characters/goblin.blob?raw';
 import goblinHomeBlobSrc from './characters/goblin-home.blob?raw';
@@ -41,6 +42,7 @@ import warbullBlobSrc from './characters/warbull.blob?raw';
 import femaleBlobSrc from './characters/female.blob?raw';
 import gargoyleBlobSrc from './characters/gargoyle.blob?raw';
 import cyberdemonBlobSrc from './characters/cyberdemon.blob?raw';
+import twinheadBlobSrc from './characters/twinhead.blob?raw';
 import bloatmawBlobSrc from './characters/bloatmaw.blob?raw';
 import gnasherBlobSrc from './characters/gnasher.blob?raw';
 import ogreBlobSrc from './characters/ogre.blob?raw';
@@ -49,7 +51,7 @@ import cultistBlobSrc from './characters/cultist.blob?raw';
 import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
 import brideBlobSrc from './characters/bride.blob?raw';
 import {
-  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, motionProfileFor, type MotionProfile,
+  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
 
 /** A face sheet's texture and its crop. `mean` is the level the shader
@@ -86,6 +88,9 @@ export interface CharacterEntry {
    *  real mean off the decoded pixels, so `mean` here is the declared value,
    *  never the render value. */
   face: FaceSheet;
+  /** A baked BODY NORMAL MAP (scripts/bake-body-normal.ts; webgpu/body-normal-load.ts): the torso relief the
+   *  march does not carry as prims. Absent = none, and the body shades exactly as it did before maps existed. */
+  bodyNormal?: BodyNormalSpec;
   /** The motion profile this character moves with. Profiles live in
    *  motion-profile.ts; this records WHICH one. Characters without a bespoke
    *  profile get motionProfileFor(name) — the zombie default. */
@@ -301,6 +306,19 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // declared value; the face step re-measures off the decoded pixels.
     face: { url: '/assets/lab/faces/gargoyle-face.png', rect: [0, 0, 512, 512, 512, 512], mean: 1 },
     profile: motionProfileFor('gargoyle'),
+  },
+  // The two-headed strogg conversion (twinhead.blob's header): flesh torso,
+  // arms and heads in the .blob, metal pelvis and legs as painted boxes the
+  // kit dresses. The face sheet is a blank placeholder: both faces are prims.
+  twinhead: {
+    name: 'twinhead', src: twinheadBlobSrc,
+    // The machinery: Blender parts (assets-source/twinhead-kit/) skinned to the
+    // .blob's bones by scripts/blender-kit.ts.
+    kit: '/assets/lab/twinhead-kit.gltf',
+    // The torso's muscle and surface detail (characters/twinhead.detail, baked; never marched).
+    bodyNormal: { url: '/assets/lab/twinhead-body-n.png', meta: '/assets/lab/twinhead-body-n.json', strength: 1 },
+    face: bakedFace('twinhead-face.png'),
+    profile: TWINHEAD_PROFILE,
   },
   cyberdemon: {
     name: 'cyberdemon', src: cyberdemonBlobSrc,
