@@ -12,4 +12,5 @@ J = {
 }
 JV = {k: bv(*v) for k, v in J.items()}
 HEAVY = {'fore': 1.05, 'hind': 1.1}
+TOE_STYLE = 'spike'   # the parasite's walking spikes, not paws (owner review: the paws read as skis)
 WIRE_MATS = ('cable', 'red')

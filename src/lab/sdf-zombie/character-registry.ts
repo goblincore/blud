@@ -349,6 +349,9 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   gibbet: {
     name: 'gibbet', src: gibbetBlobSrc,
     kit: '/assets/lab/gibbet-kit.gltf',
+    // The sac's folds, striae and varicose veins and the head's (characters/gibbet.detail, baked DOWN the hem
+    // pendulum: scripts/gibbet-detail-gen.ts has the bake command; never marched).
+    bodyNormal: { url: '/assets/lab/gibbet-body-n.png', meta: '/assets/lab/gibbet-body-n.json', strength: 1 },
     face: ZOMBIE_FLAT,
     profile: GIBBET_PROFILE,
   },

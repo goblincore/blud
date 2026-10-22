@@ -68,14 +68,21 @@ sac_r = lambda t: max(0.03, 0.30 * math.sin(math.pi * min(1.0, max(0.0, (t - 0.2
 
 if 'cage' in PARTS:
     drop(['hem|cage']); clear_work()
-    NB = 10
+    NB = 12
     T = [0.26 + (1.20 - 0.26) * i / 60 for i in range(61)]
     for b in range(NB):
         ph = 2 * math.pi * b / NB + 0.15
-        tube(f'bar{b}', [cage_at(t, ph + 0.10 * math.sin(4 * t), sac_r(t) * 1.08 + 0.01) for t in T], [0.016] * len(T), segs=8)
+        tube(f'bar{b}', [cage_at(t, ph + 0.10 * math.sin(4 * t), sac_r(t) * 1.14 + 0.025) for t in T], [0.019] * len(T), segs=8)
     for t in (0.26, 0.45, 0.70, 0.95):
-        ring(f'band{t}', A + ax * (L * t), ax, sac_r(t) * 1.08 + 0.01, 0.018 if t in (0.26, 0.95) else 0.013)
-    horn('spike', A + ax * (L * 1.18), ax, X, 0.10, 0.020, curl=0.25)    # the cage pinches to a point below
+        ring(f'band{t}', A + ax * (L * t), ax, sac_r(t) * 1.14 + 0.025, 0.022 if t in (0.26, 0.95) else 0.015)
+    horn('spike', A + ax * (L * 1.18), ax, X, 0.16, 0.030, curl=0.25)    # the cage pinches to a point below
+    # the LID: a dome of bars over the collar and a finial ring, so the cage reads as a cage from above and behind
+    for b in range(6):
+        ph = 2 * math.pi * b / 6
+        top_r = sac_r(0.26) * 1.14 + 0.025
+        tube(f'lid{b}', [cage_at(0.26 - 0.10 * math.sin(math.pi * u / 2), ph, top_r * math.cos(math.pi * u / 2) + 0.012) for u in [k / 12 for k in range(13)]],
+             [0.015] * 13, segs=8)
+    ring('finial', A + ax * (L * 0.15), ax, 0.035, 0.012)
     # the chains up to the hip cap: links alternating 90 degrees, from the collar to the pivot
     top = A + ax * (L * 0.26)
     for sx in (-1, 1):
@@ -87,8 +94,10 @@ if 'cage' in PARTS:
             ring(f'link{sx}{k}', c, nrm, 0.018, 0.0045, segs=16)
     finish('cage', 'hem|cage', 14000, mirror=False, material='iron', noise=0.0012)
     o = bpy.data.objects['hem|cage']
-    wear_colours(o, Vector((0.32, 0.32, 0.34)), Vector((0.30, 0.13, 0.05)), Vector((0.20, 0.02, 0.02)), B, A,
-                 rust_at=(0.1, 0.6), blood_at=(0.2, 0.55))
+    # Lighter than the first pass (0.32 grey, rust from a tenth of the way): the cage read as a dark ball against the
+    # meat. Pale bone-iron, rust only toward the bottom, the blood where it drips.
+    wear_colours(o, Vector((0.55, 0.54, 0.52)), Vector((0.38, 0.18, 0.07)), Vector((0.25, 0.02, 0.02)), B, A,
+                 rust_at=(0.45, 0.85), blood_at=(0.15, 0.40))
 
 # ---------------------------------------------------------------- hooks into the sac
 if 'hooks' in PARTS:
