@@ -113,25 +113,25 @@ body
   # from his hands (owner: a slim pointed tip, "less distinct than it was
   # originally", read as one more pale knuckle).
   blob torso on hem at=1.00 offset=(0.000,0.062,-0.000) r=0.040 tall=0.85 blend=0.010 rigid
-  # ...drawn up to a point out of its crown (owner: "a bit more pointed").
-  bar  torso on hem from=1.00 to=1.00 offset=(0.000,0.088,-0.000) tip=(0.000,0.077,0.003) r=0.024 r2=0.006 blend=0.010 rigid
-  # THE PINK, on the point only (owner: "isolated to the tip"): contiguous
-  # SHELLS up it, the knob left bare so its baked veins show (a painted prim
-  # takes no normal map: body-normal.wgsl.ts masks painted surfaces),
-  # each a hair out of the surface it covers so it is the nearest prim (and
-  # paints) over just its band, flushing to the zombie's pink (~eab1b4).
-  # (Overlapping blotches merged into one hard band; discs on the axis bulged
-  # into rings, a tiered cake; three shells stepped visibly.)
-  bar  torso on hem from=1.00 to=1.00 offset=(0.000,0.100,0.000) tip=(0.000,0.0155,0.0006) r=0.0224 r2=0.0188 blend=0.002 color=e0b2b0 gloss=0.55 rigid
-  bar  torso on hem from=1.00 to=1.00 offset=(0.000,0.116,0.001) tip=(0.000,0.0155,0.0006) r=0.0188 r2=0.0151 blend=0.002 color=d8a0a4 gloss=0.55 rigid
-  bar  torso on hem from=1.00 to=1.00 offset=(0.000,0.131,0.002) tip=(0.000,0.0155,0.0006) r=0.0151 r2=0.0115 blend=0.002 color=d0909c gloss=0.55 rigid
-  bar  torso on hem from=1.00 to=1.00 offset=(0.000,0.146,0.002) tip=(0.000,0.0185,0.0007) r=0.0115 r2=0.0072 blend=0.002 color=c88094 gloss=0.55 rigid
-  # THE ORIFICE at the point, where the fire button was: a dark wet hole with
+  # THE NOSE: a rounded bullet sunk deep in the knob's crown, only its domed
+  # tip showing (~1.6 cm proud of the knob's top at y 0.096), like a rocket in
+  # its silo about to launch (owner: "sits slightly inside the top part of the
+  # joystick ... more rounded", then "sink in more ... basically just the tip
+  # showing"). A capsule's end is a hemisphere, which is the dome.
+  bar  torso on hem from=1.00 to=1.00 offset=(0.000,0.058,0.000) tip=(0.000,0.039,0.000) r=0.020 r2=0.015 blend=0.004 rigid
+  # A swollen lip of SKIN round it where it comes out of the knob: unpainted,
+  # so it keeps the skin's mottle and takes the baked relief (painted raw red
+  # it read as a plastic collar).
+  blob torso on hem at=1.00 offset=(0.000,0.094,0.000) r=0.024 wide=1.0 tall=0.42 blend=0.006 rigid
+  # THE PINK, on the tip alone: one shell a hair out of the bullet's surface
+  # from just under the lip to its top, so its round cap paints the dome.
+  bar  torso on hem from=1.00 to=1.00 offset=(0.000,0.090,0.000) tip=(0.000,0.007,0.000) r=0.0171 r2=0.0162 blend=0.002 color=cc8a98 gloss=0.6 rigid
+  # THE ORIFICE in the dome, where the fire button was: a dark wet hole with
   # the lit button nub down inside it. Its infected crust, the stick's veins
   # and the veins over his knuckles are BAKED (gamer.detail): as prims they
   # read as "tubes and skittles" (owner).
-  blob torso on hem at=1.00 offset=(0.000,0.161,0.003) r=0.0065 tall=0.70 blend=0.001 color=1a0406 gloss=0.95 rigid
-  blob torso on hem at=1.00 offset=(0.000,0.164,0.003) r=0.0040 blend=0.001 color=ff2a1c glow=0.8 gloss=0.9 rigid
+  blob torso on hem at=1.00 offset=(0.000,0.110,0.000) r=0.0055 tall=0.70 blend=0.001 color=1a0406 gloss=0.95 rigid
+  blob torso on hem at=1.00 offset=(0.000,0.1125,0.000) r=0.0034 blend=0.001 color=ff2a1c glow=0.8 gloss=0.9 rigid
 
   # --- HIS NECK AND HEAD. -----------------------------------------------------
   # A thick neck, all fat.
