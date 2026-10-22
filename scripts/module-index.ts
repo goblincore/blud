@@ -54,7 +54,7 @@ export const AREAS: ReadonlyArray<{ name: string; about: string; match: RegExp }
   { name: 'Damage, wounds and heads', about: 'Wound fields, severing, head damage and the head split, death states, melting, burning.', match: /^(damage|cut-wound|sever|humanoid-|head-|torn-lips|death-state|soft-death|melt|burn-|bleed-registry|player-hit-feedback)/ },
   { name: 'Gibs and gore (logic)', about: 'Gib parts, launch, tearing, entrails, strands.', match: /^(gib-|gore-parts|gobs|flesh-bits|entrails|strand|chunk-bake-field|detached-pose)/ },
   { name: 'AI and actors (logic)', about: 'Brains, the soldier, crowd logic.', match: /^(brain|soldier-|actor|crowd|zombie|status-lights)/ },
-  { name: 'Weapons and FPV (logic)', about: 'First-person mode, dynamite flight, explosions, rockets, tracers.', match: /^(fpv|dynamite-flight|explosion-aoe|rockets|melee-ring|tracer-lights|prop-drop|blast-refraction)/ },
+  { name: 'Weapons and FPV (logic)', about: 'First-person mode, dynamite flight, explosions, rockets, bile, tracers.', match: /^(fpv|dynamite-flight|explosion-aoe|rockets|bile|melee-ring|tracer-lights|prop-drop|blast-refraction)/ },
   { name: 'Blood and lighting probes (logic)', about: 'Blood simulation, probe grids, ambient.', match: /^(blood-|probe-|ambient|flashlight-bounce)/ },
   { name: 'Shared helpers and the WebGL lab', about: 'What fits no area above: the original WebGL lab shader, resolution scaling, samplers.', match: /^/ },
 ];

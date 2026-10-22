@@ -20,6 +20,7 @@ import { chunkSettled, stepChunk } from '../gib-chunks';
 import { arbitrate, type RingClaimant } from '../melee-ring';
 import { stepHitFeedback } from '../player-hit-feedback';
 import { ROCKET, blastPlayerDamage, stepRockets } from '../rockets';
+import { BILE, stepBile } from '../bile';
 import { type Vec3 } from '../types';
 import { sdBody } from '../validate';
 import { bodyInSight } from './actor-sight';
@@ -975,10 +976,37 @@ export function tick(ctx: GameContext, dt: number) {
         if (hurt > 0) damagePlayer(ctx, hurt, 'blast');
       }
     }
+    // BILE (the gibbet's squirt, bile.ts): lobbed globs under gravity that
+    // splash on the first thing they touch; only the player takes damage.
+    if (ctx.weapon.bile.length) {
+      const pp = ctx.player.player.pos;
+      const stepped = stepBile(ctx.weapon.bile, dt, {
+        hitsWorld: (from, to) => to[1] <= 0.02 || to[1] >= ceilingAt(ctx, to[0], to[2])
+          || ctx.world.colliders.some(box => segmentHitsBox(from, to, box)),
+        hitsPlayer: (from, to) => segmentHitsCapsule(from, to, pp, PLAYER.radius + BILE.radius, PLAYER.height),
+      });
+      ctx.weapon.bile = stepped.live;
+      for (const sp of stepped.splashes) {
+        ctx.telemetry.telemetry.event('bile-splash', { cause: sp.cause, owner: sp.owner, x: sp.at[0], y: sp.at[1], z: sp.at[2] });
+        if (sp.cause === 'player') damagePlayer(ctx, BILE.playerDamage, 'pellet');
+      }
+    }
     // The eye every tracer billboards around this frame. Declared here (not
     // reused from the block below) because that one is scoped to the hit
     // pass; the streaks need it whether or not anything was hit.
     const tracerEye = eyeOf(ctx.player.player);
+    while (ctx.weapon.bileViews.length < ctx.weapon.bile.length) {
+      const view = newTracerView(ctx);
+      // Bile, not fire: the additive tracer tinted a sick yellow-green.
+      for (const m of [view.streak, view.ember]) (m.material as THREE.MeshBasicMaterial).color.setRGB(0.55, 0.85, 0.12);
+      ctx.weapon.bileViews.push(view);
+    }
+    for (let k = 0; k < ctx.weapon.bileViews.length; k++) {
+      const v = ctx.weapon.bileViews[k]!;
+      const b = ctx.weapon.bile[k];
+      if (b) placeTracer(ctx, v, { pos: b.pos, vel: b.vel, ageSec: b.ageSec, radius: BILE.radius, kind: 'slug' }, tracerEye);
+      else hideTracer(ctx, v);
+    }
     while (ctx.weapon.rocketViews.length < ctx.weapon.rockets.length) {
       ctx.weapon.rocketViews.push(newTracerView(ctx));
     }
