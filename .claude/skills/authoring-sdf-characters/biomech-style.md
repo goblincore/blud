@@ -177,3 +177,37 @@ through the open-fronted shells.
 
 **Turn off the face sheet** on anything that is not a person: with no `sheet` block the registry's zombie face
 is projected onto whatever sits at the front of the head (the gorehound's snout). Add `sheet` / `enabled 0`.
+
+## A seated rig: the chair (2026-10-22)
+
+The chair (`characters/chair.blob`, kit `assets-source/chair-kit/`) is a man fused into a walking throne, on the
+same biped names. Three things are new.
+
+**Hang the front legs from a short UPRIGHT spine.** A hound's spine runs level from the hips to the withers, so
+`chest` starts at the front and nothing can sit up at the back. The chair's `spine` is the sitter's lumbar
+(upright, 0.19 m), `chest` rises from it, and `clavicle` takes `side=` (any bone can: it offsets the head from
+the parent's tail in x) and runs FORWARD and slightly down along the seat (`dir=down pitch=71`). So the
+clavicle is his femur, `upperarm` his shin and the elbow his ankle. The front legs are his own legs, and the
+gait never knows.
+
+**Only the head aims.** The aim chain is rooted at the neck (motion.ts), so a seated torso stays put. Kit on
+`spine` (backrest, armrests) never has to follow the chest. His upper arms are `torso` bars with no `rigid`, so
+each end binds to its nearest rig point: chest top and clavicle head. They stretch between the torso and the
+throne instead of tearing off the armrests.
+
+**Flesh as upholstery.** Thin `rigid` ellipsoids on `spine` lie over the panel and pan as a skin cushion that
+merges into his back and thighs. Brass studs on a diamond lattice tuft it. Two lessons:
+- **Keep the cushion inside the panel.** At 3 cm thick, `r` 0.24 and `blend` 0.04, it swelled into a halo of
+  meat past the panel's edges. 2 cm and blend 0.02 reads as a cushion.
+- **Studs must stand proud.** Studs sunk 3 mm vanished under the blend and the skin noise. Put the dome 4 mm out.
+
+**Let the joints show.** A seat pan that ran under his knees hid the shins, and the knees read as amputee
+stumps. Stop the pan just behind the knees, so they overhang and the shins drop clear in front of the skirt.
+Ribs that wrapped the panel edge with any sideways reach read as pegs through it; keep them tight to the lip.
+
+**Fill open greaves.** `make_legs.py`'s tibia shell is open at the front. Under a thin metal core, the opening
+shows black. Run flesh (his foot) down inside it instead.
+
+**Pass your own ports.** Another worktree's Vite on 5233 serves ITS checkout: `blob:shot` reuses it and
+quietly shoots the default zombie, because your new `?character=` does not exist there. Run `blob:shot` with
+`LAB_VITE_PORT` / `LAB_CDP_PORT` set when other sessions are running.

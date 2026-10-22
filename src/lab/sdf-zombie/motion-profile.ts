@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, type ArmStyle, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, CHAIR_WADDLE, type ArmStyle, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { Vec3 } from './types';
@@ -384,6 +384,23 @@ export const GIBBET_PROFILE: MotionProfile = {
   melee: { kind: 'bite' },
 };
 
+/** THE CHAIR (characters/chair.blob): a throne with a man fused into it,
+ *  walked on four legs (CHAIR_WADDLE). It uses the hound's mind
+ *  (hound-attack.ts): the BITE is the sitter throwing his head and shoulders
+ *  forward out of the backrest at you, and the POUNCE is the chair rearing
+ *  onto its back legs and lurching forward to come down on you, front claws
+ *  first. Heavy and slow to turn. */
+export const CHAIR_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'chair',
+  gait: { walk: CHAIR_WADDLE, run: CHAIR_WADDLE },
+  runBand: { from: Infinity, to: Infinity },
+  cruise: 0.9,
+  turnRate: 1.8,
+  armStyle: 'foreleg',
+  melee: { kind: 'bite' },
+};
+
 /** The bride: a slow STALK in a high sword guard; the point trails on the
  *  run. Melee only — the sword mind (enemy-mind.ts) swings it. */
 export const BRIDE_PROFILE: MotionProfile = {
@@ -459,6 +476,7 @@ const BY_NAME: Record<string, MotionProfile> = {
   gorehound: GOREHOUND_PROFILE,
   gutcrawler: GUTCRAWLER_PROFILE,
   gibbet: GIBBET_PROFILE,
+  chair: CHAIR_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

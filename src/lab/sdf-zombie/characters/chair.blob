@@ -1,0 +1,164 @@
+# THE CHAIR — furniture made of a person (the owner's top left-field pick
+# after the gibbet, 2026-10-22). A man sits fused into a throne of bone and
+# bone-metal: his thighs ARE the seat's side rails, his shins grow down into
+# the chair's front legs, his forearms have grown into the armrests and his
+# hands into their knobs. The chair's four legs walk. From across a room it
+# should read as FURNITURE first, a high-backed throne someone left in the
+# corridor, and only then as the man in it lifting his head to look at you.
+# Garage: Bad Dream Adventure / Cronenberg: the body is the upholstery.
+#
+# THE RIG is the gorehound's (biomech-style.md, "Non-humanoid rigs"): arms
+# as front legs on the 'foreleg' gait, standard bone names. What is new is
+# where they hang from:
+#   - THE SPINE IS UPRIGHT AND SHORT. The man's lumbar, from the back of the
+#     seat up 0.12 m, so `chest` (his upper body) can rise from the BACK of
+#     the seat the way a sitter's does. A horizontal hound spine would have
+#     put his torso at the seat's front edge.
+#   - THE FRONT LEGS HANG FROM THE LUMBAR, FORWARD. `clavicle` is the man's
+#     femur: `side=` sets it out to his hip and it runs forward and a little
+#     down along the seat to his knee at the seat's front corner. So his
+#     thighs are the seat rails, `upperarm` is his shin (flesh, tucked back
+#     under the seat as a sitter's is) and `forearm` + `hand` are his foot,
+#     grown long and bony into the chair's front leg and claw.
+#   - THE BACK LEGS are pure furniture: the butcher's dog leg in bone-metal,
+#     from the back corners of the seat.
+# The aim chain is rooted at the neck (motion.ts), so only the head turns to
+# you; the torso stays in the throne, as it must, and the kit backrest and
+# armrests (on `spine`) never have to follow it.
+model chair
+  height 1.62
+
+skeleton
+  # The seat pan: hips at 0.53 (root 0.47 + len 0.06), inside the kit's pan
+  # (0.51-0.565), where the back legs socket.
+  root pelvis at 0.47 len=0.06
+  # The lumbar, buried in the seat back: short and upright, up to his hip
+  # line at 0.72 (the seat's top 0.565 plus a sitter's buttock).
+  bone spine parent=pelvis dir=up pitch=3  len=0.19
+  # He sits a little hunched, the weight of the head pulling him forward.
+  bone chest parent=spine  dir=up pitch=8  len=0.36
+  bone neck  parent=chest  dir=up pitch=26 len=0.11
+  bone skull parent=neck   dir=up pitch=4  len=0.17
+
+  mirror
+    # His femur: from the lumbar's top, out to the hip and forward along the
+    # seat to the knee at the seat's front corner (~(0.19, 0.58, 0.41)).
+    bone clavicle parent=spine    side=0.19 dir=down pitch=71 len=0.43
+    # His shin, tucked back under the seat; the elbow is his ankle.
+    bone upperarm parent=clavicle dir=down pitch=-14 tilt=6 len=0.30
+    # His foot, grown into the chair's front leg: down and forward.
+    bone forearm  parent=upperarm dir=down pitch=16        len=0.22
+    # The claw at its foot, sloping forward to the floor.
+    bone hand     parent=forearm  dir=down pitch=55        len=0.11
+    # The back legs, from the seat's back corners: thigh forward to the
+    # stifle, shin raked back to the hock, the cannon near vertical.
+    bone thigh parent=pelvis side=0.21 dir=down pitch=22 tilt=8 len=0.21
+    bone shin  parent=thigh  dir=down pitch=-30         len=0.23
+    bone foot  parent=shin   dir=down pitch=8           len=0.14
+  end
+
+body
+  # --- THE SEAT'S CORES: thin, hidden in the kit seat. ------------------------
+  # FUSING (gibbet.blob's lesson): the validator fuses clusters by a straight
+  # line between their `core` prims, so the joins are chosen to be collinear.
+  bar  torso on spine from=0.00 to=1.00 r=0.050 blend=0.010 core
+  # The hip bar the back legs hang from.
+  bar  torso on pelvis from=1.00 to=1.00 offset=(-0.21,0,0) tip=(0.42,0,0) r=0.035 blend=0.006 color=3a3e45 metal gloss=0.6
+  # The seat's cross rail between his hip sockets (the front legs' fuse path).
+  bar  torso on spine from=1.00 to=1.00 offset=(-0.19,0,0) tip=(0.38,0,0) r=0.035 blend=0.006 color=3a3e45 metal gloss=0.6
+
+  # --- THE UPHOLSTERY IS HIM. ------------------------------------------------
+  # His skin has spread over the throne's seat and back as a buttoned
+  # chesterfield cushion (the kit's `studs` press into it), merging into his
+  # back and thighs, so he is not sitting IN the chair: he is its padding.
+  # Flat ellipsoids, `rigid` on the frame: they never follow his chest.
+  # The back cushion, over the panel's front (kit zf: -0.118 at the seat to
+  # -0.078 from y 1.10 up), 2 cm proud of it and inside its edges (half-width
+  # 0.255): at 3 cm thick, r 0.24 and blend 0.04 it swelled past the panel
+  # into a halo of meat and swallowed the studs.
+  blob torso on spine at=1.00 r=0.200 wide=1.00 tall=1.40 deep=0.10 offset=(0,0.200,-0.080) blend=0.020 rigid
+  blob torso on spine at=1.00 r=0.190 wide=1.00 tall=1.00 deep=0.10 offset=(0,0.470,-0.068) blend=0.020 rigid
+  # The seat cushion, over the pan (top 0.565) round his lap and thighs.
+  blob torso on spine at=0.00 r=0.225 wide=1.05 tall=0.09 deep=1.00 offset=(0,0.050,0.110) blend=0.020 rigid
+
+  # --- THE MAN: a gaunt, pale sitter, slumped into the throne. ---------------
+  # Belly and hips, sunk into the seat and swallowed by it.
+  blob torso on spine at=0.55 r=0.130 wide=1.20 tall=0.90 deep=0.95 offset=(0,0,0.020) blend=0.030
+  # His lap: the pelvis and the thighs' roots, spread forward over the seat
+  # (also the thighs' fuse path to the torso core).
+  blob torso on spine at=0.45 r=0.120 wide=1.55 tall=0.60 deep=1.10 offset=(0,-0.010,0.110) blend=0.030
+  # A soft paunch folding over the seat.
+  blob torso on chest at=0.12 r=0.110 wide=1.10 tall=0.85 deep=1.00 offset=(0,0,0.040) blend=0.030
+  # The ribcage: narrow, sunken (the normal map will cut the ribs).
+  blob torso on chest at=0.50 r=0.130 wide=1.10 tall=1.15 deep=0.80 blend=0.030
+  blob torso on chest at=0.80 r=0.120 wide=1.40 tall=0.80 deep=0.78 blend=0.025
+  # The shoulders: bony knobs where the upper arms hang.
+  blob torso on chest at=0.92 r=0.055 offset=(0.165,-0.020,-0.005) blend=0.020 both
+  # The upper arms hang to the armrests. Each end binds to its NEAREST rig
+  # point (no `rigid`): the shoulder to the chest's top, the elbow to the
+  # clavicle's head at the seat, so the arm stretches between torso and
+  # throne instead of tearing off the armrest if the chest moves.
+  bar  torso on chest from=0.92 to=0.92 offset=(0.180,-0.040,-0.005) tip=(0.040,-0.250,-0.020) r=0.042 r2=0.036 blend=0.012 both
+  # The forearms lie IN the armrests (kit channels), wrist to the knob.
+  bar  torso on spine from=1.00 to=1.00 offset=(0.215,0.080,-0.020) tip=(0.000,0.000,0.250) r=0.034 r2=0.030 blend=0.010 both
+  # The hands: fat knuckled fists over the armrest ends.
+  blob torso on spine at=1.00 r=0.040 wide=1.10 tall=0.85 deep=1.20 offset=(0.215,0.080,0.245) blend=0.010 both
+
+  # --- HIS NECK AND HEAD. -----------------------------------------------------
+  bar  torso on neck from=0.00 to=1.00 r=0.050 r2=0.045 blend=0.020 core
+  bar  head on neck from=0.30 to=1.00 r=0.040 blend=0.010 core
+  # Eyes: dull embers deep in the sockets, all that moves in the face.
+  blob head on skull at=0.48 r=0.011 offset=(0.033,0.010,0.088) blend=0.002 color=f0d080 glow=0.6 both
+
+  # --- HIS THIGHS: the seat's side rails. -------------------------------------
+  bar  arm on clavicle from=0.00 to=0.92 r=0.068 r2=0.056 wide=1.00 tall=0.80 blend=0.020 mirror core
+  # The knee: the seat's front corner, a bare kneecap.
+  blob arm on clavicle at=1.00 r=0.058 offset=(0,0,0.010) blend=0.015 mirror
+  # --- HIS SHINS: the tops of the front legs, flesh. ---------------------------
+  bar  arm on upperarm from=0.05 to=0.95 r=0.046 r2=0.034 blend=0.012 mirror
+  # --- HIS FEET, grown into chair legs. ---------------------------------------
+  # The flesh of his foot runs down INSIDE the kit's greave, which is open at
+  # the front (make_legs.py's tibia wraps back and sides): with only a thin
+  # metal core there the opening showed black from the front.
+  bar  arm on forearm from=0.00 to=0.85 r=0.034 r2=0.024 blend=0.010 mirror
+  bar  arm on hand    from=0.00 to=0.90 r=0.018 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+
+  # --- THE BACK LEGS: machine only. -------------------------------------------
+  blob leg on thigh at=0.00 r=0.040 blend=0.006 mirror core color=3a3e45 metal gloss=0.6
+  bar  leg on thigh from=0.00 to=1.00 r=0.025 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  leg on shin  from=0.00 to=1.00 r=0.022 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  leg on foot  from=0.00 to=0.90 r=0.018 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+
+face
+  # His head is the generated face (the zombie's numbers, made gaunter and
+  # balder): he is a person, so he wears a face.
+  headRadius 0.110
+  headWidth  0.78
+  headHeight 1.16
+  headDepth  0.90
+  jawWidth   0.70
+  jawHeight  0.86
+  jawDrop    0.090
+  jawJut     0.02
+  noseLength 0.010
+  noseWidth  0.38
+  noseDrop   0.010
+  browHeavy  0.010
+  browRise   0.040
+
+palette
+  # Upholstery skin: pale, waxy, bruised where the bone-metal bites in.
+  baseColor     0.66 0.55 0.48
+  deepColor     0.38 0.10 0.12
+  charColor     0.08 0.05 0.06
+  specIntensity 0.55
+  specRoughness 0.35
+  fresnelBoost  0.55
+  translucency  0.35
+  wetness       0.45
+  surfaceNoiseAmp    0.035
+  silhouetteNoiseAmp 0.012
+  mottleAmp     0.30
+  mottleScale   1.4
+  mottleColor   0.50 0.42 0.30
+  grain         0.10
