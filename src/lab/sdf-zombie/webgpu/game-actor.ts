@@ -55,7 +55,7 @@ import {
 } from '../motion';
 import { makeRng, headingDir, type Rng, type WanderBounds } from '../wander';
 import { rotateYaw } from '../gait';
-import type { BrainPlayer } from '../brain';
+import { BRAIN_TUNING, type BrainPlayer } from '../brain';
 import { makeZombieMind, type EnemyMind } from './enemy-mind';
 import { isGoreBody, isSoldierFamily, wantsTorsoGuards, type MotionProfile } from '../motion-profile';
 import { BARREL_REST, INDEX_REST, barrelsDriven, stepBarrelIndex, stepBarrelSpin, type BarrelIndex, type BarrelSpin } from '../barrel-spin';
@@ -927,7 +927,8 @@ export function createZombieActor(opts: {
   // a brain state now); its swing phase becomes cfg.attack. The melee ring's
   // verdict and the blast flag arrive as inputs. Absent opts.mind = the
   // zombie's, which is what keeps every existing pin green by construction.
-  const mind: EnemyMind = opts.mind ?? makeZombieMind();
+  const armWeapon = opts.profile?.armWeapon;
+  const mind: EnemyMind = opts.mind ?? makeZombieMind(armWeapon ? { ...BRAIN_TUNING, swingSide: armWeapon.side } : undefined);
   let brainPlayer: BrainPlayer | null = null;
   let brainAlerted = false;
   let ringToken = false;

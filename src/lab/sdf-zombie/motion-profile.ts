@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, type ArmStyle, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, PROWL, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, type ArmStyle, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { Vec3 } from './types';
@@ -64,6 +64,12 @@ export interface MotionProfile {
    *  (enemy-mind.ts makeSwordMind) and motion.ts drives the held prop through
    *  the swing (sword-swing.ts). Absent = the zombie's unarmed swing. */
   melee?: { kind: 'sword' };
+  /** An ARM THAT IS A WEAPON (the butcher's grafted axe): the zombie's mind and
+   *  swing, but every swing is thrown with this arm (brain.ts swingSide), and a
+   *  hit in reach does `damage` instead of the zombie's bite (player-vitals.ts
+   *  VITALS.zombieBite). Unlike `melee` there is no held prop: the weapon is kit
+   *  on the arm, so the arm's own swing carries it. */
+  armWeapon?: { side: 'L' | 'R'; damage: number };
   /** A SOFT target: any bullet or blast hit kills it outright (the game
    *  forces the collapse on the first hit). The cultist is soft; the zombie
    *  and soldier soak hits and exist to show off the gore. Burns do not count
@@ -337,6 +343,21 @@ export const TWINHEAD_PROFILE: MotionProfile = {
   gunner: { weapon: 'rocket' },
 };
 
+/** The butcher (characters/butcher.blob): a zombie conversion on digitigrade
+ *  machine legs with an axe grafted on in place of the right hand. Still the
+ *  zombie's mind and reaching arms (it reads as a zombie first); the legs make
+ *  it FAST, which is most of what makes it more dangerous than the base. */
+export const BUTCHER_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'butcher',
+  gait: { walk: PROWL, run: PROWL },
+  // 1.45 against the zombie's 1.15 (WANDER_TUNING.speed): it closes distance.
+  cruise: 1.45,
+  // The axe is on the RIGHT forearm (kit foreArm.r|blade). 25 is two and a half
+  // zombie bites (VITALS.zombieBite 10), over the bride's sword (swordHit 15).
+  armWeapon: { side: 'R', damage: 25 },
+};
+
 /** The bride: a slow STALK in a high sword guard; the point trails on the
  *  run. Melee only — the sword mind (enemy-mind.ts) swings it. */
 export const BRIDE_PROFILE: MotionProfile = {
@@ -409,6 +430,7 @@ const BY_NAME: Record<string, MotionProfile> = {
   bride: BRIDE_PROFILE,
   warbull: WARBULL_PROFILE,
   twinhead: TWINHEAD_PROFILE,
+  butcher: BUTCHER_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

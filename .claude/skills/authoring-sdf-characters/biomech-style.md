@@ -113,6 +113,82 @@ Each has a `PARTS` subset switch, so one part can be iterated in about 5 s.
 - Lighting falls off toward the ground in the lab shots, so judge the legs' tone from close frames.
 - In a loop, a local named like a helper (`ring = []`, or `base` from an earlier lambda) shadows that helper.
 
+## Converting an existing body (the butcher, 2026-10-22)
+
+The butcher (`characters/butcher.blob`, kit `assets-source/butcher-kit/`) is the zombie converted, not a new body.
+What a conversion needed that the twinhead did not:
+
+- **Start from the base `.blob` and keep its skeleton names.** Copy the body, thicken the masses (muscle is mass
+  plus the normal map), and carry the base's `bones` block over verbatim if the torso only grew. Renamed or extra
+  leg bones are what broke the twinhead's gait.
+- **Keep it reading as the base.** The owner rejected a sallow tan skin at once: it read as the ogre, not as a
+  zombie. A variant keeps the base's skin family (the zombie's pink, paled toward white) and takes its menace from
+  the machinery, the silhouette and the weapon.
+
+### Reverse-knee (digitigrade) legs on the three leg bones
+
+The gait knows `thigh -> knee -> foot -> toe`, and its foot-plant IK always bows the KNEE forward
+(`ik.ts solvePlantedLeg`). A dog's hind leg already does that: its forward joint is the knee, and the joint that
+points back is the HOCK (ankle). So no rig change is needed:
+
+| bone | anatomy | butcher rest direction |
+| --- | --- | --- |
+| `thigh` | femur | `dir=down pitch=35` (knee 23 cm ahead of the hip) |
+| `shin` | tibia | `dir=down pitch=-38` (the hock, the gait's `foot` joint, behind the hip) |
+| `foot` | metatarsal | `dir=down pitch=15` (the toe joint on the floor) |
+
+`pitch` is the bone's ABSOLUTE direction (`blob-compile.ts dirVector`), +z forward. The model still declares
+`stance humanoid`: `checkStance` measures the thigh/shin knee, and that knee is forward. The trade-off: the
+metatarsal translates rigidly with the hock (the gait drives `toe` with the foot's offset), so there is no toe-off
+roll. A true four-joint chain would need a new gait joint, `JOINT_AT` entries and IK changes.
+
+**Match the cadence to the leg.** A planted foot holds while the body travels `cruise x stance time`. The shamble's
+cadence at the butcher's 1.45 m/s dragged every leg dead straight (0.86 m per stance against about 0.54 m of
+sweep). Its own `PROWL` gait (1.8 Hz, duty 0.55) keeps the knee bowed. `characters/butcher-blob.test.ts` walks the
+real pipeline and pins the knee forward and the hock back; copy it for any new leg shape.
+
+The look: the hock is the read, so it carries the biggest shape (a knuckle with a curled spur raking back and up).
+Spines rake down the BACK ridge of the tibia, toes splay forward with talons, and a dewclaw sits behind.
+
+### A weapon grafted onto an arm
+
+- The weapon is kit on the forearm bone, so the arm's own swing carries it: no held prop and no sword mind.
+  `MotionProfile.armWeapon {side, damage}` pins every swing to that arm (`brain.ts swingSide`) and sets the hit's
+  damage (`game-loop.ts`, in place of the zombie bite).
+- Face the edge to the body's BACK at rest. Pitching the arm forward turns it DOWN (the reach walk), and overhead
+  it faces forward, so the chop leads with it. Facing it forward at rest pointed the edge at the ceiling in the
+  reach walk.
+- **Do not voxel-remesh a blade.** A 1.6 mm voxel rounds a 2 mm edge away. Build the head as a bmesh loft (thick at
+  the haft, about 1 mm at the edge), join the ornament tubes unremeshed, and colour it with `wear_colours`
+  (steel, then rust, then blood toward the edge). Only the haft and graft collar are fused and AO-baked.
+- A graft collar with staples biting into the flesh above it, plus feed hoses down the forearm into the collar,
+  sells "grafted" more than the weapon itself.
+
+### Hoses, wires and ports
+
+- A hose is a Catmull-Rom tube with a rib ring every 1.6 cm, fused, with brass collars at both ends
+  (`make_upper.py hose()`). Place its control points from **skin probes** (march `sdBody` along a ray, as the
+  detail generators do) and keep them about one hose radius out.
+- A hose rides ONE bone. Break it at a joint: end one segment in a port where the next begins (pump on `spine`,
+  neck hose on `neck`, socket on `skull`).
+- Where a hose enters the flesh, set a bony flanged port with bolts. The swollen flesh round it is in the normal
+  map's agitated lumps.
+- Coloured wires (the reference figure's yellow and blue) use kit-overlay's dielectric looks `yellow`, `blue`,
+  `red` and `purple`. Wind them close: 1-2 turns per bone at about one wire radius off the shell. Looser and more
+  turns read as springs.
+- Collars and other small fused bits still need `decimate`. Undecimated brass collars were 60% of the first
+  butcher kit's 250k triangles.
+
+### Practicalities
+
+- **The Blender MCP window may belong to another session** (it held the teratoma's file). Run the kit headless:
+  `Blender -b assets-source/butcher-kit/butcher-kit.blend --python assets-source/butcher-kit/build.py -- make_legs.py:femur,tibia --export --preview <dir>`.
+  `build.py` runs the make scripts, saves, exports `mech` and renders workbench previews.
+- `blob:shot` reuses ANY lab on its port, including another worktree's Vite, so pass your own
+  `LAB_VITE_PORT`/`LAB_CDP_PORT`.
+- A face-block head can wear a generated decal: solve `projScale`/`projCentre` in the head space of the face
+  block's ellipsoid (offset / semi-axis), against eye embers you place yourself.
+
 ## Budget
 
 The twinhead kit is about 145k triangles, too high for crowds. Planned optimization: bake each sculpt's

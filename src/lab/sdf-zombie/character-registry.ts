@@ -43,6 +43,7 @@ import femaleBlobSrc from './characters/female.blob?raw';
 import gargoyleBlobSrc from './characters/gargoyle.blob?raw';
 import cyberdemonBlobSrc from './characters/cyberdemon.blob?raw';
 import twinheadBlobSrc from './characters/twinhead.blob?raw';
+import butcherBlobSrc from './characters/butcher.blob?raw';
 import bloatmawBlobSrc from './characters/bloatmaw.blob?raw';
 import gnasherBlobSrc from './characters/gnasher.blob?raw';
 import ogreBlobSrc from './characters/ogre.blob?raw';
@@ -51,7 +52,7 @@ import cultistBlobSrc from './characters/cultist.blob?raw';
 import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
 import brideBlobSrc from './characters/bride.blob?raw';
 import {
-  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, motionProfileFor, type MotionProfile,
+  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, BUTCHER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
 
 /** A face sheet's texture and its crop. `mean` is the level the shader
@@ -319,6 +320,18 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     bodyNormal: { url: '/assets/lab/twinhead-body-n.png', meta: '/assets/lab/twinhead-body-n.json', strength: 1 },
     face: bakedFace('twinhead-face.png'),
     profile: TWINHEAD_PROFILE,
+  },
+  // The zombie conversion (butcher.blob's header): the zombie's flesh, pumped,
+  // on digitigrade machine legs with an axe grafted on for a right hand.
+  butcher: {
+    name: 'butcher', src: butcherBlobSrc,
+    // The machinery: Blender parts (assets-source/butcher-kit/) skinned to the
+    // .blob's bones by scripts/blender-kit.ts.
+    kit: '/assets/lab/butcher-kit.gltf',
+    // Muscle and varicose veins on the torso and arms (characters/butcher.detail, baked; never marched).
+    bodyNormal: { url: '/assets/lab/butcher-body-n.png', meta: '/assets/lab/butcher-body-n.json', strength: 1 },
+    face: bakedFace('butcher-face.png'),
+    profile: BUTCHER_PROFILE,
   },
   cyberdemon: {
     name: 'cyberdemon', src: cyberdemonBlobSrc,

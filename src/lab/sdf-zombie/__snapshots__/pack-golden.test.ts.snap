@@ -10,6 +10,8 @@ exports[`packBody byte pin > bride.blob packs the pinned bytes 1`] = `"caad05aba
 
 exports[`packBody byte pin > broodmother.blob packs the pinned bytes 1`] = `"bc130a8d5268e68f"`;
 
+exports[`packBody byte pin > butcher.blob packs the pinned bytes 1`] = `"1536a8164d9c26fb"`;
+
 exports[`packBody byte pin > clown.blob packs the pinned bytes 1`] = `"8ec4d3949e16bc59"`;
 
 exports[`packBody byte pin > clown-alt.blob packs the pinned bytes 1`] = `"8ec4d3949e16bc59"`;

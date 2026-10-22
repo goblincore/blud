@@ -378,6 +378,27 @@ export const GOBLIN_RUN: GaitProfile = {
   armSwing: 0.04,
 };
 
+/** The butcher's prowl (characters/butcher.blob): the shamble's reaching zombie arms on a QUICK digitigrade step.
+ *  WHY ITS OWN CADENCE: a planted foot holds while the body travels cruise x stance time. The shamble at the
+ *  butcher's 1.45 m/s (1.05 Hz, duty 0.62) travels 0.86 m per stance, past what the leg can sweep (hip-to-hock
+ *  0.75 m at rest, 0.90 m straight: about 0.54 m of floor at hock height), so every stride dragged the leg dead
+ *  straight and the zigzag went flat (butcher-blob.test.ts measured it). 1.8 Hz at duty 0.55 is 0.44 m per
+ *  stance: a quick, springy, animal step that keeps the knee bowed. */
+export const PROWL: GaitProfile = {
+  ...SHAMBLE,
+  name: 'prowl',
+  strideFreq: 1.8,
+  stanceDuty: 0.55,
+  strideLen: 0.36,
+  // A high, clear lift: the hock and the long metatarsal come up together (the gait drives `toe` with the foot).
+  footLift: 0.20,
+  footPush: 0.05,
+  kneeBend: 0.12,
+  kneeLift: 0.06,
+  bobAmp: 0.03,
+  swayAmp: 0.035,
+};
+
 /** The bride's STALK: the soldier's march clip slowed and lengthened for her
  *  long legs, with a hip sway the `hem` pendulum picks up and a slight
  *  forward lean. Carry-style arms (the sword owns them). */
