@@ -143,9 +143,15 @@ body
   # at r 0.034 in the twinhead's bright raw pink they read as red beads.
   blob torso on pelvis at=0.00 offset=(0.167,-0.013,-0.493) r=0.024 blend=0.022 color=7a3c3c gloss=0.8   # back bundle
   blob torso on pelvis at=0.00 offset=(-0.349,-0.001,-0.383) r=0.024 blend=0.022 color=7a3c3c gloss=0.8  # back bundle
-  blob torso on pelvis at=0.00 offset=(0.544,0.081,-0.281) r=0.024 blend=0.022 both color=7a3c3c gloss=0.8   # hose dives in
-  blob torso on pelvis at=0.00 offset=(0.442,-0.192,-0.287) r=0.024 blend=0.022 both color=7a3c3c gloss=0.8  # hose comes out
-  blob torso on pelvis at=0.00 offset=(0.404,0.062,-0.495) r=0.022 blend=0.022 both color=7a3c3c gloss=0.8   # thin hose
+  # Each side authored from its OWN printed entry: the ball's lobes make it
+  # asymmetric, and `both` mirrors of the left's points floated 35 and 83 mm
+  # clear of the right flank (strandedOf, CI).
+  blob torso on pelvis at=0.00 offset=(0.544,0.081,-0.281) r=0.024 blend=0.022 color=7a3c3c gloss=0.8   # left hose dives in
+  blob torso on pelvis at=0.00 offset=(0.442,-0.192,-0.287) r=0.024 blend=0.022 color=7a3c3c gloss=0.8  # left hose comes out
+  blob torso on pelvis at=0.00 offset=(0.404,0.062,-0.495) r=0.022 blend=0.022 color=7a3c3c gloss=0.8   # left thin hose
+  blob torso on pelvis at=0.00 offset=(-0.486,0.072,-0.251) r=0.024 blend=0.022 color=7a3c3c gloss=0.8  # right hose dives in
+  blob torso on pelvis at=0.00 offset=(-0.435,-0.189,-0.283) r=0.024 blend=0.022 color=7a3c3c gloss=0.8 # right hose comes out
+  blob torso on pelvis at=0.00 offset=(-0.328,0.050,-0.402) r=0.022 blend=0.022 color=7a3c3c gloss=0.8  # right thin hose
 
   # ============================================================
   # ARMS — withered, four prims a side.
