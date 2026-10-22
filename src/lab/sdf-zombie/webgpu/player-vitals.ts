@@ -23,6 +23,10 @@ export const VITALS = {
   /** The warbull's bull charge landing (its one hit per charge, charge.ts):
    *  twice a sword hit, the price of not sidestepping a telegraphed run. */
   chargeHit: 30,
+  /** The gorehound's jaws (hound-attack.ts; its mind reports contact): a
+   *  bite is a heavier zombie bite, a landed pounce is the whole body. */
+  houndBite: 12,
+  houndPounce: 20,
   /** One soldier pellet or cultist SMG round (they share a projectile list). */
   soldierPellet: 3,
   /** After a melee hit, further melee is ignored for this long. */

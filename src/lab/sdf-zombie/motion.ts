@@ -74,6 +74,7 @@ import {
   COLLAPSE_TUNING, collapseRopes, makeCollapseState, stepCollapse,
 } from './collapse';
 import { attackPose, type AttackPose, type SwingVariant } from './attack';
+import { houndGapeAt, houndPose, isHoundVariant, pounceAirborne } from './hound-attack';
 import { isSwordVariant, jawGapeAt, swordCarryAt } from './sword-swing';
 import { jawRestOf, jawTargetAt, type JawRest } from './jaw';
 
@@ -262,8 +263,10 @@ export function makeMotionJoints(
   if (names.length === 0 || names.length !== baseRest.length) return null;
   const index = {} as Record<GaitJointName, number>;
   names.forEach((n, i) => { index[n] = i; });
+  // A chain the body does not have measures 0: a LEGLESS floater (teratoma.blob, bloatmaw.blob) has no hip, knee or
+  // foot, and used to throw here, so it could not be shown in the lab or spawned at all.
   const d = (a: GaitJointName, b: GaitJointName): number =>
-    len(sub(baseRest[index[a]!]!, baseRest[index[b]!]!));
+    index[a] === undefined || index[b] === undefined ? 0 : len(sub(baseRest[index[a]]!, baseRest[index[b]]!));
   return {
     names,
     base: baseRest.map(v => [v[0], v[1], v[2]] as Vec3),
@@ -279,7 +282,8 @@ export function makeMotionJoints(
     neck: [d('chest', 'neck'), d('neck', 'head')],
     ...(index.jaw === undefined ? {} : {
       jaw: jawRestOf(baseRest[index.neck!]!, baseRest[index.head!]!, baseRest[index.jaw]!, body.bones.get('jaw')?.jawHinge) }),
-    groundY: Math.min(baseRest[index.footL!]![1], baseRest[index.footR!]![1]),
+    // No feet (a floater): the floor itself, so a dead one falls all the way down.
+    groundY: index.footL === undefined || index.footR === undefined ? 0 : Math.min(baseRest[index.footL]![1], baseRest[index.footR]![1]),
     pelvis: [baseRest[index.pelvis!]![0], 0, baseRest[index.pelvis!]![2]],
     ropes: collapseRopes(names, baseRest),
   };
@@ -322,6 +326,10 @@ export interface MotionState {
   fallStrength?: number;
   plantL: PlantState;
   plantR: PlantState;
+  /** A quadruped's FRONT paw plants ('foreleg' arm style only; absent on
+   *  every biped, so their states are unchanged). */
+  plantHandL?: PlantState;
+  plantHandR?: PlantState;
   stanceBlend?: number;
   footwork?: SoldierFootwork;
   walkPosture?: number;
@@ -775,7 +783,9 @@ export function stepMotion(
   // stagger composes — see attack.ts's header. A collapsed body never swings.
   const attack: AttackPose | null =
     cfg.attack !== undefined && !collapsed
-      ? attackPose(cfg.attack.phase, cfg.attack.side, cfg.attack.variant)
+      ? isHoundVariant(cfg.attack.variant)
+        ? houndPose(cfg.attack.phase, cfg.attack.variant)
+        : attackPose(cfg.attack.phase, cfg.attack.side, cfg.attack.variant)
       : null;
 
   // --- assemble the standing rest targets ----------------------------------
@@ -820,7 +830,11 @@ export function stepMotion(
       gaitOff = [authoredSide * Math.max(minLane, authoredSide * lateral) - base[0] + pivot[0], gaitOff[1], gaitOff[2]];
     }
     const stagOff = name === 'pelvis' || STAGGER_ROOT_RIDERS.has(name) ? stagger.rootOffset : stagger.offsets[name] ?? Z;
-    const s = ARM_JOINTS.has(name) ? armPresence : blend * strideScale;
+    // A hung mass (GaitProfile.hemSwing, the gibbet's caged sac) keeps swaying at HEM_IDLE of its walking swing when
+    // the body stops: hung meat does not snap still. The gait clock runs on while standing, so the swing does too.
+    const s = ARM_JOINTS.has(name) ? armPresence
+      : name === 'hem' && gaitProfile.hemSwing ? Math.max(blend, HEM_IDLE) * strideScale
+        : blend * strideScale;
     // BRANCHED, not `add(..., ZERO)`: adding zero would turn a -0 component
     // into +0 and break the lab's bit-identity pin for no benefit.
     const base2 = add(scale(gaitOff, s), stagOff);
@@ -1276,13 +1290,44 @@ export function stepMotion(
       if (side === 'L') plantL = plant; else plantR = plant;
     }
   } else if (!collapsed) {
-    if (!missingLegL) {
+    if (!missingLegL && idx.footL !== undefined) {
       plantL = plantStep(plantL, gait.pose.stance.legL, idx.footL!, idx.hipL!, joints.leg.L);
       plantLeg(plantL, 'hipL', 'kneeL', 'footL', joints.leg.L);
     }
-    if (!missingLegR) {
+    if (!missingLegR && idx.footR !== undefined) {
       plantR = plantStep(plantR, gait.pose.stance.legR, idx.footR!, idx.hipR!, joints.leg.R);
       plantLeg(plantR, 'hipR', 'kneeR', 'footR', joints.leg.R);
+    }
+  }
+  // A quadruped's front paws ('foreleg' arm style): the same lock-and-solve
+  // as the feet on the shoulder->elbow->paw chain, with two differences. The
+  // floor plane is the paws' own rest height (the wrist sits higher than the
+  // hock), and the pole is BACKWARD: a dog's elbow points behind it.
+  let plantHandL = state.plantHandL;
+  let plantHandR = state.plantHandR;
+  const fore = gait.pose.foreStance;
+  if (fore && !collapsed && !footwork && idx.handL !== undefined && idx.handR !== undefined) {
+    const handGround = Math.min(joints.base[idx.handL]![1], joints.base[idx.handR]![1]);
+    const elbowPole = scale(legPole, -1);
+    const airborne = !!attack && !!cfg.attack && pounceAirborne(cfg.attack.phase, cfg.attack.variant);
+    for (const side of ['L', 'R'] as const) {
+      if (sig.missing[side === 'L' ? 'armL' : 'armR']) continue;
+      const hand = idx[`hand${side}`]!, elbow = idx[`elbow${side}`]!, shoulder = idx[`shoulder${side}`]!;
+      const st = stepPlant((side === 'L' ? plantHandL : plantHandR) ?? makePlant(), {
+        // A pounce throws both paws off the floor (hound-attack.ts).
+        stance: (side === 'L' ? fore.armL : fore.armR) && !release && !airborne,
+        footPos: footWorld(hand),
+        groundY: handGround,
+        // The reach slide, always on: the paws sit 0.55 m ahead of the yaw
+        // pivot (the pelvis), so a turn swings a locked paw far out of the
+        // foreleg's reach; it slides along the floor instead of hauling the
+        // shoulder after it.
+        hip: targets[shoulder]!, maxReach: 1.02 * (joints.arm[side][0] + joints.arm[side][1]),
+      }, dt);
+      if (side === 'L') plantHandL = st; else plantHandR = st;
+      const solved = solvePlantedLeg(targets[shoulder]!, targets[elbow]!, targets[hand]!, st, joints.arm[side], SOLVE, elbowPole);
+      targets[elbow] = solved.knee;
+      targets[hand] = solved.foot;
     }
   }
 
@@ -1355,7 +1400,8 @@ export function stepMotion(
   let jawGape = 0;
   if (joints.jaw && idx.jaw !== undefined && idx.neck !== undefined && idx.head !== undefined) {
     const swingGape = attack && cfg.attack && profile.melee?.kind === 'sword' && isSwordVariant(cfg.attack.variant)
-      ? jawGapeAt(cfg.attack.phase, cfg.attack.variant) : 0;
+      ? jawGapeAt(cfg.attack.phase, cfg.attack.variant)
+      : attack && cfg.attack && isHoundVariant(cfg.attack.variant) ? houndGapeAt(cfg.attack.phase, cfg.attack.variant) : 0;
     // The expression layer's gape (expression.ts) opens the jaw too; whichever is wider wins.
     jawGape = Math.max(swingGape, cfg.jawGape ?? 0);
     const at = (i: number): Vec3 => (havePoints ? points[i]!.pos : targets[i]!);
@@ -1430,7 +1476,10 @@ export function stepMotion(
     wander, gait: gait.state, stagger: stagger.state,
     ...(soldierReact || state.soldierStagger ? { soldierStagger: soldierStagger.state } : {}),
     collapse: collapse.state,
-    plantL, plantR, aim, recoil, bodyYaw, blend, stanceBlend, footwork, walkPosture, mobilityPosture,
+    plantL, plantR,
+    ...(plantHandL === undefined ? {} : { plantHandL }),
+    ...(plantHandR === undefined ? {} : { plantHandR }),
+    aim, recoil, bodyYaw, blend, stanceBlend, footwork, walkPosture, mobilityPosture,
     protectiveCrouchSec, protectiveCrouchPosture,
     runWeight: rw,
     fireHold,
@@ -1504,6 +1553,9 @@ export function stepMotion(
 }
 
 // ---------------------------------------------------------------------------
+/** The share of a hung mass's walking swing (GaitProfile.hemSwing) it keeps while the body stands. */
+const HEM_IDLE = 0.4;
+
 // Floor contact for the falling/collapsed rig.
 // ---------------------------------------------------------------------------
 

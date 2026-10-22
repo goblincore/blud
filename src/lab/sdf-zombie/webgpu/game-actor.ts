@@ -63,6 +63,7 @@ import { lightsModeFor, statusLights, type StatusLights } from '../status-lights
 import type { MotionFrame } from '../motion';
 import type { SwingVariant } from '../attack';
 import { SWORD_TUNING } from '../sword-swing';
+import { HOUND_TUNING } from '../hound-attack';
 import type { MissingLimbs } from '../collapse';
 import type { ZombieGpuView } from './zombie-gpu';
 import { createWoundRing, type CharacterView, type WoundPointTransform } from './character-view';
@@ -1512,7 +1513,9 @@ export function createZombieActor(opts: {
           // Absent on every other frame (motion.ts bit-identity contract).
           ...(swingPin === null && think.attack?.variant === 'lunge'
             ? { plantReach: SWORD_TUNING.lungePlantReach }
-            : {}),
+            : swingPin === null && think.attack?.variant === 'pounce'
+              ? { plantReach: HOUND_TUNING.pouncePlantReach }
+              : {}),
         },
         signals,
         bound.rig.points, encounterOrder && encounterOrder.mode !== 'idle' && opts.navigation ? opts.navigation.bounds : opts.bounds, rng,

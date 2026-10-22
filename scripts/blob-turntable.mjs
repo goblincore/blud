@@ -439,9 +439,17 @@ if (WOUNDS > 0) {
 const EXPR_SWEEP = process.env.BLOB_EXPR && process.env.BLOB_EXPR_SWEEP
   ? process.env.BLOB_EXPR_SWEEP.split(':').map(Number) : null;
 const EXPR_YAW = Number(process.env.BLOB_YAW ?? 0);
+// BLOB_WALK_SWEEP=<firstFrame>:<step> shoots the WALK as an animation at a FIXED yaw (BLOB_YAW): frame i is the treadmill
+// pose after firstFrame + i*step steps at 1/60 (holdPose('walk', n), deterministic per frame). For gaits whose read is
+// motion rather than a pose: the gibbet's swinging sac (2026-10-22), e.g. BLOB_WALK_SWEEP=120:4 with 12 frames.
+const WALK_SWEEP = process.env.BLOB_WALK_SWEEP ? process.env.BLOB_WALK_SWEEP.split(':').map(Number) : null;
 
 for (let i = 0; i < FRAMES; i++) {
-  const yaw = EXPR_SWEEP ? EXPR_YAW : (WIND_SWEEP || ANCHOR_SWEEP) ? 0 : (i / FRAMES) * Math.PI * 2;
+  const yaw = EXPR_SWEEP || WALK_SWEEP ? EXPR_YAW : (WIND_SWEEP || ANCHOR_SWEEP) ? 0 : (i / FRAMES) * Math.PI * 2;
+  if (WALK_SWEEP) {
+    await evaluate(`window.__sdfLab.holdPose('walk', ${WALK_SWEEP[0] + i * WALK_SWEEP[1]})`);
+    await sleep(300);
+  }
   if (EXPR_SWEEP) {
     const [t0, t1] = EXPR_SWEEP;
     const t = FRAMES > 1 ? t0 + ((t1 - t0) * i) / (FRAMES - 1) : t1;

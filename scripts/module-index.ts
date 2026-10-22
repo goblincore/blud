@@ -50,7 +50,7 @@ export const AREAS: ReadonlyArray<{ name: string; about: string; match: RegExp }
 
   // The tree root (renderer-free logic, mostly)
   { name: 'Character authoring', about: 'The `.blob` language, body building, validation, silhouette fitting.', match: /^(blob-|build-body|body|face$|validate|connectivity|simplify|mirror|silhouette|ref-|ring-fit|mesh-beam-fit|extent|character-registry|pack|resolve|translate|clusters|lod|material|plate-armor|png-decode|bone-derive|types|vec$)/ },
-  { name: 'Rig, pose and motion', about: 'Rigs, poses, IK, gait, motion profiles, hands.', match: /^(rig|pose|ik$|gait|motion|humanoid-pose|glb-clip|hand|wander|stagger|attack|charge|carry|collapse|sword-swing|barrel-spin|jaw)/ },
+  { name: 'Rig, pose and motion', about: 'Rigs, poses, IK, gait, motion profiles, hands.', match: /^(rig|pose|ik$|gait|motion|humanoid-pose|glb-clip|hand|wander|stagger|attack|charge|carry|collapse|sword-swing|hound-attack|barrel-spin|jaw)/ },
   { name: 'Damage, wounds and heads', about: 'Wound fields, severing, head damage and the head split, death states, melting, burning.', match: /^(damage|cut-wound|sever|humanoid-|head-|torn-lips|death-state|soft-death|melt|burn-|bleed-registry|player-hit-feedback)/ },
   { name: 'Gibs and gore (logic)', about: 'Gib parts, launch, tearing, entrails, strands.', match: /^(gib-|gore-parts|gobs|flesh-bits|entrails|strand|chunk-bake-field|detached-pose)/ },
   { name: 'AI and actors (logic)', about: 'Brains, the soldier, crowd logic.', match: /^(brain|soldier-|actor|crowd|zombie|status-lights)/ },
