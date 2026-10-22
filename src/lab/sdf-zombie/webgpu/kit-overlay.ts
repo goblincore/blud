@@ -231,6 +231,22 @@ const LOOK: Record<string, {
   // throw onto the skull is GLOW_FROM_ATTRIBUTE below, baked, because a real light per enemy is not affordable here
   // (adding a light re-keys the LightsNode and rebuilds every pipeline; game-dynamic-light.ts's rule).
   eyeglow: { metalness: 0.0, roughness: 0.5, envIntensity: 0.2, emissive: [1.0, 0.10, 0.03], emissiveIntensity: 7.0 },
+
+  // The teratoma's horns, crown spurs and talons (assets-source/teratoma-kit/): keratin, not metal. The near-black
+  // to dull-brown ramp is the vertex colours (baked AO times a root-to-tip tint); a soft sheen so the horns' growth
+  // rings catch the key, and a low env so their shadow side stays dark against the pink flesh.
+  horn: { metalness: 0.0, roughness: 0.42, envIntensity: 0.45 },
+  // Its one great eye: wet (tight highlight, a little env), its albedo the vertex colours (yellow iris, black slit,
+  // bloodshot sclera). The burn is GLOW_FROM_ATTRIBUTE below, so it is per vertex: the iris glows, the slit is dead.
+  cacoeye: { metalness: 0.0, roughness: 0.12, envIntensity: 0.6 },
+  // The teratoma's strogg conversion (assets-source/teratoma-kit/make_teratoma.py): the skull socket grafted round its
+  // eye is `skullmetal` under another NAME, only so its baked `_glow` burns the eye's yellow, not the twinhead's red
+  // (GLOW_FROM_ATTRIBUTE is keyed by material name).
+  orbitmetal: { metalness: 0.62, roughness: 0.34, envIntensity: 0.55 },
+  // The hover keel's vents: hot yellow-orange cores, eyeglow's recipe in the eye's colour.
+  ventglow: { metalness: 0.0, roughness: 0.5, envIntensity: 0.2, emissive: [1.0, 0.45, 0.04], emissiveIntensity: 6.0 },
+  // Its feed hoses: corrugated dull-red rubber, wet enough to catch the key along each ring.
+  hose: { metalness: 0.0, roughness: 0.30, envIntensity: 0.55 },
 };
 
 /**
@@ -243,6 +259,12 @@ const GLOW_FROM_ATTRIBUTE: Record<string, { color: [number, number, number]; gai
   // Redder and less flat than the first pass (owner: "pale red"; then the sockets read as an even orange): the
   // colour is nearly pure red so tone mapping does not push it to orange, and the bake's falloff is steep.
   skullmetal: { color: [1.0, 0.045, 0.015], gain: 2.0 },
+  // The teratoma's eye burns yellow from its own `_glow` (1 round the slit, falling toward the iris's edge, a faint
+  // 0.25 bleed onto the sclera, 0 in the pupil). Hot enough to read without bloom, the twinhead's lesson.
+  // A deep yolk-orange, not the first pass's pale [1, 0.72, 0.06] x 3, which tone-mapped to cream.
+  cacoeye: { color: [1.0, 0.50, 0.02], gain: 2.2 },
+  // ...and the eye's light on the metal socket round it.
+  orbitmetal: { color: [1.0, 0.50, 0.02], gain: 2.0 },
 };
 
 /** Materials glow() drives, by WAM material name. The juggernaut's `lens`

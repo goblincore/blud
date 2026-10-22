@@ -1,0 +1,224 @@
+# TERATOMA — a cacodemon-style floater. A ball of meat that should not have
+# grown: one great yellow cyclops eye under a heavy brow, a maw as wide as the
+# body full of long uneven yellowed teeth, two dark curled horns, and two
+# withered little arms that do nothing, shackled at the wrists, dragging
+# chains. Owner brief 2026-10-22; Doom 64's cacodemon is the silhouette and
+# the chains.
+#
+# THE HOUSE SPLIT (.claude/skills/authoring-sdf-characters/biomech-style.md):
+#   - FLESH is this file: few, large prims. The ball, its lumps, the brow, the
+#     lips, the jaw, the jowls and the arms.
+#   - FLESH DETAIL is NOT marched: the ridged folds, veins and knots are
+#     characters/teratoma.detail (scripts/teratoma-detail-gen.ts), baked into
+#     the body normal map teratoma-body-n.png.
+#   - HARD PARTS are the kit (assets-source/teratoma-kit/): teeth, talons,
+#     the eye, the shackles and chains, sculpted in Blender and skinned
+#     rigidly to the bones below.
+#
+# THE STROGG CONVERSION (owner 2026-10-22, after the first pass: "a bit too
+# on the nose; more like the dual-headed strogg stylistically"). The meat is
+# the demon; twinhead-style skullmetal machinery keeps it alive and aloft: a
+# crest-plate on the crown that the horns grow out of, a demon-skull eye
+# socket that IS the brow, a mandible plate with jaw pistons, a hover keel
+# with glowing vents underneath, and cables and feed hoses stitching in and
+# out of the flesh through raw wounds (# CABLE ENTRY below). All kit. Then
+# ("as if it went to a plastic surgery clinic to get its lips puffed up")
+# the FILLER LIPS.
+#
+# AUTHORED FROM THE BRIEF and a magazine plate (not in git, never to be). No
+# mesh: blob:measure and blob:rings do not apply, so every number below is a
+# design decision and its comment says why.
+#
+# THE MOUTH IS ADDITIVE, NOT A CARVE (bloatmaw's lesson, and the cyclops'
+# two carve attempts that failed blob:render-check with GPU holes): the ball
+# itself is SHALLOW in front (deep 0.86), and the brow, lips, jowls and jaw
+# build the face out IN FRONT of it, so the dark gullet between the lips is
+# recessed behind flesh on every side. The lips overlap its edges, which is
+# what makes it read as a hole rather than a black disc stuck on.
+model teratoma
+  # height = the top of the ball (the cranium swell tops out at ~1.98), not a standing crown:
+  # it hovers. Ball centre y 1.45 puts the eye at a man's eye height (1.60),
+  # so it looks the player in the eye, and the jaw's underside at ~0.95 leaves
+  # nearly a metre of air under it. The horns rise above `height`; they are
+  # kit, not flesh.
+  height 1.98
+  # NO `stance` line: checkStance knows humanoid/digitigrade knees and this
+  # body has no legs. Omitted means "not checked" (bloatmaw, cyclops).
+
+skeleton
+  # THE ROOT IS THE BALL'S CENTRE. Every face prim rides it with an offset, so
+  # the face is one rigid piece with the ball (the hover bob/sway moves it all).
+  root pelvis at 1.45 len=0.06
+
+  # Stubs straight up inside the ball. The format needs a skull (the face
+  # block's prims ride it) and the gait maps spine/neck/skull by name; nothing
+  # visible hangs off them. All of it ends inside the flesh (top 1.95 vs the
+  # ball's ~2.0).
+  bone spine parent=pelvis dir=up len=0.20          # 1.51 -> 1.71
+  bone neck  parent=spine  dir=up len=0.10          # 1.71 -> 1.81
+  bone skull parent=neck   dir=up len=0.10          # 1.81 -> 1.91
+
+  mirror
+    # VESTIGIAL ARMS. The clavicle runs from the ball centre DOWN-OUT and a
+    # little forward to the flank under the jowl, where the ball has curved
+    # in; an arm rooted at the equator would be buried in the widest flesh
+    # (bloatmaw's clavicle note). Shoulder at ~(0.52, 1.18, 0.15).
+    bone clavicle parent=pelvis   dir=down tilt=62 pitch=16 len=0.62
+    # Short and withered: 0.15 + 0.14 + 0.07 m on a body 1.2 m across. They
+    # hang down-forward toward the player, claws curled (the plate's pose).
+    # First pass hung them straight down and they read as LEGS standing on
+    # air: they reach FORWARD now, out past the jowls, at the player.
+    bone upperArm parent=clavicle dir=down tilt=40 pitch=45 len=0.15
+    bone foreArm  parent=upperArm dir=down tilt=10 pitch=72 len=0.14
+    bone hand     parent=foreArm  dir=down tilt=0  pitch=60 len=0.07
+  end
+
+body
+  # ============================================================
+  # THE BALL — a lumpy mass, never a sphere from any yaw.
+  # ============================================================
+  # Main mass. Semi-axes (0.582, 0.549, 0.470): nearly a sphere, shallow in
+  # front so the face can stand out of it (see the header). The first pass was
+  # squashed (tall 0.92) under a wide flat cranium and read as a DRUM from the
+  # front (first turntable, 2026-10-22). `core` for the fuse probe.
+  blob torso on pelvis at=0.00 r=0.560 wide=1.04 tall=0.98 deep=0.84 blend=0.030 core
+  # Cranium swell: the top-back bulges over the brow like a brain under skin,
+  # which is what pushes the brow forward and down onto the eye.
+  # Round, not wide: wide 1.15 x tall 0.80 flattened the top into a drum lid.
+  blob torso on pelvis at=0.00 offset=(0.02,0.16,-0.12) r=0.400 wide=1.02 tall=0.95 deep=1.00 blend=0.060
+  # TERATOMA LOBES: four uneven growths, each in a different octant so no yaw
+  # shows a clean circle. Loose blends (0.04-0.06) so they swell out of the
+  # mass instead of reading as balls stuck on it. None sits at an upper
+  # front CORNER: there they squared the front outline's shoulders (r2 turntable).
+  blob torso on pelvis at=0.00 offset=(-0.18,0.40,-0.14) r=0.160 wide=1.10 tall=0.90 blend=0.050   # crown knot, left of centre
+  blob torso on pelvis at=0.00 offset=(0.33,0.05,-0.29) r=0.220 wide=0.95 tall=1.05 blend=0.050   # back-right swell
+  blob torso on pelvis at=0.00 offset=(-0.10,-0.30,-0.20) r=0.260 wide=1.20 tall=0.80 blend=0.050  # sagging underbelly
+  blob torso on pelvis at=0.00 offset=(0.32,0.14,-0.24) r=0.150 wide=0.90 tall=1.10 blend=0.040    # right occiput knot
+
+  # ============================================================
+  # THE FACE — built out in front of the shallow ball.
+  # ============================================================
+  # BROW: the heavy brow is now METAL, the kit's demon-skull eye socket
+  # (`pelvis|orbit`, the strogg conversion; owner 2026-10-22: "too on the
+  # nose, more like the dual-headed strogg"). Two flesh brow swells (r 0.14 /
+  # 0.13, front z 0.54) buried the metal socket entirely. What is left is a
+  # low swell of meat the socket is grafted into: its front (z ~0.41) stays
+  # behind the metal's (~0.47), so the flesh bulges round the graft.
+  blob torso on pelvis at=0.00 offset=(0.00,0.30,0.30) r=0.140 wide=1.60 tall=0.60 deep=0.80 blend=0.040
+  # JOWLS: the mouth's corners, swelling out and down at the flanks. They
+  # close the gullet's sides so the mouth is a slot in flesh.
+  blob torso on pelvis at=0.00 offset=(0.35,-0.19,0.30) r=0.115 wide=0.90 tall=1.10 deep=1.00 blend=0.030 both
+  # JAW: underslung and jutting, the heaviest mass on the front. Its front
+  # (z 0.50) stands past the ball's. Wide 1.45, not 1.85: wider, it flattened
+  # the ball's bottom into a box (r2).
+  blob torso on pelvis at=0.00 offset=(0.00,-0.40,0.28) r=0.220 wide=1.45 tall=0.70 deep=1.00 blend=0.030
+
+  # THE GULLET: near-black wet blood, the deepColor of a mouth. Front z 0.466,
+  # just proud of the ball (0.441 here), set back ~10 cm behind the lips'
+  # fronts. Further out (0.50) its ends stood off the cheeks as a flat black
+  # disc in three-quarter view (r3).
+  # Semi-axes (0.320, 0.184, 0.096): just inside the lips' corners (wider, its
+  # ends showed past them as a black rectangle) and a
+  # third of the ball's height. The first pass (0.136 tall) read as a slot,
+  # not a maw; the plate's mouth is open on a full row of long teeth.
+  blob torso on pelvis at=0.00 offset=(0.00,-0.19,0.37) r=0.160 wide=2.00 tall=1.15 deep=0.60 blend=0.010 color=1a0506 gloss=0.85
+
+  # LIPS — FILLER LIPS (owner, 2026-10-22: "as if the cacodemon went to a
+  # plastic surgery clinic to get its lips puffed up"). Four halves, thick at
+  # the centre (r) and only gently thinner at the corner (r2): r 0.068/0.076
+  # tapering to 0.032 read as a normal mouth; at r 0.095/0.105 -> 0.052 they
+  # are two round, over-full pillows that pout forward (bend z 0.08). Painted
+  # a glossier, pinker meat than the hide: the filler look is the SHINE, not
+  # the colour (b8606a rendered as clown lipstick; the plate's alien has lips
+  # the colour of its skin, only inflated).
+  # The lower lip dropped 0.04 so the mouth stays open between them; the
+  # corners still meet at (+-0.39, -0.13), above the middle: a grin. The teeth
+  # (kit) root in them (make_teratoma.py's UP/LO must follow these lines).
+  bar  torso on pelvis from=0 to=0 offset=(0.00,-0.01,0.50) tip=(0.39,-0.12,-0.17) bend=(0.01,0.03,0.08) r=0.095 r2=0.052 blend=0.014 both color=a8706a gloss=0.90
+  bar  torso on pelvis from=0 to=0 offset=(0.00,-0.42,0.49) tip=(0.39,0.29,-0.16) bend=(0.01,-0.05,0.08) r=0.105 r2=0.052 blend=0.014 both color=a8706a gloss=0.90
+  # Cupid's bow: two round swells on the upper lip either side of the middle,
+  # the dip between them is the bow.
+  blob torso on pelvis at=0.00 offset=(0.085,0.020,0.565) r=0.060 wide=1.20 blend=0.016 both color=a8706a gloss=0.90
+
+  # CABLE ENTRY WOUNDS: raw swollen lips of meat where the kit's tubes dive
+  # into the flesh (make_teratoma.py `wires`, its printed ENTRIES; the
+  # twinhead's rule, a tube goes INTO a wound, never into clean skin). Only
+  # the visible ones: the two back bundles and each side's flank hose (in
+  # and back out) and thin hose. Small (r 0.024), dark and loosely blended:
+  # at r 0.034 in the twinhead's bright raw pink they read as red beads.
+  blob torso on pelvis at=0.00 offset=(0.167,-0.013,-0.493) r=0.024 blend=0.022 color=7a3c3c gloss=0.8   # back bundle
+  blob torso on pelvis at=0.00 offset=(-0.349,-0.001,-0.383) r=0.024 blend=0.022 color=7a3c3c gloss=0.8  # back bundle
+  blob torso on pelvis at=0.00 offset=(0.544,0.081,-0.281) r=0.024 blend=0.022 both color=7a3c3c gloss=0.8   # hose dives in
+  blob torso on pelvis at=0.00 offset=(0.442,-0.192,-0.287) r=0.024 blend=0.022 both color=7a3c3c gloss=0.8  # hose comes out
+  blob torso on pelvis at=0.00 offset=(0.404,0.062,-0.495) r=0.022 blend=0.022 both color=7a3c3c gloss=0.8   # thin hose
+
+  # ============================================================
+  # ARMS — withered, four prims a side.
+  # ============================================================
+  # The shoulder knot welds the arm into the flank under the jowl.
+  blob arm on clavicle at=1.00 r=0.060 blend=0.022 mirror core
+  bar  arm on upperArm from=0.00 to=1.00 r=0.040 r2=0.032 blend=0.012 mirror
+  bar  arm on foreArm  from=0.00 to=1.00 r=0.034 r2=0.028 blend=0.010 mirror
+  # The hand is a small palm; the three hooked talons are kit.
+  blob arm on hand at=0.40 r=0.032 wide=1.30 deep=0.80 blend=0.008 mirror
+
+# Face block: the stub skull's generated prims stay buried in the ball
+# (cyclops' settings: headRadius 0.035 is a 3.5 cm knot deep in the flesh;
+# brow/nose under their gates so they are not generated at all).
+face
+  headRadius 0.035
+  headWidth  1.00
+  headHeight 1.00
+  headDepth  1.00
+  jawWidth   0.80
+  jawHeight  0.70
+  jawDrop    0.020
+  jawJut     0.000
+  noseLength 0.0004
+  noseWidth  0.30
+  noseDrop   0.010
+  browHeavy  0.0004
+  browRise   0.030
+  headBlend  0.004
+
+# No face sheet: the eye is kit, the mouth is geometry.
+sheet
+  enabled    0
+  eyeGap     0.42
+  eyeSize    0.0
+  eyeRise    0.39
+  eyeTilt    0
+  eyeSquash  1.20
+  eyePupil   0
+  browHeavy  0.0
+  browAngle  0
+  mouthWidth 0.0
+  mouthRise  0.70
+  mouthCurve 0.0
+  mouthOpen  0.0
+  nostril    0.0
+  noseRidge  0.0
+  noseWide   0.0
+  noseLong   0.0
+  jawShade   0.0
+  grain      0.05
+  seed       61
+
+# Pink-brown meat (the plate's hide), warmer and lighter than the twinhead's
+# so the dark horns and the black gullet carry. Wet, with a sickly olive
+# mottle in the creases.
+palette
+  baseColor     0.52 0.31 0.27
+  deepColor     0.48 0.07 0.07
+  charColor     0.09 0.06 0.05
+  specIntensity 0.60
+  specRoughness 0.32
+  fresnelBoost  0.45
+  translucency  0.22
+  wetness       0.55
+  surfaceNoiseAmp    0.05
+  silhouetteNoiseAmp 0.018
+  mottleAmp     0.40
+  mottleScale   2.0
+  mottleColor   0.26 0.22 0.12
+  grain         0.12

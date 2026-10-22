@@ -377,7 +377,8 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
         ? makeWarbullMind(GUNNER_TUNING[characterEntry(name).profile.gunner!.weapon])
         : makeSoldierMind(GUNNER_TUNING[characterEntry(name).profile.gunner!.weapon]),
       onFire: ({ origin: muz, direction: dir }) => {
-        if (!character.prop || character.prop.released) return;
+        // A spitter (profile.spit) fires from its body and has no prop to lose.
+        if (!characterEntry(name).profile.spit && (!character.prop || character.prop.released)) return;
         ctx.world.encounter.shot(zombieId);
         // ONE barrel: the double-barrel volley is the player's signature,
         // and the soldier throwing the same wall of lead reads as a second
