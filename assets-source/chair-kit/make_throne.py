@@ -12,14 +12,15 @@
 #            grown out into talons that curl down over each armrest's end
 #   crown    a bone-metal band round his head, spined, bolted into his temples (it rides the skull, so it turns with him)
 #   upper    the back legs' femur carapaces (the gibbet's)
+#   scars    a stitched Y-incision down his chest and two welts, raised and wet, on the probed skin
 #   studs    brass buttons tufting his skin where it has spread over the seat and back as a chesterfield cushion
-import bpy, math
+import bpy, math, os
 from mathutils import Vector
 
 try:
     PARTS
 except NameError:
-    PARTS = {'seat', 'back', 'spine', 'arms', 'crown', 'upper', 'studs'}
+    PARTS = {'seat', 'back', 'spine', 'arms', 'crown', 'upper', 'studs', 'scars'}
 X = Vector((1, 0, 0)); UP = Vector((0, 0, 1)); BACK = Vector((0, 1, 0)); FWD = Vector((0, -1, 0))
 IVORY = (1.0, 0.96, 0.88)
 sm = lambda e0, e1, x: (lambda c: c * c * (3 - 2 * c))(max(0.0, min(1.0, (x - e0) / (e1 - e0))))
@@ -111,10 +112,12 @@ if 'seat' in PARTS:
     finish_t('seat', 'spine|seat', 16000, lines=sut)
 
 # ---------------------------------------------------------------- backrest panel
-# Its front cradles him: z at the front surface rises from behind his buttocks (-0.115 at the seat) to behind his
-# shoulders (-0.075), and its edges wrap forward round him (concave).
+# Its front sits 2.5 cm behind the back of the skin membrane he is sunk into (chair.blob's three back ellipsoids,
+# whose back faces are at z -0.09 at y 0.80, -0.06 at 1.05 and -0.027 at 1.30): flush with it, the ellipsoids'
+# blend and the skin noise pushed flesh THROUGH the 4 cm panel and out of its back. Its edges wrap forward round
+# him (concave), past the membrane's edges, and hide the gap.
 BY0, BY1 = 0.54, 1.50
-zf = lambda y: -0.118 + 0.040 * sm(0.60, 1.10, y)
+zf = lambda y: -0.120 + 0.035 * sm(0.70, 1.05, y) + 0.033 * sm(1.05, 1.32, y)
 bhw = lambda y: 0.255 + 0.025 * bell((y - 1.22) / 0.30)          # broader across his shoulders and head
 btop = lambda x: BY1 + 0.10 * bell(x / 0.17) ** 1.5 - 0.06 * (x / 0.28) ** 2   # a pointed arch
 
@@ -136,7 +139,7 @@ if 'back' in PARTS:
         du = P(min(1, u + e), v) - P(max(0, u - e), v); dv = P(u, min(1, v + e)) - P(u, max(0, v - e))
         n = du.cross(dv).normalized()
         return n if n.dot(FWD) > 0 else -n
-    surface_solid('panel', P, N, 48, 64, 0.040)
+    surface_solid('panel', P, N, 48, 64, 0.045)
     # rolled lips up both edges and over the arch
     tube('liptop', [P(i / 80, 1) + N(i / 80, 1) * -0.012 for i in range(81)], [0.012] * 81, segs=10)
     for u in (0, 1):
@@ -159,7 +162,7 @@ if 'back' in PARTS:
 # ---------------------------------------------------------------- bare bone up the back: column and ribs
 if 'spine' in PARTS:
     drop(['spine|bone']); clear_work()
-    zb = lambda y: zf(y) - 0.040                                      # the panel's back face on the centre line
+    zb = lambda y: zf(y) - 0.045                                      # the panel's back face on the centre line
     Y = [0.56 + 0.075 * k for k in range(13)]                         # 13 vertebrae to just under the arch
     for k, y in enumerate(Y):
         c = bv(0, y, zb(y) - 0.022)
@@ -178,7 +181,7 @@ if 'spine' in PARTS:
                 yy = y - 0.10 * r_ ** 1.3
                 if r_ < 0.75:                                         # across the back face, out to the edge
                     xn = r_ / 0.75 * 1.04
-                    p = bp(sx * xn, yy, -0.040 - 0.010) if xn <= 1 else bp(sx, yy, -0.04)
+                    p = bp(sx * xn, yy, -0.045 - 0.010) if xn <= 1 else bp(sx, yy, -0.045)
                 else:                                                 # round the edge and forward
                     a = (r_ - 0.75) / 0.25
                     # tight round the edge lip (sticking out sideways they read as pegs through the panel)
@@ -191,7 +194,7 @@ if 'spine' in PARTS:
 if 'arms' in PARTS:
     drop(['spine|arms', 'spine|talons']); clear_work()
     for sx in (-1, 1):
-        a = bv(sx * ARM_X, ARM_Y, -0.105); b = bv(sx * ARM_X, ARM_Y, ARM_Z1 + 0.030)
+        a = bv(sx * ARM_X, ARM_Y, -0.128); b = bv(sx * ARM_X, ARM_Y, ARM_Z1 + 0.030)
         F = BoneFrame(a, b, fwd=UP)                                   # ph 0 = up, 180 = under him
         r0 = ARM_R + 0.014
         _, P, N = bone_shell('trough', F, 0.0, lambda ph: 0.96 - 0.05 * (1 + math.cos(ph)) * 0.5, D(70), D(290),
@@ -245,7 +248,8 @@ if 'crown' in PARTS:
         out = (base - hc); out.z = 0; out.normalize()
         horn(f'spike{j}', base + UP * 0.006, UP + out * 0.35, out.cross(UP).normalized(), h, 0.012, curl=-0.4)
     for sx in (-1, 1):
-        bolt = hc + bv(sx * (ax_ + 0.004), -0.012, 0.012)
+        # above and in front of the pointed ears' roots, on the skin (x 0.063 there) and a touch proud
+        bolt = hc + bv(sx * 0.066, 0.035, 0.040)
         ball(f'bolt{sx}', bolt, 0.016)
         ring(f'boltring{sx}', bolt + X * (sx * 0.004), X, 0.017, 0.004)
         tube(f'prong{sx}', [bandp(D(0 if sx > 0 else 180)).lerp(bolt, i / 10) + X * (sx * 0.008 * sn(i / 10)) for i in range(11)], [0.008] * 11)
@@ -273,8 +277,10 @@ if 'upper' in PARTS:
 
 # ---------------------------------------------------------------- studs: buttons tufting the flesh cushions
 # The cushions are chair.blob's three `rigid` ellipsoids (blob centre, semi-axes); a stud sits on their union's
-# surface on a diamond lattice, its dome standing 4 mm proud (sunk, the blend and the skin noise buried them). Studs he covers are inside him and never show.
-CUSHIONS = {'back': [((0, 0.920, -0.070), (0.200, 0.280, 0.020)), ((0, 1.190, -0.058), (0.190, 0.190, 0.019))],
+# surface on a diamond lattice, its dome standing 8-10 mm proud of the ellipsoid (sunk, or only 4 mm out, the blend and the skin
+# noise buried them). Studs he covers are inside him and never show.
+CUSHIONS = {'back': [((0, 0.800, -0.065), (0.200, 0.200, 0.025)), ((0, 1.050, -0.035), (0.210, 0.2205, 0.0252)),
+                     ((0, 1.300, -0.002), (0.190, 0.1805, 0.0257))],
             'seat': [((0, 0.580, 0.110), (0.236, 0.020, 0.225))]}
 
 
@@ -294,7 +300,7 @@ if 'studs' in PARTS:
             zs = [ell_out(c, r, x, y, 2) for c, r in CUSHIONS['back']]
             zs = [z for z in zs if z is not None]
             if not zs: continue
-            p = bv(x, y, max(zs) + 0.004)
+            p = bv(x, y, max(zs) + 0.010)
             ball(f'b{i}{j}', p, 1.0, 0.012, 0.007, 0.012); ring(f'br{i}{j}', p + FWD * 0.001, FWD, 0.011, 0.0025, segs=16)
     for j in range(-1, 6):
         z = -0.08 + 0.085 * j
@@ -302,6 +308,27 @@ if 'studs' in PARTS:
             x = 0.055 * i + (0.0275 if j % 2 else 0)
             y = ell_out(*CUSHIONS['seat'][0], x, z, 1)
             if y is None: continue
-            p = bv(x, y + 0.004, z)
+            p = bv(x, y + 0.008, z)
             ball(f's{i}{j}', p, 1.0, 0.012, 0.012, 0.007); ring(f'sr{i}{j}', p + UP * 0.001, UP, 0.011, 0.0025, segs=16)
     finish_t('studs', 'spine|studs', 6000, material='brass', noise=0.0)
+
+# ---------------------------------------------------------------- scars: raised welts and stitches on his chest
+# Paths are skin points from scripts/chair-scars.ts (blob coords, probed from the front). Each welt is a thin wet red
+# tube a few mm proud of the skin; the Y-incision gets dark stitches across it. Kit, not SDF prims: painted prims
+# on this blend-heavy torso came out as 2 cm bands or ragged dashes. Rides `chest`, like the flesh under it.
+if 'scars' in PARTS:
+    import json
+    drop(['chest|scars', 'chest|stitches']); clear_work()
+    S = json.load(open(os.path.join(KIT_DIR, 'scars.json')))
+    for k, pts in enumerate(S['stitched'] + S['welts']):
+        P_ = [bv(*p) + FWD * 0.0020 for p in pts]
+        n = len(P_)
+        tube(f'w{k}', P_, [0.0030 + 0.0012 * sn(i / (n - 1)) for i in range(n)], segs=8)
+    o = fuse('scars', voxel=0.0012, noise=0.0004); decimate(o, 3500)
+    bake_ao(o, 'red', tint=(0.62, 0.42, 0.42)); install(o, 'chest|scars'); clear_work()   # darker: plain read as drawn-on pink
+    for k, pts in enumerate(S['stitched']):
+        P_ = [bv(*p) + FWD * 0.0035 for p in pts]
+        for i in range(2, len(P_) - 2, 3):
+            d = (P_[i + 1] - P_[i - 1]).normalized(); side = d.cross(FWD).normalized()
+            tube(f's{k}{i}', [P_[i] - side * 0.009 - FWD * 0.002, P_[i], P_[i] + side * 0.009 - FWD * 0.002], [0.0012] * 3, segs=6)
+    o = fuse('stitches', voxel=0.0008, noise=0.0); decimate(o, 3000); plain(o, 'cable'); install(o, 'chest|stitches'); clear_work()

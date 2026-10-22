@@ -205,6 +205,24 @@ merges into his back and thighs. Brass studs on a diamond lattice tuft it. Two l
 stumps. Stop the pan just behind the knees, so they overhang and the shins drop clear in front of the skirt.
 Ribs that wrapped the panel edge with any sideways reach read as pegs through it; keep them tight to the lip.
 
+**Meld, don't seat (owner's second look).** A thin cushion behind him read as "a big flat skin shape behind
+him". What worked:
+- Three flat `rigid` ellipsoids on `spine` make a skin MEMBRANE over the backboard. He is sunk into it, with the
+  back half of his head under it.
+- One head prim with a wide `blend` (0.045) behind the skull, plus jaw-corner webs, pulls the membrane up round
+  the face. All prims fold in one running smooth-min, so a later cluster's blend melts into an earlier one.
+- Keep the kit panel 2.5 cm BEHIND the membrane's back. Flush, the blend and the skin noise pushed flesh out
+  through the back of a 4 cm panel.
+
+**Thin lines on blend-heavy flesh are kit.** Painted scar prims paint where they are the NEAREST prim, and wide
+torso blends put the skin ~7 mm outside its prims. Twinhead-sized scars painted 2 cm bands; sunk 9 mm, they painted
+ragged dashes. Probe the skin (`scripts/chair-scars.ts` writes the paths), then lay a thin red tube and dark
+stitches as kit on the same bone.
+
+**Eyes that read in a decal'd head.** Ember points in painted sockets were lost. A glowing slit stands 1 cm proud
+of the face between two flesh lids, with the brow ledge lifted off it. Painted seams the eye cannot place
+(oval ends of a raw-edge bar beside the head) read as unexplained spots: end seams under something, or drop them.
+
 **Fill open greaves.** `make_legs.py`'s tibia shell is open at the front. Under a thin metal core, the opening
 shows black. Run flesh (his foot) down inside it instead.
 
