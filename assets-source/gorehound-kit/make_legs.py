@@ -18,6 +18,10 @@ try:
     LIMBS
 except NameError:
     LIMBS = {'hind', 'fore'}
+try:
+    TOE_STYLE                                                   # 'paw' (three toes and talons) or 'spike' (one stilt talon)
+except NameError:
+    TOE_STYLE = 'paw'
 X = Vector((1, 0, 0))
 
 
@@ -101,7 +105,17 @@ def limb(A, B, C, T, up, mid, low):
         finish('cannon', f'{low}.l|cannon', 3500)
 
     # ---------------------------------------------------------------- toes: three splayed bony toes, curled talons, a dewclaw
-    if 'toes' in PARTS:
+    if 'toes' in PARTS and TOE_STYLE == 'spike':
+        # STILT TIPS (the gibbet): no paw, the leg ends in one curled talon that takes the floor at its point, the
+        # parasite's walking spikes. A knuckle at the toe joint, a collar ring, the talon curling forward and down.
+        drop([f'{low}.l|toes', f'{low}.r|toes']); clear_work()
+        Fm = BoneFrame(C, T)
+        ball('knuckle', T, 1.0, 0.030, 0.030, 0.030)
+        ring('collar', T - Fm.u * 0.025, Fm.u, 0.030, 0.006)
+        horn('talon', T + Vector((0, 0, 0.004)), Fm.u + Vector((0, -0.4, 0)), X, 0.11, 0.024, curl=0.9)
+        horn('spur', T - Fm.u * 0.03, -Fm.f + Vector((0, 0, 0.6)), X, 0.06, 0.010, curl=-0.6)
+        finish('toes', f'{low}.l|toes', 2500)
+    elif 'toes' in PARTS:
         drop([f'{low}.l|toes', f'{low}.r|toes']); clear_work()
         base = T + Vector((0, 0, 0.008))
         ball('ball', base + Vector((0, -0.012, 0.008)), 1.0, 0.048, 0.050, 0.034)

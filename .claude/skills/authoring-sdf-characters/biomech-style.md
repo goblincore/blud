@@ -178,6 +178,30 @@ through the open-fronted shells.
 **Turn off the face sheet** on anything that is not a person: with no `sheet` block the registry's zombie face
 is projected onto whatever sits at the front of the head (the gorehound's snout). Add `sheet` / `enabled 0`.
 
+### The gibbet: hung masses and judging motion (2026-10-22)
+
+The gibbet (`characters/gibbet.blob`) is a walking gallows: a bone-metal beam on four splayed spider legs, a sac of
+meat in a birdcage hung under it, and a head dangling at the front. The owner's verdict on the gorehound ("uninspired,
+looks like the gnasher") is the lesson: **make the machine the body and the flesh the cargo, not machinery stuck on an
+animal.** What it added:
+
+- **A hung mass is the `hem` pendulum.** Hang the sac's prims AND the cage kit on `hem` (from the hips down to the
+  sac's bottom) and they swing together. The Verlet lag alone moved it ~1.5 cm on a steady walk, which reads as rigid,
+  so `GaitProfile.hemSwing` drives it: sideways a third of a stride behind the body's sway, fore-aft and a drop on each
+  footfall, and 40% of that while standing (`HEM_IDLE` in `motion.ts`). Keep the hem's tail above the toes.
+- **Thin-core bodies need collinear fuse paths.** The validator fuses clusters along the STRAIGHT line between their
+  `core` prims; struts at angles never contain one. Put the torso's core on the neck cord with the head's core riding
+  the same axis, and join the legs to each other across crossbars (hips, shoulder yoke).
+- **Judge the motion, not the pose.** `BLOB_WALK_SWEEP=<firstFrame>:<step>` with a fixed `BLOB_YAW` makes
+  `blob:shot` render the walk frame by frame (deterministic treadmill poses); stitch the frames into a GIF.
+- **Feet are silhouette.** The gorehound's paws on long sloping metacarpals read as skis; spidery legs want points
+  (`TOE_STYLE = 'spike'` in a kit's `common.py`: one curled talon taking the floor at its tip).
+- **A cage reads by contrast.** The first cage was rusty dark iron inside the sac's outline and read as lines on meat.
+  It needs bars standing clear of the sac (1.14x its radius), a lid of bars and a finial, a spike below, and pale
+  bone-iron with rust only low down.
+- **Normal map down the pendulum.** The torso projection can run along any axis: the gibbet's runs down the hem
+  (`--torso-axis` extended past both ends of the sac), and every detail line binds to `hem` so the detail swings too.
+
 ## A seated rig: the chair (2026-10-22)
 
 The chair (`characters/chair.blob`, kit `assets-source/chair-kit/`) is a man fused into a walking throne, on the

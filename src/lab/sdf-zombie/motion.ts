@@ -830,7 +830,11 @@ export function stepMotion(
       gaitOff = [authoredSide * Math.max(minLane, authoredSide * lateral) - base[0] + pivot[0], gaitOff[1], gaitOff[2]];
     }
     const stagOff = name === 'pelvis' || STAGGER_ROOT_RIDERS.has(name) ? stagger.rootOffset : stagger.offsets[name] ?? Z;
-    const s = ARM_JOINTS.has(name) ? armPresence : blend * strideScale;
+    // A hung mass (GaitProfile.hemSwing, the gibbet's caged sac) keeps swaying at HEM_IDLE of its walking swing when
+    // the body stops: hung meat does not snap still. The gait clock runs on while standing, so the swing does too.
+    const s = ARM_JOINTS.has(name) ? armPresence
+      : name === 'hem' && gaitProfile.hemSwing ? Math.max(blend, HEM_IDLE) * strideScale
+        : blend * strideScale;
     // BRANCHED, not `add(..., ZERO)`: adding zero would turn a -0 component
     // into +0 and break the lab's bit-identity pin for no benefit.
     const base2 = add(scale(gaitOff, s), stagOff);
@@ -1549,6 +1553,9 @@ export function stepMotion(
 }
 
 // ---------------------------------------------------------------------------
+/** The share of a hung mass's walking swing (GaitProfile.hemSwing) it keeps while the body stands. */
+const HEM_IDLE = 0.4;
+
 // Floor contact for the falling/collapsed rig.
 // ---------------------------------------------------------------------------
 
