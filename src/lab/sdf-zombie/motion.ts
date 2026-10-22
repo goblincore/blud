@@ -263,8 +263,10 @@ export function makeMotionJoints(
   if (names.length === 0 || names.length !== baseRest.length) return null;
   const index = {} as Record<GaitJointName, number>;
   names.forEach((n, i) => { index[n] = i; });
+  // A chain the body does not have measures 0: a LEGLESS floater (teratoma.blob, bloatmaw.blob) has no hip, knee or
+  // foot, and used to throw here, so it could not be shown in the lab or spawned at all.
   const d = (a: GaitJointName, b: GaitJointName): number =>
-    len(sub(baseRest[index[a]!]!, baseRest[index[b]!]!));
+    index[a] === undefined || index[b] === undefined ? 0 : len(sub(baseRest[index[a]]!, baseRest[index[b]]!));
   return {
     names,
     base: baseRest.map(v => [v[0], v[1], v[2]] as Vec3),
@@ -280,7 +282,8 @@ export function makeMotionJoints(
     neck: [d('chest', 'neck'), d('neck', 'head')],
     ...(index.jaw === undefined ? {} : {
       jaw: jawRestOf(baseRest[index.neck!]!, baseRest[index.head!]!, baseRest[index.jaw]!, body.bones.get('jaw')?.jawHinge) }),
-    groundY: Math.min(baseRest[index.footL!]![1], baseRest[index.footR!]![1]),
+    // No feet (a floater): the floor itself, so a dead one falls all the way down.
+    groundY: index.footL === undefined || index.footR === undefined ? 0 : Math.min(baseRest[index.footL]![1], baseRest[index.footR]![1]),
     pelvis: [baseRest[index.pelvis!]![0], 0, baseRest[index.pelvis!]![2]],
     ropes: collapseRopes(names, baseRest),
   };
@@ -1283,11 +1286,11 @@ export function stepMotion(
       if (side === 'L') plantL = plant; else plantR = plant;
     }
   } else if (!collapsed) {
-    if (!missingLegL) {
+    if (!missingLegL && idx.footL !== undefined) {
       plantL = plantStep(plantL, gait.pose.stance.legL, idx.footL!, idx.hipL!, joints.leg.L);
       plantLeg(plantL, 'hipL', 'kneeL', 'footL', joints.leg.L);
     }
-    if (!missingLegR) {
+    if (!missingLegR && idx.footR !== undefined) {
       plantR = plantStep(plantR, gait.pose.stance.legR, idx.footR!, idx.hipR!, joints.leg.R);
       plantLeg(plantR, 'hipR', 'kneeR', 'footR', joints.leg.R);
     }

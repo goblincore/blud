@@ -44,6 +44,7 @@ import gargoyleBlobSrc from './characters/gargoyle.blob?raw';
 import cyberdemonBlobSrc from './characters/cyberdemon.blob?raw';
 import twinheadBlobSrc from './characters/twinhead.blob?raw';
 import gorehoundBlobSrc from './characters/gorehound.blob?raw';
+import gutcrawlerBlobSrc from './characters/gutcrawler.blob?raw';
 import bloatmawBlobSrc from './characters/bloatmaw.blob?raw';
 import gnasherBlobSrc from './characters/gnasher.blob?raw';
 import ogreBlobSrc from './characters/ogre.blob?raw';
@@ -52,7 +53,7 @@ import cultistBlobSrc from './characters/cultist.blob?raw';
 import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
 import brideBlobSrc from './characters/bride.blob?raw';
 import {
-  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, GOREHOUND_PROFILE, motionProfileFor, type MotionProfile,
+  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, GOREHOUND_PROFILE, GUTCRAWLER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
 
 /** A face sheet's texture and its crop. `mean` is the level the shader
@@ -323,11 +324,23 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   },
   // The biomech hound (gorehound.blob's header): a four-legged dog-frog on the
   // biped rig, arms as front legs. Flesh in the .blob; the machine legs, spine
-  // ridge and teeth are kit (assets-source/gorehound-kit/), added as built.
+  // ridge, brow plate and teeth are kit (assets-source/gorehound-kit/, built
+  // headless by its build.py), skinned to the .blob by scripts/blender-kit.ts.
   gorehound: {
     name: 'gorehound', src: gorehoundBlobSrc,
+    kit: '/assets/lab/gorehound-kit.gltf',
+    // Folds, ribs, muscle and varicose veins (characters/gorehound.detail, baked round a LENGTHWISE torso axis:
+    // scripts/gorehound-detail-gen.ts has the bake command; never marched).
+    bodyNormal: { url: '/assets/lab/gorehound-body-n.png', meta: '/assets/lab/gorehound-body-n.json', strength: 1 },
     face: ZOMBIE_FLAT,
     profile: GOREHOUND_PROFILE,
+  },
+  // The gorehound's variant (gutcrawler.blob's header): legless, dragging
+  // itself on two arms, a tail on the `hem` pendulum. Kit: assets-source/gutcrawler-kit/.
+  gutcrawler: {
+    name: 'gutcrawler', src: gutcrawlerBlobSrc,
+    face: ZOMBIE_FLAT,
+    profile: GUTCRAWLER_PROFILE,
   },
   cyberdemon: {
     name: 'cyberdemon', src: cyberdemonBlobSrc,

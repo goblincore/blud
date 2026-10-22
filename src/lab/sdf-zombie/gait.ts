@@ -450,6 +450,38 @@ export const GOREHOUND: GaitProfile = {
   torsoLean: 0,
 };
 
+/** The GUTCRAWLER's drag (characters/gutcrawler.blob): no legs, two arms. The
+ *  arms are 'foreleg's on the L/R clocks with forePhase 0, so they alternate:
+ *  one reaches far ahead (strideLen 0.34, landing well forward), plants, and
+ *  pulls while the other reaches. Slow (1.0 Hz) and long in the stance: each
+ *  pull is a haul. The weight shift is SIDEWAYS: a wide sway rolls the chest
+ *  onto the planted arm. No bob to speak of: the belly is on the floor. */
+export const CRAWL_DRAG: GaitProfile = {
+  ...SHAMBLE,
+  name: 'crawl-drag',
+  strideFreq: 1.0,
+  stanceDuty: 0.62,
+  strideLen: 0.34,
+  landAhead: 0.8,
+  footLift: 0.12,
+  footPush: 0.04,
+  kneeBend: 0.06,
+  kneeLift: 0.04,
+  kneeTrack: 0.5,
+  elbowBow: -0.06,
+  swayAmp: 0.05,
+  shoulderSway: -0.6,
+  bobAmp: 0.008,
+  rockAmp: 0.02,
+  headBob: 0.5,
+  armSwing: 0,
+  elbowFlex: 0,
+  asymJitter: 0.12,
+  armStyle: 'foreleg',
+  forePhase: 0,
+  torsoLean: 0,
+};
+
 /** Lerp every numeric knob; strings (name, armStyle) snap at w = 0.5 so the
  *  hands never hover between two grips. */
 export function blendProfiles(a: GaitProfile, b: GaitProfile, w: number): GaitProfile {

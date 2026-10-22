@@ -110,15 +110,17 @@ body
   # once the jaw drops (the teratoma's additive-maw lesson).
   blob head on skull at=0.47 r=0.095 wide=1.40 tall=0.60 deep=1.40 offset=(0,-0.085,0) blend=0.010 color=3a0c0e gloss=0.9
   # Eyes: small, deep under the brow, the only glow on the body.
-  blob head on skull at=0.40 r=0.019 offset=(0.124,0.074,0.036) blend=0.002 color=ffb030 glow=0.8 both
+  blob head on skull at=0.40 r=0.023 offset=(0.124,0.074,0.036) blend=0.002 color=ffb030 glow=0.8 both
 
   # The lower jaw: a wide flat mandible and a chin, riding the jaw bone. Its
-  # top sits ~17 mm under the upper jaw at rest, so the maw is ajar and the
-  # kit teeth show; the bite swings it open about the hinge.
-  blob head on jaw at=0.62 r=0.125 wide=1.60 tall=0.50 deep=1.30 offset=(0,-0.090,0) blend=0.016
-  blob head on jaw at=1.00 r=0.075 wide=1.30 tall=0.80 deep=1.00 offset=(0,-0.065,0.010) blend=0.014
+  # top (y ~0.789) sits ~11 mm under the upper jaw's underside (~0.800) at
+  # rest, so the maw is ajar and the kit teeth (skull|teeth, jaw|teeth) fill
+  # it; round 2's mandible overlapped the upper jaw and shut the mouth. The
+  # bite swings it open about the hinge.
+  blob head on jaw at=0.62 r=0.125 wide=1.60 tall=0.50 deep=1.30 offset=(0,-0.125,0) blend=0.016
+  blob head on jaw at=1.00 r=0.075 wide=1.30 tall=0.80 deep=1.00 offset=(0,-0.085,0.010) blend=0.014
   # The tongue: a fat red slab on the floor of the mouth.
-  blob head on jaw at=0.58 r=0.068 wide=1.40 tall=0.45 deep=1.80 offset=(0,-0.040,0) blend=0.008 color=8c2a2e gloss=0.85
+  blob head on jaw at=0.58 r=0.068 wide=1.40 tall=0.45 deep=1.80 offset=(0,-0.075,0) blend=0.008 color=8c2a2e gloss=0.85
 
   # --- FORELEGS: muscled flesh to the elbow, machine below. -------------------
   blob arm on clavicle at=1.00 r=0.14 blend=0.025 mirror core
@@ -126,18 +128,18 @@ body
   # The triceps, a slab of muscle bulging out behind the humerus.
   blob arm on upperarm at=0.50 r=0.100 tall=1.50 offset=(0,0,-0.045) blend=0.020 mirror
   # Machine core (the kit sleeves it): radius strut and the metacarpal paw.
-  blob arm on forearm at=0.00 r=0.070 blend=0.006 mirror color=3a3e45 metal gloss=0.6
-  bar  arm on forearm from=0.05 to=0.95 r=0.050 blend=0.006 mirror color=3a3e45 metal gloss=0.6
-  blob arm on hand at=0.00 r=0.058 blend=0.006 mirror color=3a3e45 metal gloss=0.6
-  bar  arm on hand from=0.05 to=0.90 r=0.040 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  blob arm on forearm at=0.00 r=0.035 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  arm on forearm from=0.05 to=0.95 r=0.025 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  blob arm on hand at=0.00 r=0.030 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  arm on hand from=0.05 to=0.90 r=0.020 blend=0.006 mirror color=3a3e45 metal gloss=0.6
 
   # --- HIND LEGS: a haunch of flesh on a machine leg. -----------------------
   blob leg on thigh at=0.00 r=0.15 blend=0.025 mirror core
   bar  leg on thigh from=0.05 to=0.95 r=0.145 r2=0.090 deep=1.20 blend=0.020 mirror
-  blob leg on shin at=0.00 r=0.070 blend=0.006 mirror color=3a3e45 metal gloss=0.6
-  bar  leg on shin from=0.05 to=0.95 r=0.050 blend=0.006 mirror color=3a3e45 metal gloss=0.6
-  blob leg on foot at=0.00 r=0.058 blend=0.006 mirror color=3a3e45 metal gloss=0.6
-  bar  leg on foot from=0.05 to=0.90 r=0.040 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  blob leg on shin at=0.00 r=0.035 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  leg on shin from=0.05 to=0.95 r=0.025 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  blob leg on foot at=0.00 r=0.030 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  leg on foot from=0.05 to=0.90 r=0.020 blend=0.006 mirror color=3a3e45 metal gloss=0.6
 
 face
   # No generated face: the head is prims and kit (twinhead's blanking block).
@@ -172,3 +174,10 @@ palette
   mottleScale   1.8
   mottleColor   0.24 0.24 0.16
   grain         0.14
+
+sheet
+  # NO FACE SHEET. The registry's ZOMBIE_FLAT is still the sheet a body falls
+  # back to, and its projection lands on whatever sits at the head's front:
+  # here the snout wore the zombie's face (owner, 2026-10-22). The face is
+  # geometry and kit (the maw, the teeth, two embers), so the sheet is off.
+  enabled 0

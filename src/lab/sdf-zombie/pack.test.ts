@@ -528,6 +528,8 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
   //                  reference plate's); pinned in warbull-blob.test.ts
   //   twinhead    2  the human twin's two embers (2026-10-21); the machine
   //                  twin's optic is a kit `led`
+  //   gorehound   2  two amber embers under the brow plate (2026-10-22)
+  //   gutcrawler  2  a pale ember in each sunken eye pit (2026-10-22)
   //   (goblin-cinematic had 11: its SDF teeth' faint 0.15 glow, Task 12. The
   //                  teeth are mesh in its kit since Task 14 (2026-10-15), so it
   //                  has no glow prim any more; the base goblin never had one.)
@@ -543,6 +545,8 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
     'cultist-cowled.blob': 2,
     'warbull.blob': 2,
     'twinhead.blob': 2,
+    'gorehound.blob': 2,
+    'gutcrawler.blob': 2,
   };
 
   it('every shipped character packs primClip.w all-zero EXCEPT the named glow authors, at their exact authored count', () => {

@@ -38,6 +38,10 @@ exports[`packBody byte pin > goblin-cinematic-home.blob packs the pinned bytes 1
 
 exports[`packBody byte pin > goblin-home.blob packs the pinned bytes 1`] = `"dd36ac3cfef903ac"`;
 
+exports[`packBody byte pin > gorehound.blob packs the pinned bytes 1`] = `"4daec4595c2d7da2"`;
+
+exports[`packBody byte pin > gutcrawler.blob packs the pinned bytes 1`] = `"79498106bcf5bb0b"`;
+
 exports[`packBody byte pin > juggernaut.blob packs the pinned bytes 1`] = `"6eaa93748006d298"`;
 
 exports[`packBody byte pin > minotaur.blob packs the pinned bytes 1`] = `"baab8ed56c086fd3"`;

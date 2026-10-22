@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, type ArmStyle, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, type ArmStyle, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { Vec3 } from './types';
@@ -356,6 +356,20 @@ export const GOREHOUND_PROFILE: MotionProfile = {
   melee: { kind: 'bite' },
 };
 
+/** The gutcrawler (characters/gutcrawler.blob), the gorehound's legless
+ *  variant: it hauls itself on two arms (CRAWL_DRAG) and bites like the hound
+ *  (hound-attack.ts), lunging off its arms from the band beyond. Slow. */
+export const GUTCRAWLER_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'gutcrawler',
+  gait: { walk: CRAWL_DRAG, run: CRAWL_DRAG },
+  runBand: { from: Infinity, to: Infinity },
+  cruise: 0.75,
+  turnRate: 1.8,
+  armStyle: 'foreleg',
+  melee: { kind: 'bite' },
+};
+
 /** The bride: a slow STALK in a high sword guard; the point trails on the
  *  run. Melee only — the sword mind (enemy-mind.ts) swings it. */
 export const BRIDE_PROFILE: MotionProfile = {
@@ -429,6 +443,7 @@ const BY_NAME: Record<string, MotionProfile> = {
   warbull: WARBULL_PROFILE,
   twinhead: TWINHEAD_PROFILE,
   gorehound: GOREHOUND_PROFILE,
+  gutcrawler: GUTCRAWLER_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

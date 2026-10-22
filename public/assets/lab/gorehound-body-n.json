@@ -1,0 +1,98 @@
+{
+  "generator": "scripts/bake-body-normal.ts",
+  "character": "gorehound",
+  "width": 512,
+  "height": 705,
+  "version": 2,
+  "yMin": 0.94,
+  "yMax": 0.86,
+  "axisX": 0,
+  "axisZ": -0.34,
+  "regions": [
+    {
+      "label": "torso",
+      "kind": "torso",
+      "head": [
+        0,
+        0.86,
+        -0.34
+      ],
+      "tail": [
+        0,
+        0.94,
+        1.06
+      ],
+      "rMax": 0,
+      "row0": 1,
+      "rows": 320
+    },
+    {
+      "label": "upperarm.l",
+      "kind": "limb",
+      "head": [
+        0.1543,
+        0.8354,
+        0.5516
+      ],
+      "tail": [
+        0.174,
+        0.5535,
+        0.4014
+      ],
+      "rMax": 0.2,
+      "row0": 321,
+      "rows": 96
+    },
+    {
+      "label": "upperarm.r",
+      "kind": "limb",
+      "head": [
+        -0.1543,
+        0.8354,
+        0.5516
+      ],
+      "tail": [
+        -0.174,
+        0.5535,
+        0.4014
+      ],
+      "rMax": 0.2,
+      "row0": 417,
+      "rows": 96
+    },
+    {
+      "label": "thigh.l",
+      "kind": "limb",
+      "head": [
+        0.17,
+        0.84,
+        0
+      ],
+      "tail": [
+        0.184,
+        0.5724,
+        0.2093
+      ],
+      "rMax": 0.21,
+      "row0": 513,
+      "rows": 96
+    },
+    {
+      "label": "thigh.r",
+      "kind": "limb",
+      "head": [
+        -0.17,
+        0.84,
+        0
+      ],
+      "tail": [
+        -0.184,
+        0.5724,
+        0.2093
+      ],
+      "rMax": 0.21,
+      "row0": 609,
+      "rows": 96
+    }
+  ]
+}
