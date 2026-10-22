@@ -45,6 +45,7 @@ import cyberdemonBlobSrc from './characters/cyberdemon.blob?raw';
 import twinheadBlobSrc from './characters/twinhead.blob?raw';
 import gorehoundBlobSrc from './characters/gorehound.blob?raw';
 import gutcrawlerBlobSrc from './characters/gutcrawler.blob?raw';
+import gibbetBlobSrc from './characters/gibbet.blob?raw';
 import bloatmawBlobSrc from './characters/bloatmaw.blob?raw';
 import gnasherBlobSrc from './characters/gnasher.blob?raw';
 import ogreBlobSrc from './characters/ogre.blob?raw';
@@ -53,7 +54,7 @@ import cultistBlobSrc from './characters/cultist.blob?raw';
 import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
 import brideBlobSrc from './characters/bride.blob?raw';
 import {
-  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, GOREHOUND_PROFILE, GUTCRAWLER_PROFILE, motionProfileFor, type MotionProfile,
+  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, GOREHOUND_PROFILE, GUTCRAWLER_PROFILE, GIBBET_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
 
 /** A face sheet's texture and its crop. `mean` is the level the shader
@@ -341,6 +342,15 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     name: 'gutcrawler', src: gutcrawlerBlobSrc,
     face: ZOMBIE_FLAT,
     profile: GUTCRAWLER_PROFILE,
+  },
+  // The walking cage (gibbet.blob's header): a bone-metal frame on four long
+  // legs, a sac of meat swinging inside on the `hem` pendulum, a head dangling
+  // at the front. Kit: assets-source/gibbet-kit/.
+  gibbet: {
+    name: 'gibbet', src: gibbetBlobSrc,
+    kit: '/assets/lab/gibbet-kit.gltf',
+    face: ZOMBIE_FLAT,
+    profile: GIBBET_PROFILE,
   },
   cyberdemon: {
     name: 'cyberdemon', src: cyberdemonBlobSrc,

@@ -216,6 +216,12 @@ export type GaitProfile = {
    *  little slack, so it must land ahead or the stance overstretches it:
    *  the arc becomes (1 - a) sin(pi u) + a sin(pi u / 2). */
   landAhead?: number;
+  /** A HUNG MASS on the `hem` pendulum (the gibbet's sac): the swing (m) its
+   *  free end is driven through — sideways, a third of a stride behind the
+   *  body's sway, and fore-aft at half that on every footfall. Absent/0: the
+   *  hem only bobs and the Verlet lag is all the motion it gets (the cultist's
+   *  robe), which on a steady walk is ~1.5 cm and reads as rigid. */
+  hemSwing?: number;
   /** 'foreleg' only: the elbow's BACKWARD bow during the swing (m). A dog's
    *  elbow points back, so the front leg folds the opposite way to the
    *  knee's forward bow (kneeBend). Default: kneeBend. */
@@ -480,6 +486,27 @@ export const CRAWL_DRAG: GaitProfile = {
   armStyle: 'foreleg',
   forePhase: 0,
   torsoLean: 0,
+};
+
+/** The GIBBET's stalk (characters/gibbet.blob): the gorehound's four-beat
+ *  'foreleg' walk on long spindly legs, slower and higher-stepping, a cage
+ *  carried at the hip line. The frame barely bobs; the meat does the moving
+ *  (the sac is the `hem` pendulum and lags every step on its own). */
+export const GIBBET_STALK: GaitProfile = {
+  ...GOREHOUND,
+  name: 'gibbet-stalk',
+  hemSwing: 0.08,
+  strideFreq: 1.5,
+  stanceDuty: 0.6,
+  strideLen: 0.36,
+  landAhead: 0.6,
+  footLift: 0.17,
+  kneeBend: 0.10,
+  kneeLift: 0.07,
+  elbowBow: 0.09,
+  swayAmp: 0.03,
+  bobAmp: 0.025,
+  rockAmp: 0.02,
 };
 
 /** Lerp every numeric knob; strings (name, armStyle) snap at w = 0.5 so the
@@ -878,7 +905,9 @@ export function stepGait(
     // The cloth pendulum bobs with the hips but NEVER sways: the hips swing
     // side to side over a hem that stays put, and the Verlet constraint
     // between them tilts the skirt — the hem lagging the waist, as cloth does.
-    hem: [0, bob * 0.9, 0],
+    hem: T.hemSwing
+      ? [-T.hemSwing * Math.sin(swayPhase - TAU / 3), bob * 0.9, 0.5 * T.hemSwing * Math.cos(T.bobPerStride * phiL - 1.0)]
+      : [0, bob * 0.9, 0],
     // Rigid with the head (motion.ts re-derives the jaw target from the
     // head frame anyway; this keeps the pre-override target sane).
     jaw: [-sway * 0.2 * T.upperSway, -bob * T.headBob, 0],

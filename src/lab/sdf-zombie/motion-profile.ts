@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, type ArmStyle, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, type ArmStyle, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { Vec3 } from './types';
@@ -370,6 +370,20 @@ export const GUTCRAWLER_PROFILE: MotionProfile = {
   melee: { kind: 'bite' },
 };
 
+/** The gibbet (characters/gibbet.blob): a cage of bone-metal on four long
+ *  legs with meat slung inside. Walks on GIBBET_STALK; bites and lunges with
+ *  the head that dangles from the front of the frame (hound-attack.ts). */
+export const GIBBET_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'gibbet',
+  gait: { walk: GIBBET_STALK, run: GIBBET_STALK },
+  runBand: { from: Infinity, to: Infinity },
+  cruise: 1.1,
+  turnRate: 2.4,
+  armStyle: 'foreleg',
+  melee: { kind: 'bite' },
+};
+
 /** The bride: a slow STALK in a high sword guard; the point trails on the
  *  run. Melee only — the sword mind (enemy-mind.ts) swings it. */
 export const BRIDE_PROFILE: MotionProfile = {
@@ -444,6 +458,7 @@ const BY_NAME: Record<string, MotionProfile> = {
   twinhead: TWINHEAD_PROFILE,
   gorehound: GOREHOUND_PROFILE,
   gutcrawler: GUTCRAWLER_PROFILE,
+  gibbet: GIBBET_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

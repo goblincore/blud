@@ -1,0 +1,146 @@
+# THE GIBBET — a walking cage with meat hung in it (owner pick, 2026-10-22:
+# "chassis and sac", after the gorehound read as the gnasher again). The
+# parasite's real idea pushed further: the BODY is machine, a skullmetal
+# ribcage frame carried high on four long, spindly legs (kit), and the flesh is
+# a huge sagging sac slung INSIDE the cage, hooked and chained to the spine,
+# hanging nearly to the floor. The weight is in the sag and the sway of
+# hanging meat, not in muscle. At the front a small, wet, wrong head dangles
+# on a cable neck under the frame, and turns to look at you.
+#
+# THE RIG is the gorehound's (biomech-style.md, "Non-humanoid rigs"): arms as
+# front legs ('foreleg' gait), the butcher's dog hind leg, standard names.
+# Two things are new:
+#   - THE SAC SWINGS. It is the `hem` bone, the cloth pendulum (gait.ts
+#     GaitJointName 'hem'): from the hips down and forward to the sac's
+#     bottom. Its free end rides the body's translation and yaw while the
+#     Verlet rig lets it lag, so the meat swings behind every step and turn.
+#     Its tail stays above the toes (bindRig pins the LOWEST rig point).
+#   - THE HEAD HANGS. The neck falls DOWN from the front of the frame and the
+#     skull hangs off it face-forward-down; the aim chain (chest -> neck ->
+#     head) still turns it to the player.
+model gibbet
+  height 1.35
+
+skeleton
+  # The frame is high: hips at 1.06 (root 0.98 + len 0.08).
+  root pelvis at 0.98 len=0.08
+  # The spine runs nearly level to the withers (0, 1.08, 0.62): the cage's top.
+  bone spine parent=pelvis dir=up pitch=88  len=0.62
+  bone chest parent=spine  dir=up pitch=100 len=0.15
+  # The neck falls from the front of the frame, the skull hangs off it.
+  bone neck  parent=chest  dir=up pitch=158 len=0.30
+  bone skull parent=neck   dir=up pitch=140 len=0.20
+  bone jaw   parent=neck   dir=up pitch=160 len=0.18 hinge=0.20
+  # THE SAC: the pendulum, from the hips forward and down to the sac's
+  # bottom (~(0, 0.30, 0.31)).
+  bone hem   parent=pelvis dir=up pitch=158 len=0.82
+
+  mirror
+    # Long spindly legs (the parasite's), SPLAYED like a spider's: the knees
+    # and elbows out at x ~0.45 so the hung cage swings between them. Scapula down and out from the withers to the shoulder.
+    bone clavicle parent=spine    dir=side tilt=-30 len=0.30
+    bone upperarm parent=clavicle dir=down pitch=-22 tilt=28 len=0.42
+    bone forearm  parent=upperarm dir=down pitch=18        len=0.44
+    bone hand     parent=forearm  dir=down pitch=45        len=0.22
+    bone thigh parent=pelvis side=0.22 dir=down pitch=35 tilt=30 len=0.42
+    bone shin  parent=thigh  dir=down pitch=-40         len=0.42
+    bone foot  parent=shin   dir=down pitch=8           len=0.425
+  end
+
+body
+  # --- THE FRAME'S CORES: thin, hidden under the kit spine. ------------------
+  # FUSING A BODY OF THIN CORES. The validator fuses clusters by a STRAIGHT line
+  # between their `core` prims, and thin struts at angles never contain one, so
+  # the joins are chosen to be collinear: the torso's core is the neck cord
+  # and the head's is a cord riding the same axis; the hind legs fuse to each
+  # other across the hip crossbar and the forelegs across the shoulder yoke.
+  bar  torso on spine from=0.00 to=1.00 r=0.035 blend=0.006 color=3a3e45 metal gloss=0.6
+  # The shoulder yoke between the scapulae (the forelegs' fuse path).
+  bar  torso on spine from=1.00 to=1.00 offset=(-0.099,-0.069,0) tip=(0.198,0,0) r=0.032 blend=0.006 color=3a3e45 metal gloss=0.6
+  bar  torso on chest from=0.00 to=1.00 r=0.030 blend=0.006 color=3a3e45 metal gloss=0.6
+  # The hip crossbar the hind legs hang from (fuses the leg cores to the frame).
+  bar  torso on pelvis from=1.00 to=1.00 offset=(-0.23,0,0) tip=(0.46,0,0) r=0.035 blend=0.006 color=3a3e45 metal gloss=0.6
+
+  # --- THE SAC: hung meat. All on the pendulum, so all of it swings. ---------
+  # The stalk: where the sac is gathered up and hooked to the spine.
+  bar  torso on hem from=0.02 to=0.40 r=0.090 r2=0.150 wide=1.10 deep=1.10 blend=0.040
+  # The bulk: pear-shaped, heaviest at the bottom (gravity).
+  blob torso on hem at=0.62 r=0.230 wide=1.20 tall=1.00 deep=1.15 blend=0.050
+  blob torso on hem at=0.85 r=0.250 wide=1.25 tall=0.80 deep=1.25 offset=(0,0.03,0) blend=0.050
+  # Lobes bulging out between the cage's ribs (the kit's bars press the rest).
+  blob torso on hem at=0.70 r=0.110 offset=(0.200,0.020,-0.050) blend=0.035 both
+  blob torso on hem at=0.55 r=0.090 offset=(0.160,0.060,0.120) blend=0.035 both
+  blob torso on hem at=0.88 r=0.100 offset=(0.060,-0.070,0.170) blend=0.035
+  blob torso on hem at=0.80 r=0.085 offset=(-0.080,-0.040,-0.180) blend=0.035
+  # The drip: a teat of meat where the sac's weight pulls it to a point.
+  bar  torso on hem from=0.92 to=0.92 offset=(0.020,-0.140,0.020) tip=(0.010,-0.090,0.010) r=0.050 r2=0.016 blend=0.030
+  # Wet wounds where the hooks go in (the kit's hooks seat in them).
+  blob torso on hem at=0.40 r=0.030 offset=(0.130,0.000,0.040) blend=0.010 color=6a1418 gloss=0.9 both
+  blob torso on hem at=0.45 r=0.026 offset=(0.000,0.020,0.160) blend=0.010 color=6a1418 gloss=0.9
+
+  # --- THE NECK: a stringy cord of flesh among the cables (kit). -------------
+  bar  torso on neck from=0.00 to=1.06 r=0.040 r2=0.036 blend=0.015 core
+
+  # --- THE HEAD: small, wet, wrong. A swollen bulb with a lipless mouth. -----
+  # The head's fuse cord, inside the neck (see FUSING above).
+  bar  head on neck from=0.10 to=1.00 r=0.026 blend=0.010 core
+  blob head on skull at=0.35 r=0.085 wide=1.00 tall=1.10 deep=1.05 blend=0.015
+  # The brow sags over the eyes like a wet bag.
+  blob head on skull at=0.62 r=0.050 wide=1.50 tall=0.70 deep=0.90 offset=(0,0.030,0) blend=0.015
+  # Three eyes, unequal, clustered off-centre: the wrongness.
+  blob head on skull at=0.70 r=0.016 offset=(0.035,0.030,0.040) blend=0.002 color=e8f0a0 glow=0.7
+  blob head on skull at=0.66 r=0.011 offset=(-0.030,0.040,0.042) blend=0.002 color=e8f0a0 glow=0.7
+  blob head on skull at=0.74 r=0.008 offset=(-0.008,0.000,0.055) blend=0.002 color=e8f0a0 glow=0.7
+  # The gullet behind the teeth.
+  blob head on skull at=0.80 r=0.045 wide=1.20 tall=0.70 deep=1.10 offset=(0,-0.040,0) blend=0.008 color=3a0c0e gloss=0.9
+  # The lower jaw: a thin hinged blade of flesh.
+  blob head on jaw at=0.85 r=0.050 wide=1.30 tall=0.50 deep=1.10 offset=(0,-0.020,0.010) blend=0.012
+
+  # --- LEGS: machine only, thin cores the kit sleeves. ------------------------
+  bar  arm on clavicle from=0.00 to=1.00 r=0.030 blend=0.006 mirror core color=3a3e45 metal gloss=0.6
+  blob arm on clavicle at=1.00 r=0.040 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  arm on upperarm from=0.00 to=1.00 r=0.025 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  arm on forearm  from=0.00 to=1.00 r=0.022 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  arm on hand     from=0.00 to=0.90 r=0.018 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  blob leg on thigh at=0.00 r=0.040 blend=0.006 mirror core color=3a3e45 metal gloss=0.6
+  bar  leg on thigh from=0.00 to=1.00 r=0.025 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  leg on shin  from=0.00 to=1.00 r=0.022 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  leg on foot  from=0.00 to=0.90 r=0.018 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+
+face
+  # No generated face: the head is prims.
+  headRadius 0.001
+  headWidth  1.0
+  headHeight 1.0
+  headDepth  1.0
+  jawWidth   1.0
+  jawHeight  1.0
+  jawDrop    0
+  jawJut     0
+  noseLength 0
+  noseWidth  1.0
+  noseDrop   0
+  browHeavy  0
+  browRise   0
+  headBlend  0.006
+
+palette
+  # Hung meat: pale, wet, bruised purple-red in the folds, a fatty yellow mottle.
+  baseColor     0.62 0.42 0.40
+  deepColor     0.42 0.06 0.10
+  charColor     0.08 0.05 0.06
+  specIntensity 0.85
+  specRoughness 0.22
+  fresnelBoost  0.70
+  translucency  0.40
+  wetness       0.85
+  surfaceNoiseAmp    0.050
+  silhouetteNoiseAmp 0.020
+  mottleAmp     0.40
+  mottleScale   1.6
+  mottleColor   0.55 0.45 0.22
+  grain         0.12
+
+sheet
+  # No face sheet (biomech-style.md: a non-person wears none).
+  enabled 0
