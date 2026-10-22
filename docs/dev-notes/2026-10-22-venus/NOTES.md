@@ -24,7 +24,8 @@ A run that throws does not save the .blend, so re-run everything after a crash.
 
 - `venus-blockout.png`: the proportions pass, flesh only. The owner said "that's good".
 - `venus-face.png`: the eyes moved into the face mask's sockets (owner: "the eyes seem out of position").
-- `venus-final.png`: with kit and normal map.
+- `venus-final.png`, `venus-final-close.png`: with the kit and the normal map. The map took 56 min to bake: 1,332 detail
+  prims; the torso is 93% covered.
 
 ## How it went
 
@@ -41,6 +42,9 @@ A run that throws does not save the .blend, so re-run everything after a crash.
 ## Open
 
 - Owner review of the whole figure.
+- In the close frames, the thin baked lines on the breasts, shoulders and thighs read more as scratches or scar cuts
+  than as ropey veins or stretch marks. Next: thicker, prouder veins on the limbs, and fewer, softer stretch marks.
+  Judge on a crop before the next 56-min bake.
 - A bespoke attack mind (a grab or a two-handed rake). Today she uses the zombie's swing.
 - The collar sits under the hair curtains and shows only from behind.
 - Kit optimisation (~85k tris), as with the twinhead: bake the sculpt detail to cages.

@@ -90,7 +90,8 @@ muscled brute; fat is a different problem.
   (r 9-15 mm, ~2 mm proud) over the rear, hips and outer thighs; stretch marks as short fine streaks (r 2.8 mm,
   1.4 mm proud); a navel as a ring of six small swellings. Veins follow the recipe above; on the torso give the
   swing in METRES and convert to degrees by the probed radius, since the torso's radius varies 2x round a heavy
-  body.
+  body. Cellulite read well on the rear. The fine lines (stretch marks, and veins at the recipe's thin end) read as
+  scratch cuts on the venus's first bake. The bake is slow (56 min for ~1,300 detail prims), so trial a crop first.
 - **Lay the kit on the PROBED skin, not round a bone.** A heavy body is nothing like a cylinder: probe it
   (`scripts/venus-surface.ts` writes `surface.json`; `venus_common.py`'s `waist_pt`) and build on those points.
   The corset ribs sit 4 mm INSIDE the skin, so they bite and the `.blob`'s raw lumps swell round them.
