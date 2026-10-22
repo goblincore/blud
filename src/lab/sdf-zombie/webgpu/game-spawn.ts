@@ -24,7 +24,8 @@ import { type Primitive, type Vec3 } from '../types';
 import { bodyPrimStride } from '../validate';
 import { compileCharacterSheet, createCharacterView } from './character-view';
 import { type CrowdType } from './crowd-type';
-import { makeHoundMind, makeSoldierMind, makeSwordMind, makeWarbullMind } from './enemy-mind';
+import { makeGibbetMind, makeHoundMind, makeSoldierMind, makeSwordMind, makeWarbullMind } from './enemy-mind';
+import { spawnBile } from '../bile';
 import { createZombieActor, type ZombieActor } from './game-actor';
 import { registerBleed } from './game-bleed';
 import { crowdTypeFor } from './game-crowd-types';
@@ -375,6 +376,16 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
     ...(characterEntry(name).profile.melee?.kind === 'bite' ? {
       mind: makeHoundMind(),
     } : {}),
+    // A STAB profile (the gibbet): its spiked front legs up close and, at range, a glob of bile squirted from the
+    // sac's drip (MotionProfile.spit) and LOBBED at the player's chest (bile.ts), enemy-mind.ts makeGibbetMind.
+    ...(characterEntry(name).profile.melee?.kind === 'stab' ? {
+      mind: makeGibbetMind(),
+      onFire: ({ origin }: { origin: Vec3; direction: Vec3 }) => {
+        ctx.world.encounter.shot(zombieId);
+        const pp = ctx.player.player.pos;
+        ctx.weapon.bile.push(spawnBile(origin, [pp[0], pp[1] + SMG_TARGET_CHEST_Y, pp[2]], zombieId));
+      },
+    } : {}),
     // A RANGED profile (motion-profile.ts `gunner`) gets the shooting brain
     // on its weapon's tuning — the soldier's shotgun, the cultist's tommy
     // gun, the juggernaut's chaingun. Was `name === 'soldier'`.
@@ -435,7 +446,8 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
       // the sword's value.
       const charged = characterEntry(name).profile.charger && variant === 'shove';
       // The hound's jaws: a bite is the zombie's bite, a pounce lands the whole body.
-      const jaws = variant === 'bite' ? VITALS.houndBite : variant === 'pounce' ? VITALS.houndPounce : null;
+      const jaws = variant === 'bite' ? VITALS.houndBite : variant === 'pounce' ? VITALS.houndPounce
+        : variant === 'stab' ? VITALS.gibbetStab : null;
       damagePlayer(ctx, jaws ?? (charged ? VITALS.chargeHit : VITALS.swordHit), 'melee');
     },
     // HEAD POP (soft targets — the cultist, owner 2026-09-24: Scanners). The

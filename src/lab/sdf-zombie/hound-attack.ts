@@ -22,9 +22,12 @@ import { ATTACK_TUNING, attackDrive, type AttackPose, type SwingVariant } from '
 import { BRAIN_TUNING, type BrainTuning } from './brain';
 import { wrapPi } from './wander';
 
-export type HoundVariant = 'bite' | 'pounce';
+/** The hound's bite and pounce, and the gibbet's two (characters/gibbet.blob): the STAB (both front legs rear up and
+ *  drive their spike tips forward) and the SQUIRT (the caged sac swings back, then forward, and lobs a glob of bile
+ *  from its drip: bile.ts; the squirt never makes contact itself). */
+export type HoundVariant = 'bite' | 'pounce' | 'stab' | 'squirt';
 export function isHoundVariant(v: SwingVariant): v is HoundVariant {
-  return v === 'bite' || v === 'pounce';
+  return v === 'bite' || v === 'pounce' || v === 'stab' || v === 'squirt';
 }
 
 export const HOUND_TUNING = {
@@ -37,20 +40,28 @@ export const HOUND_TUNING = {
     crouch: -0.10, crouchBack: -0.08, rise: 0.22, root: 0.12, chest: 0.12, neck: 0.18, head: 0.24,
     pawUp: 0.24, pawFwd: 0.22,
   },
+  /** STAB: the wind-up REARS both front legs up (the paws high, the chest lifted and pulled back); the strike drives
+   *  the spike tips forward at mid height. Paws and elbows move as one, so the leg stays a leg. */
+  stab: { rearUp: 0.58, rearElbow: 0.45, rearChest: 0.10, rearBack: 0.06, thrust: 0.45, thrustUp: 0.25, elbowFwd: 0.25, chest: 0.10, root: 0.08 },
+  /** SQUIRT: the sac (the `hem` pendulum) swings back on the wind-up and forward through the strike, and the glob
+   *  leaves at `fireAt`, as it swings through. The frame recoils a little. */
+  squirt: { back: 0.20, lift: 0.06, fwd: 0.28, fwdLift: 0.10, recoil: 0.03, crouch: 0.03, fireAt: 0.42 },
   /** Root travel over one pounce (m), and how close it may land (m). */
   pounceDistance: 1.6,
   pounceStopShort: 0.8,
   /** While it pounces the hind plants slide within this fraction of leg
    *  length of the hips (motion.ts plantReach). */
   pouncePlantReach: 1.0,
-  /** The front paws are off the floor over this phase window. */
+  /** The front paws are off the floor over this phase window (a pounce; a stab rears for nearly the whole swing). */
   airborne: { from: 0.22, to: 0.62 },
-  /** The jaw (rad): wide on the wind-up, snapped shut by the strike's end. */
-  gape: { bite: 0.55, pounce: 0.65 } as Record<HoundVariant, number>,
-  /** Contact: on the phase the jaws close, inside this reach and cone. */
+  stabAirborne: { from: 0.04, to: 0.85 },
+  /** The jaw (rad): wide on the wind-up, snapped shut by the strike's end. The gibbet's attacks are not bites. */
+  gape: { bite: 0.55, pounce: 0.65, stab: 0, squirt: 0 } as Record<HoundVariant, number>,
+  /** Contact: on the phase the jaws (or the spikes) close, inside this reach and cone. The squirt's reach is 0: the
+   *  glob hits or misses on its own (bile.ts). */
   contact: {
-    phase: { bite: 0.45, pounce: 0.48 } as Record<HoundVariant, number>,
-    reach: { bite: 1.55, pounce: 1.7 } as Record<HoundVariant, number>,
+    phase: { bite: 0.45, pounce: 0.48, stab: 0.46, squirt: 1 } as Record<HoundVariant, number>,
+    reach: { bite: 1.55, pounce: 1.7, stab: 1.95, squirt: 0 } as Record<HoundVariant, number>,
     cone: 0.7,
   },
   brain: {
@@ -80,6 +91,32 @@ export function houndPose(phase: number, variant: HoundVariant): AttackPose {
   if (d === 0) return { offsets: {}, rootOffset: Z, reach };
   const w = Math.max(0, -d); // wind-up weight
   const s = Math.max(0, d); // strike weight
+  if (variant === 'stab') {
+    const S = HOUND_TUNING.stab;
+    const paw: Vec3 = [0, w * S.rearUp + s * S.thrustUp, w * 0.05 + s * S.thrust];
+    const elbow: Vec3 = [0, w * S.rearElbow + s * S.thrustUp, s * S.elbowFwd];
+    return {
+      offsets: {
+        chest: [0, w * S.rearChest, s * S.chest - w * S.rearBack],
+        neck: [0, w * S.rearChest, s * S.chest - w * S.rearBack],
+        head: [0, w * S.rearChest, s * S.chest - w * S.rearBack],
+        elbowL: elbow, elbowR: elbow, handL: paw, handR: paw,
+      },
+      rootOffset: [0, w * 0.04, s * S.root - w * S.rearBack],
+      reach,
+    };
+  }
+  if (variant === 'squirt') {
+    const Q = HOUND_TUNING.squirt;
+    return {
+      offsets: {
+        hem: [0, w * Q.lift + s * Q.fwdLift, s * Q.fwd - w * Q.back],
+        chest: [0, 0, -s * Q.recoil],
+      },
+      rootOffset: [0, -w * Q.crouch, -s * Q.recoil],
+      reach,
+    };
+  }
   if (variant === 'bite') {
     const B = HOUND_TUNING.bite;
     return {
@@ -106,11 +143,39 @@ export function houndPose(phase: number, variant: HoundVariant): AttackPose {
   };
 }
 
-/** True while a pounce has the front paws off the floor. */
+/** True while a pounce (or the gibbet's stab) has the front paws off the floor. */
 export function pounceAirborne(phase: number, variant: SwingVariant): boolean {
-  const A = HOUND_TUNING.airborne;
-  return variant === 'pounce' && phase > A.from && phase < A.to;
+  const A = variant === 'stab' ? HOUND_TUNING.stabAirborne : HOUND_TUNING.airborne;
+  return (variant === 'pounce' || variant === 'stab') && phase > A.from && phase < A.to;
 }
+
+/** The squirt's glob leaves this frame (prevPhase -> phase crosses HOUND_TUNING.squirt.fireAt). */
+export function squirtFires(prevPhase: number, phase: number): boolean {
+  const at = HOUND_TUNING.squirt.fireAt;
+  return prevPhase < at && phase >= at;
+}
+
+/** The GIBBET's mind tuning: the ring brain stabbing inside its legs' reach (no pounce: the squirt is its answer to
+ *  range, enemy-mind.ts makeGibbetMind), and the squirt's own band and cadence. */
+export const GIBBET_TUNING = {
+  brain: {
+    ...BRAIN_TUNING,
+    // The spike tips reach ~1.9 m ahead of the pelvis at the thrust.
+    meleeRadius: 1.7,
+    outerRadius: 2.4,
+    engageRange: 4.0,
+    releaseRange: 5.0,
+    pickVariant: () => 'stab',
+    swingSec: 1.0,
+    swingSecFor: { stab: 1.0 },
+    cooldownSec: 1.2,
+  } satisfies BrainTuning as BrainTuning,
+  /** It squirts at a player between these distances (m) it can see, every cooldown seconds, the first after `first`. */
+  squirtBand: { min: 3.0, max: 11 },
+  squirtSec: 1.15,
+  squirtCooldown: 3.2,
+  squirtFirst: 1.2,
+} as const;
 
 function smooth(t: number): number {
   const c = t < 0 ? 0 : t > 1 ? 1 : t;

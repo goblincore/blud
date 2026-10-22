@@ -20,7 +20,7 @@ import {
   type SoldierBrain, type SoldierTuning,
 } from '../soldier-brain';
 import { SWORD_TUNING, isSwordVariant, lungeAdvance, swordContact } from '../sword-swing';
-import { HOUND_TUNING, houndContact, isHoundVariant, pounceAdvance } from '../hound-attack';
+import { GIBBET_TUNING, HOUND_TUNING, houndContact, isHoundVariant, pounceAdvance, squirtFires } from '../hound-attack';
 import { CHARGE_REST, stepCharge, type ChargeState } from '../charge';
 import type { BrainTuning } from '../brain';
 import type { SwingVariant } from '../attack';
@@ -334,6 +334,59 @@ export function makeHoundMind(tuning: BrainTuning = HOUND_TUNING.brain): EnemyMi
       state: brain.state, alert: brain.alert, side: brain.swing.side, variant: brain.swing.variant,
       swingT: brain.swingT, holdSecs: brain.holdSecs, hasToken: lastToken, aimT: 0, cooldown: brain.cooldown,
     }),
+  };
+}
+
+/** The GIBBET's two attacks (characters/gibbet.blob, hound-attack.ts): up close, the hound mind on GIBBET_TUNING
+ *  STABS with both spiked front legs (jaw-less contact on the thrust); at range, it SQUIRTS. A seen, alerted player
+ *  between squirtBand.min and .max, with the squirt off cooldown and no stab running, starts one: the body halts and
+ *  turns to face, the sac swings back and forward (the `squirt` pose), and `fire` goes up for the one frame the glob
+ *  leaves (squirtFires). game-actor fires it from the sac's drip (MotionProfile.spit) and game-spawn lobs bile.ts's
+ *  glob at the player. A stagger cancels a squirt. */
+export function makeGibbetMind(): EnemyMind {
+  const T = GIBBET_TUNING;
+  const melee = makeHoundMind(T.brain);
+  let squirtT = -1;          // seconds into a running squirt; -1 = none
+  let cooldown: number = T.squirtFirst;
+  let prev = 0;
+  const halted = (input: MindInput, phase: number, fire: boolean): MindOutput => ({
+    target: null, halt: true,
+    attack: { phase, side: 'R', variant: 'squirt' },
+    fire, weaponUp: false,
+    faceHeading: input.player ? Math.atan2(input.player.x - input.self.x, input.player.z - input.self.z) : null,
+    engaged: true, committed: true, contact: false, aimError: 0,
+  });
+  return {
+    kind: 'zombie',
+    meleeCapable: true,
+    step(input) {
+      cooldown = Math.max(0, cooldown - input.dt);
+      if (squirtT >= 0) {
+        squirtT += input.dt;
+        const phase = squirtT / T.squirtSec;
+        if (phase < 1) {
+          const fire = squirtFires(prev, phase);
+          prev = phase;
+          return halted(input, phase, fire);
+        }
+        squirtT = -1; prev = 0; cooldown = T.squirtCooldown;
+      }
+      const out = melee.step(input);
+      const p = input.player;
+      if (!out.attack && p && input.alerted && input.lineOfSight !== false && cooldown <= 0) {
+        const dist = Math.hypot(p.x - input.self.x, p.z - input.self.z);
+        if (dist >= T.squirtBand.min && dist <= T.squirtBand.max) {
+          squirtT = 0; prev = 0;
+          return halted(input, 0, false);
+        }
+      }
+      return out;
+    },
+    stagger(holdSec) { squirtT = -1; prev = 0; melee.stagger(holdSec); },
+    debug: () => {
+      const d = melee.debug();
+      return squirtT >= 0 ? { ...d, state: 'squirt', variant: 'squirt', cooldown } : { ...d, cooldown };
+    },
   };
 }
 
