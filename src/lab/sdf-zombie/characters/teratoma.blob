@@ -123,22 +123,17 @@ body
   # not a maw; the plate's mouth is open on a full row of long teeth.
   blob torso on pelvis at=0.00 offset=(0.00,-0.19,0.37) r=0.160 wide=2.00 tall=1.15 deep=0.60 blend=0.010 color=1a0506 gloss=0.85
 
-  # LIPS — FILLER LIPS (owner, 2026-10-22: "as if the cacodemon went to a
-  # plastic surgery clinic to get its lips puffed up"). Four halves, thick at
-  # the centre (r) and only gently thinner at the corner (r2): r 0.068/0.076
-  # tapering to 0.032 read as a normal mouth; at r 0.095/0.105 -> 0.052 they
-  # are two round, over-full pillows that pout forward (bend z 0.08). Painted
-  # a glossier, pinker meat than the hide: the filler look is the SHINE, not
-  # the colour (b8606a rendered as clown lipstick; the plate's alien has lips
-  # the colour of its skin, only inflated).
-  # The lower lip dropped 0.04 so the mouth stays open between them; the
-  # corners still meet at (+-0.39, -0.13), above the middle: a grin. The teeth
-  # (kit) root in them (make_teratoma.py's UP/LO must follow these lines).
-  bar  torso on pelvis from=0 to=0 offset=(0.00,-0.01,0.50) tip=(0.39,-0.12,-0.17) bend=(0.01,0.03,0.08) r=0.095 r2=0.052 blend=0.014 both color=a8706a gloss=0.90
-  bar  torso on pelvis from=0 to=0 offset=(0.00,-0.42,0.49) tip=(0.39,0.29,-0.16) bend=(0.01,-0.05,0.08) r=0.105 r2=0.052 blend=0.014 both color=a8706a gloss=0.90
-  # Cupid's bow: two round swells on the upper lip either side of the middle,
-  # the dip between them is the bow.
-  blob torso on pelvis at=0.00 offset=(0.085,0.020,0.565) r=0.060 wide=1.20 blend=0.016 both color=a8706a gloss=0.90
+  # LIPS: four tapered halves, thick at the centre (r) and thin at the corner
+  # (r2), bowed forward by `bend` so each is one curved roll (bloatmaw r4: two
+  # constant tubes read as sausages). They overlap the gullet's rim. The teeth
+  # (kit) root in them. Upper lip is also the eye's lower lid.
+  # The corners meet at (+-0.39, -0.13), ABOVE the mouth's middle: a grin.
+  # Hide-coloured and unpainted, so the mottle and the baked furrows give them
+  # texture. Two FILLER-LIP passes (2026-10-22: painted glossy pink, r 0.095+;
+  # then one round bowed capsule per lip) were tried and rejected by the
+  # owner: "the original ones were best; these are too smooth, too red".
+  bar  torso on pelvis from=0 to=0 offset=(0.00,-0.01,0.50) tip=(0.39,-0.12,-0.17) bend=(0.01,0.03,0.05) r=0.068 r2=0.032 blend=0.012 both
+  bar  torso on pelvis from=0 to=0 offset=(0.00,-0.38,0.49) tip=(0.39,0.25,-0.16) bend=(0.01,-0.05,0.05) r=0.076 r2=0.032 blend=0.012 both
 
   # CABLE ENTRY WOUNDS: raw swollen lips of meat where the kit's tubes dive
   # into the flesh (make_teratoma.py `wires`, its printed ENTRIES; the

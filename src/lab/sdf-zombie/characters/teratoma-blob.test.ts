@@ -66,8 +66,8 @@ describe('teratoma.blob', () => {
     expect(mx[1]).toBeLessThan(doc.height! + 0.03);
   });
 
-  // THE PRIM BUDGET. 35 at authoring (25 torso, 4 per arm, the 2 buried face prims): the ball and its lobes, the
-  // face masses, the filler lips and cupid's bow, and 8 small raw wounds where the kit's hoses enter. The folds,
+  // THE PRIM BUDGET. 33 at authoring (23 torso, 4 per arm, the 2 buried face prims): the ball and its lobes, the
+  // face masses, four tapered half-lips, and 8 small raw wounds where the kit's hoses enter. The folds,
   // veins and knots are the baked normal map (teratoma.detail); the horns, teeth, eye, machinery, cables and hoses are
   // kit. A pass that marches any of them should have to change this number on purpose.
   it('marches few prims', () => {

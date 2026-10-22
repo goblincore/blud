@@ -133,6 +133,10 @@ floater: a flesh ball with one eye and a maw. It was the first test of whether t
 - The baked `_glow` route for an eye: a yellow slit eye whose glow is per-vertex (the iris burns, the slit is dead).
 - Teeth as kit. The owner's rule: SDF teeth eat the prim budget.
 - An additive mouth: a dark gullet prim recessed behind the lips, never a carve.
+- The varicose recipe above, once it arrived mid-session. The teratoma's first torso veins, copied from the twinhead's
+  older torso `varicose`, broke it (a ~1 rad phase step on 12 mm samples, a several-cm swing) and were re-generated
+  before baking. The torso `varicose` in `twinhead-detail-gen.ts` still has those older numbers, so copy from
+  `armVaricose`, not from it.
 
 **What was missing (now added above or below)**
 
@@ -162,7 +166,15 @@ floater: a flesh ball with one eye and a maw. It was the first test of whether t
 7. **Painted `.blob` colours render more saturated than their hex suggests.** `b8606a` lips came out as clown
    lipstick, and the twinhead's raw-pink wound colour read as red beads on a smaller body. Go muted (`a8706a`,
    `7a3c3c`) and let `gloss` carry the wet or filler look.
-8. **Settle the flesh before baking.** The torso bake takes ~15 min, and any torso edit (a brow, lips, a wound prim)
+8. **Lips: the plain first pass won.** Two filler-lip passes were rejected. The first was painted glossy pink at
+   r 0.095 or more, with a cupid's bow ("triangular, two weird knobs"). The second was one round bowed capsule per
+   lip ("too smooth, too red"). The owner kept the original: unpainted, hide-coloured, tapered half-lips (r 0.068 /
+   0.076 tapering to 0.032). The hide's mottle and noise give them texture, plus light baked furrows. Lesson: a
+   painted glossy lip is a separate material to the eye; unpainted flesh that swells is the house look. For a round
+   lip, the shape that worked was a constant-radius `bar` from corner to corner with `bend` (whose middle moves by
+   about half its value). Bake at 1024 wide for lip-scale detail: the torso map is ~7 mm a texel round a 1.2 m ball
+   at 512.
+9. **Settle the flesh before baking.** The torso bake takes ~15 min, and any torso edit (a brow, lips, a wound prim)
    invalidates it. Bake last.
 
 **Engine gaps this exposed (fixed on the teratoma's branch)**

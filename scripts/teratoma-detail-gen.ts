@@ -3,7 +3,8 @@
 // Generate src/lab/sdf-zombie/characters/teratoma.detail: the teratoma's BAKED flesh detail (scripts/bake-body-normal.ts
 // folds these lines into the body and bakes the difference into teratoma-body-n.png; nothing here is ever raymarched).
 //
-//   npx tsx scripts/teratoma-detail-gen.ts && npx tsx scripts/bake-body-normal.ts teratoma 512 256
+//   npx tsx scripts/teratoma-detail-gen.ts && npx tsx scripts/bake-body-normal.ts teratoma 1024 256
+//   (1024 wide so the lip furrows resolve: ~3.4 mm a texel round the ball; ~30 min)
 //
 // The template is scripts/twinhead-detail-gen.ts: every element is placed by probing the marched torso (sdBody along a
 // ray toward a vertical axis through the ball's centre), sunk a fixed amount under the skin and bound to the pelvis
@@ -137,31 +138,42 @@ for (const s of [1, -1]) {
 }
 
 section('veins: knotted serpentine trunks over the back and flanks, with branches');
+// The VARICOSE RECIPE (biomech-style.md, three failed attempts on the twinhead): a sine meander with a ~10 cm
+// wavelength and a ~1 cm swing, sampled every ~8 mm, the phase stepping 0.22-0.36 rad a sample. Never alternate sides
+// per sample (it bakes as ZZZ zigzags); a short wavelength reads as crumpled skin. The first teratoma veins broke all
+// of it (a ~1 rad phase step on 12 mm samples, a 3-5 degree swing: several cm on this ball). On the ball 1 cm of
+// swing is ~1 degree of `th`. Trunks taper 55-100% toward both ends; a knot about one sample in six; two branches.
 function vein(y0: number, th0: number, y1: number, dth: number, r: number, proud: number, branches: number, depth = 0) {
-  const n = Math.max(6, Math.round(Math.abs(y0 - y1) / 0.012));
-  const pts: [number, number][] = [];
+  const n = Math.max(8, Math.round(Math.hypot(y0 - y1, (dth * Math.PI / 180) * 0.55) / 0.008));
   let th = th0, phase = rnd() * 6.28;
-  const amp = 3 + rnd() * 2;
+  const amp = 0.9 + rnd() * 0.4;
+  const S: { y: number; t: number; c: V; rr: number }[] = [];
   for (let i = 0; i <= n; i++) {
     const y = y0 + (y1 - y0) * (i / n), t = th + amp * Math.sin(phase);
     if (onFace(y, t)) break;
-    pts.push([y, t]);
-    phase += 0.7 + rnd() * 0.5;
-    th += dth / n + (rnd() - 0.5) * 1.5;
+    const k = Math.sin(Math.PI * Math.min(1, (i / n) * 1.1 + 0.05));   // taper at both ends
+    const rr = r * (0.55 + 0.45 * k), sk = skin(y, t);
+    S.push({ y, t, c: add(sk.p, mul(sk.n, proud * (0.6 + 0.4 * k) - rr)), rr });
+    phase += 0.22 + rnd() * 0.14;
+    th += dth / n + (rnd() - 0.5) * 0.3;
   }
-  if (pts.length < 2) return;
-  ridge(pts, r, proud, 0.0016);
-  for (let i = 1; i < pts.length - 1; i++)
-    if (rnd() < 0.25) { const [y, t] = pts[i]!; lump(y, t, r * (1.6 + rnd() * 0.6), proud * 1.35, 0.002); }
+  if (S.length < 3) return;
+  for (let i = 0; i + 1 < S.length; i++) {
+    const A = S[i]!.c, B = S[i + 1]!.c;
+    out.push(`  bar  torso on pelvis from=0 to=0 offset=${fv(sub(A, PELVIS))} tip=${fv(sub(B, A))} r=${f(S[i]!.rr)} r2=${f(S[i + 1]!.rr)} blend=0.0016`);
+  }
+  for (let i = 2; i < S.length - 2; i++)
+    if (rnd() < 0.18) lump(S[i]!.y, S[i]!.t, S[i]!.rr * (1.5 + rnd() * 0.6), proud * 1.3, 0.002);
   for (let b = 0; b < branches && depth < 1; b++) {
-    const [y, t] = pts[1 + Math.floor(rnd() * Math.max(1, pts.length - 3))]!;
-    vein(y, t, y - 0.07 - rnd() * 0.07, (rnd() < 0.5 ? -1 : 1) * (15 + rnd() * 15), r * 0.65, proud * 0.75, 1, depth + 1);
+    const s0 = S[2 + Math.floor(rnd() * Math.max(1, S.length - 5))]!;
+    vein(s0.y, s0.t, s0.y - 0.08 - rnd() * 0.08, (rnd() < 0.5 ? -1 : 1) * (18 + rnd() * 20), r * 0.65, proud * 0.75, 1, depth + 1);
   }
 }
 for (const s of [1, -1]) {
   vein(1.80, s * 95, 1.20, s * 30, 0.0062, 0.0042, 2);    // from under the horn down the flank
   vein(1.72, s * 140, 1.08, -s * 20, 0.0060, 0.0040, 2);  // down the back
-  vein(1.62, s * 70, 1.30, s * 25, 0.0050, 0.0035, 1);    // behind the cheek
+  vein(1.62, s * 70, 1.30, s * 25, 0.0055, 0.0038, 2);    // behind the cheek
+  vein(1.40, s * 160, 1.05, s * 15, 0.0058, 0.0040, 2);   // low on the back into the underbelly
 }
 
 section('nodules: clustered swellings, the growths under the skin');
@@ -170,6 +182,48 @@ for (let i = 0; i < 26; i++) {
   if (onFace(y, th)) continue;
   const r = 0.012 + rnd() * 0.02;
   lump(y, th, r, r * 0.5, 0.005);
+}
+
+section('lips: furrows wrapping over each lip, uneven');
+// Owner (2026-10-22): "add some baked detail to the lips too, striations or other elements". The torso map is ~3.4 mm a
+// texel across at 1024 wide (7 mm at 512), so real lip striations would vanish; these are FURROWS ~2.2 cm apart, each a
+// raised band wrapping from the lip's top over its front to its underside, the creases between them doing the work.
+// The lips are teratoma.blob's tapered half-lip bars: from the middle `a` out to the corner `b` (mirrored), bowed by
+// `bend` (whose middle moves by about half its value, measured off the field on the filler pass).
+const LIPS = [
+  { a: [0, 1.44, 0.50], b: [0.39, 1.33, 0.33], bend: [0.01, 0.03, 0.05] },
+  { a: [0, 1.07, 0.49], b: [0.39, 1.32, 0.33], bend: [0.01, -0.05, 0.05] },
+] as const;
+function lipCentre(L: typeof LIPS[number], x: number): V {
+  const sg = x < 0 ? -1 : 1, t = Math.min(1, Math.abs(x) / L.b[0]), k = 2 * t * (1 - t);
+  return [sg * (L.b[0] * t + L.bend[0] * k), L.a[1] + (L.b[1] - L.a[1]) * t + L.bend[1] * k, L.a[2] + (L.b[2] - L.a[2]) * t + L.bend[2] * k];
+}
+/** The lip's skin at section angle a (rad; 0 = straight forward, + = up) round its centreline at x. */
+function lipSkin(L: typeof LIPS[number], x: number, a: number): { p: V; n: V } {
+  const c = lipCentre(L, x), dir: V = [0, Math.sin(a), Math.cos(a)];
+  let t = 0.25, q = add(c, mul(dir, t));
+  for (let i = 0; i < 300; i++) { const d = sdBody(q, body); if (d < 1e-4) break; t -= Math.max(d * 0.9, 2e-4); q = add(c, mul(dir, t)); }
+  const e = 6e-4, d0 = sdBody(q, body);
+  return { p: q, n: norm([sdBody(add(q, [e, 0, 0]), body) - d0, sdBody(add(q, [0, e, 0]), body) - d0, sdBody(add(q, [0, 0, e]), body) - d0]) };
+}
+for (const L of LIPS) {
+  for (let x = -0.30 + rnd() * 0.01; x <= 0.30; x += 0.019 + rnd() * 0.007) {
+    const r = 0.0045 + rnd() * 0.0015, proud = 0.0018 + rnd() * 0.001;
+    const pts: V[] = [];
+    for (let a = -1.2; a <= 1.21; a += 0.2) {
+      const sk = lipSkin(L, x + 0.004 * Math.sin(a * 3 + x * 40), a);
+      pts.push(add(sk.p, mul(sk.n, proud - r)));
+    }
+    for (let i = 0; i + 1 < pts.length; i++)
+      out.push(`  bar  torso on pelvis from=0 to=0 offset=${fv(sub(pts[i]!, PELVIS))} tip=${fv(sub(pts[i + 1]!, pts[i]!))} r=${f(r)} blend=0.003`);
+  }
+  // a few long welts running along the lip, across the furrows, where the stretched skin has folded
+  for (let k = 0; k < 3; k++) {
+    const a = (rnd() - 0.5) * 1.2, x0 = -0.25 + rnd() * 0.3, pts: V[] = [];
+    for (let x = x0; x < x0 + 0.12; x += 0.012) { const sk = lipSkin(L, x, a + 0.1 * Math.sin(x * 50)); pts.push(add(sk.p, mul(sk.n, 0.0025 - 0.004))); }
+    for (let i = 0; i + 1 < pts.length; i++)
+      out.push(`  bar  torso on pelvis from=0 to=0 offset=${fv(sub(pts[i]!, PELVIS))} tip=${fv(sub(pts[i + 1]!, pts[i]!))} r=0.004 blend=0.002`);
+  }
 }
 
 writeFileSync(resolve(ROOT, 'src/lab/sdf-zombie/characters/teratoma.detail'), out.join('\n') + '\n');

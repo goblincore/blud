@@ -56,6 +56,8 @@ exports[`packBody byte pin > soldier.blob packs the pinned bytes 1`] = `"6f693a9
 
 exports[`packBody byte pin > strand-fixture.blob packs the pinned bytes 1`] = `"a3dd2bb96f38d4b9"`;
 
+exports[`packBody byte pin > teratoma.blob packs the pinned bytes 1`] = `"dcc4944eab88dc45"`;
+
 exports[`packBody byte pin > thin-fixture.blob packs the pinned bytes 1`] = `"3bd8a1982310efc6"`;
 
 exports[`packBody byte pin > twinhead.blob packs the pinned bytes 1`] = `"b5ff117c5016b078"`;

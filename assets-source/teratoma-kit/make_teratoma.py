@@ -151,9 +151,10 @@ def tooth(name, root, down, L, w, flat=0.62, hook=0.25, broken=False):
 
 if 'teeth' in PARTS:
     clear_work()
-    # the FILLER lips (teratoma.blob, 2026-10-22): fatter, pouting further forward, the lower one dropped 0.04
-    UP = ((0, 1.44, 0.50), (0.39, 1.32, 0.33), (0.01, 0.03, 0.08), 0.095)
-    LO = ((0, 1.03, 0.49), (0.39, 1.32, 0.33), (0.01, -0.05, 0.08), 0.105)
+    # The ORIGINAL lips (teratoma.blob). Two filler-lip passes (2026-10-22) were tried and rejected by the owner:
+    # "the original ones were best; these are too smooth, too red".
+    UP = ((0, 1.44, 0.50), (0.39, 1.32, 0.33), (0.01, 0.03, 0.05), 0.068)
+    LO = ((0, 1.07, 0.49), (0.39, 1.32, 0.33), (0.01, -0.05, 0.05), 0.076)
     # (s along the lip, length, width, broken) — upper: big canines either side of the middle, smaller toward corners.
     upper = [(-0.86, 0.075, 0.016, False), (-0.68, 0.115, 0.021, False), (-0.50, 0.150, 0.026, False),
              (-0.33, 0.105, 0.020, True), (-0.15, 0.135, 0.024, False), (0.02, 0.120, 0.022, False),
