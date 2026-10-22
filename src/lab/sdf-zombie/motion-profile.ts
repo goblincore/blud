@@ -401,6 +401,18 @@ export const CHAIR_PROFILE: MotionProfile = {
   melee: { kind: 'bite' },
 };
 
+/** THE GAMER (characters/gamer.blob): the chair's boss variant, a swollen
+ *  man fused into a gaming chair, plugged in, both hands on a joystick that
+ *  grows out of his gut. The chair's waddle and the hound's mind (his head
+ *  thrown off the headrest; the whole rig rearing), slower and heavier: at
+ *  1.3x the chair's size there is more of him to chew through. */
+export const GAMER_PROFILE: MotionProfile = {
+  ...CHAIR_PROFILE,
+  name: 'gamer',
+  cruise: 0.75,
+  turnRate: 1.4,
+};
+
 /** The bride: a slow STALK in a high sword guard; the point trails on the
  *  run. Melee only — the sword mind (enemy-mind.ts) swings it. */
 export const BRIDE_PROFILE: MotionProfile = {
@@ -477,6 +489,7 @@ const BY_NAME: Record<string, MotionProfile> = {
   gutcrawler: GUTCRAWLER_PROFILE,
   gibbet: GIBBET_PROFILE,
   chair: CHAIR_PROFILE,
+  gamer: GAMER_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

@@ -47,6 +47,7 @@ import gorehoundBlobSrc from './characters/gorehound.blob?raw';
 import gutcrawlerBlobSrc from './characters/gutcrawler.blob?raw';
 import gibbetBlobSrc from './characters/gibbet.blob?raw';
 import chairBlobSrc from './characters/chair.blob?raw';
+import gamerBlobSrc from './characters/gamer.blob?raw';
 import bloatmawBlobSrc from './characters/bloatmaw.blob?raw';
 import gnasherBlobSrc from './characters/gnasher.blob?raw';
 import ogreBlobSrc from './characters/ogre.blob?raw';
@@ -55,7 +56,7 @@ import cultistBlobSrc from './characters/cultist.blob?raw';
 import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
 import brideBlobSrc from './characters/bride.blob?raw';
 import {
-  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, GOREHOUND_PROFILE, GUTCRAWLER_PROFILE, GIBBET_PROFILE, CHAIR_PROFILE, motionProfileFor, type MotionProfile,
+  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, GOREHOUND_PROFILE, GUTCRAWLER_PROFILE, GIBBET_PROFILE, CHAIR_PROFILE, GAMER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
 
 /** A face sheet's texture and its crop. `mean` is the level the shader
@@ -361,6 +362,16 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     kit: '/assets/lab/chair-kit.gltf',
     face: ZOMBIE_FLAT,
     profile: CHAIR_PROFILE,
+  },
+  // The chair's BOSS variant (gamer.blob's header): a swollen man fused into
+  // a gaming chair, a VR headset over his eyes, tubes and cables into him,
+  // both hands on a joystick of flesh out of his navel. Kit:
+  // assets-source/gamer-kit/.
+  gamer: {
+    name: 'gamer', src: gamerBlobSrc,
+    kit: '/assets/lab/gamer-kit.gltf',
+    face: ZOMBIE_FLAT,
+    profile: GAMER_PROFILE,
   },
   cyberdemon: {
     name: 'cyberdemon', src: cyberdemonBlobSrc,

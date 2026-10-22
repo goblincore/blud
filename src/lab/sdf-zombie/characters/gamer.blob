@@ -1,0 +1,153 @@
+# THE GAMER — the chair's BOSS variant (owner request, 2026-10-22: "a fleshy
+# man fused into a gaming chair hooked into tubes and wires and VR headset
+# maybe both hands on a fleshy joystick connected to his abdomen"). The
+# chair's idea (chair.blob) taken to the encounter: a swollen, sedentary man
+# grown into a racing-style gaming chair. A VR headset is fused over his eyes.
+# IV lines, a feed hose and cables run from the chair into his arms, neck
+# and spine, and both his hands grip a joystick of flesh that grows out of
+# his navel. Videodrome on a castor base. Bigger than the chair (`scale`),
+# so there is more of him to shoot through.
+#
+# THE RIG is the chair's, unchanged (read chair.blob's header): a short
+# upright lumbar, the clavicles forward along the seat as his femurs, his
+# shins as the front legs, the 'foreleg' waddle. What is new:
+#   - HIS ARMS ARE NOT ON THE ARMRESTS: they reach in to the stick. Every
+#     arm, hand, stalk and knob prim is `rigid` on `chest`, so they ride his
+#     torso as one piece and his hands are on the stick in every pose (no
+#     arm IK touches them: the rig's arms are the front legs).
+#   - THE HEAD IS BLIND. The headset (kit, on `skull`) covers his eyes, so
+#     there are no eye prims; the glow is the stick's fire button and the
+#     headset's visor (kit).
+#
+# All numbers below are AUTHORED (the chair's size); `scale` multiplies every
+# length of the compiled body, and the kit is built on the compiled joints.
+model gamer
+  height 2.10
+  # A boss: 1.3x the chair. Eyeballed: his head clears a player's eye line
+  # when he rears.
+  scale 1.30
+
+skeleton
+  # The chair's skeleton (chair.blob explains each number).
+  root pelvis at 0.47 len=0.06
+  bone spine parent=pelvis dir=up pitch=3  len=0.19
+  # He sits slumped further forward than the chair's sitter, toward the stick.
+  bone chest parent=spine  dir=up pitch=8  len=0.36
+  bone neck  parent=chest  dir=up pitch=30 len=0.11
+  bone skull parent=neck   dir=up pitch=2  len=0.17
+
+  mirror
+    bone clavicle parent=spine    side=0.19 dir=down pitch=71 len=0.43
+    bone upperarm parent=clavicle dir=down pitch=-14 tilt=6 len=0.30
+    bone forearm  parent=upperarm dir=down pitch=16        len=0.22
+    bone hand     parent=forearm  dir=down pitch=55        len=0.11
+    bone thigh parent=pelvis side=0.21 dir=down pitch=22 tilt=8 len=0.21
+    bone shin  parent=thigh  dir=down pitch=-30         len=0.23
+    bone foot  parent=shin   dir=down pitch=8           len=0.14
+  end
+
+body
+  # --- THE SEAT'S CORES (chair.blob's, for the same fuse paths). ------------
+  bar  torso on spine from=0.00 to=1.00 r=0.050 blend=0.010 core
+  bar  torso on pelvis from=1.00 to=1.00 offset=(-0.21,0,0) tip=(0.42,0,0) r=0.035 blend=0.006 color=3a3e45 metal gloss=0.6
+  bar  torso on spine from=1.00 to=1.00 offset=(-0.19,0,0) tip=(0.38,0,0) r=0.035 blend=0.006 color=3a3e45 metal gloss=0.6
+
+  # --- THE MAN: swollen, pasty, poured into the seat. -------------------------
+  # His buttocks and hips spread to the seat's bolsters.
+  blob torso on spine at=0.55 r=0.150 wide=1.30 tall=0.90 deep=1.00 offset=(0,0,0.010) blend=0.040
+  # His lap, the thighs' roots (and the thighs' fuse path, as on the chair).
+  blob torso on spine at=0.45 r=0.130 wide=1.60 tall=0.62 deep=1.15 offset=(0,-0.010,0.110) blend=0.035
+  # THE GUT: a great soft belly sagging forward over his lap.
+  # (First pass r 0.17 read as a stocky man, not a swollen one.)
+  blob torso on chest at=0.15 r=0.190 wide=1.18 tall=0.95 deep=1.12 offset=(0,-0.030,0.110) blend=0.045
+  blob torso on chest at=0.00 r=0.150 wide=1.25 tall=0.72 deep=1.05 offset=(0,-0.060,0.150) blend=0.045
+  # Love handles spilling over the seat's bolsters.
+  blob torso on chest at=0.05 r=0.085 wide=1.00 tall=0.80 deep=1.20 offset=(0.185,-0.040,0.050) blend=0.035 both
+  # A roll of fat across the belly's top, under the chest.
+  blob torso on chest at=0.38 r=0.120 wide=1.35 tall=0.45 deep=1.00 offset=(0,0,0.075) blend=0.030
+  # The chest, soft and wide; the breasts sag.
+  blob torso on chest at=0.58 r=0.150 wide=1.20 tall=1.00 deep=0.85 blend=0.035
+  blob torso on chest at=0.62 r=0.070 wide=1.10 tall=0.95 deep=1.00 offset=(0.075,-0.035,0.085) blend=0.025 both
+  # Shoulders sloping into a fat neck.
+  blob torso on chest at=0.85 r=0.130 wide=1.45 tall=0.80 deep=0.80 blend=0.030
+  blob torso on chest at=0.92 r=0.068 offset=(0.180,-0.020,-0.005) blend=0.025 both
+
+  # --- HIS ARMS, IN TO THE STICK: `rigid` on the chest, see the header. ------
+  # Generated from world targets (shoulder (0.20, 1.005, 0.04), elbow
+  # (0.235, 0.80, 0.10), wrist (0.075, 0.865, 0.42)) as offsets from the
+  # chest at 0.5 = (0, 0.898, 0.035). The elbows rest just over the kit's
+  # armrest pads (top ~0.745).
+  bar  torso on chest from=0.50 to=0.50 offset=(0.200,0.107,0.005) tip=(0.035,-0.205,0.060) r=0.060 r2=0.052 blend=0.014 rigid both
+  blob torso on chest at=0.50 offset=(0.235,-0.098,0.065) r=0.052 blend=0.012 rigid both
+  bar  torso on chest from=0.50 to=0.50 offset=(0.235,-0.098,0.065) tip=(-0.160,0.065,0.320) r=0.048 r2=0.040 blend=0.012 rigid both
+  # His hands, closed round the grip from either side.
+  blob torso on chest at=0.50 offset=(0.045,-0.018,0.415) r=0.042 wide=0.90 tall=1.05 deep=1.10 blend=0.010 rigid both
+
+  # --- THE JOYSTICK: an umbilical stalk out of his navel to a fleshy grip. ---
+  # The grip stands at z 0.45, a hand's breadth clear of the gut's front (~0.34).
+  # The stalk, sagging a little, ringed like a cord.
+  bar  torso on chest from=0.50 to=0.50 offset=(0.000,-0.163,0.265) tip=(0.000,0.080,0.150) r=0.042 r2=0.030 bend=(0,-0.030,0.000) blend=0.020 rigid
+  blob torso on chest at=0.50 offset=(0.000,-0.157,0.333) r=0.038 wide=1.15 tall=0.80 deep=1.15 blend=0.012 rigid
+  blob torso on chest at=0.50 offset=(0.000,-0.138,0.363) r=0.037 wide=1.15 tall=0.80 deep=1.15 blend=0.012 rigid
+  blob torso on chest at=0.50 offset=(0.000,-0.110,0.393) r=0.035 wide=1.15 tall=0.80 deep=1.15 blend=0.012 rigid
+  # The grip, upright between his hands, capped by a swollen knob.
+  bar  torso on chest from=0.50 to=0.50 offset=(0.000,-0.083,0.415) tip=(0.000,0.135,0.000) r=0.034 r2=0.030 blend=0.012 rigid
+  blob torso on chest at=0.50 offset=(0.000,0.052,0.415) r=0.040 wide=1.0 tall=0.80 blend=0.012 rigid
+  # The fire button: a raw red nub on the knob's crown, lit.
+  blob torso on chest at=0.50 offset=(0.000,0.089,0.415) r=0.014 tall=0.6 blend=0.003 color=ff2a1c glow=0.8 gloss=0.9 rigid
+
+  # --- HIS NECK AND HEAD. -----------------------------------------------------
+  # A thick neck, all fat.
+  bar  torso on neck from=0.00 to=1.00 r=0.075 r2=0.066 blend=0.025 core
+  bar  head on neck from=0.30 to=1.00 r=0.050 blend=0.012 core
+  # Jowls: a double chin hanging under the jaw.
+  blob head on skull at=0.10 r=0.062 wide=1.45 tall=0.70 deep=1.00 offset=(0,-0.030,0.060) blend=0.020
+
+  # --- HIS THIGHS: the seat's side rails, swollen. ---------------------------
+  bar  arm on clavicle from=0.00 to=0.92 r=0.085 r2=0.070 tall=0.80 blend=0.025 mirror core
+  blob arm on clavicle at=1.00 r=0.068 offset=(0,0,0.010) blend=0.018 mirror
+  # --- HIS CALVES: the tops of the front legs, fat. ---------------------------
+  bar  arm on upperarm from=0.05 to=0.95 r=0.060 r2=0.040 blend=0.015 mirror
+  # --- HIS FEET inside the greaves (chair.blob). ------------------------------
+  bar  arm on forearm from=0.00 to=0.85 r=0.034 r2=0.024 blend=0.010 mirror
+  bar  arm on hand    from=0.00 to=0.90 r=0.018 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+
+  # --- THE BACK LEGS: machine only. -------------------------------------------
+  blob leg on thigh at=0.00 r=0.040 blend=0.006 mirror core color=3a3e45 metal gloss=0.6
+  bar  leg on thigh from=0.00 to=1.00 r=0.025 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  leg on shin  from=0.00 to=1.00 r=0.022 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  leg on foot  from=0.00 to=0.90 r=0.018 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+
+face
+  # The generated face, made fat: wide jaw, heavy cheeks. The headset covers
+  # the eyes and brow; the slack mouth and jowls show under it.
+  headRadius 0.112
+  headWidth  0.86
+  headHeight 1.10
+  headDepth  0.92
+  jawWidth   0.88
+  jawHeight  0.90
+  jawDrop    0.110
+  jawJut     0.03
+  noseLength 0.012
+  noseWidth  0.42
+  noseDrop   0.010
+  browHeavy  0.006
+  browRise   0.040
+
+palette
+  # Pasty, sweating, blotched red where the tubes go in.
+  baseColor     0.76 0.60 0.54
+  deepColor     0.50 0.14 0.14
+  charColor     0.08 0.05 0.06
+  specIntensity 0.70
+  specRoughness 0.26
+  fresnelBoost  0.60
+  translucency  0.40
+  wetness       0.70
+  surfaceNoiseAmp    0.030
+  silhouetteNoiseAmp 0.010
+  mottleAmp     0.32
+  mottleScale   1.2
+  mottleColor   0.62 0.30 0.30
+  grain         0.10

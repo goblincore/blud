@@ -211,3 +211,25 @@ shows black. Run flesh (his foot) down inside it instead.
 **Pass your own ports.** Another worktree's Vite on 5233 serves ITS checkout: `blob:shot` reuses it and
 quietly shoots the default zombie, because your new `?character=` does not exist there. Run `blob:shot` with
 `LAB_VITE_PORT` / `LAB_CDP_PORT` set when other sessions are running.
+
+### The boss variant: the gamer (2026-10-22)
+
+`characters/gamer.blob` (kit `assets-source/gamer-kit/`) is the chair's boss: a swollen man in a gaming chair,
+plugged in. It uses the chair's rig at `scale 1.30`. What it adds:
+
+- **Hands that hold something, with no arm bones.** On this rig the arms are the front legs, so his arms, hands
+  and the joystick are all `rigid` on `chest`: one rigid group, and no pose can part them.
+  `gamer-blob.test.ts` measures each hand against the grip on the posed body after a walk. Without `rigid`, a
+  hand drifts 4.4 cm, because each end binds to its nearest joint and one of those is a front knee.
+- **A scaled body's kit is in COMPILED metres.** `blender-kit.ts` skins to the built body, so take the kit's
+  joints and prim positions from a `buildBody` dump, not from the `.blob`'s authored numbers.
+- **A product read survives the style.** Black upholstery, red racing stripes, bucket bolsters, the two neck
+  pillows, T-armrests and a five-star castor base (vestigial, drawn up like landing gear) say "gaming chair" at
+  any distance. The bone-metal goes in the rim, the spined crest and ribs up the back, and the horns.
+  The `leather` look renders tan-brown under the lab's environment; glossy `black` reads as PU leather.
+- **Plumbing rides the bone of whatever it plugs into.** Put the feed hose in his mouth on `skull`, so it stays
+  in when he turns. The IV, the shoulder cables and the catheter ride `spine`, plugging into the chest-rigid
+  flesh, which moves only a few cm against the frame.
+- **A ranged attack does not fit this rig yet.** `onFire` needs a carried prop in the right hand, and here the
+  right hand is a front claw. A ranged gamer needs a mind with the muzzle on the head (the headset); it uses the
+  hound mind for now.
