@@ -392,7 +392,7 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
         // slow turn the player outruns), its vertical the player's chest.
         const weapon = characterEntry(name).profile.gunner?.weapon;
         let shotDir = dir;
-        if (weapon === 'smg' || weapon === 'chaingun' || weapon === 'rocket') {
+        if (weapon === 'smg' || weapon === 'chaingun' || weapon === 'rocket' || weapon === 'pistol') {
           const pp = ctx.player.player.pos;
           const hx = dir[0], hz = dir[2], hl = Math.hypot(hx, hz) || 1;
           const dist = Math.hypot(pp[0] - muz[0], pp[2] - muz[2]);
@@ -407,7 +407,8 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
         // player's chest for the vertical. It detonates through the
         // dynamite path (the rocket step in the frame loop below).
         if (weapon === 'rocket') ctx.weapon.rockets.push(spawnRocket(muz, shotDir, zombieId));
-        else if (weapon === 'chaingun') ctx.weapon.soldierPellets.push(spawnRound(muz, shotDir, seedFromUnit(rngStreams.misc())));
+        // The pistol, like the chaingun, fires ONE aimed round per trigger event.
+        else if (weapon === 'chaingun' || weapon === 'pistol') ctx.weapon.soldierPellets.push(spawnRound(muz, shotDir, seedFromUnit(rngStreams.misc())));
         else ctx.weapon.soldierPellets.push(...spawnPellets(muz, shotDir, 1, seedFromUnit(rngStreams.misc())));
       },
     } : {}),

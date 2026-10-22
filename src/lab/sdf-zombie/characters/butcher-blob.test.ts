@@ -8,11 +8,14 @@
 //     forward of the hip-to-hock line and the hock stays BEHIND the knee-to-toe line. The plant IK's pole bias bows
 //     the knee forward (ik.ts solvePlantedLeg); a leg whose backward joint were the KNEE would be flipped by it.
 // It also pins the arm weapon's wiring (motion-profile.ts armWeapon). Whether it reads as a dog's hind leg is
-// a question for frames, not this file. The FLAYER (flayer.blob) shares this skeleton and legs at a faster cruise,
-// so the walk is pinned for both.
+// a question for frames, not this file. The FLAYER and the DEADEYE share this skeleton and legs (the flayer at a
+// faster cruise, the deadeye on a carry gait), so the walk is pinned for all three.
 import { describe, it, expect } from 'vitest';
 import src from './butcher.blob?raw';
 import flayerSrc from './flayer.blob?raw';
+import deadeyeSrc from './deadeye.blob?raw';
+import { GUNNER_TUNING, PISTOL_TUNING } from '../soldier-brain';
+import { CARRIES } from '../carry';
 import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace } from '../blob-compile';
 import { buildBody } from '../build-body';
@@ -23,7 +26,7 @@ import type { Vec3 } from '../types';
 
 const build = (text: string) => { const doc = parseBlob(text); return buildBody(compileBlob(doc, compileFace(doc))); };
 const body = build(src);
-const BODIES = { butcher: body, flayer: build(flayerSrc) };
+const BODIES = { butcher: body, flayer: build(flayerSrc), deadeye: build(deadeyeSrc) };
 const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 
 /** Signed forward offset (along `fwd`) of `mid` from the straight line a -> b, at mid's height. */
@@ -47,7 +50,7 @@ describe('butcher — digitigrade legs on the zombie leg bones', () => {
     expect(foot.tail[1], 'toe joint at the floor').toBeLessThan(0.05);
   });
 
-  it.each(['butcher', 'flayer'] as const)('%s: the zigzag survives walking through the real motion pipeline', (name) => {
+  it.each(['butcher', 'flayer', 'deadeye'] as const)('%s: the zigzag survives walking through the real motion pipeline', (name) => {
     const body = BODIES[name];
     const m = makeActorMotion(body, { seed: 7 });
     expect(m.motionJoints, 'every rig point must map to a gait joint').not.toBeNull();
@@ -91,5 +94,24 @@ describe('flayer — the grafted sickle', () => {
     expect(BODIES.flayer.errors).toEqual([]);
     for (const [k, b] of body.bones) expect(BODIES.flayer.bones.get(k), k).toEqual(b);
     expect(characterEntry('flayer').profile.armWeapon).toEqual({ side: 'L', damage: 20 });
+  });
+});
+
+describe('deadeye — the pistol', () => {
+  it('builds clean on the butcher\'s skeleton', () => {
+    expect(BODIES.deadeye.errors).toEqual([]);
+    for (const [k, b] of body.bones) expect(BODIES.deadeye.bones.get(k), k).toEqual(b);
+  });
+
+  it('is a pistol gunner on one-handed carries, with the pistol\'s own muzzle', () => {
+    const p = characterEntry('deadeye').profile;
+    expect(p.gunner).toEqual({ weapon: 'pistol' });
+    expect(GUNNER_TUNING.pistol).toBe(PISTOL_TUNING);
+    // A gunner needs a CARRY gait: motion.ts takes the arm style from the gait, not the profile.
+    expect(p.gait.walk.armStyle).toBe('carry');
+    expect(p.carries).toEqual({ walk: 'pistolLow', run: 'pistolLow', fire: 'pistol' });
+    for (const c of ['pistol', 'pistolLow'] as const) expect(CARRIES[c].oneHanded, c).toBeDefined();
+    // 0.112 m out, not the shared shotgun muzzle's 0.41: rounds and flash start at the barrel.
+    expect(p.prop?.muzzle?.[2]).toBeCloseTo(0.112, 3);
   });
 });

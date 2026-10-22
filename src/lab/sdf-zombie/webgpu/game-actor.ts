@@ -1660,7 +1660,7 @@ export function createZombieActor(opts: {
         const direction = burstShot
           ? rotateYaw(normalize([fwd[0], fwd[1] + Math.tan(0.26 + deathRng() * 0.79), fwd[2]]), (deathRng() - 0.5) * 0.87)
           : rotateYaw(fwd, think.aimError);
-        opts.onFire?.({ origin: gunPoint(f.gun, GUN_GRIP.muzzle), direction });
+        opts.onFire?.({ origin: gunPoint(f.gun, opts.profile?.prop?.muzzle ?? GUN_GRIP.muzzle), direction });
         firedSinceIndex = true;
       }
     }

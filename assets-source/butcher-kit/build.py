@@ -20,7 +20,7 @@ def find(script):
         if os.path.exists(os.path.join(d, script)): return os.path.join(d, script)
     raise FileNotFoundError(script)
 argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
-G = {'__name__': '__main__', 'find': find}
+G = {'__name__': '__main__', 'find': find, 'KIT_DIR': KIT}
 exec(open(os.path.join(HERE, '../twinhead-kit/kit_sculpt.py')).read(), G)
 exec(open(os.path.join(HERE, 'butcher_common.py')).read(), G)
 if os.path.exists(os.path.join(KIT, 'common.py')): exec(open(os.path.join(KIT, 'common.py')).read(), G)

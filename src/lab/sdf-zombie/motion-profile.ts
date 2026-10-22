@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, SHAMBLE_CARRY, PROWL, PROWL_QUICK, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, type ArmStyle, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, PROWL, PROWL_QUICK, PROWL_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, type ArmStyle, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { Vec3 } from './types';
@@ -13,7 +13,7 @@ import { JUGGERNAUT_INJURY_TUNING, WARBULL_INJURY_TUNING, type SoldierInjuryTuni
 
 /** What a ranged enemy fires (soldier-brain.ts GUNNER_TUNING picks the
  *  brain tuning; game-main's onFire picks the round). */
-export type GunnerWeapon = 'shotgun' | 'smg' | 'chaingun' | 'rocket';
+export type GunnerWeapon = 'shotgun' | 'smg' | 'chaingun' | 'rocket' | 'pistol';
 
 export interface MotionProfile {
   name: string;
@@ -50,7 +50,12 @@ export interface MotionProfile {
      *  carry block) instead of keeping its rest hang: a two-handed hilt held
      *  HIGH needs the fist round the grip, not dangling off the wrist. Absent
      *  = the rest hang every gun carry was tuned with. */
-    fistOnGrip?: boolean };
+    fistOnGrip?: boolean;
+    /** Gun-local muzzle (metres before `scale`, +z forward). Absent = the
+     *  shared GUN_GRIP.muzzle (0.41 m out, the enemy shotgun's): a short gun
+     *  (the deadeye's pistol) needs its own, or its rounds and flash start in
+     *  the air 30 cm past the barrel. */
+    muzzle?: Vec3 };
   /** A RANGED enemy: the game gives it the soldier's shooting brain
    *  (enemy-mind.ts makeSoldierMind) with this weapon's tuning, and its
    *  onFire spawns enemy rounds. Absent = melee. A prop alone does not make a
@@ -374,6 +379,28 @@ export const FLAYER_PROFILE: MotionProfile = {
   armWeapon: { side: 'L', damage: 20 },
 };
 
+/** The deadeye (characters/deadeye.blob): the third zombie conversion, a
+ *  gunslinger with a little pistol, an optic over one eye and a bandolier.
+ *  A RANGED enemy on the soldier's brain (PISTOL_TUNING: aimed singles and the
+ *  odd double tap from mid range), one-handed carries, the butcher's legs. Not
+ *  soldier family: bare flesh, a gore body like the twinhead. */
+export const DEADEYE_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'deadeye',
+  gait: { walk: PROWL_CARRY, run: PROWL_CARRY },
+  // Slower than the butcher: he walks to a range and holds it.
+  cruise: 1.3,
+  turnRate: 2.6,
+  carries: { walk: 'pistolLow', run: 'pistolLow', fire: 'pistol' },
+  // The pistol is a PROP (it follows the aim and drops on death), sculpted by
+  // assets-source/deadeye-kit/make_pistol.py to the shared grip contract
+  // (GUN_GRIP.gripHand). gripReach 0: his fist orb is centred ON the wrist
+  // (deadeye.blob `blob arm on foreArm at=1.00`). The muzzle is the pistol's
+  // own, 0.112 m out (not the shotgun's 0.41).
+  prop: { url: '/assets/lab/deadeye-pistol.glb', scale: 1, gripReach: 0, muzzle: [0, 0.002, 0.112] },
+  gunner: { weapon: 'pistol' },
+};
+
 /** The bride: a slow STALK in a high sword guard; the point trails on the
  *  run. Melee only — the sword mind (enemy-mind.ts) swings it. */
 export const BRIDE_PROFILE: MotionProfile = {
@@ -448,6 +475,7 @@ const BY_NAME: Record<string, MotionProfile> = {
   twinhead: TWINHEAD_PROFILE,
   butcher: BUTCHER_PROFILE,
   flayer: FLAYER_PROFILE,
+  deadeye: DEADEYE_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

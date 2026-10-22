@@ -197,6 +197,28 @@ gait work carries over. What makes it a different enemy at a glance:
 - The lab's `holdPose` swing preview (`BLOB_SWING`) swings `armWeapon.side`, so a left-armed weapon is judged on
   the right arm.
 
+### A ranged variant: the deadeye's pistol
+
+The deadeye (`characters/deadeye.blob`, kit `assets-source/deadeye-kit/`) is the same frame again, armed with a
+pistol. A ranged variant needs a different set of parts from a melee one:
+
+- **The gun is a held PROP, not kit.** A prop follows the carry's aim (`gunPitch`) and drops on death; a kit gun is
+  rigid on the forearm and cannot. Sculpt it with the same toolkit, but in the GUN-LOCAL frame: glTF +y is up and +z
+  is out of the muzzle, which `bv` maps exactly as it maps blob coordinates. Put the grip through `GUN_GRIP.gripHand`
+  (0, -0.074, -0.074). `make_pistol.py` exports its own `pistol` collection to `public/assets/lab/<name>-pistol.glb`.
+- **A short gun needs its own muzzle.** `MotionProfile.prop.muzzle` (gun-local) feeds the round's origin and the
+  flash. The shared muzzle is the enemy shotgun's, 0.41 m out.
+- **A gunner needs a CARRY gait.** `motion.ts` takes the arm style from the gait, so it is `PROWL_CARRY`, not
+  `PROWL`. Without it the arms keep the zombie's reach and ignore the carries.
+- **Pick or add the weapon's brain tuning.** `gunner: {weapon}` selects it in `soldier-brain.ts GUNNER_TUNING`.
+  The pistol is `PISTOL_TUNING` (aimed singles, the odd double tap, mid range); `game-spawn.ts` fires one aimed
+  round per trigger event.
+- **One-handed carries** (`pistol`, `pistolLow` in `carry.ts`, with `oneHanded`): the aim holds the arm straight
+  out with the wrist level; the walk carry points the gun at the floor ahead, so the raise reads as a telegraph.
+- A face mask only reads as a mask when it is SMALL and SHAPED. A band wrapping to the temple at full height read
+  as a slab on the side of the head; taper it to a point. Cables run about one radius off the skin, or they stand
+  off like sticks.
+
 ### Practicalities
 
 - **The Blender MCP window may belong to another session** (it held the teratoma's file). Run the kit headless:

@@ -634,7 +634,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
       .catch(e => console.error(`[kit] ${kitUrl} failed to load; rendering the body undressed`, e));
   }
   if (armed && entry.profile.prop) {
-    loadHeldProp(entry.profile.prop.url, opts.renderer)
+    loadHeldProp(entry.profile.prop.url, opts.renderer, entry.profile.prop.muzzle)
       .then(p => {
         if (disposed || equipmentRetired) { p.dispose(); return; }
         heldProp = p; applyKitBeam(p.object); opts.scene.add(p.object);

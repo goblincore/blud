@@ -24,6 +24,8 @@ exports[`packBody byte pin > cyberdemon.blob packs the pinned bytes 1`] = `"5061
 
 exports[`packBody byte pin > cyclops.blob packs the pinned bytes 1`] = `"6cb3ef51a960588d"`;
 
+exports[`packBody byte pin > deadeye.blob packs the pinned bytes 1`] = `"798ebae80782b07a"`;
+
 exports[`packBody byte pin > dragon.blob packs the pinned bytes 1`] = `"24e7478ac58de203"`;
 
 exports[`packBody byte pin > female.blob packs the pinned bytes 1`] = `"fda78400265bcccd"`;

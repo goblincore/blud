@@ -403,6 +403,10 @@ export const PROWL: GaitProfile = {
  *  knee flattened to 27 mm off the hip-to-hock line, butcher-blob.test.ts). */
 export const PROWL_QUICK: GaitProfile = { ...PROWL, name: 'prowl-quick', strideFreq: 2.0 };
 
+/** The deadeye's prowl: PROWL with CARRY arms (motion.ts takes the arm style from the gait, so a gunner needs a
+ *  carry gait; the pistol's carry owns the right arm and the left swings). */
+export const PROWL_CARRY: GaitProfile = { ...PROWL, name: 'prowl-carry', armStyle: 'carry', armSwing: 0.03 };
+
 /** The bride's STALK: the soldier's march clip slowed and lengthened for her
  *  long legs, with a hip sway the `hem` pendulum picks up and a slight
  *  forward lean. Carry-style arms (the sword owns them). */

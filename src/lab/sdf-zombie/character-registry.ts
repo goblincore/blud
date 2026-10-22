@@ -45,6 +45,7 @@ import cyberdemonBlobSrc from './characters/cyberdemon.blob?raw';
 import twinheadBlobSrc from './characters/twinhead.blob?raw';
 import butcherBlobSrc from './characters/butcher.blob?raw';
 import flayerBlobSrc from './characters/flayer.blob?raw';
+import deadeyeBlobSrc from './characters/deadeye.blob?raw';
 import bloatmawBlobSrc from './characters/bloatmaw.blob?raw';
 import gnasherBlobSrc from './characters/gnasher.blob?raw';
 import ogreBlobSrc from './characters/ogre.blob?raw';
@@ -53,7 +54,7 @@ import cultistBlobSrc from './characters/cultist.blob?raw';
 import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
 import brideBlobSrc from './characters/bride.blob?raw';
 import {
-  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, BUTCHER_PROFILE, FLAYER_PROFILE, motionProfileFor, type MotionProfile,
+  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, BUTCHER_PROFILE, FLAYER_PROFILE, DEADEYE_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
 
 /** A face sheet's texture and its crop. `mean` is the level the shader
@@ -343,6 +344,16 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     bodyNormal: { url: '/assets/lab/flayer-body-n.png', meta: '/assets/lab/flayer-body-n.json', strength: 1 },
     face: bakedFace('flayer-face.png'),
     profile: FLAYER_PROFILE,
+  },
+  // The third zombie conversion (deadeye.blob's header): a gunslinger on the
+  // butcher's skeleton and legs, a pistol prop, an optic over one eye.
+  deadeye: {
+    name: 'deadeye', src: deadeyeBlobSrc,
+    kit: '/assets/lab/deadeye-kit.gltf',
+    // Muscle and veins (characters/deadeye.detail from butcher-detail-gen.ts deadeye; baked, never marched).
+    bodyNormal: { url: '/assets/lab/deadeye-body-n.png', meta: '/assets/lab/deadeye-body-n.json', strength: 1 },
+    face: bakedFace('deadeye-face.png'),
+    profile: DEADEYE_PROFILE,
   },
   cyberdemon: {
     name: 'cyberdemon', src: cyberdemonBlobSrc,
