@@ -784,7 +784,7 @@ export function stepMotion(
   const attack: AttackPose | null =
     cfg.attack !== undefined && !collapsed
       ? isHoundVariant(cfg.attack.variant)
-        ? houndPose(cfg.attack.phase, cfg.attack.variant)
+        ? houndPose(cfg.attack.phase, cfg.attack.variant, cfg.attack.side)
         : attackPose(cfg.attack.phase, cfg.attack.side, cfg.attack.variant)
       : null;
 
@@ -1309,13 +1309,13 @@ export function stepMotion(
   if (fore && !collapsed && !footwork && idx.handL !== undefined && idx.handR !== undefined) {
     const handGround = Math.min(joints.base[idx.handL]![1], joints.base[idx.handR]![1]);
     const elbowPole = scale(legPole, -1);
-    const airborne = !!attack && !!cfg.attack && pounceAirborne(cfg.attack.phase, cfg.attack.variant);
     for (const side of ['L', 'R'] as const) {
       if (sig.missing[side === 'L' ? 'armL' : 'armR']) continue;
       const hand = idx[`hand${side}`]!, elbow = idx[`elbow${side}`]!, shoulder = idx[`shoulder${side}`]!;
       const st = stepPlant((side === 'L' ? plantHandL : plantHandR) ?? makePlant(), {
         // A pounce throws both paws off the floor (hound-attack.ts).
-        stance: (side === 'L' ? fore.armL : fore.armR) && !release && !airborne,
+        stance: (side === 'L' ? fore.armL : fore.armR) && !release
+          && !(attack && cfg.attack && pounceAirborne(cfg.attack.phase, cfg.attack.variant, cfg.attack.side, side)),
         footPos: footWorld(hand),
         groundY: handGround,
         // The reach slide, always on: the paws sit 0.55 m ahead of the yaw

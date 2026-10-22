@@ -1323,7 +1323,9 @@ export function createZombieActor(opts: {
           faceHeading:encounterOrder.visible?think.faceHeading:null,fire:false,weaponUp:false};
         if (encounterOrder.halt || mind.debug().holdSecs > 0) think={...think,target:null,halt:true,fire:false};
         if (!encounterOrder.visible) think={...think,attack:null,fire:false,weaponUp:false};
-        if (!encounterOrder.fireAllowed) think={...think,fire:false};
+        // Firing LANES are the soldiers' (encounter-director grants them only to kind 'soldier'); a zombie-kind mind
+        // that fires (the gibbet's squirt, enemy-mind.ts makeGibbetMind) is gated by sight above, not by a lane.
+        if (!encounterOrder.fireAllowed && mind.kind === 'soldier') think={...think,fire:false};
         if (think.target) {
           const routed=routeGoal(think.target,sdt);
           think={...think,target:routed,halt:think.halt || routed===null};
@@ -1394,7 +1396,8 @@ export function createZombieActor(opts: {
       }
       // Fire is the SAME event for the animation clock and the projectile.
       // Previously the callback fired but CALM.fire stayed false forever.
-      signals.fire = think.fire && !missingLimbs().armR
+      // A spitter (profile.spit, the teratoma) fires from its body: no right arm needed.
+      signals.fire = think.fire && (opts.profile?.spit !== undefined || !missingLimbs().armR)
         && (current.clusters.find(c => c.limb === 'head')?.alive ?? false);
       if (soldierDamage || !mind.meleeCapable) {
         signals.missing = missingLimbs();
@@ -1513,7 +1516,7 @@ export function createZombieActor(opts: {
           // Absent on every other frame (motion.ts bit-identity contract).
           ...(swingPin === null && think.attack?.variant === 'lunge'
             ? { plantReach: SWORD_TUNING.lungePlantReach }
-            : swingPin === null && think.attack?.variant === 'pounce'
+            : swingPin === null && (think.attack?.variant === 'pounce' || think.attack?.variant === 'stab')
               ? { plantReach: HOUND_TUNING.pouncePlantReach }
               : {}),
         },
@@ -1656,7 +1659,16 @@ export function createZombieActor(opts: {
         ] };
       }
       lastFistGrip = gapTo(f.gun ? gunPoint(f.gun, GUN_GRIP.gripHand) : null);
-      if (signals.fire && f.gun && !f.collapsed) {
+      const spit = opts.profile?.spit;
+      const spitFrom = spit ? joints.index[spit.from] : undefined;
+      if (signals.fire && spit && spitFrom !== undefined && !f.collapsed) {
+        // Spat from the body (the teratoma's maw): the rig point plus the body-local offset turned by the yaw, along
+        // the facing (game-spawn re-aims the vertical at the player's chest).
+        const o = rotateYaw(spit.offset, f.bodyYaw);
+        const at = bound.rig.points[spitFrom]!.pos;
+        opts.onFire?.({ origin: [at[0] + o[0], at[1] + o[1], at[2] + o[2]], direction: rotateYaw(rotateYaw([0, 0, 1], f.bodyYaw), think.aimError) });
+        firedSinceIndex = true;
+      } else if (signals.fire && f.gun && !f.collapsed) {
         const fwd = qRotate(f.gun.quat, [0, 0, 1]);
         // The death burst sprays HIGH and wide: up 15-60 deg, +-25 deg yaw.
         const direction = burstShot

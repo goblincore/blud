@@ -53,6 +53,7 @@ describe('WEAPON_BINDINGS', () => {
   });
 
   it('covers every binding assigned to this slice', () => {
-    expect(Object.keys(WEAPON_BINDINGS)).toHaveLength(59);
+    // 61: +2 for the gibbet's bile and its tracer views (bile.ts, 2026-10-22).
+    expect(Object.keys(WEAPON_BINDINGS)).toHaveLength(61);
   });
 });
