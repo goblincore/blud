@@ -103,14 +103,16 @@ describe('deadeye — the pistol', () => {
     for (const [k, b] of body.bones) expect(BODIES.deadeye.bones.get(k), k).toEqual(b);
   });
 
-  it('is a pistol gunner on one-handed carries, with the pistol\'s own muzzle', () => {
+  it('is a pistol gunner gripping with BOTH hands, with the pistol\'s own muzzle', () => {
     const p = characterEntry('deadeye').profile;
     expect(p.gunner).toEqual({ weapon: 'pistol' });
     expect(GUNNER_TUNING.pistol).toBe(PISTOL_TUNING);
     // A gunner needs a CARRY gait: motion.ts takes the arm style from the gait, not the profile.
     expect(p.gait.walk.armStyle).toBe('carry');
     expect(p.carries).toEqual({ walk: 'pistolLow', run: 'pistolLow', fire: 'pistol' });
-    for (const c of ['pistol', 'pistolLow'] as const) expect(CARRIES[c].oneHanded, c).toBeDefined();
+    // Two-handed (owner, 2026-10-22): the left hand is solved onto the pistol's foreHand, cupping the gun hand.
+    for (const c of ['pistol', 'pistolLow'] as const) expect(CARRIES[c].oneHanded, c).toBeUndefined();
+    expect(p.prop?.foreHand).toBeDefined();
     // 0.112 m out, not the shared shotgun muzzle's 0.41: rounds and flash start at the barrel.
     expect(p.prop?.muzzle?.[2]).toBeCloseTo(0.112, 3);
   });

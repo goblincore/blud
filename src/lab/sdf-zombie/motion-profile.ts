@@ -382,7 +382,7 @@ export const FLAYER_PROFILE: MotionProfile = {
 /** The deadeye (characters/deadeye.blob): the third zombie conversion, a
  *  gunslinger with a little pistol, an optic over one eye and a bandolier.
  *  A RANGED enemy on the soldier's brain (PISTOL_TUNING: aimed singles and the
- *  odd double tap from mid range), one-handed carries, the butcher's legs. Not
+ *  odd double tap from mid range), a two-handed grip, the butcher's legs. Not
  *  soldier family: bare flesh, a gore body like the twinhead. */
 export const DEADEYE_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
@@ -397,7 +397,10 @@ export const DEADEYE_PROFILE: MotionProfile = {
   // (GUN_GRIP.gripHand). gripReach 0: his fist orb is centred ON the wrist
   // (deadeye.blob `blob arm on foreArm at=1.00`). The muzzle is the pistol's
   // own, 0.112 m out (not the shotgun's 0.41).
-  prop: { url: '/assets/lab/deadeye-pistol.glb', scale: 1, gripReach: 0, muzzle: [0, 0.002, 0.112] },
+  // foreHand: the support hand CUPS the gun hand (a two-handed pistol grip),
+  // its wrist 5 cm to the gun's left (+x), a little under and behind the
+  // grip: the two fist orbs (r 0.060) overlap like clasped hands.
+  prop: { url: '/assets/lab/deadeye-pistol.glb', scale: 1, gripReach: 0, muzzle: [0, 0.002, 0.112], foreHand: [0.050, -0.090, -0.085] },
   gunner: { weapon: 'pistol' },
 };
 

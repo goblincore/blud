@@ -213,8 +213,10 @@ pistol. A ranged variant needs a different set of parts from a melee one:
 - **Pick or add the weapon's brain tuning.** `gunner: {weapon}` selects it in `soldier-brain.ts GUNNER_TUNING`.
   The pistol is `PISTOL_TUNING` (aimed singles, the odd double tap, mid range); `game-spawn.ts` fires one aimed
   round per trigger event.
-- **One-handed carries** (`pistol`, `pistolLow` in `carry.ts`, with `oneHanded`): the aim holds the arm straight
-  out with the wrist level; the walk carry points the gun at the floor ahead, so the raise reads as a telegraph.
+- **Two hands on a pistol.** The owner rejected the one-handed aim. The `pistol` and `pistolLow` carries drop
+  `oneHanded`, so the left hand is solved onto `prop.foreHand`, set to cup the gun hand (5 cm to the gun's left,
+  under and behind the grip). The aim is an isosceles stance, the gun arm swung in to the centre line. The walk
+  carry is a low ready, both hands at the belly and the muzzle at the floor, so the raise reads as a telegraph.
 - A face mask only reads as a mask when it is SMALL and SHAPED. A band wrapping to the temple at full height read
   as a slab on the side of the head; taper it to a point. Cables run about one radius off the skin, or they stand
   off like sticks.
