@@ -68,14 +68,22 @@ describe('makeHoundMind', () => {
 
 describe('the gibbet\'s stab and squirt', () => {
   it('the stab is ONE leg: it cocks high, the body rears, then the spike and the body lunge; the other leg stays down', () => {
-    const rear = houndPose(0.2, 'stab', 'R'), thrust = houndPose(0.55, 'stab', 'R');
+    // the stab's own clock: fully cocked at 0.42, struck by 0.52 (HOUND_TUNING.stab)
+    const rear = houndPose(0.41, 'stab', 'R'), thrust = houndPose(0.6, 'stab', 'R');
     expect(rear.offsets.handR![1], 'the paw cocked high').toBeGreaterThan(0.4);
     expect(rear.offsets.handTipR![2], 'the spike aimed forward of the paw').toBeGreaterThan(rear.offsets.handR![2]);
     expect(rear.rootOffset[2], 'the body rears back').toBeLessThan(-0.05);
     expect(thrust.offsets.handR![2]).toBeGreaterThan(0.5);
     expect(thrust.rootOffset[2], 'the body lunges with it').toBeGreaterThan(0.15);
     expect(thrust.offsets.handL, 'the other leg is not driven').toBeUndefined();
-    expect(houndPose(0.55, 'stab', 'L').offsets.handL![0], 'mirrored for the left').toBeCloseTo(-thrust.offsets.handR![0], 6);
+    expect(houndPose(0.6, 'stab', 'L').offsets.handL![0], 'mirrored for the left').toBeCloseTo(-thrust.offsets.handR![0], 6);
+    // the hind legs stay on the pelvis: the hip joints move with the root (the detached-thighs bug)
+    for (const p of [rear, thrust]) {
+      expect(p.offsets.hipL).toEqual(p.rootOffset);
+      expect(p.offsets.hipR).toEqual(p.rootOffset);
+    }
+    expect(houndPose(0.47, 'stab', 'R').offsets.handR![2], 'the strike snaps: half way in a twentieth of the swing')
+      .toBeGreaterThan(0.2);
     expect(pounceAirborne(0.5, 'stab', 'R', 'R')).toBe(true);
     expect(pounceAirborne(0.5, 'stab', 'R', 'L')).toBe(false);
     expect(houndGapeAt(0.3, 'stab')).toBe(0);

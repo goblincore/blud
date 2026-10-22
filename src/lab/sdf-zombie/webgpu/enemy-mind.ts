@@ -20,7 +20,7 @@ import {
   type SoldierBrain, type SoldierTuning,
 } from '../soldier-brain';
 import { SWORD_TUNING, isSwordVariant, lungeAdvance, swordContact } from '../sword-swing';
-import { GIBBET_TUNING, HOUND_TUNING, houndContact, isHoundVariant, pounceAdvance, squirtFires } from '../hound-attack';
+import { GIBBET_TUNING, HOUND_TUNING, houndContact, isHoundVariant, pounceAdvance, squirtFires, stabAdvance } from '../hound-attack';
 import { CHARGE_REST, stepCharge, type ChargeState } from '../charge';
 import type { BrainTuning } from '../brain';
 import type { SwingVariant } from '../attack';
@@ -314,8 +314,8 @@ export function makeHoundMind(tuning: BrainTuning = HOUND_TUNING.brain): EnemyMi
         const dx = input.player.x - input.self.x, dz = input.player.z - input.self.z;
         const dist = Math.hypot(dx, dz);
         contact = houndContact({ prevPhase, phase: a.phase, variant: a.variant, self: input.self, player: input.player });
-        if (a.variant === 'pounce' && dist > 1e-6) {
-          const d = pounceAdvance(prevPhase, a.phase, dist);
+        if ((a.variant === 'pounce' || a.variant === 'stab') && dist > 1e-6) {
+          const d = a.variant === 'pounce' ? pounceAdvance(prevPhase, a.phase, dist) : stabAdvance(prevPhase, a.phase, dist);
           if (d > 0) advance = [(dx / dist) * d, 0, (dz / dist) * d];
         }
         prevPhase = a.phase;

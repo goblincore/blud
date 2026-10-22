@@ -44,11 +44,19 @@ export const HOUND_TUNING = {
    *  pushed them forward together and the owner saw "pattycake". Now the body REARS back onto its haunches and leans
    *  away from the striking leg, which cocks high and back with its spike aimed forward like a spear; the strike
    *  LUNGES the whole body forward as the spike drives in. The other leg stays planted. (m, body-local) */
+  //
+  // Second review: "still tame". So the stab has its OWN clock (stabDrive), not the swing's even wind-up and strike:
+  // a long cock (the anticipation is the threat), a strike over a tenth of the swing, a hold, a recovery; the rear
+  // and the cock are bigger, the leg cocked up past the beam, and the body STEPS into the strike (stabAdvance).
   stab: {
-    rearRise: 0.12, rearBack: 0.10, rearLean: 0.06, chestRise: 0.20,
-    cockElbow: [0.12, 0.42, -0.06], cockPaw: [0.08, 0.55, -0.12], cockTip: [0.06, 0.66, 0.08],
-    lunge: 0.22, lungeDrop: 0.05, chestLunge: 0.30,
-    strikeElbow: [0.05, 0.22, 0.32], strikePaw: [0.02, 0.12, 0.58], strikeTip: [0.0, 0.02, 0.80],
+    rearRise: 0.20, rearBack: 0.14, rearLean: 0.08, chestRise: 0.34,
+    cockElbow: [0.14, 0.62, -0.10], cockPaw: [0.10, 0.82, -0.12], cockTip: [0.08, 0.86, 0.12],
+    lunge: 0.30, lungeDrop: 0.10, chestLunge: 0.42,
+    strikeElbow: [0.05, 0.28, 0.40], strikePaw: [0.02, 0.20, 0.72], strikeTip: [0.0, 0.10, 0.95],
+    /** The stab's clock: cocked by `cocked`, struck by `struck`, held to `hold`, recovered by 1. */
+    cocked: 0.42, struck: 0.52, hold: 0.68,
+    /** Root travel into the strike (m), never closer to the player than `stopShort`. */
+    advance: 0.45, stopShort: 1.1,
   },
   /** SQUIRT: the whole body squats to spray. Held over the swing (an envelope, not the signed drive, so it never
    *  pops up mid-swing): the HAUNCHES drop, the front stays up so the back tilts up, and the dangling head swings up
@@ -67,13 +75,13 @@ export const HOUND_TUNING = {
   pouncePlantReach: 1.0,
   /** The front paws are off the floor over this phase window (a pounce; a stab rears for nearly the whole swing). */
   airborne: { from: 0.22, to: 0.62 },
-  stabAirborne: { from: 0.04, to: 0.85 },
+  stabAirborne: { from: 0.04, to: 0.88 },
   /** The jaw (rad): wide on the wind-up, snapped shut by the strike's end. The gibbet's attacks are not bites. */
   gape: { bite: 0.55, pounce: 0.65, stab: 0, squirt: 0 } as Record<HoundVariant, number>,
   /** Contact: on the phase the jaws (or the spikes) close, inside this reach and cone. The squirt's reach is 0: the
    *  glob hits or misses on its own (bile.ts). */
   contact: {
-    phase: { bite: 0.45, pounce: 0.48, stab: 0.46, squirt: 1 } as Record<HoundVariant, number>,
+    phase: { bite: 0.45, pounce: 0.48, stab: 0.50, squirt: 1 } as Record<HoundVariant, number>,
     reach: { bite: 1.55, pounce: 1.7, stab: 1.95, squirt: 0 } as Record<HoundVariant, number>,
     cone: 0.7,
   },
@@ -99,7 +107,32 @@ const Z: Vec3 = [0, 0, 0];
  *  exactly zero at phase 0 and 1. `drive` is attack.ts's signed scalar
  *  (0 -> -1 wind-up -> +1 strike/hold -> 0). */
 export function houndPose(phase: number, variant: HoundVariant, side: 'L' | 'R' = 'R'): AttackPose {
-  const d = attackDrive(phase, ATTACK_TUNING);
+  const pose = houndPoseRaw(phase, variant, side);
+  // THE HIP JOINTS GO WITH THE ROOT. hipL/hipR are not bone-linked to the pelvis in the rig: they follow their own
+  // targets. A pose that moves the root and leaves them behind pulls the hind legs off the pelvis (the gibbet's
+  // first stab: both thighs came away from the beam's sockets). Poses that place the hips themselves (the squirt's
+  // squat) keep theirs.
+  const o = pose.offsets;
+  if (pose.rootOffset === Z) return pose;
+  if (o.hipL === undefined) o.hipL = pose.rootOffset;
+  if (o.hipR === undefined) o.hipR = pose.rootOffset;
+  if (o.hips === undefined) o.hips = pose.rootOffset;
+  return pose;
+}
+
+/** The stab's own signed drive (see HOUND_TUNING.stab): 0 -> -1 over a long cock, -1 -> +1 in a snap, held, then
+ *  back to 0. Exactly 0 at phase 0 and 1. */
+function stabDrive(phase: number): number {
+  if (!(phase > 0) || phase >= 1) return 0;
+  const S = HOUND_TUNING.stab;
+  if (phase < S.cocked) return -smooth(phase / S.cocked);
+  if (phase < S.struck) return -1 + 2 * Math.sqrt((phase - S.cocked) / (S.struck - S.cocked));
+  if (phase < S.hold) return 1;
+  return 1 - smooth((phase - S.hold) / (1 - S.hold));
+}
+
+function houndPoseRaw(phase: number, variant: HoundVariant, side: 'L' | 'R'): AttackPose {
+  const d = variant === 'stab' ? stabDrive(phase) : attackDrive(phase, ATTACK_TUNING);
   const reach = { pitchL: 0, pitchR: 0, yawL: 0, yawR: 0 };
   if (d === 0) return { offsets: {}, rootOffset: Z, reach };
   const w = Math.max(0, -d); // wind-up weight
@@ -239,6 +272,15 @@ export function houndContact(a: {
   const dx = a.player.x - a.self.x, dz = a.player.z - a.self.z;
   if (Math.hypot(dx, dz) > C.reach[a.variant]) return false;
   return Math.abs(wrapPi(Math.atan2(dx, dz) - a.self.yaw)) <= C.cone;
+}
+
+/** Root advance (m) this frame for the gibbet's stab: it steps into the strike, the travel spread over the snap,
+ *  never closer to the player than stab.stopShort. */
+export function stabAdvance(prevPhase: number, phase: number, dist: number): number {
+  const S = HOUND_TUNING.stab;
+  const w = (p: number) => smooth((p - S.cocked) / (S.struck - S.cocked));
+  const step = S.advance * (w(phase) - w(prevPhase));
+  return Math.max(0, Math.min(step, Math.max(0, dist - S.stopShort)));
 }
 
 /** Root advance (m) this frame for a pounce going prevPhase -> phase with the
