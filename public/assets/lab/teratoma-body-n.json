@@ -1,7 +1,7 @@
 {
   "generator": "scripts/bake-body-normal.ts",
   "character": "teratoma",
-  "width": 1024,
+  "width": 512,
   "height": 257,
   "version": 2,
   "yMin": 0.896,

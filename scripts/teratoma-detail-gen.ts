@@ -3,8 +3,7 @@
 // Generate src/lab/sdf-zombie/characters/teratoma.detail: the teratoma's BAKED flesh detail (scripts/bake-body-normal.ts
 // folds these lines into the body and bakes the difference into teratoma-body-n.png; nothing here is ever raymarched).
 //
-//   npx tsx scripts/teratoma-detail-gen.ts && npx tsx scripts/bake-body-normal.ts teratoma 1024 256
-//   (1024 wide so the lip furrows resolve: ~3.4 mm a texel round the ball; ~30 min)
+//   npx tsx scripts/teratoma-detail-gen.ts && npx tsx scripts/bake-body-normal.ts teratoma 512 256   (~20 min)
 //
 // The template is scripts/twinhead-detail-gen.ts: every element is placed by probing the marched torso (sdBody along a
 // ray toward a vertical axis through the ball's centre), sunk a fixed amount under the skin and bound to the pelvis
@@ -184,47 +183,8 @@ for (let i = 0; i < 26; i++) {
   lump(y, th, r, r * 0.5, 0.005);
 }
 
-section('lips: furrows wrapping over each lip, uneven');
-// Owner (2026-10-22): "add some baked detail to the lips too, striations or other elements". The torso map is ~3.4 mm a
-// texel across at 1024 wide (7 mm at 512), so real lip striations would vanish; these are FURROWS ~2.2 cm apart, each a
-// raised band wrapping from the lip's top over its front to its underside, the creases between them doing the work.
-// The lips are teratoma.blob's tapered half-lip bars: from the middle `a` out to the corner `b` (mirrored), bowed by
-// `bend` (whose middle moves by about half its value, measured off the field on the filler pass).
-const LIPS = [
-  { a: [0, 1.44, 0.50], b: [0.39, 1.33, 0.33], bend: [0.01, 0.03, 0.05] },
-  { a: [0, 1.07, 0.49], b: [0.39, 1.32, 0.33], bend: [0.01, -0.05, 0.05] },
-] as const;
-function lipCentre(L: typeof LIPS[number], x: number): V {
-  const sg = x < 0 ? -1 : 1, t = Math.min(1, Math.abs(x) / L.b[0]), k = 2 * t * (1 - t);
-  return [sg * (L.b[0] * t + L.bend[0] * k), L.a[1] + (L.b[1] - L.a[1]) * t + L.bend[1] * k, L.a[2] + (L.b[2] - L.a[2]) * t + L.bend[2] * k];
-}
-/** The lip's skin at section angle a (rad; 0 = straight forward, + = up) round its centreline at x. */
-function lipSkin(L: typeof LIPS[number], x: number, a: number): { p: V; n: V } {
-  const c = lipCentre(L, x), dir: V = [0, Math.sin(a), Math.cos(a)];
-  let t = 0.25, q = add(c, mul(dir, t));
-  for (let i = 0; i < 300; i++) { const d = sdBody(q, body); if (d < 1e-4) break; t -= Math.max(d * 0.9, 2e-4); q = add(c, mul(dir, t)); }
-  const e = 6e-4, d0 = sdBody(q, body);
-  return { p: q, n: norm([sdBody(add(q, [e, 0, 0]), body) - d0, sdBody(add(q, [0, e, 0]), body) - d0, sdBody(add(q, [0, 0, e]), body) - d0]) };
-}
-for (const L of LIPS) {
-  for (let x = -0.30 + rnd() * 0.01; x <= 0.30; x += 0.019 + rnd() * 0.007) {
-    const r = 0.0045 + rnd() * 0.0015, proud = 0.0018 + rnd() * 0.001;
-    const pts: V[] = [];
-    for (let a = -1.2; a <= 1.21; a += 0.2) {
-      const sk = lipSkin(L, x + 0.004 * Math.sin(a * 3 + x * 40), a);
-      pts.push(add(sk.p, mul(sk.n, proud - r)));
-    }
-    for (let i = 0; i + 1 < pts.length; i++)
-      out.push(`  bar  torso on pelvis from=0 to=0 offset=${fv(sub(pts[i]!, PELVIS))} tip=${fv(sub(pts[i + 1]!, pts[i]!))} r=${f(r)} blend=0.003`);
-  }
-  // a few long welts running along the lip, across the furrows, where the stretched skin has folded
-  for (let k = 0; k < 3; k++) {
-    const a = (rnd() - 0.5) * 1.2, x0 = -0.25 + rnd() * 0.3, pts: V[] = [];
-    for (let x = x0; x < x0 + 0.12; x += 0.012) { const sk = lipSkin(L, x, a + 0.1 * Math.sin(x * 50)); pts.push(add(sk.p, mul(sk.n, 0.0025 - 0.004))); }
-    for (let i = 0; i + 1 < pts.length; i++)
-      out.push(`  bar  torso on pelvis from=0 to=0 offset=${fv(sub(pts[i]!, PELVIS))} tip=${fv(sub(pts[i + 1]!, pts[i]!))} r=0.004 blend=0.002`);
-  }
-}
+// NO LIP DETAIL. Baked furrows over the lips (owner request, 2026-10-22) were tried and taken out again by the owner
+// ("better without"): the lips keep only the hide's own mottle and noise. The face region stays clear (onFace).
 
 writeFileSync(resolve(ROOT, 'src/lab/sdf-zombie/characters/teratoma.detail'), out.join('\n') + '\n');
 console.log(`teratoma-detail-gen: ${out.filter(l => /^\s+(bar|blob)/.test(l)).length} detail prims`);

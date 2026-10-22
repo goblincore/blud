@@ -169,11 +169,11 @@ floater: a flesh ball with one eye and a maw. It was the first test of whether t
 8. **Lips: the plain first pass won.** Two filler-lip passes were rejected. The first was painted glossy pink at
    r 0.095 or more, with a cupid's bow ("triangular, two weird knobs"). The second was one round bowed capsule per
    lip ("too smooth, too red"). The owner kept the original: unpainted, hide-coloured, tapered half-lips (r 0.068 /
-   0.076 tapering to 0.032). The hide's mottle and noise give them texture, plus light baked furrows. Lesson: a
-   painted glossy lip is a separate material to the eye; unpainted flesh that swells is the house look. For a round
-   lip, the shape that worked was a constant-radius `bar` from corner to corner with `bend` (whose middle moves by
-   about half its value). Bake at 1024 wide for lip-scale detail: the torso map is ~7 mm a texel round a 1.2 m ball
-   at 512.
+   0.076 tapering to 0.032). Only the hide's mottle and noise give them texture: baked lip furrows were tried and
+   taken out ("better without"). Lesson: a painted glossy lip reads as a separate material, and so does a combed
+   one. Unpainted swelling flesh is the house look. For a round lip, the shape that worked was a constant-radius
+   `bar` from corner to corner with `bend`, whose middle moves by about half its value. For detail at that scale
+   bake 1024 wide: at 512 the torso map is ~7 mm a texel round a 1.2 m ball.
 9. **Settle the flesh before baking.** The torso bake takes ~15 min, and any torso edit (a brow, lips, a wound prim)
    invalidates it. Bake last.
 
