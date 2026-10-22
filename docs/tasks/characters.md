@@ -2,6 +2,15 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+**How new characters are made (default since 2026-10-21):**
+- SDF flesh with few prims;
+- a baked body normal map for muscle and veins;
+- sculpted Blender kit mesh for machinery, bone and weapons, in the demon skull's style.
+
+See the skill's "The default pipeline" ([SKILL.md](../../.claude/skills/authoring-sdf-characters/SKILL.md)) and
+[biomech-style.md](../../.claude/skills/authoring-sdf-characters/biomech-style.md). The roster is being grown
+fast and will be culled later.
+
 ## Twinhead (two-headed strogg: cannon arm + impaling spike, machine legs) — first pass 2026-10-21
 
 - [x] **Body** `characters/twinhead.blob`: hunched flesh torso on a machine pelvis, two heads on ONE central skull
