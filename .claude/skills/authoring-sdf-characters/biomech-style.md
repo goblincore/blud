@@ -148,7 +148,9 @@ floater: a flesh ball with one eye and a maw. It was the first test of whether t
 2. **Wires and tubes in and out of the flesh** (owner: "more wires and tubes going in and out of the flesh"). Write a
    run as `(lat, lon, off)` controls. `off > 0` arches the run out of the skin; `off < 0` dives it under the skin, where
    the SDF hides it. Twisted black `cable` bundles, corrugated `hose` feed lines and brass ferrules where a run leaves
-   the metal. Every place a run dives in gets a small raw wound prim in the `.blob`. The script prints the points.
+   the metal. Every place a run dives in gets a small raw wound prim in the `.blob`. The script prints the points. Author each side's
+   wounds from its own printed points: on an asymmetric body a `both` mirror floats them off the skin (CI's `strandedOf`
+   caught two at 35 and 83 mm).
 3. **A body with no bone axis needs a skin table.** `BoneFrame`/`bone_shell` assume a limb. To seat anything on a
    ball, `scripts/teratoma-skin.ts` writes `skin.json`: the marched torso's outermost surface and normal on a lat/lon
    grid. `sk(lat, lon, off)`, `skn` and `cap_dir` (a polar patch round a pole) build on it. Re-run it after every torso
