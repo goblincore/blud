@@ -337,6 +337,19 @@ export const TWINHEAD_PROFILE: MotionProfile = {
   gunner: { weapon: 'rocket' },
 };
 
+/** The venus (characters/venus.blob): a heavy biomech woman whose forearms end in sculpted talon gauntlets
+ *  (assets-source/venus-kit/). Her attack is the zombie mind's unarmed swing (enemy-mind.ts makeZombieMind): with
+ *  talons on the hands it reads as a rake, so no new mind is needed. Unarmed, so the zombie's reaching arms and its
+ *  torso guards; a gore body. What is hers is the weight: the warbull's STOMP (a slow cadence, a clear
+ *  lift-and-plant) at a cruise between the twinhead's machine legs (0.95) and the warbull (0.85), and a slow turn. */
+export const VENUS_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'venus',
+  gait: { walk: STOMP, run: STOMP },
+  cruise: 0.9,
+  turnRate: 2.0,
+};
+
 /** The bride: a slow STALK in a high sword guard; the point trails on the
  *  run. Melee only — the sword mind (enemy-mind.ts) swings it. */
 export const BRIDE_PROFILE: MotionProfile = {
@@ -409,6 +422,7 @@ const BY_NAME: Record<string, MotionProfile> = {
   bride: BRIDE_PROFILE,
   warbull: WARBULL_PROFILE,
   twinhead: TWINHEAD_PROFILE,
+  venus: VENUS_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

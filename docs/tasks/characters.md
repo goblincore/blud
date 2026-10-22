@@ -2,6 +2,21 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Venus (heavy biomech woman: corset cage, talon gauntlets, knee braces) — first pass 2026-10-22
+
+- [x] **Body** `characters/venus.blob`: a heavy, full-figured flesh body (hips 0.55 m across, a 0.17 waist, a rear
+  shelf, thick thighs) with the cyberbride's head and strand hair ported from the abandoned PR goblincore/blud#5
+  (eyes moved down into the face mask's sockets, nose shortened). `?character=venus`, `?spawn=venus`.
+- [x] **Kit** `assets-source/venus-kit/` (headless `build.py`, `make_cage.py`, `make_limbs.py`, skin probed by
+  `scripts/venus-surface.ts`): a corset of bone-metal ribs biting into the waist, an exo-spine, a collar, flared
+  talon gauntlets (wear-coloured talons), pneumatic knee braces. ~85k tris; optimisation is the later pass.
+- [x] **Body normal map** from `characters/venus.detail` (`scripts/venus-detail-gen.ts`): fat rolls, cellulite,
+  stretch marks, navel, varicose veins on torso, upper arms and thighs.
+- [x] **Attack**: `VENUS_PROFILE` (STOMP walk, slow cruise), the zombie mind's unarmed swing as a talon rake.
+- [ ] Owner review. Open: a bespoke rake/grab mind; the collar hides under the hair curtains; kit optimisation;
+  the face mask is still the shared zombie flat (a generated face sheet would let her face be her own).
+  [Notes](../dev-notes/2026-10-22-venus/NOTES.md).
+
 ## Twinhead (two-headed strogg: cannon arm + impaling spike, machine legs) — first pass 2026-10-21
 
 - [x] **Body** `characters/twinhead.blob`: hunched flesh torso on a machine pelvis, two heads on ONE central skull
