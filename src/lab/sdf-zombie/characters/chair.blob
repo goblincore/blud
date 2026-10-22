@@ -128,7 +128,7 @@ body
   bar  torso on spine from=1.00 to=1.00 offset=(0.215,0.080,0.043) tip=(0,0,0.012) r=0.040 blend=0.006 color=5a0c10 gloss=0.9 rigid both
   bar  torso on spine from=1.00 to=1.00 offset=(0.215,0.080,0.183) tip=(0,0,0.012) r=0.038 blend=0.006 color=5a0c10 gloss=0.9 rigid both
 
-  # --- SCARS and VEINS are BAKED (chair.detail, from scripts/chair-detail-gen.ts,
+  # --- SCARS and VEINS are BAKED (chair.detail, from scripts/seated-detail-gen.ts,
   # into chair-body-n.png): a stitched Y-incision, two welts, ribs and varicose
   # veins, in relief. Painted prims came out as 2 cm bands or ragged dashes; kit
   # tubes painted red looked like "plastic straws" (owner).

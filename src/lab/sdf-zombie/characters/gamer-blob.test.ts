@@ -53,7 +53,7 @@ describe('gamer — the chair boss, plugged in', () => {
     const posed = applyRig(body, m.bound, m.lastBodyYaw);
     const dist = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
     const isHand = (p: { a: Vec3; radius: number }) => Math.abs(Math.abs(p.a[0]) - 0.058) < 0.005 && Math.abs(p.a[2] - 0.585) < 0.005;
-    const isGrip = (p: { a: Vec3; b: Vec3 }) => Math.abs(p.a[0]) < 1e-6 && Math.abs(p.a[2] - 0.585) < 0.005 && p.b[1] - p.a[1] > 0.1;
+    const isGrip = (p: { a: Vec3; b: Vec3 }) => Math.abs(p.a[0]) < 1e-6 && Math.abs(p.a[2] - 0.585) < 0.005 && p.b[1] - p.a[1] > 0.07;
     const restHands = body.prims.map((p, i) => [p, i] as const).filter(([p]) => isHand(p));
     const g = body.prims.findIndex(isGrip);
     expect(restHands.length, 'two hands').toBe(2);

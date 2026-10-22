@@ -16,8 +16,8 @@
 #     torso as one piece and his hands are on the stick in every pose (no
 #     arm IK touches them: the rig's arms are the front legs).
 #   - THE HEAD IS BLIND. The headset (kit, on `skull`) covers his eyes, so
-#     there are no eye prims; the glow is the stick's fire button and the
-#     headset's visor (kit).
+#     there are no eye prims; the glow is the stick's fire button (down in
+#     the orifice at its tip) and the headset's visor (kit).
 #
 # All numbers below are AUTHORED (the chair's size); `scale` multiplies every
 # length of the compiled body, and the kit is built on the compiled joints.
@@ -83,18 +83,39 @@ body
   # His hands, closed round the grip from either side.
   blob torso on chest at=0.50 offset=(0.045,-0.018,0.415) r=0.042 wide=0.90 tall=1.05 deep=1.10 blend=0.010 rigid both
 
-  # --- THE JOYSTICK: an umbilical stalk out of his navel to a fleshy grip. ---
-  # The grip stands at z 0.45, a hand's breadth clear of the gut's front (~0.34).
+  # --- THE JOYSTICK: an infected, veiny flesh tube out of his navel, gripped in
+  # both hands. A SLIM grip (r 0.034 -> 0.030) standing clear above his fists:
+  # the owner's call after a fat 4.4 cm cone base sat at the hands and its
+  # blend melted them into it ("way too fused"); the first, slim stick was
+  # "fused but distinct enough". The grip stands at z 0.45, a hand's breadth
+  # clear of the gut's front (~0.34).
   # The stalk, sagging a little, ringed like a cord.
   bar  torso on chest from=0.50 to=0.50 offset=(0.000,-0.163,0.265) tip=(0.000,0.080,0.150) r=0.042 r2=0.030 bend=(0,-0.030,0.000) blend=0.020 rigid
   blob torso on chest at=0.50 offset=(0.000,-0.157,0.333) r=0.038 wide=1.15 tall=0.80 deep=1.15 blend=0.012 rigid
   blob torso on chest at=0.50 offset=(0.000,-0.138,0.363) r=0.037 wide=1.15 tall=0.80 deep=1.15 blend=0.012 rigid
   blob torso on chest at=0.50 offset=(0.000,-0.110,0.393) r=0.035 wide=1.15 tall=0.80 deep=1.15 blend=0.012 rigid
-  # The grip, upright between his hands, capped by a swollen knob.
-  bar  torso on chest from=0.50 to=0.50 offset=(0.000,-0.083,0.415) tip=(0.000,0.135,0.000) r=0.034 r2=0.030 blend=0.012 rigid
-  blob torso on chest at=0.50 offset=(0.000,0.052,0.415) r=0.040 wide=1.0 tall=0.80 blend=0.012 rigid
-  # The fire button: a raw red nub on the knob's crown, lit.
-  blob torso on chest at=0.50 offset=(0.000,0.089,0.415) r=0.014 tall=0.6 blend=0.003 color=ff2a1c glow=0.8 gloss=0.9 rigid
+  # The grip, upright between his hands.
+  bar  torso on chest from=0.50 to=0.50 offset=(0.000,-0.083,0.415) tip=(0.000,0.123,0.000) r=0.034 r2=0.031 blend=0.012 rigid
+  # The tip, above his fists: the grip drawn on up to a point (owner: "a bit
+  # more pointed"; it was a round knob). No wider than the grip. UNPAINTED
+  # below the pink, so it keeps the skin's mottle and grain.
+  bar  torso on chest from=0.50 to=0.50 offset=(0.000,0.040,0.415) tip=(0.000,0.100,0.004) r=0.031 r2=0.008 blend=0.010 rigid
+  # THE PINK, isolated to the tip (owner): four contiguous SHELLS over its last
+  # 5 cm, each a frustum of the tip's own surface 1.2 mm out, so each is the
+  # nearest prim (and paints) over exactly its band, stepping from a faint
+  # flush to the zombie's pink (~eab1b4) at the point. (Overlapping blotches
+  # merged into one hard band; discs on the axis bulged into rings: a tiered
+  # cake; three shells stepped visibly.)
+  bar  torso on chest from=0.50 to=0.50 offset=(0.000,0.0900,0.4170) tip=(0.000,0.0125,0.0005) r=0.0207 r2=0.0178 blend=0.002 color=e6c2bc gloss=0.55 rigid
+  bar  torso on chest from=0.50 to=0.50 offset=(0.000,0.1025,0.4175) tip=(0.000,0.0125,0.0005) r=0.0178 r2=0.0149 blend=0.002 color=e0b2b0 gloss=0.55 rigid
+  bar  torso on chest from=0.50 to=0.50 offset=(0.000,0.1150,0.4180) tip=(0.000,0.0125,0.0005) r=0.0149 r2=0.0121 blend=0.002 color=d8a0a4 gloss=0.55 rigid
+  bar  torso on chest from=0.50 to=0.50 offset=(0.000,0.1275,0.4185) tip=(0.000,0.0125,0.0005) r=0.0121 r2=0.0092 blend=0.002 color=cc8a98 gloss=0.55 rigid
+  # THE ORIFICE at the point, where the fire button was: a dark wet hole with
+  # the lit button nub down inside it. Its infected crust, the stick's veins
+  # and the veins over his knuckles are BAKED (gamer.detail): as prims they
+  # read as "tubes and skittles" (owner).
+  blob torso on chest at=0.50 offset=(0.000,0.136,0.419) r=0.0065 tall=0.70 blend=0.001 color=1a0406 gloss=0.95 rigid
+  blob torso on chest at=0.50 offset=(0.000,0.139,0.419) r=0.0040 blend=0.001 color=ff2a1c glow=0.8 gloss=0.9 rigid
 
   # --- HIS NECK AND HEAD. -----------------------------------------------------
   # A thick neck, all fat.

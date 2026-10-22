@@ -18,7 +18,9 @@
 // THE HEADER: texel 0 = 'B', 'N', version, count; five texels per region of 16-bit pairs). Region 0 is the torso,
 // a vertical segment, taken only by hits on torso prims (bodyNormAxis z, w): an arm swinging through the torso's
 // height band must not be painted with chest. Limb regions are taken by the other hits whose rest point lies
-// along their segment within rMax of it, the nearest axis winning. Because the test is on the REST point, a limb
+// along their segment within rMax of it, the nearest axis winning. EXTRA torso regions (kind 0 with an rMax,
+// scripts/bake-body-normal.ts --torso-seg) do the same for torso hits: a prop of torso flesh standing clear of
+// the torso (the gamer's joystick) or arms lying across it, which the one cylinder round the torso cannot see. Because the test is on the REST point, a limb
 // in any pose finds its own region.
 //
 // THE FRAME, per region, which the bake writes in: A = the axis, f = rest +z made perpendicular to A, s = f x A.
@@ -78,7 +80,12 @@ export const BODY_NORMAL_BLOCK = /* wgsl */ `  // BODY NORMAL MAP (body-normal.w
         if (nmapT <= 0.0 || nmapT >= 1.0) { continue; }
         let nmapRadV = anchor - (nmapHd + nmapAx * nmapT);
         let nmapD = length(nmapRadV);
-        if (nmapKind > 0.5 && nmapD > ${pos16('nmapE3.xy')}) { continue; }
+        // rMax bounds a limb region, and an EXTRA torso region (a torso-prim
+        // segment beside region 0, e.g. the gamer's joystick and forearms,
+        // baked with --torso-seg) when it is set; region 0 has none (0), so
+        // it takes every torso hit no nearer axis claims.
+        let nmapRMax = ${pos16('nmapE3.xy')};
+        if ((nmapKind > 0.5 || nmapRMax > 1e-3) && nmapD > nmapRMax) { continue; }
         if (nmapD < nmapBestD) {
           nmapBestD = nmapD;
           nmapBA = nmapAx;

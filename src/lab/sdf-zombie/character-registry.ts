@@ -363,7 +363,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   chair: {
     name: 'chair', src: chairBlobSrc,
     kit: '/assets/lab/chair-kit.gltf',
-    // Baked scars, ribs and varicose veins (chair.detail, scripts/chair-detail-gen.ts).
+    // Baked scars, ribs and varicose veins (chair.detail, scripts/seated-detail-gen.ts).
     bodyNormal: { url: '/assets/lab/chair-body-n.png', meta: '/assets/lab/chair-body-n.json', strength: 1 },
     face: ZOMBIE_FLAT,
     profile: CHAIR_PROFILE,
@@ -375,6 +375,8 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   gamer: {
     name: 'gamer', src: gamerBlobSrc,
     kit: '/assets/lab/gamer-kit.gltf',
+    // Baked varicose veins and stretch marks (gamer.detail, scripts/seated-detail-gen.ts).
+    bodyNormal: { url: '/assets/lab/gamer-body-n.png', meta: '/assets/lab/gamer-body-n.json', strength: 1 },
     face: ZOMBIE_FLAT,
     profile: GAMER_PROFILE,
   },

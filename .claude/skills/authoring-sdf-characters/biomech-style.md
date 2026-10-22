@@ -241,7 +241,7 @@ him". What worked:
 **Scars on blend-heavy flesh go in the normal map.** Painted scar prims paint where they are the NEAREST prim, and
 wide torso blends put the skin ~7 mm outside its prims. Twinhead-sized scars painted 2 cm bands, and sunk 9 mm
 they painted ragged dashes. Kit tubes painted red looked like "plastic straws" (owner). Raised keloid with stitch
-bumps, baked with the veins (`scripts/chair-detail-gen.ts`), takes the skin's own colour and light. The generator
+bumps, baked with the veins (`scripts/seated-detail-gen.ts`), takes the skin's own colour and light. The generator
 probes from the FRONT (`march` along -z) for a seated body, and the veins run out of him across the membrane too.
 
 **Eyes that read in a decal'd head.** Ember points in painted sockets were lost, and so was a bare glowing slit
@@ -282,6 +282,15 @@ plugged in. It uses the chair's rig at `scale 1.30`. What it adds:
 - **Plumbing rides the bone of whatever it plugs into.** Put the feed hose in his mouth on `skull`, so it stays
   in when he turns. The IV, the shoulder cables and the catheter ride `spine`, plugging into the chest-rigid
   flesh, which moves only a few cm against the frame.
+- **Small detail on a prop of flesh is NORMAL MAP, not prims.** Veins, sores and pustules as painted prims on the
+  joystick read as "tubes and skittles" (owner). They are baked: the stick stands upright in front of him, so the
+  torso projection's front rays land on it. `scripts/seated-detail-gen.ts` probes the front, and a small meander
+  (`ampK`) keeps veins inside a 9 cm stick.
+- **A colour gradient on SDF flesh is contiguous shells, kept small.** A painted prim is flat and loses the skin's
+  mottle. One painted red cone read as a plastic bottle cap. Overlapping blotches merged into one hard band, and discs
+  on the axis bulged into rings (a tiered cake). What works: frustums of the surface itself, 1.2 mm out and butted
+  end to end, each the nearest prim over exactly its band. Keep them to where the colour is wanted (the owner: "more
+  isolated to the tip"): three over the last 5 cm, a faint flush to the zombie's pink (`eab1b4`).
 - **A ranged attack does not fit this rig yet.** `onFire` needs a carried prop in the right hand, and here the
   right hand is a front claw. A ranged gamer needs a mind with the muzzle on the head (the headset); it uses the
   hound mind for now.
