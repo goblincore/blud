@@ -59,9 +59,11 @@ if 'talons' in PARTS:
         root = F.at(0.70, 0, 0, 0) + F.f * df - F.s * 0.006
         ball(f'kn{i}', root, 0.016)
         ring(f'knr{i}', root + F.u * 0.006, F.u, 0.015, 0.003)
-        horn(f'talon{i}', root + F.u * 0.006, F.u + F.f * df * 3, F.f, L, r0, curl=1.05)
+        # horn() turns d by +curl round its axis: round F.f that swings 'down' toward +x, OUTWARD on .l (the first
+        # build; owner: "they point outwards"). Round -F.f they hook in toward the palm.
+        horn(f'talon{i}', root + F.u * 0.006, F.u + F.f * df * 3, -F.f, L, r0, curl=1.05)
     # The thumb talon: from the inner front, hooking across.
-    horn('thumb', F.at(0.25, 0, 0, 0) + F.f * 0.04 + F.s * 0.02, F.u * 0.6 + F.f * 0.5 + F.s * 0.5, F.f, 0.11, 0.010, curl=1.2)
+    horn('thumb', F.at(0.25, 0, 0, 0) + F.f * 0.04 + F.s * 0.02, F.u * 0.6 + F.f * 0.5 + F.s * 0.5, -F.f, 0.11, 0.010, curl=1.2)
     o = fuse('talons', voxel=0.0016)
     decimate(o, 5000)
     # Steel at the knuckles, rust, then dried blood toward the tips (make_spike.py's wear recipe).

@@ -45,7 +45,9 @@ A run that throws does not save the .blend, so re-run everything after a crash.
 - In the close frames, the thin baked lines on the breasts, shoulders and thighs read more as scratches or scar cuts
   than as ropey veins or stretch marks. Next: thicker, prouder veins on the limbs, and fewer, softer stretch marks.
   Judge on a crop before the next 56-min bake.
-- A bespoke attack mind (a grab or a two-handed rake). Today she uses the zombie's swing.
+- Her ATTACK is undecided (owner, 2026-10-22: likes the rakes "kinda"; revisit). Options raised: club fists and a
+  ground slam (the recommendation), the gibbet's bile lob (PR #57), a body charge, or keep the rakes. Today she uses
+  the zombie's swing. The talons now curl INWARD toward the palm (they curled outward; owner caught it).
 - The collar sits under the hair curtains and shows only from behind.
 - Kit optimisation (~85k tris), as with the twinhead: bake the sculpt detail to cages.
 - Her face is the shared zombie flat mask. A generated face sheet (as for the twinhead or ogre) would make it her own.
