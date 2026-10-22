@@ -67,15 +67,30 @@ describe('makeHoundMind', () => {
 });
 
 describe('the gibbet\'s stab and squirt', () => {
-  it('the stab rears both front legs up, then drives the tips forward; the squirt swings the sac', () => {
-    const rear = houndPose(0.2, 'stab'), thrust = houndPose(0.55, 'stab');
-    expect(rear.offsets.handL![1]).toBeGreaterThan(0.3);
-    expect(thrust.offsets.handL![2]).toBeGreaterThan(0.35);
-    expect(thrust.offsets.handR).toEqual(thrust.offsets.handL);
-    expect(pounceAirborne(0.5, 'stab')).toBe(true);
-    expect(houndPose(0.2, 'squirt').offsets.hem![2], 'sac swings back').toBeLessThan(-0.1);
-    expect(houndPose(0.55, 'squirt').offsets.hem![2], 'then forward').toBeGreaterThan(0.2);
+  it('the stab is ONE leg: it cocks high, the body rears, then the spike and the body lunge; the other leg stays down', () => {
+    const rear = houndPose(0.2, 'stab', 'R'), thrust = houndPose(0.55, 'stab', 'R');
+    expect(rear.offsets.handR![1], 'the paw cocked high').toBeGreaterThan(0.4);
+    expect(rear.offsets.handTipR![2], 'the spike aimed forward of the paw').toBeGreaterThan(rear.offsets.handR![2]);
+    expect(rear.rootOffset[2], 'the body rears back').toBeLessThan(-0.05);
+    expect(thrust.offsets.handR![2]).toBeGreaterThan(0.5);
+    expect(thrust.rootOffset[2], 'the body lunges with it').toBeGreaterThan(0.15);
+    expect(thrust.offsets.handL, 'the other leg is not driven').toBeUndefined();
+    expect(houndPose(0.55, 'stab', 'L').offsets.handL![0], 'mirrored for the left').toBeCloseTo(-thrust.offsets.handR![0], 6);
+    expect(pounceAirborne(0.5, 'stab', 'R', 'R')).toBe(true);
+    expect(pounceAirborne(0.5, 'stab', 'R', 'L')).toBe(false);
     expect(houndGapeAt(0.3, 'stab')).toBe(0);
+  });
+
+  it('the squirt squats the whole body: haunches down, the front up, the head aside; the sac swings back then forward', () => {
+    const back = houndPose(0.2, 'squirt'), fwd = houndPose(0.55, 'squirt');
+    for (const p of [back, fwd]) {
+      expect(p.rootOffset[1], 'haunches down').toBeLessThan(-0.1);
+      expect(p.offsets.chest![1], 'the front stays up').toBeGreaterThan(0);
+      expect(Math.hypot(p.offsets.head![0], p.offsets.head![1]), 'the head out of the way').toBeGreaterThan(0.15);
+    }
+    expect(back.offsets.hem![2], 'sac swings back').toBeLessThan(-0.1);
+    expect(fwd.offsets.hem![2], 'then forward').toBeGreaterThan(0.2);
+    expect(houndPose(0, 'squirt').rootOffset).toEqual([0, 0, 0]);
   });
 
   it('stabs a player inside its reach, contact exactly once', () => {

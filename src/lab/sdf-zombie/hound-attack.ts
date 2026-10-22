@@ -40,12 +40,25 @@ export const HOUND_TUNING = {
     crouch: -0.10, crouchBack: -0.08, rise: 0.22, root: 0.12, chest: 0.12, neck: 0.18, head: 0.24,
     pawUp: 0.24, pawFwd: 0.22,
   },
-  /** STAB: the wind-up REARS both front legs up (the paws high, the chest lifted and pulled back); the strike drives
-   *  the spike tips forward at mid height. Paws and elbows move as one, so the leg stays a leg. */
-  stab: { rearUp: 0.58, rearElbow: 0.45, rearChest: 0.10, rearBack: 0.06, thrust: 0.45, thrustUp: 0.25, elbowFwd: 0.25, chest: 0.10, root: 0.08 },
-  /** SQUIRT: the sac (the `hem` pendulum) swings back on the wind-up and forward through the strike, and the glob
-   *  leaves at `fireAt`, as it swings through. The frame recoils a little. */
-  squirt: { back: 0.20, lift: 0.06, fwd: 0.28, fwdLift: 0.10, recoil: 0.03, crouch: 0.03, fireAt: 0.42 },
+  /** STAB: ONE leg, a mantis strike (the swing's side; the brain alternates). The first pass raised both legs and
+   *  pushed them forward together and the owner saw "pattycake". Now the body REARS back onto its haunches and leans
+   *  away from the striking leg, which cocks high and back with its spike aimed forward like a spear; the strike
+   *  LUNGES the whole body forward as the spike drives in. The other leg stays planted. (m, body-local) */
+  stab: {
+    rearRise: 0.12, rearBack: 0.10, rearLean: 0.06, chestRise: 0.20,
+    cockElbow: [0.12, 0.42, -0.06], cockPaw: [0.08, 0.55, -0.12], cockTip: [0.06, 0.66, 0.08],
+    lunge: 0.22, lungeDrop: 0.05, chestLunge: 0.30,
+    strikeElbow: [0.05, 0.22, 0.32], strikePaw: [0.02, 0.12, 0.58], strikeTip: [0.0, 0.02, 0.80],
+  },
+  /** SQUIRT: the whole body squats to spray. Held over the swing (an envelope, not the signed drive, so it never
+   *  pops up mid-swing): the HAUNCHES drop, the front stays up so the back tilts up, and the dangling head swings up
+   *  and aside out of the spray's path. Inside that, the sac (the `hem` pendulum) swings back on the wind-up and
+   *  forward through the strike, the glob leaving at `fireAt`, and the body jolts forward with the shot. The first
+   *  pass moved only the sac and the owner saw a still body with "the flesh dangle". */
+  squirt: {
+    haunch: 0.17, haunchBack: 0.05, withersUp: 0.06, headAside: 0.16, headUp: 0.16, headBack: 0.04,
+    back: 0.20, lift: 0.04, fwd: 0.30, fwdLift: 0.10, jolt: 0.06, fireAt: 0.42,
+  },
   /** Root travel over one pounce (m), and how close it may land (m). */
   pounceDistance: 1.6,
   pounceStopShort: 0.8,
@@ -85,7 +98,7 @@ const Z: Vec3 = [0, 0, 0];
 /** The hound's attack pose at `phase` — the AttackPose contract (attack.ts):
  *  exactly zero at phase 0 and 1. `drive` is attack.ts's signed scalar
  *  (0 -> -1 wind-up -> +1 strike/hold -> 0). */
-export function houndPose(phase: number, variant: HoundVariant): AttackPose {
+export function houndPose(phase: number, variant: HoundVariant, side: 'L' | 'R' = 'R'): AttackPose {
   const d = attackDrive(phase, ATTACK_TUNING);
   const reach = { pitchL: 0, pitchR: 0, yawL: 0, yawR: 0 };
   if (d === 0) return { offsets: {}, rootOffset: Z, reach };
@@ -93,27 +106,39 @@ export function houndPose(phase: number, variant: HoundVariant): AttackPose {
   const s = Math.max(0, d); // strike weight
   if (variant === 'stab') {
     const S = HOUND_TUNING.stab;
-    const paw: Vec3 = [0, w * S.rearUp + s * S.thrustUp, w * 0.05 + s * S.thrust];
-    const elbow: Vec3 = [0, w * S.rearElbow + s * S.thrustUp, s * S.elbowFwd];
+    // +x is the body's right (attack.ts axes): the striking leg's own side. The body leans AWAY from it.
+    const sg = side === 'R' ? 1 : -1;
+    const mix = (a: readonly number[], b: readonly number[]): Vec3 => [sg * (w * a[0]! + s * b[0]!), w * a[1]! + s * b[1]!, w * a[2]! + s * b[2]!];
+    const body: Vec3 = [-sg * w * S.rearLean, w * S.rearRise - s * S.lungeDrop, s * S.lunge - w * S.rearBack];
+    const front: Vec3 = [body[0], w * S.chestRise - s * S.lungeDrop, s * S.chestLunge - w * S.rearBack];
+    const strike = side === 'L' ? 'L' : 'R';
     return {
       offsets: {
-        chest: [0, w * S.rearChest, s * S.chest - w * S.rearBack],
-        neck: [0, w * S.rearChest, s * S.chest - w * S.rearBack],
-        head: [0, w * S.rearChest, s * S.chest - w * S.rearBack],
-        elbowL: elbow, elbowR: elbow, handL: paw, handR: paw,
+        hips: body, chest: front, spineA: body, spineB: front, neck: front, head: front,
+        [`elbow${strike}`]: mix(S.cockElbow, S.strikeElbow),
+        [`hand${strike}`]: mix(S.cockPaw, S.strikePaw),
+        // The TIP gets its own offset: follow() in motion.ts carries a tip only by its parent's IK delta, never by
+        // an attack offset, so without this the spike dangled under a raised paw (the first pass).
+        [`handTip${strike}`]: mix(S.cockTip, S.strikeTip),
       },
-      rootOffset: [0, w * 0.04, s * S.root - w * S.rearBack],
+      rootOffset: body,
       reach,
     };
   }
   if (variant === 'squirt') {
     const Q = HOUND_TUNING.squirt;
+    const c = squatEnvelope(phase);
+    const haunch: Vec3 = [0, -c * Q.haunch, -c * Q.haunchBack];
+    const head: Vec3 = [c * Q.headAside, c * Q.headUp, -c * Q.headBack];
     return {
       offsets: {
-        hem: [0, w * Q.lift + s * Q.fwdLift, s * Q.fwd - w * Q.back],
-        chest: [0, 0, -s * Q.recoil],
+        hips: haunch, hipL: haunch, hipR: haunch, spineA: [0, -c * Q.haunch * 0.5, 0],
+        chest: [0, c * Q.withersUp, s * Q.jolt * 0.5], spineB: [0, c * Q.withersUp, 0],
+        neck: [head[0] * 0.5, head[1] * 0.6, head[2]], head,
+        // the sac hangs from the dropped hips: it goes down with them, then swings
+        hem: [0, -c * Q.haunch + w * Q.lift + s * Q.fwdLift, s * Q.fwd - w * Q.back],
       },
-      rootOffset: [0, -w * Q.crouch, -s * Q.recoil],
+      rootOffset: [0, -c * Q.haunch, -c * Q.haunchBack + s * Q.jolt],
       reach,
     };
   }
@@ -143,10 +168,11 @@ export function houndPose(phase: number, variant: HoundVariant): AttackPose {
   };
 }
 
-/** True while a pounce (or the gibbet's stab) has the front paws off the floor. */
-export function pounceAirborne(phase: number, variant: SwingVariant): boolean {
-  const A = variant === 'stab' ? HOUND_TUNING.stabAirborne : HOUND_TUNING.airborne;
-  return (variant === 'pounce' || variant === 'stab') && phase > A.from && phase < A.to;
+/** True while front paw `paw` is off the floor: both in a pounce, the striking leg's only in the gibbet's stab. */
+export function pounceAirborne(phase: number, variant: SwingVariant, side: 'L' | 'R' = 'R', paw: 'L' | 'R' = side): boolean {
+  if (variant === 'stab') { const A = HOUND_TUNING.stabAirborne; return paw === side && phase > A.from && phase < A.to; }
+  const A = HOUND_TUNING.airborne;
+  return variant === 'pounce' && phase > A.from && phase < A.to;
 }
 
 /** The squirt's glob leaves this frame (prevPhase -> phase crosses HOUND_TUNING.squirt.fireAt). */
@@ -180,6 +206,12 @@ export const GIBBET_TUNING = {
 function smooth(t: number): number {
   const c = t < 0 ? 0 : t > 1 ? 1 : t;
   return c * c * (3 - 2 * c);
+}
+
+/** The squirt's HELD squat: in over the first fifth, out over the last quarter, exactly 0 at phase 0 and 1. */
+function squatEnvelope(phase: number): number {
+  if (!(phase > 0) || phase >= 1) return 0;
+  return smooth(phase / 0.2) * (1 - smooth((phase - 0.75) / 0.25));
 }
 
 /** Jaw gape (rad) at `phase`: opens on the wind-up to the variant's peak,
