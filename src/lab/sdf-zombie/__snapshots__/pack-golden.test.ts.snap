@@ -28,7 +28,7 @@ exports[`packBody byte pin > female.blob packs the pinned bytes 1`] = `"fda78400
 
 exports[`packBody byte pin > gargoyle.blob packs the pinned bytes 1`] = `"5b1bfc98c92f308e"`;
 
-exports[`packBody byte pin > gibbet.blob packs the pinned bytes 1`] = `"fb349f75a049ec4c"`;
+exports[`packBody byte pin > gibbet.blob packs the pinned bytes 1`] = `"4231c10f4f44e193"`;
 
 exports[`packBody byte pin > gnasher.blob packs the pinned bytes 1`] = `"279b0d25f06c916e"`;
 
