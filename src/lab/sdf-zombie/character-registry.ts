@@ -376,7 +376,8 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     name: 'gamer', src: gamerBlobSrc,
     kit: '/assets/lab/gamer-kit.gltf',
     // Baked varicose veins and stretch marks (gamer.detail, scripts/seated-detail-gen.ts).
-    bodyNormal: { url: '/assets/lab/gamer-body-n.png', meta: '/assets/lab/gamer-body-n.json', strength: 1 },
+    // Strength 1.5: the owner wants the veins on his neck, face and the stick "pronounced".
+    bodyNormal: { url: '/assets/lab/gamer-body-n.png', meta: '/assets/lab/gamer-body-n.json', strength: 1.5 },
     face: ZOMBIE_FLAT,
     profile: GAMER_PROFILE,
   },

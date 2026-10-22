@@ -7,6 +7,7 @@
 import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, CHAIR_WADDLE, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
+import type { JoystickSpec } from './joystick';
 import type { Vec3 } from './types';
 import { JUGGERNAUT_ARMOR, WARBULL_ARMOR, type ArmorSpec } from './plate-armor';
 import { JUGGERNAUT_INJURY_TUNING, WARBULL_INJURY_TUNING, type SoldierInjuryTuning } from './soldier-damage';
@@ -68,6 +69,9 @@ export interface MotionProfile {
    *  (enemy-mind.ts makeSwordMind) and motion.ts drives the held prop through
    *  the swing (sword-swing.ts). Absent = the zombie's unarmed swing. */
   melee?: { kind: 'sword' | 'bite' | 'stab' };
+  /** A JOYSTICK on the body's `hem` (the gamer, characters/gamer.blob): motion.ts adds joystick.ts's jiggle to
+   *  the `hem` target, hard while he attacks and a faint twitch otherwise. Absent: `hem` is cloth or a hung mass. */
+  joystick?: JoystickSpec;
   /** A SOFT target: any bullet or blast hit kills it outright (the game
    *  forces the collapse on the first hit). The cultist is soft; the zombie
    *  and soldier soak hits and exist to show off the gore. Burns do not count
@@ -414,12 +418,16 @@ export const CHAIR_PROFILE: MotionProfile = {
  *  man fused into a gaming chair, plugged in, both hands on a joystick that
  *  grows out of his gut. The chair's waddle and the hound's mind (his head
  *  thrown off the headrest; the whole rig rearing), slower and heavier: at
- *  1.3x the chair's size there is more of him to chew through. */
+ *  1.3x the chair's size there is more of him to chew through. Through every
+ *  attack he works the joystick (joystick.ts). */
 export const GAMER_PROFILE: MotionProfile = {
   ...CHAIR_PROFILE,
   name: 'gamer',
   cruise: 0.75,
   turnRate: 1.4,
+  // He works the stick as he attacks, 5 cm of throw at the grip; and twitches it
+  // the whole time, he never stops playing. Eyeballed.
+  joystick: { amp: 0.05, idle: 0.012 },
 };
 
 /** The bride: a slow STALK in a high sword guard; the point trails on the

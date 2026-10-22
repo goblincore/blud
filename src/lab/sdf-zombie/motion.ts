@@ -75,6 +75,7 @@ import {
 } from './collapse';
 import { attackPose, type AttackPose, type SwingVariant } from './attack';
 import { houndGapeAt, houndPose, isHoundVariant, pounceAirborne } from './hound-attack';
+import { joystickOffset } from './joystick';
 import { isSwordVariant, jawGapeAt, swordCarryAt } from './sword-swing';
 import { jawRestOf, jawTargetAt, type JawRest } from './jaw';
 
@@ -838,9 +839,13 @@ export function stepMotion(
     // BRANCHED, not `add(..., ZERO)`: adding zero would turn a -0 component
     // into +0 and break the lab's bit-identity pin for no benefit.
     const base2 = add(scale(gaitOff, s), stagOff);
-    const local = attack
+    const local0 = attack
       ? add(base2, name === 'pelvis' ? attack.rootOffset : attack.offsets[name] ?? Z)
       : base2;
+    // A JOYSTICK on `hem` (MotionProfile.joystick, the gamer): he works it as he attacks and twitches it idle.
+    const local = name === 'hem' && profile.joystick
+      ? add(local0, joystickOffset(state.gait.time, attack && cfg.attack ? cfg.attack.phase : null, profile.joystick))
+      : local0;
     const leanShare = LEAN_SHARE[name] ?? 0;
     const leaned: Vec3 = [local[0] + lean * leanShare, local[1], local[2]];
     const spun = rotateYaw([base[0] - pivot[0], base[1], base[2] - pivot[2]], bodyYaw);

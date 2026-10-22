@@ -24,7 +24,7 @@
 //
 //   CHARACTER=gamer npx tsx scripts/seated-detail-gen.ts && npx tsx scripts/bake-body-normal.ts gamer 512 320 \
 //     --limb clavicle.l:0:1:0.15:64 --limb clavicle.r:0:1:0.15:64 --limb upperarm.l:0:1:0.10:64 --limb upperarm.r:0:1:0.10:64 \
-//     --torso-seg stick:0,1.06,0.585:0,1.355,0.591:0.075:96 \
+//     --limb skull:0:1:0.17:96 --torso-seg stick:0,1.06,0.585:0,1.39,0.590:0.075:96 \
 //     --torso-seg forearm.l:0.33,1.03,0.08:0.08,1.13,0.58:0.085:64 --torso-seg forearm.r:-0.33,1.03,0.08:-0.08,1.13,0.58:0.085:64 \
 //     --torso-seg upperarm.l:0.255,1.33,0.048:0.31,1.02,0.135:0.095:64 --torso-seg upperarm.r:-0.255,1.33,0.048:-0.31,1.02,0.135:0.095:64
 //   The --torso-seg regions give the joystick and his arms (torso flesh, in front of the gut) their own cylinders:
@@ -153,42 +153,54 @@ function varicose(x0: number, y0: number, x1: number, y1: number, r: number, pro
 if (CH === 'gamer') {
   // Compiled metres (scale 1.30). His forearms and hands lie across the gut in front, so the front probe there
   // lands on them too: veins on his forearms are welcome.
-  section('varicose veins: over his chest and flanks, down his gut and its sides');
+  // THE VEINS GO TO HIS NECK, HIS FACE AND THE JOYSTICK (owner: "the veins should be more focused on these areas:
+  // the neck of the gamer/face and the tube/shaft of the joystick ... pronounced and a lot of them"). The body keeps
+  // only a few thinner trunks.
+  section('varicose veins: a few thin trunks down his flanks and the gut\'s sides');
   for (const s of [1, -1]) {
-    varicose(s * 0.16, 1.30, s * 0.20, 1.06, 0.0075, 0.0050, 2);   // down the flank
-    varicose(s * 0.07, 1.30, s * 0.12, 1.16, 0.0065, 0.0045, 1);   // over the breast
-    varicose(s * 0.14, 1.02, s * 0.20, 0.82, 0.0075, 0.0050, 2);   // down the gut's side
-    varicose(s * 0.05, 0.98, s * 0.09, 0.80, 0.0065, 0.0045, 1);   // low on the gut, under his arms
-    varicose(s * 0.27, 1.30, s * 0.31, 1.10, 0.0065, 0.0045, 1);   // down the upper arm
+    varicose(s * 0.16, 1.30, s * 0.20, 1.06, 0.0055, 0.0038, 1);   // down the flank
+    varicose(s * 0.14, 1.02, s * 0.20, 0.82, 0.0055, 0.0038, 1);   // down the gut's side
   }
+
+  /** A pronounced vein along any skin parametrised as (t, ph) -> skin: a meander in ph, knots, short branches. */
+  const axisVein = (skin: (t: number, ph: number) => Skin | null, emit: (S: Skin[], R: number[]) => void,
+    t0: number, t1: number, ph0: number, dph: number, n: number, r: number, wig: number, branches: number, depth = 0) => {
+    const S: Skin[] = [], R: number[] = [], T: number[] = [], PH: number[] = [];
+    let phase = rnd() * 6.28;
+    for (let i = 0; i <= n; i++) {
+      const u = i / n, t = t0 + (t1 - t0) * u, ph = ph0 + dph * u + wig * Math.sin(phase);
+      phase += 0.45 + rnd() * 0.3;
+      const sk = skin(t, ph);
+      if (sk) { S.push(sk); R.push(r * (0.6 + 0.4 * Math.sin(Math.PI * Math.min(1, u * 1.1 + 0.05)))); T.push(t); PH.push(ph); }
+    }
+    if (S.length < 3) return;
+    emit(S, R);
+    for (let i = 2; i < S.length - 2; i++) if (rnd() < 0.2) emit([S[i]!], [R[i]! * 1.7]);
+    for (let b = 0; b < branches && depth < 1; b++) {
+      const k = 1 + Math.floor(rnd() * (S.length - 3)), sd = rnd() < 0.5 ? -1 : 1;
+      axisVein(skin, emit, T[k]!, T[k]! + (t1 - t0) * (0.18 + rnd() * 0.15), PH[k]!, sd * (25 + rnd() * 25), 8, r * 0.65, wig * 0.6, 1, depth + 1);
+    }
+  };
+  const torsoEmit = (proud: number) => (S: Skin[], R: number[]) =>
+    S.length === 1 ? lumpAt(S[0]!, R[0]!, proud * 1.3, 0.0015) : ridgeAt(S, R, proud, 0.0012);
   // THE JOYSTICK (owner: its veins, sores and pustules as prims "looks like tubes and skittles ... can be done in
   // normal map"). It has its own torso region in the bake (--torso-seg stick, along its axis), so its detail is
-  // placed ALL ROUND it by probing in toward that axis: grip y 1.06-1.22, the tip to its point at 1.35, z ~0.59.
-  const stickAxis = (y: number): V => [0, y, y < 1.219 ? 0.585 : 0.585 + 0.005 * (y - 1.219) / 0.130];
+  // placed ALL ROUND it by probing in toward that axis: grip y 1.06-1.21, the knob ~1.21-1.29, the point to 1.38, z ~0.59.
+  const stickAxis = (y: number): V => [0, y, y < 1.282 ? 0.585 : 0.585 + 0.004 * (y - 1.282) / 0.100];
   const stickSkin = (y: number, ph: number) => {
     const a = ph * Math.PI / 180, dir: V = [Math.sin(a), 0, Math.cos(a)];
     return march(add(stickAxis(y), mul(dir, 0.12)), mul(dir, -1), torso);
   };
-  section('the joystick: fine veins winding up the grip and the cone, all round');
-  for (const [ph0, turn] of [[20, 110], [110, -90], [200, 80], [290, -100]] as const) {
-    const S: Skin[] = [], R: number[] = [];
-    let phase = rnd() * 6.28;
-    const n = 30;
-    for (let i = 0; i <= n; i++) {
-      const u = i / n, y = 1.07 + 0.25 * u, ph = ph0 + turn * u + 9 * Math.sin(phase);
-      phase += 0.5 + rnd() * 0.3;
-      const sk = stickSkin(y, ph);
-      if (sk) { S.push(sk); R.push(0.0036 * (0.55 + 0.45 * Math.sin(Math.PI * Math.min(1, u * 1.1 + 0.05)))); }
-    }
-    ridgeAt(S, R, 0.0026, 0.0012);
-    for (let i = 2; i < S.length - 2; i++) if (rnd() < 0.15) lumpAt(S[i]!, R[i]! * 1.6, 0.0034, 0.0015);
-  }
+  section('the joystick: pronounced veins running down the shaft from the point to the stalk, all round');
+  // Nine, spaced round it with a jitter, each a near-vertical meander with knots and a branch.
+  for (let k = 0; k < 9; k++)
+    axisVein(stickSkin, torsoEmit(0.0036), 1.355, 1.07, 40 * k + rnd() * 18, (rnd() - 0.5) * 50, 34, 0.0046, 7, 1);
   section('the joystick: an infected crust round the orifice at the point, and sores');
   for (let k = 0; k < 22; k++) {
-    const sk = stickSkin(1.305 + rnd() * 0.038, rnd() * 360);
+    const sk = stickSkin(1.335 + rnd() * 0.040, rnd() * 360);
     if (sk) lumpAt(sk, 0.0030 + rnd() * 0.0030, 0.0020 + rnd() * 0.0020, 0.0015);
   }
-  for (const [cy, cph] of [[1.250, 40], [1.275, -60], [1.230, 170], [1.26, 250]] as const)
+  for (const [cy, cph] of [[1.250, 40], [1.265, -60], [1.235, 170], [1.255, 250]] as const)
     for (let k = 0; k < 7; k++) {
       const a = 2 * Math.PI * k / 7, sk = stickSkin(cy + 0.007 * Math.sin(a), cph + 14 * Math.cos(a));
       if (sk) lumpAt(sk, 0.0024, 0.0018, 0.0010);
@@ -203,6 +215,47 @@ if (CH === 'gamer') {
     const y = 0.86 + k * 0.035, x = 0.19 + 0.01 * Math.sin(k * 1.7);
     const S = frontPath([[s * x, y], [s * (x - 0.03), y + 0.012], [s * (x - 0.065), y + 0.016]], 6);
     ridgeAt(S, S.map((_, i) => 0.0030 * (0.6 + 0.4 * Math.sin(Math.PI * i / Math.max(1, S.length - 1)))), 0.0012, 0.0012);
+  }
+  // HIS NECK: torso flesh round the neck bone, probed in toward its axis.
+  const nb = bones.get('neck')!;
+  const neckSkin = (t: number, ph: number) => {
+    const a = ph * Math.PI / 180, ax = add(nb.head, mul(sub(nb.tail, nb.head), t));
+    const dir: V = [Math.sin(a), 0, Math.cos(a)];
+    return march(add(ax, mul(dir, 0.25)), mul(dir, -1), torso);
+  };
+  section('his neck: thick veins climbing from the collar to the jaw, front and sides');
+  for (let k = 0; k < 10; k++) {
+    const ph = -120 + 240 * (k + 0.5) / 10 + (rnd() - 0.5) * 14;
+    axisVein(neckSkin, torsoEmit(0.0045), -0.25, 1.05, ph, (rnd() - 0.5) * 30, 26, 0.0060, 9, 1);
+  }
+  // HIS FACE: the head cluster round the skull bone (its own normal-map region: bake with --limb skull). The face
+  // sheet covers the middle of the face; the veins run up the temples, over the crown's sides and down the jowls.
+  const head = only(['head']);
+  const sk = bones.get('skull')!;
+  const headSkin = (t: number, ph: number) => {
+    const a = ph * Math.PI / 180, ax = add(sk.head, mul(sub(sk.tail, sk.head), t));
+    const dir: V = [Math.sin(a), 0, Math.cos(a)];
+    return march(add(ax, mul(dir, 0.3)), mul(dir, -1), head);
+  };
+  const headEmit = (proud: number) => (S: Skin[], R: number[]) => {
+    const d = sub(sk.tail, sk.head);
+    const at = (p: V) => { const t = Math.min(1, Math.max(0, dot(sub(p, sk.head), d) / dot(d, d))); return { t, at: add(sk.head, mul(d, t)) }; };
+    if (S.length === 1) {
+      const c = add(S[0]!.p, mul(S[0]!.n, proud * 1.3 - R[0]!)), { t, at: o } = at(c);
+      out.push(`  blob head on skull at=${f(t)} offset=${fv(sub(c, o))} r=${fr(R[0]!)} blend=${fr(0.0015)}`);
+      return;
+    }
+    const C = S.map((s, i) => add(s.p, mul(s.n, proud - R[i]!)));
+    for (let i = 0; i + 1 < C.length; i++) {
+      const A = C[i]!, B = C[i + 1]!, { t, at: o } = at(A);
+      out.push(`  bar  head on skull from=${f(t)} to=${f(t)} offset=${fv(sub(A, o))} tip=${fv(sub(B, A))} r=${fr(R[i]!)} r2=${fr(R[i + 1]!)} blend=${fr(0.0012)}`);
+    }
+  };
+  section('his face: veins up the temples and the sides of the crown, down the jowls');
+  for (const s of [1, -1]) {
+    for (let k = 0; k < 3; k++) axisVein(headSkin, headEmit(0.0040), 0.30 + 0.05 * k, 1.05, s * (62 + 16 * k), s * (rnd() * 30), 22, 0.0052, 8, 1);
+    for (let k = 0; k < 2; k++) axisVein(headSkin, headEmit(0.0040), 0.40, -0.05, s * (48 + 22 * k), s * (rnd() * 20), 18, 0.0048, 7, 1);
+    axisVein(headSkin, headEmit(0.0038), 0.20, 1.00, s * 150, s * 15, 20, 0.0050, 8, 1);   // behind the ear, up the back
   }
 } else {
   // ---------------------------------------------------------------- scars: keloid with stitch bumps

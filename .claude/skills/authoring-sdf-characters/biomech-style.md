@@ -297,6 +297,19 @@ plugged in. It uses the chair's rig at `scale 1.30`. What it adds:
   on the axis bulged into rings (a tiered cake). What works: frustums of the surface itself, 1.2 mm out and butted
   end to end, each the nearest prim over exactly its band. Keep them to where the colour is wanted (the owner: "more
   isolated to the tip"): three over the last 5 cm, a faint flush to the zombie's pink (`eab1b4`).
+- **A held prop that moves is an UPWARD `hem`.** The gamer's stick, knob and hands ride a `hem` bone from his hips up
+  to the middle of the grip, so an attack can move them. The only spare movable point on the standard names is the
+  pendulum, and attack poses offset joints by name. `rig-bind.ts` holds an upward hem at `HEM_HELD_SCALE` (0.7, not
+  the cloth's 0.15), so it does not droop or trail: walking it holds within ~1 cm. `MotionProfile.joystick`
+  (`joystick.ts`) adds the jiggle: ~5 cm of beating back-and-forth through an attack, and a faint idle twitch. His
+  forearms are left UNRIGID, so each end binds to its nearest joint (elbow to the seat, wrist to `hem`), and the
+  arms stretch to follow the stick.
+- **Torso flesh the torso cylinder cannot see gets its own region.** `bake-body-normal.ts --torso-seg` adds kind-0
+  regions with an `rMax` (the shader bounds them by it; region 0 keeps none). The gamer has them for the stick, the
+  forearms and the upper arms: with only the torso's cylinder, the arms across the gut smeared it.
+- **Veins where the eye goes.** The owner wanted them "pronounced and a lot of them" on the neck, the face and down
+  the shaft, not spread over the body. Probe each around its own axis (`axisVein` in `seated-detail-gen.ts`). The
+  head gets a `--limb skull` region; its face sheet still covers the middle of the face.
 - **A ranged attack does not fit this rig yet.** `onFire` needs a carried prop in the right hand, and here the
   right hand is a front claw. A ranged gamer needs a mind with the muzzle on the head (the headset); it uses the
   hound mind for now.

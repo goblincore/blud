@@ -1,7 +1,8 @@
 // gamer.blob — the chair's boss variant: a swollen man fused into a gaming chair, both hands on a joystick of flesh
 // out of his navel. What this pins: it builds and fuses, it is BIGGER than the chair (the boss), it walks on all four
-// feet through the real motion pipeline, and his hands stay ON THE STICK while it walks (they are `rigid` on the
-// chest with the grip; nothing in the arm IK reaches them, because the rig's arms are the front legs).
+// feet through the real motion pipeline, he WORKS THE STICK through an attack (the joystick rides the `hem` point,
+// MotionProfile.joystick), and his hands stay ON THE STICK throughout (they ride `hem` with the grip; nothing in the
+// arm IK reaches them, because the rig's arms are the front legs).
 import { describe, it, expect } from 'vitest';
 import src from './gamer.blob?raw';
 import chairSrc from './chair.blob?raw';
@@ -48,8 +49,8 @@ describe('gamer — the chair boss, plugged in', () => {
     for (const [n, lift] of Object.entries(lifts)) expect(lift, `${n} lifts`).toBeGreaterThan(0.04);
 
     // Measured on the POSED body after the walk: each hand (the prims at x +-0.058, z 0.585 in the rest body) stays
-    // within a couple of millimetres of where it sits against the grip at rest. Rigid on the chest with the grip,
-    // so the walk carries them together; the arm IK never reaches them (the rig's arms are the front legs).
+    // within a couple of millimetres of where it sits against the grip at rest. Rigid on `hem` with the grip, so
+    // the walk carries them together; the arm IK never reaches them (the rig's arms are the front legs).
     const posed = applyRig(body, m.bound, m.lastBodyYaw);
     const dist = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
     const isHand = (p: { a: Vec3; radius: number }) => Math.abs(Math.abs(p.a[0]) - 0.058) < 0.005 && Math.abs(p.a[2] - 0.585) < 0.005;
@@ -63,5 +64,35 @@ describe('gamer — the chair boss, plugged in', () => {
       const now = dist(posed.prims[i]!.a, posed.prims[g]!.a);
       expect(Math.abs(now - rest), 'hand stays on the grip').toBeLessThan(0.003);
     }
+  });
+
+  it('works the joystick through a bite, hands on it', () => {
+    const m = makeActorMotion(body, { seed: 9 });
+    const J = m.motionJoints!.index;
+    const profile = characterEntry('gamer').profile;
+    const rng = makeRng(9);
+    const rel = (): Vec3 => { const P = (k: number) => m.bound.rig.points[k]!.pos as Vec3; const h = P(J.hem!), c = P(J.chest!); return [h[0] - c[0], h[1] - c[1], h[2] - c[2]]; };
+    const step = (attack?: { phase: number; side: 'R'; variant: 'bite' }) => stepActorMotion(m, {
+      current: body, dt: 1 / 60, wander: false, armStyle: undefined,
+      headingFollow: 1, gazeFollow: 1, bounds: { minX: -50, maxX: 50, minZ: -50, maxZ: 50 },
+      rng, signals: emptyActorSignals(), profile, forceSpeed: 0, ...(attack ? { attack } : {}),
+    });
+    for (let i = 0; i < 60; i++) step();
+    const still = rel();
+    let throwMax = 0;
+    let posed = applyRig(body, m.bound, m.lastBodyYaw);
+    for (let i = 1; i < 42; i++) {
+      step({ phase: i / 42, side: 'R', variant: 'bite' });
+      const r = rel(), d = Math.hypot(r[0] - still[0], r[1] - still[1], r[2] - still[2]);
+      if (d > throwMax) { throwMax = d; posed = applyRig(body, m.bound, m.lastBodyYaw); }   // the hands, at the widest throw
+    }
+    // The bite also throws his chest forward, so this is the stick's motion relative to the chest: measured ~5 cm.
+    expect(throwMax, 'the stick moves relative to his chest').toBeGreaterThan(0.025);
+    const dist = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    const isHand = (p: { a: Vec3 }) => Math.abs(Math.abs(p.a[0]) - 0.058) < 0.005 && Math.abs(p.a[2] - 0.585) < 0.005;
+    const isGrip = (p: { a: Vec3; b: Vec3 }) => Math.abs(p.a[0]) < 1e-6 && Math.abs(p.a[2] - 0.585) < 0.005 && p.b[1] - p.a[1] > 0.07;
+    const g = body.prims.findIndex(isGrip);
+    for (const i of body.prims.map((p, i) => [p, i] as const).filter(([p]) => isHand(p)).map(([, i]) => i))
+      expect(Math.abs(dist(posed.prims[i]!.a, posed.prims[g]!.a) - dist(body.prims[i]!.a, body.prims[g]!.a)), 'hand on the grip').toBeLessThan(0.003);
   });
 });

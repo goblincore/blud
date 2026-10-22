@@ -35,6 +35,12 @@ skeleton
   bone chest parent=spine  dir=up pitch=8  len=0.36
   bone neck  parent=chest  dir=up pitch=30 len=0.11
   bone skull parent=neck   dir=up pitch=2  len=0.17
+  # THE JOYSTICK's bone: the `hem` pendulum, from his hips up through the gut
+  # to the middle of the grip (0, 0.898, 0.450), so the stick, the knob and
+  # his hands can move on their own: he jiggles it as he plays
+  # (MotionProfile.joystick). An UPWARD hem: rig-bind.ts holds it stiffer than
+  # cloth, so the stick does not droop or trail.
+  bone hem   parent=pelvis dir=up pitch=50.72 len=0.5813
 
   mirror
     bone clavicle parent=spine    side=0.19 dir=down pitch=71 len=0.43
@@ -79,9 +85,12 @@ body
   # armrest pads (top ~0.745).
   bar  torso on chest from=0.50 to=0.50 offset=(0.200,0.107,0.005) tip=(0.035,-0.205,0.060) r=0.060 r2=0.052 blend=0.014 rigid both
   blob torso on chest at=0.50 offset=(0.235,-0.098,0.065) r=0.052 blend=0.012 rigid both
-  bar  torso on chest from=0.50 to=0.50 offset=(0.235,-0.098,0.065) tip=(-0.160,0.065,0.320) r=0.048 r2=0.040 blend=0.012 rigid both
-  # His hands, closed round the grip from either side.
-  blob torso on chest at=0.50 offset=(0.045,-0.018,0.415) r=0.042 wide=0.90 tall=1.05 deep=1.10 blend=0.010 rigid both
+  bar  torso on chest from=0.50 to=0.50 offset=(0.235,-0.098,0.065) tip=(-0.160,0.065,0.320) r=0.048 r2=0.040 blend=0.012 both
+  # The forearms are NOT rigid: each end binds to its nearest joint, the
+  # elbow to the seat's clavicle head and the wrist to the joystick's `hem`
+  # point, so the arms stretch to follow the stick when he works it.
+  # His hands, closed round the grip from either side: on `hem`, with it.
+  blob torso on hem at=1.00 offset=(0.045,-0.018,-0.000) r=0.042 wide=0.90 tall=1.05 deep=1.10 blend=0.010 rigid both
 
   # --- THE JOYSTICK: an infected, veiny flesh tube out of his navel, gripped in
   # both hands. A SLIM grip (r 0.034 -> 0.030) standing clear above his fists:
@@ -89,33 +98,40 @@ body
   # blend melted them into it ("way too fused"); the first, slim stick was
   # "fused but distinct enough". The grip stands at z 0.45, a hand's breadth
   # clear of the gut's front (~0.34).
-  # The stalk, sagging a little, ringed like a cord.
-  bar  torso on chest from=0.50 to=0.50 offset=(0.000,-0.163,0.265) tip=(0.000,0.080,0.150) r=0.042 r2=0.030 bend=(0,-0.030,0.000) blend=0.020 rigid
-  blob torso on chest at=0.50 offset=(0.000,-0.157,0.333) r=0.038 wide=1.15 tall=0.80 deep=1.15 blend=0.012 rigid
-  blob torso on chest at=0.50 offset=(0.000,-0.138,0.363) r=0.037 wide=1.15 tall=0.80 deep=1.15 blend=0.012 rigid
-  blob torso on chest at=0.50 offset=(0.000,-0.110,0.393) r=0.035 wide=1.15 tall=0.80 deep=1.15 blend=0.012 rigid
-  # The grip, upright between his hands.
-  bar  torso on chest from=0.50 to=0.50 offset=(0.000,-0.083,0.415) tip=(0.000,0.123,0.000) r=0.034 r2=0.031 blend=0.012 rigid
-  # The tip, above his fists: the grip drawn on up to a point (owner: "a bit
-  # more pointed"; it was a round knob). No wider than the grip. UNPAINTED
-  # below the pink, so it keeps the skin's mottle and grain.
-  bar  torso on chest from=0.50 to=0.50 offset=(0.000,0.040,0.415) tip=(0.000,0.100,0.004) r=0.031 r2=0.008 blend=0.010 rigid
-  # THE PINK, isolated to the tip (owner): four contiguous SHELLS over its last
-  # 5 cm, each a frustum of the tip's own surface 1.2 mm out, so each is the
-  # nearest prim (and paints) over exactly its band, stepping from a faint
-  # flush to the zombie's pink (~eab1b4) at the point. (Overlapping blotches
-  # merged into one hard band; discs on the axis bulged into rings: a tiered
-  # cake; three shells stepped visibly.)
-  bar  torso on chest from=0.50 to=0.50 offset=(0.000,0.0900,0.4170) tip=(0.000,0.0125,0.0005) r=0.0207 r2=0.0178 blend=0.002 color=e6c2bc gloss=0.55 rigid
-  bar  torso on chest from=0.50 to=0.50 offset=(0.000,0.1025,0.4175) tip=(0.000,0.0125,0.0005) r=0.0178 r2=0.0149 blend=0.002 color=e0b2b0 gloss=0.55 rigid
-  bar  torso on chest from=0.50 to=0.50 offset=(0.000,0.1150,0.4180) tip=(0.000,0.0125,0.0005) r=0.0149 r2=0.0121 blend=0.002 color=d8a0a4 gloss=0.55 rigid
-  bar  torso on chest from=0.50 to=0.50 offset=(0.000,0.1275,0.4185) tip=(0.000,0.0125,0.0005) r=0.0121 r2=0.0092 blend=0.002 color=cc8a98 gloss=0.55 rigid
+  # The stalk, ringed like a cord: ONE smooth quarter arc, out of his navel
+  # level and curving up into the upright grip (a Bezier whose control point
+  # sits at the corner, bend (0,-0.040,0.075)). It met the grip at a sharp
+  # angle before (owner: "a bit too acute ... more gradual and curved").
+  bar  torso on hem from=1.00 to=1.00 offset=(0.000,-0.163,-0.150) tip=(0.000,0.080,0.150) r=0.042 r2=0.030 bend=(0,-0.040,0.075) blend=0.020 rigid
+  blob torso on hem at=1.00 offset=(0.000,-0.150,-0.054) r=0.037 wide=1.15 tall=1.15 deep=1.15 blend=0.012 rigid
+  blob torso on hem at=1.00 offset=(0.000,-0.132,-0.022) r=0.035 wide=1.15 tall=1.15 deep=1.15 blend=0.012 rigid
+  blob torso on hem at=1.00 offset=(0.000,-0.107,-0.004) r=0.033 wide=1.15 tall=1.15 deep=1.15 blend=0.012 rigid
+  # The grip, upright between his hands, narrowing to a neck above them.
+  bar  torso on hem from=1.00 to=1.00 offset=(0.000,-0.083,-0.000) tip=(0.000,0.123,0.000) r=0.034 r2=0.027 blend=0.012 rigid
+  # THE KNOB: a swollen bulb on the neck, wider than the grip, sitting on his
+  # fists like the first pass's knob. Its BULK is what keeps the stick distinct
+  # from his hands (owner: a slim pointed tip, "less distinct than it was
+  # originally", read as one more pale knuckle).
+  blob torso on hem at=1.00 offset=(0.000,0.062,-0.000) r=0.040 tall=0.85 blend=0.010 rigid
+  # ...drawn up to a point out of its crown (owner: "a bit more pointed").
+  bar  torso on hem from=1.00 to=1.00 offset=(0.000,0.088,-0.000) tip=(0.000,0.077,0.003) r=0.024 r2=0.006 blend=0.010 rigid
+  # THE PINK, on the point only (owner: "isolated to the tip"): contiguous
+  # SHELLS up it, the knob left bare so its baked veins show (a painted prim
+  # takes no normal map: body-normal.wgsl.ts masks painted surfaces),
+  # each a hair out of the surface it covers so it is the nearest prim (and
+  # paints) over just its band, flushing to the zombie's pink (~eab1b4).
+  # (Overlapping blotches merged into one hard band; discs on the axis bulged
+  # into rings, a tiered cake; three shells stepped visibly.)
+  bar  torso on hem from=1.00 to=1.00 offset=(0.000,0.100,0.000) tip=(0.000,0.0155,0.0006) r=0.0224 r2=0.0188 blend=0.002 color=e0b2b0 gloss=0.55 rigid
+  bar  torso on hem from=1.00 to=1.00 offset=(0.000,0.116,0.001) tip=(0.000,0.0155,0.0006) r=0.0188 r2=0.0151 blend=0.002 color=d8a0a4 gloss=0.55 rigid
+  bar  torso on hem from=1.00 to=1.00 offset=(0.000,0.131,0.002) tip=(0.000,0.0155,0.0006) r=0.0151 r2=0.0115 blend=0.002 color=d0909c gloss=0.55 rigid
+  bar  torso on hem from=1.00 to=1.00 offset=(0.000,0.146,0.002) tip=(0.000,0.0185,0.0007) r=0.0115 r2=0.0072 blend=0.002 color=c88094 gloss=0.55 rigid
   # THE ORIFICE at the point, where the fire button was: a dark wet hole with
   # the lit button nub down inside it. Its infected crust, the stick's veins
   # and the veins over his knuckles are BAKED (gamer.detail): as prims they
   # read as "tubes and skittles" (owner).
-  blob torso on chest at=0.50 offset=(0.000,0.136,0.419) r=0.0065 tall=0.70 blend=0.001 color=1a0406 gloss=0.95 rigid
-  blob torso on chest at=0.50 offset=(0.000,0.139,0.419) r=0.0040 blend=0.001 color=ff2a1c glow=0.8 gloss=0.9 rigid
+  blob torso on hem at=1.00 offset=(0.000,0.161,0.003) r=0.0065 tall=0.70 blend=0.001 color=1a0406 gloss=0.95 rigid
+  blob torso on hem at=1.00 offset=(0.000,0.164,0.003) r=0.0040 blend=0.001 color=ff2a1c glow=0.8 gloss=0.9 rigid
 
   # --- HIS NECK AND HEAD. -----------------------------------------------------
   # A thick neck, all fat.
