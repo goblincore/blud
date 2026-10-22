@@ -872,6 +872,9 @@ export function stepGait(
     const missing = side === 'L' ? missingL : missingR;
     const wounded = side === 'L' ? woundedL : woundedR;
     if (missing) return Z;
+    // A QUADRUPED's hip joints ride the hips' bob: its rigid kit (the gibbet's beam, the hip sockets) shows the gap a
+    // biped's blended flesh hides. Bipeds keep their exact pose (the gait pins), so the bob is added only for 'foreleg'.
+    if (armStyle === 'foreleg') return [0.5 * sway * (side === 'L' ? aL : aR), (wounded ? -T.woundedHipDrop : 0) + bob * 0.9, 0];
     return [0.5 * sway * (side === 'L' ? aL : aR), wounded ? -T.woundedHipDrop : 0, 0];
   };
 

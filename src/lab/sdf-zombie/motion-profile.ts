@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, CHAIR_WADDLE, type ArmStyle, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, CHAIR_WADDLE, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { Vec3 } from './types';
@@ -56,6 +56,10 @@ export interface MotionProfile {
    *  onFire spawns enemy rounds. Absent = melee. A prop alone does not make a
    *  shooter — the ogre's chainsaw is a prop with carries. */
   gunner?: { weapon: GunnerWeapon };
+  /** A gunner that fires from its BODY, not from a held prop (the teratoma spits from its mouth): the round leaves
+   *  from rig point `from` plus `offset` (body-local metres: +x left, +y up, +z forward, turned by the body's yaw),
+   *  heading the way the body faces. It needs no prop, no carries and no right arm. Absent = the held gun's muzzle. */
+  spit?: { from: GaitJointName; offset: Vec3 };
   /** A CHARGER: the game gives it the warbull mind (enemy-mind.ts
    *  makeWarbullMind), the bull charge (charge.ts) over its gunner brain,
    *  and a brawl once disarmed. Needs `gunner`. */
@@ -63,7 +67,7 @@ export interface MotionProfile {
   /** A MELEE-WEAPON enemy: the game gives it that weapon's mind
    *  (enemy-mind.ts makeSwordMind) and motion.ts drives the held prop through
    *  the swing (sword-swing.ts). Absent = the zombie's unarmed swing. */
-  melee?: { kind: 'sword' | 'bite' };
+  melee?: { kind: 'sword' | 'bite' | 'stab' };
   /** A SOFT target: any bullet or blast hit kills it outright (the game
    *  forces the collapse on the first hit). The cultist is soft; the zombie
    *  and soldier soak hits and exist to show off the gore. Burns do not count
@@ -371,8 +375,10 @@ export const GUTCRAWLER_PROFILE: MotionProfile = {
 };
 
 /** The gibbet (characters/gibbet.blob): a cage of bone-metal on four long
- *  legs with meat slung inside. Walks on GIBBET_STALK; bites and lunges with
- *  the head that dangles from the front of the frame (hound-attack.ts). */
+ *  legs with meat slung inside. Walks on GIBBET_STALK. Two attacks (owner's
+ *  pick, 2026-10-22): up close it rears and STABS with both spiked front
+ *  legs; at range it SQUIRTS a lobbed glob of bile from the sac's drip
+ *  (hound-attack.ts, bile.ts, enemy-mind.ts makeGibbetMind). */
 export const GIBBET_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
   name: 'gibbet',
@@ -381,7 +387,10 @@ export const GIBBET_PROFILE: MotionProfile = {
   cruise: 1.1,
   turnRate: 2.4,
   armStyle: 'foreleg',
-  melee: { kind: 'bite' },
+  melee: { kind: 'stab' },
+  // The sac's drip: the hem tail is the sac's bottom (gibbet.blob), the teat
+  // hangs ~0.2 m below it; the glob leaves from its tip.
+  spit: { from: 'hem', offset: [0, -0.20, 0.02] },
 };
 
 /** THE CHAIR (characters/chair.blob): a throne with a man fused into it,

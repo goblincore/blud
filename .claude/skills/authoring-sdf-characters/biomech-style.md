@@ -201,6 +201,12 @@ animal.** What it added:
   bone-iron with rust only low down.
 - **Normal map down the pendulum.** The torso projection can run along any axis: the gibbet's runs down the hem
   (`--torso-axis` extended past both ends of the sac), and every detail line binds to `hem` so the detail swings too.
+- **Attacks from the body's own story.** The gibbet's two (owner's pick): up close it rears both spiked front legs
+  and STABS (`hound-attack.ts` 'stab': front plants released, contact on the thrust); at range the sac swings back and
+  forward and SQUIRTS a lobbed glob of bile from its drip (`bile.ts`, fired from a rig point through
+  `MotionProfile.spit`, PR #53's plumbing). `makeGibbetMind` wraps the hound mind and adds the squirt cycle. Zombie-kind
+  minds that fire are gated by sight, not by the encounter director's firing lanes (those are the soldiers').
+  `BLOB_SWING_SWEEP=<variant>:<p0>:<p1>` renders a swing frame by frame for review.
 
 ## A seated rig: the chair (2026-10-22)
 
