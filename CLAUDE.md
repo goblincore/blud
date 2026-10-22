@@ -17,6 +17,9 @@ reference-only for behavior comparison (dynamite, gibbing).
 - **Source map (current vs. proposed):** [`docs/architecture/repository-map.md`](docs/architecture/repository-map.md)
 - **Legacy dynamite/gibbing reference:** [`docs/reference/legacy-dynamite-gibbing.md`](docs/reference/legacy-dynamite-gibbing.md)
 - **Cross-harness agent context:** [`AGENTS.md`](AGENTS.md)
+- **Making a character:** the `authoring-sdf-characters` skill
+  ([SKILL.md](.claude/skills/authoring-sdf-characters/SKILL.md), "The default pipeline": SDF flesh, a baked body
+  normal map, sculpted Blender kit mesh) and its [biomech-style.md](.claude/skills/authoring-sdf-characters/biomech-style.md).
 
 ## Running
 

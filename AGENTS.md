@@ -38,6 +38,19 @@ module owns what is in the generated
 `/index.html`; plain `npx vite` stays non-opening for browser-free automation.
 The old `/index.html` still serves legacy until Stage 2.
 
+## Making a character
+
+New enemies and creatures follow ONE default pipeline:
+- **flesh:** SDF prims in a `.blob`, kept few;
+- **flesh detail:** a baked body normal map (`scripts/bake-body-normal.ts`, with limb regions);
+- **machinery, bone and weapons:** sculpted Blender kit mesh from generator scripts (`kit_sculpt.py`), skinned
+  by `scripts/blender-kit.ts`;
+- **style:** after the demon skull, never boxes.
+
+Start from the skill [`.claude/skills/authoring-sdf-characters/SKILL.md`](.claude/skills/authoring-sdf-characters/SKILL.md)
+("The default pipeline"), then [`biomech-style.md`](.claude/skills/authoring-sdf-characters/biomech-style.md)
+beside it. Existing WAM kits still drive the older cast; do not start new WAM kits.
+
 ## Finding and placing code
 
 - **Find it:** [docs/architecture/module-index.md](docs/architecture/module-index.md)

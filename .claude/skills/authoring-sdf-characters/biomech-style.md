@@ -1,7 +1,7 @@
 # The biomech style: flesh in SDF, bone-metal machinery as sculpted mesh
 
 The house style for Blud's biomechanical horrors, worked out on the **twinhead** (2026-10-21, PR goblincore/blud#52).
-Follow it for any new flesh-and-machine enemy. The owner's rule of thumb: **machinery is styled after the demon
+It is the **default for any new enemy or creature** (SKILL.md, "The default pipeline"), not only machine-flavoured ones. The owner's rule of thumb: **machinery is styled after the demon
 skull (organic curves, ridges, bony metal), never basic shapes.** Boxes, drums and plain cylinders read as
 placeholder robot parts.
 
