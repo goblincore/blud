@@ -128,9 +128,10 @@ body
   bar  torso on spine from=1.00 to=1.00 offset=(0.215,0.080,0.043) tip=(0,0,0.012) r=0.040 blend=0.006 color=5a0c10 gloss=0.9 rigid both
   bar  torso on spine from=1.00 to=1.00 offset=(0.215,0.080,0.183) tip=(0,0,0.012) r=0.038 blend=0.006 color=5a0c10 gloss=0.9 rigid both
 
-  # --- SCARS are KIT (make_throne.py `scars`, paths from scripts/chair-scars.ts):
-  # a stitched Y-incision down his chest and two welts. As painted prims they
-  # came out as 2 cm bands or ragged dashes (the script's header says why).
+  # --- SCARS and VEINS are BAKED (chair.detail, from scripts/chair-detail-gen.ts,
+  # into chair-body-n.png): a stitched Y-incision, two welts, ribs and varicose
+  # veins, in relief. Painted prims came out as 2 cm bands or ragged dashes; kit
+  # tubes painted red looked like "plastic straws" (owner).
 
   # --- HIS NECK AND HEAD. -----------------------------------------------------
   bar  torso on neck from=0.00 to=1.00 r=0.050 r2=0.045 blend=0.020 core
@@ -167,12 +168,14 @@ body
   # stretched thin across it (owner: the first eyes, ember points in painted
   # sockets, and the eyelids were "hard to read"; "simplest is just a
   # stretched elongated glowing red eye slit"). Each slit slants up to the
-  # outside, 4.5 cm long, its front 1 cm proud of the face; the lids stand
-  # just behind it above and below. (At the face's surface the lids and
-  # the brow ledge buried it.) The brow is lifted 1 cm off it.
-  bar  head on skull from=0.50 to=0.50 offset=(0.010,0.005,0.080) tip=(0.044,0.018,-0.010) r=0.0060 blend=0.002 color=ff2a10 glow=0.9 both
-  bar  head on skull from=0.50 to=0.50 offset=(0.008,0.017,0.075) tip=(0.048,0.016,-0.012) r=0.0080 blend=0.004 both
-  bar  head on skull from=0.50 to=0.50 offset=(0.010,-0.007,0.075) tip=(0.044,0.018,-0.012) r=0.0075 blend=0.004 both
+  # outside, 4.5 cm long, 1 cm proud of the face. The lids are swollen bulges
+  # just above and below it, their blend tight (0.0015) so a ~8 mm glowing
+  # gap stays open: at blend 0.004 and 5 mm apart they fused shut over it, and
+  # behind it they were invisible. The brow is lifted 1 cm off it. Glow 0.6: at 0.9 its
+  # bloom drowned the decal's lids and creases round it.
+  bar  head on skull from=0.50 to=0.50 offset=(0.010,0.005,0.081) tip=(0.044,0.018,-0.010) r=0.0055 blend=0.0015 color=ff2a10 glow=0.6 both
+  bar  head on skull from=0.50 to=0.50 offset=(0.008,0.0195,0.078) tip=(0.048,0.016,-0.012) r=0.0085 blend=0.0015 both
+  bar  head on skull from=0.50 to=0.50 offset=(0.010,-0.0090,0.077) tip=(0.044,0.018,-0.012) r=0.0080 blend=0.0015 both
 
   # --- HIS THIGHS: the seat's side rails. -------------------------------------
   bar  arm on clavicle from=0.00 to=0.92 r=0.068 r2=0.056 wide=1.00 tall=0.80 blend=0.020 mirror core
@@ -244,9 +247,11 @@ sheet
   blendLuma   0
   # Lower = bigger: at the twinhead's 0.317 / 0.401 the sockets landed on
   # the brow ledge and the mouth under the nose, half the face's size.
+  # Centre Y 0.52 puts the drawn lids and puckers on the glowing slits (at
+  # 0.50 they sat ~6 mm high).
   projScaleX  0.27
   projScaleY  0.33
   projCentreX 0.50
-  projCentreY 0.50
+  projCentreY 0.52
   eyeGlowCut  0.99
   eyeGlowAmp  0

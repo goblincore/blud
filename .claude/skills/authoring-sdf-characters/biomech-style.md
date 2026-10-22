@@ -214,14 +214,24 @@ him". What worked:
 - Keep the kit panel 2.5 cm BEHIND the membrane's back. Flush, the blend and the skin noise pushed flesh out
   through the back of a 4 cm panel.
 
-**Thin lines on blend-heavy flesh are kit.** Painted scar prims paint where they are the NEAREST prim, and wide
-torso blends put the skin ~7 mm outside its prims. Twinhead-sized scars painted 2 cm bands; sunk 9 mm, they painted
-ragged dashes. Probe the skin (`scripts/chair-scars.ts` writes the paths), then lay a thin red tube and dark
-stitches as kit on the same bone.
+**Scars on blend-heavy flesh go in the normal map.** Painted scar prims paint where they are the NEAREST prim, and
+wide torso blends put the skin ~7 mm outside its prims. Twinhead-sized scars painted 2 cm bands, and sunk 9 mm
+they painted ragged dashes. Kit tubes painted red looked like "plastic straws" (owner). Raised keloid with stitch
+bumps, baked with the veins (`scripts/chair-detail-gen.ts`), takes the skin's own colour and light. The generator
+probes from the FRONT (`march` along -z) for a seated body, and the veins run out of him across the membrane too.
 
-**Eyes that read in a decal'd head.** Ember points in painted sockets were lost. A glowing slit stands 1 cm proud
-of the face between two flesh lids, with the brow ledge lifted off it. Painted seams the eye cannot place
-(oval ends of a raw-edge bar beside the head) read as unexplained spots: end seams under something, or drop them.
+**Eyes that read in a decal'd head.** Ember points in painted sockets were lost, and so was a bare glowing slit
+("a bit too simple"). What reads:
+- A glowing slit 1 cm proud of the face, between two swollen lid prims.
+- The lids' blend held tight (0.0015) with ~8 mm between them. At 0.004 and 5 mm apart they fused shut over it.
+- A decal drawn ROUND the slit: an almond bruise along it, raw red rims, puckered creases drawn in from all
+  round, and bags. Place it from the slit's head-space ends through the projection, then check a close-up and
+  nudge `projCentreY`.
+- Bold decal lines: the face spans ~276 px of a 512 sheet, so a 1.6 px crease is under a millimetre.
+- Glow 0.6, not 0.9: the bloom drowned the decal round it.
+
+Painted seams the eye cannot place (oval ends of a raw-edge bar beside the head) read as unexplained spots: end
+seams under something, or drop them.
 
 **Fill open greaves.** `make_legs.py`'s tibia shell is open at the front. Under a thin metal core, the opening
 shows black. Run flesh (his foot) down inside it instead.

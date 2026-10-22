@@ -60,15 +60,68 @@ def ragged(cx: float, cy: float, rx: float, ry: float, jitter: float, n: int = 2
 
 img = Image.new("RGBA", (W, W), (0, 0, 0, 0))
 
-# --- 1. sockets: deep, bruised, a little uneven; the ember eye prims sit at the bottom ---
+# --- 1. the eyes: built round chair.blob's glowing SLITS, not round points. The owner found the first (round
+# sockets round ember points, then plain slits in them) "a bit too simple". Each slit in sheet space (u right,
+# v down), from the prims' head-space ends through the sheet block's projection (u = 0.5 + 0.27 x / 0.077,
+# v = 0.5 - 0.33 (y - 1.2645) / 0.106): inner corner (0.535, 0.457), outer (0.689, 0.401), mirrored.
+#   a slanted almond bruise along the slit; a dark almond in it; raw red lid rims tight above and below;
+#   PUCKER creases drawn in from all round, as if the lids were sewn tight; bags under; broken veins out to the
+#   temple. Lines are drawn BOLD (6-12 px at 512): the face spans ~276 px of the sheet, so a 1.6 px crease is
+#   under a millimetre on him and vanished in the brow's shadow. ---
+SLITS = [((0.535, 0.457), (0.689, 0.401)), ((0.465, 0.457), (0.311, 0.401))]
+
+
+def frame(a, b):
+    cx, cy = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    L = math.hypot(dx, dy)
+    return (cx, cy), (dx / L, dy / L), (-dy / L, dx / L), L / 2
+
+
+def eframe(c, ax, nx, hl, hw, k=48, jitter=0.0):
+    return [P(c[0] + ax[0] * hl * math.cos(2 * math.pi * i / k) + nx[0] * hw * math.sin(2 * math.pi * i / k) * rng.uniform(1 - jitter, 1 + jitter),
+              c[1] + ax[1] * hl * math.cos(2 * math.pi * i / k) + nx[1] * hw * math.sin(2 * math.pi * i / k) * rng.uniform(1 - jitter, 1 + jitter)) for i in range(k)]
+
+
+def at(c, ax, nx, u, w):
+    return (c[0] + ax[0] * u + nx[0] * w, c[1] + ax[1] * u + nx[1] * w)
+
+
 sock, d = layer()
-for sx in (-1, 1):
-    cx, cy = 0.5 + sx * EYE_DX, EYE_Y
-    d.ellipse([*P(cx - 0.115, cy - 0.080), *P(cx + 0.110, cy + 0.100)], fill=ink((70, 25, 35), 110))   # bruise
-    d.ellipse([*P(cx - 0.075, cy - 0.050), *P(cx + 0.075, cy + 0.060)], fill=ink((28, 8, 10), 210))
-    d.ellipse([*P(cx - 0.040, cy - 0.028), *P(cx + 0.040, cy + 0.032)], fill=ink((6, 2, 2), 245))
-sock = sock.filter(ImageFilter.GaussianBlur(W * 0.013))
+for a, b in SLITS:
+    c, ax, nx, hl = frame(a, b)
+    d.polygon(eframe(c, ax, nx, hl * 1.55, 0.085, jitter=0.12), fill=ink((70, 22, 32), 120))          # bruise
+    d.polygon(eframe(c, ax, nx, hl * 1.20, 0.040), fill=ink((26, 6, 8), 205))                          # the almond
+sock = sock.filter(ImageFilter.GaussianBlur(W * 0.010))
 img = Image.alpha_composite(img, sock)
+
+lids, d = layer()
+for a, b in SLITS:
+    c, ax, nx, hl = frame(a, b)
+    for side in (-1, 1):                                                                              # raw lid rims
+        pts = [P(*at(c, ax, nx, hl * 1.1 * (2 * i / 30 - 1), side * (0.016 * math.sqrt(max(0.0, 1 - (2 * i / 30 - 1) ** 2)) + 0.004)))
+               for i in range(31)]
+        d.line(pts, fill=ink((150, 28, 30), 215), width=int(W * 0.012), joint="curve")
+    for k in range(18):                                                                                # pucker creases
+        th = 2 * math.pi * (k + rng.uniform(-0.3, 0.3)) / 18
+        r0 = (0.11 + rng.uniform(0, 0.04), 0.075 + rng.uniform(0, 0.03))
+        start = at(c, ax, nx, hl * 1.6 * math.cos(th) * r0[0] / 0.11, r0[1] * math.sin(th))
+        end = at(c, ax, nx, hl * 0.9 * math.cos(th), 0.020 * math.sin(th))
+        mid = ((start[0] + end[0]) / 2 + rng.uniform(-0.01, 0.01), (start[1] + end[1]) / 2 + rng.uniform(-0.01, 0.01))
+        d.line([P(*start), P(*mid), P(*end)], fill=ink((28, 8, 8), 185), width=int(W * 0.0085), joint="curve")
+    for k in range(3):                                                                                 # bags
+        d.arc([*P(c[0] - hl * 1.3, c[1] + 0.02 + 0.018 * k), *P(c[0] + hl * 1.3, c[1] + 0.07 + 0.022 * k)], 20, 160,
+              fill=ink((40, 14, 18), 160 - 30 * k), width=int(W * 0.008))
+    o = b                                                                                              # broken veins
+    for k in range(3):
+        pts = [P(*o)]
+        x, y = o
+        for i in range(6):
+            x += (b[0] - c[0]) * 0.35 + rng.uniform(-0.012, 0.012); y += rng.uniform(-0.022, 0.018)
+            pts.append(P(x, y))
+        d.line(pts, fill=ink((110, 25, 45), 170), width=int(W * 0.0055), joint="curve")
+lids = lids.filter(ImageFilter.GaussianBlur(W * 0.0020))
+img = Image.alpha_composite(img, lids)
 
 # --- 2. gaunt hollows under the cheekbones, and the shadow down each side of the long nose ---
 hol, d = layer()
@@ -157,11 +210,6 @@ for k in range(5):
     y = 0.22 + k * 0.022
     d.arc([*P(0.30, y), *P(0.70, y + 0.07)], 200, 340, fill=ink((30, 10, 10), 130), width=int(W * 0.003))
 for sx in (-1, 1):
-    cx = 0.5 + sx * (EYE_DX + 0.10)
-    for k in range(4):
-        a = math.radians(-35 + k * 22)
-        d.line([P(cx, EYE_Y + 0.01), P(cx + sx * 0.07 * math.cos(a), EYE_Y + 0.01 + 0.07 * math.sin(a))],
-               fill=ink((30, 10, 10), 115), width=int(W * 0.003))
     d.line([P(0.5 + sx * 0.07, 0.55), P(0.5 + sx * 0.13, 0.66), P(0.5 + sx * 0.16, 0.78)],
            fill=ink((30, 10, 10), 120), width=int(W * 0.004), joint="curve")      # nasolabial folds
 wr = wr.filter(ImageFilter.GaussianBlur(W * 0.001))

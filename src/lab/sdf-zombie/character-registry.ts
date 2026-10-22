@@ -360,6 +360,8 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   chair: {
     name: 'chair', src: chairBlobSrc,
     kit: '/assets/lab/chair-kit.gltf',
+    // Baked scars, ribs and varicose veins (chair.detail, scripts/chair-detail-gen.ts).
+    bodyNormal: { url: '/assets/lab/chair-body-n.png', meta: '/assets/lab/chair-body-n.json', strength: 1 },
     face: ZOMBIE_FLAT,
     profile: CHAIR_PROFILE,
   },

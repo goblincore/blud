@@ -12,15 +12,14 @@
 #            grown out into talons that curl down over each armrest's end
 #   crown    a bone-metal band round his head, spined, bolted into his temples (it rides the skull, so it turns with him)
 #   upper    the back legs' femur carapaces (the gibbet's)
-#   scars    a stitched Y-incision down his chest and two welts, raised and wet, on the probed skin
 #   studs    brass buttons tufting his skin where it has spread over the seat and back as a chesterfield cushion
-import bpy, math, os
+import bpy, math
 from mathutils import Vector
 
 try:
     PARTS
 except NameError:
-    PARTS = {'seat', 'back', 'spine', 'arms', 'crown', 'upper', 'studs', 'scars'}
+    PARTS = {'seat', 'back', 'spine', 'arms', 'crown', 'upper', 'studs'}
 X = Vector((1, 0, 0)); UP = Vector((0, 0, 1)); BACK = Vector((0, 1, 0)); FWD = Vector((0, -1, 0))
 IVORY = (1.0, 0.96, 0.88)
 sm = lambda e0, e1, x: (lambda c: c * c * (3 - 2 * c))(max(0.0, min(1.0, (x - e0) / (e1 - e0))))
@@ -311,24 +310,3 @@ if 'studs' in PARTS:
             p = bv(x, y + 0.008, z)
             ball(f's{i}{j}', p, 1.0, 0.012, 0.012, 0.007); ring(f'sr{i}{j}', p + UP * 0.001, UP, 0.011, 0.0025, segs=16)
     finish_t('studs', 'spine|studs', 6000, material='brass', noise=0.0)
-
-# ---------------------------------------------------------------- scars: raised welts and stitches on his chest
-# Paths are skin points from scripts/chair-scars.ts (blob coords, probed from the front). Each welt is a thin wet red
-# tube a few mm proud of the skin; the Y-incision gets dark stitches across it. Kit, not SDF prims: painted prims
-# on this blend-heavy torso came out as 2 cm bands or ragged dashes. Rides `chest`, like the flesh under it.
-if 'scars' in PARTS:
-    import json
-    drop(['chest|scars', 'chest|stitches']); clear_work()
-    S = json.load(open(os.path.join(KIT_DIR, 'scars.json')))
-    for k, pts in enumerate(S['stitched'] + S['welts']):
-        P_ = [bv(*p) + FWD * 0.0020 for p in pts]
-        n = len(P_)
-        tube(f'w{k}', P_, [0.0030 + 0.0012 * sn(i / (n - 1)) for i in range(n)], segs=8)
-    o = fuse('scars', voxel=0.0012, noise=0.0004); decimate(o, 3500)
-    bake_ao(o, 'red', tint=(0.62, 0.42, 0.42)); install(o, 'chest|scars'); clear_work()   # darker: plain read as drawn-on pink
-    for k, pts in enumerate(S['stitched']):
-        P_ = [bv(*p) + FWD * 0.0035 for p in pts]
-        for i in range(2, len(P_) - 2, 3):
-            d = (P_[i + 1] - P_[i - 1]).normalized(); side = d.cross(FWD).normalized()
-            tube(f's{k}{i}', [P_[i] - side * 0.009 - FWD * 0.002, P_[i], P_[i] + side * 0.009 - FWD * 0.002], [0.0012] * 3, segs=6)
-    o = fuse('stitches', voxel=0.0008, noise=0.0); decimate(o, 3000); plain(o, 'cable'); install(o, 'chest|stitches'); clear_work()
