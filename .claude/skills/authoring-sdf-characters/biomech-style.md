@@ -1,7 +1,7 @@
 # The biomech style: flesh in SDF, bone-metal machinery as sculpted mesh
 
 The house style for Blud's biomechanical horrors, worked out on the **twinhead** (2026-10-21, PR goblincore/blud#52).
-Follow it for any new flesh-and-machine enemy. The owner's rule of thumb: **machinery is styled after the demon
+It is the **default for any new enemy or creature** (SKILL.md, "The default pipeline"), not only machine-flavoured ones. The owner's rule of thumb: **machinery is styled after the demon
 skull (organic curves, ridges, bony metal), never basic shapes.** Boxes, drums and plain cylinders read as
 placeholder robot parts.
 
@@ -69,6 +69,41 @@ The recipe (`armVaricose` / `varicose` in `scripts/twinhead-detail-gen.ts`):
 - Faces are a generated decal (`decal 0`, `blendLuma 0` for colour) on the head's fattest prim.
 - A machine head is all kit mesh; the flesh neck stops short and cables fill the gap.
 
+## Heavy, full-figured bodies (the venus, 2026-10-22)
+
+Learned on `characters/venus.blob`, a heavy woman built to contrast the thin cyberbride. The rules above assume a
+muscled brute; fat is a different problem.
+
+- **Mass reads through CONTRAST, not size.** The first pass made every mass big (chest, waist, belly and rear all
+  reaching ~0.2 m) and rendered as a stocky man. Probe the CPU field per height (half-width, front and back reach)
+  before looking: aim for waist-to-hip ~0.65 (her hips 0.275 half-width against a 0.17 waist), a rear standing
+  ~10 cm behind the waist's back in profile, and a bust well proud of the ribcage (`scripts/tmp/venus-sections.ts
+  <name>` prints them). `venus-blob.test.ts` pins these as field reaches.
+- **The thigh's root ball widens the waist.** A ball of the thigh's radius at the hip joint reaches up past the
+  hip line; seat it ~10% down the thigh. Carry the hip's width down the OUTSIDE of the thigh with a long offset
+  blob, or the outline steps in under the hip band.
+- **Arms on a wide body:** they cannot hang straight. Tilt the upper arm out (27 deg) and bring the forearms
+  forward (pitch 30) so the hands pass in front of the hips. The hips are what the hands hit (`daylightOf`), not
+  the waist.
+- **Flesh detail for fat is not muscle detail.** In the `.detail` (`scripts/venus-detail-gen.ts`): broad, low
+  horizontal fat rolls (r ~2 cm, 6 mm proud) on the back and flanks; cellulite as a scatter of small soft lumps
+  (r 9-15 mm, ~2 mm proud) over the rear, hips and outer thighs; stretch marks as short fine streaks (r 2.8 mm,
+  1.4 mm proud); a navel as a ring of six small swellings. Veins follow the recipe above; on the torso give the
+  swing in METRES and convert to degrees by the probed radius, since the torso's radius varies 2x round a heavy
+  body. Cellulite read well on the rear. The fine lines (stretch marks, and veins at the recipe's thin end) read as
+  scratch cuts on the venus's first bake. The bake is slow (56 min for ~1,300 detail prims), so trial a crop first.
+- **Lay the kit on the PROBED skin, not round a bone.** A heavy body is nothing like a cylinder: probe it
+  (`scripts/venus-surface.ts` writes `surface.json`; `venus_common.py`'s `waist_pt`) and build on those points.
+  The corset ribs sit 4 mm INSIDE the skin, so they bite and the `.blob`'s raw lumps swell round them.
+- **Bands are strips, not tubes.** Ribs that wrap a body made as round `tube`s read as barrel hoops. Make each a
+  `surface_solid` strip on the skin, tallest over the flank and pointed at its ends, with lips and a crest.
+
+## Porting a face onto a new body
+
+- The cyberbride's glow eyes sat 1.5 cm ABOVE the flat face mask's painted sockets and stood 2 cm proud, which
+  the owner read as "out of position". When porting a face, render the ORIGINAL first (a temporary registry
+  entry) so you know which faults are inherited. Seat glow eyes in the mask's sockets, a few mm proud.
+
 ## The toolkit: `assets-source/twinhead-kit/kit_sculpt.py`
 
 Run inside Blender with `exec(open(path).read())`, then a `make_*.py`. Everything is in Blender coords; `bv(x, y, z)`
@@ -112,6 +147,12 @@ Each has a `PARTS` subset switch, so one part can be iterated in about 5 s.
   in `kit-overlay.ts`.
 - Lighting falls off toward the ground in the lab shots, so judge the legs' tone from close frames.
 - In a loop, a local named like a helper (`ring = []`, or `base` from an earlier lambda) shadows that helper.
+- On a bone pointing DOWN (legs, hanging forearms), `BoneFrame`'s `s = u x f` points INWARD (-x on .l), so the
+  outer side is `ph = -90`. The venus's thigh plates landed between her legs the first time.
+- A headless `build.py` run that throws part-way does NOT save the .blend: parts built before the error are lost.
+  Re-run every make script after a crash.
+- `blob:shot` reuses whatever Vite is on port 5233, which may be ANOTHER worktree's (the new character then
+  renders as a fallback body). In parallel sessions set `LAB_VITE_PORT`/`LAB_CDP_PORT` to your own ports.
 
 ## Budget
 
@@ -335,3 +376,73 @@ plugged in. It uses the chair's rig at `scale 1.30`. What it adds:
 - **A ranged attack does not fit this rig yet.** `onFire` needs a carried prop in the right hand, and here the
   right hand is a front claw. A ranged gamer needs a mind with the muzzle on the head (the headset); it uses the
   hound mind for now.
+
+
+## Lessons from the teratoma (2026-10-22, the second character built from this guide)
+
+The teratoma (`characters/teratoma.blob`, kit `assets-source/teratoma-kit/make_teratoma.py`) is a cacodemon-style
+floater: a flesh ball with one eye and a maw. It was the first test of whether this guide gives better first results.
+
+**What worked as written**
+
+- The split table. The flesh is 35 marched prims. The folds, veins and nodules are a baked normal map, generated by
+  `scripts/teratoma-detail-gen.ts` from the twinhead's template. Everything hard is kit.
+- `kit_sculpt.py` worked unchanged, used as-is: `horn`, `tube`, `ring`, `ball`, `fuse`, `press_lines`, `bake_ao`,
+  `install` and `mirror_to_r`. A part takes about 5-15 s to rebuild, so iterating in the engine is fast.
+- The baked `_glow` route for an eye: a yellow slit eye whose glow is per-vertex (the iris burns, the slit is dead).
+- Teeth as kit. The owner's rule: SDF teeth eat the prim budget.
+- An additive mouth: a dark gullet prim recessed behind the lips, never a carve.
+- The varicose recipe above, once it arrived mid-session. The teratoma's first torso veins, copied from the twinhead's
+  older torso `varicose`, broke it (a ~1 rad phase step on 12 mm samples, a several-cm swing) and were re-generated
+  before baking. The torso `varicose` in `twinhead-detail-gen.ts` still has those older numbers, so copy from
+  `armVaricose`, not from it.
+
+**What was missing (now added above or below)**
+
+1. **Convert the creature from the start.** The first pass followed the brief literally (flesh, keratin horns,
+   shackles) and the owner called it "too on the nose". The fix was this guide's own style applied to a creature whose
+   brief never mentioned machinery. So treat every Blud enemy as a strogg CONVERSION: graft skullmetal onto the meat
+   (a crest-plate that the horns grow out of, a demon-skull socket as the brow, a mandible with jaw pistons, an organ
+   that explains its locomotion, such as a hover keel with vents) even when the brief does not ask for it.
+2. **Wires and tubes in and out of the flesh** (owner: "more wires and tubes going in and out of the flesh"). Write a
+   run as `(lat, lon, off)` controls. `off > 0` arches the run out of the skin; `off < 0` dives it under the skin, where
+   the SDF hides it. Twisted black `cable` bundles, corrugated `hose` feed lines and brass ferrules where a run leaves
+   the metal. Every place a run dives in gets a small raw wound prim in the `.blob`. The script prints the points. Author each side's
+   wounds from its own printed points: on an asymmetric body a `both` mirror floats them off the skin (CI's `strandedOf`
+   caught two at 35 and 83 mm).
+3. **A body with no bone axis needs a skin table.** `BoneFrame`/`bone_shell` assume a limb. To seat anything on a
+   ball, `scripts/teratoma-skin.ts` writes `skin.json`: the marched torso's outermost surface and normal on a lat/lon
+   grid. `sk(lat, lon, off)`, `skn` and `cap_dir` (a polar patch round a pole) build on it. Re-run it after every torso
+   edit. A good candidate to move into `kit_sculpt.py`.
+4. **A carapace is a graft, not a helmet.** A cap covering the whole crown read as a motorcycle helmet. Keep plates
+   partial (~35 deg of arc), with raked POINTS on the outline and the meat swelling round them.
+5. **Colours are LINEAR and a new material is WHITE.** Vertex colours are linear, so a "near-black" 0.10 shows as
+   sRGB ~0.35, mid-grey. Dark keratin is ~0.02-0.05. A fresh Blender material exports `baseColorFactor` 1, and the
+   first conversion rendered as polished chrome. Copy the base colours from the twinhead kit: skullmetal
+   (0.30, 0.31, 0.33), chrome (0.42, 0.44, 0.48), iron (0.055, 0.058, 0.065), cable (0.05, 0.05, 0.055),
+   brass (0.32, 0.20, 0.07). On a large plate, `bake_ao` at gain 1 goes near-black against pink meat; use gain 1.5,
+   gamma 1.6.
+6. **`GLOW_FROM_ATTRIBUTE` is keyed by material NAME.** A glow in a second colour needs an alias material:
+   `orbitmetal` is skullmetal whose `_glow` burns the eye's yellow, not the twinhead's red.
+7. **Painted `.blob` colours render more saturated than their hex suggests.** `b8606a` lips came out as clown
+   lipstick, and the twinhead's raw-pink wound colour read as red beads on a smaller body. Go muted (`a8706a`,
+   `7a3c3c`) and let `gloss` carry the wet or filler look.
+8. **Lips: the plain first pass won.** Two filler-lip passes were rejected. The first was painted glossy pink at
+   r 0.095 or more, with a cupid's bow ("triangular, two weird knobs"). The second was one round bowed capsule per
+   lip ("too smooth, too red"). The owner kept the original: unpainted, hide-coloured, tapered half-lips (r 0.068 /
+   0.076 tapering to 0.032). Only the hide's mottle and noise give them texture: baked lip furrows were tried and
+   taken out ("better without"). Lesson: a painted glossy lip reads as a separate material, and so does a combed
+   one. Unpainted swelling flesh is the house look. For a round lip, the shape that worked was a constant-radius
+   `bar` from corner to corner with `bend`, whose middle moves by about half its value. For detail at that scale
+   bake 1024 wide: at 512 the torso map is ~7 mm a texel round a 1.2 m ball.
+9. **Settle the flesh before baking.** The torso bake takes ~15 min, and any torso edit (a brow, lips, a wound prim)
+   invalidates it. Bake last.
+
+**Engine gaps this exposed (fixed on the teratoma's branch)**
+
+- `makeMotionJoints` threw on a body with no feet, so a legless body could be neither shown in the lab nor spawned. Leg
+  lengths are now 0, `groundY` is the floor, and the plants are skipped.
+- Floaters walk with the `HOVER` gait (gait.ts): a root heave, a drift and a nod, with no stepping.
+- A ranged enemy without a held prop: `MotionProfile.spit` fires from a rig point plus a body-local offset (the
+  teratoma's maw), using the warbull's slow rocket as its fireball. A real flying mind (holding altitude, strafing
+  over cover) is still missing.

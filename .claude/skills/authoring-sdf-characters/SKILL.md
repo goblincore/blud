@@ -1,6 +1,6 @@
 ---
 name: authoring-sdf-characters
-description: Use when creating or editing a Blud SDF character - writing a .blob file, porting a WAM cast member (goblin, imp, knight, lizardman, ogre, orc, skeleton, troll), adding a creature to the bestiary, or retuning an existing body's proportions or face.
+description: Use when creating or editing a Blud character - a NEW enemy or creature (the default pipeline - SDF flesh, a baked body normal map, sculpted Blender kit mesh), writing or retuning a .blob file, a body's proportions or face, or porting a WAM cast member (goblin, imp, knight, lizardman, ogre, orc, skeleton, troll).
 ---
 
 # Authoring SDF characters
@@ -26,13 +26,56 @@ as intended, not clutter:
 bone spine parent=pelvis dir=up pitch=6.842773 len=0.34
 ```
 
-## Biomechanical enemies: read `biomech-style.md`
+## The default pipeline for a NEW character (since 2026-10-21)
 
-For a flesh-and-machine enemy (the twinhead and its kin), the machinery is sculpted kit mesh in the demon
-skull's style, never boxes. Flesh detail goes in a baked body normal map. `biomech-style.md` (beside this file)
-has the rules, the Blender toolkit (`assets-source/twinhead-kit/kit_sculpt.py`) and the loop.
+New enemies and creatures are built this way: the twinhead (#52), the teratoma (#53), the zombie variants (#54), the
+gorehound, gibbet and chair (#55 to #57). The owner judged it a clear step up from the older way. Read
+**`biomech-style.md`** (beside this file) for the style rules, the Blender toolkit, the recipes and the gotchas,
+then `docs/dev-notes/2026-10-21-twinhead/HANDOFF.md` for a worked example.
 
-## The loop
+### What changed, and why it works better
+
+| | The older way | The default now |
+| --- | --- | --- |
+| **Where detail lives** | in SDF prims: every ridge, plate and vein a marched prim, so detail fought frame time and characters came out "too simple" or "a series of orbs" | **split by cost**: SDF prims only for flesh silhouette and gore; muscle, veins and knots in a **baked body normal map**; machinery, bone, horns and weapons in **sculpted mesh** |
+| **Hard surfaces** | SDF `box`/`metal` prims, or WAM kits (rings lofted round bones; a hand-copied skeleton) | Blender **generator scripts** (`kit_sculpt.py`): shells, crests, ribs, horns voxel-fused into one organic sculpt, AO and glow baked into vertex colours, skinned rigidly by `scripts/blender-kit.ts` straight from the `.blob` skeleton |
+| **Placing detail** | numbers typed by hand | **generated and probed**: detail scripts march the real skin and sit each element on it a set number of mm proud (`scripts/twinhead-detail-gen.ts`) |
+| **Style** | per character, by feel | **one anchor**, the demon skull: crests, chevron ribs, rolled lips, curled horns, sutures, pointed silhouettes, never boxes or drums. Failed attempts are written down as recipes (e.g. the varicose veins) |
+| **Iterating** | edit a number, measure, repeat | re-run a script (one part in about 5 s), look at Blender matcap frames, then `blob:shot` contact sheets and close crops; the owner sees milestones, the body proportions before any detail |
+
+### The steps
+
+1. **Brief.** Get the owner's words and reference images; name the silhouette and what makes it distinct from the
+   roster (check the existing `characters/` and open PRs, so you don't build the gnasher twice).
+2. **Skeleton and flesh silhouette** in the `.blob`, with few prims. Reuse an existing rig and its gait where you
+   can: a renamed or extra bone breaks `gait.ts` `JOINT_AT`. Show the owner the proportions.
+3. **Flesh detail:** write a `<name>-detail-gen.ts` (copy the twinhead's), then bake with
+   `npx tsx scripts/bake-body-normal.ts <name> 512 256 --limb bone:t0:t1:rMax:rows ...`. Register the map as
+   `bodyNormal` in `character-registry.ts`.
+4. **Kit:** write `assets-source/<name>-kit/make_*.py` on `kit_sculpt.py` and run them in Blender (the MCP). Export
+   the `mech` collection, run `npx tsx scripts/blender-kit.ts <name> <parts.glb>`, and hide every SDF prim the mesh
+   covers inside it.
+5. **Look**, in Blender first and then in engine, with `LAB_TMP=.lab-tmp npm run blob:shot -- <name> <dir> 8`. Read
+   the frames yourself, every time.
+6. **Wire it up:** the registry entry, a motion profile, an attack through an existing mind.
+7. **Tests:** `npm run typecheck`, `npm run test:changed`, and
+   `npx vitest run src/lab/sdf-zombie/pack-golden.test.ts -u` after `.blob` edits.
+8. **Draft PR**, and add what you learned to `biomech-style.md`.
+
+### What still applies from the older way
+
+- **Everything below** about `.blob` authoring (comment every number, limbs that read, failure triage, the dials,
+  `reference.md`) still holds: the flesh is still a `.blob`.
+- **`blob:measure`**, the next section, is for fitting a body to a reference MESH when you have one (cast ports,
+  the goblin). New enemies usually start from images, so the default loop above uses looks instead.
+- **WAM kits** (`*-kit.wam`) still drive the existing cast (goblin, soldier, juggernaut...). Don't start new kits
+  in WAM; when an old character gets a refinement pass, its kit can move to Blender generators.
+
+## Fitting a body to a reference mesh: the `blob:measure` loop
+
+Use this when you have a reference MESH (a cast port, the goblin). For a new enemy from images, follow the default
+pipeline above.
+
 
 1. **Get the reference as geometry.** The convention is
    `docs/dev-notes/refs/<name>-mesh/<name>.glb` — `blob:measure` resolves that

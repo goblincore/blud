@@ -1,0 +1,30 @@
+{
+  "generator": "scripts/bake-body-normal.ts",
+  "character": "teratoma",
+  "width": 512,
+  "height": 257,
+  "version": 2,
+  "yMin": 0.896,
+  "yMax": 1.9988,
+  "axisX": 0.009,
+  "axisZ": -0.0344,
+  "regions": [
+    {
+      "label": "torso",
+      "kind": "torso",
+      "head": [
+        0.009,
+        1.9988,
+        -0.0344
+      ],
+      "tail": [
+        0.009,
+        0.896,
+        -0.0344
+      ],
+      "rMax": 0,
+      "row0": 1,
+      "rows": 256
+    }
+  ]
+}

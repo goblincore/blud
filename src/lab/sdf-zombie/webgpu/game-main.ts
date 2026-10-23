@@ -388,6 +388,7 @@ import { gibActor, spawnScheduledGibs } from './game-gib-actor';
 import { BLAST_KICK_RAD_PER_UNIT, detonateAt, overcookInHand, stepDynamite } from './game-dynamite-step';
 import { acquireVolumeAtlas, bindSkeletonVolume, buildSkeletonSources, releaseSkeletonActor, releaseVolumeAtlas } from './game-skeleton-actors';
 import { GAME_HULL_EXIT_BOUND, GAME_LAST_STEP, GAME_LEVEL_SHADOW, GAME_OMEGA, GAME_RELAX, GAME_WOUND_EARLY_OUT, GAME_WOUND_STEP, SMG_TARGET_CHEST_Y, rebuildCast, spawnAll, spawnEnemy } from './game-spawn';
+import { arenaRespawn, installArena } from './game-arena';
 import { applyWoundTuning } from './game-wound-tuning';
 import { DemoReplayOpts, applyDemoQuery, demoSynthesize, runDemoReplay } from './game-demo-replay';
 import { applyRig } from './game-ambient-rig';
@@ -3037,6 +3038,7 @@ async function main() {
 
   // ?nospawn (dev/gates): boot the level with no enemies, e.g. to walk its layout.
   if (!new URLSearchParams(location.search).has('nospawn')) spawnAll(ctx, ctx.boot.errors);
+  installArena(ctx);   // the test arena's label (game-arena.ts); nothing on other levels
   setLoader(ctx, 'level + actors');
   if (ctx.boot.errors.length > 0) {
     console.error('[sdf-game] body errors:', ctx.boot.errors.join(' | '));
@@ -6000,6 +6002,8 @@ async function main() {
     },
     /** P3 capture: replace every actor with the default cast (fresh, unwounded bodies). */
     resetCast: () => { rebuildCast(ctx); return ctx.world.actors.length; },
+    /** The TEST ARENA's respawn (game-arena.ts), for automation: `step` characters on (0 = the same one); returns the enemy's name. */
+    arena: (step = 0) => { arenaRespawn(ctx, step); return ctx.boot.spawnOverride ?? 'zombie'; },
     /** The active render cap + how it was chosen (?res=). */
     get resolution() {
       const cap = RES_RUNGS[ctx.boot.resKey];

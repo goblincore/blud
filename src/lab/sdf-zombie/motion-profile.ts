@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, CHAIR_WADDLE, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, CHAIR_WADDLE, HOVER, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { JoystickSpec } from './joystick';
@@ -348,6 +348,19 @@ export const TWINHEAD_PROFILE: MotionProfile = {
   gunner: { weapon: 'rocket' },
 };
 
+/** The venus (characters/venus.blob): a heavy biomech woman whose forearms end in sculpted talon gauntlets
+ *  (assets-source/venus-kit/). Her attack is the zombie mind's unarmed swing (enemy-mind.ts makeZombieMind): with
+ *  talons on the hands it reads as a rake, so no new mind is needed. Unarmed, so the zombie's reaching arms and its
+ *  torso guards; a gore body. What is hers is the weight: the warbull's STOMP (a slow cadence, a clear
+ *  lift-and-plant) at a cruise between the twinhead's machine legs (0.95) and the warbull (0.85), and a slow turn. */
+export const VENUS_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'venus',
+  gait: { walk: STOMP, run: STOMP },
+  cruise: 0.9,
+  turnRate: 2.0,
+};
+
 /** The gorehound (characters/gorehound.blob): a heavy biomech quadruped. Its
  *  arms are its front legs, walked by GOREHOUND's 'foreleg' style and planted
  *  like feet. Melee, unarmed: the zombie mind closes and swings, which on
@@ -431,6 +444,26 @@ export const GAMER_PROFILE: MotionProfile = {
   joystick: { amp: 0.05, idle: 0.012, swell: { period: 3.2 } },
 };
 
+/** The teratoma (characters/teratoma.blob): a cacodemon-style floater. It HOVERS (no legs; the gait is the root's
+ *  heave and drift) and SPITS: the warbull's slow rocket, launched from its maw (`spit`), is its fireball, dodgeable at
+ *  9 m/s and bursting through the dynamite path. A gore body like the zombie. The soldier's shooting brain gives it
+ *  range-keeping and a fire cadence; a real flying mind (altitude, strafing over cover) is a follow-up. */
+export const TERATOMA_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'teratoma',
+  gait: { walk: HOVER, run: HOVER },
+  runBand: { from: Infinity, to: Infinity },
+  // A slow drift: slower than the zombie's 1.15 and the twinhead's 0.95, so its fireballs are the threat, not its
+  // approach.
+  cruise: 0.8,
+  turnRate: 1.6,
+  armStyle: 'swing',
+  gunner: { weapon: 'rocket' },
+  // The maw's centre: pelvis is the ball's centre (teratoma.blob `root pelvis at 1.45`), the gullet sits 0.19 below it,
+  // and the lips' fronts are at z ~0.57; 0.62 launches the round just clear of the teeth.
+  spit: { from: 'pelvis', offset: [0, -0.19, 0.62] },
+};
+
 /** The bride: a slow STALK in a high sword guard; the point trails on the
  *  run. Melee only — the sword mind (enemy-mind.ts) swings it. */
 export const BRIDE_PROFILE: MotionProfile = {
@@ -503,11 +536,13 @@ const BY_NAME: Record<string, MotionProfile> = {
   bride: BRIDE_PROFILE,
   warbull: WARBULL_PROFILE,
   twinhead: TWINHEAD_PROFILE,
+  venus: VENUS_PROFILE,
   gorehound: GOREHOUND_PROFILE,
   gutcrawler: GUTCRAWLER_PROFILE,
   gibbet: GIBBET_PROFILE,
   chair: CHAIR_PROFILE,
   gamer: GAMER_PROFILE,
+  teratoma: TERATOMA_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

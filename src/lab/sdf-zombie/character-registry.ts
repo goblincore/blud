@@ -49,12 +49,14 @@ import gibbetBlobSrc from './characters/gibbet.blob?raw';
 import chairBlobSrc from './characters/chair.blob?raw';
 import gamerBlobSrc from './characters/gamer.blob?raw';
 import bloatmawBlobSrc from './characters/bloatmaw.blob?raw';
+import teratomaBlobSrc from './characters/teratoma.blob?raw';
 import gnasherBlobSrc from './characters/gnasher.blob?raw';
 import ogreBlobSrc from './characters/ogre.blob?raw';
 import broodmotherBlobSrc from './characters/broodmother.blob?raw';
 import cultistBlobSrc from './characters/cultist.blob?raw';
 import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
 import brideBlobSrc from './characters/bride.blob?raw';
+import venusBlobSrc from './characters/venus.blob?raw';
 import {
   ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, GOREHOUND_PROFILE, GUTCRAWLER_PROFILE, GIBBET_PROFILE, CHAIR_PROFILE, GAMER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
@@ -416,6 +418,19 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // root sway/bob and the arm reach. See the .blob header and the report.
     profile: motionProfileFor('bloatmaw'),
   },
+  // The cacodemon-style floater (teratoma.blob's header): a flesh ball in the
+  // .blob, its folds and veins in the baked body normal map, and the hard parts
+  // (horns, teeth, talons, the eye, shackles and chains) Blender kit
+  // (assets-source/teratoma-kit/). No face sheet: the eye is kit, the mouth is
+  // geometry.
+  teratoma: {
+    name: 'teratoma', src: teratomaBlobSrc,
+    kit: '/assets/lab/teratoma-kit.gltf',
+    // The ball's roped folds, veins and nodules (characters/teratoma.detail, baked; never marched).
+    bodyNormal: { url: '/assets/lab/teratoma-body-n.png', meta: '/assets/lab/teratoma-body-n.json', strength: 1 },
+    face: ZOMBIE_FLAT,
+    profile: motionProfileFor('teratoma'),
+  },
   gnasher: {
     name: 'gnasher', src: gnasherBlobSrc,
     // Flesh in the .blob; the horns and forearm tusks are the kit, compiled
@@ -485,6 +500,22 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     armoured: true,
     face: { ...bakedFace('bride-face.png'), mean: 0.712472 },
     profile: motionProfileFor('bride'),
+  },
+
+  // The heavy biomech woman (venus.blob's header): the cyberbride's head on a
+  // full-figured flesh body, with sculpted Blender kit grafts
+  // (assets-source/venus-kit/). The face is the cyberbride's: the flat zombie
+  // mask, with the fangs, maw and glow eyes as prims.
+  venus: {
+    name: 'venus', src: venusBlobSrc,
+    // Corset cage, exo-spine, collar, talon gauntlets and knee braces: Blender
+    // parts (assets-source/venus-kit/) skinned to the .blob's bones by
+    // scripts/blender-kit.ts.
+    kit: '/assets/lab/venus-kit.gltf',
+    // Fat rolls, cellulite, stretch marks and varicose veins (characters/venus.detail, baked; never marched).
+    bodyNormal: { url: '/assets/lab/venus-body-n.png', meta: '/assets/lab/venus-body-n.json', strength: 1 },
+    face: ZOMBIE_FLAT,
+    profile: motionProfileFor('venus'),
   },
 
 };
