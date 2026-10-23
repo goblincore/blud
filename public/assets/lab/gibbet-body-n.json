@@ -1,0 +1,47 @@
+{
+  "generator": "scripts/bake-body-normal.ts",
+  "character": "gibbet",
+  "width": 512,
+  "height": 417,
+  "version": 2,
+  "yMin": 0.08,
+  "yMax": 1.12,
+  "axisX": 0,
+  "axisZ": -0.025,
+  "regions": [
+    {
+      "label": "torso",
+      "kind": "torso",
+      "head": [
+        0,
+        1.12,
+        -0.025
+      ],
+      "tail": [
+        0,
+        0.08,
+        0.395
+      ],
+      "rMax": 0,
+      "row0": 1,
+      "rows": 320
+    },
+    {
+      "label": "skull",
+      "kind": "limb",
+      "head": [
+        0,
+        0.7774,
+        0.8797
+      ],
+      "tail": [
+        0,
+        0.6242,
+        1.0083
+      ],
+      "rMax": 0.14,
+      "row0": 321,
+      "rows": 96
+    }
+  ]
+}

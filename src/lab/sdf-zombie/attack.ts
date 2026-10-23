@@ -75,7 +75,9 @@ export const ATTACK_TUNING = {
   handDrop: 0.10,
 } as const;
 
-export type SwingVariant = 'hook' | 'overhead' | 'shove' | 'cleave' | 'sweep' | 'lunge';
+export type SwingVariant = 'hook' | 'overhead' | 'shove' | 'cleave' | 'sweep' | 'lunge'
+  // The quadruped's (hound-attack.ts): motion.ts routes these to houndPose.
+  | 'bite' | 'pounce';
 
 /** Per-variant arm angles (rad). Pitch keeps the reach convention (positive =
  *  forward/raised); yaw is written for the RIGHT arm, where NEGATIVE is cocked
@@ -111,6 +113,9 @@ export const SWING_ARCS: Record<SwingVariant, {
   cleave: { windupPitch: 1.35, strikePitch: -0.75, windupYaw: -0.15, strikeYaw: 0.10 },
   sweep: { windupPitch: 0.35, strikePitch: 0.95, windupYaw: -0.85, strikeYaw: 0.90 },
   lunge: { windupPitch: 0.4, strikePitch: 1.3, windupYaw: 0, strikeYaw: 0 },
+  // A quadruped's arms are its legs: hound-attack.ts owns its pose.
+  bite: { windupPitch: 0, strikePitch: 0, windupYaw: 0, strikeYaw: 0 },
+  pounce: { windupPitch: 0, strikePitch: 0, windupYaw: 0, strikeYaw: 0 },
 };
 
 export type AttackTuning = typeof ATTACK_TUNING;

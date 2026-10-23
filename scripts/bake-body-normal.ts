@@ -3,6 +3,7 @@
 // Bake a character's BODY NORMAL MAP (spec docs/superpowers/specs/2026-10-21-body-normal-map-design.md):
 //
 //   npx tsx scripts/bake-body-normal.ts <character> [width] [torsoRows] [--limb bone:t0:t1:rMax:rows ...]
+//     [--torso-axis hx,hy,hz:tx,ty,tz]
 //     reads  src/lab/sdf-zombie/characters/<character>.blob
 //            src/lab/sdf-zombie/characters/<character>.detail   (extra `body` lines, never marched)
 //     writes public/assets/lab/<character>-body-n.png            (an atlas of tangent-space normals)
@@ -20,7 +21,11 @@
 //
 // REGIONS. Each region is a cylinder round a REST-space segment head -> tail, baked into its own band of rows:
 //   - region 0, the TORSO: a vertical segment through the torso's mean x/z from the top of its prims (head) to
-//     the bottom (tail); only the torso cluster is marched, and at runtime only torso-prim hits take it;
+//     the bottom (tail); only the torso cluster is marched, and at runtime only torso-prim hits take it.
+//     `--torso-axis` replaces the vertical segment for a body whose torso is NOT upright (the gorehound, a
+//     quadruped: its torso lies along z, and a vertical cylinder sees the whole back as one polar cap). Keep the
+//     axis a few degrees off exactly +-z: the frame's f is rest +z made perpendicular to the axis (here and in
+//     body-normal.wgsl.ts), which is undefined on an axis parallel to z;
 //   - a LIMB region per `--limb bone:t0:t1:rMax:rows`: the bone's segment from t0 to t1, its own limb cluster only,
 //     taken at runtime by non-torso hits whose rest point lies along the segment within rMax of it.
 //
@@ -50,8 +55,11 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const argv = process.argv.slice(2);
 const limbArgs: string[] = [];
 const pos: string[] = [];
+let torsoAxisArg: string | null = null;
 for (let i = 0; i < argv.length; i++) {
-  if (argv[i] === '--limb') limbArgs.push(argv[++i]!); else pos.push(argv[i]!);
+  if (argv[i] === '--limb') limbArgs.push(argv[++i]!);
+  else if (argv[i] === '--torso-axis') torsoAxisArg = argv[++i]!;
+  else pos.push(argv[i]!);
 }
 const [name, wArg, hArg] = pos;
 if (!name) { console.error('usage: bake-body-normal.ts <character> [width] [torsoRows] [--limb bone:t0:t1:rMax:rows ...]'); process.exit(2); }
@@ -100,7 +108,14 @@ const regions: Region[] = [];
     zSum += (p.a[2] + p.b[2]) / 2; xSum += (p.a[0] + p.b[0]) / 2;
   }
   const ax = xSum / torso.length, az = zSum / torso.length;
-  regions.push({ label: 'torso', limb: 'torso', head: [ax, yMax, az], tail: [ax, yMin, az], rMax: 0, rows: H, kind: 0, r0: 0.6, row0: 0 });
+  if (torsoAxisArg) {
+    const [h, t] = torsoAxisArg.split(':').map(v => v.split(',').map(Number) as V);
+    const A = norm(sub(t!, h!));
+    if (Math.abs(A[2]) > 0.9995) { console.error('--torso-axis: tilt it off +-z (the frame needs rest +z off the axis)'); process.exit(2); }
+    regions.push({ label: 'torso', limb: 'torso', head: h!, tail: t!, rMax: 0, rows: H, kind: 0, r0: 0.6, row0: 0 });
+  } else {
+    regions.push({ label: 'torso', limb: 'torso', head: [ax, yMax, az], tail: [ax, yMin, az], rMax: 0, rows: H, kind: 0, r0: 0.6, row0: 0 });
+  }
 }
 for (const arg of limbArgs) {
   const [bone, t0, t1, rMax, rows] = arg.split(':');

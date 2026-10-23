@@ -159,3 +159,86 @@ Each has a `PARTS` subset switch, so one part can be iterated in about 5 s.
 The twinhead kit is about 145k triangles, too high for crowds. Planned optimization: bake each sculpt's
 detail into a normal map on a low-poly cage, aiming for 2-4k triangles per part. Author at full detail first;
 optimize once the look is approved.
+
+## Non-humanoid rigs (the gorehound, 2026-10-22)
+
+The gorehound (`characters/gorehound.blob`) is a four-legged dog-frog on the BIPED rig. Read this before inventing
+new bones for a creature.
+
+**Keep the standard bone names.** Every system downstream keys on them: the gait's joint table (`gait.ts`
+`JOINT_AT`), plants, sever, gore, damage and the pins. One unnamed bone makes `makeMotionJoints` return null and
+the body stops moving (the twinhead's extra bones did exactly that). So map the anatomy onto the names:
+
+| Anatomy | Bone | Joint the gait sees |
+| --- | --- | --- |
+| scapula, from the withers down to the shoulder | `clavicle` (`dir=side`, negative `tilt`) | clavicle -> shoulder |
+| humerus, down and BACK | `upperarm` | shoulder -> elbow |
+| radius, down and forward | `forearm` | elbow -> hand (the wrist) |
+| metacarpal paw, sloping forward to the toes | `hand` | hand -> handTip |
+| femur, forward to the stifle | `thigh` | hip -> knee |
+| tibia, raked BACK to the hock | `shin` | knee -> foot (the hock, where the plant locks) |
+| metatarsal, near vertical to the toes | `foot` | foot -> toe |
+| a horizontal back | `spine` pitched ~70 deg, `chest` and `neck` falling forward | |
+| a lower jaw that opens | `jaw` with `hinge=` near the back of the skull (a frog's mouth corner) | jaw |
+
+**The gait: arms as front legs, not a new gait module.** `armStyle: 'foreleg'` (`gait.ts`) walks the arms with
+the leg function: lift, reach and plant, on the same-side hind clock delayed by `forePhase` (0.25 is a dog's
+four-beat walk, 0.5 a trot). `motion.ts` plants the paw (the hand joint) like a foot, with the elbow pole pointing
+BACKWARD. It is opt-in per gait profile, so every biped is unchanged. `landAhead` sets each swing down ahead of
+the hip: a near-vertical foreleg with little slack overstretches when the whole stance is spent behind it.
+The other option, a real four-limb rig with its own joint names and a four-phase gait, touches sever, gore,
+damage and every pin, so it was not taken. The trade-off: the spine does not flex, and the paw is rigid with the
+wrist (no toe roll).
+
+**Check slack before rendering.** Pin the shoulder-to-wrist drop against the arm chain (the gorehound: 0.59 m
+against 0.65 m, 91%). At ~99% the leg is a table leg (the houndcorpse's lesson).
+
+**See the walk without a GPU.** `blob:shot` disables motion. `scripts/gorehound-walk-dump.ts` walks the body
+through the real pipeline (or swings one attack) and writes the joints as JSON, and
+`scripts/gorehound-gait-strip.py` draws side-on stick strips with the planted feet ringed. Point them at another
+body by editing the path; `gorehound-blob.test.ts` pins the four-beat walk the same way.
+
+**Attacks.** A quadruped's melee is its head. `hound-attack.ts` adds `bite` (a neck strike off planted
+shoulders) and `pounce` (crouch, then the body and both paws thrown up and forward, the front plants released,
+the root advanced like the bride's lunge). The jaw gape rides the bite. `MotionProfile.melee: { kind: 'bite' }`
+gives it the ring brain with jaw contact (`enemy-mind.ts` `makeHoundMind`).
+
+**The normal map round a horizontal torso.** `bake-body-normal.ts` projects the torso round a vertical axis,
+which sees a horizontal back as one polar cap. Pass `--torso-axis` along the body, a few degrees off exactly z
+(the frame's f is +z made perpendicular to the axis; the shader needs no change). `scripts/gorehound-detail-gen.ts`
+probes the skin in that same frame (ph 0 = belly, 180 = spine).
+
+**Kit on a body with no upright axis.** Seat back and head machinery on the probed skin seen from above
+(`scripts/gorehound-skin.ts` writes `skin.json`; `on_skin(x, z, lift)` in `hound_common.py`). Plates laid flush
+with the skin vanish under the flesh noise, so lift them ~1 cm. The legs are the butcher's dog-leg sculpts
+wrapped in `limb()` and run for both pairs: shapes built from the bend itself (a cap on the bisector of the two
+bones) land outside the joint whichever way it folds, so the same code makes a stifle and an elbow. Thicken
+them after the fact (`thicken`) for a heavy body, and keep the SDF cores under them thin (2-3.5 cm), or they show
+through the open-fronted shells.
+
+**Turn off the face sheet** on anything that is not a person: with no `sheet` block the registry's zombie face
+is projected onto whatever sits at the front of the head (the gorehound's snout). Add `sheet` / `enabled 0`.
+
+### The gibbet: hung masses and judging motion (2026-10-22)
+
+The gibbet (`characters/gibbet.blob`) is a walking gallows: a bone-metal beam on four splayed spider legs, a sac of
+meat in a birdcage hung under it, and a head dangling at the front. The owner's verdict on the gorehound ("uninspired,
+looks like the gnasher") is the lesson: **make the machine the body and the flesh the cargo, not machinery stuck on an
+animal.** What it added:
+
+- **A hung mass is the `hem` pendulum.** Hang the sac's prims AND the cage kit on `hem` (from the hips down to the
+  sac's bottom) and they swing together. The Verlet lag alone moved it ~1.5 cm on a steady walk, which reads as rigid,
+  so `GaitProfile.hemSwing` drives it: sideways a third of a stride behind the body's sway, fore-aft and a drop on each
+  footfall, and 40% of that while standing (`HEM_IDLE` in `motion.ts`). Keep the hem's tail above the toes.
+- **Thin-core bodies need collinear fuse paths.** The validator fuses clusters along the STRAIGHT line between their
+  `core` prims; struts at angles never contain one. Put the torso's core on the neck cord with the head's core riding
+  the same axis, and join the legs to each other across crossbars (hips, shoulder yoke).
+- **Judge the motion, not the pose.** `BLOB_WALK_SWEEP=<firstFrame>:<step>` with a fixed `BLOB_YAW` makes
+  `blob:shot` render the walk frame by frame (deterministic treadmill poses); stitch the frames into a GIF.
+- **Feet are silhouette.** The gorehound's paws on long sloping metacarpals read as skis; spidery legs want points
+  (`TOE_STYLE = 'spike'` in a kit's `common.py`: one curled talon taking the floor at its tip).
+- **A cage reads by contrast.** The first cage was rusty dark iron inside the sac's outline and read as lines on meat.
+  It needs bars standing clear of the sac (1.14x its radius), a lid of bars and a finial, a spike below, and pale
+  bone-iron with rust only low down.
+- **Normal map down the pendulum.** The torso projection can run along any axis: the gibbet's runs down the hem
+  (`--torso-axis` extended past both ends of the sac), and every detail line binds to `hem` so the detail swings too.
