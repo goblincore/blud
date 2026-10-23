@@ -29,6 +29,15 @@
 #      a defined waist.
 #   5. THE HAIR. Waist-length, loose and dark: a crown mass plus strand
 #      curtains framing the face, over the shoulders and down the back.
+#
+# THE ANIME PASS (owner, 2026-10-23, on the first pass: "it looks very ...
+# human. not what we are going for really - it needs to be more
+# exaggerated"; references anime-3d.glb and a Mai Shiranui mesh, kept out of
+# the repo — third-party characters, read for proportion only). Pushed
+# every lever toward anime: eyes ~3x the area and set lower, high thin
+# brows, a nose cut to a ridge, a tiny mouth, a V-taper to a short pointed
+# chin, clumped bangs; wider hips (anime-3d: 0.23 of height across over a
+# 0.15 waist), heavier thighs, a bigger bust, a mid-thigh slip.
 model siren
   # Flesh crown ~1.81 (the bride's skeleton); the hair's crown takes her to
   # ~1.83.
@@ -81,9 +90,9 @@ body
   # TORSO — the bride's hourglass with the rib window taken out: a smooth
   # waist, a soft bust. Every mass a tapered bar with heavy overlap.
   # ============================================================
-  blob torso on pelvis at=0.35 r=0.105 wide=1.20 tall=0.90 deep=0.84 blend=0.028
+  blob torso on pelvis at=0.35 r=0.105 wide=1.50 tall=0.90 deep=0.90 blend=0.028
   # Waist: one tapered bar up spine1, narrowest ~0.087 semi at y 1.13.
-  bar  torso on spine1 from=0.00 to=1.00 r=0.072 r2=0.058 wide=1.16 deep=0.80 blend=0.026
+  bar  torso on spine1 from=0.00 to=1.00 r=0.072 r2=0.054 wide=1.16 deep=0.80 blend=0.026
   # Ribcage flaring to the shoulders. `core`: arms, neck and hips fuse here.
   bar  torso on chest  from=0.00 to=0.88 r=0.072 r2=0.098 wide=1.17 deep=0.84 blend=0.024 core
   # Bust: two soft forms high on the chest, a little fuller than the
@@ -91,20 +100,21 @@ body
   # ribcage instead of sitting on it. Painted the dress's crimson: the
   # bodice shell below clips open over the cleavage, and anything that
   # pokes through it reads as the dress's cups (the bride's rule).
-  blob torso on chest  at=0.95 offset=(0.062,-0.0130,0.0640) r=0.056 tall=0.95 deep=0.95 blend=0.016 both color=6e0f1c gloss=0.55
+  blob torso on chest  at=0.95 offset=(0.066,-0.0160,0.0680) r=0.070 tall=0.95 deep=0.95 blend=0.016 both color=6e0f1c gloss=0.55
   # Yoke + shoulder line, thin front-to-back.
   blob torso on spine2 at=0.90 r=0.060 wide=2.35 tall=0.62 deep=0.85 blend=0.034
 
   # ============================================================
   # THE SLIP DRESS — crimson satin (6e0f1c, glossy: satin catches a rim,
   # cotton does not). The bride's bodice shell, recoloured, and ONE skirt
-  # shell on the hem pendulum to just above the knee, so the long legs —
-  # the proportion beat — stay in view. A SLIP falls close: r 0.140 ->
-  # 0.152 (a first 0.150 -> 0.180 flared like a lampshade), and its folds
-  # run straight down (warpFreq y 0; a y frequency quilted it in diamonds).
+  # shell on the hem pendulum, hemmed at MID-THIGH (y 0.80): the anime pass
+  # widened her hips and thighs, and a knee-length skirt hid exactly that.
+  # r 0.170 -> 0.180 holds the wider hips without flaring like a lampshade
+  # (a first 0.150 -> 0.180 on the old hips did), and its folds run
+  # straight down (warpFreq y 0; a y frequency quilted it in diamonds).
   # ============================================================
   shell torso on chest at=0.0 offset=(0,-0.120,0.000) tip=(0,0.275,0.014) r=0.086 r2=0.124 wide=0.98 tall=0.60 deep=0.84 thick=0.0030 clip=(0,-0.1908,0.9816) clipd=-0.1477 rim=0.002 blend=0.004 color=6e0f1c gloss=0.55 warp=0.0010 warpFreq=(105,0,105) rigid
-  shell torso on hem at=0.0 offset=(0,-0.010,0) tip=(0,-0.360,0) r=0.140 r2=0.152 wide=1.06 tall=0.55 deep=0.92 thick=0.004 clip=(0,-1,0) clipd=-0.660 rim=0.005 blend=0.006 color=6e0f1c gloss=0.55 warp=0.003 warpFreq=(40,0,40) rigid
+  shell torso on hem at=0.0 offset=(0,-0.010,0) tip=(0,-0.240,0) r=0.170 r2=0.180 wide=1.06 tall=0.55 deep=0.92 thick=0.004 clip=(0,-1,0) clipd=-0.800 rim=0.005 blend=0.006 color=6e0f1c gloss=0.55 warp=0.003 warpFreq=(40,0,40) rigid
 
   # ============================================================
   # NECK + HEAD. The bride's solved head structure (bride.blob, "HEAD +
@@ -119,8 +129,8 @@ body
   # FACE MASS, split at the mouth (bride Task 12): the upper part on the
   # skull, the lower on the JAW, on one line with one taper, so at rest they
   # read as one smooth face and the jaw part swings away on the gape.
-  blob head on skull at=0.45 offset=(0,0,0.0290) tip=(0,-0.0260,0.0086) r=0.054 r2=0.0452 wide=1.20 blend=0.012
-  blob head on jaw at=1.0 offset=(0,0.03122,-0.02654) tip=(0,-0.0227,0.0075) r=0.0377 r2=0.028 wide=1.08 blend=0.012
+  blob head on skull at=0.45 offset=(0,0,0.0290) tip=(0,-0.0260,0.0086) r=0.054 r2=0.0370 wide=1.04 blend=0.020
+  blob head on jaw at=1.0 offset=(0,0.03122,-0.02654) tip=(0,-0.0160,0.0090) r=0.0360 r2=0.022 wide=1.00 blend=0.022
   # THE MOUTH'S INSIDE — wet dark red, buried under the rest face (it paints
   # nothing at rest), filling the opening when the jaw drops.
   bar  head on skull from=0.27 to=0.12 offset=(0,0.0006,0.0562) r=0.012 wide=2.2 deep=0.9 blend=0.004 color=2a0608 gloss=0.85
@@ -128,10 +138,10 @@ body
   # and the lower face mass below at 1.08 / r2 0.028 (bride 1.20 / 0.030):
   # her jaw read square in the close-up; a taper to the chin is the heart-
   # shaped face.
-  blob head on skull at=0.24 offset=(0,-0.0005,-0.0050) r=0.052 wide=0.96 tall=0.85 blend=0.012
+  blob head on skull at=0.24 offset=(0,-0.0005,-0.0050) r=0.048 wide=0.84 tall=0.85 blend=0.012
   # Chin: small and soft, on the jaw, lifted 2.5 mm (the bride's long
   # chin read as a long lower face).
-  blob head on jaw at=1.0 offset=(0,0.0030,-0.00096) r=0.016 wide=1.05 tall=0.90 blend=0.008
+  blob head on jaw at=1.0 offset=(0,0.0120,0.0030) r=0.012 wide=0.90 tall=1.00 blend=0.010
   # NO CHEEKBONE PRIMS. The bride's pair (and her lids and brow ridges)
   # sat at eye level and, on a face without her bruised sockets, read as
   # one horizontal band across the eyes: goggles (first look, 2026-10-23).
@@ -139,7 +149,7 @@ body
   # Soft cheeks — youth reads as fullness here, but at r 0.024 / x 0.036
   # the close-up read jowly; r 0.021 at x 0.034 keeps the curve, not the
   # bulge.
-  blob head on skull at=0.42 offset=(0.034,-0.0085,0.0520) r=0.021 blend=0.016 both
+  blob head on skull at=0.50 offset=(0.036,-0.0085,0.0480) r=0.022 blend=0.016 both
   # EYES: an UNPAINTED eyeball bulge per eye — the shape the lids wrap
   # round — and ALL the colour on the sheet (make-siren-face.py: sclera,
   # iris, liner, lashes). The first passes painted sclera, iris and a
@@ -148,18 +158,17 @@ body
   # and swallowed the lashes, two white saucers, a stare. Centred x 0.029,
   # 2.8 cm long (ordinary size and set; the bride's larger, wider-set eyes
   # were her deliberately-wrong doll trace), ~3 mm proud of the face.
-  blob head on skull at=0.55 offset=(0.022,-0.0012,0.0735) tip=(0.014,0.002,-0.004) r=0.0072 tall=0.70 blend=0.004 both
   # No lid or brow-ridge prims (see the cheekbone note): with them the eye
   # was a slit under a shelf. The sheet paints the lid and brows.
-  # Nasal root: fills between the eyes so they sit IN the face.
-  blob head on skull at=0.57 offset=(0,0.0005,0.0720) r=0.010 wide=0.90 blend=0.006
-  # Small fine nose, slightly upturned. Slimmer than the bride's (bridge
-  # 0.0040 -> 0.0050, tip r 0.0054 at z 0.0925; a fill under the tip was
-  # tried and cast a moustache): hers, unpainted on a face
-  # with soft makeup, was the biggest thing in the close-up, a bulb over a
-  # black cave of shadow.
-  blob head on skull at=0.52 offset=(0,0.0015,0.0840) tip=(0,-0.030,0.010) r=0.0040 r2=0.0050 blend=0.004
-  blob head on skull at=0.40 offset=(0,-0.0028,0.0925) r=0.0054 wide=1.15 tall=0.85 blend=0.005
+  # No nasal-root fill: an anime face is flat between the eyes (it lit as a
+  # long bridge running down into the nose).
+  # THE ANIME NOSE: one soft ridge, no tip ball. Every tip tried (the
+  # bride's r 0.0075, then 0.0054, 0.0040, 0.0030) stood a few mm proud over
+  # an undercut, and the shading filled the undercut black: a bulb over a
+  # dark cave, the biggest thing on the face. A fill under the tip cast a
+  # moustache instead. A 1.6 cm ridge (r 0.0024 -> 0.0032, blend 0.008) is
+  # a hint of a nose, which is all an anime face draws.
+  blob head on skull at=0.46 offset=(0,0.0005,0.0840) tip=(0,-0.016,0.004) r=0.0024 r2=0.0032 blend=0.008
   # LIPS: a cupid's-bow upper on the skull and a fuller lower on the JAW,
   # so the mouth opens between them. SHAPE ONLY: their colour is the
   # sheet's (make-siren-face.py lips()). Painted, in any colour, they read as
@@ -167,8 +176,8 @@ body
   # NEAREST prim, so a lip prim owns a band of skin all round it, and a
   # diagnostic sheet's red block vanished under it. Thinner than the
   # bride's (0.0045 / 0.0058) and sunk 1 mm: a soft mouth, not a pout.
-  bar  head on skull from=0.30 to=0.30 offset=(-0.015,0.0002,0.0795) tip=(0.030,0,0) bend=(0,0.0015,0.007) r=0.0034 tall=0.85 blend=0.003
-  bar  head on jaw from=1.0 to=1.0 offset=(-0.013,0.03358,0.01020) tip=(0.026,0,0) bend=(0,-0.0015,0.007) r=0.0044 tall=0.80 blend=0.003
+  bar  head on skull from=0.30 to=0.30 offset=(-0.010,0.0002,0.0800) tip=(0.020,0,0) bend=(0,0.0012,0.005) r=0.0028 tall=0.85 blend=0.003
+  bar  head on jaw from=1.0 to=1.0 offset=(-0.009,0.03358,0.01020) tip=(0.018,0,0) bend=(0,-0.0012,0.005) r=0.0034 tall=0.80 blend=0.003
 
   # ---- THE FANGS (the reveal): needle teeth hidden INSIDE the rest face
   # (the jaw capsule fills the mouth at rest; every tooth sits >= 7 mm under
@@ -199,6 +208,18 @@ body
   # cranium's (0.0912), or it becomes the fattest head prim and the face
   # sheet projects off the hair instead of the skull (headShape).
   blob head on skull at=0.64 offset=(0,0.0200,-0.0060) r=0.092 wide=0.86 tall=0.95 deep=0.98 blend=0.006 color=1c1412 gloss=0.35
+  # ANIME BANGS (owner, 2026-10-23: "more exaggerated"; Mai Shiranui's
+  # clumped fringe): ten pointed locks hanging off the crown's front edge
+  # (y ~1.768) over the forehead, ending at the brows (y ~1.725; at ~1.71 they
+  # hid the tops of the eyes), each a
+  # flat tapered cone (r 0.012 -> 0.0015, deep 0.6) standing ~4 mm proud of
+  # the cranium (front z ~0.0795 there), the outer ones longer and swept
+  # out. Offsets are from the skull's at=0.64 point (0, 1.7215, -0.0054).
+  blob head on skull at=0.64 offset=(0.008,0.0465,0.0774) tip=(0.002,-0.040,0.010) r=0.011 r2=0.0010 deep=0.60 blend=0.003 both color=1c1412 gloss=0.35
+  blob head on skull at=0.64 offset=(0.026,0.0440,0.0730) tip=(0.006,-0.046,0.010) r=0.012 r2=0.0010 deep=0.60 blend=0.003 both color=1c1412 gloss=0.35
+  blob head on skull at=0.64 offset=(0.017,0.0455,0.0760) tip=(0.004,-0.043,0.010) r=0.011 r2=0.0010 deep=0.60 blend=0.003 both color=1c1412 gloss=0.35
+  blob head on skull at=0.64 offset=(0.036,0.0415,0.0680) tip=(0.009,-0.050,0.010) r=0.012 r2=0.0010 deep=0.60 blend=0.003 both color=1c1412 gloss=0.35
+  blob head on skull at=0.64 offset=(0.046,0.0380,0.0600) tip=(0.014,-0.066,0.010) r=0.012 r2=0.0010 deep=0.60 blend=0.003 both color=1c1412 gloss=0.35
   # Face-framing curtains: centre-parted, falling past the cheeks to the
   # collarbones. 0.32 m, not longer: they ride the head, and the head turns
   # (see THE FALL).
@@ -239,11 +260,17 @@ body
   # (first pass: 0.036 into 0.035 at 0.012, a ball joint at every knee,
   # stick legs on a wooden doll).
   # ============================================================
-  blob leg on thigh at=0.09 offset=(0.012,0,-0.010) r=0.057 tall=1.30 deep=1.00 blend=0.030 mirror core
-  bar  leg on thigh from=0.04 to=1.00 r=0.070 r2=0.042 deep=1.05 blend=0.022 mirror
-  bar  leg on shin  from=0.00 to=0.97 r=0.039 r2=0.022 blend=0.026 mirror
+  blob leg on thigh at=0.09 offset=(0.024,0,-0.010) r=0.074 tall=1.35 deep=1.00 blend=0.030 mirror core
+  bar  leg on thigh from=0.04 to=1.00 r=0.084 r2=0.040 deep=1.05 blend=0.022 mirror
+  # ANIME THIGH (owner, 2026-10-23: "more exaggerated"): a long outer mass
+  # carrying the hip's width down the upper thigh, so the outline runs hip
+  # -> thigh in one generous curve and pinches in to a slim knee (anime-3d's
+  # proportion: hips 0.23 of her height across over a 0.15 waist, legs that
+  # taper hard below mid-thigh).
+  blob leg on thigh at=0.32 offset=(0.016,0,-0.004) r=0.066 tall=1.80 deep=1.05 blend=0.026 mirror
+  bar  leg on shin  from=0.00 to=0.97 r=0.035 r2=0.019 blend=0.026 mirror
   # Calf: a long soft swell behind the shin, peaking a quarter down.
-  blob leg on shin  at=0.20 offset=(0,0,-0.011) tip=(0,-0.170,0.007) r=0.040 r2=0.025 deep=1.05 blend=0.026 mirror
+  blob leg on shin  at=0.20 offset=(0,0,-0.011) tip=(0,-0.170,0.007) r=0.037 r2=0.022 deep=1.05 blend=0.026 mirror
   # Bare foot, slim and pointed a little (on her toes, the dancer's line).
   bar  leg on foot  from=0.00 to=0.90 offset=(0,-0.036,-0.010) r=0.028 r2=0.018 wide=1.05 tall=0.75 blend=0.018 mirror
 

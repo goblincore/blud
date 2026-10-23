@@ -28,3 +28,12 @@ Top: face at rest, side, and at full gape (0.85 rad, `BLOB_GAPE=0.85`). Bottom: 
 
 - Her own lunge/bite: the zombie hook bends her double and hides the face at the moment it opens.
 - The reveal at a playable distance in game (captures so far are close and the gun covers her face).
+
+## Anime pass (2026-10-23, owner feedback: "too human, needs to be more exaggerated")
+
+![anime pass 1](contact-anime-1.png)
+
+References: `anime-3d.glb` and a Mai Shiranui mesh (the owner's ~/Downloads). Third-party characters, so they are
+NOT committed and were not baked or measured into the file; read once for proportion (anime-3d: hips 0.23 of height
+across over a 0.15 waist; head ~0.12 of height; the face in the lower ~45% of the head). See biomech-style.md
+"Anime, not realistic".

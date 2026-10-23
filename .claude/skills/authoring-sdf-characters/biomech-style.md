@@ -135,6 +135,21 @@ read attractive, turn each lever the other way. What worked, in order of how muc
   through the zombie mind's unarmed swing (`attack.ts` `swingGapeAt`), with needle fangs buried >= 2 mm inside the
   rest face (pinned by `siren-blob.test.ts`), so they own no paint until the jaw drops.
 
+### Anime, not realistic (the siren's second pass)
+
+"Attractive" built from realistic proportions read to the owner as a plain human woman ("not what we are going for
+— it needs to be more exaggerated"). The roster's beauty is STYLISED. What moved it:
+
+- **Eyes are the face.** ~3x the area of a realistic eye (32 x 20 mm), set LOW (centre ~3 cm under the cranium's
+  centre), a tall iris graded dark-under-the-lid to a glowing foot, two catchlights, a heavy winged upper lash line
+  and a crease line; thin brows set high. All sheet paint. Judge size on the HEAD, not on the sheet: hs y units are
+  1.28x x units, so a sheet preview looks squat.
+- **Delete the nose.** Every nose tip, however small, stood over an undercut the shading filled black. A soft 1.6 cm
+  ridge is all an anime face draws. Flatten between the eyes too (no nasal-root fill).
+- **Widest at the cheekbones, V to the chin.** Narrow the bottom of the face masses, lift and shrink the chin.
+- **Bangs are pointed flat cones** (r 0.012 -> 0.001, deep 0.6) off the crown's front edge, ending AT the brows.
+- **Show the proportion the dress would hide**: a mid-thigh hem, so wide hips and heavy thighs read.
+
 ## Porting a face onto a new body
 
 - The cyberbride's glow eyes sat 1.5 cm ABOVE the flat face mask's painted sockets and stood 2 cm proud, which
