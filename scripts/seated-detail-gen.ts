@@ -25,7 +25,7 @@
 //   CHARACTER=gamer npx tsx scripts/seated-detail-gen.ts && npx tsx scripts/bake-body-normal.ts gamer 512 320 \
 //     --limb clavicle.l:0:1:0.15:64 --limb clavicle.r:0:1:0.15:64 --limb upperarm.l:0:1:0.10:64 --limb upperarm.r:0:1:0.10:64 \
 //     --limb skull:0:1:0.17:96 --torso-seg stick:0,1.06,0.585:0,1.39,0.590:0.075:96 \
-//     --torso-seg stalk1:0,0.95,0.385:0,0.985,0.535:0.085:48 --torso-seg stalk2:0,0.985,0.535:0,1.065,0.588:0.085:48 \
+//     --torso-seg shoulders:-0.34,1.38,0.05:0.34,1.38,0.05:0.10:64 --torso-seg stalk1:0,0.95,0.385:0,0.985,0.535:0.085:48 --torso-seg stalk2:0,0.985,0.535:0,1.065,0.588:0.085:48 \
 //     --torso-seg forearm.l:0.33,1.03,0.08:0.08,1.13,0.58:0.085:64 --torso-seg forearm.r:-0.33,1.03,0.08:-0.08,1.13,0.58:0.085:64 \
 //     --torso-seg upperarm.l:0.255,1.33,0.048:0.31,1.02,0.135:0.095:64 --torso-seg upperarm.r:-0.255,1.33,0.048:-0.31,1.02,0.135:0.095:64
 //   The --torso-seg regions give the joystick and his arms (torso flesh, in front of the gut) their own cylinders:
@@ -212,18 +212,25 @@ if (CH === 'gamer') {
   section('the stalk: veins running on down it into his navel');
   for (let k = 0; k < 7; k++)
     axisVein(stalkSkin, torsoEmit(0.0040), 0.98, 0.06, 360 * k / 7 + rnd() * 20, (rnd() - 0.5) * 40, 24, 0.0050, 7, 1);
-  // HIS FOREARMS (owner: "veins running along the forearms and wrist"): torso flesh from the seat to the sawn
-  // stumps (gamer.blob, compiled E -> W), probed round that axis; baked in the forearm.l/.r --torso-seg regions.
+  // RAISED ROPES: ~proud nearly their full radius (a round cord sitting ON the skin), a softer blend.
+  const ROPE = (r: number) => torsoEmit(r * 0.85, 0.0030);
+  // HIS ARMS, shoulder to stump (owner: "veins running along the forearms and wrist", then "the veins on his upper arm
+  // don't make sense, they should follow the arm direction and go down to the lower arm"): each vein runs the WHOLE
+  // arm, from the shoulder down the upper arm, round the elbow and along the forearm to the cuff, probed round the
+  // local axis of whichever segment it is on (gamer.blob, compiled: shoulder S, elbow E, the stump W). Baked in the
+  // upperarm and forearm --torso-seg regions.
   for (const sx of [1, -1]) {
-    const FE: V = [sx * 0.3055, 1.040, 0.130], FW: V = [sx * 0.1266, 1.1127, 0.4878];
-    const fax = norm(sub(FW, FE)), fu = norm(cross(fax, [0, 1, 0])), fv = cross(fu, fax);
-    const foreSkin = (t: number, ph: number) => {
+    const AS: V = [sx * 0.2600, 1.3065, 0.052], AE: V = [sx * 0.3055, 1.040, 0.130], AW: V = [sx * 0.1266, 1.1127, 0.4878];
+    const l1 = len(sub(AE, AS)), l2 = len(sub(AW, AE)), T1 = l1 / (l1 + l2);
+    const armSkin = (t: number, ph: number) => {
+      const up = t < T1, a0 = up ? AS : AE, a1 = up ? AE : AW, u = up ? t / T1 : (t - T1) / (1 - T1);
+      const ax = norm(sub(a1, a0)), fu = norm(cross(ax, [0, 0, 1])), fv = cross(fu, ax);
       const a = ph * Math.PI / 180, dir = norm(add(mul(fu, Math.cos(a)), mul(fv, Math.sin(a))));
-      return march(add(add(FE, mul(sub(FW, FE), t)), mul(dir, 0.15)), mul(dir, -1), torso);
+      return march(add(add(a0, mul(sub(a1, a0), u)), mul(dir, 0.16)), mul(dir, -1), torso);
     };
-    if (sx === 1) section('his forearms: thick veins along them to the wrists, all round');
-    for (let k = 0; k < 6; k++)
-      axisVein(foreSkin, torsoEmit(0.0055, 0.0024), 0.05, 0.94, 60 * k + rnd() * 25, (rnd() - 0.5) * 40, 26, 0.0068, 10, 1);
+    if (sx === 1) section('his arms: thick veins running the whole arm, shoulder to wrist, all round');
+    for (let k = 0; k < 7; k++)
+      axisVein(armSkin, ROPE(0.0075), 0.02, 0.96, 360 * k / 7 + rnd() * 25, (rnd() - 0.5) * 30, 44, 0.0075, 9, 1);
   }
   section('the stalk\'s bend: sagging wrinkles and folds round it, deepest underneath');
   // Folds: rings of low ridges round the arc, close together, each sagging (it drops further on the underside),
@@ -269,11 +276,12 @@ if (CH === 'gamer') {
   // softer blend so each swells out of the skin. The neck's cords stay BELOW his jowls: the double chin covers the
   // neck's front above t ~0.5 (the first pass's cords up to the jaw were hidden), so they climb from the collar to
   // mid-neck, thickest down the sides and the back of it.
-  const ROPE = (r: number) => torsoEmit(r * 0.85, 0.0030);
-  section('his neck: thick roped cords up the sides, from the collar to under the jowls');
-  for (let k = 0; k < 12; k++) {
-    const side = k % 2 ? 1 : -1, ph = side * (35 + 95 * (Math.floor(k / 2) + 0.5) / 6) + (rnd() - 0.5) * 10;
-    axisVein(neckSkin, ROPE(0.0105), -0.40, 0.50 + rnd() * 0.08, ph, (rnd() - 0.5) * 20, 22, 0.0105, 6, 1);
+  // The neck's top half is under his jowls and double chin (head-cluster prims, which take the skull region), so its
+  // cords stop at t 0.3 and keep to the sides and the back; at t 0.5 and on the front they were swallowed (owner).
+  section('his neck: thick roped cords up the sides and back, from the collar to below the jowls');
+  for (let k = 0; k < 14; k++) {
+    const side = k % 2 ? 1 : -1, ph = side * (55 + 115 * (Math.floor(k / 2) + 0.5) / 7) + (rnd() - 0.5) * 10;
+    axisVein(neckSkin, ROPE(0.0105), -0.55, 0.28 + rnd() * 0.06, ph, (rnd() - 0.5) * 20, 22, 0.0105, 6, 1);
   }
   // The shoulder tops seen from ABOVE (the trapezius slopes; the front probe skims them).
   const top = (x: number, z: number) => march([x, 1.9, z], [0, -1, 0], torso);
@@ -290,12 +298,15 @@ if (CH === 'gamer') {
     }
     if (S.length > 3) { topEmit(S, R); for (let i = 2; i < S.length - 2; i++) if (rnd() < 0.2) topEmit([S[i]!], [R[i]! * 1.7]); }
   }
-  section('down over his deltoids and across the top of his chest');
+  // THE UPPER CHEST (owner: "strangely devoid of any veinage"): ropes fanning from the collarbones over the pecs,
+  // out toward the armpits and down the breastbone. (The deltoid veins that ran sideways off the shoulders are gone:
+  // the arm veins above follow the arm.)
+  section('his upper chest: roped veins fanning over the pecs from the collarbones');
   for (const s of [1, -1]) {
-    varicose(s * 0.24, 1.40, s * 0.30, 1.22, 0.0105, 0.0090, 2, 0, 1, 0.003);   // down the front of the shoulder
-    varicose(s * 0.20, 1.40, s * 0.25, 1.24, 0.0095, 0.0082, 1, 0, 1, 0.003);
-    varicose(s * 0.10, 1.40, s * 0.18, 1.28, 0.0095, 0.0082, 2, 0, 1, 0.003);   // the collarbone to the top of the chest
-    varicose(s * 0.04, 1.38, s * 0.09, 1.27, 0.0085, 0.0074, 1, 0, 1, 0.003);
+    varicose(s * 0.04, 1.38, s * 0.17, 1.26, 0.0090, 0.0078, 2, 0, 1, 0.003);   // collarbone out over the pec
+    varicose(s * 0.10, 1.38, s * 0.22, 1.30, 0.0090, 0.0078, 1, 0, 1, 0.003);   // toward the armpit
+    varicose(s * 0.06, 1.33, s * 0.12, 1.18, 0.0085, 0.0074, 2, 0, 1, 0.003);   // down over the breast
+    varicose(s * 0.015, 1.36, s * 0.03, 1.20, 0.0080, 0.0068, 1, 0, 1, 0.003);  // beside the breastbone
   }
   // HIS FACE: the head cluster round the skull bone (its own normal-map region: bake with --limb skull). The face
   // sheet covers the middle of the face; the veins run up the temples, over the crown's sides and down the jowls.

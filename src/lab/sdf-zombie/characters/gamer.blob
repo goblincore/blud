@@ -149,26 +149,31 @@ body
   # THE KNOB: a swollen bulb on the neck, wider than the grip, above the
   # clamps. Its BULK keeps the stick's top distinct (owner: a slim pointed tip
   # was "less distinct than it was originally").
-  blob torso on hem at=1.00 offset=(0.000,0.062,-0.000) r=0.040 tall=0.85 blend=0.010 rigid
+  blob torso on hem at=1.00 offset=(0.000,0.062,-0.000) r=0.040 tall=0.85 blend=0.010 morph=swell:(0,0.004,0)*(1.22,1.18,1.22) rigid
+  # THE KNOB BREATHES (owner: "it breathes and grows, like the bulbous part
+  # enlarges and the rocket inside is exposed a bit more"): on the `swell`
+  # channel (MotionProfile.joystick.swell drives it, joystick.ts) the knob
+  # grows ~20% and rises 4 mm, its lip rises 1 cm and the whole rocket 2 cm,
+  # so ~1 cm more of the nose clears the lip at full swell.
   # THE NOSE: a rounded bullet sunk deep in the knob's crown, only its domed
   # tip showing (~1.6 cm proud of the knob's top at y 0.096), like a rocket in
   # its silo about to launch (owner: "sits slightly inside the top part of the
   # joystick ... more rounded", then "sink in more ... basically just the tip
   # showing"). A capsule's end is a hemisphere, which is the dome.
-  bar  torso on hem from=1.00 to=1.00 offset=(0.000,0.058,0.000) tip=(0.000,0.039,0.000) r=0.020 r2=0.015 blend=0.004 rigid
+  bar  torso on hem from=1.00 to=1.00 offset=(0.000,0.058,0.000) tip=(0.000,0.039,0.000) r=0.020 r2=0.015 blend=0.004 morph=swell:(0,0.020,0) rigid
   # A swollen lip of SKIN round it where it comes out of the knob: unpainted,
   # so it keeps the skin's mottle and takes the baked relief (painted raw red
   # it read as a plastic collar).
-  blob torso on hem at=1.00 offset=(0.000,0.094,0.000) r=0.024 wide=1.0 tall=0.42 blend=0.006 rigid
+  blob torso on hem at=1.00 offset=(0.000,0.094,0.000) r=0.024 wide=1.0 tall=0.42 blend=0.006 morph=swell:(0,0.010,0)*(1.18,1,1.18) rigid
   # THE PINK, on the tip alone: one shell a hair out of the bullet's surface
   # from just under the lip to its top, so its round cap paints the dome.
-  bar  torso on hem from=1.00 to=1.00 offset=(0.000,0.090,0.000) tip=(0.000,0.007,0.000) r=0.0171 r2=0.0162 blend=0.002 color=cc8a98 gloss=0.6 rigid
+  bar  torso on hem from=1.00 to=1.00 offset=(0.000,0.090,0.000) tip=(0.000,0.007,0.000) r=0.0171 r2=0.0162 blend=0.002 color=cc8a98 gloss=0.6 morph=swell:(0,0.020,0) rigid
   # THE ORIFICE in the dome, where the fire button was: a dark wet hole with
   # the lit button nub down inside it. Its infected crust, the stick's veins
   # and the veins over his knuckles are BAKED (gamer.detail): as prims they
   # read as "tubes and skittles" (owner).
-  blob torso on hem at=1.00 offset=(0.000,0.110,0.000) r=0.0055 tall=0.70 blend=0.001 color=1a0406 gloss=0.95 rigid
-  blob torso on hem at=1.00 offset=(0.000,0.1125,0.000) r=0.0034 blend=0.001 color=ff2a1c glow=0.8 gloss=0.9 rigid
+  blob torso on hem at=1.00 offset=(0.000,0.110,0.000) r=0.0055 tall=0.70 blend=0.001 color=1a0406 gloss=0.95 morph=swell:(0,0.020,0) rigid
+  blob torso on hem at=1.00 offset=(0.000,0.1125,0.000) r=0.0034 blend=0.001 color=ff2a1c glow=0.8 gloss=0.9 morph=swell:(0,0.020,0) rigid
 
   # --- HIS NECK AND HEAD. -----------------------------------------------------
   # A thick neck, all fat.

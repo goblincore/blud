@@ -427,7 +427,8 @@ export const GAMER_PROFILE: MotionProfile = {
   turnRate: 1.4,
   // He works the stick as he attacks, 5 cm of throw at the grip; and twitches it
   // the whole time, he never stops playing. Eyeballed.
-  joystick: { amp: 0.05, idle: 0.012 },
+  // The knob breathes on a slow 3.2 s breath and throbs through an attack (joystick.ts joystickSwell).
+  joystick: { amp: 0.05, idle: 0.012, swell: { period: 3.2 } },
 };
 
 /** The bride: a slow STALK in a high sword guard; the point trails on the

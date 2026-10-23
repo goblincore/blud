@@ -12,6 +12,10 @@ export interface JoystickSpec {
   amp: number;
   /** The idle twitch's peak throw (m); 0 holds the stick still between attacks. */
   idle: number;
+  /** The knob BREATHES (owner: "it breathes and grows, like the bulbous part enlarges and the rocket inside is exposed a
+   *  bit more"): the `swell` morph channel (expression.ts), 0..1, on a slow breath of `period` s, throbbing up to 1 through
+   *  an attack. The .blob's `morph=swell:` words say what grows. Absent: no breathing. */
+  swell?: { period: number };
 }
 
 /** The `hem` offset (body-local: +x his right, +y up, +z forward) at time `t` (s), with `attackPhase` 0..1 while
@@ -33,4 +37,17 @@ export function joystickOffset(t: number, attackPhase: number | null, spec: Joys
     idle[1] + spec.amp * 0.7 * env * (0.7 * Math.sin(w * 4.5 + 1.3) + 0.3 * Math.sin(w * 11 + 2.0)),
     idle[2] + spec.amp * 0.5 * env * Math.sin(w * 3.5 + 0.6),
   ];
+}
+
+/** The knob's `swell` weight (0..1) at time `t` (s), with `attackPhase` 0..1 during an attack, else null: a slow breath (in
+ *  over 40% of the period, held, out), and through an attack a fast throb riding up to full. Pure. */
+export function joystickSwell(t: number, attackPhase: number | null, spec: JoystickSpec): number {
+  if (!spec.swell) return 0;
+  const u = ((t / spec.swell.period) % 1 + 1) % 1;
+  // In quickly, out slowly: a breath, not a sine.
+  const breath = u < 0.4 ? 0.5 - 0.5 * Math.cos(Math.PI * u / 0.4) : 0.5 + 0.5 * Math.cos(Math.PI * (u - 0.4) / 0.6);
+  if (attackPhase === null || !(attackPhase > 0) || attackPhase >= 1) return breath;
+  const env = Math.sin(Math.PI * attackPhase);
+  const throb = 0.75 + 0.25 * Math.sin(2 * Math.PI * attackPhase * 5);
+  return Math.max(breath, env * throb);
 }

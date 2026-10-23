@@ -322,6 +322,14 @@ plugged in. It uses the chair's rig at `scale 1.30`. What it adds:
 - **A curved prop gets chord regions.** One `--torso-seg` down the chord of a quarter arc misses the outside of the
   bend. Two chords (`stalk1`, `stalk2`) cover it, and the wrinkle folds there are ridge rings that sag on the
   underside.
+- **A part that breathes is a morph channel the motion drives.** The gamer's knob grows and its rocket rises on the
+  `swell` channel (expression.ts). The prims carry `morph=swell:` words; `actor.ts` sets the weight every frame from
+  `MotionProfile.joystick.swell` (`joystickSwell`: a slow breath, throbbing through an attack). The game's actors have
+  no expression layer, so the profile is what drives it. To shoot a morph, the lab's `__sdfLab.setMorphs({ swell: 1 })`
+  holds it (`BLOB_PROBE`), since `blob:shot` freezes motion.
+- **Veins follow the limb, and hidden skin gets none.** A vein crossing the arm reads wrong: run each from the
+  shoulder to the wrist, probed round each segment's axis in turn. Skin under another cluster (the neck under his
+  jowls, which are head prims and take the head's region) shows none of its baked relief, so keep its veins below.
 - **A ranged attack does not fit this rig yet.** `onFire` needs a carried prop in the right hand, and here the
   right hand is a front claw. A ranged gamer needs a mind with the muzzle on the head (the headset); it uses the
   hound mind for now.

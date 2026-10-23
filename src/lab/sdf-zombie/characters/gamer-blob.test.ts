@@ -96,4 +96,35 @@ describe('gamer — the chair boss, plugged in', () => {
     for (const i of body.prims.map((p, i) => [p, i] as const).filter(([p]) => isHand(p)).map(([, i]) => i))
       expect(Math.abs(dist(posed.prims[i]!.a, posed.prims[g]!.a) - dist(body.prims[i]!.a, body.prims[g]!.a)), 'stump in its clamp').toBeLessThan(0.003);
   });
+
+  it('breathes: the knob swells and the rocket rises out of it, then settles', () => {
+    // The `swell` morph (MotionProfile.joystick.swell -> actor.ts -> rig-bind.ts applyRig): the knob grows ~20%, the
+    // nub at the rocket's tip climbs ~2 cm (compiled 2.6 cm) relative to the knob's centre, which climbs 5 mm.
+    const knob = body.prims.findIndex(p => p.morphs && Math.abs(p.radius - 0.052) < 0.002);
+    const nub = body.prims.findIndex(p => p.morphs && p.glow !== undefined && p.glow > 0);
+    expect(knob, 'the knob').toBeGreaterThanOrEqual(0);
+    expect(nub, 'the lit nub').toBeGreaterThanOrEqual(0);
+    const m = makeActorMotion(body, { seed: 2 });
+    const profile = characterEntry('gamer').profile;
+    const rng = makeRng(2);
+    let lo = { w: Infinity, sy: 0, dy: 0 }, hi = { w: -Infinity, sy: 0, dy: 0 };
+    for (let i = 0; i < 240; i++) {
+      stepActorMotion(m, {
+        current: body, dt: 1 / 60, wander: false, armStyle: undefined,
+        headingFollow: 1, gazeFollow: 1, bounds: { minX: -50, maxX: 50, minZ: -50, maxZ: 50 },
+        rng, signals: emptyActorSignals(), profile, forceSpeed: 0,
+      });
+      const w = m.bound.rig.morphs?.swell ?? 0;
+      if (w < lo.w || w > hi.w) {
+        const P = applyRig(body, m.bound, m.lastBodyYaw);
+        const rec = { w, sy: P.prims[knob]!.scale[1], dy: P.prims[nub]!.a[1] - P.prims[knob]!.a[1] };
+        if (w < lo.w) lo = rec;
+        if (w > hi.w) hi = rec;
+      }
+    }
+    expect(lo.w, 'a full breath in 4 s reaches empty').toBeLessThan(0.05);
+    expect(hi.w, 'and full').toBeGreaterThan(0.95);
+    expect(hi.sy / lo.sy, 'the knob swells').toBeGreaterThan(1.12);
+    expect(hi.dy - lo.dy, 'the rocket rises out of it').toBeGreaterThan(0.015);
+  });
 });

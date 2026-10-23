@@ -4710,6 +4710,9 @@ async function main() {
     },
     /** Blink now. */
     blink() { blinkStart = exprClock; },
+    /** Hold the hero's per-prim MORPH weights (morph.ts) by hand, e.g. `setMorphs({ swell: 1 })` to shoot the gamer's
+     *  joystick at full breath: a body with no expression set keeps them (stepExpression returns before writing). Null clears. */
+    setMorphs(w: MorphWeights | null) { exprMorphs = w; return w; },
     /**
      * THE POSE LAYER (spec 2026-10-03-goblin-pose-layer-design.md): hold the named authored pose or clip of the ACTIVE character
      * at clip time `t` seconds, stepped `frames` times at 1/60 with the body standing still, then frozen exactly like holdPose so
