@@ -546,11 +546,16 @@ body
   # SIDE-BACK LOCKS for volume: from behind each temple, under the veil,
   # over the back of each shoulder, so the hair reads as a full fall behind
   # the face-framing locks from the front and fills the veil's sides.
-  blob head on skull at=0.50 offset=(0.066,0.052,-0.037) tip=(0.035,-0.380,-0.030) bend=(0.022,0,0) r=0.025 r2=0.018 strand=7 wave=0.16 cycles=3 fat=0.80 blend=0.004 both color=141216 gloss=0.30
+  # ON THE UPPER SPINE (see THE VEIL): same rest geometry as the old
+  # `on skull at=0.50 offset=(0.066,0.052,-0.037)`, re-expressed off spine2's
+  # tail (0, 1.4297, -0.0141); `rigid` so the lock rides spine2 as one piece.
+  blob torso on spine2 at=1.0 offset=(0.066,0.3103,-0.0259) tip=(0.035,-0.380,-0.030) bend=(0.022,0,0) r=0.025 r2=0.018 strand=7 wave=0.16 cycles=3 fat=0.80 blend=0.004 both color=141216 gloss=0.30 rigid
   # THE BACK CURTAIN: from the back of the crown to mid-back (y ~1.20),
   # a flat wide ribbon of strands (wide 1.25, deep 0.45) bowed back to
   # clear the shoulder blades. It hangs out below the veil's hem.
-  blob head on skull at=0.50 offset=(0,0.052,-0.087) tip=(0,-0.540,-0.015) bend=(0,0,-0.015) r=0.065 r2=0.055 wide=1.10 deep=0.35 strand=10 wave=0.14 cycles=3 fat=0.80 blend=0.004 color=141216 gloss=0.30
+  # On the upper spine (see THE VEIL): was `on skull at=0.50
+  # offset=(0,0.052,-0.087)`, same rest geometry.
+  blob torso on spine2 at=1.0 offset=(0,0.3103,-0.0759) tip=(0,-0.540,-0.015) bend=(0,0,-0.015) r=0.065 r2=0.055 wide=1.10 deep=0.35 strand=10 wave=0.14 cycles=3 fat=0.80 blend=0.004 color=141216 gloss=0.30 rigid
 
   # THE VEIL, white lace (paint only), on the skull: a round cone from the
   # crown (r 0.090 — the face-frame cap above) down to the shoulders (r2
@@ -559,7 +564,18 @@ body
   # cultist hood's technique): z < ~0.03 at the eyes, a little further back
   # going down, so the face, the throat stigmata and the front locks stay
   # outside it while it frames the face at the temples.
-  shell head on skull at=0.75 offset=(0,0,-0.015) tip=(0,-0.400,-0.030) r=0.090 r2=0.140 thick=0.004 clip=(0,-0.164,0.986) clipd=-0.2491 rim=0.006 blend=0.006 color=eeeae4 warp=0.004 warpFreq=(30,6,30) rigid
+  # ON THE UPPER SPINE, NOT THE SKULL (2026-10-23). Rigid on the skull, the
+  # 0.40 m veil turned with the GAME's head aim (ik.ts: up to 0.85 rad yaw,
+  # 0.5 rad pitch about the neck pivot), and in `?spawn=bride` captures it
+  # stood out from her head as a flat white slab; the lab never aims the
+  # head, so its turntable never showed it. Cloth and hair this long hang
+  # from the body. Same rest geometry: the skull's at=0.75 point
+  # (0, 1.7479, -0.0072) plus the old offset, re-expressed off spine2's
+  # tail (0, 1.4297, -0.0141). The head now turns INSIDE the veil, as a
+  # head under a veil does. The side-back locks and back curtain above
+  # moved with it; the face-framing locks (in front, shorter) stay on the
+  # skull and turn with the face.
+  shell torso on spine2 at=1.0 offset=(0,0.3182,-0.0081) tip=(0,-0.400,-0.030) r=0.090 r2=0.140 thick=0.004 clip=(0,-0.164,0.986) clipd=-0.2491 rim=0.006 blend=0.006 color=eeeae4 warp=0.004 warpFreq=(30,6,30) rigid
 
 # Wound pass: hidden bone. Torso and skull are AUTHORED — partly for the
 # budget (auto-derive would grow a bone in every rib ridge, bust mound and
