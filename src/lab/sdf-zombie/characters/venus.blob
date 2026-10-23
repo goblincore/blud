@@ -1,0 +1,244 @@
+# VENUS — a heavy, full-figured woman the machine has kept and reinforced.
+# Owner brief (2026-10-22): a FEMALE biomechanical enemy, "more fleshy ... the
+# cyberbride proved too thin and waifish": a big, heavy, curvy body — wide
+# hips, thick thighs, a full rear, a solid frame — fleshy and weighty, a
+# horror enemy with grafts in the roster's style, not a pin-up. The owner
+# liked the cyberbride's HAIR and FACE (abandoned PR goblincore/blud#5), so the
+# head below is hers, ported; everything under the neck is new.
+#
+# AUTHORED FROM THE BRIEF. No reference mesh or plate, so blob:measure and
+# blob:rings exit 2; every number is a design decision with its reason beside
+# it. The cyberbride's Willendorf beat (hips > bust > waist) is kept as the
+# proportion budget, at roughly twice her mass.
+#
+# THE SPLIT (biomech-style.md): flesh is prims, few and LARGE (the silhouette
+# is the mass; detail is not); muscle, folds, stretch marks and varicose veins
+# are the baked body normal map (venus.detail); every machine part is sculpted
+# kit mesh (assets-source/venus-kit/): the spinal cage that corsets her waist,
+# the pneumatic knee braces that carry her weight, the forearm talons she
+# kills with, the collar the cables run up from.
+#
+# THE THREE BEATS, in order of distance:
+#   1. THE MASS. Hips the widest thing on her (0.50 m across), a full rear
+#      shelf in profile, thighs as thick as the zombie's waist. From any yaw
+#      she is a heavy body first.
+#   2. THE CAGE. A bone-metal spine runs down her back and its ribs wrap her
+#      waist like a corset that has grown INTO her: the flesh swells raw
+#      over and under it. The machine is holding her together.
+#   3. THE GRIN. The cyberbride's face: a fang row over a dark maw, red glow
+#      eyes, imp ears, ash-grey strand hair, on a small head over a big body
+#      (a small head makes the body read bigger).
+model venus
+  # Hair tops at ~1.79. Taller than the cyberbride (1.72) by her longer
+  # torso: the extra mass needs a longer trunk to carry it without reading
+  # as a ball.
+  height 1.79
+  stance humanoid
+
+skeleton
+  # Hip line 1.02 (root 0.92 + 0.10). The legs (0.45 + 0.43 below it) land
+  # the ankle at ~0.14: legs a hair over half her height, the cyberbride's
+  # ratio.
+  root pelvis at 0.92 len=0.10
+
+  # A heavy woman's posture: the lumbar SWAYS back (pitch -4) so the rear
+  # rides out behind the hips and the belly forward, then the chest comes
+  # forward over it (6) and the neck carries the head a little forward and
+  # down (6), the weight-bearing stoop. Positive pitch is forward (+z).
+  bone spine1 parent=pelvis dir=up pitch=-4 len=0.17
+  bone chest  parent=spine1 dir=up pitch=6  len=0.18
+  bone spine2 parent=chest  dir=up pitch=4  len=0.07
+  bone neck   parent=spine2 dir=up pitch=6  len=0.08
+  # The cyberbride's skull bone exactly (len 0.22, pitch 2): every head prim
+  # below is her offset at at=0.55, so keeping the bone keeps the face.
+  bone skull  parent=neck   dir=up pitch=2  len=0.22
+
+  mirror
+    # Shoulders BROAD for a woman (socket x ~0.19 vs the cyberbride's 0.104):
+    # a heavy frame carries its width up through the shoulders, and the arms
+    # must clear a torso 0.21 m in half-width at the chest.
+    bone clavicle parent=spine2  side=0.030 dir=side len=0.155
+    # Arms held OUT (tilt 27; at 22 the daylight probe had them 13 mm INTO
+    # the bust and back fat) by the mass under them — a heavy body's arms
+    # cannot hang straight down its sides — forearms forward (pitch 30),
+    # hands in front of the hips: the talons (kit) lead. At pitch 18 the
+    # hands hung beside hips 0.57 m across and touched them.
+    bone upperarm parent=clavicle dir=down tilt=27 pitch=4  len=0.27
+    bone forearm  parent=upperarm dir=down tilt=9  pitch=30 len=0.25
+    bone hand     parent=forearm  dir=down pitch=8          len=0.10
+    # Legs set WIDE (side 0.125) under the hips, angling slightly IN to the
+    # knees (tilt -3) the way heavy legs stand, then straight down.
+    bone thigh    parent=pelvis dir=down tilt=-3 side=0.125 len=0.45
+    bone shin     parent=thigh  dir=down tilt=1             len=0.43
+    bone foot     parent=shin   dir=fwd                     len=0.14
+  end
+
+body
+  # ============================================================
+  # TORSO — the mass. Eight big prims make the silhouette; everything finer
+  # is the normal map.
+  # ============================================================
+  # HIPS — the widest thing on her: half-width 0.172 x 1.60 = 0.275 against
+  # a 0.17 waist (waist-to-hip 0.63: the first pass at 0.88 read as a stocky
+  # man, every mass the same size). A band
+  # (tall 0.80) centred just under the hip joint line, so the widest slice
+  # (y ~0.98) is the top of the thighs, where a heavy figure is widest.
+  blob torso on pelvis at=0.40 r=0.172 wide=1.60 tall=0.78 deep=0.92 blend=0.030 core
+  # THE REAR — two big mounds behind and below the hips: the profile is a
+  # SHELF (back reach z ~-0.26, 11 cm behind the waist), not an egg. Low (y ~0.93) and a little
+  # apart (x 0.085) so a cleft reads between them from behind.
+  blob torso on pelvis at=0.10 offset=(0.092,-0.005,-0.112) r=0.148 wide=1.00 tall=1.02 deep=1.00 blend=0.028 both
+  # BELLY — a heavy lower belly hanging forward over the pelvis (front
+  # reach z ~0.21): the apron that says weight. Low on the trunk.
+  blob torso on spine1 at=0.15 offset=(0,-0.030,0.075) r=0.138 wide=1.25 tall=0.80 deep=0.90 blend=0.030
+  # WAIST — soft, narrower than hips and bust (half-width 0.19) but no wasp:
+  # the corset cage (kit) bites in here and the flesh above and below it
+  # swells (the painted rolls further down).
+  bar  torso on spine1 from=0.20 to=1.00 r=0.130 r2=0.140 wide=1.30 deep=0.86 blend=0.030
+  # RIBCAGE / BACK — wider at the top than the waist under it (the soldier's
+  # backwards-taper lesson): 0.160 -> 0.175, the broad back of a heavy woman.
+  bar  torso on chest  from=0.05 to=0.85 r=0.145 r2=0.160 wide=1.24 deep=0.82 blend=0.030
+  # Back fat over the shoulder blades: carries the width up behind the cage
+  # so the back view is broad, not a column.
+  bar  torso on chest  from=0.40 to=1.00 r=0.140 wide=1.30 deep=0.70 offset=(0,0,-0.045) blend=0.030
+  # YOKE — chest top to the neck, heavy trapezius slope.
+  bar  torso on spine2 from=0.00 to=0.95 r=0.125 r2=0.070 wide=1.35 deep=0.80 blend=0.026
+  # BREASTS — heavy and pendulous: drooped cones whose tip= hangs DOWN and
+  # forward, so the mass sags onto the ribcage instead of standing as
+  # spheres. Wide-set (x 0.085) so they part around the sternum and sit
+  # inside the arms. Not a pin-up beat: the kit's harness straps cut across
+  # them and the normal map marks them with veins and stretch marks.
+  blob torso on chest  at=0.62 offset=(0.088,0,0.112) tip=(0.014,-0.090,0.048) r=0.098 r2=0.082 wide=1.00 deep=0.92 blend=0.018 both
+
+  # RAW FLESH AT THE CAGE (the twinhead's erupting-flesh rule: where metal
+  # goes in, the meat swells raw). The corset's ribs (kit) bite in at the
+  # waist (spine1 at ~0.6, y ~1.12); these swollen lips bulge OVER the top
+  # rib on the flanks and back and UNDER the bottom one at the belly. Lumps,
+  # uneven, not a ring (a single roll read as a rubber belt on the twinhead).
+  # Front flanks, not the sides: a lump at the side widened the waist into
+  # the elbows (they fused at y 1.16 on the first pass).
+  blob torso on spine1 at=0.80 offset=(0.100,0.000,0.100) r=0.060 wide=1.00 tall=0.62 deep=0.90 blend=0.020 both color=a86a68 gloss=0.45
+  blob torso on spine1 at=0.82 offset=(0.090,0.005,-0.130) r=0.065 wide=1.30 tall=0.55 deep=0.80 blend=0.020 color=9c5a5a gloss=0.45
+  blob torso on spine1 at=0.78 offset=(-0.095,0.000,-0.125) r=0.060 wide=1.30 tall=0.60 deep=0.80 blend=0.020 color=7a3436 gloss=0.45
+
+  # ============================================================
+  # ARMS — heavy upper arms (a hanging mass under the humerus), forearms
+  # tapering into the kit's talon gauntlets.
+  # ============================================================
+  blob arm on clavicle at=1.00 offset=(0,-0.020,0) r=0.078 tall=0.90 blend=0.020 mirror core
+  bar  arm on upperarm from=0.05 to=0.95 r=0.072 r2=0.056 blend=0.016 mirror
+  # The soft mass hanging under the upper arm (back and in), heaviest near
+  # the shoulder: the arm reads fleshy rather than muscled.
+  blob arm on upperarm at=0.40 offset=(0,0,-0.024) r=0.062 tall=1.70 blend=0.018 mirror
+  blob arm on forearm  at=0.00 r=0.056 blend=0.012 mirror
+  bar  arm on forearm  from=0.05 to=0.70 r=0.054 r2=0.044 blend=0.012 mirror
+  # Wrist-and-hand CORE: metal, inside the kit's gauntlet and talons.
+  bar  arm on forearm  from=0.65 to=1.00 r=0.040 blend=0.006 mirror color=474b52 metal gloss=0.6
+  blob arm on hand at=0.30 r=0.040 wide=1.10 deep=0.90 blend=0.006 mirror color=474b52 metal gloss=0.6
+
+  # ============================================================
+  # LEGS — thighs as thick as a waist, tapering hard through a heavy knee to
+  # a solid calf. The kit's pneumatic braces run outside them, hip to shin.
+  # ============================================================
+  # Root ball seated a little DOWN the thigh (at 0.10, y ~0.98): at the hip
+  # joint its r 0.13 reached up to y 1.15 and filled in the waist.
+  blob leg on thigh at=0.10 r=0.126 deep=1.05 blend=0.024 mirror core
+  # wide 0.92: the inner thighs come within ~2 cm of each other at the top
+  # (side 0.125 + tilt in) without passing through.
+  bar  leg on thigh from=0.02 to=1.00 r=0.128 r2=0.082 wide=0.92 deep=1.05 blend=0.020 mirror
+  # Outer thigh: the hip's width carried down the outside of the thigh, so
+  # the outline runs hip -> thigh in one curve instead of stepping in under
+  # the hip band (first look).
+  blob leg on thigh at=0.28 offset=(0.040,0,-0.010) r=0.105 tall=1.70 deep=1.00 blend=0.026 mirror
+  blob leg on shin  at=0.00 r=0.085 blend=0.016 mirror
+  # Calf: full, peaking a third down the shin, behind the bone.
+  blob leg on shin  at=0.30 offset=(0,0,-0.022) r=0.082 tall=1.70 deep=1.05 blend=0.018 mirror
+  bar  leg on shin  from=0.05 to=0.98 r=0.068 r2=0.046 blend=0.014 mirror
+  # Foot: bare and broad, heel behind the ankle, toes forward, sole ~0.
+  # A drooped cone (r -> r2 along tip=) from heel to toes: the first foot
+  # was one ball and read as a club.
+  blob leg on foot at=0.00 r=0.050 r2=0.036 tip=(0,-0.010,0.150) wide=1.25 tall=0.95 blend=0.010 offset=(0,-0.085,-0.040) mirror
+
+  # ============================================================
+  # HEAD — THE CYBERBRIDE'S, PORTED (owner: "liked the cyberbride's hair and
+  # face"). Same skull bone (len 0.22, pitch 2), same face block, so every
+  # offset below is hers verbatim; her comments explain each number. Only
+  # the neck is new (hers was a 0.030 stalk; this one carries a heavy body's
+  # head and sinks into the yoke).
+  # ============================================================
+  bar head on neck from=0.05 to=0.95 r=0.046 deep=1.10 blend=0.010
+
+  # ---- THE MAW (cyberbride) ----
+  blob head on skull at=0.55 offset=(0,-0.052,0.058) r=0.030 wide=1.15 tall=0.30 deep=0.55 blend=0.003 color=1c0d0c gloss=0.30
+  # Upper fangs: roots inside the jaw, tips down and forward past the lip.
+  blob head on skull at=0.55 r=0.009 r2=0.0015 wide=1.30 blend=0.002 offset=(-0.024,-0.046,0.055) tip=(0.002,-0.026,0.023) color=d8cdae gloss=0.6
+  blob head on skull at=0.55 r=0.009 r2=0.0015 wide=1.30 blend=0.002 offset=(-0.012,-0.049,0.058) tip=(0.001,-0.025,0.021) color=d8cdae gloss=0.6
+  blob head on skull at=0.55 r=0.010 r2=0.0015 wide=1.30 blend=0.002 offset=(0.000,-0.050,0.060) tip=(0.000,-0.026,0.022) color=d8cdae gloss=0.6
+  blob head on skull at=0.55 r=0.009 r2=0.0015 wide=1.30 blend=0.002 offset=(0.012,-0.049,0.058) tip=(-0.001,-0.025,0.021) color=d8cdae gloss=0.6
+  blob head on skull at=0.55 r=0.009 r2=0.0015 wide=1.30 blend=0.002 offset=(0.024,-0.046,0.055) tip=(-0.002,-0.026,0.023) color=d8cdae gloss=0.6
+  # Lower fangs: an interlocking underbite pair.
+  blob head on skull at=0.55 r=0.008 r2=0.0012 wide=1.30 blend=0.002 offset=(-0.018,-0.066,0.050) tip=(0.001,0.014,0.024) both color=d8cdae gloss=0.6
+
+  # ---- THE EYES: the cyberbride's two red glows, MOVED (owner, 2026-10-22,
+  # on the first sheet: "the eyes seem out of position"). Hers sat at
+  # y +0.006, 1.5 cm ABOVE the flat mask's painted sockets, on the brow, and
+  # stood 2 cm proud of the face (centre z 0.086 over skin at 0.076) like
+  # buttons. Now in the sockets (y -0.012) and sunk: centre z 0.076 over skin
+  # at 0.080, so the r 0.009 glow stands ~5 mm proud.
+  blob head on skull at=0.55 offset=(0.026,-0.012,0.076) r=0.009 blend=0.002 both color=ff2200 glow=0.9
+
+  # ---- THE EARS (cyberbride): imp points swept out and up.
+  blob head on skull at=0.58 r=0.024 r2=0.002 wide=0.80 deep=0.44 blend=0.0020 chamfer offset=(0.058,0.008,-0.004) tip=(0.075,0.088,-0.016) both
+
+  # ---- THE HAIR (cyberbride): crown mass + strand fringe, curtains, nape.
+  blob head on skull at=0.55 offset=(0,0.032,-0.006) r=0.084 wide=1.04 tall=0.95 deep=1.12 blend=0.006 color=9a948c gloss=0.18
+  blob head on skull at=0.55 offset=(0,0.050,0.054) tip=(0,-0.060,0.014) r=0.033 wide=1.25 deep=0.72 strand=12 wave=0.13 cycles=2 fat=0.80 blend=0.004 color=9a948c gloss=0.20
+  blob head on skull at=0.55 offset=(0.058,0.028,0.004) tip=(0.004,-0.150,0.008) r=0.030 r2=0.024 wide=0.86 deep=1.18 strand=8 wave=0.17 cycles=2.5 fat=0.80 blend=0.005 both color=9a948c gloss=0.22
+  blob head on skull at=0.55 offset=(0,0.014,-0.054) tip=(0,-0.096,-0.004) r=0.034 r2=0.028 wide=1.05 deep=0.80 strand=8 wave=0.14 cycles=2 fat=0.80 blend=0.005 color=9a948c gloss=0.22
+
+# The cyberbride's face block: a small oval skull under the hair. Verbatim but
+# for the nose.
+face
+  headRadius 0.072
+  headWidth  0.94
+  headHeight 1.26
+  headDepth  1.24
+  jawWidth   0.76
+  jawHeight  0.72
+  jawDrop    0.056
+  jawJut     0.020
+  # Nose shortened and lifted (cyberbride: 0.034 / 0.050): hers hung down
+  # over the maw and read as a snout or a tongue from the side.
+  noseLength 0.022
+  noseWidth  0.70
+  noseDrop   0.022
+  browHeavy  0.0
+  browRise   0.0
+  headBlend  0.005
+
+# Interior bones for wound reveals: the limb bones auto-derive (ratio 0.38);
+# the cranium is the cyberbride's.
+bones
+  ratio 0.38
+  blob head on skull at=0.45 r=0.048 wide=0.94 tall=1.10 deep=1.06
+
+# ============================================================
+# PALETTE — fleshy, the zombie's latex-corpse sheen warmed toward live meat
+# (the brief: fleshy, weighty), with the cyberbride's bruise-green mottle.
+# Eyeballed; the frames judge it.
+# ============================================================
+palette
+  baseColor     0.54 0.40 0.36
+  deepColor     0.48 0.07 0.07
+  charColor     0.14 0.09 0.08
+  specIntensity 0.50
+  specRoughness 0.40
+  fresnelBoost  0.70
+  translucency  0.28
+  wetness       0.50
+  surfaceNoiseAmp    0.05
+  silhouetteNoiseAmp 0.015
+  mottleAmp     0.30
+  mottleScale   1.8
+  mottleColor   0.26 0.30 0.18
+  grain         0.12

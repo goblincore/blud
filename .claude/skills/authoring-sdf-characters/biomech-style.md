@@ -69,6 +69,41 @@ The recipe (`armVaricose` / `varicose` in `scripts/twinhead-detail-gen.ts`):
 - Faces are a generated decal (`decal 0`, `blendLuma 0` for colour) on the head's fattest prim.
 - A machine head is all kit mesh; the flesh neck stops short and cables fill the gap.
 
+## Heavy, full-figured bodies (the venus, 2026-10-22)
+
+Learned on `characters/venus.blob`, a heavy woman built to contrast the thin cyberbride. The rules above assume a
+muscled brute; fat is a different problem.
+
+- **Mass reads through CONTRAST, not size.** The first pass made every mass big (chest, waist, belly and rear all
+  reaching ~0.2 m) and rendered as a stocky man. Probe the CPU field per height (half-width, front and back reach)
+  before looking: aim for waist-to-hip ~0.65 (her hips 0.275 half-width against a 0.17 waist), a rear standing
+  ~10 cm behind the waist's back in profile, and a bust well proud of the ribcage (`scripts/tmp/venus-sections.ts
+  <name>` prints them). `venus-blob.test.ts` pins these as field reaches.
+- **The thigh's root ball widens the waist.** A ball of the thigh's radius at the hip joint reaches up past the
+  hip line; seat it ~10% down the thigh. Carry the hip's width down the OUTSIDE of the thigh with a long offset
+  blob, or the outline steps in under the hip band.
+- **Arms on a wide body:** they cannot hang straight. Tilt the upper arm out (27 deg) and bring the forearms
+  forward (pitch 30) so the hands pass in front of the hips. The hips are what the hands hit (`daylightOf`), not
+  the waist.
+- **Flesh detail for fat is not muscle detail.** In the `.detail` (`scripts/venus-detail-gen.ts`): broad, low
+  horizontal fat rolls (r ~2 cm, 6 mm proud) on the back and flanks; cellulite as a scatter of small soft lumps
+  (r 9-15 mm, ~2 mm proud) over the rear, hips and outer thighs; stretch marks as short fine streaks (r 2.8 mm,
+  1.4 mm proud); a navel as a ring of six small swellings. Veins follow the recipe above; on the torso give the
+  swing in METRES and convert to degrees by the probed radius, since the torso's radius varies 2x round a heavy
+  body. Cellulite read well on the rear. The fine lines (stretch marks, and veins at the recipe's thin end) read as
+  scratch cuts on the venus's first bake. The bake is slow (56 min for ~1,300 detail prims), so trial a crop first.
+- **Lay the kit on the PROBED skin, not round a bone.** A heavy body is nothing like a cylinder: probe it
+  (`scripts/venus-surface.ts` writes `surface.json`; `venus_common.py`'s `waist_pt`) and build on those points.
+  The corset ribs sit 4 mm INSIDE the skin, so they bite and the `.blob`'s raw lumps swell round them.
+- **Bands are strips, not tubes.** Ribs that wrap a body made as round `tube`s read as barrel hoops. Make each a
+  `surface_solid` strip on the skin, tallest over the flank and pointed at its ends, with lips and a crest.
+
+## Porting a face onto a new body
+
+- The cyberbride's glow eyes sat 1.5 cm ABOVE the flat face mask's painted sockets and stood 2 cm proud, which
+  the owner read as "out of position". When porting a face, render the ORIGINAL first (a temporary registry
+  entry) so you know which faults are inherited. Seat glow eyes in the mask's sockets, a few mm proud.
+
 ## The toolkit: `assets-source/twinhead-kit/kit_sculpt.py`
 
 Run inside Blender with `exec(open(path).read())`, then a `make_*.py`. Everything is in Blender coords; `bv(x, y, z)`
@@ -112,6 +147,12 @@ Each has a `PARTS` subset switch, so one part can be iterated in about 5 s.
   in `kit-overlay.ts`.
 - Lighting falls off toward the ground in the lab shots, so judge the legs' tone from close frames.
 - In a loop, a local named like a helper (`ring = []`, or `base` from an earlier lambda) shadows that helper.
+- On a bone pointing DOWN (legs, hanging forearms), `BoneFrame`'s `s = u x f` points INWARD (-x on .l), so the
+  outer side is `ph = -90`. The venus's thigh plates landed between her legs the first time.
+- A headless `build.py` run that throws part-way does NOT save the .blend: parts built before the error are lost.
+  Re-run every make script after a crash.
+- `blob:shot` reuses whatever Vite is on port 5233, which may be ANOTHER worktree's (the new character then
+  renders as a fallback body). In parallel sessions set `LAB_VITE_PORT`/`LAB_CDP_PORT` to your own ports.
 
 ## Budget
 

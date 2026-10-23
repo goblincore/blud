@@ -53,6 +53,7 @@ import broodmotherBlobSrc from './characters/broodmother.blob?raw';
 import cultistBlobSrc from './characters/cultist.blob?raw';
 import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
 import brideBlobSrc from './characters/bride.blob?raw';
+import venusBlobSrc from './characters/venus.blob?raw';
 import {
   ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, GOREHOUND_PROFILE, GUTCRAWLER_PROFILE, GIBBET_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
@@ -459,6 +460,22 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     armoured: true,
     face: { ...bakedFace('bride-face.png'), mean: 0.712472 },
     profile: motionProfileFor('bride'),
+  },
+
+  // The heavy biomech woman (venus.blob's header): the cyberbride's head on a
+  // full-figured flesh body, with sculpted Blender kit grafts
+  // (assets-source/venus-kit/). The face is the cyberbride's: the flat zombie
+  // mask, with the fangs, maw and glow eyes as prims.
+  venus: {
+    name: 'venus', src: venusBlobSrc,
+    // Corset cage, exo-spine, collar, talon gauntlets and knee braces: Blender
+    // parts (assets-source/venus-kit/) skinned to the .blob's bones by
+    // scripts/blender-kit.ts.
+    kit: '/assets/lab/venus-kit.gltf',
+    // Fat rolls, cellulite, stretch marks and varicose veins (characters/venus.detail, baked; never marched).
+    bodyNormal: { url: '/assets/lab/venus-body-n.png', meta: '/assets/lab/venus-body-n.json', strength: 1 },
+    face: ZOMBIE_FLAT,
+    profile: motionProfileFor('venus'),
   },
 
 };
