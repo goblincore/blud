@@ -513,6 +513,31 @@ export const GIBBET_STALK: GaitProfile = {
   rockAmp: 0.02,
 };
 
+/** THE CHAIR's waddle (characters/chair.blob): how you walk a heavy chair
+ *  across a floor, by rocking it corner to corner. A PACE (forePhase 0): the
+ *  two legs on one side lift together while the chair tips onto the other
+ *  pair, so the whole throne rolls side to side and the sitter's head lolls
+ *  with it. Short legs, short low steps; the sway and rock are the read. */
+export const CHAIR_WADDLE: GaitProfile = {
+  ...GOREHOUND,
+  name: 'chair-waddle',
+  forePhase: 0,
+  strideFreq: 1.6,
+  stanceDuty: 0.6,
+  strideLen: 0.22,
+  landAhead: 0.5,
+  footLift: 0.09,
+  footPush: 0.03,
+  kneeBend: 0.05,
+  kneeLift: 0.04,
+  elbowBow: 0.05,
+  swayAmp: 0.045,
+  shoulderSway: 0.3,
+  bobAmp: 0.02,
+  rockAmp: 0.05,
+  headBob: 0.8,
+};
+
 /** Lerp every numeric knob; strings (name, armStyle) snap at w = 0.5 so the
  *  hands never hover between two grips. */
 export function blendProfiles(a: GaitProfile, b: GaitProfile, w: number): GaitProfile {

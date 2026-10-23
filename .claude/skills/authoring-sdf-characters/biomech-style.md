@@ -207,3 +207,131 @@ animal.** What it added:
   `MotionProfile.spit`, PR #53's plumbing). `makeGibbetMind` wraps the hound mind and adds the squirt cycle. Zombie-kind
   minds that fire are gated by sight, not by the encounter director's firing lanes (those are the soldiers').
   `BLOB_SWING_SWEEP=<variant>:<p0>:<p1>` renders a swing frame by frame for review.
+
+## A seated rig: the chair (2026-10-22)
+
+The chair (`characters/chair.blob`, kit `assets-source/chair-kit/`) is a man fused into a walking throne, on the
+same biped names. Three things are new.
+
+**Hang the front legs from a short UPRIGHT spine.** A hound's spine runs level from the hips to the withers, so
+`chest` starts at the front and nothing can sit up at the back. The chair's `spine` is the sitter's lumbar
+(upright, 0.19 m), `chest` rises from it, and `clavicle` takes `side=` (any bone can: it offsets the head from
+the parent's tail in x) and runs FORWARD and slightly down along the seat (`dir=down pitch=71`). So the
+clavicle is his femur, `upperarm` his shin and the elbow his ankle. The front legs are his own legs, and the
+gait never knows.
+
+**Only the head aims.** The aim chain is rooted at the neck (motion.ts), so a seated torso stays put. Kit on
+`spine` (backrest, armrests) never has to follow the chest. His upper arms are `torso` bars with no `rigid`, so
+each end binds to its nearest rig point: chest top and clavicle head. They stretch between the torso and the
+throne instead of tearing off the armrests.
+
+**Flesh as upholstery.** Thin `rigid` ellipsoids on `spine` lie over the panel and pan as a skin cushion that
+merges into his back and thighs. Brass studs on a diamond lattice tuft it. Two lessons:
+- **Keep the cushion inside the panel.** At 3 cm thick, `r` 0.24 and `blend` 0.04, it swelled into a halo of
+  meat past the panel's edges. 2 cm and blend 0.02 reads as a cushion.
+- **Studs must stand proud.** Studs sunk 3 mm vanished under the blend and the skin noise. Put the dome 4 mm out.
+
+**Let the joints show.** A seat pan that ran under his knees hid the shins, and the knees read as amputee
+stumps. Stop the pan just behind the knees, so they overhang and the shins drop clear in front of the skirt.
+Ribs that wrapped the panel edge with any sideways reach read as pegs through it; keep them tight to the lip.
+
+**Meld, don't seat (owner's second look).** A thin cushion behind him read as "a big flat skin shape behind
+him". What worked:
+- Three flat `rigid` ellipsoids on `spine` make a skin MEMBRANE over the backboard. He is sunk into it, with the
+  back half of his head under it.
+- One head prim with a wide `blend` (0.045) behind the skull, plus jaw-corner webs, pulls the membrane up round
+  the face. All prims fold in one running smooth-min, so a later cluster's blend melts into an earlier one.
+- Keep the kit panel 2.5 cm BEHIND the membrane's back. Flush, the blend and the skin noise pushed flesh out
+  through the back of a 4 cm panel.
+
+**Scars on blend-heavy flesh go in the normal map.** Painted scar prims paint where they are the NEAREST prim, and
+wide torso blends put the skin ~7 mm outside its prims. Twinhead-sized scars painted 2 cm bands, and sunk 9 mm
+they painted ragged dashes. Kit tubes painted red looked like "plastic straws" (owner). Raised keloid with stitch
+bumps, baked with the veins (`scripts/seated-detail-gen.ts`), takes the skin's own colour and light. The generator
+probes from the FRONT (`march` along -z) for a seated body, and the veins run out of him across the membrane too.
+
+**Eyes that read in a decal'd head.** Ember points in painted sockets were lost, and so was a bare glowing slit
+("a bit too simple"). What reads:
+- A glowing slit 1 cm proud of the face, between two swollen lid prims.
+- The lids' blend held tight (0.0015) with ~8 mm between them. At 0.004 and 5 mm apart they fused shut over it.
+- A decal drawn ROUND the slit: an almond bruise along it, raw red rims, puckered creases drawn in from all
+  round, and bags. Place it from the slit's head-space ends through the projection, then check a close-up and
+  nudge `projCentreY`.
+- Bold decal lines: the face spans ~276 px of a 512 sheet, so a 1.6 px crease is under a millimetre.
+- Glow 0.6, not 0.9: the bloom drowned the decal round it.
+
+Painted seams the eye cannot place (oval ends of a raw-edge bar beside the head) read as unexplained spots: end
+seams under something, or drop them.
+
+**Fill open greaves.** `make_legs.py`'s tibia shell is open at the front. Under a thin metal core, the opening
+shows black. Run flesh (his foot) down inside it instead.
+
+**Pass your own ports.** Another worktree's Vite on 5233 serves ITS checkout: `blob:shot` reuses it and
+quietly shoots the default zombie, because your new `?character=` does not exist there. Run `blob:shot` with
+`LAB_VITE_PORT` / `LAB_CDP_PORT` set when other sessions are running.
+
+### The boss variant: the gamer (2026-10-22)
+
+`characters/gamer.blob` (kit `assets-source/gamer-kit/`) is the chair's boss: a swollen man in a gaming chair,
+plugged in. It uses the chair's rig at `scale 1.30`. What it adds:
+
+- **Hands that hold something, with no arm bones.** On this rig the arms are the front legs, so his arms, hands
+  and the joystick are all `rigid` on `chest`: one rigid group, and no pose can part them.
+  `gamer-blob.test.ts` measures each hand against the grip on the posed body after a walk. Without `rigid`, a
+  hand drifts 4.4 cm, because each end binds to its nearest joint and one of those is a front knee.
+- **A scaled body's kit is in COMPILED metres.** `blender-kit.ts` skins to the built body, so take the kit's
+  joints and prim positions from a `buildBody` dump, not from the `.blob`'s authored numbers.
+- **A product read survives the style.** Black upholstery, red racing stripes, bucket bolsters, the two neck
+  pillows, T-armrests and a five-star castor base (vestigial, drawn up like landing gear) say "gaming chair" at
+  any distance. The bone-metal goes in the rim, the spined crest and ribs up the back, and the horns.
+  The `leather` look renders tan-brown under the lab's environment; glossy `black` reads as PU leather.
+- **Plumbing rides the bone of whatever it plugs into.** Put the feed hose in his mouth on `skull`, so it stays
+  in when he turns. The IV, the shoulder cables and the catheter ride `spine`, plugging into the chest-rigid
+  flesh, which moves only a few cm against the frame.
+- **Small detail on a prop of flesh is NORMAL MAP, not prims.** Veins, sores and pustules as painted prims on the
+  joystick read as "tubes and skittles" (owner). They are baked: the stick stands upright in front of him, so the
+  torso projection's front rays land on it. `scripts/seated-detail-gen.ts` probes the front, and a small meander
+  (`ampK`) keeps veins inside a 9 cm stick.
+- **A colour gradient on SDF flesh is contiguous shells, kept small.** A painted prim is flat and loses the skin's
+  mottle. One painted red cone read as a plastic bottle cap. Overlapping blotches merged into one hard band, and discs
+  on the axis bulged into rings (a tiered cake). What works: frustums of the surface itself, 1.2 mm out and butted
+  end to end, each the nearest prim over exactly its band. Keep them to where the colour is wanted (the owner: "more
+  isolated to the tip"): three over the last 5 cm, a faint flush to the zombie's pink (`eab1b4`).
+- **A held prop that moves is an UPWARD `hem`.** The gamer's stick, knob and hands ride a `hem` bone from his hips up
+  to the middle of the grip, so an attack can move them. The only spare movable point on the standard names is the
+  pendulum, and attack poses offset joints by name. `rig-bind.ts` holds an upward hem at `HEM_HELD_SCALE` (0.7, not
+  the cloth's 0.15), so it does not droop or trail: walking it holds within ~1 cm. `MotionProfile.joystick`
+  (`joystick.ts`) adds the jiggle: ~5 cm of beating back-and-forth through an attack, and a faint idle twitch. His
+  forearms are left UNRIGID, so each end binds to its nearest joint (elbow to the seat, wrist to `hem`), and the
+  arms stretch to follow the stick.
+- **Torso flesh the torso cylinder cannot see gets its own region.** `bake-body-normal.ts --torso-seg` adds kind-0
+  regions with an `rMax` (the shader bounds them by it; region 0 keeps none). The gamer has them for the stick, the
+  forearms and the upper arms: with only the torso's cylinder, the arms across the gut smeared it.
+- **Veins where the eye goes.** The owner wanted them "pronounced and a lot of them" on the neck, the face and down
+  the shaft, not spread over the body. Probe each around its own axis (`axisVein` in `seated-detail-gen.ts`). The
+  head gets a `--limb skull` region; its face sheet still covers the middle of the face.
+- **Separate what is fused by cutting it.** His flesh hands melted into the grip, and any veins near them read as
+  tendrils. Sawn wrist stumps in metal prosthetic C-clamps (kit) make a clean break, and each part can then be
+  detailed alone. A stump is the forearm's round end painted raw by a shell 1.2 mm proud. The cuff runs on over most
+  of it, so only a cut face shows; left bare, the painted dome read as a glossy ball. Splinter the bones (`r2` small,
+  `chamfer`) and flatten the flaps along the cut (`deep` 0.4, blend ~0.007), or they read as balls too.
+- **Whatever must stay inside a kit part has to turn with it.** The kit rides a bone's whole frame, but a prim bound
+  to its nearest joint only translates with that point. Bound that way, the stumps slid ~2 cm in their cuffs when
+  the stick tilted. The fix: make the wrist end `rigid` on `hem` with the clamp, and put the join with the stretching
+  forearm inside the cuff.
+- **A curved prop gets chord regions.** One `--torso-seg` down the chord of a quarter arc misses the outside of the
+  bend. Two chords (`stalk1`, `stalk2`) cover it, and the wrinkle folds there are ridge rings that sag on the
+  underside.
+- **A part that breathes is a morph channel the motion drives.** The gamer's knob grows and its rocket rises on the
+  `swell` channel (expression.ts). The prims carry `morph=swell:` words; `actor.ts` sets the weight every frame from
+  `MotionProfile.joystick.swell` (`joystickSwell`: a slow breath, throbbing through an attack). The game's actors have
+  no expression layer, so the profile is what drives it. To shoot a morph, the lab's `__sdfLab.setMorphs({ swell: 1 })`
+  holds it (`BLOB_PROBE`), since `blob:shot` freezes motion.
+- **More veins is not better veins.** A denser pass on the gamer was rejected: "too busy", and it "still doesn't read
+  as veins". It added ~900 prims of veins over his upper chest, down every arm segment and round the neck. The owner
+  preferred the sparser version before it, so it was reverted. Veins read when there are few of them, where the eye
+  goes. Skin under another cluster (the neck under his jowls, head prims that take the head's region) shows none of its
+  baked relief either.
+- **A ranged attack does not fit this rig yet.** `onFire` needs a carried prop in the right hand, and here the
+  right hand is a front claw. A ranged gamer needs a mind with the muzzle on the head (the headset); it uses the
+  hound mind for now.

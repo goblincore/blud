@@ -1,0 +1,234 @@
+{
+  "generator": "scripts/bake-body-normal.ts",
+  "character": "gamer",
+  "width": 512,
+  "height": 1121,
+  "version": 2,
+  "yMin": 0.624,
+  "yMax": 1.6204,
+  "axisX": 0,
+  "axisZ": 0.3577,
+  "regions": [
+    {
+      "label": "torso",
+      "kind": "torso",
+      "head": [
+        0,
+        1.6204,
+        0.3577
+      ],
+      "tail": [
+        0,
+        0.624,
+        0.3577
+      ],
+      "rMax": 0,
+      "row0": 1,
+      "rows": 320
+    },
+    {
+      "label": "clavicle.l",
+      "kind": "limb",
+      "head": [
+        0.247,
+        0.9357,
+        0.0129
+      ],
+      "tail": [
+        0.247,
+        0.7537,
+        0.5415
+      ],
+      "rMax": 0.15,
+      "row0": 321,
+      "rows": 64
+    },
+    {
+      "label": "clavicle.r",
+      "kind": "limb",
+      "head": [
+        -0.247,
+        0.9357,
+        0.0129
+      ],
+      "tail": [
+        -0.247,
+        0.7537,
+        0.5415
+      ],
+      "rMax": 0.15,
+      "row0": 385,
+      "rows": 64
+    },
+    {
+      "label": "upperarm.l",
+      "kind": "limb",
+      "head": [
+        0.247,
+        0.7537,
+        0.5415
+      ],
+      "tail": [
+        0.2866,
+        0.3773,
+        0.4471
+      ],
+      "rMax": 0.1,
+      "row0": 449,
+      "rows": 64
+    },
+    {
+      "label": "upperarm.r",
+      "kind": "limb",
+      "head": [
+        -0.247,
+        0.7537,
+        0.5415
+      ],
+      "tail": [
+        -0.2866,
+        0.3773,
+        0.4471
+      ],
+      "rMax": 0.1,
+      "row0": 513,
+      "rows": 64
+    },
+    {
+      "label": "skull",
+      "kind": "limb",
+      "head": [
+        0,
+        1.5229,
+        0.1496
+      ],
+      "tail": [
+        0,
+        1.7438,
+        0.1573
+      ],
+      "rMax": 0.17,
+      "row0": 577,
+      "rows": 96
+    },
+    {
+      "label": "stick",
+      "kind": "torso",
+      "head": [
+        0,
+        1.06,
+        0.585
+      ],
+      "tail": [
+        0,
+        1.39,
+        0.59
+      ],
+      "rMax": 0.075,
+      "row0": 673,
+      "rows": 96
+    },
+    {
+      "label": "stalk1",
+      "kind": "torso",
+      "head": [
+        0,
+        0.95,
+        0.385
+      ],
+      "tail": [
+        0,
+        0.985,
+        0.535
+      ],
+      "rMax": 0.085,
+      "row0": 769,
+      "rows": 48
+    },
+    {
+      "label": "stalk2",
+      "kind": "torso",
+      "head": [
+        0,
+        0.985,
+        0.535
+      ],
+      "tail": [
+        0,
+        1.065,
+        0.588
+      ],
+      "rMax": 0.085,
+      "row0": 817,
+      "rows": 48
+    },
+    {
+      "label": "forearm.l",
+      "kind": "torso",
+      "head": [
+        0.33,
+        1.03,
+        0.08
+      ],
+      "tail": [
+        0.08,
+        1.13,
+        0.58
+      ],
+      "rMax": 0.085,
+      "row0": 865,
+      "rows": 64
+    },
+    {
+      "label": "forearm.r",
+      "kind": "torso",
+      "head": [
+        -0.33,
+        1.03,
+        0.08
+      ],
+      "tail": [
+        -0.08,
+        1.13,
+        0.58
+      ],
+      "rMax": 0.085,
+      "row0": 929,
+      "rows": 64
+    },
+    {
+      "label": "upperarm.l",
+      "kind": "torso",
+      "head": [
+        0.255,
+        1.33,
+        0.048
+      ],
+      "tail": [
+        0.31,
+        1.02,
+        0.135
+      ],
+      "rMax": 0.095,
+      "row0": 993,
+      "rows": 64
+    },
+    {
+      "label": "upperarm.r",
+      "kind": "torso",
+      "head": [
+        -0.255,
+        1.33,
+        0.048
+      ],
+      "tail": [
+        -0.31,
+        1.02,
+        0.135
+      ],
+      "rMax": 0.095,
+      "row0": 1057,
+      "rows": 64
+    }
+  ]
+}

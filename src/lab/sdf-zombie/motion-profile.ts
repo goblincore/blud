@@ -4,9 +4,10 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, CHAIR_WADDLE, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
+import type { JoystickSpec } from './joystick';
 import type { Vec3 } from './types';
 import { JUGGERNAUT_ARMOR, WARBULL_ARMOR, type ArmorSpec } from './plate-armor';
 import { JUGGERNAUT_INJURY_TUNING, WARBULL_INJURY_TUNING, type SoldierInjuryTuning } from './soldier-damage';
@@ -68,6 +69,9 @@ export interface MotionProfile {
    *  (enemy-mind.ts makeSwordMind) and motion.ts drives the held prop through
    *  the swing (sword-swing.ts). Absent = the zombie's unarmed swing. */
   melee?: { kind: 'sword' | 'bite' | 'stab' };
+  /** A JOYSTICK on the body's `hem` (the gamer, characters/gamer.blob): motion.ts adds joystick.ts's jiggle to
+   *  the `hem` target, hard while he attacks and a faint twitch otherwise. Absent: `hem` is cloth or a hung mass. */
+  joystick?: JoystickSpec;
   /** A SOFT target: any bullet or blast hit kills it outright (the game
    *  forces the collapse on the first hit). The cultist is soft; the zombie
    *  and soldier soak hits and exist to show off the gore. Burns do not count
@@ -393,6 +397,40 @@ export const GIBBET_PROFILE: MotionProfile = {
   spit: { from: 'hem', offset: [0, -0.20, 0.02] },
 };
 
+/** THE CHAIR (characters/chair.blob): a throne with a man fused into it,
+ *  walked on four legs (CHAIR_WADDLE). It uses the hound's mind
+ *  (hound-attack.ts): the BITE is the sitter throwing his head and shoulders
+ *  forward out of the backrest at you, and the POUNCE is the chair rearing
+ *  onto its back legs and lurching forward to come down on you, front claws
+ *  first. Heavy and slow to turn. */
+export const CHAIR_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'chair',
+  gait: { walk: CHAIR_WADDLE, run: CHAIR_WADDLE },
+  runBand: { from: Infinity, to: Infinity },
+  cruise: 0.9,
+  turnRate: 1.8,
+  armStyle: 'foreleg',
+  melee: { kind: 'bite' },
+};
+
+/** THE GAMER (characters/gamer.blob): the chair's boss variant, a swollen
+ *  man fused into a gaming chair, plugged in, both hands on a joystick that
+ *  grows out of his gut. The chair's waddle and the hound's mind (his head
+ *  thrown off the headrest; the whole rig rearing), slower and heavier: at
+ *  1.3x the chair's size there is more of him to chew through. Through every
+ *  attack he works the joystick (joystick.ts). */
+export const GAMER_PROFILE: MotionProfile = {
+  ...CHAIR_PROFILE,
+  name: 'gamer',
+  cruise: 0.75,
+  turnRate: 1.4,
+  // He works the stick as he attacks, 5 cm of throw at the grip; and twitches it
+  // the whole time, he never stops playing. Eyeballed.
+  // The knob breathes on a slow 3.2 s breath and throbs through an attack (joystick.ts joystickSwell).
+  joystick: { amp: 0.05, idle: 0.012, swell: { period: 3.2 } },
+};
+
 /** The bride: a slow STALK in a high sword guard; the point trails on the
  *  run. Melee only — the sword mind (enemy-mind.ts) swings it. */
 export const BRIDE_PROFILE: MotionProfile = {
@@ -468,6 +506,8 @@ const BY_NAME: Record<string, MotionProfile> = {
   gorehound: GOREHOUND_PROFILE,
   gutcrawler: GUTCRAWLER_PROFILE,
   gibbet: GIBBET_PROFILE,
+  chair: CHAIR_PROFILE,
+  gamer: GAMER_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

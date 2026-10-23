@@ -1,0 +1,130 @@
+// gamer.blob — the chair's boss variant: a swollen man fused into a gaming chair, his sawn wrist stumps in prosthetic
+// clamps (kit) round a joystick of flesh
+// out of his navel. What this pins: it builds and fuses, it is BIGGER than the chair (the boss), it walks on all four
+// feet through the real motion pipeline, he WORKS THE STICK through an attack (the joystick rides the `hem` point,
+// MotionProfile.joystick), and his wrist STUMPS stay where the stick's clamps hold them throughout (each stump binds
+// to the `hem` point with the grip; nothing in the arm IK reaches them, because the rig's arms are the front legs).
+import { describe, it, expect } from 'vitest';
+import src from './gamer.blob?raw';
+import chairSrc from './chair.blob?raw';
+import { parseBlob } from '../blob-parse';
+import { compileBlob, compileFace } from '../blob-compile';
+import { buildBody } from '../build-body';
+import { characterEntry } from '../character-registry';
+import { makeActorMotion, stepActorMotion, emptyActorSignals } from '../actor';
+import { makeRng } from '../wander';
+import { applyRig } from '../rig-bind';
+import type { Vec3 } from '../types';
+
+const build = (s: string) => { const d = parseBlob(s); return buildBody(compileBlob(d, compileFace(d))); };
+const body = build(src);
+const chair = build(chairSrc);
+
+describe('gamer — the chair boss, plugged in', () => {
+  it('builds clean, feet on the floor, a third bigger than the chair', () => {
+    expect(body.errors).toEqual([]);
+    expect(body.bones.get('hand.l')!.tail[1]).toBeLessThan(0.03);
+    expect(body.bones.get('foot.l')!.tail[1]).toBeLessThan(0.03);
+    const top = (b: typeof body) => b.bones.get('skull')!.tail[1];
+    expect(top(body) / top(chair)).toBeGreaterThan(1.25);
+  });
+
+  it('walks on four feet with both stumps held at the stick', () => {
+    const m = makeActorMotion(body, { seed: 5 });
+    expect(m.motionJoints, 'every rig point must map to a gait joint').not.toBeNull();
+    const J = m.motionJoints!.index;
+    const profile = characterEntry('gamer').profile;
+    const rng = makeRng(5);
+    const lifts: Record<string, number> = { handL: 0, handR: 0, footL: 0, footR: 0 };
+    const low: Record<string, number> = {};
+    for (let i = 0; i < 360; i++) {
+      stepActorMotion(m, {
+        current: body, dt: 1 / 60, wander: true, armStyle: undefined,
+        headingFollow: 1, gazeFollow: 1, bounds: { minX: -50, maxX: 50, minZ: -50, maxZ: 50 },
+        rng, signals: emptyActorSignals(), profile, forceSpeed: profile.cruise,
+      });
+      const P = (k: number) => m.bound.rig.points[k]!.pos as Vec3;
+      if (i < 90) { for (const n of Object.keys(lifts)) low[n] = Math.min(low[n] ?? Infinity, P(J[n as 'handL']!)[1]); continue; }
+      for (const n of Object.keys(lifts)) lifts[n] = Math.max(lifts[n]!, P(J[n as 'handL']!)[1] - low[n]!);
+    }
+    for (const [n, lift] of Object.entries(lifts)) expect(lift, `${n} lifts`).toBeGreaterThan(0.04);
+
+    // Measured on the POSED body after the walk: each hand (the prims at x +-0.058, z 0.585 in the rest body) stays
+    // within a couple of millimetres of where it sits against the grip at rest. Rigid on `hem` with the grip, so
+    // the walk carries them together; the arm IK never reaches them (the rig's arms are the front legs).
+    const posed = applyRig(body, m.bound, m.lastBodyYaw);
+    const dist = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    const isHand = (p: { a: Vec3; radius: number }) => Math.abs(Math.abs(p.a[0]) - 0.1266) < 0.004 && Math.abs(p.a[2] - 0.4878) < 0.004;   // the stump shells, at the cut
+    const isGrip = (p: { a: Vec3; b: Vec3 }) => Math.abs(p.a[0]) < 1e-6 && Math.abs(p.a[2] - 0.585) < 0.005 && p.b[1] - p.a[1] > 0.07;
+    const restHands = body.prims.map((p, i) => [p, i] as const).filter(([p]) => isHand(p));
+    const g = body.prims.findIndex(isGrip);
+    expect(restHands.length, 'two stumps').toBe(2);
+    expect(g, 'the grip').toBeGreaterThanOrEqual(0);
+    for (const [p, i] of restHands) {
+      const rest = dist(p.a, body.prims[g]!.a);
+      const now = dist(posed.prims[i]!.a, posed.prims[g]!.a);
+      expect(Math.abs(now - rest), 'stump stays in its clamp').toBeLessThan(0.003);
+    }
+  });
+
+  it('works the joystick through a bite, stumps in their clamps', () => {
+    const m = makeActorMotion(body, { seed: 9 });
+    const J = m.motionJoints!.index;
+    const profile = characterEntry('gamer').profile;
+    const rng = makeRng(9);
+    const rel = (): Vec3 => { const P = (k: number) => m.bound.rig.points[k]!.pos as Vec3; const h = P(J.hem!), c = P(J.chest!); return [h[0] - c[0], h[1] - c[1], h[2] - c[2]]; };
+    const step = (attack?: { phase: number; side: 'R'; variant: 'bite' }) => stepActorMotion(m, {
+      current: body, dt: 1 / 60, wander: false, armStyle: undefined,
+      headingFollow: 1, gazeFollow: 1, bounds: { minX: -50, maxX: 50, minZ: -50, maxZ: 50 },
+      rng, signals: emptyActorSignals(), profile, forceSpeed: 0, ...(attack ? { attack } : {}),
+    });
+    for (let i = 0; i < 60; i++) step();
+    const still = rel();
+    let throwMax = 0;
+    let posed = applyRig(body, m.bound, m.lastBodyYaw);
+    for (let i = 1; i < 42; i++) {
+      step({ phase: i / 42, side: 'R', variant: 'bite' });
+      const r = rel(), d = Math.hypot(r[0] - still[0], r[1] - still[1], r[2] - still[2]);
+      if (d > throwMax) { throwMax = d; posed = applyRig(body, m.bound, m.lastBodyYaw); }   // the stumps, at the widest throw
+    }
+    // The bite also throws his chest forward, so this is the stick's motion relative to the chest: measured ~5 cm.
+    expect(throwMax, 'the stick moves relative to his chest').toBeGreaterThan(0.025);
+    const dist = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    const isHand = (p: { a: Vec3 }) => Math.abs(Math.abs(p.a[0]) - 0.1266) < 0.004 && Math.abs(p.a[2] - 0.4878) < 0.004;   // the stump shells
+    const isGrip = (p: { a: Vec3; b: Vec3 }) => Math.abs(p.a[0]) < 1e-6 && Math.abs(p.a[2] - 0.585) < 0.005 && p.b[1] - p.a[1] > 0.07;
+    const g = body.prims.findIndex(isGrip);
+    for (const i of body.prims.map((p, i) => [p, i] as const).filter(([p]) => isHand(p)).map(([, i]) => i))
+      expect(Math.abs(dist(posed.prims[i]!.a, posed.prims[g]!.a) - dist(body.prims[i]!.a, body.prims[g]!.a)), 'stump in its clamp').toBeLessThan(0.003);
+  });
+
+  it('breathes: the knob swells and the rocket rises out of it, then settles', () => {
+    // The `swell` morph (MotionProfile.joystick.swell -> actor.ts -> rig-bind.ts applyRig): the knob grows ~20%, the
+    // nub at the rocket's tip climbs ~2 cm (compiled 2.6 cm) relative to the knob's centre, which climbs 5 mm.
+    const knob = body.prims.findIndex(p => p.morphs && Math.abs(p.radius - 0.052) < 0.002);
+    const nub = body.prims.findIndex(p => p.morphs && p.glow !== undefined && p.glow > 0);
+    expect(knob, 'the knob').toBeGreaterThanOrEqual(0);
+    expect(nub, 'the lit nub').toBeGreaterThanOrEqual(0);
+    const m = makeActorMotion(body, { seed: 2 });
+    const profile = characterEntry('gamer').profile;
+    const rng = makeRng(2);
+    let lo = { w: Infinity, sy: 0, dy: 0 }, hi = { w: -Infinity, sy: 0, dy: 0 };
+    for (let i = 0; i < 240; i++) {
+      stepActorMotion(m, {
+        current: body, dt: 1 / 60, wander: false, armStyle: undefined,
+        headingFollow: 1, gazeFollow: 1, bounds: { minX: -50, maxX: 50, minZ: -50, maxZ: 50 },
+        rng, signals: emptyActorSignals(), profile, forceSpeed: 0,
+      });
+      const w = m.bound.rig.morphs?.swell ?? 0;
+      if (w < lo.w || w > hi.w) {
+        const P = applyRig(body, m.bound, m.lastBodyYaw);
+        const rec = { w, sy: P.prims[knob]!.scale[1], dy: P.prims[nub]!.a[1] - P.prims[knob]!.a[1] };
+        if (w < lo.w) lo = rec;
+        if (w > hi.w) hi = rec;
+      }
+    }
+    expect(lo.w, 'a full breath in 4 s reaches empty').toBeLessThan(0.05);
+    expect(hi.w, 'and full').toBeGreaterThan(0.95);
+    expect(hi.sy / lo.sy, 'the knob swells').toBeGreaterThan(1.12);
+    expect(hi.dy - lo.dy, 'the rocket rises out of it').toBeGreaterThan(0.015);
+  });
+});
