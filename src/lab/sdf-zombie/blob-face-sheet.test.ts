@@ -308,6 +308,8 @@ describe('eyeCheek and browDrop (Task 15)', () => {
     const PINNED: Record<string, string> = {
       DEFAULT: '4a05bb6b', 'clown.blob': 'c165a082', 'clown-alt.blob': 'c165a082', 'cyclops.blob': '2e2a5e7e',
       'goblin.blob': 'a004a128', 'goblin-home.blob': 'a004a128', 'goblin-cinematic.blob': '56d68e7f', 'goblin-cinematic-home.blob': '56d68e7f', 'mouse.blob': 'd07a38f1',
+      // teratoma (2026-10-22) came after the params: its sheet is DISABLED (eye and maw are kit and geometry), pinned as authored.
+      'teratoma.blob': '7acfd2d7',
     };
     expect(fnv(generateFaceSheet(DEFAULT_SHEET).pixels)).toBe(PINNED.DEFAULT);
     for (const [path, src] of Object.entries(RAW)) {
