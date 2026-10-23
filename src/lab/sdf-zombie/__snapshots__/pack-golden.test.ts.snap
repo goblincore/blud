@@ -58,6 +58,8 @@ exports[`packBody byte pin > schoolgirl-alt.blob packs the pinned bytes 1`] = `"
 
 exports[`packBody byte pin > schoolgirl-described.blob packs the pinned bytes 1`] = `"04e7757775635ddc"`;
 
+exports[`packBody byte pin > siren.blob packs the pinned bytes 1`] = `"b481dcaa6d6d75e4"`;
+
 exports[`packBody byte pin > soldier.blob packs the pinned bytes 1`] = `"6f693a91653eaac3"`;
 
 exports[`packBody byte pin > strand-fixture.blob packs the pinned bytes 1`] = `"a3dd2bb96f38d4b9"`;

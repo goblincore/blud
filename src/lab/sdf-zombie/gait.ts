@@ -421,6 +421,18 @@ export const STALK: GaitProfile = {
   armSwing: 0.02,
 };
 
+/** The SIREN's walk: the bride's STALK on the same long legs, but with the
+ *  arms FREE ('swing': no sword owns them) swinging softly against the legs,
+ *  and a fuller hip sway — a model's walk, the lure's first read. */
+export const SIREN_WALK: GaitProfile = {
+  ...STALK,
+  name: 'siren-walk',
+  swayAmp: 0.07,
+  shoulderSway: 0.25,
+  armStyle: 'swing',
+  armSwing: 0.05,
+};
+
 /** The GOREHOUND's walk (characters/gorehound.blob): a heavy QUADRUPED. The
  *  arms are its front legs ('foreleg': walked like legs on the hind clock a
  *  quarter-stride later, a dog's lateral-sequence walk, LH LF RH RF), and

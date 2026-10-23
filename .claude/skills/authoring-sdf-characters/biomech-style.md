@@ -98,6 +98,43 @@ muscled brute; fat is a different problem.
 - **Bands are strips, not tubes.** Ribs that wrap a body made as round `tube`s read as barrel hoops. Make each a
   `surface_solid` strip on the skin, tallest over the flank and pointed at its ends, with lips and a crest.
 
+## Attractive characters (the siren, 2026-10-23)
+
+Every body before the siren read monstrous, and not only by design: the house defaults ARE the monster. To make one
+read attractive, turn each lever the other way. What worked, in order of how much it mattered:
+
+- **The face is all paint, no painted prims.** A painted prim owns every surface point it is NEAREST to, not just
+  its bulge. Sclera, iris and lash-line prims (the bride's road) spread off-white over the lids and swallowed the
+  lashes: two white saucers, a stare. Painted lip prims read as a red wax band 1.7 cm tall, in any colour. Keep
+  the face's SHAPE as unpainted prims (cranium, face mass, an eyeball bulge, a small nose, thin lips) and paint
+  every colour with a generated sheet (`scripts/make-siren-face.py`) at `decal 0`, `blendLuma 0`.
+- **Author the sheet as MULTIPLIERS on the skin, over a dark base.** The multiply runs on LINEAR albedo, divided
+  by the sheet's mean. On the bride's base grey (206, mean ~0.8) a texel can only lift the skin ~1.25x, so a
+  white eye comes out peach, and mid-tone paint washes out after the sRGB lift (brown brows rendered brick red,
+  rose lips pale pink). A base of 120 (mean ~0.45) leaves ~2.1x headroom for a real white, and paint darker than
+  it should look lands right. Write each colour as a multiplier and the texel as `BASE * m`.
+- **Place sheet features in millimetres, not head-space units.** hs x and y units are the cranium's semi-axes (71
+  vs 91 mm), so a circle drawn in hs lands 1.28x tall on the face. Convert from mm.
+- **`texRelief 0`.** Even 0.3 embossed every dark stroke as a groove with a lit rim: the brows rendered as a pale
+  ridge with a dark edge.
+- **A smooth egg beats sculpted features.** Cheekbone, lid and brow-ridge prims at eye level read as one band
+  across the eyes (goggles). Remove them; the paint gives the eye its depth. Narrow the jaw toward the chin
+  (heart-shaped), keep the nose small with a short tip (a big tip casts a black cave of shadow), and do not fill
+  under it (the fill cast a moustache).
+- **Opposite palette.** Warm skin, `translucency` 0.30, soft spec (0.32 / roughness 0.50), `mottleAmp` 0.03,
+  surface and silhouette noise 0.008, `grain` 0, `wetness` 0.08. No body normal map, no `.detail`.
+- **Limbs: big blends at the joints.** 0.012-0.016 at the elbow and knee left a ball joint (a wooden doll); one
+  taper per segment, ending close to where the next starts, with 0.022-0.026 blends, reads as a limb.
+- **Hair: a mass, then a fall, both glossy.** Strand curtains with low `deep` read from the side as pleated planks.
+  A crown mass (kept under the cranium's size, or the face sheet re-centres on it) with a blunt fringe, short strand
+  curtains framing the face, and ONE shell down the back (the bride's veil recoloured, fine vertical `warpFreq`)
+  read as long hair from every yaw. **Hang anything longer than the neck from `spine2`, not the skull.** On the
+  skull the game's head aim swings it as a rigid plank; the lab never aims the head, so only a game capture shows
+  it.
+- **Keep the monster in the motion.** The reveal is the bride's `jaw` bone opened by `MotionProfile.swingGape`
+  through the zombie mind's unarmed swing (`attack.ts` `swingGapeAt`), with needle fangs buried >= 2 mm inside the
+  rest face (pinned by `siren-blob.test.ts`), so they own no paint until the jaw drops.
+
 ## Porting a face onto a new body
 
 - The cyberbride's glow eyes sat 1.5 cm ABOVE the flat face mask's painted sockets and stood 2 cm proud, which

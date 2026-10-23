@@ -75,6 +75,20 @@ export const ATTACK_TUNING = {
   handDrop: 0.10,
 } as const;
 
+/** The jaw's gape (rad) through an UNARMED swing, for a body whose motion profile asks for one (MotionProfile.swingGape:
+ *  the siren, whose face splits open only when she strikes). Opens over the wind-up, stays wide through the strike and
+ *  the hold, and shuts by 0.85 of the swing, so the mouth is the last thing the player sees of the attack. Zero outside
+ *  a swing, so a body at rest keeps its face. */
+export function swingGapeAt(phase: number, peak: number, tuning: AttackTuning = ATTACK_TUNING): number {
+  const T = tuning;
+  const shut = 0.85;
+  if (!(phase > 0) || phase >= shut) return 0;
+  const smooth = (x: number) => x * x * (3 - 2 * x);
+  if (phase < T.windupEnd) return peak * smooth(phase / T.windupEnd);
+  if (phase < T.holdEnd) return peak;
+  return peak * (1 - smooth((phase - T.holdEnd) / (shut - T.holdEnd)));
+}
+
 export type SwingVariant = 'hook' | 'overhead' | 'shove' | 'cleave' | 'sweep' | 'lunge'
   // The quadruped's (hound-attack.ts): motion.ts routes these to houndPose.
   | 'bite' | 'pounce';

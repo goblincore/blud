@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, type ArmStyle, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, SIREN_WALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, type ArmStyle, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { Vec3 } from './types';
@@ -64,6 +64,9 @@ export interface MotionProfile {
    *  (enemy-mind.ts makeSwordMind) and motion.ts drives the held prop through
    *  the swing (sword-swing.ts). Absent = the zombie's unarmed swing. */
   melee?: { kind: 'sword' | 'bite' };
+  /** The jaw gape (rad, jaw.ts; JAW_MAX_GAPE bounds it) the UNARMED swing opens to, for a body with a `jaw` bone: the
+   *  siren's face splits open as she strikes (attack.ts swingGapeAt). Absent = the mouth stays shut through the swing. */
+  swingGape?: number;
   /** A SOFT target: any bullet or blast hit kills it outright (the game
    *  forces the collapse on the first hit). The cultist is soft; the zombie
    *  and soldier soak hits and exist to show off the gore. Burns do not count
@@ -353,6 +356,22 @@ export const VENUS_PROFILE: MotionProfile = {
   turnRate: 2.0,
 };
 
+/** The siren (characters/siren.blob): the roster's beautiful lure. She walks like a model (SIREN_WALK: the bride's
+ *  stalk with free, softly swinging arms) and attacks with the zombie mind's unarmed swing (enemy-mind.ts
+ *  makeZombieMind) — but her jaw drops open on the bride's hinge as she strikes (swingGape 0.85 rad, near jaw.ts's
+ *  0.9 ceiling, against the bride's sword gape of <= 0.55: hers is a mouth opening too wide; this is a face splitting).
+ *  The monster is only in that motion, so nothing else here is monstrous: a gore body like the zombie, an unhurried
+ *  cruise, a quick turn toward the player. */
+export const SIREN_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'siren',
+  gait: { walk: SIREN_WALK, run: SIREN_WALK },
+  cruise: 1.0,
+  turnRate: 3.0,
+  armStyle: 'swing',
+  swingGape: 0.85,
+};
+
 /** The gorehound (characters/gorehound.blob): a heavy biomech quadruped. Its
  *  arms are its front legs, walked by GOREHOUND's 'foreleg' style and planted
  *  like feet. Melee, unarmed: the zombie mind closes and swings, which on
@@ -470,6 +489,7 @@ const BY_NAME: Record<string, MotionProfile> = {
   warbull: WARBULL_PROFILE,
   twinhead: TWINHEAD_PROFILE,
   venus: VENUS_PROFILE,
+  siren: SIREN_PROFILE,
   gorehound: GOREHOUND_PROFILE,
   gutcrawler: GUTCRAWLER_PROFILE,
   gibbet: GIBBET_PROFILE,
