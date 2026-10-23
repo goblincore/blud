@@ -44,11 +44,12 @@ keeps), divided by its semi-axes. hs x and y units differ (71 vs 91 mm), so
 a circle drawn in hs would land 1.28x tall on the face: everything here is
 placed in mm (mm()) and converted, so an iris is round.
 
-  eye          x 11..43 mm, centre line rel -31 mm, 20 mm tall (anime: big, low)
-  iris         centre x +-26.5 mm, rel -29.5 mm, a 17 x 22 mm oval
-  brows        rel +1..+6 mm, x 11..47 mm (thin, high; the bangs graze them)
-  blush        x 31 mm, rel -50 mm, under the eyes
-  mouth line   y 1.635 (rel -87.3 mm; painted at -88.5), corners x +-10 mm
+  eye          x 9..46 mm, centre line rel -29 mm, 22 mm tall (anime, huge)
+  iris         centre x +-27.5 mm, rel -27 mm, a 19 x 24 mm oval
+  socket       siren.blob's carve, centred x 28 mm, rel -27 mm
+  brows        rel -6.5..+4.8 mm, x 11..52 mm, slanting in toward the nose
+  mouth line   rel -86.2 mm (the lip prims' probed swells: upper -81.5,
+               lower -93), corners x +-18 mm
 
 PROJ_SCALE / PROJ_CENTRE must match siren.blob's sheet block exactly.
 
@@ -86,37 +87,39 @@ BASE = 120  # the neutral grey every multiplier scales
 
 # Multipliers on her skin (see HOW IT BLENDS).
 SCLERA = (1.20, 1.52, 1.72)    # -> a warm white (0.98 0.88 0.81)
-SCLERA_SHADE = (0.72, 0.85, 1.05)  # the upper lid's shadow across the white
-IRIS_DARK = (0.08, 0.04, 0.05)     # the iris top, under the lid
-IRIS = (0.42, 0.16, 0.14)          # garnet
-IRIS_LIGHT = (1.15, 0.62, 0.42)    # the anime glow at the iris foot (amber)
-PUPIL = (0.02, 0.01, 0.01)
-CATCH = (1.40, 2.00, 2.10)     # the catchlights: clamp to near-white
-INK = (0.02, 0.015, 0.015)     # lash line and lashes
+SCLERA_SHADE = (0.80, 0.95, 1.10)  # the upper lid's shadow across the white
+IRIS_DARK = (0.04, 0.08, 0.06)   # the iris top, under the lid
+IRIS = (0.20, 0.52, 0.34)        # emerald
+IRIS_LIGHT = (0.70, 1.45, 0.80)  # the anime glow at the iris foot
+LIMBAL = (0.05, 0.07, 0.06)      # the dark rim of the iris
+PUPIL = (0.02, 0.02, 0.02)
+CATCH = (1.40, 2.00, 2.10)     # the catchlight: clamps to near-white
+INK = (0.02, 0.015, 0.015)     # liner and lashes
 BROW = (0.07, 0.05, 0.05)      # cool near-black brown
-CREASE = (0.45, 0.32, 0.36)    # the double-lid crease line
-LID = (0.82, 0.62, 0.70)       # mauve on the lid
-BLUSH = (1.12, 0.72, 0.78)     # rose flush under the eyes
-LIP = (0.92, 0.40, 0.48)       # pink mouth
-LIP_LINE = (0.30, 0.08, 0.12)  # the line where the lips meet
+CREASE = (0.34, 0.24, 0.28)    # lid crease: a firm dark fold line
+LID = (0.58, 0.42, 0.50)       # smoky mauve on the lid
+BROW_BONE = (1.10, 1.08, 1.06)  # a lift under the brow, so the lid reads set back
+BLUSH = (1.08, 0.78, 0.82)     # rose flush
+LIP = (0.52, 0.00, 0.07)       # red lipstick (owner, 2026-10-23): crimson; warmer values rendered salmon on her skin
+LIP_LINE = (0.22, 0.02, 0.04)  # the line where the lips meet
 
-# Eye geometry, mm (positive-x eye; mirrored for the other). ANIME: the eye
-# is ~3x the first pass's area and sits LOWER on the face (the owner, on the
-# realistic first pass: "needs to be more exaggerated"; references
-# anime-3d.glb and Mai Shiranui): 32 mm wide, 20 mm tall, a big round upper
-# lid over a flatter lower one, the iris a tall oval nearly filling it.
-# (A first anime pass at 29 x 18 mm read big in the sheet but ordinary on
-# the head at 3 m: another ~15%.)
-EYE_IN, EYE_OUT = 11.0, 43.0
-EYE_Y = -31.0          # almond centre line at the inner corner, rel cranium centre
-EYE_LIFT = 2.5         # outer corner this much higher
-EYE_HALF_H = 11.5      # upper lid height above the centre line
-EYE_LOW = 0.72         # the lower lid's depth, as a share of EYE_HALF_H
-IRIS_X, IRIS_Y, IRIS_RX, IRIS_RY = 26.5, -29.5, 8.4, 10.8
-PUPIL_RX, PUPIL_RY = 3.5, 5.0
-MOUTH_Y = -88.5        # 1.2 mm under the prims' 1.635: the head's 4-degree
-                       # tilt drops the projection on the lower face
-MOUTH_HALF_W = 10.0    # small: the lip prims are 2.0 cm now
+# Eye geometry, mm (positive-x eye; mirrored for the other). ANIME, and
+# "a bit ridiculous big" (owner, 2026-10-23): 37 x 22 mm, ~4x a realistic
+# eye's area, centred in siren.blob's carved socket (x 28, rel -27 mm: the
+# carve's offset), a tall graded iris nearly filling it.
+EYE_IN, EYE_OUT = 9.0, 46.0
+EYE_Y = -29.0          # eye centre line at the inner corner, rel cranium centre
+EYE_LIFT = 3.0         # outer corner this much higher
+EYE_HALF_H = 13.0      # upper lid height above the centre line
+EYE_LOW = 0.70         # the lower lid's depth, as a share of EYE_HALF_H
+IRIS_X, IRIS_Y, IRIS_RX, IRIS_RY = 27.5, -27.0, 9.5, 12.0
+PUPIL_RX, PUPIL_RY = 3.8, 5.6
+# The mouth line and lip peaks are siren.blob's lip prims, PROBED (the
+# surface rise each one makes): upper peak -81.5, lower -93, the line
+# between at -86.2 mm. The first sheet put the line at -88.5 and its lips
+# sat 2 mm under their own swells.
+MOUTH_Y = -86.2
+MOUTH_HALF_W = 18.0
 
 
 def mm(x: float, y: float) -> tuple[float, float]:
@@ -190,101 +193,132 @@ def almond_mask(grow: float = 0.0) -> Image.Image:
 # Layers: each returns (mask L, multiplier rgb, opacity).
 
 def lid_layers():
-    """A little mauve on the lid, and the double-lid crease: a thin dark arc
-    ~3.5 mm above the lash line, the anime eye's second line."""
+    """A PROMINENT upper lid (owner, 2026-10-23: "upper eyelid more
+    prominent"): smoky mauve from the lash line up to a firm dark crease
+    ~5 mm above it, darkest at the outer corner, with a faint lift under
+    the brow so the lid reads as a fold set back under the brow bone (the
+    carved socket in siren.blob does the rest)."""
     lid, d = new_mask()
+    n = 24
     for s_ in (1.0, -1.0):
-        ellipse(d, s_ * 28.0, EYE_Y + EYE_HALF_H + 2.0, 16.0, 5.0)
-    lid = blur(lid, 2.0)
+        band = [almond_edge(i / n, True, 0.0) for i in range(n + 1)] + \
+               [almond_edge(1 - i / n, True, 5.0) for i in range(n + 1)]
+        d.polygon([mm(s_ * x, y) for x, y in band], fill=255)
+        ellipse(d, s_ * 41.0, EYE_Y + 4.5, 6.0, 4.5)   # deeper at the outer corner
+    lid = blur(lid, 1.0)
     crease, dc = new_mask()
-    pts = [almond_edge(0.18 + 0.78 * t / 10, True, 3.6) for t in range(11)]
+    pts = [almond_edge(0.08 + 0.92 * t / 12, True, 5.0) for t in range(13)]
+    ox, oy = pts[-1]
+    pts.append((ox + 2.5, oy - 0.6))
     for side in both(pts):
-        stroke(dc, side, 0.5, 0.9)
-    crease = blur(crease, 0.35)
-    return [(lid, LID, 0.70), (crease, CREASE, 0.80)]
+        stroke(dc, side, 0.6, 1.3)
+    crease = blur(crease, 0.6)
+    bone, db = new_mask()
+    for s_ in (1.0, -1.0):
+        ellipse(db, s_ * 31.0, EYE_Y + 12.5, 15.0, 3.5)
+    bone = blur(bone, 2.0)
+    return [(bone, BROW_BONE, 0.8), (lid, LID, 0.85), (crease, CREASE, 0.80)]
 
 
 def blush_layer():
-    """Anime blush: a soft rose band under each eye, wider than tall."""
     m, d = new_mask()
-    for s_ in (1.0, -1.0):
-        ellipse(d, s_ * 31.0, -50.0, 14.0, 6.0)
-    return [(blur(m, 4.0), BLUSH, 0.85)]
+    for s in (1.0, -1.0):
+        ellipse(d, s * 38.0, -56.0, 14.0, 7.0)
+    return [(blur(m, 6.0), BLUSH, 0.9)]
 
 
 def brow_layer():
-    """Thin, high, gently arched brows (Mai's): well above the eye, so the
-    face reads open and surprised-sweet rather than stern."""
+    """Arched brows SLANTING IN (owner, 2026-10-23): the inner head set low
+    toward the nose and rising steeply to a high arch two thirds out, then
+    falling off: a sultry, knowing brow rather than the first pass's flat
+    one."""
     m, d = new_mask()
-    path = [(11.0, -1.0), (19.0, 3.5), (29.0, 5.6), (39.0, 4.6), (47.0, 0.5)]
+    # Above the big eye (its lid tops out at rel ~-15 mm).
+    path = [(11.0, -6.5), (17.0, -2.8), (25.0, 1.4), (33.0, 4.2), (39.0, 4.8), (45.0, 2.6), (52.0, -3.0)]
     for side in both(path):
-        stroke(d, side, 2.2, 0.8)
-    return [(blur(m, 0.3), BROW, 0.92)]
+        stroke(d, side, 4.2, 1.0)
+    return [(blur(m, 0.35), BROW, 0.92)]
 
 
 def eye_layers():
-    """Sclera, a graded iris (dark under the lid, glowing amber at its foot),
-    pupil, two catchlights — clipped to the eye."""
+    """Sclera, a graded anime iris (dark under the lid, glowing at its
+    foot), pupil, two catchlights — clipped to the eye."""
     alm = almond_mask()
     alm_a = np.asarray(alm)
     clip = lambda m: Image.fromarray(np.minimum(np.asarray(m), alm_a))
     out = [(blur(alm, 0.25), SCLERA, 1.0)]
     sh, d = new_mask()
     for s_ in (1.0, -1.0):
-        ellipse(d, s_ * IRIS_X, EYE_Y + EYE_HALF_H + 1.0, 17.0, 5.0)
-    out.append((clip(blur(sh, 1.0)), SCLERA_SHADE, 0.9))
-    for colour, rx, ry, dy, b in ((IRIS_DARK, IRIS_RX, IRIS_RY, 0.0, 0.3),
-                                  (IRIS, IRIS_RX - 0.9, IRIS_RY - 1.0, -0.6, 0.5),
-                                  (IRIS_LIGHT, IRIS_RX - 2.2, IRIS_RY * 0.42, -IRIS_RY * 0.50, 1.6),
-                                  (PUPIL, PUPIL_RX, PUPIL_RY, 0.4, 0.4)):
+        ellipse(d, s_ * IRIS_X, EYE_Y + EYE_HALF_H + 1.5, 20.0, 6.0)
+    out.append((clip(blur(sh, 1.2)), SCLERA_SHADE, 0.9))
+    for colour, rx, ry, dy, b in ((LIMBAL, IRIS_RX, IRIS_RY, 0.0, 0.3),
+                                  (IRIS_DARK, IRIS_RX - 0.8, IRIS_RY - 0.9, 0.0, 0.4),
+                                  (IRIS, IRIS_RX - 1.4, IRIS_RY * 0.70, -IRIS_RY * 0.22, 1.4),
+                                  (IRIS_LIGHT, IRIS_RX - 3.0, IRIS_RY * 0.36, -IRIS_RY * 0.55, 1.8),
+                                  (PUPIL, PUPIL_RX, PUPIL_RY, 0.6, 0.4)):
         m, d = new_mask()
         for s_ in (1.0, -1.0):
             ellipse(d, s_ * IRIS_X, IRIS_Y + dy, rx, ry)
         out.append((clip(blur(m, b)), colour, 1.0))
-    # The lid's shadow over the iris top.
-    out.append((clip(blur(sh, 1.0)), (0.55, 0.55, 0.55), 0.6))
+    out.append((clip(blur(sh, 1.2)), (0.55, 0.55, 0.55), 0.6))
     c, d = new_mask()
     for s_ in (1.0, -1.0):
-        # One key light: the big catchlight upper-left on both eyes, a small
+        # One key light: a big catchlight upper-left on both eyes, a small
         # one lower-right.
-        ellipse(d, s_ * IRIS_X - 3.0, IRIS_Y + 3.4, 2.3, 2.6)
-        ellipse(d, s_ * IRIS_X + 2.6, IRIS_Y - 3.8, 1.0, 1.0)
+        ellipse(d, s_ * IRIS_X - 3.4, IRIS_Y + 4.2, 2.6, 3.0)
+        ellipse(d, s_ * IRIS_X + 3.0, IRIS_Y - 4.6, 1.1, 1.1)
     out.append((blur(c, 0.15), CATCH, 1.0))
     return out
 
 
 def liner_layer():
-    """The anime upper lash line: heavy, thickening to the outer corner and
-    flicked out and up past it; a thin lower line on the outer half."""
+    """A HEAVY upper lash line (2-3 mm, swelling into the outer third) with a
+    long wing 9 mm out and up past the corner; a soft lower line on the
+    outer half."""
     m, d = new_mask()
     n = 24
     upper = [almond_edge(i / n, True, 0.4) for i in range(1, n + 1)]
     ox, oy = upper[-1]
-    upper += [(ox + 2.5, oy + 0.6), (ox + 5.0, oy + 2.0)]
+    upper += [(ox + 3.5, oy + 1.3), (ox + 6.5, oy + 3.2), (ox + 9.0, oy + 5.0)]
     for side in both(upper):
-        stroke(d, side, 1.3, 2.6)
+        stroke(d, side, 2.0, 1.6)
+    for side in both([almond_edge(1 - i / n * 0.65, True, 1.2) for i in range(n)]):
+        stroke(d, side, 3.0, 1.0)
     lower, dl = new_mask()
     for side in both([almond_edge(0.35 + 0.65 * i / 12, False, 0.3) for i in range(13)]):
-        stroke(dl, side, 0.4, 0.9)
-    return [(blur(m, 0.25), INK, 0.97), (blur(lower, 0.3), INK, 0.70)]
+        stroke(dl, side, 0.5, 1.1)
+    return [(blur(m, 0.25), INK, 0.97), (blur(lower, 0.3), INK, 0.65)]
 
 
 def lash_layer():
-    """A few thick lash CLUMPS at the outer corner, swept out (anime lashes
-    are shapes, not hairs), and two short ones under the outer corner."""
+    """LARGE lashes (owner): seven thick clumps along the outer two thirds of
+    the upper lid, 4-9 mm long, curling up and out, longest at the corner;
+    three short ones under the outer corner."""
     m, d = new_mask()
     for s_ in (1.0, -1.0):
-        for t, length, ang in ((0.70, 2.6, 70), (0.82, 3.4, 45), (0.93, 3.8, 22)):
-            x, y = almond_edge(t, True, 0.8)
-            a = math.radians(ang)
-            pts = [(x, y), (x + math.cos(a) * length * 0.6, y + math.sin(a) * length * 0.6 + 0.3),
-                   (x + math.cos(a - 0.3) * length, y + math.sin(a - 0.3) * length)]
-            stroke(d, [(s_ * px_, py_) for px_, py_ in pts], 1.1, 0.2)
-        for t in (0.78, 0.9):
-            x, y = almond_edge(t, False, 0.5)
-            pts = [(x, y), (x + 1.2, y - 1.8)]
-            stroke(d, [(s_ * px_, py_) for px_, py_ in pts], 0.6, 0.15)
-    return [(blur(m, 0.15), INK, 0.95)]
+        for t, length, ang in ((0.40, 4.0, 95), (0.52, 5.0, 85), (0.63, 6.0, 72), (0.73, 7.0, 58),
+                               (0.82, 8.0, 44), (0.90, 8.5, 30), (0.97, 9.0, 16)):
+            x, y = almond_edge(t, True, 1.2)
+            pts = []
+            for j in range(6):
+                f = j / 5
+                a = math.radians(ang) - 0.55 * f * f
+                pts.append((x + math.cos(a) * length * f, y + math.sin(a) * length * f))
+            stroke(d, [(s_ * px_, py_) for px_, py_ in pts], 1.6, 0.25)
+        for t in (0.70, 0.82, 0.92):
+            x, y = almond_edge(t, False, 0.6)
+            pts = [(x, y), (x + 1.0, y - 1.6), (x + 1.8, y - 3.0)]
+            stroke(d, [(s_ * px_, py_) for px_, py_ in pts], 0.9, 0.2)
+    return [(blur(m, 0.15), INK, 0.97)]
+
+
+def nose_light():
+    """A soft counter-light under the nose ridge's end (rel ~-61 mm), where
+    the shading pools in the hollow between the nose and the lip: without
+    it a dark smudge ~1.5 cm wide sat under her nose at every distance."""
+    m, d = new_mask()
+    ellipse(d, 0.0, -62.0, 9.0, 6.0)
+    return [(blur(m, 3.0), (1.55, 1.45, 1.42), 0.9)]
 
 
 def lip_layers():
@@ -296,22 +330,22 @@ def lip_layers():
     for i in range(41):
         x = -w + 2 * w * i / 40
         t = abs(x) / w
-        h = 3.2 * math.sin(math.pi * (1 - t) / 2) ** 0.8 - 0.7 * math.exp(-(x / (0.15 * w)) ** 2)
-        pts.append(mm(x, MOUTH_Y + 0.9 * t * t + max(0.0, h)))
+        h = 8.0 * math.sin(math.pi * (1 - t) / 2) ** 0.75 - 1.6 * math.exp(-(x / (0.13 * w)) ** 2)
+        pts.append(mm(x, MOUTH_Y + max(0.0, h)))
     for i in range(41):
         x = w - 2 * w * i / 40
         t = abs(x) / w
-        h = 4.4 * math.sin(math.pi * (1 - t) / 2) ** 0.9
-        pts.append(mm(x, MOUTH_Y + 0.9 * t * t - h))
+        h = 11.0 * math.sin(math.pi * (1 - t) / 2) ** 0.85
+        pts.append(mm(x, MOUTH_Y - h))
     d.polygon(pts, fill=255)
     line, dl = new_mask()
     lp = []
     for i in range(31):
         x = -w + 2 * w * i / 30
-        lp.append((x, MOUTH_Y + 0.3 * math.cos(math.pi * x / (2 * w)) + 1.2 * (x / w) ** 2))  # corners up: a small smile
-    stroke(dl, lp, 0.7, 0.7)
+        lp.append((x, MOUTH_Y + 0.5 * math.cos(math.pi * x / (2 * w)) - 0.4 * (x / w) ** 2))
+    stroke(dl, lp, 0.9, 0.9)
     hi, dh = new_mask()
-    ellipse(dh, 0.0, MOUTH_Y - 2.2, 3.0, 1.0)
+    ellipse(dh, 0.0, MOUTH_Y - 5.5, 5.5, 1.8)
     return [(blur(m, 0.5), LIP, 0.95), (blur(line, 0.35), LIP_LINE, 0.85), (blur(hi, 1.2), (1.05, 0.95, 0.95), 0.6)]
 
 
@@ -333,7 +367,7 @@ def base_alpha() -> np.ndarray:
 def main() -> int:
     mult = np.ones((W, W, 3), dtype=np.float32)
     layers = (lid_layers() + blush_layer() + brow_layer() + eye_layers() + liner_layer() + lash_layer()
-              + lip_layers())
+              + nose_light() + lip_layers())
     for mask, colour, opacity in layers:
         a = (np.asarray(mask, dtype=np.float32) / 255.0 * opacity)[..., None]
         mult = mult * (1.0 - a) + np.asarray(colour, dtype=np.float32) * a

@@ -135,20 +135,28 @@ read attractive, turn each lever the other way. What worked, in order of how muc
   through the zombie mind's unarmed swing (`attack.ts` `swingGapeAt`), with needle fangs buried >= 2 mm inside the
   rest face (pinned by `siren-blob.test.ts`), so they own no paint until the jaw drops.
 
-### Anime, not realistic (the siren's second pass)
+### Stylised, but not all the way (the siren's second and third passes)
 
-"Attractive" built from realistic proportions read to the owner as a plain human woman ("not what we are going for
-— it needs to be more exaggerated"). The roster's beauty is STYLISED. What moved it:
+"Attractive" built from realistic proportions read to the owner as a plain human woman ("needs to be more
+exaggerated"); a full anime remake (big head-shaped changes, short bangs, a mid-thigh slip) overshot ("your previous
+iteration was better"). What landed: the REALISTIC body and head, with an anime FACE painted onto it. What moved it:
 
-- **Eyes are the face.** ~3x the area of a realistic eye (32 x 20 mm), set LOW (centre ~3 cm under the cranium's
-  centre), a tall iris graded dark-under-the-lid to a glowing foot, two catchlights, a heavy winged upper lash line
-  and a crease line; thin brows set high. All sheet paint. Judge size on the HEAD, not on the sheet: hs y units are
-  1.28x x units, so a sheet preview looks squat.
-- **Delete the nose.** Every nose tip, however small, stood over an undercut the shading filled black. A soft 1.6 cm
-  ridge is all an anime face draws. Flatten between the eyes too (no nasal-root fill).
-- **Widest at the cheekbones, V to the chin.** Narrow the bottom of the face masses, lift and shrink the chin.
-- **Bangs are pointed flat cones** (r 0.012 -> 0.001, deep 0.6) off the crown's front edge, ending AT the brows.
-- **Show the proportion the dress would hide**: a mid-thigh hem, so wide hips and heavy thighs read.
+- **Eyes are the face, and they can be huge.** 37 x 22 mm (~4x a real eye's area), set a little low, a tall iris
+  graded dark-under-the-lid to a glowing foot, two catchlights, a heavy 2-3 mm lash line with a 9 mm wing, seven
+  thick lash CLUMPS (anime lashes are shapes, not hairs). All sheet paint. Judge size on the HEAD, not on the sheet:
+  hs y units are 1.28x x units, so a sheet preview looks squat.
+- **Carve a socket under a painted eye** (`carve on skull ... blend=0.007`, ~7 mm deep at the iris, probed): the
+  brow and cheek then stand over the eye and the painted lid reads set in. Centre the carve on the painted eye.
+- **A prominent upper lid is paint**: a smoky band from the lash line to a firm dark crease ~5 mm above, a faint lift
+  under the brow. Brows arched and slanting IN toward the nose read sultry.
+- **Paint the mouth on the lip prims' PROBED swells**, not on the authored y: diff the surface with and without the
+  lip prims and take the peaks (the first sheet's mouth sat 2.3 mm under its own lips). Lips 2 mm under the skin are
+  swells; brought proud through wide face blends they push out a muzzle.
+- **The nose undercut shades black at every size.** Drop the tip ball, keep a soft ridge, and paint a counter-light
+  (multiplier ~1.5) under it. Widen the blend between the upper face mass and the jaw part (0.020 / 0.022) so the
+  crease there stops shading.
+- **Slim the face to a point**: narrow the bottom of the face masses, lift and shrink the chin.
+- **Red lipstick renders orange on warm skin** unless the multiplier's green is ~0 and blue a little up (0.52 0 0.07).
 
 ## Porting a face onto a new body
 

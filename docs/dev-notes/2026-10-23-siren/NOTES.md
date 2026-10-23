@@ -37,3 +37,12 @@ References: `anime-3d.glb` and a Mai Shiranui mesh (the owner's ~/Downloads). Th
 NOT committed and were not baked or measured into the file; read once for proportion (anime-3d: hips 0.23 of height
 across over a 0.15 waist; head ~0.12 of height; the face in the lower ~45% of the head). See biomech-style.md
 "Anime, not realistic".
+
+## Third pass (2026-10-23, owner: "your previous iteration was better" + "eyes much more anime ... a bit ridiculous big with large lashes", a slimmer pointed face, bigger lips, "the decal doesn't line up with the geometry")
+
+Back to the realistic body and head, with: deep carved eye sockets; huge painted anime eyes (emerald, graded, two
+catchlights) with a heavy winged liner and large lash clumps; a smoky prominent upper lid and crease; brows arched and
+slanting in; a slimmer face tapering to a pointed chin; bigger crimson lips painted exactly on the lip prims' probed
+swells (the old sheet sat 2.3 mm low); the nose tip removed with a painted counter-light under the ridge.
+
+![third pass](contact-3.png)
