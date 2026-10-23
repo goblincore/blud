@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, type ArmStyle, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, HOVER, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { Vec3 } from './types';
@@ -56,6 +56,10 @@ export interface MotionProfile {
    *  onFire spawns enemy rounds. Absent = melee. A prop alone does not make a
    *  shooter — the ogre's chainsaw is a prop with carries. */
   gunner?: { weapon: GunnerWeapon };
+  /** A gunner that fires from its BODY, not from a held prop (the teratoma spits from its mouth): the round leaves
+   *  from rig point `from` plus `offset` (body-local metres: +x left, +y up, +z forward, turned by the body's yaw),
+   *  heading the way the body faces. It needs no prop, no carries and no right arm. Absent = the held gun's muzzle. */
+  spit?: { from: GaitJointName; offset: Vec3 };
   /** A CHARGER: the game gives it the warbull mind (enemy-mind.ts
    *  makeWarbullMind), the bull charge (charge.ts) over its gunner brain,
    *  and a brawl once disarmed. Needs `gunner`. */
@@ -397,6 +401,26 @@ export const GIBBET_PROFILE: MotionProfile = {
   melee: { kind: 'bite' },
 };
 
+/** The teratoma (characters/teratoma.blob): a cacodemon-style floater. It HOVERS (no legs; the gait is the root's
+ *  heave and drift) and SPITS: the warbull's slow rocket, launched from its maw (`spit`), is its fireball, dodgeable at
+ *  9 m/s and bursting through the dynamite path. A gore body like the zombie. The soldier's shooting brain gives it
+ *  range-keeping and a fire cadence; a real flying mind (altitude, strafing over cover) is a follow-up. */
+export const TERATOMA_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'teratoma',
+  gait: { walk: HOVER, run: HOVER },
+  runBand: { from: Infinity, to: Infinity },
+  // A slow drift: slower than the zombie's 1.15 and the twinhead's 0.95, so its fireballs are the threat, not its
+  // approach.
+  cruise: 0.8,
+  turnRate: 1.6,
+  armStyle: 'swing',
+  gunner: { weapon: 'rocket' },
+  // The maw's centre: pelvis is the ball's centre (teratoma.blob `root pelvis at 1.45`), the gullet sits 0.19 below it,
+  // and the lips' fronts are at z ~0.57; 0.62 launches the round just clear of the teeth.
+  spit: { from: 'pelvis', offset: [0, -0.19, 0.62] },
+};
+
 /** The bride: a slow STALK in a high sword guard; the point trails on the
  *  run. Melee only — the sword mind (enemy-mind.ts) swings it. */
 export const BRIDE_PROFILE: MotionProfile = {
@@ -473,6 +497,7 @@ const BY_NAME: Record<string, MotionProfile> = {
   gorehound: GOREHOUND_PROFILE,
   gutcrawler: GUTCRAWLER_PROFILE,
   gibbet: GIBBET_PROFILE,
+  teratoma: TERATOMA_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */
