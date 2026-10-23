@@ -95,18 +95,28 @@ body
   # cage-lumps, the palette's corpse noise off. The dress shells and the
   # bust's crimson paint are gone; clothing comes back as attachments later.
   # ============================================================
-  # HIPS — half-width 0.130 x 1.26 = 0.16, centred a little higher (the
+  # HIPS — half-width 0.128 x 1.26 = 0.16 at the hip line (the
   # thigh tops carry the line on out to ~0.21; at 0.21 here the hip stood
   # out as a shelf over the legs, a bell), a band
   # (tall 0.80) centred just under the hip joint, so the widest slice is the
   # top of the thighs.
-  blob torso on pelvis at=0.45 r=0.130 wide=1.26 tall=0.80 deep=0.90 blend=0.036 core
+  blob torso on pelvis at=0.30 offset=(0,0,-0.016) tip=(0,-0.115,0.010) r=0.128 r2=0.066 wide=1.30 tall=0.80 deep=0.74 blend=0.040 core
+  # (A downward-tapering CONE, not a ball: r 0.128 at the hip line to 0.058
+  # at the crotch, so the pelvis narrows into a V between the thighs. As an
+  # ellipsoid the whole front from the underbust to the crotch read as one
+  # round bulb with no belly and no groin. deep 0.74 and set 1.6 cm back:
+  # at deep 0.84 its front stood 5 cm proud of the waist, a pot belly; at
+  # 0.66 / 3 cm the thigh tops bulged either side of a deep cleft.)
+  # LOWER BELLY — a soft swell below the navel (y ~1.06), wider than tall,
+  # standing ~1.5 cm proud of the waist: the belly reads as a belly, not
+  # a flat panel running into the hips.
+  blob torso on spine1 at=0.10 offset=(0,-0.030,0.025) r=0.066 wide=1.35 tall=0.85 deep=0.60 blend=0.030
   # THE REAR — two round mounds behind and a little below the hips (venus's
   # shelf, smaller and higher): back reach z ~-0.20, a cleft between them.
   blob torso on pelvis at=0.10 offset=(0.070,-0.010,-0.080) r=0.108 wide=1.00 tall=1.00 deep=1.00 blend=0.028 both
   # WAIST — pulled in hard over the hips: half-width ~0.10 at y ~1.13, a
   # flat belly (deep 0.78).
-  bar  torso on spine1 from=0.00 to=1.00 r=0.088 r2=0.076 wide=1.22 deep=0.78 blend=0.030
+  bar  torso on spine1 from=0.15 to=1.00 r=0.080 r2=0.074 wide=1.20 deep=0.78 blend=0.030
   # RIBCAGE — wider at the top than the waist, the base the bust sits on.
   bar  torso on chest  from=0.00 to=0.88 r=0.080 r2=0.104 wide=1.18 deep=0.84 blend=0.028
   # THE BUST — big and round, set a little apart (x 0.076) and high: cones
@@ -272,13 +282,15 @@ body
   # a slim knee, a soft calf, a slender bare foot. Set apart (side 0.105) so
   # the inner thighs meet without passing through each other.
   # ============================================================
-  blob leg on thigh at=0.08 offset=(0.012,0,-0.010) r=0.096 deep=1.05 blend=0.034 mirror core
-  bar  leg on thigh from=0.02 to=1.00 r=0.108 r2=0.047 wide=0.95 deep=1.05 blend=0.034 mirror
+  blob leg on thigh at=0.12 offset=(0.012,0,-0.010) r=0.094 tall=0.90 deep=1.05 blend=0.034 mirror core
+  # from=0.16: started at the hip joint, its r 0.108 end cap rose to y
+  # ~1.14 and swallowed the waist (the abdomen read as part of the hips).
+  bar  leg on thigh from=0.16 to=1.00 r=0.104 r2=0.047 wide=0.95 deep=1.05 blend=0.034 mirror
   # Outer thigh: venus's, smaller — the hip's line carried down the side.
   # at=0.24, not lower: its centre must stay nearer the thigh's own hip
   # joint than the pelvis root, or the rig binds it to the pelvis
   # (rig-bind.test.ts 'joint ring'; at 0.30 it did).
-  blob leg on thigh at=0.24 offset=(0.026,0,-0.006) r=0.088 tall=2.20 deep=1.00 blend=0.036 mirror
+  blob leg on thigh at=0.24 offset=(0.026,-0.020,-0.006) r=0.088 tall=1.60 deep=1.00 blend=0.036 mirror
   bar  leg on shin  from=0.00 to=0.97 r=0.045 r2=0.023 blend=0.040 mirror
   # Calf: a long soft swell behind the shin, peaking a quarter down.
   blob leg on shin  at=0.20 offset=(0,0,-0.012) tip=(0,-0.170,0.007) r=0.044 r2=0.026 deep=1.05 blend=0.026 mirror

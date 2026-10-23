@@ -73,3 +73,13 @@ bust; thighs heavy at the top tapering to a slim knee (thigh side 0.105, arms ou
 "bumpy texture" was `silhouetteNoiseAmp` 0.008, which DISPLACES the surface: now 0, as is `surfaceNoiseAmp`.
 
 ![bare body](contact-6-body.png)
+
+## Seventh pass: belly and pelvis (owner: "her abdomen from the front is weird, doesn't read as a proper belly and pelvis region")
+
+Measured, not guessed (half-width and front z down the centreline, arms removed): there was no waist under the bust —
+0.128 half-width at y 1.20 but 0.216 by 1.10 — because the thigh bar started at the hip joint and its r 0.108 end
+cap rose to y ~1.14; and the pelvis ellipsoid stood 5 cm proud of the waist (a pot belly). Now the thigh bar starts
+at 0.16 of the thigh, the pelvis is a downward-tapering cone (r 0.128 -> 0.066) narrowing to a V between the thighs,
+set back, with a soft lower-belly swell: waist 0.108 at y 1.15, hips 0.238 at 0.95, belly ~2.5 cm proud.
+
+![torso](contact-7-torso.png)
