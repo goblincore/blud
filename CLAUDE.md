@@ -26,6 +26,7 @@ reference-only for behavior comparison (dynamite, gibbing).
 | Command | Opens | Target |
 | --- | --- | --- |
 | `npm run dev` / `npm run dev:fps` | `/sdf-game.html?level=night-train` | Active SDF FPS (Night Train; bare `/sdf-game.html` is the ring testbed, god mode on) |
+| `npm run dev:arena` | `/sdf-game.html?level=arena&spawn=zombie` | Test arena: one big lit room, one enemy, god mode. `?spawn=<character>` picks it; `` ` `` respawns, `-`/`=` cycle characters |
 | `npm run dev:legacy` | `/index.html` | Retired legacy game |
 | `npx vite` | *(no browser)* | Plain server for automation |
 
