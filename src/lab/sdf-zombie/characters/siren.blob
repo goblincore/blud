@@ -1,0 +1,344 @@
+# THE SIREN — the roster's first deliberately BEAUTIFUL body, and a lure.
+# Owner brief (2026-10-23): every SDF character so far reads monstrous; make
+# one that reads ATTRACTIVE — smooth surfaces, pleasant features, long hair —
+# and keep her in a horror roster by letting the monster out only IN MOTION
+# (owner pick: "lure, reveals in motion"; long loose DARK hair; the face is
+# ours to draw — no reference mesh or plate, so blob:measure / blob:rings
+# exit 2 and every number below is a design decision with its reason).
+#
+# WHO SHE IS. A tall, pale-warm woman in a crimson slip dress with dark hair
+# to her waist, standing still in the carriage aisle. Nothing about her is
+# wrong until she is within arm's reach: then her jaw drops past anything a
+# jaw can do and a mouth of fangs opens out of the pretty face (the bride's
+# jaw hinge, jaw.ts, opened far wider by her swing: motion-profile.ts
+# SIREN_PROFILE.swingGape).
+#
+# THE LEVERS, set the OPPOSITE way to the monsters (biomech-style.md,
+# "Attractive characters"):
+#   1. THE FACE. Shaped by a few UNPAINTED prims (cranium, a face mass
+#      tapering to a pointed chin, cheeks, carved eye sockets, a nose ridge,
+#      lip swells) and coloured entirely by a generated sheet
+#      (scripts/make-siren-face.py: huge anime eyes and lashes, brows, lids,
+#      blush, red lips), worn at MULTIPLY. No painted face prims, no glow,
+#      no ZOMBIE_FLAT mask. (Owner, 2026-10-23: the first, realistic face
+#      read as "very ... human"; a full anime remake overshot; this is the
+#      realistic head with an anime face painted on it.)
+#   2. THE SKIN. Warm, slightly translucent, near-zero corpse noise
+#      (palette): no mottle, no grain, no veins, no normal map.
+#   3. THE SURFACES. Few long tapered prims with generous blends — one bar
+#      per limb segment, so no seams, rings or lumps.
+#   4. THE PROPORTIONS. The bride's elegant frame (her skeleton, verbatim):
+#      a high hip line (legs ~57% of her height), a long neck, a small head,
+#      a defined waist.
+#   5. THE HAIR. Waist-length, loose and dark: a crown mass plus strand
+#      curtains framing the face, over the shoulders and down the back.
+model siren
+  # Flesh crown ~1.81 (the bride's skeleton); the hair's crown takes her to
+  # ~1.83.
+  height 1.83
+  stance humanoid
+
+skeleton
+  # THE BRIDE'S SKELETON, VERBATIM (bride.blob explains every number). Kept
+  # whole for three reasons: it is gait-mappable as is (the zombie's gait
+  # walks it), its proportions are already the elegant ones the brief asks
+  # for (hip joint at 1.04 m, 57% of her height; a 0.14 m neck), and its jaw
+  # bone + hinge are already solved, so the reveal costs no new rig.
+  root pelvis at 0.96 len=0.08
+
+  # Upright and a little proud: the lumbar sways back 2, the chest lifts.
+  bone spine1 parent=pelvis dir=up pitch=-2 len=0.15
+  bone chest  parent=spine1 dir=up pitch=-3 len=0.17
+  bone spine2 parent=chest  dir=up pitch=0  len=0.07
+  # The long neck, pitched forward so the head floats ahead of the
+  # shoulders: a swan's carriage.
+  bone neck   parent=spine2 dir=up pitch=8  len=0.14
+  # Skull tipped back 4 so the face lifts and the chin leads.
+  bone skull  parent=neck   dir=up pitch=-4 len=0.24
+  # The hem pendulum (the cultist's road): the dress's skirt rides it
+  # `rigid`, so it lags the walk and swings on a stop.
+  bone hem    parent=pelvis dir=down len=0.40
+  # THE JAW — the reveal. A carrier for one kinematic rig point at the chin;
+  # `on jaw` prims rotate about jaw.ts's hinge (skull 0.30, the upper lip
+  # line) by the gape. See bride.blob for the derivation.
+  # hinge=0.32: at the lip line, which the face pass moved up 4.8 mm
+  # (reference.md: a hinge above the lips swings the jaw back into the
+  # throat, one below barely opens the mouth).
+  bone jaw    parent=neck   dir=up pitch=66 len=0.070 hinge=0.32
+
+  mirror
+    # Narrow sloping shoulders (socket x ~0.15, y ~1.41).
+    bone clavicle parent=spine2   side=0.020 dir=side tilt=-8 len=0.13
+    # Arms long and slender, hanging just clear of the hips (tilt 14 / 12:
+    # at 8 / 4 the bride's forearms ran into her hip flare).
+    bone upperarm parent=clavicle dir=down tilt=14 pitch=2 len=0.30
+    # Symmetric (the bride's lenR= sword forearm dropped: she has no sword).
+    bone forearm  parent=upperarm dir=down tilt=12 pitch=10 len=0.26
+    bone hand     parent=forearm  dir=down pitch=8         len=0.08
+    # LEGS: 0.49 + 0.48 from the hip at 1.04 lands the ankle at ~0.07.
+    # Knees drawn in a whisper — a narrow, poised stance.
+    bone thigh    parent=pelvis dir=down tilt=-1.5 pitch=2 side=0.085 len=0.49
+    bone shin     parent=thigh  dir=down tilt=1.5  pitch=-1 len=0.48
+    bone foot     parent=shin   dir=fwd                      len=0.13
+  end
+
+body
+  # ============================================================
+  # TORSO — the bride's hourglass with the rib window taken out: a smooth
+  # waist, a soft bust. Every mass a tapered bar with heavy overlap.
+  # ============================================================
+  blob torso on pelvis at=0.35 r=0.105 wide=1.20 tall=0.90 deep=0.84 blend=0.028
+  # Waist: one tapered bar up spine1, narrowest ~0.087 semi at y 1.13.
+  bar  torso on spine1 from=0.00 to=1.00 r=0.072 r2=0.058 wide=1.16 deep=0.80 blend=0.026
+  # Ribcage flaring to the shoulders. `core`: arms, neck and hips fuse here.
+  bar  torso on chest  from=0.00 to=0.88 r=0.072 r2=0.098 wide=1.17 deep=0.84 blend=0.024 core
+  # Bust: two soft forms high on the chest, a little fuller than the
+  # bride's (r 0.052 -> 0.056), with a wider blend so they melt into the
+  # ribcage instead of sitting on it. Painted the dress's crimson: the
+  # bodice shell below clips open over the cleavage, and anything that
+  # pokes through it reads as the dress's cups (the bride's rule).
+  blob torso on chest  at=0.95 offset=(0.062,-0.0130,0.0640) r=0.056 tall=0.95 deep=0.95 blend=0.016 both color=6e0f1c gloss=0.55
+  # Yoke + shoulder line, thin front-to-back.
+  blob torso on spine2 at=0.90 r=0.060 wide=2.35 tall=0.62 deep=0.85 blend=0.034
+
+  # ============================================================
+  # THE SLIP DRESS — crimson satin (6e0f1c, glossy: satin catches a rim,
+  # cotton does not). The bride's bodice shell, recoloured, and ONE skirt
+  # shell on the hem pendulum to just above the knee, so the long legs —
+  # the proportion beat — stay in view. A SLIP falls close: r 0.140 ->
+  # 0.152 (a first 0.150 -> 0.180 flared like a lampshade), and its folds
+  # run straight down (warpFreq y 0; a y frequency quilted it in diamonds).
+  # ============================================================
+  shell torso on chest at=0.0 offset=(0,-0.120,0.000) tip=(0,0.275,0.014) r=0.086 r2=0.124 wide=0.98 tall=0.60 deep=0.84 thick=0.0030 clip=(0,-0.1908,0.9816) clipd=-0.1477 rim=0.002 blend=0.004 color=6e0f1c gloss=0.55 warp=0.0010 warpFreq=(105,0,105) rigid
+  shell torso on hem at=0.0 offset=(0,-0.010,0) tip=(0,-0.360,0) r=0.140 r2=0.152 wide=1.06 tall=0.55 deep=0.92 thick=0.004 clip=(0,-1,0) clipd=-0.660 rim=0.005 blend=0.006 color=6e0f1c gloss=0.55 warp=0.003 warpFreq=(40,0,40) rigid
+
+  # ============================================================
+  # NECK + HEAD. The bride's solved head structure (bride.blob, "HEAD +
+  # NECK": skull bone (0,1.568,0.005) -> (0,1.808,-0.011)), softened: no
+  # bruised sockets, no corpse sheet, eyes of normal size and set, a rosy
+  # mouth.
+  # ============================================================
+  # Long neck, flaring into the shoulders.
+  bar  head on neck from=0.00 to=1.00 r=0.043 r2=0.034 deep=1.05 blend=0.028
+  # CRANIUM: a human braincase, centre (0, 1.722, -0.011).
+  blob head on skull at=0.64 offset=(0,0.0008,-0.0053) r=0.094 wide=0.755 tall=0.97 deep=0.96 blend=0.010
+  # FACE MASS, split at the mouth (bride Task 12): the upper part on the
+  # skull, the lower on the JAW, on one line with one taper, so at rest they
+  # read as one smooth face and the jaw part swings away on the gape.
+  # Blends 0.012, the bride's. 0.020 / 0.022 were tried to soften the
+  # crease under the nose, and the smooth-min swell they stacked up with
+  # the lips and jaw pushed the whole mouth area ~1 cm out of the face (the
+  # surface sat 8-16 mm outside every prim there): a muzzle. The crease is
+  # handled by removing the nose tip and the sheet's counter-light instead.
+  blob head on skull at=0.45 offset=(0,0,0.0290) tip=(0,-0.0200,0.0040) r=0.054 r2=0.0360 wide=1.06 blend=0.012
+  # PHILTRUM PAD: fills the 2 mm groove where the upper face mass's bottom
+  # rim met the lips and jaw (probed at x 0.022: z 0.0751 / 0.0727 / 0.0744
+  # at y 1.655 / 1.650 / 1.645), whose lit lower edge read as a pale crease
+  # from cheek to cheek under the nose. On the skull and above the lip line
+  # (centre y 1.652, bottom ~1.644), so it stays with the upper face when
+  # the jaw drops.
+  blob head on skull at=0.38 offset=(0,-0.0073,0.0640) r=0.014 wide=2.10 tall=0.55 deep=0.80 blend=0.010
+  blob head on jaw at=1.0 offset=(0,0.01700,-0.02254) tip=(0,-0.0090,-0.0030) r=0.0270 r2=0.0230 wide=1.00 blend=0.012
+  # THE MOUTH'S INSIDE — wet dark red, buried under the rest face (it paints
+  # nothing at rest), filling the opening when the jaw drops.
+  bar  head on skull from=0.28 to=0.19 offset=(0,0.0006,0.0460) r=0.011 wide=1.7 deep=0.9 blend=0.004 color=4e0a10 gloss=0.85
+  # Slim jaw mass, set back from the face plane. wide 0.96 (bride 1.08)
+  # and the lower face mass below at 1.08 / r2 0.028 (bride 1.20 / 0.030):
+  # her jaw read square in the close-up; a taper to the chin is the heart-
+  # shaped face.
+  blob head on skull at=0.26 offset=(0,-0.0005,-0.0070) r=0.046 wide=0.84 tall=0.75 blend=0.012
+  # Chin: small and soft, on the jaw, lifted 2.5 mm (the bride's long
+  # chin read as a long lower face).
+  blob head on jaw at=1.0 offset=(0,0.0200,-0.0090) r=0.008 wide=0.85 tall=0.95 blend=0.010
+  # NO CHEEKBONE PRIMS. The bride's pair (and her lids and brow ridges)
+  # sat at eye level and, on a face without her bruised sockets, read as
+  # one horizontal band across the eyes: goggles (first look, 2026-10-23).
+  # Beauty here is the smooth egg; the sheet paints the rest.
+  # Soft cheeks — youth reads as fullness here, but at r 0.024 / x 0.036
+  # the close-up read jowly; r 0.021 at x 0.034 keeps the curve, not the
+  # bulge.
+  blob head on skull at=0.50 offset=(0.036,-0.0085,0.0480) r=0.022 blend=0.016 both
+  # EYES: an UNPAINTED eyeball bulge per eye — the shape the lids wrap
+  # round — and ALL the colour on the sheet (make-siren-face.py: sclera,
+  # iris, liner, lashes). The first passes painted sclera, iris and a
+  # lash-line bar as prims (the bride's road), and a painted prim owns every
+  # surface point it is NEAREST to: the off-white spread across the lids
+  # and swallowed the lashes, two white saucers, a stare. Centred x 0.029,
+  # 2.8 cm long (ordinary size and set; the bride's larger, wider-set eyes
+  # were her deliberately-wrong doll trace), ~3 mm proud of the face.
+  # DEEP SOCKETS (owner, 2026-10-23: "make the eye sockets deeper"): a
+  # soft carve per eye, centred on the painted eye (x 0.028, rel the
+  # cranium -27 mm), semi-axes 21 x 16 mm, recessing the eye ~7 mm and
+  # easing out over the brow and cheek, so the brow and cheek stand over
+  # the eye and the painted lid reads as set IN the head. wide 1.05, not
+  # 1.30: at 1.30 the two carves met at the centreline and ate the nose
+  # bridge flat. Smooth (blend 0.007): a crisp rim reads as a mask hole.
+  carve on skull at=0.55 r=0.020 wide=1.05 tall=0.80 deep=0.75 blend=0.007 offset=(0.028,-0.0046,0.0975) both
+  # No lid or brow-ridge prims (see the cheekbone note): with them the eye
+  # was a slit under a shelf. The sheet paints the lid and brows.
+  # Nasal root: fills between the eyes so they sit IN the face.
+  blob head on skull at=0.57 offset=(0,0.0005,0.0720) r=0.010 wide=0.90 blend=0.006
+  # THE NOSE: one soft ridge, no tip ball. Every tip tried (the bride's
+  # r 0.0075, then 0.0054, 0.0044, 0.0032) stood over an undercut the
+  # shading filled black — a dark cave ~1.5 cm wide under the nose, the
+  # biggest thing in the close-up; a fill under it cast a moustache. The
+  # anime faces she is pushed toward (owner, 2026-10-23) barely draw a nose.
+  # The sheet paints a counter-light where the undercut was
+  # (make-siren-face.py nose_light()).
+  blob head on skull at=0.52 offset=(0,0.0010,0.0855) tip=(0,-0.020,0.001) r=0.0032 r2=0.0036 blend=0.008
+  # LIPS: a cupid's-bow upper on the skull and a fuller lower on the JAW,
+  # so the mouth opens between them. SHAPE ONLY, and SUBTLE: their colour
+  # is the sheet's (make-siren-face.py lips(), placed on THESE prims'
+  # probed bumps: upper peak y rel the cranium -81.5 mm, lower -93 mm,
+  # mouth line -86.2 mm). Painted, in any colour, a lip prim owns a band of
+  # skin round it (paint is by NEAREST prim): a wax mouth 1.7 cm tall.
+  # Brought 3 mm proud they only pushed out a muzzle through the face
+  # blends, so they stay ~2 mm under the skin as soft swells. Bigger than
+  # the first pass (r 0.0042 / 0.0056, 3.2 / 2.8 cm) for fuller lips.
+  bar  head on skull from=0.32 to=0.32 offset=(-0.0135,0.0004,0.0720) tip=(0.027,0,0) bend=(0,0.0022,0.005) r=0.0042 tall=0.85 blend=0.004
+  bar  head on jaw from=1.0 to=1.0 offset=(-0.0080,0.03838,0.00200) tip=(0.016,0,0) bend=(0,-0.0018,0.004) r=0.0056 tall=0.80 blend=0.004
+
+  # ---- THE FANGS (the reveal): needle teeth hidden INSIDE the rest face
+  # (the jaw capsule fills the mouth at rest; every tooth sits deep enough
+  # under its front that it is never the NEAREST prim to the skin, so the
+  # rest face shows nothing — the lower row was pushed 6 mm back when the
+  # receded chin let it paint two ivory spots) and bared
+  # only when the jaw drops. Upper row on the skull, hanging from the roof
+  # of the mouth (1.2-1.9 cm: the compact, receded lower face leaves no
+  # more room to hide them at rest); lower row on the jaw, standing up
+  # from it. Ivory, wet.
+  blob head on skull at=0.27 r=0.0042 r2=0.0007 offset=(-0.005,0.0000,0.0590) tip=(0.000,-0.019,0.003) blend=0.001 both color=e6dcc4 gloss=0.70
+  blob head on skull at=0.27 r=0.0040 r2=0.0007 offset=(-0.012,0.0000,0.0570) tip=(0.000,-0.017,0.003) blend=0.001 both color=e6dcc4 gloss=0.70
+  blob head on skull at=0.27 r=0.0036 r2=0.0006 offset=(-0.019,0.0000,0.0515) tip=(-0.001,-0.015,0.003) blend=0.001 both color=e6dcc4 gloss=0.70
+  blob head on skull at=0.27 r=0.0032 r2=0.0006 offset=(-0.021,0.0000,0.0430) tip=(-0.001,-0.012,0.002) blend=0.001 both color=e6dcc4 gloss=0.70
+  blob head on jaw at=1.0 r=0.0036 r2=0.0007 offset=(-0.008,0.0230,-0.0090) tip=(0.000,0.013,0.002) blend=0.001 both color=e6dcc4 gloss=0.70
+  blob head on jaw at=1.0 r=0.0032 r2=0.0006 offset=(-0.016,0.0215,-0.0130) tip=(0.000,0.012,0.002) blend=0.001 both color=e6dcc4 gloss=0.70
+  blob head on jaw at=1.0 r=0.0028 r2=0.0005 offset=(-0.023,0.0195,-0.0200) tip=(0.000,0.010,0.002) blend=0.001 both color=e6dcc4 gloss=0.70
+
+  # ============================================================
+  # HAIR — waist-length, loose, near-black warm brown (1c1412), a satin
+  # gloss. A crown mass with a blunt fringe, strand curtains framing the
+  # face to the chest, and one shell falling down the back to the waist
+  # (y ~1.10).
+  # ============================================================
+  # Crown mass brought FORWARD over the forehead's top (bride: 0.0137,
+  # -0.0144, which sat behind her veil): at her offset the cranium's top
+  # front poked through and she read bald to the crown. Front reach z ~0.083
+  # at y ~1.74 now, so the hairline crosses the forehead ~4 cm above the brows.
+  # deep 0.98, not 1.00: its largest semi-axis must stay under the
+  # cranium's (0.0912), or it becomes the fattest head prim and the face
+  # sheet projects off the hair instead of the skull (headShape).
+  blob head on skull at=0.64 offset=(0,0.0200,-0.0060) r=0.092 wide=0.86 tall=0.95 deep=0.98 blend=0.006 color=1c1412 gloss=0.35
+  # Face-framing curtains: centre-parted, falling past the cheeks to the
+  # collarbones. 0.32 m, not longer: they ride the head, and the head turns
+  # (see THE FALL).
+  blob head on skull at=0.50 offset=(0.040,0.097,0.036) tip=(0.050,-0.320,0.006) bend=(0.030,0,0.004) r=0.020 r2=0.014 strand=7 wave=0.12 cycles=2.5 fat=0.80 blend=0.004 both color=1c1412 gloss=0.35
+  # THE FALL: one glossy SHELL from the crown to the waist, the bride's
+  # veil recoloured and lengthened (tip -0.40 -> -0.58, r2 0.14 -> 0.16,
+  # thick 0.004 -> 0.010), clipped open at the face by her near-vertical
+  # plane (keeps z < ~0.03 at the eyes, z < ~-0.07 at the waist, so it
+  # falls behind the shoulders and down the back). Fine vertical warp
+  # (warpFreq x/z 90) ribs it into locks. It replaced two strand curtains
+  # (behind the ears, down the back) that read from the side and back as
+  # flat pleated planks hung off a helmet, with bare skull between them.
+  # ON THE UPPER SPINE, NOT THE SKULL. On the skull (`rigid`, as the
+  # bride's veil is) the game's head aim turned the whole 0.6 m fall with
+  # the head, and in game captures it swung out sideways as a plank (the
+  # bride's veil does the same). Hair that long hangs from the body. Same
+  # rest geometry: the skull's at=0.75 point (0, 1.7479, -0.0072) plus the
+  # veil's offset, re-expressed off spine2's tail (0, 1.4297, -0.0141).
+  # r 0.090 stays under the cranium's 0.0912 all the same.
+  shell torso on spine2 at=1.0 offset=(0,0.3182,-0.0081) tip=(0,-0.580,-0.045) r=0.090 r2=0.160 thick=0.010 clip=(0,-0.164,0.986) clipd=-0.2491 rim=0.008 blend=0.006 color=1c1412 gloss=0.35 warp=0.003 warpFreq=(90,4,90) rigid
+
+  # ============================================================
+  # ARMS — slim and smooth: one ball at the shoulder, one tapered bar per
+  # segment, a slender hand. Blends 0.022-0.024 at the elbow (first pass
+  # 0.014-0.016 left a ball joint there: a wooden doll).
+  # ============================================================
+  blob arm on upperarm at=0.06 r=0.036 blend=0.030 mirror core
+  bar  arm on upperarm from=0.04 to=0.97 r=0.035 r2=0.026 blend=0.022 mirror
+  bar  arm on forearm  from=0.00 to=0.96 r=0.027 r2=0.019 blend=0.024 mirror
+  blob arm on hand     at=0.45 r=0.022 wide=0.75 tall=1.25 deep=1.10 blend=0.016 mirror
+
+  # ============================================================
+  # LEGS — long and bare: the hip flare carried by the thigh root (the
+  # bride's lesson: torso and leg are different clusters, so the outer line
+  # from hip into thigh must live on the thigh), a smooth taper to a slim
+  # knee, a soft calf, a slender bare foot. The knee is ONE soft taper: the
+  # thigh ends at r 0.042 into a shin starting at 0.039 with a 0.026 blend
+  # (first pass: 0.036 into 0.035 at 0.012, a ball joint at every knee,
+  # stick legs on a wooden doll).
+  # ============================================================
+  blob leg on thigh at=0.09 offset=(0.012,0,-0.010) r=0.057 tall=1.30 deep=1.00 blend=0.030 mirror core
+  bar  leg on thigh from=0.04 to=1.00 r=0.070 r2=0.042 deep=1.05 blend=0.022 mirror
+  bar  leg on shin  from=0.00 to=0.97 r=0.039 r2=0.022 blend=0.026 mirror
+  # Calf: a long soft swell behind the shin, peaking a quarter down.
+  blob leg on shin  at=0.20 offset=(0,0,-0.011) tip=(0,-0.170,0.007) r=0.040 r2=0.025 deep=1.05 blend=0.026 mirror
+  # Bare foot, slim and pointed a little (on her toes, the dancer's line).
+  bar  leg on foot  from=0.00 to=0.90 offset=(0,-0.036,-0.010) r=0.028 r2=0.018 wide=1.05 tall=0.75 blend=0.018 mirror
+
+# Interior bones for wound reveals: the bride's.
+bones
+  ratio 0.38
+  blob head on skull at=0.64 offset=(0,0.0008,-0.0053) r=0.076 wide=0.74 tall=0.92 deep=0.90
+  bar  torso on spine1 from=0.00 to=1.00 r=0.024
+  blob torso on chest  at=0.55 r=0.062 wide=1.25 tall=1.25 deep=0.85
+  blob torso on pelvis at=0.30 r=0.080 wide=1.25 tall=0.80 deep=0.85
+
+# The face block is a NUB (the bride's): every feature is a prim above, so
+# the generated cranium/jaw/brow/nose stay out of the way.
+face
+  headRadius 0.001
+  headWidth  1.0
+  headHeight 1.0
+  headDepth  1.0
+  jawWidth   1.0
+  jawHeight  1.0
+  jawDrop    0
+  jawJut     0
+  noseLength 0
+  noseWidth  1.0
+  noseDrop   0
+  browHeavy  0
+  browRise   0
+  headBlend  0.006
+
+# THE PAINT: scripts/make-siren-face.py (eyes, brows, lids, liner, lashes,
+# blush, lips — every colour on the face), worn at MULTIPLY so the face takes the body's light, with
+# blendLuma 0 so the rose and mauve stay colours (multiply defaults to
+# luminance only, which turns coloured paint grey). The projection is the
+# bride's, which the painter's geometry is solved against: change one, change
+# both. No glow anywhere: eyeGlowAmp 0, cut above every texel.
+sheet
+  image       siren-face.png
+  decal       0
+  blendLuma   0
+  projScaleX  0.40
+  projScaleY  0.40
+  projCentreX 0.50
+  projCentreY 0.70
+  eyeGlowCut  0.99
+  eyeGlowAmp  0
+  # Low luminance relief (the bride's lesson: at the 1.4 default every thin
+  # ink line, here every lash, embosses as a groove with a lit rim).
+  texRelief   0.0
+
+# WARM, LIVING SKIN — the opposite of every corpse palette in the roster.
+# sRGB ~(236,200,182) -> linear; a peach glow through the ears and fingers
+# (translucency 0.30), a soft broad sheen instead of a wet spec, and the
+# corpse noise turned all the way down.
+palette
+  baseColor     0.82 0.58 0.47
+  deepColor     0.50 0.06 0.07
+  charColor     0.20 0.12 0.10
+  specIntensity 0.32
+  specRoughness 0.50
+  fresnelBoost  0.30
+  translucency  0.30
+  wetness       0.08
+  surfaceNoiseAmp    0.008
+  silhouetteNoiseAmp 0.008
+  mottleAmp     0.03
+  mottleScale   1.2
+  mottleColor   0.70 0.42 0.36
+  grain         0

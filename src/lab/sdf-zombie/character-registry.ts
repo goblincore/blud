@@ -54,6 +54,7 @@ import cultistBlobSrc from './characters/cultist.blob?raw';
 import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
 import brideBlobSrc from './characters/bride.blob?raw';
 import venusBlobSrc from './characters/venus.blob?raw';
+import sirenBlobSrc from './characters/siren.blob?raw';
 import {
   ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, GOREHOUND_PROFILE, GUTCRAWLER_PROFILE, GIBBET_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
@@ -476,6 +477,20 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     bodyNormal: { url: '/assets/lab/venus-body-n.png', meta: '/assets/lab/venus-body-n.json', strength: 1 },
     face: ZOMBIE_FLAT,
     profile: motionProfileFor('venus'),
+  },
+
+  // The siren (siren.blob's header): the roster's first deliberately
+  // BEAUTIFUL body, a lure. Soft prim face painted by a generated sheet,
+  // warm skin, waist-length dark hair, a crimson slip dress; the monster is
+  // only in motion, when her swing drops the bride's jaw hinge open on a
+  // mouth of fangs (motion-profile.ts SIREN_PROFILE.swingGape).
+  siren: {
+    name: 'siren', src: sirenBlobSrc,
+    // mean MEASURED off the PNG (make-siren-face.py prints it): the game uses
+    // it as is, and bakedFace's fallback of 1 would darken her face by half
+    // (the sheet's base grey is dark on purpose: make-siren-face.py).
+    face: { ...bakedFace('siren-face.png'), mean: 0.433815 },
+    profile: motionProfileFor('siren'),
   },
 
 };
