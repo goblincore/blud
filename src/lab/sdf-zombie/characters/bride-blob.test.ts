@@ -185,7 +185,7 @@ describe('bride — cloth and hair', () => {
   // The LOWER (longest) tier: the lowest hem.
   const skirtI = body.prims.reduce((best, p, i) => (p.shell && p.bone === 'hem'
     && (best < 0 || p.shell.clipOffset > body.prims[best]!.shell!.clipOffset) ? i : best), -1);
-  const veilI = body.prims.findIndex(p => p.shell && p.bone === 'skull');
+  const veilI = body.prims.findIndex(p => p.shell && p.bone === 'spine2');
   /** The prim that owns the first surface a ray meets (the paint lookup's
    *  arg-min at the hit, validate.ts nearestPrim), or -1 on a miss. */
   const firstHit = (o: readonly number[], d: readonly number[], max = 1): number => {
@@ -205,11 +205,28 @@ describe('bride — cloth and hair', () => {
   const toSrgb = (c: number) => (c <= 0.0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - 0.055);
   const hex = (i: number) => body.prims[i]?.color?.map(v => Math.round(toSrgb(v) * 255).toString(16).padStart(2, '0')).join('');
 
-  it('is dressed in SHELLS: bodice, two ruffle tiers on the hem, veil on the skull', () => {
+  it('is dressed in SHELLS: bodice, two ruffle tiers on the hem, veil on the upper spine', () => {
     // The plan said three; a second, shorter skirt tier was added so the
     // skirt reads as tiered ruffles (owner: build for the look first).
+    // The veil hangs from spine2, not the skull (2026-10-23): on the skull
+    // the game's head aim swung it out as a slab (bride.blob, THE VEIL).
     const s = shells.map(p => `${p.limb}:${p.bone}`).sort();
-    expect(s).toEqual(['head:skull', 'torso:chest', 'torso:hem', 'torso:hem']);
+    expect(s).toEqual(['torso:chest', 'torso:hem', 'torso:hem', 'torso:spine2']);
+  });
+
+  it('hangs nothing longer than the neck from the skull: the head aim would swing it as a plank', () => {
+    // ik.ts lets the head turn 0.85 rad and pitch 0.5 rad about the neck
+    // pivot in GAME; anything rigid on the skull turns with it, and the lab
+    // never aims the head, so only a game capture shows the swing. The
+    // veil, back curtain and side-back locks hang from spine2; what stays on
+    // the skull reaches no lower than the face-framing locks (~0.37 m).
+    const skull = bone('skull');
+    for (const p of body.prims.filter(p => p.bone === 'skull' && (p.shell || p.strand))) {
+      const len = Math.abs(p.b[1] - p.a[1]);
+      expect(len, `skull prim reaching ${len.toFixed(3)} m`).toBeLessThan(0.40);
+      expect(Math.min(p.a[1], p.b[1])).toBeGreaterThan(skull.head[1] - 0.30);
+    }
+    for (const p of body.prims.filter(p => p.bone === 'spine2' && (p.shell || p.strand))) expect(p.rigid).toBe(true);
   });
 
   it('opens the bodice down the sternum over the rib window, and covers the bust', () => {
@@ -273,14 +290,15 @@ describe('bride — cloth and hair', () => {
 
   it('veils the head but leaves the face open', () => {
     const veil = body.prims[veilI]!;
-    // `rigid` on the skull: both ends ride the skull as one piece, so the
-    // veil does not stretch to the nearest back joint, and the opening turns
-    // with her (a 90 degree body yaw turns the clip normal from +z to +x).
+    // `rigid` on spine2: both ends ride the upper spine as one piece, so the
+    // veil does not stretch to the nearest back joint and does not swing
+    // with the head's aim, and the opening turns with her body (a 90 degree
+    // body yaw turns the clip normal from +z to +x).
     const bound = bindRig(body);
-    const skull = bone('skull');
+    const spine2 = bone('spine2');
     const pointAt = (p: readonly number[]) => bound.rig.points.findIndex(q => dist(q.pos, p) < 1e-4);
-    expect(bound.binding[veilI]!.a.point).toBe(pointAt(skull.head));
-    expect(bound.binding[veilI]!.b.point).toBe(pointAt(skull.head));
+    expect(bound.binding[veilI]!.a.point).toBe(pointAt(spine2.head));
+    expect(bound.binding[veilI]!.b.point).toBe(pointAt(spine2.head));
     const n1 = applyRig(body, bound, Math.PI / 2).prims[veilI]!.shell!.clipNormal;
     expect(n1[0]).toBeGreaterThan(0.9);
     // Eyes, nose and mouth are not behind the veil...
