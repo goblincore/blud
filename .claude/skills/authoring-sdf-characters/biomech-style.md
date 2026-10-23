@@ -1,7 +1,7 @@
 # The biomech style: flesh in SDF, bone-metal machinery as sculpted mesh
 
 The house style for Blud's biomechanical horrors, worked out on the **twinhead** (2026-10-21, PR goblincore/blud#52).
-Follow it for any new flesh-and-machine enemy. The owner's rule of thumb: **machinery is styled after the demon
+It is the **default for any new enemy or creature** (SKILL.md, "The default pipeline"), not only machine-flavoured ones. The owner's rule of thumb: **machinery is styled after the demon
 skull (organic curves, ridges, bony metal), never basic shapes.** Boxes, drums and plain cylinders read as
 placeholder robot parts.
 
@@ -69,6 +69,41 @@ The recipe (`armVaricose` / `varicose` in `scripts/twinhead-detail-gen.ts`):
 - Faces are a generated decal (`decal 0`, `blendLuma 0` for colour) on the head's fattest prim.
 - A machine head is all kit mesh; the flesh neck stops short and cables fill the gap.
 
+## Heavy, full-figured bodies (the venus, 2026-10-22)
+
+Learned on `characters/venus.blob`, a heavy woman built to contrast the thin cyberbride. The rules above assume a
+muscled brute; fat is a different problem.
+
+- **Mass reads through CONTRAST, not size.** The first pass made every mass big (chest, waist, belly and rear all
+  reaching ~0.2 m) and rendered as a stocky man. Probe the CPU field per height (half-width, front and back reach)
+  before looking: aim for waist-to-hip ~0.65 (her hips 0.275 half-width against a 0.17 waist), a rear standing
+  ~10 cm behind the waist's back in profile, and a bust well proud of the ribcage (`scripts/tmp/venus-sections.ts
+  <name>` prints them). `venus-blob.test.ts` pins these as field reaches.
+- **The thigh's root ball widens the waist.** A ball of the thigh's radius at the hip joint reaches up past the
+  hip line; seat it ~10% down the thigh. Carry the hip's width down the OUTSIDE of the thigh with a long offset
+  blob, or the outline steps in under the hip band.
+- **Arms on a wide body:** they cannot hang straight. Tilt the upper arm out (27 deg) and bring the forearms
+  forward (pitch 30) so the hands pass in front of the hips. The hips are what the hands hit (`daylightOf`), not
+  the waist.
+- **Flesh detail for fat is not muscle detail.** In the `.detail` (`scripts/venus-detail-gen.ts`): broad, low
+  horizontal fat rolls (r ~2 cm, 6 mm proud) on the back and flanks; cellulite as a scatter of small soft lumps
+  (r 9-15 mm, ~2 mm proud) over the rear, hips and outer thighs; stretch marks as short fine streaks (r 2.8 mm,
+  1.4 mm proud); a navel as a ring of six small swellings. Veins follow the recipe above; on the torso give the
+  swing in METRES and convert to degrees by the probed radius, since the torso's radius varies 2x round a heavy
+  body. Cellulite read well on the rear. The fine lines (stretch marks, and veins at the recipe's thin end) read as
+  scratch cuts on the venus's first bake. The bake is slow (56 min for ~1,300 detail prims), so trial a crop first.
+- **Lay the kit on the PROBED skin, not round a bone.** A heavy body is nothing like a cylinder: probe it
+  (`scripts/venus-surface.ts` writes `surface.json`; `venus_common.py`'s `waist_pt`) and build on those points.
+  The corset ribs sit 4 mm INSIDE the skin, so they bite and the `.blob`'s raw lumps swell round them.
+- **Bands are strips, not tubes.** Ribs that wrap a body made as round `tube`s read as barrel hoops. Make each a
+  `surface_solid` strip on the skin, tallest over the flank and pointed at its ends, with lips and a crest.
+
+## Porting a face onto a new body
+
+- The cyberbride's glow eyes sat 1.5 cm ABOVE the flat face mask's painted sockets and stood 2 cm proud, which
+  the owner read as "out of position". When porting a face, render the ORIGINAL first (a temporary registry
+  entry) so you know which faults are inherited. Seat glow eyes in the mask's sockets, a few mm proud.
+
 ## The toolkit: `assets-source/twinhead-kit/kit_sculpt.py`
 
 Run inside Blender with `exec(open(path).read())`, then a `make_*.py`. Everything is in Blender coords; `bv(x, y, z)`
@@ -112,6 +147,12 @@ Each has a `PARTS` subset switch, so one part can be iterated in about 5 s.
   in `kit-overlay.ts`.
 - Lighting falls off toward the ground in the lab shots, so judge the legs' tone from close frames.
 - In a loop, a local named like a helper (`ring = []`, or `base` from an earlier lambda) shadows that helper.
+- On a bone pointing DOWN (legs, hanging forearms), `BoneFrame`'s `s = u x f` points INWARD (-x on .l), so the
+  outer side is `ph = -90`. The venus's thigh plates landed between her legs the first time.
+- A headless `build.py` run that throws part-way does NOT save the .blend: parts built before the error are lost.
+  Re-run every make script after a crash.
+- `blob:shot` reuses whatever Vite is on port 5233, which may be ANOTHER worktree's (the new character then
+  renders as a fallback body). In parallel sessions set `LAB_VITE_PORT`/`LAB_CDP_PORT` to your own ports.
 
 ## Converting an existing body (the butcher, 2026-10-22)
 
@@ -237,3 +278,86 @@ pistol. A ranged variant needs a different set of parts from a melee one:
 The twinhead kit is about 145k triangles, too high for crowds. Planned optimization: bake each sculpt's
 detail into a normal map on a low-poly cage, aiming for 2-4k triangles per part. Author at full detail first;
 optimize once the look is approved.
+
+## Non-humanoid rigs (the gorehound, 2026-10-22)
+
+The gorehound (`characters/gorehound.blob`) is a four-legged dog-frog on the BIPED rig. Read this before inventing
+new bones for a creature.
+
+**Keep the standard bone names.** Every system downstream keys on them: the gait's joint table (`gait.ts`
+`JOINT_AT`), plants, sever, gore, damage and the pins. One unnamed bone makes `makeMotionJoints` return null and
+the body stops moving (the twinhead's extra bones did exactly that). So map the anatomy onto the names:
+
+| Anatomy | Bone | Joint the gait sees |
+| --- | --- | --- |
+| scapula, from the withers down to the shoulder | `clavicle` (`dir=side`, negative `tilt`) | clavicle -> shoulder |
+| humerus, down and BACK | `upperarm` | shoulder -> elbow |
+| radius, down and forward | `forearm` | elbow -> hand (the wrist) |
+| metacarpal paw, sloping forward to the toes | `hand` | hand -> handTip |
+| femur, forward to the stifle | `thigh` | hip -> knee |
+| tibia, raked BACK to the hock | `shin` | knee -> foot (the hock, where the plant locks) |
+| metatarsal, near vertical to the toes | `foot` | foot -> toe |
+| a horizontal back | `spine` pitched ~70 deg, `chest` and `neck` falling forward | |
+| a lower jaw that opens | `jaw` with `hinge=` near the back of the skull (a frog's mouth corner) | jaw |
+
+**The gait: arms as front legs, not a new gait module.** `armStyle: 'foreleg'` (`gait.ts`) walks the arms with
+the leg function: lift, reach and plant, on the same-side hind clock delayed by `forePhase` (0.25 is a dog's
+four-beat walk, 0.5 a trot). `motion.ts` plants the paw (the hand joint) like a foot, with the elbow pole pointing
+BACKWARD. It is opt-in per gait profile, so every biped is unchanged. `landAhead` sets each swing down ahead of
+the hip: a near-vertical foreleg with little slack overstretches when the whole stance is spent behind it.
+The other option, a real four-limb rig with its own joint names and a four-phase gait, touches sever, gore,
+damage and every pin, so it was not taken. The trade-off: the spine does not flex, and the paw is rigid with the
+wrist (no toe roll).
+
+**Check slack before rendering.** Pin the shoulder-to-wrist drop against the arm chain (the gorehound: 0.59 m
+against 0.65 m, 91%). At ~99% the leg is a table leg (the houndcorpse's lesson).
+
+**See the walk without a GPU.** `blob:shot` disables motion. `scripts/gorehound-walk-dump.ts` walks the body
+through the real pipeline (or swings one attack) and writes the joints as JSON, and
+`scripts/gorehound-gait-strip.py` draws side-on stick strips with the planted feet ringed. Point them at another
+body by editing the path; `gorehound-blob.test.ts` pins the four-beat walk the same way.
+
+**Attacks.** A quadruped's melee is its head. `hound-attack.ts` adds `bite` (a neck strike off planted
+shoulders) and `pounce` (crouch, then the body and both paws thrown up and forward, the front plants released,
+the root advanced like the bride's lunge). The jaw gape rides the bite. `MotionProfile.melee: { kind: 'bite' }`
+gives it the ring brain with jaw contact (`enemy-mind.ts` `makeHoundMind`).
+
+**The normal map round a horizontal torso.** `bake-body-normal.ts` projects the torso round a vertical axis,
+which sees a horizontal back as one polar cap. Pass `--torso-axis` along the body, a few degrees off exactly z
+(the frame's f is +z made perpendicular to the axis; the shader needs no change). `scripts/gorehound-detail-gen.ts`
+probes the skin in that same frame (ph 0 = belly, 180 = spine).
+
+**Kit on a body with no upright axis.** Seat back and head machinery on the probed skin seen from above
+(`scripts/gorehound-skin.ts` writes `skin.json`; `on_skin(x, z, lift)` in `hound_common.py`). Plates laid flush
+with the skin vanish under the flesh noise, so lift them ~1 cm. The legs are the butcher's dog-leg sculpts
+wrapped in `limb()` and run for both pairs: shapes built from the bend itself (a cap on the bisector of the two
+bones) land outside the joint whichever way it folds, so the same code makes a stifle and an elbow. Thicken
+them after the fact (`thicken`) for a heavy body, and keep the SDF cores under them thin (2-3.5 cm), or they show
+through the open-fronted shells.
+
+**Turn off the face sheet** on anything that is not a person: with no `sheet` block the registry's zombie face
+is projected onto whatever sits at the front of the head (the gorehound's snout). Add `sheet` / `enabled 0`.
+
+### The gibbet: hung masses and judging motion (2026-10-22)
+
+The gibbet (`characters/gibbet.blob`) is a walking gallows: a bone-metal beam on four splayed spider legs, a sac of
+meat in a birdcage hung under it, and a head dangling at the front. The owner's verdict on the gorehound ("uninspired,
+looks like the gnasher") is the lesson: **make the machine the body and the flesh the cargo, not machinery stuck on an
+animal.** What it added:
+
+- **A hung mass is the `hem` pendulum.** Hang the sac's prims AND the cage kit on `hem` (from the hips down to the
+  sac's bottom) and they swing together. The Verlet lag alone moved it ~1.5 cm on a steady walk, which reads as rigid,
+  so `GaitProfile.hemSwing` drives it: sideways a third of a stride behind the body's sway, fore-aft and a drop on each
+  footfall, and 40% of that while standing (`HEM_IDLE` in `motion.ts`). Keep the hem's tail above the toes.
+- **Thin-core bodies need collinear fuse paths.** The validator fuses clusters along the STRAIGHT line between their
+  `core` prims; struts at angles never contain one. Put the torso's core on the neck cord with the head's core riding
+  the same axis, and join the legs to each other across crossbars (hips, shoulder yoke).
+- **Judge the motion, not the pose.** `BLOB_WALK_SWEEP=<firstFrame>:<step>` with a fixed `BLOB_YAW` makes
+  `blob:shot` render the walk frame by frame (deterministic treadmill poses); stitch the frames into a GIF.
+- **Feet are silhouette.** The gorehound's paws on long sloping metacarpals read as skis; spidery legs want points
+  (`TOE_STYLE = 'spike'` in a kit's `common.py`: one curled talon taking the floor at its tip).
+- **A cage reads by contrast.** The first cage was rusty dark iron inside the sac's outline and read as lines on meat.
+  It needs bars standing clear of the sac (1.14x its radius), a lid of bars and a finial, a spike below, and pale
+  bone-iron with rust only low down.
+- **Normal map down the pendulum.** The torso projection can run along any axis: the gibbet's runs down the hem
+  (`--torso-axis` extended past both ends of the sac), and every detail line binds to `hem` so the detail swings too.

@@ -46,6 +46,9 @@ import twinheadBlobSrc from './characters/twinhead.blob?raw';
 import butcherBlobSrc from './characters/butcher.blob?raw';
 import flayerBlobSrc from './characters/flayer.blob?raw';
 import deadeyeBlobSrc from './characters/deadeye.blob?raw';
+import gorehoundBlobSrc from './characters/gorehound.blob?raw';
+import gutcrawlerBlobSrc from './characters/gutcrawler.blob?raw';
+import gibbetBlobSrc from './characters/gibbet.blob?raw';
 import bloatmawBlobSrc from './characters/bloatmaw.blob?raw';
 import gnasherBlobSrc from './characters/gnasher.blob?raw';
 import ogreBlobSrc from './characters/ogre.blob?raw';
@@ -53,8 +56,9 @@ import broodmotherBlobSrc from './characters/broodmother.blob?raw';
 import cultistBlobSrc from './characters/cultist.blob?raw';
 import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
 import brideBlobSrc from './characters/bride.blob?raw';
+import venusBlobSrc from './characters/venus.blob?raw';
 import {
-  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, BUTCHER_PROFILE, FLAYER_PROFILE, DEADEYE_PROFILE, motionProfileFor, type MotionProfile,
+  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, BUTCHER_PROFILE, FLAYER_PROFILE, DEADEYE_PROFILE, GOREHOUND_PROFILE, GUTCRAWLER_PROFILE, GIBBET_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
 
 /** A face sheet's texture and its crop. `mean` is the level the shader
@@ -355,6 +359,38 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     face: bakedFace('deadeye-face.png'),
     profile: DEADEYE_PROFILE,
   },
+  // The biomech hound (gorehound.blob's header): a four-legged dog-frog on the
+  // biped rig, arms as front legs. Flesh in the .blob; the machine legs, spine
+  // ridge, brow plate and teeth are kit (assets-source/gorehound-kit/, built
+  // headless by its build.py), skinned to the .blob by scripts/blender-kit.ts.
+  gorehound: {
+    name: 'gorehound', src: gorehoundBlobSrc,
+    kit: '/assets/lab/gorehound-kit.gltf',
+    // Folds, ribs, muscle and varicose veins (characters/gorehound.detail, baked round a LENGTHWISE torso axis:
+    // scripts/gorehound-detail-gen.ts has the bake command; never marched).
+    bodyNormal: { url: '/assets/lab/gorehound-body-n.png', meta: '/assets/lab/gorehound-body-n.json', strength: 1 },
+    face: ZOMBIE_FLAT,
+    profile: GOREHOUND_PROFILE,
+  },
+  // The gorehound's variant (gutcrawler.blob's header): legless, dragging
+  // itself on two arms, a tail on the `hem` pendulum. Kit: assets-source/gutcrawler-kit/.
+  gutcrawler: {
+    name: 'gutcrawler', src: gutcrawlerBlobSrc,
+    face: ZOMBIE_FLAT,
+    profile: GUTCRAWLER_PROFILE,
+  },
+  // The walking cage (gibbet.blob's header): a bone-metal frame on four long
+  // legs, a sac of meat swinging inside on the `hem` pendulum, a head dangling
+  // at the front. Kit: assets-source/gibbet-kit/.
+  gibbet: {
+    name: 'gibbet', src: gibbetBlobSrc,
+    kit: '/assets/lab/gibbet-kit.gltf',
+    // The sac's folds, striae and varicose veins and the head's (characters/gibbet.detail, baked DOWN the hem
+    // pendulum: scripts/gibbet-detail-gen.ts has the bake command; never marched).
+    bodyNormal: { url: '/assets/lab/gibbet-body-n.png', meta: '/assets/lab/gibbet-body-n.json', strength: 1 },
+    face: ZOMBIE_FLAT,
+    profile: GIBBET_PROFILE,
+  },
   cyberdemon: {
     name: 'cyberdemon', src: cyberdemonBlobSrc,
     // The hard half: the shoulder cowl, the hydraulic ram arm, the back power
@@ -459,6 +495,22 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     armoured: true,
     face: { ...bakedFace('bride-face.png'), mean: 0.712472 },
     profile: motionProfileFor('bride'),
+  },
+
+  // The heavy biomech woman (venus.blob's header): the cyberbride's head on a
+  // full-figured flesh body, with sculpted Blender kit grafts
+  // (assets-source/venus-kit/). The face is the cyberbride's: the flat zombie
+  // mask, with the fangs, maw and glow eyes as prims.
+  venus: {
+    name: 'venus', src: venusBlobSrc,
+    // Corset cage, exo-spine, collar, talon gauntlets and knee braces: Blender
+    // parts (assets-source/venus-kit/) skinned to the .blob's bones by
+    // scripts/blender-kit.ts.
+    kit: '/assets/lab/venus-kit.gltf',
+    // Fat rolls, cellulite, stretch marks and varicose veins (characters/venus.detail, baked; never marched).
+    bodyNormal: { url: '/assets/lab/venus-body-n.png', meta: '/assets/lab/venus-body-n.json', strength: 1 },
+    face: ZOMBIE_FLAT,
+    profile: motionProfileFor('venus'),
   },
 
 };

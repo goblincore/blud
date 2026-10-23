@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, SHAMBLE_CARRY, PROWL, PROWL_QUICK, PROWL_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, type ArmStyle, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, PROWL, PROWL_QUICK, PROWL_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, type ArmStyle, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { Vec3 } from './types';
@@ -68,7 +68,7 @@ export interface MotionProfile {
   /** A MELEE-WEAPON enemy: the game gives it that weapon's mind
    *  (enemy-mind.ts makeSwordMind) and motion.ts drives the held prop through
    *  the swing (sword-swing.ts). Absent = the zombie's unarmed swing. */
-  melee?: { kind: 'sword' };
+  melee?: { kind: 'sword' | 'bite' };
   /** An ARM THAT IS A WEAPON (the butcher's grafted axe): the zombie's mind and
    *  swing, but every swing is thrown with this arm (brain.ts swingSide), and a
    *  hit in reach does `damage` instead of the zombie's bite (player-vitals.ts
@@ -124,7 +124,10 @@ export function isGoreBody(profile: Pick<MotionProfile, 'family' | 'soft'> | nul
  * authored pose and drag the prop off its grip.
  */
 export function wantsTorsoGuards(profile: MotionProfile | null | undefined): boolean {
-  return !profile || (!profile.family && !profile.carries && !profile.prop && !profile.gunner && !profile.melee);
+  // A quadruped's arms are its front legs: they swing under the brisket on
+  // purpose, and the plants own them.
+  return !profile || (!profile.family && !profile.carries && !profile.prop && !profile.gunner && !profile.melee
+    && profile.armStyle !== 'foreleg');
 }
 
 export interface FlailTuning {
@@ -404,6 +407,63 @@ export const DEADEYE_PROFILE: MotionProfile = {
   gunner: { weapon: 'pistol' },
 };
 
+/** The venus (characters/venus.blob): a heavy biomech woman whose forearms end in sculpted talon gauntlets
+ *  (assets-source/venus-kit/). Her attack is the zombie mind's unarmed swing (enemy-mind.ts makeZombieMind): with
+ *  talons on the hands it reads as a rake, so no new mind is needed. Unarmed, so the zombie's reaching arms and its
+ *  torso guards; a gore body. What is hers is the weight: the warbull's STOMP (a slow cadence, a clear
+ *  lift-and-plant) at a cruise between the twinhead's machine legs (0.95) and the warbull (0.85), and a slow turn. */
+export const VENUS_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'venus',
+  gait: { walk: STOMP, run: STOMP },
+  cruise: 0.9,
+  turnRate: 2.0,
+};
+
+/** The gorehound (characters/gorehound.blob): a heavy biomech quadruped. Its
+ *  arms are its front legs, walked by GOREHOUND's 'foreleg' style and planted
+ *  like feet. Melee, unarmed: the zombie mind closes and swings, which on
+ *  this body is a lunge with the maw (attack.ts). Faster than the zombie
+ *  (1.15 m/s) and quick to turn: a hound runs you down. */
+export const GOREHOUND_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'gorehound',
+  gait: { walk: GOREHOUND, run: GOREHOUND },
+  runBand: { from: Infinity, to: Infinity },
+  cruise: 1.3,
+  turnRate: 3.0,
+  armStyle: 'foreleg',
+  melee: { kind: 'bite' },
+};
+
+/** The gutcrawler (characters/gutcrawler.blob), the gorehound's legless
+ *  variant: it hauls itself on two arms (CRAWL_DRAG) and bites like the hound
+ *  (hound-attack.ts), lunging off its arms from the band beyond. Slow. */
+export const GUTCRAWLER_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'gutcrawler',
+  gait: { walk: CRAWL_DRAG, run: CRAWL_DRAG },
+  runBand: { from: Infinity, to: Infinity },
+  cruise: 0.75,
+  turnRate: 1.8,
+  armStyle: 'foreleg',
+  melee: { kind: 'bite' },
+};
+
+/** The gibbet (characters/gibbet.blob): a cage of bone-metal on four long
+ *  legs with meat slung inside. Walks on GIBBET_STALK; bites and lunges with
+ *  the head that dangles from the front of the frame (hound-attack.ts). */
+export const GIBBET_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'gibbet',
+  gait: { walk: GIBBET_STALK, run: GIBBET_STALK },
+  runBand: { from: Infinity, to: Infinity },
+  cruise: 1.1,
+  turnRate: 2.4,
+  armStyle: 'foreleg',
+  melee: { kind: 'bite' },
+};
+
 /** The bride: a slow STALK in a high sword guard; the point trails on the
  *  run. Melee only — the sword mind (enemy-mind.ts) swings it. */
 export const BRIDE_PROFILE: MotionProfile = {
@@ -479,6 +539,10 @@ const BY_NAME: Record<string, MotionProfile> = {
   butcher: BUTCHER_PROFILE,
   flayer: FLAYER_PROFILE,
   deadeye: DEADEYE_PROFILE,
+  venus: VENUS_PROFILE,
+  gorehound: GOREHOUND_PROFILE,
+  gutcrawler: GUTCRAWLER_PROFILE,
+  gibbet: GIBBET_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

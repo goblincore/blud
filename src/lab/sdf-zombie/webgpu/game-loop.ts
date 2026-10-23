@@ -76,7 +76,8 @@ export function createLoop(ctx: GameContext): LoopRuntime {
     + ' background:radial-gradient(ellipse at center, transparent 40%, rgba(160,0,0,.55) 100%);');
   document.body.appendChild(hurt);
   const rt: LoopRuntime = {
-    god: godMode(authored, q.get('god')),
+    // A test arena defaults to god mode like the ring (game-arena.ts); story levels hurt.
+    god: godMode(authored && !def?.arena, q.get('god')),
     authored,
     finite,
     vitals: makeVitals(),

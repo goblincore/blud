@@ -1,0 +1,133 @@
+# THE GUTCRAWLER — the gorehound's variant: a belly-crawler with no legs that
+# drags itself along on two long arms (owner brief 2026-10-22, after the Dead
+# Space crawler). Gaunt and desiccated: the flesh is parchment over bone, ribs
+# and spine knuckles showing (baked normal map), a spined back ridge, a split
+# jaw that opens sideways as well as down, and a tail of bone and tendrils
+# where the legs and hips should be. Biomech house style
+# (biomech-style.md): flesh is SDF, the bone-metal is kit.
+#
+# THE RIG, on the biped names like the gorehound:
+#   - the arms are 'foreleg's (gait.ts): each reaches far ahead, plants, and
+#     the body is pulled up to it while the other arm reaches (forePhase 0:
+#     the arms alternate on the L/R clocks, half a stride apart). The pull is
+#     the sway: the chest rolls onto the planted arm;
+#   - NO LEGS. motion.ts's legless path (PR #53's fix) gives the body no
+#     plants below the waist: the stump slides on the floor;
+#   - the TAIL is the `hem` bone, the cloth pendulum (gait.ts GaitJointName
+#     'hem'): its free end rides the body's translation and yaw while the
+#     Verlet rig lets it lag, which is exactly a tail being dragged. Its tip
+#     stays ABOVE the paws (bindRig pins the lowest rig point).
+model gutcrawler
+  height 0.55
+
+skeleton
+  # Lying on its belly: the stump of the pelvis just off the floor.
+  root pelvis at 0.13 len=0.06
+  # The back rises from the stump to the shoulders, which the arms hold up:
+  #   hips  (0, 0.19, 0)
+  #   spine -> withers ~(0, 0.30, 0.40)
+  #   chest -> neck base ~(0, 0.36, 0.60)
+  #   neck  -> atlas, skull -> the face, thrust forward and a little down
+  bone spine parent=pelvis dir=up pitch=75 len=0.42
+  bone chest parent=spine  dir=up pitch=72 len=0.21
+  bone neck  parent=chest  dir=up pitch=78 len=0.13
+  bone skull parent=neck   dir=up pitch=98 len=0.22
+  # The split jaw hangs from the atlas to the chin; the hinge is far back so
+  # the whole lower face drops.
+  bone jaw   parent=neck   dir=up pitch=125 len=0.20 hinge=0.10
+  # The TAIL: back along the floor from the hips, a little down.
+  bone hem   parent=pelvis dir=up pitch=-96 len=0.85
+
+  mirror
+    # Shoulders off the withers, then the crawling arm: the humerus out and
+    # forward, elbow high and wide, the forearm down to a hand planted well
+    # ahead of the face, and long clawed fingers (kit).
+    bone clavicle parent=spine    dir=side tilt=-8 len=0.17
+    bone upperarm parent=clavicle dir=down pitch=100 tilt=65 len=0.34
+    bone forearm  parent=upperarm dir=down pitch=28 tilt=-6 len=0.29
+    bone hand     parent=forearm  dir=down pitch=78 len=0.15
+  end
+
+body
+  # --- TORSO: gaunt. Thin masses with the bone close under them. -----------
+  # The stump: what is left of the hips, torn and narrowing.
+  blob torso on pelvis at=1.00 r=0.090 wide=1.30 tall=0.80 deep=1.10 offset=(0,-0.01,-0.02) blend=0.020 core
+  # The trunk: a slim bar rising to the shoulders; the belly is caved, so the
+  # bar is narrower (wide) than it is deep where the ribs flare.
+  bar  torso on spine from=0.05 to=0.70 r=0.085 r2=0.110 wide=1.15 tall=0.80 blend=0.025
+  # The ribcage: the widest thing on the body, flaring above the arms.
+  blob torso on spine at=0.78 r=0.120 wide=1.25 tall=0.85 deep=1.10 offset=(0,0.005,0) blend=0.025
+  # Shoulder blades standing up off the back.
+  blob torso on spine at=0.96 r=0.060 wide=0.80 tall=0.70 deep=1.30 offset=(0.075,0.045,-0.02) blend=0.015 both
+  # The neck: a stringy column, thinner than the head.
+  bar  torso on chest from=0.10 to=1.00 r=0.065 wide=1.10 tall=0.90 blend=0.020
+  bar  torso on neck from=0.00 to=1.00 r=0.055 r2=0.050 blend=0.018
+
+  # --- HEAD: a desiccated skull, the face pulled tight over it. --------------
+  blob head on skull at=0.30 r=0.085 wide=1.05 tall=0.95 deep=1.15 offset=(0,0.020,0) blend=0.012 core
+  # Brow and cheekbones, sharp under the skin.
+  blob head on skull at=0.55 r=0.030 wide=1.40 tall=0.60 deep=0.90 offset=(0.045,0.040,0) blend=0.008 both
+  blob head on skull at=0.62 r=0.032 wide=1.10 tall=0.80 deep=1.20 offset=(0.060,-0.020,0) blend=0.010 both
+  # The upper jaw: a short muzzle of exposed teeth (kit), lipless.
+  blob head on skull at=0.85 r=0.050 wide=1.10 tall=0.70 deep=1.10 offset=(0,-0.020,0) blend=0.010
+  # Sunken eyes: dark pits with a pale ember each.
+  blob head on skull at=0.62 r=0.020 deep=0.70 offset=(0.040,0.012,0.040) blend=0.004 color=1a0c0a gloss=0.9 both
+  blob head on skull at=0.62 r=0.008 offset=(0.040,0.012,0.050) blend=0.002 color=e8d8a0 glow=0.6 both
+  # The gullet, dark and wet, seen when the jaw splits.
+  blob head on skull at=0.70 r=0.040 wide=1.30 tall=0.80 deep=1.40 offset=(0,-0.045,0) blend=0.008 color=3a0c0e gloss=0.9
+  # THE SPLIT JAW: two mandible halves, each its own prong flaring out to a
+  # point, with a gap between them down the middle (no chin). They ride the
+  # jaw bone, so the bite drops both and the kit tusks on each prong spread.
+  bar  head on jaw from=0.25 to=1.00 r=0.026 r2=0.012 offset=(0.035,0,0) tip=(0.030,0,0) blend=0.008 both
+  blob head on jaw at=0.45 r=0.030 wide=0.90 tall=0.80 deep=1.40 offset=(0.040,0.005,0) blend=0.008 both
+
+  # --- ARMS: long, stringy, every tendon showing. ------------------------------
+  blob arm on clavicle at=1.00 r=0.050 blend=0.015 mirror core
+  bar  arm on upperarm from=0.00 to=0.95 r=0.048 r2=0.034 blend=0.012 mirror
+  blob arm on upperarm at=0.40 r=0.036 tall=1.50 offset=(0,0.010,0) blend=0.012 mirror
+  blob arm on forearm at=0.00 r=0.034 blend=0.008 mirror
+  bar  arm on forearm from=0.05 to=0.95 r=0.032 r2=0.022 blend=0.010 mirror
+  # The hand: a bony palm; the fingers are kit.
+  blob arm on hand at=0.35 r=0.030 wide=1.40 tall=0.55 deep=1.20 blend=0.006 mirror
+
+  # --- TAIL: a thin core the kit vertebrae and tendrils cover. ------------------
+  bar  torso on hem from=0.00 to=0.25 r=0.050 r2=0.032 blend=0.015
+  bar  torso on hem from=0.25 to=1.00 r=0.024 r2=0.010 blend=0.006 color=b8ad92 gloss=0.35
+
+face
+  # No generated face: the skull is prims and kit.
+  headRadius 0.001
+  headWidth  1.0
+  headHeight 1.0
+  headDepth  1.0
+  jawWidth   1.0
+  jawHeight  1.0
+  jawDrop    0
+  jawJut     0
+  noseLength 0
+  noseWidth  1.0
+  noseDrop   0
+  browHeavy  0
+  browRise   0
+  headBlend  0.006
+
+palette
+  # Desiccated: grey-yellow parchment, dried-blood deeps, a corpse-green mottle.
+  baseColor     0.50 0.44 0.36
+  deepColor     0.35 0.06 0.05
+  charColor     0.07 0.06 0.05
+  specIntensity 0.45
+  specRoughness 0.45
+  fresnelBoost  0.50
+  translucency  0.12
+  wetness       0.30
+  surfaceNoiseAmp    0.050
+  silhouetteNoiseAmp 0.018
+  mottleAmp     0.40
+  mottleScale   2.2
+  mottleColor   0.28 0.30 0.20
+  grain         0.18
+
+sheet
+  # No face sheet (biomech-style.md: a non-person wears none).
+  enabled 0

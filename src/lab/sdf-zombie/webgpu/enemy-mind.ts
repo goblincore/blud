@@ -20,6 +20,7 @@ import {
   type SoldierBrain, type SoldierTuning,
 } from '../soldier-brain';
 import { SWORD_TUNING, isSwordVariant, lungeAdvance, swordContact } from '../sword-swing';
+import { HOUND_TUNING, houndContact, isHoundVariant, pounceAdvance } from '../hound-attack';
 import { CHARGE_REST, stepCharge, type ChargeState } from '../charge';
 import { BRAIN_TUNING, type BrainTuning } from '../brain';
 import type { SwingVariant } from '../attack';
@@ -269,6 +270,54 @@ export function makeSwordMind(tuning: BrainTuning = SWORD_TUNING.brain): EnemyMi
         contact = swordContact({ prevPhase, phase: a.phase, variant: a.variant, self: input.self, player: input.player });
         if (a.variant === 'lunge' && dist > 1e-6) {
           const d = lungeAdvance(prevPhase, a.phase, dist);
+          if (d > 0) advance = [(dx / dist) * d, 0, (dz / dist) * d];
+        }
+        prevPhase = a.phase;
+      } else {
+        prevPhase = 0;
+      }
+      return {
+        target: out.target, halt: out.halt, attack: out.attack,
+        fire: false, weaponUp: false, faceHeading: null,
+        engaged: out.engaged, committed: out.committed,
+        contact, aimError: 0, advance,
+      };
+    },
+    stagger() { brain = staggerNow(brain, tuning); prevPhase = 0; },
+    debug: () => ({
+      state: brain.state, alert: brain.alert, side: brain.swing.side, variant: brain.swing.variant,
+      swingT: brain.swingT, holdSecs: brain.holdSecs, hasToken: lastToken, aimT: 0, cooldown: brain.cooldown,
+    }),
+  };
+}
+
+/** The GOREHOUND's jaws (hound-attack.ts): the zombie's ring brain on
+ *  HOUND_TUNING — a bite inside reach, a POUNCE from the band beyond — with
+ *  the sword mind's two additions: a real contact on the frame the jaws
+ *  close, and the pounce's root advance. */
+export function makeHoundMind(tuning: BrainTuning = HOUND_TUNING.brain): EnemyMind {
+  let brain: Brain = makeBrain();
+  let lastToken = false;
+  let prevPhase = 0;
+  return {
+    kind: 'zombie',
+    meleeCapable: true,
+    step(input) {
+      lastToken = input.hasToken;
+      const out = stepBrain(brain, {
+        dt: input.dt, self: input.self, player: input.player, alerted: input.alerted,
+        hasToken: input.hasToken, drift: input.drift, roll: input.roll, lineOfSight: input.lineOfSight,
+      }, tuning);
+      brain = out.brain;
+      let contact = false;
+      let advance: Vec3 | null = null;
+      const a = out.attack;
+      if (a && input.player && isHoundVariant(a.variant)) {
+        const dx = input.player.x - input.self.x, dz = input.player.z - input.self.z;
+        const dist = Math.hypot(dx, dz);
+        contact = houndContact({ prevPhase, phase: a.phase, variant: a.variant, self: input.self, player: input.player });
+        if (a.variant === 'pounce' && dist > 1e-6) {
+          const d = pounceAdvance(prevPhase, a.phase, dist);
           if (d > 0) advance = [(dx / dist) * d, 0, (dz / dist) * d];
         }
         prevPhase = a.phase;

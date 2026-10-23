@@ -24,7 +24,7 @@ import { type Primitive, type Vec3 } from '../types';
 import { bodyPrimStride } from '../validate';
 import { compileCharacterSheet, createCharacterView } from './character-view';
 import { type CrowdType } from './crowd-type';
-import { makeSoldierMind, makeSwordMind, makeWarbullMind } from './enemy-mind';
+import { makeHoundMind, makeSoldierMind, makeSwordMind, makeWarbullMind } from './enemy-mind';
 import { createZombieActor, type ZombieActor } from './game-actor';
 import { registerBleed } from './game-bleed';
 import { crowdTypeFor } from './game-crowd-types';
@@ -369,6 +369,12 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
     ...(characterEntry(name).profile.melee?.kind === 'sword' ? {
       mind: makeSwordMind(),
     } : {}),
+    // A BITE profile (the gorehound): the ring brain on HOUND_TUNING, a bite
+    // in reach and a pounce from the band beyond, with jaw contact and the
+    // pounce's root advance (enemy-mind.ts makeHoundMind).
+    ...(characterEntry(name).profile.melee?.kind === 'bite' ? {
+      mind: makeHoundMind(),
+    } : {}),
     // A RANGED profile (motion-profile.ts `gunner`) gets the shooting brain
     // on its weapon's tuning — the soldier's shotgun, the cultist's tommy
     // gun, the juggernaut's chaingun. Was `name === 'soldier'`.
@@ -429,7 +435,9 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
       // charge.ts, one per run) hurts twice as much. Its brawl swings keep
       // the sword's value.
       const charged = characterEntry(name).profile.charger && variant === 'shove';
-      damagePlayer(ctx, charged ? VITALS.chargeHit : VITALS.swordHit, 'melee');
+      // The hound's jaws: a bite is the zombie's bite, a pounce lands the whole body.
+      const jaws = variant === 'bite' ? VITALS.houndBite : variant === 'pounce' ? VITALS.houndPounce : null;
+      damagePlayer(ctx, jaws ?? (charged ? VITALS.chargeHit : VITALS.swordHit), 'melee');
     },
     // HEAD POP (soft targets — the cultist, owner 2026-09-24: Scanners). The
     // head has swollen (game-actor inflateHead); now a VOLUMETRIC burst from
@@ -477,7 +485,7 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
   // until their source fixtures have been validated.
   if (ctx.render.segVolumeCache && name === 'zombie') bindSkeletonVolume(ctx, actor, name);
   ctx.world.encounterHomes.set(actor.id,[...start] as Vec3);
-  if (characterEntry(name).profile.melee?.kind === 'sword') ctx.world.loop?.biteExempt.add(actor.id);   // swings, never bites
+  if (characterEntry(name).profile.melee) ctx.world.loop?.biteExempt.add(actor.id);   // its own mind reports contact
   return actor;
 }
 

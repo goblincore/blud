@@ -17,12 +17,16 @@ reference-only for behavior comparison (dynamite, gibbing).
 - **Source map (current vs. proposed):** [`docs/architecture/repository-map.md`](docs/architecture/repository-map.md)
 - **Legacy dynamite/gibbing reference:** [`docs/reference/legacy-dynamite-gibbing.md`](docs/reference/legacy-dynamite-gibbing.md)
 - **Cross-harness agent context:** [`AGENTS.md`](AGENTS.md)
+- **Making a character:** the `authoring-sdf-characters` skill
+  ([SKILL.md](.claude/skills/authoring-sdf-characters/SKILL.md), "The default pipeline": SDF flesh, a baked body
+  normal map, sculpted Blender kit mesh) and its [biomech-style.md](.claude/skills/authoring-sdf-characters/biomech-style.md).
 
 ## Running
 
 | Command | Opens | Target |
 | --- | --- | --- |
 | `npm run dev` / `npm run dev:fps` | `/sdf-game.html?level=night-train` | Active SDF FPS (Night Train; bare `/sdf-game.html` is the ring testbed, god mode on) |
+| `npm run dev:arena` | `/sdf-game.html?level=arena&spawn=zombie` | Test arena: one big lit room, one enemy, god mode. `?spawn=<character>` picks it; `` ` `` respawns, `-`/`=` cycle characters |
 | `npm run dev:legacy` | `/index.html` | Retired legacy game |
 | `npx vite` | *(no browser)* | Plain server for automation |
 

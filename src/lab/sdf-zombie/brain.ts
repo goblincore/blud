@@ -132,6 +132,9 @@ export type BrainTuning = { readonly [K in keyof typeof BRAIN_TUNING]: number } 
   readonly pickVariant?: (roll: number, dist: number) => SwingVariant;
   /** A swing may also start at min <= dist <= max, as a 'lunge'. */
   readonly lungeBand?: { readonly min: number; readonly max: number };
+  /** The variant a swing started from the lungeBand rolls. Absent = 'lunge'
+   *  (the bride's thrust); the hound pounces. */
+  readonly lungeVariant?: SwingVariant;
   /** Per-variant swing duration (s). Absent entries use swingSec. */
   readonly swingSecFor?: Partial<Record<SwingVariant, number>>;
   /** Every swing uses THIS arm instead of alternating: a body whose weapon is
@@ -297,7 +300,7 @@ export function stepBrain(
     // so the rest of the swing reads a fixed value — the caller's roll keeps
     // changing every frame and must not re-decide mid-swing.
     const variant: SwingVariant = !inReach
-      ? 'lunge'
+      ? tuning.lungeVariant ?? 'lunge'
       : tuning.pickVariant
         ? tuning.pickVariant(input.roll, dist)
         : (input.roll < 0.5 ? 'hook' : 'overhead');
