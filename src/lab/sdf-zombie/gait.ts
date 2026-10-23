@@ -323,6 +323,30 @@ export const GLIDE: GaitProfile = {
  *  so a gunner needs a carry-style gait. */
 export const GLIDE_CARRY: GaitProfile = { ...GLIDE, name: 'glide-carry', armStyle: 'carry', armSwing: 0.03 };
 
+/** HOVER: a legless floater (the teratoma, teratoma.blob) drifting on nothing. There are no legs to drive (gait.ts's
+ *  leg() gives a missing chain zero offsets, and motion.ts skips plants without feet), so the gait is all ROOT: a slow
+ *  deep heave (one bob per stride at 0.35 strides/s, ~3 s a breath), a lazy sideways drift and a forward nod, with
+ *  the little arms dangling on a weak swing. The step fields are zeroed so nothing reads as walking. */
+export const HOVER: GaitProfile = {
+  ...SHAMBLE,
+  name: 'hover',
+  strideFreq: 0.35,
+  bobPerStride: 1,
+  swayPerStride: 0.5,
+  bobAmp: 0.08,
+  swayAmp: 0.06,
+  rockAmp: 0.025,
+  strideLen: 0,
+  footLift: 0,
+  footPush: 0,
+  kneeBend: 0,
+  kneeLift: 0,
+  armStyle: 'swing',
+  armSwing: 0.05,
+  elbowFlex: 0.03,
+  headBob: 0,
+};
+
 /** The zombie SHAMBLE with the arms on a HELD GUN: the goblin's INTERIM gait while it carries the player's shotgun
  *  (goblin refinement phase 3, 2026-10-02). Phase 4 gives the goblin its own gait; until then the legs are still the
  *  zombie's shamble and only the arms change. motion.ts takes the arm style from the GAIT (pickArmStyle), never from

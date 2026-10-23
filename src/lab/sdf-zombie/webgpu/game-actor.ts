@@ -1393,7 +1393,8 @@ export function createZombieActor(opts: {
       }
       // Fire is the SAME event for the animation clock and the projectile.
       // Previously the callback fired but CALM.fire stayed false forever.
-      signals.fire = think.fire && !missingLimbs().armR
+      // A spitter (profile.spit, the teratoma) fires from its body: no right arm needed.
+      signals.fire = think.fire && (opts.profile?.spit !== undefined || !missingLimbs().armR)
         && (current.clusters.find(c => c.limb === 'head')?.alive ?? false);
       if (soldierDamage || !mind.meleeCapable) {
         signals.missing = missingLimbs();
@@ -1653,7 +1654,16 @@ export function createZombieActor(opts: {
         ] };
       }
       lastFistGrip = gapTo(f.gun ? gunPoint(f.gun, GUN_GRIP.gripHand) : null);
-      if (signals.fire && f.gun && !f.collapsed) {
+      const spit = opts.profile?.spit;
+      const spitFrom = spit ? joints.index[spit.from] : undefined;
+      if (signals.fire && spit && spitFrom !== undefined && !f.collapsed) {
+        // Spat from the body (the teratoma's maw): the rig point plus the body-local offset turned by the yaw, along
+        // the facing (game-spawn re-aims the vertical at the player's chest).
+        const o = rotateYaw(spit.offset, f.bodyYaw);
+        const at = bound.rig.points[spitFrom]!.pos;
+        opts.onFire?.({ origin: [at[0] + o[0], at[1] + o[1], at[2] + o[2]], direction: rotateYaw(rotateYaw([0, 0, 1], f.bodyYaw), think.aimError) });
+        firedSinceIndex = true;
+      } else if (signals.fire && f.gun && !f.collapsed) {
         const fwd = qRotate(f.gun.quat, [0, 0, 1]);
         // The death burst sprays HIGH and wide: up 15-60 deg, +-25 deg yaw.
         const direction = burstShot
