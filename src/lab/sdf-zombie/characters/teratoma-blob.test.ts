@@ -24,6 +24,8 @@ import { makeActorMotion, stepActorMotion, emptyActorSignals } from '../actor';
 import { makeRng } from '../wander';
 import { HOVER } from '../gait';
 import { TERATOMA_PROFILE } from '../motion-profile';
+import { makeMotionJoints, makeMotionState, stepMotion, type MotionSignals } from '../motion';
+import { bindRig } from '../rig-bind';
 
 const doc = parseBlob(src);
 const built = () => buildBody(compileBlob(doc, compileFace(doc)));
@@ -119,6 +121,32 @@ describe('teratoma.blob', () => {
     }
     expect(lo).toBeGreaterThan(1.25);
     expect(hi).toBeLessThan(1.6);
+  });
+
+  // THE GAME'S PATH (owner, enemy test arena, 2026-10-23: "it doesn't float, it immediately falls into the ground").
+  // Two bugs the lab path above could not see: game-actor read the legs the body was never born with as SHOT OFF, so
+  // collapse.ts collapsed it on its first tick; and once they were not, the aimed gunner's leg IK (faceHeading, which
+  // only the game sets) dereferenced hip/knee/foot joints that do not exist and the game loop threw every frame. Here:
+  // legs reported present (as game-actor's missingLimbs now does), a facing heading, firing, for three seconds.
+  it('hovers under the game path: aimed, firing, legs not reported missing', () => {
+    const b = built();
+    const bound = bindRig(b);
+    const j = makeMotionJoints(b, bound.rig.restPose)!;
+    let state = makeMotionState(5, [0, 0, 0]);
+    let points = bound.rig.points.map(p => ({ ...p, pinned: false }));
+    const sig = (i: number): MotionSignals => ({
+      dt: 1 / 60, shot: null, fire: i % 45 === 0, severed: [], freshWounds: [], headAlive: true, forcedCollapse: false,
+      wounded: { armL: false, armR: false, legL: false, legR: false },
+      missing: { legL: false, legR: false, armL: false, armR: false },
+    });
+    for (let i = 0; i < 180; i++) {
+      const r = stepMotion(state, j, { enabled: true, wander: true, profile: TERATOMA_PROFILE, faceHeading: 0.6 }, sig(i), points,
+        { minX: -20, maxX: 20, minZ: -20, maxZ: 20 }, makeRng(5));
+      state = r.state;
+      points = r.frame.restPose.map(p => ({ pos: [...p] as [number, number, number], prev: [...p] as [number, number, number], pinned: false }));
+      expect(r.frame.collapsed, `frame ${i}`).toBe(false);
+      expect(r.frame.restPose[j.index.pelvis!]![1], `frame ${i}`).toBeGreaterThan(1.25);
+    }
   });
 
   it('uses the HOVER gait with no stepping', () => {
