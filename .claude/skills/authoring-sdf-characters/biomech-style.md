@@ -166,6 +166,9 @@ iteration was better"). What landed: the REALISTIC body and head, with an anime 
 - **The sheet rides the head, not the jaw.** A painted lower lip stays put when the jaw drops and floats over the
   opening. Put the mouth's top edge (the upper face mass's bottom) AT the lip line, and let the lower lip roll out of
   sight with the jaw; a painted lower-lip prim read as wax at rest and a detached red button on the open jaw.
+- **A jaw that opens about a hinge behind the mouth swings BACK as it drops.** Past ~0.6 rad a compact, receded chin
+  ends inside the neck and the open mouth is a fanged hole over a bare throat. Check the open jaw on the CPU
+  (`applyRig` with `rig.jawGape`, jaw prims tinted) before tuning teeth.
 - **Receding a face exposes buried prims' PAINT**: the maw and fangs became the nearest prim to the chin's skin
   (a black chin, ivory spots). The siren test raycasts the rest face and fails on any skin a fang or the maw owns.
 

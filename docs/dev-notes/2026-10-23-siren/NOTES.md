@@ -55,3 +55,12 @@ jaw hinge (`hinge=0.32`) moved up; bigger lips; eyes opened (26 mm tall); 3-4.5 
 now opens right under the red upper lip onto fangs and a deep red gullet.
 
 ![fourth pass](contact-4.png)
+
+## Fifth pass (2026-10-23, owner: "her open mouth doesn't look right"; "change her hair to blue and tie it into two pointy buns")
+
+The open jaw: at 0.85 rad its rotation about a hinge behind the mouth swung the whole lower face back into the neck,
+leaving a fanged hole over a bare throat. `swingGape` 0.6; the lower lip carries its red on the jaw so it drops with
+it; lower fangs lengthened to clear the jaw mass. Hair: cobalt (2448b8), crown mass + two round buns with points +
+short sidelocks + a back mass; the long fall removed.
+
+![fifth pass](contact-5.png)

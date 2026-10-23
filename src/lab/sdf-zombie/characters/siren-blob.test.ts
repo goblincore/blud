@@ -88,14 +88,19 @@ describe('siren — the face', () => {
     expect(fattest.strand).toBeUndefined();
   });
 
-  it('paints nothing on the face with prims: the only painted face prims are the hidden maw and fangs', () => {
+  it('paints nothing on the face with prims but the lower lip: the rest are the hidden maw and fangs', () => {
     // The sclera, iris and lip prims of the first passes owned a band of skin
     // each (paint is by nearest prim). All face colour is the sheet's now;
     // the mouth's dark inside (2a0608) and the fangs are buried at rest.
     const skull = bone('skull');
     const faceY = (y: number) => y > skull.head[1] + 0.02 && y < skull.head[1] + 0.17;
     const isMaw = (p: (typeof body.prims)[number]) => !!p.color && p.color[0] < 0.05 && p.color[1] < 0.01;
-    const painted = body.prims.filter(p => p.color && !isFang(p) && !isMaw(p) && !p.shell && !p.strand
+    // The LOWER LIP is the one deliberate exception: the sheet rides the
+    // head, so a sheet-only lower lip stays put when the jaw drops and its
+    // red floats over the hole; painted on its prim (on the jaw), the red
+    // goes down with the jaw.
+    const isLowerLip = (p: (typeof body.prims)[number]) => p.bone === 'jaw' && !!p.color && p.color[0] > 0.2 && p.color[1] < 0.02 && p.radius < 0.006;
+    const painted = body.prims.filter(p => p.color && !isFang(p) && !isMaw(p) && !isLowerLip(p) && !p.shell && !p.strand
       && faceY(p.a[1]) && p.a[2] > 0.05 && Math.abs(p.a[0]) < 0.05);
     expect(painted).toEqual([]);
   });

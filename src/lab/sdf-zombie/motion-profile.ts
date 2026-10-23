@@ -358,8 +358,9 @@ export const VENUS_PROFILE: MotionProfile = {
 
 /** The siren (characters/siren.blob): the roster's beautiful lure. She walks like a model (SIREN_WALK: the bride's
  *  stalk with free, softly swinging arms) and attacks with the zombie mind's unarmed swing (enemy-mind.ts
- *  makeZombieMind) — but her jaw drops open on the bride's hinge as she strikes (swingGape 0.85 rad, near jaw.ts's
- *  0.9 ceiling, against the bride's sword gape of <= 0.55: hers is a mouth opening too wide; this is a face splitting).
+ *  makeZombieMind) — but her jaw drops open on the bride's hinge as she strikes (swingGape 0.6 rad, a touch past the
+ *  bride's 0.55: at 0.85 the jaw's rotation about a hinge behind the mouth swung her whole lower face back into her
+ *  neck, leaving a fanged hole over a bare throat).
  *  The monster is only in that motion, so nothing else here is monstrous: a gore body like the zombie, an unhurried
  *  cruise, a quick turn toward the player. */
 export const SIREN_PROFILE: MotionProfile = {
@@ -369,7 +370,7 @@ export const SIREN_PROFILE: MotionProfile = {
   cruise: 1.0,
   turnRate: 3.0,
   armStyle: 'swing',
-  swingGape: 0.85,
+  swingGape: 0.6,
 };
 
 /** The gorehound (characters/gorehound.blob): a heavy biomech quadruped. Its
