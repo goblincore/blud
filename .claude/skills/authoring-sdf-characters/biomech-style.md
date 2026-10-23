@@ -154,6 +154,125 @@ Each has a `PARTS` subset switch, so one part can be iterated in about 5 s.
 - `blob:shot` reuses whatever Vite is on port 5233, which may be ANOTHER worktree's (the new character then
   renders as a fallback body). In parallel sessions set `LAB_VITE_PORT`/`LAB_CDP_PORT` to your own ports.
 
+## Converting an existing body (the butcher, 2026-10-22)
+
+The butcher (`characters/butcher.blob`, kit `assets-source/butcher-kit/`) is the zombie converted, not a new body.
+What a conversion needed that the twinhead did not:
+
+- **Start from the base `.blob` and keep its skeleton names.** Copy the body, thicken the masses (muscle is mass
+  plus the normal map), and carry the base's `bones` block over verbatim if the torso only grew. Renamed or extra
+  leg bones are what broke the twinhead's gait.
+- **Keep it reading as the base.** The owner rejected a sallow tan skin at once: it read as the ogre, not as a
+  zombie. A variant keeps the base's skin family (the zombie's pink, paled toward white) and takes its menace from
+  the machinery, the silhouette and the weapon.
+
+### Reverse-knee (digitigrade) legs on the three leg bones
+
+The gait knows `thigh -> knee -> foot -> toe`, and its foot-plant IK always bows the KNEE forward
+(`ik.ts solvePlantedLeg`). A dog's hind leg already does that: its forward joint is the knee, and the joint that
+points back is the HOCK (ankle). So no rig change is needed:
+
+| bone | anatomy | butcher rest direction |
+| --- | --- | --- |
+| `thigh` | femur | `dir=down pitch=35` (knee 23 cm ahead of the hip) |
+| `shin` | tibia | `dir=down pitch=-38` (the hock, the gait's `foot` joint, behind the hip) |
+| `foot` | metatarsal | `dir=down pitch=15` (the toe joint on the floor) |
+
+`pitch` is the bone's ABSOLUTE direction (`blob-compile.ts dirVector`), +z forward. The model still declares
+`stance humanoid`: `checkStance` measures the thigh/shin knee, and that knee is forward. The trade-off: the
+metatarsal translates rigidly with the hock (the gait drives `toe` with the foot's offset), so there is no toe-off
+roll. A true four-joint chain would need a new gait joint, `JOINT_AT` entries and IK changes.
+
+**Match the cadence to the leg.** A planted foot holds while the body travels `cruise x stance time`. The shamble's
+cadence at the butcher's 1.45 m/s dragged every leg dead straight (0.86 m per stance against about 0.54 m of
+sweep). Its own `PROWL` gait (1.8 Hz, duty 0.55) keeps the knee bowed. `characters/butcher-blob.test.ts` walks the
+real pipeline and pins the knee forward and the hock back; copy it for any new leg shape.
+
+The look: the hock is the read, so it carries the biggest shape (a knuckle with a curled spur raking back and up).
+Spines rake down the BACK ridge of the tibia, toes splay forward with talons, and a dewclaw sits behind.
+
+### A weapon grafted onto an arm
+
+- The weapon is kit on the forearm bone, so the arm's own swing carries it: no held prop and no sword mind.
+  `MotionProfile.armWeapon {side, damage}` pins every swing to that arm (`brain.ts swingSide`) and sets the hit's
+  damage (`game-loop.ts`, in place of the zombie bite).
+- Face the edge to the body's BACK at rest. Pitching the arm forward turns it DOWN (the reach walk), and overhead
+  it faces forward, so the chop leads with it. Facing it forward at rest pointed the edge at the ceiling in the
+  reach walk.
+- **Do not voxel-remesh a blade.** A 1.6 mm voxel rounds a 2 mm edge away. Build the head as a bmesh loft (thick at
+  the haft, about 1 mm at the edge), join the ornament tubes unremeshed, and colour it with `wear_colours`
+  (steel, then rust, then blood toward the edge). Only the haft and graft collar are fused and AO-baked.
+- A graft collar with staples biting into the flesh above it, plus feed hoses down the forearm into the collar,
+  sells "grafted" more than the weapon itself.
+
+### Hoses, wires and ports
+
+- A hose is a Catmull-Rom tube with a rib ring every 1.6 cm, fused, with brass collars at both ends
+  (`make_upper.py hose()`). Place its control points from **skin probes** (march `sdBody` along a ray, as the
+  detail generators do) and keep them about one hose radius out.
+- A hose rides ONE bone. Break it at a joint: end one segment in a port where the next begins (pump on `spine`,
+  neck hose on `neck`, socket on `skull`).
+- Where a hose enters the flesh, set a bony flanged port with bolts. The swollen flesh round it is in the normal
+  map's agitated lumps.
+- Coloured wires (the reference figure's yellow and blue) use kit-overlay's dielectric looks `yellow`, `blue`,
+  `red` and `purple`. Wind them close: 1-2 turns per bone at about one wire radius off the shell. Looser and more
+  turns read as springs.
+- Collars and other small fused bits still need `decimate`. Undecimated brass collars were 60% of the first
+  butcher kit's 250k triangles.
+
+### A second variant on the same frame (the flayer)
+
+The flayer (`characters/flayer.blob`, kit `assets-source/flayer-kit/`) reuses the butcher's skeleton exactly, so
+its legs are the butcher's leg kit rebuilt (`make_legs.py`, with wires recoloured by the kit's `common.py`) and the
+gait work carries over. What makes it a different enemy at a glance:
+
+- **A different silhouette class:** gaunt (the zombie's own masses) against the butcher's pumped bruiser. A dorsal
+  ridge of long raked spines replaces the back pump.
+- **A different weapon on the other arm:** a long serrated sickle on the left, with a saw wheel in a bony guard. A
+  thin blade vanishes from the front, so give it width: 11 cm at the root, not 6.
+- **A different head:** a bony helmet over the upper face with a glowing visor slit (the `led` look, emissive 1.4;
+  `eyeglow` at 7 is for pinpoints), cheek guards, and curled horn "ears". The flayed jaw below is the decal's job.
+  Fit the shell to probes of the head: crown, front at three heights, back and sides, 10-16 mm clear.
+- **Faster means quicker steps, not longer ones.** At 1.55 m/s the 1.8 Hz prowl flattened the knee, so the flayer
+  walks a 2.0 Hz `PROWL_QUICK`. Re-run the walk pin whenever cruise changes.
+- The lab's `holdPose` swing preview (`BLOB_SWING`) swings `armWeapon.side`, so a left-armed weapon is judged on
+  the right arm.
+
+### A ranged variant: the deadeye's pistol
+
+The deadeye (`characters/deadeye.blob`, kit `assets-source/deadeye-kit/`) is the same frame again, armed with a
+pistol. A ranged variant needs a different set of parts from a melee one:
+
+- **The gun is a held PROP, not kit.** A prop follows the carry's aim (`gunPitch`) and drops on death; a kit gun is
+  rigid on the forearm and cannot. Sculpt it with the same toolkit, but in the GUN-LOCAL frame: glTF +y is up and +z
+  is out of the muzzle, which `bv` maps exactly as it maps blob coordinates. Put the grip through `GUN_GRIP.gripHand`
+  (0, -0.074, -0.074). `make_pistol.py` exports its own `pistol` collection to `public/assets/lab/<name>-pistol.glb`.
+- **A short gun needs its own muzzle.** `MotionProfile.prop.muzzle` (gun-local) feeds the round's origin and the
+  flash. The shared muzzle is the enemy shotgun's, 0.41 m out.
+- **A gunner needs a CARRY gait.** `motion.ts` takes the arm style from the gait, so it is `PROWL_CARRY`, not
+  `PROWL`. Without it the arms keep the zombie's reach and ignore the carries.
+- **Pick or add the weapon's brain tuning.** `gunner: {weapon}` selects it in `soldier-brain.ts GUNNER_TUNING`.
+  The pistol is `PISTOL_TUNING` (aimed singles, the odd double tap, mid range); `game-spawn.ts` fires one aimed
+  round per trigger event.
+- **Two hands on a pistol.** The owner rejected the one-handed aim. The `pistol` and `pistolLow` carries drop
+  `oneHanded`, so the left hand is solved onto `prop.foreHand`, set to cup the gun hand (5 cm to the gun's left,
+  under and behind the grip). The aim is an isosceles stance, the gun arm swung in to the centre line. The walk
+  carry is a low ready, both hands at the belly and the muzzle at the floor, so the raise reads as a telegraph.
+- A face mask only reads as a mask when it is SMALL and SHAPED. A band wrapping to the temple at full height read
+  as a slab on the side of the head; taper it to a point. Cables run about one radius off the skin, or they stand
+  off like sticks.
+
+### Practicalities
+
+- **The Blender MCP window may belong to another session** (it held the teratoma's file). Run the kit headless:
+  `Blender -b assets-source/butcher-kit/butcher-kit.blend --python assets-source/butcher-kit/build.py -- make_legs.py:femur,tibia --export --preview <dir>`.
+  `build.py` runs the make scripts, saves, exports `mech` and renders workbench previews. It serves any kit: open
+  that kit's `.blend`, and scripts resolve in its folder first, then `butcher-kit/`.
+- `blob:shot` reuses ANY lab on its port, including another worktree's Vite, so pass your own
+  `LAB_VITE_PORT`/`LAB_CDP_PORT`.
+- A face-block head can wear a generated decal: solve `projScale`/`projCentre` in the head space of the face
+  block's ellipsoid (offset / semi-axis), against eye embers you place yourself.
+
 ## Budget
 
 The twinhead kit is about 145k triangles, too high for crowds. Planned optimization: bake each sculpt's

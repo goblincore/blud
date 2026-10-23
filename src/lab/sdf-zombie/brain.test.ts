@@ -181,6 +181,21 @@ describe('stepBrain — the swing', () => {
     expect(b.swing.side).not.toBe(firstSide);
   });
 
+  it('a pinned swingSide throws every swing with that arm (the butcher\'s axe)', () => {
+    const tuning = { ...BRAIN_TUNING, swingSide: 'L' as const };
+    const { brain } = alertAt(2.0);
+    let b = brain;
+    const sides: string[] = [];
+    const frames = Math.ceil((BRAIN_TUNING.swingSec + BRAIN_TUNING.cooldownSec) / DT) * 3 + 6;
+    for (let i = 0; i < frames; i++) {
+      const out = stepBrain(b, input(close), tuning);
+      b = out.brain;
+      if (out.attack && out.attack.phase === 0) sides.push(out.attack.side);
+    }
+    expect(sides.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(sides)).toEqual(new Set(['L']));
+  });
+
   it('a committed swing reports committed and finishes after the token is gone', () => {
     const { brain } = alertAt(2.0);
     const swinging = stepBrain(brain, input(close)).brain;

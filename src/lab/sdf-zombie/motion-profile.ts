@@ -4,7 +4,7 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, CHAIR_WADDLE, HOVER, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, PROWL, PROWL_QUICK, PROWL_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, CHAIR_WADDLE, HOVER, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
 import type { JoystickSpec } from './joystick';
@@ -14,7 +14,7 @@ import { JUGGERNAUT_INJURY_TUNING, WARBULL_INJURY_TUNING, type SoldierInjuryTuni
 
 /** What a ranged enemy fires (soldier-brain.ts GUNNER_TUNING picks the
  *  brain tuning; game-main's onFire picks the round). */
-export type GunnerWeapon = 'shotgun' | 'smg' | 'chaingun' | 'rocket';
+export type GunnerWeapon = 'shotgun' | 'smg' | 'chaingun' | 'rocket' | 'pistol';
 
 export interface MotionProfile {
   name: string;
@@ -51,7 +51,12 @@ export interface MotionProfile {
      *  carry block) instead of keeping its rest hang: a two-handed hilt held
      *  HIGH needs the fist round the grip, not dangling off the wrist. Absent
      *  = the rest hang every gun carry was tuned with. */
-    fistOnGrip?: boolean };
+    fistOnGrip?: boolean;
+    /** Gun-local muzzle (metres before `scale`, +z forward). Absent = the
+     *  shared GUN_GRIP.muzzle (0.41 m out, the enemy shotgun's): a short gun
+     *  (the deadeye's pistol) needs its own, or its rounds and flash start in
+     *  the air 30 cm past the barrel. */
+    muzzle?: Vec3 };
   /** A RANGED enemy: the game gives it the soldier's shooting brain
    *  (enemy-mind.ts makeSoldierMind) with this weapon's tuning, and its
    *  onFire spawns enemy rounds. Absent = melee. A prop alone does not make a
@@ -72,6 +77,12 @@ export interface MotionProfile {
   /** A JOYSTICK on the body's `hem` (the gamer, characters/gamer.blob): motion.ts adds joystick.ts's jiggle to
    *  the `hem` target, hard while he attacks and a faint twitch otherwise. Absent: `hem` is cloth or a hung mass. */
   joystick?: JoystickSpec;
+  /** An ARM THAT IS A WEAPON (the butcher's grafted axe): the zombie's mind and
+   *  swing, but every swing is thrown with this arm (brain.ts swingSide), and a
+   *  hit in reach does `damage` instead of the zombie's bite (player-vitals.ts
+   *  VITALS.zombieBite). Unlike `melee` there is no held prop: the weapon is kit
+   *  on the arm, so the arm's own swing carries it. */
+  armWeapon?: { side: 'L' | 'R'; damage: number };
   /** A SOFT target: any bullet or blast hit kills it outright (the game
    *  forces the collapse on the first hit). The cultist is soft; the zombie
    *  and soldier soak hits and exist to show off the gore. Burns do not count
@@ -348,6 +359,62 @@ export const TWINHEAD_PROFILE: MotionProfile = {
   gunner: { weapon: 'rocket' },
 };
 
+/** The butcher (characters/butcher.blob): a zombie conversion on digitigrade
+ *  machine legs with an axe grafted on in place of the right hand. Still the
+ *  zombie's mind and reaching arms (it reads as a zombie first); the legs make
+ *  it FAST, which is most of what makes it more dangerous than the base. */
+export const BUTCHER_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'butcher',
+  gait: { walk: PROWL, run: PROWL },
+  // 1.45 against the zombie's 1.15 (WANDER_TUNING.speed): it closes distance.
+  cruise: 1.45,
+  // The axe is on the RIGHT forearm (kit foreArm.r|blade). 25 is two and a half
+  // zombie bites (VITALS.zombieBite 10), over the bride's sword (swordHit 15).
+  armWeapon: { side: 'R', damage: 25 },
+};
+
+/** The flayer (characters/flayer.blob): the second zombie conversion, gaunt and
+ *  flayed, with a saw-sickle grafted on for the LEFT hand and a visored
+ *  helmet. The butcher's skeleton, legs and PROWL; quicker and a little less
+ *  brutal per hit. */
+export const FLAYER_PROFILE: MotionProfile = {
+  ...BUTCHER_PROFILE,
+  name: 'flayer',
+  gait: { walk: PROWL_QUICK, run: PROWL_QUICK },
+  // 1.55: lighter and quicker than the butcher, on a 2.0 Hz prowl to keep the
+  // stride inside the leg's sweep (gait.ts PROWL_QUICK; butcher-blob.test.ts).
+  cruise: 1.55,
+  // The sickle is on the LEFT forearm (kit foreArm.l|blade). 20: a lighter
+  // blade than the butcher's axe (25), still twice a bite.
+  armWeapon: { side: 'L', damage: 20 },
+};
+
+/** The deadeye (characters/deadeye.blob): the third zombie conversion, a
+ *  gunslinger with a little pistol, an optic over one eye and a bandolier.
+ *  A RANGED enemy on the soldier's brain (PISTOL_TUNING: aimed singles and the
+ *  odd double tap from mid range), a two-handed grip, the butcher's legs. Not
+ *  soldier family: bare flesh, a gore body like the twinhead. */
+export const DEADEYE_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'deadeye',
+  gait: { walk: PROWL_CARRY, run: PROWL_CARRY },
+  // Slower than the butcher: he walks to a range and holds it.
+  cruise: 1.3,
+  turnRate: 2.6,
+  carries: { walk: 'pistolLow', run: 'pistolLow', fire: 'pistol' },
+  // The pistol is a PROP (it follows the aim and drops on death), sculpted by
+  // assets-source/deadeye-kit/make_pistol.py to the shared grip contract
+  // (GUN_GRIP.gripHand). gripReach 0: his fist orb is centred ON the wrist
+  // (deadeye.blob `blob arm on foreArm at=1.00`). The muzzle is the pistol's
+  // own, 0.112 m out (not the shotgun's 0.41).
+  // foreHand: the support hand CUPS the gun hand (a two-handed pistol grip),
+  // its wrist 5 cm to the gun's left (+x), a little under and behind the
+  // grip: the two fist orbs (r 0.060) overlap like clasped hands.
+  prop: { url: '/assets/lab/deadeye-pistol.glb', scale: 1, gripReach: 0, muzzle: [0, 0.002, 0.112], foreHand: [0.050, -0.090, -0.085] },
+  gunner: { weapon: 'pistol' },
+};
+
 /** The venus (characters/venus.blob): a heavy biomech woman whose forearms end in sculpted talon gauntlets
  *  (assets-source/venus-kit/). Her attack is the zombie mind's unarmed swing (enemy-mind.ts makeZombieMind): with
  *  talons on the hands it reads as a rake, so no new mind is needed. Unarmed, so the zombie's reaching arms and its
@@ -536,6 +603,9 @@ const BY_NAME: Record<string, MotionProfile> = {
   bride: BRIDE_PROFILE,
   warbull: WARBULL_PROFILE,
   twinhead: TWINHEAD_PROFILE,
+  butcher: BUTCHER_PROFILE,
+  flayer: FLAYER_PROFILE,
+  deadeye: DEADEYE_PROFILE,
   venus: VENUS_PROFILE,
   gorehound: GOREHOUND_PROFILE,
   gutcrawler: GUTCRAWLER_PROFILE,

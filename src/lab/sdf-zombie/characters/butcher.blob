@@ -1,0 +1,228 @@
+# BUTCHER — the zombie, converted. Owner brief (2026-10-22): the base zombie is
+# cannon fodder once the player has a real weapon; a variant must be clearly
+# more dangerous while still reading as a zombie. Start from zombie.blob, not
+# from scratch: the upper body stays a zombie but more muscular and veiny, with
+# tubes, hoses and accessories grafted on; a melee weapon grafted on (an axe);
+# mechanical ANIMAL legs that bend backwards; a different face (nose, ears).
+#
+# AUTHORED FROM THE BRIEF over zombie.blob's numbers. No reference mesh, so
+# blob:measure does not apply; each number says what it was derived from.
+#
+# THE SPLIT (biomech-style.md): flesh is prims, few and large; muscle and
+# varicose veins are the baked body normal map (butcher.detail); every machine
+# part (legs, axe, hoses, back pump, respirator) is sculpted kit mesh from
+# assets-source/butcher-kit/, and the prims under it are thin metal CORES.
+#
+# THE LEGS ARE A DOG'S HIND LEG ON THE ZOMBIE'S THREE LEG BONES. The gait
+# (gait.ts JOINT_AT) knows thigh -> knee -> foot -> toe, and its foot-plant IK
+# (ik.ts solvePlantedLeg) always bows the KNEE forward. A digitigrade leg's
+# knee DOES point forward; the joint that points back is the hock (ankle). So:
+#   thigh = femur, raked forward to a forward knee;
+#   shin  = tibia, raked back to the hock (the gait's `foot` joint, planted);
+#   foot  = the long metatarsal, down and forward to the toes (the `toe` joint).
+# No new bones, no gait change: the zigzag is all rest pose. The trade-off:
+# the metatarsal translates rigidly with the hock (no toe-off roll), because
+# the gait drives `toe` with the foot's offset.
+model butcher
+  # Taller than the zombie (1.78): the hip rides 8 cm higher on the machine legs.
+  height 1.86
+  stance humanoid
+
+skeleton
+  # 0.08 above the zombie's 0.92: the digitigrade legs below reach 1.108 m of
+  # drop (sum of the three segments' vertical runs) from the hip at 1.14.
+  root pelvis at 1.00
+
+  # The zombie's hunch, a little deeper (+3 deg each): a predator's lean.
+  bone spine parent=pelvis dir=up pitch=9.8 len=0.34
+  bone neck  parent=spine  dir=up pitch=22 len=0.16
+  bone skull parent=neck   dir=up pitch=10.2 len=0.16
+
+  mirror
+    bone clavicle parent=spine    dir=side                     len=0.21
+    bone upperArm parent=clavicle dir=down tilt=18 pitch=4     len=0.31
+    bone foreArm  parent=upperArm dir=down tilt=3 pitch=12     len=0.30
+    # THE LEG: pitch is the bone's absolute direction (blob-compile dirVector),
+    # +z forward. Vertical runs 0.40 cos35 + 0.50 cos38 + 0.40 cos15 = 1.108.
+    # Femur forward 35 deg: the knee lands 23 cm ahead of the hip, y 0.81.
+    bone thigh    parent=pelvis   dir=down side=0.11 pitch=35  len=0.40
+    # Tibia back 38 deg: the hock lands 8 cm BEHIND the hip at y 0.42.
+    bone shin     parent=thigh    dir=down pitch=-38           len=0.50
+    # Metatarsal down and forward 15 deg to the toes at y 0.03.
+    bone foot     parent=shin     dir=down pitch=15            len=0.40
+  end
+
+body
+  # Neck: the zombie's, thicker (a bull neck between the swollen traps).
+  bar head on neck from=0.05 to=1.0 r=0.055 blend=0.010
+
+  # EARS (owner: a distinct nose and ears; the nose is the kit's respirator).
+  # Long blades swept back and up off the sides of the head (skin x 0.090 at
+  # y 1.70, z 0.135), flattened across (wide 0.40) so they read as ears from
+  # the front and as points in profile; each torn with a hard notch.
+  bar head on skull from=0.5 to=0.5 offset=(0.084,-0.006,-0.010) tip=(0.028,0.080,-0.118) bend=(0.012,-0.012,0) r=0.026 r2=0.001 wide=0.40 blend=0.006 chamfer
+  bar head on skull from=0.5 to=0.5 offset=(-0.084,-0.006,-0.010) tip=(-0.028,0.080,-0.118) bend=(-0.012,-0.012,0) r=0.026 r2=0.001 wide=0.40 blend=0.006 chamfer
+  carve on skull at=0.5 r=0.010 offset=(0.106,0.040,-0.068) hard
+  carve on skull at=0.5 r=0.009 offset=(-0.104,0.028,-0.052) hard
+  # Eyes: embers at the bottom of the decal's sockets (skin z 0.228 at
+  # x 0.033, y 1.718), sunk so only a glint stands proud.
+  blob head on skull at=0.5 offset=(0.033,0.016,0.090) r=0.007 blend=0.002 color=ff4a1a glow=0.7
+  blob head on skull at=0.5 offset=(-0.033,0.016,0.090) r=0.007 blend=0.002 color=ff4a1a glow=0.7
+
+  # TORSO — the zombie's four masses, pumped: chest r 0.150 -> 0.168 and wider,
+  # the gut kept (it is still a zombie).
+  blob torso on spine  at=0.80 r=0.168 wide=1.34 deep=0.80 blend=0.016
+  blob torso on spine  at=0.50 r=0.155 wide=1.18 deep=0.82 blend=0.02
+  blob torso on spine  at=0.15 r=0.142 wide=1.02 deep=0.95 blend=0.02
+  blob torso on pelvis at=0.40 r=0.145 wide=1.10 tall=0.9 deep=0.92 blend=0.02
+  # Traps: the yoke the neck sinks into.
+  blob torso on spine  at=1.00 offset=(0.10,-0.01,-0.03) r=0.095 wide=1.20 tall=0.85 deep=0.95 blend=0.024 both
+  # Pecs: flat slabs, tight blend so the crease survives.
+  blob torso on spine  at=0.80 offset=(0.085,0,0.085) r=0.095 wide=1.20 tall=0.72 deep=0.55 blend=0.012 both
+
+  # ARMS — the zombie's chain, thicker (shoulder 0.072 -> 0.088, upper arm
+  # 0.055 -> 0.066), plus a biceps mass.
+  blob arm on clavicle at=0.95 r=0.088 blend=0.012 mirror
+  bar  arm on upperArm from=0.02 to=0.95 r=0.066 r2=0.056 blend=0.010 mirror
+  blob arm on upperArm at=0.45 offset=(0,0,0.022) r=0.058 tall=1.5 blend=0.012 mirror
+  bar  arm on foreArm  from=0.05 to=0.90 r=0.056 r2=0.046 blend=0.009 mirror
+  # Left fist (the right hand is gone: the axe is grafted on in its place).
+  blob arm on foreArm  at=1.00 r=0.064 blend=0.0125 side=l
+  # Right wrist: a metal socket core under the kit's graft collar.
+  blob arm on foreArm  at=1.00 r=0.050 blend=0.006 side=r color=474b52 metal gloss=0.6
+
+  # LEGS — a flesh haunch where the machine goes in, then metal cores only
+  # (the visible leg is kit). Cores sized to stay INSIDE the kit housings.
+  blob leg on thigh at=0.00 r=0.095 blend=0.016 mirror
+  bar  leg on thigh from=0.12 to=0.95 r=0.048 wide=1.15 deep=1.20 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  blob leg on shin  at=0.00 r=0.055 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  leg on shin  from=0.06 to=0.94 r=0.040 wide=1.10 deep=1.10 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  blob leg on foot  at=0.00 r=0.045 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  bar  leg on foot  from=0.06 to=1.00 r=0.032 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+  # Toe pad: forward along the floor from the toe joint.
+  bar  leg on foot  from=1.00 to=1.00 tip=(0,0,0.12) r=0.030 wide=1.6 blend=0.006 mirror color=3a3e45 metal gloss=0.6
+
+bones
+  ratio 0.38
+  # The zombie's skull and torso skeleton, verbatim (zombie.blob explains every
+  # number; the torso masses above only grew, so the cage stays inside).
+  blob head on skull at=0.56 r=0.095 wide=0.88 tall=1.06 deep=1.02
+  blob head on skull at=0.30 offset=(0,-0.050,0.045) r=0.070 wide=0.88 tall=0.78 deep=1.00
+  # ---- generated by scripts/zombie-skeleton-gen.ts; edit the table there, not these lines ----
+  # Thoracic column, lower half (T12 -> apex of the kyphosis at y 1.245, z -0.072).
+  bar torso on spine from=0.1 to=0.1 offset=(0,-0.0038,-0.0641) tip=(0,0.155,-0.012) bend=(0,0,-0.028) r=0.018 deep=0.85
+  # Thoracic column, upper half (apex -> C7 at (0,1.40,0.028), meeting the derived neck bone).
+  bar torso on spine from=0.9 to=0.9 offset=(0,-0.1192,-0.1089) tip=(0,0.155,0.1) bend=(0,0,-0.028) r=0.018 deep=0.85
+  # Lumbar column: sacral promontory (0,1.00,-0.047) up to T12, bowed 1 cm forward (lordosis).
+  bar torso on pelvis from=0.6 to=0.6 offset=(0,-0.004,-0.047) tip=(0,0.09,-0.013) bend=(0,0,0.02) r=0.018 deep=0.85
+  # Rib 1: head y 1.375, cage half-width 0.075 / half-depth 0.05, descends 0.02 to the sternum. Back half: vertebra -> rib angle -> flank.
+  bar torso on spine from=0.932 to=0.932 offset=(0.017,0,-0.0339) tip=(0.058,-0.0104,0.038) bend=(0.0255,0,-0.0068) r=0.0095 tall=1.3 both
+  bar torso on spine from=0.932 to=0.932 offset=(0.075,-0.0104,0.0041) tip=(-0.051,-0.0096,0.0474) bend=(0.0229,0,0.0109) r=0.0095 r2=0.0078 tall=1.3 both
+  # Rib 2: head y 1.333, cage half-width 0.125 / half-depth 0.082, descends 0.036 to the sternum. Back half: vertebra -> rib angle -> flank.
+  bar torso on spine from=0.8077 to=0.8077 offset=(0.017,0,-0.0621) tip=(0.108,-0.0184,0.07) bend=(0.0464,0,-0.0076) r=0.0105 tall=1.3 both
+  bar torso on spine from=0.8077 to=0.8077 offset=(0.125,-0.0184,0.0079) tip=(-0.101,-0.0176,0.0805) bend=(0.044,0,0.0238) r=0.0105 r2=0.0086 tall=1.3 both
+  # Rib 3: head y 1.291, cage half-width 0.155 / half-depth 0.092, descends 0.05 to the sternum. Back half: vertebra -> rib angle -> flank.
+  bar torso on spine from=0.6834 to=0.6834 offset=(0.017,0,-0.082) tip=(0.138,-0.0254,0.08) bend=(0.0589,0,-0.0084) r=0.011 tall=1.3 both
+  bar torso on spine from=0.6834 to=0.6834 offset=(0.155,-0.0254,-0.002) tip=(-0.131,-0.0246,0.0909) bend=(0.0566,0,0.0287) r=0.011 r2=0.009 tall=1.3 both
+  # Rib 4: head y 1.249, cage half-width 0.15 / half-depth 0.09, descends 0.058 to the sternum. Back half: vertebra -> rib angle -> flank.
+  bar torso on spine from=0.5592 to=0.5592 offset=(0.017,0,-0.0938) tip=(0.133,-0.0295,0.078) bend=(0.0568,0,-0.0083) r=0.011 tall=1.3 both
+  bar torso on spine from=0.5592 to=0.5592 offset=(0.15,-0.0295,-0.0158) tip=(-0.126,-0.0285,0.0888) bend=(0.0545,0,0.0278) r=0.011 r2=0.009 tall=1.3 both
+  # Rib 5: head y 1.207, cage half-width 0.133 / half-depth 0.077, descends 0.06 to the costal margin. Back half: vertebra -> rib angle -> flank.
+  bar torso on spine from=0.4349 to=0.4349 offset=(0.017,0,-0.0973) tip=(0.116,-0.0329,0.065) bend=(0.0497,0,-0.0082) r=0.0105 tall=1.3 both
+  bar torso on spine from=0.4349 to=0.4349 offset=(0.133,-0.0329,-0.0323) tip=(-0.083,-0.0271,0.0714) bend=(0.0376,0,0.0147) r=0.0105 r2=0.0086 tall=1.3 both
+  # Rib 6: head y 1.165, cage half-width 0.11 / half-depth 0.074, descends 0.052 to the costal margin. Back half: vertebra -> rib angle -> flank.
+  bar torso on spine from=0.3107 to=0.3107 offset=(0.017,0,-0.0925) tip=(0.093,-0.0339,0.062) bend=(0.0402,0,-0.0073) r=0.0095 tall=1.3 both
+  bar torso on spine from=0.3107 to=0.3107 offset=(0.11,-0.0339,-0.0305) tip=(-0.03,-0.0181,0.0508) bend=(0.0145,0,0.0039) r=0.0095 r2=0.0078 tall=1.3 both
+  # Sternum: manubrium at y 1.372 down to the xiphoid at y 1.181, riding the ribs' sternal ends in z.
+  bar torso on spine from=0.75 to=0.75 offset=(0,0.0585,0.0589) tip=(0,-0.191,0.0063) bend=(0,0,0.0539) r=0.01 wide=2.4 deep=0.6
+  # Clavicle: manubrium -> acromion, bowed forward through (0.105,1.392,0.052).
+  bar torso on spine from=1 to=1 offset=(0.026,-0.026,0.0487) tip=(0.159,0.03,-0.0547) bend=(-0.001,0.01,-0.0207) r=0.0075 both
+  # Sacrum: promontory (0,1.005,-0.047) curving back to z -0.070 then forward to the coccyx. Fat wedge, 48 mm across at the top.
+  bar torso on pelvis from=0.5 to=0.5 offset=(0,0.015,-0.047) tip=(0,-0.08,0.011) bend=(0,0,-0.057) r=0.032 r2=0.016 wide=1.5 deep=0.7
+  # Iliac blade: acetabular hub (0.078,1.045,-0.006) up and out to the crest apex (0.128,1.100,-0.014); r 0.030, flattened front-to-back.
+  bar torso on pelvis from=0.5 to=0.5 offset=(0.078,0.055,-0.006) tip=(0.046,0.055,-0.008) r=0.03 deep=0.6 tall=1.1 both
+  # Iliac crest: PSIS -> apex -> ASIS, the thick rim over the blade.
+  bar torso on pelvis from=0.5 to=0.5 offset=(0.04,0.065,-0.07) tip=(0.078,0.015,0.12) bend=(0.09,0.075,-0.008) r=0.018 deep=0.8 both
+  # Ilium back to the sacro-iliac joint.
+  bar torso on pelvis from=0.5 to=0.5 offset=(0.078,0.055,-0.006) tip=(-0.038,0.01,-0.064) r=0.022 both
+  # Pubic ring: superior ramus hub -> symphysis (0.014,0.935,0.056),
+  bar torso on pelvis from=0.5 to=0.5 offset=(0.078,0.055,-0.006) tip=(-0.064,-0.11,0.062) r=0.018 both
+  # ischium hub -> sit bone (0.056,0.905,-0.026), the fat lower mass,
+  bar torso on pelvis from=0.5 to=0.5 offset=(0.078,0.055,-0.006) tip=(-0.022,-0.14,-0.02) r=0.022 both
+  # ischiopubic ramus closing the ring underneath.
+  bar torso on pelvis from=0.5 to=0.5 offset=(0.056,-0.085,-0.026) tip=(-0.042,0.03,0.082) r=0.015 both
+
+  # GUT COIL (organs r3). Suggestive of the classic intestine look, not
+  # anatomical — owner: "doesn't need to be anatomically correct, just
+  # suggestive". The read is round tubes, visible loops, pale pink, wet.
+  #
+  # Only drawable since applyBones started reading bend (3dc8373); before
+  # that every one of these would have rendered as a straight bar.
+  bar torso on pelvis from=0.55 to=0.75 offset=(-0.045,0.010,0.030) tip=(0.090,0.010,0.006) bend=(0.010,0.055,0.030) r=0.024 organ
+  bar torso on pelvis from=0.50 to=0.70 offset=(0.048,0.004,0.034) tip=(-0.092,0.014,-0.010) bend=(-0.012,-0.050,0.026) r=0.023 organ
+  bar torso on pelvis from=0.72 to=0.92 offset=(-0.040,0.004,0.026) tip=(0.084,-0.008,-0.014) bend=(0.008,0.048,0.032) r=0.022 organ
+  bar torso on spine  from=0.06 to=0.20 offset=(0.042,0.000,0.030) tip=(-0.086,-0.010,-0.008) bend=(-0.010,-0.044,0.028) r=0.022 organ
+  # Segmented bulges: overlapping blobs at a tight blend read as haustra far
+  # more cheaply than grooving a smooth tube.
+  blob torso on pelvis at=0.62 offset=(-0.058,0.006,0.038) r=0.026 blend=0.004 organ
+  blob torso on pelvis at=0.62 offset=(-0.020,0.014,0.042) r=0.025 blend=0.004 organ
+  blob torso on pelvis at=0.62 offset=(0.020,0.010,0.042) r=0.025 blend=0.004 organ
+  blob torso on pelvis at=0.62 offset=(0.058,0.002,0.038) r=0.026 blend=0.004 organ
+
+# Tuned by hand in the panel, then baked. Keep headHeight near 1: raising it
+# SHARPENS the crown rather than doming it, so the height and the gaunt taper
+face
+  headRadius 0.118
+  headWidth  0.76
+  headHeight 1.161
+  headDepth  0.894
+  jawWidth   0.748
+  jawHeight  0.861
+  jawDrop    0.076
+  jawJut     0.04
+  noseLength 0.007
+  noseWidth  0.379
+  noseDrop   0.009
+  browHeavy  0.008
+  browRise   0.045
+  headBlend  0.006
+
+# The zombie's flesh, paled (owner, 2026-10-22: a sallow tan read as the
+# ogre; "pinkish like the zombie ... pink or whiteish"). The zombie's
+# henenlotter-latex base (0.82, 0.44, 0.46) lifted toward white, with a light
+# purple bruise mottle for the reference figure's veins, and a little less
+# gloss than the latex so the flesh reads dead against the wet metal.
+palette
+  baseColor     0.80 0.60 0.60
+  deepColor     0.62 0.06 0.10
+  charColor     0.10 0.07 0.08
+  specIntensity 0.65
+  specRoughness 0.24
+  fresnelBoost  0.60
+  translucency  0.35
+  wetness       0.55
+  surfaceNoiseAmp    0.045
+  silhouetteNoiseAmp 0.012
+  mottleAmp     0.25
+  mottleScale   2.6
+  mottleColor   0.52 0.32 0.50
+  grain         0.06
+
+# The face: scripts/make-butcher-face.py at MULTIPLY. Projection solved in the
+# head space of the face block's ellipsoid (the head cluster's fattest prim:
+# centre (0, 1.690, 0.130), semi-axes 0.0897 x 0.137 x 0.1055):
+#   eyes: image x 0.38 / 0.62 onto the embers at x -+0.033, hs.x -+0.368:
+#     scaleX 0.12 / 0.368 = 0.326;
+#   rows: eye row (uv.y 0.60) onto y 1.718, hs.y 0.204; mouth row (uv.y 0.30)
+#     onto y 1.632, hs.y -0.423: scaleY 0.30 / 0.627 = 0.478,
+#     centreY 0.60 - 0.204 x 0.478 = 0.502.
+sheet
+  image       butcher-face.png
+  decal       0
+  blendLuma   0
+  projScaleX  0.326
+  projScaleY  0.478
+  projCentreX 0.50
+  projCentreY 0.502
+  eyeGlowCut  0.99
+  eyeGlowAmp  0
