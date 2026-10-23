@@ -327,9 +327,11 @@ plugged in. It uses the chair's rig at `scale 1.30`. What it adds:
   `MotionProfile.joystick.swell` (`joystickSwell`: a slow breath, throbbing through an attack). The game's actors have
   no expression layer, so the profile is what drives it. To shoot a morph, the lab's `__sdfLab.setMorphs({ swell: 1 })`
   holds it (`BLOB_PROBE`), since `blob:shot` freezes motion.
-- **Veins follow the limb, and hidden skin gets none.** A vein crossing the arm reads wrong: run each from the
-  shoulder to the wrist, probed round each segment's axis in turn. Skin under another cluster (the neck under his
-  jowls, which are head prims and take the head's region) shows none of its baked relief, so keep its veins below.
+- **More veins is not better veins.** A denser pass on the gamer was rejected: "too busy", and it "still doesn't read
+  as veins". It added ~900 prims of veins over his upper chest, down every arm segment and round the neck. The owner
+  preferred the sparser version before it, so it was reverted. Veins read when there are few of them, where the eye
+  goes. Skin under another cluster (the neck under his jowls, head prims that take the head's region) shows none of its
+  baked relief either.
 - **A ranged attack does not fit this rig yet.** `onFire` needs a carried prop in the right hand, and here the
   right hand is a front claw. A ranged gamer needs a mind with the muzzle on the head (the headset); it uses the
   hound mind for now.
