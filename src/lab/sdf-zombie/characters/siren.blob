@@ -70,48 +70,53 @@ skeleton
   mirror
     # Narrow sloping shoulders (socket x ~0.15, y ~1.41).
     bone clavicle parent=spine2   side=0.020 dir=side tilt=-8 len=0.13
-    # Arms long and slender, hanging just clear of the hips (tilt 14 / 12:
-    # at 8 / 4 the bride's forearms ran into her hip flare).
-    bone upperarm parent=clavicle dir=down tilt=14 pitch=2 len=0.30
+    # Arms long and slender, hanging clear of the hips (tilt 20 / 12: the
+    # wider hips; at the bride's 14 the hands met them).
+    bone upperarm parent=clavicle dir=down tilt=20 pitch=2 len=0.30
     # Symmetric (the bride's lenR= sword forearm dropped: she has no sword).
     bone forearm  parent=upperarm dir=down tilt=12 pitch=10 len=0.26
     bone hand     parent=forearm  dir=down pitch=8         len=0.08
     # LEGS: 0.49 + 0.48 from the hip at 1.04 lands the ankle at ~0.07.
-    # Knees drawn in a whisper — a narrow, poised stance.
-    bone thigh    parent=pelvis dir=down tilt=-1.5 pitch=2 side=0.085 len=0.49
+    # Knees drawn in a whisper. side 0.105 (the bride's 0.085): the heavier
+    # thighs need the room.
+    bone thigh    parent=pelvis dir=down tilt=-1.5 pitch=2 side=0.105 len=0.49
     bone shin     parent=thigh  dir=down tilt=1.5  pitch=-1 len=0.48
     bone foot     parent=shin   dir=fwd                      len=0.13
   end
 
 body
   # ============================================================
-  # TORSO — the bride's hourglass with the rib window taken out: a smooth
-  # waist, a soft bust. Every mass a tapered bar with heavy overlap.
+  # TORSO — THE BARE BODY (owner, 2026-10-23: "focus on body first without
+  # attachments ... more like the venus character with the rear and chest,
+  # though bigger and bustier, but without all the bumpy texture"). Venus's
+  # masses (venus.blob: wide hips, a rear shelf, a heavy bust, thick
+  # thighs) on this skeleton, pulled into an hourglass — hips ~0.21 half-
+  # width over a ~0.10 waist — and smooth: no normal map, no rolls, no
+  # cage-lumps, the palette's corpse noise off. The dress shells and the
+  # bust's crimson paint are gone; clothing comes back as attachments later.
   # ============================================================
-  blob torso on pelvis at=0.35 r=0.105 wide=1.20 tall=0.90 deep=0.84 blend=0.028
-  # Waist: one tapered bar up spine1, narrowest ~0.087 semi at y 1.13.
-  bar  torso on spine1 from=0.00 to=1.00 r=0.072 r2=0.058 wide=1.16 deep=0.80 blend=0.026
-  # Ribcage flaring to the shoulders. `core`: arms, neck and hips fuse here.
-  bar  torso on chest  from=0.00 to=0.88 r=0.072 r2=0.098 wide=1.17 deep=0.84 blend=0.024 core
-  # Bust: two soft forms high on the chest, a little fuller than the
-  # bride's (r 0.052 -> 0.056), with a wider blend so they melt into the
-  # ribcage instead of sitting on it. Painted the dress's crimson: the
-  # bodice shell below clips open over the cleavage, and anything that
-  # pokes through it reads as the dress's cups (the bride's rule).
-  blob torso on chest  at=0.95 offset=(0.062,-0.0130,0.0640) r=0.056 tall=0.95 deep=0.95 blend=0.016 both color=6e0f1c gloss=0.55
+  # HIPS — half-width 0.130 x 1.26 = 0.16, centred a little higher (the
+  # thigh tops carry the line on out to ~0.21; at 0.21 here the hip stood
+  # out as a shelf over the legs, a bell), a band
+  # (tall 0.80) centred just under the hip joint, so the widest slice is the
+  # top of the thighs.
+  blob torso on pelvis at=0.45 r=0.130 wide=1.26 tall=0.80 deep=0.90 blend=0.036 core
+  # THE REAR — two round mounds behind and a little below the hips (venus's
+  # shelf, smaller and higher): back reach z ~-0.20, a cleft between them.
+  blob torso on pelvis at=0.10 offset=(0.070,-0.010,-0.080) r=0.108 wide=1.00 tall=1.00 deep=1.00 blend=0.028 both
+  # WAIST — pulled in hard over the hips: half-width ~0.10 at y ~1.13, a
+  # flat belly (deep 0.78).
+  bar  torso on spine1 from=0.00 to=1.00 r=0.088 r2=0.076 wide=1.22 deep=0.78 blend=0.030
+  # RIBCAGE — wider at the top than the waist, the base the bust sits on.
+  bar  torso on chest  from=0.00 to=0.88 r=0.080 r2=0.104 wide=1.18 deep=0.84 blend=0.028
+  # THE BUST — big and round, set a little apart (x 0.076) and high: cones
+  # from r 0.080 to 0.068 (0.088 read as two balls stuck on), blend 0.030 so
+  # they grow out of the chest, tipped DOWN and forward a little, so they sit full
+  # and heavy on the ribcage (venus's droop halved: hers sag, these lift).
+  # Front reach z ~0.19 at y ~1.29.
+  blob torso on chest  at=0.66 offset=(0.072,0,0.072) tip=(0.010,-0.045,0.035) r=0.080 r2=0.068 wide=1.00 deep=0.92 blend=0.030 both
   # Yoke + shoulder line, thin front-to-back.
   blob torso on spine2 at=0.90 r=0.060 wide=2.35 tall=0.62 deep=0.85 blend=0.034
-
-  # ============================================================
-  # THE SLIP DRESS — crimson satin (6e0f1c, glossy: satin catches a rim,
-  # cotton does not). The bride's bodice shell, recoloured, and ONE skirt
-  # shell on the hem pendulum to just above the knee, so the long legs —
-  # the proportion beat — stay in view. A SLIP falls close: r 0.140 ->
-  # 0.152 (a first 0.150 -> 0.180 flared like a lampshade), and its folds
-  # run straight down (warpFreq y 0; a y frequency quilted it in diamonds).
-  # ============================================================
-  shell torso on chest at=0.0 offset=(0,-0.120,0.000) tip=(0,0.275,0.014) r=0.086 r2=0.124 wide=0.98 tall=0.60 deep=0.84 thick=0.0030 clip=(0,-0.1908,0.9816) clipd=-0.1477 rim=0.002 blend=0.004 color=6e0f1c gloss=0.55 warp=0.0010 warpFreq=(105,0,105) rigid
-  shell torso on hem at=0.0 offset=(0,-0.010,0) tip=(0,-0.360,0) r=0.140 r2=0.152 wide=1.06 tall=0.55 deep=0.92 thick=0.004 clip=(0,-1,0) clipd=-0.660 rim=0.005 blend=0.006 color=6e0f1c gloss=0.55 warp=0.003 warpFreq=(40,0,40) rigid
 
   # ============================================================
   # NECK + HEAD. The bride's solved head structure (bride.blob, "HEAD +
@@ -262,19 +267,21 @@ body
   blob arm on hand     at=0.45 r=0.022 wide=0.75 tall=1.25 deep=1.10 blend=0.016 mirror
 
   # ============================================================
-  # LEGS — long and bare: the hip flare carried by the thigh root (the
-  # bride's lesson: torso and leg are different clusters, so the outer line
-  # from hip into thigh must live on the thigh), a smooth taper to a slim
-  # knee, a soft calf, a slender bare foot. The knee is ONE soft taper: the
-  # thigh ends at r 0.042 into a shin starting at 0.039 with a 0.026 blend
-  # (first pass: 0.036 into 0.035 at 0.012, a ball joint at every knee,
-  # stick legs on a wooden doll).
+  # LEGS — venus's heavy thighs on long legs: a full root carrying the
+  # hip's width down the outside of the thigh in one curve, tapering hard to
+  # a slim knee, a soft calf, a slender bare foot. Set apart (side 0.105) so
+  # the inner thighs meet without passing through each other.
   # ============================================================
-  blob leg on thigh at=0.09 offset=(0.012,0,-0.010) r=0.057 tall=1.30 deep=1.00 blend=0.030 mirror core
-  bar  leg on thigh from=0.04 to=1.00 r=0.070 r2=0.042 deep=1.05 blend=0.022 mirror
-  bar  leg on shin  from=0.00 to=0.97 r=0.039 r2=0.022 blend=0.026 mirror
+  blob leg on thigh at=0.08 offset=(0.012,0,-0.010) r=0.096 deep=1.05 blend=0.034 mirror core
+  bar  leg on thigh from=0.02 to=1.00 r=0.108 r2=0.047 wide=0.95 deep=1.05 blend=0.034 mirror
+  # Outer thigh: venus's, smaller — the hip's line carried down the side.
+  # at=0.24, not lower: its centre must stay nearer the thigh's own hip
+  # joint than the pelvis root, or the rig binds it to the pelvis
+  # (rig-bind.test.ts 'joint ring'; at 0.30 it did).
+  blob leg on thigh at=0.24 offset=(0.026,0,-0.006) r=0.088 tall=2.20 deep=1.00 blend=0.036 mirror
+  bar  leg on shin  from=0.00 to=0.97 r=0.045 r2=0.023 blend=0.040 mirror
   # Calf: a long soft swell behind the shin, peaking a quarter down.
-  blob leg on shin  at=0.20 offset=(0,0,-0.011) tip=(0,-0.170,0.007) r=0.040 r2=0.025 deep=1.05 blend=0.026 mirror
+  blob leg on shin  at=0.20 offset=(0,0,-0.012) tip=(0,-0.170,0.007) r=0.044 r2=0.026 deep=1.05 blend=0.026 mirror
   # Bare foot, slim and pointed a little (on her toes, the dancer's line).
   bar  leg on foot  from=0.00 to=0.90 offset=(0,-0.036,-0.010) r=0.028 r2=0.018 wide=1.05 tall=0.75 blend=0.018 mirror
 
@@ -337,8 +344,11 @@ palette
   fresnelBoost  0.30
   translucency  0.30
   wetness       0.08
-  surfaceNoiseAmp    0.008
-  silhouetteNoiseAmp 0.008
+  # ZERO noise (owner, 2026-10-23: "without all the bumpy texture"):
+  # silhouetteNoiseAmp DISPLACES the surface (metres), and at 0.008 it
+  # rippled the big smooth masses of the hips and thighs in bands.
+  surfaceNoiseAmp    0
+  silhouetteNoiseAmp 0
   mottleAmp     0.03
   mottleScale   1.2
   mottleColor   0.70 0.42 0.36

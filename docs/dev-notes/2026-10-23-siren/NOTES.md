@@ -64,3 +64,12 @@ it; lower fangs lengthened to clear the jaw mass. Hair: cobalt (2448b8), crown m
 short sidelocks + a back mass; the long fall removed.
 
 ![fifth pass](contact-5.png)
+
+## Sixth pass: the bare body (2026-10-23, owner: "are her clothes painted on? ... focus on body first without attachments ... more like the venus character with the rear and chest though bigger and bustier but without all the bumpy texture")
+
+The dress (two shell layers plus a crimson-painted bust) removed. Torso and legs rebuilt on venus's lines: hips ~0.16
+half-width carried out to ~0.21 by the thigh tops, a rear of two round mounds, a waist pulled to ~0.10, a big round
+bust; thighs heavy at the top tapering to a slim knee (thigh side 0.105, arms out to tilt 20 to clear the hips). The
+"bumpy texture" was `silhouetteNoiseAmp` 0.008, which DISPLACES the surface: now 0, as is `surfaceNoiseAmp`.
+
+![bare body](contact-6-body.png)
