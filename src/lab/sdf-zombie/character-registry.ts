@@ -50,6 +50,7 @@ import gorehoundBlobSrc from './characters/gorehound.blob?raw';
 import gutcrawlerBlobSrc from './characters/gutcrawler.blob?raw';
 import gibbetBlobSrc from './characters/gibbet.blob?raw';
 import bloatmawBlobSrc from './characters/bloatmaw.blob?raw';
+import teratomaBlobSrc from './characters/teratoma.blob?raw';
 import gnasherBlobSrc from './characters/gnasher.blob?raw';
 import ogreBlobSrc from './characters/ogre.blob?raw';
 import broodmotherBlobSrc from './characters/broodmother.blob?raw';
@@ -425,6 +426,19 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // returns zero offsets for a missing chain, so it degrades quietly to the
     // root sway/bob and the arm reach. See the .blob header and the report.
     profile: motionProfileFor('bloatmaw'),
+  },
+  // The cacodemon-style floater (teratoma.blob's header): a flesh ball in the
+  // .blob, its folds and veins in the baked body normal map, and the hard parts
+  // (horns, teeth, talons, the eye, shackles and chains) Blender kit
+  // (assets-source/teratoma-kit/). No face sheet: the eye is kit, the mouth is
+  // geometry.
+  teratoma: {
+    name: 'teratoma', src: teratomaBlobSrc,
+    kit: '/assets/lab/teratoma-kit.gltf',
+    // The ball's roped folds, veins and nodules (characters/teratoma.detail, baked; never marched).
+    bodyNormal: { url: '/assets/lab/teratoma-body-n.png', meta: '/assets/lab/teratoma-body-n.json', strength: 1 },
+    face: ZOMBIE_FLAT,
+    profile: motionProfileFor('teratoma'),
   },
   gnasher: {
     name: 'gnasher', src: gnasherBlobSrc,
