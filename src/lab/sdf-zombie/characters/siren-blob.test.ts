@@ -10,7 +10,7 @@ import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace, compileSheet } from '../blob-compile';
 import { buildBody } from '../build-body';
 import { characterEntry } from '../character-registry';
-import { sdBody } from '../validate';
+import { sdBody, nearestPrim } from '../validate';
 import { checkStance } from '../blob-checks';
 import { bindRig } from '../rig-bind';
 import { makeMotionJoints } from '../motion';
@@ -62,6 +62,22 @@ describe('siren — the face', () => {
     expect(body.prims.every(p => !(p.glow && p.glow > 0))).toBe(true);
   });
 
+  it('has no DEGENERATE tapered prim on the face: |r - r2| stays under the prim\'s length', () => {
+    // A tapered capsule whose end radii differ by more than its length is one
+    // sphere swallowing the other, and its distance function jumps there: a
+    // 1 mm step in the surface that rendered as a pale crease from cheek to
+    // cheek under the nose (2026-10-23; the jaw capsule shortened for a
+    // compact chin, r 0.035 -> 0.017 over 7.6 mm).
+    const head = body.clusters.find(c => c.limb === 'head')!;
+    for (const p of body.prims.slice(head.start, head.start + head.count)) {
+      const r2 = p.radiusB;
+      if (p.op !== 'add' || r2 === undefined || p.strand || p.shell) continue;
+      const len = Math.hypot(p.b[0] - p.a[0], p.b[1] - p.a[1], p.b[2] - p.a[2]);
+      if (len === 0) continue;
+      expect(Math.abs(p.radius - r2), `prim on ${p.bone} r ${p.radius} -> ${r2} over ${len.toFixed(4)}`).toBeLessThan(len);
+    }
+  });
+
   it('keeps the CRANIUM as the face frame: no hair prim out-sizes it (game headShape takes ALL prims)', () => {
     const head = body.clusters.find(c => c.limb === 'head')!;
     const prims = body.prims.slice(head.start, head.start + head.count).filter(p => p.op !== 'sub');
@@ -86,7 +102,7 @@ describe('siren — the face', () => {
 });
 
 describe('siren — the reveal', () => {
-  it(`hides every fang (${IVORY}) at least 2 mm inside the rest face`, () => {
+  it(`hides every fang (${IVORY}) with its whole surface at least 2 mm inside the rest face`, () => {
     const fangs = body.prims.filter(isFang);
     expect(fangs.length).toBe(14);
     // The field WITHOUT the fangs, so a fang cannot hide behind itself.
@@ -97,9 +113,32 @@ describe('siren — the reveal', () => {
       for (const t of [0, 0.5, 1]) {
         const p: [number, number, number] = [
           f.a[0] + (f.b[0] - f.a[0]) * t, f.a[1] + (f.b[1] - f.a[1]) * t, f.a[2] + (f.b[2] - f.a[2]) * t];
-        expect(sdBody(p, bare), `fang point ${p.map(v => v.toFixed(3))}`).toBeLessThan(-0.002);
+        // Its SURFACE, not just its axis: the fang's own radius there plus 2 mm
+        // (the axis-only check passed while the lower fangs' bases broke the
+        // chin's skin as two pale spots, 2026-10-23).
+        const r = f.radius + ((f.radiusB ?? f.radius) - f.radius) * t;
+        expect(sdBody(p, bare), `fang point ${p.map(v => v.toFixed(3))}`).toBeLessThan(-(r + 0.002));
       }
     }
+  });
+
+  it('lets no fang or the maw PAINT the rest face: no skin point a ray from the front meets is nearest one', () => {
+    // Paint is by nearest prim, so a fang buried under thin skin still
+    // colours the skin over it ivory: two pale spots on the chin once the
+    // chin was receded (2026-10-23), with every fang still inside the field.
+    // The maw (the mouth's dark inside) too: once the chin was receded it was
+    // the nearest prim to the whole chin and painted it near-black.
+    const isMaw = (p: (typeof body.prims)[number]) => !!p.color && p.color[0] < 0.05 && p.color[1] < 0.01;
+    const fangs = new Set(body.prims.map((p, i) => (isFang(p) || isMaw(p) ? i : -1)).filter(i => i >= 0));
+    const hits: string[] = [];
+    for (let x = -0.03; x <= 0.03; x += 0.002) {
+      for (let y = 1.57; y <= 1.70; y += 0.002) {
+        let z = 0.2, f = sdBody([x, y, z], body);
+        while (z > -0.05 && f > 0.0002) { z -= Math.max(f * 0.8, 0.0002); f = sdBody([x, y, z], body); }
+        if (z > -0.05 && fangs.has(nearestPrim([x, y, z], body))) hits.push(`${x.toFixed(3)},${y.toFixed(3)}`);
+      }
+    }
+    expect(hits).toEqual([]);
   });
 
   it('opens the jaw only through the swing, near the hinge ceiling, and shuts it before the swing ends', () => {

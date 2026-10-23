@@ -46,3 +46,12 @@ slanting in; a slimmer face tapering to a pointed chin; bigger crimson lips pain
 swells (the old sheet sat 2.3 mm low); the nose tip removed with a painted counter-light under the ridge.
 
 ![third pass](contact-3.png)
+
+## Fourth pass (2026-10-23, owner: chin too big, mouth juts out, lips bigger, nose and lower face closer to the eyes, eyes "too tight", heavier liner and lid; then "a crease under the nose" and "the open mouth is all messed up")
+
+Smaller, higher, receded chin; mouth pulled back (the face-mass blends had swollen it into a muzzle); nose, mouth and
+jaw hinge (`hinge=0.32`) moved up; bigger lips; eyes opened (26 mm tall); 3-4.5 mm liner with a 12 mm wing and an
+8-10 mm smoky lid. The crease was a degenerate tapered jaw capsule (a real 1 mm step in the field); the open mouth
+now opens right under the red upper lip onto fangs and a deep red gullet.
+
+![fourth pass](contact-4.png)

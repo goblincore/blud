@@ -157,6 +157,17 @@ iteration was better"). What landed: the REALISTIC body and head, with an anime 
   crease there stops shading.
 - **Slim the face to a point**: narrow the bottom of the face masses, lift and shrink the chin.
 - **Red lipstick renders orange on warm skin** unless the multiplier's green is ~0 and blue a little up (0.52 0 0.07).
+- **A tapered prim whose radii differ by more than its length is DEGENERATE** (one end sphere swallows the other) and
+  its distance jumps: a 1 mm step in the surface that rendered as a pale crease from cheek to cheek. Shortening a
+  capsule for a "compact" face did it twice. Keep |r - r2| < length (`siren-blob.test.ts` pins it); to find a seam,
+  shade the CPU field (`sdBody` + a finite-difference normal) and knock prims out one at a time.
+- **Wide head blends inflate the face.** 0.020+ on the face masses stacked smooth-min swell until the mouth sat 1 cm
+  out of the face (a muzzle). Keep them ~0.012.
+- **The sheet rides the head, not the jaw.** A painted lower lip stays put when the jaw drops and floats over the
+  opening. Put the mouth's top edge (the upper face mass's bottom) AT the lip line, and let the lower lip roll out of
+  sight with the jaw; a painted lower-lip prim read as wax at rest and a detached red button on the open jaw.
+- **Receding a face exposes buried prims' PAINT**: the maw and fangs became the nearest prim to the chin's skin
+  (a black chin, ivory spots). The siren test raycasts the rest face and fails on any skin a fang or the maw owns.
 
 ## Porting a face onto a new body
 
