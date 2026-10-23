@@ -137,6 +137,9 @@ export type BrainTuning = { readonly [K in keyof typeof BRAIN_TUNING]: number } 
   readonly lungeVariant?: SwingVariant;
   /** Per-variant swing duration (s). Absent entries use swingSec. */
   readonly swingSecFor?: Partial<Record<SwingVariant, number>>;
+  /** Every swing uses THIS arm instead of alternating: a body whose weapon is
+   *  one arm (the butcher's grafted axe, motion-profile.ts `armWeapon`). */
+  readonly swingSide?: 'L' | 'R';
 };
 
 function swingSecOf(tuning: BrainTuning, variant: SwingVariant): number {
@@ -244,7 +247,7 @@ export function stepBrain(
     cooldown = tuning.cooldownSec;
     // Alternate the arm for the next swing; its variant is rolled when that
     // swing actually starts, not here.
-    swing = { side: swing.side === 'R' ? 'L' : 'R', variant: swing.variant };
+    swing = { side: tuning.swingSide ?? (swing.side === 'R' ? 'L' : 'R'), variant: swing.variant };
     state = 'recover';
   }
 
@@ -301,7 +304,7 @@ export function stepBrain(
       : tuning.pickVariant
         ? tuning.pickVariant(input.roll, dist)
         : (input.roll < 0.5 ? 'hook' : 'overhead');
-    const started = { side: swing.side, variant };
+    const started = { side: tuning.swingSide ?? swing.side, variant };
     return {
       brain: { state: 'attack', alert, lostFor, swingT: 0, cooldown, holdSecs, swing: started },
       target: playerPoint, halt: true,

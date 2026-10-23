@@ -43,6 +43,9 @@ import femaleBlobSrc from './characters/female.blob?raw';
 import gargoyleBlobSrc from './characters/gargoyle.blob?raw';
 import cyberdemonBlobSrc from './characters/cyberdemon.blob?raw';
 import twinheadBlobSrc from './characters/twinhead.blob?raw';
+import butcherBlobSrc from './characters/butcher.blob?raw';
+import flayerBlobSrc from './characters/flayer.blob?raw';
+import deadeyeBlobSrc from './characters/deadeye.blob?raw';
 import gorehoundBlobSrc from './characters/gorehound.blob?raw';
 import gutcrawlerBlobSrc from './characters/gutcrawler.blob?raw';
 import gibbetBlobSrc from './characters/gibbet.blob?raw';
@@ -56,7 +59,7 @@ import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
 import brideBlobSrc from './characters/bride.blob?raw';
 import venusBlobSrc from './characters/venus.blob?raw';
 import {
-  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, GOREHOUND_PROFILE, GUTCRAWLER_PROFILE, GIBBET_PROFILE, motionProfileFor, type MotionProfile,
+  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, BUTCHER_PROFILE, FLAYER_PROFILE, DEADEYE_PROFILE, GOREHOUND_PROFILE, GUTCRAWLER_PROFILE, GIBBET_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
 
 /** A face sheet's texture and its crop. `mean` is the level the shader
@@ -324,6 +327,38 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     bodyNormal: { url: '/assets/lab/twinhead-body-n.png', meta: '/assets/lab/twinhead-body-n.json', strength: 1 },
     face: bakedFace('twinhead-face.png'),
     profile: TWINHEAD_PROFILE,
+  },
+  // The zombie conversion (butcher.blob's header): the zombie's flesh, pumped,
+  // on digitigrade machine legs with an axe grafted on for a right hand.
+  butcher: {
+    name: 'butcher', src: butcherBlobSrc,
+    // The machinery: Blender parts (assets-source/butcher-kit/) skinned to the
+    // .blob's bones by scripts/blender-kit.ts.
+    kit: '/assets/lab/butcher-kit.gltf',
+    // Muscle and varicose veins on the torso and arms (characters/butcher.detail, baked; never marched).
+    bodyNormal: { url: '/assets/lab/butcher-body-n.png', meta: '/assets/lab/butcher-body-n.json', strength: 1 },
+    face: bakedFace('butcher-face.png'),
+    profile: BUTCHER_PROFILE,
+  },
+  // The second zombie conversion (flayer.blob's header): the butcher's skeleton
+  // and legs, gaunt and flayed, a saw-sickle for a left hand, a visored helmet.
+  flayer: {
+    name: 'flayer', src: flayerBlobSrc,
+    kit: '/assets/lab/flayer-kit.gltf',
+    // Ribs, spine and veins on the gaunt torso and arms (characters/flayer.detail, baked; never marched).
+    bodyNormal: { url: '/assets/lab/flayer-body-n.png', meta: '/assets/lab/flayer-body-n.json', strength: 1 },
+    face: bakedFace('flayer-face.png'),
+    profile: FLAYER_PROFILE,
+  },
+  // The third zombie conversion (deadeye.blob's header): a gunslinger on the
+  // butcher's skeleton and legs, a pistol prop, an optic over one eye.
+  deadeye: {
+    name: 'deadeye', src: deadeyeBlobSrc,
+    kit: '/assets/lab/deadeye-kit.gltf',
+    // Muscle and veins (characters/deadeye.detail from butcher-detail-gen.ts deadeye; baked, never marched).
+    bodyNormal: { url: '/assets/lab/deadeye-body-n.png', meta: '/assets/lab/deadeye-body-n.json', strength: 1 },
+    face: bakedFace('deadeye-face.png'),
+    profile: DEADEYE_PROFILE,
   },
   // The biomech hound (gorehound.blob's header): a four-legged dog-frog on the
   // biped rig, arms as front legs. Flesh in the .blob; the machine legs, spine
