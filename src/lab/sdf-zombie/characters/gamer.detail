@@ -5,37 +5,37 @@
   # ---- varicose veins: a few thin trunks down his flanks and the gut's sides ----
   bar  torso on chest from=0.8241 to=0.8241 offset=(0.1252,-0.0131,0.0935) tip=(0.0066,-0.0076,-0.0018) r=0.0026 r2=0.0029 blend=0.0012
   bar  torso on chest from=0.8026 to=0.8026 offset=(0.1318,-0.013,0.0928) tip=(0.0038,-0.008,-0.0007) r=0.0029 r2=0.0032 blend=0.0012
-  bar  torso on chest from=0.7802 to=0.7802 offset=(0.1355,-0.0131,0.0932) tip=(-0.0021,-0.0091,0.0041) r=0.0032 r2=0.0034 blend=0.0012
-  bar  torso on chest from=0.7569 to=0.7569 offset=(0.1335,-0.0138,0.0985) tip=(-0.0059,-0.0098,0.0096) r=0.0034 r2=0.0037 blend=0.0012
-  bar  torso on chest from=0.7337 to=0.7337 offset=(0.1275,-0.0153,0.1092) tip=(-0.0049,-0.0096,0.0103) r=0.0037 r2=0.0039 blend=0.0012
-  bar  torso on chest from=0.7113 to=0.7113 offset=(0.1226,-0.017,0.1206) tip=(-0.0015,-0.009,0.0082) r=0.0039 r2=0.004 blend=0.0012
-  bar  torso on chest from=0.6898 to=0.6898 offset=(0.1212,-0.0183,0.1299) tip=(0.0037,-0.008,0.0042) r=0.004 r2=0.0041 blend=0.0012
+  bar  torso on chest from=0.7803 to=0.7803 offset=(0.1355,-0.0131,0.0932) tip=(-0.0021,-0.0091,0.0042) r=0.0032 r2=0.0034 blend=0.0012
+  bar  torso on chest from=0.7569 to=0.7569 offset=(0.1335,-0.0138,0.0985) tip=(-0.0059,-0.0098,0.0095) r=0.0034 r2=0.0037 blend=0.0012
+  bar  torso on chest from=0.7337 to=0.7337 offset=(0.1275,-0.0153,0.1092) tip=(-0.0049,-0.0096,0.0104) r=0.0037 r2=0.0039 blend=0.0012
+  bar  torso on chest from=0.7113 to=0.7113 offset=(0.1226,-0.017,0.1207) tip=(-0.0015,-0.009,0.0082) r=0.0039 r2=0.004 blend=0.0012
+  bar  torso on chest from=0.6898 to=0.6898 offset=(0.1212,-0.0183,0.13) tip=(0.0037,-0.008,0.0041) r=0.004 r2=0.0041 blend=0.0012
   bar  torso on chest from=0.6693 to=0.6693 offset=(0.1249,-0.019,0.1351) tip=(0.0085,-0.0072,-0.0012) r=0.0041 r2=0.0042 blend=0.0012
   bar  torso on chest from=0.6491 to=0.6491 offset=(0.1334,-0.019,0.1349) tip=(0.0083,-0.0072,-0.0023) r=0.0042 r2=0.0042 blend=0.0012
   bar  torso on chest from=0.6285 to=0.6285 offset=(0.1418,-0.0188,0.1337) tip=(0.0042,-0.0079,0.0016) r=0.0042 r2=0.0042 blend=0.0012
-  bar  torso on chest from=0.6074 to=0.6074 offset=(0.1459,-0.0192,0.1363) tip=(-0.0008,-0.0087,0.0071) r=0.0042 r2=0.0041 blend=0.0012
-  bar  torso on chest from=0.5861 to=0.5861 offset=(0.1451,-0.0203,0.1445) tip=(-0.0048,-0.0095,0.0117) r=0.0041 r2=0.004 blend=0.0012
-  bar  torso on chest from=0.5647 to=0.5647 offset=(0.1404,-0.0221,0.1573) tip=(-0.0057,-0.0096,0.014) r=0.004 r2=0.0039 blend=0.0012
-  bar  torso on chest from=0.5436 to=0.5436 offset=(0.1347,-0.0242,0.1724) tip=(-0.0023,-0.0089,0.1633) r=0.0039 r2=0.0037 blend=0.0012
-  bar  torso on chest from=0.5822 to=0.5822 offset=(0.1323,-0.0469,0.3338) tip=(0.0027,-0.0079,0.0087) r=0.0037 r2=0.0034 blend=0.0012
-  bar  torso on chest from=0.5638 to=0.5638 offset=(0.135,-0.0483,0.3434) tip=(0.0071,-0.0073,-0.0079) r=0.0034 r2=0.0032 blend=0.0012
-  bar  torso on chest from=0.5405 to=0.5405 offset=(0.1421,-0.0473,0.3366) tip=(0.0082,-0.0072,-0.0125) r=0.0032 r2=0.0029 blend=0.0012
-  bar  torso on chest from=0.5159 to=0.5159 offset=(0.1503,-0.0457,0.3254) tip=(0.0068,-0.0075,-0.0106) r=0.0029 r2=0.0026 blend=0.0012
+  bar  torso on chest from=0.6074 to=0.6074 offset=(0.1459,-0.0192,0.1363) tip=(-0.0008,-0.0087,0.0072) r=0.0042 r2=0.0041 blend=0.0012
+  bar  torso on chest from=0.5862 to=0.5862 offset=(0.1451,-0.0203,0.1446) tip=(-0.0048,-0.0095,0.0118) r=0.0041 r2=0.004 blend=0.0012
+  bar  torso on chest from=0.5647 to=0.5647 offset=(0.1404,-0.0221,0.1574) tip=(-0.0057,-0.0096,0.0139) r=0.004 r2=0.0039 blend=0.0012
+  bar  torso on chest from=0.5436 to=0.5436 offset=(0.1347,-0.0242,0.1723) tip=(-0.0023,-0.0089,0.1635) r=0.0039 r2=0.0037 blend=0.0012
+  bar  torso on chest from=0.5823 to=0.5823 offset=(0.1323,-0.0469,0.3339) tip=(0.0027,-0.0079,0.0085) r=0.0037 r2=0.0034 blend=0.0012
+  bar  torso on chest from=0.5637 to=0.5637 offset=(0.135,-0.0483,0.3434) tip=(0.0071,-0.0073,-0.0079) r=0.0034 r2=0.0032 blend=0.0012
+  bar  torso on chest from=0.5405 to=0.5405 offset=(0.1421,-0.0473,0.3366) tip=(0.0082,-0.0072,-0.0123) r=0.0032 r2=0.0029 blend=0.0012
+  bar  torso on chest from=0.5159 to=0.5159 offset=(0.1503,-0.0457,0.3255) tip=(0.0068,-0.0075,-0.0108) r=0.0029 r2=0.0026 blend=0.0012
   bar  torso on chest from=0.4911 to=0.4911 offset=(0.1571,-0.0444,0.316) tip=(0.0023,-0.0084,-0.0037) r=0.0026 r2=0.0023 blend=0.0012
-  bar  torso on chest from=0.4667 to=0.4667 offset=(0.1594,-0.0441,0.3136) tip=(-0.0024,-0.0091,0.0004) r=0.0023 r2=0.0023 blend=0.0012
+  bar  torso on chest from=0.4667 to=0.4667 offset=(0.1594,-0.0441,0.3135) tip=(-0.0024,-0.0091,0.0004) r=0.0023 r2=0.0023 blend=0.0012
   bar  torso on chest from=0.4417 to=0.4417 offset=(0.157,-0.0443,0.3152) tip=(-0.005,-0.0096,-0.0003) r=0.0023 r2=0.0023 blend=0.0012
-  bar  torso on chest from=0.4152 to=0.4152 offset=(0.1519,-0.0444,0.3163) tip=(-0.0056,-0.0097,-0.0058) r=0.0023 r2=0.0023 blend=0.0012
+  bar  torso on chest from=0.4152 to=0.4152 offset=(0.1519,-0.0444,0.3162) tip=(-0.0056,-0.0097,-0.0058) r=0.0023 r2=0.0023 blend=0.0012
   blob torso on chest at=0.7536 offset=(0.1319,-0.0136,0.0966) r=0.0071 blend=0.0015
   bar  torso on chest from=0.6573 to=0.6573 offset=(0.1316,-0.0192,0.1367) tip=(-0.0079,-0.0052,0.009) r=0.0017 r2=0.0022 blend=0.0012
-  bar  torso on chest from=0.6464 to=0.6464 offset=(0.1237,-0.0205,0.1462) tip=(-0.01,-0.0031,0.0075) r=0.0022 r2=0.0026 blend=0.0012
-  bar  torso on chest from=0.6408 to=0.6408 offset=(0.1137,-0.0216,0.154) tip=(-0.0094,-0.0034,0.0064) r=0.0026 r2=0.0027 blend=0.0012
-  bar  torso on chest from=0.6339 to=0.6339 offset=(0.1043,-0.0226,0.1608) tip=(-0.0082,-0.0044,0.006) r=0.0027 r2=0.0027 blend=0.0012
-  bar  torso on chest from=0.6242 to=0.6242 offset=(0.0961,-0.0235,0.1673) tip=(-0.0066,-0.0057,0.0068) r=0.0027 r2=0.0024 blend=0.0012
-  bar  torso on chest from=0.6112 to=0.6112 offset=(0.0895,-0.0246,0.1748) tip=(-0.0036,-0.0083,0.0092) r=0.0024 r2=0.002 blend=0.0012
-  bar  torso on chest from=0.5918 to=0.5918 offset=(0.0859,-0.026,0.1849) tip=(-0.0011,-0.0104,0.2314) r=0.002 r2=0.0015 blend=0.0012
+  bar  torso on chest from=0.6464 to=0.6464 offset=(0.1237,-0.0206,0.1462) tip=(-0.01,-0.0031,0.0075) r=0.0022 r2=0.0026 blend=0.0012
+  bar  torso on chest from=0.6409 to=0.6409 offset=(0.1137,-0.0216,0.154) tip=(-0.0094,-0.0034,0.0063) r=0.0026 r2=0.0027 blend=0.0012
+  bar  torso on chest from=0.6339 to=0.6339 offset=(0.1043,-0.0226,0.1607) tip=(-0.0082,-0.0044,0.0062) r=0.0027 r2=0.0027 blend=0.0012
+  bar  torso on chest from=0.6243 to=0.6243 offset=(0.0961,-0.0235,0.1674) tip=(-0.0066,-0.0057,0.0067) r=0.0027 r2=0.0024 blend=0.0012
+  bar  torso on chest from=0.6111 to=0.6111 offset=(0.0895,-0.0246,0.1747) tip=(-0.0036,-0.0083,0.0093) r=0.0024 r2=0.002 blend=0.0012
+  bar  torso on chest from=0.5918 to=0.5918 offset=(0.0859,-0.026,0.185) tip=(-0.0011,-0.0104,0.2312) r=0.002 r2=0.0015 blend=0.0012
   bar  torso on chest from=0.6525 to=0.6525 offset=(0.0848,-0.0581,0.4132) tip=(-0.0022,-0.0102,0.0105) r=0.0015 r2=0.0015 blend=0.0012
   blob torso on chest at=0.622 offset=(0.0958,-0.0234,0.1665) r=0.0046 blend=0.0015
-  bar  torso on chest from=0.2945 to=0.2945 offset=(0.1069,-0.0403,0.2867) tip=(0.0082,-0.0064,-0.0023) r=0.0026 r2=0.003 blend=0.0012
+  bar  torso on chest from=0.2945 to=0.2945 offset=(0.1069,-0.0403,0.2869) tip=(0.0082,-0.0064,-0.0024) r=0.0026 r2=0.003 blend=0.0012
   bar  torso on chest from=0.2759 to=0.2759 offset=(0.1151,-0.0401,0.2854) tip=(0.0063,-0.007,-0.0012) r=0.003 r2=0.0033 blend=0.0012
   bar  torso on chest from=0.2562 to=0.2562 offset=(0.1214,-0.0401,0.2851) tip=(0.0005,-0.0087,0.0024) r=0.0033 r2=0.0036 blend=0.0012
   bar  torso on chest from=0.2333 to=0.2333 offset=(0.1219,-0.0406,0.2887) tip=(-0.0031,-0.0098,0.0047) r=0.0036 r2=0.0038 blend=0.0012
@@ -67,41 +67,41 @@
   bar  torso on chest from=0.198 to=0.198 offset=(0.1582,-0.0377,0.2685) tip=(0.0043,-0.0052,-0.0014) r=0.002 r2=0.0015 blend=0.0012
   bar  torso on chest from=0.183 to=0.183 offset=(0.1625,-0.0376,0.2678) tip=(0.0025,-0.0081,0.0002) r=0.0015 r2=0.0015 blend=0.0012
   blob torso on chest at=0.1972 offset=(0.1355,-0.04,0.2849) r=0.0042 blend=0.0015
-  bar  torso on chest from=0.8236 to=0.8236 offset=(-0.1231,-0.0133,0.0947) tip=(0.0032,-0.0092,0.0039) r=0.0026 r2=0.0029 blend=0.0012
-  bar  torso on chest from=0.7998 to=0.7998 offset=(-0.1199,-0.014,0.0998) tip=(0.0023,-0.0091,0.0045) r=0.0029 r2=0.0032 blend=0.0012
-  bar  torso on chest from=0.7765 to=0.7765 offset=(-0.1176,-0.0148,0.1055) tip=(-0.0017,-0.0084,0.0029) r=0.0032 r2=0.0034 blend=0.0012
-  bar  torso on chest from=0.7544 to=0.7544 offset=(-0.1193,-0.0154,0.1095) tip=(-0.0055,-0.0078,0.001) r=0.0034 r2=0.0037 blend=0.0012
-  bar  torso on chest from=0.7333 to=0.7333 offset=(-0.1248,-0.0157,0.1115) tip=(-0.0075,-0.0074,-0.001) r=0.0037 r2=0.0039 blend=0.0012
-  bar  torso on chest from=0.7124 to=0.7124 offset=(-0.1323,-0.0157,0.1115) tip=(-0.0062,-0.0077,-0.0001) r=0.0039 r2=0.004 blend=0.0012
-  bar  torso on chest from=0.6913 to=0.6913 offset=(-0.1385,-0.0158,0.1124) tip=(-0.0014,-0.0085,0.0056) r=0.004 r2=0.0041 blend=0.0012
-  bar  torso on chest from=0.6702 to=0.6702 offset=(-0.1399,-0.0167,0.1191) tip=(0.0033,-0.0092,0.0114) r=0.0041 r2=0.0042 blend=0.0012
-  bar  torso on chest from=0.6493 to=0.6493 offset=(-0.1366,-0.0185,0.1316) tip=(0.0053,-0.0095,0.0117) r=0.0042 r2=0.0042 blend=0.0012
-  bar  torso on chest from=0.6278 to=0.6278 offset=(-0.1313,-0.0203,0.1444) tip=(0.0023,-0.009,0.0078) r=0.0042 r2=0.0042 blend=0.0012
-  bar  torso on chest from=0.606 to=0.606 offset=(-0.129,-0.0215,0.1533) tip=(-0.0008,-0.0085,0.0054) r=0.0042 r2=0.0041 blend=0.0012
-  bar  torso on chest from=0.5847 to=0.5847 offset=(-0.1298,-0.0224,0.1597) tip=(-0.0043,-0.0079,0.0029) r=0.0041 r2=0.004 blend=0.0012
-  bar  torso on chest from=0.5641 to=0.5641 offset=(-0.1341,-0.023,0.1636) tip=(-0.0068,-0.0074,0.0009) r=0.004 r2=0.0039 blend=0.0012
-  bar  torso on chest from=0.544 to=0.544 offset=(-0.1409,-0.0233,0.1655) tip=(-0.0063,-0.0076,0.0023) r=0.0039 r2=0.0037 blend=0.0012
-  bar  torso on chest from=0.524 to=0.524 offset=(-0.1472,-0.0237,0.1688) tip=(-0.0049,-0.0077,0.1254) r=0.0037 r2=0.0034 blend=0.0012
-  bar  torso on chest from=0.5514 to=0.5514 offset=(-0.1521,-0.0412,0.2928) tip=(0.0001,-0.0084,0.0188) r=0.0034 r2=0.0032 blend=0.0012
-  bar  torso on chest from=0.5355 to=0.5355 offset=(-0.152,-0.0439,0.3125) tip=(0.0027,-0.009,0.0142) r=0.0032 r2=0.0029 blend=0.0012
-  bar  torso on chest from=0.5163 to=0.5163 offset=(-0.1493,-0.0461,0.3277) tip=(0.0041,-0.0094,0.0098) r=0.0029 r2=0.0026 blend=0.0012
-  bar  torso on chest from=0.4943 to=0.4943 offset=(-0.1452,-0.0476,0.3386) tip=(0.0023,-0.0092,0.0011) r=0.0026 r2=0.0023 blend=0.0012
-  bar  torso on chest from=0.4694 to=0.4694 offset=(-0.1429,-0.0479,0.3409) tip=(-0.0003,-0.0087,-0.0071) r=0.0023 r2=0.0023 blend=0.0012
-  bar  torso on chest from=0.4428 to=0.4428 offset=(-0.1432,-0.0471,0.3352) tip=(-0.005,-0.0078,-0.0157) r=0.0023 r2=0.0023 blend=0.0012
+  bar  torso on chest from=0.8236 to=0.8236 offset=(-0.1231,-0.0133,0.0946) tip=(0.0032,-0.0092,0.0039) r=0.0026 r2=0.0029 blend=0.0012
+  bar  torso on chest from=0.7998 to=0.7998 offset=(-0.1199,-0.014,0.0997) tip=(0.0023,-0.0091,0.0045) r=0.0029 r2=0.0032 blend=0.0012
+  bar  torso on chest from=0.7765 to=0.7765 offset=(-0.1176,-0.0148,0.1054) tip=(-0.0017,-0.0084,0.003) r=0.0032 r2=0.0034 blend=0.0012
+  bar  torso on chest from=0.7545 to=0.7545 offset=(-0.1193,-0.0154,0.1095) tip=(-0.0055,-0.0078,0.0009) r=0.0034 r2=0.0037 blend=0.0012
+  bar  torso on chest from=0.7333 to=0.7333 offset=(-0.1248,-0.0157,0.1115) tip=(-0.0075,-0.0074,-0.0009) r=0.0037 r2=0.0039 blend=0.0012
+  bar  torso on chest from=0.7125 to=0.7125 offset=(-0.1323,-0.0157,0.1116) tip=(-0.0062,-0.0077,-0.0002) r=0.0039 r2=0.004 blend=0.0012
+  bar  torso on chest from=0.6913 to=0.6913 offset=(-0.1385,-0.0158,0.1125) tip=(-0.0014,-0.0085,0.0056) r=0.004 r2=0.0041 blend=0.0012
+  bar  torso on chest from=0.6702 to=0.6702 offset=(-0.1399,-0.0167,0.1191) tip=(0.0033,-0.0092,0.0115) r=0.0041 r2=0.0042 blend=0.0012
+  bar  torso on chest from=0.6493 to=0.6493 offset=(-0.1366,-0.0185,0.1316) tip=(0.0053,-0.0095,0.0116) r=0.0042 r2=0.0042 blend=0.0012
+  bar  torso on chest from=0.6277 to=0.6277 offset=(-0.1313,-0.0203,0.1443) tip=(0.0023,-0.009,0.0078) r=0.0042 r2=0.0042 blend=0.0012
+  bar  torso on chest from=0.606 to=0.606 offset=(-0.129,-0.0215,0.1532) tip=(-0.0008,-0.0085,0.0054) r=0.0042 r2=0.0041 blend=0.0012
+  bar  torso on chest from=0.5847 to=0.5847 offset=(-0.1298,-0.0224,0.1596) tip=(-0.0043,-0.0079,0.0029) r=0.0041 r2=0.004 blend=0.0012
+  bar  torso on chest from=0.5641 to=0.5641 offset=(-0.1341,-0.023,0.1635) tip=(-0.0068,-0.0074,0.0009) r=0.004 r2=0.0039 blend=0.0012
+  bar  torso on chest from=0.5439 to=0.5439 offset=(-0.1409,-0.0232,0.1654) tip=(-0.0063,-0.0076,0.0024) r=0.0039 r2=0.0037 blend=0.0012
+  bar  torso on chest from=0.524 to=0.524 offset=(-0.1472,-0.0237,0.1689) tip=(-0.0049,-0.0077,0.1255) r=0.0037 r2=0.0034 blend=0.0012
+  bar  torso on chest from=0.5514 to=0.5514 offset=(-0.1521,-0.0412,0.2929) tip=(0.0001,-0.0084,0.0189) r=0.0034 r2=0.0032 blend=0.0012
+  bar  torso on chest from=0.5356 to=0.5356 offset=(-0.152,-0.0439,0.3126) tip=(0.0027,-0.009,0.0141) r=0.0032 r2=0.0029 blend=0.0012
+  bar  torso on chest from=0.5163 to=0.5163 offset=(-0.1493,-0.046,0.3277) tip=(0.0041,-0.0094,0.0098) r=0.0029 r2=0.0026 blend=0.0012
+  bar  torso on chest from=0.4943 to=0.4943 offset=(-0.1452,-0.0476,0.3386) tip=(0.0023,-0.0092,0.0012) r=0.0026 r2=0.0023 blend=0.0012
+  bar  torso on chest from=0.4695 to=0.4695 offset=(-0.1429,-0.0479,0.341) tip=(-0.0003,-0.0087,-0.0072) r=0.0023 r2=0.0023 blend=0.0012
+  bar  torso on chest from=0.4428 to=0.4428 offset=(-0.1432,-0.0471,0.3351) tip=(-0.005,-0.0078,-0.0157) r=0.0023 r2=0.0023 blend=0.0012
   bar  torso on chest from=0.4152 to=0.4152 offset=(-0.1482,-0.0451,0.3209) tip=(-0.0073,-0.0075,-0.0196) r=0.0023 r2=0.0023 blend=0.0012
-  blob torso on chest at=0.6239 offset=(-0.13,-0.0201,0.1429) r=0.0075 blend=0.0015
-  blob torso on chest at=0.4696 offset=(-0.1426,-0.0479,0.3407) r=0.0036 blend=0.0015
-  bar  torso on chest from=0.5324 to=0.5324 offset=(-0.1492,-0.0455,0.3241) tip=(-0.0079,-0.0001,-0.0193) r=0.0017 r2=0.0022 blend=0.0012
-  bar  torso on chest from=0.5248 to=0.5248 offset=(-0.1572,-0.0429,0.3052) tip=(-0.0072,-0.0008,-0.0172) r=0.0022 r2=0.0026 blend=0.0012
+  blob torso on chest at=0.6238 offset=(-0.13,-0.0201,0.1428) r=0.0075 blend=0.0015
+  blob torso on chest at=0.4697 offset=(-0.1426,-0.0479,0.3409) r=0.0036 blend=0.0015
+  bar  torso on chest from=0.5324 to=0.5324 offset=(-0.1492,-0.0455,0.324) tip=(-0.0079,-0.0001,-0.0193) r=0.0017 r2=0.0022 blend=0.0012
+  bar  torso on chest from=0.5248 to=0.5248 offset=(-0.1572,-0.0429,0.3051) tip=(-0.0072,-0.0008,-0.0172) r=0.0022 r2=0.0026 blend=0.0012
   bar  torso on chest from=0.5159 to=0.5159 offset=(-0.1644,-0.0405,0.2884) tip=(-0.0048,-0.003,-0.0081) r=0.0026 r2=0.0027 blend=0.0012
   bar  torso on chest from=0.5046 to=0.5046 offset=(-0.1692,-0.0395,0.2808) tip=(-0.0026,-0.0049,-0.0003) r=0.0027 r2=0.0027 blend=0.0012
-  bar  torso on chest from=0.4909 to=0.4909 offset=(-0.1718,-0.0395,0.2812) tip=(-0.001,-0.0065,0.0027) r=0.0027 r2=0.0024 blend=0.0012
-  bar  torso on chest from=0.4741 to=0.4741 offset=(-0.1728,-0.04,0.2847) tip=(0.0011,-0.0086,0.0047) r=0.0024 r2=0.002 blend=0.0012
-  bar  torso on chest from=0.4523 to=0.4523 offset=(-0.1717,-0.0408,0.2904) tip=(-0.0005,-0.0073,-0.0014) r=0.002 r2=0.0015 blend=0.0012
+  bar  torso on chest from=0.4909 to=0.4909 offset=(-0.1718,-0.0395,0.2811) tip=(-0.001,-0.0065,0.0027) r=0.0027 r2=0.0024 blend=0.0012
+  bar  torso on chest from=0.4741 to=0.4741 offset=(-0.1728,-0.04,0.2847) tip=(0.0011,-0.0086,0.0048) r=0.0024 r2=0.002 blend=0.0012
+  bar  torso on chest from=0.4524 to=0.4524 offset=(-0.1717,-0.0408,0.2906) tip=(-0.0005,-0.0073,-0.0016) r=0.002 r2=0.0015 blend=0.0012
   bar  torso on chest from=0.4317 to=0.4317 offset=(-0.1722,-0.0408,0.29) tip=(-0.003,-0.0047,-0.0072) r=0.0015 r2=0.0015 blend=0.0012
   blob torso on chest at=0.5144 offset=(-0.1635,-0.0405,0.2881) r=0.0043 blend=0.0015
   blob torso on chest at=0.4896 offset=(-0.1708,-0.0395,0.2808) r=0.0045 blend=0.0015
-  bar  torso on chest from=0.2928 to=0.2928 offset=(-0.104,-0.0406,0.2886) tip=(0.0014,-0.0093,0.0041) r=0.0026 r2=0.003 blend=0.0012
+  bar  torso on chest from=0.2927 to=0.2927 offset=(-0.104,-0.0406,0.2885) tip=(0.0014,-0.0093,0.0041) r=0.0026 r2=0.003 blend=0.0012
   bar  torso on chest from=0.2687 to=0.2687 offset=(-0.1026,-0.0413,0.2938) tip=(-0.002,-0.0083,0.0016) r=0.003 r2=0.0033 blend=0.0012
   bar  torso on chest from=0.2466 to=0.2466 offset=(-0.1046,-0.0417,0.2965) tip=(-0.0064,-0.0069,-0.0013) r=0.0033 r2=0.0036 blend=0.0012
   bar  torso on chest from=0.227 to=0.227 offset=(-0.111,-0.0416,0.2962) tip=(-0.0078,-0.0065,-0.0024) r=0.0036 r2=0.0038 blend=0.0012
@@ -126,19 +126,19 @@
   bar  torso on chest from=0.2522 to=0.2522 offset=(-0.1059,-0.0415,0.2952) tip=(-0.0073,-0.0013,-0.0038) r=0.0022 r2=0.0026 blend=0.0012
   bar  torso on chest from=0.2473 to=0.2473 offset=(-0.1132,-0.041,0.2917) tip=(-0.0074,-0.0012,-0.0039) r=0.0026 r2=0.0027 blend=0.0012
   bar  torso on chest from=0.2425 to=0.2425 offset=(-0.1205,-0.0405,0.288) tip=(-0.0062,-0.0027,-0.0028) r=0.0027 r2=0.0027 blend=0.0012
-  bar  torso on chest from=0.2342 to=0.2342 offset=(-0.1267,-0.0401,0.2857) tip=(-0.0043,-0.005,-0.0008) r=0.0027 r2=0.0024 blend=0.0012
+  bar  torso on chest from=0.2341 to=0.2341 offset=(-0.1267,-0.0401,0.2857) tip=(-0.0043,-0.005,-0.0008) r=0.0027 r2=0.0024 blend=0.0012
   bar  torso on chest from=0.2202 to=0.2202 offset=(-0.131,-0.0401,0.2856) tip=(-0.0026,-0.0071,0.0011) r=0.0024 r2=0.002 blend=0.0012
   bar  torso on chest from=0.201 to=0.201 offset=(-0.1336,-0.0404,0.2877) tip=(-0.002,-0.0079,0.0014) r=0.002 r2=0.0015 blend=0.0012
   bar  torso on chest from=0.1798 to=0.1798 offset=(-0.1356,-0.0408,0.2902) tip=(-0.0027,-0.0068,-0.0002) r=0.0015 r2=0.0015 blend=0.0012
   blob torso on chest at=0.1996 offset=(-0.1328,-0.0403,0.2865) r=0.0041 blend=0.0015
 
   # ---- the joystick: pronounced veins down the knob and its neck, all round, stopping at his fists ----
-  bar  torso on chest from=0.9202 to=0.9202 offset=(0.0095,-0.0593,0.4216) tip=(-0.0007,-0.0044,0.0011) r=0.0023 r2=0.0027 blend=0.0009
-  bar  torso on chest from=0.9084 to=0.9084 offset=(0.0088,-0.0595,0.4233) tip=(-0.001,-0.0046,0.0027) r=0.0027 r2=0.003 blend=0.0009
-  bar  torso on chest from=0.897 to=0.897 offset=(0.0079,-0.06,0.4266) tip=(-0.0023,-0.0045,0.0033) r=0.003 r2=0.0032 blend=0.0009
-  bar  torso on chest from=0.8859 to=0.8859 offset=(0.0055,-0.0605,0.4305) tip=(-0.0029,-0.0044,0.0023) r=0.0032 r2=0.0034 blend=0.0009
-  bar  torso on chest from=0.8747 to=0.8747 offset=(0.0026,-0.0609,0.4334) tip=(-0.0018,-0.0043,0.0014) r=0.0034 r2=0.0035 blend=0.0009
-  bar  torso on chest from=0.8633 to=0.8633 offset=(0.0008,-0.0612,0.4354) tip=(-0.0005,-0.0043,0.0006) r=0.0035 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.9204 to=0.9204 offset=(0.0095,-0.0592,0.4215) tip=(-0.0004,-0.0045,0.0019) r=0.0023 r2=0.0027 blend=0.0009
+  bar  torso on chest from=0.9087 to=0.9087 offset=(0.0091,-0.0596,0.424) tip=(-0.0011,-0.0045,0.0024) r=0.0027 r2=0.003 blend=0.0009
+  bar  torso on chest from=0.8972 to=0.8972 offset=(0.0079,-0.06,0.427) tip=(-0.0024,-0.0045,0.0031) r=0.003 r2=0.0032 blend=0.0009
+  bar  torso on chest from=0.8859 to=0.8859 offset=(0.0055,-0.0605,0.4306) tip=(-0.0029,-0.0044,0.0023) r=0.0032 r2=0.0034 blend=0.0009
+  bar  torso on chest from=0.8747 to=0.8747 offset=(0.0026,-0.0609,0.4335) tip=(-0.0018,-0.0043,0.0012) r=0.0034 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.8633 to=0.8633 offset=(0.0008,-0.0612,0.4353) tip=(-0.0005,-0.0043,0.0006) r=0.0035 r2=0.0035 blend=0.0009
   bar  torso on chest from=0.8517 to=0.8517 offset=(0.0003,-0.0613,0.4365) tip=(0.0011,-0.0043,0.0001) r=0.0035 r2=0.0035 blend=0.0009
   bar  torso on chest from=0.8399 to=0.8399 offset=(0.0014,-0.0614,0.4372) tip=(0.002,-0.0043,-0.0004) r=0.0035 r2=0.0033 blend=0.0009
   bar  torso on chest from=0.8278 to=0.8278 offset=(0.0034,-0.0615,0.4374) tip=(0.0011,-0.0044,-0.0008) r=0.0033 r2=0.0031 blend=0.0009
@@ -148,7 +148,7 @@
   bar  torso on chest from=0.7768 to=0.7768 offset=(0.0015,-0.0612,0.4355) tip=(-0.0022,-0.0044,-0.0019) r=0.0022 r2=0.0021 blend=0.0009
   bar  torso on chest from=0.7641 to=0.7641 offset=(-0.0007,-0.061,0.4343) tip=(-0.0022,-0.0043,-0.0016) r=0.0021 r2=0.0021 blend=0.0009
   blob torso on chest at=0.8834 offset=(0.0053,-0.0604,0.4295) r=0.0055 blend=0.0012
-  blob torso on chest at=0.8725 offset=(0.0025,-0.0607,0.4321) r=0.0058 blend=0.0012
+  blob torso on chest at=0.8725 offset=(0.0025,-0.0607,0.4322) r=0.0058 blend=0.0012
   blob torso on chest at=0.8394 offset=(0.0013,-0.0612,0.4356) r=0.0059 blend=0.0012
   bar  torso on chest from=0.7764 to=0.7764 offset=(0.0028,-0.0613,0.4361) tip=(-0.0027,-0.0016,-0.001) r=0.0015 r2=0.0019 blend=0.0009
   bar  torso on chest from=0.7716 to=0.7716 offset=(0,-0.0612,0.4353) tip=(-0.0035,-0.0016,-0.0013) r=0.0019 r2=0.0022 blend=0.0009
@@ -160,13 +160,13 @@
   bar  torso on chest from=0.7403 to=0.7403 offset=(-0.0223,-0.0602,0.4283) tip=(-0.0027,-0.0015,-0.001) r=0.0014 r2=0.0014 blend=0.0009
   blob torso on chest at=0.7618 offset=(-0.0075,-0.0608,0.4324) r=0.0039 blend=0.0012
   blob torso on chest at=0.7562 offset=(-0.0114,-0.0606,0.4312) r=0.0038 blend=0.0012
-  bar  torso on chest from=0.9165 to=0.9165 offset=(0.023,-0.0579,0.4123) tip=(0.0004,-0.0044,0.0009) r=0.0023 r2=0.0027 blend=0.0009
-  bar  torso on chest from=0.9047 to=0.9047 offset=(0.0233,-0.0582,0.4138) tip=(0.0023,-0.0046,0.0009) r=0.0027 r2=0.003 blend=0.0009
-  bar  torso on chest from=0.8925 to=0.8925 offset=(0.0257,-0.0584,0.4153) tip=(0.0034,-0.0045,0.0002) r=0.003 r2=0.0032 blend=0.0009
-  bar  torso on chest from=0.8802 to=0.8802 offset=(0.029,-0.0585,0.4161) tip=(0.0027,-0.0044,-0.0005) r=0.0032 r2=0.0034 blend=0.0009
-  bar  torso on chest from=0.8679 to=0.8679 offset=(0.0317,-0.0585,0.4162) tip=(0.0015,-0.0043,0) r=0.0034 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.9167 to=0.9167 offset=(0.0229,-0.0579,0.4122) tip=(0.001,-0.0045,0.0014) r=0.0023 r2=0.0027 blend=0.0009
+  bar  torso on chest from=0.9049 to=0.9049 offset=(0.0239,-0.0582,0.4142) tip=(0.002,-0.0045,0.0007) r=0.0027 r2=0.003 blend=0.0009
+  bar  torso on chest from=0.8926 to=0.8926 offset=(0.026,-0.0584,0.4155) tip=(0.0031,-0.0045,0) r=0.003 r2=0.0032 blend=0.0009
+  bar  torso on chest from=0.8802 to=0.8802 offset=(0.0291,-0.0585,0.4161) tip=(0.0027,-0.0044,-0.0005) r=0.0032 r2=0.0034 blend=0.0009
+  bar  torso on chest from=0.8679 to=0.8679 offset=(0.0318,-0.0585,0.4163) tip=(0.0014,-0.0043,-0.0001) r=0.0034 r2=0.0035 blend=0.0009
   bar  torso on chest from=0.856 to=0.856 offset=(0.0332,-0.0586,0.4168) tip=(0.0004,-0.0043,0.0005) r=0.0035 r2=0.0035 blend=0.0009
-  bar  torso on chest from=0.8443 to=0.8443 offset=(0.0336,-0.0587,0.4179) tip=(-0.0005,-0.0043,0.0012) r=0.0035 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.8443 to=0.8443 offset=(0.0336,-0.0587,0.4178) tip=(-0.0005,-0.0043,0.0012) r=0.0035 r2=0.0035 blend=0.0009
   bar  torso on chest from=0.8329 to=0.8329 offset=(0.0331,-0.059,0.4196) tip=(-0.0017,-0.0043,0.0022) r=0.0035 r2=0.0033 blend=0.0009
   bar  torso on chest from=0.8218 to=0.8218 offset=(0.0314,-0.0594,0.4224) tip=(-0.0025,-0.0044,0.0022) r=0.0033 r2=0.0031 blend=0.0009
   bar  torso on chest from=0.8106 to=0.8106 offset=(0.0289,-0.0598,0.4252) tip=(-0.0023,-0.0044,0.001) r=0.0031 r2=0.0028 blend=0.0009
@@ -174,28 +174,28 @@
   bar  torso on chest from=0.7863 to=0.7863 offset=(0.0253,-0.06,0.4271) tip=(-0.0004,-0.0045,-0.0013) r=0.0025 r2=0.0022 blend=0.0009
   bar  torso on chest from=0.7734 to=0.7734 offset=(0.0249,-0.0599,0.4265) tip=(-0.0001,-0.0043,-0.0015) r=0.0022 r2=0.0021 blend=0.0009
   bar  torso on chest from=0.7609 to=0.7609 offset=(0.0249,-0.0598,0.4257) tip=(0.0012,-0.0043,-0.0016) r=0.0021 r2=0.0021 blend=0.0009
-  blob torso on chest at=0.8903 offset=(0.0249,-0.0583,0.4148) r=0.0051 blend=0.0012
-  blob torso on chest at=0.8779 offset=(0.028,-0.0584,0.4155) r=0.0055 blend=0.0012
-  blob torso on chest at=0.866 offset=(0.0305,-0.0584,0.4155) r=0.0058 blend=0.0012
+  blob torso on chest at=0.8907 offset=(0.0251,-0.0583,0.4149) r=0.0051 blend=0.0012
+  blob torso on chest at=0.8779 offset=(0.0281,-0.0584,0.4155) r=0.0055 blend=0.0012
+  blob torso on chest at=0.866 offset=(0.0306,-0.0584,0.4156) r=0.0058 blend=0.0012
   blob torso on chest at=0.822 offset=(0.0302,-0.0592,0.4215) r=0.0056 blend=0.0012
   blob torso on chest at=0.7993 offset=(0.0259,-0.0599,0.4259) r=0.0048 blend=0.0012
-  bar  torso on chest from=0.8823 to=0.8823 offset=(0.0312,-0.0584,0.4153) tip=(0.0027,-0.0028,-0.0025) r=0.0015 r2=0.0019 blend=0.0009
-  bar  torso on chest from=0.8737 to=0.8737 offset=(0.0339,-0.0581,0.4133) tip=(0.0018,-0.0027,-0.0021) r=0.0019 r2=0.0022 blend=0.0009
-  bar  torso on chest from=0.8655 to=0.8655 offset=(0.0357,-0.0579,0.4116) tip=(0.0016,-0.0026,-0.0018) r=0.0022 r2=0.0023 blend=0.0009
+  bar  torso on chest from=0.8823 to=0.8823 offset=(0.0313,-0.0584,0.4154) tip=(0.0026,-0.0028,-0.0026) r=0.0015 r2=0.0019 blend=0.0009
+  bar  torso on chest from=0.8737 to=0.8737 offset=(0.0338,-0.0581,0.4132) tip=(0.002,-0.0027,-0.002) r=0.0019 r2=0.0022 blend=0.0009
+  bar  torso on chest from=0.8655 to=0.8655 offset=(0.0358,-0.0579,0.4117) tip=(0.0014,-0.0026,-0.0018) r=0.0022 r2=0.0023 blend=0.0009
   bar  torso on chest from=0.8576 to=0.8576 offset=(0.0372,-0.0577,0.4103) tip=(0.001,-0.0026,-0.0012) r=0.0023 r2=0.0023 blend=0.0009
-  bar  torso on chest from=0.8501 to=0.8501 offset=(0.0383,-0.0575,0.4094) tip=(0.001,-0.0025,-0.0016) r=0.0023 r2=0.0021 blend=0.0009
-  bar  torso on chest from=0.8425 to=0.8425 offset=(0.0393,-0.0574,0.4082) tip=(0.0011,-0.0026,-0.0023) r=0.0021 r2=0.0017 blend=0.0009
-  bar  torso on chest from=0.8345 to=0.8345 offset=(0.0404,-0.0571,0.4063) tip=(0.0009,-0.0026,-0.0033) r=0.0017 r2=0.0014 blend=0.0009
+  bar  torso on chest from=0.8501 to=0.8501 offset=(0.0382,-0.0575,0.4094) tip=(0.001,-0.0025,-0.0016) r=0.0023 r2=0.0021 blend=0.0009
+  bar  torso on chest from=0.8424 to=0.8424 offset=(0.0393,-0.0574,0.4082) tip=(0.0011,-0.0026,-0.0023) r=0.0021 r2=0.0017 blend=0.0009
+  bar  torso on chest from=0.8345 to=0.8345 offset=(0.0404,-0.0571,0.4062) tip=(0.001,-0.0026,-0.0033) r=0.0017 r2=0.0014 blend=0.0009
   bar  torso on chest from=0.8261 to=0.8261 offset=(0.0413,-0.0567,0.4034) tip=(0.0002,-0.0026,-0.004) r=0.0014 r2=0.0014 blend=0.0009
-  blob torso on chest at=0.8647 offset=(0.0351,-0.0578,0.4114) r=0.0037 blend=0.0012
+  blob torso on chest at=0.8647 offset=(0.0352,-0.0578,0.4115) r=0.0037 blend=0.0012
   blob torso on chest at=0.8344 offset=(0.04,-0.0571,0.4062) r=0.0029 blend=0.0012
-  bar  torso on chest from=0.9092 to=0.9092 offset=(0.0293,-0.0554,0.3938) tip=(0.0008,-0.0044,0.0007) r=0.0023 r2=0.0027 blend=0.0009
-  bar  torso on chest from=0.8973 to=0.8973 offset=(0.0302,-0.0555,0.3952) tip=(0.0024,-0.0046,-0.0001) r=0.0027 r2=0.003 blend=0.0009
-  bar  torso on chest from=0.8848 to=0.8848 offset=(0.0325,-0.0556,0.3957) tip=(0.0028,-0.0045,-0.0019) r=0.003 r2=0.0032 blend=0.0009
-  bar  torso on chest from=0.8716 to=0.8716 offset=(0.0353,-0.0554,0.3944) tip=(0.0017,-0.0044,-0.0032) r=0.0032 r2=0.0034 blend=0.0009
-  bar  torso on chest from=0.8583 to=0.8583 offset=(0.0369,-0.0551,0.3919) tip=(0.0007,-0.0043,-0.0033) r=0.0034 r2=0.0035 blend=0.0009
-  bar  torso on chest from=0.8451 to=0.8451 offset=(0.0377,-0.0547,0.3893) tip=(0,-0.0043,-0.0026) r=0.0035 r2=0.0035 blend=0.0009
-  bar  torso on chest from=0.8323 to=0.8323 offset=(0.0377,-0.0544,0.3873) tip=(-0.0003,-0.0043,-0.0017) r=0.0035 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.9095 to=0.9095 offset=(0.0292,-0.0553,0.3938) tip=(0.0017,-0.0045,0.0007) r=0.0023 r2=0.0027 blend=0.0009
+  bar  torso on chest from=0.8974 to=0.8974 offset=(0.0309,-0.0555,0.3952) tip=(0.002,-0.0045,-0.0002) r=0.0027 r2=0.003 blend=0.0009
+  bar  torso on chest from=0.8848 to=0.8848 offset=(0.0329,-0.0556,0.3957) tip=(0.0025,-0.0045,-0.0019) r=0.003 r2=0.0032 blend=0.0009
+  bar  torso on chest from=0.8716 to=0.8716 offset=(0.0354,-0.0554,0.3944) tip=(0.0017,-0.0044,-0.0032) r=0.0032 r2=0.0034 blend=0.0009
+  bar  torso on chest from=0.8583 to=0.8583 offset=(0.037,-0.0551,0.3919) tip=(0.0006,-0.0043,-0.0033) r=0.0034 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.8451 to=0.8451 offset=(0.0376,-0.0547,0.3893) tip=(0,-0.0043,-0.0026) r=0.0035 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.8323 to=0.8323 offset=(0.0376,-0.0544,0.3873) tip=(-0.0003,-0.0043,-0.0017) r=0.0035 r2=0.0035 blend=0.0009
   bar  torso on chest from=0.8198 to=0.8198 offset=(0.0374,-0.0543,0.3863) tip=(-0.0001,-0.0043,-0.0001) r=0.0035 r2=0.0033 blend=0.0009
   bar  torso on chest from=0.8078 to=0.8078 offset=(0.0373,-0.0544,0.3868) tip=(-0.0001,-0.0044,0.0011) r=0.0033 r2=0.0031 blend=0.0009
   bar  torso on chest from=0.7961 to=0.7961 offset=(0.0372,-0.0546,0.3885) tip=(0,-0.0044,0.0021) r=0.0031 r2=0.0028 blend=0.0009
@@ -203,7 +203,7 @@
   bar  torso on chest from=0.7727 to=0.7727 offset=(0.0368,-0.0552,0.3925) tip=(-0.0003,-0.0044,0) r=0.0025 r2=0.0022 blend=0.0009
   bar  torso on chest from=0.7606 to=0.7606 offset=(0.0365,-0.0553,0.3931) tip=(-0.0006,-0.0043,-0.0012) r=0.0022 r2=0.0021 blend=0.0009
   bar  torso on chest from=0.7484 to=0.7484 offset=(0.0359,-0.0552,0.3925) tip=(0.0005,-0.0041,-0.0024) r=0.0021 r2=0.0021 blend=0.0009
-  blob torso on chest at=0.8828 offset=(0.0315,-0.0556,0.3957) r=0.0051 blend=0.0012
+  blob torso on chest at=0.8831 offset=(0.0318,-0.0556,0.3957) r=0.0051 blend=0.0012
   blob torso on chest at=0.7855 offset=(0.0362,-0.055,0.3914) r=0.0048 blend=0.0012
   blob torso on chest at=0.7734 offset=(0.0359,-0.0552,0.3927) r=0.0042 blend=0.0012
   bar  torso on chest from=0.772 to=0.772 offset=(0.0377,-0.0551,0.3922) tip=(0,-0.0013,0.0022) r=0.0015 r2=0.0019 blend=0.0009
@@ -215,21 +215,21 @@
   bar  torso on chest from=0.7578 to=0.7578 offset=(0.0345,-0.0584,0.4156) tip=(-0.0021,-0.0014,0.0038) r=0.0017 r2=0.0014 blend=0.0009
   bar  torso on chest from=0.7554 to=0.7554 offset=(0.0324,-0.059,0.4195) tip=(-0.0023,-0.0014,0.0025) r=0.0014 r2=0.0014 blend=0.0009
   blob torso on chest at=0.7578 offset=(0.0342,-0.0584,0.4154) r=0.0029 blend=0.0012
-  bar  torso on chest from=0.9018 to=0.9018 offset=(0.0216,-0.0527,0.375) tip=(-0.0014,-0.0044,-0.0025) r=0.0023 r2=0.0027 blend=0.0009
-  bar  torso on chest from=0.8886 to=0.8886 offset=(0.0202,-0.0524,0.3731) tip=(0.0004,-0.0046,-0.0028) r=0.0027 r2=0.003 blend=0.0009
-  bar  torso on chest from=0.875 to=0.875 offset=(0.0205,-0.0521,0.371) tip=(0.0012,-0.0045,-0.0026) r=0.003 r2=0.0032 blend=0.0009
-  bar  torso on chest from=0.8616 to=0.8616 offset=(0.0217,-0.0519,0.369) tip=(0.0016,-0.0044,-0.0012) r=0.0032 r2=0.0034 blend=0.0009
-  bar  torso on chest from=0.849 to=0.849 offset=(0.0233,-0.0518,0.3684) tip=(0.0021,-0.0043,0.0001) r=0.0034 r2=0.0035 blend=0.0009
-  bar  torso on chest from=0.8371 to=0.8371 offset=(0.0254,-0.0519,0.369) tip=(0.0016,-0.0043,0.0007) r=0.0035 r2=0.0035 blend=0.0009
-  bar  torso on chest from=0.8256 to=0.8256 offset=(0.027,-0.052,0.3703) tip=(0.0004,-0.0043,0.0002) r=0.0035 r2=0.0035 blend=0.0009
-  bar  torso on chest from=0.8138 to=0.8138 offset=(0.0275,-0.0522,0.3711) tip=(-0.0007,-0.0043,-0.0004) r=0.0035 r2=0.0033 blend=0.0009
+  bar  torso on chest from=0.9021 to=0.9021 offset=(0.0215,-0.0527,0.375) tip=(-0.0008,-0.0045,-0.0032) r=0.0023 r2=0.0027 blend=0.0009
+  bar  torso on chest from=0.8884 to=0.8884 offset=(0.0207,-0.0524,0.3726) tip=(0.0001,-0.0045,-0.0026) r=0.0027 r2=0.003 blend=0.0009
+  bar  torso on chest from=0.875 to=0.875 offset=(0.0208,-0.0521,0.3707) tip=(0.001,-0.0045,-0.0024) r=0.003 r2=0.0032 blend=0.0009
+  bar  torso on chest from=0.8616 to=0.8616 offset=(0.0218,-0.0518,0.3689) tip=(0.0016,-0.0044,-0.0013) r=0.0032 r2=0.0034 blend=0.0009
+  bar  torso on chest from=0.849 to=0.849 offset=(0.0234,-0.0518,0.3683) tip=(0.002,-0.0043,0.0002) r=0.0034 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.8372 to=0.8372 offset=(0.0254,-0.0519,0.3691) tip=(0.0016,-0.0043,0.0006) r=0.0035 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.8256 to=0.8256 offset=(0.027,-0.052,0.3703) tip=(0.0005,-0.0043,0.0002) r=0.0035 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.8138 to=0.8138 offset=(0.0274,-0.0522,0.3711) tip=(-0.0007,-0.0043,-0.0004) r=0.0035 r2=0.0033 blend=0.0009
   bar  torso on chest from=0.8017 to=0.8017 offset=(0.0267,-0.0522,0.3713) tip=(-0.0019,-0.0044,-0.001) r=0.0033 r2=0.0031 blend=0.0009
   bar  torso on chest from=0.7892 to=0.7892 offset=(0.0248,-0.0521,0.3709) tip=(-0.0026,-0.0045,-0.0009) r=0.0031 r2=0.0028 blend=0.0009
   bar  torso on chest from=0.7767 to=0.7767 offset=(0.0222,-0.0521,0.3707) tip=(-0.0034,-0.0045,-0.0005) r=0.0028 r2=0.0025 blend=0.0009
   bar  torso on chest from=0.7641 to=0.7641 offset=(0.0188,-0.0521,0.3708) tip=(-0.0029,-0.0045,0.0001) r=0.0025 r2=0.0022 blend=0.0009
   bar  torso on chest from=0.7516 to=0.7516 offset=(0.0159,-0.0522,0.3715) tip=(-0.0018,-0.0044,0.001) r=0.0022 r2=0.0021 blend=0.0009
   bar  torso on chest from=0.74 to=0.74 offset=(0.0141,-0.0524,0.373) tip=(-0.0006,-0.0043,0.0013) r=0.0021 r2=0.0021 blend=0.0009
-  blob torso on chest at=0.8257 offset=(0.0259,-0.0522,0.3714) r=0.006 blend=0.0012
+  blob torso on chest at=0.8257 offset=(0.0259,-0.0522,0.3715) r=0.006 blend=0.0012
   bar  torso on chest from=0.7627 to=0.7627 offset=(0.0188,-0.052,0.3699) tip=(-0.0051,-0.0017,-0.0011) r=0.0015 r2=0.0019 blend=0.0009
   bar  torso on chest from=0.7576 to=0.7576 offset=(0.0138,-0.0519,0.369) tip=(-0.0041,-0.0017,-0.0003) r=0.0019 r2=0.0022 blend=0.0009
   bar  torso on chest from=0.7529 to=0.7529 offset=(0.0097,-0.0519,0.369) tip=(-0.0032,-0.0017,0.0002) r=0.0022 r2=0.0023 blend=0.0009
@@ -239,16 +239,16 @@
   bar  torso on chest from=0.7332 to=0.7332 offset=(-0.0005,-0.0521,0.3711) tip=(-0.0024,-0.0019,0.0003) r=0.0017 r2=0.0014 blend=0.0009
   bar  torso on chest from=0.7282 to=0.7282 offset=(-0.003,-0.0522,0.3716) tip=(-0.0032,-0.0017,0.0009) r=0.0014 r2=0.0014 blend=0.0009
   blob torso on chest at=0.7337 offset=(-0.0005,-0.0522,0.3714) r=0.0029 blend=0.0012
-  bar  torso on chest from=0.8982 to=0.8982 offset=(0.0027,-0.0514,0.3658) tip=(0.0012,-0.0044,-0.0007) r=0.0023 r2=0.0027 blend=0.0009
-  bar  torso on chest from=0.8857 to=0.8857 offset=(0.0039,-0.0514,0.3657) tip=(0.002,-0.0046,-0.0021) r=0.0027 r2=0.003 blend=0.0009
-  bar  torso on chest from=0.8724 to=0.8724 offset=(0.0059,-0.0512,0.3643) tip=(0.0028,-0.0045,-0.0022) r=0.003 r2=0.0032 blend=0.0009
+  bar  torso on chest from=0.8985 to=0.8985 offset=(0.0027,-0.0514,0.3659) tip=(0.0013,-0.0045,-0.0015) r=0.0023 r2=0.0027 blend=0.0009
+  bar  torso on chest from=0.8855 to=0.8855 offset=(0.004,-0.0513,0.365) tip=(0.002,-0.0045,-0.0017) r=0.0027 r2=0.003 blend=0.0009
+  bar  torso on chest from=0.8723 to=0.8723 offset=(0.006,-0.0512,0.364) tip=(0.0028,-0.0045,-0.002) r=0.003 r2=0.0032 blend=0.0009
   bar  torso on chest from=0.8591 to=0.8591 offset=(0.0088,-0.051,0.3627) tip=(0.0033,-0.0044,-0.0011) r=0.0032 r2=0.0034 blend=0.0009
-  bar  torso on chest from=0.8466 to=0.8466 offset=(0.0121,-0.0509,0.3623) tip=(0.002,-0.0043,-0.0007) r=0.0034 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.8466 to=0.8466 offset=(0.0121,-0.0509,0.3622) tip=(0.002,-0.0043,-0.0005) r=0.0034 r2=0.0035 blend=0.0009
   bar  torso on chest from=0.8345 to=0.8345 offset=(0.0141,-0.0509,0.3623) tip=(0,-0.0043,-0.0006) r=0.0035 r2=0.0035 blend=0.0009
-  bar  torso on chest from=0.8224 to=0.8224 offset=(0.0141,-0.0509,0.3623) tip=(-0.0008,-0.0043,-0.0004) r=0.0035 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.8225 to=0.8225 offset=(0.0141,-0.0509,0.3623) tip=(-0.0008,-0.0043,-0.0004) r=0.0035 r2=0.0035 blend=0.0009
   bar  torso on chest from=0.8104 to=0.8104 offset=(0.0133,-0.0509,0.3625) tip=(-0.0023,-0.0043,-0.0005) r=0.0035 r2=0.0033 blend=0.0009
   bar  torso on chest from=0.7983 to=0.7983 offset=(0.011,-0.051,0.3626) tip=(-0.0019,-0.0044,0.0002) r=0.0033 r2=0.0031 blend=0.0009
-  bar  torso on chest from=0.7863 to=0.7863 offset=(0.0091,-0.0511,0.3634) tip=(-0.0003,-0.0045,0.001) r=0.0031 r2=0.0028 blend=0.0009
+  bar  torso on chest from=0.7863 to=0.7863 offset=(0.0091,-0.0511,0.3634) tip=(-0.0003,-0.0045,0.0009) r=0.0031 r2=0.0028 blend=0.0009
   bar  torso on chest from=0.7744 to=0.7744 offset=(0.0088,-0.0513,0.3649) tip=(0.0009,-0.0045,0.0016) r=0.0028 r2=0.0025 blend=0.0009
   bar  torso on chest from=0.7626 to=0.7626 offset=(0.0097,-0.0516,0.3671) tip=(0.0018,-0.0045,0.0022) r=0.0025 r2=0.0022 blend=0.0009
   bar  torso on chest from=0.751 to=0.751 offset=(0.0115,-0.052,0.3699) tip=(0.0021,-0.0044,0.0024) r=0.0022 r2=0.0021 blend=0.0009
@@ -256,30 +256,30 @@
   blob torso on chest at=0.7877 offset=(0.0088,-0.0512,0.3646) r=0.0053 blend=0.0012
   blob torso on chest at=0.7639 offset=(0.0095,-0.0517,0.3679) r=0.0042 blend=0.0012
   blob torso on chest at=0.7519 offset=(0.0113,-0.0521,0.3705) r=0.0037 blend=0.0012
-  bar  torso on chest from=0.8612 to=0.8612 offset=(0.0109,-0.0508,0.3617) tip=(0.0025,-0.0027,-0.0003) r=0.0015 r2=0.0019 blend=0.0009
-  bar  torso on chest from=0.8536 to=0.8536 offset=(0.0134,-0.0508,0.3618) tip=(0.002,-0.0026,0) r=0.0019 r2=0.0022 blend=0.0009
-  bar  torso on chest from=0.8464 to=0.8464 offset=(0.0154,-0.0509,0.3622) tip=(0.0028,-0.0025,0.0004) r=0.0022 r2=0.0023 blend=0.0009
+  bar  torso on chest from=0.8612 to=0.8612 offset=(0.0109,-0.0508,0.3616) tip=(0.0025,-0.0027,-0.0001) r=0.0015 r2=0.0019 blend=0.0009
+  bar  torso on chest from=0.8536 to=0.8536 offset=(0.0134,-0.0509,0.3619) tip=(0.0021,-0.0026,-0.0002) r=0.0019 r2=0.0022 blend=0.0009
+  bar  torso on chest from=0.8463 to=0.8463 offset=(0.0155,-0.0509,0.3621) tip=(0.0028,-0.0025,0.0006) r=0.0022 r2=0.0023 blend=0.0009
   bar  torso on chest from=0.8395 to=0.8395 offset=(0.0182,-0.051,0.363) tip=(0.0031,-0.0025,0.0011) r=0.0023 r2=0.0023 blend=0.0009
-  bar  torso on chest from=0.8331 to=0.8331 offset=(0.0214,-0.0512,0.3644) tip=(0.0037,-0.0025,0.0019) r=0.0023 r2=0.0021 blend=0.0009
-  bar  torso on chest from=0.827 to=0.827 offset=(0.025,-0.0515,0.3667) tip=(0.0041,-0.0025,0.003) r=0.0021 r2=0.0017 blend=0.0009
+  bar  torso on chest from=0.8331 to=0.8331 offset=(0.0213,-0.0512,0.3645) tip=(0.0037,-0.0025,0.0019) r=0.0023 r2=0.0021 blend=0.0009
+  bar  torso on chest from=0.827 to=0.827 offset=(0.025,-0.0515,0.3667) tip=(0.0041,-0.0025,0.0029) r=0.0021 r2=0.0017 blend=0.0009
   bar  torso on chest from=0.8213 to=0.8213 offset=(0.0291,-0.052,0.3699) tip=(0.004,-0.0025,0.004) r=0.0017 r2=0.0014 blend=0.0009
   bar  torso on chest from=0.8159 to=0.8159 offset=(0.0331,-0.0526,0.3741) tip=(0.0028,-0.0025,0.0042) r=0.0014 r2=0.0014 blend=0.0009
-  blob torso on chest at=0.827 offset=(0.0247,-0.0516,0.3671) r=0.0035 blend=0.0012
-  bar  torso on chest from=0.8992 to=0.8992 offset=(-0.0124,-0.0518,0.3684) tip=(0.0002,-0.0044,-0.001) r=0.0023 r2=0.0027 blend=0.0009
-  bar  torso on chest from=0.8866 to=0.8866 offset=(-0.0122,-0.0517,0.368) tip=(-0.0017,-0.0046,-0.0019) r=0.0027 r2=0.003 blend=0.0009
-  bar  torso on chest from=0.8734 to=0.8734 offset=(-0.0139,-0.0516,0.3668) tip=(-0.0026,-0.0045,-0.0018) r=0.003 r2=0.0032 blend=0.0009
+  blob torso on chest at=0.827 offset=(0.0246,-0.0516,0.3672) r=0.0035 blend=0.0012
+  bar  torso on chest from=0.8995 to=0.8995 offset=(-0.0123,-0.0518,0.3685) tip=(-0.0002,-0.0045,-0.0018) r=0.0023 r2=0.0027 blend=0.0009
+  bar  torso on chest from=0.8864 to=0.8864 offset=(-0.0125,-0.0516,0.3674) tip=(-0.0015,-0.0045,-0.0015) r=0.0027 r2=0.003 blend=0.0009
+  bar  torso on chest from=0.8733 to=0.8733 offset=(-0.014,-0.0515,0.3665) tip=(-0.0025,-0.0045,-0.0016) r=0.003 r2=0.0032 blend=0.0009
   bar  torso on chest from=0.8603 to=0.8603 offset=(-0.0165,-0.0514,0.3656) tip=(-0.0024,-0.0044,-0.0009) r=0.0032 r2=0.0034 blend=0.0009
-  bar  torso on chest from=0.8478 to=0.8478 offset=(-0.0189,-0.0513,0.3654) tip=(-0.0026,-0.0043,0.0001) r=0.0034 r2=0.0035 blend=0.0009
-  bar  torso on chest from=0.8359 to=0.8359 offset=(-0.0214,-0.0514,0.366) tip=(-0.0009,-0.0043,-0.0001) r=0.0035 r2=0.0035 blend=0.0009
-  bar  torso on chest from=0.8241 to=0.8241 offset=(-0.0223,-0.0515,0.3665) tip=(0.0006,-0.0043,-0.0006) r=0.0035 r2=0.0035 blend=0.0009
-  bar  torso on chest from=0.812 to=0.812 offset=(-0.0217,-0.0515,0.3666) tip=(0.0015,-0.0043,-0.0006) r=0.0035 r2=0.0033 blend=0.0009
-  bar  torso on chest from=0.7999 to=0.7999 offset=(-0.0202,-0.0515,0.3665) tip=(0.0021,-0.0044,-0.0005) r=0.0033 r2=0.0031 blend=0.0009
+  bar  torso on chest from=0.8478 to=0.8478 offset=(-0.0189,-0.0513,0.3653) tip=(-0.0025,-0.0043,0.0002) r=0.0034 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.836 to=0.836 offset=(-0.0214,-0.0514,0.3661) tip=(-0.0009,-0.0043,-0.0001) r=0.0035 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.8241 to=0.8241 offset=(-0.0223,-0.0515,0.3666) tip=(0.0006,-0.0043,-0.0006) r=0.0035 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.8121 to=0.8121 offset=(-0.0217,-0.0515,0.3666) tip=(0.0015,-0.0043,-0.0006) r=0.0035 r2=0.0033 blend=0.0009
+  bar  torso on chest from=0.7999 to=0.7999 offset=(-0.0202,-0.0515,0.3666) tip=(0.0021,-0.0044,-0.0005) r=0.0033 r2=0.0031 blend=0.0009
   bar  torso on chest from=0.7876 to=0.7876 offset=(-0.0181,-0.0515,0.3667) tip=(0.0021,-0.0045,0) r=0.0031 r2=0.0028 blend=0.0009
   bar  torso on chest from=0.7753 to=0.7753 offset=(-0.016,-0.0516,0.3673) tip=(0.0021,-0.0045,0.0005) r=0.0028 r2=0.0025 blend=0.0009
   bar  torso on chest from=0.7631 to=0.7631 offset=(-0.0139,-0.0518,0.3684) tip=(0.0013,-0.0045,0.0013) r=0.0025 r2=0.0022 blend=0.0009
   bar  torso on chest from=0.7511 to=0.7511 offset=(-0.0126,-0.052,0.3703) tip=(-0.0001,-0.0044,0.0017) r=0.0022 r2=0.0021 blend=0.0009
   bar  torso on chest from=0.7398 to=0.7398 offset=(-0.0127,-0.0524,0.3726) tip=(-0.0007,-0.0043,0.0017) r=0.0021 r2=0.0021 blend=0.0009
-  blob torso on chest at=0.8587 offset=(-0.0159,-0.0516,0.3668) r=0.0055 blend=0.0012
+  blob torso on chest at=0.8587 offset=(-0.0159,-0.0515,0.3668) r=0.0055 blend=0.0012
   blob torso on chest at=0.7644 offset=(-0.0136,-0.0519,0.3691) r=0.0042 blend=0.0012
   blob torso on chest at=0.7521 offset=(-0.0124,-0.0521,0.3708) r=0.0037 blend=0.0012
   bar  torso on chest from=0.7618 to=0.7618 offset=(-0.0141,-0.0517,0.3676) tip=(-0.0024,-0.0024,0.0026) r=0.0015 r2=0.0019 blend=0.0009
@@ -293,39 +293,39 @@
   blob torso on chest at=0.7515 offset=(-0.0182,-0.0525,0.3736) r=0.0037 blend=0.0012
   blob torso on chest at=0.7322 offset=(-0.0209,-0.0532,0.3784) r=0.0035 blend=0.0012
   blob torso on chest at=0.7253 offset=(-0.0217,-0.0532,0.3788) r=0.0029 blend=0.0012
-  bar  torso on chest from=0.9064 to=0.9064 offset=(-0.0282,-0.0544,0.3867) tip=(-0.0004,-0.0044,-0.0015) r=0.0023 r2=0.0027 blend=0.0009
-  bar  torso on chest from=0.8937 to=0.8937 offset=(-0.0287,-0.0542,0.3859) tip=(-0.002,-0.0046,-0.0014) r=0.0027 r2=0.003 blend=0.0009
-  bar  torso on chest from=0.8806 to=0.8806 offset=(-0.0307,-0.0541,0.3851) tip=(-0.0029,-0.0045,-0.0001) r=0.003 r2=0.0032 blend=0.0009
-  bar  torso on chest from=0.8682 to=0.8682 offset=(-0.0336,-0.0542,0.3856) tip=(-0.0024,-0.0044,0.0013) r=0.0032 r2=0.0034 blend=0.0009
-  bar  torso on chest from=0.8565 to=0.8565 offset=(-0.036,-0.0545,0.3875) tip=(-0.0018,-0.0043,0.0021) r=0.0034 r2=0.0035 blend=0.0009
-  bar  torso on chest from=0.8454 to=0.8454 offset=(-0.0379,-0.0548,0.3901) tip=(-0.0011,-0.0043,0.0029) r=0.0035 r2=0.0035 blend=0.0009
-  bar  torso on chest from=0.8347 to=0.8347 offset=(-0.039,-0.0553,0.3935) tip=(-0.0004,-0.0043,0.0015) r=0.0035 r2=0.0035 blend=0.0009
-  bar  torso on chest from=0.8234 to=0.8234 offset=(-0.0394,-0.0556,0.3955) tip=(0.0001,-0.0043,-0.0004) r=0.0035 r2=0.0033 blend=0.0009
+  bar  torso on chest from=0.9067 to=0.9067 offset=(-0.0281,-0.0544,0.3867) tip=(-0.0012,-0.0045,-0.0018) r=0.0023 r2=0.0027 blend=0.0009
+  bar  torso on chest from=0.8936 to=0.8936 offset=(-0.0294,-0.0542,0.3856) tip=(-0.0017,-0.0045,-0.0013) r=0.0027 r2=0.003 blend=0.0009
+  bar  torso on chest from=0.8806 to=0.8806 offset=(-0.0311,-0.0541,0.385) tip=(-0.0026,-0.0045,0) r=0.003 r2=0.0032 blend=0.0009
+  bar  torso on chest from=0.8681 to=0.8681 offset=(-0.0337,-0.0542,0.3856) tip=(-0.0024,-0.0044,0.0013) r=0.0032 r2=0.0034 blend=0.0009
+  bar  torso on chest from=0.8565 to=0.8565 offset=(-0.0361,-0.0544,0.3874) tip=(-0.0017,-0.0043,0.0021) r=0.0034 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.8454 to=0.8454 offset=(-0.0378,-0.0548,0.3901) tip=(-0.0011,-0.0043,0.0029) r=0.0035 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.8347 to=0.8347 offset=(-0.0389,-0.0553,0.3935) tip=(-0.0004,-0.0043,0.0015) r=0.0035 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.8234 to=0.8234 offset=(-0.0394,-0.0556,0.3955) tip=(0,-0.0043,-0.0004) r=0.0035 r2=0.0033 blend=0.0009
   bar  torso on chest from=0.8113 to=0.8113 offset=(-0.0393,-0.0556,0.3958) tip=(0.0006,-0.0044,-0.0014) r=0.0033 r2=0.0031 blend=0.0009
   bar  torso on chest from=0.7987 to=0.7987 offset=(-0.0388,-0.0555,0.395) tip=(0.001,-0.0044,-0.0025) r=0.0031 r2=0.0028 blend=0.0009
   bar  torso on chest from=0.7855 to=0.7855 offset=(-0.0378,-0.0553,0.3932) tip=(0.001,-0.0045,-0.0016) r=0.0028 r2=0.0025 blend=0.0009
   bar  torso on chest from=0.7726 to=0.7726 offset=(-0.0367,-0.0551,0.3922) tip=(0.0004,-0.0044,0) r=0.0025 r2=0.0022 blend=0.0009
   bar  torso on chest from=0.7604 to=0.7604 offset=(-0.0363,-0.0552,0.3928) tip=(-0.0003,-0.0042,0.001) r=0.0022 r2=0.0021 blend=0.0009
   bar  torso on chest from=0.7492 to=0.7492 offset=(-0.0367,-0.0554,0.3944) tip=(-0.0032,-0.004,0.0022) r=0.0021 r2=0.0021 blend=0.0009
-  blob torso on chest at=0.8551 offset=(-0.0346,-0.0545,0.3879) r=0.0058 blend=0.0012
+  blob torso on chest at=0.8551 offset=(-0.0347,-0.0545,0.3879) r=0.0058 blend=0.0012
   blob torso on chest at=0.8343 offset=(-0.0373,-0.0553,0.3937) r=0.006 blend=0.0012
-  bar  torso on chest from=0.8575 to=0.8575 offset=(-0.0371,-0.0541,0.3847) tip=(-0.0012,-0.0026,0.0025) r=0.0015 r2=0.0019 blend=0.0009
-  bar  torso on chest from=0.8512 to=0.8512 offset=(-0.0383,-0.0545,0.3876) tip=(-0.0012,-0.0025,0.0036) r=0.0019 r2=0.0022 blend=0.0009
+  bar  torso on chest from=0.8574 to=0.8574 offset=(-0.0372,-0.0541,0.3847) tip=(-0.0013,-0.0026,0.0025) r=0.0015 r2=0.0019 blend=0.0009
+  bar  torso on chest from=0.8512 to=0.8512 offset=(-0.0384,-0.0545,0.3876) tip=(-0.0011,-0.0025,0.0036) r=0.0019 r2=0.0022 blend=0.0009
   bar  torso on chest from=0.8456 to=0.8456 offset=(-0.0395,-0.055,0.3914) tip=(-0.0007,-0.0025,0.0043) r=0.0022 r2=0.0023 blend=0.0009
-  bar  torso on chest from=0.8405 to=0.8405 offset=(-0.0403,-0.0557,0.396) tip=(-0.0003,-0.0024,0.0042) r=0.0023 r2=0.0023 blend=0.0009
+  bar  torso on chest from=0.8405 to=0.8405 offset=(-0.0402,-0.0557,0.396) tip=(-0.0003,-0.0024,0.0042) r=0.0023 r2=0.0023 blend=0.0009
   bar  torso on chest from=0.8355 to=0.8355 offset=(-0.0405,-0.0563,0.4005) tip=(0,-0.0024,0.0036) r=0.0023 r2=0.0021 blend=0.0009
   bar  torso on chest from=0.8302 to=0.8302 offset=(-0.0405,-0.0568,0.4043) tip=(0.0002,-0.0025,0.003) r=0.0021 r2=0.0017 blend=0.0009
   bar  torso on chest from=0.8246 to=0.8246 offset=(-0.0402,-0.0573,0.4076) tip=(0.0004,-0.0025,0.0024) r=0.0017 r2=0.0014 blend=0.0009
   bar  torso on chest from=0.8187 to=0.8187 offset=(-0.0399,-0.0577,0.4103) tip=(0.0008,-0.0025,0.0017) r=0.0014 r2=0.0014 blend=0.0009
-  blob torso on chest at=0.8353 offset=(-0.0398,-0.0563,0.4004) r=0.0038 blend=0.0012
-  bar  torso on chest from=0.9116 to=0.9116 offset=(-0.0288,-0.0562,0.4) tip=(-0.0011,-0.0044,-0.0015) r=0.0023 r2=0.0027 blend=0.0009
-  bar  torso on chest from=0.8989 to=0.8989 offset=(-0.0299,-0.0561,0.3991) tip=(-0.0025,-0.0046,-0.0005) r=0.0027 r2=0.003 blend=0.0009
-  bar  torso on chest from=0.8862 to=0.8862 offset=(-0.0323,-0.0561,0.3992) tip=(-0.0027,-0.0045,0.0009) r=0.003 r2=0.0032 blend=0.0009
-  bar  torso on chest from=0.8741 to=0.8741 offset=(-0.0351,-0.0563,0.4007) tip=(-0.0017,-0.0044,0.0016) r=0.0032 r2=0.0034 blend=0.0009
-  bar  torso on chest from=0.8626 to=0.8626 offset=(-0.0368,-0.0566,0.403) tip=(-0.0009,-0.0043,0.0023) r=0.0034 r2=0.0035 blend=0.0009
-  bar  torso on chest from=0.8517 to=0.8517 offset=(-0.0377,-0.057,0.4058) tip=(-0.0003,-0.0043,0.0014) r=0.0035 r2=0.0035 blend=0.0009
-  bar  torso on chest from=0.8403 to=0.8403 offset=(-0.038,-0.0573,0.4078) tip=(-0.0002,-0.0043,0.0003) r=0.0035 r2=0.0035 blend=0.0009
-  bar  torso on chest from=0.8286 to=0.8286 offset=(-0.0382,-0.0574,0.4086) tip=(-0.0004,-0.0043,-0.0018) r=0.0035 r2=0.0033 blend=0.0009
+  blob torso on chest at=0.8353 offset=(-0.0397,-0.0563,0.4004) r=0.0038 blend=0.0012
+  bar  torso on chest from=0.9119 to=0.9119 offset=(-0.0287,-0.0562,0.3999) tip=(-0.0019,-0.0045,-0.0014) r=0.0023 r2=0.0027 blend=0.0009
+  bar  torso on chest from=0.8989 to=0.8989 offset=(-0.0306,-0.0561,0.3992) tip=(-0.0021,-0.0045,-0.0006) r=0.0027 r2=0.003 blend=0.0009
+  bar  torso on chest from=0.8862 to=0.8862 offset=(-0.0327,-0.0561,0.3992) tip=(-0.0024,-0.0045,0.0009) r=0.003 r2=0.0032 blend=0.0009
+  bar  torso on chest from=0.8741 to=0.8741 offset=(-0.0351,-0.0563,0.4007) tip=(-0.0018,-0.0044,0.0016) r=0.0032 r2=0.0034 blend=0.0009
+  bar  torso on chest from=0.8627 to=0.8627 offset=(-0.0369,-0.0566,0.403) tip=(-0.0007,-0.0043,0.0023) r=0.0034 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.8516 to=0.8516 offset=(-0.0376,-0.057,0.4058) tip=(-0.0003,-0.0043,0.0014) r=0.0035 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.8403 to=0.8403 offset=(-0.0379,-0.0573,0.4078) tip=(-0.0002,-0.0043,0.0003) r=0.0035 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.8286 to=0.8286 offset=(-0.0381,-0.0574,0.4086) tip=(-0.0004,-0.0043,-0.0017) r=0.0035 r2=0.0033 blend=0.0009
   bar  torso on chest from=0.8159 to=0.8159 offset=(-0.0386,-0.0573,0.4075) tip=(-0.0002,-0.0044,-0.0032) r=0.0033 r2=0.0031 blend=0.0009
   bar  torso on chest from=0.8026 to=0.8026 offset=(-0.0387,-0.0569,0.405) tip=(0.0002,-0.0044,-0.0027) r=0.0031 r2=0.0028 blend=0.0009
   bar  torso on chest from=0.7894 to=0.7894 offset=(-0.0385,-0.0566,0.4029) tip=(0.0004,-0.0045,-0.002) r=0.0028 r2=0.0025 blend=0.0009
@@ -335,21 +335,21 @@
   blob torso on chest at=0.8505 offset=(-0.0361,-0.057,0.4055) r=0.006 blend=0.0012
   blob torso on chest at=0.8397 offset=(-0.0364,-0.0573,0.4074) r=0.006 blend=0.0012
   blob torso on chest at=0.7899 offset=(-0.0374,-0.0566,0.4028) r=0.0048 blend=0.0012
-  bar  torso on chest from=0.8646 to=0.8646 offset=(-0.0386,-0.0566,0.4029) tip=(0.0003,-0.0018,0.0027) r=0.0015 r2=0.0019 blend=0.0009
-  bar  torso on chest from=0.8607 to=0.8607 offset=(-0.0383,-0.057,0.4058) tip=(0.0006,-0.0018,0.0036) r=0.0019 r2=0.0022 blend=0.0009
+  bar  torso on chest from=0.8646 to=0.8646 offset=(-0.0387,-0.0566,0.4029) tip=(0.0003,-0.0018,0.0027) r=0.0015 r2=0.0019 blend=0.0009
+  bar  torso on chest from=0.8607 to=0.8607 offset=(-0.0384,-0.057,0.4059) tip=(0.0008,-0.0017,0.0035) r=0.0019 r2=0.0022 blend=0.0009
   bar  torso on chest from=0.8572 to=0.8572 offset=(-0.0376,-0.0576,0.4096) tip=(0.0013,-0.0017,0.004) r=0.0022 r2=0.0023 blend=0.0009
-  bar  torso on chest from=0.8541 to=0.8541 offset=(-0.0363,-0.0581,0.4137) tip=(0.0023,-0.0016,0.0049) r=0.0023 r2=0.0023 blend=0.0009
-  bar  torso on chest from=0.8515 to=0.8515 offset=(-0.0341,-0.0588,0.4187) tip=(0.0032,-0.0016,0.005) r=0.0023 r2=0.0021 blend=0.0009
+  bar  torso on chest from=0.8541 to=0.8541 offset=(-0.0363,-0.0581,0.4137) tip=(0.0022,-0.0016,0.0049) r=0.0023 r2=0.0023 blend=0.0009
+  bar  torso on chest from=0.8515 to=0.8515 offset=(-0.034,-0.0588,0.4187) tip=(0.0032,-0.0016,0.005) r=0.0023 r2=0.0021 blend=0.0009
   bar  torso on chest from=0.8489 to=0.8489 offset=(-0.0309,-0.0596,0.4238) tip=(0.0039,-0.0016,0.0046) r=0.0021 r2=0.0017 blend=0.0009
-  bar  torso on chest from=0.8462 to=0.8462 offset=(-0.0269,-0.0602,0.4286) tip=(0.0038,-0.0017,0.0034) r=0.0017 r2=0.0014 blend=0.0009
+  bar  torso on chest from=0.8462 to=0.8462 offset=(-0.0269,-0.0602,0.4285) tip=(0.0037,-0.0017,0.0034) r=0.0017 r2=0.0014 blend=0.0009
   bar  torso on chest from=0.8429 to=0.8429 offset=(-0.0232,-0.0607,0.4321) tip=(0.0037,-0.0017,0.0022) r=0.0014 r2=0.0014 blend=0.0009
-  bar  torso on chest from=0.9198 to=0.9198 offset=(-0.0118,-0.0591,0.4208) tip=(-0.0016,-0.0044,0.0002) r=0.0023 r2=0.0027 blend=0.0009
-  bar  torso on chest from=0.9077 to=0.9077 offset=(-0.0134,-0.0592,0.4216) tip=(-0.0028,-0.0046,0.0012) r=0.0027 r2=0.003 blend=0.0009
-  bar  torso on chest from=0.8957 to=0.8957 offset=(-0.0162,-0.0595,0.4234) tip=(-0.004,-0.0045,0.0008) r=0.003 r2=0.0032 blend=0.0009
+  bar  torso on chest from=0.9201 to=0.9201 offset=(-0.0117,-0.0591,0.4207) tip=(-0.002,-0.0045,0.0009) r=0.0023 r2=0.0027 blend=0.0009
+  bar  torso on chest from=0.908 to=0.908 offset=(-0.0137,-0.0593,0.4222) tip=(-0.0027,-0.0045,0.0009) r=0.0027 r2=0.003 blend=0.0009
+  bar  torso on chest from=0.8959 to=0.8959 offset=(-0.0164,-0.0595,0.4237) tip=(-0.0039,-0.0045,0.0005) r=0.003 r2=0.0032 blend=0.0009
   bar  torso on chest from=0.8836 to=0.8836 offset=(-0.0202,-0.0597,0.4248) tip=(-0.0029,-0.0044,0.0003) r=0.0032 r2=0.0034 blend=0.0009
-  bar  torso on chest from=0.8716 to=0.8716 offset=(-0.0231,-0.0598,0.4256) tip=(-0.0018,-0.0043,0.0002) r=0.0034 r2=0.0035 blend=0.0009
-  bar  torso on chest from=0.8598 to=0.8598 offset=(-0.0249,-0.0599,0.4265) tip=(-0.0003,-0.0043,0.0004) r=0.0035 r2=0.0035 blend=0.0009
-  bar  torso on chest from=0.8481 to=0.8481 offset=(-0.0253,-0.0601,0.4275) tip=(0.0007,-0.0043,0.0007) r=0.0035 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.8716 to=0.8716 offset=(-0.0232,-0.0598,0.4257) tip=(-0.0017,-0.0043,0.0001) r=0.0034 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.8598 to=0.8598 offset=(-0.0249,-0.0599,0.4264) tip=(-0.0004,-0.0043,0.0005) r=0.0035 r2=0.0035 blend=0.0009
+  bar  torso on chest from=0.8481 to=0.8481 offset=(-0.0252,-0.0601,0.4274) tip=(0.0007,-0.0043,0.0007) r=0.0035 r2=0.0035 blend=0.0009
   bar  torso on chest from=0.8366 to=0.8366 offset=(-0.0246,-0.0603,0.4288) tip=(0.0013,-0.0043,0.0007) r=0.0035 r2=0.0033 blend=0.0009
   bar  torso on chest from=0.8249 to=0.8249 offset=(-0.0233,-0.0604,0.4301) tip=(0.0018,-0.0044,0.0005) r=0.0033 r2=0.0031 blend=0.0009
   bar  torso on chest from=0.813 to=0.813 offset=(-0.0215,-0.0606,0.4312) tip=(0.0011,-0.0045,-0.0003) r=0.0031 r2=0.0028 blend=0.0009
@@ -357,71 +357,71 @@
   bar  torso on chest from=0.7876 to=0.7876 offset=(-0.0203,-0.0605,0.4306) tip=(-0.0009,-0.0045,-0.0022) r=0.0025 r2=0.0022 blend=0.0009
   bar  torso on chest from=0.7744 to=0.7744 offset=(-0.0212,-0.0603,0.4291) tip=(-0.0009,-0.0044,-0.0022) r=0.0022 r2=0.0021 blend=0.0009
   bar  torso on chest from=0.7615 to=0.7615 offset=(-0.0221,-0.0601,0.4275) tip=(-0.0019,-0.0043,-0.0021) r=0.0021 r2=0.0021 blend=0.0009
-  blob torso on chest at=0.8695 offset=(-0.0222,-0.0597,0.4246) r=0.0058 blend=0.0012
+  blob torso on chest at=0.8696 offset=(-0.0223,-0.0597,0.4247) r=0.0058 blend=0.0012
   blob torso on chest at=0.8134 offset=(-0.0208,-0.0604,0.4301) r=0.0053 blend=0.0012
-  bar  torso on chest from=0.8735 to=0.8735 offset=(-0.0261,-0.0598,0.4253) tip=(-0.0027,-0.0026,-0.002) r=0.0015 r2=0.0019 blend=0.0009
-  bar  torso on chest from=0.8655 to=0.8655 offset=(-0.0288,-0.0596,0.4237) tip=(-0.002,-0.0025,-0.0015) r=0.0019 r2=0.0022 blend=0.0009
-  bar  torso on chest from=0.858 to=0.858 offset=(-0.0308,-0.0594,0.4226) tip=(-0.0016,-0.0025,-0.0017) r=0.0022 r2=0.0023 blend=0.0009
-  bar  torso on chest from=0.8506 to=0.8506 offset=(-0.0324,-0.0592,0.4213) tip=(-0.0018,-0.0024,-0.0022) r=0.0023 r2=0.0023 blend=0.0009
+  bar  torso on chest from=0.8735 to=0.8735 offset=(-0.0261,-0.0598,0.4254) tip=(-0.0027,-0.0026,-0.002) r=0.0015 r2=0.0019 blend=0.0009
+  bar  torso on chest from=0.8655 to=0.8655 offset=(-0.0289,-0.0596,0.4238) tip=(-0.0018,-0.0025,-0.0016) r=0.0019 r2=0.0022 blend=0.0009
+  bar  torso on chest from=0.858 to=0.858 offset=(-0.0307,-0.0594,0.4226) tip=(-0.0016,-0.0025,-0.0017) r=0.0022 r2=0.0023 blend=0.0009
+  bar  torso on chest from=0.8506 to=0.8506 offset=(-0.0323,-0.0592,0.4213) tip=(-0.0018,-0.0024,-0.0022) r=0.0023 r2=0.0023 blend=0.0009
   bar  torso on chest from=0.843 to=0.843 offset=(-0.0342,-0.059,0.4195) tip=(-0.0018,-0.0024,-0.0025) r=0.0023 r2=0.0021 blend=0.0009
   bar  torso on chest from=0.8354 to=0.8354 offset=(-0.036,-0.0587,0.4174) tip=(-0.0022,-0.0024,-0.0039) r=0.0021 r2=0.0017 blend=0.0009
-  bar  torso on chest from=0.8272 to=0.8272 offset=(-0.0382,-0.0582,0.4139) tip=(-0.0019,-0.0025,-0.005) r=0.0017 r2=0.0014 blend=0.0009
+  bar  torso on chest from=0.8272 to=0.8272 offset=(-0.0382,-0.0582,0.4139) tip=(-0.002,-0.0025,-0.005) r=0.0017 r2=0.0014 blend=0.0009
   bar  torso on chest from=0.8184 to=0.8184 offset=(-0.0401,-0.0575,0.4093) tip=(-0.0007,-0.0025,-0.0057) r=0.0014 r2=0.0014 blend=0.0009
   blob torso on chest at=0.8574 offset=(-0.0302,-0.0593,0.4222) r=0.0037 blend=0.0012
   blob torso on chest at=0.8427 offset=(-0.0336,-0.0589,0.4191) r=0.0038 blend=0.0012
   blob torso on chest at=0.8272 offset=(-0.0378,-0.0582,0.4138) r=0.0029 blend=0.0012
 
   # ---- the joystick: an infected crust round the knob's crown where the nose comes out, and sores ----
-  blob torso on chest at=0.8469 offset=(-0.0377,-0.0556,0.3955) r=0.0039 blend=0.0012
+  blob torso on chest at=0.8469 offset=(-0.0376,-0.0556,0.3955) r=0.0039 blend=0.0012
   blob torso on chest at=0.8479 offset=(0.0353,-0.0537,0.3824) r=0.003 blend=0.0012
-  blob torso on chest at=0.8625 offset=(-0.0356,-0.0554,0.3944) r=0.004 blend=0.0012
-  blob torso on chest at=0.8572 offset=(-0.0299,-0.0529,0.3764) r=0.0025 blend=0.0012
-  blob torso on chest at=0.8653 offset=(-0.0276,-0.0529,0.3765) r=0.0033 blend=0.0012
-  blob torso on chest at=0.8972 offset=(-0.0161,-0.0521,0.3708) r=0.0027 blend=0.0012
-  blob torso on chest at=0.8961 offset=(-0.0243,-0.0534,0.3797) r=0.0036 blend=0.0012
-  blob torso on chest at=0.8505 offset=(0.0334,-0.0532,0.3788) r=0.0031 blend=0.0012
-  blob torso on chest at=0.8819 offset=(-0.0003,-0.0516,0.3669) r=0.0043 blend=0.0012
-  blob torso on chest at=0.8973 offset=(0.0296,-0.0564,0.4016) r=0.0029 blend=0.0012
-  blob torso on chest at=0.8349 offset=(-0.0085,-0.0509,0.3619) r=0.0039 blend=0.0012
-  blob torso on chest at=0.8834 offset=(0.027,-0.0533,0.3794) r=0.0025 blend=0.0012
-  blob torso on chest at=0.8331 offset=(0.0014,-0.0506,0.3597) r=0.0035 blend=0.0012
-  blob torso on chest at=0.8915 offset=(0.0118,-0.0518,0.3685) r=0.003 blend=0.0012
-  blob torso on chest at=0.8782 offset=(-0.0337,-0.0562,0.4) r=0.0035 blend=0.0012
-  blob torso on chest at=0.8745 offset=(0.0361,-0.056,0.3985) r=0.0024 blend=0.0012
-  blob torso on chest at=0.8607 offset=(0.0351,-0.057,0.4055) r=0.0045 blend=0.0012
-  blob torso on chest at=0.895 offset=(-0.0199,-0.0587,0.4174) r=0.0037 blend=0.0012
-  blob torso on chest at=0.8418 offset=(-0.0273,-0.0523,0.3723) r=0.0043 blend=0.0012
-  blob torso on chest at=0.8593 offset=(-0.0316,-0.0582,0.414) r=0.0045 blend=0.0012
-  blob torso on chest at=0.8909 offset=(0.0103,-0.0518,0.3685) r=0.0037 blend=0.0012
-  blob torso on chest at=0.8862 offset=(0.0289,-0.0574,0.4084) r=0.0039 blend=0.0012
-  blob torso on chest at=0.8441 offset=(0.032,-0.0592,0.421) r=0.0018 blend=0.0008
-  blob torso on chest at=0.8565 offset=(0.0293,-0.0594,0.4229) r=0.0018 blend=0.0008
+  blob torso on chest at=0.8625 offset=(-0.0355,-0.0554,0.3944) r=0.004 blend=0.0012
+  blob torso on chest at=0.8572 offset=(-0.0298,-0.0529,0.3764) r=0.0025 blend=0.0012
+  blob torso on chest at=0.8654 offset=(-0.0276,-0.0529,0.3765) r=0.0033 blend=0.0012
+  blob torso on chest at=0.8972 offset=(-0.0162,-0.0521,0.3707) r=0.0027 blend=0.0012
+  blob torso on chest at=0.8957 offset=(-0.0247,-0.0533,0.3795) r=0.0036 blend=0.0012
+  blob torso on chest at=0.8505 offset=(0.0335,-0.0532,0.3788) r=0.0031 blend=0.0012
+  blob torso on chest at=0.8816 offset=(-0.0003,-0.0515,0.3662) r=0.0043 blend=0.0012
+  blob torso on chest at=0.8974 offset=(0.0303,-0.0565,0.4017) r=0.0029 blend=0.0012
+  blob torso on chest at=0.8349 offset=(-0.0085,-0.0509,0.362) r=0.0039 blend=0.0012
+  blob torso on chest at=0.8833 offset=(0.0275,-0.0533,0.3791) r=0.0025 blend=0.0012
+  blob torso on chest at=0.8331 offset=(0.0014,-0.0506,0.3598) r=0.0035 blend=0.0012
+  blob torso on chest at=0.8913 offset=(0.012,-0.0517,0.3681) r=0.003 blend=0.0012
+  blob torso on chest at=0.8784 offset=(-0.0336,-0.0562,0.4) r=0.0035 blend=0.0012
+  blob torso on chest at=0.8745 offset=(0.0362,-0.056,0.3985) r=0.0024 blend=0.0012
+  blob torso on chest at=0.8608 offset=(0.0352,-0.057,0.4055) r=0.0045 blend=0.0012
+  blob torso on chest at=0.8955 offset=(-0.0203,-0.0587,0.4178) r=0.0037 blend=0.0012
+  blob torso on chest at=0.8419 offset=(-0.0272,-0.0523,0.3723) r=0.0043 blend=0.0012
+  blob torso on chest at=0.8593 offset=(-0.0317,-0.0582,0.4141) r=0.0045 blend=0.0012
+  blob torso on chest at=0.8904 offset=(0.0105,-0.0517,0.368) r=0.0037 blend=0.0012
+  blob torso on chest at=0.8866 offset=(0.0291,-0.0574,0.4085) r=0.0039 blend=0.0012
+  blob torso on chest at=0.8441 offset=(0.0319,-0.0592,0.421) r=0.0018 blend=0.0008
+  blob torso on chest at=0.8565 offset=(0.0293,-0.0594,0.4228) r=0.0018 blend=0.0008
   blob torso on chest at=0.8614 offset=(0.0233,-0.0601,0.4279) r=0.0018 blend=0.0008
-  blob torso on chest at=0.855 offset=(0.0181,-0.0607,0.4321) r=0.0018 blend=0.0008
+  blob torso on chest at=0.855 offset=(0.018,-0.0607,0.4321) r=0.0018 blend=0.0008
   blob torso on chest at=0.8424 offset=(0.0182,-0.0608,0.4329) r=0.0018 blend=0.0008
-  blob torso on chest at=0.8331 offset=(0.0237,-0.0604,0.4299) r=0.0018 blend=0.0008
+  blob torso on chest at=0.8331 offset=(0.0237,-0.0604,0.4298) r=0.0018 blend=0.0008
   blob torso on chest at=0.8338 offset=(0.0297,-0.0596,0.4244) r=0.0018 blend=0.0008
-  blob torso on chest at=0.8762 offset=(-0.0263,-0.0592,0.4216) r=0.0018 blend=0.0008
-  blob torso on chest at=0.8861 offset=(-0.0267,-0.0586,0.417) r=0.0018 blend=0.0008
-  blob torso on chest at=0.8865 offset=(-0.0297,-0.0577,0.4107) r=0.0018 blend=0.0008
-  blob torso on chest at=0.8768 offset=(-0.0336,-0.0572,0.4067) r=0.0018 blend=0.0008
-  blob torso on chest at=0.8644 offset=(-0.0358,-0.0573,0.408) r=0.0018 blend=0.0008
-  blob torso on chest at=0.8589 offset=(-0.0344,-0.0582,0.4145) r=0.0018 blend=0.0008
-  blob torso on chest at=0.8642 offset=(-0.0297,-0.0591,0.4206) r=0.0018 blend=0.0008
+  blob torso on chest at=0.8762 offset=(-0.0262,-0.0592,0.4215) r=0.0018 blend=0.0008
+  blob torso on chest at=0.8862 offset=(-0.0266,-0.0586,0.417) r=0.0018 blend=0.0008
+  blob torso on chest at=0.8866 offset=(-0.0299,-0.0577,0.4108) r=0.0018 blend=0.0008
+  blob torso on chest at=0.8768 offset=(-0.0337,-0.0572,0.4067) r=0.0018 blend=0.0008
+  blob torso on chest at=0.8644 offset=(-0.0359,-0.0573,0.408) r=0.0018 blend=0.0008
+  blob torso on chest at=0.8589 offset=(-0.0344,-0.0582,0.4144) r=0.0018 blend=0.0008
+  blob torso on chest at=0.8643 offset=(-0.0298,-0.0591,0.4207) r=0.0018 blend=0.0008
   blob torso on chest at=0.7889 offset=(-0.0027,-0.0509,0.3621) r=0.0018 blend=0.0008
-  blob torso on chest at=0.8001 offset=(0.0009,-0.0507,0.3607) r=0.0018 blend=0.0008
+  blob torso on chest at=0.8001 offset=(0.0009,-0.0507,0.3608) r=0.0018 blend=0.0008
   blob torso on chest at=0.8033 offset=(0.0089,-0.0508,0.3615) r=0.0018 blend=0.0008
   blob torso on chest at=0.7962 offset=(0.015,-0.0512,0.3642) r=0.0018 blend=0.0008
   blob torso on chest at=0.7839 offset=(0.0146,-0.0514,0.3657) r=0.0018 blend=0.0008
   blob torso on chest at=0.7755 offset=(0.0084,-0.0513,0.3651) r=0.0018 blend=0.0008
   blob torso on chest at=0.7779 offset=(0.0008,-0.0511,0.3637) r=0.0018 blend=0.0008
-  blob torso on chest at=0.844 offset=(-0.0389,-0.0553,0.3937) r=0.0018 blend=0.0008
-  blob torso on chest at=0.8541 offset=(-0.0372,-0.0548,0.3898) r=0.0018 blend=0.0008
+  blob torso on chest at=0.844 offset=(-0.0388,-0.0553,0.3937) r=0.0018 blend=0.0008
+  blob torso on chest at=0.8541 offset=(-0.0373,-0.0548,0.3898) r=0.0018 blend=0.0008
   blob torso on chest at=0.8541 offset=(-0.0346,-0.0538,0.3825) r=0.0018 blend=0.0008
   blob torso on chest at=0.8439 offset=(-0.0325,-0.053,0.377) r=0.0018 blend=0.0008
   blob torso on chest at=0.831 offset=(-0.0332,-0.053,0.3772) r=0.0018 blend=0.0008
   blob torso on chest at=0.8253 offset=(-0.0365,-0.0538,0.3831) r=0.0018 blend=0.0008
-  blob torso on chest at=0.8312 offset=(-0.0389,-0.0549,0.3907) r=0.0018 blend=0.0008
+  blob torso on chest at=0.8312 offset=(-0.0388,-0.0549,0.3907) r=0.0018 blend=0.0008
 
   # ---- stretch marks: shallow raised streaks fanning across the gut's sides ----
   bar  torso on spine from=0.7776 to=0.7776 offset=(0.1459,-0.016,0.3048) tip=(-0.0079,0.0031,0.0046) r=0.0014 r2=0.0018 blend=0.0009
@@ -448,18 +448,18 @@
   bar  torso on chest from=0.2052 to=0.2052 offset=(0.1153,-0.0417,0.2965) tip=(-0.0089,0.0011,0.0044) r=0.0023 r2=0.0022 blend=0.0009
   bar  torso on chest from=0.2098 to=0.2098 offset=(0.1064,-0.0423,0.3007) tip=(-0.0088,0.0011,0.0042) r=0.0022 r2=0.0018 blend=0.0009
   bar  torso on chest from=0.2144 to=0.2144 offset=(0.0976,-0.0428,0.3047) tip=(-0.0088,0.0011,0.0037) r=0.0018 r2=0.0014 blend=0.0009
-  bar  torso on chest from=0.2434 to=0.2434 offset=(0.1497,-0.0374,0.2663) tip=(-0.0079,0.003,0.0046) r=0.0014 r2=0.0018 blend=0.0009
+  bar  torso on chest from=0.2434 to=0.2434 offset=(0.1497,-0.0374,0.2663) tip=(-0.0079,0.003,0.0045) r=0.0014 r2=0.0018 blend=0.0009
   bar  torso on chest from=0.2533 to=0.2533 offset=(0.1417,-0.038,0.2703) tip=(-0.0078,0.003,0.0041) r=0.0018 r2=0.0022 blend=0.0009
   bar  torso on chest from=0.2632 to=0.2632 offset=(0.1339,-0.0385,0.2739) tip=(-0.0077,0.0031,0.004) r=0.0022 r2=0.0023 blend=0.0009
   bar  torso on chest from=0.2733 to=0.2733 offset=(0.1262,-0.039,0.2774) tip=(-0.0089,0.001,0.0049) r=0.0023 r2=0.0022 blend=0.0009
-  bar  torso on chest from=0.2779 to=0.2779 offset=(0.1173,-0.0396,0.2821) tip=(-0.0088,0.0011,0.0047) r=0.0022 r2=0.0018 blend=0.0009
-  bar  torso on chest from=0.2826 to=0.2826 offset=(0.1085,-0.0403,0.2866) tip=(-0.0088,0.0012,0.0045) r=0.0018 r2=0.0014 blend=0.0009
+  bar  torso on chest from=0.2779 to=0.2779 offset=(0.1173,-0.0396,0.2821) tip=(-0.0088,0.0011,0.0048) r=0.0022 r2=0.0018 blend=0.0009
+  bar  torso on chest from=0.2827 to=0.2827 offset=(0.1085,-0.0403,0.2867) tip=(-0.0088,0.0012,0.0044) r=0.0018 r2=0.0014 blend=0.0009
   bar  torso on chest from=0.3228 to=0.3228 offset=(0.1521,-0.0383,0.2723) tip=(-0.0078,0.0035,0.0111) r=0.0014 r2=0.0018 blend=0.0009
   bar  torso on chest from=0.3368 to=0.3368 offset=(0.1444,-0.0397,0.2828) tip=(-0.0077,0.0034,0.0125) r=0.0018 r2=0.0022 blend=0.0009
   bar  torso on chest from=0.3511 to=0.3511 offset=(0.1367,-0.0414,0.2946) tip=(-0.0077,0.0032,0.0139) r=0.0022 r2=0.0023 blend=0.0009
-  bar  torso on chest from=0.3653 to=0.3653 offset=(0.129,-0.0433,0.3078) tip=(-0.0088,0.0009,0.007) r=0.0023 r2=0.0022 blend=0.0009
+  bar  torso on chest from=0.3652 to=0.3652 offset=(0.129,-0.0433,0.3078) tip=(-0.0088,0.0009,0.007) r=0.0023 r2=0.0022 blend=0.0009
   bar  torso on chest from=0.3705 to=0.3705 offset=(0.1202,-0.0442,0.3145) tip=(-0.0088,0.0007,0.0039) r=0.0022 r2=0.0018 blend=0.0009
-  bar  torso on chest from=0.374 to=0.374 offset=(0.1114,-0.0447,0.3183) tip=(-0.0089,0.0006,-0.0086) r=0.0018 r2=0.0014 blend=0.0009
+  bar  torso on chest from=0.374 to=0.374 offset=(0.1114,-0.0447,0.3182) tip=(-0.0089,0.0006,-0.0086) r=0.0018 r2=0.0014 blend=0.0009
   bar  torso on spine from=0.7776 to=0.7776 offset=(-0.1459,-0.016,0.3048) tip=(0.0079,0.0031,0.0046) r=0.0014 r2=0.0018 blend=0.0009
   bar  torso on spine from=0.7951 to=0.7951 offset=(-0.138,-0.0162,0.3092) tip=(0.0078,0.0031,0.0041) r=0.0018 r2=0.0022 blend=0.0009
   bar  torso on spine from=0.8123 to=0.8123 offset=(-0.1302,-0.0164,0.3131) tip=(0.0077,0.0031,0.0039) r=0.0022 r2=0.0023 blend=0.0009
@@ -484,18 +484,18 @@
   bar  torso on chest from=0.2052 to=0.2052 offset=(-0.1153,-0.0417,0.2965) tip=(0.0089,0.0011,0.0044) r=0.0023 r2=0.0022 blend=0.0009
   bar  torso on chest from=0.2098 to=0.2098 offset=(-0.1064,-0.0423,0.3007) tip=(0.0088,0.0011,0.0042) r=0.0022 r2=0.0018 blend=0.0009
   bar  torso on chest from=0.2144 to=0.2144 offset=(-0.0976,-0.0428,0.3047) tip=(0.0088,0.0011,0.0037) r=0.0018 r2=0.0014 blend=0.0009
-  bar  torso on chest from=0.2434 to=0.2434 offset=(-0.1497,-0.0374,0.2663) tip=(0.0079,0.003,0.0046) r=0.0014 r2=0.0018 blend=0.0009
+  bar  torso on chest from=0.2434 to=0.2434 offset=(-0.1497,-0.0374,0.2663) tip=(0.0079,0.003,0.0045) r=0.0014 r2=0.0018 blend=0.0009
   bar  torso on chest from=0.2533 to=0.2533 offset=(-0.1417,-0.038,0.2703) tip=(0.0078,0.003,0.0041) r=0.0018 r2=0.0022 blend=0.0009
   bar  torso on chest from=0.2632 to=0.2632 offset=(-0.1339,-0.0385,0.2739) tip=(0.0077,0.0031,0.004) r=0.0022 r2=0.0023 blend=0.0009
   bar  torso on chest from=0.2733 to=0.2733 offset=(-0.1262,-0.039,0.2774) tip=(0.0089,0.001,0.0049) r=0.0023 r2=0.0022 blend=0.0009
-  bar  torso on chest from=0.2779 to=0.2779 offset=(-0.1173,-0.0396,0.2821) tip=(0.0088,0.0011,0.0047) r=0.0022 r2=0.0018 blend=0.0009
-  bar  torso on chest from=0.2826 to=0.2826 offset=(-0.1085,-0.0403,0.2866) tip=(0.0088,0.0012,0.0045) r=0.0018 r2=0.0014 blend=0.0009
+  bar  torso on chest from=0.2779 to=0.2779 offset=(-0.1173,-0.0396,0.2821) tip=(0.0088,0.0011,0.0048) r=0.0022 r2=0.0018 blend=0.0009
+  bar  torso on chest from=0.2827 to=0.2827 offset=(-0.1085,-0.0403,0.2867) tip=(0.0088,0.0012,0.0044) r=0.0018 r2=0.0014 blend=0.0009
   bar  torso on chest from=0.3228 to=0.3228 offset=(-0.1521,-0.0383,0.2723) tip=(0.0078,0.0035,0.0111) r=0.0014 r2=0.0018 blend=0.0009
   bar  torso on chest from=0.3368 to=0.3368 offset=(-0.1444,-0.0397,0.2828) tip=(0.0077,0.0034,0.0125) r=0.0018 r2=0.0022 blend=0.0009
   bar  torso on chest from=0.3511 to=0.3511 offset=(-0.1367,-0.0414,0.2946) tip=(0.0077,0.0032,0.0139) r=0.0022 r2=0.0023 blend=0.0009
   bar  torso on chest from=0.3653 to=0.3653 offset=(-0.129,-0.0433,0.3078) tip=(0.0088,0.0009,0.007) r=0.0023 r2=0.0022 blend=0.0009
   bar  torso on chest from=0.3705 to=0.3705 offset=(-0.1202,-0.0442,0.3145) tip=(0.0088,0.0007,0.0039) r=0.0022 r2=0.0018 blend=0.0009
-  bar  torso on chest from=0.374 to=0.374 offset=(-0.1114,-0.0447,0.3183) tip=(0.0089,0.0006,-0.0086) r=0.0018 r2=0.0014 blend=0.0009
+  bar  torso on chest from=0.374 to=0.374 offset=(-0.1114,-0.0447,0.3182) tip=(0.0089,0.0006,-0.0086) r=0.0018 r2=0.0014 blend=0.0009
 
   # ---- his neck: thick cords up the sides and the front, from the collar to the jaw ----
   bar  torso on chest from=0.8875 to=0.8875 offset=(-0.1456,0.0118,-0.0836) tip=(-0.0195,0.0045,0.0052) r=0.0038 r2=0.0041 blend=0.0009
@@ -710,14 +710,14 @@
   bar  torso on neck from=0.4677 to=0.4677 offset=(-0.0006,-0.0411,0.0712) tip=(0.0054,0.0046,-0.0003) r=0.0055 r2=0.0056 blend=0.0009
   bar  torso on neck from=0.5025 to=0.5025 offset=(0.0048,-0.0398,0.069) tip=(0.0006,0.0046,0) r=0.0056 r2=0.0057 blend=0.0009
   bar  torso on neck from=0.5387 to=0.5387 offset=(0.0054,-0.0386,0.0669) tip=(-0.0028,0.0046,0.0003) r=0.0057 r2=0.0058 blend=0.0009
-  bar  torso on neck from=0.5768 to=0.5768 offset=(0.0026,-0.0376,0.0652) tip=(-0.0049,0.0046,0.0005) r=0.0058 r2=0.0058 blend=0.0009
+  bar  torso on neck from=0.5767 to=0.5767 offset=(0.0026,-0.0376,0.0652) tip=(-0.0049,0.0046,0.0005) r=0.0058 r2=0.0058 blend=0.0009
   bar  torso on neck from=0.6154 to=0.6154 offset=(-0.0023,-0.0367,0.0635) tip=(-0.0057,0.0046,0.0003) r=0.0058 r2=0.0057 blend=0.0009
   bar  torso on neck from=0.6534 to=0.6534 offset=(-0.0081,-0.0357,0.0618) tip=(-0.004,0.0046,0.0004) r=0.0057 r2=0.0057 blend=0.0009
   bar  torso on neck from=0.6917 to=0.6917 offset=(-0.0121,-0.0347,0.0601) tip=(0.0001,0.0046,0.0012) r=0.0057 r2=0.0055 blend=0.0009
   bar  torso on neck from=0.7335 to=0.7335 offset=(-0.012,-0.0341,0.059) tip=(0.0031,0.0046,0.002) r=0.0055 r2=0.0054 blend=0.0009
   bar  torso on neck from=0.7786 to=0.7786 offset=(-0.0089,-0.0338,0.0585) tip=(0.0052,0.0046,0.0023) r=0.0054 r2=0.0052 blend=0.0009
   bar  torso on neck from=0.8249 to=0.8249 offset=(-0.0037,-0.0336,0.0582) tip=(0.0058,0.0045,0.0023) r=0.0052 r2=0.005 blend=0.0009
-  bar  torso on neck from=0.871 to=0.871 offset=(0.0022,-0.0335,0.058) tip=(0.0041,0.0045,0.002) r=0.005 r2=0.0047 blend=0.0009
+  bar  torso on neck from=0.8709 to=0.8709 offset=(0.0022,-0.0335,0.058) tip=(0.0041,0.0045,0.002) r=0.005 r2=0.0047 blend=0.0009
   bar  torso on neck from=0.9155 to=0.9155 offset=(0.0063,-0.0332,0.0576) tip=(0.0026,0.0045,0.0021) r=0.0047 r2=0.0045 blend=0.0009
   bar  torso on neck from=0.9601 to=0.9601 offset=(0.0089,-0.033,0.0572) tip=(-0.0014,0.0045,0.0026) r=0.0045 r2=0.0042 blend=0.0009
   bar  torso on neck from=1 to=1 offset=(0.0075,-0.0324,0.0576) tip=(-0.003,0.0045,0.0027) r=0.0042 r2=0.0039 blend=0.0009
@@ -744,10 +744,10 @@
   bar  torso on chest from=0.9728 to=0.9728 offset=(0.0233,-0.0142,0.1013) tip=(-0.0089,0.0045,-0.0001) r=0.0041 r2=0.0044 blend=0.0009
   bar  torso on chest from=0.9852 to=0.9852 offset=(0.0144,-0.0141,0.1006) tip=(-0.0086,0.0045,-0.0004) r=0.0044 r2=0.0047 blend=0.0009
   bar  torso on chest from=0.9975 to=0.9975 offset=(0.0058,-0.014,0.0995) tip=(-0.0038,0.0046,-0.0007) r=0.0047 r2=0.0049 blend=0.0009
-  bar  torso on chest from=1 to=1 offset=(0.002,-0.0103,0.0987) tip=(0.0005,0.0046,-0.0009) r=0.0049 r2=0.0052 blend=0.0009
-  bar  torso on chest from=1 to=1 offset=(0.0026,-0.0057,0.0979) tip=(0.0034,0.0046,-0.0007) r=0.0052 r2=0.0053 blend=0.0009
+  bar  torso on chest from=1 to=1 offset=(0.002,-0.0103,0.0987) tip=(0.0005,0.0046,-0.0007) r=0.0049 r2=0.0052 blend=0.0009
+  bar  torso on chest from=1 to=1 offset=(0.0026,-0.0057,0.098) tip=(0.0034,0.0046,-0.0008) r=0.0052 r2=0.0053 blend=0.0009
   bar  torso on chest from=1 to=1 offset=(0.006,-0.0012,0.0972) tip=(0.0059,0.0046,-0.0009) r=0.0053 r2=0.0055 blend=0.0009
-  bar  torso on neck from=0.4649 to=0.4649 offset=(0.0119,-0.0409,0.0708) tip=(0.0038,0.0046,-0.0008) r=0.0055 r2=0.0056 blend=0.0009
+  bar  torso on neck from=0.4648 to=0.4648 offset=(0.0119,-0.0409,0.0708) tip=(0.0038,0.0046,-0.0008) r=0.0055 r2=0.0056 blend=0.0009
   bar  torso on neck from=0.4977 to=0.4977 offset=(0.0157,-0.0394,0.0682) tip=(0.0028,0.0046,-0.0006) r=0.0056 r2=0.0057 blend=0.0009
   bar  torso on neck from=0.5313 to=0.5313 offset=(0.0185,-0.038,0.0658) tip=(0.0005,0.0046,0) r=0.0057 r2=0.0058 blend=0.0009
   bar  torso on neck from=0.5677 to=0.5677 offset=(0.019,-0.0368,0.0637) tip=(-0.0036,0.0047,0.001) r=0.0058 r2=0.0058 blend=0.0009
@@ -767,7 +767,7 @@
   bar  torso on neck from=1 to=1 offset=(-0.0012,-0.0141,0.0654) tip=(-0.0048,0.0046,0.0007) r=0.0035 r2=0.0035 blend=0.0009
   bar  torso on neck from=1 to=1 offset=(-0.006,-0.0095,0.0661) tip=(-0.0027,0.0046,0.0002) r=0.0035 r2=0.0035 blend=0.0009
   blob torso on chest at=1 offset=(0.0059,-0.0013,0.0948) r=0.0091 blend=0.0012
-  blob torso on neck at=0.4526 offset=(0.0116,-0.0398,0.0689) r=0.0094 blend=0.0012
+  blob torso on neck at=0.4525 offset=(0.0116,-0.0398,0.0689) r=0.0094 blend=0.0012
   blob torso on neck at=0.6438 offset=(0.0098,-0.0343,0.0594) r=0.0097 blend=0.0012
   blob torso on neck at=0.689 offset=(0.0026,-0.0338,0.0586) r=0.0096 blend=0.0012
   blob torso on neck at=0.9154 offset=(0.0018,-0.0324,0.0561) r=0.0081 blend=0.0012
@@ -1194,241 +1194,241 @@
 
   # ---- down over his deltoids and across the top of his chest ----
   bar  torso on neck from=0.2172 to=0.2172 offset=(0.1844,-0.0198,0.0342) tip=(-0.0016,-0.0099,0.0077) r=0.0033 r2=0.0038 blend=0.0012
-  bar  torso on chest from=0.9963 to=0.9963 offset=(0.1829,-0.0076,0.0541) tip=(0.001,-0.0089,0.0043) r=0.0038 r2=0.0043 blend=0.0012
-  bar  torso on chest from=0.9735 to=0.9735 offset=(0.1839,-0.0084,0.0596) tip=(0.0032,-0.008,0.0022) r=0.0043 r2=0.0046 blend=0.0012
-  bar  torso on chest from=0.9523 to=0.9523 offset=(0.1871,-0.0088,0.0628) tip=(0.005,-0.0073,0.0005) r=0.0046 r2=0.005 blend=0.0012
-  bar  torso on chest from=0.9322 to=0.9322 offset=(0.192,-0.009,0.0643) tip=(0.0074,-0.0065,-0.0016) r=0.005 r2=0.0052 blend=0.0012
-  bar  torso on chest from=0.9139 to=0.9139 offset=(0.1995,-0.009,0.0637) tip=(0.0061,-0.0069,-0.0019) r=0.0052 r2=0.0053 blend=0.0012
+  bar  torso on chest from=0.9962 to=0.9962 offset=(0.1829,-0.0076,0.054) tip=(0.001,-0.0089,0.0043) r=0.0038 r2=0.0043 blend=0.0012
+  bar  torso on chest from=0.9735 to=0.9735 offset=(0.1839,-0.0084,0.0595) tip=(0.0032,-0.008,0.0022) r=0.0043 r2=0.0046 blend=0.0012
+  bar  torso on chest from=0.9522 to=0.9522 offset=(0.1871,-0.0088,0.0628) tip=(0.005,-0.0073,0.0006) r=0.0046 r2=0.005 blend=0.0012
+  bar  torso on chest from=0.9323 to=0.9323 offset=(0.192,-0.009,0.0644) tip=(0.0074,-0.0065,-0.0017) r=0.005 r2=0.0052 blend=0.0012
+  bar  torso on chest from=0.9138 to=0.9138 offset=(0.1995,-0.0089,0.0635) tip=(0.0061,-0.0069,-0.0018) r=0.0052 r2=0.0053 blend=0.0012
   bar  torso on chest from=0.8942 to=0.8942 offset=(0.2056,-0.0088,0.0627) tip=(0.0034,-0.0078,-0.0011) r=0.0053 r2=0.0054 blend=0.0012
-  bar  torso on chest from=0.8724 to=0.8724 offset=(0.2091,-0.0088,0.0628) tip=(0.0007,-0.0087,-0.0005) r=0.0054 r2=0.0053 blend=0.0012
-  bar  torso on chest from=0.8482 to=0.8482 offset=(0.2098,-0.0089,0.0635) tip=(-0.0004,-0.0092,-0.0002) r=0.0053 r2=0.0052 blend=0.0012
-  bar  torso on chest from=0.8228 to=0.8228 offset=(0.2094,-0.0091,0.0646) tip=(-0.0011,-0.0095,-0.0002) r=0.0052 r2=0.0049 blend=0.0012
+  bar  torso on chest from=0.8723 to=0.8723 offset=(0.2091,-0.0088,0.0627) tip=(0.0007,-0.0087,-0.0003) r=0.0054 r2=0.0053 blend=0.0012
+  bar  torso on chest from=0.8482 to=0.8482 offset=(0.2098,-0.0089,0.0636) tip=(-0.0004,-0.0092,-0.0002) r=0.0053 r2=0.0052 blend=0.0012
+  bar  torso on chest from=0.8229 to=0.8229 offset=(0.2094,-0.0091,0.0647) tip=(-0.0011,-0.0095,-0.0003) r=0.0052 r2=0.0049 blend=0.0012
   bar  torso on chest from=0.7967 to=0.7967 offset=(0.2082,-0.0092,0.0657) tip=(0.0001,-0.0091,-0.0004) r=0.0049 r2=0.0046 blend=0.0012
-  bar  torso on chest from=0.7715 to=0.7715 offset=(0.2083,-0.0094,0.0665) tip=(0.003,-0.0081,-0.0007) r=0.0046 r2=0.0042 blend=0.0012
-  bar  torso on chest from=0.7488 to=0.7488 offset=(0.2113,-0.0094,0.067) tip=(0.0059,-0.0071,-0.0011) r=0.0042 r2=0.0038 blend=0.0012
-  bar  torso on chest from=0.7288 to=0.7288 offset=(0.2173,-0.0094,0.0669) tip=(0.0077,-0.0064,-0.0011) r=0.0038 r2=0.0033 blend=0.0012
-  bar  torso on chest from=0.7107 to=0.7107 offset=(0.225,-0.0094,0.0667) tip=(0.0057,-0.0071,-0.0004) r=0.0033 r2=0.003 blend=0.0012
+  bar  torso on chest from=0.7715 to=0.7715 offset=(0.2083,-0.0094,0.0666) tip=(0.003,-0.0081,-0.0008) r=0.0046 r2=0.0042 blend=0.0012
+  bar  torso on chest from=0.7488 to=0.7488 offset=(0.2113,-0.0094,0.0669) tip=(0.0059,-0.0071,-0.0009) r=0.0042 r2=0.0038 blend=0.0012
+  bar  torso on chest from=0.7289 to=0.7289 offset=(0.2173,-0.0094,0.067) tip=(0.0077,-0.0064,-0.0013) r=0.0038 r2=0.0033 blend=0.0012
+  bar  torso on chest from=0.7106 to=0.7106 offset=(0.225,-0.0094,0.0666) tip=(0.0057,-0.0071,-0.0004) r=0.0033 r2=0.003 blend=0.0012
   bar  torso on chest from=0.691 to=0.691 offset=(0.2308,-0.0094,0.0672) tip=(0.0036,-0.0078,0.0007) r=0.003 r2=0.003 blend=0.0012
-  bar  torso on chest from=0.6698 to=0.6698 offset=(0.2344,-0.0097,0.069) tip=(0.0008,-0.0087,0.0025) r=0.003 r2=0.003 blend=0.0012
-  blob torso on chest at=0.9111 offset=(0.1983,-0.0085,0.0608) r=0.0097 blend=0.0015
-  blob torso on chest at=0.7475 offset=(0.2104,-0.009,0.0638) r=0.0088 blend=0.0015
-  bar  torso on chest from=0.7413 to=0.7413 offset=(0.2104,-0.0097,0.0688) tip=(0.0093,0.003,-0.0038) r=0.0022 r2=0.0028 blend=0.0012
-  bar  torso on chest from=0.748 to=0.748 offset=(0.2197,-0.0091,0.0646) tip=(0.0081,0.0002,-0.0042) r=0.0028 r2=0.0033 blend=0.0012
-  bar  torso on chest from=0.747 to=0.747 offset=(0.2279,-0.0085,0.0605) tip=(0.0074,-0.0018,-0.0043) r=0.0033 r2=0.0035 blend=0.0012
-  bar  torso on chest from=0.7404 to=0.7404 offset=(0.2352,-0.0079,0.0565) tip=(0.006,-0.0053,-0.0031) r=0.0035 r2=0.0034 blend=0.0012
-  bar  torso on chest from=0.7245 to=0.7245 offset=(0.2413,-0.0076,0.0542) tip=(0.0052,-0.0077,-0.0017) r=0.0034 r2=0.0031 blend=0.0012
+  bar  torso on chest from=0.6699 to=0.6699 offset=(0.2344,-0.0097,0.069) tip=(0.0008,-0.0087,0.0023) r=0.003 r2=0.003 blend=0.0012
+  blob torso on chest at=0.9111 offset=(0.1983,-0.0085,0.0607) r=0.0097 blend=0.0015
+  blob torso on chest at=0.7475 offset=(0.2104,-0.0089,0.0636) r=0.0088 blend=0.0015
+  bar  torso on chest from=0.7412 to=0.7412 offset=(0.2104,-0.0096,0.0687) tip=(0.0093,0.003,-0.0036) r=0.0022 r2=0.0028 blend=0.0012
+  bar  torso on chest from=0.748 to=0.748 offset=(0.2197,-0.0091,0.0647) tip=(0.0081,0.0002,-0.0042) r=0.0028 r2=0.0033 blend=0.0012
+  bar  torso on chest from=0.7471 to=0.7471 offset=(0.2279,-0.0085,0.0605) tip=(0.0074,-0.0018,-0.0043) r=0.0033 r2=0.0035 blend=0.0012
+  bar  torso on chest from=0.7404 to=0.7404 offset=(0.2352,-0.008,0.0566) tip=(0.006,-0.0053,-0.0033) r=0.0035 r2=0.0034 blend=0.0012
+  bar  torso on chest from=0.7245 to=0.7245 offset=(0.2413,-0.0076,0.0541) tip=(0.0052,-0.0077,-0.0017) r=0.0034 r2=0.0031 blend=0.0012
   bar  torso on chest from=0.7026 to=0.7026 offset=(0.2465,-0.0075,0.0536) tip=(0.0056,-0.0071,-0.002) r=0.0031 r2=0.0025 blend=0.0012
   bar  torso on chest from=0.6822 to=0.6822 offset=(0.2521,-0.0074,0.0526) tip=(0.0064,-0.0055,-0.0046) r=0.0025 r2=0.0019 blend=0.0012
-  bar  torso on chest from=0.6652 to=0.6652 offset=(0.2585,-0.0069,0.0488) tip=(0.0077,-0.0017,-0.015) r=0.0019 r2=0.0019 blend=0.0012
-  blob torso on chest at=0.7456 offset=(0.2268,-0.0082,0.0584) r=0.0066 blend=0.0015
+  bar  torso on chest from=0.6652 to=0.6652 offset=(0.2585,-0.0069,0.0489) tip=(0.0077,-0.0017,-0.0151) r=0.0019 r2=0.0019 blend=0.0012
+  blob torso on chest at=0.7456 offset=(0.2268,-0.0082,0.0585) r=0.0066 blend=0.0015
   blob torso on chest at=0.6811 offset=(0.2513,-0.0073,0.0519) r=0.0045 blend=0.0015
-  bar  torso on chest from=0.9208 to=0.9208 offset=(0.1957,-0.0094,0.0666) tip=(0.0017,-0.0064,-0.0004) r=0.0022 r2=0.0028 blend=0.0012
-  bar  torso on chest from=0.9029 to=0.9029 offset=(0.1974,-0.0094,0.0671) tip=(0.0027,-0.0067,-0.0009) r=0.0028 r2=0.0033 blend=0.0012
-  bar  torso on chest from=0.8841 to=0.8841 offset=(0.2001,-0.0094,0.0672) tip=(0.0002,-0.0057,-0.0002) r=0.0033 r2=0.0035 blend=0.0012
-  bar  torso on chest from=0.8683 to=0.8683 offset=(0.2003,-0.0095,0.0678) tip=(-0.0032,-0.0044,0.001) r=0.0035 r2=0.0034 blend=0.0012
-  bar  torso on chest from=0.8567 to=0.8567 offset=(0.1971,-0.0098,0.0694) tip=(-0.0062,-0.0033,0.0023) r=0.0034 r2=0.0031 blend=0.0012
-  bar  torso on chest from=0.8487 to=0.8487 offset=(0.1909,-0.0101,0.0721) tip=(-0.006,-0.0033,0.002) r=0.0031 r2=0.0025 blend=0.0012
-  bar  torso on chest from=0.8403 to=0.8403 offset=(0.1849,-0.0105,0.0745) tip=(-0.0037,-0.0043,0.0011) r=0.0025 r2=0.0019 blend=0.0012
-  bar  torso on chest from=0.829 to=0.829 offset=(0.1812,-0.0107,0.0762) tip=(-0.0013,-0.0051,-0.0004) r=0.0019 r2=0.0019 blend=0.0012
-  blob torso on chest at=0.8675 offset=(0.1995,-0.0092,0.0655) r=0.0068 blend=0.0015
-  bar  torso on neck from=0.2479 to=0.2479 offset=(0.1623,-0.0199,0.0345) tip=(-0.0006,-0.0095,0.0074) r=0.0031 r2=0.0036 blend=0.0012
-  bar  torso on chest from=1 to=1 offset=(0.1617,-0.0058,0.0554) tip=(-0.0041,-0.0105,0.0064) r=0.0036 r2=0.0041 blend=0.0012
-  bar  torso on chest from=0.9791 to=0.9791 offset=(0.1577,-0.0088,0.0629) tip=(-0.0022,-0.0098,0.0043) r=0.0041 r2=0.0044 blend=0.0012
+  bar  torso on chest from=0.9207 to=0.9207 offset=(0.1957,-0.0093,0.0665) tip=(0.0017,-0.0064,-0.0003) r=0.0022 r2=0.0028 blend=0.0012
+  bar  torso on chest from=0.9029 to=0.9029 offset=(0.1974,-0.0094,0.0671) tip=(0.0027,-0.0067,-0.001) r=0.0028 r2=0.0033 blend=0.0012
+  bar  torso on chest from=0.8841 to=0.8841 offset=(0.2001,-0.0094,0.0671) tip=(0.0002,-0.0057,-0.0002) r=0.0033 r2=0.0035 blend=0.0012
+  bar  torso on chest from=0.8683 to=0.8683 offset=(0.2003,-0.0095,0.0677) tip=(-0.0032,-0.0044,0.0012) r=0.0035 r2=0.0034 blend=0.0012
+  bar  torso on chest from=0.8568 to=0.8568 offset=(0.1971,-0.0098,0.0695) tip=(-0.0062,-0.0033,0.0021) r=0.0034 r2=0.0031 blend=0.0012
+  bar  torso on chest from=0.8486 to=0.8486 offset=(0.1909,-0.0101,0.072) tip=(-0.006,-0.0033,0.0022) r=0.0031 r2=0.0025 blend=0.0012
+  bar  torso on chest from=0.8403 to=0.8403 offset=(0.1849,-0.0105,0.0746) tip=(-0.0037,-0.0043,0.0011) r=0.0025 r2=0.0019 blend=0.0012
+  bar  torso on chest from=0.8289 to=0.8289 offset=(0.1812,-0.0107,0.0762) tip=(-0.0013,-0.0051,-0.0004) r=0.0019 r2=0.0019 blend=0.0012
+  blob torso on chest at=0.8674 offset=(0.1995,-0.0092,0.0655) r=0.0068 blend=0.0015
+  bar  torso on neck from=0.248 to=0.248 offset=(0.1623,-0.0199,0.0345) tip=(-0.0006,-0.0095,0.0073) r=0.0031 r2=0.0036 blend=0.0012
+  bar  torso on chest from=1 to=1 offset=(0.1617,-0.0058,0.0554) tip=(-0.0041,-0.0105,0.0065) r=0.0036 r2=0.0041 blend=0.0012
+  bar  torso on chest from=0.9792 to=0.9792 offset=(0.1577,-0.0089,0.063) tip=(-0.0022,-0.0098,0.0042) r=0.0041 r2=0.0044 blend=0.0012
   bar  torso on chest from=0.9539 to=0.9539 offset=(0.1555,-0.0096,0.0685) tip=(0.0002,-0.0089,0.0025) r=0.0044 r2=0.0047 blend=0.0012
-  bar  torso on chest from=0.9303 to=0.9303 offset=(0.1557,-0.0101,0.0722) tip=(0.003,-0.008,0.0013) r=0.0047 r2=0.0049 blend=0.0012
+  bar  torso on chest from=0.9303 to=0.9303 offset=(0.1557,-0.0101,0.0722) tip=(0.003,-0.008,0.0012) r=0.0047 r2=0.0049 blend=0.0012
   bar  torso on chest from=0.9087 to=0.9087 offset=(0.1586,-0.0105,0.0745) tip=(0.0058,-0.0071,0) r=0.0049 r2=0.005 blend=0.0012
-  bar  torso on chest from=0.8893 to=0.8893 offset=(0.1645,-0.0106,0.0755) tip=(0.0073,-0.0066,-0.0011) r=0.005 r2=0.005 blend=0.0012
+  bar  torso on chest from=0.8892 to=0.8892 offset=(0.1645,-0.0106,0.0754) tip=(0.0073,-0.0066,-0.001) r=0.005 r2=0.005 blend=0.0012
   bar  torso on chest from=0.8707 to=0.8707 offset=(0.1718,-0.0106,0.0753) tip=(0.008,-0.0064,-0.0019) r=0.005 r2=0.0048 blend=0.0012
   bar  torso on chest from=0.8523 to=0.8523 offset=(0.1798,-0.0104,0.0743) tip=(0.0052,-0.0074,-0.002) r=0.0048 r2=0.0045 blend=0.0012
   bar  torso on chest from=0.8313 to=0.8313 offset=(0.185,-0.0103,0.0734) tip=(0.0018,-0.0085,-0.0016) r=0.0045 r2=0.0042 blend=0.0012
   bar  torso on chest from=0.8073 to=0.8073 offset=(0.1868,-0.0103,0.073) tip=(-0.0021,-0.0098,-0.0007) r=0.0042 r2=0.0037 blend=0.0012
-  bar  torso on chest from=0.7802 to=0.7802 offset=(0.1847,-0.0103,0.0736) tip=(-0.0037,-0.0103,-0.0007) r=0.0037 r2=0.0032 blend=0.0012
+  bar  torso on chest from=0.7801 to=0.7801 offset=(0.1847,-0.0103,0.0736) tip=(-0.0037,-0.0103,-0.0006) r=0.0037 r2=0.0032 blend=0.0012
   bar  torso on chest from=0.7516 to=0.7516 offset=(0.181,-0.0105,0.0744) tip=(-0.0012,-0.0095,-0.0009) r=0.0032 r2=0.0027 blend=0.0012
-  bar  torso on chest from=0.7252 to=0.7252 offset=(0.1798,-0.0105,0.0748) tip=(0.0017,-0.0084,-0.0011) r=0.0027 r2=0.0027 blend=0.0012
-  bar  torso on chest from=0.7017 to=0.7017 offset=(0.1815,-0.0105,0.0748) tip=(0.0055,-0.0072,-0.0008) r=0.0027 r2=0.0027 blend=0.0012
-  blob torso on chest at=0.9497 offset=(0.1551,-0.0092,0.0658) r=0.0087 blend=0.0015
+  bar  torso on chest from=0.7252 to=0.7252 offset=(0.1798,-0.0105,0.0748) tip=(0.0017,-0.0084,-0.0012) r=0.0027 r2=0.0027 blend=0.0012
+  bar  torso on chest from=0.7017 to=0.7017 offset=(0.1815,-0.0105,0.0748) tip=(0.0055,-0.0072,-0.0007) r=0.0027 r2=0.0027 blend=0.0012
+  blob torso on chest at=0.9497 offset=(0.1551,-0.0093,0.0658) r=0.0087 blend=0.0015
   blob torso on chest at=0.8519 offset=(0.1792,-0.0101,0.072) r=0.0083 blend=0.0015
   blob torso on chest at=0.8075 offset=(0.1862,-0.0099,0.0708) r=0.0076 blend=0.0015
   bar  torso on chest from=1 to=1 offset=(0.157,-0.0031,0.0548) tip=(0.0038,-0.0077,0.0042) r=0.002 r2=0.0026 blend=0.0012
-  bar  torso on chest from=0.9932 to=0.9932 offset=(0.1607,-0.0083,0.0593) tip=(0.0033,-0.0073,0.0033) r=0.0026 r2=0.003 blend=0.0012
-  bar  torso on chest from=0.9744 to=0.9744 offset=(0.1641,-0.0089,0.0635) tip=(-0.0009,-0.0051,0.0021) r=0.003 r2=0.0032 blend=0.0012
-  bar  torso on chest from=0.9611 to=0.9611 offset=(0.1632,-0.0093,0.0662) tip=(-0.0045,-0.0033,0.002) r=0.0032 r2=0.0032 blend=0.0012
-  bar  torso on chest from=0.9529 to=0.9529 offset=(0.1587,-0.0096,0.0686) tip=(-0.008,-0.0015,0.0019) r=0.0032 r2=0.0029 blend=0.0012
-  bar  torso on chest from=0.9495 to=0.9495 offset=(0.1507,-0.0099,0.0707) tip=(-0.0063,-0.0022,0.0021) r=0.0029 r2=0.0023 blend=0.0012
-  bar  torso on chest from=0.9442 to=0.9442 offset=(0.1444,-0.0103,0.0731) tip=(-0.0049,-0.0029,0.0024) r=0.0023 r2=0.0018 blend=0.0012
+  bar  torso on chest from=0.9932 to=0.9932 offset=(0.1607,-0.0083,0.0593) tip=(0.0033,-0.0073,0.0032) r=0.0026 r2=0.003 blend=0.0012
+  bar  torso on chest from=0.9743 to=0.9743 offset=(0.1641,-0.0089,0.0635) tip=(-0.0009,-0.0051,0.0022) r=0.003 r2=0.0032 blend=0.0012
+  bar  torso on chest from=0.9611 to=0.9611 offset=(0.1632,-0.0093,0.0663) tip=(-0.0045,-0.0033,0.002) r=0.0032 r2=0.0032 blend=0.0012
+  bar  torso on chest from=0.9529 to=0.9529 offset=(0.1587,-0.0097,0.0687) tip=(-0.008,-0.0015,0.0018) r=0.0032 r2=0.0029 blend=0.0012
+  bar  torso on chest from=0.9494 to=0.9494 offset=(0.1507,-0.0099,0.0706) tip=(-0.0063,-0.0022,0.0023) r=0.0029 r2=0.0023 blend=0.0012
+  bar  torso on chest from=0.9442 to=0.9442 offset=(0.1444,-0.0103,0.0732) tip=(-0.0049,-0.0029,0.0024) r=0.0023 r2=0.0018 blend=0.0012
   bar  torso on chest from=0.9371 to=0.9371 offset=(0.1394,-0.0107,0.0759) tip=(-0.0017,-0.0047,0.0016) r=0.0018 r2=0.0018 blend=0.0012
   blob torso on chest at=0.9514 offset=(0.1585,-0.0095,0.0677) r=0.0051 blend=0.0015
   bar  torso on chest from=1 to=1 offset=(0.0738,-0.0013,0.08) tip=(0.0018,-0.0091,0.0024) r=0.0031 r2=0.0037 blend=0.0012
   bar  torso on chest from=1 to=1 offset=(0.0756,-0.0105,0.0824) tip=(0.0046,-0.0073,0.0008) r=0.0037 r2=0.0042 blend=0.0012
   bar  torso on chest from=0.9833 to=0.9833 offset=(0.0801,-0.0118,0.084) tip=(0.007,-0.0057,-0.0004) r=0.0042 r2=0.0046 blend=0.0012
-  bar  torso on chest from=0.9675 to=0.9675 offset=(0.0871,-0.0119,0.0845) tip=(0.0092,-0.0042,-0.0018) r=0.0046 r2=0.0049 blend=0.0012
-  bar  torso on chest from=0.9555 to=0.9555 offset=(0.0963,-0.0117,0.0833) tip=(0.0087,-0.0044,-0.0016) r=0.0049 r2=0.005 blend=0.0012
-  bar  torso on chest from=0.9427 to=0.9427 offset=(0.105,-0.0116,0.0824) tip=(0.0063,-0.006,-0.0002) r=0.005 r2=0.005 blend=0.0012
+  bar  torso on chest from=0.9675 to=0.9675 offset=(0.0871,-0.0119,0.0844) tip=(0.0092,-0.0041,-0.0016) r=0.0046 r2=0.0049 blend=0.0012
+  bar  torso on chest from=0.9555 to=0.9555 offset=(0.0963,-0.0117,0.0834) tip=(0.0087,-0.0044,-0.0017) r=0.0049 r2=0.005 blend=0.0012
+  bar  torso on chest from=0.9427 to=0.9427 offset=(0.105,-0.0116,0.0823) tip=(0.0063,-0.006,-0.0001) r=0.005 r2=0.005 blend=0.0012
   bar  torso on chest from=0.9261 to=0.9261 offset=(0.1114,-0.0117,0.083) tip=(0.0039,-0.0076,0.0011) r=0.005 r2=0.0048 blend=0.0012
-  bar  torso on chest from=0.9057 to=0.9057 offset=(0.1153,-0.012,0.0851) tip=(0.0015,-0.0092,0.0022) r=0.0048 r2=0.0045 blend=0.0012
-  bar  torso on chest from=0.8812 to=0.8812 offset=(0.1168,-0.0124,0.0885) tip=(0.0003,-0.0101,0.0026) r=0.0045 r2=0.004 blend=0.0012
-  bar  torso on chest from=0.8545 to=0.8545 offset=(0.117,-0.013,0.0925) tip=(0.002,-0.009,0.0019) r=0.004 r2=0.0035 blend=0.0012
-  bar  torso on chest from=0.8305 to=0.8305 offset=(0.119,-0.0134,0.0956) tip=(0.0039,-0.0077,0.0007) r=0.0035 r2=0.0029 blend=0.0012
-  bar  torso on chest from=0.8097 to=0.8097 offset=(0.1229,-0.0137,0.0973) tip=(0.0062,-0.0062,-0.0015) r=0.0029 r2=0.0027 blend=0.0012
+  bar  torso on chest from=0.9056 to=0.9056 offset=(0.1153,-0.012,0.0851) tip=(0.0015,-0.0092,0.0023) r=0.0048 r2=0.0045 blend=0.0012
+  bar  torso on chest from=0.8812 to=0.8812 offset=(0.1168,-0.0124,0.0886) tip=(0.0003,-0.0101,0.0026) r=0.0045 r2=0.004 blend=0.0012
+  bar  torso on chest from=0.8545 to=0.8545 offset=(0.117,-0.013,0.0925) tip=(0.002,-0.009,0.0018) r=0.004 r2=0.0035 blend=0.0012
+  bar  torso on chest from=0.8305 to=0.8305 offset=(0.119,-0.0134,0.0955) tip=(0.0039,-0.0077,0.0008) r=0.0035 r2=0.0029 blend=0.0012
+  bar  torso on chest from=0.8097 to=0.8097 offset=(0.1229,-0.0137,0.0974) tip=(0.0062,-0.0062,-0.0016) r=0.0029 r2=0.0027 blend=0.0012
   bar  torso on chest from=0.7922 to=0.7922 offset=(0.1291,-0.0136,0.0967) tip=(0.0077,-0.0052,-0.0031) r=0.0027 r2=0.0027 blend=0.0012
   blob torso on chest at=0.9018 offset=(0.1141,-0.0115,0.082) r=0.0095 blend=0.0015
   blob torso on chest at=0.8794 offset=(0.1161,-0.0122,0.0869) r=0.0075 blend=0.0015
   blob torso on chest at=0.8527 offset=(0.1163,-0.0128,0.0908) r=0.0071 blend=0.0015
-  bar  torso on chest from=0.8869 to=0.8869 offset=(0.1109,-0.0129,0.0918) tip=(0.0024,-0.0072,0.0002) r=0.002 r2=0.0026 blend=0.0012
-  bar  torso on chest from=0.8671 to=0.8671 offset=(0.1133,-0.0131,0.093) tip=(0.0051,-0.0077,-0.0009) r=0.0026 r2=0.003 blend=0.0012
+  bar  torso on chest from=0.8869 to=0.8869 offset=(0.1109,-0.0129,0.0919) tip=(0.0024,-0.0072,0.0001) r=0.002 r2=0.0026 blend=0.0012
+  bar  torso on chest from=0.8671 to=0.8671 offset=(0.1133,-0.0131,0.0929) tip=(0.0051,-0.0077,-0.0008) r=0.0026 r2=0.003 blend=0.0012
   bar  torso on chest from=0.8456 to=0.8456 offset=(0.1184,-0.0131,0.0932) tip=(0.0024,-0.0071,0.0003) r=0.003 r2=0.0032 blend=0.0012
   bar  torso on chest from=0.8262 to=0.8262 offset=(0.1208,-0.0133,0.0945) tip=(-0.0018,-0.0062,0.0027) r=0.0032 r2=0.0032 blend=0.0012
-  bar  torso on chest from=0.8101 to=0.8101 offset=(0.119,-0.0138,0.098) tip=(-0.0047,-0.0056,0.0046) r=0.0032 r2=0.0029 blend=0.0012
-  bar  torso on chest from=0.7965 to=0.7965 offset=(0.1143,-0.0145,0.1032) tip=(-0.0074,-0.0049,0.0062) r=0.0029 r2=0.0023 blend=0.0012
+  bar  torso on chest from=0.8101 to=0.8101 offset=(0.119,-0.0138,0.0979) tip=(-0.0047,-0.0056,0.0047) r=0.0032 r2=0.0029 blend=0.0012
+  bar  torso on chest from=0.7965 to=0.7965 offset=(0.1143,-0.0145,0.1033) tip=(-0.0074,-0.0049,0.0062) r=0.0029 r2=0.0023 blend=0.0012
   bar  torso on chest from=0.7853 to=0.7853 offset=(0.1069,-0.0155,0.11) tip=(-0.0054,-0.0052,0.0056) r=0.0023 r2=0.0018 blend=0.0012
   bar  torso on chest from=0.7731 to=0.7731 offset=(0.1015,-0.0163,0.1162) tip=(-0.0012,-0.0063,0.0042) r=0.0018 r2=0.0018 blend=0.0012
-  bar  torso on chest from=0.8108 to=0.8108 offset=(0.1217,-0.0137,0.0978) tip=(-0.0073,-0.006,0.0051) r=0.002 r2=0.0026 blend=0.0012
-  bar  torso on chest from=0.7962 to=0.7962 offset=(0.1143,-0.0146,0.1036) tip=(-0.0032,-0.0071,0.0041) r=0.0026 r2=0.003 blend=0.0012
-  bar  torso on chest from=0.7783 to=0.7783 offset=(0.1111,-0.0153,0.1086) tip=(0.0005,-0.008,0.0038) r=0.003 r2=0.0032 blend=0.0012
-  bar  torso on chest from=0.7577 to=0.7577 offset=(0.1116,-0.0159,0.1134) tip=(0.002,-0.0083,0.0044) r=0.0032 r2=0.0032 blend=0.0012
-  bar  torso on chest from=0.7366 to=0.7366 offset=(0.1136,-0.0167,0.1188) tip=(0.0043,-0.0087,0.0045) r=0.0032 r2=0.0029 blend=0.0012
-  bar  torso on chest from=0.7144 to=0.7144 offset=(0.1179,-0.0175,0.1244) tip=(0.001,-0.0077,0.0066) r=0.0029 r2=0.0023 blend=0.0012
-  bar  torso on chest from=0.6959 to=0.6959 offset=(0.1189,-0.0185,0.1319) tip=(-0.0036,-0.0064,0.0084) r=0.0023 r2=0.0018 blend=0.0012
+  bar  torso on chest from=0.8108 to=0.8108 offset=(0.1217,-0.0138,0.0979) tip=(-0.0073,-0.006,0.005) r=0.002 r2=0.0026 blend=0.0012
+  bar  torso on chest from=0.7963 to=0.7963 offset=(0.1143,-0.0146,0.1036) tip=(-0.0032,-0.0071,0.0041) r=0.0026 r2=0.003 blend=0.0012
+  bar  torso on chest from=0.7783 to=0.7783 offset=(0.1111,-0.0153,0.1086) tip=(0.0005,-0.008,0.0037) r=0.003 r2=0.0032 blend=0.0012
+  bar  torso on chest from=0.7577 to=0.7577 offset=(0.1116,-0.0159,0.1134) tip=(0.002,-0.0083,0.0043) r=0.0032 r2=0.0032 blend=0.0012
+  bar  torso on chest from=0.7366 to=0.7366 offset=(0.1136,-0.0167,0.1188) tip=(0.0043,-0.0087,0.0046) r=0.0032 r2=0.0029 blend=0.0012
+  bar  torso on chest from=0.7144 to=0.7144 offset=(0.1179,-0.0175,0.1245) tip=(0.001,-0.0077,0.0064) r=0.0029 r2=0.0023 blend=0.0012
+  bar  torso on chest from=0.6958 to=0.6958 offset=(0.1189,-0.0185,0.1318) tip=(-0.0036,-0.0064,0.0084) r=0.0023 r2=0.0018 blend=0.0012
   bar  torso on chest from=0.6814 to=0.6814 offset=(0.1153,-0.0198,0.141) tip=(-0.0074,-0.0058,0.0083) r=0.0018 r2=0.0018 blend=0.0012
-  bar  torso on chest from=1 to=1 offset=(0.037,-0.0118,0.0955) tip=(-0.0021,-0.0103,0.0018) r=0.0029 r2=0.0035 blend=0.0012
-  bar  torso on chest from=0.977 to=0.977 offset=(0.035,-0.0138,0.0985) tip=(-0.0024,-0.0104,0.002) r=0.0035 r2=0.004 blend=0.0012
-  bar  torso on chest from=0.949 to=0.949 offset=(0.0326,-0.0143,0.1019) tip=(0.0009,-0.0089,0.0011) r=0.004 r2=0.0044 blend=0.0012
-  bar  torso on chest from=0.9249 to=0.9249 offset=(0.0335,-0.0147,0.1042) tip=(0.0035,-0.0077,0.0009) r=0.0044 r2=0.0046 blend=0.0012
-  bar  torso on chest from=0.904 to=0.904 offset=(0.037,-0.0149,0.1062) tip=(0.0061,-0.0065,0.0007) r=0.0046 r2=0.0046 blend=0.0012
-  bar  torso on chest from=0.8862 to=0.8862 offset=(0.043,-0.0152,0.1078) tip=(0.0088,-0.0052,0.0002) r=0.0046 r2=0.0044 blend=0.0012
-  bar  torso on chest from=0.8719 to=0.8719 offset=(0.0519,-0.0153,0.1087) tip=(0.009,-0.0051,0.0003) r=0.0044 r2=0.004 blend=0.0012
+  bar  torso on chest from=1 to=1 offset=(0.037,-0.0118,0.0956) tip=(-0.0021,-0.0103,0.0018) r=0.0029 r2=0.0035 blend=0.0012
+  bar  torso on chest from=0.977 to=0.977 offset=(0.035,-0.0138,0.0985) tip=(-0.0024,-0.0104,0.0019) r=0.0035 r2=0.004 blend=0.0012
+  bar  torso on chest from=0.949 to=0.949 offset=(0.0326,-0.0143,0.1018) tip=(0.0009,-0.0089,0.0013) r=0.004 r2=0.0044 blend=0.0012
+  bar  torso on chest from=0.9249 to=0.9249 offset=(0.0335,-0.0147,0.1043) tip=(0.0035,-0.0077,0.0009) r=0.0044 r2=0.0046 blend=0.0012
+  bar  torso on chest from=0.904 to=0.904 offset=(0.037,-0.0149,0.1063) tip=(0.0061,-0.0065,0.0005) r=0.0046 r2=0.0046 blend=0.0012
+  bar  torso on chest from=0.8862 to=0.8862 offset=(0.043,-0.0151,0.1078) tip=(0.0088,-0.0052,0.0004) r=0.0046 r2=0.0044 blend=0.0012
+  bar  torso on chest from=0.872 to=0.872 offset=(0.0519,-0.0153,0.1089) tip=(0.009,-0.0051,0.0001) r=0.0044 r2=0.004 blend=0.0012
   bar  torso on chest from=0.8579 to=0.8579 offset=(0.0609,-0.0154,0.1097) tip=(0.006,-0.0065,0.0011) r=0.004 r2=0.0035 blend=0.0012
   bar  torso on chest from=0.8405 to=0.8405 offset=(0.0668,-0.0157,0.1117) tip=(0.0016,-0.0084,0.0029) r=0.0035 r2=0.0029 blend=0.0012
-  bar  torso on chest from=0.8185 to=0.8185 offset=(0.0685,-0.0163,0.1158) tip=(-0.0014,-0.0098,0.0041) r=0.0029 r2=0.0025 blend=0.0012
-  bar  torso on chest from=0.7933 to=0.7933 offset=(0.0671,-0.017,0.1212) tip=(-0.0029,-0.0105,0.0055) r=0.0025 r2=0.0025 blend=0.0012
-  blob torso on chest at=0.8841 offset=(0.0428,-0.0149,0.1059) r=0.0078 blend=0.0015
-  blob torso on chest at=0.8705 offset=(0.0517,-0.0151,0.1075) r=0.0068 blend=0.0015
-  bar  torso on chest from=0.8841 to=0.8841 offset=(0.0497,-0.0154,0.1093) tip=(-0.0028,-0.0074,0.0015) r=0.0019 r2=0.0024 blend=0.0012
-  bar  torso on chest from=0.8643 to=0.8643 offset=(0.0469,-0.0157,0.1118) tip=(-0.0057,-0.0067,0.0017) r=0.0024 r2=0.0028 blend=0.0012
-  bar  torso on chest from=0.8465 to=0.8465 offset=(0.0413,-0.0161,0.1143) tip=(-0.0055,-0.0067,0.0018) r=0.0028 r2=0.003 blend=0.0012
-  bar  torso on chest from=0.8287 to=0.8287 offset=(0.0357,-0.0164,0.117) tip=(-0.0048,-0.0068,0.0019) r=0.003 r2=0.0029 blend=0.0012
-  bar  torso on chest from=0.8107 to=0.8107 offset=(0.031,-0.0168,0.1198) tip=(-0.0023,-0.0073,0.288) r=0.0029 r2=0.0026 blend=0.0012
-  bar  torso on chest from=0.902 to=0.902 offset=(0.0286,-0.0567,0.4033) tip=(0.0007,-0.0077,0.0111) r=0.0026 r2=0.0022 blend=0.0012
-  bar  torso on chest from=0.8852 to=0.8852 offset=(0.0294,-0.0584,0.4153) tip=(0.0036,-0.0085,0.0027) r=0.0022 r2=0.0017 blend=0.0012
-  bar  torso on chest from=0.8628 to=0.8628 offset=(0.0329,-0.0589,0.4191) tip=(0.0029,-0.0087,-0.0021) r=0.0017 r2=0.0017 blend=0.0012
+  bar  torso on chest from=0.8185 to=0.8185 offset=(0.0685,-0.0163,0.1156) tip=(-0.0014,-0.0098,0.0043) r=0.0029 r2=0.0025 blend=0.0012
+  bar  torso on chest from=0.7933 to=0.7933 offset=(0.0671,-0.017,0.1212) tip=(-0.0029,-0.0105,0.0054) r=0.0025 r2=0.0025 blend=0.0012
+  blob torso on chest at=0.8841 offset=(0.0428,-0.0149,0.1058) r=0.0078 blend=0.0015
+  blob torso on chest at=0.8706 offset=(0.0517,-0.0151,0.1076) r=0.0068 blend=0.0015
+  bar  torso on chest from=0.884 to=0.884 offset=(0.0497,-0.0153,0.1092) tip=(-0.0028,-0.0074,0.0015) r=0.0019 r2=0.0024 blend=0.0012
+  bar  torso on chest from=0.8643 to=0.8643 offset=(0.0469,-0.0157,0.1117) tip=(-0.0057,-0.0067,0.0018) r=0.0024 r2=0.0028 blend=0.0012
+  bar  torso on chest from=0.8465 to=0.8465 offset=(0.0413,-0.0161,0.1144) tip=(-0.0055,-0.0067,0.0017) r=0.0028 r2=0.003 blend=0.0012
+  bar  torso on chest from=0.8287 to=0.8287 offset=(0.0357,-0.0164,0.117) tip=(-0.0048,-0.0068,0.002) r=0.003 r2=0.0029 blend=0.0012
+  bar  torso on chest from=0.8107 to=0.8107 offset=(0.031,-0.0168,0.1199) tip=(-0.0023,-0.0073,0.29) r=0.0029 r2=0.0026 blend=0.0012
+  bar  torso on chest from=0.9028 to=0.9028 offset=(0.0286,-0.057,0.4052) tip=(0.0007,-0.0077,0.0092) r=0.0026 r2=0.0022 blend=0.0012
+  bar  torso on chest from=0.8851 to=0.8851 offset=(0.0294,-0.0584,0.4153) tip=(0.0036,-0.0085,0.0027) r=0.0022 r2=0.0017 blend=0.0012
+  bar  torso on chest from=0.8628 to=0.8628 offset=(0.0329,-0.0589,0.4191) tip=(0.0029,-0.0087,-0.0023) r=0.0017 r2=0.0017 blend=0.0012
   blob torso on chest at=0.8453 offset=(0.0411,-0.0159,0.1133) r=0.0048 blend=0.0015
   bar  torso on chest from=1 to=1 offset=(-0.1781,-0.0012,0.0497) tip=(-0.0081,-0.0066,0.0025) r=0.0033 r2=0.0038 blend=0.0012
-  bar  torso on chest from=0.9987 to=0.9987 offset=(-0.1862,-0.0073,0.0523) tip=(-0.0084,-0.0064,0.0007) r=0.0038 r2=0.0043 blend=0.0012
-  bar  torso on chest from=0.9813 to=0.9813 offset=(-0.1946,-0.0076,0.0539) tip=(-0.0062,-0.0071,0.0007) r=0.0043 r2=0.0046 blend=0.0012
-  bar  torso on chest from=0.9621 to=0.9621 offset=(-0.2008,-0.0078,0.0555) tip=(-0.0019,-0.0084,0.0021) r=0.0046 r2=0.005 blend=0.0012
-  bar  torso on chest from=0.9399 to=0.9399 offset=(-0.2026,-0.0083,0.0587) tip=(0.0018,-0.0095,0.003) r=0.005 r2=0.0052 blend=0.0012
-  bar  torso on chest from=0.9148 to=0.9148 offset=(-0.2008,-0.0089,0.063) tip=(0.0027,-0.0098,0.0021) r=0.0052 r2=0.0053 blend=0.0012
-  bar  torso on chest from=0.8887 to=0.8887 offset=(-0.1981,-0.0093,0.0664) tip=(0.0021,-0.0096,0.0008) r=0.0053 r2=0.0054 blend=0.0012
-  bar  torso on chest from=0.8625 to=0.8625 offset=(-0.196,-0.0096,0.0685) tip=(-0.0014,-0.0085,-0.0009) r=0.0054 r2=0.0053 blend=0.0012
-  bar  torso on chest from=0.8387 to=0.8387 offset=(-0.1974,-0.0097,0.0688) tip=(-0.0053,-0.0073,-0.0026) r=0.0053 r2=0.0052 blend=0.0012
-  bar  torso on chest from=0.8177 to=0.8177 offset=(-0.2027,-0.0094,0.0672) tip=(-0.0084,-0.0063,-0.0035) r=0.0052 r2=0.0049 blend=0.0012
-  bar  torso on chest from=0.7989 to=0.7989 offset=(-0.2111,-0.0091,0.0647) tip=(-0.0092,-0.0061,-0.004) r=0.0049 r2=0.0046 blend=0.0012
-  bar  torso on chest from=0.7807 to=0.7807 offset=(-0.2203,-0.0087,0.0616) tip=(-0.0053,-0.0074,-0.002) r=0.0046 r2=0.0042 blend=0.0012
+  bar  torso on chest from=0.9987 to=0.9987 offset=(-0.1862,-0.0073,0.0522) tip=(-0.0084,-0.0064,0.0007) r=0.0038 r2=0.0043 blend=0.0012
+  bar  torso on chest from=0.9813 to=0.9813 offset=(-0.1946,-0.0076,0.0538) tip=(-0.0062,-0.0071,0.0006) r=0.0043 r2=0.0046 blend=0.0012
+  bar  torso on chest from=0.9621 to=0.9621 offset=(-0.2008,-0.0078,0.0554) tip=(-0.0019,-0.0084,0.0021) r=0.0046 r2=0.005 blend=0.0012
+  bar  torso on chest from=0.9399 to=0.9399 offset=(-0.2026,-0.0082,0.0586) tip=(0.0018,-0.0095,0.003) r=0.005 r2=0.0052 blend=0.0012
+  bar  torso on chest from=0.9148 to=0.9148 offset=(-0.2008,-0.0088,0.0629) tip=(0.0027,-0.0098,0.0022) r=0.0052 r2=0.0053 blend=0.0012
+  bar  torso on chest from=0.8886 to=0.8886 offset=(-0.1981,-0.0093,0.0664) tip=(0.0021,-0.0096,0.0009) r=0.0053 r2=0.0054 blend=0.0012
+  bar  torso on chest from=0.8625 to=0.8625 offset=(-0.196,-0.0096,0.0686) tip=(-0.0014,-0.0085,-0.001) r=0.0054 r2=0.0053 blend=0.0012
+  bar  torso on chest from=0.8388 to=0.8388 offset=(-0.1974,-0.0097,0.0688) tip=(-0.0053,-0.0073,-0.0027) r=0.0053 r2=0.0052 blend=0.0012
+  bar  torso on chest from=0.8177 to=0.8177 offset=(-0.2027,-0.0094,0.0672) tip=(-0.0084,-0.0063,-0.0036) r=0.0052 r2=0.0049 blend=0.0012
+  bar  torso on chest from=0.7989 to=0.7989 offset=(-0.2111,-0.0091,0.0646) tip=(-0.0092,-0.0061,-0.004) r=0.0049 r2=0.0046 blend=0.0012
+  bar  torso on chest from=0.7806 to=0.7806 offset=(-0.2203,-0.0086,0.0615) tip=(-0.0053,-0.0074,-0.0018) r=0.0046 r2=0.0042 blend=0.0012
   bar  torso on chest from=0.7596 to=0.7596 offset=(-0.2256,-0.0085,0.0607) tip=(-0.0012,-0.0087,0.0007) r=0.0042 r2=0.0038 blend=0.0012
-  bar  torso on chest from=0.736 to=0.736 offset=(-0.2267,-0.0088,0.0626) tip=(0.0032,-0.0101,0.0034) r=0.0038 r2=0.0033 blend=0.0012
+  bar  torso on chest from=0.736 to=0.736 offset=(-0.2267,-0.0088,0.0626) tip=(0.0032,-0.0101,0.0033) r=0.0038 r2=0.0033 blend=0.0012
   bar  torso on chest from=0.7096 to=0.7096 offset=(-0.2236,-0.0095,0.0673) tip=(0.002,-0.0096,0.0028) r=0.0033 r2=0.003 blend=0.0012
-  bar  torso on chest from=0.6841 to=0.6841 offset=(-0.2216,-0.01,0.0713) tip=(0.0012,-0.0094,0.0025) r=0.003 r2=0.003 blend=0.0012
-  bar  torso on chest from=0.6592 to=0.6592 offset=(-0.2204,-0.0106,0.0751) tip=(-0.0021,-0.0083,0.0016) r=0.003 r2=0.003 blend=0.0012
-  blob torso on chest at=0.957 offset=(-0.1994,-0.0074,0.0527) r=0.0094 blend=0.0015
-  blob torso on chest at=0.758 offset=(-0.2242,-0.0081,0.0579) r=0.0085 blend=0.0015
+  bar  torso on chest from=0.6841 to=0.6841 offset=(-0.2216,-0.01,0.0714) tip=(0.0012,-0.0094,0.0025) r=0.003 r2=0.003 blend=0.0012
+  bar  torso on chest from=0.6592 to=0.6592 offset=(-0.2204,-0.0106,0.0751) tip=(-0.0021,-0.0083,0.0017) r=0.003 r2=0.003 blend=0.0012
+  blob torso on chest at=0.957 offset=(-0.1994,-0.0074,0.0526) r=0.0094 blend=0.0015
+  blob torso on chest at=0.758 offset=(-0.2242,-0.0081,0.058) r=0.0085 blend=0.0015
   bar  torso on chest from=0.6991 to=0.6991 offset=(-0.2316,-0.0092,0.0655) tip=(0.0043,-0.0057,0.0026) r=0.0022 r2=0.0028 blend=0.0012
-  bar  torso on chest from=0.6844 to=0.6844 offset=(-0.2273,-0.0097,0.0688) tip=(0.0085,-0.0037,0.0027) r=0.0028 r2=0.0033 blend=0.0012
-  bar  torso on chest from=0.6752 to=0.6752 offset=(-0.2188,-0.0101,0.0719) tip=(0.0091,-0.0034,0.0016) r=0.0033 r2=0.0035 blend=0.0012
-  bar  torso on chest from=0.6666 to=0.6666 offset=(-0.2097,-0.0104,0.074) tip=(0.0054,-0.005,0.0012) r=0.0035 r2=0.0034 blend=0.0012
-  bar  torso on chest from=0.6534 to=0.6534 offset=(-0.2043,-0.0107,0.0758) tip=(0.0008,-0.007,0.0016) r=0.0034 r2=0.0031 blend=0.0012
-  bar  torso on chest from=0.6349 to=0.6349 offset=(-0.2035,-0.011,0.0784) tip=(-0.0022,-0.0083,0.0024) r=0.0031 r2=0.0025 blend=0.0012
+  bar  torso on chest from=0.6844 to=0.6844 offset=(-0.2273,-0.0097,0.0688) tip=(0.0085,-0.0037,0.0026) r=0.0028 r2=0.0033 blend=0.0012
+  bar  torso on chest from=0.6752 to=0.6752 offset=(-0.2188,-0.0101,0.0718) tip=(0.0091,-0.0034,0.0018) r=0.0033 r2=0.0035 blend=0.0012
+  bar  torso on chest from=0.6666 to=0.6666 offset=(-0.2097,-0.0104,0.074) tip=(0.0054,-0.005,0.0011) r=0.0035 r2=0.0034 blend=0.0012
+  bar  torso on chest from=0.6534 to=0.6534 offset=(-0.2043,-0.0106,0.0758) tip=(0.0008,-0.007,0.0016) r=0.0034 r2=0.0031 blend=0.0012
+  bar  torso on chest from=0.6349 to=0.6349 offset=(-0.2035,-0.011,0.0783) tip=(-0.0022,-0.0083,0.0024) r=0.0031 r2=0.0025 blend=0.0012
   bar  torso on chest from=0.6131 to=0.6131 offset=(-0.2057,-0.0115,0.0818) tip=(-0.0025,-0.0083,0.0028) r=0.0025 r2=0.0019 blend=0.0012
-  bar  torso on chest from=0.5912 to=0.5912 offset=(-0.2082,-0.012,0.0857) tip=(-0.0004,-0.0075,0.002) r=0.0019 r2=0.0019 blend=0.0012
+  bar  torso on chest from=0.5912 to=0.5912 offset=(-0.2082,-0.012,0.0857) tip=(-0.0004,-0.0075,0.0021) r=0.0019 r2=0.0019 blend=0.0012
   blob torso on chest at=0.6113 offset=(-0.2058,-0.0113,0.0802) r=0.0052 blend=0.0015
-  bar  torso on chest from=0.9883 to=0.9883 offset=(-0.1828,-0.0081,0.0574) tip=(-0.0047,-0.005,0.0007) r=0.0022 r2=0.0028 blend=0.0012
-  bar  torso on chest from=0.9748 to=0.9748 offset=(-0.1875,-0.0083,0.0588) tip=(-0.0068,-0.002,-0.0018) r=0.0028 r2=0.0033 blend=0.0012
-  bar  torso on chest from=0.9686 to=0.9686 offset=(-0.1943,-0.0081,0.0573) tip=(-0.0076,-0.0008,-0.003) r=0.0033 r2=0.0035 blend=0.0012
-  bar  torso on chest from=0.9652 to=0.9652 offset=(-0.202,-0.0076,0.0544) tip=(-0.0078,-0.0006,-0.0037) r=0.0035 r2=0.0034 blend=0.0012
-  bar  torso on chest from=0.9619 to=0.9619 offset=(-0.2098,-0.0071,0.0508) tip=(-0.0071,-0.0016,-0.0035) r=0.0034 r2=0.0031 blend=0.0012
+  bar  torso on chest from=0.9883 to=0.9883 offset=(-0.1828,-0.0081,0.0573) tip=(-0.0047,-0.005,0.0007) r=0.0022 r2=0.0028 blend=0.0012
+  bar  torso on chest from=0.9747 to=0.9747 offset=(-0.1875,-0.0083,0.0587) tip=(-0.0068,-0.002,-0.0018) r=0.0028 r2=0.0033 blend=0.0012
+  bar  torso on chest from=0.9686 to=0.9686 offset=(-0.1943,-0.008,0.0572) tip=(-0.0076,-0.0008,-0.0031) r=0.0033 r2=0.0035 blend=0.0012
+  bar  torso on chest from=0.9651 to=0.9651 offset=(-0.202,-0.0076,0.0543) tip=(-0.0078,-0.0006,-0.0038) r=0.0035 r2=0.0034 blend=0.0012
+  bar  torso on chest from=0.9619 to=0.9619 offset=(-0.2098,-0.0071,0.0508) tip=(-0.0071,-0.0016,-0.0033) r=0.0034 r2=0.0031 blend=0.0012
   bar  torso on chest from=0.9561 to=0.9561 offset=(-0.2169,-0.0067,0.0477) tip=(-0.005,-0.0047,-0.0006) r=0.0031 r2=0.0025 blend=0.0012
-  bar  torso on chest from=0.943 to=0.943 offset=(-0.2219,-0.0067,0.0477) tip=(-0.0032,-0.0073,0.0013) r=0.0025 r2=0.0019 blend=0.0012
-  bar  torso on chest from=0.9235 to=0.9235 offset=(-0.2251,-0.007,0.05) tip=(-0.0025,-0.0079,0.0004) r=0.0019 r2=0.0019 blend=0.0012
+  bar  torso on chest from=0.943 to=0.943 offset=(-0.2219,-0.0067,0.0478) tip=(-0.0032,-0.0073,0.0013) r=0.0025 r2=0.0019 blend=0.0012
+  bar  torso on chest from=0.9235 to=0.9235 offset=(-0.2251,-0.007,0.05) tip=(-0.0025,-0.0079,0.0003) r=0.0019 r2=0.0019 blend=0.0012
   blob torso on chest at=0.9424 offset=(-0.2216,-0.0067,0.0474) r=0.0039 blend=0.0015
-  bar  torso on neck from=0.2409 to=0.2409 offset=(-0.1516,-0.0226,0.0391) tip=(-0.007,-0.0071,0.0041) r=0.0031 r2=0.0036 blend=0.0012
+  bar  torso on neck from=0.241 to=0.241 offset=(-0.1516,-0.0226,0.0391) tip=(-0.007,-0.0071,0.0041) r=0.0031 r2=0.0036 blend=0.0012
   bar  torso on chest from=1 to=1 offset=(-0.1586,-0.0068,0.0565) tip=(-0.0062,-0.0073,0.0034) r=0.0036 r2=0.0041 blend=0.0012
   bar  torso on chest from=0.9845 to=0.9845 offset=(-0.1648,-0.0085,0.0607) tip=(-0.0028,-0.0082,0.0032) r=0.0041 r2=0.0044 blend=0.0012
-  bar  torso on chest from=0.9631 to=0.9631 offset=(-0.1676,-0.0091,0.065) tip=(-0.0006,-0.0088,0.0027) r=0.0044 r2=0.0047 blend=0.0012
-  bar  torso on chest from=0.9399 to=0.9399 offset=(-0.1682,-0.0097,0.0688) tip=(0.0023,-0.0097,0.0027) r=0.0047 r2=0.0049 blend=0.0012
-  bar  torso on chest from=0.9144 to=0.9144 offset=(-0.1659,-0.0102,0.0728) tip=(0.0014,-0.0093,0.0015) r=0.0049 r2=0.005 blend=0.0012
-  bar  torso on chest from=0.8893 to=0.8893 offset=(-0.1645,-0.0106,0.0755) tip=(-0.0006,-0.0087,0.0004) r=0.005 r2=0.005 blend=0.0012
-  bar  torso on chest from=0.8655 to=0.8655 offset=(-0.1652,-0.0108,0.077) tip=(-0.0039,-0.0077,-0.0009) r=0.005 r2=0.0048 blend=0.0012
+  bar  torso on chest from=0.9631 to=0.9631 offset=(-0.1676,-0.0091,0.0649) tip=(-0.0006,-0.0088,0.0028) r=0.0044 r2=0.0047 blend=0.0012
+  bar  torso on chest from=0.9399 to=0.9399 offset=(-0.1682,-0.0097,0.0689) tip=(0.0023,-0.0097,0.0026) r=0.0047 r2=0.0049 blend=0.0012
+  bar  torso on chest from=0.9144 to=0.9144 offset=(-0.1659,-0.0102,0.0728) tip=(0.0014,-0.0093,0.0014) r=0.0049 r2=0.005 blend=0.0012
+  bar  torso on chest from=0.8893 to=0.8893 offset=(-0.1645,-0.0106,0.0754) tip=(-0.0006,-0.0087,0.0005) r=0.005 r2=0.005 blend=0.0012
+  bar  torso on chest from=0.8655 to=0.8655 offset=(-0.1652,-0.0108,0.0771) tip=(-0.0039,-0.0077,-0.001) r=0.005 r2=0.0048 blend=0.0012
   bar  torso on chest from=0.844 to=0.844 offset=(-0.169,-0.0108,0.0772) tip=(-0.0059,-0.0071,-0.002) r=0.0048 r2=0.0045 blend=0.0012
-  bar  torso on chest from=0.8236 to=0.8236 offset=(-0.1749,-0.0107,0.0763) tip=(-0.0073,-0.0068,-0.003) r=0.0045 r2=0.0042 blend=0.0012
-  bar  torso on chest from=0.8038 to=0.8038 offset=(-0.1822,-0.0104,0.0743) tip=(-0.0056,-0.0074,-0.0025) r=0.0042 r2=0.0037 blend=0.0012
-  bar  torso on chest from=0.7825 to=0.7825 offset=(-0.1878,-0.0102,0.0729) tip=(-0.0028,-0.0082,-0.0016) r=0.0037 r2=0.0032 blend=0.0012
+  bar  torso on chest from=0.8236 to=0.8236 offset=(-0.1749,-0.0107,0.0762) tip=(-0.0073,-0.0068,-0.003) r=0.0045 r2=0.0042 blend=0.0012
+  bar  torso on chest from=0.8038 to=0.8038 offset=(-0.1822,-0.0104,0.0742) tip=(-0.0056,-0.0074,-0.0025) r=0.0042 r2=0.0037 blend=0.0012
+  bar  torso on chest from=0.7825 to=0.7825 offset=(-0.1878,-0.0102,0.0728) tip=(-0.0028,-0.0082,-0.0016) r=0.0037 r2=0.0032 blend=0.0012
   bar  torso on chest from=0.7593 to=0.7593 offset=(-0.1906,-0.0102,0.0724) tip=(-0.0002,-0.009,-0.0007) r=0.0032 r2=0.0027 blend=0.0012
-  bar  torso on chest from=0.7343 to=0.7343 offset=(-0.1908,-0.0103,0.0729) tip=(0.0025,-0.0097,-0.0004) r=0.0027 r2=0.0027 blend=0.0012
-  bar  torso on chest from=0.7073 to=0.7073 offset=(-0.1883,-0.0104,0.0739) tip=(0.0015,-0.0094,-0.0001) r=0.0027 r2=0.0027 blend=0.0012
-  blob torso on chest at=0.8875 offset=(-0.164,-0.0102,0.0728) r=0.0089 blend=0.0015
-  bar  torso on chest from=0.976 to=0.976 offset=(-0.1607,-0.0091,0.0646) tip=(0.0047,-0.0064,0.0028) r=0.002 r2=0.0026 blend=0.0012
-  bar  torso on chest from=0.9594 to=0.9594 offset=(-0.156,-0.0096,0.0683) tip=(-0.0002,-0.009,0.0027) r=0.0026 r2=0.003 blend=0.0012
-  bar  torso on chest from=0.9356 to=0.9356 offset=(-0.1562,-0.0102,0.0722) tip=(-0.0026,-0.0103,0.0017) r=0.003 r2=0.0032 blend=0.0012
-  bar  torso on chest from=0.908 to=0.908 offset=(-0.1588,-0.0106,0.0754) tip=(-0.0003,-0.0089,0.0012) r=0.0032 r2=0.0032 blend=0.0012
-  bar  torso on chest from=0.884 to=0.884 offset=(-0.159,-0.0109,0.0777) tip=(0.0019,-0.0076,0.0012) r=0.0032 r2=0.0029 blend=0.0012
+  bar  torso on chest from=0.7343 to=0.7343 offset=(-0.1908,-0.0103,0.073) tip=(0.0025,-0.0097,-0.0005) r=0.0027 r2=0.0027 blend=0.0012
+  bar  torso on chest from=0.7073 to=0.7073 offset=(-0.1883,-0.0104,0.0738) tip=(0.0015,-0.0094,0) r=0.0027 r2=0.0027 blend=0.0012
+  blob torso on chest at=0.8874 offset=(-0.164,-0.0102,0.0727) r=0.0089 blend=0.0015
+  bar  torso on chest from=0.9761 to=0.9761 offset=(-0.1607,-0.0091,0.0647) tip=(0.0047,-0.0064,0.0028) r=0.002 r2=0.0026 blend=0.0012
+  bar  torso on chest from=0.9595 to=0.9595 offset=(-0.156,-0.0096,0.0684) tip=(-0.0002,-0.009,0.0025) r=0.0026 r2=0.003 blend=0.0012
+  bar  torso on chest from=0.9356 to=0.9356 offset=(-0.1562,-0.0101,0.0721) tip=(-0.0026,-0.0103,0.0019) r=0.003 r2=0.0032 blend=0.0012
+  bar  torso on chest from=0.908 to=0.908 offset=(-0.1588,-0.0106,0.0753) tip=(-0.0003,-0.0089,0.0013) r=0.0032 r2=0.0032 blend=0.0012
+  bar  torso on chest from=0.8841 to=0.8841 offset=(-0.159,-0.0109,0.0778) tip=(0.0019,-0.0076,0.0011) r=0.0032 r2=0.0029 blend=0.0012
   bar  torso on chest from=0.8635 to=0.8635 offset=(-0.1571,-0.0112,0.0799) tip=(0.0055,-0.0056,0.0019) r=0.0029 r2=0.0023 blend=0.0012
-  bar  torso on chest from=0.8489 to=0.8489 offset=(-0.1516,-0.0116,0.0825) tip=(0.0093,-0.0034,0.0032) r=0.0023 r2=0.0018 blend=0.0012
-  bar  torso on chest from=0.8409 to=0.8409 offset=(-0.1423,-0.0121,0.0861) tip=(0.0082,-0.0041,0.0031) r=0.0018 r2=0.0018 blend=0.0012
+  bar  torso on chest from=0.8489 to=0.8489 offset=(-0.1516,-0.0116,0.0825) tip=(0.0093,-0.0034,0.0033) r=0.0023 r2=0.0018 blend=0.0012
+  bar  torso on chest from=0.8409 to=0.8409 offset=(-0.1423,-0.0121,0.0862) tip=(0.0082,-0.0041,0.0031) r=0.0018 r2=0.0018 blend=0.0012
   blob torso on chest at=0.907 offset=(-0.1586,-0.0104,0.0742) r=0.0053 blend=0.0015
   blob torso on chest at=0.8488 offset=(-0.1515,-0.0116,0.0822) r=0.0035 blend=0.0015
-  bar  torso on neck from=0.3628 to=0.3628 offset=(-0.0801,-0.0316,0.0548) tip=(-0.0085,-0.0047,-0.0023) r=0.0031 r2=0.0037 blend=0.0012
+  bar  torso on neck from=0.3629 to=0.3629 offset=(-0.0801,-0.0317,0.0548) tip=(-0.0085,-0.0047,-0.0023) r=0.0031 r2=0.0037 blend=0.0012
   bar  torso on chest from=1 to=1 offset=(-0.0886,-0.0018,0.0724) tip=(-0.0051,-0.007,0.0011) r=0.0037 r2=0.0042 blend=0.0012
-  bar  torso on chest from=1 to=1 offset=(-0.0937,-0.0087,0.0735) tip=(-0.0018,-0.0092,0.0038) r=0.0042 r2=0.0046 blend=0.0012
-  bar  torso on chest from=0.9806 to=0.9806 offset=(-0.0955,-0.011,0.0783) tip=(0.0014,-0.0112,0.0052) r=0.0046 r2=0.0049 blend=0.0012
-  bar  torso on chest from=0.9518 to=0.9518 offset=(-0.094,-0.0119,0.0849) tip=(0.0003,-0.0104,0.0038) r=0.0049 r2=0.005 blend=0.0012
-  bar  torso on chest from=0.9246 to=0.9246 offset=(-0.0937,-0.0127,0.0901) tip=(-0.0035,-0.0079,0.0013) r=0.005 r2=0.005 blend=0.0012
-  bar  torso on chest from=0.9034 to=0.9034 offset=(-0.0972,-0.013,0.0924) tip=(-0.0076,-0.0051,-0.0012) r=0.005 r2=0.0048 blend=0.0012
-  bar  torso on chest from=0.8888 to=0.8888 offset=(-0.1048,-0.0129,0.092) tip=(-0.0108,-0.0031,-0.0031) r=0.0048 r2=0.0045 blend=0.0012
-  bar  torso on chest from=0.8793 to=0.8793 offset=(-0.1155,-0.0126,0.0893) tip=(-0.0089,-0.0043,-0.002) r=0.0045 r2=0.004 blend=0.0012
+  bar  torso on chest from=1 to=1 offset=(-0.0937,-0.0087,0.0735) tip=(-0.0018,-0.0092,0.0037) r=0.0042 r2=0.0046 blend=0.0012
+  bar  torso on chest from=0.9806 to=0.9806 offset=(-0.0955,-0.011,0.0783) tip=(0.0014,-0.0112,0.0053) r=0.0046 r2=0.0049 blend=0.0012
+  bar  torso on chest from=0.9519 to=0.9519 offset=(-0.094,-0.012,0.085) tip=(0.0003,-0.0104,0.0037) r=0.0049 r2=0.005 blend=0.0012
+  bar  torso on chest from=0.9247 to=0.9247 offset=(-0.0937,-0.0127,0.0901) tip=(-0.0035,-0.0079,0.0012) r=0.005 r2=0.005 blend=0.0012
+  bar  torso on chest from=0.9034 to=0.9034 offset=(-0.0972,-0.013,0.0924) tip=(-0.0076,-0.0051,-0.0011) r=0.005 r2=0.0048 blend=0.0012
+  bar  torso on chest from=0.8889 to=0.8889 offset=(-0.1048,-0.0129,0.092) tip=(-0.0108,-0.0031,-0.0031) r=0.0048 r2=0.0045 blend=0.0012
+  bar  torso on chest from=0.8793 to=0.8793 offset=(-0.1155,-0.0126,0.0894) tip=(-0.0089,-0.0043,-0.002) r=0.0045 r2=0.004 blend=0.0012
   bar  torso on chest from=0.8665 to=0.8665 offset=(-0.1244,-0.0124,0.088) tip=(-0.0077,-0.0051,-0.0012) r=0.004 r2=0.0035 blend=0.0012
-  bar  torso on chest from=0.852 to=0.852 offset=(-0.1321,-0.0123,0.0876) tip=(-0.0031,-0.0083,0.0006) r=0.0035 r2=0.0029 blend=0.0012
+  bar  torso on chest from=0.852 to=0.852 offset=(-0.1321,-0.0123,0.0875) tip=(-0.0031,-0.0083,0.0007) r=0.0035 r2=0.0029 blend=0.0012
   bar  torso on chest from=0.8294 to=0.8294 offset=(-0.1352,-0.0126,0.0893) tip=(0.0007,-0.0108,0.002) r=0.0029 r2=0.0027 blend=0.0012
-  bar  torso on chest from=0.8005 to=0.8005 offset=(-0.1345,-0.013,0.0927) tip=(-0.0001,-0.0101,0.0022) r=0.0027 r2=0.0027 blend=0.0012
+  bar  torso on chest from=0.8005 to=0.8005 offset=(-0.1345,-0.013,0.0927) tip=(-0.0001,-0.0101,0.0023) r=0.0027 r2=0.0027 blend=0.0012
   blob torso on chest at=0.9205 offset=(-0.0926,-0.0122,0.0871) r=0.0096 blend=0.0015
   blob torso on chest at=0.8874 offset=(-0.1043,-0.0128,0.0908) r=0.0073 blend=0.0015
-  bar  torso on chest from=0.8899 to=0.8899 offset=(-0.1066,-0.0131,0.0932) tip=(0.0072,-0.0054,0.0035) r=0.002 r2=0.0026 blend=0.0012
-  bar  torso on chest from=0.8764 to=0.8764 offset=(-0.0993,-0.0137,0.0973) tip=(0.0051,-0.0058,0.0028) r=0.0026 r2=0.003 blend=0.0012
-  bar  torso on chest from=0.8615 to=0.8615 offset=(-0.0943,-0.0142,0.1009) tip=(0.0017,-0.0064,0.002) r=0.003 r2=0.0032 blend=0.0012
-  bar  torso on chest from=0.8446 to=0.8446 offset=(-0.0926,-0.0146,0.1037) tip=(-0.003,-0.0073,0.0012) r=0.0032 r2=0.0032 blend=0.0012
+  bar  torso on chest from=0.8899 to=0.8899 offset=(-0.1066,-0.0131,0.0932) tip=(0.0072,-0.0054,0.0034) r=0.002 r2=0.0026 blend=0.0012
+  bar  torso on chest from=0.8764 to=0.8764 offset=(-0.0993,-0.0137,0.0973) tip=(0.0051,-0.0058,0.0027) r=0.0026 r2=0.003 blend=0.0012
+  bar  torso on chest from=0.8615 to=0.8615 offset=(-0.0943,-0.0142,0.1008) tip=(0.0017,-0.0064,0.0022) r=0.003 r2=0.0032 blend=0.0012
+  bar  torso on chest from=0.8446 to=0.8446 offset=(-0.0926,-0.0146,0.1038) tip=(-0.003,-0.0073,0.0011) r=0.0032 r2=0.0032 blend=0.0012
   bar  torso on chest from=0.825 to=0.825 offset=(-0.0956,-0.0149,0.1059) tip=(-0.0041,-0.0074,0.0015) r=0.0032 r2=0.0029 blend=0.0012
   bar  torso on chest from=0.8051 to=0.8051 offset=(-0.0997,-0.0152,0.1084) tip=(-0.0049,-0.0075,0.0017) r=0.0029 r2=0.0023 blend=0.0012
-  bar  torso on chest from=0.7853 to=0.7853 offset=(-0.1046,-0.0156,0.1111) tip=(-0.0009,-0.0066,0.0037) r=0.0023 r2=0.0018 blend=0.0012
-  bar  torso on chest from=0.7687 to=0.7687 offset=(-0.1054,-0.0163,0.1157) tip=(0.0036,-0.0059,0.005) r=0.0018 r2=0.0018 blend=0.0012
+  bar  torso on chest from=0.7853 to=0.7853 offset=(-0.1046,-0.0156,0.1111) tip=(-0.0009,-0.0066,0.0036) r=0.0023 r2=0.0018 blend=0.0012
+  bar  torso on chest from=0.7687 to=0.7687 offset=(-0.1054,-0.0162,0.1156) tip=(0.0036,-0.0059,0.0051) r=0.0018 r2=0.0018 blend=0.0012
   blob torso on chest at=0.8225 offset=(-0.0949,-0.0146,0.1041) r=0.0062 blend=0.0015
   blob torso on chest at=0.784 offset=(-0.1042,-0.0155,0.1104) r=0.0041 blend=0.0015
-  bar  torso on neck from=0.3331 to=0.3331 offset=(-0.0892,-0.0306,0.053) tip=(-0.0068,0.0039,-0.0071) r=0.002 r2=0.0026 blend=0.0012
-  bar  torso on neck from=0.3319 to=0.3319 offset=(-0.096,-0.0266,0.046) tip=(-0.0064,0.0003,-0.0047) r=0.0026 r2=0.003 blend=0.0012
-  bar  torso on neck from=0.3131 to=0.3131 offset=(-0.1024,-0.0245,0.0424) tip=(-0.006,-0.0037,-0.0002) r=0.003 r2=0.0032 blend=0.0012
-  bar  torso on neck from=0.283 to=0.283 offset=(-0.1084,-0.0253,0.0438) tip=(-0.0058,-0.0063,0.0031) r=0.0032 r2=0.0032 blend=0.0012
-  bar  torso on chest from=1 to=1 offset=(-0.1142,-0.0047,0.0625) tip=(-0.0058,-0.0067,0.0032) r=0.0032 r2=0.0029 blend=0.0012
-  bar  torso on chest from=0.9941 to=0.9941 offset=(-0.12,-0.0093,0.066) tip=(-0.0062,-0.0033,0.0008) r=0.0029 r2=0.0023 blend=0.0012
-  bar  torso on chest from=0.9853 to=0.9853 offset=(-0.1262,-0.0095,0.0673) tip=(-0.0067,0.0009,-0.0012) r=0.0023 r2=0.0018 blend=0.0012
-  bar  torso on chest from=0.9875 to=0.9875 offset=(-0.1329,-0.0093,0.0661) tip=(-0.007,0.0049,-0.0042) r=0.0018 r2=0.0018 blend=0.0012
+  bar  torso on neck from=0.3332 to=0.3332 offset=(-0.0892,-0.0306,0.0531) tip=(-0.0068,0.0039,-0.0072) r=0.002 r2=0.0026 blend=0.0012
+  bar  torso on neck from=0.3315 to=0.3315 offset=(-0.096,-0.0265,0.046) tip=(-0.0064,0.0003,-0.0046) r=0.0026 r2=0.003 blend=0.0012
+  bar  torso on neck from=0.3134 to=0.3134 offset=(-0.1024,-0.0245,0.0424) tip=(-0.006,-0.0037,-0.0002) r=0.003 r2=0.0032 blend=0.0012
+  bar  torso on neck from=0.2832 to=0.2832 offset=(-0.1084,-0.0253,0.0439) tip=(-0.0058,-0.0063,0.003) r=0.0032 r2=0.0032 blend=0.0012
+  bar  torso on chest from=1 to=1 offset=(-0.1142,-0.0047,0.0624) tip=(-0.0058,-0.0067,0.0033) r=0.0032 r2=0.0029 blend=0.0012
+  bar  torso on chest from=0.9941 to=0.9941 offset=(-0.12,-0.0093,0.066) tip=(-0.0062,-0.0033,0.001) r=0.0029 r2=0.0023 blend=0.0012
+  bar  torso on chest from=0.9854 to=0.9854 offset=(-0.1262,-0.0095,0.0674) tip=(-0.0067,0.0009,-0.0013) r=0.0023 r2=0.0018 blend=0.0012
+  bar  torso on chest from=0.9875 to=0.9875 offset=(-0.1329,-0.0093,0.066) tip=(-0.007,0.0049,-0.0042) r=0.0018 r2=0.0018 blend=0.0012
   bar  torso on chest from=0.9898 to=0.9898 offset=(-0.0242,-0.014,0.0996) tip=(-0.006,-0.0066,-0.0004) r=0.0029 r2=0.0035 blend=0.0012
   bar  torso on chest from=0.9715 to=0.9715 offset=(-0.0302,-0.0141,0.1001) tip=(-0.0077,-0.0058,-0.0006) r=0.0035 r2=0.004 blend=0.0012
   bar  torso on chest from=0.9552 to=0.9552 offset=(-0.0379,-0.0141,0.1003) tip=(-0.007,-0.0062,-0.0003) r=0.004 r2=0.0044 blend=0.0012
   bar  torso on chest from=0.9381 to=0.9381 offset=(-0.0449,-0.0142,0.1009) tip=(-0.006,-0.0066,0.0002) r=0.0044 r2=0.0046 blend=0.0012
-  bar  torso on chest from=0.92 to=0.92 offset=(-0.0509,-0.0143,0.1019) tip=(-0.0033,-0.0078,0.0015) r=0.0046 r2=0.0046 blend=0.0012
-  bar  torso on chest from=0.8991 to=0.8991 offset=(-0.0542,-0.0147,0.1045) tip=(-0.0001,-0.0092,0.0024) r=0.0046 r2=0.0044 blend=0.0012
-  bar  torso on chest from=0.8747 to=0.8747 offset=(-0.0543,-0.0152,0.1081) tip=(0.0001,-0.0093,0.0027) r=0.0044 r2=0.004 blend=0.0012
-  bar  torso on chest from=0.8501 to=0.8501 offset=(-0.0541,-0.0157,0.1119) tip=(0.0009,-0.0096,0.0032) r=0.004 r2=0.0035 blend=0.0012
-  bar  torso on chest from=0.825 to=0.825 offset=(-0.0532,-0.0164,0.1164) tip=(-0.0024,-0.008,0.0029) r=0.0035 r2=0.0029 blend=0.0012
-  bar  torso on chest from=0.8041 to=0.8041 offset=(-0.0557,-0.0169,0.1204) tip=(-0.0055,-0.0066,0.0023) r=0.0029 r2=0.0025 blend=0.0012
-  bar  torso on chest from=0.7868 to=0.7868 offset=(-0.0612,-0.0174,0.1235) tip=(-0.0087,-0.0053,0.0014) r=0.0025 r2=0.0025 blend=0.0012
-  blob torso on chest at=0.8733 offset=(-0.054,-0.015,0.1068) r=0.0068 blend=0.0015
-  blob torso on chest at=0.8016 offset=(-0.0555,-0.0167,0.1187) r=0.0059 blend=0.0015
-  bar  torso on chest from=0.8757 to=0.8757 offset=(-0.0553,-0.0154,0.1095) tip=(0.0088,-0.006,0.0021) r=0.0019 r2=0.0023 blend=0.0012
+  bar  torso on chest from=0.92 to=0.92 offset=(-0.0509,-0.0143,0.102) tip=(-0.0033,-0.0078,0.0014) r=0.0046 r2=0.0046 blend=0.0012
+  bar  torso on chest from=0.8991 to=0.8991 offset=(-0.0542,-0.0147,0.1044) tip=(-0.0001,-0.0092,0.0024) r=0.0046 r2=0.0044 blend=0.0012
+  bar  torso on chest from=0.8747 to=0.8747 offset=(-0.0543,-0.0152,0.108) tip=(0.0001,-0.0093,0.0027) r=0.0044 r2=0.004 blend=0.0012
+  bar  torso on chest from=0.8502 to=0.8502 offset=(-0.0541,-0.0157,0.112) tip=(0.0009,-0.0096,0.0031) r=0.004 r2=0.0035 blend=0.0012
+  bar  torso on chest from=0.825 to=0.825 offset=(-0.0532,-0.0163,0.1163) tip=(-0.0024,-0.008,0.0029) r=0.0035 r2=0.0029 blend=0.0012
+  bar  torso on chest from=0.8041 to=0.8041 offset=(-0.0557,-0.0169,0.1203) tip=(-0.0055,-0.0066,0.0023) r=0.0029 r2=0.0025 blend=0.0012
+  bar  torso on chest from=0.7868 to=0.7868 offset=(-0.0612,-0.0173,0.1234) tip=(-0.0087,-0.0053,0.0014) r=0.0025 r2=0.0025 blend=0.0012
+  blob torso on chest at=0.8733 offset=(-0.054,-0.015,0.1067) r=0.0068 blend=0.0015
+  blob torso on chest at=0.8016 offset=(-0.0555,-0.0167,0.1186) r=0.0059 blend=0.0015
+  bar  torso on chest from=0.8757 to=0.8757 offset=(-0.0553,-0.0154,0.1095) tip=(0.0088,-0.006,0.0022) r=0.0019 r2=0.0023 blend=0.0012
   bar  torso on chest from=0.86 to=0.86 offset=(-0.0465,-0.0158,0.1125) tip=(0.006,-0.0068,0.0017) r=0.0023 r2=0.0027 blend=0.0012
-  bar  torso on chest from=0.8419 to=0.8419 offset=(-0.0405,-0.0162,0.115) tip=(0.0008,-0.0083,0.0019) r=0.0027 r2=0.003 blend=0.0012
-  bar  torso on chest from=0.8198 to=0.8198 offset=(-0.0397,-0.0166,0.118) tip=(-0.0035,-0.0095,0.0027) r=0.003 r2=0.003 blend=0.0012
-  bar  torso on chest from=0.7946 to=0.7946 offset=(-0.0432,-0.0172,0.122) tip=(-0.0039,-0.0096,0.0037) r=0.003 r2=0.0028 blend=0.0012
-  bar  torso on chest from=0.7697 to=0.7697 offset=(-0.0471,-0.0178,0.127) tip=(-0.0021,-0.0089,0.0051) r=0.0028 r2=0.0025 blend=0.0012
-  bar  torso on chest from=0.747 to=0.747 offset=(-0.0492,-0.0187,0.1332) tip=(0.0019,-0.0077,0.0051) r=0.0025 r2=0.002 blend=0.0012
-  bar  torso on chest from=0.7279 to=0.7279 offset=(-0.0473,-0.0196,0.1393) tip=(0.0059,-0.0065,0.0046) r=0.002 r2=0.0017 blend=0.0012
+  bar  torso on chest from=0.842 to=0.842 offset=(-0.0405,-0.0162,0.1151) tip=(0.0008,-0.0083,0.0019) r=0.0027 r2=0.003 blend=0.0012
+  bar  torso on chest from=0.8199 to=0.8199 offset=(-0.0397,-0.0166,0.1181) tip=(-0.0035,-0.0095,0.0025) r=0.003 r2=0.003 blend=0.0012
+  bar  torso on chest from=0.7946 to=0.7946 offset=(-0.0432,-0.0171,0.1219) tip=(-0.0039,-0.0096,0.0039) r=0.003 r2=0.0028 blend=0.0012
+  bar  torso on chest from=0.7697 to=0.7697 offset=(-0.0471,-0.0179,0.1271) tip=(-0.0021,-0.0089,0.0048) r=0.0028 r2=0.0025 blend=0.0012
+  bar  torso on chest from=0.747 to=0.747 offset=(-0.0492,-0.0187,0.1331) tip=(0.0019,-0.0077,0.0052) r=0.0025 r2=0.002 blend=0.0012
+  bar  torso on chest from=0.7279 to=0.7279 offset=(-0.0473,-0.0196,0.1393) tip=(0.0059,-0.0065,0.0045) r=0.002 r2=0.0017 blend=0.0012
   bar  torso on chest from=0.7118 to=0.7118 offset=(-0.0414,-0.0203,0.1446) tip=(0.0063,-0.0071,0.2781) r=0.0017 r2=0.0017 blend=0.0012
 
   # ---- his face: veins up the temples and the sides of the crown, down the jowls ----
