@@ -14,13 +14,15 @@
 #   tubes    what plugs him in: an IV pole and blood bag into his arm, lines from the armrests into his forearms,
 #            cables from the harness slots into his shoulders, a catheter bundle from his lap down to the gas lift
 #   hose     a corrugated feed hose into the corner of his mouth (on the skull, so it stays in when he turns)
+#   clamps   his prosthetic hands: a bone-metal cuff on each sawn wrist stump, a bracket, and a C-clamp screwed shut
+#            round the joystick's grip; on `hem` with the stick, so they move when he works it
 import bpy, math
 from mathutils import Vector
 
 try:
     PARTS
 except NameError:
-    PARTS = {'shell', 'stripes', 'trim', 'arms', 'base', 'headset', 'tubes', 'hose'}
+    PARTS = {'shell', 'stripes', 'trim', 'arms', 'base', 'headset', 'tubes', 'hose', 'clamps'}
 X = Vector((1, 0, 0)); UP = Vector((0, 0, 1)); BACK = Vector((0, 1, 0)); FWD = Vector((0, -1, 0))
 sm = lambda e0, e1, x: (lambda c: c * c * (3 - 2 * c))(max(0.0, min(1.0, (x - e0) / (e1 - e0))))
 V = bv
@@ -257,3 +259,55 @@ if 'hose' in PARTS:
         d = (path[i + 1] - path[i - 1]).normalized()
         ring(f'cr{i}', path[i], d, 0.017, 0.0045, segs=20)
     finish_t('hose', 'skull|hose', 4000, material='yellow', tint=(0.55, 0.50, 0.42), noise=0.0)
+
+# ---------------------------------------------------------------- clamps: prosthetic hands on the stick
+# Owner: his flesh hands fused into the grip were "problematic ... saw his wrists off to bloody stumps and attach
+# metal prosthetic c-clamp hands that go around the joystick". gamer.blob's forearms end in stumps at W (compiled);
+# each cuff closes round the last 7 cm of a forearm and runs on past the cut over most of the stump's round end, so
+# only a raw face shows inside its lip (stopped short of the cut, the stump read as a glossy red ball).
+# A bracket runs from the cuff to a C-clamp round the grip (axis x 0, z 0.585), the two clamps at different heights,
+# each open at the front and screwed shut across the gap (chrome). All on `hem`, the stick's bone.
+if 'clamps' in PARTS:
+    drop(['hem|clamps', 'hem|screws']); clear_work()
+    GZ = 0.585
+    grip_r = lambda y: 0.044 - 0.009 * (y - 1.0595) / 0.16
+    screws = []
+    for sx, yc in ((1, 1.112), (-1, 1.168)):
+        W = V(sx * 0.1266, 1.1127, 0.4878); d = V(sx * -0.4400, 0.1788, 0.8800).normalized()
+        rc = grip_r(yc) + 0.019                                     # clear of the grip's flesh (at +8 mm it sank into it)
+        # the cuff: a ribbed collar round the stump, a rolled lip at its open front end
+        c0 = W - d * 0.050; c1 = W + d * 0.026
+        tube(f'cuff{sx}', [c0.lerp(c1, i / 12) for i in range(13)], [0.062 - 0.004 * (i / 12) for i in range(13)], segs=24)
+        for k in range(3):
+            ring(f'crib{sx}{k}', c0.lerp(c1, 0.2 + 0.3 * k), d, 0.063 - 0.002 * k, 0.005)
+        ring(f'clip{sx}', c1, d, 0.059, 0.006)
+        # the C: an arc round the grip, open at the front (blob +z is blender -y), jaws at its ends
+        cen = V(0, yc, GZ)
+        def arc(a):
+            return cen + V(rc * math.cos(a), 0, rc * math.sin(a)) - V(0, 0, 0)
+        A0, A1 = D(90 + 38), D(90 + 360 - 38)
+        pts = [cen + V(rc * math.cos(A0 + (A1 - A0) * i / 40), 0, rc * math.sin(A0 + (A1 - A0) * i / 40)) - V(0, 0, 0) for i in range(41)]
+        pts = [Vector((p.x, p.y, p.z)) for p in pts]
+        tube(f'c{sx}', pts, [0.012] * 41, segs=12)
+        tube(f'ccrest{sx}', [p + (p - cen).normalized() * 0.010 for p in pts[3:-3]], [0.0045] * 35, segs=8)
+        ja = cen + V(rc * math.cos(A0), 0, rc * math.sin(A0)); jb = cen + V(rc * math.cos(A1), 0, rc * math.sin(A1))
+        ja = Vector((ja.x, ja.y, ja.z)); jb = Vector((jb.x, jb.y, jb.z))
+        for j, q in enumerate((ja, jb)):
+            ball(f'jaw{sx}{j}', q + (q - cen).normalized() * 0.006, 1.0, 0.016, 0.014, 0.016)
+        screws.append((ja + (ja - cen).normalized() * 0.008, jb + (jb - cen).normalized() * 0.008))
+        # the bracket: from the cuff's inner side, bowed, to the C's outer side
+        out = cen + V(sx * (rc + 0.004), 0, 0); out = Vector((out.x, out.y, out.z))
+        st = W - d * 0.030 + V(-sx * 0.045, 0, 0)
+        mid = st.lerp(out, 0.5) + UP * 0.020
+        br = spline([st, mid, out], 14)
+        tube(f'br{sx}', br, [0.013 - 0.003 * (i / (len(br) - 1)) for i in range(len(br))], segs=12)
+        tube(f'brc{sx}', [q + UP * 0.010 for q in br[2:-2]], [0.004] * (len(br) - 4), segs=8)
+        ball(f'knuck{sx}', out, 0.018); ball(f'knuck2{sx}', st, 0.020)
+        horn(f'spur{sx}', mid + UP * 0.012, UP + V(sx * 0.4, 0, -0.3), X, 0.045, 0.009, curl=0.7)
+    finish_t('clamps', 'hem|clamps', 9000)
+    for k, (a, b) in enumerate(screws):
+        ax = (b - a).normalized()
+        tube(f'rod{k}', [a - ax * 0.012 + (b - a) * (i / 8) * (1 + 0.024 / max(1e-6, (b - a).length)) for i in range(9)], [0.0045] * 9, segs=10)
+        tube(f'th{k}', [b + ax * 0.016 + UP * 0.016, b + ax * 0.016 - UP * 0.016], [0.004, 0.004], segs=8)
+        ball(f'nut{k}', a - ax * 0.006, 0.008)
+    o = fuse('screws', voxel=0.0010, noise=0.0); decimate(o, 2500); plain(o, 'chrome'); install(o, 'hem|screws'); clear_work()

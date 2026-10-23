@@ -1,8 +1,9 @@
-// gamer.blob — the chair's boss variant: a swollen man fused into a gaming chair, both hands on a joystick of flesh
+// gamer.blob — the chair's boss variant: a swollen man fused into a gaming chair, his sawn wrist stumps in prosthetic
+// clamps (kit) round a joystick of flesh
 // out of his navel. What this pins: it builds and fuses, it is BIGGER than the chair (the boss), it walks on all four
 // feet through the real motion pipeline, he WORKS THE STICK through an attack (the joystick rides the `hem` point,
-// MotionProfile.joystick), and his hands stay ON THE STICK throughout (they ride `hem` with the grip; nothing in the
-// arm IK reaches them, because the rig's arms are the front legs).
+// MotionProfile.joystick), and his wrist STUMPS stay where the stick's clamps hold them throughout (each stump binds
+// to the `hem` point with the grip; nothing in the arm IK reaches them, because the rig's arms are the front legs).
 import { describe, it, expect } from 'vitest';
 import src from './gamer.blob?raw';
 import chairSrc from './chair.blob?raw';
@@ -28,7 +29,7 @@ describe('gamer — the chair boss, plugged in', () => {
     expect(top(body) / top(chair)).toBeGreaterThan(1.25);
   });
 
-  it('walks on four feet with both hands on the stick', () => {
+  it('walks on four feet with both stumps held at the stick', () => {
     const m = makeActorMotion(body, { seed: 5 });
     expect(m.motionJoints, 'every rig point must map to a gait joint').not.toBeNull();
     const J = m.motionJoints!.index;
@@ -53,20 +54,20 @@ describe('gamer — the chair boss, plugged in', () => {
     // the walk carries them together; the arm IK never reaches them (the rig's arms are the front legs).
     const posed = applyRig(body, m.bound, m.lastBodyYaw);
     const dist = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-    const isHand = (p: { a: Vec3; radius: number }) => Math.abs(Math.abs(p.a[0]) - 0.058) < 0.005 && Math.abs(p.a[2] - 0.585) < 0.005;
+    const isHand = (p: { a: Vec3; radius: number }) => Math.abs(Math.abs(p.a[0]) - 0.1266) < 0.004 && Math.abs(p.a[2] - 0.4878) < 0.004;   // the stump shells, at the cut
     const isGrip = (p: { a: Vec3; b: Vec3 }) => Math.abs(p.a[0]) < 1e-6 && Math.abs(p.a[2] - 0.585) < 0.005 && p.b[1] - p.a[1] > 0.07;
     const restHands = body.prims.map((p, i) => [p, i] as const).filter(([p]) => isHand(p));
     const g = body.prims.findIndex(isGrip);
-    expect(restHands.length, 'two hands').toBe(2);
+    expect(restHands.length, 'two stumps').toBe(2);
     expect(g, 'the grip').toBeGreaterThanOrEqual(0);
     for (const [p, i] of restHands) {
       const rest = dist(p.a, body.prims[g]!.a);
       const now = dist(posed.prims[i]!.a, posed.prims[g]!.a);
-      expect(Math.abs(now - rest), 'hand stays on the grip').toBeLessThan(0.003);
+      expect(Math.abs(now - rest), 'stump stays in its clamp').toBeLessThan(0.003);
     }
   });
 
-  it('works the joystick through a bite, hands on it', () => {
+  it('works the joystick through a bite, stumps in their clamps', () => {
     const m = makeActorMotion(body, { seed: 9 });
     const J = m.motionJoints!.index;
     const profile = characterEntry('gamer').profile;
@@ -84,15 +85,15 @@ describe('gamer — the chair boss, plugged in', () => {
     for (let i = 1; i < 42; i++) {
       step({ phase: i / 42, side: 'R', variant: 'bite' });
       const r = rel(), d = Math.hypot(r[0] - still[0], r[1] - still[1], r[2] - still[2]);
-      if (d > throwMax) { throwMax = d; posed = applyRig(body, m.bound, m.lastBodyYaw); }   // the hands, at the widest throw
+      if (d > throwMax) { throwMax = d; posed = applyRig(body, m.bound, m.lastBodyYaw); }   // the stumps, at the widest throw
     }
     // The bite also throws his chest forward, so this is the stick's motion relative to the chest: measured ~5 cm.
     expect(throwMax, 'the stick moves relative to his chest').toBeGreaterThan(0.025);
     const dist = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-    const isHand = (p: { a: Vec3 }) => Math.abs(Math.abs(p.a[0]) - 0.058) < 0.005 && Math.abs(p.a[2] - 0.585) < 0.005;
+    const isHand = (p: { a: Vec3 }) => Math.abs(Math.abs(p.a[0]) - 0.1266) < 0.004 && Math.abs(p.a[2] - 0.4878) < 0.004;   // the stump shells
     const isGrip = (p: { a: Vec3; b: Vec3 }) => Math.abs(p.a[0]) < 1e-6 && Math.abs(p.a[2] - 0.585) < 0.005 && p.b[1] - p.a[1] > 0.07;
     const g = body.prims.findIndex(isGrip);
     for (const i of body.prims.map((p, i) => [p, i] as const).filter(([p]) => isHand(p)).map(([, i]) => i))
-      expect(Math.abs(dist(posed.prims[i]!.a, posed.prims[g]!.a) - dist(body.prims[i]!.a, body.prims[g]!.a)), 'hand on the grip').toBeLessThan(0.003);
+      expect(Math.abs(dist(posed.prims[i]!.a, posed.prims[g]!.a) - dist(body.prims[i]!.a, body.prims[g]!.a)), 'stump in its clamp').toBeLessThan(0.003);
   });
 });

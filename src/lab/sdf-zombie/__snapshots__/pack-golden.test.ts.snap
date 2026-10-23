@@ -28,7 +28,7 @@ exports[`packBody byte pin > dragon.blob packs the pinned bytes 1`] = `"24e7478a
 
 exports[`packBody byte pin > female.blob packs the pinned bytes 1`] = `"fda78400265bcccd"`;
 
-exports[`packBody byte pin > gamer.blob packs the pinned bytes 1`] = `"f441d1050a1aa256"`;
+exports[`packBody byte pin > gamer.blob packs the pinned bytes 1`] = `"96f9fbb9d21e2150"`;
 
 exports[`packBody byte pin > gargoyle.blob packs the pinned bytes 1`] = `"5b1bfc98c92f308e"`;
 

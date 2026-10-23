@@ -25,6 +25,7 @@
 //   CHARACTER=gamer npx tsx scripts/seated-detail-gen.ts && npx tsx scripts/bake-body-normal.ts gamer 512 320 \
 //     --limb clavicle.l:0:1:0.15:64 --limb clavicle.r:0:1:0.15:64 --limb upperarm.l:0:1:0.10:64 --limb upperarm.r:0:1:0.10:64 \
 //     --limb skull:0:1:0.17:96 --torso-seg stick:0,1.06,0.585:0,1.39,0.590:0.075:96 \
+//     --torso-seg stalk1:0,0.95,0.385:0,0.985,0.535:0.085:48 --torso-seg stalk2:0,0.985,0.535:0,1.065,0.588:0.085:48 \
 //     --torso-seg forearm.l:0.33,1.03,0.08:0.08,1.13,0.58:0.085:64 --torso-seg forearm.r:-0.33,1.03,0.08:-0.08,1.13,0.58:0.085:64 \
 //     --torso-seg upperarm.l:0.255,1.33,0.048:0.31,1.02,0.135:0.095:64 --torso-seg upperarm.r:-0.255,1.33,0.048:-0.31,1.02,0.135:0.095:64
 //   The --torso-seg regions give the joystick and his arms (torso flesh, in front of the gut) their own cylinders:
@@ -127,7 +128,7 @@ function frontPath(pts: [number, number][], n: number): Skin[] {
 
 // ---------------------------------------------------------------- varicose veins (biomech-style.md's recipe)
 /** A trunk from (x0, y0) toward (x1, y1) on the front-probed skin: a lazy meander, knots, `branches` branches. */
-function varicose(x0: number, y0: number, x1: number, y1: number, r: number, proud: number, branches: number, depth = 0, ampK = 1) {
+function varicose(x0: number, y0: number, x1: number, y1: number, r: number, proud: number, branches: number, depth = 0, ampK = 1, blend = 0.0016) {
   const L = Math.hypot(x1 - x0, y1 - y0);
   const n = Math.max(8, Math.round(L / 0.011));
   const along: [number, number] = [(x1 - x0) / L, (y1 - y0) / L], perp: [number, number] = [-along[1], along[0]];
@@ -142,12 +143,12 @@ function varicose(x0: number, y0: number, x1: number, y1: number, r: number, pro
     S.push(s); R.push(r * (0.55 + 0.45 * Math.sin(Math.PI * Math.min(1, u * 1.1 + 0.05))));
   }
   if (S.length < 3) return;
-  ridgeAt(S, R, proud, 0.0016);
-  for (let i = 2; i < S.length - 2; i++) if (rnd() < 0.18) lumpAt(S[i]!, R[i]! * (1.5 + rnd() * 0.6), proud * 1.3, 0.002);
+  ridgeAt(S, R, proud, blend);
+  for (let i = 2; i < S.length - 2; i++) if (rnd() < 0.18) lumpAt(S[i]!, R[i]! * (1.5 + rnd() * 0.6), proud * 1.3, blend * 1.25);
   for (let b = 0; b < branches && depth < 1; b++) {
     const s0 = S[1 + Math.floor(rnd() * (S.length - 3))]!, a = Math.atan2(y1 - y0, x1 - x0) + (rnd() < 0.5 ? -1 : 1) * (0.5 + rnd() * 0.45);
     const l = 0.05 + rnd() * 0.05;
-    varicose(s0.p[0], s0.p[1], s0.p[0] + Math.cos(a) * l * ampK, s0.p[1] + Math.sin(a) * l * ampK, r * 0.65, proud * 0.75, 1, depth + 1, ampK);
+    varicose(s0.p[0], s0.p[1], s0.p[0] + Math.cos(a) * l * ampK, s0.p[1] + Math.sin(a) * l * ampK, r * 0.65, proud * 0.75, 1, depth + 1, ampK, blend);
   }
 }
 if (CH === 'gamer') {
@@ -181,8 +182,8 @@ if (CH === 'gamer') {
       axisVein(skin, emit, T[k]!, T[k]! + (t1 - t0) * (0.18 + rnd() * 0.15), PH[k]!, sd * (25 + rnd() * 25), 8, r * 0.65, wig * 0.6, 1, depth + 1);
     }
   };
-  const torsoEmit = (proud: number) => (S: Skin[], R: number[]) =>
-    S.length === 1 ? lumpAt(S[0]!, R[0]!, proud * 1.3, 0.0015) : ridgeAt(S, R, proud, 0.0012);
+  const torsoEmit = (proud: number, blend = 0.0012) => (S: Skin[], R: number[]) =>
+    S.length === 1 ? lumpAt(S[0]!, R[0]!, proud * 1.3, blend * 1.25) : ridgeAt(S, R, proud, blend);
   // THE JOYSTICK (owner: its veins, sores and pustules as prims "looks like tubes and skittles ... can be done in
   // normal map"). It has its own torso region in the bake (--torso-seg stick, along its axis), so its detail is
   // placed ALL ROUND it by probing in toward that axis: grip y 1.06-1.21, the knob ~1.21-1.29, the nose to 1.34, z ~0.585.
@@ -191,12 +192,52 @@ if (CH === 'gamer') {
     const a = ph * Math.PI / 180, dir: V = [Math.sin(a), 0, Math.cos(a)];
     return march(add(stickAxis(y), mul(dir, 0.12)), mul(dir, -1), torso);
   };
-  section('the joystick: pronounced veins down the knob and its neck, all round, stopping at his fists');
-  // Nine, spaced round it with a jitter, each a near-vertical meander with knots and a branch. They END at the top
-  // of his fists (y ~1.20): the hands are fused to the grip, so veins run down past them climbed over the hands
-  // and read as tendrils (owner). They start at the nose's collar (1.285).
+  section('the joystick: pronounced veins down the whole shaft, from the nose\'s collar to the stalk, all round');
+  // Nine, spaced round it with a jitter, each a near-vertical meander with knots and a branch. They run the full
+  // length now his hands are sawn off and clamped (the clamps are kit and sit over them): with flesh hands fused to
+  // the grip, veins past the fists climbed over the hands and read as tendrils (owner).
   for (let k = 0; k < 9; k++)
-    axisVein(stickSkin, torsoEmit(0.0036), 1.285, 1.205, 40 * k + rnd() * 18, (rnd() - 0.5) * 40, 14, 0.0046, 6, 1);
+    axisVein(stickSkin, torsoEmit(0.0040), 1.285, 1.065, 40 * k + rnd() * 18, (rnd() - 0.5) * 50, 28, 0.0050, 7, 1);
+
+  // THE STALK: the quarter arc out of his navel (gamer.blob: a Bezier N -> Q -> G, compiled metres), probed round
+  // its own curve; its bake regions are --torso-seg stalk1/stalk2, two chords of the arc.
+  const SN: V = [0, 0.9555, 0.390], SQ: V = [0, 0.9555, 0.585], SG: V = [0, 1.0595, 0.585];
+  const stalkAt = (t: number): V => add(add(mul(SN, (1 - t) ** 2), mul(SQ, 2 * t * (1 - t))), mul(SG, t * t));
+  const stalkSkin = (t: number, ph: number) => {
+    const p = stalkAt(t), tan = norm(sub(stalkAt(Math.min(1, t + 0.01)), stalkAt(Math.max(0, t - 0.01))));
+    const e1: V = [1, 0, 0], e2 = norm(cross(tan, e1));
+    const a = ph * Math.PI / 180, dir = norm(add(mul(e1, Math.sin(a)), mul(e2, Math.cos(a))));
+    return march(add(p, mul(dir, 0.15)), mul(dir, -1), torso);
+  };
+  section('the stalk: veins running on down it into his navel');
+  for (let k = 0; k < 7; k++)
+    axisVein(stalkSkin, torsoEmit(0.0040), 0.98, 0.06, 360 * k / 7 + rnd() * 20, (rnd() - 0.5) * 40, 24, 0.0050, 7, 1);
+  // HIS FOREARMS (owner: "veins running along the forearms and wrist"): torso flesh from the seat to the sawn
+  // stumps (gamer.blob, compiled E -> W), probed round that axis; baked in the forearm.l/.r --torso-seg regions.
+  for (const sx of [1, -1]) {
+    const FE: V = [sx * 0.3055, 1.040, 0.130], FW: V = [sx * 0.1266, 1.1127, 0.4878];
+    const fax = norm(sub(FW, FE)), fu = norm(cross(fax, [0, 1, 0])), fv = cross(fu, fax);
+    const foreSkin = (t: number, ph: number) => {
+      const a = ph * Math.PI / 180, dir = norm(add(mul(fu, Math.cos(a)), mul(fv, Math.sin(a))));
+      return march(add(add(FE, mul(sub(FW, FE), t)), mul(dir, 0.15)), mul(dir, -1), torso);
+    };
+    if (sx === 1) section('his forearms: thick veins along them to the wrists, all round');
+    for (let k = 0; k < 6; k++)
+      axisVein(foreSkin, torsoEmit(0.0055, 0.0024), 0.05, 0.94, 60 * k + rnd() * 25, (rnd() - 0.5) * 40, 26, 0.0068, 10, 1);
+  }
+  section('the stalk\'s bend: sagging wrinkles and folds round it, deepest underneath');
+  // Folds: rings of low ridges round the arc, close together, each sagging (it drops further on the underside),
+  // so the bend reads as loose, wrinkled skin.
+  for (let k = 0; k < 16; k++) {
+    const t0 = 0.12 + 0.70 * k / 15 + (rnd() - 0.5) * 0.02;
+    const S: Skin[] = [], R: number[] = [];
+    for (let i = 0; i <= 36; i++) {
+      const ph = 360 * i / 36, under = 0.5 + 0.5 * Math.cos(ph * Math.PI / 180);   // 1 on the underside (ph 0 faces the e2 side)
+      const sk = stalkSkin(t0 - 0.05 * under + 0.01 * Math.sin(i * 1.7 + k), ph);
+      if (sk) { S.push(sk); R.push(0.0030 + 0.0020 * under); }
+    }
+    if (S.length > 6) ridgeAt(S, R, 0.0018 + 0.0012 * rnd(), 0.0016);
+  }
   section('the joystick: an infected crust round the knob\'s crown where the nose comes out, and sores');
   for (let k = 0; k < 22; k++) {
     const sk = stickSkin(1.255 + rnd() * 0.030, rnd() * 360);
@@ -223,14 +264,20 @@ if (CH === 'gamer') {
   // A WEIGHTLIFTER STRAINING (owner: "more lower like down the neck and shoulder area think like a weightlifter
   // lifting a heavy weight"): thick cords up the sides of the neck, veins fanning out over the trapezius to the
   // shoulders, and down over the deltoids and the top of the chest. Thicker and prouder than anywhere else.
-  section('his neck: thick cords up the sides and the front, from the collar to the jaw');
+  // RAISED ROPES, not creases (owner, after the first bake read as dark creases): ~1 cm thick and standing out
+  // nearly their full radius (proud 0.85 r, so the cross-section is a round cord sitting ON the skin), with a
+  // softer blend so each swells out of the skin. The neck's cords stay BELOW his jowls: the double chin covers the
+  // neck's front above t ~0.5 (the first pass's cords up to the jaw were hidden), so they climb from the collar to
+  // mid-neck, thickest down the sides and the back of it.
+  const ROPE = (r: number) => torsoEmit(r * 0.85, 0.0030);
+  section('his neck: thick roped cords up the sides, from the collar to under the jowls');
   for (let k = 0; k < 12; k++) {
-    const ph = -130 + 260 * (k + 0.5) / 12 + (rnd() - 0.5) * 12;
-    axisVein(neckSkin, torsoEmit(0.0058), -0.30, 0.95, ph, (rnd() - 0.5) * 24, 26, 0.0075, 7, 1);
+    const side = k % 2 ? 1 : -1, ph = side * (35 + 95 * (Math.floor(k / 2) + 0.5) / 6) + (rnd() - 0.5) * 10;
+    axisVein(neckSkin, ROPE(0.0105), -0.40, 0.50 + rnd() * 0.08, ph, (rnd() - 0.5) * 20, 22, 0.0105, 6, 1);
   }
   // The shoulder tops seen from ABOVE (the trapezius slopes; the front probe skims them).
   const top = (x: number, z: number) => march([x, 1.9, z], [0, -1, 0], torso);
-  const topEmit = torsoEmit(0.0058);
+  const topEmit = ROPE(0.0105);
   section('his trapezius: veins fanning from the neck out over the shoulders');
   for (const s of [1, -1]) for (let k = 0; k < 5; k++) {
     const z0 = -0.02 + 0.035 * k + (rnd() - 0.5) * 0.01, z1 = z0 + (rnd() - 0.5) * 0.06;
@@ -239,16 +286,16 @@ if (CH === 'gamer') {
     for (let i = 0; i <= 18; i++) {
       const u = i / 18, sk = top(s * (0.10 + 0.17 * u), z0 + (z1 - z0) * u + 0.010 * Math.sin(phase));
       phase += 0.5 + rnd() * 0.3;
-      if (sk && sk.n[1] > 0.25) { S.push(sk); R.push(0.0070 * (0.6 + 0.4 * Math.sin(Math.PI * Math.min(1, u * 1.1 + 0.05)))); }
+      if (sk && sk.n[1] > 0.25) { S.push(sk); R.push(0.0105 * (0.6 + 0.4 * Math.sin(Math.PI * Math.min(1, u * 1.1 + 0.05)))); }
     }
     if (S.length > 3) { topEmit(S, R); for (let i = 2; i < S.length - 2; i++) if (rnd() < 0.2) topEmit([S[i]!], [R[i]! * 1.7]); }
   }
   section('down over his deltoids and across the top of his chest');
   for (const s of [1, -1]) {
-    varicose(s * 0.24, 1.40, s * 0.30, 1.22, 0.0070, 0.0050, 2);   // down the front of the shoulder
-    varicose(s * 0.20, 1.40, s * 0.25, 1.24, 0.0065, 0.0048, 1);
-    varicose(s * 0.10, 1.40, s * 0.18, 1.28, 0.0065, 0.0048, 2);   // the collarbone to the top of the chest
-    varicose(s * 0.04, 1.38, s * 0.09, 1.27, 0.0060, 0.0045, 1);
+    varicose(s * 0.24, 1.40, s * 0.30, 1.22, 0.0105, 0.0090, 2, 0, 1, 0.003);   // down the front of the shoulder
+    varicose(s * 0.20, 1.40, s * 0.25, 1.24, 0.0095, 0.0082, 1, 0, 1, 0.003);
+    varicose(s * 0.10, 1.40, s * 0.18, 1.28, 0.0095, 0.0082, 2, 0, 1, 0.003);   // the collarbone to the top of the chest
+    varicose(s * 0.04, 1.38, s * 0.09, 1.27, 0.0085, 0.0074, 1, 0, 1, 0.003);
   }
   // HIS FACE: the head cluster round the skull bone (its own normal-map region: bake with --limb skull). The face
   // sheet covers the middle of the face; the veins run up the temples, over the crown's sides and down the jowls.

@@ -2,12 +2,12 @@
   "generator": "scripts/bake-body-normal.ts",
   "character": "gamer",
   "width": 512,
-  "height": 1025,
+  "height": 1121,
   "version": 2,
   "yMin": 0.624,
   "yMax": 1.6204,
   "axisX": 0,
-  "axisZ": 0.2798,
+  "axisZ": 0.3577,
   "regions": [
     {
       "label": "torso",
@@ -15,12 +15,12 @@
       "head": [
         0,
         1.6204,
-        0.2798
+        0.3577
       ],
       "tail": [
         0,
         0.624,
-        0.2798
+        0.3577
       ],
       "rMax": 0,
       "row0": 1,
@@ -129,6 +129,40 @@
       "rows": 96
     },
     {
+      "label": "stalk1",
+      "kind": "torso",
+      "head": [
+        0,
+        0.95,
+        0.385
+      ],
+      "tail": [
+        0,
+        0.985,
+        0.535
+      ],
+      "rMax": 0.085,
+      "row0": 769,
+      "rows": 48
+    },
+    {
+      "label": "stalk2",
+      "kind": "torso",
+      "head": [
+        0,
+        0.985,
+        0.535
+      ],
+      "tail": [
+        0,
+        1.065,
+        0.588
+      ],
+      "rMax": 0.085,
+      "row0": 817,
+      "rows": 48
+    },
+    {
       "label": "forearm.l",
       "kind": "torso",
       "head": [
@@ -142,7 +176,7 @@
         0.58
       ],
       "rMax": 0.085,
-      "row0": 769,
+      "row0": 865,
       "rows": 64
     },
     {
@@ -159,7 +193,7 @@
         0.58
       ],
       "rMax": 0.085,
-      "row0": 833,
+      "row0": 929,
       "rows": 64
     },
     {
@@ -176,7 +210,7 @@
         0.135
       ],
       "rMax": 0.095,
-      "row0": 897,
+      "row0": 993,
       "rows": 64
     },
     {
@@ -193,7 +227,7 @@
         0.135
       ],
       "rMax": 0.095,
-      "row0": 961,
+      "row0": 1057,
       "rows": 64
     }
   ]

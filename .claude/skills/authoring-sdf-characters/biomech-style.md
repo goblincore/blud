@@ -310,6 +310,18 @@ plugged in. It uses the chair's rig at `scale 1.30`. What it adds:
 - **Veins where the eye goes.** The owner wanted them "pronounced and a lot of them" on the neck, the face and down
   the shaft, not spread over the body. Probe each around its own axis (`axisVein` in `seated-detail-gen.ts`). The
   head gets a `--limb skull` region; its face sheet still covers the middle of the face.
+- **Separate what is fused by cutting it.** His flesh hands melted into the grip, and any veins near them read as
+  tendrils. Sawn wrist stumps in metal prosthetic C-clamps (kit) make a clean break, and each part can then be
+  detailed alone. A stump is the forearm's round end painted raw by a shell 1.2 mm proud. The cuff runs on over most
+  of it, so only a cut face shows; left bare, the painted dome read as a glossy ball. Splinter the bones (`r2` small,
+  `chamfer`) and flatten the flaps along the cut (`deep` 0.4, blend ~0.007), or they read as balls too.
+- **Whatever must stay inside a kit part has to turn with it.** The kit rides a bone's whole frame, but a prim bound
+  to its nearest joint only translates with that point. Bound that way, the stumps slid ~2 cm in their cuffs when
+  the stick tilted. The fix: make the wrist end `rigid` on `hem` with the clamp, and put the join with the stretching
+  forearm inside the cuff.
+- **A curved prop gets chord regions.** One `--torso-seg` down the chord of a quarter arc misses the outside of the
+  bend. Two chords (`stalk1`, `stalk2`) cover it, and the wrinkle folds there are ridge rings that sag on the
+  underside.
 - **A ranged attack does not fit this rig yet.** `onFire` needs a carried prop in the right hand, and here the
   right hand is a front claw. A ranged gamer needs a mind with the muzzle on the head (the headset); it uses the
   hound mind for now.
