@@ -26,6 +26,8 @@
 //     quadruped: its torso lies along z, and a vertical cylinder sees the whole back as one polar cap). Keep the
 //     axis a few degrees off exactly +-z: the frame's f is rest +z made perpendicular to the axis (here and in
 //     body-normal.wgsl.ts), which is undefined on an axis parallel to z;
+//   - an EXTRA TORSO region per `--torso-seg label:hx,hy,hz:tx,ty,tz:rMax:rows` (torso prims only, bounded by rMax:
+//     the gamer's joystick and forearms, torso flesh the main cylinder cannot see);
 //   - a LIMB region per `--limb bone:t0:t1:rMax:rows`: the bone's segment from t0 to t1, its own limb cluster only,
 //     taken at runtime by non-torso hits whose rest point lies along the segment within rMax of it.
 //
@@ -54,11 +56,13 @@ type V = [number, number, number];
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const argv = process.argv.slice(2);
 const limbArgs: string[] = [];
+const segArgs: string[] = [];
 const pos: string[] = [];
 let torsoAxisArg: string | null = null;
 for (let i = 0; i < argv.length; i++) {
   if (argv[i] === '--limb') limbArgs.push(argv[++i]!);
   else if (argv[i] === '--torso-axis') torsoAxisArg = argv[++i]!;
+  else if (argv[i] === '--torso-seg') segArgs.push(argv[++i]!);
   else pos.push(argv[i]!);
 }
 const [name, wArg, hArg] = pos;
@@ -125,6 +129,14 @@ for (const arg of limbArgs) {
   if (!limb) { console.error(`--limb ${arg}: no prims on ${bone}`); process.exit(2); }
   const d = sub(b.tail, b.head);
   regions.push({ label: bone!, limb, head: add(b.head, mul(d, Number(t0))), tail: add(b.head, mul(d, Number(t1))), rMax: Number(rMax), rows: Number(rows), kind: 1, r0: Number(rMax) * 1.5, row0: 0 });
+}
+// EXTRA TORSO REGIONS: `--torso-seg label:hx,hy,hz:tx,ty,tz:rMax:rows` (rest metres), torso prims only, taken at
+// runtime by torso hits within rMax of the segment (nearest axis wins; region 0 has rMax 0 and takes the rest).
+// For torso flesh the one cylinder round the torso cannot see: a prop standing clear of it, or arms across it.
+for (const arg of segArgs) {
+  const [label, h, t, rMax, rows] = arg.split(':');
+  const [hv, tv] = [h, t].map(v => v!.split(',').map(Number) as V);
+  regions.push({ label: label!, limb: 'torso', head: hv!, tail: tv!, rMax: Number(rMax), rows: Number(rows), kind: 0, r0: Number(rMax) * 1.5, row0: 0 });
 }
 let nextRow = 1;   // row 0 is the header
 for (const r of regions) { r.row0 = nextRow; nextRow += r.rows; }

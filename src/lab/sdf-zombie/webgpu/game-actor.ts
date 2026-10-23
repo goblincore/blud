@@ -1324,7 +1324,9 @@ export function createZombieActor(opts: {
           faceHeading:encounterOrder.visible?think.faceHeading:null,fire:false,weaponUp:false};
         if (encounterOrder.halt || mind.debug().holdSecs > 0) think={...think,target:null,halt:true,fire:false};
         if (!encounterOrder.visible) think={...think,attack:null,fire:false,weaponUp:false};
-        if (!encounterOrder.fireAllowed) think={...think,fire:false};
+        // Firing LANES are the soldiers' (encounter-director grants them only to kind 'soldier'); a zombie-kind mind
+        // that fires (the gibbet's squirt, enemy-mind.ts makeGibbetMind) is gated by sight above, not by a lane.
+        if (!encounterOrder.fireAllowed && mind.kind === 'soldier') think={...think,fire:false};
         if (think.target) {
           const routed=routeGoal(think.target,sdt);
           think={...think,target:routed,halt:think.halt || routed===null};
@@ -1515,7 +1517,7 @@ export function createZombieActor(opts: {
           // Absent on every other frame (motion.ts bit-identity contract).
           ...(swingPin === null && think.attack?.variant === 'lunge'
             ? { plantReach: SWORD_TUNING.lungePlantReach }
-            : swingPin === null && think.attack?.variant === 'pounce'
+            : swingPin === null && (think.attack?.variant === 'pounce' || think.attack?.variant === 'stab')
               ? { plantReach: HOUND_TUNING.pouncePlantReach }
               : {}),
         },

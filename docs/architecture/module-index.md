@@ -63,9 +63,9 @@ Each line is the first sentence of the module's header comment.
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
 | [Gibs and gore (logic)](#gibs-and-gore-logic) | 13 | Gib parts, launch, tearing, entrails, strands. |
 | [AI and actors (logic)](#ai-and-actors-logic) | 11 | Brains, the soldier, crowd logic. |
-| [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 9 | First-person mode, dynamite flight, explosions, rockets, tracers. |
+| [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 10 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
-| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 9 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
+| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 10 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
 
@@ -783,8 +783,9 @@ Brains, the soldier, crowd logic.
 
 ## Weapons and FPV (logic)
 
-First-person mode, dynamite flight, explosions, rockets, tracers.
+First-person mode, dynamite flight, explosions, rockets, bile, tracers.
 
+- `bile.ts` — The gibbet's BILE (characters/gibbet.blob): a glob squirted from the drip at the bottom of its caged sac and LOBBED at the player.
 - `blast-refraction.ts` — THE OPTICAL BLAST WAVE — pure scheduling math for the screen-space refraction band that post-aa.ts's blit draws.
 - `dynamite-flight.ts` — Pure ballistic integrator for a thrown dynamite bundle (spec §3): gravity, floor bounce and wall bounce with Blood's elastic feel, fuse countdown…
 - `explosion-aoe.ts` — PURE explosion AOE resolver (spec §4, task X1.23-3): turns a detonation point into the complete effect bundle the lab's gore stack already…
@@ -818,6 +819,7 @@ What fits no area above: the original WebGL lab shader, resolution scaling, samp
 - `depth-diff.ts` — Depth diff — comparing the INSIDE of the outline: per-pixel surface depth of the compiled body against the reference mesh, where both agree the…
 - `expression-library.ts` — Which expression clips (and which tuning) each character has, by the name the lab and the game use for it.
 - `expression.ts` — THE EXPRESSION LAYER's pure half (spec docs/superpowers/specs/2026-10-13-goblin-expressions-design.md, plan…
+- `joystick.ts` — THE GAMER WORKS HIS JOYSTICK (characters/gamer.blob; owner: "he jiggles the joystick back n forth or up and down like he's controlling something in…
 - `march.glsl.ts` — Shader source as strings.
 - `morph.ts` — PER-PRIM MORPHS: a per-prim delta per face channel that the expression layer's weight scales (goblin expressions Task 12, a minimal approach C; spec…
 - `skull-fracture.ts` — Anatomical skull damage and ray selection.

@@ -33,6 +33,7 @@ import type { ArmStyle } from './gait';
 import type { CarryName } from './carry';
 import type { SwingVariant } from './attack';
 import { isSoldierFamily, wantsTorsoGuards, type MotionProfile } from './motion-profile';
+import { joystickSwell } from './joystick';
 import { makeRng, type Rng, type WanderBounds } from './wander';
 import type { Wound } from './damage';
 import type { LimbId, Vec3 } from './types';
@@ -207,6 +208,12 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
     }
     m.lastRootShift = f.rootShift;
     m.lastBodyYaw = f.bodyYaw;
+    // A BREATHING joystick (MotionProfile.joystick.swell, the gamer): its `swell` morph weight joins the caller's, from the gait
+    // clock and the attack's phase, so the knob breathes in the game with no expression layer behind it.
+    const joy = input.profile?.joystick;
+    const morphs = joy?.swell
+      ? { ...input.morphs, swell: joystickSwell(m.motionState.gait.time, input.attack ? input.attack.phase : null, joy) }
+      : input.morphs;
 
     let points = stepRig(
       { ...m.bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw, posePins: f.posePins,
@@ -234,7 +241,7 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
       ...m.bound,
       rig: constrainRigBends({ ...m.bound.rig, points, headFollowsRig: isSoldierFamily(input.profile) && f.collapsed, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape,
         // This frame's weights, or none: a caller that stops passing them must not leave last frame's face behind.
-        ...(input.morphs || m.bound.rig.morphs ? { morphs: input.morphs } : {}) },
+        ...(morphs || m.bound.rig.morphs ? { morphs } : {}) },
         f.collapsed ? f.floorY : undefined),
     };
     // Fire kicks: point shoves THROUGH the rig, after the bend constraints

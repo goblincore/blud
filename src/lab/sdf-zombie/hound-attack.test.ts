@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { HOUND_TUNING, houndGapeAt, houndPose, pounceAirborne } from './hound-attack';
-import { makeHoundMind } from './webgpu/enemy-mind';
+import { GIBBET_TUNING, HOUND_TUNING, houndGapeAt, houndPose, pounceAirborne } from './hound-attack';
+import { makeGibbetMind, makeHoundMind } from './webgpu/enemy-mind';
 import type { MindInput } from './webgpu/enemy-mind';
 
 const input = (dist: number, over: Partial<MindInput> = {}): MindInput => ({
@@ -63,5 +63,78 @@ describe('makeHoundMind', () => {
     }
     expect(variant).toBe('pounce');
     expect(total).toBeCloseTo(Math.min(HOUND_TUNING.pounceDistance, 2.8 - HOUND_TUNING.pounceStopShort), 2);
+  });
+});
+
+describe('the gibbet\'s stab and squirt', () => {
+  it('the stab is ONE leg: it cocks high, the body rears, then the spike and the body lunge; the other leg stays down', () => {
+    // the stab's own clock: fully cocked at 0.42, struck by 0.52 (HOUND_TUNING.stab)
+    const rear = houndPose(0.41, 'stab', 'R'), thrust = houndPose(0.6, 'stab', 'R');
+    expect(rear.offsets.handR![1], 'the paw cocked high').toBeGreaterThan(0.4);
+    expect(rear.offsets.handTipR![2], 'the spike aimed forward of the paw').toBeGreaterThan(rear.offsets.handR![2]);
+    expect(rear.rootOffset[2], 'the body rears back').toBeLessThan(-0.05);
+    expect(thrust.offsets.handR![2]).toBeGreaterThan(0.5);
+    expect(thrust.rootOffset[2], 'the body lunges with it').toBeGreaterThan(0.15);
+    expect(thrust.offsets.handL, 'the other leg is not driven').toBeUndefined();
+    expect(houndPose(0.6, 'stab', 'L').offsets.handL![0], 'mirrored for the left').toBeCloseTo(-thrust.offsets.handR![0], 6);
+    // the hind legs stay on the pelvis: the hip joints move with the root (the detached-thighs bug)
+    for (const p of [rear, thrust]) {
+      expect(p.offsets.hipL).toEqual(p.rootOffset);
+      expect(p.offsets.hipR).toEqual(p.rootOffset);
+    }
+    expect(houndPose(0.47, 'stab', 'R').offsets.handR![2], 'the strike snaps: half way in a twentieth of the swing')
+      .toBeGreaterThan(0.2);
+    expect(pounceAirborne(0.5, 'stab', 'R', 'R')).toBe(true);
+    expect(pounceAirborne(0.5, 'stab', 'R', 'L')).toBe(false);
+    expect(houndGapeAt(0.3, 'stab')).toBe(0);
+  });
+
+  it('the squirt squats the whole body: haunches down, the front up, the head aside; the sac swings back then forward', () => {
+    const back = houndPose(0.2, 'squirt'), fwd = houndPose(0.55, 'squirt');
+    for (const p of [back, fwd]) {
+      expect(p.rootOffset[1], 'haunches down').toBeLessThan(-0.1);
+      expect(p.offsets.chest![1], 'the front stays up').toBeGreaterThan(0);
+      expect(Math.hypot(p.offsets.head![0], p.offsets.head![1]), 'the head out of the way').toBeGreaterThan(0.15);
+    }
+    expect(back.offsets.hem![2], 'sac swings back').toBeLessThan(-0.1);
+    expect(fwd.offsets.hem![2], 'then forward').toBeGreaterThan(0.2);
+    expect(houndPose(0, 'squirt').rootOffset).toEqual([0, 0, 0]);
+  });
+
+  it('stabs a player inside its reach, contact exactly once', () => {
+    const mind = makeGibbetMind();
+    let contacts = 0, swung = false, fired = 0;
+    for (let i = 0; i < 240; i++) {
+      const out = mind.step(input(1.5));
+      if (out.attack) { swung = true; expect(out.attack.variant).toBe('stab'); }
+      if (out.contact) contacts++;
+      if (out.fire) fired++;
+      if (swung && !out.attack) break;
+    }
+    expect(swung).toBe(true);
+    expect(contacts).toBe(1);
+    expect(fired).toBe(0);
+  });
+
+  it('squirts at a player out of reach: halts, faces, one glob per squirt, then cools down', () => {
+    const mind = makeGibbetMind();
+    let fired = 0, squirts = 0, wasSquirting = false;
+    // Two squirts and the cooldown between them, ending well before a third would start.
+    const secs = GIBBET_TUNING.squirtFirst + 2 * GIBBET_TUNING.squirtSec + GIBBET_TUNING.squirtCooldown + 0.5;
+    for (let i = 0; i < secs * 60; i++) {
+      const out = mind.step(input(6));
+      const squirting = out.attack?.variant === 'squirt';
+      if (squirting) { expect(out.halt).toBe(true); expect(out.faceHeading).toBeCloseTo(0, 6); }
+      if (squirting && !wasSquirting) squirts++;
+      wasSquirting = squirting;
+      if (out.fire) fired++;
+    }
+    expect(squirts).toBe(2);
+    expect(fired).toBe(2);
+  });
+
+  it('does not squirt at a player it cannot see', () => {
+    const mind = makeGibbetMind();
+    for (let i = 0; i < 300; i++) expect(mind.step(input(6, { lineOfSight: false })).fire).toBe(false);
   });
 });

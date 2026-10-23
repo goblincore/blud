@@ -21,7 +21,7 @@
 // the face's own sense (positive smiles), so `actuate` SUBTRACTS it from mouthCurve.
 import type { FaceSheetParams } from './blob-face-sheet';
 
-export const CHANNEL_NAMES = ['gape', 'smile', 'browDown', 'lipCurl', 'lid', 'squint', 'squash', 'furrow', 'sneer'] as const;
+export const CHANNEL_NAMES = ['gape', 'smile', 'browDown', 'lipCurl', 'lid', 'squint', 'squash', 'furrow', 'sneer', 'swell'] as const;
 export type ChannelName = typeof CHANNEL_NAMES[number];
 
 /** Every channel, resolved. Ranges: gape 0..1; smile -1..1 (negative frowns); browDown -1..1 (negative raises); lipCurl 0..1;
@@ -30,11 +30,12 @@ export type ChannelName = typeof CHANNEL_NAMES[number];
  *  the cartoon's squash and stretch; squash.ts, applied by rig-bind's applyRig through the morph weights); furrow 0..1 (Task 19:
  *  the brows knit inward into a furrow, painted creases between them and the inner-brow bulges, the evil grin's and scowl's);
  *  sneer 0..1 (Task 20: the evil grin's mouth on top of a smile, the upper lip curled off the fangs and the corners hiked, lopsided;
- *  geometry only, the character's `morph=sneer:` words, never the sheet). */
+ *  geometry only, the character's `morph=sneer:` words, never the sheet); swell 0..1 (not a face: a BREATHING part, the gamer's
+ *  joystick knob and the rocket in it, `morph=swell:` words, driven by actor.ts from MotionProfile.joystick.swell). */
 export type Channels = Record<ChannelName, number>;
 
 export const REST_CHANNELS: Readonly<Channels> = {
-  gape: 0, smile: 0, browDown: 0, lipCurl: 0, lid: 0, squint: 0, squash: 0, furrow: 0, sneer: 0,
+  gape: 0, smile: 0, browDown: 0, lipCurl: 0, lid: 0, squint: 0, squash: 0, furrow: 0, sneer: 0, swell: 0,
 };
 
 export interface ExpressionKey {
@@ -183,6 +184,7 @@ export function actuate(channels: Channels, base: FaceSheetParams, tuning: Expre
   const squash = clamp(channels.squash, -1, 1);
   const furrow = clamp(channels.furrow, 0, 1);
   const sneer = clamp(channels.sneer, 0, 1);
+  const swell = clamp(channels.swell, 0, 1);
   const grin = Math.max(smile, 0);
   const raise = Math.max(-browDown, 0);
   // The eye params are only written when they move, so a rest frame (or a tuning without the Task 15 fields) hands back the
@@ -196,7 +198,7 @@ export function actuate(channels: Channels, base: FaceSheetParams, tuning: Expre
   const knit = furrow * (tuning.furrowSheet ?? 0);
   return {
     jawGape: gape * tuning.maxGape,
-    morphs: { gape, smile, browDown, lipCurl, lid, squint, squash, furrow, sneer },
+    morphs: { gape, smile, browDown, lipCurl, lid, squint, squash, furrow, sneer, swell },
     sheet: {
       ...base,
       mouthCurve: base.mouthCurve - smile * tuning.smileCurve + lipCurl * tuning.curlCurve,

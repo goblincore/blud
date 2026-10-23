@@ -443,9 +443,18 @@ const EXPR_YAW = Number(process.env.BLOB_YAW ?? 0);
 // pose after firstFrame + i*step steps at 1/60 (holdPose('walk', n), deterministic per frame). For gaits whose read is
 // motion rather than a pose: the gibbet's swinging sac (2026-10-22), e.g. BLOB_WALK_SWEEP=120:4 with 12 frames.
 const WALK_SWEEP = process.env.BLOB_WALK_SWEEP ? process.env.BLOB_WALK_SWEEP.split(':').map(Number) : null;
+// BLOB_SWING_SWEEP=<variant>:<p0>:<p1> shoots a melee SWING as an animation at a fixed yaw (BLOB_YAW): frame i holds
+// the variant at phase p0..p1 on a standing body (holdPose('aim', 40, swing)), e.g. BLOB_SWING_SWEEP=stab:0:1.
+const SWING_SWEEP = process.env.BLOB_SWING_SWEEP
+  ? (([v, a, b]) => ({ variant: v, p0: Number(a), p1: Number(b) }))(process.env.BLOB_SWING_SWEEP.split(':')) : null;
 
 for (let i = 0; i < FRAMES; i++) {
-  const yaw = EXPR_SWEEP || WALK_SWEEP ? EXPR_YAW : (WIND_SWEEP || ANCHOR_SWEEP) ? 0 : (i / FRAMES) * Math.PI * 2;
+  const yaw = EXPR_SWEEP || WALK_SWEEP || SWING_SWEEP ? EXPR_YAW : (WIND_SWEEP || ANCHOR_SWEEP) ? 0 : (i / FRAMES) * Math.PI * 2;
+  if (SWING_SWEEP) {
+    const ph = FRAMES > 1 ? SWING_SWEEP.p0 + ((SWING_SWEEP.p1 - SWING_SWEEP.p0) * i) / (FRAMES - 1) : SWING_SWEEP.p1;
+    await evaluate(`window.__sdfLab.holdPose('aim', 40, ${JSON.stringify({ variant: SWING_SWEEP.variant, phase: ph })})`);
+    await sleep(300);
+  }
   if (WALK_SWEEP) {
     await evaluate(`window.__sdfLab.holdPose('walk', ${WALK_SWEEP[0] + i * WALK_SWEEP[1]})`);
     await sleep(300);

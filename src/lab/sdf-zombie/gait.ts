@@ -566,6 +566,31 @@ export const GIBBET_STALK: GaitProfile = {
   rockAmp: 0.02,
 };
 
+/** THE CHAIR's waddle (characters/chair.blob): how you walk a heavy chair
+ *  across a floor, by rocking it corner to corner. A PACE (forePhase 0): the
+ *  two legs on one side lift together while the chair tips onto the other
+ *  pair, so the whole throne rolls side to side and the sitter's head lolls
+ *  with it. Short legs, short low steps; the sway and rock are the read. */
+export const CHAIR_WADDLE: GaitProfile = {
+  ...GOREHOUND,
+  name: 'chair-waddle',
+  forePhase: 0,
+  strideFreq: 1.6,
+  stanceDuty: 0.6,
+  strideLen: 0.22,
+  landAhead: 0.5,
+  footLift: 0.09,
+  footPush: 0.03,
+  kneeBend: 0.05,
+  kneeLift: 0.04,
+  elbowBow: 0.05,
+  swayAmp: 0.045,
+  shoulderSway: 0.3,
+  bobAmp: 0.02,
+  rockAmp: 0.05,
+  headBob: 0.8,
+};
+
 /** Lerp every numeric knob; strings (name, armStyle) snap at w = 0.5 so the
  *  hands never hover between two grips. */
 export function blendProfiles(a: GaitProfile, b: GaitProfile, w: number): GaitProfile {
@@ -900,6 +925,9 @@ export function stepGait(
     const missing = side === 'L' ? missingL : missingR;
     const wounded = side === 'L' ? woundedL : woundedR;
     if (missing) return Z;
+    // A QUADRUPED's hip joints ride the hips' bob: its rigid kit (the gibbet's beam, the hip sockets) shows the gap a
+    // biped's blended flesh hides. Bipeds keep their exact pose (the gait pins), so the bob is added only for 'foreleg'.
+    if (armStyle === 'foreleg') return [0.5 * sway * (side === 'L' ? aL : aR), (wounded ? -T.woundedHipDrop : 0) + bob * 0.9, 0];
     return [0.5 * sway * (side === 'L' ? aL : aR), wounded ? -T.woundedHipDrop : 0, 0];
   };
 

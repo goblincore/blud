@@ -1,0 +1,98 @@
+{
+  "generator": "scripts/bake-body-normal.ts",
+  "character": "chair",
+  "width": 512,
+  "height": 577,
+  "version": 2,
+  "yMin": 0.48,
+  "yMax": 1.4802,
+  "axisX": 0,
+  "axisZ": 0.0656,
+  "regions": [
+    {
+      "label": "torso",
+      "kind": "torso",
+      "head": [
+        0,
+        1.4802,
+        0.0656
+      ],
+      "tail": [
+        0,
+        0.48,
+        0.0656
+      ],
+      "rMax": 0,
+      "row0": 1,
+      "rows": 320
+    },
+    {
+      "label": "clavicle.l",
+      "kind": "limb",
+      "head": [
+        0.19,
+        0.7197,
+        0.0099
+      ],
+      "tail": [
+        0.19,
+        0.5797,
+        0.4165
+      ],
+      "rMax": 0.11,
+      "row0": 321,
+      "rows": 64
+    },
+    {
+      "label": "clavicle.r",
+      "kind": "limb",
+      "head": [
+        -0.19,
+        0.7197,
+        0.0099
+      ],
+      "tail": [
+        -0.19,
+        0.5797,
+        0.4165
+      ],
+      "rMax": 0.11,
+      "row0": 385,
+      "rows": 64
+    },
+    {
+      "label": "upperarm.l",
+      "kind": "limb",
+      "head": [
+        0.19,
+        0.5797,
+        0.4165
+      ],
+      "tail": [
+        0.2204,
+        0.2903,
+        0.3439
+      ],
+      "rMax": 0.08,
+      "row0": 449,
+      "rows": 64
+    },
+    {
+      "label": "upperarm.r",
+      "kind": "limb",
+      "head": [
+        -0.19,
+        0.5797,
+        0.4165
+      ],
+      "tail": [
+        -0.2204,
+        0.2903,
+        0.3439
+      ],
+      "rMax": 0.08,
+      "row0": 513,
+      "rows": 64
+    }
+  ]
+}

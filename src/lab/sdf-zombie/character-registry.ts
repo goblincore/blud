@@ -49,6 +49,8 @@ import deadeyeBlobSrc from './characters/deadeye.blob?raw';
 import gorehoundBlobSrc from './characters/gorehound.blob?raw';
 import gutcrawlerBlobSrc from './characters/gutcrawler.blob?raw';
 import gibbetBlobSrc from './characters/gibbet.blob?raw';
+import chairBlobSrc from './characters/chair.blob?raw';
+import gamerBlobSrc from './characters/gamer.blob?raw';
 import bloatmawBlobSrc from './characters/bloatmaw.blob?raw';
 import teratomaBlobSrc from './characters/teratoma.blob?raw';
 import gnasherBlobSrc from './characters/gnasher.blob?raw';
@@ -59,7 +61,7 @@ import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
 import brideBlobSrc from './characters/bride.blob?raw';
 import venusBlobSrc from './characters/venus.blob?raw';
 import {
-  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, BUTCHER_PROFILE, FLAYER_PROFILE, DEADEYE_PROFILE, GOREHOUND_PROFILE, GUTCRAWLER_PROFILE, GIBBET_PROFILE, motionProfileFor, type MotionProfile,
+  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, BUTCHER_PROFILE, FLAYER_PROFILE, DEADEYE_PROFILE, GOREHOUND_PROFILE, GUTCRAWLER_PROFILE, GIBBET_PROFILE, CHAIR_PROFILE, GAMER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
 
 /** A face sheet's texture and its crop. `mean` is the level the shader
@@ -391,6 +393,30 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     bodyNormal: { url: '/assets/lab/gibbet-body-n.png', meta: '/assets/lab/gibbet-body-n.json', strength: 1 },
     face: ZOMBIE_FLAT,
     profile: GIBBET_PROFILE,
+  },
+  // The walking throne (chair.blob's header): a man fused seated into a
+  // chair of bone and bone-metal, his thighs the seat, his forearms the
+  // armrests, his shins the front legs. Kit: assets-source/chair-kit/.
+  chair: {
+    name: 'chair', src: chairBlobSrc,
+    kit: '/assets/lab/chair-kit.gltf',
+    // Baked scars, ribs and varicose veins (chair.detail, scripts/seated-detail-gen.ts).
+    bodyNormal: { url: '/assets/lab/chair-body-n.png', meta: '/assets/lab/chair-body-n.json', strength: 1 },
+    face: ZOMBIE_FLAT,
+    profile: CHAIR_PROFILE,
+  },
+  // The chair's BOSS variant (gamer.blob's header): a swollen man fused into
+  // a gaming chair, a VR headset over his eyes, tubes and cables into him,
+  // both hands on a joystick of flesh out of his navel. Kit:
+  // assets-source/gamer-kit/.
+  gamer: {
+    name: 'gamer', src: gamerBlobSrc,
+    kit: '/assets/lab/gamer-kit.gltf',
+    // Baked varicose veins and stretch marks (gamer.detail, scripts/seated-detail-gen.ts).
+    // Strength 1.5: the owner wants the veins on his neck, face and the stick "pronounced".
+    bodyNormal: { url: '/assets/lab/gamer-body-n.png', meta: '/assets/lab/gamer-body-n.json', strength: 1.5 },
+    face: ZOMBIE_FLAT,
+    profile: GAMER_PROFILE,
   },
   cyberdemon: {
     name: 'cyberdemon', src: cyberdemonBlobSrc,
