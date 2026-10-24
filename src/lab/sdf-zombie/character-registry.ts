@@ -489,7 +489,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // mean MEASURED off the PNG (make-siren-face.py prints it): the game uses
     // it as is, and bakedFace's fallback of 1 would darken her face by half
     // (the sheet's base grey is dark on purpose: make-siren-face.py).
-    face: { ...bakedFace('siren-face.png'), mean: 0.433815 },
+    face: { ...bakedFace('siren-face.png'), mean: 0.441372 },
     profile: motionProfileFor('siren'),
   },
 

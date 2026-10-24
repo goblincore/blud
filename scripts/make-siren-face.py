@@ -96,8 +96,9 @@ PUPIL = (0.02, 0.02, 0.02)
 CATCH = (1.40, 2.00, 2.10)     # the catchlight: clamps to near-white
 INK = (0.02, 0.015, 0.015)     # liner and lashes
 BROW = (0.07, 0.05, 0.05)      # cool near-black brown
-CREASE = (0.34, 0.24, 0.28)    # lid crease: a firm dark fold line
-LID = (0.44, 0.30, 0.38)       # smoky plum on the lid (owner: a bigger, darker lid)
+CREASE = (0.40, 0.26, 0.40)    # the lid's crease: a firm plum line round the top of the big lid
+LID = (0.98, 0.66, 1.45)       # lavender-pink shadow over the whole heavy lid (the 1940s pin-up's)
+LID_ROUND = (1.10, 1.08, 1.08) # a soft highlight across the lid's middle: the lid reads convex, a fold over the eye
 BROW_BONE = (1.10, 1.08, 1.06)  # a lift under the brow, so the lid reads set back
 BLUSH = (1.08, 0.78, 0.82)     # rose flush
 LIP = (0.52, 0.00, 0.07)       # red lipstick (owner, 2026-10-23): crimson; warmer values rendered salmon on her skin
@@ -110,16 +111,22 @@ LIP_LINE = (0.22, 0.02, 0.04)  # the line where the lips meet
 EYE_IN, EYE_OUT = 9.0, 46.0
 EYE_Y = -29.0          # eye centre line at the inner corner, rel cranium centre
 EYE_LIFT = 3.0         # outer corner this much higher
-EYE_HALF_H = 14.5      # upper lid height above the centre line (13: "too tight")
+EYE_HALF_H = 14.5      # the eye's full height above the centre line: the top of the big lid
+# HEAVY LIDS (owner, 2026-10-24: "the eyelids are really big and long lashes,
+# eyes are not so wide open though eyes are big"; the 1940s cartoon pin-up):
+# the upper lid's EDGE drops to this share of EYE_HALF_H, so the lid covers
+# the top ~40% of the iris and the eye looks half-closed, knowing. Everything
+# between the lid edge and the eye's full top is LID, painted lavender-pink.
+LID_OPEN = 0.40
 EYE_LOW = 0.78         # the lower lid's depth, as a share of EYE_HALF_H
-IRIS_X, IRIS_Y, IRIS_RX, IRIS_RY = 27.5, -27.5, 9.8, 13.0
-PUPIL_RX, PUPIL_RY = 3.8, 5.6
+IRIS_X, IRIS_Y, IRIS_RX, IRIS_RY = 28.0, -28.5, 9.6, 11.5
+PUPIL_RX, PUPIL_RY = 3.4, 4.6
 # The mouth line and lip peaks are siren.blob's lip prims, PROBED (where
 # each prim lies closest under the skin): upper peak -78, lower -89.5, the
 # line between at -81.5 mm (the owner's "closer to the eyes" pass moved the
 # mouth up 4.8 mm). An earlier sheet put the line 2.3 mm under its lips.
 MOUTH_Y = -81.5
-MOUTH_HALF_W = 19.5
+MOUTH_HALF_W = 18.0
 
 
 def mm(x: float, y: float) -> tuple[float, float]:
@@ -170,10 +177,20 @@ def almond_edge(t: float, upper: bool, grow: float = 0.0) -> tuple[float, float]
     x = EYE_IN + (EYE_OUT - EYE_IN) * t
     yc = EYE_Y + EYE_LIFT * t
     if upper:
-        h = EYE_HALF_H * math.sin(math.pi * t ** 0.80) ** 0.55 + grow
+        # The LID EDGE: low and only gently curved (a drowsy lid is nearly
+        # straight across), highest a little past the middle.
+        h = LID_OPEN * EYE_HALF_H * math.sin(math.pi * t ** 0.95) ** 0.45 + grow
         return x, yc + h
     h = EYE_LOW * EYE_HALF_H * math.sin(math.pi * t ** 1.1) ** 0.8 + grow
     return x, yc - h
+
+
+def orbit_top(t: float, grow: float = 0.0) -> tuple[float, float]:
+    """The top of the eye's full shape — where the big lid ends at its
+    crease — t 0 inner -> 1 outer."""
+    x = EYE_IN + (EYE_OUT - EYE_IN) * t
+    yc = EYE_Y + EYE_LIFT * t
+    return x, yc + EYE_HALF_H * math.sin(math.pi * t ** 0.80) ** 0.55 + grow
 
 
 def both(pts):
@@ -193,34 +210,39 @@ def almond_mask(grow: float = 0.0) -> Image.Image:
 # Layers: each returns (mask L, multiplier rgb, opacity).
 
 def lid_layers():
-    """A PROMINENT upper lid (owner, 2026-10-23: "upper eyelid more
-    prominent"): smoky mauve from the lash line up to a firm dark crease
-    ~5 mm above it, darkest at the outer corner, with a faint lift under
-    the brow so the lid reads as a fold set back under the brow bone (the
-    carved socket in siren.blob does the rest)."""
+    """THE HEAVY LID: everything from the dropped lid edge up to the eye's
+    full top plus ~3 mm, lavender-pink, deepest at the lash line and swept
+    out past the outer corner; a soft highlight across its middle so it
+    reads as a convex fold over the eye; a firm plum crease round its top;
+    a faint lift under the brow."""
     lid, d = new_mask()
-    n = 24
+    n = 30
     for s_ in (1.0, -1.0):
-        # 8 mm deep over the lid (5 mm read as a thin stripe), swept up and
-        # out past the outer corner into a smoky wing.
-        band = [almond_edge(i / n, True, 0.0) for i in range(n + 1)] + \
-               [almond_edge(1 - i / n, True, 8.0 + 2.0 * (1 - i / n)) for i in range(n + 1)]
+        band = [almond_edge(i / n, True, -0.5) for i in range(n + 1)] + \
+               [orbit_top(1 - i / n, 3.0) for i in range(n + 1)]
         d.polygon([mm(s_ * x, y) for x, y in band], fill=255)
         ox, oy = almond_edge(1.0, True, 0.0)
-        ellipse(d, s_ * (ox + 1.0), oy + 4.5, 7.5, 6.0)   # deeper at the outer corner
-    lid = blur(lid, 1.0)
+        ellipse(d, s_ * (ox + 2.0), oy + 3.5, 7.0, 5.0)   # swept out past the corner
+    lid = blur(lid, 1.2)
+    rnd, dr = new_mask()
+    for s_ in (1.0, -1.0):
+        mx, my = almond_edge(0.55, True, 0.0)
+        tx, ty = orbit_top(0.55, 0.0)
+        ellipse(dr, s_ * mx, (my + ty) / 2 + 1.0, 11.0, 3.5)
+    rnd = blur(rnd, 2.0)
     crease, dc = new_mask()
-    pts = [almond_edge(0.08 + 0.92 * t / 12, True, 8.0 + 2.0 * t / 12) for t in range(13)]
+    pts = [orbit_top(0.06 + 0.94 * t / 14, 3.0) for t in range(15)]
     ox, oy = pts[-1]
-    pts.append((ox + 2.5, oy - 0.6))
+    pts.append((ox + 3.0, oy - 1.5))
     for side in both(pts):
-        stroke(dc, side, 0.6, 1.3)
-    crease = blur(crease, 0.6)
+        stroke(dc, side, 0.6, 1.4)
+    crease = blur(crease, 0.5)
     bone, db = new_mask()
     for s_ in (1.0, -1.0):
-        ellipse(db, s_ * 31.0, EYE_Y + EYE_HALF_H + 12.0, 15.0, 3.0)
+        tx, ty = orbit_top(0.55, 0.0)
+        ellipse(db, s_ * tx, ty + 8.0, 15.0, 3.0)
     bone = blur(bone, 2.0)
-    return [(bone, BROW_BONE, 0.8), (lid, LID, 0.92), (crease, CREASE, 0.80)]
+    return [(bone, BROW_BONE, 0.8), (lid, LID, 0.95), (rnd, LID_ROUND, 0.7), (crease, CREASE, 0.85)]
 
 
 def blush_layer():
@@ -231,15 +253,17 @@ def blush_layer():
 
 
 def brow_layer():
-    """Arched brows SLANTING IN (owner, 2026-10-23): the inner head set low
-    toward the nose and rising steeply to a high arch two thirds out, then
-    falling off: a sultry, knowing brow rather than the first pass's flat
-    one."""
+    """Thin, high, gently arched brows (the 1940s pin-up's, owner
+    2026-10-24): the peak two thirds out, both ends falling away."""
     m, d = new_mask()
     # Above the big eye (its lid tops out at rel ~-15 mm).
-    path = [(11.0, -6.5), (17.0, -2.8), (25.0, 1.4), (33.0, 4.2), (39.0, 4.8), (45.0, 2.6), (52.0, -3.0)]
+    # THIN, HIGH ARCHES (the pin-up's): set well above the big lid, rising
+    # from a low inner head to a peak two thirds out, falling off sharply.
+    # Inner heads NOT low: a first pass dropped them to -4 mm and the
+    # brows rendered as an angry V. A gentle high arch reads knowing.
+    path = [(13.0, 3.0), (19.0, 6.2), (26.0, 8.6), (33.0, 9.8), (39.0, 9.4), (45.0, 6.8), (51.0, 2.0)]
     for side in both(path):
-        stroke(d, side, 4.2, 1.0)
+        stroke(d, side, 2.6, 0.7)
     return [(blur(m, 0.35), BROW, 0.92)]
 
 
@@ -252,7 +276,8 @@ def eye_layers():
     out = [(blur(alm, 0.25), SCLERA, 1.0)]
     sh, d = new_mask()
     for s_ in (1.0, -1.0):
-        ellipse(d, s_ * IRIS_X, EYE_Y + EYE_HALF_H + 1.5, 20.0, 6.0)
+        lx, ly = almond_edge(0.5, True, 0.0)
+        ellipse(d, s_ * IRIS_X, ly + 1.0, 20.0, 4.0)
     out.append((clip(blur(sh, 1.2)), SCLERA_SHADE, 0.9))
     for colour, rx, ry, dy, b in ((LIMBAL, IRIS_RX, IRIS_RY, 0.0, 0.3),
                                   (IRIS_DARK, IRIS_RX - 0.8, IRIS_RY - 0.9, 0.0, 0.4),
@@ -268,8 +293,8 @@ def eye_layers():
     for s_ in (1.0, -1.0):
         # One key light: a big catchlight upper-left on both eyes, a small
         # one lower-right.
-        ellipse(d, s_ * IRIS_X - 3.4, IRIS_Y + 4.2, 2.6, 3.0)
-        ellipse(d, s_ * IRIS_X + 3.0, IRIS_Y - 4.6, 1.1, 1.1)
+        ellipse(d, s_ * IRIS_X - 3.2, IRIS_Y + 1.6, 2.0, 2.0)
+        ellipse(d, s_ * IRIS_X + 3.0, IRIS_Y - 5.0, 0.9, 0.9)
     out.append((blur(c, 0.15), CATCH, 1.0))
     return out
 
@@ -284,11 +309,11 @@ def liner_layer():
     ox, oy = upper[-1]
     # HEAVIER (owner, twice): 3 mm along the lid, swelling to 4.5 mm over
     # the outer third, and a long thick wing 12 mm out and up.
-    upper += [(ox + 4.0, oy + 1.6), (ox + 8.0, oy + 4.0), (ox + 12.0, oy + 6.5)]
+    upper += [(ox + 4.0, oy + 1.4), (ox + 8.0, oy + 3.4), (ox + 11.0, oy + 5.5)]
     for side in both(upper):
-        stroke(d, side, 3.0, 1.8)
-    for side in both([almond_edge(1 - i / n * 0.70, True, 1.6) for i in range(n)]):
-        stroke(d, side, 4.5, 1.4)
+        stroke(d, side, 2.8, 1.6)
+    for side in both([almond_edge(1 - i / n * 0.75, True, 1.4) for i in range(n)]):
+        stroke(d, side, 3.6, 1.2)
     lower, dl = new_mask()
     for side in both([almond_edge(0.35 + 0.65 * i / 12, False, 0.3) for i in range(13)]):
         stroke(dl, side, 0.8, 1.8)
@@ -296,23 +321,24 @@ def liner_layer():
 
 
 def lash_layer():
-    """LARGE lashes (owner): seven thick clumps along the outer two thirds of
-    the upper lid, 4-9 mm long, curling up and out, longest at the corner;
-    three short ones under the outer corner."""
+    """LONG LASHES at the heavy lid's OUTER half (the pin-up's): five thick,
+    tapered sweeps, 9-16 mm, going OUT more than up and curling up a little
+    at the tips, the longest past the outer corner. (A first pass stood
+    eight lashes up across the lid like a comb and hid the lid colour.)
+    Two short ones under the outer corner."""
     m, d = new_mask()
     for s_ in (1.0, -1.0):
-        for t, length, ang in ((0.40, 4.0, 95), (0.52, 5.0, 85), (0.63, 6.0, 72), (0.73, 7.0, 58),
-                               (0.82, 8.0, 44), (0.90, 8.5, 30), (0.97, 9.0, 16)):
-            x, y = almond_edge(t, True, 1.2)
+        for t, length, ang in ((0.62, 9.0, 52), (0.74, 11.5, 38), (0.85, 13.5, 26), (0.94, 15.5, 14), (1.00, 15.0, 2)):
+            x, y = almond_edge(t, True, 0.6)
             pts = []
-            for j in range(6):
-                f = j / 5
-                a = math.radians(ang) - 0.55 * f * f
-                pts.append((x + math.cos(a) * length * f, y + math.sin(a) * length * f))
-            stroke(d, [(s_ * px_, py_) for px_, py_ in pts], 1.6, 0.25)
-        for t in (0.70, 0.82, 0.92):
+            for j in range(8):
+                f = j / 7
+                a = math.radians(ang) + 0.45 * f * f    # curl up at the tips
+                pts.append((x + math.cos(a) * length * f, y + math.sin(a) * length * f * 0.80))
+            stroke(d, [(s_ * px_, py_) for px_, py_ in pts], 2.8, 0.4)
+        for t in (0.80, 0.92):
             x, y = almond_edge(t, False, 0.6)
-            pts = [(x, y), (x + 1.0, y - 1.6), (x + 1.8, y - 3.0)]
+            pts = [(x, y), (x + 1.2, y - 1.8), (x + 2.2, y - 3.2)]
             stroke(d, [(s_ * px_, py_) for px_, py_ in pts], 0.9, 0.2)
     return [(blur(m, 0.15), INK, 0.97)]
 
@@ -335,12 +361,13 @@ def lip_layers():
     for i in range(41):
         x = -w + 2 * w * i / 40
         t = abs(x) / w
-        h = 9.0 * math.sin(math.pi * (1 - t) / 2) ** 0.70 - 1.8 * math.exp(-(x / (0.13 * w)) ** 2)
+        # A pronounced cupid's bow: two peaks and a deep dip (the pout).
+        h = 10.5 * math.sin(math.pi * (1 - t) / 2) ** 0.65 - 3.0 * math.exp(-(x / (0.14 * w)) ** 2)
         pts.append(mm(x, MOUTH_Y + max(0.0, h)))
     for i in range(41):
         x = w - 2 * w * i / 40
         t = abs(x) / w
-        h = 12.5 * math.sin(math.pi * (1 - t) / 2) ** 0.80
+        h = 14.0 * math.sin(math.pi * (1 - t) / 2) ** 0.75
         pts.append(mm(x, MOUTH_Y - h))
     d.polygon(pts, fill=255)
     line, dl = new_mask()

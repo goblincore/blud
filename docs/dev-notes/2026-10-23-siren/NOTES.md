@@ -83,3 +83,14 @@ at 0.16 of the thigh, the pelvis is a downward-tapering cone (r 0.128 -> 0.066) 
 set back, with a soft lower-belly swell: waist 0.108 at y 1.15, hips 0.238 at 0.95, belly ~2.5 cm proud.
 
 ![torso](contact-7-torso.png)
+
+## Eighth pass: the 1940s pin-up face (2026-10-24, owner: "more resemble Jessica Rabbit ... the eyelids are really big and long lashes, eyes are not so wide open though eyes are big")
+
+The archetype, not the character (a Disney/Amblin IP): the upper lid's EDGE drops to 40% of the eye's height
+(`LID_OPEN`), so the lid covers the top ~40% of a big iris and the eye is half-closed; above it to the eye's full top
+is a lavender-pink lid with a soft highlight across its middle and a plum crease; five long lashes sweep OUT from the
+outer half (a row standing up across the lid read as a comb); thin high brows (inner ends dropped low read as an
+angry V); a fuller, pouty cupid's-bow mouth. Also a navel (a groove pit) and a belly mound in front of recessed thigh
+tops.
+
+![pin-up face](contact-8-face.png)
