@@ -17,6 +17,7 @@ import {
   type RoomDef, type TunnelDef,
 } from './game-level';
 import { SKY_PRESETS, type EdgeStyle, type GroundName, type SkyName, type SkylineName } from './outdoor-presets';
+import type { SectorMap } from './sector-def';
 
 export const LEVEL_WALL_T = 0.3;
 /** Spec §3: validation and opening-detection tolerance, metres. */
@@ -35,7 +36,7 @@ export const DEFAULT_PALETTE: LevelPalette = {
   solid: [0.34, 0.33, 0.32],
 };
 
-export type Capability = 'multi-floor' | 'windows' | 'open-sky' | 'void' | 'portals' | 'art';
+export type Capability = 'multi-floor' | 'windows' | 'open-sky' | 'void' | 'portals' | 'art' | 'sectors';
 export type WallSide = 'n' | 's' | 'e' | 'w';
 export type PickupItem = 'melee' | 'shotgun' | 'dynamite' | 'shells' | 'health' | 'cd' | 'flashlight';
 export const PICKUP_ITEMS: readonly PickupItem[] = ['melee', 'shotgun', 'dynamite', 'shells', 'health', 'cd', 'flashlight'];
@@ -127,6 +128,9 @@ export interface LevelDef {
   portals: PortalDef[];
   /** Mesh key §3: the level's art file (beside the JSON), or null. */
   art: string | null;
+  /** Sector levels (spec 2026-10-24 §4): the sector geometry; absent on room levels. Its zones
+   *  are `rooms` with `shell: 'art'` (collision comes from the sectors, not their boxes). */
+  sectors?: SectorMap;
 }
 
 export interface Mouth { lo: number; hi: number; tunnel: LevelTunnel }
