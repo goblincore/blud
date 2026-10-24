@@ -5,8 +5,6 @@ appears in a generated level; it is mapped to one of ours here.
 """
 from __future__ import annotations
 
-SKY_FLAT = "F_SKY1"
-
 # (prefix, ours), first match wins.
 FLAT_FAMILIES = [
     ("F_SKY", "sky"), ("NUKAGE", "nukage"), ("LAVA", "lava"), ("SLIME", "acid"), ("FWATER", "acid"),
@@ -31,7 +29,7 @@ EXIT_SPECIALS = {11, 51, 52, 124}
 REMOTE_DOOR_SPECIALS = {2, 4, 16, 29, 46, 61, 63, 86, 90, 103, 105, 106, 108, 109, 111, 112, 114, 115}
 # Floor lowers: written LOWERED to the lowest neighbouring floor (also for the "to highest / next" variants).
 FLOOR_LOWER_SPECIALS = {19, 23, 36, 37, 38, 45, 60, 70, 71, 82, 83, 84, 98, 102}
-# Lifts: left as they are (static step 1: a lift at its top is a known gap).
+# Reserved: lifts are static until the doors/lifts plan (a lift at its top is a known gap).
 LIFT_SPECIALS = {10, 21, 62, 88, 120, 121, 122, 123}
 
 # Sector types -> (special, hurtPerSec). Doom hurts every 32 tics (~0.91 s); we use per second.
