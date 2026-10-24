@@ -77,7 +77,9 @@ export const ATTACK_TUNING = {
 
 export type SwingVariant = 'hook' | 'overhead' | 'shove' | 'cleave' | 'sweep' | 'lunge'
   // The quadrupeds' (hound-attack.ts: the gorehound's, the gibbet's): motion.ts routes these to houndPose.
-  | 'bite' | 'pounce' | 'stab' | 'squirt';
+  | 'bite' | 'pounce' | 'stab' | 'squirt'
+  // The gutcrawler's rear-and-slam (hound-attack.ts 'slam').
+  | 'slam';
 
 /** Per-variant arm angles (rad). Pitch keeps the reach convention (positive =
  *  forward/raised); yaw is written for the RIGHT arm, where NEGATIVE is cocked
@@ -118,6 +120,7 @@ export const SWING_ARCS: Record<SwingVariant, {
   pounce: { windupPitch: 0, strikePitch: 0, windupYaw: 0, strikeYaw: 0 },
   stab: { windupPitch: 0, strikePitch: 0, windupYaw: 0, strikeYaw: 0 },
   squirt: { windupPitch: 0, strikePitch: 0, windupYaw: 0, strikeYaw: 0 },
+  slam: { windupPitch: 0, strikePitch: 0, windupYaw: 0, strikeYaw: 0 },
 };
 
 export type AttackTuning = typeof ATTACK_TUNING;

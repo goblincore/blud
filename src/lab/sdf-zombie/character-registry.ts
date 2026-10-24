@@ -375,11 +375,14 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     face: ZOMBIE_FLAT,
     profile: GOREHOUND_PROFILE,
   },
-  // The gorehound's variant (gutcrawler.blob's header): legless, dragging
-  // itself on two arms, a tail on the `hem` pendulum. Kit: assets-source/gutcrawler-kit/.
+  // A giant naked grub with a man's front (gutcrawler.blob's header), dragging
+  // itself on its arms, the rear rings writhing on the hem -> hem2 -> hem3 pendulums.
   gutcrawler: {
     name: 'gutcrawler', src: gutcrawlerBlobSrc,
-    face: ZOMBIE_FLAT,
+    // A naked mole-rat's wrinkled hide (characters/gutcrawler.detail, baked ALONG the body: scripts/gutcrawler-detail-gen.ts
+    // has the bake command; never marched).
+    bodyNormal: { url: '/assets/lab/gutcrawler-body-n.png', meta: '/assets/lab/gutcrawler-body-n.json', strength: 1 },
+    face: bakedFace('gutcrawler-face.png'),
     profile: GUTCRAWLER_PROFILE,
   },
   // The walking cage (gibbet.blob's header): a bone-metal frame on four long

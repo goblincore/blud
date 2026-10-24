@@ -81,7 +81,7 @@ export interface MotionProfile {
   /** A MELEE-WEAPON enemy: the game gives it that weapon's mind
    *  (enemy-mind.ts makeSwordMind) and motion.ts drives the held prop through
    *  the swing (sword-swing.ts). Absent = the zombie's unarmed swing. */
-  melee?: { kind: 'sword' | 'bite' | 'stab' };
+  melee?: { kind: 'sword' | 'bite' | 'stab' | 'slam' };
   /** A JOYSTICK on the body's `hem` (the gamer, characters/gamer.blob): motion.ts adds joystick.ts's jiggle to
    *  the `hem` target, hard while he attacks and a faint twitch otherwise. Absent: `hem` is cloth or a hung mass. */
   joystick?: JoystickSpec;
@@ -452,9 +452,10 @@ export const GOREHOUND_PROFILE: MotionProfile = {
   melee: { kind: 'bite' },
 };
 
-/** The gutcrawler (characters/gutcrawler.blob), the gorehound's legless
- *  variant: it hauls itself on two arms (CRAWL_DRAG) and bites like the hound
- *  (hound-attack.ts), lunging off its arms from the band beyond. Slow. */
+/** The gutcrawler (characters/gutcrawler.blob): a giant naked grub with a man's chest, arms and staring head on the
+ *  front, hauling itself on its two arms (CRAWL_DRAG, the body wave writhing the rear rings). It cannot bite or leap:
+ *  it REARS its front half off the floor and SLAMS it down on you, star snout first (hound-attack.ts 'slam',
+ *  GUTCRAWLER_TUNING). Slow and heavy. */
 export const GUTCRAWLER_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
   name: 'gutcrawler',
@@ -463,7 +464,7 @@ export const GUTCRAWLER_PROFILE: MotionProfile = {
   cruise: 0.75,
   turnRate: 1.8,
   armStyle: 'foreleg',
-  melee: { kind: 'bite' },
+  melee: { kind: 'slam' },
 };
 
 /** The gibbet (characters/gibbet.blob): a cage of bone-metal on four long
