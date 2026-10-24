@@ -336,18 +336,43 @@ body
   blob leg on thigh at=0.14 offset=(0.016,0,-0.024) r=0.082 tall=0.90 deep=0.85 blend=0.034 mirror core
   # from=0.16: started at the hip joint, its r 0.108 end cap rose to y
   # ~1.14 and swallowed the waist (the abdomen read as part of the hips).
-  bar  leg on thigh from=0.16 to=1.00 offset=(0.004,0,-0.012) r=0.090 r2=0.047 wide=0.92 deep=0.92 blend=0.034 mirror
+  bar  leg on thigh from=0.16 to=1.05 offset=(0.004,0,-0.012) r=0.090 r2=0.043 wide=0.92 deep=0.92 blend=0.034 mirror
   # Outer thigh: venus's, smaller — the hip's line carried down the side.
   # at=0.20: its ends must bind within the thigh's own joint ring, or the
   # rig hands them to the pelvis (rig-bind.test.ts 'joint ring'). Which
   # (at, x) pairs pass is found by trying, not by rule: 0.24 / 0.022 failed
   # and 0.20 / 0.022 passes.
   blob leg on thigh at=0.20 offset=(0.022,-0.020,-0.016) r=0.074 tall=1.60 deep=0.90 blend=0.036 mirror
-  bar  leg on shin  from=0.00 to=0.97 r=0.045 r2=0.023 blend=0.040 mirror
-  # Calf: a long soft swell behind the shin, peaking a quarter down.
-  blob leg on shin  at=0.20 offset=(0,0,-0.012) tip=(0,-0.170,0.007) r=0.044 r2=0.026 deep=1.05 blend=0.026 mirror
-  # Bare foot, slim and pointed a little (on her toes, the dancer's line).
-  bar  leg on foot  from=0.00 to=0.90 offset=(0,-0.036,-0.010) r=0.028 r2=0.018 wide=1.05 tall=0.75 blend=0.018 mirror
+  # THE KNEE AND SHIN (owner, 2026-10-24: "still some issues with the
+  # leg"). Probed, the leg narrowed to 104 mm at y 0.64 and then WIDENED to
+  # 126 mm at the knee (0.56): the thigh's end, the shin's start and the
+  # calf's start all met there, each with its own wide blend, and the swells
+  # stacked into a ball; and the calf ended in an 18 mm step at y 0.26. Now
+  # the shin starts SMALLER than the thigh ends (0.036 under 0.043) with a
+  # modest blend, so the knee is one taper; the calf starts below the knee
+  # and runs on down to the ankle, so its end is a taper too. Probed after:
+  # 88-94 mm wide from the knee through the calf, no ball and no pinch.
+  # THE KNEE: one soft stretched ellipsoid ON the joint. The thigh's
+  # rounded end and the shin's rounded start sat side by side there and
+  # left a groove between them, a ring from the side (CPU-shaded side view)
+  # even once widths and fronts lined up; the thigh now runs 5% past the
+  # knee (to=1.05) so the two ends overlap, and this fills what is left into
+  # one kneecap curve.
+  blob leg on shin  at=0.00 offset=(0,0,-0.008) r=0.038 tall=1.80 deep=1.00 blend=0.020 mirror
+  # Set back 9 mm (offset z): the thigh bar is set back 12 mm and the shin
+  # was not, so the front of the leg stepped 1 cm FORWARD at the knee — a
+  # ring from the side even with the widths smooth.
+  bar  leg on shin  from=0.02 to=0.96 offset=(0,0,-0.009) r=0.036 r2=0.021 blend=0.020 mirror
+  # Calf: a long soft ELLIPSOID behind the shin, fullest a third of the way
+  # down (no end caps: as a tapered cone its rounded top read as a second
+  # band below the knee), fading out above the ankle.
+  blob leg on shin  at=0.36 offset=(0,0,-0.014) r=0.036 tall=2.6 deep=1.05 blend=0.026 mirror
+  # THE FOOT: a heel-to-toe shape, not a stick — a tapered drop from a
+  # rounded heel under and behind the ankle to a slim toe ~13 cm forward,
+  # the instep high, with the ankle a smooth fill between shin and foot.
+  # (A thin bar of r 0.028 -> 0.018 read as a flat stick joined at an angle.)
+  blob leg on foot  at=0.00 offset=(0,-0.048,-0.018) tip=(0,-0.010,0.140) r=0.030 r2=0.015 wide=1.20 tall=0.85 blend=0.016 mirror
+  blob leg on foot  at=0.00 offset=(0,-0.020,0.004) r=0.026 wide=1.05 tall=1.10 blend=0.018 mirror
 
 # Interior bones for wound reveals: the bride's.
 bones

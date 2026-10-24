@@ -156,3 +156,16 @@ now parametric (shamble machinery: lift 0.08, knee 0.06, 1.0 Hz x 0.42 m sized t
 peaks at ~0.16 m. The bride shares the same mismatch (her armour hides it).
 
 ![proportions and walk](contact-14-proportions-walk.png)
+
+## Fifteenth pass: the legs (2026-10-24, owner: "there are still some issues with the leg")
+
+Rings and beads down the leg, measured, not guessed: (1) the leg narrowed to 104 mm at y 0.64 then WIDENED to 126 mm
+at the knee — the thigh's end, the shin's start and the calf's start met there, each with a wide blend; (2) the calf
+ended in an 18 mm step at 0.26; (3) from the side the front of the leg stepped 1 cm forward at the knee (the thigh set
+back 12 mm, the shin not); (4) a CPU-shaded side view still showed two bands — the groove between the thigh's and
+shin's rounded ends, and the calf cone's rounded top. Now: the thigh runs to 1.05 past the knee, a soft knee
+ellipsoid fills the joint, the shin is set back 9 mm, the calf is one long ellipsoid (no caps), and the foot is a
+heel-to-toe drop instead of a flat stick. Widths taper smoothly hip to ankle (knee 106, calf 90 mm).
+Width probes miss front/back steps and normal creases: probe the profile too, and shade it.
+
+![legs](contact-15-legs.png)
