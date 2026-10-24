@@ -166,6 +166,9 @@ CI job. Locally they run with `npm run test:gpu`. With no adapter they **skip** 
    shell + warp, chamfer, chamfer + bend, carve, groove, dead prim, bone/organ skip, two clusters. Each is
    evaluated at ~4k points on and around the surface on both backends: abs(gpu − cpu) ≤ 2e-6 m. A failure
    names the op. The chamfer + bend fixture pins open question 1's answer.
+   A second fixture set runs the same op bodies through the **runtime** fold (`foldGroup`), which is how
+   the chamfer + bend mismatch would have been caught. That set is optional and needs a small harness for
+   `mapBody`'s globals.
 2. **Character field parity** (`field-characters.gpu.test.ts`). For every character with a `.detail` file,
    the plain and detail bodies at ~3k points: 2k on the skin (found by the CPU `skin` from random region
    rays) plus 1k in the shell around it. Same bar, starting at 2e-6 m. The bar is set from measured
