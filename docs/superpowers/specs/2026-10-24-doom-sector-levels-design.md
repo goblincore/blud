@@ -150,8 +150,9 @@ probes and shadows apply unchanged. The door's ceiling mesh is separate so it ca
 ### 6.5 Zones
 
 Sectors are too small to act as lighting "rooms" (E1M1 has ~80). The converter groups them into
-**zones**: connected components of sectors when doors are cut, with any zone over ~400 m² split
-on its longest axis. Zones play the role of rooms for probes, near-light sets and level events.
+**zones**: connected components of sectors when doors are cut, with any zone over 600 m² of real
+polygon area split on its longest axis (halves kept connected; zones under 50 m² merged into a
+neighbour). Lights are placed only for zones of 150 m² or more, at most 10. Zones play the role of rooms for probes, near-light sets and level events.
 
 ## 7. Lighting
 

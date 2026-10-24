@@ -17,10 +17,16 @@
   floor, ceilings, the eye easing up steps (`stepLag`).
 - **Geometry and mesh** (`sector-geometry.ts`, `game-sector-mesh.ts`): sector polygons with holes,
   oriented wall quads (lower/upper/mid), one merged mesh per zone and role in the level group,
-  room-tagged like level art, the arena's stone material everywhere.
+  room-tagged like level art, the arena's stone material everywhere (sector `light` and
+  `materials` are not used yet; lighting is plan 4).
+- **Active level** (`active-level.ts`): `sectorActiveLevel` answers `keyAt` and `spawnList` from the
+  sector under the point (zone boxes overlap, so a spawn's room is its sector's zone, not the
+  first box it falls in).
 - **Converter** (`scripts/levels/doom_map.py`, `doom_tables.py`, tests in
   `scripts/tests/test_doom_map.py`): WAD → `public/assets/levels/doom-<map>.level.json` (gitignored,
-  a dev placeholder like the Blood assets) plus an optional SVG plan.
+  a dev placeholder like the Blood assets) plus an optional SVG plan. Zones split on real polygon
+  area over 600 m² (halves kept connected; zones under 50 m² merged), not bounding-box area;
+  lights only for zones of 150 m² or more, capped at 10.
 - **Gate** (`scripts/sdf-game-doom-gate.{sh,mjs}`, ports 5483/9483): the fixture always (boot,
   step up, ledge stop, pit drop, column stop), then E1M1 when generated (boot, the route, budget,
   `SHOTS=1` writes `.lab-tmp/doom/e1m1-<waypoint>-<yaw>.png`, yaw k = −z, +x, +z, −x).
@@ -85,12 +91,11 @@ wall the flashlight blows the bricks out (`e1m1-2-3.png`, `e1m1-5-0.png`).
 
 - **Slugs pass through sector walls**: `game-hit-trace.ts` reads the AABB colliders only.
 - **Dynamite, gibs and blood land at y = 0**, not on the sector floor.
-- **The emergence hand-off and the head-sever standoff seam don't look up the sector floor.**
+- **The emergence hand-off doesn't look up the sector floor** (the head-sever standoff seam now does).
 - **`teleport` to a zone's box centre can land outside every sector** (zone boxes are bounding
   boxes of irregular sectors).
 - **Lights choose the first overlapping zone room** (zone boxes overlap).
 - **Lights only in zones ≥ 150 m²** (9 for E1M1).
-- **Loop chaining at pinch vertices takes the first edge** (sweeping clockwise from the way back).
 - **Wall texture U restarts per quad** (a seam at each vertex), and a **horizontal seam at y ≈ 2 m**
   where the stone texture's vertical tile isn't seamless.
 - **12 of 88 sectors are unreachable** from the start (reviewer BFS, step 0.75 m, headroom 1.75 m;
