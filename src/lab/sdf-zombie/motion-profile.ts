@@ -356,8 +356,8 @@ export const VENUS_PROFILE: MotionProfile = {
   turnRate: 2.0,
 };
 
-/** The siren (characters/siren.blob): the roster's beautiful lure. She walks like a model (SIREN_WALK: the bride's
- *  stalk with free, softly swinging arms) and attacks with the zombie mind's unarmed swing (enemy-mind.ts
+/** The siren (characters/siren.blob): the roster's beautiful lure. She walks like a model (SIREN_WALK: a parametric
+ *  walk with a soft knee, free softly swinging arms) and attacks with the zombie mind's unarmed swing (enemy-mind.ts
  *  makeZombieMind) — but her jaw drops open on the bride's hinge as she strikes (swingGape 0.6 rad, a touch past the
  *  bride's 0.55: at 0.85 the jaw's rotation about a hinge behind the mouth swung her whole lower face back into her
  *  neck, leaving a fanged hole over a bare throat).
@@ -367,7 +367,8 @@ export const SIREN_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
   name: 'siren',
   gait: { walk: SIREN_WALK, run: SIREN_WALK },
-  cruise: 1.0,
+  // 0.85 m/s: SIREN_WALK's steps are sized to it (gait.ts).
+  cruise: 0.85,
   turnRate: 3.0,
   armStyle: 'swing',
   swingGape: 0.6,

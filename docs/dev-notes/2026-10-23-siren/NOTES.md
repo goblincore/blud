@@ -143,3 +143,16 @@ in a ledge at the seam. Coverage checked on the CPU from front/side/back: no ski
 comes out under the hem, not through it.
 
 ![clothes](contact-13-clothes.png)
+
+## Fourteenth pass: proportions and the walk (2026-10-24, owner: "her neck is a bit too long, her thighs are a bit too wide such that her arms fuse into it ... we should fix her motion profile as well")
+
+Neck 0.14 -> 0.10 m (the bride's was her deliberately-wrong stalk). Hips 0.244 -> 0.228 half-width (thigh masses and
+the pelvis narrowed), the skirt refitted. The arm/hip fusion was MEASURED (arm surface to body surface below the
+armpit): the forearm ran 1 cm into the hip; splaying wider only put the hand at the hips' widest point, so the
+forearms come forward (upperarm 24 / 6, forearm 12 / 30): 3.7 cm clear, ~2% of height. The back-kick in the walk:
+STALK's legs are the soldier's walk CLIP, and in curve mode the knee bend is the clip's own (strideLen and cadence do
+not touch it) — on her long legs it folded the swing shin to the horizontal, ankle 0.45 m up at 1 m/s. SIREN_WALK is
+now parametric (shamble machinery: lift 0.08, knee 0.06, 1.0 Hz x 0.42 m sized to a 0.85 m/s cruise): the swing ankle
+peaks at ~0.16 m. The bride shares the same mismatch (her armour hides it).
+
+![proportions and walk](contact-14-proportions-walk.png)

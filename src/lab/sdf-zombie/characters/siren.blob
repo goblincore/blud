@@ -36,9 +36,9 @@
 #      waist-length, loose and dark: a crown mass plus strand
 #      curtains framing the face, over the shoulders and down the back.
 model siren
-  # Flesh crown ~1.81 (the bride's skeleton); the hair's crown takes her to
-  # ~1.83.
-  height 1.83
+  # Flesh crown ~1.77 (the bride's skeleton, neck 4 cm shorter); the hair's
+  # crown takes her to ~1.81.
+  height 1.81
   stance humanoid
 
 skeleton
@@ -53,9 +53,10 @@ skeleton
   bone spine1 parent=pelvis dir=up pitch=-2 len=0.15
   bone chest  parent=spine1 dir=up pitch=-3 len=0.17
   bone spine2 parent=chest  dir=up pitch=0  len=0.07
-  # The long neck, pitched forward so the head floats ahead of the
-  # shoulders: a swan's carriage.
-  bone neck   parent=spine2 dir=up pitch=8  len=0.14
+  # The neck, pitched forward so the head floats ahead of the shoulders.
+  # 0.10 m (owner, 2026-10-24: "her neck is a bit too long"; the bride's
+  # 0.14 was her deliberately-wrong stalk).
+  bone neck   parent=spine2 dir=up pitch=8  len=0.10
   # Skull tipped back 4 so the face lifts and the chin leads.
   bone skull  parent=neck   dir=up pitch=-4 len=0.24
   # The hem pendulum (the cultist's road): the dress's skirt rides it
@@ -72,11 +73,15 @@ skeleton
   mirror
     # Narrow sloping shoulders (socket x ~0.15, y ~1.41).
     bone clavicle parent=spine2   side=0.020 dir=side tilt=-8 len=0.13
-    # Arms long and slender, hanging clear of the hips (tilt 20 / 12: the
-    # wider hips; at the bride's 14 the hands met them).
-    bone upperarm parent=clavicle dir=down tilt=20 pitch=2 len=0.30
+    # Arms long and slender, held a little out and the forearms FORWARD,
+    # hands in front of the hips (owner, 2026-10-24: "her arms fuse into"
+    # the thighs). Probed surface-to-surface: hanging at tilt 20 / 12, pitch
+    # 2 / 10, the forearm ran 1 cm INTO the hip; splaying wider only moved
+    # the hand to the hips' widest point. At 24 / 6 and 12 / 30 the arm
+    # clears hip and skirt by 3.8 cm (~2% of height, the guide's daylight).
+    bone upperarm parent=clavicle dir=down tilt=24 pitch=6 len=0.30
     # Symmetric (the bride's lenR= sword forearm dropped: she has no sword).
-    bone forearm  parent=upperarm dir=down tilt=12 pitch=10 len=0.26
+    bone forearm  parent=upperarm dir=down tilt=12 pitch=30 len=0.26
     bone hand     parent=forearm  dir=down pitch=8         len=0.08
     # LEGS: 0.49 + 0.48 from the hip at 1.04 lands the ankle at ~0.07.
     # Knees drawn in a whisper. side 0.105 (the bride's 0.085): the heavier
@@ -102,7 +107,7 @@ body
   # out as a shelf over the legs, a bell), a band
   # (tall 0.80) centred just under the hip joint, so the widest slice is the
   # top of the thighs.
-  blob torso on pelvis at=0.30 offset=(0,0,-0.020) tip=(0,-0.120,0.030) r=0.124 r2=0.050 wide=1.30 tall=0.80 deep=0.74 blend=0.040 core
+  blob torso on pelvis at=0.30 offset=(0,0,-0.020) tip=(0,-0.120,0.030) r=0.124 r2=0.050 wide=1.20 tall=0.80 deep=0.74 blend=0.040 core
   # (A downward-tapering CONE, not a ball: r 0.128 at the hip line to 0.058
   # at the crotch, so the pelvis narrows into a V between the thighs. As an
   # ellipsoid the whole front from the underbust to the crotch read as one
@@ -158,20 +163,21 @@ body
   # take over. Fine vertical ribs (warp, no y frequency) read as boning.
   shell torso on spine1 at=0.53 offset=(0,0,-0.003) tip=(0,0.120,0.004) r=0.080 r2=0.092 wide=1.42 deep=0.98 thick=0.004 clip=(0,1,0) clipd=1.235 rim=0.004 blend=0.006 color=8e0e1c gloss=0.60 warp=0.0012 warpFreq=(140,0,140)
   # THE SKIRT, UPPER: the hips swell out in a DOME just below the waist
-  # (x 0.114 / 0.178 / 0.218 / 0.244 at y 1.12 / 1.08 / 1.04 / 0.96), which
+  # (x 0.108 / 0.160 / 0.202 / 0.228 at y 1.12 / 1.08 / 1.04 / 0.96 since the
+  # thighs were narrowed, 2026-10-24), which
   # no cone follows (a straight one cut under it by 3 cm). An ELLIPSOID
-  # centred at the hips' widest (y 0.95) has that dome: semi 0.257 x 0.193 x
+  # centred at the hips' widest (y 0.95) has that dome: semi 0.241 x 0.193 x
   # 0.162, set back to z -0.034 for the rear (front 0.100 / back -0.186 at
   # 0.96); its top closes inside the waist at ~1.13, so the skirt grows out
   # of the waist without a band. On the pelvis: it moves with the hips.
   # Cut low (y 0.84), not at the seam: below 0.95 the ellipsoid narrows
   # faster than the pencil and sinks inside it, so the two meet in a blend,
   # not an edge (cut at 0.92 it left a ledge round the hips).
-  shell torso on pelvis at=0.0 offset=(0,-0.010,-0.034) r=0.165 wide=1.56 tall=1.17 deep=0.98 thick=0.004 clip=(0,-1,0) clipd=-0.840 rim=0.002 blend=0.006 color=8e0e1c gloss=0.60
-  # THE SKIRT, LOWER: a pencil cone from the hips (y 0.95; x 0.261, z
-  # 0.144) tapering to a hem above the knee (y 0.71; x 0.193; body 0.176),
+  shell torso on pelvis at=0.0 offset=(0,-0.010,-0.034) r=0.165 wide=1.46 tall=1.17 deep=0.98 thick=0.004 clip=(0,-1,0) clipd=-0.840 rim=0.002 blend=0.006 color=8e0e1c gloss=0.60
+  # THE SKIRT, LOWER: a pencil cone from the hips (y 0.95; x 0.244, z
+  # 0.144) tapering to a hem above the knee (y 0.71; x 0.181; body 0.161),
   # on the HEM pendulum so it swings with the walk.
-  shell torso on hem at=0.0 offset=(0,-0.090,-0.040) tip=(0,-0.250,0.036) r=0.165 r2=0.122 wide=1.58 deep=0.87 thick=0.004 clip=(0,-1,0) clipd=-0.710 rim=0.006 blend=0.006 color=8e0e1c gloss=0.60 rigid
+  shell torso on hem at=0.0 offset=(0,-0.090,-0.040) tip=(0,-0.250,0.036) r=0.165 r2=0.122 wide=1.48 deep=0.87 thick=0.004 clip=(0,-1,0) clipd=-0.710 rim=0.006 blend=0.006 color=8e0e1c gloss=0.60 rigid
 
   # ============================================================
   # NECK + HEAD. The bride's solved head structure (bride.blob, "HEAD +
@@ -327,15 +333,16 @@ body
   # a slim knee, a soft calf, a slender bare foot. Set apart (side 0.105) so
   # the inner thighs meet without passing through each other.
   # ============================================================
-  blob leg on thigh at=0.14 offset=(0.022,0,-0.024) r=0.088 tall=0.90 deep=0.85 blend=0.034 mirror core
+  blob leg on thigh at=0.14 offset=(0.016,0,-0.024) r=0.082 tall=0.90 deep=0.85 blend=0.034 mirror core
   # from=0.16: started at the hip joint, its r 0.108 end cap rose to y
   # ~1.14 and swallowed the waist (the abdomen read as part of the hips).
-  bar  leg on thigh from=0.16 to=1.00 offset=(0.008,0,-0.012) r=0.098 r2=0.047 wide=0.95 deep=0.92 blend=0.034 mirror
+  bar  leg on thigh from=0.16 to=1.00 offset=(0.004,0,-0.012) r=0.090 r2=0.047 wide=0.92 deep=0.92 blend=0.034 mirror
   # Outer thigh: venus's, smaller — the hip's line carried down the side.
-  # at=0.24, not lower: its centre must stay nearer the thigh's own hip
-  # joint than the pelvis root, or the rig binds it to the pelvis
-  # (rig-bind.test.ts 'joint ring'; at 0.30 it did).
-  blob leg on thigh at=0.24 offset=(0.034,-0.020,-0.016) r=0.084 tall=1.60 deep=0.90 blend=0.036 mirror
+  # at=0.20: its ends must bind within the thigh's own joint ring, or the
+  # rig hands them to the pelvis (rig-bind.test.ts 'joint ring'). Which
+  # (at, x) pairs pass is found by trying, not by rule: 0.24 / 0.022 failed
+  # and 0.20 / 0.022 passes.
+  blob leg on thigh at=0.20 offset=(0.022,-0.020,-0.016) r=0.074 tall=1.60 deep=0.90 blend=0.036 mirror
   bar  leg on shin  from=0.00 to=0.97 r=0.045 r2=0.023 blend=0.040 mirror
   # Calf: a long soft swell behind the shin, peaking a quarter down.
   blob leg on shin  at=0.20 offset=(0,0,-0.012) tip=(0,-0.170,0.007) r=0.044 r2=0.026 deep=1.05 blend=0.026 mirror
