@@ -16,10 +16,10 @@ describe('sectorAmbient', () => {
     expect(sectorAmbient(1, DEFAULT_SECTOR_LIGHT)).toBeCloseTo(DEFAULT_SECTOR_LIGHT.max, 9);
     expect(sectorAmbient(0, DEFAULT_SECTOR_LIGHT)).toBe(0);
   });
-  it('is a hard curve: Doom 160 is well under half of Doom 255', () => {
+  it('is a hard curve: Doom 160 is under half of Doom 255 (γ1.6: about 0.47)', () => {
     const r = sectorAmbient(160 / 255, DEFAULT_SECTOR_LIGHT) / sectorAmbient(1, DEFAULT_SECTOR_LIGHT);
-    expect(r).toBeGreaterThan(0.3);
-    expect(r).toBeLessThan(0.4);
+    expect(r).toBeGreaterThan(0.4);
+    expect(r).toBeLessThan(0.5);
   });
   it('is monotonic and clamps out-of-range input', () => {
     let prev = -1;

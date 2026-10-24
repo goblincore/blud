@@ -13,8 +13,9 @@ import type { SectorDef, SectorSpecial } from './sector-def';
 export interface SectorLightCurve { max: number; gamma: number }
 export interface SectorLightConfig extends SectorLightCurve { on: boolean }
 
-/** Doom 255 → 7 % of albedo, Doom 160 → about 2.6 %. Tuned live with __sdfGame.sectorLight. */
-export const DEFAULT_SECTOR_LIGHT: SectorLightCurve = { max: 0.07, gamma: 2.2 };
+/** Owner pick from the tuning sheet (2026-10-24; was max 0.07 γ2.2, barely visible): Doom 255 → 35 % of
+ *  albedo, Doom 160 → about 16.6 %. Tuned live with __sdfGame.sectorLight. */
+export const DEFAULT_SECTOR_LIGHT: SectorLightCurve = { max: 0.35, gamma: 1.6 };
 
 /** Strobe: Doom's STROBEBRIGHT (5 tics) out of ~1 s; the dark phase keeps 35 % of the light. */
 const STROBE_PERIOD_S = 1.0;

@@ -108,23 +108,35 @@ What the columns look like:
 darkest sector at the default (each also at max 0.35 γ1.6, report-only), and the pool at pitch
 −0.5 and −1.2.
 
-## Owner decision needed: light curve (column) and pool glowGain
+## Owner decision: light curve (column) and pool glowGain — decided 2026-10-24
 
-1. **Sector light curve** — pick a column from the tuning sheet. My read: **max 0.35 γ1.6** keeps
-   the dark and gives Doom's bright-room / dark-corridor rhythm; the current default is close to
-   invisible; 0.6+ flattens the darkness. Then set `DEFAULT_SECTOR_LIGHT` in `sector-light.ts`.
-2. **Pool glowGain** — my read: **0.35** (deep green, the flow reads, no glare). Then set
-   `DEFAULT_GLOW_GAIN` in `game-sector-light.ts`. Try live first: `?glowgain=0.35` or
-   `__sdfGame.sectorLight({ max: 0.35, gamma: 1.6, glowGain: 0.35 })`.
-3. Whether ceilings should keep a whisper of self-light with sector light on (now 0).
-4. Pool colour.
+The owner picked from the tuning sheet (in chat, 2026-10-24):
 
-Defaults are **unchanged** (max 0.07, γ 2.2, glowGain 1.0) pending the owner's pick.
+1. **Sector light curve: max 0.35 γ1.6** (`DEFAULT_SECTOR_LIGHT` in `sector-light.ts`; was 0.07 γ2.2,
+   barely visible). Doom 255 → 35 % of albedo, Doom 160 → ~16.6 %.
+2. **Pool glowGain: 0.35** (`DEFAULT_GLOW_GAIN` in `game-sector-light.ts`; was 1.0, glaring).
+
+The gate asserts the A/B on the new default; the old 0.07 γ2.2 is measured beside it, report-only.
+At the new defaults (gate run 2026-10-24 18:48, load ~14–40, all pass):
+
+```
+glow: centre-30% mean R 40.5 G 115.5 B 53.1, G/R 2.85
+sector light A/B, bright sector 25 (light 1), default curve max 0.35 γ1.6: on 29.76 / off 15.95 = 1.866
+sector light A/B, bright sector 25, max 0.07 γ2.2: on 19.13 / off 15.95 = 1.200 (report only)
+sector light A/B, darkest sector 6 (light 0.502), default curve: on 21.71 / off 13.51 = 1.606 (report only)
+budget: 123 draw calls, 10.90 ms a frame at the start (readings 10.4, 10.9, 11.3)
+```
+
+(One earlier run of the review-fix commit failed only the frame budget, 51.9 ms / 369 draws, under
+a load spike; the run above, after both commits, passed at 10.9 ms.)
+
+Still open for the owner: whether ceilings keep a whisper of self-light with sector light on (now 0);
+pool colour; the pool light colouring the room (hand-off item 2b).
 
 ## Decisions from the plan, with numbers
 
-- Sector light is a self-lit ambient term (`emissive = albedo × level`); default curve max 0.07,
-  γ 2.2 → A/B 1.20 bright, 1.07–1.09 darkest (owner to retune, above).
+- Sector light is a self-lit ambient term (`emissive = albedo × level`); the plan's curve max 0.07,
+  γ 2.2 → A/B 1.20 bright, 1.07–1.09 darkest; the owner's default is now max 0.35 γ1.6 (above).
 - Ceilings lose plan 1's 10 % whisper while sector light is on.
 - Strobe follows Doom's rhythm (0.14 s bright of 1 s); reduced flashes → a 3 s pulse.
 - Pool lights are `mood: 'fire'` (cheap list tier, a gentle flicker).

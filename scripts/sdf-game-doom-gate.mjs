@@ -298,10 +298,10 @@ async function ab(q, curve) {
   return { on, off, a, b, ratio: a / Math.max(b, 1e-6) };
 }
 const fmt = (r) => `on ${r.a.toFixed(2)} / off ${r.b.toFixed(2)} = ${r.ratio.toFixed(3)}`;
-const TUNED = { max: 0.35, gamma: 1.6 };
+const TUNED = { max: 0.07, gamma: 2.2 };   // the pre-owner-pick default, for comparison
 const bright = await ab(poses.bright[0], { max: DEFAULT_CURVE.max, gamma: DEFAULT_CURVE.gamma });
 console.log(`sector light A/B, bright sector ${poses.bright[0].i} (light ${poses.bright[0].light}), default curve max ${DEFAULT_CURVE.max} γ${DEFAULT_CURVE.gamma}: ${fmt(bright)}`);
-// The assertion is on the shipped default curve; max 0.35 γ1.6 is measured for the owner (report only).
+// The assertion is on the shipped default curve; the old default (max 0.07 γ2.2) is measured for comparison (report only).
 const abPass = bright;
 const abCurve = `default max ${DEFAULT_CURVE.max} γ${DEFAULT_CURVE.gamma}`;
 const tunedBright = await ab(poses.bright[0], TUNED);
@@ -317,14 +317,14 @@ if (process.env.SHOTS === '1') {
   const lab = (q, what) => `${what}\nsector ${q.i}, light ${q.light}\nwall ${q.wall.toFixed(1)} m`;
   await sheet('sector-light-sheet.png', `Sector light on/off (on = ${abCurve}; pool at glowGain ${DEFAULT_CURVE.glowGain})`,
     [lab(poses.bright[0], 'bright A'), lab(poses.bright[1], 'bright B'), lab(poses.dark, 'darkest'), 'pool\n(pitch -0.5, -1.2)'],
-    ['on', 'off', 'on, max 0.35 γ1.6'],
+    ['on', 'off', 'on, old max 0.07 γ2.2'],
     [[abPass.on, abPass.off, tunedBright.on], [second.on, second.off, tunedSecond.on], [dark.on, dark.off, tunedDark.on], [poolRim, poolDown, null]],
     [[abPass.a.toFixed(1), abPass.b.toFixed(1), tunedBright.a.toFixed(1)], [second.a.toFixed(1), second.b.toFixed(1), tunedSecond.a.toFixed(1)], [dark.a.toFixed(1), dark.b.toFixed(1), tunedDark.a.toFixed(1)], ['', `G/R ${(gm.g / Math.max(gm.r, 1e-6)).toFixed(2)}`, '']]);
   pass(`shots: ${OUT}/e1m1-pool.png, e1m1-bright-on/off.png, sector-light-sheet.png`);
 }
 if (process.env.TUNING === '1') {
   // The owner's sheet: rows = poses, columns = curves (light rows) or glowGain (pool row); mean grey per cell.
-  const curves = [['off', { on: false }], ['max 0.07 γ2.2 (current)', { on: true, max: 0.07, gamma: 2.2 }], ['max 0.35 γ1.6', { on: true, max: 0.35, gamma: 1.6 }],
+  const curves = [['off', { on: false }], ['max 0.07 γ2.2 (old)', { on: true, max: 0.07, gamma: 2.2 }], ['max 0.35 γ1.6 (default)', { on: true, max: 0.35, gamma: 1.6 }],
     ['max 0.6 γ1.2', { on: true, max: 0.6, gamma: 1.2 }], ['max 1.0 γ1.0', { on: true, max: 1, gamma: 1 }]];
   const gains = [1, 0.6, 0.35, 0.2];
   const rows = [poses.bright[0], poses.bright[1], poses.dark];

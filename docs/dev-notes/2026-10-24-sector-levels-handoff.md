@@ -33,6 +33,9 @@ Experiment: rebuild Doom E1M1's layout from `doomu.wad` in our look and play it.
    invisible: +0.3–1.6 grey) / 0.35 γ1.6 / 0.6 γ1.2 / 1.0 γ1.0; pool glowGain 1.0 / 0.6 / 0.35 / 0.2).
    Owner picks; then change the defaults (`DEFAULT_SECTOR_LIGHT` in `sector-light.ts`, glowGain in
    `game-sector-light.ts`).
+   **Done 2026-10-24:** gate + sheet built ([notes](2026-10-24-sector-levels-2/NOTES.md)); the owner picked
+   **max 0.35 γ1.6** and **glowGain 0.35**, now the defaults. (With the flashlight off the old default measured
+   on/off 1.20, +2.4–3.3 grey — the "invisible" reading above had the flashlight on.)
 2. **Pool light doesn't colour the room** (owner noticed, 2026-10-24). The converter writes one pool light
    per pool (3 in E1M1, power 14, `mood: 'fire'`, y = floor + 0.6) — `fire` puts it in the cheap
    list tier (diffuse-only, shadowless). Check: did the owner's run have the regenerated level (pool

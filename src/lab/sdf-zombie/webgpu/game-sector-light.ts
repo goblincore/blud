@@ -13,7 +13,7 @@ import { simTimeMs } from './sim-clock';
 /** The ceilings' fixed whisper of self-light while sector light is off (plan 1's look). */
 export const CEIL_WHISPER = 0.10;
 /** The glow floors' brightness multiplier (owner-tunable; ?glowgain=<n>, __sdfGame.sectorLight({ glowGain })). */
-export const DEFAULT_GLOW_GAIN = 1.0;
+export const DEFAULT_GLOW_GAIN = 0.35;   // owner pick from the tuning sheet (2026-10-24; 1.0 glared)
 
 const floatUniform = (v: number) => uniform(v);
 type FloatUniform = ReturnType<typeof floatUniform>;
