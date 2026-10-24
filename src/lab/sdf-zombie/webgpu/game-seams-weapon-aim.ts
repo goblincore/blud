@@ -12,6 +12,7 @@ import { updateHud } from './game-hud';
 import { MAGAZINE_CAPACITY, RELOAD } from './game-viewmodel';
 import { aimAtNearestSurface, aimDir, convergedDir, fire, muzzleWorld } from './game-weapon-rig';
 import { eyeOf } from './game-player';
+import { standingFloor } from './level-ground';
 import { WEAPON_SLOTS, requestSlot, type WeaponSlot } from './game-weapon-slots';
 import { BOB, FREE_AIM } from './free-aim';
 import { predictSlugHitNow } from './game-hit-trace';
@@ -112,7 +113,9 @@ export function createWeaponAimSeams(ctx: GameContext) {
       let dx = p.pos[0] - cx, dz = p.pos[2] - cz;
       const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d;
       const stand = o.dist ?? 1.1;
-      p.pos = [cx + dx * stand, p.pos[1], cz + dz * stand];
+      const sx = cx + dx * stand, sz = cz + dz * stand;
+      p.pos = [sx, standingFloor(ctx.world.level.ground, sx, sz), sz];   // the floor under the standoff (0 on room levels)
+      p.stepLag = 0;
       p.vel = [0, 0, 0];
       p.yaw = Math.atan2(-dx, dz);
       const eyeY = p.pos[1] + 1.62;
