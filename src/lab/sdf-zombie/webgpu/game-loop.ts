@@ -19,6 +19,8 @@ import { switchOnFlashlight, runLightCommand } from './game-dynamic-light';
 import { commandsFor, expandCues, gatesOpenedBy, makeTriggerState, stepTriggers, type LevelCommand, type TriggerState } from './level-events';
 import { collectPickups, makeInventory, reloadFromReserve, type Inventory } from './pickups';
 import { characterEntry, hasCharacter } from '../character-registry';
+import { newHazard, stepHazard, type HazardState } from './hazard-floor';
+import type { SectorGround } from './sector-ground';
 import { VITALS, applyDamage, bitesInReach, godMode, makeVitals, stepVitals, type DamageKind, type Vitals } from './player-vitals';
 
 export interface LoopRuntime {
@@ -34,6 +36,8 @@ export interface LoopRuntime {
   done: boolean;
   /** Actors that fight with a weapon (the bride's sword) and so never bite. */
   biteExempt: Set<number>;
+  /** The hurt-floor damage clock (hazard-floor.ts). */
+  hazard: HazardState;
   meshes: Map<string, THREE.Mesh>;
   el: { status: HTMLDivElement; hurt: HTMLDivElement; death: HTMLDivElement; complete: HTMLDivElement };
 }
@@ -87,6 +91,7 @@ export function createLoop(ctx: GameContext): LoopRuntime {
     pending: [],
     done: false,
     biteExempt: new Set(),
+    hazard: newHazard(),
     meshes: new Map(),
     el: { status, hurt, death: overlay('YOU DIED', 'click to restart'), complete: overlay('LEVEL COMPLETE', 'click to play again') },
   };
@@ -206,6 +211,15 @@ export function stepLoop(ctx: GameContext, dt: number): void {
       }));
       damagePlayer(ctx, hit, 'melee');
     }
+  }
+  // HURT FLOORS (spec 2026-10-24 §8): feet on a hurt sector's floor (not jumping over it).
+  const sectors = ctx.world.level.def?.sectors;
+  if (sectors) {
+    const g = ctx.world.level.ground as SectorGround;
+    const s = ctx.player.player.grounded ? g.sectorAt(feet[0], feet[2]) : -1;
+    const sec = s >= 0 ? sectors.sectors[s]! : null;
+    const dmg = stepHazard(rt.hazard, sec && sec.special === 'hurt' ? sec.hurtPerSec : 0, dt);
+    if (dmg > 0) damagePlayer(ctx, dmg, 'pellet');
   }
   const def = ctx.world.level.def;
   if (!def) return;
