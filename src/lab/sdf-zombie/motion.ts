@@ -73,7 +73,7 @@ import type { CollapsePhase, CollapseState, MissingLimbs, RopeLimit } from './co
 import {
   COLLAPSE_TUNING, collapseRopes, makeCollapseState, stepCollapse,
 } from './collapse';
-import { attackPose, type AttackPose, type SwingVariant } from './attack';
+import { attackPose, swingGapeAt, type AttackPose, type SwingVariant } from './attack';
 import { houndGapeAt, houndPose, isHoundVariant, pounceAirborne } from './hound-attack';
 import { joystickOffset } from './joystick';
 import { isSwordVariant, jawGapeAt, swordCarryAt } from './sword-swing';
@@ -1407,7 +1407,9 @@ export function stepMotion(
   if (joints.jaw && idx.jaw !== undefined && idx.neck !== undefined && idx.head !== undefined) {
     const swingGape = attack && cfg.attack && profile.melee?.kind === 'sword' && isSwordVariant(cfg.attack.variant)
       ? jawGapeAt(cfg.attack.phase, cfg.attack.variant)
-      : attack && cfg.attack && isHoundVariant(cfg.attack.variant) ? houndGapeAt(cfg.attack.phase, cfg.attack.variant) : 0;
+      : attack && cfg.attack && isHoundVariant(cfg.attack.variant) ? houndGapeAt(cfg.attack.phase, cfg.attack.variant)
+      // An unarmed swing on a body that opens its jaw to strike (the siren's reveal, attack.ts swingGapeAt).
+      : attack && cfg.attack && profile.swingGape ? swingGapeAt(cfg.attack.phase, profile.swingGape) : 0;
     // The expression layer's gape (expression.ts) opens the jaw too; whichever is wider wins.
     jawGape = Math.max(swingGape, cfg.jawGape ?? 0);
     const at = (i: number): Vec3 => (havePoints ? points[i]!.pos : targets[i]!);

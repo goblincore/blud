@@ -474,6 +474,33 @@ export const STALK: GaitProfile = {
   armSwing: 0.02,
 };
 
+/** The SIREN's walk: a model's walk — modest steps, a small heel lift, a
+ *  soft knee, a full hip sway, arms free ('swing') swinging softly against the
+ *  legs. PARAMETRIC (the shamble's machinery, no clip curves): it was the
+ *  bride's STALK, whose legs come from the soldier's walk CLIP, and in curve
+ *  mode the knee bend is the clip's own — strideLen and cadence do not touch
+ *  it. On her long legs that clip folded the swing shin up behind her to the
+ *  horizontal (swing ankle 0.45 m off the floor at 1 m/s; owner, 2026-10-24).
+ *  Here the swing ankle peaks at ~0.16 m. Cadence x step length is sized to
+ *  her cruise (SIREN_PROFILE 0.85 m/s). */
+export const SIREN_WALK: GaitProfile = {
+  ...SHAMBLE,
+  name: 'siren-walk',
+  strideFreq: 1.0,
+  strideLen: 0.42,
+  stanceDuty: 0.60,
+  footLift: 0.08,
+  footPush: 0.04,
+  kneeBend: 0.06,
+  kneeLift: 0.02,
+  swayAmp: 0.07,
+  shoulderSway: 0.25,
+  bobAmp: 0.015,
+  torsoLean: 0,
+  armStyle: 'swing',
+  armSwing: 0.05,
+};
+
 /** The GOREHOUND's walk (characters/gorehound.blob): a heavy QUADRUPED. The
  *  arms are its front legs ('foreleg': walked like legs on the hind clock a
  *  quarter-stride later, a dog's lateral-sequence walk, LH LF RH RF), and

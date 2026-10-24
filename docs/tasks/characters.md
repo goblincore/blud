@@ -2,6 +2,18 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Siren (the beautiful lure: face splits open as she strikes) — first pass 2026-10-23
+
+- [x] **Body** `characters/siren.blob`: the bride's skeleton and jaw hinge (legs 57% of her height, long neck)
+  under a smooth, softened head, a crimson slip dress (shells), warm skin, waist-length dark hair (crown mass,
+  face-framing strands, a shell fall hung from `spine2`). `?character=siren`, `?spawn=siren`.
+- [x] **Face** painted by a generated sheet (`scripts/make-siren-face.py`: eyes, brows, lashes, lid, blush, lips)
+  at multiply; no painted face prims, no glow.
+- [x] **Attack**: `SIREN_PROFILE` (`SIREN_WALK`, arms free), the zombie mind's unarmed swing; `swingGape` 0.85 rad
+  drops her jaw on a row of hidden needle fangs through the swing (`attack.ts` `swingGapeAt`).
+- [ ] Owner review. Open: her own lunge/bite mind (the zombie hook bends her double, hiding the face); fuller
+  lower-lip shape at gape; the in-game check of the reveal at a playable distance.
+
 ## Venus (heavy biomech woman: corset cage, talon gauntlets, knee braces) — first pass 2026-10-22
 
 - [x] **Body** `characters/venus.blob`: a heavy, full-figured flesh body (hips 0.55 m across, a 0.17 waist, a rear
