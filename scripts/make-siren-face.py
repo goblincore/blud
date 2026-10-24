@@ -108,7 +108,7 @@ LIP_LINE = (0.22, 0.02, 0.04)  # the line where the lips meet
 # "a bit ridiculous big" (owner, 2026-10-23): 37 x 22 mm, ~4x a realistic
 # eye's area, centred in siren.blob's carved socket (x 28, rel -27 mm: the
 # carve's offset), a tall graded iris nearly filling it.
-EYE_IN, EYE_OUT = 9.0, 46.0
+EYE_IN, EYE_OUT = 12.0, 49.0     # (9, 46 read as too close-set, owner 2026-10-24)
 EYE_Y = -29.0          # eye centre line at the inner corner, rel cranium centre
 EYE_LIFT = 3.0         # outer corner this much higher
 EYE_HALF_H = 14.5      # the eye's full height above the centre line: the top of the big lid
@@ -119,7 +119,7 @@ EYE_HALF_H = 14.5      # the eye's full height above the centre line: the top of
 # between the lid edge and the eye's full top is LID, painted lavender-pink.
 LID_OPEN = 0.40
 EYE_LOW = 0.78         # the lower lid's depth, as a share of EYE_HALF_H
-IRIS_X, IRIS_Y, IRIS_RX, IRIS_RY = 28.0, -28.5, 9.6, 11.5
+IRIS_X, IRIS_Y, IRIS_RX, IRIS_RY = 31.0, -28.5, 9.6, 11.5
 PUPIL_RX, PUPIL_RY = 3.4, 4.6
 # The mouth line and lip peaks are siren.blob's lip prims, PROBED (where
 # each prim lies closest under the skin): upper peak -78, lower -89.5, the
@@ -261,7 +261,7 @@ def brow_layer():
     # from a low inner head to a peak two thirds out, falling off sharply.
     # Inner heads NOT low: a first pass dropped them to -4 mm and the
     # brows rendered as an angry V. A gentle high arch reads knowing.
-    path = [(13.0, 3.0), (19.0, 6.2), (26.0, 8.6), (33.0, 9.8), (39.0, 9.4), (45.0, 6.8), (51.0, 2.0)]
+    path = [(16.0, 3.0), (22.0, 6.2), (29.0, 8.6), (36.0, 9.8), (42.0, 9.4), (48.0, 6.8), (54.0, 2.0)]
     for side in both(path):
         stroke(d, side, 2.6, 0.7)
     return [(blur(m, 0.35), BROW, 0.92)]

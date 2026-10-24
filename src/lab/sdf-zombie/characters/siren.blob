@@ -30,8 +30,8 @@
 #   4. THE PROPORTIONS. The bride's elegant frame (her skeleton, verbatim):
 #      a high hip line (legs ~57% of her height), a long neck, a small head,
 #      a defined waist.
-#   5. THE HAIR. Long and orange-red, side-parted with a big wave over one
-#      side of the face (owner, 2026-10-24); earlier blue buns, before that
+#   5. THE HAIR. Orange twin tails with a side swoop over one brow (owner,
+#      2026-10-24); earlier a long side-parted fall, blue buns, before that
 #      waist-length, loose and dark: a crown mass plus strand
 #      curtains framing the face, over the shoulders and down the back.
 model siren
@@ -157,7 +157,7 @@ body
   # the lips and jaw pushed the whole mouth area ~1 cm out of the face (the
   # surface sat 8-16 mm outside every prim there): a muzzle. The crease is
   # handled by removing the nose tip and the sheet's counter-light instead.
-  blob head on skull at=0.45 offset=(0,0,0.0290) tip=(0,-0.0200,0.0040) r=0.054 r2=0.0360 wide=1.06 blend=0.012
+  blob head on skull at=0.45 offset=(0,0,0.0290) tip=(0,-0.0200,0.0040) r=0.054 r2=0.0360 wide=0.98 blend=0.012
   # PHILTRUM PAD: fills the 2 mm groove where the upper face mass's bottom
   # rim met the lips and jaw (probed at x 0.022: z 0.0751 / 0.0727 / 0.0744
   # at y 1.655 / 1.650 / 1.645), whose lit lower edge read as a pale crease
@@ -184,7 +184,7 @@ body
   # Soft cheeks — youth reads as fullness here, but at r 0.024 / x 0.036
   # the close-up read jowly; r 0.021 at x 0.034 keeps the curve, not the
   # bulge.
-  blob head on skull at=0.50 offset=(0.036,-0.0085,0.0480) r=0.022 blend=0.016 both
+  blob head on skull at=0.50 offset=(0.040,-0.0085,0.0440) r=0.017 blend=0.014 both
   # EYES: an UNPAINTED eyeball bulge per eye — the shape the lids wrap
   # round — and ALL the colour on the sheet (make-siren-face.py: sclera,
   # iris, liner, lashes). The first passes painted sclera, iris and a
@@ -194,13 +194,13 @@ body
   # 2.8 cm long (ordinary size and set; the bride's larger, wider-set eyes
   # were her deliberately-wrong doll trace), ~3 mm proud of the face.
   # DEEP SOCKETS (owner, 2026-10-23: "make the eye sockets deeper"): a
-  # soft carve per eye, centred on the painted eye (x 0.028, rel the
+  # soft carve per eye, centred on the painted eye (x 0.031, rel the
   # cranium -27 mm), semi-axes 21 x 16 mm, recessing the eye ~7 mm and
   # easing out over the brow and cheek, so the brow and cheek stand over
   # the eye and the painted lid reads as set IN the head. wide 1.05, not
   # 1.30: at 1.30 the two carves met at the centreline and ate the nose
   # bridge flat. Smooth (blend 0.007): a crisp rim reads as a mask hole.
-  carve on skull at=0.55 r=0.020 wide=1.05 tall=0.80 deep=0.75 blend=0.007 offset=(0.028,-0.0046,0.0975) both
+  carve on skull at=0.55 r=0.020 wide=1.05 tall=0.80 deep=0.75 blend=0.007 offset=(0.031,-0.0046,0.0975) both
   # No lid or brow-ridge prims (see the cheekbone note): with them the eye
   # was a slit under a shelf. The sheet paints the lid and brows.
   # Nasal root: fills between the eyes so they sit IN the face.
@@ -243,9 +243,10 @@ body
   blob head on jaw at=1.0 r=0.0028 r2=0.0005 offset=(-0.020,0.0195,-0.0200) tip=(0.000,0.019,0.002) blend=0.001 both color=e6dcc4 gloss=0.70
 
   # ============================================================
-  # HAIR — LONG ORANGE-RED (owner, 2026-10-24: "change her hair to be long
-  # orange hair like the reference" — the 1940s pin-up's: a deep side part, a
-  # big glossy wave sweeping down over one side of the face, a long fall).
+  # HAIR — ORANGE TWIN TAILS (owner, 2026-10-24: first "long orange hair
+  # like the reference", then "maybe like double ponytail with long tails"):
+  # a side-parted crown with a glossy swoop over one brow, tied up into two
+  # long tails.
   # Was blue buns. A vivid orange (e8661c; d2461a rendered plain red under
   # the warm key) with a satin gloss.
   # ============================================================
@@ -267,23 +268,24 @@ body
   # brow's outer half, and a thick lock down past the cheekbone to the jaw.
   blob head on skull at=0.64 offset=(-0.036,0.050,0.050) tip=(-0.026,-0.010,0.006) r=0.026 wide=1.20 deep=0.70 blend=0.010 color=e8661c gloss=0.50
   blob head on skull at=0.64 offset=(-0.060,0.036,0.034) tip=(-0.010,-0.130,0.008) bend=(-0.010,0,0.008) r=0.024 r2=0.016 deep=0.80 strand=5 wave=0.10 cycles=1.5 fat=0.85 blend=0.004 color=e8661c gloss=0.50
-  # Face-framing curtains down past the jaw to the collarbones. 0.32 m, not
-  # longer: they ride the head, and the head turns (see THE FALL).
-  blob head on skull at=0.50 offset=(0.040,0.097,0.036) tip=(0.050,-0.320,0.006) bend=(0.030,0,0.004) r=0.020 r2=0.014 strand=7 wave=0.12 cycles=2.5 fat=0.80 blend=0.004 both color=e8661c gloss=0.50
+  # TWIN TAILS (owner, 2026-10-24: "maybe like double ponytail with long
+  # tails"): a tie high on each side of the head (x +-0.080, y ~1.81, a
+  # little behind the ear line) and a long tapered bundle of strands from
+  # it, out, down and BACK to y ~1.42 behind the shoulders, bowed outward
+  # (straight down, the first pass hung like side curtains and painted the
+  # shoulder tops orange). 0.38 m: on the skull a tail swings with the
+  # head's aim in game, as a real ponytail does; much longer and it would
+  # reach the arms.
+  # The gathered root: a round knot where the hair is tied.
+  blob head on skull at=0.64 offset=(0.080,0.086,-0.034) r=0.032 wide=1.00 tall=1.00 deep=0.95 blend=0.010 both color=e8661c gloss=0.50
+  # The tie: a darker band round the root.
+  blob head on skull at=0.64 offset=(0.100,0.090,-0.034) tip=(0.008,-0.012,0.000) r=0.022 wide=0.55 deep=1.10 tall=1.10 blend=0.004 both color=8a2a10 gloss=0.40
+  # The tail: thick at the tie, tapering to loose strands at the tip.
+  blob head on skull at=0.64 offset=(0.108,0.086,-0.036) tip=(0.030,-0.380,-0.075) bend=(0.050,0.010,-0.020) r=0.030 r2=0.012 deep=0.90 strand=8 wave=0.12 cycles=2.5 fat=0.85 blend=0.006 both color=e8661c gloss=0.50
   # BACK AND SIDES: covers the back of the skull and the sides behind the
   # ears. Centre (0, 1.676, -0.047), semi 0.0775 x 0.056 x 0.053; r x wide
   # 0.0775 stays under the cranium's 0.0912 (the face frame).
   blob head on skull at=0.45 offset=(0,0,-0.045) r=0.062 wide=1.25 tall=0.90 deep=0.85 blend=0.008 color=e8661c gloss=0.50
-  # THE FALL: one glossy SHELL from the crown down the back to the shoulder
-  # blades and on (y ~1.15), clipped open at the face by a near-vertical
-  # plane, fine vertical warp ribbing it into locks. ON THE UPPER SPINE,
-  # NOT THE SKULL: on the skull the game's head aim swung a fall this long
-  # out as a plank (the bride's veil, goblincore/blud#61). Same rest
-  # geometry as a skull fall: the skull's at=0.75 point plus the offset,
-  # re-expressed off spine2's tail (0, 1.4297, -0.0141). r 0.090 stays under
-  # the cranium's 0.0912. r2 0.135, set back: at 0.170 it was the nearest
-  # prim to the shoulder tops and painted them orange.
-  shell torso on spine2 at=1.0 offset=(0,0.3182,-0.0081) tip=(0,-0.540,-0.060) r=0.090 r2=0.135 thick=0.010 clip=(0,-0.164,0.986) clipd=-0.2491 rim=0.008 blend=0.006 color=e8661c gloss=0.50 warp=0.003 warpFreq=(90,4,90) rigid
 
   # ============================================================
   # ARMS — slim and smooth: one ball at the shoulder, one tapered bar per

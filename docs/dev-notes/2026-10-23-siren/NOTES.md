@@ -104,3 +104,12 @@ across the eye read as a band over the face), curtains to the collarbones, a bac
 helmet-like from the front.
 
 ![hair](contact-9-hair.png)
+
+## Tenth pass: twin tails, wider-set eyes, smaller cheeks (2026-10-24, owner: "maybe like double ponytail with long tails ... the eyes may be too close, cheeks too big")
+
+Long fall and curtains removed; two high ties (x +-0.080, y ~1.81) with a dark band and a 0.38 m tapered strand tail
+each, falling out, down and BACK behind the shoulders (straight down they hung like side curtains and painted the
+shoulder tops). Eyes 3 mm further apart each (sheet `EYE_IN/OUT`, `IRIS_X`, the brows and the socket carves together);
+cheek prims r 0.022 -> 0.017, the face mass wide 1.06 -> 0.98.
+
+![twin tails](contact-10-tails.png)
