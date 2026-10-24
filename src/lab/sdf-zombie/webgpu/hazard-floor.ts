@@ -15,9 +15,10 @@ export function newHazard(): HazardState {
 
 /** One sim step on a floor hurting `hurtPerSec` (0 = safe). Returns the damage to apply now. */
 export function stepHazard(h: HazardState, hurtPerSec: number, dt: number): number {
+  if (!(dt > 0) || !Number.isFinite(dt)) return 0;
   if (!(hurtPerSec > 0)) { h.acc = PERIOD_S - FIRST_S; return 0; }
   h.acc += dt;
   let dmg = 0;
-  while (h.acc >= PERIOD_S) { h.acc -= PERIOD_S; dmg += Math.round(hurtPerSec * PERIOD_S); }
+  while (h.acc >= PERIOD_S) { h.acc -= PERIOD_S; dmg += Math.max(1, Math.round(hurtPerSec * PERIOD_S)); }
   return dmg;
 }

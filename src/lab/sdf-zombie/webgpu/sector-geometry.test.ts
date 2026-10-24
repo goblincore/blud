@@ -136,4 +136,17 @@ describe('sectorInteriorPoint', () => {
     const [x, z] = sectorInteriorPoint(map(), 0)!;
     expect(x >= -1 && x <= 1 && z <= -3 && z >= -5).toBe(false);
   });
+  it('prefers the middle of a thin strip', () => {
+    const m: SectorMap = {
+      vertices: [[0, 0], [0.5, 0], [0.5, -4], [0, -4]],
+      sectors: [{
+        floor: 0, ceil: 4, light: 1, special: 'none', hurtPerSec: 0, glow: null,
+        materials: { floor: 'default', ceil: 'default', wall: 'default' }, zone: 0,
+      }],
+      lines: [[0, 1], [1, 2], [2, 3], [3, 0]].map(([a, b]) => ({ v: [a!, b!] as [number, number], front: 0, back: -1, door: null, exit: false })),
+    };
+    const [x, z] = sectorInteriorPoint(m, 0)!;
+    expect(Math.abs(x - 0.25)).toBeLessThan(0.05);
+    expect(Math.abs(z + 2)).toBeLessThan(0.5);
+  });
 });

@@ -125,7 +125,8 @@ const distToSeg = (x: number, z: number, [ax, az]: XZ, [bx, bz]: XZ): number => 
   return Math.hypot(x - (ax + t * dx), z - (az + t * dz));
 };
 
-/** A point well inside sector s (the inside grid sample farthest from its lines), or null. */
+/** A point well inside sector s (the inside grid sample farthest from its lines, ties broken
+ *  toward the middle of the sector), or null. A second, finer pass refines around the best sample. */
 export function sectorInteriorPoint(map: SectorMap, s: number): [number, number] | null {
   const edges = sectorEdges(map, s);
   if (edges.length === 0) return null;
@@ -133,15 +134,36 @@ export function sectorInteriorPoint(map: SectorMap, s: number): [number, number]
   for (const [a, b] of edges) for (const [x, z] of [a, b]) {
     x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z);
   }
-  const step = Math.max(0.25, Math.min(x1 - x0, z1 - z0) / 24);
-  let best: [number, number] | null = null, bestD = -1;
-  for (let z = z0 + step / 2; z < z1; z += step) {
-    for (let x = x0 + step / 2; x < x1; x += step) {
-      if (!pointInEdges(x, z, edges)) continue;
-      let d = Infinity;
-      for (const [a, b] of edges) d = Math.min(d, distToSeg(x, z, a, b));
-      if (d > bestD) { bestD = d; best = [x, z]; }
+  const clearance = (x: number, z: number): number => {
+    let d = Infinity;
+    for (const [a, b] of edges) d = Math.min(d, distToSeg(x, z, a, b));
+    return d;
+  };
+  const sample = (ax: number, bx: number, az: number, bz: number, step: number) => {
+    const pts: { x: number; z: number; d: number }[] = [];
+    for (let z = az + step / 2; z < bz; z += step) {
+      for (let x = ax + step / 2; x < bx; x += step) {
+        if (pointInEdges(x, z, edges)) pts.push({ x, z, d: clearance(x, z) });
+      }
     }
-  }
-  return best;
+    return pts;
+  };
+  const pick = (pts: { x: number; z: number; d: number }[]) => {
+    if (pts.length === 0) return null;
+    let cx = 0, cz = 0;
+    for (const p of pts) { cx += p.x; cz += p.z; }
+    cx /= pts.length; cz /= pts.length;
+    let best = pts[0]!, bestC = Math.hypot(best.x - cx, best.z - cz);
+    for (const p of pts) {
+      const c = Math.hypot(p.x - cx, p.z - cz);
+      if (p.d > best.d + 1e-6 || (Math.abs(p.d - best.d) <= 1e-6 && c < bestC)) { best = p; bestC = c; }
+    }
+    return best;
+  };
+  const step = Math.max(0.25, Math.min(x1 - x0, z1 - z0) / 24);
+  const coarse = pick(sample(x0, x1, z0, z1, step));
+  if (!coarse) return null;
+  const fine = pick(sample(coarse.x - step, coarse.x + step, coarse.z - step, coarse.z + step, step / 4));
+  const best = fine && fine.d > coarse.d - 1e-6 ? fine : coarse;
+  return [best.x, best.z];
 }

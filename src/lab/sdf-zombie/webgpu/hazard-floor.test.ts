@@ -30,4 +30,18 @@ describe('stepHazard', () => {
     for (let i = 0; i < 120; i++) total += stepHazard(h, 2.6, 1 / 60);
     expect(total).toBe(6);                                                   // round(2.6) = 3, twice
   });
+  it('ignores non-finite or non-positive dt', () => {
+    const h = newHazard();
+    const before = h.acc;
+    expect(stepHazard(h, 10, NaN)).toBe(0);
+    expect(stepHazard(h, 10, Infinity)).toBe(0);
+    expect(stepHazard(h, 10, -1)).toBe(0);
+    expect(h.acc).toBe(before);
+  });
+  it('a small positive rate still hurts by at least a point', () => {
+    const h = newHazard();
+    let total = 0;
+    for (let i = 0; i < 126; i++) total += stepHazard(h, 0.4, 1 / 60);       // 2.1 s
+    expect(total).toBe(2);
+  });
 });
