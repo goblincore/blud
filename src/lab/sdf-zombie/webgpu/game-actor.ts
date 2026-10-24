@@ -955,9 +955,13 @@ export function createZombieActor(opts: {
     return w;
   }
 
+  // A limb the body was BORN without is not missing. The teratoma (a floater) and the gutcrawler have no leg clusters
+  // at all, and reading that as "both legs shot off" collapsed them on their first tick (collapse.ts bothLegsGone):
+  // the floater dropped to the floor the moment it spawned (owner, enemy test arena, 2026-10-23).
+  const bornWith = new Set<LimbId>(body.clusters.map(c => c.limb as LimbId));
   function missingLimbs(): MissingLimbs {
     if (soldierDamage) return soldierInjury(current, soldierWounds, injuryTuning).missing;
-    const gone = (l: LimbId) => !(current.clusters.find(c => c.limb === l)?.alive ?? false);
+    const gone = (l: LimbId) => bornWith.has(l) && !(current.clusters.find(c => c.limb === l)?.alive ?? false);
     // A leg with ANY distal cut has lost its foot (severDistal kills the prim
     // and everything outward), so it can no longer bear weight: count it as
     // missing for the gait/collapse. Otherwise two shot-off shins left the

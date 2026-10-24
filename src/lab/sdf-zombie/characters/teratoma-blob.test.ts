@@ -24,6 +24,10 @@ import { makeActorMotion, stepActorMotion, emptyActorSignals } from '../actor';
 import { makeRng } from '../wander';
 import { HOVER } from '../gait';
 import { TERATOMA_PROFILE } from '../motion-profile';
+import { makeMotionJoints, makeMotionState, stepMotion, type MotionSignals } from '../motion';
+import { bindRig, applyRig } from '../rig-bind';
+import { boneFrames } from '../rig-frames';
+import { add, len, qRotate, sub } from '../vec';
 
 const doc = parseBlob(src);
 const built = () => buildBody(compileBlob(doc, compileFace(doc)));
@@ -119,6 +123,63 @@ describe('teratoma.blob', () => {
     }
     expect(lo).toBeGreaterThan(1.25);
     expect(hi).toBeLessThan(1.6);
+  });
+
+  // THE GAME'S PATH (owner, enemy test arena, 2026-10-23: "it doesn't float, it immediately falls into the ground").
+  // Two bugs the lab path above could not see: game-actor read the legs the body was never born with as SHOT OFF, so
+  // collapse.ts collapsed it on its first tick; and once they were not, the aimed gunner's leg IK (faceHeading, which
+  // only the game sets) dereferenced hip/knee/foot joints that do not exist and the game loop threw every frame. Here:
+  // legs reported present (as game-actor's missingLimbs now does), a facing heading, firing, for three seconds.
+  it('hovers under the game path: aimed, firing, legs not reported missing', () => {
+    const b = built();
+    const bound = bindRig(b);
+    const j = makeMotionJoints(b, bound.rig.restPose)!;
+    let state = makeMotionState(5, [0, 0, 0]);
+    let points = bound.rig.points.map(p => ({ ...p, pinned: false }));
+    const sig = (i: number): MotionSignals => ({
+      dt: 1 / 60, shot: null, fire: i % 45 === 0, severed: [], freshWounds: [], headAlive: true, forcedCollapse: false,
+      wounded: { armL: false, armR: false, legL: false, legR: false },
+      missing: { legL: false, legR: false, armL: false, armR: false },
+    });
+    for (let i = 0; i < 180; i++) {
+      const r = stepMotion(state, j, { enabled: true, wander: true, profile: TERATOMA_PROFILE, faceHeading: 0.6 }, sig(i), points,
+        { minX: -20, maxX: 20, minZ: -20, maxZ: 20 }, makeRng(5));
+      state = r.state;
+      points = r.frame.restPose.map(p => ({ pos: [...p] as [number, number, number], prev: [...p] as [number, number, number], pinned: false }));
+      expect(r.frame.collapsed, `frame ${i}`).toBe(false);
+      expect(r.frame.restPose[j.index.pelvis!]![1], `frame ${i}`).toBeGreaterThan(1.25);
+    }
+  });
+
+  // THE SWIMMING (owner, test arena, 2026-10-24: "he is swimming within his own flesh"). Every torso prim is `rigid` on
+  // the pelvis, so the ball moves as ONE piece in the pelvis bone's frame, the frame the kit (eye, teeth, plates)
+  // rides. Without it each prim end rode its nearest rig joint and drifted up to 456 mm from the kit in the hover.
+  // And the ball stays near upright: the arms hang off the head point, not the 6 cm pelvis's tail, whose drag rolled
+  // the whole rigid ball up to 49 degrees (now ~13).
+  it('moves the flesh as one piece with the kit, and stays near upright', () => {
+    const b = built();
+    const m = makeActorMotion(b, { seed: 1 });
+    const rng = makeRng(7);
+    const ph = (b.bones as unknown as Map<string, { head: [number, number, number] }>).get('pelvis')!.head;
+    const mid = (p: { a: readonly number[]; b: readonly number[] }) =>
+      [(p.a[0]! + p.b[0]!) / 2, (p.a[1]! + p.b[1]!) / 2, (p.a[2]! + p.b[2]!) / 2] as [number, number, number];
+    const torso = b.prims.map((p, i) => [p, i] as const).filter(([p]) => p.limb === 'torso');
+    let drift = 0, tilt = 0;
+    for (let i = 0; i < 400; i++) {
+      const f = stepActorMotion(m, {
+        current: b, dt: 1 / 60, wander: true, armStyle: undefined, headingFollow: 1, gazeFollow: 1,
+        bounds: { minX: -50, maxX: 50, minZ: -50, maxZ: 50 }, rng, signals: emptyActorSignals(), profile: TERATOMA_PROFILE,
+      })!;
+      const posed = applyRig(b, m.bound, f.bodyYaw);
+      const fr = boneFrames(b, m.bound, f.bodyYaw).get('pelvis')!;
+      for (const [p, k] of torso)
+        drift = Math.max(drift, len(sub(mid(posed.prims[k]!), add(fr.pos, qRotate(fr.quat, sub(mid(p), ph))))));
+      const q = fr.quat, y = [0, Math.sin(f.bodyYaw / 2), 0, Math.cos(f.bodyYaw / 2)];
+      const d = Math.abs(q[0]! * y[0]! + q[1]! * y[1]! + q[2]! * y[2]! + q[3]! * y[3]!);
+      tilt = Math.max(tilt, 2 * Math.acos(Math.min(1, d)) * 180 / Math.PI);
+    }
+    expect(drift).toBeLessThan(0.001);
+    expect(tilt).toBeLessThan(20);
   });
 
   it('uses the HOVER gait with no stepping', () => {
