@@ -8,6 +8,7 @@
 
 import type { Capability, LevelDef } from './level-def';
 import { parseLevelJson, type ParseOptions } from './level-json';
+import { buildSectorGround } from './sector-ground';
 import {
   GLOW_KINDS, SECTOR_SPECIALS, zoneName,
   type GlowKind, type SectorDef, type SectorLine, type SectorMap, type SectorSpecial, type XZ,
@@ -166,6 +167,22 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
     return { id: zone + 1, name: zoneName(zone), min: [minX, minZ], max: [maxX, maxZ], floor: lo,
       height: Math.max(hi - lo, 0.1), shell: 'art' };
   });
+
+  // --- markers must stand in a sector (the room boxes alone let one land in a hole) ------
+  if (errors.length === 0) {
+    const ground = buildSectorGround({ vertices, sectors, lines });
+    const inVoid = (pos: unknown): boolean => Array.isArray(pos) && pos.length === 3 && pos.every(isNum)
+      && Number.isNaN(ground.floorAt(pos[0] as number, pos[2] as number));
+    const posOf = (o: unknown): unknown => (typeof o === 'object' && o !== null ? (o as Json).pos : undefined);
+    if (inVoid(posOf(j.start))) errors.push('start: must stand in a sector');
+    const listed = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+    const label = (o: unknown, i: number) => {
+      const id = typeof o === 'object' && o !== null ? (o as Json).id : undefined;
+      return typeof id === 'string' || typeof id === 'number' ? String(id) : String(i);
+    };
+    listed(j.spawns).forEach((o, i) => { if (inVoid(posOf(o))) errors.push(`spawn ${label(o, i)}: must stand in a sector`); });
+    listed(j.pickups).forEach((o, i) => { if (inVoid(posOf(o))) errors.push(`pickup ${label(o, i)}: must stand in a sector`); });
+  }
 
   const shared: Json = {};
   for (const k of SHARED) if (j[k] !== undefined) shared[k] = j[k];

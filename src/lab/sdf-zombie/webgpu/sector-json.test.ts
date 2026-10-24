@@ -86,6 +86,28 @@ describe('parseSectorLevel: review fixes', () => {
   });
 });
 
+describe('parseSectorLevel: markers in void', () => {
+  const broken = (edit: (j: any) => void) => { const j = fixture(); edit(j); return () => parseSectorLevel(j); };
+  it('refuses a start in the column hole, and still parses the fixture as is', () => {
+    expect(() => parseSectorLevel(fixture())).not.toThrow();
+    expect(broken(j => { j.start.pos = [0, 0, -4]; })).toThrow(/start: must stand in a sector/);
+  });
+  it('refuses spawns and pickups in void, in one error', () => {
+    let msg = '';
+    try {
+      const j = fixture();
+      j.start.pos = [0, 0, -4];
+      j.spawns = [{ id: 'z1', character: 'zombie', pos: [0, 0, -4] }];
+      j.pickups = [{ id: 'p1', kind: 'health', pos: [20, 0, 20] }];
+      parseSectorLevel(j);
+    } catch (e) { msg = (e as Error).message; }
+    expect(msg).toMatch(/start: must stand in a sector/);
+    expect(msg).toMatch(/spawn z1: must stand in a sector/);
+    expect(msg).toMatch(/pickup p1: must stand in a sector/);
+    expect(msg.match(/level sectors-fixture:/g)).toHaveLength(1);
+  });
+});
+
 describe('parseLevel', () => {
   it('sends sector files to the sector parser and the rest to Level Format v1', () => {
     expect(parseLevel(fixture()).sectors).toBeDefined();
