@@ -38,7 +38,8 @@ export function createSectorFx(sectorCount: number, search: URLSearchParams, red
   // A uniform array needs at least one element to declare.
   const n = Math.max(1, sectorCount);
   const gainParam = search.get('glowgain');
-  const gain = gainParam === null ? NaN : Number(gainParam);
+  // Absent or empty (`?glowgain=`) means the default: Number('') is 0 and would black out the pools.
+  const gain = gainParam === null || gainParam.trim() === '' ? NaN : Number(gainParam);
   return {
     levels: uniformArray(new Array<number>(n).fill(0), 'float'),
     values: new Float32Array(sectorCount),

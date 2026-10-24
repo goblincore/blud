@@ -12,7 +12,7 @@ import { roomIdAt } from './game-level-rooms';
 import { CHUNK_OBJECT_LIGHT, type ChunkObjectLight } from './baked-chunks';
 import { forEachDrawnChunkMesh, type ChunkMeshSource } from './game-chunk-bake';
 import type { GameContext } from './game-context';
-import { setSectorLightConfig } from './game-sector-light';
+import { setSectorLightConfig, type SectorLightPatch } from './game-sector-light';
 import { sectorInteriorPoint } from './sector-geometry';
 import * as THREE from 'three/webgpu';
 import { ATTACK_TUNING, type SwingVariant } from '../attack';
@@ -670,7 +670,7 @@ export function createWorldSeams(ctx: GameContext) {
       geometry: ctx.world.level.def?.sectors ? 'sectors' : 'rooms',
     }),
     /** Sector light (spec 2026-10-24 §7): read or patch the curve, the on/off toggle and the pool glowGain. */
-    sectorLight: (patch?: { max?: number; gamma?: number; on?: boolean; glowGain?: number }) =>
+    sectorLight: (patch?: SectorLightPatch) =>
       ctx.world.sectorFx ? setSectorLightConfig(ctx.world.sectorFx, patch ?? {}) : null,
     /** A point well inside the first hurt sector (gates): [x, floorY, z] and the sector, or null. */
     hazardPoint: () => {

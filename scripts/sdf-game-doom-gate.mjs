@@ -226,6 +226,9 @@ await sleep(2000);
 const h3 = await evaluate('__sdfGame.health()');
 if (h3 < h2) fail(`hazard: still hurting off the pool (${h2} -> ${h3})`);
 pass(`hazard: off the pool health holds (${h2} -> ${h3})`);
+// boot() resets the console log: check the ?god=0 boot's errors first.
+const hazardErrs = consoleEvents.filter((e) => e.type === 'error' || e.type === 'exception');
+if (hazardErrs.length) fail(`console errors (?god=0 boot): ${JSON.stringify(hazardErrs.slice(0, 4))}`);
 // The look work: a fresh boot with god mode on, so no hurt flash tints the pool frames and nobody dies mid-sheet.
 await boot('doom-e1m1', '&god=1');
 // The glow, looking down at the pool.
@@ -273,15 +276,18 @@ const poses = await evaluate(`(async () => {
   const second = bright.find((c) => c.zone !== bright[0].zone) ?? bright[1];
   const low = Math.min(...cands.map((c) => c.light));
   const dark = cands.filter((c) => c.light === low).sort((a, b) => a.score - b.score)[0];
-  return { bright: [bright[0], second], dark };
+  return { bright: [bright[0] ?? null, second ?? null], dark: dark ?? null };
 })()`);
 console.log(`poses: ${JSON.stringify(poses)}`);
+if (!poses.bright[0]) fail('A/B: no bright pose (no indoor non-special sector with 2.2 m headroom facing a wall 1.5..14 m off)');
+if (!poses.dark) fail('A/B: no dark pose (no walkable non-special sector at the lowest light facing a wall)');
+if ((process.env.SHOTS === '1' || process.env.TUNING === '1') && !poses.bright[1]) fail('sheets: no second bright pose');
 const poseAt = async (q, pitch = -0.1) => evaluate(`__sdfGame.setPose(${q.x}, ${q.z}, ${q.yaw}, ${pitch}, ${q.y})`);
 const flash = await flashOff();
 console.log(`flashlight: setFlashlight(false) -> ${flash === null ? 'no seam on this level (on as authored)' : flash}`);
 const DEFAULT_CURVE = await evaluate('__sdfGame.sectorLight()');
 const shotWith = async (patch) => { await evaluate(`__sdfGame.sectorLight(${JSON.stringify(patch)})`); await flashOff(); await sleep(sleepSettle); return grab(); };
-const restore = () => evaluate(`__sdfGame.sectorLight(${JSON.stringify({ on: true, max: DEFAULT_CURVE.max, gamma: DEFAULT_CURVE.gamma, glowGain: DEFAULT_CURVE.glowGain })})`);
+const restore = () => evaluate(`__sdfGame.sectorLight(${JSON.stringify({ on: DEFAULT_CURVE.on, max: DEFAULT_CURVE.max, gamma: DEFAULT_CURVE.gamma, glowGain: DEFAULT_CURVE.glowGain })})`);
 /** On/off frames at a pose for a curve: luminance means and the ratio. */
 async function ab(q, curve) {
   await poseAt(q);
@@ -295,13 +301,11 @@ const fmt = (r) => `on ${r.a.toFixed(2)} / off ${r.b.toFixed(2)} = ${r.ratio.toF
 const TUNED = { max: 0.35, gamma: 1.6 };
 const bright = await ab(poses.bright[0], { max: DEFAULT_CURVE.max, gamma: DEFAULT_CURVE.gamma });
 console.log(`sector light A/B, bright sector ${poses.bright[0].i} (light ${poses.bright[0].light}), default curve max ${DEFAULT_CURVE.max} γ${DEFAULT_CURVE.gamma}: ${fmt(bright)}`);
-let abPass = bright;
-let abCurve = `default max ${DEFAULT_CURVE.max} γ${DEFAULT_CURVE.gamma}`;
-if (bright.ratio <= 1.05) {
-  abPass = await ab(poses.bright[0], TUNED);
-  abCurve = `max ${TUNED.max} γ${TUNED.gamma} (the default is under 1.05: ${bright.ratio.toFixed(3)})`;
-  console.log(`sector light A/B, bright sector ${poses.bright[0].i}, max ${TUNED.max} γ${TUNED.gamma}: ${fmt(abPass)}`);
-}
+// The assertion is on the shipped default curve; max 0.35 γ1.6 is measured for the owner (report only).
+const abPass = bright;
+const abCurve = `default max ${DEFAULT_CURVE.max} γ${DEFAULT_CURVE.gamma}`;
+const tunedBright = await ab(poses.bright[0], TUNED);
+console.log(`sector light A/B, bright sector ${poses.bright[0].i}, max ${TUNED.max} γ${TUNED.gamma}: ${fmt(tunedBright)} (report only)`);
 const dark = await ab(poses.dark, { max: DEFAULT_CURVE.max, gamma: DEFAULT_CURVE.gamma });
 console.log(`sector light A/B, darkest sector ${poses.dark.i} (light ${poses.dark.light}), default curve: ${fmt(dark)} (report only)`);
 if (process.env.SHOTS === '1') {
@@ -311,11 +315,11 @@ if (process.env.SHOTS === '1') {
   const tunedDark = await ab(poses.dark, TUNED);
   const tunedSecond = await ab(poses.bright[1], TUNED);
   const lab = (q, what) => `${what}\nsector ${q.i}, light ${q.light}\nwall ${q.wall.toFixed(1)} m`;
-  await sheet('sector-light-sheet.png', `Sector light on/off (on = ${abCurve.split(' (')[0]} for row 1; default for rows 2-3; pool at glowGain ${DEFAULT_CURVE.glowGain})`,
+  await sheet('sector-light-sheet.png', `Sector light on/off (on = ${abCurve}; pool at glowGain ${DEFAULT_CURVE.glowGain})`,
     [lab(poses.bright[0], 'bright A'), lab(poses.bright[1], 'bright B'), lab(poses.dark, 'darkest'), 'pool\n(pitch -0.5, -1.2)'],
     ['on', 'off', 'on, max 0.35 γ1.6'],
-    [[abPass.on, abPass.off, null], [second.on, second.off, tunedSecond.on], [dark.on, dark.off, tunedDark.on], [poolRim, poolDown, null]],
-    [[abPass.a.toFixed(1), abPass.b.toFixed(1), ''], [second.a.toFixed(1), second.b.toFixed(1), tunedSecond.a.toFixed(1)], [dark.a.toFixed(1), dark.b.toFixed(1), tunedDark.a.toFixed(1)], ['', `G/R ${(gm.g / gm.r).toFixed(2)}`, '']]);
+    [[abPass.on, abPass.off, tunedBright.on], [second.on, second.off, tunedSecond.on], [dark.on, dark.off, tunedDark.on], [poolRim, poolDown, null]],
+    [[abPass.a.toFixed(1), abPass.b.toFixed(1), tunedBright.a.toFixed(1)], [second.a.toFixed(1), second.b.toFixed(1), tunedSecond.a.toFixed(1)], [dark.a.toFixed(1), dark.b.toFixed(1), tunedDark.a.toFixed(1)], ['', `G/R ${(gm.g / Math.max(gm.r, 1e-6)).toFixed(2)}`, '']]);
   pass(`shots: ${OUT}/e1m1-pool.png, e1m1-bright-on/off.png, sector-light-sheet.png`);
 }
 if (process.env.TUNING === '1') {

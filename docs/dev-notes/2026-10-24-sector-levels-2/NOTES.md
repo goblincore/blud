@@ -44,8 +44,9 @@ ok   sector light A/B: on 19.14 / off 15.98 = 1.198 at default max 0.07 γ2.2
 - **Hazard:** 15 points in 3.2 s at 5/s (the 1 s accumulator: 3 ticks), none off the pool.
 - **Glow G/R:** 2.64–2.66 looking down (pitch −1.2); G 185 of 255 at glowGain 1.
 - **Sector light A/B** (mean frame luminance, flashlight OFF via `setFlashlight(false)`, facing a wall
-  2.5 m off): bright sector 25 on/off **1.20** at the current default (the assertion uses the default:
-  it passes 1.05). Darkest sector 6 (light 0.502) **1.07–1.09**. The earlier "+0.3–1.6 grey,
+  2.5 m off): bright sector 25 on/off **1.20** at the current default. The gate asserts on the
+  shipped default curve (on/off > 1.05, else FAIL); max 0.35 γ1.6 is measured at the same pose and
+  printed as report-only. Darkest sector 6 (light 0.502) **1.07–1.09**. The earlier "+0.3–1.6 grey,
   invisible" reading was taken with the flashlight on; with it off the default adds +2.4–3.3 grey
   in bright sectors — measurable, still very subtle by eye (see the sheet).
 - **Budget** (start pose, median of three `timeDraws(21)`): 9.9–11.2 ms, 103–226 draw calls across
@@ -104,7 +105,7 @@ What the columns look like:
   (hand-off item 2b, the next task).
 
 `.lab-tmp/doom/sector-light-sheet.png` (plan step 2): on/off pairs for bright A, bright B and the
-darkest sector at the default (bright B and darkest also at max 0.35 γ1.6), and the pool at pitch
+darkest sector at the default (each also at max 0.35 γ1.6, report-only), and the pool at pitch
 −0.5 and −1.2.
 
 ## Owner decision needed: light curve (column) and pool glowGain
