@@ -57,6 +57,7 @@ import { makeRng, headingDir, type Rng, type WanderBounds } from '../wander';
 import { rotateYaw } from '../gait';
 import { BRAIN_TUNING, type BrainPlayer } from '../brain';
 import { makeZombieMind, type EnemyMind } from './enemy-mind';
+import { scaleGunCrater, type GoreTuning } from '../gore-tuning';
 import { isGoreBody, isSoldierFamily, wantsTorsoGuards, type MotionProfile } from '../motion-profile';
 import { BARREL_REST, INDEX_REST, barrelsDriven, stepBarrelIndex, stepBarrelSpin, type BarrelIndex, type BarrelSpin } from '../barrel-spin';
 import { lightsModeFor, statusLights, type StatusLights } from '../status-lights';
@@ -397,6 +398,8 @@ export interface ZombieActor {
    *  source of truth for every decision field this interface reports. */
   mind(): EnemyMind;
   readonly kind: 'zombie' | 'soldier';
+  /** Per-character gore (MotionProfile.gore, gore-tuning.ts): the bleed and the flesh-bit throw read it. Null = shared. */
+  readonly gore: GoreTuning | null;
   /** The MOTION PROFILE's name ('zombie' when none): how this body moves. Not which character it is: every
    *  character without a profile of its own moves on the zombie's (motion-profile.ts motionProfileFor), so the
    *  female, the schoolgirls, the bonewalker and the clowns all answer 'zombie' here. */
@@ -1764,7 +1767,7 @@ export function createZombieActor(opts: {
     // in the UN-WARPED head (damage.ts unwarpHit): the shove, the reaction
     // and the blood below keep the world hit.
     const u = unwarpHit(posed, hitWorld);
-    const wound = woundFromPellet(posed.prims, u.hit, bodyYaw, u.field);
+    const wound = scaleGunCrater(woundFromPellet(posed.prims, u.hit, bodyYaw, u.field), opts.profile?.gore);
     wound.shot = shot;
     gunWetLip(wound, 'pellet');
     headLip(wound);
@@ -1773,7 +1776,7 @@ export function createZombieActor(opts: {
 
   function hitSlug(hitWorld: Vec3, dirWorld: Vec3, shot?: import('../damage').ShotProvenance): Wound | null {
     const u = unwarpHit(posed, hitWorld);   // the un-warped head, as hit()
-    const wound = woundFromSlug(posed.prims, u.hit, u.field, bodyYaw);
+    const wound = scaleGunCrater(woundFromSlug(posed.prims, u.hit, u.field, bodyYaw), opts.profile?.gore);
     wound.shot = shot?.weapon === 'slug' ? shot : { weapon: 'slug' };
     gunWetLip(wound, 'slug');
     headLip(wound);
@@ -2305,6 +2308,7 @@ export function createZombieActor(opts: {
     burnStumbles: () => burnStumbles,
     mind: () => mind,
     kind: mind.kind,
+    gore: opts.profile?.gore ?? null,
     meleeCapable: () => !doomed && (soldierDamage ? missingLimbs().armR : mind.meleeCapable),
     setRingInput: (hasToken: boolean, drift: -1 | 0 | 1) => {
       ringToken = hasToken;

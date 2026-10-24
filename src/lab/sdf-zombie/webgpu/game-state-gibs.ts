@@ -119,6 +119,8 @@ export interface MeshGib {
   state: Chunk;
   object: Object3D;
   tag: string;
+  /** A stable id for the blood-trail emitter clock (game-tick emitTrails; MESH_TRAIL_ID_BASE + id). */
+  id?: number;
 }
 
 /** Every call returns a fresh object, the set and arrays included. */
