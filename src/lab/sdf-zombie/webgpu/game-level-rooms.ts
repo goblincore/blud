@@ -35,10 +35,10 @@ export function roomIdAt(ctx: GameContext, x: number, z: number): number {
   return ctx.world.level.rooms.find(r => r.name === key)?.id ?? -1;
 }
 
-/** Tallest room ceiling in the level: the bundle/gib ceiling fallback for a
+/** Highest room ceiling in the level (world-space y, floor + height): the bundle/gib ceiling fallback for a
  *  point inside no enclosure. */
 export function levelCeilingM(ctx: GameContext): number {
-  return Math.max(...ctx.world.level.rooms.map(r => r.height));
+  return Math.max(...ctx.world.level.rooms.map(r => ((r as { floor?: number }).floor ?? 0) + r.height))   // LevelRoom has a floor, the ring's RoomDef is at 0;
 }
 
 /** A room's spawn positions in the active level, in spawn order. Not the
