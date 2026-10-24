@@ -406,18 +406,30 @@ export const GOBLIN_RUN: GaitProfile = {
   armSwing: 0.04,
 };
 
-/** The bride's STALK: the soldier's march clip slowed and lengthened for her
- *  long legs, with a hip sway the `hem` pendulum picks up and a slight
- *  forward lean. Carry-style arms (the sword owns them). */
+/** The bride's STALK: a long, poised stride with a hip sway the `hem`
+ *  pendulum picks up and a slight forward lean. Carry-style arms (the sword
+ *  owns them). PARAMETRIC (the shamble's machinery, no clip curves): it was
+ *  MARCH, whose legs replay the soldier's walk CLIP, and in curve mode the
+ *  knee bend is the clip's own — strideLen and cadence never touch it. On her
+ *  long legs the clip folded the swing shin up behind her to the horizontal
+ *  (swing ankle 0.45 m off the floor at her 1.1 m/s cruise, still 0.40 at
+ *  0.6; 2026-10-24, found on the siren, who shared this gait). Here the swing
+ *  ankle peaks at ~0.19 m; cadence x step length is sized to her cruise. */
 export const STALK: GaitProfile = {
-  ...MARCH,
+  ...SHAMBLE,
   name: 'stalk',
-  strideFreq: MARCH.strideFreq * 0.8,
-  strideLen: 0.42,
+  strideFreq: 1.05,
+  strideLen: 0.50,
+  stanceDuty: 0.65,
+  footLift: 0.05,
+  footPush: 0.04,
+  kneeBend: 0.04,
+  kneeLift: 0.02,
   swayAmp: 0.06,
   shoulderSway: 0.2,
   bobAmp: 0.015,
   torsoLean: 2.3, // degrees (gait.ts converts); ~0.04 rad
+  armStyle: 'carry',
   armSwing: 0.02,
 };
 
