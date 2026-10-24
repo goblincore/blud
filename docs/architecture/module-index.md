@@ -52,12 +52,12 @@ Each line is the first sentence of the module's header comment.
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
-| [Levels and world](#levels-and-world) | 28 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
+| [Levels and world](#levels-and-world) | 33 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
 | [Actors and crowd (render)](#actors-and-crowd-render) | 19 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 7 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 50 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [SDF march renderer](#sdf-march-renderer) | 46 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 33 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
@@ -530,6 +530,11 @@ Level definitions, kits, the train, the disco, the egg, sky, encounters.
 - `webgpu/level-list-node.ts` — THE CHEAP LEVEL TIER'S NODE (spec 2026-09-29-level-list-lighting-design.md).
 - `webgpu/level-tier.ts` — THE CHEAP LEVEL TIER (spec 2026-09-29-level-list-lighting-design.md).
 - `webgpu/portal.wgsl.ts` — The Void's portal, embers and glow pool, hand-written WGSL (spec 2026-09-24-void-portal-design.md §5).
+- `webgpu/sector-def.ts` — SECTOR LEVELS — types and the movement limits.
+- `webgpu/sector-edges.ts` — SECTOR EDGES — the one rule for a sector's directed boundary, shared by the parser (closure, winding), the loop builder and the point-in-sector test…
+- `webgpu/sector-geometry.ts` — SECTOR GEOMETRY as plain data (spec 2026-10-24-doom-sector-levels-design.md §6.4): each sector's boundary as loops (outer polygons and their holes)…
+- `webgpu/sector-ground.ts` — SECTOR GROUND (spec 2026-10-24-doom-sector-levels-design.md §6.1–§6.2): which sector is under a point (even-odd crossing over that sector's lines,…
+- `webgpu/sector-json.ts` — SECTOR LEVELS — parse and validate (spec 2026-10-24-doom-sector-levels-design.md §4).
 - `webgpu/sky-color.ts` — TypeScript twin of SKY_COLOR (sky.wgsl.ts).
 - `webgpu/sky.wgsl.ts` — The sky dome's colour, hand-written WGSL (Outdoor v1 §6).
 - `webgpu/train-motion.ts` — The train's motion (carriage kit spec §6), as pure functions of SIM time and speed: camera roll and bob, rail-joint jolts, lamp and curtain swing.
@@ -634,10 +639,6 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 - `webgpu/screen-pass.ts` — THE SCREEN PASS, shared by the lab page (screen-lab-main.ts) and the game (plan 2026-10-16-emergence-in-the-flat.md Task 2): the march…
 - `webgpu/screen-set.ts` — THE EMERGENCE SET (moved out of screen-lab-main.ts, plan 2026-10-16-emergence-in-the-flat Task 3): the polygonal pieces the egg comes out among,…
 - `webgpu/sdf-layer.ts` — Renders the raymarched bodies into their own render target, at their own resolution, and composites the result back over the polygonal scene.
-- `webgpu/sector-def.ts` — SECTOR LEVELS — types and the movement limits.
-- `webgpu/sector-geometry.ts` — SECTOR GEOMETRY as plain data (spec 2026-10-24-doom-sector-levels-design.md §6.4): each sector's boundary as loops (outer polygons and their holes)…
-- `webgpu/sector-ground.ts` — SECTOR GROUND (spec 2026-10-24-doom-sector-levels-design.md §6.1–§6.2): which sector is under a point (even-odd crossing over that sector's lines,…
-- `webgpu/sector-json.ts` — SECTOR LEVELS — parse and validate (spec 2026-10-24-doom-sector-levels-design.md §4).
 - `webgpu/shell-hull-outer.ts` — A conservative OUTER hull of the bodies — geometry guaranteed to CONTAIN the real surface — rasterised so the march can start where the body starts…
 - `webgpu/shell-hull.ts` — CPU iso-surface extraction for the shell-march spike.
 - `webgpu/shell-spike.wgsl.ts` — The shell-march entry for the hull+shell spike.

@@ -41,7 +41,7 @@ export const AREAS: ReadonlyArray<{ name: string; about: string; match: RegExp }
   { name: 'Blood, goo and splashes (render)', about: 'Blood views, the goo layer, impact splashes.', match: /^webgpu\/(blood-|goo-|impact-splash)/ },
   { name: 'Fire and explosions (render)', about: 'Burning bodies, fire volumes, flames, explosion VFX.', match: /^webgpu\/(burn-|fire-|flame-|explosion-vfx|post-tongues|tongue-tuning)/ },
   { name: 'Lighting and probes (render)', about: 'Light lists, profiles, layers, probe grids, outdoor light.', match: /^webgpu\/(light-|lamp-moods|probe-|room-probes|dungeon-lighting|outdoor-|kit-lights|self-shadow|beacon|storm|flashlight-bounce|ambient)/ },
-  { name: 'Levels and world', about: 'Level definitions, kits, the train, the disco, the egg, sky, encounters.', match: /^webgpu\/(level-|active-level|enclosure|train-|disco-|egg|void-portal|portal|sky|kit-|ending-sequence|encounter-)/ },
+  { name: 'Levels and world', about: 'Level definitions, kits, the train, the disco, the egg, sky, encounters.', match: /^webgpu\/(level-|sector-|active-level|enclosure|train-|disco-|egg|void-portal|portal|sky|kit-|ending-sequence|encounter-)/ },
   { name: 'Actors and crowd (render)', about: 'Per-actor GPU records, crowd atlas, character views, wounds on screen.', match: /^webgpu\/(crowd-|actor-sight|enemy-mind|character-|visual-actor-set|humanoid|zombie-gpu|bone-|goblin-skin|wound-|player-vitals)/ },
   { name: 'Deferred renderer (paused)', about: 'Opt-in deferred path; paused by the owner, not pursued.', match: /^webgpu\/deferred-/ },
   { name: 'Post-processing', about: 'AA, glow, VHS, shutter blur, fisheye.', match: /^webgpu\/(post-|fisheye|shutter-|vhs-)/ },
