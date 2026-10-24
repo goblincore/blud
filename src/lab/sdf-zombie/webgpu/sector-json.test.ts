@@ -97,13 +97,14 @@ describe('parseSectorLevel: markers in void', () => {
     try {
       const j = fixture();
       j.start.pos = [0, 0, -4];
-      j.spawns = [{ id: 'z1', character: 'zombie', pos: [0, 0, -4] }];
-      j.pickups = [{ id: 'p1', kind: 'health', pos: [20, 0, 20] }];
+      j.spawns = [{ id: 's1', kind: 'zombie', pos: [0, 0, -4] }];
+      j.pickups = [{ id: 'p1', item: 'shells', pos: [20, 0, 20] }];
       parseSectorLevel(j);
     } catch (e) { msg = (e as Error).message; }
     expect(msg).toMatch(/start: must stand in a sector/);
-    expect(msg).toMatch(/spawn z1: must stand in a sector/);
+    expect(msg).toMatch(/spawn s1: must stand in a sector/);
     expect(msg).toMatch(/pickup p1: must stand in a sector/);
+    expect(msg).not.toMatch(/unknown key/);
     expect(msg.match(/level sectors-fixture:/g)).toHaveLength(1);
   });
 });

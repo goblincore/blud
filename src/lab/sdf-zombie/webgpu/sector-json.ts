@@ -176,12 +176,12 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
     const posOf = (o: unknown): unknown => (typeof o === 'object' && o !== null ? (o as Json).pos : undefined);
     if (inVoid(posOf(j.start))) errors.push('start: must stand in a sector');
     const listed = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
-    const label = (o: unknown, i: number) => {
+    const label = (kind: string, o: unknown, i: number) => {
       const id = typeof o === 'object' && o !== null ? (o as Json).id : undefined;
-      return typeof id === 'string' || typeof id === 'number' ? String(id) : String(i);
+      return typeof id === 'string' || typeof id === 'number' ? String(id) : `${kind}${i}`;
     };
-    listed(j.spawns).forEach((o, i) => { if (inVoid(posOf(o))) errors.push(`spawn ${label(o, i)}: must stand in a sector`); });
-    listed(j.pickups).forEach((o, i) => { if (inVoid(posOf(o))) errors.push(`pickup ${label(o, i)}: must stand in a sector`); });
+    listed(j.spawns).forEach((o, i) => { if (inVoid(posOf(o))) errors.push(`spawn ${label('spawn', o, i)}: must stand in a sector`); });
+    listed(j.pickups).forEach((o, i) => { if (inVoid(posOf(o))) errors.push(`pickup ${label('pickup', o, i)}: must stand in a sector`); });
   }
 
   const shared: Json = {};
