@@ -131,7 +131,7 @@ budget: 123 draw calls, 10.90 ms a frame at the start (readings 10.4, 10.9, 11.3
 a load spike; the run above, after both commits, passed at 10.9 ms.)
 
 Still open for the owner: whether ceilings keep a whisper of self-light with sector light on (now 0);
-pool colour; the pool light colouring the room (hand-off item 2b).
+pool colour; the bounce strength (below).
 
 ## Decisions from the plan, with numbers
 
@@ -149,8 +149,63 @@ pool colour; the pool light colouring the room (hand-off item 2b).
 - Deferred renderer: sector light and glow show in the forward path only.
 - Bodies are not darkened per sector.
 - Strobe sectors under the reduced-flashes setting become a slow pulse.
-- Pool light does not colour the room (walls next to the pool stay black at every glowGain); the
-  likely cause and the bounce plan are in the [hand-off](../2026-10-24-sector-levels-handoff.md) item 2b.
+- Pool bounce (below): no occlusion by bodies or props, a per-vertex bake (big floor triangles far from
+  pools interpolate it linearly), the pool's own cheap light is still masked to the pool's zone.
 - Cold boot likely +0.3–0.7 s vs plan 1 (above), unconfirmed under load.
 - Shots include the debug HUD panels and the weapon; they are the same in every cell, so the means
   compare.
+
+## Glow bounce (hand-off item 2b) — 2026-10-24
+
+**Diagnosis.** All three pool lights reached a light list. Sector 0's (the big pool, 164 m²) was correctly
+in zone 0, but every surface round the pool belongs to sector 1, which is zone 1. Sector levels have no
+tunnels, so `accentRoomsFor` / the cheap-tier room mask let a zone's meshes shade only their own zone's
+accents. The pool light therefore lit only the pit's own 0.75 m risers and the ceiling above it. The
+suspected box bug was real for a different pool: sector 53's light was in zone 9 (first overlapping box),
+not zone 10. Fixed in `sector-json.ts` `rehomeAccents` (the sector under a light decides its zone, as for
+keyAt and spawnList; room levels untouched).
+
+**Bounce.** `sector-bounce.ts` (pure, tested) bakes a per-vertex RGB `glowBounce` at mesh build:
+Σ over glow sectors of `GLOW_BASE_RGB[kind] × 0.7 × min(1, area/16 m²) × 1/(1+(d/3)²) × fade(9..12 m)
+× facing × seen`. d is 3D (nearest pool point, plus the height above or below the pool floor).
+facing = (n·L + 0.5)/1.5. seen = the share of two rays (to the nearest pool point and to its interior
+point, aimed 0.1 m over the rim) that cross no one-sided wall and no lip or closed door at the ray's
+height. The pool's own rim never blocks, because the pit glows up to it. This stops green bleeding
+through solid walls, and it is simpler than a sector-adjacency rule. The emissive gains
+`albedo × glowBounce × bounceGain × glowGain`: scaling by glowGain keeps the room in step with the
+pool's brightness when the owner retunes it. Seams: `?bouncegain=` (empty = default; finite ≥ 0) and
+`__sdfGame.sectorLight({ bounceGain })`.
+
+**Mesh density.** Lines within 12 m of a pool box are split into pieces of at most 2 m
+(`refineNearGlow`; both sides share the points). Walls are cut in height on a 2 m world grid at
+each edge end near a pool (`wallRows`, zipped by `wallStrip`), so walls meeting at a corner cut it the
+same way: no new T-junctions. Wall u is now world-continuous along a line. E1M1 triangles go
+**1906 → 4687** (floors and ceilings 900 → 1747, walls 1006 → 2940). The bake is about 40 ms
+(5.5k unique vertices, 1.6k lit; vitest timing).
+
+**Default bounceGain 12**, chosen by measurement. The gate pose faces the west wall (x = 10) of the
+pool room, 4.5 m off the pool's edge, 3.5 m away, with the flashlight off. Wall crop (centre 30 %) G/R at
+bounceGain × 0 / ½ / 1 / 2 is **1.19 / 1.51 / 1.73 / 1.98**. At 6 it was 1.52, which failed the gate's
+≥ off × 1.3 bar and read as only a hint of green by eye. At 12, the wide view from in the pool reads as
+a green-lit room. The risers and floor round the pit are clearly green, and the far wall has a green
+cast without looking like paint. The tuning sheet's bounce row (the pool room wide, 0 / 6 / 12 / 24)
+measures G/R 1.36 / 1.53 / 1.63 / 1.76.
+
+Gate (`LAB_VITE_PORT=5491 LAB_CDP_PORT=9491 LAB_TMP=.lab-tmp SHOTS=1 TUNING=1`, load ~13–60, all pass):
+
+```
+budget: 103 draw calls, 12.80 ms a frame at the start (readings 11.1, 12.8, 13.0)
+glow: centre-30% mean R 40.6 G 115.6 B 53.2, G/R 2.85
+sector light A/B, bright sector 25 (light 1), default curve max 0.35 γ1.6: on 29.74 / off 15.98 = 1.861
+bounce: wall crop G/R at bounceGain × 0 / ½ / 1 / 2: 1.19 / 1.51 / 1.73 / 1.98
+ok   bounce: wall G/R 1.73 on vs 1.19 off at bounceGain 12
+```
+
+Shots: `e1m1-bounce-wall-on/off.png` (the gate pose), `e1m1-pool-room-on/off.png` (wide, bounceGain
+12 vs 0), and `tuning-sheet.png`, which now has the bounce row; 0.35 γ1.6 and glowGain 0.35 are
+labelled "(default)".
+
+Skipped: a full-tier (shadowed or non-cheap) light for the biggest pool. It would sit in the same
+zone-mask trap and need neighbouring-zone masks (a light `rooms` list through `LampInput` and
+`accentRoomsFor`). That is the right follow-up if bodies standing in a pool room should catch green
+from a direction. Bodies get no bounce today.

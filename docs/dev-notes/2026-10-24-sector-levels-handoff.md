@@ -57,6 +57,13 @@ Experiment: rebuild Doom E1M1's layout from `doomu.wad` in our look and play it.
    - Optionally the biggest pool gets a full (non-cheap) shadowless light for direction on walls/bodies (~1 ms).
    - Then redo the tuning sheet with bounce on, and measure green on walls near pools (mean G/R of a wall
      crop) before/after.
+   **Done 2026-10-24 (items 2 and 2b):** diagnosis: the sector-0 pool light WAS in zone 0's list, but the
+   whole room round the pool is sector 1 = zone 1, and with no tunnels on sector levels a zone's surfaces
+   shade only their own zone's accents, so the light reached only the pit's 0.75 m risers. The box bug was
+   real for another pool (sector 53's light sat in zone 9, not 10): fixed, lights are re-homed by the sector
+   under them (`sector-json.ts` rehomeAccents). The room colour comes from a **baked glow bounce**
+   (`sector-bounce.ts`, default `bounceGain` 12, × glowGain); the full-tier light (option 3) was skipped —
+   it would need neighbouring-zone light masks. Details and numbers: [plan 2 notes](2026-10-24-sector-levels-2/NOTES.md) "Glow bounce".
 3. **Plan 3a** — enemies on sector floors (motion `floorY`), navigation over sectors, sight and shots vs
    sector walls, pickups, exit as a walk-in trigger (E is slug mode; no use key yet).
 4. **Plan 3b** (not written) — exploding barrels (no HP/destructible system exists; reuse
@@ -71,7 +78,7 @@ Experiment: rebuild Doom E1M1's layout from `doomu.wad` in our look and play it.
   gitignored: `python3 scripts/levels/doom_map.py "$HOME/MIYOO BACKUP/Roms/PORTS/Games/Doom (PrBoom)/doom/doomu.wad" E1M1 --svg .lab-tmp/doom`.
 - Gate: `LAB_TMP=.lab-tmp SHOTS=1 bash scripts/sdf-game-doom-gate.sh` (`DOOM_GATE_ONLY_FIXTURE=1` for the
   committed fixture only). Frame budget fails randomly under high machine load (other sessions).
-- Tuning seams: `__sdfGame.sectorLight({ max, gamma, on, glowGain })`, `hazardPoint()`, `health()`, `ground(x, z)`.
+- Tuning seams: `__sdfGame.sectorLight({ max, gamma, on, glowGain, bounceGain })` (`?bouncegain=`), `hazardPoint()`, `health()`, `ground(x, z)`.
 
 ## Working method used
 Subagent per task; one reviewer per task doing spec compliance then code quality; fixes back to the
