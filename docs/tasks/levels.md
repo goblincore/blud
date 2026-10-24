@@ -9,7 +9,7 @@ Night Train, the Wake, the Void and menu, level format, game design. Part of the
 - [ ] 2 Doors (use-to-open ceiling doors).
 - [ ] 3 Hazard floors (nukage/lava/acid WGSL glow + damage).
 - [ ] 4 Sector lighting (darkened Doom levels, `?doomlight=0` A/B).
-- [ ] 5 Things: enemies with height-aware nav, pickups, exit, exploding barrels.
+- [ ] 5 Things: enemies with height-aware nav (zombiemen → random biomech variant deadeye/butcher/flayer, shotgun guys → soldier, imps → zombie), pickups, exit, exploding barrels.
 
 ## New game flow restructure — design approved 2026-09-24
 

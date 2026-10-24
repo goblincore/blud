@@ -183,14 +183,26 @@ barrels in the blast catch after a random 0.1–0.3 s delay so chains ripple. It
 
 | Doom | Ours |
 |---|---|
-| Zombieman (3004) | `zombie` |
+| Zombieman (3004) | a biomech zombie variant: `deadeye` (pistol gunner), `butcher` (axe) or `flayer` (saw-sickle), picked at random per spawn (§9.1) |
 | Shotgun guy (9) | `soldier` |
-| Imp (3001) | `cultist` (placeholder until a ranged thrower exists) |
+| Imp (3001) | `zombie` (for now) |
 | Barrel (2035) | `barrel` |
 | Shotgun (2001), shells (2008, 2049), clip/bullets (2007, 2048) | `shotgun`, `shells` |
 | Stimpack (2011), medikit (2012), armor (2018, 2019), bonus (2014, 2015) | `health` |
 | Player 1 start (1) | `start` |
 | Lamps, columns, other decorations | box `solids`; lamps also add a level light |
+
+### 9.1 The zombieman's variants (owner, 2026-10-24)
+
+The three biomech zombie conversions are registered characters (`character-registry.ts`:
+`deadeye` with `gunner: { weapon: 'pistol' }`, `butcher` with its grafted axe, `flayer`) but
+not yet level spawn kinds: `SpawnKind` is `zombie | soldier | cultist | juggernaut | warbull`.
+Plan 5 adds `deadeye`, `butcher` and `flayer` to `SpawnKind` (and the spawn path that builds
+them from the registry, as the arena's `?spawn=` already does).
+
+The converter picks a variant per zombieman, deterministic from a hash of the spawn id, so the
+same map always places the same bodies. `--zombieman mix|deadeye|butcher|flayer` (default `mix`,
+equal weights) switches it; a single variant is there to compare how each one plays in the map.
 
 Default skill flag: Ultra-Violence (busiest). `?skill=` picks another. Unknown types are skipped
 and listed in the converter summary.
