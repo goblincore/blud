@@ -59,12 +59,14 @@ export function loadBodyNormal(spec: BodyNormalSpec): Promise<LoadedBodyNormal> 
  * The view parameters for one body: the sidecar's projection plus the prim range of the body's TORSO
  * cluster, the only prims whose hits take the map. Clusters are contiguous runs of the packed prims (pack.ts),
  * so the range is just the torso cluster's [start, start + count). Null when the body has no torso cluster
- * (a severed piece), which leaves the map off.
+ * (a severed piece), which leaves the map off. `origin` is where the body was placed (translateBody's offset):
+ * pass it for any body that is not at the origin, or the map's regions miss it.
  */
 export function bodyNormalMap(
   spec: Pick<BodyNormalSpec, 'strength'>,
   meta: BodyNormalMeta,
   body: { clusters: readonly { limb: string; start: number; count: number }[] },
+  origin?: readonly [number, number, number],
 ): BodyNormalMap | null {
   const torso = body.clusters.find(c => c.limb === 'torso');
   if (!torso) return null;
@@ -72,6 +74,7 @@ export function bodyNormalMap(
     strength: spec.strength,
     yMin: meta.yMin, yMax: meta.yMax, axisX: meta.axisX, axisZ: meta.axisZ,
     primStart: torso.start, primEnd: torso.start + torso.count,
+    ...(origin ? { origin } : {}),
   };
 }
 
