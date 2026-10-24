@@ -33,6 +33,21 @@ export function parseLevel(raw: unknown, opts: ParseOptions = {}): LevelDef {
   return j.geometry === 'sectors' ? parseSectorLevel(raw, opts) : parseLevelJson(raw, opts);
 }
 
+/** parseLevelJson puts each light in the FIRST room whose box holds it, and zone boxes overlap on
+ *  sector levels, so a light can land in the wrong zone (E1M1: the sector-53 pool light went to
+ *  zone 9, not 10) and be gated out of its own zone's light lists. The sector under the light
+ *  decides its zone, as it does for keyAt and spawnList. A light over no sector stays put. */
+function rehomeAccents(def: LevelDef, map: SectorMap): void {
+  const ground = buildSectorGround(map);
+  const byName = new Map(def.rooms.map(r => [r.name, r]));
+  const placed = def.rooms.flatMap(r => r.accents.map(a => {
+    const s = ground.sectorAt(a.pos[0], a.pos[2]);
+    return { a, to: (s < 0 ? undefined : byName.get(zoneName(map.sectors[s]!.zone))) ?? r };
+  }));
+  for (const r of def.rooms) r.accents.length = 0;
+  for (const { a, to } of placed) to.accents.push(a);
+}
+
 export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDef {
   const errors: string[] = [];
   const j = (raw ?? {}) as Json;
@@ -196,6 +211,7 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
     errors.push(...msg.split('; '));
   }
   if (errors.length > 0 || !base) throw new Error(`level ${id}: ${errors.join('; ')}`);
+  rehomeAccents(base, map);
   const requires: Capability[] = [...base.requires.filter(c => c !== 'multi-floor'), 'sectors'];
   return { ...base, requires, sectors: map };
 }

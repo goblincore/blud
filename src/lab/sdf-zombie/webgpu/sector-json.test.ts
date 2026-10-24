@@ -119,3 +119,22 @@ describe('parseLevel', () => {
     expect(parseLevel(rooms).sectors).toBeUndefined();
   });
 });
+
+describe('parseSectorLevel: lights go to the zone of the sector they stand in', () => {
+  // Sector 1 (x -4..4, z -8..-12) moved to zone 1: zone 1's box (sectors 1 and 3) now overlaps zone 0's.
+  const overlapping = () => { const j = fixture(); j.sectors[1].zone = 1; return j; };
+  it('a light in a zone-1 sector inside zone 0\'s box lands in zone 1', () => {
+    const j = overlapping();
+    j.lights.push({ pos: [0, 3, -10], color: [0.2, 1, 0.3], power: 14, mood: 'fire', fixture: 'none' });
+    const L = parseSectorLevel(j);
+    const z0 = L.rooms.find(r => r.name === 'zone-0')!, z1 = L.rooms.find(r => r.name === 'zone-1')!;
+    expect(z0.minZ).toBeLessThanOrEqual(-10);                     // the boxes do overlap there
+    expect(z0.accents.map(a => a.pos)).toEqual([[0, 3.4, -6]]);
+    expect(z1.accents.map(a => a.pos)).toHaveLength(2);
+    expect(z1.accents.map(a => a.pos)).toEqual(expect.arrayContaining([[6, 3.4, -4], [0, 3, -10]]));
+  });
+  it('leaves correctly boxed lights alone', () => {
+    const L = parseSectorLevel(fixture());
+    expect(L.rooms.map(r => r.accents.map(a => a.power))).toEqual([[10], [6]]);
+  });
+});
