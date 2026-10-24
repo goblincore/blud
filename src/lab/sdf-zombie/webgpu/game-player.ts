@@ -140,8 +140,12 @@ export function resolveCapsule(pos: Mut3, colliders: readonly Aabb[]): boolean {
 }
 
 /** Push a circle of radius r at pos (x, z) off every segment, in place. Returns the total push in
- *  x/z, or null when nothing touched. Two passes, as resolveCapsule. */
-export function resolveSegments(pos: Mut3, segs: readonly WallSeg[], r: number): [number, number] | null {
+ *  x/z, or null when nothing touched. Two passes, as resolveCapsule. With `from` (where the body was
+ *  before the move) a body that ended on the far side of a line is put back on the side it came
+ *  FROM, at radius distance, so a fast step cannot complete a crossing. */
+export function resolveSegments(
+  pos: Mut3, segs: readonly WallSeg[], r: number, from?: readonly [number, number],
+): [number, number] | null {
   let px = 0, pz = 0;
   for (let pass = 0; pass < 2; pass++) {
     for (const g of segs) {
@@ -149,10 +153,22 @@ export function resolveSegments(pos: Mut3, segs: readonly WallSeg[], r: number):
       const len2 = ex * ex + ez * ez;
       if (len2 < 1e-12) continue;
       const t = clamp(((pos[0] - g.ax) * ex + (pos[2] - g.az) * ez) / len2, 0, 1);
-      let dx = pos[0] - (g.ax + ex * t), dz = pos[2] - (g.az + ez * t);
+      const cx = g.ax + ex * t, cz = g.az + ez * t;
+      let dx = pos[0] - cx, dz = pos[2] - cz;
       const d = Math.hypot(dx, dz);
+      // Unit normal on the side the body came from (the (-ez, ex) side when no `from`).
+      const ln = Math.sqrt(len2);
+      let nx = -ez / ln, nz = ex / ln;
+      if (from && ex * (from[1] - g.az) - ez * (from[0] - g.ax) < 0) { nx = -nx; nz = -nz; }
+      if (from && t > 0 && t < 1 && dx * nx + dz * nz < 0) {
+        // Crossed: put the body back on its own side.
+        const mx = cx + nx * r - pos[0], mz = cz + nz * r - pos[2];
+        pos[0] += mx; pos[2] += mz;
+        px += mx; pz += mz;
+        continue;
+      }
       if (d >= r) continue;
-      if (d < 1e-9) { const n = Math.sqrt(len2); dx = -ez / n; dz = ex / n; } else { dx /= d; dz /= d; }
+      if (d < 1e-9) { dx = nx; dz = nz; } else { dx /= d; dz /= d; }
       const k = r - d;
       pos[0] += dx * k; pos[2] += dz * k;
       px += dx * k; pz += dz * k;
@@ -215,9 +231,13 @@ export function stepPlayer(
   s.pos[1] += s.vel[1] * dtc;
   s.pos[2] += s.vel[2] * dtc;
 
-  // Wall lines that block at these feet (none on flat ground).
+  // Wall lines that block at these feet (none on flat ground). A grounded body is asked at its
+  // standing height: gravity just sank it a hair below the floor, which must not make a step of
+  // exactly SECTOR_STEP_M block at some frame rates.
+  const feet = wasGrounded ? Math.max(s.pos[1], fromY) : s.pos[1];
   const segPush = resolveSegments(
-    s.pos, ground.blockingNear(s.pos[0], s.pos[2], PLAYER.radius + SEG_QUERY_PAD_M, s.pos[1]), PLAYER.radius);
+    s.pos, ground.blockingNear(s.pos[0], s.pos[2], PLAYER.radius + SEG_QUERY_PAD_M, feet), PLAYER.radius,
+    [fromX, fromZ]);
   if (segPush) killInto(s.vel, [segPush[0], 0, segPush[1]]);
 
   // The floor under the feet: y = 0 on flat ground, the sector's floor on a sector level. Off every
@@ -225,12 +245,17 @@ export function stepPlayer(
   let floor = ground.floorAt(s.pos[0], s.pos[2]);
   if (Number.isNaN(floor)) {
     s.pos[0] = fromX; s.pos[2] = fromZ;
+    s.vel[0] = 0; s.vel[2] = 0;   // else the same move is retried every frame
     floor = ground.floorAt(fromX, fromZ);
     if (Number.isNaN(floor)) floor = fromY;
   }
   if (s.pos[1] <= floor) {
-    const rise = floor - fromY;
-    if (wasGrounded && rise > STEP_MIN_M) s.stepLag = (s.stepLag ?? 0) - rise;
+    // The eye lags only when the FLOOR itself rose under the body, never because an AABB push left
+    // the feet below it, so flat ground (floor 0 everywhere) never sets a lag.
+    const prevFloor = ground.floorAt(fromX, fromZ);
+    if (wasGrounded && !Number.isNaN(prevFloor) && floor - prevFloor > STEP_MIN_M) {
+      s.stepLag = (s.stepLag ?? 0) - (floor - prevFloor);
+    }
     s.pos[1] = floor;
     if (s.vel[1] < 0) s.vel[1] = 0;
     s.grounded = true;
