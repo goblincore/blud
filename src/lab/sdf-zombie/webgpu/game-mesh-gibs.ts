@@ -6,7 +6,7 @@
 // position, rotation and the landing squash (squashFactors, world axes after the rotation, the chunkPoint
 // transform). Used by the modelled brain and anatomical skull fragments.
 //
-// The list lives on ctx.gibs.meshGibs, with separate bounded pools for skull plates and other meshes.
+// The list lives on ctx.gibs.meshGibs, with separate bounded pools for skull plates, torn meat chunks and other meshes.
 // rebuildCast clears them all. Brain meshes share their owner's geometry/material; skull fragments own
 // their geometry (including light rows) and dispose it on removal, while retaining the shared material.
 import * as THREE from 'three/webgpu';
@@ -18,8 +18,13 @@ import { chunkSettled, makeChunk, squashFactors, stepChunk } from '../gib-chunks
 import { chunkCollidersAt } from './game-hit-trace';
 
 export const MESH_GIB_CAP = 8;
+/** Torn meat chunks (game-meat-gib.ts) keep their own pool, so a slug's burst never evicts a brain. */
+export const MEAT_GIB_CAP = 16;
 /** A complete skull has fourteen plates; keep its pool separate from brains. */
 export const SKULL_GIB_CAP = 32;
+
+/** Mesh gib ids (MeshGib.id): the blood-trail clocks key on them. */
+let nextMeshGibId = 0;
 
 const _m = new THREE.Matrix4();
 const _s = new THREE.Matrix4();
@@ -57,11 +62,13 @@ export function spawnMeshGib(
   object.matrixAutoUpdate = false;
   ctx.boot.handle.scene.add(object);
   ctx.boot.deferredApi?.router.register(object, 'mesh', 'level-only');
-  const g: MeshGib = { state, object, tag: opts?.tag ?? 'mesh' };
+  const g: MeshGib = { state, object, tag: opts?.tag ?? 'mesh', id: ++nextMeshGibId };
   pose(g);
   ctx.gibs.meshGibs.push(g);
-  const cap = g.tag === 'skull' ? SKULL_GIB_CAP : MESH_GIB_CAP;
-  const samePool = (q: MeshGib) => (q.tag === 'skull') === (g.tag === 'skull');
+  const poolOf = (t: string) => (t === 'skull' || t === 'meat' ? t : 'mesh');
+  const pool = poolOf(g.tag);
+  const cap = pool === 'skull' ? SKULL_GIB_CAP : pool === 'meat' ? MEAT_GIB_CAP : MESH_GIB_CAP;
+  const samePool = (q: MeshGib) => poolOf(q.tag) === pool;
   while (ctx.gibs.meshGibs.filter(samePool).length > cap) {
     const index = ctx.gibs.meshGibs.findIndex(samePool);
     remove(ctx,ctx.gibs.meshGibs.splice(index,1)[0]!);

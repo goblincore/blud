@@ -103,6 +103,8 @@ export interface DensityPack {
   /** Multiplier on the emission cone HALF-angle (the spread). < 1 tightens
    *  the spray so droplets leave along one another, > 1 fans it wider. */
   coneScale?: number;
+  /** Multiplier on the launch speed band (gore-tuning.ts: a character's heavier spray). Absent = 1, bit-identical. */
+  speedMul?: number;
   /** Multiplier on the droplet count. > 1 packs more droplets per pulse /
    *  raises the sustained-emitter rate, which is what makes neighbours
    *  overlap. One rng draw per extra droplet, as usual. */
@@ -530,7 +532,7 @@ export function spawnImpactGout(
     const size = (p.sizeMin + rng() * (p.sizeMax - p.sizeMin)) * sizeMul;
     const life = p.lifeMin + rng() * (p.lifeMax - p.lifeMin);
     const t = count > 1 ? i / (count - 1) : 0;
-    const speed = p.speedMax + (p.speedMin - p.speedMax) * t;
+    const speed = (p.speedMax + (p.speedMin - p.speedMax) * t) * (pack?.speedMul ?? 1);
     push(sim, {
       pos: [anchor[0] + dir[0] * WOUND_SPAWN_OFFSET,
         anchor[1] + dir[1] * WOUND_SPAWN_OFFSET, anchor[2] + dir[2] * WOUND_SPAWN_OFFSET],

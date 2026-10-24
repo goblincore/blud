@@ -111,13 +111,19 @@ body
   # ============================================================
   # THE FACE — built out in front of the shallow ball.
   # ============================================================
-  # BROW: the heavy brow is now METAL, the kit's demon-skull eye socket
-  # (`pelvis|orbit`, the strogg conversion; owner 2026-10-22: "too on the
-  # nose, more like the dual-headed strogg"). Two flesh brow swells (r 0.14 /
-  # 0.13, front z 0.54) buried the metal socket entirely. What is left is a
-  # low swell of meat the socket is grafted into: its front (z ~0.41) stays
-  # behind the metal's (~0.47), so the flesh bulges round the graft.
+  # BROW: a low swell of meat over the eye (its front z ~0.41). It was the
+  # graft round a metal demon-skull eye socket (`pelvis|orbit`, the strogg
+  # conversion); the owner swapped the socket for FLESHY EYELIDS (2026-10-24).
   blob torso on pelvis at=0.00 offset=(0.00,0.30,0.30) r=0.140 wide=1.60 tall=0.60 deep=0.80 blend=0.040 rigid
+  # EYELIDS: two bowed rolls across the kit eye (centre offset (0, 0.175,
+  # 0.40), r 0.135), each a constant-radius capsule from one corner of the eye
+  # to the other, its middle pushed up/down and forward by `bend` (the middle
+  # moves by about half the bend). Their middles sit at y 0.29 and 0.07, in
+  # front of the eyeball's surface there (z 0.47 / 0.49 vs the lids' 0.54),
+  # so the eye shows through a slit 0.13 tall out of its 0.27: HALF-LIDDED,
+  # a heavy upper lid glaring down. The lower lid is thinner.
+  bar  torso on pelvis from=0 to=0 offset=(-0.15,0.175,0.41) tip=(0.30,0,0) bend=(0,0.23,0.26) r=0.048 blend=0.016 rigid
+  bar  torso on pelvis from=0 to=0 offset=(-0.14,0.17,0.41) tip=(0.28,0,0) bend=(0,-0.20,0.24) r=0.042 blend=0.016 rigid
   # JOWLS: the mouth's corners, swelling out and down at the flanks. They
   # close the gullet's sides so the mouth is a slot in flesh.
   blob torso on pelvis at=0.00 offset=(0.35,-0.19,0.30) r=0.115 wide=0.90 tall=1.10 deep=1.00 blend=0.030 both rigid
@@ -179,6 +185,26 @@ body
 # Face block: the stub skull's generated prims stay buried in the ball
 # (cyclops' settings: headRadius 0.035 is a 3.5 cm knot deep in the flesh;
 # brow/nose under their gates so they are not generated at all).
+
+# BONES (owner, 2026-10-24: "there should be some kind of bone structure, since he has teeth"). Without this block the
+# body DERIVED its bones: one featureless 21 cm sphere deep in the ball and nothing behind the teeth, so a crater in
+# the face showed raw flesh with the kit teeth floating in it. Authored on `pelvis` (which suppresses the derived torso
+# spheres; `ratio` keeps the little arms' derived bones). The default game meshes these (skeleton-spike) and shows them
+# only where a wound has carved the flesh away. Two rules (validate.ts, rig-bind.ts):
+#   * every bone stays >= 4 mm inside the flesh (the gullet counts as flesh): an outside bone is a build error;
+#   * a torso bone rides the axial joint NEAREST its midpoint, NOT the `rigid` pelvis frame the flesh rides: so every
+#     midpoint stays at or below the pelvis span (y 1.45-1.51), or the bone would swim against the flesh in the hover.
+bones
+  ratio 0.38
+  # THE VAULT: a thick dome of skull in the ball's upper core, under the crest-plate. Its midpoint y 1.49.
+  blob torso on pelvis at=0.00 offset=(0.00,0.04,-0.06) r=0.300 wide=1.20 tall=0.75 deep=1.00
+  # THE MAXILLA: the upper dental arch, a bowed bar arcing just behind the upper teeth's roots (their roots ride the
+  # upper lip's centreline, y ~1.40-1.44, z ~0.45-0.48). Middle at (0, 1.415, 0.41).
+  bar  torso on pelvis from=0 to=0 offset=(-0.32,-0.05,0.30) tip=(0.64,0,0) bend=(0,0.03,0.22) r=0.034
+  # THE MANDIBLE: the lower arch behind the lower teeth, heavier, and a chin boss under it. Middle at (0, 1.10, 0.39).
+  bar  torso on pelvis from=0 to=0 offset=(-0.28,-0.33,0.29) tip=(0.56,0,0) bend=(0,-0.03,0.20) r=0.038
+  blob torso on pelvis at=0.00 offset=(0.00,-0.40,0.30) r=0.090 wide=1.80 tall=0.70 deep=1.10
+
 face
   headRadius 0.035
   headWidth  1.00
