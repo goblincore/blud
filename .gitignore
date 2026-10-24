@@ -16,6 +16,8 @@ scripts/.venv/
 public/assets/**/*-placeholder.*
 public/assets/**/placeholder/
 public/assets/**/*-placeholder/
+# Doom maps converted by scripts/levels/doom_map.py: derived from id data, dev placeholders only
+public/assets/levels/doom-*.level.json
 assets-source/blood-extracted/
 __pycache__/
 
