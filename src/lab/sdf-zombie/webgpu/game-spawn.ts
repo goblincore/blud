@@ -255,7 +255,8 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
   // it for the frames the PNG takes to arrive, then the crowd type picks it up from this view by reference.
   const bodyNormalSpec = characterEntry(name).bodyNormal;
   if (bodyNormalSpec) {
-    void loadBodyNormal(bodyNormalSpec).then(l => view.setBodyNormal(l.tex, bodyNormalMap(bodyNormalSpec, l.meta, placed) ?? undefined))
+    // `start`: the body is translated there (character-view.ts), and the map's regions are baked round the origin.
+    void loadBodyNormal(bodyNormalSpec).then(l => view.setBodyNormal(l.tex, bodyNormalMap(bodyNormalSpec, l.meta, placed, [start[0]!, start[1]!, start[2]!]) ?? undefined))
       .catch(err => console.error(`[sdf-game] ${name}: body normal map failed to load`, err));
   }
   view.uniforms.faceCfg.value.x = 1;

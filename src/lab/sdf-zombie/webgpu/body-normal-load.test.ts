@@ -18,6 +18,12 @@ describe('bodyNormalMap', () => {
     expect(m).toEqual({ strength: 0.8, yMin: 0.95, yMax: 1.9, axisX: 0, axisZ: 0.1, primStart: 21, primEnd: 56 });
   });
 
+  it('carries the placement origin of a moved body (the game\'s spawn point), and none for one at the origin', () => {
+    const body = { clusters: [{ limb: 'torso', start: 0, count: 10 }] };
+    expect(bodyNormalMap({ strength: 1 }, META, body, [0, 0, -10])!.origin).toEqual([0, 0, -10]);
+    expect(bodyNormalMap({ strength: 1 }, META, body)!.origin).toBeUndefined();
+  });
+
   it('is off for a body with no torso (a severed piece)', () => {
     expect(bodyNormalMap({ strength: 1 }, META, { clusters: [{ limb: 'armL', start: 0, count: 9 }] })).toBeNull();
   });
@@ -37,6 +43,10 @@ describe('BODY_NORMAL_BLOCK', () => {
     expect(BODY_NORMAL_BLOCK).toContain('round(nmapHdr.x) == 66.0 && round(nmapHdr.y) == 78.0');
     expect(BODY_NORMAL_BLOCK).toContain('let nmapTorso = hitBest >= i32(bodyNormAxis.z) && hitBest < i32(bodyNormAxis.w);');
     expect(BODY_NORMAL_BLOCK).toContain('if ((nmapKind < 0.5) != nmapTorso) { continue; }');
+    // A placed body's rest points are moved by its spawn point (translateBody), the regions are baked round the
+    // origin: the block tests the regions against the rest point minus bodyNormCfg.yzw, never against it raw.
+    expect(BODY_NORMAL_BLOCK).toContain('let nmapAnc = anchor - bodyNormCfg.yzw;');
+    expect(BODY_NORMAL_BLOCK).not.toMatch(/dot\(anchor - nmapHd|= anchor - \(nmapHd/);
     const locals = [...BODY_NORMAL_BLOCK.matchAll(/\b(?:let|var)\s+([A-Za-z_]\w*)/g)].map(m => m[1]!);
     expect(locals.length).toBeGreaterThan(0);
     expect(locals.every(n => n.startsWith('nmap'))).toBe(true);

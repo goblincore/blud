@@ -189,21 +189,42 @@ body
 # BONES (owner, 2026-10-24: "there should be some kind of bone structure, since he has teeth"). Without this block the
 # body DERIVED its bones: one featureless 21 cm sphere deep in the ball and nothing behind the teeth, so a crater in
 # the face showed raw flesh with the kit teeth floating in it. Authored on `pelvis` (which suppresses the derived torso
-# spheres; `ratio` keeps the little arms' derived bones). The default game meshes these (skeleton-spike) and shows them
+# spheres). The default game meshes these (skeleton-spike) and shows them
 # only where a wound has carved the flesh away. Two rules (validate.ts, rig-bind.ts):
 #   * every bone stays >= 4 mm inside the flesh (the gullet counts as flesh): an outside bone is a build error;
-#   * a torso bone rides the axial joint NEAREST its midpoint, NOT the `rigid` pelvis frame the flesh rides: so every
-#     midpoint stays at or below the pelvis span (y 1.45-1.51), or the bone would swim against the flesh in the hover.
+#   * every bone is `rigid` on `pelvis`: it rides the pelvis frame as one piece with the flesh (rig-bind.ts honours
+#     `rigid` for bones since 2026-10-24; without it a torso bone rode the axial joint NEAREST its midpoint, so the
+#     orbit's upper half bound to the spine and neck stubs and would swim against the flesh in the hover).
 bones
-  ratio 0.38
+  # ratio 0: NO derived bones. The derived ones were the buried face knot's (a 'head' segment, which the mesh skeleton
+  # gives two eyeballs, mesh-eyes.ts: a crown wound would have exposed a stray pair of eyes) and the withered arms'
+  # 1-2 cm specks. The skull is all authored below.
+  ratio 0
   # THE VAULT: a thick dome of skull in the ball's upper core, under the crest-plate. Its midpoint y 1.49.
-  blob torso on pelvis at=0.00 offset=(0.00,0.04,-0.06) r=0.300 wide=1.20 tall=0.75 deep=1.00
+  blob torso on pelvis at=0.00 offset=(0.00,0.04,-0.06) r=0.300 wide=1.20 tall=0.75 deep=1.00 rigid
   # THE MAXILLA: the upper dental arch, a bowed bar arcing just behind the upper teeth's roots (their roots ride the
   # upper lip's centreline, y ~1.40-1.44, z ~0.45-0.48). Middle at (0, 1.415, 0.41).
-  bar  torso on pelvis from=0 to=0 offset=(-0.32,-0.05,0.30) tip=(0.64,0,0) bend=(0,0.03,0.22) r=0.034
+  bar  torso on pelvis from=0 to=0 offset=(-0.32,-0.05,0.30) tip=(0.64,0,0) bend=(0,0.03,0.22) r=0.034 rigid
   # THE MANDIBLE: the lower arch behind the lower teeth, heavier, and a chin boss under it. Middle at (0, 1.10, 0.39).
-  bar  torso on pelvis from=0 to=0 offset=(-0.28,-0.33,0.29) tip=(0.56,0,0) bend=(0,-0.03,0.20) r=0.038
-  blob torso on pelvis at=0.00 offset=(0.00,-0.40,0.30) r=0.090 wide=1.80 tall=0.70 deep=1.10
+  bar  torso on pelvis from=0 to=0 offset=(-0.28,-0.33,0.29) tip=(0.56,0,0) bend=(0,-0.03,0.20) r=0.038 rigid
+  blob torso on pelvis at=0.00 offset=(0.00,-0.40,0.30) r=0.090 wide=1.80 tall=0.70 deep=1.10 rigid
+  # THE ORBIT (owner, playtest 2026-10-24: "the skull should be a little more prominent ... an orbital bone that goes
+  # around the eye, basically like a cyclops skull"). Eight bars round the eye socket at 0.185 from the eye's axis
+  # (the eyeball is 0.135), thicker over the brow; each point pushed in until the bar's whole radius sits 9 mm inside
+  # the marched flesh (generated against the field, not hand-placed). A popped eye's crater opens onto this ring.
+  bar  torso on pelvis from=0 to=0 offset=(0,0.36,0.308) tip=(0.131,-0.054,0.026) r=0.039 rigid
+  bar  torso on pelvis from=0 to=0 offset=(0.131,0.306,0.334) tip=(0.054,-0.131,0.029) r=0.036 rigid
+  bar  torso on pelvis from=0 to=0 offset=(0.185,0.175,0.363) tip=(-0.054,-0.131,0.041) r=0.03 rigid
+  bar  torso on pelvis from=0 to=0 offset=(0.131,0.044,0.404) tip=(-0.131,-0.054,0.017) r=0.026 rigid
+  bar  torso on pelvis from=0 to=0 offset=(0,-0.01,0.421) tip=(-0.131,0.054,-0.017) r=0.026 rigid
+  bar  torso on pelvis from=0 to=0 offset=(-0.131,0.044,0.404) tip=(-0.054,0.131,-0.041) r=0.03 rigid
+  bar  torso on pelvis from=0 to=0 offset=(-0.185,0.175,0.363) tip=(0.054,0.131,-0.029) r=0.036 rigid
+  bar  torso on pelvis from=0 to=0 offset=(-0.131,0.306,0.334) tip=(0.131,0.054,-0.026) r=0.039 rigid
+  # The brow ridge, bowed forward over the orbit.
+  bar  torso on pelvis from=0 to=0 offset=(-0.22,0.39,0.185) tip=(0.44,0,0) bend=(0,0.02,0.15) r=0.040 rigid
+  # The cheekbones (zygomatic arches), from the orbit's lower-outer rim back toward each jowl.
+  bar  torso on pelvis from=0 to=0 offset=(0.156,0.076,0.405) tip=(0.244,-0.126,-0.116) r=0.030 r2=0.022 rigid
+  bar  torso on pelvis from=0 to=0 offset=(-0.156,0.076,0.405) tip=(-0.244,-0.126,-0.116) r=0.030 r2=0.022 rigid
 
 face
   headRadius 0.035
