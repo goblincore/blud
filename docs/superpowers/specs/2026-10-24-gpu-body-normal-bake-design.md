@@ -98,8 +98,12 @@ CLI over them.
   texel encode. Shared by both backends so they cannot disagree on anything except the field.
 - `header.ts`: the region-table row and the `.json` sidecar. Moved.
 - `cpu-bake.ts`: today's `skin` / `grad` loop over `sdBody`. The reference.
-- `gpu-bake.ts`: the Dawn driver: create the device, upload, dispatch per region, read back. Imports
-  `webgpu` lazily so nothing else in the repo loads a native module.
+- `gpu-pack.ts`: the bake's data texture (the game's rows via `writePrimRows`, one column per prim) and the
+  fold-order prim list.
+- The Dawn driver is **`scripts/lib/dawn-field.ts`**, not under `src/`: it loads a native module, and nothing the
+  app typecheck or the browser build sees may. (Implementation note, 2026-10-24: dawn.node 0.6.2 frees its `GPU`
+  instance when it is garbage collected and the next callback into it segfaults, exit 139; the driver keeps the
+  instance in a module-level variable.)
 - `bake.wgsl.ts`: the kernel (below).
 
 The texel encode stays on the CPU: the kernel returns `(nd·T, nd·B, nd·nb, hit)` as floats, so the bytes
@@ -169,8 +173,9 @@ CI job. Locally they run with `npm run test:gpu`. With no adapter they **skip** 
    A second fixture set runs the same op bodies through the **runtime** fold (`foldGroup`), which is how
    the chamfer + bend mismatch would have been caught. That set is optional and needs a small harness for
    `mapBody`'s globals.
-2. **Character field parity** (`field-characters.gpu.test.ts`). For every character with a `.detail` file,
-   the plain and detail bodies at ~3k points: 2k on the skin (found by the CPU `skin` from random region
+2. **Character field parity** (`field-characters-{0,1}.gpu.test.ts`, two shards so the slow builds run in
+   parallel). For every character with a `.detail` file, its detail body (which holds every plain-body prim too)
+   at 1,500 points (detail builds cost up to ~90 s and `sdBody` up to ~7 ms a point on the CPU): 2k on the skin (found by the CPU `skin` from random region
    rays) plus 1k in the shell around it. Same bar, starting at 2e-6 m. The bar is set from measured
    llvmpipe and Metal numbers in the implementation PR, never loosened to make a red run pass.
 3. **Bake parity** (`bake-parity.gpu.test.ts`). twinhead (boxes, carves, chamfers, heavy bending) and venus
@@ -207,3 +212,13 @@ About a minute plus test time. `webgpu` becomes a devDependency.
 2. **Re-baking committed maps.** Step 3 re-bakes every map on the GPU so all of them come from one backend.
    The alternative is to leave them alone and only use the GPU for new bakes. Re-baking is recommended, as
    it makes the step-3 diff the best end-to-end parity evidence we have.
+
+## Update 2026-10-24: step 2 numbers
+
+Op fixtures agree to 3.3e-8 m or better and catch the chamfer + bend rule; nine of ten characters agree to 2.3e-7 m.
+**teratoma fails (6.6e-6 m)**: the shipped `sdBezierT` loses f32 precision on NEARLY STRAIGHT bent prims, up to
+~0.4 mm and ~5 degrees of normal at isolated points. That is the game's own leaf, not the bake. Numbers, scripts and
+the options are in [the step 2 notes](../../dev-notes/2026-10-24-gpu-bake-parity/notes.md).
+
+**Open question 3, bent-prim f32 conditioning.** Polish `coneBend`'s best `t` with Newton steps (both fields; a game render change
+   with a march-hash re-pin), or scale the parity bar with the bend's conditioning, or leave it failing until fixed.
