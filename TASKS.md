@@ -10,6 +10,7 @@
 
 ## In flight / next
 
+- [~] **Sector levels step 1 built 2026-10-24 (Doom-style sectors, empty E1M1 walkable); owner checkpoint pending: play `npm run dev:doom`.** Detail: [levels](docs/tasks/levels.md) "Sector levels" item 1.
 - [~] **Enemy test arena built 2026-10-23; owner look pending.** `npm run dev:arena` (`/sdf-game.html?level=arena&spawn=<character>`): one big lit room, one enemy 7 m out, god mode, every weapon, infinite ammo. `` ` `` respawns it fresh, `-`/`=` step through the registry's characters, a label names it. `"arena": true` in a level turns this on (`game-arena.ts`, `level-json.ts`); `__sdfGame.arena(step)` for scripts. Input waits for the ~30 s warm-up after boot.
 
 **The goblin's face moves** (owner, 2026-10-13) — [characters](docs/tasks/characters.md)
