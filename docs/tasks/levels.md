@@ -2,6 +2,15 @@
 
 Night Train, the Wake, the Void and menu, level format, game design. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Sector levels + the E1M1 experiment — design approved 2026-10-24
+
+[Spec](../../docs/superpowers/specs/2026-10-24-doom-sector-levels-design.md). Owner theory: abstract, non-representational layouts (the arena, the ring) feel more alien than themed places (train, graveyard). Test: rebuild Doom E1M1's layout from `doomu.wad` (generated level gitignored, like Blood placeholders) in our look, with real heights, doors, glowing hurt pools, darkened sector light, our enemies and chaining barrels. Sectors become the engine's multi-floor support.
+- [ ] 1 Sectors, `LevelGround` interface, 2.5D collision, converter (`scripts/levels/doom_map.py`) → walk an empty E1M1. **Owner checkpoint.**
+- [ ] 2 Doors (use-to-open ceiling doors).
+- [ ] 3 Hazard floors (nukage/lava/acid WGSL glow + damage).
+- [ ] 4 Sector lighting (darkened Doom levels, `?doomlight=0` A/B).
+- [ ] 5 Things: enemies with height-aware nav, pickups, exit, exploding barrels.
+
 ## New game flow restructure — design approved 2026-09-24
 
 **Hand-off:** [2026-09-27 night train](../../docs/dev-notes/2026-09-27-night-train-handoff.md) — next: the Boiler Room resize (4l), the flashlight feel (4m).
