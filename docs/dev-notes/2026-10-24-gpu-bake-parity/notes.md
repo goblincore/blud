@@ -12,20 +12,22 @@ chamfer + bend mismatch open question 1 is about.
 
 ## Character detail bodies (`field-characters-{0,1}.gpu.test.ts`, 1500 points each)
 
-| character | prims | max abs(gpu − cpu) |
-| --- | --- | --- |
-| chair | 952 | 4.3e-8 |
-| flayer | 1100 | 2.3e-7 |
-| gibbet | 1310 | 5.0e-8 |
-| butcher | 1313 | 5.2e-8 |
-| venus | 1395 | 4.8e-8 |
-| deadeye | 1306 | 5.4e-8 |
-| gamer | 3537 | 5.8e-8 |
-| gorehound | 1273 | 4.5e-8 |
-| twinhead | 1229 | 1.1e-7 |
-| **teratoma** | 1790 | **6.6e-6 (fails the 2e-6 bar)** |
+| character | prims | Metal (Mac) | llvmpipe (CI) |
+| --- | --- | --- | --- |
+| chair | 952 | 4.3e-8 | 4.9e-8 |
+| flayer | 1100 | 2.3e-7 | 4.3e-7 |
+| gibbet | 1310 | 5.0e-8 | 5.5e-8 |
+| butcher | 1313 | 5.2e-8 | 5.2e-8 |
+| venus | 1395 | 4.8e-8 | 6.7e-8 |
+| deadeye | 1306 | 5.4e-8 | 5.5e-7 |
+| gamer | 3537 | 5.8e-8 | 6.9e-8 |
+| gorehound | 1273 | 4.5e-8 | 6.7e-8 |
+| twinhead | 1229 | 1.1e-7 | 6.9e-8 |
+| **teratoma** | 1790 | **6.6e-6 (fails the 2e-6 bar)** | **1.5e-5 (fails)** |
 
-Wall time for both shards in parallel: ~3 min, almost all of it CPU body builds (gamer ~90 s) and `sdBody`.
+Wall time for both shards in parallel: ~3 min on the (busy) Mac, 75 s of tests in the `gpu-parity` CI job (run
+40134775372), almost all of it CPU body builds and `sdBody`. On llvmpipe the op fixtures read 6e-9 .. 5.3e-8 except
+`chamfer and bent` at 5.8e-7, the same bent-prim conditioning as below, still under the bar.
 
 ## The teratoma miss: f32 conditioning of a NEARLY STRAIGHT bent prim
 

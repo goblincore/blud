@@ -220,5 +220,6 @@ Op fixtures agree to 3.3e-8 m or better and catch the chamfer + bend rule; nine 
 ~0.4 mm and ~5 degrees of normal at isolated points. That is the game's own leaf, not the bake. Numbers, scripts and
 the options are in [the step 2 notes](../../dev-notes/2026-10-24-gpu-bake-parity/notes.md).
 
-**Open question 3, bent-prim f32 conditioning.** Polish `coneBend`'s best `t` with Newton steps (both fields; a game render change
-   with a march-hash re-pin), or scale the parity bar with the bend's conditioning, or leave it failing until fixed.
+**Open question 3, bent-prim f32 conditioning.** Polish `coneBend`'s best `t` with Newton steps (both fields; a
+game render change with a march-hash re-pin), or scale the parity bar with the bend's conditioning, or leave it
+failing until fixed.
