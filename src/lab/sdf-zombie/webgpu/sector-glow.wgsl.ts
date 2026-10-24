@@ -39,3 +39,11 @@ export const SECTOR_GLOW = /* wgsl */ `fn sectorGlow(wpos: vec3<f32>, t: f32, ki
 }`;
 
 export const GLOW_KIND_INDEX = { nukage: 0, lava: 1, acid: 2 } as const;
+
+/** Each kind's `base` colour in SECTOR_GLOW (the bulk of the surface; sector-bounce.ts tints the
+ *  room with it). sector-glow.wgsl.test.ts pins these against the WGSL. */
+export const GLOW_BASE_RGB = {
+  nukage: [0.10, 0.85, 0.18],
+  lava: [0.95, 0.30, 0.05],
+  acid: [0.55, 0.85, 0.10],
+} as const satisfies Record<keyof typeof GLOW_KIND_INDEX, readonly [number, number, number]>;

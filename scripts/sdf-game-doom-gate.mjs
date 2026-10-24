@@ -3,7 +3,8 @@
 //   2. FIXTURE walk: up the 0.5 m step, stopped by the 1.0 m ledge, down into the pit, stopped by the column.
 //   3. E1M1 (skipped if public/assets/levels/doom-e1m1.level.json is absent): boot, the ROUTE, budget, shots.
 //   4. E1M1 pools and sector light (plan 2026-10-24-sector-levels-2): a hurt floor hurts (?god=0) and stops
-//      hurting off it; the glow reads green; sector light lifts a bright sector's frame (A/B).
+//      hurting off it; the glow reads green; sector light lifts a bright sector's frame (A/B); the glow bounce
+//      greens a wall near the big pool (G/R with the default bounceGain vs bounceGain 0).
 // Usage: LAB_TMP=.lab-tmp bash scripts/sdf-game-doom-gate.sh   (DOOM_GATE_ONLY_FIXTURE=1 skips 3–4; SHOTS=1 writes
 // shots and .lab-tmp/doom/sector-light-sheet.png; TUNING=1 also writes the owner's .lab-tmp/doom/tuning-sheet.png)
 import { execFileSync } from 'node:child_process';
@@ -287,7 +288,7 @@ const flash = await flashOff();
 console.log(`flashlight: setFlashlight(false) -> ${flash === null ? 'no seam on this level (on as authored)' : flash}`);
 const DEFAULT_CURVE = await evaluate('__sdfGame.sectorLight()');
 const shotWith = async (patch) => { await evaluate(`__sdfGame.sectorLight(${JSON.stringify(patch)})`); await flashOff(); await sleep(sleepSettle); return grab(); };
-const restore = () => evaluate(`__sdfGame.sectorLight(${JSON.stringify({ on: DEFAULT_CURVE.on, max: DEFAULT_CURVE.max, gamma: DEFAULT_CURVE.gamma, glowGain: DEFAULT_CURVE.glowGain })})`);
+const restore = () => evaluate(`__sdfGame.sectorLight(${JSON.stringify({ on: DEFAULT_CURVE.on, max: DEFAULT_CURVE.max, gamma: DEFAULT_CURVE.gamma, glowGain: DEFAULT_CURVE.glowGain, bounceGain: DEFAULT_CURVE.bounceGain })})`);
 /** On/off frames at a pose for a curve: luminance means and the ratio. */
 async function ab(q, curve) {
   await poseAt(q);
@@ -308,7 +309,68 @@ const tunedBright = await ab(poses.bright[0], TUNED);
 console.log(`sector light A/B, bright sector ${poses.bright[0].i}, max ${TUNED.max} γ${TUNED.gamma}: ${fmt(tunedBright)} (report only)`);
 const dark = await ab(poses.dark, { max: DEFAULT_CURVE.max, gamma: DEFAULT_CURVE.gamma });
 console.log(`sector light A/B, darkest sector ${poses.dark.i} (light ${poses.dark.light}), default curve: ${fmt(dark)} (report only)`);
+// GLOW BOUNCE (hand-off item 2b): the wall near the hazard pool that sector-bounce.ts lights most, seen from
+// 3.5 m in front of it at eye height, and a wide view of the pool room from across it facing the pool.
+const bouncePoses = await evaluate(`(async () => {
+  const sj = await import('/src/lab/sdf-zombie/webgpu/sector-json.ts');
+  const sg = await import('/src/lab/sdf-zombie/webgpu/sector-geometry.ts');
+  const sb = await import('/src/lab/sdf-zombie/webgpu/sector-bounce.ts');
+  const map = sj.parseLevel(await (await fetch('/assets/levels/doom-e1m1.level.json')).json()).sectors;
+  const pool = ${hz.sector};
+  const sgr = (await import('/src/lab/sdf-zombie/webgpu/sector-ground.ts')).buildSectorGround(map);
+  const src = sb.glowSources(map).find((s) => s.sector === pool);
+  if (!src) return { wall: null, wide: null };
+  const b = sb.createGlowBounce(map, [src]);              // this pool's bounce only
+  const walkable = (x, z) => { const g = __sdfGame.ground(x, z); return Number.isFinite(g.floor) ? g : null; };
+  const yawTo = (dx, dz) => Math.atan2(dx, -dz);
+  let wall = null;
+  for (const q of sg.wallQuads(map)) {
+    if (q.sector === pool || map.sectors[q.sector].glow !== null || q.y1 - q.y0 < 2) continue;
+    const dx = q.b[0] - q.a[0], dz = q.b[1] - q.a[1], len = Math.hypot(dx, dz);
+    if (len < 2) continue;
+    const nx = -dz / len, nz = dx / len, mx = (q.a[0] + q.b[0]) / 2, mz = (q.a[1] + q.b[1]) / 2;
+    if (sb.nearestOnPool(src, mx, mz).d > 8) continue;
+    const fl = map.sectors[q.sector].floor, sx = mx + nx * 3.5, sz = mz + nz * 3.5;
+    const g = walkable(sx, sz);
+    if (!g || g.floor > fl + 0.8 || g.floor < fl - 0.8 || g.ceil - g.floor < 2) continue;
+    const c = b.at([mx, fl + 1.5, mz], [nx, 0, nz], [nx, nz]);
+    if (!wall || c[1] > wall.g) wall = { x: sx, z: sz, y: g.floor, yaw: yawTo(-nx, -nz), g: c[1], sector: q.sector, len, mx, mz, nx, nz };
+  }
+  // Wide: back from that wall (the farthest walkable of 9..5 m, the pool included: the look boot is god mode),
+  // facing it across the room.
+  let wide = null;
+  for (const r of [9, 8, 7, 6, 5]) {
+    if (!wall) break;
+    const x = wall.mx + wall.nx * r, z = wall.mz + wall.nz * r, g = walkable(x, z), si = sgr.sectorAt(x, z);
+    if (!g || si < 0 || g.ceil - g.floor < 2) continue;
+    wide = { x, z, y: g.floor, yaw: wall.yaw, r };
+    break;
+  }
+  return { wall, wide };
+})()`);
+console.log(`bounce poses: ${JSON.stringify(bouncePoses)}`);
+if (!bouncePoses.wall) fail('bounce: no wall near the pool to look at');
+const gr = (m) => m.g / Math.max(m.r, 1e-6);
+await poseAt(bouncePoses.wall, 0);
+const wallShots = [];
+for (const k of [0, 0.5, 1, 2]) wallShots.push(await shotWith({ bounceGain: DEFAULT_CURVE.bounceGain * k }));
+await restore();
+const [bounceOff, , bounceOn] = wallShots;
+const wallMeans = [];
+for (const b64 of wallShots) wallMeans.push(await measure(b64, 0.3));
+console.log(`bounce: wall crop G/R at bounceGain × 0 / ½ / 1 / 2: ${wallMeans.map((m) => gr(m).toFixed(2)).join(' / ')}`);
+const bmOn = wallMeans[2], bmOff = wallMeans[0];
+console.log(`bounce: wall crop (centre 30%) at bounceGain ${DEFAULT_CURVE.bounceGain}: R ${bmOn.r.toFixed(1)} G ${bmOn.g.toFixed(1)} B ${bmOn.b.toFixed(1)} G/R ${gr(bmOn).toFixed(2)}; `
+  + `bounceGain 0: R ${bmOff.r.toFixed(1)} G ${bmOff.g.toFixed(1)} B ${bmOff.b.toFixed(1)} G/R ${gr(bmOff).toFixed(2)}`);
+const wideShots = [];
+if (bouncePoses.wide) {
+  await poseAt(bouncePoses.wide, -0.15);
+  for (const k of [0, 0.5, 1, 2]) wideShots.push(await shotWith({ bounceGain: DEFAULT_CURVE.bounceGain * k }));
+  await restore();
+}
 if (process.env.SHOTS === '1') {
+  save('e1m1-bounce-wall-on.png', bounceOn); save('e1m1-bounce-wall-off.png', bounceOff);
+  if (wideShots.length) { save('e1m1-pool-room-off.png', wideShots[0]); save('e1m1-pool-room-on.png', wideShots[2]); }
   save('e1m1-pool.png', poolRim); save('e1m1-pool-down.png', poolDown);
   save('e1m1-bright-on.png', abPass.on); save('e1m1-bright-off.png', abPass.off);
   const second = await ab(poses.bright[1], { max: DEFAULT_CURVE.max, gamma: DEFAULT_CURVE.gamma });
@@ -349,13 +411,26 @@ if (process.env.TUNING === '1') {
   pr.push(null); pn.push('');
   cells.push(pr); notes.push(pn);
   await restore();
+  // The bounce row: the pool room wide, bounceGain off / half / default / double.
+  if (wideShots.length) {
+    const bn = [];
+    for (const [k, b64] of wideShots.entries()) {
+      const m = await measure(b64);
+      bn.push(`G/R ${gr(m).toFixed(2)} grey ${m.grey.toFixed(1)}`);
+      table.push({ bounceGain: DEFAULT_CURVE.bounceGain * [0, 0.5, 1, 2][k], grey: +m.grey.toFixed(2), gr: +gr(m).toFixed(3) });
+    }
+    cells.push([...wideShots, null]); notes.push([...bn, '']);
+  }
   const lab = (q, what) => `${what}\nsector ${q.i}\nDoom light ${q.light}\nwall ${q.wall.toFixed(1)} m`;
-  await sheet('tuning-sheet.png', `E1M1 tuning sheet — light rows: columns = sector light curve; pool row: columns = glowGain 1.0 | 0.6 | 0.35 | 0.2 (flashlight ${flash === null ? 'ON (no seam)' : 'off'})`,
-    [lab(rows[0], 'bright A'), lab(rows[1], 'bright B'), lab(rows[2], 'darkest'), `pool\nsector ${hz.sector}\npitch -0.5\ncols: glowGain`],
+  await sheet('tuning-sheet.png', `E1M1 tuning sheet — light rows: columns = sector light curve; pool row: columns = glowGain 1.0 | 0.6 | 0.35 (default) | 0.2 (flashlight ${flash === null ? 'ON (no seam)' : 'off'})`,
+    [lab(rows[0], 'bright A'), lab(rows[1], 'bright B'), lab(rows[2], 'darkest'), `pool\nsector ${hz.sector}\npitch -0.5\ncols: glowGain`,
+      ...(wideShots.length ? [`bounce: pool room\nwide, cols: bounceGain\n0 | ½ | ${DEFAULT_CURVE.bounceGain} (default) | 2×`] : [])],
     curves.map(([l]) => l), cells, notes);
   console.log(`tuning: ${JSON.stringify(table)}`);
   pass(`tuning sheet: ${OUT}/tuning-sheet.png`);
 }
+if (!(gr(bmOn) >= gr(bmOff) * 1.3)) fail(`bounce: wall G/R ${gr(bmOn).toFixed(2)} on vs ${gr(bmOff).toFixed(2)} off (need on >= off × 1.3)`);
+pass(`bounce: wall G/R ${gr(bmOn).toFixed(2)} on vs ${gr(bmOff).toFixed(2)} off at bounceGain ${DEFAULT_CURVE.bounceGain}`);
 if (!(abPass.ratio > 1.05)) fail(`sector light A/B: ${fmt(abPass)} at ${abCurve} (need > 1.05)`);
 pass(`sector light A/B: ${fmt(abPass)} at ${abCurve}`);
 const errs = consoleEvents.filter((e) => e.type === 'error' || e.type === 'exception');

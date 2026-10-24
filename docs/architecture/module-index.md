@@ -52,7 +52,7 @@ Each line is the first sentence of the module's header comment.
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
-| [Levels and world](#levels-and-world) | 35 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
+| [Levels and world](#levels-and-world) | 36 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
 | [Actors and crowd (render)](#actors-and-crowd-render) | 19 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
@@ -531,6 +531,7 @@ Level definitions, kits, the train, the disco, the egg, sky, encounters.
 - `webgpu/level-list-node.ts` — THE CHEAP LEVEL TIER'S NODE (spec 2026-09-29-level-list-lighting-design.md).
 - `webgpu/level-tier.ts` — THE CHEAP LEVEL TIER (spec 2026-09-29-level-list-lighting-design.md).
 - `webgpu/portal.wgsl.ts` — The Void's portal, embers and glow pool, hand-written WGSL (spec 2026-09-24-void-portal-design.md §5).
+- `webgpu/sector-bounce.ts` — GLOW BOUNCE (hand-off 2026-10-24 item 2b): the green a nukage pool (lava, acid) throws on the room round it, baked once per vertex at mesh build.
 - `webgpu/sector-def.ts` — SECTOR LEVELS — types and the movement limits.
 - `webgpu/sector-edges.ts` — SECTOR EDGES — the one rule for a sector's directed boundary, shared by the parser (closure, winding), the loop builder and the point-in-sector test…
 - `webgpu/sector-geometry.ts` — SECTOR GEOMETRY as plain data (spec 2026-10-24-doom-sector-levels-design.md §6.4): each sector's boundary as loops (outer polygons and their holes)…

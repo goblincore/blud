@@ -669,7 +669,7 @@ export function createWorldSeams(ctx: GameContext) {
       windows: ctx.world.level.surfaces.windows.map(w => w.id),
       geometry: ctx.world.level.def?.sectors ? 'sectors' : 'rooms',
     }),
-    /** Sector light (spec 2026-10-24 §7): read or patch the curve, the on/off toggle and the pool glowGain. */
+    /** Sector light (spec 2026-10-24 §7): read or patch the curve, the on/off toggle, the pool glowGain and the glow bounceGain. */
     sectorLight: (patch?: SectorLightPatch) =>
       ctx.world.sectorFx ? setSectorLightConfig(ctx.world.sectorFx, patch ?? {}) : null,
     /** A point well inside the first hurt sector (gates): [x, floorY, z] and the sector, or null. */

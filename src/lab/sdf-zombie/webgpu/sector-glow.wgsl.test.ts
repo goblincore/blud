@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/webgpu/sector-glow.wgsl.test.ts
 
 import { describe, expect, it } from 'vitest';
-import { SECTOR_GLOW, SECTOR_GLOW_HASH, SECTOR_GLOW_NOISE } from './sector-glow.wgsl';
+import { GLOW_BASE_RGB, SECTOR_GLOW, SECTOR_GLOW_HASH, SECTOR_GLOW_NOISE } from './sector-glow.wgsl';
 
 describe('sector-glow.wgsl', () => {
   const all = [SECTOR_GLOW_HASH, SECTOR_GLOW_NOISE, SECTOR_GLOW];
@@ -29,5 +29,9 @@ describe('sector-glow.wgsl', () => {
       const at = line.indexOf('//');
       if (at >= 0) expect(line.slice(at)).not.toContain(':');
     }
+  });
+  it('GLOW_BASE_RGB matches each kind\'s base colour in the WGSL', () => {
+    const v = (c: readonly number[]) => `vec3<f32>(${c.map(x => x.toFixed(2)).join(', ')})`;
+    for (const c of Object.values(GLOW_BASE_RGB)) expect(SECTOR_GLOW).toContain(v(c));
   });
 });

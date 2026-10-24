@@ -7,13 +7,16 @@
 
 import { uniform, uniformArray } from 'three/tsl';
 import type { GameContext } from './game-context';
-import { DEFAULT_SECTOR_LIGHT, writeSectorLevels, type SectorLightConfig } from './sector-light';
+import { DEFAULT_SECTOR_LIGHT, gainParam, writeSectorLevels, type SectorLightConfig } from './sector-light';
 import { simTimeMs } from './sim-clock';
 
 /** The ceilings' fixed whisper of self-light while sector light is off (plan 1's look). */
 export const CEIL_WHISPER = 0.10;
 /** The glow floors' brightness multiplier (owner-tunable; ?glowgain=<n>, __sdfGame.sectorLight({ glowGain })). */
 export const DEFAULT_GLOW_GAIN = 0.35;   // owner pick from the tuning sheet (2026-10-24; 1.0 glared)
+/** The baked glow bounce's multiplier (sector-bounce.ts; ?bouncegain=<n>, __sdfGame.sectorLight({ bounceGain })).
+ *  The sector meshes add albedo × glowBounce × bounceGain × glowGain: the bounce follows the pools' brightness. */
+export const DEFAULT_BOUNCE_GAIN = 12;
 
 const floatUniform = (v: number) => uniform(v);
 type FloatUniform = ReturnType<typeof floatUniform>;
@@ -30,6 +33,8 @@ export interface SectorFxRuntime {
   glowTime: FloatUniform;
   /** Multiplies the glow floors' colour (DEFAULT_GLOW_GAIN unless ?glowgain or the seam set it). */
   glowGain: FloatUniform;
+  /** Multiplies the baked glow bounce (DEFAULT_BOUNCE_GAIN unless ?bouncegain or the seam set it). */
+  bounceGain: FloatUniform;
   reducedFlashes: boolean;
 }
 
@@ -37,16 +42,14 @@ export function createSectorFx(sectorCount: number, search: URLSearchParams, red
   const cfg: SectorLightConfig = { ...DEFAULT_SECTOR_LIGHT, on: search.get('doomlight') !== '0' };
   // A uniform array needs at least one element to declare.
   const n = Math.max(1, sectorCount);
-  const gainParam = search.get('glowgain');
-  // Absent or empty (`?glowgain=`) means the default: Number('') is 0 and would black out the pools.
-  const gain = gainParam === null || gainParam.trim() === '' ? NaN : Number(gainParam);
   return {
     levels: uniformArray(new Array<number>(n).fill(0), 'float'),
     values: new Float32Array(sectorCount),
     cfg,
     ceilWhisper: floatUniform(cfg.on ? 0 : CEIL_WHISPER),
     glowTime: floatUniform(0),
-    glowGain: floatUniform(Number.isFinite(gain) && gain >= 0 ? gain : DEFAULT_GLOW_GAIN),
+    glowGain: floatUniform(gainParam(search.get('glowgain'), DEFAULT_GLOW_GAIN)),
+    bounceGain: floatUniform(gainParam(search.get('bouncegain'), DEFAULT_BOUNCE_GAIN)),
     reducedFlashes,
   };
 }
@@ -65,15 +68,16 @@ export function stepSectorLight(ctx: GameContext): void {
   fx.ceilWhisper.value = fx.cfg.on ? 0 : CEIL_WHISPER;
 }
 
-export type SectorLightPatch = Partial<SectorLightConfig> & { glowGain?: number };
-export type SectorLightState = SectorLightConfig & { glowGain: number };
+export type SectorLightPatch = Partial<SectorLightConfig> & { glowGain?: number; bounceGain?: number };
+export type SectorLightState = SectorLightConfig & { glowGain: number; bounceGain: number };
 
-/** Patch the curve, the toggle or the glow gain (finite, non-negative numbers only); returns the live state. */
+/** Patch the curve, the toggle, the glow gain or the bounce gain (finite, non-negative numbers only); returns the live state. */
 export function setSectorLightConfig(fx: SectorFxRuntime, patch: SectorLightPatch): SectorLightState {
   if (typeof patch.max === 'number' && Number.isFinite(patch.max) && patch.max >= 0) fx.cfg.max = patch.max;
   if (typeof patch.gamma === 'number' && Number.isFinite(patch.gamma) && patch.gamma > 0) fx.cfg.gamma = patch.gamma;
   if (typeof patch.on === 'boolean') fx.cfg.on = patch.on;
   if (typeof patch.glowGain === 'number' && Number.isFinite(patch.glowGain) && patch.glowGain >= 0) fx.glowGain.value = patch.glowGain;
+  if (typeof patch.bounceGain === 'number' && Number.isFinite(patch.bounceGain) && patch.bounceGain >= 0) fx.bounceGain.value = patch.bounceGain;
   fx.ceilWhisper.value = fx.cfg.on ? 0 : CEIL_WHISPER;
-  return { ...fx.cfg, glowGain: fx.glowGain.value };
+  return { ...fx.cfg, glowGain: fx.glowGain.value, bounceGain: fx.bounceGain.value };
 }

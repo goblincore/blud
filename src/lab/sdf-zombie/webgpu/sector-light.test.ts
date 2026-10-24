@@ -3,7 +3,7 @@
 // Spec 2026-10-24 §7: Doom light levels on a hard curve; flicker, pulse and strobe on sim time.
 
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SECTOR_LIGHT, sectorAmbient, sectorEffect, writeSectorLevels } from './sector-light';
+import { DEFAULT_SECTOR_LIGHT, gainParam, sectorAmbient, sectorEffect, writeSectorLevels } from './sector-light';
 import type { SectorDef } from './sector-def';
 
 const sector = (light: number, special: SectorDef['special'] = 'none'): SectorDef => ({
@@ -71,5 +71,13 @@ describe('writeSectorLevels', () => {
     expect(out[2]).toBeCloseTo(DEFAULT_SECTOR_LIGHT.max * sectorEffect('strobe', 0.5, 2, false), 6);
     writeSectorLevels(sectors, 0.5, { ...DEFAULT_SECTOR_LIGHT, on: false }, false, out);
     expect([...out]).toEqual([0, 0, 0]);
+  });
+});
+
+describe('gainParam', () => {
+  it('absent, empty, junk or negative is the fallback; 0 and positives pass', () => {
+    for (const raw of [null, '', '  ', 'abc', '-1', 'Infinity']) expect(gainParam(raw, 6)).toBe(6);
+    expect(gainParam('0', 6)).toBe(0);
+    expect(gainParam('2.5', 6)).toBe(2.5);
   });
 });

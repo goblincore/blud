@@ -60,3 +60,10 @@ export function writeSectorLevels(
     out[i] = cfg.on ? sectorAmbient(s.light, cfg) * sectorEffect(s.special, t, i, reducedFlashes) : 0;
   }
 }
+
+/** A gain from a URL parameter (`?glowgain=`, `?bouncegain=`): absent, empty, non-finite or
+ *  negative means the fallback (Number('') is 0 and would black the term out). */
+export function gainParam(raw: string | null, fallback: number): number {
+  const v = raw === null || raw.trim() === '' ? NaN : Number(raw);
+  return Number.isFinite(v) && v >= 0 ? v : fallback;
+}

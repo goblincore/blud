@@ -1,0 +1,155 @@
+// src/lab/sdf-zombie/webgpu/sector-bounce.test.ts
+//
+// Glow bounce (hand-off 2026-10-24 item 2b): falloff, occlusion by walls and lips, refinement.
+
+import { describe, expect, it } from 'vitest';
+import {
+  BOUNCE_CUTOFF_M, bounceFalloff, createGlowBounce, glowSources, nearestOnPool, nearGlow, REFINE_MAX_M, refineNearGlow, wallRows, wallStrip,
+} from './sector-bounce';
+import type { SectorDef, SectorMap } from './sector-def';
+import { loopArea, sectorPolygons, wallQuads } from './sector-geometry';
+
+const sector = (floor: number, ceil: number, glow: SectorDef['glow'] = null): SectorDef => ({
+  floor, ceil, light: 1, special: 'none', hurtPerSec: 0, glow, zone: 0,
+  materials: { floor: 'default', ceil: 'default', wall: 'default' },
+});
+const line = (a: number, b: number, front: number, back = -1) => ({ v: [a, b] as [number, number], front, back, door: null, exit: false });
+
+/** Room A (x 0..10, z 0..10, sector 0) round a sunken nukage pool (x 4..6, z 4..6, sector 1, floor -0.5);
+ *  room B (x 10.5..20, sector 2) behind A's solid east wall. */
+function twoRooms(): SectorMap {
+  return {
+    vertices: [[0, 0], [10, 0], [10, 10], [0, 10], [4, 4], [6, 4], [6, 6], [4, 6], [10.5, 0], [20, 0], [20, 10], [10.5, 10]],
+    sectors: [sector(0, 4), sector(-0.5, 4, 'nukage'), sector(0, 4)],
+    lines: [
+      line(0, 1, 0), line(1, 2, 0), line(2, 3, 0), line(3, 0, 0),
+      line(4, 5, 1, 0), line(5, 6, 1, 0), line(6, 7, 1, 0), line(7, 4, 1, 0),
+      line(8, 9, 2), line(9, 10, 2), line(10, 11, 2), line(11, 8, 2),
+    ],
+  };
+}
+
+describe('wallRows', () => {
+  it('cuts on the world grid, keeping both ends', () => {
+    expect(wallRows(0, 4, 1.5)).toEqual([0, 1.5, 3, 4]);
+    expect(wallRows(-2.5, -1.75, 1.5)).toEqual([-2.5, -1.75]);
+    expect(wallRows(1.5, 3, 1.5)).toEqual([1.5, 3]);
+    expect(wallRows(-2, 2, 1.5)).toEqual([-2, -1.5, 0, 1.5, 2]);
+  });
+});
+
+describe('bounceFalloff', () => {
+  it('is 1 at the pool, 1/2 at the falloff distance, 0 at the cutoff, and never rises', () => {
+    expect(bounceFalloff(0)).toBe(1);
+    expect(bounceFalloff(3)).toBeCloseTo(0.5, 6);
+    expect(bounceFalloff(BOUNCE_CUTOFF_M)).toBe(0);
+    let prev = Infinity;
+    for (let d = 0; d <= BOUNCE_CUTOFF_M; d += 0.05) { const f = bounceFalloff(d); expect(f).toBeLessThanOrEqual(prev + 1e-12); prev = f; }
+  });
+});
+
+describe('glowSources and nearestOnPool', () => {
+  const [src] = glowSources(twoRooms());
+  it('finds the pool with its area, floor and kind', () => {
+    expect(glowSources(twoRooms())).toHaveLength(1);
+    expect(src).toMatchObject({ sector: 1, kind: 'nukage', floor: -0.5 });
+    expect(src!.targetY).toBeCloseTo(0.1, 9);                       // aimed just over the rim (room A's floor)
+    expect(src!.area).toBeCloseTo(4, 6);
+  });
+  it('the nearest point is the point itself inside, the edge outside', () => {
+    expect(nearestOnPool(src!, 5, 5).d).toBe(0);
+    const o = nearestOnPool(src!, 1, 5);
+    expect(o.d).toBeCloseTo(3, 6);
+    expect(o.p).toEqual([4, 5]);
+  });
+});
+
+describe('createGlowBounce', () => {
+  const b = createGlowBounce(twoRooms());
+  const at = (p: [number, number, number], n: [number, number, number]) => b.at(p, n, [n[0], n[2]]);
+  it('a wall facing the pool goes green', () => {
+    const c = at([0, 1, 5], [1, 0, 0]);                              // A's west wall
+    expect(c[1]).toBeGreaterThan(0.01);
+    expect(c[1]).toBeGreaterThan(c[0] * 3);
+    expect(c[1]).toBeGreaterThan(c[2] * 3);
+  });
+  it('nearer is brighter', () => {
+    expect(at([0, 1, 5], [1, 0, 0])[1]).toBeGreaterThan(at([0, 3.9, 0.1], [1, 0, 0])[1]);
+  });
+  it('the ceiling over the pool catches it', () => {
+    expect(at([5, 4, 5], [0, -1, 0])[1]).toBeGreaterThan(0.01);
+  });
+  it('nothing through a solid wall: room B stays dark on either side of its walls', () => {
+    expect(at([20, 1, 5], [-1, 0, 0])).toEqual([0, 0, 0]);          // B's east wall, facing the pool through A's wall
+    expect(at([10.5, 1, 5], [1, 0, 0])).toEqual([0, 0, 0]);         // B's west wall, the back of the solid wall
+    expect(at([15, 0, 5], [0, 1, 0])).toEqual([0, 0, 0]);           // B's floor
+  });
+  it('the back of a wall gets nothing (A\'s east wall seen from inside does)', () => {
+    expect(at([10, 1, 5], [-1, 0, 0])[1]).toBeGreaterThan(0);
+    expect(at([10, 1, 5], [1, 0, 0])).toEqual([0, 0, 0]);
+  });
+  it('the pool\'s own rim does not shade it: the floor round the pit catches a little, the riser a lot', () => {
+    const floor = at([2, 0, 5], [0, 1, 0]);
+    expect(floor[1]).toBeGreaterThan(0);
+    expect(floor[1]).toBeLessThan(at([0, 1, 5], [1, 0, 0])[1] * 1.5);
+    expect(b.at([4, -0.25, 5], [1, 0, 0], [1, 0])[1]).toBeGreaterThan(0.1);
+  });
+  it('nothing past the cutoff', () => {
+    expect(at([19.9, 1, 5], [-1, 0, 0])).toEqual([0, 0, 0]);       // 13.9 m off, even with no wall between
+    expect(createGlowBounce({ ...twoRooms(), lines: twoRooms().lines.filter((_, i) => i !== 1) }).sources).toHaveLength(1);
+  });
+});
+
+describe('refineNearGlow', () => {
+  const map = twoRooms();
+  const r = refineNearGlow(map);
+  const len = (m: SectorMap, i: number) => {
+    const [a, b] = m.lines[i]!.v.map(v => m.vertices[v]!);
+    return Math.hypot(b![0] - a![0], b![1] - a![1]);
+  };
+  it('splits the lines near a pool to at most REFINE_MAX_M and leaves far ones alone', () => {
+    for (let i = 0; i < r.lines.length; i++) {
+      const [a, b] = r.lines[i]!.v.map(v => r.vertices[v]!);
+      const far = Math.min(a![0], b![0]) >= 20;                  // B's east wall: 14 m from the pool box
+      if (!far) expect(len(r, i)).toBeLessThanOrEqual(REFINE_MAX_M + 1e-9);
+    }
+    expect(r.lines.some(l => l.v.every(v => r.vertices[v]![0] === 20) && Math.abs(r.vertices[l.v[0]]![1] - r.vertices[l.v[1]]![1]) === 10)).toBe(true);
+  });
+  it('keeps every sector\'s area, and walls on both sides of a split line share their split points', () => {
+    const area = (m: SectorMap) => sectorPolygons(m).map(p => loopArea(p.outer) + p.holes.reduce((s, h) => s + loopArea(h), 0));
+    expect(area(r).map(a => +a.toFixed(6))).toEqual(area(map).map(a => +a.toFixed(6)));
+    const key = (p: readonly number[]) => `${p[0]},${p[1]}`;
+    const lowerFromA = new Set(wallQuads(r).filter(q => q.sector === 1).flatMap(q => [key(q.a), key(q.b)]));
+    const poolEdge = new Set(sectorPolygons(r).find(p => p.sector === 0)!.holes.flat().map(key));
+    expect([...lowerFromA].sort()).toEqual([...poolEdge].sort());
+  });
+  it('a map with no glow comes back as is', () => {
+    const plain: SectorMap = { ...map, sectors: map.sectors.map(s => ({ ...s, glow: null })) };
+    expect(refineNearGlow(plain)).toBe(plain);
+  });
+});
+
+describe('nearGlow and wallStrip', () => {
+  const src = glowSources(twoRooms());
+  it('nearGlow is the pool box grown by the cutoff', () => {
+    expect(nearGlow(src, 0, 0)).toBe(true);
+    expect(nearGlow(src, 6 + BOUNCE_CUTOFF_M - 0.01, 5)).toBe(true);
+    expect(nearGlow(src, 6 + BOUNCE_CUTOFF_M + 0.01, 5)).toBe(false);
+  });
+  it('a plain quad is two triangles; uneven edges zip into a strip covering both', () => {
+    expect(wallStrip([0, 4], [0, 4])).toEqual([[[0, 0], [1, 0], [1, 1]], [[0, 0], [1, 1], [0, 1]]]);
+    const tris = wallStrip([0, 1.5, 3, 4], [0, 4]);
+    expect(tris).toHaveLength(4);
+    const used = (side: number) => new Set(tris.flatMap(t => t.filter(c => c[0] === side).map(c => c[1])));
+    expect([...used(0)].sort()).toEqual([0, 1, 2, 3]);
+    expect([...used(1)].sort()).toEqual([0, 1]);
+    // Area in (side, y) space: the strip covers the trapezoid exactly (no gaps, no overlaps).
+    const L = [0, 1.5, 3, 4], R = [0, 4];
+    const pt = ([s, r]: [number, number]) => [s, s === 0 ? L[r]! : R[r]!] as const;
+    const area = tris.reduce((acc, t) => {
+      const [p, q, w] = t.map(pt) as [readonly [number, number], readonly [number, number], readonly [number, number]];
+      return acc + Math.abs((q[0] - p[0]) * (w[1] - p[1]) - (w[0] - p[0]) * (q[1] - p[1])) / 2;
+    }, 0);
+    expect(area).toBeCloseTo(4, 9);
+  });
+});
