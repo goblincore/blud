@@ -22,6 +22,7 @@ import {
 import { SWORD_TUNING, isSwordVariant, lungeAdvance, swordContact } from '../sword-swing';
 import { GIBBET_TUNING, HOUND_TUNING, houndContact, isHoundVariant, pounceAdvance, squirtFires, stabAdvance } from '../hound-attack';
 import { CHARGE_REST, stepCharge, type ChargeState } from '../charge';
+import { IMP_TUNING, throwFires } from '../fireball';
 import { BRAIN_TUNING, type BrainTuning } from '../brain';
 import type { SwingVariant } from '../attack';
 import type { Vec3 } from '../types';
@@ -390,6 +391,60 @@ export function makeGibbetMind(): EnemyMind {
     debug: () => {
       const d = melee.debug();
       return squirtT >= 0 ? { ...d, state: 'squirt', variant: 'squirt', cooldown } : { ...d, cooldown };
+    },
+  };
+}
+
+/** The IMP's two attacks (characters/imp.blob, fireball.ts): up close, the zombie mind's unarmed swing, which with
+ *  talon fists reads as a claw rake (the venus's lesson); at range it THROWS. A seen player it is alert to between
+ *  IMP_TUNING.band.min and .max, with the throw off cooldown, no swing running and its throwing (right) arm on,
+ *  starts one: the body halts and turns to face, the right arm cocks up and back and whips forward overhand (attack.ts
+ *  `throw`), and `fire` goes up for the one frame the ball leaves the hand (throwFires). game-actor fires it from the
+ *  hand's tip (MotionProfile.spit) and game-spawn flings fireball.ts's ball at the player. A stagger cancels a throw. */
+export function makeImpMind(): EnemyMind {
+  const T = IMP_TUNING;
+  const melee = makeZombieMind();
+  let throwT = -1;           // seconds into a running throw; -1 = none
+  let cooldown: number = T.first;
+  let prev = 0;
+  const halted = (input: MindInput, phase: number, fire: boolean): MindOutput => ({
+    target: null, halt: true,
+    attack: { phase, side: 'R', variant: 'throw' },
+    fire, weaponUp: false,
+    faceHeading: input.player ? Math.atan2(input.player.x - input.self.x, input.player.z - input.self.z) : null,
+    engaged: true, committed: true, contact: false, aimError: 0,
+  });
+  return {
+    kind: 'zombie',
+    meleeCapable: true,
+    step(input) {
+      cooldown = Math.max(0, cooldown - input.dt);
+      if (throwT >= 0) {
+        throwT += input.dt;
+        const phase = throwT / T.throwSec;
+        if (phase < 1 && !input.missing?.armR) {
+          const fire = throwFires(prev, phase);
+          prev = phase;
+          return halted(input, phase, fire);
+        }
+        throwT = -1; prev = 0; cooldown = T.cooldown;
+      }
+      const out = melee.step(input);
+      const p = input.player;
+      // The brain's own ALERT (it has noticed the player), not input.alerted (a shot fired in this room this frame).
+      if (!out.attack && p && melee.debug().alert && input.lineOfSight !== false && cooldown <= 0 && !input.missing?.armR) {
+        const dist = Math.hypot(p.x - input.self.x, p.z - input.self.z);
+        if (dist >= T.band.min && dist <= T.band.max) {
+          throwT = 0; prev = 0;
+          return halted(input, 0, false);
+        }
+      }
+      return out;
+    },
+    stagger(holdSec) { throwT = -1; prev = 0; melee.stagger(holdSec); },
+    debug: () => {
+      const d = melee.debug();
+      return throwT >= 0 ? { ...d, state: 'throw', variant: 'throw', swingT: throwT / T.throwSec, cooldown } : { ...d, cooldown };
     },
   };
 }

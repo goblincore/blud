@@ -565,3 +565,46 @@ floater: a flesh ball with one eye and a maw. It was the first test of whether t
 - A ranged enemy without a held prop: `MotionProfile.spit` fires from a rig point plus a body-local offset (the
   teratoma's maw), using the warbull's slow rocket as its fireball. A real flying mind (holding altitude, strafing
   over cover) is still missing.
+
+## A fireball thrower: the imp (2026-10-24)
+
+The imp (`characters/imp.blob`, kit `assets-source/imp-kit/`) is a gaunt demon on the butcher's digitigrade legs that
+throws fireballs. What it taught:
+
+- **A reference is a point of departure.** The owner's brief came with a Doom 3 imp; the first head (a pale egg with an
+  eye-hole cluster and a lipless grin) read as an alien and as a copy. The owner pointed at the house style instead:
+  build the head as **flesh over a simplified version of the twinhead's demon skull** (not the metal skull itself, which
+  was tried and rejected as "the demon head"). In prims: a long low cranium blended wide into the temples, a brow ridge
+  per side in a V, slanted sunken sockets with a small red ember each, cheekbones sweeping back, a long narrow muzzle, a
+  jaw with a chin point, kit fangs and horns. Pitfalls on the way, each one a look: a cranium wider than the face (and
+  one brow bar straight across) reads as a **hat brim**; sockets that meet in the middle read as **goggles**; round dark
+  nostrils a centimetre across read as a **pig snout**, narrow slits raked up the muzzle read as flared nostrils; horns
+  curling up and back are seen end-on from the front as **mouse ears**, so sweep them out as much as back.
+- **No fingers: a socket, caged.** Each hand is a knuckled skullmetal cup round a burning coal (`ventglow`), with five
+  talons rising off a crown of points on its rim and curling hard back in over the mouth (curl ~1.8 rad; at 1.35 they
+  hung open). It reads at fighting range as an orange point between dark claws, and the fireball leaves from it. A
+  straight flared tube for the cup read as a plastic drum; bulge it over the knuckles and give the rim points. Knuckles
+  as balls read as marbles; ridges do not.
+- **Fire light without lights.** The coal, the chest furnace and the eye embers light the parts round them through
+  baked `_glow` (`glow_bake` in `imp_common.py`: falloff times facing). A second glow colour needs its own material name
+  in `GLOW_FROM_ATTRIBUTE`: `impmetal` (skullmetal's look) and `impclaw` (horn's) burn orange where `skullmetal` burns
+  red. (The teratoma's `orbitmetal` alias is not in kit-overlay.ts on main, so its socket glow falls back to the default
+  look: worth a check.)
+- **Joining parts in Blender: deselect first.** `bpy.ops.object.join()` joins every SELECTED object, and a part's
+  install leaves it selected: the first eye-ember join swallowed the ocular plate, which then rendered as a glowing
+  yellow crown.
+- **A hunched torso bakes round a tilted axis.** At a 26 deg hunch the torso is probed and baked round the spine
+  (`--torso-axis 0,1.56,0.19:0,0.90,-0.06`; `scripts/imp-detail-gen.ts` probes from the same line). The zombie's
+  generated spinal column breached the starved back under the hunch (both the kyphosis and the lumbar curve): leave it
+  out and put the spine's ridge in the normal map. Leg detail is a `--limb` region per leg bone like the arms'
+  (`limbOf` in the generator picks `leg` or `arm`). **Sinew** is a long, nearly straight cord, thickest in its middle,
+  sampled every ~1.4 cm (no meander, no knots): it is what makes a starved limb ropy where veins make it swollen.
+- **The throw is an arm arc, not a new pose system.** `attack.ts` `throw` (windup pitch 2.4 rad, up and back past the
+  vertical; strike 0.45, forward and down) runs through the zombie arms' `armArc`; `makeImpMind` holds the body,
+  faces the player and raises `fire` once at `IMP_TUNING.fireAt`, and `MotionProfile.spit` from `handTipR` puts the
+  ball in the hand. A strike pitch of 1.05 ended the follow-through 45 deg up and read as a lob. Judge it with
+  `BLOB_SWING_SWEEP=throw:0:0.6 BLOB_YAW=-1.3` (yaw in RADIANS; degrees spin the camera round to a random angle).
+- **A light projectile, not the rocket.** The teratoma's fireball is the warbull's rocket (the dynamite's blast). An
+  imp throws often from a quick body, so `fireball.ts` is its own straight-ish ball (11 m/s, a slight droop it aims
+  for, 14 on a hit and 5 on a near miss, a 0.55 m fire burst through the dynamite's burst visual and light), and it
+  hurts only the player.

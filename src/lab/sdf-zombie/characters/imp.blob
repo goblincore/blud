@@ -1,0 +1,199 @@
+# IMP — a gaunt, hunched demon that throws fireballs (owner, 2026-10-24: "a
+# demonic humanoid that throws fireballs, in the spirit of the Doom 3 imp").
+# Pale grey-white leathery hide over a starved frame, a raw wound in the
+# chest, long sinewy arms ending in big claws, digitigrade legs, a predatory
+# crouch. Quick and agile, not a shambler. The reference is a point
+# of departure, not a target (owner): the head's proportions are the twinhead's
+# demon skull's, under the hide.
+#
+# THE CONVERSION (biomech-style.md: "treat every enemy as a strogg
+# conversion"). The fire has a source: the chest wound is held open by a
+# skullmetal rib-spreader round a glowing FURNACE, and the hands are no hands
+# at all but burning SOCKETS caged by fused talons. The fireball leaves the
+# socket at the throw (MotionProfile.spit from the hand tip). The head is
+# flesh over a simplified demon skull, its eyes burning red.
+#
+# THE SPLIT: flesh is prims (few: the silhouette); sinew, veins and the
+# starved ribs are the baked body normal map (imp.detail); the teeth, horns,
+# talons, sockets, the spreader, the spines and the foot claws are kit
+# (assets-source/imp-kit/), with thin cores under them.
+#
+# THE SKELETON is the butcher's (butcher.blob explains the reverse-knee legs
+# on the three standard leg bones), hunched deeper, with longer arms and a
+# HAND bone so the socket rides its own frame through a throw.
+model imp
+  height 1.80
+  stance humanoid
+
+skeleton
+  # The butcher's: the digitigrade legs reach 1.108 m of drop from the hip at 1.14.
+  root pelvis at 1.00
+
+  # A deep predatory hunch (the reference's crouch): the chest pitched 26 deg
+  # forward of the hips (the butcher's 9.8 read upright in profile, first
+  # look), the neck thrust out near level and the skull carried low and
+  # forward of the chest, not stacked on it.
+  bone spine parent=pelvis dir=up pitch=26 len=0.34
+  bone neck  parent=spine  dir=up pitch=50 len=0.15
+  bone skull parent=neck   dir=up pitch=28 len=0.16
+
+  mirror
+    bone clavicle parent=spine    dir=side                     len=0.20
+    # LONG ARMS (the reference's hands reach the knees): 0.34 + 0.33 + 0.13
+    # against the butcher's 0.31 + 0.30 and no hand. Held out (tilt 20) and
+    # forward (pitch 14, then 30 on the forearm): the claws lead, the way a
+    # stalking imp carries them, and they clear the thighs in the crouch.
+    bone upperArm parent=clavicle dir=down tilt=20 pitch=14    len=0.34
+    bone foreArm  parent=upperArm dir=down tilt=6 pitch=30     len=0.33
+    bone hand     parent=foreArm  dir=down pitch=40            len=0.13
+    # THE LEG: the butcher's (butcher.blob), unchanged, so its walk pin holds.
+    bone thigh    parent=pelvis   dir=down side=0.11 pitch=35  len=0.40
+    bone shin     parent=thigh    dir=down pitch=-38           len=0.50
+    bone foot     parent=shin     dir=down pitch=15            len=0.40
+  end
+
+body
+  # Neck: stringy and long, thrust forward out of the hunch.
+  bar head on neck from=0.0 to=1.0 r=0.046 r2=0.040 blend=0.012
+
+  # HEAD — flesh over a simplified DEMON SKULL: the twinhead kit's skull
+  # (assets-source/twinhead-kit, skull|demonskull) as the armature under the
+  # hide (owner, 2026-10-24: "the proportions as a starting point ... a
+  # simplified version of the skull under the SDF flesh"). Its read, in prims:
+  # a long domed cranium, a heavy brow ridge in a V, sunken slanted sockets with
+  # red eyes, cheekbones flaring back to the temples, a long narrow muzzle and a
+  # hard jaw with a chin point. Teeth and the swept-back horns are kit.
+  # Offsets are world axes at rest from the skull bone at 0.30, (0, 1.584, 0.287).
+  # Cranium: long and low, swept back over the neck.
+  # Narrower than the brows and blended wide, so it tapers into the temples:
+  # at wide 0.90 its equator overhung the face like a cap's brim.
+  blob head on skull at=0.30 offset=(0,0.058,-0.035) r=0.085 wide=0.78 tall=0.88 deep=1.28 blend=0.026
+  # The nape: where the neck swells into the skull's base, the head's CORE (the
+  # validator fuses clusters along the straight line between cores; from the
+  # cranium's centre that line left the hunched neck).
+  blob head on skull at=0.00 offset=(0,0.012,-0.010) r=0.046 blend=0.014 core
+  # Brow ridges: one per side in a V (the skull's scowl), low at the bridge and
+  # rising to the temple, overhanging the sockets. One bar straight across read
+  # as a hat brim.
+  # Kept inside the temples: run out to x 0.058 the pair read as a hat brim.
+  bar  head on skull from=0.30 to=0.30 offset=(0.006,0.062,0.096) tip=(0.036,0.014,-0.026) bend=(0,0.002,0.004) r=0.011 tall=0.80 blend=0.010 both
+  # Cheekbones: flaring wide below the sockets and sweeping back to the temples.
+  bar  head on skull from=0.30 to=0.30 offset=(0.036,0.030,0.078) tip=(0.024,0.010,-0.070) r=0.017 r2=0.012 blend=0.010 both
+  # The muzzle: a long narrow maxilla thrust forward, the skull's snout.
+  blob head on skull at=0.30 offset=(0,0.008,0.098) r=0.040 wide=0.86 tall=0.72 deep=1.40 blend=0.012
+  # FLARED NOSTRILS (owner: "flared nostrils or something"): two swollen alae
+  # on top of the muzzle's front, splayed out and back, each with a dark slit
+  # raking up and out (the skull's nasal cavity, under the hide).
+  # Narrow slits raked up the muzzle, not holes facing front: round dark holes
+  # a centimetre across read as a pig's snout (biomech-style.md's warning).
+  blob head on skull at=0.30 offset=(0.018,0.026,0.120) r=0.0085 wide=1.10 tall=0.80 deep=1.20 blend=0.007 both
+  bar  head on skull from=0.30 to=0.30 offset=(0.008,0.026,0.136) tip=(0.011,0.008,-0.014) r=0.0026 deep=0.7 blend=0.0015 both color=1c0707 gloss=0.6
+  # The jaw: two mandible bars from the angle to a hard chin point.
+  bar  head on skull from=0.30 to=0.30 offset=(0.040,-0.010,0.004) tip=(-0.038,-0.032,0.106) r=0.018 r2=0.013 blend=0.010 both
+  blob head on skull at=0.30 offset=(0,-0.044,0.110) r=0.022 wide=1.10 tall=0.90 deep=1.00 blend=0.010
+  # Sockets: sunken dark hollows under the brow, slanted (outer end higher),
+  # with a bridge of flesh between them (from 0.016 they met in the middle and
+  # read as one goggle band), each with a small red ember sunk in it (the
+  # skull's burning eyes; owner: red).
+  bar  head on skull from=0.30 to=0.30 offset=(0.021,0.050,0.090) tip=(0.022,0.010,-0.014) r=0.0105 tall=0.80 deep=0.55 blend=0.004 both color=1c0707 gloss=0.3
+  blob head on skull at=0.30 offset=(0.031,0.055,0.088) r=0.0055 blend=0.002 both color=ff2410 glow=0.9
+  # The mouth: a dark slot between muzzle and jaw, the kit teeth set on its edges.
+  # (At wide 1.55 it stood out past the jaw's sides and read as a black collar.)
+  blob head on skull at=0.30 offset=(0,-0.020,0.128) r=0.028 wide=1.15 tall=0.45 deep=0.60 blend=0.003 color=2a0a0c gloss=0.9
+
+  # TORSO — the flayer's gaunt masses (flayer.blob), the chest narrower and
+  # the waist pinched: starved, every rib in the normal map.
+  blob torso on spine  at=0.80 r=0.150 wide=1.36 deep=0.78 blend=0.016
+  blob torso on spine  at=0.50 r=0.136 wide=1.12 deep=0.80 blend=0.02
+  blob torso on spine  at=0.15 r=0.112 wide=1.00 deep=0.88 blend=0.02
+  # The yoke: wiry traps and the shoulder girdle the long arms hang from, so
+  # the upper body reads broad over the starved waist (first look: a narrow
+  # mannequin with arms on a coat hanger).
+  blob torso on spine  at=0.98 offset=(0.09,-0.01,-0.02) r=0.075 wide=1.25 tall=0.80 deep=0.95 blend=0.022 both
+  blob torso on pelvis at=0.40 r=0.125 wide=1.04 tall=0.9 deep=0.90 blend=0.02
+  # The CHEST WOUND: raw meat proud of the sternum where the spreader (kit)
+  # holds it open, and the furnace's dark socket inside it. Muted red (the
+  # teratoma's lesson: hex reds render hotter than they read).
+  blob torso on spine  at=0.62 offset=(0,0,0.095) r=0.062 wide=1.20 tall=1.25 deep=0.55 blend=0.006 color=7a3c3c gloss=0.85
+  blob torso on spine  at=0.62 offset=(0,0,0.118) r=0.036 wide=1.10 tall=1.30 deep=0.50 blend=0.004 color=2a0a0c gloss=0.9
+
+  # ARMS — long and stringy: thin upper arms, the forearm swelling below the
+  # elbow (the sinew is in the normal map), the hand a thin core inside the
+  # kit's talons and socket.
+  # Deltoid: a bony knob of a shoulder, wider than the arm below it.
+  blob arm on clavicle at=0.95 r=0.070 wide=1.10 blend=0.012 mirror
+  bar  arm on upperArm from=0.02 to=0.96 r=0.046 r2=0.036 blend=0.008 mirror
+  bar  arm on foreArm  from=0.04 to=0.95 r=0.050 r2=0.032 blend=0.008 mirror
+  # The forearm's belly, just below the elbow: the sinewy swell of the
+  # reference, fatter than the upper arm (the tubes read uniform, first look).
+  blob arm on foreArm  at=0.30 offset=(0,0,-0.006) r=0.052 tall=2.0 blend=0.012 mirror
+  blob arm on hand     at=0.30 r=0.034 wide=1.15 deep=0.85 blend=0.008 mirror
+
+  # LEGS — flesh, digitigrade: a lean haunch, a thin thigh, a ropy shin to the
+  # hock and a long bony metatarsal. The claws at the toes are kit.
+  # The haunch, seated down the femur: at r 0.088 on the hip joint it swelled
+  # behind like buttocks in profile (first look).
+  blob leg on thigh at=0.20 r=0.082 blend=0.018 mirror
+  # A runner's thigh, a little deeper than wide. The owner on a thinner pass
+  # (r 0.060, wide 0.80): "his thighs and legs are a bit too skinny".
+  bar  leg on thigh from=0.06 to=0.96 r=0.074 r2=0.050 wide=0.92 blend=0.012 mirror
+  bar  leg on shin  from=0.02 to=0.96 r=0.060 r2=0.042 blend=0.010 mirror
+  # The calf belly on the BACK of the tibia's upper half (the digitigrade
+  # shin's gastrocnemius), so the lower leg tapers to a ropy tendon at the hock.
+  blob leg on shin  at=0.30 offset=(0,0,-0.022) r=0.058 tall=1.9 blend=0.016 mirror
+  # The metatarsal: still the leg's thinnest run, but not a stick (at r 0.030
+  # it read as a stilt from the front).
+  bar  leg on foot  from=0.02 to=0.98 r=0.044 r2=0.032 blend=0.010 mirror
+  # The foot's pad, forward along the floor, inside the kit claws.
+  bar  leg on foot  from=1.00 to=1.00 tip=(0,0,0.08) r=0.026 wide=1.5 blend=0.008 mirror
+
+bones
+  ratio 0.38
+  # The flayer's (the zombie's) skull and torso skeleton, so a wound shows bone.
+  # Inside the cranium (a wound there shows bone).
+  blob head on skull at=0.30 offset=(0,0.062,-0.035) r=0.066 wide=0.86 tall=0.78 deep=1.22
+  # The zombie's spinal column is left out: under this hunch and the pinched
+  # starved waist it breached the back at both the kyphosis (y 1.23) and the
+  # lumbar curve (y 1.17). The spine ridge is the normal map's.
+
+# No generated face: the head is prims and kit (twinhead's blanking block).
+face
+  headRadius 0.001
+  headWidth  1.0
+  headHeight 1.0
+  headDepth  1.0
+  jawWidth   1.0
+  jawHeight  1.0
+  jawDrop    0
+  jawJut     0
+  noseLength 0
+  noseWidth  1.0
+  noseDrop   0
+  browHeavy  0
+  browRise   0
+  headBlend  0.006
+
+# Pale grey-white leather: a cool grey, barely pink, a dry sheen rather than
+# the zombie's wet flesh, mottled with a dirty grey-brown. Low translucency
+# (hide, not skin).
+palette
+  baseColor     0.66 0.64 0.62
+  deepColor     0.50 0.07 0.07
+  charColor     0.08 0.07 0.07
+  specIntensity 0.65
+  specRoughness 0.30
+  fresnelBoost  0.55
+  translucency  0.18
+  wetness       0.35
+  surfaceNoiseAmp    0.030
+  silhouetteNoiseAmp 0.010
+  mottleAmp     0.45
+  mottleScale   2.4
+  mottleColor   0.40 0.37 0.34
+  # Low: at 0.10 the hide read as a pixel checker up close.
+  grain         0.04
+
+sheet
+  # NO FACE SHEET: the face is prims and kit (the gorehound's lesson: a sheet
+  # left on lands on whatever flesh sits at the head's front).
+  enabled 0

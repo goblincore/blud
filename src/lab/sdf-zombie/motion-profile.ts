@@ -91,6 +91,9 @@ export interface MotionProfile {
    *  VITALS.zombieBite). Unlike `melee` there is no held prop: the weapon is kit
    *  on the arm, so the arm's own swing carries it. */
   armWeapon?: { side: 'L' | 'R'; damage: number };
+  /** A THROWER (the imp): the zombie's mind and claws up close, and at range a wind-up and an overhand throw of a
+   *  fireball (fireball.ts, enemy-mind.ts makeImpMind) that leaves from `spit` (the hand). */
+  throws?: 'fireball';
   /** A SOFT target: any bullet or blast hit kills it outright (the game
    *  forces the collapse on the first hit). The cultist is soft; the zombie
    *  and soldier soak hits and exist to show off the gore. Burns do not count
@@ -563,6 +566,22 @@ export const TERATOMA_PROFILE: MotionProfile = {
   },
 };
 
+/** The imp (characters/imp.blob): a gaunt hunched demon on the butcher's digitigrade legs that THROWS FIREBALLS.
+ *  Quick and agile: the flayer's 2.0 Hz prowl at a faster cruise, and a quick turn. Up close the zombie mind's
+ *  unarmed swing, which with talons for hands reads as a claw rake (the venus's lesson); at range it winds up and
+ *  throws (enemy-mind.ts makeImpMind): the fireball is born in the right hand's burning socket and leaves from it. */
+export const IMP_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'imp',
+  gait: { walk: PROWL_QUICK, run: PROWL_QUICK },
+  cruise: 1.6,
+  turnRate: 3.2,
+  throws: 'fireball',
+  // The fireball leaves the right fist's burning socket: the hand bone's tail (handTipR) is the socket's coal
+  // (assets-source/imp-kit/make_hands.py EMBER, 0.96 down the bone); a few cm on clears the talons.
+  spit: { from: 'handTipR', offset: [0, 0, 0.04] },
+};
+
 /** The bride: a slow STALK in a high sword guard; the point trails on the
  *  run. Melee only — the sword mind (enemy-mind.ts) swings it. */
 export const BRIDE_PROFILE: MotionProfile = {
@@ -645,6 +664,7 @@ const BY_NAME: Record<string, MotionProfile> = {
   chair: CHAIR_PROFILE,
   gamer: GAMER_PROFILE,
   teratoma: TERATOMA_PROFILE,
+  imp: IMP_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

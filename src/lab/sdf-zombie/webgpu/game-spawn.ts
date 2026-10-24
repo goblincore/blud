@@ -24,8 +24,9 @@ import { type Primitive, type Vec3 } from '../types';
 import { bodyPrimStride } from '../validate';
 import { compileCharacterSheet, createCharacterView } from './character-view';
 import { type CrowdType } from './crowd-type';
-import { makeGibbetMind, makeHoundMind, makeSoldierMind, makeSwordMind, makeWarbullMind } from './enemy-mind';
+import { makeGibbetMind, makeHoundMind, makeImpMind, makeSoldierMind, makeSwordMind, makeWarbullMind } from './enemy-mind';
 import { spawnBile } from '../bile';
+import { spawnFireball } from '../fireball';
 import { createZombieActor, type ZombieActor } from './game-actor';
 import { registerBleed } from './game-bleed';
 import { crowdTypeFor } from './game-crowd-types';
@@ -385,6 +386,16 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
         ctx.world.encounter.shot(zombieId);
         const pp = ctx.player.player.pos;
         ctx.weapon.bile.push(spawnBile(origin, [pp[0], pp[1] + SMG_TARGET_CHEST_Y, pp[2]], zombieId));
+      },
+    } : {}),
+    // A THROWER (the imp): claws up close and, at range, a fireball thrown overhand from the right fist's socket
+    // (MotionProfile.spit) at the player's chest (fireball.ts), enemy-mind.ts makeImpMind.
+    ...(characterEntry(name).profile.throws === 'fireball' ? {
+      mind: makeImpMind(),
+      onFire: ({ origin }: { origin: Vec3; direction: Vec3 }) => {
+        ctx.world.encounter.shot(zombieId);
+        const pp = ctx.player.player.pos;
+        ctx.weapon.fireballs.push(spawnFireball(origin, [pp[0], pp[1] + SMG_TARGET_CHEST_Y, pp[2]], zombieId));
       },
     } : {}),
     // A RANGED profile (motion-profile.ts `gunner`) gets the shooting brain

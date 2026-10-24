@@ -54,6 +54,8 @@ exports[`packBody byte pin > gorehound.blob packs the pinned bytes 1`] = `"4daec
 
 exports[`packBody byte pin > gutcrawler.blob packs the pinned bytes 1`] = `"79498106bcf5bb0b"`;
 
+exports[`packBody byte pin > imp.blob packs the pinned bytes 1`] = `"d74d2224881287e5"`;
+
 exports[`packBody byte pin > juggernaut.blob packs the pinned bytes 1`] = `"6eaa93748006d298"`;
 
 exports[`packBody byte pin > minotaur.blob packs the pinned bytes 1`] = `"baab8ed56c086fd3"`;

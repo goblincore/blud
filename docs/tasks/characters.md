@@ -2,6 +2,24 @@
 
 SDF characters: authoring, prims, the roster, blends. Part of the task wiki: [TASKS.md](../../TASKS.md) is the front page. Sections are newest-first where dated; each keeps its own history.
 
+## Imp (gaunt fireball-throwing demon: burning socket fists, chest furnace) — first pass 2026-10-24
+
+- [x] **Body** `characters/imp.blob`: a gaunt, hunched, pale-hide demon on the butcher's digitigrade legs (flesh, not
+  machine), long arms with a `hand` bone, a deep hunch. The head is flesh over a simplified version of the twinhead's
+  demon skull (owner): V brow, slanted sunken sockets with red embers, cheekbones, flared nostrils, long muzzle,
+  chin point. `?character=imp`, `?spawn=imp`.
+- [x] **Kit** `assets-source/imp-kit/` (headless `build.py`, skin probed by `scripts/imp-skin.ts`): socket fists
+  (a knuckled skullmetal cup round a burning coal, caged by five curled talons, glowing from a baked `_glow`), fangs
+  and swept horns, a chest-wound spreader over a glowing furnace, dorsal and shoulder spines, splayed foot talons and
+  a hock spur. ~97k tris; optimisation is the later pass.
+- [x] **Body normal map** from `characters/imp.detail` (`scripts/imp-detail-gen.ts`): a starved rib cage, spine
+  knuckles, sinew cords down the forearms, shins and metatarsals, veins; torso baked round the hunched spine axis.
+- [x] **Attacks**: `IMP_PROFILE` (PROWL_QUICK at 1.6 m/s, quick turn). Up close the zombie mind's swing as a claw
+  rake; at range `makeImpMind` winds up and throws overhand (`attack.ts` `throw`): `fireball.ts` flies from the right
+  socket (`spit` from `handTipR`) at 11 m/s, 14 on a hit, 5 on a near miss, a small fire burst. Seen in the arena.
+- [ ] Owner review. Open: a charging fireball visible in the socket through the wind-up; the in-flight look of the
+  ball (a tinted tracer, like the bile); kit optimisation.
+
 ## Venus (heavy biomech woman: corset cage, talon gauntlets, knee braces) — first pass 2026-10-22
 
 - [x] **Body** `characters/venus.blob`: a heavy, full-figured flesh body (hips 0.55 m across, a 0.17 waist, a rear

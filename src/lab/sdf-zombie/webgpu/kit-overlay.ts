@@ -243,6 +243,11 @@ const LOOK: Record<string, {
   ventglow: { metalness: 0.0, roughness: 0.5, envIntensity: 0.2, emissive: [1.0, 0.45, 0.04], emissiveIntensity: 6.0 },
   // Its feed hoses: corrugated dull-red rubber, wet enough to catch the key along each ring.
   hose: { metalness: 0.0, roughness: 0.30, envIntensity: 0.55 },
+  // The imp's (assets-source/imp-kit/): its socket fists, ocular plate and chest spreader are skullmetal, and its hand
+  // and foot talons keratin, under their own names so each can burn orange from the fire it holds
+  // (GLOW_FROM_ATTRIBUTE below). Same looks as skullmetal and horn.
+  impmetal: { metalness: 0.62, roughness: 0.34, envIntensity: 0.55 },
+  impclaw: { metalness: 0.0, roughness: 0.42, envIntensity: 0.45 },
 };
 
 /**
@@ -259,6 +264,10 @@ const GLOW_FROM_ATTRIBUTE: Record<string, { color: [number, number, number]; gai
   // 0.25 bleed onto the sclera, 0 in the pupil). Hot enough to read without bloom, the twinhead's lesson.
   // A deep yolk-orange, not the first pass's pale [1, 0.72, 0.06] x 3, which tone-mapped to cream.
   cacoeye: { color: [1.0, 0.50, 0.02], gain: 2.2 },
+  // The imp's fire: the coal in each hand socket, the furnace in its chest and the embers in its eye sockets light the
+  // metal and talons round them a fire orange, a touch redder than ventglow's core so the source stays the hottest.
+  impmetal: { color: [1.0, 0.32, 0.03], gain: 2.4 },
+  impclaw: { color: [1.0, 0.32, 0.03], gain: 2.0 },
 };
 
 /** Materials glow() drives, by WAM material name. The juggernaut's `lens`
