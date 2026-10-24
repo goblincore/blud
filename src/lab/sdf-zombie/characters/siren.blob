@@ -141,6 +141,39 @@ body
   blob torso on spine2 at=0.90 r=0.060 wide=2.35 tall=0.62 deep=0.85 blend=0.034
 
   # ============================================================
+  # THE CLOTHES (owner, 2026-10-24: "a bustier and skirt ... mesh or sdf,
+  # I'll let you decide"). SDF SHELLS — thin real cloth standing a few mm
+  # off the body (the bride's road), not paint on the skin: the skirt rides
+  # the hem pendulum, and there is no Blender round-trip. Crimson satin
+  # (8e0e1c). Every size is FITTED to the probed body cross-sections
+  # (half-width x, front and back z, chest to knee, arms removed), so no
+  # skin pokes through; the numbers in each comment are those probes.
+  # ============================================================
+  # THE BUSTIER CUPS: each breast's own cone (the bust prim above) grown
+  # 6 mm, a shell cut straight across at the neckline (keeps y < 1.31), so
+  # the upper bust shows over a firm edge (rim) and the cleavage is skin.
+  shell torso on chest at=0.66 offset=(0.072,0,0.072) tip=(0.010,-0.045,0.035) r=0.086 r2=0.074 deep=0.92 thick=0.004 clip=(0,1,0) clipd=1.310 rim=0.004 blend=0.006 both color=8e0e1c gloss=0.60
+  # THE BODICE: a cone from the waist (y 1.12; body x 0.114, z +-0.074)
+  # widening to under the bust (y 1.24), cut at y 1.235 where the cups
+  # take over. Fine vertical ribs (warp, no y frequency) read as boning.
+  shell torso on spine1 at=0.53 offset=(0,0,-0.003) tip=(0,0.120,0.004) r=0.080 r2=0.092 wide=1.42 deep=0.98 thick=0.004 clip=(0,1,0) clipd=1.235 rim=0.004 blend=0.006 color=8e0e1c gloss=0.60 warp=0.0012 warpFreq=(140,0,140)
+  # THE SKIRT, UPPER: the hips swell out in a DOME just below the waist
+  # (x 0.114 / 0.178 / 0.218 / 0.244 at y 1.12 / 1.08 / 1.04 / 0.96), which
+  # no cone follows (a straight one cut under it by 3 cm). An ELLIPSOID
+  # centred at the hips' widest (y 0.95) has that dome: semi 0.257 x 0.193 x
+  # 0.162, set back to z -0.034 for the rear (front 0.100 / back -0.186 at
+  # 0.96); its top closes inside the waist at ~1.13, so the skirt grows out
+  # of the waist without a band. On the pelvis: it moves with the hips.
+  # Cut low (y 0.84), not at the seam: below 0.95 the ellipsoid narrows
+  # faster than the pencil and sinks inside it, so the two meet in a blend,
+  # not an edge (cut at 0.92 it left a ledge round the hips).
+  shell torso on pelvis at=0.0 offset=(0,-0.010,-0.034) r=0.165 wide=1.56 tall=1.17 deep=0.98 thick=0.004 clip=(0,-1,0) clipd=-0.840 rim=0.002 blend=0.006 color=8e0e1c gloss=0.60
+  # THE SKIRT, LOWER: a pencil cone from the hips (y 0.95; x 0.261, z
+  # 0.144) tapering to a hem above the knee (y 0.71; x 0.193; body 0.176),
+  # on the HEM pendulum so it swings with the walk.
+  shell torso on hem at=0.0 offset=(0,-0.090,-0.040) tip=(0,-0.250,0.036) r=0.165 r2=0.122 wide=1.58 deep=0.87 thick=0.004 clip=(0,-1,0) clipd=-0.710 rim=0.006 blend=0.006 color=8e0e1c gloss=0.60 rigid
+
+  # ============================================================
   # NECK + HEAD. The bride's solved head structure (bride.blob, "HEAD +
   # NECK": skull bone (0,1.568,0.005) -> (0,1.808,-0.011)), softened: no
   # bruised sockets, no corpse sheet, eyes of normal size and set, a rosy

@@ -131,3 +131,15 @@ silhouette were tried twice (thin, then fat): in 3D they read as a spiked mace. 
 the hair.
 
 ![bob](contact-12-bob.png)
+
+## Thirteenth pass: a bustier and skirt (2026-10-24, owner: "a bustier and skirt ... mesh or sdf, I'll let you decide")
+
+SDF shells, fitted to probed body cross-sections (half-width and front/back z, y 1.42 -> 0.60, arms removed), crimson
+satin: a cup shell per breast cut at y 1.31; a ribbed bodice cone from the waist to under the bust; the upper skirt an
+ELLIPSOID shell on the pelvis (the hips' dome below the waist — x 0.114 / 0.178 / 0.218 / 0.244 at y 1.12 / 1.08 /
+1.04 / 0.96 — which no cone follows; its top closes inside the waist, so there is no band); the lower skirt a pencil
+cone on the hem pendulum to y 0.71. The upper shell is cut low (0.84) so it sinks inside the pencil rather than ending
+in a ledge at the seam. Coverage checked on the CPU from front/side/back: no skin through. In the walk the thigh
+comes out under the hem, not through it.
+
+![clothes](contact-13-clothes.png)
