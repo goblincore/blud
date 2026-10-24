@@ -5,7 +5,8 @@ Night Train, the Wake, the Void and menu, level format, game design. Part of the
 ## Sector levels + the E1M1 experiment — design approved 2026-10-24
 
 [Spec](../../docs/superpowers/specs/2026-10-24-doom-sector-levels-design.md). Owner theory: abstract, non-representational layouts (the arena, the ring) feel more alien than themed places (train, graveyard). Test: rebuild Doom E1M1's layout from `doomu.wad` (generated level gitignored, like Blood placeholders) in our look, with real heights, doors, glowing hurt pools, darkened sector light, our enemies and chaining barrels. Sectors become the engine's multi-floor support.
-- [ ] 1 Sectors, `LevelGround` interface, 2.5D collision, converter (`scripts/levels/doom_map.py`) → walk an empty E1M1. **Owner checkpoint.**
+- [x] 1 Sectors, `LevelGround` interface, 2.5D collision, converter (`scripts/levels/doom_map.py`) → walk an empty E1M1 ([plan](../superpowers/plans/2026-10-24-sector-levels-1-walk-e1m1.md) · [notes](../dev-notes/2026-10-24-sector-levels-1/NOTES.md)). Gate `scripts/sdf-game-doom-gate.sh`: fixture 5/5, E1M1 7-leg route start → zigzag walkway, 5.5 ms / ~100 draws at the start (quiet machine). Known gaps in the notes (slugs through sector walls, gore at y = 0, tagged remote doors, converter floor-lower targets). **Owner checkpoint pending: walk it (`npm run dev:doom`).**
+- [ ] 1b **Level architecture follow-up** (owner, gated on the item-1 playtest): if the feel is confirmed, a separate design pass formalizing the level model around Doom-style sectors in the engine/code structure — rooms vs sectors, zones as the lighting/event unit, how level code is organized for the Rust port.
 - [ ] 2 Doors (use-to-open ceiling doors).
 - [ ] 3 Hazard floors (nukage/lava/acid WGSL glow + damage).
 - [ ] 4 Sector lighting (darkened Doom levels, `?doomlight=0` A/B).

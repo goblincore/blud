@@ -114,12 +114,19 @@ if (!existsSync('public/assets/levels/doom-e1m1.level.json')) {
 await boot('doom-e1m1');
 const start = await evaluate('__sdfGame.ground(0, 0)');
 if (start.floor !== 0) fail(`E1M1 start floor ${start.floor}, expected 0`);
-// ROUTE: [x, z] waypoints along the main path, read off .lab-tmp/doom/E1M1.svg (Step 3). Each leg
-// must end within 0.6 m of its target, standing on the floor the ground reports there.
-const ROUTE = JSON.parse(process.env.DOOM_ROUTE ?? '[]');
+// ROUTE: [x, z] waypoints along the main path (DOOM_ROUTE overrides). Each leg must end within 0.6 m of
+// its target, standing on the floor the ground reports there. The default is derived numbers, not WAD data:
+// a grid search over the generated level (step 0.75 m, headroom 1.9 m, 0.45 m clear of every blocking line,
+// no nukage) for straight legs. Start room (floor -0.5..0) north, out its north-east door, the bent corridor
+// (zone 7), across the window room (zone 2), the corridor east down a 0.25 m step, onto the zigzag
+// walkway over the nukage (zone 9, floor -0.75).
+const DEFAULT_ROUTE = [[0, 0], [0, -17], [5.75, -22.75], [8.5, -34], [30.25, -33.75], [32.75, -31.25], [49.75, -31.25], [57.75, -23.25]];
+const ROUTE = process.env.DOOM_ROUTE ? JSON.parse(process.env.DOOM_ROUTE) : DEFAULT_ROUTE;
 if (ROUTE.length < 4) fail('E1M1: ROUTE needs at least 4 waypoints (DOOM_ROUTE env, see the plan Task 7 Step 3)');
 for (let i = 1; i < ROUTE.length; i++) {
-  const q = await walk(ROUTE[i - 1], ROUTE[i], 6000);
+  // Walk speed 3.4 m/s: allow the leg's length at ~2.4 m/s plus 2 s, so legs up to ~22 m fit.
+  const len = Math.hypot(ROUTE[i][0] - ROUTE[i - 1][0], ROUTE[i][1] - ROUTE[i - 1][1]);
+  const q = await walk(ROUTE[i - 1], ROUTE[i], Math.max(6000, 2000 + (len / 2.4) * 1000));
   const gap = Math.hypot(q[0] - ROUTE[i][0], q[2] - ROUTE[i][1]);
   const floor = (await evaluate(`__sdfGame.ground(${q[0]}, ${q[2]})`)).floor;
   if (gap > 0.6) fail(`E1M1 leg ${i}: stopped ${gap.toFixed(2)} m short of ${ROUTE[i]}`);
@@ -129,19 +136,25 @@ for (let i = 1; i < ROUTE.length; i++) {
 
 await evaluate('__sdfGame.setPose(0, 0, 0, 0, 0)');
 await sleep(800);
+await evaluate('__sdfGame.timeDraws(15)');                              // warm: the pipelines for what this pose sees
+// One frame's draws: reset the counters, draw one frame, read them (a bare drawStats(true) after boot read 0).
+await evaluate('__sdfGame.drawStats(true)');
+await evaluate('__sdfGame.timeDraws(1)');
 const drawCalls = (await evaluate('__sdfGame.drawStats(true)')).drawCalls;
-await evaluate('__sdfGame.timeDraws(15)');
 const readings = [];
 for (let i = 0; i < 3; i++) readings.push(await evaluate('__sdfGame.timeDraws(21)'));
 const frameMs = readings.sort((a, b) => a - b)[1];
-console.log(`budget: ${drawCalls} draw calls, ${frameMs.toFixed(2)} ms a frame at the start`);
-if (frameMs > 33.3) fail(`frame ${frameMs.toFixed(2)} ms > 33.3 ms`);
-pass('E1M1 budget: under 33.3 ms');
+const lights = await evaluate('JSON.stringify(__sdfGame.levelProbes?.lights ?? null)').catch(() => 'n/a');
+console.log(`budget: ${drawCalls} draw calls, ${frameMs.toFixed(2)} ms a frame at the start (readings ${readings.map((v) => v.toFixed(1)).join(', ')}; level lights per room ${lights})`);
 
+// Shots before the budget verdict, so an over-budget run still leaves pictures to look at.
 if (process.env.SHOTS === '1') {
-  for (const [i, [x, z]] of [[0, 0], ...ROUTE].entries()) {
+  const at = ROUTE[0][0] === 0 && ROUTE[0][1] === 0 ? ROUTE : [[0, 0], ...ROUTE];   // e1m1-<i>-<k>: waypoint i, yaw k (-z, +x, +z, -x)
+  for (const [i, [x, z]] of at.entries()) {
     for (const [k, yaw] of [0, Math.PI / 2, Math.PI, -Math.PI / 2].entries()) await shot(`e1m1-${i}-${k}.png`, x, z, yaw);
   }
   pass(`shots: ${OUT}/e1m1-*.png`);
 }
+if (frameMs > 33.3) fail(`frame ${frameMs.toFixed(2)} ms > 33.3 ms`);
+pass('E1M1 budget: under 33.3 ms');
 process.exit(0);
