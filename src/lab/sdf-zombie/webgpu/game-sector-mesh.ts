@@ -6,31 +6,44 @@
 // UVs (one texture tile per TILE_M metres) so the pattern runs on across every wall and floor.
 // Sky ceilings are not drawn. Wall quads already run with their sector on the left, so the left
 // normal (-dz, 0, dx) faces into the sector the wall is seen from.
+//
+// SECTOR LIGHT AND GLOW (spec 2026-10-24 §7–§8): every vertex carries its `sectorIndex`, and every
+// mesh owns a MeshStandardNodeMaterial whose emissive is albedo × levels[sectorIndex] (the level
+// array is game-sector-light.ts's). A glowing sector's floor (nukage, lava, acid) leaves the stone
+// batches for an unlit WGSL surface (sector-glow.wgsl.ts) on meshes added to the scene, outside the
+// level group, so the per-room light lists and the deferred router never touch it.
 
 import * as THREE from 'three/webgpu';
+import { MeshBasicNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
+import { attribute, float, materialColor, positionWorld, vec3, vec4, wgslFn } from 'three/tsl';
 import type { GameContext } from './game-context';
-import { SKY_MATERIAL, type SectorMap, type XZ } from './sector-def';
+import { createSectorFx, type SectorFxRuntime } from './game-sector-light';
+import { SKY_MATERIAL, type GlowKind, type SectorMap, type XZ } from './sector-def';
 import { sectorPolygons, wallQuads } from './sector-geometry';
+import { GLOW_KIND_INDEX, SECTOR_GLOW, SECTOR_GLOW_HASH, SECTOR_GLOW_NOISE } from './sector-glow.wgsl';
 
 const TILE_M = 2;
+/** Glow floors sit this far above the sector floor, so they never z-fight a neighbour's riser edge. */
+const GLOW_LIFT_M = 0.002;
 type Role = 'floor' | 'ceil' | 'wall';
 
 class Batch {
-  pos: number[] = []; uv: number[] = []; nrm: number[] = [];
-  /** One triangle; flipped if its normal disagrees with `want`. */
-  tri(p: number[][], uv: number[][], want: [number, number, number]) {
+  pos: number[] = []; uv: number[] = []; nrm: number[] = []; sec: number[] = [];
+  /** One triangle of sector `sector`; flipped if its normal disagrees with `want`. */
+  tri(p: number[][], uv: number[][], want: [number, number, number], sector: number) {
     const [a, b, c] = p as [number[], number[], number[]];
     const ux = b[0]! - a[0]!, uy = b[1]! - a[1]!, uz = b[2]! - a[2]!;
     const vx = c[0]! - a[0]!, vy = c[1]! - a[1]!, vz = c[2]! - a[2]!;
     const n = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
     const order = n[0]! * want[0] + n[1]! * want[1] + n[2]! * want[2] >= 0 ? [0, 1, 2] : [0, 2, 1];
-    for (const i of order) { this.pos.push(...p[i]!); this.uv.push(...uv[i]!); this.nrm.push(...want); }
+    for (const i of order) { this.pos.push(...p[i]!); this.uv.push(...uv[i]!); this.nrm.push(...want); this.sec.push(sector); }
   }
   geometry(): THREE.BufferGeometry {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
     g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nrm, 3));
     g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
+    g.setAttribute('sectorIndex', new THREE.Float32BufferAttribute(this.sec, 1));
     g.computeBoundingSphere();
     return g;
   }
@@ -51,13 +64,38 @@ function worldTiled(base: THREE.MeshStandardMaterial): THREE.MeshStandardMateria
   return m;
 }
 
-/** Add the sector level's meshes to the level group; returns how many meshes were added. */
+/** One mesh's own node material (a NodeMaterial is reused as is by the light-list loop, so meshes
+ *  never share one): the role's world-tiled stone textures and the palette colour, plus the sector
+ *  term — the albedo times the sector's current level — and, for ceilings, plan 1's whisper. */
+function sectorMaterial(role: THREE.MeshStandardMaterial, color: readonly [number, number, number], fx: SectorFxRuntime, ceil: boolean): MeshStandardNodeMaterial {
+  const nm = new MeshStandardNodeMaterial();
+  nm.map = role.map; nm.normalMap = role.normalMap; nm.roughnessMap = role.roughnessMap;
+  nm.roughness = role.roughness; nm.metalness = role.metalness; nm.normalScale.copy(role.normalScale);
+  nm.color = new THREE.Color(...color);
+  // The sector's self-lit level (sector-light.ts via game-sector-light.ts), times the albedo.
+  const lvl = fx.levels.element(attribute('sectorIndex', 'float').toInt());
+  const base = ceil ? vec3(...color).mul(fx.ceilWhisper) : vec3(0);
+  nm.emissiveNode = materialColor.rgb.mul(lvl).add(base);
+  return nm;
+}
+
+/** Add the sector level's meshes: stone to the level group, glow floors to the scene. Creates the
+ *  sector light runtime on ctx.world.sectorFx. Returns how many level-group meshes were added. */
 export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
+  const search = new URLSearchParams(location.search);
+  const fx = createSectorFx(map.sectors.length, search, search.get('flashes') === 'reduced');
+  ctx.world.sectorFx = fx;
   const batches = new Map<string, Batch>();
   const batch = (zone: number, role: Role) => {
     const key = `${zone}:${role}`;
     let b = batches.get(key);
     if (!b) batches.set(key, (b = new Batch()));
+    return b;
+  };
+  const glowBatches = new Map<GlowKind, Batch>();
+  const glowBatch = (kind: GlowKind) => {
+    let b = glowBatches.get(kind);
+    if (!b) glowBatches.set(kind, (b = new Batch()));
     return b;
   };
 
@@ -68,12 +106,14 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
     const pts: XZ[] = [...poly.outer, ...poly.holes.flat()];
     const faces = THREE.ShapeUtils.triangulateShape(contour, holes);
     const faces3: [Role, number, [number, number, number]][] = [['floor', s.floor, [0, 1, 0]], ['ceil', s.ceil, [0, -1, 0]]];
-    for (const [role, y, want] of faces3) {
+    for (const [role, y0, want] of faces3) {
       if (role === 'ceil' && s.materials.ceil === SKY_MATERIAL) continue;
-      const b = batch(s.zone, role);
+      const glow = role === 'floor' && s.glow !== null;
+      const b = glow ? glowBatch(s.glow!) : batch(s.zone, role);
+      const y = glow ? y0 + GLOW_LIFT_M : y0;
       for (const f of faces) {
         const p = f.map(i => [pts[i]![0], y, pts[i]![1]]);
-        b.tri(p, f.map(i => [pts[i]![0] / TILE_M, pts[i]![1] / TILE_M]), want);
+        b.tri(p, f.map(i => [pts[i]![0] / TILE_M, pts[i]![1] / TILE_M]), want, poly.sector);
       }
     }
   }
@@ -86,29 +126,45 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
     const b1 = [q.b[0], q.y1, q.b[1]], a1 = [q.a[0], q.y1, q.a[1]];
     const u0 = 0, u1 = len / TILE_M, v0 = q.y0 / TILE_M, v1 = q.y1 / TILE_M;
     const b = batch(zone, 'wall');
-    b.tri([a0, b0, b1], [[u0, v0], [u1, v0], [u1, v1]], want);
-    b.tri([a0, b1, a1], [[u0, v0], [u1, v1], [u0, v1]], want);
+    b.tri([a0, b0, b1], [[u0, v0], [u1, v0], [u1, v1]], want, q.sector);
+    b.tri([a0, b1, a1], [[u0, v0], [u1, v1], [u0, v1]], want, q.sector);
   }
 
-  // Sector `light` and `materials` are not used yet: one stone set for every zone (sector lighting is the next plan).
+  // Sector `materials` are not used yet: one stone set for every zone. The world-tiled clones are
+  // made ONCE per role; their textures are shared by every mesh's own node material.
   const P = ctx.world.level.def!.palette;
-  const mats: Record<Role, THREE.MeshStandardMaterial> = {
+  const roles: Record<Role, THREE.MeshStandardMaterial> = {
     floor: worldTiled(ctx.world.stoneSet.floor as THREE.MeshStandardMaterial),
     ceil: worldTiled(ctx.world.stoneSet.perimeterAccent as THREE.MeshStandardMaterial),
     wall: worldTiled(ctx.world.stoneSet.wall as THREE.MeshStandardMaterial),
   };
-  mats.floor.color = new THREE.Color(...P.floor);
-  mats.ceil.color = new THREE.Color(...P.ceil);
-  // The ceilings' whisper of self-light, as the plane path in game-main gives generated ceilings.
-  mats.ceil.emissive = new THREE.Color(...P.ceil).multiplyScalar(0.10);
-  mats.wall.color = new THREE.Color(...P.wall);
+  const colors: Record<Role, readonly [number, number, number]> = { floor: P.floor, ceil: P.ceil, wall: P.wall };
 
   for (const [key, b] of batches) {
     const [zone, role] = key.split(':') as [string, Role];
-    const mesh = new THREE.Mesh(b.geometry(), mats[role]);
+    const mesh = new THREE.Mesh(b.geometry(), sectorMaterial(roles[role], colors[role], fx, role === 'ceil'));
     mesh.name = `sector-${role}-zone-${zone}`;
     mesh.userData.room = Number(zone) + 1;                       // the zone's synthesized room id
     ctx.world.levelGroup.add(mesh);
+  }
+
+  if (glowBatches.size > 0) {
+    // WGSL has no nested fn: the noise helpers ride along as includes (game-void.ts's pattern).
+    const include = (fn: ReturnType<typeof wgslFn>) => fn as unknown as NonNullable<Parameters<typeof wgslFn>[1]>[number];
+    const glowFn = wgslFn(SECTOR_GLOW, [include(wgslFn(SECTOR_GLOW_NOISE, [include(wgslFn(SECTOR_GLOW_HASH))]))]);
+    const group = new THREE.Group();
+    group.name = 'sector-glow';
+    for (const [kind, b] of glowBatches) {
+      const mat = new MeshBasicNodeMaterial();
+      mat.colorNode = vec4(glowFn({ wpos: positionWorld, t: fx.glowTime, kind: float(GLOW_KIND_INDEX[kind]) }) as unknown as ReturnType<typeof vec3>, 1);
+      mat.fog = false;
+      const mesh = new THREE.Mesh(b.geometry(), mat);
+      mesh.name = `sector-glow-${kind}`;
+      mesh.userData.shadow = false;
+      mesh.userData.skipLevelLights = true;
+      group.add(mesh);
+    }
+    ctx.boot.handle.scene.add(group);
   }
   return batches.size;
 }

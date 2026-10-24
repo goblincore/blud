@@ -12,6 +12,8 @@ import { roomIdAt } from './game-level-rooms';
 import { CHUNK_OBJECT_LIGHT, type ChunkObjectLight } from './baked-chunks';
 import { forEachDrawnChunkMesh, type ChunkMeshSource } from './game-chunk-bake';
 import type { GameContext } from './game-context';
+import { setSectorLightConfig } from './game-sector-light';
+import { sectorInteriorPoint } from './sector-geometry';
 import * as THREE from 'three/webgpu';
 import { ATTACK_TUNING, type SwingVariant } from '../attack';
 import { woundCarveNormal, woundDirToWorld, woundWorldPos } from '../damage';
@@ -667,6 +669,23 @@ export function createWorldSeams(ctx: GameContext) {
       windows: ctx.world.level.surfaces.windows.map(w => w.id),
       geometry: ctx.world.level.def?.sectors ? 'sectors' : 'rooms',
     }),
+    /** Sector light (spec 2026-10-24 §7): read or patch the curve and the on/off toggle. */
+    sectorLight: (patch?: { max?: number; gamma?: number; on?: boolean }) =>
+      ctx.world.sectorFx ? setSectorLightConfig(ctx.world.sectorFx, patch ?? {}) : null,
+    /** A point well inside the first hurt sector (gates): [x, floorY, z] and the sector, or null. */
+    hazardPoint: () => {
+      const map = ctx.world.level.def?.sectors;
+      if (!map) return null;
+      for (let s = 0; s < map.sectors.length; s++) {
+        const sec = map.sectors[s]!;
+        if (sec.special !== 'hurt') continue;
+        const p = sectorInteriorPoint(map, s);
+        if (p) return { sector: s, pos: [p[0], sec.floor, p[1]] as [number, number, number], glow: sec.glow, hurtPerSec: sec.hurtPerSec };
+      }
+      return null;
+    },
+    /** The player's health, or null before the loop exists. */
+    health: () => ctx.world.loop?.vitals.health ?? null,
     /** The ground under (x, z): floor and ceiling heights (NaN outside every sector). */
     ground: (x: number, z: number) => ({ floor: ctx.world.level.ground.floorAt(x, z), ceil: ctx.world.level.ground.ceilAt(x, z) }),
     /** Open an authored level's gate by id (false if unknown or already open). */

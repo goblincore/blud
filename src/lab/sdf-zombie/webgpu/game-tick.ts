@@ -35,6 +35,7 @@ import { gibBakedPiece, gibChunkMeat } from './game-chunk-pieces';
 import { describeRecordedWound, neutralInput, readInputFrame, updateDemoHud } from './game-demo-record';
 import { stepDisco } from './game-disco';
 import { stepDynamicLight } from './game-dynamic-light';
+import { stepSectorLight } from './game-sector-light';
 import { detonateAt, stepDynamite } from './game-dynamite-step';
 import { stepEgg } from './game-egg';
 import { spawnScheduledGibs } from './game-gib-actor';
@@ -131,6 +132,7 @@ export function tick(ctx: GameContext, dt: number) {
   stepVoid(ctx, dt);
   stepTrain(ctx, dt);
   stepDynamicLight(ctx, dt);
+  if (ctx.world.sectorFx) stepSectorLight(ctx);
   lightSteam(ctx);
   stepDisco(ctx);
   stepEgg(ctx);

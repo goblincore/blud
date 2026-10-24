@@ -27,6 +27,7 @@ import type { DiscoRuntime } from './game-disco';
 import type { EggRuntime } from './game-egg';
 import type { EmergenceRuntime } from './game-emergence';
 import type { SequenceRuntime } from './game-sequence';
+import type { SectorFxRuntime } from './game-sector-light';
 import type * as THREE from 'three/webgpu';
 import type { Vec3 } from '../types';
 import type { ActiveLevel } from './active-level';
@@ -83,6 +84,8 @@ export interface WorldState {
   emergence: EmergenceRuntime | null;
   /** The running scripted sequence (the Night Train ending); null until one starts. */
   sequence: SequenceRuntime | null;
+  /** Sector light and glow floors (game-sector-light.ts); null unless the level is built from sectors. */
+  sectorFx: SectorFxRuntime | null;
   /** Collision boxes for the level — the same list the player and gibs clamp
    *  against, split around every doorway so pieces can sail out of doors. */
   colliders: Aabb[];
@@ -147,6 +150,7 @@ export function makeWorldState(): WorldState {
     egg: null,
     emergence: null,
     sequence: null,
+    sectorFx: null,
     colliders: [],
     actors: [],
     frustum: unbuilt<THREE.Frustum>(),
@@ -187,6 +191,7 @@ export const WORLD_BINDINGS = {
   egg: 'world.egg',
   emergence: 'world.emergence',
   sequence: 'world.sequence',
+  sectorFx: 'world.sectorFx',
   colliders: 'world.colliders',
   actors: 'world.actors',
   frustum: 'world.frustum',
