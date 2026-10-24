@@ -100,6 +100,9 @@ export interface LevelDef {
   palette: LevelPalette;
   loadout: string[];
   completeOn: string;
+  /** A TEST ARENA (game-arena.ts): god mode by default, and dev keys respawn the enemy and cycle the character
+   *  (`?level=arena`). Absent on every story level. */
+  arena?: boolean;
   /** The state this LevelDef was filtered to, and every state the file declares. */
   state: string;
   states: string[];

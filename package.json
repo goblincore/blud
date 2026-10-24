@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --open /sdf-game.html?level=night-train",
     "dev:fps": "vite --open /sdf-game.html?level=night-train",
+    "dev:arena": "vite --open /sdf-game.html?level=arena&spawn=zombie",
     "dev:legacy": "vite --open /index.html",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",

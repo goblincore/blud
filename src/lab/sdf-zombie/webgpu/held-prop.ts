@@ -35,7 +35,7 @@ export interface HeldProp {
   dispose(): void;
 }
 
-export async function loadHeldProp(url: string, renderer?: THREE.WebGPURenderer): Promise<HeldProp> {
+export async function loadHeldProp(url: string, renderer?: THREE.WebGPURenderer, muzzleAt: Vec3 = GUN_GRIP.muzzle): Promise<HeldProp> {
   const gltf = await new GLTFLoader().loadAsync(url);
   const object = new THREE.Group();
   object.add(gltf.scene);
@@ -104,7 +104,7 @@ export async function loadHeldProp(url: string, renderer?: THREE.WebGPURenderer)
       write(drop.pos, drop.quat);
     },
     muzzle(forward = 0) {
-      return gunPoint(last, [GUN_GRIP.muzzle[0], GUN_GRIP.muzzle[1], GUN_GRIP.muzzle[2] + forward]);
+      return gunPoint(last, [muzzleAt[0], muzzleAt[1], muzzleAt[2] + forward]);
     },
     dispose() {
       object.removeFromParent();

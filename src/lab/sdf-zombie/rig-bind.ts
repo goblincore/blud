@@ -153,6 +153,10 @@ const DISTAL_JOINT_RE = /^(elbow|hand|handTip|knee|foot|toe)[LR]$/;
  *  about a second. At 1 (a joint's stiffness) it tracks rigidly — 0 cm.
  *  docs/dev-notes/2026-09-23-cultist/. */
 export const HEM_REST_SCALE = 0.15;
+/** Rest-pull multiplier for an UPWARD `hem` (its tail above its head): not cloth but a HELD prop on a stalk, the
+ *  gamer's joystick (characters/gamer.blob). At the cloth's 0.15 it would droop under gravity and trail every step;
+ *  this keeps it where his hands and the attack's jiggle put it, with a little give. */
+export const HEM_HELD_SCALE = 0.7;
 
 export function bindRig(body: BuildResult): BoundRig {
   // Deduplicate joints: a bone's tail and its child's head are the same point.
@@ -189,7 +193,7 @@ export function bindRig(body: BuildResult): BoundRig {
   const hemBone = body.bones.get('hem');
   if (hemBone) {
     const scale = positions.map(() => 1);
-    scale[indexOf(hemBone.tail)] = HEM_REST_SCALE;
+    scale[indexOf(hemBone.tail)] = hemBone.tail[1] > hemBone.head[1] ? HEM_HELD_SCALE : HEM_REST_SCALE;
     rig.restScale = scale;
   }
   // Only intact upper-arm/forearm chains get an elbow stop. Dead distal

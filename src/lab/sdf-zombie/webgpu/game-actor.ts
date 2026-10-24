@@ -55,8 +55,9 @@ import {
 } from '../motion';
 import { makeRng, headingDir, type Rng, type WanderBounds } from '../wander';
 import { rotateYaw } from '../gait';
-import type { BrainPlayer } from '../brain';
+import { BRAIN_TUNING, type BrainPlayer } from '../brain';
 import { makeZombieMind, type EnemyMind } from './enemy-mind';
+import { scaleGunCrater, type GoreTuning } from '../gore-tuning';
 import { isGoreBody, isSoldierFamily, wantsTorsoGuards, type MotionProfile } from '../motion-profile';
 import { BARREL_REST, INDEX_REST, barrelsDriven, stepBarrelIndex, stepBarrelSpin, type BarrelIndex, type BarrelSpin } from '../barrel-spin';
 import { lightsModeFor, statusLights, type StatusLights } from '../status-lights';
@@ -397,6 +398,8 @@ export interface ZombieActor {
    *  source of truth for every decision field this interface reports. */
   mind(): EnemyMind;
   readonly kind: 'zombie' | 'soldier';
+  /** Per-character gore (MotionProfile.gore, gore-tuning.ts): the bleed and the flesh-bit throw read it. Null = shared. */
+  readonly gore: GoreTuning | null;
   /** The MOTION PROFILE's name ('zombie' when none): how this body moves. Not which character it is: every
    *  character without a profile of its own moves on the zombie's (motion-profile.ts motionProfileFor), so the
    *  female, the schoolgirls, the bonewalker and the clowns all answer 'zombie' here. */
@@ -928,7 +931,8 @@ export function createZombieActor(opts: {
   // a brain state now); its swing phase becomes cfg.attack. The melee ring's
   // verdict and the blast flag arrive as inputs. Absent opts.mind = the
   // zombie's, which is what keeps every existing pin green by construction.
-  const mind: EnemyMind = opts.mind ?? makeZombieMind();
+  const armWeapon = opts.profile?.armWeapon;
+  const mind: EnemyMind = opts.mind ?? makeZombieMind(armWeapon ? { ...BRAIN_TUNING, swingSide: armWeapon.side } : undefined);
   let brainPlayer: BrainPlayer | null = null;
   let brainAlerted = false;
   let ringToken = false;
@@ -954,9 +958,13 @@ export function createZombieActor(opts: {
     return w;
   }
 
+  // A limb the body was BORN without is not missing. The teratoma (a floater) and the gutcrawler have no leg clusters
+  // at all, and reading that as "both legs shot off" collapsed them on their first tick (collapse.ts bothLegsGone):
+  // the floater dropped to the floor the moment it spawned (owner, enemy test arena, 2026-10-23).
+  const bornWith = new Set<LimbId>(body.clusters.map(c => c.limb as LimbId));
   function missingLimbs(): MissingLimbs {
     if (soldierDamage) return soldierInjury(current, soldierWounds, injuryTuning).missing;
-    const gone = (l: LimbId) => !(current.clusters.find(c => c.limb === l)?.alive ?? false);
+    const gone = (l: LimbId) => bornWith.has(l) && !(current.clusters.find(c => c.limb === l)?.alive ?? false);
     // A leg with ANY distal cut has lost its foot (severDistal kills the prim
     // and everything outward), so it can no longer bear weight: count it as
     // missing for the gait/collapse. Otherwise two shot-off shins left the
@@ -1323,7 +1331,9 @@ export function createZombieActor(opts: {
           faceHeading:encounterOrder.visible?think.faceHeading:null,fire:false,weaponUp:false};
         if (encounterOrder.halt || mind.debug().holdSecs > 0) think={...think,target:null,halt:true,fire:false};
         if (!encounterOrder.visible) think={...think,attack:null,fire:false,weaponUp:false};
-        if (!encounterOrder.fireAllowed) think={...think,fire:false};
+        // Firing LANES are the soldiers' (encounter-director grants them only to kind 'soldier'); a zombie-kind mind
+        // that fires (the gibbet's squirt, enemy-mind.ts makeGibbetMind) is gated by sight above, not by a lane.
+        if (!encounterOrder.fireAllowed && mind.kind === 'soldier') think={...think,fire:false};
         if (think.target) {
           const routed=routeGoal(think.target,sdt);
           think={...think,target:routed,halt:think.halt || routed===null};
@@ -1394,7 +1404,8 @@ export function createZombieActor(opts: {
       }
       // Fire is the SAME event for the animation clock and the projectile.
       // Previously the callback fired but CALM.fire stayed false forever.
-      signals.fire = think.fire && !missingLimbs().armR
+      // A spitter (profile.spit, the teratoma) fires from its body: no right arm needed.
+      signals.fire = think.fire && (opts.profile?.spit !== undefined || !missingLimbs().armR)
         && (current.clusters.find(c => c.limb === 'head')?.alive ?? false);
       if (soldierDamage || !mind.meleeCapable) {
         signals.missing = missingLimbs();
@@ -1513,7 +1524,7 @@ export function createZombieActor(opts: {
           // Absent on every other frame (motion.ts bit-identity contract).
           ...(swingPin === null && think.attack?.variant === 'lunge'
             ? { plantReach: SWORD_TUNING.lungePlantReach }
-            : swingPin === null && think.attack?.variant === 'pounce'
+            : swingPin === null && (think.attack?.variant === 'pounce' || think.attack?.variant === 'stab')
               ? { plantReach: HOUND_TUNING.pouncePlantReach }
               : {}),
         },
@@ -1656,13 +1667,22 @@ export function createZombieActor(opts: {
         ] };
       }
       lastFistGrip = gapTo(f.gun ? gunPoint(f.gun, GUN_GRIP.gripHand) : null);
-      if (signals.fire && f.gun && !f.collapsed) {
+      const spit = opts.profile?.spit;
+      const spitFrom = spit ? joints.index[spit.from] : undefined;
+      if (signals.fire && spit && spitFrom !== undefined && !f.collapsed) {
+        // Spat from the body (the teratoma's maw): the rig point plus the body-local offset turned by the yaw, along
+        // the facing (game-spawn re-aims the vertical at the player's chest).
+        const o = rotateYaw(spit.offset, f.bodyYaw);
+        const at = bound.rig.points[spitFrom]!.pos;
+        opts.onFire?.({ origin: [at[0] + o[0], at[1] + o[1], at[2] + o[2]], direction: rotateYaw(rotateYaw([0, 0, 1], f.bodyYaw), think.aimError) });
+        firedSinceIndex = true;
+      } else if (signals.fire && f.gun && !f.collapsed) {
         const fwd = qRotate(f.gun.quat, [0, 0, 1]);
         // The death burst sprays HIGH and wide: up 15-60 deg, +-25 deg yaw.
         const direction = burstShot
           ? rotateYaw(normalize([fwd[0], fwd[1] + Math.tan(0.26 + deathRng() * 0.79), fwd[2]]), (deathRng() - 0.5) * 0.87)
           : rotateYaw(fwd, think.aimError);
-        opts.onFire?.({ origin: gunPoint(f.gun, GUN_GRIP.muzzle), direction });
+        opts.onFire?.({ origin: gunPoint(f.gun, opts.profile?.prop?.muzzle ?? GUN_GRIP.muzzle), direction });
         firedSinceIndex = true;
       }
     }
@@ -1747,7 +1767,7 @@ export function createZombieActor(opts: {
     // in the UN-WARPED head (damage.ts unwarpHit): the shove, the reaction
     // and the blood below keep the world hit.
     const u = unwarpHit(posed, hitWorld);
-    const wound = woundFromPellet(posed.prims, u.hit, bodyYaw, u.field);
+    const wound = scaleGunCrater(woundFromPellet(posed.prims, u.hit, bodyYaw, u.field), opts.profile?.gore);
     wound.shot = shot;
     gunWetLip(wound, 'pellet');
     headLip(wound);
@@ -1756,7 +1776,7 @@ export function createZombieActor(opts: {
 
   function hitSlug(hitWorld: Vec3, dirWorld: Vec3, shot?: import('../damage').ShotProvenance): Wound | null {
     const u = unwarpHit(posed, hitWorld);   // the un-warped head, as hit()
-    const wound = woundFromSlug(posed.prims, u.hit, u.field, bodyYaw);
+    const wound = scaleGunCrater(woundFromSlug(posed.prims, u.hit, u.field, bodyYaw), opts.profile?.gore);
     wound.shot = shot?.weapon === 'slug' ? shot : { weapon: 'slug' };
     gunWetLip(wound, 'slug');
     headLip(wound);
@@ -2288,6 +2308,7 @@ export function createZombieActor(opts: {
     burnStumbles: () => burnStumbles,
     mind: () => mind,
     kind: mind.kind,
+    gore: opts.profile?.gore ?? null,
     meleeCapable: () => !doomed && (soldierDamage ? missingLimbs().armR : mind.meleeCapable),
     setRingInput: (hasToken: boolean, drift: -1 | 0 | 1) => {
       ringToken = hasToken;

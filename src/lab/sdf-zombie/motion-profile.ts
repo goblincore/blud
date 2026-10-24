@@ -4,16 +4,19 @@
 // wanders, how it carries a weapon. Selected by character name by the lab
 // (and, later, by the game's spawn table). Pure data; THREE-free — the prop
 // is a URL and a grip spec, the view loads it.
-import { SHAMBLE, SHAMBLE_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, SIREN_WALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, type ArmStyle, type GaitProfile } from './gait';
+import { SHAMBLE, SHAMBLE_CARRY, PROWL, PROWL_QUICK, PROWL_CARRY, GOBLIN_WALK, GOBLIN_RUN, MARCH, RUN, STOMP, GLIDE_CARRY, STALK, SIREN_WALK, GOREHOUND, CRAWL_DRAG, GIBBET_STALK, CHAIR_WADDLE, HOVER, type ArmStyle, type GaitJointName, type GaitProfile } from './gait';
 import type { CarryName } from './carry';
 import { WANDER_TUNING } from './wander';
+import type { JoystickSpec } from './joystick';
 import type { Vec3 } from './types';
 import { JUGGERNAUT_ARMOR, WARBULL_ARMOR, type ArmorSpec } from './plate-armor';
 import { JUGGERNAUT_INJURY_TUNING, WARBULL_INJURY_TUNING, type SoldierInjuryTuning } from './soldier-damage';
+import type { GoreTuning } from './gore-tuning';
+import type { KitEyeSpec } from './kit-eye';
 
 /** What a ranged enemy fires (soldier-brain.ts GUNNER_TUNING picks the
  *  brain tuning; game-main's onFire picks the round). */
-export type GunnerWeapon = 'shotgun' | 'smg' | 'chaingun' | 'rocket';
+export type GunnerWeapon = 'shotgun' | 'smg' | 'chaingun' | 'rocket' | 'pistol';
 
 export interface MotionProfile {
   name: string;
@@ -50,12 +53,27 @@ export interface MotionProfile {
      *  carry block) instead of keeping its rest hang: a two-handed hilt held
      *  HIGH needs the fist round the grip, not dangling off the wrist. Absent
      *  = the rest hang every gun carry was tuned with. */
-    fistOnGrip?: boolean };
+    fistOnGrip?: boolean;
+    /** Gun-local muzzle (metres before `scale`, +z forward). Absent = the
+     *  shared GUN_GRIP.muzzle (0.41 m out, the enemy shotgun's): a short gun
+     *  (the deadeye's pistol) needs its own, or its rounds and flash start in
+     *  the air 30 cm past the barrel. */
+    muzzle?: Vec3 };
   /** A RANGED enemy: the game gives it the soldier's shooting brain
    *  (enemy-mind.ts makeSoldierMind) with this weapon's tuning, and its
    *  onFire spawns enemy rounds. Absent = melee. A prop alone does not make a
    *  shooter — the ogre's chainsaw is a prop with carries. */
   gunner?: { weapon: GunnerWeapon };
+  /** A gunner that fires from its BODY, not from a held prop (the teratoma spits from its mouth): the round leaves
+   *  from rig point `from` plus `offset` (body-local metres: +x left, +y up, +z forward, turned by the body's yaw),
+   *  heading the way the body faces. It needs no prop, no carries and no right arm. Absent = the held gun's muzzle. */
+  spit?: { from: GaitJointName; offset: Vec3 };
+  /** PER-CHARACTER GORE (gore-tuning.ts): bigger gun craters, a heavier impact gout and flesh bits thrown off the
+   *  hit. Absent = the shared look exactly. */
+  gore?: GoreTuning;
+  /** A KIT EYE THAT POPS (kit-eye.ts, webgpu/game-kit-eye.ts): a gun hit in it hangs it out on a stalk, the next hit
+   *  or death snaps it off. Absent = no eye damage beyond craters. */
+  eye?: KitEyeSpec;
   /** A CHARGER: the game gives it the warbull mind (enemy-mind.ts
    *  makeWarbullMind), the bull charge (charge.ts) over its gunner brain,
    *  and a brawl once disarmed. Needs `gunner`. */
@@ -63,10 +81,19 @@ export interface MotionProfile {
   /** A MELEE-WEAPON enemy: the game gives it that weapon's mind
    *  (enemy-mind.ts makeSwordMind) and motion.ts drives the held prop through
    *  the swing (sword-swing.ts). Absent = the zombie's unarmed swing. */
-  melee?: { kind: 'sword' | 'bite' };
+  melee?: { kind: 'sword' | 'bite' | 'stab' };
   /** The jaw gape (rad, jaw.ts; JAW_MAX_GAPE bounds it) the UNARMED swing opens to, for a body with a `jaw` bone: the
    *  siren's face splits open as she strikes (attack.ts swingGapeAt). Absent = the mouth stays shut through the swing. */
   swingGape?: number;
+  /** A JOYSTICK on the body's `hem` (the gamer, characters/gamer.blob): motion.ts adds joystick.ts's jiggle to
+   *  the `hem` target, hard while he attacks and a faint twitch otherwise. Absent: `hem` is cloth or a hung mass. */
+  joystick?: JoystickSpec;
+  /** An ARM THAT IS A WEAPON (the butcher's grafted axe): the zombie's mind and
+   *  swing, but every swing is thrown with this arm (brain.ts swingSide), and a
+   *  hit in reach does `damage` instead of the zombie's bite (player-vitals.ts
+   *  VITALS.zombieBite). Unlike `melee` there is no held prop: the weapon is kit
+   *  on the arm, so the arm's own swing carries it. */
+  armWeapon?: { side: 'L' | 'R'; damage: number };
   /** A SOFT target: any bullet or blast hit kills it outright (the game
    *  forces the collapse on the first hit). The cultist is soft; the zombie
    *  and soldier soak hits and exist to show off the gore. Burns do not count
@@ -343,6 +370,62 @@ export const TWINHEAD_PROFILE: MotionProfile = {
   gunner: { weapon: 'rocket' },
 };
 
+/** The butcher (characters/butcher.blob): a zombie conversion on digitigrade
+ *  machine legs with an axe grafted on in place of the right hand. Still the
+ *  zombie's mind and reaching arms (it reads as a zombie first); the legs make
+ *  it FAST, which is most of what makes it more dangerous than the base. */
+export const BUTCHER_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'butcher',
+  gait: { walk: PROWL, run: PROWL },
+  // 1.45 against the zombie's 1.15 (WANDER_TUNING.speed): it closes distance.
+  cruise: 1.45,
+  // The axe is on the RIGHT forearm (kit foreArm.r|blade). 25 is two and a half
+  // zombie bites (VITALS.zombieBite 10), over the bride's sword (swordHit 15).
+  armWeapon: { side: 'R', damage: 25 },
+};
+
+/** The flayer (characters/flayer.blob): the second zombie conversion, gaunt and
+ *  flayed, with a saw-sickle grafted on for the LEFT hand and a visored
+ *  helmet. The butcher's skeleton, legs and PROWL; quicker and a little less
+ *  brutal per hit. */
+export const FLAYER_PROFILE: MotionProfile = {
+  ...BUTCHER_PROFILE,
+  name: 'flayer',
+  gait: { walk: PROWL_QUICK, run: PROWL_QUICK },
+  // 1.55: lighter and quicker than the butcher, on a 2.0 Hz prowl to keep the
+  // stride inside the leg's sweep (gait.ts PROWL_QUICK; butcher-blob.test.ts).
+  cruise: 1.55,
+  // The sickle is on the LEFT forearm (kit foreArm.l|blade). 20: a lighter
+  // blade than the butcher's axe (25), still twice a bite.
+  armWeapon: { side: 'L', damage: 20 },
+};
+
+/** The deadeye (characters/deadeye.blob): the third zombie conversion, a
+ *  gunslinger with a little pistol, an optic over one eye and a bandolier.
+ *  A RANGED enemy on the soldier's brain (PISTOL_TUNING: aimed singles and the
+ *  odd double tap from mid range), a two-handed grip, the butcher's legs. Not
+ *  soldier family: bare flesh, a gore body like the twinhead. */
+export const DEADEYE_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'deadeye',
+  gait: { walk: PROWL_CARRY, run: PROWL_CARRY },
+  // Slower than the butcher: he walks to a range and holds it.
+  cruise: 1.3,
+  turnRate: 2.6,
+  carries: { walk: 'pistolLow', run: 'pistolLow', fire: 'pistol' },
+  // The pistol is a PROP (it follows the aim and drops on death), sculpted by
+  // assets-source/deadeye-kit/make_pistol.py to the shared grip contract
+  // (GUN_GRIP.gripHand). gripReach 0: his fist orb is centred ON the wrist
+  // (deadeye.blob `blob arm on foreArm at=1.00`). The muzzle is the pistol's
+  // own, 0.112 m out (not the shotgun's 0.41).
+  // foreHand: the support hand CUPS the gun hand (a two-handed pistol grip),
+  // its wrist 5 cm to the gun's left (+x), a little under and behind the
+  // grip: the two fist orbs (r 0.060) overlap like clasped hands.
+  prop: { url: '/assets/lab/deadeye-pistol.glb', scale: 1, gripReach: 0, muzzle: [0, 0.002, 0.112], foreHand: [0.050, -0.090, -0.085] },
+  gunner: { weapon: 'pistol' },
+};
+
 /** The venus (characters/venus.blob): a heavy biomech woman whose forearms end in sculpted talon gauntlets
  *  (assets-source/venus-kit/). Her attack is the zombie mind's unarmed swing (enemy-mind.ts makeZombieMind): with
  *  talons on the hands it reads as a rake, so no new mind is needed. Unarmed, so the zombie's reaching arms and its
@@ -405,8 +488,10 @@ export const GUTCRAWLER_PROFILE: MotionProfile = {
 };
 
 /** The gibbet (characters/gibbet.blob): a cage of bone-metal on four long
- *  legs with meat slung inside. Walks on GIBBET_STALK; bites and lunges with
- *  the head that dangles from the front of the frame (hound-attack.ts). */
+ *  legs with meat slung inside. Walks on GIBBET_STALK. Two attacks (owner's
+ *  pick, 2026-10-22): up close it rears and STABS with both spiked front
+ *  legs; at range it SQUIRTS a lobbed glob of bile from the sac's drip
+ *  (hound-attack.ts, bile.ts, enemy-mind.ts makeGibbetMind). */
 export const GIBBET_PROFILE: MotionProfile = {
   ...ZOMBIE_PROFILE,
   name: 'gibbet',
@@ -415,7 +500,88 @@ export const GIBBET_PROFILE: MotionProfile = {
   cruise: 1.1,
   turnRate: 2.4,
   armStyle: 'foreleg',
+  melee: { kind: 'stab' },
+  // The sac's drip: the hem tail is the sac's bottom (gibbet.blob), the teat
+  // hangs ~0.2 m below it; the glob leaves from its tip.
+  spit: { from: 'hem', offset: [0, -0.20, 0.02] },
+};
+
+/** THE CHAIR (characters/chair.blob): a throne with a man fused into it,
+ *  walked on four legs (CHAIR_WADDLE). It uses the hound's mind
+ *  (hound-attack.ts): the BITE is the sitter throwing his head and shoulders
+ *  forward out of the backrest at you, and the POUNCE is the chair rearing
+ *  onto its back legs and lurching forward to come down on you, front claws
+ *  first. Heavy and slow to turn. */
+export const CHAIR_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'chair',
+  gait: { walk: CHAIR_WADDLE, run: CHAIR_WADDLE },
+  runBand: { from: Infinity, to: Infinity },
+  cruise: 0.9,
+  turnRate: 1.8,
+  armStyle: 'foreleg',
   melee: { kind: 'bite' },
+};
+
+/** THE GAMER (characters/gamer.blob): the chair's boss variant, a swollen
+ *  man fused into a gaming chair, plugged in, both hands on a joystick that
+ *  grows out of his gut. The chair's waddle and the hound's mind (his head
+ *  thrown off the headrest; the whole rig rearing), slower and heavier: at
+ *  1.3x the chair's size there is more of him to chew through. Through every
+ *  attack he works the joystick (joystick.ts). */
+export const GAMER_PROFILE: MotionProfile = {
+  ...CHAIR_PROFILE,
+  name: 'gamer',
+  cruise: 0.75,
+  turnRate: 1.4,
+  // He works the stick as he attacks, 5 cm of throw at the grip; and twitches it
+  // the whole time, he never stops playing. Eyeballed.
+  // The knob breathes on a slow 3.2 s breath and throbs through an attack (joystick.ts joystickSwell).
+  joystick: { amp: 0.05, idle: 0.012, swell: { period: 3.2 } },
+};
+
+/** The teratoma (characters/teratoma.blob): a cacodemon-style floater. It HOVERS (no legs; the gait is the root's
+ *  heave and drift) and SPITS: the warbull's slow rocket, launched from its maw (`spit`), is its fireball, dodgeable at
+ *  9 m/s and bursting through the dynamite path. A gore body like the zombie. The soldier's shooting brain gives it
+ *  range-keeping and a fire cadence; a real flying mind (altitude, strafing over cover) is a follow-up. */
+export const TERATOMA_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'teratoma',
+  gait: { walk: HOVER, run: HOVER },
+  runBand: { from: Infinity, to: Infinity },
+  // A slow drift: slower than the zombie's 1.15 and the twinhead's 0.95, so its fireballs are the threat, not its
+  // approach.
+  cruise: 0.8,
+  turnRate: 1.6,
+  armStyle: 'swing',
+  gunner: { weapon: 'rocket' },
+  // The maw's centre: pelvis is the ball's centre (teratoma.blob `root pelvis at 1.45`), the gullet sits 0.19 below it,
+  // and the lips' fronts are at z ~0.57; 0.62 launches the round just clear of the teeth.
+  spit: { from: 'pelvis', offset: [0, -0.19, 0.62] },
+  // VISCERAL HITS (owner, test arena 2026-10-24: "a giant meatball ... not as satisfying as I would have thought").
+  // The shared craters are sized for a man (pellet 5.5 cm, slug 16 cm), pock marks on a ball 1.2 m across. x2.2:
+  // a pellet bites 12 cm, a slug 35 cm, deep enough to notch the outline from the side and gouge the face. The gout
+  // is 2.5-3x the droplets, bigger and faster (the slug's owner-tuned near-stationary gout is kept slow-ish at x3 of
+  // 0.2-0.5 m/s), and every hit tears meat off: a pellet throws 2 bits one time in three (a volley of them adds up),
+  // a slug 6-9 big ones. The body turns to face its target, so most bites land on the face; one off-centre of the
+  // ball as the shooter sees it notches the outline.
+  // THE EYE POPS (owner, 2026-10-24: "damage effects to the eye, like the eyeball popping out"). The kit eyeball
+  // (centre 0.175 above and 0.40 in front of the ball's centre, r 0.135, assets-source/teratoma-kit) is hidden and an
+  // SDF eyeball in its yellow hangs out on a stalk drawn 1.4x the zombie's (EYE_STALK: 0.20 m, a thick nerve) from the eye's front: it
+  // dangles in front of the mouth. At 2x it hung below the chin, hidden behind the gun (arena look).
+  eye: { offset: [0, 0.175, 0.40], radius: 0.135, material: 'cacoeye', iris: [1.0, 0.55, 0.02], popRadius: 0.10, stalkScale: 1.4 },
+  gore: {
+    craterScale: 2.2,
+    blood: {
+      pellet: { countMul: 2.5, sizeMul: 1.35, coneScale: 1.25, speedMul: 1.4 },
+      slug: { countMul: 3, sizeMul: 1.4, coneScale: 1.35, speedMul: 3 },
+    },
+    chunks: {
+      // Sized to read at fighting range: at x1.6 a slug's bits (5-8 cm) were specks at 4.5 m (arena look, 2026-10-24).
+      pellet: { count: [0.35, 2], scale: 1.3 },
+      slug: { count: [6, 9], scale: 2.2 },
+    },
+  },
 };
 
 /** The bride: a slow STALK in a high sword guard; the point trails on the
@@ -490,11 +656,17 @@ const BY_NAME: Record<string, MotionProfile> = {
   bride: BRIDE_PROFILE,
   warbull: WARBULL_PROFILE,
   twinhead: TWINHEAD_PROFILE,
+  butcher: BUTCHER_PROFILE,
+  flayer: FLAYER_PROFILE,
+  deadeye: DEADEYE_PROFILE,
   venus: VENUS_PROFILE,
   siren: SIREN_PROFILE,
   gorehound: GOREHOUND_PROFILE,
   gutcrawler: GUTCRAWLER_PROFILE,
   gibbet: GIBBET_PROFILE,
+  chair: CHAIR_PROFILE,
+  gamer: GAMER_PROFILE,
+  teratoma: TERATOMA_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

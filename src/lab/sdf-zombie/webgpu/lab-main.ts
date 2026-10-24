@@ -934,6 +934,8 @@ async function main() {
   // -------------------------------------------------------------------------
   /** The live body — replaced on sever and on any override edit. */
   let current = body;
+  /** The limbs the hero was BUILT with (missingLimbs): a legless body never "loses" its legs. */
+  let heroBornWith: ReadonlySet<LimbId> | null = new Set(body.clusters.map(c => c.limb as LimbId));
   // Motion (X1.22): the orchestrator drives the hero's rest-pose targets;
   // the crowd stays static — it is a perf fixture, body zero is the actor.
   const WANDER_BOUNDS: WanderBounds = { minX: -1.5, maxX: 1.5, minZ: -1.5, maxZ: 1.5 };
@@ -1294,7 +1296,9 @@ async function main() {
    *  leave the cluster alive and do NOT count — hop/collapse see full legs). */
   function missingLimbs(): MissingLimbs {
     if (isSoldierFamily(motionProfile)) return soldierInjury(current, woundRing.all()).missing;
-    const gone = (l: LimbId) => !(current.clusters.find(c => c.limb === l)?.alive ?? false);
+    // A limb the body was BORN without is not missing (game-actor.ts's rule): a legless floater read as "both legs
+    // gone" and the lab's hover collapsed it onto the floor.
+    const gone = (l: LimbId) => (heroBornWith?.has(l) ?? true) && !(current.clusters.find(c => c.limb === l)?.alive ?? false);
     return { legL: gone('legL'), legR: gone('legR'), armL: gone('armL'), armR: gone('armR') };
   }
 
@@ -3017,6 +3021,7 @@ async function main() {
     override = { ...override, faceParams: face };
     saveOverride(activeCharacterName(), override);
     current = buildCharacterBody(entry, [0, 0, 0], [], face, override);
+    heroBornWith = new Set(current.clusters.map(c => c.limb as LimbId));
     woundRing.set([]);
     // Empty rings skip their usual upload; explicitly clear the old carve rows.
     view.setWounds([], [], [], []);
@@ -4675,7 +4680,7 @@ async function main() {
           current, dt: 1 / 60, wander: false, armStyle, headingFollow, gazeFollow,
           bounds: WANDER_BOUNDS, rng: motionRng, signals: sig,
           profile: motionProfile, forceSpeed, carryOverride,
-          ...(swing && i >= frames - 30 ? { attack: { phase: swing.phase, side: 'R' as const, variant: swing.variant } } : {}),
+          ...(swing && i >= frames - 30 ? { attack: { phase: swing.phase, side: motionProfile.armWeapon?.side ?? 'R', variant: swing.variant } } : {}),   // an arm weapon swings its own arm (motion-profile.ts armWeapon)
         });
         lastMotionFrame = f;
         if (f) sinceFire = f.kicks.length ? 0 : sinceFire + 1 / 60;
@@ -4710,6 +4715,9 @@ async function main() {
     },
     /** Blink now. */
     blink() { blinkStart = exprClock; },
+    /** Hold the hero's per-prim MORPH weights (morph.ts) by hand, e.g. `setMorphs({ swell: 1 })` to shoot the gamer's
+     *  joystick at full breath: a body with no expression set keeps them (stepExpression returns before writing). Null clears. */
+    setMorphs(w: MorphWeights | null) { exprMorphs = w; return w; },
     /**
      * THE POSE LAYER (spec 2026-10-03-goblin-pose-layer-design.md): hold the named authored pose or clip of the ACTIVE character
      * at clip time `t` seconds, stepped `frames` times at 1/60 with the body standing still, then frozen exactly like holdPose so

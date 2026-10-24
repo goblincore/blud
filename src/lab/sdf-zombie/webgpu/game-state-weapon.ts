@@ -26,6 +26,7 @@
 // to stay structurally usable after the rewrite.
 
 import type { Rocket } from '../rockets';
+import type { Bile } from '../bile';
 import type { FlareHarness } from './game-flare';
 import type { FlailWeapon } from './game-flail';
 import type { ViewmodelLights } from './viewmodel-lights';
@@ -185,6 +186,10 @@ export interface WeaponState {
   rockets: Rocket[];
   /** Tracer views for the rockets, pooled (drawn at the rocket's calibre). */
   rocketViews: TracerView[];
+  /** The gibbet's bile globs in flight (bile.ts). */
+  bile: Bile[];
+  /** Tracer views for the bile, pooled, tinted bile-green. */
+  bileViews: TracerView[];
   /** The one shared plane geometry every tracer quad reuses. */
   pelletGeo: THREE.PlaneGeometry;
   /** Tracer views for the player pellets, pooled. */
@@ -281,6 +286,8 @@ export function makeWeaponState(): WeaponState {
     soldierPelletViews: [],
     rockets: [],
     rocketViews: [],
+    bile: [],
+    bileViews: [],
     pelletGeo: unbuilt<THREE.PlaneGeometry>(),
     pelletViews: [],
     cooldown: 0,
@@ -346,6 +353,8 @@ export const WEAPON_BINDINGS = {
   soldierPelletViews: 'weapon.soldierPelletViews',
   rockets: 'weapon.rockets',
   rocketViews: 'weapon.rocketViews',
+  bile: 'weapon.bile',
+  bileViews: 'weapon.bileViews',
   pelletGeo: 'weapon.pelletGeo',
   pelletViews: 'weapon.pelletViews',
   cooldown: 'weapon.cooldown',

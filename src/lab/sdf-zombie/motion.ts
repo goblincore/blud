@@ -75,6 +75,7 @@ import {
 } from './collapse';
 import { attackPose, swingGapeAt, type AttackPose, type SwingVariant } from './attack';
 import { houndGapeAt, houndPose, isHoundVariant, pounceAirborne } from './hound-attack';
+import { joystickOffset } from './joystick';
 import { isSwordVariant, jawGapeAt, swordCarryAt } from './sword-swing';
 import { jawRestOf, jawTargetAt, type JawRest } from './jaw';
 
@@ -784,7 +785,7 @@ export function stepMotion(
   const attack: AttackPose | null =
     cfg.attack !== undefined && !collapsed
       ? isHoundVariant(cfg.attack.variant)
-        ? houndPose(cfg.attack.phase, cfg.attack.variant)
+        ? houndPose(cfg.attack.phase, cfg.attack.variant, cfg.attack.side)
         : attackPose(cfg.attack.phase, cfg.attack.side, cfg.attack.variant)
       : null;
 
@@ -838,9 +839,13 @@ export function stepMotion(
     // BRANCHED, not `add(..., ZERO)`: adding zero would turn a -0 component
     // into +0 and break the lab's bit-identity pin for no benefit.
     const base2 = add(scale(gaitOff, s), stagOff);
-    const local = attack
+    const local0 = attack
       ? add(base2, name === 'pelvis' ? attack.rootOffset : attack.offsets[name] ?? Z)
       : base2;
+    // A JOYSTICK on `hem` (MotionProfile.joystick, the gamer): he works it as he attacks and twitches it idle.
+    const local = name === 'hem' && profile.joystick
+      ? add(local0, joystickOffset(state.gait.time, attack && cfg.attack ? cfg.attack.phase : null, profile.joystick))
+      : local0;
     const leanShare = LEAN_SHARE[name] ?? 0;
     const leaned: Vec3 = [local[0] + lean * leanShare, local[1], local[2]];
     const spun = rotateYaw([base[0] - pivot[0], base[1], base[2] - pivot[2]], bodyYaw);
@@ -1252,7 +1257,8 @@ export function stepMotion(
     for (const [side, hip, knee, foot] of [
       ['L', 'hipL', 'kneeL', 'footL'], ['R', 'hipR', 'kneeR', 'footR'],
     ] as const) {
-      if (sig.missing[side === 'L' ? 'legL' : 'legR']) continue;
+      // ...or never had one: a legless body (the teratoma, a floater) has no hip/knee/foot joints to solve.
+      if (sig.missing[side === 'L' ? 'legL' : 'legR'] || idx[foot] === undefined) continue;
       const ih = idx[hip]!, ik = idx[knee]!, iff = idx[foot]!;
       const chain = solveChain([targets[ih]!, targets[ik]!, targets[iff]!], joints.leg[side], targets[iff]!, SOLVE);
       targets[ik] = poleReflect(chain[0]!, chain[1]!, chain[2]!, legPole);
@@ -1309,13 +1315,13 @@ export function stepMotion(
   if (fore && !collapsed && !footwork && idx.handL !== undefined && idx.handR !== undefined) {
     const handGround = Math.min(joints.base[idx.handL]![1], joints.base[idx.handR]![1]);
     const elbowPole = scale(legPole, -1);
-    const airborne = !!attack && !!cfg.attack && pounceAirborne(cfg.attack.phase, cfg.attack.variant);
     for (const side of ['L', 'R'] as const) {
       if (sig.missing[side === 'L' ? 'armL' : 'armR']) continue;
       const hand = idx[`hand${side}`]!, elbow = idx[`elbow${side}`]!, shoulder = idx[`shoulder${side}`]!;
       const st = stepPlant((side === 'L' ? plantHandL : plantHandR) ?? makePlant(), {
         // A pounce throws both paws off the floor (hound-attack.ts).
-        stance: (side === 'L' ? fore.armL : fore.armR) && !release && !airborne,
+        stance: (side === 'L' ? fore.armL : fore.armR) && !release
+          && !(attack && cfg.attack && pounceAirborne(cfg.attack.phase, cfg.attack.variant, cfg.attack.side, side)),
         footPos: footWorld(hand),
         groundY: handGround,
         // The reach slide, always on: the paws sit 0.55 m ahead of the yaw

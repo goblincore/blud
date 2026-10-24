@@ -528,11 +528,15 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
   //                  reference plate's); pinned in warbull-blob.test.ts
   //   twinhead    2  the human twin's two embers (2026-10-21); the machine
   //                  twin's optic is a kit `led`
+  //   butcher     2  two embers in the decal's sockets (2026-10-22)
+  //   deadeye     1  the bare left eye's ember; the right is the kit's optic
   //   venus       2  the cyberbride's two red eyes, seated in the face's
   //                  sockets (2026-10-22); pinned in venus-blob.test.ts
   //   gorehound   2  two amber embers under the brow plate (2026-10-22)
   //   gutcrawler  2  a pale ember in each sunken eye pit (2026-10-22)
   //   gibbet      3  three unequal eyes clustered off-centre on the dangling head
+  //   chair       2  the sitter's eyes, dull embers deep in the sockets
+  //   gamer       1  the fire button on his joystick (the headset's slit is kit `led`)
   //   (goblin-cinematic had 11: its SDF teeth' faint 0.15 glow, Task 12. The
   //                  teeth are mesh in its kit since Task 14 (2026-10-15), so it
   //                  has no glow prim any more; the base goblin never had one.)
@@ -548,10 +552,14 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
     'cultist-cowled.blob': 2,
     'warbull.blob': 2,
     'twinhead.blob': 2,
+    'butcher.blob': 2,
+    'deadeye.blob': 1,
     'venus.blob': 2,
     'gorehound.blob': 2,
     'gutcrawler.blob': 2,
     'gibbet.blob': 3,
+    'chair.blob': 2,
+    'gamer.blob': 1,
   };
 
   it('every shipped character packs primClip.w all-zero EXCEPT the named glow authors, at their exact authored count', () => {

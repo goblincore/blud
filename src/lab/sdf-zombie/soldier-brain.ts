@@ -305,12 +305,37 @@ export const ROCKET_TUNING: SoldierTuning = {
   sweepFire: true,
 };
 
+/** The deadeye's PISTOL on the soldier's brain (characters/deadeye.blob,
+ *  2026-10-22): a marksman, not a sprayer.
+ *   - a short, steady aim (the arm comes up and holds) before every shot;
+ *   - mostly single shots, sometimes a double tap (burstMin 1, one follow-up
+ *     at most), each a separate aimed round;
+ *   - a shorter cooldown than the shotgun's: he fires more often, each shot
+ *     lighter;
+ *   - he keeps a mid range and strafes, backing off if you close in. */
+export const PISTOL_TUNING: SoldierTuning = {
+  ...SOLDIER_TUNING,
+  noticeRange: 10,
+  fireRange: 8.0,
+  preferredRange: 4.5,
+  rangeSlack: 0.8,
+  burstMin: 1,
+  burstMax: 1,
+  burstChance: 0.4,
+  aimSec: 0.45,
+  followAimSec: 0.16,
+  recoverSec: 0.18,
+  settleSec: 0.3,
+  minCooldownSec: 0.75,
+};
+
 /** Brain tuning per gunner weapon (MotionProfile.gunner). */
 export const GUNNER_TUNING: Record<import('./motion-profile').GunnerWeapon, SoldierTuning> = {
   shotgun: SOLDIER_TUNING,
   smg: SMG_TUNING,
   chaingun: CHAINGUN_TUNING,
   rocket: ROCKET_TUNING,
+  pistol: PISTOL_TUNING,
 };
 
 export function makeSoldierBrain(): SoldierBrain {

@@ -20,6 +20,7 @@ import { chunkSettled, stepChunk } from '../gib-chunks';
 import { arbitrate, type RingClaimant } from '../melee-ring';
 import { stepHitFeedback } from '../player-hit-feedback';
 import { ROCKET, blastPlayerDamage, stepRockets } from '../rockets';
+import { BILE, stepBile } from '../bile';
 import { type Vec3 } from '../types';
 import { sdBody } from '../validate';
 import { bodyInSight } from './actor-sight';
@@ -28,7 +29,7 @@ import { type EncounterAgent } from './encounter-director';
 import { reticleNdc } from './fisheye';
 import { approachAngle, approachBob, bobPose, pivotOffset, turnFromAim, weaponAngles, weaponSlide } from './free-aim';
 import { segmentHitsBox, type ZombieActor } from './game-actor';
-import { registerBleed, stepGutRopes } from './game-bleed';
+import { registerBleed, stepGutRopes, throwGunFlesh } from './game-bleed';
 import { cancelChunkBake, finishChunkBake } from './game-chunk-bake';
 import { gibBakedPiece, gibChunkMeat } from './game-chunk-pieces';
 import { describeRecordedWound, neutralInput, readInputFrame, updateDemoHud } from './game-demo-record';
@@ -109,6 +110,8 @@ export const FORE_HAND_REST = new THREE.Vector3();
 /** Keeps sprite trail-emitter ids out of the chunk ids' range — `emitTrails`
  *  keys its per-emitter clock by id and the two sequences both start at 1. */
 export const SPRITE_TRAIL_ID_BASE = 0x4000_0000;
+/** ...and the flying MESH gibs' (game-meat-gib.ts's torn meat) out of both. */
+export const MESH_TRAIL_ID_BASE = 0x2000_0000;
 
 export function tick(ctx: GameContext, dt: number) {
   if (ctx.demo.simLocked) return; // render-lock: drawFn still runs; nothing mutates.
@@ -918,7 +921,12 @@ export function tick(ctx: GameContext, dt: number) {
             wound: stamped ? describeRecordedWound(ctx, hitActor, stamped) : null,
             woundCount: hitActor.wounds().length,
           });
-          if (stamped) registerBleed(ctx, hitActor, stamped, p.kind, { point: hitPoint, incoming: dirN });
+          if (stamped) {
+            registerBleed(ctx, hitActor, stamped, p.kind, { point: hitPoint, incoming: dirN });
+            throwGunFlesh(ctx, hitActor, stamped, p.kind, dirN);
+          }
+          // A kit eye in the line of fire pops; a dangling one snaps (game-kit-eye.ts; profile.eye only).
+          if (!burstHandled) ctx.boot.kitEye?.hit(hitActor, hitPoint, dirN);
           dead = true;
         }
       }
@@ -975,10 +983,37 @@ export function tick(ctx: GameContext, dt: number) {
         if (hurt > 0) damagePlayer(ctx, hurt, 'blast');
       }
     }
+    // BILE (the gibbet's squirt, bile.ts): lobbed globs under gravity that
+    // splash on the first thing they touch; only the player takes damage.
+    if (ctx.weapon.bile.length) {
+      const pp = ctx.player.player.pos;
+      const stepped = stepBile(ctx.weapon.bile, dt, {
+        hitsWorld: (from, to) => to[1] <= 0.02 || to[1] >= ceilingAt(ctx, to[0], to[2])
+          || ctx.world.colliders.some(box => segmentHitsBox(from, to, box)),
+        hitsPlayer: (from, to) => segmentHitsCapsule(from, to, pp, PLAYER.radius + BILE.radius, PLAYER.height),
+      });
+      ctx.weapon.bile = stepped.live;
+      for (const sp of stepped.splashes) {
+        ctx.telemetry.telemetry.event('bile-splash', { cause: sp.cause, owner: sp.owner, x: sp.at[0], y: sp.at[1], z: sp.at[2] });
+        if (sp.cause === 'player') damagePlayer(ctx, BILE.playerDamage, 'pellet');
+      }
+    }
     // The eye every tracer billboards around this frame. Declared here (not
     // reused from the block below) because that one is scoped to the hit
     // pass; the streaks need it whether or not anything was hit.
     const tracerEye = eyeOf(ctx.player.player);
+    while (ctx.weapon.bileViews.length < ctx.weapon.bile.length) {
+      const view = newTracerView(ctx);
+      // Bile, not fire: the additive tracer tinted a sick yellow-green.
+      for (const m of [view.streak, view.ember]) (m.material as THREE.MeshBasicMaterial).color.setRGB(0.55, 0.85, 0.12);
+      ctx.weapon.bileViews.push(view);
+    }
+    for (let k = 0; k < ctx.weapon.bileViews.length; k++) {
+      const v = ctx.weapon.bileViews[k]!;
+      const b = ctx.weapon.bile[k];
+      if (b) placeTracer(ctx, v, { pos: b.pos, vel: b.vel, ageSec: b.ageSec, radius: BILE.radius, kind: 'slug' }, tracerEye);
+      else hideTracer(ctx, v);
+    }
     while (ctx.weapon.rocketViews.length < ctx.weapon.rockets.length) {
       ctx.weapon.rocketViews.push(newTracerView(ctx));
     }
@@ -1081,6 +1116,7 @@ export function tick(ctx: GameContext, dt: number) {
     }
     // MESH GIBS (the head damage's modelled brain): the same stepChunk, dt and colliders as the SDF chunks.
     stepMeshGibs(ctx, cdt);
+    ctx.boot.kitEye?.step(cdt);
     // SPRITE PIECES, on the same clock and in the same block as the marched
     // ones — deliberately, because they are the same physics: `stepSpritePieces`
     // calls the same `stepChunk` with the same `chunkCollidersAt`, so a sprite
@@ -1148,6 +1184,12 @@ export function tick(ctx: GameContext, dt: number) {
           ...ctx.vfx.spritePieces.live.map(p => ({
             id: SPRITE_TRAIL_ID_BASE + p.id, pos: p.state.pos, vel: p.state.vel,
             stream: trailStreamId(ctx, SPRITE_TRAIL_ID_BASE + p.id),
+          })),
+          // TORN MEAT (game-meat-gib.ts, owner 2026-10-24: "they should have blood trails"): a flying meat chunk is a
+          // mesh gib, in neither list above. Flying only: a settled one would stack drops on one spot.
+          ...ctx.gibs.meshGibs.filter(g => g.tag === 'meat' && g.id !== undefined && !chunkSettled(g.state)).map(g => ({
+            id: MESH_TRAIL_ID_BASE + g.id!, pos: g.state.pos, vel: g.state.vel,
+            stream: trailStreamId(ctx, MESH_TRAIL_ID_BASE + g.id!),
           })),
         ],
         cdt, rngStreams.bleed,

@@ -228,6 +228,125 @@ Each has a `PARTS` subset switch, so one part can be iterated in about 5 s.
 - `blob:shot` reuses whatever Vite is on port 5233, which may be ANOTHER worktree's (the new character then
   renders as a fallback body). In parallel sessions set `LAB_VITE_PORT`/`LAB_CDP_PORT` to your own ports.
 
+## Converting an existing body (the butcher, 2026-10-22)
+
+The butcher (`characters/butcher.blob`, kit `assets-source/butcher-kit/`) is the zombie converted, not a new body.
+What a conversion needed that the twinhead did not:
+
+- **Start from the base `.blob` and keep its skeleton names.** Copy the body, thicken the masses (muscle is mass
+  plus the normal map), and carry the base's `bones` block over verbatim if the torso only grew. Renamed or extra
+  leg bones are what broke the twinhead's gait.
+- **Keep it reading as the base.** The owner rejected a sallow tan skin at once: it read as the ogre, not as a
+  zombie. A variant keeps the base's skin family (the zombie's pink, paled toward white) and takes its menace from
+  the machinery, the silhouette and the weapon.
+
+### Reverse-knee (digitigrade) legs on the three leg bones
+
+The gait knows `thigh -> knee -> foot -> toe`, and its foot-plant IK always bows the KNEE forward
+(`ik.ts solvePlantedLeg`). A dog's hind leg already does that: its forward joint is the knee, and the joint that
+points back is the HOCK (ankle). So no rig change is needed:
+
+| bone | anatomy | butcher rest direction |
+| --- | --- | --- |
+| `thigh` | femur | `dir=down pitch=35` (knee 23 cm ahead of the hip) |
+| `shin` | tibia | `dir=down pitch=-38` (the hock, the gait's `foot` joint, behind the hip) |
+| `foot` | metatarsal | `dir=down pitch=15` (the toe joint on the floor) |
+
+`pitch` is the bone's ABSOLUTE direction (`blob-compile.ts dirVector`), +z forward. The model still declares
+`stance humanoid`: `checkStance` measures the thigh/shin knee, and that knee is forward. The trade-off: the
+metatarsal translates rigidly with the hock (the gait drives `toe` with the foot's offset), so there is no toe-off
+roll. A true four-joint chain would need a new gait joint, `JOINT_AT` entries and IK changes.
+
+**Match the cadence to the leg.** A planted foot holds while the body travels `cruise x stance time`. The shamble's
+cadence at the butcher's 1.45 m/s dragged every leg dead straight (0.86 m per stance against about 0.54 m of
+sweep). Its own `PROWL` gait (1.8 Hz, duty 0.55) keeps the knee bowed. `characters/butcher-blob.test.ts` walks the
+real pipeline and pins the knee forward and the hock back; copy it for any new leg shape.
+
+The look: the hock is the read, so it carries the biggest shape (a knuckle with a curled spur raking back and up).
+Spines rake down the BACK ridge of the tibia, toes splay forward with talons, and a dewclaw sits behind.
+
+### A weapon grafted onto an arm
+
+- The weapon is kit on the forearm bone, so the arm's own swing carries it: no held prop and no sword mind.
+  `MotionProfile.armWeapon {side, damage}` pins every swing to that arm (`brain.ts swingSide`) and sets the hit's
+  damage (`game-loop.ts`, in place of the zombie bite).
+- Face the edge to the body's BACK at rest. Pitching the arm forward turns it DOWN (the reach walk), and overhead
+  it faces forward, so the chop leads with it. Facing it forward at rest pointed the edge at the ceiling in the
+  reach walk.
+- **Do not voxel-remesh a blade.** A 1.6 mm voxel rounds a 2 mm edge away. Build the head as a bmesh loft (thick at
+  the haft, about 1 mm at the edge), join the ornament tubes unremeshed, and colour it with `wear_colours`
+  (steel, then rust, then blood toward the edge). Only the haft and graft collar are fused and AO-baked.
+- A graft collar with staples biting into the flesh above it, plus feed hoses down the forearm into the collar,
+  sells "grafted" more than the weapon itself.
+
+### Hoses, wires and ports
+
+- A hose is a Catmull-Rom tube with a rib ring every 1.6 cm, fused, with brass collars at both ends
+  (`make_upper.py hose()`). Place its control points from **skin probes** (march `sdBody` along a ray, as the
+  detail generators do) and keep them about one hose radius out.
+- A hose rides ONE bone. Break it at a joint: end one segment in a port where the next begins (pump on `spine`,
+  neck hose on `neck`, socket on `skull`).
+- Where a hose enters the flesh, set a bony flanged port with bolts. The swollen flesh round it is in the normal
+  map's agitated lumps.
+- Coloured wires (the reference figure's yellow and blue) use kit-overlay's dielectric looks `yellow`, `blue`,
+  `red` and `purple`. Wind them close: 1-2 turns per bone at about one wire radius off the shell. Looser and more
+  turns read as springs.
+- Collars and other small fused bits still need `decimate`. Undecimated brass collars were 60% of the first
+  butcher kit's 250k triangles.
+
+### A second variant on the same frame (the flayer)
+
+The flayer (`characters/flayer.blob`, kit `assets-source/flayer-kit/`) reuses the butcher's skeleton exactly, so
+its legs are the butcher's leg kit rebuilt (`make_legs.py`, with wires recoloured by the kit's `common.py`) and the
+gait work carries over. What makes it a different enemy at a glance:
+
+- **A different silhouette class:** gaunt (the zombie's own masses) against the butcher's pumped bruiser. A dorsal
+  ridge of long raked spines replaces the back pump.
+- **A different weapon on the other arm:** a long serrated sickle on the left, with a saw wheel in a bony guard. A
+  thin blade vanishes from the front, so give it width: 11 cm at the root, not 6.
+- **A different head:** a bony helmet over the upper face with a glowing visor slit (the `led` look, emissive 1.4;
+  `eyeglow` at 7 is for pinpoints), cheek guards, and curled horn "ears". The flayed jaw below is the decal's job.
+  Fit the shell to probes of the head: crown, front at three heights, back and sides, 10-16 mm clear.
+- **Faster means quicker steps, not longer ones.** At 1.55 m/s the 1.8 Hz prowl flattened the knee, so the flayer
+  walks a 2.0 Hz `PROWL_QUICK`. Re-run the walk pin whenever cruise changes.
+- The lab's `holdPose` swing preview (`BLOB_SWING`) swings `armWeapon.side`, so a left-armed weapon is judged on
+  the right arm.
+
+### A ranged variant: the deadeye's pistol
+
+The deadeye (`characters/deadeye.blob`, kit `assets-source/deadeye-kit/`) is the same frame again, armed with a
+pistol. A ranged variant needs a different set of parts from a melee one:
+
+- **The gun is a held PROP, not kit.** A prop follows the carry's aim (`gunPitch`) and drops on death; a kit gun is
+  rigid on the forearm and cannot. Sculpt it with the same toolkit, but in the GUN-LOCAL frame: glTF +y is up and +z
+  is out of the muzzle, which `bv` maps exactly as it maps blob coordinates. Put the grip through `GUN_GRIP.gripHand`
+  (0, -0.074, -0.074). `make_pistol.py` exports its own `pistol` collection to `public/assets/lab/<name>-pistol.glb`.
+- **A short gun needs its own muzzle.** `MotionProfile.prop.muzzle` (gun-local) feeds the round's origin and the
+  flash. The shared muzzle is the enemy shotgun's, 0.41 m out.
+- **A gunner needs a CARRY gait.** `motion.ts` takes the arm style from the gait, so it is `PROWL_CARRY`, not
+  `PROWL`. Without it the arms keep the zombie's reach and ignore the carries.
+- **Pick or add the weapon's brain tuning.** `gunner: {weapon}` selects it in `soldier-brain.ts GUNNER_TUNING`.
+  The pistol is `PISTOL_TUNING` (aimed singles, the odd double tap, mid range); `game-spawn.ts` fires one aimed
+  round per trigger event.
+- **Two hands on a pistol.** The owner rejected the one-handed aim. The `pistol` and `pistolLow` carries drop
+  `oneHanded`, so the left hand is solved onto `prop.foreHand`, set to cup the gun hand (5 cm to the gun's left,
+  under and behind the grip). The aim is an isosceles stance, the gun arm swung in to the centre line. The walk
+  carry is a low ready, both hands at the belly and the muzzle at the floor, so the raise reads as a telegraph.
+- A face mask only reads as a mask when it is SMALL and SHAPED. A band wrapping to the temple at full height read
+  as a slab on the side of the head; taper it to a point. Cables run about one radius off the skin, or they stand
+  off like sticks.
+
+### Practicalities
+
+- **The Blender MCP window may belong to another session** (it held the teratoma's file). Run the kit headless:
+  `Blender -b assets-source/butcher-kit/butcher-kit.blend --python assets-source/butcher-kit/build.py -- make_legs.py:femur,tibia --export --preview <dir>`.
+  `build.py` runs the make scripts, saves, exports `mech` and renders workbench previews. It serves any kit: open
+  that kit's `.blend`, and scripts resolve in its folder first, then `butcher-kit/`.
+- `blob:shot` reuses ANY lab on its port, including another worktree's Vite, so pass your own
+  `LAB_VITE_PORT`/`LAB_CDP_PORT`.
+- A face-block head can wear a generated decal: solve `projScale`/`projCentre` in the head space of the face
+  block's ellipsoid (offset / semi-axis), against eye embers you place yourself.
+
 ## Budget
 
 The twinhead kit is about 145k triangles, too high for crowds. Planned optimization: bake each sculpt's
@@ -316,3 +435,207 @@ animal.** What it added:
   bone-iron with rust only low down.
 - **Normal map down the pendulum.** The torso projection can run along any axis: the gibbet's runs down the hem
   (`--torso-axis` extended past both ends of the sac), and every detail line binds to `hem` so the detail swings too.
+- **Attacks from the body's own story.** The gibbet's two (owner's pick): up close it rears both spiked front legs
+  and STABS (`hound-attack.ts` 'stab': front plants released, contact on the thrust); at range the sac swings back and
+  forward and SQUIRTS a lobbed glob of bile from its drip (`bile.ts`, fired from a rig point through
+  `MotionProfile.spit`, PR #53's plumbing). `makeGibbetMind` wraps the hound mind and adds the squirt cycle. Zombie-kind
+  minds that fire are gated by sight, not by the encounter director's firing lanes (those are the soldiers').
+  `BLOB_SWING_SWEEP=<variant>:<p0>:<p1>` renders a swing frame by frame for review.
+
+## A seated rig: the chair (2026-10-22)
+
+The chair (`characters/chair.blob`, kit `assets-source/chair-kit/`) is a man fused into a walking throne, on the
+same biped names. Three things are new.
+
+**Hang the front legs from a short UPRIGHT spine.** A hound's spine runs level from the hips to the withers, so
+`chest` starts at the front and nothing can sit up at the back. The chair's `spine` is the sitter's lumbar
+(upright, 0.19 m), `chest` rises from it, and `clavicle` takes `side=` (any bone can: it offsets the head from
+the parent's tail in x) and runs FORWARD and slightly down along the seat (`dir=down pitch=71`). So the
+clavicle is his femur, `upperarm` his shin and the elbow his ankle. The front legs are his own legs, and the
+gait never knows.
+
+**Only the head aims.** The aim chain is rooted at the neck (motion.ts), so a seated torso stays put. Kit on
+`spine` (backrest, armrests) never has to follow the chest. His upper arms are `torso` bars with no `rigid`, so
+each end binds to its nearest rig point: chest top and clavicle head. They stretch between the torso and the
+throne instead of tearing off the armrests.
+
+**Flesh as upholstery.** Thin `rigid` ellipsoids on `spine` lie over the panel and pan as a skin cushion that
+merges into his back and thighs. Brass studs on a diamond lattice tuft it. Two lessons:
+- **Keep the cushion inside the panel.** At 3 cm thick, `r` 0.24 and `blend` 0.04, it swelled into a halo of
+  meat past the panel's edges. 2 cm and blend 0.02 reads as a cushion.
+- **Studs must stand proud.** Studs sunk 3 mm vanished under the blend and the skin noise. Put the dome 4 mm out.
+
+**Let the joints show.** A seat pan that ran under his knees hid the shins, and the knees read as amputee
+stumps. Stop the pan just behind the knees, so they overhang and the shins drop clear in front of the skirt.
+Ribs that wrapped the panel edge with any sideways reach read as pegs through it; keep them tight to the lip.
+
+**Meld, don't seat (owner's second look).** A thin cushion behind him read as "a big flat skin shape behind
+him". What worked:
+- Three flat `rigid` ellipsoids on `spine` make a skin MEMBRANE over the backboard. He is sunk into it, with the
+  back half of his head under it.
+- One head prim with a wide `blend` (0.045) behind the skull, plus jaw-corner webs, pulls the membrane up round
+  the face. All prims fold in one running smooth-min, so a later cluster's blend melts into an earlier one.
+- Keep the kit panel 2.5 cm BEHIND the membrane's back. Flush, the blend and the skin noise pushed flesh out
+  through the back of a 4 cm panel.
+
+**Scars on blend-heavy flesh go in the normal map.** Painted scar prims paint where they are the NEAREST prim, and
+wide torso blends put the skin ~7 mm outside its prims. Twinhead-sized scars painted 2 cm bands, and sunk 9 mm
+they painted ragged dashes. Kit tubes painted red looked like "plastic straws" (owner). Raised keloid with stitch
+bumps, baked with the veins (`scripts/seated-detail-gen.ts`), takes the skin's own colour and light. The generator
+probes from the FRONT (`march` along -z) for a seated body, and the veins run out of him across the membrane too.
+
+**Eyes that read in a decal'd head.** Ember points in painted sockets were lost, and so was a bare glowing slit
+("a bit too simple"). What reads:
+- A glowing slit 1 cm proud of the face, between two swollen lid prims.
+- The lids' blend held tight (0.0015) with ~8 mm between them. At 0.004 and 5 mm apart they fused shut over it.
+- A decal drawn ROUND the slit: an almond bruise along it, raw red rims, puckered creases drawn in from all
+  round, and bags. Place it from the slit's head-space ends through the projection, then check a close-up and
+  nudge `projCentreY`.
+- Bold decal lines: the face spans ~276 px of a 512 sheet, so a 1.6 px crease is under a millimetre.
+- Glow 0.6, not 0.9: the bloom drowned the decal round it.
+
+Painted seams the eye cannot place (oval ends of a raw-edge bar beside the head) read as unexplained spots: end
+seams under something, or drop them.
+
+**Fill open greaves.** `make_legs.py`'s tibia shell is open at the front. Under a thin metal core, the opening
+shows black. Run flesh (his foot) down inside it instead.
+
+**Pass your own ports.** Another worktree's Vite on 5233 serves ITS checkout: `blob:shot` reuses it and
+quietly shoots the default zombie, because your new `?character=` does not exist there. Run `blob:shot` with
+`LAB_VITE_PORT` / `LAB_CDP_PORT` set when other sessions are running.
+
+### The boss variant: the gamer (2026-10-22)
+
+`characters/gamer.blob` (kit `assets-source/gamer-kit/`) is the chair's boss: a swollen man in a gaming chair,
+plugged in. It uses the chair's rig at `scale 1.30`. What it adds:
+
+- **Hands that hold something, with no arm bones.** On this rig the arms are the front legs, so his arms, hands
+  and the joystick are all `rigid` on `chest`: one rigid group, and no pose can part them.
+  `gamer-blob.test.ts` measures each hand against the grip on the posed body after a walk. Without `rigid`, a
+  hand drifts 4.4 cm, because each end binds to its nearest joint and one of those is a front knee.
+- **A scaled body's kit is in COMPILED metres.** `blender-kit.ts` skins to the built body, so take the kit's
+  joints and prim positions from a `buildBody` dump, not from the `.blob`'s authored numbers.
+- **A product read survives the style.** Black upholstery, red racing stripes, bucket bolsters, the two neck
+  pillows, T-armrests and a five-star castor base (vestigial, drawn up like landing gear) say "gaming chair" at
+  any distance. The bone-metal goes in the rim, the spined crest and ribs up the back, and the horns.
+  The `leather` look renders tan-brown under the lab's environment; glossy `black` reads as PU leather.
+- **Plumbing rides the bone of whatever it plugs into.** Put the feed hose in his mouth on `skull`, so it stays
+  in when he turns. The IV, the shoulder cables and the catheter ride `spine`, plugging into the chest-rigid
+  flesh, which moves only a few cm against the frame.
+- **Small detail on a prop of flesh is NORMAL MAP, not prims.** Veins, sores and pustules as painted prims on the
+  joystick read as "tubes and skittles" (owner). They are baked: the stick stands upright in front of him, so the
+  torso projection's front rays land on it. `scripts/seated-detail-gen.ts` probes the front, and a small meander
+  (`ampK`) keeps veins inside a 9 cm stick.
+- **A colour gradient on SDF flesh is contiguous shells, kept small.** A painted prim is flat and loses the skin's
+  mottle. One painted red cone read as a plastic bottle cap. Overlapping blotches merged into one hard band, and discs
+  on the axis bulged into rings (a tiered cake). What works: frustums of the surface itself, 1.2 mm out and butted
+  end to end, each the nearest prim over exactly its band. Keep them to where the colour is wanted (the owner: "more
+  isolated to the tip"): three over the last 5 cm, a faint flush to the zombie's pink (`eab1b4`).
+- **A held prop that moves is an UPWARD `hem`.** The gamer's stick, knob and hands ride a `hem` bone from his hips up
+  to the middle of the grip, so an attack can move them. The only spare movable point on the standard names is the
+  pendulum, and attack poses offset joints by name. `rig-bind.ts` holds an upward hem at `HEM_HELD_SCALE` (0.7, not
+  the cloth's 0.15), so it does not droop or trail: walking it holds within ~1 cm. `MotionProfile.joystick`
+  (`joystick.ts`) adds the jiggle: ~5 cm of beating back-and-forth through an attack, and a faint idle twitch. His
+  forearms are left UNRIGID, so each end binds to its nearest joint (elbow to the seat, wrist to `hem`), and the
+  arms stretch to follow the stick.
+- **Torso flesh the torso cylinder cannot see gets its own region.** `bake-body-normal.ts --torso-seg` adds kind-0
+  regions with an `rMax` (the shader bounds them by it; region 0 keeps none). The gamer has them for the stick, the
+  forearms and the upper arms: with only the torso's cylinder, the arms across the gut smeared it.
+- **Veins where the eye goes.** The owner wanted them "pronounced and a lot of them" on the neck, the face and down
+  the shaft, not spread over the body. Probe each around its own axis (`axisVein` in `seated-detail-gen.ts`). The
+  head gets a `--limb skull` region; its face sheet still covers the middle of the face.
+- **Separate what is fused by cutting it.** His flesh hands melted into the grip, and any veins near them read as
+  tendrils. Sawn wrist stumps in metal prosthetic C-clamps (kit) make a clean break, and each part can then be
+  detailed alone. A stump is the forearm's round end painted raw by a shell 1.2 mm proud. The cuff runs on over most
+  of it, so only a cut face shows; left bare, the painted dome read as a glossy ball. Splinter the bones (`r2` small,
+  `chamfer`) and flatten the flaps along the cut (`deep` 0.4, blend ~0.007), or they read as balls too.
+- **Whatever must stay inside a kit part has to turn with it.** The kit rides a bone's whole frame, but a prim bound
+  to its nearest joint only translates with that point. Bound that way, the stumps slid ~2 cm in their cuffs when
+  the stick tilted. The fix: make the wrist end `rigid` on `hem` with the clamp, and put the join with the stretching
+  forearm inside the cuff.
+- **A curved prop gets chord regions.** One `--torso-seg` down the chord of a quarter arc misses the outside of the
+  bend. Two chords (`stalk1`, `stalk2`) cover it, and the wrinkle folds there are ridge rings that sag on the
+  underside.
+- **A part that breathes is a morph channel the motion drives.** The gamer's knob grows and its rocket rises on the
+  `swell` channel (expression.ts). The prims carry `morph=swell:` words; `actor.ts` sets the weight every frame from
+  `MotionProfile.joystick.swell` (`joystickSwell`: a slow breath, throbbing through an attack). The game's actors have
+  no expression layer, so the profile is what drives it. To shoot a morph, the lab's `__sdfLab.setMorphs({ swell: 1 })`
+  holds it (`BLOB_PROBE`), since `blob:shot` freezes motion.
+- **More veins is not better veins.** A denser pass on the gamer was rejected: "too busy", and it "still doesn't read
+  as veins". It added ~900 prims of veins over his upper chest, down every arm segment and round the neck. The owner
+  preferred the sparser version before it, so it was reverted. Veins read when there are few of them, where the eye
+  goes. Skin under another cluster (the neck under his jowls, head prims that take the head's region) shows none of its
+  baked relief either.
+- **A ranged attack does not fit this rig yet.** `onFire` needs a carried prop in the right hand, and here the
+  right hand is a front claw. A ranged gamer needs a mind with the muzzle on the head (the headset); it uses the
+  hound mind for now.
+
+
+## Lessons from the teratoma (2026-10-22, the second character built from this guide)
+
+The teratoma (`characters/teratoma.blob`, kit `assets-source/teratoma-kit/make_teratoma.py`) is a cacodemon-style
+floater: a flesh ball with one eye and a maw. It was the first test of whether this guide gives better first results.
+
+**What worked as written**
+
+- The split table. The flesh is 35 marched prims. The folds, veins and nodules are a baked normal map, generated by
+  `scripts/teratoma-detail-gen.ts` from the twinhead's template. Everything hard is kit.
+- `kit_sculpt.py` worked unchanged, used as-is: `horn`, `tube`, `ring`, `ball`, `fuse`, `press_lines`, `bake_ao`,
+  `install` and `mirror_to_r`. A part takes about 5-15 s to rebuild, so iterating in the engine is fast.
+- The baked `_glow` route for an eye: a yellow slit eye whose glow is per-vertex (the iris burns, the slit is dead).
+- Teeth as kit. The owner's rule: SDF teeth eat the prim budget.
+- An additive mouth: a dark gullet prim recessed behind the lips, never a carve.
+- The varicose recipe above, once it arrived mid-session. The teratoma's first torso veins, copied from the twinhead's
+  older torso `varicose`, broke it (a ~1 rad phase step on 12 mm samples, a several-cm swing) and were re-generated
+  before baking. The torso `varicose` in `twinhead-detail-gen.ts` still has those older numbers, so copy from
+  `armVaricose`, not from it.
+
+**What was missing (now added above or below)**
+
+1. **Convert the creature from the start.** The first pass followed the brief literally (flesh, keratin horns,
+   shackles) and the owner called it "too on the nose". The fix was this guide's own style applied to a creature whose
+   brief never mentioned machinery. So treat every Blud enemy as a strogg CONVERSION: graft skullmetal onto the meat
+   (a crest-plate that the horns grow out of, a demon-skull socket as the brow, a mandible with jaw pistons, an organ
+   that explains its locomotion, such as a hover keel with vents) even when the brief does not ask for it.
+2. **Wires and tubes in and out of the flesh** (owner: "more wires and tubes going in and out of the flesh"). Write a
+   run as `(lat, lon, off)` controls. `off > 0` arches the run out of the skin; `off < 0` dives it under the skin, where
+   the SDF hides it. Twisted black `cable` bundles, corrugated `hose` feed lines and brass ferrules where a run leaves
+   the metal. Every place a run dives in gets a small raw wound prim in the `.blob`. The script prints the points. Author each side's
+   wounds from its own printed points: on an asymmetric body a `both` mirror floats them off the skin (CI's `strandedOf`
+   caught two at 35 and 83 mm).
+3. **A body with no bone axis needs a skin table.** `BoneFrame`/`bone_shell` assume a limb. To seat anything on a
+   ball, `scripts/teratoma-skin.ts` writes `skin.json`: the marched torso's outermost surface and normal on a lat/lon
+   grid. `sk(lat, lon, off)`, `skn` and `cap_dir` (a polar patch round a pole) build on it. Re-run it after every torso
+   edit. A good candidate to move into `kit_sculpt.py`.
+4. **A carapace is a graft, not a helmet.** A cap covering the whole crown read as a motorcycle helmet. Keep plates
+   partial (~35 deg of arc), with raked POINTS on the outline and the meat swelling round them.
+5. **Colours are LINEAR and a new material is WHITE.** Vertex colours are linear, so a "near-black" 0.10 shows as
+   sRGB ~0.35, mid-grey. Dark keratin is ~0.02-0.05. A fresh Blender material exports `baseColorFactor` 1, and the
+   first conversion rendered as polished chrome. Copy the base colours from the twinhead kit: skullmetal
+   (0.30, 0.31, 0.33), chrome (0.42, 0.44, 0.48), iron (0.055, 0.058, 0.065), cable (0.05, 0.05, 0.055),
+   brass (0.32, 0.20, 0.07). On a large plate, `bake_ao` at gain 1 goes near-black against pink meat; use gain 1.5,
+   gamma 1.6.
+6. **`GLOW_FROM_ATTRIBUTE` is keyed by material NAME.** A glow in a second colour needs an alias material:
+   `orbitmetal` is skullmetal whose `_glow` burns the eye's yellow, not the twinhead's red.
+7. **Painted `.blob` colours render more saturated than their hex suggests.** `b8606a` lips came out as clown
+   lipstick, and the twinhead's raw-pink wound colour read as red beads on a smaller body. Go muted (`a8706a`,
+   `7a3c3c`) and let `gloss` carry the wet or filler look.
+8. **Lips: the plain first pass won.** Two filler-lip passes were rejected. The first was painted glossy pink at
+   r 0.095 or more, with a cupid's bow ("triangular, two weird knobs"). The second was one round bowed capsule per
+   lip ("too smooth, too red"). The owner kept the original: unpainted, hide-coloured, tapered half-lips (r 0.068 /
+   0.076 tapering to 0.032). Only the hide's mottle and noise give them texture: baked lip furrows were tried and
+   taken out ("better without"). Lesson: a painted glossy lip reads as a separate material, and so does a combed
+   one. Unpainted swelling flesh is the house look. For a round lip, the shape that worked was a constant-radius
+   `bar` from corner to corner with `bend`, whose middle moves by about half its value. For detail at that scale
+   bake 1024 wide: at 512 the torso map is ~7 mm a texel round a 1.2 m ball.
+9. **Settle the flesh before baking.** The torso bake takes ~15 min, and any torso edit (a brow, lips, a wound prim)
+   invalidates it. Bake last.
+
+**Engine gaps this exposed (fixed on the teratoma's branch)**
+
+- `makeMotionJoints` threw on a body with no feet, so a legless body could be neither shown in the lab nor spawned. Leg
+  lengths are now 0, `groundY` is the floor, and the plants are skipped.
+- Floaters walk with the `HOVER` gait (gait.ts): a root heave, a drift and a nod, with no stepping.
+- A ranged enemy without a held prop: `MotionProfile.spit` fires from a rig point plus a body-local offset (the
+  teratoma's maw), using the warbull's slow rocket as its fireball. A real flying mind (holding altitude, strafing
+  over cover) is still missing.
