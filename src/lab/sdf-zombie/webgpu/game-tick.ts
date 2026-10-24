@@ -978,7 +978,8 @@ export function tick(ctx: GameContext, dt: number) {
       ctx.weapon.rockets = stepped.live;
       for (const d of stepped.detonations) {
         ctx.telemetry.telemetry.event('rocket-detonate', { cause: d.cause, owner: d.owner, x: d.at[0], y: d.at[1], z: d.at[2] });
-        detonateAt(ctx, d.at);
+        // The firer is spared its own blast (detonateAt's spareActorId): a point-blank shot no longer self-destructs.
+        detonateAt(ctx, d.at, false, d.owner);
         const hurt = blastPlayerDamage(Math.hypot(pp[0] - d.at[0], pp[1] + PLAYER.height * 0.5 - d.at[1], pp[2] - d.at[2]));
         if (hurt > 0) damagePlayer(ctx, hurt, 'blast');
       }
