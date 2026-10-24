@@ -130,10 +130,13 @@ describe('review fixes', () => {
     expect(s.vel[2]).toBe(0);
   });
 
-  it('flat ground never sets a lag, even when an AABB pushes the feet down-clamp', () => {
+  it('flat ground never sets a lag, even when an overhang pushes the feet below 0', () => {
     const s = at(0, 0, 0);
-    const box = { min: [-1, -1, -1] as const, max: [1, 0.2, 1] as const };
-    stepPlayer(s, { x: 0, z: 0, jump: false }, 1 / 60, [box as never]);
-    expect(s.stepLag ?? 0).toBe(0);
+    const box = { min: [-1, 1.5, -1] as const, max: [1, 2.5, 1] as const };   // underside 1.5 < height 1.75
+    for (let i = 0; i < 10; i++) {
+      stepPlayer(s, { x: 0, z: 0, jump: false }, 1 / 60, [box as never]);
+      expect(s.stepLag ?? 0).toBe(0);
+      expect(eyeOf(s)[1]).toBe(s.pos[1] + PLAYER.eye);
+    }
   });
 });

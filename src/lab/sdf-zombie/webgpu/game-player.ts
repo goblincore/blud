@@ -159,8 +159,10 @@ export function resolveSegments(
       // Unit normal on the side the body came from (the (-ez, ex) side when no `from`).
       const ln = Math.sqrt(len2);
       let nx = -ez / ln, nz = ex / ln;
-      if (from && ex * (from[1] - g.az) - ez * (from[0] - g.ax) < 0) { nx = -nx; nz = -nz; }
-      if (from && t > 0 && t < 1 && dx * nx + dz * nz < 0) {
+      const cross = from ? ex * (from[1] - g.az) - ez * (from[0] - g.ax) : 0;
+      const sided = from !== undefined && Math.abs(cross) >= 1e-12;   // `from` on the line's extension: no side
+      if (sided && cross < 0) { nx = -nx; nz = -nz; }
+      if (sided && t > 0 && t < 1 && dx * nx + dz * nz < 0) {
         // Crossed: put the body back on its own side.
         const mx = cx + nx * r - pos[0], mz = cz + nz * r - pos[2];
         pos[0] += mx; pos[2] += mz;
@@ -210,6 +212,8 @@ export function stepPlayer(
   const target = PLAYER.walkSpeed * Math.min(wishLen, 1);
 
   const accel = s.grounded ? PLAYER.accel : PLAYER.airAccel;
+  // The sided wall push (resolveSegments) is only reliable while one step stays well under
+  // PLAYER.radius (walk speed gives 0.113 m); faster horizontal motion (knockback) needs sub-stepping.
   s.vel[0] = clamp(s.vel[0] + clamp(nx * target - s.vel[0], -accel * dtc, accel * dtc), -60, 60);
   s.vel[2] = clamp(s.vel[2] + clamp(nz * target - s.vel[2], -accel * dtc, accel * dtc), -60, 60);
   if (s.grounded && wishLen < 1e-6) {
