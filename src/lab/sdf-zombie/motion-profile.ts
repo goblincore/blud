@@ -12,6 +12,7 @@ import type { Vec3 } from './types';
 import { JUGGERNAUT_ARMOR, WARBULL_ARMOR, type ArmorSpec } from './plate-armor';
 import { JUGGERNAUT_INJURY_TUNING, WARBULL_INJURY_TUNING, type SoldierInjuryTuning } from './soldier-damage';
 import type { GoreTuning } from './gore-tuning';
+import type { KitEyeSpec } from './kit-eye';
 
 /** What a ranged enemy fires (soldier-brain.ts GUNNER_TUNING picks the
  *  brain tuning; game-main's onFire picks the round). */
@@ -70,6 +71,9 @@ export interface MotionProfile {
   /** PER-CHARACTER GORE (gore-tuning.ts): bigger gun craters, a heavier impact gout and flesh bits thrown off the
    *  hit. Absent = the shared look exactly. */
   gore?: GoreTuning;
+  /** A KIT EYE THAT POPS (kit-eye.ts, webgpu/game-kit-eye.ts): a gun hit in it hangs it out on a stalk, the next hit
+   *  or death snaps it off. Absent = no eye damage beyond craters. */
+  eye?: KitEyeSpec;
   /** A CHARGER: the game gives it the warbull mind (enemy-mind.ts
    *  makeWarbullMind), the bull charge (charge.ts) over its gunner brain,
    *  and a brawl once disarmed. Needs `gunner`. */
@@ -540,6 +544,11 @@ export const TERATOMA_PROFILE: MotionProfile = {
   // 0.2-0.5 m/s), and every hit tears meat off: a pellet throws 2 bits one time in three (a volley of them adds up),
   // a slug 6-9 big ones. The body turns to face its target, so most bites land on the face; one off-centre of the
   // ball as the shooter sees it notches the outline.
+  // THE EYE POPS (owner, 2026-10-24: "damage effects to the eye, like the eyeball popping out"). The kit eyeball
+  // (centre 0.175 above and 0.40 in front of the ball's centre, r 0.135, assets-source/teratoma-kit) is hidden and an
+  // SDF eyeball in its yellow hangs out on a stalk drawn 1.4x the zombie's (EYE_STALK: 0.20 m, a thick nerve) from the eye's front: it
+  // dangles in front of the mouth. At 2x it hung below the chin, hidden behind the gun (arena look).
+  eye: { offset: [0, 0.175, 0.40], radius: 0.135, material: 'cacoeye', iris: [1.0, 0.55, 0.02], popRadius: 0.10, stalkScale: 1.4 },
   gore: {
     craterScale: 2.2,
     blood: {

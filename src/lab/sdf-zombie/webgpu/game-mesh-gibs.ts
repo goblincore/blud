@@ -23,6 +23,9 @@ export const MEAT_GIB_CAP = 16;
 /** A complete skull has fourteen plates; keep its pool separate from brains. */
 export const SKULL_GIB_CAP = 32;
 
+/** Mesh gib ids (MeshGib.id): the blood-trail clocks key on them. */
+let nextMeshGibId = 0;
+
 const _m = new THREE.Matrix4();
 const _s = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
@@ -59,7 +62,7 @@ export function spawnMeshGib(
   object.matrixAutoUpdate = false;
   ctx.boot.handle.scene.add(object);
   ctx.boot.deferredApi?.router.register(object, 'mesh', 'level-only');
-  const g: MeshGib = { state, object, tag: opts?.tag ?? 'mesh' };
+  const g: MeshGib = { state, object, tag: opts?.tag ?? 'mesh', id: ++nextMeshGibId };
   pose(g);
   ctx.gibs.meshGibs.push(g);
   const poolOf = (t: string) => (t === 'skull' || t === 'meat' ? t : 'mesh');

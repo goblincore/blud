@@ -22,8 +22,8 @@ export const MEAT_GLB = '/assets/lab/meat-chunks.glb';
  *  albedo renders white under the torch (game-brain-gib.ts BRAIN_LOOK), so `color` darkens the vertex colours.
  *  Glossy and coated: torn meat is wet. */
 export const MEAT_LOOK = {
-  // 0.32 rendered the chunks pale pink-grey in the lit arena (first look, 2026-10-24); the raw red has to read.
-  color: [0.2, 0.15, 0.15] as const,
+  // 0.32 rendered the chunks pale pink-grey in the lit arena (first look, 2026-10-24); 0.2 read too dark (owner).
+  color: [0.27, 0.2, 0.2] as const,
   roughness: 0.34,
   clearcoat: 0.5,
   clearcoatRoughness: 0.25,

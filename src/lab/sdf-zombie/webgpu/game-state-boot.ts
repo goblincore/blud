@@ -161,6 +161,8 @@ export interface BootState {
   spawnMeshGib?: (object: import('three/webgpu').Object3D, pos: Vec3, vel: Vec3, angVel: Vec3, radius: number, opts?: MeshGibOpts) => void;
   /** Torn meat chunks thrown off gun craters (game-meat-gib.ts); absent until game-main builds it. */
   meatGib?: import('./game-meat-gib').MeatGibLeaf;
+  /** The popping kit eye (game-kit-eye.ts): characters whose profile declares `eye`. */
+  kitEye?: import('./game-kit-eye').KitEyeLeaf;
   /** DEV-only `?tiles-playtest` gate for the compute tile controller. */
   tilesPlaytest: boolean;
   /** The tile-culling playtest controller; inert when not allowed. */
