@@ -17,7 +17,8 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
 import { attribute, float, materialColor, positionWorld, vec3, vec4, wgslFn } from 'three/tsl';
 import type { GameContext } from './game-context';
-import { createSectorFx, type SectorFxRuntime } from './game-sector-light';
+import { createSectorFx, CEIL_WHISPER, type SectorFxRuntime } from './game-sector-light';
+import { reducedFlashes } from './lamp-moods';
 import { SKY_MATERIAL, type GlowKind, type SectorMap, type XZ } from './sector-def';
 import { sectorPolygons, wallQuads } from './sector-geometry';
 import { GLOW_KIND_INDEX, SECTOR_GLOW, SECTOR_GLOW_HASH, SECTOR_GLOW_NOISE } from './sector-glow.wgsl';
@@ -72,8 +73,12 @@ function sectorMaterial(role: THREE.MeshStandardMaterial, color: readonly [numbe
   nm.map = role.map; nm.normalMap = role.normalMap; nm.roughnessMap = role.roughnessMap;
   nm.roughness = role.roughness; nm.metalness = role.metalness; nm.normalScale.copy(role.normalScale);
   nm.color = new THREE.Color(...color);
+  // The deferred router copies `emissive` and drops emissiveNode: ceilings keep plan 1's whisper
+  // there. Forward is unchanged (NodeMaterial uses emissiveNode INSTEAD of `emissive` when set).
+  if (ceil) nm.emissive = new THREE.Color(...color).multiplyScalar(CEIL_WHISPER);
   // The sector's self-lit level (sector-light.ts via game-sector-light.ts), times the albedo.
-  const lvl = fx.levels.element(attribute('sectorIndex', 'float').toInt());
+  // +0.5 before the cast: the interpolated index may arrive as 2.9999998, which truncates to 2.
+  const lvl = fx.levels.element(attribute('sectorIndex', 'float').add(0.5).toInt());
   const base = ceil ? vec3(...color).mul(fx.ceilWhisper) : vec3(0);
   nm.emissiveNode = materialColor.rgb.mul(lvl).add(base);
   return nm;
@@ -83,7 +88,7 @@ function sectorMaterial(role: THREE.MeshStandardMaterial, color: readonly [numbe
  *  sector light runtime on ctx.world.sectorFx. Returns how many level-group meshes were added. */
 export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
   const search = new URLSearchParams(location.search);
-  const fx = createSectorFx(map.sectors.length, search, search.get('flashes') === 'reduced');
+  const fx = createSectorFx(map.sectors.length, search, reducedFlashes(search));
   ctx.world.sectorFx = fx;
   const batches = new Map<string, Batch>();
   const batch = (zone: number, role: Role) => {

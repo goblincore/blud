@@ -20,7 +20,7 @@ import { STORM_HASH, STORM_NOISE } from './train-window.wgsl';
 import { TUBE_BEAM_WGSL } from './tube-beam.wgsl';
 import type { GameContext } from './game-context';
 import { roomIdAt } from './game-level-rooms';
-import { LAMP_SCRIPT, lampLevel, type LampMood, type LampScript } from './lamp-moods';
+import { LAMP_SCRIPT, lampLevel, reducedFlashes, type LampMood, type LampScript } from './lamp-moods';
 import { BEACON, beaconAxisInto, beaconPhase, beaconShadowLive, beaconSpotIntensity, countsAsRoomLamp, countsForRoomFill, lampKind, scriptFor } from './beacon';
 import type { LightMode } from './level-events';
 import { moonShadowFrame } from './outdoor-light';
@@ -221,7 +221,7 @@ const TUBE = {
  *  A/B them. The maps still render once at boot. */
 let tubeShadowUpdates = true;
 /** `?flashes=reduced`: the Boiler Room's strobe slows and its flash bursts become slow pulses (lamp-moods.ts LAMP_SCRIPT). */
-const REDUCED_FLASHES = new URLSearchParams(location.search).get('flashes') === 'reduced';
+const REDUCED_FLASHES = reducedFlashes(new URLSearchParams(location.search));
 let beamFn: ReturnType<typeof wgslFn> | null = null;
 
 function makeTube(ctx: GameContext, light: THREE.PointLight, mesh: THREE.Mesh | null, room: number, group: THREE.Group, shadow: boolean): Tube {

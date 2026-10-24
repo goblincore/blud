@@ -29,7 +29,7 @@ export const SECTOR_GLOW = /* wgsl */ `fn sectorGlow(wpos: vec3<f32>, t: f32, ki
   let n2 = sgNoise(p * 2.3 - vec2<f32>(t * 0.17, -t * 0.05));
   let n = n1 * 0.65 + n2 * 0.35;
   let vein = smoothstep(0.62, 0.78, n) - smoothstep(0.78, 0.95, n);
-  let crust = smoothstep(0.30, 0.12, n);
+  let crust = 1.0 - smoothstep(0.12, 0.30, n);
   var base = vec3<f32>(0.10, 0.85, 0.18);
   var hot = vec3<f32>(0.75, 1.00, 0.45);
   if (kind > 0.5 && kind < 1.5) { base = vec3<f32>(0.95, 0.30, 0.05); hot = vec3<f32>(1.00, 0.80, 0.35); }

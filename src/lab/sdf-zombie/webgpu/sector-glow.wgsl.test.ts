@@ -16,6 +16,14 @@ describe('sector-glow.wgsl', () => {
     expect(SECTOR_GLOW).toContain('sgNoise(');
     expect(SECTOR_GLOW_NOISE).toContain('sgHash(');
   });
+  it('every smoothstep has low < high (WGSL makes low >= high a shader-creation error)', () => {
+    let seen = 0;
+    for (const s of all) for (const m of s.matchAll(/smoothstep\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,/g)) {
+      expect(Number(m[1]), m[0]).toBeLessThan(Number(m[2]));
+      seen++;
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
   it('has no colon inside a // comment', () => {
     for (const s of all) for (const line of s.split('\n')) {
       const at = line.indexOf('//');

@@ -195,7 +195,10 @@ export function stepLoop(ctx: GameContext, dt: number): void {
   // The gun hides while the live slot is a weapon the player doesn't own yet.
   if (ctx.weapon.gunGroup) ctx.weapon.gunGroup.visible = ownsSlot(ctx, ctx.weapon.slotState.live);
   for (const m of rt.meshes.values()) if (!m.userData.still) m.rotation.y += dt * 1.6;
-  if (rt.vitals.dead || rt.done || ctx.world.sequence?.active) return;
+  if (rt.vitals.dead || rt.done || ctx.world.sequence?.active) {
+    stepHazard(rt.hazard, 0, dt);   // off the floor's clock: the first hurt after this waits 0.5 s again
+    return;
+  }
   const feet = ctx.player.player.pos;
   // ZOMBIE BITES. The zombie mind never reports melee contact; a live zombie in reach
   // bites, rate-limited by the melee invulnerability window. Frozen AI never bites.

@@ -4,6 +4,11 @@
 // on its power) for its ambient mood and for a scripted event, at a time on the sim clock.
 // Seeded by the lamp, never Math.random, so a replay lights the same way.
 
+/** `?flashes=reduced` (the repo's reduced-flashes setting): strobes and flash bursts become slow pulses. */
+export function reducedFlashes(search: URLSearchParams): boolean {
+  return search.get('flashes') === 'reduced';
+}
+
 export type LampMood = 'steady' | 'flicker' | 'stutter' | 'dying' | 'dead' | 'fire';
 export const LAMP_MOODS: readonly LampMood[] = ['steady', 'flicker', 'stutter', 'dying', 'dead', 'fire'];
 
