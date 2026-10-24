@@ -11,6 +11,7 @@ import type { JoystickSpec } from './joystick';
 import type { Vec3 } from './types';
 import { JUGGERNAUT_ARMOR, WARBULL_ARMOR, type ArmorSpec } from './plate-armor';
 import { JUGGERNAUT_INJURY_TUNING, WARBULL_INJURY_TUNING, type SoldierInjuryTuning } from './soldier-damage';
+import type { GoreTuning } from './gore-tuning';
 
 /** What a ranged enemy fires (soldier-brain.ts GUNNER_TUNING picks the
  *  brain tuning; game-main's onFire picks the round). */
@@ -66,6 +67,9 @@ export interface MotionProfile {
    *  from rig point `from` plus `offset` (body-local metres: +x left, +y up, +z forward, turned by the body's yaw),
    *  heading the way the body faces. It needs no prop, no carries and no right arm. Absent = the held gun's muzzle. */
   spit?: { from: GaitJointName; offset: Vec3 };
+  /** PER-CHARACTER GORE (gore-tuning.ts): bigger gun craters, a heavier impact gout and flesh bits thrown off the
+   *  hit. Absent = the shared look exactly. */
+  gore?: GoreTuning;
   /** A CHARGER: the game gives it the warbull mind (enemy-mind.ts
    *  makeWarbullMind), the bull charge (charge.ts) over its gunner brain,
    *  and a brawl once disarmed. Needs `gunner`. */
@@ -529,6 +533,25 @@ export const TERATOMA_PROFILE: MotionProfile = {
   // The maw's centre: pelvis is the ball's centre (teratoma.blob `root pelvis at 1.45`), the gullet sits 0.19 below it,
   // and the lips' fronts are at z ~0.57; 0.62 launches the round just clear of the teeth.
   spit: { from: 'pelvis', offset: [0, -0.19, 0.62] },
+  // VISCERAL HITS (owner, test arena 2026-10-24: "a giant meatball ... not as satisfying as I would have thought").
+  // The shared craters are sized for a man (pellet 5.5 cm, slug 16 cm), pock marks on a ball 1.2 m across. x2.2:
+  // a pellet bites 12 cm, a slug 35 cm, deep enough to notch the outline from the side and gouge the face. The gout
+  // is 2.5-3x the droplets, bigger and faster (the slug's owner-tuned near-stationary gout is kept slow-ish at x3 of
+  // 0.2-0.5 m/s), and every hit tears meat off: a pellet throws 2 bits one time in three (a volley of them adds up),
+  // a slug 6-9 big ones. The body turns to face its target, so most bites land on the face; one off-centre of the
+  // ball as the shooter sees it notches the outline.
+  gore: {
+    craterScale: 2.2,
+    blood: {
+      pellet: { countMul: 2.5, sizeMul: 1.35, coneScale: 1.25, speedMul: 1.4 },
+      slug: { countMul: 3, sizeMul: 1.4, coneScale: 1.35, speedMul: 3 },
+    },
+    chunks: {
+      // Sized to read at fighting range: at x1.6 a slug's bits (5-8 cm) were specks at 4.5 m (arena look, 2026-10-24).
+      pellet: { count: [0.35, 2], scale: 1.3 },
+      slug: { count: [6, 9], scale: 2.2 },
+    },
+  },
 };
 
 /** The bride: a slow STALK in a high sword guard; the point trails on the

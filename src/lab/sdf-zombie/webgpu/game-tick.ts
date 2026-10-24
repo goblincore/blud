@@ -29,7 +29,7 @@ import { type EncounterAgent } from './encounter-director';
 import { reticleNdc } from './fisheye';
 import { approachAngle, approachBob, bobPose, pivotOffset, turnFromAim, weaponAngles, weaponSlide } from './free-aim';
 import { segmentHitsBox, type ZombieActor } from './game-actor';
-import { registerBleed, stepGutRopes } from './game-bleed';
+import { registerBleed, stepGutRopes, throwGunFlesh } from './game-bleed';
 import { cancelChunkBake, finishChunkBake } from './game-chunk-bake';
 import { gibBakedPiece, gibChunkMeat } from './game-chunk-pieces';
 import { describeRecordedWound, neutralInput, readInputFrame, updateDemoHud } from './game-demo-record';
@@ -919,7 +919,10 @@ export function tick(ctx: GameContext, dt: number) {
             wound: stamped ? describeRecordedWound(ctx, hitActor, stamped) : null,
             woundCount: hitActor.wounds().length,
           });
-          if (stamped) registerBleed(ctx, hitActor, stamped, p.kind, { point: hitPoint, incoming: dirN });
+          if (stamped) {
+            registerBleed(ctx, hitActor, stamped, p.kind, { point: hitPoint, incoming: dirN });
+            throwGunFlesh(ctx, hitActor, stamped, p.kind, dirN);
+          }
           dead = true;
         }
       }

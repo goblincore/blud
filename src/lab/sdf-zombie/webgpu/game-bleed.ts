@@ -10,6 +10,8 @@
 import type { GameContext } from './game-context';
 import { woundEmitAnchorAndNormal } from '../bleed-registry'
 import { spawnImpactGout, type Droplet } from '../blood-sim'
+import { chunkCount, goutPack, type GunHitKind } from '../gore-tuning'
+import { fleshBits, fleshRand } from '../flesh-bits'
 import { type Wound, woundDirToWorld } from '../damage'
 import { detachGutChain, pinGutChain, stepGutChain } from '../entrails'
 import { warpDir, warpPoint } from '../head-split'
@@ -112,7 +114,9 @@ export function registerBleed(ctx: GameContext,
   // the gout so it fuses with this wound's per-frame droplets and no
   // other emitter's.
   const streamId = woundStreamId(ctx, wound);
-  spawnImpactGout(ctx.vfx.bloodSim, kind, anchor, [-normal[0], -normal[1], -normal[2]], rngStreams.bleed, streamId);
+  // A character's heavier spray (MotionProfile.gore, gore-tuning.ts goutPack): undefined = the shared gout, bit-identical.
+  spawnImpactGout(ctx.vfx.bloodSim, kind, anchor, [-normal[0], -normal[1], -normal[2]], rngStreams.bleed, streamId,
+    goutPack(a.gore, kind));
   // SUPPLEMENTARY entry splash (opt-in, ?impactsplash=1). Projectile hits
   // use the contact and incoming shot below; stumps use their outward
   // wound normal. The seed is
@@ -143,6 +147,25 @@ export function registerBleed(ctx: GameContext,
   // nothing advances the stream while bleed is frozen. The capture twins
   // (stampWoundAt/explode) call spillVerdict directly instead.
   spillVerdict(ctx, a, wound);
+}
+
+/** FLESH OFF A GUN CRATER (MotionProfile.gore.chunks, gore-tuning.ts): wet meat bits torn off the hit and thrown back
+ *  along the shot and out of the crater, through the flail's chunk path (onGoreDispatch -> spawnChunkPiece, tag
+ *  'flesh': the live cap, the shrink and the eviction rules of flesh-bits.ts). Nothing for a character without it.
+ *  Each actor has its own flesh stream (flesh-bits.ts fleshRand), salted apart from the flail's. */
+const gunFleshStreams = new WeakMap<ZombieActor, () => number>();
+export function throwGunFlesh(ctx: GameContext, a: ZombieActor, wound: Wound, kind: GunHitKind, incoming: Vec3): void {
+  // The character's own opt-in, NOT the flail's global flesh switch (fleshBitsOn, off by default): a body that asks
+  // for flesh off its gun craters always throws it.
+  if (!a.gore?.chunks?.[kind] || !ctx.boot.onGoreDispatch) return;
+  let rand = gunFleshStreams.get(a);
+  if (!rand) { rand = fleshRand(a.id * 2 + 1); gunFleshStreams.set(a, rand); }
+  const count = chunkCount(a.gore, kind, rand);
+  if (count <= 0) return;
+  const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, wound, a.pose().yaw, a.posed().split);
+  // The blow is the shot reflected off the skin: back toward the shooter and out of the crater.
+  const back: Vec3 = [-incoming[0], -incoming[1], -incoming[2]];
+  ctx.boot.onGoreDispatch(a, fleshBits(anchor, back, normal, count, rand, a.gore.chunks[kind]!.scale));
 }
 
 /** CUT GORE (2026-10-04 look pass, "more excessive"): a cut bleeds as registerBleed does (the trickle and the gout at its
