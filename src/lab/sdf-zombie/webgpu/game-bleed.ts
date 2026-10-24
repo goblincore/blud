@@ -157,7 +157,7 @@ const gunFleshStreams = new WeakMap<ZombieActor, () => number>();
 export function throwGunFlesh(ctx: GameContext, a: ZombieActor, wound: Wound, kind: GunHitKind, incoming: Vec3): void {
   // The character's own opt-in, NOT the flail's global flesh switch (fleshBitsOn, off by default): a body that asks
   // for flesh off its gun craters always throws it.
-  if (!a.gore?.chunks?.[kind] || !ctx.boot.onGoreDispatch) return;
+  if (!a.gore?.chunks?.[kind] || (!ctx.boot.onGoreDispatch && !ctx.boot.meatGib)) return;
   let rand = gunFleshStreams.get(a);
   if (!rand) { rand = fleshRand(a.id * 2 + 1); gunFleshStreams.set(a, rand); }
   const count = chunkCount(a.gore, kind, rand);
@@ -165,7 +165,15 @@ export function throwGunFlesh(ctx: GameContext, a: ZombieActor, wound: Wound, ki
   const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, wound, a.pose().yaw, a.posed().split);
   // The blow is the shot reflected off the skin: back toward the shooter and out of the crater.
   const back: Vec3 = [-incoming[0], -incoming[1], -incoming[2]];
-  ctx.boot.onGoreDispatch(a, fleshBits(anchor, back, normal, count, rand, a.gore.chunks[kind]!.scale));
+  const pieces = fleshBits(anchor, back, normal, count, rand, a.gore.chunks[kind]!.scale);
+  // TORN MEAT (game-meat-gib.ts): the same launches, thrown as sculpted ragged chunks; the SDF bits (round globules,
+  // owner 2026-10-24) only until the mesh has loaded.
+  const meat = ctx.boot.meatGib;
+  if (meat?.ready()) {
+    for (const p of pieces) meat.throw(p.origin, p.vel, p.angVel, p.prims[0]?.radius ?? 0.04);
+    return;
+  }
+  ctx.boot.onGoreDispatch?.(a, pieces);
 }
 
 /** CUT GORE (2026-10-04 look pass, "more excessive"): a cut bleeds as registerBleed does (the trickle and the gout at its
