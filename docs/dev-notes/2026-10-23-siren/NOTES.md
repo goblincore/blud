@@ -94,3 +94,13 @@ angry V); a fuller, pouty cupid's-bow mouth. Also a navel (a groove pit) and a b
 tops.
 
 ![pin-up face](contact-8-face.png)
+
+## Ninth pass: long orange hair (2026-10-24, owner: "change her hair to be long orange hair like the reference")
+
+Orange (e8661c; d2461a rendered plain red under the warm key), side-parted with a volume swell on the part side, a
+glossy swoop rolling over her right brow and down the side of the face OUTSIDE the eye (a strand lock run diagonally
+across the eye read as a band over the face), curtains to the collarbones, a back mass, and the long fall back on
+`spine2` (r2 0.135: at 0.170 it was the nearest prim to the shoulder tops and painted them orange). Still a little
+helmet-like from the front.
+
+![hair](contact-9-hair.png)

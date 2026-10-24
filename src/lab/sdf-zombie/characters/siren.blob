@@ -30,7 +30,8 @@
 #   4. THE PROPORTIONS. The bride's elegant frame (her skeleton, verbatim):
 #      a high hip line (legs ~57% of her height), a long neck, a small head,
 #      a defined waist.
-#   5. THE HAIR. Blue, tied up in two pointed buns (owner, 2026-10-23); was
+#   5. THE HAIR. Long and orange-red, side-parted with a big wave over one
+#      side of the face (owner, 2026-10-24); earlier blue buns, before that
 #      waist-length, loose and dark: a crown mass plus strand
 #      curtains framing the face, over the shoulders and down the back.
 model siren
@@ -242,11 +243,11 @@ body
   blob head on jaw at=1.0 r=0.0028 r2=0.0005 offset=(-0.020,0.0195,-0.0200) tip=(0.000,0.019,0.002) blend=0.001 both color=e6dcc4 gloss=0.70
 
   # ============================================================
-  # HAIR — BLUE (owner, 2026-10-23: "change her hair to blue and tie it into
-  # two pointy buns on either side of her head"; was a near-black waist-length
-  # fall). A deep cobalt (2448b8) with a satin gloss: the crown mass, two
-  # pointed buns on the upper sides of the head, and short face-framing
-  # sidelocks.
+  # HAIR — LONG ORANGE-RED (owner, 2026-10-24: "change her hair to be long
+  # orange hair like the reference" — the 1940s pin-up's: a deep side part, a
+  # big glossy wave sweeping down over one side of the face, a long fall).
+  # Was blue buns. A vivid orange (e8661c; d2461a rendered plain red under
+  # the warm key) with a satin gloss.
   # ============================================================
   # Crown mass brought FORWARD over the forehead's top (bride: 0.0137,
   # -0.0144, which sat behind her veil): at her offset the cranium's top
@@ -255,26 +256,34 @@ body
   # deep 0.98, not 1.00: its largest semi-axis must stay under the
   # cranium's (0.0912), or it becomes the fattest head prim and the face
   # sheet projects off the hair instead of the skull (headShape).
-  blob head on skull at=0.64 offset=(0,0.0200,-0.0060) r=0.092 wide=0.86 tall=0.95 deep=0.98 blend=0.006 color=2448b8 gloss=0.45
-  # THE BUNS, one each side: a round bun (r 0.044) standing OUT of the
-  # crown's upper side (centre x +-0.078, y ~1.81: at x 0.062 it sat mostly
-  # inside the crown and only its point showed), with a tapered point
-  # coming out of it, up and out, ~6 cm past the bun: round from the side,
-  # pointed from the front. (Cones alone read as two small horns.)
-  blob head on skull at=0.64 offset=(0.078,0.084,-0.016) r=0.044 wide=1.00 tall=0.95 deep=0.90 blend=0.012 both color=2448b8 gloss=0.45
-  blob head on skull at=0.64 offset=(0.092,0.104,-0.016) tip=(0.026,0.056,0.000) bend=(0.008,0,0) r=0.022 r2=0.002 deep=0.85 blend=0.008 both color=2448b8 gloss=0.45
-  # A twist round each bun's root: a flattened darker ring, so the base of
-  # the bun is a wound line, not a bulge.
-  blob head on skull at=0.64 offset=(0.062,0.066,-0.016) tip=(0.010,0.009,0.000) r=0.036 wide=1.10 deep=0.95 tall=0.40 blend=0.006 both color=1a3488 gloss=0.45
-  # Face-framing sidelocks: centre-parted, falling past the cheeks to the
-  # jaw — short now that the rest of the hair is tied up.
-  blob head on skull at=0.50 offset=(0.040,0.097,0.036) tip=(0.048,-0.200,0.006) bend=(0.024,0,0.004) r=0.020 r2=0.010 strand=6 wave=0.12 cycles=2 fat=0.80 blend=0.004 both color=2448b8 gloss=0.45
-  # BACK AND SIDES: the hair swept up from the nape to the buns covers the
-  # back of the skull and the sides behind the ears (with the long fall
-  # gone, the side view was bare skull below the crown). Centre (0, 1.676,
-  # -0.047), semi 0.0775 x 0.056 x 0.053: down to y ~1.62 at the back.
-  # r x wide 0.0775 stays under the cranium's 0.0912 (the face frame).
-  blob head on skull at=0.45 offset=(0,0,-0.045) r=0.062 wide=1.25 tall=0.90 deep=0.85 blend=0.008 color=2448b8 gloss=0.45
+  blob head on skull at=0.64 offset=(0,0.0200,-0.0060) r=0.092 wide=0.86 tall=0.95 deep=0.98 blend=0.006 color=e8661c gloss=0.50
+  # VOLUME on the part side: a swell over her left temple (+x) lifting the
+  # crown into the big side-parted shape, the part a little left of centre.
+  blob head on skull at=0.64 offset=(0.022,0.052,0.008) r=0.062 wide=1.10 tall=0.75 deep=1.00 blend=0.010 color=e8661c gloss=0.50
+  # THE WAVE: the side-parted hair rolling over the right side of the
+  # forehead (-x) in a big glossy swoop and dropping down the side of the
+  # face OUTSIDE the eye. (A first pass ran a strand lock diagonally across
+  # the right eye and cheek: a red band over the face.) A roll over the
+  # brow's outer half, and a thick lock down past the cheekbone to the jaw.
+  blob head on skull at=0.64 offset=(-0.036,0.050,0.050) tip=(-0.026,-0.010,0.006) r=0.026 wide=1.20 deep=0.70 blend=0.010 color=e8661c gloss=0.50
+  blob head on skull at=0.64 offset=(-0.060,0.036,0.034) tip=(-0.010,-0.130,0.008) bend=(-0.010,0,0.008) r=0.024 r2=0.016 deep=0.80 strand=5 wave=0.10 cycles=1.5 fat=0.85 blend=0.004 color=e8661c gloss=0.50
+  # Face-framing curtains down past the jaw to the collarbones. 0.32 m, not
+  # longer: they ride the head, and the head turns (see THE FALL).
+  blob head on skull at=0.50 offset=(0.040,0.097,0.036) tip=(0.050,-0.320,0.006) bend=(0.030,0,0.004) r=0.020 r2=0.014 strand=7 wave=0.12 cycles=2.5 fat=0.80 blend=0.004 both color=e8661c gloss=0.50
+  # BACK AND SIDES: covers the back of the skull and the sides behind the
+  # ears. Centre (0, 1.676, -0.047), semi 0.0775 x 0.056 x 0.053; r x wide
+  # 0.0775 stays under the cranium's 0.0912 (the face frame).
+  blob head on skull at=0.45 offset=(0,0,-0.045) r=0.062 wide=1.25 tall=0.90 deep=0.85 blend=0.008 color=e8661c gloss=0.50
+  # THE FALL: one glossy SHELL from the crown down the back to the shoulder
+  # blades and on (y ~1.15), clipped open at the face by a near-vertical
+  # plane, fine vertical warp ribbing it into locks. ON THE UPPER SPINE,
+  # NOT THE SKULL: on the skull the game's head aim swung a fall this long
+  # out as a plank (the bride's veil, goblincore/blud#61). Same rest
+  # geometry as a skull fall: the skull's at=0.75 point plus the offset,
+  # re-expressed off spine2's tail (0, 1.4297, -0.0141). r 0.090 stays under
+  # the cranium's 0.0912. r2 0.135, set back: at 0.170 it was the nearest
+  # prim to the shoulder tops and painted them orange.
+  shell torso on spine2 at=1.0 offset=(0,0.3182,-0.0081) tip=(0,-0.540,-0.060) r=0.090 r2=0.135 thick=0.010 clip=(0,-0.164,0.986) clipd=-0.2491 rim=0.008 blend=0.006 color=e8661c gloss=0.50 warp=0.003 warpFreq=(90,4,90) rigid
 
   # ============================================================
   # ARMS — slim and smooth: one ball at the shoulder, one tapered bar per
