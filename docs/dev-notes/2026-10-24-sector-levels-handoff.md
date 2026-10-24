@@ -39,6 +39,21 @@ Experiment: rebuild Doom E1M1's layout from `doomu.wad` in our look and play it.
    lights landed in a02856d1)? If yes, the cheap tier is too weak/short-range — try a higher power, a
    higher position, a full (non-cheap) light for the biggest pool, or a bigger range; measure the green
    on nearby walls with the gate's image-mean tooling.
+2b. **Owner playtest (6:17 pm, screenshot): the pool is an unlit green shape floating in black — no green
+   in the room.** Diagnosis + fix, queued as the NEXT task after Task 7 (same files: game-sector-mesh.ts,
+   game-sector-light.ts, doom_map.py — don't run in parallel with Task 7):
+   - Likely bug: level lights pick the FIRST zone room whose bounding box holds them (level-json.ts light →
+     room accents via `inRoom`), and zone boxes overlap on sector levels, so a pool light can land in the
+     wrong zone's light list. Fix: on sector levels assign each light to the zone of the sector it stands in
+     (as `sectorActiveLevel.spawnList` now does for spawns), e.g. re-home accents after parse in
+     sector-json.ts using sector-ground.
+   - Bounce: bake a per-vertex `glowBounce` RGB attribute at mesh build — sum over pools of pool colour ×
+     area weight × falloff(distance from vertex to the pool's nearest point, e.g. 1/(1+(d/3)²), cut at ~12 m,
+     only where the vertex can "see" the pool: same or neighbouring sector, or skip occlusion for v1) —
+     added into the sector emissive term (× a `bounceGain` uniform, seam-tunable). Free per frame.
+   - Optionally the biggest pool gets a full (non-cheap) shadowless light for direction on walls/bodies (~1 ms).
+   - Then redo the tuning sheet with bounce on, and measure green on walls near pools (mean G/R of a wall
+     crop) before/after.
 3. **Plan 3a** — enemies on sector floors (motion `floorY`), navigation over sectors, sight and shots vs
    sector walls, pickups, exit as a walk-in trigger (E is slug mode; no use key yet).
 4. **Plan 3b** (not written) — exploding barrels (no HP/destructible system exists; reuse
