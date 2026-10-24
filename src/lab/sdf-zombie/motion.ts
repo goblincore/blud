@@ -833,7 +833,8 @@ export function stepMotion(
     // A hung mass (GaitProfile.hemSwing, the gibbet's caged sac) keeps swaying at HEM_IDLE of its walking swing when
     // the body stops: hung meat does not snap still. The gait clock runs on while standing, so the swing does too.
     const s = ARM_JOINTS.has(name) ? armPresence
-      : name === 'hem' && gaitProfile.hemSwing ? Math.max(blend, HEM_IDLE) * strideScale
+      : (name === 'hem' || name === 'hem2' || name === 'hem3') && (gaitProfile.hemSwing || gaitProfile.undulate)
+        ? Math.max(blend, HEM_IDLE) * strideScale
         : blend * strideScale;
     // BRANCHED, not `add(..., ZERO)`: adding zero would turn a -0 component
     // into +0 and break the lab's bit-identity pin for no benefit.
@@ -1308,10 +1309,15 @@ export function stepMotion(
   const fore = gait.pose.foreStance;
   if (fore && !collapsed && !footwork && idx.handL !== undefined && idx.handR !== undefined) {
     const handGround = Math.min(joints.base[idx.handL]![1], joints.base[idx.handR]![1]);
-    const elbowPole = scale(legPole, -1);
+    const backPole = scale(legPole, -1);
+    const authoredPole = gaitProfile.elbowPole;
     for (const side of ['L', 'R'] as const) {
       if (sig.missing[side === 'L' ? 'armL' : 'armR']) continue;
       const hand = idx[`hand${side}`]!, elbow = idx[`elbow${side}`]!, shoulder = idx[`shoulder${side}`]!;
+      // GaitProfile.elbowPole is the LEFT arm's (+x); the right mirrors it.
+      const elbowPole = authoredPole
+        ? rotateYaw([side === 'L' ? authoredPole[0] : -authoredPole[0], authoredPole[1], authoredPole[2]], bodyYaw)
+        : backPole;
       const st = stepPlant((side === 'L' ? plantHandL : plantHandR) ?? makePlant(), {
         // A pounce throws both paws off the floor (hound-attack.ts).
         stance: (side === 'L' ? fore.armL : fore.armR) && !release

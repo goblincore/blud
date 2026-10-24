@@ -12,7 +12,7 @@ export const HIT_FEEDBACK = {
   /** Seconds from a hit to a clean screen (flash and shake both at 0). */
   fadeSec: 0.45,
   /** Peak camera offset per variant (m). The heavy sword blows shake most. */
-  shake: { cleave: 0.06, sweep: 0.04, lunge: 0.05, hook: 0.03, overhead: 0.03, shove: 0.02, bite: 0.04, pounce: 0.07, stab: 0.06, squirt: 0.03 } as Record<SwingVariant, number>,
+  shake: { cleave: 0.06, sweep: 0.04, lunge: 0.05, hook: 0.03, overhead: 0.03, shove: 0.02, bite: 0.04, pounce: 0.07, stab: 0.06, squirt: 0.03, slam: 0.08 } as Record<SwingVariant, number>,
   /** Shake frequency (Hz); sim time, so a replay shakes identically. */
   shakeHz: 23,
 } as const;

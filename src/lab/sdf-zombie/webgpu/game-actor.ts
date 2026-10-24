@@ -28,7 +28,7 @@ import {
   type RuptureFrame, type RupturePlan, type TearState, type TearTuning,
 } from '../gib-tear';
 import { constrainRigBends, stepRig } from '../rig';
-import { relaxRopeConstraints } from '../collapse';
+import { limbsMissing, relaxRopeConstraints } from '../collapse';
 import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan } from '../soft-death';
 import { applyDeathState, hasDeathState } from '../death-state';
 import { inflateHead, SWELL_SEC } from '../head-pop';
@@ -956,14 +956,14 @@ export function createZombieActor(opts: {
 
   function missingLimbs(): MissingLimbs {
     if (soldierDamage) return soldierInjury(current, soldierWounds, injuryTuning).missing;
-    const gone = (l: LimbId) => !(current.clusters.find(c => c.limb === l)?.alive ?? false);
+    const lost = limbsMissing(current);
     // A leg with ANY distal cut has lost its foot (severDistal kills the prim
     // and everything outward), so it can no longer bear weight: count it as
     // missing for the gait/collapse. Otherwise two shot-off shins left the
     // torso standing on air (the cluster stays alive on a mid-limb cut).
-    const legGone = (l: LimbId) => gone(l)
+    const legGone = (l: LimbId) => lost[l as 'legL' | 'legR']
       || current.prims.some(p => p.limb === l && p.dead && p.op !== 'sub');
-    return { legL: legGone('legL'), legR: legGone('legR'), armL: gone('armL'), armR: gone('armR') };
+    return { ...lost, legL: legGone('legL'), legR: legGone('legR') };
   }
 
   /** Carve upload: the SURFACE ANCHOR (the shader's sphere centre — the
@@ -1516,7 +1516,7 @@ export function createZombieActor(opts: {
           // Absent on every other frame (motion.ts bit-identity contract).
           ...(swingPin === null && think.attack?.variant === 'lunge'
             ? { plantReach: SWORD_TUNING.lungePlantReach }
-            : swingPin === null && (think.attack?.variant === 'pounce' || think.attack?.variant === 'stab')
+            : swingPin === null && (think.attack?.variant === 'pounce' || think.attack?.variant === 'stab' || think.attack?.variant === 'slam')
               ? { plantReach: HOUND_TUNING.pouncePlantReach }
               : {}),
         },

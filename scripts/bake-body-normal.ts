@@ -3,7 +3,7 @@
 // Bake a character's BODY NORMAL MAP (spec docs/superpowers/specs/2026-10-21-body-normal-map-design.md):
 //
 //   npx tsx scripts/bake-body-normal.ts <character> [width] [torsoRows] [--limb bone:t0:t1:rMax:rows ...]
-//     [--torso-axis hx,hy,hz:tx,ty,tz]
+//     [--torso-axis hx,hy,hz:tx,ty,tz] [--shards N]
 //     reads  src/lab/sdf-zombie/characters/<character>.blob
 //            src/lab/sdf-zombie/characters/<character>.detail   (extra `body` lines, never marched)
 //     writes public/assets/lab/<character>-body-n.png            (an atlas of tangent-space normals)
@@ -36,11 +36,18 @@
 // surface normal; rgb = (t, b, n) mapped from -1..1. For the torso (A = -y) this is exactly the original
 // projection: u = atan2(x - axisX, z - axisZ), v = 1 - t.
 //
+// --shards N bakes on N cores: it re-runs itself as N children (`--shard k/N --shard-out <file>`), each baking every
+// Nth texel row into a raw buffer, and stitches the rows back together. Same bytes as one process. The torso band of a
+// long body marches nearly every detail prim per texel (its ray disc is 0.6 m wide), so one process took over an hour
+// on the gutcrawler's 768 x 1152 atlas and 3,700 detail prims (2026-10-24).
+//
 // THE HEADER. Row 0 of the image is the region table, read by the shader: texel 0 = ('B', 'N', 2, count); region
 // i is texels 1 + 5i .. 5 + 5i holding pairs of 16-bit values (r,g = hi,lo of the first; b,a of the second):
 // [head.x, head.y] [head.z, tail.x] [tail.y, tail.z] [rMax, row0] [rows, kind]. Positions and rMax are mapped from
 // -2.5..2.5 m; row0, rows and kind (0 torso, 1 limb) are plain integers. PNG keeps the bytes exact.
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseBlob } from '../src/lab/sdf-zombie/blob-parse';
@@ -56,9 +63,13 @@ const argv = process.argv.slice(2);
 const limbArgs: string[] = [];
 const pos: string[] = [];
 let torsoAxisArg: string | null = null;
+let shards = 1, shardK = 0, shardN = 1, shardOut: string | null = null;
 for (let i = 0; i < argv.length; i++) {
   if (argv[i] === '--limb') limbArgs.push(argv[++i]!);
   else if (argv[i] === '--torso-axis') torsoAxisArg = argv[++i]!;
+  else if (argv[i] === '--shards') shards = Math.max(1, Number(argv[++i]));
+  else if (argv[i] === '--shard') [shardK, shardN] = argv[++i]!.split('/').map(Number) as [number, number];
+  else if (argv[i] === '--shard-out') shardOut = argv[++i]!;
   else pos.push(argv[i]!);
 }
 const [name, wArg, hArg] = pos;
@@ -165,9 +176,35 @@ function grad(body: Body, p: V): V {
   ]);
 }
 
-const rgba = new Uint8Array(W * TH * 4);
-const enc = (x: number) => Math.max(0, Math.min(255, Math.round((x * 0.5 + 0.5) * 255)));
 const t0 = Date.now();
+const rgba = new Uint8Array(W * TH * 4);
+const shardCovered = new Map<string, number>();
+if (shards > 1) {
+  // The parent: run the shards, then stitch each one's rows (row % shards === k) into rgba.
+  const dir = mkdtempSync(resolve(tmpdir(), 'bake-body-normal-'));
+  const self = fileURLToPath(import.meta.url);
+  const base = argv.filter((a, i) => a !== '--shards' && argv[i - 1] !== '--shards');
+  const t = Date.now();
+  await Promise.all(Array.from({ length: shards }, (_, k) => new Promise<void>((ok, fail) => {
+    const child = spawn(process.execPath, [...process.execArgv, self, ...base, '--shard', `${k}/${shards}`, '--shard-out', resolve(dir, `${k}.bin`)],
+      { stdio: ['ignore', 'pipe', 'inherit'] });
+    // Each shard prints `COVERED <region> <n>` per region; the parent sums them for the stats line.
+    let out = '';
+    child.stdout!.on('data', d => { out += d; });
+    child.on('exit', code => {
+      if (code !== 0) { fail(new Error(`shard ${k} exited ${code}`)); return; }
+      for (const m of out.matchAll(/^COVERED (\S+) (\d+)$/gm)) shardCovered.set(m[1]!, (shardCovered.get(m[1]!) ?? 0) + Number(m[2]));
+      ok();
+    });
+  })));
+  for (let k = 0; k < shards; k++) {
+    const part = readFileSync(resolve(dir, `${k}.bin`));
+    for (let row = k; row < TH; row += shards) rgba.set(part.subarray(row * W * 4, (row + 1) * W * 4), row * W * 4);
+  }
+  rmSync(dir, { recursive: true, force: true });
+  console.log(`  ${shards} shards stitched, ${((Date.now() - t) / 1000).toFixed(0)} s`);
+}
+const enc = (x: number) => Math.max(0, Math.min(255, Math.round((x * 0.5 + 0.5) * 255)));
 const stats: string[] = [];
 for (const R of regions) {
   const A = norm(sub(R.tail, R.head));
@@ -175,6 +212,8 @@ for (const R of regions) {
   const s = cross(f, A);
   let covered = 0;
   for (let row = 0; row < R.rows; row++) {
+    // A sharded parent bakes nothing itself; a shard bakes only its own rows.
+    if (shards > 1 || (R.row0 + row) % shardN !== shardK) continue;
     const P = add(R.head, mul(sub(R.tail, R.head), (row + 0.5) / R.rows));
     const nb0 = nearBody(base, R.limb, P, R.r0), nd0 = nearBody(detail, R.limb, P, R.r0);
     for (let col = 0; col < W; col++) {
@@ -193,9 +232,13 @@ for (const R of regions) {
       covered++;
     }
   }
+  if (shardOut) console.log(`COVERED ${R.label} ${covered}`);
+  if (shards > 1) covered = shardCovered.get(R.label) ?? 0;
   stats.push(`${R.label} ${(100 * covered / (W * R.rows)).toFixed(0)}%`);
   console.log(`  ${R.label}: rows ${R.row0}..${R.row0 + R.rows - 1}, ${((Date.now() - t0) / 1000).toFixed(0)} s`);
 }
+
+if (shardOut) { writeFileSync(shardOut, rgba); process.exit(0); }
 
 // The header row: the region table (see THE HEADER above).
 const q16 = (x: number) => Math.max(0, Math.min(65535, Math.round((x + 2.5) / 5 * 65535)));

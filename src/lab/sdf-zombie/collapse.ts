@@ -104,6 +104,15 @@ export interface MissingLimbs {
   armR: boolean;
 }
 
+/** The limbs a body has LOST: it was built with the limb and the limb's cluster is dead (sever keeps a severed
+ *  cluster, marked dead). A limb the body never had is not missing: the legless gutcrawler was reported as having
+ *  lost both legs, and the collapse below (both legs gone) dropped it flat on the floor every frame. The lab's and
+ *  the game's non-soldier signals both read this. */
+export function limbsMissing(body: { clusters: readonly { limb: LimbId; alive: boolean }[] }): MissingLimbs {
+  const lost = (l: LimbId) => { const c = body.clusters.find(k => k.limb === l); return c !== undefined && !c.alive; };
+  return { legL: lost('legL'), legR: lost('legR'), armL: lost('armL'), armR: lost('armR') };
+}
+
 /** A one-sided max-distance joint limit (a rope), in rig-point indices. */
 export interface RopeLimit {
   a: number;

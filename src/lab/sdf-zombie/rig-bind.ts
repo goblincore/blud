@@ -153,6 +153,8 @@ const DISTAL_JOINT_RE = /^(elbow|hand|handTip|knee|foot|toe)[LR]$/;
  *  about a second. At 1 (a joint's stiffness) it tracks rigidly — 0 cm.
  *  docs/dev-notes/2026-09-23-cultist/. */
 export const HEM_REST_SCALE = 0.15;
+/** Pendulum segments chained off the `hem` bone (a tail: gait.ts 'hem2'). Treated like the hem's free end. */
+const PENDULUM_CHAIN: readonly string[] = ['hem2', 'hem3'];
 
 export function bindRig(body: BuildResult): BoundRig {
   // Deduplicate joints: a bone's tail and its child's head are the same point.
@@ -190,6 +192,8 @@ export function bindRig(body: BuildResult): BoundRig {
   if (hemBone) {
     const scale = positions.map(() => 1);
     scale[indexOf(hemBone.tail)] = HEM_REST_SCALE;
+    // A tail chained off the hem (gait.ts 'hem2'): every segment's free end is pendulum too.
+    for (const t of PENDULUM_CHAIN) { const b = body.bones.get(t); if (b) scale[indexOf(b.tail)] = HEM_REST_SCALE; }
     rig.restScale = scale;
   }
   // Only intact upper-arm/forearm chains get an elbow stop. Dead distal
@@ -245,7 +249,7 @@ export function bindRig(body: BuildResult): BoundRig {
   // must not frame one (the bride's pelvis bone sits exactly on it).
   const axialJoints: number[] = [];
   for (const [name, bone] of body.bones) {
-    if (/\.[lr]$/.test(name) || name === 'hem' || name === 'jaw') continue;
+    if (/\.[lr]$/.test(name) || name === 'hem' || PENDULUM_CHAIN.includes(name) || name === 'jaw') continue;
     for (const j of [indexOf(bone.head), indexOf(bone.tail)])
       if (!axialJoints.includes(j)) axialJoints.push(j);
   }
@@ -253,7 +257,7 @@ export function bindRig(body: BuildResult): BoundRig {
   // rigid torso-bone frames below.
   const axialSegs: { head: number; tail: number }[] = [];
   for (const [name, bone] of body.bones) {
-    if (/\.[lr]$/.test(name) || name === 'hem' || name === 'jaw') continue;
+    if (/\.[lr]$/.test(name) || name === 'hem' || PENDULUM_CHAIN.includes(name) || name === 'jaw') continue;
     const h = indexOf(bone.head), t = indexOf(bone.tail);
     if (h !== t) axialSegs.push({ head: h, tail: t });
   }
@@ -326,6 +330,7 @@ export function bindRig(body: BuildResult): BoundRig {
   // hem (2026-09-24).
   const hemPendulum = body.bones.get('hem');
   if (hemPendulum) distal.add(indexOf(hemPendulum.tail));
+  for (const t of PENDULUM_CHAIN) { const b = body.bones.get(t); if (b) distal.add(indexOf(b.tail)); }
   // The JAW point is stricter still: ONLY prims declared `on jaw` may bind
   // to it. The upper lip ends 7 cm from it and 10 cm from the skull pivot,
   // so a nearest-point bind would hang the upper lip (and the nose, and the

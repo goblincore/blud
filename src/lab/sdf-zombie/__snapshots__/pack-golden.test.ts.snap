@@ -42,7 +42,7 @@ exports[`packBody byte pin > goblin-home.blob packs the pinned bytes 1`] = `"dd3
 
 exports[`packBody byte pin > gorehound.blob packs the pinned bytes 1`] = `"4daec4595c2d7da2"`;
 
-exports[`packBody byte pin > gutcrawler.blob packs the pinned bytes 1`] = `"79498106bcf5bb0b"`;
+exports[`packBody byte pin > gutcrawler.blob packs the pinned bytes 1`] = `"3700a0d4b0a5fdf5"`;
 
 exports[`packBody byte pin > juggernaut.blob packs the pinned bytes 1`] = `"6eaa93748006d298"`;
 

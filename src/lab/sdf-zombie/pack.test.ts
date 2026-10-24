@@ -529,7 +529,8 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
   //   twinhead    2  the human twin's two embers (2026-10-21); the machine
   //                  twin's optic is a kit `led`
   //   gorehound   2  two amber embers under the brow plate (2026-10-22)
-  //   gutcrawler  2  a pale ember in each sunken eye pit (2026-10-22)
+  //   (gutcrawler had 2, a pale ember in each eye pit; its eyes are slits in its
+  //                  baked face since 2026-10-23, so it has none.)
   //   gibbet      3  three unequal eyes clustered off-centre on the dangling head
   //   (goblin-cinematic had 11: its SDF teeth' faint 0.15 glow, Task 12. The
   //                  teeth are mesh in its kit since Task 14 (2026-10-15), so it
@@ -547,7 +548,6 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
     'warbull.blob': 2,
     'twinhead.blob': 2,
     'gorehound.blob': 2,
-    'gutcrawler.blob': 2,
     'gibbet.blob': 3,
   };
 
