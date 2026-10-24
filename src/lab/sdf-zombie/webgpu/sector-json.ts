@@ -9,6 +9,7 @@
 import type { Capability, LevelDef } from './level-def';
 import { parseLevelJson, type ParseOptions } from './level-json';
 import { buildSectorGround } from './sector-ground';
+import { edgesArea, sectorEdgeIndices, sectorEdges } from './sector-edges';
 import {
   GLOW_KINDS, SECTOR_SPECIALS, zoneName,
   type GlowKind, type SectorDef, type SectorLine, type SectorMap, type SectorSpecial, type XZ,
@@ -128,24 +129,17 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
   });
 
   // --- closure and winding: each sector's directed lines form closed loops, sector on the left ---
+  const map: SectorMap = { vertices, sectors, lines };
   if (errors.length === 0) sectors.forEach((_, s) => {
+    const idx = sectorEdgeIndices(map, s);
     const bal = new Map<number, number>();
-    let area2 = 0, any = false;
-    const edge = (a: number, b: number) => {
-      any = true;
+    for (const [a, b] of idx) {
       bal.set(a, (bal.get(a) ?? 0) + 1);
       bal.set(b, (bal.get(b) ?? 0) - 1);
-      const [x0, z0] = vertices[a]!, [x1, z1] = vertices[b]!;
-      area2 += x0 * z1 - x1 * z0;
-    };
-    for (const l of lines) {
-      if (l.front === l.back) continue;                       // both sides the same sector: adds nothing
-      if (l.front === s) edge(l.v[0], l.v[1]);
-      else if (l.back === s) edge(l.v[1], l.v[0]);
     }
-    if (!any) { errors.push(`sector ${s}: no lines`); return; }
+    if (idx.length === 0) { errors.push(`sector ${s}: no lines`); return; }
     for (const [vi, n] of bal) if (n !== 0) { errors.push(`sector ${s}: not closed (vertex ${vi} unbalanced)`); return; }
-    if (!(area2 > 0)) errors.push(`sector ${s}: lines must keep the sector on their left (spec §4)`);
+    if (!(edgesArea(sectorEdges(map, s)) > 0)) errors.push(`sector ${s}: lines must keep the sector on their left (spec §4)`);
   });
 
   // --- heights: a door may close to its floor, nothing may invert -------------------
@@ -179,7 +173,7 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
 
   // --- markers must stand in a sector (the room boxes alone let one land in a hole) ------
   if (errors.length === 0) {
-    const ground = buildSectorGround({ vertices, sectors, lines });
+    const ground = buildSectorGround(map);
     const inVoid = (pos: unknown): boolean => Array.isArray(pos) && pos.length === 3 && pos.every(isNum)
       && Number.isNaN(ground.floorAt(pos[0] as number, pos[2] as number));
     const posOf = (o: unknown): unknown => (typeof o === 'object' && o !== null ? (o as Json).pos : undefined);
@@ -202,7 +196,6 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
     errors.push(...msg.split('; '));
   }
   if (errors.length > 0 || !base) throw new Error(`level ${id}: ${errors.join('; ')}`);
-  const map: SectorMap = { vertices, sectors, lines };
   const requires: Capability[] = [...base.requires.filter(c => c !== 'multi-floor'), 'sectors'];
   return { ...base, requires, sectors: map };
 }

@@ -9,29 +9,20 @@
 // Pure: no three.js, no DOM.
 
 import { SKY_MATERIAL, type SectorMap, type XZ } from './sector-def';
+import { edgesArea, pointInEdges, sectorEdgeIndices } from './sector-edges';
 
 export interface SectorPolygon { sector: number; outer: XZ[]; holes: XZ[][] }
 export type WallPart = 'mid' | 'lower' | 'upper';
 export interface WallQuad { a: XZ; b: XZ; y0: number; y1: number; sector: number; part: WallPart }
 
+const loopEdges = (loop: readonly XZ[]): [XZ, XZ][] => loop.map((p, i) => [p, loop[(i + 1) % loop.length]!]);
+
 /** Signed shoelace area in x/z. */
 export function loopArea(loop: readonly XZ[]): number {
-  let a = 0;
-  for (let i = 0; i < loop.length; i++) {
-    const [x0, z0] = loop[i]!, [x1, z1] = loop[(i + 1) % loop.length]!;
-    a += x0 * z1 - x1 * z0;
-  }
-  return a / 2;
+  return edgesArea(loopEdges(loop));
 }
 
-function pointInLoop(x: number, z: number, loop: readonly XZ[]): boolean {
-  let odd = false;
-  for (let i = 0, j = loop.length - 1; i < loop.length; j = i++) {
-    const [ax, az] = loop[i]!, [bx, bz] = loop[j]!;
-    if ((az > z) !== (bz > z) && x < ax + ((z - az) * (bx - ax)) / (bz - az)) odd = !odd;
-  }
-  return odd;
-}
+const pointInLoop = (x: number, z: number, loop: readonly XZ[]): boolean => pointInEdges(x, z, loopEdges(loop));
 
 /** Splits a closed vertex walk at every vertex it visits twice, so each piece is a simple loop
  *  (tracing the free side of two pillars that touch at a corner is one walk through the corner). */
@@ -53,12 +44,7 @@ function splitAtRepeats(walk: readonly number[]): number[][] {
  *  a point whatever the line order. Outer loops come out positive, holes negative. */
 function sectorLoops(map: SectorMap, sector: number): XZ[][] {
   const V = map.vertices;
-  const edges: [number, number][] = [];
-  for (const l of map.lines) {
-    if (l.front === l.back) continue;
-    if (l.front === sector) edges.push([l.v[0], l.v[1]]);
-    else if (l.back === sector) edges.push([l.v[1], l.v[0]]);
-  }
+  const edges = sectorEdgeIndices(map, sector);
   const outgoing = new Map<number, number[]>();
   edges.forEach((e, i) => { const o = outgoing.get(e[0]); if (o) o.push(i); else outgoing.set(e[0], [i]); });
   const used = new Array<boolean>(edges.length).fill(false);

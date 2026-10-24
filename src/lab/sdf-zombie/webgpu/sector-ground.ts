@@ -47,6 +47,8 @@ export function buildSectorGround(map: SectorMap): SectorGround {
     if (ls.length > 0) forCells(x0, z0, x1, z1, cell => sectorCells[cell]!.push(s));
   });
 
+  // The even-odd rule of sector-edges.ts pointInEdges, inlined over line indices (no per-call edge arrays)
+  // because sectorAt is on the per-frame path.
   const inside = (s: number, x: number, z: number): boolean => {
     let odd = false;
     for (const i of sectorLines[s]!) {

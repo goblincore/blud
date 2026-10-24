@@ -95,6 +95,8 @@ def parse_map(l: dict[str, bytes]):
     return verts, sectors, sides, lines, things
 
 
+# Python copies of the sector rules in src/lab/sdf-zombie/webgpu/sector-edges.ts (pointInEdges,
+# sectorEdges); keep the two in step.
 def _inside(px: float, pz: float, segs) -> bool:
     """Even-odd test against a list of ((ax, az), (bx, bz)) segments."""
     odd = False
