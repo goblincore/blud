@@ -10,12 +10,13 @@ SKY_FLAT = "F_SKY1"
 # (prefix, ours), first match wins.
 FLAT_FAMILIES = [
     ("F_SKY", "sky"), ("NUKAGE", "nukage"), ("LAVA", "lava"), ("SLIME", "acid"), ("FWATER", "acid"),
-    ("BLOOD", "acid"), ("FLOOR", "metal-plate"), ("FLAT", "tile"), ("CEIL", "concrete"),
+    ("BLOOD", "tile"),  # no blood glow material yet: plain tile, not a glow kind
+    ("FLOOR", "metal-plate"), ("FLAT", "tile"), ("CEIL", "concrete"),
     ("TLITE", "light-panel"), ("GRNLITE", "light-panel"), ("STEP", "metal-plate"), ("DEM", "tile"),
 ]
 TEXTURE_FAMILIES = [
     ("STAR", "tech"), ("TEK", "tech"), ("COMP", "tech"), ("BROWN", "rust"), ("BRN", "rust"),
-    ("DOOR", "door"), ("EXIT", "door"), ("SUPPORT", "metal"), ("METAL", "metal"), ("LITE", "light-panel"),
+    ("DOORTRAK", "metal"), ("BIGDOOR", "door"), ("DOOR", "door"), ("EXIT", "door"), ("STEP", "metal-plate"), ("SUPPORT", "metal"), ("METAL", "metal"), ("LITE", "light-panel"),
     ("STONE", "concrete"), ("GRAY", "concrete"), ("ICKW", "concrete"), ("PIPE", "metal"), ("SW1", "tech"),
 ]
 GLOW_MATERIALS = {"nukage", "lava", "acid"}
@@ -23,6 +24,15 @@ GLOW_MATERIALS = {"nukage", "lava", "acid"}
 # Linedef specials: manual doors (locked ones treated as plain in step 1-2: E1M1 has none) and exits.
 DOOR_SPECIALS = {1, 26, 27, 28, 31, 32, 33, 34, 117, 118}
 EXIT_SPECIALS = {11, 51, 52, 124}
+
+# Remotely triggered line specials (the line's tag names the target sectors). Step 1 is static, so each
+# class is applied once when converting; moving them is plan 2.
+# Doors (raise / open / close variants alike): the target sector is written OPEN.
+REMOTE_DOOR_SPECIALS = {2, 4, 16, 29, 46, 61, 63, 86, 90, 103, 105, 106, 108, 109, 111, 112, 114, 115}
+# Floor lowers: written LOWERED to the lowest neighbouring floor (also for the "to highest / next" variants).
+FLOOR_LOWER_SPECIALS = {19, 23, 36, 37, 38, 45, 60, 70, 71, 82, 83, 84, 98, 102}
+# Lifts: left as they are (static step 1: a lift at its top is a known gap).
+LIFT_SPECIALS = {10, 21, 62, 88, 120, 121, 122, 123}
 
 # Sector types -> (special, hurtPerSec). Doom hurts every 32 tics (~0.91 s); we use per second.
 SECTOR_TYPES = {
