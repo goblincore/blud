@@ -83,6 +83,16 @@ describe('sectorActiveLevel', () => {
     expect(L.ground.floorAt(0, -10)).toBe(0.5);
     expect(L.staticColliders).toEqual([]);
   });
+  it('puts a spawn in its sector zone even when the zone boxes overlap', () => {
+    const raw = read('public/assets/levels/fixtures/sectors.level.json');
+    raw.sectors[1].zone = 1;                                            // zone 1's box now sits inside zone 0's
+    raw.spawns = [
+      { id: 'in-1', kind: 'zombie', pos: [0, 0.5, -10] },
+      { id: 'in-0', kind: 'zombie', pos: [0, 0, -2] },
+    ];
+    const level = sectorActiveLevel(parseSectorLevel(raw));
+    expect(level.spawnList().map(s => [s.id, s.room.name])).toEqual([['in-1', 'zone-1'], ['in-0', 'zone-0']]);
+  });
   it('room levels and the ring stand on flat ground', () => {
     expect(ringLevel().ground).toBe(FLAT_GROUND);
     expect(authoredLevel(parseLevelJson(read('public/assets/levels/fixtures/two-rooms.level.json'))).ground).toBe(FLAT_GROUND);

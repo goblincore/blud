@@ -115,5 +115,14 @@ export function sectorActiveLevel(def: LevelDef): ActiveLevel {
       return s < 0 ? 'void' : zoneName(map.sectors[s]!.zone);
     },
     ground,
+    // Rooms are the zones' bounding boxes, which overlap on sector levels: the sector under the
+    // spawn decides its room, as it does keyAt.
+    spawnList: () => def.spawns.flatMap(sp => {
+      const si = ground.sectorAt(sp.pos[0], sp.pos[2]);
+      if (si < 0) return [];
+      const name = zoneName(map.sectors[si]!.zone);
+      const room = def.rooms.find(r => r.name === name);
+      return room ? [{ id: sp.id, kind: sp.kind, room, pos: sp.pos }] : [];
+    }),
   };
 }
