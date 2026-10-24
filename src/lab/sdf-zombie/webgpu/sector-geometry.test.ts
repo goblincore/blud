@@ -110,4 +110,15 @@ describe('sectorPolygons at pinch vertices', () => {
       expect(polys.every(p => p.holes.length === 0)).toBe(true);
     }
   });
+  it('an island inside a hole does not capture the hole', () => {
+    const base = mapOf([ccw(0, 0, 10, 10), cw(2, 2, 6, 6), ccw(3, 3, 4, 4)]);
+    for (const seed of SEEDS) {
+      const polys = sectorPolygons(shuffled(base, seed));
+      expect(polys).toHaveLength(2);
+      const room = polys.find(p => Math.abs(loopArea(p.outer)) === 100)!;
+      const island = polys.find(p => Math.abs(loopArea(p.outer)) === 16)!;
+      expect(areas(room.holes)).toEqual([36]);
+      expect(island.holes).toHaveLength(0);
+    }
+  });
 });

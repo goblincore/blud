@@ -96,7 +96,7 @@ export function sectorPolygons(map: SectorMap): SectorPolygon[] {
     const loops = sectorLoops(map, sector);
     const polys: SectorPolygon[] = loops.filter(l => loopArea(l) > 0).map(outer => ({ sector, outer, holes: [] }));
     for (const hole of loops.filter(l => loopArea(l) <= 0)) {
-      const px = (hole[0]![0] + hole[1]![0] + hole[2]![0]) / 3, pz = (hole[0]![1] + hole[1]![1] + hole[2]![1]) / 3;
+      const px = (hole[0]![0] + hole[1]![0]) / 2, pz = (hole[0]![1] + hole[1]![1]) / 2;   // on the hole's own edge, never inside an island
       let owner: SectorPolygon | undefined;
       for (const p of polys) {
         if (!pointInLoop(px, pz, p.outer)) continue;
