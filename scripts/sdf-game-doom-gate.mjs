@@ -2,9 +2,12 @@
 //   1. FIXTURE boot: webgpu, ready, no errors, geometry 'sectors'.
 //   2. FIXTURE walk: up the 0.5 m step, stopped by the 1.0 m ledge, down into the pit, stopped by the column.
 //   3. E1M1 (skipped if public/assets/levels/doom-e1m1.level.json is absent): boot, the ROUTE, budget, shots.
-// Usage: LAB_TMP=.lab-tmp bash scripts/sdf-game-doom-gate.sh   (DOOM_GATE_ONLY_FIXTURE=1 skips 3; SHOTS=1 writes shots)
+//   4. E1M1 pools and sector light (plan 2026-10-24-sector-levels-2): a hurt floor hurts (?god=0) and stops
+//      hurting off it; the glow reads green; sector light lifts a bright sector's frame (A/B).
+// Usage: LAB_TMP=.lab-tmp bash scripts/sdf-game-doom-gate.sh   (DOOM_GATE_ONLY_FIXTURE=1 skips 3–4; SHOTS=1 writes
+// shots and .lab-tmp/doom/sector-light-sheet.png; TUNING=1 also writes the owner's .lab-tmp/doom/tuning-sheet.png)
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 const OUT = '.lab-tmp/doom';
 
 const VITE = Number(process.argv[2] ?? 5483);
@@ -35,9 +38,9 @@ await send('Page.enable'); await send('Runtime.enable');
 await fetch(`http://localhost:${CDP}/json/activate/${tab.id}`);
 await send('Emulation.setDeviceMetricsOverride', { width: 960, height: 720, deviceScaleFactor: 1, mobile: false });
 
-async function boot(level) {
+async function boot(level, query = '') {
   consoleEvents = [];
-  await send('Page.navigate', { url: `http://localhost:${VITE}/sdf-game.html?level=${level}` });
+  await send('Page.navigate', { url: `http://localhost:${VITE}/sdf-game.html?level=${level}${query}` });
   let ready = false;
   for (let i = 0; i < 360 && !ready; i++) {
     await sleep(500);
@@ -157,4 +160,200 @@ if (process.env.SHOTS === '1') {
 }
 if (frameMs > 33.3) fail(`frame ${frameMs.toFixed(2)} ms > 33.3 ms`);
 pass('E1M1 budget: under 33.3 ms');
+
+// 4. POOLS AND SECTOR LIGHT
+const sleepSettle = 1200;
+/** A screenshot as base64 PNG (no file). */
+const grab = async () => (await send('Page.captureScreenshot', { format: 'png' })).result.data;
+/** Decode a PNG in the page and average a centred crop (fraction of width and height): channel means 0..255. */
+const measure = (b64, crop = 1) => evaluate(`(async () => {
+  const bmp = await createImageBitmap(await (await fetch('data:image/png;base64,${b64}')).blob());
+  const cw = Math.max(1, Math.round(bmp.width * ${crop})), ch = Math.max(1, Math.round(bmp.height * ${crop}));
+  const c = new OffscreenCanvas(cw, ch); const g = c.getContext('2d');
+  g.drawImage(bmp, (bmp.width - cw) / 2, (bmp.height - ch) / 2, cw, ch, 0, 0, cw, ch);
+  const d = g.getImageData(0, 0, cw, ch).data; let r = 0, gr = 0, b = 0;
+  for (let i = 0; i < d.length; i += 4) { r += d[i]; gr += d[i + 1]; b += d[i + 2]; }
+  const n = d.length / 4;
+  return { r: r / n, g: gr / n, b: b / n, grey: (r + gr + b) / 3 / n, lum: (0.2126 * r + 0.7152 * gr + 0.0722 * b) / n };
+})()`);
+const save = (file, b64) => { mkdirSync(OUT, { recursive: true }); writeFileSync(`${OUT}/${file}`, Buffer.from(b64, 'base64')); };
+/** Compose a labelled grid in the page: cells[row][col] base64 PNGs (or null), drawn at cellW wide. */
+async function sheet(file, title, rowLabels, colLabels, cells, notes = cells.map((r) => r.map(() => ''))) {
+  const cellW = 400, cellH = 300, left = 190, top = 64;
+  await evaluate('window.__sheetCells = []');
+  for (const [r, row] of cells.entries()) for (const [c, b64] of row.entries()) {
+    if (b64) await evaluate(`window.__sheetCells.push([${r}, ${c}, '${b64}'])`);
+  }
+  const out = await evaluate(`(async () => {
+    const rows = ${JSON.stringify(rowLabels)}, cols = ${JSON.stringify(colLabels)}, notes = ${JSON.stringify(notes)};
+    const cv = document.createElement('canvas'); cv.width = ${left} + cols.length * ${cellW}; cv.height = ${top} + rows.length * ${cellH};
+    const g = cv.getContext('2d'); g.fillStyle = '#111'; g.fillRect(0, 0, cv.width, cv.height);
+    g.fillStyle = '#fff'; g.font = 'bold 20px sans-serif'; g.fillText(${JSON.stringify(title)}, 10, 26);
+    g.font = '16px sans-serif';
+    cols.forEach((t, c) => g.fillText(t, ${left} + c * ${cellW} + 8, 54));
+    rows.forEach((t, r) => t.split('\\n').forEach((line, k) => g.fillText(line, 8, ${top} + r * ${cellH} + 24 + k * 20)));
+    for (const [r, c, b64] of window.__sheetCells) {
+      const bmp = await createImageBitmap(await (await fetch('data:image/png;base64,' + b64)).blob());
+      const x = ${left} + c * ${cellW}, y = ${top} + r * ${cellH};
+      g.drawImage(bmp, x + 2, y + 2, ${cellW} - 4, ${cellH} - 4);
+      if (notes[r][c]) { g.fillStyle = 'rgba(0,0,0,0.7)'; g.fillRect(x + 2, y + ${cellH} - 30, ${cellW} - 4, 28); g.fillStyle = '#ff0'; g.fillText(notes[r][c], x + 8, y + ${cellH} - 10); g.fillStyle = '#fff'; }
+    }
+    window.__sheetCells = [];
+    return cv.toDataURL('image/png').split(',')[1];
+  })()`);
+  save(file, out);
+}
+
+const raw = JSON.parse(readFileSync('public/assets/levels/doom-e1m1.level.json', 'utf8'));
+await boot('doom-e1m1', '&god=0');
+// The flashlight adds its own light on top of the sector term; switch it off where the seam exists.
+const flashOff = async () => evaluate('__sdfGame.setFlashlight ? __sdfGame.setFlashlight(false) : null');
+const hz = await evaluate('__sdfGame.hazardPoint()');
+if (!hz) fail('E1M1: no hurt sector (hazardPoint null)');
+const hurtPerSec = raw.sectors[hz.sector].hurtPerSec;
+await evaluate(`__sdfGame.setPose(${hz.pos[0]}, ${hz.pos[2]}, 0, 0, ${hz.pos[1]})`);
+const h0 = await evaluate('__sdfGame.health()');
+await sleep(3200);
+const h1 = await evaluate('__sdfGame.health()');
+if (!(h0 - h1 >= 2 * hurtPerSec)) fail(`hazard: health ${h0} -> ${h1} in 3.2 s on sector ${hz.sector}, expected a drop of >= ${2 * hurtPerSec}`);
+if (!(h1 > 0)) fail(`hazard: the player died (${h1})`);
+pass(`hazard: sector ${hz.sector} (${hz.glow}, ${hurtPerSec}/s) took health ${h0} -> ${h1} in 3.2 s`);
+// Off the pool (the start pose): health holds.
+await evaluate('__sdfGame.setPose(0, 0, 0, 0, 0)');
+await sleep(300);
+const h2 = await evaluate('__sdfGame.health()');
+await sleep(2000);
+const h3 = await evaluate('__sdfGame.health()');
+if (h3 < h2) fail(`hazard: still hurting off the pool (${h2} -> ${h3})`);
+pass(`hazard: off the pool health holds (${h2} -> ${h3})`);
+// The look work: a fresh boot with god mode on, so no hurt flash tints the pool frames and nobody dies mid-sheet.
+await boot('doom-e1m1', '&god=1');
+// The glow, looking down at the pool.
+await evaluate(`__sdfGame.setPose(${hz.pos[0]}, ${hz.pos[2]}, 0, -1.2, ${hz.pos[1]})`);
+await sleep(sleepSettle);
+const poolDown = await grab();
+const gm = await measure(poolDown, 0.3);
+console.log(`glow: centre-30% mean R ${gm.r.toFixed(1)} G ${gm.g.toFixed(1)} B ${gm.b.toFixed(1)}, G/R ${(gm.g / Math.max(gm.r, 1e-6)).toFixed(2)}`);
+if (!(gm.g > 1.4 * gm.r && gm.g > 40)) fail(`glow: G ${gm.g.toFixed(1)} vs R ${gm.r.toFixed(1)} (need G > 1.4 R and G > 40)`);
+pass('glow: the pool reads green');
+await evaluate(`__sdfGame.setPose(${hz.pos[0]}, ${hz.pos[2]}, 0.6, -0.5, ${hz.pos[1]})`);
+await sleep(sleepSettle);
+const poolRim = await grab();
+
+// Poses for the A/B: the game's own pure modules pick sectors; a march along __sdfGame.ground picks a yaw facing
+// a wall 2.5..6 m off (a rise > 0.6 m or a ceiling under 1.9 m above the feet counts as a wall).
+const poses = await evaluate(`(async () => {
+  const sj = await import('/src/lab/sdf-zombie/webgpu/sector-json.ts');
+  const sg = await import('/src/lab/sdf-zombie/webgpu/sector-geometry.ts');
+  const map = sj.parseLevel(await (await fetch('/assets/levels/doom-e1m1.level.json')).json()).sectors;
+  const wallYaw = (x, z, f0) => {
+    let best = null;
+    for (let k = 0; k < 16; k++) {
+      const yaw = -Math.PI + (k * Math.PI) / 8, dx = Math.sin(yaw), dz = -Math.cos(yaw);
+      let d = 0.25;
+      for (; d < 14; d += 0.25) {
+        const g = __sdfGame.ground(x + dx * d, z + dz * d);
+        if (!Number.isFinite(g.floor) || g.floor - f0 > 0.6 || g.ceil - f0 < 1.9) break;
+      }
+      const score = d >= 2.5 && d <= 6 ? d : d >= 1.5 ? 50 + d : 1e9;
+      if (best === null || score < best.score) best = { yaw, d, score };
+    }
+    return best;
+  };
+  const cands = [];
+  map.sectors.forEach((s, i) => {
+    if (s.glow !== null || s.special !== 'none' || s.ceil - s.floor < 2.2) return;
+    const p = sg.sectorInteriorPoint(map, i); if (!p) return;
+    const w = wallYaw(p[0], p[1], s.floor); if (!w || w.score > 1e8) return;
+    cands.push({ i, zone: s.zone, light: s.light, sky: s.materials.ceil === 'sky', x: p[0], z: p[1], y: s.floor, yaw: w.yaw, wall: w.d, score: w.score });
+  });
+  const indoor = cands.filter((c) => !c.sky);
+  const top = Math.max(...indoor.map((c) => c.light));
+  const bright = indoor.filter((c) => c.light === top).sort((a, b) => a.score - b.score);
+  const second = bright.find((c) => c.zone !== bright[0].zone) ?? bright[1];
+  const low = Math.min(...cands.map((c) => c.light));
+  const dark = cands.filter((c) => c.light === low).sort((a, b) => a.score - b.score)[0];
+  return { bright: [bright[0], second], dark };
+})()`);
+console.log(`poses: ${JSON.stringify(poses)}`);
+const poseAt = async (q, pitch = -0.1) => evaluate(`__sdfGame.setPose(${q.x}, ${q.z}, ${q.yaw}, ${pitch}, ${q.y})`);
+const flash = await flashOff();
+console.log(`flashlight: setFlashlight(false) -> ${flash === null ? 'no seam on this level (on as authored)' : flash}`);
+const DEFAULT_CURVE = await evaluate('__sdfGame.sectorLight()');
+const shotWith = async (patch) => { await evaluate(`__sdfGame.sectorLight(${JSON.stringify(patch)})`); await flashOff(); await sleep(sleepSettle); return grab(); };
+const restore = () => evaluate(`__sdfGame.sectorLight(${JSON.stringify({ on: true, max: DEFAULT_CURVE.max, gamma: DEFAULT_CURVE.gamma, glowGain: DEFAULT_CURVE.glowGain })})`);
+/** On/off frames at a pose for a curve: luminance means and the ratio. */
+async function ab(q, curve) {
+  await poseAt(q);
+  const on = await shotWith({ on: true, ...curve });
+  const off = await shotWith({ on: false });
+  await restore();
+  const a = (await measure(on)).lum, b = (await measure(off)).lum;
+  return { on, off, a, b, ratio: a / Math.max(b, 1e-6) };
+}
+const fmt = (r) => `on ${r.a.toFixed(2)} / off ${r.b.toFixed(2)} = ${r.ratio.toFixed(3)}`;
+const TUNED = { max: 0.35, gamma: 1.6 };
+const bright = await ab(poses.bright[0], { max: DEFAULT_CURVE.max, gamma: DEFAULT_CURVE.gamma });
+console.log(`sector light A/B, bright sector ${poses.bright[0].i} (light ${poses.bright[0].light}), default curve max ${DEFAULT_CURVE.max} γ${DEFAULT_CURVE.gamma}: ${fmt(bright)}`);
+let abPass = bright;
+let abCurve = `default max ${DEFAULT_CURVE.max} γ${DEFAULT_CURVE.gamma}`;
+if (bright.ratio <= 1.05) {
+  abPass = await ab(poses.bright[0], TUNED);
+  abCurve = `max ${TUNED.max} γ${TUNED.gamma} (the default is under 1.05: ${bright.ratio.toFixed(3)})`;
+  console.log(`sector light A/B, bright sector ${poses.bright[0].i}, max ${TUNED.max} γ${TUNED.gamma}: ${fmt(abPass)}`);
+}
+const dark = await ab(poses.dark, { max: DEFAULT_CURVE.max, gamma: DEFAULT_CURVE.gamma });
+console.log(`sector light A/B, darkest sector ${poses.dark.i} (light ${poses.dark.light}), default curve: ${fmt(dark)} (report only)`);
+if (process.env.SHOTS === '1') {
+  save('e1m1-pool.png', poolRim); save('e1m1-pool-down.png', poolDown);
+  save('e1m1-bright-on.png', abPass.on); save('e1m1-bright-off.png', abPass.off);
+  const second = await ab(poses.bright[1], { max: DEFAULT_CURVE.max, gamma: DEFAULT_CURVE.gamma });
+  const tunedDark = await ab(poses.dark, TUNED);
+  const tunedSecond = await ab(poses.bright[1], TUNED);
+  const lab = (q, what) => `${what}\nsector ${q.i}, light ${q.light}\nwall ${q.wall.toFixed(1)} m`;
+  await sheet('sector-light-sheet.png', `Sector light on/off (on = ${abCurve.split(' (')[0]} for row 1; default for rows 2-3; pool at glowGain ${DEFAULT_CURVE.glowGain})`,
+    [lab(poses.bright[0], 'bright A'), lab(poses.bright[1], 'bright B'), lab(poses.dark, 'darkest'), 'pool\n(pitch -0.5, -1.2)'],
+    ['on', 'off', 'on, max 0.35 γ1.6'],
+    [[abPass.on, abPass.off, null], [second.on, second.off, tunedSecond.on], [dark.on, dark.off, tunedDark.on], [poolRim, poolDown, null]],
+    [[abPass.a.toFixed(1), abPass.b.toFixed(1), ''], [second.a.toFixed(1), second.b.toFixed(1), tunedSecond.a.toFixed(1)], [dark.a.toFixed(1), dark.b.toFixed(1), tunedDark.a.toFixed(1)], ['', `G/R ${(gm.g / gm.r).toFixed(2)}`, '']]);
+  pass(`shots: ${OUT}/e1m1-pool.png, e1m1-bright-on/off.png, sector-light-sheet.png`);
+}
+if (process.env.TUNING === '1') {
+  // The owner's sheet: rows = poses, columns = curves (light rows) or glowGain (pool row); mean grey per cell.
+  const curves = [['off', { on: false }], ['max 0.07 γ2.2 (current)', { on: true, max: 0.07, gamma: 2.2 }], ['max 0.35 γ1.6', { on: true, max: 0.35, gamma: 1.6 }],
+    ['max 0.6 γ1.2', { on: true, max: 0.6, gamma: 1.2 }], ['max 1.0 γ1.0', { on: true, max: 1, gamma: 1 }]];
+  const gains = [1, 0.6, 0.35, 0.2];
+  const rows = [poses.bright[0], poses.bright[1], poses.dark];
+  const cells = [], notes = [], table = [];
+  for (const q of rows) {
+    await poseAt(q);
+    const r = [], n = [];
+    for (const [label, patch] of curves) {
+      const b64 = await shotWith(patch); const m = await measure(b64);
+      r.push(b64); n.push(`grey ${m.grey.toFixed(1)}`); table.push({ sector: q.i, light: q.light, curve: label, grey: +m.grey.toFixed(2) });
+    }
+    cells.push(r); notes.push(n);
+  }
+  await restore();
+  await evaluate(`__sdfGame.setPose(${hz.pos[0]}, ${hz.pos[2]}, 0.6, -0.5, ${hz.pos[1]})`);
+  const pr = [], pn = [];
+  for (const k of gains) {
+    const b64 = await shotWith({ glowGain: k }); const m = await measure(b64);
+    pr.push(b64); pn.push(`grey ${m.grey.toFixed(1)} G/R ${(m.g / Math.max(m.r, 1e-6)).toFixed(2)}`);
+    table.push({ sector: hz.sector, pool: true, glowGain: k, grey: +m.grey.toFixed(2), r: +m.r.toFixed(1), g: +m.g.toFixed(1), b: +m.b.toFixed(1) });
+  }
+  pr.push(null); pn.push('');
+  cells.push(pr); notes.push(pn);
+  await restore();
+  const lab = (q, what) => `${what}\nsector ${q.i}\nDoom light ${q.light}\nwall ${q.wall.toFixed(1)} m`;
+  await sheet('tuning-sheet.png', `E1M1 tuning sheet — light rows: columns = sector light curve; pool row: columns = glowGain 1.0 | 0.6 | 0.35 | 0.2 (flashlight ${flash === null ? 'ON (no seam)' : 'off'})`,
+    [lab(rows[0], 'bright A'), lab(rows[1], 'bright B'), lab(rows[2], 'darkest'), `pool\nsector ${hz.sector}\npitch -0.5\ncols: glowGain`],
+    curves.map(([l]) => l), cells, notes);
+  console.log(`tuning: ${JSON.stringify(table)}`);
+  pass(`tuning sheet: ${OUT}/tuning-sheet.png`);
+}
+if (!(abPass.ratio > 1.05)) fail(`sector light A/B: ${fmt(abPass)} at ${abCurve} (need > 1.05)`);
+pass(`sector light A/B: ${fmt(abPass)} at ${abCurve}`);
+const errs = consoleEvents.filter((e) => e.type === 'error' || e.type === 'exception');
+if (errs.length) fail(`console errors: ${JSON.stringify(errs.slice(0, 4))}`);
 process.exit(0);
