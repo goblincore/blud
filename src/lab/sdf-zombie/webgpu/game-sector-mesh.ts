@@ -67,12 +67,13 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
     const holes = poly.holes.map(h => h.map(([x, z]) => new THREE.Vector2(x, z)));
     const pts: XZ[] = [...poly.outer, ...poly.holes.flat()];
     const faces = THREE.ShapeUtils.triangulateShape(contour, holes);
-    for (const [role, y, want] of [['floor', s.floor, [0, 1, 0]], ['ceil', s.ceil, [0, -1, 0]]] as const) {
+    const faces3: [Role, number, [number, number, number]][] = [['floor', s.floor, [0, 1, 0]], ['ceil', s.ceil, [0, -1, 0]]];
+    for (const [role, y, want] of faces3) {
       if (role === 'ceil' && s.materials.ceil === SKY_MATERIAL) continue;
       const b = batch(s.zone, role);
       for (const f of faces) {
         const p = f.map(i => [pts[i]![0], y, pts[i]![1]]);
-        b.tri(p, f.map(i => [pts[i]![0] / TILE_M, pts[i]![1] / TILE_M]), want as unknown as [number, number, number]);
+        b.tri(p, f.map(i => [pts[i]![0] / TILE_M, pts[i]![1] / TILE_M]), want);
       }
     }
   }
@@ -89,6 +90,7 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
     b.tri([a0, b1, a1], [[u0, v0], [u1, v1], [u0, v1]], want);
   }
 
+  // Sector `light` and `materials` are not used yet: one stone set for every zone (sector lighting is the next plan).
   const P = ctx.world.level.def!.palette;
   const mats: Record<Role, THREE.MeshStandardMaterial> = {
     floor: worldTiled(ctx.world.stoneSet.floor as THREE.MeshStandardMaterial),
