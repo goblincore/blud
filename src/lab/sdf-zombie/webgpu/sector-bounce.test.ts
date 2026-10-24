@@ -153,3 +153,35 @@ describe('nearGlow and wallStrip', () => {
     expect(area).toBeCloseTo(4, 9);
   });
 });
+
+describe('occlusion by lips, closed doors, soffits and tall risers', () => {
+  /** twoRooms with an island sector 3 (x 2..3, z 3..7) in room A between its west wall and the pool. */
+  const withIsland = (floor: number, ceil: number): SectorMap => {
+    const m = twoRooms();
+    const v = m.vertices.length;
+    return {
+      vertices: [...m.vertices, [2, 3], [3, 3], [3, 7], [2, 7]],
+      sectors: [...m.sectors, sector(floor, ceil)],
+      lines: [...m.lines, line(v, v + 1, 3, 0), line(v + 1, v + 2, 3, 0), line(v + 2, v + 3, 3, 0), line(v + 3, v, 3, 0)],
+    };
+  };
+  const west = (m: SectorMap) => createGlowBounce(m).at([0, 1, 5], [1, 0, 0], [1, 0]);
+  it('a raised block (a lip) between the wall and the pool shades the wall', () => {
+    expect(west(twoRooms())[1]).toBeGreaterThan(0);
+    expect(west(withIsland(3, 4))).toEqual([0, 0, 0]);
+  });
+  it('a closed door (ceil == floor) blocks', () => {
+    expect(west(withIsland(0, 0))).toEqual([0, 0, 0]);
+  });
+  it('the pool\'s own soffit blocks: a low pool ceiling under a tall room keeps the room\'s ceiling dark', () => {
+    const m = twoRooms();
+    const tall: SectorMap = { ...m, sectors: [sector(0, 8), sector(-0.5, 1, 'nukage'), sector(0, 4)] };
+    expect(createGlowBounce(m).at([3.9, 4, 5], [0, -1, 0], [-1, 0])[1]).toBeGreaterThan(0);
+    expect(createGlowBounce(tall).at([3.9, 8, 5], [0, -1, 0], [-1, 0])).toEqual([0, 0, 0]);
+  });
+  it('a riser taller than the rim allowance blocks: a pool 3 m down does not light the room above', () => {
+    const m = twoRooms();
+    const deep: SectorMap = { ...m, sectors: [sector(2.5, 6), sector(-0.5, 6, 'nukage'), sector(2.5, 6)] };
+    expect(createGlowBounce(deep).at([0, 2.6, 5], [1, 0, 0], [1, 0])).toEqual([0, 0, 0]);
+  });
+});

@@ -43,8 +43,9 @@ class Batch {
   pos: number[] = []; uv: number[] = []; nrm: number[] = []; sec: number[] = []; bnc: number[] = [];
   constructor(private readonly bounce: GlowBounce | null, private readonly cache: BounceCache = new Map()) {}
   /** One triangle of sector `sector`; flipped if its normal disagrees with `want`. Each vertex's glow
-   *  bounce is baked with its ray starting toward the triangle's centre (inside its own sector). */
-  tri(p: number[][], uv: number[][], want: [number, number, number], sector: number) {
+   *  bounce is baked with its ray starting inside its own sector: off a wall along the wall's normal,
+   *  off a floor or ceiling toward the triangle's centre. */
+  tri(p: number[][], uv: number[][], want: [number, number, number], sector: number, wall = false) {
     const [a, b, c] = p as [number[], number[], number[]];
     const ux = b[0]! - a[0]!, uy = b[1]! - a[1]!, uz = b[2]! - a[2]!;
     const vx = c[0]! - a[0]!, vy = c[1]! - a[1]!, vz = c[2]! - a[2]!;
@@ -58,7 +59,7 @@ class Batch {
         const key = `${q[0]},${q[1]},${q[2]},${want[0]},${want[1]},${want[2]}`;
         let g = this.cache.get(key);
         if (!g) {
-          const r = this.bounce.at([q[0]!, q[1]!, q[2]!], want, [cx - q[0]!, cz - q[2]!], bounceScratch);
+          const r = this.bounce.at([q[0]!, q[1]!, q[2]!], want, wall ? [want[0], want[2]] : [cx - q[0]!, cz - q[2]!], bounceScratch);
           this.cache.set(key, (g = [r[0], r[1], r[2]]));
         }
         this.bnc.push(g[0], g[1], g[2]);
@@ -171,7 +172,7 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
     const ends = [q.a, q.b] as const, us = [u0, u1] as const;
     for (const t of wallStrip(cols[0], cols[1])) {
       b.tri(t.map(([side, r]) => [ends[side]![0], cols[side]![r]!, ends[side]![1]]),
-        t.map(([side, r]) => [us[side]!, cols[side]![r]! / TILE_M]), want, q.sector);
+        t.map(([side, r]) => [us[side]!, cols[side]![r]! / TILE_M]), want, q.sector, true);
     }
   }
 

@@ -205,6 +205,19 @@ Shots: `e1m1-bounce-wall-on/off.png` (the gate pose), `e1m1-pool-room-on/off.png
 12 vs 0), and `tuning-sheet.png`, which now has the bounce row; 0.35 γ1.6 and glowGain 0.35 are
 labelled "(default)".
 
+Occlusion detail (review fix): the pool's own two-sided lines still occlude. Only their floor bound is
+dropped, and only while the neighbour's floor is within 1 m of the pool's. So a pool ceiling lower than
+the room's (a soffit) keeps the room's ceiling dark beyond it, and a riser taller than 1 m shades the
+room above. Tests cover the lip, the closed door, the soffit and the tall riser.
+
+Caveats:
+- The bounce is emissive, so it also shows with `?doomlight=0`. That skews the sector-light A/B "off"
+  frames a little near pools; the A/B poses are away from them.
+- The deferred path (`?renderer=deferred`) drops the custom emissive node, so there is no bounce there.
+- Cost scales with glow sectors × occluders × near vertices. A map with many thin nukage strips (each
+  its own sector) could make the bake slow. The follow-up would be merging adjacent glow sectors of the
+  same kind into one source, and/or a uniform grid for the occluders.
+
 Skipped: a full-tier (shadowed or non-cheap) light for the biggest pool. It would sit in the same
 zone-mask trap and need neighbouring-zone masks (a light `rooms` list through `LampInput` and
 `accentRoomsFor`). That is the right follow-up if bodies standing in a pool room should catch green

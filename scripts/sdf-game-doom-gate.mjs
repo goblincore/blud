@@ -333,6 +333,13 @@ const bouncePoses = await evaluate(`(async () => {
     const fl = map.sectors[q.sector].floor, sx = mx + nx * 3.5, sz = mz + nz * 3.5;
     const g = walkable(sx, sz);
     if (!g || g.floor > fl + 0.8 || g.floor < fl - 0.8 || g.ceil - g.floor < 2) continue;
+    // The camera must see the wall: nothing (a column, a raised block, a low soffit) on the way to it.
+    let clear = true;
+    for (let d = 0.25; d < 3.4 && clear; d += 0.25) {
+      const h = walkable(mx + nx * d, mz + nz * d);
+      if (!h || h.floor > g.floor + 1.0 || h.ceil < g.floor + 1.8) clear = false;
+    }
+    if (!clear) continue;
     const c = b.at([mx, fl + 1.5, mz], [nx, 0, nz], [nx, nz]);
     if (!wall || c[1] > wall.g) wall = { x: sx, z: sz, y: g.floor, yaw: yawTo(-nx, -nz), g: c[1], sector: q.sector, len, mx, mz, nx, nz };
   }
@@ -429,6 +436,7 @@ if (process.env.TUNING === '1') {
   console.log(`tuning: ${JSON.stringify(table)}`);
   pass(`tuning sheet: ${OUT}/tuning-sheet.png`);
 }
+if (!(bmOff.r > 1 && bmOn.g - bmOff.g > 2)) fail(`bounce: wall crop too dark to judge or no green added (off R ${bmOff.r.toFixed(1)}, G ${bmOff.g.toFixed(1)} -> ${bmOn.g.toFixed(1)}; need off R > 1 and G up > 2)`);
 if (!(gr(bmOn) >= gr(bmOff) * 1.3)) fail(`bounce: wall G/R ${gr(bmOn).toFixed(2)} on vs ${gr(bmOff).toFixed(2)} off (need on >= off × 1.3)`);
 pass(`bounce: wall G/R ${gr(bmOn).toFixed(2)} on vs ${gr(bmOff).toFixed(2)} off at bounceGain ${DEFAULT_CURVE.bounceGain}`);
 if (!(abPass.ratio > 1.05)) fail(`sector light A/B: ${fmt(abPass)} at ${abCurve} (need > 1.05)`);

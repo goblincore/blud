@@ -11,8 +11,8 @@
 // pool floor counts). fade: 1 to 0 over the last quarter of CUTOFF_M. facing: a wrapped n·L toward
 // the pool. seen: the share of two rays (to the pool's nearest point and to its interior point) that
 // cross no blocking line — a one-sided wall, or a two-sided line the ray passes below the higher
-// floor or above the lower ceiling of (a lip, a closed door); the pool's own rim never blocks (the
-// pit glows up to it). So the green never bleeds through a solid wall into an unrelated room. The renderer multiplies the sum by the albedo and its gains.
+// floor or above the lower ceiling of (a lip, a closed door); the pool's own rim does not block up
+// to RIM_MAX_M (the pit glows up to it), its soffit and taller risers do. So the green never bleeds through a solid wall into an unrelated room. The renderer multiplies the sum by the albedo and its gains.
 //
 // refineNearGlow splits the lines near pools so walls, floors and ceilings get vertices along them
 // (both sides of a line split at the same points: no T-junctions); wallRows splits walls in height
@@ -63,9 +63,10 @@ export interface GlowSource {
   max: XZ;
   /** The lines within reach (the box grown by the cutoff) that can block this pool's light, packed
    *  OCC_STRIDE floats each for rayClear: a.x, a.z, (b - a).x, (b - a).z, lowest open y, highest
-   *  open y (both 0 for a one-sided wall), solid (1 for a one-sided wall). The pool's own lines are
-   *  left out: a sunken pool's pit glows up to its rim (its risers are lit green and pass the light
-   *  on), so the rim never shades the pool's own light. */
+   *  open y (both 0 for a one-sided wall), solid (1 for a one-sided wall). On the pool's own
+   *  two-sided lines the floor bound is dropped while the neighbour's floor is within RIM_MAX_M of
+   *  the pool's (a sunken pool's pit glows up to its rim, its risers lit green, so the lip never
+   *  shades the pool's own light); a taller riser and the soffit (the lower ceiling) still block. */
   occluders: Float64Array;
 }
 
@@ -95,12 +96,14 @@ export function glowSources(map: SectorMap): GlowSource[] {
       if (other >= 0 && other !== sector) rim = Math.max(rim, Math.min(map.sectors[other]!.floor, s.floor + RIM_MAX_M));
     }
     for (const l of map.lines) {
-      if (l.front === l.back || l.front === sector || l.back === sector) continue;
+      if (l.front === l.back) continue;
       const a = map.vertices[l.v[0]]!, b = map.vertices[l.v[1]]!;
       if (!boxNear(min, max, a, b, BOUNCE_CUTOFF_M)) continue;
       const f = map.sectors[l.front]!, k = l.back >= 0 ? map.sectors[l.back]! : null;
-      occ.push(a[0], a[1], b[0] - a[0], b[1] - a[1],
-        k ? Math.max(f.floor, k.floor) - 1e-3 : 0, k ? Math.min(f.ceil, k.ceil) + 1e-3 : 0, k ? 0 : 1);
+      const own = l.front === sector || l.back === sector;
+      const hiFloor = k ? Math.max(f.floor, k.floor) : 0;
+      const lo = !k ? 0 : own && hiFloor <= s.floor + RIM_MAX_M ? -Infinity : hiFloor - 1e-3;
+      occ.push(a[0], a[1], b[0] - a[0], b[1] - a[1], lo, k ? Math.min(f.ceil, k.ceil) + 1e-3 : 0, k ? 0 : 1);
     }
     out.push({ sector, kind: s.glow, floor: s.floor, targetY: rim + TARGET_LIFT_M, area: Math.abs(edgesArea(edges)), edges, interior, min, max,
       occluders: Float64Array.from(occ) });
@@ -154,7 +157,8 @@ export function rayClear(occ: Float64Array, a: V3, b: V3): boolean {
 export interface GlowBounce {
   sources: readonly GlowSource[];
   /** The bounce at vertex `p` with normal `n`; `into` is an x/z direction into the vertex's own
-   *  sector (a wall's normal; for a floor, toward its triangle's centre), so a ray starts inside it. */
+   *  sector (a wall's normal x/z; for a floor or ceiling, toward its triangle's centre), so a ray
+   *  starts inside it. */
   at(p: V3, n: V3, into: XZ, out?: RGB): RGB;
 }
 
