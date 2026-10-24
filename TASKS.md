@@ -10,6 +10,12 @@
 
 ## In flight / next
 
+- [~] **GPU body-normal bake** (owner, 2026-10-24; branch `claude/cpu-bake-performance-2a477d`) — [spec](docs/superpowers/specs/2026-10-24-gpu-body-normal-bake-design.md).
+  The CPU bake takes ~17 CPU-minutes for gibbet and more for bigger bodies; the plan is a Dawn-in-Node WebGPU compute bake held to `sdBody`
+  by a lavapipe CI job. Step 1 done: the bake is split into `src/lab/sdf-zombie/body-normal-bake/` (CPU backend only) and
+  `pack.ts` exports `writePrimRows`; gibbet re-bakes byte-identical. Next: step 2 (kernel, field-parity tests, `gpu-parity` CI job).
+  Owner question open: a chamfered BENT prim folds round on the GPU but chamfered in `sdBody` (10 shipped blobs; spec open question 1).
+
 - [~] **Enemy test arena built 2026-10-23; owner look pending.** `npm run dev:arena` (`/sdf-game.html?level=arena&spawn=<character>`): one big lit room, one enemy 7 m out, god mode, every weapon, infinite ammo. `` ` `` respawns it fresh, `-`/`=` step through the registry's characters, a label names it. `"arena": true` in a level turns this on (`game-arena.ts`, `level-json.ts`); `__sdfGame.arena(step)` for scripts. Input waits for the ~30 s warm-up after boot.
 
 **The goblin's face moves** (owner, 2026-10-13) — [characters](docs/tasks/characters.md)
