@@ -29,7 +29,7 @@ import { type EncounterAgent } from './encounter-director';
 import { reticleNdc } from './fisheye';
 import { approachAngle, approachBob, bobPose, pivotOffset, turnFromAim, weaponAngles, weaponSlide } from './free-aim';
 import { segmentHitsBox, type ZombieActor } from './game-actor';
-import { registerBleed, stepGutRopes } from './game-bleed';
+import { registerBleed, stepGutRopes, throwGunFlesh } from './game-bleed';
 import { cancelChunkBake, finishChunkBake } from './game-chunk-bake';
 import { gibBakedPiece, gibChunkMeat } from './game-chunk-pieces';
 import { describeRecordedWound, neutralInput, readInputFrame, updateDemoHud } from './game-demo-record';
@@ -110,6 +110,8 @@ export const FORE_HAND_REST = new THREE.Vector3();
 /** Keeps sprite trail-emitter ids out of the chunk ids' range — `emitTrails`
  *  keys its per-emitter clock by id and the two sequences both start at 1. */
 export const SPRITE_TRAIL_ID_BASE = 0x4000_0000;
+/** ...and the flying MESH gibs' (game-meat-gib.ts's torn meat) out of both. */
+export const MESH_TRAIL_ID_BASE = 0x2000_0000;
 
 export function tick(ctx: GameContext, dt: number) {
   if (ctx.demo.simLocked) return; // render-lock: drawFn still runs; nothing mutates.
@@ -919,7 +921,12 @@ export function tick(ctx: GameContext, dt: number) {
             wound: stamped ? describeRecordedWound(ctx, hitActor, stamped) : null,
             woundCount: hitActor.wounds().length,
           });
-          if (stamped) registerBleed(ctx, hitActor, stamped, p.kind, { point: hitPoint, incoming: dirN });
+          if (stamped) {
+            registerBleed(ctx, hitActor, stamped, p.kind, { point: hitPoint, incoming: dirN });
+            throwGunFlesh(ctx, hitActor, stamped, p.kind, dirN);
+          }
+          // A kit eye in the line of fire pops; a dangling one snaps (game-kit-eye.ts; profile.eye only).
+          if (!burstHandled) ctx.boot.kitEye?.hit(hitActor, hitPoint, dirN);
           dead = true;
         }
       }
@@ -1109,6 +1116,7 @@ export function tick(ctx: GameContext, dt: number) {
     }
     // MESH GIBS (the head damage's modelled brain): the same stepChunk, dt and colliders as the SDF chunks.
     stepMeshGibs(ctx, cdt);
+    ctx.boot.kitEye?.step(cdt);
     // SPRITE PIECES, on the same clock and in the same block as the marched
     // ones — deliberately, because they are the same physics: `stepSpritePieces`
     // calls the same `stepChunk` with the same `chunkCollidersAt`, so a sprite
@@ -1176,6 +1184,12 @@ export function tick(ctx: GameContext, dt: number) {
           ...ctx.vfx.spritePieces.live.map(p => ({
             id: SPRITE_TRAIL_ID_BASE + p.id, pos: p.state.pos, vel: p.state.vel,
             stream: trailStreamId(ctx, SPRITE_TRAIL_ID_BASE + p.id),
+          })),
+          // TORN MEAT (game-meat-gib.ts, owner 2026-10-24: "they should have blood trails"): a flying meat chunk is a
+          // mesh gib, in neither list above. Flying only: a settled one would stack drops on one spot.
+          ...ctx.gibs.meshGibs.filter(g => g.tag === 'meat' && g.id !== undefined && !chunkSettled(g.state)).map(g => ({
+            id: MESH_TRAIL_ID_BASE + g.id!, pos: g.state.pos, vel: g.state.vel,
+            stream: trailStreamId(ctx, MESH_TRAIL_ID_BASE + g.id!),
           })),
         ],
         cdt, rngStreams.bleed,

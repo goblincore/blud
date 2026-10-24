@@ -1257,7 +1257,8 @@ export function stepMotion(
     for (const [side, hip, knee, foot] of [
       ['L', 'hipL', 'kneeL', 'footL'], ['R', 'hipR', 'kneeR', 'footR'],
     ] as const) {
-      if (sig.missing[side === 'L' ? 'legL' : 'legR']) continue;
+      // ...or never had one: a legless body (the teratoma, a floater) has no hip/knee/foot joints to solve.
+      if (sig.missing[side === 'L' ? 'legL' : 'legR'] || idx[foot] === undefined) continue;
       const ih = idx[hip]!, ik = idx[knee]!, iff = idx[foot]!;
       const chain = solveChain([targets[ih]!, targets[ik]!, targets[iff]!], joints.leg[side], targets[iff]!, SOLVE);
       targets[ik] = poleReflect(chain[0]!, chain[1]!, chain[2]!, legPole);

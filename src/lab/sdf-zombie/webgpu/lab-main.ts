@@ -934,6 +934,8 @@ async function main() {
   // -------------------------------------------------------------------------
   /** The live body — replaced on sever and on any override edit. */
   let current = body;
+  /** The limbs the hero was BUILT with (missingLimbs): a legless body never "loses" its legs. */
+  let heroBornWith: ReadonlySet<LimbId> | null = new Set(body.clusters.map(c => c.limb as LimbId));
   // Motion (X1.22): the orchestrator drives the hero's rest-pose targets;
   // the crowd stays static — it is a perf fixture, body zero is the actor.
   const WANDER_BOUNDS: WanderBounds = { minX: -1.5, maxX: 1.5, minZ: -1.5, maxZ: 1.5 };
@@ -1294,7 +1296,9 @@ async function main() {
    *  leave the cluster alive and do NOT count — hop/collapse see full legs). */
   function missingLimbs(): MissingLimbs {
     if (isSoldierFamily(motionProfile)) return soldierInjury(current, woundRing.all()).missing;
-    const gone = (l: LimbId) => !(current.clusters.find(c => c.limb === l)?.alive ?? false);
+    // A limb the body was BORN without is not missing (game-actor.ts's rule): a legless floater read as "both legs
+    // gone" and the lab's hover collapsed it onto the floor.
+    const gone = (l: LimbId) => (heroBornWith?.has(l) ?? true) && !(current.clusters.find(c => c.limb === l)?.alive ?? false);
     return { legL: gone('legL'), legR: gone('legR'), armL: gone('armL'), armR: gone('armR') };
   }
 
@@ -3017,6 +3021,7 @@ async function main() {
     override = { ...override, faceParams: face };
     saveOverride(activeCharacterName(), override);
     current = buildCharacterBody(entry, [0, 0, 0], [], face, override);
+    heroBornWith = new Set(current.clusters.map(c => c.limb as LimbId));
     woundRing.set([]);
     // Empty rings skip their usual upload; explicitly clear the old carve rows.
     view.setWounds([], [], [], []);

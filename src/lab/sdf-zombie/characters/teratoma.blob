@@ -46,8 +46,14 @@ model teratoma
   # body has no legs. Omitted means "not checked" (bloatmaw, cyclops).
 
 skeleton
-  # THE ROOT IS THE BALL'S CENTRE. Every face prim rides it with an offset, so
-  # the face is one rigid piece with the ball (the hover bob/sway moves it all).
+  # THE ROOT IS THE BALL'S CENTRE. Every torso prim rides it with an offset AND
+  # the bare word `rigid`, so the whole ball is ONE piece in the pelvis bone's
+  # frame, the same frame the kit's eye, teeth and plates ride. Without
+  # `rigid` each prim end bound to its NEAREST rig joint (pelvis, hips, chest,
+  # neck, head, shoulders: all inside this 1.2 m ball), the hover gait moved
+  # those joints by different amounts, and the lobes, brow, jaw and lips slid
+  # against each other and against the kit (owner, test arena, 2026-10-24:
+  # "he is swimming within his own flesh").
   root pelvis at 1.45 len=0.06
 
   # Stubs straight up inside the ball. The format needs a skull (the face
@@ -59,11 +65,18 @@ skeleton
   bone skull parent=neck   dir=up len=0.10          # 1.81 -> 1.91
 
   mirror
-    # VESTIGIAL ARMS. The clavicle runs from the ball centre DOWN-OUT and a
-    # little forward to the flank under the jowl, where the ball has curved
-    # in; an arm rooted at the equator would be buried in the widest flesh
-    # (bloatmaw's clavicle note). Shoulder at ~(0.52, 1.18, 0.15).
-    bone clavicle parent=pelvis   dir=down tilt=62 pitch=16 len=0.62
+    # VESTIGIAL ARMS. The clavicle runs from the TOP of the skull stub (the head
+    # point, y 1.91, buried in the ball) down-out and a little forward to the
+    # flank under the jowl, where the ball has curved in; an arm rooted at the
+    # equator would be buried in the widest flesh (bloatmaw's clavicle note).
+    # Shoulder at (0.526, 1.229, 0.170). It used to hang off the pelvis's tail,
+    # 6 cm above the ball's centre: the dangling arms dragged that point and
+    # tipped the short pelvis bone, and the whole ball (rigid on it, see the
+    # root) rolled up to 49 degrees in the hover. From the head point their
+    # pull lands at the far end of the spine chain: max ~13 degrees.
+    # Angles from the shoulder target: v = (0.526, -0.681, 0.170), |v| 0.877,
+    # pitch = asin(0.170/0.877), tilt = asin(0.526 / (0.877 cos pitch)).
+    bone clavicle parent=skull    dir=down tilt=37.7 pitch=11.2 len=0.877
     # Short and withered: 0.15 + 0.14 + 0.07 m on a body 1.2 m across. They
     # hang down-forward toward the player, claws curled (the plate's pose).
     # First pass hung them straight down and they read as LEGS standing on
@@ -81,37 +94,43 @@ body
   # front so the face can stand out of it (see the header). The first pass was
   # squashed (tall 0.92) under a wide flat cranium and read as a DRUM from the
   # front (first turntable, 2026-10-22). `core` for the fuse probe.
-  blob torso on pelvis at=0.00 r=0.560 wide=1.04 tall=0.98 deep=0.84 blend=0.030 core
+  blob torso on pelvis at=0.00 r=0.560 wide=1.04 tall=0.98 deep=0.84 blend=0.030 core rigid
   # Cranium swell: the top-back bulges over the brow like a brain under skin,
   # which is what pushes the brow forward and down onto the eye.
   # Round, not wide: wide 1.15 x tall 0.80 flattened the top into a drum lid.
-  blob torso on pelvis at=0.00 offset=(0.02,0.16,-0.12) r=0.400 wide=1.02 tall=0.95 deep=1.00 blend=0.060
+  blob torso on pelvis at=0.00 offset=(0.02,0.16,-0.12) r=0.400 wide=1.02 tall=0.95 deep=1.00 blend=0.060 rigid
   # TERATOMA LOBES: four uneven growths, each in a different octant so no yaw
   # shows a clean circle. Loose blends (0.04-0.06) so they swell out of the
   # mass instead of reading as balls stuck on it. None sits at an upper
   # front CORNER: there they squared the front outline's shoulders (r2 turntable).
-  blob torso on pelvis at=0.00 offset=(-0.18,0.40,-0.14) r=0.160 wide=1.10 tall=0.90 blend=0.050   # crown knot, left of centre
-  blob torso on pelvis at=0.00 offset=(0.33,0.05,-0.29) r=0.220 wide=0.95 tall=1.05 blend=0.050   # back-right swell
-  blob torso on pelvis at=0.00 offset=(-0.10,-0.30,-0.20) r=0.260 wide=1.20 tall=0.80 blend=0.050  # sagging underbelly
-  blob torso on pelvis at=0.00 offset=(0.32,0.14,-0.24) r=0.150 wide=0.90 tall=1.10 blend=0.040    # right occiput knot
+  blob torso on pelvis at=0.00 offset=(-0.18,0.40,-0.14) r=0.160 wide=1.10 tall=0.90 blend=0.050 rigid   # crown knot, left of centre
+  blob torso on pelvis at=0.00 offset=(0.33,0.05,-0.29) r=0.220 wide=0.95 tall=1.05 blend=0.050 rigid   # back-right swell
+  blob torso on pelvis at=0.00 offset=(-0.10,-0.30,-0.20) r=0.260 wide=1.20 tall=0.80 blend=0.050 rigid   # sagging underbelly
+  blob torso on pelvis at=0.00 offset=(0.32,0.14,-0.24) r=0.150 wide=0.90 tall=1.10 blend=0.040 rigid   # right occiput knot
 
   # ============================================================
   # THE FACE — built out in front of the shallow ball.
   # ============================================================
-  # BROW: the heavy brow is now METAL, the kit's demon-skull eye socket
-  # (`pelvis|orbit`, the strogg conversion; owner 2026-10-22: "too on the
-  # nose, more like the dual-headed strogg"). Two flesh brow swells (r 0.14 /
-  # 0.13, front z 0.54) buried the metal socket entirely. What is left is a
-  # low swell of meat the socket is grafted into: its front (z ~0.41) stays
-  # behind the metal's (~0.47), so the flesh bulges round the graft.
-  blob torso on pelvis at=0.00 offset=(0.00,0.30,0.30) r=0.140 wide=1.60 tall=0.60 deep=0.80 blend=0.040
+  # BROW: a low swell of meat over the eye (its front z ~0.41). It was the
+  # graft round a metal demon-skull eye socket (`pelvis|orbit`, the strogg
+  # conversion); the owner swapped the socket for FLESHY EYELIDS (2026-10-24).
+  blob torso on pelvis at=0.00 offset=(0.00,0.30,0.30) r=0.140 wide=1.60 tall=0.60 deep=0.80 blend=0.040 rigid
+  # EYELIDS: two bowed rolls across the kit eye (centre offset (0, 0.175,
+  # 0.40), r 0.135), each a constant-radius capsule from one corner of the eye
+  # to the other, its middle pushed up/down and forward by `bend` (the middle
+  # moves by about half the bend). Their middles sit at y 0.29 and 0.07, in
+  # front of the eyeball's surface there (z 0.47 / 0.49 vs the lids' 0.54),
+  # so the eye shows through a slit 0.13 tall out of its 0.27: HALF-LIDDED,
+  # a heavy upper lid glaring down. The lower lid is thinner.
+  bar  torso on pelvis from=0 to=0 offset=(-0.15,0.175,0.41) tip=(0.30,0,0) bend=(0,0.23,0.26) r=0.048 blend=0.016 rigid
+  bar  torso on pelvis from=0 to=0 offset=(-0.14,0.17,0.41) tip=(0.28,0,0) bend=(0,-0.20,0.24) r=0.042 blend=0.016 rigid
   # JOWLS: the mouth's corners, swelling out and down at the flanks. They
   # close the gullet's sides so the mouth is a slot in flesh.
-  blob torso on pelvis at=0.00 offset=(0.35,-0.19,0.30) r=0.115 wide=0.90 tall=1.10 deep=1.00 blend=0.030 both
+  blob torso on pelvis at=0.00 offset=(0.35,-0.19,0.30) r=0.115 wide=0.90 tall=1.10 deep=1.00 blend=0.030 both rigid
   # JAW: underslung and jutting, the heaviest mass on the front. Its front
   # (z 0.50) stands past the ball's. Wide 1.45, not 1.85: wider, it flattened
   # the ball's bottom into a box (r2).
-  blob torso on pelvis at=0.00 offset=(0.00,-0.40,0.28) r=0.220 wide=1.45 tall=0.70 deep=1.00 blend=0.030
+  blob torso on pelvis at=0.00 offset=(0.00,-0.40,0.28) r=0.220 wide=1.45 tall=0.70 deep=1.00 blend=0.030 rigid
 
   # THE GULLET: near-black wet blood, the deepColor of a mouth. Front z 0.466,
   # just proud of the ball (0.441 here), set back ~10 cm behind the lips'
@@ -121,7 +140,7 @@ body
   # ends showed past them as a black rectangle) and a
   # third of the ball's height. The first pass (0.136 tall) read as a slot,
   # not a maw; the plate's mouth is open on a full row of long teeth.
-  blob torso on pelvis at=0.00 offset=(0.00,-0.19,0.37) r=0.160 wide=2.00 tall=1.15 deep=0.60 blend=0.010 color=1a0506 gloss=0.85
+  blob torso on pelvis at=0.00 offset=(0.00,-0.19,0.37) r=0.160 wide=2.00 tall=1.15 deep=0.60 blend=0.010 color=1a0506 gloss=0.85 rigid
 
   # LIPS: four tapered halves, thick at the centre (r) and thin at the corner
   # (r2), bowed forward by `bend` so each is one curved roll (bloatmaw r4: two
@@ -132,8 +151,8 @@ body
   # texture. Two FILLER-LIP passes (2026-10-22: painted glossy pink, r 0.095+;
   # then one round bowed capsule per lip) were tried and rejected by the
   # owner: "the original ones were best; these are too smooth, too red".
-  bar  torso on pelvis from=0 to=0 offset=(0.00,-0.01,0.50) tip=(0.39,-0.12,-0.17) bend=(0.01,0.03,0.05) r=0.068 r2=0.032 blend=0.012 both
-  bar  torso on pelvis from=0 to=0 offset=(0.00,-0.38,0.49) tip=(0.39,0.25,-0.16) bend=(0.01,-0.05,0.05) r=0.076 r2=0.032 blend=0.012 both
+  bar  torso on pelvis from=0 to=0 offset=(0.00,-0.01,0.50) tip=(0.39,-0.12,-0.17) bend=(0.01,0.03,0.05) r=0.068 r2=0.032 blend=0.012 both rigid
+  bar  torso on pelvis from=0 to=0 offset=(0.00,-0.38,0.49) tip=(0.39,0.25,-0.16) bend=(0.01,-0.05,0.05) r=0.076 r2=0.032 blend=0.012 both rigid
 
   # CABLE ENTRY WOUNDS: raw swollen lips of meat where the kit's tubes dive
   # into the flesh (make_teratoma.py `wires`, its printed ENTRIES; the
@@ -141,17 +160,17 @@ body
   # the visible ones: the two back bundles and each side's flank hose (in
   # and back out) and thin hose. Small (r 0.024), dark and loosely blended:
   # at r 0.034 in the twinhead's bright raw pink they read as red beads.
-  blob torso on pelvis at=0.00 offset=(0.167,-0.013,-0.493) r=0.024 blend=0.022 color=7a3c3c gloss=0.8   # back bundle
-  blob torso on pelvis at=0.00 offset=(-0.349,-0.001,-0.383) r=0.024 blend=0.022 color=7a3c3c gloss=0.8  # back bundle
+  blob torso on pelvis at=0.00 offset=(0.167,-0.013,-0.493) r=0.024 blend=0.022 color=7a3c3c gloss=0.8 rigid   # back bundle
+  blob torso on pelvis at=0.00 offset=(-0.349,-0.001,-0.383) r=0.024 blend=0.022 color=7a3c3c gloss=0.8 rigid   # back bundle
   # Each side authored from its OWN printed entry: the ball's lobes make it
   # asymmetric, and `both` mirrors of the left's points floated 35 and 83 mm
   # clear of the right flank (strandedOf, CI).
-  blob torso on pelvis at=0.00 offset=(0.544,0.081,-0.281) r=0.024 blend=0.022 color=7a3c3c gloss=0.8   # left hose dives in
-  blob torso on pelvis at=0.00 offset=(0.442,-0.192,-0.287) r=0.024 blend=0.022 color=7a3c3c gloss=0.8  # left hose comes out
-  blob torso on pelvis at=0.00 offset=(0.404,0.062,-0.495) r=0.022 blend=0.022 color=7a3c3c gloss=0.8   # left thin hose
-  blob torso on pelvis at=0.00 offset=(-0.486,0.072,-0.251) r=0.024 blend=0.022 color=7a3c3c gloss=0.8  # right hose dives in
-  blob torso on pelvis at=0.00 offset=(-0.435,-0.189,-0.283) r=0.024 blend=0.022 color=7a3c3c gloss=0.8 # right hose comes out
-  blob torso on pelvis at=0.00 offset=(-0.328,0.050,-0.402) r=0.022 blend=0.022 color=7a3c3c gloss=0.8  # right thin hose
+  blob torso on pelvis at=0.00 offset=(0.544,0.081,-0.281) r=0.024 blend=0.022 color=7a3c3c gloss=0.8 rigid   # left hose dives in
+  blob torso on pelvis at=0.00 offset=(0.442,-0.192,-0.287) r=0.024 blend=0.022 color=7a3c3c gloss=0.8 rigid   # left hose comes out
+  blob torso on pelvis at=0.00 offset=(0.404,0.062,-0.495) r=0.022 blend=0.022 color=7a3c3c gloss=0.8 rigid   # left thin hose
+  blob torso on pelvis at=0.00 offset=(-0.486,0.072,-0.251) r=0.024 blend=0.022 color=7a3c3c gloss=0.8 rigid   # right hose dives in
+  blob torso on pelvis at=0.00 offset=(-0.435,-0.189,-0.283) r=0.024 blend=0.022 color=7a3c3c gloss=0.8 rigid   # right hose comes out
+  blob torso on pelvis at=0.00 offset=(-0.328,0.050,-0.402) r=0.022 blend=0.022 color=7a3c3c gloss=0.8 rigid   # right thin hose
 
   # ============================================================
   # ARMS — withered, four prims a side.
@@ -166,6 +185,26 @@ body
 # Face block: the stub skull's generated prims stay buried in the ball
 # (cyclops' settings: headRadius 0.035 is a 3.5 cm knot deep in the flesh;
 # brow/nose under their gates so they are not generated at all).
+
+# BONES (owner, 2026-10-24: "there should be some kind of bone structure, since he has teeth"). Without this block the
+# body DERIVED its bones: one featureless 21 cm sphere deep in the ball and nothing behind the teeth, so a crater in
+# the face showed raw flesh with the kit teeth floating in it. Authored on `pelvis` (which suppresses the derived torso
+# spheres; `ratio` keeps the little arms' derived bones). The default game meshes these (skeleton-spike) and shows them
+# only where a wound has carved the flesh away. Two rules (validate.ts, rig-bind.ts):
+#   * every bone stays >= 4 mm inside the flesh (the gullet counts as flesh): an outside bone is a build error;
+#   * a torso bone rides the axial joint NEAREST its midpoint, NOT the `rigid` pelvis frame the flesh rides: so every
+#     midpoint stays at or below the pelvis span (y 1.45-1.51), or the bone would swim against the flesh in the hover.
+bones
+  ratio 0.38
+  # THE VAULT: a thick dome of skull in the ball's upper core, under the crest-plate. Its midpoint y 1.49.
+  blob torso on pelvis at=0.00 offset=(0.00,0.04,-0.06) r=0.300 wide=1.20 tall=0.75 deep=1.00
+  # THE MAXILLA: the upper dental arch, a bowed bar arcing just behind the upper teeth's roots (their roots ride the
+  # upper lip's centreline, y ~1.40-1.44, z ~0.45-0.48). Middle at (0, 1.415, 0.41).
+  bar  torso on pelvis from=0 to=0 offset=(-0.32,-0.05,0.30) tip=(0.64,0,0) bend=(0,0.03,0.22) r=0.034
+  # THE MANDIBLE: the lower arch behind the lower teeth, heavier, and a chin boss under it. Middle at (0, 1.10, 0.39).
+  bar  torso on pelvis from=0 to=0 offset=(-0.28,-0.33,0.29) tip=(0.56,0,0) bend=(0,-0.03,0.20) r=0.038
+  blob torso on pelvis at=0.00 offset=(0.00,-0.40,0.30) r=0.090 wide=1.80 tall=0.70 deep=1.10
+
 face
   headRadius 0.035
   headWidth  1.00

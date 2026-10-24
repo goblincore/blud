@@ -26,7 +26,9 @@ try:
 except NameError:
     # The shipped kit. 'horns' and 'spurs' (keratin horns, bone crown spurs) are the FIRST pass, superseded by the
     # strogg conversion's skullmetal horns on the crest-plate ('cap'); kept buildable for comparison, not installed.
-    PARTS = {'teeth', 'eye', 'talons', 'shackles', 'cap', 'orbit', 'jaw', 'keel', 'wires'}
+    # 'orbit' (the metal demon-skull eye socket) is retired too: the owner swapped it for fleshy eyelids in the .blob
+    # (2026-10-24). Still buildable for comparison; the export drops it.
+    PARTS = {'teeth', 'eye', 'talons', 'shackles', 'cap', 'jaw', 'keel', 'wires'}
 
 R = random.Random(7)
 
