@@ -122,3 +122,12 @@ projected because the eye-socket CARVES' smooth blend ate the bridge along its w
 outside); carves narrowed (wide 0.90, blend 0.004, x 0.033) and the ridge's end pushed 8 mm out: ~1.3 cm proud.
 
 ![bouffant](contact-11-bouffant.png)
+
+## Twelfth pass: a flapper bob (2026-10-24, owner: the bouffant "looks quite asymmetrical ... maybe like a betty boop style stylized short haircut")
+
+The 1930s cartoon flapper archetype, not the character: symmetrical, a centre part between two round lobes, a widow's
+peak, short at the jaw with the ends flipped up, two flat spit curls on the forehead. Curls standing OUT round the
+silhouette were tried twice (thin, then fat): in 3D they read as a spiked mace. A cartoon's curls are drawn flat on
+the hair.
+
+![bob](contact-12-bob.png)

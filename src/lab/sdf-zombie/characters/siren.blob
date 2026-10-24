@@ -30,8 +30,9 @@
 #   4. THE PROPORTIONS. The bride's elegant frame (her skeleton, verbatim):
 #      a high hip line (legs ~57% of her height), a long neck, a small head,
 #      a defined waist.
-#   5. THE HAIR. An orange bouffant blowout with a swoop over one brow
-#      (owner, 2026-10-24); earlier twin tails, a long fall, blue buns, before that
+#   5. THE HAIR. A symmetrical orange flapper bob with spit curls (owner,
+#      2026-10-24); earlier a bouffant, twin tails, a long fall, blue buns,
+#      before that
 #      waist-length, loose and dark: a crown mass plus strand
 #      curtains framing the face, over the shoulders and down the back.
 model siren
@@ -246,54 +247,36 @@ body
   blob head on jaw at=1.0 r=0.0028 r2=0.0005 offset=(-0.020,0.0195,-0.0200) tip=(0.000,0.019,0.002) blend=0.001 both color=e6dcc4 gloss=0.70
 
   # ============================================================
-  # HAIR — AN ORANGE BOUFFANT (owner, 2026-10-24: "long orange hair like the
-  # reference", then twin tails, then "a big bouffant blowout"): a teased
-  # crown, wide sides and back, ends flipped out at the jaw, and a glossy
-  # swoop over one brow.
-  # Was blue buns. A vivid orange (e8661c; d2461a rendered plain red under
-  # the warm key) with a satin gloss.
+  # HAIR — A FLAPPER BOB (owner, 2026-10-24: the bouffant "looks quite
+  # asymmetrical ... maybe like a betty boop style stylized short haircut").
+  # The 1930s cartoon flapper's archetype, not the character: SYMMETRICAL, a
+  # centre part with a widow's peak, two rounded lobes on top, short at the
+  # jaw, and little hooked spit curls round the edge. Orange (e8661c), a
+  # satin gloss. Every mass keeps radius x largest scale under the cranium's
+  # 0.0912, or the face sheet re-centres on the hair (headShape). Offsets
+  # are from the skull's at=0.64 point (0, 1.7215, -0.0054).
   # ============================================================
-  # Crown mass brought FORWARD over the forehead's top (bride: 0.0137,
-  # -0.0144, which sat behind her veil): at her offset the cranium's top
-  # front poked through and she read bald to the crown. Front reach z ~0.083
-  # at y ~1.74 now, so the hairline crosses the forehead ~4 cm above the brows.
-  # deep 0.98, not 1.00: its largest semi-axis must stay under the
-  # cranium's (0.0912), or it becomes the fattest head prim and the face
-  # sheet projects off the hair instead of the skull (headShape).
+  # The base: the hairline over the forehead's top (front reach z ~0.083 at
+  # y ~1.74, ~4 cm above the brows). deep 0.98: under the cranium's size.
   blob head on skull at=0.64 offset=(0,0.0200,-0.0060) r=0.092 wide=0.86 tall=0.95 deep=0.98 blend=0.006 color=e8661c gloss=0.50
-  # VOLUME on the part side: a swell over her left temple (+x) lifting the
-  # crown into the big side-parted shape, the part a little left of centre.
-  blob head on skull at=0.64 offset=(0.022,0.052,0.008) r=0.062 wide=1.10 tall=0.75 deep=1.00 blend=0.010 color=e8661c gloss=0.50
-  # THE WAVE: the side-parted hair rolling over the right side of the
-  # forehead (-x) in a big glossy swoop and dropping down the side of the
-  # face OUTSIDE the eye. (A first pass ran a strand lock diagonally across
-  # the right eye and cheek: a red band over the face.) A roll over the
-  # brow's outer half, and a thick lock down past the cheekbone to the jaw.
-  blob head on skull at=0.64 offset=(-0.036,0.050,0.050) tip=(-0.026,-0.010,0.006) r=0.026 wide=1.20 deep=0.70 blend=0.010 color=e8661c gloss=0.50
-  blob head on skull at=0.64 offset=(-0.060,0.036,0.034) tip=(-0.010,-0.130,0.008) bend=(-0.010,0,0.008) r=0.024 r2=0.016 deep=0.80 strand=5 wave=0.10 cycles=1.5 fat=0.85 blend=0.004 color=e8661c gloss=0.50
-  # THE BOUFFANT (owner, 2026-10-24: "a big bouffant blowout type deal";
-  # replaces the twin tails): a teased high crown, wide volume at the
-  # sides and back, ends flipping out at the jaw. Built from SEVERAL big
-  # masses, each with radius x largest scale just under the cranium's
-  # 0.0912: one prim bigger than the skull becomes the "fattest head prim"
-  # and the face sheet re-centres on the hair (headShape; siren-blob.test.ts
-  # pins it). Offsets from the skull's at=0.64 point (0, 1.7215, -0.0054);
-  # the side and back masses sit behind the face plane (front z <= ~0.05,
-  # under the face's ~0.075), so the face stays clear.
-  # The teased crown: high and round, lifting the silhouette ~5 cm.
-  blob head on skull at=0.64 offset=(0,0.075,-0.015) r=0.082 wide=1.10 tall=0.95 deep=1.00 blend=0.016 color=e8661c gloss=0.50
-  # The sides: big round volume beside each temple and over the ears.
-  blob head on skull at=0.64 offset=(0.082,0.020,-0.025) r=0.068 wide=1.00 tall=1.32 deep=1.05 blend=0.016 both color=e8661c gloss=0.50
-  # The back: the volume carried round behind the head.
-  blob head on skull at=0.64 offset=(0,0.010,-0.072) r=0.080 wide=1.12 tall=1.05 deep=0.95 blend=0.016 color=e8661c gloss=0.50
-  # The flip: the ends turned up and out at jaw level (y ~1.61), a rolled
-  # curl each side, wider than the head, the blowout's signature.
-  blob head on skull at=0.64 offset=(0.078,-0.075,-0.022) tip=(0.040,-0.030,0.004) bend=(0,0.014,0) r=0.034 r2=0.022 wide=1.00 deep=1.00 blend=0.016 both color=e8661c gloss=0.50
-  blob head on skull at=0.64 offset=(0,-0.070,-0.090) r=0.052 wide=1.55 tall=0.80 deep=0.80 blend=0.016 color=e8661c gloss=0.50
-  # BACK AND SIDES: covers the back of the skull and the sides behind the
-  # ears. Centre (0, 1.676, -0.047), semi 0.0775 x 0.056 x 0.053; r x wide
-  # 0.0775 stays under the cranium's 0.0912 (the face frame).
-  blob head on skull at=0.45 offset=(0,0,-0.045) r=0.062 wide=1.25 tall=0.90 deep=0.85 blend=0.008 color=e8661c gloss=0.50
+  # THE LOBES: two round domes either side of the part, so the top of the
+  # head is a heart, the part a crease between them.
+  blob head on skull at=0.64 offset=(0.040,0.066,-0.004) r=0.070 wide=0.95 tall=0.85 deep=1.10 blend=0.008 both color=e8661c gloss=0.50
+  # THE WIDOW'S PEAK: the lobes' front edges meeting in a point on the
+  # forehead's centre, a short tapered tongue down from the part.
+  blob head on skull at=0.64 offset=(0,0.056,0.070) tip=(0,-0.040,0.010) r=0.020 r2=0.003 wide=1.40 deep=0.55 blend=0.006 color=e8661c gloss=0.50
+  # THE SIDES: the bob's fullness over the ears, ending at the jaw (y ~1.64).
+  blob head on skull at=0.64 offset=(0.072,-0.008,-0.012) r=0.056 wide=1.00 tall=1.40 deep=1.05 blend=0.010 both color=e8661c gloss=0.50
+  # THE BACK: the bob carried round behind the head, cut at the nape.
+  blob head on skull at=0.64 offset=(0,0.000,-0.066) r=0.076 wide=1.15 tall=1.10 deep=0.90 blend=0.010 color=e8661c gloss=0.50
+  # SPIT CURLS: two flat commas lying ON the forehead either side of the
+  # peak (deep 0.40, the tip curling down and out along the skin). Curls
+  # standing out round the silhouette were tried twice and read as a
+  # spiked mace in 3D: the cartoon's curls are drawn flat on the hair.
+  blob head on skull at=0.64 offset=(0.026,0.040,0.078) tip=(0.014,-0.020,0.002) bend=(0.010,0.004,0.002) r=0.011 r2=0.004 deep=0.40 blend=0.004 both color=e8661c gloss=0.50
+  # THE FLIP: the cut ends turned up and out at the jaw, a soft roll each
+  # side, so the bob ends in a curl rather than a cut.
+  blob head on skull at=0.64 offset=(0.084,-0.082,-0.006) tip=(0.026,0.008,0.004) bend=(0,0.008,0) r=0.022 r2=0.014 deep=1.00 blend=0.010 both color=e8661c gloss=0.50
 
   # ============================================================
   # ARMS — slim and smooth: one ball at the shoulder, one tapered bar per
