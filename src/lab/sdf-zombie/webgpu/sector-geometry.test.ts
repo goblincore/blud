@@ -5,7 +5,7 @@
 // @ts-expect-error — node:fs available in vitest via happy-dom/node
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { loopArea, sectorPolygons, wallQuads } from './sector-geometry';
+import { loopArea, sectorInteriorPoint, sectorPolygons, wallQuads } from './sector-geometry';
 import { buildSectorGround } from './sector-ground';
 import { parseSectorLevel } from './sector-json';
 
@@ -120,5 +120,20 @@ describe('sectorPolygons at pinch vertices', () => {
       expect(areas(room.holes)).toEqual([36]);
       expect(island.holes).toHaveLength(0);
     }
+  });
+});
+
+describe('sectorInteriorPoint', () => {
+  it('lands inside each fixture sector, clear of its lines', () => {
+    const m = map();
+    const g = buildSectorGround(m);
+    for (let s = 0; s < m.sectors.length; s++) {
+      const [x, z] = sectorInteriorPoint(m, s)!;
+      expect(g.sectorAt(x, z)).toBe(s);
+    }
+  });
+  it('avoids the column hole in A', () => {
+    const [x, z] = sectorInteriorPoint(map(), 0)!;
+    expect(x >= -1 && x <= 1 && z <= -3 && z >= -5).toBe(false);
   });
 });

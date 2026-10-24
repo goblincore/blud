@@ -9,7 +9,7 @@
 // Pure: no three.js, no DOM.
 
 import { SKY_MATERIAL, type SectorMap, type XZ } from './sector-def';
-import { edgesArea, pointInEdges, sectorEdgeIndices } from './sector-edges';
+import { edgesArea, pointInEdges, sectorEdgeIndices, sectorEdges } from './sector-edges';
 
 export interface SectorPolygon { sector: number; outer: XZ[]; holes: XZ[][] }
 export type WallPart = 'mid' | 'lower' | 'upper';
@@ -117,4 +117,31 @@ export function wallQuads(map: SectorMap): WallQuad[] {
     }
   }
   return out;
+}
+
+const distToSeg = (x: number, z: number, [ax, az]: XZ, [bx, bz]: XZ): number => {
+  const dx = bx - ax, dz = bz - az, len2 = dx * dx + dz * dz;
+  const t = len2 > 0 ? Math.min(1, Math.max(0, ((x - ax) * dx + (z - az) * dz) / len2)) : 0;
+  return Math.hypot(x - (ax + t * dx), z - (az + t * dz));
+};
+
+/** A point well inside sector s (the inside grid sample farthest from its lines), or null. */
+export function sectorInteriorPoint(map: SectorMap, s: number): [number, number] | null {
+  const edges = sectorEdges(map, s);
+  if (edges.length === 0) return null;
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (const [a, b] of edges) for (const [x, z] of [a, b]) {
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z);
+  }
+  const step = Math.max(0.25, Math.min(x1 - x0, z1 - z0) / 24);
+  let best: [number, number] | null = null, bestD = -1;
+  for (let z = z0 + step / 2; z < z1; z += step) {
+    for (let x = x0 + step / 2; x < x1; x += step) {
+      if (!pointInEdges(x, z, edges)) continue;
+      let d = Infinity;
+      for (const [a, b] of edges) d = Math.min(d, distToSeg(x, z, a, b));
+      if (d > bestD) { bestD = d; best = [x, z]; }
+    }
+  }
+  return best;
 }
