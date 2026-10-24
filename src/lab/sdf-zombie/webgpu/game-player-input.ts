@@ -21,6 +21,7 @@ import { MAGAZINE_CAPACITY, RELOAD } from './game-viewmodel';
 import { startReload, fire } from './game-weapon-rig';
 import { requestSlot, slotForKey } from './game-weapon-slots';
 import { type DemoFrame } from './demo-recorder';
+import { arenaRespawn } from './game-arena';
 
 /** The mouse delta's effect, extracted so the live handler and the replay
  *  apply the IDENTICAL maths. Free aim moves the reticle (the camera follows
@@ -109,6 +110,12 @@ export function applyInputEdges(ctx: GameContext, next: Set<string>): void {
     else if (ctx.weapon.slotState.live === 'shotgun' && ctx.weapon.shells < MAGAZINE_CAPACITY && ctx.weapon.reloadAge > RELOAD.totalSec) startReload(ctx);
   }
   if (pressed('KeyF')) toggleFlashlight(ctx);          // the flashlight, once the player has it
+  // THE TEST ARENA (game-arena.ts; a level with "arena": true): ` respawns the enemy, - / = step to another character.
+  if (ctx.world.level.def?.arena) {
+    if (pressed('Backquote')) arenaRespawn(ctx, 0);
+    if (pressed('Minus')) arenaRespawn(ctx, -1);
+    if (pressed('Equal')) arenaRespawn(ctx, 1);
+  }
   if (pressed('KeyT')) {
     ctx.weapon.reloadSpeed = ctx.weapon.reloadSpeed === 1 ? 0.25 : ctx.weapon.reloadSpeed === 0.25 ? 0.1 : 1;
     updateHud(ctx);

@@ -255,7 +255,8 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
   // it for the frames the PNG takes to arrive, then the crowd type picks it up from this view by reference.
   const bodyNormalSpec = characterEntry(name).bodyNormal;
   if (bodyNormalSpec) {
-    void loadBodyNormal(bodyNormalSpec).then(l => view.setBodyNormal(l.tex, bodyNormalMap(bodyNormalSpec, l.meta, placed) ?? undefined))
+    // `start`: the body is translated there (character-view.ts), and the map's regions are baked round the origin.
+    void loadBodyNormal(bodyNormalSpec).then(l => view.setBodyNormal(l.tex, bodyNormalMap(bodyNormalSpec, l.meta, placed, [start[0]!, start[1]!, start[2]!]) ?? undefined))
       .catch(err => console.error(`[sdf-game] ${name}: body normal map failed to load`, err));
   }
   view.uniforms.faceCfg.value.x = 1;
@@ -400,7 +401,8 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
         ? makeWarbullMind(GUNNER_TUNING[characterEntry(name).profile.gunner!.weapon])
         : makeSoldierMind(GUNNER_TUNING[characterEntry(name).profile.gunner!.weapon]),
       onFire: ({ origin: muz, direction: dir }) => {
-        if (!character.prop || character.prop.released) return;
+        // A spitter (profile.spit) fires from its body and has no prop to lose.
+        if (!characterEntry(name).profile.spit && (!character.prop || character.prop.released)) return;
         ctx.world.encounter.shot(zombieId);
         // ONE barrel: the double-barrel volley is the player's signature,
         // and the soldier throwing the same wall of lead reads as a second
@@ -415,7 +417,7 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
         // slow turn the player outruns), its vertical the player's chest.
         const weapon = characterEntry(name).profile.gunner?.weapon;
         let shotDir = dir;
-        if (weapon === 'smg' || weapon === 'chaingun' || weapon === 'rocket') {
+        if (weapon === 'smg' || weapon === 'chaingun' || weapon === 'rocket' || weapon === 'pistol') {
           const pp = ctx.player.player.pos;
           const hx = dir[0], hz = dir[2], hl = Math.hypot(hx, hz) || 1;
           const dist = Math.hypot(pp[0] - muz[0], pp[2] - muz[2]);
@@ -430,7 +432,8 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
         // player's chest for the vertical. It detonates through the
         // dynamite path (the rocket step in the frame loop below).
         if (weapon === 'rocket') ctx.weapon.rockets.push(spawnRocket(muz, shotDir, zombieId));
-        else if (weapon === 'chaingun') ctx.weapon.soldierPellets.push(spawnRound(muz, shotDir, seedFromUnit(rngStreams.misc())));
+        // The pistol, like the chaingun, fires ONE aimed round per trigger event.
+        else if (weapon === 'chaingun' || weapon === 'pistol') ctx.weapon.soldierPellets.push(spawnRound(muz, shotDir, seedFromUnit(rngStreams.misc())));
         else ctx.weapon.soldierPellets.push(...spawnPellets(muz, shotDir, 1, seedFromUnit(rngStreams.misc())));
       },
     } : {}),
@@ -532,6 +535,7 @@ export function rebuildCast(ctx: GameContext): void {
   ctx.weapon.headSplit?.reset();
   ctx.weapon.headShot?.reset();
   clearMeshGibs(ctx);
+  ctx.boot.kitEye?.clear();
   ctx.world.soldierCorpses?.dispose();
   ctx.world.encounter.clear(); ctx.world.encounterHomes.clear();
   // DRAIN IN-FLIGHT RUPTURES FIRST. Their actors are about to be disposed and

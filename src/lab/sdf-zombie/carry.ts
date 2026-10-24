@@ -23,7 +23,7 @@ import {
   add, cross, dot, normalize, qFromAxisAngle, qMul, qRotate, scale, sub, type Quat,
 } from './vec';
 
-export type CarryName = 'low' | 'chest' | 'hip' | 'aim' | 'saw' | 'drag' | 'heavy' | 'swordGuard' | 'swordTrail' | 'launcher' | 'launcherLow';
+export type CarryName = 'low' | 'chest' | 'hip' | 'aim' | 'saw' | 'drag' | 'heavy' | 'swordGuard' | 'swordTrail' | 'launcher' | 'launcherLow' | 'pistol' | 'pistolLow';
 
 /** Right-arm rotations, radians. pitch: forward raise about the body's
  *  right axis (0 = the authored hang). yaw: about +y, positive swings the
@@ -165,6 +165,17 @@ export const CARRIES: Record<CarryName, CarrySpec> = {
   // -0.55. The swap from this to `launcher` IS the raise the player sees
   // before a volley (the brain's weaponUp beat).
   launcherLow: { right: { pitch: -0.05, yaw: 0.65, fold: 0.10 }, gunPitch: 0.281, leftPole: [0.6, -0.4, 0.1], oneHanded: { leftSwing: 0.30 } },
+  // PISTOL — the deadeye's (characters/deadeye.blob, the butcher's rig: arms
+  // hang 18 deg out, forearm pitched 12 deg forward). TWO-HANDED (owner,
+  // 2026-10-22: "he should put both hands to grip the pistol and aim"): the
+  // gun arm straight out and swung in toward the centre line, the left hand
+  // solved onto the prop's foreHand, cupped under the gun hand (motion-
+  // profile.ts DEADEYE_PROFILE), the left elbow poled out and down: an
+  // isosceles stance. PISTOL LOW — his walk: the low ready, both hands on the
+  // gun at the belly, the muzzle at the floor ahead; the swap to `pistol` is
+  // the raise the player sees before a shot. Tuned on frames.
+  pistol: { right: { pitch: 1.30, yaw: 0.40, fold: 0.05 }, gunPitch: 0.0, gunYaw: 0.10, leftPole: [0.7, -0.6, 0.0] },
+  pistolLow: { right: { pitch: 0.60, yaw: 0.48, fold: 0.75 }, gunPitch: -0.85, leftPole: [0.7, -0.6, 0.0] },
 };
 
 /** Shared held-gun locators, gun-local metres, +z = muzzle. Measured from

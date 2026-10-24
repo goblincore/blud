@@ -22,7 +22,7 @@ import {
 import { SWORD_TUNING, isSwordVariant, lungeAdvance, swordContact } from '../sword-swing';
 import { GIBBET_TUNING, HOUND_TUNING, houndContact, isHoundVariant, pounceAdvance, slamAdvance, squirtFires, stabAdvance } from '../hound-attack';
 import { CHARGE_REST, stepCharge, type ChargeState } from '../charge';
-import type { BrainTuning } from '../brain';
+import { BRAIN_TUNING, type BrainTuning } from '../brain';
 import type { SwingVariant } from '../attack';
 import type { Vec3 } from '../types';
 import type { WanderBounds } from '../wander';
@@ -131,7 +131,9 @@ export interface EnemyMind {
   debug(): MindDebug;
 }
 
-export function makeZombieMind(): EnemyMind {
+/** `tuning` defaults to the zombie's; the butcher passes it with a pinned
+ *  `swingSide` (its axe arm). */
+export function makeZombieMind(tuning: BrainTuning = BRAIN_TUNING): EnemyMind {
   let brain: Brain = makeBrain();
   let lastToken = false;
   return {
@@ -148,7 +150,7 @@ export function makeZombieMind(): EnemyMind {
         drift: input.drift,
         roll: input.roll,
         lineOfSight: input.lineOfSight,
-      });
+      }, tuning);
       brain = out.brain;
       return {
         target: out.target,

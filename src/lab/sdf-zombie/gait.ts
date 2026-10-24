@@ -368,6 +368,30 @@ export const GLIDE: GaitProfile = {
  *  so a gunner needs a carry-style gait. */
 export const GLIDE_CARRY: GaitProfile = { ...GLIDE, name: 'glide-carry', armStyle: 'carry', armSwing: 0.03 };
 
+/** HOVER: a legless floater (the teratoma, teratoma.blob) drifting on nothing. There are no legs to drive (gait.ts's
+ *  leg() gives a missing chain zero offsets, and motion.ts skips plants without feet), so the gait is all ROOT: a slow
+ *  deep heave (one bob per stride at 0.35 strides/s, ~3 s a breath), a lazy sideways drift and a forward nod, with
+ *  the little arms dangling on a weak swing. The step fields are zeroed so nothing reads as walking. */
+export const HOVER: GaitProfile = {
+  ...SHAMBLE,
+  name: 'hover',
+  strideFreq: 0.35,
+  bobPerStride: 1,
+  swayPerStride: 0.5,
+  bobAmp: 0.08,
+  swayAmp: 0.06,
+  rockAmp: 0.025,
+  strideLen: 0,
+  footLift: 0,
+  footPush: 0,
+  kneeBend: 0,
+  kneeLift: 0,
+  armStyle: 'swing',
+  armSwing: 0.05,
+  elbowFlex: 0.03,
+  headBob: 0,
+};
+
 /** The zombie SHAMBLE with the arms on a HELD GUN: the goblin's INTERIM gait while it carries the player's shotgun
  *  (goblin refinement phase 3, 2026-10-02). Phase 4 gives the goblin its own gait; until then the legs are still the
  *  zombie's shamble and only the arms change. motion.ts takes the arm style from the GAIT (pickArmStyle), never from
@@ -422,6 +446,35 @@ export const GOBLIN_RUN: GaitProfile = {
   shoulderSway: 0.5,
   armSwing: 0.04,
 };
+
+/** The butcher's prowl (characters/butcher.blob): the shamble's reaching zombie arms on a QUICK digitigrade step.
+ *  WHY ITS OWN CADENCE: a planted foot holds while the body travels cruise x stance time. The shamble at the
+ *  butcher's 1.45 m/s (1.05 Hz, duty 0.62) travels 0.86 m per stance, past what the leg can sweep (hip-to-hock
+ *  0.75 m at rest, 0.90 m straight: about 0.54 m of floor at hock height), so every stride dragged the leg dead
+ *  straight and the zigzag went flat (butcher-blob.test.ts measured it). 1.8 Hz at duty 0.55 is 0.44 m per
+ *  stance: a quick, springy, animal step that keeps the knee bowed. */
+export const PROWL: GaitProfile = {
+  ...SHAMBLE,
+  name: 'prowl',
+  strideFreq: 1.8,
+  stanceDuty: 0.55,
+  strideLen: 0.36,
+  // A high, clear lift: the hock and the long metatarsal come up together (the gait drives `toe` with the foot).
+  footLift: 0.20,
+  footPush: 0.05,
+  kneeBend: 0.12,
+  kneeLift: 0.06,
+  bobAmp: 0.03,
+  swayAmp: 0.035,
+};
+
+/** The flayer's prowl: PROWL at 2.0 Hz for its faster 1.55 m/s cruise (0.43 m per stance; at PROWL's 1.8 Hz the
+ *  knee flattened to 27 mm off the hip-to-hock line, butcher-blob.test.ts). */
+export const PROWL_QUICK: GaitProfile = { ...PROWL, name: 'prowl-quick', strideFreq: 2.0 };
+
+/** The deadeye's prowl: PROWL with CARRY arms (motion.ts takes the arm style from the gait, so a gunner needs a
+ *  carry gait; the pistol's carry owns the right arm and the left swings). */
+export const PROWL_CARRY: GaitProfile = { ...PROWL, name: 'prowl-carry', armStyle: 'carry', armSwing: 0.03 };
 
 /** The bride's STALK: the soldier's march clip slowed and lengthened for her
  *  long legs, with a hip sway the `hem` pendulum picks up and a slight
@@ -538,6 +591,31 @@ export const GIBBET_STALK: GaitProfile = {
   swayAmp: 0.03,
   bobAmp: 0.025,
   rockAmp: 0.02,
+};
+
+/** THE CHAIR's waddle (characters/chair.blob): how you walk a heavy chair
+ *  across a floor, by rocking it corner to corner. A PACE (forePhase 0): the
+ *  two legs on one side lift together while the chair tips onto the other
+ *  pair, so the whole throne rolls side to side and the sitter's head lolls
+ *  with it. Short legs, short low steps; the sway and rock are the read. */
+export const CHAIR_WADDLE: GaitProfile = {
+  ...GOREHOUND,
+  name: 'chair-waddle',
+  forePhase: 0,
+  strideFreq: 1.6,
+  stanceDuty: 0.6,
+  strideLen: 0.22,
+  landAhead: 0.5,
+  footLift: 0.09,
+  footPush: 0.03,
+  kneeBend: 0.05,
+  kneeLift: 0.04,
+  elbowBow: 0.05,
+  swayAmp: 0.045,
+  shoulderSway: 0.3,
+  bobAmp: 0.02,
+  rockAmp: 0.05,
+  headBob: 0.8,
 };
 
 /** Lerp every numeric knob; strings (name, armStyle) snap at w = 0.5 so the

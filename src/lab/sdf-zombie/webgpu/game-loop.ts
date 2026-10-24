@@ -18,6 +18,7 @@ import { startSequence } from './game-sequence';
 import { switchOnFlashlight, runLightCommand } from './game-dynamic-light';
 import { commandsFor, expandCues, gatesOpenedBy, makeTriggerState, stepTriggers, type LevelCommand, type TriggerState } from './level-events';
 import { collectPickups, makeInventory, reloadFromReserve, type Inventory } from './pickups';
+import { characterEntry, hasCharacter } from '../character-registry';
 import { VITALS, applyDamage, bitesInReach, godMode, makeVitals, stepVitals, type DamageKind, type Vitals } from './player-vitals';
 
 export interface LoopRuntime {
@@ -75,7 +76,8 @@ export function createLoop(ctx: GameContext): LoopRuntime {
     + ' background:radial-gradient(ellipse at center, transparent 40%, rgba(160,0,0,.55) 100%);');
   document.body.appendChild(hurt);
   const rt: LoopRuntime = {
-    god: godMode(authored, q.get('god')),
+    // A test arena defaults to god mode like the ring (game-arena.ts); story levels hurt.
+    god: godMode(authored && !def?.arena, q.get('god')),
     authored,
     finite,
     vitals: makeVitals(),
@@ -195,7 +197,15 @@ export function stepLoop(ctx: GameContext, dt: number): void {
   if (!ctx.demo.wanderFrozen) {
     const zombies = ctx.world.actors.filter(a => a.kind === 'zombie' && !rt.biteExempt.has(a.id))
       .map(a => ({ id: a.id, pos: a.pose().pos, down: !!a.motionFrame()?.collapsed }));
-    if (bitesInReach(feet, zombies, VITALS.biteReach).length > 0) damagePlayer(ctx, VITALS.zombieBite, 'melee');
+    // An arm-weapon body (motion-profile.ts armWeapon, the butcher's axe) hits harder than a bite.
+    const biters = bitesInReach(feet, zombies, VITALS.biteReach);
+    if (biters.length > 0) {
+      const hit = Math.max(...biters.map(id => {
+        const name = ctx.world.actors.find(x => x.id === id)?.characterName();
+        return (name && hasCharacter(name) && characterEntry(name).profile.armWeapon?.damage) || VITALS.zombieBite;
+      }));
+      damagePlayer(ctx, hit, 'melee');
+    }
   }
   const def = ctx.world.level.def;
   if (!def) return;

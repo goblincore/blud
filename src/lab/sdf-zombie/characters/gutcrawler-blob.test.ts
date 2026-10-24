@@ -1,7 +1,7 @@
 // gutcrawler.blob — a giant naked grub with a man's chest, arms and staring head on the front, hauling itself on
 // its arms. What this pins: it builds and fuses; it has no legs and is NOT collapsed for it (the lab and the game
 // reported a limb with no cluster as missing, and collapse.ts dropped the legless body flat every frame, until both
-// read collapse.ts limbsMissing); every rig point maps to a gait joint, the tail chain included; the
+// counted only limbs the body was born with); every rig point maps to a gait joint, the tail chain included; the
 // drag through the real motion pipeline lifts each arm, hauls the body forward and writhes the rear (the body wave
 // down hem -> hem2 -> hem3); and the slam rears the front half up off the floor.
 import { describe, it, expect } from 'vitest';
@@ -11,8 +11,9 @@ import { compileBlob, compileFace } from '../blob-compile';
 import { buildBody } from '../build-body';
 import { characterEntry } from '../character-registry';
 import { makeActorMotion, stepActorMotion, emptyActorSignals, type ActorSignals } from '../actor';
-import { limbsMissing } from '../collapse';
 import { severLimb } from '../sever';
+import type { BuildResult } from '../build-body';
+import type { MissingLimbs } from '../collapse';
 import { makeRng } from '../wander';
 import type { Vec3 } from '../types';
 
@@ -21,9 +22,16 @@ const body = buildBody(compileBlob(doc, compileFace(doc)));
 const profile = characterEntry('gutcrawler').profile;
 const BOUNDS = { minX: -50, maxX: 50, minZ: -50, maxZ: 50 };
 
-/** The signals the lab and the game send this body (their missingLimbs read limbsMissing). */
+/** The game's missing-limbs rule (game-actor.ts / lab-main.ts missingLimbs): a limb is missing when the body was
+ *  BORN with it and its cluster is dead. */
+const BORN_WITH = new Set(body.clusters.map(c => c.limb));
+function missingOf(b: BuildResult): MissingLimbs {
+  const gone = (l: 'legL' | 'legR' | 'armL' | 'armR') => BORN_WITH.has(l) && !(b.clusters.find(c => c.limb === l)?.alive ?? false);
+  return { legL: gone('legL'), legR: gone('legR'), armL: gone('armL'), armR: gone('armR') };
+}
+/** The signals the lab and the game send this body. */
 function asTheGameSees(): ActorSignals {
-  return { ...emptyActorSignals(), missing: limbsMissing(body) };
+  return { ...emptyActorSignals(), missing: missingOf(body) };
 }
 
 describe('gutcrawler — a grub with a man on the front', () => {
@@ -36,8 +44,8 @@ describe('gutcrawler — a grub with a man on the front', () => {
   });
 
   it('has no legs to lose: a limb it never had is not missing, a severed one is', () => {
-    expect(limbsMissing(body)).toEqual({ legL: false, legR: false, armL: false, armR: false });
-    expect(limbsMissing(severLimb(body, 'armL').body).armL).toBe(true);
+    expect(missingOf(body)).toEqual({ legL: false, legR: false, armL: false, armR: false });
+    expect(missingOf(severLimb(body, 'armL').body).armL).toBe(true);
   });
 
   it('drags itself along on its arms, writhing, without collapsing for want of legs', () => {

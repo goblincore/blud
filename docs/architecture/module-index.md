@@ -46,7 +46,7 @@ Each line is the first sentence of the module's header comment.
 | [Dev panels](#dev-panels) | 10 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 23 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 77 | Gameplay features wired into the game loop. |
+| [Game: feature modules](#game-feature-modules) | 80 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
@@ -57,7 +57,7 @@ Each line is the first sentence of the module's header comment.
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 7 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 45 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [SDF march renderer](#sdf-march-renderer) | 46 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 33 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
@@ -65,7 +65,7 @@ Each line is the first sentence of the module's header comment.
 | [AI and actors (logic)](#ai-and-actors-logic) | 11 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 10 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
-| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 9 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
+| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 13 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
 
@@ -312,6 +312,7 @@ Gameplay features wired into the game loop.
 
 - `webgpu/game-actor.ts` — The zombie actor record for the game page, its combat and navigation step, damage handling, and furniture avoidance helpers.
 - `webgpu/game-ambient-rig.ts` — applyRig: applies an ambient rig (hemisphere, sun, ambient, fog, clear colour, flashlight visibility) to the scene.
+- `webgpu/game-arena.ts` — THE TEST ARENA (owner: "there isn't a proper way for me to see enemies in testing ...
 - `webgpu/game-arms-math.ts` — The FPV arms' pure half: the node contract, the material-name mapping, and the basis that aims an arm.
 - `webgpu/game-arms.ts` — The FPV goblin arms: loads goblin-arm.glb, dresses it, and hands two arm groups (origin = hand centre, local +Y = toward the elbow) to game-main.
 - `webgpu/game-axe.ts` — WEAPON SLOT 7: THE AXE (spec docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md §3-§4).
@@ -349,6 +350,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-head-split.ts` — THE HEAD SPLIT LEAF (spec docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md §4-§5).
 - `webgpu/game-hit-trace.ts` — Slug and melee hit tracing, ceiling and chunk collider queries, on-screen body count and level probe-room stamping.
 - `webgpu/game-hud.ts` — The HUD text line: frame time, bodies on screen, room, weapon slot, ammo and render-mode flags, refreshed from the game context.
+- `webgpu/game-kit-eye.ts` — THE POPPING KIT EYE, in the game (kit-eye.ts has the rules and the shape).
 - `webgpu/game-launcher-view.ts` — Opt-in FPV art prototype.
 - `webgpu/game-level-art.ts` — LEVEL ART in the game (mesh key spec §5): fetch and parse <id>.art.glb, then attach every mesh to the level group tagged with its room, so the…
 - `webgpu/game-level-lights.ts` — Level lighting helpers: hemisphere light intensity, accent rooms, the scene lights for a room, and refreshing the level lights.
@@ -358,6 +360,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-loader-status.ts` — Boot helper for the game page: updating the loader status text.
 - `webgpu/game-loop.ts` — THE GAME LOOP in the game (docs/superpowers/plans/2026-09-26-game-loop.md): health and damage, death and restart, pickups and loadout, finite ammo,…
 - `webgpu/game-march-accept.ts` — THE MARCH'S ACCEPT LAW AS THE GAME SHIPS IT: the numbers game-main writes into every body view's aaCfg.y/z/w and perfCfg.w, and the march's step…
+- `webgpu/game-meat-gib.ts` — TORN MEAT CHUNKS as mesh gibs (owner, 2026-10-24: the SDF flesh bits off the teratoma's gun craters "tend to form round globules rather than the more…
 - `webgpu/game-menu-dom.ts` — The Esc menu overlay. Esc already releases pointer lock (the browser does that); this shows a panel whenever the pointer is free after the first…
 - `webgpu/game-menu.ts` — The Esc menu's decisions, as pure functions: where New game starts, which levels the dev picker offers, the URL that starts one, and when the menu…
 - `webgpu/game-mesh-gibs.ts` — MESH GIBS (melee head damage, plan Task 11; spec §14 decision 3).
@@ -601,6 +604,7 @@ Benchmarks, demo record/replay, frame hashes, GPU timing.
 
 The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation.
 
+- `webgpu/arena-cycle.ts` — The TEST ARENA's character cycling (game-arena.ts), pure: which registry characters it steps through, and the next one from the current.
 - `webgpu/body-normal-load.ts` — Load a character's BODY NORMAL MAP (character-registry.ts `bodyNormal`; spec docs/superpowers/specs/2026-10-21-body-normal-map-design.md) and turn it…
 - `webgpu/curl-volume-node.ts` — THE SHARED CURL VOLUME, TSL SIDE (extracted from flame-cards.ts for the explosion-curl task).
 - `webgpu/curl-volume.ts` — CURL-NOISE VOLUME (flame-polish plan task 2, 2026-09-18): a small seeded 64^3 RGBA8 3D texture whose RGB is a divergence-free vector field and whose…
@@ -817,6 +821,10 @@ What fits no area above: the original WebGL lab shader, resolution scaling, samp
 - `depth-diff.ts` — Depth diff — comparing the INSIDE of the outline: per-pixel surface depth of the compiled body against the reference mesh, where both agree the…
 - `expression-library.ts` — Which expression clips (and which tuning) each character has, by the name the lab and the game use for it.
 - `expression.ts` — THE EXPRESSION LAYER's pure half (spec docs/superpowers/specs/2026-10-13-goblin-expressions-design.md, plan…
+- `gore-tuning.ts` — PER-CHARACTER GORE (owner, 2026-10-24, on the teratoma: "when I shoot him it isn't as satisfying as I would have thought since he is a giant meatball…
+- `joystick.ts` — THE GAMER WORKS HIS JOYSTICK (characters/gamer.blob; owner: "he jiggles the joystick back n forth or up and down like he's controlling something in…
+- `kit-eye-texture.ts` — THE POPPED EYE'S SURFACE (owner, 2026-10-24: the dangling eye "looks like a yellow ball on a lollipop stick; it should have some veins, and bloody…
+- `kit-eye.ts` — A KIT EYE THAT POPS (owner, 2026-10-24, on the teratoma: "we would need to figure out some damage effects to the eye, like the eyeball popping out").
 - `march.glsl.ts` — Shader source as strings.
 - `morph.ts` — PER-PRIM MORPHS: a per-prim delta per face channel that the expression layer's weight scales (goblin expressions Task 12, a minimal approach C; spec…
 - `skull-fracture.ts` — Anatomical skull damage and ray selection.

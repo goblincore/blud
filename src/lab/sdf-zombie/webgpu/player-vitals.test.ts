@@ -87,4 +87,8 @@ describe('godMode', () => {
     expect(godMode(false, '0')).toBe(false);
     expect(godMode(false, 'false')).toBe(false);
   });
+  it('a test arena passes authored=false, so it is god mode unless ?god=0 (game-loop.ts)', () => {
+    expect(godMode(false, null)).toBe(true);
+    expect(godMode(false, '0')).toBe(false);
+  });
 });
