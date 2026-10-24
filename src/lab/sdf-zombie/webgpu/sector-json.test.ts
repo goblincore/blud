@@ -59,6 +59,33 @@ describe('parseSectorLevel: refusals (collects every problem)', () => {
   });
 });
 
+describe('parseSectorLevel: review fixes', () => {
+  const broken = (edit: (j: any) => void) => { const j = fixture(); edit(j); return () => parseSectorLevel(j); };
+  it('treats back: null as a solid wall', () => {
+    const j = fixture(); j.lines[0].back = null;
+    expect(parseSectorLevel(j).sectors!.lines[0]!.back).toBe(-1);
+  });
+  it('reports a sector mistake and a marker mistake in one error', () => {
+    let msg = '';
+    try { const j = fixture(); j.sectors[1].ceil = 0.5; j.start.pos = [50, 0, 50]; parseSectorLevel(j); }
+    catch (e) { msg = (e as Error).message; }
+    expect(msg).toMatch(/sectors\[1\]: ceil must be above floor/);
+    expect(msg).toMatch(/start/);
+    expect(msg.match(/level sectors-fixture:/g)).toHaveLength(1);
+  });
+  it('refuses bad materials', () => {
+    expect(broken(j => { j.sectors[0].materials = 'tech'; })).toThrow(/sectors\[0\]\.materials: expected an object/);
+    expect(broken(j => { j.sectors[0].materials.floor = 3; })).toThrow(/sectors\[0\]\.materials\.floor: expected a name/);
+  });
+  it('accepts door: null and refuses a non-object door', () => {
+    expect(broken(j => { j.lines[2].door = null; })).not.toThrow();
+    expect(broken(j => { j.lines[2].door = 5; })).toThrow(/lines\[2\]\.door: expected an object/);
+  });
+  it('refuses a zero-length line', () => {
+    expect(broken(j => { j.vertices[1] = [...j.vertices[0]]; })).toThrow(/lines\[0\]\.v: zero-length line/);
+  });
+});
+
 describe('parseLevel', () => {
   it('sends sector files to the sector parser and the rest to Level Format v1', () => {
     expect(parseLevel(fixture()).sectors).toBeDefined();

@@ -78,9 +78,18 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
       if (GLOW_KINDS.includes(o.glow as GlowKind)) glow = o.glow as GlowKind;
       else errors.push(`${where}.glow: one of ${GLOW_KINDS.join(', ')}`);
     }
-    const mj = (typeof o.materials === 'object' && o.materials !== null ? o.materials : {}) as Json;
+    let mj: Json = {};
+    if (o.materials !== undefined) {
+      if (typeof o.materials === 'object' && o.materials !== null && !Array.isArray(o.materials)) mj = o.materials as Json;
+      else errors.push(`${where}.materials: expected an object`);
+    }
     unknownKeys(mj, MATERIAL_KEYS, `${where}.materials`);
-    const mat = (k: string) => (typeof mj[k] === 'string' && mj[k] ? mj[k] as string : 'default');
+    const mat = (k: string) => {
+      if (mj[k] === undefined) return 'default';
+      if (typeof mj[k] === 'string' && mj[k]) return mj[k] as string;
+      errors.push(`${where}.materials.${k}: expected a name`);
+      return 'default';
+    };
     const zone = isInt(o.zone) && o.zone >= 0 ? o.zone : (errors.push(`${where}.zone: an integer >= 0`), 0);
     return { floor, ceil, light, special, hurtPerSec, glow,
       materials: { floor: mat('floor'), ceil: mat('ceil'), wall: mat('wall') }, zone };
@@ -96,12 +105,17 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
       && o.v[0] !== o.v[1];
     if (!ok) errors.push(`${where}.v: two different vertex indices`);
     const v = (ok ? o.v : [0, 0]) as [number, number];
+    if (ok) {
+      const a = vertices[v[0]]!, b = vertices[v[1]]!;
+      if (a[0] === b[0] && a[1] === b[1]) errors.push(`${where}.v: zero-length line`);
+    }
     const front = sectorIndex(o.front) ? o.front as number : (errors.push(`${where}.front: a sector index`), 0);
-    const back = o.back === undefined || o.back === -1 ? -1
+    const back = o.back === undefined || o.back === null || o.back === -1 ? -1
       : sectorIndex(o.back) ? o.back as number : (errors.push(`${where}.back: a sector index or -1`), -1);
     let door: SectorLine['door'] = null;
-    if (o.door !== undefined) {
-      const d = (typeof o.door === 'object' && o.door !== null ? o.door : {}) as Json;
+    if (o.door !== undefined && o.door !== null) {
+      if (typeof o.door !== 'object' || Array.isArray(o.door)) errors.push(`${where}.door: expected an object`);
+      const d = (typeof o.door === 'object' && !Array.isArray(o.door) ? o.door : {}) as Json;
       unknownKeys(d, DOOR_KEYS, `${where}.door`);
       if (!sectorIndex(d.sector)) errors.push(`${where}.door.sector: a sector index`);
       const speed = d.speed === undefined ? 2 : isNum(d.speed) && d.speed > 0 ? d.speed : (errors.push(`${where}.door.speed: > 0`), 2);
@@ -131,8 +145,6 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
     else if (!(s.ceil > s.floor)) errors.push(`sectors[${i}]: ceil must be above floor`);
   });
 
-  if (errors.length > 0) throw new Error(`level ${id}: ${errors.join('; ')}`);
-
   // --- one art-shelled room per zone, boxed round its sectors' vertices -------------
   const zones = [...new Set(sectors.map(s => s.zone))].sort((a, b) => a - b);
   const rooms = zones.map(zone => {
@@ -143,18 +155,27 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
       for (const l of lines) {
         if (l.front !== si && l.back !== si) continue;
         for (const vi of l.v) {
-          const [x, z] = vertices[vi]!;
+          const p = vertices[vi];
+          if (!p) continue;
+          const [x, z] = p;
           minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
         }
       }
     });
+    if (!Number.isFinite(minX)) { minX = maxX = minZ = maxZ = 0; }
     return { id: zone + 1, name: zoneName(zone), min: [minX, minZ], max: [maxX, maxZ], floor: lo,
       height: Math.max(hi - lo, 0.1), shell: 'art' };
   });
 
   const shared: Json = {};
   for (const k of SHARED) if (j[k] !== undefined) shared[k] = j[k];
-  const base = parseLevelJson({ ...shared, rooms }, opts);
+  let base: LevelDef | null = null;
+  try { base = parseLevelJson({ ...shared, rooms }, opts); }
+  catch (e) {
+    const msg = (e instanceof Error ? e.message : String(e)).replace(`level ${id}: `, '');
+    errors.push(...msg.split('; '));
+  }
+  if (errors.length > 0 || !base) throw new Error(`level ${id}: ${errors.join('; ')}`);
   const map: SectorMap = { vertices, sectors, lines };
   const requires: Capability[] = [...base.requires.filter(c => c !== 'multi-floor'), 'sectors'];
   return { ...base, requires, sectors: map };
