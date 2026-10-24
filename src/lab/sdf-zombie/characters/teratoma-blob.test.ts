@@ -182,6 +182,35 @@ describe('teratoma.blob', () => {
     expect(tilt).toBeLessThan(20);
   });
 
+  // THE SKULL rides with the flesh (owner, playtest 2026-10-24: "more prominent ... an orbital bone that goes around the
+  // eye, like a cyclops skull"). Every torso bone is `rigid` on the pelvis, which rig-bind.ts now honours for bones:
+  // the orbit reaches y 1.82, where the nearest axial joint is the neck stub, and bound there it would swim.
+  it('authors a cyclops skull (vault, arches, orbit ring, brow, cheekbones) that moves as one piece with the flesh', () => {
+    const b = built();
+    const bones = b.bonePrims.map((p, i) => [p, i] as const).filter(([p]) => p.limb === 'torso');
+    expect(bones.length).toBeGreaterThanOrEqual(15);
+    expect(bones.every(([p]) => p.rigid)).toBe(true);
+    // the orbit rings the eye: some bone above the eye's top (y 1.76) and some below its bottom (y 1.49), in front
+    expect(bones.some(([p]) => Math.max(p.a[1], p.b[1]) > 1.78 && p.a[2] > 0.3)).toBe(true);
+    const m = makeActorMotion(b, { seed: 1 });
+    const rng = makeRng(7);
+    const ph = (b.bones as unknown as Map<string, { head: [number, number, number] }>).get('pelvis')!.head;
+    const mid = (p: { a: readonly number[]; b: readonly number[] }) =>
+      [(p.a[0]! + p.b[0]!) / 2, (p.a[1]! + p.b[1]!) / 2, (p.a[2]! + p.b[2]!) / 2] as [number, number, number];
+    let drift = 0;
+    for (let i = 0; i < 300; i++) {
+      const f = stepActorMotion(m, {
+        current: b, dt: 1 / 60, wander: true, armStyle: undefined, headingFollow: 1, gazeFollow: 1,
+        bounds: { minX: -50, maxX: 50, minZ: -50, maxZ: 50 }, rng, signals: emptyActorSignals(), profile: TERATOMA_PROFILE,
+      })!;
+      const posed = applyRig(b, m.bound, f.bodyYaw);
+      const fr = boneFrames(b, m.bound, f.bodyYaw).get('pelvis')!;
+      for (const [p, k] of bones)
+        drift = Math.max(drift, len(sub(mid(posed.bonePrims[k]!), add(fr.pos, qRotate(fr.quat, sub(mid(p), ph))))));
+    }
+    expect(drift).toBeLessThan(0.001);
+  });
+
   it('uses the HOVER gait with no stepping', () => {
     expect(TERATOMA_PROFILE.gait.walk).toBe(HOVER);
     expect(HOVER.strideLen).toBe(0);

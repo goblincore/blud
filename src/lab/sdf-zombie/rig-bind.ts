@@ -452,6 +452,14 @@ export function bindRig(body: BuildResult): BoundRig {
     return binding;
   };
 
+  /** The declared bone's segment for a `rigid` prim, or null (unknown or zero-length: no frame to ride). */
+  const rigidOwn = (name: string): { head: number; tail: number } | null => {
+    const own = body.bones.get(name);
+    if (!own) return null;
+    const h = indexOf(own.head), t = indexOf(own.tail);
+    return h === t ? null : { head: h, tail: t };
+  };
+
   const primBinding = body.prims.map(bindPrim);
   rig.torsoGuards = buildTorsoGuards(body, positions, primBinding, indexOf, armBoneName);
   return {
@@ -473,8 +481,13 @@ export function bindRig(body: BuildResult): BoundRig {
     // sway/droop), so a rib bound there would shear off the cage exactly as
     // the per-end bind did. A rib belongs to a vertebra (2026-09-03 skeleton
     // re-author, which is what made hoops wide enough to need this).
+    // ...UNLESS the bone is `rigid` on a declared bone (teratoma.blob, 2026-10-24): then it rides that bone's frame as
+    // one piece, exactly like a `rigid` flesh prim, so a skull authored inside a rigid ball of flesh moves with it.
+    // Bound to the nearest axial joint instead, a cyclops orbit round the eye (y 1.45-1.80 on a 1.45 m pelvis) bound
+    // its upper half to the spine and neck stubs and swam against the flesh.
     boneBinding: body.bonePrims.map(p => {
       if (p.limb !== 'torso' && p.limb !== 'head') return bindPrim(p);
+      if (p.rigid && p.bone && rigidOwn(p.bone)) return bindPrim(p);
       const mid: Vec3 = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2];
       const j = bindAxial(mid);
       return { a: { point: j, offset: sub(p.a, positions[j]!) }, b: { point: j, offset: sub(p.b, positions[j]!) } };
@@ -489,7 +502,8 @@ export function bindRig(body: BuildResult): BoundRig {
         // rigid rule widened would have posed the goblin's nose bone twice.
         if (ridesHead(p)) return;
         const mid: Vec3 = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2];
-        const seg = nearestSeg(mid);
+        // A `rigid` bone takes its DECLARED bone's segment (boneBinding's rule above).
+        const seg = (p.rigid && p.bone ? rigidOwn(p.bone) : null) ?? nearestSeg(mid);
         if (!seg) return;
         const h = positions[seg.head]!;
         frames.set(i, {
