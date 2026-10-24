@@ -33,49 +33,77 @@ function pointInLoop(x: number, z: number, loop: readonly XZ[]): boolean {
   return odd;
 }
 
-/** The closed vertex loops bounding one sector. Edges are chained without direction; at a vertex
- *  with several unused edges the first in line order is taken (Doom maps rarely pinch). */
+/** Splits a closed vertex walk at every vertex it visits twice, so each piece is a simple loop
+ *  (tracing the free side of two pillars that touch at a corner is one walk through the corner). */
+function splitAtRepeats(walk: readonly number[]): number[][] {
+  const out: number[][] = [], stack: number[] = [];
+  for (const vi of walk) {
+    const at = stack.indexOf(vi);
+    if (at >= 0) out.push(stack.splice(at + 1));                 // the sub-loop that returned here
+    if (at >= 0) out[out.length - 1]!.unshift(vi);
+    else stack.push(vi);
+  }
+  out.push(stack);
+  return out;
+}
+
+/** The closed vertex loops bounding one sector, chained along DIRECTED edges (the sector is on
+ *  the left of each, spec §4). At a vertex with several outgoing edges the sharpest left turn is
+ *  taken (first met sweeping clockwise from the way back), which separates loops that pinch at
+ *  a point whatever the line order. Outer loops come out positive, holes negative. */
 function sectorLoops(map: SectorMap, sector: number): XZ[][] {
-  const edges = map.lines.filter(l => l.front !== l.back && (l.front === sector || l.back === sector)).map(l => l.v);
+  const V = map.vertices;
+  const edges: [number, number][] = [];
+  for (const l of map.lines) {
+    if (l.front === l.back) continue;
+    if (l.front === sector) edges.push([l.v[0], l.v[1]]);
+    else if (l.back === sector) edges.push([l.v[1], l.v[0]]);
+  }
+  const outgoing = new Map<number, number[]>();
+  edges.forEach((e, i) => { const o = outgoing.get(e[0]); if (o) o.push(i); else outgoing.set(e[0], [i]); });
   const used = new Array<boolean>(edges.length).fill(false);
   const loops: XZ[][] = [];
   for (let start = 0; start < edges.length; start++) {
     if (used[start]) continue;
-    used[start] = true;
-    const first = edges[start]![0];
-    const loop: number[] = [first];
-    let cur = edges[start]![1];
-    while (cur !== first) {
-      loop.push(cur);
-      const next = edges.findIndex((e, i) => !used[i] && (e[0] === cur || e[1] === cur));
-      if (next < 0) break;                                          // open: the parser refuses this
-      used[next] = true;
-      cur = edges[next]![0] === cur ? edges[next]![1] : edges[next]![0];
+    const loop: number[] = [];
+    let e = start;
+    while (!used[e]) {
+      used[e] = true;
+      const [a, b] = edges[e]!;
+      loop.push(a);
+      const back = Math.atan2(V[a]![1] - V[b]![1], V[a]![0] - V[b]![0]);
+      let best = -1, bestAng = Infinity;
+      for (const c of outgoing.get(b) ?? []) {
+        const to = V[edges[c]![1]]!;
+        let cw = back - Math.atan2(to[1] - V[b]![1], to[0] - V[b]![0]);
+        while (cw <= 0) cw += 2 * Math.PI;
+        while (cw > 2 * Math.PI) cw -= 2 * Math.PI;
+        if (cw < bestAng) { bestAng = cw; best = c; }
+      }
+      if (best < 0 || best === start) break;                        // closed (or open: the parser refuses that)
+      e = best;
     }
-    if (loop.length >= 3) loops.push(loop.map(vi => map.vertices[vi]!));
+    for (const simple of splitAtRepeats(loop)) if (simple.length >= 3) loops.push(simple.map(vi => V[vi]!));
   }
   return loops;
 }
 
-/** Every sector as outer polygons with their holes: a loop nested inside an odd number of the
- *  sector's other loops is a hole of the smallest loop that holds it. */
+/** Every sector as outer polygons with their holes: positive loops are outers, negative loops
+ *  are holes of the smallest outer that contains them. */
 export function sectorPolygons(map: SectorMap): SectorPolygon[] {
   const out: SectorPolygon[] = [];
   map.sectors.forEach((_, sector) => {
     const loops = sectorLoops(map, sector);
-    const probe = (l: XZ[]): [number, number] => [(l[0]![0] + l[1]![0]) / 2, (l[0]![1] + l[1]![1]) / 2];
-    const holders = loops.map((l, i) => {
-      const [px, pz] = probe(l);
-      return loops.map((o, k) => k).filter(k => k !== i && pointInLoop(px, pz, loops[k]!));
-    });
-    const outers = loops.map((_, i) => i).filter(i => holders[i]!.length % 2 === 0);
-    const polys = outers.map(i => ({ sector, outer: loops[i]!, holes: [] as XZ[][] }));
-    loops.forEach((l, i) => {
-      if (holders[i]!.length % 2 === 0) return;
-      const owner = holders[i]!.filter(k => outers.includes(k))
-        .sort((p, q) => Math.abs(loopArea(loops[p]!)) - Math.abs(loopArea(loops[q]!)))[0];
-      if (owner !== undefined) polys[outers.indexOf(owner)]!.holes.push(l);
-    });
+    const polys: SectorPolygon[] = loops.filter(l => loopArea(l) > 0).map(outer => ({ sector, outer, holes: [] }));
+    for (const hole of loops.filter(l => loopArea(l) <= 0)) {
+      const px = (hole[0]![0] + hole[1]![0] + hole[2]![0]) / 3, pz = (hole[0]![1] + hole[1]![1] + hole[2]![1]) / 3;
+      let owner: SectorPolygon | undefined;
+      for (const p of polys) {
+        if (!pointInLoop(px, pz, p.outer)) continue;
+        if (!owner || loopArea(p.outer) < loopArea(owner.outer)) owner = p;
+      }
+      owner?.holes.push(hole);
+    }
     out.push(...polys);
   });
   return out;
@@ -83,28 +111,23 @@ export function sectorPolygons(map: SectorMap): SectorPolygon[] {
 
 /** Wall quads: one-sided lines full height; two-sided lines a lower riser (seen from the lower
  *  floor) and an upper lip (seen from the higher ceiling, skipped when both ceilings are sky).
- *  `sectorAt` orients each quad into its sector. */
-export function wallQuads(map: SectorMap, sectorAt: (x: number, z: number) => number): WallQuad[] {
+ *  Each quad runs a -> b with its sector on the left: a part seen from the front sector keeps
+ *  the line's direction, one seen from the back sector swaps it. */
+export function wallQuads(map: SectorMap): WallQuad[] {
   const out: WallQuad[] = [];
-  const push = (a: XZ, b: XZ, y0: number, y1: number, sector: number, part: WallPart) => {
-    if (y1 - y0 < 1e-4) return;
-    const dx = b[0] - a[0], dz = b[1] - a[1], n = Math.hypot(dx, dz);
-    const mx = (a[0] + b[0]) / 2 + (-dz / n) * 0.05, mz = (a[1] + b[1]) / 2 + (dx / n) * 0.05;
-    out.push(sectorAt(mx, mz) === sector ? { a, b, y0, y1, sector, part } : { a: b, b: a, y0, y1, sector, part });
-  };
   for (const l of map.lines) {
-    const a = map.vertices[l.v[0]]!, b = map.vertices[l.v[1]]!;
+    const va = map.vertices[l.v[0]]!, vb = map.vertices[l.v[1]]!;
+    const push = (y0: number, y1: number, sector: number, part: WallPart) => {
+      if (y1 - y0 < 1e-4) return;
+      out.push(sector === l.front ? { a: va, b: vb, y0, y1, sector, part } : { a: vb, b: va, y0, y1, sector, part });
+    };
     const f = map.sectors[l.front]!;
-    if (l.back < 0) { push(a, b, f.floor, f.ceil, l.front, 'mid'); continue; }
+    if (l.back < 0) { push(f.floor, f.ceil, l.front, 'mid'); continue; }
     if (l.back === l.front) continue;
     const k = map.sectors[l.back]!;
-    if (f.floor !== k.floor) {
-      const low = f.floor < k.floor ? l.front : l.back;
-      push(a, b, Math.min(f.floor, k.floor), Math.max(f.floor, k.floor), low, 'lower');
-    }
+    if (f.floor !== k.floor) push(Math.min(f.floor, k.floor), Math.max(f.floor, k.floor), f.floor < k.floor ? l.front : l.back, 'lower');
     if (f.ceil !== k.ceil && !(f.materials.ceil === SKY_MATERIAL && k.materials.ceil === SKY_MATERIAL)) {
-      const high = f.ceil > k.ceil ? l.front : l.back;
-      push(a, b, Math.min(f.ceil, k.ceil), Math.max(f.ceil, k.ceil), high, 'upper');
+      push(Math.min(f.ceil, k.ceil), Math.max(f.ceil, k.ceil), f.ceil > k.ceil ? l.front : l.back, 'upper');
     }
   }
   return out;

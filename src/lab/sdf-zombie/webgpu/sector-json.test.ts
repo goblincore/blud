@@ -18,7 +18,7 @@ describe('parseSectorLevel: the sectors fixture', () => {
     expect(L.sectors!.sectors.map(s => [s.floor, s.ceil, s.zone])).toEqual([[0, 4, 0], [0.5, 4, 0], [1.5, 4, 0], [-1, 4, 1]]);
     expect(L.sectors!.sectors[1]).toMatchObject({ special: 'none', hurtPerSec: 0, glow: null,
       materials: { floor: 'default', ceil: 'default', wall: 'default' } });
-    expect(L.sectors!.lines[0]).toEqual({ v: [0, 1], front: 0, back: -1, door: null, exit: false });
+    expect(L.sectors!.lines[0]).toEqual({ v: [1, 0], front: 0, back: -1, door: null, exit: false });
     expect(L.sectors!.lines[1]!.back).toBe(3);
   });
   it('makes one art-shelled room per zone, boxed round its sectors', () => {
@@ -44,6 +44,9 @@ describe('parseSectorLevel: refusals (collects every problem)', () => {
   });
   it('refuses an open sector (a vertex used an odd number of times)', () => {
     expect(broken(j => { j.lines.splice(12, 1); })).toThrow(/sector 2: not closed/);
+    expect(broken(j => { j.lines[0].v.reverse(); })).toThrow(/sector 0: not closed/);
+    // D wound clockwise (every one of its lines reversed): closed, but not on their left
+    expect(broken(j => { for (const i of [1, 14, 15, 16]) j.lines[i].v.reverse(); })).toThrow(/sector 3: lines must keep the sector on their left/);
   });
   it('refuses a ceiling at or below the floor', () => {
     expect(broken(j => { j.sectors[1].ceil = 0.5; })).toThrow(/sectors\[1\]: ceil must be above floor/);

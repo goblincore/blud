@@ -127,16 +127,25 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
     return { v, front, back, door, exit: o.exit === true };
   });
 
-  // --- closure: each sector's lines form closed loops ------------------------------
-  sectors.forEach((_, s) => {
-    const uses = new Map<number, number>();
+  // --- closure and winding: each sector's directed lines form closed loops, sector on the left ---
+  if (errors.length === 0) sectors.forEach((_, s) => {
+    const bal = new Map<number, number>();
+    let area2 = 0, any = false;
+    const edge = (a: number, b: number) => {
+      any = true;
+      bal.set(a, (bal.get(a) ?? 0) + 1);
+      bal.set(b, (bal.get(b) ?? 0) - 1);
+      const [x0, z0] = vertices[a]!, [x1, z1] = vertices[b]!;
+      area2 += x0 * z1 - x1 * z0;
+    };
     for (const l of lines) {
-      if (l.front === l.back) continue;                       // both sides the same sector: adds 2, changes nothing
-      if (l.front !== s && l.back !== s) continue;
-      for (const vi of l.v) uses.set(vi, (uses.get(vi) ?? 0) + 1);
+      if (l.front === l.back) continue;                       // both sides the same sector: adds nothing
+      if (l.front === s) edge(l.v[0], l.v[1]);
+      else if (l.back === s) edge(l.v[1], l.v[0]);
     }
-    if (uses.size === 0) errors.push(`sector ${s}: no lines`);
-    for (const [vi, n] of uses) if (n % 2 !== 0) { errors.push(`sector ${s}: not closed (vertex ${vi} used ${n} times)`); break; }
+    if (!any) { errors.push(`sector ${s}: no lines`); return; }
+    for (const [vi, n] of bal) if (n !== 0) { errors.push(`sector ${s}: not closed (vertex ${vi} unbalanced)`); return; }
+    if (!(area2 > 0)) errors.push(`sector ${s}: lines must keep the sector on their left (spec §4)`);
   });
 
   // --- heights: a door may close to its floor, nothing may invert -------------------

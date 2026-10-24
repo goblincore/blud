@@ -5,6 +5,10 @@
 // A sector is a 2D polygon bounded by its lines, with a floor, a ceiling and a light;
 // a line is a wall (one sector) or an edge between two sectors (a step, a lip or nothing).
 //
+// WINDING RULE (spec §4): a sector lies on the LEFT of its lines. Left of a -> b in x/z is
+// (-dz, dx). A line's front sector is left of v[0] -> v[1]; its back sector is left of
+// v[1] -> v[0]. So an outer boundary runs positive (shoelace x0*z1 - x1*z0), a hole negative.
+//
 // Pure: no three.js, no DOM.
 
 export type XZ = readonly [number, number];
@@ -29,6 +33,7 @@ export interface SectorDef {
 }
 export interface SectorDoor { sector: number; speed: number; wait: number }
 export interface SectorLine {
+  /** Vertex indices. The front sector is on the LEFT of v[0] -> v[1], the back on the left of v[1] -> v[0]. */
   v: readonly [number, number];
   front: number;
   /** -1: a solid wall with nothing behind it. */
