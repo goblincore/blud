@@ -166,8 +166,9 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     profile: motionProfileFor('goblin'),
   },
   // The goblin at home (the screen emergence lab): goblin.blob plus a vest and shorts of SDF `shell` cloth and bare feet, in one
-  // marked block (characters/goblin-home.test.ts guards the copy). No kit: the armour stays off at home. The goblin's own motion
-  // profile; the lab drives him with the pose layer, which overwrites every target.
+  // marked block (characters/goblin-home.test.ts guards the copy). No kit: the armour stays off at home, and so do the bony
+  // kit hands: the at-home poses rest ORB hands on the keys and the floor, so the block carries the orb back (owner,
+  // 2026-10-24). The goblin's own motion profile; the lab drives him with the pose layer, which overwrites every target.
   'goblin-home': {
     name: 'goblin-home', src: goblinHomeBlobSrc,
     face: ZOMBIE_FLAT,
@@ -185,7 +186,7 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   // The cinematic goblin AT HOME (emergence in the Flat, plan Task 4): goblin-cinematic.blob (the face rig) plus goblin-home's cloth
   // block and bare feet, at the goblin's 1.70 m (characters/goblin-cinematic-home.test.ts guards the copy). The armour stays off at
   // home, but the cinematic's mesh TEETH live in its 1.30 m kit (one skinned glTF, the `tooth` primitive beside the armour's), so he
-  // borrows that kit's teeth alone, scaled by the .blob's own `scale` about each bone (plan Task 4b; characters/
+  // borrows that kit's teeth alone (not its bony `goblinskin` hands: at home the orbs stay), scaled by the .blob's own `scale` about each bone (plan Task 4b; characters/
   // goblin-cinematic-home-teeth.test.ts pins them in his mouth). The cinematic's gait, poses and expressions (motion-profile.ts,
   // pose-library.ts, expression-library.ts list it under its own name).
   'goblin-cinematic-home': {

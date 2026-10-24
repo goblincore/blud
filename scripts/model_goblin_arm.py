@@ -65,6 +65,8 @@ MATS = {
     'Band':      M('Band',      (0.035, 0.035, 0.04, 1), 0.0, 0.60),
     'WatchBody': M('WatchBody', (0.06, 0.06, 0.07, 1),   0.6, 0.35),
     'Screen':    M('Screen',    (0.02, 0.03, 0.04, 1),   0.0, 0.20),
+    # Claw tips: old yellowed horn, glossier than the skin so they catch the torch.
+    'Claw':      M('Claw',      (0.30, 0.25, 0.15, 1),   0.0, 0.28),
 }
 
 # ---- mesh helpers ---------------------------------------------------------
@@ -158,6 +160,86 @@ def locator(name, parent, loc):
     e.location = loc; e.empty_display_size = 0.01; e.parent = parent
     return e
 
+# ---- the hand ---------------------------------------------------------------
+# BONY GOBLIN HAND (owner, 2026-10-24: "not realistic but fits the character
+# ... bony skinny long fingers"), replacing the orb. Stylised, not anatomical:
+# a small flat palm, four long thin digits whose joints are BALLS fatter than
+# the shafts between them (the blob's "a shaft alone reads as a pipe" rule,
+# at finger scale: the knuckle bulge is what reads as bony), a two-joint
+# thumb, and a horn claw on every tip. One static loose-grip curl, round a
+# ~32 mm bar across the palm, which is what the hand does on every weapon.
+#
+# Authored in the UNMIRRORED frame (origin = hand centre, fingers toward -Z,
+# palmar +Y, dorsal -Y, thumb toward +X, the inner side opposite the
+# buckles); every point goes through P() so the left hand is a true mirror.
+PALM = (0.029, 0.012, 0.030)      # half-extents x (across), y (thick), z (long)
+# (x at the knuckle line, splay deg, segment lengths, curl deg per joint)
+FINGERS = (
+    (+0.0205, +8, (0.035, 0.028, 0.022), (34, 52, 30)),   # index
+    (+0.0068, +2, (0.039, 0.031, 0.024), (38, 55, 32)),   # middle, the longest
+    (-0.0068, -4, (0.036, 0.029, 0.022), (42, 58, 34)),   # ring
+    (-0.0205, -11, (0.029, 0.023, 0.018), (48, 62, 36)),  # little
+)
+DIGIT_R  = (0.0056, 0.0048, 0.0040, 0.0029)   # shaft radius at base, joint 1, joint 2, tip
+JOINT_R  = (0.0076, 0.0065, 0.0055)           # knuckle balls: MCP, PIP, DIP -- proud of the shafts
+CLAW_LEN, CLAW_CURL = 0.014, 14
+
+def seg_part(p0, p1, r0, r1, name, mat, parent, segs=8):
+    """A tapered shaft from p0 (radius r0) to p1 (radius r1)."""
+    a, b = Vector(p0), Vector(p1)
+    d = b - a
+    rot = Vector((0, 0, 1)).rotation_difference(d.normalized()).to_euler()
+    return put(frustum(r0, r1, d.length, segs), name, mat, parent, loc=(a + b) / 2, rot=rot, uv=True)
+
+def build_hand(sx, tag, root):
+    from mathutils import Quaternion
+    P = lambda v: Vector((sx * v[0], v[1], v[2]))
+    parts = []
+    from mathutils import Matrix
+    pm = sphere(1.0, 20, 14)
+    pm.transform(Matrix.Diagonal((PALM[0], PALM[1], PALM[2], 1.0)))
+    palm = put(pm, f'hand_{tag}', 'Skin', root, uv=True)
+    i = 0
+    for (kx, splay, lens, curls) in FINGERS:
+        # The knuckle sits on the palm's distal rim, a touch dorsal so the MCP
+        # ball humps the back of the hand like a bony fist.
+        p = Vector((kx, -0.002, -PALM[2] * 0.86))
+        q = Quaternion((0, 1, 0), math.radians(-splay))      # fan in the palm plane
+        lateral = q @ Vector((1, 0, 0))
+        parts.append(put(sphere(JOINT_R[0], 10, 7), f'k{i}0_{tag}', 'Skin', root, loc=P(p), uv=True))
+        # Metacarpal ridge: a thin bone under the skin from the wrist end of
+        # the palm to this knuckle, on the dorsal face -- the bony back.
+        m0 = Vector((kx * 0.55, -PALM[1] * 0.80, PALM[2] * 0.55))
+        parts.append(seg_part(P(m0), P(p + Vector((0, -0.002, 0))), 0.0034, 0.0046, f'm{i}_{tag}', 'Skin', root, segs=6))
+        for j, (ln, c) in enumerate(zip(lens, curls)):
+            q = Quaternion(lateral, math.radians(c)) @ q      # curl toward the palm (+Y)
+            nxt = p + q @ Vector((0, 0, -ln))
+            parts.append(seg_part(P(p), P(nxt), DIGIT_R[j], DIGIT_R[j + 1], f'f{i}{j}_{tag}', 'Skin', root))
+            if j < 2:
+                parts.append(put(sphere(JOINT_R[j + 1], 8, 6), f'k{i}{j + 1}_{tag}', 'Skin', root, loc=P(nxt), uv=True))
+            p = nxt
+        q = Quaternion(lateral, math.radians(CLAW_CURL)) @ q
+        tip = p + q @ Vector((0, 0, -CLAW_LEN))
+        parts.append(seg_part(P(p), P(tip), DIGIT_R[3] * 0.95, 0.0005, f'c{i}_{tag}', 'Claw', root, segs=8))
+        i += 1
+    # THUMB: rooted low on the palmar side at the thumbward edge, it swings
+    # across the front of the grip and hooks over the curled index.
+    t0 = Vector((PALM[0] * 0.80, 0.007, 0.006))
+    t1 = t0 + Vector((-0.30, 0.62, -0.72)).normalized() * 0.030
+    t2 = t1 + Vector((-0.78, 0.45, -0.43)).normalized() * 0.024
+    t3 = t2 + Vector((-0.90, 0.10, -0.42)).normalized() * CLAW_LEN
+    parts.append(put(sphere(0.0095, 10, 8), f't0_{tag}', 'Skin', root, loc=P(t0), uv=True))
+    parts.append(seg_part(P(t0), P(t1), 0.0078, 0.0062, f't1_{tag}', 'Skin', root))
+    parts.append(put(sphere(JOINT_R[1], 10, 8), f'tk_{tag}', 'Skin', root, loc=P(t1), uv=True))
+    parts.append(seg_part(P(t1), P(t2), 0.0062, DIGIT_R[3], f't2_{tag}', 'Skin', root))
+    parts.append(seg_part(P(t2), P(t3), DIGIT_R[3] * 0.95, 0.0005, f'tc_{tag}', 'Claw', root, segs=8))
+    # One mesh, `hand_<tag>`: the verify gate and the runtime see one fist.
+    with bpy.context.temp_override(active_object=palm, object=palm,
+                                   selected_objects=[palm] + parts,
+                                   selected_editable_objects=[palm] + parts):
+        bpy.ops.object.join()
+    return palm
+
 # ---- the arm ----------------------------------------------------------------
 def fore_r(z):
     """Forearm radius at height z: a taper from the wrist to the elbow."""
@@ -169,9 +251,8 @@ def build_arm(sx, tag, watch):
 
     # SKIN. Ball joints on purpose (the blob's stylisation: "a shaft alone
     # reads as a pipe"), radii up from the blob's 0.028 shaft per the owner.
-    put(sphere(HAND_R, 24, 16), f'hand_{tag}', 'Skin', root, uv=True)
-    # No knuckle nubs: three lumps on the back of the fist read as warts, not
-    # knuckles (owner, 2026-09-05), so the fist is the plain orb the blob has.
+    # The hand was the blob's plain orb until 2026-10-24; now the bony hand.
+    build_hand(sx, tag, root)
     put(sphere(WRIST_R, 16, 12), f'wrist_{tag}', 'Skin', root, loc=(0, 0, WRIST_Z), uv=True)
     put(frustum(FORE_R0, FORE_R1, ELBOW_Z - WRIST_Z, 24), f'forearm_{tag}', 'Skin', root,
         loc=(0, 0, (WRIST_Z + ELBOW_Z) / 2), uv=True)
@@ -306,9 +387,13 @@ if info['missing_nodes']:
 if info['skin_without_uv']:
     print(f"[goblin-arm] FAIL: skin meshes without UVs {info['skin_without_uv']} -- "
           f"they would sample one texel and read flat", file=sys.stderr); ok = False
-if info['hand_dim'] is None or abs(info['hand_dim'] - 2 * HAND_R) > 0.002:
-    print(f"[goblin-arm] FAIL: hand diameter {info['hand_dim']} != {2 * HAND_R} "
-          f"(GOBLIN_SKIN.handRadius; loadHold depends on it)", file=sys.stderr); ok = False
+# The fist must stay inside the old orb's reach: loadHold() still places the
+# shells by GOBLIN_SKIN.handRadius, so a hand much bigger than the orb would
+# swallow them and a much smaller one would leave them floating.
+if info['hand_dim'] is None or not (1.2 * HAND_R <= info['hand_dim'] <= 2 * HAND_R + 0.012):
+    print(f"[goblin-arm] FAIL: hand extent {info['hand_dim']} outside "
+          f"[{1.2 * HAND_R}, {2 * HAND_R + 0.012}] (GOBLIN_SKIN.handRadius; loadHold depends on it)",
+          file=sys.stderr); ok = False
 if not info['screen_under_arm_l']:
     print("[goblin-arm] FAIL: Watch_Screen is not under Arm_L", file=sys.stderr); ok = False
 
@@ -338,6 +423,14 @@ for n, (az, el) in enumerate(((-90, 10), (-30, 20), (40, 15), (150, 25))):
     cam.location = ctr + Vector((math.sin(a) * math.cos(e), -math.cos(a) * math.cos(e), math.sin(e))) * R
     cam.rotation_euler = (ctr - cam.location).to_track_quat('-Z', 'Y').to_euler()
     sc.render.filepath = os.path.join(NOTES_DIR, f'turntable-{n}.png')
+    bpy.ops.render.render(write_still=True)
+# Hand close-ups (the bony hand, 2026-10-24): back, side, palm.
+ctr = Vector((0, 0, -0.050)); R = 0.26
+for n, (az, el) in enumerate(((0, 15), (-90, 10), (180, 20))):
+    a = math.radians(az); e = math.radians(el)
+    cam.location = ctr + Vector((math.sin(a) * math.cos(e), -math.cos(a) * math.cos(e), math.sin(e))) * R
+    cam.rotation_euler = (ctr - cam.location).to_track_quat('-Z', 'Y').to_euler()
+    sc.render.filepath = os.path.join(NOTES_DIR, f'hand-{n}.png')
     bpy.ops.render.render(write_still=True)
 
 if not ok:

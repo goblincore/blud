@@ -370,12 +370,14 @@ body
   bar  arm on upperarm from=0.00 to=1.00 r=0.031 r2=0.024 blend=0.010 mirror
   bar  arm on forearm  from=0.00 to=1.00 r=0.027 r2=0.018 blend=0.010 mirror
 
-  # Big grabby hands: still orbs, still r 0.046. goblin-skin.ts hard-codes this
-  # radius (GOBLIN_SKIN.handRadius) for the player's first-person hands, and
-  # loadHold depends on it. Nothing links the two: change them together. Only
-  # the blend widened, 0.0034 -> 0.008, so the wrist runs into the hand
-  # instead of meeting it at a seam.
-  blob arm on hand at=0.55 r=0.046 deep=0.90 blend=0.008 mirror
+  # The hand is no longer flesh: the bony long-fingered hand (owner,
+  # 2026-10-24) is polygon kit, merged into goblin-kit.gltf on the hand bone by
+  # scripts/merge-kit-hands.ts from the FPV arm's own hand mesh. What stays
+  # here is a WRIST KNOB the kit palm sits into, so the forearm still ends in
+  # a round (the early-3D accent) and there is no seam where mesh meets SDF.
+  # It replaced the r 0.046 orb at at=0.55; GOBLIN_SKIN.handRadius keeps the
+  # old 0.046 for loadHold's shell offsets, no longer this prim's radius.
+  blob arm on hand at=0.10 r=0.024 blend=0.008 mirror
 
   # The legs wear the trousers' paint (see the torso block). The shin bar runs
   # to the ankle, so the boot in goblin-kit.wam covers the seam.

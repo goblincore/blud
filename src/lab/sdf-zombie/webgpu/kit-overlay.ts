@@ -51,6 +51,7 @@ import type { BuildResult } from '../build-body';
 import type { Wound } from '../damage';
 import type { Vec3 } from '../types';
 import { kitBoneKey } from '../rig-frames';
+import { makeSkinMaterial } from './game-arms';
 
 /**
  * How each WAM material should actually look in the lab.
@@ -216,6 +217,14 @@ const LOOK: Record<string, {
   // grin's teeth from luma ~158 to ~191 (and toward a pale plastic sheen); 0.55 keeps the beige the owner preferred. No glow:
   // the SDF teeth needed one inside the cavity's AO, polygons are lit by the scene's key directly.
   tooth: { metalness: 0.0, roughness: 0.38, envIntensity: 0.55 },
+  // The goblin's bony hands (scripts/merge-kit-hands.ts): polygon skin standing in for SDF flesh at the wrist, so it
+  // should read as the same skin, not as a glove. NOT dressed from this table: loadKit swaps in the FPV arm's own skin
+  // material (game-arms.ts makeSkinMaterial: the generated mottle albedo, wart normal and pit roughness maps), and only
+  // this entry's env survives. The env is the saturation knob: at 0.45 the room's grey environment washed a flat green
+  // to (127,134,96) beside the SDF wrist's (162,180,79) (turntable frame-00, 2026-10-24).
+  goblinskin: { metalness: 0.0, roughness: 1.0, envIntensity: 0.12 },
+  // Its claw tips: old horn, glossier than the skin (model_goblin_arm.py's Claw). Colour is the vertex colour.
+  goblinclaw: { metalness: 0.0, roughness: 0.28, envIntensity: 0.45 },
 
   // The twinhead's metal skull (assets-source/twinhead-kit/): the dark backs of its empty eye socket and nasal
   // cavity. A HOLE must not shine: any sheen on these spheres read as a pair of black eyeballs in the sockets (Blender
@@ -274,6 +283,15 @@ const PULSED = ['led', 'core'] as const;
  * which is the whole reason that character read as flat poster paint. A kit
  * should not have to enumerate itself to look like it belongs in the scene.
  */
+/**
+ * Linear multiplier on the bony hands' skin map (LOOK.goblinskin). The map is the FPV arm's albedo, toned for the gun's
+ * close, bright view (goblin-skin.ts fpvTone: exposure 0.72, red x0.80, blue x1.08, so darker and greener). Beside the
+ * marched goblin's wrist it read dark blue-green, (59,72,40) against the wrist's (162,180,79) (turntable frame-00,
+ * 2026-10-24), so third person undoes that tone and lifts it to the SDF flesh's level, more in red than blue to get
+ * the palette's yellow-green back. Tuned by measuring the same frame, not derived.
+ */
+export const GOBLIN_KIT_SKIN_TINT: readonly [number, number, number] = [5.6, 5.0, 2.7];
+
 const LOOK_DEFAULT = { metalness: 0.05, roughness: 0.35, envIntensity: 0.9 };
 
 export interface KitOverlay {
@@ -468,6 +486,19 @@ export async function loadKit(
       nm.emissiveNode = vec3(...glowSpec.color).mul(attribute('_glow', 'float')).mul(glowSpec.gain);
       (o as THREE.Mesh).material = nm;
       old.dispose();
+    }
+    // The bony hands' skin wears the FPV arm's material, so first and third person are one skin (see LOOK.goblinskin).
+    const asMesh = o as THREE.Mesh;
+    if (asMesh.isMesh && !Array.isArray(asMesh.material) && asMesh.material?.name === 'goblinskin') {
+      const old = asMesh.material;
+      const skin = makeSkinMaterial(env, 1);
+      skin.name = 'goblinskin';
+      skin.side = THREE.DoubleSide;
+      skin.envMapIntensity = LOOK.goblinskin!.envIntensity;
+      skin.color.setRGB(...GOBLIN_KIT_SKIN_TINT);
+      asMesh.material = skin;
+      old.dispose();
+      return;
     }
     const m = (o as THREE.Mesh).material;
     for (const mat of Array.isArray(m) ? m : m ? [m] : []) {

@@ -24,11 +24,11 @@ export const UPPER_LEN_M = 0.30;
 export type ArmNode = typeof ARM_NODES[number];
 
 export type ArmMaterialKind =
-  | 'skin' | 'leather' | 'steel' | 'brass' | 'band' | 'watchBody' | 'screen';
+  | 'skin' | 'leather' | 'steel' | 'brass' | 'band' | 'watchBody' | 'screen' | 'claw';
 
 const KINDS: Record<string, ArmMaterialKind> = {
   Skin: 'skin', Leather: 'leather', Steel: 'steel', Brass: 'brass',
-  Band: 'band', WatchBody: 'watchBody', Screen: 'screen',
+  Band: 'band', WatchBody: 'watchBody', Screen: 'screen', Claw: 'claw',
 };
 
 /** GLB material name -> runtime treatment. Blender appends `.001` when a

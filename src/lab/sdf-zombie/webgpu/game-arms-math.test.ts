@@ -54,6 +54,7 @@ describe('armMaterialKind', () => {
     expect(armMaterialKind('Band')).toBe('band');
     expect(armMaterialKind('WatchBody')).toBe('watchBody');
     expect(armMaterialKind('Screen')).toBe('screen');
+    expect(armMaterialKind('Claw')).toBe('claw');
   });
   it('is null for anything else, so the loader can be loud about it', () => {
     expect(armMaterialKind('Wood')).toBeNull();
