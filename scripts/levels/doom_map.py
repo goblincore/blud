@@ -34,6 +34,9 @@ ZONE_SPLIT_M2 = 600.0            # a zone whose real floor area is over this spl
 ZONE_MIN_M2 = 50.0               # a smaller zone merges into a neighbour
 LIGHT_MIN_ZONE_M2 = 150.0        # a zone gets a fill light from this area up
 MAX_LIGHTS = 10
+MAX_POOL_LIGHTS = 8             # pool lights do not count toward MAX_LIGHTS
+POOL_MIN_M2 = 4.0
+POOL_COLOURS = {"nukage": [0.35, 1.0, 0.3], "lava": [1.0, 0.45, 0.12], "acid": [0.75, 1.0, 0.25]}
 
 
 def _name8(b: bytes) -> str:
@@ -383,6 +386,29 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = 32) -> tuple[dic
                            "color": [1.0, 0.92, 0.82], "power": round(3 + 9 * mean, 2), "fixture": "none"})
             break
 
+    # Pool lights: connected glow sectors of one kind form a pool; each of at least POOL_MIN_M2 gets a
+    # cheap 'fire' light (liquid flicker) just above the floor of its biggest sector.
+    glow = {i: out_sectors[i]["glow"] for i in range(n) if "glow" in out_sectors[i]}
+    pu = _Union(n)
+    for a, b in pairs:
+        if a != b and a in glow and glow.get(a) == glow.get(b):
+            pu.join(a, b)
+    pools: dict[int, list[int]] = {}
+    for i in glow:
+        pools.setdefault(pu.find(i), []).append(i)
+    ranked = sorted(((sum(area[i] for i in g), min(g), g) for g in pools.values() if sum(area[i] for i in g) >= POOL_MIN_M2),
+                    key=lambda t: (-t[0], t[1]))[:MAX_POOL_LIGHTS]
+    for total_area, _, g in ranked:
+        for i in sorted(g, key=lambda i: (-area[i], i)):
+            pt = _fill_point(sector_segs[i], bbox[i]) if area[i] > 0 else None
+            if pt is None:
+                continue
+            lights.append({"pos": [round(pt[0], 3), round(out_sectors[i]["floor"] + 0.6, 3), round(pt[1], 3)],
+                           "color": list(POOL_COLOURS[glow[i]]), "power": round(min(14, 4 + 0.15 * total_area), 2),
+                           "mood": "fire", "fixture": "none"})
+            break
+    pool_lights = sum(1 for li in lights if li.get("mood") == "fire")
+
     level = {
         "version": 1, "id": f"doom-{map_name.lower()}", "name": f"Doom {map_name.upper()} (dev placeholder)",
         "geometry": "sectors", "ammo": "infinite", "loadout": ["melee", "shotgun", "dynamite", "flare"],
@@ -391,7 +417,7 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = 32) -> tuple[dic
         "start": {"pos": [0.0, 0.0, 0.0], "yaw": round(math.radians(90 - start["angle"]), 6)},
         "lights": lights,
     }
-    stats = {"dropped_zero_length_lines": dropped, "doors_opened": sorted(doors), "floors_lowered": sorted(lowered)}
+    stats = {"dropped_zero_length_lines": dropped, "doors_opened": sorted(doors), "floors_lowered": sorted(lowered), "pool_lights": pool_lights}
     return level, stats
 
 
@@ -438,7 +464,7 @@ def main() -> None:
     path.write_text(json.dumps(level, indent=1))
     zones = len({s["zone"] for s in level["sectors"]})
     doors = sum(1 for ln in level["lines"] if "door" in ln)
-    print(f"{path}: {len(level['sectors'])} sectors, {len(level['lines'])} lines, {zones} zones, {doors} door lines, {len(level['lights'])} lights"
+    print(f"{path}: {len(level['sectors'])} sectors, {len(level['lines'])} lines, {zones} zones, {doors} door lines, {len(level['lights'])} lights ({stats['pool_lights']} pool)"
           + (f", dropped {dropped} zero-length lines" if dropped else ""))
     if a.svg:
         write_svg(level, a.svg / f"{a.map.upper()}.svg")

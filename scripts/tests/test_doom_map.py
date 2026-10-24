@@ -108,7 +108,7 @@ def test_lines_and_zones(tmp_path):
     assert len(step) == 1 and {step[0]["front"], step[0]["back"]} == {0, 1}
     assert len(out["lines"]) == 7
     assert [s["zone"] for s in out["sectors"]] == [0, 0]   # joined by a non-door line
-    assert out["lights"] == []                            # 96 m2: under the light threshold
+    assert [li for li in out["lights"] if "mood" not in li] == []                            # 96 m2: under the light threshold
 
 
 def test_yaw_east_is_plus_x(tmp_path):
@@ -132,8 +132,9 @@ def test_every_sector_is_left_of_its_lines_with_positive_area(tmp_path):
 
 def test_a_big_zone_gets_a_light_inside_its_sector(tmp_path):
     out = convert(tmp_path, units_per_m=16)               # 4x the area: 384 m2
-    assert len(out["lights"]) == 1
-    px, py, pz = out["lights"][0]["pos"]
+    fill = [li for li in out["lights"] if "mood" not in li]
+    assert len(fill) == 1
+    px, py, pz = fill[0]["pos"]
     assert -4 < px < 12 and -8 < pz < 8                   # inside the 16 x 16 m box of A + B (x -4..20 overall)
     a = out["sectors"][0]
     assert a["floor"] < py < a["ceil"]
@@ -164,3 +165,42 @@ def test_zero_length_line_is_dropped(tmp_path):
     out, stats = convert_row(tmp_path, (0, 128, "FLOOR4_8", "CEIL3_5", 160, 0), 0, 0, extra_lines=[(0, 0, 1, 0, 0, 0, 0xFFFF)])
     assert stats["dropped_zero_length_lines"] == 1
     assert all(ln["v"][0] != ln["v"][1] for ln in out["lines"])
+
+
+def _inside(level, px, pz, sector):
+    vs = level["vertices"]
+    segs = [(tuple(vs[ln["v"][0]]), tuple(vs[ln["v"][1]])) for ln in level["lines"]
+            if ln["front"] != ln.get("back") and sector in (ln["front"], ln.get("back"))]
+    return doom_map._inside(px, pz, segs)
+
+
+def test_pool_gets_a_green_fire_light_inside_it(tmp_path):
+    out = convert(tmp_path)
+    pools = [li for li in out["lights"] if li.get("mood") == "fire"]
+    assert len(pools) == 1
+    li = pools[0]
+    r, g, b = li["color"]
+    assert g > r and g > b and li["fixture"] == "none"
+    assert _inside(out, li["pos"][0], li["pos"][2], 1)
+    assert li["pos"][1] == round(out["sectors"][1]["floor"] + 0.6, 3)
+    assert li["power"] == round(min(14, 4 + 0.15 * 32), 2)
+
+
+def test_pool_lights_do_not_use_the_fill_light_cap(tmp_path):
+    # 11 separate 256 m2 rooms (16 units/m); the last is nukage.
+    verts, sectors, sides, lines = [], [], [], []
+    for k in range(11):
+        x = k * 600
+        v = len(verts)
+        verts += [(x, 0), (x + 256, 0), (x + 256, 256), (x, 256)]
+        floor_tex = "NUKAGE1" if k == 10 else "FLOOR4_8"
+        sectors.append((0, 128, floor_tex, "CEIL3_5", 160, 0, 0))
+        sides.append((0, 0, "-", "-", "STARTAN3", k))
+        for a, b in ((1, 0), (2, 1), (3, 2), (0, 3)):
+            lines.append((v + a, v + b, 1, 0, 0, k, 0xFFFF))
+    wad = tmp_path / "m.wad"
+    wad.write_bytes(pack_wad(verts, sectors, sides, lines, [(64, 128, 0, 1, 7)]))
+    out, _ = doom_map.convert(wad, "E1M1", units_per_m=16)
+    fire = [li for li in out["lights"] if li.get("mood") == "fire"]
+    assert len(fire) == 1
+    assert len(out["lights"]) - len(fire) == doom_map.MAX_LIGHTS
