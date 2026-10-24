@@ -161,7 +161,7 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
     group.name = 'sector-glow';
     for (const [kind, b] of glowBatches) {
       const mat = new MeshBasicNodeMaterial();
-      mat.colorNode = vec4(glowFn({ wpos: positionWorld, t: fx.glowTime, kind: float(GLOW_KIND_INDEX[kind]) }) as unknown as ReturnType<typeof vec3>, 1);
+      mat.colorNode = vec4((glowFn({ wpos: positionWorld, t: fx.glowTime, kind: float(GLOW_KIND_INDEX[kind]) }) as unknown as ReturnType<typeof vec3>).mul(fx.glowGain), 1);
       mat.fog = false;
       const mesh = new THREE.Mesh(b.geometry(), mat);
       mesh.name = `sector-glow-${kind}`;
