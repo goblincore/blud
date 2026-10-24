@@ -10,6 +10,7 @@
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { type Vec3 } from '../types';
+import { standingFloor } from './level-ground';
 
 export function createWeaponPlayerSeams(ctx: GameContext) {
   const { scene, camera } = ctx.boot.handle;
@@ -19,30 +20,37 @@ export function createWeaponPlayerSeams(ctx: GameContext) {
      *  `teleport()` writes; returns the enclosure key under the feet so a
      *  caller can assert the pose landed in the intended room. */
     placePlayer(p: { x: number; z: number; yaw: number; pitch?: number }) {
-      ctx.player.player.pos = [p.x, 0, p.z];
+      ctx.player.player.pos = [p.x, standingFloor(ctx.world.level.ground, p.x, p.z), p.z];
       ctx.player.player.vel = [0, 0, 0];
       ctx.player.player.yaw = p.yaw;
       ctx.player.player.pitch = p.pitch ?? 0;
       ctx.player.player.grounded = true;
+      ctx.player.player.stepLag = 0;
       return ctx.world.level.keyAt(p.x, p.z);
     },
-    /** Set the player pose. y defaults to 0 (feet on the floor). */
-    setPose(x: number, z: number, yaw: number, pitch = 0, y = 0) {
-      ctx.player.player.pos = [x, y, z];
+    /** Set the player pose. y defaults to the floor under (x, z) (0 on room levels). */
+    setPose(x: number, z: number, yaw: number, pitch = 0, y?: number) {
+      const floor = standingFloor(ctx.world.level.ground, x, z);
+      const feet = y ?? floor;
+      ctx.player.player.pos = [x, feet, z];
       ctx.player.player.vel = [0, 0, 0];
       ctx.player.player.yaw = yaw;
       ctx.player.player.pitch = pitch;
-      ctx.player.player.grounded = y === 0;
+      ctx.player.player.grounded = feet === floor;
+      ctx.player.player.stepLag = 0;
     },
     pose: () => ({ pos: [...ctx.player.player.pos] as Vec3, yaw: ctx.player.player.yaw, pitch: ctx.player.player.pitch }),
     /** Teleport to a room's centre, facing +z. */
     teleport(roomId: number) {
       const r = ctx.world.level.rooms.find(r => r.id === roomId);
       if (!r) return false;
-      ctx.player.player.pos = [(r.minX + r.maxX) / 2, 0, (r.minZ + r.maxZ) / 2];
+      const x = (r.minX + r.maxX) / 2, z = (r.minZ + r.maxZ) / 2;
+      ctx.player.player.pos = [x, standingFloor(ctx.world.level.ground, x, z), z];
       ctx.player.player.vel = [0, 0, 0];
       ctx.player.player.yaw = 0;
       ctx.player.player.pitch = 0;
+      ctx.player.player.grounded = true;
+      ctx.player.player.stepLag = 0;
       return true;
     },
     /** The player's ground position — a capture rig needs it to stand beside a

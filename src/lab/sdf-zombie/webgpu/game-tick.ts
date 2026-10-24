@@ -220,7 +220,7 @@ export function tick(ctx: GameContext, dt: number) {
     return { min: [p[0] - 0.35, 0, p[2] - 0.35] as Vec3, max: [p[0] + 0.35, 1.8, p[2] + 0.35] as Vec3 };
   });
   if (loopBlocksInput(ctx)) input = { x: 0, z: 0, jump: false };   // dead or done
-  stepPlayer(ctx.player.player, input, dt, [...ctx.world.colliders, ...zombieBoxes]);
+  stepPlayer(ctx.player.player, input, dt, [...ctx.world.colliders, ...zombieBoxes], ctx.world.level.ground);
 
   // Damage transitions use their own clock; frozen pose captures must
   // still show a newly selected preset. Refresh exclusions as it grows.

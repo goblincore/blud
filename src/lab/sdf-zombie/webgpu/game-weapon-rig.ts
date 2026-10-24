@@ -25,6 +25,7 @@ import { RELOAD, magazineAfterFire } from './game-viewmodel';
 import { predictSlugHitNow } from './game-hit-trace';
 import { firedSides, triggerMuzzleFlash } from './game-muzzle-flash';
 import { type BenchAction } from './game-bench-scenario';
+import { standingFloor } from './level-ground';
 
 /** A view-space point, expressed in the aim rig's space RIGHT NOW. Refresh
  *  the anchor's world matrices first when the rig moved this frame. */
@@ -603,7 +604,7 @@ switch (a.kind) {
       const inset = 0.6;
       const px = Math.min(r.maxX - inset, Math.max(r.minX + inset, tx + ax * STANDOFF));
       const pz = Math.min(r.maxZ - inset, Math.max(r.minZ + inset, tz + az * STANDOFF));
-      ctx.player.player.pos = [px, 0, pz];
+      ctx.player.player.pos = [px, standingFloor(ctx.world.level.ground, px, pz), pz];
       ctx.player.player.vel = [0, 0, 0];
       // atan2(dx, −dz): the page's forward is (sin yaw, −cos
       // yaw) — see aimAtNearestSurface. Was atan2(dx, +dz)
@@ -611,6 +612,7 @@ switch (a.kind) {
       ctx.player.player.yaw = Math.atan2(tx - px, -(tz - pz));
       ctx.player.player.pitch = 0;
       ctx.player.player.grounded = true;
+      ctx.player.player.stepLag = 0;
     }
     break;
   }

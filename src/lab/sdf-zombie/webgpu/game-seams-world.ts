@@ -665,7 +665,10 @@ export function createWorldSeams(ctx: GameContext) {
       openGates: [...ctx.world.openGates],
       requires: ctx.world.level.def?.requires ?? [],
       windows: ctx.world.level.surfaces.windows.map(w => w.id),
+      geometry: ctx.world.level.def?.sectors ? 'sectors' : 'rooms',
     }),
+    /** The ground under (x, z): floor and ceiling heights (NaN outside every sector). */
+    ground: (x: number, z: number) => ({ floor: ctx.world.level.ground.floorAt(x, z), ceil: ctx.world.level.ground.ceilAt(x, z) }),
     /** Open an authored level's gate by id (false if unknown or already open). */
     openGate: (id: string) => openGate(ctx, id),
     /** Mesh key: what the level's art placed (null without art). */

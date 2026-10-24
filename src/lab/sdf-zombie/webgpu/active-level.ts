@@ -18,9 +18,12 @@ import {
   enclosureKeyIn, enclosureOfIn, gateColliders, layoutColliders, layoutSurfaces,
   roomAtPoint, type Capability, type LevelDef, type LevelSurfaceSet, type PortalDef, type SpawnKind,
 } from './level-def';
+import { FLAT_GROUND, type LevelGround } from './level-ground';
+import { zoneName } from './sector-def';
+import { buildSectorGround } from './sector-ground';
 
 /** Capabilities the web engine can load today (spec §8). */
-export const ENGINE_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>(['windows', 'open-sky', 'void', 'portals', 'art']);
+export const ENGINE_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>(['windows', 'open-sky', 'void', 'portals', 'art', 'sectors']);
 
 export function missingCapabilities(def: LevelDef, supported: ReadonlySet<Capability>): Capability[] {
   return def.requires.filter(c => !supported.has(c));
@@ -45,6 +48,8 @@ export interface ActiveLevel {
   gateColliders(open: ReadonlySet<string>): Aabb[];
   /** Void v1 §3: portals; empty for the ring. */
   portals: readonly PortalDef[];
+  /** What bodies stand on (level-ground.ts): FLAT_GROUND for the ring and room levels. */
+  ground: LevelGround;
   /** Enemies to spawn at load, in spawn order. */
   spawnList(): LevelSpawn[];
 }
@@ -64,6 +69,7 @@ export function ringLevel(): ActiveLevel {
     enclosureFor: enclosureOf,
     gateColliders: () => [],
     portals: [],
+    ground: FLAT_GROUND,
     spawnList: () => ROOMS.flatMap(room => spawnPoints(room).map((pos, index) => ({
       id: `ring-${room.id}-${index}`,
       kind: slotCharacter(room, index),
@@ -87,9 +93,27 @@ export function authoredLevel(def: LevelDef): ActiveLevel {
     enclosureFor: key => enclosureOfIn(def, key),
     gateColliders: open => gateColliders(def, open),
     portals: def.portals,
+    ground: FLAT_GROUND,
     spawnList: () => def.spawns.flatMap(s => {
       const room = roomAtPoint(def, s.pos[0], s.pos[2]);
       return room ? [{ id: s.id, kind: s.kind, room, pos: s.pos }] : [];
     }),
+  };
+}
+
+/** A sector level (spec 2026-10-24 §6): the sectors are its ground and its walls; its zone rooms
+ *  carry lighting, probes and keys but no wall colliders (only the level's box solids collide). */
+export function sectorActiveLevel(def: LevelDef): ActiveLevel {
+  const map = def.sectors;
+  if (!map) throw new Error(`level ${def.id}: not a sector level`);
+  const ground = buildSectorGround(map);
+  return {
+    ...authoredLevel(def),
+    staticColliders: layoutColliders({ ...def, rooms: [], tunnels: [] }),
+    keyAt: (x, z) => {
+      const s = ground.sectorAt(x, z);
+      return s < 0 ? 'void' : zoneName(map.sectors[s]!.zone);
+    },
+    ground,
   };
 }

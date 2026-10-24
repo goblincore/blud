@@ -26,3 +26,10 @@ export const FLAT_GROUND: LevelGround = {
   ceilAt: () => Infinity,
   blockingNear: () => NO_SEGS,
 };
+
+/** Where feet placed at (x, z) stand: the floor there, or 0 outside every sector (every
+ *  teleport and pose seam uses this, so room levels still place at y = 0). */
+export function standingFloor(g: LevelGround, x: number, z: number): number {
+  const f = g.floorAt(x, z);
+  return Number.isFinite(f) ? f : 0;
+}

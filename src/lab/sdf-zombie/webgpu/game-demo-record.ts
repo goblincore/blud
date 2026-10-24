@@ -14,6 +14,7 @@ import { type DemoFile, type DemoFrame, createDemoRecorder } from './demo-record
 import { type ZombieActor } from './game-actor';
 import { type Scenario, type ScenarioStep } from './game-bench-scenario';
 import { playerRoomId } from './game-player-input';
+import { standingFloor } from './level-ground';
 
 /** Snapshot the listeners' accumulated input as the frame the next tick will
  *  consume. Zeroes the accumulators: a delta belongs to exactly one frame. */
@@ -47,20 +48,23 @@ export function describeRecordedWound(ctx: GameContext, a: ZombieActor, w: Wound
 export function placeFromDemo(ctx: GameContext, file: DemoFile): void {
   const sp = file.meta?.startPose as { x?: number; z?: number; yaw?: number; pitch?: number } | undefined;
   if (sp && Number.isFinite(sp.x) && Number.isFinite(sp.z)) {
-    ctx.player.player.pos = [sp.x as number, 0, sp.z as number];
+    ctx.player.player.pos = [sp.x as number, standingFloor(ctx.world.level.ground, sp.x as number, sp.z as number), sp.z as number];
     ctx.player.player.vel = [0, 0, 0];
     ctx.player.player.yaw = Number.isFinite(sp.yaw) ? (sp.yaw as number) : 0;
     ctx.player.player.pitch = Number.isFinite(sp.pitch) ? (sp.pitch as number) : 0;
     ctx.player.player.grounded = true;
+    ctx.player.player.stepLag = 0;
     return;
   }
   const r = ctx.world.level.rooms.find(x => x.id === file.room);
   if (r) {
-    ctx.player.player.pos = [(r.minX + r.maxX) / 2, 0, (r.minZ + r.maxZ) / 2];
+    const x = (r.minX + r.maxX) / 2, z = (r.minZ + r.maxZ) / 2;
+    ctx.player.player.pos = [x, standingFloor(ctx.world.level.ground, x, z), z];
     ctx.player.player.vel = [0, 0, 0];
     ctx.player.player.yaw = 0;
     ctx.player.player.pitch = 0;
     ctx.player.player.grounded = true;
+    ctx.player.player.stepLag = 0;
   }
 }
 

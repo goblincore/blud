@@ -98,8 +98,10 @@ import { ZOMBIE_FLAT, headShape } from './game-zombie-face';
 import type { Quat } from '../vec';
 import zombieBlobSrc from '../characters/zombie.blob?raw';
 import { wanderBounds, type RoomDef } from './game-level';
-import { ENGINE_CAPABILITIES, authoredLevel, missingCapabilities, ringLevel } from './active-level';
-import { parseLevelJson } from './level-json';
+import { ENGINE_CAPABILITIES, authoredLevel, missingCapabilities, ringLevel, sectorActiveLevel } from './active-level';
+import { parseLevel } from './sector-json';
+import { addSectorMeshes } from './game-sector-mesh';
+import { standingFloor } from './level-ground';
 import { levelCeilingM, roomIdAt as levelRoomIdAt, roomSpawnPoints } from './game-level-rooms';
 import { chunkListGainNow, chunkPickBody } from './chunk-light-pick';
 import { applyMoonKey, createOutdoor, createOutdoorSeams, outdoorSurfaceMaterial, stepOutdoor } from './game-outdoor';
@@ -591,10 +593,10 @@ async function main() {
     if (levelParam) {
       const res = await fetch(`/assets/levels/${levelParam}.level.json`);
       if (!res.ok) throw new Error(`level ${levelParam}: HTTP ${res.status}`);
-      const def = parseLevelJson(await res.json(), { state: q.get('state') ?? undefined });
+      const def = parseLevel(await res.json(), { state: q.get('state') ?? undefined });
       const missing = missingCapabilities(def, ENGINE_CAPABILITIES);
       if (missing.length > 0) throw new Error(`level ${def.id} needs engine support for: ${missing.join(', ')}`);
-      ctx.world.level = authoredLevel(def);
+      ctx.world.level = def.sectors ? sectorActiveLevel(def) : authoredLevel(def);
       ctx.world.artScene = await loadLevelArt(levelParam, def.art);
     } else {
       ctx.world.level = ringLevel();
@@ -764,6 +766,8 @@ async function main() {
   }
   // Mesh key §5: the art joins the group BEFORE the per-room light lists are
   // assigned (below), so it is lit exactly like the walls.
+  // Sector levels (spec 2026-10-24 §6.4): floors, ceilings and walls from the sectors.
+  if (ctx.world.level.def?.sectors) addSectorMeshes(ctx, ctx.world.level.def.sectors);
   if (ctx.world.artScene && ctx.world.level.def?.art) placeLevelArt(ctx, ctx.world.artScene, ctx.world.level.def.art);
   scene.add(ctx.world.levelGroup);
   // OUTDOOR v1: moon, sky dome, skyline — only for a level with open-sky rooms
@@ -3188,8 +3192,12 @@ async function main() {
       || r.id === Number(ctx.boot.roomParam)) ?? null;
   ctx.player.player = {
     pos: ctx.boot.room
-      ? [(ctx.boot.room.minX + ctx.boot.room.maxX) / 2, 0, (ctx.boot.room.minZ + ctx.boot.room.maxZ) / 2]
-      : [ctx.world.level.playerStart.x, 0, ctx.world.level.playerStart.z],
+      ? [(ctx.boot.room.minX + ctx.boot.room.maxX) / 2,
+        standingFloor(ctx.world.level.ground, (ctx.boot.room.minX + ctx.boot.room.maxX) / 2, (ctx.boot.room.minZ + ctx.boot.room.maxZ) / 2),
+        (ctx.boot.room.minZ + ctx.boot.room.maxZ) / 2]
+      : [ctx.world.level.playerStart.x,
+        standingFloor(ctx.world.level.ground, ctx.world.level.playerStart.x, ctx.world.level.playerStart.z),
+        ctx.world.level.playerStart.z],
     vel: [0, 0, 0],
     yaw: ctx.boot.room ? 0 : ctx.world.level.playerStart.yaw,
     pitch: ctx.world.level.playerStart.pitch,
