@@ -50,9 +50,9 @@ never both; every existing level is unchanged.
   "sectors": [{
     "floor": 0.0, "ceil": 3.0,                        // metres
     "light": 0.63,                                    // 0..1
-    "special": "none",                                // none | hurt | glow | flicker | pulse | strobe
+    "special": "none",                                // none | hurt | flicker | pulse | strobe
     "hurtPerSec": 10,                                 // hurt sectors only
-    "glow": "nukage",                                 // nukage | lava | acid (glow sectors; usually also hurt)
+    "glow": "nukage",                                 // null | nukage | lava | acid (independent of special: a pool is usually glow + hurt)
     "materials": { "floor": "metal-plate", "ceil": "concrete", "wall": "tech" },
     "zone": 3                                         // §6.5
   }],
@@ -71,8 +71,9 @@ A two-sided line between sectors of different heights generates the step riser (
 higher floor) and the ceiling lip (higher ceiling → lower ceiling). Validation: every sector is
 closed by its lines (each vertex used an even number of times per sector), no line references a
 missing sector, heights satisfy `ceil > floor` except for door sectors (closed: `ceil == floor`).
-Capability: a sector level `requires` `multi-floor`, which joins `ENGINE_CAPABILITIES` once
-plan 1 lands.
+Capability: a sector level `requires` a new `sectors` capability (not `multi-floor`, which
+stays the refusal for room levels with raised floors: the Wake gate checks it), which joins
+`ENGINE_CAPABILITIES` in plan 1.
 
 ## 5. The converter
 
@@ -89,8 +90,9 @@ plan 1 lands.
   - linedef specials → `door` (1, 26–28, 31–34, 117, 118: door; locked variants treated as plain)
     and `exit` (11, 51, 52, 124);
   - thing types → kinds (§9), filtered by skill flag.
-- **Door sectors**: written closed (`ceil = floor`); the open height is computed at load by
-  Doom's rule (lowest neighbouring ceiling − 4 units).
+- **Door sectors**: plan 1 writes them OPEN (ceiling at Doom's open height: lowest neighbouring
+  ceiling − 4 units) so the map is walkable before doors move; plan 2 writes them closed
+  (`ceil = floor`) with the open height computed at load.
 - **Zones** (§6.5) assigned here.
 - Writes `<out>/doom-<map>.level.json` and prints a summary (sectors, lines, zones, things by kind).
 
@@ -104,11 +106,12 @@ One small pure interface replaces that assumption:
 
 ```ts
 interface LevelGround {
-  floorAt(x: number, z: number, fromY: number): number;  // highest floor at or below fromY + step
+  floorAt(x: number, z: number): number;   // the sector's floor; NaN outside every sector
   ceilAt(x: number, z: number): number;
-  segments: readonly WallSegment[];                      // 2D blocking lines (with heights)
-  solids: readonly Aabb[];                               // box solids, as today
+  blockingNear(x: number, z: number, r: number, feetY: number): readonly WallSeg[];
 }
+// Doom has no sector over sector, so (x, z) picks one floor. Box solids stay in the
+// collider list, as today.
 ```
 
 Room levels implement it as today (floor 0, the box colliders), so behaviour stays identical;
