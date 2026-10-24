@@ -30,8 +30,8 @@
 #   4. THE PROPORTIONS. The bride's elegant frame (her skeleton, verbatim):
 #      a high hip line (legs ~57% of her height), a long neck, a small head,
 #      a defined waist.
-#   5. THE HAIR. Orange twin tails with a side swoop over one brow (owner,
-#      2026-10-24); earlier a long side-parted fall, blue buns, before that
+#   5. THE HAIR. An orange bouffant blowout with a swoop over one brow
+#      (owner, 2026-10-24); earlier twin tails, a long fall, blue buns, before that
 #      waist-length, loose and dark: a crown mass plus strand
 #      curtains framing the face, over the shoulders and down the back.
 model siren
@@ -200,7 +200,7 @@ body
   # the eye and the painted lid reads as set IN the head. wide 1.05, not
   # 1.30: at 1.30 the two carves met at the centreline and ate the nose
   # bridge flat. Smooth (blend 0.007): a crisp rim reads as a mask hole.
-  carve on skull at=0.55 r=0.020 wide=1.05 tall=0.80 deep=0.75 blend=0.007 offset=(0.031,-0.0046,0.0975) both
+  carve on skull at=0.55 r=0.020 wide=0.90 tall=0.80 deep=0.75 blend=0.004 offset=(0.033,-0.0046,0.0975) both
   # No lid or brow-ridge prims (see the cheekbone note): with them the eye
   # was a slit under a shelf. The sheet paints the lid and brows.
   # Nasal root: fills between the eyes so they sit IN the face.
@@ -211,8 +211,11 @@ body
   # biggest thing in the close-up; a fill under it cast a moustache. The
   # anime faces she is pushed toward (owner, 2026-10-23) barely draw a nose.
   # The sheet paints a counter-light where the undercut was
-  # (make-siren-face.py nose_light()).
-  blob head on skull at=0.52 offset=(0,0.0010,0.0855) tip=(0,-0.020,0.001) r=0.0032 r2=0.0036 blend=0.008
+  # (make-siren-face.py nose_light()). Projecting more (owner, 2026-10-24:
+  # "her nose should project more"): the ridge's end pushed 8 mm further
+  # out (tip z +0.009, was +0.001) and a touch fuller (r2 0.0046), still
+  # one tapered ridge, no ball.
+  blob head on skull at=0.53 offset=(0,0.0010,0.0860) tip=(0,-0.022,0.009) r=0.0034 r2=0.0046 blend=0.008
   # LIPS: a cupid's-bow upper on the skull and a fuller lower on the JAW,
   # so the mouth opens between them. SHAPE ONLY, and SUBTLE: their colour
   # is the sheet's (make-siren-face.py lips(), placed on THESE prims'
@@ -243,10 +246,10 @@ body
   blob head on jaw at=1.0 r=0.0028 r2=0.0005 offset=(-0.020,0.0195,-0.0200) tip=(0.000,0.019,0.002) blend=0.001 both color=e6dcc4 gloss=0.70
 
   # ============================================================
-  # HAIR — ORANGE TWIN TAILS (owner, 2026-10-24: first "long orange hair
-  # like the reference", then "maybe like double ponytail with long tails"):
-  # a side-parted crown with a glossy swoop over one brow, tied up into two
-  # long tails.
+  # HAIR — AN ORANGE BOUFFANT (owner, 2026-10-24: "long orange hair like the
+  # reference", then twin tails, then "a big bouffant blowout"): a teased
+  # crown, wide sides and back, ends flipped out at the jaw, and a glossy
+  # swoop over one brow.
   # Was blue buns. A vivid orange (e8661c; d2461a rendered plain red under
   # the warm key) with a satin gloss.
   # ============================================================
@@ -268,20 +271,25 @@ body
   # brow's outer half, and a thick lock down past the cheekbone to the jaw.
   blob head on skull at=0.64 offset=(-0.036,0.050,0.050) tip=(-0.026,-0.010,0.006) r=0.026 wide=1.20 deep=0.70 blend=0.010 color=e8661c gloss=0.50
   blob head on skull at=0.64 offset=(-0.060,0.036,0.034) tip=(-0.010,-0.130,0.008) bend=(-0.010,0,0.008) r=0.024 r2=0.016 deep=0.80 strand=5 wave=0.10 cycles=1.5 fat=0.85 blend=0.004 color=e8661c gloss=0.50
-  # TWIN TAILS (owner, 2026-10-24: "maybe like double ponytail with long
-  # tails"): a tie high on each side of the head (x +-0.080, y ~1.81, a
-  # little behind the ear line) and a long tapered bundle of strands from
-  # it, out, down and BACK to y ~1.42 behind the shoulders, bowed outward
-  # (straight down, the first pass hung like side curtains and painted the
-  # shoulder tops orange). 0.38 m: on the skull a tail swings with the
-  # head's aim in game, as a real ponytail does; much longer and it would
-  # reach the arms.
-  # The gathered root: a round knot where the hair is tied.
-  blob head on skull at=0.64 offset=(0.080,0.086,-0.034) r=0.032 wide=1.00 tall=1.00 deep=0.95 blend=0.010 both color=e8661c gloss=0.50
-  # The tie: a darker band round the root.
-  blob head on skull at=0.64 offset=(0.100,0.090,-0.034) tip=(0.008,-0.012,0.000) r=0.022 wide=0.55 deep=1.10 tall=1.10 blend=0.004 both color=8a2a10 gloss=0.40
-  # The tail: thick at the tie, tapering to loose strands at the tip.
-  blob head on skull at=0.64 offset=(0.108,0.086,-0.036) tip=(0.030,-0.380,-0.075) bend=(0.050,0.010,-0.020) r=0.030 r2=0.012 deep=0.90 strand=8 wave=0.12 cycles=2.5 fat=0.85 blend=0.006 both color=e8661c gloss=0.50
+  # THE BOUFFANT (owner, 2026-10-24: "a big bouffant blowout type deal";
+  # replaces the twin tails): a teased high crown, wide volume at the
+  # sides and back, ends flipping out at the jaw. Built from SEVERAL big
+  # masses, each with radius x largest scale just under the cranium's
+  # 0.0912: one prim bigger than the skull becomes the "fattest head prim"
+  # and the face sheet re-centres on the hair (headShape; siren-blob.test.ts
+  # pins it). Offsets from the skull's at=0.64 point (0, 1.7215, -0.0054);
+  # the side and back masses sit behind the face plane (front z <= ~0.05,
+  # under the face's ~0.075), so the face stays clear.
+  # The teased crown: high and round, lifting the silhouette ~5 cm.
+  blob head on skull at=0.64 offset=(0,0.075,-0.015) r=0.082 wide=1.10 tall=0.95 deep=1.00 blend=0.016 color=e8661c gloss=0.50
+  # The sides: big round volume beside each temple and over the ears.
+  blob head on skull at=0.64 offset=(0.082,0.020,-0.025) r=0.068 wide=1.00 tall=1.32 deep=1.05 blend=0.016 both color=e8661c gloss=0.50
+  # The back: the volume carried round behind the head.
+  blob head on skull at=0.64 offset=(0,0.010,-0.072) r=0.080 wide=1.12 tall=1.05 deep=0.95 blend=0.016 color=e8661c gloss=0.50
+  # The flip: the ends turned up and out at jaw level (y ~1.61), a rolled
+  # curl each side, wider than the head, the blowout's signature.
+  blob head on skull at=0.64 offset=(0.078,-0.075,-0.022) tip=(0.040,-0.030,0.004) bend=(0,0.014,0) r=0.034 r2=0.022 wide=1.00 deep=1.00 blend=0.016 both color=e8661c gloss=0.50
+  blob head on skull at=0.64 offset=(0,-0.070,-0.090) r=0.052 wide=1.55 tall=0.80 deep=0.80 blend=0.016 color=e8661c gloss=0.50
   # BACK AND SIDES: covers the back of the skull and the sides behind the
   # ears. Centre (0, 1.676, -0.047), semi 0.0775 x 0.056 x 0.053; r x wide
   # 0.0775 stays under the cranium's 0.0912 (the face frame).

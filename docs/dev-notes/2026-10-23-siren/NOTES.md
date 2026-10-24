@@ -113,3 +113,12 @@ shoulder tops). Eyes 3 mm further apart each (sheet `EYE_IN/OUT`, `IRIS_X`, the 
 cheek prims r 0.022 -> 0.017, the face mass wide 1.06 -> 0.98.
 
 ![twin tails](contact-10-tails.png)
+
+## Eleventh pass: a bouffant, a nose that projects (2026-10-24, owner: "a big bouffant blowout type deal ... her nose should project more")
+
+Twin tails out. The bouffant is several big masses (a teased crown, sides, back, flipped ends at the jaw) each with
+radius x largest scale under the cranium's 0.0912, so the face sheet keeps projecting off the skull. The nose had never
+projected because the eye-socket CARVES' smooth blend ate the bridge along its whole length (prim inside, body
+outside); carves narrowed (wide 0.90, blend 0.004, x 0.033) and the ridge's end pushed 8 mm out: ~1.3 cm proud.
+
+![bouffant](contact-11-bouffant.png)
