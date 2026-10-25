@@ -215,6 +215,41 @@ describe('stepGutChain on a debris ground (plan 3b Task 4)', () => {
     expect(maxX).toBeLessThanOrEqual(WALL_X - R + 1e-9);         // and no node centre got past it
     for (const n of c.nodes) expect(n.pos[1]).toBeGreaterThanOrEqual(-1e-9);
   });
+  it('an attached rope whose constraints drag a STOPPED node back across a wall keeps it on its side (2nd pass)', () => {
+    // The pin sits past a wall at x = 0 (a body pressed to it, its wound poking through); the rest of the rope lies
+    // still on the near side. Integration moves the still nodes only in y, so the first wall pass sees no crossing:
+    // every crossing logged here is the constraints' pull, caught by the second pass.
+    const WALL_X = 0, R = 0.03;
+    const crossings: Vec3[] = [];
+    const wall: DebrisGround = {
+      floorAt: () => 0,
+      bounce: (prev, next, vel, restitution, friction, radius = 0) => {
+        if (!(prev[0] < WALL_X && next[0] + radius > WALL_X - 1e-12)) return null;
+        crossings.push([...prev] as Vec3);
+        const vn = vel[0];
+        return { pos: [WALL_X - Math.max(radius, 0.01), next[1], next[2]],
+          vel: [vn > 0 ? -vn * restitution : vn, vel[1], vel[2] * friction], normal: [-1, 0, 0] };
+      },
+    };
+    const base = makeGutChain([0.4, 0.5, 0]);
+    let c: GutChain = {
+      ...base,
+      nodes: base.nodes.map((n, i) => {
+        const pos: Vec3 = i === 0 ? [0.4, 0.5, 0] : [-R - 0.06 * i, 0, 0.02 * i];
+        return { pos, prev: [...pos] as Vec3 };
+      }),
+    };
+    expect(c.attached).toBe(true);
+    for (let i = 0; i < 120; i++) {
+      c = stepGutChain(pinGutChain(c, [0.4, 0.5, 0]), 1 / 60, wall, R);
+      for (const n of c.nodes.slice(1)) {
+        expect(n.pos[0]).toBeLessThanOrEqual(WALL_X - R + 1e-9);
+        expect(n.pos.every(Number.isFinite)).toBe(true);
+      }
+      expect(c.nodes[0]!.pos).toEqual([0.4, 0.5, 0]);          // the pin is the caller's
+    }
+    expect(crossings.length).toBeGreaterThan(0);                // the pull did reach the wall
+  });
   it('off the map a node keeps its last floor (spawned with the body floor as floorY)', () => {
     const hole: DebrisGround = { floorAt: () => NaN, bounce: () => null };
     let c = detachGutChain(makeGutChain([0, 1.5, 0], { floorY: 0.5 }));

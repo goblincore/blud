@@ -33,7 +33,7 @@ import { FLAT_GROUND } from './level-ground';
 import { registerBleed } from './game-bleed';
 import { crowdTypeFor } from './game-crowd-types';
 import { applyStormBodyKey } from './game-dynamic-light';
-import { actorSpawnCentre, debrisGround, seatBloodSpawn, shellAmpOf } from './game-hit-trace';
+import { actorSpawnCentre, debrisGround, seatBurstSpawn, shellAmpOf } from './game-hit-trace';
 import { seatSpawnInsideMap } from './sector-debris';
 import { wanderBounds, type RoomDef } from './game-level';
 import { damagePlayer } from './game-loop';
@@ -506,8 +506,9 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
         let rad = 0.08;
         for (const p of head.prims) for (const e of [p.a, p.b]) rad = Math.max(rad, Math.hypot(e[0] - at[0], e[1] - at[1], e[2] - at[2]));
         // Sector levels (plan 3b): the head's blood starts inside the level; the gout's drops know the body's floor.
-        const seat = seatBloodSpawn(ctx, actor, at);
-        burstVolume(ctx.vfx.bloodSim, seat.pos, Math.min(rad, 0.25), [dir[0] * 1.5, 0.5, dir[2] * 1.5], rngStreams.bleed, ctx.boot.nextEmitterStream++);
+        const seat = seatBurstSpawn(ctx, actor, at);
+        burstVolume(ctx.vfx.bloodSim, seat.pos, Math.min(rad, 0.25), [dir[0] * 1.5, 0.5, dir[2] * 1.5], rngStreams.bleed, ctx.boot.nextEmitterStream++,
+          undefined, seat.seat);
         const l = Math.hypot(dir[0], dir[1] + 0.6, dir[2]) || 1;
         spawnImpactGout(ctx.vfx.bloodSim, 'slug', seat.pos, [dir[0] / l, (dir[1] + 0.6) / l, dir[2] / l], rngStreams.bleed, ctx.boot.nextEmitterStream++,
           undefined, seat.floorY);

@@ -39,8 +39,8 @@ interface Piece {
 }
 interface Debris {
   mesh: THREE.Mesh; velocity: THREE.Vector3; spin: THREE.Vector3; resting: boolean;
-  /** SECTOR levels (plan 3b): the floor the piece last fell over (0 until known) and its x/z half-extent, the radius
-   *  its wall bounce stops at. Read only with a ground. */
+  /** SECTOR levels (plan 3b): the floor the piece last fell over (0 until known) and its bounds' half-diagonal, the
+   *  radius its wall bounce stops at. Read only with a ground. */
   floorY: number; radius: number;
 }
 export interface KitDamageEvent { kind:'armor-hit'|'armor-shed'; point:Vec3; limb:LimbId }
@@ -163,7 +163,8 @@ export function createKitDamage(object:THREE.Object3D) {
     geometry.computeBoundingBox();
     const centre=geometry.boundingBox!.getCenter(new THREE.Vector3());
     geometry.translate(-centre.x,-centre.y,-centre.z); geometry.computeBoundingBox();
-    const half=geometry.boundingBox!.getSize(new THREE.Vector3()).multiplyScalar(.5), radius=Math.max(half.x,half.z);
+    // The wall-bounce radius is the box's half-diagonal: a tumbling plate turns its corners to the wall.
+    const half=geometry.boundingBox!.getSize(new THREE.Vector3()).multiplyScalar(.5), radius=half.length();
     // SECTOR levels (plan 3b): a piece shed through a wall starts on this side of it, on the body's floor.
     const at=seat?seat(centre.toArray() as Vec3,radius):null;
     const mesh=new THREE.Mesh(geometry,source.material); mesh.position.copy(centre); mesh.name=`Detached_${piece.bone}`;
@@ -173,7 +174,8 @@ export function createKitDamage(object:THREE.Object3D) {
     drops.push({mesh,velocity:new THREE.Vector3(side*.7,1.7,1.3),spin:new THREE.Vector3(4,side*3,2),resting:false,
       floorY:at?.floorY??0,radius});
     piece.released=true;
-    return centre.toArray() as Vec3;
+    // The 'armor-shed' event's point: where the piece actually starts (the seated position on a sector level).
+    return (at ? [at.pos[0],at.pos[1],at.pos[2]] : centre.toArray()) as Vec3;
   };
   const worldBounds=(piece:Piece)=>{
     const g=piece.source.geometry,pos=g.getAttribute('position'),box=new THREE.Box3(),p=new THREE.Vector3();

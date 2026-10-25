@@ -16,7 +16,7 @@ import type { Vec3 } from '../types';
 import { GUN_GRIP, gunPoint, muzzleRise, type GunPose } from '../carry';
 import { DROP, releaseProp, stepDrop, type DropState } from '../prop-drop';
 import type { DebrisGround, DebrisSeat } from '../debris-ground';
-import { qFromAxisAngle, qMul, qRotate, sub, scale, type Quat } from '../vec';
+import { add, qFromAxisAngle, qMul, qRotate, sub, scale, type Quat } from '../vec';
 
 export interface HeldProp {
   object: THREE.Object3D;
@@ -66,6 +66,10 @@ export async function loadHeldProp(url: string, renderer?: THREE.WebGPURenderer,
   // A rotary gun's barrel cluster (make-juggernaut-chaingun.ts): a node on
   // the bore axis, spun about its local Z by pose()'s barrelSpin.
   const barrels = gltf.scene.getObjectByName('Barrels') ?? null;
+  // The prop's bounds centre in its own (root) frame: a dropped gun meets sector walls there (prop-drop.ts
+  // DropState.centre), not at the grip root a long barrel reaches far past.
+  const bounds = new THREE.Box3().setFromObject(gltf.scene);
+  const centreLocal: Vec3 = bounds.isEmpty() ? [0, 0, 0] : bounds.getCenter(new THREE.Vector3()).toArray() as Vec3;
   object.matrixAutoUpdate = false;
   const pos = new THREE.Vector3(), q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1);
   let last: GunPose = { root: [0, 0, 0], quat: [0, 0, 0, 1] };
@@ -101,8 +105,12 @@ export async function loadHeldProp(url: string, renderer?: THREE.WebGPURenderer,
       if (drop) return;
       drop = releaseProp(last.root, last.quat, scale(handVel, 1), seed);
       if (seat) {
-        const at = seat(drop.pos, DROP.radius);
-        drop = { ...drop, pos: [at.pos[0], at.pos[1], at.pos[2]], ...(at.floorY === undefined ? {} : { floorY: at.floorY }) };
+        // Sector levels: seat the bounds CENTRE inside the level and move the root by the same correction.
+        const centre = scale(centreLocal, last.scale ?? 1);
+        const c = add(drop.pos, qRotate(drop.quat, centre));
+        const at = seat(c, DROP.radius);
+        const root: Vec3 = [drop.pos[0] + at.pos[0] - c[0], drop.pos[1] + at.pos[1] - c[1], drop.pos[2] + at.pos[2] - c[2]];
+        drop = { ...drop, pos: root, centre, ...(at.floorY === undefined ? {} : { floorY: at.floorY }) };
       }
     },
     step(dt, floorY, ground) {

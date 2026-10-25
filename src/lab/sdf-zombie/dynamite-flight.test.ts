@@ -349,18 +349,32 @@ describe('sector ground (plan 3b Task 8)', () => {
     expect(s.pos[1]).toBe(0.5);
     expect(s.floorY).toBe(0.5);
   });
-  it('the ceiling over the bundle (ceilAt) caps a lob every sub-step; sky and off-map fall back to ceilM', () => {
+  it('the ceiling over the bundle (ceilAt) caps a lob every sub-step; sky is open, off-map falls back to ceilM', () => {
     const LOW: DebrisGround = { floorAt: () => 0, ceilAt: (x) => (x > 1 ? 1.5 : x > 0.5 ? Infinity : NaN), bounce: () => null };
     let maxY = 0;
     let s = makeFlight([1.2, 1, 0], [0, 12, 0], { impactMode: false, fuseSec: 30 });
     for (let i = 0; i < 120; i++) { s = stepFlight(s, 1 / 120, null, { ground: LOW, ceilM: 10 }); maxY = Math.max(maxY, s.pos[1]); }
     expect(maxY).toBe(1.5);
-    for (const x of [0.8, 0.2]) {
-      maxY = 0;
-      s = makeFlight([x, 1, 0], [0, 30, 0], { impactMode: false, fuseSec: 30 });
-      for (let i = 0; i < 240; i++) { s = stepFlight(s, 1 / 120, null, { ground: LOW, ceilM: 4 }); maxY = Math.max(maxY, s.pos[1]); }
-      expect(maxY).toBe(4);
+    const top = (x: number) => {
+      let m = 0;
+      let f = makeFlight([x, 1, 0], [0, 30, 0], { impactMode: false, fuseSec: 30 });
+      for (let i = 0; i < 240; i++) { f = stepFlight(f, 1 / 120, null, { ground: LOW, ceilM: 4 }); m = Math.max(m, f.pos[1]); }
+      return m;
+    };
+    expect(top(0.8)).toBeGreaterThan(10);                       // under sky: no cap, not the caller's ceilM
+    expect(top(0.2)).toBe(4);                                   // off the map: the caller's ceilM
+  });
+  it('a lob from under a lintel into a sky sector meets no false ceiling there (impact mode stays armed, no hit)', () => {
+    // x < 1: a 2.2 m lintel sector (the frame's ceilM); x >= 1: sky. The bundle flies at 3 m out over the sky sector.
+    const LINTEL: DebrisGround = { floorAt: () => 0, ceilAt: (x) => (x < 1 ? 2.2 : Infinity), bounce: () => null };
+    let s = makeFlight([0.9, 2.0, 0], [8, 4, 0], { impactMode: true, fuseSec: 30 });
+    s = { ...s, age: 1, spawn: [-10, 0, 0] };                    // past the grace window and the safe distance
+    for (let i = 0; i < 24; i++) {
+      s = stepFlight(s, 1 / 120, null, { ground: LINTEL, ceilM: 2.2 });
+      if (s.pos[0] >= 1.05) expect(s.detonated).toBe(false);
     }
+    expect(s.pos[0]).toBeGreaterThan(1.05);
+    expect(s.pos[1]).toBeGreaterThan(2.2);                       // it rose past the start sector's ceiling height
   });
   it('no ground: no floorY key, the same flight as before', () => {
     const a = fly(makeFlight([0, 1, 0], [3, 2, 1]), 2, {});

@@ -27,6 +27,28 @@ describe('blood-sim', () => {
     expect(maxSpeed(full)).toBeGreaterThan(VOLUME_BURST.speedMax * 0.5);
   });
 
+  it('burstVolume seat (sector levels): floorY on every drop, each start clamped, the RNG stream untouched', () => {
+    const plain = createBloodSim();
+    burstVolume(plain, [0, 1.7, 0], 0.25, [1.5, 0.5, 0], seeded(3), 9);
+    const empty = createBloodSim();
+    burstVolume(empty, [0, 1.7, 0], 0.25, [1.5, 0.5, 0], seeded(3), 9, undefined, {});
+    expect(empty.droplets).toEqual(plain.droplets);                      // an empty seat is the shipped burst
+    const seated = createBloodSim();
+    const wall = 0.05;                                                   // a wall at x = 0.05: starts stay short of it
+    burstVolume(seated, [0, 1.7, 0], 0.25, [1.5, 0.5, 0], seeded(3), 9, undefined,
+      { floorY: 0.5, clamp: (p) => [Math.min(p[0], wall), p[1], p[2]] });
+    expect(seated.droplets).toHaveLength(plain.droplets.length);
+    expect(plain.droplets.some((d) => d.pos[0] > wall)).toBe(true);     // the volume did reach past it
+    for (const [i, d] of seated.droplets.entries()) {
+      expect(d.floorY).toBe(0.5);
+      expect(d.pos[0]).toBeLessThanOrEqual(wall);
+      const p = plain.droplets[i]!;
+      expect(d.vel).toEqual(p.vel);                                      // same draws, same order
+      expect(d.size).toBe(p.size);
+      expect([d.pos[1], d.pos[2]]).toEqual([p.pos[1], p.pos[2]]);
+    }
+  });
+
   it('burst spawns GIB_BURST.count droplets inside the game speed band', () => {
     const sim = createBloodSim();
     burst(sim, [0, 1, 0], seeded());

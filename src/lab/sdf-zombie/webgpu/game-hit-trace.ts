@@ -18,7 +18,7 @@ import { roomCeilingM } from './level-def';
 import { type Chunk, type ChunkColliders } from '../gib-chunks';
 import { convergedDir, muzzleWorld } from './game-weapon-rig';
 import type { DebrisGround } from '../debris-ground';
-import { clampSpawnInsideMap, seatSpawnInsideMap, sectorDebrisGround } from './sector-debris';
+import { clampSpawnInsideMap, seatBurstInsideMap, seatSpawnInsideMap, sectorDebrisGround } from './sector-debris';
 import { WOUND_SPAWN_OFFSET } from '../blood-sim';
 import { sectorSegmentHit, type SectorHit } from './sector-ray';
 import type { SectorGround } from './sector-ground';
@@ -46,6 +46,19 @@ export function bodiesOnScreen(ctx: GameContext): number { return ctx.world.cull
 // builds on this: zombies are addressable by id, the player pose is
 // settable, frames are steppable, wanderers freezable.
 // -----------------------------------------------------------------------
+/** A VOLUME blood burst's spawn on a SECTOR level (plan 3b follow-up): `seatBloodSpawn`'s centre and body floor plus
+ *  the per-drop clamp, as the `seat` blood-sim.ts burstVolume takes. Room levels: `{ pos: at, seat: undefined }`
+ *  without reading the actor — the shipped burst. */
+export function seatBurstSpawn(
+  ctx: GameContext, a: { pose(): { pos: Vec3 } } | null, at: Vec3,
+): { pos: Vec3; floorY: number | undefined; seat: { floorY?: number; clamp: (p: Vec3) => Vec3 } | undefined } {
+  const map = sectorsOf(ctx);
+  if (!map) return { pos: at, floorY: undefined, seat: undefined };
+  const s = seatBurstInsideMap(map, ctx.world.level.ground as SectorGround, a ? actorSpawnCentre(ctx, a) : null, at,
+    WOUND_SPAWN_OFFSET);
+  return { pos: s.pos, floorY: s.floorY, seat: { ...(s.floorY === undefined ? {} : { floorY: s.floorY }), clamp: s.clamp } };
+}
+
 /** Where a slug fired RIGHT NOW would hit — the shared predictor.
  *  Lifted out of __sdfGame so aimAtNearestSurface can CONFIRM an aim
  *  with the same code the placement gate uses, rather than trusting a

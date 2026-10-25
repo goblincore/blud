@@ -68,7 +68,7 @@ describe('damaged kit pieces', () => {
     const seat:DebrisSeat=(at,r)=>{ seen=r; return { pos:[at[0]+.5,at[1],at[2]], floorY:.5 }; };
     const ground={ floorAt:(x:number)=>(x>-.5?.5:NaN), ceilAt:()=>1.5, bounce:()=>null };
     damage.update(b,[],0,0,null,ground,seat);
-    expect(seen).toBeCloseTo(.05,5);                                 // the 0.1 m quad's x/z half-extent
+    expect(seen).toBeCloseTo(Math.hypot(.05,.05),5);                 // the 0.1 m quad's half-diagonal (it tumbles)
     expect(damage.debris.children[0]!.position.x).toBeCloseTo(-.14+.5,5);
     let top=-Infinity;
     for(let i=0;i<240;i++) {
@@ -80,6 +80,21 @@ describe('damaged kit pieces', () => {
     const [d]=damage.dropped();
     expect(d!.resting).toBe(true);
     expect(d!.minY).toBeCloseTo(.51,5);
+    damage.dispose();
+  });
+  it('sector levels: an armour shed reports where the piece starts (the seated point), not the unseated centre', () => {
+    const {damage}=fixture();
+    const b=body();
+    const index=b.prims.findIndex(p=>p.limb==='armL' && p.op!=='sub');
+    const wound={...worldHitToWound([b.prims[index]!],[-.14,1.38,.01],.055,'pellet'),primIdx:index,eventId:1};
+    const second={...wound,local:[...wound.local] as typeof wound.local,eventId:2};
+    const seat:DebrisSeat=(at)=>({ pos:[at[0]+.5,at[1]-.1,at[2]], floorY:0 });
+    const ground={ floorAt:()=>0, bounce:()=>null };
+    const shed=damage.update(b,[wound,second],0,0,null,ground,seat).filter(e=>e.kind==='armor-shed');
+    expect(shed).toHaveLength(1);
+    const m=damage.debris.children[0]!;
+    expect(shed[0]!.point).toEqual([m.position.x,m.position.y,m.position.z]);
+    expect(shed[0]!.point[0]).toBeCloseTo(-.14+.5,5);
     damage.dispose();
   });
   it('reattaches the kit and clears debris on an explicit reset', () => {

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { releaseProp, stepDrop, DROP } from './prop-drop';
 import type { DebrisGround } from './debris-ground';
+import { add, qFromAxisAngle, qRotate } from './vec';
+import type { Vec3 } from './types';
 
 describe('prop drop', () => {
   it('falls under gravity, lands on the floor pad, and stops', () => {
@@ -55,6 +57,40 @@ describe('prop drop on a debris ground (sector levels, plan 3b)', () => {
     expect(seen).toBe(DROP.radius);
     expect(s.pos[0]).toBe(0.5);
     expect(s.vel[0]).toBeLessThan(0);
+  });
+  it('a long gun meets the wall at its bounds CENTRE, not its grip root (the correction moves the root)', () => {
+    const WALL_X = 1;
+    const wall: DebrisGround = {
+      floorAt: () => 0,
+      bounce: (prev, next, vel, restitution, friction, radius = 0) => {
+        if (!(prev[0] < WALL_X && next[0] + radius > WALL_X - 1e-12)) return null;
+        return { pos: [WALL_X - Math.max(radius, 0.01), next[1], next[2]],
+          vel: [vel[0] > 0 ? -vel[0] * restitution : vel[0], vel[1], vel[2] * friction], normal: [-1, 0, 0] };
+      },
+    };
+    const centre: Vec3 = [0, 0, 0.5];                                   // the barrel reaches 0.5 m past the grip
+    const facing = qFromAxisAngle([0, 1, 0], Math.PI / 2);              // local +z → world +x: facing the wall
+    const run = (withCentre: boolean) => {
+      let s = releaseProp([0.1, 1.0, 0], facing, [3, 0, 0], 3);
+      if (withCentre) s = { ...s, centre };
+      let maxCentre = -Infinity;
+      for (let i = 0; i < 400 && !s.resting; i++) {
+        s = stepDrop(s, 1 / 60, 0, wall);
+        maxCentre = Math.max(maxCentre, add(s.pos, qRotate(s.quat, centre))[0]);
+      }
+      return { s, maxCentre };
+    };
+    const judged = run(true);
+    expect(judged.s.resting).toBe(true);
+    expect(judged.s.centre).toEqual(centre);                            // carried through every step
+    expect(judged.maxCentre).toBeLessThan(WALL_X);                      // the barrel never pokes through
+    expect(run(false).maxCentre).toBeGreaterThan(WALL_X + 0.1);         // judged at the root, it does
+  });
+  it('the floor is read under the bounds centre', () => {
+    const LEDGE: DebrisGround = { floorAt: (x) => (x < 0 ? 1 : 0), bounce: () => null };
+    let s = { ...releaseProp([0.2, 1.6, 0], [0, 0, 0, 1], [0, 0, 0], 3), centre: [-0.5, 0, 0] as Vec3, spinRate: 0 };
+    for (let i = 0; i < 300 && !s.resting; i++) s = { ...stepDrop(s, 1 / 60, 0, LEDGE) } as typeof s;
+    expect(s.pos[1]).toBeCloseTo(1 + DROP.floorPad, 6);                 // the root is over the low floor, the gun over the ledge
   });
   it('never flies above a ceiling; sky (Infinity) and off the map (NaN) do not clamp', () => {
     const low: DebrisGround = { floorAt: () => 0, ceilAt: () => 1.2, bounce: () => null };

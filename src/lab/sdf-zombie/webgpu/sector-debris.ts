@@ -121,3 +121,14 @@ export function seatSpawnInsideMap(
   const own = ground.floorAt(pos[0], pos[2]);
   return { pos, floorY: Number.isFinite(body) ? body : Number.isFinite(own) ? own : undefined };
 }
+
+/** A VOLUME burst on a sector level (plan 3b follow-up: the head pop, the brain stage): the burst centre seated as
+ *  `seatSpawnInsideMap`, plus the per-drop clamp blood-sim.ts burstVolume runs on every drawn start point — clamped
+ *  inside from the SEATED centre by `radius`, so a 0.25 m head volume beside a wall starts on this side of it. */
+export function seatBurstInsideMap(
+  map: SectorMap, ground: SectorGround, from: Vec3 | null, at: Vec3, radius = 0,
+): { pos: Vec3; floorY: number | undefined; clamp: (p: Vec3) => Vec3 } {
+  const seat = seatSpawnInsideMap(map, ground, from, at, radius);
+  const c = seat.pos;
+  return { ...seat, clamp: p => clampSpawnInsideMap(map, ground, c, p, radius) };
+}

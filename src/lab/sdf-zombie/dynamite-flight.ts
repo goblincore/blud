@@ -228,10 +228,12 @@ function stepSub(s: FlightState, sub: number, b: FlightBounds | null, world: Fli
   //   roof. Tunnels are handled by their own lintel boxes, which the box test
   //   below catches — a lintel spans 2.2 → 3.0 m, so the low mouths are real. —
   // Sector levels read the ceiling over the bundle every sub-step (a lob that
-  // crosses into a low sector mid-frame meets its ceiling there); sky (Infinity)
-  // or off the map (NaN) keeps the caller's `ceilM`.
+  // crosses into a low sector mid-frame meets its ceiling there). Sky (Infinity)
+  // has NO cap — the caller's `ceilM` is the start sector's ceiling, so a lob
+  // passing from under a lintel into a sky sector would bounce (or detonate) in
+  // open air; only off the map (NaN) keeps the caller's `ceilM`.
   const sc = ground?.ceilAt?.(pos[0], pos[2]);
-  const ceil = sc !== undefined && Number.isFinite(sc) ? sc : world.ceilM ?? null;
+  const ceil = sc === undefined || Number.isNaN(sc) ? world.ceilM ?? null : sc === Infinity ? null : sc;
   if (ceil !== null && pos[1] > ceil) {
     pos[1] = ceil;
     hit = true;

@@ -5,7 +5,8 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseSectorLevel } from './sector-json';
 import { buildSectorGround } from './sector-ground';
-import { clampSpawnInsideMap, seatSpawnInsideMap, sectorDebrisGround, WALL_SKIN_M } from './sector-debris';
+import { clampSpawnInsideMap, seatBurstInsideMap, seatSpawnInsideMap, sectorDebrisGround, WALL_SKIN_M } from './sector-debris';
+import { burstVolume, createBloodSim } from '../blood-sim';
 import { landingFloor } from '../debris-ground';
 import type { Vec3 } from '../types';
 
@@ -145,6 +146,26 @@ describe('seatSpawnInsideMap: a point spawn (blood) clamped inside with the body
     const to: Vec3 = [0, 1, -10];
     expect(seatSpawnInsideMap(map, ground, null, to)).toEqual({ pos: to, floorY: 0.5 });
     expect(seatSpawnInsideMap(map, ground, null, [0, 1, -4]).floorY).toBeUndefined();
+  });
+});
+
+describe('seatBurstInsideMap: a head-pop volume beside a wall starts on this side of it (plan 3b follow-up)', () => {
+  const ground = buildSectorGround(map);
+  const rng = (seed: number) => { let x = seed; return () => { x = (x * 1664525 + 1013904223) >>> 0; return x / 2 ** 32; }; };
+  it('every drop of a 0.25 m burst 0.1 m from the north wall starts inside, on the body floor', () => {
+    const head: Vec3 = [0, 1.6, -0.1];
+    const plain = createBloodSim();
+    burstVolume(plain, head, 0.25, [0, 0.5, 1.5], rng(2), 1);
+    expect(plain.droplets.some((d) => d.pos[2] > 0)).toBe(true);        // unclamped, part of it is past the wall
+    const s = seatBurstInsideMap(map, ground, [0, 0.9, -0.3], head, 0.02);
+    const sim = createBloodSim();
+    burstVolume(sim, s.pos, 0.25, [0, 0.5, 1.5], rng(2), 1, undefined, { floorY: s.floorY, clamp: s.clamp });
+    expect(sim.droplets).toHaveLength(plain.droplets.length);
+    for (const d of sim.droplets) {
+      expect(d.pos[2]).toBeLessThan(0);                                   // on the room side of the wall
+      expect(Number.isFinite(ground.floorAt(d.pos[0], d.pos[2]))).toBe(true);
+      expect(d.floorY).toBe(0);
+    }
   });
 });
 

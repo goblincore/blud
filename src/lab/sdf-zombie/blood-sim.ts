@@ -178,10 +178,16 @@ export const VOLUME_BURST = {
  * `scale` shrinks the burst (the melee brain stage's half burst, spec docs/superpowers/specs/2026-09-28-melee-
  * head-damage-design.md §14): `count` multiplies the drops and the scraps (rounded), `speed` their radial speed,
  * so the spray's reach after a given time scales by `speed`. Omitted: the full burst, bit-identical.
+ *
+ * `seat` (optional, SECTOR levels, plan 3b): `floorY` seeds every drop's floor with the body's floor (as
+ * spawnImpactGout's), and `clamp` moves each drop's start point inside the level (a 0.25 m head volume next to a
+ * wall would start part of the burst inside it) — called once per drop with the drawn point, after its draws, so
+ * the RNG stream is the same with or without it. Omitted: the shipped burst, bit-identical.
  */
 export function burstVolume(
   sim: BloodSim, centre: Vec3, radius: number, bias: Vec3, rng: () => number, stream?: number,
   scale?: { count?: number; speed?: number },
+  seat?: { floorY?: number; clamp?: (at: Vec3) => Vec3 },
 ): void {
   const V = VOLUME_BURST;
   const drops = scale?.count !== undefined ? Math.round(V.drops * scale.count) : V.drops;
@@ -193,9 +199,11 @@ export function burstVolume(
     const z = rng() * 2 - 1, th = rng() * Math.PI * 2, rr = Math.sqrt(1 - z * z);
     const dir: Vec3 = [Math.cos(th) * rr, z * 0.8 + 0.25, Math.sin(th) * rr];
     const k = radius * rng();
-    const at: [number, number, number] = [centre[0] + dir[0] * k, centre[1] + dir[1] * k, centre[2] + dir[2] * k];
+    const drawn: [number, number, number] = [centre[0] + dir[0] * k, centre[1] + dir[1] * k, centre[2] + dir[2] * k];
     const speed = (V.speedMin + rng() * (V.speedMax - V.speedMin)) * (scrap ? 0.6 : 1) * sp;
     const band = scrap ? V.scrapSize : V.dropSize;
+    const c = seat?.clamp ? seat.clamp(drawn) : drawn;
+    const at: MutVec3 = c === drawn ? drawn : [c[0], c[1], c[2]];
     push(sim, {
       pos: at,
       vel: [dir[0] * speed + bias[0], dir[1] * speed + bias[1], dir[2] * speed + bias[2]],
@@ -204,6 +212,7 @@ export function burstVolume(
       size: band[0] + rng() * (band[1] - band[0]),
       kind: scrap ? 'scrap' : 'drop',
       ...(stream !== undefined ? { stream } : {}),
+      ...(seat?.floorY !== undefined ? { floorY: seat.floorY } : {}),
     });
   }
 }
