@@ -17,27 +17,29 @@ export const FREE_AIM = {
    *  this box the camera does not turn at all; the reticle just moves. */
   deadzoneX: 0.45,
   deadzoneY: 0.38,
-  /** ELASTIC FOLLOW while strafing, 1/seconds at full strafe speed, per axis.
+  /** Share of mouse motion that turns the CAMERA instead of the reticle at
+   *  full strafe speed, 0..1. Free aim fades into mouse-look as you strafe.
    *
    *  Standing still, the big dead zone is the mechanic. Strafing, it fights
    *  you: circling a target needs a steady turn of strafe-speed / radius
-   *  (~0.85 rad/s at 3.4 m/s and 4 m), and the squared dead-zone push only
-   *  gives that with the reticle -- so the target -- out at ~0.8 of the
-   *  half-screen (owner report). Hard-edged fixes (a shrunk zone, mouse past
-   *  the zone edge turning the camera) were tried and felt jerky: every edge
-   *  is a sudden change in how the mouse behaves.
+   *  (~0.85 rad/s at 3.4 m/s and 4 m), and anything that turns the camera
+   *  FROM THE RETICLE'S POSITION only gives that with the target held
+   *  off-centre -- centre it, as instinct says to, and the turn dies and you
+   *  slide off in a straight strafe (owner report). Tried and rejected in
+   *  play: a strafe-shrunk dead zone (barely helped), mouse past the zone edge
+   *  turning the camera (jerky: an edge is a sudden change in how the mouse
+   *  behaves), and an elastic camera follow (the camera moving on its own
+   *  dragged the cursor to the centre and fought the player's tracking).
    *
-   *  Instead the camera is pulled toward the reticle like a spring, harder
-   *  the further off-centre it is, scaled by the strafe envelope; the reticle
-   *  is shifted back by the same angle so it stays on what it was aimed at.
-   *  No edges, no mode switch: the mouse only ever moves the reticle, and the
-   *  camera smoothly catches up. Steady state while circling at rate w puts
-   *  the reticle at angle w / followRateX off-centre. Only sideways motion
-   *  counts, and Y is off by default: strafing drifts nothing vertically. */
-  followRateX: 4.0,
-  followRateY: 0.0,
+   *  Circle-strafing works in a normal FPS because the hand turns the view.
+   *  So while strafing, this share of each mouse motion turns the camera
+   *  directly; the rest moves the reticle. The split is in ANGLE, so a pixel
+   *  moves the aim the same amount either way -- no speed change as the blend
+   *  shifts -- and nothing moves on its own. Below 1 keeps some free aim
+   *  even at full strafe. */
+  strafeMouseLook: 1.0,
   /** How fast the strafe envelope follows the player's lateral speed,
-   *  1/seconds, so the follow eases in and out instead of popping. */
+   *  1/seconds, so the mouse-look blend eases in and out instead of popping. */
   strafeRamp: 5.0,
   /** Peak camera turn, radians/second, reached when the reticle is jammed
    *  fully into a corner. Measured in-engine: 2.4 rad/s is 137 deg/s at full
@@ -136,7 +138,7 @@ export function strafeSpeed01(dx: number, dz: number, yaw: number, dt: number, f
   return Math.min(1, lateral / dt / fullSpeed);
 }
 
-/** Smooth the strafe envelope so the follow eases in and out. */
+/** Smooth the strafe envelope so the mouse-look blend eases in and out. */
 export function approachStrafe(current: number, target01: number, dt: number): number {
   const k = 1 - Math.exp(-FREE_AIM.strafeRamp * dt);
   return current + (Math.min(1, Math.max(0, target01)) - current) * k;
@@ -148,27 +150,31 @@ export function approachStrafe(current: number, target01: number, dt: number): n
 export interface Frustum { tanH: number; tanV: number; }
 
 /**
- * Elastic camera follow for one frame: turn the camera a fraction of the way
- * toward the reticle and move the reticle back by the same angle, so it stays
- * on the same world point (see FREE_AIM.followRateX). The rate scales with the
- * 0..1 strafe envelope, so standing still this is a no-op.
+ * Apply raw mouse motion, split between the reticle and the camera by the
+ * 0..1 strafe envelope (see FREE_AIM.strafeMouseLook). Standing still this is
+ * exactly moveAim and never turns the camera.
  *
- * Angles are atan(normalised * tan(halfFov)), the projection the shot ray and
- * weaponAngles use, so the compensation is exact per axis.
+ * The split is done in ANGLE: the mouse's angular effect is what the reticle
+ * alone would have done -- atan(x * tan(halfFov)) before and after, the
+ * projection the shot ray and weaponAngles use -- and `share` of that angle
+ * turns the camera while the rest moves the reticle. That is what keeps a
+ * pixel worth the same aim at every point of the blend. The angle is taken
+ * unclamped, so at the screen edge the camera share still turns.
  */
-export function followAim(
-  aim: AimPoint, strafe01: number, dt: number, f: Frustum,
+export function splitMouse(
+  aim: AimPoint, dxPx: number, dyPx: number, strafe01: number, f: Frustum,
 ): { aim: AimPoint; yaw: number; pitch: number } {
-  const s = Math.min(1, Math.max(0, strafe01));
-  const axis = (v: number, rate: number, tan: number) => {
-    const k = 1 - Math.exp(-Math.max(0, rate) * s * dt);
-    if (k <= 0 || v === 0) return { pos: v, turn: 0 };
-    const angle = Math.atan(v * tan);
-    const kept = angle * (1 - k);
-    return { pos: Math.tan(kept) / tan, turn: angle - kept };
+  const share = Math.min(1, Math.max(0, FREE_AIM.strafeMouseLook))
+    * Math.min(1, Math.max(0, strafe01));
+  if (share <= 0) return { aim: moveAim(aim, dxPx, dyPx), yaw: 0, pitch: 0 };
+  const axis = (v: number, d: number, tan: number) => {
+    const from = Math.atan(v * tan);
+    const delta = Math.atan((v + d * FREE_AIM.sensitivity) * tan) - from;
+    return { pos: clamp1(Math.tan(from + delta * (1 - share)) / tan), turn: delta * share };
   };
-  const x = axis(aim.x, FREE_AIM.followRateX, f.tanH);
-  const y = axis(aim.y, FREE_AIM.followRateY, f.tanV);
+  // Screen y grows downward; aim y (and pitch) grow upward.
+  const x = axis(aim.x, dxPx, f.tanH);
+  const y = axis(aim.y, -dyPx, f.tanV);
   return { aim: { x: x.pos, y: y.pos }, yaw: x.turn, pitch: y.turn };
 }
 

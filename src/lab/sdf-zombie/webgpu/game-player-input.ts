@@ -10,7 +10,7 @@
 
 import { ownsSlot } from './game-loop';
 import { type GameContext } from './game-context';
-import { moveAim } from './free-aim';
+import { splitMouse } from './free-aim';
 import { PLAYER } from './game-player';
 import { roomIdAt } from './game-level-rooms';
 import { updateHud } from './game-hud';
@@ -18,7 +18,7 @@ import { toggleFlashlight } from './game-dynamic-light';
 import { pushProbeWeight } from './game-probe-weight';
 import { applyUpscaleAbMode } from './game-render-controls';
 import { MAGAZINE_CAPACITY, RELOAD } from './game-viewmodel';
-import { startReload, fire } from './game-weapon-rig';
+import { aimFrustum, startReload, fire } from './game-weapon-rig';
 import { requestSlot, slotForKey } from './game-weapon-slots';
 import { type DemoFrame } from './demo-recorder';
 import { arenaRespawn } from './game-arena';
@@ -29,8 +29,14 @@ import { arenaRespawn } from './game-arena';
 export function applyMouseDelta(ctx: GameContext, dx: number, dy: number): void {
   if (ctx.player.freeAimOn) {
     // The mouse moves the RETICLE, not the camera. Turning is a consequence
-    // of shoving the reticle past the dead zone, handled in the tick.
-    ctx.weapon.aim = moveAim(ctx.weapon.aim, dx, dy);
+    // of shoving the reticle past the dead zone, handled in the tick -- except
+    // while strafing, when a share of the motion turns the camera directly
+    // (free aim fading into mouse-look; see FREE_AIM.strafeMouseLook).
+    const m = splitMouse(ctx.weapon.aim, dx, dy, ctx.player.strafeAmount, aimFrustum(ctx));
+    ctx.weapon.aim = m.aim;
+    ctx.player.player.yaw += m.yaw;
+    ctx.player.player.pitch = Math.min(PLAYER.pitchLimit,
+      Math.max(-PLAYER.pitchLimit, ctx.player.player.pitch + m.pitch));
   } else {
     ctx.player.player.yaw += dx * 0.0022;
     ctx.player.player.pitch = Math.min(PLAYER.pitchLimit,

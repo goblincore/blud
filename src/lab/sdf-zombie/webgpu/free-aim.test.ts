@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import {
   BOB, FREE_AIM, approachAngle, approachBob, approachStrafe, bobPose, deadzonePush,
-  followAim, moveAim, pivotOffset, recentre, strafeSpeed01, turnFromAim,
+  moveAim, pivotOffset, recentre, splitMouse, strafeSpeed01, turnFromAim,
   weaponAngles, weaponSlide,
 } from './free-aim';
 
@@ -66,59 +66,49 @@ describe('turnFromAim', () => {
   });
 });
 
-describe('followAim (elastic follow while strafing)', () => {
+describe('splitMouse (free aim fades into mouse-look while strafing)', () => {
   const F = { tanV: Math.tan(75 * Math.PI / 360), tanH: Math.tan(75 * Math.PI / 360) * (790 / 555) };
-  it('does nothing standing still -- free aim is untouched', () => {
-    const m = followAim({ x: 0.9, y: -0.6 }, 0, 1 / 60, F);
-    expect(m.aim).toEqual({ x: 0.9, y: -0.6 });
+  const worldX = (aimX: number, yaw: number) => yaw + Math.atan(aimX * F.tanH);
+  it('standing still is exactly moveAim and never turns the camera', () => {
+    const m = splitMouse({ x: 0.2, y: -0.1 }, 37, -12, 0, F);
+    expect(m.aim).toEqual(moveAim({ x: 0.2, y: -0.1 }, 37, -12));
     expect(m.yaw).toBe(0);
     expect(m.pitch).toBe(0);
   });
-  it('turns the camera toward the reticle and pulls the reticle in', () => {
-    const r = followAim({ x: 0.5, y: 0 }, 1, 1 / 60, F);
-    expect(r.yaw).toBeGreaterThan(0);
-    expect(r.aim.x).toBeLessThan(0.5);
-    expect(r.aim.x).toBeGreaterThan(0);
-    const l = followAim({ x: -0.5, y: 0 }, 1, 1 / 60, F);
-    expect(l.yaw).toBeLessThan(0);
+  it('at full strafe the mouse turns the camera and the reticle stays put', () => {
+    const m = splitMouse({ x: 0.3, y: 0.1 }, 50, -20, 1, F);
+    expect(m.aim.x).toBeCloseTo(0.3, 9);
+    expect(m.aim.y).toBeCloseTo(0.1, 9);
+    expect(m.yaw).toBeGreaterThan(0);
+    expect(m.pitch).toBeGreaterThan(0); // mouse up (dy < 0) looks up
   });
-  it('is elastic: the further off-centre, the harder the pull, with no edge', () => {
-    let prev = 0;
-    for (let x = 0.05; x <= 1; x += 0.05) {
-      const t = followAim({ x, y: 0 }, 1, 1 / 60, F).yaw;
-      expect(t).toBeGreaterThan(prev);
-      prev = t;
+  it('moves the aim by the same angle at every point of the blend', () => {
+    const still = splitMouse({ x: 0.3, y: 0 }, 40, 0, 0, F);
+    const want = worldX(still.aim.x, still.yaw);
+    for (const s of [0.25, 0.5, 0.75, 1]) {
+      const m = splitMouse({ x: 0.3, y: 0 }, 40, 0, s, F);
+      expect(worldX(m.aim.x, m.yaw)).toBeCloseTo(want, 9);
     }
   });
-  it('keeps the reticle on the same world point', () => {
-    let aim = { x: 0.7, y: 0 }, yaw = 0;
-    for (let i = 0; i < 30; i++) { const m = followAim(aim, 1, 1 / 60, F); aim = m.aim; yaw += m.yaw; }
-    expect(yaw + Math.atan(aim.x * F.tanH)).toBeCloseTo(Math.atan(0.7 * F.tanH), 9);
-  });
-  it('scales with the strafe envelope', () => {
-    const full = followAim({ x: 0.5, y: 0 }, 1, 1 / 60, F).yaw;
-    const half = followAim({ x: 0.5, y: 0 }, 0.5, 1 / 60, F).yaw;
-    expect(half).toBeGreaterThan(0);
-    expect(half).toBeLessThan(full);
-  });
-  it('leaves pitch alone by default (followRateY 0) but follows it when tuned', () => {
-    expect(followAim({ x: 0, y: 0.5 }, 1, 1 / 60, F).pitch).toBe(0);
-    FREE_AIM.followRateY = 4;
-    expect(followAim({ x: 0, y: 0.5 }, 1, 1 / 60, F).pitch).toBeGreaterThan(0);
-  });
-  it('settles a steady circle-strafe turn at angle w / followRateX off-centre', () => {
-    // Each frame the world slides by w*dt (the circling turn); the mouse keeps
-    // the reticle on the target, so the reticle angle grows by w*dt, then the
-    // follow eats some of it back.
-    const w = 0.85, dt = 1 / 60;
-    let aim = { x: 0, y: 0 };
-    for (let i = 0; i < 600; i++) {
-      const a = Math.atan(aim.x * F.tanH) + w * dt;
-      aim = followAim({ x: Math.tan(a) / F.tanH, y: 0 }, 1, dt, F).aim;
+  it('blends smoothly: a bigger strafe envelope gives more camera, less reticle', () => {
+    let prevYaw = -1, prevX = 2;
+    for (const s of [0, 0.25, 0.5, 0.75, 1]) {
+      const m = splitMouse({ x: 0, y: 0 }, 40, 0, s, F);
+      expect(m.yaw).toBeGreaterThan(prevYaw);
+      expect(m.aim.x).toBeLessThan(prevX);
+      prevYaw = m.yaw; prevX = m.aim.x;
     }
-    expect(Math.atan(aim.x * F.tanH)).toBeCloseTo(w / FREE_AIM.followRateX, 1);
   });
-  afterEach(() => { FREE_AIM.followRateY = 0; });
+  it('still turns the camera with the reticle at the screen edge', () => {
+    expect(splitMouse({ x: 1, y: 0 }, 40, 0, 1, F).yaw).toBeGreaterThan(0);
+  });
+  it('strafeMouseLook caps the camera share, keeping some free aim', () => {
+    FREE_AIM.strafeMouseLook = 0.5;
+    const m = splitMouse({ x: 0, y: 0 }, 40, 0, 1, F);
+    expect(m.yaw).toBeGreaterThan(0);
+    expect(m.aim.x).toBeGreaterThan(0);
+  });
+  afterEach(() => { FREE_AIM.strafeMouseLook = 1.0; });
 });
 
 describe('strafeSpeed01', () => {
