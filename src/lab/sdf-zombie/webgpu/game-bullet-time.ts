@@ -5,7 +5,8 @@
 // split itself; this is what the mode turns UP while it is on:
 //   * the projectiles' AIR WAKE — each near pellet / rocket / bile glob pushes
 //     a ring into post-aa's burn-distort slots (re-pushed every frame, like a
-//     burning body's heat band), so a slowed shot visibly bends the air;
+//     burning body's heat band), so a slowed shot visibly bends the air; the
+//     player's own pellets only faintly (BULLET_TIME.ownWakeMul);
 //   * the GORE — blood-sim's boost (more, fatter, longer-lived droplets);
 //   * a cold vignette, so the mode reads at a glance.
 import { goreBoostAt, pickWakes, type WakeSource } from '../bullet-time';
@@ -18,7 +19,7 @@ export function stepBulletTimeFx(ctx: GameContext): void {
   if (bt.intensity > 0) {
     const w = ctx.weapon;
     const sources: WakeSource[] = [];
-    for (const p of w.pellets) sources.push({ pos: p.pos, heavy: false });
+    for (const p of w.pellets) sources.push({ pos: p.pos, heavy: false, own: true });
     for (const p of w.soldierPellets) sources.push({ pos: p.pos, heavy: false });
     for (const r of w.rockets) sources.push({ pos: r.pos, heavy: true });
     for (const b of w.bile) sources.push({ pos: b.pos, heavy: true });

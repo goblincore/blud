@@ -70,6 +70,18 @@ describe('pickWakes', () => {
     expect(w.map(x => -x.pos[2])).toEqual([2, 3, 5, 7]);
     expect(w[0]!.strength).toBeCloseTo(BULLET_TIME.wakeStrength, 9);
   });
+
+  it("ranks incoming shots before the player's own, which are faint", () => {
+    const src = [
+      { pos: [0, 0, -2] as const, heavy: false, own: true },
+      { pos: [0, 0, -3] as const, heavy: false, own: true },
+      ...[8, 9, 10].map(z => ({ pos: [0, 0, -z] as const, heavy: false })),
+    ];
+    const w = pickWakes(src, eye, 1);
+    expect(w.map(x => -x.pos[2])).toEqual([8, 9, 10, 2]);
+    expect(w[3]!.strength).toBeCloseTo(BULLET_TIME.wakeStrength * BULLET_TIME.ownWakeMul, 9);
+    expect(pickWakes(src.slice(0, 2), eye, 1, { ...BULLET_TIME, ownWakeMul: 0 })).toEqual([]);
+  });
 });
 
 describe('goreBoostAt', () => {
