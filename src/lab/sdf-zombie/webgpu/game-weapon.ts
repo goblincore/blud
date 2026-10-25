@@ -126,6 +126,9 @@ export interface Projectile {
   radius: number;
   /** Which crater this projectile stamps on impact. */
   kind: 'pellet' | 'slug';
+  /** SECTOR levels, enemy rounds: where the first step's wall and player tests start (the shooter's
+   *  eye), so a muzzle poking past a wall line cannot fly on beyond it. Cleared after that step. */
+  launchFrom?: Vec3;
   /** The actors whose skull this projectile has damaged a plate of, on an open head (skeleton-spike/
    *  skull-split-hit.ts SkullStrikes): one plate of a skull at most. Unset until the first. */
   skulls?: object[];
@@ -276,8 +279,12 @@ export function stepProjectiles(list: Projectile[], dt: number): void {
   }
 }
 
-export function expired(p: Projectile): boolean {
-  return p.ageSec > GRAPESHOT.lifeSec || p.pos[1] < -0.5;
+/** Too old, or (room levels) fallen through the y 0 floor. On a SECTOR level (`sectorLevel`) only age
+ *  counts: floors there run from about −4.25 m to 4.25 m (E1M1), and the sector hit test already
+ *  stops a round at every floor, wall and ceiling; a round that leaves the map starts its next step in
+ *  the void, which that test kills at t 0. */
+export function expired(p: Projectile, sectorLevel = false): boolean {
+  return p.ageSec > GRAPESHOT.lifeSec || (!sectorLevel && p.pos[1] < -0.5);
 }
 
 /**

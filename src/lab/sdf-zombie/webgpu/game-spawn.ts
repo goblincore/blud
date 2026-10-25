@@ -439,8 +439,18 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
         // dynamite path (the rocket step in the frame loop below).
         if (weapon === 'rocket') ctx.weapon.rockets.push(spawnRocket(muz, shotDir, zombieId));
         // The pistol, like the chaingun, fires ONE aimed round per trigger event.
-        else if (weapon === 'chaingun' || weapon === 'pistol') ctx.weapon.soldierPellets.push(spawnRound(muz, shotDir, seedFromUnit(rngStreams.misc())));
-        else ctx.weapon.soldierPellets.push(...spawnPellets(muz, shotDir, 1, seedFromUnit(rngStreams.misc())));
+        else {
+          const rounds = weapon === 'chaingun' || weapon === 'pistol'
+            ? [spawnRound(muz, shotDir, seedFromUnit(rngStreams.misc()))]
+            : spawnPellets(muz, shotDir, 1, seedFromUnit(rngStreams.misc()));
+          // Sector levels: the first step's wall test starts at the shooter's eye (1.4 m over its
+          // floor), so a muzzle poking past a wall line cannot fly on beyond it (game-tick.ts).
+          if (sectorGround) {
+            const sp = actor.pose().pos;
+            for (const r of rounds) r.launchFrom = [sp[0], sp[1] + 1.4, sp[2]];
+          }
+          ctx.weapon.soldierPellets.push(...rounds);
+        }
       },
     } : {}),
     profile: characterEntry(name).profile,

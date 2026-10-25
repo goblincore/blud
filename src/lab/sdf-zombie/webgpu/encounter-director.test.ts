@@ -121,11 +121,11 @@ describe('sight on a sector level', () => {
     const at = (x: number, y: number, z: number): EncounterAgent => ({ ...a(1, x, z), pos: [x, y, z], home: [x, y, z], yaw: Math.PI });
     it('a wall between hides the player; the same line in the open sees', () => {
         // The column stands between z -1 and z -7 at x 0 — a box-only test would see straight through it.
-        const hidden = createEncounterDirector(sNav, [], blocked).update([at(0, 0, -1)], { x: 0, z: -7, room: 1 }, false, .1, 0).get(1)!;
+        const hidden = createEncounterDirector(sNav, [], blocked).update([at(0, 0, -1)], { x: 0, z: -7, room: 1, y: 0 }, false, .1).get(1)!;
         expect(hidden.visible).toBe(false);
         expect(hidden.fireAllowed).toBe(false);
         expect(createEncounterDirector(sNav, []).update([at(0, 0, -1)], { x: 0, z: -7, room: 1 }, false, .1).get(1)!.visible).toBe(true);
-        const open = createEncounterDirector(sNav, [], blocked).update([at(2.5, 0, -1)], { x: 2.5, z: -7, room: 1 }, false, .1, 0).get(1)!;
+        const open = createEncounterDirector(sNav, [], blocked).update([at(2.5, 0, -1)], { x: 2.5, z: -7, room: 1, y: 0 }, false, .1).get(1)!;
         expect(open.visible).toBe(true);
     });
     it('sight is floor-relative: a body on B sees the player on the C ledge over the riser', () => {
@@ -133,7 +133,7 @@ describe('sight on a sector level', () => {
         // flat 1.4 m the line would run into the riser.
         expect(blocked([0, 1.4, -9], [0, 1.4, -14])).toBe(true);
         const d = createEncounterDirector(sNav, [], blocked);
-        const order = d.update([at(0, 0.5, -9)], { x: 0, z: -14, room: 1 }, false, .1, 1.5).get(1)!;
+        const order = d.update([at(0, 0.5, -9)], { x: 0, z: -14, room: 1, y: 1.5 }, false, .1).get(1)!;
         expect(order.visible).toBe(true);
         // The target keeps the player's real height.
         expect(d.debug().memories[0]!.at).toEqual([0, 1.5, -14]);

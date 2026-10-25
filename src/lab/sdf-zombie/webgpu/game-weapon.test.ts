@@ -113,6 +113,14 @@ describe('stepProjectiles', () => {
     stepProjectiles(ps, dt); // strictly past lifeSec — no float-equality edge
     expect(expired(ps[0]!)).toBe(true);
   });
+
+  it('room levels kill a round under y -0.5; sector levels (floors to -4.25 m on E1M1) only age it out', () => {
+    const [p] = spawnPellets([0, -2, 0], FWD, 1, 3);
+    expect(expired(p!)).toBe(true);
+    expect(expired(p!, true)).toBe(false);
+    p!.ageSec = GRAPESHOT.lifeSec + 0.01;
+    expect(expired(p!, true)).toBe(true);
+  });
 });
 
 describe('traceProjectile', () => {

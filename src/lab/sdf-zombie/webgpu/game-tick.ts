@@ -294,15 +294,18 @@ export function tick(ctx: GameContext, dt: number) {
     // view.update() render the corrected positions, so a resolved overlap
     // is never a frame late on screen.
     const pRoom = ctx.world.encounterNav.roomAt(ctx.player.player.pos);
+    // Sector levels also carry the player's feet (BrainPlayer.y): sight there is floor-relative.
     const pInfo = pRoom > 0
-      ? { x: ctx.player.player.pos[0], z: ctx.player.player.pos[2], room: pRoom }
+      ? ctx.world.level.def?.sectors
+        ? { x: ctx.player.player.pos[0], z: ctx.player.player.pos[2], room: pRoom, y: ctx.player.player.pos[1] }
+        : { x: ctx.player.player.pos[0], z: ctx.player.player.pos[2], room: pRoom }
       : null;
     // The snapshot build is INSIDE the phase on purpose: it calls pose()
     // per actor and is part of what the director costs per frame.
     const encounterTiming = ctx.telemetry.telemetry.begin();
     const snapshots: EncounterAgent[] = ctx.world.actors.map(a=>({id:a.id,pos:a.pose().pos,yaw:a.pose().yaw,room:a.room,
       home:ctx.world.encounterHomes.get(a.id)??a.pose().pos,soldier:a.kind==='soldier',ranged:a.kind==='soldier'&& !a.meleeCapable(),disabled:!!a.motionFrame()?.collapsed}));
-    const orders=ctx.world.encounter.update(snapshots,pInfo,ctx.weapon.shotAlert,dt,ctx.player.player.pos[1]);
+    const orders=ctx.world.encounter.update(snapshots,pInfo,ctx.weapon.shotAlert,dt);
     ctx.weapon.shotAlert = false;
     for (const a of ctx.world.actors) a.setEncounterOrder(orders.get(a.id)!);
     ctx.telemetry.telemetry.end('encounter', encounterTiming);
@@ -794,8 +797,23 @@ export function tick(ctx: GameContext, dt: number) {
     const hitThisFrame = new Set<ZombieActor>();
     for (let i = ctx.weapon.pellets.length - 1; i >= 0; i--) {
       const p = ctx.weapon.pellets[i]!;
-      const from = prevs[i]!;
-      let dead = expired(p);
+      const sectorLevel = !!ctx.world.level.def?.sectors;
+      // Sector levels: a round's first step starts at the EYE, not the muzzle — the view-model muzzle
+      // can sit past a wall the player hugs (a segment starting in the void or on a wall line hits at
+      // t 0, and a body the muzzle overlaps behind the wall must not take the round). Every later step
+      // starts at the last frame's end, which was open. Room levels: the muzzle, as before.
+      const from = sectorLevel && p.ageSec - dt < 1e-6 ? eyeOf(ctx.player.player) : prevs[i]!;
+      let dead = expired(p, sectorLevel);
+      // Sector levels: the frame's segment against the sector walls, floors and ceilings, FIRST — before
+      // the gib-chunk tests below, so a slug that hits a wall cannot gib a piece lying behind it. A hit
+      // cuts the segment at the hit point (everything below tests the cut segment: a chunk or an actor
+      // in front of the wall still takes the round) and kills the round after the actor test. Room
+      // levels keep their order: chunks, then the y 0.02 floor kill (see the ORDER comments).
+      let wallHit = false;
+      if (!dead && sectorLevel) {
+        const h = sectorWorldHit(ctx, from, p.pos);
+        if (h) { p.pos = [h.point[0], h.point[1], h.point[2]]; wallHit = true; }
+      }
       if (!dead && ctx.bake.chunks.length > 0) {
         // ORDER: this MUST precede the floor kill below — a settled piece
         // rests AT the y = 0.02 plane, so the slug that reaches it is
@@ -860,18 +878,8 @@ export function tick(ctx: GameContext, dt: number) {
           break;
         }
       }
-      // Sector levels: the frame's segment against the sector walls, floors and ceilings. A hit clips
-      // the segment to the hit point (an actor in front of the wall still takes the round) and kills
-      // the round after the actor test. `from` is the last frame's end, which was open, so it is inside
-      // the level; a fresh round starts at the muzzle (sectorWorldHit). Room levels keep the y 0.02
-      // floor kill.
-      let wallHit = false;
-      if (!dead && ctx.world.level.def?.sectors) {
-        // A round's first step starts at the eye, not the muzzle: the view-model muzzle can sit past a
-        // wall the player hugs, and a segment starting in the void or on a wall line hits at t 0.
-        const h = sectorWorldHit(ctx, p.ageSec - dt < 1e-6 ? eyeOf(ctx.player.player) : from, p.pos);
-        if (h) { p.pos = [h.point[0], h.point[1], h.point[2]]; wallHit = true; }
-      } else if (!dead && p.pos[1] <= 0.02) dead = true;
+      // Room levels: the y 0.02 floor kill (sector levels stopped at their floors above).
+      if (!dead && !sectorLevel && p.pos[1] <= 0.02) dead = true;
       if (!dead && !wallHit) {
         // Level geometry: a point-in-AABB test is enough — pellets are
         // small and the substepped trace already bounds their travel.
@@ -970,13 +978,17 @@ export function tick(ctx: GameContext, dt: number) {
     stepProjectiles(ctx.weapon.soldierPellets, dt);
     for (let i = ctx.weapon.soldierPellets.length - 1; i >= 0; i--) {
       const p = ctx.weapon.soldierPellets[i]!;
-      // Sector levels: a wall, floor or ceiling clips the segment; the player in front of it still
-      // takes the round, behind it is safe (null on room levels: the segment as before).
-      const wall = sectorWorldHit(ctx, soldierFrom[i]!, p.pos);
+      // Sector levels: a wall, floor or ceiling cuts the segment; the player in front of it still
+      // takes the round, behind it is safe (null on room levels: the segment as before). The first
+      // step starts at the shooter's eye (launchFrom, set at the trigger on sector levels only), so a
+      // point-blank muzzle past a wall line cannot fly on beyond it.
+      const start = p.launchFrom ?? soldierFrom[i]!;
+      p.launchFrom = undefined;
+      const wall = sectorWorldHit(ctx, start, p.pos);
       const end = wall ? wall.point : p.pos;
-      if (expired(p) || ctx.world.colliders.some(box => segmentHitsBox(soldierFrom[i]!, end, box))) {
+      if (expired(p, !!ctx.world.level.def?.sectors) || ctx.world.colliders.some(box => segmentHitsBox(start, end, box))) {
         ctx.weapon.soldierPellets.splice(i, 1);
-      } else if (segmentHitsCapsule(soldierFrom[i]!, end, ctx.player.player.pos, PLAYER.radius, PLAYER.height)) {
+      } else if (segmentHitsCapsule(start, end, ctx.player.player.pos, PLAYER.radius, PLAYER.height)) {
         // The game loop: soldier pellets and cultist rounds hit the player (never actors).
         damagePlayer(ctx, VITALS.soldierPellet, 'pellet');
         ctx.weapon.soldierPellets.splice(i, 1);
@@ -1338,9 +1350,9 @@ export function tick(ctx: GameContext, dt: number) {
 
 /** Where segment a→b first meets a SECTOR level's walls, floors or ceilings (sector-ray.ts), or null
  *  (always null on room levels). `a` must be inside the level: a start in the void or exactly on a
- *  one-sided wall line is a hit at t 0. Every caller starts from the last frame's open end, or for a
- *  fresh player round from the eye; an enemy round's first step starts at its muzzle, which is in
- *  front of the body (a muzzle through a wall the body faces dies there, which is right). */
+ *  one-sided wall line is a hit at t 0. Every caller starts from the last frame's open end, or on a
+ *  round's first step from the shooter's eye (the player's eye; an enemy round's launchFrom). Rockets
+ *  and bile still start at their muzzle / mouth. */
 function sectorWorldHit(ctx: GameContext, a: Vec3, b: Vec3): SectorHit | null {
   const map = ctx.world.level.def?.sectors;
   return map ? sectorSegmentHit(map, ctx.world.level.ground as SectorGround, a, b) : null;

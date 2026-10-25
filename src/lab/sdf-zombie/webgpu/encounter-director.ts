@@ -70,11 +70,14 @@ export function createEncounterDirector(nav: EncounterNavigation, boxes: readonl
     // Sight from a body's eye to the player's. Room levels: y 1.4 at both ends, boxes only (as
     // before). Sector levels: each end 1.4 m over its own floor (a soldier on a ledge sees the player
     // below), and the sector geometry blocks too.
+    // Scratch eyes: neither clearSight nor the blocker keeps them.
+    const eyeA: [number, number, number] = [0, 0, 0], eyeB: [number, number, number] = [0, 0, 0];
     const sees = (from: Vec3, to: Vec3): boolean => {
+        eyeA[0] = from[0]; eyeA[1] = sectorBlocked ? from[1] + EYE_M : EYE_M; eyeA[2] = from[2];
+        eyeB[0] = to[0]; eyeB[1] = sectorBlocked ? to[1] + EYE_M : EYE_M; eyeB[2] = to[2];
         if (!sectorBlocked)
-            return clearSight([from[0], EYE_M, from[2]], [to[0], EYE_M, to[2]], boxes);
-        const a: Vec3 = [from[0], from[1] + EYE_M, from[2]], b: Vec3 = [to[0], to[1] + EYE_M, to[2]];
-        return Number.isFinite(a[1]) && Number.isFinite(b[1]) && clearSight(a, b, boxes) && !sectorBlocked(a, b);
+            return clearSight(eyeA, eyeB, boxes);
+        return Number.isFinite(eyeA[1]) && Number.isFinite(eyeB[1]) && clearSight(eyeA, eyeB, boxes) && !sectorBlocked(eyeA, eyeB);
     };
     type Memory = {
         at: Vec3;
@@ -106,9 +109,9 @@ export function createEncounterDirector(nav: EncounterNavigation, boxes: readonl
         } },
         clear() { memory.clear(); routes.clear(); lastShot.clear(); owner = null; lease = 0; },
         debug: () => ({ owner, memories: [...memory].map(([id, m]) => ({ id, at: m.at, age: m.age })) }),
-        /** `playerFeet`: the player's feet height, read on sector levels only (the target keeps the
-         *  player's real y there); room levels target y 0 as before. */
-        update(agents: readonly EncounterAgent[], player: BrainPlayer | null, gunshot: boolean, dt: number, playerFeet = 0): Map<number, EncounterOrder> {
+        /** On sector levels the target keeps the player's real feet height (`player.y`); room levels
+         *  target y 0 as before. */
+        update(agents: readonly EncounterAgent[], player: BrainPlayer | null, gunshot: boolean, dt: number): Map<number, EncounterOrder> {
             clock += dt;
             lease -= dt;
             observed.clear();
@@ -119,7 +122,7 @@ export function createEncounterDirector(nav: EncounterNavigation, boxes: readonl
                     routes.delete(id);
                     lastShot.delete(id);
                 }
-            const target: Vec3 | null = player ? [player.x, sectorBlocked ? playerFeet : 0, player.z] : null;
+            const target: Vec3 | null = player ? [player.x, sectorBlocked ? player.y ?? 0 : 0, player.z] : null;
             for (const a of agents) {
                 if (a.disabled) {
                     memory.delete(a.id);

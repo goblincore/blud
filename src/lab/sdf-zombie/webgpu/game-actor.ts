@@ -954,15 +954,21 @@ export function createZombieActor(opts: {
   let brainPlayer: BrainPlayer | null = null;
   /** A ranged mind's own sight to the player (no encounter order). Room levels: 1.4 m at both ends,
    *  furniture only, exactly as before. Sector levels: 1.4 m over the body's floor to 1.4 m over the
-   *  floor under the player (BrainPlayer has no height), furniture and sector geometry. */
+   *  player's feet (BrainPlayer.y, else the floor under the player), furniture and sector geometry. */
+  const sightA: [number, number, number] = [0, 0, 0], sightB: [number, number, number] = [0, 0, 0];   // scratch: nothing keeps them
   const rangedSight = (pl: BrainPlayer): boolean => {
     const sx = state.wander.pos[0], sz = state.wander.pos[2];
-    if (!opts.ground || !opts.sectorSight)
-      return !opts.furniture.some(box => segmentHitsBox([sx, 1.4, sz], [pl.x, 1.4, pl.z], box));
-    const playerFloor = opts.ground.floorAt(pl.x, pl.z);
-    if (!Number.isFinite(playerFloor)) return false;
-    const a: Vec3 = [sx, state.wander.pos[1] + 1.4, sz], b: Vec3 = [pl.x, playerFloor + 1.4, pl.z];
-    return !opts.furniture.some(box => segmentHitsBox(a, b, box)) && !opts.sectorSight(a, b);
+    if (!opts.ground || !opts.sectorSight) {
+      sightA[0] = sx; sightA[1] = 1.4; sightA[2] = sz;
+      sightB[0] = pl.x; sightB[1] = 1.4; sightB[2] = pl.z;
+      return !opts.furniture.some(box => segmentHitsBox(sightA, sightB, box));
+    }
+    // The player's real feet when the caller gave them (BrainPlayer.y), else the floor under them.
+    const feet = pl.y ?? opts.ground.floorAt(pl.x, pl.z);
+    if (!Number.isFinite(feet)) return false;
+    sightA[0] = sx; sightA[1] = state.wander.pos[1] + 1.4; sightA[2] = sz;
+    sightB[0] = pl.x; sightB[1] = feet + 1.4; sightB[2] = pl.z;
+    return !opts.furniture.some(box => segmentHitsBox(sightA, sightB, box)) && !opts.sectorSight(sightA, sightB);
   };
   let brainAlerted = false;
   let ringToken = false;

@@ -20,7 +20,7 @@ const doc = parseBlob(cultistSrc);
 const body = buildBody(compileBlob(doc, compileFace(doc)));
 
 /** A cultist on a 1 m floor with the player 3 m in front (+z); `wall` says what the sector test answers. */
-function run(wall: boolean) {
+function run(wall: boolean, playerY?: number) {
   let fired = 0;
   const asked: [Vec3, Vec3][] = [];
   const start: Vec3 = [0, 1, 0];
@@ -35,7 +35,7 @@ function run(wall: boolean) {
     ground: { ...FLAT_GROUND, floorAt: () => 1 },
     sectorSight: (a, b) => { asked.push([[...a] as Vec3, [...b] as Vec3]); return wall; },
   });
-  for (let i = 0; i < 300; i++) { actor.setBrainInput({ x: 0, z: 3, room: 1 }, true); actor.step(1 / 60); }
+  for (let i = 0; i < 300; i++) { actor.setBrainInput({ x: 0, z: 3, room: 1, ...(playerY !== undefined ? { y: playerY } : {}) }, true); actor.step(1 / 60); }
   return { fired, asked };
 }
 
@@ -47,6 +47,10 @@ describe('a ranged mind\'s own sight on a sector level', () => {
     const [a, b] = r.asked[0]!;
     expect(a[1]).toBeCloseTo(2.4, 6);
     expect(b).toEqual([0, 2.4, 3]);
+  });
+  it('aims at the player\'s real feet when the caller gives them (BrainPlayer.y)', () => {
+    const r = run(false, 2);
+    expect(r.asked[0]![1]).toEqual([0, 3.4, 3]);
   });
   it('a sector wall between: never fires', () => {
     const r = run(true);
