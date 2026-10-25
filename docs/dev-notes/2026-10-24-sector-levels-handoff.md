@@ -86,6 +86,17 @@ Experiment: rebuild Doom E1M1's layout from `doomu.wad` in our look and play it.
    for gibs, blood, entrails, prop drop, brass, flames, dynamite). "The parts with enemies feel good"; other
    parts need interaction (barrels, doors/switches, secrets). The level is monochrome (one brick texture) —
    rooms need material variation (Doom's per-sidedef/flat textures → a small palette of our materials).
+2g. **Expressive lighting: screens and light panels (owner approved 2026-10-25, queued after plan 3b).**
+   Owner: the computer room and its enemy alcove need fluorescent / coloured lighting and glowing screens.
+   E1M1 emitter textures (WAD counts): COMPUTE2/COMPUTE3/COMPTALL (17 sides), PLANET1 viewscreen (16),
+   LITE3 strips (14), EXITSIGN (8), TLITE6_* ceiling flats (12). Today they map to tech / dim light-panel.
+   Plan: (1) new emissive families + our own procedural looks — CRT computer banks (green/amber readouts,
+   slow scroll, flicker), the viewscreen (dark glass, drifting star/planet display, scanlines), fluorescent
+   strips/ceilings (cold blue-white, rare flicker), red exit signs; (2) these surfaces light the room: baked
+   coloured bounce onto nearby surfaces (generalise sector-bounce from pools to emissive walls/ceilings),
+   plus real coloured converter lights for the strongest emitters (screen banks, fluorescent ceilings over
+   alcoves) so bodies are lit; (3) tuning sheet (computer room, alcove, fluorescent corridor), brightness
+   seams. Limit: lights still don't cross zones (cross-zone lights follow-up).
 3. **Plan 3a** — enemies on sector floors (motion `floorY`), navigation over sectors, sight and shots vs
    sector walls, pickups, exit as a walk-in trigger (E is slug mode; no use key yet).
    **Done 2026-10-25** ([notes](2026-10-24-sector-levels-3a/NOTES.md)): 29 enemies on their floors, sector
