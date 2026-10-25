@@ -25,7 +25,8 @@ export interface DebrisGround {
    *  into the start sector's floor..ceiling band: a one-sided line, a riser higher than the piece, a lip lower than
    *  it), the piece's centre stops max(radius, 1 cm) short of the wall (the probe runs on `radius` past next, so the
    *  leading edge meets it): the normal velocity reflects × `restitution`, the tangential keeps × `friction`, y is
-   *  next's. `radius` defaults to 0. Null when nothing was crossed (or prev is off the map: nothing to judge
+   *  next's. A centre already closer than `radius` is pushed out along the normal, but never off the map or across
+   *  another line (it stays on its own path instead). `radius` defaults to 0. Null when nothing was crossed (or prev is off the map: nothing to judge
    *  against). */
   bounce(prev: Vec3, next: Vec3, vel: Vec3, restitution: number, friction: number, radius?: number): WallBounce | null;
 }

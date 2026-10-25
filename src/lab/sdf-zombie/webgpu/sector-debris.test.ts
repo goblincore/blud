@@ -147,3 +147,39 @@ describe('seatSpawnInsideMap: a point spawn (blood) clamped inside with the body
     expect(seatSpawnInsideMap(map, ground, null, [0, 1, -4]).floorY).toBeUndefined();
   });
 });
+
+describe('sectorDebrisGround: a push-out never leaves the map or crosses a wall (review)', () => {
+  // A 0.2 m corridor (sector 0, x 0..0.2, floor 0, one-sided west wall) beside a raised sector (1, x 0.2..2,
+  // floor 1): narrower than a gun's 0.3 m radius, so pushing a centre out along either normal overshoots.
+  const narrow = parseSectorLevel({
+    version: 1, id: 'narrow', name: 'Narrow', geometry: 'sectors', ammo: 'infinite', loadout: ['melee'],
+    vertices: [[0, 0], [0.2, 0], [0.2, -4], [0, -4], [2, 0], [2, -4]],
+    sectors: [{ floor: 0, ceil: 3, light: 0.6, zone: 0 }, { floor: 1, ceil: 3, light: 0.6, zone: 0 }],
+    lines: [
+      { v: [1, 0], front: 0 }, { v: [2, 1], front: 0, back: 1 }, { v: [3, 2], front: 0 }, { v: [0, 3], front: 0 },
+      { v: [4, 1], front: 1 }, { v: [5, 4], front: 1 }, { v: [2, 5], front: 1 },
+    ],
+    start: { pos: [0.1, 0, -2], yaw: 0 },
+  }).sectors!;
+  const ng = buildSectorGround(narrow);
+  const n = sectorDebrisGround(narrow, ng);
+  it('a push across the riser into the raised sector falls back to the start point', () => {
+    const b = n.bounce([0.05, 0.2, -2], [-0.02, 0.2, -2], [-4, 0, 0], 0.5, 0.7, 0.3)!;
+    expect(b).not.toBeNull();
+    expect(b.normal[0]).toBeCloseTo(1, 9);
+    expect(b.pos[0]).toBeCloseTo(0.05, 9);
+    expect(ng.sectorAt(b.pos[0], b.pos[2])).toBe(0);
+    expect(b.vel[0]).toBeCloseTo(2, 9);                            // still reflected
+  });
+  it('a push off the map (through the one-sided west wall) falls back to the start point', () => {
+    const b = n.bounce([0.15, 0.2, -2], [0.22, 0.2, -2], [4, 0, 0], 0.5, 0.7, 0.3)!;
+    expect(b).not.toBeNull();
+    expect(b.normal[0]).toBeCloseTo(-1, 9);
+    expect(b.pos[0]).toBeCloseTo(0.15, 9);
+    expect(ng.sectorAt(b.pos[0], b.pos[2])).toBe(0);
+  });
+  it('a push-out with room behind it is unchanged (the fixture riser)', () => {
+    const b = g.bounce([1, 0.2, -7.95], [1, 0.2, -8.05], [0, 0, -3], 0.5, 0.7, 0.1)!;
+    expect(b.pos[2]).toBeCloseTo(-8 + 0.1, 9);
+  });
+});

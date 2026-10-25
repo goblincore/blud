@@ -8,7 +8,8 @@
 // [floor, ceil] (no top under sky): the probe meets only walls — a riser it is lower than, a lip it is higher than, a
 // one-sided line — never the floor or ceiling of the sector it is in (those are the vertical clamp's business, read
 // at the end x/z), and a piece that ended last step above its ceiling or below its floor still meets this step's
-// walls. Cached per SectorMap.
+// walls. A centre already closer than its radius is pushed out along the normal, unless that push would leave the map
+// or cross a line (a gap narrower than the radius, an acute corner): then it stays on its path. Cached per SectorMap.
 //
 // Pure: no three.js, no DOM.
 import type { Vec3 } from '../types';
@@ -27,6 +28,7 @@ export function sectorDebrisGround(map: SectorMap, ground: SectorGround): Debris
   if (cached) return cached;
   const S = map.sectors;
   const out: SectorHit = { t: 0, point: [0, 0, 0], kind: 'wall', line: -1, sector: -1 };
+  const guard: SectorHit = { t: 0, point: [0, 0, 0], kind: 'wall', line: -1, sector: -1 };
   const a: [number, number, number] = [0, 0, 0];
   const b: [number, number, number] = [0, 0, 0];
   const g: DebrisGround = {
@@ -70,8 +72,18 @@ export function sectorDebrisGround(map: SectorMap, ground: SectorGround): Debris
       const dn = dx * nx + dz * nz;   // < 0: the step runs toward the wall
       const tc = dn < 0 ? Math.min(1, Math.max(0, (stop - dist0) / dn)) : 0;
       const push = stop - (dist0 + tc * dn);
+      // On the centre's own path, short of the first crossing (so inside the map and with nothing between it and
+      // prev); the push is not probed by the step's probe, so in a gap narrower than the radius (or an acute corner)
+      // it could cross another line or leave the map: then the piece stays at the path point instead.
+      const px = prev[0] + tc * dx, pz = prev[2] + tc * dz;
+      let ox = px + push * nx, oz = pz + push * nz;
+      if (push > 1e-9) {
+        a[0] = px; a[1] = y; a[2] = pz;
+        b[0] = ox; b[1] = y; b[2] = oz;
+        if (ground.sectorAt(ox, oz) < 0 || sectorSegmentHit(map, ground, a, b, guard)) { ox = px; oz = pz; }
+      }
       return {
-        pos: [prev[0] + tc * dx + push * nx, next[1], prev[2] + tc * dz + push * nz] as Vec3,
+        pos: [ox, next[1], oz] as Vec3,
         vel: [tx * friction + rn * nx, vel[1], tz * friction + rn * nz] as Vec3,
         normal: [nx, 0, nz] as Vec3,
       };
