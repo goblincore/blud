@@ -64,6 +64,14 @@ Experiment: rebuild Doom E1M1's layout from `doomu.wad` in our look and play it.
    under them (`sector-json.ts` rehomeAccents). The room colour comes from a **baked glow bounce**
    (`sector-bounce.ts`, default `bounceGain` 36 — owner pick after playtest, 12 was too weak — × glowGain); the full-tier light (option 3) was skipped —
    it would need neighbouring-zone light masks. Details and numbers: [plan 2 notes](2026-10-24-sector-levels-2/NOTES.md) "Glow bounce".
+2c. **Distance veil in glowing rooms (owner playtest 2026-10-24).** Owner: the "dark fog" that hides things
+   until you're close makes sense in dark rooms, not in a glowing pool room. Cause: `DUNGEON_RIG` scene fog
+   (`dungeon-lighting.ts`: near-black, `fogNear 2.5`, `fogFar 13`) applies to every sector mesh (the glow
+   floor itself has `fog = false`, so the pool shows but the green-lit walls behind it fade to black).
+   Fix options: (a) per-vertex fog scale on sector meshes — reduce fog where the baked glowBounce (or sector
+   light) is high, via a custom fogNode / `fogNode` factor on the sector materials; (b) per-zone fog range
+   eased by the player's zone (cheap, but whole-room); (c) treat bright emissive as fog-immune (fog only the
+   lit term). Prefer (a). Owner said pool brightness is fine; enemies first, this after.
 3. **Plan 3a** — enemies on sector floors (motion `floorY`), navigation over sectors, sight and shots vs
    sector walls, pickups, exit as a walk-in trigger (E is slug mode; no use key yet).
 4. **Plan 3b** (not written) — exploding barrels (no HP/destructible system exists; reuse
