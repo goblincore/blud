@@ -42,7 +42,7 @@ export function createBarrelRuntime(ctx: GameContext, defs: readonly BarrelDef[]
     views.set(b.id, createBarrelView(ctx, b, sector, zoneRoom, mats));
   }
   const scorches = createScorchPool(ctx);
-  const shielded = (from: Vec3, to: Vec3) => blastShielded(ctx, from, to);
+  const shielded = (from: Vec3, to: Vec3, inside?: Vec3) => blastShielded(ctx, from, to, inside);
 
   const core = createBarrelCore(defs, ctx.world.colliders, {
     shielded,

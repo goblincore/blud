@@ -228,12 +228,14 @@ export function sectorHitBetween(ctx: GameContext, a: Vec3, b: Vec3): SectorHit 
 
 /** BLAST SHIELDING (plan 3b; Doom's radius-damage sight check): is `to` behind sector geometry from the blast at
  *  `at`? The probe starts at seatBlastProbe's seated point (lifted, inside the map), so a blast in the void or at a
- *  ceiling never shields everything; a blast that cannot be seated shields nothing. Always false on room levels. */
-export function blastShielded(ctx: GameContext, at: Vec3, to: Vec3): boolean {
+ *  ceiling never shields everything; a blast that cannot be seated shields nothing. `inside`: an open point on the
+ *  blast's own side (seatBlastProbe's hint — the shooter's body, the bundle's last open spot, the player's eye), so a
+ *  blast at a thin wall seats on that side. Always false on room levels. */
+export function blastShielded(ctx: GameContext, at: Vec3, to: Vec3, inside?: Vec3): boolean {
   const map = sectorsOf(ctx);
   if (!map) return false;
   const ground = ctx.world.level.ground as SectorGround;
-  const from = seatBlastProbe(map, ground, at);
+  const from = seatBlastProbe(map, ground, at, inside);
   return from !== null && sectorSegmentHit(map, ground, from, to) !== null;
 }
 

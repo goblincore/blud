@@ -165,6 +165,14 @@ describe('barrelsInStrike (the flail)', () => {
     expect(h!.point[2]).toBeCloseTo(-1.2 + BARREL.radiusM, 9);
     expect(h!.point[1]).toBeCloseTo(BARREL.heightM, 9);
   });
+  it('reach is 3D, eye to the drum surface: from a 1 m ledge a drum 1.2 m out on the floor below is out of reach', () => {
+    const ledgeEye: Vec3 = [0, 2.62, 0];
+    expect(barrelsInStrike(states, ledgeEye, 0, 50).map(h => h.id)).toEqual([]);              // 1.90 m to the lid rim
+    const near = [{ ...states[0]!, pos: [0, 0, -0.8] as Vec3 }];
+    expect(barrelsInStrike(near, ledgeEye, 0, 50).map(h => h.id)).toEqual(['front']);          // 1.70 m: in reach
+    const edge = [{ ...states[0]!, pos: [0, 0, -(1.8 + BARREL.radiusM - 0.01)] as Vec3 }];     // same floor, side 1.79 m off
+    expect(barrelsInStrike(edge, [0, 0.5, 0], 0, 50).map(h => h.id)).toEqual(['front']);
+  });
   it('a blocked drum (behind a wall) is not struck', () => {
     expect(barrelsInStrike(states, eye, 0, 50, () => true)).toEqual([]);
   });

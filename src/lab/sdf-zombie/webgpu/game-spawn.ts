@@ -20,7 +20,7 @@ import { decapitationRule } from '../head-burst';
 import { HEAD_LEAF } from './game-head-damage';
 import { LIGHT_PRESETS } from '../material';
 import { hitFeedback } from '../player-hit-feedback';
-import { spawnRocket } from '../rockets';
+import { ROCKET, spawnRocket } from '../rockets';
 import { GUNNER_TUNING } from '../soldier-brain';
 import { type Primitive, type Vec3 } from '../types';
 import { bodyPrimStride } from '../validate';
@@ -33,7 +33,7 @@ import { FLAT_GROUND } from './level-ground';
 import { registerBleed } from './game-bleed';
 import { crowdTypeFor } from './game-crowd-types';
 import { applyStormBodyKey } from './game-dynamic-light';
-import { actorSpawnCentre, debrisGround, seatBurstSpawn, shellAmpOf } from './game-hit-trace';
+import { actorSpawnCentre, clampSpawnInside, debrisGround, seatBurstSpawn, shellAmpOf } from './game-hit-trace';
 import { seatSpawnInsideMap } from './sector-debris';
 import { wanderBounds, type RoomDef } from './game-level';
 import { damagePlayer } from './game-loop';
@@ -449,7 +449,14 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
         // (rockets.ts), aimed like the tommy gun: the arm's heading, the
         // player's chest for the vertical. It detonates through the
         // dynamite path (the rocket step in the frame loop below).
-        if (weapon === 'rocket') ctx.weapon.rockets.push(spawnRocket(muz, shotDir, zombieId));
+        // Sector levels (plan 3b review): the warhead starts at the muzzle clamped inside the map from the shooter's
+        // body centre (clampSpawnInside), so a warbull hugging a thin wall never launches from inside or past it —
+        // its first segment, and a blast on that step, start on his side. Room levels: the muzzle, as before.
+        if (weapon === 'rocket') {
+          const centre = sectorGround ? actorSpawnCentre(ctx, actor) : null;
+          const origin = centre ? clampSpawnInside(ctx, centre, muz, ROCKET.radius) : muz;
+          ctx.weapon.rockets.push(spawnRocket(origin, shotDir, zombieId));
+        }
         // The pistol, like the chaingun, fires ONE aimed round per trigger event.
         else {
           const rounds = weapon === 'chaingun' || weapon === 'pistol'

@@ -40,7 +40,7 @@ import { detonateAt, stepDynamite } from './game-dynamite-step';
 import { stepEgg } from './game-egg';
 import { spawnScheduledGibs } from './game-gib-actor';
 import { stepPendingGibImpulses } from './game-gib-spawn';
-import { ceilingAt, chunkCollidersAt, debrisGround, seatBloodSpawn, shellAmpOf } from './game-hit-trace';
+import { blastShielded, ceilingAt, chunkCollidersAt, debrisGround, seatBloodSpawn, shellAmpOf } from './game-hit-trace';
 import { updateHud } from './game-hud';
 import { applyDeathCamera, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop';
 import { stepMeshGibs } from './game-mesh-gibs';
@@ -1055,8 +1055,11 @@ export function tick(ctx: GameContext, dt: number) {
       for (const d of stepped.detonations) {
         ctx.telemetry.telemetry.event('rocket-detonate', { cause: d.cause, owner: d.owner, x: d.at[0], y: d.at[1], z: d.at[2] });
         detonateAt(ctx, d.at);
+        const centre: Vec3 = [pp[0], pp[1] + PLAYER.height * 0.5, pp[2]];
         const hurt = blastPlayerDamage(Math.hypot(pp[0] - d.at[0], pp[1] + PLAYER.height * 0.5 - d.at[1], pp[2] - d.at[2]));
-        if (hurt > 0) damagePlayer(ctx, hurt, 'blast');
+        // Sector levels (plan 3b review): the player behind sector geometry from the blast takes nothing, as a
+        // barrel's blast (blastShielded is always false on room levels: the old rule there).
+        if (hurt > 0 && !blastShielded(ctx, d.at, centre)) damagePlayer(ctx, hurt, 'blast');
       }
     }
     // BARRELS (plan 3b, sector levels only): fuses burn, lit drums go up through the dynamite blast and chain.

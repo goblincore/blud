@@ -27,35 +27,36 @@ export interface BarrelRuntime {
   /** The nearest standing barrel (intact or lit) the segment meets: its id, t (the segment padded by `pad`, a
    *  projectile's radius) and the contact point ON the drum's own surface; or null. */
   segmentHit(a: Vec3, b: Vec3, pad?: number): BarrelSegmentHit | null;
-  /** A blast at `at` (any blast: dynamite, a rocket, another barrel). */
-  catchBlast(at: Vec3): void;
+  /** A blast at `at` (any blast: dynamite, a rocket, another barrel); `inside`: the shield probe's hint
+   *  (seatBlastProbe — an open point on the blast's own side). */
+  catchBlast(at: Vec3, inside?: Vec3): void;
   step(dt: number): void;
 }
 
 export interface BarrelSegmentHit { id: string; t: number; point: Vec3 }
 
-/** THE FLAIL ON BARRELS (plan 3b Task 14): every intact drum whose centre is in the strike's reach and arc
- *  (flail-strike.ts inStrikeArc, horizontal — as the actors are judged), whose height span is within the reach of
- *  the eye's height, and that `blocked` (a sector wall between the eye and the drum centre) does not hide; each with
- *  the drum-surface point nearest the eye. */
+/** THE FLAIL ON BARRELS (plan 3b Task 14): every intact drum whose surface point nearest the eye is within the
+ *  strike's reach in 3D (FLAIL_STRIKE.reach — so a player on a ledge cannot flail a drum far below) and in its arc
+ *  (flail-strike.ts inStrikeArc on that point: from outside it lies on the eye → centre bearing), and that `blocked`
+ *  (a sector wall between the eye and the drum centre) does not hide; each with that point. */
 export function barrelsInStrike(states: readonly BarrelState[], eye: Vec3, yaw: number, arcDeg: number,
   blocked?: (from: Vec3, to: Vec3) => boolean): { id: string; point: Vec3 }[] {
   const out: { id: string; point: Vec3 }[] = [];
   for (const b of states) {
     if (b.phase !== 'intact') continue;
     const centre: Vec3 = [b.pos[0], b.pos[1] + BARREL.heightM * 0.5, b.pos[2]];
-    if (!inStrikeArc(eye, yaw, centre, arcDeg)) continue;
-    const y = Math.min(b.pos[1] + BARREL.heightM, Math.max(b.pos[1], eye[1]));
-    if (Math.abs(eye[1] - y) > FLAIL_STRIKE.reach) continue;
+    const point = barrelSurfacePoint(b, eye);
+    if (Math.hypot(point[0] - eye[0], point[1] - eye[1], point[2] - eye[2]) > FLAIL_STRIKE.reach) continue;
+    if (!inStrikeArc(eye, yaw, point, arcDeg)) continue;
     if (blocked?.(eye, centre)) continue;
-    out.push({ id: b.id, point: barrelSurfacePoint(b, eye) });
+    out.push({ id: b.id, point });
   }
   return out;
 }
 
 export interface BarrelCoreIo {
   /** Is `to` behind level geometry from the blast at `from`? Absent: nothing shields. */
-  shielded?(from: Vec3, to: Vec3): boolean;
+  shielded?(from: Vec3, to: Vec3, inside?: Vec3): boolean;
   /** A barrel goes up at `at` (its centre; `feet` on its floor). Called from step(), after its box has left the
    *  colliders; a blast it sets off comes back through catchBlast (the chain). */
   explode(id: string, at: Vec3, feet: Vec3): void;
@@ -105,10 +106,11 @@ export function createBarrelCore(defs: readonly { id: string; pos: Vec3 }[], col
       const t = best.t, at: Vec3 = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
       return { id: best.s.id, t, point: barrelSurfacePoint(best.s, at) };
     },
-    catchBlast(at) {
+    catchBlast(at, inside) {
       rt.blasts++;
       const before = rt.states;
-      rt.states = catchBlast(before, at, rt.blasts, io.shielded);
+      const shielded = io.shielded;
+      rt.states = catchBlast(before, at, rt.blasts, shielded && ((f: Vec3, t: Vec3) => shielded(f, t, inside)));
       newlyLit(before, rt.states, 'chain');
     },
     step(dt) {

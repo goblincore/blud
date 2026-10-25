@@ -144,14 +144,23 @@ const BLAST_SEAT_REACH_M = 1.0, BLAST_SEAT_STEP_M = 0.05, BLAST_SEAT_ANGLES = 16
  *  a probe from the void or from above/below its sector's band is a t = 0 hit, which would shield every body and
  *  barrel. Inside a sector the start is clamped into that sector's floor..ceiling band (no top under sky); in the
  *  void it moves to the nearest point in a sector within BLAST_SEAT_REACH_M (rings outward), then into that band.
- *  Null when nothing is in reach: the caller then shields nothing, rather than everything. */
-export function seatBlastProbe(map: SectorMap, ground: SectorGround, at: Vec3): Vec3 | null {
+ *  `inside` (the review follow-up): a point known to be open on the blast's own side — the shooter's body centre, the
+ *  bundle's last open position, the player's eye. When it is in a sector the lifted blast is clamped in FROM it
+ *  (clampSpawnInsideMap), so a blast inside or past a thin wall seats on the hint's side, never the far room; the
+ *  ring search is the hint-less fallback. Null when nothing is in reach: the caller then shields nothing, rather
+ *  than everything. */
+export function seatBlastProbe(map: SectorMap, ground: SectorGround, at: Vec3, inside?: Vec3): Vec3 | null {
   const y = at[1] + BLAST_LIFT_M;
-  const seat = (x: number, z: number, s: number): Vec3 => {
+  const seat = (x: number, z: number, s: number, py = y): Vec3 => {
     const sec = map.sectors[s]!;
     const top = sec.materials.ceil === SKY_MATERIAL ? Infinity : sec.ceil - BLAST_SEAT_SKIN_M;
-    return [x, Math.min(Math.max(y, sec.floor + BLAST_SEAT_SKIN_M), top), z];
+    return [x, Math.min(Math.max(py, sec.floor + BLAST_SEAT_SKIN_M), top), z];
   };
+  if (inside && ground.sectorAt(inside[0], inside[2]) >= 0) {
+    const p = clampSpawnInsideMap(map, ground, inside, [at[0], y, at[2]]);
+    const s = ground.sectorAt(p[0], p[2]);
+    if (s >= 0) return seat(p[0], p[2], s, p[1]);
+  }
   const s0 = ground.sectorAt(at[0], at[2]);
   if (s0 >= 0) return seat(at[0], at[2], s0);
   for (let r = BLAST_SEAT_STEP_M; r <= BLAST_SEAT_REACH_M + 1e-9; r += BLAST_SEAT_STEP_M) {

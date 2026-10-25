@@ -239,3 +239,50 @@ describe('seatBlastProbe: where a blast\'s shield probes start', () => {
     expect(seatBlastProbe(map, ground, [500, 0, 500])).toBeNull();
   });
 });
+
+describe('seatBlastProbe: the inside hint keeps a blast on its own side of a thin wall (review follow-up)', () => {
+  // Room A (x −3..0) and room B (x 0.2..3), z 0..−4, both one-sided: a 0.2 m solid wall between them (x 0..0.2).
+  const thin = parseSectorLevel({
+    version: 1, id: 'thin', name: 'Thin', geometry: 'sectors', ammo: 'infinite', loadout: ['melee'],
+    vertices: [[-3, 0], [0, 0], [0, -4], [-3, -4], [0.2, 0], [3, 0], [3, -4], [0.2, -4]],
+    sectors: [{ floor: 0, ceil: 3, light: 0.6, zone: 0 }, { floor: 0, ceil: 3, light: 0.6, zone: 0 }],
+    lines: [
+      { v: [1, 0], front: 0 }, { v: [0, 3], front: 0 }, { v: [3, 2], front: 0 }, { v: [2, 1], front: 0 },
+      { v: [5, 4], front: 1 }, { v: [4, 7], front: 1 }, { v: [7, 6], front: 1 }, { v: [6, 5], front: 1 },
+    ],
+    start: { pos: [-1.5, 0, -2], yaw: 0 },
+  }).sectors!;
+  const tg = buildSectorGround(thin);
+  const shields = (at: Vec3, to: Vec3, inside?: Vec3) => {
+    const from = seatBlastProbe(thin, tg, at, inside);
+    return from !== null && sectorSegmentHit(thin, tg, from, to) !== null;
+  };
+  const inWall: Vec3 = [0.1, 1, -2];                                 // a rocket at a muzzle poking into the wall
+  const shooter: Vec3 = [-0.4, 0.9, -2];                              // the warbull hugging the wall, in A
+  const inA: Vec3 = [-1.5, 1, -2], inB: Vec3 = [1.5, 1, -2];
+  it('hint-less, the ring search can seat it in the FAR room (the bug the hint fixes)', () => {
+    expect(tg.sectorAt(inWall[0], inWall[2])).toBe(-1);
+    const from = seatBlastProbe(thin, tg, inWall)!;
+    expect(tg.sectorAt(from[0], from[2])).toBe(1);
+  });
+  it('with the shooter as the hint it seats in A, WALL_SKIN_M short of the wall: A is hit, B is shielded', () => {
+    const from = seatBlastProbe(thin, tg, inWall, shooter)!;
+    expect(tg.sectorAt(from[0], from[2])).toBe(0);
+    expect(from[0]).toBeLessThan(0);                               // pulled WALL_SKIN_M back along hint → blast
+    expect(from[0]).toBeGreaterThan(-2 * WALL_SKIN_M);
+    expect(from[1]).toBeGreaterThan(0.9);
+    expect(from[1]).toBeLessThan(1 + BLAST_LIFT_M);
+    expect(shields(inWall, inA, shooter)).toBe(false);
+    expect(shields(inWall, inB, shooter)).toBe(true);
+  });
+  it('a blast past the wall, in B, is pulled back to the hint\'s side too', () => {
+    const from = seatBlastProbe(thin, tg, [0.5, 1, -2], shooter)!;
+    expect(tg.sectorAt(from[0], from[2])).toBe(0);
+  });
+  it('a blast in the open on the hint\'s side is the plain lifted point', () => {
+    expect(seatBlastProbe(thin, tg, [-1, 1, -2], shooter)).toEqual(seatBlastProbe(thin, tg, [-1, 1, -2]));
+  });
+  it('a hint off the map is ignored (the ring search)', () => {
+    expect(seatBlastProbe(thin, tg, inWall, [0.1, 1, -2])).toEqual(seatBlastProbe(thin, tg, inWall));
+  });
+});

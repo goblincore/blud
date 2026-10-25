@@ -36,10 +36,12 @@ export function overcookInHand(ctx: GameContext): void {
   const hand = propWorld(ctx, ctx.weapon.heldProp);
   const at = ctx.world.level.def?.sectors ? clampSpawnInside(ctx, eyeOf(ctx.player.player), hand) : hand;
   ctx.telemetry.telemetry.event('dynamite-overcook', { x: at[0], y: at[1], z: at[2] });
-  detonateAt(ctx, at, true);
+  detonateAt(ctx, at, true, ctx.world.level.def?.sectors ? eyeOf(ctx.player.player) : undefined);
 }
 
-export function detonateAt(ctx: GameContext, at: Vec3, inHand = false): void {
+/** `inside` (sector levels): an open point on the blast's own side — the shield probes' seat hint (seatBlastProbe),
+ *  so a blast at a thin wall never reaches through it. */
+export function detonateAt(ctx: GameContext, at: Vec3, inHand = false, inside?: Vec3): void {
   const t0 = performance.now();
   ctx.dynamite.gibTierLog = [];
   const prof = newBlastProfile(ctx);
@@ -55,7 +57,7 @@ export function detonateAt(ctx: GameContext, at: Vec3, inHand = false): void {
   const inBlast = ctx.world.level.def?.sectors
     ? ctx.world.actors.filter(a => {
       const torso = a.posed().clusters.find(c => c.limb === 'torso')?.center;
-      return !torso || !blastShielded(ctx, at, [torso[0], torso[1], torso[2]]);
+      return !torso || !blastShielded(ctx, at, [torso[0], torso[1], torso[2]], inside);
     })
     : ctx.world.actors;
   const bodies: ExplosionBody[] = inBlast.map(a => ({
@@ -214,7 +216,7 @@ export function detonateAt(ctx: GameContext, at: Vec3, inHand = false): void {
     bodies: fx.perBody.length, gibbed, pieces, ms: ctx.dynamite.lastBlastMs,
   });
   // BARRELS (plan 3b): every blast lights the drums in reach — a barrel's own detonation comes here too: the chain.
-  ctx.world.barrels?.catchBlast(at);
+  ctx.world.barrels?.catchBlast(at, inside);
 }
 
 /**
@@ -257,10 +259,12 @@ export function stepDynamite(ctx: GameContext, dt: number): void {
     };
     let remaining = Math.min(dt, 0.25);
     let boom: Vec3 | null = null;
+    let lastOpen: Vec3 = b.state.pos;   // the bundle's last open position: the blast's shield seat hint
     while (remaining > 1e-9 && !flightDetonated(b.state)) {
       const sub = Math.min(remaining, FLIGHT_TUNING.subStepSec);
       remaining -= sub;
       const from = b.state.pos;
+      lastOpen = from;
       // bounds: null — the dungeon has no arena rect; `colliders` is its
       // real solid geometry and `ceilM` its ceiling.
       b.state = stepFlight(b.state, sub, null, world);
@@ -271,7 +275,7 @@ export function stepDynamite(ctx: GameContext, dt: number): void {
       // Hand the prop back BEFORE the blast so the very next cook has one.
       if (b.prop) { b.prop.object.visible = false; ctx.bake.spareBundles.push(b.prop); }
       ctx.bake.liveBundles.splice(i, 1);
-      detonateAt(ctx, boom);
+      detonateAt(ctx, boom, false, ctx.world.level.def?.sectors ? lastOpen : undefined);
       continue;
     }
     b.prop?.pose({ mode: 'flight', pos: b.state.pos, spin: b.state.spin, fuseBurning: true });
