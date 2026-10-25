@@ -59,3 +59,21 @@ describe('buildSectorGround: blocking lines', () => {
     expect(segs.length).toBeLessThan(17);
   });
 });
+
+describe('buildSectorGround: linesNear', () => {
+  const g = buildSectorGround(map());
+  it('returns each line in the cells the box covers once', () => {
+    const near = g.linesNear(-0.5, -0.5, 0.5, 0.5);
+    expect(new Set(near).size).toBe(near.length);
+    expect(near).toContain(0);                                              // A's north wall, z = 0
+    expect(near).not.toContain(12);                                         // C's south wall, z = -16
+  });
+  it('a box over the whole map returns every line, in either corner order', () => {
+    const all = [...buildSectorGround(map()).linesNear(-10, -20, 10, 2)].sort((a, b) => a - b);
+    expect(all).toEqual(Array.from({ length: 17 }, (_, i) => i));
+    expect([...g.linesNear(10, 2, -10, -20)].sort((a, b) => a - b)).toEqual(all);
+  });
+  it('is empty off the map', () => {
+    expect(g.linesNear(50, 50, 60, 60)).toEqual([]);
+  });
+});

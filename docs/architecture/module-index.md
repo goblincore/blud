@@ -52,7 +52,7 @@ Each line is the first sentence of the module's header comment.
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
-| [Levels and world](#levels-and-world) | 36 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
+| [Levels and world](#levels-and-world) | 38 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
 | [Actors and crowd (render)](#actors-and-crowd-render) | 19 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
@@ -520,6 +520,7 @@ Level definitions, kits, the train, the disco, the egg, sky, encounters.
 - `webgpu/encounter-director.ts` — Encounter director: line-of-sight and fire-lane tests, plus the per-agent orders (idle, combat, pursue, search, return, yield).
 - `webgpu/encounter-navigation.ts` — Static floor navigation for encounters: a grid path planner over rooms and tunnels that keeps actors clear of solid boxes.
 - `webgpu/ending-sequence.ts` — SHORT SCRIPTED SEQUENCES (spec 2026-09-30-night-train-egg-ending-design.md §3): a timeline of shots, each a duration, a cut type, a camera and an…
+- `webgpu/grid-navigation.ts` — GRID NAVIGATION CORE: an 8-connected grid of standable cells over a level's bounds, a BFS route between the nearest reachable cells, and `follow`…
 - `webgpu/kit-bounds.ts` — A cheap, conservative bounding sphere for a skinned kit mesh — the "bone sphere" — so frustum culling stays valid without skinning every vertex on…
 - `webgpu/kit-damage.ts` — Armor kit damage on skinned meshes: piece support and attachment checks, hit damage, shedding and the detached armor debris.
 - `webgpu/kit-overlay.ts` — The POLYGON half of a character: armour, clothing, and hard props, authored in WAM (a text→glTF mesh compiler) and laid over the raymarched flesh.
@@ -539,6 +540,7 @@ Level definitions, kits, the train, the disco, the egg, sky, encounters.
 - `webgpu/sector-ground.ts` — SECTOR GROUND (spec 2026-10-24-doom-sector-levels-design.md §6.1–§6.2): which sector is under a point (even-odd crossing over that sector's lines,…
 - `webgpu/sector-json.ts` — SECTOR LEVELS — parse and validate (spec 2026-10-24-doom-sector-levels-design.md §4).
 - `webgpu/sector-light.ts` — SECTOR LIGHT (spec 2026-10-24-doom-sector-levels-design.md §7).
+- `webgpu/sector-navigation.ts` — NAVIGATION OVER SECTOR GROUND (spec 2026-10-24-doom-sector-levels-design.md §6.3): the grid core of grid-navigation.ts, with standing and travel read…
 - `webgpu/sky-color.ts` — TypeScript twin of SKY_COLOR (sky.wgsl.ts).
 - `webgpu/sky.wgsl.ts` — The sky dome's colour, hand-written WGSL (Outdoor v1 §6).
 - `webgpu/train-motion.ts` — The train's motion (carriage kit spec §6), as pure functions of SIM time and speed: camera roll and bob, rail-joint jolts, lamp and curtain swing.

@@ -16,6 +16,9 @@ const CELL_M = 4;
 export interface SectorGround extends LevelGround {
   /** The sector index under (x, z), or -1. */
   sectorAt(x: number, z: number): number;
+  /** The indices of the lines in the grid cells the box covers (deduplicated; a candidate set, not
+   *  an exact overlap test). Corners in either order. Empty when the box misses the map. */
+  linesNear(x0: number, z0: number, x1: number, z1: number): readonly number[];
 }
 
 export function buildSectorGround(map: SectorMap): SectorGround {
@@ -38,12 +41,14 @@ export function buildSectorGround(map: SectorMap): SectorGround {
     const [ax, az] = V[l.v[0]]!, [bx, bz] = V[l.v[1]]!;
     forCells(Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz), cell => lineCells[cell]!.push(i));
   });
+  const sectorBox = new Float64Array(S.length * 4);
   sectorLines.forEach((ls, s) => {
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
     for (const i of ls) for (const vi of L[i]!.v) {
       const [x, z] = V[vi]!;
       x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z);
     }
+    sectorBox.set([x0, z0, x1, z1], s * 4);
     if (ls.length > 0) forCells(x0, z0, x1, z1, cell => sectorCells[cell]!.push(s));
   });
 
@@ -59,7 +64,11 @@ export function buildSectorGround(map: SectorMap): SectorGround {
   };
   const sectorAt = (x: number, z: number): number => {
     if (x < minX || x > maxX || z < minZ || z > maxZ) return -1;
-    for (const s of sectorCells[row(z) * cols + col(x)]!) if (inside(s, x, z)) return s;
+    for (const s of sectorCells[row(z) * cols + col(x)]!) {
+      const b = s * 4;
+      if (x < sectorBox[b]! || z < sectorBox[b + 1]! || x > sectorBox[b + 2]! || z > sectorBox[b + 3]!) continue;   // cheap reject
+      if (inside(s, x, z)) return s;
+    }
     return -1;
   };
   const blocks = (i: number, feetY: number): boolean => {
@@ -70,8 +79,22 @@ export function buildSectorGround(map: SectorMap): SectorGround {
     return hi - lo < SECTOR_HEADROOM_M || lo - feetY > SECTOR_STEP_M;
   };
 
+  // Dedup by stamping lines with a per-call number (linesNear is on the navigation hot path).
+  const stamp = new Uint32Array(L.length);
+  let stampNow = 0;
+  const linesNear = (x0: number, z0: number, x1: number, z1: number): number[] => {
+    const lx = Math.min(x0, x1), hx = Math.max(x0, x1), lz = Math.min(z0, z1), hz = Math.max(z0, z1);
+    if (hx < minX || lx > maxX || hz < minZ || lz > maxZ) return [];
+    const out: number[] = [];
+    if (++stampNow === 0xffffffff) { stamp.fill(0); stampNow = 1; }
+    for (let r = row(lz); r <= row(hz); r++) for (let c = col(lx); c <= col(hx); c++)
+      for (const i of lineCells[r * cols + c]!) if (stamp[i] !== stampNow) { stamp[i] = stampNow; out.push(i); }
+    return out;
+  };
+
   return {
     sectorAt,
+    linesNear,
     floorAt: (x, z) => { const s = sectorAt(x, z); return s < 0 ? NaN : S[s]!.floor; },
     ceilAt: (x, z) => { const s = sectorAt(x, z); return s < 0 ? NaN : S[s]!.ceil; },
     blockingNear(x, z, r, feetY) {

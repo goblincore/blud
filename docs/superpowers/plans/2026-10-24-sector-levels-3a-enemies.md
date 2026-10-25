@@ -161,7 +161,7 @@ def fnv1a32(s: str) -> int:
 
 **Files:** create `grid-navigation.ts`, `sector-navigation.ts` (+ tests); modify `encounter-navigation.ts`, `sector-ground.ts`.
 
-- [ ] **Step 1: Extract the core, behaviour unchanged.** Read `encounter-navigation.ts` fully. Move
+- [x] **Step 1: Extract the core, behaviour unchanged.** Read `encounter-navigation.ts` fully. Move
   the grid build, `nearest`, BFS `route`, `follow` into `grid-navigation.ts`:
 
 ```ts
@@ -182,11 +182,11 @@ export function createGridNavigation(spec: GridNavSpec): EncounterNavigation
   returned navigation type. **All of `encounter-navigation.test.ts` must pass unchanged** (and the
   crowd/director tests that use navigation).
 
-- [ ] **Step 2: `linesNear` on sector ground.** `SectorGround` gains
+- [x] **Step 2: `linesNear` on sector ground.** `SectorGround` gains
   `linesNear(x0: number, z0: number, x1: number, z1: number): readonly number[]` — the line indices
   in the grid cells the box covers (deduplicated). Test it on the fixture.
 
-- [ ] **Step 3: `sector-navigation.ts` (test first).** Tests on the sectors fixture (plan 1 diagram:
+- [x] **Step 3: `sector-navigation.ts` (test first).** Tests on the sectors fixture (plan 1 diagram:
   A floor 0 with a column, B 0.5 step, C 1.5 ledge, D −1 pit):
   - `canStand` is false in the column, outside the map, and within `radius` of a one-sided wall;
     true in the middle of A, B, C, D;
@@ -208,7 +208,7 @@ export function createGridNavigation(spec: GridNavSpec): EncounterNavigation
   The cost: build once at load (E1M1 ≈ 120 × 110 m → ~80k cells; if building takes > 300 ms in the
   gate, report it — a coarser 0.5 m step is the fallback).
 
-- [ ] **Step 4:** run the new tests + `encounter-navigation.test.ts` + any test that imports it
+- [x] **Step 4:** run the new tests + `encounter-navigation.test.ts` + any test that imports it
   (`grep -l encounter-navigation src/lab/sdf-zombie/**/*.test.ts`); typecheck. Commit:
   `feat(levels): grid navigation core; navigation over sector ground`.
 
