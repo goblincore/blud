@@ -22,6 +22,7 @@ import { bodyInSight } from './actor-sight';
 import { type ZombieActor } from './game-actor';
 import { gateRefineTwin } from './game-wound-streams';
 import { simTimeMs } from './sim-clock';
+import { headShape } from './game-zombie-face';
 import { scaleForRung, stepAdaptive } from '../adaptive-scale';
 import { parseUpscaleConfig, parseUpscaleModelJson } from './upscale/upscale-model';
 import { type UpscaleInfo } from './upscale/upscale-stage';
@@ -351,16 +352,30 @@ export function updateVisibleActors(ctx: GameContext): void {
  *  bodies within 3 m — all in sight), so the kit never leaves before the flesh does. A released prop
  *  lies on its own and stays shown. Sector levels only (ctx.world.sightOccluder set): room levels are
  *  untouched. */
+const kitDrawn = new Set<ZombieActor>();
 export function syncKitVisibility(ctx: GameContext): void {
   if (!ctx.world.sightOccluder) return;
-  const drawn = new Set(ctx.render.visibleActors);
+  kitDrawn.clear();
+  for (const a of ctx.render.visibleActors) kitDrawn.add(a);
+  let now = NaN;
   for (const a of ctx.world.actors) {
-    const on = drawn.has(a) || ctx.render.visualActors.has(a);
-    // The tick skipped the view upload of a body outside its visual set (game-tick VIEW SYNC): one the
-    // march draws anyway is uploaded now, before the draw reads it. Back off again next tick if still out.
-    if (drawn.has(a)) a.setViewSync(true);
+    const visual = ctx.render.visualActors.has(a);
+    if (kitDrawn.has(a)) {
+      // The tick skipped the view upload of a body outside its visual set (game-tick VIEW SYNC): one the
+      // march draws anyway is uploaded now, before the draw reads it. Back off again next tick if still out.
+      a.setViewSync(true);
+      // ...and its per-actor visual state, which the tick writes for the visual set only (view time, the
+      // face's head shape): the same writes, so its first frame in sight is not a frame stale.
+      if (!visual) {
+        if (Number.isNaN(now)) now = ctx.demo.hold ? simTimeMs() / 1000 : performance.now() / 1000;
+        a.view.setTime(now);
+        const skull = headShape(a.drawnBody());
+        if (skull) a.view.setHeadShape(skull.centre, skull.axes);
+      }
+    }
     const ch = a.character;
     if (!ch) continue;
+    const on = visual || kitDrawn.has(a);
     if (ch.kit) ch.kit.object.visible = on;
     if (ch.prop && !ch.prop.released) ch.prop.object.visible = on;
     else if (ch.prop) ch.prop.object.visible = true;

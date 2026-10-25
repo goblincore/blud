@@ -28,6 +28,7 @@ import { woundWorldPos } from '../damage';
 import { rotateYaw } from '../gait';
 import { mulberry32 } from './game-weapon';
 import type { Vec3 } from '../types';
+import { gibPlan } from '../gib-parts';
 
 const stubView = () => ({
   setRootShift: () => {},
@@ -1192,5 +1193,98 @@ describe('head damage engine hooks (melee head damage, task 5)', () => {
     a.step(1 / 60);
     const plain = a.posed().prims.find(q => q.limb === 'head')!;
     expect(Math.abs(plain.a[1] - bare.a[1])).toBeLessThan(lift * 0.2);
+  });
+});
+
+describe('setViewSync: every direct view write settles what is owed (review 2026-10-25)', () => {
+  function makeRecorded() {
+    const doc = parseBlob(zombieBlobSrc);
+    const room = ROOMS[0]!;
+    const start = spawnPoints(room)[0]!;
+    const placed = translateBody(buildBody(compileBlob(doc, compileFace(doc)), DEFAULT_BUILD_OPTS, {}), start);
+    const rec = { update: 0, lastBody: null as unknown, lastHead: null as unknown };
+    const view = {
+      ...stubView(),
+      update: (b: unknown) => { rec.update++; rec.lastBody = b; },
+      setHeadRotation: (q: readonly number[]) => { rec.lastHead = [...q]; },
+      setGoreStrength: () => {}, setBonesBare: () => {}, setWounds: () => {},
+    };
+    const actor = createZombieActor({
+      id: 5, room: room.id, body: placed, view: view as never, start, seed: 4242,
+      bounds: wanderBounds(room), furniture: [], onSever: () => {},
+    });
+    for (let f = 0; f < 30; f++) actor.step(1 / 60);
+    return { actor, rec };
+  }
+
+  it('catchUp false leaves the upload to the next step: one upload, not two', () => {
+    const { actor, rec } = makeRecorded();
+    actor.setViewSync(false);
+    for (let f = 0; f < 5; f++) actor.step(1 / 60);
+    const u = rec.update;
+    actor.setViewSync(true, false);
+    expect(rec.update).toBe(u);
+    actor.step(1 / 60);
+    expect(rec.update).toBe(u + 1);
+    actor.setViewSync(true);
+    expect(rec.update).toBe(u + 1);            // the step settled it
+  });
+
+  it('a corpse bake owns the view: no catch-up while paused, nothing owed after either toggle', () => {
+    const { actor, rec } = makeRecorded();
+    actor.setViewSync(false);
+    for (let f = 0; f < 5; f++) actor.step(1 / 60);
+    actor.pauseForBake(true);                  // the baker uploads its head-only partition itself
+    const u = rec.update;
+    actor.setViewSync(true);
+    expect(rec.update).toBe(u);                // never over the partition
+    actor.setViewSync(false);
+    actor.step(1 / 60);                        // paused: step returns before posing
+    actor.setViewSync(true);
+    expect(rec.update).toBe(u);
+    actor.pauseForBake(false);                 // the baker re-uploads the full pose on restore
+    actor.setViewSync(true);
+    expect(rec.update).toBe(u);
+  });
+
+  it('a hit uploads and settles: no second upload on re-entry', () => {
+    const { actor, rec } = makeRecorded();
+    actor.setViewSync(false);
+    actor.step(1 / 60);
+    const torso = actor.posed().clusters.find(c => c.limb === 'torso')!.center;
+    let t = 0, hit: Vec3 | null = null;
+    for (let i = 0; i < 128 && t < 20; i++) {
+      const p: Vec3 = [torso[0], torso[1], torso[2] + 4 - t];
+      const d = sdBody(p, actor.posed());
+      if (d < 0.002) { hit = p; break; }
+      t += Math.max(d, 0.002);
+    }
+    expect(hit).not.toBeNull();
+    actor.hit(hit!, [0, 0, -1]);
+    const u = rec.update;
+    actor.setViewSync(true);
+    expect(rec.update).toBe(u);
+  });
+
+  it('mid-rupture the catch-up reproduces stepTear: the rupture frame and the composed head', () => {
+    const { actor, rec } = makeRecorded();
+    actor.beginTear([0, 1.2, 0.4], 1, gibPlan(actor.posed()));
+    actor.setViewSync(false);
+    // stepTear BEFORE the step this frame: the step's skipped upload is owed after the tear's.
+    actor.stepTear(1 / 60);
+    actor.step(1 / 60);
+    actor.setViewSync(true);
+    const caught = { body: rec.lastBody, head: rec.lastHead };
+    expect(caught.body).toEqual(actor.tearFrame()!.body);
+    actor.stepTear(0);                         // the same tear state uploaded by its own path
+    expect(rec.lastBody).toEqual(caught.body);
+    expect(caught.head).toEqual(rec.lastHead);
+    // stepTear AFTER the step: it settled the frame, nothing more to upload.
+    actor.setViewSync(false);
+    actor.step(1 / 60);
+    actor.stepTear(1 / 60);
+    const u = rec.update;
+    actor.setViewSync(true);
+    expect(rec.update).toBe(u);
   });
 });

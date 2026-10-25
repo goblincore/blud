@@ -445,8 +445,9 @@ export interface ZombieActor {
   /** VIEW SYNC (sector perf, 2026-10-25). false: step() still moves, poses and thinks, but skips the GPU
    *  view's per-frame upload (the body pack, the head rotation, the wound rows) — for a body no view can
    *  see. true: back on, and a view left stale is uploaded at once from the current pose, so it is right
-   *  before it is drawn. Default true. Hits and other re-poses upload as always. */
-  setViewSync(on: boolean): void;
+   *  before it is drawn (catchUp false: leave it to the next step(), which uploads anyway). Default true.
+   *  Hits, blasts, the rupture and the corpse baker write the view as always, and settle what is owed. */
+  setViewSync(on: boolean, catchUp?: boolean): void;
   /** Live wound ring (for HUD/debug). */
   wounds: () => readonly Wound[];
   /** Rendered carve spheres, also used to exclude occluder hulls. */
@@ -1168,6 +1169,42 @@ export function createZombieActor(opts: {
   /** What every pose change outside step() ends with: the pose, the view, the head's rotation, the wound rows. */
   function showPose() {
     posed = repose();
+    uploadPose();
+  }
+
+  /** The rupture's view upload (stepTear's): the rupture frame, the gore ramp, the wounds riding their
+   *  regions, the face riding the head region. Settles viewStale like uploadPose. */
+  function uploadTear() {
+    if (!tear) return;
+    viewStale = false;
+    // One frame computed once: the body, the wound carry and the face anchor must all read the SAME
+    // transforms, or they disagree by a frame.
+    const frame = ruptureFrameNow();
+    view.update(frame?.body ?? posed, current);
+    // ...and the material ramp rides the SAME clock, so at release the drawn
+    // body is already wearing the gore strength the spawned chunks carry and
+    // there is no one-frame material switch (see ruptureGore).
+    view.setGoreStrength(ruptureGore(ruptureProgress(tear.age, tearTuning.sec)));
+    // Wounds ride their rotating region (task 4).
+    refreshWounds(frame);
+    // THE FACE RIDES THE HEAD REGION. The head is one region; its displayed
+    // orientation is composed over the rig's own head quat, so the projection
+    // frame turns with the skull instead of staying pinned to the clean pose.
+    // The CENTRE is handled by the per-frame `headShape(a.drawnBody())` in the
+    // draw loop.
+    if (frame && tearPlan) {
+      const hi = tearPlan.pieces.findIndex(p => p.limb === 'head');
+      const hq = hi >= 0 ? frame.quats[hi] : undefined;
+      if (hq && !(hq[0] === 0 && hq[1] === 0 && hq[2] === 0 && hq[3] === 1)) {
+        const base = headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1];
+        view.setHeadRotation(qMul(hq, base));
+      }
+    }
+  }
+
+  /** THE view upload of a pose change: the body pack, the head rotation, the wound rows. Every write of
+   *  the view settles what setViewSync owes (viewStale). */
+  function uploadPose() {
     viewStale = false;
     view.update(drawnPose(), current);
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
@@ -1765,13 +1802,8 @@ export function createZombieActor(opts: {
         posed = inflateHead(posed, u, swellClock);
       }
     }
-    if (viewSync) {
-      view.update(drawnPose(), current);
-      view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
-      refreshWounds();
-    } else {
-      viewStale = true;
-    }
+    if (viewSync) uploadPose();
+    else viewStale = true;
     const d = lastFrame;
     if (d) {
       // The decision fields are the MIND's now. holdSecs rides MindDebug so
@@ -1871,9 +1903,7 @@ export function createZombieActor(opts: {
     for (const w of blastWounds) pendingWounds.push(w);
     if (blastWounds.length === 0) return;
     posed = repose();
-    view.update(drawnPose(), current);
-    view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
-    refreshWounds();
+    uploadPose();
   }
 
   /**
@@ -1975,9 +2005,7 @@ export function createZombieActor(opts: {
     //     together, including the pinned foot. The pose/upload refresh below is
     //     still wanted because the sever tail must see a current pose.
     posed = repose();
-    view.update(drawnPose(), current);
-    view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
-    refreshWounds();
+    uploadPose();
     if (blastWounds.length > 0) runSeverChecks();
   }
 
@@ -2091,9 +2119,7 @@ export function createZombieActor(opts: {
     hitCause = 'other';
     runSeverChecks(cause, dir);
     posed = repose();
-    view.update(drawnPose(), current);
-    view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
-    refreshWounds();
+    uploadPose();
   }
   /** A round the armour stopped: sparks (queued above), no wound, no injury.
    *  A slug still rocks him (a medium stagger); a pellet only shoves the rig
@@ -2272,30 +2298,7 @@ export function createZombieActor(opts: {
       // would never advance. Uploading the same pose twice on a frame the actor
       // DID step is one wasted pack for one body; a body stuck mid-rupture
       // forever is a hole in the world.
-      //
-      // One frame computed once: the body, the wound carry and the face anchor
-      // must all read the SAME transforms, or they disagree by a frame.
-      const frame = ruptureFrameNow();
-      view.update(frame?.body ?? posed, current);
-      // ...and the material ramp rides the SAME clock, so at release the drawn
-      // body is already wearing the gore strength the spawned chunks carry and
-      // there is no one-frame material switch (see ruptureGore).
-      view.setGoreStrength(ruptureGore(ruptureProgress(tear.age, tearTuning.sec)));
-      // Wounds ride their rotating region (task 4).
-      refreshWounds(frame);
-      // THE FACE RIDES THE HEAD REGION. The head is one region; its displayed
-      // orientation is composed over the rig's own head quat, so the projection
-      // frame turns with the skull instead of staying pinned to the clean pose.
-      // The CENTRE is handled by the per-frame `headShape(a.drawnBody())` in the
-      // draw loop.
-      if (frame && tearPlan) {
-        const hi = tearPlan.pieces.findIndex(p => p.limb === 'head');
-        const hq = hi >= 0 ? frame.quats[hi] : undefined;
-        if (hq && !(hq[0] === 0 && hq[1] === 0 && hq[2] === 0 && hq[3] === 1)) {
-          const base = headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1];
-          view.setHeadRotation(qMul(hq, base));
-        }
-      }
+      uploadTear();
     },
     tearing: () => tear !== null && tear.age < tearTuning.sec,
     tearAge: () => tear?.age ?? 0,
@@ -2375,19 +2378,22 @@ export function createZombieActor(opts: {
     engagedForCrowd: () => !doomed && lastEngaged,
     committed: () => !doomed && lastCommitted,
     step,
-    setViewSync(on: boolean) {
+    setViewSync(on: boolean, catchUp = true) {
       viewSync = on;
-      if (!on || !viewStale) return;
-      viewStale = false;
-      view.update(drawnPose(), current);
-      view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
-      refreshWounds();
+      // A body paused for its corpse bake: the baker owns the view (the head-only partition); never
+      // overwrite it. pauseForBake already settled what was owed.
+      if (!on || !catchUp || !viewStale || bakePaused) return;
+      // Exactly what the skipped frames' last step would have left: its upload, then stepTear's.
+      uploadPose();
+      uploadTear();
     },
     corpseBakeEligible: () => soldierDamage && state.collapse.phase === 'settled',
     refineEligible: () => state.collapse.phase === 'standing',
     damageRevision: () => damageRevision,
     injuryHistorySize: () => soldierWounds.length,
-    pauseForBake: (paused: boolean) => { bakePaused = paused; },
+    // The baker writes the view itself both ways (the head-only partition, then the full pose on
+    // restore): nothing is owed to setViewSync after either.
+    pauseForBake: (paused: boolean) => { bakePaused = paused; viewStale = false; },
     wounds: () => woundRing.all(),
     visualWounds: () => torsoWounds?.visual(posed) ?? (soldierDamage ? soldierVisualWounds(woundRing.all()) : woundRing.all()),
     advanceWoundPreview,

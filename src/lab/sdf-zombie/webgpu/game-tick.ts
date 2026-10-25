@@ -358,12 +358,15 @@ export function tick(ctx: GameContext, dt: number) {
 
     const bodyTiming = ctx.telemetry.telemetry.begin();
     ctx.world.soldierCorpses?.update(ctx.world.actors,dt);
-    // VIEW SYNC (sector levels): a body outside the visual set steps, poses and thinks but skips its
-    // GPU view upload; the draw catches up any body the march cull then keeps (syncKitVisibility).
-    // Room levels: every view uploads every frame, as before.
+    // VIEW SYNC (sector levels): a CROWD-ATTACHED body outside the visual set steps, poses and thinks but
+    // skips its GPU view upload; the draw catches up any body the march cull then keeps (syncKitVisibility)
+    // before the crowd's visible set or the fallback proxies (shown = the march set) can read it. A
+    // per-body view (?crowd=0, an unattached actor) is marched by its own `.visible`, which the cull does
+    // not drive, so it always uploads. Room levels: every view uploads every frame, as before.
+    // catchUp false: a body coming back in is uploaded by its own step() just below, once.
     const viewCull = !!ctx.world.sightOccluder;
     for (const a of ctx.world.actors) {
-      if (viewCull) a.setViewSync(ctx.render.visualActors.has(a));
+      if (viewCull) a.setViewSync(!a.crowd || ctx.render.visualActors.has(a), false);
       a.step(dt);
     }
     // 'body-step' CLOSES HERE, before the kit pose below, because that is

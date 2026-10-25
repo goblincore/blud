@@ -12,6 +12,8 @@ import type { GameContext } from './game-context';
 import { type DeferredDebugView } from './deferred-layer';
 import { hashFrame } from './demo-hash';
 import { setPassLabelObserver } from './gpu-pass-timing';
+import { sectorOcclusion } from './actor-sight';
+import type { SectorGround } from './sector-ground';
 import { type GameDeferredRendererDiagnostics, type GameSurfaceHash } from './game-deferred-renderer';
 
 // Type aliases copied from game-main.ts, where they are module-scope and
@@ -105,17 +107,19 @@ export function createBootSeams(ctx: GameContext) {
      *  (bodies behind sector walls drawn again, kits shown by frustum only, the pre-fix behaviour); true
      *  restores it. Returns whether it is on. A room level has none: always false. */
     setSectorCull: (on: boolean) => {
-      const w = ctx.world as typeof ctx.world & { sightOccluderOff?: typeof ctx.world.sightOccluder };
-      if (on && !w.sightOccluder && w.sightOccluderOff) { w.sightOccluder = w.sightOccluderOff; w.sightOccluderOff = null; }
-      if (!on && w.sightOccluder) {
-        w.sightOccluderOff = w.sightOccluder; w.sightOccluder = null;
+      // Rebuilt from the CURRENT level each time (never a stash that could outlive a level change).
+      const map = ctx.world.level.def?.sectors;
+      if (on && map) {
+        if (!ctx.world.sightOccluder) ctx.world.sightOccluder = sectorOcclusion(map, ctx.world.level.ground as SectorGround);
+      } else if (ctx.world.sightOccluder) {
+        ctx.world.sightOccluder = null;
         for (const a of ctx.world.actors) {
           a.setViewSync(true);
           if (a.character?.kit) a.character.kit.object.visible = true;
           if (a.character?.prop) a.character.prop.object.visible = true;
         }
       }
-      return !!w.sightOccluder;
+      return !!ctx.world.sightOccluder;
     },
     /** FRAME SPLIT (sector perf, 2026-10-25): `n` hand-stepped frames with the rAF loop STOPPED, each
      *  split into the tick's CPU ms, the draw's CPU ms (encode + submit) and the wait for the GPU fence

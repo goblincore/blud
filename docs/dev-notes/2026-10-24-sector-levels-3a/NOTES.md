@@ -209,7 +209,11 @@ routes are cheap: routes replan at most every 0.65 s); **draw CPU 7.5 ms** — t
    drew and skinned its kit behind the wall. Shown for bodies in the march set or the visual set.
 3. **No GPU upload for bodies no view can see** (`actor.setViewSync`, sector levels): a body outside the
    visual set still steps, poses and thinks, but skips its view's pack/upload, head rotation and wound
-   rows; the draw catches up any body the march cull keeps before it is drawn.
+   rows; the draw catches up any body the march cull keeps before it is drawn. Crowd-attached bodies only (a
+   per-body view is marched by its own `.visible`, which the cull does not drive). Every direct view write
+   (hits, blasts, the rupture's `stepTear`, the corpse baker via `pauseForBake`) settles what is owed; no
+   catch-up while a body is paused for its bake; the catch-up is the step's upload then the rupture's, so a
+   tearing body keeps its region-riding craters and composed head quat.
 4. The doom gate's budget lines add the loop-stopped split and the run-1 corridor pose.
 
 ### Before / after (interleaved A/B, final code)
