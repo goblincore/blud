@@ -276,7 +276,7 @@ export function tick(ctx: GameContext, dt: number) {
         bodies, alsoKeep, undefined,
         // Walls count: the same per-cluster sight test the march cull uses,
         // from this tick's eye. Only bodies the cone kept are ever asked.
-        (id) => { const a = byId.get(id); return !a || bodyInSight(eye, a.posed().clusters, ctx.world.colliders); },
+        (id) => { const a = byId.get(id); return !a || bodyInSight(eye, a.posed().clusters, ctx.world.colliders, ctx.world.sightOccluder ?? undefined); },
       );
       const visual = new Set<ZombieActor>();
       for (const a of unmeasurable) visual.add(a);

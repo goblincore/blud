@@ -357,7 +357,7 @@ import { finishChunkBake, spawnGoreShowcase } from './game-chunk-bake';
 import { ensureCarvedLibrary } from './game-gib-spawn';
 import { updateHud } from './game-hud';
 import { selectVisualActors } from './visual-actor-set';
-import { bodyInSight } from './actor-sight';
+import { bodyInSight, sectorOcclusion } from './actor-sight';
 import { sceneCensus } from './game-telemetry-scene';
 import { demoRecordStart } from './game-demo-record';
 import { ADAPTIVE_WINDOW, PROBE_ABORT_FRAMES, tickAdaptive } from './game-render-controls';
@@ -6120,8 +6120,11 @@ function buildEncounter(ctx: GameContext): void {
     ctx.world.encounterNav = createSectorNavigation(sectorMap, sectorGround, ctx.world.level.rooms, ctx.world.level.staticColliders);
     console.info(`[sector-nav] built in ${(performance.now() - navStart).toFixed(1)} ms (${sectorMap.sectors.length} sectors, ${sectorMap.lines.length} lines)`);
     ctx.world.encounter = createEncounterDirector(ctx.world.encounterNav, ctx.world.colliders, sectorSightBlocker(sectorMap, sectorGround));
+    // The render culls (march + visual set) see through the same geometry (actor-sight.ts).
+    ctx.world.sightOccluder = sectorOcclusion(sectorMap, sectorGround);
   } else {
     ctx.world.encounterNav = createEncounterNavigation(ctx.world.level.rooms, ctx.world.level.tunnels, ctx.world.level.staticColliders);
     ctx.world.encounter = createEncounterDirector(ctx.world.encounterNav, ctx.world.colliders);
+    ctx.world.sightOccluder = null;
   }
 }

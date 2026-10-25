@@ -309,7 +309,9 @@ export function updateVisibleActors(ctx: GameContext): void {
       // behind the wall while a body leaning out of cover already showed an
       // arm and its head: flesh culled, skeleton meshes not, so the owner saw
       // a bare skull and arm bones in the doorway (2026-09-20).
-      seen = bodyInSight(ctx.world.sightA, a.posed().clusters, ctx.world.colliders);
+      // Sector levels add their walls, floors and ceilings (ctx.world.sightOccluder; null on
+      // room levels, where this is the boxes-only test exactly).
+      seen = bodyInSight(ctx.world.sightA, a.posed().clusters, ctx.world.colliders, ctx.world.sightOccluder ?? undefined);
     }
     if (seen) ctx.world.lastSeenMs.set(a.id, now);
     const since = now - (ctx.world.lastSeenMs.get(a.id) ?? -Infinity);

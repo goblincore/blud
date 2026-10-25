@@ -35,6 +35,7 @@ import type { BakedChunkMaterial } from './baked-chunks';
 import type { EncounterNavigation } from './encounter-navigation';
 import type { ZombieActor } from './game-actor';
 import type { Aabb } from './game-level';
+import type { SightOccluder } from './actor-sight';
 import type { RoomProbes } from './room-probes';
 import type { OuterHull } from './shell-hull-outer';
 import type { ThemeMaterialSet } from '../../../game/level/theme-material-set';
@@ -105,6 +106,9 @@ export interface WorldState {
   coverage: { screenFrac: number; nearestM: number; biggestFrac: number };
   /** Scratch direction/point vector for the actor sight test. */
   sightA: [number, number, number];
+  /** The level geometry the box colliders do not hold, for the render culls' sight test
+   *  (actor-sight.ts sectorOcclusion): set on sector levels, null on room levels. */
+  sightOccluder: SightOccluder | null;
   /** Navigation graph the encounter director paths over. */
   encounterNav: EncounterNavigation;
   /** The encounter director itself (per-agent memory, routes, sight). */
@@ -160,6 +164,7 @@ export function makeWorldState(): WorldState {
     cullCounts: { visible: 0, total: 0 },
     coverage: { screenFrac: 0, nearestM: 0, biggestFrac: 0 },
     sightA: [0, 0, 0],
+    sightOccluder: null,
     encounterNav: unbuilt<EncounterNavigation>(),
     encounter: unbuilt<EncounterDirector>(),
     encounterHomes: new Map<number, Vec3>(),
