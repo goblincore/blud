@@ -257,6 +257,9 @@ export function createBootSeams(ctx: GameContext) {
     gpuDiagnostics: () => ctx.boot.handle.gpuDiagnostics,
     loopRunning: () => ctx.boot.handle.loopRunning,
     uptime: () => (performance.now() - ctx.boot.time) / 1000,
+    /** BULLET TIME (bullet-time.ts; Q in game): the toggle, the eased intensity and the live droplet count. */
+    bulletTime: () => ({ ...ctx.player.bulletTime, droplets: ctx.vfx.bloodSim.droplets.length, pellets: ctx.weapon.pellets.map(p => p.pos) }),
+    setBulletTime: (on: boolean) => { ctx.player.bulletTime.on = on; return { ...ctx.player.bulletTime }; },
     /**
      * THE SURFACE 'bodies' COMPOSITES INTO, read back (2026-09-10).
      *

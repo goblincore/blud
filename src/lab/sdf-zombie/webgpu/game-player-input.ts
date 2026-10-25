@@ -22,6 +22,7 @@ import { startReload, fire } from './game-weapon-rig';
 import { requestSlot, slotForKey } from './game-weapon-slots';
 import { type DemoFrame } from './demo-recorder';
 import { arenaRespawn } from './game-arena';
+import { toggleBulletTime } from '../bullet-time';
 
 /** The mouse delta's effect, extracted so the live handler and the replay
  *  apply the IDENTICAL maths. Free aim moves the reticle (the camera follows
@@ -115,6 +116,11 @@ export function applyInputEdges(ctx: GameContext, next: Set<string>): void {
     if (pressed('Backquote')) arenaRespawn(ctx, 0);
     if (pressed('Minus')) arenaRespawn(ctx, -1);
     if (pressed('Equal')) arenaRespawn(ctx, 1);
+  }
+  // BULLET TIME (bullet-time.ts), dev trigger: the world slows to a crawl, the player does not.
+  if (pressed('KeyQ')) {
+    toggleBulletTime(ctx.player.bulletTime);
+    ctx.telemetry.telemetry.event('bullet-time', { on: ctx.player.bulletTime.on });
   }
   if (pressed('KeyT')) {
     ctx.weapon.reloadSpeed = ctx.weapon.reloadSpeed === 1 ? 0.25 : ctx.weapon.reloadSpeed === 0.25 ? 0.1 : 1;

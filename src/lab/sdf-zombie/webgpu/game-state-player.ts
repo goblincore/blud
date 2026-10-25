@@ -25,6 +25,7 @@ import type { Vec3 } from '../types';
 import type { PlayerState as PlayerMotionState } from './game-player';
 import type { DemoFrame } from './demo-recorder';
 import { makeHitFeedback, type HitFeedback } from '../player-hit-feedback';
+import { makeBulletTime, type BulletTimeState } from '../bullet-time';
 
 export interface PlayerState {
   /** Center FOV handed to the fisheye lens, degrees; the lens and camera.fov
@@ -80,6 +81,10 @@ export interface PlayerState {
   hitFeedback: HitFeedback;
   /** The full-screen red flash overlay, created once at boot. */
   hitFlashEl: HTMLDivElement | null;
+  /** BULLET TIME (bullet-time.ts): Q toggles it; the tick runs the world on its eased scale. */
+  bulletTime: BulletTimeState;
+  /** Its vignette overlay, created lazily by the tick (game-bullet-time.ts). */
+  bulletTimeEl: HTMLDivElement | null;
 }
 
 /** Every call returns a fresh object, nested objects, arrays and sets included. */
@@ -108,6 +113,8 @@ export function makePlayerState(): PlayerState {
     lastWalkPos: null,
     hitFeedback: makeHitFeedback(),
     hitFlashEl: null,
+    bulletTime: makeBulletTime(),
+    bulletTimeEl: null,
   };
 }
 

@@ -121,6 +121,20 @@ export interface BloodSim {
   splats: Splat[];
   /** Per-source emission clocks, keyed by chunk id. */
   clocks: Record<number, number>;
+  /** BULLET TIME's gore (bullet-time.ts goreBoostAt), set by the game each tick; absent/null = the shipped spawns. */
+  boost?: GoreBoost | null;
+  /** The boost's sibling counter: its jitter is hashed from this, so a boost draws NO rng (the streams stay aligned). */
+  boostSeq?: number;
+}
+
+/** Every spawned bead gets `extra` jittered siblings, `sizeMul` the size and `lifeMul` the life. Not 'gut' nodes. */
+export interface GoreBoost { extra: number; sizeMul: number; lifeMul: number; spread: number }
+
+/** A hashed [-1, 1): the boost's jitter, independent of every rng stream. */
+function hash11(n: number): number {
+  let h = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return ((h ^ (h >>> 16)) >>> 0) / 0x80000000 - 1;
 }
 
 export function createBloodSim(): BloodSim {
@@ -128,6 +142,27 @@ export function createBloodSim(): BloodSim {
 }
 
 function push(sim: BloodSim, d: Droplet): void {
+  const b = sim.boost;
+  if (b && d.kind !== 'gut') {
+    d.size *= b.sizeMul;
+    d.life *= b.lifeMul;
+    for (let k = 0; k < b.extra; k++) {
+      const n = (sim.boostSeq = (sim.boostSeq ?? 0) + 1) * 4;
+      const sp = Math.hypot(d.vel[0], d.vel[1], d.vel[2]) * b.spread;
+      const j = 1 + hash11(n + 3) * b.spread;
+      pushRaw(sim, {
+        ...d,
+        pos: [d.pos[0], d.pos[1], d.pos[2]],
+        vel: [d.vel[0] * j + hash11(n) * sp, d.vel[1] * j + hash11(n + 1) * sp, d.vel[2] * j + hash11(n + 2) * sp],
+        size: d.size * (0.7 + 0.3 * Math.abs(hash11(n + 5))),
+        ...(d.hist ? { hist: [] } : {}),
+      });
+    }
+  }
+  pushRaw(sim, d);
+}
+
+function pushRaw(sim: BloodSim, d: Droplet): void {
   sim.droplets.push(d);
   while (sim.droplets.length > MAX_DROPLETS) sim.droplets.shift();
 }
