@@ -19,8 +19,9 @@ export interface GridNavSpec {
   roomAt(p: Vec3): number;
   /** Feet height at p (0 on room levels). Also each waypoint's y: the floor under its cell centre. */
   floorAt(p: Vec3): number;
-  /** Travel is one-way (sector levels: drops yes, climbs no). The route then ends at the first cell
-   *  the search reaches that is within NEAREST_M of `to` and joined to it either way, instead of the
+  /** Travel is one-way (sector levels: drops yes, climbs no). The route then ends at the cell nearest
+   *  `to` in the first BFS layer holding a cell within NEAREST_M of `to` joined to it either way (it may
+   *  be unable to walk onto `to`: the foot of a ledge the target stands on), instead of the
    *  nearest cell `to` can travel to, which may sit on a ledge nothing below reaches (a target a
    *  smaller body stands on at the foot of a riser). Default false: room levels. */
   oneWay?: boolean;
@@ -30,7 +31,10 @@ export interface EncounterNavigation {
   readonly bounds: WanderBounds;
   canStand(p: Vec3): boolean;
   canTravel(a: Vec3, b: Vec3): boolean;
-  /** Waypoints from `from` to `to` (the last is `to` itself); [] when there is no way. A waypoint's y
+  /** Waypoints from `from` to `to` (the last is `to` itself); [] when there is no way. On one-way
+   *  levels (sector levels) the waypoint before `to` is a reachable cell within 1.5 m of it that may
+   *  not walk onto it (the foot of a ledge the target stands on), and [] means no reachable cell is
+   *  within 1.5 m of `to` joined to it either way. A waypoint's y
    *  is the floor under its grid cell's centre (`floorAt`), not the feet height of a body standing
    *  there: a cell whose disc overhangs a higher floor still says the lower one. */
   route(from: Vec3, to: Vec3): Vec3[];
@@ -106,16 +110,30 @@ export function createGridNavigation(spec: GridNavSpec): EncounterNavigation {
       return [];
     const parent = new Int32Array(open.length).fill(-1), queue = [start];
     parent[start] = start;
-    const done = () => ends ? end >= 0 : parent[end] !== -1;
-    for (let at = 0; at < queue.length && !done(); at++)
-      for (const j of edges[queue[at]!]!)
-        if (parent[j] === -1) {
-          parent[j] = queue[at]!;
-          queue.push(j);
-          if (ends && end < 0 && ends.has(j)) end = j;
-        }
-    if (!done())
-      return [];
+    if (ends) {
+      // One-way: finish the BFS layer of the first arrival and take the arrival nearest `to`.
+      const depth = new Int32Array(open.length), gap = (i: number) => { const q = point(i); return Math.hypot(q[0] - to[0], q[2] - to[2]); };
+      let endDepth = end >= 0 ? 0 : -1, endGap = end >= 0 ? gap(end) : Infinity;
+      for (let at = 0; at < queue.length && !(end >= 0 && depth[queue[at]!]! >= endDepth); at++)
+        for (const j of edges[queue[at]!]!)
+          if (parent[j] === -1) {
+            parent[j] = queue[at]!;
+            depth[j] = depth[queue[at]!]! + 1;
+            queue.push(j);
+            if (ends.has(j) && (end < 0 || gap(j) < endGap)) { end = j; endDepth = depth[j]!; endGap = gap(j); }
+          }
+      if (end < 0)
+        return [];
+    } else {
+      for (let at = 0; at < queue.length && parent[end] === -1; at++)
+        for (const j of edges[queue[at]!]!)
+          if (parent[j] === -1) {
+            parent[j] = queue[at]!;
+            queue.push(j);
+          }
+      if (parent[end] === -1)
+        return [];
+    }
     const path: Vec3[] = [];
     for (let i = end; i !== start; i = parent[i]!)
       path.push(point(i));

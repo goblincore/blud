@@ -91,6 +91,17 @@ describe('createSectorNavigation: travel and routes', () => {
       expect(Math.hypot(last[0] - to[0], last[2] - to[2])).toBeLessThan(1.5);
     }
   });
+  it('a target on a ledge routes to a cell below it that cannot walk up (an enemy at the foot shoots up)', () => {
+    const to: Vec3 = [0, 1.5, -12.6];                                       // on C, 0.6 m back from the lip
+    const path = nav.route(A2, to);
+    expect(path.length).toBeGreaterThan(1);
+    expect(path.at(-1)).toEqual(to);
+    const last = path.at(-2)!;
+    expect(Math.hypot(last[0] - to[0], last[2] - to[2])).toBeLessThan(1.5);
+    expect(nav.canTravel(last, to)).toBe(false);
+    let at = A2;
+    for (const p of path.slice(0, -1)) { expect(nav.canTravel(at, p)).toBe(true); at = p; }
+  });
   it('waypoints sit on their sector floors', () => {
     const path = nav.route(A2, B);
     for (const p of path.slice(0, -1)) expect(p[1]).toBe(nav.floorAt(p));
