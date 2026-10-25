@@ -13,7 +13,7 @@ import { type GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { rngStreams, seedFromUnit } from './rng';
 import { type TracerBasis, TRACER, faceEyeBasis, tracerBasis, tracerHeadOn, tracerLength, tracerNearFade, tracerNearScale } from './tracer-sprite';
-import { type Frustum } from './free-aim';
+import { type Frustum, shotAim } from './free-aim';
 import { muzzleWorldPosition } from '../../../game/weapons/muzzle-pos';
 import { type Vec3 } from '../types';
 import { eyeOf } from './game-player';
@@ -288,7 +288,10 @@ export function aimDir(ctx: GameContext): Vec3 {
     right[2] * fwd[0] - right[0] * fwd[2],
     right[0] * fwd[1] - right[1] * fwd[0],
   ];
-  const cx = ctx.weapon.aim.x * tanH, cy = ctx.weapon.aim.y * tanV;
+  // Through the SHOT aim: the reticle itself standing still, pulled to the
+  // centre while strafing (the reticle is then only steering the camera).
+  const shot = shotAim(ctx.weapon.aim, ctx.player.strafeAmount);
+  const cx = shot.x * tanH, cy = shot.y * tanV;
   const d: Vec3 = [
     fwd[0] + right[0] * cx + up[0] * cy,
     fwd[1] + right[1] * cx + up[1] * cy,
