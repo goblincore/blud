@@ -41,7 +41,7 @@ export const AREAS: ReadonlyArray<{ name: string; about: string; match: RegExp }
   { name: 'Blood, goo and splashes (render)', about: 'Blood views, the goo layer, impact splashes.', match: /^webgpu\/(blood-|goo-|impact-splash)/ },
   { name: 'Fire and explosions (render)', about: 'Burning bodies, fire volumes, flames, explosion VFX.', match: /^webgpu\/(burn-|fire-|flame-|explosion-vfx|post-tongues|tongue-tuning)/ },
   { name: 'Lighting and probes (render)', about: 'Light lists, profiles, layers, probe grids, outdoor light.', match: /^webgpu\/(light-|lamp-moods|probe-|room-probes|dungeon-lighting|outdoor-|kit-lights|self-shadow|beacon|storm|flashlight-bounce|ambient)/ },
-  { name: 'Levels and world', about: 'Level definitions, kits, the train, the disco, the egg, sky, encounters.', match: /^webgpu\/(level-|sector-|active-level|enclosure|train-|disco-|egg|void-portal|portal|sky|kit-|ending-sequence|encounter-|grid-navigation)/ },
+  { name: 'Levels and world', about: 'Level definitions, kits, the train, the disco, the egg, sky, encounters.', match: /^webgpu\/(level-|sector-|barrel-|active-level|enclosure|train-|disco-|egg|void-portal|portal|sky|kit-|ending-sequence|encounter-|grid-navigation)/ },
   { name: 'Actors and crowd (render)', about: 'Per-actor GPU records, crowd atlas, character views, wounds on screen.', match: /^webgpu\/(crowd-|actor-sight|enemy-mind|character-|visual-actor-set|humanoid|zombie-gpu|bone-|goblin-skin|wound-|player-vitals)/ },
   { name: 'Deferred renderer (paused)', about: 'Opt-in deferred path; paused by the owner, not pursued.', match: /^webgpu\/deferred-/ },
   { name: 'Post-processing', about: 'AA, glow, VHS, shutter blur, fisheye.', match: /^webgpu\/(post-|fisheye|shutter-|vhs-)/ },
@@ -54,7 +54,7 @@ export const AREAS: ReadonlyArray<{ name: string; about: string; match: RegExp }
   { name: 'Damage, wounds and heads', about: 'Wound fields, severing, head damage and the head split, death states, melting, burning.', match: /^(damage|cut-wound|sever|humanoid-|head-|torn-lips|death-state|soft-death|melt|burn-|bleed-registry|player-hit-feedback)/ },
   { name: 'Gibs and gore (logic)', about: 'Gib parts, launch, tearing, entrails, strands.', match: /^(gib-|gore-parts|gobs|flesh-bits|entrails|strand|chunk-bake-field|detached-pose)/ },
   { name: 'AI and actors (logic)', about: 'Brains, the soldier, crowd logic.', match: /^(brain|soldier-|actor|crowd|zombie|status-lights)/ },
-  { name: 'Weapons and FPV (logic)', about: 'First-person mode, dynamite flight, explosions, rockets, bile, tracers.', match: /^(fpv|dynamite-flight|explosion-aoe|rockets|bile|melee-ring|tracer-lights|prop-drop|blast-refraction)/ },
+  { name: 'Weapons and FPV (logic)', about: 'First-person mode, dynamite flight, explosions, rockets, bile, tracers.', match: /^(fpv|dynamite-flight|explosion-aoe|rockets|bile|melee-ring|tracer-lights|prop-drop|blast-refraction|blast-player)/ },
   { name: 'Blood and lighting probes (logic)', about: 'Blood simulation, probe grids, ambient.', match: /^(blood-|probe-|ambient|flashlight-bounce)/ },
   { name: 'Shared helpers and the WebGL lab', about: 'What fits no area above: the original WebGL lab shader, resolution scaling, samplers.', match: /^/ },
 ];

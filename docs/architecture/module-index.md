@@ -52,7 +52,7 @@ Each line is the first sentence of the module's header comment.
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
-| [Levels and world](#levels-and-world) | 41 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
+| [Levels and world](#levels-and-world) | 42 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
 | [Actors and crowd (render)](#actors-and-crowd-render) | 19 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
@@ -63,7 +63,7 @@ Each line is the first sentence of the module's header comment.
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
 | [Gibs and gore (logic)](#gibs-and-gore-logic) | 13 | Gib parts, launch, tearing, entrails, strands. |
 | [AI and actors (logic)](#ai-and-actors-logic) | 11 | Brains, the soldier, crowd logic. |
-| [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 10 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
+| [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 11 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
 | [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 13 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
@@ -513,6 +513,7 @@ Light lists, profiles, layers, probe grids, outdoor light.
 Level definitions, kits, the train, the disco, the egg, sky, encounters.
 
 - `webgpu/active-level.ts` — THE ACTIVE LEVEL. Everything in the game that used to read the ring's globals (ROOMS, TUNNELS, FURNITURE, PLAYER_START, levelColliders(), ...) reads…
+- `webgpu/barrel-state.ts` — EXPLODING BARRELS (spec 2026-10-24 §8, plan 2026-10-25-sector-levels-3b): hit points, hits by kind, the blast catch (every intact barrel within…
 - `webgpu/disco-star.wgsl.ts` — A disco ball's reflected star (spec 2026-09-27-disco-ball-design.md §2), hand-written WGSL: a soft round spot with a hot core, drawn additive on a…
 - `webgpu/disco-stars.ts` — THE BOILER ROOM DISCO BALL (spec 2026-09-27-disco-ball-design.md).
 - `webgpu/disco-tiles.wgsl.ts` — The disco ball's mirror tiles (spec 2026-09-27-disco-ball-design.md §1), hand-written WGSL.
@@ -807,6 +808,7 @@ Brains, the soldier, crowd logic.
 First-person mode, dynamite flight, explosions, rockets, bile, tracers.
 
 - `bile.ts` — The gibbet's BILE (characters/gibbet.blob): a glob squirted from the drip at the bottom of its caged sac and LOBBED at the player.
+- `blast-player.ts` — THE PLAYER'S SHARE OF A BLAST (plan 2026-10-25-sector-levels-3b): the rocket's rule (rockets.ts blastFalloff — 1 at the epicentre, quadratic to 0 at…
 - `blast-refraction.ts` — THE OPTICAL BLAST WAVE — pure scheduling math for the screen-space refraction band that post-aa.ts's blit draws.
 - `dynamite-flight.ts` — Pure ballistic integrator for a thrown dynamite bundle (spec §3): gravity, floor bounce and wall bounce with Blood's elastic feel, fuse countdown…
 - `explosion-aoe.ts` — PURE explosion AOE resolver (spec §4, task X1.23-3): turns a detonation point into the complete effect bundle the lab's gore stack already…
