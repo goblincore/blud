@@ -349,7 +349,7 @@ import { blastPlayerDamage, spawnRocket, stepRockets, ROCKET } from '../rockets'
 import { BUNDLE_BODY_RADIUS_M, EXPLOSION_LIGHT, EXPLOSION_LIGHTS, _propPos, bundleHitsBody, explosionLightEnv, igniteExplosionLight, propWorld } from './game-dynamite-throw';
 import { BUNDLE_HOLD, BURST_SLOTS, spawnBurstStandIn, stepWeaponSlots } from './game-weapon-rig';
 import { TRAIL_STREAM_BASE, trailStreamId } from './game-wound-vfx';
-import { CULL_DWELL_MS, updateVisibleActors } from './game-render-controls';
+import { CULL_DWELL_MS, syncKitVisibility, updateVisibleActors } from './game-render-controls';
 import { chunkCollidersAt } from './game-hit-trace';
 import { applySdfScale } from './game-render-controls';
 import { aimDir } from './game-weapon-rig';
@@ -2281,6 +2281,7 @@ async function main() {
     // LEGACY ONLY — the deferred mode's SDF producer pass is fed by the
     // router, not by sdf-layer's body list.
     updateVisibleActors(ctx);
+    syncKitVisibility(ctx);
     // CROWD STAGE A: one sync per type per frame, after every attached view
     // has written its record AND after updateVisibleActors(), so the visible
     // set passed to sync() is THIS frame's. The per-frame globals (beam,

@@ -101,6 +101,61 @@ export function createBootSeams(ctx: GameContext) {
       }
       return ms.sort((a, b) => a - b)[n >> 1]!;
     },
+    /** SECTOR CULL A/B (sector perf, 2026-10-25): false drops the sector occluder from the render culls
+     *  (bodies behind sector walls drawn again, kits shown by frustum only, the pre-fix behaviour); true
+     *  restores it. Returns whether it is on. A room level has none: always false. */
+    setSectorCull: (on: boolean) => {
+      const w = ctx.world as typeof ctx.world & { sightOccluderOff?: typeof ctx.world.sightOccluder };
+      if (on && !w.sightOccluder && w.sightOccluderOff) { w.sightOccluder = w.sightOccluderOff; w.sightOccluderOff = null; }
+      if (!on && w.sightOccluder) {
+        w.sightOccluderOff = w.sightOccluder; w.sightOccluder = null;
+        for (const a of ctx.world.actors) { if (a.character?.kit) a.character.kit.object.visible = true; if (a.character?.prop) a.character.prop.object.visible = true; }
+      }
+      return !!w.sightOccluder;
+    },
+    /** FRAME SPLIT (sector perf, 2026-10-25): `n` hand-stepped frames with the rAF loop STOPPED, each
+     *  split into the tick's CPU ms, the draw's CPU ms (encode + submit) and the wait for the GPU fence
+     *  after it; medians, plus the tick's telemetry phases (median per phase, inclusive). `drawOnly`
+     *  repeats `timeDraws` with the loop stopped (no rAF frame can land inside the fence wait). The sim
+     *  advances `dt` per frame. The loop is restarted afterwards. */
+    frameSplit: async (n = 21, dt = 1 / 30) => {
+      const med = (v: number[]) => [...v].sort((a, b) => a - b)[v.length >> 1] ?? NaN;
+      const handle = ctx.boot.handle, tel = ctx.telemetry.telemetry;
+      const wasActive = tel.active;
+      handle.setLoopRunning(false);
+      const tick: number[] = [], draw: number[] = [], fence: number[] = [], drawOnly: number[] = [];
+      const phases: Record<string, number[]> = {};
+      try {
+        tel.active = true;
+        for (let i = 0; i < n; i++) {
+          tel.drainPhases();
+          const t = handle.stepTimed(dt);
+          tel.lap('region', null); tel.lap('pass', null);   // close the open laps before the fence wait
+          const f0 = performance.now();
+          await handle.resolveGpu();
+          tick.push(t.tickMs); draw.push(t.drawMs); fence.push(performance.now() - f0);
+          for (const [k, v] of Object.entries(tel.drainPhases())) (phases[k] ??= []).push(v);
+        }
+        tel.active = wasActive;
+        for (let i = 0; i < n; i++) {
+          const t0 = performance.now();
+          handle.drawOnce();
+          await handle.resolveGpu();
+          drawOnly.push(performance.now() - t0);
+        }
+      } finally {
+        tel.active = wasActive;
+        handle.setLoopRunning(true);
+      }
+      const phaseMed: Record<string, number> = {};
+      for (const [k, v] of Object.entries(phases)) {
+        // Phases that ran on only some frames: median over all n (absent = 0).
+        while (v.length < n) v.push(0);
+        const m = med(v);
+        if (m >= 0.05) phaseMed[k] = +m.toFixed(2);
+      }
+      return { tickMs: med(tick), drawMs: med(draw), fenceMs: med(fence), drawOnlyMs: med(drawOnly), phases: phaseMed };
+    },
     // ---------------------------------------------------------------
     // FRAME PACING. setFrameCap(fps) presents on a fixed cadence; 0
     // uncaps and restores the raw rAF behaviour. Default 30, matching
