@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import {
-  BOB, FREE_AIM, approachAngle, approachBob, bobPose, deadzonePush, moveAim,
-  pivotOffset, recentre, turnFromAim, viewmodelFrustum, weaponAngles, weaponSlide,
+  BOB, FREE_AIM, approachAngle, approachBob, approachStrafe, bobPose, deadzonePush, deadzoneSize,
+  moveAim, pivotOffset, recentre, shotAim, strafeSpeed01, turnFromAim,
+  viewmodelFrustum, weaponAngles, weaponSlide,
 } from './free-aim';
 
 describe('moveAim', () => {
@@ -62,6 +63,89 @@ describe('turnFromAim', () => {
     const nearEdge = Math.abs(turnFromAim({ x: FREE_AIM.deadzoneX + 0.02, y: 0 }, 1 / 60).yaw);
     const atMax = Math.abs(turnFromAim({ x: 1, y: 0 }, 1 / 60).yaw);
     expect(nearEdge).toBeLessThan(atMax * 0.05);
+  });
+});
+
+describe('strafing: the dead zone fades out', () => {
+  it('is today\'s zone standing still', () => {
+    expect(deadzoneSize(0)).toEqual({ x: FREE_AIM.deadzoneX, y: FREE_AIM.deadzoneY });
+    expect(deadzoneSize()).toEqual(deadzoneSize(0));
+  });
+  it('is gone at full strafe by default, and blends linearly between', () => {
+    expect(deadzoneSize(1)).toEqual({ x: 0, y: 0 });
+    expect(deadzoneSize(0.5).x).toBeCloseTo(FREE_AIM.deadzoneX / 2, 9);
+    expect(deadzoneSize(5)).toEqual(deadzoneSize(1));
+    expect(deadzoneSize(-5)).toEqual(deadzoneSize(0));
+  });
+  it('turns the camera from the first step off-centre at full strafe', () => {
+    expect(turnFromAim({ x: 0.1, y: 0 }, 1 / 60, 0).yaw).toBe(0);
+    expect(turnFromAim({ x: 0.1, y: 0 }, 1 / 60, 1).yaw).toBeGreaterThan(0);
+    expect(turnFromAim({ x: -0.1, y: 0 }, 1 / 60, 1).yaw).toBeLessThan(0);
+  });
+  it('keeps the same peak turn rate at the edge', () => {
+    expect(turnFromAim({ x: 1, y: 0 }, 1, 1).yaw).toBeCloseTo(FREE_AIM.turnRateX, 6);
+  });
+  it('honours a tuned scale', () => {
+    FREE_AIM.strafeDeadzoneScaleX = 0.5;
+    expect(deadzoneSize(1).x).toBeCloseTo(FREE_AIM.deadzoneX * 0.5, 9);
+  });
+  afterEach(() => { FREE_AIM.strafeDeadzoneScaleX = 0; });
+});
+
+describe('shotAim (the gun aims at centre while strafing)', () => {
+  it('is the reticle standing still', () => {
+    expect(shotAim({ x: 0.7, y: -0.4 }, 0)).toEqual({ x: 0.7, y: -0.4 });
+    expect(shotAim({ x: 0.7, y: -0.4 })).toEqual({ x: 0.7, y: -0.4 });
+  });
+  it('is screen centre at full strafe, whatever the steering reticle', () => {
+    const a = shotAim({ x: -0.95, y: 0.3 }, 1);
+    expect(a.x).toBeCloseTo(0, 9);
+    expect(a.y).toBeCloseTo(0, 9);
+  });
+  it('slides smoothly with the strafe envelope', () => {
+    expect(shotAim({ x: 0.8, y: 0 }, 0.5).x).toBeCloseTo(0.4, 9);
+    expect(shotAim({ x: 0.8, y: 0 }, 2).x).toBeCloseTo(0, 9);
+  });
+  it('strafeAimCentre below 1 keeps the aim partly on the reticle', () => {
+    FREE_AIM.strafeAimCentre = 0.5;
+    expect(shotAim({ x: 0.8, y: 0 }, 1).x).toBeCloseTo(0.4, 9);
+  });
+  afterEach(() => { FREE_AIM.strafeAimCentre = 1; });
+});
+
+describe('strafeSpeed01', () => {
+  const dt = 1 / 60, v = 4;
+  it('reads pure sideways motion as full strafe (right = [cos yaw, 0, sin yaw])', () => {
+    expect(strafeSpeed01(v * dt, 0, 0, dt, v)).toBeCloseTo(1, 9);
+    expect(strafeSpeed01(-v * dt, 0, 0, dt, v)).toBeCloseTo(1, 9);
+    // Facing 90 deg, right is +Z.
+    expect(strafeSpeed01(0, v * dt, Math.PI / 2, dt, v)).toBeCloseTo(1, 9);
+  });
+  it('ignores forward/back motion', () => {
+    // Forward at yaw 0 is -Z.
+    expect(strafeSpeed01(0, -v * dt, 0, dt, v)).toBeCloseTo(0, 9);
+    expect(strafeSpeed01(v * dt, 0, Math.PI / 2, dt, v)).toBeCloseTo(0, 9);
+  });
+  it('takes the lateral share of a diagonal, and clamps at 1', () => {
+    const d = v * dt / Math.SQRT2;
+    expect(strafeSpeed01(d, -d, 0, dt, v)).toBeCloseTo(Math.SQRT1_2, 6);
+    expect(strafeSpeed01(100, 0, 0, dt, v)).toBe(1);
+  });
+  it('is zero for a zero or negative dt', () => {
+    expect(strafeSpeed01(1, 0, 0, 0, v)).toBe(0);
+  });
+});
+
+describe('approachStrafe', () => {
+  it('eases toward the target instead of popping, and settles', () => {
+    const one = approachStrafe(0, 1, 1 / 60);
+    expect(one).toBeGreaterThan(0);
+    expect(one).toBeLessThan(0.2);
+    let s = 0;
+    for (let i = 0; i < 120; i++) s = approachStrafe(s, 1, 1 / 60);
+    expect(s).toBeGreaterThan(0.99);
+    for (let i = 0; i < 120; i++) s = approachStrafe(s, 0, 1 / 60);
+    expect(s).toBeLessThan(0.01);
   });
 });
 

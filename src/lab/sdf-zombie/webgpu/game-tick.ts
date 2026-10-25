@@ -27,7 +27,7 @@ import { bodyInSight } from './actor-sight';
 import { connectionBlobsForSim } from './blood-connections';
 import { type EncounterAgent } from './encounter-director';
 import { reticleNdc } from './fisheye';
-import { approachAngle, approachBob, bobPose, pivotOffset, turnFromAim, viewmodelFrustum, weaponAngles, weaponSlide } from './free-aim';
+import { approachAngle, approachBob, approachStrafe, bobPose, pivotOffset, shotAim, strafeSpeed01, turnFromAim, viewmodelFrustum, weaponAngles, weaponSlide } from './free-aim';
 import { segmentHitsBox, type ZombieActor } from './game-actor';
 import { registerBleed, stepGutRopes, throwGunFlesh } from './game-bleed';
 import { cancelChunkBake, finishChunkBake } from './game-chunk-bake';
@@ -506,18 +506,26 @@ export function tick(ctx: GameContext, dt: number) {
   ctx.weapon.recoilPitch *= Math.exp(-9 * dt);
   // ——— FREE AIM ————————————————————————————————————————————————————
   // The reticle only turns the camera once it is shoved past the dead zone;
-  // inside it, aiming is free and the world stays put.
+  // inside it, aiming is free and the world stays put. While strafing the
+  // zone fades out (FREE_AIM.strafeDeadzoneScaleX) so the reticle steers the
+  // camera like a stick -- how circle-strafing is done -- and the gun aims at
+  // the centre instead (shotAim). The strafe envelope is updated in the
+  // walk-bob block below from this frame's displacement, so it lags one frame,
+  // far inside its own smoothing.
   if (ctx.player.freeAimOn) {
-    const turn = turnFromAim(ctx.weapon.aim, dt);
+    const turn = turnFromAim(ctx.weapon.aim, dt, ctx.player.strafeAmount);
     ctx.player.player.yaw += turn.yaw;
     ctx.player.player.pitch = Math.min(PLAYER.pitchLimit,
       Math.max(-PLAYER.pitchLimit, ctx.player.player.pitch + turn.pitch));
   }
   {
-    // Through the view model's own FOV scale, or the barrel points short of
-    // the reticle by exactly that scale (free-aim.ts viewmodelFrustum).
+    // The gun follows the SHOT aim, not the steering reticle: the same point
+    // standing still, pulled to the centre while strafing. Through the view
+    // model's own FOV scale, or the barrel points short of the reticle by
+    // exactly that scale (free-aim.ts viewmodelFrustum).
+    const shot = shotAim(ctx.weapon.aim, ctx.player.strafeAmount);
     const vf = viewmodelFrustum(aimFrustum(ctx), ctx.weapon.fovRig?.scale.x ?? 1);
-    const w = ctx.player.freeAimOn ? weaponAngles(ctx.weapon.aim, vf) : { yawDeg: 0, pitchDeg: 0 };
+    const w = ctx.player.freeAimOn ? weaponAngles(shot, vf) : { yawDeg: 0, pitchDeg: 0 };
     ctx.weapon.yawDeg = approachAngle(ctx.weapon.yawDeg, w.yawDeg, dt);
     ctx.weapon.pitchDeg = approachAngle(ctx.weapon.pitchDeg, w.pitchDeg, dt);
     // ...and the weapon CARRIES across the frame as well as turning. Rotation
@@ -525,7 +533,7 @@ export function tick(ctx: GameContext, dt: number) {
     // that is what pivoting about the grip means -- so the gun read as bolted
     // to the camera with a hinged barrel (owner report). approachAngle is a
     // plain exponential catch-up, so it smooths metres as happily as degrees.
-    const s = ctx.player.freeAimOn ? weaponSlide(ctx.weapon.aim) : { x: 0, y: 0 };
+    const s = ctx.player.freeAimOn ? weaponSlide(shot) : { x: 0, y: 0 };
     ctx.weapon.slideXm = approachAngle(ctx.weapon.slideXm, s.x, dt);
     ctx.weapon.slideYm = approachAngle(ctx.weapon.slideYm, s.y, dt);
   }
@@ -533,7 +541,10 @@ export function tick(ctx: GameContext, dt: number) {
   // stride when the player speeds up, slows down or stops.
   {
     const pos = ctx.player.player.pos;
-    const step = Math.hypot(pos[0] - ctx.player.prevPlayerPos[0], pos[2] - ctx.player.prevPlayerPos[2]);
+    const dx = pos[0] - ctx.player.prevPlayerPos[0], dz = pos[2] - ctx.player.prevPlayerPos[2];
+    const step = Math.hypot(dx, dz);
+    ctx.player.strafeAmount = approachStrafe(ctx.player.strafeAmount,
+      strafeSpeed01(dx, dz, ctx.player.player.yaw, dt, PLAYER.walkSpeed), dt);
     ctx.player.prevPlayerPos = [pos[0], pos[1], pos[2]];
     ctx.player.bobDistance += step;
     const speed01 = dt > 0 ? Math.min(1, step / dt / PLAYER.walkSpeed) : 0;
@@ -575,7 +586,7 @@ export function tick(ctx: GameContext, dt: number) {
   ctx.weapon.headDamage?.tick(dt);
   stepDynamite(ctx, dt);
   if (ctx.player.reticleEl) {
-    ctx.player.reticleEl.style.display = ctx.player.freeAimOn && !ctx.world.sequence?.started ? 'block' : 'none';
+    ctx.player.reticleEl.style.display = ctx.player.freeAimOn && !ctx.player.reticleHidden && !ctx.world.sequence?.started ? 'block' : 'none';
     if (ctx.player.freeAimOn) {
       // Position against the CANVAS, not the window. Percent-of-viewport put
       // the reticle outside the render area whenever the canvas did not fill
@@ -586,9 +597,26 @@ export function tick(ctx: GameContext, dt: number) {
       // so the crosshair rides the inverse map or it stops marking where
       // the shot lands. Pushed outward, because the centre is magnified.
       // Lens off (k = 0) returns `aim` unchanged — this is the old line.
-      const p = reticleNdc(ctx.weapon.aim, ctx.render.postAa.lens);
+      // The crosshair marks the SHOT aim; while strafing that is pulled to the
+      // centre, and the faint steering cursor marks where the reticle that
+      // turns the camera actually is.
+      const shot = shotAim(ctx.weapon.aim, ctx.player.strafeAmount);
+      const p = reticleNdc(shot, ctx.render.postAa.lens);
       ctx.player.reticleEl.style.left = `${r.left + r.width * (0.5 + p.x * 0.5)}px`;
       ctx.player.reticleEl.style.top = `${r.top + r.height * (0.5 - p.y * 0.5)}px`;
+      if (ctx.player.steerEl) {
+        // Shown only once it has come apart from the crosshair, fading in
+        // with the separation so it never pops.
+        const apart = Math.hypot(ctx.weapon.aim.x - shot.x, ctx.weapon.aim.y - shot.y);
+        const alpha = Math.min(1, apart / 0.08) * 0.6;
+        const q = reticleNdc(ctx.weapon.aim, ctx.render.postAa.lens);
+        ctx.player.steerEl.style.display = alpha > 0.01 && !ctx.player.reticleHidden && !ctx.world.sequence?.started ? 'block' : 'none';
+        ctx.player.steerEl.style.opacity = alpha.toFixed(3);
+        ctx.player.steerEl.style.left = `${r.left + r.width * (0.5 + q.x * 0.5)}px`;
+        ctx.player.steerEl.style.top = `${r.top + r.height * (0.5 - q.y * 0.5)}px`;
+      }
+    } else if (ctx.player.steerEl) {
+      ctx.player.steerEl.style.display = 'none';
     }
   }
 

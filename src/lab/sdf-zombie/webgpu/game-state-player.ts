@@ -56,10 +56,18 @@ export interface PlayerState {
   bobDistance: number;
   /** Smoothed 0..1 bob amount. */
   bobAmount: number;
+  /** Smoothed 0..1 sideways speed; shrinks the free-aim dead zone. */
+  strafeAmount: number;
   /** Previous frame's feet position, the bob-distance sample. */
   prevPlayerPos: Vec3;
   /** Overlay element the free-aim reticle is drawn into, once created. */
   reticleEl: HTMLDivElement | null;
+  /** Faint steering cursor, shown while strafing pulls the crosshair to
+   *  centre and the reticle is only steering the camera. */
+  steerEl: HTMLDivElement | null;
+  /** C / `__sdfGame.setReticleVisible(false)`: hide the crosshair and the
+   *  steering cursor entirely. Aiming is unchanged, only the markers go. */
+  reticleHidden: boolean;
   /** Bench: pin the player pose for the whole leg (forced zero input). */
   holdPlayerPose: boolean;
   /** The `__sdfGame.placeMarker` debug sphere. */
@@ -97,8 +105,11 @@ export function makePlayerState(): PlayerState {
     freeAimOn: true,
     bobDistance: 0,
     bobAmount: 0,
+    strafeAmount: 0,
     prevPlayerPos: [0, 0, 0],
     reticleEl: null,
+    steerEl: null,
+    reticleHidden: false,
     holdPlayerPose: false,
     marker: null,
     autopilot: null,

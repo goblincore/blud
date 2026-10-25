@@ -32,6 +32,8 @@ export function createWeaponAimSeams(ctx: GameContext) {
      *  coat check). Hand-step at dt 0 to hold it. */
     muzzleFlash: () => { ctx.weapon.flashAge = 0; return !!ctx.weapon.flashLight; },
     setFreeAim(on: boolean) { ctx.player.freeAimOn = on; ctx.weapon.aim = { x: 0, y: 0 }; updateHud(ctx); return ctx.player.freeAimOn; },
+    /** Show/hide the crosshair and the strafe steering cursor (key C). Aiming is unchanged. Returns the new visibility. */
+    setReticleVisible(on: boolean) { ctx.player.reticleHidden = !on; return !ctx.player.reticleHidden; },
     setInfiniteAmmo: (on: boolean) => {
       ctx.weapon.infiniteAmmo = on;
       // Turning it OFF with 0 shells in the gun must not leave the player
