@@ -11,6 +11,7 @@ import { chunkSettled, chunkSupportOffset } from '../gib-chunks';
 import { spritePieceStates } from './gib-sprite-pieces';
 import { burst } from '../blood-sim';
 import { makeFlight } from '../dynamite-flight';
+import { spawnRocket } from '../rockets';
 import { rngStreams } from './rng';
 import { seatBurstSpawn } from './game-hit-trace';
 
@@ -62,6 +63,12 @@ export function createDebrisSeams(ctx: GameContext) {
       const seat = seatBurstSpawn(ctx, null, [x, y, z]);
       burst(ctx.vfx.bloodSim, seat.pos, rngStreams.bleed, undefined, seat.floorY);
       return ctx.vfx.bloodSim.droplets.length;
+    },
+    /** A warbull rocket from (x, y, z) along (dx, dy, dz) with no owner (owner -1: every actor and the player are
+     *  targets), stepped and detonated by the real rocket path (game-tick: detonateAt + the player's shielded share). */
+    spawnTestRocket: (x: number, y: number, z: number, dx: number, dy: number, dz: number) => {
+      ctx.weapon.rockets.push(spawnRocket([x, y, z], [dx, dy, dz], -1));
+      return ctx.weapon.rockets.length;
     },
     /** A dynamite bundle in flight with no prop (fuse in seconds; impact detonation off). */
     throwTestBundle: (x: number, y: number, z: number, vx: number, vy: number, vz: number, fuseSec = 6) => {

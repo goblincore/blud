@@ -692,6 +692,8 @@ export function createWorldSeams(ctx: GameContext) {
     /** Simulated seconds since boot (sim-clock.ts: advanced by every tick's dt, the same dt the loop's hurt floor
      *  steps by). Under load the dt clamp makes this run behind the wall clock: time sim-rule checks on it. */
     simTime: () => simTimeMs() / 1000,
+    /** The player's last hits that took health ({amount, kind, health, t: sim s}), oldest first; [] before the loop. */
+    hurtLog: () => ctx.world.loop?.hurts.map(h => ({ ...h })) ?? [],
     /** The ground under (x, z): floor and ceiling heights (NaN outside every sector). */
     ground: (x: number, z: number) => ({ floor: ctx.world.level.ground.floorAt(x, z), ceil: ctx.world.level.ground.ceilAt(x, z) }),
     /** Open an authored level's gate by id (false if unknown or already open). */

@@ -15,6 +15,11 @@
 //      a surface-blood burst stains a sector wall; a corpse lies on the pit floor. 6b on E1M1 (after 5.4b, so
 //      casings exist): a soldier collapses, a blast gibs an actor on a non-zero floor, and every settled piece,
 //      splat, casing, gun, kit piece, rope and pickup is on the floor under it (SHOTS e1m1-debris-0..1.png).
+//   7. Barrels (plan 3b Task 16). 7a on the fixture (?god=0): the five drums on their floors; b1 -> b2 chains
+//      0.1–0.3 s apart (explode times, ± one frame), the others stay intact, the player and a zombie are hurt; b5
+//      behind the column does not hurt the player (and a test rocket there, report only); a shot sets b3 off; b4's
+//      scorch lies on the ledge. 7b on E1M1 (?god=0): every converter barrel on its floor, b48 -> b50 (4.3 m), a
+//      player 2 m off takes a share, the budget at that pose, SHOTS fixture-barrels-0..2 and e1m1-barrels-0..2.
 // Usage: LAB_TMP=.lab-tmp bash scripts/sdf-game-doom-gate.sh   (DOOM_GATE_ONLY_FIXTURE=1 skips 3–4; SHOTS=1 writes
 // shots and .lab-tmp/doom/sector-light-sheet.png; TUNING=1 also writes the owner's .lab-tmp/doom/tuning-sheet.png)
 import { execFileSync } from 'node:child_process';
@@ -69,17 +74,31 @@ async function boot(level, query = '') {
   pass(`boot: ${level} ready on webgpu, ${info.rooms.length} zones`);
 }
 
-/** Walk from `from` toward `to` for `ms`; return the final pose. y is set to the floor there first. */
+/** Wait until the game's SIM clock (__sdfGame.simTime) has advanced `sec` seconds, or `capMs` of wall time; returns
+ *  { sim, wall } seconds. Under load the dt clamp runs the sim behind the wall clock, so anything timed against a
+ *  game rule (walk speed, a fuse, a hurt tick) waits on this, not on sleep. */
+async function simWait(sec, capMs = sec * 4000 + 10000) {
+  const s0 = await evaluate('__sdfGame.simTime()'), w0 = Date.now();
+  let s = s0;
+  while (s - s0 < sec && Date.now() - w0 < capMs) { await sleep(Math.min(100, sec * 250)); s = await evaluate('__sdfGame.simTime()'); }
+  return { sim: s - s0, wall: (Date.now() - w0) / 1000 };
+}
+const fmtT = (t) => `${t.sim.toFixed(1)} sim s / ${t.wall.toFixed(1)} wall s`;
+let lastWalk = null;
+/** Walk from `from` toward `to` for `ms` of SIM time; return the final pose. y is set to the floor there first. */
 async function walk(from, to, ms) {
   const floor = (await evaluate(`__sdfGame.ground(${from[0]}, ${from[1]})`)).floor;
   await evaluate(`__sdfGame.setPose(${from[0]}, ${from[1]}, 0, 0, ${floor})`);
   await evaluate(`__sdfGame.walkTo(${to[0]}, ${to[1]})`);
-  await sleep(ms);
+  lastWalk = await simWait(ms / 1000);
   const pos = (await evaluate('__sdfGame.pose()')).pos;
   await evaluate('__sdfGame.walkCancel()');
   return pos;
 }
 
+/** A screenshot as base64 PNG (no file), and one saved under OUT. */
+const grab = async () => (await send('Page.captureScreenshot', { format: 'png' })).result.data;
+const save = (file, b64) => { mkdirSync(OUT, { recursive: true }); writeFileSync(`${OUT}/${file}`, Buffer.from(b64, 'base64')); };
 /** A screenshot from a pose (x, z, yaw) standing on the floor there. */
 async function shot(file, x, z, yaw) {
   mkdirSync(OUT, { recursive: true });
@@ -175,22 +194,29 @@ const fixtureFloor = async (x, z, what) => {
 };
 // 6a.3 BLOOD first, with nothing else in the level (a chunk bleeds as it rolls; those splats are judged below).
 {
-  const n = await evaluate('__sdfGame.bloodBurstAt(0, 1.8, -12.1)');
-  if (!(n > 0)) fail(`debris blood: bloodBurstAt(0, 1.8, -12.1) made ${n} drops`);
-  await sleep(4000);
-  const d = await evaluate('__sdfGame.debris()');
-  if (d.droplets !== 0) fail(`debris blood: ${d.droplets} drops still in the air 4 s after the burst`);
-  if (!d.splats.length) fail('debris blood: no splats 4 s after the burst');
+  // The burst is random (rngStreams.bleed): drops thrown +z mostly clear B and land on A, so a burst can leave
+  // none on B. Burst again (up to 3) until both C and B hold a splat; every splat of every burst is judged.
+  let n = 0, bursts = 0, d = null;
   const byFloor = {};
   let worst = 0;
-  for (const s of d.splats) {
-    const f = await fixtureFloor(s[0], s[2], 'blood splat');
-    if (Math.abs(s[1] - f) > 0.01) fail(`debris blood: splat at ${s.map((v) => v.toFixed(3))} is ${(s[1] - f).toFixed(3)} m off its floor ${f}`);
-    worst = Math.max(worst, Math.abs(s[1] - f));
-    byFloor[f] = (byFloor[f] ?? 0) + 1;
+  while (bursts < 3 && (!byFloor[1.5] || !byFloor[0.5])) {
+    const k = await evaluate('__sdfGame.bloodBurstAt(0, 1.8, -12.1)');
+    if (!(k > 0)) fail(`debris blood: bloodBurstAt(0, 1.8, -12.1) made ${k} drops`);
+    n += k; bursts++;
+    await sleep(4000);
+    d = await evaluate('__sdfGame.debris()');
+    if (d.droplets !== 0) fail(`debris blood: ${d.droplets} drops still in the air 4 s after the burst`);
+    if (!d.splats.length) fail('debris blood: no splats 4 s after the burst');
+    for (const f of Object.keys(byFloor)) delete byFloor[f];
+    for (const s of d.splats) {
+      const f = await fixtureFloor(s[0], s[2], 'blood splat');
+      if (Math.abs(s[1] - f) > 0.01) fail(`debris blood: splat at ${s.map((v) => v.toFixed(3))} is ${(s[1] - f).toFixed(3)} m off its floor ${f}`);
+      worst = Math.max(worst, Math.abs(s[1] - f));
+      byFloor[f] = (byFloor[f] ?? 0) + 1;
+    }
   }
-  if (!byFloor[1.5] || !byFloor[0.5]) fail(`debris blood: splats by floor ${JSON.stringify(byFloor)}, expected some on C (1.5) and on B (0.5)`);
-  pass(`debris blood: ${n} drops over the C/B edge -> 0 in the air after 4 s, ${d.splats.length} splats on their floors (by floor ${JSON.stringify(byFloor)}, worst |y - floor| ${worst.toFixed(4)} m)`);
+  if (!byFloor[1.5] || !byFloor[0.5]) fail(`debris blood: splats by floor ${JSON.stringify(byFloor)} after ${bursts} bursts, expected some on C (1.5) and on B (0.5)`);
+  pass(`debris blood: ${n} drops over the C/B edge in ${bursts} burst(s) -> 0 in the air 4 s after each, ${d.splats.length} splats on their floors (by floor ${JSON.stringify(byFloor)}, worst |y - floor| ${worst.toFixed(4)} m)`);
 }
 // 6a.5 SURFACE BLOOD ON SECTOR WALLS (the opt-in stains sweep ctx.world.levelGroup: the sector meshes).
 {
@@ -282,6 +308,158 @@ const fixtureFloor = async (x, z, what) => {
 const debrisErrs = consoleEvents.filter((e) => e.type === 'error' || e.type === 'exception');
 if (debrisErrs.length) fail(`console errors (fixture debris): ${JSON.stringify(debrisErrs.slice(0, 4))}`);
 
+// 7. BARRELS (plan 3b Task 16). Shared helpers: a rAF sampler of the sim clock's per-frame step (the "± one frame" of
+// a chain gap is the slowest frame seen while the chain burned), the player's blast share by the shipped rule
+// (blast-player.ts BLAST_PROFILES.barrel: 55 at the centre, quadratic to 0 at 4 m, centre to capsule centre), and
+// the player's hurt log split by kind (a barrel's share is 'blast'; bites and rounds are not).
+const installBarrelHelper = () => evaluate(`(async () => {
+  const bp = await import('/src/lab/sdf-zombie/blast-player.ts');
+  const gp = await import('/src/lab/sdf-zombie/webgpu/game-player.ts');
+  let st = null;
+  const frame = () => { if (!st) return; const t = __sdfGame.simTime(); if (st.last !== null) st.maxDt = Math.max(st.maxDt, t - st.last); st.last = t; requestAnimationFrame(frame); };
+  window.__bt = {
+    PLAYER: { height: gp.PLAYER.height, eye: gp.PLAYER.eye },
+    share: (at, feet) => bp.playerBlastDamage(bp.blastToPlayer(at, feet, gp.PLAYER.height), bp.BLAST_PROFILES.barrel),
+    dist: (at, feet) => bp.blastToPlayer(at, feet, gp.PLAYER.height),
+    start() { st = { last: null, maxDt: 0 }; requestAnimationFrame(frame); },
+    stop() { const m = st ? st.maxDt : 0; st = null; return m; },
+  };
+  return true;
+})()`);
+const BARREL_H = 0.95;
+const barrelCentreOf = (b) => [b.pos[0], b.pos[1] + BARREL_H * 0.5, b.pos[2]];
+/** The player's hits since sim time `t0` (the log is the last 64: index into it would drift). */
+const hurtsSince = async (t0) => (await evaluate('__sdfGame.hurtLog()')).filter((h) => h.t > t0);
+const blastSum = (hs) => hs.filter((h) => h.kind === 'blast').reduce((a, h) => a + h.amount, 0);
+/** The chain gap between two booms, judged 0.1–0.3 s ± one frame (the slowest sim step seen). */
+const chainGap = (booms, a, b, frame) => {
+  const ia = booms.findIndex((q) => q.id === a), ib = booms.findIndex((q) => q.id === b);
+  if (ia < 0 || ib < 0 || ib < ia) return { ok: false, why: `booms ${JSON.stringify(booms)}: expected ${a} then ${b}` };
+  const gap = booms[ib].t - booms[ia].t, tol = Math.max(frame, 1 / 60);
+  return { ok: gap >= 0.1 - tol && gap <= 0.3 + tol, gap, tol, why: `${a} -> ${b} ${gap.toFixed(3)} s (band 0.1..0.3 ± ${tol.toFixed(3)})` };
+};
+const barrelShot = async (file) => { if (process.env.SHOTS === '1') save(file, await grab()); };
+
+// 7a. BARRELS ON THE FIXTURE, ?god=0 (health counts). The zombie is frozen in place (freeze: actors do not step;
+// blasts, barrels, rounds and rockets still do), so no bite muddles the player's blast share.
+await boot('fixtures/sectors', '&god=0');
+await installBarrelHelper();
+await evaluate('__sdfGame.setPose(0, -1.5, 0, 0, 0)');
+await simWait(1);
+{
+  // 7a.1 PLACED: the five fixture drums, intact, each standing on the floor under it (b4 on the C ledge, 1.5).
+  const bs = await evaluate('__sdfGame.barrels().map((b) => ({ ...b, floor: __sdfGame.ground(b.pos[0], b.pos[2]).floor }))');
+  const ids = bs.map((b) => b.id).sort();
+  if (JSON.stringify(ids) !== JSON.stringify(['b1', 'b2', 'b3', 'b4', 'b5'])) fail(`barrels placed: ${JSON.stringify(ids)}, expected b1..b5`);
+  const off = bs.filter((b) => b.phase !== 'intact' || !Number.isFinite(b.floor) || Math.abs(b.pos[1] - b.floor) > 1e-6);
+  if (off.length) fail(`barrels placed: not intact on their floors: ${JSON.stringify(off)}`);
+  const b4 = bs.find((b) => b.id === 'b4');
+  if (b4.pos[1] !== 1.5) fail(`barrels placed: b4 at y ${b4.pos[1]}, expected 1.5 (the C ledge)`);
+  pass(`barrels placed: b1..b5 intact on their floors (${bs.map((b) => `${b.id} ${b.floor}`).join(', ')})`);
+}
+// 7a.2 CHAIN + DAMAGE: a zombie between b1/b2 and the player; the player on D's floor ~2.3 m off both drums.
+{
+  const sp = await evaluate(`__sdfGame.spawnCrowd('zombie', 1, { region: { minX: 5.0, maxX: 5.6, minZ: -5.6, maxZ: -5.0 } })`);
+  if (sp?.ok !== 1) fail(`barrels chain: could not spawn the zombie (${JSON.stringify(sp)})`);
+  await evaluate('__sdfGame.freeze(true)');
+  const zid = (await evaluate('__sdfGame.actorList()'))[0].id;
+  await evaluate('__sdfGame.setPose(6.8, -4.8, 0, -0.25, -1)');
+  await simWait(0.5);
+  await barrelShot('fixture-barrels-0.png');
+  const bs0 = await evaluate('__sdfGame.barrels()');
+  const feet = (await evaluate('__sdfGame.pose()')).pos;
+  const want = {};
+  for (const id of ['b1', 'b2']) want[id] = await evaluate(`__bt.share(${JSON.stringify(barrelCentreOf(bs0.find((b) => b.id === id)))}, ${JSON.stringify(feet)})`);
+  const w0 = (await evaluate(`__sdfGame.actorWounds(${zid})`)).length;
+  const h0 = await evaluate('__sdfGame.health()'), n0 = await evaluate('__sdfGame.simTime()');
+  await evaluate('__bt.start()');
+  if ((await evaluate("__sdfGame.damageBarrel('b1')")) !== 'lit') fail('barrels chain: damageBarrel(b1) did not light it');
+  await barrelShot('fixture-barrels-1.png');                           // the chain in progress
+  await simWait(1.5);
+  const frame = await evaluate('__bt.stop()');
+  const L = await evaluate('__sdfGame.barrelLog()');
+  const g = chainGap(L.booms, 'b1', 'b2', frame);
+  if (!g.ok) fail(`barrels chain: ${g.why}`);
+  const bs1 = await evaluate('__sdfGame.barrels()');
+  const phase = Object.fromEntries(bs1.map((b) => [b.id, b.phase]));
+  if (phase.b1 !== 'gone' || phase.b2 !== 'gone') fail(`barrels chain: phases ${JSON.stringify(phase)}, expected b1 and b2 gone`);
+  const still = ['b3', 'b4', 'b5'].filter((id) => phase[id] !== 'intact');
+  if (still.length) fail(`barrels chain: ${still.join(', ')} not intact (${JSON.stringify(phase)}; b3 is 6.2 m from b2)`);
+  const hs = await hurtsSince(n0), blast = blastSum(hs), h1 = await evaluate('__sdfGame.health()');
+  const bad = hs.filter((h) => h.kind === 'blast' && !(h.amount > 0 && h.amount <= 55));
+  if (!(blast > 0) || bad.length) fail(`barrels chain: player blast share ${blast} (hits ${JSON.stringify(hs)}), expected > 0 and each <= 55`);
+  if (Math.abs(blast - (want.b1 + want.b2)) > 2) fail(`barrels chain: player blast share ${blast}, the rule gives ${want.b1} + ${want.b2} at this pose (± 2)`);
+  const z = (await evaluate('__sdfGame.actorList()')).find((a) => a.id === zid);
+  const w1 = z ? (await evaluate(`__sdfGame.actorWounds(${zid})`)).length : null;
+  if (z && !(w1 > w0)) fail(`barrels chain: the zombie 0.9 m from b1 took no blast wounds (${w0} -> ${w1})`);
+  if (L.scorches.length !== 2) fail(`barrels chain: ${L.scorches.length} scorches, expected 2`);
+  await evaluate('__sdfGame.setPose(6.8, -4.8, 0, -0.6, -1)');      // pitched down: the stubs and the scorches
+  await simWait(0.6);
+  await barrelShot('fixture-barrels-2.png');
+  pass(`barrels chain: b1 hit -> booms ${L.booms.map((b) => `${b.id}@${b.t.toFixed(3)}`).join(', ')} — ${g.why}; b3 b4 b5 intact; player ${h0} -> ${h1}, blast share ${blast} (${hs.filter((h) => h.kind === 'blast').map((h) => h.amount).join(' + ')}; the rule's ${want.b1} + ${want.b2} at ${feet.map((v) => v.toFixed(2))}); zombie ${z ? `wounds ${w0} -> ${w1}` : 'gibbed'}; phases ${JSON.stringify(phase)}; scorches ${L.scorches.length}`);
+}
+// 7a.3 SHIELDED: north of the column, b5 3.2 m south of the player behind it — no blast share.
+{
+  await evaluate('__sdfGame.setPose(0, -2.4, 0, -0.2, 0)');
+  await simWait(0.5);
+  const b5 = (await evaluate('__sdfGame.barrels()')).find((b) => b.id === 'b5');
+  const feet = (await evaluate('__sdfGame.pose()')).pos;
+  const open = await evaluate(`__bt.share(${JSON.stringify(barrelCentreOf(b5))}, ${JSON.stringify(feet)})`);
+  const h0 = await evaluate('__sdfGame.health()'), n0 = await evaluate('__sdfGame.simTime()');
+  await evaluate("__sdfGame.damageBarrel('b5')");
+  await simWait(1);
+  const hs = await hurtsSince(n0), h1 = await evaluate('__sdfGame.health()');
+  const phase = (await evaluate('__sdfGame.barrels()')).find((b) => b.id === 'b5').phase;
+  if (phase !== 'gone') fail(`barrels shielded: b5 ${phase}, expected gone`);
+  if (!(open > 0)) fail(`barrels shielded: the unshielded share at this pose is ${open} — nothing to shield (move the pose)`);
+  if (blastSum(hs) !== 0 || h1 !== h0) fail(`barrels shielded: health ${h0} -> ${h1}, hits ${JSON.stringify(hs)} with the column between b5 and the player`);
+  pass(`barrels shielded: b5 gone ${(await evaluate(`__bt.dist(${JSON.stringify(barrelCentreOf(b5))}, ${JSON.stringify(feet)})`)).toFixed(2)} m off behind the column — health ${h0} -> ${h1} (unshielded the rule gives ${open})`);
+  // REPORT ONLY: a rocket blast behind the column. From the south along +z at 0.9 m it meets the column's south face
+  // (z -5); the player stands 2.3 m north of it. (A warbull firing while hugging a wall is not staged: the brain
+  // picks when it fires, so that needs a seam to place and trigger one — skipped.)
+  await evaluate('__sdfGame.setPose(0, -2.7, 0, -0.2, 0)');
+  await simWait(0.3);
+  const r0 = await evaluate('__sdfGame.health()'), rn = await evaluate('__sdfGame.simTime()');
+  const bl0 = (await evaluate('__sdfGame.barrelLog()')).blasts;
+  await evaluate('__sdfGame.spawnTestRocket(0, 0.9, -7.5, 0, 0, 1)');
+  await simWait(1.5);
+  const rh = await hurtsSince(rn), bl1 = (await evaluate('__sdfGame.barrelLog()')).blasts;
+  console.log(`report rocket behind the column: player (0, -2.7) north of it, rocket from (0, 0.9, -7.5) along +z; ${bl1 - bl0} blast(s) caught by the barrel runtime (detonateAt's catchBlast: the rocket went off); health ${r0} -> ${await evaluate('__sdfGame.health()')}, hits ${JSON.stringify(rh)}; unshielded, rockets.ts's rule would give about ${Math.round(45 * Math.max(0, 1 - 2.3 / 3.2) ** 2)} at ~2.3 m`);
+}
+// 7a.4 SHOT: the player in D facing b3 at its centre, one shot.
+{
+  const b3 = (await evaluate('__sdfGame.barrels()')).find((b) => b.id === 'b3');
+  const eye = await evaluate('__bt.PLAYER.eye'), c = barrelCentreOf(b3), from = [5.0, -1, -0.8];
+  const pitch = Math.atan2(c[1] - (from[1] + eye), Math.hypot(c[0] - from[0], c[2] - from[2]));
+  await evaluate(`__sdfGame.setPose(5.0, -0.8, ${Math.atan2(c[0] - from[0], -(c[2] - from[2]))}, ${pitch}, -1)`);
+  await simWait(0.5);
+  const hits0 = (await evaluate('__sdfGame.barrelLog()')).hits.length;
+  await evaluate('__sdfGame.fire()');
+  let phase = 'intact';
+  const t = await simWait(1);
+  phase = (await evaluate('__sdfGame.barrels()')).find((b) => b.id === 'b3').phase;
+  const hits = (await evaluate('__sdfGame.barrelLog()')).hits.slice(hits0).filter((h) => h.id === 'b3');
+  if (phase !== 'gone') fail(`barrels shot: b3 ${phase} ${fmtT(t)} after fire() (hits ${JSON.stringify(hits)})`);
+  pass(`barrels shot: fire() at b3 from 2.3 m — ${hits.length} hits (${[...new Set(hits.map((h) => h.kind))].join(', ')}), b3 gone within ${fmtT(t)}`);
+}
+// 7a.5 RAISED FLOOR: b4 on the C ledge (1.5) leaves its scorch on the ledge (y 1.5 + 0.004 lift + 0.0002 per slot).
+{
+  const n = (await evaluate('__sdfGame.barrelLog()')).scorches.length;
+  await evaluate("__sdfGame.damageBarrel('b4')");
+  await simWait(0.6);
+  const L = await evaluate('__sdfGame.barrelLog()');
+  const s = L.scorches.find((q) => Math.hypot(q[0] + 3, q[2] + 15) < 0.01);
+  if (!L.booms.some((b) => b.id === 'b4') || !s) fail(`barrels raised: b4 booms ${JSON.stringify(L.booms)}, scorches ${JSON.stringify(L.scorches)} (none at -3, -15)`);
+  if (!(Math.abs(s[1] - 1.504) <= 0.002)) fail(`barrels raised: b4's scorch at y ${s[1].toFixed(4)}, expected 1.504 ± 0.002`);
+  pass(`barrels raised: b4 on the C ledge went up, its scorch at y ${s[1].toFixed(4)} (scorch ${n + 1}; band 1.504 ± 0.002)`);
+}
+await evaluate('__sdfGame.freeze(false)');
+{
+  const errs = consoleEvents.filter((e) => e.type === 'error' || e.type === 'exception');
+  if (errs.length) fail(`console errors (fixture barrels): ${JSON.stringify(errs.slice(0, 4))}`);
+  if (process.env.SHOTS === '1') pass(`shots: ${OUT}/fixture-barrels-0..2.png`);
+}
+
 // 3. E1M1
 if (process.env.DOOM_GATE_ONLY_FIXTURE === '1') process.exit(0);
 if (!existsSync('public/assets/levels/doom-e1m1.level.json')) {
@@ -340,7 +518,9 @@ const installEnemyHelper = () => evaluate(`(async () => {
       for (const h of hidden) for (const o of open) {
         // Prefer the open pose 4 m or more off the soldier (its rounds spread: some miss and fly on to the walls).
         const d = flat(h, o), score = d - 3 * Math.min(flat(s.pos, o), 4.5);
-        if (d <= 4 && (!best || score < best.score)) best = { score, d, soldier: s.id, soldierAt: s.pos, hidden: { x: h[0], y: h[1], z: h[2], yaw: yawTo(h, s.pos) }, open: { x: o[0], y: o[1], z: o[2], yaw: yawTo(o, s.pos) } };
+        // d >= 0.8: the duck must take the capsule (r 0.32) out of the volley's path — a 0.49 m duck once left every
+        // round on the player (5.4b found no wall stop).
+        if (d >= 0.8 && d <= 4 && (!best || score < best.score)) best = { score, d, soldier: s.id, soldierAt: s.pos, hidden: { x: h[0], y: h[1], z: h[2], yaw: yawTo(h, s.pos) }, open: { x: o[0], y: o[1], z: o[2], yaw: yawTo(o, s.pos) } };
       }
     }
     return best;
@@ -490,9 +670,9 @@ for (let i = 1; i < ROUTE.length; i++) {
   const q = await walk(ROUTE[i - 1], ROUTE[i], Math.max(6000, 2000 + (len / 2.4) * 1000));
   const gap = Math.hypot(q[0] - ROUTE[i][0], q[2] - ROUTE[i][1]);
   const floor = (await evaluate(`__sdfGame.ground(${q[0]}, ${q[2]})`)).floor;
-  if (gap > 0.6) fail(`E1M1 leg ${i}: stopped ${gap.toFixed(2)} m short of ${ROUTE[i]}`);
+  if (gap > 0.6) fail(`E1M1 leg ${i}: stopped ${gap.toFixed(2)} m short of ${ROUTE[i]} (${fmtT(lastWalk)})`);
   if (Math.abs(q[1] - floor) > 0.02) fail(`E1M1 leg ${i}: feet ${q[1].toFixed(2)} but floor ${floor}`);
-  pass(`E1M1 leg ${i}: reached ${ROUTE[i]} on floor ${floor}`);
+  pass(`E1M1 leg ${i}: reached ${ROUTE[i]} on floor ${floor} (${fmtT(lastWalk)})`);
 }
 
 await evaluate('__sdfGame.setPose(0, 0, 0, 0, 0)');
@@ -528,8 +708,6 @@ else pass(`E1M1 budget: ${frameMs.toFixed(2)} ms with enemies (fails only over 5
 
 // 4. POOLS AND SECTOR LIGHT
 const sleepSettle = 1200;
-/** A screenshot as base64 PNG (no file). */
-const grab = async () => (await send('Page.captureScreenshot', { format: 'png' })).result.data;
 /** Decode a PNG in the page and average a centred crop (fraction of width and height): channel means 0..255. */
 const measure = (b64, crop = 1) => evaluate(`(async () => {
   const bmp = await createImageBitmap(await (await fetch('data:image/png;base64,${b64}')).blob());
@@ -541,7 +719,6 @@ const measure = (b64, crop = 1) => evaluate(`(async () => {
   const n = d.length / 4;
   return { r: r / n, g: gr / n, b: b / n, grey: (r + gr + b) / 3 / n, lum: (0.2126 * r + 0.7152 * gr + 0.0722 * b) / n };
 })()`);
-const save = (file, b64) => { mkdirSync(OUT, { recursive: true }); writeFileSync(`${OUT}/${file}`, Buffer.from(b64, 'base64')); };
 /** Compose a labelled grid in the page: cells[row][col] base64 PNGs (or null), drawn at cellW wide. */
 async function sheet(file, title, rowLabels, colLabels, cells, notes = cells.map((r) => r.map(() => ''))) {
   const cellW = 400, cellH = 300, left = 190, top = 64;
@@ -609,13 +786,26 @@ const floorsCheck = async (what) => {
   return list;
 };
 await evaluate('__sdfGame.setPose(0, 0, 0, 0, 0)');
-await sleep(3000);
+await simWait(3);
 const at3 = await floorsCheck('after 3 s');
-await sleep(17000);
+// The farthest each body got from its 3 s spot over the next 17 sim s (sampled each 0.5 sim s): an idle wanderer
+// walks out and back, so the end-to-end distance alone read ~2 m either side of the bar run to run.
+const far = new Map();
+const w0 = Date.now();
+let walkedSim = 0;
+for (let k = 0; k < 34; k++) {
+  walkedSim += (await simWait(0.5)).sim;
+  for (const a of await evaluate('__sdfGame.actorList().map((a) => ({ id: a.id, pos: a.pos }))')) {
+    const b = at3.find((q) => q.id === a.id);
+    if (b) far.set(a.id, Math.max(far.get(a.id) ?? 0, Math.hypot(a.pos[0] - b.pos[0], a.pos[2] - b.pos[2])));
+  }
+}
+const walked = { sim: walkedSim, wall: (Date.now() - w0) / 1000 };
 const at20 = await floorsCheck('after 20 s');
-const moved = at20.map((a) => { const b = at3.find((q) => q.id === a.id); return { id: a.id, d: b ? Math.hypot(a.pos[0] - b.pos[0], a.pos[2] - b.pos[2]) : 0 }; }).sort((a, b) => b.d - a.d);
-if (!(moved[0].d > 2)) fail(`enemies walk: none moved > 2 m in 17 s (most ${moved[0].d.toFixed(2)} m, actor ${moved[0].id})`);
-pass(`enemies walk: ${moved.filter((m) => m.d > 2).length} moved > 2 m in 17 s (most ${moved[0].d.toFixed(2)} m, actor ${moved[0].id})`);
+const moved = at20.map((a) => { const b = at3.find((q) => q.id === a.id); return { id: a.id, d: b ? Math.hypot(a.pos[0] - b.pos[0], a.pos[2] - b.pos[2]) : 0, far: far.get(a.id) ?? 0 }; }).sort((a, b) => b.far - a.far);
+if (!(walked.sim >= 17)) fail(`enemies walk: the sim clock advanced only ${fmtT(walked)}`);
+if (!(moved[0].far > 2)) fail(`enemies walk: none got > 2 m from its spot in ${fmtT(walked)} (farthest ${moved[0].far.toFixed(2)} m, actor ${moved[0].id})`);
+pass(`enemies walk: ${moved.filter((m) => m.far > 2).length} got > 2 m from their 3 s spot in ${fmtT(walked)} (farthest ${moved[0].far.toFixed(2)} m, actor ${moved[0].id}; end to end most ${Math.max(...moved.map((m) => m.d)).toFixed(2)} m)`);
 // 5.4b ROUNDS STOP AT WALLS: stand in a soldier's sight (god mode) for 8 s and follow every enemy round frame by frame.
 // The player ducks behind the wall as each volley leaves (the sampler's dodge), so the rounds miss and fly on
 // into the walls behind the open pose: they must stop there, not step through.
@@ -797,7 +987,8 @@ if (process.env.SHOTS === '1') {
         let v = null;
         for (const r of [3, 2.5, 3.5, 4, 4.5]) for (let k = 0; k < 16 && !v; k++) {
           const t = side + ((k % 2 ? 1 : -1) * Math.ceil(k / 2) * Math.PI) / 8, q = __eg.stand(s[0] + Math.sin(t) * r, s[2] + Math.cos(t) * r);
-          if (q && __eg.sees(q, s)) v = { x: q[0], y: q[1], z: q[2], yaw: __eg.yawTo(q, s), r };
+          // On (about) the pile's floor: a pose up on a ledge looks down a block's side instead of at the pile.
+          if (q && Math.abs(q[1] - s[1]) <= 0.5 && __eg.sees(q, s)) v = { x: q[0], y: q[1], z: q[2], yaw: __eg.yawTo(q, s), r };
         }
         if (v) out.push(v);
       }
@@ -1102,4 +1293,70 @@ if (!(abPass.ratio > 1.05)) fail(`sector light A/B: ${fmt(abPass)} at ${abCurve}
 pass(`sector light A/B: ${fmt(abPass)} at ${abCurve}`);
 const errs = consoleEvents.filter((e) => e.type === 'error' || e.type === 'exception');
 if (errs.length) fail(`console errors: ${JSON.stringify(errs.slice(0, 4))}`);
+// 7b. BARRELS ON E1M1, a fresh ?god=0 boot of its own (the 5.4 boot leaves the player under fire and hurt): every converter barrel on its floor; b48 -> b50 (4.3 m, the
+// map's closest pair: the 4.5 m reach chains on the real map); the player 2 m off b48 in the open takes a share;
+// the others stay intact; the budget at that pose; SHOTS e1m1-barrels-0..2.png (before, the chain, after).
+await boot('doom-e1m1', '&god=0');
+{
+  await installEnemyHelper();
+  await installBarrelHelper();
+  const bs = await evaluate('__sdfGame.barrels().map((b) => ({ ...b, floor: __sdfGame.ground(b.pos[0], b.pos[2]).floor }))');
+  const want = (raw.barrels ?? []).map((b) => b.id).sort();
+  if (!want.length) fail('barrels E1M1: the level JSON has no barrels (regenerate E1M1 with doom_map.py)');
+  if (JSON.stringify(bs.map((b) => b.id).sort()) !== JSON.stringify(want)) fail(`barrels E1M1: live ${JSON.stringify(bs.map((b) => b.id))}, the converter wrote ${JSON.stringify(want)}`);
+  const off = bs.filter((b) => b.phase !== 'intact' || !Number.isFinite(b.floor) || Math.abs(b.pos[1] - b.floor) > 1e-6);
+  if (off.length) fail(`barrels E1M1: not intact on their floors: ${JSON.stringify(off)}`);
+  pass(`barrels E1M1: ${bs.length} = the converter's, intact on their floors (${bs.map((b) => `${b.id} ${b.floor}`).join(', ')})`);
+  const b48 = bs.find((b) => b.id === 'b48'), b50 = bs.find((b) => b.id === 'b50');
+  if (!b48 || !b50) fail('barrels E1M1: no b48/b50 (the chain pair)');
+  const pair = Math.hypot(...barrelCentreOf(b48).map((v, i) => v - barrelCentreOf(b50)[i]));
+  // The pose: 2 m off b48's centre (flat), standable, in sight of it, on its floor; the side away from b50 first.
+  const pose = await evaluate(`(() => {
+    const a = ${JSON.stringify(b48.pos)}, o = ${JSON.stringify(b50.pos)};
+    const away = Math.atan2(a[0] - o[0], a[2] - o[2]);
+    for (let k = 0; k < 32; k++) {
+      const t = away + ((k % 2 ? 1 : -1) * Math.ceil(k / 2) * Math.PI) / 16;
+      const q = __eg.stand(a[0] + Math.sin(t) * 2, a[2] + Math.cos(t) * 2);
+      if (q && Math.abs(q[1] - a[1]) < 0.01 && __eg.sees(q, a)) return { x: q[0], y: q[1], z: q[2], yaw: __eg.yawTo(q, a), t };
+    }
+    return null;
+  })()`);
+  if (!pose) fail('barrels E1M1: no open pose 2 m off b48');
+  // Actors frozen (freeze: they do not step or fire; blasts still reach them): the soldiers near the exit shot a
+  // player standing here dead within seconds, which muddled the share and left the after-shot a YOU DIED screen.
+  await evaluate('__sdfGame.freeze(true)');
+  await evaluate(`__sdfGame.setPose(${pose.x}, ${pose.z}, ${pose.yaw}, -0.2, ${pose.y})`);
+  await simWait(0.3);
+  await barrelShot('e1m1-barrels-0.png');
+  const feet = (await evaluate('__sdfGame.pose()')).pos;
+  const rule = { b48: await evaluate(`__bt.share(${JSON.stringify(barrelCentreOf(b48))}, ${JSON.stringify(feet)})`), b50: await evaluate(`__bt.share(${JSON.stringify(barrelCentreOf(b50))}, ${JSON.stringify(feet)})`) };
+  const h0 = await evaluate('__sdfGame.health()'), n0 = await evaluate('__sdfGame.simTime()');
+  if (!(h0 > 20)) fail(`barrels E1M1: the player has ${h0} health before b48 (nothing to measure)`);
+  await evaluate('__bt.start()');
+  if ((await evaluate("__sdfGame.damageBarrel('b48')")) !== 'lit') fail('barrels E1M1: damageBarrel(b48) did not light it');
+  await barrelShot('e1m1-barrels-1.png');                              // the chain in progress
+  const t = await simWait(1.5);
+  const frame = await evaluate('__bt.stop()');
+  const L = await evaluate('__sdfGame.barrelLog()');
+  const g = chainGap(L.booms, 'b48', 'b50', frame);
+  if (!g.ok) fail(`barrels E1M1 chain: ${g.why} (pair ${pair.toFixed(2)} m)`);
+  const phase = Object.fromEntries((await evaluate('__sdfGame.barrels()')).map((q) => [q.id, q.phase]));
+  const still = Object.keys(phase).filter((id) => id !== 'b48' && id !== 'b50' && phase[id] !== 'intact');
+  if (phase.b48 !== 'gone' || phase.b50 !== 'gone' || still.length) fail(`barrels E1M1 chain: phases ${JSON.stringify(phase)} (b48, b50 gone; the rest intact)`);
+  const hs = await hurtsSince(n0), blast = blastSum(hs), h1 = await evaluate('__sdfGame.health()');
+  const bad = hs.filter((h) => h.kind === 'blast' && !(h.amount > 0 && h.amount <= 55));
+  if (!(blast > 0) || bad.length) fail(`barrels E1M1: player blast share ${blast} (hits ${JSON.stringify(hs)}), expected > 0 and each <= 55`);
+  if (Math.abs(blast - (rule.b48 + rule.b50)) > 2) fail(`barrels E1M1: player blast share ${blast}, the rule gives ${rule.b48} + ${rule.b50} at this pose (± 2)`);
+  pass(`barrels E1M1 chain: b48 -> b50 (${pair.toFixed(2)} m) — ${g.why}; others intact (${Object.keys(phase).filter((id) => phase[id] === 'intact').join(', ')}); player 2 m off b48: ${h0} -> ${h1}, blast share ${blast} (${hs.filter((h) => h.kind === 'blast').map((h) => h.amount).join(' + ')}; the rule's ${rule.b48} + ${rule.b50}), other hits ${JSON.stringify(hs.filter((h) => h.kind !== 'blast').map((h) => [h.kind, h.amount]))}; ${fmtT(t)}`);
+  await evaluate(`__sdfGame.setPose(${pose.x}, ${pose.z}, ${pose.yaw}, -0.45, ${pose.y})`);   // the stubs and scorches
+  await simWait(0.6);
+  await barrelShot('e1m1-barrels-2.png');
+  if (process.env.SHOTS === '1') pass(`shots: ${OUT}/e1m1-barrels-0..2.png`);
+  await evaluate(`__sdfGame.setPose(${pose.x}, ${pose.z}, ${pose.yaw}, -0.2, ${pose.y})`);
+  const b = await budgetHere();
+  console.log(`budget at the barrel pose (2 m off b48, after the chain): ${b.calls} draw calls, ${b.ms.toFixed(2)} ms (readings ${b.readings.map((x) => x.toFixed(1)).join(', ')}); load ${loadAvg()}; ${b.split.line}`);
+  await evaluate('__sdfGame.freeze(false)');
+  const errs = consoleEvents.filter((e) => e.type === 'error' || e.type === 'exception');
+  if (errs.length) fail(`console errors (E1M1 barrels): ${JSON.stringify(errs.slice(0, 4))}`);
+}
 process.exit(0);

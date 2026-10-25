@@ -225,6 +225,8 @@ export interface ScorchPool {
   mesh: THREE.InstancedMesh;
   /** Lay a scorch of `size` m (edge) at the floor point, turned by `yaw`; the oldest is reused past the cap. */
   add(x: number, y: number, z: number, size: number, yaw: number): void;
+  /** The laid scorches' centres (instance translations), oldest slot first (gate readback). */
+  positions(): [number, number, number][];
   dispose(): void;
 }
 
@@ -277,6 +279,11 @@ export function createScorchPool(ctx: GameContext, n = 12): ScorchPool {
       mesh.instanceMatrix.needsUpdate = true;
       next++;
       mesh.count = Math.min(next, n);
+    },
+    positions() {
+      const out: [number, number, number][] = [];
+      for (let i = 0; i < mesh.count; i++) { mesh.getMatrixAt(i, m4); p.setFromMatrixPosition(m4); out.push([p.x, p.y, p.z]); }
+      return out;
     },
     dispose() {
       ctx.boot.deferredApi?.router.unregister(mesh);

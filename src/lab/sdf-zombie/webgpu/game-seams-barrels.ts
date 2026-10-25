@@ -2,7 +2,7 @@
 //
 // Barrel seams (plan docs/superpowers/plans/2026-10-25-sector-levels-3b-debris-and-barrels.md Task 13): the level's
 // barrels as plain data, a hit by kind (the gate's way to set one off), the detonation log the chain checks read and
-// (Task 14) every hit that counted, by kind and drum point.
+// (Task 14) every hit that counted, by kind and drum point; (Task 16) the detonations and the scorches laid.
 // Empty / null on levels without barrels.
 import type { GameContext } from './game-context';
 import type { BarrelHitKind } from './barrel-state';
@@ -15,7 +15,7 @@ export function createBarrelSeams(ctx: GameContext) {
       return ctx.world.barrels?.states.find(b => b.id === id)?.phase ?? null;
     },
     barrelLog: () => ctx.world.barrels
-      ? { clock: ctx.world.barrels.clock, log: [...ctx.world.barrels.log], hits: ctx.world.barrels.hits.map(h => ({ ...h })), materials: ctx.world.barrels.materialCount() }
+      ? { clock: ctx.world.barrels.clock, blasts: ctx.world.barrels.blasts, log: [...ctx.world.barrels.log], booms: ctx.world.barrels.booms.map(b => ({ ...b })), scorches: ctx.world.barrels.scorches(), hits: ctx.world.barrels.hits.map(h => ({ ...h })), materials: ctx.world.barrels.materialCount() }
       : null,
     /** Render cost census (plan 3b boot check): the barrels' materials and the renderer's compiled-pipeline,
      *  shader-program and node-build cache sizes (three r186 internals, read defensively; -1 when absent). */

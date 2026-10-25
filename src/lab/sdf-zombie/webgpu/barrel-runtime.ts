@@ -17,6 +17,9 @@ export interface BarrelRuntime {
   clock: number;
   blasts: number;
   log: { id: string; t: number; cause: 'hit' | 'chain' }[];
+  /** Every detonation in order: the drum and the sim time it went up (log is when it was LIT; the chain's
+   *  0.1–0.3 s shows between explosions, plan 3b gate). */
+  booms: { id: string; t: number }[];
   /** Every hit that counted (the drum was intact): its kind, sim time and the point on the drum (when the caller
    *  had one). Bounded: each one takes HP off an intact drum. */
   hits: { id: string; kind: BarrelHitKind; t: number; point?: Vec3 }[];
@@ -85,6 +88,7 @@ export function createBarrelCore(defs: readonly { id: string; pos: Vec3 }[], col
     clock: 0,
     blasts: 0,
     log: [],
+    booms: [],
     hits: [],
     liveBoxes: () => [...boxes.values()],
     hit(id, kind, point) {
@@ -125,6 +129,7 @@ export function createBarrelCore(defs: readonly { id: string; pos: Vec3 }[], col
           if (k >= 0) colliders.splice(k, 1);
         }
         const b = rt.states.find(q => q.id === d.id)!;
+        rt.booms.push({ id: d.id, t: rt.clock });
         io.explode(d.id, d.at, [b.pos[0], b.pos[1], b.pos[2]]);
       }
     },

@@ -60,6 +60,12 @@ describe('barrel runtime (pure core)', () => {
     // b1 went on the first step (clock 1/60); b2 was lit then and goes once its fuse has burned.
     expect(rt.log[1]!.t).toBeCloseTo(1 / 60, 9);
     expect(rt.clock).toBeCloseTo(1.0, 6);
+    // booms: when each went UP (b1 on the first step; b2 its 0.1-0.3 s fuse later, ± one step).
+    expect(rt.booms.map(b => b.id)).toEqual(['b1', 'b2']);
+    expect(rt.booms[0]!.t).toBeCloseTo(1 / 60, 9);
+    const gap = rt.booms[1]!.t - rt.booms[0]!.t;
+    expect(gap).toBeGreaterThanOrEqual(0.1 - 1 / 60);
+    expect(gap).toBeLessThanOrEqual(0.3 + 1 / 60);
   });
 
   it('the chain fuse matches the hash (± one step)', () => {

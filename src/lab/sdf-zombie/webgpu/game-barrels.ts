@@ -29,6 +29,8 @@ const SCORCH_M = 1.6;
 export interface GameBarrels extends BarrelRuntime {
   /** Materials the barrels made (2 per zone with barrels: drum/stub and lid). */
   materialCount(): number;
+  /** The floor scorches laid so far (their centres, gate readback). */
+  scorches(): [number, number, number][];
 }
 
 export function createBarrelRuntime(ctx: GameContext, defs: readonly BarrelDef[]): GameBarrels {
@@ -58,5 +60,5 @@ export function createBarrelRuntime(ctx: GameContext, defs: readonly BarrelDef[]
     },
   });
   console.info(`[barrels] ${defs.length} barrels, ${mats.count()} materials (2 per zone with barrels)`);
-  return Object.assign(core, { materialCount: () => mats.count() });
+  return Object.assign(core, { materialCount: () => mats.count(), scorches: () => scorches.positions() });
 }

@@ -22,6 +22,7 @@ import { characterEntry, hasCharacter } from '../character-registry';
 import { newHazard, stepHazard, type HazardState } from './hazard-floor';
 import type { SectorGround } from './sector-ground';
 import { VITALS, applyDamage, bitesInReach, godMode, makeVitals, stepVitals, type DamageKind, type Vitals } from './player-vitals';
+import { simTimeMs } from './sim-clock';
 
 export interface LoopRuntime {
   god: boolean;
@@ -38,6 +39,9 @@ export interface LoopRuntime {
   biteExempt: Set<number>;
   /** The hurt-floor damage clock (hazard-floor.ts). */
   hazard: HazardState;
+  /** The last 64 hits that took health, by kind and sim time (gate readback: a barrel's 'blast' share apart from
+   *  bites and rounds). */
+  hurts: { amount: number; kind: DamageKind; health: number; t: number }[];
   meshes: Map<string, THREE.Mesh>;
   el: { status: HTMLDivElement; hurt: HTMLDivElement; death: HTMLDivElement; complete: HTMLDivElement };
 }
@@ -92,6 +96,7 @@ export function createLoop(ctx: GameContext): LoopRuntime {
     done: false,
     biteExempt: new Set(),
     hazard: newHazard(),
+    hurts: [],
     meshes: new Map(),
     el: { status, hurt, death: overlay('YOU DIED', 'click to restart'), complete: overlay('LEVEL COMPLETE', 'click to play again') },
   };
@@ -133,6 +138,8 @@ export function damagePlayer(ctx: GameContext, amount: number, kind: DamageKind)
   rt.vitals = applyDamage(rt.vitals, amount, kind);
   if (rt.vitals === before) return;
   ctx.telemetry.telemetry.event('player-hurt', { amount, kind, health: rt.vitals.health });
+  rt.hurts.push({ amount: before.health - rt.vitals.health, kind, health: rt.vitals.health, t: simTimeMs() / 1000 });
+  if (rt.hurts.length > 64) rt.hurts.shift();
   if (rt.vitals.dead) {
     rt.el.death.style.display = 'grid';
     document.exitPointerLock?.();
