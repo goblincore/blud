@@ -13,7 +13,8 @@ import { spawnImpactGout, type Droplet } from '../blood-sim'
 import { chunkCount, goutPack, type GunHitKind } from '../gore-tuning'
 import { fleshBits, fleshRand } from '../flesh-bits'
 import { type Wound, woundDirToWorld } from '../damage'
-import { detachGutChain, pinGutChain, stepGutChain } from '../entrails'
+import { detachGutChain, pinGutChain, seatGutChain, stepGutChain } from '../entrails'
+import { clampSpawnInside, debrisGround } from './game-hit-trace'
 import { warpDir, warpPoint } from '../head-split'
 import { type Vec3 } from '../types'
 import { type ZombieActor } from './game-actor'
@@ -24,6 +25,12 @@ import { impactSplashProfiles } from './impact-splash-profiles'
 import { rngStreams } from './rng'
 import { actorSpawnCentre } from './game-hit-trace'
 
+
+/** A gut rope node's wall radius, metres: half the panel's gut thickness (the rope's edge, not its centre, meets a
+ *  sector wall). */
+export function gutNodeRadius(ctx: GameContext): number {
+  return ctx.vfx.woundTuning.gutSize * 0.5;
+}
 
 /** Per-frame rope sim, BEFORE the bleed block (so stepBlood sees the same
  *  frame it does): pin to the wound's current emit point — the anchor is
@@ -38,16 +45,34 @@ export function stepGutRopes(ctx: GameContext, dt: number): void {
     if (!entry) continue;
     // Body down (falling or settled) → the rope tears free. It keeps its
     // verlet momentum, falls, settles, freezes (entrails.ts).
+    // SPAWNS START INSIDE THE LEVEL (plan 3b), on a rope's first step (spillVerdict made it, no droplets yet): on a
+    // sector level the rope moves to its wound point pulled back toward the body centre if a wall or a column is
+    // between them, and its nodes take the body's floor as their last floor. Room levels: null centre, untouched.
+    if (entry.droplets.length === 0) {
+      const from = actorSpawnCentre(ctx, a);
+      if (from) {
+        const start = clampSpawnInside(ctx, from, entry.chain.nodes[0]!.pos, gutNodeRadius(ctx));
+        const bodyFloor = ctx.world.level.ground.floorAt(from[0], from[2]);
+        entry = { ...entry, chain: seatGutChain(entry.chain, start, Number.isFinite(bodyFloor) ? bodyFloor : undefined) };
+        ctx.vfx.gutRopes.set(a.id, entry);
+      }
+    }
     if (entry.chain.attached && a.debug().phase !== 'standing') {
       entry = { ...entry, chain: detachGutChain(entry.chain) };
       ctx.vfx.gutRopes.set(a.id, entry);
     }
     if (entry.chain.attached) {
       const { anchor } = woundEmitAnchorAndNormal(a.posed().prims, entry.wound, a.pose().yaw, a.posed().split);
-      entry = { ...entry, chain: pinGutChain(entry.chain, anchor) };
+      // Sector levels: the pin stays inside the level too (a body hugging a wall), so every node's step starts
+      // inside the map, where the sector walls can judge it. Room levels: the anchor itself.
+      const from = actorSpawnCentre(ctx, a);
+      const pin = from ? clampSpawnInside(ctx, from, anchor, gutNodeRadius(ctx)) : anchor;
+      entry = { ...entry, chain: pinGutChain(entry.chain, pin) };
       ctx.vfx.gutRopes.set(a.id, entry);
     }
-    entry = { ...entry, chain: stepGutChain(entry.chain, dt) };
+    // Sector levels (plan 3b): every node on the floor under it, and no node through a sector wall.
+    const ground = debrisGround(ctx);
+    entry = { ...entry, chain: ground ? stepGutChain(entry.chain, dt, ground, gutNodeRadius(ctx)) : stepGutChain(entry.chain, dt) };
     ctx.vfx.gutRopes.set(a.id, entry);
 
     // Keep the rope's droplets in the sim. They are created once and then
