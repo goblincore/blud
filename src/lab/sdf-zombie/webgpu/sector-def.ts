@@ -31,6 +31,9 @@ export interface SectorDef {
   /** The lighting zone (spec §6.5): its synthesized room is `zoneName(zone)`. */
   zone: number;
 }
+/** A line side's own wall families by part (the converter's per-sidedef textures); a part left out
+ *  falls back to the sector's `materials.wall`. */
+export interface SideWalls { upper?: string; mid?: string; lower?: string }
 export interface SectorDoor { sector: number; speed: number; wait: number }
 export interface SectorLine {
   /** Vertex indices. The front sector is on the LEFT of v[0] -> v[1], the back on the left of v[1] -> v[0]. */
@@ -40,6 +43,8 @@ export interface SectorLine {
   back: number;
   door: SectorDoor | null;
   exit: boolean;
+  /** Per-side wall families (optional: older files and fixtures have none). */
+  walls?: { front?: SideWalls; back?: SideWalls };
 }
 export interface SectorMap { vertices: XZ[]; sectors: SectorDef[]; lines: SectorLine[] }
 

@@ -52,7 +52,7 @@ Each line is the first sentence of the module's header comment.
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
-| [Levels and world](#levels-and-world) | 39 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
+| [Levels and world](#levels-and-world) | 40 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
 | [Actors and crowd (render)](#actors-and-crowd-render) | 19 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
@@ -540,6 +540,7 @@ Level definitions, kits, the train, the disco, the egg, sky, encounters.
 - `webgpu/sector-ground.ts` — SECTOR GROUND (spec 2026-10-24-doom-sector-levels-design.md §6.1–§6.2): which sector is under a point (even-odd crossing over that sector's lines,…
 - `webgpu/sector-json.ts` — SECTOR LEVELS — parse and validate (spec 2026-10-24-doom-sector-levels-design.md §4).
 - `webgpu/sector-light.ts` — SECTOR LIGHT (spec 2026-10-24-doom-sector-levels-design.md §7).
+- `webgpu/sector-materials.ts` — SECTOR MATERIALS: the converter's family names (scripts/levels/doom_tables.py — tech, rust, metal, door, light-panel, concrete, metal-plate, tile) to…
 - `webgpu/sector-navigation.ts` — NAVIGATION OVER SECTOR GROUND (spec 2026-10-24-doom-sector-levels-design.md §6.3): the grid core of grid-navigation.ts, with standing and travel read…
 - `webgpu/sector-ray.ts` — SEGMENT VS SECTOR GEOMETRY (plan 2026-10-24-sector-levels-3a Task 3): where a 3D segment a→b first meets a sector level's walls, floors or ceilings —…
 - `webgpu/sky-color.ts` — TypeScript twin of SKY_COLOR (sky.wgsl.ts).

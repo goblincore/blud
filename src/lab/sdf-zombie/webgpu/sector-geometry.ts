@@ -13,7 +13,8 @@ import { edgesArea, pointInEdges, sectorEdgeIndices, sectorEdges } from './secto
 
 export interface SectorPolygon { sector: number; outer: XZ[]; holes: XZ[][] }
 export type WallPart = 'mid' | 'lower' | 'upper';
-export interface WallQuad { a: XZ; b: XZ; y0: number; y1: number; sector: number; part: WallPart }
+/** `mat`: the wall family this quad wears — its line side's own (`SectorLine.walls`), else its sector's. */
+export interface WallQuad { a: XZ; b: XZ; y0: number; y1: number; sector: number; part: WallPart; mat: string }
 
 const loopEdges = (loop: readonly XZ[]): [XZ, XZ][] => loop.map((p, i) => [p, loop[(i + 1) % loop.length]!]);
 
@@ -105,7 +106,9 @@ export function wallQuads(map: SectorMap): WallQuad[] {
     const va = map.vertices[l.v[0]]!, vb = map.vertices[l.v[1]]!;
     const push = (y0: number, y1: number, sector: number, part: WallPart) => {
       if (y1 - y0 < 1e-4) return;
-      out.push(sector === l.front ? { a: va, b: vb, y0, y1, sector, part } : { a: vb, b: va, y0, y1, sector, part });
+      const front = sector === l.front;
+      const mat = (front ? l.walls?.front : l.walls?.back)?.[part] ?? map.sectors[sector]!.materials.wall;
+      out.push(front ? { a: va, b: vb, y0, y1, sector, part, mat } : { a: vb, b: va, y0, y1, sector, part, mat });
     };
     const f = map.sectors[l.front]!;
     if (l.back < 0) { push(f.floor, f.ceil, l.front, 'mid'); continue; }

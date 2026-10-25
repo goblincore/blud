@@ -12,7 +12,7 @@ import { buildSectorGround } from './sector-ground';
 import { edgesArea, sectorEdgeIndices, sectorEdges } from './sector-edges';
 import {
   GLOW_KINDS, SECTOR_SPECIALS, zoneName,
-  type GlowKind, type SectorDef, type SectorLine, type SectorMap, type SectorSpecial, type XZ,
+  type GlowKind, type SectorDef, type SectorLine, type SideWalls, type SectorMap, type SectorSpecial, type XZ,
 } from './sector-def';
 
 type Json = Record<string, unknown>;
@@ -23,9 +23,13 @@ const TOP = ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'arena', 
 const SHARED = ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'arena', 'palette',
   'solids', 'lights', 'start', 'spawns', 'pickups', 'triggers', 'cues'];
 const SECTOR_KEYS = ['floor', 'ceil', 'light', 'special', 'hurtPerSec', 'glow', 'materials', 'zone'];
-const LINE_KEYS = ['v', 'front', 'back', 'door', 'exit'];
+const LINE_KEYS = ['v', 'front', 'back', 'door', 'exit', 'walls'];
+const WALL_SIDES = ['front', 'back'];
+const WALL_PARTS = ['upper', 'mid', 'lower'];
 const DOOR_KEYS = ['sector', 'speed', 'wait'];
 const MATERIAL_KEYS = ['floor', 'ceil', 'wall'];
+
+const backSideOnOneSided = (back: number, walls: NonNullable<SectorLine['walls']>) => back < 0 && walls.back !== undefined;
 
 /** A sector file (`"geometry": "sectors"`) or a Level Format v1 room file. */
 export function parseLevel(raw: unknown, opts: ParseOptions = {}): LevelDef {
@@ -140,7 +144,31 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
       door = { sector: sectorIndex(d.sector) ? d.sector as number : 0, speed, wait };
     }
     if (o.exit !== undefined && typeof o.exit !== 'boolean') errors.push(`${where}.exit: true or false`);
-    return { v, front, back, door, exit: o.exit === true };
+    const rec: SectorLine = { v, front, back, door, exit: o.exit === true };
+    if (o.walls !== undefined) {
+      const isObj = (x: unknown): x is Json => typeof x === 'object' && x !== null && !Array.isArray(x);
+      if (!isObj(o.walls)) errors.push(`${where}.walls: expected an object`);
+      else {
+        unknownKeys(o.walls, WALL_SIDES, `${where}.walls`);
+        const walls: NonNullable<SectorLine['walls']> = {};
+        for (const side of WALL_SIDES as ('front' | 'back')[]) {
+          const sj = o.walls[side];
+          if (sj === undefined) continue;
+          if (!isObj(sj)) { errors.push(`${where}.walls.${side}: expected an object`); continue; }
+          unknownKeys(sj, WALL_PARTS, `${where}.walls.${side}`);
+          const parts: SideWalls = {};
+          for (const part of WALL_PARTS as (keyof SideWalls)[]) {
+            if (sj[part] === undefined) continue;
+            if (typeof sj[part] === 'string' && sj[part]) parts[part] = sj[part] as string;
+            else errors.push(`${where}.walls.${side}.${part}: expected a name`);
+          }
+          walls[side] = parts;
+        }
+        if (backSideOnOneSided(back, walls)) errors.push(`${where}.walls.back: a one-sided line has no back side`);
+        rec.walls = walls;
+      }
+    }
+    return rec;
   });
 
   // --- closure and winding: each sector's directed lines form closed loops, sector on the left ---

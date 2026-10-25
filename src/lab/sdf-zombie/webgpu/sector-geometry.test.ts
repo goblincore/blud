@@ -150,3 +150,21 @@ describe('sectorInteriorPoint', () => {
     expect(Math.abs(z + 2)).toBeLessThan(0.5);
   });
 });
+
+describe('wallQuads: wall families', () => {
+  it('a quad wears its line side\'s family, else its sector\'s wall', () => {
+    const m = map();
+    m.sectors[0]!.materials.wall = 'rust';
+    const riserLine = m.lines.findIndex(l => l.back >= 0 && m.sectors[l.front]!.floor !== m.sectors[l.back]!.floor);
+    const l = m.lines[riserLine]!;
+    const lowSide = m.sectors[l.front]!.floor < m.sectors[l.back]!.floor ? 'front' : 'back';
+    l.walls = { [lowSide]: { lower: 'metal-plate' } };
+    const quads = wallQuads(m);
+    const va = m.vertices[l.v[0]]!, vb = m.vertices[l.v[1]]!;
+    const onLine = (q: { a: readonly number[]; b: readonly number[] }) =>
+      [q.a, q.b].every(p => (p[0] === va[0] && p[1] === va[1]) || (p[0] === vb[0] && p[1] === vb[1]));
+    expect(quads.filter(onLine).find(q => q.part === 'lower')!.mat).toBe('metal-plate');
+    const plain = quads.find(q => q.sector === 0 && q.part === 'mid' && !onLine(q))!;
+    expect(plain.mat).toBe('rust');
+  });
+});

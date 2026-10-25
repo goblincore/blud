@@ -672,6 +672,8 @@ export function createWorldSeams(ctx: GameContext) {
     /** Sector light (spec 2026-10-24 §7): read or patch the curve, the on/off toggle, the pool glowGain and the glow bounceGain. */
     sectorLight: (patch?: SectorLightPatch) =>
       ctx.world.sectorFx ? setSectorLightConfig(ctx.world.sectorFx, patch ?? {}) : null,
+    /** The sector level's level-group meshes by name (sector-<role>[-<kind>]-zone-<n>), or [] on a room level. */
+    sectorMeshes: () => ctx.world.levelGroup.children.filter(o => o.name.startsWith('sector-')).map(o => o.name),
     /** A point well inside the first hurt sector (gates): [x, floorY, z] and the sector, or null. */
     hazardPoint: () => {
       const map = ctx.world.level.def?.sectors;

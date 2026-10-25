@@ -138,3 +138,20 @@ describe('parseSectorLevel: lights go to the zone of the sector they stand in', 
     expect(L.rooms.map(r => r.accents.map(a => a.power))).toEqual([[10], [6]]);
   });
 });
+
+describe('parseSectorLevel: per-side wall families', () => {
+  it('reads walls on a line and leaves lines without them bare', () => {
+    const j = fixture();
+    j.lines[1].walls = { front: { lower: 'metal-plate' }, back: { upper: 'door' } };
+    const L = parseSectorLevel(j);
+    expect(L.sectors!.lines[1]!.walls).toEqual({ front: { lower: 'metal-plate' }, back: { upper: 'door' } });
+    expect(L.sectors!.lines[0]!.walls).toBeUndefined();
+  });
+  it('refuses unknown sides and parts, empty names and a back side on a one-sided line', () => {
+    const j = fixture();
+    j.lines[1].walls = { left: {}, front: { side: 'x', mid: '' } };
+    j.lines[0].walls = { back: { mid: 'tech' } };
+    expect(() => parseSectorLevel(j)).toThrow(/lines\[1\]\.walls: unknown key left.*lines\[1\]\.walls\.front: unknown key side.*lines\[1\]\.walls\.front\.mid: expected a name/);
+    expect(() => parseSectorLevel(j)).toThrow(/lines\[0\]\.walls\.back: a one-sided line has no back side/);
+  });
+});

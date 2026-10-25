@@ -3,7 +3,7 @@
 // SECTOR LEVEL MESHES (spec 2026-10-24-doom-sector-levels-design.md §6.4): floors, ceilings and
 // walls from sector-geometry.ts, merged into one mesh per zone and role, room-tagged like level art
 // so the per-room light lists light them, and wearing the stone set's materials with WORLD-space
-// UVs (one texture tile per TILE_M metres) so the pattern runs on across every wall and floor.
+// UVs (one texture tile per SurfaceLook.tileM metres) so the pattern runs on across every wall and floor.
 // Sky ceilings are not drawn. Wall quads already run with their sector on the left, so the left
 // normal (-dz, 0, dx) faces into the sector the wall is seen from.
 //
@@ -18,10 +18,18 @@
 // emissive as albedo × glowBounce × bounceGain × glowGain. The mesh is built from a copy of the map
 // whose lines near pools are split (refineNearGlow), and walls are cut in height on a world grid
 // (wallRows), so the bounce has vertices to vary across.
+//
+// MATERIALS (2026-10-25): each surface wears its converter family (sector-materials.ts → the
+// procedural panel-textures.ts kinds; a wall quad its own line side's family when the file has one),
+// batched by (zone, role, kind), UVs at the kind's own tile size. Unknown families and `?sectormat=0`
+// keep the old stone set, so the batches are then exactly the old (zone, role) ones. A light panel
+// adds its glow map to the emissive.
 
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
-import { attribute, float, materialColor, positionWorld, vec3, vec4, wgslFn } from 'three/tsl';
+import { attribute, float, materialColor, positionWorld, texture, uniform, vec3, vec4, wgslFn } from 'three/tsl';
+import { panelTextures, type PanelKind, type PanelTextureSet } from '../../../game/level/panel-textures';
+import { isStone, sectorMaterialsOn, surfaceKind, SURFACE_LOOKS, type SurfaceKind, type SurfaceLook } from './sector-materials';
 import type { GameContext } from './game-context';
 import { createSectorFx, CEIL_WHISPER, type SectorFxRuntime } from './game-sector-light';
 import { reducedFlashes } from './lamp-moods';
@@ -30,7 +38,6 @@ import { createGlowBounce, glowSources, nearGlow, refineNearGlow, wallRows, wall
 import { sectorPolygons, wallQuads } from './sector-geometry';
 import { GLOW_KIND_INDEX, SECTOR_GLOW, SECTOR_GLOW_HASH, SECTOR_GLOW_NOISE } from './sector-glow.wgsl';
 
-const TILE_M = 2;
 /** Glow floors sit this far above the sector floor, so they never z-fight a neighbour's riser edge. */
 const GLOW_LIFT_M = 0.002;
 type Role = 'floor' | 'ceil' | 'wall';
@@ -78,7 +85,7 @@ class Batch {
   }
 }
 
-/** A clone of a stone material whose textures repeat once per UV unit (the UVs are world/TILE_M). */
+/** A clone of a stone material whose textures repeat once per UV unit (the UVs are world/tileM). */
 function worldTiled(base: THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
   const m = base.clone();
   for (const k of ['map', 'normalMap', 'roughnessMap'] as const) {
@@ -93,14 +100,30 @@ function worldTiled(base: THREE.MeshStandardMaterial): THREE.MeshStandardMateria
   return m;
 }
 
+/** The panel kinds' textures, built once per page (each is ~0.1 s of CPU and 4 × 1 MB before mips). */
+const panelCache = new Map<PanelKind, PanelTextureSet>();
+const PANEL_SEEDS: Record<PanelKind, number> = {
+  techPanel: 101, metalSheet: 103, door: 107, rustBrick: 109, lightPanel: 113, concreteSlab: 127, metalPlate: 131, floorTile: 137,
+};
+function panelSet(kind: PanelKind): PanelTextureSet {
+  let t = panelCache.get(kind);
+  if (!t) panelCache.set(kind, (t = panelTextures(kind, PANEL_SEEDS[kind])));
+  return t;
+}
+/** The light panels' glow strength (`?panelglow=` overrides). */
+export const panelGlow = uniform(1);
+
+interface SurfaceSource { base: THREE.MeshStandardMaterial; look: SurfaceLook; glowMap: THREE.Texture | null }
+
 /** One mesh's own node material (a NodeMaterial is reused as is by the light-list loop, so meshes
- *  never share one): the role's world-tiled stone textures and the palette colour, plus the sector
- *  term — the albedo times the sector's current level — and, for ceilings, plan 1's whisper. */
-function sectorMaterial(role: THREE.MeshStandardMaterial, color: readonly [number, number, number], fx: SectorFxRuntime, ceil: boolean): MeshStandardNodeMaterial {
+ *  never share one): the surface's textures and the palette colour, plus the sector term — the
+ *  albedo times the sector's current level — for ceilings plan 1's whisper, and a light panel's glow. */
+function sectorMaterial(src: SurfaceSource, color: readonly [number, number, number], fx: SectorFxRuntime, ceil: boolean): MeshStandardNodeMaterial {
+  const role = src.base;
   const nm = new MeshStandardNodeMaterial();
   nm.map = role.map; nm.normalMap = role.normalMap; nm.roughnessMap = role.roughnessMap;
   nm.roughness = role.roughness; nm.metalness = role.metalness; nm.normalScale.copy(role.normalScale);
-  nm.color = new THREE.Color(...color);
+  nm.color = new THREE.Color(...color).multiplyScalar(src.look.gain);
   // The deferred router copies `emissive` and drops emissiveNode: ceilings keep plan 1's whisper
   // there. Forward is unchanged (NodeMaterial uses emissiveNode INSTEAD of `emissive` when set).
   if (ceil) nm.emissive = new THREE.Color(...color).multiplyScalar(CEIL_WHISPER);
@@ -110,7 +133,8 @@ function sectorMaterial(role: THREE.MeshStandardMaterial, color: readonly [numbe
   const base = ceil ? vec3(...color).mul(fx.ceilWhisper) : vec3(0);
   // The pools' baked bounce (sector-bounce.ts), scaled with the pools' own brightness (glowGain).
   const bounce = attribute('glowBounce', 'vec3').mul(fx.bounceGain.mul(fx.glowGain));
-  nm.emissiveNode = materialColor.rgb.mul(vec3(lvl).add(bounce)).add(base);
+  const lit = materialColor.rgb.mul(vec3(lvl).add(bounce)).add(base);
+  nm.emissiveNode = src.glowMap ? lit.add(texture(src.glowMap).rgb.mul(panelGlow.mul(src.look.glow))) : lit;
   return nm;
 }
 
@@ -125,9 +149,10 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
   const bounce = sources.length > 0 ? createGlowBounce(map, sources) : null;
   const meshMap = refineNearGlow(map, sources);
   const cache: BounceCache = new Map();
+  const matsOn = sectorMaterialsOn(search);
   const batches = new Map<string, Batch>();
-  const batch = (zone: number, role: Role) => {
-    const key = `${zone}:${role}`;
+  const batch = (zone: number, role: Role, kind: SurfaceKind) => {
+    const key = `${zone}:${role}:${kind}`;
     let b = batches.get(key);
     if (!b) batches.set(key, (b = new Batch(bounce, cache)));
     return b;
@@ -149,11 +174,13 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
     for (const [role, y0, want] of faces3) {
       if (role === 'ceil' && s.materials.ceil === SKY_MATERIAL) continue;
       const glow = role === 'floor' && s.glow !== null;
-      const b = glow ? glowBatch(s.glow!) : batch(s.zone, role);
+      const kind = surfaceKind(role === 'floor' ? s.materials.floor : s.materials.ceil, role, matsOn);
+      const tile = SURFACE_LOOKS[kind].tileM;
+      const b = glow ? glowBatch(s.glow!) : batch(s.zone, role, kind);
       const y = glow ? y0 + GLOW_LIFT_M : y0;
       for (const f of faces) {
         const p = f.map(i => [pts[i]![0], y, pts[i]![1]]);
-        b.tri(p, f.map(i => [pts[i]![0] / TILE_M, pts[i]![1] / TILE_M]), want, poly.sector);
+        b.tri(p, f.map(i => [pts[i]![0] / tile, pts[i]![1] / tile]), want, poly.sector);
       }
     }
   }
@@ -164,32 +191,50 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
     const dx = q.b[0] - q.a[0], dz = q.b[1] - q.a[1], len = Math.hypot(dx, dz);
     const want: [number, number, number] = [-dz / len, 0, dx / len];
     // u runs along the wall from the projection of `a` on its direction, so the pieces of a split line tile on.
-    const u0 = (q.a[0] * dx + q.a[1] * dz) / len / TILE_M, u1 = u0 + len / TILE_M;
-    const b = batch(zone, 'wall');
+    const kind = surfaceKind(q.mat, 'wall', matsOn);
+    const tile = SURFACE_LOOKS[kind].tileM;
+    const u0 = (q.a[0] * dx + q.a[1] * dz) / len / tile, u1 = u0 + len / tile;
+    const b = batch(zone, 'wall', kind);
     // Each vertical edge is cut by its own end (nearGlow), so walls meeting at a corner cut it alike.
     const cuts = (p: XZ) => (bounce && nearGlow(sources, p[0], p[1]) ? wallRows(q.y0, q.y1) : [q.y0, q.y1]);
     const cols = [cuts(q.a), cuts(q.b)] as const;
     const ends = [q.a, q.b] as const, us = [u0, u1] as const;
     for (const t of wallStrip(cols[0], cols[1])) {
       b.tri(t.map(([side, r]) => [ends[side]![0], cols[side]![r]!, ends[side]![1]]),
-        t.map(([side, r]) => [us[side]!, cols[side]![r]! / TILE_M]), want, q.sector, true);
+        t.map(([side, r]) => [us[side]!, cols[side]![r]! / tile]), want, q.sector, true);
     }
   }
 
-  // Sector `materials` are not used yet: one stone set for every zone. The world-tiled clones are
-  // made ONCE per role; their textures are shared by every mesh's own node material.
+  // The world-tiled stone clones and the panel materials are made ONCE per kind; their textures are
+  // shared by every mesh's own node material.
   const P = ctx.world.level.def!.palette;
-  const roles: Record<Role, THREE.MeshStandardMaterial> = {
-    floor: worldTiled(ctx.world.stoneSet.floor as THREE.MeshStandardMaterial),
-    ceil: worldTiled(ctx.world.stoneSet.perimeterAccent as THREE.MeshStandardMaterial),
-    wall: worldTiled(ctx.world.stoneSet.wall as THREE.MeshStandardMaterial),
+  const surfaces = new Map<SurfaceKind, SurfaceSource>();
+  const sourceOf = (kind: SurfaceKind): SurfaceSource => {
+    let src = surfaces.get(kind);
+    if (src) return src;
+    const look = SURFACE_LOOKS[kind];
+    if (isStone(kind)) {
+      const set = ctx.world.stoneSet;
+      const m = kind === 'stoneFloor' ? set.floor : kind === 'stoneCeil' ? set.perimeterAccent : set.wall;
+      src = { base: worldTiled(m as THREE.MeshStandardMaterial), look, glowMap: null };
+    } else {
+      const t = panelSet(kind);
+      const base = new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normalMap, roughnessMap: t.roughnessMap,
+        roughness: look.roughness, metalness: look.metalness, normalScale: new THREE.Vector2(look.normalScale, look.normalScale) });
+      src = { base, look, glowMap: t.emissiveMap };
+    }
+    surfaces.set(kind, src);
+    return src;
   };
+  const glowParam = search.get('panelglow');
+  if (glowParam !== null && Number.isFinite(Number(glowParam)) && Number(glowParam) >= 0) panelGlow.value = Number(glowParam);
   const colors: Record<Role, readonly [number, number, number]> = { floor: P.floor, ceil: P.ceil, wall: P.wall };
 
   for (const [key, b] of batches) {
-    const [zone, role] = key.split(':') as [string, Role];
-    const mesh = new THREE.Mesh(b.geometry(), sectorMaterial(roles[role], colors[role], fx, role === 'ceil'));
-    mesh.name = `sector-${role}-zone-${zone}`;
+    const [zone, role, kind] = key.split(':') as [string, Role, SurfaceKind];
+    const mesh = new THREE.Mesh(b.geometry(), sectorMaterial(sourceOf(kind), colors[role], fx, role === 'ceil'));
+    mesh.name = isStone(kind) ? `sector-${role}-zone-${zone}` : `sector-${role}-${kind}-zone-${zone}`;
+    mesh.userData.sectorKind = kind;
     mesh.userData.room = Number(zone) + 1;                       // the zone's synthesized room id
     ctx.world.levelGroup.add(mesh);
   }

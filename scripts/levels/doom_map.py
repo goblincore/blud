@@ -382,6 +382,9 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = 32, skill: int =
                 rec["door"] = {"sector": rec["back"]}
         if ln["special"] in EXIT_SPECIALS:
             rec["exit"] = True
+        walls = _line_walls(ln, sides, out_sectors)
+        if walls:
+            rec["walls"] = walls
         out_lines.append(rec)
 
     # Fill lights: one per zone of real area >= LIGHT_MIN_ZONE_M2 (the biggest MAX_LIGHTS), at a point
@@ -499,6 +502,29 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = 32, skill: int =
              "spawns_by_kind": count(spawns, "kind"), "pickups_by_item": count(pickups, "item"), "skipped_types": skipped,
              "in_no_sector": in_no_sector, "not_this_skill": not_this_skill, "multiplayer_only": multiplayer_only}
     return level, stats
+
+
+def _line_walls(ln, sides, out_sectors) -> dict:
+    """Per-side wall families for the parts the renderer draws: a one-sided line's middle, a two-sided
+    line's upper and lower on each side (each side's sidedef faces its own sector). A part whose family
+    equals that sector's `materials.wall`, or whose texture is missing ("-"), is left out (the fallback)."""
+    out = {}
+    parts = (("mid", "middle"),) if ln["left"] is None else (("upper", "upper"), ("lower", "lower"))
+    for side_name, side in (("front", ln["right"]), ("back", ln["left"])):
+        if side is None:
+            continue
+        sd = sides[side]
+        fallback = out_sectors[sd["sector"]]["materials"]["wall"]
+        fams = {}
+        for part, key in parts:
+            tex = sd[key]
+            if tex and tex != "-":
+                fam = material_for_texture(tex)
+                if fam != fallback:
+                    fams[part] = fam
+        if fams:
+            out[side_name] = fams
+    return out
 
 
 def write_svg(level: dict, path: Path) -> None:

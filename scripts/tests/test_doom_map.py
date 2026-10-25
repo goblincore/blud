@@ -115,6 +115,16 @@ def test_heights_light_specials_materials(tmp_path):
     assert a["materials"] == {"floor": "metal-plate", "ceil": "concrete", "wall": "tech"}
 
 
+def test_per_side_wall_materials(tmp_path):
+    out = convert(tmp_path)
+    step = next(l for l in out["lines"] if l.get("back") is not None)
+    # The riser on the step line faces A (the lower floor): A's sidedef lower texture STEP6, not A's tech walls.
+    assert step["walls"] == {"front": {"lower": "metal-plate"}}
+    # One-sided lines whose middle matches their sector's wall family carry nothing (the fallback).
+    walls = [l for l in out["lines"] if l.get("back") is None]
+    assert all("walls" not in l for l in walls)
+
+
 def test_lines_and_zones(tmp_path):
     out = convert(tmp_path)
     step = [l for l in out["lines"] if l.get("back") is not None]
