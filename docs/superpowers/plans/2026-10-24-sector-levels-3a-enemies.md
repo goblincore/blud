@@ -218,7 +218,7 @@ export function createGridNavigation(spec: GridNavSpec): EncounterNavigation
 
 **Files:** create `sector-ray.ts` + test.
 
-- [ ] **Step 1: Tests first** (fixture):
+- [x] **Step 1: Tests first** (fixture):
   - a horizontal segment at y 1 from A (0, 1, −1) toward the north wall (0, 1, 1) hits at z = 0
     (t ≈ 0.5), kind `'wall'`;
   - from A at y 0.25 toward B across the riser line z = −8 hits the riser (`'wall'`, the lower part
@@ -232,7 +232,7 @@ export function createGridNavigation(spec: GridNavSpec): EncounterNavigation
     NOT stopped by it (sky is open; it leaves the map) — returns null for the sky part;
   - a segment wholly inside open space returns null.
 
-- [ ] **Step 2: Implement.**
+- [x] **Step 2: Implement.**
 
 ```ts
 export type SectorHitKind = 'wall' | 'floor' | 'ceil';
@@ -251,7 +251,7 @@ export function sectorSegmentHit(map: SectorMap, ground: SectorGround,
   (use the sector at the crossing's x/z; for the short per-frame steps this is exact enough). Return
   the smallest `t`. Pure; no three.
 
-- [ ] **Step 3:** tests pass; commit `feat(levels): segment vs sector geometry (pure)`.
+- [x] **Step 3:** tests pass; commit `feat(levels): segment vs sector geometry (pure)`.
 
 ---
 
