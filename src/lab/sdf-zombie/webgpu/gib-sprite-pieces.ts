@@ -442,10 +442,12 @@ export function clearSpritePieces(set: SpritePieceSet): number {
 export function spritePieceStates(set: SpritePieceSet): {
   id: number; limb: string; kind: string; rest: boolean;
   pos: Chunk['pos']; vel: Chunk['vel']; quat: Chunk['quat']; radius: number; settled: boolean;
+  /** The floor the piece stands over (plan 3b: the sector floor under it; 0 on room levels). */
+  floorY: number;
 }[] {
   return [...set.live, ...set.rest].map(p => ({
     id: p.id, limb: p.state.limb as unknown as string, kind: p.state.kind,
     rest: p.resting, pos: p.state.pos, vel: p.state.vel, quat: p.state.quat, radius: p.state.radius,
-    settled: chunkSettled(p.state),
+    settled: chunkSettled(p.state), floorY: p.state.floorY ?? 0,
   }));
 }

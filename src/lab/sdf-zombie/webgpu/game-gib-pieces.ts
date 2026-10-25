@@ -17,6 +17,7 @@ import { type Primitive, type Vec3 } from '../types'
 import { type Quat } from '../vec'
 import { type ZombieActor } from './game-actor'
 import { gibAssetArchetypeOf, primsLongAxis } from './game-gib-spawn'
+import { seatChunkSpawn } from './game-hit-trace'
 import { checkGibAssetDeformBounds, gibAssetDeformBoundsOk, gibAssetRowsFromPrims } from './gib-asset-deform'
 import { gibAssetMeshEligible } from './gib-asset-runtime'
 import { spawnSpritePiece } from './gib-sprite-pieces'
@@ -39,6 +40,8 @@ export function spawnAssetGibPiece(ctx: GameContext,
   g: GibPiece,
   impulseVel: Vec3 | null,
   impulseDelay: number,
+  /** SECTOR levels (plan 3b): the body centre — seatChunkSpawn clamps the spawn from it. */
+  from?: Vec3 | null,
 ): boolean {
   const lib = ctx.gibs.assetRuntime.library(gibAssetArchetypeOf(ctx, a));
   if (!lib) { ctx.gibs.assetRuntime.countFallback('no-library'); return false; }
@@ -69,14 +72,14 @@ export function spawnAssetGibPiece(ctx: GameContext,
   const boneOnly = g.prims.length === 0 && g.bones.length > 0;
   const extentSource = boneOnly ? g.bones : g.prims;
   const support = chunkSupportSpheres(extentSource, g.origin);
-  const state = makeChunk(
+  const state = seatChunkSpawn(ctx, makeChunk(
     g.limb as never, g.origin, [0, 0, 0],
     boneOnly ? boneChunkRadius(g.bones) : chunkExtent(g.prims, g.origin),
     primsLongAxis(ctx, extentSource, g.origin),
     rngStreams.misc, kind,
     (g.spinQuat || g.spinAngVel) ? { quat: g.spinQuat, angVel: g.spinAngVel } : undefined,
     support.length > 0 ? support : undefined,
-  );
+  ), from);
   // THE DEFORMATION SOURCE: THE RUNTIME PIECE'S OWN ROW-ALIGNED FRAMES.
   //
   // On the rupture path `g.prims`/`g.bones` are `retargetGibPieces`' output —
@@ -176,6 +179,8 @@ export function spawnSpriteGibPiece(ctx: GameContext,
   },
   impulseVel: Vec3 | null,
   impulseDelay: number,
+  /** SECTOR levels (plan 3b): the body centre — seatChunkSpawn clamps the spawn from it. */
+  from?: Vec3 | null,
 ): boolean {
   if (!ctx.gibs.atlas) return false;
   const rng = rngStreams.misc;
@@ -183,7 +188,7 @@ export function spawnSpriteGibPiece(ctx: GameContext,
   const boneOnly = piece.prims.length === 0 && piece.bones.length > 0;
   const extentSource = boneOnly ? piece.bones : piece.prims;
   const support = chunkSupportSpheres(extentSource, piece.origin);
-  const state = makeChunk(
+  const state = seatChunkSpawn(ctx, makeChunk(
     piece.limb as never, piece.origin, [0, 0, 0],
     boneOnly ? boneChunkRadius(piece.bones) : chunkExtent(piece.prims, piece.origin),
     primsLongAxis(ctx, extentSource, piece.origin),
@@ -192,7 +197,7 @@ export function spawnSpriteGibPiece(ctx: GameContext,
       ? { quat: piece.spinQuat, angVel: piece.spinAngVel }
       : undefined,
     support.length > 0 ? support : undefined,
-  );
+  ), from);
   spawnSpritePiece(ctx.vfx.spritePieces, {
     state, frame: pickFrame(ctx.gibs.atlas, rng()),
     impulseDelay, impulseVel, sizeScale: ctx.gibs.spriteSizeScale,

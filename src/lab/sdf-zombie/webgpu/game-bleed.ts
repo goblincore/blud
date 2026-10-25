@@ -21,6 +21,7 @@ import { spillVerdict } from './game-wound-vfx'
 import { woundStreamId } from './game-wound-streams'
 import { impactSplashProfiles } from './impact-splash-profiles'
 import { rngStreams } from './rng'
+import { actorSpawnCentre } from './game-hit-trace'
 
 
 /** Per-frame rope sim, BEFORE the bleed block (so stepBlood sees the same
@@ -170,7 +171,8 @@ export function throwGunFlesh(ctx: GameContext, a: ZombieActor, wound: Wound, ki
   // owner 2026-10-24) only until the mesh has loaded.
   const meat = ctx.boot.meatGib;
   if (meat?.ready()) {
-    for (const p of pieces) meat.throw(p.origin, p.vel, p.angVel, p.prims[0]?.radius ?? 0.04);
+    const from = actorSpawnCentre(ctx, a);
+    for (const p of pieces) meat.throw(p.origin, p.vel, p.angVel, p.prims[0]?.radius ?? 0.04, from);
     return;
   }
   ctx.boot.onGoreDispatch?.(a, pieces);

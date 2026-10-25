@@ -80,3 +80,19 @@ export function sectorDebrisGround(map: SectorMap, ground: SectorGround): Debris
   cache.set(map, g);
   return g;
 }
+
+/** SPAWNS START INSIDE THE LEVEL (plan 3b): a piece spawned at `to` from a body whose centre is `from` (inside the
+ *  map). If from → to meets sector geometry (a wall, a column, the floor, a ceiling), the piece goes at the hit point
+ *  pulled WALL_SKIN_M + radius back toward `from` (at `from` itself when the hit is closer than that); otherwise `to`
+ *  is returned as is (the same reference). A `from` off the map or outside its sector's band (a hit at t 0) has
+ *  nothing to judge against: `to` unchanged. */
+export function clampSpawnInsideMap(map: SectorMap, ground: SectorGround, from: Vec3, to: Vec3, radius = 0): Vec3 {
+  const h = sectorSegmentHit(map, ground, from, to);
+  if (!h || h.t <= 0) return to;
+  const dx = h.point[0] - from[0], dy = h.point[1] - from[1], dz = h.point[2] - from[2];
+  const d = Math.hypot(dx, dy, dz);
+  const pull = WALL_SKIN_M + radius;
+  if (d <= pull) return [from[0], from[1], from[2]];
+  const k = (d - pull) / d;
+  return [from[0] + dx * k, from[1] + dy * k, from[2] + dz * k];
+}

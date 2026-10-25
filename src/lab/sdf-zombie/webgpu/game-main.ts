@@ -350,7 +350,7 @@ import { BUNDLE_BODY_RADIUS_M, EXPLOSION_LIGHT, EXPLOSION_LIGHTS, _propPos, bund
 import { BUNDLE_HOLD, BURST_SLOTS, spawnBurstStandIn, stepWeaponSlots } from './game-weapon-rig';
 import { TRAIL_STREAM_BASE, trailStreamId } from './game-wound-vfx';
 import { CULL_DWELL_MS, syncKitVisibility, updateVisibleActors } from './game-render-controls';
-import { chunkCollidersAt } from './game-hit-trace';
+import { actorSpawnCentre, chunkCollidersAt } from './game-hit-trace';
 import { applySdfScale } from './game-render-controls';
 import { aimDir } from './game-weapon-rig';
 import { finishChunkBake, spawnGoreShowcase } from './game-chunk-bake';
@@ -5515,13 +5515,14 @@ async function main() {
   // the wound is the actor's own reference, so the anchor rides the body).
   ctx.boot.onSeverDispatch = (a, piece, stumpWound) => {
     ctx.telemetry.telemetry.event('sever', { actor: a.id, limb: piece.limb });
-    spawnChunkPiece(ctx, piece, { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture });
+    spawnChunkPiece(ctx, piece, { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture }, undefined, actorSpawnCentre(ctx, a));
     if (stumpWound) registerBleed(ctx, a, stumpWound, 'stump');
   };
   ctx.boot.onGoreDispatch = (a, pieces) => {
+    const from = actorSpawnCentre(ctx, a);
     for (const p of pieces) {
       spawnChunkPiece(ctx, { ...p, spinAngVel: p.angVel },
-        { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture }, p.vel);
+        { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture }, p.vel, from);
     }
   };
   /** A kinematic SDF piece riding an actor (head-damage's dangling eye): no

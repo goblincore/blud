@@ -19,6 +19,7 @@ import { characterEntry, hasCharacter } from '../character-registry';
 import { EYE_FLY, eyeFlyLaunch, makeStalk, stepStalk, type StalkState } from '../head-eye';
 import { danglingKitEye, hitsKitEye, kitEyeCentre, kitEyeForward, kitEyeSocket, kitEyeStalkRadii, type KitEyeSpec } from '../kit-eye';
 import { rngStreams } from './rng';
+import { actorSpawnCentre } from './game-hit-trace';
 
 interface EyeState {
   phase: 'dangling' | 'gone';
@@ -166,7 +167,8 @@ export function createKitEye(ctx: GameContext, deps: KitEyeDeps): KitEyeLeaf {
     const flying = new THREE.Mesh(eye.geometry, eye.material);
     flying.name = 'kit-eye-gib';
     const p = eye.position;
-    ctx.boot.spawnMeshGib(flying, [p.x, p.y, p.z], l.vel, l.angVel, spec.popRadius, { restitution: EYE_FLY.restitution, tag: 'eye' });
+    ctx.boot.spawnMeshGib(flying, [p.x, p.y, p.z], l.vel, l.angVel, spec.popRadius,
+      { restitution: EYE_FLY.restitution, tag: 'eye', from: actorSpawnCentre(ctx, a) });
   }
 
   return {

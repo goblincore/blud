@@ -469,6 +469,8 @@ export function createFxSeams(ctx: GameContext) {
         // way it is facing to photograph the face, not just its back.
         quat: c.state.quat,
         settled: chunkSettled(c.state),
+        // The floor the piece stands over (plan 3b: the sector floor under it; 0 on room levels).
+        floorY: c.state.floorY ?? 0,
         render: 'march' as const,
       })),
       // SPRITE PIECES ARE PIECES. A rig that asks "where is every piece and is

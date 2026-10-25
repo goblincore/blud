@@ -3,7 +3,13 @@
 //
 // traceMeleeHitFrom: the straight, reach-capped ray the rod uses (no gravity, no 60 m march), against stub bodies.
 import { describe, expect, it } from 'vitest';
-import { traceMeleeHitFrom } from './game-hit-trace';
+// @ts-expect-error — node:fs available in vitest
+import { readFileSync } from 'node:fs';
+import { chunkCollidersAt, clampSpawnInside, seatChunkSpawn, traceMeleeHitFrom } from './game-hit-trace';
+import { parseSectorLevel } from './sector-json';
+import { buildSectorGround } from './sector-ground';
+import { WALL_SKIN_M } from './sector-debris';
+import { makeChunk } from '../gib-chunks';
 import { prim } from '../head-pop';
 import type { GameContext } from './game-context';
 import type { ZombieActor } from './game-actor';
@@ -38,5 +44,34 @@ describe('traceMeleeHitFrom', () => {
   it('the nearest body along the ray wins; a body off the ray is ignored', () => {
     const r = traceMeleeHitFrom(ctxOf(body(8, 0.4, -1), body(7, 0.4, 0), body(9, 3, 0)), [0.4, 1.25, 1.0], [0, 0, -1], 2.2);
     expect(r.actorId).toBe(7);
+  });
+});
+
+
+describe('debris spawns on sector levels (plan 3b)', () => {
+  const map = parseSectorLevel(JSON.parse(readFileSync('public/assets/levels/fixtures/sectors.level.json', 'utf8'))).sectors!;
+  const sectorCtx = { world: { colliders: [], level: { def: { sectors: map }, ground: buildSectorGround(map), tunnels: [], rooms: [] } } } as unknown as GameContext;
+  const roomCtx = { world: { colliders: [], level: { def: {}, ground: { floorAt: () => 0, ceilAt: () => Infinity }, tunnels: [], rooms: [{ minX: -5, maxX: 5, minZ: -5, maxZ: 5, height: 3 }] } } } as unknown as GameContext;
+
+  it('clampSpawnInside pulls a point past a wall back in; a room level returns the point itself', () => {
+    const p = clampSpawnInside(sectorCtx, [0, 1, -1], [0, 1, 0.3], 0.1);
+    expect(p[2]).toBeCloseTo(-(WALL_SKIN_M + 0.1), 9);
+    const to: Vec3 = [0, 1, 0.3];
+    expect(clampSpawnInside(roomCtx, [0, 1, -1], to, 0.1)).toBe(to);
+  });
+  it('seatChunkSpawn clamps the chunk and seeds floorY with the body floor; a room level returns the chunk itself', () => {
+    const c = makeChunk('armL', [0, 1, -3.4], [0, 0, 0], 0.1, [0, 1, 0], () => 0.5);   // inside the column
+    const s = seatChunkSpawn(sectorCtx, c, [0, 1, -2]);
+    expect(s).not.toBe(c);
+    expect(c.pos).toEqual([0, 1, -3.4]);                                             // the original is untouched
+    expect(s.pos[2]).toBeCloseTo(-3 + WALL_SKIN_M + 0.1, 9);
+    expect(s.floorY).toBe(0);
+    const noBody = seatChunkSpawn(sectorCtx, makeChunk('armL', [0, 1, -10], [0, 0, 0], 0.1, [0, 1, 0], () => 0.5));
+    expect(noBody.floorY).toBe(0.5);                                                 // the floor under the piece
+    expect(seatChunkSpawn(roomCtx, c, [0, 1, -2])).toBe(c);
+  });
+  it('chunkCollidersAt carries the ground on a sector level only', () => {
+    expect(chunkCollidersAt(sectorCtx, [0, 1, -2]).ground).toBeDefined();
+    expect('ground' in chunkCollidersAt(roomCtx, [0, 1, 0])).toBe(false);
   });
 });

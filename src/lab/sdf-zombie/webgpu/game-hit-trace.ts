@@ -15,10 +15,10 @@ import { sdBody } from '../validate';
 import { SLUG, traceProjectile } from './game-weapon';
 import { levelCeilingM } from './game-level-rooms';
 import { roomCeilingM } from './level-def';
-import { type ChunkBox } from '../gib-chunks';
+import { type Chunk, type ChunkColliders } from '../gib-chunks';
 import { convergedDir, muzzleWorld } from './game-weapon-rig';
 import type { DebrisGround } from '../debris-ground';
-import { sectorDebrisGround } from './sector-debris';
+import { clampSpawnInsideMap, sectorDebrisGround } from './sector-debris';
 import { sectorSegmentHit, type SectorHit } from './sector-ray';
 import type { SectorGround } from './sector-ground';
 
@@ -191,8 +191,12 @@ export function ceilingAt(ctx: GameContext, x: number, z: number): number {
  * lookup the bundle's flight already uses, which is why a piece cannot sail
  * out through the arena's 6 m roof while the 3 m rooms keep theirs.
  */
-export function chunkCollidersAt(ctx: GameContext, pos: Vec3): { boxes: readonly ChunkBox[]; ceilingY: number } {
-  return { boxes: ctx.world.colliders, ceilingY: ceilingAt(ctx, pos[0], pos[2]) };
+export function chunkCollidersAt(ctx: GameContext, pos: Vec3): ChunkColliders {
+  // Sector levels (plan 3b) add the debris ground: the floor under the chunk now and the sector walls. Room levels
+  // get the same two fields as before, so stepChunk runs its y = 0 path unchanged.
+  const ground = debrisGround(ctx);
+  const boxes = ctx.world.colliders, ceilingY = ceilingAt(ctx, pos[0], pos[2]);
+  return ground ? { boxes, ceilingY, ground } : { boxes, ceilingY };
 }
 
 /** The debris ground on a SECTOR level (plan 3b), or null on a room level — where every debris stepper keeps its
@@ -206,6 +210,50 @@ export function debrisGround(ctx: GameContext): DebrisGround | null {
 export function sectorHitBetween(ctx: GameContext, a: Vec3, b: Vec3): SectorHit | null {
   const map = ctx.world.level.def?.sectors;
   return map ? sectorSegmentHit(map, ctx.world.level.ground as SectorGround, a, b) : null;
+}
+
+/** The level's sector map, or undefined on a room level — optional all the way down, because the spawn helpers below
+ *  run inside spawners that tests drive with a bare stub context. */
+function sectorsOf(ctx: GameContext) {
+  return ctx.world?.level?.def?.sectors;
+}
+
+/** SPAWNS START INSIDE THE LEVEL (plan 3b): `to` pulled back toward the body centre `from` if from → to meets sector
+ *  geometry (sector-debris.ts clampSpawnInsideMap). Room levels: `to` itself, untouched. */
+export function clampSpawnInside(ctx: GameContext, from: Vec3, to: Vec3, radius = 0): Vec3 {
+  const map = sectorsOf(ctx);
+  return map ? clampSpawnInsideMap(map, ctx.world.level.ground as SectorGround, from, to, radius) : to;
+}
+
+/** How high over an actor's feet its spawn-clamp centre sits, metres (mid torso; under every E1M1 ceiling). */
+export const SPAWN_CENTRE_M = 0.9;
+/** The body centre debris spawns are clamped from: `SPAWN_CENTRE_M` over the actor's feet, kept 5 cm under the
+ *  sector's ceiling. Null on room levels (nothing to clamp against). */
+export function spawnCentreOf(ctx: GameContext, feet: Vec3): Vec3 | null {
+  if (!sectorsOf(ctx)) return null;
+  const ceil = ctx.world.level.ground.ceilAt(feet[0], feet[2]);
+  const y = feet[1] + SPAWN_CENTRE_M;
+  return [feet[0], Number.isFinite(ceil) ? Math.max(feet[1], Math.min(y, ceil - 0.05)) : y, feet[2]];
+}
+
+/** `spawnCentreOf` an actor's feet; null on room levels without reading the actor. */
+export function actorSpawnCentre(ctx: GameContext, a: { pose(): { pos: Vec3 } }): Vec3 | null {
+  return sectorsOf(ctx) ? spawnCentreOf(ctx, a.pose().pos) : null;
+}
+
+/** A new chunk on a SECTOR level: its position clamped inside the level from the body centre `from` (when the caller
+ *  knows the body) and its `floorY` seeded with the body's floor (else the floor under the piece), so it never starts
+ *  inside a wall or a column and keeps a floor if it spawns over a hole. Returns a NEW chunk (a view that recentred
+ *  its prims on the old object keeps it); room levels return `c` itself, untouched. */
+export function seatChunkSpawn(ctx: GameContext, c: Chunk, from?: Vec3 | null): Chunk {
+  const map = sectorsOf(ctx);
+  if (!map) return c;
+  const ground = ctx.world.level.ground;
+  const pos = from ? clampSpawnInside(ctx, from, c.pos, c.radius) : c.pos;
+  const bodyFloor = from ? ground.floorAt(from[0], from[2]) : NaN;
+  const ownFloor = ground.floorAt(pos[0], pos[2]);
+  const floorY = Number.isFinite(bodyFloor) ? bodyFloor : Number.isFinite(ownFloor) ? ownFloor : c.floorY;
+  return { ...c, pos: [pos[0], pos[1], pos[2]], ...(floorY === undefined ? {} : { floorY }) };
 }
 
 /** Where a slug fired RIGHT NOW would hit — the shared predictor.

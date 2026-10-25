@@ -40,7 +40,8 @@ const SIZE_STEP = 0.02;
 export interface MeatGibLeaf {
   /** Throw one torn chunk from `pos` with `vel` and `angVel`, `r` the size an SDF bit would have had. False: the GLB
    *  is not ready. */
-  throw(pos: Vec3, vel: Vec3, angVel: Vec3, r: number): boolean;
+  /** `from`: SECTOR levels (plan 3b), the body centre the spawn is clamped inside the level from. */
+  throw(pos: Vec3, vel: Vec3, angVel: Vec3, r: number, from?: Vec3 | null): boolean;
   ready(): boolean;
 }
 
@@ -104,7 +105,7 @@ export function createMeatGib(ctx: GameContext, deps: MeatGibDeps): MeatGibLeaf 
 
   return {
     ready: () => variants.length > 0 && base !== null,
-    throw(pos, vel, angVel, r) {
+    throw(pos, vel, angVel, r, from) {
       if (variants.length === 0 || !base || !ctx.boot.spawnMeshGib) return false;
       // Round-robin through the variants, so a burst of chunks never repeats one shape side by side.
       const v = next++ % variants.length;
@@ -117,7 +118,7 @@ export function createMeatGib(ctx: GameContext, deps: MeatGibDeps): MeatGibLeaf 
       mesh.castShadow = false;
       mesh.receiveShadow = false;
       ctx.boot.spawnMeshGib(mesh, pos, vel, angVel, size * MEAT_LOOK.physicsRadius,
-        { longAxis: [1, 0, 0], restitution: MEAT_LOOK.restitution, tag: 'meat' });
+        { longAxis: [1, 0, 0], restitution: MEAT_LOOK.restitution, tag: 'meat', from });
       return true;
     },
   };

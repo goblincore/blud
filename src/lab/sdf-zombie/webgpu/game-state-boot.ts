@@ -39,6 +39,9 @@ export interface MeshGibOpts {
   restitution?: number;
   /** For the seams (`__sdfGame.head.brains()` lists the 'brain' ones). */
   tag?: string;
+  /** SECTOR levels (plan 3b): the body centre the gib came from — the spawn is clamped inside the level from it and
+   *  its floor seeds the gib's floorY. Absent: no clamp, the floor under the gib. Ignored on room levels. */
+  from?: Vec3 | null;
 }
 
 /** The handle `boot.attachPiece` returns. */

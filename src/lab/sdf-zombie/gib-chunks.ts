@@ -14,6 +14,7 @@
 // spawn. Launch speeds and gravity are untouched — the arcs are game-hot and
 // authoritative; only the spin was tuned.
 import type { LimbId, Vec3 } from './types';
+import { landingFloor, type DebrisGround } from './debris-ground';
 import {
   add, cross, dot, len, normalize, scale,
   qFromAxisAngle, qIdentity, qMul, qNormalize, qRotate, type Quat,
@@ -105,6 +106,9 @@ export interface Chunk {
   /** A uniform size factor (absent: 1) folded into squashFactors: a flying flesh bit's closing shrink
    *  (flesh-bits.ts fleshShrink). Both renderer paths scale the whole piece about its origin by it. */
   shrink?: number;
+  /** SECTOR levels: the floor the chunk last stood over (stepChunk writes it only when given a ground). Absent = the
+   *  y = 0 plane. */
+  floorY?: number;
 }
 
 /** One sphere of a chunk's local support shape: a centre in chunk-local space
@@ -167,6 +171,9 @@ export interface ChunkColliders {
   boxes?: readonly ChunkBox[];
   /** Ceiling height (m) for the enclosure the chunk is in, if known. */
   ceilingY?: number;
+  /** SECTOR levels (plan 3b): the floor under the chunk's CURRENT x/z and the sector walls. Absent: the y = 0 plane,
+   *  as before. */
+  ground?: DebrisGround;
 }
 
 /**
@@ -321,6 +328,13 @@ export function stepChunk(c: Chunk, dt: number, colliders?: ChunkColliders): Chu
     x = r.pos[0]; y = r.pos[1]; z = r.pos[2];
     vx = r.vel[0]; vy = r.vel[1]; vz = r.vel[2];
   }
+  const ground = colliders?.ground;
+  // SECTOR WALLS (plan 3b): the step's move from where the chunk was, after the boxes. A fast piece meets the wall
+  // it would have crossed (the probe is a segment), stops short and bounces with the wall restitution.
+  if (ground) {
+    const b = ground.bounce(c.pos, [x, y, z], [vx, vy, vz], wallRest, FLOOR_FRICTION, c.radius);
+    if (b) { x = b.pos[0]; y = b.pos[1]; z = b.pos[2]; vx = b.vel[0]; vy = b.vel[1]; vz = b.vel[2]; }
+  }
   // The ceiling is not one of `levelColliders()`' boxes (they are walls up to
   // WALL_H), so it comes in as an explicit height for the enclosure the chunk is
   // in. Without it a blast can throw a piece up through the room's roof.
@@ -334,8 +348,12 @@ export function stepChunk(c: Chunk, dt: number, colliders?: ChunkColliders): Chu
 
   let grounded = false;
   const floorOffset = supportBottom(c.support, quat, squash, c.radius);
-  if (y < floorOffset) {
-    y = floorOffset;
+  // THE FLOOR UNDER THE CHUNK NOW (sector levels: read at this step's x/z, so a piece off a ledge falls to the lower
+  // floor); room levels: the y = 0 plane, the same arithmetic as before.
+  const floorY = ground ? landingFloor(ground, x, z, c.floorY ?? 0) : 0;
+  const floorLine = ground ? floorY + floorOffset : floorOffset;
+  if (y < floorLine) {
+    y = floorLine;
     grounded = true;
     if (vy < 0) {
       // Squash scales with impact speed — this is what sells wetness. BONES
@@ -383,10 +401,11 @@ export function stepChunk(c: Chunk, dt: number, colliders?: ChunkColliders): Chu
   // through the floor.
   if (grounded) {
     const postFloor = supportBottom(c.support, quat, squash, c.radius);
-    if (y < postFloor) y = postFloor;
+    const post = ground ? floorY + postFloor : postFloor;
+    if (y < post) y = post;
   }
 
-  const out: Chunk = { ...c, pos: [x, y, z], vel: [vx, vy, vz], squash, quat, angVel };
+  const out: Chunk = { ...c, pos: [x, y, z], vel: [vx, vy, vz], squash, quat, angVel, ...(ground ? { floorY } : {}) };
   return finite(out) ? out : {
     ...c, vel: [0, 0, 0], angVel: [0, 0, 0], squash: 0,
   };
@@ -434,7 +453,8 @@ export function toppleAngleToFlat(c: Chunk): number {
 export function chunkSettled(c: Chunk): boolean {
   // Grounded = the piece's LOWEST WORLD POINT is on the floor (orientation
   // aware), not merely that its origin is under the broad-phase radius.
-  if (!(c.pos[1] <= chunkSupportOffset(c) + 1e-4)) return false;
+  const base = c.floorY === undefined ? chunkSupportOffset(c) : c.floorY + chunkSupportOffset(c);
+  if (!(c.pos[1] <= base + 1e-4)) return false;
   if (c.angVel[0] !== 0 || c.angVel[1] !== 0 || c.angVel[2] !== 0) return false;
   if (c.squash > 0) return false;                                 // still relaxing
   if (toppleAngleToFlat(c) > 0.011) return false;                 // still toppling

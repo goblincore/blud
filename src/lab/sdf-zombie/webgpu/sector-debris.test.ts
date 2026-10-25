@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseSectorLevel } from './sector-json';
 import { buildSectorGround } from './sector-ground';
-import { sectorDebrisGround, WALL_SKIN_M } from './sector-debris';
+import { clampSpawnInsideMap, sectorDebrisGround, WALL_SKIN_M } from './sector-debris';
 import { landingFloor } from '../debris-ground';
 import type { Vec3 } from '../types';
 
@@ -95,5 +95,36 @@ describe('sectorDebrisGround: review fixes', () => {
     expect(g.ceilAt!(0, -2)).toBe(4);
     expect(g.ceilAt!(6, -4)).toBe(Infinity);
     expect(Number.isNaN(g.ceilAt!(0, -4))).toBe(true);
+  });
+});
+
+describe('clampSpawnInsideMap: spawns start inside the level (plan 3b)', () => {
+  const ground = buildSectorGround(map);
+  it('a spawn point past the north wall is pulled back skin + radius toward the body', () => {
+    const p = clampSpawnInsideMap(map, ground, [0, 1, -1], [0, 1, 0.3], 0.1);
+    expect(p[0]).toBeCloseTo(0, 9);
+    expect(p[1]).toBeCloseTo(1, 9);
+    expect(p[2]).toBeCloseTo(-(WALL_SKIN_M + 0.1), 9);
+  });
+  it('a spawn point inside the column stops at its face', () => {
+    const p = clampSpawnInsideMap(map, ground, [0, 1, -2], [0, 1, -3.5], 0);
+    expect(p[2]).toBeCloseTo(-3 + WALL_SKIN_M, 9);
+  });
+  it('a spawn point under the floor is pulled back up toward the body', () => {
+    const p = clampSpawnInsideMap(map, ground, [1, 1, -2], [1, -0.3, -2], 0.05);
+    expect(p[1]).toBeCloseTo(WALL_SKIN_M + 0.05, 9);
+  });
+  it('an open spawn point is returned as is', () => {
+    const to: Vec3 = [1, 1.2, -2.5];
+    expect(clampSpawnInsideMap(map, ground, [1, 1, -2], to, 0.1)).toBe(to);
+  });
+  it('a hit closer than skin + radius puts the piece at the body centre', () => {
+    const p = clampSpawnInsideMap(map, ground, [0, 1, -0.05], [0, 1, 0.5], 0.1);
+    expect(p).toEqual([0, 1, -0.05]);
+  });
+  it('a body centre off the map (or out of its band) is not judged', () => {
+    const to: Vec3 = [0, 1, -2];
+    expect(clampSpawnInsideMap(map, ground, [0, 1, -4], to, 0.1)).toBe(to);
+    expect(clampSpawnInsideMap(map, ground, [0, -1, -2], to, 0.1)).toBe(to);
   });
 });
