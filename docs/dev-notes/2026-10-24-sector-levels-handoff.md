@@ -86,6 +86,8 @@ Experiment: rebuild Doom E1M1's layout from `doomu.wad` in our look and play it.
    for gibs, blood, entrails, prop drop, brass, flames, dynamite). "The parts with enemies feel good"; other
    parts need interaction (barrels, doors/switches, secrets). The level is monochrome (one brick texture) —
    rooms need material variation (Doom's per-sidedef/flat textures → a small palette of our materials).
+   **Floating debris and barrels done 2026-10-25 (plan 3b, item 4); materials: levels.md item 6.** Doors,
+   switches and secrets still open (item 5).
 2g. **Expressive lighting: screens and light panels (owner approved 2026-10-25, queued after plan 3b).**
    Owner: the computer room and its enemy alcove need fluorescent / coloured lighting and glowing screens.
    E1M1 emitter textures (WAD counts): COMPUTE2/COMPUTE3/COMPTALL (17 sides), PLANET1 viewscreen (16),
@@ -108,6 +110,10 @@ Experiment: rebuild Doom E1M1's layout from `doomu.wad` in our look and play it.
    on sector floors (y = 0 sites listed in the plan-3 research: gib-chunks 335, blood-sim 555/559/620,
    entrails 177, prop-drop via character-view 695, game-burning 424/438, dynamite-flight 183,
    game-dynamite-step 57).
+   **Done 2026-10-25** ([plan](../superpowers/plans/2026-10-25-sector-levels-3b-debris-and-barrels.md) ·
+   [notes](2026-10-25-sector-levels-3b/NOTES.md)): every debris kind rests on the floor under it, falls off ledges
+   and stops at sector walls (item 2f's floating debris); E1M1's 6 barrels explode, chain (4.5 m), hurt and are
+   shielded by sector walls; gate sections 6 and 7 pass. Next: the barrel grime pass (owner), then item 2g.
 5. Doors (see above), lifts, secrets, a use key.
 
 ## How to run

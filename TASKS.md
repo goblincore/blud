@@ -10,7 +10,7 @@
 
 ## In flight / next
 
-- [~] **Sector levels step 1 built 2026-10-24 (Doom-style sectors, empty E1M1 walkable); owner checkpoint pending: play `npm run dev:doom`.** Detail: [levels](docs/tasks/levels.md) "Sector levels" item 1.
+- [~] **Sector levels (Doom E1M1 experiment):** sectors, pools + light, enemies, materials and (2026-10-25, plan 3b) debris on sector floors + exploding barrels built; next the barrel grime pass, then emissive screens/light panels. Play `npm run dev:doom`. Detail: [levels](docs/tasks/levels.md) "Sector levels" items 5b, 5c.
 - [~] **GPU body-normal bake** (owner, 2026-10-24; branch `claude/cpu-bake-performance-2a477d`) — [spec](docs/superpowers/specs/2026-10-24-gpu-body-normal-bake-design.md).
   The CPU bake takes ~17 CPU-minutes for gibbet and more for bigger bodies; the plan is a Dawn-in-Node WebGPU compute bake held to `sdBody`
   by a lavapipe CI job. Step 1 done: the bake is split into `src/lab/sdf-zombie/body-normal-bake/` (CPU backend only) and
