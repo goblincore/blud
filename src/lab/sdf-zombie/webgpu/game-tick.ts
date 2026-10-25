@@ -27,7 +27,7 @@ import { bodyInSight } from './actor-sight';
 import { connectionBlobsForSim } from './blood-connections';
 import { type EncounterAgent } from './encounter-director';
 import { reticleNdc } from './fisheye';
-import { approachAngle, approachBob, approachStrafe, bobPose, pivotOffset, strafeSpeed01, turnFromAim, weaponAngles, weaponSlide } from './free-aim';
+import { approachAngle, approachBob, approachStrafe, bobPose, pivotOffset, settleToEdge, strafeSpeed01, turnFromAim, weaponAngles, weaponSlide } from './free-aim';
 import { segmentHitsBox, type ZombieActor } from './game-actor';
 import { registerBleed, stepGutRopes, throwGunFlesh } from './game-bleed';
 import { cancelChunkBake, finishChunkBake } from './game-chunk-bake';
@@ -513,9 +513,13 @@ export function tick(ctx: GameContext, dt: number) {
   // inside its own smoothing.
   if (ctx.player.freeAimOn) {
     const turn = turnFromAim(ctx.weapon.aim, dt, ctx.player.strafeAmount);
-    ctx.player.player.yaw += turn.yaw;
+    // A reticle stranded outside the strafe turn edge eases back onto it,
+    // the camera following so the target stays under the reticle.
+    const settle = settleToEdge(ctx.weapon.aim, ctx.player.strafeAmount, dt, aimFrustum(ctx));
+    ctx.weapon.aim = settle.aim;
+    ctx.player.player.yaw += turn.yaw + settle.yaw;
     ctx.player.player.pitch = Math.min(PLAYER.pitchLimit,
-      Math.max(-PLAYER.pitchLimit, ctx.player.player.pitch + turn.pitch));
+      Math.max(-PLAYER.pitchLimit, ctx.player.player.pitch + turn.pitch + settle.pitch));
   }
   {
     const w = ctx.player.freeAimOn ? weaponAngles(ctx.weapon.aim, aimFrustum(ctx)) : { yawDeg: 0, pitchDeg: 0 };

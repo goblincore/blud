@@ -39,6 +39,13 @@ export const FREE_AIM = {
    *  reasoned about -- __sdfGame.setAimTuning({ turnRateX }). */
   turnRateX: 1.9,
   turnRateY: 1.25,
+  /** Camera turn per mouse pixel, radians, for mouse motion that OVERFLOWS
+   *  the reticle's turn edge (see moveAimOverflow). Same rate as plain
+   *  mouse-look with free aim off. */
+  overflowTurn: 0.0022,
+  /** How fast a reticle left OUTSIDE the turn edge eases back onto it,
+   *  1/seconds, with the camera turning to match (see settleToEdge). */
+  edgeSettle: 6.0,
   /** Reticle travel per mouse pixel, in half-viewport units. */
   sensitivity: 0.0042,
   /** How much of the reticle's TRUE angle the weapon takes up, 0..1. 1 = the
@@ -101,6 +108,80 @@ export function deadzoneSize(strafe01 = 0): { x: number; y: number } {
     x: FREE_AIM.deadzoneX * lerp(FREE_AIM.strafeDeadzoneScaleX),
     y: FREE_AIM.deadzoneY * lerp(FREE_AIM.strafeDeadzoneScaleY),
   };
+}
+
+/**
+ * Where mouse motion stops moving the reticle and starts turning the camera,
+ * per axis, for a 0..1 strafe envelope.
+ *
+ * Standing still the edge is the SCREEN edge (1), so free aim is untouched --
+ * the only change is that shoving past the edge now turns the camera instead
+ * of doing nothing. While strafing it pulls in to the strafe-shrunk dead zone.
+ * That is what makes circle-strafing work: keeping a target in view needs a
+ * constant turn of strafe-speed / radius (~0.85 rad/s at 3.4 m/s and 4 m),
+ * and the squared dead-zone push only delivers that with the reticle -- and
+ * so the target -- out at ~0.7-0.8 of the half-screen. With the edge pulled
+ * in, the mouse steers the camera directly and the target stays near centre.
+ */
+export function turnEdge(strafe01 = 0): { x: number; y: number } {
+  const s = Math.min(1, Math.max(0, strafe01));
+  const dz = deadzoneSize(s);
+  return { x: 1 + (dz.x - 1) * s, y: 1 + (dz.y - 1) * s };
+}
+
+/**
+ * Apply raw mouse motion with OVERFLOW: the reticle moves as moveAim does
+ * until it reaches the turn edge (or stays where it is, if a shrinking zone
+ * has already left it outside), and whatever motion would carry it further
+ * out turns the camera instead, radians. Inward motion always moves the
+ * reticle.
+ */
+export function moveAimOverflow(
+  aim: AimPoint, dxPx: number, dyPx: number, strafe01 = 0,
+): { aim: AimPoint; yaw: number; pitch: number } {
+  const edge = turnEdge(strafe01);
+  const axis = (v: number, d: number, e: number) => {
+    const n = v + d * FREE_AIM.sensitivity;
+    const limit = Math.min(1, Math.max(Math.abs(v), e));
+    if (Math.abs(n) <= limit) return { pos: n, turn: 0 };
+    const over = Math.abs(n) - limit;
+    return { pos: Math.sign(n) * limit, turn: Math.sign(n) * over / FREE_AIM.sensitivity * FREE_AIM.overflowTurn };
+  };
+  // Screen y grows downward; aim y (and pitch) grow upward.
+  const x = axis(aim.x, dxPx, edge.x);
+  const y = axis(aim.y, -dyPx, edge.y);
+  return { aim: { x: x.pos, y: y.pos }, yaw: x.turn, pitch: y.turn };
+}
+
+/**
+ * Ease a reticle that sits OUTSIDE the turn edge back onto it, turning the
+ * camera by exactly the angle that keeps the reticle on the same world point.
+ *
+ * The edge pulls in when strafing starts, but the strafe envelope takes a
+ * moment to build, and a player who starts strafing and turning together has
+ * usually pushed the reticle out past it by then. Left alone it would stay
+ * out there (moveAimOverflow never moves it further out, but nothing brings it
+ * in), so the target sits near the screen edge -- the very thing the edge is
+ * meant to stop. Here the CAMERA does the work: the target stays under the
+ * reticle while both swing in toward the edge. Standing still the edge is the
+ * screen edge, so this never runs.
+ *
+ * Angles are atan(normalised * tan(halfFov)), the same projection the shot ray
+ * and weaponAngles use, so the compensation is exact per axis.
+ */
+export function settleToEdge(
+  aim: AimPoint, strafe01: number, dt: number, f: Frustum,
+): { aim: AimPoint; yaw: number; pitch: number } {
+  const edge = turnEdge(strafe01);
+  const k = 1 - Math.exp(-FREE_AIM.edgeSettle * dt);
+  const axis = (v: number, e: number, tan: number) => {
+    if (Math.abs(v) <= e) return { pos: v, turn: 0 };
+    const n = v + (Math.sign(v) * e - v) * k;
+    return { pos: n, turn: Math.atan(v * tan) - Math.atan(n * tan) };
+  };
+  const x = axis(aim.x, edge.x, f.tanH);
+  const y = axis(aim.y, edge.y, f.tanV);
+  return { aim: { x: x.pos, y: y.pos }, yaw: x.turn, pitch: y.turn };
 }
 
 /** How far past the dead zone the reticle is pushing, -1..1 per axis.
