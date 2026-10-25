@@ -575,8 +575,11 @@ body
   # here is a WRIST KNOB the kit palm sits into, so the forearm still ends in
   # a round (the early-3D accent) and there is no seam where mesh meets SDF.
   # It replaced the r 0.046 orb at at=0.55; GOBLIN_SKIN.handRadius keeps the
-  # old 0.046 for loadHold's shell offsets, no longer this prim's radius.
-  blob arm on hand at=0.10 r=0.024 blend=0.008 mirror
+  # old 0.046 for loadHold's shell offsets, no longer this prim's radius. At
+  # at=0.25 the knob lies wholly inside that orb, so the at-home goblins, which
+  # carry the orb back (their marked block), keep exactly their old shape (at
+  # 0.10 it poked 1.3 cm past it and met the keyboard: screen-lab-goblin.test).
+  blob arm on hand at=0.25 r=0.024 blend=0.008 mirror
 
   # The legs wear the trousers' paint (see the torso block). The shin bar runs
   # to the ankle, so the boot in goblin-kit.wam covers the seam.
