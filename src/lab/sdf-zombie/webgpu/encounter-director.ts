@@ -60,7 +60,22 @@ export function clearFireLane(self: EncounterAgent, target: Vec3, agents: readon
         return along > 0 && along < length + .2 && side < .45 + along * .07;
     });
 }
-export function createEncounterDirector(nav: EncounterNavigation, boxes: readonly Aabb[]) {
+/** Eye height over a body's floor (both ends of a sight line). */
+const EYE_M = 1.4;
+/** A sector level's walls, floors and ceilings for sight (sector-ray.ts sectorSightBlocker): true
+ *  when the segment is blocked. Absent on room levels, where sight is furniture boxes only, at a
+ *  flat 1.4 m. */
+export type SectorSightBlocked = (a: Vec3, b: Vec3) => boolean;
+export function createEncounterDirector(nav: EncounterNavigation, boxes: readonly Aabb[], sectorBlocked?: SectorSightBlocked) {
+    // Sight from a body's eye to the player's. Room levels: y 1.4 at both ends, boxes only (as
+    // before). Sector levels: each end 1.4 m over its own floor (a soldier on a ledge sees the player
+    // below), and the sector geometry blocks too.
+    const sees = (from: Vec3, to: Vec3): boolean => {
+        if (!sectorBlocked)
+            return clearSight([from[0], EYE_M, from[2]], [to[0], EYE_M, to[2]], boxes);
+        const a: Vec3 = [from[0], from[1] + EYE_M, from[2]], b: Vec3 = [to[0], to[1] + EYE_M, to[2]];
+        return Number.isFinite(a[1]) && Number.isFinite(b[1]) && clearSight(a, b, boxes) && !sectorBlocked(a, b);
+    };
     type Memory = {
         at: Vec3;
         age: number;
@@ -91,7 +106,9 @@ export function createEncounterDirector(nav: EncounterNavigation, boxes: readonl
         } },
         clear() { memory.clear(); routes.clear(); lastShot.clear(); owner = null; lease = 0; },
         debug: () => ({ owner, memories: [...memory].map(([id, m]) => ({ id, at: m.at, age: m.age })) }),
-        update(agents: readonly EncounterAgent[], player: BrainPlayer | null, gunshot: boolean, dt: number): Map<number, EncounterOrder> {
+        /** `playerFeet`: the player's feet height, read on sector levels only (the target keeps the
+         *  player's real y there); room levels target y 0 as before. */
+        update(agents: readonly EncounterAgent[], player: BrainPlayer | null, gunshot: boolean, dt: number, playerFeet = 0): Map<number, EncounterOrder> {
             clock += dt;
             lease -= dt;
             observed.clear();
@@ -102,7 +119,7 @@ export function createEncounterDirector(nav: EncounterNavigation, boxes: readonl
                     routes.delete(id);
                     lastShot.delete(id);
                 }
-            const target: Vec3 | null = player ? [player.x, 0, player.z] : null;
+            const target: Vec3 | null = player ? [player.x, sectorBlocked ? playerFeet : 0, player.z] : null;
             for (const a of agents) {
                 if (a.disabled) {
                     memory.delete(a.id);
@@ -112,7 +129,7 @@ export function createEncounterDirector(nav: EncounterNavigation, boxes: readonl
                 const dx = target ? target[0] - a.pos[0] : 0, dz = target ? target[2] - a.pos[2] : 0;
                 const bearing = Math.atan2(dx, dz), angle = Math.atan2(Math.sin(bearing - a.yaw), Math.cos(bearing - a.yaw));
                 const visible = !!target && distance(a.pos, target) < 10 && (!!prior || Math.abs(angle) < Math.PI * .39)
-                    && clearSight([a.pos[0], 1.4, a.pos[2]], [target[0], 1.4, target[2]], boxes);
+                    && sees(a.pos, target);
                 observed.set(a.id, visible);
                 if (visible || (gunshot && target && distance(a.pos, target) < 12))
                     memory.set(a.id, { at: [...target!] as Vec3, age: 0, search: 0 });
@@ -157,8 +174,10 @@ export function createEncounterDirector(nav: EncounterNavigation, boxes: readonl
                         if (blocked || crowded || distance(a.pos, target) > 4.5) {
                             const bearing = Math.atan2(a.pos[0] - target[0], a.pos[2] - target[2]);
                             const choices = [-.65, .65, -1.1, 1.1, 0].map(offset => [target[0] + Math.sin(bearing + offset) * 3.8, 0, target[2] + Math.cos(bearing + offset) * 3.8] as Vec3)
+                                // Sector levels: a firing spot stands on the floor under it (NaN off the map; canStand rejects it).
+                                .map(p => sectorBlocked ? [p[0], nav.floorAt(p), p[2]] as Vec3 : p)
                                 .filter(p => nav.canStand(p) && agents.every(b => b.id === a.id || b.disabled || distance(p, b.pos) > 1.05)
-                                && clearFireLane({ ...a, pos: p }, target, agents) && clearSight([p[0], 1.4, p[2]], [target[0], 1.4, target[2]], boxes));
+                                && clearFireLane({ ...a, pos: p }, target, agents) && sees(p, target));
                             choices.sort((p, q) => distance(a.pos, p) - distance(a.pos, q));
                             goal = choices[0] ?? null;
                         }
@@ -207,7 +226,7 @@ export function createEncounterDirector(nav: EncounterNavigation, boxes: readonl
                 let aside: Vec3 | null = null;
                 if (opposing) {
                     const dx = target[0] - a.pos[0], dz = target[2] - a.pos[2], len = Math.hypot(dx, dz);
-                    aside = [.55, .4, .25].flatMap(width => [1, -1].map(sign => [a.pos[0] + sign * dz / len * width, 0, a.pos[2] - sign * dx / len * width] as Vec3))
+                    aside = [.55, .4, .25].flatMap(width => [1, -1].map(sign => [a.pos[0] + sign * dz / len * width, sectorBlocked ? a.pos[1] : 0, a.pos[2] - sign * dx / len * width] as Vec3))
                         .find(p => nav.canTravel(a.pos, p) && agents.every(b => b.id === a.id || b.disabled || distance(p, b.pos) > .65)) ?? null;
                 }
                 order.moveTarget = aside;

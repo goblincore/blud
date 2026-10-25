@@ -102,7 +102,9 @@ export function createLoop(ctx: GameContext): LoopRuntime {
       const mesh = new THREE.Mesh(l.geo(), new THREE.MeshStandardMaterial({
         color: l.color, emissive: l.color, emissiveIntensity: 0.35, metalness: 0.3, roughness: 0.4,
       }));
-      mesh.position.set(p.pos[0], Math.max(0.25, p.pos[1]), p.pos[2]);
+      // Sector levels: a pickup's y is the floor under it (the converter writes it), so it sits 0.25 m
+      // over that floor, which may be below 0 (a pit).
+      mesh.position.set(p.pos[0], def.sectors ? p.pos[1] + 0.25 : Math.max(0.25, p.pos[1]), p.pos[2]);
       if (p.item === 'cd') mesh.rotation.x = Math.PI / 2;
       if (STILL.has(p.item)) mesh.userData.still = true;
       mesh.name = `pickup:${p.id}`;

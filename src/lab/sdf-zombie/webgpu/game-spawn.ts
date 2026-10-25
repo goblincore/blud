@@ -7,6 +7,8 @@
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
+import { sectorSightBlocker } from './sector-ray';
+import type { SectorGround } from './sector-ground';
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { burstVolume, spawnImpactGout } from '../blood-sim';
@@ -372,6 +374,8 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
   const actor = createZombieActor({
     id: zombieId, room: room.id, body: placed, view, character, characterName: name, start,
     ...(sectorGround ? { ground: sectorGround } : {}),
+    ...(sectorGround && ctx.world.level.def?.sectors
+      ? { sectorSight: sectorSightBlocker(ctx.world.level.def.sectors, sectorGround as SectorGround) } : {}),
     boundedWounds: ctx.vfx.boundedWoundPreview,
     // A SWORD profile (motion-profile.ts `melee.kind === 'sword'`, the
     // bride) gets the ring brain on SWORD_TUNING plus strike contact and

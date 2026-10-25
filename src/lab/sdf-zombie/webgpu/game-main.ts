@@ -4,6 +4,9 @@
 
 import { impactSplashPresets, impactSplashProfiles, resolveImpactSplashProfile, type ImpactSplashProfile, type ImpactSplashWeapon } from './impact-splash-profiles';
 import { createEncounterNavigation } from './encounter-navigation';
+import { createSectorNavigation } from './sector-navigation';
+import { sectorSightBlocker } from './sector-ray';
+import type { SectorGround } from './sector-ground';
 import { createEncounterDirector, clearSight, type EncounterAgent } from './encounter-director';
 import { createSoldierCorpseBakes } from './soldier-corpse-bake';
 import { buildNormalBodyPointFn } from './normal-gradient.wgsl';
@@ -64,7 +67,7 @@ import {
 } from './game-viewmodel';
 import { dungeonMaterialSet } from '../../../game/level/theme-material-set';
 import { createOuterHull } from './shell-hull-outer';
-import { makeGameContext } from './game-context';
+import { makeGameContext, type GameContext } from './game-context';
 import { createBoneInstancer } from './bone-instancer';
 import { createSkeletonSources, type BoneFieldSource } from './skeleton-spike/contract';
 import { startBoneMeshCache } from './skeleton-spike/sculpt-cache';
@@ -686,8 +689,7 @@ async function main() {
   ctx.world.sightA = [0, 0, 0];
 
   // Static colliders: enemies route with gates open (spec §6.4).
-  ctx.world.encounterNav = createEncounterNavigation(ctx.world.level.rooms, ctx.world.level.tunnels, ctx.world.level.staticColliders);
-  ctx.world.encounter = createEncounterDirector(ctx.world.encounterNav, ctx.world.colliders);
+  buildEncounter(ctx);
   ctx.world.encounterHomes = new Map<number, Vec3>();
   ctx.world.surfaces = { planes: ctx.world.level.surfaces.planes, boxes: ctx.world.level.surfaces.boxes };
   ctx.world.levelGroup = new THREE.Group();
@@ -6106,3 +6108,20 @@ main().catch((err) => {
   if (loaderStatus) loaderStatus.textContent = 'FAILED — see console';
   console.error('[sdf-game] bootstrap failed', err);
 });
+
+/** Enemy routing and the encounter director for the active level. Sector levels (plan
+ *  2026-10-24-sector-levels-3a Task 5): enemies route over the sector ground and see through sector
+ *  space only; room levels keep the room planner and box-only sight. */
+function buildEncounter(ctx: GameContext): void {
+  const sectorMap = ctx.world.level.def?.sectors;
+  if (sectorMap) {
+    const sectorGround = ctx.world.level.ground as SectorGround;
+    const navStart = performance.now();
+    ctx.world.encounterNav = createSectorNavigation(sectorMap, sectorGround, ctx.world.level.rooms, ctx.world.level.staticColliders);
+    console.info(`[sector-nav] built in ${(performance.now() - navStart).toFixed(1)} ms (${sectorMap.sectors.length} sectors, ${sectorMap.lines.length} lines)`);
+    ctx.world.encounter = createEncounterDirector(ctx.world.encounterNav, ctx.world.colliders, sectorSightBlocker(sectorMap, sectorGround));
+  } else {
+    ctx.world.encounterNav = createEncounterNavigation(ctx.world.level.rooms, ctx.world.level.tunnels, ctx.world.level.staticColliders);
+    ctx.world.encounter = createEncounterDirector(ctx.world.encounterNav, ctx.world.colliders);
+  }
+}

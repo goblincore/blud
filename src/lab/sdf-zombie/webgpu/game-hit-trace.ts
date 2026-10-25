@@ -151,6 +151,12 @@ export function traceMeleeHitFrom(
  *  or through a door frame mid-flight), which is the generous case and the one
  *  the collider boxes are there to catch. */
 export function ceilingAt(ctx: GameContext, x: number, z: number): number {
+  // Sector levels: the sector's ceiling over the point; sky (Infinity) or off the map (NaN) falls back
+  // to the level's tallest ceiling, like a point inside no room.
+  if (ctx.world.level.def?.sectors) {
+    const c = ctx.world.level.ground.ceilAt(x, z);
+    return Number.isFinite(c) ? c : levelCeilingM(ctx);
+  }
   for (const t of ctx.world.level.tunnels) {
     if (x >= t.minX && x <= t.maxX && z >= t.minZ && z <= t.maxZ) return t.height;
   }

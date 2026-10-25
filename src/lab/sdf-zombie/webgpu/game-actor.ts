@@ -603,6 +603,10 @@ export function createZombieActor(opts: {
    *  its feet to the floor under it. Absent on room levels (FLAT_GROUND), where the motion step
    *  gets no floorAt and every frame is exactly what it was. */
   ground?: LevelGround;
+  /** SECTOR levels only, with `ground`: true when the segment a→b is blocked by the sector walls,
+   *  floors or ceilings (sector-ray.ts sectorSightBlocker). A ranged mind with no encounter order
+   *  then sees from 1.4 m over its floor to 1.4 m over the player's, through open sector space. */
+  sectorSight?: (a: Vec3, b: Vec3) => boolean;
   id: number;
   room: number;
   body: BuildResult;
@@ -948,6 +952,18 @@ export function createZombieActor(opts: {
   const armWeapon = opts.profile?.armWeapon;
   const mind: EnemyMind = opts.mind ?? makeZombieMind(armWeapon ? { ...BRAIN_TUNING, swingSide: armWeapon.side } : undefined);
   let brainPlayer: BrainPlayer | null = null;
+  /** A ranged mind's own sight to the player (no encounter order). Room levels: 1.4 m at both ends,
+   *  furniture only, exactly as before. Sector levels: 1.4 m over the body's floor to 1.4 m over the
+   *  floor under the player (BrainPlayer has no height), furniture and sector geometry. */
+  const rangedSight = (pl: BrainPlayer): boolean => {
+    const sx = state.wander.pos[0], sz = state.wander.pos[2];
+    if (!opts.ground || !opts.sectorSight)
+      return !opts.furniture.some(box => segmentHitsBox([sx, 1.4, sz], [pl.x, 1.4, pl.z], box));
+    const playerFloor = opts.ground.floorAt(pl.x, pl.z);
+    if (!Number.isFinite(playerFloor)) return false;
+    const a: Vec3 = [sx, state.wander.pos[1] + 1.4, sz], b: Vec3 = [pl.x, playerFloor + 1.4, pl.z];
+    return !opts.furniture.some(box => segmentHitsBox(a, b, box)) && !opts.sectorSight(a, b);
+  };
   let brainAlerted = false;
   let ringToken = false;
   let ringDrift: -1 | 0 | 1 = 0;
@@ -1317,9 +1333,7 @@ export function createZombieActor(opts: {
         missing: missingLimbs(),
         ...(!mind.meleeCapable && !encounterOrder ? {
           bounds: opts.bounds,
-          lineOfSight: brainPlayer !== null && !opts.furniture.some(box => segmentHitsBox(
-            [state.wander.pos[0], 1.4, state.wander.pos[2]],
-            [brainPlayer!.x, 1.4, brainPlayer!.z], box)),
+          lineOfSight: brainPlayer !== null && rangedSight(brainPlayer),
           canMoveTo: (target: Vec3) => clearCombatMove(state.wander.pos, target, opts.furniture),
         } : {}),
       });
@@ -1503,7 +1517,10 @@ export function createZombieActor(opts: {
       if (think.advance) {
         const p = state.wander.pos;
         const next: Vec3 = [p[0] + think.advance[0], p[1], p[2] + think.advance[2]];
-        if (clearCombatMove(p, next, opts.furniture)) {
+        // Sector levels: the surge must also be a walk the sector ground allows, so a lunge never
+        // carries the body up a ledge or through a wall line.
+        if (clearCombatMove(p, next, opts.furniture)
+          && (!opts.ground || !opts.navigation || opts.navigation.canTravel(p, next))) {
           state = { ...state, wander: { ...state.wander, pos: next } };
         }
       }

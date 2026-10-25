@@ -1,7 +1,13 @@
+// @ts-expect-error — node:fs available in vitest via happy-dom/node
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { createEncounterDirector, clearFireLane, type EncounterAgent } from './encounter-director';
 import { createEncounterNavigation } from './encounter-navigation';
 import { ROOMS, TUNNELS, levelColliders } from './game-level';
+import { parseSectorLevel } from './sector-json';
+import { buildSectorGround } from './sector-ground';
+import { createSectorNavigation } from './sector-navigation';
+import { sectorSightBlocker } from './sector-ray';
 import { makeSoldierBrain, stepSoldierBrain } from '../soldier-brain';
 const nav = createEncounterNavigation(ROOMS, TUNNELS, levelColliders());
 const a = (id: number, x: number, z: number): EncounterAgent => ({ id, pos: [x, 0, z], home: [x, 0, z], yaw: Math.PI, room: 1, soldier: true, ranged: true, disabled: false });
@@ -104,4 +110,32 @@ describe('mixed encounter coordination', () => {
         expect(nav.canTravel(agents[0]!.pos,orders.get(2)!.moveTarget!)).toBe(true);
     });
 
+});
+
+// Sector levels (plan 2026-10-24-sector-levels-3a Task 5) on the committed sectors fixture: A (floor 0,
+// a column x -1..1, z -5..-3), B (z -8..-12, floor 0.5), C (z -12..-16, floor 1.5).
+describe('sight on a sector level', () => {
+    const L = parseSectorLevel(JSON.parse(readFileSync('public/assets/levels/fixtures/sectors.level.json', 'utf8')));
+    const map = L.sectors!, ground = buildSectorGround(map);
+    const sNav = createSectorNavigation(map, ground, L.rooms, []), blocked = sectorSightBlocker(map, ground);
+    const at = (x: number, y: number, z: number): EncounterAgent => ({ ...a(1, x, z), pos: [x, y, z], home: [x, y, z], yaw: Math.PI });
+    it('a wall between hides the player; the same line in the open sees', () => {
+        // The column stands between z -1 and z -7 at x 0 — a box-only test would see straight through it.
+        const hidden = createEncounterDirector(sNav, [], blocked).update([at(0, 0, -1)], { x: 0, z: -7, room: 1 }, false, .1, 0).get(1)!;
+        expect(hidden.visible).toBe(false);
+        expect(hidden.fireAllowed).toBe(false);
+        expect(createEncounterDirector(sNav, []).update([at(0, 0, -1)], { x: 0, z: -7, room: 1 }, false, .1).get(1)!.visible).toBe(true);
+        const open = createEncounterDirector(sNav, [], blocked).update([at(2.5, 0, -1)], { x: 2.5, z: -7, room: 1 }, false, .1, 0).get(1)!;
+        expect(open.visible).toBe(true);
+    });
+    it('sight is floor-relative: a body on B sees the player on the C ledge over the riser', () => {
+        // From B (floor 0.5) to C (floor 1.5): eye 1.9 -> 2.9 clears C's 1.5 m riser at z -12. At a
+        // flat 1.4 m the line would run into the riser.
+        expect(blocked([0, 1.4, -9], [0, 1.4, -14])).toBe(true);
+        const d = createEncounterDirector(sNav, [], blocked);
+        const order = d.update([at(0, 0.5, -9)], { x: 0, z: -14, room: 1 }, false, .1, 1.5).get(1)!;
+        expect(order.visible).toBe(true);
+        // The target keeps the player's real height.
+        expect(d.debug().memories[0]!.at).toEqual([0, 1.5, -14]);
+    });
 });

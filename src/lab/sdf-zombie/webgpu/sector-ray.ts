@@ -167,3 +167,12 @@ export function sectorSegmentHit(map: SectorMap, ground: SectorGround, a: V3, b:
     lo = tc + tEps;
   }
 }
+
+/** A reusable "is a→b blocked by sector geometry?" test for line of sight (the director, a ranged
+ *  mind): one hit record per closure, so a call allocates nothing. Both ends must be inside the level
+ *  (a body's eye, the player's eye): a start in the void or exactly on a one-sided wall line is a
+ *  hit at t 0, so it reads as blocked. */
+export function sectorSightBlocker(map: SectorMap, ground: SectorGround): (a: V3, b: V3) => boolean {
+  const out: SectorHit = { t: 0, point: [0, 0, 0], kind: 'wall', line: -1, sector: -1 };
+  return (a, b) => sectorSegmentHit(map, ground, a, b, out) !== null;
+}
