@@ -81,6 +81,11 @@ Experiment: rebuild Doom E1M1's layout from `doomu.wad` in our look and play it.
    and more enemies in general". Frame time read 46 ms with bodies 5/29 in the HUD — check the budget with
    enemies in Task 6. Density idea: a converter knob that adds zombie packs per zone by area (seeded), on top
    of Doom's things.
+2f. **Owner playtest after plan 3a + cull (2026-10-25):** enemies change elevation properly, but dropped
+   bodies/kit, ejected shells and blood stains float in mid-air on raised/sunken floors (plan 3b: y = 0 sites
+   for gibs, blood, entrails, prop drop, brass, flames, dynamite). "The parts with enemies feel good"; other
+   parts need interaction (barrels, doors/switches, secrets). The level is monochrome (one brick texture) —
+   rooms need material variation (Doom's per-sidedef/flat textures → a small palette of our materials).
 3. **Plan 3a** — enemies on sector floors (motion `floorY`), navigation over sectors, sight and shots vs
    sector walls, pickups, exit as a walk-in trigger (E is slug mode; no use key yet).
    **Done 2026-10-25** ([notes](2026-10-24-sector-levels-3a/NOTES.md)): 29 enemies on their floors, sector
