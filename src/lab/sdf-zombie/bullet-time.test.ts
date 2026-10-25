@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BULLET_TIME, goreBoostAt, makeBulletTime, pickWakes, stepBulletTime, toggleBulletTime, worldScaleAt } from './bullet-time';
+import { BULLET_TIME, goreBoostAt, makeBulletTime, pickWakes, scalesAt, stepBulletTime, toggleBulletTime, worldScaleAt } from './bullet-time';
 
 describe('bullet time ramp', () => {
   it('runs the world at full speed until toggled', () => {
@@ -23,6 +23,18 @@ describe('bullet time ramp', () => {
     expect(worldScaleAt(0)).toBe(1);
     expect(worldScaleAt(1)).toBeCloseTo(BULLET_TIME.worldScale, 12);
     expect(worldScaleAt(1, BULLET_TIME.shotScale)).toBeCloseTo(BULLET_TIME.shotScale, 12);
+  });
+});
+
+describe('scalesAt', () => {
+  it('is all 1 at normal time', () => {
+    expect(scalesAt(0)).toEqual({ player: 1, shot: 1, air: 1 });
+  });
+  it('fully in: the player at playerScale, its shots at shotScale, the jump hang absolute at airScale', () => {
+    const s = scalesAt(1);
+    expect(s.player).toBeCloseTo(BULLET_TIME.playerScale, 12);
+    expect(s.shot).toBeCloseTo(BULLET_TIME.shotScale, 12);
+    expect(s.player * s.air).toBeCloseTo(BULLET_TIME.airScale, 12);
   });
 });
 

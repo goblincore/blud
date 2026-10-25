@@ -55,7 +55,7 @@ import { applyTrainCamera, lightSteam, stepTrain } from './game-train';
 import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell, extractStage, extractorOffset, fireRecoil, insertStage, loadCarry, loadHold, reloadPhaseAt, reloadPose, stagedShellCenter, supportHandPose, topLeverAngle, type HandDelta, type HandHold } from './game-viewmodel';
 import { stepVoid } from './game-void';
 import { stepBulletTimeFx } from './game-bullet-time';
-import { BULLET_TIME, stepBulletTime, worldScaleAt } from '../bullet-time';
+import { scalesAt, stepBulletTime } from '../bullet-time';
 import { carryFreshShots, expired, stepProjectiles, traceProjectile } from './game-weapon';
 import { aimArms, aimFrustum, boreFrameInRig, breechInRig, hideTracer, newTracerView, placeTracer, stepWeaponSlots } from './game-weapon-rig';
 import { woundStreamId } from './game-wound-streams';
@@ -123,12 +123,15 @@ export function tick(ctx: GameContext, dt: number) {
   // feel's view springs — run on the unscaled step. The demo recorder stores
   // the scaled dt (a replay stays deterministic).
   dt *= ctx.weapon.flail?.timeScale(dt) ?? 1;
-  // BULLET TIME (bullet-time.ts, Q): the WORLD runs on `dt`, scaled; the
-  // PLAYER — motion, aim, the view-model, weapon cadence — on `pdt`, the real
-  // step. The ramp eases on the real step. The recorder stores `pdt` (the
-  // toggle replays from the recorded keys, so the replay re-derives the scale).
-  const pdt = dt;
-  dt *= stepBulletTime(ctx.player.bulletTime, pdt);
+  // BULLET TIME (bullet-time.ts, Q): the WORLD runs on `dt`, the PLAYER —
+  // motion, aim, the view-model, firing and reload — on `pdt`, both scaled
+  // from `rdt`, the real step (the ramp eases on it). The recorder stores
+  // `rdt` (the toggle replays from the recorded keys, so the replay re-derives
+  // the scales).
+  const rdt = dt;
+  dt *= stepBulletTime(ctx.player.bulletTime, rdt);
+  const btScales = scalesAt(ctx.player.bulletTime.intensity);
+  const pdt = rdt * btScales.player;
   // The sim clock advances ONLY here, from the step's own dt — never from
   // wall time. This is the single source of "how much simulated time has
   // passed", so every dwell/timer that reads it is reproducible under a
@@ -171,7 +174,7 @@ export function tick(ctx: GameContext, dt: number) {
   } else {
     // The frame the tick CONSUMED, not a re-read after the fact: a live
     // event that lands mid-tick must belong to the next frame, not this one.
-    if (ctx.demo.recorder) { ctx.demo.recorder.push({ ...inputFrame, dt: pdt }); updateDemoHud(ctx); }
+    if (ctx.demo.recorder) { ctx.demo.recorder.push({ ...inputFrame, dt: rdt }); updateDemoHud(ctx); }
   }
   const held = inputFrame.keys;
   let input: MoveInput = ctx.player.holdPlayerPose
@@ -229,9 +232,9 @@ export function tick(ctx: GameContext, dt: number) {
   });
   if (loopBlocksInput(ctx)) input = { x: 0, z: 0, jump: false };   // dead or done
   const preStep = [...ctx.player.player.pos] as Vec3;
-  // Bullet time's shootdodge hang: the jump floats (BULLET_TIME.airScale), the walk does not.
+  // Bullet time's shootdodge hang: the jump floats (BULLET_TIME.airScale), a touch slower than the walk.
   stepPlayer(ctx.player.player, input, pdt, [...ctx.world.colliders, ...zombieBoxes],
-    worldScaleAt(ctx.player.bulletTime.intensity, BULLET_TIME.airScale));
+    btScales.air);
   // This tick's shots left the muzzle where last frame's camera put it; the
   // camera follows the step, so the shots must too (carryFreshShots).
   carryFreshShots(ctx.weapon.pellets, [
@@ -801,7 +804,7 @@ export function tick(ctx: GameContext, dt: number) {
     const prevs = ctx.weapon.pellets.map(p => [...p.pos] as Vec3);
     // The PLAYER's pellets fly on their own scale (BULLET_TIME.shotScale): in bullet time the world crawls, your shot
     // only slows.
-    stepProjectiles(ctx.weapon.pellets, pdt * worldScaleAt(ctx.player.bulletTime.intensity, BULLET_TIME.shotScale));
+    stepProjectiles(ctx.weapon.pellets, rdt * btScales.shot);
     // Hit batching: every actor hit this frame flushes its rig/repack/
     // wound-row tail ONCE after the loop (ZombieActor.beginHits).
     const hitThisFrame = new Set<ZombieActor>();
