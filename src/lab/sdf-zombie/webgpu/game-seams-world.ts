@@ -35,6 +35,7 @@ const exactBit = (a: { view: { uniforms: { counts2: { value: { z: number } } } }
 };
 const refoldMode = (z: number) => z % 8;
 import { HULL_SHRINK, buildHullInstances } from './occluder-hull';
+import { simTimeMs } from './sim-clock';
 
 export function createWorldSeams(ctx: GameContext) {
   const { camera } = ctx.boot.handle;
@@ -688,6 +689,9 @@ export function createWorldSeams(ctx: GameContext) {
     },
     /** The player's health, or null before the loop exists. */
     health: () => ctx.world.loop?.vitals.health ?? null,
+    /** Simulated seconds since boot (sim-clock.ts: advanced by every tick's dt, the same dt the loop's hurt floor
+     *  steps by). Under load the dt clamp makes this run behind the wall clock: time sim-rule checks on it. */
+    simTime: () => simTimeMs() / 1000,
     /** The ground under (x, z): floor and ceiling heights (NaN outside every sector). */
     ground: (x: number, z: number) => ({ floor: ctx.world.level.ground.floorAt(x, z), ceil: ctx.world.level.ground.ceilAt(x, z) }),
     /** Open an authored level's gate by id (false if unknown or already open). */

@@ -833,12 +833,19 @@ const hz = await evaluate('__sdfGame.hazardPoint()');
 if (!hz) fail('E1M1: no hurt sector (hazardPoint null)');
 const hurtPerSec = raw.sectors[hz.sector].hurtPerSec;
 await evaluate(`__sdfGame.setPose(${hz.pos[0]}, ${hz.pos[2]}, 0, 0, ${hz.pos[1]})`);
+// Timed on the SIM clock (__sdfGame.simTime, the dt the hurt floor steps by): under load the dt clamp runs the sim
+// behind the wall clock, and 3.2 s of wall time landed one tick. 3.2 sim s on the floor must land >= 2 ticks (the first
+// after 0.5 s, then one a second; a scratch run read 100 -> 90 in 3.20 sim s = 4.33 wall s).
 const h0 = await evaluate('__sdfGame.health()');
-await sleep(3200);
+const sim0 = await evaluate('__sdfGame.simTime()'), wall0 = Date.now();
+let simNow = sim0;
+while (simNow - sim0 < 3.2 && Date.now() - wall0 < 30000) { await sleep(100); simNow = await evaluate('__sdfGame.simTime()'); }
 const h1 = await evaluate('__sdfGame.health()');
-if (!(h0 - h1 >= 2 * hurtPerSec)) fail(`hazard: health ${h0} -> ${h1} in 3.2 s on sector ${hz.sector}, expected a drop of >= ${2 * hurtPerSec}`);
+const hzSim = simNow - sim0, hzWall = (Date.now() - wall0) / 1000;
+if (!(hzSim >= 3.2)) fail(`hazard: the sim clock advanced only ${hzSim.toFixed(2)} s in ${hzWall.toFixed(1)} s of wall time`);
+if (!(h0 - h1 >= 2 * hurtPerSec)) fail(`hazard: health ${h0} -> ${h1} in ${hzSim.toFixed(2)} sim s (${hzWall.toFixed(2)} wall s) on sector ${hz.sector}, expected a drop of >= ${2 * hurtPerSec} (2 ticks)`);
 if (!(h1 > 0)) fail(`hazard: the player died (${h1})`);
-pass(`hazard: sector ${hz.sector} (${hz.glow}, ${hurtPerSec}/s) took health ${h0} -> ${h1} in 3.2 s`);
+pass(`hazard: sector ${hz.sector} (${hz.glow}, ${hurtPerSec}/s) took health ${h0} -> ${h1} in ${hzSim.toFixed(2)} sim s (${hzWall.toFixed(2)} wall s)`);
 // Off the pool (the start pose): health holds.
 await evaluate('__sdfGame.setPose(0, 0, 0, 0, 0)');
 await sleep(300);
