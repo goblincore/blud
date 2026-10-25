@@ -463,6 +463,10 @@ export interface MotionConfig {
    *  the feet is a wall, not a step: the body keeps its current floor. Absent: no cap (room levels,
    *  the lab). */
   maxStepUp?: number;
+  /** Sector levels: the floor under the body's CENTRE (floorAt is the disc floor). Mid-fall, a disc
+   *  floor further above the feet than maxStepUp (a lip the falling body is beside) is not a
+   *  landing: the body keeps falling toward this one. Absent: the fall reads floorAt only. */
+  fallFloorAt?: (x: number, z: number) => number;
 }
 
 /** What happened since the last frame — collected by the wiring between
@@ -706,10 +710,16 @@ export function stepMotion(
   let feetY = state.floorY;
   let floorVel = state.floorVel ?? 0;
   if (cfg.floorAt) {
-    const want = cfg.floorAt(wander.pos[0], wander.pos[2]);
+    let want = cfg.floorAt(wander.pos[0], wander.pos[2]);
+    // Mid-fall, a disc floor the body cannot step onto (a lip it is beside) is not a landing: it
+    // keeps falling toward the floor under its centre.
+    if (floorVel < 0 && cfg.fallFloorAt && cfg.maxStepUp !== undefined && !(want <= feetY + cfg.maxStepUp)) {
+      const centre = cfg.fallFloorAt(wander.pos[0], wander.pos[2]);
+      if (Number.isFinite(centre)) want = centre;
+    }
     if (Number.isFinite(want)) {
-      // Mid-fall, a floor ABOVE the feet is not a landing (a lip the body is beside): the fall ends
-      // where it is and the step rule below decides (never a snap up to it).
+      // Mid-fall, a floor ABOVE the feet that it can step onto ends the fall where it is and the
+      // step rule below eases it up (never a snap up to it).
       if (floorVel < 0 && want > feetY) floorVel = 0;
       if (floorVel < 0 || want < feetY - FALL_DROP_M) {
         // A DROP (a ledge, a pit, a blast's knock over the edge): fall, land on the floor.
@@ -754,7 +764,17 @@ export function stepMotion(
   const stanceBlend = clamp((state.stanceBlend ?? 0) + (groundedSoldier ? 1 : -1) * SOLDIER_STANCE.blendRate * dt, 0, 1);
   const stanceDrop = SOLDIER_STANCE.hipDrop * stanceBlend + .16 * crouchPosture;
   const walkPosture = clamp((state.walkPosture ?? 0) + (groundedSoldier && !aimedSoldier ? 1 : -1) * 3 * dt, 0, 1);
-  let footwork = groundedSoldier ? stepSoldierFootwork(state.footwork, {
+  // A falling soldier's planted feet leave the ledge with him (sector levels): his contacts drop by
+  // this frame's fall, so the support never pins him to the floor he fell from. 0 otherwise.
+  const fallDy = floorVel < 0 || (state.floorVel ?? 0) < 0 ? feetY - state.floorY : 0;
+  const footworkFrom = fallDy !== 0 && state.footwork ? {
+    ...state.footwork,
+    feet: state.footwork.feet.map(p => [p[0], p[1] + fallDy, p[2]] as Vec3) as [Vec3, Vec3],
+    swing: state.footwork.swing ? { ...state.footwork.swing,
+      from: [state.footwork.swing.from[0], state.footwork.swing.from[1] + fallDy, state.footwork.swing.from[2]] as Vec3,
+      to: [state.footwork.swing.to[0], state.footwork.swing.to[1] + fallDy, state.footwork.swing.to[2]] as Vec3 } : null,
+  } : state.footwork;
+  let footwork = groundedSoldier ? stepSoldierFootwork(footworkFrom, {
     fromRoot: state.wander.pos, desiredRoot: wander.pos, yaw: bodyYaw, dt,
     feet: [havePoints ? points[idx.footL]!.pos : joints.base[idx.footL]!, havePoints ? points[idx.footR]!.pos : joints.base[idx.footR]!],
     hips: (['L', 'R'] as const).map(side => {

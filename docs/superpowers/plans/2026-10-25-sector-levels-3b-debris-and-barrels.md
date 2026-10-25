@@ -964,6 +964,15 @@ export const FALL_GRAVITY = 9.81;
   (globs to what exists) — PASS, snapshots unchanged; `npm run test:changed`; typecheck. **Commit**
   `feat(actors): bodies fall off ledges; corpses meet the floor under each point`.
 
+**As built (after review, commits 9d8ad9b7, 8ef6c863 and the hover fix):** corpse points judge their own rise
+(`pointFloor` gets each point's previous position: a floor over `FALL_DROP_M` above it is a wall and the point keeps
+the floor it had); a soldier's structural fall pose releases targets over a lower floor (`MotionFrame.restRelease`);
+motion stands a body on `SectorGround.floorUnder` (the disc floor navigation uses, shared `discFloor`), caps a rise
+at `maxStepUp = SECTOR_STEP_M`, and mid-fall falls on to the centre floor (`fallFloorAt`) past a lip it cannot step
+onto; a nav-rejected move while falling reverts x/z only; falling bodies hold no plant, and a soldier's footwork
+contacts drop with him. **Known gap (for Task 17's notes):** collapsed rig points have NO sector-wall collision —
+only per-point floor contact — so a point sliding under a high ledge can end up inside the riser.
+
 ---
 
 ## Task 7: The burn pile and the blast's floor distance

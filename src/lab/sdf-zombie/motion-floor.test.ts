@@ -307,6 +307,32 @@ describe('floorAt: falling and step caps', () => {
   });
 });
 
+describe('floorAt: a falling body never hovers', () => {
+  it('mid-fall, a lip above a step from the feet is no landing: it falls on to fallFloorAt', () => {
+    const j = zombieJoints();
+    const r = run(j, cruising(7), i => ({ enabled: true, wander: true, maxStepUp: 0.75,
+      fallFloorAt: () => -3, floorAt: () => (i < 10 ? 0 : i < 40 ? -3 : 0) }), 100);
+    expect(r.states[39]!.floorY).toBeLessThan(-0.75);
+    const landed = r.states.findIndex(s => s.floorY === -3);
+    expect(landed).toBeGreaterThan(40);
+    expect(landed).toBeLessThanOrEqual(10 + 48);
+    r.states.slice(10, landed).forEach(s => expect(s.floorVel).toBeLessThan(0));
+    expect(r.state.floorY).toBe(-3);
+    expect(r.state.floorVel).toBe(0);
+  });
+
+  it('a soldier on footwork takes his feet with him off the ledge', () => {
+    const j = soldierJoints();
+    const r = run(j, cruising(11), i => ({ enabled: true, wander: true, profile: SOLDIER_PROFILE,
+      floorAt: () => (i < 60 ? 0 : -3) }), 140);
+    for (const s of r.states.slice(60)) {
+      expect(s.footwork).toBeDefined();
+      for (const p of s.footwork!.feet) expect(p[1] - s.floorY).toBeLessThan(0.3);
+    }
+    for (const p of r.state.footwork!.feet) expect(p[1]).toBeCloseTo(-3 + j.groundY, 1);
+  });
+});
+
 describe('applyFloorContact: the floor under each point', () => {
   const pts = (): RigPoint[] => [
     { pos: [0.5, -0.5, 0], prev: [0.5, -0.45, 0], pinned: false },

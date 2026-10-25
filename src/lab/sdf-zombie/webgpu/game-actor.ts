@@ -688,11 +688,14 @@ export function createZombieActor(opts: {
   // Sector levels: the floor a body stands on is the highest its disc touches (floorUnder, the rule
   // sector navigation stands it on), so it falls only once clear of a ledge, and a rise over
   // SECTOR_STEP_M (a wall) never lifts it. A ground without floorUnder reads the floor at the centre.
-  const floorAt = ground ? {
-    floorAt: ground.floorUnder
-      ? (x: number, z: number) => ground.floorUnder!(x, z, SECTOR_BODY_RADIUS_M)
-      : (x: number, z: number) => ground.floorAt(x, z),
+  // Mid-fall, a lip the disc touches is no landing: fallFloorAt (the centre floor) is.
+  const motionFloor = ground ? (ground.floorUnder
+    ? (x: number, z: number) => ground.floorUnder!(x, z, SECTOR_BODY_RADIUS_M)
+    : (x: number, z: number) => ground.floorAt(x, z)) : undefined;
+  const floorAt = ground && motionFloor ? {
+    floorAt: motionFloor,
     maxStepUp: SECTOR_STEP_M,
+    fallFloorAt: (x: number, z: number) => ground.floorAt(x, z),
   } : {};
   const joints: MotionJoints = mj;
   let state: MotionState = makeMotionState(opts.seed, opts.start);
@@ -1636,7 +1639,22 @@ export function createZombieActor(opts: {
       // Footwork rebases its world contacts from wander on the next step.
       // Undoing a move onto a step also undoes its rise (dy): the feet go back to the floor they
       // came from. dy is 0 on room levels (y is 0 throughout), and branched so -0 stays -0.
-      const correctFrame = (pos: Vec3) => {
+      // A FALLING body (sector levels: falling, or this step dropped its feet) reverts x/z only: it
+      // keeps its new height, clamped up to the floor under the reverted spot when it can step onto
+      // it (a body that never left the ledge goes back onto it, and stops falling). Otherwise a body pushing toward a lip
+      // navigation refuses would hover, its drop undone every frame.
+      const correctFrame = (to: Vec3) => {
+        let pos = to;
+        if (motionFloor && ((state.floorVel ?? 0) < 0 || state.wander.pos[1] < to[1])) {
+          const feet = state.wander.pos[1];
+          // The floor there as motion's fall reads it: the disc floor, unless that is a lip it
+          // cannot step onto, then the floor under the centre.
+          let floor = motionFloor(to[0], to[2]);
+          if (!(floor <= feet + SECTOR_STEP_M)) floor = ground!.floorAt(to[0], to[2]);
+          const y = Number.isFinite(floor) && floor > feet && floor <= feet + SECTOR_STEP_M ? floor : feet;
+          pos = [to[0], y, to[2]];
+          if (y !== state.wander.pos[1]) state = { ...state, floorVel: 0 };
+        }
         const dx = pos[0] - state.wander.pos[0], dz = pos[2] - state.wander.pos[2];
         const dy = pos[1] - state.wander.pos[1];
         const translate = (p: Vec3): Vec3 => [p[0] + dx, dy === 0 ? p[1] : p[1] + dy, p[2] + dz];

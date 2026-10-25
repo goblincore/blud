@@ -129,4 +129,37 @@ describe('an actor on a sector floor', () => {
     expect(wall.pose().pos[1]).toBe(0);
     expect(step.pose().pos[1]).toBe(0.5);
   });
+
+  // Re-review: a falling body never hovers. Path A: mid-fall, a lip its disc touches (higher than a
+  // step above its feet) is no landing, it falls on to the centre floor. Path B: navigation refusing
+  // every move (pushing toward the lip) reverts x/z only, never the drop.
+  it('a falling body pushed at a lip every frame lands in the pit in free-fall time', () => {
+    const [x, , z] = spawnPoints(ROOMS[0]!)[0]!;
+    let frame = 0, rejections = 0;
+    const nav = {
+      bounds: wanderBounds(ROOMS[0]!), canStand: () => true,
+      canTravel: () => { rejections++; return false; },
+      route: () => [], follow: () => null, roomAt: () => ROOMS[0]!.id, floorAt: () => -3,
+    };
+    const a = createZombieActor({
+      id: 1, room: ROOMS[0]!.id, body: translateBody(buildBody(compileBlob(parseBlob(zombieBlobSrc),
+        compileFace(parseBlob(zombieBlobSrc))), DEFAULT_BUILD_OPTS, {}), [x, 0, z]),
+      view: stubView() as never, start: [x, 0, z], seed: 1337, bounds: wanderBounds(ROOMS[0]!), furniture: [],
+      navigation: nav as never,
+      // The disc is clear of the ledge for 25 frames, then touches the lip (0) again: by then the
+      // feet are ~0.9 m down, more than a step below it.
+      ground: { ...FLAT_GROUND, floorAt: () => -3, floorUnder: () => (frame < 25 ? -3 : 0) },
+    });
+    const ys: number[] = [0];
+    for (; frame < 70; frame++) { a.step(1 / 60); ys.push(a.pose().pos[1]); }
+    expect(rejections).toBeGreaterThan(40);
+    // A 3 m free fall at 1/60 s takes 47 frames; one frame of slack.
+    const landed = ys.findIndex(y => y === -3);
+    expect(landed).toBeGreaterThan(0);
+    expect(landed).toBeLessThanOrEqual(48);
+    // Every frame until it lands it falls FASTER (never a hover, never a stop); then it rests.
+    for (let i = 2; i < landed; i++) expect(ys[i]! - ys[i - 1]!).toBeLessThan(ys[i - 1]! - ys[i - 2]! + 1e-12);
+    for (let i = 1; i < landed; i++) expect(ys[i]!).toBeLessThan(ys[i - 1]!);
+    for (const y of ys.slice(landed)) expect(y).toBe(-3);
+  });
 });
