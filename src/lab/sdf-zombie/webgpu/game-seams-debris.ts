@@ -30,6 +30,7 @@ export function createDebrisSeams(ctx: GameContext) {
       })),
       sprites: spritePieceStates(ctx.vfx.spritePieces).map(p => ({
         id: p.id, limb: p.limb, kind: p.kind, rest: p.rest, settled: p.settled, pos: [...p.pos], floorY: p.floorY,
+        support: p.support, render: p.render, drawnLowY: p.drawnLowY,
       })),
       splats: ctx.vfx.bloodSim.splats.map(s => [...s.pos]),
       droplets: ctx.vfx.bloodSim.droplets.filter(d => d.kind !== 'gut').length,
