@@ -62,6 +62,9 @@ export interface PlayerState {
   prevPlayerPos: Vec3;
   /** Overlay element the free-aim reticle is drawn into, once created. */
   reticleEl: HTMLDivElement | null;
+  /** Faint steering cursor, shown while strafing pulls the crosshair to
+   *  centre and the reticle is only steering the camera. */
+  steerEl: HTMLDivElement | null;
   /** Bench: pin the player pose for the whole leg (forced zero input). */
   holdPlayerPose: boolean;
   /** The `__sdfGame.placeMarker` debug sphere. */
@@ -102,6 +105,7 @@ export function makePlayerState(): PlayerState {
     strafeAmount: 0,
     prevPlayerPos: [0, 0, 0],
     reticleEl: null,
+    steerEl: null,
     holdPlayerPose: false,
     marker: null,
     autopilot: null,

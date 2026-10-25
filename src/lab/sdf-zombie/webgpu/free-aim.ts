@@ -17,29 +17,34 @@ export const FREE_AIM = {
    *  this box the camera does not turn at all; the reticle just moves. */
   deadzoneX: 0.45,
   deadzoneY: 0.38,
-  /** Share of mouse motion that turns the CAMERA instead of the reticle at
-   *  full strafe speed, 0..1. Free aim fades into mouse-look as you strafe.
+  /** CIRCLE-STRAFING. Standing still, the reticle is the aim point and the
+   *  big dead zone is the mechanic. Strafing, the owner circles a target by
+   *  holding the reticle off-centre as a STEERING stick -- with no dead zone,
+   *  how far out it sits sets how fast the camera turns, which keeps the
+   *  target centred while you orbit it (owner's circlestrafe.mov, dead zone
+   *  tuned to 0 by hand). The catch was the gun: it pointed at the reticle,
+   *  out at the screen edge, not at the centred target, so you had to break
+   *  the strafe to shoot.
    *
-   *  Standing still, the big dead zone is the mechanic. Strafing, it fights
-   *  you: circling a target needs a steady turn of strafe-speed / radius
-   *  (~0.85 rad/s at 3.4 m/s and 4 m), and anything that turns the camera
-   *  FROM THE RETICLE'S POSITION only gives that with the target held
-   *  off-centre -- centre it, as instinct says to, and the turn dies and you
-   *  slide off in a straight strafe (owner report). Tried and rejected in
-   *  play: a strafe-shrunk dead zone (barely helped), mouse past the zone edge
-   *  turning the camera (jerky: an edge is a sudden change in how the mouse
-   *  behaves), and an elastic camera follow (the camera moving on its own
-   *  dragged the cursor to the centre and fought the player's tracking).
+   *  So while strafing the reticle's two jobs split, both faded in by the
+   *  smoothed strafe envelope:
+   *  - the dead zone shrinks by these scales (0 = gone at full strafe), so the
+   *    steering cursor turns the camera from the first pixel off-centre;
+   *  - the gun, the shot and the crosshair pull toward screen centre by
+   *    `strafeAimCentre` (1 = fully centred), like a normal shooter, while a
+   *    faint cursor shows where the steering stick is.
    *
-   *  Circle-strafing works in a normal FPS because the hand turns the view.
-   *  So while strafing, this share of each mouse motion turns the camera
-   *  directly; the rest moves the reticle. The split is in ANGLE, so a pixel
-   *  moves the aim the same amount either way -- no speed change as the blend
-   *  shifts -- and nothing moves on its own. Below 1 keeps some free aim
-   *  even at full strafe. */
-  strafeMouseLook: 1.0,
+   *  Tried and rejected in play first: a dead zone shrunk only to 0.4
+   *  (barely helped), mouse past the zone edge turning the camera (jerky),
+   *  an elastic camera follow (dragged the cursor to centre), and fading the
+   *  mouse into plain mouse-look (could not circle). Only sideways motion
+   *  counts as strafing. */
+  strafeDeadzoneScaleX: 0.0,
+  strafeDeadzoneScaleY: 0.0,
+  strafeAimCentre: 1.0,
   /** How fast the strafe envelope follows the player's lateral speed,
-   *  1/seconds, so the mouse-look blend eases in and out instead of popping. */
+   *  1/seconds, so the dead zone and the centred aim ease in and out
+   *  instead of popping. */
   strafeRamp: 5.0,
   /** Peak camera turn, radians/second, reached when the reticle is jammed
    *  fully into a corner. Measured in-engine: 2.4 rad/s is 137 deg/s at full
@@ -102,14 +107,38 @@ export function moveAim(aim: AimPoint, dxPx: number, dyPx: number): AimPoint {
   };
 }
 
-/** How far past the dead zone the reticle is pushing, -1..1 per axis. */
-export function deadzonePush(aim: AimPoint): { x: number; y: number } {
+/** Dead-zone half-extents for a 0..1 strafe envelope (see strafeDeadzoneScaleX). */
+export function deadzoneSize(strafe01 = 0): { x: number; y: number } {
+  const s = Math.min(1, Math.max(0, strafe01));
+  const lerp = (scale: number) => 1 + (Math.max(0, scale) - 1) * s;
+  return {
+    x: FREE_AIM.deadzoneX * lerp(FREE_AIM.strafeDeadzoneScaleX),
+    y: FREE_AIM.deadzoneY * lerp(FREE_AIM.strafeDeadzoneScaleY),
+  };
+}
+
+/**
+ * Where the gun, the shot and the crosshair aim, given the steering reticle
+ * and the 0..1 strafe envelope (see strafeAimCentre). Standing still it IS the
+ * reticle; strafing it pulls toward screen centre while the reticle keeps
+ * steering the camera.
+ */
+export function shotAim(steer: AimPoint, strafe01 = 0): AimPoint {
+  const k = 1 - Math.min(1, Math.max(0, FREE_AIM.strafeAimCentre))
+    * Math.min(1, Math.max(0, strafe01));
+  return { x: steer.x * k, y: steer.y * k };
+}
+
+/** How far past the dead zone the reticle is pushing, -1..1 per axis.
+ *  `strafe01` shrinks the zone while the player moves sideways. */
+export function deadzonePush(aim: AimPoint, strafe01 = 0): { x: number; y: number } {
+  const dz = deadzoneSize(strafe01);
   const past = (v: number, dz: number) => {
     if (Math.abs(v) <= dz) return 0;
     const over = (Math.abs(v) - dz) / Math.max(1e-6, 1 - dz);
     return Math.sign(v) * Math.min(1, over);
   };
-  return { x: past(aim.x, FREE_AIM.deadzoneX), y: past(aim.y, FREE_AIM.deadzoneY) };
+  return { x: past(aim.x, dz.x), y: past(aim.y, dz.y) };
 }
 
 /**
@@ -117,8 +146,8 @@ export function deadzonePush(aim: AimPoint): { x: number; y: number } {
  * that flat region IS the mechanic. Squared response so the edge of the zone is
  * a gentle drift and only the extremes whip round.
  */
-export function turnFromAim(aim: AimPoint, dt: number): { yaw: number; pitch: number } {
-  const p = deadzonePush(aim);
+export function turnFromAim(aim: AimPoint, dt: number, strafe01 = 0): { yaw: number; pitch: number } {
+  const p = deadzonePush(aim, strafe01);
   return {
     yaw: Math.sign(p.x) * p.x * p.x * FREE_AIM.turnRateX * dt,
     pitch: Math.sign(p.y) * p.y * p.y * FREE_AIM.turnRateY * dt,
@@ -138,7 +167,7 @@ export function strafeSpeed01(dx: number, dz: number, yaw: number, dt: number, f
   return Math.min(1, lateral / dt / fullSpeed);
 }
 
-/** Smooth the strafe envelope so the mouse-look blend eases in and out. */
+/** Smooth the strafe envelope so the strafe behaviour eases in and out. */
 export function approachStrafe(current: number, target01: number, dt: number): number {
   const k = 1 - Math.exp(-FREE_AIM.strafeRamp * dt);
   return current + (Math.min(1, Math.max(0, target01)) - current) * k;
@@ -148,35 +177,6 @@ export function approachStrafe(current: number, target01: number, dt: number): n
  *  tanH = tanV * aspect. The caller owns the camera, so it passes these in
  *  rather than this module importing Three.js. */
 export interface Frustum { tanH: number; tanV: number; }
-
-/**
- * Apply raw mouse motion, split between the reticle and the camera by the
- * 0..1 strafe envelope (see FREE_AIM.strafeMouseLook). Standing still this is
- * exactly moveAim and never turns the camera.
- *
- * The split is done in ANGLE: the mouse's angular effect is what the reticle
- * alone would have done -- atan(x * tan(halfFov)) before and after, the
- * projection the shot ray and weaponAngles use -- and `share` of that angle
- * turns the camera while the rest moves the reticle. That is what keeps a
- * pixel worth the same aim at every point of the blend. The angle is taken
- * unclamped, so at the screen edge the camera share still turns.
- */
-export function splitMouse(
-  aim: AimPoint, dxPx: number, dyPx: number, strafe01: number, f: Frustum,
-): { aim: AimPoint; yaw: number; pitch: number } {
-  const share = Math.min(1, Math.max(0, FREE_AIM.strafeMouseLook))
-    * Math.min(1, Math.max(0, strafe01));
-  if (share <= 0) return { aim: moveAim(aim, dxPx, dyPx), yaw: 0, pitch: 0 };
-  const axis = (v: number, d: number, tan: number) => {
-    const from = Math.atan(v * tan);
-    const delta = Math.atan((v + d * FREE_AIM.sensitivity) * tan) - from;
-    return { pos: clamp1(Math.tan(from + delta * (1 - share)) / tan), turn: delta * share };
-  };
-  // Screen y grows downward; aim y (and pitch) grow upward.
-  const x = axis(aim.x, dxPx, f.tanH);
-  const y = axis(aim.y, -dyPx, f.tanV);
-  return { aim: { x: x.pos, y: y.pos }, yaw: x.turn, pitch: y.turn };
-}
 
 /**
  * Where the weapon must point to be aimed AT the reticle, degrees.

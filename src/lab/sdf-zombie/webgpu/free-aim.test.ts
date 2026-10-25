@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import {
-  BOB, FREE_AIM, approachAngle, approachBob, approachStrafe, bobPose, deadzonePush,
-  moveAim, pivotOffset, recentre, splitMouse, strafeSpeed01, turnFromAim,
+  BOB, FREE_AIM, approachAngle, approachBob, approachStrafe, bobPose, deadzonePush, deadzoneSize,
+  moveAim, pivotOffset, recentre, shotAim, strafeSpeed01, turnFromAim,
   weaponAngles, weaponSlide,
 } from './free-aim';
 
@@ -66,49 +66,51 @@ describe('turnFromAim', () => {
   });
 });
 
-describe('splitMouse (free aim fades into mouse-look while strafing)', () => {
-  const F = { tanV: Math.tan(75 * Math.PI / 360), tanH: Math.tan(75 * Math.PI / 360) * (790 / 555) };
-  const worldX = (aimX: number, yaw: number) => yaw + Math.atan(aimX * F.tanH);
-  it('standing still is exactly moveAim and never turns the camera', () => {
-    const m = splitMouse({ x: 0.2, y: -0.1 }, 37, -12, 0, F);
-    expect(m.aim).toEqual(moveAim({ x: 0.2, y: -0.1 }, 37, -12));
-    expect(m.yaw).toBe(0);
-    expect(m.pitch).toBe(0);
+describe('strafing: the dead zone fades out', () => {
+  it('is today\'s zone standing still', () => {
+    expect(deadzoneSize(0)).toEqual({ x: FREE_AIM.deadzoneX, y: FREE_AIM.deadzoneY });
+    expect(deadzoneSize()).toEqual(deadzoneSize(0));
   });
-  it('at full strafe the mouse turns the camera and the reticle stays put', () => {
-    const m = splitMouse({ x: 0.3, y: 0.1 }, 50, -20, 1, F);
-    expect(m.aim.x).toBeCloseTo(0.3, 9);
-    expect(m.aim.y).toBeCloseTo(0.1, 9);
-    expect(m.yaw).toBeGreaterThan(0);
-    expect(m.pitch).toBeGreaterThan(0); // mouse up (dy < 0) looks up
+  it('is gone at full strafe by default, and blends linearly between', () => {
+    expect(deadzoneSize(1)).toEqual({ x: 0, y: 0 });
+    expect(deadzoneSize(0.5).x).toBeCloseTo(FREE_AIM.deadzoneX / 2, 9);
+    expect(deadzoneSize(5)).toEqual(deadzoneSize(1));
+    expect(deadzoneSize(-5)).toEqual(deadzoneSize(0));
   });
-  it('moves the aim by the same angle at every point of the blend', () => {
-    const still = splitMouse({ x: 0.3, y: 0 }, 40, 0, 0, F);
-    const want = worldX(still.aim.x, still.yaw);
-    for (const s of [0.25, 0.5, 0.75, 1]) {
-      const m = splitMouse({ x: 0.3, y: 0 }, 40, 0, s, F);
-      expect(worldX(m.aim.x, m.yaw)).toBeCloseTo(want, 9);
-    }
+  it('turns the camera from the first step off-centre at full strafe', () => {
+    expect(turnFromAim({ x: 0.1, y: 0 }, 1 / 60, 0).yaw).toBe(0);
+    expect(turnFromAim({ x: 0.1, y: 0 }, 1 / 60, 1).yaw).toBeGreaterThan(0);
+    expect(turnFromAim({ x: -0.1, y: 0 }, 1 / 60, 1).yaw).toBeLessThan(0);
   });
-  it('blends smoothly: a bigger strafe envelope gives more camera, less reticle', () => {
-    let prevYaw = -1, prevX = 2;
-    for (const s of [0, 0.25, 0.5, 0.75, 1]) {
-      const m = splitMouse({ x: 0, y: 0 }, 40, 0, s, F);
-      expect(m.yaw).toBeGreaterThan(prevYaw);
-      expect(m.aim.x).toBeLessThan(prevX);
-      prevYaw = m.yaw; prevX = m.aim.x;
-    }
+  it('keeps the same peak turn rate at the edge', () => {
+    expect(turnFromAim({ x: 1, y: 0 }, 1, 1).yaw).toBeCloseTo(FREE_AIM.turnRateX, 6);
   });
-  it('still turns the camera with the reticle at the screen edge', () => {
-    expect(splitMouse({ x: 1, y: 0 }, 40, 0, 1, F).yaw).toBeGreaterThan(0);
+  it('honours a tuned scale', () => {
+    FREE_AIM.strafeDeadzoneScaleX = 0.5;
+    expect(deadzoneSize(1).x).toBeCloseTo(FREE_AIM.deadzoneX * 0.5, 9);
   });
-  it('strafeMouseLook caps the camera share, keeping some free aim', () => {
-    FREE_AIM.strafeMouseLook = 0.5;
-    const m = splitMouse({ x: 0, y: 0 }, 40, 0, 1, F);
-    expect(m.yaw).toBeGreaterThan(0);
-    expect(m.aim.x).toBeGreaterThan(0);
+  afterEach(() => { FREE_AIM.strafeDeadzoneScaleX = 0; });
+});
+
+describe('shotAim (the gun aims at centre while strafing)', () => {
+  it('is the reticle standing still', () => {
+    expect(shotAim({ x: 0.7, y: -0.4 }, 0)).toEqual({ x: 0.7, y: -0.4 });
+    expect(shotAim({ x: 0.7, y: -0.4 })).toEqual({ x: 0.7, y: -0.4 });
   });
-  afterEach(() => { FREE_AIM.strafeMouseLook = 1.0; });
+  it('is screen centre at full strafe, whatever the steering reticle', () => {
+    const a = shotAim({ x: -0.95, y: 0.3 }, 1);
+    expect(a.x).toBeCloseTo(0, 9);
+    expect(a.y).toBeCloseTo(0, 9);
+  });
+  it('slides smoothly with the strafe envelope', () => {
+    expect(shotAim({ x: 0.8, y: 0 }, 0.5).x).toBeCloseTo(0.4, 9);
+    expect(shotAim({ x: 0.8, y: 0 }, 2).x).toBeCloseTo(0, 9);
+  });
+  it('strafeAimCentre below 1 keeps the aim partly on the reticle', () => {
+    FREE_AIM.strafeAimCentre = 0.5;
+    expect(shotAim({ x: 0.8, y: 0 }, 1).x).toBeCloseTo(0.4, 9);
+  });
+  afterEach(() => { FREE_AIM.strafeAimCentre = 1; });
 });
 
 describe('strafeSpeed01', () => {
