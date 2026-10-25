@@ -5,9 +5,10 @@
 // game-main.ts; the per-actor wound application lives in game-actor.ts.
 //
 // Fire model per docs/superpowers/specs/2026-08-16-sdf-lab-grapeshot-design.md
-// §2 (Blood sawed-off homage), as trimmed by the dispatch brief: click fires
-// ONE barrel, alt-fire dumps both, ~8 LARGE travelling pellets per barrel,
-// fire-rate limit + camera kick are in. Break-open reload animation and muzzle
+// §2 (Blood sawed-off homage), as trimmed by the dispatch brief: ~8 LARGE
+// travelling pellets per barrel, fire-rate limit + camera kick are in. Since
+// 2026-10-25 (owner) the player's click fires BOTH barrels and alt-fire one,
+// and the player's pellets are denser, faster and flatter (PLAYER_GRAPESHOT). Break-open reload animation and muzzle
 // smoke are deliberately not here.
 
 import type { Vec3 } from '../types';
@@ -60,6 +61,39 @@ export const GRAPESHOT = {
    *  35 m/s pellet cannot step over an arm between frames. */
   substepLen: 0.05,
 } as const;
+
+/**
+ * THE PLAYER'S VOLLEY (owner, 2026-10-25): "the arc of the shot is too arcy
+ * ... at these ranges it's pretty straight", and more pellets. Only the
+ * player's gun reads these — GRAPESHOT's 35 m/s / -6 stays the ENEMY band
+ * (soldier/cultist volleys), which the spec keeps dodgeable and the doom
+ * gate's dodge checks measure.
+ *
+ * Drop below the launch line (½·g·(d/v)²), the old player pellet vs this:
+ *   10 m: 35 m/s, -6 → 24.5 cm      80 m/s, -1.5 → 1.2 cm
+ *   20 m:            → 98 cm                     → 4.7 cm
+ * 80 m/s still crosses 20 m in a quarter second (15 frames at 60 Hz), so the
+ * streak visibly travels rather than reading as hitscan.
+ */
+export const PLAYER_GRAPESHOT = {
+  /** Pellets per barrel: 10, up from 8. Both barrels is now the default
+   *  click, so a trigger pull already went 8 → 20; 12 (24 a pull) would put
+   *  one point-blank volley at three quarters of an actor's 32 wound slots
+   *  (damage.ts MAX_WOUNDS) and push the soldier's per-volley sever/stagger
+   *  counts harder than the owner asked for. */
+  pelletsPerBarrel: 10,
+  /** Muzzle speed, m/s. */
+  speed: 80,
+  /** Pellet drop, m/s² — a hint, not an arc. */
+  gravity: -1.5,
+} as const;
+
+/** How a volley flies, when it is not GRAPESHOT's enemy band. */
+export interface VolleyBallistics {
+  pelletsPerBarrel: number;
+  speed: number;
+  gravity: number;
+}
 
 /** Deterministic 32-bit RNG (mulberry32) — fixed-seed spread patterns. */
 export function mulberry32(seed: number): () => number {
@@ -126,6 +160,8 @@ export interface Projectile {
   radius: number;
   /** Which crater this projectile stamps on impact. */
   kind: 'pellet' | 'slug';
+  /** Pellet drop for THIS round, m/s². Unset = GRAPESHOT.gravity (every enemy round, the slug). */
+  gravity?: number;
   /** SECTOR levels, enemy rounds: where the first step's wall and player tests start (the shooter's
    *  eye), so a muzzle poking past a wall line cannot fly on beyond it. Cleared after that step. */
   launchFrom?: Vec3;
@@ -164,14 +200,16 @@ export const SLUG = {
 /**
  * One volley from the muzzle at `origin` along `aimDir`.
  * barrels 1 → one seed's pattern; barrels 2 → twice the pellets from two
- * independent patterns (never mirrored twins).
+ * independent patterns (never mirrored twins). `ballistics` unset = GRAPESHOT's
+ * enemy volley (8 a barrel, 35 m/s, -6); the player's gun passes PLAYER_GRAPESHOT.
  */
 let nextShotId = 0;
 
 export function spawnPellets(
-  origin: Vec3, aimDir: Vec3, barrels: 1 | 2, seed: number,
+  origin: Vec3, aimDir: Vec3, barrels: 1 | 2, seed: number, ballistics?: VolleyBallistics,
 ): Projectile[] {
-  const n = GRAPESHOT.pelletsPerBarrel;
+  const n = ballistics?.pelletsPerBarrel ?? GRAPESHOT.pelletsPerBarrel;
+  const speed = ballistics?.speed ?? GRAPESHOT.speed;
   const dirs = barrels === 1
     ? spreadDirections(aimDir, n, seed)
     : [...spreadDirections(aimDir, n, seed), ...spreadDirections(aimDir, n, seed ^ 0x9e3779b9)];
@@ -179,10 +217,11 @@ export function spawnPellets(
   return dirs.map((d, i) => ({
     shot: { weapon: 'shotgun' as const, shotId, barrels, barrel: (i < n ? 0 : 1) as 0 | 1 },
     pos: [...origin] as Vec3,
-    vel: [d[0] * GRAPESHOT.speed, d[1] * GRAPESHOT.speed, d[2] * GRAPESHOT.speed],
+    vel: [d[0] * speed, d[1] * speed, d[2] * speed] as Vec3,
     ageSec: 0,
     radius: GRAPESHOT.radius,
     kind: 'pellet' as const,
+    ...(ballistics ? { gravity: ballistics.gravity } : {}),
   }));
 }
 
@@ -265,10 +304,10 @@ export function woundFromSlug(
 
 /** Integrate one frame: ballistic arc + ageing. Mutates in place.
  *  Semi-implicit Euler — gravity first, THEN move — which is the stable
- *  order for the arc we want. */
+ *  order for the arc we want. Each round's own `gravity`, else GRAPESHOT's. */
 export function stepProjectiles(list: Projectile[], dt: number): void {
   for (const p of list) {
-    const vel: Vec3 = [p.vel[0], p.vel[1] + GRAPESHOT.gravity * dt, p.vel[2]];
+    const vel: Vec3 = [p.vel[0], p.vel[1] + (p.gravity ?? GRAPESHOT.gravity) * dt, p.vel[2]];
     p.pos = [
       p.pos[0] + vel[0] * dt,
       p.pos[1] + vel[1] * dt,
@@ -294,6 +333,27 @@ export function carryFreshShots(list: Projectile[], delta: Vec3): void {
     if (p.ageSec !== 0) continue;
     p.pos = [p.pos[0] + delta[0], p.pos[1] + delta[1], p.pos[2] + delta[2]];
   }
+}
+
+/** First crossing of segment [from → to] into the box [min, max] (slab test), as the hit point; null if
+ *  the segment misses it. A segment STARTING inside the box hits at `from`. The player's pellets test the
+ *  room-level colliders with this, not with an end-point-in-box test: at 80 m/s a frame's step (1.3 m at
+ *  60 Hz) is longer than a 0.3 m outer wall, and a point test let the round step clean through it. */
+export function segmentBoxHit(from: Vec3, to: Vec3, min: Vec3, max: Vec3): Vec3 | null {
+  let t0 = 0, t1 = 1;
+  for (let k = 0; k < 3; k++) {
+    const d = to[k]! - from[k]!;
+    if (Math.abs(d) < 1e-12) {
+      if (from[k]! <= min[k]! || from[k]! >= max[k]!) return null;
+      continue;
+    }
+    let a = (min[k]! - from[k]!) / d, b = (max[k]! - from[k]!) / d;
+    if (a > b) { const t = a; a = b; b = t; }
+    if (a > t0) t0 = a;
+    if (b < t1) t1 = b;
+    if (t0 > t1) return null;
+  }
+  return [from[0] + (to[0] - from[0]) * t0, from[1] + (to[1] - from[1]) * t0, from[2] + (to[2] - from[2]) * t0];
 }
 
 /** Too old, or (room levels) fallen through the y 0 floor. On a SECTOR level (`sectorLevel`) only age

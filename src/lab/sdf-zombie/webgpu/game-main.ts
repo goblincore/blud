@@ -3277,7 +3277,9 @@ async function main() {
   window.addEventListener('keyup', (e) => ctx.player.keys.delete(e.code));
   ctx.player.parked = DEFAULT_PROBE_WEIGHT;
 
-  // GRAPESHOT INPUT. Left = one barrel, right = both. The first click only
+  // GRAPESHOT INPUT. Left = both barrels (owner, 2026-10-25: the default shot is the double), right = one —
+  // the single barrel stays as the shell-saving option. Mapped HERE, at capture, not in applyInputFrame: a
+  // recorded demo's frame says how many barrels went off, so old recordings still replay as recorded. The first click only
   // locks the pointer; shots need lock so a stray desktop click cannot fire.
   // DYNAMITE (slot 3) takes the same left button but as a HELD input: press
   // lights the fuse, release throws (fpv.ts's cook machine). Right button stays
@@ -3304,8 +3306,8 @@ async function main() {
     // Deferred to the tick (see the input seam note): an edge event must land
     // on exactly one frame or a recording cannot replay it. The dynamite press
     // above is already a flag the tick consumes, so it is on the same seam.
-    if (e.button === 0) ctx.weapon.pendingFire = 1;
-    else if (e.button === 2) ctx.weapon.pendingFire = 2;
+    if (e.button === 0) ctx.weapon.pendingFire = 2;
+    else if (e.button === 2) ctx.weapon.pendingFire = 1;
   });
   // The release half of the cook. Without this the bundle could only ever cook
   // to an overcook, which is not the weapon.

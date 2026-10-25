@@ -57,7 +57,7 @@ import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejected
 import { stepVoid } from './game-void';
 import { stepBulletTimeFx } from './game-bullet-time';
 import { airScaleAt, scalesAt, stepBulletTime } from '../bullet-time';
-import { carryFreshShots, expired, stepProjectiles, traceProjectile } from './game-weapon';
+import { carryFreshShots, expired, segmentBoxHit, stepProjectiles, traceProjectile } from './game-weapon';
 import { aimArms, aimFrustum, boreFrameInRig, breechInRig, hideTracer, newTracerView, placeTracer, stepWeaponSlots } from './game-weapon-rig';
 import { woundStreamId } from './game-wound-streams';
 import { trailStreamId } from './game-wound-vfx';
@@ -960,14 +960,19 @@ export function tick(ctx: GameContext, dt: number) {
       // Room levels: the y 0.02 floor kill (sector levels stopped at their floors above).
       if (!dead && !sectorLevel && p.pos[1] <= 0.02) dead = true;
       if (!dead && !wallHit && !barrelHit) {
-        // Level geometry: a point-in-AABB test is enough — pellets are
-        // small and the substepped trace already bounds their travel.
+        // Level geometry: the frame's SEGMENT against each box (segmentBoxHit), cut at the nearest entry. It
+        // was an end-point-in-box test, which a 35 m/s pellet's 0.58 m frame step mostly got away with; the
+        // player's 80 m/s pellets step 1.3 m a frame (2.7 m at 30 Hz), clean through a 0.3 m outer wall.
+        // The cut segment is what the actor test below reads, so a body behind the wall is not hit.
+        let boxHit: Vec3 | null = null, boxD2 = Infinity;
         for (const b of ctx.world.colliders) {
           if (pelletDrumBoxes?.has(b)) continue;        // a drum's box: the drum test above is its collision
-          if (p.pos[0] > b.min[0] && p.pos[0] < b.max[0]
-            && p.pos[1] > b.min[1] && p.pos[1] < b.max[1]
-            && p.pos[2] > b.min[2] && p.pos[2] < b.max[2]) { dead = true; break; }
+          const h = segmentBoxHit(from, p.pos, b.min, b.max);
+          if (!h) continue;
+          const d2 = (h[0] - from[0]) ** 2 + (h[1] - from[1]) ** 2 + (h[2] - from[2]) ** 2;
+          if (d2 < boxD2) { boxD2 = d2; boxHit = h; }
         }
+        if (boxHit) { p.pos = boxHit; wallHit = true; }
       }
       if (!dead) {
         // Actors: bounding-sphere reject on the frame segment, then a

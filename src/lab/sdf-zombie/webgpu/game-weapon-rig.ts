@@ -19,7 +19,7 @@ import { type Vec3 } from '../types';
 import { eyeOf } from './game-player';
 import { slotLowerAmount, stepWeaponSlot, slotReady } from './game-weapon-slots';
 import { aimArm } from './game-arms';
-import { type Projectile, GRAPESHOT, spawnPellets, spawnSlug } from './game-weapon';
+import { type Projectile, GRAPESHOT, PLAYER_GRAPESHOT, spawnPellets, spawnSlug } from './game-weapon';
 import { updateHud } from './game-hud';
 import { RELOAD, magazineAfterFire } from './game-viewmodel';
 import { predictSlugHitNow } from './game-hit-trace';
@@ -502,8 +502,9 @@ export function fire(ctx: GameContext, barrels: 1 | 2): boolean {
   const muz = muzzleWorld(ctx);
   const dir = convergedDir(ctx, muz);
   // spawnPellets spreads around `dir`; convergence just re-centres the cone.
-  // One `misc` draw per volley is the pellet seed (mulberry32 inside).
-  ctx.weapon.pellets.push(...spawnPellets(muz, dir, barrels, seedFromUnit(rngStreams.misc())));
+  // One `misc` draw per volley is the pellet seed (mulberry32 inside). The player's volley flies flatter, faster
+  // and denser than an enemy's (PLAYER_GRAPESHOT); enemy volleys keep GRAPESHOT's dodgeable band.
+  ctx.weapon.pellets.push(...spawnPellets(muz, dir, barrels, seedFromUnit(rngStreams.misc()), PLAYER_GRAPESHOT));
   return true;
 }
 
