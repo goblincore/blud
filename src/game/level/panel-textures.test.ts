@@ -2,7 +2,7 @@
 //
 // Every assertion compares two regions, kinds or seeds, so a constant buffer cannot pass.
 import { describe, expect, it } from 'vitest';
-import { generateMottle, generatePanel, MOTTLE_SIZE, PANEL_KINDS, PANEL_SIZE, type PanelKind } from './panel-textures';
+import { generateMottle, generatePanel, MOTTLE_SIZE, PANEL_KINDS, PANEL_SIZE, tstreak, type PanelKind } from './panel-textures';
 import { generateStone } from './stone-textures';
 
 const N = PANEL_SIZE;
@@ -81,5 +81,18 @@ describe('generatePanel', () => {
     for (let y = 0; y < MOTTLE_SIZE; y++) { wrap += Math.abs(m[y * MOTTLE_SIZE]! - m[y * MOTTLE_SIZE + MOTTLE_SIZE - 1]!); inside += Math.abs(m[y * MOTTLE_SIZE + 63]! - m[y * MOTTLE_SIZE + 64]!); }
     expect(hi - lo).toBeGreaterThan(100);
     expect(wrap).toBeLessThan(inside * 3 + MOTTLE_SIZE * 2);
+  });
+
+  it.each([[2, 64], [4, 64], [4, 128], [8, 128], [8, 256]])('tstreak %i × %i tiles at the map size and has no short period', (cx, cy) => {
+    const f = (x: number, y: number) => tstreak(x, y, 41, cx, cy);
+    let wrap = 0, step = 0;
+    for (let y = 0; y < N; y += 7) { wrap += Math.abs(f(0, y) - f(N, y)) + Math.abs(f(y, 0) - f(y, N)); step += Math.abs(f(100, y) - f(100 + cx, y)); }
+    expect(wrap).toBeLessThan(1e-9);
+    // The old bug wrapped the x lattice at N / cy cells of cx px: a period of cx·N/cy px (16–24 px).
+    for (const period of [16, 24, 32, 64]) {
+      let d = 0;
+      for (let y = 0; y < N; y += 5) for (let x = 0; x < N; x += 11) d += Math.abs(f(x, y) - f(x + period, y));
+      expect(d).toBeGreaterThan(step * 0.5);
+    }
   });
 });

@@ -62,7 +62,7 @@ for (const variant of VARIANTS) {
     if (consoleEvents.some((e) => e.type === 'error' || e.type === 'exception')) break;
   }
   if (!ready) { console.error(consoleEvents.slice(-8)); fail(`${variant}: did not boot to ready`); }
-  console.log(`${variant}: ready in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+  console.log(`${variant}: ready in ${((Date.now() - t0) / 1000).toFixed(1)} s${consoleEvents.filter((e) => e.text.includes('[sector-mat]')).map((e) => `; ${e.text}`).join('')}`);
   // Walk a little first: right after ready the click-to-start overlay still covers the frame.
   await evaluate('__sdfGame.setPose(0, 0, 0, 0, 0)');
   await evaluate('__sdfGame.walkTo(0, -4)'); await sleep(2500); await evaluate('__sdfGame.walkCancel()');

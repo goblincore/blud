@@ -13,8 +13,10 @@ import { edgesArea, pointInEdges, sectorEdgeIndices, sectorEdges } from './secto
 
 export interface SectorPolygon { sector: number; outer: XZ[]; holes: XZ[][] }
 export type WallPart = 'mid' | 'lower' | 'upper';
-/** `mat`: the wall family this quad wears — its line side's own (`SectorLine.walls`), else its sector's. */
-export interface WallQuad { a: XZ; b: XZ; y0: number; y1: number; sector: number; part: WallPart; mat: string }
+/** `mat`: the wall family this quad wears — its line side's own (`SectorLine.walls`), else its sector's.
+ *  `along`: where the quad's a and b ends sit along its whole line (the original one when the line was
+ *  cut into pieces, `SectorLine.origin`), measured in the quad's own direction, and that line's length. */
+export interface WallQuad { a: XZ; b: XZ; y0: number; y1: number; sector: number; part: WallPart; mat: string; along: [number, number, number] }
 
 const loopEdges = (loop: readonly XZ[]): [XZ, XZ][] => loop.map((p, i) => [p, loop[(i + 1) % loop.length]!]);
 
@@ -104,11 +106,14 @@ export function wallQuads(map: SectorMap): WallQuad[] {
   const out: WallQuad[] = [];
   for (const l of map.lines) {
     const va = map.vertices[l.v[0]]!, vb = map.vertices[l.v[1]]!;
+    const o = l.origin?.a ?? va, len = l.origin?.len ?? Math.hypot(vb[0] - va[0], vb[1] - va[1]);
+    const ta = Math.hypot(va[0] - o[0], va[1] - o[1]), tb = Math.hypot(vb[0] - o[0], vb[1] - o[1]);
     const push = (y0: number, y1: number, sector: number, part: WallPart) => {
       if (y1 - y0 < 1e-4) return;
       const front = sector === l.front;
       const mat = (front ? l.walls?.front : l.walls?.back)?.[part] ?? map.sectors[sector]!.materials.wall;
-      out.push(front ? { a: va, b: vb, y0, y1, sector, part, mat } : { a: vb, b: va, y0, y1, sector, part, mat });
+      out.push(front ? { a: va, b: vb, y0, y1, sector, part, mat, along: [ta, tb, len] }
+        : { a: vb, b: va, y0, y1, sector, part, mat, along: [len - tb, len - ta, len] });
     };
     const f = map.sectors[l.front]!;
     if (l.back < 0) { push(f.floor, f.ceil, l.front, 'mid'); continue; }

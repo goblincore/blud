@@ -27,9 +27,9 @@
 
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
-import { attribute, exp, float, materialColor, max, positionWorld, texture, uniform, uniformArray, uv, vec3, vec4, wgslFn } from 'three/tsl';
-import { mottleTexture, panelTextures, type PanelKind, type PanelTextureSet } from '../../../game/level/panel-textures';
-import { isStone, sectorMaterialsOn, surfaceKind, SURFACE_LOOKS, type SurfaceKind, type SurfaceLook } from './sector-materials';
+import { attribute, exp, float, materialColor, max, positionWorld, texture, uniform, uniformArray, vec3, vec4, wgslFn } from 'three/tsl';
+import { blankPanel, fillPanel, mottleTexture, panelTextures, wrapPanel, type PanelKind, type PanelMaps, type PanelTextureSet } from '../../../game/level/panel-textures';
+import { isStone, sectorMaterialsOn, surfaceKind, SURFACE_LOOKS, wallU, type SurfaceKind, type SurfaceLook } from './sector-materials';
 import type { GameContext } from './game-context';
 import { createSectorFx, CEIL_WHISPER, type SectorFxRuntime } from './game-sector-light';
 import { reducedFlashes } from './lamp-moods';
@@ -47,12 +47,12 @@ const bounceScratch: RGB = [0, 0, 0];
 type BounceCache = Map<string, readonly [number, number, number]>;
 
 class Batch {
-  pos: number[] = []; uv: number[] = []; nrm: number[] = []; sec: number[] = []; bnc: number[] = [];
+  pos: number[] = []; uv: number[] = []; muv: number[] = []; nrm: number[] = []; sec: number[] = []; bnc: number[] = [];
   constructor(private readonly bounce: GlowBounce | null, private readonly cache: BounceCache = new Map()) {}
   /** One triangle of sector `sector`; flipped if its normal disagrees with `want`. Each vertex's glow
    *  bounce is baked with its ray starting inside its own sector: off a wall along the wall's normal,
    *  off a floor or ceiling toward the triangle's centre. */
-  tri(p: number[][], uv: number[][], want: [number, number, number], sector: number, wall = false) {
+  tri(p: number[][], uv: number[][], want: [number, number, number], sector: number, wall = false, muv: number[][] = uv) {
     const [a, b, c] = p as [number[], number[], number[]];
     const ux = b[0]! - a[0]!, uy = b[1]! - a[1]!, uz = b[2]! - a[2]!;
     const vx = c[0]! - a[0]!, vy = c[1]! - a[1]!, vz = c[2]! - a[2]!;
@@ -61,7 +61,7 @@ class Batch {
     const cx = (a[0]! + b[0]! + c[0]!) / 3, cz = (a[2]! + b[2]! + c[2]!) / 3;
     for (const i of order) {
       const q = p[i]!;
-      this.pos.push(...q); this.uv.push(...uv[i]!); this.nrm.push(...want); this.sec.push(sector);
+      this.pos.push(...q); this.uv.push(...uv[i]!); this.muv.push(...muv[i]!); this.nrm.push(...want); this.sec.push(sector);
       if (this.bounce) {
         const key = `${q[0]},${q[1]},${q[2]},${want[0]},${want[1]},${want[2]}`;
         let g = this.cache.get(key);
@@ -78,6 +78,8 @@ class Batch {
     g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
     g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nrm, 3));
     g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
+    // The grime mottle's coordinates: the world-projected uv even where `uv` is laid per line (doors).
+    g.setAttribute('mottleUv', new THREE.Float32BufferAttribute(this.muv, 2));
     g.setAttribute('sectorIndex', new THREE.Float32BufferAttribute(this.sec, 1));
     g.setAttribute('glowBounce', new THREE.Float32BufferAttribute(this.bnc, 3));
     g.computeBoundingSphere();
@@ -100,15 +102,58 @@ function worldTiled(base: THREE.MeshStandardMaterial): THREE.MeshStandardMateria
   return m;
 }
 
-/** The panel kinds' textures, built once per page (each is ~0.1 s of CPU and 4 × 1 MB before mips). */
+/** The panel kinds' textures, built once per page. Their pixels (~2 s of CPU for all eight) are
+ *  generated in workers (panel-textures.worker.ts) so the level boots without waiting: each set is
+ *  made blank at once and filled when its worker answers. Without Worker (tests, old browsers) it is
+ *  built in place. `[sector-mat]` logs the cost once per level build. Each kind is 2.25 MB before
+ *  mips (albedo + normal RGBA, roughness one channel). */
 const panelCache = new Map<PanelKind, PanelTextureSet>();
 const PANEL_SEEDS: Record<PanelKind, number> = {
   techPanel: 101, metalSheet: 103, door: 107, rustBrick: 109, lightPanel: 113, concreteSlab: 127, metalPlate: 131, floorTile: 137,
 };
+interface PanelJob { kind: PanelKind; set: PanelTextureSet }
+let pendingJobs: PanelJob[] = [];
+let syncMs = 0;
 function panelSet(kind: PanelKind): PanelTextureSet {
   let t = panelCache.get(kind);
-  if (!t) panelCache.set(kind, (t = panelTextures(kind, PANEL_SEEDS[kind])));
+  if (t) return t;
+  if (typeof Worker === 'undefined') {
+    const t0 = performance.now();
+    t = panelTextures(kind, PANEL_SEEDS[kind]);
+    syncMs += performance.now() - t0;
+  } else {
+    t = wrapPanel(blankPanel(kind));
+    pendingJobs.push({ kind, set: t });
+  }
+  panelCache.set(kind, t);
   return t;
+}
+/** Send this build's pending kinds to a small worker pool; log once every kind has arrived. */
+function flushPanelJobs(): void {
+  if (syncMs > 0) { console.info(`[sector-mat] built panel kinds on the main thread in ${syncMs.toFixed(0)} ms`); syncMs = 0; }
+  const jobs = pendingJobs;
+  pendingJobs = [];
+  if (jobs.length === 0) return;
+  const t0 = performance.now();
+  const size = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1, jobs.length));
+  let next = 0, done = 0, cpu = 0;
+  for (let w = 0; w < size; w++) {
+    const worker = new Worker(new URL('../../../game/level/panel-textures.worker.ts', import.meta.url), { type: 'module' });
+    const send = () => {
+      const job = jobs[next++];
+      if (!job) { worker.terminate(); return; }
+      worker.onmessage = (ev: MessageEvent<Omit<PanelMaps, 'height'> & { kind: PanelKind; ms: number }>) => {
+        fillPanel(job.set, ev.data);
+        cpu += ev.data.ms;
+        if (++done === jobs.length) {
+          console.info(`[sector-mat] ${jobs.length} panel kinds filled off-thread in ${(performance.now() - t0).toFixed(0)} ms (${cpu.toFixed(0)} ms worker CPU, ${size} workers; main thread 0)`);
+        }
+        send();
+      };
+      worker.postMessage({ kind: job.kind, seed: PANEL_SEEDS[job.kind] });
+    };
+    send();
+  }
 }
 /** The light panels' glow strength (`?panelglow=` overrides). */
 export const panelGlow = uniform(1);
@@ -151,7 +196,7 @@ function sectorMaterial(src: SurfaceSource, color: readonly [number, number, num
     // GRIME (panel kinds only): a large mottle breaks the 4 m repeat in albedo and roughness, and walls
     // darken toward their sector's floor (the per-sector floor height, read like the level).
     mottle ??= mottleTexture(977);
-    const m = texture(mottle, uv().mul(GRIME.mottleScale)).r;
+    const m = texture(mottle, attribute('mottleUv', 'vec2').mul(GRIME.mottleScale)).r;
     let k = m.mul(GRIME.hi - GRIME.lo).add(GRIME.lo);
     if (wallFloors) {
       const floorY = wallFloors.element(attribute('sectorIndex', 'float').add(0.5).toInt());
@@ -221,22 +266,19 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
     const zone = map.sectors[q.sector]!.zone;
     const dx = q.b[0] - q.a[0], dz = q.b[1] - q.a[1], len = Math.hypot(dx, dz);
     const want: [number, number, number] = [-dz / len, 0, dx / len];
-    // u runs along the wall from the projection of `a` on its direction, so the pieces of a split line tile on.
     const kind = surfaceKind(q.mat, 'wall', matsOn);
     const tile = SURFACE_LOOKS[kind].tileM;
-    // A door's u starts at its line's start and spans a whole number of tiles, so its frame strips
-    // sit at the door's edges (a line split near a pool restarts per piece).
-    const door = kind === 'door';
-    const u0 = door ? 0 : (q.a[0] * dx + q.a[1] * dz) / len / tile;
-    const u1 = door ? Math.max(1, Math.round(len / tile)) : u0 + len / tile;
+    const [u0, u1] = wallU(kind, q.a, q.along, dx, dz, len, tile);
+    const [m0, m1] = wallU('techPanel', q.a, q.along, dx, dz, len, tile);   // the world-projected u, for the mottle
     const b = batch(zone, 'wall', kind);
     // Each vertical edge is cut by its own end (nearGlow), so walls meeting at a corner cut it alike.
     const cuts = (p: XZ) => (bounce && nearGlow(sources, p[0], p[1]) ? wallRows(q.y0, q.y1) : [q.y0, q.y1]);
     const cols = [cuts(q.a), cuts(q.b)] as const;
-    const ends = [q.a, q.b] as const, us = [u0, u1] as const;
+    const ends = [q.a, q.b] as const, us = [u0, u1] as const, ms = [m0, m1] as const;
     for (const t of wallStrip(cols[0], cols[1])) {
       b.tri(t.map(([side, r]) => [ends[side]![0], cols[side]![r]!, ends[side]![1]]),
-        t.map(([side, r]) => [us[side]!, cols[side]![r]! / tile]), want, q.sector, true);
+        t.map(([side, r]) => [us[side]!, cols[side]![r]! / tile]), want, q.sector, true,
+        t.map(([side, r]) => [ms[side]!, cols[side]![r]! / tile]));
     }
   }
 
@@ -254,6 +296,9 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
       src = { base: worldTiled(m as THREE.MeshStandardMaterial), look, glowMap: null, roughness: null };
     } else {
       const t = panelSet(kind);
+      // No roughnessMap: panel roughness is one channel, read as .r by the roughnessNode. The deferred
+      // path (?renderer=deferred, deferred-mesh.ts) copies roughnessMap only, so it draws panels at the
+      // flat look.roughness, and drops the grime nodes (colorNode, emissiveNode) like every node term.
       const base = new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normalMap,
         roughness: look.roughness, metalness: look.metalness, normalScale: new THREE.Vector2(look.normalScale, look.normalScale) });
       src = { base, look, glowMap: t.emissiveMap, roughness: t.roughness };
@@ -274,6 +319,8 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
     mesh.userData.room = Number(zone) + 1;                       // the zone's synthesized room id
     ctx.world.levelGroup.add(mesh);
   }
+
+  flushPanelJobs();
 
   if (glowBatches.size > 0) {
     // WGSL has no nested fn: the noise helpers ride along as includes (game-void.ts's pattern).

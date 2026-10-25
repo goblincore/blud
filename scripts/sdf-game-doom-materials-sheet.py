@@ -1,6 +1,6 @@
 """Compose .lab-tmp/doom/materials-before-after.png from scripts/sdf-game-doom-materials.mjs's shots:
 one row per pose, one column per variant folder under .lab-tmp/doom/mat/ that has the pose.
-COLUMNS=before,prev,after (default) — "prev" is a copy of an earlier "after" run (e.g. 4a267574)."""
+SHEET_COLUMNS=before,prev,after (default; not COLUMNS, the shell's terminal width) — "prev" is a copy of an earlier "after" run (e.g. 4a267574)."""
 import os
 from pathlib import Path
 import sys
@@ -15,11 +15,14 @@ LABELS = {
     "exitdoor": "facing the exit door", "start-off": "start room, flashlight OFF", "tech-off": "window room, flashlight OFF",
 }
 poses = sys.argv[1:] or list(LABELS)
-COLS = os.environ.get("COLUMNS", "before,prev,after").split(",")
-COLS = [c for c in COLS if (ROOT / c).is_dir()]
+COLS = [c for c in os.environ.get("SHEET_COLUMNS", "before,prev,after").split(",") if (ROOT / c).is_dir()]
+if not COLS:
+    sys.exit(f"no shot folders: none of SHEET_COLUMNS under {ROOT} exist (run scripts/sdf-game-doom-materials.sh)")
 TITLES = {"before": "OLD STONE (?sectormat=0)", "prev": "FIRST MATERIALS (4a267574)", "after": "GRIMY MATERIALS (now)"}
 cw, ch, left, top = 480, 360, 200, 40
 rows = [p for p in poses if all((ROOT / c / f"{p}.png").exists() for c in COLS)]
+if not rows:
+    sys.exit(f"no pose has a shot in every column {COLS}")
 sheet = Image.new("RGB", (left + len(COLS) * cw, top + len(rows) * ch), "#111")
 g = ImageDraw.Draw(sheet)
 try:

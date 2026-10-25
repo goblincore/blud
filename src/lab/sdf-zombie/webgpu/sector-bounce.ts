@@ -217,10 +217,11 @@ export function refineNearGlow(map: SectorMap, sources: readonly GlowSource[] = 
     const n = near ? Math.ceil(len / maxLen - 1e-9) : 1;
     if (n <= 1) { lines.push(l); continue; }
     let prev = l.v[0];
+    const origin = l.origin ?? { a, len };
     for (let i = 1; i <= n; i++) {
       let next = l.v[1];
       if (i < n) { vertices.push([a[0] + ((b[0] - a[0]) * i) / n, a[1] + ((b[1] - a[1]) * i) / n]); next = vertices.length - 1; }
-      lines.push({ ...l, v: [prev, next] });
+      lines.push({ ...l, v: [prev, next], origin });
       prev = next;
     }
   }

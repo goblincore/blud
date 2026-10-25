@@ -8,6 +8,7 @@ import {
 } from './sector-bounce';
 import type { SectorDef, SectorMap } from './sector-def';
 import { loopArea, sectorPolygons, wallQuads } from './sector-geometry';
+import { wallU } from './sector-materials';
 
 const sector = (floor: number, ceil: number, glow: SectorDef['glow'] = null): SectorDef => ({
   floor, ceil, light: 1, special: 'none', hurtPerSec: 0, glow, zone: 0,
@@ -122,6 +123,19 @@ describe('refineNearGlow', () => {
     const lowerFromA = new Set(wallQuads(r).filter(q => q.sector === 1).flatMap(q => [key(q.a), key(q.b)]));
     const poolEdge = new Set(sectorPolygons(r).find(p => p.sector === 0)!.holes.flat().map(key));
     expect([...lowerFromA].sort()).toEqual([...poolEdge].sort());
+  });
+  it('pieces carry their original line (start and length); unsplit lines carry none', () => {
+    for (const l of r.lines) {
+      if (!l.origin) continue;
+      const [a, b] = l.v.map(v => r.vertices[v]!);
+      for (const p of [a!, b!]) expect(Math.hypot(p[0] - l.origin.a[0], p[1] - l.origin.a[1])).toBeLessThanOrEqual(l.origin.len + 1e-9);
+    }
+    expect(r.lines.some(l => l.origin && l.origin.len > REFINE_MAX_M)).toBe(true);
+    expect(map.lines.every(l => l.origin === undefined)).toBe(true);
+    // A door near a pool: its pieces' u (wallU) runs 0..1 tile across the whole line, not per piece.
+    const pieces = wallQuads(r).filter(q => q.along[2] > REFINE_MAX_M + 1e-9 && q.along[2] <= 6);
+    const ends = pieces.map(q => wallU('door', q.a, q.along, q.b[0] - q.a[0], q.b[1] - q.a[1], Math.hypot(q.b[0] - q.a[0], q.b[1] - q.a[1]), 4));
+    for (const [u0, u1] of ends) { expect(u0).toBeGreaterThanOrEqual(-1e-9); expect(u1).toBeLessThanOrEqual(Math.max(1, Math.round(6 / 4)) + 1e-9); }
   });
   it('a map with no glow comes back as is', () => {
     const plain: SectorMap = { ...map, sectors: map.sectors.map(s => ({ ...s, glow: null })) };

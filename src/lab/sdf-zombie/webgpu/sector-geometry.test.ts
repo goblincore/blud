@@ -168,3 +168,19 @@ describe('wallQuads: wall families', () => {
     expect(plain.mat).toBe('rust');
   });
 });
+
+describe('wallQuads: along the original line', () => {
+  it('a line cut into pieces keeps its pieces\' places on the whole line, both sides', () => {
+    const m = map();
+    const li = m.lines.findIndex(l => l.back < 0);
+    const l = m.lines[li]!;
+    const va = m.vertices[l.v[0]]!, vb = m.vertices[l.v[1]]!, len = Math.hypot(vb[0] - va[0], vb[1] - va[1]);
+    const mid: [number, number] = [(va[0] + vb[0]) / 2, (va[1] + vb[1]) / 2];
+    const vi = m.vertices.push(mid) - 1;
+    const origin = { a: va, len };
+    m.lines.splice(li, 1, { ...l, v: [l.v[0], vi], origin }, { ...l, v: [vi, l.v[1]], origin });
+    const pieces = wallQuads(m).filter(q => q.part === 'mid' && q.along[2] === len && q.sector === l.front
+      && [q.a, q.b].some(p => p[0] === mid[0] && p[1] === mid[1]));
+    expect(pieces.map(q => q.along.slice(0, 2)).sort((x, y) => x[0]! - y[0]!)).toEqual([[0, len / 2], [len / 2, len]]);
+  });
+});

@@ -9,6 +9,7 @@
 // Pure: no three.js, no DOM.
 
 import type { PanelKind } from '../../../game/level/panel-textures';
+import type { XZ } from './sector-def';
 
 export type SurfaceRole = 'floor' | 'ceil' | 'wall';
 export type StoneKind = 'stoneWall' | 'stoneFloor' | 'stoneCeil';
@@ -66,3 +67,20 @@ export const isStone = (k: SurfaceKind): k is StoneKind => k === 'stoneWall' || 
 
 /** `?sectormat=0` turns the family materials off (the A/B against the old single stone set). */
 export const sectorMaterialsOn = (search: URLSearchParams): boolean => search.get('sectormat') !== '0';
+
+/** A wall quad's u at its two ends. Most kinds run u along the wall from the projection of `a` on its
+ *  direction, so the pieces of a split line tile on. A DOOR lays its texture per whole line (`along`:
+ *  the quad's place on the original line, so a door cut into pieces near a pool is still one door):
+ *  a line of at least half a tile stretches to a whole number of tiles, so the frame strips sit at
+ *  the door's two edges; a narrower one keeps the natural scale from its start (never a squashed
+ *  4 m tile). */
+export function wallU(kind: SurfaceKind, a: XZ, along: readonly [number, number, number], dx: number, dz: number, len: number, tile: number): [number, number] {
+  if (kind !== 'door') {
+    const u0 = (a[0] * dx + a[1] * dz) / len / tile;
+    return [u0, u0 + len / tile];
+  }
+  const [t0, t1, full] = along;
+  const tiles = Math.round(full / tile);
+  const scale = tiles >= 1 ? tiles / full : 1 / tile;
+  return [t0 * scale, t1 * scale];
+}

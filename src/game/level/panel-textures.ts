@@ -45,17 +45,34 @@ const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const smooth = (e0: number, e1: number, v: number) => { const t = clamp01((v - e0) / (e1 - e0)); return t * t * (3 - 2 * t); };
 const wrapPx = (i: number) => ((i % N) + N) % N;
 
-/** Value noise on a lattice of `cell` px that wraps at the map edge (cell divides PANEL_SIZE). */
-function tnoise(x: number, y: number, seed: number, cell: number): number {
-  const p = N / cell;
-  const sx = x / cell, sy = y / cell;
+/** The hashed lattice values for (seed, px × py cells), cached: the noise reads them instead of
+ *  hashing four corners per sample (most of the generation cost). Cleared after each map. */
+const lattices = new Map<number, Float32Array>();
+function lattice(seed: number, px: number, py: number): Float32Array {
+  const key = (seed * 1024 + px) * 1024 + py;
+  let l = lattices.get(key);
+  if (!l) {
+    l = new Float32Array(px * py);
+    for (let y = 0; y < py; y++) for (let x = 0; x < px; x++) l[y * px + x] = hash2(x, y, seed);
+    lattices.set(key, l);
+  }
+  return l;
+}
+/** Value noise on a lattice of `cellX` × `cellY` px that wraps at the map edge on both axes (each
+ *  cell size divides PANEL_SIZE, so the lattice periods are N / cellX and N / cellY cells). */
+function tnoise2(x: number, y: number, seed: number, cellX: number, cellY: number): number {
+  const px = N / cellX, py = N / cellY;
+  const sx = x / cellX, sy = y / cellY;
   const x0 = Math.floor(sx), y0 = Math.floor(sy);
   const fx = sx - x0, fy = sy - y0;
   const ex = fx * fx * (3 - 2 * fx), ey = fy * fy * (3 - 2 * fy);
-  const xa = ((x0 % p) + p) % p, xb = (xa + 1) % p, ya = ((y0 % p) + p) % p, yb = (ya + 1) % p;
-  const n00 = hash2(xa, ya, seed), n10 = hash2(xb, ya, seed), n01 = hash2(xa, yb, seed), n11 = hash2(xb, yb, seed);
+  const xa = ((x0 % px) + px) % px, xb = (xa + 1) % px, ya = ((y0 % py) + py) % py, yb = (ya + 1) % py;
+  const L = lattice(seed, px, py);
+  const n00 = L[ya * px + xa]!, n10 = L[ya * px + xb]!, n01 = L[yb * px + xa]!, n11 = L[yb * px + xb]!;
   return (n00 * (1 - ex) + n10 * ex) * (1 - ey) + (n01 * (1 - ex) + n11 * ex) * ey;
 }
+/** Square-cell tileable value noise (cell divides PANEL_SIZE). */
+const tnoise = (x: number, y: number, seed: number, cell: number): number => tnoise2(x, y, seed, cell, cell);
 /** Tileable fbm from `cell` px down, halving each octave (not below 2 px). */
 function tfbm(x: number, y: number, seed: number, cell: number, octaves = 3): number {
   let sum = 0, amp = 0.5, norm = 0, c = cell;
@@ -65,9 +82,9 @@ function tfbm(x: number, y: number, seed: number, cell: number, octaves = 3): nu
   }
   return sum / norm;
 }
-/** Anisotropic tileable noise: cells cx × cy px (streaks, brushing). */
-function tstreak(x: number, y: number, seed: number, cx: number, cy: number): number {
-  return tnoise(x * (cy / cx), y, seed, cy);
+/** Anisotropic tileable noise: cells cx × cy px (streaks, brushing); both must divide PANEL_SIZE. */
+export function tstreak(x: number, y: number, seed: number, cx: number, cy: number): number {
+  return tnoise2(x, y, seed, cx, cy);
 }
 
 /** Distance in px to the nearest edge of a w × h box for a point (lx, ly) inside it (negative outside). */
@@ -79,22 +96,47 @@ const dome = (x: number, y: number, cx: number, cy: number, r: number) => {
   const d2 = ((x - cx) ** 2 + (y - cy) ** 2) / (r * r);
   return d2 >= 1 ? 0 : Math.sqrt(1 - d2);
 };
+/** Scratch segments per (seed, cell, density), one record per lattice cell: x, y (cell-local
+ *  offset in px), dx, dy, half length, strength (0 = no scratch). Built once per map, not per pixel. */
+const SCRATCH_STRIDE = 6;
+const scratchTables = new Map<number, Float32Array>();
+function scratchTable(seed: number, cell: number, density: number): Float32Array {
+  const key = (seed * 1024 + cell) * 1024 + Math.round(density * 1000);
+  let t = scratchTables.get(key);
+  if (t) return t;
+  const p = N / cell;
+  t = new Float32Array(p * p * SCRATCH_STRIDE);
+  for (let wy = 0; wy < p; wy++) for (let wx = 0; wx < p; wx++) {
+    const o = (wy * p + wx) * SCRATCH_STRIDE;
+    if (hash2(wx, wy, seed) > density) continue;
+    const ang = hash2(wx, wy, seed + 3) * Math.PI;
+    t[o] = hash2(wx, wy, seed + 1) * cell; t[o + 1] = hash2(wx, wy, seed + 2) * cell;
+    t[o + 2] = Math.cos(ang); t[o + 3] = Math.sin(ang);
+    t[o + 4] = cell * (0.4 + hash2(wx, wy, seed + 4) * 0.9) / 2;
+    t[o + 5] = 0.5 + 0.5 * hash2(wx, wy, seed + 5);
+  }
+  if (scratchTables.size > 64) scratchTables.clear();
+  scratchTables.set(key, t);
+  return t;
+}
 /** Thin random scratches: one per `cell` px cell, a short segment at a random angle; 0..1 strength. */
 function scratches(x: number, y: number, seed: number, cell: number, density: number): number {
+  const table = scratchTable(seed, cell, density);
+  const p = N / cell;
   let best = 0;
   const gx = Math.floor(x / cell), gy = Math.floor(y / cell);
   for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
     const cx = gx + ox, cy = gy + oy;
-    const p = N / cell, wx = ((cx % p) + p) % p, wy = ((cy % p) + p) % p;
-    if (hash2(wx, wy, seed) > density) continue;
-    const px = (cx + hash2(wx, wy, seed + 1)) * cell, py = (cy + hash2(wx, wy, seed + 2)) * cell;
-    const ang = hash2(wx, wy, seed + 3) * Math.PI, len = cell * (0.4 + hash2(wx, wy, seed + 4) * 0.9);
-    const dx = Math.cos(ang), dy = Math.sin(ang);
-    const rx = x - px, ry = y - py;
-    const t = rx * dx + ry * dy;
-    if (Math.abs(t) > len / 2) continue;
+    const wx = ((cx % p) + p) % p, wy = ((cy % p) + p) % p;
+    const o = (wy * p + wx) * SCRATCH_STRIDE;
+    const strength = table[o + 5]!;
+    if (strength === 0) continue;
+    const rx = x - (cx * cell + table[o]!), ry = y - (cy * cell + table[o + 1]!);
+    const dx = table[o + 2]!, dy = table[o + 3]!;
+    if (Math.abs(rx * dx + ry * dy) > table[o + 4]!) continue;
     const d = Math.abs(rx * dy - ry * dx);
-    best = Math.max(best, (1 - smooth(0.3, 1.1, d)) * (0.5 + 0.5 * hash2(wx, wy, seed + 5)));
+    if (d >= 1.1) continue;
+    best = Math.max(best, (1 - smooth(0.3, 1.1, d)) * strength);
   }
   return best;
 }
@@ -186,7 +228,7 @@ const door: Shader = (x, y, seed, o) => {
   const sc = scratches(x, y, seed + 21, 32, 0.8);
   const dent = tfbm(x, y, seed + 3, 128, 2);
   height += 0.08 * dent;
-  const grime = clamp01(tfbm(x, y, seed + 31, 64) * 1.1 - 0.35 + 0.5 * band + tstreak(x, y, seed + 41, 6, 128) * 0.35 - 0.15);
+  const grime = clamp01(tfbm(x, y, seed + 31, 64) * 1.1 - 0.35 + 0.5 * band + tstreak(x, y, seed + 41, 8, 128) * 0.35 - 0.15);
   const base = inFrame ? 0.78 : 1;
   const k = base * (0.95 + 0.3 * sc + 0.15 * bolt) * (1 - 0.55 * grime) * (1 - 0.35 * band);
   o.h = height; o.r = 98 * k; o.g = 98 * k; o.b = 102 * k;
@@ -207,7 +249,7 @@ const rustBrick: Shader = (x, y, seed, o) => {
   const height = clamp01(face * (0.72 - chip * 0.12) + grain);
   const v = hash2(bx, row, seed + 5);
   const brick: [number, number, number] = v < 0.33 ? [96, 72, 60] : v < 0.66 ? [118, 80, 58] : [104, 86, 74];
-  const stain = clamp01(tstreak(x, y, seed + 41, 6, 128) * 1.4 - 0.55 + tfbm(x, y, seed + 31, 128) * 0.5 - 0.2);
+  const stain = clamp01(tstreak(x, y, seed + 41, 8, 128) * 1.4 - 0.55 + tfbm(x, y, seed + 31, 128) * 0.5 - 0.2);
   const wet = clamp01(tfbm(x, y, seed + 61, 64) * 1.8 - 0.9);
   const shade = (0.62 + 0.45 * height) * (1 - 0.35 * wet);
   const mortar = 1 - face;
@@ -423,13 +465,13 @@ export function generatePanel(kind: PanelKind, seed: number): PanelMaps {
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
     const i = y * N + x;
     const c = cav[i]!;
-    const streaky = 0.35 + 0.65 * tstreak(x, y, seed + 241, 3, 64);
-    const d = clamp01(drip[i]! * streaky * 1.6 - c);
+    // Terms whose weight is 0 for this kind skip their noise (boot cost).
+    const d = g.drip > 0 ? clamp01(drip[i]! * (0.35 + 0.65 * tstreak(x, y, seed + 241, 4, 64)) * 1.6 - c) : 0;
     const mottle = (tfbm(x, y, seed + 251, 256, 2) - 0.5) * 2;
-    const rustN = clamp01((tfbm(x, y, seed + 261, 32) - 0.55) * 4 + c * 1.2 + d * 0.6) * g.rust;
-    const oil = clamp01((tfbm(x, y, seed + 271, 128) - 0.58) * 5) * g.oil;
-    const wet = clamp01((tfbm(x, y, seed + 281, 64) - 0.55) * 4) * g.wet;
-    const lip = clamp01((height[i]! - height[wrapPx(y - 3) * N + x]!) * 4) * g.dust;
+    const rustN = g.rust > 0 ? clamp01((tfbm(x, y, seed + 261, 32) - 0.55) * 4 + c * 1.2 + d * 0.6) * g.rust : 0;
+    const oil = g.oil > 0 ? clamp01((tfbm(x, y, seed + 271, 128) - 0.58) * 5) * g.oil : 0;
+    const wet = g.wet > 0 ? clamp01((tfbm(x, y, seed + 281, 64) - 0.55) * 4) * g.wet : 0;
+    const lip = g.dust > 0 ? clamp01((height[i]! - height[wrapPx(y - 3) * N + x]!) * 4) * g.dust : 0;
     let k = (1 - g.ao * c) * (1 - g.drip * 0.55 * d) * (1 + g.mottle * 0.35 * mottle) * (1 - 0.55 * oil) * (1 - 0.2 * wet);
     k = Math.max(0.15, k);
     let r = col[i * 3]! * k, gg = col[i * 3 + 1]! * k, b = col[i * 3 + 2]! * k;
@@ -452,13 +494,14 @@ export function generatePanel(kind: PanelKind, seed: number): PanelMaps {
       const hl = height[y * N + wrapPx(x - 1)]!, hr = height[y * N + wrapPx(x + 1)]!;
       const hd = height[wrapPx(y - 1) * N + x]!, hu = height[wrapPx(y + 1) * N + x]!;
       const dx = (hl - hr) * gain, dy = (hd - hu) * gain;
-      const len = Math.hypot(dx, dy, 1);
+      const len = Math.sqrt(dx * dx + dy * dy + 1);
       normal[i * 4] = (dx / len * 0.5 + 0.5) * 255;
       normal[i * 4 + 1] = (dy / len * 0.5 + 0.5) * 255;
       normal[i * 4 + 2] = (1 / len * 0.5 + 0.5) * 255;
       normal[i * 4 + 3] = 255;
     }
   }
+  lattices.clear();
   return { albedo, normal, roughness, emissive, height };
 }
 
@@ -474,7 +517,32 @@ export interface PanelTextureSet {
  *  stone set's colour-space rule). Unlike the stone set these are mipmapped and linearly filtered:
  *  tread plate, slats and lattices are fine enough to shimmer badly at a distance otherwise. */
 export function panelTextures(kind: PanelKind, seed: number): PanelTextureSet {
-  const m = generatePanel(kind, seed);
+  return wrapPanel(generatePanel(kind, seed));
+}
+
+/** Placeholder maps for a kind whose pixels arrive later (fillPanel): flat normals, mid albedo and
+ *  roughness, no glow — the same sizes and formats, so nothing recompiles when they are filled. */
+export function blankPanel(kind: PanelKind): Omit<PanelMaps, 'height'> {
+  const n = N * N;
+  const albedo = new Uint8ClampedArray(n * 4), normal = new Uint8ClampedArray(n * 4);
+  for (let i = 0; i < n; i++) {
+    albedo[i * 4] = albedo[i * 4 + 1] = albedo[i * 4 + 2] = 60; albedo[i * 4 + 3] = 255;
+    normal[i * 4] = normal[i * 4 + 1] = 128; normal[i * 4 + 2] = 255; normal[i * 4 + 3] = 255;
+  }
+  return { albedo, normal, roughness: new Uint8ClampedArray(n).fill(200), emissive: kind === 'lightPanel' ? new Uint8ClampedArray(n * 4) : null };
+}
+
+/** Swap generated pixels into a set made by wrapPanel (from blankPanel or an earlier build). */
+export function fillPanel(set: PanelTextureSet, m: Omit<PanelMaps, 'height'>): void {
+  const put = (t: THREE.DataTexture | null, data: Uint8ClampedArray | null) => {
+    if (!t || !data) return;
+    t.image.data = data;
+    t.needsUpdate = true;
+  };
+  put(set.map, m.albedo); put(set.normalMap, m.normal); put(set.roughness, m.roughness); put(set.emissiveMap, m.emissive);
+}
+
+export function wrapPanel(m: Omit<PanelMaps, 'height'>): PanelTextureSet {
   const make = (data: Uint8ClampedArray, srgb: boolean, format: THREE.PixelFormat = THREE.RGBAFormat) => {
     const t = new THREE.DataTexture(data, N, N, format);
     t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;

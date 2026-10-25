@@ -43,6 +43,9 @@ export interface SectorLine {
   back: number;
   door: SectorDoor | null;
   exit: boolean;
+  /** Set on the pieces of a line cut up by refineNearGlow (never in a file): the ORIGINAL line's
+   *  v[0] position and length, so a texture laid per line (a door) runs on across its pieces. */
+  origin?: { a: XZ; len: number };
   /** Per-side wall families (optional: older files and fixtures have none). */
   walls?: { front?: SideWalls; back?: SideWalls };
 }
