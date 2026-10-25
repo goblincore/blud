@@ -45,7 +45,7 @@ Each line is the first sentence of the module's header comment.
 | [Entrypoints and labs](#entrypoints-and-labs) | 20 | One module per HTML page; see the entrypoint table above. |
 | [Dev panels](#dev-panels) | 11 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
-| [Game: debug seams](#game-debug-seams) | 23 | `window.__sdfGame` members, read by the gate and capture scripts. |
+| [Game: debug seams](#game-debug-seams) | 24 | `window.__sdfGame` members, read by the gate and capture scripts. |
 | [Game: feature modules](#game-feature-modules) | 82 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
@@ -285,6 +285,7 @@ The GameContext and its state slices (ECS resources to be). All game state lives
 
 - `webgpu/game-seams-bench.ts` — Seam module: the `bench` and `demoScenario` members lifted verbatim out of the `__sdfGame` object literal in game-main.ts.
 - `webgpu/game-seams-boot.ts` — The window.__sdfGame boot and frame diagnostics: backend, tiles, frame hash, pass timings, draw counts, frame cap and shadow toggles.
+- `webgpu/game-seams-debris.ts` — Debris seams (plan docs/superpowers/plans/2026-10-25-sector-levels-3b-debris-and-barrels.md Task 9): where every loose piece a fight leaves behind…
 - `webgpu/game-seams-debug-probe.ts` — Debug probe and world inspection seams, lifted verbatim out of the window.__sdfGame object literal in game-main.ts.
 - `webgpu/game-seams-demo-step.ts` — The window.__sdfGame demo recording, demo info, manual stepping, bodies-on-screen and demo-hold members.
 - `webgpu/game-seams-dynamite.ts` — Dynamite/explosion seams: the panel's tuning surface and the wound-only diagnostic detonation (the real `detonate`/`overcook` stay in game-main.ts's…

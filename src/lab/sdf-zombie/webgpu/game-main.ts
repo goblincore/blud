@@ -327,6 +327,7 @@ import { createFireSeams } from './game-seams-fire';
 import { createFlailSeams } from './game-seams-flail';
 import { createSkeletonSeams } from './game-seams-skeleton';
 import { createDynamiteSeams } from './game-seams-dynamite';
+import { createDebrisSeams } from './game-seams-debris';
 import { createMarchDebugSeams } from './game-seams-march-debug';
 import { createEarlyzSeams } from './game-seams-earlyz';
 import { EARLYZ_FLAG } from './earlyz/flag';
@@ -5922,6 +5923,7 @@ async function main() {
     createHeadSeams(ctx),
     createSkeletonSeams(ctx),
     createDynamiteSeams(ctx),
+    createDebrisSeams(ctx),
     createMarchDebugSeams(ctx),
     createEarlyzSeams(ctx),
     createMiscSeams(ctx),
