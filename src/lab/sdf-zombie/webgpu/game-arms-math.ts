@@ -13,6 +13,8 @@ export const ARM_NODES = [
   'Arm_L', 'Arm_R', 'Hand_L', 'Hand_R', 'Wrist_L', 'Wrist_R',
   'Elbow_L', 'Elbow_R', 'Upper_L', 'Upper_R', 'Shoulder_L', 'Shoulder_R',
   'Watch_Screen',
+  // The fore hand's two poses: the grip fist and the reload's shell hold (game-arms.ts setShellHold).
+  'hand_L', 'handhold_L',
 ] as const;
 
 /** Forearm (hand -> elbow) and upper arm (elbow -> shoulder) lengths the IK

@@ -367,7 +367,7 @@ export function aimArms(ctx: GameContext): void {
   }
   if (ctx.weapon.foreHandGroup) {
     viewDirToRig(ctx, BEND_L_VIEW, _bendL);
-    aimArm(ctx.weapon.foreHandGroup, viewToRig(ctx, SHOULDER_L_VIEW, _sh), _bendL);
+    aimArm(ctx.weapon.foreHandGroup, viewToRig(ctx, SHOULDER_L_VIEW, _sh), _bendL, ctx.weapon.foreRoll);
   }
 }
 

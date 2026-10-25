@@ -38,7 +38,7 @@ import type * as THREE from 'three/webgpu';
 import type { Vec3 } from '../types';
 import type { StickProp } from './fpv-view';
 import type { AimPoint } from './free-aim';
-import type { GoblinArms } from './game-arms';
+import type { ArmRoll, GoblinArms } from './game-arms';
 import type { Projectile } from './game-weapon';
 import type { WeaponSlotState } from './game-weapon-slots';
 import type { RodHarness } from './game-rod';
@@ -136,6 +136,9 @@ export interface WeaponState {
   gripHandGroup: THREE.Group | null;
   /** The fore hand group, or null before it is built. */
   foreHandGroup: THREE.Group | null;
+  /** The reload's palm turn of the fore arm (game-viewmodel.ts palmTurn), set by the tick while the hand carries and
+   *  pushes the fresh cases, null otherwise. */
+  foreRoll: ArmRoll | null;
   /** The gun geometry group, or null before it is built. */
   gunGroup: THREE.Group | null;
   /** The muzzle-flash group, or null before it is built. */
@@ -261,6 +264,7 @@ export function makeWeaponState(): WeaponState {
     extractorRestZ: 0,
     gripHandGroup: null,
     foreHandGroup: null,
+    foreRoll: null,
     gunGroup: null,
     flashGroup: null,
     flashMaterial: null,
@@ -328,6 +332,7 @@ export const WEAPON_BINDINGS = {
   extractorRestZ: 'weapon.extractorRestZ',
   gripHandGroup: 'weapon.gripHandGroup',
   foreHandGroup: 'weapon.foreHandGroup',
+  foreRoll: 'weapon.foreRoll',
   gunGroup: 'weapon.gunGroup',
   flashGroup: 'weapon.flashGroup',
   flashMaterial: 'weapon.flashMaterial',

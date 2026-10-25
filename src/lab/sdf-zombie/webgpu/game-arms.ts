@@ -32,6 +32,17 @@ export interface GoblinArms {
   /** The one skin material both arms share. */
   skin: THREE.MeshStandardMaterial;
   screen: WatchScreen;
+  /** The fore (left) hand's grip fist and its shell-hold pose (model_goblin_arm.py FINGERS_HOLD). Exactly one shows:
+   *  the fist, except while the reload carries the two fresh cases (setShellHold). */
+  foreFist: THREE.Object3D;
+  foreHold: THREE.Object3D;
+}
+
+/** Show the fore hand's shell-hold pose (on) or its grip fist (off). A whole-mesh swap, like an early-3D hand
+ *  model change: the two poses share the hand's origin, so nothing else moves. */
+export function setShellHold(arms: GoblinArms, on: boolean): void {
+  arms.foreHold.visible = on;
+  arms.foreFist.visible = !on;
 }
 
 /** The goblin's skin: generated colour + normal maps, the blob's roughness,
@@ -119,9 +130,46 @@ const _m = new THREE.Matrix4();
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();
 const _elbow = new THREE.Vector3();
 const _qWorld = new THREE.Quaternion(), _qInv = new THREE.Quaternion();
+const _qRoll = new THREE.Quaternion(), _qRollB = new THREE.Quaternion();
 
-function basisQuat(out: THREE.Quaternion, dir: THREE.Vector3): THREE.Quaternion {
-  const b = armBasis([dir.x, dir.y, dir.z] as V3, [0, 0, 1]);
+/** A scheduled roll of an arm about its forearm (the reload's palm turn): `a` and `b` are back-of-hand directions
+ *  (rig space), `k` blends a -> b and `w` blends the normal camera-facing roll -> that. */
+export interface ArmRoll {
+  a: THREE.Vector3; b: THREE.Vector3; k: number; w: number;
+  /** Which way round a -> b turns: the hand's thumb (-X, the LEFT hand's) swings through this rig direction rather
+   *  than away from it. The shortest turn can go either way; the owner wants the reload's palm turn to roll the
+   *  thumb back toward the viewer (2026-10-24). */
+  thumbVia?: THREE.Vector3;
+}
+
+const _axis = new THREE.Vector3(), _qRel = new THREE.Quaternion(), _qStep = new THREE.Quaternion();
+const _thumb = new THREE.Vector3();
+
+/**
+ * Turn `a` (in place) k of the way to `b` about the arm axis `dir`. Both bases share that axis, so a -> b is one roll
+ * about it by some angle; a slerp always takes the short way round, and with `thumbVia` this picks the way that swings
+ * the thumb (-X) through that direction at the half-way point instead.
+ */
+function rollToward(a: THREE.Quaternion, b: THREE.Quaternion, dir: THREE.Vector3, k: number, thumbVia?: THREE.Vector3): void {
+  _axis.copy(dir).normalize();
+  _qRel.copy(b).multiply(_qInv.copy(a).invert());
+  if (_qRel.w < 0) _qRel.set(-_qRel.x, -_qRel.y, -_qRel.z, -_qRel.w);
+  const sinHalf = Math.hypot(_qRel.x, _qRel.y, _qRel.z);
+  let phi = 2 * Math.atan2(sinHalf, _qRel.w);                      // 0..PI, the short way
+  if (_qRel.x * _axis.x + _qRel.y * _axis.y + _qRel.z * _axis.z < 0) phi = -phi;
+  if (thumbVia && Math.abs(phi) > 1e-4) {
+    const score = (ang: number): number => {
+      _qStep.setFromAxisAngle(_axis, ang / 2).multiply(a);
+      return _thumb.set(-1, 0, 0).applyQuaternion(_qStep).dot(thumbVia);
+    };
+    const other = phi - Math.sign(phi) * 2 * Math.PI;              // the long way round
+    if (score(other) > score(phi)) phi = other;
+  }
+  a.premultiply(_qStep.setFromAxisAngle(_axis, phi * k));
+}
+
+function basisQuat(out: THREE.Quaternion, dir: THREE.Vector3, dorsal?: THREE.Vector3): THREE.Quaternion {
+  const b = armBasis([dir.x, dir.y, dir.z] as V3, dorsal ? [dorsal.x, dorsal.y, dorsal.z] : [0, 0, 1]);
   _x.set(b.x[0], b.x[1], b.x[2]); _y.set(b.y[0], b.y[1], b.y[2]); _z.set(b.z[0], b.z[1], b.z[2]);
   _m.makeBasis(_x, _y, _z);
   return out.setFromRotationMatrix(_m);
@@ -151,7 +199,10 @@ function upperOf(arm: THREE.Object3D): THREE.Object3D | null {
  *  least this far off the hand-shoulder line, toward the hint. */
 export const ARM_MIN_BEND_RAD = 0.6;
 
-export function aimArm(arm: THREE.Object3D, shoulder: THREE.Vector3, bendHint: THREE.Vector3): void {
+export function aimArm(
+  arm: THREE.Object3D, shoulder: THREE.Vector3, bendHint: THREE.Vector3,
+  roll: ArmRoll | null = null,
+): void {
   const e = armIk(
     [arm.position.x, arm.position.y, arm.position.z],
     [shoulder.x, shoulder.y, shoulder.z],
@@ -162,6 +213,14 @@ export function aimArm(arm: THREE.Object3D, shoulder: THREE.Vector3, bendHint: T
   _elbow.set(e[0], e[1], e[2]);
   _dir.copy(_elbow).sub(arm.position);
   basisQuat(arm.quaternion, _dir);
+  if (roll && roll.w > 0) {
+    // Turn about the forearm: from roll.a's back-of-hand direction toward roll.b's by k, then from the normal roll
+    // toward that by w. The elbow and the upper arm do not move.
+    basisQuat(_qRoll, _dir, roll.a);
+    basisQuat(_qRollB, _dir, roll.b);
+    rollToward(_qRoll, _qRollB, _dir, roll.k, roll.thumbVia);
+    arm.quaternion.slerp(_qRoll, Math.min(1, roll.w));
+  }
   const upper = upperOf(arm);
   if (!upper) return;
   _dir.copy(shoulder).sub(_elbow);
@@ -220,5 +279,9 @@ export async function loadGoblinArms(
   // Detach from the loader's scene so the caller parents them where it likes.
   left.removeFromParent(); right.removeFromParent();
   left.position.set(0, 0, 0); right.position.set(0, 0, 0);
-  return { left, right, skin, screen };
+  // Read off the detached left arm (both poses are its children; ARM_NODES already proved they exist).
+  const foreFist = left.getObjectByName('hand_L')!, foreHold = left.getObjectByName('handhold_L')!;
+  const arms: GoblinArms = { left, right, skin, screen, foreFist, foreHold };
+  setShellHold(arms, false);   // every user (gun, axe, flail) starts on the fist
+  return arms;
 }

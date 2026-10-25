@@ -483,10 +483,46 @@ const SUPPORT_KEYS: readonly (SupportHandPose & { t: number })[] = [
   { t: 0.18, dx: -0.020, dy: -0.060, dz: 0.020, carrying: false },
   { t: 0.51, dx: -0.060, dy: -0.200, dz: 0.060, carrying: false },
   { t: 0.74, dx: -0.050, dy: -0.160, dz: 0.100, carrying: true  },
+  // THE PRESENT (PALM_TURN): up into view below and left of the breech, nearer the eye, palm to the camera with the
+  // two cases on it, before the turn carries them over the tubes. Without it the hand was still under the frame
+  // until the turn had begun, so the open palm was never seen.
+  { t: 0.86, dx: -0.060, dy:  0.075, dz: 0.140, carrying: true  },
   { t: 0.96, dx:  0.010, dy:  0.010, dz: 0.140, carrying: true  },  // hold.stage
   { t: 1.11, dx:  0.020, dy:  0.020, dz: 0.120, carrying: true  },  // hold.seat
   { t: 1.16, dx: -0.010, dy: -0.040, dz: 0.060, carrying: false },
   { t: 1.30, dx:  0.000, dy:  0.000, dz: 0.000, carrying: false },
+];
+
+/**
+ * THE PALM TURN (owner, 2026-10-24): the fore hand comes up PALM TO THE CAMERA with the two fresh cases lying across
+ * it, then turns over in a covering motion above the open tubes and pushes them in palm-down. The cases are on show
+ * while nothing else is happening and hidden only once the hand is doing the pushing -- the camera looks almost
+ * straight down the open bores, so a case on the bore axis behind a pushing hand is hidden whatever the hand does.
+ *
+ * `w` (0..1): how far the fore arm is rolled away from its normal back-of-hand-to-camera roll toward this schedule.
+ * `k` (0..1): along the schedule, palm to the camera (0) to palm down onto the mouths (1). The turn ends exactly at
+ * loadStageSec, where the cases must be lying on the bore axis for the insert to pick them up.
+ */
+/** `presentSec` is SUPPORT_KEYS' present key (the open palm on show); the turn runs turnStartSec..loadStageSec. */
+export const PALM_TURN = { presentSec: 0.86, turnStartSec: 0.89 } as const;
+export function palmTurn(t: number): { w: number; k: number } {
+  return {
+    w: smoothstep(RELOAD.loadStartSec, RELOAD.loadStartSec + 0.10, t)
+      * (1 - smoothstep(RELOAD.loadSeatSec, RELOAD.snapEndSec, t)),
+    k: smoothstep(PALM_TURN.turnStartSec, RELOAD.loadStageSec, t),
+  };
+}
+
+/**
+ * Where the two fresh cases lie on the open palm before the turn, in the FORE HAND's frame (game-arms.ts: origin the
+ * palm centre, +Y toward the elbow, +Z the back of the hand, so the palm faces -Z; metres at model_goblin_arm.py's
+ * HAND_SIZE 1.4). Side by side across the palm, hulls toward the little-finger side (+X on the left hand), resting
+ * on the palm: its half-thickness (0.012 x 1.4) plus a case radius, sunk 4 mm into the cupped flesh. The cupped hold
+ * pose (FINGERS_HOLD) is authored around exactly these.
+ */
+export const PALM_SHELLS: readonly { c: Vec3 }[] = [
+  { c: [0, -0.0255, -0.030] },
+  { c: [0, 0.0095, -0.030] },
 ];
 
 export function supportHandPose(t: number, hold?: HandHold): SupportHandPose {

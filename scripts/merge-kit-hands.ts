@@ -43,9 +43,10 @@ const die = (m: string): never => { console.error(`merge-kit-hands: ${m}`); proc
 
 /** Where the palm centre sits along the hand bone (the orb's old `at`). */
 const HAND_AT = 0.55;
-/** FPV metres -> this character's. The third-person orb was 0.120 m across and read as "big grabby hands"; the FPV
- *  fist spans ~0.095 m, so 1.25 (the .blob's own scale) left the hand barely filling the bracer's cuff. */
-const HAND_SCALE = 1.6;
+/** FPV metres -> this character's. The third-person orb was 0.120 m across and read as "big grabby hands"; at the
+ *  FPV hand's original size (fist ~0.095 m) 1.6 filled the bracer's cuff. The FPV hand has since grown by
+ *  model_goblin_arm.py's HAND_SIZE (1.4) for the gun view, so the third-person size stays where it was: 1.6 / 1.4. */
+const HAND_SCALE = 1.6 / 1.4;
 /** Horn, for the Claw faces: model_goblin_arm.py's Claw base colour. */
 const CLAW_RGB: V3 = [0.30, 0.25, 0.15];
 
@@ -94,8 +95,9 @@ for (const [side, node, thumbSign] of [['l', 'hand_L', -1], ['r', 'hand_R', +1]]
       for (let c = 0; c < 3; c++) out.P.push(centre[c] + HAND_SCALE * (ex[c] * x + ey[c] * y + ez[c] * z));
       const [a, b, cc] = nrm[k];
       out.N.push(...norm([ex[0] * a + ey[0] * b + ez[0] * cc, ex[1] * a + ey[1] * b + ez[1] * cc, ex[2] * a + ey[2] * b + ez[2] * cc]));
-      // UVs scaled with the hand, so one tile of the skin maps covers the same world size as on the FPV arm.
-      if (uv) out.UV!.push(uv[k][0] * HAND_SCALE, uv[k][1] * HAND_SCALE);
+      // v (along the part, in metres per tile) scales with the hand, so one tile of the skin maps covers the same world
+      // size as on the FPV arm. u is the angle AROUND the part (cyl_uv): scaling it would break the wrap seam.
+      if (uv) out.UV!.push(uv[k][0], uv[k][1] * HAND_SCALE);
       out.C?.push(...CLAW_RGB);
       out.J.push(joint);
     }

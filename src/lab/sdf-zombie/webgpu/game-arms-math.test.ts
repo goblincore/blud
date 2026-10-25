@@ -63,11 +63,12 @@ describe('armMaterialKind', () => {
 });
 
 describe('ARM_NODES', () => {
-  it('names both arms, four locators each, the upper-arm nodes, and the screen', () => {
+  it('names both arms, four locators each, the upper-arm nodes, the screen, and the fore hand\'s two poses', () => {
     expect([...ARM_NODES].sort()).toEqual([
       'Arm_L', 'Arm_R', 'Elbow_L', 'Elbow_R', 'Hand_L', 'Hand_R',
       'Shoulder_L', 'Shoulder_R', 'Upper_L', 'Upper_R', 'Watch_Screen', 'Wrist_L', 'Wrist_R',
-    ]);
+      'hand_L', 'handhold_L',
+    ].sort());
   });
 });
 

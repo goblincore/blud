@@ -121,6 +121,8 @@ export function createWeaponPlayerSeams(ctx: GameContext) {
     /** The eject arc's seed for the current/last reload; 0 = reference arc. */
     get reloadSeed() { return ctx.weapon.reloadSeed; },
     get reloadSpeed() { return ctx.weapon.reloadSpeed; },
+    /** Seconds into the running reload (Infinity when none), so a capture can stop on a named RELOAD beat. */
+    get reloadAge() { return ctx.weapon.reloadAge; },
     /** Hold one seed for every reload from now on (null releases it), so a
      *  gate can capture the same arc twice. */
     pinReloadSeed(seed: number | null) { ctx.weapon.pinnedReloadSeed = seed; },
