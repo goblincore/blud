@@ -17,7 +17,8 @@
   Owner question open: a chamfered BENT prim folds round on the GPU but chamfered in `sdBody` (10 shipped blobs; spec open question 1).
   Step 2 done (2026-10-24): GPU bake field + parity tests + `gpu-parity` CI job. They found the shipped `coneBend` losing f32
   precision on nearly straight bends (up to 0.66 mm); fixed with a Newton polish in both fields, parity 38/38, march-hash
-  unchanged. **Pending owner OK: re-pin the march source-text golden** ([notes](docs/dev-notes/2026-10-24-gpu-bake-parity/notes.md)).
+  unchanged; the march source-text golden re-pinned on the owner's OK (CONE_BEND + the joined helpers only)
+  ([notes](docs/dev-notes/2026-10-24-gpu-bake-parity/notes.md)). Next: step 3 (GPU bake default, bake parity, re-bake maps).
 
 - [~] **Enemy test arena built 2026-10-23; owner look pending.** `npm run dev:arena` (`/sdf-game.html?level=arena&spawn=<character>`): one big lit room, one enemy 7 m out, god mode, every weapon, infinite ammo. `` ` `` respawns it fresh, `-`/`=` step through the registry's characters, a label names it. `"arena": true` in a level turns this on (`game-arena.ts`, `level-json.ts`); `__sdfGame.arena(step)` for scripts. Input waits for the ~30 s warm-up after boot.
 
