@@ -27,6 +27,7 @@ import { type CrowdType } from './crowd-type';
 import { makeGibbetMind, makeHoundMind, makeSoldierMind, makeSwordMind, makeWarbullMind } from './enemy-mind';
 import { spawnBile } from '../bile';
 import { createZombieActor, type ZombieActor } from './game-actor';
+import { FLAT_GROUND } from './level-ground';
 import { registerBleed } from './game-bleed';
 import { crowdTypeFor } from './game-crowd-types';
 import { applyStormBodyKey } from './game-dynamic-light';
@@ -80,7 +81,14 @@ export const GAME_LEVEL_SHADOW = 1.0;
 /** Height above the player's feet an enemy SMG or chaingun round is aimed at (m). */
 export const SMG_TARGET_CHEST_Y = 1.25;
 
-export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start: Vec3, errs: string[]): ZombieActor {
+export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnAt: Vec3, errs: string[]): ZombieActor {
+  // SECTOR LEVELS: the feet stand on the floor under the spawn point (standingFloor; a point off the
+  // map keeps its own y), and the actor's motion follows the floor from there. Room levels stand on
+  // FLAT_GROUND: the point as given and no ground handed to the actor, so nothing about them changes.
+  const ground = ctx.world.level.ground;
+  const sectorGround = ground !== FLAT_GROUND ? ground : null;
+  const floorHere = sectorGround ? sectorGround.floorAt(spawnAt[0], spawnAt[2]) : NaN;
+  const start: Vec3 = Number.isFinite(floorHere) ? [spawnAt[0], floorHere, spawnAt[2]] : spawnAt;
   const enc = ctx.world.level.enclosureFor(room.name)!;
   const roomFurniture = ctx.world.level.furniture
     .filter(f => f.room === room.id)
@@ -363,6 +371,7 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
   rigGroup.userData.gameActorId = zombieId;
   const actor = createZombieActor({
     id: zombieId, room: room.id, body: placed, view, character, characterName: name, start,
+    ...(sectorGround ? { ground: sectorGround } : {}),
     boundedWounds: ctx.vfx.boundedWoundPreview,
     // A SWORD profile (motion-profile.ts `melee.kind === 'sword'`, the
     // bride) gets the ring brain on SWORD_TUNING plus strike contact and

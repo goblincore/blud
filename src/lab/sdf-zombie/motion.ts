@@ -146,6 +146,11 @@ export const MOTION_TUNING = {
   restCutoff: 0.35 / 60,
 } as const;
 
+/** How fast a body's feet height (MotionState.floorY) follows the floor under it, m/s: the
+ *  player's eye-step rate (game-player.ts), so a body never pops up a step, and drops ease at the
+ *  same rate (a falling body is plan 3b's business). */
+export const FLOOR_EASE_MPS = 6;
+
 /** Hip-fire knobs. */
 export const FIRE = {
   /** How long the fire carry holds after the last shot (s). The plan said
@@ -363,12 +368,18 @@ export interface MotionState {
   lastShift: Vec3;
   /** Root shift captured when the fall started; null while standing. */
   fallShift: Vec3 | null;
+  /** The feet's world height: eased toward MotionConfig.floorAt under the root at FLOOR_EASE_MPS.
+   *  It is the root shift's y and lifts every world-plane use of joints.groundY. 0 on room levels
+   *  (no floorAt), where every frame is exactly what it was before this field existed. */
+  floorY: number;
 }
 
 /** A fresh motion state: standing at `start`, idle, clock at zero. */
 export function makeMotionState(seed: number, start: Vec3): MotionState {
+  // The spawn's own floor (a sector level's spawn y); `|| 0` keeps room levels' +0 and drops NaN.
+  const floorY = start[1] || 0;
   return {
-    wander: { pos: [start[0], 0, start[2]], heading: 0, speed: 0, target: null, idle: 0 },
+    wander: { pos: [start[0], floorY, start[2]], heading: 0, speed: 0, target: null, idle: 0 },
     gait: { time: 0, seed: seed >>> 0 },
     stagger: makeStaggerState(seed),
     collapse: makeCollapseState(),
@@ -383,6 +394,7 @@ export function makeMotionState(seed: number, start: Vec3): MotionState {
     sinceFire: Infinity,
     lastShift: [0, 0, 0],
     fallShift: null,
+    floorY,
   };
 }
 
@@ -434,6 +446,10 @@ export interface MotionConfig {
    *  length at toe-off by design, so this is not a general rule, and absent
    *  is bit-identical to before the key existed. */
   plantReach?: number;
+  /** THE FLOOR UNDER THE BODY (sector levels): world floor height at (x, z); NaN off the map keeps
+   *  the previous floor. MotionState.floorY eases toward it at FLOOR_EASE_MPS. ABSENT on room
+   *  levels: floorY stays where it started (0) and every frame is bit-identical to before. */
+  floorAt?: (x: number, z: number) => number;
 }
 
 /** What happened since the last frame — collected by the wiring between
@@ -666,6 +682,22 @@ export function stepMotion(
       clamp(wander.pos[2] + soldierStagger.travelDelta[2], bounds.minZ, bounds.maxZ),
     ] };
   }
+  // --- the floor under the root (sector levels) -----------------------------
+  // feetY eases toward cfg.floorAt at FLOOR_EASE_MPS; the wander root rides it. No floorAt: it
+  // stays at the state's floor (0 on room levels) and nothing below changes by a bit.
+  let feetY = state.floorY;
+  if (cfg.floorAt) {
+    const want = cfg.floorAt(wander.pos[0], wander.pos[2]);
+    if (Number.isFinite(want)) {
+      const max = FLOOR_EASE_MPS * dt;
+      feetY = Math.abs(want - feetY) <= max ? want : feetY + Math.sign(want - feetY) * max;
+    }
+  }
+  if (wander.pos[1] !== feetY) wander = { ...wander, pos: [wander.pos[0], feetY, wander.pos[2]] };
+  /** A body-frame height on today's floor → the world, on the floor under the body. Branched, not
+   *  `+ 0`: adding zero turns a -0 into +0 and the frames are pinned bit for bit. */
+  const onFloor = (y: number): number => (feetY === 0 ? y : y + feetY);
+  const worldGround = onFloor(joints.groundY);
 
   // --- body yaw: the damped rigid turn -------------------------------------
   // The whole body (rest pose, gait/stagger offsets, aim cone, plants via
@@ -693,7 +725,7 @@ export function stepMotion(
   const stanceBlend = clamp((state.stanceBlend ?? 0) + (groundedSoldier ? 1 : -1) * SOLDIER_STANCE.blendRate * dt, 0, 1);
   const stanceDrop = SOLDIER_STANCE.hipDrop * stanceBlend + .16 * crouchPosture;
   const walkPosture = clamp((state.walkPosture ?? 0) + (groundedSoldier && !aimedSoldier ? 1 : -1) * 3 * dt, 0, 1);
-  const footwork = groundedSoldier ? stepSoldierFootwork(state.footwork, {
+  let footwork = groundedSoldier ? stepSoldierFootwork(state.footwork, {
     fromRoot: state.wander.pos, desiredRoot: wander.pos, yaw: bodyYaw, dt,
     feet: [havePoints ? points[idx.footL]!.pos : joints.base[idx.footL]!, havePoints ? points[idx.footR]!.pos : joints.base[idx.footR]!],
     hips: (['L', 'R'] as const).map(side => {
@@ -715,8 +747,12 @@ export function stepMotion(
       const injured = sig.mobilityInjury?.side === side || sig.mobilityInjury?.side === 'both';
       return 1 - mobilityPosture * (injured ? .62 : .38);
     }) as [number, number],
-    groundY: joints.groundY,
+    groundY: worldGround,
   }) : undefined;
+  // The footwork root's y is a lerp between last frame's floor and this one's: the root stands on
+  // the eased floor, and the footwork's own root agrees so its next rebase shift has no dy.
+  if (footwork && footwork.root[1] !== feetY)
+    footwork = { ...footwork, root: [footwork.root[0], feetY, footwork.root[2]] };
   if (footwork) wander = { ...wander, pos: footwork.root,
     speed: dt > 0 ? Math.hypot(footwork.root[0] - state.wander.pos[0], footwork.root[2] - state.wander.pos[2]) / dt : 0 };
 
@@ -797,7 +833,7 @@ export function stepMotion(
   // captured in WORLD space from where the foot actually is, so a planted
   // foot pivots in place while the body turns around it (no skate).
   const shift: Vec3 = frozen ?? [
-    wander.pos[0] - joints.pelvis[0], 0, wander.pos[2] - joints.pelvis[2],
+    wander.pos[0] - joints.pelvis[0], feetY, wander.pos[2] - joints.pelvis[2],
   ];
   const pivot = joints.pelvis;
   // Reach- and carry-style arms keep a presence floor so a standing body's
@@ -850,9 +886,10 @@ export function stepMotion(
     const leaned: Vec3 = [local[0] + lean * leanShare, local[1], local[2]];
     const spun = rotateYaw([base[0] - pivot[0], base[1], base[2] - pivot[2]], bodyYaw);
     const off = rotateYaw(leaned, bodyYaw);
+    const y = spun[1] + off[1] - (name.startsWith('foot') || name.startsWith('toe') ? 0 : stanceDrop);
     return [
       pivot[0] + shift[0] + spun[0] + off[0],
-      spun[1] + off[1] - (name.startsWith('foot') || name.startsWith('toe') ? 0 : stanceDrop),
+      shift[1] === 0 ? y : y + shift[1],
       pivot[2] + shift[2] + spun[2] + off[2],
     ];
   });
@@ -1242,7 +1279,7 @@ export function stepMotion(
   ): PlantState => stepPlant(st, {
     stance: stance && !release,
     footPos: footWorld(footIdx),
-    groundY: joints.groundY,
+    groundY: worldGround,
     ...(cfg.plantReach !== undefined
       ? { hip: targets[hipIdx]!, maxReach: cfg.plantReach * (lens[0] + lens[1]) }
       : {}),
@@ -1313,7 +1350,7 @@ export function stepMotion(
   let plantHandR = state.plantHandR;
   const fore = gait.pose.foreStance;
   if (fore && !collapsed && !footwork && idx.handL !== undefined && idx.handR !== undefined) {
-    const handGround = Math.min(joints.base[idx.handL]![1], joints.base[idx.handR]![1]);
+    const handGround = onFloor(Math.min(joints.base[idx.handL]![1], joints.base[idx.handR]![1]));
     const elbowPole = scale(legPole, -1);
     for (const side of ['L', 'R'] as const) {
       if (sig.missing[side === 'L' ? 'armL' : 'armR']) continue;
@@ -1456,7 +1493,7 @@ export function stepMotion(
   const structural = isSoldierFamily(profile) && collapsed;
   // Soldier foot joints sit 13 cm above the authored boot sole. The normal
   // ankle-height plant plane would suspend a side-lying torso in the air.
-  const floorY = joints.groundY - (structural ? .13 : MOTION_TUNING.floorPad);
+  const floorY = worldGround - (structural ? .13 : MOTION_TUNING.floorPad);
   const fallPose = structural ? (state.fallPose ?? points.map(p => [...p.pos] as Vec3)) : undefined;
   const fallFatal = !!state.fallFatal || !!sig.fatal || !sig.headAlive || sig.forcedCollapse;
   const fallImpact = state.fallImpact ?? sig.shot?.dirWorld ?? (state.recoil.joint !== null ? state.recoil.dirWorld : rotateYaw([0,0,-1], bodyYaw));
@@ -1473,7 +1510,7 @@ export function stepMotion(
   if (poseActive) {
     cfg.pose!.forEach((p, i) => {
       const spun = rotateYaw([p[0] - pivot[0], p[1], p[2] - pivot[2]], bodyYaw);
-      targets[i] = [pivot[0] + shift[0] + spun[0], spun[1], pivot[2] + shift[2] + spun[2]];
+      targets[i] = [pivot[0] + shift[0] + spun[0], shift[1] === 0 ? spun[1] : spun[1] + shift[1], pivot[2] + shift[2] + spun[2]];
     });
   }
 
@@ -1498,6 +1535,7 @@ export function stepMotion(
     ...(soldierFullArmBase === undefined ? {} : { soldierFullArmBase }),
     lastShift: shift,
     fallShift: collapsed ? (state.fallShift ?? shift) : null,
+    floorY: feetY,
   };
 
   return {

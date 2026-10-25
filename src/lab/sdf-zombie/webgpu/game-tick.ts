@@ -219,7 +219,8 @@ export function tick(ctx: GameContext, dt: number) {
   // Zombies are soft obstacles: one fat AABB each, rebuilt per frame.
   const zombieBoxes = ctx.world.actors.filter(a=>!a.motionFrame()?.collapsed).map(a => {
     const p = a.pose().pos;
-    return { min: [p[0] - 0.35, 0, p[2] - 0.35] as Vec3, max: [p[0] + 0.35, 1.8, p[2] + 0.35] as Vec3 };
+    // From the body's feet (its floor; 0 on room levels, so 0 .. 1.8 exactly as before).
+    return { min: [p[0] - 0.35, p[1], p[2] - 0.35] as Vec3, max: [p[0] + 0.35, p[1] + 1.8, p[2] + 0.35] as Vec3 };
   });
   if (loopBlocksInput(ctx)) input = { x: 0, z: 0, jump: false };   // dead or done
   stepPlayer(ctx.player.player, input, dt, [...ctx.world.colliders, ...zombieBoxes], ctx.world.level.ground);

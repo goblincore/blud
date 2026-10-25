@@ -79,6 +79,7 @@ import { layerOn } from './light-layers';
 import {
   BURN_BEHAVIOUR, createBurnPanic, stepBurnPanic, type BurnPanicState,
 } from '../burn-behaviour';
+import type { LevelGround } from './level-ground';
 
 /** Signals for an undamaged wanderer — every frame, verbatim. */
 const CALM: Omit<MotionSignals, 'dt'> = {
@@ -252,7 +253,7 @@ export function pushOutOfFurniture(
     else if (min === north) z = maxZ;
     else z = minZ;
   }
-  return [x, 0, z];
+  return [x, p[1], z];
 }
 
 /** The first furniture box the segment p→q crosses (injection order), or
@@ -284,7 +285,8 @@ export function avoidPoint(
   const dz = goal[2] - p[2];
   const d = Math.hypot(dx, dz) || 1;
   // (goal − p) rotated ±90°: side +1 → (dz, −dx), side −1 → (−dz, dx).
-  return [goal[0] + side * (dz / d) * offset, 0, goal[2] + side * (-dx / d) * offset];
+  // y: the body's own floor (a way-point is a ground-plane goal; 0 on room levels).
+  return [goal[0] + side * (dz / d) * offset, p[1], goal[2] + side * (-dx / d) * offset];
 }
 
 /** Committed avoid side for a blocked chase line: prefer the side whose
@@ -597,6 +599,10 @@ export interface ActorBlastEffect {
 
 export function createZombieActor(opts: {
   navigation?: EncounterNavigation;
+  /** What the body stands on, on a SECTOR level (ctx.world.level.ground): the motion step eases
+   *  its feet to the floor under it. Absent on room levels (FLAT_GROUND), where the motion step
+   *  gets no floorAt and every frame is exactly what it was. */
+  ground?: LevelGround;
   id: number;
   room: number;
   body: BuildResult;
@@ -659,8 +665,16 @@ export function createZombieActor(opts: {
     ...bound,
     rig: { ...bound.rig, points: bound.rig.points.map(p => ({ ...p, pinned: false })) },
   };
-  const mj = makeMotionJoints(body, bound.rig.restPose);
+  // The body was built standing at `start`, its spawn floor included (translateBody), but motion
+  // measures the joints from the floor and adds MotionState.floorY (= start y) back: rebase them, or
+  // a body spawned on a 2 m ledge would stand 4 m up. Room levels spawn at y = 0: the array as is.
+  const startY = opts.start[1] || 0;
+  const mj = makeMotionJoints(body, startY === 0 ? bound.rig.restPose
+    : bound.rig.restPose.map(v => [v[0], v[1] - startY, v[2]] as Vec3));
   if (!mj) throw new Error(`zombie ${opts.id}: no motion joints`);
+  // The motion step's floor (sector levels only; the key stays ABSENT otherwise, see motion.ts).
+  const ground = opts.ground;
+  const floorAt = ground ? { floorAt: (x: number, z: number) => ground.floorAt(x, z) } : {};
   const joints: MotionJoints = mj;
   let state: MotionState = makeMotionState(opts.seed, opts.start);
   // Starting-phase variety: seed the initial heading so spawns don't parade.
@@ -1255,7 +1269,7 @@ export function createZombieActor(opts: {
             ...w,
             pos: [
               Math.min(Math.max(nx, opts.navigation?.bounds.minX ?? opts.bounds.minX), opts.navigation?.bounds.maxX ?? opts.bounds.maxX),
-              0,
+              w.pos[1],
               Math.min(Math.max(nz, opts.navigation?.bounds.minZ ?? opts.bounds.minZ), opts.navigation?.bounds.maxZ ?? opts.bounds.maxZ),
             ],
           },
@@ -1350,7 +1364,8 @@ export function createZombieActor(opts: {
         // so read the player from the order when present and remember the
         // last seen point for when sight is lost.
         const playerNow = encounterOrder?.player ?? brainPlayer;
-        if (playerNow) lastPlayerPos = [playerNow.x, 0, playerNow.z];
+        // BrainPlayer has no height: the panic's flee/chase points are ground-plane, on this body's floor.
+        if (playerNow) lastPlayerPos = [playerNow.x, state.floorY, playerNow.z];
         const bp = stepBurnPanic(burnPanic, {
           kind: mind.kind,
           self: state.wander.pos,
@@ -1503,6 +1518,7 @@ export function createZombieActor(opts: {
           // bit-identity contract as the attack line below — motion.ts's
           // zombie path is pinned on the key being ABSENT, not undefined.
           ...(opts.profile !== undefined ? { profile: opts.profile } : {}),
+          ...floorAt,
           // Spread, not `attack: think.attack ?? undefined`: motion.ts's
           // bit-identity contract is about the key being ABSENT.
           // swingPin is forceSwing()'s one-frame capture pin (see step());
@@ -1541,14 +1557,18 @@ export function createZombieActor(opts: {
       // Collision resolves after motion authored world-space targets. Keep
       // this frame's rig, held prop and future fall anchor with the root.
       // Footwork rebases its world contacts from wander on the next step.
+      // Undoing a move onto a step also undoes its rise (dy): the feet go back to the floor they
+      // came from. dy is 0 on room levels (y is 0 throughout), and branched so -0 stays -0.
       const correctFrame = (pos: Vec3) => {
         const dx = pos[0] - state.wander.pos[0], dz = pos[2] - state.wander.pos[2];
-        const translate = (p: Vec3): Vec3 => [p[0] + dx, p[1], p[2] + dz];
+        const dy = pos[1] - state.wander.pos[1];
+        const translate = (p: Vec3): Vec3 => [p[0] + dx, dy === 0 ? p[1] : p[1] + dy, p[2] + dz];
         f.rootShift = translate(f.rootShift);
         f.restPose = f.restPose.map(translate);
         if (f.gun) f.gun = { ...f.gun, root: translate(f.gun.root) };
+        if (dy !== 0) f.floorY += dy;
         state = { ...state, lastShift: translate(state.lastShift),
-          wander: { ...state.wander, pos } };
+          wander: { ...state.wander, pos }, ...(dy !== 0 ? { floorY: state.floorY + dy } : {}) };
       };
       if (opts.navigation && !opts.navigation.canTravel(beforeMove,state.wander.pos)) {
         correctFrame(beforeMove);
@@ -1754,7 +1774,7 @@ export function createZombieActor(opts: {
     const w = state.wander;
     const next: Vec3 = [
       Math.min(Math.max(w.pos[0] + dx, opts.navigation?.bounds.minX ?? opts.bounds.minX), opts.navigation?.bounds.maxX ?? opts.bounds.maxX),
-      0,
+      w.pos[1],
       Math.min(Math.max(w.pos[2] + dz, opts.navigation?.bounds.minZ ?? opts.bounds.minZ), opts.navigation?.bounds.maxZ ?? opts.bounds.maxZ),
     ];
     if (opts.navigation && !opts.navigation.canTravel(w.pos,next)) return;
