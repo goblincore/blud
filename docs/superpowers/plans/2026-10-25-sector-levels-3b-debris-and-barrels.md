@@ -59,11 +59,14 @@ optional argument.
 - **Player blast damage already exists for rockets only** (`rockets.ts` `blastPlayerDamage`: 45 at the centre,
   quadratic to 0 at 3.2 m, applied in `game-tick.ts` after `detonateAt`); dynamite and the overcook never hurt the
   player. This plan adds a general `blast-player.ts` (same falloff shape, proven equal to the rocket's) and gives
-  barrels their own profile. **Dynamite stays harmless to the player** until the owner says otherwise (open question).
+  barrels their own profile. **Dynamite does NOT hurt the player — enemies only (owner, 2026-10-25: keep today's
+  behaviour).** `blast-player.ts` serves rockets (their rule unchanged) and barrels only; no task adds player damage
+  to a thrown bundle or the overcook, and `detonateAt` itself never damages the player (barrels apply theirs in
+  `game-barrels.ts` after calling it).
 - **Blasts on sector levels are shielded by sector geometry** (Doom's radius-damage sight check): a body whose torso
   centre, a barrel whose centre, or the player whose capsule centre is behind a sector wall from the blast takes
   nothing. One probe per target. Room levels are unchanged (no filter).
-- **Barrel numbers (owner may retune):** radius 0.3 m, height 0.95 m, 20 HP; a pellet 4, a slug 20, a flail strike 10,
+- **Barrel numbers (owner, 2026-10-25: use these, tune after playing):** radius 0.3 m, height 0.95 m, 20 HP; a pellet 4, a slug 20, a flail strike 10,
   an enemy round 3; a blast lights every intact barrel whose centre is within 3.5 m (and not shielded) after
   0.1–0.3 s (FNV-1a of `id:blastCount`, deterministic, no RNG stream touched); a barrel shot to 0 HP goes up on the
   next barrel step (never inside the pellet loop); it explodes at its centre (floor + 0.475 m); the player takes up to
@@ -72,8 +75,13 @@ optional argument.
   with a black/yellow hazard band, rust at the foot and drips, the level's `metalSheet` normal and roughness maps,
   lit like the sector walls (the sector's light level × albedo) plus a faint nukage-green glow in the lid. No WAD
   data. After the blast: a sooty stub (the drum's bottom 0.18 m, torn top) and a soot scorch on the floor.
+- **All of E1M1's barrels, whatever the skill (owner, 2026-10-25: barrels are scenery).** The converter ignores the
+  skill flags for type 2035; Doom's multiplayer-only flag (16) STILL skips a barrel — those things are not in a
+  single-player Doom game either, and the rule stays the same one the monsters and pickups use.
 - **Barrels are sector-level only** in this plan (the level format accepts `barrels` only in sector files). Barrels in
-  room levels are a later item (below).
+  room levels are later, not in 3b (owner, 2026-10-25).
+- **Known gap, accepted for 3b:** a destroyed barrel keeps blocking enemy pathing until the level reloads (navigation
+  is built once, with the drums' boxes in it).
 
 **Out of scope (later):** barrels in room levels (Level Format v1 `barrels`, the Flat/arena), a destroyed barrel
 freeing its navigation cells (nav is built once; the cells stay blocked until reload), barrel sounds, metal shrapnel
@@ -1040,20 +1048,28 @@ export function createDebrisSeams(ctx: GameContext) {
 
   (b1–b2 chain, 1.1 m apart; b3 is 6.2 m from b2, outside the 3.5 m catch; b4 stands on the C ledge; b5 is south of
   the column, so a player north of it is shielded.)
-- [ ] **Step 4 (Python, test first)** in `test_doom_map.py`: the test WAD's thing 6 (a barrel at (32, 32) in A, flags 7)
-  becomes `out["barrels"] == [{"id": "b6", "pos": [-1.0, 0.0, 3.0]}]`; `test_summary_counts_kinds_and_skipped_things`
-  now expects `stats["skipped_types"] == {}` and `stats["barrels"] == 1`; a barrel outside every sector counts in
-  `in_no_sector`; a WAD with no barrels has no `"barrels"` key. Run `python3 -m pytest scripts/tests/test_doom_map.py -q` — FAIL.
+- [ ] **Step 4 (Python, test first)** in `test_doom_map.py`. Append two things to `build_wad()`'s list (at the END, so
+  every existing thing index and test stays put): `(64, 64, 0, 2035, 1)` — 8, a barrel in A on EASY only — and
+  `(96, 96, 0, 2035, 23)` — 9, a multiplayer-only barrel in A. Then:
+  - default skill 4: `out["barrels"] == [{"id": "b6", "pos": [-1.0, 0.0, 3.0]}, {"id": "b8", "pos": [0.0, 0.0, 2.0]}]`
+    — the easy-only barrel is placed (barrels ignore skill), the multiplayer-only one is not;
+  - `convert(tmp_path, skill=1)["barrels"]` is the same list (skill never changes barrels);
+  - `test_summary_counts_kinds_and_skipped_things` now expects `stats["skipped_types"] == {}`, `stats["barrels"] == 2`,
+    `stats["not_this_skill"] == 1` (the imp only: barrels never count there) and `stats["multiplayer_only"] == 2`;
+  - a barrel outside every sector counts in `in_no_sector`; a WAD with no barrels has no `"barrels"` key.
+  Run `python3 -m pytest scripts/tests/test_doom_map.py -q` — FAIL.
 - [ ] **Step 5 (Python):** `doom_tables.py`: `THING_BARRELS = {2035}  # Doom's exploding barrel -> our toxic drum (plan 3b)`.
-  `doom_map.py` in the things loop: `is_barrel = t["type"] in THING_BARRELS`; the skip test becomes
+  `doom_map.py` in the things loop: compute `is_barrel = t["type"] in THING_BARRELS` BEFORE the flag tests; the
+  multiplayer-only test stays first and applies to barrels; the skill test becomes
+  `if not is_barrel and not t["flags"] & skill_bit:` (barrels are scenery: every skill); the type skip test becomes
   `if not is_spawn and not is_barrel and t["type"] not in THING_PICKUPS`; after the sector lookup,
   `if is_barrel: barrels.append({"id": f"b{ti}", "pos": pos}); continue`. `level["barrels"] = barrels` when non-empty;
   `stats["barrels"] = len(barrels)`; the module docstring and `main()`'s summary print mention barrels.
 - [ ] **Step 6:** pytest PASS; regenerate E1M1
   (`python3 scripts/levels/doom_map.py "$HOME/MIYOO BACKUP/Roms/PORTS/Games/Doom (PrBoom)/doom/doomu.wad" E1M1 --svg .lab-tmp/doom`)
   and parse it with `npx tsx -e` + `parseSectorLevel` (as plan 1 did) — it must pass. **Report the barrel count**: the 3a
-  summary skipped six 2035s at skill 4 (the owner said 8 — the other two are probably not on skill 4 or
-  multiplayer-only; say which). `npx vitest run` the sector-json tests; typecheck. **Commit** (no generated files)
+  summary skipped six 2035s at skill 4; with skill ignored the owner expects 8 — report the count and how many
+  multiplayer-only barrels were still skipped (if that leaves fewer than 8, say so in the notes). `npx vitest run` the sector-json tests; typecheck. **Commit** (no generated files)
   `feat(levels): barrels in the sector format; the converter keeps Doom's barrels`.
 
 ---
@@ -1146,7 +1162,7 @@ describe('barrels', () => {
 // THE PLAYER'S SHARE OF A BLAST (plan 2026-10-25-sector-levels-3b): the rocket's rule (rockets.ts blastFalloff —
 // 1 at the epicentre, quadratic to 0 at the radius) for any blast with a profile. Rockets keep their own functions
 // (proven equal in the test); barrels use BLAST_PROFILES.barrel. Dynamite has no profile: it does not hurt the
-// player (owner question, plan 3b).
+// player — enemies only (owner, 2026-10-25).
 //
 // Pure: no three.js, no DOM.
 import type { Vec3 } from './types';
@@ -1522,7 +1538,7 @@ a pickup `y − floor` = 0.25 ± 0.001; a resting bundle `|y − floor| ≤ 0.01
     read `debris()`).
 - [ ] **Step 2: Notes** `docs/dev-notes/2026-10-25-sector-levels-3b/NOTES.md`: what was built, the y = 0 sites table
   (as fixed), the decisions above, the barrel numbers, the gate output, the shots looked at, the converter's barrel
-  count, boot `drawOnce` before/after, gaps (dynamite does not hurt the player; destroyed drums keep their nav cells;
+  count, boot `drawOnce` before/after, decisions kept (dynamite does not hurt the player, by the owner's choice), gaps (destroyed drums keep their nav cells;
   room-level barrels; no barrel sound; nav does not avoid lit drums).
 - [ ] **Step 3: Task wiki.** `docs/tasks/levels.md`: the sector-levels item gains 5b (debris on floors + barrels, done,
   links) and the next items (doors per the owner's sliding-door question, room-level barrels); `TASKS.md` front page
@@ -1530,13 +1546,14 @@ a pickup `y − floor` = 0.25 ± 0.001; a resting bundle `|y − floor| ≤ 0.01
 
 ---
 
-## Open questions for the owner
+## Owner decisions (answered 2026-10-25)
 
-1. **Should dynamite hurt the player** (a thrown bundle near you, the overcook in hand) like rockets and now barrels?
-   Today it does not; `blast-player.ts` makes it a one-line profile.
-2. **Barrel numbers:** 20 HP (a close shotgun blast or one slug pops one; two flail strikes), 55 HP to the player at
-   point-blank falling to 0 at 4 m, chains within 3.5 m after 0.1–0.3 s. Doom's barrel kills at point-blank — harsher?
-3. **Barrel count:** the 3a converter summary skipped six type-2035 things at skill 4; you said E1M1 has 8 (the other
-   two are likely not on skill 4 / multiplayer-only). Keep skill 4's six, or place all barrels regardless of skill?
-4. **Destroyed barrels keep blocking navigation cells** until reload (nav is built once). Fine for E1M1, or rebuild?
-5. **Barrels in room levels** (the arena, the Flat): a later item — want them soon?
+1. **Dynamite does not hurt the player** — enemies only, today's behaviour. `blast-player.ts` is used by rockets
+   (unchanged rule) and barrels only.
+2. **Barrel numbers: the draft values** — 20 HP; pellet 4, slug 20, flail 10, enemy round 3; up to 55 to the player,
+   quadratic to 0 at 4 m; chains within 3.5 m after 0.1–0.3 s. Tune after playing.
+3. **All E1M1 barrels regardless of skill** (barrels are scenery): the converter ignores skill flags for barrels;
+   Doom's multiplayer-only flag still skips one (the same rule as every other thing).
+4. **A destroyed barrel keeps blocking enemy pathing until reload** — accepted for 3b, listed as a known gap
+   (controller default).
+5. **Barrels in room levels: later**, not in 3b.
