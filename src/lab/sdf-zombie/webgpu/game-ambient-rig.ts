@@ -12,6 +12,7 @@ import * as THREE from 'three/webgpu';
 import { DUNGEON_RIG, type AmbientRig } from './dungeon-lighting';
 import { restampLevelProbes } from './game-bone-cull';
 import { applyHemi } from './game-level-lights';
+import { fogRange } from './fog-range';
 
 
 export function applyRig(ctx: GameContext, rig: AmbientRig) {
@@ -30,8 +31,9 @@ export function applyRig(ctx: GameContext, rig: AmbientRig) {
   const fog = ctx.boot.handle.scene.fog as THREE.Fog | null;
   if (fog) {
     fog.color.setRGB(...rig.fogColor);
-    fog.near = rig.fogNear;
-    fog.far = rig.fogFar;
+    const r = fogRange(rig, !!ctx.world.level?.def?.sectors, typeof location === 'undefined' ? '' : location.search);
+    fog.near = r.near;
+    fog.far = r.far;
   }
   ctx.boot.handle.renderer.setClearColor(new THREE.Color(...rig.fogColor));
   ctx.lighting.flashlight.spot.visible = rig === DUNGEON_RIG;

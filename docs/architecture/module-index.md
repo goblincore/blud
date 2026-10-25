@@ -57,7 +57,7 @@ Each line is the first sentence of the module's header comment.
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 7 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 47 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [SDF march renderer](#sdf-march-renderer) | 48 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 39 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
@@ -319,7 +319,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-arms-math.ts` — The FPV arms' pure half: the node contract, the material-name mapping, and the basis that aims an arm.
 - `webgpu/game-arms.ts` — The FPV goblin arms: loads goblin-arm.glb, dresses it, and hands two arm groups (origin = hand centre, local +Y = toward the elbow) to game-main.
 - `webgpu/game-axe.ts` — WEAPON SLOT 7: THE AXE (spec docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md §3-§4).
-- `webgpu/game-barrel-view.ts` — THE BARREL VIEW (plan 2026-10-25-sector-levels-3b Tasks 12–13): the three.js side of barrel-look.ts.
+- `webgpu/game-barrel-view.ts` — THE BARREL VIEW (plan 2026-10-25-sector-levels-3b Tasks 12–13, owner look pass 2026-10-25): the three.js side of barrel-look.ts.
 - `webgpu/game-barrels.ts` — BARRELS IN PLAY (plan 2026-10-25-sector-levels-3b Task 13): the level's barrels on ctx.world.barrels — the pure core (barrel-runtime.ts: states,…
 - `webgpu/game-bench-scenario.ts` — The scripted firefight, as DATA.
 - `webgpu/game-bench.ts` — Runs a Scenario against the page and reports per-segment frame cost.
@@ -639,6 +639,7 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 - `webgpu/emergence-placement.ts` — Where the screen frame (origin at the glass centre, +x right, +y up, +z out of the screen toward the room, metres: emergence-field.ts) sits in the…
 - `webgpu/emergence-timeline.ts` — THE SCREEN EMERGENCE's cue curves (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md, section 5): from a time `t` in…
 - `webgpu/field-render.ts` — INTERLACED FIELD RENDERING — the pure math.
+- `webgpu/fog-range.ts` — fogRange: the scene fog's near/far for a level — the ambient rig's own range on room levels, a longer, thinner veil on sector levels, then URL…
 - `webgpu/goblin-puppet.ts` — THE GOBLIN PUPPET (emergence in the Flat, plan Task 4; spec docs/superpowers/specs/2026-10-16-emergence-in-the-flat-design.md): the SDF goblin of the…
 - `webgpu/hazard-floor.ts` — HURT FLOORS (spec 2026-10-24 §8): standing on a hurt sector deals whole points of damage once a second, the first after half a second (Doom hits…
 - `webgpu/hull-refine-view.ts` — Wraps a shipped body/chunk view so it can be drawn EITHER through its own proxy-box march (unchanged) OR through a per-frame surface-nets hull whose…
