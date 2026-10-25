@@ -152,6 +152,14 @@ function flushPanelJobs(): void {
     done: st => console.info(`[sector-mat] ${jobs.length} panel kinds filled in ${st.ms.toFixed(0)} ms: ${st.offThread} off-thread (${cpu.toFixed(0)} ms worker CPU, ${st.workers} workers), ${st.inPlace} in place${st.failures ? `, ${st.failures} worker failures` : ''}`),
   });
 }
+/** A panel kind's shared texture set — the walls' own, built once per page (filled off-thread when it is new).
+ *  Props that wear the level's materials (the barrels' metalSheet normal and roughness) share it, so it costs no
+ *  texture memory of its own. */
+export function sectorPanelSet(kind: PanelKind): PanelTextureSet {
+  const t = panelSet(kind);
+  flushPanelJobs();
+  return t;
+}
 /** The light panels' glow strength (`?panelglow=` overrides). */
 export const panelGlow = uniform(1);
 /** Grime weights for the panel kinds (stone is untouched, so ?sectormat=0 stays the old look). */
