@@ -2,7 +2,7 @@
 //
 // BARRELS IN PLAY (plan 2026-10-25-sector-levels-3b Task 13): the level's barrels on ctx.world.barrels — the pure
 // core (barrel-runtime.ts: states, boxes in ctx.world.colliders, the chain log) wired to the game. A barrel that
-// goes up swaps its drum for the stub, lays a scorch at its feet, detonates THROUGH the dynamite blast (detonateAt:
+// goes up swaps its drum for the stub, lays a scorch at its feet (as big as the floor there takes), detonates THROUGH the dynamite blast (detonateAt:
 // wounds, gibs, launches, light, VFX, kick — and its closing catchBlast is the chain), then hurts the player by
 // BLAST_PROFILES.barrel unless sector geometry shields the capsule centre. Dynamite itself never hurts the player
 // (owner, 2026-10-25); only this module and the rockets apply a blast share.
@@ -13,7 +13,7 @@ import { BLAST_PROFILES, blastToPlayer, playerBlastDamage } from '../blast-playe
 import type { GameContext } from './game-context';
 import type { BarrelDef } from './level-def';
 import type { SectorGround } from './sector-ground';
-import { barrelYaw } from './barrel-look';
+import { barrelYaw, scorchFit } from './barrel-look';
 import { createBarrelCore, type BarrelRuntime } from './barrel-runtime';
 import { createBarrelMaterials, createBarrelView, createScorchPool, type BarrelView } from './game-barrel-view';
 import { detonateAt } from './game-dynamite-step';
@@ -22,9 +22,6 @@ import { damagePlayer } from './game-loop';
 import { PLAYER } from './game-player';
 
 export type { BarrelRuntime } from './barrel-runtime';
-
-/** A scorch's edge, metres. */
-const SCORCH_M = 1.6;
 
 export interface GameBarrels extends BarrelRuntime {
   /** Materials the barrels made (2 per zone with barrels: drum/stub and lid). */
@@ -50,7 +47,9 @@ export function createBarrelRuntime(ctx: GameContext, defs: readonly BarrelDef[]
     shielded,
     explode(id, at, feet) {
       views.get(id)?.explode();
-      scorches.add(feet[0], feet[1], feet[2], SCORCH_M, barrelYaw(`${id}:scorch`));
+      // As wide as the floor round the feet takes (BARREL_LOOK.scorchM, shrunk so it never hangs off a ledge).
+      const size = scorchFit((x, z) => ground.floorAt(x, z), feet[0], feet[2], feet[1]);
+      scorches.add(feet[0], feet[1], feet[2], size, barrelYaw(`${id}:scorch`));
       detonateAt(ctx, at);
       const pp = ctx.player.player.pos;
       const d = blastToPlayer(at, pp, PLAYER.height);
