@@ -350,7 +350,7 @@ import { BUNDLE_BODY_RADIUS_M, EXPLOSION_LIGHT, EXPLOSION_LIGHTS, _propPos, bund
 import { BUNDLE_HOLD, BURST_SLOTS, spawnBurstStandIn, stepWeaponSlots } from './game-weapon-rig';
 import { TRAIL_STREAM_BASE, trailStreamId } from './game-wound-vfx';
 import { CULL_DWELL_MS, syncKitVisibility, updateVisibleActors } from './game-render-controls';
-import { actorSpawnCentre, chunkCollidersAt } from './game-hit-trace';
+import { actorSpawnCentre, chunkCollidersAt, seatBloodSpawn } from './game-hit-trace';
 import { applySdfScale } from './game-render-controls';
 import { aimDir } from './game-weapon-rig';
 import { finishChunkBake, spawnGoreShowcase } from './game-chunk-bake';
@@ -3383,11 +3383,13 @@ async function main() {
     // frames on it was a 0.3 m red ball exactly around the brain's climb, and it hid the brain
     // (head-4-brain.png). And a PELLET gout, not the slug one (85 near-stationary 6-14 cm drops held at the
     // crown for up to 0.9 s).
-    burst: (_a, at, dir) => {
-      burstVolume(ctx.vfx.bloodSim, at, 0.06, [dir[0] * 0.6, 0.4, dir[2] * 0.6], rngStreams.bleed, ctx.boot.nextEmitterStream++,
+    burst: (a, at, dir) => {
+      const seat = seatBloodSpawn(ctx, a, at);   // sector levels (plan 3b): inside the level, on the body's floor
+      burstVolume(ctx.vfx.bloodSim, seat.pos, 0.06, [dir[0] * 0.6, 0.4, dir[2] * 0.6], rngStreams.bleed, ctx.boot.nextEmitterStream++,
         { count: 0.4, speed: 0.5 });
       const l = Math.hypot(dir[0], dir[1] + 0.6, dir[2]) || 1;
-      spawnImpactGout(ctx.vfx.bloodSim, 'pellet', at, [dir[0] / l, (dir[1] + 0.6) / l, dir[2] / l], rngStreams.bleed, ctx.boot.nextEmitterStream++);
+      spawnImpactGout(ctx.vfx.bloodSim, 'pellet', seat.pos, [dir[0] / l, (dir[1] + 0.6) / l, dir[2] / l], rngStreams.bleed, ctx.boot.nextEmitterStream++,
+        undefined, seat.floorY);
     },
     bleed: (a, w, point, incoming, kind) => registerBleed(ctx, a, w, kind, { point, incoming }),
     attach: (a, prims, pos, opts) => ctx.boot.attachPiece?.(a, prims, pos, opts) ?? { update() {}, dispose() {} },

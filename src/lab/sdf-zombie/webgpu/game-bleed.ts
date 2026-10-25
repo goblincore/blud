@@ -19,6 +19,7 @@ import { type Vec3 } from '../types'
 import { type ZombieActor } from './game-actor'
 import { spillVerdict } from './game-wound-vfx'
 import { woundStreamId } from './game-wound-streams'
+import { seatBloodSpawn } from './game-hit-trace'
 import { impactSplashProfiles } from './impact-splash-profiles'
 import { rngStreams } from './rng'
 import { actorSpawnCentre } from './game-hit-trace'
@@ -116,8 +117,11 @@ export function registerBleed(ctx: GameContext,
   // other emitter's.
   const streamId = woundStreamId(ctx, wound);
   // A character's heavier spray (MotionProfile.gore, gore-tuning.ts goutPack): undefined = the shared gout, bit-identical.
-  spawnImpactGout(ctx.vfx.bloodSim, kind, anchor, [-normal[0], -normal[1], -normal[2]], rngStreams.bleed, streamId,
-    goutPack(a.gore, kind));
+  // Sector levels (plan 3b): the gout starts inside the level (a limb through a wall bleeds on this side) and its
+  // drops know the body's floor. Room levels: the anchor itself, no floor field.
+  const seat = seatBloodSpawn(ctx, a, anchor);
+  spawnImpactGout(ctx.vfx.bloodSim, kind, seat.pos, [-normal[0], -normal[1], -normal[2]], rngStreams.bleed, streamId,
+    goutPack(a.gore, kind), seat.floorY);
   // SUPPLEMENTARY entry splash (opt-in, ?impactsplash=1). Projectile hits
   // use the contact and incoming shot below; stumps use their outward
   // wound normal. The seed is
@@ -198,6 +202,8 @@ export function registerCutBleed(ctx: GameContext,
   for (const t of CUT_EXTRA_GOUTS) {
     const m = warpPoint(posed.split, [anchor[0] + along[0] * t * wound.radius, anchor[1] + along[1] * t * wound.radius, anchor[2] + along[2] * t * wound.radius]);
     const out = warpDir(posed.split, m.piece, normal);
-    spawnImpactGout(ctx.vfx.bloodSim, kind, m.p, [-out[0], -out[1], -out[2]], rngStreams.bleed, streamId);
+    const seat = seatBloodSpawn(ctx, a, m.p);
+    spawnImpactGout(ctx.vfx.bloodSim, kind, seat.pos, [-out[0], -out[1], -out[2]], rngStreams.bleed, streamId,
+      undefined, seat.floorY);
   }
 }

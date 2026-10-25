@@ -96,3 +96,16 @@ export function clampSpawnInsideMap(map: SectorMap, ground: SectorGround, from: 
   const k = (d - pull) / d;
   return [from[0] + dx * k, from[1] + dy * k, from[2] + dz * k];
 }
+
+/** A POINT spawn on a sector level (plan 3b: blood gouts and wound drops): `to` clamped inside from the body centre
+ *  `from` (clampSpawnInsideMap; unclamped with no body) and the floor to seed the spawn with — the BODY's floor (the
+ *  floor the drops fall toward from a limb poking over a riser or through a wall), else the floor under the point,
+ *  else undefined (off the map with no body: the stepper's own fallback). */
+export function seatSpawnInsideMap(
+  map: SectorMap, ground: SectorGround, from: Vec3 | null, to: Vec3, radius = 0,
+): { pos: Vec3; floorY: number | undefined } {
+  const pos = from ? clampSpawnInsideMap(map, ground, from, to, radius) : to;
+  const body = from ? ground.floorAt(from[0], from[2]) : NaN;
+  const own = ground.floorAt(pos[0], pos[2]);
+  return { pos, floorY: Number.isFinite(body) ? body : Number.isFinite(own) ? own : undefined };
+}

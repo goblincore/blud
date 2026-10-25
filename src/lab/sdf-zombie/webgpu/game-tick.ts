@@ -40,7 +40,7 @@ import { detonateAt, stepDynamite } from './game-dynamite-step';
 import { stepEgg } from './game-egg';
 import { spawnScheduledGibs } from './game-gib-actor';
 import { stepPendingGibImpulses } from './game-gib-spawn';
-import { ceilingAt, chunkCollidersAt, debrisGround, shellAmpOf } from './game-hit-trace';
+import { ceilingAt, chunkCollidersAt, debrisGround, seatBloodSpawn, shellAmpOf } from './game-hit-trace';
 import { updateHud } from './game-hud';
 import { applyDeathCamera, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop';
 import { stepMeshGibs } from './game-mesh-gibs';
@@ -1193,9 +1193,12 @@ export function tick(ctx: GameContext, dt: number) {
         const a = ctx.world.actors.find(q => q.id === e.bodyId);
         if (!a) { ctx.vfx.bleed.evictForBody(e.bodyId); continue; }
         const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, e.wound, a.pose().yaw, a.posed().split);
+        // Sector levels (plan 3b): the wound's drops start inside the level and know the body's floor (one probe
+        // per emitter per frame). Room levels: the anchor itself, no floor field.
+        const seat = seatBloodSpawn(ctx, a, anchor);
         e.acc = spawnWoundDroplets(
-          ctx.vfx.bloodSim, e.kind, ctx.vfx.bleedClock - e.bornAt, anchor, normal, cdt, e.acc, rngStreams.bleed,
-          woundStreamId(ctx, e.wound),
+          ctx.vfx.bloodSim, e.kind, ctx.vfx.bleedClock - e.bornAt, seat.pos, normal, cdt, e.acc, rngStreams.bleed,
+          woundStreamId(ctx, e.wound), undefined, seat.floorY,
         );
       }
       // EVERY FLYING PIECE IS AN EMITTER, IN EITHER RENDER MODE. The owner,

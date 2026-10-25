@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseSectorLevel } from './sector-json';
 import { buildSectorGround } from './sector-ground';
-import { clampSpawnInsideMap, sectorDebrisGround, WALL_SKIN_M } from './sector-debris';
+import { clampSpawnInsideMap, seatSpawnInsideMap, sectorDebrisGround, WALL_SKIN_M } from './sector-debris';
 import { landingFloor } from '../debris-ground';
 import type { Vec3 } from '../types';
 
@@ -126,5 +126,24 @@ describe('clampSpawnInsideMap: spawns start inside the level (plan 3b)', () => {
     const to: Vec3 = [0, 1, -2];
     expect(clampSpawnInsideMap(map, ground, [0, 1, -4], to, 0.1)).toBe(to);
     expect(clampSpawnInsideMap(map, ground, [0, -1, -2], to, 0.1)).toBe(to);
+  });
+});
+
+describe('seatSpawnInsideMap: a point spawn (blood) clamped inside with the body floor (plan 3b)', () => {
+  const ground = buildSectorGround(map);
+  it('a wound point past the north wall is pulled inside and keeps the body floor', () => {
+    const s = seatSpawnInsideMap(map, ground, [0, 1, -1], [0, 1, 0.3], 0.02);
+    expect(s.pos[2]).toBeCloseTo(-(WALL_SKIN_M + 0.02), 9);
+    expect(Number.isFinite(ground.floorAt(s.pos[0], s.pos[2]))).toBe(true);
+    expect(s.floorY).toBe(0);
+  });
+  it('the floor is the BODY floor, not the floor under the spawn (a limb over the B riser)', () => {
+    const s = seatSpawnInsideMap(map, ground, [1, 0.9, -7.8], [1, 0.9, -8.2], 0.02);
+    expect(s.floorY).toBe(0);
+  });
+  it('no body centre: the point unclamped, the floor under it (undefined off the map)', () => {
+    const to: Vec3 = [0, 1, -10];
+    expect(seatSpawnInsideMap(map, ground, null, to)).toEqual({ pos: to, floorY: 0.5 });
+    expect(seatSpawnInsideMap(map, ground, null, [0, 1, -4]).floorY).toBeUndefined();
   });
 });

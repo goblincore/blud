@@ -18,7 +18,8 @@ import { roomCeilingM } from './level-def';
 import { type Chunk, type ChunkColliders } from '../gib-chunks';
 import { convergedDir, muzzleWorld } from './game-weapon-rig';
 import type { DebrisGround } from '../debris-ground';
-import { clampSpawnInsideMap, sectorDebrisGround } from './sector-debris';
+import { clampSpawnInsideMap, seatSpawnInsideMap, sectorDebrisGround } from './sector-debris';
+import { WOUND_SPAWN_OFFSET } from '../blood-sim';
 import { sectorSegmentHit, type SectorHit } from './sector-ray';
 import type { SectorGround } from './sector-ground';
 
@@ -254,6 +255,19 @@ export function seatChunkSpawn(ctx: GameContext, c: Chunk, from?: Vec3 | null): 
   const ownFloor = ground.floorAt(pos[0], pos[2]);
   const floorY = Number.isFinite(bodyFloor) ? bodyFloor : Number.isFinite(ownFloor) ? ownFloor : c.floorY;
   return { ...c, pos: [pos[0], pos[1], pos[2]], ...(floorY === undefined ? {} : { floorY }) };
+}
+
+/** A BLOOD spawn point on a SECTOR level (plan 3b): `at` (a wound anchor, a gout centre) clamped inside the level from
+ *  the body's spawn centre (`actorSpawnCentre`; a limb poking through a wall bleeds on this side of it) by the drops'
+ *  spawn offset, and the body's floor to seed the drops' `floorY` with (blood-sim.ts spawnImpactGout /
+ *  spawnWoundDroplets). Room levels: `{ pos: at, floorY: undefined }` without reading the actor — the shipped spawn. */
+export function seatBloodSpawn(
+  ctx: GameContext, a: { pose(): { pos: Vec3 } } | null, at: Vec3,
+): { pos: Vec3; floorY: number | undefined } {
+  const map = sectorsOf(ctx);
+  if (!map) return { pos: at, floorY: undefined };
+  return seatSpawnInsideMap(map, ctx.world.level.ground as SectorGround, a ? actorSpawnCentre(ctx, a) : null, at,
+    WOUND_SPAWN_OFFSET);
 }
 
 /** Where a slug fired RIGHT NOW would hit — the shared predictor.

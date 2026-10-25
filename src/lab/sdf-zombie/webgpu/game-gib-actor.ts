@@ -20,7 +20,7 @@ import { type ZombieActor } from './game-actor';
 import { spawnChunkPiece } from './game-chunk-pieces';
 import { spawnAssetGibPiece, spawnSpriteGibPiece } from './game-gib-pieces';
 import { ensureCarvedLibrary, gibAllowance, gibAssetArchetypeOf, gibBudget, gibDebit, retireActor, spawnCarvedPiece } from './game-gib-spawn';
-import { actorSpawnCentre } from './game-hit-trace';
+import { actorSpawnCentre, seatBloodSpawn } from './game-hit-trace';
 import { rngStreams } from './rng';
 
 
@@ -358,7 +358,9 @@ export function gibActor(ctx: GameContext,
   // takes the SIM directly (its droplets are rendered by bloodView.sync), and
   // 'slug' is the heaviest profile BleedKind has — there is no 'blast' one.
   if (ctx.vfx.bleedEnabled) {
-    spawnImpactGout(ctx.vfx.bloodSim, 'slug', at, [0, 1, 0], rngStreams.bleed, ctx.boot.nextEmitterStream++);
+    const seat = seatBloodSpawn(ctx, a, at);   // sector levels: inside the level, on the body's floor (plan 3b)
+    spawnImpactGout(ctx.vfx.bloodSim, 'slug', seat.pos, [0, 1, 0], rngStreams.bleed, ctx.boot.nextEmitterStream++,
+      undefined, seat.floorY);
   }
   retireActor(ctx, a);
   ctx.telemetry.telemetry.event('dynamite-gib', {

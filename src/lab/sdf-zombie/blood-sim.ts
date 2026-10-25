@@ -411,7 +411,7 @@ const WOUND_DROPLET_LIFE = BLOOD_TRAIL.lifetimeSec;
 /** Spawned 2 cm out along the emit direction so a droplet's first frame is
  *  already off the skin (a sprite spawning ON the surface pixel reads as a
  *  flesh flicker at wound size). */
-const WOUND_SPAWN_OFFSET = 0.02;
+export const WOUND_SPAWN_OFFSET = 0.02;
 
 /**
  * One emitter's frame: spawns this step's droplets for ONE wound of `kind`
@@ -423,11 +423,14 @@ const WOUND_SPAWN_OFFSET = 0.02;
  *
  * `pack` (optional, blood-density spike) multiplies the cone / rate / size
  * bands for a DENSER spray; absent = the shipped profile exactly.
+ *
+ * `floorY` (optional, SECTOR levels, plan 3b) seeds every droplet's `floorY` with the body's floor, so a drop that
+ * starts over a hole still has a floor; absent = no field (room levels unchanged).
  */
 export function spawnWoundDroplets(
   sim: BloodSim, kind: BleedKind, ageSec: number,
   anchor: Vec3, normal: Vec3, dt: number, acc: number, rng: () => number,
-  stream?: number, pack?: DensityPack,
+  stream?: number, pack?: DensityPack, floorY?: number,
 ): number {
   const p = WOUND_BLEED[kind];
   if (ageSec > p.lifetimeSec || dt <= 0) return acc;
@@ -464,6 +467,7 @@ export function spawnWoundDroplets(
       kind: 'drop',
       ribbon: true,
       ...(stream !== undefined ? { stream } : {}),
+      ...(floorY !== undefined ? { floorY } : {}),
     });
     // MIST — fine spray haze riding each bead (X1.bleed-look, owner ask):
     // spawned around the bead's own direction with a wider scatter, smaller,
@@ -487,6 +491,7 @@ export function spawnWoundDroplets(
         // consumer never has to guess which emitter a haze particle
         // belonged to.
         ...(stream !== undefined ? { stream } : {}),
+        ...(floorY !== undefined ? { floorY } : {}),
       });
     }
   }
@@ -506,10 +511,12 @@ export function spawnWoundDroplets(
  * into an arcing rope. Jittering it collapses the rope back into a ball —
  * in the 2D prototype that was the entire difference between "one pink
  * blob" and the reference look.
+ *
+ * `floorY` (optional, SECTOR levels, plan 3b): as spawnWoundDroplets.
  */
 export function spawnImpactGout(
   sim: BloodSim, kind: BleedKind, anchor: Vec3, dirN: Vec3, rng: () => number,
-  stream?: number, pack?: DensityPack,
+  stream?: number, pack?: DensityPack, floorY?: number,
 ): void {
   const p = IMPACT_GOUT[kind];
   // Density pack (blood-density spike): `p.count` when no pack, so the shipped
@@ -547,12 +554,14 @@ export function spawnImpactGout(
       // NOT ribbon-eligible: at gout speeds a 0.15 s path history is a
       // straight metre of line, which renders as a laser rod, not fluid.
       ...(stream !== undefined ? { stream } : {}),
+      ...(floorY !== undefined ? { floorY } : {}),
     });
   }
 }
 
 /** Stamp the splat(s) for a drop landing at `at`. With a `ground` (SECTOR levels, plan 3b) the splats sit at `floorY`
- *  and a splat whose jittered centre is over a different floor is skipped; every random number is drawn in the same
+ *  and a splat whose jittered centre is over a different floor is not put there (the first goes at the drop's own
+ *  spot instead, the second is skipped); every random number is drawn in the same
  *  order whether or not a splat is kept, so the room path (no ground, floorY 0) is bit-identical. */
 function stamp(sim: BloodSim, at: Vec3, rng: () => number, kind: 'drop' | 'scrap' = 'drop',
   ground?: DebrisGround, floorY = 0): void {
@@ -562,7 +571,10 @@ function stamp(sim: BloodSim, at: Vec3, rng: () => number, kind: 'drop' | 'scrap
   const keep = (x: number, z: number) => !ground || Math.abs(landingFloor(ground, x, z, NaN) - floorY) <= 0.02;
   const x1 = at[0] + ox, z1 = at[2] + oz;
   const size1 = (0.12 + rng() * 0.18) * scale, yaw1 = rng() * Math.PI * 2;
+  // A first splat jittered over a different floor (a narrow step, a ledge lip) goes at the drop's own spot instead —
+  // skipping it would thin pools at every edge (spreadM 0.35 against a 0.3 m lip); skipped only if that is off too.
   if (keep(x1, z1)) sim.splats.push({ pos: [x1, floorY, z1], size: size1, yaw: yaw1 });
+  else if (keep(at[0], at[2])) sim.splats.push({ pos: [at[0], floorY, at[2]], size: size1, yaw: yaw1 });
   // Raised second-pool chance, same knob the game uses (0xB000 / 0x10000).
   if (rng() < BLOOD_SPLAT.secondChance / 0x10000) {
     const x2 = at[0] - ox * 0.6, z2 = at[2] - oz * 0.6;

@@ -735,3 +735,45 @@ describe('stepBlood on a debris ground (sector levels)', () => {
     expect(b.splats).toEqual(a.splats);
   });
 });
+
+describe('blood on sector levels: narrow steps and seeded floors (plan 3b follow-up)', () => {
+  it('a drop on a narrow step still leaves a splat on the step (a jittered-off first splat goes at the drop)', () => {
+    // A 0.3 m step (x 0..0.3, floor 0.75) between two floor-0 sides: most ±0.35 m jitters fall off it.
+    const narrow: DebrisGround = { floorAt: (x) => (x >= 0 && x < 0.3 ? 0.75 : 0), bounce: () => null };
+    const sim = createBloodSim();
+    const n = 30;
+    for (let k = 0; k < n; k++) sim.droplets.push(drop([0.15, 1.5, k * 0.5], [0, 0, 0]));
+    const rng = makeRng(5);
+    for (let i = 0; i < 240 && sim.droplets.length; i++) stepBlood(sim, 1 / 60, rng, undefined, undefined, narrow);
+    expect(sim.droplets).toHaveLength(0);
+    for (let k = 0; k < n; k++) {
+      expect(sim.splats.some((s) => Math.abs(s.pos[2] - k * 0.5) <= 0.36 && s.pos[1] === 0.75)).toBe(true);
+    }
+    for (const s of sim.splats) expect(s.pos[1]).toBe(narrow.floorAt(s.pos[0], s.pos[2]));
+  });
+  it('spawnImpactGout / spawnWoundDroplets seed floorY only when given one (room spawns unchanged)', () => {
+    const a = createBloodSim(), b = createBloodSim();
+    spawnImpactGout(a, 'slug', [0, 1, 0], [0, 0, -1], seeded(4), 7);
+    spawnImpactGout(b, 'slug', [0, 1, 0], [0, 0, -1], seeded(4), 7, undefined, 0.75);
+    expect(a.droplets.every((d) => !('floorY' in d))).toBe(true);
+    expect(b.droplets.every((d) => d.floorY === 0.75)).toBe(true);
+    expect(b.droplets.map(({ floorY: _f, ...d }) => d)).toEqual(a.droplets);
+    const c = createBloodSim();
+    spawnWoundDroplets(c, 'stump', 0, [0, 1, 0], [1, 0, 0], 1 / 60, 0, seeded(5), 3, undefined, -0.5);
+    expect(c.droplets.length).toBeGreaterThan(0);
+    expect(c.droplets.every((d) => d.floorY === -0.5)).toBe(true);
+  });
+  it('a seeded drop over a hole lands on the body floor it was seeded with', () => {
+    const hole: DebrisGround = { floorAt: () => NaN, bounce: () => null };
+    const sim = createBloodSim();
+    const d: Droplet = { ...drop([0, 1.5, 0], [0, 0, 0]), floorY: 0.75 };
+    sim.droplets.push(d);
+    const rng = makeRng(6);
+    for (let i = 0; i < 240 && sim.droplets.length; i++) stepBlood(sim, 1 / 60, rng, undefined, undefined, hole);
+    expect(sim.droplets).toHaveLength(0);
+    expect(d.age).toBeLessThan(d.life);                 // it LANDED, not expired
+    expect(d.pos[1]).toBeGreaterThan(0.6);              // on the seeded 0.75, not the y = 0 default
+    expect(d.pos[1]).toBeLessThanOrEqual(0.76);
+    expect(sim.splats).toHaveLength(0);                 // nothing under it to paint (off the map)
+  });
+});
