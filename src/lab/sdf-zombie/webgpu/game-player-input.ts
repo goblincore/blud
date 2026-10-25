@@ -95,6 +95,9 @@ export function applyInputEdges(ctx: GameContext, next: Set<string>): void {
     ctx.weapon.aim = { x: 0, y: 0 };
     updateHud(ctx);
   }
+  // C hides/shows the crosshair and the strafe steering cursor (aiming is
+  // unchanged; only the markers go).
+  if (pressed('KeyC')) ctx.player.reticleHidden = !ctx.player.reticleHidden;
   if (pressed('KeyH')) {
     ctx.panels.hidden = !ctx.panels.hidden;
     ctx.panels.woundPanel?.setVisible(!ctx.panels.hidden);

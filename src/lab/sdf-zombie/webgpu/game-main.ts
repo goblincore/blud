@@ -3483,8 +3483,10 @@ async function main() {
    *  DISTANCE so it stays locked to footfalls at any speed. */
   ctx.player.bobDistance = 0;
   ctx.player.bobAmount = 0;
+  ctx.player.strafeAmount = 0;
   ctx.player.prevPlayerPos = [0, 0, 0];
   ctx.player.reticleEl = null;
+  ctx.player.steerEl = null;
   ctx.weapon.gunReady = false;
   // LOADING SCREEN gate: resolved on BOTH paths below — a failed weapon load
   // still boots the game, and the loader must not hang on it.
@@ -5601,6 +5603,19 @@ async function main() {
       + '<line x1="27.5" y1="17" x2="32.5" y2="17"/>'
       + '</g></svg>';
     document.body.appendChild(ctx.player.reticleEl);
+    // THE STEERING CURSOR: while strafing, the crosshair (where the gun aims)
+    // pulls to centre and the reticle is only a steering stick for the
+    // camera. A small, dim ring marks where that stick is; the tick fades it
+    // in with the separation and hides it standing still.
+    ctx.player.steerEl = document.createElement('div');
+    ctx.player.steerEl.setAttribute('style',
+      'position:fixed; left:50%; top:50%; width:18px; height:18px; z-index:34;'
+      + ' margin:-9px 0 0 -9px; pointer-events:none; display:none;');
+    ctx.player.steerEl.innerHTML =
+      '<svg viewBox="0 0 18 18" width="18" height="18" aria-hidden="true">'
+      + '<circle cx="9" cy="9" r="6" fill="none" stroke="#ffd98a" stroke-width="1.2"/>'
+      + '</svg>';
+    document.body.appendChild(ctx.player.steerEl);
   }
   // THE HIT FLASH: a full-screen red multiply the tick drives from
   // ctx.player.hitFeedback.flash when an enemy blade lands.

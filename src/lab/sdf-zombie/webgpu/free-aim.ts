@@ -17,6 +17,35 @@ export const FREE_AIM = {
    *  this box the camera does not turn at all; the reticle just moves. */
   deadzoneX: 0.45,
   deadzoneY: 0.38,
+  /** CIRCLE-STRAFING. Standing still, the reticle is the aim point and the
+   *  big dead zone is the mechanic. Strafing, the owner circles a target by
+   *  holding the reticle off-centre as a STEERING stick -- with no dead zone,
+   *  how far out it sits sets how fast the camera turns, which keeps the
+   *  target centred while you orbit it (owner's circlestrafe.mov, dead zone
+   *  tuned to 0 by hand). The catch was the gun: it pointed at the reticle,
+   *  out at the screen edge, not at the centred target, so you had to break
+   *  the strafe to shoot.
+   *
+   *  So while strafing the reticle's two jobs split, both faded in by the
+   *  smoothed strafe envelope:
+   *  - the dead zone shrinks by these scales (0 = gone at full strafe), so the
+   *    steering cursor turns the camera from the first pixel off-centre;
+   *  - the gun, the shot and the crosshair pull toward screen centre by
+   *    `strafeAimCentre` (1 = fully centred), like a normal shooter, while a
+   *    faint cursor shows where the steering stick is.
+   *
+   *  Tried and rejected in play first: a dead zone shrunk only to 0.4
+   *  (barely helped), mouse past the zone edge turning the camera (jerky),
+   *  an elastic camera follow (dragged the cursor to centre), and fading the
+   *  mouse into plain mouse-look (could not circle). Only sideways motion
+   *  counts as strafing. */
+  strafeDeadzoneScaleX: 0.0,
+  strafeDeadzoneScaleY: 0.0,
+  strafeAimCentre: 1.0,
+  /** How fast the strafe envelope follows the player's lateral speed,
+   *  1/seconds, so the dead zone and the centred aim ease in and out
+   *  instead of popping. */
+  strafeRamp: 5.0,
   /** Peak camera turn, radians/second, reached when the reticle is jammed
    *  fully into a corner. Measured in-engine: 2.4 rad/s is 137 deg/s at full
    *  push, which overshoots badly on a flick; 1.9 is ~109 deg/s. Tunable,
@@ -78,14 +107,38 @@ export function moveAim(aim: AimPoint, dxPx: number, dyPx: number): AimPoint {
   };
 }
 
-/** How far past the dead zone the reticle is pushing, -1..1 per axis. */
-export function deadzonePush(aim: AimPoint): { x: number; y: number } {
+/** Dead-zone half-extents for a 0..1 strafe envelope (see strafeDeadzoneScaleX). */
+export function deadzoneSize(strafe01 = 0): { x: number; y: number } {
+  const s = Math.min(1, Math.max(0, strafe01));
+  const lerp = (scale: number) => 1 + (Math.max(0, scale) - 1) * s;
+  return {
+    x: FREE_AIM.deadzoneX * lerp(FREE_AIM.strafeDeadzoneScaleX),
+    y: FREE_AIM.deadzoneY * lerp(FREE_AIM.strafeDeadzoneScaleY),
+  };
+}
+
+/**
+ * Where the gun, the shot and the crosshair aim, given the steering reticle
+ * and the 0..1 strafe envelope (see strafeAimCentre). Standing still it IS the
+ * reticle; strafing it pulls toward screen centre while the reticle keeps
+ * steering the camera.
+ */
+export function shotAim(steer: AimPoint, strafe01 = 0): AimPoint {
+  const k = 1 - Math.min(1, Math.max(0, FREE_AIM.strafeAimCentre))
+    * Math.min(1, Math.max(0, strafe01));
+  return { x: steer.x * k, y: steer.y * k };
+}
+
+/** How far past the dead zone the reticle is pushing, -1..1 per axis.
+ *  `strafe01` shrinks the zone while the player moves sideways. */
+export function deadzonePush(aim: AimPoint, strafe01 = 0): { x: number; y: number } {
+  const dz = deadzoneSize(strafe01);
   const past = (v: number, dz: number) => {
     if (Math.abs(v) <= dz) return 0;
     const over = (Math.abs(v) - dz) / Math.max(1e-6, 1 - dz);
     return Math.sign(v) * Math.min(1, over);
   };
-  return { x: past(aim.x, FREE_AIM.deadzoneX), y: past(aim.y, FREE_AIM.deadzoneY) };
+  return { x: past(aim.x, dz.x), y: past(aim.y, dz.y) };
 }
 
 /**
@@ -93,12 +146,31 @@ export function deadzonePush(aim: AimPoint): { x: number; y: number } {
  * that flat region IS the mechanic. Squared response so the edge of the zone is
  * a gentle drift and only the extremes whip round.
  */
-export function turnFromAim(aim: AimPoint, dt: number): { yaw: number; pitch: number } {
-  const p = deadzonePush(aim);
+export function turnFromAim(aim: AimPoint, dt: number, strafe01 = 0): { yaw: number; pitch: number } {
+  const p = deadzonePush(aim, strafe01);
   return {
     yaw: Math.sign(p.x) * p.x * p.x * FREE_AIM.turnRateX * dt,
     pitch: Math.sign(p.y) * p.y * p.y * FREE_AIM.turnRateY * dt,
   };
+}
+
+/**
+ * 0..1 SIDEWAYS speed for one frame of player motion: the component of the
+ * ground displacement (dx, dz) along the player's right vector, over
+ * `fullSpeed`. Right is [cos yaw, 0, sin yaw], matching fpv.ts. Taken from the
+ * actual displacement rather than the keys, so sliding along a wall or
+ * standing against one reads as what the screen is actually doing.
+ */
+export function strafeSpeed01(dx: number, dz: number, yaw: number, dt: number, fullSpeed: number): number {
+  if (dt <= 0 || fullSpeed <= 0) return 0;
+  const lateral = Math.abs(dx * Math.cos(yaw) + dz * Math.sin(yaw));
+  return Math.min(1, lateral / dt / fullSpeed);
+}
+
+/** Smooth the strafe envelope so the strafe behaviour eases in and out. */
+export function approachStrafe(current: number, target01: number, dt: number): number {
+  const k = 1 - Math.exp(-FREE_AIM.strafeRamp * dt);
+  return current + (Math.min(1, Math.max(0, target01)) - current) * k;
 }
 
 /** Half-angle tangents of the live camera frustum. tanV = tan(fovY/2),
