@@ -29,7 +29,7 @@ export async function dawnDevice(): Promise<DawnGpu | null> {
 }
 
 /** Compile WGSL, failing with every compiler message rather than a bare pipeline error. */
-async function compile(device: GPUDevice, code: string, entryPoint: string): Promise<GPUComputePipeline> {
+export async function compile(device: GPUDevice, code: string, entryPoint: string): Promise<GPUComputePipeline> {
   const module = device.createShaderModule({ code });
   const info = await module.getCompilationInfo();
   const errors = info.messages.filter(m => m.type === 'error');

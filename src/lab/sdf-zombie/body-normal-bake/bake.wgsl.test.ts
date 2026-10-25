@@ -4,14 +4,14 @@
 // creation as a bare WGSL parse error. The numbers are held by the *.gpu.test.ts parity suites (npm run test:gpu).
 import { describe, expect, it } from 'vitest';
 import { HELPERS } from '../webgpu/march/helpers';
-import { BAKE_FIELD, BAKE_GLOBALS, BAKE_LEAVES, BAKE_PRIM, FIELD_ENTRY, fieldShaderSource } from './bake.wgsl';
+import { BAKE_ENTRY, BAKE_FIELD, BAKE_GLOBALS, BAKE_GRAD, BAKE_LEAVES, BAKE_PRIM, BAKE_SKIN, FIELD_ENTRY, bakeShaderSource, fieldShaderSource } from './bake.wgsl';
 
 const strip = (s: string) => s.replace(/\/\/.*$/gm, '');
 const declared = (s: string) => [...strip(s).matchAll(/\bfn\s+(\w+)\s*\(/g)].map(m => m[1]!);
 const called = (s: string) => new Set([...strip(s).matchAll(/\b([a-z]\w*)\s*\(/g)].map(m => m[1]!));
 /** Every fn the game's include list declares: a call to one of these from the kernel must be declared in it. */
 const GAME_FNS = new Set(HELPERS.flatMap(declared));
-const OWN = [['bakePrim', BAKE_PRIM], ['bakeField', BAKE_FIELD], ['fieldMain', FIELD_ENTRY]] as const;
+const OWN = [['bakePrim', BAKE_PRIM], ['bakeField', BAKE_FIELD], ['bakeSkin', BAKE_SKIN], ['bakeGrad', BAKE_GRAD], ['fieldMain', FIELD_ENTRY], ['bakeMain', BAKE_ENTRY]] as const;
 
 describe('bake field WGSL text', () => {
   it('each leaf is the fn its label names, and the leaves are the game include strings themselves', () => {
@@ -47,10 +47,12 @@ describe('bake field WGSL text', () => {
     }
   });
 
-  it('assembles one module with the fieldMain entry', () => {
-    const src = fieldShaderSource();
-    expect(src.match(/@compute/g)).toHaveLength(1);
-    expect(src).toContain('fn fieldMain(');
-    expect(new Set(declared(src)).size).toBe(declared(src).length);
-  });
+  for (const [entry, build] of [['fieldMain', fieldShaderSource], ['bakeMain', bakeShaderSource]] as const) {
+    it(`assembles one module with the ${entry} entry`, () => {
+      const src = build();
+      expect(src.match(/@compute/g)).toHaveLength(1);
+      expect(src).toContain(`fn ${entry}(`);
+      expect(new Set(declared(src)).size).toBe(declared(src).length);
+    });
+  }
 });

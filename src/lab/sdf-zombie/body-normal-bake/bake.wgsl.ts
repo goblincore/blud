@@ -99,3 +99,68 @@ const FIELD_BINDINGS = /* wgsl */ `@group(0) @binding(0) var data: texture_2d<f3
 export function fieldShaderSource(): string {
   return [FIELD_BINDINGS, ...BAKE_GLOBALS.map(g => g[1]), ...BAKE_LEAVES.map(l => l[1]), BAKE_PRIM, BAKE_FIELD, FIELD_ENTRY].join('\n\n');
 }
+
+/** cpu-bake.ts `skin`: the first skin along the ray from r0 in toward the axis point P. xyz the point, w 1 on a hit. */
+export const BAKE_SKIN = /* wgsl */ `fn bakeSkin(P: vec3<f32>, dir: vec3<f32>, r0: f32, data: texture_2d<f32>, off: u32, n: u32) -> vec4<f32> {
+  var t = r0;
+  for (var i = 0; i < 300; i = i + 1) {
+    if (t <= 0.0) { break; }
+    let p = P + dir * t;
+    let d = bakeField(p, data, off, n);
+    if (d < 1e-4) { return vec4<f32>(p, 1.0); }
+    t = t - max(d * 0.9, 2e-4);
+  }
+  return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+}`;
+
+/** cpu-bake.ts `grad`: the central-difference normal, eps 6e-4. */
+export const BAKE_GRAD = /* wgsl */ `fn bakeGrad(p: vec3<f32>, data: texture_2d<f32>, off: u32, n: u32) -> vec3<f32> {
+  let e = 6e-4;
+  return normalize(vec3<f32>(
+    bakeField(p + vec3<f32>(e, 0.0, 0.0), data, off, n) - bakeField(p - vec3<f32>(e, 0.0, 0.0), data, off, n),
+    bakeField(p + vec3<f32>(0.0, e, 0.0), data, off, n) - bakeField(p - vec3<f32>(0.0, e, 0.0), data, off, n),
+    bakeField(p + vec3<f32>(0.0, 0.0, e), data, off, n) - bakeField(p - vec3<f32>(0.0, 0.0, e), data, off, n)));
+}`;
+
+/** One texel per invocation over a chunk of a region's rows: cpu-bake.ts `texelNormals`. The CPU supplies each
+ *  row's axis point and prim lists (rowsIn[r]: P.xyz, then rowLists[r]: base off/n, detail off/n) and each column's
+ *  ray direction (cols[c]), all from frame.ts; the encode stays on the CPU (frame.ts writeTexel). outN[2k] = (nb, hit),
+ *  outN[2k + 1] = (nd, 0), k = local row * width + column. */
+export const BAKE_ENTRY = /* wgsl */ `@compute @workgroup_size(64)
+fn bakeMain(@builtin(global_invocation_id) id: vec3<u32>) {
+  let width = bcfg.x;
+  let k = id.x;
+  if (k >= width * bcfg.z) { return; }
+  let row = bcfg.y + k / width;
+  let col = k % width;
+  let P = rowsIn[row].xyz;
+  let L = rowLists[row];
+  let dir = cols[col].xyz;
+  let r0 = bcfgF.x;
+  let pb = bakeSkin(P, dir, r0, dataBase, L.x, L.y);
+  if (pb.w < 0.5) {
+    outN[2u * k] = vec4<f32>(0.0, 0.0, 1.0, 0.0);
+    outN[2u * k + 1u] = vec4<f32>(0.0, 0.0, 1.0, 0.0);
+    return;
+  }
+  var pd = bakeSkin(P, dir, r0, dataDetail, L.z, L.w);
+  if (pd.w < 0.5) { pd = pb; }
+  outN[2u * k] = vec4<f32>(bakeGrad(pb.xyz, dataBase, L.x, L.y), 1.0);
+  outN[2u * k + 1u] = vec4<f32>(bakeGrad(pd.xyz, dataDetail, L.z, L.w), 0.0);
+}`;
+
+const BAKE_BINDINGS = /* wgsl */ `@group(0) @binding(0) var dataBase: texture_2d<f32>;
+@group(0) @binding(1) var dataDetail: texture_2d<f32>;
+@group(0) @binding(2) var<storage, read> list: array<u32>;
+@group(0) @binding(3) var<storage, read> rowsIn: array<vec4<f32>>;
+@group(0) @binding(4) var<storage, read> rowLists: array<vec4<u32>>;
+@group(0) @binding(5) var<storage, read> cols: array<vec4<f32>>;
+@group(0) @binding(6) var<storage, read_write> outN: array<vec4<f32>>;
+@group(0) @binding(7) var<uniform> bcfg: vec4<u32>;
+@group(0) @binding(8) var<uniform> bcfgF: vec4<f32>;`;
+
+/** The whole bake module: bindings, globals, leaves, the fold, skin, gradient and the entry `bakeMain`. bcfg = (width,
+ *  first row of this dispatch, rows in it, 0); bcfgF = (r0, 0, 0, 0). */
+export function bakeShaderSource(): string {
+  return [BAKE_BINDINGS, ...BAKE_GLOBALS.map(g => g[1]), ...BAKE_LEAVES.map(l => l[1]), BAKE_PRIM, BAKE_FIELD, BAKE_SKIN, BAKE_GRAD, BAKE_ENTRY].join('\n\n');
+}

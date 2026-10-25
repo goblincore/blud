@@ -29,6 +29,15 @@ export function grad(body: Body, p: V): V {
   ]);
 }
 
+/** One texel's normals: the plain skin's (nb) and the detailed skin's (nd) along the ray, or null on a miss. `nb0`
+ *  and `nd0` are the row's nearBody bodies. */
+export function texelNormals(nb0: Body, nd0: Body, P: V, dir: V, r0: number): { nb: V; nd: V } | null {
+  const pb = skin(nb0, P, dir, r0);
+  if (!pb) return null;
+  const pd = skin(nd0, P, dir, r0) ?? pb;
+  return { nb: grad(nb0, pb), nd: grad(nd0, pd) };
+}
+
 /** Bake region R's band into `rgba` (`width` wide). Returns how many texels hit the plain skin. */
 export function bakeRegionCpu(rgba: Uint8Array, width: number, R: Region, base: Body, detail: Body): number {
   const F = regionFrame(R.head, R.tail);
@@ -38,13 +47,11 @@ export function bakeRegionCpu(rgba: Uint8Array, width: number, R: Region, base: 
     const nb0 = nearBody(base, R.limb, P, R.r0), nd0 = nearBody(detail, R.limb, P, R.r0);
     for (let col = 0; col < width; col++) {
       const th = colAngle(col, width);
-      const dir = rayDir(F, th);
       const o = ((R.row0 + row) * width + col) * 4;
       writeFlat(rgba, o);
-      const pb = skin(nb0, P, dir, R.r0);
-      if (!pb) continue;
-      const pd = skin(nd0, P, dir, R.r0) ?? pb;
-      writeTexel(rgba, o, F, th, grad(nb0, pb), grad(nd0, pd));
+      const n = texelNormals(nb0, nd0, P, rayDir(F, th), R.r0);
+      if (!n) continue;
+      writeTexel(rgba, o, F, th, n.nb, n.nd);
       covered++;
     }
   }

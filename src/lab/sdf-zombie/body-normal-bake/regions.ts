@@ -104,18 +104,26 @@ export function buildRegions(base: Body, args: RegionArgs): { regions: Region[];
   return { regions, height: nextRow };
 }
 
-/** A body of only the prims of `limb` that can reach the ray disc at P (radius r0): one row's march is much cheaper. */
-export function nearBody(body: Body, limb: string, P: V, r0: number): Body {
-  const keep: Prim[] = [];
+/** Indices into body.prims, in fold order, of the prims of `limb` that can reach the ray disc at P (radius r0): one
+ *  row's march is much cheaper. The GPU bake folds exactly this list (gpu-pack.ts packs every prim, by index). */
+export function nearList(body: Body, limb: string, P: V, r0: number): number[] {
+  const keep: number[] = [];
   for (const c of body.clusters) {
     if (c.limb !== limb) continue;
-    for (const p of body.prims.slice(c.start, c.start + c.count)) {
+    for (let i = c.start; i < c.start + c.count; i++) {
+      const p = body.prims[i]!;
       const ab = sub(p.b, p.a), L2 = dot(ab, ab);
       const t = L2 > 0 ? Math.max(0, Math.min(1, dot(sub(P, p.a), ab) / L2)) : 0;
       const q = add(p.a, mul(ab, t));
       const reach = Math.max(p.radius, p.radiusB ?? 0) * Math.max(...p.scale) + (p.blendK ?? 0) * 4 + 0.03;
-      if (Math.hypot(...sub(P, q)) - reach < r0) keep.push(p);
+      if (Math.hypot(...sub(P, q)) - reach < r0) keep.push(i);
     }
   }
+  return keep;
+}
+
+/** nearList as a body of its own, one cluster, for `sdBody` (the CPU bake). */
+export function nearBody(body: Body, limb: string, P: V, r0: number): Body {
+  const keep: Prim[] = nearList(body, limb, P, r0).map(i => body.prims[i]!);
   return { ...body, split: undefined, prims: keep, clusters: [{ ...body.clusters[0]!, limb, start: 0, count: keep.length, alive: true }] } as Body;
 }
