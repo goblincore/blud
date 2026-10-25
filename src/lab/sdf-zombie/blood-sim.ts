@@ -16,6 +16,7 @@ import { BLOOD_TRAIL, GIB_BURST, BLOOD_SPLAT } from '../../game/gibs/tuning';
 import { add, basisFromAxis, dot, normalize, scale } from './vec';
 import { curlAccelAt, type CurlFlow } from './curl-sample';
 import type { SurfaceHit } from './blood-surface';
+import { landingFloor, type DebrisGround } from './debris-ground';
 
 const MAX_DROPLETS = 600;
 const MAX_SPLATS = 256;
@@ -66,6 +67,8 @@ export interface Droplet {
    * skipped by the connection builder rather than guessed at.
    */
   stream?: number;
+  /** SECTOR levels: the floor the drop was last over (stepBlood writes it only with a ground). */
+  floorY?: number;
 }
 
 // Scrap feel knobs (gobs-and-goo §1): scraps are the amorphous meat bits
@@ -548,20 +551,29 @@ export function spawnImpactGout(
   }
 }
 
-function stamp(sim: BloodSim, at: Vec3, rng: () => number, kind: 'drop' | 'scrap' = 'drop'): void {
+/** Stamp the splat(s) for a drop landing at `at`. With a `ground` (SECTOR levels, plan 3b) the splats sit at `floorY`
+ *  and a splat whose jittered centre is over a different floor is skipped; every random number is drawn in the same
+ *  order whether or not a splat is kept, so the room path (no ground, floorY 0) is bit-identical. */
+function stamp(sim: BloodSim, at: Vec3, rng: () => number, kind: 'drop' | 'scrap' = 'drop',
+  ground?: DebrisGround, floorY = 0): void {
   const scale = kind === 'scrap' ? SCRAP_TUNING.splatScale : 1;
   const ox = (rng() - 0.5) * 2 * BLOOD_SPLAT.spreadM;
   const oz = (rng() - 0.5) * 2 * BLOOD_SPLAT.spreadM;
-  sim.splats.push({ pos: [at[0] + ox, 0, at[2] + oz], size: (0.12 + rng() * 0.18) * scale, yaw: rng() * Math.PI * 2 });
+  const keep = (x: number, z: number) => !ground || Math.abs(landingFloor(ground, x, z, NaN) - floorY) <= 0.02;
+  const x1 = at[0] + ox, z1 = at[2] + oz;
+  const size1 = (0.12 + rng() * 0.18) * scale, yaw1 = rng() * Math.PI * 2;
+  if (keep(x1, z1)) sim.splats.push({ pos: [x1, floorY, z1], size: size1, yaw: yaw1 });
   // Raised second-pool chance, same knob the game uses (0xB000 / 0x10000).
   if (rng() < BLOOD_SPLAT.secondChance / 0x10000) {
-    sim.splats.push({
-      pos: [at[0] - ox * 0.6, 0, at[2] - oz * 0.6],
-      size: (0.1 + rng() * 0.12) * scale, yaw: rng() * Math.PI * 2,
-    });
+    const x2 = at[0] - ox * 0.6, z2 = at[2] - oz * 0.6;
+    const size2 = (0.1 + rng() * 0.12) * scale, yaw2 = rng() * Math.PI * 2;
+    if (keep(x2, z2)) sim.splats.push({ pos: [x2, floorY, z2], size: size2, yaw: yaw2 });
   }
   while (sim.splats.length > MAX_SPLATS) sim.splats.shift();
 }
+
+/** The drop's start of step, for the sector wall probe (module scratch: no allocation per drop). */
+const PREV: [number, number, number] = [0, 0, 0];
 
 /**
  * Integrate droplets; floor hits and expiry both stamp splats (cascade).
@@ -579,17 +591,24 @@ function stamp(sim: BloodSim, at: Vec3, rng: () => number, kind: 'drop' | 'scrap
  * block entirely, so no velocity, position or RNG draw changes and the shipped
  * sim is untouched (pinned by blood-sim.test.ts). Determinism is preserved
  * because the curl sample is pure arithmetic — no Math.random.
+ *
+ * `ground` is OPTIONAL (SECTOR levels, plan 3b; ignored when `surfaces` is given). With it a drop stops at a sector
+ * wall and runs down it, and lands and stamps on the floor under it NOW (a drop off a ledge falls to the lower
+ * floor). Absent (room levels) the y = 0 path runs unchanged.
  */
 export function stepBlood(
   sim: BloodSim, dt: number, rng: () => number, flow?: CurlFlow,
   surfaces?: { sweep(from: Vec3, to: Vec3): SurfaceHit | null; deposit(hit: SurfaceHit, drop: Droplet): void },
+  ground?: DebrisGround,
 ): void {
+  const sector = !surfaces && ground ? ground : null;
   const curl = flow !== undefined && flow.strength !== 0 ? flow : null;
   for (let i = sim.droplets.length - 1; i >= 0; i--) {
     const d = sim.droplets[i]!;
     // Guts are chain-driven, not ballistic — see Droplet.kind.
     if (d.kind === 'gut') continue;
     const from: Vec3 | null = surfaces ? [...d.pos] : null;
+    if (sector) { PREV[0] = d.pos[0]; PREV[1] = d.pos[1]; PREV[2] = d.pos[2]; }
     // Scraps are chunky — they feel double the airdrag of a mist bead.
     const drag = Math.max(0, 1 - BLOOD_TRAIL.airdrag
       * (d.kind === 'scrap' ? SCRAP_TUNING.dragMul : d.kind === 'mist' ? 3 : 1) * dt);
@@ -615,6 +634,21 @@ export function stepBlood(
       const hit = surfaces.sweep(from!, d.pos);
       if (hit || d.age >= d.life || d.pos[1] < -20) {
         if (hit && d.kind !== 'mist') surfaces.deposit(hit, d);
+        sim.droplets.splice(i, 1);
+      }
+    } else if (sector) {
+      // SECTOR LEVELS (plan 3b): a wall stops the drop dead (x/z) — it runs down the wall to that wall's floor; the
+      // floor is read under the drop NOW, so a drop off a ledge falls to the lower floor.
+      const b = sector.bounce(PREV, d.pos, d.vel, 0, 0);
+      if (b) {
+        d.pos[0] = b.pos[0]; d.pos[2] = b.pos[2]; d.vel[0] = 0; d.vel[2] = 0;
+        const h = d.hist?.[d.hist.length - 1];
+        if (h) { h[0] = d.pos[0]; h[2] = d.pos[2]; }   // the ribbon ends at the wall, not past it
+      }
+      const f = landingFloor(sector, d.pos[0], d.pos[2], d.floorY ?? 0);
+      d.floorY = f;
+      if (d.pos[1] <= f + 0.01 || d.age >= d.life) {
+        if (d.kind !== 'mist') stamp(sim, d.pos, rng, d.kind, sector, f);
         sim.droplets.splice(i, 1);
       }
     } else if (d.pos[1] <= 0.01 || d.age >= d.life) {

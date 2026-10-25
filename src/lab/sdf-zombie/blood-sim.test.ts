@@ -6,6 +6,7 @@ import {
 import type { Vec3 } from './types';
 import type { Droplet } from './blood-sim';
 import type { CurlFlow } from './curl-sample';
+import type { DebrisGround } from './debris-ground';
 import { BLOOD_TRAIL, GIB_BURST } from '../../game/gibs/tuning';
 
 function seeded(seed = 1): () => number {
@@ -687,3 +688,50 @@ describe('emission density pack (blood-density spike, optional)', () => {
   });
 });
 
+
+const makeRng = seeded;
+const STEP: DebrisGround = { floorAt: (x) => (x < 0 ? 0.75 : -0.5), bounce: () => null };
+const drop = (pos: [number, number, number], vel: [number, number, number]): Droplet =>
+  ({ pos, vel, age: 0, life: 5, size: 0.01, kind: 'drop' });
+
+describe('stepBlood on a debris ground (sector levels)', () => {
+  it('a drop lands and stamps on the floor under it', () => {
+    const sim = createBloodSim();
+    sim.droplets.push(drop([-0.5, 2, 0], [0, 0, 0]), drop([0.5, 2, 0], [0, 0, 0]));
+    const rng = makeRng(1);
+    for (let i = 0; i < 240 && sim.droplets.length; i++) stepBlood(sim, 1 / 60, rng, undefined, undefined, STEP);
+    expect(sim.droplets).toHaveLength(0);
+    for (const s of sim.splats) expect(s.pos[1]).toBe(s.pos[0] < 0 ? 0.75 : -0.5);
+    expect(sim.splats.some((s) => s.pos[1] === -0.5)).toBe(true);
+  });
+  it('never stamps a splat on a floor it is not over (a jittered splat across an edge is skipped)', () => {
+    const sim = createBloodSim();
+    for (let k = 0; k < 40; k++) sim.droplets.push(drop([-0.01, 1.2, k * 0.05], [0, 0, 0]));
+    const rng = makeRng(2);
+    for (let i = 0; i < 240 && sim.droplets.length; i++) stepBlood(sim, 1 / 60, rng, undefined, undefined, STEP);
+    expect(sim.splats.length).toBeGreaterThan(0);
+    for (const s of sim.splats) expect(s.pos[1]).toBe(STEP.floorAt(s.pos[0], s.pos[2]));
+  });
+  it('a drop that hits a wall stops there and runs down to that floor', () => {
+    const wall: DebrisGround = {
+      floorAt: () => 0,
+      bounce: (prev, next, vel) => (prev[0] < 1 && next[0] >= 1
+        ? { pos: [0.99, next[1], next[2]], vel: [0, vel[1], 0], normal: [-1, 0, 0] } : null),
+    };
+    const sim = createBloodSim();
+    sim.droplets.push(drop([0, 1.5, 0], [6, 0, 0]));
+    const rng = makeRng(3);
+    for (let i = 0; i < 240 && sim.droplets.length; i++) stepBlood(sim, 1 / 60, rng, undefined, undefined, wall);
+    expect(sim.splats.length).toBeGreaterThan(0);
+    expect(sim.splats.every((s) => s.pos[0] < 1 + 0.3)).toBe(true);   // at the wall's foot (± the splat jitter)
+  });
+  it('the same RNG draws with or without a ground on a flat floor', () => {
+    const flat: DebrisGround = { floorAt: () => 0, bounce: () => null };
+    const a = createBloodSim(), b = createBloodSim();
+    burst(a, [0, 1, 0], makeRng(9)); burst(b, [0, 1, 0], makeRng(9));
+    const ra = makeRng(10), rb = makeRng(10);
+    for (let i = 0; i < 300; i++) { stepBlood(a, 1 / 60, ra); stepBlood(b, 1 / 60, rb, undefined, undefined, flat); }
+    expect(a.splats.length).toBeGreaterThan(0);
+    expect(b.splats).toEqual(a.splats);
+  });
+});

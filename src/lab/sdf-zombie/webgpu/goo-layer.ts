@@ -2428,7 +2428,7 @@ export function createGooLayer(
           if (count >= candCap) break;
           const gr = sp.size * GOO_TUNING.splatGooScale * 2; // quad edge = 2x radius
           const halfH = gr / 2;
-          const x = sp.pos[0], y = 0.02, z = sp.pos[2];
+          const x = sp.pos[0], y = sp.pos[1] + 0.02, z = sp.pos[2];
           if (tooSmall(halfH, x, y, z)) continue;
           const h = Math.sin(sp.yaw * 78.233) * 43758.5453;
           const ecc = 1.4 + (h - Math.floor(h)) * 1.2;
@@ -2504,8 +2504,8 @@ export function createGooLayer(
         for (let i = 0; i < splatLimit && n < particleCap; i++) {
           const sp = sim.splats[i]!;
           const gr = sp.size * GOO_TUNING.splatGooScale * 2; // quad edge = 2x radius
-          if (tooSmall(gr / 2, sp.pos[0], 0.02, sp.pos[2])) continue;
-          p.set(sp.pos[0], 0.02, sp.pos[2]);
+          if (tooSmall(gr / 2, sp.pos[0], sp.pos[1] + 0.02, sp.pos[2])) continue;
+          p.set(sp.pos[0], sp.pos[1] + 0.02, sp.pos[2]);
           roll.setFromAxisAngle(zAxis, sp.yaw);
           q.copy(perspCam.quaternion).multiply(roll);
           // Deterministic per-splat eccentricity hashed from the stamp yaw.

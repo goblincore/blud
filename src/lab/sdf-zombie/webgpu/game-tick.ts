@@ -40,7 +40,7 @@ import { detonateAt, stepDynamite } from './game-dynamite-step';
 import { stepEgg } from './game-egg';
 import { spawnScheduledGibs } from './game-gib-actor';
 import { stepPendingGibImpulses } from './game-gib-spawn';
-import { ceilingAt, chunkCollidersAt, shellAmpOf } from './game-hit-trace';
+import { ceilingAt, chunkCollidersAt, debrisGround, shellAmpOf } from './game-hit-trace';
 import { updateHud } from './game-hud';
 import { applyDeathCamera, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop';
 import { stepMeshGibs } from './game-mesh-gibs';
@@ -1242,7 +1242,7 @@ export function tick(ctx: GameContext, dt: number) {
         cdt, rngStreams.bleed,
       );
       stepBlood(ctx.vfx.bloodSim, cdt, rngStreams.bleed, undefined,
-        ctx.vfx.surfaceBlood?.enabled ? ctx.vfx.surfaceBlood : undefined);
+        ctx.vfx.surfaceBlood?.enabled ? ctx.vfx.surfaceBlood : undefined, debrisGround(ctx) ?? undefined);
       // Re-pose every instance from sim state (billboards track the camera
       // even frozen — same contract as the lab's always-sync).
       ctx.vfx.bloodView.sync(ctx.vfx.bloodSim, ctx.boot.handle.camera);
