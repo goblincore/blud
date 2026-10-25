@@ -214,11 +214,11 @@ THUMB_FORE = ((0.75, 0.45, -0.48), (0.85, 0.45, -0.25), (0.80, 0.55, -0.20))   #
 # comes up already palm-down over the open tubes, the two fresh cases under it, and shoves them in. So this is a
 # CUPPED open hand that covers the mouths, the fingers draping over the breech. Built as its own mesh, `handhold_L`
 # (the fore hand only), which game-arms.ts shows instead of `hand_L` while the reload is carrying.
-FINGERS_HOLD = (
-    (+0.0205, +6, (0.035, 0.028, 0.022), (18, 40, 26)),   # index: out past the far case, then up in front of it
-    (+0.0068, +1, (0.039, 0.031, 0.024), (16, 38, 26)),   # middle
-    (-0.0068, -5, (0.036, 0.029, 0.022), (18, 40, 28)),   # ring
-    (-0.0205, -12, (0.029, 0.023, 0.018), (22, 44, 30)),  # little
+FINGERS_HOLD = (   # a FLAT cup: the fingers lie forward over the barrels, curled only at the tips (more and they
+    (+0.0205, +6, (0.035, 0.028, 0.022), (8, 14, 18)),    # drooped into the bores while it pushed -- playtest 2026-10-25)
+    (+0.0068, +1, (0.039, 0.031, 0.024), (6, 12, 18)),
+    (-0.0068, -5, (0.036, 0.029, 0.022), (8, 14, 20)),
+    (-0.0205, -12, (0.029, 0.023, 0.018), (12, 18, 22)),
 )
 THUMB_HOLD = ((0.35, 0.35, -0.87), (0.05, 0.55, -0.83), (-0.25, 0.60, -0.76))
 # Two stand-in cases cradled in the cup, in the LEFT arm's Blender frame at final size (centre, hull axis), for the

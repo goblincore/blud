@@ -492,9 +492,11 @@ export interface HandHold { stage: HandDelta; seat: HandDelta; }
  * frame while the cases seated by themselves; that is the failure mode.
  */
 /** The withdraw's first key: the hand lifted back and out off the breech, before it settles under the fore-end. */
-export const WITHDRAW_LIFT_SEC = 1.17;
-/** ...and the one below the gun, before it comes up into the cradle. */
-export const WITHDRAW_UNDER_SEC = 1.24;
+export const WITHDRAW_LIFT_SEC = 1.15;
+/** ...out to the left, still high... */
+export const WITHDRAW_OUT_SEC = 1.20;
+/** ...and below the gun, before it comes up into the cradle. */
+export const WITHDRAW_UNDER_SEC = 1.25;
 const SUPPORT_KEYS: readonly (SupportHandPose & { t: number })[] = [
   { t: 0.00, dx:  0.000, dy:  0.000, dz: 0.000, carrying: false },
   { t: 0.18, dx: -0.020, dy: -0.060, dz: 0.020, carrying: false },
@@ -505,12 +507,16 @@ const SUPPORT_KEYS: readonly (SupportHandPose & { t: number })[] = [
   { t: 0.87, dx: -0.120, dy:  0.090, dz: 0.150, carrying: true  },  // over the top, above and left of the breech
   { t: 0.96, dx:  0.010, dy:  0.010, dz: 0.140, carrying: true  },  // hold.stage
   { t: 1.11, dx:  0.020, dy:  0.020, dz: 0.120, carrying: true  },  // hold.seat
-  // BACK, OUT, UNDER, UP: it lifts off the breech toward the eye and left, drops below the gun -- which is snapping
-  // shut and levelling up through where the hand was -- and comes up into the fore-end cradle from underneath,
-  // unrolling as it goes (coverRoll) and changing pose mid-move (HOLD_POSE_END_SEC). It used to drop to rest in 50 ms,
-  // all three at once, which read as a snap; dropped straight from the left, the fingers came out of the gun's side.
-  { t: WITHDRAW_LIFT_SEC, dx: -0.130, dy:  0.040, dz: 0.100, carrying: false },
-  { t: WITHDRAW_UNDER_SEC, dx: -0.070, dy: -0.090, dz: 0.040, carrying: false },
+  // UP, OUT, UNDER, UP (owner playtest, 2026-10-25: "instead of withdrawing ... it just swipes through the frame").
+  // The gun snaps shut seat..snapEndSec, the barrels swinging up through where the hand was, so the hand first LIFTS
+  // straight up and back toward the eye, clear of them, by WITHDRAW_LIFT_SEC; then out to the left still high; then
+  // below the gun; then up into the fore-end cradle from underneath -- unrolling as it goes (coverRoll) and changing
+  // pose mid-move (HOLD_POSE_END_SEC).
+  // The flat cup's fingers reach ~13 cm and point right, toward the gun, so every key until the hand is under the
+  // gun keeps it clear to the LEFT of the receiver, not just above it.
+  { t: WITHDRAW_LIFT_SEC, dx: -0.060, dy:  0.180, dz: 0.160, carrying: false },  // UP (fingers above the barrels), back, a little left
+  { t: WITHDRAW_OUT_SEC, dx: -0.220, dy:  0.050, dz: 0.120, carrying: false },   // out wide left
+  { t: WITHDRAW_UNDER_SEC, dx: -0.120, dy: -0.120, dz: 0.040, carrying: false }, // below and left of the gun
   { t: 1.30, dx:  0.000, dy:  0.000, dz: 0.000, carrying: false },
 ];
 
@@ -527,10 +533,10 @@ export function coverRoll(t: number): number {
     * (1 - smoothstep(RELOAD.loadSeatSec, COVER_UNROLL_END_SEC, t));
 }
 /** The roll unwinds over the withdraw, seat to here, not in the 50 ms to the snap. */
-export const COVER_UNROLL_END_SEC = 1.25;
+export const COVER_UNROLL_END_SEC = 1.24;
 /** The fore hand shows its cupped cover pose (handhold_L) from loadStartSec until here: mid-way down the withdraw, while
  *  it moves fastest and is nearly unrolled, so the swap to the fore-end cradle is not a pop on a still hand. */
-export const HOLD_POSE_END_SEC = 1.21;
+export const HOLD_POSE_END_SEC = 1.22;
 
 export function supportHandPose(t: number, hold?: HandHold): SupportHandPose {
   const REST: SupportHandPose = { dx: 0, dy: 0, dz: 0, carrying: false };
