@@ -66,5 +66,6 @@ THING_PICKUPS = {
     2008: "shells", 2049: "shells", 2007: "shells", 2048: "shells",     # shells, box, clip, box of bullets
     2011: "health", 2012: "health", 2014: "health", 2015: "health", 2018: "health", 2019: "health",
 }
+THING_BARRELS = {2035}  # Doom's exploding barrel -> our toxic drum (plan 3b)
 SKILL_BITS = {1: 1, 2: 1, 3: 2, 4: 4, 5: 4}               # Doom skill -> THINGS flag bit
 MULTIPLAYER_ONLY = 16

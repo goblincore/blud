@@ -89,6 +89,8 @@ export const SPAWN_KINDS: readonly SpawnKind[] = ['zombie', 'soldier', 'cultist'
 export interface SpawnDef { id: string; kind: SpawnKind; pos: Vec3; yaw: number }
 export interface GraveDef { id: string; wave: number; pos: Vec3; yaw: number }
 export interface BellDef { id: string; pos: Vec3; radius: number }
+/** Sector levels (plan 3b): an exploding barrel, its feet at `pos` (on its floor). */
+export interface BarrelDef { id: string; pos: Vec3 }
 export interface TriggerDef { id: string; event: string; once: boolean; box: Aabb }
 export interface GateDef { id: string; opensOn: string; box: Aabb }
 /** Dynamic light §3: when `on` fires, the level also fires every event in `emit`. */
@@ -132,6 +134,8 @@ export interface LevelDef {
   /** Sector levels (spec 2026-10-24 §4): the sector geometry; absent on room levels. Its zones
    *  are `rooms` with `shell: 'art'` (collision comes from the sectors, not their boxes). */
   sectors?: SectorMap;
+  /** Sector levels (plan 3b): exploding barrels, feet on their floor. Absent when the file has none. */
+  barrels?: BarrelDef[];
 }
 
 export interface Mouth { lo: number; hi: number; tunnel: LevelTunnel }

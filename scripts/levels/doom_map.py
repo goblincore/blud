@@ -9,8 +9,9 @@ The output is derived from id Software's data: a dev placeholder, never committe
 
 Plan 1 writes geometry, zones, fill lights and the player start. Door sectors (manual or remotely
 tagged) are written OPEN and remote floor-lowers LOWERED (plan 2 makes them move). Plan 3a writes
-monsters (spawns), pickups and an exit trigger in front of each exit switch; other things (barrels,
-decorations, keys, ...) are skipped and counted.
+monsters (spawns), pickups and an exit trigger in front of each exit switch. Plan 3b writes Doom's
+exploding barrels as our toxic drums (`barrels`, on every skill: they are scenery; multiplayer-only
+ones are still left out). Other things (decorations, keys, ...) are skipped and counted.
 """
 from __future__ import annotations
 
@@ -24,7 +25,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from doom_tables import (  # noqa: E402
     DOOR_SPECIALS, EXIT_SPECIALS, FLOOR_LOWER_SPECIALS, GLOW_MATERIALS, MULTIPLAYER_ONLY, REMOTE_DOOR_SPECIALS,
-    SKILL_BITS, THING_PICKUPS, THING_SPAWNS, ZOMBIEMAN, ZOMBIEMAN_VARIANTS,
+    SKILL_BITS, THING_BARRELS, THING_PICKUPS, THING_SPAWNS, ZOMBIEMAN, ZOMBIEMAN_VARIANTS,
     material_for_flat, material_for_texture, sector_special,
 )
 
@@ -429,22 +430,23 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = 32, skill: int =
             break
     pool_lights = sum(1 for li in lights if li.get("mood") == "fire")
 
-    # Things: monsters and pickups at their sector's floor; ids from the THINGS index, so stable.
+    # Things: monsters, pickups and barrels at their sector's floor; ids from the THINGS index, so stable.
     skill_bit = SKILL_BITS[skill]
-    spawns, pickups = [], []
+    spawns, pickups, barrels = [], [], []
     skipped: dict[int, int] = {}
     in_no_sector = not_this_skill = multiplayer_only = 0
     for ti, t in enumerate(things):
         if t["type"] == PLAYER1_START:
             continue
+        is_barrel = t["type"] in THING_BARRELS
         if t["flags"] & MULTIPLAYER_ONLY:
             multiplayer_only += 1
             continue
-        if not t["flags"] & skill_bit:
+        if not is_barrel and not t["flags"] & skill_bit:     # barrels are scenery: every skill
             not_this_skill += 1
             continue
         is_spawn = t["type"] == ZOMBIEMAN or t["type"] in THING_SPAWNS
-        if not is_spawn and t["type"] not in THING_PICKUPS:
+        if not is_spawn and not is_barrel and t["type"] not in THING_PICKUPS:
             skipped[t["type"]] = skipped.get(t["type"], 0) + 1
             continue
         sec = next((s for s in range(n) if _sector_at(t["x"], t["y"], verts, lines, sides, s)), None)
@@ -452,6 +454,9 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = 32, skill: int =
             in_no_sector += 1
             continue
         pos = [X(t["x"]), out_sectors[sec]["floor"], Z(t["y"])]
+        if is_barrel:
+            barrels.append({"id": f"b{ti}", "pos": pos})
+            continue
         if is_spawn:
             sid = f"s{ti}"
             if t["type"] == ZOMBIEMAN:
@@ -491,6 +496,8 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = 32, skill: int =
     }
     if triggers:
         level["completeOn"] = "level.end"
+    if barrels:
+        level["barrels"] = barrels
 
     def count(items, key):
         out: dict[str, int] = {}
@@ -499,7 +506,7 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = 32, skill: int =
         return out
 
     stats = {"dropped_zero_length_lines": dropped, "doors_opened": sorted(doors), "floors_lowered": sorted(lowered), "pool_lights": pool_lights,
-             "spawns_by_kind": count(spawns, "kind"), "pickups_by_item": count(pickups, "item"), "skipped_types": skipped,
+             "spawns_by_kind": count(spawns, "kind"), "pickups_by_item": count(pickups, "item"), "skipped_types": skipped, "barrels": len(barrels),
              "in_no_sector": in_no_sector, "not_this_skill": not_this_skill, "multiplayer_only": multiplayer_only}
     return level, stats
 
@@ -574,7 +581,7 @@ def main() -> None:
     doors = sum(1 for ln in level["lines"] if "door" in ln)
     print(f"{path}: {len(level['sectors'])} sectors, {len(level['lines'])} lines, {zones} zones, {doors} door lines, {len(level['lights'])} lights ({stats['pool_lights']} pool)"
           + (f", dropped {dropped} zero-length lines" if dropped else ""))
-    print(f"things: spawns {stats['spawns_by_kind']}, pickups {stats['pickups_by_item']}, {len(level['triggers'])} exit triggers"
+    print(f"things: spawns {stats['spawns_by_kind']}, pickups {stats['pickups_by_item']}, {stats['barrels']} barrels, {len(level['triggers'])} exit triggers"
           + (f" {[[t['min'], t['max']] for t in level['triggers']]}" if level["triggers"] else "")
           + f"; skipped types {dict(sorted(stats['skipped_types'].items()))}, {stats['in_no_sector']} in no sector,"
           f" {stats['not_this_skill']} not on skill {a.skill}, {stats['multiplayer_only']} multiplayer-only")

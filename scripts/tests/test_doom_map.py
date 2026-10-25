@@ -35,7 +35,7 @@ def pack_wad(verts, sectors, sides, lines, things) -> bytes:
     return struct.pack("<4sii", b"PWAD", len(lumps), offset) + body + directory
 
 
-def build_wad() -> bytes:
+def build_wad(extra_things=()) -> bytes:
     # A: x 0..256, y 0..256 floor 0 ceil 128; B: x 256..384, y 0..256 floor 16 ceil 128 (F_SKY1 ceiling).
     verts = [(0, 0), (256, 0), (256, 256), (0, 256), (384, 0), (384, 256)]
     sectors = [(0, 128, "FLOOR4_8", "CEIL3_5", 160, 0, 0), (16, 128, "NUKAGE1", "F_SKY1", 255, 7, 0)]
@@ -55,9 +55,11 @@ def build_wad() -> bytes:
               (128, 192, 0, 3001, 1),      # 3 imp in A, easy only
               (320, 128, 0, 2007, 7),      # 4 clip in B
               (192, 192, 0, 2001, 23),     # 5 shotgun in A, multiplayer only
-              (32, 32, 0, 2035, 7),        # 6 barrel in A (skipped: plan 3b)
-              (900, 900, 0, 2011, 7)]      # 7 stimpack in no sector
-    return pack_wad(verts, sectors, sides, lines, things)
+              (32, 32, 0, 2035, 7),        # 6 barrel in A
+              (900, 900, 0, 2011, 7),      # 7 stimpack in no sector
+              (64, 64, 0, 2035, 1),        # 8 barrel in A, easy only (barrels ignore skill: plan 3b)
+              (96, 96, 0, 2035, 23)]       # 9 barrel in A, multiplayer only (skipped)
+    return pack_wad(verts, sectors, sides, lines, things + list(extra_things))
 
 
 def build_row(mid_sector, mid_tag, special, extra_lines=()) -> bytes:
@@ -284,6 +286,30 @@ def test_summary_counts_kinds_and_skipped_things(tmp_path):
     want = doom_map.ZOMBIEMAN_VARIANTS[doom_map.fnv1a32("s1") % 3]
     assert stats["spawns_by_kind"] == {"soldier": 1, want: 1}
     assert stats["pickups_by_item"] == {"shells": 1}
-    assert stats["skipped_types"] == {2035: 1}
+    assert stats["skipped_types"] == {}
+    assert stats["barrels"] == 2
     assert stats["in_no_sector"] == 1
-    assert stats["not_this_skill"] == 1 and stats["multiplayer_only"] == 1
+    assert stats["not_this_skill"] == 1 and stats["multiplayer_only"] == 2   # the imp only; barrels never count there
+
+
+# --- barrels (plan 3b task 10) -----------------------------------------------------------------
+
+BARRELS = [{"id": "b6", "pos": [-1.0, 0.0, 3.0]}, {"id": "b8", "pos": [0.0, 0.0, 2.0]}]
+
+
+def test_barrels_ignore_skill_but_not_multiplayer(tmp_path):
+    assert convert(tmp_path)["barrels"] == BARRELS         # the easy-only barrel is placed on skill 4
+    assert convert(tmp_path, skill=1)["barrels"] == BARRELS
+
+
+def test_a_barrel_outside_every_sector_counts_in_no_sector(tmp_path):
+    wad = tmp_path / "x.wad"
+    wad.write_bytes(build_wad(extra_things=[(900, 64, 0, 2035, 7)]))
+    out, stats = doom_map.convert(wad, "E1M1", units_per_m=32)
+    assert out["barrels"] == BARRELS and stats["barrels"] == 2
+    assert stats["in_no_sector"] == 2
+
+
+def test_a_wad_with_no_barrels_has_no_barrels_key(tmp_path):
+    out, stats = convert_row(tmp_path, (0, 128, "FLOOR4_8", "CEIL3_5", 160, 0), 0, 0)
+    assert "barrels" not in out and stats["barrels"] == 0

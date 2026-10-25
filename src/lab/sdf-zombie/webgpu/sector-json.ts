@@ -6,7 +6,7 @@
 // pickups, triggers, cues) is checked by parseLevelJson, which gets one art-shelled room per
 // zone so its "inside a room" rules hold. Collects every problem and throws once.
 
-import type { Capability, LevelDef } from './level-def';
+import type { BarrelDef, Capability, LevelDef } from './level-def';
 import { parseLevelJson, type ParseOptions } from './level-json';
 import { buildSectorGround } from './sector-ground';
 import { edgesArea, sectorEdgeIndices, sectorEdges } from './sector-edges';
@@ -18,7 +18,7 @@ import {
 type Json = Record<string, unknown>;
 
 const TOP = ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'arena', 'palette', 'geometry',
-  'vertices', 'sectors', 'lines', 'solids', 'lights', 'start', 'spawns', 'pickups', 'triggers', 'cues'];
+  'vertices', 'sectors', 'lines', 'solids', 'lights', 'start', 'spawns', 'pickups', 'triggers', 'cues', 'barrels'];
 /** Handed on to parseLevelJson unchanged. */
 const SHARED = ['version', 'id', 'name', 'ammo', 'loadout', 'completeOn', 'arena', 'palette',
   'solids', 'lights', 'start', 'spawns', 'pickups', 'triggers', 'cues'];
@@ -28,6 +28,7 @@ const WALL_SIDES = ['front', 'back'];
 const WALL_PARTS = ['upper', 'mid', 'lower'];
 const DOOR_KEYS = ['sector', 'speed', 'wait'];
 const MATERIAL_KEYS = ['floor', 'ceil', 'wall'];
+const BARREL_KEYS = ['id', 'pos'];
 
 const backSideOnOneSided = (back: number, walls: NonNullable<SectorLine['walls']>) => back < 0 && walls.back !== undefined;
 
@@ -171,6 +172,26 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
     return rec;
   });
 
+  // --- barrels (plan 3b): sector levels only; the room parser never sees them ------
+  const barrels: BarrelDef[] = [];
+  if (j.barrels !== undefined) {
+    const seen = new Set<string>();
+    objects(j.barrels, 'barrels').forEach((o, i) => {
+      const where = `barrels[${i}]`;
+      unknownKeys(o, BARREL_KEYS, where);
+      const okId = typeof o.id === 'string' && o.id !== '';
+      if (!okId) errors.push(`${where}.id: expected a name`);
+      const okPos = Array.isArray(o.pos) && o.pos.length === 3 && o.pos.every(isNum);
+      if (!okPos) errors.push(`${where}.pos: expected [x, y, z]`);
+      if (okId && seen.has(o.id as string)) errors.push(`barrel ${o.id as string}: duplicate id`);
+      if (okId) seen.add(o.id as string);
+      if (okId && okPos) {
+        const p = o.pos as number[];
+        barrels.push({ id: o.id as string, pos: [p[0]!, p[1]!, p[2]!] });
+      }
+    });
+  }
+
   // --- closure and winding: each sector's directed lines form closed loops, sector on the left ---
   const map: SectorMap = { vertices, sectors, lines };
   if (errors.length === 0) sectors.forEach((_, s) => {
@@ -228,6 +249,7 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
     };
     listed(j.spawns).forEach((o, i) => { if (inVoid(posOf(o))) errors.push(`spawn ${label('spawn', o, i)}: must stand in a sector`); });
     listed(j.pickups).forEach((o, i) => { if (inVoid(posOf(o))) errors.push(`pickup ${label('pickup', o, i)}: must stand in a sector`); });
+    listed(j.barrels).forEach((o, i) => { if (inVoid(posOf(o))) errors.push(`barrel ${label('barrel', o, i)}: must stand in a sector`); });
   }
 
   const shared: Json = {};
@@ -241,5 +263,5 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
   if (errors.length > 0 || !base) throw new Error(`level ${id}: ${errors.join('; ')}`);
   rehomeAccents(base, map);
   const requires: Capability[] = [...base.requires.filter(c => c !== 'multi-floor'), 'sectors'];
-  return { ...base, requires, sectors: map };
+  return { ...base, requires, sectors: map, ...(barrels.length ? { barrels } : {}) };
 }

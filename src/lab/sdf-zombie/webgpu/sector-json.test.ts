@@ -112,6 +112,36 @@ describe('parseSectorLevel: markers in void', () => {
   });
 });
 
+describe('parseSectorLevel: barrels (plan 3b)', () => {
+  const broken = (edit: (j: any) => void) => { const j = fixture(); edit(j); return () => parseSectorLevel(j); };
+  it('reads the fixture\'s five barrels in file order', () => {
+    expect(parseSectorLevel(fixture()).barrels).toEqual([
+      { id: 'b1', pos: [6.2, -1, -7.0] },
+      { id: 'b2', pos: [7.3, -1, -7.0] },
+      { id: 'b3', pos: [7.3, -1, -0.8] },
+      { id: 'b4', pos: [-3.0, 1.5, -15.0] },
+      { id: 'b5', pos: [0.0, 0, -5.6] },
+    ]);
+  });
+  it('refuses a barrel in the column hole', () => {
+    expect(broken(j => { j.barrels.push({ id: 'b9', pos: [0, 0, -4] }); })).toThrow(/barrel b9: must stand in a sector/);
+  });
+  it('refuses a duplicate id', () => {
+    expect(broken(j => { j.barrels.push({ id: 'b1', pos: [0, 0, -1] }); })).toThrow(/barrel b1: duplicate id/);
+  });
+  it('refuses an unknown key, a non-string id and a bad pos', () => {
+    expect(broken(j => { j.barrels[0].hp = 20; })).toThrow(/barrels\[0\]: unknown key hp/);
+    expect(broken(j => { j.barrels[0].id = 7; })).toThrow(/barrels\[0\]\.id: expected a name/);
+    expect(broken(j => { j.barrels[0].pos = [1, 2]; })).toThrow(/barrels\[0\]\.pos: expected \[x, y, z\]/);
+    expect(broken(j => { j.barrels = {}; })).toThrow(/barrels: expected an array of objects/);
+  });
+  it('leaves barrels absent when the file has none', () => {
+    const j = fixture(); delete j.barrels;
+    const L = parseSectorLevel(j);
+    expect('barrels' in L).toBe(false);
+  });
+});
+
 describe('parseLevel', () => {
   it('sends sector files to the sector parser and the rest to Level Format v1', () => {
     expect(parseLevel(fixture()).sectors).toBeDefined();
