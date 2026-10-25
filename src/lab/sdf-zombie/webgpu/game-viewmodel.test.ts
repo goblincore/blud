@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CHAMBER_DEPTH_M, FLASH, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell,
-  extractStage, extractorOffset, fireRecoil, flashEnvelope, hingeOpenFraction,
+  extractStage, extractorOffset, fireRecoil, flashEnvelope, recoilAge, hingeOpenFraction,
   insertStage, loadCarry, loadHold, magazineAfterFire, reloadPhaseAt, reloadPose,
   stagedShellCenter, supportHandPose, topLeverAngle,
   VIEWMODEL_REFERENCE_FOV_DEG, viewmodelFovScale,
@@ -304,6 +304,17 @@ describe('fireRecoil', () => {
       if (fireRecoil(t).dz < -1e-4) { sawNegative = true; break; }
     }
     expect(sawNegative).toBe(true);
+  });
+});
+
+describe('recoilAge', () => {
+  it('holds the gun at rest on the flash frame and kicks on the next, at any frame rate', () => {
+    for (const dt of [1 / 30, 1 / 60, 1 / 144]) {
+      // fire() zeroes fireAge; the tick adds dt before posing.
+      const first = fireRecoil(recoilAge(0 + dt, dt), 2);
+      expect(first).toEqual({ dy: 0, dz: 0, pitch: 0, roll: 0 });
+      expect(fireRecoil(recoilAge(2 * dt, dt), 2).dz).toBeGreaterThan(0);
+    }
   });
 });
 
