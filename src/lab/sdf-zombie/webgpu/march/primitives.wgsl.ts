@@ -194,6 +194,30 @@ export const CONE_BEND = /* wgsl */ `fn coneBend(q: vec3<f32>, a: vec3<f32>, b: 
       if (v < best) { best = v; bestT = t; }
     }
   }
+  // NEWTON POLISH (2026-10-24). On a NEARLY STRAIGHT bend the cubic above is ill-conditioned in f32 (kk =
+  // 1/dot(bv,bv) scales every coefficient), its root lands far off, and the 1/32 grid cannot recover: measured up to
+  // 0.66 mm of field error on shipped prims (docs/dev-notes/2026-10-24-gpu-bake-parity/notes.md). Two Newton steps
+  // from the best t, each kept only if it lowers G (still monotone):
+  //   1. on the SQUARED distance f(t) = |q - P(t)|^2 / 2 (a quartic, exact in one step on a straight chord from any
+  //      start; Newton on G itself diverges near the curve, where G is a sharp hyperbola: a thin prim's interior);
+  //   2. on G(t) = |q - P(t)| - r(t) from step 1's t (the taper moves G's minimiser off f's).
+  // Straight-line code, no loop and no branch, on purpose: this function is inlined at every sdPrim/sdPrimO call site
+  // of the crowd program, and a three-step branching loop pushed its background compile past the 180 s warm budget.
+  // Mirrors sdBentCone in validate.ts.
+  let nD = q - (a + e1 * bestT + bb * (bestT * bestT));
+  let nP = e1 + bb * (2.0 * bestT);
+  let nF2 = dot(nP, nP) - 2.0 * dot(nD, bb);
+  let nT = select(bestT, clamp(bestT + dot(nD, nP) / nF2, 0.0, 1.0), nF2 > 0.0);
+  let nV = length(q - (a + e1 * nT + bb * (nT * nT))) - (r1 + (rb - r1) * nT);
+  let t1 = select(bestT, nT, nV < best);
+  best = min(best, nV);
+  let wD = q - (a + e1 * t1 + bb * (t1 * t1));
+  let wP = e1 + bb * (2.0 * t1);
+  let wL = max(length(wD), 1e-9);
+  let wDp = dot(wD, wP);
+  let wG2 = (dot(wP, wP) - 2.0 * dot(wD, bb)) / wL - wDp * wDp / (wL * wL * wL);
+  let wT = select(t1, clamp(t1 - (-wDp / wL - (rb - r1)) / wG2, 0.0, 1.0), wG2 > 0.0);
+  best = min(best, length(q - (a + e1 * wT + bb * (wT * wT))) - (r1 + (rb - r1) * wT));
   return best * minScale;
 }`;
 
