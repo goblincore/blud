@@ -14,7 +14,8 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { setMaterialEnvironment } from './material-environment';
 import type { Vec3 } from '../types';
 import { GUN_GRIP, gunPoint, muzzleRise, type GunPose } from '../carry';
-import { releaseProp, stepDrop, type DropState } from '../prop-drop';
+import { DROP, releaseProp, stepDrop, type DropState } from '../prop-drop';
+import type { DebrisGround, DebrisSeat } from '../debris-ground';
 import { qFromAxisAngle, qMul, qRotate, sub, scale, type Quat } from '../vec';
 
 export interface HeldProp {
@@ -22,10 +23,13 @@ export interface HeldProp {
   /** Pose from this frame's gun pose. `sinceFire` (s) adds the muzzle rise;
    *  `bodyRight` is the axis the rise pitches about. */
   pose(gun: GunPose, sinceFire: number, bodyRight: Vec3, barrelSpin?: number): void;
-  /** Let go: the prop tumbles from where it is with the hand's velocity. */
-  release(handVel: Vec3, seed: number): void;
-  /** Advance a released prop. No-op while held or resting. */
-  step(dt: number, floorY: number): void;
+  /** Let go: the prop tumbles from where it is with the hand's velocity. SECTOR levels (plan 3b) pass `seat`: the
+   *  drop starts inside the level and on its body's floor. */
+  release(handVel: Vec3, seed: number, seat?: DebrisSeat): void;
+  /** Advance a released prop. No-op while held or resting. SECTOR levels pass `ground` (prop-drop.ts stepDrop). */
+  step(dt: number, floorY: number, ground?: DebrisGround): void;
+  /** The released prop's pose (null while held) and whether it is resting — the debris seam. */
+  dropped(): { pos: Vec3; resting: boolean } | null;
   /** World muzzle for the last posed frame; optional forward offset for gas. */
   muzzle(forward?: number): Vec3;
   /** True once released. */
@@ -93,15 +97,22 @@ export async function loadHeldProp(url: string, renderer?: THREE.WebGPURenderer,
       last = { root, quat, scale: gun.scale };
       write(root, quat);
     },
-    release(handVel, seed) {
+    release(handVel, seed, seat) {
       if (drop) return;
       drop = releaseProp(last.root, last.quat, scale(handVel, 1), seed);
+      if (seat) {
+        const at = seat(drop.pos, DROP.radius);
+        drop = { ...drop, pos: [at.pos[0], at.pos[1], at.pos[2]], ...(at.floorY === undefined ? {} : { floorY: at.floorY }) };
+      }
     },
-    step(dt, floorY) {
+    step(dt, floorY, ground) {
       if (!drop || drop.resting) return;
-      drop = stepDrop(drop, dt, floorY);
+      drop = stepDrop(drop, dt, floorY, ground);
       last = { ...last, root: drop.pos, quat: drop.quat };
       write(drop.pos, drop.quat);
+    },
+    dropped() {
+      return drop ? { pos: [drop.pos[0], drop.pos[1], drop.pos[2]] as Vec3, resting: drop.resting } : null;
     },
     muzzle(forward = 0) {
       return gunPoint(last, [muzzleAt[0], muzzleAt[1], muzzleAt[2] + forward]);

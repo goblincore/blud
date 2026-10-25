@@ -38,6 +38,7 @@ import type { MotionFrame } from '../motion';
 import { DEFAULT_FACE, type FaceParams } from '../face';
 import type { FleshMaterial } from '../material';
 import type { BodyDef, Vec3 } from '../types';
+import type { DebrisGround, DebrisSeat } from '../debris-ground';
 import type { VisualWound } from '../shared-wounds/torso';
 import { tearUpload, wetLipUpload } from '../torn-lips';
 import type { FaceSheetParams } from '../blob-face-sheet';
@@ -524,6 +525,9 @@ export interface CharacterView {
   muzzle(): Vec3 | null;
   /** Let the held prop go (collapse, gib). */
   releaseProp(vel: Vec3, seed: number): void;
+  /** What this body has dropped (the debris seam): casings, the released gun, shed kit pieces. */
+  debris(): { casings: { pos: Vec3; resting: boolean }[]; prop: { pos: Vec3; resting: boolean } | null;
+    kit: { x: number; z: number; minY: number; resting: boolean }[] };
   /** Restore equipment and clear detached armor when a fresh body replaces this one. */
   resetEquipment(): void;
   /** Permanently remove attachments when the actor leaves the simulation. */
@@ -567,6 +571,11 @@ export interface CharacterViewOpts {
   /** No held prop (the goblin at home, goblin-puppet.ts): the profile's gun, its muzzle flash and brass are never made; the kit
    *  still loads. Absent: armed as the profile says. */
   unarmed?: boolean;
+  /** SECTOR levels: what dropped equipment lands on (plan 3b). Absent on room levels: the y = 0 plane. */
+  ground?: DebrisGround;
+  /** SECTOR levels (plan 3b): where a released gun, a shed kit piece or an ejected casing starts — inside the level
+   *  from the body's centre, on the body's floor (game-spawn.ts builds it per actor). Absent on room levels. */
+  seat?: DebrisSeat;
 }
 
 /**
@@ -671,7 +680,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
       // Polygon halves ride the rig: the kit from per-bone frames, the gun from
       // the motion frame's gun pose (right forearm). Collapse and gib release
       // the gun; the kit simply keeps following the (fallen) rig.
-      casings?.step(dt);
+      casings?.step(dt, opts.ground);
       if (!kit && !heldProp) {
         ejection.update(sinceFire, false);
         return;
@@ -681,7 +690,8 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
       const frames = kitFrames(body, bound, bodyYaw);
       const armorSpec = entry.profile.armor?.spec;
       const events=kit?.pose(frames, { body: damageBody ?? body, wounds: wounds.all(), bodyYaw, dt,
-        armor: armor && armorSpec ? { spec: armorSpec, shed: armor.shed, hits: armor.hits } : null }) ?? [];
+        armor: armor && armorSpec ? { spec: armorSpec, shed: armor.shed, hits: armor.hits } : null,
+        ground: opts.ground ?? null, seat: opts.seat ?? null }) ?? [];
       // Sparks with no kit loaded yet (the juggernaut before his glTF is built)
       // still show the round glancing off.
       if (!kit && armor) for (const p of armor.hits) armorSparks?.burst(p, 5);
@@ -691,14 +701,14 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
         if (frame?.gun && !heldProp.released) {
           heldProp.pose(frame.gun, sinceFire, rotateYaw([1, 0, 0], bodyYaw), barrelSpin);
         }
-        if (frame?.collapsed && !heldProp.released) heldProp.release([0, 0, 0], releaseSeed);
-        heldProp.step(Math.min(dt, 1 / 30), 0);
+        if (frame?.collapsed && !heldProp.released) heldProp.release([0, 0, 0], releaseSeed, opts.seat);
+        heldProp.step(Math.min(dt, 1 / 30), 0, opts.ground);
         if (ejection.update(sinceFire, !!frame?.gun && !heldProp.released) && casings) {
           // Receiver's right-side port, using the rendered gun's recoil transform.
           heldProp.object.updateWorldMatrix(true, false);
           ejectOrigin.set(.038, .006, -.025).applyMatrix4(heldProp.object.matrixWorld);
           ejectRight.set(1, 0, 0).transformDirection(heldProp.object.matrixWorld);
-          casings.eject(ejectOrigin.toArray() as Vec3, ejectRight.toArray() as Vec3);
+          casings.eject(ejectOrigin.toArray() as Vec3, ejectRight.toArray() as Vec3, opts.seat);
         }
         // Gas begins just outside the bore, so the barrel doesn't punch a
         // black hole through the hot core when viewed from the side.
@@ -709,8 +719,11 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
       return heldProp ? heldProp.muzzle() : null;
     },
     releaseProp(vel, seed) {
-      heldProp?.release(vel, seed);
+      heldProp?.release(vel, seed, opts.seat);
       muzzleFlash?.pose(null, Infinity);
+    },
+    debris() {
+      return { casings: casings?.debris() ?? [], prop: heldProp?.dropped() ?? null, kit: kit?.dropped() ?? [] };
     },
     resetEquipment() {
       if (equipmentRetired) return;

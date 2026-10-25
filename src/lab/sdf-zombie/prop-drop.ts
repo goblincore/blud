@@ -6,6 +6,7 @@
 // rather than a closed form, because a dropped gun has to LAND and stay.
 // Pure: no wall clock, seed in, same numbers out.
 import type { Vec3 } from './types';
+import { landingFloor, type DebrisGround } from './debris-ground';
 import { add, normalize, qFromAxisAngle, qMul, qNormalize, scale, type Quat } from './vec';
 
 export const DROP = {
@@ -21,6 +22,8 @@ export const DROP = {
   restCutoff: 0.35,
   /** Spin rate (rad/s) at release, jittered by the seed. */
   spin: 9,
+  /** SECTOR levels (plan 3b): the gun's collision half-extent for the wall bounce, metres. */
+  radius: 0.3,
 } as const;
 
 export interface DropState {
@@ -31,6 +34,8 @@ export interface DropState {
   spinAxis: Vec3;
   spinRate: number;
   resting: boolean;
+  /** SECTOR levels (plan 3b): the floor the prop last stood over (kept off the map). Absent on room levels. */
+  floorY?: number;
 }
 
 function jitter(seed: number, n: number): number {
@@ -51,15 +56,28 @@ export function releaseProp(pos: Vec3, quat: Quat, handVel: Vec3, seed: number):
   };
 }
 
-/** One integration step. `floorY` is the floor plane. */
-export function stepDrop(s: DropState, dt: number, floorY: number): DropState {
+/** One integration step. `floorY` is the floor plane. SECTOR levels (plan 3b) pass `ground`: the prop bounces off
+ *  its walls, stays under its ceiling, and lands on the floor under it (`floorY` is then only the fallback before the
+ *  first floor is known); room levels pass nothing and keep the plane, byte for byte. */
+export function stepDrop(s: DropState, dt: number, floorY: number, ground?: DebrisGround): DropState {
   if (s.resting) return s;
   let vel: Vec3 = [s.vel[0], s.vel[1] + DROP.gravity * dt, s.vel[2]];
   let pos = add(s.pos, scale(vel, dt));
+  if (ground) {
+    const b = ground.bounce(s.pos, pos, vel, DROP.restitution, DROP.friction, DROP.radius);
+    if (b) { pos = b.pos; vel = b.vel; }
+    const ceil = ground.ceilAt?.(pos[0], pos[2]) ?? Infinity;
+    if (Number.isFinite(ceil) && pos[1] > ceil - DROP.floorPad) {
+      pos = [pos[0], ceil - DROP.floorPad, pos[2]];
+      if (vel[1] > 0) vel = [vel[0], -vel[1] * DROP.restitution, vel[2]];
+    }
+  }
+  const base = ground ? landingFloor(ground, pos[0], pos[2], s.floorY ?? floorY) : floorY;
+  const keep = ground ? { floorY: base } : {};
   let quat = qNormalize(qMul(qFromAxisAngle(s.spinAxis, s.spinRate * dt), s.quat));
   let spinRate = s.spinRate;
   let resting = false;
-  const rest = floorY + DROP.floorPad;
+  const rest = base + DROP.floorPad;
   if (pos[1] <= rest) {
     pos = [pos[0], rest, pos[2]];
     if (Math.abs(vel[1]) < DROP.restCutoff) {
@@ -68,10 +86,10 @@ export function stepDrop(s: DropState, dt: number, floorY: number): DropState {
       // Lie flat: keep the yaw, drop the pitch/roll.
       const yaw = Math.atan2(2 * (quat[3] * quat[1] + quat[0] * quat[2]), 1 - 2 * (quat[1] * quat[1] + quat[2] * quat[2]));
       quat = qFromAxisAngle([0, 1, 0], yaw);
-      return { pos, quat, vel: [0, 0, 0], spinAxis: s.spinAxis, spinRate, resting };
+      return { pos, quat, vel: [0, 0, 0], spinAxis: s.spinAxis, spinRate, resting, ...keep };
     }
     vel = [vel[0] * DROP.friction, -vel[1] * DROP.restitution, vel[2] * DROP.friction];
     spinRate *= 0.6;
   }
-  return { pos, quat, vel, spinAxis: s.spinAxis, spinRate, resting };
+  return { pos, quat, vel, spinAxis: s.spinAxis, spinRate, resting, ...keep };
 }

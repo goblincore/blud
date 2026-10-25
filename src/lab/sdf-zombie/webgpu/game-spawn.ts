@@ -33,7 +33,8 @@ import { FLAT_GROUND } from './level-ground';
 import { registerBleed } from './game-bleed';
 import { crowdTypeFor } from './game-crowd-types';
 import { applyStormBodyKey } from './game-dynamic-light';
-import { seatBloodSpawn, shellAmpOf } from './game-hit-trace';
+import { actorSpawnCentre, debrisGround, seatBloodSpawn, shellAmpOf } from './game-hit-trace';
+import { seatSpawnInsideMap } from './sector-debris';
 import { wanderBounds, type RoomDef } from './game-level';
 import { damagePlayer } from './game-loop';
 import {
@@ -209,9 +210,20 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
   const rigGroup = new THREE.Group();
   rigGroup.name = `deferred-rig-${name}-${start[0]!.toFixed(2)}-${start[2]!.toFixed(2)}`;
   if (ctx.boot.deferredMode) ctx.boot.handle.scene.add(rigGroup);
+  // SECTOR levels (plan 3b): dropped equipment (the gun, shed kit, casings) lands on the sector floor and stops at its
+  // walls, and starts inside the level from the body's centre on the body's floor. The actor does not exist yet; the
+  // seat reads it once it does (equipment only drops after spawn). Room levels pass neither.
+  const sectorMap = sectorGround ? ctx.world.level.def?.sectors : undefined;
+  let seatActor: ZombieActor | null = null;
+  const debrisOpts = sectorMap ? {
+    ground: debrisGround(ctx)!,
+    seat: (at: Vec3, radius: number) => seatSpawnInsideMap(sectorMap, sectorGround as SectorGround,
+      seatActor ? actorSpawnCentre(ctx, seatActor) : null, at, radius),
+  } : {};
   const character = createCharacterView({
     name,
     start,
+    ...debrisOpts,
     renderer: ctx.boot.handle.renderer,
     scene: ctx.boot.deferredMode ? rigGroup : ctx.boot.handle.scene,
     effectsScene: ctx.vfx.characterEffects.scene,
@@ -505,6 +517,8 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
       },
     } : {}),
   });
+  seatActor = actor;
+
   // Ship default + any live toggle: a late spawn must not fall back to the
   // flat bone fold while the rest of the room culls.
   if (crowdAttach) actor.crowd = crowdAttach;

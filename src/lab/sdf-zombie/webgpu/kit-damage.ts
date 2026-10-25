@@ -7,6 +7,7 @@ import type { BuildResult } from '../build-body';
 import type { LimbId, Vec3 } from '../types';
 import { woundWorldPos, type Wound } from '../damage';
 import { kitShedFor, type ArmorSpec } from '../plate-armor';
+import { landingFloor, type DebrisGround, type DebrisSeat } from '../debris-ground';
 
 // Memoised: attached() used to run this regex on every prim for every piece,
 // every frame. Bone names are a small closed set, so the cache stays tiny.
@@ -36,7 +37,12 @@ interface Piece {
   released: boolean;
   damage: number;
 }
-interface Debris { mesh: THREE.Mesh; velocity: THREE.Vector3; spin: THREE.Vector3; resting: boolean }
+interface Debris {
+  mesh: THREE.Mesh; velocity: THREE.Vector3; spin: THREE.Vector3; resting: boolean;
+  /** SECTOR levels (plan 3b): the floor the piece last fell over (0 until known) and its x/z half-extent, the radius
+   *  its wall bounce stops at. Read only with a ground. */
+  floorY: number; radius: number;
+}
 export interface KitDamageEvent { kind:'armor-hit'|'armor-shed'; point:Vec3; limb:LimbId }
 /** PLATE ARMOUR MODE (the juggernaut, plate-armor.ts): the actor's plate
  *  state decides what sheds, not this file's own wound count. `hits` are the
@@ -134,7 +140,7 @@ export function createKitDamage(object:THREE.Object3D) {
     for(const p of pieces) { p.released=false; p.damage=0; }
     for(const [mesh,index] of originals) { mesh.geometry.setIndex(index); mesh.visible=true; }
   };
-  const bake=(piece:Piece)=>{
+  const bake=(piece:Piece,seat?:DebrisSeat|null)=>{
     const source=piece.source, g=source.geometry, pos=g.getAttribute('position'), normal=g.getAttribute('normal'), uv=g.getAttribute('uv');
     const positions:number[]=[], normals:number[]=[], uvs:number[]=[];
     const p=new THREE.Vector3(), n=new THREE.Vector3();
@@ -157,10 +163,15 @@ export function createKitDamage(object:THREE.Object3D) {
     geometry.computeBoundingBox();
     const centre=geometry.boundingBox!.getCenter(new THREE.Vector3());
     geometry.translate(-centre.x,-centre.y,-centre.z); geometry.computeBoundingBox();
+    const half=geometry.boundingBox!.getSize(new THREE.Vector3()).multiplyScalar(.5), radius=Math.max(half.x,half.z);
+    // SECTOR levels (plan 3b): a piece shed through a wall starts on this side of it, on the body's floor.
+    const at=seat?seat(centre.toArray() as Vec3,radius):null;
     const mesh=new THREE.Mesh(geometry,source.material); mesh.position.copy(centre); mesh.name=`Detached_${piece.bone}`;
+    if(at) mesh.position.set(at.pos[0],at.pos[1],at.pos[2]);
     debris.add(mesh);
     const side=piece.limb.endsWith('L')?1:-1;
-    drops.push({mesh,velocity:new THREE.Vector3(side*.7,1.7,1.3),spin:new THREE.Vector3(4,side*3,2),resting:false});
+    drops.push({mesh,velocity:new THREE.Vector3(side*.7,1.7,1.3),spin:new THREE.Vector3(4,side*3,2),resting:false,
+      floorY:at?.floorY??0,radius});
     piece.released=true;
     return centre.toArray() as Vec3;
   };
@@ -173,7 +184,11 @@ export function createKitDamage(object:THREE.Object3D) {
   return {
     debris,
     reset,
-    update(body:BuildResult,wounds:readonly Wound[],bodyYaw:number,dt:number,armor?:KitArmorInput|null):KitDamageEvent[] {
+    /** SECTOR levels (plan 3b) pass `ground` (shed pieces stop at its walls, stay under its ceiling and land on the
+     *  floor under them) and `seat` (they start inside the level on the body's floor); room levels pass neither and
+     *  keep the y = 0 plane, byte for byte. */
+    update(body:BuildResult,wounds:readonly Wound[],bodyYaw:number,dt:number,armor?:KitArmorInput|null,
+      ground?:DebrisGround|null,seat?:DebrisSeat|null):KitDamageEvent[] {
       const events:KitDamageEvent[]=[];
       // Gibs clear their wound list before a healthy body is respawned.
       // Equipment loss, not the previous wound count, records that reset.
@@ -195,7 +210,7 @@ export function createKitDamage(object:THREE.Object3D) {
           // helmet's lenses and snout never hang in front of a bare face.
           support??=kitSupportIndex(body);
           if(!kitPieceAttached(piece.limb,piece.support,support) || kitShedFor(armor.spec,armor.shed,piece.bone)) {
-            const point=bake(piece); changed.add(piece.source);
+            const point=bake(piece,seat); changed.add(piece.source);
             if(piece.armor) events.push({kind:'armor-shed',point,limb:piece.limb});
           }
           continue;
@@ -208,7 +223,7 @@ export function createKitDamage(object:THREE.Object3D) {
         }
         support??=kitSupportIndex(body);
         if(!kitPieceAttached(piece.limb,piece.support,support) || piece.damage>=(piece.limb==='torso'?3:2)) {
-          const point=bake(piece); changed.add(piece.source);
+          const point=bake(piece,seat); changed.add(piece.source);
           if(piece.armor) events.push({kind:'armor-shed',point,limb:piece.limb});
         }
       }
@@ -219,17 +234,42 @@ export function createKitDamage(object:THREE.Object3D) {
       const step=Math.min(Math.max(dt,0),1/30);
       for(const d of drops) {
         if(d.resting || step===0) continue;
-        d.velocity.y-=10*step; d.mesh.position.addScaledVector(d.velocity,step);
+        d.velocity.y-=10*step;
+        const p=d.mesh.position, start:Vec3|null=ground?[p.x,p.y,p.z]:null;
+        p.addScaledVector(d.velocity,step);
+        if(ground) {
+          const b=ground.bounce(start!,[p.x,p.y,p.z],[d.velocity.x,d.velocity.y,d.velocity.z],.22,.6,d.radius);
+          if(b) { p.set(b.pos[0],b.pos[1],b.pos[2]); d.velocity.set(b.vel[0],b.vel[1],b.vel[2]); }
+        }
         d.mesh.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(d.spin.x*step,d.spin.y*step,d.spin.z*step)));
         d.mesh.updateMatrixWorld(true);
         const bounds=d.mesh.geometry.boundingBox!.clone().applyMatrix4(d.mesh.matrixWorld);
-        if(bounds.min.y<.01) {
-          d.mesh.position.y+=.01-bounds.min.y;
+        if(ground) {
+          // Under a non-sky ceiling the piece's top stays under it (NaN off the map, Infinity under sky: no clamp).
+          const ceil=ground.ceilAt?.(p.x,p.z)??Infinity;
+          if(Number.isFinite(ceil) && bounds.max.y>ceil-.01) {
+            const down=bounds.max.y-(ceil-.01);
+            p.y-=down; bounds.min.y-=down; bounds.max.y-=down;
+            if(d.velocity.y>0) d.velocity.y*=-.22;
+          }
+        }
+        const lift=ground?(d.floorY=landingFloor(ground,p.x,p.z,d.floorY))+.01:.01;
+        if(bounds.min.y<lift) {
+          d.mesh.position.y+=lift-bounds.min.y;
           d.velocity.set(d.velocity.x*.6,Math.abs(d.velocity.y)*.22,d.velocity.z*.6); d.spin.multiplyScalar(.65);
           if(d.velocity.y<.3) { d.resting=true; d.velocity.set(0,0,0); }
         }
       }
       return events;
+    },
+    /** Every shed piece's x/z, its world bounds' lowest y and whether it has settled (the debris seam). Named
+     *  `dropped`, not `debris`: that is the pieces' scene group. */
+    dropped():{x:number;z:number;minY:number;resting:boolean}[] {
+      return drops.map(d=>{
+        d.mesh.updateMatrixWorld(true);
+        const b=d.mesh.geometry.boundingBox!.clone().applyMatrix4(d.mesh.matrixWorld);
+        return {x:d.mesh.position.x,z:d.mesh.position.z,minY:b.min.y,resting:d.resting};
+      });
     },
     dispose(){ clear(); debris.removeFromParent(); },
   };

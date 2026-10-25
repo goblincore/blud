@@ -46,6 +46,7 @@ import { attribute, vec3 } from 'three/tsl';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { setMaterialEnvironment } from './material-environment';
 import { createKitDamage, type KitArmorInput, type KitDamageEvent } from './kit-damage';
+import type { DebrisGround, DebrisSeat } from '../debris-ground';
 import { precomputeKitBounds, updateKitBounds } from './kit-bounds';
 import type { BuildResult } from '../build-body';
 import type { Wound } from '../damage';
@@ -295,8 +296,14 @@ export interface KitOverlay {
    * At rest every frame is (bind head, identity) and the result is exactly
    * the static placement this overlay had before it could move.
    */
-  pose(frames: ReadonlyMap<string, { pos: Vec3; quat: readonly number[] }>, damage?: { body: BuildResult; wounds: readonly Wound[]; bodyYaw: number; dt: number; armor?: KitArmorInput | null }): KitDamageEvent[];
+  pose(frames: ReadonlyMap<string, { pos: Vec3; quat: readonly number[] }>, damage?: {
+    body: BuildResult; wounds: readonly Wound[]; bodyYaw: number; dt: number; armor?: KitArmorInput | null;
+    /** SECTOR levels (plan 3b): what shed pieces land on, and where they start (kit-damage.ts update). */
+    ground?: DebrisGround | null; seat?: DebrisSeat | null;
+  }): KitDamageEvent[];
   resetDamage(): void;
+  /** The shed pieces (kit-damage.ts dropped; empty for an unbreakable kit) — the debris seam. */
+  dropped(): { x: number; z: number; minY: number; resting: boolean }[];
   /** Scale the PULSED materials' emissive intensity from their authored
    *  look (status-lights.ts output; 1 = authored). coreRgb recolours the
    *  core (amber, red when enraged). No-op on a kit without them. */
@@ -514,7 +521,8 @@ export async function loadKit(
     // — from the posed bone origins (kit-bounds.ts), NOT computeBoundingSphere,
     // which CPU-skins every vertex (~75 ms/frame for the bride under load).
     skinned.forEach((mesh, i) => updateKitBounds(mesh, skinBounds[i]!));
-    return damage ? damageView?.update(damage.body, damage.wounds, damage.bodyYaw, damage.dt, damage.armor) ?? [] : [];
+    return damage ? damageView?.update(damage.body, damage.wounds, damage.bodyYaw, damage.dt, damage.armor,
+      damage.ground, damage.seat) ?? [] : [];
   };
 
   return {
@@ -523,6 +531,7 @@ export async function loadKit(
     bones,
     pose,
     resetDamage() { damageView?.reset(); object.visible = true; },
+    dropped: () => damageView?.dropped() ?? [],
     glow(levels) {
       for (const p of pulsed) {
         p.mat.emissiveIntensity = p.base * (p.name === 'led' ? levels.led : levels.core);

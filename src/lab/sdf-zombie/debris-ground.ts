@@ -31,6 +31,11 @@ export interface DebrisGround {
   bounce(prev: Vec3, next: Vec3, vel: Vec3, restitution: number, friction: number, radius?: number): WallBounce | null;
 }
 
+/** SPAWNS START INSIDE THE LEVEL (plan 3b), for a stepper that cannot see the level: where a piece spawned at `at`
+ *  with collision radius `radius` actually starts (clamped inside the level from its body's centre) and the floor to
+ *  seed it with (the body's floor; undefined when none is known). The game builds it per actor (game-spawn.ts). */
+export type DebrisSeat = (at: Vec3, radius: number) => { pos: Vec3; floorY: number | undefined };
+
 /** The floor a piece at (x, z) lands on: the floor there, or `last` (its previous floor) off the map. */
 export function landingFloor(g: DebrisGround, x: number, z: number, last: number): number {
   const f = g.floorAt(x, z);

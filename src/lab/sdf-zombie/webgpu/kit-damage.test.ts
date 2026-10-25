@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { createKitDamage } from './kit-damage';
+import type { DebrisSeat } from '../debris-ground';
 import { JUGGERNAUT_ARMOR } from '../plate-armor';
 import { buildBody } from '../build-body';
 import { compileBlob } from '../blob-compile';
@@ -58,6 +59,27 @@ describe('damaged kit pieces', () => {
     expect(damage.debris.children[0]!.position.x).toBeCloseTo(3-.14,5);
     damage.update(severLimb(b,'armL').body, [], 0, 1/60);
     expect(damage.debris.children).toHaveLength(1);
+    damage.dispose();
+  });
+  it('sector levels: a shed piece starts where the seat puts it, stays under the ceiling and rests on the floor under it', () => {
+    const {damage}=fixture();
+    const b=severLimb(body(),'armL').body;
+    let seen=-1;
+    const seat:DebrisSeat=(at,r)=>{ seen=r; return { pos:[at[0]+.5,at[1],at[2]], floorY:.5 }; };
+    const ground={ floorAt:(x:number)=>(x>-.5?.5:NaN), ceilAt:()=>1.5, bounce:()=>null };
+    damage.update(b,[],0,0,null,ground,seat);
+    expect(seen).toBeCloseTo(.05,5);                                 // the 0.1 m quad's x/z half-extent
+    expect(damage.debris.children[0]!.position.x).toBeCloseTo(-.14+.5,5);
+    let top=-Infinity;
+    for(let i=0;i<240;i++) {
+      damage.update(b,[],0,1/60,null,ground,seat);
+      const m=damage.debris.children[0] as THREE.Mesh; m.updateMatrixWorld(true);
+      top=Math.max(top,m.geometry.boundingBox!.clone().applyMatrix4(m.matrixWorld).max.y);
+    }
+    expect(top).toBeLessThanOrEqual(1.49+1e-9);
+    const [d]=damage.dropped();
+    expect(d!.resting).toBe(true);
+    expect(d!.minY).toBeCloseTo(.51,5);
     damage.dispose();
   });
   it('reattaches the kit and clears debris on an explicit reset', () => {
