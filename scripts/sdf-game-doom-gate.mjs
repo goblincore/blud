@@ -211,16 +211,20 @@ const installEnemyHelper = () => evaluate(`(async () => {
     return { drawn: __sdfGame.bodiesOnScreen(), framed: framed.length, inSight: seen, total: actors.length };
   };
   // THE SAMPLER
+  const ROUND_LIFE = (await import('/src/lab/sdf-zombie/webgpu/game-weapon.ts')).GRAPESHOT.lifeSec;   // expired() ages rounds out here
   let st = null;
   const frame = () => {
     if (!st) return;
+    const now = performance.now();
+    if (st.lastT !== null) st.maxDt = Math.max(st.maxDt, (now - st.lastT) / 1000);
+    st.lastT = now;
     const pp = __sdfGame.pose().pos;
     const list = __sdfGame.actorList();
     for (const b of __sdfGame.brains()) {
       const prev = st.since.get(b.id);
       if (prev !== undefined && b.sinceFire + 1e-6 < prev) {
         const a = list.find((q) => q.id === b.id);
-        st.shots.push({ id: b.id, kind: b.kind, at: a.pos.map((v) => +v.toFixed(2)), los: sees(a.pos, pp), dist: +flat(a.pos, pp).toFixed(2) });
+        st.shots.push({ id: b.id, kind: b.kind, at: a.pos.map((v) => +v.toFixed(2)), los: sees(a.pos, pp), ducked: st.dodging, dist: +flat(a.pos, pp).toFixed(2) });
       }
       st.since.set(b.id, b.sinceFire);
     }
@@ -243,28 +247,32 @@ const installEnemyHelper = () => evaluate(`(async () => {
         for (const a of list) if (!sh || flat(a.pos, r.pos) < flat(sh.pos, r.pos)) sh = a;
         const hit = sh ? sr.sectorSegmentHit(map, ground, eye(sh.pos), r.pos) : null;
         if (hit) st.passed.push({ leg: 'eye->first', shooter: sh.id, kind: hit.kind, hit: hit.point.map((v) => +v.toFixed(2)), pos: r.pos.map((v) => +v.toFixed(2)) });
-        st.rounds.set(r, { last: [...r.pos], age: r.ageSec });
+        st.rounds.set(r, { last: [...r.pos], vel: [...r.vel], age: r.ageSec });
         continue;
       }
       const hit = sr.sectorSegmentHit(map, ground, t.last, r.pos);
       if (hit) st.passed.push({ leg: 'step', kind: hit.kind, hit: hit.point.map((v) => +v.toFixed(2)), pos: r.pos.map((v) => +v.toFixed(2)), age: +r.ageSec.toFixed(2) });
-      t.last = [...r.pos]; t.age = r.ageSec;
+      t.last = [...r.pos]; t.vel = [...r.vel]; t.age = r.ageSec;
     }
-    // Gone: aged out in flight, stopped by the player (its last step ended within 0.9 m of the player's axis, inside
-    // its height), or stopped by the world (a wall, floor, ceiling or collider).
+    // Gone: stopped by the player (its last step ended within 0.9 m of the player's axis, inside its height); stopped
+    // by the WORLD only when it went young (age < lifeSec − 2 × the slowest frame) AND sector geometry lies within two
+    // frames' flight ahead of its last sample (last → last + vel·2·dt); anything else is 'expired' or 'other'.
     for (const [r, t] of st.tracked) if (!live.has(r)) {
       st.tracked.delete(r);
-      if (t.age > 1.9) st.expired++;
-      else if (flat(t.last, pp) < 0.9 && t.last[1] > pp[1] - 0.3 && t.last[1] < pp[1] + 2.1) st.atPlayer++;
-      else st.atWorld++;
+      const dt = Math.max(st.maxDt, 1 / 60);
+      const ahead = [t.last[0] + t.vel[0] * 2 * dt, t.last[1] + t.vel[1] * 2 * dt, t.last[2] + t.vel[2] * 2 * dt];
+      if (flat(t.last, pp) < 0.9 && t.last[1] > pp[1] - 0.3 && t.last[1] < pp[1] + 2.1) st.atPlayer++;
+      else if (t.age < ROUND_LIFE - 2 * dt && sr.sectorSegmentHit(map, ground, t.last, ahead)) st.atWorld++;
+      else if (t.age >= ROUND_LIFE - 2 * dt) st.expired++;
+      else st.other++;
     }
     for (const r of live) st.tracked.set(r, st.rounds.get(r));
     st.frames++;
     requestAnimationFrame(frame);
   };
   const sampler = {
-    start(opts = {}) { st = { dodge: opts.dodge ?? null, dodging: false, dodges: 0, since: new Map(), shots: [], rounds: new WeakMap(), tracked: new Map(), seen: 0, atPlayer: 0, atWorld: 0, expired: 0, passed: [], frames: 0 }; requestAnimationFrame(frame); },
-    read() { return st ? { shots: st.shots, seen: st.seen, atPlayer: st.atPlayer, atWorld: st.atWorld, expired: st.expired, inFlight: st.tracked.size, passed: st.passed.slice(0, 6), passedCount: st.passed.length, frames: st.frames, dodges: st.dodges } : null; },
+    start(opts = {}) { st = { dodge: opts.dodge ?? null, dodging: false, dodges: 0, lastT: null, maxDt: 0, other: 0, since: new Map(), shots: [], rounds: new WeakMap(), tracked: new Map(), seen: 0, atPlayer: 0, atWorld: 0, expired: 0, passed: [], frames: 0 }; requestAnimationFrame(frame); },
+    read() { return st ? { shots: st.shots, seen: st.seen, atPlayer: st.atPlayer, atWorld: st.atWorld, expired: st.expired, inFlight: st.tracked.size, passed: st.passed.slice(0, 6), passedCount: st.passed.length, frames: st.frames, dodges: st.dodges, other: st.other, maxFrameMs: +(st.maxDt * 1000).toFixed(1) } : null; },
     stop() { const r = sampler.read(); st = null; return r; },
   };
   window.__eg = { sees, stand, sightPoses, viewPoses, cullReport, sampler, yawTo };
@@ -399,15 +407,22 @@ const keys = [...new Set([...Object.keys(want), ...Object.keys(got)])].sort();
 if (!Object.keys(want).length) fail('enemies: the level JSON has no spawns (regenerate E1M1 with doom_map.py)');
 if (keys.some((k) => want[k] !== got[k])) fail(`enemies: spawned ${JSON.stringify(got)}, the level has ${JSON.stringify(want)}`);
 pass(`enemies spawned: ${keys.map((k) => `${k} ${got[k]}`).join(', ')} (= the converter's ${raw.spawns.length})`);
-// 5.2–5.3 ON THEIR FLOORS, then WALKING: feet within 0.08 m of the floor under them, the floor finite.
+// 5.2–5.3 ON THEIR FLOORS, then WALKING. The feet (actorList pos y, the motion's eased floorY) within 0.08 m of the floor
+// under them and that floor finite catches an unwired floorAt or a body in the void; it cannot catch a body drawn off
+// its feet (pos y eases toward the same floorAt). So the POSED body's lowest point (actorGround.bodyLowest, the
+// capsules' lowest ends) minus the floor must sit in BODY_LOW_BAND too — calibrated from the first runs (-0.04..+0.17 m).
+const BODY_LOW_BAND = [-0.15, 0.25];
 const floorsCheck = async (what) => {
   const list = await evaluate('__sdfGame.actorList().map((a) => ({ id: a.id, kind: a.kind, pos: a.pos, g: __sdfGame.ground(a.pos[0], a.pos[2]), low: __sdfGame.actorGround(a.id).bodyLowest }))');
   const bad = list.filter((a) => !Number.isFinite(a.g.floor) || Math.abs(a.pos[1] - a.g.floor) > 0.08);
   if (bad.length) fail(`enemies ${what}: ${bad.length} off their floor: ${JSON.stringify(bad.slice(0, 4).map((a) => ({ id: a.id, pos: a.pos.map((v) => +v.toFixed(2)), floor: a.g.floor })))}`);
   const worst = Math.max(...list.map((a) => Math.abs(a.pos[1] - a.g.floor)));
   const low = list.map((a) => a.low - a.g.floor).filter(Number.isFinite);
+  if (!low.length) fail(`enemies ${what}: no finite posed-body lowest point (actorGround)`);
+  const lowBad = list.filter((a) => Number.isFinite(a.low - a.g.floor) && (a.low - a.g.floor < BODY_LOW_BAND[0] || a.low - a.g.floor > BODY_LOW_BAND[1]));
+  if (lowBad.length) fail(`enemies ${what}: ${lowBad.length} posed bodies sunk or floating (lowest − floor outside ${BODY_LOW_BAND.join('..')} m): ${JSON.stringify(lowBad.slice(0, 4).map((a) => ({ id: a.id, kind: a.kind, gap: +(a.low - a.g.floor).toFixed(3), floor: a.g.floor })))}`);
   const floors = [...new Set(list.map((a) => a.g.floor))].sort((a, b) => a - b);
-  pass(`enemies ${what}: ${list.length} on their floors (worst feet gap ${worst.toFixed(3)} m; floors ${floors.join(', ')}; posed body lowest − floor ${Math.min(...low).toFixed(2)}..${Math.max(...low).toFixed(2)} m)`);
+  pass(`enemies ${what}: ${list.length} on their floors (worst feet gap ${worst.toFixed(3)} m; floors ${floors.join(', ')}; posed body lowest − floor ${Math.min(...low).toFixed(2)}..${Math.max(...low).toFixed(2)} m over ${low.length}, band ${BODY_LOW_BAND.join('..')})`);
   return list;
 };
 await evaluate('__sdfGame.setPose(0, 0, 0, 0, 0)');
@@ -432,9 +447,12 @@ console.log(`rounds: ${JSON.stringify({ ...rounds, shots: rounds.shots.length, s
 if (rounds.shots.length === 0 || rounds.seen === 0) fail(`rounds: no enemy fired in 8 s in soldier ${sp.soldier}'s sight (${rounds.shots.length} shots, ${rounds.seen} rounds)`);
 if (rounds.passedCount > 0) fail(`rounds: ${rounds.passedCount} round steps went through sector geometry: ${JSON.stringify(rounds.passed)}`);
 if (rounds.atWorld === 0) fail(`rounds: no round stopped at a wall, floor or ceiling (${rounds.atPlayer} at the player, ${rounds.expired} expired) — nothing tested`);
-const blind = rounds.shots.filter((s) => !s.los);
+// A shot decided on the frame the player ducked can read blind (the director saw the open pose, the sampler the
+// hiding place): shots fired while ducked are reported, not judged.
+const blind = rounds.shots.filter((s) => !s.los && !s.ducked);
+const duckedShots = rounds.shots.filter((s) => s.ducked);
 if (blind.length) fail(`rounds: ${blind.length} shots from actors without sight of the player: ${JSON.stringify(blind.slice(0, 4))}`);
-pass(`rounds: ${rounds.shots.length} shots (${rounds.dodges} dodged), ${rounds.seen} rounds followed over ${rounds.frames} frames — ${rounds.atPlayer} stopped at the player, ${rounds.atWorld} at walls/floors/ceilings, ${rounds.expired} expired in flight, 0 stepped through sector geometry`);
+pass(`rounds: ${rounds.shots.length} shots (${rounds.dodges} dodged; ${duckedShots.length} fired while ducked, ${duckedShots.filter((s) => !s.los).length} of them blind, not judged), ${rounds.seen} rounds followed over ${rounds.frames} frames — ${rounds.atPlayer} stopped at the player, ${rounds.atWorld} at walls/floors/ceilings (geometry within two frames ahead), ${rounds.expired} expired in flight, ${rounds.other} other; slowest frame ${rounds.maxFrameMs} ms; 0 stepped through sector geometry`);
 // 5.6 BUDGET WITH ENEMIES IN VIEW (report only): the first cluster pose, facing it.
 const views = await evaluate('__eg.viewPoses(4)');
 console.log(`view poses: ${JSON.stringify(views)}`);
@@ -520,11 +538,11 @@ while (Date.now() - tOpen < 6000 && firstFire === null) {
   await sleep(100);
   const r = await evaluate('__eg.sampler.read()');
   hOpen = await evaluate('__sdfGame.health()');
-  if (r.shots.length || hOpen < hHid1) firstFire = { ms: Date.now() - tOpen, shots: r.shots, health: hOpen };
+  if (r.shots.some((s) => s.id === sight.soldier)) firstFire = { ms: Date.now() - tOpen, shots: r.shots, health: hOpen };
 }
 const openRead = await evaluate('__eg.sampler.stop()');
-if (!firstFire) fail(`sight: in soldier ${sight.soldier}'s sight ${flatGap(sight.open, sight.soldierAt).toFixed(2)} m off for 6 s and nobody fired (health ${hOpen})`);
-pass(`sight: stepped ${sight.d.toFixed(2)} m into soldier ${sight.soldier}'s sight — fired after ${(firstFire.ms / 1000).toFixed(1)} s (shooters ${[...new Set(firstFire.shots.map((s) => s.id))].join(', ') || 'n/a'}, health ${hHid1} -> ${firstFire.health}; ${openRead.passedCount} rounds through geometry)`);
+if (!firstFire) fail(`sight: in soldier ${sight.soldier}'s sight ${flatGap(sight.open, sight.soldierAt).toFixed(2)} m off for 6 s and it never fired (health ${hOpen}; other shots ${JSON.stringify(openRead.shots.slice(0, 4))})`);
+pass(`sight: stepped ${sight.d.toFixed(2)} m into soldier ${sight.soldier}'s sight — it fired after ${(firstFire.ms / 1000).toFixed(1)} s (all shooters ${[...new Set(firstFire.shots.map((s) => s.id))].join(', ') || 'n/a'}, health ${hHid1} -> ${firstFire.health}; ${openRead.passedCount} rounds through geometry)`);
 if (openRead.passedCount) fail(`sight: rounds through sector geometry: ${JSON.stringify(openRead.passed)}`);
 const sightErrs = consoleEvents.filter((e) => e.type === 'error' || e.type === 'exception');
 if (sightErrs.length) fail(`console errors (?god=0 boot, sight): ${JSON.stringify(sightErrs.slice(0, 4))}`);
