@@ -10,19 +10,31 @@
 //   hittable   a slug fired AT a baked piece gibs it: baked count drops,
 //              live chunk count rises (fresh gobs), no silent absorption
 //   leak       long-firefight loop: sever → settle → bake → gib → again;
-//              views stay <= MAX_CHUNKS (12) and baked+live stay bounded,
-//              reported as a series
+//              views and baked stay <= the page's chunk budget (lowered
+//              to 12 for this leg) while totalBakes passes it, reported
+//              as a series
 //
 // Usage: node scripts/sdf-chunk-bake-gate.mjs <vitePort> <cdpPort>
 //        [mainVitePort] — omit the third arg to skip the vs-main parity leg
 //                        (self-parity still runs).
 import { execFileSync, spawn } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 const VITE = Number(process.argv[2] ?? 5377);
 const CDP = Number(process.argv[3] ?? 9377);
 const MAIN_VITE = process.argv[4] ? Number(process.argv[4]) : null;
-const OUT = process.env.GATE_OUT ?? '/tmp/sdf-chunk-bake/gate.json';
+const OUT_DIR = `${process.env.LAB_TMP ?? '/tmp'}/sdf-chunk-bake`;
+const OUT = process.env.GATE_OUT ?? `${OUT_DIR}/gate.json`;
+mkdirSync(OUT_DIR, { recursive: true });
+mkdirSync(dirname(OUT), { recursive: true });
+// The chunk-view budget the leak leg is sized around. The page default is 64
+// (raised from the old MAX_CHUNKS 12 so one full-body gib fits); at 64 this
+// gate's ~30 bakes never reach the cap, so the ring would never recycle and
+// the leak leg would prove nothing. The leak leg lowers it to 12 live (and
+// only there: the budget also picks the gib tier, so a 12 budget at boot
+// changes what the staging slugs sever and breaks bake-happens).
+const CHUNK_CAP = 12;
 const W = 1280, H = 800;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -209,7 +221,7 @@ await evaluate(`(async () => {
 const shotMarched = await send('Page.captureScreenshot', { format: 'png' });
 if (shotMarched.result?.data) {
   const { writeFileSync: wf } = await import('node:fs');
-  wf('/tmp/sdf-chunk-bake/look-marched.png', Buffer.from(shotMarched.result.data, 'base64'));
+  wf(`${OUT_DIR}/look-marched.png`, Buffer.from(shotMarched.result.data, 'base64'));
 }
 
 // vs-main parity: same staging on the MAIN checkout's build.
@@ -287,7 +299,7 @@ await evaluate(`(async () => {
 const shot = await send('Page.captureScreenshot', { format: 'png' });
 if (shot.result?.data) {
   const { writeFileSync: wf } = await import('node:fs');
-  wf('/tmp/sdf-chunk-bake/look-baked.png', Buffer.from(shot.result.data, 'base64'));
+  wf(`${OUT_DIR}/look-baked.png`, Buffer.from(shot.result.data, 'base64'));
 }
 
 // HITTABLE: fire the REAL weapon path at a baked piece. The severed-limb
@@ -376,13 +388,18 @@ gate('baked-piece-hittable',
 
 // LEAK: long-firefight soak — spawn synthetic chunks repeatedly (the same
 // spawn/settle/bake machinery as real severs, in unlimited supply), bake
-// them, gib a few, keep going until totalBakes is ~3x the view cap. Views
-// must never exceed MAX_CHUNKS (12) and baked+live must stay bounded while
-// totalBakes grows — proof the ring actually RECYCLES rather than leaking.
+// them, gib a few, keep going until totalBakes is ~3x the view cap. A baked
+// piece keeps its view (freeBaked hands it back), so baked <= views <= cap;
+// views and baked must never exceed the page's budget while totalBakes grows
+// past it — proof the ring actually RECYCLES (oldest baked evicted first)
+// rather than leaking.
 const leak = [];
 let leakOk = true;
 {
-  for (let cycle = 0; cycle < 6; cycle++) {
+  // Views so far (staging + hittable) are well under 12, so lowering the
+  // budget live leaves no view over the cap.
+  await evaluate(`__sdfGame.setDynamiteTuning({ maxchunks: ${CHUNK_CAP} })`);
+  for (let cycle = 0; cycle < 10; cycle++) {
     // Three fresh chunks per cycle, offset so they scatter differently.
     await evaluate(`(async () => {
       const z = __sdfGame.zombies().find(q => q.room === 3);
@@ -427,11 +444,13 @@ let leakOk = true;
       })()`);
     }
     const s = await evaluate('__sdfGame.chunkStats()');
-    leak.push({ cycle, live: s.live, baked: s.baked, views: s.views, totalBakes: s.totalBakes });
-    if (s.views > 12 || s.baked > 12) leakOk = false;
+    leak.push({ cycle, live: s.live, baked: s.baked, views: s.views, totalBakes: s.totalBakes, cap: s.cap });
+    if (s.cap !== CHUNK_CAP || s.views > s.cap || s.baked > s.cap) leakOk = false;
   }
+  // The soak must actually push past the budget, or no recycle ever ran.
+  if (leak[leak.length - 1].totalBakes <= CHUNK_CAP) leakOk = false;
 }
-gate('leak-bounded', leakOk, { series: leak });
+gate('leak-bounded', leakOk, { cap: CHUNK_CAP, series: leak });
 
 writeFileSync(OUT, JSON.stringify(results, null, 2));
 console.log(`gate results written to ${OUT}`);
