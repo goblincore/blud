@@ -5,10 +5,15 @@
 //   4. E1M1 pools and sector light (plan 2026-10-24-sector-levels-2): a hurt floor hurts (?god=0) and stops
 //      hurting off it; the glow reads green; sector light lifts a bright sector's frame (A/B); the glow bounce
 //      greens a wall near the big pool (G/R with the default bounceGain vs bounceGain 0).
+//   5. E1M1 enemies (plan 2026-10-24-sector-levels-3a Task 6): spawns match the converter, bodies on their floors
+//      at 3 s and 20 s, someone walks > 2 m, rounds from a soldier that sees the player stop at walls (followed frame
+//      by frame), hidden behind a wall nobody fires and in the open someone does (?god=0), the exit completes the
+//      level; the budget with enemies in view and SHOTS e1m1-enemies-*.png (report only).
 // Usage: LAB_TMP=.lab-tmp bash scripts/sdf-game-doom-gate.sh   (DOOM_GATE_ONLY_FIXTURE=1 skips 3–4; SHOTS=1 writes
 // shots and .lab-tmp/doom/sector-light-sheet.png; TUNING=1 also writes the owner's .lab-tmp/doom/tuning-sheet.png)
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { loadavg } from 'node:os';
 const OUT = '.lab-tmp/doom';
 
 const VITE = Number(process.argv[2] ?? 5483);
@@ -115,7 +120,175 @@ if (!existsSync('public/assets/levels/doom-e1m1.level.json')) {
   console.log('skip E1M1: run scripts/levels/doom_map.py <doomu.wad> E1M1 first');
   process.exit(0);
 }
-await boot('doom-e1m1');
+/** The page-side helper for the enemy checks: the level's own pure modules (sector-ray's sight test, the
+ *  director's eye height 1.4 m over each floor and its 10 m / ±0.39π sight rule), a pose finder, and a sampler on
+ *  requestAnimationFrame that counts shots (an actor's sinceFire resetting) and follows every enemy round by
+ *  identity (__sdfGame.enemyRounds, the live list) testing each frame's step against the sector geometry. */
+const installEnemyHelper = () => evaluate(`(async () => {
+  const sj = await import('/src/lab/sdf-zombie/webgpu/sector-json.ts');
+  const sgr = await import('/src/lab/sdf-zombie/webgpu/sector-ground.ts');
+  const sr = await import('/src/lab/sdf-zombie/webgpu/sector-ray.ts');
+  const map = sj.parseLevel(await (await fetch('/assets/levels/doom-e1m1.level.json')).json()).sectors;
+  const ground = sgr.buildSectorGround(map);
+  const EYE = 1.4;
+  const eye = (p) => [p[0], p[1] + EYE, p[2]];
+  const blocked = (a, b) => sr.sectorSegmentHit(map, ground, a, b) !== null;
+  const sees = (from, to) => !blocked(eye(from), eye(to));
+  const flat = (a, b) => Math.hypot(a[0] - b[0], a[2] - b[2]);
+  /** A player can stand at (x, z): floor finite and level within 0.3 m 0.35 m round, 2 m headroom. */
+  const stand = (x, z) => {
+    const g = __sdfGame.ground(x, z);
+    if (!Number.isFinite(g.floor) || g.ceil - g.floor < 2) return null;
+    for (const [dx, dz] of [[0.35, 0], [-0.35, 0], [0, 0.35], [0, -0.35]]) {
+      const h = __sdfGame.ground(x + dx, z + dz);
+      if (!Number.isFinite(h.floor) || Math.abs(h.floor - g.floor) > 0.3) return null;
+    }
+    return [x, g.floor, z];
+  };
+  const inFov = (a, p) => {
+    const bearing = Math.atan2(p[0] - a.pos[0], p[2] - a.pos[2]);
+    return Math.abs(Math.atan2(Math.sin(bearing - a.yaw), Math.cos(bearing - a.yaw))) < Math.PI * 0.39;
+  };
+  const yawTo = (from, to) => Math.atan2(to[0] - from[0], -(to[2] - from[2]));
+  /** Ring candidates round an actor, r 2.5..5 m. */
+  const ring = (a) => {
+    const out = [];
+    for (const r of [2.5, 3.25, 4, 4.75]) for (let k = 0; k < 32; k++) {
+      const t = (k / 32) * Math.PI * 2, q = stand(a.pos[0] + Math.sin(t) * r, a.pos[2] + Math.cos(t) * r);
+      if (q) out.push(q);
+    }
+    return out;
+  };
+  /** HIDDEN: a soldier within 2.5..5 m (fire range 6 m) that cannot see it, and nobody within 12 m can; OPEN:
+   *  within 4 m of it, in that soldier's sight and field of view, nobody else within 10 m. */
+  const sightPoses = () => {
+    const actors = __sdfGame.actorList();
+    let best = null;
+    for (const s of actors) {
+      if (s.kind !== 'soldier') continue;
+      const cands = ring(s);
+      const hidden = cands.filter((h) => actors.every((a) => flat(a.pos, h) > 12 || !sees(a.pos, h)) && actors.every((a) => a.id === s.id || flat(a.pos, h) > flat(s.pos, h)));
+      const open = cands.filter((o) => sees(s.pos, o) && inFov(s, o) && actors.every((a) => a.id === s.id || flat(a.pos, o) > 10));
+      for (const h of hidden) for (const o of open) {
+        // Prefer the open pose 4 m or more off the soldier (its rounds spread: some miss and fly on to the walls).
+        const d = flat(h, o), score = d - 3 * Math.min(flat(s.pos, o), 4.5);
+        if (d <= 4 && (!best || score < best.score)) best = { score, d, soldier: s.id, soldierAt: s.pos, hidden: { x: h[0], y: h[1], z: h[2], yaw: yawTo(h, s.pos) }, open: { x: o[0], y: o[1], z: o[2], yaw: yawTo(o, s.pos) } };
+      }
+    }
+    return best;
+  };
+  /** In-view poses for shots and the busy budget: one per spawn cluster (actors within 8 m of each other), 4..6.5 m
+   *  from its first actor, in sight of it, facing it; the clusters' floors differ where they can. */
+  const viewPoses = (n) => {
+    const actors = __sdfGame.actorList(), used = new Set(), out = [];
+    const order = [...actors].sort((a, b) => a.pos[1] - b.pos[1]);   // lowest floors and highest ledges first and last
+    const pick = [order[0], order[order.length - 1], ...actors];
+    for (const a of pick) {
+      if (out.length >= n || used.has(a.id)) continue;
+      let q = null;
+      for (const r of [5, 4, 6, 6.5]) {
+        for (let k = 0; k < 32 && !q; k++) {
+          const t = a.yaw + ((k % 2 ? 1 : -1) * Math.ceil(k / 2) * Math.PI) / 16;   // in front of it first
+          const c = stand(a.pos[0] + Math.sin(t) * r, a.pos[2] + Math.cos(t) * r);
+          if (c && sees(a.pos, c)) q = c;
+        }
+        if (q) break;
+      }
+      if (!q) continue;
+      const near = actors.filter((b) => flat(b.pos, a.pos) < 8);
+      for (const b of near) used.add(b.id);
+      out.push({ x: q[0], y: q[1], z: q[2], yaw: yawTo(q, [a.pos[0], 0, a.pos[2]]), actor: a.id, kind: a.kind, floor: a.pos[1], cluster: near.length });
+    }
+    return out;
+  };
+  /** Bodies drawn this frame (the render cull) against bodies the eye can see through sector space. */
+  const cullReport = () => {
+    const p = __sdfGame.pose().pos, e = [p[0], p[1] + 1.6, p[2]];
+    const actors = __sdfGame.actorList();
+    const onScreen = (a) => { const s = __sdfGame.screenPosOf(a.pos[0], a.pos[1] + 1.2, a.pos[2]); return Math.abs(s.x) <= 1.1 && Math.abs(s.y) <= 1.1 && s.z < 1; };
+    const framed = actors.filter(onScreen);
+    const seen = framed.filter((a) => !blocked(e, [a.pos[0], a.pos[1] + 1.2, a.pos[2]])).length;
+    return { drawn: __sdfGame.bodiesOnScreen(), framed: framed.length, inSight: seen, total: actors.length };
+  };
+  // THE SAMPLER
+  let st = null;
+  const frame = () => {
+    if (!st) return;
+    const pp = __sdfGame.pose().pos;
+    const list = __sdfGame.actorList();
+    for (const b of __sdfGame.brains()) {
+      const prev = st.since.get(b.id);
+      if (prev !== undefined && b.sinceFire + 1e-6 < prev) {
+        const a = list.find((q) => q.id === b.id);
+        st.shots.push({ id: b.id, kind: b.kind, at: a.pos.map((v) => +v.toFixed(2)), los: sees(a.pos, pp), dist: +flat(a.pos, pp).toFixed(2) });
+      }
+      st.since.set(b.id, b.sinceFire);
+    }
+    const live = new Set();
+    for (const r of __sdfGame.enemyRounds()) {
+      live.add(r);
+      const t = st.rounds.get(r);
+      if (!t) {
+        st.seen++;
+        // DODGE: a round is in the air at the open pose: duck to the hiding place, so it flies on past where the
+        // player stood into whatever is behind (back in 0.7 s).
+        if (st.dodge && !st.dodging) {
+          const h = st.dodge.hide;
+          __sdfGame.setPose(h.x, h.z, h.yaw, 0, h.y);
+          st.dodging = true; st.dodges++;
+          setTimeout(() => { if (!st) return; const o = st.dodge.back; __sdfGame.setPose(o.x, o.z, o.yaw, 0, o.y); st.dodging = false; }, 700);
+        }
+        // Its shooter: the nearest actor; the eye-to-first-sample leg must be open too.
+        let sh = null;
+        for (const a of list) if (!sh || flat(a.pos, r.pos) < flat(sh.pos, r.pos)) sh = a;
+        const hit = sh ? sr.sectorSegmentHit(map, ground, eye(sh.pos), r.pos) : null;
+        if (hit) st.passed.push({ leg: 'eye->first', shooter: sh.id, kind: hit.kind, hit: hit.point.map((v) => +v.toFixed(2)), pos: r.pos.map((v) => +v.toFixed(2)) });
+        st.rounds.set(r, { last: [...r.pos], age: r.ageSec });
+        continue;
+      }
+      const hit = sr.sectorSegmentHit(map, ground, t.last, r.pos);
+      if (hit) st.passed.push({ leg: 'step', kind: hit.kind, hit: hit.point.map((v) => +v.toFixed(2)), pos: r.pos.map((v) => +v.toFixed(2)), age: +r.ageSec.toFixed(2) });
+      t.last = [...r.pos]; t.age = r.ageSec;
+    }
+    // Gone: aged out in flight, stopped by the player (its last step ended within 0.9 m of the player's axis, inside
+    // its height), or stopped by the world (a wall, floor, ceiling or collider).
+    for (const [r, t] of st.tracked) if (!live.has(r)) {
+      st.tracked.delete(r);
+      if (t.age > 1.9) st.expired++;
+      else if (flat(t.last, pp) < 0.9 && t.last[1] > pp[1] - 0.3 && t.last[1] < pp[1] + 2.1) st.atPlayer++;
+      else st.atWorld++;
+    }
+    for (const r of live) st.tracked.set(r, st.rounds.get(r));
+    st.frames++;
+    requestAnimationFrame(frame);
+  };
+  const sampler = {
+    start(opts = {}) { st = { dodge: opts.dodge ?? null, dodging: false, dodges: 0, since: new Map(), shots: [], rounds: new WeakMap(), tracked: new Map(), seen: 0, atPlayer: 0, atWorld: 0, expired: 0, passed: [], frames: 0 }; requestAnimationFrame(frame); },
+    read() { return st ? { shots: st.shots, seen: st.seen, atPlayer: st.atPlayer, atWorld: st.atWorld, expired: st.expired, inFlight: st.tracked.size, passed: st.passed.slice(0, 6), passedCount: st.passed.length, frames: st.frames, dodges: st.dodges } : null; },
+    stop() { const r = sampler.read(); st = null; return r; },
+  };
+  window.__eg = { sees, stand, sightPoses, viewPoses, cullReport, sampler, yawTo };
+  return true;
+})()`);
+const flatGap = (p, q) => Math.hypot(p.x - q[0], p.z - q[2]);
+const navLog = () => consoleEvents.find((e) => e.text.includes('[sector-nav] built'))?.text ?? '(no [sector-nav] line)';
+const loadAvg = () => loadavg()[0].toFixed(1);
+/** Draw calls and median frame ms at the current pose (as the start budget above). */
+async function budgetHere() {
+  await sleep(800);
+  await evaluate('__sdfGame.timeDraws(15)');
+  await evaluate('__sdfGame.drawStats(true)');
+  await evaluate('__sdfGame.timeDraws(1)');
+  const calls = (await evaluate('__sdfGame.drawStats(true)')).drawCalls;
+  const r = [];
+  for (let i = 0; i < 3; i++) r.push(await evaluate('__sdfGame.timeDraws(21)'));
+  return { calls, ms: [...r].sort((a, b) => a - b)[1], readings: r, cull: await evaluate('__eg.cullReport()') };
+}
+
+// God mode: the level has enemies now, and the route walks past them.
+await boot('doom-e1m1', '&god=1');
+console.log(`nav: ${navLog()}`);
+await installEnemyHelper();
 const start = await evaluate('__sdfGame.ground(0, 0)');
 if (start.floor !== 0) fail(`E1M1 start floor ${start.floor}, expected 0`);
 // ROUTE: [x, z] waypoints along the main path (DOOM_ROUTE overrides). Each leg must end within 0.6 m of
@@ -149,7 +322,10 @@ const readings = [];
 for (let i = 0; i < 3; i++) readings.push(await evaluate('__sdfGame.timeDraws(21)'));
 const frameMs = readings.sort((a, b) => a - b)[1];
 const lights = await evaluate('JSON.stringify(__sdfGame.levelProbes?.lights ?? null)').catch(() => 'n/a');
-console.log(`budget: ${drawCalls} draw calls, ${frameMs.toFixed(2)} ms a frame at the start (readings ${readings.map((v) => v.toFixed(1)).join(', ')}; level lights per room ${lights})`);
+const startCull = await evaluate('__eg.cullReport()');
+const startLoad = loadAvg();
+console.log(`budget: ${drawCalls} draw calls, ${frameMs.toFixed(2)} ms a frame at the start (readings ${readings.map((v) => v.toFixed(1)).join(', ')}; level lights per room ${lights}); `
+  + `bodies drawn ${startCull.drawn} / in frame ${startCull.framed} / in sight ${startCull.inSight} / ${startCull.total}; load ${startLoad}`);
 
 // Shots before the budget verdict, so an over-budget run still leaves pictures to look at.
 if (process.env.SHOTS === '1') {
@@ -159,8 +335,10 @@ if (process.env.SHOTS === '1') {
   }
   pass(`shots: ${OUT}/e1m1-*.png`);
 }
-if (frameMs > 33.3) fail(`frame ${frameMs.toFixed(2)} ms > 33.3 ms`);
-pass('E1M1 budget: under 33.3 ms');
+// With enemies (plan 3a Task 6): fail only over 50 ms at a load average under 8; otherwise report.
+if (frameMs > 50 && Number(startLoad) < 8) fail(`frame ${frameMs.toFixed(2)} ms > 50 ms at load ${startLoad}`);
+if (frameMs > 50) console.log(`WARN E1M1 budget: ${frameMs.toFixed(2)} ms > 50 ms, not judged at load ${startLoad} (>= 8)`);
+else pass(`E1M1 budget: ${frameMs.toFixed(2)} ms with enemies (fails only over 50 ms at load < 8)`);
 
 // 4. POOLS AND SECTOR LIGHT
 const sleepSettle = 1200;
@@ -206,6 +384,95 @@ async function sheet(file, title, rowLabels, colLabels, cells, notes = cells.map
 }
 
 const raw = JSON.parse(readFileSync('public/assets/levels/doom-e1m1.level.json', 'utf8'));
+// 5. E1M1 ENEMIES (plan 2026-10-24-sector-levels-3a Task 6): spawned per the converter, standing on their floors,
+// walking sector space, rounds stopped by walls, budget and shots with enemies in view, the exit. (5.4, walls block
+// sight, needs health: it runs on the ?god=0 boot below.)
+await boot('doom-e1m1', '&god=1');
+console.log(`nav: ${navLog()}`);
+await installEnemyHelper();
+// 5.1 SPAWNED: the live roster by character equals the converter's spawns by kind.
+const want = {};
+for (const s of raw.spawns ?? []) want[s.kind] = (want[s.kind] ?? 0) + 1;
+const got = {};
+for (const b of await evaluate('__sdfGame.brains()')) got[b.character] = (got[b.character] ?? 0) + 1;
+const keys = [...new Set([...Object.keys(want), ...Object.keys(got)])].sort();
+if (!Object.keys(want).length) fail('enemies: the level JSON has no spawns (regenerate E1M1 with doom_map.py)');
+if (keys.some((k) => want[k] !== got[k])) fail(`enemies: spawned ${JSON.stringify(got)}, the level has ${JSON.stringify(want)}`);
+pass(`enemies spawned: ${keys.map((k) => `${k} ${got[k]}`).join(', ')} (= the converter's ${raw.spawns.length})`);
+// 5.2–5.3 ON THEIR FLOORS, then WALKING: feet within 0.08 m of the floor under them, the floor finite.
+const floorsCheck = async (what) => {
+  const list = await evaluate('__sdfGame.actorList().map((a) => ({ id: a.id, kind: a.kind, pos: a.pos, g: __sdfGame.ground(a.pos[0], a.pos[2]), low: __sdfGame.actorGround(a.id).bodyLowest }))');
+  const bad = list.filter((a) => !Number.isFinite(a.g.floor) || Math.abs(a.pos[1] - a.g.floor) > 0.08);
+  if (bad.length) fail(`enemies ${what}: ${bad.length} off their floor: ${JSON.stringify(bad.slice(0, 4).map((a) => ({ id: a.id, pos: a.pos.map((v) => +v.toFixed(2)), floor: a.g.floor })))}`);
+  const worst = Math.max(...list.map((a) => Math.abs(a.pos[1] - a.g.floor)));
+  const low = list.map((a) => a.low - a.g.floor).filter(Number.isFinite);
+  const floors = [...new Set(list.map((a) => a.g.floor))].sort((a, b) => a - b);
+  pass(`enemies ${what}: ${list.length} on their floors (worst feet gap ${worst.toFixed(3)} m; floors ${floors.join(', ')}; posed body lowest − floor ${Math.min(...low).toFixed(2)}..${Math.max(...low).toFixed(2)} m)`);
+  return list;
+};
+await evaluate('__sdfGame.setPose(0, 0, 0, 0, 0)');
+await sleep(3000);
+const at3 = await floorsCheck('after 3 s');
+await sleep(17000);
+const at20 = await floorsCheck('after 20 s');
+const moved = at20.map((a) => { const b = at3.find((q) => q.id === a.id); return { id: a.id, d: b ? Math.hypot(a.pos[0] - b.pos[0], a.pos[2] - b.pos[2]) : 0 }; }).sort((a, b) => b.d - a.d);
+if (!(moved[0].d > 2)) fail(`enemies walk: none moved > 2 m in 17 s (most ${moved[0].d.toFixed(2)} m, actor ${moved[0].id})`);
+pass(`enemies walk: ${moved.filter((m) => m.d > 2).length} moved > 2 m in 17 s (most ${moved[0].d.toFixed(2)} m, actor ${moved[0].id})`);
+// 5.4b ROUNDS STOP AT WALLS: stand in a soldier's sight (god mode) for 8 s and follow every enemy round frame by frame.
+// The player ducks behind the wall as each volley leaves (the sampler's dodge), so the rounds miss and fly on
+// into the walls behind the open pose: they must stop there, not step through.
+const sp = await evaluate('__eg.sightPoses()');
+if (!sp) fail("rounds: no pose in a soldier's sight with a hiding place near it");
+console.log(`sight poses: ${JSON.stringify(sp)}`);
+await evaluate(`__eg.sampler.start({ dodge: { hide: ${JSON.stringify(sp.hidden)}, back: ${JSON.stringify(sp.open)} } })`);
+await evaluate(`__sdfGame.setPose(${sp.open.x}, ${sp.open.z}, ${sp.open.yaw}, 0, ${sp.open.y})`);
+await sleep(8000);
+const rounds = await evaluate('__eg.sampler.stop()');
+console.log(`rounds: ${JSON.stringify({ ...rounds, shots: rounds.shots.length, shotsLos: rounds.shots.filter((s) => s.los).length, shooters: [...new Set(rounds.shots.map((s) => s.id))] })}`);
+if (rounds.shots.length === 0 || rounds.seen === 0) fail(`rounds: no enemy fired in 8 s in soldier ${sp.soldier}'s sight (${rounds.shots.length} shots, ${rounds.seen} rounds)`);
+if (rounds.passedCount > 0) fail(`rounds: ${rounds.passedCount} round steps went through sector geometry: ${JSON.stringify(rounds.passed)}`);
+if (rounds.atWorld === 0) fail(`rounds: no round stopped at a wall, floor or ceiling (${rounds.atPlayer} at the player, ${rounds.expired} expired) — nothing tested`);
+const blind = rounds.shots.filter((s) => !s.los);
+if (blind.length) fail(`rounds: ${blind.length} shots from actors without sight of the player: ${JSON.stringify(blind.slice(0, 4))}`);
+pass(`rounds: ${rounds.shots.length} shots (${rounds.dodges} dodged), ${rounds.seen} rounds followed over ${rounds.frames} frames — ${rounds.atPlayer} stopped at the player, ${rounds.atWorld} at walls/floors/ceilings, ${rounds.expired} expired in flight, 0 stepped through sector geometry`);
+// 5.6 BUDGET WITH ENEMIES IN VIEW (report only): the first cluster pose, facing it.
+const views = await evaluate('__eg.viewPoses(4)');
+console.log(`view poses: ${JSON.stringify(views)}`);
+if (views.length) {
+  const v = views[0];
+  await evaluate(`__sdfGame.setPose(${v.x}, ${v.z}, ${v.yaw}, -0.05, ${v.y})`);
+  const b = await budgetHere();
+  console.log(`budget near a cluster (actor ${v.actor}, ${v.cluster} near): ${b.calls} draw calls, ${b.ms.toFixed(2)} ms (readings ${b.readings.map((x) => x.toFixed(1)).join(', ')}); bodies drawn ${b.cull.drawn} / in frame ${b.cull.framed} / in sight ${b.cull.inSight} / ${b.cull.total}; load ${loadAvg()}`);
+  // Same pose facing away: what the bodies in frame cost (report only).
+  await evaluate(`__sdfGame.setPose(${v.x}, ${v.z}, ${v.yaw + Math.PI}, -0.05, ${v.y})`);
+  const back = await budgetHere();
+  console.log(`budget same pose facing away: ${back.calls} draw calls, ${back.ms.toFixed(2)} ms (readings ${back.readings.map((x) => x.toFixed(1)).join(', ')}); bodies drawn ${back.cull.drawn} / in frame ${back.cull.framed} / in sight ${back.cull.inSight}`);
+}
+// 5.7 SHOTS with enemies in view.
+if (process.env.SHOTS === '1') {
+  for (const [k, v] of views.entries()) {
+    mkdirSync(OUT, { recursive: true });
+    await evaluate(`__sdfGame.setPose(${v.x}, ${v.z}, ${v.yaw}, -0.18, ${v.y})`);   // pitched down a little: the feet in frame
+    await sleep(1200);
+    const cull = await evaluate('__eg.cullReport()');
+    save(`e1m1-enemies-${k}.png`, await grab());
+    console.log(`shot e1m1-enemies-${k}.png: actor ${v.actor} (${v.kind}) on floor ${v.floor}, cluster of ${v.cluster}; bodies drawn ${cull.drawn} / in frame ${cull.framed} / in sight ${cull.inSight}`);
+  }
+  pass(`shots: ${OUT}/e1m1-enemies-*.png`);
+}
+// 5.5 THE EXIT: into the trigger box -> the level completes.
+const exit = (raw.triggers ?? []).find((t) => t.event === raw.completeOn);
+if (!exit) fail(`exit: no trigger fires ${raw.completeOn}`);
+if (await evaluate('__sdfGame.levelComplete()')) fail('exit: complete before the exit');
+const ex = (exit.min[0] + exit.max[0]) / 2, ez = (exit.min[2] + exit.max[2]) / 2;
+await evaluate(`__sdfGame.setPose(${ex}, ${ez}, 0, 0, __sdfGame.ground(${ex}, ${ez}).floor)`);
+let done = false;
+for (let i = 0; i < 20 && !done; i++) { await sleep(150); done = await evaluate('__sdfGame.levelComplete()'); }
+if (!done) fail(`exit: stood in trigger ${exit.id} at (${ex}, ${ez}) and the level did not complete`);
+pass(`exit: trigger ${exit.id} (${exit.event}) completes the level`);
+const enemyErrs = consoleEvents.filter((e) => e.type === 'error' || e.type === 'exception');
+if (enemyErrs.length) fail(`console errors (enemy boot): ${JSON.stringify(enemyErrs.slice(0, 4))}`);
+
 await boot('doom-e1m1', '&god=0');
 // The flashlight adds its own light on top of the sector term; switch it off where the seam exists.
 const flashOff = async () => evaluate('__sdfGame.setFlashlight ? __sdfGame.setFlashlight(false) : null');
@@ -230,6 +497,37 @@ pass(`hazard: off the pool health holds (${h2} -> ${h3})`);
 // boot() resets the console log: check the ?god=0 boot's errors first.
 const hazardErrs = consoleEvents.filter((e) => e.type === 'error' || e.type === 'exception');
 if (hazardErrs.length) fail(`console errors (?god=0 boot): ${JSON.stringify(hazardErrs.slice(0, 4))}`);
+// 5.4 WALLS BLOCK SIGHT (this ?god=0 boot: health counts): 6 s hidden from a soldier 2.5..5 m off behind a wall
+// (nobody within 12 m can see the pose) — no shot, health holds; then step into its sight — fire within 6 s.
+await installEnemyHelper();
+const sight = await evaluate('__eg.sightPoses()');
+if (!sight) fail('sight: no hidden pose near a soldier with an open pose beside it');
+console.log(`sight poses: ${JSON.stringify(sight)}`);
+await evaluate('__eg.sampler.start()');
+await evaluate(`__sdfGame.setPose(${sight.hidden.x}, ${sight.hidden.z}, ${sight.hidden.yaw}, 0, ${sight.hidden.y})`);
+await sleep(300);
+const hHid0 = await evaluate('__sdfGame.health()');
+await sleep(6000);
+const hHid1 = await evaluate('__sdfGame.health()');
+const hid = await evaluate('__eg.sampler.read()');
+if (hid.shots.length || hid.seen) fail(`sight: ${hid.shots.length} shots, ${hid.seen} rounds while hidden behind a wall from soldier ${sight.soldier}: ${JSON.stringify(hid.shots.slice(0, 4))}`);
+if (hHid1 < hHid0) fail(`sight: health ${hHid0} -> ${hHid1} while hidden`);
+pass(`sight: hidden ${flatGap(sight.hidden, sight.soldierAt).toFixed(2)} m from soldier ${sight.soldier} behind a wall for 6 s — 0 shots, health ${hHid0} -> ${hHid1}`);
+await evaluate(`__sdfGame.setPose(${sight.open.x}, ${sight.open.z}, ${sight.open.yaw}, 0, ${sight.open.y})`);
+const tOpen = Date.now();
+let firstFire = null, hOpen = hHid1;
+while (Date.now() - tOpen < 6000 && firstFire === null) {
+  await sleep(100);
+  const r = await evaluate('__eg.sampler.read()');
+  hOpen = await evaluate('__sdfGame.health()');
+  if (r.shots.length || hOpen < hHid1) firstFire = { ms: Date.now() - tOpen, shots: r.shots, health: hOpen };
+}
+const openRead = await evaluate('__eg.sampler.stop()');
+if (!firstFire) fail(`sight: in soldier ${sight.soldier}'s sight ${flatGap(sight.open, sight.soldierAt).toFixed(2)} m off for 6 s and nobody fired (health ${hOpen})`);
+pass(`sight: stepped ${sight.d.toFixed(2)} m into soldier ${sight.soldier}'s sight — fired after ${(firstFire.ms / 1000).toFixed(1)} s (shooters ${[...new Set(firstFire.shots.map((s) => s.id))].join(', ') || 'n/a'}, health ${hHid1} -> ${firstFire.health}; ${openRead.passedCount} rounds through geometry)`);
+if (openRead.passedCount) fail(`sight: rounds through sector geometry: ${JSON.stringify(openRead.passed)}`);
+const sightErrs = consoleEvents.filter((e) => e.type === 'error' || e.type === 'exception');
+if (sightErrs.length) fail(`console errors (?god=0 boot, sight): ${JSON.stringify(sightErrs.slice(0, 4))}`);
 // The look work: a fresh boot with god mode on, so no hurt flash tints the pool frames and nobody dies mid-sheet.
 await boot('doom-e1m1', '&god=1');
 // The glow, looking down at the pool.

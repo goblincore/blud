@@ -11,6 +11,7 @@ import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { type Vec3 } from '../types';
 import { standingFloor } from './level-ground';
+import type { Projectile } from './game-weapon';
 
 export function createWeaponPlayerSeams(ctx: GameContext) {
   const { scene, camera } = ctx.boot.handle;
@@ -158,6 +159,10 @@ export function createWeaponPlayerSeams(ctx: GameContext) {
     })),
     /** The gibbet's bile globs in flight (bile.ts): the in-game check of its squirt. */
     bile: () => ctx.weapon.bile.map(b => ({ pos: [...b.pos] as Vec3, vel: [...b.vel] as Vec3, ageSec: b.ageSec, owner: b.owner })),
+    /** Enemy rounds in flight (soldier pellets, cultist/pistol/chaingun rounds), the LIVE objects so an
+     *  in-page sampler can follow each round by identity frame to frame (sdf-game-doom-gate's
+     *  through-a-wall check). Read only. */
+    enemyRounds: (): readonly Readonly<Projectile>[] => ctx.weapon.soldierPellets,
     /** HIDE THE VIEW MODEL (the held shotgun/arm rig parented to the camera).
      *  A capture that must see the BODY's silhouette has the player's own arm
      *  across the right half of the frame, which covers the very flesh the
