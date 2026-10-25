@@ -5,7 +5,9 @@
 // and the two looks the mode turns up — the projectiles' air wake and the gore
 // boost. game-tick.ts splits its step on this: the PLAYER (motion, aim, the
 // view-model, weapon cadence) runs on the real step, the WORLD (actors,
-// projectiles, gibs, blood, dynamite, the sim clock) on `scale` times it.
+// enemy projectiles, gibs, blood, dynamite, the sim clock) on `scale` times
+// it, and the player's own pellets in between (`shotScale`: slow enough to
+// watch, fast enough not to wait on).
 //
 // Dev trigger: Q toggles (game-player-input.ts). The mode eases in and out
 // over `rampSec` of REAL time, so the drop into slow motion reads as a lurch
@@ -15,6 +17,11 @@ import type { Vec3 } from './types';
 export const BULLET_TIME = {
   /** The world's dt multiplier fully in bullet time. */
   worldScale: 0.2,
+  /** The PLAYER's pellets' dt multiplier fully in (owner 2026-10-25: 0.2 "takes too long", full speed loses the look). */
+  shotScale: 0.5,
+  /** The player's VERTICAL dt multiplier fully in: the shootdodge hang (owner 2026-10-25: "make the jump floaty").
+   *  0.4 = the same height, 2.5x the airtime (~1.6 s); walking stays full speed. */
+  airScale: 0.4,
   /** Real seconds to ease fully in (and out). */
   rampSec: 0.3,
   /** Peak UV offset of one projectile's air wake (post-aa's burn band). */

@@ -22,6 +22,7 @@ describe('bullet time ramp', () => {
   it('maps intensity endpoints exactly', () => {
     expect(worldScaleAt(0)).toBe(1);
     expect(worldScaleAt(1)).toBeCloseTo(BULLET_TIME.worldScale, 12);
+    expect(worldScaleAt(1, BULLET_TIME.shotScale)).toBeCloseTo(BULLET_TIME.shotScale, 12);
   });
 });
 

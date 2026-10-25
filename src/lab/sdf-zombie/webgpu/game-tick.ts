@@ -55,7 +55,7 @@ import { applyTrainCamera, lightSteam, stepTrain } from './game-train';
 import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell, extractStage, extractorOffset, fireRecoil, insertStage, loadCarry, loadHold, reloadPhaseAt, reloadPose, stagedShellCenter, supportHandPose, topLeverAngle, type HandDelta, type HandHold } from './game-viewmodel';
 import { stepVoid } from './game-void';
 import { stepBulletTimeFx } from './game-bullet-time';
-import { stepBulletTime } from '../bullet-time';
+import { BULLET_TIME, stepBulletTime, worldScaleAt } from '../bullet-time';
 import { carryFreshShots, expired, stepProjectiles, traceProjectile } from './game-weapon';
 import { aimArms, aimFrustum, boreFrameInRig, breechInRig, hideTracer, newTracerView, placeTracer, stepWeaponSlots } from './game-weapon-rig';
 import { woundStreamId } from './game-wound-streams';
@@ -229,7 +229,9 @@ export function tick(ctx: GameContext, dt: number) {
   });
   if (loopBlocksInput(ctx)) input = { x: 0, z: 0, jump: false };   // dead or done
   const preStep = [...ctx.player.player.pos] as Vec3;
-  stepPlayer(ctx.player.player, input, pdt, [...ctx.world.colliders, ...zombieBoxes]);
+  // Bullet time's shootdodge hang: the jump floats (BULLET_TIME.airScale), the walk does not.
+  stepPlayer(ctx.player.player, input, pdt, [...ctx.world.colliders, ...zombieBoxes],
+    worldScaleAt(ctx.player.bulletTime.intensity, BULLET_TIME.airScale));
   // This tick's shots left the muzzle where last frame's camera put it; the
   // camera follows the step, so the shots must too (carryFreshShots).
   carryFreshShots(ctx.weapon.pellets, [
@@ -797,7 +799,9 @@ export function tick(ctx: GameContext, dt: number) {
   {
     const projectileTiming = ctx.telemetry.telemetry.begin();
     const prevs = ctx.weapon.pellets.map(p => [...p.pos] as Vec3);
-    stepProjectiles(ctx.weapon.pellets, dt);
+    // The PLAYER's pellets fly on their own scale (BULLET_TIME.shotScale): in bullet time the world crawls, your shot
+    // only slows.
+    stepProjectiles(ctx.weapon.pellets, pdt * worldScaleAt(ctx.player.bulletTime.intensity, BULLET_TIME.shotScale));
     // Hit batching: every actor hit this frame flushes its rig/repack/
     // wound-row tail ONCE after the loop (ZombieActor.beginHits).
     const hitThisFrame = new Set<ZombieActor>();
