@@ -76,6 +76,11 @@ Experiment: rebuild Doom E1M1's layout from `doomu.wad` in our look and play it.
    pickups, 38 of them Doom's +1 health/armor bonuses (2014/2015), each healing a full 25 (`pickups.ts`).
    Options when balancing: skip the bonuses, or give them a small item. Skill 4 has 16 soldiers (all of
    Doom's shotgun guys are UV-only); `--skill 3` gives 6 monsters.
+2e. **Owner playtest with Task 1 spawns (2026-10-24, 11:38 pm):** enemies see/shoot through walls (expected
+   until 3a Task 5), some float (expected until Task 4), and the level "feels a bit sparse — add some zombies
+   and more enemies in general". Frame time read 46 ms with bodies 5/29 in the HUD — check the budget with
+   enemies in Task 6. Density idea: a converter knob that adds zombie packs per zone by area (seeded), on top
+   of Doom's things.
 3. **Plan 3a** — enemies on sector floors (motion `floorY`), navigation over sectors, sight and shots vs
    sector walls, pickups, exit as a walk-in trigger (E is slug mode; no use key yet).
 4. **Plan 3b** (not written) — exploding barrels (no HP/destructible system exists; reuse
