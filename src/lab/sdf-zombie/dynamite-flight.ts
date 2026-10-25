@@ -18,6 +18,7 @@
 // stack. Deterministic: no Date.now, no Math.random, fixed 120 Hz sub-steps
 // (the sim's own tic rate), so identical inputs yield identical trajectories.
 import type { Vec3 } from './types';
+import { landingFloor, type DebrisGround } from './debris-ground';
 import { BALLISTIC_BOUNDS, DYNAMITE_COOK } from '../../game/gibs/tuning';
 
 /** Arena rectangle on the ground plane (injected; defaults to BALLISTIC_BOUNDS). */
@@ -53,11 +54,14 @@ export interface FlightWorld {
   ceilM?: number | null;
   /** Bundle collision radius (m); defaults to FLIGHT_TUNING.bundleRadiusM. */
   bundleRadiusM?: number;
+  /** SECTOR levels (plan 3b): the floor under the bundle, the ceiling over it (`ceilAt`, per sub-step; sky or off
+   *  the map falls back to `ceilM`) and the sector walls. Absent: the y = 0 plane, `ceilM` only. */
+  ground?: DebrisGround;
 }
 
 
 export interface FlightState {
-  /** Bundle center, meters; the floor is at y = 0. */
+  /** Bundle center, meters; the floor under it (y = 0 without a ground). */
   pos: Vec3;
   /** Velocity, m/s. */
   vel: Vec3;
@@ -75,6 +79,9 @@ export interface FlightState {
   resting: boolean;
   /** Fuse out or qualifying impact — stop integrating; the wiring resolves. */
   detonated: boolean;
+  /** SECTOR levels (plan 3b): the floor the bundle last stood over, kept off the map (a hole, the void). Present only
+   *  when the flight has a `ground`. */
+  floorY?: number;
 }
 
 export const FLIGHT_TUNING = {
@@ -172,16 +179,33 @@ function stepSub(s: FlightState, sub: number, b: FlightBounds | null, world: Fli
   vel[1] *= drag;
   vel[2] *= drag;
 
-  // — Floor (y = 0): reflect + dampen, or rest once the bounce is weak.
-  //   resting zeroes the VERTICAL only; horizontal keeps sliding (stepThing). —
   let hit = false;
   /** |velocity along the normal| of EVERY contact made this sub-step. The
    *  bundle counts as resting when it touched something and none of those
    *  components is still above the rest speed — the floor's original rule,
    *  generalised so a bundle landing on a CRATE settles too. */
   const contactSpeeds: number[] = [];
-  if (pos[1] <= 0) {
-    pos[1] = 0;
+
+  // — Sector walls (plan 3b): one segment probe from this sub-step's start to
+  //   its end, the bundle's own radius ahead; a crossing stops it short and
+  //   reflects the normal velocity × the elastic, the tangential kept. —
+  const ground = world.ground;
+  const radius = world.bundleRadiusM ?? T.bundleRadiusM;
+  if (ground) {
+    const wb = ground.bounce(s.pos, pos, vel, T.elastic, 1, radius);
+    if (wb) {
+      pos[0] = wb.pos[0]; pos[2] = wb.pos[2]; vel[0] = wb.vel[0]; vel[2] = wb.vel[2];
+      hit = true;
+      contactSpeeds.push(Math.abs(vel[0] * wb.normal[0] + vel[2] * wb.normal[2]));
+    }
+  }
+
+  // — Floor (y = 0, or the sector floor under the bundle now): reflect +
+  //   dampen, or rest once the bounce is weak. resting zeroes the VERTICAL
+  //   only; horizontal keeps sliding (stepThing). —
+  const floor = ground ? landingFloor(ground, pos[0], pos[2], s.floorY ?? 0) : 0;
+  if (pos[1] <= floor) {
+    pos[1] = floor;
     hit = true;
     if (vel[1] < 0) {
       const up = -vel[1] * T.elastic;
@@ -203,7 +227,11 @@ function stepSub(s: FlightState, sub: number, b: FlightBounds | null, world: Fli
   //   levelColliders, so without this a full-charge lob leaves through the
   //   roof. Tunnels are handled by their own lintel boxes, which the box test
   //   below catches — a lintel spans 2.2 → 3.0 m, so the low mouths are real. —
-  const ceil = world.ceilM ?? null;
+  // Sector levels read the ceiling over the bundle every sub-step (a lob that
+  // crosses into a low sector mid-frame meets its ceiling there); sky (Infinity)
+  // or off the map (NaN) keeps the caller's `ceilM`.
+  const sc = ground?.ceilAt?.(pos[0], pos[2]);
+  const ceil = sc !== undefined && Number.isFinite(sc) ? sc : world.ceilM ?? null;
   if (ceil !== null && pos[1] > ceil) {
     pos[1] = ceil;
     hit = true;
@@ -215,7 +243,7 @@ function stepSub(s: FlightState, sub: number, b: FlightBounds | null, world: Fli
   //   corner settles instead of jittering between two faces. —
   const boxes = world.colliders;
   if (boxes !== undefined && boxes.length > 0) {
-    const r = world.bundleRadiusM ?? T.bundleRadiusM;
+    const r = radius;
     for (let pass = 0; pass < 2; pass++) {
       for (const box of boxes) {
         // Cheap reject on the bundle's own AABB.
@@ -286,6 +314,7 @@ function stepSub(s: FlightState, sub: number, b: FlightBounds | null, world: Fli
   return {
     pos, vel, fuse, age, spawn: s.spawn, spin,
     impactMode: s.impactMode, resting, detonated: det,
+    ...(ground ? { floorY: floor } : {}),
   };
 }
 

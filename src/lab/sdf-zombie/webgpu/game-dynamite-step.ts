@@ -16,7 +16,7 @@ import { type Vec3 } from '../types';
 import { EXPLOSION_LIGHT, bundleHitsBody, explosionLightEnv, igniteExplosionLight, propWorld, throwBundle } from './game-dynamite-throw';
 import { gibActor } from './game-gib-actor';
 import { gibAllowance, gibBudget, gibDebit, newBlastProfile, reacquireHeldProp, scheduleGib } from './game-gib-spawn';
-import { ceilingAt } from './game-hit-trace';
+import { ceilingAt, debrisGround } from './game-hit-trace';
 import { eyeOf } from './game-player';
 import { standingFloor } from './level-ground';
 import { spawnBurstStandIn, stepBursts } from './game-weapon-rig';
@@ -234,7 +234,13 @@ export function stepDynamite(ctx: GameContext, dt: number): void {
     // see ceilingAt. One frame of lag across a doorway is invisible (the wall
     // boxes catch that frame), and a 5-entry lookup per bundle per frame is
     // nothing next to getting the roof wrong.
-    const world = { colliders: ctx.world.colliders, ceilM: ceilingAt(ctx, b.state.pos[0], b.state.pos[2]) };
+    // Sector levels (plan 3b) add the debris ground: the floor under the
+    // bundle, the ceiling over it per sub-step, and the sector walls. Room
+    // levels get the same two fields as before (the y = 0 flight unchanged).
+    const g = debrisGround(ctx);
+    const world = {
+      colliders: ctx.world.colliders, ceilM: ceilingAt(ctx, b.state.pos[0], b.state.pos[2]), ...(g ? { ground: g } : {}),
+    };
     let remaining = Math.min(dt, 0.25);
     let boom: Vec3 | null = null;
     while (remaining > 1e-9 && !flightDetonated(b.state)) {
