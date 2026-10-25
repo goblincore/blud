@@ -478,14 +478,26 @@ export interface HandHold { stage: HandDelta; seat: HandDelta; }
  * 1110 ms capture of the authored table had the hand at the bottom of the
  * frame while the cases seated by themselves; that is the failure mode.
  */
+/** The withdraw's first key: the hand lifted back and out off the breech, before it settles under the fore-end. */
+export const WITHDRAW_LIFT_SEC = 1.17;
+/** ...and the one below the gun, before it comes up into the cradle. */
+export const WITHDRAW_UNDER_SEC = 1.24;
 const SUPPORT_KEYS: readonly (SupportHandPose & { t: number })[] = [
   { t: 0.00, dx:  0.000, dy:  0.000, dz: 0.000, carrying: false },
   { t: 0.18, dx: -0.020, dy: -0.060, dz: 0.020, carrying: false },
   { t: 0.51, dx: -0.060, dy: -0.200, dz: 0.060, carrying: false },
-  { t: 0.74, dx: -0.050, dy: -0.160, dz: 0.100, carrying: true  },
+  // OUT AND OVER (owner playtest, 2026-10-25): the hand comes round the gun's LEFT side and over the top onto the open
+  // tubes. Straight from below-left to the stage key, it passed through the receiver.
+  { t: 0.74, dx: -0.190, dy: -0.050, dz: 0.120, carrying: true  },  // wide left, coming up clear of the receiver
+  { t: 0.87, dx: -0.120, dy:  0.090, dz: 0.150, carrying: true  },  // over the top, above and left of the breech
   { t: 0.96, dx:  0.010, dy:  0.010, dz: 0.140, carrying: true  },  // hold.stage
   { t: 1.11, dx:  0.020, dy:  0.020, dz: 0.120, carrying: true  },  // hold.seat
-  { t: 1.16, dx: -0.010, dy: -0.040, dz: 0.060, carrying: false },
+  // BACK, OUT, UNDER, UP: it lifts off the breech toward the eye and left, drops below the gun -- which is snapping
+  // shut and levelling up through where the hand was -- and comes up into the fore-end cradle from underneath,
+  // unrolling as it goes (coverRoll) and changing pose mid-move (HOLD_POSE_END_SEC). It used to drop to rest in 50 ms,
+  // all three at once, which read as a snap; dropped straight from the left, the fingers came out of the gun's side.
+  { t: WITHDRAW_LIFT_SEC, dx: -0.130, dy:  0.040, dz: 0.100, carrying: false },
+  { t: WITHDRAW_UNDER_SEC, dx: -0.070, dy: -0.090, dz: 0.040, carrying: false },
   { t: 1.30, dx:  0.000, dy:  0.000, dz: 0.000, carrying: false },
 ];
 
@@ -499,8 +511,13 @@ const SUPPORT_KEYS: readonly (SupportHandPose & { t: number })[] = [
  */
 export function coverRoll(t: number): number {
   return smoothstep(RELOAD.loadStartSec, RELOAD.loadStartSec + 0.10, t)
-    * (1 - smoothstep(RELOAD.loadSeatSec, RELOAD.snapEndSec, t));
+    * (1 - smoothstep(RELOAD.loadSeatSec, COVER_UNROLL_END_SEC, t));
 }
+/** The roll unwinds over the withdraw, seat to here, not in the 50 ms to the snap. */
+export const COVER_UNROLL_END_SEC = 1.25;
+/** The fore hand shows its cupped cover pose (handhold_L) from loadStartSec until here: mid-way down the withdraw, while
+ *  it moves fastest and is nearly unrolled, so the swap to the fore-end cradle is not a pop on a still hand. */
+export const HOLD_POSE_END_SEC = 1.21;
 
 export function supportHandPose(t: number, hold?: HandHold): SupportHandPose {
   const REST: SupportHandPose = { dx: 0, dy: 0, dz: 0, carrying: false };

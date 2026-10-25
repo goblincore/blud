@@ -55,7 +55,7 @@ import { applyTrainCamera, lightSteam, stepTrain } from './game-train';
 import { setShellHold } from './game-arms';
 /** The rig's toward-the-viewer direction: the fore hand's turn rolls its thumb this way. */
 const TOWARD_VIEWER = new THREE.Vector3(0, 0, 1);
-import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell, extractStage, extractorOffset, fireRecoil, insertStage, coverRoll, loadCarry, loadHold, reloadPhaseAt, reloadPose, stagedShellCenter, supportHandPose, topLeverAngle, type HandDelta, type HandHold } from './game-viewmodel';
+import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell, extractStage, extractorOffset, fireRecoil, insertStage, HOLD_POSE_END_SEC, coverRoll, loadCarry, loadHold, reloadPhaseAt, reloadPose, stagedShellCenter, supportHandPose, topLeverAngle, type HandDelta, type HandHold } from './game-viewmodel';
 import { stepVoid } from './game-void';
 import { carryFreshShots, expired, stepProjectiles, traceProjectile } from './game-weapon';
 import { aimArms, aimFrustum, boreFrameInRig, breechInRig, hideTracer, newTracerView, placeTracer, stepWeaponSlots } from './game-weapon-rig';
@@ -676,7 +676,7 @@ export function tick(ctx: GameContext, dt: number) {
       hold = { stage: asDelta(h.stage), seat: asDelta(h.seat) };
     }
     const sh = supportHandPose(ctx.weapon.reloadAge, hold);
-    shellHold = sh.carrying;
+    shellHold = ctx.weapon.reloadAge >= RELOAD.loadStartSec && ctx.weapon.reloadAge < HOLD_POSE_END_SEC;
     // THE COVER-AND-SHOVE (coverRoll): palm down onto the open tubes, back of the hand along `out` (the way the
     // cases came out). The stage key already puts the case heads against that palm: they sit 16 mm ahead of the
     // hand's centre, the palm's face 17 mm.
