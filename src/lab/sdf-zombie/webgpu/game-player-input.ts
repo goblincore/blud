@@ -10,7 +10,7 @@
 
 import { ownsSlot } from './game-loop';
 import { type GameContext } from './game-context';
-import { moveAimOverflow } from './free-aim';
+import { moveAim } from './free-aim';
 import { PLAYER } from './game-player';
 import { roomIdAt } from './game-level-rooms';
 import { updateHud } from './game-hud';
@@ -29,15 +29,8 @@ import { arenaRespawn } from './game-arena';
 export function applyMouseDelta(ctx: GameContext, dx: number, dy: number): void {
   if (ctx.player.freeAimOn) {
     // The mouse moves the RETICLE, not the camera. Turning is a consequence
-    // of shoving the reticle past the dead zone, handled in the tick -- plus
-    // any motion past the reticle's turn edge, which turns the camera here
-    // directly (the screen edge standing still, the shrunk dead zone while
-    // strafing; see turnEdge).
-    const m = moveAimOverflow(ctx.weapon.aim, dx, dy, ctx.player.strafeAmount);
-    ctx.weapon.aim = m.aim;
-    ctx.player.player.yaw += m.yaw;
-    ctx.player.player.pitch = Math.min(PLAYER.pitchLimit,
-      Math.max(-PLAYER.pitchLimit, ctx.player.player.pitch + m.pitch));
+    // of shoving the reticle past the dead zone, handled in the tick.
+    ctx.weapon.aim = moveAim(ctx.weapon.aim, dx, dy);
   } else {
     ctx.player.player.yaw += dx * 0.0022;
     ctx.player.player.pitch = Math.min(PLAYER.pitchLimit,

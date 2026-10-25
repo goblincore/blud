@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import {
   BOB, FREE_AIM, approachAngle, approachBob, approachStrafe, bobPose, deadzonePush,
-  deadzoneSize, moveAim, moveAimOverflow, pivotOffset, recentre, settleToEdge, strafeSpeed01, turnEdge, turnFromAim,
+  deadzoneSize, moveAim, pivotOffset, recentre, strafeSpeed01, turnFromAim,
   weaponAngles, weaponSlide,
 } from './free-aim';
 
@@ -98,87 +98,6 @@ describe('strafe-shrunk dead zone', () => {
     expect(deadzoneSize(1).x).toBeCloseTo(FREE_AIM.deadzoneX, 9);
   });
   afterEach(() => { FREE_AIM.strafeDeadzoneScaleX = 0.4; });
-});
-
-describe('moveAimOverflow', () => {
-  const px = (units: number) => units / FREE_AIM.sensitivity;
-  it('standing still, matches moveAim inside the screen and never turns', () => {
-    expect(turnEdge(0)).toEqual({ x: 1, y: 1 });
-    const m = moveAimOverflow({ x: 0.2, y: 0 }, px(0.5), px(-0.3), 0);
-    const plain = moveAim({ x: 0.2, y: 0 }, px(0.5), px(-0.3));
-    expect(m.aim.x).toBeCloseTo(plain.x, 9);
-    expect(m.aim.y).toBeCloseTo(plain.y, 9);
-    expect(m.yaw).toBe(0);
-    expect(m.pitch).toBe(0);
-  });
-  it('standing still, shoving past the screen edge turns the camera instead of doing nothing', () => {
-    const m = moveAimOverflow({ x: 1, y: 0 }, 100, 0, 0);
-    expect(m.aim.x).toBe(1);
-    expect(m.yaw).toBeCloseTo(100 * FREE_AIM.overflowTurn, 9);
-  });
-  it('strafing, the reticle stops at the shrunk dead zone and the rest turns the camera', () => {
-    const e = turnEdge(1).x;
-    expect(e).toBeCloseTo(deadzoneSize(1).x, 9);
-    const m = moveAimOverflow({ x: 0, y: 0 }, px(e + 0.1), 0, 1);
-    expect(m.aim.x).toBeCloseTo(e, 9);
-    expect(m.yaw).toBeCloseTo(px(0.1) * FREE_AIM.overflowTurn, 6);
-    const left = moveAimOverflow({ x: 0, y: 0 }, -px(e + 0.1), 0, 1);
-    expect(left.aim.x).toBeCloseTo(-e, 9);
-    expect(left.yaw).toBeLessThan(0);
-  });
-  it('turns pitch the same way the reticle would have moved (screen y is down)', () => {
-    const m = moveAimOverflow({ x: 0, y: 1 }, 0, -50, 0);
-    expect(m.aim.y).toBe(1);
-    expect(m.pitch).toBeGreaterThan(0);
-  });
-  it('inward motion always moves the reticle', () => {
-    const m = moveAimOverflow({ x: 0.6, y: 0 }, -px(0.1), 0, 1);
-    expect(m.aim.x).toBeCloseTo(0.5, 9);
-    expect(m.yaw).toBe(0);
-  });
-  it('a reticle left outside a shrinking zone stays put and does not snap in', () => {
-    const m = moveAimOverflow({ x: 0.6, y: 0 }, px(0.1), 0, 1);
-    expect(m.aim.x).toBeCloseTo(0.6, 9);
-    expect(m.yaw).toBeCloseTo(px(0.1) * FREE_AIM.overflowTurn, 6);
-  });
-  it('the turn edge blends from the screen edge to the dead zone with the envelope', () => {
-    const half = turnEdge(0.5).x;
-    expect(half).toBeLessThan(1);
-    expect(half).toBeGreaterThan(turnEdge(1).x);
-  });
-});
-
-describe('settleToEdge', () => {
-  const F = { tanV: Math.tan(75 * Math.PI / 360), tanH: Math.tan(75 * Math.PI / 360) * (790 / 555) };
-  it('never runs standing still -- the edge is the screen edge', () => {
-    const m = settleToEdge({ x: 0.95, y: -0.9 }, 0, 1 / 60, F);
-    expect(m.aim).toEqual({ x: 0.95, y: -0.9 });
-    expect(m.yaw).toBe(0);
-    expect(m.pitch).toBe(0);
-  });
-  it('leaves a reticle inside the edge alone', () => {
-    const m = settleToEdge({ x: 0.1, y: 0 }, 1, 1 / 60, F);
-    expect(m.aim.x).toBe(0.1);
-    expect(m.yaw).toBe(0);
-  });
-  it('eases a stranded reticle onto the edge, turning the camera toward it', () => {
-    let aim = { x: 0.8, y: 0 }, yaw = 0;
-    for (let i = 0; i < 120; i++) {
-      const m = settleToEdge(aim, 1, 1 / 60, F);
-      aim = m.aim; yaw += m.yaw;
-    }
-    expect(aim.x).toBeCloseTo(turnEdge(1).x, 3);
-    expect(yaw).toBeGreaterThan(0);
-    const left = settleToEdge({ x: -0.8, y: 0 }, 1, 1 / 60, F);
-    expect(left.aim.x).toBeGreaterThan(-0.8);
-    expect(left.yaw).toBeLessThan(0);
-  });
-  it('keeps the reticle on the same world point: turn equals the change in reticle angle', () => {
-    let aim = { x: 0.8, y: 0 }, yaw = 0;
-    for (let i = 0; i < 30; i++) { const m = settleToEdge(aim, 1, 1 / 60, F); aim = m.aim; yaw += m.yaw; }
-    // World angle of the aimed point, relative to the starting camera.
-    expect(yaw + Math.atan(aim.x * F.tanH)).toBeCloseTo(Math.atan(0.8 * F.tanH), 9);
-  });
 });
 
 describe('strafeSpeed01', () => {
