@@ -583,6 +583,26 @@ describe('hit batching (beginHits/endHits)', () => {
     }
     return out;
   }
+  it('setViewSync(false): steps move the body but skip the upload; setViewSync(true) uploads the current pose once', () => {
+    const a = makeCounted(3);
+    const before = a.counts.update;
+    const posed0 = a.actor.posed();
+    a.actor.setViewSync(false);
+    for (let f = 0; f < 30; f++) a.actor.step(1 / 60);
+    expect(a.counts.update).toBe(before);
+    // The sim did not stop: the body was re-posed while its view slept.
+    expect(a.actor.posed()).not.toBe(posed0);
+    a.actor.setViewSync(true);
+    expect(a.counts.update).toBe(before + 1);            // the owed upload, at once
+    a.actor.setViewSync(true);
+    expect(a.counts.update).toBe(before + 1);            // owed only once
+    a.actor.step(1 / 60);
+    expect(a.counts.update).toBe(before + 2);            // and every step uploads again
+    a.actor.setViewSync(false);
+    a.actor.setViewSync(true);
+    expect(a.counts.update).toBe(before + 2);            // nothing skipped, nothing owed
+  });
+
   it('16 pellets in one batch = ONE repack/upload and ONE wound-row rewrite; unbatched = one per pellet', () => {
     const a = makeCounted(1);
     const hits = torsoHits(a.actor, 16);

@@ -358,7 +358,14 @@ export function tick(ctx: GameContext, dt: number) {
 
     const bodyTiming = ctx.telemetry.telemetry.begin();
     ctx.world.soldierCorpses?.update(ctx.world.actors,dt);
-    for (const a of ctx.world.actors) a.step(dt);
+    // VIEW SYNC (sector levels): a body outside the visual set steps, poses and thinks but skips its
+    // GPU view upload; the draw catches up any body the march cull then keeps (syncKitVisibility).
+    // Room levels: every view uploads every frame, as before.
+    const viewCull = !!ctx.world.sightOccluder;
+    for (const a of ctx.world.actors) {
+      if (viewCull) a.setViewSync(ctx.render.visualActors.has(a));
+      a.step(dt);
+    }
     // 'body-step' CLOSES HERE, before the kit pose below, because that is
     // the boundary main's telemetry numbers were taken with. Widening a
     // counter to cover more work without saying so makes every recorded

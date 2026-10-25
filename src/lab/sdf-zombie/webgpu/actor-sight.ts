@@ -50,8 +50,11 @@ export const SIGHT_SLACK_M = 0.1;
 /** The sector geometry as a SightOccluder (one hit record per closure: no allocation per call). */
 export function sectorOcclusion(map: SectorMap, ground: SectorGround): SightOccluder {
   const out: SectorHit = { t: 0, point: [0, 0, 0], kind: 'wall', line: -1, sector: -1 };
+  // Every probe of a frame starts at the same eye: its sector is looked up once per eye position.
+  let eyeX = NaN, eyeZ = NaN, eyeSector = -1;
   return (eye, p, slackM) => {
-    const hit = sectorSegmentHit(map, ground, eye, p, out);
+    if (eye[0] !== eyeX || eye[2] !== eyeZ) { eyeX = eye[0]; eyeZ = eye[2]; eyeSector = ground.sectorAt(eyeX, eyeZ); }
+    const hit = sectorSegmentHit(map, ground, eye, p, out, eyeSector);
     if (!hit) return false;
     const len = Math.hypot(p[0] - eye[0], p[1] - eye[1], p[2] - eye[2]);
     const at = hit.t * len;

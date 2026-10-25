@@ -342,7 +342,8 @@ export function updateVisibleActors(ctx: GameContext): void {
   ctx.world.cullCounts.visible = out.length;
 }
 
-/** THE POLYGON HALVES FOLLOW THE CULL (sector levels, 2026-10-25). A body's kit (skinned armour and
+/** THE POLYGON HALVES FOLLOW THE CULL (sector levels, 2026-10-25). Also settles the view upload a
+ *  drawn body is owed (game-actor setViewSync). A body's kit (skinned armour and
  *  sculpted pieces) and its held prop are scene meshes three culls by frustum only, so a body the march
  *  cull dropped behind a wall still drew and skinned its kit and gun: at E1M1's start 111 skinned kit
  *  meshes and 48 gun meshes of 29 bodies sat in the scene, mostly behind walls. Shown when the body is
@@ -354,9 +355,12 @@ export function syncKitVisibility(ctx: GameContext): void {
   if (!ctx.world.sightOccluder) return;
   const drawn = new Set(ctx.render.visibleActors);
   for (const a of ctx.world.actors) {
+    const on = drawn.has(a) || ctx.render.visualActors.has(a);
+    // The tick skipped the view upload of a body outside its visual set (game-tick VIEW SYNC): one the
+    // march draws anyway is uploaded now, before the draw reads it. Back off again next tick if still out.
+    if (drawn.has(a)) a.setViewSync(true);
     const ch = a.character;
     if (!ch) continue;
-    const on = drawn.has(a) || ctx.render.visualActors.has(a);
     if (ch.kit) ch.kit.object.visible = on;
     if (ch.prop && !ch.prop.released) ch.prop.object.visible = on;
     else if (ch.prop) ch.prop.object.visible = true;

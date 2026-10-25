@@ -109,7 +109,11 @@ export function createBootSeams(ctx: GameContext) {
       if (on && !w.sightOccluder && w.sightOccluderOff) { w.sightOccluder = w.sightOccluderOff; w.sightOccluderOff = null; }
       if (!on && w.sightOccluder) {
         w.sightOccluderOff = w.sightOccluder; w.sightOccluder = null;
-        for (const a of ctx.world.actors) { if (a.character?.kit) a.character.kit.object.visible = true; if (a.character?.prop) a.character.prop.object.visible = true; }
+        for (const a of ctx.world.actors) {
+          a.setViewSync(true);
+          if (a.character?.kit) a.character.kit.object.visible = true;
+          if (a.character?.prop) a.character.prop.object.visible = true;
+        }
       }
       return !!w.sightOccluder;
     },

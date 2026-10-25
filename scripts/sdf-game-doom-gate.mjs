@@ -290,7 +290,15 @@ async function budgetHere() {
   const calls = (await evaluate('__sdfGame.drawStats(true)')).drawCalls;
   const r = [];
   for (let i = 0; i < 3; i++) r.push(await evaluate('__sdfGame.timeDraws(21)'));
-  return { calls, ms: [...r].sort((a, b) => a - b)[1], readings: r, cull: await evaluate('__eg.cullReport()') };
+  const cull = await evaluate('__eg.cullReport()');
+  return { calls, ms: [...r].sort((a, b) => a - b)[1], readings: r, cull, split: await frameSplit() };
+}
+/** The frame split with the rAF loop STOPPED (__sdfGame.frameSplit): tick CPU + draw CPU + the GPU fence wait.
+ *  timeDraws above runs with the loop on, so each sample also waits out whatever loop frame lands inside its
+ *  fence: with a ~17 ms loop frame (E1M1's 29 actors) its readings sit on the 30 Hz cap's 33 ms steps. */
+async function frameSplit() {
+  const s = await evaluate('__sdfGame.frameSplit(21)');
+  return { ...s, fullMs: s.tickMs + s.drawMs + s.fenceMs, line: `split (loop stopped): tick ${s.tickMs.toFixed(1)} + draw ${s.drawMs.toFixed(1)} + GPU wait ${s.fenceMs.toFixed(1)} = ${(s.tickMs + s.drawMs + s.fenceMs).toFixed(1)} ms; draw + GPU alone ${s.drawOnlyMs.toFixed(1)} ms` };
 }
 
 // God mode: the level has enemies now, and the route walks past them.
@@ -331,9 +339,11 @@ for (let i = 0; i < 3; i++) readings.push(await evaluate('__sdfGame.timeDraws(21
 const frameMs = readings.sort((a, b) => a - b)[1];
 const lights = await evaluate('JSON.stringify(__sdfGame.levelProbes?.lights ?? null)').catch(() => 'n/a');
 const startCull = await evaluate('__eg.cullReport()');
+const startSplit = await frameSplit();
 const startLoad = loadAvg();
 console.log(`budget: ${drawCalls} draw calls, ${frameMs.toFixed(2)} ms a frame at the start (readings ${readings.map((v) => v.toFixed(1)).join(', ')}; level lights per room ${lights}); `
   + `bodies drawn ${startCull.drawn} / in frame ${startCull.framed} / in sight ${startCull.inSight} / ${startCull.total}; load ${startLoad}`);
+console.log(`budget at the start, ${startSplit.line}`);
 
 // Shots before the budget verdict, so an over-budget run still leaves pictures to look at.
 if (process.env.SHOTS === '1') {
@@ -460,11 +470,19 @@ if (views.length) {
   const v = views[0];
   await evaluate(`__sdfGame.setPose(${v.x}, ${v.z}, ${v.yaw}, -0.05, ${v.y})`);
   const b = await budgetHere();
-  console.log(`budget near a cluster (actor ${v.actor}, ${v.cluster} near): ${b.calls} draw calls, ${b.ms.toFixed(2)} ms (readings ${b.readings.map((x) => x.toFixed(1)).join(', ')}); bodies drawn ${b.cull.drawn} / in frame ${b.cull.framed} / in sight ${b.cull.inSight} / ${b.cull.total}; load ${loadAvg()}`);
+  console.log(`budget near a cluster (actor ${v.actor}, ${v.cluster} near): ${b.calls} draw calls, ${b.ms.toFixed(2)} ms (readings ${b.readings.map((x) => x.toFixed(1)).join(', ')}); bodies drawn ${b.cull.drawn} / in frame ${b.cull.framed} / in sight ${b.cull.inSight} / ${b.cull.total}; load ${loadAvg()}; ${b.split.line}`);
   // Same pose facing away: what the bodies in frame cost (report only).
   await evaluate(`__sdfGame.setPose(${v.x}, ${v.z}, ${v.yaw + Math.PI}, -0.05, ${v.y})`);
   const back = await budgetHere();
-  console.log(`budget same pose facing away: ${back.calls} draw calls, ${back.ms.toFixed(2)} ms (readings ${back.readings.map((x) => x.toFixed(1)).join(', ')}); bodies drawn ${back.cull.drawn} / in frame ${back.cull.framed} / in sight ${back.cull.inSight}`);
+  console.log(`budget same pose facing away: ${back.calls} draw calls, ${back.ms.toFixed(2)} ms (readings ${back.readings.map((x) => x.toFixed(1)).join(', ')}); bodies drawn ${back.cull.drawn} / in frame ${back.cull.framed} / in sight ${back.cull.inSight}; ${back.split.line}`);
+}
+// The pit corridor pose of the 3a notes' run 1 (40.9, 13.1), looking down the corridor (yaw 1.1): ten bodies
+// stood in that frustum behind sector walls, all drawn before the render culls learned the walls (report only).
+{
+  const f = (await evaluate('__sdfGame.ground(40.9, 13.1)')).floor;
+  await evaluate(`__sdfGame.setPose(40.9, 13.1, 1.1, -0.05, ${f})`);
+  const c = await budgetHere();
+  console.log(`budget pit corridor (40.9, 13.1) yaw 1.1: ${c.calls} draw calls, ${c.ms.toFixed(2)} ms (readings ${c.readings.map((x) => x.toFixed(1)).join(', ')}); bodies drawn ${c.cull.drawn} / in frame ${c.cull.framed} / in sight ${c.cull.inSight}; ${c.split.line}`);
 }
 // 5.7 SHOTS with enemies in view.
 if (process.env.SHOTS === '1') {

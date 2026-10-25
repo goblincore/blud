@@ -442,6 +442,11 @@ export interface ZombieActor {
   /** True while the ring may not revoke this body's token (mid-swing). */
   committed(): boolean;
   step(dt: number): void;
+  /** VIEW SYNC (sector perf, 2026-10-25). false: step() still moves, poses and thinks, but skips the GPU
+   *  view's per-frame upload (the body pack, the head rotation, the wound rows) — for a body no view can
+   *  see. true: back on, and a view left stale is uploaded at once from the current pose, so it is right
+   *  before it is drawn. Default true. Hits and other re-poses upload as always. */
+  setViewSync(on: boolean): void;
   /** Live wound ring (for HUD/debug). */
   wounds: () => readonly Wound[];
   /** Rendered carve spheres, also used to exclude occluder hulls. */
@@ -755,6 +760,8 @@ export function createZombieActor(opts: {
   const ruptureFrameNow = (): RuptureFrame | null =>
     tear && tearPlan ? rupturePosed(posed, tearPlan, tear, tearTuning) : null;
   const drawnPose = (): BuildResult => ruptureFrameNow()?.body ?? posed;
+  /** setViewSync: whether step() uploads the view, and whether a skipped upload is owed. */
+  let viewSync = true, viewStale = false;
   /** A body mid-rupture is DOOMED: it is already dead for gameplay (the blast
    *  resolved the kill), it just has not finished coming apart. It must not keep
    *  attacking or moving while it tears. */
@@ -1161,6 +1168,7 @@ export function createZombieActor(opts: {
   /** What every pose change outside step() ends with: the pose, the view, the head's rotation, the wound rows. */
   function showPose() {
     posed = repose();
+    viewStale = false;
     view.update(drawnPose(), current);
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
     refreshWounds();
@@ -1757,9 +1765,13 @@ export function createZombieActor(opts: {
         posed = inflateHead(posed, u, swellClock);
       }
     }
-    view.update(drawnPose(), current);
-    view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
-    refreshWounds();
+    if (viewSync) {
+      view.update(drawnPose(), current);
+      view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
+      refreshWounds();
+    } else {
+      viewStale = true;
+    }
     const d = lastFrame;
     if (d) {
       // The decision fields are the MIND's now. holdSecs rides MindDebug so
@@ -2363,6 +2375,14 @@ export function createZombieActor(opts: {
     engagedForCrowd: () => !doomed && lastEngaged,
     committed: () => !doomed && lastCommitted,
     step,
+    setViewSync(on: boolean) {
+      viewSync = on;
+      if (!on || !viewStale) return;
+      viewStale = false;
+      view.update(drawnPose(), current);
+      view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
+      refreshWounds();
+    },
     corpseBakeEligible: () => soldierDamage && state.collapse.phase === 'settled',
     refineEligible: () => state.collapse.phase === 'standing',
     damageRevision: () => damageRevision,

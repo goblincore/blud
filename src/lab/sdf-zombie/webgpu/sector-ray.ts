@@ -92,13 +92,14 @@ function put(out: SectorHit | undefined, t: number, x: number, y: number, z: num
 }
 
 /** The first place segment a→b meets sector geometry, or null when it is open all the way.
- *  Pass `out` to reuse a hit record (the per-frame path). */
-export function sectorSegmentHit(map: SectorMap, ground: SectorGround, a: V3, b: V3, out?: SectorHit): SectorHit | null {
+ *  Pass `out` to reuse a hit record (the per-frame path). `startSector`, when given, is
+ *  `ground.sectorAt(a[0], a[2])` already looked up by the caller (many segments from one eye). */
+export function sectorSegmentHit(map: SectorMap, ground: SectorGround, a: V3, b: V3, out?: SectorHit, startSector?: number): SectorHit | null {
   const S = map.sectors, L = map.lines, V = map.vertices;
   const ax = a[0], ay = a[1], az = a[2];
   const dx = b[0] - ax, dy = b[1] - ay, dz = b[2] - az;
 
-  let s = ground.sectorAt(ax, az);
+  let s = startSector ?? ground.sectorAt(ax, az);
   if (s < 0) return put(out, 0, ax, ay, az, 'wall', -1, -1);
   {
     const sec = S[s]!;
