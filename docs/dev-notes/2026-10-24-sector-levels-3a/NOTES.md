@@ -173,3 +173,91 @@ The arena checks are a scratch driver (boot, `brains()`, `actorList()`, console 
 - **Distance fog veil in glowing rooms** (owner): the dungeon fog hides the green-lit walls of pool rooms
   (hand-off item 2c; per-vertex fog scale preferred).
 - **Render cull vs sector walls** (finding (a) above) and the **start-pose 33 ms** (finding (b)).
+
+## Perf follow-up (2026-10-25): the cull vs sector walls, and the "33 ms" start frame
+
+Commits 7cb532eb, 9349090a, b8579bc0. Measured with `__sdfGame.frameSplit(n)` (new: hand-stepped frames
+with the rAF loop stopped, split into tick CPU, draw CPU and the GPU fence wait, plus the tick's
+telemetry phases) and `__sdfGame.setSectorCull(on)` (new: A/B of everything below in one boot),
+interleaved legs (6 each), load 4.5–5.8. "Full" = tick + draw + GPU wait.
+
+### Finding (b) explained: the 33 ms is the measuring, not the frame
+
+`timeDraws` draws and fences with the rAF loop still running. Headless Chrome's rAF ticks at 60 Hz
+(16.7 ms measured) and the game's frame cap presents at 30 Hz. While a sample awaits its fence the loop
+runs a whole frame of its own (tick + draw + GPU); with E1M1's 29 actors that frame is ~17 ms of CPU, so
+nearly every sample also waits out a loop frame and the readings sit on the cap's 33 ms steps (67 ms when
+two land). The flat level's loop frame is short, so the same probe reads 8.7 ms there. With the loop
+stopped the start pose's draw + GPU alone was 11.9 ms before these fixes (33.4 ms loop-on, same boot).
+
+Start pose, before the fixes (CPU profile + phases, per frame): **tick 9.9 ms** — body-step 5.0 (29 ×
+`actor.step`: rig `applyRig` 1.5, the GPU view's pack + upload 1.5, motion 0.7), occluder hull 2.0 (the
+visual set's bodies), kit pose 0.9, blood 0.7, hits 0.7, director 0.2 (the director's sight rays and
+routes are cheap: routes replan at most every 0.65 s); **draw CPU 7.5 ms** — three's scene render 5.2
+(of it `updateMatrixWorld` 2.5, shadow pass 1.3); **GPU wait 7.2 ms**. Full 24.6 ms.
+
+### What changed
+
+1. **Render culls see sector geometry** (`actor-sight.ts` `sectorOcclusion`, both the march cull
+   `updateVisibleActors` and the visual-actor set). A probe is blocked only when `sectorSegmentHit` meets
+   geometry more than 0.1 m before the probe point; an eye it cannot judge (void, under its floor, over a
+   closed ceiling) never culls; a fifth probe (the sphere's bottom) runs with the occluder. The 250 ms
+   dwell and the visual set's "last frame's visible" union were already the hysteresis. Room levels pass
+   no occluder: the boxes-only test, unchanged.
+2. **Kits and guns follow the cull** (`syncKitVisibility`, sector levels): at the start 111 skinned kit
+   meshes and 48 gun meshes of 29 bodies were in the scene, culled by frustum only, so a culled body still
+   drew and skinned its kit behind the wall. Shown for bodies in the march set or the visual set.
+3. **No GPU upload for bodies no view can see** (`actor.setViewSync`, sector levels): a body outside the
+   visual set still steps, poses and thinks, but skips its view's pack/upload, head rotation and wound
+   rows; the draw catches up any body the march cull keeps before it is drawn.
+4. The doom gate's budget lines add the loop-stopped split and the run-1 corridor pose.
+
+### Before / after (interleaved A/B, final code)
+
+| pose | bodies drawn | tick | draw CPU | GPU wait | full | draw + GPU alone |
+| --- | --- | --- | --- | --- | --- | --- |
+| start, off | 2 | 10.1 | 7.2 | 7.1 | 24.5 | 11.8 |
+| start, **on** | 0 | 6.8 | 6.4 | 4.6 | **18.3** | 12.8 |
+| pit corridor (40.9, 13.1) looking down it (yaw 1.1), off | 9 | 16.5 | 10.7 | 14.3 | 39.0 | 25.6 |
+| same, **on** | 1 | 8.0 | 7.8 | 13.2 | **28.7** | 22.5 |
+| same pose at the wall (yaw −2.04), off | 1 | 10.5 | 8.1 | 13.4 | 32.2 | 22.8 |
+| same, **on** | 1 | 7.7 | 6.8 | 10.6 | **24.9** | 21.9 |
+
+Gate (`LAB_VITE_PORT=5499 LAB_CDP_PORT=9499 LAB_TMP=.lab-tmp SHOTS=1 bash scripts/sdf-game-doom-gate.sh`,
+load 4.4–4.9): **passes end to end**.
+
+```
+budget: 286 draw calls, 18.50 ms a frame at the start (readings 15.8, 18.5, 19.1); bodies drawn 0 / in frame 1 / in sight 0 / 29
+budget at the start, split (loop stopped): tick 8.7 + draw 7.5 + GPU wait 7.0 = 23.2 ms; draw + GPU alone 13.8 ms
+budget near a cluster (actor 26, 1 near): 144 draw calls, 23.40 ms; bodies drawn 1 / in frame 10 / in sight 1 / 29; split: tick 9.6 + draw 9.7 + GPU wait 10.7 = 30.0 ms
+budget same pose facing away: 232 draw calls, 31.30 ms; bodies drawn 1 / in frame 1 / in sight 1; split: tick 10.6 + draw 9.3 + GPU wait 15.8 = 35.7 ms
+budget pit corridor (40.9, 13.1) yaw 1.1: 148 draw calls, 33.30 ms; bodies drawn 1 / in frame 9 / in sight 1; split: tick 9.5 + draw 9.4 + GPU wait 16.4 = 35.3 ms
+```
+
+(The loop-on `timeDraws` readings above are kept for continuity with the earlier tables — 33.5 / 33.3 /
+34.1 ms, and 67–75 ms at the corridor — and stay quantised; the split is the number to read.)
+
+**Nothing visible vanished.** Shots `e1m1-enemies-0..3` and the corridor pose looked at: every body in view
+drawn with its kit and gun. A sweep of 42 random poses 2–12 m from the actors (450 ms settle each)
+compared the march set with a dense test (40 points on a 0.3 m cylinder per body, in frame and open
+through sector space): 64 of 65 bodies with any open point were drawn; the one miss was a soldier's head
+top on the 3.25 m ledge whose frame with the cull OFF shows nothing either (behind the ledge wall). 31
+drawn bodies had no open point (the dwell, the probe spheres' extents) — the cull stays conservative.
+Flat gate (room level): PASS, 8.7 ms, 147 draw calls.
+
+### Left, and why
+
+- **three's scene traversal, ~4.6 ms of draw CPU** (`updateMatrixWorld` ~2.5 ms over every render call,
+  shadow pass ~1.3 ms): a scene-graph cost (level meshes, 53 pickups, 32 shells, kit bone trees, hidden or
+  not). Fix = static subtrees with `matrixAutoUpdate`/`matrixWorldAutoUpdate` off, or fewer full-scene
+  renders — a renderer change, not done here.
+- **Kit pose for every actor (~0.8 ms):** `character.pose` also steps brass, the muzzle flash pose and
+  prop release; skipping it off screen could leave a stale flash, so it still runs.
+- **Rig + motion for 29 bodies (~2–2.5 ms):** simulation (hits, sight and the cull read `posed()`). A
+  distance LOD (pose far bodies every other tick) would be the next lever.
+- **GPU at the corridor (~13–16 ms wait, 22 ms draw + GPU alone with one body):** the level and one body
+  at that view, not the culled bodies; untouched.
+- **Late pipeline compiles on first sight of a character** (7 with the cull on, 13 off, visiting each
+  kind once; frames up to 470–750 ms in both arms): pre-existing, not caused by hiding kits. The gate's
+  rounds section logged a 244 ms slowest frame once (79 ms before); the A/B shows the same hitches with
+  the cull off.
