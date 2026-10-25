@@ -27,7 +27,7 @@ import { bodyInSight } from './actor-sight';
 import { connectionBlobsForSim } from './blood-connections';
 import { type EncounterAgent } from './encounter-director';
 import { reticleNdc } from './fisheye';
-import { approachAngle, approachBob, bobPose, pivotOffset, turnFromAim, weaponAngles, weaponSlide } from './free-aim';
+import { approachAngle, approachBob, approachStrafe, bobPose, pivotOffset, strafeSpeed01, turnFromAim, weaponAngles, weaponSlide } from './free-aim';
 import { segmentHitsBox, type ZombieActor } from './game-actor';
 import { registerBleed, stepGutRopes, throwGunFlesh } from './game-bleed';
 import { cancelChunkBake, finishChunkBake } from './game-chunk-bake';
@@ -506,9 +506,13 @@ export function tick(ctx: GameContext, dt: number) {
   ctx.weapon.recoilPitch *= Math.exp(-9 * dt);
   // ——— FREE AIM ————————————————————————————————————————————————————
   // The reticle only turns the camera once it is shoved past the dead zone;
-  // inside it, aiming is free and the world stays put.
+  // inside it, aiming is free and the world stays put. The zone shrinks while
+  // strafing (FREE_AIM.strafeDeadzoneScaleX) so the camera follows sooner when
+  // the whole view is sliding sideways. The envelope is updated in the walk-bob
+  // block below from this frame's displacement, so it lags one frame -- far
+  // inside its own smoothing.
   if (ctx.player.freeAimOn) {
-    const turn = turnFromAim(ctx.weapon.aim, dt);
+    const turn = turnFromAim(ctx.weapon.aim, dt, ctx.player.strafeAmount);
     ctx.player.player.yaw += turn.yaw;
     ctx.player.player.pitch = Math.min(PLAYER.pitchLimit,
       Math.max(-PLAYER.pitchLimit, ctx.player.player.pitch + turn.pitch));
@@ -530,7 +534,10 @@ export function tick(ctx: GameContext, dt: number) {
   // stride when the player speeds up, slows down or stops.
   {
     const pos = ctx.player.player.pos;
-    const step = Math.hypot(pos[0] - ctx.player.prevPlayerPos[0], pos[2] - ctx.player.prevPlayerPos[2]);
+    const dx = pos[0] - ctx.player.prevPlayerPos[0], dz = pos[2] - ctx.player.prevPlayerPos[2];
+    const step = Math.hypot(dx, dz);
+    ctx.player.strafeAmount = approachStrafe(ctx.player.strafeAmount,
+      strafeSpeed01(dx, dz, ctx.player.player.yaw, dt, PLAYER.walkSpeed), dt);
     ctx.player.prevPlayerPos = [pos[0], pos[1], pos[2]];
     ctx.player.bobDistance += step;
     const speed01 = dt > 0 ? Math.min(1, step / dt / PLAYER.walkSpeed) : 0;

@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import {
-  BOB, FREE_AIM, approachAngle, approachBob, bobPose, deadzonePush, moveAim,
-  pivotOffset, recentre, turnFromAim, weaponAngles, weaponSlide,
+  BOB, FREE_AIM, approachAngle, approachBob, approachStrafe, bobPose, deadzonePush,
+  deadzoneSize, moveAim, pivotOffset, recentre, strafeSpeed01, turnFromAim,
+  weaponAngles, weaponSlide,
 } from './free-aim';
 
 describe('moveAim', () => {
@@ -62,6 +63,76 @@ describe('turnFromAim', () => {
     const nearEdge = Math.abs(turnFromAim({ x: FREE_AIM.deadzoneX + 0.02, y: 0 }, 1 / 60).yaw);
     const atMax = Math.abs(turnFromAim({ x: 1, y: 0 }, 1 / 60).yaw);
     expect(nearEdge).toBeLessThan(atMax * 0.05);
+  });
+});
+
+describe('strafe-shrunk dead zone', () => {
+  it('is today\'s zone standing still', () => {
+    expect(deadzoneSize(0)).toEqual({ x: FREE_AIM.deadzoneX, y: FREE_AIM.deadzoneY });
+    expect(deadzoneSize()).toEqual(deadzoneSize(0));
+  });
+  it('shrinks X to the strafe scale at full strafe, and Y by its own scale', () => {
+    const d = deadzoneSize(1);
+    expect(d.x).toBeCloseTo(FREE_AIM.deadzoneX * FREE_AIM.strafeDeadzoneScaleX, 9);
+    expect(d.y).toBeCloseTo(FREE_AIM.deadzoneY * FREE_AIM.strafeDeadzoneScaleY, 9);
+    expect(d.x).toBeLessThan(FREE_AIM.deadzoneX);
+  });
+  it('blends linearly and clamps the envelope to 0..1', () => {
+    const half = deadzoneSize(0.5).x;
+    expect(half).toBeCloseTo((deadzoneSize(0).x + deadzoneSize(1).x) / 2, 9);
+    expect(deadzoneSize(5)).toEqual(deadzoneSize(1));
+    expect(deadzoneSize(-5)).toEqual(deadzoneSize(0));
+  });
+  it('turns the camera with less reticle travel while strafing', () => {
+    const x = FREE_AIM.deadzoneX * 0.8;
+    expect(turnFromAim({ x, y: 0 }, 1 / 60, 0).yaw).toBe(0);
+    expect(turnFromAim({ x, y: 0 }, 1 / 60, 1).yaw).toBeGreaterThan(0);
+    expect(turnFromAim({ x: -x, y: 0 }, 1 / 60, 1).yaw).toBeLessThan(0);
+  });
+  it('still reaches full push exactly at the edge, so peak turn rate is unchanged', () => {
+    expect(deadzonePush({ x: 1, y: 0 }, 1).x).toBeCloseTo(1, 6);
+    expect(turnFromAim({ x: 1, y: 0 }, 1, 1).yaw).toBeCloseTo(FREE_AIM.turnRateX, 6);
+  });
+  it('setAimTuning-style edits to the scale take effect', () => {
+    FREE_AIM.strafeDeadzoneScaleX = 1;
+    expect(deadzoneSize(1).x).toBeCloseTo(FREE_AIM.deadzoneX, 9);
+  });
+  afterEach(() => { FREE_AIM.strafeDeadzoneScaleX = 0.4; });
+});
+
+describe('strafeSpeed01', () => {
+  const dt = 1 / 60, v = 4;
+  it('reads pure sideways motion as full strafe (right = [cos yaw, 0, sin yaw])', () => {
+    expect(strafeSpeed01(v * dt, 0, 0, dt, v)).toBeCloseTo(1, 9);
+    expect(strafeSpeed01(-v * dt, 0, 0, dt, v)).toBeCloseTo(1, 9);
+    // Facing 90 deg, right is +Z.
+    expect(strafeSpeed01(0, v * dt, Math.PI / 2, dt, v)).toBeCloseTo(1, 9);
+  });
+  it('ignores forward/back motion', () => {
+    // Forward at yaw 0 is -Z.
+    expect(strafeSpeed01(0, -v * dt, 0, dt, v)).toBeCloseTo(0, 9);
+    expect(strafeSpeed01(v * dt, 0, Math.PI / 2, dt, v)).toBeCloseTo(0, 9);
+  });
+  it('takes the lateral share of a diagonal, and clamps at 1', () => {
+    const d = v * dt / Math.SQRT2;
+    expect(strafeSpeed01(d, -d, 0, dt, v)).toBeCloseTo(Math.SQRT1_2, 6);
+    expect(strafeSpeed01(100, 0, 0, dt, v)).toBe(1);
+  });
+  it('is zero for a zero or negative dt', () => {
+    expect(strafeSpeed01(1, 0, 0, 0, v)).toBe(0);
+  });
+});
+
+describe('approachStrafe', () => {
+  it('eases toward the target instead of popping, and settles', () => {
+    const one = approachStrafe(0, 1, 1 / 60);
+    expect(one).toBeGreaterThan(0);
+    expect(one).toBeLessThan(0.2);
+    let s = 0;
+    for (let i = 0; i < 120; i++) s = approachStrafe(s, 1, 1 / 60);
+    expect(s).toBeGreaterThan(0.99);
+    for (let i = 0; i < 120; i++) s = approachStrafe(s, 0, 1 / 60);
+    expect(s).toBeLessThan(0.01);
   });
 });
 

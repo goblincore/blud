@@ -3483,6 +3483,7 @@ async function main() {
    *  DISTANCE so it stays locked to footfalls at any speed. */
   ctx.player.bobDistance = 0;
   ctx.player.bobAmount = 0;
+  ctx.player.strafeAmount = 0;
   ctx.player.prevPlayerPos = [0, 0, 0];
   ctx.player.reticleEl = null;
   ctx.weapon.gunReady = false;

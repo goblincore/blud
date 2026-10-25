@@ -17,6 +17,21 @@ export const FREE_AIM = {
    *  this box the camera does not turn at all; the reticle just moves. */
   deadzoneX: 0.45,
   deadzoneY: 0.38,
+  /** Dead-zone scale at full STRAFE speed, per axis (1 = unchanged).
+   *
+   *  Standing still, the big zone is the mechanic. Strafing, it fights you:
+   *  everything in view slides sideways across the screen, and a target you
+   *  are tracking drifts out to the edge before the camera starts following
+   *  (owner report). Shrinking the zone with lateral speed lets the camera
+   *  pick up sooner exactly when the world is sliding. Only sideways motion
+   *  counts -- walking forward or back moves things outward slowly and
+   *  radially, which the full zone handles fine. Y is left alone: strafing
+   *  drifts nothing vertically. */
+  strafeDeadzoneScaleX: 0.4,
+  strafeDeadzoneScaleY: 1.0,
+  /** How fast the strafe envelope follows the player's lateral speed,
+   *  1/seconds, so the zone eases in and out instead of popping. */
+  strafeRamp: 5.0,
   /** Peak camera turn, radians/second, reached when the reticle is jammed
    *  fully into a corner. Measured in-engine: 2.4 rad/s is 137 deg/s at full
    *  push, which overshoots badly on a flick; 1.9 is ~109 deg/s. Tunable,
@@ -78,14 +93,26 @@ export function moveAim(aim: AimPoint, dxPx: number, dyPx: number): AimPoint {
   };
 }
 
-/** How far past the dead zone the reticle is pushing, -1..1 per axis. */
-export function deadzonePush(aim: AimPoint): { x: number; y: number } {
+/** Dead-zone half-extents for a 0..1 strafe envelope (see strafeDeadzoneScaleX). */
+export function deadzoneSize(strafe01 = 0): { x: number; y: number } {
+  const s = Math.min(1, Math.max(0, strafe01));
+  const lerp = (scale: number) => 1 + (scale - 1) * s;
+  return {
+    x: FREE_AIM.deadzoneX * lerp(FREE_AIM.strafeDeadzoneScaleX),
+    y: FREE_AIM.deadzoneY * lerp(FREE_AIM.strafeDeadzoneScaleY),
+  };
+}
+
+/** How far past the dead zone the reticle is pushing, -1..1 per axis.
+ *  `strafe01` shrinks the zone while the player moves sideways. */
+export function deadzonePush(aim: AimPoint, strafe01 = 0): { x: number; y: number } {
+  const dz = deadzoneSize(strafe01);
   const past = (v: number, dz: number) => {
     if (Math.abs(v) <= dz) return 0;
     const over = (Math.abs(v) - dz) / Math.max(1e-6, 1 - dz);
     return Math.sign(v) * Math.min(1, over);
   };
-  return { x: past(aim.x, FREE_AIM.deadzoneX), y: past(aim.y, FREE_AIM.deadzoneY) };
+  return { x: past(aim.x, dz.x), y: past(aim.y, dz.y) };
 }
 
 /**
@@ -93,12 +120,31 @@ export function deadzonePush(aim: AimPoint): { x: number; y: number } {
  * that flat region IS the mechanic. Squared response so the edge of the zone is
  * a gentle drift and only the extremes whip round.
  */
-export function turnFromAim(aim: AimPoint, dt: number): { yaw: number; pitch: number } {
-  const p = deadzonePush(aim);
+export function turnFromAim(aim: AimPoint, dt: number, strafe01 = 0): { yaw: number; pitch: number } {
+  const p = deadzonePush(aim, strafe01);
   return {
     yaw: Math.sign(p.x) * p.x * p.x * FREE_AIM.turnRateX * dt,
     pitch: Math.sign(p.y) * p.y * p.y * FREE_AIM.turnRateY * dt,
   };
+}
+
+/**
+ * 0..1 SIDEWAYS speed for one frame of player motion: the component of the
+ * ground displacement (dx, dz) along the player's right vector, over
+ * `fullSpeed`. Right is [cos yaw, 0, sin yaw], matching fpv.ts. Taken from the
+ * actual displacement rather than the keys, so sliding along a wall or
+ * standing against one reads as what the screen is actually doing.
+ */
+export function strafeSpeed01(dx: number, dz: number, yaw: number, dt: number, fullSpeed: number): number {
+  if (dt <= 0 || fullSpeed <= 0) return 0;
+  const lateral = Math.abs(dx * Math.cos(yaw) + dz * Math.sin(yaw));
+  return Math.min(1, lateral / dt / fullSpeed);
+}
+
+/** Smooth the strafe envelope so the dead zone eases in and out. */
+export function approachStrafe(current: number, target01: number, dt: number): number {
+  const k = 1 - Math.exp(-FREE_AIM.strafeRamp * dt);
+  return current + (Math.min(1, Math.max(0, target01)) - current) * k;
 }
 
 /** Half-angle tangents of the live camera frustum. tanV = tan(fovY/2),

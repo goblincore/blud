@@ -56,6 +56,8 @@ export interface PlayerState {
   bobDistance: number;
   /** Smoothed 0..1 bob amount. */
   bobAmount: number;
+  /** Smoothed 0..1 sideways speed; shrinks the free-aim dead zone. */
+  strafeAmount: number;
   /** Previous frame's feet position, the bob-distance sample. */
   prevPlayerPos: Vec3;
   /** Overlay element the free-aim reticle is drawn into, once created. */
@@ -97,6 +99,7 @@ export function makePlayerState(): PlayerState {
     freeAimOn: true,
     bobDistance: 0,
     bobAmount: 0,
+    strafeAmount: 0,
     prevPlayerPos: [0, 0, 0],
     reticleEl: null,
     holdPlayerPose: false,
