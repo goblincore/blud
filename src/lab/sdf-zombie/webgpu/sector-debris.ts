@@ -2,15 +2,18 @@
 //
 // THE SECTOR DEBRIS GROUND (plan 2026-10-25-sector-levels-3b Task 1): DebrisGround for a sector level. floorAt is the
 // sector floor; bounce is ONE horizontal sectorSegmentHit probe from the step's start to its end at the START height
-// (a segment test, so a fast piece cannot tunnel a wall), stopping the piece WALL_SKIN_M short of the line hit.
-// Horizontal at the start height on purpose: a resting piece is above its own floor, so the probe meets only walls —
-// a riser it is lower than, a lip it is higher than, a one-sided line — never the floor or ceiling of the sector it
-// is in (those are the vertical clamp's business, read at the end x/z). Cached per SectorMap.
+// (a segment test, so a fast piece cannot tunnel a wall), run on past the end by the piece's radius so its leading
+// edge meets the wall, and the piece's CENTRE is put max(radius, WALL_SKIN_M) from the line hit.
+// Horizontal at the start height on purpose, and that height clamped into the start sector's open band
+// [floor, ceil] (no top under sky): the probe meets only walls — a riser it is lower than, a lip it is higher than, a
+// one-sided line — never the floor or ceiling of the sector it is in (those are the vertical clamp's business, read
+// at the end x/z), and a piece that ended last step above its ceiling or below its floor still meets this step's
+// walls. Cached per SectorMap.
 //
 // Pure: no three.js, no DOM.
 import type { Vec3 } from '../types';
 import type { DebrisGround, WallBounce } from '../debris-ground';
-import type { SectorMap } from './sector-def';
+import { SKY_MATERIAL, type SectorMap } from './sector-def';
 import type { SectorGround } from './sector-ground';
 import { sectorSegmentHit, type SectorHit } from './sector-ray';
 
@@ -22,29 +25,53 @@ const cache = new WeakMap<SectorMap, DebrisGround>();
 export function sectorDebrisGround(map: SectorMap, ground: SectorGround): DebrisGround {
   const cached = cache.get(map);
   if (cached) return cached;
+  const S = map.sectors;
   const out: SectorHit = { t: 0, point: [0, 0, 0], kind: 'wall', line: -1, sector: -1 };
   const a: [number, number, number] = [0, 0, 0];
   const b: [number, number, number] = [0, 0, 0];
   const g: DebrisGround = {
     floorAt: (x, z) => ground.floorAt(x, z),
-    bounce(prev, next, vel, restitution, friction): WallBounce | null {
-      if (prev[0] === next[0] && prev[2] === next[2]) return null;
-      if (Number.isNaN(ground.floorAt(prev[0], prev[2]))) return null;
-      a[0] = prev[0]; a[1] = prev[1]; a[2] = prev[2];
-      b[0] = next[0]; b[1] = prev[1]; b[2] = next[2];
-      const h = sectorSegmentHit(map, ground, a, b, out);
+    ceilAt(x, z) {
+      const s = ground.sectorAt(x, z);
+      if (s < 0) return NaN;
+      const sec = S[s]!;
+      return sec.materials.ceil === SKY_MATERIAL ? Infinity : sec.ceil;
+    },
+    bounce(prev, next, vel, restitution, friction, radius = 0): WallBounce | null {
+      const dx = next[0] - prev[0], dz = next[2] - prev[2];
+      if (dx === 0 && dz === 0) return null;
+      const s = ground.sectorAt(prev[0], prev[2]);
+      if (s < 0) return null;
+      // Probe inside the start sector's open band: a piece above its ceiling (or below its floor) would
+      // otherwise read as a ceiling (floor) hit at t 0 and skip every wall this step.
+      const sec = S[s]!;
+      const top = sec.materials.ceil === SKY_MATERIAL ? Infinity : sec.ceil;
+      const y = Math.min(top, Math.max(sec.floor, prev[1]));
+      const stop = Math.max(radius, WALL_SKIN_M);
+      // The probe runs on past next by the radius, so the piece's leading edge meets the wall, not its centre.
+      const ext = radius > 0 ? radius / Math.hypot(dx, dz) : 0;
+      a[0] = prev[0]; a[1] = y; a[2] = prev[2];
+      b[0] = next[0] + dx * ext; b[1] = y; b[2] = next[2] + dz * ext;
+      const h = sectorSegmentHit(map, ground, a, b, out, s);
       if (!h || h.kind !== 'wall' || h.line < 0) return null;
       const ln = map.lines[h.line]!;
       const v0 = map.vertices[ln.v[0]]!, v1 = map.vertices[ln.v[1]]!;
+      // (−ez, ex) points into the line's front (left) side; flip it when the piece came from the back.
       let nx = -(v1[1] - v0[1]), nz = v1[0] - v0[0];
       const l = Math.hypot(nx, nz) || 1;
       nx /= l; nz /= l;
-      if (nx * (prev[0] - h.point[0]) + nz * (prev[2] - h.point[2]) < 0) { nx = -nx; nz = -nz; }
+      if (ln.front !== h.sector) { nx = -nx; nz = -nz; }
       const vn = vel[0] * nx + vel[2] * nz;
       const tx = vel[0] - vn * nx, tz = vel[2] - vn * nz;
       const rn = vn < 0 ? -vn * restitution : vn;
+      // Where the centre's own path is `stop` from the line (the line is straight, so the distance is linear in
+      // t), clamped to the step; a centre already closer than that is pushed out along the normal.
+      const dist0 = nx * (prev[0] - h.point[0]) + nz * (prev[2] - h.point[2]);
+      const dn = dx * nx + dz * nz;   // < 0: the step runs toward the wall
+      const tc = dn < 0 ? Math.min(1, Math.max(0, (stop - dist0) / dn)) : 0;
+      const push = stop - (dist0 + tc * dn);
       return {
-        pos: [h.point[0] + nx * WALL_SKIN_M, next[1], h.point[2] + nz * WALL_SKIN_M] as Vec3,
+        pos: [prev[0] + tc * dx + push * nx, next[1], prev[2] + tc * dz + push * nz] as Vec3,
         vel: [tx * friction + rn * nx, vel[1], tz * friction + rn * nz] as Vec3,
         normal: [nx, 0, nz] as Vec3,
       };

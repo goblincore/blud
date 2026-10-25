@@ -57,3 +57,43 @@ describe('sectorDebrisGround: walls', () => {
     expect(g.bounce(p, [1, 0.1, -7], [0, -1, 0], 0.5, 0.7)).toBeNull();
   });
 });
+
+describe('sectorDebrisGround: review fixes', () => {
+  it('a piece above its ceiling or below its floor still meets the walls', () => {
+    // Above A's 4 m ceiling, sliding into A's north wall: probed at the ceiling, still a wall.
+    const up = g.bounce([0, 4.5, -0.5], [0, 4.5, 0.5], [0, 0, 60], 0.5, 0.7)!;
+    expect(up).not.toBeNull();
+    expect(up.pos[2]).toBeCloseTo(-WALL_SKIN_M, 9);
+    // Sunk under B's 0.5 m floor, sliding into the 1.5 m riser to C: probed at B's floor, still a wall.
+    const down = g.bounce([0, 0.3, -11.5], [0, 0.3, -12.5], [0, 0, -3], 0.5, 0.7)!;
+    expect(down).not.toBeNull();
+    expect(down.pos[2]).toBeCloseTo(-12 + WALL_SKIN_M, 9);
+  });
+  it('a radius stops the centre that far from the wall, and catches a leading edge the centre never crossed', () => {
+    const r = g.bounce([1, 0.2, -7.5], [1, 0.2, -8.5], [0, 0, -3], 0.5, 0.7, 0.1)!;
+    expect(r.pos[2]).toBeCloseTo(-8 + 0.1, 9);
+    const edge = g.bounce([1, 0.2, -7.5], [1, 0.2, -7.95], [0, 0, -3], 0.5, 0.7, 0.1)!;
+    expect(edge).not.toBeNull();
+    expect(edge.pos[2]).toBeCloseTo(-8 + 0.1, 9);
+    expect(edge.vel[2]).toBeCloseTo(1.5, 9);
+    expect(g.bounce([1, 0.2, -7.5], [1, 0.2, -7.95], [0, 0, -3], 0.5, 0.7)).toBeNull();   // radius 0: open
+  });
+  it('a slanted approach with a radius ends exactly radius off the line', () => {
+    const r = g.bounce([1, 0.2, -7.5], [2, 0.2, -8.5], [2, 0, -2], 0.5, 1, 0.1)!;
+    expect(r.pos[2]).toBeCloseTo(-8 + 0.1, 9);
+    expect(r.pos[0]).toBeCloseTo(1.4, 9);                           // on the centre's path
+    expect(r.vel[0]).toBeCloseTo(2, 9);
+  });
+  it('the normal comes from the side the piece is on (column faces, from outside)', () => {
+    const n = g.bounce([0, 0.2, -5.5], [0, 0.2, -4.5], [0, 0, 3], 0.5, 0.7)!;   // the column's south face, z −5
+    expect(n.normal[2]).toBeCloseTo(-1, 9);
+    expect(n.pos[2]).toBeCloseTo(-5 - WALL_SKIN_M, 9);
+    const e = g.bounce([1.5, 0.2, -4], [0.5, 0.2, -4], [-3, 0, 0], 0.5, 0.7)!;
+    expect(e.normal[0]).toBeCloseTo(1, 9);
+  });
+  it('ceilAt: the sector ceiling, Infinity under sky, NaN off the map', () => {
+    expect(g.ceilAt!(0, -2)).toBe(4);
+    expect(g.ceilAt!(6, -4)).toBe(Infinity);
+    expect(Number.isNaN(g.ceilAt!(0, -4))).toBe(true);
+  });
+});

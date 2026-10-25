@@ -19,12 +19,13 @@ stains float in mid-air on raised/sunken floors"; "the parts with enemies feel g
 
 **Architecture:** one small pure interface, one sector implementation, and every debris stepper takes it as an
 optional argument.
-- `debris-ground.ts` (new, pure, in `src/lab/sdf-zombie/`): `DebrisGround { floorAt(x, z); bounce(prev, next, vel,
-  restitution, friction) }` and `landingFloor(g, x, z, last)`. The steppers in `src/lab/sdf-zombie/` import only
+- `debris-ground.ts` (new, pure, in `src/lab/sdf-zombie/`): `DebrisGround { floorAt(x, z); ceilAt?(x, z);
+  bounce(prev, next, vel, restitution, friction, radius = 0) }` and `landingFloor(g, x, z, last)`. The steppers in `src/lab/sdf-zombie/` import only
   this interface (they must not import `webgpu/`).
 - `webgpu/sector-debris.ts` (new, pure): the sector implementation — `floorAt` from `SectorGround`, `bounce` from ONE
   horizontal `sectorSegmentHit` probe per moving piece per step (a segment test, so a fast piece cannot tunnel),
-  with the hit line's normal. Cached per `SectorMap`.
+  at the start height clamped into the start sector's floor..ceiling band, run on `radius` past the end, with the hit
+  line's normal (the side the piece is on); `ceilAt` (Infinity under sky). Cached per `SectorMap`.
 - `webgpu/game-hit-trace.ts`: `debrisGround(ctx)` (null on room levels) and `sectorHitBetween(ctx, a, b)`; every game
   call site passes `debrisGround(ctx) ?? undefined`. **Room levels pass nothing**, so every stepper runs its old
   y = 0 code path, byte for byte.
@@ -40,11 +41,25 @@ optional argument.
 **Decisions taken in this plan:**
 - **The floor is read at the piece's CURRENT x/z every step** (`landingFloor`), never at its spawn point; off the map
   (a column hole, the void) a piece keeps its last floor (stored on the piece as an optional `floorY`).
-- **Walls:** one horizontal probe from the step's start to its end at the START height. A one-sided line, a riser
-  higher than the piece (the lower part) or a lip lower than it (the upper part) stops the piece 1 cm short; the
-  normal velocity reflects × the piece's own restitution, the tangential keeps × its friction. Falling off a ledge is
-  open (the piece is above the lower floor); sliding into a step up is a wall unless the piece is above that floor.
-  A step start off the map is not judged (`bounce` returns null).
+  A piece's floor is the floor under its CENTRE: right for chunks, casings and blood; a gun or kit piece straddling a
+  riser may hang or sink half its length — accepted for 3b (an optional footprint `floorUnder(x, z, r)` can come
+  later).
+- **Spawns start inside the level:** a spawner seeds the piece's `floorY` with the body's floor
+  (`ctx.world.level.ground.floorAt` at the body, i.e. the actor's floor) and clamps each spawn point with
+  `sectorHitBetween(ctx, bodyCentre, spawnPos)` (a hit: put the piece at the hit point pulled `WALL_SKIN_M` plus its
+  radius back toward the body centre), so a gib, rope node, gun, kit piece or casing never starts inside a wall or a
+  column — `bounce` judges a step only from a start inside the map. Tasks 2, 4 and 5 do this.
+- **Walls:** one horizontal probe from the step's start to its end (run on by the piece's `radius`) at the START
+  height, clamped into the start sector's [floor, ceiling] band (no top under sky) — so a piece that ended a step
+  above its sector's ceiling (over a doorway's lower lintel) or below its floor still meets this step's walls. A
+  one-sided line, a riser higher than the piece (the lower part) or a lip lower than it (the upper part) stops the
+  piece's CENTRE `max(radius, 1 cm)` from the line, on its own path (a centre already closer is pushed out along the
+  normal); the normal (from the line's side the piece is on, `front === sector`) velocity reflects × the piece's own
+  restitution, the tangential keeps × its friction. Callers pass their piece's collision radius (chunks `c.radius`,
+  bundles the flight's bundle radius, guns/kit a half-extent); `radius` 0 is the bare 1 cm skin. Falling off a ledge
+  is open (the piece is above the lower floor); sliding into a step up is a wall unless the piece is above that floor.
+  A step start off the map is not judged (`bounce` returns null). A piece moving parallel to a wall within its radius
+  is not pushed out (only a crossing is judged).
 - **Blood on walls:** the shipped blood is floor splats only (`blood-sim.ts` `stamp` never paints walls), so it needs
   no sector walls — the drop now stops at a sector wall and runs down it to that wall's floor. The opt-in surface
   blood (`?surfaceblood=1`, `surface-blood-view.ts`) already sweeps every mesh in `ctx.world.levelGroup`, and on a
@@ -217,13 +232,19 @@ export interface WallBounce {
 }
 
 export interface DebrisGround {
-  /** Floor height under (x, z); NaN off the map (a column hole, the void). */
+  /** Floor height under (x, z); NaN off the map (a column hole, the void). A piece's floor is the floor under its
+   *  CENTRE (a long piece straddling a riser may hang or sink half its length: accepted for 3b). */
   floorAt(x: number, z: number): number;
-  /** The piece moved prev → next with velocity vel. If that move crossed a sector wall at the start height (a
-   *  one-sided line, a riser higher than the piece, a lip lower than it), the piece stops 1 cm short of the wall:
-   *  the normal velocity reflects × `restitution`, the tangential keeps × `friction`, y is next's. Null when nothing
-   *  was crossed (or prev is off the map: nothing to judge against). */
-  bounce(prev: Vec3, next: Vec3, vel: Vec3, restitution: number, friction: number): WallBounce | null;
+  /** Ceiling height over (x, z): Infinity under sky, NaN off the map. Optional (a stepper with no ground, or a
+   *  ground without it, has no ceiling: treat as Infinity). */
+  ceilAt?(x: number, z: number): number;
+  /** The piece moved prev → next with velocity vel. If that move crossed a sector wall at the start height (clamped
+   *  into the start sector's floor..ceiling band: a one-sided line, a riser higher than the piece, a lip lower than
+   *  it), the piece's centre stops max(radius, 1 cm) short of the wall (the probe runs on `radius` past next, so the
+   *  leading edge meets it): the normal velocity reflects × `restitution`, the tangential keeps × `friction`, y is
+   *  next's. `radius` defaults to 0. Null when nothing was crossed (or prev is off the map: nothing to judge
+   *  against). */
+  bounce(prev: Vec3, next: Vec3, vel: Vec3, restitution: number, friction: number, radius?: number): WallBounce | null;
 }
 
 /** The floor a piece at (x, z) lands on: the floor there, or `last` (its previous floor) off the map. */
@@ -295,6 +316,46 @@ describe('sectorDebrisGround: walls', () => {
     expect(g.bounce(p, [1, 0.1, -7], [0, -1, 0], 0.5, 0.7)).toBeNull();
   });
 });
+
+describe('sectorDebrisGround: review fixes', () => {
+  it('a piece above its ceiling or below its floor still meets the walls', () => {
+    // Above A's 4 m ceiling, sliding into A's north wall: probed at the ceiling, still a wall.
+    const up = g.bounce([0, 4.5, -0.5], [0, 4.5, 0.5], [0, 0, 60], 0.5, 0.7)!;
+    expect(up).not.toBeNull();
+    expect(up.pos[2]).toBeCloseTo(-WALL_SKIN_M, 9);
+    // Sunk under B's 0.5 m floor, sliding into the 1.5 m riser to C: probed at B's floor, still a wall.
+    const down = g.bounce([0, 0.3, -11.5], [0, 0.3, -12.5], [0, 0, -3], 0.5, 0.7)!;
+    expect(down).not.toBeNull();
+    expect(down.pos[2]).toBeCloseTo(-12 + WALL_SKIN_M, 9);
+  });
+  it('a radius stops the centre that far from the wall, and catches a leading edge the centre never crossed', () => {
+    const r = g.bounce([1, 0.2, -7.5], [1, 0.2, -8.5], [0, 0, -3], 0.5, 0.7, 0.1)!;
+    expect(r.pos[2]).toBeCloseTo(-8 + 0.1, 9);
+    const edge = g.bounce([1, 0.2, -7.5], [1, 0.2, -7.95], [0, 0, -3], 0.5, 0.7, 0.1)!;
+    expect(edge).not.toBeNull();
+    expect(edge.pos[2]).toBeCloseTo(-8 + 0.1, 9);
+    expect(edge.vel[2]).toBeCloseTo(1.5, 9);
+    expect(g.bounce([1, 0.2, -7.5], [1, 0.2, -7.95], [0, 0, -3], 0.5, 0.7)).toBeNull();   // radius 0: open
+  });
+  it('a slanted approach with a radius ends exactly radius off the line', () => {
+    const r = g.bounce([1, 0.2, -7.5], [2, 0.2, -8.5], [2, 0, -2], 0.5, 1, 0.1)!;
+    expect(r.pos[2]).toBeCloseTo(-8 + 0.1, 9);
+    expect(r.pos[0]).toBeCloseTo(1.4, 9);                           // on the centre's path
+    expect(r.vel[0]).toBeCloseTo(2, 9);
+  });
+  it('the normal comes from the side the piece is on (column faces, from outside)', () => {
+    const n = g.bounce([0, 0.2, -5.5], [0, 0.2, -4.5], [0, 0, 3], 0.5, 0.7)!;   // the column's south face, z −5
+    expect(n.normal[2]).toBeCloseTo(-1, 9);
+    expect(n.pos[2]).toBeCloseTo(-5 - WALL_SKIN_M, 9);
+    const e = g.bounce([1.5, 0.2, -4], [0.5, 0.2, -4], [-3, 0, 0], 0.5, 0.7)!;
+    expect(e.normal[0]).toBeCloseTo(1, 9);
+  });
+  it('ceilAt: the sector ceiling, Infinity under sky, NaN off the map', () => {
+    expect(g.ceilAt!(0, -2)).toBe(4);
+    expect(g.ceilAt!(6, -4)).toBe(Infinity);
+    expect(Number.isNaN(g.ceilAt!(0, -4))).toBe(true);
+  });
+});
 ```
 
 - [ ] **Step 3: Run** `npx vitest run src/lab/sdf-zombie/webgpu/sector-debris.test.ts` — FAIL (module missing).
@@ -306,15 +367,18 @@ describe('sectorDebrisGround: walls', () => {
 //
 // THE SECTOR DEBRIS GROUND (plan 2026-10-25-sector-levels-3b Task 1): DebrisGround for a sector level. floorAt is the
 // sector floor; bounce is ONE horizontal sectorSegmentHit probe from the step's start to its end at the START height
-// (a segment test, so a fast piece cannot tunnel a wall), stopping the piece WALL_SKIN_M short of the line hit.
-// Horizontal at the start height on purpose: a resting piece is above its own floor, so the probe meets only walls —
-// a riser it is lower than, a lip it is higher than, a one-sided line — never the floor or ceiling of the sector it
-// is in (those are the vertical clamp's business, read at the end x/z). Cached per SectorMap.
+// (a segment test, so a fast piece cannot tunnel a wall), run on past the end by the piece's radius so its leading
+// edge meets the wall, and the piece's CENTRE is put max(radius, WALL_SKIN_M) from the line hit.
+// Horizontal at the start height on purpose, and that height clamped into the start sector's open band
+// [floor, ceil] (no top under sky): the probe meets only walls — a riser it is lower than, a lip it is higher than, a
+// one-sided line — never the floor or ceiling of the sector it is in (those are the vertical clamp's business, read
+// at the end x/z), and a piece that ended last step above its ceiling or below its floor still meets this step's
+// walls. Cached per SectorMap.
 //
 // Pure: no three.js, no DOM.
 import type { Vec3 } from '../types';
 import type { DebrisGround, WallBounce } from '../debris-ground';
-import type { SectorMap } from './sector-def';
+import { SKY_MATERIAL, type SectorMap } from './sector-def';
 import type { SectorGround } from './sector-ground';
 import { sectorSegmentHit, type SectorHit } from './sector-ray';
 
@@ -326,29 +390,53 @@ const cache = new WeakMap<SectorMap, DebrisGround>();
 export function sectorDebrisGround(map: SectorMap, ground: SectorGround): DebrisGround {
   const cached = cache.get(map);
   if (cached) return cached;
+  const S = map.sectors;
   const out: SectorHit = { t: 0, point: [0, 0, 0], kind: 'wall', line: -1, sector: -1 };
   const a: [number, number, number] = [0, 0, 0];
   const b: [number, number, number] = [0, 0, 0];
   const g: DebrisGround = {
     floorAt: (x, z) => ground.floorAt(x, z),
-    bounce(prev, next, vel, restitution, friction): WallBounce | null {
-      if (prev[0] === next[0] && prev[2] === next[2]) return null;
-      if (Number.isNaN(ground.floorAt(prev[0], prev[2]))) return null;
-      a[0] = prev[0]; a[1] = prev[1]; a[2] = prev[2];
-      b[0] = next[0]; b[1] = prev[1]; b[2] = next[2];
-      const h = sectorSegmentHit(map, ground, a, b, out);
+    ceilAt(x, z) {
+      const s = ground.sectorAt(x, z);
+      if (s < 0) return NaN;
+      const sec = S[s]!;
+      return sec.materials.ceil === SKY_MATERIAL ? Infinity : sec.ceil;
+    },
+    bounce(prev, next, vel, restitution, friction, radius = 0): WallBounce | null {
+      const dx = next[0] - prev[0], dz = next[2] - prev[2];
+      if (dx === 0 && dz === 0) return null;
+      const s = ground.sectorAt(prev[0], prev[2]);
+      if (s < 0) return null;
+      // Probe inside the start sector's open band: a piece above its ceiling (or below its floor) would
+      // otherwise read as a ceiling (floor) hit at t 0 and skip every wall this step.
+      const sec = S[s]!;
+      const top = sec.materials.ceil === SKY_MATERIAL ? Infinity : sec.ceil;
+      const y = Math.min(top, Math.max(sec.floor, prev[1]));
+      const stop = Math.max(radius, WALL_SKIN_M);
+      // The probe runs on past next by the radius, so the piece's leading edge meets the wall, not its centre.
+      const ext = radius > 0 ? radius / Math.hypot(dx, dz) : 0;
+      a[0] = prev[0]; a[1] = y; a[2] = prev[2];
+      b[0] = next[0] + dx * ext; b[1] = y; b[2] = next[2] + dz * ext;
+      const h = sectorSegmentHit(map, ground, a, b, out, s);
       if (!h || h.kind !== 'wall' || h.line < 0) return null;
       const ln = map.lines[h.line]!;
       const v0 = map.vertices[ln.v[0]]!, v1 = map.vertices[ln.v[1]]!;
+      // (−ez, ex) points into the line's front (left) side; flip it when the piece came from the back.
       let nx = -(v1[1] - v0[1]), nz = v1[0] - v0[0];
       const l = Math.hypot(nx, nz) || 1;
       nx /= l; nz /= l;
-      if (nx * (prev[0] - h.point[0]) + nz * (prev[2] - h.point[2]) < 0) { nx = -nx; nz = -nz; }
+      if (ln.front !== h.sector) { nx = -nx; nz = -nz; }
       const vn = vel[0] * nx + vel[2] * nz;
       const tx = vel[0] - vn * nx, tz = vel[2] - vn * nz;
       const rn = vn < 0 ? -vn * restitution : vn;
+      // Where the centre's own path is `stop` from the line (the line is straight, so the distance is linear in
+      // t), clamped to the step; a centre already closer than that is pushed out along the normal.
+      const dist0 = nx * (prev[0] - h.point[0]) + nz * (prev[2] - h.point[2]);
+      const dn = dx * nx + dz * nz;   // < 0: the step runs toward the wall
+      const tc = dn < 0 ? Math.min(1, Math.max(0, (stop - dist0) / dn)) : 0;
+      const push = stop - (dist0 + tc * dn);
       return {
-        pos: [h.point[0] + nx * WALL_SKIN_M, next[1], h.point[2] + nz * WALL_SKIN_M] as Vec3,
+        pos: [prev[0] + tc * dx + push * nx, next[1], prev[2] + tc * dz + push * nz] as Vec3,
         vel: [tx * friction + rn * nx, vel[1], tz * friction + rn * nz] as Vec3,
         normal: [nx, 0, nz] as Vec3,
       };
@@ -359,7 +447,9 @@ export function sectorDebrisGround(map: SectorMap, ground: SectorGround): Debris
 }
 ```
 
-  (Check `SectorLine.v` and `SectorMap.vertices` names in `sector-def.ts`; the fixture JSON uses `v` and `vertices`.)
+  (Review fixes, 2026-10-25: the probe height is clamped into the start sector's band and `sectorAt` is looked up
+  once and passed as `startSector`; `radius` stops the centre that far out; the normal's side is
+  `ln.front === h.sector`; `ceilAt` added.)
 
 - [ ] **Step 5: Game helpers** in `src/lab/sdf-zombie/webgpu/game-hit-trace.ts` (beside `chunkCollidersAt`):
 
@@ -388,6 +478,12 @@ export function sectorHitBetween(ctx: GameContext, a: Vec3, b: Vec3): SectorHit 
 - [ ] **Step 7: Commit:**
   `git add src/lab/sdf-zombie/debris-ground.ts src/lab/sdf-zombie/webgpu/sector-debris.ts src/lab/sdf-zombie/webgpu/sector-debris.test.ts src/lab/sdf-zombie/webgpu/game-hit-trace.ts`
   → `feat(levels): the debris ground — sector floors and walls for loose pieces (pure)`.
+
+**Interface notes for Tasks 2–8 (after the Task 1 review):** `bounce` takes an optional 6th argument `radius`
+(metres, default 0) — pass the piece's collision radius so its edge, not its centre, meets the wall. `ceilAt?(x, z)`
+is optional on `DebrisGround` (Infinity under sky, NaN off the map); a stepper that clamps to a ceiling reads it as
+`ground.ceilAt?.(x, z) ?? Infinity` and treats NaN as no ceiling. Fake grounds in tests may omit it. Spawners follow
+the "Spawns start inside the level" decision.
 
 ---
 
@@ -464,7 +560,7 @@ describe('stepChunk on a debris ground (sector levels)', () => {
   // SECTOR WALLS (plan 3b): the step's move from where the chunk was, after the boxes. A fast piece meets the wall
   // it would have crossed (the probe is a segment), stops short and bounces with the wall restitution.
   if (ground) {
-    const b = ground.bounce(c.pos, [x, y, z], [vx, vy, vz], wallRest, FLOOR_FRICTION);
+    const b = ground.bounce(c.pos, [x, y, z], [vx, vy, vz], wallRest, FLOOR_FRICTION, c.radius);
     if (b) { x = b.pos[0]; y = b.pos[1]; z = b.pos[2]; vx = b.vel[0]; vy = b.vel[1]; vz = b.vel[2]; }
   }
 ```
@@ -495,7 +591,12 @@ export function chunkCollidersAt(ctx: GameContext, pos: Vec3): ChunkColliders {
 }
 ```
 
-  No other call site changes (game-tick, game-mesh-gibs and the sprite pieces all call it). In `game-seams-fx.ts`
+  No other call site changes (game-tick, game-mesh-gibs and the sprite pieces all call it) — except the SPAWNS: where
+  the game makes a chunk, flesh bit, mesh gib or sprite piece on a sector level, seed `floorY` with the body's floor
+  and clamp the spawn point with `sectorHitBetween(ctx, bodyCentre, spawnPos)` (see the decision "Spawns start inside
+  the level"), so a gib never starts inside a wall or the column. Gate it with a test on the clamp helper (pure: put
+  it beside `debrisGround` in `game-hit-trace.ts` as `clampSpawnInside(ctx, from, to, radius)`, or a pure twin taking
+  the map and ground, tested on the fixture). In `game-seams-fx.ts`
   `chunkStates` add `floorY: c.state.floorY ?? 0` to the marched rows (sprite rows: add it in `spritePieceStates` the
   same way if it builds rows from `p.state`).
 - [ ] **Step 4:** `npx vitest run src/lab/sdf-zombie/gib-chunks.test.ts src/lab/sdf-zombie/webgpu/gib-sprite-pieces*.test.ts src/lab/sdf-zombie/flesh-bits.test.ts src/lab/sdf-zombie/gib-launch.test.ts`
@@ -624,6 +725,10 @@ function stamp(sim: BloodSim, at: Vec3, rng: () => number, kind: 'drop' | 'scrap
 
 **Files:** `src/lab/sdf-zombie/entrails.ts`, `src/lab/sdf-zombie/entrails.test.ts`, `src/lab/sdf-zombie/webgpu/game-bleed.ts`.
 
+Spawns: a rope's nodes are seeded with the body's floor as `floorY`, and each node's start is clamped inside the level
+with the Task 2 spawn clamp (`clampSpawnInside` / `sectorHitBetween` from the body centre), per the decision "Spawns
+start inside the level".
+
 - [ ] **Step 1: Failing test** in `entrails.test.ts`:
 
 ```ts
@@ -671,6 +776,10 @@ describe('stepGutChain on a debris ground', () => {
 `src/lab/sdf-zombie/webgpu/shotgun-casings.ts` (+ `shotgun-casings.test.ts`), `src/lab/sdf-zombie/webgpu/kit-damage.ts`,
 `src/lab/sdf-zombie/webgpu/kit-overlay.ts`, `src/lab/sdf-zombie/webgpu/character-view.ts`, `src/lab/sdf-zombie/webgpu/game-spawn.ts`.
 Off-limits: `game-actor.ts` (Task 6).
+
+Spawns: a released gun, a shed kit piece and an ejected casing seed `floorY` with the body's (or the shooter's) floor,
+and their start is clamped inside the level with the Task 2 spawn clamp from the body centre, per the decision
+"Spawns start inside the level". Casings pass radius 0 (the 1 cm skin covers them).
 
 - [ ] **Step 1: Failing tests.** `prop-drop.test.ts`:
 
@@ -720,7 +829,7 @@ it('rests on the floor under the shell (sector levels)', () => {
   let vel: Vec3 = [s.vel[0], s.vel[1] + DROP.gravity * dt, s.vel[2]];
   let pos = add(s.pos, scale(vel, dt));
   if (ground) {
-    const b = ground.bounce(s.pos, pos, vel, DROP.restitution, DROP.friction);
+    const b = ground.bounce(s.pos, pos, vel, DROP.restitution, DROP.friction, DROP.radius /* a half-extent; add to DROP */);
     if (b) { pos = b.pos; vel = b.vel; }
   }
   const base = ground ? landingFloor(ground, pos[0], pos[2], s.floorY ?? floorY) : floorY;
@@ -751,7 +860,7 @@ it('rests on the floor under the shell (sector levels)', () => {
   and add `debris(): { pos: Vec3; resting: boolean }[]` returning every live shell's position and flag.
 - [ ] **Step 5: `kit-damage.ts` / `kit-overlay.ts`.** `update(body, wounds, bodyYaw, dt, armor?, ground?: DebrisGround | null)`;
   each drop keeps `floorY` (init 0); in the drop loop keep the centre before the move, apply
-  `ground.bounce(start, centre, velocity, .22, .6)` to `d.mesh.position` / `d.velocity` when given, then
+  `ground.bounce(start, centre, velocity, .22, .6, radius)` (radius: the piece's bounds half-extent in x/z) to `d.mesh.position` / `d.velocity` when given, then
 
 ```ts
         const lift = ground ? (d.floorY = landingFloor(ground, d.mesh.position.x, d.mesh.position.z, d.floorY)) + .01 : .01;
@@ -924,7 +1033,7 @@ it('no ground: no floorY key, the same flight as before', () => {
   let hit = false;
   const contactSpeeds: number[] = [];
   if (ground) {
-    const b = ground.bounce(s.pos, pos, vel, T.elastic, 1);
+    const b = ground.bounce(s.pos, pos, vel, T.elastic, 1, radius /* the bundle's collision radius */);
     if (b) {
       pos[0] = b.pos[0]; pos[2] = b.pos[2]; vel[0] = b.vel[0]; vel[2] = b.vel[2];
       hit = true;

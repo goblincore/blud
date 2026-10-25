@@ -15,13 +15,19 @@ export interface WallBounce {
 }
 
 export interface DebrisGround {
-  /** Floor height under (x, z); NaN off the map (a column hole, the void). */
+  /** Floor height under (x, z); NaN off the map (a column hole, the void). A piece's floor is the floor under its
+   *  CENTRE (a long piece straddling a riser may hang or sink half its length: accepted for 3b). */
   floorAt(x: number, z: number): number;
-  /** The piece moved prev → next with velocity vel. If that move crossed a sector wall at the start height (a
-   *  one-sided line, a riser higher than the piece, a lip lower than it), the piece stops 1 cm short of the wall:
-   *  the normal velocity reflects × `restitution`, the tangential keeps × `friction`, y is next's. Null when nothing
-   *  was crossed (or prev is off the map: nothing to judge against). */
-  bounce(prev: Vec3, next: Vec3, vel: Vec3, restitution: number, friction: number): WallBounce | null;
+  /** Ceiling height over (x, z): Infinity under sky, NaN off the map. Optional (a stepper with no ground, or a
+   *  ground without it, has no ceiling: treat as Infinity). */
+  ceilAt?(x: number, z: number): number;
+  /** The piece moved prev → next with velocity vel. If that move crossed a sector wall at the start height (clamped
+   *  into the start sector's floor..ceiling band: a one-sided line, a riser higher than the piece, a lip lower than
+   *  it), the piece's centre stops max(radius, 1 cm) short of the wall (the probe runs on `radius` past next, so the
+   *  leading edge meets it): the normal velocity reflects × `restitution`, the tangential keeps × `friction`, y is
+   *  next's. `radius` defaults to 0. Null when nothing was crossed (or prev is off the map: nothing to judge
+   *  against). */
+  bounce(prev: Vec3, next: Vec3, vel: Vec3, restitution: number, friction: number, radius?: number): WallBounce | null;
 }
 
 /** The floor a piece at (x, z) lands on: the floor there, or `last` (its previous floor) off the map. */
