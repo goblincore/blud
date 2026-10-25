@@ -15,5 +15,7 @@ describe('playerBlastDamage', () => {
   });
   it('measures to the capsule centre', () => {
     expect(blastToPlayer([0, 1, 0], [3, 0, 4], 2)).toBe(5);
+    // a blast at the feet: the centre rule gives √26 (the capsule's nearest point would give 5)
+    expect(blastToPlayer([0, 0, 0], [3, 0, 4], 2)).toBeCloseTo(Math.sqrt(26), 12);
   });
 });

@@ -29,6 +29,8 @@ const WALL_PARTS = ['upper', 'mid', 'lower'];
 const DOOR_KEYS = ['sector', 'speed', 'wait'];
 const MATERIAL_KEYS = ['floor', 'ceil', 'wall'];
 const BARREL_KEYS = ['id', 'pos'];
+/** How far a barrel's y may sit off the floor under it (float noise from the converter's unit scale). */
+const BARREL_FLOOR_TOLERANCE_M = 0.01;
 
 const backSideOnOneSided = (back: number, walls: NonNullable<SectorLine['walls']>) => back < 0 && walls.back !== undefined;
 
@@ -249,7 +251,15 @@ export function parseSectorLevel(raw: unknown, opts: ParseOptions = {}): LevelDe
     };
     listed(j.spawns).forEach((o, i) => { if (inVoid(posOf(o))) errors.push(`spawn ${label('spawn', o, i)}: must stand in a sector`); });
     listed(j.pickups).forEach((o, i) => { if (inVoid(posOf(o))) errors.push(`pickup ${label('pickup', o, i)}: must stand in a sector`); });
-    listed(j.barrels).forEach((o, i) => { if (inVoid(posOf(o))) errors.push(`barrel ${label('barrel', o, i)}: must stand in a sector`); });
+    listed(j.barrels).forEach((o, i) => {
+      const pos = posOf(o);
+      if (inVoid(pos)) { errors.push(`barrel ${label('barrel', o, i)}: must stand in a sector`); return; }
+      // A barrel is scenery on its floor: its y must be the floor under it (the converter writes exactly that).
+      if (Array.isArray(pos) && pos.length === 3 && pos.every(isNum)) {
+        const [x, y, z] = pos as number[];
+        if (Math.abs(y! - ground.floorAt(x!, z!)) > BARREL_FLOOR_TOLERANCE_M) errors.push(`barrel ${label('barrel', o, i)}: must stand on its floor`);
+      }
+    });
   }
 
   const shared: Json = {};

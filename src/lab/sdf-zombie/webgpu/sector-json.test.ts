@@ -126,6 +126,11 @@ describe('parseSectorLevel: barrels (plan 3b)', () => {
   it('refuses a barrel in the column hole', () => {
     expect(broken(j => { j.barrels.push({ id: 'b9', pos: [0, 0, -4] }); })).toThrow(/barrel b9: must stand in a sector/);
   });
+  it('refuses a barrel off its floor (more than 1 cm), accepts float noise', () => {
+    expect(broken(j => { j.barrels[0].pos = [6.2, -0.9, -7.0]; })).toThrow(/barrel b1: must stand on its floor/);
+    expect(broken(j => { j.barrels[3].pos = [-3.0, 0, -15.0]; })).toThrow(/barrel b4: must stand on its floor/);
+    expect(broken(j => { j.barrels[0].pos = [6.2, -1.005, -7.0]; })).not.toThrow();
+  });
   it('refuses a duplicate id', () => {
     expect(broken(j => { j.barrels.push({ id: 'b1', pos: [0, 0, -1] }); })).toThrow(/barrel b1: duplicate id/);
   });

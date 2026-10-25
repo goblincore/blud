@@ -82,7 +82,7 @@ optional argument.
   centre, a barrel whose centre, or the player whose capsule centre is behind a sector wall from the blast takes
   nothing. One probe per target. Room levels are unchanged (no filter).
 - **Barrel numbers (owner, 2026-10-25: use these, tune after playing):** radius 0.3 m, height 0.95 m, 20 HP; a pellet 4, a slug 20, a flail strike 10,
-  an enemy round 3; a blast lights every intact barrel whose centre is within 3.5 m (and not shielded) after
+  an enemy round 3; a blast lights every intact barrel whose centre is within 4.5 m, centre to centre in 3D (and not shielded; was 3.5 m — owner, 2026-10-25, after E1M1's spacing, see Owner decision 6) after
   0.1–0.3 s (FNV-1a of `id:blastCount`, deterministic, no RNG stream touched); a barrel shot to 0 HP goes up on the
   next barrel step (never inside the pellet loop); it explodes at its centre (floor + 0.475 m); the player takes up to
   55 HP, quadratic to 0 at 4.0 m. The blast itself (radius, wounds, gibs) is the dynamite blast unchanged.
@@ -1164,7 +1164,7 @@ export function createDebrisSeams(ctx: GameContext) {
   ]
 ```
 
-  (b1–b2 chain, 1.1 m apart; b3 is 6.2 m from b2, outside the 3.5 m catch; b4 stands on the C ledge; b5 is south of
+  (b1–b2 chain, 1.1 m apart; b3 is 6.2 m from b2, outside the 4.5 m catch; b4 stands on the C ledge; b5 is south of
   the column, so a player north of it is shielded.)
 - [ ] **Step 4 (Python, test first)** in `test_doom_map.py`. Append two things to `build_wad()`'s list (at the END, so
   every existing thing index and test stays put): `(64, 64, 0, 2035, 1)` — 8, a barrel in A on EASY only — and
@@ -1187,7 +1187,7 @@ export function createDebrisSeams(ctx: GameContext) {
   (`python3 scripts/levels/doom_map.py "$HOME/MIYOO BACKUP/Roms/PORTS/Games/Doom (PrBoom)/doom/doomu.wad" E1M1 --svg .lab-tmp/doom`)
   and parse it with `npx tsx -e` + `parseSectorLevel` (as plan 1 did) — it must pass. **Report the barrel count**: the 3a
   summary skipped six 2035s at skill 4; with skill ignored the owner expects 8 — report the count and how many
-  multiplayer-only barrels were still skipped (if that leaves fewer than 8, say so in the notes). `npx vitest run` the sector-json tests; typecheck. **Commit** (no generated files)
+  multiplayer-only barrels were still skipped (if that leaves fewer than 8, say so in the notes). (Result: 6 — 9 in the WAD, 3 multiplayer-only; Owner decision 7.) `npx vitest run` the sector-json tests; typecheck. **Commit** (no generated files)
   `feat(levels): barrels in the sector format; the converter keeps Doom's barrels`.
 
 ---
@@ -1326,7 +1326,7 @@ export const BARREL = {
   heightM: 0.95,
   hp: 20,
   damage: { pellet: 4, slug: 20, melee: 10, round: 3 },
-  catchRadiusM: 3.5,
+  catchRadiusM: 4.5,   // was 3.5 — Owner decision 6
   chainDelaySec: [0.1, 0.3] as const,
 } as const;
 
@@ -1631,8 +1631,9 @@ a pickup `y − floor` = 0.25 ± 0.001; a resting bundle `|y − floor| ≤ 0.01
   5. **Raised floor:** b4 stands at 1.5 (step 1) and `damageBarrel('b4')` leaves its scorch at y 1.504 ± 0.002 (read
      the scorch instance matrix through a seam if needed, or the stub's world y).
 - [ ] **Step 2: 7b, on E1M1:** `barrels()` count = the converter's (read the JSON), all on their floors;
-  `damageBarrel(<one with a neighbour within 3.5 m>)` → the chain ripples (log), with `god=0` a player 2 m away loses
-  health; budget at a barrel pose reported (draw calls, frame split); SHOTS `e1m1-barrels-0..2.png` before/after —
+  `damageBarrel('b48')` → the chain ripples to b50 (4.3 m centre to centre, E1M1's closest pair — the check that the
+  4.5 m reach chains on the real map; log b48 then b50 with a gap in 0.1–0.3 s ± one frame), with `god=0` a player
+  2 m away loses health; the fixture's b1–b2 chain (1.1 m, step 1.2) stays the short-range check; budget at a barrel pose reported (draw calls, frame split); SHOTS `e1m1-barrels-0..2.png` before/after —
   LOOK.
 - [ ] **Step 3: Run** the gate end to end twice (load average reported). **Commit**
   `test(levels): doom gate — barrels explode, chain, hurt and are shielded by walls`.
@@ -1669,9 +1670,16 @@ a pickup `y − floor` = 0.25 ± 0.001; a resting bundle `|y − floor| ≤ 0.01
 1. **Dynamite does not hurt the player** — enemies only, today's behaviour. `blast-player.ts` is used by rockets
    (unchanged rule) and barrels only.
 2. **Barrel numbers: the draft values** — 20 HP; pellet 4, slug 20, flail 10, enemy round 3; up to 55 to the player,
-   quadratic to 0 at 4 m; chains within 3.5 m after 0.1–0.3 s. Tune after playing.
+   quadratic to 0 at 4 m; chains within 3.5 m after 0.1–0.3 s. Tune after playing. (Chain reach later raised to
+   4.5 m — decision 6.)
 3. **All E1M1 barrels regardless of skill** (barrels are scenery): the converter ignores skill flags for barrels;
    Doom's multiplayer-only flag still skips one (the same rule as every other thing).
 4. **A destroyed barrel keeps blocking enemy pathing until reload** — accepted for 3b, listed as a known gap
    (controller default).
 5. **Barrels in room levels: later**, not in 3b.
+6. **Chain reach 4.5 m, Doom-like (owner, 2026-10-25, after E1M1's barrel spacing):** `BARREL.catchRadiusM` is 4.5,
+   centre to centre in 3D. E1M1's closest pair, b48–b50, is 4.3 m apart, so 3.5 m would never chain on E1M1. A lit
+   barrel caught by a second blast keeps its fuse; a gone barrel ignores it.
+7. **E1M1 has 6 barrels, not 8:** the WAD has 9 type-2035 things, 3 of them multiplayer-only (flag 16, still
+   skipped); the skill filter changes nothing (6 at skill 1, 4 and 5). The sector parser now also refuses a barrel
+   whose y is more than 0.01 m off the floor under it (`barrel <id>: must stand on its floor`).

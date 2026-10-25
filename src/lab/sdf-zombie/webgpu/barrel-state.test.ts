@@ -20,6 +20,24 @@ describe('barrels', () => {
     expect(lit[1]!.fuse).toBe(chainDelay('b2', 1));
     expect(catchBlast(two(), [0, 0.5, 0], 1)).toEqual(lit);
   });
+  it('reaches 4.5 m centre to centre (E1M1 b48–b50 are 4.3 m apart), not further', () => {
+    const at = (x: number) => makeBarrels([{ id: 'a', pos: [0, 0, 0] }, { id: 'b', pos: [x, 0, 0] }]);
+    expect(BARREL.catchRadiusM).toBe(4.5);
+    expect(catchBlast(at(4.3), barrelCentre(at(4.3)[0]!), 1)[1]!.phase).toBe('lit');
+    expect(catchBlast(at(4.5), barrelCentre(at(4.5)[0]!), 1)[1]!.phase).toBe('lit');
+    expect(catchBlast(at(4.51), barrelCentre(at(4.51)[0]!), 1)[1]!.phase).toBe('intact');
+    const up = makeBarrels([{ id: 'a', pos: [0, 0, 0] }, { id: 'b', pos: [4.3, 1.5, 0] }]);   // 3D: √(4.3² + 1.5²) ≈ 4.55
+    expect(catchBlast(up, barrelCentre(up[0]!), 1)[1]!.phase).toBe('intact');
+  });
+  it('a second blast keeps a lit barrel\'s fuse and leaves a gone barrel gone', () => {
+    const first = catchBlast(two(), [0, 0.5, 0], 1);
+    const again = catchBlast(first, [0, 0.5, 0], 2);
+    expect(again[0]!.fuse).toBe(first[0]!.fuse); expect(again[0]!.phase).toBe('lit');
+    expect(again[0]).toBe(first[0]);
+    const gone = stepBarrels([hitBarrel(two()[0]!, 'slug')], 1 / 60).barrels;
+    const after = catchBlast(gone, [0, 0.5, 0], 3);
+    expect(after[0]!.phase).toBe('gone'); expect(after[0]).toBe(gone[0]);
+  });
   it('a shielded barrel does not catch', () => {
     const lit = catchBlast(two(), [0, 0.5, 0], 1, (_a, b) => b[0] > 1);
     expect(lit[1]!.phase).toBe('intact');
