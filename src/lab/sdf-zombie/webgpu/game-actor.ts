@@ -50,7 +50,7 @@ import {
 } from './game-weapon';
 import {
   makeMotionJoints, makeMotionState, stepMotion, planSubSteps,
-  applyFloorContact, MOTION_TUNING, STANDING_RIG,
+  applyFloorContact, FALL_DROP_M, MOTION_TUNING, STANDING_RIG,
   type MotionJoints, type MotionState, type MotionSignals,
 } from '../motion';
 import { makeRng, headingDir, type Rng, type WanderBounds } from '../wander';
@@ -1699,13 +1699,20 @@ export function createZombieActor(opts: {
       if (fistTips && f.gun && !f.collapsed && !propReleaseRequested) {
         points = pinTips(points, fistTips.tips, f.bodyYaw, f.restPose, fistTips.only);
       }
+      // SECTOR LEVELS (plan 3b): a corpse meets the floor under each point (an arm over a ledge hangs
+      // down it) but never climbs more than FALL_DROP_M (a ledge wall is not a floor). Relative to the
+      // body's own contact plane f.floorY. Room levels (no ground): undefined, the one-plane calls.
+      const pointFloor = ground && f.collapsed ? (x: number, z: number): number => {
+        const d = ground.floorAt(x, z) - state.floorY;
+        return f.floorY + (!Number.isFinite(d) || d > FALL_DROP_M ? 0 : d);
+      } : undefined;
       if (f.collapsed) {
-        points = applyFloorContact(points, f.floorY);
+        points = applyFloorContact(points, f.floorY, undefined, undefined, pointFloor);
       }
       bound = {
         ...bound,
         rig: constrainRigBends({ ...bound.rig, points, headFollowsRig: soldierDamage && f.collapsed, restPose: f.restPose, bodyYaw: f.bodyYaw, jawGape: f.jawGape },
-          f.collapsed ? f.floorY : undefined),
+          f.collapsed ? f.floorY : undefined, pointFloor),
       };
       for (const kick of f.kicks) {
         const i = joints.index[kick.joint];

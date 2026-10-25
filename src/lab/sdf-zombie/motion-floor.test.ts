@@ -6,7 +6,7 @@
 // recorded digests below were taken from motion.ts before the change, -0 included.
 import { describe, it, expect } from 'vitest';
 import {
-  FLOOR_EASE_MPS, makeMotionJoints, makeMotionState, MOTION_TUNING, stepMotion,
+  applyFloorContact, FALL_DROP_M, FALL_GRAVITY, FLOOR_EASE_MPS, makeMotionJoints, makeMotionState, MOTION_TUNING, stepMotion,
   type MotionConfig, type MotionFrame, type MotionJoints, type MotionSignals, type MotionState,
 } from './motion';
 import { buildBody } from './build-body';
@@ -116,6 +116,12 @@ describe('no floorAt: frames are exactly the frames before floorY existed', () =
       ...(i > 40 ? { faceHeading: 1.2 } : {}) }), 240, i => SIG({ downed: i >= 170, fatal: i >= 170 }));
     expect(digest(r.frames, r.states)).toBe(RECORDED.soldier);
   });
+
+  it('carries no floorVel (the ledge fall is sector-level state only)', () => {
+    const j = zombieJoints();
+    const r = run(j, cruising(7), { enabled: true, wander: true }, 30);
+    for (const s of r.states) expect('floorVel' in s).toBe(false);
+  });
 });
 
 const RECORDED = {
@@ -207,5 +213,66 @@ describe('floorAt: the body stands on the floor under it', () => {
     const r = run(j, cruising(3, 1), { enabled: true, wander: true, floorAt: () => 1 }, 30,
       () => SIG({ forcedCollapse: true }), 1);
     expect(r.frames[29]!.floorY).toBeCloseTo(j.groundY - MOTION_TUNING.floorPad + 1, 12);
+  });
+});
+
+// Plan 3b Task 6: a drop over FALL_DROP_M falls under gravity; a step down still eases.
+describe('floorAt: bodies fall off ledges', () => {
+  it('falls 3 m under gravity, not at the ease rate, and lands with floorVel 0', () => {
+    expect(FALL_DROP_M).toBe(0.75);
+    expect(FALL_GRAVITY).toBe(9.81);
+    const j = zombieJoints();
+    const r = run(j, cruising(7), i => ({ enabled: true, wander: true, floorAt: () => (i < 60 ? 0 : -3) }), 120);
+    expect(r.states[59]!.floorY).toBe(0);
+    // 0.2 s into the fall: free fall has dropped ½·9.81·0.2² ≈ 0.2 m (easing would have done 1.2 m).
+    const at02 = r.states[59 + 12]!;
+    expect(-at02.floorY).toBeLessThan(0.3);
+    expect(-at02.floorY).toBeGreaterThan(0.15);
+    expect(at02.floorVel).toBeLessThan(0);
+    // Monotonic, never below the floor it lands on.
+    let prev = 0;
+    for (const s of r.states.slice(60)) {
+      expect(s.floorY).toBeLessThanOrEqual(prev);
+      expect(s.floorY).toBeGreaterThanOrEqual(-3);
+      prev = s.floorY;
+    }
+    // A 3 m free fall takes 0.78 s: landed by 0.9 s, at rest.
+    const at09 = r.states[59 + 54]!;
+    expect(at09.floorY).toBe(-3);
+    expect(at09.floorVel).toBe(0);
+    expect(r.state.floorY).toBe(-3);
+    expect(r.state.wander.pos[1]).toBe(-3);
+    expect(r.frames[r.frames.length - 1]!.rootShift[1]).toBe(-3);
+  });
+
+  it('a step down (0.5 m) still eases at FLOOR_EASE_MPS with floorVel 0', () => {
+    const j = zombieJoints();
+    const r = run(j, cruising(7), i => ({ enabled: true, wander: true, floorAt: () => (i < 30 ? 0 : -0.5) }), 90);
+    let prev = 0;
+    for (const s of r.states) {
+      expect(prev - s.floorY).toBeLessThanOrEqual(FLOOR_EASE_MPS * DT + 1e-12);
+      expect(s.floorY).toBeLessThanOrEqual(prev);
+      expect(s.floorVel).toBe(0);
+      prev = s.floorY;
+    }
+    expect(r.state.floorY).toBe(-0.5);
+  });
+});
+
+describe('applyFloorContact: the floor under each point', () => {
+  const pts = (): RigPoint[] => [
+    { pos: [0.5, -0.5, 0], prev: [0.5, -0.45, 0], pinned: false },
+    { pos: [-0.5, 0.05, 0], prev: [-0.5, 0.1, 0], pinned: false },
+  ];
+  it('keeps a point above its own (lower) floor and lifts one below its floor', () => {
+    const out = applyFloorContact(pts(), 0.1, undefined, undefined, x => (x > 0 ? -0.9 : 0.1));
+    expect(out[0]).toEqual(pts()[0]);
+    expect(out[1]!.pos[1]).toBe(0.1);
+  });
+  it('with no floorAt, is the one-plane call', () => {
+    const a = applyFloorContact(pts(), 0.1);
+    expect(applyFloorContact(pts(), 0.1, undefined, undefined, undefined)).toEqual(a);
+    expect(a[0]!.pos[1]).toBe(0.1);
+    expect(a[1]!.pos[1]).toBe(0.1);
   });
 });

@@ -147,9 +147,12 @@ export const MOTION_TUNING = {
 } as const;
 
 /** How fast a body's feet height (MotionState.floorY) follows the floor under it, m/s: the
- *  player's eye-step rate (game-player.ts), so a body never pops up a step, and drops ease at the
- *  same rate (a falling body is plan 3b's business). */
+ *  player's eye-step rate (game-player.ts), so a body never pops up a step, and a step down eases
+ *  at the same rate. Drops over FALL_DROP_M fall under FALL_GRAVITY instead (plan 3b). */
 export const FLOOR_EASE_MPS = 6;
+/** A floor drop bigger than this FALLS under gravity instead of easing (spec §6.2's step rule, 24 Doom units). */
+export const FALL_DROP_M = 0.75;
+export const FALL_GRAVITY = 9.81;
 
 /** Hip-fire knobs. */
 export const FIRE = {
@@ -372,6 +375,9 @@ export interface MotionState {
    *  It is the root shift's y and lifts every world-plane use of joints.groundY. 0 on room levels
    *  (no floorAt), where every frame is exactly what it was before this field existed. */
   floorY: number;
+  /** Sector levels: the body's vertical speed while it falls off a ledge (m/s, ≤ 0). Absent on
+   *  room levels. */
+  floorVel?: number;
 }
 
 /** A fresh motion state: standing at `start`, idle, clock at zero. */
@@ -683,14 +689,23 @@ export function stepMotion(
     ] };
   }
   // --- the floor under the root (sector levels) -----------------------------
-  // feetY eases toward cfg.floorAt at FLOOR_EASE_MPS; the wander root rides it. No floorAt: it
-  // stays at the state's floor (0 on room levels) and nothing below changes by a bit.
+  // feetY eases toward cfg.floorAt at FLOOR_EASE_MPS, or falls under FALL_GRAVITY when the floor
+  // drops by more than FALL_DROP_M; the wander root rides it. No floorAt: it stays at the state's
+  // floor (0 on room levels) and nothing below changes by a bit.
   let feetY = state.floorY;
+  let floorVel = state.floorVel ?? 0;
   if (cfg.floorAt) {
     const want = cfg.floorAt(wander.pos[0], wander.pos[2]);
     if (Number.isFinite(want)) {
-      const max = FLOOR_EASE_MPS * dt;
-      feetY = Math.abs(want - feetY) <= max ? want : feetY + Math.sign(want - feetY) * max;
+      if (floorVel < 0 || want < feetY - FALL_DROP_M) {
+        // A DROP (a ledge, a pit, a blast's knock over the edge): fall, land on the floor.
+        floorVel -= FALL_GRAVITY * dt;
+        feetY = Math.max(want, feetY + floorVel * dt);
+        if (feetY === want) floorVel = 0;
+      } else {
+        const max = FLOOR_EASE_MPS * dt;
+        feetY = Math.abs(want - feetY) <= max ? want : feetY + Math.sign(want - feetY) * max;
+      }
     }
   }
   if (wander.pos[1] !== feetY) wander = { ...wander, pos: [wander.pos[0], feetY, wander.pos[2]] };
@@ -1536,6 +1551,7 @@ export function stepMotion(
     lastShift: shift,
     fallShift: collapsed ? (state.fallShift ?? shift) : null,
     floorY: feetY,
+    ...(cfg.floorAt ? { floorVel } : {}),
   };
 
   return {
@@ -1615,10 +1631,13 @@ export function applyFloorContact(
   groundY: number,
   restitution: number = COLLAPSE_TUNING.groundRestitution,
   friction: number = COLLAPSE_TUNING.groundFriction,
+  floorAt?: (x: number, z: number) => number,
 ): RigPoint[] {
   return points.map(p => {
     if (p.pinned) return p;
-    if (p.pos[1] >= groundY) return p;
+    // Sector levels: the contact plane under THIS point (an arm over a ledge hangs down it).
+    const g = floorAt ? floorAt(p.pos[0], p.pos[2]) : groundY;
+    if (p.pos[1] >= g) return p;
     const vy = p.pos[1] - p.prev[1]; // per-frame fall displacement
     const bounce = vy < 0 ? -vy * restitution : 0;
     const still = bounce < MOTION_TUNING.restCutoff;
@@ -1626,8 +1645,8 @@ export function applyFloorContact(
     const vz = (p.pos[2] - p.prev[2]) * friction;
     return {
       pinned: false,
-      pos: [p.pos[0], groundY, p.pos[2]],
-      prev: [p.pos[0] - vx, groundY - (still ? 0 : bounce), p.pos[2] - vz],
+      pos: [p.pos[0], g, p.pos[2]],
+      prev: [p.pos[0] - vx, g - (still ? 0 : bounce), p.pos[2] - vz],
     };
   });
 }

@@ -53,4 +53,22 @@ describe('an actor on a sector floor', () => {
     const lo = (prims: ReturnType<typeof flat.posed>['prims']) => Math.min(...prims.map(p => Math.min(p.a[1]!, p.b[1]!)));
     expect(lo(up.posed().prims)).toBeCloseTo(lo(flat.posed().prims) + 0.5, 6);
   });
+
+  // Plan 3b Task 6: a collapsed body meets the floor under each rig point, never climbing more than
+  // FALL_DROP_M: a corpse at a pit's lip hangs into it; one against a high ledge wall lies as on flat.
+  it('a corpse hangs into a pit beside it and ignores a ledge wall higher than FALL_DROP_M', () => {
+    const [x, , z] = spawnPoints(ROOMS[0]!)[0]!;
+    const ring = (inside: number, outside: number) => ({ ...FLAT_GROUND,
+      floorAt: (px: number, pz: number) => (Math.hypot(px - x, pz - z) > 0.3 ? outside : inside) });
+    const flat = actorAt([x, 0, z], ring(0, 0));
+    const pit = actorAt([x, 0, z], ring(0, -2));
+    const wall = actorAt([x, 0, z], ring(0, 2));
+    const all = [flat, pit, wall];
+    for (const a of all) a.blast({ wounds: [], meterCredit: 0, impulse: null, reaction: 'none', forceCollapse: true });
+    for (let f = 0; f < 240; f++) for (const a of all) a.step(1 / 60);
+    for (const a of all) expect(a.debug().phase).not.toBe('standing');
+    const lo = (a: typeof flat) => Math.min(...a.posed().prims.map(p => Math.min(p.a[1]!, p.b[1]!)));
+    expect(lo(pit)).toBeLessThan(lo(flat) - 0.3);
+    expect(wall.posed().prims.map(p => [...p.a, ...p.b])).toEqual(flat.posed().prims.map(p => [...p.a, ...p.b]));
+  });
 });

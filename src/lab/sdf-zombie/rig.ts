@@ -110,8 +110,12 @@ export interface RigGuardLimb {
  * length and permitted recoil. The wrist slides to the allowed boundaries;
  * shoulder and elbow remain where physics put them.
  * Pure so both the impulse path and post-integration callers can use it.
+ * `floorY` is the floor fallback's plane; `floorAt` (sector levels) replaces it with the floor
+ * under the wrist, so a forearm over a ledge hangs down it instead of being held level.
  */
-export function constrainRigBends(state: RigState, floorY?: number): RigState {
+export function constrainRigBends(
+  state: RigState, floorY?: number, floorAt?: (x: number, z: number) => number,
+): RigState {
   let points = state.points;
   for (const bend of state.bends ?? []) {
     const root = points[bend.root]!, mid = points[bend.mid]!, end = points[bend.end]!;
@@ -141,7 +145,8 @@ export function constrainRigBends(state: RigState, floorY?: number): RigState {
       dir = len(tangent) < 1e-8 ? normalize(upper) : normalize(tangent);
     }
     let pos = add(mid.pos, scale(dir, foreLength));
-    if (floorY !== undefined && pos[1] < floorY && mid.pos[1] >= floorY) {
+    const fy = floorAt ? floorAt(pos[0], pos[2]) : floorY;
+    if (fy !== undefined && pos[1] < fy && mid.pos[1] >= fy) {
       // Floor contact already positioned the elbow above ground. A horizontal
       // forearm in the allowed half-plane satisfies BOTH constraints without
       // shortening the segment or undoing contact by pushing the wrist down.
