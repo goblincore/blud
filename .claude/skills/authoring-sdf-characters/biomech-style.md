@@ -565,3 +565,51 @@ floater: a flesh ball with one eye and a maw. It was the first test of whether t
 - A ranged enemy without a held prop: `MotionProfile.spit` fires from a rig point plus a body-local offset (the
   teratoma's maw), using the warbull's slow rocket as its fireball. A real flying mind (holding altitude, strafing
   over cover) is still missing.
+
+### The gutcrawler: a crawl that reads, and a design found in review (2026-10-23)
+
+The gutcrawler (`characters/gutcrawler.blob`) went through six looks in one day, the owner steering from renders: a
+lizard-man ("a lizard and a snake meets a hominid ... not creepy"), a belly-up man with his head hanging upside down,
+then "bigger, like a fat worm / giant maggot", a "semi normal" head, "like a naked mole", and a star-nosed mole's tube
+snout for a mouth. What carried over, and what it added:
+
+- **Creepy is a recognisable human made wrong, not a monster.** The lizard-man had human arms and still read as an
+  animal. What landed: a man's chest, arms and face stuck on the front of something that is not a man. Make the body
+  grow bigger and stranger, keep the human part plainly human.
+- **The cast has ball fists, not hands** (owner: "that's the way hands are in this universe"). Fingers add animation
+  weight for nothing. One round blob on the hand bone.
+- **One source for the eyes.** Black eye prims painted over a face decal's eyes fought it. Paint the change INTO the face
+  image instead: `gutcrawler-face.png` is `female-face.png` run through PIL (desaturated toward pink, hair painted out,
+  the eyes squeezed to slits, the mouth painted out under the snout). Cheap, and the face stays one image.
+- **The generated head is upright at REST whatever way the skull bone points** (its prims are only translated), so a
+  cocked or upside-down head needs its own prims. The decal can be flipped upside down (a negative `projScaleY`), not
+  turned sideways.
+- **A legless body is not a body that lost its legs.** The lab and the game called a limb with no cluster "missing",
+  and `collapse.ts` dropped the gutcrawler flat every frame (the teratoma's floater hit the same thing the same day:
+  `game-actor.ts` / `lab-main.ts` now only count limbs the body was born with). The node walk dumps never showed it:
+  they pass `emptyActorSignals()`. Pass the signals the game sends (`gutcrawler-blob.test.ts` does).
+
+**Making a drag read** (`gait.ts` CRAWL_DRAG; each new knob is opt-in and inert for every other body):
+
+- **Bend the arm at rest.** Authored nearly straight, the fists planted at full stretch and the elbows never bent: a
+  glide. At rest the shoulder-to-fist distance should be ~2/3 of the chain, so a haul can fold it right up.
+- **`elbowPole`**: the planted arm's IK pole, body-local. A dog's elbow points back; a man hauling himself along a floor
+  points his elbows up and out.
+- **`crawlRoll`**: the shoulder over the planted fist drops and the reaching one rises; the chest leans onto the
+  hauling arm.
+- **`rockAmp` as a surge**: the body lurches forward on each pull instead of gliding at a constant speed.
+- **`undulate` and a pendulum chain**: one rigid `hem` stick read as a needle ("so stiff"). Bones `hem2` (parent hem)
+  and `hem3` (parent hem2) are now pendulum points like the hem (`rig-bind.ts` PENDULUM_CHAIN; not `tail2`/`tail3`,
+  which the cyclops, dragon and gargoyle use for anatomy: the first names caught them), and the body wave
+  runs from the shoulders down the chain with growing swing and lag, so a grub's rear rings writhe as it hauls.
+- **Judge it travelling.** `BLOB_WALK_SWEEP` holds the walk on a treadmill, where a planted fist is never hauled past and
+  the arms read as straight sticks. `BLOB_WALK_TRAVEL=1` walks the sweep straight ahead with the camera following.
+
+**The rear-and-slam** (`hound-attack.ts` 'slam', `GUTCRAWLER_TUNING`): a grub cannot bite or leap, so it rears its front
+half off the floor (both fists over its head, its own long clock: the rear is the threat) and slams it down, snout
+first, surging ~0.9 m (`slamAdvance`). A first pass that lifted the chest 0.30 m read as a shrug on a 2.2 m body.
+
+**Shooting a long, low body**: `blob:shot` reuses ANY Vite already on 5233, including another worktree's, and then
+renders that checkout without a word; give each worktree its own `LAB_VITE_PORT`/`LAB_CDP_PORT` and read the
+`lab-servers: starting vite` line. The lab's 0.4 m reference cube hides a body this low (hide it in a `BLOB_PROBE`), and
+`BLOB_TARGET_X`/`BLOB_TARGET_Z` move the orbit centre to a head 0.8 m from the origin.

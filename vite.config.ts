@@ -174,6 +174,16 @@ const namesTestFiles = (() => {
   return args.slice(i + 1).some(a => !a.startsWith('-'));
 })();
 const skipSlow = !process.env.VITEST_ALL && !namesTestFiles;
+/**
+ * THE GPU GROUP: `*.gpu.test.ts` run WebGPU compute through Dawn (scripts/lib/dawn-field.ts) and are held to the CPU
+ * field (the body-normal bake parity, docs/superpowers/specs/2026-10-24-gpu-body-normal-bake-design.md). They run
+ *   - in the gpu-parity CI job (`npm run test:gpu`, i.e. VITEST_GPU=1: these files ONLY, on lavapipe, with
+ *     BLUD_REQUIRE_GPU=1 so a missing adapter fails rather than skips);
+ *   - whenever you NAME one, like the slow group.
+ * Never in the sharded `test` job, whose runners have no Vulkan driver installed.
+ */
+const gpuOnly = !!process.env.VITEST_GPU;
+const GPU_TESTS = '**/*.gpu.test.ts';
 
 export default defineConfig({
   // Worktrees share node_modules, but must not overwrite another dev server's
@@ -205,7 +215,7 @@ export default defineConfig({
     // which are written for `node --test` and report "No test suite found" under
     // vitest. `npm test` has never covered them, and a config change must not
     // silently change what `npm test` means. Add a new .mjs vitest suite here.
-    include: [
+    include: gpuOnly ? [`scripts/${GPU_TESTS}`, `src/${GPU_TESTS}`] : [
       'src/**/*.test.ts',
       'scripts/**/*.test.ts',
       'scripts/census-diff.test.mjs',
@@ -217,7 +227,10 @@ export default defineConfig({
       'scripts/lib/march-depth-guard.test.mjs',
       'scripts/sdf-melee-stage.test.mjs',
     ],
-    exclude: ['**/node_modules/**', '**/.claude/**', 'docs/**', 'dist/**', ...(skipSlow ? SLOW_TESTS : [])],
+    exclude: [
+      '**/node_modules/**', '**/.claude/**', 'docs/**', 'dist/**',
+      ...(skipSlow && !gpuOnly ? SLOW_TESTS : []), ...(gpuOnly || namesTestFiles ? [] : [GPU_TESTS]),
+    ],
   },
   build: {
     rollupOptions: {

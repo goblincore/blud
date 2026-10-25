@@ -27,7 +27,7 @@ import { bodyInSight } from './actor-sight';
 import { connectionBlobsForSim } from './blood-connections';
 import { type EncounterAgent } from './encounter-director';
 import { reticleNdc } from './fisheye';
-import { approachAngle, approachBob, bobPose, pivotOffset, turnFromAim, weaponAngles, weaponSlide } from './free-aim';
+import { approachAngle, approachBob, bobPose, pivotOffset, turnFromAim, viewmodelFrustum, weaponAngles, weaponSlide } from './free-aim';
 import { segmentHitsBox, type ZombieActor } from './game-actor';
 import { registerBleed, stepGutRopes, throwGunFlesh } from './game-bleed';
 import { cancelChunkBake, finishChunkBake } from './game-chunk-bake';
@@ -55,7 +55,7 @@ import { applyTrainCamera, lightSteam, stepTrain } from './game-train';
 import { setShellHold } from './game-arms';
 /** The rig's toward-the-viewer direction: the fore hand's turn rolls its thumb this way. */
 const TOWARD_VIEWER = new THREE.Vector3(0, 0, 1);
-import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell, extractStage, extractorOffset, fireRecoil, insertStage, HOLD_POSE_END_SEC, coverRoll, loadCarry, loadHold, reloadPhaseAt, reloadPose, stagedShellCenter, supportHandPose, topLeverAngle, type HandDelta, type HandHold } from './game-viewmodel';
+import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell, extractStage, extractorOffset, fireRecoil, insertStage, HOLD_POSE_END_SEC, coverRoll, loadCarry, loadHold, recoilAge, reloadPhaseAt, reloadPose, stagedShellCenter, supportHandPose, topLeverAngle, type HandDelta, type HandHold } from './game-viewmodel';
 import { stepVoid } from './game-void';
 import { carryFreshShots, expired, stepProjectiles, traceProjectile } from './game-weapon';
 import { aimArms, aimFrustum, boreFrameInRig, breechInRig, hideTracer, newTracerView, placeTracer, stepWeaponSlots } from './game-weapon-rig';
@@ -517,7 +517,10 @@ export function tick(ctx: GameContext, dt: number) {
       Math.max(-PLAYER.pitchLimit, ctx.player.player.pitch + turn.pitch));
   }
   {
-    const w = ctx.player.freeAimOn ? weaponAngles(ctx.weapon.aim, aimFrustum(ctx)) : { yawDeg: 0, pitchDeg: 0 };
+    // Through the view model's own FOV scale, or the barrel points short of
+    // the reticle by exactly that scale (free-aim.ts viewmodelFrustum).
+    const vf = viewmodelFrustum(aimFrustum(ctx), ctx.weapon.fovRig?.scale.x ?? 1);
+    const w = ctx.player.freeAimOn ? weaponAngles(ctx.weapon.aim, vf) : { yawDeg: 0, pitchDeg: 0 };
     ctx.weapon.yawDeg = approachAngle(ctx.weapon.yawDeg, w.yawDeg, dt);
     ctx.weapon.pitchDeg = approachAngle(ctx.weapon.pitchDeg, w.pitchDeg, dt);
     // ...and the weapon CARRIES across the frame as well as turning. Rotation
@@ -618,7 +621,8 @@ export function tick(ctx: GameContext, dt: number) {
   const reloading = ctx.weapon.reloadAge <= RELOAD.totalSec;
   if (reloading) ctx.weapon.reloadAge += dt * ctx.weapon.reloadSpeed;
   const rp = reloading ? reloadPose(ctx.weapon.reloadAge) : { roll: 0, pitch: 0, dy: 0, dz: 0, hinge: 0 };
-  const rc = fireRecoil(ctx.weapon.fireAge, ctx.weapon.fireBarrels);
+  // One frame late: the flash frame holds the gun where it fired (recoilAge).
+  const rc = fireRecoil(recoilAge(ctx.weapon.fireAge, dt), ctx.weapon.fireBarrels);
   if (ctx.weapon.gunGroup) {
     ctx.weapon.gunGroup.rotation.z = THREE.MathUtils.degToRad(GUN_REST.rollDeg + rp.roll + rc.roll);
     ctx.weapon.gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg + rp.pitch + rc.pitch);

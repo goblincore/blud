@@ -429,6 +429,19 @@ const RECOIL_SHAPE_PEAK = (() => {
 })();
 
 /**
+ * The clock fireRecoil runs on: the shot's age as of the PREVIOUS frame, so the
+ * frame the flash first shows (fireAge = that frame's dt) poses the gun at rest
+ * and the kick starts on the frame after it. Run on fireAge itself, the curve
+ * was already ~75% of its peak by the first 30 fps frame, so the flash burned
+ * off a gun that had already jumped back and sideways (shoved back along a
+ * yawed bore) -- away from where the shot actually went. Counted in frames,
+ * not a fixed delay, so it is exactly one frame at any frame rate.
+ */
+export function recoilAge(fireAge: number, dt: number): number {
+  return fireAge - dt;
+}
+
+/**
  * Weapon recoil at `t` seconds since the shot, scaled by how many barrels went
  * off. Instant spike, then a decaying return that UNDERSHOOTS slightly before
  * settling — the small dip past rest is what makes it read as a mechanism

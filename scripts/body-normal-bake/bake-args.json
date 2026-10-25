@@ -1,0 +1,18 @@
+{
+  "_comment": "Every committed body normal map's bake command (scripts/bake-body-normal.ts <character> ...args), from the generator headers (scripts/*-detail-gen.ts). check-bake-args.test.ts holds each to its committed public/assets/lab/<character>-body-n.json region table. Two headers were wrong (flayer's forearm ranges are the other way round, venus's torso band is 256 rows); these are the arguments the committed maps were actually baked with.",
+  "butcher": ["512", "256", "--limb", "upperArm.l:0:1:0.15:96", "--limb", "foreArm.l:0:1:0.13:96", "--limb", "upperArm.r:0:1:0.15:96", "--limb", "foreArm.r:0:0.9:0.13:96"],
+  "chair": ["512", "320", "--limb", "clavicle.l:0:1:0.11:64", "--limb", "clavicle.r:0:1:0.11:64", "--limb", "upperarm.l:0:1:0.08:64", "--limb", "upperarm.r:0:1:0.08:64"],
+  "deadeye": ["512", "256", "--limb", "upperArm.l:0:1:0.15:96", "--limb", "foreArm.l:0:1:0.13:96", "--limb", "upperArm.r:0:1:0.15:96", "--limb", "foreArm.r:0:1:0.13:96"],
+  "flayer": ["512", "256", "--limb", "upperArm.l:0:1:0.15:96", "--limb", "foreArm.l:0:0.9:0.13:96", "--limb", "upperArm.r:0:1:0.15:96", "--limb", "foreArm.r:0:1:0.13:96"],
+  "gamer": ["512", "320", "--limb", "clavicle.l:0:1:0.15:64", "--limb", "clavicle.r:0:1:0.15:64", "--limb", "upperarm.l:0:1:0.10:64", "--limb", "upperarm.r:0:1:0.10:64",
+    "--limb", "skull:0:1:0.17:96", "--torso-seg", "stick:0,1.06,0.585:0,1.39,0.590:0.075:96",
+    "--torso-seg", "stalk1:0,0.95,0.385:0,0.985,0.535:0.085:48", "--torso-seg", "stalk2:0,0.985,0.535:0,1.065,0.588:0.085:48",
+    "--torso-seg", "forearm.l:0.33,1.03,0.08:0.08,1.13,0.58:0.085:64", "--torso-seg", "forearm.r:-0.33,1.03,0.08:-0.08,1.13,0.58:0.085:64",
+    "--torso-seg", "upperarm.l:0.255,1.33,0.048:0.31,1.02,0.135:0.095:64", "--torso-seg", "upperarm.r:-0.255,1.33,0.048:-0.31,1.02,0.135:0.095:64"],
+  "gibbet": ["512", "320", "--torso-axis", "0,1.12,-0.025:0,0.08,0.395", "--limb", "skull:0:1:0.14:96"],
+  "gorehound": ["512", "320", "--torso-axis", "0,0.86,-0.34:0,0.94,1.06", "--limb", "upperarm.l:0:1:0.20:96", "--limb", "upperarm.r:0:1:0.20:96", "--limb", "thigh.l:0:1:0.21:96", "--limb", "thigh.r:0:1:0.21:96"],
+  "gutcrawler": ["768", "640", "--torso-axis", "0,0.10,-1.14:0,0.30,0.64", "--limb", "upperarm.l:0:1:0.12:128", "--limb", "upperarm.r:0:1:0.12:128", "--limb", "forearm.l:0:1:0.10:128", "--limb", "forearm.r:0:1:0.10:128"],
+  "teratoma": ["512", "256"],
+  "twinhead": ["512", "256", "--limb", "upperarm.l:0:1:0.17:96", "--limb", "forearm.l:0:0.5:0.13:48", "--limb", "upperarm.r:0:1:0.17:96", "--limb", "forearm.r:0:0.5:0.13:48"],
+  "venus": ["512", "256", "--limb", "upperarm.l:0:1:0.15:96", "--limb", "upperarm.r:0:1:0.15:96", "--limb", "thigh.l:0:1:0.20:128", "--limb", "thigh.r:0:1:0.20:128"]
+}

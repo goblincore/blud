@@ -14,6 +14,7 @@
     "test:changed": "node scripts/test-changed.mjs",
     "test:all": "VITEST_ALL=1 vitest run",
     "test:slow": "node scripts/test-slow.mjs",
+    "test:gpu": "VITEST_GPU=1 vitest run",
     "typecheck": "tsc --noEmit",
     "blob:measure": "tsx scripts/blob-measure.ts",
     "blob:rings": "tsx scripts/blob-rings.ts",
@@ -51,6 +52,7 @@
     "tsx": "^4.23.0",
     "typescript": "^5.6.0",
     "vite": "^5.4.0",
-    "vitest": "^2.1.0"
+    "vitest": "^2.1.0",
+    "webgpu": "0.6.2"
   }
 }

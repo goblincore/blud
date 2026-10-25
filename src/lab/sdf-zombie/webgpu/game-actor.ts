@@ -1524,7 +1524,7 @@ export function createZombieActor(opts: {
           // Absent on every other frame (motion.ts bit-identity contract).
           ...(swingPin === null && think.attack?.variant === 'lunge'
             ? { plantReach: SWORD_TUNING.lungePlantReach }
-            : swingPin === null && (think.attack?.variant === 'pounce' || think.attack?.variant === 'stab')
+            : swingPin === null && (think.attack?.variant === 'pounce' || think.attack?.variant === 'stab' || think.attack?.variant === 'slam')
               ? { plantReach: HOUND_TUNING.pouncePlantReach }
               : {}),
         },

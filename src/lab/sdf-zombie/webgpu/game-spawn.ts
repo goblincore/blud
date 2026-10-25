@@ -44,6 +44,7 @@ import { applyWoundRamp, faceFor } from './game-wound-vfx';
 import { ZOMBIE_FLAT, headShape } from './game-zombie-face';
 import { type LevelRoom } from './level-def';
 import { VITALS } from './player-vitals';
+import { GUTCRAWLER_TUNING } from '../hound-attack';
 import { rngStreams, seedFromUnit } from './rng';
 import { CONE_LAYER, DEPTH_PREPASS_LAYER, REFINE_LAYER, SDF_LAYER } from './sdf-layer';
 import { type GpuViewOpts } from './zombie-gpu';
@@ -377,6 +378,11 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
     ...(characterEntry(name).profile.melee?.kind === 'bite' ? {
       mind: makeHoundMind(),
     } : {}),
+    // A SLAM profile (the gutcrawler): the hound mind rearing and slamming its front half down on the player, the
+    // surge as root advance (hound-attack.ts 'slam', GUTCRAWLER_TUNING).
+    ...(characterEntry(name).profile.melee?.kind === 'slam' ? {
+      mind: makeHoundMind(GUTCRAWLER_TUNING.brain),
+    } : {}),
     // A STAB profile (the gibbet): its spiked front legs up close and, at range, a glob of bile squirted from the
     // sac's drip (MotionProfile.spit) and LOBBED at the player's chest (bile.ts), enemy-mind.ts makeGibbetMind.
     ...(characterEntry(name).profile.melee?.kind === 'stab' ? {
@@ -450,7 +456,7 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, start:
       const charged = characterEntry(name).profile.charger && variant === 'shove';
       // The hound's jaws: a bite is the zombie's bite, a pounce lands the whole body.
       const jaws = variant === 'bite' ? VITALS.houndBite : variant === 'pounce' ? VITALS.houndPounce
-        : variant === 'stab' ? VITALS.gibbetStab : null;
+        : variant === 'stab' ? VITALS.gibbetStab : variant === 'slam' ? VITALS.crawlerSlam : null;
       damagePlayer(ctx, jaws ?? (charged ? VITALS.chargeHit : VITALS.swordHit), 'melee');
     },
     // HEAD POP (soft targets — the cultist, owner 2026-09-24: Scanners). The

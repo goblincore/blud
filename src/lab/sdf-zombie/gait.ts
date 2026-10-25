@@ -55,6 +55,11 @@ export type GaitJointName =
   // translation and yaw while the Verlet rig swings it on its constraint —
   // which is exactly the lag a robe's skirt should have (cultist, 2026-09-23).
   | 'hem'
+  // A PENDULUM CHAIN: further segments hung off the hem (bones `hem2` parent=hem, `hem3` parent=hem2; the
+  // gutcrawler's rear, 2026-10-23). Each free end lags the one before, so a body wave (GaitProfile.undulate) runs
+  // down it instead of swinging one rigid stick. Optional like `hem`. NOT `tail2`/`tail3`: the cyclops, dragon and
+  // gargoyle have tail1..tail4 chains that are anatomy, not pendulums, and must not be caught by these names.
+  | 'hem2' | 'hem3'
   // THE JAW: the tail of a `jaw` bone (bride, 2026-09-24). Kinematic, never a
   // Verlet point: motion.ts pins it to the head frame turned by the gape
   // about the hinge (jaw.ts); rig-bind.ts poses the `on jaw` prims from the
@@ -69,7 +74,7 @@ export const GAIT_JOINTS: readonly GaitJointName[] = [
   'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR',
   'hipL', 'hipR', 'kneeL', 'kneeR', 'footL', 'footR',
   'spineA', 'spineB', 'clavicleL', 'clavicleR', 'handTipL', 'handTipR', 'toeL', 'toeR',
-  'hem', 'jaw',
+  'hem', 'hem2', 'hem3', 'jaw',
 ];
 
 /** A GAIT PROFILE — every knob of one way of walking. The zombie's numbers
@@ -227,6 +232,18 @@ export type GaitProfile = {
    *  elbow points back, so the front leg folds the opposite way to the
    *  knee's forward bow (kneeBend). Default: kneeBend. */
   elbowBow?: number;
+  /** 'foreleg' only: the elbow's IK pole for a planted paw, body-local, for the LEFT arm (+x; the right mirrors x).
+   *  Default [0, 0, -1], a dog's elbow pointing back. A crawler hauling itself on its arms (the gutcrawler) points
+   *  its elbows UP and OUT, above the shoulders, like a man pulling himself along a floor. */
+  elbowPole?: Vec3;
+  /** 'foreleg' only: the CHEST ROLL (m). The shoulder over the planted paw drops and the reaching one rises, and the
+   *  chest shifts toward the planted arm by half as much: the body's weight rolls onto the arm that is hauling it.
+   *  Tied to each paw's own stance clock, deepest at mid-stance. Absent/0: no roll (the quadrupeds). */
+  crawlRoll?: number;
+  /** 'foreleg' only: the BODY WAVE (m), a lizard's lateral undulation run off the paws' clock. The chest swings
+   *  toward the hauling arm, the hips the other way a beat later, and the tail (hem -> hem2 -> hem3) whips after
+   *  them with growing swing and lag: a wave running from the shoulders out to the tail tip. Absent/0: none. */
+  undulate?: number;
 };
 
 export const SHAMBLE: GaitProfile = GAIT_TUNING as unknown as GaitProfile;
@@ -510,36 +527,46 @@ export const GOREHOUND: GaitProfile = {
   torsoLean: 0,
 };
 
-/** The GUTCRAWLER's drag (characters/gutcrawler.blob): no legs, two arms. The
- *  arms are 'foreleg's on the L/R clocks with forePhase 0, so they alternate:
- *  one reaches far ahead (strideLen 0.34, landing well forward), plants, and
- *  pulls while the other reaches. Slow (1.0 Hz) and long in the stance: each
- *  pull is a haul. The weight shift is SIDEWAYS: a wide sway rolls the chest
- *  onto the planted arm. No bob to speak of: the belly is on the floor. */
+/** The GUTCRAWLER's drag (characters/gutcrawler.blob): no legs, two arms, a grub body behind. The arms are
+ *  'foreleg's on the L/R clocks with forePhase 0, so they alternate: one lifts high (footLift 0.16) and reaches,
+ *  lands a little ahead (landAhead 0.35: further and the planted arm started each haul at full stretch, a straight
+ *  stick), plants, and the body is hauled past it until the elbow folds right up (0.57 -> 0.23 m shoulder-to-fist)
+ *  while the other reaches. Slow (0.9 Hz) and long in the stance: each pull is a haul. Judge it travelling
+ *  (blob-turntable BLOB_WALK_TRAVEL=1): on the treadmill a planted fist is never hauled past and the arms read
+ *  straight. Owner, 2026-10-23: "so stiff" -> the elbow pole, the chest roll, the surge and the body wave below. */
 export const CRAWL_DRAG: GaitProfile = {
   ...SHAMBLE,
   name: 'crawl-drag',
-  strideFreq: 1.0,
-  stanceDuty: 0.62,
-  strideLen: 0.34,
-  landAhead: 0.8,
-  footLift: 0.12,
-  footPush: 0.04,
+  strideFreq: 0.9,
+  stanceDuty: 0.6,
+  strideLen: 0.30,
+  landAhead: 0.35,
+  footLift: 0.16,
+  footPush: 0.06,
   kneeBend: 0.06,
   kneeLift: 0.04,
   kneeTrack: 0.5,
   elbowBow: -0.06,
-  swayAmp: 0.05,
-  shoulderSway: -0.6,
+  // Elbows up and out over the shoulders while the paw hauls (motion.ts poles the planted arm's IK this way).
+  elbowPole: [0.7, 0.7, -0.15],
+  crawlRoll: 0.06,
+  swayAmp: 0.02,
+  shoulderSway: 0,
   bobAmp: 0.008,
-  rockAmp: 0.02,
-  headBob: 0.5,
+  // The SURGE: the root runs ahead and falls back twice a cycle, once per haul, so the body lurches forward on each
+  // pull instead of gliding at a constant speed.
+  rockAmp: 0.05,
+  headBob: 0.8,
   armSwing: 0,
   elbowFlex: 0,
   asymJitter: 0.12,
   armStyle: 'foreleg',
   forePhase: 0,
   torsoLean: 0,
+  // The body wave (owner, 2026-10-23: "so stiff"): the chest swings toward the hauling arm, the hips counter-swing,
+  // and the three tail segments whip after them (gait.ts undulate). It replaces the gibbet-style hemSwing lash, which
+  // swung the one-bone tail as a rigid needle.
+  undulate: 0.07,
 };
 
 /** The GIBBET's stalk (characters/gibbet.blob): the gorehound's four-beat
@@ -921,6 +948,22 @@ export function stepGait(
     };
   };
 
+  // The crawl roll (GaitProfile.crawlRoll): -1 at the paw's mid-stance (weight on it), +1 at mid-swing.
+  const rollAt = (legPhi: number, side: 'L' | 'R'): number => {
+    let p = ((legPhi - forePhase * TAU) % TAU) / TAU;
+    if (p < 0) p += 1;
+    return -Math.cos(TAU * (p - duty(side) / 2));
+  };
+  const roll = (side: 'L' | 'R'): number =>
+    armStyle === 'foreleg' && T.crawlRoll ? T.crawlRoll * rollAt(side === 'L' ? phiL : phiR, side) : 0;
+  // The chest leans over the planted arm: toward +x (the left) when the right arm reaches.
+  const rollShift = 0.25 * (roll('R') - roll('L'));
+  // The body wave (GaitProfile.undulate): theta is 0 at the LEFT paw's mid-stance; +x is the left.
+  const U = armStyle === 'foreleg' ? T.undulate ?? 0 : 0;
+  const theta = TAU * ((((phiL - forePhase * TAU) % TAU) + TAU) % TAU / TAU - duty('L') / 2);
+  const wave = (k: number, lag: number): number => U * k * Math.cos(theta - lag);
+  const tailWave = (k: number, lag: number, lift: number): Vec3 => [wave(k, lag), U * lift * (1 + Math.cos(2 * theta - lag)), 0];
+
   const hip = (side: 'L' | 'R'): Vec3 => {
     const missing = side === 'L' ? missingL : missingR;
     const wounded = side === 'L' ? woundedL : woundedR;
@@ -936,7 +979,7 @@ export function stepGait(
     const droop = missing ? -T.missingArmDrop : 0;
     const armsUp = hop && !missing ? T.hopArmsUp : 0;
     const reachLift = armStyle === 'reach' && !missing ? T.reachShoulderUp : 0;
-    return [-sway * T.shoulderSway * (side === 'L' ? aL : aR), droop + armsUp + reachLift, 0];
+    return [-sway * T.shoulderSway * (side === 'L' ? aL : aR), droop + armsUp + reachLift + roll(side), 0];
   };
 
   // The reach pivot spec: pitch per side (wounded arms reach less, missing
@@ -960,8 +1003,8 @@ export function stepGait(
   const armB = arm(phiR, 'R');
 
   const offsets: Record<Exclude<GaitJointName, 'pelvis'>, Vec3> = {
-    hips: [sway * 0.9, bob * 0.9, 0],
-    chest: [sway * 0.6 * T.upperSway, bob * 0.6, 0],
+    hips: [sway * 0.9 - wave(0.7, 0.7), bob * 0.9, 0],
+    chest: [sway * 0.6 * T.upperSway + rollShift + wave(1, 0), bob * 0.6, 0],
     neck: [sway * 0.3 * T.upperSway, bob * 0.4, 0],
     // The head counter-bobs: it rises as the root dips.
     head: [-sway * 0.2 * T.upperSway, -bob * T.headBob, 0],
@@ -979,10 +1022,10 @@ export function stepGait(
     footR: legB.foot,
     // Secondary joints — rigid with their parents. Nothing is authored
     // against them; they exist so richer skeletons have a target per point.
-    spineA: [sway * 0.75 * T.upperSway, bob * 0.75, 0],
-    spineB: [sway * 0.65 * T.upperSway, bob * 0.65, 0],
-    clavicleL: [sway * 0.6 * T.upperSway, bob * 0.6, 0],
-    clavicleR: [sway * 0.6 * T.upperSway, bob * 0.6, 0],
+    spineA: [sway * 0.75 * T.upperSway + wave(0.4, 0.3), bob * 0.75, 0],
+    spineB: [sway * 0.65 * T.upperSway + rollShift + wave(1, 0), bob * 0.65, 0],
+    clavicleL: [sway * 0.6 * T.upperSway + rollShift + wave(1, 0), bob * 0.6 + 0.5 * roll('L'), 0],
+    clavicleR: [sway * 0.6 * T.upperSway + rollShift + wave(1, 0), bob * 0.6 + 0.5 * roll('R'), 0],
     handTipL: armA.hand,
     handTipR: armB.hand,
     toeL: legA.foot,
@@ -992,10 +1035,13 @@ export function stepGait(
     // between them tilts the skirt — the hem lagging the waist, as cloth does.
     // A hung mass (hemSwing): sideways a third of a stride behind the body's sway, fore-aft on every footfall, and
     // DROPPING a beat after each footfall (the meat lands after the frame does).
-    hem: T.hemSwing
+    hem: U ? tailWave(-1.6, 1.4, 0.2) : T.hemSwing
       ? [-T.hemSwing * Math.sin(swayPhase - TAU / 3), bob * 0.9 - 0.35 * T.hemSwing * Math.cos(T.bobPerStride * phiL - 1.4),
         0.7 * T.hemSwing * Math.cos(T.bobPerStride * phiL - 1.0)]
       : [0, bob * 0.9, 0],
+    // The tail chained off the hem: the wave runs on down it, swinging wider and later at each segment.
+    hem2: U ? tailWave(-2.6, 2.2, 0.35) : [0, bob * 0.9, 0],
+    hem3: U ? tailWave(-3.6, 3.0, 0.5) : [0, bob * 0.9, 0],
     // Rigid with the head (motion.ts re-derives the jaw target from the
     // head frame anyway; this keeps the pre-override target sane).
     jaw: [-sway * 0.2 * T.upperSway, -bob * T.headBob, 0],
@@ -1045,6 +1091,9 @@ const JOINT_AT: Record<string, { head: string; tail: string }> = {
   foot:     { head: 'foot',     tail: 'toe' },
   // Cloth pendulum off the pelvis (see GaitJointName 'hem').
   hem:      { head: 'hips',     tail: 'hem' },
+  // A tail chained off the hem (see GaitJointName 'hem2').
+  hem2:    { head: 'hem',      tail: 'hem2' },
+  hem3:    { head: 'hem2',    tail: 'hem3' },
   // The jaw carrier hangs off the skull's pivot (the neck joint) to the chin
   // (see GaitJointName 'jaw').
   jaw:      { head: 'neck',     tail: 'jaw' },
