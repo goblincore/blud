@@ -52,7 +52,7 @@ Each line is the first sentence of the module's header comment.
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
-| [Levels and world](#levels-and-world) | 40 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
+| [Levels and world](#levels-and-world) | 41 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
 | [Actors and crowd (render)](#actors-and-crowd-render) | 19 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
@@ -65,7 +65,7 @@ Each line is the first sentence of the module's header comment.
 | [AI and actors (logic)](#ai-and-actors-logic) | 11 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 10 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
-| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 12 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
+| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 13 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
 
@@ -534,6 +534,7 @@ Level definitions, kits, the train, the disco, the egg, sky, encounters.
 - `webgpu/level-tier.ts` — THE CHEAP LEVEL TIER (spec 2026-09-29-level-list-lighting-design.md).
 - `webgpu/portal.wgsl.ts` — The Void's portal, embers and glow pool, hand-written WGSL (spec 2026-09-24-void-portal-design.md §5).
 - `webgpu/sector-bounce.ts` — GLOW BOUNCE (hand-off 2026-10-24 item 2b): the green a nukage pool (lava, acid) throws on the room round it, baked once per vertex at mesh build.
+- `webgpu/sector-debris.ts` — THE SECTOR DEBRIS GROUND (plan 2026-10-25-sector-levels-3b Task 1): DebrisGround for a sector level.
 - `webgpu/sector-def.ts` — SECTOR LEVELS — types and the movement limits.
 - `webgpu/sector-edges.ts` — SECTOR EDGES — the one rule for a sector's directed boundary, shared by the parser (closure, winding), the loop builder and the point-in-sector test…
 - `webgpu/sector-geometry.ts` — SECTOR GEOMETRY as plain data (spec 2026-10-24-doom-sector-levels-design.md §6.4): each sector's boundary as loops (outer polygons and their holes)…
@@ -835,6 +836,7 @@ What fits no area above: the original WebGL lab shader, resolution scaling, samp
 
 - `adaptive-scale.ts` — Dynamic resolution for the SDF layer: keep the frame inside a budget by trading raymarch resolution, which is the one lever whose cost is exactly…
 - `curl-sample.ts` — CPU SIDE OF THE SHARED CURL VOLUME (2026-09-18 blood-curl-spike): a pure, THREE-FREE trilinear sampler over the packed `Uint8Array` from…
+- `debris-ground.ts` — WHAT LOOSE DEBRIS LANDS ON (plan 2026-10-25-sector-levels-3b): the floor under a piece at its CURRENT x/z and the walls it must not pass.
 - `depth-diff.ts` — Depth diff — comparing the INSIDE of the outline: per-pixel surface depth of the compiled body against the reference mesh, where both agree the…
 - `expression-library.ts` — Which expression clips (and which tuning) each character has, by the name the lab and the game use for it.
 - `expression.ts` — THE EXPRESSION LAYER's pure half (spec docs/superpowers/specs/2026-10-13-goblin-expressions-design.md, plan…

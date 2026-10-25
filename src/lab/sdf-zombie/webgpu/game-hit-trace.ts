@@ -17,6 +17,10 @@ import { levelCeilingM } from './game-level-rooms';
 import { roomCeilingM } from './level-def';
 import { type ChunkBox } from '../gib-chunks';
 import { convergedDir, muzzleWorld } from './game-weapon-rig';
+import type { DebrisGround } from '../debris-ground';
+import { sectorDebrisGround } from './sector-debris';
+import { sectorSegmentHit, type SectorHit } from './sector-ray';
+import type { SectorGround } from './sector-ground';
 
 /** The room's level cfg: weight, and the gain that puts the probe level at
  *  the hemisphere's (or the owner's override). 0/0 until the bake lands. */
@@ -189,6 +193,19 @@ export function ceilingAt(ctx: GameContext, x: number, z: number): number {
  */
 export function chunkCollidersAt(ctx: GameContext, pos: Vec3): { boxes: readonly ChunkBox[]; ceilingY: number } {
   return { boxes: ctx.world.colliders, ceilingY: ceilingAt(ctx, pos[0], pos[2]) };
+}
+
+/** The debris ground on a SECTOR level (plan 3b), or null on a room level — where every debris stepper keeps its
+ *  y = 0 plane exactly. Cached per map inside sector-debris.ts, so this is a WeakMap lookup per call. */
+export function debrisGround(ctx: GameContext): DebrisGround | null {
+  const map = ctx.world.level.def?.sectors;
+  return map ? sectorDebrisGround(map, ctx.world.level.ground as SectorGround) : null;
+}
+
+/** Where a → b first meets sector geometry, or null (always null on room levels). */
+export function sectorHitBetween(ctx: GameContext, a: Vec3, b: Vec3): SectorHit | null {
+  const map = ctx.world.level.def?.sectors;
+  return map ? sectorSegmentHit(map, ctx.world.level.ground as SectorGround, a, b) : null;
 }
 
 /** Where a slug fired RIGHT NOW would hit — the shared predictor.
