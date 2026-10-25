@@ -62,7 +62,7 @@ Experiment: rebuild Doom E1M1's layout from `doomu.wad` in our look and play it.
    shade only their own zone's accents, so the light reached only the pit's 0.75 m risers. The box bug was
    real for another pool (sector 53's light sat in zone 9, not 10): fixed, lights are re-homed by the sector
    under them (`sector-json.ts` rehomeAccents). The room colour comes from a **baked glow bounce**
-   (`sector-bounce.ts`, default `bounceGain` 12, × glowGain); the full-tier light (option 3) was skipped —
+   (`sector-bounce.ts`, default `bounceGain` 36 — owner pick after playtest, 12 was too weak — × glowGain); the full-tier light (option 3) was skipped —
    it would need neighbouring-zone light masks. Details and numbers: [plan 2 notes](2026-10-24-sector-levels-2/NOTES.md) "Glow bounce".
 3. **Plan 3a** — enemies on sector floors (motion `floorY`), navigation over sectors, sight and shots vs
    sector walls, pickups, exit as a walk-in trigger (E is slug mode; no use key yet).

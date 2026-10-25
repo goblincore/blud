@@ -183,7 +183,7 @@ same way: no new T-junctions. Wall u is now world-continuous along a line. E1M1 
 **1906 → 4687** (floors and ceilings 900 → 1747, walls 1006 → 2940). The bake is about 40 ms
 (5.5k unique vertices, 1.6k lit; vitest timing).
 
-**Default bounceGain 12**, chosen by measurement. The gate pose faces the west wall (x = 10) of the
+**Default bounceGain 36: owner pick (2026-10-24 playtest: 12 was too weak, 36 "ok").** The first default, 12, was chosen by measurement. The gate pose faces the west wall (x = 10) of the
 pool room, 4.5 m off the pool's edge, 3.5 m away, with the flashlight off. Wall crop (centre 30 %) G/R at
 bounceGain × 0 / ½ / 1 / 2 is **1.19 / 1.51 / 1.73 / 1.98**. At 6 it was 1.52, which failed the gate's
 ≥ off × 1.3 bar and read as only a hint of green by eye. At 12, the wide view from in the pool reads as

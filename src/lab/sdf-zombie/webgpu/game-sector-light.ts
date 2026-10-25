@@ -16,7 +16,7 @@ export const CEIL_WHISPER = 0.10;
 export const DEFAULT_GLOW_GAIN = 0.35;   // owner pick from the tuning sheet (2026-10-24; 1.0 glared)
 /** The baked glow bounce's multiplier (sector-bounce.ts; ?bouncegain=<n>, __sdfGame.sectorLight({ bounceGain })).
  *  The sector meshes add albedo × glowBounce × bounceGain × glowGain: the bounce follows the pools' brightness. */
-export const DEFAULT_BOUNCE_GAIN = 12;
+export const DEFAULT_BOUNCE_GAIN = 36;
 
 const floatUniform = (v: number) => uniform(v);
 type FloatUniform = ReturnType<typeof floatUniform>;
