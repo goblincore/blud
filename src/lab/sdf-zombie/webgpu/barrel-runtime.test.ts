@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Vec3 } from '../types';
 import type { Aabb } from './game-level';
 import { BARREL, barrelCentre, chainDelay } from './barrel-state';
-import { barrelBox, createBarrelCore, type BarrelRuntime } from './barrel-runtime';
+import { barrelBox, barrelsInStrike, createBarrelCore, type BarrelRuntime } from './barrel-runtime';
 
 const DEFS = [
   { id: 'b1', pos: [0, 0, 0] as Vec3 },
@@ -114,5 +114,58 @@ describe('barrel runtime (pure core)', () => {
     rt.hit('b1', 'slug'); rt.step(1 / 60);                                     // b1 gone, b2 lit (still standing)
     expect(rt.segmentHit(a, b)!.id).toBe('b2');
     expect(rt.segmentHit([0, 2, 5], [0, 2, -5])).toBeNull();                   // over the drums
+  });
+
+  it('segmentHit gives the contact point ON the drum surface (not the padded one) for impact effects', () => {
+    const { rt } = rig();
+    const h = rt.segmentHit([-2, 0.5, 0], [12, 0.5, 0], 0.05)!;
+    expect(h.point[0]).toBeCloseTo(-BARREL.radiusM, 9);
+    expect(h.point[1]).toBeCloseTo(0.5, 9);
+    expect(h.point[2]).toBeCloseTo(0, 9);
+    const top = rt.segmentHit([0.1, 2, 0], [0.1, 0.5, 0])!;                                  // down onto the lid
+    expect(top.point).toEqual([0.1, BARREL.heightM, 0]);
+  });
+
+  it('hits log once per hit that counted (kind, point); hits on lit or gone drums are not logged', () => {
+    const { rt } = rig();
+    rt.hit('b3', 'pellet', [8.7, 0.5, 0]);
+    expect(rt.hits).toEqual([{ id: 'b3', kind: 'pellet', t: 0, point: [8.7, 0.5, 0] }]);
+    rt.hit('b3', 'slug');
+    expect(rt.hits.length).toBe(2);
+    rt.hit('b3', 'round');                                                                   // lit: ignored
+    rt.step(1 / 60);
+    rt.hit('b3', 'slug');                                                                    // gone: ignored
+    rt.hit('nope', 'slug');
+    expect(rt.hits.map(h => h.kind)).toEqual(['pellet', 'slug']);
+  });
+
+  it('two flail strikes (melee 10) pop a drum', () => {
+    const { rt } = rig();
+    rt.hit('b3', 'melee');
+    expect(rt.states[2]!.phase).toBe('intact');
+    rt.hit('b3', 'melee');
+    expect(rt.states[2]!.phase).toBe('lit');
+  });
+});
+
+describe('barrelsInStrike (the flail)', () => {
+  const states = [
+    { id: 'front', pos: [0, 0, -1.2] as Vec3, hp: 20, phase: 'intact' as const, fuse: 0 },
+    { id: 'behind', pos: [0, 0, 1.2] as Vec3, hp: 20, phase: 'intact' as const, fuse: 0 },
+    { id: 'far', pos: [0, 0, -2.5] as Vec3, hp: 20, phase: 'intact' as const, fuse: 0 },
+    { id: 'lit', pos: [0.3, 0, -1.0] as Vec3, hp: 0, phase: 'lit' as const, fuse: 0.2 },
+    { id: 'below', pos: [0.2, -4, -1.0] as Vec3, hp: 20, phase: 'intact' as const, fuse: 0 },
+  ];
+  const eye: Vec3 = [0, 1.6, 0];
+  it('intact drums in reach and in the arc, at a reachable height, facing −z (yaw 0)', () => {
+    expect(barrelsInStrike(states, eye, 0, 50).map(h => h.id)).toEqual(['front']);
+  });
+  it('the hit point sits on the drum, toward the eye', () => {
+    const [h] = barrelsInStrike(states, eye, 0, 50);
+    expect(h!.point[2]).toBeCloseTo(-1.2 + BARREL.radiusM, 9);
+    expect(h!.point[1]).toBeCloseTo(BARREL.heightM, 9);
+  });
+  it('a blocked drum (behind a wall) is not struck', () => {
+    expect(barrelsInStrike(states, eye, 0, 50, () => true)).toEqual([]);
   });
 });

@@ -8,7 +8,8 @@
 // Pure: no three.js, no DOM, no GameContext.
 import type { Vec3 } from '../types';
 import type { Aabb } from './game-level';
-import { BARREL, catchBlast, hitBarrel, makeBarrels, segmentHitsBarrel, stepBarrels, type BarrelHitKind, type BarrelState } from './barrel-state';
+import { BARREL, barrelSurfacePoint, catchBlast, hitBarrel, makeBarrels, segmentHitsBarrel, stepBarrels, type BarrelHitKind, type BarrelState } from './barrel-state';
+import { FLAIL_STRIKE, inStrikeArc } from './flail-strike';
 
 export interface BarrelRuntime {
   states: BarrelState[];
@@ -16,14 +17,40 @@ export interface BarrelRuntime {
   clock: number;
   blasts: number;
   log: { id: string; t: number; cause: 'hit' | 'chain' }[];
+  /** Every hit that counted (the drum was intact): its kind, sim time and the point on the drum (when the caller
+   *  had one). Bounded: each one takes HP off an intact drum. */
+  hits: { id: string; kind: BarrelHitKind; t: number; point?: Vec3 }[];
   /** The standing barrels' AABBs (pushed into the level's colliders; removed when one goes). */
   liveBoxes(): Aabb[];
-  hit(id: string, kind: BarrelHitKind): void;
-  /** The nearest standing barrel (intact or lit) the segment meets: its id and t, or null. */
-  segmentHit(a: Vec3, b: Vec3, pad?: number): { id: string; t: number } | null;
+  /** One hit by kind (`point`: where on the drum, for the log). A lit or gone drum ignores it. */
+  hit(id: string, kind: BarrelHitKind, point?: Vec3): void;
+  /** The nearest standing barrel (intact or lit) the segment meets: its id, t (the segment padded by `pad`, a
+   *  projectile's radius) and the contact point ON the drum's own surface; or null. */
+  segmentHit(a: Vec3, b: Vec3, pad?: number): BarrelSegmentHit | null;
   /** A blast at `at` (any blast: dynamite, a rocket, another barrel). */
   catchBlast(at: Vec3): void;
   step(dt: number): void;
+}
+
+export interface BarrelSegmentHit { id: string; t: number; point: Vec3 }
+
+/** THE FLAIL ON BARRELS (plan 3b Task 14): every intact drum whose centre is in the strike's reach and arc
+ *  (flail-strike.ts inStrikeArc, horizontal — as the actors are judged), whose height span is within the reach of
+ *  the eye's height, and that `blocked` (a sector wall between the eye and the drum centre) does not hide; each with
+ *  the drum-surface point nearest the eye. */
+export function barrelsInStrike(states: readonly BarrelState[], eye: Vec3, yaw: number, arcDeg: number,
+  blocked?: (from: Vec3, to: Vec3) => boolean): { id: string; point: Vec3 }[] {
+  const out: { id: string; point: Vec3 }[] = [];
+  for (const b of states) {
+    if (b.phase !== 'intact') continue;
+    const centre: Vec3 = [b.pos[0], b.pos[1] + BARREL.heightM * 0.5, b.pos[2]];
+    if (!inStrikeArc(eye, yaw, centre, arcDeg)) continue;
+    const y = Math.min(b.pos[1] + BARREL.heightM, Math.max(b.pos[1], eye[1]));
+    if (Math.abs(eye[1] - y) > FLAIL_STRIKE.reach) continue;
+    if (blocked?.(eye, centre)) continue;
+    out.push({ id: b.id, point: barrelSurfacePoint(b, eye) });
+  }
+  return out;
 }
 
 export interface BarrelCoreIo {
@@ -57,22 +84,26 @@ export function createBarrelCore(defs: readonly { id: string; pos: Vec3 }[], col
     clock: 0,
     blasts: 0,
     log: [],
+    hits: [],
     liveBoxes: () => [...boxes.values()],
-    hit(id, kind) {
+    hit(id, kind, point) {
       const i = rt.states.findIndex(b => b.id === id);
-      if (i < 0) return;
+      if (i < 0 || rt.states[i]!.phase !== 'intact') return;
+      rt.hits.push(point ? { id, kind, t: rt.clock, point: [point[0], point[1], point[2]] } : { id, kind, t: rt.clock });
       const before = rt.states;
       rt.states = before.map((b, k) => (k === i ? hitBarrel(b, kind) : b));
       newlyLit(before, rt.states, 'hit');
     },
     segmentHit(a, b, pad = 0) {
-      let best: { id: string; t: number } | null = null;
+      let best: { s: BarrelState; t: number } | null = null;
       for (const s of rt.states) {
         if (s.phase === 'gone') continue;
         const t = segmentHitsBarrel(a, b, s, pad);
-        if (t !== null && (best === null || t < best.t)) best = { id: s.id, t };
+        if (t !== null && (best === null || t < best.t)) best = { s, t };
       }
-      return best;
+      if (!best) return null;
+      const t = best.t, at: Vec3 = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+      return { id: best.s.id, t, point: barrelSurfacePoint(best.s, at) };
     },
     catchBlast(at) {
       rt.blasts++;

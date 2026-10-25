@@ -805,6 +805,9 @@ export function tick(ctx: GameContext, dt: number) {
     // Hit batching: every actor hit this frame flushes its rig/repack/
     // wound-row tail ONCE after the loop (ZombieActor.beginHits).
     const hitThisFrame = new Set<ZombieActor>();
+    // BARRELS (plan 3b Task 14): the standing drums' boxes, skipped by the point-in-box test below — a round that
+    // misses the drum (segmentHit) past its box's corner flies on. Null on levels without barrels.
+    const pelletDrumBoxes = ctx.world.barrels ? new Set(ctx.world.barrels.liveBoxes()) : null;
     for (let i = ctx.weapon.pellets.length - 1; i >= 0; i--) {
       const p = ctx.weapon.pellets[i]!;
       const sectorLevel = !!ctx.world.level.def?.sectors;
@@ -823,6 +826,16 @@ export function tick(ctx: GameContext, dt: number) {
       if (!dead && sectorLevel) {
         const h = sectorWorldHit(ctx, from, p.pos);
         if (h) { p.pos = [h.point[0], h.point[1], h.point[2]]; wallHit = true; }
+      }
+      // BARRELS (plan 3b Task 14): the cut segment's first standing drum cuts it as the wall does, at the contact
+      // point on the drum's surface — everything below (chunks, actors) tests the segment up to the drum, so a body
+      // in front still takes the round; the drum takes it only if nothing in front did (after the actor test). The
+      // drum's box in ctx.world.colliders is not point-tested for this round (the drum test IS its collision), so a
+      // round hits a drum once, by kind, and is gone.
+      let barrelHit: { id: string; point: Vec3 } | null = null;
+      if (!dead && ctx.world.barrels) {
+        const bh = ctx.world.barrels.segmentHit(from, p.pos, p.radius);
+        if (bh) { p.pos = [bh.point[0], bh.point[1], bh.point[2]]; barrelHit = bh; }
       }
       if (!dead && ctx.bake.chunks.length > 0) {
         // ORDER: this MUST precede the floor kill below — a settled piece
@@ -890,10 +903,11 @@ export function tick(ctx: GameContext, dt: number) {
       }
       // Room levels: the y 0.02 floor kill (sector levels stopped at their floors above).
       if (!dead && !sectorLevel && p.pos[1] <= 0.02) dead = true;
-      if (!dead && !wallHit) {
+      if (!dead && !wallHit && !barrelHit) {
         // Level geometry: a point-in-AABB test is enough — pellets are
         // small and the substepped trace already bounds their travel.
         for (const b of ctx.world.colliders) {
+          if (pelletDrumBoxes?.has(b)) continue;        // a drum's box: the drum test above is its collision
           if (p.pos[0] > b.min[0] && p.pos[0] < b.max[0]
             && p.pos[1] > b.min[1] && p.pos[1] < b.max[1]
             && p.pos[2] > b.min[2] && p.pos[2] < b.max[2]) { dead = true; break; }
@@ -964,6 +978,11 @@ export function tick(ctx: GameContext, dt: number) {
           dead = true;
         }
       }
+      // The drum takes the round only when no chunk or actor in front of it did (both set `dead` above).
+      if (barrelHit && !dead) {
+        ctx.world.barrels!.hit(barrelHit.id, p.kind === 'slug' ? 'slug' : 'pellet', barrelHit.point);
+        dead = true;
+      }
       if (wallHit) dead = true;
       if (dead) ctx.weapon.pellets.splice(i, 1);
     }
@@ -986,6 +1005,9 @@ export function tick(ctx: GameContext, dt: number) {
     // move); hand-rolling a second one would let the two drift apart.
     const soldierFrom = ctx.weapon.soldierPellets.map(p => [...p.pos] as Vec3);
     stepProjectiles(ctx.weapon.soldierPellets, dt);
+    // BARRELS (plan 3b Task 14): the drums' own boxes, left out of the collider test below — the drum test
+    // (segmentHit, the upright cylinder) is their collision for an enemy round, so a round meets a drum once.
+    const drumBoxes = ctx.world.barrels ? new Set(ctx.world.barrels.liveBoxes()) : null;
     for (let i = ctx.weapon.soldierPellets.length - 1; i >= 0; i--) {
       const p = ctx.weapon.soldierPellets[i]!;
       // Sector levels: a wall, floor or ceiling cuts the segment; the player in front of it still
@@ -995,12 +1017,20 @@ export function tick(ctx: GameContext, dt: number) {
       const start = p.launchFrom ?? soldierFrom[i]!;
       p.launchFrom = undefined;
       const wall = sectorWorldHit(ctx, start, p.pos);
-      const end = wall ? wall.point : p.pos;
-      if (expired(p, !!ctx.world.level.def?.sectors) || ctx.world.colliders.some(box => segmentHitsBox(start, end, box))) {
+      let end = wall ? wall.point : p.pos;
+      // BARRELS: the cut segment's first standing drum cuts it again, at the contact point on the drum; a level
+      // box or the player in front of the drum still takes the round (the tests below run on the cut segment).
+      const spent = expired(p, !!ctx.world.level.def?.sectors);
+      const drum = spent ? null : ctx.world.barrels?.segmentHit(start, end, 0.02) ?? null;
+      if (drum) end = drum.point;
+      if (spent || ctx.world.colliders.some(box => !drumBoxes?.has(box) && segmentHitsBox(start, end, box))) {
         ctx.weapon.soldierPellets.splice(i, 1);
       } else if (segmentHitsCapsule(start, end, ctx.player.player.pos, PLAYER.radius, PLAYER.height)) {
         // The game loop: soldier pellets and cultist rounds hit the player (never actors).
         damagePlayer(ctx, VITALS.soldierPellet, 'pellet');
+        ctx.weapon.soldierPellets.splice(i, 1);
+      } else if (drum) {
+        ctx.world.barrels!.hit(drum.id, 'round', drum.point);
         ctx.weapon.soldierPellets.splice(i, 1);
       } else if (wall) {
         ctx.weapon.soldierPellets.splice(i, 1);

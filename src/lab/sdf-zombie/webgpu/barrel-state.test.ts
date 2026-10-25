@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BARREL, barrelCentre, catchBlast, chainDelay, hitBarrel, makeBarrels, segmentHitsBarrel, stepBarrels } from './barrel-state';
+import { BARREL, barrelCentre, barrelSurfacePoint, catchBlast, chainDelay, hitBarrel, makeBarrels, segmentHitsBarrel, stepBarrels } from './barrel-state';
 
 const two = () => makeBarrels([{ id: 'b1', pos: [0, 0, 0] }, { id: 'b2', pos: [1.1, 0, 0] }, { id: 'b3', pos: [9, 0, 0] }]);
 
@@ -61,5 +61,17 @@ describe('barrels', () => {
     expect(segmentHitsBarrel([0, 2, 0], [0, 0.5, 0], b!)).toBeCloseTo((2 - BARREL.heightM) / 1.5, 9);
     expect(segmentHitsBarrel([-2, 0.5, 0], [-1, 0.5, 0], b!)).toBeNull();
     expect(segmentHitsBarrel([0, 0.5, 0], [2, 0.5, 0], b!)).toBe(0);           // starts inside
+  });
+
+  it('barrelSurfacePoint: the nearest point ON the drum, from outside (side, cap, rim) and from inside', () => {
+    const [b] = makeBarrels([{ id: 'b', pos: [1, 2, 3] }]);
+    const R = BARREL.radiusM, H = BARREL.heightM;
+    const near = (p: readonly number[], q: readonly number[]) => p.forEach((v, i) => expect(v).toBeCloseTo(q[i]!, 9));
+    near(barrelSurfacePoint(b!, [1 + R + 0.05, 2.5, 3]), [1 + R, 2.5, 3]);                // beside: onto the side
+    near(barrelSurfacePoint(b!, [1.1, 2 + H + 0.05, 3]), [1.1, 2 + H, 3]);                 // above: onto the lid
+    near(barrelSurfacePoint(b!, [1 + R + 0.1, 2 + H + 0.1, 3]), [1 + R, 2 + H, 3]);        // diagonal: the rim
+    near(barrelSurfacePoint(b!, [1 + R - 0.02, 2.5, 3]), [1 + R, 2.5, 3]);                 // inside, near the side
+    near(barrelSurfacePoint(b!, [1, 2 + H - 0.01, 3]), [1, 2 + H, 3]);                     // inside, near the lid
+    near(barrelSurfacePoint(b!, [1, 2 + 0.01, 3]), [1, 2, 3]);                             // inside, near the foot
   });
 });

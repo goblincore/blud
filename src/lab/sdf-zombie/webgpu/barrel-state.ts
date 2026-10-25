@@ -95,3 +95,20 @@ export function segmentHitsBarrel(a: Vec3, b: Vec3, barrel: BarrelState, pad = 0
   }
   return best;
 }
+
+/** The point ON the drum's surface (side, lid or foot) nearest q — where an impact effect sits. From outside: the
+ *  solid's nearest point (radial and height clamped). From inside: pushed out through the nearest face. */
+export function barrelSurfacePoint(barrel: BarrelState, q: Vec3): Vec3 {
+  const R = BARREL.radiusM, [cx, y0, cz] = barrel.pos, y1 = y0 + BARREL.heightM;
+  const ox = q[0] - cx, oz = q[2] - cz, d = Math.hypot(ox, oz);
+  const insideR = d <= R, insideY = q[1] >= y0 && q[1] <= y1;
+  if (!(insideR && insideY)) {
+    const s = d > R ? R / d : 1;
+    return [cx + ox * s, Math.min(y1, Math.max(y0, q[1])), cz + oz * s];
+  }
+  const toSide = R - d, toTop = y1 - q[1], toFoot = q[1] - y0;
+  if (toTop <= toSide && toTop <= toFoot) return [q[0], y1, q[2]];
+  if (toFoot <= toSide) return [q[0], y0, q[2]];
+  if (d < 1e-12) return [cx + R, q[1], cz];
+  return [cx + ox * (R / d), q[1], cz + oz * (R / d)];
+}
