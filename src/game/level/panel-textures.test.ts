@@ -2,7 +2,8 @@
 //
 // Every assertion compares two regions, kinds or seeds, so a constant buffer cannot pass.
 import { describe, expect, it } from 'vitest';
-import { generatePanel, PANEL_KINDS, PANEL_SIZE, type PanelKind } from './panel-textures';
+import { generateMottle, generatePanel, MOTTLE_SIZE, PANEL_KINDS, PANEL_SIZE, type PanelKind } from './panel-textures';
+import { generateStone } from './stone-textures';
 
 const N = PANEL_SIZE;
 const maps = new Map<PanelKind, ReturnType<typeof generatePanel>>();
@@ -56,5 +57,29 @@ describe('generatePanel', () => {
     const sig = (k: PanelKind) => Array.from(get(k).height.slice(0, 2048), v => Math.round(v * 20));
     expect(sig('floorTile')).not.toEqual(sig('metalPlate'));
     expect(sig('techPanel')).not.toEqual(sig('door'));
+  });
+
+  it.each(PANEL_KINDS)('%s: relief near the stone set (mean normal tilt > 65%% of wallBrick)', (k) => {
+    const tilt = (n: Uint8ClampedArray) => { let t = 0; for (let i = 0; i < n.length; i += 4) t += Math.hypot(n[i]! - 128, n[i + 1]! - 128); return t / (n.length / 4); };
+    // The sector mesh draws these at normalScale 1.3 against the stone's 1.1, so 65% here is ~75% on screen; the panels' relief sits on their features (seams, rivets), not everywhere.
+    expect(tilt(get(k).normal)).toBeGreaterThan(tilt(generateStone('wallBrick', 11).normal) * 0.65);
+  });
+
+  it('roughness is one channel and varies (damp and oily patches are glossier)', () => {
+    const r = get('metalPlate').roughness;
+    expect(r.length).toBe(N * N);
+    let lo = 255, hi = 0;
+    for (let i = 0; i < r.length; i += 97) { lo = Math.min(lo, r[i]!); hi = Math.max(hi, r[i]!); }
+    expect(hi - lo).toBeGreaterThan(80);
+  });
+
+  it('the mottle map is single-channel, tileable and spread', () => {
+    const m = generateMottle(977);
+    expect(m.length).toBe(MOTTLE_SIZE * MOTTLE_SIZE);
+    let lo = 255, hi = 0, wrap = 0, inside = 0;
+    for (const v of m) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    for (let y = 0; y < MOTTLE_SIZE; y++) { wrap += Math.abs(m[y * MOTTLE_SIZE]! - m[y * MOTTLE_SIZE + MOTTLE_SIZE - 1]!); inside += Math.abs(m[y * MOTTLE_SIZE + 63]! - m[y * MOTTLE_SIZE + 64]!); }
+    expect(hi - lo).toBeGreaterThan(100);
+    expect(wrap).toBeLessThan(inside * 3 + MOTTLE_SIZE * 2);
   });
 });

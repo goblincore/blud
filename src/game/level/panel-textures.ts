@@ -33,7 +33,7 @@ export const PANEL_KINDS: readonly PanelKind[] = [
 export interface PanelMaps {
   albedo: Uint8ClampedArray;     // RGBA, sRGB
   normal: Uint8ClampedArray;     // RGBA, linear tangent-space
-  roughness: Uint8ClampedArray;  // RGBA, linear, value in .r
+  roughness: Uint8ClampedArray;  // ONE channel, linear (PANEL_SIZE² bytes)
   /** RGBA sRGB glow colour × strength, or null for a kind that does not glow (only lightPanel does). */
   emissive: Uint8ClampedArray | null;
   /** The height field 0..1 (tests read it). */
@@ -218,7 +218,7 @@ const rustBrick: Shader = (x, y, seed, o) => {
 };
 
 /** A lit grid panel: 1 m cells of a diffuser behind a fine lattice, in a dark frame; a few cells
- *  have failed dim. Emissive is the diffuser (modest: the sector mesh scales it). */
+ *  have failed or dim. Emissive is the diffuser (modest: the sector mesh scales it by the sector light). */
 const lightPanel: Shader = (x, y, seed, o) => {
   const cx = Math.floor(x / 128), cy = Math.floor(y / 128);
   const lx = x - cx * 128, ly = y - cy * 128;
@@ -226,7 +226,9 @@ const lightPanel: Shader = (x, y, seed, o) => {
   const inCell = smooth(12, 15, edge);
   const lat = Math.min(lx % 16, 16 - (lx % 16), ly % 16, 16 - (ly % 16));
   const lattice = 1 - smooth(0.6, 1.6, lat);
-  const failed = hash2(cx, cy, seed) < 0.18 ? 0.25 : 1;
+  // A third of the cells have failed or are dying: off, a dim ember, or half-lit.
+  const fh = hash2(cx, cy, seed);
+  const failed = fh < 0.12 ? 0.04 : fh < 0.24 ? 0.18 : fh < 0.34 ? 0.45 : 1;
   const vignette = 0.75 + 0.25 * smooth(12, 60, edge);
   const grime = tfbm(x, y, seed + 31, 64);
   const glow = inCell * (1 - 0.55 * lattice) * vignette * failed * (0.85 + 0.15 * grime);
@@ -318,36 +320,131 @@ const floorTile: Shader = (x, y, seed, o) => {
 };
 
 const SHADERS: Record<PanelKind, Shader> = { techPanel, metalSheet, door, rustBrick, lightPanel, concreteSlab, metalPlate, floorTile };
-/** Height → normal gain per kind (stone's is 3 × normalStrength 1). */
+/** Height → normal gain per kind. Stone's is 3 × normalStrength over a field that is pebbled
+ *  everywhere; these fields are flatter between their features, so the gain is higher. */
 const NORMAL_GAIN: Record<PanelKind, number> = {
-  techPanel: 2.4, metalSheet: 2.0, door: 2.4, rustBrick: 3, lightPanel: 2.0, concreteSlab: 2.2, metalPlate: 2.6, floorTile: 2.2,
+  techPanel: 5, metalSheet: 5, door: 5, rustBrick: 4.5, lightPanel: 4.5, concreteSlab: 4.5, metalPlate: 4.5, floorTile: 4.5,
 };
-/** The lit panel's glow colour, sRGB (cold fluorescent). */
-const GLOW_SRGB = [214, 232, 222] as const;
+
+/** The grime pass applied after each kind's own shader (generatePanel):
+ *  relief — the kind's own height × this (deeper seams, taller rivets and bands) ·
+ *  grain — fine surface relief (pitting, hammering) · dent — broad dents · gouge — scratched-in grooves ·
+ *  chip — chipped seam edges · ao — darkening in recesses (height below its local mean) ·
+ *  drip — streaks running down from recesses (rivets, vents, seams) · rust — rust bloom round recesses ·
+ *  oil — dark, wet (low roughness) stains · dust — pale dust on the lips above drops (ledges) ·
+ *  mottle — large low-frequency light/dark patches · wet — glossy damp patches. */
+interface Grime { relief: number; grain: number; dent: number; gouge: number; chip: number; ao: number; drip: number; rust: number; oil: number; dust: number; mottle: number; wet: number }
+const GRIME: Record<PanelKind, Grime> = {
+  techPanel:    { relief: 1.5, grain: 0.07, dent: 0.05, gouge: 0.07, chip: 0.25, ao: 0.6,  drip: 0.6,  rust: 0.30, oil: 0,    dust: 0.25, mottle: 0.4,  wet: 0.35 },
+  metalSheet:   { relief: 1.6, grain: 0.07, dent: 0.07, gouge: 0.08, chip: 0.2,  ao: 0.6,  drip: 0.6,  rust: 0.45, oil: 0,    dust: 0.2,  mottle: 0.45, wet: 0.35 },
+  door:         { relief: 1.5, grain: 0.07, dent: 0.06, gouge: 0.1,  chip: 0.25, ao: 0.65, drip: 0.6,  rust: 0.5,  oil: 0,    dust: 0.3,  mottle: 0.4,  wet: 0.3 },
+  rustBrick:    { relief: 1.0, grain: 0.08, dent: 0.06, gouge: 0.04, chip: 0.35, ao: 0.5,  drip: 0.5,  rust: 0.2,  oil: 0,    dust: 0.2,  mottle: 0.4,  wet: 0.4 },
+  lightPanel:   { relief: 1.4, grain: 0.05, dent: 0.04, gouge: 0.05, chip: 0.15, ao: 0.6,  drip: 0.45, rust: 0.25, oil: 0,    dust: 0.3,  mottle: 0.35, wet: 0.2 },
+  concreteSlab: { relief: 1.4, grain: 0.14, dent: 0.06, gouge: 0.05, chip: 0.4,  ao: 0.6,  drip: 0.45, rust: 0.15, oil: 0.25, dust: 0.15, mottle: 0.5,  wet: 0.4 },
+  metalPlate:   { relief: 1.3, grain: 0.06, dent: 0.06, gouge: 0.08, chip: 0.2,  ao: 0.65, drip: 0,    rust: 0.35, oil: 0.55, dust: 0,    mottle: 0.45, wet: 0.45 },
+  floorTile:    { relief: 1.4, grain: 0.06, dent: 0.04, gouge: 0.05, chip: 0.35, ao: 0.65, drip: 0,    rust: 0.1,  oil: 0.5,  dust: 0,    mottle: 0.45, wet: 0.5 },
+};
+const RUST_SRGB = [92, 54, 34] as const;
+
+/** Wrapping box blur of a scalar field, radius r px, separable. */
+function boxBlur(src: Float32Array, r: number): Float32Array {
+  const tmp = new Float32Array(N * N), out = new Float32Array(N * N), w = 2 * r + 1;
+  for (let y = 0; y < N; y++) {
+    let acc = 0;
+    for (let k = -r; k <= r; k++) acc += src[y * N + wrapPx(k)]!;
+    for (let x = 0; x < N; x++) {
+      tmp[y * N + x] = acc / w;
+      acc += src[y * N + wrapPx(x + r + 1)]! - src[y * N + wrapPx(x - r)]!;
+    }
+  }
+  for (let x = 0; x < N; x++) {
+    let acc = 0;
+    for (let k = -r; k <= r; k++) acc += tmp[wrapPx(k) * N + x]!;
+    for (let y = 0; y < N; y++) {
+      out[y * N + x] = acc / w;
+      acc += tmp[wrapPx(y + r + 1) * N + x]! - tmp[wrapPx(y - r) * N + x]!;
+    }
+  }
+  return out;
+}
+
+/** The lit panel's glow colour, sRGB (cold fluorescent, a little dingy). */
+const GLOW_SRGB = [200, 218, 204] as const;
 
 export function generatePanel(kind: PanelKind, seed: number): PanelMaps {
   const n = N * N;
   const albedo = new Uint8ClampedArray(n * 4);
   const normal = new Uint8ClampedArray(n * 4);
-  const roughness = new Uint8ClampedArray(n * 4);
+  const roughness = new Uint8ClampedArray(n);
   const emissive = kind === 'lightPanel' ? new Uint8ClampedArray(n * 4) : null;
   const height = new Float32Array(n);
+  const col = new Float32Array(n * 3), rough = new Float32Array(n), glow = emissive ? new Float32Array(n) : null;
   const shade = SHADERS[kind];
+  const g = GRIME[kind];
   const o: Px = { h: 0, r: 0, g: 0, b: 0, rough: 0, e: 0 };
+  // 1. The kind's own surface, plus damage relief: grain, dents, gouges.
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
       const i = y * N + x;
       shade(x, y, seed, o);
-      height[i] = o.h;
-      albedo[i * 4] = o.r; albedo[i * 4 + 1] = o.g; albedo[i * 4 + 2] = o.b; albedo[i * 4 + 3] = 255;
-      const r = clamp01(o.rough) * 255;
-      roughness[i * 4] = r; roughness[i * 4 + 1] = r; roughness[i * 4 + 2] = r; roughness[i * 4 + 3] = 255;
-      if (emissive) {
-        const e = clamp01(o.e);
-        emissive[i * 4] = GLOW_SRGB[0] * e; emissive[i * 4 + 1] = GLOW_SRGB[1] * e; emissive[i * 4 + 2] = GLOW_SRGB[2] * e; emissive[i * 4 + 3] = 255;
+      const damage = g.grain * (tfbm(x, y, seed + 201, 4, 2) - 0.5) * 2
+        + g.dent * (tfbm(x, y, seed + 211, 64, 2) - 0.5) * 2
+        - g.gouge * scratches(x, y, seed + 221, 64, 0.3);
+      height[i] = o.h * g.relief + damage;
+      col[i * 3] = o.r; col[i * 3 + 1] = o.g; col[i * 3 + 2] = o.b;
+      rough[i] = o.rough;
+      if (glow) glow[i] = o.e;
+    }
+  }
+  // 2. Chipped edges: near a step in height (the field off its 3 px mean), noise bites into the face.
+  const near = boxBlur(height, 3);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const i = y * N + x;
+    const edgeness = Math.abs(height[i]! - near[i]!);
+    if (edgeness > 0.04 && tnoise(x, y, seed + 231, 4) > 1 - g.chip) height[i] = Math.min(height[i]!, near[i]! - 0.12);
+  }
+  // 3. Recesses: how far below its 8 px neighbourhood a pixel sits (seams, holes, slats, rivet rims).
+  const mean = boxBlur(height, 8);
+  const cav = new Float32Array(n);
+  for (let i = 0; i < n; i++) cav[i] = clamp01((mean[i]! - height[i]!) * 5);
+  // 4. Drips: run each recess DOWN the wall (row y runs up, so down is toward row 0), streaky per column.
+  const drip = new Float32Array(n);
+  if (g.drip > 0) {
+    for (let x = 0; x < N; x++) {
+      let run = 0;
+      for (let k = 2 * N - 1; k >= 0; k--) {            // twice round, so a drip crosses the wrap
+        const y = k % N, i = y * N + x;
+        run = Math.max(cav[i]! * 0.9, run * 0.985);
+        if (k < N) drip[i] = run;
       }
     }
   }
+  // 5. Colour and roughness: AO, drips, rust bloom, oil, dust, mottling, damp.
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const i = y * N + x;
+    const c = cav[i]!;
+    const streaky = 0.35 + 0.65 * tstreak(x, y, seed + 241, 3, 64);
+    const d = clamp01(drip[i]! * streaky * 1.6 - c);
+    const mottle = (tfbm(x, y, seed + 251, 256, 2) - 0.5) * 2;
+    const rustN = clamp01((tfbm(x, y, seed + 261, 32) - 0.55) * 4 + c * 1.2 + d * 0.6) * g.rust;
+    const oil = clamp01((tfbm(x, y, seed + 271, 128) - 0.58) * 5) * g.oil;
+    const wet = clamp01((tfbm(x, y, seed + 281, 64) - 0.55) * 4) * g.wet;
+    const lip = clamp01((height[i]! - height[wrapPx(y - 3) * N + x]!) * 4) * g.dust;
+    let k = (1 - g.ao * c) * (1 - g.drip * 0.55 * d) * (1 + g.mottle * 0.35 * mottle) * (1 - 0.55 * oil) * (1 - 0.2 * wet);
+    k = Math.max(0.15, k);
+    let r = col[i * 3]! * k, gg = col[i * 3 + 1]! * k, b = col[i * 3 + 2]! * k;
+    const rs = rustN * (0.7 + 0.3 * tnoise(x, y, seed + 291, 4));
+    r = r * (1 - rs) + RUST_SRGB[0] * k * rs; gg = gg * (1 - rs) + RUST_SRGB[1] * k * rs; b = b * (1 - rs) + RUST_SRGB[2] * k * rs;
+    r += 30 * lip; gg += 29 * lip; b += 27 * lip;
+    albedo[i * 4] = r; albedo[i * 4 + 1] = gg; albedo[i * 4 + 2] = b; albedo[i * 4 + 3] = 255;
+    const ro = rough[i]! + 0.25 * c + 0.2 * rs + 0.15 * lip - 0.45 * oil - 0.4 * wet + 0.12 * mottle * g.mottle;
+    roughness[i] = clamp01(ro) * 255;
+    if (emissive && glow) {
+      const e = clamp01(glow[i]! * (1 - 0.6 * d) * (1 - 0.5 * c) * (1 - 0.35 * Math.max(0, -mottle)) * (0.75 + 0.25 * tnoise(x, y, seed + 301, 16)));
+      emissive[i * 4] = GLOW_SRGB[0] * e; emissive[i * 4 + 1] = GLOW_SRGB[1] * e; emissive[i * 4 + 2] = GLOW_SRGB[2] * e; emissive[i * 4 + 3] = 255;
+    }
+  }
+  // 6. Normals from the final height.
   const gain = NORMAL_GAIN[kind];
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
@@ -368,7 +465,8 @@ export function generatePanel(kind: PanelKind, seed: number): PanelMaps {
 export interface PanelTextureSet {
   map: THREE.DataTexture;
   normalMap: THREE.DataTexture;
-  roughnessMap: THREE.DataTexture;
+  /** Single channel (RedFormat): read it as `.r` (the sector mesh's roughnessNode), not as a roughnessMap (.g). */
+  roughness: THREE.DataTexture;
   emissiveMap: THREE.DataTexture | null;
 }
 
@@ -377,8 +475,8 @@ export interface PanelTextureSet {
  *  tread plate, slats and lattices are fine enough to shimmer badly at a distance otherwise. */
 export function panelTextures(kind: PanelKind, seed: number): PanelTextureSet {
   const m = generatePanel(kind, seed);
-  const make = (data: Uint8ClampedArray, srgb: boolean) => {
-    const t = new THREE.DataTexture(data, N, N, THREE.RGBAFormat);
+  const make = (data: Uint8ClampedArray, srgb: boolean, format: THREE.PixelFormat = THREE.RGBAFormat) => {
+    const t = new THREE.DataTexture(data, N, N, format);
     t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.magFilter = THREE.LinearFilter;
@@ -391,9 +489,32 @@ export function panelTextures(kind: PanelKind, seed: number): PanelTextureSet {
   return {
     map: make(m.albedo, true),
     normalMap: make(m.normal, false),
-    roughnessMap: make(m.roughness, false),
+    roughness: make(m.roughness, false, THREE.RedFormat),
     emissiveMap: m.emissive ? make(m.emissive, true) : null,
   };
+}
+
+/** Large-scale mottling for the sector mesh to sample at a scale unrelated to the 4 m tile (it breaks
+ *  the repeat): MOTTLE_SIZE² single-channel, tileable, 0..255 around 128. */
+export const MOTTLE_SIZE = 128;
+export function generateMottle(seed: number): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(MOTTLE_SIZE * MOTTLE_SIZE);
+  const step = N / MOTTLE_SIZE;
+  for (let y = 0; y < MOTTLE_SIZE; y++) for (let x = 0; x < MOTTLE_SIZE; x++) {
+    const v = tfbm(x * step, y * step, seed, 128, 4) * 0.75 + tnoise(x * step, y * step, seed + 9, 32) * 0.25;
+    out[y * MOTTLE_SIZE + x] = clamp01((v - 0.5) * 2.2 + 0.5) * 255;
+  }
+  return out;
+}
+export function mottleTexture(seed: number): THREE.DataTexture {
+  const t = new THREE.DataTexture(generateMottle(seed), MOTTLE_SIZE, MOTTLE_SIZE, THREE.RedFormat);
+  t.colorSpace = THREE.NoColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.magFilter = THREE.LinearFilter;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true;
+  t.needsUpdate = true;
+  return t;
 }
 
 export { PX_PER_M as PANEL_PX_PER_M };

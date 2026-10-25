@@ -42,7 +42,8 @@ export interface SurfaceLook {
   normalScale: number;
   /** Multiplies the level palette's role colour (the dark tint every sector surface wears). */
   gain: number;
-  /** The glow map's strength (lightPanel only); 0 for everything else. */
+  /** The glow map's strength (lightPanel only) per unit of sector level (the mesh multiplies by the
+   *  sector's current level: 0.35 at full light, so 0.35 × 0.35 ≈ 0.12 there); 0 for everything else. */
   glow: number;
 }
 
@@ -51,14 +52,14 @@ const STONE_LOOK: SurfaceLook = { tileM: 2, roughness: 1, metalness: 0, normalSc
 /** Tuned by eye in E1M1 under the torch and the sector light (scripts/sdf-game-doom-materials.sh shots). */
 export const SURFACE_LOOKS: Readonly<Record<SurfaceKind, SurfaceLook>> = {
   stoneWall: STONE_LOOK, stoneFloor: STONE_LOOK, stoneCeil: STONE_LOOK,
-  techPanel: { tileM: 4, roughness: 1, metalness: 0.15, normalScale: 1.0, gain: 1.0, glow: 0 },
-  metalSheet: { tileM: 4, roughness: 1, metalness: 0.25, normalScale: 0.9, gain: 1.0, glow: 0 },
-  door: { tileM: 4, roughness: 1, metalness: 0.3, normalScale: 1.1, gain: 1.0, glow: 0 },
-  rustBrick: { tileM: 4, roughness: 1, metalness: 0, normalScale: 1.1, gain: 1.0, glow: 0 },
-  lightPanel: { tileM: 4, roughness: 1, metalness: 0.1, normalScale: 0.8, gain: 1.0, glow: 0.35 },
-  concreteSlab: { tileM: 4, roughness: 1, metalness: 0, normalScale: 1.0, gain: 1.0, glow: 0 },
-  metalPlate: { tileM: 4, roughness: 1, metalness: 0.2, normalScale: 1.0, gain: 1.0, glow: 0 },
-  floorTile: { tileM: 4, roughness: 1, metalness: 0, normalScale: 0.9, gain: 1.0, glow: 0 },
+  techPanel: { tileM: 4, roughness: 1, metalness: 0.15, normalScale: 1.3, gain: 1.0, glow: 0 },
+  metalSheet: { tileM: 4, roughness: 1, metalness: 0.25, normalScale: 1.3, gain: 1.0, glow: 0 },
+  door: { tileM: 4, roughness: 1, metalness: 0.3, normalScale: 1.3, gain: 1.0, glow: 0 },
+  rustBrick: { tileM: 4, roughness: 1, metalness: 0, normalScale: 1.3, gain: 1.0, glow: 0 },
+  lightPanel: { tileM: 4, roughness: 1, metalness: 0.1, normalScale: 1.3, gain: 1.0, glow: 0.35 },
+  concreteSlab: { tileM: 4, roughness: 1, metalness: 0, normalScale: 1.3, gain: 1.0, glow: 0 },
+  metalPlate: { tileM: 4, roughness: 1, metalness: 0.2, normalScale: 1.3, gain: 1.0, glow: 0 },
+  floorTile: { tileM: 4, roughness: 1, metalness: 0, normalScale: 1.3, gain: 1.0, glow: 0 },
 };
 
 export const isStone = (k: SurfaceKind): k is StoneKind => k === 'stoneWall' || k === 'stoneFloor' || k === 'stoneCeil';

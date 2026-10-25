@@ -27,8 +27,8 @@
 
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
-import { attribute, float, materialColor, positionWorld, texture, uniform, vec3, vec4, wgslFn } from 'three/tsl';
-import { panelTextures, type PanelKind, type PanelTextureSet } from '../../../game/level/panel-textures';
+import { attribute, exp, float, materialColor, max, positionWorld, texture, uniform, uniformArray, uv, vec3, vec4, wgslFn } from 'three/tsl';
+import { mottleTexture, panelTextures, type PanelKind, type PanelTextureSet } from '../../../game/level/panel-textures';
 import { isStone, sectorMaterialsOn, surfaceKind, SURFACE_LOOKS, type SurfaceKind, type SurfaceLook } from './sector-materials';
 import type { GameContext } from './game-context';
 import { createSectorFx, CEIL_WHISPER, type SectorFxRuntime } from './game-sector-light';
@@ -112,13 +112,26 @@ function panelSet(kind: PanelKind): PanelTextureSet {
 }
 /** The light panels' glow strength (`?panelglow=` overrides). */
 export const panelGlow = uniform(1);
+/** Grime weights for the panel kinds (stone is untouched, so ?sectormat=0 stays the old look). */
+const GRIME = {
+  /** The large-scale mottle's UV scale: one mottle repeat per 4 / 0.231 ≈ 17 m, unrelated to the 4 m tile. */
+  mottleScale: 0.231,
+  /** Albedo × mix(lo, hi, mottle); roughness × mix(roughLo, roughHi, mottle). */
+  lo: 0.62, hi: 1.12, roughLo: 0.8, roughHi: 1.15,
+  /** Walls darken toward their sector's floor: 1 - base × exp(-(y - floor) / falloff). */
+  base: 0.5, falloffM: 0.9,
+  /** Panel glow follows the sector light, never quite out: × max(level, glowFloor). */
+  glowFloor: 0.04,
+};
+let mottle: THREE.DataTexture | null = null;
 
-interface SurfaceSource { base: THREE.MeshStandardMaterial; look: SurfaceLook; glowMap: THREE.Texture | null }
+interface SurfaceSource { base: THREE.MeshStandardMaterial; look: SurfaceLook; glowMap: THREE.Texture | null; roughness: THREE.Texture | null }
 
 /** One mesh's own node material (a NodeMaterial is reused as is by the light-list loop, so meshes
  *  never share one): the surface's textures and the palette colour, plus the sector term — the
  *  albedo times the sector's current level — for ceilings plan 1's whisper, and a light panel's glow. */
-function sectorMaterial(src: SurfaceSource, color: readonly [number, number, number], fx: SectorFxRuntime, ceil: boolean): MeshStandardNodeMaterial {
+function sectorMaterial(src: SurfaceSource, color: readonly [number, number, number], fx: SectorFxRuntime, ceil: boolean,
+  wallFloors: ReturnType<typeof uniformArray<'float'>> | null): MeshStandardNodeMaterial {
   const role = src.base;
   const nm = new MeshStandardNodeMaterial();
   nm.map = role.map; nm.normalMap = role.normalMap; nm.roughnessMap = role.roughnessMap;
@@ -133,8 +146,26 @@ function sectorMaterial(src: SurfaceSource, color: readonly [number, number, num
   const base = ceil ? vec3(...color).mul(fx.ceilWhisper) : vec3(0);
   // The pools' baked bounce (sector-bounce.ts), scaled with the pools' own brightness (glowGain).
   const bounce = attribute('glowBounce', 'vec3').mul(fx.bounceGain.mul(fx.glowGain));
-  const lit = materialColor.rgb.mul(vec3(lvl).add(bounce)).add(base);
-  nm.emissiveNode = src.glowMap ? lit.add(texture(src.glowMap).rgb.mul(panelGlow.mul(src.look.glow))) : lit;
+  let albedo = materialColor.rgb;
+  if (src.roughness) {
+    // GRIME (panel kinds only): a large mottle breaks the 4 m repeat in albedo and roughness, and walls
+    // darken toward their sector's floor (the per-sector floor height, read like the level).
+    mottle ??= mottleTexture(977);
+    const m = texture(mottle, uv().mul(GRIME.mottleScale)).r;
+    let k = m.mul(GRIME.hi - GRIME.lo).add(GRIME.lo);
+    if (wallFloors) {
+      const floorY = wallFloors.element(attribute('sectorIndex', 'float').add(0.5).toInt());
+      k = k.mul(float(1).sub(exp(positionWorld.y.sub(floorY).max(0).div(-GRIME.falloffM)).mul(GRIME.base)));
+    }
+    albedo = albedo.mul(k);
+    nm.colorNode = vec4(albedo, 1);
+    nm.roughnessNode = texture(src.roughness).r.mul(src.look.roughness).mul(m.mul(GRIME.roughHi - GRIME.roughLo).add(GRIME.roughLo)).clamp(0.04, 1);
+  }
+  const lit = albedo.mul(vec3(lvl).add(bounce)).add(base);
+  // A light panel's glow follows its sector's light (dark, flicker and strobe sectors dim their panels).
+  nm.emissiveNode = src.glowMap
+    ? lit.add(texture(src.glowMap).rgb.mul(panelGlow.mul(src.look.glow)).mul(max(lvl, GRIME.glowFloor)))
+    : lit;
   return nm;
 }
 
@@ -193,7 +224,11 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
     // u runs along the wall from the projection of `a` on its direction, so the pieces of a split line tile on.
     const kind = surfaceKind(q.mat, 'wall', matsOn);
     const tile = SURFACE_LOOKS[kind].tileM;
-    const u0 = (q.a[0] * dx + q.a[1] * dz) / len / tile, u1 = u0 + len / tile;
+    // A door's u starts at its line's start and spans a whole number of tiles, so its frame strips
+    // sit at the door's edges (a line split near a pool restarts per piece).
+    const door = kind === 'door';
+    const u0 = door ? 0 : (q.a[0] * dx + q.a[1] * dz) / len / tile;
+    const u1 = door ? Math.max(1, Math.round(len / tile)) : u0 + len / tile;
     const b = batch(zone, 'wall', kind);
     // Each vertical edge is cut by its own end (nearGlow), so walls meeting at a corner cut it alike.
     const cuts = (p: XZ) => (bounce && nearGlow(sources, p[0], p[1]) ? wallRows(q.y0, q.y1) : [q.y0, q.y1]);
@@ -216,12 +251,12 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
     if (isStone(kind)) {
       const set = ctx.world.stoneSet;
       const m = kind === 'stoneFloor' ? set.floor : kind === 'stoneCeil' ? set.perimeterAccent : set.wall;
-      src = { base: worldTiled(m as THREE.MeshStandardMaterial), look, glowMap: null };
+      src = { base: worldTiled(m as THREE.MeshStandardMaterial), look, glowMap: null, roughness: null };
     } else {
       const t = panelSet(kind);
-      const base = new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normalMap, roughnessMap: t.roughnessMap,
+      const base = new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normalMap,
         roughness: look.roughness, metalness: look.metalness, normalScale: new THREE.Vector2(look.normalScale, look.normalScale) });
-      src = { base, look, glowMap: t.emissiveMap };
+      src = { base, look, glowMap: t.emissiveMap, roughness: t.roughness };
     }
     surfaces.set(kind, src);
     return src;
@@ -229,10 +264,11 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
   const glowParam = search.get('panelglow');
   if (glowParam !== null && Number.isFinite(Number(glowParam)) && Number(glowParam) >= 0) panelGlow.value = Number(glowParam);
   const colors: Record<Role, readonly [number, number, number]> = { floor: P.floor, ceil: P.ceil, wall: P.wall };
+  const wallFloors = uniformArray<'float'>(map.sectors.map(s => s.floor), 'float');
 
   for (const [key, b] of batches) {
     const [zone, role, kind] = key.split(':') as [string, Role, SurfaceKind];
-    const mesh = new THREE.Mesh(b.geometry(), sectorMaterial(sourceOf(kind), colors[role], fx, role === 'ceil'));
+    const mesh = new THREE.Mesh(b.geometry(), sectorMaterial(sourceOf(kind), colors[role], fx, role === 'ceil', role === 'wall' ? wallFloors : null));
     mesh.name = isStone(kind) ? `sector-${role}-zone-${zone}` : `sector-${role}-${kind}-zone-${zone}`;
     mesh.userData.sectorKind = kind;
     mesh.userData.room = Number(zone) + 1;                       // the zone's synthesized room id
