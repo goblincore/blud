@@ -725,8 +725,8 @@ if (process.env.SHOTS === '1') {
     const still = (kind) => { moving[kind] = (moving[kind] ?? 0) + 1; };
     for (const c of d.chunks) c.settled ? add('chunk', c.pos[0], c.pos[2], c.pos[1] - c.support, -0.02, 0.03, { id: c.id, tag: c.tag }) : still('chunk');
     for (const c of d.meshGibs) c.settled ? add('meshGib', c.pos[0], c.pos[2], c.pos[1] - c.support, -0.02, 0.03, { id: c.id, tag: c.tag }) : still('meshGib');
-    // Sprite pieces: the physics (pos.y - support) is judged; the DRAWN mesh's lowest vertex is the independent
-    // twin, reported below (a carved piece whose support spheres do not match its mesh draws off the floor).
+    // Sprite pieces: the physics (pos.y - support) and, for carved mesh pieces, the DRAWN mesh's lowest vertex (the
+    // independent twin, judged below: a piece whose support spheres do not match its mesh draws off the floor).
     const drawn = [];
     for (const p of d.sprites) {
       if (!p.settled) { still('sprite'); continue; }
@@ -768,11 +768,12 @@ if (process.env.SHOTS === '1') {
   const need = { gib: (kinds.chunk?.n ?? 0) + (kinds.meshGib?.n ?? 0) + (kinds.sprite?.n ?? 0), splat: kinds.splat?.n ?? 0, casing: kinds.casing?.n ?? 0, gun: kinds.gun?.n ?? 0, pickup: kinds.pickup?.n ?? 0 };
   const missing = Object.entries(need).filter(([, n]) => n === 0).map(([k]) => k);
   if (missing.length) fail(`debris: nothing judged for ${missing.join(', ')} (${JSON.stringify(need)}) — the check would pass vacuously`);
-  // The drawn twin (report, WARN): a settled carved piece's lowest drawn vertex against the floor under it.
-  const DRAWN_BAND = [-0.03, 0.05];
+  // The drawn twin: a settled carved piece's lowest DRAWN vertex against the floor under it (the asset gibs rest on
+  // support spheres taken from their drawn mesh since plan 3b Task 15; before, the torso bone drew 0.3-1.0 m up).
+  const DRAWN_BAND = [-0.03, 0.08];
   const drawnOut = J.drawn.filter((q) => !(q.gap >= DRAWN_BAND[0] && q.gap <= DRAWN_BAND[1]));
-  if (J.drawn.length) console.log(`debris E1M1 drawn: ${J.drawn.length} settled carved pieces, lowest drawn vertex - floor ${Math.min(...J.drawn.map((q) => q.gap)).toFixed(3)}..${Math.max(...J.drawn.map((q) => q.gap)).toFixed(3)} m`);
-  if (drawnOut.length) console.log(`WARN debris E1M1 drawn: ${drawnOut.length} carved pieces draw off the floor though their physics rests on it (band ${DRAWN_BAND.join('..')}; not judged — the same on room levels): ${JSON.stringify(drawnOut.map((q) => ({ ...q, gap: +q.gap.toFixed(3), support: +q.support.toFixed(3) })))}`);
+  if (drawnOut.length) fail(`debris E1M1 drawn: ${drawnOut.length} settled carved pieces draw off the floor (lowest drawn vertex - floor outside ${DRAWN_BAND.join('..')} m): ${JSON.stringify(drawnOut.map((q) => ({ ...q, gap: +q.gap.toFixed(3), support: +q.support.toFixed(3) })))}`);
+  if (J.drawn.length) pass(`debris E1M1 drawn: ${J.drawn.length} settled carved pieces, lowest drawn vertex - floor ${Math.min(...J.drawn.map((q) => q.gap)).toFixed(3)}..${Math.max(...J.drawn.map((q) => q.gap)).toFixed(3)} m (band ${DRAWN_BAND.join('..')})`);
   const nonZero = [...new Set(rows.filter((r) => r.kind !== 'pickup' && Number.isFinite(r.f) && r.f !== 0).map((r) => r.f))].sort((a, b) => a - b);
   if (!nonZero.length) fail('debris: every judged fight item rests on floor 0 — no raised or sunken floor tested');
   pass(`debris E1M1: ${rows.length - (kinds.ropeLowest?.n ?? 0)} items on the floor under them (${summary}); fight debris on non-zero floors ${nonZero.join(', ')}`);

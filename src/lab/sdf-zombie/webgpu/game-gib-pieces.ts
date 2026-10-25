@@ -9,7 +9,7 @@
 
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu'
-import { chunkExtent, chunkSupportSpheres } from '../extent'
+import { chunkExtent, chunkSupportSpheres, supportSpheresFromPoints } from '../extent'
 import { makeChunk } from '../gib-chunks'
 import { type GibPiece } from '../gib-parts'
 import { boneChunkRadius } from '../melt-bones'
@@ -31,9 +31,10 @@ import { rngStreams } from './rng'
  * the caller then falls back to the marched path for that piece.
  *
  * The `Chunk` state is built with EXACTLY `spawnChunkPiece`/`spawnSpriteGibPiece`
- * arithmetic — same radius, long axis, support spheres and pre-release spin —
- * so an asset gib settles at the same height, bounces off the same walls and
- * topples the same way as the marched one.
+ * arithmetic — same radius, long axis and pre-release spin — so an asset gib
+ * bounces off the same walls and topples the same way as the marched one. Its
+ * SUPPORT spheres are then replaced by the drawn mesh's extreme points, so what
+ * rests on the floor is what is drawn (plan 3b Task 15).
  */
 export function spawnAssetGibPiece(ctx: GameContext, 
   a: ZombieActor,
@@ -114,6 +115,14 @@ export function spawnAssetGibPiece(ctx: GameContext,
     ctx.gibs.assetRuntime.countFallback(bounds.finite ? 'deform-bounds' : 'deform-nonfinite');
     return false;
   }
+  // THE SUPPORT IS THE DRAWN MESH (plan 3b Task 15). The floor contact must rest what is DRAWN on the floor:
+  // the prim spheres above (chunkSupportSpheres) describe the marched SDF, and for the torso bone piece they sat
+  // 0.3-1.0 m below its mesh, so it settled with its ribs in mid-air (room levels and sectors alike). The deformed
+  // positions are chunk-relative (deformRows subtracts g.origin), the frame the support spheres live in. Set after
+  // the display gate so the chunk (and rngStreams.misc) is built exactly as before; nothing read the support yet.
+  // An empty mesh keeps the prim spheres.
+  const drawnSupport = supportSpheresFromPoints(inst.positions);
+  if (drawnSupport.length > 0) state.support = drawnSupport;
   // PER-INSTANCE FACE FRAME (task 4). The asset's stored `doc.face` is the
   // REST frame; what must be projected is the POSED/sloughed frame the actor
   // is drawing with right now — the same snapshot `spawnChunkPiece` takes from

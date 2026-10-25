@@ -1612,6 +1612,29 @@ a pickup `y − floor` = 0.25 ± 0.001; a resting bundle `|y − floor| ≤ 0.01
 - [ ] **Step 3: Run** `LAB_TMP=.lab-tmp SHOTS=1 bash scripts/sdf-game-doom-gate.sh`; fix what it finds (in the task
   that owns the stepper). **Commit** `test(levels): doom gate — debris rests on sector floors and stops at walls`.
 
+**As built (commits 9c0093eb, f3e1e18f and the bone-support fix):**
+- 6a order: the blood burst runs first (test chunks bleed as they roll); a zombie is spawned in the pit (7.3, −4) and
+  collapsed, because `spawnTestChunk` draws with `actors[0]`'s view — it is also a corpse check. Every fixture floor
+  is read from `__sdfGame.ground` AND the fixture layout written out in the gate (a disagreement fails); a rAF sampler
+  fails any frame a piece is off the map or has its lowest point under the floor beneath it (inside a riser). The
+  bundle is sampled for 7.5 s (its fuse is 8 s).
+- 6b: the blast target prefers a soldier on a floor |y| ≥ 0.25; chunk bake is off for the 8 s (a baked chunk leaves
+  `liveChunks` and the debris seam). Floors are compared between the game's ground and one the page builds from the
+  level JSON. The asset path turns a gibbed body into carved sprite pieces only (no chunks, mesh gibs, ropes or kit
+  on E1M1 in these runs), and a gibbed actor's gun is not in `debris()`: the gun judged is the collapsed soldier's.
+  Fail-on-empty: gibs, splats, casings, guns, pickups, and at least one non-zero floor. Shots frame the gib pile's
+  median (the blast throws pieces metres off the site).
+- Seams: sprite rows carry `support` and `drawnLowY` (the drawn mesh's lowest vertex), and the gate FAILS a settled
+  carved piece whose lowest drawn vertex is outside −0.03..+0.08 m of its floor. That check found the torso BONE asset
+  piece drawing 0.27–1.03 m above the floor on every level (room levels too): its prim support spheres sat far below
+  its mesh. Asset pieces now rest on support spheres from their drawn mesh (`extent.ts supportSpheresFromPoints`,
+  `game-gib-pieces.ts spawnAssetGibPiece`). `__sdfGame.simTime()` (sim seconds) times section 4's hurt floor.
+- Section 5.2 judges bodies against the disc floor (`floorUnder` 0.34 m, Task 6's rule): a body on a 0.75 m lip read
+  off the centre's `floorAt` and failed the 20 s check.
+- **Report only (Task 6 area):** a collapsed zombie's posed lowest point is about −0.26 m below the fixture PIT floor
+  (−1, sky ceiling), against about −0.15 m on the fixture's floors 0 and 0.5 and on the arena. The gate's corpse band
+  is −0.3..+0.25 m (`CORPSE_LOW_BAND`).
+
 ---
 
 ## Task 16: Gate — barrels
