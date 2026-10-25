@@ -51,7 +51,7 @@ describe('reloadPhaseAt', () => {
     expect(reloadPhaseAt(0.40)).toBe('break');
     expect(reloadPhaseAt(0.60)).toBe('eject');
     expect(reloadPhaseAt(0.90)).toBe('load');
-    expect(reloadPhaseAt(1.13)).toBe('snap');
+    expect(reloadPhaseAt(1.17)).toBe('snap');   // 1.15..1.20 since the snap waits for the hand to lift (2026-10-25)
     expect(reloadPhaseAt(1.25)).toBe('settle');
   });
   it('is done past the total', () => {

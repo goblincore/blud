@@ -46,8 +46,9 @@ import { isLevelCheap } from './level-tier';
 import { LevelListLightingNode } from './level-list-node';
 import { GOBLIN_SKIN } from './goblin-skin';
 import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms, seatOnBar, type GoblinArms } from './game-arms';
-/** From the gun's Fore_Hand locator to the fore-end's axis, where the fore hand's curl centre goes (rig metres). */
-const FORE_BAR_OFFSET = new THREE.Vector3(0, 0.012, 0);
+/** From the gun's Fore_Hand locator to the fore-end's axis, where the fore hand's Grip_L goes (rig metres; measured
+ *  against the fore-end mesh in the hand's frame, 2026-10-25). */
+const FORE_BAR_OFFSET = new THREE.Vector3(0.010, 0.012, 0);
 import { flashPixels, smokePixels } from './flash-sprite';
 import {
   TRACER, emberPixels, faceEyeBasis, tracerBasis, tracerHeadOn, tracerLength,

@@ -18,8 +18,10 @@ export const RELOAD = {
   /** Barrels at full 45 deg. 0.33 s of travel, straight off the reference. */
   breakEndSec: 0.51,
   ejectEndSec: 0.65,
-  loadEndSec:  1.11,
-  snapEndSec:  1.16,
+  /** The gun stays open past the seat until the fore hand has lifted clear (WITHDRAW_LIFT_SEC), then snaps: shut with
+   *  the hand still over the breech, the barrels swung up through it (owner playtest, 2026-10-25). */
+  loadEndSec:  1.15,
+  snapEndSec:  1.20,
   totalSec:    1.30,
   /** How far the barrels swing off the frame, radians (45 deg). The reference
    *  opens this wide; our old 35 deg barely showed the breech. */
@@ -29,10 +31,11 @@ export const RELOAD = {
   extractAtSec: 0.45,
   /** When they clear the mouth and the free tumble takes over. */
   ejectAtSec: 0.51,
-  /** When fresh cases first appear coming up from under the frame, and when
-   *  they seat. Seating well before the snap so the gun never closes on a
-   *  shell that is still visibly outside it. */
-  loadStartSec: 0.74,
+  /** When fresh cases first appear -- in the fore hand while it is down at the POUCH, deep under the frame -- and when
+   *  they seat. Seating well before the snap so the gun never closes on a shell that is still visibly outside it.
+   *  (0.74 until 2026-10-25: by then the hand was back in view at the gun's left, and looking up showed the cases
+   *  appearing in it from thin air.) */
+  loadStartSec: 0.66,
   /** When the fresh cases arrive STAGED: tips a gap behind the mouths, lying
    *  on the bore axis, still in the hand. From here to loadSeatSec they slide
    *  straight in along the bore -- the extract in reverse. Before this the
@@ -89,10 +92,10 @@ const RELOAD_KEYS: readonly (ReloadPose & { t: number })[] = [
   { t: 0.18, roll: -12, pitch: 10, dy: 0.025, dz: 0.020, hinge: 0 },
   { t: 0.51, roll: -16, pitch: 16, dy: 0.040, dz: 0.030, hinge: 1 },
   { t: 0.65, roll: -16, pitch: 17, dy: 0.042, dz: 0.031, hinge: 1 },
-  { t: 1.11, roll: -14, pitch: 15, dy: 0.037, dz: 0.027, hinge: 1 },
-  // The snap. 0.14 s to shut against 0.33 s to open, so it closes far harder
+  { t: RELOAD.loadEndSec, roll: -14, pitch: 15, dy: 0.037, dz: 0.027, hinge: 1 },
+  // The snap. 0.05 s to shut against 0.33 s to open, so it closes far harder
   // than it opened -- that asymmetry IS the "clack".
-  { t: 1.16, roll:  -4, pitch:  3, dy: 0.010, dz: 0.006, hinge: 0 },
+  { t: RELOAD.snapEndSec, roll:  -4, pitch:  3, dy: 0.010, dz: 0.006, hinge: 0 },
   { t: 1.30, roll:   0, pitch:  0, dy: 0.000, dz: 0.000, hinge: 0 },
 ];
 
@@ -494,17 +497,24 @@ export interface HandHold { stage: HandDelta; seat: HandDelta; }
 /** The withdraw's first key: the hand lifted back and out off the breech, before it settles under the fore-end. */
 export const WITHDRAW_LIFT_SEC = 1.15;
 /** ...out to the left, still high... */
-export const WITHDRAW_OUT_SEC = 1.20;
+export const WITHDRAW_OUT_SEC = 1.21;
 /** ...and below the gun, before it comes up into the cradle. */
-export const WITHDRAW_UNDER_SEC = 1.25;
+export const WITHDRAW_UNDER_SEC = 1.255;
 const SUPPORT_KEYS: readonly (SupportHandPose & { t: number })[] = [
   { t: 0.00, dx:  0.000, dy:  0.000, dz: 0.000, carrying: false },
   { t: 0.18, dx: -0.020, dy: -0.060, dz: 0.020, carrying: false },
-  { t: 0.51, dx: -0.060, dy: -0.200, dz: 0.060, carrying: false },
+  // THE POUCH: deep under the frame -- out of view even on an extreme look up, where the free-aim lean shows more of
+  // the rig -- while the spent cases fly; the fresh ones appear in the hand there (loadStartSec), then it comes back
+  // up with them.
+  { t: 0.51, dx: -0.140, dy: -0.340, dz: 0.100, carrying: false },
+  { t: 0.66, dx: -0.150, dy: -0.340, dz: 0.110, carrying: true  },  // grabbing the fresh cases
   // OUT AND OVER (owner playtest, 2026-10-25): the hand comes round the gun's LEFT side and over the top onto the open
   // tubes. Straight from below-left to the stage key, it passed through the receiver.
-  { t: 0.74, dx: -0.190, dy: -0.050, dz: 0.120, carrying: true  },  // wide left, coming up clear of the receiver
-  { t: 0.87, dx: -0.120, dy:  0.090, dz: 0.150, carrying: true  },  // over the top, above and left of the breech
+  // Measured (clip sweep, 2026-10-25): while the gun is presented its top sits ~0.18 m ABOVE the fore hand's rest and
+  // its left side ~0.04 m right of it, and the cup's fingers reach ~0.13 m to the right. So the hand stays >= 0.2 m
+  // left until it is above the top, then comes over.
+  { t: 0.77, dx: -0.220, dy:  0.000, dz: 0.120, carrying: true  },  // wide left, coming up clear of the receiver
+  { t: 0.87, dx: -0.120, dy:  0.260, dz: 0.180, carrying: true  },  // above the gun's top, left of the breech
   { t: 0.96, dx:  0.010, dy:  0.010, dz: 0.140, carrying: true  },  // hold.stage
   { t: 1.11, dx:  0.020, dy:  0.020, dz: 0.120, carrying: true  },  // hold.seat
   // UP, OUT, UNDER, UP (owner playtest, 2026-10-25: "instead of withdrawing ... it just swipes through the frame").
@@ -514,9 +524,9 @@ const SUPPORT_KEYS: readonly (SupportHandPose & { t: number })[] = [
   // pose mid-move (HOLD_POSE_END_SEC).
   // The flat cup's fingers reach ~13 cm and point right, toward the gun, so every key until the hand is under the
   // gun keeps it clear to the LEFT of the receiver, not just above it.
-  { t: WITHDRAW_LIFT_SEC, dx: -0.060, dy:  0.180, dz: 0.160, carrying: false },  // UP (fingers above the barrels), back, a little left
-  { t: WITHDRAW_OUT_SEC, dx: -0.220, dy:  0.050, dz: 0.120, carrying: false },   // out wide left
-  { t: WITHDRAW_UNDER_SEC, dx: -0.120, dy: -0.120, dz: 0.040, carrying: false }, // below and left of the gun
+  { t: WITHDRAW_LIFT_SEC, dx: -0.020, dy:  0.250, dz: 0.170, carrying: false },  // UP above the gun's top, back
+  { t: WITHDRAW_OUT_SEC, dx: -0.200, dy:  0.050, dz: 0.120, carrying: false },   // out left, fingers clear of its side
+  { t: WITHDRAW_UNDER_SEC, dx: -0.140, dy: -0.100, dz: 0.040, carrying: false }, // below and left of the gun
   { t: 1.30, dx:  0.000, dy:  0.000, dz: 0.000, carrying: false },
 ];
 
@@ -530,13 +540,15 @@ const SUPPORT_KEYS: readonly (SupportHandPose & { t: number })[] = [
  */
 export function coverRoll(t: number): number {
   return smoothstep(RELOAD.loadStartSec, RELOAD.loadStartSec + 0.10, t)
-    * (1 - smoothstep(RELOAD.loadSeatSec, COVER_UNROLL_END_SEC, t));
+    * (1 - smoothstep(COVER_UNROLL_START_SEC, COVER_UNROLL_END_SEC, t));
 }
-/** The roll unwinds over the withdraw, seat to here, not in the 50 ms to the snap. */
-export const COVER_UNROLL_END_SEC = 1.24;
+/** The roll back to underhand comes LAST: the hand moves away and down still palm-down, then turns under to re-grip
+ *  (owner playtest, 2026-10-25: the roll came too soon and too fast). */
+export const COVER_UNROLL_START_SEC = 1.23;
+export const COVER_UNROLL_END_SEC = 1.29;
 /** The fore hand shows its cupped cover pose (handhold_L) from loadStartSec until here: mid-way down the withdraw, while
  *  it moves fastest and is nearly unrolled, so the swap to the fore-end cradle is not a pop on a still hand. */
-export const HOLD_POSE_END_SEC = 1.22;
+export const HOLD_POSE_END_SEC = 1.26;
 
 export function supportHandPose(t: number, hold?: HandHold): SupportHandPose {
   const REST: SupportHandPose = { dx: 0, dy: 0, dz: 0, carrying: false };

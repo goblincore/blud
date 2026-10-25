@@ -202,13 +202,16 @@ FINGERS_FIST = (
     (-0.0068, -3, (0.036, 0.029, 0.022), (75, 98, 74)),
     (-0.0205, -8, (0.029, 0.023, 0.018), (78, 100, 76)),
 )
-FINGERS_FORE = (
-    (+0.0205, +6, (0.035, 0.028, 0.022), (45, 65, 45)),
-    (+0.0068, +2, (0.039, 0.031, 0.024), (48, 68, 46)),
-    (-0.0068, -4, (0.036, 0.029, 0.022), (52, 70, 48)),
-    (-0.0205, -10, (0.029, 0.023, 0.018), (56, 72, 50)),
+FINGERS_FORE = (   # FLAT under the fore-end, wrapping its far edge: measured in the hand frame the wood is ~14 cm
+    (+0.0205, +2, (0.035, 0.028, 0.022), (6, 18, 55)),    # across and 46 mm thick, so a real curl drove the fingers
+    (+0.0068, +0, (0.039, 0.031, 0.024), (5, 16, 55)),    # into it (clip sweep, 2026-10-25); splay kept small and the
+    (-0.0068, -1, (0.036, 0.029, 0.022), (6, 18, 57)),    # tips wrapped down onto the edge, not standing up past it
+    (-0.0205, -3, (0.029, 0.023, 0.018), (8, 20, 60)),    # ("a little too wide/loose", owner 2026-10-25)
 )
-THUMB_FORE = ((0.75, 0.45, -0.48), (0.85, 0.45, -0.25), (0.80, 0.55, -0.20))   # forward along the flank, claw out
+THUMB_FORE = ((0.70, 0.55, 0.15), (0.80, 0.55, 0.10), (0.80, 0.60, 0.00))   # forward and up the near flank, claw out
+# The FORE pose has no curl to centre on: its Grip_L is where the fore-end's axis sits when the palm lies flat on its
+# underside (authored frame: x 0, palmar, distal; scaled by HAND_SIZE like grip_centre).
+GRIP_FORE = (0.0, 0.0314, -0.0286)
 
 # THE SHELL-HOLD POSE (owner, 2026-10-24): the reload's cover-and-shove (game-viewmodel.ts coverRoll). The fore hand
 # comes up already palm-down over the open tubes, the two fresh cases under it, and shoves them in. So this is a
@@ -324,7 +327,8 @@ def build_arm(sx, tag, watch):
     # The hand was the blob's plain orb until 2026-10-24; now the bony hand.
     pose = (FINGERS_FORE, THUMB_FORE) if watch else (FINGERS_FIST, THUMB)   # watch == the fore (left) arm
     build_hand(sx, tag, root, *pose)
-    locator(f'Grip_{tag}', root, grip_centre(pose[0]))
+    grip = tuple(c * HAND_SIZE for c in GRIP_FORE) if watch else grip_centre(pose[0])
+    locator(f'Grip_{tag}', root, grip)
     if watch:   # the fore (left) arm carries the shells in the reload
         build_hand(sx, tag, root, FINGERS_HOLD, THUMB_HOLD, name=f'handhold_{tag}')
     put(sphere(WRIST_R, 16, 12), f'wrist_{tag}', 'Skin', root, loc=(0, 0, WRIST_Z), uv=True)
@@ -484,10 +488,11 @@ if info['skin_without_uv']:
 # swallow them and a much smaller one would leave them floating.
 # (The upper bound is loose since HAND_SIZE: a bigger fist covering more of the two cases during the shove is the
 # point -- loadHold's own comment says the hand doing it should hide them.)
-# 3.5x since the fore cradle's thumb reaches forward along the flank (151 mm).
-if info['hand_dim'] is None or not (1.2 * HAND_R <= info['hand_dim'] <= 3.5 * HAND_R):
+# 4.2x since the fore cradle went FLAT under the fore-end (183 mm, fingers straight). hand_L is no longer the hand that
+# carries the shells (handhold_L is), so this is a sanity bound now, not loadHold's.
+if info['hand_dim'] is None or not (1.2 * HAND_R <= info['hand_dim'] <= 4.2 * HAND_R):
     print(f"[goblin-arm] FAIL: hand extent {info['hand_dim']} outside "
-          f"[{1.2 * HAND_R}, {3.5 * HAND_R}] (GOBLIN_SKIN.handRadius; loadHold depends on it)",
+          f"[{1.2 * HAND_R}, {4.2 * HAND_R}] (a sanity bound on the FPV hand's size)",
           file=sys.stderr); ok = False
 if not info['screen_under_arm_l']:
     print("[goblin-arm] FAIL: Watch_Screen is not under Arm_L", file=sys.stderr); ok = False
