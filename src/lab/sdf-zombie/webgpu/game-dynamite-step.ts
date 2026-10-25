@@ -18,6 +18,7 @@ import { gibActor } from './game-gib-actor';
 import { gibAllowance, gibBudget, gibDebit, newBlastProfile, reacquireHeldProp, scheduleGib } from './game-gib-spawn';
 import { ceilingAt } from './game-hit-trace';
 import { eyeOf } from './game-player';
+import { standingFloor } from './level-ground';
 import { spawnBurstStandIn, stepBursts } from './game-weapon-rig';
 import { slotReady } from './game-weapon-slots';
 import { scaleBurstVisual, spillVerdict } from './game-wound-vfx';
@@ -51,10 +52,9 @@ export function detonateAt(ctx: GameContext, at: Vec3, inHand = false): void {
   const tResolve = performance.now();
   const fx = resolveExplosion(at, bodies, {
     eye: eyeOf(ctx.player.player),
-    // Floor distance IS the height above y = 0, this level's real floor, so
-    // the resolver's air-vs-ground burst choice is exact here without
-    // overriding its default.
-    floorDistM: Math.max(0, at[1]),
+    // The blast's height over the floor under it (sector levels: that sector's floor; room levels: y = 0, the old
+    // value exactly) — the resolver's air-vs-ground burst choice.
+    floorDistM: Math.max(0, at[1] - standingFloor(ctx.world.level.ground, at[0], at[2])),
     // A gibbed body's wounds are never read (see `gibWounds` above).
     woundsOnGibbed: ctx.gibs.wounds,
     // THE FOCUS KNOBS, live from the panel. Both are the resolver's own
