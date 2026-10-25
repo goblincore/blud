@@ -8,12 +8,13 @@ import type { Vec3 } from '../types';
 import { type GameContext } from './game-context';
 import type { RoomDef } from './game-level';
 
-/** Rebuild the collider list in place from the level's static boxes and its
- *  closed gates. In place: movers hold the array reference for the session. */
+/** Rebuild the collider list in place from the level's static boxes, its
+ *  closed gates and its standing barrels (plan 3b). In place: movers hold the
+ *  array reference for the session. */
 export function refreshGateColliders(ctx: GameContext): void {
   const w = ctx.world;
   w.colliders.length = 0;
-  w.colliders.push(...w.level.staticColliders, ...w.level.gateColliders(w.openGates));
+  w.colliders.push(...w.level.staticColliders, ...w.level.gateColliders(w.openGates), ...(w.barrels?.liveBoxes() ?? []));
 }
 
 /** Open an authored level's gate by id: it stops colliding and its mesh hides.

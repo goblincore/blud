@@ -45,14 +45,14 @@ Each line is the first sentence of the module's header comment.
 | [Entrypoints and labs](#entrypoints-and-labs) | 20 | One module per HTML page; see the entrypoint table above. |
 | [Dev panels](#dev-panels) | 11 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
-| [Game: debug seams](#game-debug-seams) | 24 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 83 | Gameplay features wired into the game loop. |
+| [Game: debug seams](#game-debug-seams) | 25 | `window.__sdfGame` members, read by the gate and capture scripts. |
+| [Game: feature modules](#game-feature-modules) | 84 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
-| [Levels and world](#levels-and-world) | 43 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
+| [Levels and world](#levels-and-world) | 44 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
 | [Actors and crowd (render)](#actors-and-crowd-render) | 19 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
@@ -283,6 +283,7 @@ The GameContext and its state slices (ECS resources to be). All game state lives
 
 `window.__sdfGame` members, read by the gate and capture scripts.
 
+- `webgpu/game-seams-barrels.ts` — Barrel seams (plan docs/superpowers/plans/2026-10-25-sector-levels-3b-debris-and-barrels.md Task 13): the level's barrels as plain data, a hit by…
 - `webgpu/game-seams-bench.ts` — Seam module: the `bench` and `demoScenario` members lifted verbatim out of the `__sdfGame` object literal in game-main.ts.
 - `webgpu/game-seams-boot.ts` — The window.__sdfGame boot and frame diagnostics: backend, tiles, frame hash, pass timings, draw counts, frame cap and shadow toggles.
 - `webgpu/game-seams-debris.ts` — Debris seams (plan docs/superpowers/plans/2026-10-25-sector-levels-3b-debris-and-barrels.md Task 9): where every loose piece a fight leaves behind…
@@ -318,7 +319,8 @@ Gameplay features wired into the game loop.
 - `webgpu/game-arms-math.ts` — The FPV arms' pure half: the node contract, the material-name mapping, and the basis that aims an arm.
 - `webgpu/game-arms.ts` — The FPV goblin arms: loads goblin-arm.glb, dresses it, and hands two arm groups (origin = hand centre, local +Y = toward the elbow) to game-main.
 - `webgpu/game-axe.ts` — WEAPON SLOT 7: THE AXE (spec docs/superpowers/specs/2026-10-04-axe-and-head-split-design.md §3-§4).
-- `webgpu/game-barrel-view.ts` — THE BARREL VIEW (plan 2026-10-25-sector-levels-3b Task 12): the three.js side of barrel-look.ts.
+- `webgpu/game-barrel-view.ts` — THE BARREL VIEW (plan 2026-10-25-sector-levels-3b Tasks 12–13): the three.js side of barrel-look.ts.
+- `webgpu/game-barrels.ts` — BARRELS IN PLAY (plan 2026-10-25-sector-levels-3b Task 13): the level's barrels on ctx.world.barrels — the pure core (barrel-runtime.ts: states,…
 - `webgpu/game-bench-scenario.ts` — The scripted firefight, as DATA.
 - `webgpu/game-bench.ts` — Runs a Scenario against the page and reports per-segment frame cost.
 - `webgpu/game-bleed.ts` — Gut rope stepping, and registering wound and cut bleeds on actors.
@@ -515,6 +517,7 @@ Level definitions, kits, the train, the disco, the egg, sky, encounters.
 
 - `webgpu/active-level.ts` — THE ACTIVE LEVEL. Everything in the game that used to read the ring's globals (ROOMS, TUNNELS, FURNITURE, PLAYER_START, levelColliders(), ...) reads…
 - `webgpu/barrel-look.ts` — THE BARREL'S LOOK (spec 2026-10-24 §8, plan 2026-10-25-sector-levels-3b Task 12): our own toxic drum, no WAD data.
+- `webgpu/barrel-runtime.ts` — BARRELS IN PLAY, THE PURE CORE (plan 2026-10-25-sector-levels-3b Task 13): the level's barrel states over time — hits, blast catches, the fuse step,…
 - `webgpu/barrel-state.ts` — EXPLODING BARRELS (spec 2026-10-24 §8, plan 2026-10-25-sector-levels-3b): hit points, hits by kind, the blast catch (every intact barrel within…
 - `webgpu/disco-star.wgsl.ts` — A disco ball's reflected star (spec 2026-09-27-disco-ball-design.md §2), hand-written WGSL: a soft round spot with a hot core, drawn additive on a…
 - `webgpu/disco-stars.ts` — THE BOILER ROOM DISCO BALL (spec 2026-09-27-disco-ball-design.md).

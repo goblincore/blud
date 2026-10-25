@@ -1,0 +1,64 @@
+// src/lab/sdf-zombie/webgpu/game-barrels.ts
+//
+// BARRELS IN PLAY (plan 2026-10-25-sector-levels-3b Task 13): the level's barrels on ctx.world.barrels — the pure
+// core (barrel-runtime.ts: states, boxes in ctx.world.colliders, the chain log) wired to the game. A barrel that
+// goes up swaps its drum for the stub, lays a scorch at its feet, detonates THROUGH the dynamite blast (detonateAt:
+// wounds, gibs, launches, light, VFX, kick — and its closing catchBlast is the chain), then hurts the player by
+// BLAST_PROFILES.barrel unless sector geometry shields the capsule centre. Dynamite itself never hurts the player
+// (owner, 2026-10-25); only this module and the rockets apply a blast share.
+//
+// Sector levels only: game-main builds this only when the level has barrels.
+import type { Vec3 } from '../types';
+import { BLAST_PROFILES, blastToPlayer, playerBlastDamage } from '../blast-player';
+import type { GameContext } from './game-context';
+import type { BarrelDef } from './level-def';
+import type { SectorGround } from './sector-ground';
+import { barrelYaw } from './barrel-look';
+import { createBarrelCore, type BarrelRuntime } from './barrel-runtime';
+import { createBarrelMaterials, createBarrelView, createScorchPool, type BarrelView } from './game-barrel-view';
+import { detonateAt } from './game-dynamite-step';
+import { sectorHitBetween } from './game-hit-trace';
+import { damagePlayer } from './game-loop';
+import { PLAYER } from './game-player';
+
+export type { BarrelRuntime } from './barrel-runtime';
+
+/** A scorch's edge, metres. */
+const SCORCH_M = 1.6;
+/** Probes start this far over the blast so a blast on the floor is not "under" it. */
+const SHIELD_LIFT_M = 0.05;
+
+export interface GameBarrels extends BarrelRuntime {
+  /** Materials the barrels made (2 per zone with barrels: drum/stub and lid). */
+  materialCount(): number;
+}
+
+export function createBarrelRuntime(ctx: GameContext, defs: readonly BarrelDef[]): GameBarrels {
+  const map = ctx.world.level.def!.sectors!;
+  const ground = ctx.world.level.ground as SectorGround;
+  const mats = createBarrelMaterials(ctx);
+  const views = new Map<string, BarrelView>();
+  for (const b of defs) {
+    const sector = ground.sectorAt(b.pos[0], b.pos[2]);
+    const zoneRoom = map.sectors[sector]!.zone + 1;          // the zone's synthesized room (game-sector-mesh)
+    views.set(b.id, createBarrelView(ctx, b, sector, zoneRoom, mats));
+  }
+  const scorches = createScorchPool(ctx);
+  const shielded = (from: Vec3, to: Vec3) => sectorHitBetween(ctx, [from[0], from[1] + SHIELD_LIFT_M, from[2]], to) !== null;
+
+  const core = createBarrelCore(defs, ctx.world.colliders, {
+    shielded,
+    explode(id, at, feet) {
+      views.get(id)?.explode();
+      scorches.add(feet[0], feet[1], feet[2], SCORCH_M, barrelYaw(`${id}:scorch`));
+      detonateAt(ctx, at);
+      const pp = ctx.player.player.pos;
+      const d = blastToPlayer(at, pp, PLAYER.height);
+      const hurt = playerBlastDamage(d, BLAST_PROFILES.barrel);
+      if (hurt > 0 && !shielded(at, [pp[0], pp[1] + PLAYER.height * 0.5, pp[2]])) damagePlayer(ctx, hurt, 'blast');
+      ctx.telemetry.telemetry.event('barrel-explode', { id, x: at[0], y: at[1], z: at[2], t: core.clock });
+    },
+  });
+  console.info(`[barrels] ${defs.length} barrels, ${mats.count()} materials (2 per zone with barrels)`);
+  return Object.assign(core, { materialCount: () => mats.count() });
+}

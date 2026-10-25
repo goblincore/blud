@@ -1,16 +1,24 @@
 // src/lab/sdf-zombie/webgpu/game-barrel-view.ts
 //
-// THE BARREL VIEW (plan 2026-10-25-sector-levels-3b Task 12): the three.js side of barrel-look.ts. One barrel is a
+// THE BARREL VIEW (plan 2026-10-25-sector-levels-3b Tasks 12–13): the three.js side of barrel-look.ts. One barrel is a
 // lathe drum, an emissive nukage-green lid and a hidden sooty stub; explode() swaps the drum for the stub. The drum
 // wears our procedural albedo (one shared DataTexture per page), the walls' own metalSheet normal and roughness
 // (game-sector-mesh's shared set — no texture memory of its own), and is lit like a sector wall: its zone's light
 // list plus albedo × the sector's current level (ctx.world.sectorFx), so a drum in a dark sector is as dark as its
 // walls. One scorch pool per barrel runtime draws the floor scorches (an InstancedMesh ring).
 //
+// SHARED MATERIALS (owner, 2026-10-25): materials are per ZONE, not per barrel — the light list is the zone room's,
+// and everything else a barrel needs rides its geometry, as the sector walls do: a `sectorIndex` attribute (read
+// with +0.5 before the cast) picks the sector's light level, and a `barrelTint` attribute is the stub's soot (1 on
+// the drum, STUB_SOOT on the stub), so the drum and the stub share ONE material and one pipeline (the stub, hidden
+// until a blast, needs no compile when it first shows). A zone with barrels has two materials: drum/stub and lid.
+// The meshes are direct children of the level group (feet position, hashed yaw) so game-main's light-list loop
+// stamps the zone's list on them like any level surface; forZone() also stamps it when the lists already exist.
+//
 // Renderer side only: every number comes from barrel-look.ts / barrel-state.ts.
 import * as THREE from 'three/webgpu';
-import { MeshStandardNodeMaterial } from 'three/webgpu';
-import { float, int, texture, vec3, vec4 } from 'three/tsl';
+import { MeshBasicNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
+import { attribute, float, texture, vec3, vec4 } from 'three/tsl';
 import type { GameContext } from './game-context';
 import type { BarrelDef } from './level-def';
 import { BARREL } from './barrel-state';
@@ -27,12 +35,12 @@ const LID_GLOW: readonly [number, number, number] = [0.35, 0.9, 0.2];
 const LID_GAIN = 0.45;
 
 export interface BarrelView {
-  group: THREE.Group;
   drum: THREE.Mesh;
   lid: THREE.Mesh;
   stub: THREE.Mesh;
   /** Hide the drum and lid, show the stub. */
   explode(): void;
+  /** Remove the meshes and free their geometry (the materials are the zone's: BarrelMaterials.dispose). */
   dispose(): void;
 }
 
@@ -51,6 +59,13 @@ function drumAlbedo(): THREE.DataTexture {
   t.needsUpdate = true;
   albedoTex = t;
   return t;
+}
+
+/** Per-vertex constants a barrel's geometry carries for the shared material: its sector and its tint. */
+function tag(g: THREE.BufferGeometry, sector: number, tint: number): void {
+  const n = g.attributes.position!.count;
+  g.setAttribute('sectorIndex', new THREE.Float32BufferAttribute(new Float32Array(n).fill(sector), 1));
+  g.setAttribute('barrelTint', new THREE.Float32BufferAttribute(new Float32Array(n).fill(tint), 1));
 }
 
 /** A lathe of the profile whose v is height / drum height (three's lathe spaces v by point index, which would
@@ -84,85 +99,123 @@ function stubGeometry(seed: number): THREE.LatheGeometry {
   return g;
 }
 
-/** The zone's light list on a material (forward path), as game-main does for the level group's meshes. */
-function lightBy(ctx: GameContext, m: THREE.NodeMaterial, zoneRoom: number): void {
-  if (ctx.boot.deferredMode) return;
-  const list = ctx.world.levelLightLists.get(zoneRoom);
-  if (!list) return;
-  m.lightsNode = list;
-  ctx.world.levelNodeMaterials.push(m);
-}
-
-/** The drum (or stub) material: the albedo, the walls' metalSheet normal and roughness, and albedo × the sector's
- *  level as emissive (game-sector-mesh sectorMaterial's wall term). */
-function drumMaterial(ctx: GameContext, sector: number, gain: number): MeshStandardNodeMaterial {
+/** The drum (and stub) material: the albedo × the vertex tint, the walls' metalSheet normal and roughness, and
+ *  albedo × tint × the vertex's sector level as emissive (game-sector-mesh sectorMaterial's wall term). */
+function drumMaterial(ctx: GameContext): MeshStandardNodeMaterial {
   const map = drumAlbedo();
   const metal = sectorPanelSet('metalSheet');
   const m = new MeshStandardNodeMaterial();
-  m.name = gain === 1 ? 'barrel-drum' : 'barrel-stub';
-  m.map = map;
-  m.color = new THREE.Color(gain, gain, gain);
+  m.map = map;                                   // the deferred router's copy; forward reads colorNode
   m.normalMap = metal.normalMap;
   m.metalness = 0.35;
   m.roughness = 0.7;
   // The panel roughness is one channel (RedFormat): read as .r, not as a roughnessMap (.g).
   m.roughnessNode = texture(metal.roughness).r.mul(0.7).clamp(0.04, 1);
+  const albedo = texture(map).rgb.mul(attribute('barrelTint', 'float'));
+  m.colorNode = vec4(albedo, 1);
   const fx = ctx.world.sectorFx;
-  if (fx) m.emissiveNode = texture(map).rgb.mul(gain).mul(fx.levels.element(int(sector)));
+  // +0.5 before the cast: the interpolated index may arrive as 2.9999998, which truncates to 2.
+  if (fx) m.emissiveNode = albedo.mul(fx.levels.element(attribute('sectorIndex', 'float').add(0.5).toInt()));
   return m;
 }
 
-export function createBarrelView(ctx: GameContext, b: BarrelDef, sector: number, zoneRoom: number): BarrelView {
-  const group = new THREE.Group();
-  group.name = `barrel-${b.id}`;
-  group.position.set(b.pos[0], b.pos[1], b.pos[2]);
-  group.rotation.y = barrelYaw(b.id);
-
-  const drumMat = drumMaterial(ctx, sector, 1);
-  const drum = new THREE.Mesh(lathe(barrelProfile()), drumMat);
-  drum.name = 'barrel-drum';
-
+function lidMaterial(ctx: GameContext): MeshStandardNodeMaterial {
   const fx = ctx.world.sectorFx;
-  const lidMat = new MeshStandardNodeMaterial();
-  lidMat.name = 'barrel-lid';
-  lidMat.color = new THREE.Color(0.05, 0.09, 0.03);
-  lidMat.roughness = 0.35;
-  lidMat.metalness = 0;
+  const m = new MeshStandardNodeMaterial();
+  m.color = new THREE.Color(0.05, 0.09, 0.03);
+  // 0.6, not 0.35: head-on under the flashlight a glossier lid washed out to a flat pale disc (Task 13 look check).
+  m.roughness = 0.6;
+  m.metalness = 0;
   const glow = vec3(...LID_GLOW).mul(LID_GAIN);
-  lidMat.emissiveNode = fx ? glow.mul(fx.glowGain) : glow;
+  m.emissiveNode = fx ? glow.mul(fx.glowGain) : glow;
+  return m;
+}
+
+export interface ZoneBarrelMaterials { drum: MeshStandardNodeMaterial; lid: MeshStandardNodeMaterial }
+export interface BarrelMaterials {
+  /** The zone room's shared set, made on first use (its light list stamped when the lists exist). */
+  forZone(zoneRoom: number): ZoneBarrelMaterials;
+  /** Materials made so far (2 per zone with barrels). */
+  count(): number;
+  dispose(): void;
+}
+
+export function createBarrelMaterials(ctx: GameContext): BarrelMaterials {
+  const zones = new Map<number, ZoneBarrelMaterials>();
+  const lightBy = (m: THREE.NodeMaterial, zoneRoom: number) => {
+    if (ctx.boot.deferredMode) return;
+    const list = ctx.world.levelLightLists.get(zoneRoom);
+    if (!list) return;                           // not built yet: game-main's light-list loop stamps the meshes
+    m.lightsNode = list;
+    if (!ctx.world.levelNodeMaterials.includes(m)) ctx.world.levelNodeMaterials.push(m);
+  };
+  return {
+    forZone(zoneRoom) {
+      let z = zones.get(zoneRoom);
+      if (z) return z;
+      z = { drum: drumMaterial(ctx), lid: lidMaterial(ctx) };
+      z.drum.name = `barrel-drum-zone-${zoneRoom}`;
+      z.lid.name = `barrel-lid-zone-${zoneRoom}`;
+      lightBy(z.drum, zoneRoom);
+      lightBy(z.lid, zoneRoom);
+      zones.set(zoneRoom, z);
+      return z;
+    },
+    count: () => zones.size * 2,
+    dispose() {
+      for (const z of zones.values()) {
+        for (const m of [z.drum, z.lid]) {
+          m.dispose();
+          const i = ctx.world.levelNodeMaterials.indexOf(m);
+          if (i >= 0) ctx.world.levelNodeMaterials.splice(i, 1);
+        }
+      }
+      zones.clear();
+    },
+  };
+}
+
+export function createBarrelView(ctx: GameContext, b: BarrelDef, sector: number, zoneRoom: number, mats: BarrelMaterials): BarrelView {
+  const { drum: drumMat, lid: lidMat } = mats.forZone(zoneRoom);
+  const yaw = barrelYaw(b.id);
+
+  const drumGeo = lathe(barrelProfile());
+  tag(drumGeo, sector, 1);
+  const drum = new THREE.Mesh(drumGeo, drumMat);
+  drum.name = `barrel-drum-${b.id}`;
+
   const lidGeo = new THREE.CircleGeometry(BARREL.radiusM - 0.02, SEGMENTS);
   lidGeo.rotateX(-Math.PI / 2);
   const lid = new THREE.Mesh(lidGeo, lidMat);
-  lid.name = 'barrel-lid';
-  // 1 mm over the lathe's own lid disc, so the two never fight.
-  lid.position.y = BARREL.heightM - BARREL_LOOK.lidRecessM + 0.001;
+  lid.name = `barrel-lid-${b.id}`;
 
-  const stubMat = drumMaterial(ctx, sector, STUB_SOOT);
-  const stub = new THREE.Mesh(stubGeometry(fnv1a(b.id)), stubMat);
-  stub.name = 'barrel-stub';
+  const stubGeo = stubGeometry(fnv1a(b.id));
+  tag(stubGeo, sector, STUB_SOOT);
+  const stub = new THREE.Mesh(stubGeo, drumMat);
+  stub.name = `barrel-stub-${b.id}`;
   stub.visible = false;
 
-  for (const [mesh, mat] of [[drum, drumMat], [lid, lidMat], [stub, stubMat]] as const) {
-    mesh.userData.room = zoneRoom; // the zone's light list applies, like a sector wall
-    lightBy(ctx, mat, zoneRoom);
-    group.add(mesh);
+  for (const mesh of [drum, lid, stub]) {
+    mesh.position.set(b.pos[0], b.pos[1], b.pos[2]);
+    mesh.rotation.y = yaw;
+    mesh.userData.room = zoneRoom;               // the zone's light list applies, like a sector wall
+    mesh.userData.barrel = b.id;
+    ctx.world.levelGroup.add(mesh);
   }
-  ctx.world.levelGroup.add(group);
+  // 1 mm over the lathe's own lid disc, so the two never fight.
+  lid.position.y += BARREL.heightM - BARREL_LOOK.lidRecessM + 0.001;
 
   return {
-    group, drum, lid, stub,
+    drum, lid, stub,
     explode() {
       drum.visible = false;
       lid.visible = false;
       stub.visible = true;
     },
     dispose() {
-      group.removeFromParent();
       for (const mesh of [drum, lid, stub]) {
+        mesh.removeFromParent();
         mesh.geometry.dispose();
-        (mesh.material as THREE.Material).dispose();
-        const i = ctx.world.levelNodeMaterials.indexOf(mesh.material as THREE.NodeMaterial);
-        if (i >= 0) ctx.world.levelNodeMaterials.splice(i, 1);
       }
     },
   };
@@ -190,15 +243,17 @@ function scorchTexture(): THREE.DataTexture {
 
 /** The floor scorches, one pool per barrel runtime: a flat quad instanced `n` times, soot coloured, alpha from
  *  scorchAlpha in colorNode.w. Each scorch sits a hair above the last so overlapping ones never fight. Drawn
- *  forward (registered with the deferred router like the surface blood). */
+ *  forward (registered with the deferred router like the surface blood).
+ *
+ *  UNLIT (Task 13 look check): the pool lives in the scene, not the level group, so a lit material there takes the
+ *  scene's whole light list (every lamp, through walls) and the near-black soot read as a light grey square. Soot is
+ *  a darkening, so it is a MeshBasicNodeMaterial — like the blood splats — and needs no light at all. */
 export function createScorchPool(ctx: GameContext, n = 12): ScorchPool {
   const geo = new THREE.PlaneGeometry(1, 1);
   geo.rotateX(-Math.PI / 2);
-  const mat = new MeshStandardNodeMaterial();
+  const mat = new MeshBasicNodeMaterial();
   mat.name = 'barrel-scorch';
   mat.colorNode = vec4(0.02, 0.018, 0.016, texture(scorchTexture()).r.mul(float(0.85)));
-  mat.roughness = 1;
-  mat.metalness = 0;
   mat.transparent = true;
   mat.depthWrite = false;
   const mesh = new THREE.InstancedMesh(geo, mat, n);

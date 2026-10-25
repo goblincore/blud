@@ -1029,6 +1029,8 @@ export function tick(ctx: GameContext, dt: number) {
         if (hurt > 0) damagePlayer(ctx, hurt, 'blast');
       }
     }
+    // BARRELS (plan 3b, sector levels only): fuses burn, lit drums go up through the dynamite blast and chain.
+    ctx.world.barrels?.step(dt);
     // BILE (the gibbet's squirt, bile.ts): lobbed globs under gravity that
     // splash on the first thing they touch; only the player takes damage.
     if (ctx.weapon.bile.length) {

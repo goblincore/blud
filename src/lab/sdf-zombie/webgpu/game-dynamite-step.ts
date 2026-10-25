@@ -16,7 +16,7 @@ import { type Vec3 } from '../types';
 import { EXPLOSION_LIGHT, bundleHitsBody, explosionLightEnv, igniteExplosionLight, propWorld, throwBundle } from './game-dynamite-throw';
 import { gibActor } from './game-gib-actor';
 import { gibAllowance, gibBudget, gibDebit, newBlastProfile, reacquireHeldProp, scheduleGib } from './game-gib-spawn';
-import { ceilingAt, debrisGround } from './game-hit-trace';
+import { ceilingAt, debrisGround, sectorHitBetween } from './game-hit-trace';
 import { eyeOf } from './game-player';
 import { standingFloor } from './level-ground';
 import { spawnBurstStandIn, stepBursts } from './game-weapon-rig';
@@ -46,7 +46,18 @@ export function detonateAt(ctx: GameContext, at: Vec3, inHand = false): void {
   EXPLOSION_PROFILE.bodiesPruned = 0; EXPLOSION_PROFILE.prunedPrims = 0;
   EXPLOSION_PROFILE.traces = 0;
   ctx.dynamite.detonations++;
-  const bodies: ExplosionBody[] = ctx.world.actors.map(a => ({
+  // SECTOR-SHIELDED BLASTS (plan 3b; Doom's radius-damage sight check): on a sector level a body whose torso centre is
+  // behind sector geometry from the blast takes nothing (one probe per body, 5 cm over the blast so a floor burst is
+  // not "under" the floor). A body with no torso cluster is kept. Room levels: every actor, as before.
+  const sectors = ctx.world.level.def?.sectors;
+  const from: Vec3 = [at[0], at[1] + 0.05, at[2]];
+  const inBlast = sectors
+    ? ctx.world.actors.filter(a => {
+      const torso = a.posed().clusters.find(c => c.limb === 'torso')?.center;
+      return !torso || sectorHitBetween(ctx, from, [torso[0], torso[1], torso[2]]) === null;
+    })
+    : ctx.world.actors;
+  const bodies: ExplosionBody[] = inBlast.map(a => ({
     id: String(a.id), body: a.posed(), bodyYaw: a.pose().yaw,
   }));
   const tResolve = performance.now();
@@ -201,6 +212,8 @@ export function detonateAt(ctx: GameContext, at: Vec3, inHand = false): void {
     x: at[0], y: at[1], z: at[2], radiusM: fx.radiusM,
     bodies: fx.perBody.length, gibbed, pieces, ms: ctx.dynamite.lastBlastMs,
   });
+  // BARRELS (plan 3b): every blast lights the drums in reach — a barrel's own detonation comes here too: the chain.
+  ctx.world.barrels?.catchBlast(at);
 }
 
 /**

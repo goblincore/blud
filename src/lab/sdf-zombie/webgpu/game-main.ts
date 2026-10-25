@@ -328,6 +328,9 @@ import { createFlailSeams } from './game-seams-flail';
 import { createSkeletonSeams } from './game-seams-skeleton';
 import { createDynamiteSeams } from './game-seams-dynamite';
 import { createDebrisSeams } from './game-seams-debris';
+import { createBarrelSeams } from './game-seams-barrels';
+import { createBarrelRuntime } from './game-barrels';
+import { barrelBox } from './barrel-runtime';
 import { createMarchDebugSeams } from './game-seams-march-debug';
 import { createEarlyzSeams } from './game-seams-earlyz';
 import { EARLYZ_FLAG } from './earlyz/flag';
@@ -771,6 +774,9 @@ async function main() {
   // assigned (below), so it is lit exactly like the walls.
   // Sector levels (spec 2026-10-24 §6.4): floors, ceilings and walls from the sectors.
   if (ctx.world.level.def?.sectors) addSectorMeshes(ctx, ctx.world.level.def.sectors);
+  // Barrels (plan 3b): sector levels only. Their meshes join the level group here so the light-list loop below lights
+  // them like the walls; their boxes join ctx.world.colliders (the same array) before anything moves.
+  if (ctx.world.level.def?.barrels?.length) ctx.world.barrels = createBarrelRuntime(ctx, ctx.world.level.def.barrels);
   if (ctx.world.artScene && ctx.world.level.def?.art) placeLevelArt(ctx, ctx.world.artScene, ctx.world.level.def.art);
   scene.add(ctx.world.levelGroup);
   // OUTDOOR v1: moon, sky dome, skyline — only for a level with open-sky rooms
@@ -3038,7 +3044,8 @@ async function main() {
       if (!nm) continue;
       nm.lightsNode = list;
       mesh.material = nm;
-      ctx.world.levelNodeMaterials.push(nm);
+      // A material shared by several meshes of one room (the barrels' per-zone set) is listed once.
+      if (!ctx.world.levelNodeMaterials.includes(nm)) ctx.world.levelNodeMaterials.push(nm);
     }
   }
   ctx.boot.spawnOverride = ((): string | null => {
@@ -5925,6 +5932,7 @@ async function main() {
     createSkeletonSeams(ctx),
     createDynamiteSeams(ctx),
     createDebrisSeams(ctx),
+    createBarrelSeams(ctx),
     createMarchDebugSeams(ctx),
     createEarlyzSeams(ctx),
     createMiscSeams(ctx),
@@ -6124,7 +6132,10 @@ function buildEncounter(ctx: GameContext): void {
   if (sectorMap) {
     const sectorGround = ctx.world.level.ground as SectorGround;
     const navStart = performance.now();
-    ctx.world.encounterNav = createSectorNavigation(sectorMap, sectorGround, ctx.world.level.rooms, ctx.world.level.staticColliders);
+    ctx.world.encounterNav = createSectorNavigation(sectorMap, sectorGround, ctx.world.level.rooms,
+      // Enemies route round the drums (built before the barrel runtime, so from the defs: every drum stands at load);
+      // a destroyed drum's cells stay blocked until reload (plan 3b, a known gap).
+      [...ctx.world.level.staticColliders, ...(ctx.world.level.def?.barrels ?? []).map(barrelBox)]);
     console.info(`[sector-nav] built in ${(performance.now() - navStart).toFixed(1)} ms (${sectorMap.sectors.length} sectors, ${sectorMap.lines.length} lines)`);
     ctx.world.encounter = createEncounterDirector(ctx.world.encounterNav, ctx.world.colliders, sectorSightBlocker(sectorMap, sectorGround));
     // The render culls (march + visual set) see through the same geometry (actor-sight.ts).
