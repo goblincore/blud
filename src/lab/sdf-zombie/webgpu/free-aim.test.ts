@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import {
   BOB, FREE_AIM, approachAngle, approachBob, approachStrafe, bobPose, deadzonePush,
-  deadzoneSize, moveAim, pivotOffset, recentre, strafeSpeed01, turnFromAim,
+  followAim, moveAim, pivotOffset, recentre, strafeSpeed01, turnFromAim,
   weaponAngles, weaponSlide,
 } from './free-aim';
 
@@ -66,38 +66,59 @@ describe('turnFromAim', () => {
   });
 });
 
-describe('strafe-shrunk dead zone', () => {
-  it('is today\'s zone standing still', () => {
-    expect(deadzoneSize(0)).toEqual({ x: FREE_AIM.deadzoneX, y: FREE_AIM.deadzoneY });
-    expect(deadzoneSize()).toEqual(deadzoneSize(0));
+describe('followAim (elastic follow while strafing)', () => {
+  const F = { tanV: Math.tan(75 * Math.PI / 360), tanH: Math.tan(75 * Math.PI / 360) * (790 / 555) };
+  it('does nothing standing still -- free aim is untouched', () => {
+    const m = followAim({ x: 0.9, y: -0.6 }, 0, 1 / 60, F);
+    expect(m.aim).toEqual({ x: 0.9, y: -0.6 });
+    expect(m.yaw).toBe(0);
+    expect(m.pitch).toBe(0);
   });
-  it('shrinks X to the strafe scale at full strafe, and Y by its own scale', () => {
-    const d = deadzoneSize(1);
-    expect(d.x).toBeCloseTo(FREE_AIM.deadzoneX * FREE_AIM.strafeDeadzoneScaleX, 9);
-    expect(d.y).toBeCloseTo(FREE_AIM.deadzoneY * FREE_AIM.strafeDeadzoneScaleY, 9);
-    expect(d.x).toBeLessThan(FREE_AIM.deadzoneX);
+  it('turns the camera toward the reticle and pulls the reticle in', () => {
+    const r = followAim({ x: 0.5, y: 0 }, 1, 1 / 60, F);
+    expect(r.yaw).toBeGreaterThan(0);
+    expect(r.aim.x).toBeLessThan(0.5);
+    expect(r.aim.x).toBeGreaterThan(0);
+    const l = followAim({ x: -0.5, y: 0 }, 1, 1 / 60, F);
+    expect(l.yaw).toBeLessThan(0);
   });
-  it('blends linearly and clamps the envelope to 0..1', () => {
-    const half = deadzoneSize(0.5).x;
-    expect(half).toBeCloseTo((deadzoneSize(0).x + deadzoneSize(1).x) / 2, 9);
-    expect(deadzoneSize(5)).toEqual(deadzoneSize(1));
-    expect(deadzoneSize(-5)).toEqual(deadzoneSize(0));
+  it('is elastic: the further off-centre, the harder the pull, with no edge', () => {
+    let prev = 0;
+    for (let x = 0.05; x <= 1; x += 0.05) {
+      const t = followAim({ x, y: 0 }, 1, 1 / 60, F).yaw;
+      expect(t).toBeGreaterThan(prev);
+      prev = t;
+    }
   });
-  it('turns the camera with less reticle travel while strafing', () => {
-    const x = FREE_AIM.deadzoneX * 0.8;
-    expect(turnFromAim({ x, y: 0 }, 1 / 60, 0).yaw).toBe(0);
-    expect(turnFromAim({ x, y: 0 }, 1 / 60, 1).yaw).toBeGreaterThan(0);
-    expect(turnFromAim({ x: -x, y: 0 }, 1 / 60, 1).yaw).toBeLessThan(0);
+  it('keeps the reticle on the same world point', () => {
+    let aim = { x: 0.7, y: 0 }, yaw = 0;
+    for (let i = 0; i < 30; i++) { const m = followAim(aim, 1, 1 / 60, F); aim = m.aim; yaw += m.yaw; }
+    expect(yaw + Math.atan(aim.x * F.tanH)).toBeCloseTo(Math.atan(0.7 * F.tanH), 9);
   });
-  it('still reaches full push exactly at the edge, so peak turn rate is unchanged', () => {
-    expect(deadzonePush({ x: 1, y: 0 }, 1).x).toBeCloseTo(1, 6);
-    expect(turnFromAim({ x: 1, y: 0 }, 1, 1).yaw).toBeCloseTo(FREE_AIM.turnRateX, 6);
+  it('scales with the strafe envelope', () => {
+    const full = followAim({ x: 0.5, y: 0 }, 1, 1 / 60, F).yaw;
+    const half = followAim({ x: 0.5, y: 0 }, 0.5, 1 / 60, F).yaw;
+    expect(half).toBeGreaterThan(0);
+    expect(half).toBeLessThan(full);
   });
-  it('setAimTuning-style edits to the scale take effect', () => {
-    FREE_AIM.strafeDeadzoneScaleX = 1;
-    expect(deadzoneSize(1).x).toBeCloseTo(FREE_AIM.deadzoneX, 9);
+  it('leaves pitch alone by default (followRateY 0) but follows it when tuned', () => {
+    expect(followAim({ x: 0, y: 0.5 }, 1, 1 / 60, F).pitch).toBe(0);
+    FREE_AIM.followRateY = 4;
+    expect(followAim({ x: 0, y: 0.5 }, 1, 1 / 60, F).pitch).toBeGreaterThan(0);
   });
-  afterEach(() => { FREE_AIM.strafeDeadzoneScaleX = 0.4; });
+  it('settles a steady circle-strafe turn at angle w / followRateX off-centre', () => {
+    // Each frame the world slides by w*dt (the circling turn); the mouse keeps
+    // the reticle on the target, so the reticle angle grows by w*dt, then the
+    // follow eats some of it back.
+    const w = 0.85, dt = 1 / 60;
+    let aim = { x: 0, y: 0 };
+    for (let i = 0; i < 600; i++) {
+      const a = Math.atan(aim.x * F.tanH) + w * dt;
+      aim = followAim({ x: Math.tan(a) / F.tanH, y: 0 }, 1, dt, F).aim;
+    }
+    expect(Math.atan(aim.x * F.tanH)).toBeCloseTo(w / FREE_AIM.followRateX, 1);
+  });
+  afterEach(() => { FREE_AIM.followRateY = 0; });
 });
 
 describe('strafeSpeed01', () => {

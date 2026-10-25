@@ -27,7 +27,7 @@ import { bodyInSight } from './actor-sight';
 import { connectionBlobsForSim } from './blood-connections';
 import { type EncounterAgent } from './encounter-director';
 import { reticleNdc } from './fisheye';
-import { approachAngle, approachBob, approachStrafe, bobPose, pivotOffset, strafeSpeed01, turnFromAim, weaponAngles, weaponSlide } from './free-aim';
+import { approachAngle, approachBob, approachStrafe, bobPose, followAim, pivotOffset, strafeSpeed01, turnFromAim, weaponAngles, weaponSlide } from './free-aim';
 import { segmentHitsBox, type ZombieActor } from './game-actor';
 import { registerBleed, stepGutRopes, throwGunFlesh } from './game-bleed';
 import { cancelChunkBake, finishChunkBake } from './game-chunk-bake';
@@ -506,16 +506,18 @@ export function tick(ctx: GameContext, dt: number) {
   ctx.weapon.recoilPitch *= Math.exp(-9 * dt);
   // ——— FREE AIM ————————————————————————————————————————————————————
   // The reticle only turns the camera once it is shoved past the dead zone;
-  // inside it, aiming is free and the world stays put. The zone shrinks while
-  // strafing (FREE_AIM.strafeDeadzoneScaleX) so the camera follows sooner when
-  // the whole view is sliding sideways. The envelope is updated in the walk-bob
-  // block below from this frame's displacement, so it lags one frame -- far
-  // inside its own smoothing.
+  // inside it, aiming is free and the world stays put. While strafing the
+  // camera is also pulled elastically toward the reticle (followAim), the
+  // reticle staying on what it was aimed at. The strafe envelope is updated
+  // in the walk-bob block below from this frame's displacement, so it lags
+  // one frame -- far inside its own smoothing.
   if (ctx.player.freeAimOn) {
-    const turn = turnFromAim(ctx.weapon.aim, dt, ctx.player.strafeAmount);
-    ctx.player.player.yaw += turn.yaw;
+    const turn = turnFromAim(ctx.weapon.aim, dt);
+    const follow = followAim(ctx.weapon.aim, ctx.player.strafeAmount, dt, aimFrustum(ctx));
+    ctx.weapon.aim = follow.aim;
+    ctx.player.player.yaw += turn.yaw + follow.yaw;
     ctx.player.player.pitch = Math.min(PLAYER.pitchLimit,
-      Math.max(-PLAYER.pitchLimit, ctx.player.player.pitch + turn.pitch));
+      Math.max(-PLAYER.pitchLimit, ctx.player.player.pitch + turn.pitch + follow.pitch));
   }
   {
     const w = ctx.player.freeAimOn ? weaponAngles(ctx.weapon.aim, aimFrustum(ctx)) : { yawDeg: 0, pitchDeg: 0 };

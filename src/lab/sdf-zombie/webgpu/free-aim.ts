@@ -17,20 +17,27 @@ export const FREE_AIM = {
    *  this box the camera does not turn at all; the reticle just moves. */
   deadzoneX: 0.45,
   deadzoneY: 0.38,
-  /** Dead-zone scale at full STRAFE speed, per axis (1 = unchanged).
+  /** ELASTIC FOLLOW while strafing, 1/seconds at full strafe speed, per axis.
    *
-   *  Standing still, the big zone is the mechanic. Strafing, it fights you:
-   *  everything in view slides sideways across the screen, and a target you
-   *  are tracking drifts out to the edge before the camera starts following
-   *  (owner report). Shrinking the zone with lateral speed lets the camera
-   *  pick up sooner exactly when the world is sliding. Only sideways motion
-   *  counts -- walking forward or back moves things outward slowly and
-   *  radially, which the full zone handles fine. Y is left alone: strafing
-   *  drifts nothing vertically. */
-  strafeDeadzoneScaleX: 0.4,
-  strafeDeadzoneScaleY: 1.0,
+   *  Standing still, the big dead zone is the mechanic. Strafing, it fights
+   *  you: circling a target needs a steady turn of strafe-speed / radius
+   *  (~0.85 rad/s at 3.4 m/s and 4 m), and the squared dead-zone push only
+   *  gives that with the reticle -- so the target -- out at ~0.8 of the
+   *  half-screen (owner report). Hard-edged fixes (a shrunk zone, mouse past
+   *  the zone edge turning the camera) were tried and felt jerky: every edge
+   *  is a sudden change in how the mouse behaves.
+   *
+   *  Instead the camera is pulled toward the reticle like a spring, harder
+   *  the further off-centre it is, scaled by the strafe envelope; the reticle
+   *  is shifted back by the same angle so it stays on what it was aimed at.
+   *  No edges, no mode switch: the mouse only ever moves the reticle, and the
+   *  camera smoothly catches up. Steady state while circling at rate w puts
+   *  the reticle at angle w / followRateX off-centre. Only sideways motion
+   *  counts, and Y is off by default: strafing drifts nothing vertically. */
+  followRateX: 4.0,
+  followRateY: 0.0,
   /** How fast the strafe envelope follows the player's lateral speed,
-   *  1/seconds, so the zone eases in and out instead of popping. */
+   *  1/seconds, so the follow eases in and out instead of popping. */
   strafeRamp: 5.0,
   /** Peak camera turn, radians/second, reached when the reticle is jammed
    *  fully into a corner. Measured in-engine: 2.4 rad/s is 137 deg/s at full
@@ -93,26 +100,14 @@ export function moveAim(aim: AimPoint, dxPx: number, dyPx: number): AimPoint {
   };
 }
 
-/** Dead-zone half-extents for a 0..1 strafe envelope (see strafeDeadzoneScaleX). */
-export function deadzoneSize(strafe01 = 0): { x: number; y: number } {
-  const s = Math.min(1, Math.max(0, strafe01));
-  const lerp = (scale: number) => 1 + (scale - 1) * s;
-  return {
-    x: FREE_AIM.deadzoneX * lerp(FREE_AIM.strafeDeadzoneScaleX),
-    y: FREE_AIM.deadzoneY * lerp(FREE_AIM.strafeDeadzoneScaleY),
-  };
-}
-
-/** How far past the dead zone the reticle is pushing, -1..1 per axis.
- *  `strafe01` shrinks the zone while the player moves sideways. */
-export function deadzonePush(aim: AimPoint, strafe01 = 0): { x: number; y: number } {
-  const dz = deadzoneSize(strafe01);
+/** How far past the dead zone the reticle is pushing, -1..1 per axis. */
+export function deadzonePush(aim: AimPoint): { x: number; y: number } {
   const past = (v: number, dz: number) => {
     if (Math.abs(v) <= dz) return 0;
     const over = (Math.abs(v) - dz) / Math.max(1e-6, 1 - dz);
     return Math.sign(v) * Math.min(1, over);
   };
-  return { x: past(aim.x, dz.x), y: past(aim.y, dz.y) };
+  return { x: past(aim.x, FREE_AIM.deadzoneX), y: past(aim.y, FREE_AIM.deadzoneY) };
 }
 
 /**
@@ -120,8 +115,8 @@ export function deadzonePush(aim: AimPoint, strafe01 = 0): { x: number; y: numbe
  * that flat region IS the mechanic. Squared response so the edge of the zone is
  * a gentle drift and only the extremes whip round.
  */
-export function turnFromAim(aim: AimPoint, dt: number, strafe01 = 0): { yaw: number; pitch: number } {
-  const p = deadzonePush(aim, strafe01);
+export function turnFromAim(aim: AimPoint, dt: number): { yaw: number; pitch: number } {
+  const p = deadzonePush(aim);
   return {
     yaw: Math.sign(p.x) * p.x * p.x * FREE_AIM.turnRateX * dt,
     pitch: Math.sign(p.y) * p.y * p.y * FREE_AIM.turnRateY * dt,
@@ -141,7 +136,7 @@ export function strafeSpeed01(dx: number, dz: number, yaw: number, dt: number, f
   return Math.min(1, lateral / dt / fullSpeed);
 }
 
-/** Smooth the strafe envelope so the dead zone eases in and out. */
+/** Smooth the strafe envelope so the follow eases in and out. */
 export function approachStrafe(current: number, target01: number, dt: number): number {
   const k = 1 - Math.exp(-FREE_AIM.strafeRamp * dt);
   return current + (Math.min(1, Math.max(0, target01)) - current) * k;
@@ -151,6 +146,31 @@ export function approachStrafe(current: number, target01: number, dt: number): n
  *  tanH = tanV * aspect. The caller owns the camera, so it passes these in
  *  rather than this module importing Three.js. */
 export interface Frustum { tanH: number; tanV: number; }
+
+/**
+ * Elastic camera follow for one frame: turn the camera a fraction of the way
+ * toward the reticle and move the reticle back by the same angle, so it stays
+ * on the same world point (see FREE_AIM.followRateX). The rate scales with the
+ * 0..1 strafe envelope, so standing still this is a no-op.
+ *
+ * Angles are atan(normalised * tan(halfFov)), the projection the shot ray and
+ * weaponAngles use, so the compensation is exact per axis.
+ */
+export function followAim(
+  aim: AimPoint, strafe01: number, dt: number, f: Frustum,
+): { aim: AimPoint; yaw: number; pitch: number } {
+  const s = Math.min(1, Math.max(0, strafe01));
+  const axis = (v: number, rate: number, tan: number) => {
+    const k = 1 - Math.exp(-Math.max(0, rate) * s * dt);
+    if (k <= 0 || v === 0) return { pos: v, turn: 0 };
+    const angle = Math.atan(v * tan);
+    const kept = angle * (1 - k);
+    return { pos: Math.tan(kept) / tan, turn: angle - kept };
+  };
+  const x = axis(aim.x, FREE_AIM.followRateX, f.tanH);
+  const y = axis(aim.y, FREE_AIM.followRateY, f.tanV);
+  return { aim: { x: x.pos, y: y.pos }, yaw: x.turn, pitch: y.turn };
+}
 
 /**
  * Where the weapon must point to be aimed AT the reticle, degrees.
