@@ -23,8 +23,8 @@
 #                     `jaw`) with its own `tooth` material and vertex colours.
 #                     The .wam has no teeth; without this step the kit has none.
 #   goblin, goblin-cinematic
-#                     the BONY HANDS (2026-10-24): the FPV arm's own hand_L/R
-#                     meshes from public/assets/lab/goblin-arm.glb, re-posed
+#                     the BONY HANDS (2026-10-24): the FPV arm script's relaxed
+#                     kithand_L/R from assets-source/goblin-hands/, re-posed
 #                     onto hand.l/hand.r by scripts/merge-kit-hands.ts as one
 #                     `goblinskin` primitive. The .blob keeps a wrist knob.
 set -euo pipefail

@@ -67,7 +67,7 @@ describe('ARM_NODES', () => {
     expect([...ARM_NODES].sort()).toEqual([
       'Arm_L', 'Arm_R', 'Elbow_L', 'Elbow_R', 'Hand_L', 'Hand_R',
       'Shoulder_L', 'Shoulder_R', 'Upper_L', 'Upper_R', 'Watch_Screen', 'Wrist_L', 'Wrist_R',
-      'hand_L', 'handhold_L',
+      'hand_L', 'handhold_L', 'Grip_L', 'Grip_R',
     ].sort());
   });
 });

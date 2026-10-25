@@ -53,14 +53,9 @@ import { applySequenceCamera, stepSequence } from './game-sequence';
 import { applyEmergenceCamera, stepEmergence } from './game-emergence';
 import { applyTrainCamera, lightSteam, stepTrain } from './game-train';
 import { setShellHold } from './game-arms';
-/** The back of the fore hand for the PRESENT: down and away from the camera, so the palm faces up and toward the eye,
- *  offering the cases. Square to the camera (rig -Z alone) the scene's top light fell on the far side of the cases and
- *  they read almost black (capture 2026-10-24). */
-const PALM_TO_CAMERA_DORSAL = new THREE.Vector3(0, -0.7, -0.7).normalize();
+/** The rig's toward-the-viewer direction: the fore hand's turn rolls its thumb this way. */
 const TOWARD_VIEWER = new THREE.Vector3(0, 0, 1);
-const Q_SHELL_ACROSS_PALM = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(1, 0, 0));
-const _palmPos = new THREE.Vector3(), _palmQ = new THREE.Quaternion();
-import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell, extractStage, extractorOffset, fireRecoil, insertStage, PALM_SHELLS, loadCarry, palmTurn, loadHold, reloadPhaseAt, reloadPose, stagedShellCenter, supportHandPose, topLeverAngle, type HandDelta, type HandHold } from './game-viewmodel';
+import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell, extractStage, extractorOffset, fireRecoil, insertStage, coverRoll, loadCarry, loadHold, reloadPhaseAt, reloadPose, stagedShellCenter, supportHandPose, topLeverAngle, type HandDelta, type HandHold } from './game-viewmodel';
 import { stepVoid } from './game-void';
 import { carryFreshShots, expired, stepProjectiles, traceProjectile } from './game-weapon';
 import { aimArms, aimFrustum, boreFrameInRig, breechInRig, hideTracer, newTracerView, placeTracer, stepWeaponSlots } from './game-weapon-rig';
@@ -682,15 +677,10 @@ export function tick(ctx: GameContext, dt: number) {
     }
     const sh = supportHandPose(ctx.weapon.reloadAge, hold);
     shellHold = sh.carrying;
-    // THE PALM TURN (palmTurn): palm to the camera with the cases on it (back of the hand AWAY from the camera, rig
-    // -Z), then over onto the open tubes, palm down (back of the hand along `out`, the way the cases came out). The
-    // stage key already puts the case heads against that palm: they sit 16 mm ahead of the hand's centre, the palm's
-    // face 17 mm.
-    if (haveBore) {
-      const pt = palmTurn(ctx.weapon.reloadAge);
-      // thumbVia: the turn rolls the left thumb back toward the viewer (rig +Z), not away over the far side.
-      ctx.weapon.foreRoll = { a: PALM_TO_CAMERA_DORSAL, b: out.clone(), k: pt.k, w: pt.w, thumbVia: TOWARD_VIEWER };
-    }
+    // THE COVER-AND-SHOVE (coverRoll): palm down onto the open tubes, back of the hand along `out` (the way the
+    // cases came out). The stage key already puts the case heads against that palm: they sit 16 mm ahead of the
+    // hand's centre, the palm's face 17 mm.
+    if (haveBore) ctx.weapon.foreRoll = { dorsal: out.clone(), w: coverRoll(ctx.weapon.reloadAge), thumbVia: TOWARD_VIEWER };
     const handNow = new THREE.Vector3(
       FORE_HAND_REST.x + sh.dx,
       FORE_HAND_REST.y + sh.dy,
@@ -774,18 +764,6 @@ export function tick(ctx: GameContext, dt: number) {
       );
       const qHeld = new THREE.Quaternion().setFromAxisAngle(side, -0.7).multiply(qBore);
       m.quaternion.copy(qHeld).slerp(qBore, carry);
-      // ON THE PALM until the turn: the case lies on the open hand (PALM_SHELLS, the hand's own frame) and slides off
-      // it onto the rig-space carry above as the hand turns over, arriving on the bore axis at the stage beat.
-      const hand = ctx.weapon.foreHandGroup;
-      const onPalm = PALM_SHELLS[k];
-      if (hand && onPalm) {
-        const u = palmTurn(ctx.weapon.reloadAge).k;
-        const palmPos = _palmPos.set(...onPalm.c).applyQuaternion(hand.quaternion).add(hand.position);
-        // Hull (+Y) toward the little-finger side, +X of the left hand.
-        const palmQ = _palmQ.copy(hand.quaternion).multiply(Q_SHELL_ACROSS_PALM);
-        m.position.lerp(palmPos, 1 - u);
-        m.quaternion.slerp(palmQ, 1 - u);
-      }
     }
 
     if (reloadPhaseAt(ctx.weapon.reloadAge) === 'done') {

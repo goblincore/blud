@@ -130,15 +130,15 @@ const _m = new THREE.Matrix4();
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();
 const _elbow = new THREE.Vector3();
 const _qWorld = new THREE.Quaternion(), _qInv = new THREE.Quaternion();
-const _qRoll = new THREE.Quaternion(), _qRollB = new THREE.Quaternion();
+const _qRollB = new THREE.Quaternion();
 
-/** A scheduled roll of an arm about its forearm (the reload's palm turn): `a` and `b` are back-of-hand directions
- *  (rig space), `k` blends a -> b and `w` blends the normal camera-facing roll -> that. */
+/** A scheduled roll of an arm about its forearm (the reload's cover-and-shove): `dorsal` is the back-of-hand
+ *  direction to turn toward (rig space) and `w` (0..1) how far from the arm's base roll. */
 export interface ArmRoll {
-  a: THREE.Vector3; b: THREE.Vector3; k: number; w: number;
-  /** Which way round a -> b turns: the hand's thumb (-X, the LEFT hand's) swings through this rig direction rather
-   *  than away from it. The shortest turn can go either way; the owner wants the reload's palm turn to roll the
-   *  thumb back toward the viewer (2026-10-24). */
+  dorsal: THREE.Vector3; w: number;
+  /** Which way round the turn goes: the hand's thumb (-X, the LEFT hand's) swings through this rig direction rather
+   *  than away from it. The shortest turn can go either way; the owner wants the fore hand's turn to roll the thumb
+   *  back toward the viewer (2026-10-24). */
   thumbVia?: THREE.Vector3;
 }
 
@@ -201,7 +201,7 @@ export const ARM_MIN_BEND_RAD = 0.6;
 
 export function aimArm(
   arm: THREE.Object3D, shoulder: THREE.Vector3, bendHint: THREE.Vector3,
-  roll: ArmRoll | null = null,
+  roll: ArmRoll | null = null, baseDorsal?: THREE.Vector3,
 ): void {
   const e = armIk(
     [arm.position.x, arm.position.y, arm.position.z],
@@ -212,14 +212,12 @@ export function aimArm(
   );
   _elbow.set(e[0], e[1], e[2]);
   _dir.copy(_elbow).sub(arm.position);
-  basisQuat(arm.quaternion, _dir);
+  // The base roll: the back of the hand toward `baseDorsal` (rig space), the camera unless the caller says otherwise.
+  basisQuat(arm.quaternion, _dir, baseDorsal);
   if (roll && roll.w > 0) {
-    // Turn about the forearm: from roll.a's back-of-hand direction toward roll.b's by k, then from the normal roll
-    // toward that by w. The elbow and the upper arm do not move.
-    basisQuat(_qRoll, _dir, roll.a);
-    basisQuat(_qRollB, _dir, roll.b);
-    rollToward(_qRoll, _qRollB, _dir, roll.k, roll.thumbVia);
-    arm.quaternion.slerp(_qRoll, Math.min(1, roll.w));
+    // Turn about the forearm toward roll.dorsal by w. The elbow and the upper arm do not move.
+    basisQuat(_qRollB, _dir, roll.dorsal);
+    rollToward(arm.quaternion, _qRollB, _dir, Math.min(1, roll.w), roll.thumbVia);
   }
   const upper = upperOf(arm);
   if (!upper) return;
@@ -227,6 +225,45 @@ export function aimArm(
   basisQuat(_qWorld, _dir);
   _qInv.copy(arm.quaternion).invert();
   upper.quaternion.copy(_qInv).multiply(_qWorld);
+}
+
+const _gy = new THREE.Vector3(), _gx = new THREE.Vector3(), _gOff = new THREE.Vector3();
+
+/**
+ * SEAT A HAND ON A BAR (owner, 2026-10-24: the flail's haft read as impaling the palm, the fore-end as clipping through
+ * the hand). The orb hand only had to be near the thing it held; a hand with fingers has to hold it IN its curl. So:
+ * roll the hand about its forearm until the curl runs along the bar with the thumb toward `barAxis`, then move it so
+ * the arm's `Grip_L`/`Grip_R` locator (model_goblin_arm.py grip_centre) sits on `barPoint`, and re-aim. The IK moves
+ * the elbow when the hand moves, which turns the forearm a little, so this runs twice.
+ *
+ * `barPoint`/`barAxis` are in the arm's parent space. The right hand's thumb is its +X, the left's its -X
+ * (`thumbSign` +1 / -1). `aim(dorsal)` re-runs the caller's aimArm with that base roll (undefined: its default).
+ * Returns the base roll it settled on, for a caller that keeps the hand there.
+ */
+export function seatOnBar(
+  arm: THREE.Object3D, barPoint: THREE.Vector3, barAxis: THREE.Vector3, thumbSign: 1 | -1,
+  aim: (dorsal: THREE.Vector3 | undefined) => void,
+): THREE.Vector3 {
+  let grip = arm.userData['gripNode'] as THREE.Object3D | undefined;
+  if (!grip) {
+    arm.traverse((o) => { if (!grip && /^Grip_[LR]$/.test(o.name)) grip = o; });
+    arm.userData['gripNode'] = grip;
+  }
+  const dorsal = new THREE.Vector3(0, 0, 1);
+  arm.position.copy(barPoint);
+  aim(undefined);
+  for (let i = 0; i < 2; i++) {
+    _gy.set(0, 1, 0).applyQuaternion(arm.quaternion);
+    _gx.copy(barAxis).multiplyScalar(thumbSign).addScaledVector(_gy, -_gy.dot(barAxis) * thumbSign).normalize();
+    dorsal.crossVectors(_gx, _gy).normalize();                    // x = y cross z  <=>  z = x cross y
+    aim(dorsal);
+    if (grip) {
+      _gOff.copy(grip.position).multiply(arm.scale).applyQuaternion(arm.quaternion);
+      arm.position.copy(barPoint).sub(_gOff);
+      aim(dorsal);
+    }
+  }
+  return dorsal;
 }
 
 /**

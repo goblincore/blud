@@ -4,11 +4,12 @@
 // sees in first person (owner, 2026-10-24: "bony skinny long fingers", stylised, replacing the orb):
 //
 //   npx tsx scripts/merge-kit-hands.ts <character> <kit.gltf> [hands.glb] [out.gltf]
-//     default hands.glb: public/assets/lab/goblin-arm.glb (written by scripts/model_goblin_arm.py)
+//     default hands.glb: assets-source/goblin-hands/goblin-hands.glb (written by scripts/model_goblin_arm.py)
 //   (scripts/build-wam-kit.sh goblin runs it after WAM)
 //
-// ONE HAND, TWO VIEWS. The source is the FPV arm asset's own `hand_L` / `hand_R` meshes, not a second sculpt: change the
-// hand in model_goblin_arm.py, rebuild that glb, re-run this, and both views move together. Each hand rides its `hand.l`
+// ONE HAND, TWO VIEWS. The source is the FPV arm script's own hand (model_goblin_arm.py build_hand) in its RELAXED pose,
+// exported as `kithand_L` / `kithand_R` -- the FPV hands themselves took job-specific poses (a fist, a fore-end
+// cradle). Change the hand in model_goblin_arm.py, re-run it, re-run this, and both views move together. Each hand rides its `hand.l`
 // / `hand.r` joint, weight 1, as two primitives appended by scripts/lib/kit-merge.mjs: `goblinskin` (the Skin faces,
 // with the FPV mesh's UVs, which kit-overlay.ts dresses in the FPV arm's own generated skin maps) and `goblinclaw` (the
 // Claw faces, vertex colour = horn). WAM's buffer is untouched, and re-running strips the previous merge first (same
@@ -37,7 +38,7 @@ if (!name || !kitPath) {
   console.error('usage: merge-kit-hands.ts <character> <kit.gltf> [hands.glb] [out.gltf]');
   process.exit(2);
 }
-const glbPath = glbArg ?? resolve(ROOT, 'public/assets/lab/goblin-arm.glb');
+const glbPath = glbArg ?? resolve(ROOT, 'assets-source/goblin-hands/goblin-hands.glb');
 const outPath = outArg ?? kitPath;
 const die = (m: string): never => { console.error(`merge-kit-hands: ${m}`); process.exit(1); };
 
@@ -67,7 +68,7 @@ const g = readGlb(glbPath, die);
 type Part = { P: number[]; N: number[]; C?: number[]; UV?: number[]; J: number[]; I: number[] };
 const skin: Part = { P: [], N: [], UV: [], J: [], I: [] };
 const claw: Part = { P: [], N: [], C: [], J: [], I: [] };
-for (const [side, node, thumbSign] of [['l', 'hand_L', -1], ['r', 'hand_R', +1]] as const) {
+for (const [side, node, thumbSign] of [['l', 'kithand_L', -1], ['r', 'kithand_R', +1]] as const) {
   const bone = (built.bones as Map<string, { head: V3; tail: V3 }>).get(`hand.${side}`) ?? die(`${name} has no hand.${side} bone`);
   const up = norm(sub(bone.head, bone.tail));
   const fwd0: V3 = [0, 0, 1];

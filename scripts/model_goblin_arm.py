@@ -22,6 +22,7 @@ from mathutils import Vector
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_GLB   = os.path.join(REPO_ROOT, "public", "assets", "lab", "goblin-arm.glb")
+KIT_GLB   = os.path.join(REPO_ROOT, "assets-source", "goblin-hands", "goblin-hands.glb")   # merge-kit-hands.ts's source
 NOTES_DIR = os.path.join(REPO_ROOT, "docs", "dev-notes", "2026-09-04-fpv-goblin-arms")
 os.makedirs(NOTES_DIR, exist_ok=True)
 
@@ -42,7 +43,7 @@ STRAP_Z = (0.100, 0.155)
 TILE_M   = 0.042          # one tile of the generated skin maps per 42 mm of arm (finer grain, owner)
 TRI_CAP  = 16500          # 14000 until the shell-hold hand (a second left hand, ~2.4k tris) joined the asset
 
-REQUIRED_NODES = ["Arm_L", "Arm_R", "Hand_L", "Hand_R", "Wrist_L", "Wrist_R",
+REQUIRED_NODES = ["Arm_L", "Arm_R", "Hand_L", "Hand_R", "Grip_L", "Grip_R", "Wrist_L", "Wrist_R",
                   "Elbow_L", "Elbow_R", "Upper_L", "Upper_R", "Shoulder_L", "Shoulder_R",
                   "Watch_Screen"]
 
@@ -187,11 +188,32 @@ FINGERS = (
 # The thumb's three segment directions (grip: swings across the front of the bar and hooks over the curled index).
 THUMB = ((-0.30, 0.62, -0.72), (-0.78, 0.45, -0.43), (-0.90, 0.10, -0.42))
 
-# THE SHELL-HOLD POSE (owner, 2026-10-24): the reload's PALM TURN (game-viewmodel.ts palmTurn). The fore hand comes up
-# palm to the camera with the two fresh cases lying across it, then turns over above the open tubes and pushes them in
-# palm-down. So this is a CUPPED open hand: the fingers rise a little in front of the far case and the thumb lies
-# along the near edge, cradling them on show; turned over, the same cup covers the mouths. Built as its own mesh,
-# `handhold_L` (the fore hand only), which game-arms.ts shows instead of `hand_L` while the reload is carrying.
+# THE FPV GRIPS (owner, 2026-10-24). FINGERS above is the RELAXED loose curl the third-person kit hands keep
+# (exported apart, KIT_GLB). In first person each hand has a job, so each gets its own pose:
+#  * FIST, the right hand (the shotgun's grip, the axe and flail hafts): a tight curl. The loose one floated a ~45 mm
+#    gap round a 17 mm haft, and the haft read as impaling the palm.
+#  * FORE, the left hand under the fore-end: a cradle, palm up, the fingers wrapping the far (right) side and the THUMB
+#    running forward along the near (left) flank with its claw out -- the one digit the camera sees ("cool to see the
+#    thumbnail claw off the left side of the gun").
+# Each hand's curl centre is exported as a `Grip_<tag>` locator (grip_centre); the runtime seats the held thing there.
+FINGERS_FIST = (
+    (+0.0205, +6, (0.035, 0.028, 0.022), (70, 95, 70)),
+    (+0.0068, +2, (0.039, 0.031, 0.024), (72, 96, 72)),
+    (-0.0068, -3, (0.036, 0.029, 0.022), (75, 98, 74)),
+    (-0.0205, -8, (0.029, 0.023, 0.018), (78, 100, 76)),
+)
+FINGERS_FORE = (
+    (+0.0205, +6, (0.035, 0.028, 0.022), (45, 65, 45)),
+    (+0.0068, +2, (0.039, 0.031, 0.024), (48, 68, 46)),
+    (-0.0068, -4, (0.036, 0.029, 0.022), (52, 70, 48)),
+    (-0.0205, -10, (0.029, 0.023, 0.018), (56, 72, 50)),
+)
+THUMB_FORE = ((0.75, 0.45, -0.48), (0.85, 0.45, -0.25), (0.80, 0.55, -0.20))   # forward along the flank, claw out
+
+# THE SHELL-HOLD POSE (owner, 2026-10-24): the reload's cover-and-shove (game-viewmodel.ts coverRoll). The fore hand
+# comes up already palm-down over the open tubes, the two fresh cases under it, and shoves them in. So this is a
+# CUPPED open hand that covers the mouths, the fingers draping over the breech. Built as its own mesh, `handhold_L`
+# (the fore hand only), which game-arms.ts shows instead of `hand_L` while the reload is carrying.
 FINGERS_HOLD = (
     (+0.0205, +6, (0.035, 0.028, 0.022), (18, 40, 26)),   # index: out past the far case, then up in front of it
     (+0.0068, +1, (0.039, 0.031, 0.024), (16, 38, 26)),   # middle
@@ -199,9 +221,8 @@ FINGERS_HOLD = (
     (-0.0205, -12, (0.029, 0.023, 0.018), (22, 44, 30)),  # little
 )
 THUMB_HOLD = ((0.35, 0.35, -0.87), (0.05, 0.55, -0.83), (-0.25, 0.60, -0.76))
-# The two cases on the palm in the LEFT arm's Blender frame at final size (centre, hull axis): game-viewmodel.ts
-# PALM_SHELLS turned into Blender axes (x, -z, y). Only the evidence render uses them (stand-in cylinders made after
-# the export, never shipped -- see the render block).
+# Two stand-in cases cradled in the cup, in the LEFT arm's Blender frame at final size (centre, hull axis), for the
+# evidence render only (cylinders made after the export, never shipped -- see the render block).
 HOLD_CASES = (((0.0, 0.030, -0.0255), (1.0, 0.0, 0.0)),
               ((0.0, 0.030, 0.0095), (1.0, 0.0, 0.0)))
 CASE_R, CASE_LEN = 0.0172, 0.070        # == game-viewmodel.ts SHELL_RADIUS_M / SHELL_LEN_M
@@ -272,6 +293,23 @@ def build_hand(sx, tag, root, fingers=FINGERS, thumb=THUMB, name=None):
         loop_uv.uv = (loop_uv.uv[0], loop_uv.uv[1] * HAND_SIZE)
     return palm
 
+def grip_centre(fingers):
+    """The centre of a pose's finger curl, in the authored hand frame at HAND_SIZE (x 0: the curl runs across the
+    palm). A least-squares circle through every finger joint in the (palmar, distal) plane -- the same chain build_hand
+    walks -- which is where a held bar's axis sits."""
+    import numpy as np
+    pts = []
+    for (kx, splay, lens, curls) in fingers:
+        y, z, ang = -0.002, -PALM[2] * 0.86, 0.0
+        pts.append((y, z))
+        for ln, c in zip(lens, curls):
+            ang += math.radians(c)
+            y += math.sin(ang) * ln; z -= math.cos(ang) * ln
+            pts.append((y, z))
+    P = np.array(pts)
+    c = np.linalg.lstsq(np.c_[2 * P, np.ones(len(P))], (P ** 2).sum(1), rcond=None)[0]
+    return (0.0, float(c[0]) * HAND_SIZE, float(c[1]) * HAND_SIZE)
+
 # ---- the arm ----------------------------------------------------------------
 def fore_r(z):
     """Forearm radius at height z: a taper from the wrist to the elbow."""
@@ -284,7 +322,9 @@ def build_arm(sx, tag, watch):
     # SKIN. Ball joints on purpose (the blob's stylisation: "a shaft alone
     # reads as a pipe"), radii up from the blob's 0.028 shaft per the owner.
     # The hand was the blob's plain orb until 2026-10-24; now the bony hand.
-    build_hand(sx, tag, root)
+    pose = (FINGERS_FORE, THUMB_FORE) if watch else (FINGERS_FIST, THUMB)   # watch == the fore (left) arm
+    build_hand(sx, tag, root, *pose)
+    locator(f'Grip_{tag}', root, grip_centre(pose[0]))
     if watch:   # the fore (left) arm carries the shells in the reload
         build_hand(sx, tag, root, FINGERS_HOLD, THUMB_HOLD, name=f'handhold_{tag}')
     put(sphere(WRIST_R, 16, 12), f'wrist_{tag}', 'Skin', root, loc=(0, 0, WRIST_Z), uv=True)
@@ -409,6 +449,24 @@ def verify_glb(path):
 
 size = export_glb(OUT_GLB)
 info = verify_glb(OUT_GLB)
+
+# THE KIT HANDS: the relaxed pose (FINGERS/THUMB) for the third-person goblin, as `kithand_L`/`kithand_R` in their
+# own glb that scripts/merge-kit-hands.ts reads. Not a runtime asset, so it lives in assets-source.
+for o in [o for o in bpy.data.objects if o not in set(col.objects)]:
+    bpy.data.objects.remove(o, do_unlink=True)          # the verify re-import
+kit_roots = []
+for sx, tag in ((-1, 'L'), (+1, 'R')):
+    kr = bpy.data.objects.new(f'KitArm_{tag}', None); col.objects.link(kr); kit_roots.append(kr)
+    build_hand(sx, tag, kr, name=f'kithand_{tag}')
+bpy.ops.object.select_all(action='DESELECT')
+kit_objs = [o for o in col.objects if o in kit_roots or o.parent in kit_roots]
+for o in kit_objs: o.select_set(True)
+os.makedirs(os.path.dirname(KIT_GLB), exist_ok=True)
+bpy.ops.export_scene.gltf(filepath=KIT_GLB, export_format='GLB', export_apply=True, export_yup=True,
+                          export_extras=False, use_selection=True)
+print(f"[goblin-arm] kit hands -> {KIT_GLB}")
+for o in kit_objs:
+    bpy.data.objects.remove(o, do_unlink=True)
 print(f"[goblin-arm] exported {OUT_GLB} ({size} bytes)")
 print(f"[goblin-arm] verify: {info}")
 ok = True
@@ -426,9 +484,10 @@ if info['skin_without_uv']:
 # swallow them and a much smaller one would leave them floating.
 # (The upper bound is loose since HAND_SIZE: a bigger fist covering more of the two cases during the shove is the
 # point -- loadHold's own comment says the hand doing it should hide them.)
-if info['hand_dim'] is None or not (1.2 * HAND_R <= info['hand_dim'] <= 3.2 * HAND_R):
+# 3.5x since the fore cradle's thumb reaches forward along the flank (151 mm).
+if info['hand_dim'] is None or not (1.2 * HAND_R <= info['hand_dim'] <= 3.5 * HAND_R):
     print(f"[goblin-arm] FAIL: hand extent {info['hand_dim']} outside "
-          f"[{1.2 * HAND_R}, {3.2 * HAND_R}] (GOBLIN_SKIN.handRadius; loadHold depends on it)",
+          f"[{1.2 * HAND_R}, {3.5 * HAND_R}] (GOBLIN_SKIN.handRadius; loadHold depends on it)",
           file=sys.stderr); ok = False
 if not info['screen_under_arm_l']:
     print("[goblin-arm] FAIL: Watch_Screen is not under Arm_L", file=sys.stderr); ok = False

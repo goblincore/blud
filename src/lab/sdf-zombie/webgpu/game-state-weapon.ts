@@ -136,7 +136,7 @@ export interface WeaponState {
   gripHandGroup: THREE.Group | null;
   /** The fore hand group, or null before it is built. */
   foreHandGroup: THREE.Group | null;
-  /** The reload's palm turn of the fore arm (game-viewmodel.ts palmTurn), set by the tick while the hand carries and
+  /** The reload's cover-and-shove roll of the fore arm (game-viewmodel.ts coverRoll), set by the tick while the hand carries and
    *  pushes the fresh cases, null otherwise. */
   foreRoll: ArmRoll | null;
   /** The gun geometry group, or null before it is built. */
