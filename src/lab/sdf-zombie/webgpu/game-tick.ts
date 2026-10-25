@@ -55,7 +55,7 @@ import { applyTrainCamera, lightSteam, stepTrain } from './game-train';
 import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell, extractStage, extractorOffset, fireRecoil, insertStage, loadCarry, loadHold, reloadPhaseAt, reloadPose, stagedShellCenter, supportHandPose, topLeverAngle, type HandDelta, type HandHold } from './game-viewmodel';
 import { stepVoid } from './game-void';
 import { stepBulletTimeFx } from './game-bullet-time';
-import { scalesAt, stepBulletTime } from '../bullet-time';
+import { airScaleAt, scalesAt, stepBulletTime } from '../bullet-time';
 import { carryFreshShots, expired, stepProjectiles, traceProjectile } from './game-weapon';
 import { aimArms, aimFrustum, boreFrameInRig, breechInRig, hideTracer, newTracerView, placeTracer, stepWeaponSlots } from './game-weapon-rig';
 import { woundStreamId } from './game-wound-streams';
@@ -232,9 +232,10 @@ export function tick(ctx: GameContext, dt: number) {
   });
   if (loopBlocksInput(ctx)) input = { x: 0, z: 0, jump: false };   // dead or done
   const preStep = [...ctx.player.player.pos] as Vec3;
-  // Bullet time's shootdodge hang: the jump floats (BULLET_TIME.airScale), a touch slower than the walk.
+  // Bullet time's shootdodge hang: the jump eases from the walk's pace into the apex hang (BULLET_TIME.airScale)
+  // and back out for the landing (airScaleAt).
   stepPlayer(ctx.player.player, input, pdt, [...ctx.world.colliders, ...zombieBoxes],
-    btScales.air);
+    airScaleAt(ctx.player.bulletTime.intensity, ctx.player.player.vel[1], ctx.player.player.grounded, PLAYER.jumpSpeed));
   // This tick's shots left the muzzle where last frame's camera put it; the
   // camera follows the step, so the shots must too (carryFreshShots).
   carryFreshShots(ctx.weapon.pellets, [

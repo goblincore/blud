@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BULLET_TIME, goreBoostAt, makeBulletTime, pickWakes, scalesAt, stepBulletTime, toggleBulletTime, worldScaleAt } from './bullet-time';
+import { BULLET_TIME, airScaleAt, goreBoostAt, makeBulletTime, pickWakes, scalesAt, stepBulletTime, toggleBulletTime, worldScaleAt } from './bullet-time';
 
 describe('bullet time ramp', () => {
   it('runs the world at full speed until toggled', () => {
@@ -35,6 +35,23 @@ describe('scalesAt', () => {
     expect(s.player).toBeCloseTo(BULLET_TIME.playerScale, 12);
     expect(s.shot).toBeCloseTo(BULLET_TIME.shotScale, 12);
     expect(s.player * s.air).toBeCloseTo(BULLET_TIME.airScale, 12);
+  });
+});
+
+describe('airScaleAt (the jump eases into the apex hang and back)', () => {
+  const J = 6;
+  it('runs at the player pace on the ground, at takeoff/landing speed and outside bullet time', () => {
+    expect(airScaleAt(1, 0, true, J)).toBe(1);
+    expect(airScaleAt(1, J, false, J)).toBe(1);
+    expect(airScaleAt(1, -J * 1.5, false, J)).toBe(1);
+    expect(airScaleAt(0, 0, false, J)).toBe(1);
+  });
+  it('reaches the absolute airScale at the apex, monotonically', () => {
+    expect(airScaleAt(1, 0, false, J) * scalesAt(1).player).toBeCloseTo(BULLET_TIME.airScale, 12);
+    const a = airScaleAt(1, J * 0.75, false, J), b = airScaleAt(1, J * 0.25, false, J);
+    expect(a).toBeLessThan(1);
+    expect(b).toBeLessThan(a);
+    expect(airScaleAt(1, -J * 0.25, false, J)).toBeCloseTo(b, 12);
   });
 });
 

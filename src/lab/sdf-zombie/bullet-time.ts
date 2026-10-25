@@ -21,13 +21,14 @@ import type { Vec3 } from './types';
 export const BULLET_TIME = {
   /** The world's dt multiplier fully in bullet time. */
   worldScale: 0.2,
-  /** The PLAYER's (owner 2026-10-25: "player should move slower ... like 0.5"): motion, aim, firing and reload. */
-  playerScale: 0.5,
+  /** The PLAYER's (owner 2026-10-25: 0.5, then "a bit slower like 0.35"): motion, aim, firing and reload. */
+  playerScale: 0.35,
   /** The PLAYER's pellets' dt multiplier fully in (owner 2026-10-25: 0.2 "takes too long", full speed loses the look). */
   shotScale: 0.5,
-  /** The player's VERTICAL dt multiplier fully in: the shootdodge hang (owner 2026-10-25: "make the jump floaty").
-   *  0.4 = the same height, 2.5x the airtime (~1.6 s), a touch slower than the walk's 0.5. */
-  airScale: 0.4,
+  /** The player's VERTICAL dt multiplier fully in AT THE APEX: the shootdodge hang (owner 2026-10-25: "make the
+   *  jump floaty", then 0.4 -> 0.2, then "gradually go from 0.35 -> 0.2 and as you are landing accelerate back").
+   *  `airScaleAt` eases from the walk's playerScale at takeoff to this at the top and back for the landing. */
+  airScale: 0.2,
   /** Real seconds to ease fully in (and out). */
   rampSec: 0.3,
   /** Peak UV offset of one projectile's air wake (post-aa's burn band). */
@@ -70,11 +71,23 @@ export function stepBulletTime(s: BulletTimeState, realDt: number, T = BULLET_TI
   return worldScaleAt(s.intensity, T.worldScale);
 }
 
-/** This tick's multipliers at `intensity`: `player` on the real step; `shot` on the real step; `air` RELATIVE to
- *  `player` (stepPlayer's airScale rides the player's dt, so the jump's absolute hang stays `airScale`). */
+/** This tick's multipliers at `intensity`: `player` on the real step; `shot` on the real step; `air` the APEX hang
+ *  RELATIVE to `player` (stepPlayer's airScale rides the player's dt, so the absolute apex hang stays `airScale`). */
 export function scalesAt(intensity: number, T = BULLET_TIME): { player: number; shot: number; air: number } {
   const player = worldScaleAt(intensity, T.playerScale);
   return { player, shot: worldScaleAt(intensity, T.shotScale), air: worldScaleAt(intensity, T.airScale) / player };
+}
+
+/**
+ * stepPlayer's airScale this step (relative to the player's dt): 1 on the ground and wherever the player moves
+ * vertically at the jump's own speed (takeoff, landing, any faster fall), easing to `scalesAt(...).air` as the
+ * vertical speed drops to 0 at the apex. Retiming the arc leaves its shape alone, so the jump keeps its height.
+ */
+export function airScaleAt(intensity: number, vy: number, grounded: boolean, jumpSpeed: number, T = BULLET_TIME): number {
+  if (grounded || !(intensity > 0) || !(jumpSpeed > 0)) return 1;
+  const apex = scalesAt(intensity, T).air;
+  const h = ease(Math.max(0, Math.min(1, 1 - Math.abs(vy) / jumpSpeed)));
+  return 1 + (apex - 1) * h;
 }
 
 export interface WakeSource { pos: Vec3; heavy: boolean }
