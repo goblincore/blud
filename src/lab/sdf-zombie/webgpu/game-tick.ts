@@ -583,7 +583,7 @@ export function tick(ctx: GameContext, dt: number) {
   ctx.weapon.headDamage?.tick(dt);
   stepDynamite(ctx, dt);
   if (ctx.player.reticleEl) {
-    ctx.player.reticleEl.style.display = ctx.player.freeAimOn && !ctx.world.sequence?.started ? 'block' : 'none';
+    ctx.player.reticleEl.style.display = ctx.player.freeAimOn && !ctx.player.reticleHidden && !ctx.world.sequence?.started ? 'block' : 'none';
     if (ctx.player.freeAimOn) {
       // Position against the CANVAS, not the window. Percent-of-viewport put
       // the reticle outside the render area whenever the canvas did not fill
@@ -607,7 +607,7 @@ export function tick(ctx: GameContext, dt: number) {
         const apart = Math.hypot(ctx.weapon.aim.x - shot.x, ctx.weapon.aim.y - shot.y);
         const alpha = Math.min(1, apart / 0.08) * 0.6;
         const q = reticleNdc(ctx.weapon.aim, ctx.render.postAa.lens);
-        ctx.player.steerEl.style.display = alpha > 0.01 && !ctx.world.sequence?.started ? 'block' : 'none';
+        ctx.player.steerEl.style.display = alpha > 0.01 && !ctx.player.reticleHidden && !ctx.world.sequence?.started ? 'block' : 'none';
         ctx.player.steerEl.style.opacity = alpha.toFixed(3);
         ctx.player.steerEl.style.left = `${r.left + r.width * (0.5 + q.x * 0.5)}px`;
         ctx.player.steerEl.style.top = `${r.top + r.height * (0.5 - q.y * 0.5)}px`;

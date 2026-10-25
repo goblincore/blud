@@ -65,6 +65,9 @@ export interface PlayerState {
   /** Faint steering cursor, shown while strafing pulls the crosshair to
    *  centre and the reticle is only steering the camera. */
   steerEl: HTMLDivElement | null;
+  /** C / `__sdfGame.setReticleVisible(false)`: hide the crosshair and the
+   *  steering cursor entirely. Aiming is unchanged, only the markers go. */
+  reticleHidden: boolean;
   /** Bench: pin the player pose for the whole leg (forced zero input). */
   holdPlayerPose: boolean;
   /** The `__sdfGame.placeMarker` debug sphere. */
@@ -106,6 +109,7 @@ export function makePlayerState(): PlayerState {
     prevPlayerPos: [0, 0, 0],
     reticleEl: null,
     steerEl: null,
+    reticleHidden: false,
     holdPlayerPose: false,
     marker: null,
     autopilot: null,
