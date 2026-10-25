@@ -12,6 +12,7 @@ import { spritePieceStates } from './gib-sprite-pieces';
 import { burst } from '../blood-sim';
 import { makeFlight } from '../dynamite-flight';
 import { rngStreams } from './rng';
+import { seatBurstSpawn } from './game-hit-trace';
 
 type LiveBundle = BakeState['liveBundles'][number];
 
@@ -45,16 +46,20 @@ export function createDebrisSeams(ctx: GameContext) {
         ? [...ctx.world.loop.meshes.entries()].map(([id, m]) => ({ id, pos: [m.position.x, m.position.y, m.position.z] }))
         : [],
     }),
-    /** Collapse an actor where it stands (a corpse: its gun drops, its kit falls with it). */
+    /** Collapse an actor where it stands (a corpse: its gun drops, its kit falls with it). `reaction: 'none'`: no
+     *  blast shot signal, so a living soldier drops without a stagger first. False, touching nothing, for an actor
+     *  that is gone (gibbed actors leave the list), tearing apart, or already down. */
     collapseActor: (id: number) => {
       const a = ctx.world.actors.find(q => q.id === id);
-      if (!a) return false;
-      a.blast({ wounds: [], meterCredit: 0, impulse: null, forceCollapse: true });
+      if (!a || a.tearing() || a.motionFrame()?.collapsed) return false;
+      a.blast({ wounds: [], meterCredit: 0, impulse: null, forceCollapse: true, reaction: 'none' });
       return true;
     },
-    /** A blood burst at a point (the gib burst's droplets, rngStreams.bleed). */
+    /** A blood burst at a point (the gib burst's droplets, rngStreams.bleed). Seated as the real bursts are
+     *  (seatBurstSpawn with no body: on a sector level the drops carry the floor under the point). */
     bloodBurstAt: (x: number, y: number, z: number) => {
-      burst(ctx.vfx.bloodSim, [x, y, z], rngStreams.bleed);
+      const seat = seatBurstSpawn(ctx, null, [x, y, z]);
+      burst(ctx.vfx.bloodSim, seat.pos, rngStreams.bleed, undefined, seat.floorY);
       return ctx.vfx.bloodSim.droplets.length;
     },
     /** A dynamite bundle in flight with no prop (fuse in seconds; impact detonation off). */

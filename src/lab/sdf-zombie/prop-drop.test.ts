@@ -92,6 +92,24 @@ describe('prop drop on a debris ground (sector levels, plan 3b)', () => {
     for (let i = 0; i < 300 && !s.resting; i++) s = { ...stepDrop(s, 1 / 60, 0, LEDGE) } as typeof s;
     expect(s.pos[1]).toBeCloseTo(1 + DROP.floorPad, 6);                 // the root is over the low floor, the gun over the ledge
   });
+  it('lying flat re-reads the floor under the flat centre (a gun swung over a step does not float or clip)', () => {
+    const STEP: DebrisGround = { floorAt: (_x, z) => (z > 0.3 ? 0.4 : 0), bounce: () => null };
+    const down = qFromAxisAngle([1, 0, 0], Math.PI / 2);             // local +z (the barrel) points straight down
+    let s = { ...releaseProp([0, 0.031, 0], down, [0, 0, 0], 3), vel: [0, 0, 0] as Vec3, spinRate: 0,
+      centre: [0, 0, 0.5] as Vec3 };
+    s = stepDrop(s, 1 / 60, 0, STEP) as typeof s;
+    expect(s.resting).toBe(true);
+    expect(add(s.pos, qRotate(s.quat, s.centre))[2]).toBeCloseTo(0.5, 6); // flat: the barrel lies over the step
+    expect(s.floorY).toBe(0.4);
+    expect(s.pos[1]).toBeCloseTo(0.4 + DROP.floorPad, 9);
+  });
+  it('the ceiling is read over the bounds centre too', () => {
+    const LOW: DebrisGround = { floorAt: () => 0, ceilAt: (_x, z) => (z > 0.3 ? 1.0 : Infinity), bounce: () => null };
+    let s = { ...releaseProp([0, 0.9, 0], [0, 0, 0, 1], [0, 4, 0], 3), spinRate: 0, centre: [0, 0, 0.5] as Vec3 };
+    let top = -Infinity;
+    for (let i = 0; i < 60 && !s.resting; i++) { s = stepDrop(s, 1 / 60, 0, LOW) as typeof s; top = Math.max(top, s.pos[1]); }
+    expect(top).toBeLessThanOrEqual(1.0 - DROP.floorPad + 1e-12);   // the root is under sky, the gun under the lintel
+  });
   it('never flies above a ceiling; sky (Infinity) and off the map (NaN) do not clamp', () => {
     const low: DebrisGround = { floorAt: () => 0, ceilAt: () => 1.2, bounce: () => null };
     let s = releaseProp([0, 1.1, 0], [0, 0, 0, 1], [0, 4, 0], 3);

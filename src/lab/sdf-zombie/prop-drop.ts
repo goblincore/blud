@@ -75,7 +75,8 @@ export function stepDrop(s: DropState, dt: number, floorY: number, ground?: Debr
     const c1 = centreOf(pos, quat);
     const b = ground.bounce(centreOf(s.pos, s.quat), c1, vel, DROP.restitution, DROP.friction, DROP.radius);
     if (b) { pos = off ? [pos[0] + b.pos[0] - c1[0], pos[1], pos[2] + b.pos[2] - c1[2]] : b.pos; vel = b.vel; }
-    const ceil = ground.ceilAt?.(pos[0], pos[2]) ?? Infinity;
+    const cc = centreOf(pos, quat);
+    const ceil = ground.ceilAt?.(cc[0], cc[2]) ?? Infinity;
     if (Number.isFinite(ceil) && pos[1] > ceil - DROP.floorPad) {
       pos = [pos[0], ceil - DROP.floorPad, pos[2]];
       if (vel[1] > 0) vel = [vel[0], -vel[1] * DROP.restitution, vel[2]];
@@ -100,6 +101,12 @@ export function stepDrop(s: DropState, dt: number, floorY: number, ground?: Debr
         const c0 = centreOf(pos, quat), c1 = centreOf(pos, flat);
         const b = ground.bounce(c0, c1, [0, 0, 0], 0, 0, DROP.radius);
         if (b) pos = [pos[0] + b.pos[0] - c1[0], pos[1], pos[2] + b.pos[2] - c1[2]];
+        // The flat centre (moved by the swing, and by that correction) rests on the floor under IT.
+        const c = centreOf(pos, flat);
+        const f = landingFloor(ground, c[0], c[2], base);
+        pos = [pos[0], f + DROP.floorPad, pos[2]];
+        quat = flat;
+        return { pos, quat, vel: [0, 0, 0], spinAxis: s.spinAxis, spinRate, resting, ...keep, floorY: f };
       }
       quat = flat;
       return { pos, quat, vel: [0, 0, 0], spinAxis: s.spinAxis, spinRate, resting, ...keep };

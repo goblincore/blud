@@ -138,8 +138,9 @@ function push(sim: BloodSim, d: Droplet): void {
 /** FX_13-style radial spray at a gib/sever instant. `stream` is the caller's
  *  stable emitter id (optional; untagged droplets are skipped by
  *  blood-connections). It is written to every spawned droplet and does not
- *  touch the RNG stream. */
-export function burst(sim: BloodSim, origin: Vec3, rng: () => number, stream?: number): void {
+ *  touch the RNG stream. `floorY` (optional, SECTOR levels, plan 3b) seeds every drop's floor, as
+ *  spawnImpactGout's. */
+export function burst(sim: BloodSim, origin: Vec3, rng: () => number, stream?: number, floorY?: number): void {
   for (let i = 0; i < GIB_BURST.count; i++) {
     const theta = rng() * Math.PI * 2;
     const speed = GIB_BURST.speedMin + rng() * (GIB_BURST.speedMax - GIB_BURST.speedMin);
@@ -154,6 +155,7 @@ export function burst(sim: BloodSim, origin: Vec3, rng: () => number, stream?: n
       size: 0.03 + rng() * 0.03,
       kind: 'drop',
       ...(stream !== undefined ? { stream } : {}),
+      ...(floorY !== undefined ? { floorY } : {}),
     });
   }
 }
