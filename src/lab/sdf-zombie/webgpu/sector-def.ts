@@ -53,6 +53,8 @@ export interface SectorMap { vertices: XZ[]; sectors: SectorDef[]; lines: Sector
 
 /** Spec §6.2: the highest step a body walks up (Doom's 24 units at 32 units/m). */
 export const SECTOR_STEP_M = 0.75;
+/** The body disc radius sector navigation stands a body on (and the motion floor reads under). */
+export const SECTOR_BODY_RADIUS_M = 0.34;
 /** Spec §6.2: the lowest opening a body fits through (the Flat's doorway rule). */
 export const SECTOR_HEADROOM_M = 1.9;
 /** The material that means "open to the sky": no ceiling drawn (Doom's F_SKY1). */

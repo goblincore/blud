@@ -13,6 +13,32 @@ import { SECTOR_HEADROOM_M, SECTOR_STEP_M, type SectorMap } from './sector-def';
 
 const CELL_M = 4;
 
+/** Squared distance from (px, pz) to the segment a -> b. */
+export function segDist2(px: number, pz: number, ax: number, az: number, bx: number, bz: number): number {
+  const dx = bx - ax, dz = bz - az, len2 = dx * dx + dz * dz;
+  const t = len2 > 0 ? Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / len2)) : 0;
+  const ex = ax + dx * t - px, ez = az + dz * t - pz;
+  return ex * ex + ez * ez;
+}
+
+/** The highest floor a disc (squared radius r2) centred at (x, z) over sector s touches: that
+ *  sector's floor and both sides of every two-sided line in `cand` within the radius (Doom's
+ *  floorz). `hit.close` is set when any line of `cand` is within the radius. Sector navigation's
+ *  standing probe and SectorGround.floorUnder share this. */
+export function discFloor(map: SectorMap, s: number, x: number, z: number, cand: readonly number[], r2: number,
+  hit?: { close: boolean }): number {
+  const V = map.vertices, S = map.sectors, Ls = map.lines;
+  let feet = S[s]!.floor, close = false;
+  for (const i of cand) {
+    const l = Ls[i]!, [ax, az] = V[l.v[0]]!, [bx, bz] = V[l.v[1]]!;
+    if (segDist2(x, z, ax, az, bx, bz) >= r2) continue;
+    close = true;
+    if (l.back >= 0) feet = Math.max(feet, S[l.front]!.floor, S[l.back]!.floor);
+  }
+  if (hit) hit.close = close;
+  return feet;
+}
+
 export interface SectorGround extends LevelGround {
   /** The sector index under (x, z), or -1. */
   sectorAt(x: number, z: number): number;
@@ -22,6 +48,8 @@ export interface SectorGround extends LevelGround {
   linesNear(x0: number, z0: number, x1: number, z1: number): number[];
   /** Whether line i blocks a body with its feet at feetY (the rule blockingNear applies). */
   lineBlocks(i: number, feetY: number): boolean;
+  /** The highest floor a disc of `radius` at (x, z) touches (discFloor); NaN off the map. */
+  floorUnder(x: number, z: number, radius: number): number;
 }
 
 export function buildSectorGround(map: SectorMap): SectorGround {
@@ -100,6 +128,12 @@ export function buildSectorGround(map: SectorMap): SectorGround {
     linesNear,
     lineBlocks: blocks,
     floorAt: (x, z) => { const s = sectorAt(x, z); return s < 0 ? NaN : S[s]!.floor; },
+    floorUnder: (x, z, radius) => {
+      const s = sectorAt(x, z);
+      if (s < 0) return NaN;
+      if (!(radius > 0)) return S[s]!.floor;
+      return discFloor(map, s, x, z, linesNear(x - radius, z - radius, x + radius, z + radius), radius * radius);
+    },
     ceilAt: (x, z) => { const s = sectorAt(x, z); return s < 0 ? NaN : S[s]!.ceil; },
     blockingNear(x, z, r, feetY) {
       const out: WallSeg[] = [];

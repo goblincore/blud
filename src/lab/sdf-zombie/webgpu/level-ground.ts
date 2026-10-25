@@ -17,6 +17,9 @@ export interface LevelGround {
   ceilAt(x: number, z: number): number;
   /** Wall segments within about `r` of (x, z) that block a body whose feet are at `feetY`. */
   blockingNear(x: number, z: number, r: number, feetY: number): readonly WallSeg[];
+  /** Optional (sector levels): the floor a body of `radius` centred at (x, z) stands on, the highest
+   *  floor its disc touches (Doom's floorz; sector navigation's rule). NaN off the map. */
+  floorUnder?(x: number, z: number, radius: number): number;
 }
 
 const NO_SEGS: readonly WallSeg[] = [];

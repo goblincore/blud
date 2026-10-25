@@ -259,6 +259,54 @@ describe('floorAt: bodies fall off ledges', () => {
   });
 });
 
+// Review fixes 3 and 4: the feet leave a ledge with the body; a mid-fall floor above the feet never
+// snaps the body up; a rise over maxStepUp is a wall, not a step.
+describe('floorAt: falling and step caps', () => {
+  it('holds no stance plant while falling and plants again after landing', () => {
+    const j = zombieJoints();
+    const r = run(j, cruising(7), i => ({ enabled: true, wander: true, floorAt: () => (i < 60 ? 0 : -3) }), 160);
+    const falling = r.states.filter(s => (s.floorVel ?? 0) < 0);
+    expect(falling.length).toBeGreaterThan(30);
+    for (const s of falling) {
+      expect(s.plantL.phase).not.toBe('stance');
+      expect(s.plantR.phase).not.toBe('stance');
+    }
+    expect(r.states.slice(-40).some(s => s.plantL.phase === 'stance' || s.plantR.phase === 'stance')).toBe(true);
+  });
+
+  it('mid-fall, a floor above the feet ends the fall where it is (no snap up)', () => {
+    const j = zombieJoints();
+    const r = run(j, cruising(7), i => ({ enabled: true, wander: true, maxStepUp: 0.75,
+      floorAt: () => (i < 10 ? 0 : i < 40 ? -3 : 0) }), 70);
+    expect(r.states[39]!.floorY).toBeLessThan(-0.75);
+    expect(r.states[39]!.floorVel).toBeLessThan(0);
+    // The floor jumped back to 0, more than maxStepUp above the feet: the body holds its height.
+    expect(r.states[40]!.floorY).toBe(r.states[39]!.floorY);
+    expect(r.states[40]!.floorVel).toBe(0);
+    expect(r.state.floorY).toBe(r.states[39]!.floorY);
+  });
+
+  it('mid-fall, a floor within maxStepUp above the feet is eased up onto', () => {
+    const j = zombieJoints();
+    const r = run(j, cruising(7), i => ({ enabled: true, wander: true, maxStepUp: 0.75,
+      floorAt: () => (i < 10 ? 0 : i < 28 ? -3 : -0.2) }), 60);
+    const at = r.states[27]!.floorY;
+    expect(at).toBeLessThan(-0.2);
+    expect(at).toBeGreaterThan(-0.95);
+    expect(r.states[28]!.floorY - at).toBeLessThanOrEqual(FLOOR_EASE_MPS * DT + 1e-12);
+    expect(r.state.floorY).toBe(-0.2);
+  });
+
+  it('maxStepUp: a rise above it keeps the current floor; one within it eases up; absent, no cap', () => {
+    const j = zombieJoints();
+    const cfg = (y: number, cap?: number) => ({ enabled: true, wander: true, floorAt: () => y,
+      ...(cap === undefined ? {} : { maxStepUp: cap }) });
+    expect(run(j, cruising(7), cfg(1, 0.75), 60).state.floorY).toBe(0);
+    expect(run(j, cruising(7), cfg(0.5, 0.75), 60).state.floorY).toBe(0.5);
+    expect(run(j, cruising(7), cfg(1), 60).state.floorY).toBe(1);
+  });
+});
+
 describe('applyFloorContact: the floor under each point', () => {
   const pts = (): RigPoint[] => [
     { pos: [0.5, -0.5, 0], prev: [0.5, -0.45, 0], pinned: false },

@@ -77,3 +77,20 @@ describe('buildSectorGround: linesNear', () => {
     expect(g.linesNear(50, 50, 60, 60)).toEqual([]);
   });
 });
+
+// Plan 3b Task 6 review: the body's floor is the highest floor its disc touches (navigation's rule).
+describe('buildSectorGround: floorUnder', () => {
+  const g = buildSectorGround(map());
+  it('stands a disc overhanging a ledge on the ledge, and drops it once clear', () => {
+    expect(g.floorAt(4.2, -4)).toBe(-1);
+    expect(g.floorUnder(4.2, -4, 0.34)).toBe(0);
+    expect(g.floorUnder(4.5, -4, 0.34)).toBe(-1);
+    expect(g.floorUnder(3.8, -4, 0.34)).toBe(0);
+  });
+  it('radius 0 is floorAt; off the map is NaN', () => {
+    expect(g.floorUnder(4.2, -4, 0)).toBe(-1);
+    expect(g.floorUnder(0, -4, 0.34)).toBeNaN();
+    expect(g.floorUnder(20, 20, 0.34)).toBeNaN();
+  });
+});
+

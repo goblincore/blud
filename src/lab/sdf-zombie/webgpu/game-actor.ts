@@ -45,12 +45,13 @@ import { blastPlates, freshPlates, hitPlate, isShed, restHitPoint, shedPlates, t
 import { posedDetachedChunk } from '../detached-pose';
 import { cutLimbs, cutChains, chainOrder, jointPoint } from '../connectivity';
 import type { LimbId, Primitive, Vec3 } from '../types';
+import { SECTOR_BODY_RADIUS_M, SECTOR_STEP_M } from './sector-def';
 import {
   woundFromPellet, woundFromSlug,
 } from './game-weapon';
 import {
   makeMotionJoints, makeMotionState, stepMotion, planSubSteps,
-  applyFloorContact, FALL_DROP_M, MOTION_TUNING, STANDING_RIG,
+  applyFloorContact, FALL_DROP_M, MOTION_TUNING, STANDING_RIG, releasedRestScale,
   type MotionJoints, type MotionState, type MotionSignals,
 } from '../motion';
 import { makeRng, headingDir, type Rng, type WanderBounds } from '../wander';
@@ -684,7 +685,15 @@ export function createZombieActor(opts: {
   if (!mj) throw new Error(`zombie ${opts.id}: no motion joints`);
   // The motion step's floor (sector levels only; the key stays ABSENT otherwise, see motion.ts).
   const ground = opts.ground;
-  const floorAt = ground ? { floorAt: (x: number, z: number) => ground.floorAt(x, z) } : {};
+  // Sector levels: the floor a body stands on is the highest its disc touches (floorUnder, the rule
+  // sector navigation stands it on), so it falls only once clear of a ledge, and a rise over
+  // SECTOR_STEP_M (a wall) never lifts it. A ground without floorUnder reads the floor at the centre.
+  const floorAt = ground ? {
+    floorAt: ground.floorUnder
+      ? (x: number, z: number) => ground.floorUnder!(x, z, SECTOR_BODY_RADIUS_M)
+      : (x: number, z: number) => ground.floorAt(x, z),
+    maxStepUp: SECTOR_STEP_M,
+  } : {};
   const joints: MotionJoints = mj;
   let state: MotionState = makeMotionState(opts.seed, opts.start);
   // Starting-phase variety: seed the initial heading so spawns don't parade.
@@ -1679,6 +1688,7 @@ export function createZombieActor(opts: {
       }
       let points = stepRig(
         { ...bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw, posePins: f.posePins,
+          ...(f.restRelease ? { restScale: releasedRestScale(bound.rig, f.restRelease) } : {}),
           torsoGuards: wantsTorsoGuards(opts.profile) ? bound.rig.torsoGuards : undefined }, sdt,
         {
           gravity: f.gravity,
@@ -1700,12 +1710,22 @@ export function createZombieActor(opts: {
         points = pinTips(points, fistTips.tips, f.bodyYaw, f.restPose, fistTips.only);
       }
       // SECTOR LEVELS (plan 3b): a corpse meets the floor under each point (an arm over a ledge hangs
-      // down it) but never climbs more than FALL_DROP_M (a ledge wall is not a floor). Relative to the
-      // body's own contact plane f.floorY. Room levels (no ground): undefined, the one-plane calls.
-      const pointFloor = ground && f.collapsed ? (x: number, z: number): number => {
-        const d = ground.floorAt(x, z) - state.floorY;
-        return f.floorY + (!Number.isFinite(d) || d > FALL_DROP_M ? 0 : d);
+      // down it). The rise is judged PER POINT, against where that point was: a floor more than
+      // FALL_DROP_M above it is a wall, not a floor, and the point keeps the floor it had (the one
+      // under its previous position, else the body's plane, else its own height). Independent of the
+      // root, so points lying on a ledge stay on it when the root goes over the lip. The contact
+      // plane sits the body's pad (f.floorY - state.floorY) above each floor. Room levels (no
+      // ground): undefined, the one-plane calls.
+      const pad = f.floorY - state.floorY;
+      const pointFloor = ground && f.collapsed ? (x: number, z: number, from: Vec3): number => {
+        const reach = from[1] + FALL_DROP_M;
+        const here = ground.floorAt(x, z) + pad;
+        if (Number.isFinite(here) && here <= reach) return here;
+        const was = ground.floorAt(from[0], from[2]) + pad;
+        if (Number.isFinite(was) && was <= reach) return was;
+        return f.floorY <= reach ? f.floorY : from[1];
       } : undefined;
+
       if (f.collapsed) {
         points = applyFloorContact(points, f.floorY, undefined, undefined, pointFloor);
       }

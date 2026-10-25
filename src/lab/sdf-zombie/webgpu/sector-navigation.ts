@@ -18,23 +18,15 @@ import type { Aabb } from './game-level';
 import type { Vec3 } from '../types';
 import type { WanderBounds } from '../wander';
 import { createGridNavigation, type EncounterNavigation } from './grid-navigation';
-import type { SectorGround } from './sector-ground';
-import { SECTOR_HEADROOM_M, SECTOR_STEP_M, zoneName, type SectorMap } from './sector-def';
+import { discFloor, segDist2, type SectorGround } from './sector-ground';
+import { SECTOR_BODY_RADIUS_M, SECTOR_HEADROOM_M, SECTOR_STEP_M, zoneName, type SectorMap } from './sector-def';
 
 const STEP = 0.4;
 const SAMPLE_M = 0.12;
 const BODY_H = 1.8;
 
-/** Squared distance from (px, pz) to the segment a -> b. */
-function segDist2(px: number, pz: number, ax: number, az: number, bx: number, bz: number): number {
-  const dx = bx - ax, dz = bz - az, len2 = dx * dx + dz * dz;
-  const t = len2 > 0 ? Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / len2)) : 0;
-  const ex = ax + dx * t - px, ez = az + dz * t - pz;
-  return ex * ex + ez * ez;
-}
-
 export function createSectorNavigation(map: SectorMap, ground: SectorGround, rooms: readonly { id: number; name: string }[],
-  boxes: readonly Aabb[], radius = 0.34): EncounterNavigation {
+  boxes: readonly Aabb[], radius = SECTOR_BODY_RADIUS_M): EncounterNavigation {
   const V = map.vertices, S = map.sectors, Ls = map.lines;
   const r2 = radius * radius;
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
@@ -62,17 +54,12 @@ export function createSectorNavigation(map: SectorMap, ground: SectorGround, roo
   };
   /** The feet height of a body centred at (x, z) over sector s, or NaN when it cannot stand there.
    *  `cand` holds (at least) every line within radius. Feet: the highest floor the disc touches. */
+  const hit = { close: false };
   const probe = (x: number, z: number, s: number, cand: readonly number[]): number => {
     if (s < 0) return NaN;
-    let feet = S[s]!.floor, close = false;
-    for (const i of cand) {
-      const l = Ls[i]!, [ax, az] = V[l.v[0]]!, [bx, bz] = V[l.v[1]]!;
-      if (segDist2(x, z, ax, az, bx, bz) >= r2) continue;
-      close = true;
-      if (l.back >= 0) feet = Math.max(feet, S[l.front]!.floor, S[l.back]!.floor);
-    }
+    const feet = discFloor(map, s, x, z, cand, r2, hit);
     if (S[s]!.ceil - feet < SECTOR_HEADROOM_M) return NaN;
-    if (close)
+    if (hit.close)
       for (const i of cand) {
         if (!ground.lineBlocks(i, feet)) continue;
         const l = Ls[i]!, [ax, az] = V[l.v[0]]!, [bx, bz] = V[l.v[1]]!;

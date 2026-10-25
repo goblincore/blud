@@ -153,6 +153,9 @@ export const FLOOR_EASE_MPS = 6;
 /** A floor drop bigger than this FALLS under gravity instead of easing (spec §6.2's step rule, 24 Doom units). */
 export const FALL_DROP_M = 0.75;
 export const FALL_GRAVITY = 9.81;
+/** A soldier's structural fall-pose target over a floor this far below the body's own is released
+ *  to fall to it (sector levels). */
+export const LEDGE_RELEASE_M = 0.1;
 
 /** Hip-fire knobs. */
 export const FIRE = {
@@ -456,6 +459,10 @@ export interface MotionConfig {
    *  the previous floor. MotionState.floorY eases toward it at FLOOR_EASE_MPS. ABSENT on room
    *  levels: floorY stays where it started (0) and every frame is bit-identical to before. */
   floorAt?: (x: number, z: number) => number;
+  /** Sector levels: the highest rise the body's floor follows (SECTOR_STEP_M). A floor further above
+   *  the feet is a wall, not a step: the body keeps its current floor. Absent: no cap (room levels,
+   *  the lab). */
+  maxStepUp?: number;
 }
 
 /** What happened since the last frame — collected by the wiring between
@@ -515,6 +522,10 @@ export interface MotionFrame {
   jawGape: number;
   /** Multiply stepRig's restStiffness by this (the collapse ramp). */
   restPull: number;
+  /** Sector levels: rig points whose rest pull is dropped this frame (the wiring zeroes their
+   *  restScale) — a soldier's structural fall pose over a lower floor (a ledge, a pit) lets those
+   *  points fall to it instead of holding them flat on the root's plane. Absent otherwise. */
+  restRelease?: number[];
   /** Gravity for stepRig this frame (soft standing vs full falling weight). */
   gravity: Vec3;
   /** One-sided joint limits to relax after stepRig. Empty while standing. */
@@ -697,12 +708,15 @@ export function stepMotion(
   if (cfg.floorAt) {
     const want = cfg.floorAt(wander.pos[0], wander.pos[2]);
     if (Number.isFinite(want)) {
+      // Mid-fall, a floor ABOVE the feet is not a landing (a lip the body is beside): the fall ends
+      // where it is and the step rule below decides (never a snap up to it).
+      if (floorVel < 0 && want > feetY) floorVel = 0;
       if (floorVel < 0 || want < feetY - FALL_DROP_M) {
         // A DROP (a ledge, a pit, a blast's knock over the edge): fall, land on the floor.
         floorVel -= FALL_GRAVITY * dt;
         feetY = Math.max(want, feetY + floorVel * dt);
         if (feetY === want) floorVel = 0;
-      } else {
+      } else if (cfg.maxStepUp === undefined || want - feetY <= cfg.maxStepUp) {
         const max = FLOOR_EASE_MPS * dt;
         feetY = Math.abs(want - feetY) <= max ? want : feetY + Math.sign(want - feetY) * max;
       }
@@ -1286,7 +1300,9 @@ export function stepMotion(
   // --- IK override 1: foot plants ------------------------------------------
   // A blast's recoveryStep releases both locks for one frame (a forced
   // stance edge): the feet catch up to the shoved root, then re-plant.
-  const release = stagger.recoveryStep && !collapsed;
+  // A body falling off a ledge (floorVel < 0, sector levels) holds no stance either: the feet leave
+  // the ledge with it and re-plant on landing.
+  const release = (stagger.recoveryStep && !collapsed) || floorVel < 0;
   const footWorld = (i: number): Vec3 =>
     havePoints ? points[i]!.pos : targets[i]!;
   const plantStep = (
@@ -1518,6 +1534,22 @@ export function stepMotion(
       floorY, sig.missing.legL || sig.wounded.legL, !fallFatal, fallImpact, fallStrength, sig.missing.armL);
     fall.forEach((p, i) => { targets[i] = p; });
   }
+  // Sector levels: the structural pose lies every target on the ROOT's plane, held at rest pull 1.
+  // A target over a floor lower than that (a ledge's lip, a pit) is released to fall to it; with
+  // the pelvis over it the whole body goes (the torso is the load-bearing mass).
+  let restRelease: number[] | undefined;
+  if (structural && cfg.floorAt) {
+    const over = (p: Vec3): boolean => {
+      const f = cfg.floorAt!(p[0], p[2]);
+      return Number.isFinite(f) && f < feetY - LEDGE_RELEASE_M;
+    };
+    const pel = idx.pelvis;
+    if (pel !== undefined && over(targets[pel]!)) restRelease = targets.map((_, i) => i);
+    else {
+      const some = targets.flatMap((p, i) => (over(p) ? [i] : []));
+      if (some.length) restRelease = some;
+    }
+  }
 
   // --- the pose layer -------------------------------------------------------
   // After every other target writer (gait, carry, aim, plants, the soldier fall) so the authored pose has the last word.
@@ -1590,7 +1622,8 @@ export function stepMotion(
         return pins.length ? { posePins: pins } : {};
       })(),
       restPull: structural ? 1 : collapse.restPull,
-      gravity: structural ? [0, -1.5, 0] : collapsed
+      ...(restRelease ? { restRelease } : {}),
+      gravity: structural ? (restRelease ? [0, MOTION_TUNING.collapseGravity, 0] : [0, -1.5, 0]) : collapsed
         ? [0, MOTION_TUNING.collapseGravity, 0]
         : [0, STANDING_RIG.gravityY, 0],
       ropes: structural ? [] : collapse.ropes,
@@ -1631,12 +1664,13 @@ export function applyFloorContact(
   groundY: number,
   restitution: number = COLLAPSE_TUNING.groundRestitution,
   friction: number = COLLAPSE_TUNING.groundFriction,
-  floorAt?: (x: number, z: number) => number,
+  floorAt?: (x: number, z: number, from: Vec3) => number,
 ): RigPoint[] {
   return points.map(p => {
     if (p.pinned) return p;
-    // Sector levels: the contact plane under THIS point (an arm over a ledge hangs down it).
-    const g = floorAt ? floorAt(p.pos[0], p.pos[2]) : groundY;
+    // Sector levels: the contact plane under THIS point (an arm over a ledge hangs down it); `from`
+    // is where the point was last frame, so the caller can judge its rise.
+    const g = floorAt ? floorAt(p.pos[0], p.pos[2], p.prev) : groundY;
     if (p.pos[1] >= g) return p;
     const vy = p.pos[1] - p.prev[1]; // per-frame fall displacement
     const bounce = vy < 0 ? -vy * restitution : 0;
@@ -1649,4 +1683,13 @@ export function applyFloorContact(
       prev: [p.pos[0] - vx, g - (still ? 0 : bounce), p.pos[2] - vz],
     };
   });
+}
+
+/** The rig's restScale with the frame's released points (MotionFrame.restRelease) zeroed: those
+ *  points keep no rest pull this step. Other points keep their own scale (1 when the rig has none). */
+export function releasedRestScale(rig: { points: readonly unknown[]; restScale?: readonly number[] },
+  released: readonly number[]): number[] {
+  const k = rig.points.map((_, i) => rig.restScale?.[i] ?? 1);
+  for (const i of released) k[i] = 0;
+  return k;
 }
