@@ -458,6 +458,25 @@ function sdBentCone(q: Vec3, a: Vec3, b: Vec3, c: Vec3, r1: number, r2: number):
       if (v < best) { best = v; bestT = t; }
     }
   }
+  // Pass 4, NEWTON POLISH: a Newton step on the squared distance from the best t, then one on g, each kept only if
+  // it lowers g — the mirror of coneBend's (march/primitives.wgsl.ts, which has the why: the f32 cubic is
+  // ill-conditioned on a nearly straight bend). Here in f64 the cubic is fine, but the 1/32 grid stops short on a
+  // steeply tapered bend (up to ~1.7e-4 m on bloatmaw before this pass).
+  const dPAt = (t: number): Vec3 => [e1[0] + 2 * e2[0] * t, e1[1] + 2 * e2[1] * t, e1[2] + 2 * e2[2] * t];
+  {
+    const D = sub(q, at(bestT)), dP = dPAt(bestT);
+    const f2 = dot(dP, dP) - 2 * dot(D, e2);
+    const t = f2 > 0 ? Math.max(0, Math.min(1, bestT + dot(D, dP) / f2)) : bestT;
+    const v = g(t);
+    if (v < best) { best = v; bestT = t; }
+  }
+  {
+    const D = sub(q, at(bestT)), dP = dPAt(bestT);
+    const L = Math.max(len(D), 1e-9), dDp = dot(D, dP);
+    const g2 = (dot(dP, dP) - 2 * dot(D, e2)) / L - dDp * dDp / (L * L * L);
+    const t = g2 > 0 ? Math.max(0, Math.min(1, bestT - (-dDp / L - (r2 - r1)) / g2)) : bestT;
+    best = Math.min(best, g(t));
+  }
   return best;
 }
 

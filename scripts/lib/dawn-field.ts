@@ -50,7 +50,8 @@ export class GpuField {
     readonly listLength: number,
   ) {}
 
-  static async create(gpu: DawnGpu, packed: BakePacked): Promise<GpuField> {
+  /** `source` overrides the shader module (the leaf A/B swaps one leaf's text); default fieldShaderSource(). */
+  static async create(gpu: DawnGpu, packed: BakePacked, source = fieldShaderSource()): Promise<GpuField> {
     const { device } = gpu;
     const max = device.limits.maxTextureDimension2D;
     if (packed.width > max) throw new Error(`bake field: ${packed.width} prims exceed this adapter's ${max}-texel texture`);
@@ -60,11 +61,12 @@ export class GpuField {
     device.queue.writeTexture({ texture }, packed.texels, { bytesPerRow: packed.width * 16, rowsPerImage: packed.height }, [packed.width, packed.height]);
     const listBuf = device.createBuffer({ size: Math.max(16, packed.list.byteLength), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
     device.queue.writeBuffer(listBuf, 0, packed.list);
-    return new GpuField(device, await compile(device, fieldShaderSource(), 'fieldMain'), texture, listBuf, packed.list.length);
+    return new GpuField(device, await compile(device, source, 'fieldMain'), texture, listBuf, packed.list.length);
   }
 
-  /** bakeField at each point (xyz triples) over list entries [off, off + n) (default: the whole list). */
-  async evaluate(points: Float32Array, off = 0, n = this.listLength): Promise<Float32Array> {
+  /** bakeField at each point (xyz triples) over list entries [off, off + n) (default: the whole list). `repeat`
+   *  dispatches the same pass that many times in one submit, for timing the field without the transfers. */
+  async evaluate(points: Float32Array, off = 0, n = this.listLength, repeat = 1): Promise<Float32Array> {
     const { device } = this;
     const count = points.length / 3;
     const pts4 = new Float32Array(Math.max(1, count) * 4);
@@ -88,7 +90,7 @@ export class GpuField {
     const enc = device.createCommandEncoder();
     const pass = enc.beginComputePass();
     pass.setPipeline(this.pipeline); pass.setBindGroup(0, bind);
-    pass.dispatchWorkgroups(Math.ceil(count / 64));
+    for (let r = 0; r < repeat; r++) pass.dispatchWorkgroups(Math.ceil(count / 64));
     pass.end();
     enc.copyBufferToBuffer(outBuf, 0, readBuf, 0, Math.max(16, count * 4));
     device.queue.submit([enc.finish()]);

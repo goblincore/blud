@@ -223,3 +223,8 @@ the options are in [the step 2 notes](../../dev-notes/2026-10-24-gpu-bake-parity
 **Open question 3, bent-prim f32 conditioning.** Polish `coneBend`'s best `t` with Newton steps (both fields; a
 game render change with a march-hash re-pin), or scale the parity bar with the bend's conditioning, or leave it
 failing until fixed.
+
+**Answered 2026-10-24: fix the leaf.** Newton polish in `coneBend` and `sdBentCone`; every bent prim in every shipped and
+detail body is now within 6.7e-7 m of `sdBody`, and the parity suite is green (38 of 38). march-hash unchanged; the
+march source-text golden awaits a re-pin. Numbers and pictures:
+[the step 2 notes](../../dev-notes/2026-10-24-gpu-bake-parity/notes.md), last section.

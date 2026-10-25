@@ -64,3 +64,55 @@ Isolated spikes, not noise: in an 8-bit normal map a worst texel would be ~10 co
 2. **Leave the leaf**, and raise the parity bar for bent prims only (the error is bounded by the bend's conditioning,
    so the bar could scale with `kk`). The bake then inherits the spikes the game already has.
 3. **Leave the leaf and the bar**; let teratoma (and any future slightly bent character) fail until 1 lands.
+
+## Update 2026-10-24 (later): the fix, Newton polish in `coneBend` and `sdBentCone`
+
+Owner: "Fix it in the leaf … measure the march-hash and frame-cost change, and show me before/after on teratoma
+before re-pinning." **Nothing is re-pinned yet.**
+
+**The change** (both fields, plus the WGSL transcription in `bend.test.ts`): after the cubic roots and the 1/8, 1/32
+grid passes, two Newton steps from the best t, each kept only if it lowers G (still monotone):
+1. on the squared distance |q − P(t)|²/2 (a quartic, exact in one step on a straight chord from any start);
+2. on G(t) = |q − P(t)| − r(t) itself (the taper moves G's minimiser off the closest point).
+
+Straight-line code, no loop and no branch. The first try, a three-iteration branching loop, gave the same accuracy, but
+the crowd/gib background compiles then missed the 180 s warm budget on every boot. That was not only the loop: cold
+HEAD (with a one-line no-op to bust the cache) misses it too on this machine. The probe closing the tab abandons the
+compiles, so every probe was cold. A boot held open until the compiles finish (`warm-probe.mjs … HOLD`) warms the cache.
+After that, both background compiles finish in 139 s with the final leaf.
+
+**Accuracy** (`bend-survey.mts`, `bend-truth.mts`, each bent prim alone, 2000 points):
+
+| | before | after |
+| --- | --- | --- |
+| shipped base bodies: bent prims over 2e-6 | 29 of 141, worst 6.6e-4 m | **0 of 141, worst 6.7e-7** |
+| detail bodies: bent prims over 2e-6 | (teratoma failing) | **0 of 2193, worst 1.4e-7** |
+| twinhead worst prim vs brute force: GPU / CPU | 6.6e-4 / 1.4e-8 | 1.3e-7 / 1.1e-16 |
+| bloatmaw worst prim vs brute force: GPU / CPU | 2.9e-4 / 9.1e-6 | 7.5e-8 / 8.3e-17 |
+| `npm run test:gpu` | 37 of 38 (teratoma 6.6e-6) | **38 of 38** |
+
+The CPU field (click-to-shoot, validators) gets better too: its grid refine stopped short on steeply tapered bends.
+
+**Teratoma** (`leaf-render.mts`, deterministic: the bake field rendered twice in one process, CONE_BEND's HEAD text
+swapped in for BEFORE). The failing prim is a `.detail` line, so it is the BAKE's view of teratoma; the game's teratoma
+base body has no affected prim.
+- [leaf-render-teratoma-600.png](leaf-render-teratoma-600.png): before | after | diff x8. Before, a dotted line of
+  wrong shading runs along the bent tube; after, a clean surface. 765 of 102,400 px change, up to 113/255.
+- [error-map-teratoma-600-before.png](error-map-teratoma-600-before.png) → [after](error-map-teratoma-600-after.png):
+  slice through the prim. Field error 1.8e-3 → 5.4e-8 m, normal error (bake eps) 7.8 → 0.00 deg.
+- The lab turntables (`blob-turntable.mjs`) are NOT a usable A/B: per its own KNOWN LIMIT they are not reproducible run
+  to run (here 4-12% of pixels and the reference cube's position differed between legs).
+- twinhead's worst prim (src 248, 6.6e-4) renders with 0 changed pixels: its error was inside the body.
+
+**march-hash: unchanged.** room1 `0c71e712…` (the pinned canonical), repeat equal, wounded `bf6836cd…`, with the cache
+warm. The staged close-up draws no prim whose surface moved. The only pin that moves is the source-text golden
+`webgpu/march/__snapshots__/march-golden.test.ts.snap` (the "MOVE-ONLY" sha1 of every march string export), red until
+re-pinned on the owner's OK.
+
+**Frame cost.** The leaf alone (`field-microbench.mts`, Dawn, before and after interleaved in one process, 262144 points
+per dispatch): **+3.6 to +3.9 %** of field time on bodies with bent prims (twinhead, cyclops, teratoma); zombie (no
+bends) −2.9 %, the noise. Scene B in the game bench (`bench-ab.sh`, interleaved HEAD / polished / HEAD / polished, 2
+runs each): p50 HEAD 44.4, 54.8, 56.1, 51.0 ms; polished 56.6, 64.0, 56.8, 53.7 ms. That does not resolve a few
+percent: the machine drifted under XProtect scans during the session (~150 % CPU), and run-to-run spread is ±6 ms. The
+before leg hours earlier read 41-43 ms on a quieter machine; that is machine state, not the leaf. A clean scene-B number
+needs a quiet machine.
