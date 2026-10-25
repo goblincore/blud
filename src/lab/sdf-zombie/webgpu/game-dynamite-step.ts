@@ -35,7 +35,10 @@ export function overcookInHand(ctx: GameContext): void {
   detonateAt(ctx, at, true);
 }
 
-export function detonateAt(ctx: GameContext, at: Vec3, inHand = false): void {
+/** `spareActorId`: an actor the blast does not touch, its FIRER (a rocket's owner, rockets.ts). Doom's rule: a
+ *  monster is never hurt by its own projectile. Without it the teratoma's point-blank spit blew the teratoma itself apart
+ *  (owner, enemy test arena, 2026-10-24); the warbull's rocket in the same spot would have done the same to him. */
+export function detonateAt(ctx: GameContext, at: Vec3, inHand = false, spareActorId?: number): void {
   const t0 = performance.now();
   ctx.dynamite.gibTierLog = [];
   const prof = newBlastProfile(ctx);
@@ -45,7 +48,7 @@ export function detonateAt(ctx: GameContext, at: Vec3, inHand = false): void {
   EXPLOSION_PROFILE.bodiesPruned = 0; EXPLOSION_PROFILE.prunedPrims = 0;
   EXPLOSION_PROFILE.traces = 0;
   ctx.dynamite.detonations++;
-  const bodies: ExplosionBody[] = ctx.world.actors.map(a => ({
+  const bodies: ExplosionBody[] = ctx.world.actors.filter(a => a.id !== spareActorId).map(a => ({
     id: String(a.id), body: a.posed(), bodyYaw: a.pose().yaw,
   }));
   const tResolve = performance.now();

@@ -25,9 +25,9 @@ import { wrapPi } from './wander';
 /** The hound's bite and pounce, and the gibbet's two (characters/gibbet.blob): the STAB (both front legs rear up and
  *  drive their spike tips forward) and the SQUIRT (the caged sac swings back, then forward, and lobs a glob of bile
  *  from its drip: bile.ts; the squirt never makes contact itself). */
-export type HoundVariant = 'bite' | 'pounce' | 'stab' | 'squirt';
+export type HoundVariant = 'bite' | 'pounce' | 'stab' | 'squirt' | 'slam';
 export function isHoundVariant(v: SwingVariant): v is HoundVariant {
-  return v === 'bite' || v === 'pounce' || v === 'stab' || v === 'squirt';
+  return v === 'bite' || v === 'pounce' || v === 'stab' || v === 'squirt' || v === 'slam';
 }
 
 export const HOUND_TUNING = {
@@ -67,6 +67,24 @@ export const HOUND_TUNING = {
     haunch: 0.17, haunchBack: 0.05, withersUp: 0.06, headAside: 0.16, headUp: 0.16, headBack: 0.04,
     back: 0.20, lift: 0.04, fwd: 0.30, fwdLift: 0.10, jolt: 0.06, fireAt: 0.42,
   },
+  /** SLAM, the GUTCRAWLER's (characters/gutcrawler.blob): a fat grub with a man's front cannot bite or leap, so it
+   *  REARS and SLAMS. The wind-up lifts the whole front half off the floor, both fists raised high and the head pulled
+   *  back over them, the rear rings bunching up behind; the strike throws it forward, the fists slamming down far
+   *  ahead and the star snout driven into the player, the body surging after them (slamAdvance). Its own clock
+   *  (slamDrive), like the stab's: a long rear (the threat), a snap, a hold, a slow recovery. (m, body-local) */
+  slam: {
+    // First pass (0.30 m on the chest) read as a shrug on a 2.2 m body seen side-on: the rear is the threat, so the
+    // front half stands right up, the fists over the head.
+    rearChest: [0, 0.46, -0.14], rearSpine: [0, 0.24, -0.08], rearNeck: [0, 0.56, -0.20], rearHead: [0, 0.64, -0.28],
+    rearElbow: [0.10, 0.56, -0.06], rearHand: [0.04, 0.70, 0.02], rearRoot: [0, 0.05, -0.10], rearHem: [0, 0.04, 0.14],
+    slamChest: [0, -0.03, 0.30], slamSpine: [0, -0.02, 0.18], slamNeck: [0, -0.05, 0.42], slamHead: [0, -0.10, 0.52],
+    slamElbow: [0.04, 0.06, 0.32], slamHand: [0.02, 0, 0.44], slamRoot: [0, 0, 0.14], slamHem: [0, 0, 0.12],
+    /** The slam's clock: reared by `reared`, slammed by `slammed`, held to `hold`, recovered by 1. */
+    reared: 0.45, slammed: 0.54, hold: 0.72,
+    /** Root travel into the slam (m), never closer to the player than `stopShort`. */
+    advance: 0.9, stopShort: 1.2,
+  },
+  slamAirborne: { from: 0.04, to: 0.53 },
   /** Root travel over one pounce (m), and how close it may land (m). */
   pounceDistance: 1.6,
   pounceStopShort: 0.8,
@@ -77,12 +95,12 @@ export const HOUND_TUNING = {
   airborne: { from: 0.22, to: 0.62 },
   stabAirborne: { from: 0.04, to: 0.88 },
   /** The jaw (rad): wide on the wind-up, snapped shut by the strike's end. The gibbet's attacks are not bites. */
-  gape: { bite: 0.55, pounce: 0.65, stab: 0, squirt: 0 } as Record<HoundVariant, number>,
+  gape: { bite: 0.55, pounce: 0.65, stab: 0, squirt: 0, slam: 0 } as Record<HoundVariant, number>,
   /** Contact: on the phase the jaws (or the spikes) close, inside this reach and cone. The squirt's reach is 0: the
    *  glob hits or misses on its own (bile.ts). */
   contact: {
-    phase: { bite: 0.45, pounce: 0.48, stab: 0.50, squirt: 1 } as Record<HoundVariant, number>,
-    reach: { bite: 1.55, pounce: 1.7, stab: 1.95, squirt: 0 } as Record<HoundVariant, number>,
+    phase: { bite: 0.45, pounce: 0.48, stab: 0.50, squirt: 1, slam: 0.53 } as Record<HoundVariant, number>,
+    reach: { bite: 1.55, pounce: 1.7, stab: 1.95, squirt: 0, slam: 1.9 } as Record<HoundVariant, number>,
     cone: 0.7,
   },
   brain: {
@@ -131,8 +149,18 @@ function stabDrive(phase: number): number {
   return 1 - smooth((phase - S.hold) / (1 - S.hold));
 }
 
+/** The slam's own signed drive (HOUND_TUNING.slam): 0 -> -1 over a long rear, -1 -> +1 in a snap, held, back to 0. */
+function slamDrive(phase: number): number {
+  if (!(phase > 0) || phase >= 1) return 0;
+  const S = HOUND_TUNING.slam;
+  if (phase < S.reared) return -smooth(phase / S.reared);
+  if (phase < S.slammed) return -1 + 2 * Math.sqrt((phase - S.reared) / (S.slammed - S.reared));
+  if (phase < S.hold) return 1;
+  return 1 - smooth((phase - S.hold) / (1 - S.hold));
+}
+
 function houndPoseRaw(phase: number, variant: HoundVariant, side: 'L' | 'R'): AttackPose {
-  const d = variant === 'stab' ? stabDrive(phase) : attackDrive(phase, ATTACK_TUNING);
+  const d = variant === 'stab' ? stabDrive(phase) : variant === 'slam' ? slamDrive(phase) : attackDrive(phase, ATTACK_TUNING);
   const reach = { pitchL: 0, pitchR: 0, yawL: 0, yawR: 0 };
   if (d === 0) return { offsets: {}, rootOffset: Z, reach };
   const w = Math.max(0, -d); // wind-up weight
@@ -155,6 +183,27 @@ function houndPoseRaw(phase: number, variant: HoundVariant, side: 'L' | 'R'): At
         [`handTip${strike}`]: mix(S.cockTip, S.strikeTip),
       },
       rootOffset: body,
+      reach,
+    };
+  }
+  if (variant === 'slam') {
+    const S = HOUND_TUNING.slam;
+    const mix = (a: readonly number[], b: readonly number[], sx = 1): Vec3 => [sx * (w * a[0]! + s * b[0]!), w * a[1]! + s * b[1]!, w * a[2]! + s * b[2]!];
+    const root = mix(S.rearRoot, S.slamRoot), chest = mix(S.rearChest, S.slamChest);
+    // The fists go out on their own sides (+x is the left arm here, as the .blob mirrors it).
+    const handL = mix(S.rearHand, S.slamHand), handR = mix(S.rearHand, S.slamHand, -1);
+    return {
+      offsets: {
+        chest, spineB: chest, spineA: mix(S.rearSpine, S.slamSpine), clavicleL: chest, clavicleR: chest,
+        shoulderL: chest, shoulderR: chest,
+        neck: mix(S.rearNeck, S.slamNeck), head: mix(S.rearHead, S.slamHead),
+        elbowL: mix(S.rearElbow, S.slamElbow), elbowR: mix(S.rearElbow, S.slamElbow, -1),
+        handL, handR,
+        // follow() never carries an attack offset to a tip (the stab's lesson): the fists' tips get their own.
+        handTipL: handL, handTipR: handR,
+        hem: mix(S.rearHem, S.slamHem),
+      },
+      rootOffset: root,
       reach,
     };
   }
@@ -203,6 +252,7 @@ function houndPoseRaw(phase: number, variant: HoundVariant, side: 'L' | 'R'): At
 
 /** True while front paw `paw` is off the floor: both in a pounce, the striking leg's only in the gibbet's stab. */
 export function pounceAirborne(phase: number, variant: SwingVariant, side: 'L' | 'R' = 'R', paw: 'L' | 'R' = side): boolean {
+  if (variant === 'slam') { const A = HOUND_TUNING.slamAirborne; return phase > A.from && phase < A.to; }
   if (variant === 'stab') { const A = HOUND_TUNING.stabAirborne; return paw === side && phase > A.from && phase < A.to; }
   const A = HOUND_TUNING.airborne;
   return variant === 'pounce' && phase > A.from && phase < A.to;
@@ -235,6 +285,34 @@ export const GIBBET_TUNING = {
   squirtCooldown: 3.2,
   squirtFirst: 1.2,
 } as const;
+
+/** The GUTCRAWLER's mind tuning: the hound mind SLAMMING in reach and from the band just beyond (the slam's surge
+ *  closes it), slower and heavier than the hound. */
+export const GUTCRAWLER_TUNING = {
+  brain: {
+    ...BRAIN_TUNING,
+    // The snout reaches ~1.0 m ahead of the pelvis at rest and ~1.6 m at the slam, plus the surge.
+    meleeRadius: 1.6,
+    outerRadius: 2.6,
+    engageRange: 5.0,
+    releaseRange: 6.0,
+    lungeBand: { min: 1.6, max: 2.6 },
+    lungeVariant: 'slam',
+    pickVariant: () => 'slam',
+    swingSec: 1.4,
+    swingSecFor: { slam: 1.4 },
+    cooldownSec: 1.3,
+  } satisfies BrainTuning as BrainTuning,
+} as const;
+
+/** Root advance (m) this frame for the gutcrawler's slam: the surge spread over the snap, never closer to the player
+ *  than slam.stopShort. */
+export function slamAdvance(prevPhase: number, phase: number, dist: number): number {
+  const S = HOUND_TUNING.slam;
+  const w = (p: number) => smooth((p - S.reared) / (S.slammed - S.reared));
+  const step = S.advance * (w(phase) - w(prevPhase));
+  return Math.max(0, Math.min(step, Math.max(0, dist - S.stopShort)));
+}
 
 function smooth(t: number): number {
   const c = t < 0 ? 0 : t > 1 ? 1 : t;

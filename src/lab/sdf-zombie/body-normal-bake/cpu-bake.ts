@@ -38,11 +38,13 @@ export function texelNormals(nb0: Body, nd0: Body, P: V, dir: V, r0: number): { 
   return { nb: grad(nb0, pb), nd: grad(nd0, pd) };
 }
 
-/** Bake region R's band into `rgba` (`width` wide). Returns how many texels hit the plain skin. */
-export function bakeRegionCpu(rgba: Uint8Array, width: number, R: Region, base: Body, detail: Body): number {
+/** Bake region R's band into `rgba` (`width` wide). Returns how many texels hit the plain skin. `takeRow`, given an
+ *  IMAGE row, says whether this call bakes it (the CLI's --shards: each shard process bakes every Nth row). */
+export function bakeRegionCpu(rgba: Uint8Array, width: number, R: Region, base: Body, detail: Body, takeRow: (imageRow: number) => boolean = () => true): number {
   const F = regionFrame(R.head, R.tail);
   let covered = 0;
   for (let row = 0; row < R.rows; row++) {
+    if (!takeRow(R.row0 + row)) continue;
     const P = rowAxisPoint(R.head, R.tail, row, R.rows);
     const nb0 = nearBody(base, R.limb, P, R.r0), nd0 = nearBody(detail, R.limb, P, R.r0);
     for (let col = 0; col < width; col++) {

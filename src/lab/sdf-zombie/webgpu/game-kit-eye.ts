@@ -8,16 +8,19 @@
 // MESH, NOT SDF. The zombie head damage hangs its eye as an SDF piece riding the actor (boot.attachPiece); for this
 // eye that piece reported visible and drew nothing (arena, 2026-10-24). A plain mesh, lit like the level (the meat
 // chunks' and the brain's way, game-meat-gib.ts), is reliable and costs nothing in the march:
-//   * the eyeball: a sphere whose vertex colours are a glowing yellow iris over most of its front, a vertical black
-//     slit pupil and a torn red back; emissive in the iris's yellow so it still burns;
-//   * the stalk: a tube rebuilt each frame along the rope's nodes (6 nodes, a dozen rings: nothing).
+//   * the eyeball: a sphere with GENERATED maps (kit-eye-texture.ts; owner 2026-10-24: it read as "a yellow ball on a
+//     lollipop stick"): a fibrous iris with a limbal ring and a black slit, a bloodshot sclera with raised veins, a torn
+//     clotted back; a normal map from the same height field; an emissive mask so only the iris burns;
+//   * the stalk: a tapered tube rebuilt in place each frame along the rope's nodes (kit-eye.ts stalkTubePositions), pink
+//     wet flesh with striations and veins, blood-soaked toward the eye, swelling into a torn cuff where it meets it.
 import * as THREE from 'three/webgpu';
 import type { GameContext } from './game-context';
 import type { ZombieActor } from './game-actor';
 import type { Vec3 } from '../types';
 import { characterEntry, hasCharacter } from '../character-registry';
 import { EYE_FLY, eyeFlyLaunch, makeStalk, stepStalk, type StalkState } from '../head-eye';
-import { danglingKitEye, hitsKitEye, kitEyeCentre, kitEyeForward, kitEyeSocket, kitEyeStalkRadii, type KitEyeSpec } from '../kit-eye';
+import { danglingKitEye, hitsKitEye, kitEyeCentre, kitEyeForward, kitEyeSocket, kitEyeStalkRadii, stalkTubeLayout, stalkTubePositions, type KitEyeSpec } from '../kit-eye';
+import { eyeTextures, stalkTextures } from '../kit-eye-texture';
 import { rngStreams } from './rng';
 
 interface EyeState {
@@ -43,11 +46,33 @@ export interface KitEyeDeps {
 
 /** The meshes' look: darkened like every three material under the SDF-calibrated lights (game-meat-gib MEAT_LOOK). */
 export const KIT_EYE_LOOK = {
-  color: [0.55, 0.5, 0.5] as const,
-  emissiveIntensity: 0.55,
-  roughness: 0.2,
-  cord: [0.35, 0.12, 0.12] as const,
+  color: [0.6, 0.55, 0.55] as const,
+  emissiveIntensity: 0.9,
+  roughness: 0.22,
+  cord: [0.55, 0.45, 0.45] as const,
+  /** Texture sizes: the eye's equirectangular map, the stalk's along x round. */
+  eyeTex: [512, 256] as const,
+  stalkTex: [256, 64] as const,
+  /** The stalk tube: rings along it and vertices round each. */
+  stalkSegs: 24,
+  stalkRadial: 12,
 } as const;
+
+/** RGBA bytes as a texture. Rows are reversed: the generators put the eye's front pole (v = 0) in row 0, and a
+ *  SphereGeometry's front-pole vertices carry uv.y = 1. */
+function dataTexture(rgba: Uint8ClampedArray, w: number, h: number, srgb: boolean, flipRows: boolean): THREE.DataTexture {
+  let data = rgba;
+  if (flipRows) {
+    data = new Uint8ClampedArray(rgba.length);
+    for (let y = 0; y < h; y++) data.set(rgba.subarray((h - 1 - y) * w * 4, (h - y) * w * 4), y * w * 4);
+  }
+  const t = new THREE.DataTexture(data, w, h, THREE.RGBAFormat);
+  t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.ClampToEdgeWrapping;
+  t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
+  t.needsUpdate = true;
+  return t;
+}
 
 function specOf(a: ZombieActor): KitEyeSpec | null {
   const name = a.characterName();
@@ -64,21 +89,9 @@ function setKitMaterialVisible(a: ZombieActor, material: string, visible: boolea
   });
 }
 
-/** The eyeball, looking down +z: vertex colours for iris / slit / torn back. */
-function eyeGeometry(r: number, iris: Vec3): THREE.BufferGeometry {
-  const g = new THREE.SphereGeometry(r, 28, 20);
-  const pos = g.getAttribute('position');
-  const col = new Float32Array(pos.count * 3);
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i) / r, y = pos.getY(i) / r, z = pos.getZ(i) / r;
-    let c: [number, number, number];
-    if (z > 0.35 && Math.abs(x) < 0.09 * Math.max(0, 1 - (y / 0.7) ** 2) + 0.02 && Math.abs(y) < 0.72) c = [0.01, 0.005, 0];   // slit
-    else if (z > -0.15) c = [iris[0], iris[1] * (0.75 + 0.25 * z), iris[2]];                                                     // iris
-    else c = [0.42, 0.04, 0.04];                                                                                                   // torn back
-    col.set(c, i * 3);
-  }
-  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  return g;
+/** The eyeball, looking down +z: a sphere whose +y pole (the texture's front) is turned onto +z. */
+function eyeGeometry(r: number): THREE.BufferGeometry {
+  return new THREE.SphereGeometry(r, 48, 32).rotateX(Math.PI / 2);
 }
 
 export function createKitEye(ctx: GameContext, deps: KitEyeDeps): KitEyeLeaf {
@@ -87,19 +100,41 @@ export function createKitEye(ctx: GameContext, deps: KitEyeDeps): KitEyeLeaf {
   const mats = new Map<string, THREE.MeshPhysicalNodeMaterial>();
   const listIds = new Map<THREE.LightsNode, number>();
 
+  // The generated maps, made once per iris colour (a few ms; at the first pop, not at boot).
+  const texCache = new Map<string, { eye: THREE.DataTexture; eyeN: THREE.DataTexture; eyeG: THREE.DataTexture; cord: THREE.DataTexture; cordN: THREE.DataTexture }>();
+  function textures(iris: Vec3) {
+    const key = iris.join(',');
+    let t = texCache.get(key);
+    if (!t) {
+      const [ew, eh] = KIT_EYE_LOOK.eyeTex, [sw, sh] = KIT_EYE_LOOK.stalkTex;
+      const e = eyeTextures(ew, eh, iris), c = stalkTextures(sw, sh);
+      t = {
+        eye: dataTexture(e.albedo, ew, eh, true, true), eyeN: dataTexture(e.normal, ew, eh, false, true),
+        eyeG: dataTexture(e.glow!, ew, eh, false, true),
+        cord: dataTexture(c.albedo, sw, sh, true, false), cordN: dataTexture(c.normal, sw, sh, false, false),
+      };
+      texCache.set(key, t);
+    }
+    return t;
+  }
+
   function material(kind: 'eye' | 'cord', pos: Vec3, iris: Vec3): THREE.Material {
     const list = ctx.boot.deferredMode ? null : deps.lightsAt(pos);
     if (list && !listIds.has(list)) listIds.set(list, listIds.size + 1);
     const key = `${kind}:${iris.join(',')}:${list ? listIds.get(list) : 0}`;
     let m = mats.get(key);
     if (!m) {
+      const t = textures(iris);
       m = kind === 'eye'
         ? new THREE.MeshPhysicalNodeMaterial({
-          color: new THREE.Color(...KIT_EYE_LOOK.color), vertexColors: true, roughness: KIT_EYE_LOOK.roughness,
-          clearcoat: 0.8, clearcoatRoughness: 0.1,
-          emissive: new THREE.Color(iris[0], iris[1], iris[2]), emissiveIntensity: KIT_EYE_LOOK.emissiveIntensity,
+          color: new THREE.Color(...KIT_EYE_LOOK.color), map: t.eye, normalMap: t.eyeN, roughness: KIT_EYE_LOOK.roughness,
+          clearcoat: 0.9, clearcoatRoughness: 0.08,
+          emissive: new THREE.Color(iris[0], iris[1], iris[2]), emissiveMap: t.eyeG, emissiveIntensity: KIT_EYE_LOOK.emissiveIntensity,
         })
-        : new THREE.MeshPhysicalNodeMaterial({ color: new THREE.Color(...KIT_EYE_LOOK.cord), roughness: 0.3, clearcoat: 0.6 });
+        : new THREE.MeshPhysicalNodeMaterial({
+          color: new THREE.Color(...KIT_EYE_LOOK.cord), map: t.cord, normalMap: t.cordN, roughness: 0.32,
+          clearcoat: 0.7, clearcoatRoughness: 0.15, side: THREE.DoubleSide,
+        });
       m.name = kind === 'eye' ? 'kit-eye-pop' : 'kit-eye-cord';
       if (list) { m.lightsNode = list; ctx.world.levelNodeMaterials.push(m); }
       mats.set(key, m);
@@ -121,7 +156,7 @@ export function createKitEye(ctx: GameContext, deps: KitEyeDeps): KitEyeLeaf {
   function eyeGeom(spec: KitEyeSpec): THREE.BufferGeometry {
     const key = `${spec.popRadius}:${spec.iris.join(',')}`;
     let g = geoms.get(key);
-    if (!g) { g = eyeGeometry(spec.popRadius, spec.iris); geoms.set(key, g); }
+    if (!g) { g = eyeGeometry(spec.popRadius); geoms.set(key, g); }
     return g;
   }
 
@@ -131,11 +166,29 @@ export function createKitEye(ctx: GameContext, deps: KitEyeDeps): KitEyeLeaf {
     const d = danglingKitEye(st.stalk, spec, fwd);
     st.eye.position.set(d.eye[0], d.eye[1], d.eye[2]);
     st.eye.quaternion.setFromUnitVectors(_z, _look.set(d.look[0], d.look[1], d.look[2]));
-    // The stalk: a fresh tube along the nodes (a curve through them), ending at the eyeball's back.
-    const curve = new THREE.CatmullRomCurve3(d.nodes.map(p => new THREE.Vector3(p[0], p[1], p[2])));
-    const [r0, r1] = kitEyeStalkRadii(spec);
-    const tube = new THREE.TubeGeometry(curve, 12, (r0 + r1) / 2, 8, false);
-    if (st.cord) { st.cord.geometry.dispose(); st.cord.geometry = tube; }
+    // The stalk: the tapered, cuffed tube rebuilt IN PLACE along the nodes (positions and normals; uvs and indices are
+    // fixed), its cuff where the rope enters the eyeball's back.
+    if (st.cord) {
+      const [r0, r1] = kitEyeStalkRadii(spec);
+      const geo = st.cord.geometry;
+      const attr = geo.getAttribute('position') as THREE.BufferAttribute;
+      const len = Math.max(1e-3, d.nodes.slice(1).reduce((s, p, i) => s + Math.hypot(p[0] - d.nodes[i]![0], p[1] - d.nodes[i]![1], p[2] - d.nodes[i]![2]), 0));
+      const cuffAt = Math.max(0.3, 1 - spec.popRadius / len);
+      stalkTubePositions(d.nodes, r0, r1, KIT_EYE_LOOK.stalkSegs, KIT_EYE_LOOK.stalkRadial, cuffAt, attr.array as Float32Array);
+      attr.needsUpdate = true;
+      geo.computeVertexNormals();
+      geo.computeBoundingSphere();
+    }
+  }
+
+  function stalkGeometry(): THREE.BufferGeometry {
+    const { uv, index } = stalkTubeLayout(KIT_EYE_LOOK.stalkSegs, KIT_EYE_LOOK.stalkRadial);
+    const g = new THREE.BufferGeometry();
+    const n = (KIT_EYE_LOOK.stalkSegs + 1) * (KIT_EYE_LOOK.stalkRadial + 1);
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    g.setIndex(new THREE.BufferAttribute(index, 1));
+    return g;
   }
 
   function pop(a: ZombieActor, spec: KitEyeSpec, centre: Vec3, dir: Vec3): void {
@@ -147,7 +200,7 @@ export function createKitEye(ctx: GameContext, deps: KitEyeDeps): KitEyeLeaf {
     const st: EyeState = { phase: 'dangling', stalk: makeStalk(socket, kick, 2.0), eye: null, cord: null };
     st.eye = new THREE.Mesh(eyeGeom(spec), material('eye', socket, spec.iris));
     st.eye.name = 'kit-eye-pop';
-    st.cord = new THREE.Mesh(new THREE.BufferGeometry(), material('cord', socket, spec.iris));
+    st.cord = new THREE.Mesh(stalkGeometry(), material('cord', socket, spec.iris));
     st.cord.name = 'kit-eye-cord';
     for (const m of [st.eye, st.cord]) { m.castShadow = false; m.receiveShadow = false; addToScene(m); }
     poseDangling(st, spec, fwd);

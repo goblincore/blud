@@ -276,6 +276,23 @@ export function stepProjectiles(list: Projectile[], dt: number): void {
   }
 }
 
+/** Carry the shots fired THIS tick (not yet stepped, ageSec 0) along with
+ *  the player's move. fire() runs from the input frame, before stepPlayer, so
+ *  it reads the muzzle off last frame's camera; the camera then moves by the
+ *  player's step and the gun is drawn there while the shot stays behind. At
+ *  walk speed that is ~11 cm sideways at 30 Hz, and strafing right it put the
+ *  shot inboard of the barrel, already along its line to the crosshair, so it
+ *  appeared out of the air beside the gun (owner clip, 2026-10-24). Strafing
+ *  left the same lag sits outboard and the shot crosses the muzzle on its way
+ *  in, which is why only one side read wrong. */
+export function carryFreshShots(list: Projectile[], delta: Vec3): void {
+  if (delta[0] === 0 && delta[1] === 0 && delta[2] === 0) return;
+  for (const p of list) {
+    if (p.ageSec !== 0) continue;
+    p.pos = [p.pos[0] + delta[0], p.pos[1] + delta[1], p.pos[2] + delta[2]];
+  }
+}
+
 export function expired(p: Projectile): boolean {
   return p.ageSec > GRAPESHOT.lifeSec || p.pos[1] < -0.5;
 }

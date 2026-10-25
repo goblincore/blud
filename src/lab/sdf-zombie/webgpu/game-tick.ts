@@ -54,7 +54,7 @@ import { applyEmergenceCamera, stepEmergence } from './game-emergence';
 import { applyTrainCamera, lightSteam, stepTrain } from './game-train';
 import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell, extractStage, extractorOffset, fireRecoil, insertStage, loadCarry, loadHold, reloadPhaseAt, reloadPose, stagedShellCenter, supportHandPose, topLeverAngle, type HandDelta, type HandHold } from './game-viewmodel';
 import { stepVoid } from './game-void';
-import { expired, stepProjectiles, traceProjectile } from './game-weapon';
+import { carryFreshShots, expired, stepProjectiles, traceProjectile } from './game-weapon';
 import { aimArms, aimFrustum, boreFrameInRig, breechInRig, hideTracer, newTracerView, placeTracer, stepWeaponSlots } from './game-weapon-rig';
 import { woundStreamId } from './game-wound-streams';
 import { trailStreamId } from './game-wound-vfx';
@@ -220,7 +220,13 @@ export function tick(ctx: GameContext, dt: number) {
     return { min: [p[0] - 0.35, 0, p[2] - 0.35] as Vec3, max: [p[0] + 0.35, 1.8, p[2] + 0.35] as Vec3 };
   });
   if (loopBlocksInput(ctx)) input = { x: 0, z: 0, jump: false };   // dead or done
+  const preStep = [...ctx.player.player.pos] as Vec3;
   stepPlayer(ctx.player.player, input, dt, [...ctx.world.colliders, ...zombieBoxes]);
+  // This tick's shots left the muzzle where last frame's camera put it; the
+  // camera follows the step, so the shots must too (carryFreshShots).
+  carryFreshShots(ctx.weapon.pellets, [
+    ctx.player.player.pos[0] - preStep[0], ctx.player.player.pos[1] - preStep[1], ctx.player.player.pos[2] - preStep[2],
+  ]);
 
   // Damage transitions use their own clock; frozen pose captures must
   // still show a newly selected preset. Refresh exclusions as it grows.
@@ -978,7 +984,8 @@ export function tick(ctx: GameContext, dt: number) {
       ctx.weapon.rockets = stepped.live;
       for (const d of stepped.detonations) {
         ctx.telemetry.telemetry.event('rocket-detonate', { cause: d.cause, owner: d.owner, x: d.at[0], y: d.at[1], z: d.at[2] });
-        detonateAt(ctx, d.at);
+        // The firer is spared its own blast (detonateAt's spareActorId): a point-blank shot no longer self-destructs.
+        detonateAt(ctx, d.at, false, d.owner);
         const hurt = blastPlayerDamage(Math.hypot(pp[0] - d.at[0], pp[1] + PLAYER.height * 0.5 - d.at[1], pp[2] - d.at[2]));
         if (hurt > 0) damagePlayer(ctx, hurt, 'blast');
       }

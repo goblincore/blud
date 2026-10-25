@@ -99,3 +99,63 @@ export function kitEyeStalkLength(spec: KitEyeSpec): number {
   return EYE_STALK.len * spec.stalkScale;
 }
 
+
+/** The STALK'S MESH, rebuilt each frame along the rope (owner: "a yellow ball on a lollipop stick"): a tube through
+ *  the nodes (a Catmull-Rom curve), tapering from r0 at the socket to r1, and swelling into a ragged CUFF of torn flesh
+ *  where it meets the eyeball. `segs` rings of `radial` vertices; u along (socket 0 -> eye 1), v
+ *  round. stalkTubeLayout gives the fixed uvs and indices; stalkTubePositions the per-frame positions. */
+export function stalkTubeLayout(segs: number, radial: number): { uv: Float32Array; index: Uint32Array } {
+  const uv = new Float32Array((segs + 1) * (radial + 1) * 2);
+  const index: number[] = [];
+  for (let i = 0; i <= segs; i++) for (let j = 0; j <= radial; j++) {
+    const k = (i * (radial + 1) + j) * 2; uv[k] = i / segs; uv[k + 1] = j / radial;
+    if (i < segs && j < radial) {
+      const a = i * (radial + 1) + j, b = a + radial + 1;
+      index.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  }
+  return { uv, index: new Uint32Array(index) };
+}
+
+export function stalkTubePositions(
+  nodes: readonly Vec3[], r0: number, r1: number, segs: number, radial: number, cuffAt = 0.85, out?: Float32Array,
+): Float32Array {
+  const n = nodes.length;
+  const pos = out ?? new Float32Array((segs + 1) * (radial + 1) * 3);
+  const P = (i: number) => nodes[Math.max(0, Math.min(n - 1, i))]!;
+  const curve = (t: number): Vec3 => {
+    const f = t * (n - 1), i = Math.min(n - 2, Math.floor(f)), u = f - i;
+    const p0 = P(i - 1), p1 = P(i), p2 = P(i + 1), p3 = P(i + 2);
+    const u2 = u * u, u3 = u2 * u;
+    const c = (k: number) => 0.5 * (2 * p1[k]! + (-p0[k]! + p2[k]!) * u + (2 * p0[k]! - 5 * p1[k]! + 4 * p2[k]! - p3[k]!) * u2
+      + (-p0[k]! + 3 * p1[k]! - 3 * p2[k]! + p3[k]!) * u3);
+    return [c(0), c(1), c(2)];
+  };
+  let prevN: Vec3 | null = null;
+  for (let i = 0; i <= segs; i++) {
+    const t = i / segs;
+    const c = curve(t), a = curve(Math.max(0, t - 0.01)), b = curve(Math.min(1, t + 0.01));
+    let tx = b[0] - a[0], ty = b[1] - a[1], tz = b[2] - a[2];
+    const tl = Math.hypot(tx, ty, tz) || 1; tx /= tl; ty /= tl; tz /= tl;
+    // a normal transported from the last ring (no twist), seeded from world up
+    let nx: number, ny: number, nz: number;
+    if (prevN) { [nx, ny, nz] = prevN; } else { nx = 0; ny = 1; nz = 0; if (Math.abs(ty) > 0.9) { nx = 1; ny = 0; } }
+    const d = nx * tx + ny * ty + nz * tz; nx -= tx * d; ny -= ty * d; nz -= tz * d;
+    const nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl;
+    prevN = [nx, ny, nz];
+    const bx = ty * nz - tz * ny, by = tz * nx - tx * nz, bz = tx * ny - ty * nx;
+    // taper, then the torn CUFF: a lumpy swelling centred where the stalk enters the eyeball (`cuffAt`, the fraction of
+    // the rope at the eyeball's back: the rope ends at the eyeball's centre, so a cuff at the very end hides inside it)
+    const cuff = Math.exp(-(((t - cuffAt) / 0.1) ** 2));
+    const base = r0 + (r1 - r0) * t;
+    for (let j = 0; j <= radial; j++) {
+      const ang = j / radial * Math.PI * 2;
+      const lump = 1 + cuff * (1.1 + 0.4 * Math.sin(ang * 5 + t * 30) + 0.25 * Math.sin(ang * 9));
+      const r = base * lump;
+      const cs = Math.cos(ang), sn = Math.sin(ang);
+      const k = (i * (radial + 1) + j) * 3;
+      pos[k] = c[0] + (nx * cs + bx * sn) * r; pos[k + 1] = c[1] + (ny * cs + by * sn) * r; pos[k + 2] = c[2] + (nz * cs + bz * sn) * r;
+    }
+  }
+  return pos;
+}

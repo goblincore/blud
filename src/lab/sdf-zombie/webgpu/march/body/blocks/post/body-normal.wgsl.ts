@@ -47,7 +47,8 @@ const pos16 = (pair: string) => `(${u16(pair)} / 65535.0 * 5.0 - 2.5)`;
 
 export const BODY_NORMAL_BLOCK = /* wgsl */ `  // BODY NORMAL MAP (body-normal.wgsl.ts): the character's baked relief, an
   // atlas of cylindrical projections round rest-space segments, the region
-  // table in the texture's header row. bodyNormCfg x strength; bodyNormAxis
+  // table in the texture's header row. bodyNormCfg x strength, yzw the body's
+  // placement origin; bodyNormAxis
   // z,w the torso prim range (region 0's hits). Strength 0 skips the block.
   let nmapStr = bodyNormCfg.x;
   if (nmapStr > 0.0) {
@@ -56,6 +57,9 @@ export const BODY_NORMAL_BLOCK = /* wgsl */ `  // BODY NORMAL MAP (body-normal.w
     let nmapRa = textureLoad(data, vec2<i32>(hitBest, ${ROW_REST_A} + gBand), 0);
     let nmapHdr = textureLoad(bodyNormTex, vec2<i32>(0, 0), 0) * 255.0;
     if (nmapMask > 0.0 && nmapRa.w > 0.0 && round(nmapHdr.x) == 66.0 && round(nmapHdr.y) == 78.0) {
+      // The rest point in the map's frame: a PLACED body (the game's spawn point) carries its rest points moved by
+      // the placement, bodyNormCfg.yzw (zombie-gpu.ts setBodyNormal); the regions are baked round the origin.
+      let nmapAnc = anchor - bodyNormCfg.yzw;
       let nmapTorso = hitBest >= i32(bodyNormAxis.z) && hitBest < i32(bodyNormAxis.w);
       let nmapCount = min(i32(round(nmapHdr.w)), 16);
       var nmapBestD = 1e9;
@@ -76,9 +80,9 @@ export const BODY_NORMAL_BLOCK = /* wgsl */ `  // BODY NORMAL MAP (body-normal.w
         let nmapHd = vec3<f32>(${pos16('nmapE0.xy')}, ${pos16('nmapE0.zw')}, ${pos16('nmapE1.xy')});
         let nmapTl = vec3<f32>(${pos16('nmapE1.zw')}, ${pos16('nmapE2.xy')}, ${pos16('nmapE2.zw')});
         let nmapAx = nmapTl - nmapHd;
-        let nmapT = dot(anchor - nmapHd, nmapAx) / max(dot(nmapAx, nmapAx), 1e-8);
+        let nmapT = dot(nmapAnc - nmapHd, nmapAx) / max(dot(nmapAx, nmapAx), 1e-8);
         if (nmapT <= 0.0 || nmapT >= 1.0) { continue; }
-        let nmapRadV = anchor - (nmapHd + nmapAx * nmapT);
+        let nmapRadV = nmapAnc - (nmapHd + nmapAx * nmapT);
         let nmapD = length(nmapRadV);
         // rMax bounds a limb region, and an EXTRA torso region (a torso-prim
         // segment beside region 0, e.g. the gamer's joystick and forearms,

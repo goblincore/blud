@@ -404,6 +404,11 @@ export interface BodyNormalMap {
   axisZ: number;
   primStart: number;
   primEnd: number;
+  /** Where the body was PLACED (translate.ts translateBody's offset; the game's spawn point). The map's regions are
+   *  baked round the origin, and the shader tests them against the rest point, which a placed body carries moved by
+   *  this much: without it every enemy away from the world origin lost its map in the game (the lab never moves its
+   *  body, so it always showed there). Absent: [0, 0, 0]. */
+  origin?: readonly [number, number, number];
 }
 
 let blankBodyNorm: THREE.DataTexture | null = null;
@@ -3177,7 +3182,10 @@ export function createZombieGpuView(
         return;
       }
       u.bodyNormTex.value = tex;
-      u.bodyNormCfg.value.set(map.strength, map.yMin, map.yMax, 0);
+      // yzw: the placement origin (the shader reads only .x of the old yMin/yMax fields, which v2 maps replaced with the
+      // region table), subtracted from the rest point before the region tests.
+      const o = map.origin ?? [0, 0, 0];
+      u.bodyNormCfg.value.set(map.strength, o[0], o[1], o[2]);
       u.bodyNormAxis.value.set(map.axisX, map.axisZ, map.primStart, map.primEnd);
     },
     setEyeGlow(side, on) {
