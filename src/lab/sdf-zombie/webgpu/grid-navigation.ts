@@ -17,20 +17,27 @@ export interface GridNavSpec {
   canStand(p: Vec3): boolean;
   canTravel(a: Vec3, b: Vec3): boolean;
   roomAt(p: Vec3): number;
-  /** Feet height at p (0 on room levels). */
+  /** Feet height at p (0 on room levels). Also each waypoint's y: the floor under its cell centre. */
   floorAt(p: Vec3): number;
+  /** Travel is one-way (sector levels: drops yes, climbs no). The route then ends at the first cell
+   *  the search reaches that is within NEAREST_M of `to` and joined to it either way, instead of the
+   *  nearest cell `to` can travel to, which may sit on a ledge nothing below reaches (a target a
+   *  smaller body stands on at the foot of a riser). Default false: room levels. */
+  oneWay?: boolean;
 }
 
 export interface EncounterNavigation {
   readonly bounds: WanderBounds;
   canStand(p: Vec3): boolean;
   canTravel(a: Vec3, b: Vec3): boolean;
-  /** Waypoints from `from` to `to` (the last is `to` itself); [] when there is no way. */
+  /** Waypoints from `from` to `to` (the last is `to` itself); [] when there is no way. A waypoint's y
+   *  is the floor under its grid cell's centre (`floorAt`), not the feet height of a body standing
+   *  there: a cell whose disc overhangs a higher floor still says the lower one. */
   route(from: Vec3, to: Vec3): Vec3[];
   /** The furthest waypoint of `path` reachable from `from` in a straight line, or null. */
   follow(from: Vec3, path: readonly Vec3[]): Vec3 | null;
   roomAt(p: Vec3): number;
-  /** Feet height at p (0 on room levels). */
+  /** The floor under p: 0 everywhere on room levels; the sector's floor on sector levels, NaN off the map. */
   floorAt(p: Vec3): number;
 }
 
@@ -38,7 +45,7 @@ export interface EncounterNavigation {
 const NEAREST_M = 1.5;
 
 export function createGridNavigation(spec: GridNavSpec): EncounterNavigation {
-  const { bounds, step, canStand, canTravel, roomAt, floorAt } = spec;
+  const { bounds, step, canStand, canTravel, roomAt, floorAt, oneWay = false } = spec;
   const nx = Math.ceil((bounds.maxX - bounds.minX) / step), nz = Math.ceil((bounds.maxZ - bounds.minZ) / step);
   const cx = (i: number) => bounds.minX + (i % nx + .5) * step, cz = (i: number) => bounds.minZ + (Math.floor(i / nx) + .5) * step;
   const open = Uint8Array.from({ length: nx * nz }, (_, i) => canStand([cx(i), 0, cz(i)]) ? 1 : 0);
@@ -56,42 +63,58 @@ export function createGridNavigation(spec: GridNavSpec): EncounterNavigation {
         if (open[j] && canTravel(point(i), point(j)))
           edges[i]!.push(j);
       }
-  // Scans only the window of cells that can lie within NEAREST_M, in index order, so it picks the
-  // same cell as a scan of the whole grid.
-  const nearest = (p: Vec3) => {
+  // Visits only the window of cells that can lie within NEAREST_M of p, in index order, so `nearest`
+  // picks the same cell as a scan of the whole grid.
+  const inWindow = (p: Vec3, visit: (i: number) => void) => {
     const c0 = Math.max(0, Math.floor((p[0] - NEAREST_M - bounds.minX) / step) - 1);
     const c1 = Math.min(nx - 1, Math.ceil((p[0] + NEAREST_M - bounds.minX) / step) + 1);
     const r0 = Math.max(0, Math.floor((p[2] - NEAREST_M - bounds.minZ) / step) - 1);
     const r1 = Math.min(nz - 1, Math.ceil((p[2] + NEAREST_M - bounds.minZ) / step) + 1);
-    let best = -1, dist = Infinity;
     for (let r = r0; r <= r1; r++)
-      for (let c = c0; c <= c1; c++) {
-        const i = r * nx + c;
-        if (open[i]) {
-          const q = point(i), d = Math.hypot(q[0] - p[0], q[2] - p[2]);
-          if (d < dist && d < NEAREST_M && canTravel(p, q)) {
-            best = i;
-            dist = d;
-          }
+      for (let c = c0; c <= c1; c++) visit(r * nx + c);
+  };
+  /** One-way travel: the open cells within NEAREST_M joined to `to` either way. */
+  const arrivals = (to: Vec3): Set<number> => {
+    const out = new Set<number>();
+    inWindow(to, i => {
+      if (open[i]) {
+        const q = point(i);
+        if (Math.hypot(q[0] - to[0], q[2] - to[2]) < NEAREST_M && (canTravel(q, to) || canTravel(to, q))) out.add(i);
+      }
+    });
+    return out;
+  };
+  const nearest = (p: Vec3) => {
+    let best = -1, dist = Infinity;
+    inWindow(p, i => {
+      if (open[i]) {
+        const q = point(i), d = Math.hypot(q[0] - p[0], q[2] - p[2]);
+        if (d < dist && d < NEAREST_M && canTravel(p, q)) {
+          best = i;
+          dist = d;
         }
       }
+    });
     return best;
   };
   const route = (from: Vec3, to: Vec3): Vec3[] => {
     if (canTravel(from, to))
       return [[...to] as Vec3];
-    const start = nearest(from), end = nearest(to);
-    if (start < 0 || end < 0)
+    const start = nearest(from), ends = oneWay ? arrivals(to) : null;
+    let end = ends ? (ends.has(start) ? start : -1) : nearest(to);
+    if (start < 0 || (ends ? ends.size === 0 : end < 0))
       return [];
     const parent = new Int32Array(open.length).fill(-1), queue = [start];
     parent[start] = start;
-    for (let at = 0; at < queue.length && parent[end] === -1; at++)
+    const done = () => ends ? end >= 0 : parent[end] !== -1;
+    for (let at = 0; at < queue.length && !done(); at++)
       for (const j of edges[queue[at]!]!)
         if (parent[j] === -1) {
           parent[j] = queue[at]!;
           queue.push(j);
+          if (ends && end < 0 && ends.has(j)) end = j;
         }
-    if (parent[end] === -1)
+    if (!done())
       return [];
     const path: Vec3[] = [];
     for (let i = end; i !== start; i = parent[i]!)

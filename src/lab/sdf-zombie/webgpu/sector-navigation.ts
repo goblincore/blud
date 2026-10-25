@@ -7,7 +7,7 @@
 // its centre and both sides of every line within `radius`. So a body overhanging a ledge stands on
 // the ledge, and only drops once it is clear of it. It stands at p when
 //   - p is over a sector and the ceiling there leaves SECTOR_HEADROOM_M above that floor;
-//   - no line that blocks at that feet height (sector-ground's step / headroom rule) is within radius;
+//   - no line that blocks at that feet height (sector-ground's lineBlocks rule) is within radius;
 //   - no box overlapping feet .. feet + 1.8 m, inflated by radius, holds p.
 // Travel samples every 0.12 m: each sample stands, and the feet rise at most SECTOR_STEP_M between
 // samples (any drop is fine).
@@ -46,8 +46,13 @@ export function createSectorNavigation(map: SectorMap, ground: SectorGround, roo
     const [ax, az] = V[l.v[0]]!, [bx, bz] = V[l.v[1]]!;
     return [Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz)];
   }));
-  const near = (x0: number, z0: number, x1: number, z1: number): number[] =>
-    ground.linesNear(x0, z0, x1, z1).filter(i => box[4 * i]! <= x1 && box[4 * i + 2]! >= x0 && box[4 * i + 1]! <= z1 && box[4 * i + 3]! >= z0);
+  const near = (x0: number, z0: number, x1: number, z1: number): number[] => {
+    const out = ground.linesNear(x0, z0, x1, z1);
+    let n = 0;
+    for (const i of out) if (box[4 * i]! <= x1 && box[4 * i + 2]! >= x0 && box[4 * i + 1]! <= z1 && box[4 * i + 3]! >= z0) out[n++] = i;
+    out.length = n;
+    return out;
+  };
   /** Whether the segment p -> q touches line i (endpoints included). */
   const crosses = (i: number, px: number, pz: number, qx: number, qz: number): boolean => {
     const [ax, az] = V[Ls[i]!.v[0]]!, [bx, bz] = V[Ls[i]!.v[1]]!;
@@ -68,8 +73,11 @@ export function createSectorNavigation(map: SectorMap, ground: SectorGround, roo
     }
     if (S[s]!.ceil - feet < SECTOR_HEADROOM_M) return NaN;
     if (close)
-      for (const w of ground.blockingNear(x, z, radius, feet))
-        if (segDist2(x, z, w.ax, w.az, w.bx, w.bz) < r2) return NaN;
+      for (const i of cand) {
+        if (!ground.lineBlocks(i, feet)) continue;
+        const l = Ls[i]!, [ax, az] = V[l.v[0]]!, [bx, bz] = V[l.v[1]]!;
+        if (segDist2(x, z, ax, az, bx, bz) < r2) return NaN;
+      }
     for (const b of boxes)
       if (b.min[1] < feet + BODY_H && b.max[1] > feet
         && x > b.min[0] - radius && x < b.max[0] + radius && z > b.min[2] - radius && z < b.max[2] + radius) return NaN;
@@ -103,7 +111,9 @@ export function createSectorNavigation(map: SectorMap, ground: SectorGround, roo
     const s = ground.sectorAt(p[0], p[2]);
     return s < 0 ? 0 : roomIds.get(zoneName(S[s]!.zone)) ?? 0;
   };
-  /** The floor of the sector under p (NaN off the map). */
+  /** The floor of the sector under p (NaN off the map). Waypoints carry it too: the floor under the
+   *  cell centre, which can be below the feet of a body whose disc overhangs a higher floor. */
   const floorAt = (p: Vec3): number => ground.floorAt(p[0], p[2]);
-  return createGridNavigation({ bounds, step: STEP, canStand, canTravel, roomAt, floorAt });
+  // Edges are one-way (drops yes, climbs no): the route ends at a cell the search reaches.
+  return createGridNavigation({ bounds, step: STEP, canStand, canTravel, roomAt, floorAt, oneWay: true });
 }

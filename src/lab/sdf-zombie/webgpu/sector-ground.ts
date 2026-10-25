@@ -17,8 +17,11 @@ export interface SectorGround extends LevelGround {
   /** The sector index under (x, z), or -1. */
   sectorAt(x: number, z: number): number;
   /** The indices of the lines in the grid cells the box covers (deduplicated; a candidate set, not
-   *  an exact overlap test). Corners in either order. Empty when the box misses the map. */
-  linesNear(x0: number, z0: number, x1: number, z1: number): readonly number[];
+   *  an exact overlap test). Corners in either order. Empty when the box misses the map. A fresh
+   *  array: the caller may filter it in place. */
+  linesNear(x0: number, z0: number, x1: number, z1: number): number[];
+  /** Whether line i blocks a body with its feet at feetY (the rule blockingNear applies). */
+  lineBlocks(i: number, feetY: number): boolean;
 }
 
 export function buildSectorGround(map: SectorMap): SectorGround {
@@ -95,6 +98,7 @@ export function buildSectorGround(map: SectorMap): SectorGround {
   return {
     sectorAt,
     linesNear,
+    lineBlocks: blocks,
     floorAt: (x, z) => { const s = sectorAt(x, z); return s < 0 ? NaN : S[s]!.floor; },
     ceilAt: (x, z) => { const s = sectorAt(x, z); return s < 0 ? NaN : S[s]!.ceil; },
     blockingNear(x, z, r, feetY) {

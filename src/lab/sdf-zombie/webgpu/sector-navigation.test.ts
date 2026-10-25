@@ -78,6 +78,19 @@ describe('createSectorNavigation: travel and routes', () => {
     expect(nav.route(A2, C)).toEqual([]);
     expect(nav.route(D, A2)).toEqual([]);
   });
+  it('routes to a target in the band at the foot of a riser (the end snaps to a cell that reaches it)', () => {
+    // The player (radius 0.32) can stand 0.32-0.34 m from the B -> C riser at z = -12, inside the
+    // nav's 0.34 m band, where the band cell itself is only reachable from the ledge above.
+    for (const z of [-11.6, -11.67]) {
+      const to: Vec3 = [0.1, 0.5, z];
+      const path = nav.route(A2, to);
+      expect(path.length).toBeGreaterThan(0);
+      expect(path.at(-1)).toEqual(to);
+      let last = A2;
+      for (const p of path.slice(0, -1)) { expect(nav.canTravel(last, p)).toBe(true); last = p; }
+      expect(Math.hypot(last[0] - to[0], last[2] - to[2])).toBeLessThan(1.5);
+    }
+  });
   it('waypoints sit on their sector floors', () => {
     const path = nav.route(A2, B);
     for (const p of path.slice(0, -1)) expect(p[1]).toBe(nav.floorAt(p));
