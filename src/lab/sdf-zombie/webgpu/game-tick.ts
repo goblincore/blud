@@ -27,7 +27,7 @@ import { bodyInSight } from './actor-sight';
 import { connectionBlobsForSim } from './blood-connections';
 import { type EncounterAgent } from './encounter-director';
 import { reticleNdc } from './fisheye';
-import { approachAngle, approachBob, bobPose, pivotOffset, turnFromAim, weaponAngles, weaponSlide } from './free-aim';
+import { approachAngle, approachBob, approachStrafe, bobPose, pivotOffset, shotAim, strafeSpeed01, turnFromAim, viewmodelFrustum, weaponAngles, weaponSlide } from './free-aim';
 import { segmentHitsBox, type ZombieActor } from './game-actor';
 import { registerBleed, stepGutRopes, throwGunFlesh } from './game-bleed';
 import { cancelChunkBake, finishChunkBake } from './game-chunk-bake';
@@ -53,9 +53,11 @@ import { gibBlurSubjects } from './game-render-controls';
 import { applySequenceCamera, stepSequence } from './game-sequence';
 import { applyEmergenceCamera, stepEmergence } from './game-emergence';
 import { applyTrainCamera, lightSteam, stepTrain } from './game-train';
-import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell, extractStage, extractorOffset, fireRecoil, insertStage, loadCarry, loadHold, reloadPhaseAt, reloadPose, stagedShellCenter, supportHandPose, topLeverAngle, type HandDelta, type HandHold } from './game-viewmodel';
+import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell, extractStage, extractorOffset, fireRecoil, insertStage, loadCarry, loadHold, recoilAge, reloadPhaseAt, reloadPose, stagedShellCenter, supportHandPose, topLeverAngle, type HandDelta, type HandHold } from './game-viewmodel';
 import { stepVoid } from './game-void';
-import { expired, stepProjectiles, traceProjectile } from './game-weapon';
+import { stepBulletTimeFx } from './game-bullet-time';
+import { airScaleAt, scalesAt, stepBulletTime } from '../bullet-time';
+import { carryFreshShots, expired, stepProjectiles, traceProjectile } from './game-weapon';
 import { aimArms, aimFrustum, boreFrameInRig, breechInRig, hideTracer, newTracerView, placeTracer, stepWeaponSlots } from './game-weapon-rig';
 import { woundStreamId } from './game-wound-streams';
 import { trailStreamId } from './game-wound-vfx';
@@ -124,6 +126,15 @@ export function tick(ctx: GameContext, dt: number) {
   // feel's view springs — run on the unscaled step. The demo recorder stores
   // the scaled dt (a replay stays deterministic).
   dt *= ctx.weapon.flail?.timeScale(dt) ?? 1;
+  // BULLET TIME (bullet-time.ts, Q): the WORLD runs on `dt`, the PLAYER —
+  // motion, aim, the view-model, firing and reload — on `pdt`, both scaled
+  // from `rdt`, the real step (the ramp eases on it). The recorder stores
+  // `rdt` (the toggle replays from the recorded keys, so the replay re-derives
+  // the scales).
+  const rdt = dt;
+  dt *= stepBulletTime(ctx.player.bulletTime, rdt);
+  const btScales = scalesAt(ctx.player.bulletTime.intensity);
+  const pdt = rdt * btScales.player;
   // The sim clock advances ONLY here, from the step's own dt — never from
   // wall time. This is the single source of "how much simulated time has
   // passed", so every dwell/timer that reads it is reproducible under a
@@ -167,7 +178,7 @@ export function tick(ctx: GameContext, dt: number) {
   } else {
     // The frame the tick CONSUMED, not a re-read after the fact: a live
     // event that lands mid-tick must belong to the next frame, not this one.
-    if (ctx.demo.recorder) { ctx.demo.recorder.push({ ...inputFrame, dt }); updateDemoHud(ctx); }
+    if (ctx.demo.recorder) { ctx.demo.recorder.push({ ...inputFrame, dt: rdt }); updateDemoHud(ctx); }
   }
   const held = inputFrame.keys;
   let input: MoveInput = ctx.player.holdPlayerPose
@@ -184,7 +195,7 @@ export function tick(ctx: GameContext, dt: number) {
       ctx.player.autopilot = null;
       input = { x: 0, z: 0, jump: false };
     } else if (ctx.player.strafeT > 0) {
-      ctx.player.strafeT -= dt;
+      ctx.player.strafeT -= pdt;
       input = { x: ctx.player.strafeDir, z: 0.2, jump: false };
     } else {
       ctx.player.player.yaw = Math.atan2(dx, -dz);
@@ -192,7 +203,7 @@ export function tick(ctx: GameContext, dt: number) {
     }
     if (ctx.player.lastWalkPos
       && Math.hypot(ctx.player.player.pos[0] - ctx.player.lastWalkPos[0], ctx.player.player.pos[2] - ctx.player.lastWalkPos[1]) < 0.02) {
-      ctx.player.stuckT += dt;
+      ctx.player.stuckT += pdt;
       if (ctx.player.stuckT > 0.5) {
         // Strafe AWAY from whatever is ahead: nearest zombie within 1.2 m
         // in front picks the side; walls just get the fallback flip.
@@ -225,7 +236,16 @@ export function tick(ctx: GameContext, dt: number) {
     return { min: [p[0] - 0.35, p[1], p[2] - 0.35] as Vec3, max: [p[0] + 0.35, p[1] + 1.8, p[2] + 0.35] as Vec3 };
   });
   if (loopBlocksInput(ctx)) input = { x: 0, z: 0, jump: false };   // dead or done
-  stepPlayer(ctx.player.player, input, dt, [...ctx.world.colliders, ...zombieBoxes], ctx.world.level.ground);
+  const preStep = [...ctx.player.player.pos] as Vec3;
+  // Bullet time's shootdodge hang: the jump eases from the walk's pace into the apex hang (BULLET_TIME.airScale)
+  // and back out for the landing (airScaleAt).
+  stepPlayer(ctx.player.player, input, pdt, [...ctx.world.colliders, ...zombieBoxes], ctx.world.level.ground,
+    airScaleAt(ctx.player.bulletTime.intensity, ctx.player.player.vel[1], ctx.player.player.grounded, PLAYER.jumpSpeed));
+  // This tick's shots left the muzzle where last frame's camera put it; the
+  // camera follows the step, so the shots must too (carryFreshShots).
+  carryFreshShots(ctx.weapon.pellets, [
+    ctx.player.player.pos[0] - preStep[0], ctx.player.player.pos[1] - preStep[1], ctx.player.player.pos[2] - preStep[2],
+  ]);
 
   // Damage transitions use their own clock; frozen pose captures must
   // still show a newly selected preset. Refresh exclusions as it grows.
@@ -510,43 +530,57 @@ export function tick(ctx: GameContext, dt: number) {
   // detached pieces fly ballistically through the shared chunk path.
   // ---------------------------------------------------------------
   ctx.telemetry.telemetry.lap('region', 'tick:weapon-rig-reload');
-  ctx.weapon.cooldown = Math.max(0, ctx.weapon.cooldown - dt);
-  ctx.weapon.flare?.tickCooldown(dt);
-  ctx.weapon.rod?.tick(dt);
-  ctx.weapon.axe?.tick(dt);
-  ctx.weapon.launcher?.tick(dt);
-  ctx.weapon.recoilPitch *= Math.exp(-9 * dt);
+  ctx.weapon.cooldown = Math.max(0, ctx.weapon.cooldown - pdt);
+  ctx.weapon.flare?.tickCooldown(pdt);
+  ctx.weapon.rod?.tick(pdt);
+  ctx.weapon.axe?.tick(pdt);
+  ctx.weapon.launcher?.tick(pdt);
+  ctx.weapon.recoilPitch *= Math.exp(-9 * pdt);
   // ——— FREE AIM ————————————————————————————————————————————————————
   // The reticle only turns the camera once it is shoved past the dead zone;
-  // inside it, aiming is free and the world stays put.
+  // inside it, aiming is free and the world stays put. While strafing the
+  // zone fades out (FREE_AIM.strafeDeadzoneScaleX) so the reticle steers the
+  // camera like a stick -- how circle-strafing is done -- and the gun aims at
+  // the centre instead (shotAim). The strafe envelope is updated in the
+  // walk-bob block below from this frame's displacement, so it lags one frame,
+  // far inside its own smoothing.
   if (ctx.player.freeAimOn) {
-    const turn = turnFromAim(ctx.weapon.aim, dt);
+    const turn = turnFromAim(ctx.weapon.aim, pdt, ctx.player.strafeAmount);
     ctx.player.player.yaw += turn.yaw;
     ctx.player.player.pitch = Math.min(PLAYER.pitchLimit,
       Math.max(-PLAYER.pitchLimit, ctx.player.player.pitch + turn.pitch));
   }
   {
-    const w = ctx.player.freeAimOn ? weaponAngles(ctx.weapon.aim, aimFrustum(ctx)) : { yawDeg: 0, pitchDeg: 0 };
-    ctx.weapon.yawDeg = approachAngle(ctx.weapon.yawDeg, w.yawDeg, dt);
-    ctx.weapon.pitchDeg = approachAngle(ctx.weapon.pitchDeg, w.pitchDeg, dt);
+    // The gun follows the SHOT aim, not the steering reticle: the same point
+    // standing still, pulled to the centre while strafing. Through the view
+    // model's own FOV scale, or the barrel points short of the reticle by
+    // exactly that scale (free-aim.ts viewmodelFrustum).
+    const shot = shotAim(ctx.weapon.aim, ctx.player.strafeAmount);
+    const vf = viewmodelFrustum(aimFrustum(ctx), ctx.weapon.fovRig?.scale.x ?? 1);
+    const w = ctx.player.freeAimOn ? weaponAngles(shot, vf) : { yawDeg: 0, pitchDeg: 0 };
+    ctx.weapon.yawDeg = approachAngle(ctx.weapon.yawDeg, w.yawDeg, pdt);
+    ctx.weapon.pitchDeg = approachAngle(ctx.weapon.pitchDeg, w.pitchDeg, pdt);
     // ...and the weapon CARRIES across the frame as well as turning. Rotation
     // alone pins the grip near screen centre at every reticle position --
     // that is what pivoting about the grip means -- so the gun read as bolted
     // to the camera with a hinged barrel (owner report). approachAngle is a
     // plain exponential catch-up, so it smooths metres as happily as degrees.
-    const s = ctx.player.freeAimOn ? weaponSlide(ctx.weapon.aim) : { x: 0, y: 0 };
-    ctx.weapon.slideXm = approachAngle(ctx.weapon.slideXm, s.x, dt);
-    ctx.weapon.slideYm = approachAngle(ctx.weapon.slideYm, s.y, dt);
+    const s = ctx.player.freeAimOn ? weaponSlide(shot) : { x: 0, y: 0 };
+    ctx.weapon.slideXm = approachAngle(ctx.weapon.slideXm, s.x, pdt);
+    ctx.weapon.slideYm = approachAngle(ctx.weapon.slideYm, s.y, pdt);
   }
   // WALK BOB, driven by distance rather than time so it stays locked to the
   // stride when the player speeds up, slows down or stops.
   {
     const pos = ctx.player.player.pos;
-    const step = Math.hypot(pos[0] - ctx.player.prevPlayerPos[0], pos[2] - ctx.player.prevPlayerPos[2]);
+    const dx = pos[0] - ctx.player.prevPlayerPos[0], dz = pos[2] - ctx.player.prevPlayerPos[2];
+    const step = Math.hypot(dx, dz);
+    ctx.player.strafeAmount = approachStrafe(ctx.player.strafeAmount,
+      strafeSpeed01(dx, dz, ctx.player.player.yaw, pdt, PLAYER.walkSpeed), pdt);
     ctx.player.prevPlayerPos = [pos[0], pos[1], pos[2]];
     ctx.player.bobDistance += step;
-    const speed01 = dt > 0 ? Math.min(1, step / dt / PLAYER.walkSpeed) : 0;
-    ctx.player.bobAmount = approachBob(ctx.player.bobAmount, speed01, dt);
+    const speed01 = pdt > 0 ? Math.min(1, step / pdt / PLAYER.walkSpeed) : 0;
+    ctx.player.bobAmount = approachBob(ctx.player.bobAmount, speed01, pdt);
   }
   if (ctx.weapon.aimRig) {
     const b = bobPose(ctx.player.bobDistance, ctx.player.bobAmount);
@@ -576,15 +610,15 @@ export function tick(ctx: GameContext, dt: number) {
   // (the holster travel is a local transform on gunRig/bundleRig, so it does
   // not care where the rig is — but the burst sprites the dynamite spawns are
   // world-space and want the frame's final camera).
-  stepWeaponSlots(ctx, dt);
+  stepWeaponSlots(ctx, pdt);
   // The flail, after the rig AND the holster are placed (game-flail.ts).
-  ctx.weapon.flail?.tick(dt);
+  ctx.weapon.flail?.tick(pdt);
   // The head damage model after the flail (actors stepped earlier this frame,
   // so the dangling eye follows this frame's pose).
   ctx.weapon.headDamage?.tick(dt);
   stepDynamite(ctx, dt);
   if (ctx.player.reticleEl) {
-    ctx.player.reticleEl.style.display = ctx.player.freeAimOn && !ctx.world.sequence?.started ? 'block' : 'none';
+    ctx.player.reticleEl.style.display = ctx.player.freeAimOn && !ctx.player.reticleHidden && !ctx.world.sequence?.started ? 'block' : 'none';
     if (ctx.player.freeAimOn) {
       // Position against the CANVAS, not the window. Percent-of-viewport put
       // the reticle outside the render area whenever the canvas did not fill
@@ -595,14 +629,31 @@ export function tick(ctx: GameContext, dt: number) {
       // so the crosshair rides the inverse map or it stops marking where
       // the shot lands. Pushed outward, because the centre is magnified.
       // Lens off (k = 0) returns `aim` unchanged — this is the old line.
-      const p = reticleNdc(ctx.weapon.aim, ctx.render.postAa.lens);
+      // The crosshair marks the SHOT aim; while strafing that is pulled to the
+      // centre, and the faint steering cursor marks where the reticle that
+      // turns the camera actually is.
+      const shot = shotAim(ctx.weapon.aim, ctx.player.strafeAmount);
+      const p = reticleNdc(shot, ctx.render.postAa.lens);
       ctx.player.reticleEl.style.left = `${r.left + r.width * (0.5 + p.x * 0.5)}px`;
       ctx.player.reticleEl.style.top = `${r.top + r.height * (0.5 - p.y * 0.5)}px`;
+      if (ctx.player.steerEl) {
+        // Shown only once it has come apart from the crosshair, fading in
+        // with the separation so it never pops.
+        const apart = Math.hypot(ctx.weapon.aim.x - shot.x, ctx.weapon.aim.y - shot.y);
+        const alpha = Math.min(1, apart / 0.08) * 0.6;
+        const q = reticleNdc(ctx.weapon.aim, ctx.render.postAa.lens);
+        ctx.player.steerEl.style.display = alpha > 0.01 && !ctx.player.reticleHidden && !ctx.world.sequence?.started ? 'block' : 'none';
+        ctx.player.steerEl.style.opacity = alpha.toFixed(3);
+        ctx.player.steerEl.style.left = `${r.left + r.width * (0.5 + q.x * 0.5)}px`;
+        ctx.player.steerEl.style.top = `${r.top + r.height * (0.5 - q.y * 0.5)}px`;
+      }
+    } else if (ctx.player.steerEl) {
+      ctx.player.steerEl.style.display = 'none';
     }
   }
 
-  ctx.weapon.flashAge += dt;
-  ctx.weapon.fireAge += dt;
+  ctx.weapon.flashAge += pdt;
+  ctx.weapon.fireAge += pdt;
   // The flame jets are posed below, after the view-model matrices are current.
   stepFlashLight(ctx);
 
@@ -625,9 +676,10 @@ export function tick(ctx: GameContext, dt: number) {
   // THE VIEW-MODEL POSE: rest + reload delta + recoil delta, composed once so
   // a reload during recoil reads as both rather than one clobbering the other.
   const reloading = ctx.weapon.reloadAge <= RELOAD.totalSec;
-  if (reloading) ctx.weapon.reloadAge += dt * ctx.weapon.reloadSpeed;
+  if (reloading) ctx.weapon.reloadAge += pdt * ctx.weapon.reloadSpeed;
   const rp = reloading ? reloadPose(ctx.weapon.reloadAge) : { roll: 0, pitch: 0, dy: 0, dz: 0, hinge: 0 };
-  const rc = fireRecoil(ctx.weapon.fireAge, ctx.weapon.fireBarrels);
+  // One frame late: the flash frame holds the gun where it fired (recoilAge).
+  const rc = fireRecoil(recoilAge(ctx.weapon.fireAge, pdt), ctx.weapon.fireBarrels);
   if (ctx.weapon.gunGroup) {
     ctx.weapon.gunGroup.rotation.z = THREE.MathUtils.degToRad(GUN_REST.rollDeg + rp.roll + rc.roll);
     ctx.weapon.gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg + rp.pitch + rc.pitch);
@@ -801,7 +853,10 @@ export function tick(ctx: GameContext, dt: number) {
   {
     const projectileTiming = ctx.telemetry.telemetry.begin();
     const prevs = ctx.weapon.pellets.map(p => [...p.pos] as Vec3);
-    stepProjectiles(ctx.weapon.pellets, dt);
+    // The PLAYER's pellets fly on their own scale (BULLET_TIME.shotScale): in bullet time the world crawls, your shot
+    // only slows.
+    const shotDt = rdt * btScales.shot;
+    stepProjectiles(ctx.weapon.pellets, shotDt);
     // Hit batching: every actor hit this frame flushes its rig/repack/
     // wound-row tail ONCE after the loop (ZombieActor.beginHits).
     const hitThisFrame = new Set<ZombieActor>();
@@ -814,8 +869,9 @@ export function tick(ctx: GameContext, dt: number) {
       // Sector levels: a round's first step starts at the EYE, not the muzzle — the view-model muzzle
       // can sit past a wall the player hugs (a segment starting in the void or on a wall line hits at
       // t 0, and a body the muzzle overlaps behind the wall must not take the round). Every later step
-      // starts at the last frame's end, which was open. Room levels: the muzzle, as before.
-      const from = sectorLevel && p.ageSec - dt < 1e-6 ? eyeOf(ctx.player.player) : prevs[i]!;
+      // starts at the last frame's end, which was open. Room levels: the muzzle, as before. Fresh = its age is
+      // this frame's SHOT step (bullet time steps the player's pellets on shotDt, not the world's dt).
+      const from = sectorLevel && p.ageSec - shotDt < 1e-6 ? eyeOf(ctx.player.player) : prevs[i]!;
       let dead = expired(p, sectorLevel);
       // Sector levels: the frame's segment against the sector walls, floors and ceilings, FIRST — before
       // the gib-chunk tests below, so a slug that hits a wall cannot gib a piece lying behind it. A hit
@@ -1054,7 +1110,8 @@ export function tick(ctx: GameContext, dt: number) {
       ctx.weapon.rockets = stepped.live;
       for (const d of stepped.detonations) {
         ctx.telemetry.telemetry.event('rocket-detonate', { cause: d.cause, owner: d.owner, x: d.at[0], y: d.at[1], z: d.at[2] });
-        detonateAt(ctx, d.at);
+        // The firer is spared its own blast (detonateAt's spareActorId): a point-blank shot no longer self-destructs.
+        detonateAt(ctx, d.at, false, undefined, d.owner);
         const centre: Vec3 = [pp[0], pp[1] + PLAYER.height * 0.5, pp[2]];
         const hurt = blastPlayerDamage(Math.hypot(pp[0] - d.at[0], pp[1] + PLAYER.height * 0.5 - d.at[1], pp[2] - d.at[2]));
         // Sector levels (plan 3b review): the player behind sector geometry from the blast takes nothing, as a
@@ -1296,7 +1353,9 @@ export function tick(ctx: GameContext, dt: number) {
   // Melee hit feedback: the shake offsets the eye (and so the look target,
   // which is taken from `eye` below: the view shakes, it does not swivel);
   // the flash drives the overlay.
-  ctx.player.hitFeedback = stepHitFeedback(ctx.player.hitFeedback, dt);
+  ctx.player.hitFeedback = stepHitFeedback(ctx.player.hitFeedback, pdt);
+  // Bullet time's looks: the projectiles' air wakes (after every projectile stepped), the gore boost, the vignette.
+  stepBulletTimeFx(ctx);
   if (ctx.player.hitFlashEl) ctx.player.hitFlashEl.style.opacity = String(ctx.player.hitFeedback.flash * 0.55);
   // THE FLAIL'S IMPACT (flail-impact.ts, published by flail.timeScale):
   // its judder is SUMMED with the hit-feedback shake — x along the view's

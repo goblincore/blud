@@ -191,6 +191,11 @@ function killInto(vel: Mut3, push: Mut3): void {
 /**
  * One movement step: intent -> horizontal velocity (ground friction /
  * acceleration), gravity, integrate, collide with the ground's walls and floor, then the colliders. Mutates and returns `s`. dt is clamped like the lab's frame clamp.
+ *
+ * `airScale` slows the VERTICAL motion alone (bullet time's shootdodge hang,
+ * bullet-time.ts airScale): gravity and the rise/fall both run on dt x
+ * airScale, so a jump keeps its height but hangs 1/airScale as long while the
+ * player still walks — and carries — at full speed. 1 = the plain step.
  */
 export function stepPlayer(
   s: PlayerState,
@@ -198,8 +203,10 @@ export function stepPlayer(
   dt: number,
   colliders: readonly Aabb[],
   ground: LevelGround = FLAT_GROUND,
+  airScale = 1,
 ): PlayerState {
   const dtc = Math.min(Math.max(dt, 0), 1 / 30);
+  const dty = dtc * Math.max(0, airScale);
 
   // View-space intent -> world. Forward = [sin yaw, 0, -cos yaw];
   // right = [cos yaw, 0, sin yaw].
@@ -227,12 +234,12 @@ export function stepPlayer(
     s.vel[1] = PLAYER.jumpSpeed;
     s.grounded = false;
   }
-  s.vel[1] += PLAYER.gravity * dtc;
+  s.vel[1] += PLAYER.gravity * dty;
 
   const fromX = s.pos[0], fromY = s.pos[1], fromZ = s.pos[2];
   const wasGrounded = s.grounded;
   s.pos[0] += s.vel[0] * dtc;
-  s.pos[1] += s.vel[1] * dtc;
+  s.pos[1] += s.vel[1] * dty;
   s.pos[2] += s.vel[2] * dtc;
 
   // Wall lines that block at these feet (none on flat ground). A grounded body is asked at its

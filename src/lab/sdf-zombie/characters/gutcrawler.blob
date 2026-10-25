@@ -1,133 +1,243 @@
-# THE GUTCRAWLER — the gorehound's variant: a belly-crawler with no legs that
-# drags itself along on two long arms (owner brief 2026-10-22, after the Dead
-# Space crawler). Gaunt and desiccated: the flesh is parchment over bone, ribs
-# and spine knuckles showing (baked normal map), a spined back ridge, a split
-# jaw that opens sideways as well as down, and a tail of bone and tendrils
-# where the legs and hips should be. Biomech house style
-# (biomech-style.md): flesh is SDF, the bone-metal is kit.
+# THE GUTCRAWLER — a giant naked grub with a man's chest, arms and head on the
+# front, hauling itself along the floor on its arms. Brief (2026-10-22): a
+# legless crawler after the Dead Space crawlers, "a human head on a wretched,
+# writhing human body made to bend in ways it is not meant to". Reached by the
+# owner's reviews, in order (2026-10-23): a lizard-man ("like a lizard and a
+# snake meets a hominid ... not creepy") -> a belly-up man with the head hanging
+# upside down -> "bigger, like a fat worm / giant maggot" -> head and neck
+# "semi normal" -> "like a naked mole" -> a star-nosed mole's tube snout in place
+# of the mouth. So: a pink, hairless, wrinkled grub (the wrinkles are the baked
+# normal map, gutcrawler.detail), a man's front stuck on it, a human face with
+# the eyes squeezed to slits (gutcrawler-face.png), and a star of 22 pink rays
+# where the mouth should be. Ball fists, like the rest of the cast. No kit: the
+# design left the biomech machinery behind on the way.
 #
-# THE RIG, on the biped names like the gorehound:
-#   - the arms are 'foreleg's (gait.ts): each reaches far ahead, plants, and
-#     the body is pulled up to it while the other arm reaches (forePhase 0:
-#     the arms alternate on the L/R clocks, half a stride apart). The pull is
-#     the sway: the chest rolls onto the planted arm;
-#   - NO LEGS. motion.ts's legless path (PR #53's fix) gives the body no
-#     plants below the waist: the stump slides on the floor;
-#   - the TAIL is the `hem` bone, the cloth pendulum (gait.ts GaitJointName
-#     'hem'): its free end rides the body's translation and yaw while the
-#     Verlet rig lets it lag, which is exactly a tail being dragged. Its tip
-#     stays ABOVE the paws (bindRig pins the lowest rig point).
+# THE RIG, on the biped names like the gorehound (biomech-style.md):
+#   - the arms are 'foreleg's (gait.ts CRAWL_DRAG): each reaches ahead, plants,
+#     and hauls the body past it while the other reaches (forePhase 0: the L/R
+#     clocks, half a stride apart), the elbows poled up and out (elbowPole),
+#     the chest rolling onto the hauling arm (crawlRoll);
+#   - NO LEGS. actor.ts masks "missing" limbs by the limbs the body was built
+#     with: a body that never had legs is not one that lost them (until then
+#     collapse.ts dropped this one flat every frame);
+#   - the rear of the grub rides a CHAIN of pendulums: `hem` then `hem2` and
+#     `hem3` chained off it (gait.ts GaitJointName 'hem2'). The gait's body
+#     wave (undulate) runs from the shoulders down the chain, so the rings
+#     writhe as it hauls. The chain's tip stays ABOVE the fists (bindRig pins
+#     the lowest rig point).
+#   - it attacks by REARING its front half off the floor and SLAMMING it down
+#     on you, snout first (hound-attack.ts 'slam').
 model gutcrawler
   height 0.55
 
 skeleton
-  # Lying on its belly: the stump of the pelvis just off the floor.
-  root pelvis at 0.13 len=0.06
-  # The back rises from the stump to the shoulders, which the arms hold up:
-  #   hips  (0, 0.19, 0)
-  #   spine -> withers ~(0, 0.30, 0.40)
-  #   chest -> neck base ~(0, 0.36, 0.60)
-  #   neck  -> atlas, skull -> the face, thrust forward and a little down
-  bone spine parent=pelvis dir=up pitch=75 len=0.42
+  # The grub lies on its belly: its fattest ring (r 0.285 x tall 0.86) has its
+  # centre at the hips, (0, 0.26, 0), so its underside sits on the floor.
+  root pelvis at 0.22 len=0.04
+  # The man's front: the spine runs level forward to the withers, which the
+  # arms hold up, then the chest rises to the throat and the neck lifts the
+  # head upright to stare ahead:
+  #   spine -> withers (0, 0.25, 0.41)
+  #   chest -> neck base (0, 0.31, 0.61)
+  #   neck  -> the base of the skull (0, 0.41, 0.75), skull upright above it
+  bone spine parent=pelvis dir=up pitch=91.8 len=0.411
   bone chest parent=spine  dir=up pitch=72 len=0.21
-  bone neck  parent=chest  dir=up pitch=78 len=0.13
-  bone skull parent=neck   dir=up pitch=98 len=0.22
-  # The split jaw hangs from the atlas to the chin; the hinge is far back so
-  # the whole lower face drops.
-  bone jaw   parent=neck   dir=up pitch=125 len=0.20 hinge=0.10
-  # The TAIL: back along the floor from the hips, a little down.
-  bone hem   parent=pelvis dir=up pitch=-96 len=0.85
+  bone neck  parent=chest  dir=up pitch=55 len=0.17
+  bone skull parent=neck   dir=up pitch=8 len=0.21
+  # The REAR of the grub: back along the floor from the hips in three
+  # pendulum segments, sloping down as the rings taper. The gait's body wave
+  # (CRAWL_DRAG undulate) swings each segment wider and later.
+  bone hem   parent=pelvis dir=up pitch=-95 len=0.40
+  bone hem2 parent=hem    dir=up pitch=-101 len=0.38
+  bone hem3 parent=hem2  dir=up pitch=-104 len=0.32
 
   mirror
-    # Shoulders off the withers, then the crawling arm: the humerus out and
-    # forward, elbow high and wide, the forearm down to a hand planted well
-    # ahead of the face, and long clawed fingers (kit).
+    # Shoulders off the withers, then the crawling arm. The first pass ran the
+    # humerus level and forward and planted the hand ahead of the face, so the
+    # arm was nearly straight at rest: in the walk the hands planted at full
+    # stretch and the elbows never bent (a glide, not a drag). Now the arm is a
+    # man pulling himself along the floor: the humerus goes OUT, forward and UP
+    # to an elbow above and outboard of the shoulder, (0.38, 0.33, 0.60);
+    # the long forearm drops to a wrist planted beside the face, (0.31, 0.05,
+    # 0.78); the hand bone (the ball fist rides it) points forward-out. Shoulder-to-wrist at
+    # rest is 0.43 m on a 0.64 m chain (67%): room to reach well ahead and to
+    # fold deep at the end of each haul. Angles solved from those points
+    # (dirVector: `up` for the rising humerus, `down` for the rest).
     bone clavicle parent=spine    dir=side tilt=-8 len=0.17
-    bone upperarm parent=clavicle dir=down pitch=100 tilt=65 len=0.34
-    bone forearm  parent=upperarm dir=down pitch=28 tilt=-6 len=0.29
-    bone hand     parent=forearm  dir=down pitch=78 len=0.15
+    bone upperarm parent=clavicle dir=up   pitch=38.57 tilt=63.43 len=0.30
+    bone forearm  parent=upperarm dir=down pitch=31.95 tilt=-14.04 len=0.34
+    bone hand     parent=forearm  dir=down pitch=69.76 tilt=35.54 len=0.15
   end
 
 body
-  # --- TORSO: gaunt. Thin masses with the bone close under them. -----------
-  # The stump: what is left of the hips, torn and narrowing.
-  blob torso on pelvis at=1.00 r=0.090 wide=1.30 tall=0.80 deep=1.10 offset=(0,-0.01,-0.02) blend=0.020 core
-  # The trunk: a slim bar rising to the shoulders; the belly is caved, so the
-  # bar is narrower (wide) than it is deep where the ribs flare.
-  bar  torso on spine from=0.05 to=0.70 r=0.085 r2=0.110 wide=1.15 tall=0.80 blend=0.025
-  # The ribcage: the widest thing on the body, flaring above the arms.
-  blob torso on spine at=0.78 r=0.120 wide=1.25 tall=0.85 deep=1.10 offset=(0,0.005,0) blend=0.025
-  # Shoulder blades standing up off the back.
-  blob torso on spine at=0.96 r=0.060 wide=0.80 tall=0.70 deep=1.30 offset=(0.075,0.045,-0.02) blend=0.015 both
-  # The neck: a stringy column, thinner than the head.
-  bar  torso on chest from=0.10 to=1.00 r=0.065 wide=1.10 tall=0.90 blend=0.020
-  bar  torso on neck from=0.00 to=1.00 r=0.055 r2=0.050 blend=0.018
+  # THE MAGGOT (owner, 2026-10-23: "bigger, like a fat worm / giant maggot").
+  # A man's chest, arms and hanging head on the front of a swollen grub body:
+  # eleven fat RING segments, short along the body (deep 0.62) with tight
+  # blends so the creases between them pinch in, swelling just behind the
+  # ribs and tapering to a blunt rear. The rear rings ride the hem -> hem2 ->
+  # hem3 pendulums, so the gait's body wave writhes them. Each ring's
+  # underside sits on the floor (centre height ~ r x tall).
+  blob torso on spine  at=0.681 r=0.230 wide=1.12 tall=0.86 deep=0.62 blend=0.022
+  blob torso on spine  at=0.292 r=0.265 wide=1.12 tall=0.86 deep=0.62 blend=0.022
+  blob torso on hem    at=0.101 r=0.285 wide=1.12 tall=0.86 deep=0.62 blend=0.022 core
+  blob torso on hem    at=0.477 r=0.285 wide=1.12 tall=0.86 deep=0.62 blend=0.022
+  blob torso on hem    at=0.854 r=0.270 wide=1.12 tall=0.86 deep=0.62 blend=0.022
+  blob torso on hem2  at=0.247 r=0.245 wide=1.12 tall=0.86 deep=0.62 blend=0.022
+  blob torso on hem2  at=0.622 r=0.215 wide=1.12 tall=0.86 deep=0.62 blend=0.022
+  blob torso on hem2  at=0.971 r=0.180 wide=1.12 tall=0.86 deep=0.62 blend=0.022
+  blob torso on hem3  at=0.350 r=0.145 wide=1.12 tall=0.86 deep=0.62 blend=0.022
+  blob torso on hem3  at=0.672 r=0.110 wide=1.12 tall=0.86 deep=0.62 blend=0.022
+  blob torso on hem3  at=0.929 r=0.075 wide=1.12 tall=0.86 deep=0.62 blend=0.022
+  # Skin sagging off the lower flanks of the fattest rings, a mole-rat's
+  # loose hide pooling on the floor.
+  blob torso on hem    at=0.101 r=0.120 wide=0.70 tall=0.55 deep=1.60 offset=(0.250,-0.140,0) blend=0.040 both
+  blob torso on hem    at=0.600 r=0.110 wide=0.70 tall=0.55 deep=1.60 offset=(0.235,-0.130,0) blend=0.040 both
+  blob torso on spine  at=0.400 r=0.100 wide=0.70 tall=0.55 deep=1.50 offset=(0.215,-0.120,0) blend=0.040 both
+  # The man's front on the grub: a ribcage, the sternum a ridge down its
+  # middle, the costal arch flaring over the first ring.
+  blob torso on spine at=0.78 r=0.150 wide=1.25 tall=0.85 deep=1.10 offset=(0,0.020,0) blend=0.028
+  bar  torso on spine from=0.62 to=1.00 r=0.022 offset=(0,0.135,0) blend=0.018
+  bar  torso on spine from=0.55 to=0.80 r=0.030 offset=(0.090,0.090,0.02) tip=(0.04,-0.03,-0.05) blend=0.016 both
+  # The pectorals and the collarbones, the shoulders rolled back under it.
+  blob torso on spine at=0.93 r=0.075 wide=1.10 tall=0.55 deep=1.00 offset=(0.075,0.075,0.01) blend=0.018 both
+  blob torso on spine at=0.98 r=0.075 offset=(0.130,-0.005,0) blend=0.022 both
+  # The throat, rising to the neck.
+  bar  torso on chest from=0.10 to=1.00 r=0.074 wide=1.10 tall=0.90 blend=0.022
+  # THE NECK: plain flesh (owner, 2026-10-23: the spine-through-the-crown
+  # join did not read; "make the head and neck semi normal"). The fear is in
+  # the face and the snout.
+  bar  head on neck from=0.00 to=1.00 r=0.052 r2=0.046 blend=0.016 core
+  blob head on neck at=0.45 r=0.015 offset=(0,0,0) blend=0.006
 
-  # --- HEAD: a desiccated skull, the face pulled tight over it. --------------
-  blob head on skull at=0.30 r=0.085 wide=1.05 tall=0.95 deep=1.15 offset=(0,0.020,0) blend=0.012 core
-  # Brow and cheekbones, sharp under the skin.
-  blob head on skull at=0.55 r=0.030 wide=1.40 tall=0.60 deep=0.90 offset=(0.045,0.040,0) blend=0.008 both
-  blob head on skull at=0.62 r=0.032 wide=1.10 tall=0.80 deep=1.20 offset=(0.060,-0.020,0) blend=0.010 both
-  # The upper jaw: a short muzzle of exposed teeth (kit), lipless.
-  blob head on skull at=0.85 r=0.050 wide=1.10 tall=0.70 deep=1.10 offset=(0,-0.020,0) blend=0.010
-  # Sunken eyes: dark pits with a pale ember each.
-  blob head on skull at=0.62 r=0.020 deep=0.70 offset=(0.040,0.012,0.040) blend=0.004 color=1a0c0a gloss=0.9 both
-  blob head on skull at=0.62 r=0.008 offset=(0.040,0.012,0.050) blend=0.002 color=e8d8a0 glow=0.6 both
-  # The gullet, dark and wet, seen when the jaw splits.
-  blob head on skull at=0.70 r=0.040 wide=1.30 tall=0.80 deep=1.40 offset=(0,-0.045,0) blend=0.008 color=3a0c0e gloss=0.9
-  # THE SPLIT JAW: two mandible halves, each its own prong flaring out to a
-  # point, with a gap between them down the middle (no chin). They ride the
-  # jaw bone, so the bite drops both and the kit tusks on each prong spread.
-  bar  head on jaw from=0.25 to=1.00 r=0.026 r2=0.012 offset=(0.035,0,0) tip=(0.030,0,0) blend=0.008 both
-  blob head on jaw at=0.45 r=0.030 wide=0.90 tall=0.80 deep=1.40 offset=(0.040,0.005,0) blend=0.008 both
+  # --- HEAD: a human head (the face block's generated cranium and chin; its
+  # nose is shrunk away under the snout) wearing a baked human face.
 
-  # --- ARMS: long, stringy, every tendon showing. ------------------------------
-  blob arm on clavicle at=1.00 r=0.050 blend=0.015 mirror core
-  bar  arm on upperarm from=0.00 to=0.95 r=0.048 r2=0.034 blend=0.012 mirror
-  blob arm on upperarm at=0.40 r=0.036 tall=1.50 offset=(0,0.010,0) blend=0.012 mirror
-  blob arm on forearm at=0.00 r=0.034 blend=0.008 mirror
-  bar  arm on forearm from=0.05 to=0.95 r=0.032 r2=0.022 blend=0.010 mirror
-  # The hand: a bony palm; the fingers are kit.
-  blob arm on hand at=0.35 r=0.030 wide=1.40 tall=0.55 deep=1.20 blend=0.006 mirror
+  # THE FACE IS THE PAINTING (gutcrawler-face.png, from female-face.png):
+  # the eyes squeezed to slits in it, so no prim fights them.
 
-  # --- TAIL: a thin core the kit vertebrae and tendrils cover. ------------------
-  bar  torso on hem from=0.00 to=0.25 r=0.050 r2=0.032 blend=0.015
-  bar  torso on hem from=0.25 to=1.00 r=0.024 r2=0.010 blend=0.006 color=b8ad92 gloss=0.35
+  # THE TUBE SNOUT (owner, 2026-10-23: a star-nosed mole's snout in place
+  # of the mouth; "we don't need him to open his mouth"). A fleshy tube
+  # pushes out of the middle of the face and ends in a ring of 22 pink rays
+  # round two nostrils. It never opens: no jaw bone, the face's chin is part
+  # of the skull. Rays: 11 a side, longest at the sides, each a fleshy finger
+  # in two pieces, tapering to a blunt tip and curling forward, with gaps
+  # between them (the first pass, packed and flat, read as a flower).
+  blob head on skull at=0.2 offset=(0.0000,-0.0586,0.0592) r=0.034 blend=0.01 wide=1.00 tall=0.75 deep=0.95
+  bar  head on skull from=0.2 to=0.2 offset=(0.0000,0.0044,0.0742) tip=(0.0000,-0.0020,0.0450) r=0.026 r2=0.022 blend=0.01
+  bar  head on skull from=0.2 to=0.2 offset=(0.0000,-0.0106,0.0792) tip=(0.0000,0.0060,0.0370) r=0.02 r2=0.018 blend=0.008
+  blob head on skull at=0.2 offset=(0.0000,0.0014,0.1322) r=0.02 blend=0.006 deep=0.55 color=d88a86 gloss=0.8
+  bar  head on skull from=0.2 to=0.2 offset=(0.0019,0.0143,0.1342) tip=(0.0017,0.0117,0.0080) r=0.0062 r2=0.0055 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(0.0035,0.0259,0.1422) tip=(0.0014,0.0095,0.0140) r=0.0055 r2=0.004 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(0.0054,0.0132,0.1342) tip=(0.0055,0.0121,0.0080) r=0.0062 r2=0.0055 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(0.0109,0.0253,0.1422) tip=(0.0045,0.0099,0.0140) r=0.0055 r2=0.004 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(0.0085,0.0112,0.1342) tip=(0.0096,0.0110,0.0080) r=0.0062 r2=0.0055 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(0.0181,0.0223,0.1422) tip=(0.0078,0.0090,0.0140) r=0.0055 r2=0.004 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(0.0109,0.0084,0.1342) tip=(0.0131,0.0084,0.0080) r=0.0062 r2=0.0055 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(0.0241,0.0169,0.1422) tip=(0.0108,0.0069,0.0140) r=0.0055 r2=0.004 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(0.0125,0.0051,0.1342) tip=(0.0156,0.0046,0.0080) r=0.0062 r2=0.0055 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(0.0281,0.0096,0.1422) tip=(0.0128,0.0038,0.0140) r=0.0055 r2=0.004 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(0.0130,0.0014,0.1342) tip=(0.0165,0.0000,0.0080) r=0.0062 r2=0.0055 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(0.0295,0.0014,0.1422) tip=(0.0135,0.0000,0.0140) r=0.0055 r2=0.004 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(0.0125,-0.0023,0.1342) tip=(0.0156,-0.0046,0.0080) r=0.0062 r2=0.0055 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(0.0281,-0.0068,0.1422) tip=(0.0128,-0.0038,0.0140) r=0.0055 r2=0.004 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(0.0109,-0.0056,0.1342) tip=(0.0131,-0.0084,0.0080) r=0.0062 r2=0.0055 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(0.0241,-0.0141,0.1422) tip=(0.0108,-0.0069,0.0140) r=0.0055 r2=0.004 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(0.0085,-0.0084,0.1342) tip=(0.0096,-0.0110,0.0080) r=0.0062 r2=0.0055 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(0.0181,-0.0195,0.1422) tip=(0.0078,-0.0090,0.0140) r=0.0055 r2=0.004 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(0.0054,-0.0104,0.1342) tip=(0.0055,-0.0121,0.0080) r=0.0062 r2=0.0055 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(0.0109,-0.0225,0.1422) tip=(0.0045,-0.0099,0.0140) r=0.0055 r2=0.004 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(0.0019,-0.0115,0.1342) tip=(0.0017,-0.0117,0.0080) r=0.0062 r2=0.0055 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(0.0035,-0.0231,0.1422) tip=(0.0014,-0.0095,0.0140) r=0.0055 r2=0.004 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(-0.0019,-0.0115,0.1342) tip=(-0.0017,-0.0117,0.0080) r=0.0062 r2=0.0055 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(-0.0035,-0.0231,0.1422) tip=(-0.0014,-0.0095,0.0140) r=0.0055 r2=0.004 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(-0.0054,-0.0104,0.1342) tip=(-0.0055,-0.0121,0.0080) r=0.0062 r2=0.0055 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(-0.0109,-0.0225,0.1422) tip=(-0.0045,-0.0099,0.0140) r=0.0055 r2=0.004 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(-0.0085,-0.0084,0.1342) tip=(-0.0096,-0.0110,0.0080) r=0.0062 r2=0.0055 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(-0.0181,-0.0195,0.1422) tip=(-0.0078,-0.0090,0.0140) r=0.0055 r2=0.004 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(-0.0109,-0.0056,0.1342) tip=(-0.0131,-0.0084,0.0080) r=0.0062 r2=0.0055 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(-0.0241,-0.0141,0.1422) tip=(-0.0108,-0.0069,0.0140) r=0.0055 r2=0.004 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(-0.0125,-0.0023,0.1342) tip=(-0.0156,-0.0046,0.0080) r=0.0062 r2=0.0055 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(-0.0281,-0.0068,0.1422) tip=(-0.0128,-0.0038,0.0140) r=0.0055 r2=0.004 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(-0.0130,0.0014,0.1342) tip=(-0.0165,0.0000,0.0080) r=0.0062 r2=0.0055 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(-0.0295,0.0014,0.1422) tip=(-0.0135,0.0000,0.0140) r=0.0055 r2=0.004 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(-0.0125,0.0051,0.1342) tip=(-0.0156,0.0046,0.0080) r=0.0062 r2=0.0055 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(-0.0281,0.0096,0.1422) tip=(-0.0128,0.0038,0.0140) r=0.0055 r2=0.004 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(-0.0109,0.0084,0.1342) tip=(-0.0131,0.0084,0.0080) r=0.0062 r2=0.0055 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(-0.0241,0.0169,0.1422) tip=(-0.0108,0.0069,0.0140) r=0.0055 r2=0.004 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(-0.0085,0.0112,0.1342) tip=(-0.0096,0.0110,0.0080) r=0.0062 r2=0.0055 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(-0.0181,0.0223,0.1422) tip=(-0.0078,0.0090,0.0140) r=0.0055 r2=0.004 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(-0.0054,0.0132,0.1342) tip=(-0.0055,0.0121,0.0080) r=0.0062 r2=0.0055 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(-0.0109,0.0253,0.1422) tip=(-0.0045,0.0099,0.0140) r=0.0055 r2=0.004 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(-0.0019,0.0143,0.1342) tip=(-0.0017,0.0117,0.0080) r=0.0062 r2=0.0055 blend=0.0015 color=e8a49c gloss=0.75
+  bar  head on skull from=0.2 to=0.2 offset=(-0.0035,0.0259,0.1422) tip=(-0.0014,0.0095,0.0140) r=0.0055 r2=0.004 blend=0.0015 color=e8a49c gloss=0.75
+  blob head on skull at=0.2 offset=(-0.0070,0.0014,0.1462) r=0.0055 blend=0.002 color=200608 gloss=0.95
+  blob head on skull at=0.2 offset=(0.0070,0.0014,0.1462) r=0.0055 blend=0.002 color=200608 gloss=0.95
+  # Loose skin: a dewlap hanging under the throat.
+  blob head on neck at=0.55 r=0.045 wide=1.1 tall=0.8 deep=1.3 offset=(0,-0.040,0) blend=0.020
+
+  # --- ARMS: a man's, ~25% fuller than the first pass (owner: "too thin"); a
+  # knotted biceps, the forearm thickening toward the elbow.
+  blob arm on clavicle at=1.00 r=0.062 blend=0.016 mirror core
+  bar  arm on upperarm from=0.00 to=0.95 r=0.058 r2=0.043 blend=0.013 mirror
+  blob arm on upperarm at=0.40 r=0.044 tall=1.50 offset=(0,0.012,0) blend=0.013 mirror
+  blob arm on forearm at=0.00 r=0.042 blend=0.009 mirror
+  bar  arm on forearm from=0.05 to=0.95 r=0.042 r2=0.028 blend=0.011 mirror
+  # BALL HANDS, the cast's own (owner, 2026-10-23: "that's the way hands are
+  # in this universe"): a round fist on the end of each forearm, planted on
+  # the floor like a stump.
+  blob arm on hand at=0.30 r=0.048 wide=1.05 tall=0.95 deep=1.05 offset=(0,0.014,0) blend=0.012 mirror
+
 
 face
-  # No generated face: the skull is prims and kit.
-  headRadius 0.001
-  headWidth  1.0
-  headHeight 1.0
-  headDepth  1.0
-  jawWidth   1.0
-  jawHeight  1.0
-  jawDrop    0
-  jawJut     0
-  noseLength 0
-  noseWidth  1.0
-  noseDrop   0
-  browHeavy  0
-  browRise   0
-  headBlend  0.006
+  # A human head, the female's generated proportions (female.blob), with the
+  # generated jaw made small (0.55 x 0.40: the chin prim and the snout fill the
+  # lower face) and no nose (the snout is where it was).
+  headRadius 0.070
+  headWidth  0.92
+  headHeight 1.25
+  headDepth  1.10
+  jawWidth   0.55
+  jawHeight  0.40
+  jawDrop    0.060
+  jawJut     0.030
+  noseLength 0.001
+  noseWidth  0.633
+  noseDrop   0.022
+  browHeavy  0.004
+  browRise   0.022
+  headBlend  0.005
 
 palette
-  # Desiccated: grey-yellow parchment, dried-blood deeps, a corpse-green mottle.
-  baseColor     0.50 0.44 0.36
-  deepColor     0.35 0.06 0.05
-  charColor     0.07 0.06 0.05
-  specIntensity 0.45
-  specRoughness 0.45
-  fresnelBoost  0.50
-  translucency  0.12
-  wetness       0.30
-  surfaceNoiseAmp    0.050
-  silhouetteNoiseAmp 0.018
-  mottleAmp     0.40
-  mottleScale   2.2
-  mottleColor   0.28 0.30 0.20
-  grain         0.18
+  # A naked mole-rat's hide: pink, hairless, thin enough to see the blood
+  # under it (high translucency), wet, mottled violet where the veins run.
+  baseColor     0.70 0.48 0.44
+  deepColor     0.45 0.12 0.14
+  charColor     0.08 0.05 0.05
+  specIntensity 0.60
+  specRoughness 0.35
+  fresnelBoost  0.60
+  translucency  0.45
+  wetness       0.55
+  surfaceNoiseAmp    0.020
+  silhouetteNoiseAmp 0.008
+  mottleAmp     0.35
+  mottleScale   3.0
+  mottleColor   0.50 0.32 0.40
+  grain         0.10
 
+# The face: gutcrawler-face.png, made from female-face.png (desaturated toward
+# a mole-rat's pink, the hair painted out to a bald wrinkled scalp, the eyes
+# squeezed to wet slits between puffy lids, the mouth painted out under the
+# snout). Multiplied (decal 0) so it takes the body's light. projScaleY 0.27 /
+# projCentreY 0.436 (the female's are 0.23 / 0.45): squeezed a little so the
+# face's lower half lands on this head's short lower face, eyes where they were.
 sheet
-  # No face sheet (biomech-style.md: a non-person wears none).
-  enabled 0
+  image       gutcrawler-face.png
+  decal       0
+  projScaleX  0.19
+  projScaleY  0.27
+  projCentreX 0.50
+  projCentreY 0.436
+  # No glint: the eyes are slits.
+  eyeGlowAmp  0
+  eyeGlowCut  0.69

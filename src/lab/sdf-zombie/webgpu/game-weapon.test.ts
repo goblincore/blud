@@ -10,7 +10,7 @@ import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { ZOMBIE } from '../body';
 import { sdBody, sdPrimitive } from '../validate';
 import {
-  GRAPESHOT, SLUG, applyRigidYaw, expired, fitRestToPose, mulberry32,
+  GRAPESHOT, SLUG, applyRigidYaw, carryFreshShots, expired, fitRestToPose, mulberry32,
   spawnPellets, spawnRound, CHAINGUN_ROUND, spawnSlug, spreadDirections, stepProjectiles, traceProjectile,
   woundFromPellet, woundFromSlug,
 } from './game-weapon';
@@ -89,6 +89,18 @@ describe('spawnPellets', () => {
       expect(p.pos).toEqual([1, 2, 3]);
       expect(angleFrom(p.vel, FWD)).toBeLessThanOrEqual(GRAPESHOT.spreadRad + 1e-9);
     }
+  });
+});
+
+describe('carryFreshShots', () => {
+  it('moves only the shots not yet stepped, by the player\'s step', () => {
+    const ps = spawnPellets([0, 1.5, 0], FWD, 1, 7);
+    const old = spawnPellets([0, 1.5, 0], FWD, 1, 7);
+    stepProjectiles(old, 0.1);
+    const was = old.map(p => [...p.pos]);
+    carryFreshShots([...ps, ...old], [0.11, 0, 0]);
+    for (const p of ps) expect(p.pos[0]).toBeCloseTo(0.11, 9);
+    old.forEach((p, i) => expect(p.pos).toEqual(was[i]));
   });
 });
 

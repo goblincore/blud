@@ -153,6 +153,8 @@ const DISTAL_JOINT_RE = /^(elbow|hand|handTip|knee|foot|toe)[LR]$/;
  *  about a second. At 1 (a joint's stiffness) it tracks rigidly — 0 cm.
  *  docs/dev-notes/2026-09-23-cultist/. */
 export const HEM_REST_SCALE = 0.15;
+/** Pendulum segments chained off the `hem` bone (a tail: gait.ts 'hem2'). Treated like the hem's free end. */
+const PENDULUM_CHAIN: readonly string[] = ['hem2', 'hem3'];
 /** Rest-pull multiplier for an UPWARD `hem` (its tail above its head): not cloth but a HELD prop on a stalk, the
  *  gamer's joystick (characters/gamer.blob). At the cloth's 0.15 it would droop under gravity and trail every step;
  *  this keeps it where his hands and the attack's jiggle put it, with a little give. */
@@ -194,6 +196,8 @@ export function bindRig(body: BuildResult): BoundRig {
   if (hemBone) {
     const scale = positions.map(() => 1);
     scale[indexOf(hemBone.tail)] = hemBone.tail[1] > hemBone.head[1] ? HEM_HELD_SCALE : HEM_REST_SCALE;
+    // A tail chained off the hem (gait.ts 'hem2'): every segment's free end is pendulum too.
+    for (const t of PENDULUM_CHAIN) { const b = body.bones.get(t); if (b) scale[indexOf(b.tail)] = HEM_REST_SCALE; }
     rig.restScale = scale;
   }
   // Only intact upper-arm/forearm chains get an elbow stop. Dead distal
@@ -249,7 +253,7 @@ export function bindRig(body: BuildResult): BoundRig {
   // must not frame one (the bride's pelvis bone sits exactly on it).
   const axialJoints: number[] = [];
   for (const [name, bone] of body.bones) {
-    if (/\.[lr]$/.test(name) || name === 'hem' || name === 'jaw') continue;
+    if (/\.[lr]$/.test(name) || name === 'hem' || PENDULUM_CHAIN.includes(name) || name === 'jaw') continue;
     for (const j of [indexOf(bone.head), indexOf(bone.tail)])
       if (!axialJoints.includes(j)) axialJoints.push(j);
   }
@@ -257,7 +261,7 @@ export function bindRig(body: BuildResult): BoundRig {
   // rigid torso-bone frames below.
   const axialSegs: { head: number; tail: number }[] = [];
   for (const [name, bone] of body.bones) {
-    if (/\.[lr]$/.test(name) || name === 'hem' || name === 'jaw') continue;
+    if (/\.[lr]$/.test(name) || name === 'hem' || PENDULUM_CHAIN.includes(name) || name === 'jaw') continue;
     const h = indexOf(bone.head), t = indexOf(bone.tail);
     if (h !== t) axialSegs.push({ head: h, tail: t });
   }
@@ -330,6 +334,7 @@ export function bindRig(body: BuildResult): BoundRig {
   // hem (2026-09-24).
   const hemPendulum = body.bones.get('hem');
   if (hemPendulum) distal.add(indexOf(hemPendulum.tail));
+  for (const t of PENDULUM_CHAIN) { const b = body.bones.get(t); if (b) distal.add(indexOf(b.tail)); }
   // The JAW point is stricter still: ONLY prims declared `on jaw` may bind
   // to it. The upper lip ends 7 cm from it and 10 cm from the skull pivot,
   // so a nearest-point bind would hang the upper lip (and the nose, and the
@@ -452,6 +457,14 @@ export function bindRig(body: BuildResult): BoundRig {
     return binding;
   };
 
+  /** The declared bone's segment for a `rigid` prim, or null (unknown or zero-length: no frame to ride). */
+  const rigidOwn = (name: string): { head: number; tail: number } | null => {
+    const own = body.bones.get(name);
+    if (!own) return null;
+    const h = indexOf(own.head), t = indexOf(own.tail);
+    return h === t ? null : { head: h, tail: t };
+  };
+
   const primBinding = body.prims.map(bindPrim);
   rig.torsoGuards = buildTorsoGuards(body, positions, primBinding, indexOf, armBoneName);
   return {
@@ -473,8 +486,13 @@ export function bindRig(body: BuildResult): BoundRig {
     // sway/droop), so a rib bound there would shear off the cage exactly as
     // the per-end bind did. A rib belongs to a vertebra (2026-09-03 skeleton
     // re-author, which is what made hoops wide enough to need this).
+    // ...UNLESS the bone is `rigid` on a declared bone (teratoma.blob, 2026-10-24): then it rides that bone's frame as
+    // one piece, exactly like a `rigid` flesh prim, so a skull authored inside a rigid ball of flesh moves with it.
+    // Bound to the nearest axial joint instead, a cyclops orbit round the eye (y 1.45-1.80 on a 1.45 m pelvis) bound
+    // its upper half to the spine and neck stubs and swam against the flesh.
     boneBinding: body.bonePrims.map(p => {
       if (p.limb !== 'torso' && p.limb !== 'head') return bindPrim(p);
+      if (p.rigid && p.bone && rigidOwn(p.bone)) return bindPrim(p);
       const mid: Vec3 = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2];
       const j = bindAxial(mid);
       return { a: { point: j, offset: sub(p.a, positions[j]!) }, b: { point: j, offset: sub(p.b, positions[j]!) } };
@@ -489,7 +507,8 @@ export function bindRig(body: BuildResult): BoundRig {
         // rigid rule widened would have posed the goblin's nose bone twice.
         if (ridesHead(p)) return;
         const mid: Vec3 = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2];
-        const seg = nearestSeg(mid);
+        // A `rigid` bone takes its DECLARED bone's segment (boneBinding's rule above).
+        const seg = (p.rigid && p.bone ? rigidOwn(p.bone) : null) ?? nearestSeg(mid);
         if (!seg) return;
         const h = positions[seg.head]!;
         frames.set(i, {

@@ -46,7 +46,7 @@ Each line is the first sentence of the module's header comment.
 | [Dev panels](#dev-panels) | 11 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 25 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 84 | Gameplay features wired into the game loop. |
+| [Game: feature modules](#game-feature-modules) | 85 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
@@ -58,14 +58,14 @@ Each line is the first sentence of the module's header comment.
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 7 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
 | [SDF march renderer](#sdf-march-renderer) | 47 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
-| [Character authoring](#character-authoring) | 33 | The `.blob` language, body building, validation, silhouette fitting. |
+| [Character authoring](#character-authoring) | 39 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
 | [Gibs and gore (logic)](#gibs-and-gore-logic) | 13 | Gib parts, launch, tearing, entrails, strands. |
 | [AI and actors (logic)](#ai-and-actors-logic) | 11 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 11 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
-| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 13 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
+| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 15 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
 
@@ -326,6 +326,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-bleed.ts` — Gut rope stepping, and registering wound and cut bleeds on actors.
 - `webgpu/game-bone-cull.ts` — Toggling bone culling, and re-stamping the level probes.
 - `webgpu/game-brain-gib.ts` — THE BRAIN MESH (melee head damage, plan Task 11; spec §14 decision 3).
+- `webgpu/game-bullet-time.ts` — BULLET TIME's in-game looks (bullet-time.ts holds the state and the math), lifted beside game-tick.ts rather than into it.
 - `webgpu/game-burning.ts` — IN-GAME BURNING (2026-09-18 flare test harness), lifted beside game-main.ts rather than into its closure (the decomposition's rule for new features).
 - `webgpu/game-chunk-bake.ts` — Chunk bake and draw helpers: lit chunk materials, drawn chunk mesh iteration, picking, the gore showcase and bake completion.
 - `webgpu/game-chunk-pieces.ts` — Chunk gib pieces: creating, dressing and releasing a piece view, spawning a chunk piece, and gibbing chunk meat and baked pieces.
@@ -687,6 +688,12 @@ The `.blob` language, body building, validation, silhouette fitting.
 - `blob-face-sheet.ts` — A procedurally generated greyscale face sheet.
 - `blob-parse.ts` — The `.blob` text parser: tokenizes source lines and builds the BlobDoc that blob-compile consumes.
 - `body-grain.ts` — BODY GRAIN (spec docs/superpowers/specs/2026-10-02-body-grain-design.md; plan docs/superpowers/plans/2026-10-02-body-grain.md).
+- `body-normal-bake/bake.wgsl.ts` — THE BAKE FIELD in WGSL: `sdBodyClosed` (validate.ts) line for line, built from the SAME leaf functions the game marches with…
+- `body-normal-bake/cpu-bake.ts` — The CPU backend, and the REFERENCE every other backend is held to: per texel it finds the plain skin along a ray toward the region's axis, the…
+- `body-normal-bake/frame.ts` — THE FRAME, which the shader (march/body/blocks/post/body-normal.wgsl.ts) must agree with exactly, and the texel encode.
+- `body-normal-bake/gpu-pack.ts` — Packs a body's prims for the bake field (bake.wgsl.ts): the game's own per-prim rows, written by the game's own writer (pack.ts writePrimRows), but…
+- `body-normal-bake/header.ts` — THE HEADER. Row 0 of the image is the region table, read by the shader: texel 0 = ('B', 'N', 2, count); region i is texels 1 + 5i .. 5 + 5i holding…
+- `body-normal-bake/regions.ts` — The bodies a body-normal bake marches, its REGIONS, and the per-row prim cull.
 - `body-scale.ts` — A uniform SCALE for a compiled body (spec docs/superpowers/specs/2026-10-11-goblin-human-height-design.md, section 3).
 - `body.ts` — The frozen hand-authored reference zombie BodyDef, with makeZombie to rebuild it for a given face.
 - `bone-derive.ts` — Derives the bone capsule inside each flesh primitive, so deep wounds can reach bone.
@@ -843,6 +850,7 @@ Blood simulation, probe grids, ambient.
 What fits no area above: the original WebGL lab shader, resolution scaling, samplers.
 
 - `adaptive-scale.ts` — Dynamic resolution for the SDF layer: keep the frame inside a budget by trading raymarch resolution, which is the one lever whose cost is exactly…
+- `bullet-time.ts` — BULLET TIME (owner 2026-10-25: "like the matrix — you move normal speed but everything else slows down").
 - `curl-sample.ts` — CPU SIDE OF THE SHARED CURL VOLUME (2026-09-18 blood-curl-spike): a pure, THREE-FREE trilinear sampler over the packed `Uint8Array` from…
 - `debris-ground.ts` — WHAT LOOSE DEBRIS LANDS ON (plan 2026-10-25-sector-levels-3b): the floor under a piece at its CURRENT x/z and the walls it must not pass.
 - `depth-diff.ts` — Depth diff — comparing the INSIDE of the outline: per-pixel surface depth of the compiled body against the reference mesh, where both agree the…
@@ -850,6 +858,7 @@ What fits no area above: the original WebGL lab shader, resolution scaling, samp
 - `expression.ts` — THE EXPRESSION LAYER's pure half (spec docs/superpowers/specs/2026-10-13-goblin-expressions-design.md, plan…
 - `gore-tuning.ts` — PER-CHARACTER GORE (owner, 2026-10-24, on the teratoma: "when I shoot him it isn't as satisfying as I would have thought since he is a giant meatball…
 - `joystick.ts` — THE GAMER WORKS HIS JOYSTICK (characters/gamer.blob; owner: "he jiggles the joystick back n forth or up and down like he's controlling something in…
+- `kit-eye-texture.ts` — THE POPPED EYE'S SURFACE (owner, 2026-10-24: the dangling eye "looks like a yellow ball on a lollipop stick; it should have some veins, and bloody…
 - `kit-eye.ts` — A KIT EYE THAT POPS (owner, 2026-10-24, on the teratoma: "we would need to figure out some damage effects to the eye, like the eyeball popping out").
 - `march.glsl.ts` — Shader source as strings.
 - `morph.ts` — PER-PRIM MORPHS: a per-prim delta per face channel that the expression layer's weight scales (goblin expressions Task 12, a minimal approach C; spec…

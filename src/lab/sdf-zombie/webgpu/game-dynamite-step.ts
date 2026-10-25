@@ -40,8 +40,11 @@ export function overcookInHand(ctx: GameContext): void {
 }
 
 /** `inside` (sector levels): an open point on the blast's own side — the shield probes' seat hint (seatBlastProbe),
- *  so a blast at a thin wall never reaches through it. */
-export function detonateAt(ctx: GameContext, at: Vec3, inHand = false, inside?: Vec3): void {
+ *  so a blast at a thin wall never reaches through it.
+ *  `spareActorId`: an actor the blast does not touch, its FIRER (a rocket's owner, rockets.ts). Doom's rule: a
+ *  monster is never hurt by its own projectile. Without it the teratoma's point-blank spit blew the teratoma itself apart
+ *  (owner, enemy test arena, 2026-10-24); the warbull's rocket in the same spot would have done the same to him. */
+export function detonateAt(ctx: GameContext, at: Vec3, inHand = false, inside?: Vec3, spareActorId?: number): void {
   const t0 = performance.now();
   ctx.dynamite.gibTierLog = [];
   const prof = newBlastProfile(ctx);
@@ -53,13 +56,15 @@ export function detonateAt(ctx: GameContext, at: Vec3, inHand = false, inside?: 
   ctx.dynamite.detonations++;
   // SECTOR-SHIELDED BLASTS (plan 3b; Doom's radius-damage sight check): on a sector level a body whose torso centre is
   // behind sector geometry from the blast takes nothing (one probe per body from the blast's seated probe start —
-  // blastShielded). A body with no torso cluster is kept. Room levels: every actor, as before.
+  // blastShielded). A body with no torso cluster is kept. Room levels: every actor, as before. The firer
+  // (`spareActorId`) is spared on every level.
+  const unspared = ctx.world.actors.filter(a => a.id !== spareActorId);
   const inBlast = ctx.world.level.def?.sectors
-    ? ctx.world.actors.filter(a => {
+    ? unspared.filter(a => {
       const torso = a.posed().clusters.find(c => c.limb === 'torso')?.center;
       return !torso || !blastShielded(ctx, at, [torso[0], torso[1], torso[2]], inside);
     })
-    : ctx.world.actors;
+    : unspared;
   const bodies: ExplosionBody[] = inBlast.map(a => ({
     id: String(a.id), body: a.posed(), bodyYaw: a.pose().yaw,
   }));

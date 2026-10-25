@@ -21,6 +21,7 @@ import { billboardGib, makeGibSprite } from './gib-sprites';
 import { bodyInSight } from './actor-sight';
 import { type ZombieActor } from './game-actor';
 import { gateRefineTwin } from './game-wound-streams';
+import { arenaPending } from './arena-cycle';
 import { simTimeMs } from './sim-clock';
 import { headShape } from './game-zombie-face';
 import { scaleForRung, stepAdaptive } from '../adaptive-scale';
@@ -265,9 +266,11 @@ export const CULL_DWELL_MS = 250;
 export function updateVisibleActors(ctx: GameContext): void {
   const now = simTimeMs();
   ctx.world.cullCounts.total = ctx.world.actors.length;
+  // THE TEST ARENA holds a new character out of the draw while it compiles (arena-cycle.ts arenaPending).
+  const actors = arenaPending.size === 0 ? ctx.world.actors : ctx.world.actors.filter(a => !arenaPending.has(a.id));
   if (!ctx.render.actorCullEnabled) {
-    ctx.render.visibleActors = ctx.world.actors;
-    ctx.world.cullCounts.visible = ctx.world.actors.length;
+    ctx.render.visibleActors = actors;
+    ctx.world.cullCounts.visible = actors.length;
     // Cull off: the frustum/dwell work is skipped, but the refine gate is
     // NOT — the spec's first rule (a dead body never refines) has to hold in
     // both modes, so a body that collapses with the cull off still loses its
@@ -276,7 +279,7 @@ export function updateVisibleActors(ctx: GameContext): void {
     ctx.render.refinedBodies = 0;
     for (const a of ctx.world.actors) {
       const torso = a.posed().clusters.find(c => c.limb === 'torso');
-      if (gateRefineTwin(ctx, a, torso ? torso.center as Vec3 : null, true)) ctx.render.refinedBodies++;
+      if (gateRefineTwin(ctx, a, torso ? torso.center as Vec3 : null, !arenaPending.has(a.id))) ctx.render.refinedBodies++;
     }
     ctx.world.coverage.screenFrac = 0; ctx.world.coverage.nearestM = 0; ctx.world.coverage.biggestFrac = 0;
     return;
@@ -291,7 +294,7 @@ export function updateVisibleActors(ctx: GameContext): void {
   const tanHalfFov = Math.tan((ctx.boot.handle.camera.fov * Math.PI / 180) / 2);
   let area = 0, nearest = 0, biggest = 0;
   ctx.render.refinedBodies = 0;
-  for (const a of ctx.world.actors) {
+  for (const a of actors) {
     const torso = a.posed().clusters.find(c => c.limb === 'torso');
     // No torso cluster (mid-gib, exotic body): never cull what we cannot
     // measure — fall back to drawing it. No distance to band-test either, so

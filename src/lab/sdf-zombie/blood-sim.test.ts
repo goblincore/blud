@@ -799,3 +799,19 @@ describe('blood on sector levels: narrow steps and seeded floors (plan 3b follow
     expect(sim.splats).toHaveLength(0);                 // nothing under it to paint (off the map)
   });
 });
+
+describe('gore boost (bullet time)', () => {
+  const seeded = (seed: number) => () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  it('adds `extra` siblings per bead, fatter and longer-lived, without drawing rng', () => {
+    const plain = createBloodSim();
+    const boosted = createBloodSim();
+    boosted.boost = { extra: 2, sizeMul: 1.5, lifeMul: 2, spread: 0.3 };
+    const ra = seeded(7), rb = seeded(7);
+    burst(plain, [0, 1, 0], ra);
+    burst(boosted, [0, 1, 0], rb);
+    expect(boosted.droplets.length).toBe(plain.droplets.length * 3);
+    expect(ra()).toBe(rb()); // the same draws were consumed
+    const first = boosted.droplets.find(d => d.life === plain.droplets[0]!.life * 2)!;
+    expect(first).toBeDefined();
+  });
+});

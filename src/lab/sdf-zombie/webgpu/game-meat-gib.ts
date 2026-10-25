@@ -28,7 +28,8 @@ export const MEAT_LOOK = {
   clearcoat: 0.5,
   clearcoatRoughness: 0.25,
   /** A chunk's mesh is ~1 unit across; a thrown piece of size r (the SDF bit's radius) is drawn r x this across. */
-  sizePerRadius: 3.2,
+  // 4.4 (was 3.2): the owner's playtest asked for the chunks "a bit larger" (2026-10-24).
+  sizePerRadius: 4.4,
   /** Physics radius as a fraction of the drawn size (the chunks are slabs: they rest low). */
   physicsRadius: 0.3,
   restitution: 0.15,

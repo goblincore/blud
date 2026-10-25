@@ -4666,10 +4666,17 @@ async function main() {
      * swing at a fixed phase over the last 30 frames (sword swing strips).
      */
     holdPose(preset: 'walk' | 'run' | 'hip' | 'aim' | 'rest', frames = 90,
-      swing?: { phase: number; variant: SwingVariant }) {
+      swing?: { phase: number; variant: SwingVariant }, travel = false) {
       if (heroView.prop) heroView.prop.object.visible = true; // holdAuthoredPose hides it
       setWander(false);
       setMotionEnabled(true); // resetMotion: fresh state at the origin, poseHeld off
+      // TRAVEL (blob-turntable BLOB_WALK_TRAVEL=1): walk straight ahead (+z) toward a target far off instead of on the
+      // treadmill. A planted gait needs the root to MOVE: on the treadmill a locked paw never gets hauled past the
+      // shoulder, so the gutcrawler's drag rendered as straight arms gliding (2026-10-23).
+      if (travel && heroMotion.motionState) {
+        heroMotion.motionState = { ...heroMotion.motionState,
+          wander: { ...heroMotion.motionState.wander, target: [0, 0, 1000], idle: 0 } };
+      }
       forceSpeed = preset === 'walk' ? cruiseFor('walk') : preset === 'run' ? cruiseFor('run') : 0;
       carryOverride = preset === 'hip' ? 'hip' : preset === 'aim' ? motionProfile.carries?.fire : undefined;
       if (preset === 'hip') pendingFire = true;
@@ -4677,9 +4684,9 @@ async function main() {
       for (let i = 0; i < frames; i++) {
         sig.fire = pendingFire; pendingFire = false;
         const f = stepActorMotion(heroMotion, {
-          current, dt: 1 / 60, wander: false, armStyle, headingFollow, gazeFollow,
-          bounds: WANDER_BOUNDS, rng: motionRng, signals: sig,
-          profile: motionProfile, forceSpeed, carryOverride,
+          current, dt: 1 / 60, wander: travel, armStyle, headingFollow, gazeFollow,
+          bounds: travel ? { minX: -1000, maxX: 1000, minZ: -1000, maxZ: 1000 } : WANDER_BOUNDS, rng: motionRng, signals: sig,
+          profile: motionProfile, forceSpeed: travel ? undefined : forceSpeed, carryOverride,
           ...(swing && i >= frames - 30 ? { attack: { phase: swing.phase, side: motionProfile.armWeapon?.side ?? 'R', variant: swing.variant } } : {}),   // an arm weapon swings its own arm (motion-profile.ts armWeapon)
         });
         lastMotionFrame = f;
@@ -4688,6 +4695,8 @@ async function main() {
       sinceFire = Infinity; // a held pose is judged without the muzzle rise
       poseHeld = true; // NOT setMotionEnabled(false): that rebinds to the authored rest
       forceSpeed = undefined; carryOverride = undefined;
+      // Frame the body where it walked to (the orbit target only drifts after the root in the live frame loop).
+      if (travel) { camTarget.x = heroMotion.lastRootShift[0]; camTarget.z = heroMotion.lastRootShift[2]; }
       return lastMotionFrame ? { gait: lastMotionFrame.gaitName, carry: lastMotionFrame.carry } : null;
     },
     /** Hand-set the jaw gape (rad), clamped to jaw.ts's JAW_MAX_GAPE. Statue and held captures both honour it; it holds over the expression clips until holdExpression/playExpression. */
@@ -4899,7 +4908,7 @@ async function main() {
     get lodLevels() {
       return [view, ...crowd].map(v => lastLevel.get(v.object) ?? -1);
     },
-    setCam(yaw: number, pitch: number, dist: number, targetY?: number) {
+    setCam(yaw: number, pitch: number, dist: number, targetY?: number, targetX?: number, targetZ?: number) {
       autoSpin = false;
       camYaw = yaw;
       camPitch = pitch;
@@ -4907,6 +4916,10 @@ async function main() {
       // Optional orbit height, so a turntable can frame the HEAD (face decal
       // fitting) without the whole figure. Omitted = leave the target alone.
       if (targetY !== undefined) camTarget.y = targetY;
+      // And an optional orbit centre on the floor: a long, low body's head is nowhere near its origin (the gutcrawler's is
+      // 0.8 m ahead of its hips).
+      if (targetX !== undefined) camTarget.x = targetX;
+      if (targetZ !== undefined) camTarget.z = targetZ;
     },
   };
 }
