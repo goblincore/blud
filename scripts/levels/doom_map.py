@@ -8,8 +8,9 @@ lumps (VERTEXES, LINEDEFS, SIDEDEFS, SECTORS, THINGS; no BSP). Writes <out>/doom
 The output is derived from id Software's data: a dev placeholder, never committed (.gitignore).
 
 Plan 1 writes geometry, zones, fill lights and the player start. Door sectors (manual or remotely
-tagged) are written OPEN and remote floor-lowers LOWERED (plan 2 makes them move); other things are
-skipped (plan 5).
+tagged) are written OPEN and remote floor-lowers LOWERED (plan 2 makes them move). Plan 3a writes
+monsters (spawns), pickups and an exit trigger in front of each exit switch; other things (barrels,
+decorations, keys, ...) are skipped and counted.
 """
 from __future__ import annotations
 
@@ -22,7 +23,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from doom_tables import (  # noqa: E402
-    DOOR_SPECIALS, EXIT_SPECIALS, FLOOR_LOWER_SPECIALS, GLOW_MATERIALS, REMOTE_DOOR_SPECIALS,
+    DOOR_SPECIALS, EXIT_SPECIALS, FLOOR_LOWER_SPECIALS, GLOW_MATERIALS, MULTIPLAYER_ONLY, REMOTE_DOOR_SPECIALS,
+    SKILL_BITS, THING_PICKUPS, THING_SPAWNS, ZOMBIEMAN, ZOMBIEMAN_VARIANTS,
     material_for_flat, material_for_texture, sector_special,
 )
 
@@ -37,6 +39,15 @@ MAX_LIGHTS = 10
 MAX_POOL_LIGHTS = 8             # pool lights do not count toward MAX_LIGHTS
 POOL_MIN_M2 = 4.0
 POOL_COLOURS = {"nukage": [0.35, 1.0, 0.3], "lava": [1.0, 0.45, 0.12], "acid": [0.75, 1.0, 0.25]}
+EXIT_DEPTH_M = 0.8               # the exit trigger reaches this far in front of the switch line
+EXIT_HEIGHT_M = 2.0
+
+
+def fnv1a32(s: str) -> int:
+    h = 0x811C9DC5
+    for b in s.encode("utf-8"):
+        h = ((h ^ b) * 0x01000193) & 0xFFFFFFFF
+    return h
 
 
 def _name8(b: bytes) -> str:
@@ -254,8 +265,14 @@ def _fill_point(segs, box) -> tuple[float, float] | None:
     return best
 
 
-def convert(wad_path: Path, map_name: str, units_per_m: float = 32) -> tuple[dict, dict]:
-    """Returns (level, stats): the level is the JSON to write, stats only feed the summary line."""
+def convert(wad_path: Path, map_name: str, units_per_m: float = 32, skill: int = 4, zombieman: str = "mix") -> tuple[dict, dict]:
+    """Returns (level, stats): the level is the JSON to write, stats only feed the summary line.
+    `skill` is Doom's 1..5 (things without that skill's flag bit are left out); `zombieman` is
+    "mix" (a variant per spawn by FNV-1a of its id) or one of ZOMBIEMAN_VARIANTS."""
+    if skill not in SKILL_BITS:
+        raise ValueError(f"skill must be one of {sorted(SKILL_BITS)}")
+    if zombieman != "mix" and zombieman not in ZOMBIEMAN_VARIANTS:
+        raise ValueError(f"zombieman must be mix or one of {ZOMBIEMAN_VARIANTS}")
     verts, sectors, sides, lines, things = parse_map(map_lumps(read_wad(Path(wad_path).read_bytes()), map_name))
     start = next((t for t in things if t["type"] == PLAYER1_START), None)
     if start is None:
@@ -409,6 +426,57 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = 32) -> tuple[dic
             break
     pool_lights = sum(1 for li in lights if li.get("mood") == "fire")
 
+    # Things: monsters and pickups at their sector's floor; ids from the THINGS index, so stable.
+    skill_bit = SKILL_BITS[skill]
+    spawns, pickups = [], []
+    skipped: dict[int, int] = {}
+    in_no_sector = not_this_skill = multiplayer_only = 0
+    for ti, t in enumerate(things):
+        if t["type"] == PLAYER1_START:
+            continue
+        if t["flags"] & MULTIPLAYER_ONLY:
+            multiplayer_only += 1
+            continue
+        if not t["flags"] & skill_bit:
+            not_this_skill += 1
+            continue
+        is_spawn = t["type"] == ZOMBIEMAN or t["type"] in THING_SPAWNS
+        if not is_spawn and t["type"] not in THING_PICKUPS:
+            skipped[t["type"]] = skipped.get(t["type"], 0) + 1
+            continue
+        sec = next((s for s in range(n) if _sector_at(t["x"], t["y"], verts, lines, sides, s)), None)
+        if sec is None:
+            in_no_sector += 1
+            continue
+        pos = [X(t["x"]), out_sectors[sec]["floor"], Z(t["y"])]
+        if is_spawn:
+            sid = f"s{ti}"
+            if t["type"] == ZOMBIEMAN:
+                kind = ZOMBIEMAN_VARIANTS[fnv1a32(sid) % len(ZOMBIEMAN_VARIANTS)] if zombieman == "mix" else zombieman
+            else:
+                kind = THING_SPAWNS[t["type"]]
+            spawns.append({"id": sid, "kind": kind, "pos": pos, "yaw": round(math.radians(90 - t["angle"]), 6)})
+        else:
+            pickups.append({"id": f"p{ti}", "item": THING_PICKUPS[t["type"]], "pos": pos})
+
+    # The exit: walking into the switch ends the level. A box on the line's front side (left of
+    # v0 -> v1 in our x/z), EXIT_DEPTH_M deep, spanning the line, floor to floor + EXIT_HEIGHT_M.
+    triggers = []
+    for ln in kept:
+        if ln["special"] not in EXIT_SPECIALS:
+            continue
+        f = sides[ln["right"]]["sector"]
+        (ax, az), (bx, bz) = (X(verts[ln["v1"]][0]), Z(verts[ln["v1"]][1])), (X(verts[ln["v2"]][0]), Z(verts[ln["v2"]][1]))
+        dx, dz = bx - ax, bz - az
+        length = math.hypot(dx, dz)
+        nx, nz = -dz / length * EXIT_DEPTH_M, dx / length * EXIT_DEPTH_M
+        xs = (ax, bx, ax + nx, bx + nx)
+        zs = (az, bz, az + nz, bz + nz)
+        fl = out_sectors[f]["floor"]
+        triggers.append({"id": "exit" if not triggers else f"exit-{len(triggers) + 1}", "event": "level.end", "once": True,
+                         "min": [round(min(xs), 4), fl, round(min(zs), 4)],
+                         "max": [round(max(xs), 4), round(fl + EXIT_HEIGHT_M, 4), round(max(zs), 4)]})
+
     level = {
         "version": 1, "id": f"doom-{map_name.lower()}", "name": f"Doom {map_name.upper()} (dev placeholder)",
         "geometry": "sectors", "ammo": "infinite", "loadout": ["melee", "shotgun", "dynamite", "flare"],
@@ -416,8 +484,20 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = 32) -> tuple[dic
         "sectors": out_sectors, "lines": out_lines,
         "start": {"pos": [0.0, 0.0, 0.0], "yaw": round(math.radians(90 - start["angle"]), 6)},
         "lights": lights,
+        "spawns": spawns, "pickups": pickups, "triggers": triggers,
     }
-    stats = {"dropped_zero_length_lines": dropped, "doors_opened": sorted(doors), "floors_lowered": sorted(lowered), "pool_lights": pool_lights}
+    if triggers:
+        level["completeOn"] = "level.end"
+
+    def count(items, key):
+        out: dict[str, int] = {}
+        for it in items:
+            out[it[key]] = out.get(it[key], 0) + 1
+        return out
+
+    stats = {"dropped_zero_length_lines": dropped, "doors_opened": sorted(doors), "floors_lowered": sorted(lowered), "pool_lights": pool_lights,
+             "spawns_by_kind": count(spawns, "kind"), "pickups_by_item": count(pickups, "item"), "skipped_types": skipped,
+             "in_no_sector": in_no_sector, "not_this_skill": not_this_skill, "multiplayer_only": multiplayer_only}
     return level, stats
 
 
@@ -456,8 +536,10 @@ def main() -> None:
     ap.add_argument("--units-per-m", type=float, default=32)
     ap.add_argument("--out", type=Path, default=Path("public/assets/levels"))
     ap.add_argument("--svg", type=Path, default=None, help="directory for a <MAP>.svg plan (keep it in .lab-tmp/)")
+    ap.add_argument("--skill", type=int, choices=sorted(SKILL_BITS), default=4, help="Doom skill 1..5 (default 4, Ultra-Violence's things)")
+    ap.add_argument("--zombieman", choices=("mix",) + ZOMBIEMAN_VARIANTS, default="mix", help="what zombiemen become (default: a mix)")
     a = ap.parse_args()
-    level, stats = convert(a.wad, a.map, a.units_per_m)
+    level, stats = convert(a.wad, a.map, a.units_per_m, skill=a.skill, zombieman=a.zombieman)
     a.out.mkdir(parents=True, exist_ok=True)
     path = a.out / f"{level['id']}.level.json"
     dropped = stats["dropped_zero_length_lines"]
@@ -466,6 +548,10 @@ def main() -> None:
     doors = sum(1 for ln in level["lines"] if "door" in ln)
     print(f"{path}: {len(level['sectors'])} sectors, {len(level['lines'])} lines, {zones} zones, {doors} door lines, {len(level['lights'])} lights ({stats['pool_lights']} pool)"
           + (f", dropped {dropped} zero-length lines" if dropped else ""))
+    print(f"things: spawns {stats['spawns_by_kind']}, pickups {stats['pickups_by_item']}, {len(level['triggers'])} exit triggers"
+          + (f" {[[t['min'], t['max']] for t in level['triggers']]}" if level["triggers"] else "")
+          + f"; skipped types {dict(sorted(stats['skipped_types'].items()))}, {stats['in_no_sector']} in no sector,"
+          f" {stats['not_this_skill']} not on skill {a.skill}, {stats['multiplayer_only']} multiplayer-only")
     if a.svg:
         write_svg(level, a.svg / f"{a.map.upper()}.svg")
         print(f"plan: {a.svg / (a.map.upper() + '.svg')}")

@@ -40,6 +40,21 @@ describe('parseLevelJson: two-rooms fixture', () => {
   it('rejects an unknown state', () => {
     expect(() => parseLevelJson(fixture('two-rooms'), { state: 'party' })).toThrow('state party');
   });
+
+  it.each(['deadeye', 'butcher', 'flayer'])('accepts a %s spawn (the zombieman variants) without counting a soldier', kind => {
+    const f = fixture('two-rooms');
+    f.spawns[0].kind = kind;
+    const L = parseLevelJson(f);
+    expect(L.spawns.map(s => s.kind)).toEqual([kind]);
+    expect(L.rooms[1]).toMatchObject({ zombies: 1, soldiers: 0 });
+  });
+
+  it('refuses an unknown spawn kind, listing every kind', () => {
+    const f = fixture('two-rooms');
+    f.spawns[0].kind = 'imp';
+    expect(() => parseLevelJson(f))
+      .toThrow('spawn z1: kind must be zombie, soldier, cultist, juggernaut, warbull, deadeye, butcher or flayer');
+  });
 });
 
 describe('parseLevelJson: two-floors fixture', () => {

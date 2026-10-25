@@ -45,9 +45,18 @@ def build_wad() -> bytes:
              (0, 0, "-", "-", "BROWN1", 1)]     # 3 B walls
     # (v1, v2, flags, special, tag, right, left)
     # Doom: the RIGHT sidedef's sector is on the right of v1 -> v2, so these run clockwise around A and B.
-    lines = [(1, 0, 1, 0, 0, 0, 0xFFFF), (2, 1, 4, 0, 0, 1, 2), (3, 2, 1, 0, 0, 0, 0xFFFF), (0, 3, 1, 0, 0, 0, 0xFFFF),
+    # Line 0 (A's south wall, x 256 -> 0 at y 0) is an exit switch (special 11).
+    lines = [(1, 0, 1, 11, 0, 0, 0xFFFF), (2, 1, 4, 0, 0, 1, 2), (3, 2, 1, 0, 0, 0, 0xFFFF), (0, 3, 1, 0, 0, 0, 0xFFFF),
              (4, 1, 1, 0, 0, 3, 0xFFFF), (5, 4, 1, 0, 0, 3, 0xFFFF), (2, 5, 1, 0, 0, 3, 0xFFFF)]
-    things = [(64, 128, 0, 1, 7), (300, 128, 0, 3004, 7)]   # player 1 start facing east; a zombieman (ignored in plan 1)
+    # (x, y, angle, type, flags): flags bit 1 easy, 2 medium, 4 hard, 16 multiplayer only.
+    things = [(64, 128, 0, 1, 7),          # 0 player 1 start facing east
+              (128, 64, 90, 3004, 7),      # 1 zombieman in A, facing north, every skill
+              (192, 64, 180, 9, 4),        # 2 shotgun guy in A, hard only
+              (128, 192, 0, 3001, 1),      # 3 imp in A, easy only
+              (320, 128, 0, 2007, 7),      # 4 clip in B
+              (192, 192, 0, 2001, 23),     # 5 shotgun in A, multiplayer only
+              (32, 32, 0, 2035, 7),        # 6 barrel in A (skipped: plan 3b)
+              (900, 900, 0, 2011, 7)]      # 7 stimpack in no sector
     return pack_wad(verts, sectors, sides, lines, things)
 
 
@@ -74,12 +83,16 @@ def convert_row(tmp_path, *a, **kw):
     return doom_map.convert(wad, "E1M1", units_per_m=32)
 
 
-def convert(tmp_path, units_per_m=32) -> dict:
+def convert(tmp_path, units_per_m=32, **kw) -> dict:
+    return convert_stats(tmp_path, units_per_m, **kw)[0]
+
+
+def convert_stats(tmp_path, units_per_m=32, **kw) -> tuple[dict, dict]:
     wad = tmp_path / "t.wad"
     wad.write_bytes(build_wad())
-    out, _ = doom_map.convert(wad, "E1M1", units_per_m=units_per_m)
+    out, stats = doom_map.convert(wad, "E1M1", units_per_m=units_per_m, **kw)
     json.dumps(out)                                     # serialisable
-    return out
+    return out, stats
 
 
 def test_scale_and_origin_at_the_start(tmp_path):
@@ -204,3 +217,63 @@ def test_pool_lights_do_not_use_the_fill_light_cap(tmp_path):
     fire = [li for li in out["lights"] if li.get("mood") == "fire"]
     assert len(fire) == 1
     assert len(out["lights"]) - len(fire) == doom_map.MAX_LIGHTS
+
+
+# --- things (plan 3a task 1) -------------------------------------------------------------------
+
+def test_default_skill_is_hard_spawns(tmp_path):
+    spawns = {s["id"]: s for s in convert(tmp_path)["spawns"]}
+    assert sorted(spawns) == ["s1", "s2"]                  # the imp (easy only) is absent
+    assert spawns["s1"]["kind"] in doom_map.ZOMBIEMAN_VARIANTS
+    assert spawns["s2"]["kind"] == "soldier"
+    assert spawns["s1"]["pos"] == [2.0, 0.0, 2.0]          # ((128 - 64) / 32, A's floor, -(64 - 128) / 32)
+
+
+def test_skill_1_keeps_the_imp_and_drops_the_shotgun_guy(tmp_path):
+    spawns = {s["id"]: s["kind"] for s in convert(tmp_path, skill=1)["spawns"]}
+    assert set(spawns) == {"s1", "s3"} and spawns["s3"] == "zombie"
+
+
+def test_pickups_skip_multiplayer_and_stand_on_their_floor(tmp_path):
+    out = convert(tmp_path)
+    assert out["pickups"] == [{"id": "p4", "item": "shells", "pos": [8.0, out["sectors"][1]["floor"], 0.0]}]
+    assert out["pickups"][0]["pos"][1] == 0.5
+
+
+def test_spawn_yaw_uses_the_start_rule(tmp_path):
+    import math
+    spawns = {s["id"]: s for s in convert(tmp_path)["spawns"]}
+    assert spawns["s1"]["yaw"] == round(math.radians(90 - 90), 6)
+    assert spawns["s2"]["yaw"] == round(math.radians(90 - 180), 6)
+
+
+def test_zombieman_variant_choice(tmp_path):
+    assert {s["id"]: s["kind"] for s in convert(tmp_path, zombieman="butcher")["spawns"]}["s1"] == "butcher"
+    a = convert(tmp_path, zombieman="mix")
+    b = convert(tmp_path)
+    assert a["spawns"] == b["spawns"]                      # mix is the default and deterministic
+    assert doom_map.fnv1a32("a") == 0xE40C292C            # FNV-1a 32 reference value
+    want = doom_map.ZOMBIEMAN_VARIANTS[doom_map.fnv1a32("s1") % 3]
+    assert {s["id"]: s["kind"] for s in a["spawns"]}["s1"] == want
+
+
+def test_exit_switch_writes_a_trigger_on_its_front_side(tmp_path):
+    out = convert(tmp_path)
+    assert out["completeOn"] == "level.end"
+    assert len(out["triggers"]) == 1
+    t = out["triggers"][0]
+    assert {k: t[k] for k in ("id", "event", "once")} == {"id": "exit", "event": "level.end", "once": True}
+    # Line 0 runs (6, 4) -> (-2, 4) in our x/z; A (its front) lies at z < 4.
+    assert t["min"] == [-2.0, 0.0, 3.2] and t["max"] == [6.0, 2.0, 4.0]
+    cx, cz = (t["min"][0] + t["max"][0]) / 2, (t["min"][2] + t["max"][2]) / 2
+    assert _inside(out, cx, cz, 0)
+
+
+def test_summary_counts_kinds_and_skipped_things(tmp_path):
+    _, stats = convert_stats(tmp_path)
+    want = doom_map.ZOMBIEMAN_VARIANTS[doom_map.fnv1a32("s1") % 3]
+    assert stats["spawns_by_kind"] == {"soldier": 1, want: 1}
+    assert stats["pickups_by_item"] == {"shells": 1}
+    assert stats["skipped_types"] == {2035: 1}
+    assert stats["in_no_sector"] == 1
+    assert stats["not_this_skill"] == 1 and stats["multiplayer_only"] == 1

@@ -8,7 +8,7 @@
 import type { Vec3 } from '../types';
 import type { Aabb, FurnitureDef } from './game-level';
 import {
-  DEFAULT_PALETTE, LEVEL_TOL, PICKUP_ITEMS, type BellDef, type Capability, type PortalDef, type GateDef,
+  DEFAULT_PALETTE, LEVEL_TOL, PICKUP_ITEMS, SPAWN_KINDS, type BellDef, type Capability, type PortalDef, type GateDef,
   type EdgeDef, type GraveDef, type LevelDef, type LevelPalette, type LevelRoom, type LevelTunnel,
   type PathDef, type PickupDef, type PickupItem, type SpawnDef, type StairDef, type TriggerDef,
   type WallSide, type WindowDef, type CueDef,
@@ -399,8 +399,8 @@ export function parseLevelJson(raw: unknown, opts: ParseOptions = {}): LevelDef 
     keys(o, 'spawn', `spawn ${sid}`);
     const keep = present(o, `spawn ${sid}`);
     claim(sid);
-    const kind = o.kind === 'soldier' || o.kind === 'zombie' || o.kind === 'cultist' || o.kind === 'juggernaut' || o.kind === 'warbull' ? o.kind : null;
-    if (!kind) errors.push(`spawn ${sid}: kind must be zombie, soldier, cultist, juggernaut or warbull`);
+    const kind = SPAWN_KINDS.find(k => k === o.kind) ?? null;
+    if (!kind) errors.push(`spawn ${sid}: kind must be ${SPAWN_KINDS.slice(0, -1).join(', ')} or ${SPAWN_KINDS[SPAWN_KINDS.length - 1]}`);
     const pos = vec(o.pos, 3, `spawn ${sid}.pos`) as unknown as Vec3;
     const room = inRoom(pos[0], pos[2]);
     if (!room) errors.push(`spawn ${sid}: must be inside a room (not a corridor)`);

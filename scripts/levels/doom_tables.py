@@ -56,3 +56,15 @@ def material_for_texture(name: str) -> str:
 
 def sector_special(kind: int) -> tuple[str, float]:
     return SECTOR_TYPES.get(kind, ("none", 0))
+
+# Doom thing types -> ours (spec 2026-10-24 §9). Zombiemen become a biomech variant (§9.1).
+ZOMBIEMAN = 3004
+THING_SPAWNS = {9: "soldier", 3001: "zombie"}            # shotgun guy, imp (for now)
+ZOMBIEMAN_VARIANTS = ("deadeye", "butcher", "flayer")
+THING_PICKUPS = {
+    2001: "shotgun",
+    2008: "shells", 2049: "shells", 2007: "shells", 2048: "shells",     # shells, box, clip, box of bullets
+    2011: "health", 2012: "health", 2014: "health", 2015: "health", 2018: "health", 2019: "health",
+}
+SKILL_BITS = {1: 1, 2: 1, 3: 2, 4: 4, 5: 4}               # Doom skill -> THINGS flag bit
+MULTIPLAYER_ONLY = 16
