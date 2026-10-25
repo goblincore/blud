@@ -16,7 +16,7 @@ import { type Vec3 } from '../types';
 import { EXPLOSION_LIGHT, bundleHitsBody, explosionLightEnv, igniteExplosionLight, propWorld, throwBundle } from './game-dynamite-throw';
 import { gibActor } from './game-gib-actor';
 import { gibAllowance, gibBudget, gibDebit, newBlastProfile, reacquireHeldProp, scheduleGib } from './game-gib-spawn';
-import { ceilingAt, debrisGround, sectorHitBetween } from './game-hit-trace';
+import { blastShielded, ceilingAt, clampSpawnInside, debrisGround } from './game-hit-trace';
 import { eyeOf } from './game-player';
 import { standingFloor } from './level-ground';
 import { spawnBurstStandIn, stepBursts } from './game-weapon-rig';
@@ -31,7 +31,10 @@ export const BLAST_KICK_RAD_PER_UNIT = 0.015;
 /** The bundle that never left the hand: an overcook, or a fuse that burned
  *  out while held. Detonates AT the player. */
 export function overcookInHand(ctx: GameContext): void {
-  const at = propWorld(ctx, ctx.weapon.heldProp);
+  // Sector levels (plan 3b review): the hand can sit past a wall the player hugs — the blast goes off on the
+  // player's side of it (clamped from the eye). Room levels: the hand position, as before.
+  const hand = propWorld(ctx, ctx.weapon.heldProp);
+  const at = ctx.world.level.def?.sectors ? clampSpawnInside(ctx, eyeOf(ctx.player.player), hand) : hand;
   ctx.telemetry.telemetry.event('dynamite-overcook', { x: at[0], y: at[1], z: at[2] });
   detonateAt(ctx, at, true);
 }
@@ -47,14 +50,12 @@ export function detonateAt(ctx: GameContext, at: Vec3, inHand = false): void {
   EXPLOSION_PROFILE.traces = 0;
   ctx.dynamite.detonations++;
   // SECTOR-SHIELDED BLASTS (plan 3b; Doom's radius-damage sight check): on a sector level a body whose torso centre is
-  // behind sector geometry from the blast takes nothing (one probe per body, 5 cm over the blast so a floor burst is
-  // not "under" the floor). A body with no torso cluster is kept. Room levels: every actor, as before.
-  const sectors = ctx.world.level.def?.sectors;
-  const from: Vec3 = [at[0], at[1] + 0.05, at[2]];
-  const inBlast = sectors
+  // behind sector geometry from the blast takes nothing (one probe per body from the blast's seated probe start —
+  // blastShielded). A body with no torso cluster is kept. Room levels: every actor, as before.
+  const inBlast = ctx.world.level.def?.sectors
     ? ctx.world.actors.filter(a => {
       const torso = a.posed().clusters.find(c => c.limb === 'torso')?.center;
-      return !torso || sectorHitBetween(ctx, from, [torso[0], torso[1], torso[2]]) === null;
+      return !torso || !blastShielded(ctx, at, [torso[0], torso[1], torso[2]]);
     })
     : ctx.world.actors;
   const bodies: ExplosionBody[] = inBlast.map(a => ({

@@ -18,7 +18,7 @@ import { roomCeilingM } from './level-def';
 import { type Chunk, type ChunkColliders } from '../gib-chunks';
 import { convergedDir, muzzleWorld } from './game-weapon-rig';
 import type { DebrisGround } from '../debris-ground';
-import { clampSpawnInsideMap, seatBurstInsideMap, seatSpawnInsideMap, sectorDebrisGround } from './sector-debris';
+import { clampSpawnInsideMap, seatBlastProbe, seatBurstInsideMap, seatSpawnInsideMap, sectorDebrisGround } from './sector-debris';
 import { WOUND_SPAWN_OFFSET } from '../blood-sim';
 import { sectorSegmentHit, type SectorHit } from './sector-ray';
 import type { SectorGround } from './sector-ground';
@@ -224,6 +224,17 @@ export function debrisGround(ctx: GameContext): DebrisGround | null {
 export function sectorHitBetween(ctx: GameContext, a: Vec3, b: Vec3): SectorHit | null {
   const map = ctx.world.level.def?.sectors;
   return map ? sectorSegmentHit(map, ctx.world.level.ground as SectorGround, a, b) : null;
+}
+
+/** BLAST SHIELDING (plan 3b; Doom's radius-damage sight check): is `to` behind sector geometry from the blast at
+ *  `at`? The probe starts at seatBlastProbe's seated point (lifted, inside the map), so a blast in the void or at a
+ *  ceiling never shields everything; a blast that cannot be seated shields nothing. Always false on room levels. */
+export function blastShielded(ctx: GameContext, at: Vec3, to: Vec3): boolean {
+  const map = sectorsOf(ctx);
+  if (!map) return false;
+  const ground = ctx.world.level.ground as SectorGround;
+  const from = seatBlastProbe(map, ground, at);
+  return from !== null && sectorSegmentHit(map, ground, from, to) !== null;
 }
 
 /** The level's sector map, or undefined on a room level — optional all the way down, because the spawn helpers below

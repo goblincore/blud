@@ -17,7 +17,7 @@ import { barrelYaw } from './barrel-look';
 import { createBarrelCore, type BarrelRuntime } from './barrel-runtime';
 import { createBarrelMaterials, createBarrelView, createScorchPool, type BarrelView } from './game-barrel-view';
 import { detonateAt } from './game-dynamite-step';
-import { sectorHitBetween } from './game-hit-trace';
+import { blastShielded } from './game-hit-trace';
 import { damagePlayer } from './game-loop';
 import { PLAYER } from './game-player';
 
@@ -25,8 +25,6 @@ export type { BarrelRuntime } from './barrel-runtime';
 
 /** A scorch's edge, metres. */
 const SCORCH_M = 1.6;
-/** Probes start this far over the blast so a blast on the floor is not "under" it. */
-const SHIELD_LIFT_M = 0.05;
 
 export interface GameBarrels extends BarrelRuntime {
   /** Materials the barrels made (2 per zone with barrels: drum/stub and lid). */
@@ -44,7 +42,7 @@ export function createBarrelRuntime(ctx: GameContext, defs: readonly BarrelDef[]
     views.set(b.id, createBarrelView(ctx, b, sector, zoneRoom, mats));
   }
   const scorches = createScorchPool(ctx);
-  const shielded = (from: Vec3, to: Vec3) => sectorHitBetween(ctx, [from[0], from[1] + SHIELD_LIFT_M, from[2]], to) !== null;
+  const shielded = (from: Vec3, to: Vec3) => blastShielded(ctx, from, to);
 
   const core = createBarrelCore(defs, ctx.world.colliders, {
     shielded,

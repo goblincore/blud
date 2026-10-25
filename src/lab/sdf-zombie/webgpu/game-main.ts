@@ -3033,6 +3033,7 @@ async function main() {
     // fromMaterial is three's own classic-to-node conversion (NodeLibrary.js);
     // it is what the builder calls per pipeline, just not in the typings.
     const library = ctx.boot.handle.renderer.library as unknown as { fromMaterial(m: THREE.Material): THREE.NodeMaterial | null };
+    const listed = new Set<THREE.NodeMaterial>(ctx.world.levelNodeMaterials);
     for (const mesh of ctx.world.levelGroup.children) {
       if (!(mesh instanceof THREE.Mesh)) continue;
       if (mesh.userData.skipLevelLights) continue; // unlit art (the train's window scenery)
@@ -3045,7 +3046,7 @@ async function main() {
       nm.lightsNode = list;
       mesh.material = nm;
       // A material shared by several meshes of one room (the barrels' per-zone set) is listed once.
-      if (!ctx.world.levelNodeMaterials.includes(nm)) ctx.world.levelNodeMaterials.push(nm);
+      if (!listed.has(nm)) { listed.add(nm); ctx.world.levelNodeMaterials.push(nm); }
     }
   }
   ctx.boot.spawnOverride = ((): string | null => {

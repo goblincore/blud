@@ -5,10 +5,11 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseSectorLevel } from './sector-json';
 import { buildSectorGround } from './sector-ground';
-import { clampSpawnInsideMap, seatBurstInsideMap, seatSpawnInsideMap, sectorDebrisGround, WALL_SKIN_M } from './sector-debris';
+import { BLAST_LIFT_M, clampSpawnInsideMap, seatBlastProbe, seatBurstInsideMap, seatSpawnInsideMap, sectorDebrisGround, WALL_SKIN_M } from './sector-debris';
 import { burstVolume, createBloodSim } from '../blood-sim';
 import { landingFloor } from '../debris-ground';
 import type { Vec3 } from '../types';
+import { sectorSegmentHit } from './sector-ray';
 
 const map = parseSectorLevel(JSON.parse(readFileSync('public/assets/levels/fixtures/sectors.level.json', 'utf8'))).sectors!;
 const g = sectorDebrisGround(map, buildSectorGround(map));
@@ -202,5 +203,39 @@ describe('sectorDebrisGround: a push-out never leaves the map or crosses a wall 
   it('a push-out with room behind it is unchanged (the fixture riser)', () => {
     const b = g.bounce([1, 0.2, -7.95], [1, 0.2, -8.05], [0, 0, -3], 0.5, 0.7, 0.1)!;
     expect(b.pos[2]).toBeCloseTo(-8 + 0.1, 9);
+  });
+});
+
+describe('seatBlastProbe: where a blast\'s shield probes start', () => {
+  const ground = buildSectorGround(map);
+  const shields = (at: Vec3, to: Vec3) => {
+    const from = seatBlastProbe(map, ground, at);
+    return from !== null && sectorSegmentHit(map, ground, from, to) !== null;
+  };
+  it('in the open: the blast lifted by BLAST_LIFT_M, untouched', () => {
+    expect(seatBlastProbe(map, ground, [0, 0, -1])).toEqual([0, BLAST_LIFT_M, -1]);
+    expect(shields([0, 0, -1], [2, 1.1, -1])).toBe(false);
+    expect(shields([0, 0, -1], [0, 1.1, -7])).toBe(true);           // behind the column: still shielded
+  });
+  it('a start inside the column is pulled into A, so a body in the open is still hit', () => {
+    const from = seatBlastProbe(map, ground, [0.9, 1, -3.1])!;     // 10 cm inside the column's corner
+    expect(from).not.toBeNull();
+    expect(ground.sectorAt(from[0], from[2])).toBe(0);
+    expect(Math.hypot(from[0] - 0.9, from[2] + 3.1)).toBeLessThan(0.3);
+    expect(sectorSegmentHit(map, ground, [0.9, 1, -3.1], [3, 1.1, -2])).not.toBeNull();   // the raw start: t = 0
+    expect(shields([0.9, 1, -3.1], [3, 1.1, -2])).toBe(false);
+  });
+  it('a start above A\'s ceiling (a rocket at the ceiling, + the lift) is seated under it', () => {
+    const from = seatBlastProbe(map, ground, [0, 3.99, -1])!;
+    expect(from[1]).toBeLessThan(4);
+    expect(from[1]).toBeGreaterThan(3.9);
+    expect(sectorSegmentHit(map, ground, [0, 4.04, -1], [2, 1.1, -1])).not.toBeNull();     // unseated: t = 0
+    expect(shields([0, 3.99, -1], [2, 1.1, -1])).toBe(false);
+  });
+  it('a start below its floor is seated on it', () => {
+    expect(seatBlastProbe(map, ground, [6, -1.5, -4])![1]).toBeGreaterThanOrEqual(-1);
+  });
+  it('deep in the void (nothing within reach): null — the caller shields nothing', () => {
+    expect(seatBlastProbe(map, ground, [500, 0, 500])).toBeNull();
   });
 });
