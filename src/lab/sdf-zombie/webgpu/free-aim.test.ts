@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import {
   BOB, FREE_AIM, approachAngle, approachBob, bobPose, deadzonePush, moveAim,
-  pivotOffset, recentre, turnFromAim, weaponAngles, weaponSlide,
+  pivotOffset, recentre, turnFromAim, viewmodelFrustum, weaponAngles, weaponSlide,
 } from './free-aim';
 
 describe('moveAim', () => {
@@ -329,5 +329,33 @@ describe('the weapon actually crosses the frame (owner report)', () => {
     for (const x of [-1, -0.5, 0, 0.5, 1]) {
       expect(Math.abs(gripScreenX(x))).toBeLessThan(1);
     }
+  });
+});
+
+describe('viewmodelFrustum', () => {
+  const F = { tanV: Math.tan(75 * Math.PI / 360), tanH: Math.tan(75 * Math.PI / 360) * (790 / 555) };
+
+  it('aims the barrel at the reticle once the view model rig scales it by (s, s, 1)', () => {
+    // The live numbers from the owner's report: scale 0.735, reticle at -0.6.
+    // One axis at a time: yaw and pitch compose (pitch is applied last), and
+    // that coupling is weaponAngles' business, not this scale's.
+    const s = 0.735;
+    const screen = (aim: { x: number; y: number }) => {
+      const w = weaponAngles(aim, viewmodelFrustum(F, s));
+      const d = new THREE.Vector3(0, 0, -1).applyEuler(
+        new THREE.Euler(w.pitchDeg * Math.PI / 180, w.yawDeg * Math.PI / 180, 0));
+      // The rig's (s, s, 1) scale, then the projection.
+      return { x: (d.x * s) / -d.z / F.tanH, y: (d.y * s) / -d.z / F.tanV };
+    };
+    expect(screen({ x: -0.6, y: 0 }).x).toBeCloseTo(-0.6, 6);
+    expect(screen({ x: 0, y: 0.4 }).y).toBeCloseTo(0.4, 6);
+    // Unscaled, the barrel falls short by exactly s -- the bug.
+    const raw = weaponAngles({ x: -0.6, y: 0 }, F).yawDeg * Math.PI / 180;
+    expect(-Math.tan(raw) * s / F.tanH).toBeCloseTo(-0.6 * s, 6);
+  });
+  it('is the plain frustum at scale 1 and for a nonsense scale', () => {
+    expect(viewmodelFrustum(F, 1)).toEqual(F);
+    expect(viewmodelFrustum(F, 0)).toEqual(F);
+    expect(viewmodelFrustum(F, Number.NaN)).toEqual(F);
   });
 });

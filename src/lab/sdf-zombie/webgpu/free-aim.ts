@@ -130,6 +130,20 @@ export function weaponAngles(aim: AimPoint, f: Frustum): { yawDeg: number; pitch
 }
 
 /**
+ * The frustum as the VIEW MODEL sees it. The weapon hangs under a rig scaled
+ * (s, s, 1) so it keeps its framing at its own FOV (viewmodelFovScale in
+ * game-viewmodel.ts), and that scale squeezes every view-model direction's
+ * screen offset by s too. Fed the plain camera frustum, weaponAngles aims the
+ * barrel in rig space and the scale then pulls it toward screen centre: at
+ * s = 0.735 a reticle at x = -0.6 got a barrel pointing at -0.44. Dividing
+ * the tangents by s pre-compensates, so the barrel lands on the reticle.
+ */
+export function viewmodelFrustum(f: Frustum, scale: number): Frustum {
+  const s = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  return { tanH: f.tanH / s, tanV: f.tanV / s };
+}
+
+/**
  * How far the weapon slides across the frame for a given reticle, METRES in
  * camera space (x right, y up).
  *
