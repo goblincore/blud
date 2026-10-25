@@ -12,7 +12,7 @@ Experiment: rebuild Doom E1M1's layout from `doomu.wad` in our look and play it.
 - Spec: [2026-10-24-doom-sector-levels-design.md](../superpowers/specs/2026-10-24-doom-sector-levels-design.md)
 - Plan 1 (walk an empty E1M1): [plan](../superpowers/plans/2026-10-24-sector-levels-1-walk-e1m1.md) · [notes](2026-10-24-sector-levels-1/NOTES.md) — **done, reviewed, fixed**
 - Plan 2 (glowing pools + sector light): [plan](../superpowers/plans/2026-10-24-sector-levels-2-pools-and-light.md) · notes `2026-10-24-sector-levels-2/NOTES.md` (written by Task 7) — Tasks 1–6 done and reviewed; Task 7 (gate + tuning sheet) was running at hand-off
-- Plan 3a (enemies, pickups, exit): [plan](../superpowers/plans/2026-10-24-sector-levels-3a-enemies.md) — written, not started
+- Plan 3a (enemies, pickups, exit): [plan](../superpowers/plans/2026-10-24-sector-levels-3a-enemies.md) · [notes](2026-10-24-sector-levels-3a/NOTES.md) — **done**
 
 ## Owner decisions so far
 - Faithful heights (sectors), the WAD as source (not the Sketchfab E1M3 mesh), map E1M1.
@@ -83,6 +83,10 @@ Experiment: rebuild Doom E1M1's layout from `doomu.wad` in our look and play it.
    of Doom's things.
 3. **Plan 3a** — enemies on sector floors (motion `floorY`), navigation over sectors, sight and shots vs
    sector walls, pickups, exit as a walk-in trigger (E is slug mode; no use key yet).
+   **Done 2026-10-25** ([notes](2026-10-24-sector-levels-3a/NOTES.md)): 29 enemies on their floors, sector
+   navigation, sight and rounds stopped by walls, the walk-in exit; gate section 5 passes. Open from it: the body
+   render cull ignores sector walls (10 drawn / 1 in sight → 67–75 ms; likely the owner's 46 ms), and the start
+   pose reads ~33 ms (plan 2: ~10 ms), undiagnosed.
 4. **Plan 3b** (not written) — exploding barrels (no HP/destructible system exists; reuse
    `detonateAt`, add player blast damage, chain delay 0.1–0.3 s) and gore/blood/dynamite/flames/prop drops
    on sector floors (y = 0 sites listed in the plan-3 research: gib-chunks 335, blood-sim 555/559/620,
