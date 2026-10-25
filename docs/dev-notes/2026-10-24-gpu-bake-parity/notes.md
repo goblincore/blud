@@ -116,3 +116,29 @@ runs each): p50 HEAD 44.4, 54.8, 56.1, 51.0 ms; polished 56.6, 64.0, 56.8, 53.7 
 percent: the machine drifted under XProtect scans during the session (~150 % CPU), and run-to-run spread is ±6 ms. The
 before leg hours earlier read 41-43 ms on a quieter machine; that is machine state, not the leaf. A clean scene-B number
 needs a quiet machine.
+
+## Update 2026-10-24 (step 3): the GPU bake, and every map re-baked
+
+`scripts/bake-body-normal.ts` now bakes on the GPU by default (`--cpu` forces the reference; no adapter falls back to
+it). **gibbet: 568 s of CPU (quiet machine) -> 3.4 s on the GPU.** Every committed map re-bakes in 0.7-12 s.
+
+**Full-image parity, gibbet** (GPU vs a fresh `--cpu` bake of the same source, all 212,992 texels,
+`rebake/full-compare.mjs`): 135,288 byte-identical, 77,702 one code apart, 2 three or four codes apart, none worse.
+The fresh CPU bake is byte-identical to step 1's (`bf8f044b…`): the Newton polish does not touch gibbet (no bent prims).
+
+**The re-bake** (`scripts/body-normal-bake/rebake-all.ts`, report in [rebake/REPORT.md](rebake/REPORT.md)) against
+the committed maps:
+- eight characters: a third of their texels move by **one code** (the f32 GPU vs the f64 CPU, as above); a handful by
+  more (twinhead 18 texels over 4 codes, venus 7, butcher 1, flayer 1). Sampled backend parity on every layout: no
+  coverage mismatch, max 1 code;
+- **gamer and teratoma are stale**: their committed maps were baked before torso prims moved, so the torso axis
+  (derived from the prims) moved too (teratoma's by 4 cm in z). Their maps move a lot: gamer 3.6 % of texels by over
+  32 codes (the torso band and the forearm/stalk segments), teratoma 16 %, the same detail shifted along u
+  ([gamer](rebake/gamer-sheet.png), [teratoma](rebake/teratoma-sheet.png): committed | GPU | diff x 8). The runtime reads
+  the axis from the map's own header row, so a re-baked map is self-consistent; the committed ones are what is off.
+- `bake-args.json` reproduces the other eight committed region tables exactly; two generator headers were wrong
+  (flayer's forearm ranges, venus's torso band rows).
+
+**Not committed yet: the re-baked maps** (owner look first, spec rollout step 3). On the owner's OK: copy
+`.lab-tmp/rebake/*-body-n.{png,json}` over `public/assets/lab/`, and add `check-bake-args.test.ts`, which holds the
+committed region tables to `bake-args.json` and is red for gamer and teratoma until then.
