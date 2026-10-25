@@ -43,7 +43,7 @@ Each line is the first sentence of the module's header comment.
 | [shared-wounds/](#shared-wounds) | 4 | Shared wound-field probe page. |
 | [gait-curves/](#gait-curves) | 2 | Baked gait curve data. |
 | [Entrypoints and labs](#entrypoints-and-labs) | 20 | One module per HTML page; see the entrypoint table above. |
-| [Dev panels](#dev-panels) | 10 | Tuning panels for the labs and the game. |
+| [Dev panels](#dev-panels) | 11 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 23 | `window.__sdfGame` members, read by the gate and capture scripts. |
 | [Game: feature modules](#game-feature-modules) | 82 | Gameplay features wired into the game loop. |
@@ -248,6 +248,7 @@ Tuning panels for the labs and the game.
 - `webgpu/goo-panel.ts` — See panel-chrome.ts for the shared shell (title bar, collapse caret, close button) every tuning panel sits in.
 - `webgpu/light-layers-panel.ts` — The LIGHT LAYERS panel (owner 2026-09-28): one checkbox per body-lighting layer added since the melee branch (light-layers.ts), all off by default,…
 - `webgpu/panel-chrome.ts` — The shell every tuning panel sits in: fixed frame, title bar, collapse caret, close button, and a body the caller fills with rows.
+- `webgpu/panel-pool.ts` — A small job pool for the sector materials' off-thread texture builds (game-sector-mesh.ts).
 - `webgpu/shutter-panel.ts` — FOCUSED PLAYER/DEV CONTROLS for the selective shutter blur (2026-09-17).
 - `webgpu/vhs-panel.ts` — See panel-chrome.ts for the shared shell (title bar, collapse caret, close button) the tuning panels sit in.
 - `webgpu/wound-panel.ts` — See panel-chrome.ts for the shared shell (title bar, collapse caret, close button) every tuning panel sits in.

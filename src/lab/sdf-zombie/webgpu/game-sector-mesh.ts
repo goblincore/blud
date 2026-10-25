@@ -28,7 +28,8 @@
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
 import { attribute, exp, float, materialColor, max, positionWorld, texture, uniform, uniformArray, vec3, vec4, wgslFn } from 'three/tsl';
-import { blankPanel, fillPanel, mottleTexture, panelTextures, wrapPanel, type PanelKind, type PanelMaps, type PanelTextureSet } from '../../../game/level/panel-textures';
+import { blankPanel, fillPanel, generatePanel, mottleTexture, panelTextures, wrapPanel, type PanelKind, type PanelMaps, type PanelTextureSet } from '../../../game/level/panel-textures';
+import { runPool, type PoolWorker } from './panel-pool';
 import { isStone, sectorMaterialsOn, surfaceKind, SURFACE_LOOKS, wallU, type SurfaceKind, type SurfaceLook } from './sector-materials';
 import type { GameContext } from './game-context';
 import { createSectorFx, CEIL_WHISPER, type SectorFxRuntime } from './game-sector-light';
@@ -128,32 +129,28 @@ function panelSet(kind: PanelKind): PanelTextureSet {
   panelCache.set(kind, t);
   return t;
 }
-/** Send this build's pending kinds to a small worker pool; log once every kind has arrived. */
+/** Send this build's pending kinds to a small worker pool (panel-pool.ts: a failing or missing
+ *  worker falls back to building in place); log once every kind has arrived. */
 function flushPanelJobs(): void {
   if (syncMs > 0) { console.info(`[sector-mat] built panel kinds on the main thread in ${syncMs.toFixed(0)} ms`); syncMs = 0; }
   const jobs = pendingJobs;
   pendingJobs = [];
   if (jobs.length === 0) return;
-  const t0 = performance.now();
-  const size = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1, jobs.length));
-  let next = 0, done = 0, cpu = 0;
-  for (let w = 0; w < size; w++) {
-    const worker = new Worker(new URL('../../../game/level/panel-textures.worker.ts', import.meta.url), { type: 'module' });
-    const send = () => {
-      const job = jobs[next++];
-      if (!job) { worker.terminate(); return; }
-      worker.onmessage = (ev: MessageEvent<Omit<PanelMaps, 'height'> & { kind: PanelKind; ms: number }>) => {
-        fillPanel(job.set, ev.data);
-        cpu += ev.data.ms;
-        if (++done === jobs.length) {
-          console.info(`[sector-mat] ${jobs.length} panel kinds filled off-thread in ${(performance.now() - t0).toFixed(0)} ms (${cpu.toFixed(0)} ms worker CPU, ${size} workers; main thread 0)`);
-        }
-        send();
-      };
-      worker.postMessage({ kind: job.kind, seed: PANEL_SEEDS[job.kind] });
-    };
-    send();
-  }
+  let cpu = 0;
+  runPool(jobs, {
+    size: Math.min(4, (navigator.hardwareConcurrency || 2) - 1),
+    spawn: () => new Worker(new URL('../../../game/level/panel-textures.worker.ts', import.meta.url), { type: 'module' }) as unknown as PoolWorker,
+    message: job => ({ kind: job.kind, seed: PANEL_SEEDS[job.kind] }),
+    onResult: (job, data) => {
+      const m = data as Omit<PanelMaps, 'height'> & { ms: number };
+      fillPanel(job.set, m);
+      cpu += m.ms;
+    },
+    inPlace: job => fillPanel(job.set, generatePanel(job.kind, PANEL_SEEDS[job.kind])),
+    label: job => job.kind,
+    warn: msg => console.warn(msg),
+    done: st => console.info(`[sector-mat] ${jobs.length} panel kinds filled in ${st.ms.toFixed(0)} ms: ${st.offThread} off-thread (${cpu.toFixed(0)} ms worker CPU, ${st.workers} workers), ${st.inPlace} in place${st.failures ? `, ${st.failures} worker failures` : ''}`),
+  });
 }
 /** The light panels' glow strength (`?panelglow=` overrides). */
 export const panelGlow = uniform(1);
