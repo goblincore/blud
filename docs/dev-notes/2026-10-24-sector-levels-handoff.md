@@ -72,6 +72,10 @@ Experiment: rebuild Doom E1M1's layout from `doomu.wad` in our look and play it.
    light) is high, via a custom fogNode / `fogNode` factor on the sector materials; (b) per-zone fog range
    eased by the player's zone (cheap, but whole-room); (c) treat bright emissive as fog-immune (fog only the
    lit term). Prefer (a). Owner said pool brightness is fine; enemies first, this after.
+2d. **Pickup balance (later, owner 2026-10-24: "keep all 44 for now").** E1M1 skill 4 converts to 44 `health`
+   pickups, 38 of them Doom's +1 health/armor bonuses (2014/2015), each healing a full 25 (`pickups.ts`).
+   Options when balancing: skip the bonuses, or give them a small item. Skill 4 has 16 soldiers (all of
+   Doom's shotgun guys are UV-only); `--skill 3` gives 6 monsters.
 3. **Plan 3a** — enemies on sector floors (motion `floorY`), navigation over sectors, sight and shots vs
    sector walls, pickups, exit as a walk-in trigger (E is slug mode; no use key yet).
 4. **Plan 3b** (not written) — exploding barrels (no HP/destructible system exists; reuse
