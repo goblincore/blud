@@ -223,6 +223,112 @@ function put4(dst: Float32Array, o: number, x: number, y: number, z: number, w: 
   dst[o] = x; dst[o + 1] = y; dst[o + 2] = z; dst[o + 3] = w;
 }
 
+/** The per-prim rows of a PackedBody: every array one prim writes at its index. */
+export type PrimRows = Pick<PackedBody, 'primA' | 'primB' | 'primScale' | 'primQuat' | 'primShape' | 'primBend' | 'primColor' | 'primShell' | 'primClip' | 'primWarp' | 'primStrand' | 'restA' | 'restB'>;
+
+/**
+ * Writes prim `p`'s texels at index `i` of every per-prim row, with role code
+ * `w` (W_ADD .. W_ORGAN; see primRole) and its rest twin `rp`. packBody's one
+ * row writer, shared by flesh and bone — byte-for-byte the same Float32 writes
+ * in the same order, so extracting it cannot drift the flesh rows the zombie
+ * pin demands stay bit-identical. Exported for the body-normal bake, which
+ * packs bodies far past MAX_PRIMS into rows of its own size.
+ */
+export function writePrimRows(rows: PrimRows, p: Primitive, i: number, w: number, rp: Primitive | undefined): void {
+  const { primA, primB, primScale, primQuat, primShape, primBend, primColor, primShell, primClip, primWarp, primStrand, restA, restB } = rows;
+  const o = i * PRIM_STRIDE;
+  // The prim role rides primScale.w, which held a cluster id the shader
+  // never actually read.
+  //
+  // It used to ride the SIGN of blendK, which was free but silently broken:
+  // -0 is indistinguishable from 0 once stored in a Float32Array, so a carve
+  // authored with blendK 0 folded in as ADDITIVE. That matters because
+  // blendK 0 is the useful case — smin short-circuits to a hard min, giving
+  // crisp-edged features instead of the smear that made carved eye sockets
+  // fail. Never encode a flag in a sign whose zero is meaningful.
+  //
+  // w=2 (dead) outranks w=1 (carve): a mid-limb sever only ever kills add
+  // prims, but if a carve ever went dead it must stop carving too.
+  // Element writes, not .set([...]): the same Float32 stores without an
+  // array literal per row per prim (the hero re-packs every frame).
+  put4(primA, o, p.a[0], p.a[1], p.a[2], p.radius);
+  put4(primB, o, p.b[0], p.b[1], p.b[2], p.blendK);
+  put4(primScale, o, p.scale[0], p.scale[1], p.scale[2], w);
+  // Identity default: sdPrim branches on |1 - w| so an unoriented prim
+  // costs one compare. Only rig-posed skull prims ever carry a real quat.
+  const q = p.orient;
+  if (q) put4(primQuat, o, q[0], q[1], q[2], q[3]); else put4(primQuat, o, 0, 0, 0, 1);
+  // -1 for an untapered prim, which is the plain-capsule branch in coneCap.
+  // A radiusB EQUAL to radius is still written as a taper: it is a
+  // no-op geometrically, and rewriting it to -1 to save a branch would make
+  // the packed data depend on a float comparison the author did not make.
+  // zw carry the groove's depth and width, which is why the groove needed no
+  // new row — they were spare here from the moment the taper claimed xy.
+  // y encodes profile AND bend: +2 means the Bezier path. placePrims has
+  // already dropped collinear/zero bends, so anything that arrives here
+  // bent is genuinely curved. The bent values sit ABOVE chamfer so every
+  // existing "> 0.5 means chamfer" consumer keeps working.
+  const bent = p.bend !== undefined ? 2 : 0;
+  // y = fold profile. 0 round, 1 chamfer, 2 round+bent, 3 chamfer+bent;
+  // a SHELL adds bit 2 (value 4) so straight=4, bent=6; a BOX adds bit 3
+  // (value 8); METAL adds bit 4 (value 16) — a shading-only bit, safe
+  // because every fold read of prof is a bit mask ((& 2), (& 4), (& 8),
+  // (& 7) == 1) that leaves bit 4 clear. The shader folds any prof >= 4
+  // as a shell ONLY through the (& 4) mask; the low bits still mean
+  // chamfer/bend for the non-shell range and are ignored on a shell.
+  const prof = (p.blendProfile === 'chamfer' ? 1 : 0) + bent + (p.shell ? 4 : 0) + (p.box ? 8 : 0) + (p.metal ? 16 : 0) + (p.strand ? 32 : 0);
+  // primBend.w carries a BOX's corner-rounding fraction. Safe to share the
+  // row: the shader reads ROW_PRIM_BEND only when prof & 2, and `bend=` on a
+  // box is rejected at compile time, so a box never sets that bit and the
+  // xyz are never fetched for it. The w component is unread in every other
+  // case — the shader loads this row as .xyz.
+  if (p.bend === undefined) put4(primBend, o, 0, 0, 0, p.box ? p.box.round : 0);
+  else { const c = bendCtrl(p.a, p.b, p.bend); put4(primBend, o, c[0], c[1], c[2], 0); }
+  if (p.color === undefined) put4(primColor, o, 0, 0, 0, 0);
+  else put4(primColor, o, p.color[0], p.color[1], p.color[2], 1 + (p.gloss ?? 0));
+  // Shell fold (2026-08-25): the row-array pair for a shell-clipped sheet.
+  // Sets ROW_PRIM_SHELL (thickness, rim, clip offset, hasClip) and
+  // ROW_PRIM_CLIP (clip normal, PLUS the per-prim glow in w). The shader
+  // reads these rows only where the prim's profile marks it a shell (field
+  // path, .xyz only) and at the hit pixel (shading path, .w = glow), so an
+  // additive prim pays nothing for them. glow rides the row on BOTH
+  // branches: the glow COLOUR is the prim's own albedo (packs in primColor
+  // above), and a glowing shell — a lit cable run authored as a sheet —
+  // must glow exactly like a glowing capsule. (hard-surface task 3.)
+  const sh = p.shell;
+  if (sh) put4(primShell, o, sh.thickness, sh.rim, sh.clipOffset, 1); else put4(primShell, o, 0, 0, 0, 0);
+  if (sh) put4(primClip, o, sh.clipNormal[0], sh.clipNormal[1], sh.clipNormal[2], p.glow ?? 0);
+  else put4(primClip, o, 0, 0, 0, p.glow ?? 0);
+  // WRINKLES. Its own row, for the reason ROW_PRIM_WARP's doc gives. Zeros
+  // unless the author wrote `warp=`, and the shader's warp branch is gated
+  // on both being non-zero, so an unwarped shell takes the exact same code
+  // path it took before this row existed.
+  if (sh) { const wf = sh.warpFreq ?? ZERO3; put4(primWarp, o, sh.warpAmp ?? 0, wf[0]!, wf[1]!, wf[2]!); }
+  else put4(primWarp, o, 0, 0, 0, 0);
+  // The strand bundle's four parameters ride their own row (hairlock).
+  // Zeros for everything else, so a body with no strand= packs rows
+  // bit-identical to before the row existed.
+  if (p.strand === undefined) put4(primStrand, o, 0, 0, 0, 0);
+  else put4(primStrand, o, p.strand.count, p.strand.wave, p.strand.cycles, p.strand.fat);
+  put4(primShape, o, p.radiusB === undefined ? -1 : p.radiusB, prof, p.grooveDepth ?? 0, p.grooveWidth ?? 0);
+  // Rest endpoints (motion-polish task 6). A missing rest prim packs as
+  // ZEROS — restA.w = 0 is the shader's 'unwritten' sentinel (a real prim
+  // always has radius > 0), which falls back to the old noiseLocal anchor.
+  if (rp) {
+    put4(restA, o, rp.a[0], rp.a[1], rp.a[2], rp.radius);
+    put4(restB, o, rp.b[0], rp.b[1], rp.b[2], rp.blendK);
+  }
+}
+
+/** A flesh prim's role code for primScale.w: dead outranks every op. */
+export function primRole(p: Primitive): number {
+  return p.dead ? W_DEAD
+    : p.op === 'groove' ? W_GROOVE
+    : p.op === 'bone' ? W_BONE
+    : p.op === 'organ' ? W_ORGAN
+    : p.op === 'sub' ? W_CARVE : W_ADD;
+}
+
 export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {}, scratch?: PackedBody): PackedBody {
   const primA = scratch?.primA.fill(0) ?? new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primB = scratch?.primB.fill(0) ?? new Float32Array(MAX_PRIMS * PRIM_STRIDE);
@@ -241,103 +347,13 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
   let maxBlendK = 0;
   let carveCount = 0;
 
-  // One row writer shared by flesh and bone — byte-for-byte the same Float32
-  // writes in the same order, so extracting it cannot drift the flesh rows
-  // the zombie pin demands stay bit-identical.
-  const writePrim = (p: Primitive, i: number, w: number, rp: Primitive | undefined): void => {
-    const o = i * PRIM_STRIDE;
-    // The prim role rides primScale.w, which held a cluster id the shader
-    // never actually read.
-    //
-    // It used to ride the SIGN of blendK, which was free but silently broken:
-    // -0 is indistinguishable from 0 once stored in a Float32Array, so a carve
-    // authored with blendK 0 folded in as ADDITIVE. That matters because
-    // blendK 0 is the useful case — smin short-circuits to a hard min, giving
-    // crisp-edged features instead of the smear that made carved eye sockets
-    // fail. Never encode a flag in a sign whose zero is meaningful.
-    //
-    // w=2 (dead) outranks w=1 (carve): a mid-limb sever only ever kills add
-    // prims, but if a carve ever went dead it must stop carving too.
-    // Element writes, not .set([...]): the same Float32 stores without an
-    // array literal per row per prim (the hero re-packs every frame).
-    put4(primA, o, p.a[0], p.a[1], p.a[2], p.radius);
-    put4(primB, o, p.b[0], p.b[1], p.b[2], p.blendK);
-    put4(primScale, o, p.scale[0], p.scale[1], p.scale[2], w);
-    // Identity default: sdPrim branches on |1 - w| so an unoriented prim
-    // costs one compare. Only rig-posed skull prims ever carry a real quat.
-    const q = p.orient;
-    if (q) put4(primQuat, o, q[0], q[1], q[2], q[3]); else put4(primQuat, o, 0, 0, 0, 1);
-    // -1 for an untapered prim, which is the plain-capsule branch in coneCap.
-    // A radiusB EQUAL to radius is still written as a taper: it is a
-    // no-op geometrically, and rewriting it to -1 to save a branch would make
-    // the packed data depend on a float comparison the author did not make.
-    // zw carry the groove's depth and width, which is why the groove needed no
-    // new row — they were spare here from the moment the taper claimed xy.
-    // y encodes profile AND bend: +2 means the Bezier path. placePrims has
-    // already dropped collinear/zero bends, so anything that arrives here
-    // bent is genuinely curved. The bent values sit ABOVE chamfer so every
-    // existing "> 0.5 means chamfer" consumer keeps working.
-    const bent = p.bend !== undefined ? 2 : 0;
-    // y = fold profile. 0 round, 1 chamfer, 2 round+bent, 3 chamfer+bent;
-    // a SHELL adds bit 2 (value 4) so straight=4, bent=6; a BOX adds bit 3
-    // (value 8); METAL adds bit 4 (value 16) — a shading-only bit, safe
-    // because every fold read of prof is a bit mask ((& 2), (& 4), (& 8),
-    // (& 7) == 1) that leaves bit 4 clear. The shader folds any prof >= 4
-    // as a shell ONLY through the (& 4) mask; the low bits still mean
-    // chamfer/bend for the non-shell range and are ignored on a shell.
-    const prof = (p.blendProfile === 'chamfer' ? 1 : 0) + bent + (p.shell ? 4 : 0) + (p.box ? 8 : 0) + (p.metal ? 16 : 0) + (p.strand ? 32 : 0);
-    // primBend.w carries a BOX's corner-rounding fraction. Safe to share the
-    // row: the shader reads ROW_PRIM_BEND only when prof & 2, and `bend=` on a
-    // box is rejected at compile time, so a box never sets that bit and the
-    // xyz are never fetched for it. The w component is unread in every other
-    // case — the shader loads this row as .xyz.
-    if (p.bend === undefined) put4(primBend, o, 0, 0, 0, p.box ? p.box.round : 0);
-    else { const c = bendCtrl(p.a, p.b, p.bend); put4(primBend, o, c[0], c[1], c[2], 0); }
-    if (p.color === undefined) put4(primColor, o, 0, 0, 0, 0);
-    else put4(primColor, o, p.color[0], p.color[1], p.color[2], 1 + (p.gloss ?? 0));
-    // Shell fold (2026-08-25): the row-array pair for a shell-clipped sheet.
-    // Sets ROW_PRIM_SHELL (thickness, rim, clip offset, hasClip) and
-    // ROW_PRIM_CLIP (clip normal, PLUS the per-prim glow in w). The shader
-    // reads these rows only where the prim's profile marks it a shell (field
-    // path, .xyz only) and at the hit pixel (shading path, .w = glow), so an
-    // additive prim pays nothing for them. glow rides the row on BOTH
-    // branches: the glow COLOUR is the prim's own albedo (packs in primColor
-    // above), and a glowing shell — a lit cable run authored as a sheet —
-    // must glow exactly like a glowing capsule. (hard-surface task 3.)
-    const sh = p.shell;
-    if (sh) put4(primShell, o, sh.thickness, sh.rim, sh.clipOffset, 1); else put4(primShell, o, 0, 0, 0, 0);
-    if (sh) put4(primClip, o, sh.clipNormal[0], sh.clipNormal[1], sh.clipNormal[2], p.glow ?? 0);
-    else put4(primClip, o, 0, 0, 0, p.glow ?? 0);
-    // WRINKLES. Its own row, for the reason ROW_PRIM_WARP's doc gives. Zeros
-    // unless the author wrote `warp=`, and the shader's warp branch is gated
-    // on both being non-zero, so an unwarped shell takes the exact same code
-    // path it took before this row existed.
-    if (sh) { const wf = sh.warpFreq ?? ZERO3; put4(primWarp, o, sh.warpAmp ?? 0, wf[0]!, wf[1]!, wf[2]!); }
-    else put4(primWarp, o, 0, 0, 0, 0);
-    // The strand bundle's four parameters ride their own row (hairlock).
-    // Zeros for everything else, so a body with no strand= packs rows
-    // bit-identical to before the row existed.
-    if (p.strand === undefined) put4(primStrand, o, 0, 0, 0, 0);
-    else put4(primStrand, o, p.strand.count, p.strand.wave, p.strand.cycles, p.strand.fat);
-    put4(primShape, o, p.radiusB === undefined ? -1 : p.radiusB, prof, p.grooveDepth ?? 0, p.grooveWidth ?? 0);
-    // Rest endpoints (motion-polish task 6). A missing rest prim packs as
-    // ZEROS — restA.w = 0 is the shader's 'unwritten' sentinel (a real prim
-    // always has radius > 0), which falls back to the old noiseLocal anchor.
-    if (rp) {
-      put4(restA, o, rp.a[0], rp.a[1], rp.a[2], rp.radius);
-      put4(restB, o, rp.b[0], rp.b[1], rp.b[2], rp.blendK);
-    }
-  };
+  // One row writer shared by flesh and bone (writePrimRows, above).
+  const rows: PrimRows = { primA, primB, primScale, primQuat, primShape, primBend, primColor, primShell, primClip, primWarp, primStrand, restA, restB };
+  const writePrim = (p: Primitive, i: number, w: number, rp: Primitive | undefined): void => writePrimRows(rows, p, i, w, rp);
 
   body.prims.forEach((p, i) => {
-    const isCarve = p.op === 'sub';
-    if (isCarve && !p.dead) carveCount++;
-    const w = p.dead ? W_DEAD
-      : p.op === 'groove' ? W_GROOVE
-      : p.op === 'bone' ? W_BONE
-      : p.op === 'organ' ? W_ORGAN
-      : isCarve ? W_CARVE : W_ADD;
-    writePrim(p, i, w, (rest ?? body).prims[i]);
+    if (p.op === 'sub' && !p.dead) carveCount++;
+    writePrim(p, i, primRole(p), (rest ?? body).prims[i]);
     // Cull margin is a distance: always the magnitude, never the sign.
     if (p.blendK > maxBlendK) maxBlendK = p.blendK;
   });
