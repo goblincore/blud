@@ -52,7 +52,7 @@ export const PAINT_CHAR_BLOCK = /* wgsl */ `  // PER-PRIMITIVE COLOUR. The fold 
     // CLOTH: uneven dye in long streaks down the drape plus a fine slub, in the hit prim's REST frame (anchor) so
     // it rides the cloth. Skin gets its grain from the body layers, which paint masks off; fabric needs its own.
     var paint = primAlbedo;
-    if (cloth > 0.0) { paint = primAlbedo * (1.0 + 0.2 * fbm(anchor * vec3<f32>(2.5, 0.7, 2.5)) + 0.07 * fbm(anchor * 26.0)) * (1.0 - 0.7 * clothValley); }
+    if (cloth > 0.0) { paint = primAlbedo * (1.0 + 0.2 * fbm(anchor * vec3<f32>(2.5, 0.7, 2.5)) + 0.07 * fbm(anchor * 26.0)) * (1.0 - 0.7 * clothValley) * (1.0 - 0.75 * clothInside); }
     albedo = mix(mix(paint, paint * 0.28, fray), inside, reveal);
     // CLOTH DECALS (soft targets, 2026-09-24; WOUND_MASK bit 2). Nothing is
     // carved: the robe is marked where the round went through.

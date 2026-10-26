@@ -111,7 +111,10 @@ describe('metal modifier (hard-surface task 2)', () => {
     // parse-gated on color=, so an unpainted pixel can never change the
     // answer. One load, not a repeat.
     expect(SHADE_BODY).toContain('var metal = 0.0;');
-    expect((SHADE_BODY.match(new RegExp(esc(SHAPE_LOAD), 'g')) ?? []).length).toBe(1);
+    // ONE in the post-hit material read. (The walk has its own, the CLOTH ACCEPT's: one read on a sample about to
+    // accept, before any hit exists — it cannot share this one.)
+    const post = SHADE_BODY.slice(SHADE_BODY.indexOf('var gloss = 0.0;'));
+    expect((post.match(new RegExp(esc(SHAPE_LOAD), 'g')) ?? []).length).toBe(1);
     expect(SHADE_BODY.indexOf('var metal = 0.0;'))
       .toBeLessThan(SHADE_BODY.indexOf('calcNormal(p,'));
     expect(SHADE_BODY.indexOf(SHAPE_LOAD))
@@ -265,6 +268,6 @@ describe('cloth (SDF-cloth look, 2026-10-26)', () => {
   it('folds are shading-only, round the hit shell\'s REST axis, and darken their floors in the paint', () => {
     expect(SHADE_BODY).toContain('if (cloth > 0.0 && hitBest >= 0) {');
     expect(SHADE_BODY).toContain('let walk = length(gWindDrift.xz);');
-    expect(SHADE_BODY).toContain('* (1.0 - 0.7 * clothValley)');
+    expect(SHADE_BODY).toContain('* (1.0 - 0.7 * clothValley) * (1.0 - 0.75 * clothInside)');
   });
 });

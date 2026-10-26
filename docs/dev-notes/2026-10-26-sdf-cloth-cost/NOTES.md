@@ -339,6 +339,65 @@ Clips: [robe](look-robe-before-after.gif) and [cultist](look-cultist-before-afte
 - Folds react to walking but not to turning (the lattice is body-anchored by yaw).
 - The colour is the owner's: tan 6e5c40 still reads gold under the flashlight.
 
+## The hood as cloth, and the shell-edge artefacts
+
+**The owner's live look:** the look was "promising" but not apparent enough, with four problems:
+
+- the robe zombie's legs clip through the skirt;
+- "onion" rings round the cultist hood's opening;
+- a slab-thick capelet edge;
+- a shotgun hole in the robe zombie's capelet showed a pink chunk.
+
+And the owner wants the hood to "drape on the head and have some surface movement", not read as a helmet.
+
+**What the onion rings were** (found by painting the lining test's result red and green): the hood's **peak**. It
+was a SOLID robe-painted *flesh* blob rooted inside the crown. Through the face opening its flesh-shaded base
+filled the top of the hood's inside, stacked against the lining and the rim. The old upright spike had the same
+root, which is why the rings predate this work.
+
+**Fixed:**
+
+- **The peak is cloth.** It is a shell cut at y 1.885, just under the crown, so only the part outside the hood
+  exists. It also **slumps**: it leans back ~60 degrees and bows so the tip droops, instead of a rigid crest.
+- **The drape.** A new non-rigid shell (`shell torso on neck`) runs from the back of the hood onto the shoulders.
+  Its top binds to the head's joint and its bottom to the shoulders', so it stretches and shifts as the head turns.
+  From behind, the silhouette now runs crown → capelet like a cowl, not a ball on a neck.
+- **A thinner hood and capelet:** thick 0.008 → 0.005, rim 0.010 → 0.005 / 0.004. The hood's `warp=` is gone; its
+  folds are the shading's.
+- **The lining.** A cloth pixel whose normal faces back into its own shell (radially in from a cone's axis, or in
+  from a ball's centre) is shaded as a shadowed lining: albedo x 0.25, no sheen. The hood's inside, under the
+  skirt, inside the cuffs.
+- **Hood folds.** A ball shell (the hood) gathers its pleats just behind the opening, round its clip normal.
+  They are calm at the rim and fade toward the back; the first version met at the back pole in a starburst.
+- **CLOTH ACCEPT** (`trace.wgsl.ts`).
+  - The footprint accept takes a hit up to 6 footprints (~1 cm up close) short of the surface, which is thicker than
+    a sheet. When the accepting sample's dominant prim is a shell, the march now keeps stepping to within ONE
+    footprint.
+  - Cost: one texel read on a sample about to accept. Flesh never reaches it.
+  - Edges now draw at their real thickness.
+- **The robe zombie's chest** is robe-painted (`bench-cloth.ts`), so a hole in the capelet shows robe colour, not
+  bare skin.
+- **Proxy pad, chained-blend term.** It is now the WIDEST blend in the shell's cluster, not the shell's own: the
+  peak (blend 0.030) melting into the hood bulged their junction 4.2 mm past a hood-only pad.
+- **Turning** drifts the folds too (`CLOTH_TURN_DRIFT` 0.12 m per radian).
+
+**Cost** (game close-up): the robe zombie 5.01M → **5.19M** (1.64x → **1.70x**). The extra is the cloth accept's
+steps on cloth edges only: the bare zombie is unchanged (3.06M) and the arena is flat (0.59M). Hits fell 2%, as
+the fattened edges thinned to the cloth's real thickness.
+
+![hood opening: before / after](hood-opening-before-after.png)
+![hood front, side, back](hood-views.png)
+
+Clips: [cultist walking](hood-cultist-walk.gif) and [robe zombie walking](hood-robe-walk.gif).
+
+**Not fixed:**
+
+- **The robe zombie's legs clip through the skirt.** That is the gait, not the cloth: the zombie's shamble strides
+  out of any rigid cone. The cultist's `GLIDE` gait exists for exactly this. A robed zombie needs a glide-style
+  gait or the `hem2`/`hem3` chain so the hem gives way.
+- **Bullet holes in shells on a CARVED body** (the robe zombie) are flesh-sized craters. The cultist's soft-target
+  decals are the model for cloth.
+
 ## The analytic normal stopped working on 2026-09-29 (found here, fixed in follow-up 4)
 
 `ngBody` (analytic normals, on by default since 2026-09-06, measured then at about 6% faster on an intact torso)

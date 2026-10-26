@@ -2501,6 +2501,8 @@ function warnNearReach(u: MarchUniforms): void {
 /** CLOTH WALK DRIFT (2026-10-26): how far the shell folds' lattice falls back per metre the body walks (0.35: about
  *  one 0.29 m fold a second at a 1 m/s walk). */
 export const CLOTH_WALK_DRIFT = 0.35;
+/** CLOTH TURN DRIFT: metres the folds' lattice moves across the body per radian it turns. */
+export const CLOTH_TURN_DRIFT = 0.12;
 /** A root move longer than this between two setRootShift calls is a jump (spawn, teleport), not a step. */
 const CLOTH_DRIFT_MAX_STEP = 0.5;
 
@@ -3056,7 +3058,7 @@ export function createZombieGpuView(
 
   const mainSegmentVolume = material as unknown as MaterialWithSegmentVolume;
   /** The last root position setRootShift saw (cloth walk drift). */
-  let driftPrev: [number, number] | null = null;
+  let driftPrev: [number, number, number] | null = null;
   return {
     object: mesh,
     coneObject: coneMesh,
@@ -3195,14 +3197,20 @@ export function createZombieGpuView(
       // walking body's folds stream back through the cloth (air pushing the robe) instead of riding it frozen. The
       // game never set windDrift before (only the lab's wind did), and the lab still overwrites it every frame. A
       // jump (spawn, teleport) is not a step.
+      // TURNING drifts it too: CLOTH_TURN_DRIFT metres per radian, across the body (the folds swing round as he turns).
       if (driftPrev) {
         const dx = x - driftPrev[0], dz = z - driftPrev[1];
         if (Math.hypot(dx, dz) < CLOTH_DRIFT_MAX_STEP) {
           u.windDrift.value.x -= dx * CLOTH_WALK_DRIFT;
           u.windDrift.value.z -= dz * CLOTH_WALK_DRIFT;
         }
+        const dy = Math.atan2(Math.sin(bodyYaw - driftPrev[2]), Math.cos(bodyYaw - driftPrev[2]));
+        if (Math.abs(dy) < 1) {
+          u.windDrift.value.x += Math.cos(bodyYaw) * dy * CLOTH_TURN_DRIFT;
+          u.windDrift.value.z -= Math.sin(bodyYaw) * dy * CLOTH_TURN_DRIFT;
+        }
       }
-      driftPrev = [x, z];
+      driftPrev = [x, z, bodyYaw];
       syncRecord();
     },
     setFaceTexture(tex, atlas, mean) {
