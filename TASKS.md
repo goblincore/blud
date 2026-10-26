@@ -10,6 +10,14 @@
 
 ## In flight / next
 
+- [~] **Goblin & zombie hands** (owner, 2026-10-24..26; branch `claude/character-hand-design-a5dcee`, PR goblincore/blud#75) — the orb hands became bony,
+  long-fingered goblin hands: FPV per-job poses (right fist seated on hafts, left flat cradle under the fore-end with the thumb claw out, cupped
+  cover pose) via `Grip_` locators and `seatOnBar`; the shotgun reload reworked (pouch beat, over the top, cover-and-shove, lift before the snap),
+  clipping measured per frame (<= 9 vertices during the push, 0 at rest). Third-person goblin and the zombie (grabber, its first kit) wear kit hands
+  lit by the flesh shader (`kit-flesh.ts`); kits are parsed once and share geometry across actors. Detail: [characters](docs/tasks/characters.md#goblin-refinement-pass-body-kit-weapons-rig-animation--phase-1-body-done-2026-10-01).
+  Next: owner playtest; other weapons' grips; idle grip fidgets (needs articulated fingers); kit sever handling (a shot-off forearm's hand stays).
+  The zombie redesign (shackles, body normal map, kit below the knee) runs in its own session/branch (`zombie-refine`).
+
 - [~] **GPU body-normal bake** (owner, 2026-10-24; branch `claude/cpu-bake-performance-2a477d`) — [spec](docs/superpowers/specs/2026-10-24-gpu-body-normal-bake-design.md).
   The CPU bake takes ~17 CPU-minutes for gibbet and more for bigger bodies; the plan is a Dawn-in-Node WebGPU compute bake held to `sdBody`
   by a lavapipe CI job. Step 1 done: the bake is split into `src/lab/sdf-zombie/body-normal-bake/` (CPU backend only) and
