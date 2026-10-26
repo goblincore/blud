@@ -76,6 +76,8 @@ export function dressKitFlesh(root: THREE.Object3D, material: THREE.Material, fl
     mesh.material = material;
     old.dispose();
     mesh.userData['kitFlesh'] = true;
+    // The kit's own material NAME, which the shared lit material does not carry: kit-sever.ts cuts a hand by it.
+    mesh.userData['kitMaterial'] = old.name;
     dressed.push(mesh);
   });
   return dressed;

@@ -28,6 +28,7 @@ import type { ZombieActor } from './game-actor';
 import type { GibAssetHeadFactory } from './gib-asset-head';
 import type { GibAssetRuntime } from './gib-asset-runtime';
 import type { GibShutterLayer } from './gib-shutter-layer';
+import type { KitRider } from './kit-sever';
 import type { GibSpriteAtlas } from './gib-sprites';
 
 /**
@@ -108,6 +109,9 @@ export interface GibsState {
   /** MESH GIBS (game-mesh-gibs.ts): plain three meshes riding a gib-chunks `Chunk` — the head damage's
    *  modelled brain. Stepped with the SDF chunks, capped (oldest out), cleared on a cast rebuild. */
   meshGibs: MeshGib[];
+  /** KIT RIDERS (game-kit-riders.ts): kit cut off a severed piece's bones (the zombie's hand and shackle), each riding
+   *  its chunk by id; posed each frame, dropped with their chunk, cleared on a cast rebuild. */
+  kitRiders: KitRider[];
   /** The flesh bits' (flesh-bits.ts) own throwaway launch/tumble stream for spawnChunkPiece, so
    *  flesh on or off leaves rngStreams.misc untouched. Fixed seed, never reseeded; the codemod
    *  pattern supplies the real `mulberry32` stream at the original line. */
@@ -156,6 +160,7 @@ export function makeGibsState(): GibsState {
     pendingGibs: [],
     partsMode: null,
     meshGibs: [],
+    kitRiders: [],
     fleshSpawnRng: unbuilt<() => number>(),
   };
 }

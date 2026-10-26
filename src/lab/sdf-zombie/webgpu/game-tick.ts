@@ -43,6 +43,7 @@ import { ceilingAt, chunkCollidersAt, shellAmpOf } from './game-hit-trace';
 import { updateHud } from './game-hud';
 import { applyDeathCamera, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop';
 import { stepMeshGibs } from './game-mesh-gibs';
+import { handShot, stepKitRiders } from './game-kit-riders';
 import { skullPasses } from './game-skull-shots';
 import { stepFlashLight, stepMuzzleFlash } from './game-muzzle-flash';
 import { stepOutdoor } from './game-outdoor';
@@ -958,9 +959,12 @@ export function tick(ctx: GameContext, dt: number) {
           const d = Math.hypot(hp[0]-from[0], hp[1]-from[1], hp[2]-from[2]);
           if (d < bestDist) { bestDist = d; hitActor = a; hitPoint = hp; }
         }
+        // A round that meets a polygon HAND (kitHands) before any flesh takes the hand off at the wrist, and is spent.
+        const handTook = handShot(ctx, p, from, bestDist);
+        if (handTook) dead = true;
         // Bone standing in an open head's gap has no flesh in front of it for the trace above to find.
-        skullPasses(ctx, p, from, hitActor, hitPoint);
-        if (hitActor && hitPoint) {
+        if (!handTook) skullPasses(ctx, p, from, hitActor, hitPoint);
+        if (!handTook && hitActor && hitPoint) {
           const l = Math.hypot(p.vel[0], p.vel[1], p.vel[2]) || 1;
           const dirN: Vec3 = [p.vel[0] / l, p.vel[1] / l, p.vel[2] / l];
           // hit/hitSlug RETURN the wound this impact stamped (pre-sever),
@@ -1186,6 +1190,7 @@ export function tick(ctx: GameContext, dt: number) {
     }
     // MESH GIBS (the head damage's modelled brain): the same stepChunk, dt and colliders as the SDF chunks.
     stepMeshGibs(ctx, cdt);
+    stepKitRiders(ctx);
     ctx.boot.kitEye?.step(cdt);
     // SPRITE PIECES, on the same clock and in the same block as the marched
     // ones — deliberately, because they are the same physics: `stepSpritePieces`

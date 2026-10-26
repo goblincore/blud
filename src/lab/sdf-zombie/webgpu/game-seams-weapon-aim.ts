@@ -96,6 +96,30 @@ export function createWeaponAimSeams(ctx: GameContext) {
     aimSurface: (limb?: string, actorId?: number) => aimAtNearestSurface(ctx, limb, actorId),
     /** aimSurface('head') — the bone-tubes reel's head-shot staging. */
     aimHead: () => aimAtNearestSurface(ctx, 'head'),
+    /** HAND SHOTS (2026-10-26; game-kit-riders.ts handShot): face the nearest polygon hand's palm sphere (kitHands),
+     *  or the one on `bone`. Returns that bone, or null when no hand is on. Point-blank aim, no slug-drop search: the
+     *  palm is a sphere, so a driver fires pellets (fire) or steps closer. */
+    aimHand: (bone?: string) => {
+      const eye = eyeOf(ctx.player.player);
+      const hands = ctx.world.actors.flatMap(a => a.handSpheres()).filter(h => bone === undefined || h.bone === bone)
+        .sort((a, b) => Math.hypot(a.centre[0] - eye[0], a.centre[2] - eye[2]) - Math.hypot(b.centre[0] - eye[0], b.centre[2] - eye[2]));
+      const h = hands[0];
+      if (!h) return null;
+      ctx.player.player.yaw = Math.atan2(h.centre[0] - eye[0], -(h.centre[2] - eye[2]));
+      ctx.player.player.pitch = Math.atan2(h.centre[1] - eye[1], Math.hypot(h.centre[0] - eye[0], h.centre[2] - eye[2]));
+      return h.bone;
+    },
+    /** Sever an arm of the nearest actor (or `id`) as a shot would: 'full', or a chain index for a cut (debugSever).
+     *  The kit on the bones it takes rides the piece (kitRiders). */
+    severArm: (limb: 'armL' | 'armR', at: 'full' | number = 'full', id?: number) => {
+      const a = id === undefined ? ctx.world.actors[0] : ctx.world.actors.find(q => q.id === id);
+      return !!a && a.debugSever(limb, at);
+    },
+    /** The kit riders (game-kit-riders.ts): each one's chunk, its parts and where it is. */
+    kitRiders: () => ctx.gibs.kitRiders.map(r => ({
+      chunkId: r.chunkId, parts: r.object.children.map(c => c.name),
+      at: [r.object.matrix.elements[12]!, r.object.matrix.elements[13]!, r.object.matrix.elements[14]!],
+    })),
     /** DECAP REPRO (debug): behead the nearest actor with a live head and
      *  frame the stump. at = 'full' (default) removes the whole head cluster;
      *  a number severDistal's from that head-chain prim. frame:false leaves

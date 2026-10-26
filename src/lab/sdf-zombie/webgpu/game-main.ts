@@ -304,6 +304,7 @@ import { createMeatGib } from './game-meat-gib';
 import { createKitEye } from './game-kit-eye';
 import { createBrainGib } from './game-brain-gib';
 import { clearMeshGibs, spawnMeshGib, stepMeshGibs } from './game-mesh-gibs';
+import { spawnKitRiders } from './game-kit-riders';
 import { createHeadSeams } from './game-seams-head';
 import { createLauncherView } from './game-launcher-view';
 import { createMiscSeams } from './game-seams-misc';
@@ -5522,7 +5523,9 @@ async function main() {
   // the wound is the actor's own reference, so the anchor rides the body).
   ctx.boot.onSeverDispatch = (a, piece, stumpWound) => {
     ctx.telemetry.telemetry.event('sever', { actor: a.id, limb: piece.limb });
-    spawnChunkPiece(ctx, piece, { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture });
+    const chunkId = spawnChunkPiece(ctx, piece, { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture });
+    // The kit on the bones the piece took flesh off goes WITH it (the zombie's hand and shackle with its forearm).
+    spawnKitRiders(ctx, a, piece, chunkId);
     if (stumpWound) registerBleed(ctx, a, stumpWound, 'stump');
   };
   ctx.boot.onGoreDispatch = (a, pieces) => {

@@ -77,7 +77,7 @@ export function spawnChunkPiece(ctx: GameContext,
   },
   template: { uniforms: import('./zombie-gpu').MarchUniforms; volumeTexture: THREE.Texture },
   initialVelocity?: Vec3,
-) {
+): number {
   // A FLESH BIT (flesh-bits.ts) draws its throwaway launch and tumble from its own stream, so flesh on or
   // off leaves rngStreams.misc — every other piece's sequence — untouched.
   const rng = piece.tag === 'flesh' ? ctx.gibs.fleshSpawnRng : rngStreams.misc;
@@ -145,6 +145,8 @@ export function spawnChunkPiece(ctx: GameContext,
       piece.tornAt.length ? piece.tornAt : undefined, piece.bones, template, kind, boneOnly);
     ctx.bake.liveChunks.push({ id: ctx.bake.nextId++, state, view, template, kind, boneOnly, ...(tag ? { tag } : {}) });
   }
+  // The new piece's id: kit riders (game-kit-riders.ts) follow it.
+  return ctx.bake.liveChunks[ctx.bake.liveChunks.length - 1]!.id;
 }
 
 /** Take live piece `index` out of the physics (cancelling its bake): its view, for the caller to reuse. */

@@ -449,6 +449,11 @@ Branch `claude/zombie-refine-468259`, on top of the hands PR goblincore/blud#75.
   their vertex colours (the kit has no normal maps). 20.1k triangles (the look-dev's labourer was 31k).
 - [x] **Proportions:** the forearm tapers r 0.048 -> 0.040 into the shackle, and the wrist knob shrinks 0.045 -> 0.041
   (zombie.blob and its body.ts twin; golden and gib assets re-pinned).
+- [x] **Playtest fixes (owner's clips, 2026-10-26):** the trousers are laid on the flesh's POSED envelope over the walk
+  (`scripts/zombie-surface.ts`), checked by `scripts/kit-clearance.ts` (flesh showing through the seat while walking 6% -> 0.1%);
+  the cloth's relief is a baked normal map (kit normal maps: `zombie_common.py bake_normal_atlas` -> `blender-kit.ts`);
+  a severed piece takes the kit on its bones with it, and a shot to a hand takes the hand off at the wrist
+  (`webgpu/kit-sever.ts`, `webgpu/game-kit-riders.ts`, `CharacterEntry.kitHands`; seams `aimHand`, `severArm`, `kitRiders`).
 - [ ] **Owner's in-game look** ([in-game frames](../dev-notes/2026-10-26-zombie-refine-lookdev/zombie-labourer-ingame.png)).
 - [ ] **Shins and feet to mesh** (owner's idea, to save prims): the boots and trousers now hide the foot prims and most of the
   shin, so the 4 foot prims a side could go, but the foot prims carry the `toe` rig points, gait pins, gib assets and the

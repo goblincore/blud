@@ -46,13 +46,13 @@ Each line is the first sentence of the module's header comment.
 | [Dev panels](#dev-panels) | 10 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 23 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 81 | Gameplay features wired into the game loop. |
+| [Game: feature modules](#game-feature-modules) | 82 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
-| [Levels and world](#levels-and-world) | 28 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
+| [Levels and world](#levels-and-world) | 29 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
 | [Actors and crowd (render)](#actors-and-crowd-render) | 19 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
@@ -352,6 +352,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-hit-trace.ts` — Slug and melee hit tracing, ceiling and chunk collider queries, on-screen body count and level probe-room stamping.
 - `webgpu/game-hud.ts` — The HUD text line: frame time, bodies on screen, room, weapon slot, ammo and render-mode flags, refreshed from the game context.
 - `webgpu/game-kit-eye.ts` — THE POPPING KIT EYE, in the game (kit-eye.ts has the rules and the shape).
+- `webgpu/game-kit-riders.ts` — The game side of kit-sever.ts: a severed piece takes the actor's kit on the bones it took flesh off (the zombie's hand and wrist shackle go with its…
 - `webgpu/game-launcher-view.ts` — Opt-in FPV art prototype.
 - `webgpu/game-level-art.ts` — LEVEL ART in the game (mesh key spec §5): fetch and parse <id>.art.glb, then attach every mesh to the level group tagged with its room, so the…
 - `webgpu/game-level-lights.ts` — Level lighting helpers: hemisphere light intensity, accent rooms, the scene lights for a room, and refreshing the level lights.
@@ -523,6 +524,7 @@ Level definitions, kits, the train, the disco, the egg, sky, encounters.
 - `webgpu/kit-damage.ts` — Armor kit damage on skinned meshes: piece support and attachment checks, hit damage, shedding and the detached armor debris.
 - `webgpu/kit-flesh.ts` — KIT FLESH: polygon kit parts that stand in for a character's FLESH (the goblin's bony hands, 2026-10-24) drawn with the flesh shader's own lighting…
 - `webgpu/kit-overlay.ts` — The POLYGON half of a character: armour, clothing, and hard props, authored in WAM (a text→glTF mesh compiler) and laid over the raymarched flesh.
+- `webgpu/kit-sever.ts` — KIT THAT LEAVES WITH ITS FLESH (owner, 2026-10-26, the zombie's grabber hands: "when you shoot the arm off, the hand does not follow, so you have a…
 - `webgpu/level-art.ts` — LEVEL ART (the mesh key, spec 2026-09-24-level-mesh-key-design.md) as pure decisions: where a level's art file lives, which room lights a mesh, the…
 - `webgpu/level-def.ts` — LEVEL FORMAT v1 — types and the generation rules.
 - `webgpu/level-events.ts` — LEVEL EVENTS. Triggers fire string events when the player walks in; gates open on events; a small vocabulary of events turns into commands the game…

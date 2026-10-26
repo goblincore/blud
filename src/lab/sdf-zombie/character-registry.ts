@@ -90,6 +90,11 @@ export interface CharacterEntry {
   /** The kit's `plate` pieces are ARMOUR: hits on them spark, and enough hits
    *  shed the piece (webgpu/kit-damage.ts). Was hard-coded to the soldier. */
   armoured?: boolean;
+  /** Polygon HANDS on the kit that can be shot off whole (webgpu/kit-sever.ts, game-hand-shots.ts): the kit materials
+   *  that are the hand (a wrist cut takes only these; the rest of the bone's kit, e.g. a shackle, stays on the stump),
+   *  and the palm the shot tests, a sphere `drop` metres past each hand bone's end knob along the bone, `radius` round.
+   *  The hand bones are the ones whose flesh chain ends in a knob (`blob ... at=0.97` on the zombie's foreArm). */
+  kitHands?: { bones: readonly string[]; materials: readonly string[]; drop: number; radius: number };
   /** The face sheet the character wears when its own `sheet` block does not
    *  produce one — its baked PNG where it has one (the sheet block's `image`
    *  line names the same file), else the shared zombie flat. Multiplier-vs-
@@ -162,6 +167,9 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   zombie: {
     name: 'zombie', src: zombieBlobSrc, face: ZOMBIE_FLAT,
     kit: '/assets/lab/zombie-kit.gltf',
+    // The grabber hands come off whole: palm ~7.5 cm past the wrist knob (make_kit.py HANG 0.072 x 1.2 scale less the
+    // knob's offset), and a sphere that takes the splayed fingers.
+    kitHands: { bones: ['foreArm.l', 'foreArm.r'], materials: ['zombieskin', 'zombienail'], drop: 0.075, radius: 0.08 },
     // Collarbones, ribs through slack skin, gut folds, spine and veins (characters/zombie.detail, baked; never marched).
     bodyNormal: { url: '/assets/lab/zombie-body-n.png', meta: '/assets/lab/zombie-body-n.json', strength: 1 },
     profile: ZOMBIE_PROFILE,

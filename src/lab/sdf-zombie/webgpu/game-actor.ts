@@ -530,6 +530,11 @@ export interface ZombieActor {
   refreshWoundUpload(): void;
   /** Debug seam: sever a limb as a shot would ('full' or a chain index for severDistal). */
   debugSever(limb: LimbId, at?: 'full' | number): boolean;
+  /** Shoot a polygon HAND off (CharacterEntry.kitHands): cut at the wrist, the bone's end knob and the hand leave
+   *  together (kit-sever.ts). False when that hand is already gone. */
+  severHand(bone: string): boolean;
+  /** The hands still on (kitHands), as world spheres round each palm in the current pose. */
+  handSpheres(): { bone: string; centre: Vec3; radius: number }[];
   /**
    * A RESOLVED EXPLOSION's full effect on this body — the dynamite path.
    * Stamps the blast wounds (geometry + carves), credits the collapse meter
@@ -1049,6 +1054,21 @@ export function createZombieActor(opts: {
       };
     }
     bound = next;
+  }
+
+  /** A hand bone's end KNOB (the last live prim of its limb's chain, a point on that bone) and the segment before it:
+   *  null when the limb or the knob is gone (the hand with it). */
+  function handKnob(bone: string): { limb: LimbId; knob: number; bar: number } | null {
+    for (const cluster of current.clusters) {
+      if (!cluster.alive) continue;
+      const order = chainOrder(current, cluster);
+      const knob = order[order.length - 1], bar = order[order.length - 2];
+      if (knob === undefined || bar === undefined) continue;
+      const p = current.prims[knob]!;
+      if (p.bone !== bone || p.dead || Math.hypot(p.b[0] - p.a[0], p.b[1] - p.a[1], p.b[2] - p.a[2]) > 0.05) continue;
+      return { limb: cluster.limb, knob, bar };
+    }
+    return null;
   }
 
   function detach(limb: LimbId, r: SeverResult) {
@@ -2351,6 +2371,28 @@ export function createZombieActor(opts: {
      *  1 leaves the neck on the body — the headshot-stump case). */
     profileName: () => opts.profile?.name ?? 'zombie',
     characterName: () => characterName,
+    severHand: (bone: string) => {
+      const k = handKnob(bone);
+      if (!k) return false;
+      detach(k.limb, severDistal(current, { limb: k.limb, fromPrim: k.knob }));
+      refreshWounds();
+      return true;
+    },
+    handSpheres: () => {
+      const hands = opts.character?.entry?.kitHands;
+      if (!hands) return [];
+      const out: { bone: string; centre: Vec3; radius: number }[] = [];
+      for (const bone of hands.bones) {
+        const k = handKnob(bone);
+        if (!k) continue;
+        const knob = posed.prims[k.knob]!, bar = posed.prims[k.bar]!;
+        const d: Vec3 = [knob.a[0] - bar.a[0], knob.a[1] - bar.a[1], knob.a[2] - bar.a[2]];
+        const l = Math.hypot(d[0], d[1], d[2]) || 1;
+        out.push({ bone, radius: hands.radius,
+          centre: [knob.a[0] + d[0] / l * hands.drop, knob.a[1] + d[1] / l * hands.drop, knob.a[2] + d[2] / l * hands.drop] });
+      }
+      return out;
+    },
     debugSever: (limb: LimbId, at: 'full' | number = 'full') => {
       const cluster = current.clusters.find(c => c.limb === limb);
       if (!cluster?.alive) return false;
