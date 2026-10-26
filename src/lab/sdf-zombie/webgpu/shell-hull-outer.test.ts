@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { buildOuterHullInstances, SPHERE_CHAIN_INFLATE } from './shell-hull-outer';
+import { buildOuterHullInstances, SPHERE_CHAIN_INFLATE, taperedChain } from './shell-hull-outer';
+import zombieSrc from '../characters/zombie.blob?raw';
+import { parseBlob } from '../blob-parse';
+import { compileBlob, compileFace } from '../blob-compile';
+import { clothVariantSrc } from './bench-cloth';
 import { sdBody } from '../validate';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { ZOMBIE } from '../body';
@@ -208,5 +212,65 @@ describe('containment on the SHIPPED zombie', () => {
     expect(found, 'no rays found the zombie at all').toBeGreaterThan(200);
     expect(worst, `surface escaped the hull by ${worst} m at ${JSON.stringify(worstAt)}`)
       .toBeLessThan(0);
+  });
+});
+
+/** Fires rays inward from a sphere round `b` and returns the worst escape of a first surface hit from the hull. */
+function worstEscape(b: BuiltBody, hull: { centre: Vec3; radius: number }[], centre: Vec3, R = 2.0, rays = 900) {
+  let worst = -Infinity, found = 0;
+  for (let i = 0; i < rays; i++) {
+    const y = 1 - (i / (rays - 1)) * 2;
+    const r = Math.sqrt(Math.max(0, 1 - y * y));
+    const th = Math.PI * (3 - Math.sqrt(5)) * i;
+    const dir: Vec3 = [Math.cos(th) * r, y, Math.sin(th) * r];
+    const from: Vec3 = [centre[0] + dir[0] * R, centre[1] + dir[1] * R, centre[2] + dir[2] * R];
+    let t = 0;
+    for (let s = 0; s < 300 && t < 2 * R; s++) {
+      const q: Vec3 = [from[0] - dir[0] * t, from[1] - dir[1] * t, from[2] - dir[2] * t];
+      const d = sdBody(q, b);
+      if (d < 1e-4) { found++; worst = Math.max(worst, sdHull(q, hull)); break; }
+      t += Math.max(d, 1e-4);
+    }
+  }
+  return { worst, found };
+}
+
+describe('the TAPER-AWARE chain (SDF-cloth cost spike)', () => {
+  it('contains a strongly tapered cone, sampled on its whole surface', () => {
+    // A skirt-like round cone: 0.05 at the top, 0.30 at the hem, 0.8 long.
+    const b = built([prim({ b: [0, -0.8, 0], radius: 0.05, radiusB: 0.30, blendK: 0.01 })]);
+    const hull = buildOuterHullInstances([b]);
+    const { worst, found } = worstEscape(b, hull, [0, -0.4, 0], 1.5, 1500);
+    expect(found).toBeGreaterThan(1000);
+    expect(worst, `the cone escaped its hull by ${worst} m`).toBeLessThan(0);
+  });
+
+  it('holds the cone in well under the room the max-radius chain took (54%)', () => {
+    const chain = taperedChain([0, 0, 0], [0, -0.8, 0], 0.05, 0.30, 0.01)!;
+    const R = 0.31 * SPHERE_CHAIN_INFLATE, n = Math.ceil(0.8 / 0.31);
+    const old = Array.from({ length: n + 1 }, (_, i) => ({ centre: [0, -0.8 * i / n, 0] as Vec3, radius: R }));
+    // The union's volume on a 2 cm grid (sums of sphere volumes would count the overlaps).
+    const union = (h: { centre: Vec3; radius: number }[]) => {
+      let c = 0;
+      for (let x = -0.45; x <= 0.45; x += 0.02) for (let y = -1.25; y <= 0.45; y += 0.02) for (let z = -0.45; z <= 0.45; z += 0.02)
+        if (sdHull([x, y, z], h) < 0) c++;
+      return c;
+    };
+    expect(union(chain)).toBeLessThan(0.6 * union(old));
+  });
+
+  it('falls back (null) when the thin end would need too many spheres', () => {
+    expect(taperedChain([0, 0, 0], [0, 1, 0], 0.001, 0.2, 0)).toBeNull();
+  });
+
+  // The cloth variants are the content this was written for: a skirt and capelet on the hem pendulum, and five
+  // shell tubes. Each must stay inside its hull everywhere a ray can find it.
+  it.each(['robe', 'trousers'] as const)('contains the zombie in %s', (v) => {
+    const doc = parseBlob(clothVariantSrc(zombieSrc, v));
+    const b = buildBody(compileBlob(doc, compileFace(doc)), DEFAULT_BUILD_OPTS);
+    const hull = buildOuterHullInstances([b]);
+    const { worst, found } = worstEscape(b, hull, [0, 0.9, 0]);
+    expect(found).toBeGreaterThan(200);
+    expect(worst, `the ${v} zombie escaped its hull by ${worst} m`).toBeLessThan(0);
   });
 });

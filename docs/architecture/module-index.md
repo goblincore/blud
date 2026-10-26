@@ -56,7 +56,7 @@ Each line is the first sentence of the module's header comment.
 | [Actors and crowd (render)](#actors-and-crowd-render) | 19 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
-| [Bench, demo and telemetry](#bench-demo-and-telemetry) | 7 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
+| [Bench, demo and telemetry](#bench-demo-and-telemetry) | 8 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
 | [SDF march renderer](#sdf-march-renderer) | 46 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 39 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
@@ -594,6 +594,7 @@ AA, glow, VHS, shutter blur, fisheye.
 
 Benchmarks, demo record/replay, frame hashes, GPU timing.
 
+- `webgpu/bench-cloth.ts` — THE SDF-CLOTH COST SPIKE (2026-10-26, docs/dev-notes/2026-10-26-sdf-cloth-cost/).
 - `webgpu/bench-stats.ts` — Pure frame-time accumulator for the bench page.
 - `webgpu/demo-hash.ts` — THE FRAME HASH, in-page half.
 - `webgpu/demo-recorder.ts` — THE INPUT RECORDER/PLAYER (deterministic demo recordings stage 3, 2026-09-14).

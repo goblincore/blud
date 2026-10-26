@@ -92,6 +92,34 @@ export const SPHERE_CHAIN_INFLATE = 1.13;
  *  above — change one and the containment proof needs redoing. */
 const SPHERE_CHAIN_SPACING = 1.0;
 
+/** A tapered chain longer than this many spheres falls back to the max-radius chain (a needle-thin end). */
+const TAPER_CHAIN_MAX = 24;
+
+/**
+ * THE TAPER-AWARE CHAIN (SDF-cloth cost spike, 2026-10-26, docs/dev-notes/2026-10-26-sdf-cloth-cost/). A round
+ * cone is the convex hull of its two end balls, which is exactly the union of the balls B(c(t), R(t)) whose centre
+ * and radius both run linearly from (a, ra) to (b, rb). So between two chain centres the solid lies inside the
+ * CAPSULE of radius max(R(ti), R(ti+1)) on that segment, and the header's capsule proof applies segment by segment:
+ * spacing d <= the segment's radius, each sphere SPHERE_CHAIN_INFLATE times the larger radius of the two segments it
+ * ends. `pad` (shell thickness, blend, noise, margin) is added to every radius, as `reach` adds it.
+ * Returns null when the thin end would need more than TAPER_CHAIN_MAX spheres (the max-radius chain is used then).
+ */
+export function taperedChain(a: Vec3, b: Vec3, ra: number, rb: number, pad: number): HullSphere[] | null {
+  const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
+  const len = Math.hypot(dx, dy, dz);
+  const step = (Math.min(ra, rb) + pad) * SPHERE_CHAIN_SPACING;
+  const n = Math.max(1, Math.ceil(len / step));
+  if (n + 1 > TAPER_CHAIN_MAX) return null;
+  const R = (t: number) => ra + (rb - ra) * t + pad;
+  const out: HullSphere[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const rr = Math.max(R(Math.max(0, (i - 1) / n)), R(t), R(Math.min(1, (i + 1) / n)));
+    out.push({ centre: [a[0] + dx * t, a[1] + dy * t, a[2] + dz * t], radius: rr * SPHERE_CHAIN_INFLATE });
+  }
+  return out;
+}
+
 /** Below this the sphere is not worth an instance; the primitive is smaller
  *  than a pixel at any distance the crowd is seen from. */
 const MIN_HULL_RADIUS = 0.008;
@@ -241,7 +269,13 @@ export function buildOuterHullInstances(
       const r = reach * SPHERE_CHAIN_INFLATE;
       const step = reach * SPHERE_CHAIN_SPACING;
       const primStart = out.length;
-      for (let seg = 0; seg + 1 < spine.length; seg++) {
+      // A TAPERED straight prim gets a chain that follows its taper (taperedChain): a skirt cone or a capelet
+      // is several times wider at one end, and a chain of max-radius spheres was a fat tube around the thin end.
+      const tapered = p.bend === undefined && p.radiusB !== undefined && p.radiusB !== p.radius
+        ? taperedChain(p.a, p.b, p.radius * maxScale, p.radiusB * maxScale, reach - rMax * maxScale)
+        : null;
+      if (tapered) for (const sp of tapered) out.push(sp);
+      for (let seg = 0; !tapered && seg + 1 < spine.length; seg++) {
         const s = spine[seg]!;
         const e = spine[seg + 1]!;
         const dx = e[0] - s[0], dy = e[1] - s[1], dz = e[2] - s[2];
