@@ -4,7 +4,7 @@ The question (owner, after the zombie's trousers moved from polygon kit to paint
 zombie wear **real SDF cloth** (trousers, or a robe like the cultist's) instead of paint, and what would it cost?
 The owner's bar for the cultist was **about 1.5x a zombie**.
 
-**Short answer.**
+**Short answer** (updated by the follow-up below: the rasterised cloth proxy brings the robe to 1.64x).
 
 - **Trousers and anything else that hugs a limb:** do it as an **offset of the flesh**: paint, plus the covered
   prims' radius grown by the cloth's stand-off. It costs **1.00-1.01x**. SDF shell tubes cost **1.48x** in close-up
@@ -166,16 +166,74 @@ counters, but no ratio can be quoted from it. Re-time on a quiet machine with
   - The game ships `GAME_RELAX = 1.0`, so it could be revived behind a "not relaxed" flag. It is not worth it for 1%.
   - If folds are kept, keep `warpA x |warpFreq|` small: `lip` divides every step near the cloth.
 
+## Option 1, built: the rasterised cloth proxy (follow-up, same day)
+
+`webgpu/cloth-proxy.ts` gives each straight shell prim a **closed triangle mesh fitted to its own round cone**.
+
+- **Size.** The cone is grown by the shell's reach (thickness, warp, blend, noise, margin), plus a second blend
+  reach for the chained-blend case, then circumscribed so the flat facets still contain it.
+- **Drawing.** `shell-hull-outer.ts` draws these meshes into the outer hull's entry and exit targets, as children of
+  the sphere meshes with the same two materials, **in place of** that shell's sphere chain. Rays start a few
+  centimetres from the cloth, and a pixel the cloth does not cover is not marched for it.
+- **Toggle.** `?clothproxy=0` turns it off for A/B.
+- **Scope.** Bent shells, and bodies with a split head, keep their sphere chains. Up to 256 shells; past that, every
+  shell falls back to spheres.
+
+**Containment** is pinned three ways:
+
+- **The mesh alone** (`cloth-proxy.test.ts`): it is convex and wound outward. Every sampled point of its true round
+  cone lies inside every face plane, for a skirt, a capelet, a trouser tube, a ball and a degenerate cone.
+- **Whole bodies** (`shell-hull-outer.test.ts`): rays fired at the robe zombie, the trousers zombie and the shipped
+  **cultist** (skirt, capelet, cuffs, hood). Every first hit is inside a hull sphere or a proxy.
+- **Why the second blend reach.** The first version escaped by **4.9 mm** at the trouser crotch and knees. There,
+  two shells and the flesh between them blend within each other's reach, and their smin undercuts stack. The
+  sphere chain's 13% inflation used to absorb that case; a fitted mesh has no spare room.
+
+**Game counters** (proxies on, against `?clothproxy=0`, which is the taper-aware chain above):
+
+| Variant | close: steps | close: walk | close: **total** | x zombie (3.06) | arena: **total** | x zombie (0.50) |
+| --- | --- | --- | --- | --- | --- | --- |
+| robe, spheres | 0.36 | 4.08 | **6.33** | 2.07 | **0.65** | 1.30 |
+| robe, **proxy** | 0.24 | 2.74 | **5.01** | **1.64** | **0.59** | **1.18** |
+| robe-flat, spheres | 0.28 | 3.49 | **5.84** | 1.91 | **0.61** | 1.22 |
+| robe-flat, **proxy** | 0.19 | 2.36 | **4.73** | **1.55** | **0.57** | **1.14** |
+| trousers, spheres | 0.13 | 2.00 | **4.54** | 1.48 | **0.59** | 1.18 |
+| trousers, **proxy** | 0.13 | 1.88 | **4.41** | 1.44 | **0.58** | 1.16 |
+
+- **Robe close-up: −21% total, −33% walk, −33% steps.** Together with the taper chain, that is −26% against where
+  the spike started (6.78M).
+- **Rendering is unchanged.** Per texel against spheres, no texel the old hull marched goes unmarched. Robe hits
+  drop from 5.1 to 4.3 steps each. Only 8-10 grazing silhouette texels flip between hit and miss, both ways, as
+  moving a ray's start point does to an edge pixel.
+- **Shading is unchanged** (2.24 → 2.27M). Shading is now the larger half of the robe's cost: it is untouched by
+  any hull and is the next lever.
+
+**Timing** is indicative only: load was 10-22. The A/B used three boots per mode, each timing the robe close-up and
+the bare zombie close-up with `timeDraws(60)`, read as robe minus zombie *within the same boot*:
+
+| | Boot 1 | Boot 2 | Boot 3 |
+| --- | --- | --- | --- |
+| proxy: robe / zombie | 59.9 / 50.5 ms (+9.4) | 39.1 / 30.6 ms (+8.5) | 35.2 / 25.9 ms (+9.3) |
+| spheres: robe / zombie | 41.1 / 30.1 ms (+11.0) | 50.2 / 30.1 ms (+20.1) | 42.5 / 24.0 ms (+18.5) |
+
+The robe's extra frame time falls from ~11-20 ms to ~9 ms, which agrees with the counters. Re-time quietly before
+quoting it.
+
 ## Recommendation
 
 1. **Zombie trousers: keep paint (#82), or move to the offset form if the legs should read thicker.** The offset form
    is paint plus a radius grow and costs nothing. SDF shell trousers are 1.48x for no visible gain at game range.
    - If a hem or cuff edge is wanted later, build the per-prim cuff above rather than shells.
-2. **A robed crowd enemy: not as a floor-length SDF robe at today's cost (2.07x close-up).**
-   - With a cone-fitted hull piece (est. −20%) and no `warp=` (−8%), the counters put it at about **1.5-1.6x**,
-     right at the owner's bar. That is the order to try them in, and the hull piece is the bigger one.
-   - A **shorter** loose garment (a kilt, apron or tabard) covers less screen and fewer silhouette pixels. It should
-     land well under the robe, but it is unmeasured.
+2. **A robed crowd enemy: viable with the cloth proxy.**
+   - It measures **1.64x** a zombie in close-up and **1.18x** in the arena; **1.55x / 1.14x** without `warp=`
+     folds. That is at the owner's ~1.5x bar.
+   - The estimate before the proxy was built was −20%. It measured −21%.
+   - A **shorter** loose garment (a kilt, apron or tabard) covers less screen and should land lower, but it is
+     unmeasured.
+   - **Before shipping it:**
+     - watch it in live play (the counters are on frozen poses; the proxy is rebuilt from the posed body every hull
+       update, as the spheres were);
+     - take the shading bound below, which is now the robe's bigger half.
 3. **The general win** that would help cloth and every character alike is **bounding the shading taps** (trousers
    shade +53%, cultist ~40% of its cost is shading per PERF.md). It is out of scope here.
 4. **Re-time** the game close-up on a quiet machine before quoting milliseconds.
@@ -188,6 +246,9 @@ counters, but no ratio can be quoted from it. Re-time on a quiet machine with
   - scene `Z1`;
   - `__sdfBench.census()` and `__sdfBench.counters(mode)`.
 - `src/lab/sdf-zombie/webgpu/game-main.ts`: `?cloth=` on the zombie registry entry.
-- `src/lab/sdf-zombie/webgpu/shell-hull-outer.ts` (+ tests): `taperedChain`, the prototype.
+- `src/lab/sdf-zombie/webgpu/shell-hull-outer.ts` (+ tests):
+  - `taperedChain`, the first prototype;
+  - the cloth proxies' raster path and `setClothProxies`.
+- `src/lab/sdf-zombie/webgpu/cloth-proxy.ts` (+ test): the proxy mesh. Containment is argued in its header.
 - `scripts/cloth-cost.mjs` (bench) and `scripts/cloth-cost-game.mjs` (game): the drivers. Both have `DUMP=1`, and
   `TIMING=1` on the bench driver.

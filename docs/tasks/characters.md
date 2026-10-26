@@ -351,8 +351,10 @@ only if an idea below earns it.
 - [x] **SDF-cloth cost spike (2026-10-26)**: [notes](../../docs/dev-notes/2026-10-26-sdf-cloth-cost/NOTES.md). Counters, game close-up,
   zombie = 1.00: paint or flesh-OFFSET trousers 1.00-1.01x, five shell trousers 1.48x, the cultist's robe 2.07x (arena 1.30x).
   The robe's cost is STEPS near its silhouette, not prims. Landed: taper-aware outer-hull chain (-7% robe close-up).
-- [ ] Next if a robed crowd enemy is wanted: a cone-fitted outer-hull piece per shell (est. -20%) and no `warp=` (-8%),
-  est. ~1.5-1.6x. Bound the shading taps (trousers shade +53%). A per-prim cuff (hem lip from the flesh offset).
+- [x] **Rasterised cloth proxy** (`cloth-proxy.ts`): each shell's own fitted mesh in the outer hull instead of spheres.
+  Robe close-up -21% -> **1.64x** a zombie (1.55x without `warp=`), arena 1.18x. `?clothproxy=0` for A/B.
+- [ ] Next: watch a robed zombie in live play; bound the shading taps (now the robe's bigger half; trousers shade +53%);
+  a per-prim cuff (hem lip from the flesh offset).
 - [ ] **Cloth feel**: hood and robe read stiff (owner). Options: more pendulum points (hem flare ring, hood tail),
   travelling warp waves driven by velocity, or a prebaked cloth sim. Robe distortion on the death throw.
 - [ ] **Hip fire**: the cultist fires from the shoulder; owner wants a random mix of hip and shoulder bursts.
