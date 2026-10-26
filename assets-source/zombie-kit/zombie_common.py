@@ -213,11 +213,14 @@ def crease(o, k=6.0, lift=0.25):
 
 
 def finish(name, kit, material, tris, voxel=0.0018, noise=0.0008, noise_scale=0.02, smooth=(0.5, 3), ao=True,
-           base=(0.8, 0.8, 0.8), rust=None, rust_amt=0.0, seed=1, dirt=None, folds=None, cavity=0.0, ao_dist=0.03):
+           base=(0.8, 0.8, 0.8), rust=None, rust_amt=0.0, seed=1, dirt=None, folds=None, cavity=0.0, ao_dist=0.03, nmap=False):
     import time; t0 = time.time()
     o = fuse(name, voxel=voxel, smooth=smooth, noise=noise, noise_scale=noise_scale)
     print(f'[finish] {name} fused {len(o.data.vertices)} verts {time.time() - t0:.1f}s', flush=True)
     if folds: deform(o, folds); print(f'[finish] {name} folds {time.time() - t0:.1f}s', flush=True)
+    hi = None
+    if nmap:   # keep the full-detail sculpt: its relief is baked into the decimated part's normal map (bake_normal_atlas)
+        hi = o.copy(); hi.data = o.data.copy(); hi.name = f'{name}.hi'; work_coll().objects.link(hi)
     decimate(o, tris)
     print(f'[finish] {name} decimated {len(o.data.polygons)} {time.time() - t0:.1f}s', flush=True)
     if ao: bake_ao(o, material=material, ao_dist=ao_dist)
@@ -225,7 +228,89 @@ def finish(name, kit, material, tris, voxel=0.0018, noise=0.0008, noise_scale=0.
     colourise(o, base, rust, rust_amt, seed, dirt=dirt)
     if cavity: crease(o, cavity)
     print(f'[finish] {name} done {time.time() - t0:.1f}s', flush=True)
-    return install(o, kit)
+    o = install(o, kit)
+    if hi:
+        for c in list(hi.users_collection): c.objects.unlink(hi)
+        hi_coll().objects.link(hi)
+        NMAP_PARTS.append((o, hi))
+    return o
+
+
+NMAP_PARTS = []   # (decimated part in `mech`, its full-detail sculpt) for bake_normal_atlas
+
+
+def hi_coll():
+    c = bpy.data.collections.get('nmap_hi') or bpy.data.collections.new('nmap_hi')
+    if c.name not in bpy.context.scene.collection.children: bpy.context.scene.collection.children.link(c)
+    return c
+
+
+def drop_inner_wall(o, bone=None):
+    """Delete the cloth shell's INNER wall: faces facing in toward the part's own axis (its bone; the torso's vertical
+    axis for the seat). The kit draws double-sided, so a single outer skin reads the same, the atlas holds only what is
+    seen (twice the texels), and the bake has no inner wall to fire through (the closed shell baked ~10% flipped)."""
+    bone = bone or o.name.split('|')[0]
+    if bone in LIMB:
+        h, tl, u, fw, s_ = limb_frame(bone)
+        axis = lambda p: h + u * (p - h).dot(u)
+    else:
+        axis = lambda p: Vector((0.0, p.y, 0.02))
+    bm = bmesh.new(); bm.from_mesh(o.data)
+    bm.faces.ensure_lookup_table()
+    gone = []
+    for f in bm.faces:
+        c = to_blob(f.calc_center_median()); n = to_blob(f.normal)
+        if n.dot(c - axis(c)) < 0: gone.append(f)
+    bmesh.ops.delete(bm, geom=gone, context='FACES')
+    bm.to_mesh(o.data); bm.free(); o.data.update()
+
+
+def bake_normal_atlas(material, size, png_path):
+    """NORMAL MAPS FOR KIT (owner, 2026-10-26: the cloth relief "doesn't really read"). Every decimated part wearing
+    `material` is unwrapped into ONE shared atlas (blender-kit.ts merges a material's parts into one primitive, so they
+    share one texture), then each part's full-detail sculpt is baked into it as a tangent-space normal map
+    (selected-to-active, Cycles). The material gets an Image Texture -> Normal Map node, so the glTF exporter writes
+    normalTexture, TEXCOORD_0 and (export_tangents) TANGENT. The sculpts are deleted afterwards."""
+    parts = [(lo, hi) for lo, hi in NMAP_PARTS if lo.data.materials and lo.data.materials[0].name == material]
+    if not parts: return
+    los = [lo for lo, _ in parts]
+    for lo, hi in parts: drop_inner_wall(lo); drop_inner_wall(hi, lo.name.split('|')[0])
+    bpy.ops.object.select_all(action='DESELECT')
+    for lo in los: lo.hide_set(False); lo.select_set(True)
+    bpy.context.view_layer.objects.active = los[0]
+    bpy.ops.object.mode_set(mode='EDIT')       # multi-object edit: every part's islands packed into one 0..1 space
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.uv.smart_project(angle_limit=math.radians(60), island_margin=0.004)
+    bpy.ops.uv.pack_islands(margin=0.004)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    img = bpy.data.images.get(f'nm_{material}') or bpy.data.images.new(f'nm_{material}', size, size, alpha=False)
+    img.colorspace_settings.name = 'Non-Color'
+    img.generated_color = (0.5, 0.5, 1.0, 1.0)
+    m = bpy.data.materials[material]; nt = m.node_tree
+    tex = nt.nodes.get('nmap_tex') or nt.nodes.new('ShaderNodeTexImage'); tex.name = 'nmap_tex'; tex.image = img
+    nmn = nt.nodes.get('nmap') or nt.nodes.new('ShaderNodeNormalMap'); nmn.name = 'nmap'
+    bsdf = nt.nodes['Principled BSDF']
+    nt.links.new(tex.outputs['Color'], nmn.inputs['Color']); nt.links.new(nmn.outputs['Normal'], bsdf.inputs['Normal'])
+    nt.nodes.active = tex                      # the bake writes into the material's ACTIVE image node
+    sc = bpy.context.scene; prev = sc.render.engine
+    sc.render.engine = 'CYCLES'; sc.cycles.samples = 1; sc.cycles.device = 'CPU'
+    sc.render.bake.use_selected_to_active = True
+    # Both the part and its sculpt are outer skins only (drop_inner_wall), so a generous cage is safe: the fold crests
+    # stand up to 7 mm off the decimated part, and with the sculpt's inner wall still there, rays starting inside a
+    # crest hit it from behind and baked flipped normals (~10% of the atlas, yellow).
+    sc.render.bake.cage_extrusion = 0.010; sc.render.bake.max_ray_distance = 0.025
+    sc.render.bake.margin = 6; sc.render.bake.normal_space = 'TANGENT'
+    for k, (lo, hi) in enumerate(parts):
+        hi.hide_set(False)
+        bpy.ops.object.select_all(action='DESELECT')
+        hi.select_set(True); lo.select_set(True); bpy.context.view_layer.objects.active = lo
+        sc.render.bake.use_clear = k == 0
+        bpy.ops.object.bake(type='NORMAL')
+        hi.hide_set(True)
+    sc.render.engine = prev
+    img.filepath_raw = png_path; img.file_format = 'PNG'; img.save()
+    for _, hi in parts: bpy.data.objects.remove(hi, do_unlink=True)
+    print(f'[nmap] {material}: {len(parts)} parts -> {png_path}', flush=True)
 
 
 def mat(name, base=(1, 1, 1), rough=0.5, metal=0.0):

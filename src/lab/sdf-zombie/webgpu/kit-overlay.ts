@@ -361,8 +361,9 @@ function loadKitSource(url: string): Promise<GLTF> {
         if (!mesh.isMesh) return;
         SHARED.add(mesh.geometry);
         for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
-          const map = (m as THREE.MeshStandardMaterial).map;
+          const { map, normalMap } = m as THREE.MeshStandardMaterial;
           if (map) SHARED.add(map);
+          if (normalMap) SHARED.add(normalMap);   // baked cloth relief (blender-kit.ts normalTexture), shared like the map
         }
       });
       return g;
@@ -401,15 +402,15 @@ export function keepKitMaterials(root: THREE.Object3D, only: readonly string[]):
     if (!mesh.isMesh) return;
     const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     if (mats.some(m => keep.has(m.name))) {
-      for (const m of mats) { const map = (m as THREE.MeshStandardMaterial).map; if (map) keptMaps.add(map); }
+      for (const m of mats) for (const t of [(m as THREE.MeshStandardMaterial).map, (m as THREE.MeshStandardMaterial).normalMap]) if (t) keptMaps.add(t);
     } else drop.push(mesh);
   });
   for (const mesh of drop) {
     mesh.removeFromParent();
     if (!SHARED.has(mesh.geometry)) mesh.geometry.dispose();
     for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
-      const map = (m as THREE.MeshStandardMaterial).map;
-      if (map && !keptMaps.has(map) && !SHARED.has(map)) map.dispose();
+      for (const t of [(m as THREE.MeshStandardMaterial).map, (m as THREE.MeshStandardMaterial).normalMap])
+        if (t && !keptMaps.has(t) && !SHARED.has(t)) t.dispose();
       m.dispose();
     }
   }

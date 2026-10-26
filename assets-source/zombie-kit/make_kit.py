@@ -474,27 +474,29 @@ def labourer():
     clear_work()
     def seat(u, v):
         th = 360 * v
-        y = 1.045 - (1.045 - 0.87) * u
-        return B(torso_pt(y, th, 0.006 + 0.003 * u))   # 0.007 + 0.006u bagged out behind like a nappy
+        y = 1.045 - (1.045 - 0.85) * u   # to 0.85: at 0.87 a sliver of crotch showed between the seat and the thighs
+        # 11 mm + up to 4 mm off the POSED envelope (surface.json): the fold valleys pull the cloth in by up to 4 mm, and
+        # the first trousers, 6 mm off the rest skin, had flesh coming through at the crotch whenever he walked.
+        return B(torso_pt(y, th, 0.011 + 0.004 * u))
     _sleeve('seat', seat, 12, 60, 0.004)
     band_ = [B(torso_pt(1.045, 6 * k, 0.012)) for k in range(62)]
     tube('waistband', band_, [0.008] * len(band_), segs=8)
     for k, th in enumerate((24, 70, 120, 160, -160, -120, -70, -24)):   # belt loops
         tube(f'loop{k}', [B(torso_pt(1.058, th, 0.019)), B(torso_pt(1.045, th, 0.021)), B(torso_pt(1.030, th, 0.019))], [0.0028] * 3, segs=6)
     finish('pelvis|trousers', 'pelvis|trousers', 'cloth', 1900, voxel=0.0020, noise=0.0010, noise_scale=0.03,
-           smooth=(0.5, 2), base=DENIM, rust=GRIME, rust_amt=0.5, seed=21, folds=seat_folds, cavity=12.0, ao_dist=0.05)
+           smooth=(0.5, 2), base=DENIM, rust=GRIME, rust_amt=0.5, seed=21, folds=seat_folds, cavity=12.0, ao_dist=0.05, nmap=True)
     for sd in 'lr':
         clear_work()
-        _sleeve(f'thigh{sd}', lambda u, v, sd=sd: B(limb_pt(f'thigh.{sd}', -0.06 + 1.12 * u, 360 * v, 0.011 + 0.006 * math.sin(math.pi * u))), 14, 40, 0.004)
+        _sleeve(f'thigh{sd}', lambda u, v, sd=sd: B(limb_pt(f'thigh.{sd}', -0.06 + 1.12 * u, 360 * v, 0.012 + 0.006 * math.sin(math.pi * u))), 14, 40, 0.004)
         finish(f'thigh.{sd}|trousers', f'thigh.{sd}|trousers', 'cloth', 1600, voxel=0.0020, noise=0.0010, noise_scale=0.03,
                smooth=(0.5, 2), base=DENIM, rust=GRIME, rust_amt=0.5, seed=22 if sd == 'l' else 23,
-               folds=leg_folds(f'thigh.{sd}', sd, patch=(sd == 'l')), cavity=12.0, ao_dist=0.05)
+               folds=leg_folds(f'thigh.{sd}', sd, patch=(sd == 'l')), cavity=12.0, ao_dist=0.05, nmap=True)
         clear_work()
         rag = jag(51 if sd == 'l' else 57, 0.09, 8)
-        _sleeve(f'shin{sd}', lambda u, v, sd=sd, rag=rag: B(limb_pt(f'shin.{sd}', -0.08 + (0.40 + rag(360 * v) + 0.08) * u, 360 * v, 0.013 + 0.004 * u)), 10, 40, 0.004)
+        _sleeve(f'shin{sd}', lambda u, v, sd=sd, rag=rag: B(limb_pt(f'shin.{sd}', -0.08 + (0.40 + rag(360 * v) + 0.08) * u, 360 * v, 0.015 + 0.004 * u)), 10, 40, 0.004)
         finish(f'shin.{sd}|trousers', f'shin.{sd}|trousers', 'cloth', 1100, voxel=0.0020, noise=0.0010, noise_scale=0.03,
                smooth=(0.5, 2), base=DENIM, rust=GRIME, rust_amt=0.7, seed=24 if sd == 'l' else 25, dirt=dirt_up(0.35, 0.55),
-               folds=shin_folds(f'shin.{sd}', sd), cavity=12.0, ao_dist=0.05)
+               folds=shin_folds(f'shin.{sd}', sd), cavity=12.0, ao_dist=0.05, nmap=True)
         # Work boots: a shaft round the ankle on the shin, the boot body round the foot. Rounded toe cap, a heel, a
         # flat sole on the floor, laces up the front.
         clear_work()
@@ -541,11 +543,14 @@ for sd in 'lr':
 {'asylum': asylum, 'morgue': morgue, 'labourer': labourer, 'none': lambda: None}[VARIANT]()
 for o in list(mech.objects):
     if o.type == 'EMPTY': bpy.data.objects.remove(o, do_unlink=True)
+# The trousers' relief as a normal map (1024: ~0.8 mm a texel over the trousers' ~0.6 m2), baked from the sculpts.
+bake_normal_atlas('cloth', 1024, os.path.join(HERE, 'zombie-cloth-n.png'))
 
 parts = [o for o in mech.objects if o.type == 'MESH']
 print('[zombie-kit]', VARIANT, {o.name: len(o.data.polygons) for o in parts}, 'total', sum(len(o.data.polygons) for o in parts))
 bpy.ops.object.select_all(action='DESELECT')
 for o in parts: o.hide_set(False); o.select_set(True)
 bpy.ops.export_scene.gltf(filepath=OUT_GLB, export_format='GLB', export_apply=True, export_yup=True, export_extras=False,
-                          use_selection=True, export_vertex_color='ACTIVE', export_attributes=True)
+                          use_selection=True, export_vertex_color='ACTIVE', export_attributes=True,
+                          export_tangents=True, export_image_format='AUTO')
 print('[zombie-kit] ->', OUT_GLB)
