@@ -3,6 +3,7 @@
 // Phase-1 split of march.wgsl.ts (2026-09-18): the signed-distance body field and its normal.
 // MOVE-ONLY: the WGSL text below is byte-identical to the original
 // file; see docs/dev-notes/2026-09-18-march-split/.
+import { SHADE_BOUND as SHADE } from './shade-bound-flag';
 import { LIMB_ACCUMULATORS as LIMBS } from './limbs-flag';
 import { MAX_CROWD_INSTANCES } from '../crowd-records';
 import { ROW_CLUSTER_BOUNDS, ROW_CLUSTER_GROUPS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE } from './layout';
@@ -193,7 +194,11 @@ ${LIMBS ? `    // Mode 4 only where it can matter: a body with wounds. An unwoun
   // the body's). A split slot's pieces fold at different un-warped points, so
   // the bound holds for the PIECE it was measured on only: its point at the
   // last sample and at this one are the same rigid motion of the ray's.
-  gCullRef = select(1e9, gCullUB, base + s == gCullSlot && i32(piece.z) == gCullPiece && !limbMode);
+${SHADE ? `  // POST-HIT BOUND (shade-bound-flag.ts): outside the walk (gCullUB unset), after a hit, the accepting sample's
+  // fold bounds this one's by the walk's Lipschitz rule.
+  let shadeOn = gCullUB > 1e8 && gShadeFold < 1e8;
+  let ubRef = select(gCullUB, gShadeFold + 3.0 * length(pIn - gShadeAt) + 0.002, shadeOn);
+  gCullRef = select(1e9, ubRef, base + s == select(gCullSlot, gShadeSlot, shadeOn) && i32(piece.z) == select(gCullPiece, gShadePiece, shadeOn) && !limbMode);` : `  gCullRef = select(1e9, gCullUB, base + s == gCullSlot && i32(piece.z) == gCullPiece && !limbMode);`}
   if (tiled) {
     // TILE-LIST PATH (perf task 5 step 2, range-walked in 7d). MARCH_BODY
     // preloaded this pixel's tile entries into gTile* ONCE, before any
@@ -503,7 +508,12 @@ var<private> gCullSlot: i32 = -1;
 var<private> gCullPiece: i32 = 0;
 var<private> gLastFold: f32 = 1e9;
 var<private> gLastFoldSlot: i32 = -1;
-var<private> gLastFoldPiece: i32 = 0;`;
+var<private> gLastFoldPiece: i32 = 0;${SHADE ? `
+// POST-HIT BOUND (shade-bound-flag.ts): the walk's accepting sample, for every mapBody after it. 1e9 = none.
+var<private> gShadeFold: f32 = 1e9;
+var<private> gShadeAt: vec3<f32> = vec3<f32>(0.0);
+var<private> gShadeSlot: i32 = -1;
+var<private> gShadePiece: i32 = 0;` : ''}`;
 
 // Tetrahedron differences. Epsilon stays SMALL: the prior blendshell experiment
 // used 0.02 (2 cm on 6 cm limbs) and smeared normals exactly at the

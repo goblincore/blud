@@ -81,6 +81,8 @@ async function boot(variant) {
   for (let i = 0; i < 800; i++) { wb = await evaluate("__sdfGame.warmBackground()"); if (wb.gib === "ready" && wb.crowd === "ready") break; if (wb.gib === "failed" || wb.crowd === "failed") break; await sleep(500); if (i % 10 === 0) await evaluate("__sdfGame.step(1, 0)"); }
   if (wb?.gib !== "ready" || wb?.crowd !== "ready") die(`the background warm is ${JSON.stringify(wb)}`);
   await evaluate("__sdfGame.installDebugProbe()");
+  // NG=0: the analytic normal off (every hit takes the finite-difference normal).
+  if (process.env.NG === "0") await evaluate("__sdfGame.setNormalGradient(0)");
 }
 
 async function stage(name) {
@@ -139,6 +141,16 @@ for (let round = 0; round < ROUNDS; round++) {
           // The walk's raw texels (mode 13), de-padded, for a per-texel diff between variants.
           const d = await evaluate(`(async () => { __sdfGame.setMarchDebugMode(13); await __sdfGameDebug.readMarchTarget(); const r = await __sdfGameDebug.readMarchTarget(); __sdfGame.setMarchDebugMode(0); await __sdfGameDebug.readMarchTarget(); return r; })()`);
           writeFileSync(`${OUT}/${st}-${variant}.w${d.w}h${d.h}.f32`, Buffer.from(d.rgba32f, "base64"));
+          // And the SHADED march target (mode 0), for a pixel diff of a shading change.
+          const c0 = await evaluate(`(async () => { __sdfGame.setMarchDebugMode(0); await __sdfGameDebug.readMarchTarget(); return __sdfGameDebug.readMarchTarget(); })()`);
+          writeFileSync(`${OUT}/${st}-${variant}.shaded.f32`, Buffer.from(c0.rgba32f, "base64"));
+        }
+        if (process.env.REASONS === "1") {
+          // Debug mode 12: g = the analytic normal's reason per hit pixel (0 = analytic used; 1 = unsupported prim).
+          const h = await evaluate(`(async () => { __sdfGame.setMarchDebugMode(12); await __sdfGameDebug.readMarchTarget(); const r = await __sdfGameDebug.readMarchTarget(); __sdfGame.setMarchDebugMode(0); await __sdfGameDebug.readMarchTarget();
+            const f = new Float32Array(Uint8Array.from(atob(r.rgba32f), (c) => c.charCodeAt(0)).buffer); const hist = {};
+            for (let i = 0; i < f.length; i += 4) { if (!(f[i + 3] < 1)) continue; const k = Math.round(f[i + 1]); hist[k] = (hist[k] ?? 0) + 1; } return hist; })()`);
+          console.log(`  ${st} ${variant} analytic-normal reasons ${JSON.stringify(h)}`);
         }
         const shot = await S.send("Page.captureScreenshot", { format: "png" });
         writeFileSync(`${OUT}/${st}-${variant}.png`, Buffer.from(shot.result.data, "base64"));

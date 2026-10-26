@@ -2,6 +2,7 @@
 //
 // WGSL for the analytic normal gradient (probe, wounds, bones and body functions) and the builders that wrap it as three wgslFn nodes.
 
+import { NG_COUNT as NGC } from './march/shade-bound-flag';
 import { wgslFn } from 'three/tsl';
 import {
   HELPERS, ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_SHAPE, ROW_PRIM_QUAT,
@@ -213,7 +214,8 @@ const NG_EXCLUDED = /* wgsl */ `fn ngExcluded(p: vec3<f32>, bounds: vec4<f32>, g
     for (var i = 0; i < i32(grp.y); i = i + 1) {
       let idx = i32(grp.x) + i;
       let S = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SCALE} + band), 0);
-      if (S.w > 0.5) { continue; }
+      if (S.w > 0.5) { continue; }${NGC ? `
+      if (gDebugMode > 0.5) { gDebugPrims = gDebugPrims + 1.0; }` : ''}
       let T = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHAPE} + band), 0);
       if (T.x >= 0.0 || (i32(T.y) & 47) != 0) { gNgReason = 1; return lower; }
     }
@@ -238,7 +240,8 @@ const NG_GROUP = /* wgsl */ `fn ngGroup(dIn: vec4<f32>, p: vec3<f32>, data: text
     let idx = i32(grp.x) + i;
     if (idx >= i32(counts.x)) { break; }
     let S = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SCALE} + band), 0);
-    if (S.w > 0.5) { continue; }
+    if (S.w > 0.5) { continue; }${NGC ? `
+    if (gDebugMode > 0.5) { gDebugPrims = gDebugPrims + 1.0; }` : ''}
     if ((flags & 2) != 0) {
       let T = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHAPE} + band), 0);
       // Metal is bit 16 and has no geometric effect. All other profiles,

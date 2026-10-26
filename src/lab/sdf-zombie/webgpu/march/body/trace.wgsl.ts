@@ -3,6 +3,7 @@
 // Phase-1 split of march.wgsl.ts (2026-09-18): march trace setup/loop/post and assembled trace.
 // MOVE-ONLY: the WGSL text below is byte-identical to the original
 // file; see docs/dev-notes/2026-09-18-march-split/.
+import { SHADE_BOUND as SHADE } from '../shade-bound-flag';
 import { WOUND_STEP_MUL } from '../layout';
 import { SPLIT_SHADE } from '../../../head-split';
 import { FACE_LAYER_WGSL } from './face.wgsl';
@@ -332,7 +333,9 @@ ${RAYMASK ? `  // RAY-MASK PROBE (?raymask): the walk's samples all lie on this 
       clamped = true;
     }
   }
-${DEBUG_COUNTERS_BLOCK}
+${SHADE ? `  // POST-HIT BOUND (shade-bound-flag.ts): the accepting sample bounds every field call after it.
+  if (hit && cullFold < 1e8) { gShadeFold = cullFold; gShadeAt = camPos + rd * cullT; gShadeSlot = cullSlot; gShadePiece = cullPiece; }
+` : ''}${DEBUG_COUNTERS_BLOCK}
 `;
 
 export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) {

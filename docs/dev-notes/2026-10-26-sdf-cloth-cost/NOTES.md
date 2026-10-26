@@ -219,6 +219,68 @@ the bare zombie close-up with `timeDraws(60)`, read as robe minus zombie *within
 The robe's extra frame time falls from ~11-20 ms to ~9 ms, which agrees with the counters. Re-time quietly before
 quoting it.
 
+## The shading lever (follow-up 2)
+
+**Finding: shading is not a cloth cost.** Shading prims per hit pixel in the game close-up are the same for cloth
+and flesh:
+
+| | Shading prims per hit pixel |
+| --- | --- |
+| zombie | 61 |
+| robe | 60 |
+| trousers | 86 |
+
+- The robe's shading total is higher only because it covers more screen.
+- The trousers' extra is the four normal taps folding tube and flesh together.
+- So no shading change moves the cloth-to-zombie ratio. These are **general** levers, for every character.
+
+Two spike switches measured, both **off by default**, with the shader text byte-identical when off:
+
+- **`?shadebound`**, the post-hit upper-bound cull (`march/shade-bound-flag.ts`, `map-body.wgsl.ts`,
+  `trace.wgsl.ts`).
+  - The walk already gives every sample's fold an upper bound, so the culls bite from the first cluster. The
+    shading's `mapBody` calls (normal taps, AO and scatter probes, wound shadow) had none.
+  - The walk now leaves its accepting sample's fold, point, slot and piece behind. Every later `mapBody` of the pixel
+    culls against `fold + 3 x |p - sample| + 2 mm`, the walk's own rule.
+- **The analytic normal off** (`__sdfGame.setNormalGradient(0)`, a runtime switch that already exists).
+  - Debug mode 12 says `ngBody` reports reason 1 ("unsupported") on **every** hit pixel of both scenes: zombie, robe
+    and the arena's whole cast.
+  - It gives up on ANY tapered or shaped prim, including prims in groups it merely skips (`ngExcluded` checks
+    those). The zombie's foot bar is tapered, and every shell is shaped.
+  - So each hit pays `ngBody`'s fold and then the 4-tap fallback anyway. `?ngcount` adds `ngBody`'s own prim
+    evaluations to the census, which never saw them.
+
+| Game counters (with `?ngcount`) | close none | close robe | close trousers | arena none | arena robe |
+| --- | --- | --- | --- | --- | --- |
+| A. as shipped | 3.21 | 5.13 | 4.54 | 0.54 | 0.62 |
+| B. analytic normal off | 3.06 (−5%) | 5.01 (−2%) | 4.41 (−3%) | 0.50 (−7%) | 0.59 (−5%) |
+| C. B + post-hit bound | 3.00 (−7%) | 4.95 (−4%) | 4.33 (−5%) | **0.44 (−19%)** | **0.54 (−13%)** |
+
+Pixels (the shaded float march target, max channel difference over hit texels):
+
+| | A → B | B → C |
+| --- | --- | --- |
+| robe | bit-identical | max 27/255; 22 texels > 1/255 |
+| trousers | bit-identical | max 15/255; 41 texels > 1/255 |
+| bare zombie | max 9/255; 11% of texels > 1/255 | max 8/255; 18% of texels > 1/255 |
+
+- The bare zombie's A → B difference contradicts mode 12's "always reason 1". The analytic path reaches the bare
+  body's image somewhere (a side effect of its globals?), so it needs a look before it is switched off.
+- The bound's shifts are the smin-order kind the walk's own bound made when it landed (max 11/255 then). The
+  robe's few outliers up to 27/255 would need an owner look.
+
+**Verdict.**
+
+- **Worth taking for CROWDS**, where it is −13% to −19% of the arena's march work. In close-up it is only −4% to
+  −7%.
+- **Order:**
+  1. the post-hit bound, after an owner look at the outliers;
+  2. the analytic normal: either fix `ngBody` so it skips unsupported prims it does not need (instead of failing
+     the whole pixel), or turn it off where it can never succeed. That needs the bare-zombie difference understood.
+- **Close-up shading** is about 4 taps x ~12 prims + an AO probe per hit pixel. The 7 cm cull margin (4 x the
+  blend) keeps most nearby groups in. The next lever there is fewer taps or cheaper ones, not culling: for example,
+  normals from the walk's last two samples, or a 3-tap one-sided difference.
+
 ## Recommendation
 
 1. **Zombie trousers: keep paint (#82), or move to the offset form if the legs should read thicker.** The offset form
