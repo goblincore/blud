@@ -41,7 +41,8 @@
 // leaves the flesh behind. That warning does NOT apply here. This is a real
 // mesh; moving the object is the correct and only way to move it.
 import * as THREE from 'three/webgpu';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { attribute, vec3 } from 'three/tsl';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { setMaterialEnvironment } from './material-environment';
@@ -341,7 +342,56 @@ export interface KitLoadOpts {
   scale?: number;
 }
 
-/** Drops (and disposes) every mesh under `root` whose material is not named in `only`. Pure scene-graph work: no renderer. */
+/**
+ * ONE PARSE PER KIT, SHARED GEOMETRY (owner, 2026-10-26: "each zombie shares the same mesh"). A kit used to be loaded
+ * and parsed per ACTOR, so twenty zombies held twenty copies of the same hand geometry and built twenty room
+ * environments. Now the parsed glTF is cached per URL and each actor gets a skeleton CLONE of it (SkeletonUtils: its
+ * own bones and skinned meshes, the SAME geometry and textures) with its OWN material clones -- per-actor material
+ * state is real (glow() pulses each actor's LEDs; the breakable path swaps geometry per actor, kit-damage.ts) and a
+ * cloned material shares the original's shader. Everything in a cached source is SHARED: no per-actor dispose frees it.
+ */
+const KIT_SOURCES = new Map<string, Promise<GLTF>>();
+const SHARED = new WeakSet<object>();
+function loadKitSource(url: string): Promise<GLTF> {
+  let p = KIT_SOURCES.get(url);
+  if (!p) {
+    p = new GLTFLoader().loadAsync(url).then((g) => {
+      g.scene.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        SHARED.add(mesh.geometry);
+        for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+          const map = (m as THREE.MeshStandardMaterial).map;
+          if (map) SHARED.add(map);
+        }
+      });
+      return g;
+    });
+    p.catch(() => KIT_SOURCES.delete(url));   // a failed load may be retried
+    KIT_SOURCES.set(url, p);
+  }
+  return p;
+}
+/** True for geometry or a texture that belongs to a cached kit source (shared by every actor wearing that kit). */
+export const isSharedKitResource = (o: object): boolean => SHARED.has(o);
+
+/** The kit room environment, ONE per renderer (it was built per kit, per actor; it never changes). */
+const KIT_ENV = new WeakMap<object, THREE.RenderTarget>();
+function kitEnvironment(renderer: THREE.WebGPURenderer): THREE.RenderTarget {
+  let rt = KIT_ENV.get(renderer);
+  if (!rt) {
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const room = new RoomEnvironment();
+    rt = pmrem.fromScene(room, 0.04);
+    room.dispose();
+    pmrem.dispose();
+    KIT_ENV.set(renderer, rt);
+  }
+  return rt;
+}
+
+/** Drops (and disposes) every mesh under `root` whose material is not named in `only`. Pure scene-graph work: no renderer.
+ *  Geometry and textures shared with a cached kit source are only dropped, never disposed (isSharedKitResource). */
 export function keepKitMaterials(root: THREE.Object3D, only: readonly string[]): void {
   const keep = new Set(only);
   const drop: THREE.Mesh[] = [];
@@ -356,10 +406,10 @@ export function keepKitMaterials(root: THREE.Object3D, only: readonly string[]):
   });
   for (const mesh of drop) {
     mesh.removeFromParent();
-    mesh.geometry.dispose();
+    if (!SHARED.has(mesh.geometry)) mesh.geometry.dispose();
     for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
       const map = (m as THREE.MeshStandardMaterial).map;
-      if (map && !keptMaps.has(map)) map.dispose();
+      if (map && !keptMaps.has(map) && !SHARED.has(map)) map.dispose();
       m.dispose();
     }
   }
@@ -444,7 +494,14 @@ export async function loadKit(
   url: string, renderer: THREE.WebGPURenderer, root: Vec3 = [0, 0, 0],
   breakable = false, opts: KitLoadOpts = {},
 ): Promise<KitOverlay> {
-  const gltf = await new GLTFLoader().loadAsync(url);
+  const source = await loadKitSource(url);
+  // This actor's kit: its own skeleton and skinned meshes over the SHARED geometry, and its own materials.
+  const gltf = { scene: cloneSkinned(source.scene) as THREE.Group };
+  gltf.scene.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.material = Array.isArray(mesh.material) ? mesh.material.map(m => m.clone()) : mesh.material.clone();
+  });
   if (opts.only) keepKitMaterials(gltf.scene, opts.only);
   const kitScale = opts.scale ?? 1;
 
@@ -460,12 +517,7 @@ export async function loadKit(
   // reference cube, which are MeshStandardMaterial too, keep the look every
   // previous capture was judged against.
   // (A kit loaded with `only` has already lost its other meshes here: keepKitMaterials above.)
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const room = new RoomEnvironment();
-  const environment = pmrem.fromScene(room, 0.04);
-  const env = environment.texture;
-  room.dispose();
-  pmrem.dispose();
+  const env = kitEnvironment(renderer).texture;
   const object = new THREE.Group();
   object.add(gltf.scene);
   object.position.set(root[0], root[1], root[2]);
@@ -568,10 +620,10 @@ export async function loadKit(
     dispose() {
       damageView?.dispose();
       debris.removeFromParent();
-      environment.dispose();
+      // The environment and any geometry still shared with the cached source belong to every actor wearing this kit.
       object.traverse(o => {
         const mesh = o as THREE.Mesh;
-        mesh.geometry?.dispose();
+        if (mesh.geometry && !SHARED.has(mesh.geometry)) mesh.geometry.dispose();
         const m = mesh.material;
         for (const mat of Array.isArray(m) ? m : m ? [m] : []) mat.dispose();
       });

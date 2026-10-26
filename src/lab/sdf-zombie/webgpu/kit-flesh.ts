@@ -62,11 +62,16 @@ export function dressKitFlesh(root: THREE.Object3D, material: THREE.Material, fl
   root.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh || Array.isArray(mesh.material) || !KIT_FLESH_MATERIALS.has(mesh.material?.name ?? '')) return;
-    const pos = mesh.geometry.getAttribute('position');
-    const a = kitFleshAttributes(pos.array as ArrayLike<number>, flesh);
-    mesh.geometry.setAttribute('bakeColor', new THREE.BufferAttribute(a.bakeColor, 4));
-    mesh.geometry.setAttribute('bakeAnchor', new THREE.BufferAttribute(a.bakeAnchor, 4));
-    mesh.geometry.setAttribute('bakeResponse', new THREE.BufferAttribute(a.bakeResponse, 4));
+    // Kit geometry is SHARED by every actor wearing the kit (kit-overlay.ts loadKitSource): bake once per geometry and
+    // flesh, not once per zombie.
+    if (mesh.geometry.userData['kitFleshOf'] !== flesh) {
+      const pos = mesh.geometry.getAttribute('position');
+      const a = kitFleshAttributes(pos.array as ArrayLike<number>, flesh);
+      mesh.geometry.setAttribute('bakeColor', new THREE.BufferAttribute(a.bakeColor, 4));
+      mesh.geometry.setAttribute('bakeAnchor', new THREE.BufferAttribute(a.bakeAnchor, 4));
+      mesh.geometry.setAttribute('bakeResponse', new THREE.BufferAttribute(a.bakeResponse, 4));
+      mesh.geometry.userData['kitFleshOf'] = flesh;
+    }
     const old = mesh.material;
     mesh.material = material;
     old.dispose();
