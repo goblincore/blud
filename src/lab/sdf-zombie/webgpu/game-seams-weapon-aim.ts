@@ -109,6 +109,14 @@ export function createWeaponAimSeams(ctx: GameContext) {
       ctx.player.player.pitch = Math.atan2(h.centre[1] - eye[1], Math.hypot(h.centre[0] - eye[0], h.centre[2] - eye[2]));
       return h.bone;
     },
+    /** Face a world point from the eye (the kit-piece shots: a belt, a shackle). */
+    aimAt: (x: number, y: number, z: number) => {
+      const eye = eyeOf(ctx.player.player);
+      ctx.player.player.yaw = Math.atan2(x - eye[0], -(z - eye[2]));
+      ctx.player.player.pitch = Math.atan2(y - eye[1], Math.hypot(x - eye[0], z - eye[2]));
+    },
+    /** Mesh gibs in flight or at rest, by tag (a knocked-off belt or shackle is a 'mesh'). */
+    meshGibCount: (tag = 'mesh') => ctx.gibs.meshGibs.filter(g => g.tag === tag).length,
     /** Sever an arm of the nearest actor (or `id`) as a shot would: 'full', or a chain index for a cut (debugSever).
      *  The kit on the bones it takes rides the piece (kitRiders). */
     severArm: (limb: 'armL' | 'armR', at: 'full' | number = 'full', id?: number) => {

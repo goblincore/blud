@@ -95,6 +95,9 @@ export interface CharacterEntry {
    *  and the palm the shot tests, a sphere `drop` metres past each hand bone's end knob along the bone, `radius` round.
    *  The hand bones are the ones whose flesh chain ends in a knob (`blob ... at=0.97` on the zombie's foreArm). */
   kitHands?: { bones: readonly string[]; materials: readonly string[]; drop: number; radius: number };
+  /** Kit pieces a round knocks off whole (kit-sever.ts kitPieceHit, game-kit-riders.ts kitPieceShot): the kit on
+   *  `bone` wearing `materials`. A belt, an iron cuff: rigid things that should not shrug off a shotgun. */
+  kitBreakables?: readonly { bone: string; materials: readonly string[] }[];
   /** The face sheet the character wears when its own `sheet` block does not
    *  produce one — its baked PNG where it has one (the sheet block's `image`
    *  line names the same file), else the shared zombie flat. Multiplier-vs-
@@ -170,6 +173,9 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // The grabber hands come off whole: palm ~7.5 cm past the wrist knob (make_kit.py HANG 0.072 x 1.2 scale less the
     // knob's offset), and a sphere that takes the splayed fingers.
     kitHands: { bones: ['foreArm.l', 'foreArm.r'], materials: ['zombieskin', 'zombienail'], drop: 0.075, radius: 0.08 },
+    // The belt (leather, its iron buckle) and each wrist shackle fly off when shot (owner, 2026-10-26).
+    kitBreakables: [{ bone: 'pelvis', materials: ['leather', 'rustplate'] },
+      { bone: 'foreArm.l', materials: ['rustplate'] }, { bone: 'foreArm.r', materials: ['rustplate'] }],
     // Collarbones, ribs through slack skin, gut folds, spine and veins (characters/zombie.detail, baked; never marched).
     bodyNormal: { url: '/assets/lab/zombie-body-n.png', meta: '/assets/lab/zombie-body-n.json', strength: 1 },
     profile: ZOMBIE_PROFILE,

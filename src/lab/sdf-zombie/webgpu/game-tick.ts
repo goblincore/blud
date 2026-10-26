@@ -43,7 +43,7 @@ import { ceilingAt, chunkCollidersAt, shellAmpOf } from './game-hit-trace';
 import { updateHud } from './game-hud';
 import { applyDeathCamera, damagePlayer, loopBlocksInput, refillMagazine, stepLoop } from './game-loop';
 import { stepMeshGibs } from './game-mesh-gibs';
-import { handShot, stepKitRiders } from './game-kit-riders';
+import { handShot, kitPieceShot, stepKitRiders } from './game-kit-riders';
 import { skullPasses } from './game-skull-shots';
 import { stepFlashLight, stepMuzzleFlash } from './game-muzzle-flash';
 import { stepOutdoor } from './game-outdoor';
@@ -960,7 +960,8 @@ export function tick(ctx: GameContext, dt: number) {
           if (d < bestDist) { bestDist = d; hitActor = a; hitPoint = hp; }
         }
         // A round that meets a polygon HAND (kitHands) before any flesh takes the hand off at the wrist, and is spent.
-        const handTook = handShot(ctx, p, from, bestDist);
+        // ...and one that meets a breakable kit piece (kitBreakables: the belt, a shackle) first knocks it off.
+        const handTook = kitPieceShot(ctx, p, from, bestDist) || handShot(ctx, p, from, bestDist);
         if (handTook) dead = true;
         // Bone standing in an open head's gap has no flesh in front of it for the trace above to find.
         if (!handTook) skullPasses(ctx, p, from, hitActor, hitPoint);

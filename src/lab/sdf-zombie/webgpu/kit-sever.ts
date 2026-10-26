@@ -143,3 +143,76 @@ export function kitTakenBy(prims: readonly Primitive[], handMaterials: ReadonlyS
   }
   return [...byBone].map(([bone, seg]) => seg || !handMaterials ? { bone } : { bone, materials: handMaterials });
 }
+
+// ---------------------------------------------------------------- shootable pieces
+// SHOT OFF (owner, 2026-10-26: "the belt doesn't react to shots; if it gets hit it should just break or fly off, same
+// with the wrist shackles"). A round's segment is tested against a kit piece's own triangles in its bone's REST frame
+// (the segment goes through the inverse of the bone's rigid transform, so no vertex is ever skinned on the CPU), and
+// the nearest hit takes the piece off as a mesh gib (game-kit-riders.ts kitPieceShot).
+
+/** The triangles (index positions) on one joint, and their rest-space bounding sphere: per INDEX attribute, so a cut
+ *  (which writes a new index) is seen at once. */
+const PIECE_TRIS = new WeakMap<object, Map<number, { tris: Int32Array; c: THREE.Vector3; r: number }>>();
+function pieceTris(g: THREE.BufferGeometry, joint: number) {
+  const index = g.index!, si = g.getAttribute('skinIndex'), pos = g.getAttribute('position');
+  let byJoint = PIECE_TRIS.get(index);
+  if (!byJoint) { byJoint = new Map(); PIECE_TRIS.set(index, byJoint); }
+  let e = byJoint.get(joint);
+  if (!e) {
+    const { take } = trianglesOnJoint(index.array, si.array, joint);
+    const box = new THREE.Box3();
+    for (const t of take) for (let k = 0; k < 3; k++) box.expandByPoint(_v.fromBufferAttribute(pos, index.getX(t + k)));
+    const c = box.getCenter(new THREE.Vector3());
+    let r = 0;
+    for (const t of take) for (let k = 0; k < 3; k++) r = Math.max(r, _v.fromBufferAttribute(pos, index.getX(t + k)).distanceTo(c));
+    e = { tris: Int32Array.from(take), c, r };
+    byJoint.set(joint, e);
+  }
+  return e;
+}
+
+const _o = new THREE.Vector3(), _d = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
+const _e1 = new THREE.Vector3(), _e2 = new THREE.Vector3(), _pv = new THREE.Vector3(), _tv = new THREE.Vector3(), _qv = new THREE.Vector3();
+const _inv = new THREE.Matrix4();
+
+/** Where the segment `from`->`to` first meets a triangle of `kitRoot` riding `bone` (only these materials), as a
+ *  fraction 0..1 of the segment; null for a miss. */
+export function kitPieceHit(kitRoot: THREE.Object3D, bone: string, materials: ReadonlySet<string>, from: Vec3, to: Vec3): number | null {
+  const key = kitBoneKey(bone);
+  let best: number | null = null;
+  kitRoot.traverse(o => {
+    const mesh = o as THREE.SkinnedMesh;
+    if (!mesh.isSkinnedMesh || Array.isArray(mesh.material) || !mesh.visible) return;
+    if (!materials.has(mesh.userData['kitMaterial'] ?? mesh.material.name)) return;
+    const joint = mesh.skeleton.bones.findIndex(b => b.name === key);
+    const g = mesh.geometry;
+    if (joint < 0 || !g.index || !g.getAttribute('skinIndex')) return;
+    const piece = pieceTris(g, joint);
+    if (piece.tris.length === 0) return;
+    // the segment into the bone's rest frame (rest -> world is boneWorld * boneInverse, rigid)
+    _inv.multiplyMatrices(mesh.skeleton.bones[joint]!.matrixWorld, mesh.skeleton.boneInverses[joint]!).invert();
+    _o.set(from[0], from[1], from[2]).applyMatrix4(_inv);
+    _d.set(to[0], to[1], to[2]).applyMatrix4(_inv).sub(_o);
+    // the sphere first
+    _tv.subVectors(piece.c, _o);
+    const L2 = _d.lengthSq(), along = Math.max(0, Math.min(1, _tv.dot(_d) / (L2 || 1)));
+    if (_qv.copy(_o).addScaledVector(_d, along).distanceTo(piece.c) > piece.r) return;
+    const pos = g.getAttribute('position'), index = g.index;
+    for (const t of piece.tris) {
+      _a.fromBufferAttribute(pos, index.getX(t)); _b.fromBufferAttribute(pos, index.getX(t + 1)); _c.fromBufferAttribute(pos, index.getX(t + 2));
+      _e1.subVectors(_b, _a); _e2.subVectors(_c, _a); _pv.crossVectors(_d, _e2);
+      const det = _e1.dot(_pv);
+      if (Math.abs(det) < 1e-12) continue;
+      const inv = 1 / det;
+      _tv.subVectors(_o, _a);
+      const u = _tv.dot(_pv) * inv;
+      if (u < 0 || u > 1) continue;
+      _qv.crossVectors(_tv, _e1);
+      const v = _d.dot(_qv) * inv;
+      if (v < 0 || u + v > 1) continue;
+      const s = _e2.dot(_qv) * inv;
+      if (s >= 0 && s <= 1 && (best === null || s < best)) best = s;
+    }
+  });
+  return best;
+}

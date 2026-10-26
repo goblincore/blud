@@ -5,6 +5,10 @@
 // (CharacterEntry.kitHands; owner, 2026-10-26: "you should be able to shoot the hand off, no individual fingers,
 // just the whole hand").
 //
+// And a round that meets a BREAKABLE kit piece (CharacterEntry.kitBreakables: the belt, an iron shackle) before any
+// flesh knocks it off whole: cut out of the actor's kit as for a sever, thrown as a mesh gib (game-mesh-gibs.ts) along
+// the shot.
+//
 // Riders live on ctx.gibs.kitRiders, each naming the chunk it rides. Rather than thread them through every way a
 // chunk ends (a bake, an eviction, a flesh bit's expiry, a piece shot apart, a reset), stepKitRiders looks the chunk
 // up each frame, live or baked, poses the rider from it, and drops the rider once the chunk is gone.
@@ -12,7 +16,7 @@ import type { DetachedPiece, ZombieActor } from './game-actor';
 import type { GameContext } from './game-context';
 import type { Projectile } from './game-weapon';
 import type { Vec3 } from '../types';
-import { cutKitBone, disposeKitRider, kitTakenBy, poseKitRider, type KitRider } from './kit-sever';
+import { cutKitBone, disposeKitRider, kitPieceHit, kitTakenBy, poseKitRider, type KitRider } from './kit-sever';
 
 /** Cut what `piece` takes of `a`'s kit out of it and set it riding chunk `chunkId`. */
 export function spawnKitRiders(ctx: GameContext, a: ZombieActor, piece: Pick<DetachedPiece, 'origin' | 'prims'>, chunkId: number | undefined): void {
@@ -80,4 +84,37 @@ export function handShot(ctx: GameContext, p: Projectile, from: Vec3, fleshDist:
   if (!best) return false;
   ctx.telemetry.telemetry.event('hand-shot', { actor: best.a.id, bone: best.bone, kind: p.kind });
   return best.a.severHand(best.bone);
+}
+
+/**
+ * A round's step `from`..p.pos that meets a breakable kit piece (CharacterEntry.kitBreakables) before any flesh
+ * (`fleshDist`, as handShot) knocks the piece off: the nearest one goes, as a mesh gib thrown along the shot. True when
+ * it did (the round is spent on it).
+ */
+export function kitPieceShot(ctx: GameContext, p: Projectile, from: Vec3, fleshDist: number): boolean {
+  const len = Math.hypot(p.pos[0] - from[0], p.pos[1] - from[1], p.pos[2] - from[2]);
+  if (len < 1e-6) return false;
+  let best: { a: ZombieActor; bone: string; materials: ReadonlySet<string>; d: number } | null = null;
+  for (const a of ctx.world.actors) {
+    const pieces = a.character?.entry?.kitBreakables, kit = a.character?.kit;
+    if (!pieces || !kit) continue;
+    for (const piece of pieces) {
+      const materials = new Set(piece.materials);
+      const s = kitPieceHit(kit.object, piece.bone, materials, from, p.pos);
+      if (s === null) continue;
+      const d = s * len;
+      if (d < fleshDist && (!best || d < best.d)) best = { a, bone: piece.bone, materials, d };
+    }
+  }
+  if (!best) return false;
+  const u: Vec3 = [(p.pos[0] - from[0]) / len, (p.pos[1] - from[1]) / len, (p.pos[2] - from[2]) / len];
+  const at: Vec3 = [from[0] + u[0] * best.d, from[1] + u[1] * best.d, from[2] + u[2] * best.d];
+  const object = cutKitBone(best.a.character!.kit!.object, best.bone, at, best.materials);
+  if (!object) return false;
+  // Off along the shot with a hop, spinning about a horizontal axis across it (a belt flips, a shackle tumbles).
+  const vel: Vec3 = [u[0] * 3.2, 1.8 + u[1] * 3.2, u[2] * 3.2];
+  const spin: Vec3 = [u[2] * 9, 0, -u[0] * 9];
+  ctx.boot.spawnMeshGib?.(object, at, vel, spin, 0.04, { tag: 'mesh' });
+  ctx.telemetry.telemetry.event('kit-piece-shot', { actor: best.a.id, bone: best.bone, materials: [...best.materials], kind: p.kind });
+  return true;
 }

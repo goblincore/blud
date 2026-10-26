@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { cutKitBone, kitTakenBy, trianglesOnJoint } from './kit-sever';
+import { cutKitBone, kitPieceHit, kitTakenBy, trianglesOnJoint } from './kit-sever';
 import { createZombieActor, type DetachedPiece } from './game-actor';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { makeZombie } from '../body';
@@ -28,27 +28,28 @@ describe('kitTakenBy', () => {
   });
 });
 
+/** A two-bone skinned kit: one triangle on each bone; bone 1 posed 1 m up. */
+function kit() {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0, 1, 1]), 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(18).fill(0).map((_, i) => (i % 3 === 2 ? 1 : 0)), 3));
+  g.setAttribute('skinIndex', new THREE.BufferAttribute(new Uint16Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]), 4));
+  g.setAttribute('skinWeight', new THREE.BufferAttribute(new Float32Array(24).fill(0).map((_, i) => (i % 4 === 0 ? 1 : 0)), 4));
+  g.setIndex([0, 1, 2, 3, 4, 5]);
+  const b0 = new THREE.Bone(), b1 = new THREE.Bone();
+  b0.name = 'thighl'; b1.name = 'foreArml';   // kitBoneKey's sanitised names
+  const mat = new THREE.MeshStandardMaterial(); mat.name = 'cloth';
+  const mesh = new THREE.SkinnedMesh(g, mat);
+  mesh.add(b0, b1);
+  mesh.bind(new THREE.Skeleton([b0, b1]));
+  const root = new THREE.Group(); root.add(mesh);
+  root.updateMatrixWorld(true);
+  b1.position.set(0, 1, 0);
+  root.updateMatrixWorld(true);
+  return { root, mesh };
+}
+
 describe('cutKitBone', () => {
-  /** A two-bone skinned kit: one triangle on each bone; bone 1 posed 1 m up. */
-  function kit() {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0, 1, 1]), 3));
-    g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(18).fill(0).map((_, i) => (i % 3 === 2 ? 1 : 0)), 3));
-    g.setAttribute('skinIndex', new THREE.BufferAttribute(new Uint16Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]), 4));
-    g.setAttribute('skinWeight', new THREE.BufferAttribute(new Float32Array(24).fill(0).map((_, i) => (i % 4 === 0 ? 1 : 0)), 4));
-    g.setIndex([0, 1, 2, 3, 4, 5]);
-    const b0 = new THREE.Bone(), b1 = new THREE.Bone();
-    b0.name = 'thighl'; b1.name = 'foreArml';   // kitBoneKey's sanitised names
-    const mat = new THREE.MeshStandardMaterial(); mat.name = 'cloth';
-    const mesh = new THREE.SkinnedMesh(g, mat);
-    mesh.add(b0, b1);
-    mesh.bind(new THREE.Skeleton([b0, b1]));
-    const root = new THREE.Group(); root.add(mesh);
-    root.updateMatrixWorld(true);
-    b1.position.set(0, 1, 0);
-    root.updateMatrixWorld(true);
-    return { root, mesh };
-  }
   it('lifts the bone’s triangles out, posed in world space less the origin, and hides them on the kit', () => {
     const { root, mesh } = kit();
     const group = cutKitBone(root, 'foreArm.l', [0, 0.5, 0])!;
@@ -64,6 +65,21 @@ describe('cutKitBone', () => {
   it('is null when nothing rides the bone, or the material is not asked for', () => {
     expect(cutKitBone(kit().root, 'skull', [0, 0, 0])).toBeNull();
     expect(cutKitBone(kit().root, 'foreArm.l', [0, 0, 0], new Set(['zombieskin']))).toBeNull();
+  });
+});
+
+describe('kitPieceHit', () => {
+  it('meets a bone\u2019s triangle where it is POSED, and misses once the piece is cut off', () => {
+    const { root } = kit();   // bone 1's triangle (0,0,1) (1,0,1) (0,1,1), posed 1 m up
+    const cloth = new Set(['cloth']);
+    // a segment along -z through (0.2, 1.2, *): the triangle sits at z 1 once posed
+    const s = kitPieceHit(root, 'foreArm.l', cloth, [0.2, 1.2, 3], [0.2, 1.2, -1]);
+    expect(s).toBeCloseTo(0.5, 6);
+    // the same line at REST height (y 0.2) passes under it
+    expect(kitPieceHit(root, 'foreArm.l', cloth, [0.2, 0.2, 3], [0.2, 0.2, -1])).toBeNull();
+    expect(kitPieceHit(root, 'foreArm.l', new Set(['leather']), [0.2, 1.2, 3], [0.2, 1.2, -1])).toBeNull();
+    cutKitBone(root, 'foreArm.l', [0, 0, 0]);
+    expect(kitPieceHit(root, 'foreArm.l', cloth, [0.2, 1.2, 3], [0.2, 1.2, -1])).toBeNull();
   });
 });
 

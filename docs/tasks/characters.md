@@ -459,6 +459,10 @@ Branch `claude/zombie-refine-468259`, on top of the hands PR goblincore/blud#75.
   the thighs. `fabric` is a new `.blob` word: matte paint that keeps the body normal map, which carries the fly,
   pockets, seams and folds. The trousers end at the knee, where the thigh bar does. The kit keeps the hands,
   shackles and boots, and adds a leather belt over the waist seam. The suspenders are gone. Kit 12.8k tris.
+- [x] **Belt and shackles break off (owner, 2026-10-26):** `CharacterEntry.kitBreakables` (zombie: the belt and its buckle on
+  the pelvis, each wrist's iron cuff). A round meeting one before any flesh knocks it off whole as a mesh gib along the
+  shot (`kit-sever.ts kitPieceHit`: the segment in the bone's rest frame against its triangles; `game-kit-riders.ts
+  kitPieceShot`). Seams: `aimAt`, `meshGibCount`, `slugFrom` (an exact line).
 - [ ] **Owner's in-game look** ([in-game frames](../dev-notes/2026-10-26-zombie-refine-lookdev/zombie-labourer-ingame.png)).
 - [ ] **Shins and feet to mesh** (owner's idea, to save prims): the boots and trousers now hide the foot prims and most of the
   shin, so the 4 foot prims a side could go, but the foot prims carry the `toe` rig points, gait pins, gib assets and the
