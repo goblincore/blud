@@ -567,6 +567,9 @@ export interface CharacterViewOpts {
   /** No held prop (the goblin at home, goblin-puppet.ts): the profile's gun, its muzzle flash and brass are never made; the kit
    *  still loads. Absent: armed as the profile says. */
   unarmed?: boolean;
+  /** Called with the loaded kit (before it is added to the scene) and the character's palette, so the game can draw its
+   *  FLESH parts with the flesh shader's lighting (kit-flesh.ts). Absent (the lab): kit-overlay's own standard look. */
+  dressKitFlesh?: (kitRoot: THREE.Object3D, palette: FleshMaterial | null) => void;
 }
 
 /**
@@ -629,7 +632,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
     kitLoad
       .then(k => {
         if (disposed || equipmentRetired) { k.dispose(); return; }
-        kit = k; applyKitBeam(k.object); opts.scene.add(k.object, k.debris);
+        kit = k; opts.dressKitFlesh?.(k.object, out.palette); applyKitBeam(k.object); opts.scene.add(k.object, k.debris);
       })
       .catch(e => console.error(`[kit] ${kitUrl} failed to load; rendering the body undressed`, e));
   }
