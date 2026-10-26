@@ -4,7 +4,7 @@ import {
   CHAMBER_DEPTH_M, FLASH, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell,
   extractStage, extractorOffset, fireRecoil, flashEnvelope, recoilAge, hingeOpenFraction,
   insertStage, loadCarry, loadHold, magazineAfterFire, reloadPhaseAt, reloadPose,
-  stagedShellCenter, supportHandPose, topLeverAngle,
+  stagedShellCenter, supportHandPose, topLeverAngle, WITHDRAW_LIFT_SEC,
   VIEWMODEL_REFERENCE_FOV_DEG, viewmodelFovScale,
 } from './game-viewmodel';
 import { FISHEYE_DEFAULTS } from './fisheye';
@@ -51,7 +51,7 @@ describe('reloadPhaseAt', () => {
     expect(reloadPhaseAt(0.40)).toBe('break');
     expect(reloadPhaseAt(0.60)).toBe('eject');
     expect(reloadPhaseAt(0.90)).toBe('load');
-    expect(reloadPhaseAt(1.13)).toBe('snap');
+    expect(reloadPhaseAt(1.17)).toBe('snap');   // 1.15..1.20 since the snap waits for the hand to lift (2026-10-25)
     expect(reloadPhaseAt(1.25)).toBe('settle');
   });
   it('is done past the total', () => {
@@ -442,7 +442,9 @@ describe('supportHandPose', () => {
   });
   it('is unchanged everywhere outside the load beat when a hold is given', () => {
     const hold = { stage: { dx: 0.11, dy: 0.13, dz: 0.17 }, seat: { dx: 0.09, dy: 0.10, dz: 0.12 } };
-    for (const t of [0, 0.1, 0.3, RELOAD.breakEndSec, RELOAD.loadStartSec, RELOAD.snapEndSec, RELOAD.totalSec]) {
+    // WITHDRAW_LIFT_SEC, not snapEndSec: the withdraw's first key since the out-and-over pass (2026-10-25); between
+    // the seat and it the hand still blends from the live hold.
+    for (const t of [0, 0.1, 0.3, RELOAD.breakEndSec, RELOAD.loadStartSec, WITHDRAW_LIFT_SEC, RELOAD.totalSec]) {
       expect(supportHandPose(t, hold)).toEqual(supportHandPose(t));
     }
   });

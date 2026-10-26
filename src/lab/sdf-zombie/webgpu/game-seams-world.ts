@@ -10,7 +10,7 @@
 import { setChunkListGain } from './chunk-light-pick';
 import { roomIdAt } from './game-level-rooms';
 import { CHUNK_OBJECT_LIGHT, type ChunkObjectLight } from './baked-chunks';
-import { forEachDrawnChunkMesh, type ChunkMeshSource } from './game-chunk-bake';
+import { forEachDrawnChunkMesh, setKitListGain, type ChunkMeshSource } from './game-chunk-bake';
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { ATTACK_TUNING, type SwingVariant } from '../attack';
@@ -466,6 +466,8 @@ export function createWorldSeams(ctx: GameContext) {
     /** The gib trim on every list term (chunk-light-pick CHUNK_LIST_GAIN), live; NaN restores it.
      *  A tuning seam: the value is module state in chunk-light-pick.ts on purpose. */
     setChunkListGain: (g: number) => setChunkListGain(g),
+    /** The kit FLESH parts' own list trim (game-chunk-bake.ts KIT_LIST_GAIN), for matching them to the body. */
+    setKitListGain: (g: number) => setKitListGain(g),
     /** Shared light list, Task 12: what each gib light holds this frame. `materials`: every
      *  registered baked material's list switch (lightListCfg.x) and ambient; `pieces`: every drawn
      *  gib mesh (forEachDrawnChunkMesh) with its source, position, room and its OWN per-object

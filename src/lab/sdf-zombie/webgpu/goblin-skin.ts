@@ -16,7 +16,8 @@ export const GOBLIN_SKIN = {
   baseLinear: [0.34, 0.44, 0.19] as const,
   /** `specRoughness 0.42` -- clammy, not the orbs' matte 0.85. */
   roughness: 0.42,
-  /** `blob arm on hand at=0.55 r=0.046`. */
+  /** The old hand orb's radius (`blob arm on hand at=0.55 r=0.046`, replaced by the bony kit hand on 2026-10-24). Kept
+   *  as the fist size loadHold() offsets the shells by; the FPV fist still spans about this (model_goblin_arm.py gate). */
   handRadius: 0.046,
   /** Forearm: `bar arm on forearm ... r=0.028`, elbow blob `r=0.038`,
    *  `bone forearm ... len=0.235`. */

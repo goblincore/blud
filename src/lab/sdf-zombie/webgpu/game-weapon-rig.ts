@@ -362,6 +362,11 @@ export const _bendR = new THREE.Vector3();
  *  is set, and again wherever a hand is moved. */
 export const _bendL = new THREE.Vector3();
 
+/** The fore hand's base roll: back of the hand roughly DOWN, palm up under the fore-end. With the arms' default (back
+ *  of the hand to the camera) the gun read as resting on the back of the goblin's hand (owner, 2026-10-24). game-main
+ *  replaces it with the roll seatOnBar settles on when it seats the hand on the fore-end. */
+export const FORE_HAND_DORSAL = new THREE.Vector3(0, -1, 0);
+
 export function aimArms(ctx: GameContext): void {
   ctx.weapon.viewModelAnchor.updateMatrixWorld(true);
   if (ctx.weapon.gripHandGroup) {
@@ -370,7 +375,7 @@ export function aimArms(ctx: GameContext): void {
   }
   if (ctx.weapon.foreHandGroup) {
     viewDirToRig(ctx, BEND_L_VIEW, _bendL);
-    aimArm(ctx.weapon.foreHandGroup, viewToRig(ctx, SHOULDER_L_VIEW, _sh), _bendL);
+    aimArm(ctx.weapon.foreHandGroup, viewToRig(ctx, SHOULDER_L_VIEW, _sh), _bendL, ctx.weapon.foreRoll, FORE_HAND_DORSAL);
   }
 }
 

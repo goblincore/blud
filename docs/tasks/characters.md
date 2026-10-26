@@ -90,7 +90,7 @@ so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), like
 
 - [x] **Spec** ([design](../superpowers/specs/2026-10-01-goblin-refinement-design.md), owner-approved structure,
   2026-10-01). The goblin is the protagonist, seen armed in-game (no enemy AI). It holds **the player's weapons**; the buckler
-  and cleaver are retired. **The hands stay orbs** (an early-3D style). Body: **variant A, "sinew"**, picked from three
+  and cleaver are retired. **The hands stay orbs** (an early-3D style) — superseded 2026-10-24: bony long-fingered hands, FPV and kit (see below). Body: **variant A, "sinew"**, picked from three
   rendered variants ([look-dev](../dev-notes/2026-10-01-goblin-body-lookdev/)).
 - [x] **Phase 1, body:** re-authored to variant A (plan `docs/superpowers/plans/2026-10-01-goblin-body-phase1.md`):
   continuous torso, tapered limbs, orbs only at the shoulders, hands, ankles and toes; the shoulder round is the arm's
@@ -192,6 +192,19 @@ so this pass matters more than for an enemy. Audit (read-only, 2026-10-01), like
     add `scale 1.3077`, rebuild `goblin-cinematic-kit` at `height 1.70`, regenerate the teeth (their layout is derived from the
     grin's pose: `goblin_teeth.py` headless), and check `scaleBodyDef` accepts the face rig's `morphs`/`hinge` fields; or move the
     face rig into `goblin-home` ([notes](../dev-notes/2026-10-13-goblin-expressions/NOTES.md), Task 13 section).
+
+- [~] **Bony hands (2026-10-24..26, PR #75).** Owner: "not realistic but fits the character ... bony skinny long fingers".
+  - FPV (`scripts/model_goblin_arm.py`, HAND_SIZE 1.4): right `hand_R` a tight fist (FINGERS_FIST), left `hand_L` a flat cradle under the fore-end
+    (FINGERS_FORE/THUMB_FORE, explicit GRIP_FORE), `handhold_L` a flat cup for the reload. `Grip_L`/`Grip_R` locators; `game-arms.ts seatOnBar`
+    seats the fore hand on the fore-end at load and the fist on axe/flail hafts every frame.
+  - Reload (`game-viewmodel.ts` SUPPORT_KEYS, `coverRoll`, `loadEndSec` 1.15 / `snapEndSec` 1.20, `loadStartSec` 0.66): pouch out of frame, over the
+    top >= 0.2 m left of the gun, palm-down cover-and-shove, lift above the barrels before the snap, out, under, roll to underhand last.
+    Clip sweep: headless capture counting hand vertices inside gun parts each 1/120 s (dev-notes `2026-09-04-fpv-goblin-arms/`).
+  - Third person: `scripts/merge-kit-hands.ts` merges the relaxed hand (`assets-source/goblin-hands/goblin-hands.glb`) into goblin and
+    goblin-cinematic kits; `.blob` hand is a wrist knob (at=0.25, inside the orb); at-home goblins keep the orb in their marked block — anything that
+    needs "the hand ball" takes the BIGGEST prim on the hand bone.
+  - Kit flesh (`kit-flesh.ts`): flesh-named kit parts drawn with the settled-gib material (flesh shader lighting), `KIT_LIST_GAIN` 1.0.
+  - Open: other weapons' grips; idle grip fidgets (articulated fingers); kit sever handling.
 
 ## Warbull (cyber-minotaur: flesh + bolted-in machinery, rockets + charge) — second draft from the owner's reference plate 2026-09-27, awaiting kit build + playtest
 

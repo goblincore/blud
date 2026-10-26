@@ -22,6 +22,11 @@
 #                     one skinned primitive (upper row on `skull`, lower on
 #                     `jaw`) with its own `tooth` material and vertex colours.
 #                     The .wam has no teeth; without this step the kit has none.
+#   goblin, goblin-cinematic
+#                     the BONY HANDS (2026-10-24): the FPV arm script's relaxed
+#                     kithand_L/R from assets-source/goblin-hands/, re-posed
+#                     onto hand.l/hand.r by scripts/merge-kit-hands.ts as one
+#                     `goblinskin` primitive. The .blob keeps a wrist knob.
 set -euo pipefail
 
 NAME="${1:?usage: build-wam-kit.sh <character>}"
@@ -42,9 +47,14 @@ OUT="$REPO/public/assets/lab/$NAME-kit"
 # public/ and get served.
 rm -f "$OUT"_sheet.png "$OUT"_tex.png "$OUT"_viewer.json "$OUT"_bones.png
 
+# Order matters: each merge strips only its OWN trailing block, so on a fresh WAM build the teeth go first and the hands
+# last (re-running the teeth merge alone on a kit that already has hands refuses rather than guess).
 case "$NAME" in
+  goblin)
+    npx tsx "$REPO/scripts/merge-kit-hands.ts" goblin "$OUT.gltf" ;;
   goblin-cinematic)
-    node "$REPO/scripts/merge-kit-teeth.mjs" "$OUT.gltf" "$REPO/assets-source/goblin-teeth/goblin-teeth.glb" ;;
+    node "$REPO/scripts/merge-kit-teeth.mjs" "$OUT.gltf" "$REPO/assets-source/goblin-teeth/goblin-teeth.glb"
+    npx tsx "$REPO/scripts/merge-kit-hands.ts" goblin-cinematic "$OUT.gltf" ;;
 esac
 
 echo "wrote $OUT.gltf"

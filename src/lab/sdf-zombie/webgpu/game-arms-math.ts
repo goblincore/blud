@@ -13,6 +13,10 @@ export const ARM_NODES = [
   'Arm_L', 'Arm_R', 'Hand_L', 'Hand_R', 'Wrist_L', 'Wrist_R',
   'Elbow_L', 'Elbow_R', 'Upper_L', 'Upper_R', 'Shoulder_L', 'Shoulder_R',
   'Watch_Screen',
+  // The fore hand's two poses: the fore-end cradle and the reload's shell hold (game-arms.ts setShellHold).
+  'hand_L', 'handhold_L',
+  // Each hand's curl centre, where a held bar's axis goes (game-arms.ts seatOnBar).
+  'Grip_L', 'Grip_R',
 ] as const;
 
 /** Forearm (hand -> elbow) and upper arm (elbow -> shoulder) lengths the IK
@@ -24,11 +28,11 @@ export const UPPER_LEN_M = 0.30;
 export type ArmNode = typeof ARM_NODES[number];
 
 export type ArmMaterialKind =
-  | 'skin' | 'leather' | 'steel' | 'brass' | 'band' | 'watchBody' | 'screen';
+  | 'skin' | 'leather' | 'steel' | 'brass' | 'band' | 'watchBody' | 'screen' | 'claw';
 
 const KINDS: Record<string, ArmMaterialKind> = {
   Skin: 'skin', Leather: 'leather', Steel: 'steel', Brass: 'brass',
-  Band: 'band', WatchBody: 'watchBody', Screen: 'screen',
+  Band: 'band', WatchBody: 'watchBody', Screen: 'screen', Claw: 'claw',
 };
 
 /** GLB material name -> runtime treatment. Blender appends `.001` when a
