@@ -24,13 +24,19 @@
 // batched by (zone, role, kind), UVs at the kind's own tile size. Unknown families and `?sectormat=0`
 // keep the old stone set, so the batches are then exactly the old (zone, role) ones. A light panel
 // adds its glow map to the emissive.
+//
+// EMITTERS (hand-off item 2g, part A): screen banks, the viewscreen, fluorescents and exit signs add an
+// ANIMATED glow (emitter-glow.wgsl.ts on the sim clock, masked by the kind's glow map) × the kind's gain
+// seam × max(level / full, k): it follows its sector's light partly and stays lit in the dark. Their
+// walls fit whole cells (sector-materials.ts wallFit). `?emitters=0` draws the old kinds.
 
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
-import { attribute, exp, float, materialColor, max, positionWorld, texture, uniform, uniformArray, vec3, vec4, wgslFn } from 'three/tsl';
+import { attribute, exp, float, fwidth, materialColor, max, min, positionWorld, texture, uniform, uniformArray, uv, vec3, vec4, wgslFn } from 'three/tsl';
 import { blankPanel, fillPanel, generatePanel, mottleTexture, panelTextures, wrapPanel, type PanelKind, type PanelMaps, type PanelTextureSet } from '../../../game/level/panel-textures';
 import { runPool, type PoolWorker } from './panel-pool';
-import { isStone, sectorMaterialsOn, surfaceKind, SURFACE_LOOKS, wallU, type SurfaceKind, type SurfaceLook } from './sector-materials';
+import { emittersOn, isStone, lineSeedTiles, sectorMaterialsOn, surfaceKind, SURFACE_LOOKS, wallFit, wallU, type SurfaceKind, type SurfaceLook } from './sector-materials';
+import { EM_HASH, EM_RAND, EMITTER_FN, type EmitterKind } from './emitter-glow.wgsl';
 import type { GameContext } from './game-context';
 import { createSectorFx, CEIL_WHISPER, type SectorFxRuntime } from './game-sector-light';
 import { reducedFlashes } from './lamp-moods';
@@ -111,6 +117,7 @@ function worldTiled(base: THREE.MeshStandardMaterial): THREE.MeshStandardMateria
 const panelCache = new Map<PanelKind, PanelTextureSet>();
 const PANEL_SEEDS: Record<PanelKind, number> = {
   techPanel: 101, metalSheet: 103, door: 107, rustBrick: 109, lightPanel: 113, concreteSlab: 127, metalPlate: 131, floorTile: 137,
+  screenBank: 139, viewscreen: 149, fluorescent: 151, exitSign: 157,
 };
 interface PanelJob { kind: PanelKind; set: PanelTextureSet }
 let pendingJobs: PanelJob[] = [];
@@ -123,7 +130,7 @@ function panelSet(kind: PanelKind): PanelTextureSet {
     t = panelTextures(kind, PANEL_SEEDS[kind]);
     syncMs += performance.now() - t0;
   } else {
-    t = wrapPanel(blankPanel(kind));
+    t = wrapPanel(blankPanel(kind), kind);
     pendingJobs.push({ kind, set: t });
   }
   panelCache.set(kind, t);
@@ -175,7 +182,26 @@ const GRIME = {
 };
 let mottle: THREE.DataTexture | null = null;
 
-interface SurfaceSource { base: THREE.MeshStandardMaterial; look: SurfaceLook; glowMap: THREE.Texture | null; roughness: THREE.Texture | null }
+interface SurfaceSource { base: THREE.MeshStandardMaterial; look: SurfaceLook; glowMap: THREE.Texture | null; roughness: THREE.Texture | null; emit: EmitterKind | null }
+
+/** The emitter glow fns, one node per WGSL fn shared by every material (the builder emits a shared
+ *  include once per shader). */
+type WgslFnNode = ReturnType<typeof wgslFn>;
+let emitterFns: Record<EmitterKind, WgslFnNode> | null = null;
+function emitterFn(kind: EmitterKind): WgslFnNode {
+  if (!emitterFns) {
+    const inc = (fn: WgslFnNode) => fn as unknown as NonNullable<Parameters<typeof wgslFn>[1]>[number];
+    const hash = wgslFn(EM_HASH);
+    const rand = wgslFn(EM_RAND, [inc(hash)]);
+    const deps = new Map<string, WgslFnNode>();
+    const dep = (src: string) => { let d = deps.get(src); if (!d) deps.set(src, (d = wgslFn(src, [inc(rand)]))); return d; };
+    emitterFns = Object.fromEntries((Object.keys(EMITTER_FN) as EmitterKind[]).map(k => {
+      const e = EMITTER_FN[k];
+      return [k, wgslFn(e.src, [inc(rand), ...e.deps.map(d => inc(dep(d)))])];
+    })) as Record<EmitterKind, WgslFnNode>;
+  }
+  return emitterFns[kind];
+}
 
 /** One mesh's own node material (a NodeMaterial is reused as is by the light-list loop, so meshes
  *  never share one): the surface's textures and the palette colour, plus the sector term — the
@@ -212,6 +238,18 @@ function sectorMaterial(src: SurfaceSource, color: readonly [number, number, num
     nm.roughnessNode = texture(src.roughness).r.mul(src.look.roughness).mul(m.mul(GRIME.roughHi - GRIME.roughLo).add(GRIME.roughLo)).clamp(0.04, 1);
   }
   const lit = albedo.mul(vec3(lvl).add(bounce)).add(base);
+  if (src.emit && src.glowMap && src.look.emit) {
+    // An emitter: the animated glow (sim clock, per-sector seed, calm under ?flashes=reduced), its gain
+    // seam, and max(level / full, k) so it stays lit in a dark sector and dims with a flickering one.
+    const sec = attribute('sectorIndex', 'float');
+    const fw = fwidth(uv().mul(512));
+    const glow = emitterFn(src.emit)({
+      uv: uv(), mask: texture(src.glowMap), t: fx.glowTime, sec, calm: float(fx.reducedFlashes ? 1 : 0), fw: max(fw.x, fw.y),
+    }) as unknown as ReturnType<typeof vec3>;
+    const factor = max(min(lvl.div(max(fx.fullLevel, 1e-4)), 1), src.look.emit.floor);
+    nm.emissiveNode = lit.add(glow.mul(fx.emitGains[src.look.emit.gain]).mul(factor));
+    return nm;
+  }
   // A light panel's glow follows its sector's light (dark, flicker and strobe sectors dim their panels).
   nm.emissiveNode = src.glowMap
     ? lit.add(texture(src.glowMap).rgb.mul(panelGlow.mul(src.look.glow)).mul(max(lvl, GRIME.glowFloor)))
@@ -231,6 +269,7 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
   const meshMap = refineNearGlow(map, sources);
   const cache: BounceCache = new Map();
   const matsOn = sectorMaterialsOn(search);
+  const emitOn = emittersOn(search);
   const batches = new Map<string, Batch>();
   const batch = (zone: number, role: Role, kind: SurfaceKind) => {
     const key = `${zone}:${role}:${kind}`;
@@ -255,7 +294,7 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
     for (const [role, y0, want] of faces3) {
       if (role === 'ceil' && s.materials.ceil === SKY_MATERIAL) continue;
       const glow = role === 'floor' && s.glow !== null;
-      const kind = surfaceKind(role === 'floor' ? s.materials.floor : s.materials.ceil, role, matsOn);
+      const kind = surfaceKind(role === 'floor' ? s.materials.floor : s.materials.ceil, role, matsOn, emitOn);
       const tile = SURFACE_LOOKS[kind].tileM;
       const b = glow ? glowBatch(s.glow!) : batch(s.zone, role, kind);
       const y = glow ? y0 + GLOW_LIFT_M : y0;
@@ -271,18 +310,25 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
     const zone = map.sectors[q.sector]!.zone;
     const dx = q.b[0] - q.a[0], dz = q.b[1] - q.a[1], len = Math.hypot(dx, dz);
     const want: [number, number, number] = [-dz / len, 0, dx / len];
-    const kind = surfaceKind(q.mat, 'wall', matsOn);
-    const tile = SURFACE_LOOKS[kind].tileM;
+    const kind = surfaceKind(q.mat, 'wall', matsOn, emitOn);
+    const look = SURFACE_LOOKS[kind];
+    const tile = look.tileM;
     const [u0, u1] = wallU(kind, q.a, q.along, dx, dz, len, tile);
+    // A fitted (emitter) wall: whole cells along the line and up the quad, seeded per line.
+    const fit = look.fit;
+    const seedTiles = fit ? lineSeedTiles(q.a[0] - (dx / len) * q.along[0], q.a[1] - (dz / len) * q.along[0]) : 0;
     const [m0, m1] = wallU('techPanel', q.a, q.along, dx, dz, len, tile);   // the world-projected u, for the mottle
     const b = batch(zone, 'wall', kind);
     // Each vertical edge is cut by its own end (nearGlow), so walls meeting at a corner cut it alike.
     const cuts = (p: XZ) => (bounce && nearGlow(sources, p[0], p[1]) ? wallRows(q.y0, q.y1) : [q.y0, q.y1]);
     const cols = [cuts(q.a), cuts(q.b)] as const;
     const ends = [q.a, q.b] as const, us = [u0, u1] as const, ms = [m0, m1] as const;
+    const wuv = (side: number, y: number): number[] => fit
+      ? wallFit(fit, q.along[side]!, q.along[2], y, q.y0, q.y1, seedTiles)
+      : [us[side]!, y / tile];
     for (const t of wallStrip(cols[0], cols[1])) {
       b.tri(t.map(([side, r]) => [ends[side]![0], cols[side]![r]!, ends[side]![1]]),
-        t.map(([side, r]) => [us[side]!, cols[side]![r]! / tile]), want, q.sector, true,
+        t.map(([side, r]) => wuv(side, cols[side]![r]!)), want, q.sector, true,
         t.map(([side, r]) => [ms[side]!, cols[side]![r]! / tile]));
     }
   }
@@ -298,7 +344,7 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
     if (isStone(kind)) {
       const set = ctx.world.stoneSet;
       const m = kind === 'stoneFloor' ? set.floor : kind === 'stoneCeil' ? set.perimeterAccent : set.wall;
-      src = { base: worldTiled(m as THREE.MeshStandardMaterial), look, glowMap: null, roughness: null };
+      src = { base: worldTiled(m as THREE.MeshStandardMaterial), look, glowMap: null, roughness: null, emit: null };
     } else {
       const t = panelSet(kind);
       // No roughnessMap: panel roughness is one channel, read as .r by the roughnessNode. The deferred
@@ -306,7 +352,7 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
       // flat look.roughness, and drops the grime nodes (colorNode, emissiveNode) like every node term.
       const base = new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normalMap,
         roughness: look.roughness, metalness: look.metalness, normalScale: new THREE.Vector2(look.normalScale, look.normalScale) });
-      src = { base, look, glowMap: t.emissiveMap, roughness: t.roughness };
+      src = { base, look, glowMap: t.emissiveMap, roughness: t.roughness, emit: look.emit && kind in EMITTER_FN ? kind as EmitterKind : null };
     }
     surfaces.set(kind, src);
     return src;

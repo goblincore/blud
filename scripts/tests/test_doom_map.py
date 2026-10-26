@@ -127,6 +127,29 @@ def test_per_side_wall_materials(tmp_path):
     assert all("walls" not in l for l in walls)
 
 
+def test_emitter_families_longest_prefix_wins():
+    from doom_tables import EMITTER_FAMILIES, material_for_flat, material_for_texture
+    assert material_for_texture("COMPUTE2") == "screen-bank" and material_for_texture("COMPUTE3") == "screen-bank"
+    assert material_for_texture("COMPTALL") == "screen-bank"
+    assert material_for_texture("COMPSPAN") == "tech" and material_for_texture("COMPTILE") == "tech"   # trim
+    assert material_for_texture("PLANET1") == "viewscreen"
+    assert material_for_texture("EXITSIGN") == "exit-sign" and material_for_texture("EXITDOOR") == "door"
+    assert material_for_texture("LITE3") == "fluorescent" and material_for_texture("lite5") == "fluorescent"
+    assert material_for_flat("TLITE6_5") == "fluorescent" and material_for_flat("GRNLITE1") == "light-panel"
+    assert material_for_texture("DOORTRAK") == "metal" and material_for_texture("STARTAN3") == "tech"
+    assert {"screen-bank", "viewscreen", "fluorescent", "exit-sign"} == EMITTER_FAMILIES
+
+
+def test_emitter_wall_sides_are_written_per_side(tmp_path):
+    # The riser on the step line (A's side, lower part) wears a computer bank instead of STEP6.
+    wad = tmp_path / "e.wad"
+    data = build_wad()
+    wad.write_bytes(data.replace(name8("STEP6"), name8("COMPUTE2")))
+    out, _ = doom_map.convert(wad, "E1M1", units_per_m=32)
+    step = next(l for l in out["lines"] if l.get("back") is not None)
+    assert step["walls"] == {"front": {"lower": "screen-bank"}}
+
+
 def test_lines_and_zones(tmp_path):
     out = convert(tmp_path)
     step = [l for l in out["lines"] if l.get("back") is not None]

@@ -7,18 +7,28 @@ import sys
 
 from PIL import Image, ImageDraw, ImageFont
 
-ROOT = Path(".lab-tmp/doom/mat")
-OUT = Path(".lab-tmp/doom/materials-before-after.png")
+EMIT = os.environ.get("SHEET") == "emitters"
+ROOT = Path(".lab-tmp/doom/emit" if EMIT else ".lab-tmp/doom/mat")
+OUT = Path(".lab-tmp/doom/emitters-before-after.png" if EMIT else ".lab-tmp/doom/materials-before-after.png")
 LABELS = {
     "start": "start room (zone 4)", "tech": "window room: tech walls, light-panel bays", "door": "zone 7 corridor, door east",
     "nukage": "nukage pool from the walkway", "corridor": "corridor east (zone 9)", "lightceil": "light-panel ceiling (zone 11)",
     "exitdoor": "facing the exit door", "start-off": "start room, flashlight OFF", "tech-off": "window room, flashlight OFF",
 }
+if EMIT:
+    LABELS = {
+        "computer": "computer room (zone 2): viewscreen boxes, screen banks", "viewscreen": "viewscreen box, looking up",
+        "screens": "south alcove: screen-bank wall, bank above", "screens-far": "south screen banks from mid-room",
+        "fluoro-ceil": "zone 7 corridor: fluorescent ceiling", "fluoro-niche": "start niche: fluorescent strips (flicker sector)",
+        "exitsign": "exit passage sign", "exitceil": "exit room: fluorescent ceiling, second sign",
+        "computer-off": "computer room, flashlight OFF", "viewscreen-off": "viewscreen, flashlight OFF",
+    }
 poses = sys.argv[1:] or list(LABELS)
-COLS = [c for c in os.environ.get("SHEET_COLUMNS", "before,prev,after").split(",") if (ROOT / c).is_dir()]
+COLS = [c for c in os.environ.get("SHEET_COLUMNS", "emit-before,emit-after" if EMIT else "before,prev,after").split(",") if (ROOT / c).is_dir()]
 if not COLS:
     sys.exit(f"no shot folders: none of SHEET_COLUMNS under {ROOT} exist (run scripts/sdf-game-doom-materials.sh)")
-TITLES = {"before": "OLD STONE (?sectormat=0)", "prev": "FIRST MATERIALS (4a267574)", "after": "GRIMY MATERIALS (now)"}
+TITLES = {"before": "OLD STONE (?sectormat=0)", "prev": "FIRST MATERIALS (4a267574)", "after": "GRIMY MATERIALS (now)",
+          "emit-before": "BEFORE (?emitters=0)", "emit-after": "EMITTERS (now)"}
 cw, ch, left, top = 480, 360, 200, 40
 rows = [p for p in poses if all((ROOT / c / f"{p}.png").exists() for c in COLS)]
 if not rows:

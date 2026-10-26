@@ -3,10 +3,11 @@
 // SECTOR LIGHT AND GLOW at runtime (spec 2026-10-24 §7–§8): owns the per-sector level uniform
 // array the sector meshes read, refreshes it every tick from sector-light.ts on the sim clock,
 // advances the glow surfaces' time, and holds the on/off toggle (?doomlight=0) and the curve the
-// __sdfGame.sectorLight seam tunes. The decisions are sector-light.ts's; this only binds them.
+// __sdfGame.sectorLight seam tunes (also the emitter gains: screenGain, fluoroGain, signGain). The decisions are sector-light.ts's; this only binds them.
 
 import { uniform, uniformArray } from 'three/tsl';
 import type { GameContext } from './game-context';
+import { DEFAULT_EMITTER_GAINS, type EmitterGainKey } from './sector-materials';
 import { DEFAULT_SECTOR_LIGHT, gainParam, writeSectorLevels, type SectorLightConfig } from './sector-light';
 import { simTimeMs } from './sim-clock';
 
@@ -36,7 +37,13 @@ export interface SectorFxRuntime {
   /** Multiplies the baked glow bounce (DEFAULT_BOUNCE_GAIN unless ?bouncegain or the seam set it). */
   bounceGain: FloatUniform;
   reducedFlashes: boolean;
+  /** The emitter kinds' glow gains (sector-materials.ts DEFAULT_EMITTER_GAINS; ?screengain= ?fluorogain= ?signgain=). */
+  emitGains: Record<EmitterGainKey, FloatUniform>;
+  /** A full-bright sector's level (the curve's max): emitters divide their sector's level by it. */
+  fullLevel: FloatUniform;
 }
+
+const EMIT_PARAMS: Record<EmitterGainKey, string> = { screenGain: 'screengain', fluoroGain: 'fluorogain', signGain: 'signgain' };
 
 export function createSectorFx(sectorCount: number, search: URLSearchParams, reducedFlashes: boolean): SectorFxRuntime {
   const cfg: SectorLightConfig = { ...DEFAULT_SECTOR_LIGHT, on: search.get('doomlight') !== '0' };
@@ -51,6 +58,9 @@ export function createSectorFx(sectorCount: number, search: URLSearchParams, red
     glowGain: floatUniform(gainParam(search.get('glowgain'), DEFAULT_GLOW_GAIN)),
     bounceGain: floatUniform(gainParam(search.get('bouncegain'), DEFAULT_BOUNCE_GAIN)),
     reducedFlashes,
+    emitGains: Object.fromEntries((Object.keys(EMIT_PARAMS) as EmitterGainKey[]).map(k =>
+      [k, floatUniform(gainParam(search.get(EMIT_PARAMS[k]), DEFAULT_EMITTER_GAINS[k]))])) as Record<EmitterGainKey, FloatUniform>,
+    fullLevel: floatUniform(cfg.max),
   };
 }
 
@@ -66,10 +76,11 @@ export function stepSectorLight(ctx: GameContext): void {
   for (let i = 0; i < fx.values.length; i++) arr[i] = fx.values[i]!;
   fx.glowTime.value = t;
   fx.ceilWhisper.value = fx.cfg.on ? 0 : CEIL_WHISPER;
+  fx.fullLevel.value = fx.cfg.max;
 }
 
-export type SectorLightPatch = Partial<SectorLightConfig> & { glowGain?: number; bounceGain?: number };
-export type SectorLightState = SectorLightConfig & { glowGain: number; bounceGain: number };
+export type SectorLightPatch = Partial<SectorLightConfig> & { glowGain?: number; bounceGain?: number } & Partial<Record<EmitterGainKey, number>>;
+export type SectorLightState = SectorLightConfig & { glowGain: number; bounceGain: number } & Record<EmitterGainKey, number>;
 
 /** Patch the curve, the toggle, the glow gain or the bounce gain (finite, non-negative numbers only); returns the live state. */
 export function setSectorLightConfig(fx: SectorFxRuntime, patch: SectorLightPatch): SectorLightState {
@@ -78,6 +89,12 @@ export function setSectorLightConfig(fx: SectorFxRuntime, patch: SectorLightPatc
   if (typeof patch.on === 'boolean') fx.cfg.on = patch.on;
   if (typeof patch.glowGain === 'number' && Number.isFinite(patch.glowGain) && patch.glowGain >= 0) fx.glowGain.value = patch.glowGain;
   if (typeof patch.bounceGain === 'number' && Number.isFinite(patch.bounceGain) && patch.bounceGain >= 0) fx.bounceGain.value = patch.bounceGain;
+  for (const k of Object.keys(fx.emitGains) as EmitterGainKey[]) {
+    const v = patch[k];
+    if (typeof v === 'number' && Number.isFinite(v) && v >= 0) fx.emitGains[k].value = v;
+  }
   fx.ceilWhisper.value = fx.cfg.on ? 0 : CEIL_WHISPER;
-  return { ...fx.cfg, glowGain: fx.glowGain.value, bounceGain: fx.bounceGain.value };
+  fx.fullLevel.value = fx.cfg.max;
+  const gains = Object.fromEntries(Object.entries(fx.emitGains).map(([k, u]) => [k, u.value])) as Record<EmitterGainKey, number>;
+  return { ...fx.cfg, glowGain: fx.glowGain.value, bounceGain: fx.bounceGain.value, ...gains };
 }

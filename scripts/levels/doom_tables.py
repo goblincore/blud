@@ -5,16 +5,19 @@ appears in a generated level; it is mapped to one of ours here.
 """
 from __future__ import annotations
 
-# (prefix, ours), first match wins.
+# (prefix, ours): the LONGEST matching prefix wins (so COMPUTE beats COMP, EXITSIGN beats EXIT), whatever
+# the order. Emitters (2026-10-26, hand-off item 2g): screen-bank (computer banks), viewscreen (the big
+# display wall), fluorescent (strip and ceiling lights), exit-sign. COMPSPAN / COMPTILE stay tech trim.
 FLAT_FAMILIES = [
     ("F_SKY", "sky"), ("NUKAGE", "nukage"), ("LAVA", "lava"), ("SLIME", "acid"), ("FWATER", "acid"),
     ("BLOOD", "tile"),  # no blood glow material yet: plain tile, not a glow kind
     ("FLOOR", "metal-plate"), ("FLAT", "tile"), ("CEIL", "concrete"),
-    ("TLITE", "light-panel"), ("GRNLITE", "light-panel"), ("STEP", "metal-plate"), ("DEM", "tile"),
+    ("TLITE", "fluorescent"), ("GRNLITE", "light-panel"), ("STEP", "metal-plate"), ("DEM", "tile"),
 ]
 TEXTURE_FAMILIES = [
-    ("STAR", "tech"), ("TEK", "tech"), ("COMP", "tech"), ("BROWN", "rust"), ("BRN", "rust"),
-    ("DOORTRAK", "metal"), ("BIGDOOR", "door"), ("DOOR", "door"), ("EXIT", "door"), ("STEP", "metal-plate"), ("SUPPORT", "metal"), ("METAL", "metal"), ("LITE", "light-panel"),
+    ("STAR", "tech"), ("TEK", "tech"), ("COMP", "tech"), ("COMPUTE", "screen-bank"), ("COMPTALL", "screen-bank"),
+    ("PLANET", "viewscreen"), ("EXITSIGN", "exit-sign"), ("BROWN", "rust"), ("BRN", "rust"),
+    ("DOORTRAK", "metal"), ("BIGDOOR", "door"), ("DOOR", "door"), ("EXIT", "door"), ("STEP", "metal-plate"), ("SUPPORT", "metal"), ("METAL", "metal"), ("LITE", "fluorescent"),
     ("STONE", "concrete"), ("GRAY", "concrete"), ("ICKW", "concrete"), ("PIPE", "metal"), ("SW1", "tech"),
 ]
 GLOW_MATERIALS = {"nukage", "lava", "acid"}
@@ -39,11 +42,15 @@ SECTOR_TYPES = {
 }
 
 
+EMITTER_FAMILIES = {"screen-bank", "viewscreen", "fluorescent", "exit-sign"}
+
+
 def _family(name: str, table: list[tuple[str, str]], default: str) -> str:
+    best = None
     for prefix, ours in table:
-        if name.startswith(prefix):
-            return ours
-    return default
+        if name.startswith(prefix) and (best is None or len(prefix) > len(best[0])):
+            best = (prefix, ours)
+    return best[1] if best else default
 
 
 def material_for_flat(name: str) -> str:

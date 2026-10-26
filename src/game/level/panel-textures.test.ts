@@ -2,7 +2,9 @@
 //
 // Every assertion compares two regions, kinds or seeds, so a constant buffer cannot pass.
 import { describe, expect, it } from 'vitest';
-import { generateMottle, generatePanel, MOTTLE_SIZE, PANEL_KINDS, PANEL_SIZE, tstreak, type PanelKind } from './panel-textures';
+import * as THREE from 'three';
+import { EMITTER_PANEL_KINDS, generateMottle, generatePanel, isEmitterPanel, MOTTLE_SIZE, PANEL_KINDS, PANEL_SIZE, panelGlows, tstreak, wrapPanel, type PanelKind } from './panel-textures';
+import { exitLetterAt, FL_CELL_W, FL_FRAME_PX, FL_TUBES, SB_CELL_TYPES, SB_GLASS, SB_LEDS } from './emitter-layout';
 import { generateStone } from './stone-textures';
 
 const N = PANEL_SIZE;
@@ -35,12 +37,14 @@ describe('generatePanel', () => {
     for (let i = 0; i < m.normal.length; i += 4) if (Math.abs(m.normal[i]! - 128) > 12 || Math.abs(m.normal[i + 1]! - 128) > 12) deviating++;
     expect(deviating).toBeGreaterThan(N * N * 0.01);
     const grey = (mean(m.albedo, 0) + mean(m.albedo, 1) + mean(m.albedo, 2)) / 3;
-    expect(grey).toBeGreaterThan(35);
+    // Screens and the viewscreen are mostly dark glass.
+    expect(grey).toBeGreaterThan(isEmitterPanel(k) ? 20 : 35);
     expect(grey).toBeLessThan(150);
   });
 
-  it('only the light panel glows', () => {
-    for (const k of PANEL_KINDS) expect(get(k).emissive !== null).toBe(k === 'lightPanel');
+  it('only the light panel and the emitter kinds glow', () => {
+    for (const k of PANEL_KINDS) expect(get(k).emissive !== null).toBe(k === 'lightPanel' || EMITTER_PANEL_KINDS.includes(k));
+    for (const k of PANEL_KINDS) expect(panelGlows(k)).toBe(get(k).emissive !== null);
     const e = get('lightPanel').emissive!;
     // A cell centre glows, the frame corner does not.
     expect(e[(64 * N + 64) * 4 + 1]!).toBeGreaterThan(40);
@@ -59,7 +63,7 @@ describe('generatePanel', () => {
     expect(sig('techPanel')).not.toEqual(sig('door'));
   });
 
-  it.each(PANEL_KINDS)('%s: relief near the stone set (mean normal tilt > 65%% of wallBrick)', (k) => {
+  it.each(PANEL_KINDS.filter(k => !isEmitterPanel(k)))('%s: relief near the stone set (mean normal tilt > 65%% of wallBrick)', (k) => {
     const tilt = (n: Uint8ClampedArray) => { let t = 0; for (let i = 0; i < n.length; i += 4) t += Math.hypot(n[i]! - 128, n[i + 1]! - 128); return t / (n.length / 4); };
     // The sector mesh draws these at normalScale 1.3 against the stone's 1.1, so 65% here is ~75% on screen; the panels' relief sits on their features (seams, rivets), not everywhere.
     expect(tilt(get(k).normal)).toBeGreaterThan(tilt(generateStone('wallBrick', 11).normal) * 0.65);
@@ -94,5 +98,49 @@ describe('generatePanel', () => {
       for (let y = 0; y < N; y += 5) for (let x = 0; x < N; x += 11) d += Math.abs(f(x, y) - f(x + period, y));
       expect(d).toBeGreaterThan(step * 0.5);
     }
+  });
+});
+
+describe('emitter masks (R and G channels, linear)', () => {
+  const at = (k: PanelKind, x: number, y: number, ch: number) => get(k).emissive![(y * N + x) * 4 + ch]!;
+  it('screen bank: glass centres glow in R, bezels and seams do not; LED lenses glow in G', () => {
+    for (let cell = 0; cell < 16; cell++) {
+      const cx = (cell % 4) * 128, cy = Math.floor(cell / 4) * 128;
+      const [r] = SB_GLASS[SB_CELL_TYPES[cell]!]!;
+      const gx = cx + Math.round((r![0] + r![2]) / 2), gy = cy + Math.round((r![1] + r![3]) / 2);
+      expect(at('screenBank', gx, gy, 0), `cell ${cell} glass`).toBeGreaterThan(60);
+      expect(at('screenBank', cx + 1, cy + 64, 0), `cell ${cell} seam`).toBe(0);
+      const [lx, ly] = SB_LEDS[SB_CELL_TYPES[cell]!]!;
+      expect(at('screenBank', cx + lx, cy + ly, 1), `cell ${cell} led`).toBeGreaterThan(60);
+      expect(at('screenBank', gx, gy, 1)).toBe(0);
+    }
+  });
+  it('viewscreen: the glass glows, the frame does not', () => {
+    expect(at('viewscreen', 128, 128, 0)).toBeGreaterThan(80);
+    expect(at('viewscreen', 4, 128, 0)).toBe(0);
+  });
+  it('fluorescent: each tube band is brighter in its own channel than the diffuser between; the frame is dark', () => {
+    let tubeA = 0, tubeB = 0, mid = 0;
+    for (let y = 64; y < 192; y++) { tubeA += at('fluorescent', FL_TUBES[0], y, 0); tubeB += at('fluorescent', FL_TUBES[1], y, 1); mid += at('fluorescent', 64, y, 0); }
+    expect(tubeA).toBeGreaterThan(mid * 1.6);
+    expect(tubeB).toBeGreaterThan(mid * 1.6);
+    expect(at('fluorescent', FL_CELL_W + 2, 128, 0)).toBe(0);
+    expect(at('fluorescent', FL_FRAME_PX + 30, 128, 0)).toBeGreaterThan(0);
+  });
+  it('exit sign: the letters glow in R, the backlit face in G, the housing in neither', () => {
+    let lit = 0, unlit = 0, seen = 0;
+    for (let y = 0; y < N; y += 7) for (let x = 0; x < N; x += 7) {
+      if (exitLetterAt(x, y)) { lit += at('exitSign', x, y, 0); seen++; } else unlit = Math.max(unlit, at('exitSign', x, y, 0));
+    }
+    expect(seen).toBeGreaterThan(100);
+    expect(lit / seen).toBeGreaterThan(120);
+    expect(unlit).toBeLessThan(60);
+    expect(at('exitSign', 256, 60, 1)).toBeGreaterThan(80);
+    expect(at('exitSign', 4, 256, 1)).toBe(0);
+  });
+  it('an emitter mask wraps as linear data; the light panel glow as sRGB', () => {
+    const m = get('screenBank');
+    expect(wrapPanel(m, 'screenBank').emissiveMap!.colorSpace).toBe(THREE.NoColorSpace);
+    expect(wrapPanel(get('lightPanel'), 'lightPanel').emissiveMap!.colorSpace).toBe(THREE.SRGBColorSpace);
   });
 });
