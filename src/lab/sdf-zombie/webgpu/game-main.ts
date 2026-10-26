@@ -4036,18 +4036,34 @@ async function main() {
         undefined,
       );
       warmChunkView.object.layers.set(SDF_LAYER);
+      // HIDDEN except across each compile's synchronous prologue, as the crowd
+      // compile below does. The warm chunk is real geometry (the first actor's
+      // first two prims, i.e. its HEAD) in the live scene on SDF_LAYER: left
+      // visible, the live march drew it for the whole compile, which is a
+      // blink while the browser's shader cache is warm and many seconds of a
+      // dark second head beside the zombie's after ANY march source change
+      // makes the compile cold (bisected onto PR #83, which only changed the
+      // march text). compileAsync projects the object synchronously before
+      // its first await, so visibility after that call does not matter.
+      warmChunkView.object.visible = false;
       scene.add(warmChunkView.object);
+      const warmObject = warmChunkView.object;
+      const prologue = <T>(start: () => Promise<T>): Promise<T> => {
+        warmObject.visible = true;
+        try { return start(); } finally { warmObject.visible = false; }
+      };
       // The march MRT context (rgba32float). Then the gib-shutter context
       // (rgba16float) — the second cold per-SHAPE target; a shape compiles once
       // per (shape x target), so both must be warmed before `gib` is ready.
-      const mrtOk = await ctx.render.sdfLayer.precompileInBackground(
-        warmChunkView.object, scene, camera, { timeoutMs: PRECOMPILE_COLD_PASS_TIMEOUT_MS },
-      );
+      const mrtOk = await prologue(() => ctx.render.sdfLayer.precompileInBackground(
+        warmObject, scene, camera, { timeoutMs: PRECOMPILE_COLD_PASS_TIMEOUT_MS },
+      ));
       let shutterOk = true;
       if (ctx.gibs.shutter) {
-        shutterOk = await ctx.gibs.shutter.precompileSubjectInBackground(
-          warmChunkView.object, ctx.render.postAa.captureTarget, scene, camera, PRECOMPILE_COLD_PASS_TIMEOUT_MS,
-        );
+        const shutter = ctx.gibs.shutter;
+        shutterOk = await prologue(() => shutter.precompileSubjectInBackground(
+          warmObject, ctx.render.postAa.captureTarget, scene, camera, PRECOMPILE_COLD_PASS_TIMEOUT_MS,
+        ));
       }
       return mrtOk && shutterOk;
     } catch (err) {
