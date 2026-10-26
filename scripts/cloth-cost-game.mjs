@@ -13,7 +13,8 @@
 //   bash -c 'export LAB_TMP=.lab-tmp LAB_VITE_PORT=5282 LAB_CDP_PORT=9282; . scripts/lab-servers.sh;
 //     trap lab_servers_down EXIT; lab_servers_up; node scripts/cloth-cost-game.mjs 5282 9282'
 // Env: VARIANTS (none,paint,trousers,robe,robe-flat)  STAGES (arena,close)  ROUNDS (2)  N (60)  CLOSE_D (1.3)
-//      DUMP=1 (raw mode-13 texels per stage and variant)  QS (extra page flags)  OUT (.lab-tmp/cloth-cost-game)
+//      DUMP=1 (raw mode-13 and shaded texels per stage and variant, light clocks pinned)  QS (extra page flags)
+//      NG=0 (analytic normal off)  REASONS=1 (its mode-12 reason histogram)  OUT (.lab-tmp/cloth-cost-game)
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { loadavg } from "node:os";
@@ -81,6 +82,9 @@ async function boot(variant) {
   for (let i = 0; i < 800; i++) { wb = await evaluate("__sdfGame.warmBackground()"); if (wb.gib === "ready" && wb.crowd === "ready") break; if (wb.gib === "failed" || wb.crowd === "failed") break; await sleep(500); if (i % 10 === 0) await evaluate("__sdfGame.step(1, 0)"); }
   if (wb?.gib !== "ready" || wb?.crowd !== "ready") die(`the background warm is ${JSON.stringify(wb)}`);
   await evaluate("__sdfGame.installDebugProbe()");
+  // DUMP=1 compares SHADED pixels across boots, and the practical lamps flicker on the wall clock: two frames of the
+  // same build differed by up to 7/255 until both clocks were pinned (an on/off A/B then sits at 0.1/255).
+  if (process.env.DUMP === "1") await evaluate("(() => { __sdfGame.setDemoHold(true); __sdfGame.setLightClockFrozen(true); return 1; })()");
   // NG=0: the analytic normal off (every hit takes the finite-difference normal).
   if (process.env.NG === "0") await evaluate("__sdfGame.setNormalGradient(0)");
 }

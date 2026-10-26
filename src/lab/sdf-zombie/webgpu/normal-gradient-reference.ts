@@ -86,6 +86,130 @@ export function capsuleGradient(p: V3, s: CapsuleInput): Dg {
   return { d, g, reason: 'ok' };
 }
 
+/** A tapered prim: `r` at a, `r2` at b (r2 >= 0; coneCap in march/primitives.wgsl.ts). */
+export interface ConeInput extends CapsuleInput {
+  r2: number;
+}
+
+/** Value and unnormalized gradient of the production round cone (coneCap's tapered branch), in the same scaled
+ * space as capsuleGradient. Each of coneCap's three regions is a closed form: the two end caps are spheres, and the
+ * side is |pa_perp| * cos(half-angle) + (pa . axis) * sin(half-angle), whose gradient is a unit vector. Outside the
+ * cone the field is a convex body's distance, so the three pieces meet with a continuous gradient. */
+export function roundConeGradient(p: V3, s: ConeInput): Dg {
+  assertFinite('cone input', [...p, ...s.a, ...s.b, s.r, s.r2, ...s.scale]);
+  if (s.scale.some(x => x <= 0)) throw new RangeError('cone scale must be positive');
+  const inv: V3 = [1 / s.scale[0], 1 / s.scale[1], 1 / s.scale[2]];
+  const q: V3 = [p[0] * inv[0], p[1] * inv[1], p[2] * inv[2]];
+  const a: V3 = [s.a[0] * inv[0], s.a[1] * inv[1], s.a[2] * inv[2]];
+  const b: V3 = [s.b[0] * inv[0], s.b[1] * inv[1], s.b[2] * inv[2]];
+  const minScale = Math.min(...s.scale);
+  const toWorld = (d: number, gq: V3, reason: NgReason): Dg =>
+    ({ d: d * minScale, g: [gq[0] * inv[0] * minScale, gq[1] * inv[1] * minScale, gq[2] * inv[2] * minScale], reason });
+  const sphere = (c: V3, r: number): Dg => {
+    const v: V3 = [q[0] - c[0], q[1] - c[1], q[2] - c[2]];
+    const vl = Math.hypot(...v);
+    return vl === 0 ? toWorld(vl - r, ZERO, 'degenerate') : toWorld(vl - r, [v[0] / vl, v[1] / vl, v[2] / vl], 'ok');
+  };
+  const ba: V3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  const l2 = ba[0] ** 2 + ba[1] ** 2 + ba[2] ** 2;
+  if (l2 < 1e-12) return sphere(a, Math.max(s.r, s.r2));
+  const rr = s.r - s.r2;
+  const a2 = l2 - rr * rr;
+  const il2 = 1 / l2;
+  const pa: V3 = [q[0] - a[0], q[1] - a[1], q[2] - a[2]];
+  const y = pa[0] * ba[0] + pa[1] * ba[1] + pa[2] * ba[2];
+  const z = y - l2;
+  const x: V3 = [pa[0] * l2 - ba[0] * y, pa[1] * l2 - ba[1] * y, pa[2] * l2 - ba[2] * y];
+  const x2 = x[0] ** 2 + x[1] ** 2 + x[2] ** 2;
+  const k = Math.sign(rr) * rr * rr * x2;
+  if (Math.sign(z) * a2 * z * z * l2 > k) return sphere(b, s.r2);
+  if (Math.sign(y) * a2 * y * y * l2 < k) return sphere(a, s.r);
+  const d = (Math.sqrt(x2 * a2 * il2) + y * rr) * il2 - s.r;
+  // A point on the axis: |pa_perp| = sqrt(x2) / l2 has no direction.
+  if (Math.sqrt(x2) <= 1e-9 * l2) return toWorld(d, ZERO, 'degenerate');
+  const c = Math.sqrt(a2 * il2) / Math.sqrt(x2);
+  return toWorld(d, [x[0] * c + ba[0] * rr * il2, x[1] * c + ba[1] * rr * il2, x[2] * c + ba[2] * rr * il2], 'ok');
+}
+
+/** A shell prim's sheet parameters (ShellParams, plus the wind drift and body anchor the fold reads). */
+export interface ShellInput {
+  thickness: number;
+  clipNormal: V3;
+  clipOffset: number;
+  rim: number;
+  warpAmp?: number;
+  warpFreq?: V3;
+  warpDrift?: V3;
+  bodyAnchor?: V3;
+}
+
+/** The stencil ball's radius: calcNormal's tetrahedral taps sit sqrt(3) * 1.5 mm from the hit. */
+export const NG_STENCIL_R = Math.sqrt(3) * 0.0015;
+
+/** Value and gradient of the production shell (sdShellWrap / sdShell) taken off a closed base field and its gradient.
+ * Its three switches (the sheet's crease mid-sheet, the clip plane, the rounded rim) are kinks: within the stencil
+ * ball of one, finite differences straddle two gradients, so the analytic one is not certified there
+ * ('hard-boundary'). The warp is a product of sines, differentiated through noiseLocal's affine body frame. */
+export function shellGradient(base: Dg, p: V3, s: ShellInput): Dg {
+  assertDg('shell base', base);
+  const R = NG_STENCIL_R;
+  let reason: NgReason = base.reason;
+  const flag = (bad: boolean): void => { if (bad && reason === 'ok') reason = 'hard-boundary'; };
+  let bd = base.d;
+  let bg: V3 = base.g;
+  let lip = 1;
+  const A = s.warpAmp ?? 0;
+  const F = s.warpFreq ?? ZERO;
+  const fLen = Math.hypot(...F);
+  if (A !== 0 && fLen !== 0) {
+    const drift = s.warpDrift ?? ZERO;
+    const anchor = s.bodyAnchor ?? ZERO;
+    const lx = p[0] - drift[0] - anchor[0], dy = p[1] - drift[1], lz = p[2] - drift[2] - anchor[2];
+    const ch = Math.cos(anchor[1]), sh = Math.sin(anchor[1]);
+    const qx = lx * ch - lz * sh, qy = dy, qz = lx * sh + lz * ch;
+    const sx = Math.sin(F[0] * qx), sy = Math.sin(F[1] * qy + 1.3), sz = Math.sin(F[2] * qz + 2.6);
+    const gq: V3 = [
+      A * F[0] * Math.cos(F[0] * qx) * sy * sz,
+      A * sx * F[1] * Math.cos(F[1] * qy + 1.3) * sz,
+      A * sx * sy * F[2] * Math.cos(F[2] * qz + 2.6),
+    ];
+    bd += A * sx * sy * sz;
+    bg = [bg[0] + gq[0] * ch + gq[2] * sh, bg[1] + gq[1], bg[2] - gq[0] * sh + gq[2] * ch];
+    lip = 1 + Math.abs(A) * fLen;
+  }
+  flag(Math.abs(bd) <= lip * R);
+  const sg = bd >= 0 ? 1 : -1;
+  const d: Dg = { d: Math.abs(bd) - s.thickness, g: [sg * bg[0], sg * bg[1], sg * bg[2]], reason };
+  const n = s.clipNormal;
+  const plane: Dg = { d: n[0] * p[0] + n[1] * p[1] + n[2] * p[2] - s.clipOffset, g: n, reason: 'ok' };
+  // Each switch is checked only where it decides the value: the sheet/plane edge only where the rounding does not win.
+  const reach = 2 * (lip + Math.hypot(...n)) * R;
+  let m = d.d >= plane.d ? d : plane;
+  const len = Math.hypot(d.d, plane.d);
+  if (len === 0) return { d: m.d / lip, g: ZERO, reason: 'degenerate' };
+  const rimD = s.rim - len;
+  flag(Math.abs(m.d - rimD) <= reach);
+  if (rimD > m.d) m = { d: rimD, g: [0, 1, 2].map(i => -(d.d * d.g[i]! + plane.d * n[i]!) / len) as unknown as V3, reason };
+  else flag(Math.abs(d.d - plane.d) <= reach);
+  return { d: m.d / lip, g: [m.g[0] / lip, m.g[1] / lip, m.g[2] / lip], reason };
+}
+
+/** Production chamfer union (sminChamfer): min(min(a, b), (a - K + b) / sqrt 2), a piecewise-linear blend whose
+ * two switches are kinks. Ties within `margin` of either switch are 'hard-boundary'. */
+export function chamferMinGradient(a: Dg, b: Dg, kIn: number, margin = 4 * NG_STENCIL_R): Dg {
+  const K = 4 * kIn;
+  if (K <= 0) return smoothMinGradient(a, b, kIn);
+  const m = a.d <= b.d ? a : b;
+  const c: Dg = {
+    d: (a.d - K + b.d) * Math.SQRT1_2,
+    g: [(a.g[0] + b.g[0]) * Math.SQRT1_2, (a.g[1] + b.g[1]) * Math.SQRT1_2, (a.g[2] + b.g[2]) * Math.SQRT1_2],
+    reason: contributingReason(a, b, 0.5),
+  };
+  if (Math.abs(m.d - c.d) <= margin) return { ...(c.d < m.d ? c : m), reason: 'hard-boundary' };
+  if (c.d < m.d) return c;
+  return Math.abs(a.d - b.d) <= margin ? { ...m, reason: 'hard-boundary' } : { ...m };
+}
+
 function contributingReason(a: Dg, b: Dg, wa: number): NgReason {
   if (wa > 0 && a.reason !== 'ok') return a.reason;
   if (wa < 1 && b.reason !== 'ok') return b.reason;

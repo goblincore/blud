@@ -12,6 +12,11 @@ describe('normal support summary and stencil ownership', () => {
     expect(classifyNormalSupport(body([{ ...p, box:{ round:.1 } }]))).toEqual({ commonFlesh:false, reasons:['unsupported'] });
     expect(classifyNormalSupport(body([{ ...p, dead:true }]))).toEqual({ commonFlesh:false, reasons:['inactive'] });
   });
+  it('supports tapers, shells and chamfer blends', () => {
+    const shell = { thickness: .006, clipNormal: [0, -1, 0] as const, clipOffset: .4, rim: .004 };
+    expect(classifyNormalSupport(body([p, { ...p, radiusB: .1 }, { ...p, shell }, { ...p, blendProfile: 'chamfer' }])))
+      .toEqual({ commonFlesh:true, reasons:[] });
+  });
   it('retains intact eligibility in a mixed supported/unsupported body', () => {
     expect(classifyNormalSupport(body([p, { ...p, bend:[.1,0,0] }]))).toEqual({ commonFlesh:true, reasons:['unsupported'] });
   });

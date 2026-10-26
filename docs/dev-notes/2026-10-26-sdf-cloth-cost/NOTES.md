@@ -339,29 +339,103 @@ Clips: [robe](look-robe-before-after.gif) and [cultist](look-cultist-before-afte
 - Folds react to walking but not to turning (the lattice is body-anchored by yaw).
 - The colour is the owner's: tan 6e5c40 still reads gold under the flashlight.
 
-## The analytic normal stopped working on 2026-09-29 (found here, not fixed)
+## The analytic normal stopped working on 2026-09-29 (found here, fixed in follow-up 4)
 
 `ngBody` (analytic normals, on by default since 2026-09-06, measured then at about 6% faster on an intact torso)
-gives up on a whole pixel when it meets ANY tapered or shaped prim. That includes prims in groups it merely SKIPS:
-`ngExcluded` checks those too.
+gave up on a whole pixel when it met ANY tapered or shaped prim. That included prims in groups it merely SKIPS:
+`ngExcluded` checked those too.
 
 - The zombie's only such prims are its two tapered foot bars, which arrived with the bigger feet on 2026-09-29
   (`1b4da1d8`).
-- Since then, debug mode 12 reports reason 1 ("unsupported") on **every** hit pixel of the zombie, the robe and the
-  arena's whole cast.
-- So each hit pays `ngBody`'s fold for nothing, then the 4-tap fallback (5-7% of counted work, see the shading
+- From then on, debug mode 12 reported reason 1 ("unsupported") on **every** hit pixel of the zombie, the robe and
+  the arena's whole cast.
+- So each hit paid `ngBody`'s fold for nothing, then the 4-tap fallback (5-7% of counted work, see the shading
   section).
 
-**Estimate if it worked again:** the 4-tap normal is about four-fifths of shading, which is about half of a
-close-up's prim work. A working analytic normal should return **20-25% of close-up prim work**.
+## Follow-up 4: the analytic normal, working again
 
-**The fix, in order:**
+**Result: −31% of the bare zombie's close-up prim work, −25% on the robe, −13 to −15% in the arena**, against the
+build as shipped (`?ngcount`, deterministic counters). The shading half alone halves.
 
-1. Explain why switching it off still moves bare-zombie pixels (up to 9/255) when it reports failing everywhere.
-2. Let `ngExcluded` accept skipped tapered and shell groups, whose bound spheres are valid. That alone brings back
-   the zombie and every body's flesh.
-3. Give tapers an analytic gradient (a round cone has a closed form).
-4. Give shells one: sign(base) x grad(base), max with the clip plane, and the warp's derivative is analytic too.
+### 1. Why "off" moved bare-zombie pixels: it did not. The lamps flicker on the wall clock
+
+The A → B pixel diff above (max 9/255 on the bare zombie) was not a global leaking out of `ngBody`.
+
+- Two frames of the **same** build and setting, a few renders apart in one session, differ as much: up to 3.6-7.4/255
+  on 15-23% of hit texels, in blotches over the lit torso.
+- The room's practical lamps flicker on a wall clock. `?frozen=1` freezes the sim, not that clock.
+- With `__sdfGame.setDemoHold(true)` and `setLightClockFrozen(true)`, A/A **and** on/off A/B both drop to at most
+  0.14/255, with no texel over 1/255.
+- The robe and trousers came out bit-identical by luck of timing. The boot's warm loop steps on a timer, so frame
+  counts differ between boots.
+- `cloth-cost-game.mjs` now pins both clocks under `DUMP=1`. The census counters never depended on the lighting.
+
+### 2-4. What changed (`normal-gradient.wgsl.ts`; the CPU mirror and tests in `normal-gradient-reference.ts`)
+
+- **`ngExcluded` accepts every skipped prim but a strand.**
+  - A group's bound sphere is fitted at each prim's reach (`pack.ts` `primReach`: the larger taper radius, box and
+    strand reach, shell `thickness + |warp|`).
+  - A capsule, round cone, box or bent cone is then a scaled-space distance no smaller than Euclidean exterior /
+    distortion. Chamfer is a blend, not a field.
+  - A shell divides its field by its warp's Lipschitz factor (`1 + |A| |F|`), so a skipped shell's lower bound
+    is divided by it too.
+  - A strand's own Lipschitz divide is not bounded there, so a skipped strand still fails the pixel.
+- **Tapers** (`ngCone`, `ngConeOriented`): coneCap's three regions in closed form.
+  - The two caps are spheres.
+  - The side is `|pa_perp| cos(a) + (pa . axis) sin(a)` for the half-angle a, so its gradient is a unit vector.
+  - Outside the cone the field is a convex body's distance, so the pieces meet with a continuous gradient.
+- **Shells** (`ngShell`): sign(base) x grad(base), then max with the clip plane, then the rounded rim, all over
+  `lip`.
+  - The warp's derivative is a product of sines, taken back through noiseLocal's yaw.
+  - Each switch is a kink: the sheet's crease mid-sheet, the sheet/plane edge, and the rim's hand-off.
+  - A stencil within reach of one that decides the value reports reason 3 and takes the 4 taps. On the robe that
+    is the capelet's hem rim (4% of hit pixels).
+- **Chamfer blends** (`ngSminChamfer`): sminChamfer's two branches, with the same kink rule.
+- A prim whose kink or degenerate point sits outside smin's 4k reach of the running fold, over the whole stencil,
+  no longer fails the pixel. Its gradient never reaches the result. `ngBones` already did this.
+- **Still unsupported:** bend (2), box (8) and strand (32) in an evaluated group, and tapered carves. In the arena
+  that is the soldiers (620 px, reason 1).
+
+### Measured (game, `?ngcount`, M prim evaluations; A and B from the shading section)
+
+| | close none | close robe | close trousers | arena none | arena robe |
+| --- | --- | --- | --- | --- | --- |
+| A. as shipped (fails everywhere) | 3.21 | 5.13 | 4.54 | 0.54 | 0.62 |
+| B. analytic off | 3.06 | 5.01 | 4.41 | 0.50 | 0.59 |
+| **D. fixed** | **2.23 (−31%)** | **3.85 (−25%)** | **3.23 (−29%)** | **0.46 (−15%)** | **0.54 (−13%)** |
+| shade only, B → D | 1.66 → 0.82 | 2.27 → 1.10 | 2.54 → 1.35 | 0.27 → 0.22 | 0.30 → 0.24 |
+
+- The walk is untouched (close none 1.41M both ways). All of it is shading.
+- That beat the 20-25% estimate on the bare zombie, because the 4-tap fallback's taps each fold the hit's groups
+  again.
+- **The robe's ratio rises** because flesh gains more: 3.85 / 2.23 = **1.73x** a zombie in close-up (1.64x
+  before), though its absolute cost fell 25%. The trousers hold at 1.45x (1.48x).
+
+Mode-12 reasons on hit pixels, after:
+
+| | 0 (analytic) | 1 (unsupported) | 3 (kink) | 4 (noise owner tie) |
+| --- | --- | --- | --- | --- |
+| close none | 24678 (91%) | 0 | 0 | 2539 |
+| close robe | 36118 (95%) | 0 | 1470 | 479 |
+| arena none | 5494 (82%) | 620 | 0 | 598 |
+| close trousers | 26264 (89%) | 0 | 1078 | 2137 |
+| arena robe | 6596 (84%) | 620 | 263 | 399 |
+
+![reasons on the robe close-up: red reason 3 at the hem rim, yellow reason 4](ng-reasons-robe.png)
+
+### Pixels (clocks pinned; one session, the switch flipped)
+
+- **Normals** (the normal-output debug, on vs off, reason-0 pixels): dot ≥ 0.984 everywhere. Bare zombie
+  median 0.28°, p99 1.5°, max 6.8°. Fewer than 0.5% of pixels are under dot 0.999, robe included.
+  - The largest angles run along the blend seams at the joints. There a 1.5 mm finite difference and the exact
+    gradient legitimately part.
+  - Mode 12's own dot(n, nFD) reads low on cloth (to 0.87). That is the shading-only pleats, which tilt `n` after
+    the comparison point but not `nFD`. It is not a gradient error.
+- **Shaded** (bare zombie close-up): mean 0.7/255 over analytic pixels, p99 5.4/255, 86 texels of 27k over
+  8/255 (max 36/255, on those seams). Robe close-up mean 0.16/255.
+- This is the look the game shipped from 2026-09-06 (owner playtest-passed) to 2026-09-29, now back.
+
+![bare zombie close-up: on, off, shaded diff x8, normal angle x40](ng-onoff-zombie.png)
 
 ## Recommendation
 
@@ -395,4 +469,8 @@ close-up's prim work. A working analytic normal should return **20-25% of close-
   - the cloth proxies' raster path and `setClothProxies`.
 - `src/lab/sdf-zombie/webgpu/cloth-proxy.ts` (+ test): the proxy mesh. Containment is argued in its header.
 - `scripts/cloth-cost.mjs` (bench) and `scripts/cloth-cost-game.mjs` (game): the drivers. Both have `DUMP=1`, and
-  `TIMING=1` on the bench driver.
+  `TIMING=1` on the bench driver. The game driver also has `NG=0` and `REASONS=1`, and pins the light clocks under
+  `DUMP=1`.
+- `src/lab/sdf-zombie/webgpu/normal-gradient.wgsl.ts`: the analytic normal (follow-up 4: `ngCone`, `ngShell`,
+  `ngSminChamfer`, `ngExcluded`, `ngGroup`). Its CPU mirror and finite-difference tests are
+  `normal-gradient-reference.ts` (+ test).

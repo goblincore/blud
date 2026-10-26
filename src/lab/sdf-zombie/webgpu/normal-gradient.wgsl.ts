@@ -9,6 +9,7 @@ import {
   ROW_CLUSTER_RANGE, ROW_CLUSTER_BOUNDS, ROW_CLUSTER_GROUPS,
   ROW_GROUP_RANGE, ROW_GROUP_BOUNDS, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS, ROW_PRIM_BEND,
 } from './march.wgsl';
+import { ROW_PRIM_CLIP, ROW_PRIM_SHELL, ROW_PRIM_WARP } from './march/layout';
 import { MAX_PRIMS } from '../validate';
 import { MAX_WOUNDS } from '../damage';
 import { TILE_MAX_ENTRIES } from './tile-cull';
@@ -200,16 +201,165 @@ export function buildNormalGradientFn(source: string): ReturnType<typeof wgslFn>
 
 // Game integration is registered AFTER the scalar helpers, only for march.
 // It has no writes to production gFold* owner/hit metadata.
+// TAPER, SHELL AND CHAMFER (2026-10-26): the analytic counterparts of coneCap's tapered branch, sdShell and
+// sminChamfer, mirrored by roundConeGradient, shellGradient and chamferMinGradient in normal-gradient-reference.ts
+// (tested there against finite differences of the CPU fields). Before these, ngGroup and ngExcluded gave up on ANY
+// tapered or shaped prim, so the zombie's two tapered foot bars (2026-09-29) failed every hit pixel of every body.
+const NG_CONE = /* wgsl */ `fn ngCone(
+  p: vec3<f32>,
+  a: vec3<f32>,
+  b: vec3<f32>,
+  r1: f32,
+  r2: f32,
+  scale: vec3<f32>
+) -> vec4<f32> {
+  if (r2 < 0.0) { return ngCapsule(p, a, b, r1, scale); }
+  if (any(scale <= vec3<f32>(0.0))) {
+    if (gNgReason == 0) { gNgReason = 1; }
+    return vec4<f32>(0.0);
+  }
+  let invScale = 1.0 / scale;
+  let q = p * invScale;
+  let aa = a * invScale;
+  let bb = b * invScale;
+  let minScale = min(scale.x, min(scale.y, scale.z));
+  // coneCap's expressions verbatim, so the value is the field the fold sums; each region's gradient is closed form.
+  let ba = bb - aa;
+  let l2 = dot(ba, ba);
+  var d: f32;
+  var v: vec3<f32>;
+  if (l2 < 1e-12) {
+    d = (length(q - aa) - max(r1, r2)) * minScale;
+    v = q - aa;
+  } else {
+    let rr = r1 - r2;
+    let a2 = l2 - rr * rr;
+    let il2 = 1.0 / l2;
+    let pa = q - aa;
+    let y = dot(pa, ba);
+    let z = y - l2;
+    let x = pa * l2 - ba * y;
+    let x2 = dot(x, x);
+    let y2 = y * y * l2;
+    let z2 = z * z * l2;
+    let k = sign(rr) * rr * rr * x2;
+    if (sign(z) * a2 * z2 > k) {
+      d = (sqrt(x2 + z2) * il2 - r2) * minScale;
+      v = q - bb;
+    } else if (sign(y) * a2 * y2 < k) {
+      d = (sqrt(x2 + y2) * il2 - r1) * minScale;
+      v = q - aa;
+    } else {
+      d = ((sqrt(x2 * a2 * il2) + y * rr) * il2 - r1) * minScale;
+      // The side: |pa_perp| cos + (pa . axis) sin of the half-angle, a unit gradient. On the axis it has no direction.
+      if (sqrt(x2) <= 1e-9 * l2) {
+        if (gNgReason == 0) { gNgReason = 2; }
+        return vec4<f32>(d, 0.0, 0.0, 0.0);
+      }
+      let side = x * (sqrt(a2 * il2) * inverseSqrt(x2)) + ba * (rr * il2);
+      return vec4<f32>(d, side * invScale * minScale);
+    }
+  }
+  let vLen = length(v);
+  if (vLen < 1e-9) {
+    if (gNgReason == 0) { gNgReason = 2; }
+    return vec4<f32>(d, 0.0, 0.0, 0.0);
+  }
+  return vec4<f32>(d, (v / vLen) * invScale * minScale);
+}`;
+
+const NG_CONE_ORIENTED = /* wgsl */ `fn ngConeOriented(
+  p: vec3<f32>,
+  a: vec3<f32>,
+  b: vec3<f32>,
+  r1: f32,
+  r2: f32,
+  scale: vec3<f32>,
+  quat: vec4<f32>
+) -> vec4<f32> {
+  if (r2 < 0.0) { return ngCapsuleOriented(p, a, b, r1, scale, quat); }
+  let quatLen2 = dot(quat, quat);
+  if (abs(quatLen2 - 1.0) > 1e-3) {
+    if (gNgReason == 0) { gNgReason = 1; }
+    return vec4<f32>(0.0);
+  }
+  let mid = (a + b) * 0.5;
+  let invQuat = vec4<f32>(-quat.xyz, quat.w);
+  let local = ngCone(
+    mid + ngQRot(invQuat, p - mid),
+    mid + ngQRot(invQuat, a - mid),
+    mid + ngQRot(invQuat, b - mid),
+    r1,
+    r2,
+    scale);
+  return vec4<f32>(local.x, ngQRot(quat, local.yzw));
+}`;
+
+// sdShell with its gradient: sign(base) x grad(base) for the sheet, max with the clip plane, the rounded rim, all
+// over the warp's Lipschitz factor. The warp's derivative goes through noiseLocal's body frame (a yaw, then the
+// transpose back). Each switch is a kink; a stencil within reach of one that decides the value is reason 3.
+const NG_SHELL = /* wgsl */ `fn ngShell(dBase: vec4<f32>, p: vec3<f32>, thick: f32, rim: f32, clipO: f32, hasClip: f32, clipN: vec3<f32>, warpA: f32, warpF: vec3<f32>, drift: vec3<f32>) -> vec4<f32> {
+  let R = 0.002598076211;
+  var base = dBase;
+  var lip = 1.0;
+  let fLen = length(warpF);
+  if (warpA != 0.0 && fLen != 0.0) {
+    let q = noiseLocal(p - drift, gBodyAnchor);
+    let sx = sin(warpF.x * q.x);
+    let sy = sin(warpF.y * q.y + 1.3);
+    let sz = sin(warpF.z * q.z + 2.6);
+    let gq = warpA * vec3<f32>(warpF.x * cos(warpF.x * q.x) * sy * sz, sx * warpF.y * cos(warpF.y * q.y + 1.3) * sz, sx * sy * warpF.z * cos(warpF.z * q.z + 2.6));
+    let ch = cos(gBodyAnchor.y);
+    let sh = sin(gBodyAnchor.y);
+    base = vec4<f32>(base.x + warpA * sx * sy * sz, base.yzw + vec3<f32>(gq.x * ch + gq.z * sh, gq.y, gq.z * ch - gq.x * sh));
+    lip = 1.0 + abs(warpA) * fLen;
+  }
+  if (abs(base.x) <= lip * R && gNgReason == 0) { gNgReason = 3; }
+  let d = vec4<f32>(abs(base.x) - thick, select(-base.yzw, base.yzw, base.x >= 0.0));
+  if (hasClip < 0.5) { return d / lip; }
+  let plane = vec4<f32>(dot(p, clipN) - clipO, clipN);
+  let reach = 2.0 * (lip + length(clipN)) * R;
+  var m = select(plane, d, d.x >= plane.x);
+  let len = length(vec2(d.x, plane.x));
+  if (len < 1e-9) {
+    if (gNgReason == 0) { gNgReason = 2; }
+    return vec4<f32>(m.x / lip, 0.0, 0.0, 0.0);
+  }
+  let rimT = vec4<f32>(rim - len, -(d.x * d.yzw + plane.x * clipN) / len);
+  if (abs(m.x - rimT.x) <= reach && gNgReason == 0) { gNgReason = 3; }
+  if (rimT.x > m.x) { m = rimT; }
+  else if (abs(d.x - plane.x) <= reach && gNgReason == 0) { gNgReason = 3; }
+  return m / lip;
+}`;
+
+const NG_SMIN_CHAMFER = /* wgsl */ `fn ngSminChamfer(a: vec4<f32>, b: vec4<f32>, kIn: f32) -> vec4<f32> {
+  let K = kIn * 4.0;
+  if (K <= 0.0) { return ngSmin(a, b, kIn); }
+  let margin = 4.0 * 0.002598076211;
+  let m = select(b, a, a.x <= b.x);
+  let c = vec4<f32>((a.x - K + b.x) * 0.70710678, (a.yzw + b.yzw) * 0.70710678);
+  if (abs(m.x - c.x) <= margin && gNgReason == 0) { gNgReason = 3; }
+  if (c.x < m.x) { return c; }
+  if (abs(a.x - b.x) <= margin && gNgReason == 0) { gNgReason = 3; }
+  return m;
+}`;
+
+// Game integration is registered AFTER the scalar helpers, only for march.
+// It has no writes to production gFold* owner/hit metadata.
 const NG_EXCLUDED = /* wgsl */ `fn ngExcluded(p: vec3<f32>, bounds: vec4<f32>, grp: vec4<f32>, data: texture_2d<f32>, band: i32) -> f32 {
   if ((gNgDebugMask & 4u) != 0u) { return 1e9; }
   // The enclosing sphere minus R contains the entire stencil. OUTSIDE it,
-  // each supported capsule's field is >= Euclidean exterior / distortion.
+  // each prim's field is >= Euclidean exterior / distortion: the sphere is
+  // fitted at the reach (pack.ts primReach: the larger taper radius, box and
+  // strand reach, shell thickness + |warp|), and a capsule, round cone, box
+  // or bent cone is a scaled-space distance no larger than its own reach.
   // Inside an enclosing sphere no lower field bound follows from that sphere.
   let exterior = length(p - bounds.xyz) - bounds.w - 0.002598076211;
-  let lower = select(-1e9, exterior / max(grp.z, 1.0), exterior > 0.0);
-  gNgExcluded = min(gNgExcluded, lower);
-  // Bounds of unsupported profiles do not carry a proven field/Lipschitz
-  // relationship here. Do not bless an unsupported skipped contributor.
+  var lower = select(-1e9, exterior / max(grp.z, 1.0), exterior > 0.0);
+  // A shaped group: a shell divides by its warp's Lipschitz factor, so its
+  // bound does too. A strand's own Lipschitz divide is not bounded here, so a
+  // skipped strand is still not blessed. Taper, chamfer (a blend, not a
+  // field), bend and box need nothing more.
   if ((i32(grp.w + 0.5) & 2) != 0) {
     for (var i = 0; i < i32(grp.y); i = i + 1) {
       let idx = i32(grp.x) + i;
@@ -217,9 +367,14 @@ const NG_EXCLUDED = /* wgsl */ `fn ngExcluded(p: vec3<f32>, bounds: vec4<f32>, g
       if (S.w > 0.5) { continue; }${NGC ? `
       if (gDebugMode > 0.5) { gDebugPrims = gDebugPrims + 1.0; }` : ''}
       let T = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHAPE} + band), 0);
-      if (T.x >= 0.0 || (i32(T.y) & 47) != 0) { gNgReason = 1; return lower; }
+      if ((i32(T.y) & 32) != 0) { gNgReason = 1; return lower; }
+      if ((i32(T.y) & 4) != 0 && lower > 0.0) {
+        let W2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_WARP} + band), 0);
+        lower = lower / (1.0 + abs(W2.x) * length(W2.yzw));
+      }
     }
   }
+  gNgExcluded = min(gNgExcluded, lower);
   return lower;
 }
 var<private> gNgBest: f32;
@@ -229,6 +384,7 @@ var<private> gNgExcluded: f32;
 `;
 
 const NG_GROUP = /* wgsl */ `fn ngGroup(dIn: vec4<f32>, p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, band: i32, bounds: vec4<f32>, grp: vec4<f32>) -> vec4<f32> {
+  let R = 0.002598076211;
   var d = dIn;
   if (length(p - bounds.xyz) - bounds.w > (d.x + counts.w * 4.0) * grp.z) {
     let excluded = ngExcluded(p, bounds, grp, data, band);
@@ -242,26 +398,42 @@ const NG_GROUP = /* wgsl */ `fn ngGroup(dIn: vec4<f32>, p: vec3<f32>, data: text
     let S = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SCALE} + band), 0);
     if (S.w > 0.5) { continue; }${NGC ? `
     if (gDebugMode > 0.5) { gDebugPrims = gDebugPrims + 1.0; }` : ''}
+    var r2 = -1.0;
+    var prof = 0;
     if ((flags & 2) != 0) {
       let T = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHAPE} + band), 0);
-      // Metal is bit 16 and has no geometric effect. All other profiles,
-      // including strand bit 32, are unsupported in the intact phase.
-      if (T.x >= 0.0 || (i32(T.y) & 47) != 0) { gNgReason = 1; return d; }
+      // Taper (T.x >= 0), chamfer (bit 1), shell (bit 4) and metal (bit 16,
+      // no geometric effect) have gradients here. Bend (2), box (8) and
+      // strand (32) are unsupported in the intact phase.
+      if ((i32(T.y) & 42) != 0) { gNgReason = 1; return d; }
+      r2 = T.x;
+      prof = i32(T.y);
     }
     let A = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_A} + band), 0);
     let B = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_B} + band), 0);
-    var dg = ngCapsule(p, A.xyz, B.xyz, A.w, S.xyz);
+    // A prim the running fold cannot feel (outside smin's 4k reach, over the
+    // whole stencil) may report a kink or a degenerate point without
+    // failing the pixel: its gradient never reaches the result.
+    let savedReason = gNgReason;
+    var dg = ngCone(p, A.xyz, B.xyz, A.w, r2, S.xyz);
     if ((flags & 1) != 0) {
       let O = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_QUAT} + band), 0);
       // Production leaves near-identity quaternions untouched too.
-      if (abs(1.0 - O.w) > 1e-6) { dg = ngCapsuleOriented(p, A.xyz, B.xyz, A.w, S.xyz, O); }
+      if (abs(1.0 - O.w) > 1e-6) { dg = ngConeOriented(p, A.xyz, B.xyz, A.w, r2, S.xyz, O); }
     }
+    if ((prof & 4) != 0) {
+      let S2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHELL} + band), 0);
+      let C2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_CLIP} + band), 0);
+      let W2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_WARP} + band), 0);
+      dg = ngShell(dg, p, S2.x, S2.y, S2.z, S2.w, C2.xyz, W2.x, W2.yzw, gWindDrift);
+    }
+    if (gNgReason != savedReason && gNgReason != 1 && dg.x - d.x > B.w * 4.0 + 6.0 * R * max(grp.z, 1.0)) { gNgReason = savedReason; }
     if (dg.x < gNgBest) {
       gNgSecond = gNgBest;
       gNgBest = dg.x;
       gNgOwner = idx;
     } else { gNgSecond = min(gNgSecond, dg.x); }
-    d = ngSmin(d, dg, B.w);
+    if ((prof & 7) == 1) { d = ngSminChamfer(d, dg, B.w); } else { d = ngSmin(d, dg, B.w); }
   }
   return d;
 }`;
@@ -543,7 +715,7 @@ const NG_DETAIL = /* wgsl */ `fn ngDetail(p: vec3<f32>, data: texture_2d<f32>, o
   return (k1 * h1 + k2 * h2 + k3 * h3 + k4 * h4) / (4.0 * 0.0015);
 }`;
 
-export const NORMAL_GRADIENT_GAME_HELPERS = [NG_EXCLUDED, NG_GROUP, NG_WOUND_LIP, NG_WOUNDS, NG_INTERNAL_LOWER, NG_BONES, NG_BODY, NG_DETAIL] as const;
+export const NORMAL_GRADIENT_GAME_HELPERS = [NG_CONE, NG_CONE_ORIENTED, NG_SHELL, NG_SMIN_CHAMFER, NG_EXCLUDED, NG_GROUP, NG_WOUND_LIP, NG_WOUNDS, NG_INTERNAL_LOWER, NG_BONES, NG_BODY, NG_DETAIL] as const;
 
 /** Diagnostic point entry reuses the complete production scalar and gradient
  * helper chains. It never runs in a game material or timed beauty pass. */
