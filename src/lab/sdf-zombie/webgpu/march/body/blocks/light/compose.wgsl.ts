@@ -84,6 +84,12 @@ export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A
                // soldier and torn (flail) wounds only; applied at the consumer so the hoisted wet statement stays pinned.
                + metalTint * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet * mix(1.0, woundGlint, max(soldierWound, tornWound))
                + scatter;
+  // CLOTH SHEEN: fabric's grazing-angle sheen (fibres catching light edge-on), in the cloth's own colour lifted
+  // toward grey, lit like the diffuse. Instead of skin's wet rim, which the matte wet above has mostly removed.
+  if (cloth > 0.0) {
+    let sheen = pow(1.0 - max(dot(n, V), 0.0), 3.0) * 0.4;
+    fleshLit = fleshLit + cloth * sheen * (albedo * 0.7 + vec3<f32>(0.035)) * (amb + diff * wShadow * lvl * keyI * keyC) * ao;
+  }
   // SHARED LIGHT LIST: the other 3 lights and every light's back rim (spec §5). Through AO, not
   // the wound/level shadow (those belong to the dominant). Zero when the list is off.
   fleshLit = fleshLit + (listDiff * albedo + listSpec) * ao + listRim;${SPLIT_GLISTEN_BLOCK}

@@ -353,8 +353,13 @@ only if an idea below earns it.
   The robe's cost is STEPS near its silhouette, not prims. Landed: taper-aware outer-hull chain (-7% robe close-up).
 - [x] **Rasterised cloth proxy** (`cloth-proxy.ts`): each shell's own fitted mesh in the outer hull instead of spheres.
   Robe close-up -21% -> **1.64x** a zombie (1.55x without `warp=`), arena 1.18x. `?clothproxy=0` for A/B.
-- [ ] Next: watch a robed zombie in live play; bound the shading taps (now the robe's bigger half; trousers shade +53%);
-  a per-prim cuff (hem lip from the flesh offset).
+- [x] **Cloth that reads as cloth** (owner: the robe "moves and looks like SDF flesh"): painted shells now shade as
+  fabric (no scatter/wet/skin noise, wrap + sheen, dye mottle), shading-only pleats round each shell's axis, and
+  walking drifts the folds (`CLOTH_WALK_DRIFT`). Zero march cost. [Notes](../../docs/dev-notes/2026-10-26-sdf-cloth-cost/NOTES.md).
+- [ ] Next for cloth: a bending hem (`hem2`/`hem3` chain) instead of one rigid cone; folds that answer turning; a
+  per-prim cuff (hem lip from the flesh offset); `?shadebound` after an owner look at its outliers.
+- [ ] **Analytic normals dead since 2026-09-29** (the zombie's tapered foot bar makes `ngBody` fail on every pixel;
+  est. 20-25% of close-up prim work if it worked). See the notes' last section for the fix order.
 - [ ] **Cloth feel**: hood and robe read stiff (owner). Options: more pendulum points (hem flare ring, hood tail),
   travelling warp waves driven by velocity, or a prebaked cloth sim. Robe distortion on the death throw.
 - [ ] **Hip fire**: the cultist fires from the shoulder; owner wants a random mix of hip and shoulder bursts.

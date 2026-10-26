@@ -2498,6 +2498,12 @@ function warnNearReach(u: MarchUniforms): void {
     + `(aaCfg ${a.toArray().map(v => +v.toPrecision(3)).join(', ')}; last-step ${u.perfCfg.value.w})`);
 }
 
+/** CLOTH WALK DRIFT (2026-10-26): how far the shell folds' lattice falls back per metre the body walks (0.35: about
+ *  one 0.29 m fold a second at a 1 m/s walk). */
+export const CLOTH_WALK_DRIFT = 0.35;
+/** A root move longer than this between two setRootShift calls is a jump (spawn, teleport), not a step. */
+const CLOTH_DRIFT_MAX_STEP = 0.5;
+
 export function createZombieGpuView(
   body: BuildResult, opts: GpuViewOpts = {},
 ): ZombieGpuView {
@@ -3049,6 +3055,8 @@ export function createZombieGpuView(
   }
 
   const mainSegmentVolume = material as unknown as MaterialWithSegmentVolume;
+  /** The last root position setRootShift saw (cloth walk drift). */
+  let driftPrev: [number, number] | null = null;
   return {
     object: mesh,
     coneObject: coneMesh,
@@ -3183,6 +3191,18 @@ export function createZombieGpuView(
       // pre-pass. Written HERE so there is a single place that decides what
       // "the body's frame" is — see bodyAnchor's declaration.
       u.bodyAnchor.value.set(x, bodyYaw, z);
+      // CLOTH WALK DRIFT: the shell folds' lattice falls back by CLOTH_WALK_DRIFT of each step the body takes, so a
+      // walking body's folds stream back through the cloth (air pushing the robe) instead of riding it frozen. The
+      // game never set windDrift before (only the lab's wind did), and the lab still overwrites it every frame. A
+      // jump (spawn, teleport) is not a step.
+      if (driftPrev) {
+        const dx = x - driftPrev[0], dz = z - driftPrev[1];
+        if (Math.hypot(dx, dz) < CLOTH_DRIFT_MAX_STEP) {
+          u.windDrift.value.x -= dx * CLOTH_WALK_DRIFT;
+          u.windDrift.value.z -= dz * CLOTH_WALK_DRIFT;
+        }
+      }
+      driftPrev = [x, z];
       syncRecord();
     },
     setFaceTexture(tex, atlas, mean) {

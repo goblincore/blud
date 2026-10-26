@@ -281,6 +281,88 @@ Pixels (the shaded float march target, max channel difference over hit texels):
   blend) keeps most nearby groups in. The next lever there is fewer taps or cheaper ones, not culling: for example,
   normals from the walk's last two samples, or a 3-tap one-sided difference.
 
+## Cloth that reads as cloth (follow-up 3)
+
+**The owner's verdict on the robe zombie:** "it doesn't really feel like cloth, it's just like SDF flesh in terms of
+how it moves and looks". The cause was that shells were lit exactly as skin is:
+
+- subsurface scatter;
+- the wet glint;
+- skin pore and silhouette noise in the normal;
+- a hard terminator.
+
+They also had no visible folds (the field's `warp=` folds are 1 cm and lost at game range). And in the game they
+were frozen to the body: only the lab ever set `windDrift`.
+
+**Changed.** A painted `shell` prim (shape bit 4, read off the texel the painted branch already loads) is now
+**cloth** in the shading:
+
+| Where | What cloth gets |
+| --- | --- |
+| `shading-normal.wgsl.ts` | no skin noise in the normal |
+| `paint-char.wgsl.ts` | a rest-frame dye mottle (long streaks plus a fine slub) |
+| `wet.wgsl.ts` | the wet highlight at 12%, except inside a hole, where the flesh under it keeps its own |
+| `occlusion.wgsl.ts` | no subsurface scatter |
+| `light.wgsl.ts` | a wrapped terminator (+0.25) |
+| `compose.wgsl.ts` | a grazing sheen, 0.4 x (1 - N.V)^3 in the cloth's colour |
+
+**Folds, shading-only** (`shading-normal.wgsl.ts`, CLOTH FOLDS):
+
+- Nine pleats round the hit shell's own rest axis, deepening toward its open end and wandering a little.
+- They tilt the normal and darken the fold floors in the paint (`clothValley`).
+- **Motion.** `zombie-gpu.ts setRootShift` now lags the shell folds' lattice by `CLOTH_WALK_DRIFT` (0.35) of every
+  step the body takes. The field's warp folds therefore stream back through the cloth as it walks, and a wave
+  (driven by the walked distance) runs down the shading pleats. Jumps over 0.5 m (spawn, teleport) are not steps.
+
+**Cost: zero march work.** Census before and after is identical: close-up 3.06M zombie and 5.01M robe; arena 0.50M
+and 0.59M. Everything is per-cloth-pixel arithmetic plus two texel reads.
+
+**Pixels:**
+
+- **Robe:** changes as intended.
+- **Bare zombie:** an A/A of two boots of the old code is bit-identical. Before → after moves the zombie by a
+  **mean of 0.6/255**, max 6.6/255, with no net brightening or darkening, spread thinly over the whole body.
+- No non-cloth path computes anything different (every use is `if (cloth > 0.0)` or a multiply by 1 - 0), so that
+  is the shader compiler's code generation shifting, not a logic change.
+
+**Frames** (arena, the enemy walking at the player). Top/left is before, bottom/right is after:
+
+![robe zombie before/after](look-robe-before-after.png)
+![cultist before/after](look-cultist-before-after.png)
+
+Clips: [robe](look-robe-before-after.gif) and [cultist](look-cultist-before-after.gif).
+
+**Not done; the next steps for feel:**
+
+- The skirt still swings as ONE rigid cone on the `hem` pendulum. The gait already supports a chain (`hem2`/`hem3`)
+  that `.blob`s can use for a bending hem.
+- Folds react to walking but not to turning (the lattice is body-anchored by yaw).
+- The colour is the owner's: tan 6e5c40 still reads gold under the flashlight.
+
+## The analytic normal stopped working on 2026-09-29 (found here, not fixed)
+
+`ngBody` (analytic normals, on by default since 2026-09-06, measured then at about 6% faster on an intact torso)
+gives up on a whole pixel when it meets ANY tapered or shaped prim. That includes prims in groups it merely SKIPS:
+`ngExcluded` checks those too.
+
+- The zombie's only such prims are its two tapered foot bars, which arrived with the bigger feet on 2026-09-29
+  (`1b4da1d8`).
+- Since then, debug mode 12 reports reason 1 ("unsupported") on **every** hit pixel of the zombie, the robe and the
+  arena's whole cast.
+- So each hit pays `ngBody`'s fold for nothing, then the 4-tap fallback (5-7% of counted work, see the shading
+  section).
+
+**Estimate if it worked again:** the 4-tap normal is about four-fifths of shading, which is about half of a
+close-up's prim work. A working analytic normal should return **20-25% of close-up prim work**.
+
+**The fix, in order:**
+
+1. Explain why switching it off still moves bare-zombie pixels (up to 9/255) when it reports failing everywhere.
+2. Let `ngExcluded` accept skipped tapered and shell groups, whose bound spheres are valid. That alone brings back
+   the zombie and every body's flesh.
+3. Give tapers an analytic gradient (a round cone has a closed form).
+4. Give shells one: sign(base) x grad(base), max with the clip plane, and the warp's derivative is analytic too.
+
 ## Recommendation
 
 1. **Zombie trousers: keep paint (#82), or move to the offset form if the legs should read thicker.** The offset form

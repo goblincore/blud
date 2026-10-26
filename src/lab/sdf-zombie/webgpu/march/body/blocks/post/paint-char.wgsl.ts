@@ -49,7 +49,11 @@ export const PAINT_CHAR_BLOCK = /* wgsl */ `  // PER-PRIMITIVE COLOUR. The fold 
     // of this pixel's wound mask belongs to a hole.
     let holeness = clamp(gWoundHole / max(wm, 1e-4), 0.0, 1.0);
     let inside = mix(albedo, vec3<f32>(0.012, 0.008, 0.006), holeness);
-    albedo = mix(mix(primAlbedo, primAlbedo * 0.28, fray), inside, reveal);
+    // CLOTH: uneven dye in long streaks down the drape plus a fine slub, in the hit prim's REST frame (anchor) so
+    // it rides the cloth. Skin gets its grain from the body layers, which paint masks off; fabric needs its own.
+    var paint = primAlbedo;
+    if (cloth > 0.0) { paint = primAlbedo * (1.0 + 0.2 * fbm(anchor * vec3<f32>(2.5, 0.7, 2.5)) + 0.07 * fbm(anchor * 26.0)) * (1.0 - 0.7 * clothValley); }
+    albedo = mix(mix(paint, paint * 0.28, fray), inside, reveal);
     // CLOTH DECALS (soft targets, 2026-09-24; WOUND_MASK bit 2). Nothing is
     // carved: the robe is marked where the round went through.
     //   stain ... blood soaking out from a torn dark core (heavy rounds);
