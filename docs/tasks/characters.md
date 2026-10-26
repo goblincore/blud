@@ -431,3 +431,24 @@ only if an idea below earns it.
 - [ ] **A monster with dangling jelly-orange tubes** (owner, 2026-10-03): the slug-burst's scalp flaps (`head-flap.ts`,
   the leaf's rim-hinged flap piece) read as wiggling orange tubes on the zombie, "quite creepy", so they are off there and
   can be the signature of a new creature. See [build notes](../dev-notes/2026-10-02-head-burst/NOTES.md).
+
+## The zombie refinement (2026-10-26)
+
+Owner: seeing detailed grabber hands on the plain zombie, bring the whole zombie up to the newer creatures' standard.
+Branch `claude/zombie-refine-468259`, on top of the hands PR goblincore/blud#75.
+
+- [x] **Look-dev:** three variants rendered in the lab on a shared base (asylum escapee, morgue walker, rotting labourer;
+  [sheet](../dev-notes/2026-10-26-zombie-refine-lookdev/zombie-variants-sheet.png)). The owner picked the **labourer**. `make_kit.py -- asylum|morgue`
+  still builds the other two (morgue wants `zombie-detail-gen.ts --incision`).
+- [x] **Body normal map:** `scripts/zombie-detail-gen.ts` -> `characters/zombie.detail` (collarbones, the lower ribs through slack
+  skin, pec edges, gut folds, spine knuckles, shoulder blades, varicose veins, forearm tendons), baked on the GPU in ~3 s
+  (`bake-args.json` has the command). No thigh regions: the trousers cover them.
+- [x] **Kit** (`assets-source/zombie-kit/make_kit.py` on `kit_sculpt.py`, laid on probed skin from `scripts/zombie-surface.ts`):
+  hands 1.2x and fleshier, iron wrist shackles with a broken chain over the hand seam, torn work trousers to below the knee,
+  work boots, suspenders. 17.5k triangles (the look-dev's labourer was 31k).
+- [x] **Proportions:** the forearm tapers r 0.048 -> 0.040 into the shackle, and the wrist knob shrinks 0.045 -> 0.041
+  (zombie.blob and its body.ts twin; golden and gib assets re-pinned).
+- [ ] **Owner's in-game look** ([in-game frames](../dev-notes/2026-10-26-zombie-refine-lookdev/zombie-labourer-ingame.png)).
+- [ ] **Shins and feet to mesh** (owner's idea, to save prims): the boots and trousers now hide the foot prims and most of the
+  shin, so the 4 foot prims a side could go, but the foot prims carry the `toe` rig points, gait pins, gib assets and the
+  zombie's test-fixture role. Its own task.

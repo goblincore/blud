@@ -226,7 +226,7 @@ const LOOK: Record<string, {
   goblinskin: { metalness: 0.0, roughness: 1.0, envIntensity: 0.12 },
   // Its claw tips: old horn, glossier than the skin (model_goblin_arm.py's Claw). Colour is the vertex colour.
   goblinclaw: { metalness: 0.0, roughness: 0.28, envIntensity: 0.45 },
-  // The zombie's grabber hands (assets-source/zombie-kit/make_hands.py). `zombieskin` is FLESH: the game redraws it with
+  // The zombie's grabber hands (assets-source/zombie-kit/make_kit.py). `zombieskin` is FLESH: the game redraws it with
   // the flesh shader's lighting in the zombie's own flesh (kit-flesh.ts); this entry is only the lab's fallback look,
   // dielectric and wet like the henenlotter latex. `zombienail`: yellowed, cracked horn.
   zombieskin: { metalness: 0.0, roughness: 0.38, envIntensity: 0.35 },

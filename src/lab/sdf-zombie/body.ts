@@ -62,8 +62,9 @@ const ZOMBIE_BASE: BodyDef = {
     // polygon kit on the forearm: zombie.blob, 2026-10-26).
     { bone: 'clavicle', at: 0.90, radius: 0.072, scale: [1, 1, 1], blendK: 0.010, limb: 'arm', mirror: true },
     { bone: 'upperArm', at: 0.02, capTo: 0.95, radius: 0.055, scale: [1, 1, 1], blendK: 0.007, limb: 'arm', mirror: true },
-    { bone: 'foreArm',  at: 0.05, capTo: 0.90, radius: 0.048, scale: [1, 1, 1], blendK: 0.007, limb: 'arm', mirror: true },
-    { bone: 'foreArm',  at: 0.97, radius: 0.045, scale: [1, 1, 1], blendK: 0.0125, limb: 'arm', mirror: true },
+    // The forearm tapers into the iron wrist shackle (kit), and the knob shrinks with it (zombie.blob, 2026-10-26).
+    { bone: 'foreArm',  at: 0.05, capTo: 0.90, radius: 0.048, radiusB: 0.040, scale: [1, 1, 1], blendK: 0.007, limb: 'arm', mirror: true },
+    { bone: 'foreArm',  at: 0.97, radius: 0.041, scale: [1, 1, 1], blendK: 0.0125, limb: 'arm', mirror: true },
 
     // Legs — thigh, shin, ankle, foot (heel + sole down to the floor; see zombie.blob).
     { bone: 'thigh', at: 0.04348, capTo: 0.95, radius: 0.082, scale: [1, 1, 1], blendK: 0.0175, limb: 'leg', mirror: true },

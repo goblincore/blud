@@ -613,3 +613,21 @@ first, surging ~0.9 m (`slamAdvance`). A first pass that lifted the chest 0.30 m
 renders that checkout without a word; give each worktree its own `LAB_VITE_PORT`/`LAB_CDP_PORT` and read the
 `lab-servers: starting vite` line. The lab's 0.4 m reference cube hides a body this low (hide it in a `BLOB_PROBE`), and
 `BLOB_TARGET_X`/`BLOB_TARGET_Z` move the orbit centre to a head 0.8 m from the origin.
+
+## Refining the base zombie (the labourer, 2026-10-26)
+
+The crowd enemy got the default pipeline as a refinement pass rather than a new character. What it taught:
+
+- **Look-dev through the real pipeline, cheaply.** Copy the `.blob` to `zombie-<variant>.blob`, give each copy a
+  temporary registry entry with its own kit glTF and body map, and shoot them with `blob:shot`. One `make_kit.py` with a
+  variant switch builds every outfit on shared parts (hands, shackles), so the owner compares outfits, not lighting.
+  Delete the copies once one is picked.
+- **Clothes on probed skin.** `scripts/zombie-surface.ts` dumps torso rings and per-bone radius tables;
+  `zombie_common.py`'s `torso_pt` / `limb_pt` lay straps, trouser legs and cuffs a set clearance off the skin. A rigid cuff
+  takes the WIDEST skin across its span at each angle. Trouser pieces ride separate bones (pelvis, thigh, shin) and
+  overlap generously at the joints.
+- **Crowd budgets.** Decimate each part to ~700-1,200 tris; the look-dev's 31k labourer kit shipped at 17.5k with no
+  visible loss. Old iron needs a dark albedo (~0.10): 0.30 rendered as pale gold bangles.
+- **Bake trap (fixed):** `bakeBodies` now builds flesh only (`fleshFromBlob`). With bones, a body that has a `bones` block
+  plus a big `.detail` spent minutes deriving and containment-checking a bone per detail prim before the GPU started. And
+  a worktree whose `node_modules` predates the `webgpu` package falls back to the CPU bake: run `npm install`.

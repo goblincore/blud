@@ -155,11 +155,15 @@ function bakedFace(file: string): FaceSheet {
  * the whole reason the turntable exists.
  */
 export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
-  // The grabber HANDS are its kit (assets-source/zombie-kit/make_hands.py): polygon flesh on each forearm, drawn in the
-  // game with the flesh shader's lighting (kit-flesh.ts). The .blob keeps a wrist knob where the fist orb was.
+  // The rotting labourer (owner's pick, 2026-10-26 look-dev: docs/dev-notes/2026-10-26-zombie-refine-lookdev/). Its kit
+  // (assets-source/zombie-kit/make_kit.py): the grabber HANDS, polygon flesh on each forearm drawn in the game with the
+  // flesh shader's lighting (kit-flesh.ts), iron wrist shackles over the hand seam, torn work trousers, boots and
+  // suspenders. The .blob keeps a wrist knob where the fist orb was.
   zombie: {
     name: 'zombie', src: zombieBlobSrc, face: ZOMBIE_FLAT,
     kit: '/assets/lab/zombie-kit.gltf',
+    // Collarbones, ribs through slack skin, gut folds, spine and veins (characters/zombie.detail, baked; never marched).
+    bodyNormal: { url: '/assets/lab/zombie-body-n.png', meta: '/assets/lab/zombie-body-n.json', strength: 1 },
     profile: ZOMBIE_PROFILE,
   },
   goblin: {

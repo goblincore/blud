@@ -39,12 +39,14 @@ body
   blob torso on pelvis at=0.40 r=0.145 wide=1.10 tall=0.9 deep=0.92 blend=0.02
 
   # Arms — shoulder blob, then upper and forearm capsules, then a WRIST knob. The fist orb (r 0.062 at 1.00) is now the
-  # grabber HANDS, polygon kit on the forearm (assets-source/zombie-kit/make_hands.py, owner 2026-10-26), drawn in this
+  # grabber HANDS, polygon kit on the forearm (assets-source/zombie-kit/make_kit.py, owner 2026-10-26), drawn in this
   # body's own flesh with the flesh shader's lighting (kit-flesh.ts); the knob is what the hand's palm sits into.
   blob arm on clavicle at=0.90 r=0.072 blend=0.010 mirror
   bar  arm on upperArm from=0.02 to=0.95 r=0.055 blend=0.007 mirror
-  bar  arm on foreArm  from=0.05 to=0.90 r=0.048 blend=0.007 mirror
-  blob arm on foreArm  at=0.97 r=0.045 blend=0.0125 mirror
+  # The forearm TAPERS into the wrist (owner 2026-10-26): r 0.048 at the elbow to 0.040, so it narrows into the iron
+  # wrist shackle (kit) instead of meeting the hand as a thick drum; the knob shrinks with it and sits inside the cuff.
+  bar  arm on foreArm  from=0.05 to=0.90 r=0.048 r2=0.040 blend=0.007 mirror
+  blob arm on foreArm  at=0.97 r=0.041 blend=0.0125 mirror
 
   # Legs — thigh, shin, ankle, foot.
   # from=0.04348: 0.02 m down the (now 0.46) thigh, where 0.05 of 0.40 put it — the hip's flesh must not

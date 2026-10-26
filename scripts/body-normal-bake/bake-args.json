@@ -14,5 +14,6 @@
   "gutcrawler": ["768", "640", "--torso-axis", "0,0.10,-1.14:0,0.30,0.64", "--limb", "upperarm.l:0:1:0.12:128", "--limb", "upperarm.r:0:1:0.12:128", "--limb", "forearm.l:0:1:0.10:128", "--limb", "forearm.r:0:1:0.10:128"],
   "teratoma": ["512", "256"],
   "twinhead": ["512", "256", "--limb", "upperarm.l:0:1:0.17:96", "--limb", "forearm.l:0:0.5:0.13:48", "--limb", "upperarm.r:0:1:0.17:96", "--limb", "forearm.r:0:0.5:0.13:48"],
-  "venus": ["512", "256", "--limb", "upperarm.l:0:1:0.15:96", "--limb", "upperarm.r:0:1:0.15:96", "--limb", "thigh.l:0:1:0.20:128", "--limb", "thigh.r:0:1:0.20:128"]
+  "venus": ["512", "256", "--limb", "upperarm.l:0:1:0.15:96", "--limb", "upperarm.r:0:1:0.15:96", "--limb", "thigh.l:0:1:0.20:128", "--limb", "thigh.r:0:1:0.20:128"],
+  "zombie": ["512", "256", "--limb", "upperArm.l:0:1:0.12:96", "--limb", "foreArm.l:0:1:0.10:96", "--limb", "upperArm.r:0:1:0.12:96", "--limb", "foreArm.r:0:1:0.10:96"]
 }
