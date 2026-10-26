@@ -2451,13 +2451,14 @@ async function main() {
   ctx.boot.deferredApi?.router.register(ctx.render.occluderHull.object, 'exclude');
   ctx.boot.deferredApi?.router.register(ctx.render.occluderHull.shadowObject, 'exclude');
 
-  // OCCLUDER PRE-PASS OFF (2026-09-01). Its tMax clamp is gone from the
-  // march -- the distance it rasterises is only accurate in the near field
-  // and under-reports badly beyond ~3 m, which shredded bodies at range.
-  // The full measurement and the revival conditions are in march.wgsl.ts
-  // above tMax. __sdfGame.setOccluder still renders the pass for
-  // diagnostics; nothing consumes it.
+  // INNER-HULL OCCLUDER OFF (2026-09-01): it measured as worth nothing, and its
+  // CPU rebuild is not free. (Its distance decay, the original reason, was fog,
+  // fixed 2026-09-04.) __sdfGame.setOccluder still turns it on for A/B.
   ctx.render.sdfLayer.setOccluderEnabled(false);
+  // KIT OCCLUSION ON (2026-10-26): opaque kit cloth bounds the march's tMax, so
+  // flesh under trousers and boots is neither marched to the skin nor shaded
+  // (kit-occluder.ts; KIT_OCCLUDER_LAYER). ?kitocc=0 / __sdfGame.setKitOccluder.
+  ctx.render.sdfLayer.setKitOccluderEnabled(new URLSearchParams(location.search).get('kitocc') !== '0');
 
   /** Close-up task 3: the quarter-resolution depth prepass — a coarse march
    *  of the same field at one texel per 4x4 SDF-pixel block (~1/16 of the
