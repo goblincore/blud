@@ -6,7 +6,7 @@ import { loadHeldProp } from './held-prop';
 
 afterEach(() => vi.restoreAllMocks());
 
-it.each(['kit', 'prop'] as const)('%s retirement leaves the survivor with independent environment bindings', async kind => {
+function stubLoads() {
   const targets: THREE.RenderTarget[] = [];
   vi.spyOn(THREE.PMREMGenerator.prototype, 'fromScene').mockImplementation(() => {
     const target = new THREE.RenderTarget(16, 16);
@@ -22,8 +22,13 @@ it.each(['kit', 'prop'] as const)('%s retirement leaves the survivor with indepe
     scene.add(new THREE.Mesh(new THREE.BoxGeometry(), material));
     return { scene } as never;
   });
+  return { targets, materials };
+}
+
+it('prop retirement leaves the survivor with independent environment bindings', async () => {
+  const { targets, materials } = stubLoads();
   const renderer = {} as THREE.WebGPURenderer;
-  const load = () => kind === 'kit' ? loadKit('/stub.gltf', renderer) : loadHeldProp('/stub.gltf', renderer);
+  const load = () => loadHeldProp('/stub.gltf', renderer);
   const first = await load(), survivor = await load();
   const disposeFirst = vi.spyOn(targets[0]!, 'dispose');
   const disposeSurvivor = vi.spyOn(targets[1]!, 'dispose');
@@ -36,4 +41,24 @@ it.each(['kit', 'prop'] as const)('%s retirement leaves the survivor with indepe
   expect(materials[1]!.envMap).toBe(targets[1]!.texture);
   survivor.dispose();
   expect(disposeSurvivor).toHaveBeenCalledOnce();
+});
+
+// Kits share ONE room environment per renderer (kit-overlay.ts kitEnvironment) and one parse per URL: retiring an actor's
+// kit must never dispose that environment, so every survivor keeps sampling a live texture.
+it('kit retirement never disposes the shared environment the survivor samples', async () => {
+  const { targets } = stubLoads();
+  const renderer = {} as THREE.WebGPURenderer;
+  const first = await loadKit('/stub-kit.gltf', renderer), survivor = await loadKit('/stub-kit.gltf', renderer);
+  expect(targets).toHaveLength(1);
+  const disposeEnv = vi.spyOn(targets[0]!, 'dispose');
+  const envOf = (k: typeof first) => {
+    let env: THREE.Texture | null = null;
+    k.object.traverse(o => { const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined; if (m?.envMap) env = m.envMap; });
+    return env;
+  };
+  expect(envOf(survivor)).toBe(targets[0]!.texture);
+  first.dispose();
+  survivor.dispose();
+  expect(disposeEnv).not.toHaveBeenCalled();
+  expect(envOf(survivor)).toBe(targets[0]!.texture);
 });

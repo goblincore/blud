@@ -169,8 +169,9 @@ describe('carveBodyIntoPieces — the whole body meshed, then cut', () => {
     // rather than the exact figure, which moves with `cells` and the cell size.
     expect(meat / total).toBeGreaterThan(0.15);
     // ...and the skin must still be there. A mask that fired everywhere would
-    // be just as wrong as one that never fires.
-    expect(skin / total).toBeGreaterThan(0.3);
+    // be just as wrong as one that never fires. (0.25, not 0.3: the fist orbs became wrist knobs when the hands moved to
+    // the kit, 2026-10-26, taking hand skin off the carved body -- measured 29.97% at this 2 cm cell.)
+    expect(skin / total).toBeGreaterThan(0.25);
     // The whole point: exposed meat reads DARKER and REDDER than skin. Under
     // the shipped preset the ramp lands near-black clot at the muscle knee
     // against a pale dermis, so the gap is large, not a nudge.
