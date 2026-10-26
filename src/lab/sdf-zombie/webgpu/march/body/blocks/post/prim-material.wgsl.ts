@@ -22,6 +22,8 @@ export const PRIM_MATERIAL_BLOCK = /* wgsl */ `  // PER-PRIMITIVE MATERIAL READ 
   var gloss = 0.0;
   var painted = 0.0;
   var metal = 0.0;
+  // FABRIC (prof bit 6, 64): painted cloth, matte, keeping the body normal map (the zombie's painted trousers).
+  var fabric = 0.0;
   var primGlow = 0.0;
   var primAlbedo = vec3<f32>(0.0);
   if (hitBest >= 0) {
@@ -32,6 +34,7 @@ export const PRIM_MATERIAL_BLOCK = /* wgsl */ `  // PER-PRIMITIVE MATERIAL READ 
       painted = 1.0;
       let PS = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SHAPE} + gBand), 0);
       if ((i32(PS.y) & 16) != 0) { metal = 1.0; }
+      if ((i32(PS.y) & 64) != 0) { fabric = 1.0; }
       // GLOW (hard-surface task 3): primClip.w, the lane that was documented
       // spare until now. Loaded ONLY inside the painted branch — glow is
       // parse-gated on color=, so an unpainted pixel can never author one,

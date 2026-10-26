@@ -5,7 +5,8 @@
 // so detail costs the crowd nothing at runtime).
 //
 //   npx tsx scripts/zombie-detail-gen.ts [name] [--incision] && npx tsx scripts/bake-body-normal.ts <name> 512 256 \
-//     --limb upperArm.l:0:1:0.12:96 --limb foreArm.l:0:1:0.10:96 --limb upperArm.r:0:1:0.12:96 --limb foreArm.r:0:1:0.10:96
+//     --limb upperArm.l:0:1:0.12:96 --limb foreArm.l:0:1:0.10:96 --limb upperArm.r:0:1:0.12:96 --limb foreArm.r:0:1:0.10:96 \\
+//     --limb thigh.l:0:1:0.14:96 --limb thigh.r:0:1:0.14:96
 //   name defaults to `zombie`; --incision adds the morgue's Y-incision and its stitches.
 //
 // THE TEMPLATE is scripts/flayer-detail-gen.ts (skin probes, the varicose recipe in biomech-style.md). The zombie's
@@ -115,12 +116,27 @@ section('pecs: a sagging lower edge, and the sternum between them');
 for (const s of [1, -1]) ridge([[1.37, s * 8], [1.355, s * 30], [1.36, s * 55], [1.38, s * 72]], 0.012, 0.004, 0.008);
 ridge([[1.43, 0], [1.38, 0], [1.32, 0]], 0.007, 0.0022, 0.004);
 
-section('gut: slack skin folds over the sag, a navel, a fold under the belly and over each hip');
+section('gut: a slack fold over the sag, above the belt');
 // Short, soft and broken: a fold right round the front read as a belt in the first bake.
-for (const [y, a0, a1, w] of [[1.075, 14, 52, 0.013], [0.995, 8, 60, 0.015]] as const) for (const s of [1, -1])
-  ridge([[y - 0.006, s * a0], [y - 0.002, s * (a0 + a1) / 2], [y + 0.007, s * a1]], w, 0.0025, 0.010);
-for (const s of [1, -1]) ridge([[1.00, s * 70], [1.02, s * 95], [1.03, s * 120]], 0.014, 0.004, 0.008);   // love handles
-for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; lump(1.04 + 0.009 * Math.sin(a), 9 * Math.cos(a), 0.005, 0.002, 0.002); }
+for (const s of [1, -1]) ridge([[1.075 - 0.006, s * 14], [1.075 - 0.002, s * 33], [1.075 + 0.007, s * 52]], 0.013, 0.0025, 0.010);
+
+// ---------------------------------------------------------------- the trousers (below the waist)
+// The labourer's trousers are PAINT on the pelvis mass and the thighs (zombie.blob); their cloth is relief here, under
+// the kit belt (y 1.025-1.065). Seams and placket edges are narrow ridges; folds are soft and broad.
+section('trousers: gathers under the belt, the fly, front and back pockets, side seams, crotch folds');
+for (let th = -170; th <= 180; th += 9) if (Math.abs(th) > 14) ridge([[1.024, th], [1.004, th + 1.5]], 0.0035, 0.0018, 0.003);
+ridge([[1.022, 4], [0.985, 4], [0.952, 5], [0.935, 8]], 0.006, 0.0022, 0.004);                    // the fly's placket
+ridge([[1.020, 13], [0.975, 13], [0.950, 11], [0.938, 6]], 0.0022, 0.0015, 0.0015);               // its stitched edge
+for (const s of [1, -1]) {
+  ridge([[1.022, s * 30], [1.000, s * 40], [0.982, s * 54], [0.976, s * 66]], 0.0028, 0.0018, 0.002);   // front pocket mouth
+  // back pocket: a raised patch with stitched edges
+  lump(0.965, s * 152, 0.034, 0.0016, 0.006, ' wide=1.0 tall=1.05 deep=0.25', 0.034 * 0.25);
+  ridge([[0.998, s * 136], [0.998, s * 168]], 0.0022, 0.0016, 0.0015);
+  ridge([[0.998, s * 136], [0.936, s * 139], [0.926, s * 152], [0.936, s * 165], [0.998, s * 168]], 0.0020, 0.0014, 0.0015);
+  ridge([[1.022, s * 90], [0.97, s * 90], [0.90, s * 91]], 0.0045, 0.0018, 0.003);                     // side seam
+  for (let k = 0; k < 3; k++)                                                                            // crotch smile folds
+    ridge([[0.915 + 0.018 * k, s * 6], [0.925 + 0.020 * k, s * 22], [0.945 + 0.022 * k, s * 40]], 0.007, 0.0028, 0.006);
+}
 
 section('back: the spinous processes as knuckles, the erectors either side, the shoulder blades');
 for (let y = 1.07; y <= 1.43; y += 0.033) lump(y, 180, 0.010, 0.0045, 0.003);
@@ -279,7 +295,27 @@ for (const sd of ['l', 'r']) {
   for (const ph of [-20, 15, 50]) limbRidge('arm', `foreArm.${sd}`, 0.55, 0.92, ph, ph * 0.8, 0.0040, 0.0025);
   limbRidge('arm', `upperArm.${sd}`, 0.70, 0.98, 175, 180, 0.010, 0.004);   // the elbow's point
 }
-// No thigh detail: the labourer's trousers cover the thighs (make_kit.py), so the map has no thigh regions.
+section('trouser legs: seams, the long folds a leg hangs in, the knee, crotch drag folds, a knee patch');
+let fseed = 771;
+const frnd = () => ((fseed = (fseed * 16807) % 2147483647) / 2147483647);
+for (const sd of ['l', 'r']) {
+  const b = `thigh.${sd}`;
+  limbRidge('leg', b, 0.03, 0.97, 90, 90, 0.0045, 0.0018);                 // outseam
+  limbRidge('leg', b, 0.08, 0.97, -90, -92, 0.0045, 0.0018);               // inseam
+  for (const ph of [-35, 20, 60, 140, -150]) {                            // hanging folds, wandering a little
+    const p1 = ph + (frnd() - 0.5) * 30;
+    limbRidge('leg', b, 0.10 + frnd() * 0.08, 0.55 + frnd() * 0.15, ph, p1, 0.010, 0.0030);
+  }
+  for (let k = 0; k < 4; k++) {                                           // compression folds behind the knee
+    const t = 0.80 + 0.045 * k;
+    limbRidge('leg', b, t, t + 0.01, 130, 230, 0.0065, k % 2 ? 0.0020 : 0.0034);
+  }
+  for (let k = 0; k < 2; k++) limbRidge('leg', b, 0.86 + 0.05 * k, 0.87 + 0.05 * k, -40, 40, 0.006, 0.0022);   // over the knee
+  for (let k = 0; k < 3; k++) limbRidge('leg', b, 0.04 + 0.07 * k, 0.24 + 0.07 * k, -100, -30, 0.008, 0.0028);   // crotch drag
+}
+// a knee patch on the left leg: a raised panel and its stitched edge
+limbRidge('leg', 'thigh.l', 0.80, 0.98, -10, 15, 0.030, 0.0018);
+for (const ph of [-28, 32]) limbRidge('leg', 'thigh.l', 0.78, 0.99, ph, ph, 0.0022, 0.0016);
 
 const path = resolve(ROOT, `src/lab/sdf-zombie/characters/${NAME}.detail`);
 writeFileSync(path, out.join('\n') + '\n');

@@ -454,6 +454,11 @@ Branch `claude/zombie-refine-468259`, on top of the hands PR goblincore/blud#75.
   the cloth's relief is a baked normal map (kit normal maps: `zombie_common.py bake_normal_atlas` -> `blender-kit.ts`);
   a severed piece takes the kit on its bones with it, and a shot to a hand takes the hand off at the wrist
   (`webgpu/kit-sever.ts`, `webgpu/game-kit-riders.ts`, `CharacterEntry.kitHands`; seams `aimHand`, `severArm`, `kitRiders`).
+- [x] **Second playtest (owner, 2026-10-26):** the polygon trousers still clipped through the pelvis and looked bad,
+  and the suspenders did not react to shots. Now the trousers are PAINT: `color=4a5568 fabric` on the pelvis mass and
+  the thighs. `fabric` is a new `.blob` word: matte paint that keeps the body normal map, which carries the fly,
+  pockets, seams and folds. The trousers end at the knee, where the thigh bar does. The kit keeps the hands,
+  shackles and boots, and adds a leather belt over the waist seam. The suspenders are gone. Kit 12.8k tris.
 - [ ] **Owner's in-game look** ([in-game frames](../dev-notes/2026-10-26-zombie-refine-lookdev/zombie-labourer-ingame.png)).
 - [ ] **Shins and feet to mesh** (owner's idea, to save prims): the boots and trousers now hide the foot prims and most of the
   shin, so the 4 foot prims a side could go, but the foot prims carry the `toe` rig points, gait pins, gib assets and the

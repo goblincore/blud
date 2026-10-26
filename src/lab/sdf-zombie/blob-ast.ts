@@ -127,6 +127,8 @@ export interface BlobPart {
    * pores either. Parse-gated on `color=` exactly as gloss is.
    */
   metal: boolean;
+  /** The bare word `fabric`: painted cloth, matte and keeping the body normal map (PrimDef.fabric). Paint-gated. */
+  fabric: boolean;
   /** The bare word `core`: this prim is the limb's structural mass. */
   core: boolean;
   /** The bare word `rigid`: BOTH ends ride the bone the line is declared

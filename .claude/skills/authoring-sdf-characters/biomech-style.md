@@ -634,6 +634,10 @@ The crowd enemy got the default pipeline as a refinement pass rather than a new 
   cavity map). At 2-5 mm they still read as smooth tubes; 3-7 mm and a strong crease darkening read across a room.
   In `deform`, read every normal BEFORE writing any `v.co`: writing dirties the normals, and the next read recomputes
   all of them (quadratic: 40 minutes on a 138k-vertex part, 3 s fixed).
+- **Tight clothes on a crowd enemy: PAINT them (`fabric`), don't mesh them.** Even fitted to the posed envelope, the
+  labourer's polygon trousers read badly where they met the pelvis, and a rigid kit piece never takes a shot. Painted
+  `fabric` prims cost nothing, deform, wound and sever with the body, and the folds go in the body normal map. Keep
+  kit for rigid things (boots, belt, iron).
 - **Cloth must clear the POSED flesh, not the rest skin.** Kit rides one bone rigidly; the flesh under a seat is folded
   from the pelvis AND the swinging thighs. Probe the outermost flesh over the real walk in each piece's own bone frame
   (`zombie-surface.ts`, capped ~25 mm past rest: past that the flesh belongs to a limb whose own cloth piece covers it),

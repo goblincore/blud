@@ -28,6 +28,9 @@ export const WET_BLOCK = /* wgsl */ `  // Wounds are wetter than the surrounding
   let wetWound = max(wm * lip * (1.0 - cutKeep), gore);
   let woundWetBoost = mix(1.6, 2.15, faceGlowRedOnly);
   var wet = mix(surfCfg2.x * mix(1.0, woundWetBoost, wetWound) * (1.0 - cm) * select(1.0, 0.25, isBone) * select(1.0, 1.8, isOrgan), 1.0, gloss);
+  // FABRIC (a painted prim's \`fabric\` word, prim-material.wgsl.ts): cloth is matte whatever the flesh preset says; a
+  // wound in it stays as wet as flesh (wetWound), so a shot through the trousers still glistens.
+  if (fabric > 0.0) { wet = mix(wet * 0.12, wet, wetWound); }
   // TORN LIPS (SOLDIER_MEAT's tornWound, 0 off tear-flagged wounds, so this is skipped
   // there): the whole tear is wet, not just the lip — the everted lip and the walls
   // glisten, the clotted floor less. Only ever raises wet; bone/organ are excluded

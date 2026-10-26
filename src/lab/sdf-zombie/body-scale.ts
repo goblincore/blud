@@ -35,7 +35,7 @@ export const PRIM_UNITS = {
   // `side` on a PrimDef is 'l' | 'r' (which half a single-sided prim lives on), not a distance.
   side: 'same',
   op: 'same', grooveDepth: 'length', grooveWidth: 'length', offset: 'length', tip: 'length', mirrorOffset: 'same',
-  color: 'same', gloss: 'same', metal: 'same', glow: 'same', core: 'same', rigid: 'same', when: 'same',
+  color: 'same', gloss: 'same', metal: 'same', fabric: 'same', glow: 'same', core: 'same', rigid: 'same', when: 'same',
   // `shell` is recursed into below (SHELL_UNITS); `box` and `strand` hold fractions and counts only.
   shell: 'same', box: 'same', strand: 'same',
   // `morphs` is recursed into below (MORPH_UNITS).

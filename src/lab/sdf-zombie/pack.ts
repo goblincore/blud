@@ -37,7 +37,8 @@ export interface PackedBody {
    *  BITFIELD: bit 0 (1) chamfer, bit 1 (2) bent, bit 2 (4) shell,
    *  bit 3 (8) box, bit 4 (16) metal (SHADING-ONLY — every fold read of
    *  prof is a bit mask, so the bit never changes geometry), bit 5 (32)
-   *  STRAND (hairlock — the strand bundle; strand.ts); zw spare
+   *  STRAND (hairlock — the strand bundle; strand.ts), bit 6 (64) FABRIC (painted cloth: matte, keeps the body
+   *  normal map; SHADING-ONLY, read by prim-material.wgsl.ts beside metal); zw spare
    *  (groove depth/width). Negative is the sentinel rather than "equal to radius"
    *  because 0 is a LEGITIMATE taper target — a true point is the whole
    *  reason the taper exists. */
@@ -276,7 +277,7 @@ export function writePrimRows(rows: PrimRows, p: Primitive, i: number, w: number
   // (& 7) == 1) that leaves bit 4 clear. The shader folds any prof >= 4
   // as a shell ONLY through the (& 4) mask; the low bits still mean
   // chamfer/bend for the non-shell range and are ignored on a shell.
-  const prof = (p.blendProfile === 'chamfer' ? 1 : 0) + bent + (p.shell ? 4 : 0) + (p.box ? 8 : 0) + (p.metal ? 16 : 0) + (p.strand ? 32 : 0);
+  const prof = (p.blendProfile === 'chamfer' ? 1 : 0) + bent + (p.shell ? 4 : 0) + (p.box ? 8 : 0) + (p.metal ? 16 : 0) + (p.strand ? 32 : 0) + (p.fabric ? 64 : 0);
   // primBend.w carries a BOX's corner-rounding fraction. Safe to share the
   // row: the shader reads ROW_PRIM_BEND only when prof & 2, and `bend=` on a
   // box is rejected at compile time, so a box never sets that bit and the

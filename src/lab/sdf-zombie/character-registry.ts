@@ -162,8 +162,8 @@ function bakedFace(file: string): FaceSheet {
 export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   // The rotting labourer (owner's pick, 2026-10-26 look-dev: docs/dev-notes/2026-10-26-zombie-refine-lookdev/). Its kit
   // (assets-source/zombie-kit/make_kit.py): the grabber HANDS, polygon flesh on each forearm drawn in the game with the
-  // flesh shader's lighting (kit-flesh.ts), iron wrist shackles over the hand seam, torn work trousers, boots and
-  // suspenders. The .blob keeps a wrist knob where the fist orb was.
+  // flesh shader's lighting (kit-flesh.ts), iron wrist shackles over the hand seam, a belt and work boots. The trousers
+  // are PAINT on the flesh (zombie.blob `fabric`), their folds in the body map. The .blob keeps a wrist knob.
   zombie: {
     name: 'zombie', src: zombieBlobSrc, face: ZOMBIE_FLAT,
     kit: '/assets/lab/zombie-kit.gltf',

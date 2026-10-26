@@ -5,7 +5,7 @@
 #   * IRON WRIST SHACKLES hiding the seam where the forearm meets the hand, each with a broken chain.
 # and then ONE outfit on top. The owner picked the LABOURER (2026-10-26 look-dev, all three rendered in
 # docs/dev-notes/2026-10-26-zombie-refine-lookdev/); the other two stay buildable for variants:
-#   labourer  torn work trousers to below the knee, work boots, suspenders   (the default: zombie-parts.glb)
+#   labourer  a belt and work boots over the trousers the .blob PAINTS on the flesh   (the default: zombie-parts.glb)
 #   asylum    ankle shackles with broken chains, a torn canvas straitjacket yoke and its leather straps
 #   morgue    a toe tag on the right big toe, a torn sheet over one shoulder and round the hips (wants
 #             `zombie-detail-gen.ts --incision` for its Y-incision)
@@ -14,7 +14,7 @@
 #   npx tsx scripts/blender-kit.ts zombie assets-source/zombie-kit/zombie-parts.glb
 #
 # TRIANGLES: the zombie is the crowd enemy, so every part is decimated to a small budget (the look-dev's were twice
-# these, ~31k tris for the labourer); the shipped kit is ~15k.
+# these, ~31k tris for the labourer); the shipped kit is ~13k (trousers painted on the flesh since, 2026-10-26).
 #
 # Skin positions come from surface.json (npx tsx scripts/zombie-surface.ts). Parts are named `<bone>|<part>` and
 # ride that bone rigidly (scripts/blender-kit.ts). `zombieskin` is FLESH: the game redraws it with the flesh shader's
@@ -379,124 +379,27 @@ def morgue():
 
 
 def labourer():
-    # Dark: (0.17, 0.19, 0.24) washed out to pale grey under the arena's lights.
-    DENIM = (0.075, 0.085, 0.12); GRIME = (0.10, 0.075, 0.045)
-    # Trousers: the seat and waistband on the pelvis, a leg on each thigh, the torn shin piece on each shin. Rigid
-    # pieces on separate bones overlap generously at the joints so a bend does not open a gap.
-    #
-    # THE CLOTH'S RELIEF IS GEOMETRY (owner, 2026-10-26: "his pants are a bit flat looking"). The body normal map
-    # cannot reach kit, and these voxel-remeshed parts have no UVs for a normal texture, so the folds are sculpted in
-    # (`deform`) and then darkened into the vertex colours (`crease`): compression folds behind the knee, drag folds
-    # from the crotch, bunching above the torn hem, raised flat-felled seams, the fly, back pockets and a knee patch.
-    # Amplitudes 3-7 mm on a 2 mm voxel (the first pass at 2-5 mm still read as smooth tubes); the parts' triangle budgets rose with them (~1.5x) to keep the folds.
-    from mathutils import noise as mnoise
-
-    def drape(p, amp=0.0040, scale=9.0, seed=0.0):
-        """Low, broad bagginess: cloth hangs in soft lumps, not a sprayed-on skin."""
-        return amp * mnoise.noise(p * scale + Vector((seed, 2 * seed, 3 * seed)))
-
-    def seam(arc, w=0.0035, h=0.0014):
-        """A flat-felled seam: a raised band with a stitch groove down each side."""
-        return h * gauss(arc, w) - 0.0009 * (gauss(arc - w * 1.3, 0.0012) + gauss(arc + w * 1.3, 0.0012))
-
-    def leg_folds(bone, sd, patch):
-        L = (Vector(LIMB[bone]['tail']) - Vector(LIMB[bone]['head'])).length
-        def fn(p):
-            t, ph, r = limb_coords(bone, p)
-            arc = lambda a: math.radians(angd(ph, a)) * r          # metres round the leg from angle a
-            d = drape(p, seed=3.1 if sd == 'l' else 7.7)
-            # compression folds behind the knee: stacked, wobbling, strongest at the back
-            back = max(0.0, math.cos(math.radians(angd(ph, 180)) * 0.9))
-            for k in range(4):
-                tk = 0.78 + 0.055 * k + 0.012 * math.sin(math.radians(ph) * 3 + k * 1.7)
-                d += back * (0.0070 if k % 2 == 0 else -0.0040) * gauss((t - tk) * L, 0.009)
-            # a few soft stretch wrinkles across the front of the knee
-            front = max(0.0, math.cos(math.radians(angd(ph, 0))))
-            for k in range(2):
-                d += front * 0.0040 * gauss((t - (0.90 + 0.05 * k)) * L, 0.007)
-            # the long folds a trouser leg HANGS in from the hip: a few wandering vertical ridges, fading out at the knee
-            # (the first pass, without them, read as smooth tubes from across the room)
-            hang = smoothstep(0.02, 0.15, t) * smoothstep(0.80, 0.62, t)
-            d += hang * 0.0042 * math.sin(math.radians(ph) * 4 + 2.4 * mnoise.noise(Vector((t * 2.5, 0.3, 1.7 if sd == 'l' else 4.1))))
-            # drag folds from the crotch, raking down the inside and front of the thigh
-            if t < 0.45:
-                inner = max(0.0, math.cos(math.radians(angd(ph, -55)) * 0.8))
-                for k in range(3):
-                    line = t * L - (0.02 + 0.05 * k) - 0.55 * arc(-90)
-                    d += inner * (1 - t / 0.45) * 0.0060 * gauss(line, 0.0075)
-            # seams down the outside and the inside of the leg
-            d += seam(arc(90)) + seam(arc(-90))
-            # a knee patch on one leg: a raised panel with a stitched edge
-            if patch:
-                a = angd(ph, 5); m = smoothstep(-34, -28, a) * smoothstep(34, 28, a) * smoothstep(0.76, 0.79, t) * smoothstep(1.01, 0.98, t)
-                edge = gauss(abs(a) - 30, 2.2) * smoothstep(0.74, 0.79, t) * smoothstep(1.03, 0.98, t) + \
-                    gauss((t - 0.785) * L, 0.0018) * smoothstep(-36, -28, a) * smoothstep(36, 28, a)
-                d += 0.0026 * m - 0.0012 * edge
-            return d
-        return fn
-
-    def shin_folds(bone, sd):
-        L = (Vector(LIMB[bone]['tail']) - Vector(LIMB[bone]['head'])).length
-        def fn(p):
-            t, ph, r = limb_coords(bone, p)
-            d = drape(p, 0.0025, seed=5.3 if sd == 'l' else 9.1)
-            # the cloth bunches where the knee bends it, all the way round
-            for k in range(4):
-                tk = 0.02 + 0.07 * k + 0.02 * math.sin(math.radians(ph) * 2 + k)
-                d += (0.0065 if k % 2 == 0 else -0.0035) * gauss((t - tk) * L, 0.009)
-            arc = lambda a: math.radians(angd(ph, a)) * r
-            return d + seam(arc(90)) + seam(arc(-90))
-        return fn
-
-    def seat_folds(p):
-        th = math.degrees(math.atan2(p.x, p.z - 0.02)); y = p.y
-        r = math.hypot(p.x, p.z - 0.02); arc = lambda a: math.radians(angd(th, a)) * r
-        d = drape(p, 0.0030, seed=1.3)
-        # gathered under the cinched waistband: short vertical ripples
-        d += 0.0022 * math.sin(math.radians(th) * 38) * gauss(y - 1.018, 0.012)
-        # the fly: a raised placket down the front, off-centre, its stitch line curving in at the bottom
-        d += 0.0020 * gauss(arc(3), 0.009) * smoothstep(0.90, 0.93, y) * smoothstep(1.04, 1.02, y)
-        d -= 0.0010 * gauss(arc(3) - 0.012 + 0.10 * max(0.0, 0.94 - y), 0.0013) * smoothstep(0.915, 0.93, y) * smoothstep(1.035, 1.02, y)
-        # crotch smile folds low on the front
-        for sgn in (1, -1):
-            for k in range(2):
-                line = (y - (0.895 + 0.022 * k)) - 0.35 * abs(arc(0))
-                d += 0.0032 * gauss(line, 0.0055) * smoothstep(0.004, 0.02, abs(arc(0))) * smoothstep(0.12, 0.06, abs(arc(0))) * (1 if sgn * angd(th, 0) > 0 else 0)
-        # back pockets: raised panels with stitched edges
-        for c in (155, -155):
-            a = arc(c); m = smoothstep(-0.055, -0.048, a) * smoothstep(0.055, 0.048, a) * smoothstep(0.925, 0.935, y) * smoothstep(1.005, 0.995, y)
-            edge = (gauss(abs(a) - 0.050, 0.0016) * smoothstep(0.92, 0.935, y) * smoothstep(1.01, 0.995, y)
-                    + gauss(y - 0.928 - 0.25 * abs(a), 0.0016) * smoothstep(0.058, 0.048, abs(a)))
-            d += 0.0018 * m - 0.0011 * edge
-        # side seams
-        return d + seam(arc(90)) + seam(arc(-90))
-
+    # The labourer's TROUSERS ARE PAINT on the flesh (zombie.blob, owner 2026-10-26): the polygon trousers clipped
+    # through the pelvis and looked bad, and the suspenders, kit, did not react to shots. What stays polygon is what
+    # rides rigidly anyway: the belt over the painted waist (the paint's edge, where the pelvis mass hands over to the
+    # spine masses at y 1.03-1.06) and the boots.
     clear_work()
-    def seat(u, v):
-        th = 360 * v
-        y = 1.045 - (1.045 - 0.85) * u   # to 0.85: at 0.87 a sliver of crotch showed between the seat and the thighs
-        # 11 mm + up to 4 mm off the POSED envelope (surface.json): the fold valleys pull the cloth in by up to 4 mm, and
-        # the first trousers, 6 mm off the rest skin, had flesh coming through at the crotch whenever he walked.
-        return B(torso_pt(y, th, 0.011 + 0.004 * u))
-    _sleeve('seat', seat, 12, 60, 0.004)
-    band_ = [B(torso_pt(1.045, 6 * k, 0.012)) for k in range(62)]
-    tube('waistband', band_, [0.008] * len(band_), segs=8)
-    for k, th in enumerate((24, 70, 120, 160, -160, -120, -70, -24)):   # belt loops
-        tube(f'loop{k}', [B(torso_pt(1.058, th, 0.019)), B(torso_pt(1.045, th, 0.021)), B(torso_pt(1.030, th, 0.019))], [0.0028] * 3, segs=6)
-    finish('pelvis|trousers', 'pelvis|trousers', 'cloth', 1900, voxel=0.0020, noise=0.0010, noise_scale=0.03,
-           smooth=(0.5, 2), base=DENIM, rust=GRIME, rust_amt=0.5, seed=21, folds=seat_folds, cavity=12.0, ao_dist=0.05, nmap=True)
+    BELT_Y = 1.045
+    strip('belt', [(BELT_Y + 0.003 * math.cos(math.radians(a)), a) for a in range(0, 360, 10)], 0.040, 0.006, n=72,
+          closed=True, out=0.007)
+    # the free end of the strap, past the buckle, lying on the belt
+    strip('tail', [(BELT_Y - 0.002, 4), (BELT_Y - 0.004, -12), (BELT_Y - 0.010, -24)], 0.034, 0.005, n=12, out=0.012)
+    finish('pelvis|belt', 'pelvis|belt', 'leather', 900, voxel=0.0016, noise=0.0006, smooth=(0.5, 2),
+           base=(0.22, 0.12, 0.06), rust=(0.08, 0.05, 0.03), rust_amt=0.6, seed=28)
+    # the buckle: a heavy iron frame, its prong, at the front just off the fly
+    clear_work()
+    c = B(torso_pt(BELT_Y, 8, 0.016)); nrm = bv(*Vector((math.sin(math.radians(8)), 0, math.cos(math.radians(8))))).normalized()
+    up = Vector((0, 0, 1)); side = up.cross(nrm).normalized()
+    frame = [c + side * x + up * y for x, y in ((-0.026, -0.027), (0.026, -0.027), (0.026, 0.027), (-0.026, 0.027), (-0.026, -0.027))]
+    tube('buckle', frame, [0.0042] * len(frame), segs=8)
+    tube('prong', [c + side * -0.026 + nrm * 0.002, c + side * 0.024 + nrm * 0.004], [0.0022, 0.0018], segs=6)
+    finish('pelvis|buckle', 'pelvis|buckle', 'rustplate', 400, voxel=0.0012, noise=0.0003, base=IRON, rust=RUST, rust_amt=0.5)
     for sd in 'lr':
-        clear_work()
-        _sleeve(f'thigh{sd}', lambda u, v, sd=sd: B(limb_pt(f'thigh.{sd}', -0.06 + 1.12 * u, 360 * v, 0.012 + 0.006 * math.sin(math.pi * u))), 14, 40, 0.004)
-        finish(f'thigh.{sd}|trousers', f'thigh.{sd}|trousers', 'cloth', 1600, voxel=0.0020, noise=0.0010, noise_scale=0.03,
-               smooth=(0.5, 2), base=DENIM, rust=GRIME, rust_amt=0.5, seed=22 if sd == 'l' else 23,
-               folds=leg_folds(f'thigh.{sd}', sd, patch=(sd == 'l')), cavity=12.0, ao_dist=0.05, nmap=True)
-        clear_work()
-        rag = jag(51 if sd == 'l' else 57, 0.09, 8)
-        _sleeve(f'shin{sd}', lambda u, v, sd=sd, rag=rag: B(limb_pt(f'shin.{sd}', -0.08 + (0.40 + rag(360 * v) + 0.08) * u, 360 * v, 0.015 + 0.004 * u)), 10, 40, 0.004)
-        finish(f'shin.{sd}|trousers', f'shin.{sd}|trousers', 'cloth', 1100, voxel=0.0020, noise=0.0010, noise_scale=0.03,
-               smooth=(0.5, 2), base=DENIM, rust=GRIME, rust_amt=0.7, seed=24 if sd == 'l' else 25, dirt=dirt_up(0.35, 0.55),
-               folds=shin_folds(f'shin.{sd}', sd), cavity=12.0, ao_dist=0.05, nmap=True)
         # Work boots: a shaft round the ankle on the shin, the boot body round the foot. Rounded toe cap, a heel, a
         # flat sole on the floor, laces up the front.
         clear_work()
@@ -518,20 +421,6 @@ def labourer():
         decimate(o, 900); bake_ao(o, material='boot', ao_dist=0.03)
         colourise(o, (0.16, 0.10, 0.06), (0.09, 0.06, 0.04), 0.6, 27, dirt=lambda co: 1.0 if co.z < 0.022 else 0.0)
         install(o, f'foot.{sd}|boot')
-    # Suspenders: two leather straps from the waistband's front over each shoulder, crossing in an X on the back.
-    clear_work()
-    for s in (1, -1):
-        strip(f'brace{s}', [(1.05, s * 18), (1.16, s * 21), (1.28, s * 25), (1.38, s * 32), (1.45, s * 48), (1.472, s * 80),
-                            (1.44, s * 120), (1.34, s * 155), (1.24, s * 185 if s > 0 else -175), (1.12, s * 200 if s > 0 else -160), (1.05, s * 206 if s > 0 else -154)],
-              0.030, 0.0035, n=80, out=0.004)
-    finish('spine|suspenders', 'spine|suspenders', 'leather', 900, voxel=0.0016, noise=0.0006, smooth=(0.5, 2),
-           base=(0.30, 0.16, 0.08), rust=(0.10, 0.06, 0.03), rust_amt=0.5, seed=28)
-    clear_work()
-    for s in (1, -1):
-        for (y, th) in ((1.07, s * 18), (1.07, 206 if s > 0 else 154)):
-            c = B(torso_pt(y, th, 0.012))
-            ball(f'clip{s}{th}', c, 0.010, 1.0, 1.0, 1.3)
-    finish('spine|clips', 'spine|clips', 'rustplate', 300, voxel=0.0012, noise=0.0003, base=IRON, rust=RUST, rust_amt=0.4)
 
 
 # ======================================================================== build
@@ -543,8 +432,6 @@ for sd in 'lr':
 {'asylum': asylum, 'morgue': morgue, 'labourer': labourer, 'none': lambda: None}[VARIANT]()
 for o in list(mech.objects):
     if o.type == 'EMPTY': bpy.data.objects.remove(o, do_unlink=True)
-# The trousers' relief as a normal map (1024: ~0.8 mm a texel over the trousers' ~0.6 m2), baked from the sculpts.
-bake_normal_atlas('cloth', 1024, os.path.join(HERE, 'zombie-cloth-n.png'))
 
 parts = [o for o in mech.objects if o.type == 'MESH']
 print('[zombie-kit]', VARIANT, {o.name: len(o.data.polygons) for o in parts}, 'total', sum(len(o.data.polygons) for o in parts))

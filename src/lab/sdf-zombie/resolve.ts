@@ -111,6 +111,7 @@ export function placePrims(
       ...(p.gloss === undefined ? {} : { gloss: p.gloss }),
       ...(p.glow === undefined ? {} : { glow: p.glow }),
       ...(p.metal === undefined ? {} : { metal: p.metal }),
+      ...(p.fabric === undefined ? {} : { fabric: p.fabric }),
       ...(p.core ? { core: true } : {}),
       ...(p.rigid ? { rigid: true } : {}),
       // A dead-only prim starts hidden; the actor swaps the sets on death
