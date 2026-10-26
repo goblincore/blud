@@ -1064,9 +1064,24 @@ const OCC_FETCH_WGSL = /* wgsl */ `fn occFetch(
 ) -> f32 {
   if (enabled < 0.5) { return 1e9; }
   let dims = vec2<f32>(textureDimensions(occTex, 0));
-  let c = clamp(vec2<i32>(floor(screenUV * dims)), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
-  let v = textureLoad(occTex, c, 0).x;
-  if (v <= 0.0) { return 1e9; }
+  let hi = vec2<i32>(dims) - vec2<i32>(1, 1);
+  let c = clamp(vec2<i32>(floor(screenUV * dims)), vec2<i32>(0, 0), hi);
+  // ERODED: the max over this texel and its four DIAGONAL neighbours, and no
+  // bound at all if any of them is empty. The march pixel is upscaled (and in
+  // field mode woven) onto a footprint about one texel wide, while the kit
+  // cloth rasterises at full resolution; a ray clamped because its CENTRE is
+  // under cloth would otherwise leave a fringe of background where the
+  // footprint pokes out past a cloth edge over flesh (a waistband, a hem). The
+  // diagonals bound the footprint's square, so a straight edge crossing it
+  // always uncovers one of them. max() of distances is conservative (a later
+  // tMax only marches further).
+  var v = textureLoad(occTex, c, 0).x;
+  let a = textureLoad(occTex, clamp(c + vec2<i32>(-1, -1), vec2<i32>(0, 0), hi), 0).x;
+  let b = textureLoad(occTex, clamp(c + vec2<i32>(1, -1), vec2<i32>(0, 0), hi), 0).x;
+  let d = textureLoad(occTex, clamp(c + vec2<i32>(-1, 1), vec2<i32>(0, 0), hi), 0).x;
+  let e = textureLoad(occTex, clamp(c + vec2<i32>(1, 1), vec2<i32>(0, 0), hi), 0).x;
+  if (min(min(v, a), min(b, min(d, e))) <= 0.0) { return 1e9; }
+  v = max(max(v, a), max(b, max(d, e)));
   return v;
 }`;
 export const occFetchNode = wgslFn(OCC_FETCH_WGSL);

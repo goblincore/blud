@@ -117,4 +117,10 @@ export const HULL_BOUNDS_BLOCK = /* wgsl */ `  // OCCLUDER PRE-PASS. occT is the
   // this by putting the term back. Do not put it back before that: the outer
   // hull (shell-hull-outer.ts) writes distance the same way, and is unharmed
   // only because shellIn is a ray START and shellOut a > 0 test, where
-  // under-reporting is conservative. Here it is fatal.`;
+  // under-reporting is conservative. Here it is fatal.
+  //
+  // REVIVED 2026-10-26 (ray-window block, tMaxOcc). The decay was SCENE FOG
+  // mixed into the written distance (root-caused 2026-09-04: material.fog =
+  // false on the hull and shell materials), so the number is exact again, and
+  // the target now also carries opaque KIT CLOTH (kit-occluder.ts), which is
+  // what makes the bound worth having. The inner hull stays off by default.`;

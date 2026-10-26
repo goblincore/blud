@@ -10,6 +10,7 @@
 
 ## In flight / next
 
+- [~] **Kit occlusion: flesh under opaque kit cloth is not marched or shaded** (owner, 2026-10-26; branch `claude/intelligent-bose-856348`). Skinned distance twins of cloth/boot/leather kit meshes (`kit-occluder.ts`, `KIT_OCCLUDER_LAYER`) feed pass 1c's occT; the march's tMax clamp is back (the 09-01 "decay" was fog). Bound sits 2 cm in front of the cloth (`KIT_OCCLUDER_INSET`), so flesh clipping through trousers now shows cloth. Arena, 12 zombies: flesh hits −16% (3 m) / −23% (7 m), paired frame delta −2..−4 ms median on a loaded machine. `?kitocc=0` / `__sdfGame.setKitOccluder`, `setKitOccluderInset`, `kitOccluderXray`. Owner look pending.
 - [~] **GPU body-normal bake** (owner, 2026-10-24; branch `claude/cpu-bake-performance-2a477d`) — [spec](docs/superpowers/specs/2026-10-24-gpu-body-normal-bake-design.md).
   The CPU bake takes ~17 CPU-minutes for gibbet and more for bigger bodies; the plan is a Dawn-in-Node WebGPU compute bake held to `sdBody`
   by a lavapipe CI job. Step 1 done: the bake is split into `src/lab/sdf-zombie/body-normal-bake/` (CPU backend only) and
