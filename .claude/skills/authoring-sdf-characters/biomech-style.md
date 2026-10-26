@@ -628,6 +628,12 @@ The crowd enemy got the default pipeline as a refinement pass rather than a new 
   overlap generously at the joints.
 - **Crowd budgets.** Decimate each part to ~700-1,200 tris; the look-dev's 31k labourer kit shipped at 17.5k with no
   visible loss. Old iron needs a dark albedo (~0.10): 0.30 rendered as pale gold bangles.
+- **Cloth on kit needs its relief in the GEOMETRY.** The body normal map cannot reach kit, and voxel-remeshed parts
+  have no UVs, so the trousers' folds are sculpted in (`zombie_common.py deform`: knee compression folds, the long
+  folds a leg hangs in, crotch drag folds, seams, pockets, a patch) and darkened into the vertex colours (`crease`, a
+  cavity map). At 2-5 mm they still read as smooth tubes; 3-7 mm and a strong crease darkening read across a room.
+  In `deform`, read every normal BEFORE writing any `v.co`: writing dirties the normals, and the next read recomputes
+  all of them (quadratic: 40 minutes on a 138k-vertex part, 3 s fixed).
 - **Bake trap (fixed):** `bakeBodies` now builds flesh only (`fleshFromBlob`). With bones, a body that has a `bones` block
   plus a big `.detail` spent minutes deriving and containment-checking a bone per detail prim before the GPU started. And
   a worktree whose `node_modules` predates the `webgpu` package falls back to the CPU bake: run `npm install`.

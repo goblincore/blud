@@ -144,13 +144,87 @@ def colourise(o, base, rust=None, rust_amt=0.0, seed=1, scale=18.0, dirt=None):
         ca.data[i].color = (c[0] * col[0], c[1] * col[1], c[2] * col[2], 1.0)
 
 
+def to_blob(co):
+    """Blender coords back to the .blob's (bv's inverse)."""
+    return Vector((co.x, co.z, -co.y))
+
+
+def limb_coords(bone, p):
+    """A blob point's place round `bone`: (t along it, ph in degrees in limb_frame's convention, radius)."""
+    h, tl, u, fw, s = limb_frame(bone)
+    L = (tl - h).length; d = p - h; t = d.dot(u) / L
+    r = d - u * d.dot(u)
+    return t, math.degrees(math.atan2(r.dot(s), r.dot(fw))), r.length
+
+
+def angd(a, b):
+    """Signed shortest angle a - b in degrees."""
+    return (a - b + 180.0) % 360.0 - 180.0
+
+
+def gauss(x, w):
+    return math.exp(-(x / w) ** 2)
+
+
+def smoothstep(e0, e1, x):
+    k = min(1.0, max(0.0, (x - e0) / (e1 - e0)))
+    return k * k * (3 - 2 * k)
+
+
+def deform(o, fn, smooth_after=1):
+    """Cloth relief sculpted into a fused part: each vertex moves `fn(blob point)` metres along its normal (folds,
+    seams, patches). A light smooth afterwards keeps the folds soft, like cloth, not carved."""
+    me = o.data
+    me.update()
+    # Read every position and normal BEFORE writing any: setting v.co dirties the normals, and the next v.normal read
+    # recomputes all of them, which made this loop quadratic (40 min on the 138k-vertex seat).
+    moved = [v.co + v.normal * fn(to_blob(v.co)) for v in me.vertices]
+    for v, c in zip(me.vertices, moved): v.co = c
+    me.update()
+    if smooth_after:
+        bpy.context.view_layer.objects.active = o
+        m = o.modifiers.new('fs', 'SMOOTH'); m.factor = 0.5; m.iterations = smooth_after
+        bpy.ops.object.modifier_apply(modifier='fs')
+
+
+def crease(o, k=6.0, lift=0.25):
+    """Darken the creases and lift the crests in the vertex colours (a cavity map), so the folds read even under
+    the flat, bright light of the arena, where the AO alone washed out."""
+    me = o.data; ca = me.color_attributes.active_color
+    n = len(me.vertices); acc = [Vector() for _ in range(n)]; cnt = [0] * n; el = [0.0] * n
+    for e in me.edges:
+        a, b = e.vertices; va, vb = me.vertices[a].co, me.vertices[b].co
+        acc[a] += vb; acc[b] += va; cnt[a] += 1; cnt[b] += 1
+        l = (va - vb).length; el[a] += l; el[b] += l
+    c = []
+    for i, v in enumerate(me.vertices):
+        if not cnt[i]: c.append(0.0); continue
+        m = acc[i] / cnt[i]
+        c.append((m - v.co).dot(v.normal) / max(1e-6, el[i] / cnt[i]))   # > 0 in a crease
+    nbr = [[] for _ in range(n)]
+    for e in me.edges:
+        a, b = e.vertices; nbr[a].append(b); nbr[b].append(a)
+    for _ in range(2):
+        c = [(c[i] * 2 + sum(c[j] for j in nbr[i])) / (2 + len(nbr[i])) for i in range(n)]
+    for i in range(n):
+        f = 1.0 - min(0.6, k * max(0.0, c[i])) + min(lift, k * 0.5 * max(0.0, -c[i]))
+        col = ca.data[i].color
+        ca.data[i].color = (col[0] * f, col[1] * f, col[2] * f, 1.0)
+
+
 def finish(name, kit, material, tris, voxel=0.0018, noise=0.0008, noise_scale=0.02, smooth=(0.5, 3), ao=True,
-           base=(0.8, 0.8, 0.8), rust=None, rust_amt=0.0, seed=1, dirt=None):
+           base=(0.8, 0.8, 0.8), rust=None, rust_amt=0.0, seed=1, dirt=None, folds=None, cavity=0.0, ao_dist=0.03):
+    import time; t0 = time.time()
     o = fuse(name, voxel=voxel, smooth=smooth, noise=noise, noise_scale=noise_scale)
+    print(f'[finish] {name} fused {len(o.data.vertices)} verts {time.time() - t0:.1f}s', flush=True)
+    if folds: deform(o, folds); print(f'[finish] {name} folds {time.time() - t0:.1f}s', flush=True)
     decimate(o, tris)
-    if ao: bake_ao(o, material=material, ao_dist=0.03)
+    print(f'[finish] {name} decimated {len(o.data.polygons)} {time.time() - t0:.1f}s', flush=True)
+    if ao: bake_ao(o, material=material, ao_dist=ao_dist)
     else: plain(o, material)
     colourise(o, base, rust, rust_amt, seed, dirt=dirt)
+    if cavity: crease(o, cavity)
+    print(f'[finish] {name} done {time.time() - t0:.1f}s', flush=True)
     return install(o, kit)
 
 

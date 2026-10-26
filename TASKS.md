@@ -26,7 +26,7 @@
 - [~] **The zombie brought up to the newer creatures' standard** (owner, 2026-10-26; branch `claude/zombie-refine-468259`, builds on
   the hands PR goblincore/blud#75). The owner picked the ROTTING LABOURER from three rendered variants
   ([look-dev](docs/dev-notes/2026-10-26-zombie-refine-lookdev/)): a baked body normal map (`scripts/zombie-detail-gen.ts`), 1.2x fleshier
-  hands, iron wrist shackles, a tapered forearm, torn trousers, boots and suspenders (`assets-source/zombie-kit/make_kit.py`, 17.5k tris).
+  hands, iron wrist shackles, a tapered forearm, torn trousers, boots and suspenders (`assets-source/zombie-kit/make_kit.py`, 20.1k tris).
   [Characters](docs/tasks/characters.md#the-zombie-refinement-2026-10-26). Open: the owner's in-game look; moving shins and feet to mesh.
 
 - [~] **Enemy test arena built 2026-10-23; owner look pending.** `npm run dev:arena` (`/sdf-game.html?level=arena&spawn=<character>`): one big lit room, one enemy 7 m out, god mode, every weapon, infinite ammo. `` ` `` respawns it fresh, `-`/`=` step through the registry's characters, a label names it. `"arena": true` in a level turns this on (`game-arena.ts`, `level-json.ts`); `__sdfGame.arena(step)` for scripts. Input waits for the ~30 s warm-up after boot.

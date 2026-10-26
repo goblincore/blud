@@ -445,7 +445,8 @@ Branch `claude/zombie-refine-468259`, on top of the hands PR goblincore/blud#75.
   (`bake-args.json` has the command). No thigh regions: the trousers cover them.
 - [x] **Kit** (`assets-source/zombie-kit/make_kit.py` on `kit_sculpt.py`, laid on probed skin from `scripts/zombie-surface.ts`):
   hands 1.2x and fleshier, iron wrist shackles with a broken chain over the hand seam, torn work trousers to below the knee,
-  work boots, suspenders. 17.5k triangles (the look-dev's labourer was 31k).
+  work boots, suspenders. The trousers carry sculpted folds, seams, a fly, back pockets and a knee patch, darkened into
+  their vertex colours (the kit has no normal maps). 20.1k triangles (the look-dev's labourer was 31k).
 - [x] **Proportions:** the forearm tapers r 0.048 -> 0.040 into the shackle, and the wrist knob shrinks 0.045 -> 0.041
   (zombie.blob and its body.ts twin; golden and gib assets re-pinned).
 - [ ] **Owner's in-game look** ([in-game frames](../dev-notes/2026-10-26-zombie-refine-lookdev/zombie-labourer-ingame.png)).
