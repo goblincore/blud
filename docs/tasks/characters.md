@@ -356,6 +356,9 @@ only if an idea below earns it.
 - [x] **Cloth that reads as cloth** (owner: the robe "moves and looks like SDF flesh"): painted shells now shade as
   fabric (no scatter/wet/skin noise, wrap + sheen, dye mottle), shading-only pleats round each shell's axis, and
   walking drifts the folds (`CLOTH_WALK_DRIFT`). Zero march cost. [Notes](../../docs/dev-notes/2026-10-26-sdf-cloth-cost/NOTES.md).
+- [x] **Cultist hood as cloth** (owner: "drape on the head ... not a hard helmet"): a back drape onto the shoulders,
+  a slumped shell peak (the solid one caused the "onion" rings in the opening), dark linings, thinner sheets, and a
+  cloth-only tight accept for real-thickness edges. Robe zombie 1.70x a zombie close-up.
 - [ ] Next for cloth: a bending hem (`hem2`/`hem3` chain) instead of one rigid cone; folds that answer turning; a
   per-prim cuff (hem lip from the flesh offset); `?shadebound` after an owner look at its outliers.
 - [ ] **Analytic normals dead since 2026-09-29** (the zombie's tapered foot bar makes `ngBody` fail on every pixel;

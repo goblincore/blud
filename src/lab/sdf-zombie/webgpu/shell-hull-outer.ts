@@ -236,6 +236,14 @@ export function buildOuterHullInstances(
   for (const body of bodies) {
     const live = new Set<number>();
     for (const c of body.clusters) if (c.alive) live.add(c.id);
+    // The widest blend reach in each cluster, for the cloth proxies' chained-blend pad (below).
+    const clusterBlend = new Map<number, number>();
+    if (opts.shellProxies) {
+      for (const q of body.prims) {
+        if (q.op === 'sub' || q.op === 'groove' || q.dead) continue;
+        clusterBlend.set(q.cluster, Math.max(clusterBlend.get(q.cluster) ?? 0, blendReach(q.blendK ?? 0, q.blendProfile)));
+      }
+    }
     // THE HEAD SPLIT (head-split.ts): the spheres whose turned copies cover the opened halves (below). None for a
     // closed head.
     const split = splitFrame(boundsSplit(body.split, SPLIT_BOUND.hullOuter));
@@ -261,8 +269,10 @@ export function buildOuterHullInstances(
       if (opts.shellProxies && p.shell !== undefined && p.bend === undefined && !split) {
         // + a SECOND blend reach: the CHAIN case the header names. A proxy has no spare room (the sphere chain's 13%
         // inflation used to absorb it), and two shells blending with each other and the flesh between them (a
-        // trouser crotch, a knee) stack their smin undercuts: measured 4.9 mm past one reach on the trousers.
-        const pad = reach - rMax * maxScale + blendReach(p.blendK ?? 0, p.blendProfile);
+        // trouser crotch, a knee) stack their smin undercuts: measured 4.9 mm past one reach on the trousers. It is
+        // the WIDEST blend in the shell's cluster, not its own: the cultist's peak (blend 0.030) melting into the
+        // hood (0.006) bulged their junction 4.2 mm past a hood-only pad.
+        const pad = reach - rMax * maxScale + Math.max(blendReach(p.blendK ?? 0, p.blendProfile), clusterBlend.get(p.cluster) ?? 0);
         opts.shellProxies.push({ a: p.a, b: p.b, ra: p.radius * maxScale + pad, rb: (p.radiusB ?? p.radius) * maxScale + pad });
         continue;
       }

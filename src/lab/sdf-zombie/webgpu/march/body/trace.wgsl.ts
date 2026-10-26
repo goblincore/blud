@@ -4,7 +4,7 @@
 // MOVE-ONLY: the WGSL text below is byte-identical to the original
 // file; see docs/dev-notes/2026-09-18-march-split/.
 import { SHADE_BOUND as SHADE } from '../shade-bound-flag';
-import { WOUND_STEP_MUL } from '../layout';
+import { ROW_PRIM_SHAPE, WOUND_STEP_MUL } from '../layout';
 import { SPLIT_SHADE } from '../../../head-split';
 import { FACE_LAYER_WGSL } from './face.wgsl';
 import { TILE_PRELOAD_BLOCK } from './blocks/setup/tile-preload.wgsl';
@@ -264,7 +264,18 @@ ${RAYMASK ? `  // RAY-MASK PROBE (?raymask): the walk's samples all lie on this 
         // back-step to the interval actually travelled. This is the other half
         // of the wounded-ray non-reconvergence. Fixing it needs the packed
         // distortion factor threaded to this site — see the perf spec.
-        if (d < -max(hitEpsBase, t * aaKt / distort) && omega > 1.0 && !conservative) {
+        // CLOTH ACCEPT (2026-10-26, docs/dev-notes/2026-10-26-sdf-cloth-cost/): the footprint accept (aaKt, up to 6x
+        // a pixel's footprint up close) lands a hit up to ~1 cm short of the surface — thicker than a cloth sheet,
+        // so a shell was shaded from a point between its faces: a slab-thick edge, and bands and blotches inside a
+        // hood's opening. When the sample's dominant prim is a SHELL, keep stepping until d is within ONE
+        // footprint. One texel read, only on a sample that would otherwise accept; flesh never reaches it.
+        var clothTight = false;
+        if (hitBest >= 0 && d > max(hitEpsBase, t * aaCfg.x / distort)) {
+          clothTight = (i32(textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SHAPE} + gBand), 0).y) & 4) != 0;
+        }
+        if (clothTight) {
+          stepLen = d;
+        } else if (d < -max(hitEpsBase, t * aaKt / distort) && omega > 1.0 && !conservative) {
           stepLen = d;
           omega = 1.0;
         } else {

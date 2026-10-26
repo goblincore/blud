@@ -28,6 +28,7 @@ export const PRIM_MATERIAL_BLOCK = /* wgsl */ `  // PER-PRIMITIVE MATERIAL READ 
   // cloth 0 computes exactly what it did before.
   var cloth = 0.0;
   var primGlow = 0.0;
+  var primClipT = vec4<f32>(0.0);
   var primAlbedo = vec3<f32>(0.0);
   if (hitBest >= 0) {
     let PC = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_COLOR} + gBand), 0);
@@ -43,6 +44,8 @@ export const PRIM_MATERIAL_BLOCK = /* wgsl */ `  // PER-PRIMITIVE MATERIAL READ 
       // parse-gated on color=, so an unpainted pixel can never author one,
       // and this is the third texel a painted hit pixel pays for (colour,
       // shape, clip) and the last.
-      primGlow = clamp(textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_CLIP} + gBand), 0).w, 0.0, 1.0);
+      // Kept whole (primClipT): the cloth folds read its xyz, the shell's posed clip normal (shading-normal).
+      primClipT = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_CLIP} + gBand), 0);
+      primGlow = clamp(primClipT.w, 0.0, 1.0);
     }
   }`;

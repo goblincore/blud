@@ -301,7 +301,7 @@ describe('CLOTH PROXIES in the outer hull (cloth-proxy.ts)', () => {
     const b = buildBody(compileBlob(doc, compileFace(doc)), DEFAULT_BUILD_OPTS);
     const proxies: ProxyCone[] = [];
     const hull = buildOuterHullInstances([b], { shellProxies: proxies });
-    expect(proxies.length).toBe({ robe: 2, trousers: 5, cultist: 5 }[v]);
+    expect(proxies.length).toBe({ robe: 2, trousers: 5, cultist: 6 }[v]);
     const inside = proxies.map(proxyOutside);
     const { worst, found } = worstEscape(b, hull, [0, 0.9, 0], 2.0, 1500,
       (p) => Math.min(sdHull(p, hull), ...inside.map(f => f(p))));

@@ -88,7 +88,7 @@ export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A
   // toward grey, lit like the diffuse. Instead of skin's wet rim, which the matte wet above has mostly removed.
   if (cloth > 0.0) {
     let sheen = pow(1.0 - max(dot(n, V), 0.0), 3.0) * 0.4;
-    fleshLit = fleshLit + cloth * sheen * (albedo * 0.7 + vec3<f32>(0.035)) * (amb + diff * wShadow * lvl * keyI * keyC) * ao;
+    fleshLit = fleshLit + cloth * (1.0 - clothInside) * sheen * (albedo * 0.7 + vec3<f32>(0.035)) * (amb + diff * wShadow * lvl * keyI * keyC) * ao;
   }
   // SHARED LIGHT LIST: the other 3 lights and every light's back rim (spec §5). Through AO, not
   // the wound/level shadow (those belong to the dominant). Zero when the list is off.
