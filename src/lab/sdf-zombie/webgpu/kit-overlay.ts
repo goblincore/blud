@@ -48,6 +48,7 @@ import { setMaterialEnvironment } from './material-environment';
 import { createKitDamage, type KitArmorInput, type KitDamageEvent } from './kit-damage';
 import type { DebrisGround, DebrisSeat } from '../debris-ground';
 import { precomputeKitBounds, updateKitBounds } from './kit-bounds';
+import { addKitOccluders } from './kit-occluder';
 import type { BuildResult } from '../build-body';
 import type { Wound } from '../damage';
 import type { Vec3 } from '../types';
@@ -512,6 +513,9 @@ export async function loadKit(
 
   const damageView = breakable ? createKitDamage(object) : null;
   const debris = damageView?.debris ?? new THREE.Group();
+  // Distance twins of the opaque cloth for the march's occT bound (kit-occluder.ts). After createKitDamage, which
+  // clones the geometry the twins must share. Drawn only by pass 1c, and only while it is on.
+  const occluders = addKitOccluders(object);
   const pose: KitOverlay['pose'] = (frames, damage) => {
     poseKitBones(kitBones, frames, kitScale);
     // Three caches the skinned bounds on first render. Our world-space bone
@@ -521,6 +525,7 @@ export async function loadKit(
     // — from the posed bone origins (kit-bounds.ts), NOT computeBoundingSphere,
     // which CPU-skins every vertex (~75 ms/frame for the bride under load).
     skinned.forEach((mesh, i) => updateKitBounds(mesh, skinBounds[i]!));
+    occluders.sync();
     return damage ? damageView?.update(damage.body, damage.wounds, damage.bodyYaw, damage.dt, damage.armor,
       damage.ground, damage.seat) ?? [] : [];
   };
@@ -540,6 +545,7 @@ export async function loadKit(
     },
     dispose() {
       damageView?.dispose();
+      occluders.dispose(); // before the traverse below: the twins share one material across kits
       debris.removeFromParent();
       environment.dispose();
       object.traverse(o => {

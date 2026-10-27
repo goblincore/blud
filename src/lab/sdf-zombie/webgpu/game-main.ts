@@ -89,7 +89,8 @@ import { parseBlob } from '../blob-parse';
 import { MOTION_TUNING } from '../motion';
 import { createCharacterView, compileCharacterSheet, bodyBuildCacheStats } from './character-view';
 import { createCharacterEffects } from './character-effects';
-import { characterEntry, characterNames } from '../character-registry';
+import { CHARACTERS, characterEntry, characterNames } from '../character-registry';
+import { applyClothQuery } from './bench-cloth';
 import { rotateYaw } from '../gait';
 import { makeSoldierMind, makeWarbullMind, makeSwordMind } from './enemy-mind';
 import { hitFeedback, stepHitFeedback } from '../player-hit-feedback';
@@ -2469,13 +2470,14 @@ async function main() {
   ctx.boot.deferredApi?.router.register(ctx.render.occluderHull.object, 'exclude');
   ctx.boot.deferredApi?.router.register(ctx.render.occluderHull.shadowObject, 'exclude');
 
-  // OCCLUDER PRE-PASS OFF (2026-09-01). Its tMax clamp is gone from the
-  // march -- the distance it rasterises is only accurate in the near field
-  // and under-reports badly beyond ~3 m, which shredded bodies at range.
-  // The full measurement and the revival conditions are in march.wgsl.ts
-  // above tMax. __sdfGame.setOccluder still renders the pass for
-  // diagnostics; nothing consumes it.
+  // INNER-HULL OCCLUDER OFF (2026-09-01): it measured as worth nothing, and its
+  // CPU rebuild is not free. (Its distance decay, the original reason, was fog,
+  // fixed 2026-09-04.) __sdfGame.setOccluder still turns it on for A/B.
   ctx.render.sdfLayer.setOccluderEnabled(false);
+  // KIT OCCLUSION ON (2026-10-26): opaque kit cloth bounds the march's tMax, so
+  // flesh under trousers and boots is neither marched to the skin nor shaded
+  // (kit-occluder.ts; KIT_OCCLUDER_LAYER). ?kitocc=0 / __sdfGame.setKitOccluder.
+  ctx.render.sdfLayer.setKitOccluderEnabled(new URLSearchParams(location.search).get('kitocc') !== '0');
 
   /** Close-up task 3: the quarter-resolution depth prepass — a coarse march
    *  of the same field at one texel per 4x4 SDF-pixel block (~1/16 of the
@@ -3057,6 +3059,8 @@ async function main() {
       if (!listed.has(nm)) { listed.add(nm); ctx.world.levelNodeMaterials.push(nm); }
     }
   }
+  // ?cloth=<variant>: the SDF-cloth cost spike's garments on the zombie (bench-cloth.ts). Dev only.
+  applyClothQuery(location.search, CHARACTERS.zombie as { src: string });
   ctx.boot.spawnOverride = ((): string | null => {
     const v = new URLSearchParams(location.search).get('spawn');
     return v && characterNames().includes(v) ? v : null;
@@ -4068,18 +4072,34 @@ async function main() {
         undefined,
       );
       warmChunkView.object.layers.set(SDF_LAYER);
+      // HIDDEN except across each compile's synchronous prologue, as the crowd
+      // compile below does. The warm chunk is real geometry (the first actor's
+      // first two prims, i.e. its HEAD) in the live scene on SDF_LAYER: left
+      // visible, the live march drew it for the whole compile, which is a
+      // blink while the browser's shader cache is warm and many seconds of a
+      // dark second head beside the zombie's after ANY march source change
+      // makes the compile cold (bisected onto PR #83, which only changed the
+      // march text). compileAsync projects the object synchronously before
+      // its first await, so visibility after that call does not matter.
+      warmChunkView.object.visible = false;
       scene.add(warmChunkView.object);
+      const warmObject = warmChunkView.object;
+      const prologue = <T>(start: () => Promise<T>): Promise<T> => {
+        warmObject.visible = true;
+        try { return start(); } finally { warmObject.visible = false; }
+      };
       // The march MRT context (rgba32float). Then the gib-shutter context
       // (rgba16float) — the second cold per-SHAPE target; a shape compiles once
       // per (shape x target), so both must be warmed before `gib` is ready.
-      const mrtOk = await ctx.render.sdfLayer.precompileInBackground(
-        warmChunkView.object, scene, camera, { timeoutMs: PRECOMPILE_COLD_PASS_TIMEOUT_MS },
-      );
+      const mrtOk = await prologue(() => ctx.render.sdfLayer.precompileInBackground(
+        warmObject, scene, camera, { timeoutMs: PRECOMPILE_COLD_PASS_TIMEOUT_MS },
+      ));
       let shutterOk = true;
       if (ctx.gibs.shutter) {
-        shutterOk = await ctx.gibs.shutter.precompileSubjectInBackground(
-          warmChunkView.object, ctx.render.postAa.captureTarget, scene, camera, PRECOMPILE_COLD_PASS_TIMEOUT_MS,
-        );
+        const shutter = ctx.gibs.shutter;
+        shutterOk = await prologue(() => shutter.precompileSubjectInBackground(
+          warmObject, ctx.render.postAa.captureTarget, scene, camera, PRECOMPILE_COLD_PASS_TIMEOUT_MS,
+        ));
       }
       return mrtOk && shutterOk;
     } catch (err) {

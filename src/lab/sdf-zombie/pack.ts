@@ -51,7 +51,7 @@ export interface PackedBody {
    *  an unpainted body packs as all zeros — bit-identical data rows for
    *  every character authored before colour existed. */
   primColor: Float32Array;
-  /** x = half-thickness, y = rim radius, z = clip offset, w = hasClip (0/1).
+  /** x = half-thickness, y = rim radius, z = clip offset, w = hasClip (0 none, else 1 + ShellParams.ruffle).
    *  Only read by prims folded as a shell (profile bit 2). */
   primShell: Float32Array;
   /** xyz = the clip plane's unit normal; w = per-prim emissive `glow=` 0..1
@@ -296,7 +296,7 @@ export function writePrimRows(rows: PrimRows, p: Primitive, i: number, w: number
   // above), and a glowing shell — a lit cable run authored as a sheet —
   // must glow exactly like a glowing capsule. (hard-surface task 3.)
   const sh = p.shell;
-  if (sh) put4(primShell, o, sh.thickness, sh.rim, sh.clipOffset, 1); else put4(primShell, o, 0, 0, 0, 0);
+  if (sh) put4(primShell, o, sh.thickness, sh.rim, sh.clipOffset, 1 + (sh.ruffle ?? 0)); else put4(primShell, o, 0, 0, 0, 0);
   if (sh) put4(primClip, o, sh.clipNormal[0], sh.clipNormal[1], sh.clipNormal[2], p.glow ?? 0);
   else put4(primClip, o, 0, 0, 0, p.glow ?? 0);
   // WRINKLES. Its own row, for the reason ROW_PRIM_WARP's doc gives. Zeros
@@ -357,6 +357,15 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
     // Cull margin is a distance: always the magnitude, never the sign.
     if (p.blendK > maxBlendK) maxBlendK = p.blendK;
   });
+  // SHROUD (cultist hood, 2026-10-27; PrimDef.shroud): every flesh prim of a hooded body points at the hood, so a
+  // hit pixel on the face can find the shell whose inside darkens it. x = -(hood index + 1), y = strength. The
+  // lanes are ROW_PRIM_STRAND's, free on every prim without profile bit 32 (every strand read is gated on it): a
+  // strand prim keeps its own parameters and is never shrouded. A dead hood (dropped, shot off) writes nothing.
+  const hood = body.prims.findIndex(p => (p.shroud ?? 0) > 0 && !p.dead && !!p.shell);
+  if (hood >= 0) {
+    const k = body.prims[hood]!.shroud!;
+    body.prims.forEach((p, i) => { if (p.strand === undefined) put4(primStrand, i * PRIM_STRIDE, -(hood + 1), k, 0, 0); });
+  }
 
   // BONE rows (wound pass r2): written AFTER the flesh, at indices
   // [prims.length, prims.length + boneCount), never inside a cluster or group

@@ -12,6 +12,7 @@ import { applySdfScale } from './game-render-controls';
 
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
+import { setKitOccluderInset } from './kit-occluder';
 import { SCALE_LADDER, initialAdaptiveState, scaleForRung } from '../adaptive-scale';
 import { type SscsTerms } from './post-sscs';
 import { type VhsPreset, type VhsTerms } from './post-vhs';
@@ -37,6 +38,47 @@ export function createRenderSeams(ctx: GameContext) {
       ctx.render.sdfLayer.setOccluderEnabled(on);
     },
     get occluder() { return ctx.render.sdfLayer.occluderEnabled && ctx.render.occluderDesired; },
+    /** Kit occlusion A/B (2026-10-26): opaque kit cloth bounds the march's tMax (kit-occluder.ts). Ships ON. */
+    setKitOccluder: (on: boolean) => ctx.render.sdfLayer.setKitOccluderEnabled(on),
+    get kitOccluder() { return ctx.render.sdfLayer.kitOccluderEnabled; },
+    /** How far in front of the cloth the bound sits (metres; kit-occluder.ts KIT_OCCLUDER_INSET). */
+    setKitOccluderInset: (m: number) => setKitOccluderInset(m),
+    /** X-RAY: hide the real cloth the twins stand in for, leaving the twins drawing into occT. With the kit
+     *  occluder on, the flesh under the cloth must then be MISSING (background shows) exactly in the cloth's
+     *  shape — an alignment check of twin against kit. Returns how many meshes it toggled. */
+    kitOccluderXray(on: boolean) {
+      let n = 0;
+      ctx.boot.handle.scene.traverse(o => {
+        if (!o.userData['kitOccluderTwin'] || !o.parent) return;
+        ((o.parent as THREE.Mesh).material as THREE.Material).visible = !on;
+        n++;
+      });
+      return n;
+    },
+    /** Reads the occT target back after one drawn frame: how much of the SDF target the occluders cover, and
+     *  (image: true) a grey PNG data URL of it (black = nothing, white = 0 m, fading to grey at 8 m). */
+    async kitOccluderCoverage(image = false) {
+      ctx.boot.handle.drawOnce();
+      await ctx.boot.handle.resolveGpu();
+      const t = ctx.render.sdfLayer.occluderTarget;
+      const buf = new Float32Array(await ctx.boot.handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, t.width, t.height));
+      const stride = Math.ceil((t.width * 16) / 256) * 256 / 4; // WebGPU pads rows to 256 bytes
+      let covered = 0;
+      const px = image ? new Uint8ClampedArray(t.width * t.height * 4) : null;
+      for (let y = 0; y < t.height; y++) for (let x = 0; x < t.width; x++) {
+        const v = buf[y * stride + x * 4]!;
+        if (v > 0) covered++;
+        if (px) { const o = ((t.height - 1 - y) * t.width + x) * 4; const g = v > 0 ? 255 - Math.min(200, v * 25) : 0; px[o] = px[o + 1] = px[o + 2] = g; px[o + 3] = 255; }
+      }
+      let url: string | null = null;
+      if (px) {
+        const c = document.createElement('canvas'); c.width = t.width; c.height = t.height;
+        c.getContext('2d')!.putImageData(new ImageData(px, t.width, t.height), 0, 0);
+        url = c.toDataURL('image/png');
+      }
+      const m = ctx.render.sdfLayer.marchTarget;
+      return { w: t.width, h: t.height, marchW: m.width, marchH: m.height, covered, fraction: covered / (t.width * t.height), image: url };
+    },
     setHullExclusions: (on: boolean) => { ctx.render.hullExclusionsEnabled = on; },
     get hullExclusions() { return ctx.render.hullExclusionsEnabled; },
     // setAdaptive / setSdfScale already exist further down this object and

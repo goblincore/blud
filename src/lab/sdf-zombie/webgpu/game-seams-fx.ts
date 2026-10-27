@@ -301,6 +301,8 @@ export function createFxSeams(ctx: GameContext) {
       sharedLiveMaterial: ctx.bake.liveChunks.every(c => (c.view.object as THREE.Mesh).material === ctx.bake.material.material),
       baked: ctx.bake.chunks.length,
       views: ctx.bake.views.length,
+      /** The view budget (`?maxchunks`): views, and so baked pieces, stay <= it. */
+      cap: ctx.bake.maxChunks,
       totalBakes: ctx.bake.totalBakes,
       lastBakeMs: ctx.bake.lastBakeMs, // worker CPU time, NOT a main-thread span
       lastBakeSwapMs: ctx.bake.lastSwapMs,

@@ -7,6 +7,17 @@
 export const RAY_WINDOW_BLOCK = /* wgsl */ `  let tMaxBox = length(worldPos - camPos);
   let relax = woundCfg2.y > 1.0;
   let tMaxSel = select(tMaxBox, min(tMaxBox, shellOut), perfCfg.x > 0.5 && !relax);
+  // KIT OCCLUSION (2026-10-26, owner: "not render the flesh if clothes is over it"). occT is the
+  // nearest opaque kit cloth (kit-occluder.ts, written KIT_OCCLUDER_INSET in front of it) or
+  // inner-hull surface along this ray, ERODED by occFetch so a pixel only clamps when its whole
+  // footprint is covered. Flesh standing clear of the cloth is still hit before tMax; flesh
+  // behind it (or within the inset of it) would lose the depth test to the cloth anyway,
+  // so cutting the ray there skips its steps and all of its shading. The distance is exact since
+  // the fog fix (2026-09-04, material.fog = false), which is what removed this bound on 09-01.
+  // + woundCfg2.z: the shell-dent amp, as the hull form had it. Un-relaxed path only, like the exit
+  // fold: the relaxed tracer takes a clamped final sample AT tMax, which on cloth sitting outside
+  // the flesh would be an AA-epsilon "hit" z-fighting the cloth. Disabled, occT is 1e9: identity.
+  let tMaxOcc = select(tMaxSel, min(tMaxSel, occT + woundCfg2.z), !relax);
   // Accumulated-depth gate (perf round 2 task 5): a nearer body already
   // owns this pixel out to prevT — the front-to-back per-body passes blit
   // the accumulated frame state before each pass, and prevFetch decodes its
@@ -54,6 +65,6 @@ export const RAY_WINDOW_BLOCK = /* wgsl */ `  let tMaxBox = length(worldPos - ca
   // scale checker, far ones get real half-scale rays.
   let winNear = select(1e9, depthPreCfg.w, depthPreCfg.w > 0.0);
   let winFar = select(0.0, -depthPreCfg.w, depthPreCfg.w < 0.0);
-  let tMax = min(min(tMaxSel, prevT), winNear);
+  let tMax = min(min(tMaxOcc, prevT), winNear);
   if (bodyEntry > winNear || tMax < winFar) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
   let steps = i32(marchCfg.x);`;

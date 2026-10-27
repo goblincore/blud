@@ -18,9 +18,9 @@ exports[`packBody byte pin > clown.blob packs the pinned bytes 1`] = `"8ec4d3949
 
 exports[`packBody byte pin > clown-alt.blob packs the pinned bytes 1`] = `"8ec4d3949e16bc59"`;
 
-exports[`packBody byte pin > cultist.blob packs the pinned bytes 1`] = `"aec92496ffdcf2b0"`;
+exports[`packBody byte pin > cultist.blob packs the pinned bytes 1`] = `"81c1aa0af79478a3"`;
 
-exports[`packBody byte pin > cultist-cowled.blob packs the pinned bytes 1`] = `"0e4a9ec3f9d60e50"`;
+exports[`packBody byte pin > cultist-cowled.blob packs the pinned bytes 1`] = `"e337e1e693a6ae46"`;
 
 exports[`packBody byte pin > cyberdemon.blob packs the pinned bytes 1`] = `"50614ab404febdd5"`;
 

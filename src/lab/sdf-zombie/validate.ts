@@ -128,6 +128,18 @@ function sdRoundBox(p: Vec3, e: Vec3, r: number): number {
     + Math.min(Math.max(qx, qy, qz), 0) - r;
 }
 
+// The hot field helpers below are MODULE-LEVEL functions, not closures built per
+// call: tsx (and any esbuild build with keepNames) wraps every named closure in
+// a `__name` call each time it is created, which was ~1/6 of a bake-side
+// buildBody profile. Same expressions, so the field is bit-identical.
+
+/** `x` rotated about `mid` by the quaternion with vector part `u` and scalar `w`. */
+function rotAbout(x: Vec3, mid: Vec3, u: Vec3, w: number): Vec3 {
+  const v = sub(x, mid);
+  const t = vscale(cross(u, v), 2);
+  return add(mid, add(v, add(vscale(t, w), cross(u, t))));
+}
+
 /** Distance from p to one primitive, matching the shader's ellipsoid capsule. */
 export function sdPrimitive(p: Vec3, prim: Primitive): number {
   let qv: Vec3 = p;
@@ -147,15 +159,10 @@ export function sdPrimitive(p: Vec3, prim: Primitive): number {
     const mid = vscale(add(prim.a, prim.b), 0.5);
     const u: Vec3 = [-o[0], -o[1], -o[2]]; // conjugate: negate the vector part
     const w = o[3];
-    const rot = (x: Vec3): Vec3 => {
-      const v = sub(x, mid);
-      const t = vscale(cross(u, v), 2);
-      return add(mid, add(v, add(vscale(t, w), cross(u, t))));
-    };
-    qv = rot(qv);
-    av = rot(av);
-    bv = rot(bv);
-    if (cv !== undefined) cv = rot(cv);
+    qv = rotAbout(qv, mid, u, w);
+    av = rotAbout(av, mid, u, w);
+    bv = rotAbout(bv, mid, u, w);
+    if (cv !== undefined) cv = rotAbout(cv, mid, u, w);
   }
   const inv: Vec3 = [1 / prim.scale[0], 1 / prim.scale[1], 1 / prim.scale[2]];
   const q: Vec3 = [qv[0] * inv[0], qv[1] * inv[1], qv[2] * inv[2]];
@@ -203,7 +210,7 @@ export function sdPrimitive(p: Vec3, prim: Primitive): number {
   // plane with a rounded rim — the exact construction sdShellWrap below. Only
   // when the prim carries `shell` params; every other prim keeps the bare
   // capsule field bit-identical, which is what the zombie pin demands.
-  if (prim.shell) return sdShellWrap(base, p, prim.shell.thickness, prim.shell.clipNormal, prim.shell.clipOffset, prim.shell.rim, prim.shell.warpAmp, prim.shell.warpFreq);
+  if (prim.shell) return sdShellWrap(base, p, prim.shell.thickness, prim.shell.clipNormal, prim.shell.clipOffset, prim.shell.rim, prim.shell.warpAmp, prim.shell.warpFreq, ZERO3, ZERO3, prim.shell.ruffle);
   return base;
 }
 
@@ -216,28 +223,32 @@ export function sdPrimitive(p: Vec3, prim: Primitive): number {
  * `thickness` is the HALF-thickness. The sheet is `abs(dBase) - thickness`:
  * it occupies the `thickness`-wide band either side of the base surface. The
  * clip keeps the half-space where `dot(p, clipNormal) - clipOffset` is
- * NEGATIVE; `max(sheet, plane)` is the hard edge, and `rim` rounds the edge
- * by taking the distance to the clip/sheet intersection curve via
- * `length(vec2(sheet, plane))`.
+ * NEGATIVE; `max(sheet, plane)` is the hard edge, and `rim` rounds it with
+ * the rounded intersection `min(-rim, max) + length(max(vec2(sheet + rim,
+ * plane + rim), 0))`: a quarter circle of radius `rim` in place of the corner,
+ * both flat faces unmoved (rim == thickness is a bullnose hem). Until
+ * 2026-10-27 this was `max(max, rim - length(vec2(sheet, plane)))`, which
+ * hollows a groove along the edge instead of rounding it (the hood's
+ * "layered" opening).
  *
  * CONSERVATIVENESS. `dBase` itself is the established scaled-space capsule
  * field (it under-reports by minScale for anisotropic prims), so `abs(dBase)
  * - thickness` under-reports the true sheet distance — never over-reports,
  * which is what a raymarcher needs. `dPlane` is an EXACT world-space plane
  * distance. Near the rim the dominant term becomes
- * `rim - length(vec2(sheet, plane))`, whose gradient magnitude is <= 1 where
- * the two surfaces are near perpendicular (a well-cut cloth edge); at a
- * grazing cut it can exceed 1 and over-report by up to the rim radius. rims
- * are a few mm and the folded sheet dominates elsewhere, so the field stays
- * within the careful margin — the author's job is to cut the sheet close to
- * perpendicular, which is how cloth is actually cut.
+ * `length(vec2(sheet + rim, plane + rim)) - rim`, whose gradient magnitude is
+ * <= 1 where the two surfaces are near perpendicular (a well-cut cloth edge);
+ * at a grazing cut it can exceed 1 and over-report by up to the rim radius.
+ * rims are a few mm and the folded sheet dominates elsewhere, so the field
+ * stays within the careful margin — the author's job is to cut the sheet close
+ * to perpendicular, which is how cloth is actually cut.
  */
 const ZERO3: Vec3 = [0, 0, 0];
 
 export function sdShellWrap(
   dBase: number, p: Vec3, thickness: number,
   clipNormal: Vec3, clipOffset: number, rim: number,
-  warpAmp = 0, warpFreq: Vec3 = ZERO3, warpDrift: Vec3 = ZERO3, bodyAnchor: Vec3 = ZERO3,
+  warpAmp = 0, warpFreq: Vec3 = ZERO3, warpDrift: Vec3 = ZERO3, bodyAnchor: Vec3 = ZERO3, ruffle = 0,
 ): number {
   // WRINKLES. Three sines with offset phases so the pattern does not repeat
   // visibly along any axis, added to the BASE distance before the sheet is
@@ -290,8 +301,18 @@ export function sdShellWrap(
     lip = 1 + Math.abs(warpAmp) * fLen;
   }
   const d = Math.abs(base) - thickness;
-  const dPlane = clipNormal[0] * p[0] + clipNormal[1] * p[1] + clipNormal[2] * p[2] - clipOffset;
-  return Math.max(Math.max(d, dPlane), rim - Math.hypot(d, dPlane)) / lip;
+  let dPlane = clipNormal[0] * p[0] + clipNormal[1] * p[1] + clipNormal[2] * p[2] - clipOffset;
+  // RUFFLE (ShellParams.ruffle): the cut wanders 0..ruffle INTO the sheet on the warp's lattice, so the opening is
+  // ragged. Only ever cuts deeper, so bounds fitted to the plain clip still hold.
+  if (ruffle > 0 && fLen !== 0) {
+    const dx = p[0] - warpDrift[0], dy = p[1] - warpDrift[1], dz = p[2] - warpDrift[2];
+    const lx = dx - bodyAnchor[0], lz = dz - bodyAnchor[2];
+    const ch = Math.cos(bodyAnchor[1]), sh = Math.sin(bodyAnchor[1]);
+    const qx = lx * ch - lz * sh, qy = dy, qz = lx * sh + lz * ch;
+    dPlane += ruffle * (0.5 + 0.25 * Math.sin(warpFreq[0] * qx + 0.7) + 0.25 * Math.sin(warpFreq[1] * qy + warpFreq[2] * qz + 2.1));
+    lip = Math.max(lip, 1 + 0.25 * ruffle * (Math.abs(warpFreq[0]) + Math.hypot(warpFreq[1], warpFreq[2])));
+  }
+  return (Math.min(-rim, Math.max(d, dPlane)) + Math.hypot(Math.max(d + rim, 0), Math.max(dPlane + rim, 0))) / lip;
 }
 
 /**
@@ -352,6 +373,8 @@ function sdRoundCone(p: Vec3, a: Vec3, b: Vec3, r1: number, r2: number): number 
  * f32 on the GPU and f64 here agree only to packing precision, which is what
  * every other mirror in this project accepts.
  */
+const clamp01 = (u: number): number => Math.max(0, Math.min(1, u));
+
 function sdBezierTs(p: Vec3, A: Vec3, B: Vec3, C: Vec3): number[] {
   const a = sub(B, A);
   const b: Vec3 = [A[0] - 2 * B[0] + C[0], A[1] - 2 * B[1] + C[1], A[2] - 2 * B[2] + C[2]];
@@ -366,7 +389,6 @@ function sdBezierTs(p: Vec3, A: Vec3, B: Vec3, C: Vec3): number[] {
   const pp = ky - kx * kx;
   const qq = kx * (2 * kx * kx - 3 * ky) + kz;
   const h = qq * qq + 4 * pp ** 3;
-  const clamp01 = (u: number) => Math.max(0, Math.min(1, u));
 
   if (h >= 0) {
     // One real root: the squared distance falls monotonically to it and rises
@@ -420,6 +442,25 @@ function sdBezierTs(p: Vec3, A: Vec3, B: Vec3, C: Vec3): number[] {
  * control point hugs the chord; there sdRoundCone IS the exact answer, so
  * the fallback costs nothing but the test.
  */
+/** Point on the quadratic Bezier `a + e1 t + e2 t²`. */
+function bezAt(a: Vec3, e1: Vec3, e2: Vec3, t: number): Vec3 {
+  return [
+    a[0] + e1[0] * t + e2[0] * t * t,
+    a[1] + e1[1] * t + e2[1] * t * t,
+    a[2] + e1[2] * t + e2[2] * t * t,
+  ];
+}
+
+/** The curve's derivative at t. */
+function bezDp(e1: Vec3, e2: Vec3, t: number): Vec3 {
+  return [e1[0] + 2 * e2[0] * t, e1[1] + 2 * e2[1] * t, e1[2] + 2 * e2[2] * t];
+}
+
+/** sdBentCone's objective: distance to the curve point at t minus the lerped radius. */
+function bezG(q: Vec3, a: Vec3, e1: Vec3, e2: Vec3, r1: number, r2: number, t: number): number {
+  return len(sub(q, bezAt(a, e1, e2, t))) - (r1 + (r2 - r1) * t);
+}
+
 function sdBentCone(q: Vec3, a: Vec3, b: Vec3, c: Vec3, r1: number, r2: number): number {
   // Curve coefficient of the quadratic term, a − 2c + b. Its magnitude is
   // twice the curve's worst deviation from the chord, so dot(bb,bb) under
@@ -434,12 +475,6 @@ function sdBentCone(q: Vec3, a: Vec3, b: Vec3, c: Vec3, r1: number, r2: number):
 
   const e1 = vscale(sub(c, a), 2);           // 2(B − A)
   const e2 = bb;                             // A − 2B + C
-  const at = (t: number): Vec3 => [
-    a[0] + e1[0] * t + e2[0] * t * t,
-    a[1] + e1[1] * t + e2[1] * t * t,
-    a[2] + e1[2] * t + e2[2] * t * t,
-  ];
-  const g = (t: number): number => len(sub(q, at(t))) - (r1 + (r2 - r1) * t);
   // Pass 1: every cubic root, both ends, and quarters. Passes 2-3 refine
   // locally around the best so far (steps 1/8 then 1/32) — the objective's
   // own minimiser drifts off the pure-distance candidates where the taper is
@@ -448,13 +483,13 @@ function sdBentCone(q: Vec3, a: Vec3, b: Vec3, c: Vec3, r1: number, r2: number):
   let bestT = 0;
   const ts = [...sdBezierTs(q, a, c, b), 0, 0.25, 0.5, 0.75, 1];
   for (const t of ts) {
-    const v = g(t);
+    const v = bezG(q, a, e1, e2, r1, r2, t);
     if (v < best) { best = v; bestT = t; }
   }
   for (const step of [0.125, 0.03125]) {
     for (const dt of [-step, 0, step]) {
       const t = Math.max(0, Math.min(1, bestT + dt));
-      const v = g(t);
+      const v = bezG(q, a, e1, e2, r1, r2, t);
       if (v < best) { best = v; bestT = t; }
     }
   }
@@ -462,20 +497,19 @@ function sdBentCone(q: Vec3, a: Vec3, b: Vec3, c: Vec3, r1: number, r2: number):
   // it lowers g — the mirror of coneBend's (march/primitives.wgsl.ts, which has the why: the f32 cubic is
   // ill-conditioned on a nearly straight bend). Here in f64 the cubic is fine, but the 1/32 grid stops short on a
   // steeply tapered bend (up to ~1.7e-4 m on bloatmaw before this pass).
-  const dPAt = (t: number): Vec3 => [e1[0] + 2 * e2[0] * t, e1[1] + 2 * e2[1] * t, e1[2] + 2 * e2[2] * t];
   {
-    const D = sub(q, at(bestT)), dP = dPAt(bestT);
+    const D = sub(q, bezAt(a, e1, e2, bestT)), dP = bezDp(e1, e2, bestT);
     const f2 = dot(dP, dP) - 2 * dot(D, e2);
     const t = f2 > 0 ? Math.max(0, Math.min(1, bestT + dot(D, dP) / f2)) : bestT;
-    const v = g(t);
+    const v = bezG(q, a, e1, e2, r1, r2, t);
     if (v < best) { best = v; bestT = t; }
   }
   {
-    const D = sub(q, at(bestT)), dP = dPAt(bestT);
+    const D = sub(q, bezAt(a, e1, e2, bestT)), dP = bezDp(e1, e2, bestT);
     const L = Math.max(len(D), 1e-9), dDp = dot(D, dP);
     const g2 = (dot(dP, dP) - 2 * dot(D, e2)) / L - dDp * dDp / (L * L * L);
     const t = g2 > 0 ? Math.max(0, Math.min(1, bestT - (-dDp / L - (r2 - r1)) / g2)) : bestT;
-    best = Math.min(best, g(t));
+    best = Math.min(best, bezG(q, a, e1, e2, r1, r2, t));
   }
   return best;
 }
@@ -662,9 +696,10 @@ export const BONE_CONTAINMENT_MARGIN = 0.004;
  */
 export function checkBoneContainment(body: Body): string[] {
   const errs: string[] = [];
+  const index = fleshIndex(body);
   (body.bonePrims ?? []).forEach((prim, i) => {
     if ((prim.op !== 'bone' && prim.op !== 'organ') || prim.dead) return;
-    const first = boneBreach(body, prim);
+    const first = boneBreach(body, prim, index);
     if (first !== null) {
       errs.push(
         `bone/organ prim ${i} (${prim.limb}) breaches the flesh surface at ` +
@@ -677,49 +712,176 @@ export function checkBoneContainment(body: Body): string[] {
 }
 
 /**
- * First breaching sample on ONE bone's surface, or null if it stays
- * BONE_CONTAINMENT_MARGIN inside the flesh everywhere sampled. The shared
- * sampler for checkBoneContainment (report) and buildBody's derivation
- * filter (drop) — one sampling implementation, two consumers.
+ * THE CHEAP SIDE OF A THRESHOLD TEST (2026-10-26). Bone containment and the
+ * connectivity probe never need the flesh field's VALUE, only which side of a
+ * threshold it is on, and on a body carrying a `.detail` file's ~1,300 relief
+ * prims a full `sdBody` per sample made `buildBody` take minutes (every derived
+ * bone, 156 samples, each folding every prim).
+ *
+ * The test is decided EXACTLY, never approximated: the answer equals
+ * `sdBody(p, body) > t` for every input (flesh-above.test.ts holds every shipped
+ * character's samples to it). It works from an UPPER bound, which the fold
+ * provides for free:
+ *
+ *   - ADDITIVE PASS. Each step is `smin(d, x, k) = min(d, x) - h*h*kk/4` with
+ *     `h*h*kk/4 >= 0`, or a chamfer `min(min(d, x), ...)`; in floats as in
+ *     reals, neither returns more than `min(d, x)`. So the running value never
+ *     rises, and after the pass it is <= EVERY additive prim's own distance:
+ *     the min over any SUBSET of them is a rigorous bound. The subset is the
+ *     solids whose bounding sphere holds `p` (the ones that can be negative
+ *     there), found per sampling station so a sample walks a few dozen
+ *     prims, not all.
+ *   - CARVE PASS. `smax` and `sdGroove` are monotone non-decreasing in the
+ *     running value with slope <= 1, so pushing the bound through every live
+ *     carve in fold order bounds the carved result, plus CARVE_SLACK per carve
+ *     for float rounding (a few ulps at these magnitudes, ~1e-16; the slack is
+ *     seven orders larger). Carves are few, so this pass evaluates them all.
+ *
+ * Bound <= t settles "not above"; otherwise the full `sdBody` decides. Inside
+ * samples settle cheaply, so the full fold runs only where the bound is too
+ * loose (within a blend width of the surface) and on the one breaching sample
+ * a breaching bone stops at.
  */
-export function boneBreach(body: Body, prim: Primitive): Vec3 | null {
-  // A fixed low-discrepancy-ish sphere sampling. 26 directions — the 6 axes,
-  // 12 edge midpoints and 8 corners of a cube, normalised — is enough to catch
-  // a breach without making validation quadratic in prim count.
-  const dirs: Vec3[] = [];
-  for (const x of [-1, 0, 1]) for (const y of [-1, 0, 1]) for (const z of [-1, 0, 1]) {
-    if (x === 0 && y === 0 && z === 0) continue;
-    const l = Math.hypot(x, y, z);
-    dirs.push([x / l, y / l, z / l]);
-  }
+const CARVE_SLACK = 1e-9;
 
+interface FleshSolid { prim: Primitive; c: Vec3; r: number }
+
+/** The prims an upper bound reads: live additive solids with bounding spheres, live carves in fold order. Null
+ *  for a split body, whose field is not the prim fold. */
+export interface FleshIndex { solids: FleshSolid[]; carves: Primitive[] }
+
+export function fleshIndex(body: Body): FleshIndex | null {
+  if (body.split) return null;
+  const solids: FleshSolid[] = [];
+  const carves: Primitive[] = [];
+  for (const cl of body.clusters) {
+    if (!cl.alive) continue;
+    for (let i = cl.start; i < cl.start + cl.count; i++) {
+      const prim = body.prims[i]!;
+      if (prim.dead || prim.op === 'bone' || prim.op === 'organ') continue;
+      if (prim.op === 'sub' || prim.op === 'groove') { carves.push(prim); continue; }
+      const s = primSphere(prim);
+      solids.push({ prim, c: s.c, r: s.r });
+    }
+  }
+  return { solids, carves };
+}
+
+/** A sphere holding the prim's surface: centred on the chord midpoint (orientation rotates about it), out to the
+ *  farthest end or control point plus the outer reach. Only steers which prims bound a sample, so a loose fit
+ *  costs speed, never correctness. */
+function primSphere(prim: Primitive): { c: Vec3; r: number } {
+  const c = lerp(prim.a, prim.b, 0.5);
+  let far = len(sub(prim.a, c));
+  if (prim.bend !== undefined) far = Math.max(far, len(sub(bendCtrl(prim.a, prim.b, prim.bend), c)));
+  const maxScale = Math.max(prim.scale[0], prim.scale[1], prim.scale[2]);
+  const rMax = Math.max(prim.radius, prim.radiusB ?? prim.radius) * boxReach(prim.box) * strandReach(prim.strand);
+  return { c, r: far + rMax * maxScale + shellReach(prim) };
+}
+
+/** The solids whose sphere reaches within `reach` of `c`: a region's candidates for fleshAbove. */
+export function solidsNear(index: FleshIndex, c: Vec3, reach: number): FleshSolid[] {
+  const out: FleshSolid[] = [];
+  for (const s of index.solids) {
+    const dx = s.c[0] - c[0], dy = s.c[1] - c[1], dz = s.c[2] - c[2], r = s.r + reach;
+    if (dx * dx + dy * dy + dz * dz <= r * r) out.push(s);
+  }
+  return out;
+}
+
+/** Exactly `sdBody(p, body) > t`, settled by the upper bound when it can be (see CARVE_SLACK). `solids` must come
+ *  from `index` (any subset is sound); a null index means the full field. */
+export function fleshAbove(p: Vec3, body: Body, t: number, index: FleshIndex | null, solids?: FleshSolid[]): boolean {
+  if (index !== null) {
+    let u = Infinity;
+    for (const s of solids ?? index.solids) {
+      const dx = p[0] - s.c[0], dy = p[1] - s.c[1], dz = p[2] - s.c[2];
+      if (dx * dx + dy * dy + dz * dz > s.r * s.r) continue;
+      const x = sdPrimitive(p, s.prim);
+      if (x < u) u = x;
+    }
+    if (u !== Infinity) {
+      for (const prim of index.carves) {
+        u = prim.op === 'sub'
+          ? smax(u, -sdPrimitive(p, prim), prim.blendK)
+          : sdGroove(u, sdPrimitive(p, prim), prim.grooveDepth ?? 0, prim.grooveWidth ?? 0);
+        u += CARVE_SLACK;
+      }
+      if (u <= t) return false;
+    }
+  }
+  return sdBody(p, body) > t;
+}
+
+// A fixed low-discrepancy-ish sphere sampling. 26 directions — the 6 axes,
+// 12 edge midpoints and 8 corners of a cube, normalised — is enough to catch
+// a breach without making validation quadratic in prim count.
+const BREACH_DIRS: Vec3[] = [];
+for (const x of [-1, 0, 1]) for (const y of [-1, 0, 1]) for (const z of [-1, 0, 1]) {
+  if (x === 0 && y === 0 && z === 0) continue;
+  const l = Math.hypot(x, y, z);
+  BREACH_DIRS.push([x / l, y / l, z / l]);
+}
+
+/**
+ * The points boneBreach probes on ONE bone's surface, in probe order. Exported
+ * so a test can hold the fast decision to the full field on exactly these.
+ */
+export function breachSamples(prim: Primitive): Vec3[] {
   const STATIONS = 5;
   const ctrl = prim.bend === undefined ? undefined : bendCtrl(prim.a, prim.b, prim.bend);
+  const out: Vec3[] = [];
   for (let s = 0; s <= STATIONS; s++) {
     const t = s / STATIONS;
     // Centre line: the straight chord, or the quadratic Bezier through the
     // control point — the same curve sdPrimitive's bent branch evaluates.
-    const centre: Vec3 = [0, 1, 2].map(k => ctrl === undefined
-      ? prim.a[k]! + (prim.b[k]! - prim.a[k]!) * t
-      : (1 - t) * (1 - t) * prim.a[k]! + 2 * (1 - t) * t * ctrl[k]! + t * t * prim.b[k]!
-    ) as [number, number, number];
+    const at = (k: 0 | 1 | 2): number => ctrl === undefined
+      ? prim.a[k] + (prim.b[k] - prim.a[k]) * t
+      : (1 - t) * (1 - t) * prim.a[k] + 2 * (1 - t) * t * ctrl[k] + t * t * prim.b[k];
+    const centre: Vec3 = [at(0), at(1), at(2)];
     // Taper: radius runs linearly to radiusB across the SAME parameter the
     // endpoints interpolate, matching sdRoundCone's lerp.
     const r = prim.radiusB === undefined
       ? prim.radius : prim.radius + (prim.radiusB - prim.radius) * t;
-    for (const d of dirs) {
+    for (const d of BREACH_DIRS) {
       // SCALE IS LOAD-BEARING: sdPrimitive divides by prim.scale, so a prim
       // with scale.x 1.45 reaches 1.45 * r in x. Sampling at r alone probes
       // a sphere the prim does not have.
-      const p: Vec3 = [
+      out.push([
         centre[0] + d[0] * r * prim.scale[0],
         centre[1] + d[1] * r * prim.scale[1],
         centre[2] + d[2] * r * prim.scale[2],
-      ];
-      // sdBody walks prims only, and bone is not in prims any more, so this
-      // is the FLESH field — exactly the surface the bone must stay inside.
-      if (sdBody(p, body) > -BONE_CONTAINMENT_MARGIN) return p;
+      ]);
     }
+  }
+  return out;
+}
+
+/**
+ * First breaching sample on ONE bone's surface, or null if it stays
+ * BONE_CONTAINMENT_MARGIN inside the flesh everywhere sampled. The shared
+ * sampler for checkBoneContainment (report) and buildBody's derivation
+ * filter (drop) — one sampling implementation, two consumers. Pass one
+ * `fleshIndex(body)` across many bones of the same body to build it once.
+ */
+export function boneBreach(body: Body, prim: Primitive, index: FleshIndex | null = fleshIndex(body)): Vec3 | null {
+  const pts = breachSamples(prim);
+  // The bounding solids are found per STATION (one ring of BREACH_DIRS), not
+  // per bone: a long torso bone's sphere overlaps most of a detail body.
+  const ring = BREACH_DIRS.length;
+  let near: FleshSolid[] | undefined;
+  for (let i = 0; i < pts.length; i++) {
+    if (index !== null && i % ring === 0) {
+      let c: Vec3 = [0, 0, 0];
+      for (let j = i; j < i + ring; j++) c = add(c, pts[j]!);
+      c = vscale(c, 1 / ring);
+      let reach = 0;
+      for (let j = i; j < i + ring; j++) reach = Math.max(reach, len(sub(pts[j]!, c)));
+      near = solidsNear(index, c, reach);
+    }
+    // sdBody walks prims only, and bone is not in prims any more, so this
+    // is the FLESH field — exactly the surface the bone must stay inside.
+    if (fleshAbove(pts[i]!, body, -BONE_CONTAINMENT_MARGIN, index, near)) return pts[i]!;
   }
   return null;
 }
@@ -803,17 +965,19 @@ export function validateBody(body: Body, opts: ValidateOpts): string[] {
   // the skull drags that centroid clean out of the cranium, at which point every
   // segment starts outside the surface and the whole body reports as
   // disconnected. The core below is inside its primitive by construction.
-  if (body.clusters.length > 1)
+  if (body.clusters.length > 1) {
+    const index = fleshIndex(body);
     for (const c of body.clusters) {
       const from = clusterCore(body, c);
       if (from === null) continue; // nothing solid to probe from
       const fused = body.clusters.some(o => {
         if (o.id === c.id) return false;
         const to = clusterCore(body, o);
-        return to !== null && segmentInside(from, to, body);
+        return to !== null && segmentInside(from, to, body, index);
       });
       if (!fused) errs.push(`cluster "${c.limb}" is disconnected — not fused to any other cluster`);
     }
+  }
 
   return errs;
 }
@@ -973,9 +1137,10 @@ export function clusterCore(body: Body, c: ClusterInfo): Vec3 | null {
   return best === null ? null : lerp(best.a, best.b, 0.5);
 }
 
-function segmentInside(from: Vec3, to: Vec3, body: Body): boolean {
+function segmentInside(from: Vec3, to: Vec3, body: Body, index: FleshIndex | null): boolean {
   const STEPS = 24;
+  const near = index === null ? undefined : solidsNear(index, lerp(from, to, 0.5), len(sub(to, from)) / 2);
   for (let i = 0; i <= STEPS; i++)
-    if (sdBody(lerp(from, to, i / STEPS), body) > 0) return false;
+    if (fleshAbove(lerp(from, to, i / STEPS), body, 0, index, near)) return false;
   return true;
 }

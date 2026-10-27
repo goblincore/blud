@@ -146,6 +146,7 @@ const SLOW_TESTS = [
   'scripts/blob-depth.test.ts',                                                // 82 s
   'src/lab/sdf-zombie/webgpu/surface-nets-cpu.test.ts',                        // 27 s
   'src/lab/sdf-zombie/pack.test.ts',                                           // 27 s
+  'src/lab/sdf-zombie/flesh-above.test.ts',                                    // ~30 s (local, darwin/arm64)
   'src/lab/sdf-zombie/silhouette.test.ts',                                     // 22 s
   'src/lab/sdf-zombie/webgpu/gib-library.test.ts',                             // 21 s
   'src/lab/sdf-zombie/characters/bride-blob.test.ts',                          // 18 s

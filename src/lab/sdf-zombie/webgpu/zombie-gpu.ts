@@ -10,6 +10,7 @@
 
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
+import { stepClothSway } from '../cloth-sway';
 import {
   wgslFn, positionWorld, cameraPosition, vec4, uniform, texture, texture3D, float,
   cameraProjectionMatrix, cameraViewMatrix, cameraNear, cameraFar, modelWorldMatrix, normalize, sub, mul, add, screenUV,
@@ -157,7 +158,7 @@ export interface ZombieGpuView {
    * structurally zero (wander translates on the floor), which is why the
    * packed channel is a vec2. Statue bodies leave the default (0, 0).
    */
-  setRootShift(x: number, z: number, bodyYaw?: number): void;
+  setRootShift(x: number, z: number, bodyYaw?: number, dt?: number): void;
   /**
    * Swaps the face sheet, its crop rect (as uv scale/offset) and its mean.
    *
@@ -1064,9 +1065,24 @@ const OCC_FETCH_WGSL = /* wgsl */ `fn occFetch(
 ) -> f32 {
   if (enabled < 0.5) { return 1e9; }
   let dims = vec2<f32>(textureDimensions(occTex, 0));
-  let c = clamp(vec2<i32>(floor(screenUV * dims)), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
-  let v = textureLoad(occTex, c, 0).x;
-  if (v <= 0.0) { return 1e9; }
+  let hi = vec2<i32>(dims) - vec2<i32>(1, 1);
+  let c = clamp(vec2<i32>(floor(screenUV * dims)), vec2<i32>(0, 0), hi);
+  // ERODED: the max over this texel and its four DIAGONAL neighbours, and no
+  // bound at all if any of them is empty. The march pixel is upscaled (and in
+  // field mode woven) onto a footprint about one texel wide, while the kit
+  // cloth rasterises at full resolution; a ray clamped because its CENTRE is
+  // under cloth would otherwise leave a fringe of background where the
+  // footprint pokes out past a cloth edge over flesh (a waistband, a hem). The
+  // diagonals bound the footprint's square, so a straight edge crossing it
+  // always uncovers one of them. max() of distances is conservative (a later
+  // tMax only marches further).
+  var v = textureLoad(occTex, c, 0).x;
+  let a = textureLoad(occTex, clamp(c + vec2<i32>(-1, -1), vec2<i32>(0, 0), hi), 0).x;
+  let b = textureLoad(occTex, clamp(c + vec2<i32>(1, -1), vec2<i32>(0, 0), hi), 0).x;
+  let d = textureLoad(occTex, clamp(c + vec2<i32>(-1, 1), vec2<i32>(0, 0), hi), 0).x;
+  let e = textureLoad(occTex, clamp(c + vec2<i32>(1, 1), vec2<i32>(0, 0), hi), 0).x;
+  if (min(min(v, a), min(b, min(d, e))) <= 0.0) { return 1e9; }
+  v = max(max(v, a), max(b, max(d, e)));
   return v;
 }`;
 export const occFetchNode = wgslFn(OCC_FETCH_WGSL);
@@ -2483,6 +2499,7 @@ function warnNearReach(u: MarchUniforms): void {
     + `(aaCfg ${a.toArray().map(v => +v.toPrecision(3)).join(', ')}; last-step ${u.perfCfg.value.w})`);
 }
 
+
 export function createZombieGpuView(
   body: BuildResult, opts: GpuViewOpts = {},
 ): ZombieGpuView {
@@ -3034,6 +3051,9 @@ export function createZombieGpuView(
   }
 
   const mainSegmentVolume = material as unknown as MaterialWithSegmentVolume;
+  /** The last root position setRootShift saw, and the cloth sway spring's velocity (CLOTH SWAY). */
+  let driftPrev: [number, number, number] | null = null;
+  const swayVel: [number, number] = [0, 0];
   return {
     object: mesh,
     coneObject: coneMesh,
@@ -3160,7 +3180,7 @@ export function createZombieGpuView(
       old.dispose();
       refineTailSync();
     },
-    setRootShift(x, z, bodyYaw = 0) {
+    setRootShift(x, z, bodyYaw = 0, dt = 1 / 60) {
       u.faceCfg3.value.z = x; u.faceCfg3.value.w = z;
       // Free lodCfg channel: the noise frame's yaw (see NOISE_LOCAL).
       u.lodCfg.value.z = bodyYaw;
@@ -3168,6 +3188,16 @@ export function createZombieGpuView(
       // pre-pass. Written HERE so there is a single place that decides what
       // "the body's frame" is — see bodyAnchor's declaration.
       u.bodyAnchor.value.set(x, bodyYaw, z);
+      // CLOTH SWAY: windDrift is a damped spring chasing a target set by how the body moves — back from its walk, across
+      // it from its turn — so the folds swing out, ease, and settle back to rest when it stops. The game never set
+      // windDrift before (only the lab's wind did, and the lab still overwrites it every frame). A jump (spawn,
+      // teleport) is not a step.
+      if (driftPrev) {
+        const d = u.windDrift.value;
+        const r = stepClothSway({ x: d.x, z: d.z, vx: swayVel[0], vz: swayVel[1] }, driftPrev, [x, z, bodyYaw], dt);
+        d.x = r.x; d.z = r.z; swayVel[0] = r.vx; swayVel[1] = r.vz;
+      }
+      driftPrev = [x, z, bodyYaw];
       syncRecord();
     },
     setFaceTexture(tex, atlas, mean) {
