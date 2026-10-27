@@ -665,3 +665,15 @@ head". The hood is smaller and lower (crown ~1.93 -> ~1.85 m), the face block's 
 the peak came down with the crown.
 
 ![before/after](hood-fit-before-after.png)
+
+## 2026-10-27: the cloth sway eased
+
+The owner: the hood's motion was "too fast", "spastic", "like a hamster", and it also moved when the PLAYER moved.
+
+- **Why the player set it off:** the cultist turns to keep facing you, so strafing turned his body, and turning drifted
+  the folds (`CLOTH_TURN_DRIFT`, 0.12 m per radian).
+- **Why it was jumpy:** the drift accumulated a fixed fraction of every step, so the folds streamed at walking pace and
+  jumped with every turn, with no ease in or out.
+- **Now** (`cloth-sway.ts`): `windDrift` is a damped spring (0.7 Hz, damping 0.55) chasing a target set by the walk
+  velocity (0.03 s of lag per m/s) and, much more weakly, the turn rate (0.005 m per rad/s), capped at 3.5 cm. The
+  cloth swings back as he sets off, eases, and settles when he stops. Tested without a GPU in `cloth-sway.test.ts`.

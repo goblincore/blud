@@ -10,6 +10,7 @@
 
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
+import { stepClothSway } from '../cloth-sway';
 import {
   wgslFn, positionWorld, cameraPosition, vec4, uniform, texture, texture3D, float,
   cameraProjectionMatrix, cameraViewMatrix, cameraNear, cameraFar, modelWorldMatrix, normalize, sub, mul, add, screenUV,
@@ -157,7 +158,7 @@ export interface ZombieGpuView {
    * structurally zero (wander translates on the floor), which is why the
    * packed channel is a vec2. Statue bodies leave the default (0, 0).
    */
-  setRootShift(x: number, z: number, bodyYaw?: number): void;
+  setRootShift(x: number, z: number, bodyYaw?: number, dt?: number): void;
   /**
    * Swaps the face sheet, its crop rect (as uv scale/offset) and its mean.
    *
@@ -2498,13 +2499,6 @@ function warnNearReach(u: MarchUniforms): void {
     + `(aaCfg ${a.toArray().map(v => +v.toPrecision(3)).join(', ')}; last-step ${u.perfCfg.value.w})`);
 }
 
-/** CLOTH WALK DRIFT (2026-10-26): how far the shell folds' lattice falls back per metre the body walks (0.35: about
- *  one 0.29 m fold a second at a 1 m/s walk). */
-export const CLOTH_WALK_DRIFT = 0.35;
-/** CLOTH TURN DRIFT: metres the folds' lattice moves across the body per radian it turns. */
-export const CLOTH_TURN_DRIFT = 0.12;
-/** A root move longer than this between two setRootShift calls is a jump (spawn, teleport), not a step. */
-const CLOTH_DRIFT_MAX_STEP = 0.5;
 
 export function createZombieGpuView(
   body: BuildResult, opts: GpuViewOpts = {},
@@ -3057,8 +3051,9 @@ export function createZombieGpuView(
   }
 
   const mainSegmentVolume = material as unknown as MaterialWithSegmentVolume;
-  /** The last root position setRootShift saw (cloth walk drift). */
+  /** The last root position setRootShift saw, and the cloth sway spring's velocity (CLOTH SWAY). */
   let driftPrev: [number, number, number] | null = null;
+  const swayVel: [number, number] = [0, 0];
   return {
     object: mesh,
     coneObject: coneMesh,
@@ -3185,7 +3180,7 @@ export function createZombieGpuView(
       old.dispose();
       refineTailSync();
     },
-    setRootShift(x, z, bodyYaw = 0) {
+    setRootShift(x, z, bodyYaw = 0, dt = 1 / 60) {
       u.faceCfg3.value.z = x; u.faceCfg3.value.w = z;
       // Free lodCfg channel: the noise frame's yaw (see NOISE_LOCAL).
       u.lodCfg.value.z = bodyYaw;
@@ -3193,22 +3188,14 @@ export function createZombieGpuView(
       // pre-pass. Written HERE so there is a single place that decides what
       // "the body's frame" is — see bodyAnchor's declaration.
       u.bodyAnchor.value.set(x, bodyYaw, z);
-      // CLOTH WALK DRIFT: the shell folds' lattice falls back by CLOTH_WALK_DRIFT of each step the body takes, so a
-      // walking body's folds stream back through the cloth (air pushing the robe) instead of riding it frozen. The
-      // game never set windDrift before (only the lab's wind did), and the lab still overwrites it every frame. A
-      // jump (spawn, teleport) is not a step.
-      // TURNING drifts it too: CLOTH_TURN_DRIFT metres per radian, across the body (the folds swing round as he turns).
+      // CLOTH SWAY: windDrift is a damped spring chasing a target set by how the body moves — back from its walk, across
+      // it from its turn — so the folds swing out, ease, and settle back to rest when it stops. The game never set
+      // windDrift before (only the lab's wind did, and the lab still overwrites it every frame). A jump (spawn,
+      // teleport) is not a step.
       if (driftPrev) {
-        const dx = x - driftPrev[0], dz = z - driftPrev[1];
-        if (Math.hypot(dx, dz) < CLOTH_DRIFT_MAX_STEP) {
-          u.windDrift.value.x -= dx * CLOTH_WALK_DRIFT;
-          u.windDrift.value.z -= dz * CLOTH_WALK_DRIFT;
-        }
-        const dy = Math.atan2(Math.sin(bodyYaw - driftPrev[2]), Math.cos(bodyYaw - driftPrev[2]));
-        if (Math.abs(dy) < 1) {
-          u.windDrift.value.x += Math.cos(bodyYaw) * dy * CLOTH_TURN_DRIFT;
-          u.windDrift.value.z -= Math.sin(bodyYaw) * dy * CLOTH_TURN_DRIFT;
-        }
+        const d = u.windDrift.value;
+        const r = stepClothSway({ x: d.x, z: d.z, vx: swayVel[0], vz: swayVel[1] }, driftPrev, [x, z, bodyYaw], dt);
+        d.x = r.x; d.z = r.z; swayVel[0] = r.vx; swayVel[1] = r.vz;
       }
       driftPrev = [x, z, bodyYaw];
       syncRecord();

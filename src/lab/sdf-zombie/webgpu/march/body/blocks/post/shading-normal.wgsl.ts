@@ -96,7 +96,7 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
   // CLOTH FOLDS (2026-10-26, docs/dev-notes/2026-10-26-sdf-cloth-cost/): hanging pleats in the SHADING only, so the
   // march pays nothing — the field's own warp= folds are a centimetre and vanish at game range. Nine folds round the
   // hit shell's own axis, deepening toward its open end (s 0 at a, 1 at b), wandering a little, with a wave that runs
-  // down them as the body walks (the walk drift, |windDrift.xz|, zombie-gpu setRootShift). The pattern lives in the
+  // down them as the body sways (|windDrift.xz|, the eased spring in cloth-sway.ts). The pattern lives in the
   // REST frame (anchor and the rest axis), so it rides the cloth; the tilt is applied round the POSED axis.
   // A shell with no axis (a == b: the hood's ellipsoid) folds round its OPENING instead: the rest axis is body-forward
   // and the posed one its clip normal, so the cloth gathers round the face and the folds run back from it.
