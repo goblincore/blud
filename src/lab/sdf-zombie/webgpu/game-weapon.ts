@@ -335,6 +335,17 @@ export function carryFreshShots(list: Projectile[], delta: Vec3): void {
   }
 }
 
+/** Distance from point `c` to the segment [from → to] (closest approach, clamped to the segment). The
+ *  player pellets' actor broad phase uses it; it used to divide the clamped fraction by the length a
+ *  second time, so on steps longer than ~1 m (80 m/s pellets at < ~48 fps) a body right on the line
+ *  could be rejected and the whole volley flew through it. */
+export function segmentPointDistance(from: Vec3, to: Vec3, c: Vec3): number {
+  const dx = to[0] - from[0], dy = to[1] - from[1], dz = to[2] - from[2];
+  const len2 = dx * dx + dy * dy + dz * dz;
+  const u = len2 > 0 ? Math.max(0, Math.min(1, ((c[0] - from[0]) * dx + (c[1] - from[1]) * dy + (c[2] - from[2]) * dz) / len2)) : 0;
+  return Math.hypot(from[0] + dx * u - c[0], from[1] + dy * u - c[1], from[2] + dz * u - c[2]);
+}
+
 /** First crossing of segment [from → to] into the box [min, max] (slab test), as the hit point; null if
  *  the segment misses it. A segment STARTING inside the box hits at `from`. The player's pellets test the
  *  room-level colliders with this, not with an end-point-in-box test: at 80 m/s a frame's step (1.3 m at

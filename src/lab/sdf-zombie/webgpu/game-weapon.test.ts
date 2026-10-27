@@ -10,7 +10,7 @@ import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { ZOMBIE } from '../body';
 import { sdBody, sdPrimitive } from '../validate';
 import {
-  GRAPESHOT, PLAYER_GRAPESHOT, SLUG, applyRigidYaw, segmentBoxHit, carryFreshShots, expired, fitRestToPose, mulberry32,
+  GRAPESHOT, PLAYER_GRAPESHOT, SLUG, applyRigidYaw, segmentBoxHit, segmentPointDistance, carryFreshShots, expired, fitRestToPose, mulberry32,
   spawnPellets, spawnRound, CHAINGUN_ROUND, spawnSlug, spreadDirections, stepProjectiles, traceProjectile,
   woundFromPellet, woundFromSlug,
 } from './game-weapon';
@@ -450,5 +450,21 @@ describe('spawnRound (the chaingun)', () => {
   it('is deterministic per seed and differs across seeds', () => {
     expect(spawnRound([0, 0, 0], FWD, 7).vel).toEqual(spawnRound([0, 0, 0], FWD, 7).vel);
     expect(spawnRound([0, 0, 0], FWD, 7).vel).not.toEqual(spawnRound([0, 0, 0], FWD, 8).vel);
+  });
+});
+
+describe('segmentPointDistance (the pellet-vs-actor broad phase)', () => {
+  it('finds a body on the line far along a long step (the old double division rejected it)', () => {
+    // A 3.3 m step (80 m/s at ~24 fps, or a sector first step from the eye): torso 2.5 m along it.
+    expect(segmentPointDistance([0, 1, 0], [0, 1, 3.3], [0, 1, 2.5])).toBeCloseTo(0, 9);
+    // The old maths put the closest point at 2.5/3.3 m along → 1.74 m off: past the 1.35 m reject.
+  });
+  it('clamps to the ends and measures off-line distance', () => {
+    expect(segmentPointDistance([0, 0, 0], [0, 0, 4], [0, 0, 6])).toBeCloseTo(2, 9);
+    expect(segmentPointDistance([0, 0, 0], [0, 0, 4], [0, 0, -1])).toBeCloseTo(1, 9);
+    expect(segmentPointDistance([0, 0, 0], [0, 0, 4], [1, 0, 2])).toBeCloseTo(1, 9);
+  });
+  it('a zero-length step measures from its point', () => {
+    expect(segmentPointDistance([1, 2, 3], [1, 2, 3], [1, 2, 5])).toBeCloseTo(2, 9);
   });
 });

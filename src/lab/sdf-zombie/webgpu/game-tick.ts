@@ -58,7 +58,7 @@ import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejected
 import { stepVoid } from './game-void';
 import { stepBulletTimeFx } from './game-bullet-time';
 import { airScaleAt, scalesAt, stepBulletTime } from '../bullet-time';
-import { carryFreshShots, expired, segmentBoxHit, stepProjectiles, traceProjectile } from './game-weapon';
+import { carryFreshShots, expired, segmentBoxHit, segmentPointDistance, stepProjectiles, traceProjectile } from './game-weapon';
 import { aimArms, aimFrustum, boreFrameInRig, breechInRig, hideTracer, newTracerView, placeTracer, stepWeaponSlots } from './game-weapon-rig';
 import { woundStreamId } from './game-wound-streams';
 import { trailStreamId } from './game-wound-vfx';
@@ -995,18 +995,11 @@ export function tick(ctx: GameContext, dt: number) {
         let bestDist = Infinity;
         let hitActor: ZombieActor | null = null;
         let hitPoint: Vec3 | null = null;
-        const segLen = Math.hypot(p.pos[0] - from[0], p.pos[1] - from[1], p.pos[2] - from[2]);
         for (const a of ctx.world.actors) {
           const c = a.posed().clusters.find(cc => cc.limb === 'torso')?.center;
           if (!c) continue;
           // Segment-to-centre distance (clamped closest approach).
-          const t = Math.max(0, Math.min(segLen,
-            ((c[0]-from[0])*(p.pos[0]-from[0]) + (c[1]-from[1])*(p.pos[1]-from[1]) + (c[2]-from[2])*(p.pos[2]-from[2]))
-            / (segLen * segLen || 1)));
-          const qx = from[0] + (p.pos[0]-from[0]) * t / (segLen || 1);
-          const qy = from[1] + (p.pos[1]-from[1]) * t / (segLen || 1);
-          const qz = from[2] + (p.pos[2]-from[2]) * t / (segLen || 1);
-          if (Math.hypot(qx-c[0], qy-c[1], qz-c[2]) > 1.35) continue;
+          if (segmentPointDistance(from, p.pos, c) > 1.35) continue;
           const posedA = a.posed();
           const hp = traceProjectile(from, p.pos, q => sdBody(q, posedA));
           if (!hp) continue;
