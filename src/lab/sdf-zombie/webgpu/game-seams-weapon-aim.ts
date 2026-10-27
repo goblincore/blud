@@ -15,6 +15,8 @@ import { eyeOf } from './game-player';
 import { standingFloor } from './level-ground';
 import { WEAPON_SLOTS, requestSlot, type WeaponSlot } from './game-weapon-slots';
 import { BOB, FREE_AIM } from './free-aim';
+import { SLOT_AIM_STYLE } from './aim-style';
+import { setFreeAimOverride } from './game-player-input';
 import { predictSlugHitNow } from './game-hit-trace';
 import { spawnSlug } from './game-weapon';
 import type { Vec3 } from '../types';
@@ -32,7 +34,11 @@ export function createWeaponAimSeams(ctx: GameContext) {
      *  with no shot, no ammo and no weapon ownership (Night Train's player has no shotgun at the
      *  coat check). Hand-step at dt 0 to hold it. */
     muzzleFlash: () => { ctx.weapon.flashAge = 0; return !!ctx.weapon.flashLight; },
-    setFreeAim(on: boolean) { ctx.player.freeAimOn = on; ctx.weapon.aim = { x: 0, y: 0 }; updateHud(ctx); return ctx.player.freeAimOn; },
+    /** Free aim on/off for EVERY weapon (the G session override), or null to hand it back to each weapon's own
+     *  style (aim-style.ts: the shotgun mouselook, the rest free aim). Re-centres the reticle. Returns the result. */
+    setFreeAim(on: boolean | null) { setFreeAimOverride(ctx, on); ctx.weapon.aim = { x: 0, y: 0 }; return ctx.player.freeAimOn; },
+    /** The aim scheme in force: whether free aim is on, the session override, and each weapon's own style. */
+    aimStyle: () => ({ freeAim: ctx.player.freeAimOn, override: ctx.player.freeAimOverride, slot: ctx.weapon.slotState.target, styles: { ...SLOT_AIM_STYLE } }),
     /** Show/hide the crosshair and the strafe steering cursor (key C). Aiming is unchanged. Returns the new visibility. */
     setReticleVisible(on: boolean) { ctx.player.reticleHidden = !on; return !ctx.player.reticleHidden; },
     setInfiniteAmmo: (on: boolean) => {

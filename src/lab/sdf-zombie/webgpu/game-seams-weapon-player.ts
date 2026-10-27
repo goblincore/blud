@@ -68,6 +68,14 @@ export function createWeaponPlayerSeams(ctx: GameContext) {
     /** Free-aim seam, for the gate and for A/B by hand. */
     get freeAim() { return ctx.player.freeAimOn; },
     get aimPoint() { return { x: ctx.weapon.aim.x, y: ctx.weapon.aim.y }; },
+    /** Queue a mouse delta (pixels) exactly as the pointer-locked mousemove does: the next tick consumes it through
+     *  readInputFrame -> applyInputFrame, so free aim moves the reticle and mouselook turns the view. For headless
+     *  drivers, where pointer lock is refused. Returns the queued total. */
+    mouseDelta(dx: number, dy = 0) {
+      if (Number.isFinite(dx)) ctx.player.pendingDx += dx;
+      if (Number.isFinite(dy)) ctx.player.pendingDy += dy;
+      return { dx: ctx.player.pendingDx, dy: ctx.player.pendingDy };
+    },
     setAimPoint(x: number, y: number) {
       ctx.weapon.aim = { x: Math.min(1, Math.max(-1, x)), y: Math.min(1, Math.max(-1, y)) };
       return { x: ctx.weapon.aim.x, y: ctx.weapon.aim.y };

@@ -27,6 +27,7 @@ import { bodyInSight } from './actor-sight';
 import { connectionBlobsForSim } from './blood-connections';
 import { type EncounterAgent } from './encounter-director';
 import { reticleNdc } from './fisheye';
+import { easeAimToCentre } from './aim-style';
 import { approachAngle, approachBob, approachStrafe, bobPose, pivotOffset, shotAim, strafeSpeed01, turnFromAim, viewmodelFrustum, weaponAngles, weaponSlide } from './free-aim';
 import { segmentHitsBox, type ZombieActor } from './game-actor';
 import { registerBleed, stepGutRopes, throwGunFlesh } from './game-bleed';
@@ -555,6 +556,11 @@ export function tick(ctx: GameContext, dt: number) {
     ctx.player.player.yaw += turn.yaw;
     ctx.player.player.pitch = Math.min(PLAYER.pitchLimit,
       Math.max(-PLAYER.pitchLimit, ctx.player.player.pitch + turn.pitch));
+  } else {
+    // MOUSELOOK (the shotgun's style, or G off — aim-style.ts): the crosshair belongs at the centre. A reticle left
+    // off-centre by a switch out of free aim eases home; the gun, crosshair and shot all follow it, the camera does
+    // not move, so the hand-over has no jump. At the centre this is a no-op.
+    ctx.weapon.aim = easeAimToCentre(ctx.weapon.aim, aimDt);
   }
   {
     // The gun follows the SHOT aim, not the steering reticle: the same point
@@ -563,7 +569,9 @@ export function tick(ctx: GameContext, dt: number) {
     // exactly that scale (free-aim.ts viewmodelFrustum).
     const shot = shotAim(ctx.weapon.aim, ctx.player.strafeAmount);
     const vf = viewmodelFrustum(aimFrustum(ctx), ctx.weapon.fovRig?.scale.x ?? 1);
-    const w = ctx.player.freeAimOn ? weaponAngles(shot, vf) : { yawDeg: 0, pitchDeg: 0 };
+    // Off-centre in mouselook only while easing home (above), so the lean eases out with it.
+    const aimed = ctx.player.freeAimOn || ctx.weapon.aim.x !== 0 || ctx.weapon.aim.y !== 0;
+    const w = aimed ? weaponAngles(shot, vf) : { yawDeg: 0, pitchDeg: 0 };
     ctx.weapon.yawDeg = approachAngle(ctx.weapon.yawDeg, w.yawDeg, aimDt);
     ctx.weapon.pitchDeg = approachAngle(ctx.weapon.pitchDeg, w.pitchDeg, aimDt);
     // ...and the weapon CARRIES across the frame as well as turning. Rotation
@@ -571,7 +579,7 @@ export function tick(ctx: GameContext, dt: number) {
     // that is what pivoting about the grip means -- so the gun read as bolted
     // to the camera with a hinged barrel (owner report). approachAngle is a
     // plain exponential catch-up, so it smooths metres as happily as degrees.
-    const s = ctx.player.freeAimOn ? weaponSlide(shot) : { x: 0, y: 0 };
+    const s = aimed ? weaponSlide(shot) : { x: 0, y: 0 };
     ctx.weapon.slideXm = approachAngle(ctx.weapon.slideXm, s.x, aimDt);
     ctx.weapon.slideYm = approachAngle(ctx.weapon.slideYm, s.y, aimDt);
   }
@@ -624,8 +632,9 @@ export function tick(ctx: GameContext, dt: number) {
   ctx.weapon.headDamage?.tick(dt);
   stepDynamite(ctx, dt);
   if (ctx.player.reticleEl) {
-    ctx.player.reticleEl.style.display = ctx.player.freeAimOn && !ctx.player.reticleHidden && !ctx.world.sequence?.started ? 'block' : 'none';
-    if (ctx.player.freeAimOn) {
+    // Shown in mouselook too (a conventional centre crosshair; it rides the reticle home after a switch).
+    ctx.player.reticleEl.style.display = !ctx.player.reticleHidden && !ctx.world.sequence?.started ? 'block' : 'none';
+    {
       // Position against the CANVAS, not the window. Percent-of-viewport put
       // the reticle outside the render area whenever the canvas did not fill
       // the page -- so the thing marking where you are aiming sat somewhere
@@ -642,7 +651,9 @@ export function tick(ctx: GameContext, dt: number) {
       const p = reticleNdc(shot, ctx.render.postAa.lens);
       ctx.player.reticleEl.style.left = `${r.left + r.width * (0.5 + p.x * 0.5)}px`;
       ctx.player.reticleEl.style.top = `${r.top + r.height * (0.5 - p.y * 0.5)}px`;
-      if (ctx.player.steerEl) {
+      if (ctx.player.steerEl && !ctx.player.freeAimOn) {
+        ctx.player.steerEl.style.display = 'none';   // mouselook: the mouse steers the camera, there is no cursor
+      } else if (ctx.player.steerEl) {
         // Shown only once it has come apart from the crosshair, fading in
         // with the separation so it never pops.
         const apart = Math.hypot(ctx.weapon.aim.x - shot.x, ctx.weapon.aim.y - shot.y);
@@ -653,8 +664,6 @@ export function tick(ctx: GameContext, dt: number) {
         ctx.player.steerEl.style.left = `${r.left + r.width * (0.5 + q.x * 0.5)}px`;
         ctx.player.steerEl.style.top = `${r.top + r.height * (0.5 - q.y * 0.5)}px`;
       }
-    } else if (ctx.player.steerEl) {
-      ctx.player.steerEl.style.display = 'none';
     }
   }
 

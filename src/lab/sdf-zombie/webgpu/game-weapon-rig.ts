@@ -275,7 +275,9 @@ export function aimDir(ctx: GameContext): Vec3 {
   const fwd: Vec3 = [
     Math.sin(ctx.player.player.yaw) * cp, Math.sin(ctx.player.player.pitch), -Math.cos(ctx.player.player.yaw) * cp,
   ];
-  if (!ctx.player.freeAimOn) return fwd;
+  // Mouselook (the shotgun's style, aim-style.ts) shoots down the view axis; the reticle offset only counts while
+  // it is still easing home after a switch out of free aim (game-tick.ts easeAimToCentre).
+  if (!ctx.player.freeAimOn && ctx.weapon.aim.x === 0 && ctx.weapon.aim.y === 0) return fwd;
   // FIRE THROUGH THE RETICLE. With free aim the reticle is the aim point, so
   // a shot down the camera's forward axis would land wherever the player
   // happens to be FACING rather than where they are AIMING -- the one thing
