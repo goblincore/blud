@@ -225,6 +225,7 @@ import { createImpactSplashLayer, type ImpactSplashLayer } from './impact-splash
 import { createGooPanel, type GooPanel } from './goo-panel';
 import { createBulletTimePanel } from './bullet-time-panel';
 import { applyBulletTimeTuning, bulletTimeFromParams } from '../bullet-time';
+import { adrenalineFromParams, applyAdrenalineTuning } from '../adrenaline';
 import { createVhsPanel, type VhsPanel } from './vhs-panel';
 import { createLightLayersPanel } from './light-layers-panel';
 import { listLook } from './light-list';
@@ -522,6 +523,9 @@ async function main() {
   {
     const bt = applyBulletTimeTuning(bulletTimeFromParams(ctx.boot.seedSearch));
     if (bt.rejected.length) console.warn(`[sdf-game] bullet time params refused: ${bt.rejected.join('; ')}`);
+    // ADRENALINE (adrenaline.ts ADRENALINE_PARAMS: ?adrenaline=0, ?adr_world= &c.), the same way.
+    const adr = applyAdrenalineTuning(adrenalineFromParams(ctx.boot.seedSearch));
+    if (adr.rejected.length) console.warn(`[sdf-game] adrenaline params refused: ${adr.rejected.join('; ')}`);
   }
 
   // LOADING SCREEN (spike program). The boot compiles for seconds before the

@@ -9,9 +9,34 @@
 //     player's own pellets only faintly (BULLET_TIME.ownWakeMul);
 //   * the GORE — blood-sim's boost (more, fatter, longer-lived droplets);
 //   * a cold vignette, so the mode reads at a glance.
+//   * ADRENALINE (adrenaline.ts), the automatic rush: its trigger, and a faint warm edge vignette.
 import { goreBoostAt, pickWakes, type WakeSource } from '../bullet-time';
+import { ADRENALINE, adrenalineFeedbackAt, triggerAdrenaline } from '../adrenaline';
 import { type GameContext } from './game-context';
 import { eyeOf } from './game-player';
+
+/** ADRENALINE's trigger: game-tick.ts's pellet loop (a round landed on an actor) and game-flail.ts's strike. */
+export function triggerAdrenalineRush(ctx: GameContext, by: 'shot' | 'flail'): void {
+  if (by === 'flail' && !ADRENALINE.flail) return;
+  if (triggerAdrenaline(ctx.player.adrenaline, ctx.player.bulletTime.on) && ctx.telemetry.telemetry.active) {
+    ctx.telemetry.telemetry.event('adrenaline', { by, phase: ctx.player.adrenaline.phase });
+  }
+}
+
+function stepAdrenalineFx(ctx: GameContext): void {
+  const o = adrenalineFeedbackAt(ctx.player.adrenaline.level);
+  if (!ctx.player.adrenalineEl) {
+    if (!(o > 0)) return;
+    const el = document.createElement('div');
+    el.setAttribute('style',
+      'position:fixed; inset:0; z-index:33; pointer-events:none; opacity:0;'
+      + ' background:radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(70,8,4,0.9) 100%);'
+      + ' mix-blend-mode:multiply;');
+    document.body.appendChild(el);
+    ctx.player.adrenalineEl = el;
+  }
+  ctx.player.adrenalineEl.style.opacity = String(o);
+}
 
 export function stepBulletTimeFx(ctx: GameContext): void {
   const bt = ctx.player.bulletTime;
@@ -28,6 +53,7 @@ export function stepBulletTimeFx(ctx: GameContext): void {
     }
   }
   if (typeof document === 'undefined') return;
+  stepAdrenalineFx(ctx);
   if (!ctx.player.bulletTimeEl) {
     if (!(bt.intensity > 0)) return;
     const el = document.createElement('div');

@@ -27,6 +27,7 @@ import type { DemoFrame } from './demo-recorder';
 import type { WeaponSlot } from './game-weapon-slots';
 import { makeHitFeedback, type HitFeedback } from '../player-hit-feedback';
 import { makeBulletTime, type BulletTimeState } from '../bullet-time';
+import { makeAdrenaline, type AdrenalineState } from '../adrenaline';
 
 export interface PlayerState {
   /** Center FOV handed to the fisheye lens, degrees; the lens and camera.fov
@@ -99,6 +100,9 @@ export interface PlayerState {
   bulletTime: BulletTimeState;
   /** Its vignette overlay, created lazily by the tick (game-bullet-time.ts). */
   bulletTimeEl: HTMLDivElement | null;
+  /** ADRENALINE (adrenaline.ts): the automatic rush a hit on an enemy sets off; and its vignette (game-bullet-time.ts). */
+  adrenaline: AdrenalineState;
+  adrenalineEl: HTMLDivElement | null;
 }
 
 /** Every call returns a fresh object, nested objects, arrays and sets included. */
@@ -134,6 +138,8 @@ export function makePlayerState(): PlayerState {
     hitFlashEl: null,
     bulletTime: makeBulletTime(),
     bulletTimeEl: null,
+    adrenaline: makeAdrenaline(),
+    adrenalineEl: null,
   };
 }
 

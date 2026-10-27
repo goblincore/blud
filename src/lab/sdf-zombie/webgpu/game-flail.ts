@@ -50,6 +50,7 @@ import {
   stepImpact, timeScale,
 } from './flail-impact';
 import { bloodHit, makeFlailBlood, setBloodLevel, stepBlood } from './flail-blood';
+import { triggerAdrenalineRush } from './game-bullet-time';
 
 const FLAIL_GLB = '/assets/lab/flail.glb';
 
@@ -597,6 +598,7 @@ export function createFlail(ctx: GameContext, deps: FlailDeps): FlailWeapon {
       // punch, rig kick and chain relax (setImpactFx). Replaces the old 0.02 rad recoilPitch kick.
       contact(impact, impactKick(side, anyHead), { time: hitStopOn, view: impactFxOn });
       contacts++;
+      triggerAdrenalineRush(ctx, 'flail');   // ADRENALINE (adrenaline.ts): a connecting strike starts the rush too
       // BLOOD (flail-blood.ts): one contact, one dose — ×1.5 on H, ×1.3 when any hit was a head hit.
       bloodHit(blood, side, anyHead);
       bloodU.value = blood.level;

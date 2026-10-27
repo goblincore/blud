@@ -11,6 +11,9 @@
 // the ?bt_* params), and the value shown is read BACK from BULLET_TIME. COPY
 // emits the __sdfGame.bulletTime({...}) call that reproduces the state.
 //
+// ADRENALINE (adrenaline.ts, the automatic rush on a hit) has its own section below, the same way: rows from
+// ADRENALINE_RANGES plus its two switches, writes through applyAdrenalineTuning, read back from ADRENALINE.
+//
 // Ships visible and collapsed beside LIGHT LAYERS (top-left; the top-right row
 // is full).
 
@@ -18,6 +21,10 @@ import { createPanelShell } from './panel-chrome';
 import {
   BULLET_TIME, BULLET_TIME_KNOBS, BULLET_TIME_RANGES, applyBulletTimeTuning, bulletTimeKnobs, type BulletTimeKnob,
 } from '../bullet-time';
+import {
+  ADRENALINE, ADRENALINE_KNOBS, ADRENALINE_RANGES, ADRENALINE_SWITCHES, adrenalineKnobs, applyAdrenalineTuning,
+  type AdrenalineKnob, type AdrenalineValues,
+} from '../adrenaline';
 
 export interface BulletTimePanel {
   readonly el: HTMLElement;
@@ -43,6 +50,18 @@ const HINTS: Record<BulletTimeKnob, string> = {
   ownWakeMul: 'The player\'s own pellets\' wake, as a fraction of wakeStrength.',
 };
 
+const ADR_HINTS: Record<AdrenalineKnob | typeof ADRENALINE_SWITCHES[number], string> = {
+  on: 'The automatic rush when a shot (or the flail) hits an enemy.',
+  flail: 'A connecting flail strike triggers it too.',
+  worldScale: 'The world fully in the rush (explicit bullet time is 0.2).',
+  playerScale: 'The player\'s move, aim, fire and reload fully in.',
+  shotScale: 'The player\'s own pellets in flight.',
+  easeInSec: 'Real seconds to ease in.',
+  holdSec: 'Real seconds fully in; a new hit restarts it (never deepens).',
+  easeOutSec: 'Real seconds to ease back to normal time.',
+  feedback: 'Peak opacity of the warm edge vignette (0 = none).',
+};
+
 function stepFor(span: number): number {
   if (span <= 0.25) return 0.001;
   if (span <= 1) return 0.01;
@@ -53,6 +72,15 @@ function stepFor(span: number): number {
 export function emitBulletTime(values: Record<BulletTimeKnob, number> = bulletTimeKnobs()): string {
   const pairs = BULLET_TIME_KNOBS.map(k => `${k}: ${Math.round(values[k] * 1000) / 1000}`);
   return `__sdfGame.bulletTime({ ${pairs.join(', ')} })`;
+}
+
+/** ADRENALINE's tuning as the console call that reproduces it. */
+export function emitAdrenaline(values: AdrenalineValues = adrenalineKnobs()): string {
+  const pairs = [
+    ...ADRENALINE_SWITCHES.map(k => `${k}: ${values[k]}`),
+    ...ADRENALINE_KNOBS.map(k => `${k}: ${Math.round(values[k] * 1000) / 1000}`),
+  ];
+  return `__sdfGame.adrenaline({ ${pairs.join(', ')} })`;
 }
 
 export function createBulletTimePanel(opts: { left?: number; top?: number } = {}): BulletTimePanel {
@@ -92,11 +120,60 @@ export function createBulletTimePanel(opts: { left?: number; top?: number } = {}
     rows.push({ key, input, out });
   }
 
+  const adrHead = document.createElement('div');
+  adrHead.textContent = 'ADRENALINE — auto rush on a hit';
+  adrHead.setAttribute('style', 'color:#d8a07f; margin:10px 0 5px; border-top:1px solid #3a2f2d; padding-top:6px;');
+  body.appendChild(adrHead);
+  const adrChecks: { key: typeof ADRENALINE_SWITCHES[number]; input: HTMLInputElement }[] = [];
+  for (const key of ADRENALINE_SWITCHES) {
+    const row = document.createElement('label');
+    row.setAttribute('style', 'display:flex; align-items:center; gap:6px; margin-bottom:3px; cursor:pointer;');
+    row.title = ADR_HINTS[key];
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = ADRENALINE[key];
+    input.addEventListener('change', () => { applyAdrenalineTuning({ [key]: input.checked }); input.checked = ADRENALINE[key]; });
+    const name = document.createElement('span');
+    name.textContent = key;
+    row.append(input, name);
+    body.appendChild(row);
+    adrChecks.push({ key, input });
+  }
+  const adrRows: { key: AdrenalineKnob; input: HTMLInputElement; out: HTMLSpanElement }[] = [];
+  for (const key of ADRENALINE_KNOBS) {
+    const [lo, hi] = ADRENALINE_RANGES[key];
+    const row = document.createElement('div');
+    row.setAttribute('style', 'display:flex; align-items:center; gap:6px; margin-bottom:3px;');
+    row.title = ADR_HINTS[key];
+    const name = document.createElement('span');
+    name.textContent = key;
+    name.setAttribute('style', 'width:88px; flex:none; overflow:hidden; text-overflow:ellipsis;');
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.min = String(lo);
+    input.max = String(hi);
+    input.step = String(hi - lo <= 1 ? 0.01 : 0.005);
+    input.value = String(ADRENALINE[key]);
+    input.setAttribute('style', 'flex:1; min-width:0; accent-color:#c0704f;');
+    const out = document.createElement('span');
+    out.setAttribute('style', 'width:38px; flex:none; text-align:right; color:#e8b090;');
+    out.textContent = fmt(ADRENALINE[key]);
+    input.addEventListener('input', () => {
+      applyAdrenalineTuning({ [key]: parseFloat(input.value) });
+      out.textContent = fmt(ADRENALINE[key]);   // read BACK
+    });
+    row.append(name, input, out);
+    body.appendChild(row);
+    adrRows.push({ key, input, out });
+  }
+
   const btnRow = document.createElement('div');
   btnRow.setAttribute('style', 'display:flex; gap:5px; flex-wrap:wrap; margin-top:8px;');
-  btnRow.appendChild(button('defaults', () => { applyBulletTimeTuning({ reset: true }); refresh(); }));
+  btnRow.appendChild(button('defaults', () => {
+    applyBulletTimeTuning({ reset: true }); applyAdrenalineTuning({ reset: true }); refresh();
+  }));
   btnRow.appendChild(button('copy', () => {
-    const text = emitBulletTime();
+    const text = `${emitBulletTime()}; ${emitAdrenaline()}`;
     void navigator.clipboard?.writeText(text).catch(() => { /* non-secure origin */ });
     // eslint-disable-next-line no-console
     console.log(text);
@@ -107,6 +184,11 @@ export function createBulletTimePanel(opts: { left?: number; top?: number } = {}
     for (const r of rows) {
       r.input.value = String(BULLET_TIME[r.key]);
       r.out.textContent = fmt(BULLET_TIME[r.key]);
+    }
+    for (const c of adrChecks) c.input.checked = ADRENALINE[c.key];
+    for (const r of adrRows) {
+      r.input.value = String(ADRENALINE[r.key]);
+      r.out.textContent = fmt(ADRENALINE[r.key]);
     }
   }
 

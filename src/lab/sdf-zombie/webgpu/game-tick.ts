@@ -56,8 +56,9 @@ import { applyEmergenceCamera, stepEmergence } from './game-emergence';
 import { applyTrainCamera, lightSteam, stepTrain } from './game-train';
 import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejectedShell, extractStage, extractorOffset, fireRecoil, insertStage, loadCarry, loadHold, recoilAge, reloadPhaseAt, reloadPose, stagedShellCenter, supportHandPose, topLeverAngle, type HandDelta, type HandHold } from './game-viewmodel';
 import { stepVoid } from './game-void';
-import { stepBulletTimeFx } from './game-bullet-time';
+import { stepBulletTimeFx, triggerAdrenalineRush } from './game-bullet-time';
 import { airScaleAt, scalesAt, stepBulletTime } from '../bullet-time';
+import { adrenalineScalesAt, combineScales, stepAdrenaline } from '../adrenaline';
 import { carryFreshShots, expired, segmentBoxHit, segmentPointDistance, stepProjectiles, traceProjectile } from './game-weapon';
 import { aimArms, aimFrustum, boreFrameInRig, breechInRig, hideTracer, newTracerView, placeTracer, stepWeaponSlots } from './game-weapon-rig';
 import { woundStreamId } from './game-wound-streams';
@@ -136,8 +137,12 @@ export function tick(ctx: GameContext, dt: number) {
   // toggle replays from the recorded keys, so the replay re-derives the
   // scales; a replay under a retuned BULLET_TIME differs, like any tuning).
   const rdt = dt;
-  dt *= stepBulletTime(ctx.player.bulletTime, rdt);
-  const btScales = scalesAt(ctx.player.bulletTime.intensity);
+  // ADRENALINE (adrenaline.ts): the automatic rush a player hit on an enemy sets off (triggered below, in the pellet
+  // loop, and by a flail strike). Stepped on the same real dt; per channel the slower of it and bullet time wins.
+  stepAdrenaline(ctx.player.adrenaline, rdt, ctx.player.bulletTime.on);
+  const btScales = combineScales(stepBulletTime(ctx.player.bulletTime, rdt),
+    scalesAt(ctx.player.bulletTime.intensity), adrenalineScalesAt(ctx.player.adrenaline.level));
+  dt *= btScales.world;
   const moveDt = rdt * btScales.move;
   const aimDt = rdt * btScales.aim;
   const fireDt = rdt * btScales.fire;
@@ -1055,6 +1060,8 @@ export function tick(ctx: GameContext, dt: number) {
       if (wallHit) dead = true;
       if (dead) ctx.weapon.pellets.splice(i, 1);
     }
+    // ADRENALINE: a round on an actor this frame (not a drum, a gib or a wall) starts or refreshes the rush.
+    if (hitThisFrame.size > 0) triggerAdrenalineRush(ctx, 'shot');
     const flushTiming = ctx.telemetry.telemetry.begin();
     for (const a of hitThisFrame) a.endHits();
     if (ctx.telemetry.telemetry.active) for (const a of hitThisFrame) ctx.telemetry.telemetry.event('actor-wounds', {
