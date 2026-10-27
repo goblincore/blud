@@ -455,3 +455,18 @@ close-up's prim work. A working analytic normal should return **20-25% of close-
 - `src/lab/sdf-zombie/webgpu/cloth-proxy.ts` (+ test): the proxy mesh. Containment is argued in its header.
 - `scripts/cloth-cost.mjs` (bench) and `scripts/cloth-cost-game.mjs` (game): the drivers. Both have `DUMP=1`, and
   `TIMING=1` on the bench driver.
+
+## 2026-10-27: the "layered" hood edge was a groove in the shell rim
+
+![before / after](hood-rim-groove-fix.png)
+
+The owner still saw the hood opening as a layered cut. The debug normals (`setNormalGradientDebug(1)`) showed
+several bands of normals across the edge, and they were still there with the shading folds off. They went away with
+`rim=0`. The cause was `sdShell`'s rim term, `max(max(sheet, plane), rim - length(vec2(sheet, plane)))`. That term
+does not round the edge: it hollows out a groove of radius `rim` along it. The field rises to `rim` at the corner,
+then falls back. This has been in place since shells first landed.
+
+The fix is the standard rounded intersection, `min(-rim, max) + length(max(vec2(sheet + rim, plane + rim), 0))`,
+which gives a convex bullnose and leaves both flat faces where they were. It is never below the hard cut, so the
+hull and the cloth proxies still contain it. `shell.test.ts` now checks that the edge is monotonic, a test the old
+formula fails. This fixes every shell edge in the cast (hems, cuffs, capelets), not only the hood.
