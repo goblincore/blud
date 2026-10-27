@@ -12,7 +12,7 @@ exports[`packBody byte pin > broodmother.blob packs the pinned bytes 1`] = `"bc1
 
 exports[`packBody byte pin > butcher.blob packs the pinned bytes 1`] = `"1536a8164d9c26fb"`;
 
-exports[`packBody byte pin > chair.blob packs the pinned bytes 1`] = `"8cf1065a59e66798"`;
+exports[`packBody byte pin > chair.blob packs the pinned bytes 1`] = `"48c957aee509143e"`;
 
 exports[`packBody byte pin > clown.blob packs the pinned bytes 1`] = `"8ec4d3949e16bc59"`;
 
@@ -34,7 +34,7 @@ exports[`packBody byte pin > female.blob packs the pinned bytes 1`] = `"fda78400
 
 exports[`packBody byte pin > flayer.blob packs the pinned bytes 1`] = `"523ae5937ba479b7"`;
 
-exports[`packBody byte pin > gamer.blob packs the pinned bytes 1`] = `"96f9fbb9d21e2150"`;
+exports[`packBody byte pin > gamer.blob packs the pinned bytes 1`] = `"fe65940f15b27cda"`;
 
 exports[`packBody byte pin > gargoyle.blob packs the pinned bytes 1`] = `"5b1bfc98c92f308e"`;
 
