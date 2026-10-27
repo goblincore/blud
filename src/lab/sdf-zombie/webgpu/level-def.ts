@@ -84,8 +84,10 @@ export interface LevelTunnel extends TunnelDef { floor: number }
 export interface StairDef { id: string; up: '+x' | '-x' | '+z' | '-z'; box: Aabb }
 export interface WindowDef { id: string; view: string; room: number; side: WallSide; box: Aabb }
 export interface PickupDef { id: string; item: PickupItem; pos: Vec3 }
-export type SpawnKind = 'zombie' | 'soldier' | 'cultist' | 'juggernaut' | 'warbull' | 'deadeye' | 'butcher' | 'flayer';
-export const SPAWN_KINDS: readonly SpawnKind[] = ['zombie', 'soldier', 'cultist', 'juggernaut', 'warbull', 'deadeye', 'butcher', 'flayer'];
+/** A spawn's kind is the registry character it spawns (game-spawn.ts spawnAll). `teratoma` is the floater
+ *  (2026-10-27, E1M1 overrides): it hovers over the floor under it and walks the same sector navigation. */
+export type SpawnKind = 'zombie' | 'soldier' | 'cultist' | 'juggernaut' | 'warbull' | 'deadeye' | 'butcher' | 'flayer' | 'teratoma';
+export const SPAWN_KINDS: readonly SpawnKind[] = ['zombie', 'soldier', 'cultist', 'juggernaut', 'warbull', 'deadeye', 'butcher', 'flayer', 'teratoma'];
 export interface SpawnDef { id: string; kind: SpawnKind; pos: Vec3; yaw: number }
 export interface GraveDef { id: string; wave: number; pos: Vec3; yaw: number }
 export interface BellDef { id: string; pos: Vec3; radius: number }

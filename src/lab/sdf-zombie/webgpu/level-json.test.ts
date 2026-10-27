@@ -41,7 +41,7 @@ describe('parseLevelJson: two-rooms fixture', () => {
     expect(() => parseLevelJson(fixture('two-rooms'), { state: 'party' })).toThrow('state party');
   });
 
-  it.each(['deadeye', 'butcher', 'flayer'])('accepts a %s spawn (the zombieman variants) without counting a soldier', kind => {
+  it.each(['deadeye', 'butcher', 'flayer', 'teratoma'])('accepts a %s spawn (the zombieman variants, the floater) without counting a soldier', kind => {
     const f = fixture('two-rooms');
     f.spawns[0].kind = kind;
     const L = parseLevelJson(f);
@@ -53,7 +53,7 @@ describe('parseLevelJson: two-rooms fixture', () => {
     const f = fixture('two-rooms');
     f.spawns[0].kind = 'imp';
     expect(() => parseLevelJson(f))
-      .toThrow('spawn z1: kind must be zombie, soldier, cultist, juggernaut, warbull, deadeye, butcher or flayer');
+      .toThrow('spawn z1: kind must be zombie, soldier, cultist, juggernaut, warbull, deadeye, butcher, flayer or teratoma');
   });
 });
 

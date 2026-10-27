@@ -12,6 +12,10 @@ tagged) are written OPEN and remote floor-lowers LOWERED (plan 2 makes them move
 monsters (spawns), pickups and an exit trigger in front of each exit switch. Plan 3b writes Doom's
 exploding barrels as our toxic drums (`barrels`, on every skill: they are scenery; multiplayer-only
 ones are still left out). Other things (decorations, keys, ...) are skipped and counted.
+
+Hand-written edits (ours, committed): scripts/levels/overrides/<map>.json is applied when it exists
+(`--overrides PATH` picks another, `--no-overrides` skips it); format in doom_overrides.py. Sector
+patches land before lights and things are placed; override spawns are added after Doom's.
 """
 from __future__ import annotations
 
@@ -23,6 +27,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import doom_overrides  # noqa: E402
 from doom_tables import (  # noqa: E402
     DOOR_SPECIALS, EXIT_SPECIALS, FLOOR_LOWER_SPECIALS, GLOW_MATERIALS, MULTIPLAYER_ONLY, REMOTE_DOOR_SPECIALS,
     SKILL_BITS, THING_BARRELS, THING_PICKUPS, THING_SPAWNS, ZOMBIEMAN, ZOMBIEMAN_VARIANTS,
@@ -266,10 +271,14 @@ def _fill_point(segs, box) -> tuple[float, float] | None:
     return best
 
 
-def convert(wad_path: Path, map_name: str, units_per_m: float = 32, skill: int = 4, zombieman: str = "mix") -> tuple[dict, dict]:
+def convert(wad_path: Path, map_name: str, units_per_m: float = 32, skill: int = 4, zombieman: str = "mix",
+            overrides: dict | None = None) -> tuple[dict, dict]:
     """Returns (level, stats): the level is the JSON to write, stats only feed the summary line.
     `skill` is Doom's 1..5 (things without that skill's flag bit are left out); `zombieman` is
-    "mix" (a variant per spawn by FNV-1a of its id) or one of ZOMBIEMAN_VARIANTS."""
+    "mix" (a variant per spawn by FNV-1a of its id) or one of ZOMBIEMAN_VARIANTS. `overrides` is a
+    loaded doom_overrides file (None: none); a bad one raises doom_overrides.OverrideError."""
+    if overrides is not None:
+        doom_overrides.check_top(overrides, map_name)
     if skill not in SKILL_BITS:
         raise ValueError(f"skill must be one of {sorted(SKILL_BITS)}")
     if zombieman != "mix" and zombieman not in ZOMBIEMAN_VARIANTS:
@@ -373,6 +382,8 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = 32, skill: int =
         if floor_mat in GLOW_MATERIALS:
             sec["glow"] = floor_mat
         out_sectors.append(sec)
+    # Hand-written sector patches, before anything reads the sectors (lines' wall fallbacks, lights, things).
+    sector_patches = doom_overrides.apply_sectors(overrides, out_sectors, sector_segs) if overrides is not None else []
 
     out_lines = []
     for ln in kept:
@@ -467,6 +478,12 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = 32, skill: int =
         else:
             pickups.append({"id": f"p{ti}", "item": THING_PICKUPS[t["type"]], "pos": pos})
 
+    override_spawns = []
+    if overrides is not None:
+        used = {s["id"] for s in spawns} | {p["id"] for p in pickups} | {b["id"] for b in barrels}
+        verts_m = [[X(x), Z(y)] for x, y in verts]
+        override_spawns = doom_overrides.apply_spawns(overrides, spawns, used, verts_m, out_lines, out_sectors, sector_segs)
+
     # The exit: walking into the switch ends the level. A box on the line's front side (left of
     # v0 -> v1 in our x/z), EXIT_DEPTH_M deep, spanning the line, floor to floor + EXIT_HEIGHT_M.
     triggers = []
@@ -507,7 +524,8 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = 32, skill: int =
 
     stats = {"dropped_zero_length_lines": dropped, "doors_opened": sorted(doors), "floors_lowered": sorted(lowered), "pool_lights": pool_lights,
              "spawns_by_kind": count(spawns, "kind"), "pickups_by_item": count(pickups, "item"), "skipped_types": skipped, "barrels": len(barrels),
-             "in_no_sector": in_no_sector, "not_this_skill": not_this_skill, "multiplayer_only": multiplayer_only}
+             "in_no_sector": in_no_sector, "not_this_skill": not_this_skill, "multiplayer_only": multiplayer_only,
+             "override_sectors": sector_patches, "override_spawns": override_spawns}
     return level, stats
 
 
@@ -571,8 +589,17 @@ def main() -> None:
     ap.add_argument("--svg", type=Path, default=None, help="directory for a <MAP>.svg plan (keep it in .lab-tmp/)")
     ap.add_argument("--skill", type=int, choices=sorted(SKILL_BITS), default=4, help="Doom skill 1..5 (default 4, Ultra-Violence's things)")
     ap.add_argument("--zombieman", choices=("mix",) + ZOMBIEMAN_VARIANTS, default="mix", help="what zombiemen become (default: a mix)")
+    ap.add_argument("--overrides", type=Path, default=None, help="hand-written edits (default scripts/levels/overrides/<map>.json if it exists)")
+    ap.add_argument("--no-overrides", action="store_true", help="convert the WAD only")
     a = ap.parse_args()
-    level, stats = convert(a.wad, a.map, a.units_per_m, skill=a.skill, zombieman=a.zombieman)
+    ov_path = None if a.no_overrides else a.overrides or doom_overrides.default_path(a.map)
+    if a.overrides and not a.overrides.exists():
+        ap.error(f"--overrides {a.overrides}: no such file")
+    overrides = doom_overrides.load(ov_path) if ov_path is not None and ov_path.exists() else None
+    try:
+        level, stats = convert(a.wad, a.map, a.units_per_m, skill=a.skill, zombieman=a.zombieman, overrides=overrides)
+    except doom_overrides.OverrideError as e:
+        sys.exit(f"{ov_path}: {e}")
     a.out.mkdir(parents=True, exist_ok=True)
     path = a.out / f"{level['id']}.level.json"
     dropped = stats["dropped_zero_length_lines"]
@@ -585,6 +612,10 @@ def main() -> None:
           + (f" {[[t['min'], t['max']] for t in level['triggers']]}" if level["triggers"] else "")
           + f"; skipped types {dict(sorted(stats['skipped_types'].items()))}, {stats['in_no_sector']} in no sector,"
           f" {stats['not_this_skill']} not on skill {a.skill}, {stats['multiplayer_only']} multiplayer-only")
+    if overrides is not None:
+        patched = ", ".join(f"{p['sector']} {sorted(p['set'])}" for p in stats["override_sectors"]) or "none"
+        added = ", ".join(f"{s['id']} ({s['kind']}, sector {s['sector']})" for s in stats["override_spawns"]) or "none"
+        print(f"overrides {ov_path}: sectors patched: {patched}; spawns added: {added}")
     if a.svg:
         write_svg(level, a.svg / f"{a.map.upper()}.svg")
         print(f"plan: {a.svg / (a.map.upper() + '.svg')}")
