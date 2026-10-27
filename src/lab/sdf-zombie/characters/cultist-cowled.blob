@@ -125,7 +125,7 @@ body
   # the plane cut nothing and it read as a closed saucer round the neck.
   # Round cone: r 0.08 at the neck, r2 0.29 at the chest; the shoulder balls
   # (x reach 0.244 at y 1.53) sit inside the flare.
-  shell torso on spine at=1.00 offset=(0,0.10,0.0) tip=(0,-0.28,0) r=0.080 r2=0.290 wide=1.12 deep=0.84 thick=0.008 clip=(0,-1,0) clipd=-1.23 rim=0.008 blend=0.010 color=6e5c40 warp=0.006 warpFreq=(30,6,30) rigid
+  shell torso on spine at=1.00 offset=(0,0.10,0.0) tip=(0,-0.28,0) r=0.080 r2=0.290 wide=1.12 deep=0.84 thick=0.005 clip=(0,-1,0) clipd=-1.23 rim=0.004 blend=0.010 color=6e5c40 warp=0.006 warpFreq=(30,6,30) rigid
 
   # BELL CUFFS: the sleeve flares open past the wrist, dark inside, the bony
   # hand coming out of the black.
@@ -136,7 +136,10 @@ body
   # sits in shadow). Rides the skull rigidly (a head sphere always does).
   # tall 1.30: at 1.18 it read from behind as a round ball — a hood is
   # taller than the head it holds, and the extra height is the peak.
-  shell head on skull at=0.45 offset=(0,0.035,-0.030) r=0.150 wide=0.95 tall=1.30 deep=1.18 thick=0.008 clip=(0,0.31,0.95) clipd=0.67 rim=0.010 blend=0.006 color=6e5c40 warp=0.004 warpFreq=(40,10,40) when=alive
+  # CLOTH PASS 2026-10-26, as cultist.blob (see its hood comments): thinner sheet,
+  # smaller bead, no warp, the drape down the back, the slumped peak.
+  shell head on skull at=0.45 offset=(0,0.035,-0.030) r=0.150 wide=0.95 tall=1.30 deep=1.18 thick=0.005 clip=(0,0.31,0.95) clipd=0.67 rim=0.005 blend=0.006 color=6e5c40 when=alive
+  shell torso on neck at=1.00 offset=(0,0.030,-0.130) tip=(0,-0.240,-0.050) r=0.100 r2=0.170 wide=1.25 deep=0.80 thick=0.005 clip=(0,0,1) clipd=0.04 rim=0.005 blend=0.012 color=6e5c40 when=alive
   # The hood's peak — a cone off the crown, up and back, so the hood reads
   # as a POINTED cowl (the Blood cultist silhouette), not a balaclava.
   # Owner (2026-09-23): "the hoodie should have a more pointy top". The v1
@@ -144,7 +147,7 @@ body
   # 1.905), so it never showed. Now rooted just under the crown (y 1.86,
   # z 0.00) and rising 13 cm up and 9 cm back to a point, with a wide blend
   # so the sheet flows into it instead of a horn stuck on a dome.
-  blob head on skull at=0.90 offset=(0,0.114,-0.080) tip=(0,0.130,-0.090) r=0.070 r2=0.005 blend=0.045 color=6e5c40 when=alive
+  shell head on skull at=0.90 offset=(0,0.100,-0.085) tip=(0,0.070,-0.140) bend=(0,0.030,0) r=0.066 r2=0.006 thick=0.005 clip=(0,-1,0) clipd=-1.885 rim=0.004 blend=0.030 color=6e5c40 when=alive
   # HOOD DOWN (owner playtest 2026-09-24: a shot should drop the hood, not
   # carve it, "his head would be completely exposed"). The two lines above
   # are `when=alive`; these are `when=dead` — hidden until he dies, then the

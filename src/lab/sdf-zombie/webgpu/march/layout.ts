@@ -67,7 +67,7 @@ export const MAX_GROUPS = MAX_PRIMS;
 /** Per-cluster span into the group list: x = first group, y = group count. */
 export const ROW_CLUSTER_GROUPS = 15;
 /** `shell` construction (2048-08-25): x = half-thickness, y = rim radius,
- *  z = clip offset, w = hasClip (0/1). Read only by prims with a shell fold
+ *  z = clip offset, w = hasClip: 0 none, else 1 + the edge ruffle in metres (ShellParams.ruffle). Read only by prims with a shell fold
  *  (profile bit 2 set — see ROW_PRIM_SHAPE's `prof`). */
 export const ROW_PRIM_SHELL = 16;
 /** `shell` clip plane: xyz = unit normal; w = per-prim emissive `glow=`

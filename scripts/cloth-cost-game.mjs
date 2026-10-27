@@ -5,6 +5,7 @@
 // registry entry) on the game page as it ships (crowd march, hulls, kit occluder), frozen and seeded:
 //   arena   the bare page's arena (room 6: six zombies, two soldiers), the view teleport() leaves.
 //   close   room 4's nearest zombie, the eye CLOSE_D m in front of its chest.
+//   soldier room 6's nearest soldier, framed the same way (bent limbs and boxes: the analytic normal's bend/box path).
 // Per boot and stage: THE CENSUS (debug modes 13 and 14 read off the float march target: steps and prim evaluations,
 // deterministic) and __sdfGame.timeDraws(N) (fenced still frames, CPU + GPU; ROUNDS boots per variant, the variants
 // rotated, the 1-minute load average logged beside each). Timing is not trustworthy above a load of ~6.
@@ -13,7 +14,8 @@
 //   bash -c 'export LAB_TMP=.lab-tmp LAB_VITE_PORT=5282 LAB_CDP_PORT=9282; . scripts/lab-servers.sh;
 //     trap lab_servers_down EXIT; lab_servers_up; node scripts/cloth-cost-game.mjs 5282 9282'
 // Env: VARIANTS (none,paint,trousers,robe,robe-flat)  STAGES (arena,close)  ROUNDS (2)  N (60)  CLOSE_D (1.3)
-//      DUMP=1 (raw mode-13 texels per stage and variant)  QS (extra page flags)  OUT (.lab-tmp/cloth-cost-game)
+//      DUMP=1 (raw mode-13 and shaded texels per stage and variant, light clocks pinned)  QS (extra page flags)
+//      NG=0 (analytic normal off)  REASONS=1 (its mode-12 reason histogram)  OUT (.lab-tmp/cloth-cost-game)
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { loadavg } from "node:os";
@@ -81,6 +83,11 @@ async function boot(variant) {
   for (let i = 0; i < 800; i++) { wb = await evaluate("__sdfGame.warmBackground()"); if (wb.gib === "ready" && wb.crowd === "ready") break; if (wb.gib === "failed" || wb.crowd === "failed") break; await sleep(500); if (i % 10 === 0) await evaluate("__sdfGame.step(1, 0)"); }
   if (wb?.gib !== "ready" || wb?.crowd !== "ready") die(`the background warm is ${JSON.stringify(wb)}`);
   await evaluate("__sdfGame.installDebugProbe()");
+  // DUMP=1 compares SHADED pixels across boots, and the practical lamps flicker on the wall clock: two frames of the
+  // same build differed by up to 7/255 until both clocks were pinned (an on/off A/B then sits at 0.1/255).
+  if (process.env.DUMP === "1") await evaluate("(() => { __sdfGame.setDemoHold(true); __sdfGame.setLightClockFrozen(true); return 1; })()");
+  // NG=0: the analytic normal off (every hit takes the finite-difference normal).
+  if (process.env.NG === "0") await evaluate("__sdfGame.setNormalGradient(0)");
 }
 
 async function stage(name) {
@@ -88,11 +95,12 @@ async function stage(name) {
     await evaluate("(() => { __sdfGame.freeze(true); __sdfGame.teleport(6); for (let i = 0; i < 30; i++) __sdfGame.step(1, 0); return 1; })()");
     return;
   }
-  await evaluate("(() => { __sdfGame.freeze(true); __sdfGame.teleport(4); __sdfGame.step(1, 0); return 1; })()");
+  const [room, kind] = name === "soldier" ? [6, "soldier"] : [4, "zombie"];
+  await evaluate(`(() => { __sdfGame.freeze(true); __sdfGame.teleport(${room}); __sdfGame.step(1, 0); return 1; })()`);
   const pose = await evaluate("__sdfGame.pose()");
-  const zs = (await evaluate("__sdfGame.actorList()")).filter((a) => a.kind === "zombie" && a.room === 4);
+  const zs = (await evaluate("__sdfGame.actorList()")).filter((a) => a.kind === kind && a.room === room);
   const z = zs.sort((a, b) => Math.hypot(a.pos[0] - pose.pos[0], a.pos[2] - pose.pos[2]) - Math.hypot(b.pos[0] - pose.pos[0], b.pos[2] - pose.pos[2]))[0];
-  if (!z) die("no zombie in room 4");
+  if (!z) die(`no ${kind} in room ${room}`);
   const torso = await evaluate(`__sdfGame.actorLimbCenter(${z.id}, "torso")`);
   const t = [torso[0], torso[1] - 0.15, torso[2]];
   const fx = Math.sin(z.yaw), fz = -Math.cos(z.yaw);
@@ -139,6 +147,21 @@ for (let round = 0; round < ROUNDS; round++) {
           // The walk's raw texels (mode 13), de-padded, for a per-texel diff between variants.
           const d = await evaluate(`(async () => { __sdfGame.setMarchDebugMode(13); await __sdfGameDebug.readMarchTarget(); const r = await __sdfGameDebug.readMarchTarget(); __sdfGame.setMarchDebugMode(0); await __sdfGameDebug.readMarchTarget(); return r; })()`);
           writeFileSync(`${OUT}/${st}-${variant}.w${d.w}h${d.h}.f32`, Buffer.from(d.rgba32f, "base64"));
+          // And the SHADED march target (mode 0), for a pixel diff of a shading change.
+          const c0 = await evaluate(`(async () => { __sdfGame.setMarchDebugMode(0); await __sdfGameDebug.readMarchTarget(); return __sdfGameDebug.readMarchTarget(); })()`);
+          writeFileSync(`${OUT}/${st}-${variant}.shaded.f32`, Buffer.from(c0.rgba32f, "base64"));
+        }
+        if (process.env.REASONS === "1") {
+          // Debug mode 12: g = the analytic normal's reason per hit pixel (0 = analytic used; 1 = unsupported prim).
+          const h = await evaluate(`(async () => { __sdfGame.setMarchDebugMode(12); await __sdfGameDebug.readMarchTarget(); const r = await __sdfGameDebug.readMarchTarget(); __sdfGame.setMarchDebugMode(0); await __sdfGameDebug.readMarchTarget();
+            const f = new Float32Array(Uint8Array.from(atob(r.rgba32f), (c) => c.charCodeAt(0)).buffer); const hist = {};
+            const ang = [];
+            for (let i = 0; i < f.length; i += 4) { if (!(f[i + 3] < 1)) continue; const k = Math.round(f[i + 1]); hist[k] = (hist[k] ?? 0) + 1;
+              if (k === 0) ang.push(Math.acos(Math.min(1, Math.max(-1, f[i + 2]))) * 180 / Math.PI); }
+            ang.sort((x, y) => x - y); const q = (u) => ang.length ? +ang[Math.min(ang.length - 1, Math.floor(u * ang.length))].toFixed(2) : null;
+            return { hist, angleDeg: { median: q(0.5), p99: q(0.99), max: q(1) } }; })()`);
+          // angleDeg: on reason-0 pixels, the angle between the analytic normal and the 4-tap one (mode 12's b).
+          console.log(`  ${st} ${variant} analytic-normal reasons ${JSON.stringify(h.hist)} vs 4-tap ${JSON.stringify(h.angleDeg)}`);
         }
         const shot = await S.send("Page.captureScreenshot", { format: "png" });
         writeFileSync(`${OUT}/${st}-${variant}.png`, Buffer.from(shot.result.data, "base64"));

@@ -74,6 +74,7 @@ import type { BuiltBody, Vec3 } from '../types';
 import { HEAD_SPLIT, splitFrame, splitSphereImages } from '../head-split';
 import { CUT_SHADE } from '../cut-wound';
 import { SPLIT_BOUND, boundsSplit, splitAblate } from './split-ablate';
+import { PROXY_TRIS, PROXY_VERTS, proxyIndices, writeProxyCone, type ProxyCone } from './cloth-proxy';
 
 /**
  * How much bigger each chain sphere is than the capsule radius it covers.
@@ -210,6 +211,9 @@ export interface OuterHullOpts {
   shellAmp?: number;
   /** Extra uniform slack, in metres. Debugging aid; ships at 0. */
   margin?: number;
+  /** CLOTH PROXIES (cloth-proxy.ts): when given, each straight shell prim of a body with a closed head is pushed
+   *  here as its round cone, grown by its reach, INSTEAD of a sphere chain. The caller rasterises them. */
+  shellProxies?: ProxyCone[];
 }
 
 /**
@@ -232,6 +236,14 @@ export function buildOuterHullInstances(
   for (const body of bodies) {
     const live = new Set<number>();
     for (const c of body.clusters) if (c.alive) live.add(c.id);
+    // The widest blend reach in each cluster, for the cloth proxies' chained-blend pad (below).
+    const clusterBlend = new Map<number, number>();
+    if (opts.shellProxies) {
+      for (const q of body.prims) {
+        if (q.op === 'sub' || q.op === 'groove' || q.dead) continue;
+        clusterBlend.set(q.cluster, Math.max(clusterBlend.get(q.cluster) ?? 0, blendReach(q.blendK ?? 0, q.blendProfile)));
+      }
+    }
     // THE HEAD SPLIT (head-split.ts): the spheres whose turned copies cover the opened halves (below). None for a
     // closed head.
     const split = splitFrame(boundsSplit(body.split, SPLIT_BOUND.hullOuter));
@@ -252,6 +264,18 @@ export function buildOuterHullInstances(
         + shellAmp
         + margin;
       if (reach < MIN_HULL_RADIUS) continue;
+      // A straight shell on a body whose head is closed: its own fitted mesh (cloth-proxy.ts), not spheres. A split
+      // body keeps the spheres, whose turned copies the split needs.
+      if (opts.shellProxies && p.shell !== undefined && p.bend === undefined && !split) {
+        // + a SECOND blend reach: the CHAIN case the header names. A proxy has no spare room (the sphere chain's 13%
+        // inflation used to absorb it), and two shells blending with each other and the flesh between them (a
+        // trouser crotch, a knee) stack their smin undercuts: measured 4.9 mm past one reach on the trousers. It is
+        // the WIDEST blend in the shell's cluster, not its own: the cultist's peak (blend 0.030) melting into the
+        // hood (0.006) bulged their junction 4.2 mm past a hood-only pad.
+        const pad = reach - rMax * maxScale + Math.max(blendReach(p.blendK ?? 0, p.blendProfile), clusterBlend.get(p.cluster) ?? 0);
+        opts.shellProxies.push({ a: p.a, b: p.b, ra: p.radius * maxScale + pad, rb: (p.radiusB ?? p.radius) * maxScale + pad });
+        continue;
+      }
 
       // The path the surface hugs. For a bend that is the CURVE, tessellated
       // — not the control polygon, which the arc bows away from.
@@ -326,6 +350,10 @@ export interface OuterHull {
   update(bodies: BuiltBody[], opts?: OuterHullOpts): void;
   readonly instanceCount: number;
   readonly overflowed: boolean;
+  /** Shells drawn as cloth proxies (cloth-proxy.ts) last update. */
+  readonly proxyCount: number;
+  /** Cloth proxies on (default) or off (every shell back to its sphere chain). Takes effect at the next update. */
+  setClothProxies(on: boolean): void;
   dispose(): void;
 }
 
@@ -396,12 +424,42 @@ export function createOuterHull(maxInstances = 4096): OuterHull {
     m.count = 0;
   }
 
+  // THE CLOTH PROXIES: one closed mesh per shell, rewritten every update, drawn by the same two materials as
+  // CHILDREN of the sphere meshes, so they reach the entry/exit targets wherever the spheres do (layers are copied
+  // from the parent each update; the caller sets them on the parent after creation).
+  const MAX_PROXIES = 256;
+  const proxyPos = new Float32Array(MAX_PROXIES * PROXY_VERTS * 3);
+  const proxyGeo = new THREE.BufferGeometry();
+  const posAttr = new THREE.BufferAttribute(proxyPos, 3);
+  posAttr.setUsage(THREE.DynamicDrawUsage);
+  proxyGeo.setAttribute('position', posAttr);
+  const one = proxyIndices();
+  const idx = new Uint32Array(MAX_PROXIES * one.length);
+  for (let k = 0; k < MAX_PROXIES; k++) for (let i = 0; i < one.length; i++) idx[k * one.length + i] = one[i]! + k * PROXY_VERTS;
+  proxyGeo.setIndex(new THREE.BufferAttribute(idx, 1));
+  proxyGeo.setDrawRange(0, 0);
+  const entryProxy = new THREE.Mesh(proxyGeo, entryMaterial);
+  const exitProxy = new THREE.Mesh(proxyGeo, exitMaterial);
+  entryProxy.frustumCulled = false;
+  exitProxy.frustumCulled = false;
+  let proxiesOn = new URLSearchParams(globalThis.location?.search ?? '').get('clothproxy') !== '0';
+  let proxyCount = 0;
+
   const m = new THREE.Matrix4();
   let count = 0;
   let overflowed = false;
 
   function update(bodies: BuiltBody[], opts: OuterHullOpts = {}) {
-    const inst = buildOuterHullInstances(bodies, opts);
+    const proxies: ProxyCone[] = [];
+    const inst = buildOuterHullInstances(bodies, proxiesOn ? { ...opts, shellProxies: proxies } : opts);
+    // More shells than the buffer holds: the rest go back to sphere chains (a full rebuild without proxies).
+    if (proxies.length > MAX_PROXIES) { proxies.length = 0; inst.splice(0, inst.length, ...buildOuterHullInstances(bodies, opts)); }
+    proxyCount = proxies.length;
+    for (let k = 0; k < proxyCount; k++) writeProxyCone(proxies[k]!, proxyPos, k * PROXY_VERTS * 3);
+    posAttr.needsUpdate = true;
+    proxyGeo.setDrawRange(0, proxyCount * PROXY_TRIS * 3);
+    entryProxy.layers.mask = entryMesh.layers.mask;
+    exitProxy.layers.mask = exitMesh.layers.mask;
     overflowed = inst.length > maxInstances;
     count = Math.min(inst.length, maxInstances);
     for (let i = 0; i < count; i++) {
@@ -418,6 +476,8 @@ export function createOuterHull(maxInstances = 4096): OuterHull {
     exitMesh.instanceMatrix.needsUpdate = true;
   }
 
+  entryMesh.add(entryProxy);
+  exitMesh.add(exitProxy);
   update([]);
 
   return {
@@ -429,8 +489,11 @@ export function createOuterHull(maxInstances = 4096): OuterHull {
     // not fit leave uncovered flesh, and uncovered flesh renders as a hole.
     // The consumer must fall back to the unbounded march when this is true.
     get overflowed() { return overflowed; },
+    get proxyCount() { return proxyCount; },
+    setClothProxies(on: boolean) { proxiesOn = on; },
     dispose() {
       geo.dispose();
+      proxyGeo.dispose();
       entryMaterial.dispose();
       exitMaterial.dispose();
       entryMesh.dispose();

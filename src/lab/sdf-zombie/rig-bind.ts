@@ -1058,6 +1058,9 @@ function buildHeadKeepOut(
   for (const i of head.prims.keys()) {
     const p = body.prims[i]!;
     if (p.dead || (p.op !== undefined && p.op !== 'add')) continue;
+    // A LOOSE hood (shroud=, the cultist's since 2026-10-27) is cloth standing off the head, not the head: sized
+    // from it, the keep-out grew ~9 cm and held the throw-back's flung arm off the chest. A fitted cowl still counts.
+    if ((p.shroud ?? 0) > 0) continue;
     const sc = p.scale ?? [1, 1, 1];
     const rp = p.radius * Math.max(Math.abs(sc[0]), Math.abs(sc[2]));
     const ra = p.radius * Math.abs(sc[1]);

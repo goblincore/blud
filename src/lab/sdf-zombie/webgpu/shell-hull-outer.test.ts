@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { buildOuterHullInstances, SPHERE_CHAIN_INFLATE, taperedChain } from './shell-hull-outer';
 import zombieSrc from '../characters/zombie.blob?raw';
+import cultistSrc from '../characters/cultist.blob?raw';
 import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace } from '../blob-compile';
 import { clothVariantSrc } from './bench-cloth';
+import { PROXY_VERTS, proxyIndices, writeProxyCone, type ProxyCone } from './cloth-proxy';
 import { sdBody } from '../validate';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { ZOMBIE } from '../body';
@@ -216,7 +218,8 @@ describe('containment on the SHIPPED zombie', () => {
 });
 
 /** Fires rays inward from a sphere round `b` and returns the worst escape of a first surface hit from the hull. */
-function worstEscape(b: BuiltBody, hull: { centre: Vec3; radius: number }[], centre: Vec3, R = 2.0, rays = 900) {
+function worstEscape(b: BuiltBody, hull: { centre: Vec3; radius: number }[], centre: Vec3, R = 2.0, rays = 900,
+  outside: (p: Vec3) => number = (p) => sdHull(p, hull)) {
   let worst = -Infinity, found = 0;
   for (let i = 0; i < rays; i++) {
     const y = 1 - (i / (rays - 1)) * 2;
@@ -228,7 +231,7 @@ function worstEscape(b: BuiltBody, hull: { centre: Vec3; radius: number }[], cen
     for (let s = 0; s < 300 && t < 2 * R; s++) {
       const q: Vec3 = [from[0] - dir[0] * t, from[1] - dir[1] * t, from[2] - dir[2] * t];
       const d = sdBody(q, b);
-      if (d < 1e-4) { found++; worst = Math.max(worst, sdHull(q, hull)); break; }
+      if (d < 1e-4) { found++; worst = Math.max(worst, outside(q)); break; }
       t += Math.max(d, 1e-4);
     }
   }
@@ -272,5 +275,45 @@ describe('the TAPER-AWARE chain (SDF-cloth cost spike)', () => {
     const { worst, found } = worstEscape(b, hull, [0, 0.9, 0]);
     expect(found).toBeGreaterThan(200);
     expect(worst, `the ${v} zombie escaped its hull by ${worst} m`).toBeLessThan(0);
+  });
+});
+
+/** Signed distance-ish to a convex proxy mesh: the largest face-plane value (negative inside). */
+function proxyOutside(c: ProxyCone): (p: Vec3) => number {
+  const pos = new Float32Array(PROXY_VERTS * 3);
+  writeProxyCone(c, pos, 0);
+  const idx = proxyIndices();
+  const pl: number[][] = [];
+  for (let t = 0; t < idx.length; t += 3) {
+    const v = [idx[t]!, idx[t + 1]!, idx[t + 2]!].map(i => [pos[i * 3]!, pos[i * 3 + 1]!, pos[i * 3 + 2]!]);
+    const e1 = v[1]!.map((x, i) => x - v[0]![i]!), e2 = v[2]!.map((x, i) => x - v[0]![i]!);
+    const n = [e1[1]! * e2[2]! - e1[2]! * e2[1]!, e1[2]! * e2[0]! - e1[0]! * e2[2]!, e1[0]! * e2[1]! - e1[1]! * e2[0]!];
+    const l = Math.hypot(n[0]!, n[1]!, n[2]!);
+    if (l < 1e-9) continue;
+    pl.push([n[0]! / l, n[1]! / l, n[2]! / l, (n[0]! * v[0]![0]! + n[1]! * v[0]![1]! + n[2]! * v[0]![2]!) / l]);
+  }
+  return (p) => Math.max(...pl.map(q => q[0]! * p[0] + q[1]! * p[1] + q[2]! * p[2] - q[3]!));
+}
+
+describe('CLOTH PROXIES in the outer hull (cloth-proxy.ts)', () => {
+  it.each(['robe', 'trousers', 'cultist'] as const)('the %s body stays inside spheres + proxies', (v) => {
+    const doc = parseBlob(v === 'cultist' ? cultistSrc : clothVariantSrc(zombieSrc, v));
+    const b = buildBody(compileBlob(doc, compileFace(doc)), DEFAULT_BUILD_OPTS);
+    const proxies: ProxyCone[] = [];
+    const hull = buildOuterHullInstances([b], { shellProxies: proxies });
+    expect(proxies.length).toBe({ robe: 2, trousers: 5, cultist: 6 }[v]);
+    const inside = proxies.map(proxyOutside);
+    const { worst, found } = worstEscape(b, hull, [0, 0.9, 0], 2.0, 1500,
+      (p) => Math.min(sdHull(p, hull), ...inside.map(f => f(p))));
+    expect(found).toBeGreaterThan(300);
+    expect(worst, `the ${v} zombie escaped spheres + proxies by ${worst} m`).toBeLessThan(0);
+  });
+
+  it('takes the shells OUT of the sphere chain', () => {
+    const doc = parseBlob(clothVariantSrc(zombieSrc, 'robe'));
+    const b = buildBody(compileBlob(doc, compileFace(doc)), DEFAULT_BUILD_OPTS);
+    const withSpheres = buildOuterHullInstances([b]).length;
+    const withProxies = buildOuterHullInstances([b], { shellProxies: [] }).length;
+    expect(withProxies).toBeLessThan(withSpheres);
   });
 });

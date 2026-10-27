@@ -24,7 +24,7 @@ export const OCCLUSION_BLOCK = /* wgsl */ `  // Fake backlit scatter: sample the
       gProbePass = 0.0;
       if (k == 0) {
         let thin = clamp(probeD * -8.0, 0.0, 1.0);
-        scatter = deepColor * thin * surfCfg.w * (1.0 - cm);
+        scatter = deepColor * thin * surfCfg.w * (1.0 - cm) * (1.0 - cloth);
       } else {
         ao = clamp(probeD / 0.06, 0.35, 1.0);
       }

@@ -67,6 +67,8 @@ export function clothVariantSrc(zombieSrc: string, variant: ClothVariant): strin
   src = paintLine(src, PELVIS, 'pelvis mass');
   if (variant === 'paint' || variant === 'offset') return src;
   if (variant !== 'trousers') {
+    // A robe covers the chest too: the bare torso under the capelet showed through every shotgun hole as pink skin.
+    src = src.replace(/^(\s*blob torso on (?:spine|pelvis) at=\S+ r=\S+ .*?)(\s*#.*)?$/gm, (m, body: string, c = '') => body.includes('color=') ? m : `${body} color=6e5c40${c}`);
     // The skirt rides a pendulum off the hips, as the cultist's does (its tail stays above the feet).
     src = src.replace(/^(\s*root pelvis .*)$/m, '$1\n  bone hem parent=pelvis dir=down len=0.55');
     if (!src.includes('bone hem')) throw new Error('bench-cloth: zombie.blob has no `root pelvis` line');

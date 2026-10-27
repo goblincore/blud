@@ -1571,7 +1571,7 @@ export function createZombieActor(opts: {
         state = { ...state, wander: w };
       }
       bodyYaw = f.bodyYaw;
-      view.setRootShift(f.rootShift[0], f.rootShift[2], f.bodyYaw);
+      view.setRootShift(f.rootShift[0], f.rootShift[2], f.bodyYaw, sdt);
       // LIFE-STATE PRIMS: the first collapsed sub-step swaps the body to its
       // dead look (the cultist's hood drops off his head; death-state.ts).
       if (f.collapsed && !deathStateApplied) {
