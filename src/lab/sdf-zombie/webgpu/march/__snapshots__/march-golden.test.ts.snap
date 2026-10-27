@@ -93,7 +93,7 @@ exports[`march.wgsl split golden > keeps every string export byte-identical 1`] 
   "SD_PRIM": "d8b700e4fea2b4319be2901270fc0f764ec894b2",
   "SD_PRIM_ORIENTED": "77345ec559b09f619ff740a73b475a47fdc90b03",
   "SD_ROUND_BOX": "1fa6a93aca9be798ec78154517a83d2d7263858d",
-  "SD_SHELL": "faab6a448dd1ca8451a710f0a9c45a24ed822e60",
+  "SD_SHELL": "af40183151adb0258fc404fa29e2481ea121d65d",
   "SMAX": "dd2c6c140e8a7fc97081e3937826fe564d551caf",
   "SMIN": "cdca39ca796c6fcb4c52899528f18361bbc0423a",
   "SMIN_CHAMFER": "87950b7ccd37559dd5f60ba657abd041275189ae",
@@ -107,7 +107,7 @@ exports[`march.wgsl split golden > keeps every string export byte-identical 1`] 
   "WOUND_SHADOW": "2151c7d3774353131f1165826832053b2aa4322b",
   "WOUND_STEP_MUL": "num:0.6",
   "__HELPERS_count": "50",
-  "__HELPERS_joined": "45052b7fadacb67dbc259ac9a1b4e213c326ffae",
+  "__HELPERS_joined": "cae8b9e3f5c117584d69dc69f9b0951aeb456855",
   "__export_names": "8fcf60b7a61df585171b1396f67066466c838de1",
 }
 `;

@@ -528,10 +528,18 @@ export const SD_PRIM_ORIENTED = /* wgsl */ `fn sdPrimO(p: vec3<f32>, i: i32, dat
 // `dBase` is the closed primitive's capsule field (coneCap/coneBend result);
 // the sheet is `abs(dBase) - thickness` (half-thickness), clipped against the
 // half-space `dot(p, clipN) < clipO` with a rounded edge of radius `rim`.
-// A hard `max(sheet, plane)` is the razor edge; `length(vec2(sheet, plane))
-// - rim` is the distance to the sheet/plane intersection CURVE, so
-// `max(max(sheet, plane), rim - length(...))` rounds that edge — a cloth hem
-// instead of a cut. `rim` 0 degenerates to the hard clip.
+// A hard `max(sheet, plane)` is the razor edge; the ROUNDED intersection
+// `min(-rim, max(sheet, plane)) + length(max(vec2(sheet + rim, plane + rim), 0))`
+// replaces the corner with a quarter circle of radius `rim` and leaves both
+// flat faces where they were — at rim == thick the two corners meet and the
+// cut is a bullnose, a cloth hem instead of a cut. `rim` 0 degenerates to the
+// hard clip. It is never below the hard max, so every bound fitted to the
+// hard clip (the hull, the cloth proxies) still contains it.
+// UNTIL 2026-10-27 this was `max(max(sheet, plane), rim - length(vec2(sheet,
+// plane)))`, which does not round the edge: it hollows a GROOVE of radius
+// `rim` along it (the field rises to `rim` at the corner and falls back
+// outside it). Every shell edge drew as a concave channel, which shaded as
+// stacked bands — the cultist's hood opening read as a layered cut slab.
 // WRINKLES (shell cloth spike). Three sines with offset phases displace the
 // BASE distance before the sheet is taken, so the whole sheet undulates like
 // hanging cloth rather than its two faces getting independently roughened.
@@ -584,7 +592,7 @@ export const SD_SHELL = /* wgsl */ `fn sdShell(dBase: f32, p: vec3<f32>, thick: 
   let d = abs(base) - thick;
   if (hasClip < 0.5) { return d / lip; }
   let dPlane = dot(p, clipN) - clipO;
-  return max(max(d, dPlane), rim - length(vec2(d, dPlane))) / lip;
+  return (min(-rim, max(d, dPlane)) + length(max(vec2(d + rim, dPlane + rim), vec2(0.0)))) / lip;
 }`;
 
 /**

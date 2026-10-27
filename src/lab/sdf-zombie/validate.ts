@@ -223,21 +223,25 @@ export function sdPrimitive(p: Vec3, prim: Primitive): number {
  * `thickness` is the HALF-thickness. The sheet is `abs(dBase) - thickness`:
  * it occupies the `thickness`-wide band either side of the base surface. The
  * clip keeps the half-space where `dot(p, clipNormal) - clipOffset` is
- * NEGATIVE; `max(sheet, plane)` is the hard edge, and `rim` rounds the edge
- * by taking the distance to the clip/sheet intersection curve via
- * `length(vec2(sheet, plane))`.
+ * NEGATIVE; `max(sheet, plane)` is the hard edge, and `rim` rounds it with
+ * the rounded intersection `min(-rim, max) + length(max(vec2(sheet + rim,
+ * plane + rim), 0))`: a quarter circle of radius `rim` in place of the corner,
+ * both flat faces unmoved (rim == thickness is a bullnose hem). Until
+ * 2026-10-27 this was `max(max, rim - length(vec2(sheet, plane)))`, which
+ * hollows a groove along the edge instead of rounding it (the hood's
+ * "layered" opening).
  *
  * CONSERVATIVENESS. `dBase` itself is the established scaled-space capsule
  * field (it under-reports by minScale for anisotropic prims), so `abs(dBase)
  * - thickness` under-reports the true sheet distance — never over-reports,
  * which is what a raymarcher needs. `dPlane` is an EXACT world-space plane
  * distance. Near the rim the dominant term becomes
- * `rim - length(vec2(sheet, plane))`, whose gradient magnitude is <= 1 where
- * the two surfaces are near perpendicular (a well-cut cloth edge); at a
- * grazing cut it can exceed 1 and over-report by up to the rim radius. rims
- * are a few mm and the folded sheet dominates elsewhere, so the field stays
- * within the careful margin — the author's job is to cut the sheet close to
- * perpendicular, which is how cloth is actually cut.
+ * `length(vec2(sheet + rim, plane + rim)) - rim`, whose gradient magnitude is
+ * <= 1 where the two surfaces are near perpendicular (a well-cut cloth edge);
+ * at a grazing cut it can exceed 1 and over-report by up to the rim radius.
+ * rims are a few mm and the folded sheet dominates elsewhere, so the field
+ * stays within the careful margin — the author's job is to cut the sheet close
+ * to perpendicular, which is how cloth is actually cut.
  */
 const ZERO3: Vec3 = [0, 0, 0];
 
@@ -298,7 +302,7 @@ export function sdShellWrap(
   }
   const d = Math.abs(base) - thickness;
   const dPlane = clipNormal[0] * p[0] + clipNormal[1] * p[1] + clipNormal[2] * p[2] - clipOffset;
-  return Math.max(Math.max(d, dPlane), rim - Math.hypot(d, dPlane)) / lip;
+  return (Math.min(-rim, Math.max(d, dPlane)) + Math.hypot(Math.max(d + rim, 0), Math.max(dPlane + rim, 0))) / lip;
 }
 
 /**
