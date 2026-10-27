@@ -43,7 +43,7 @@ Each line is the first sentence of the module's header comment.
 | [shared-wounds/](#shared-wounds) | 4 | Shared wound-field probe page. |
 | [gait-curves/](#gait-curves) | 2 | Baked gait curve data. |
 | [Entrypoints and labs](#entrypoints-and-labs) | 20 | One module per HTML page; see the entrypoint table above. |
-| [Dev panels](#dev-panels) | 11 | Tuning panels for the labs and the game. |
+| [Dev panels](#dev-panels) | 12 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 25 | `window.__sdfGame` members, read by the gate and capture scripts. |
 | [Game: feature modules](#game-feature-modules) | 85 | Gameplay features wired into the game loop. |
@@ -242,6 +242,7 @@ One module per HTML page; see the entrypoint table above.
 Tuning panels for the labs and the game.
 
 - `panel.ts` — Dev panel helpers for the lab: per-character override storage and slider, select and button widgets.
+- `webgpu/bullet-time-panel.ts` — The BULLET TIME tuning panel: one slider per bullet-time.ts knob, live.
 - `webgpu/dynamite-panel.ts` — The DYNAMITE / GIB tuning panel.
 - `webgpu/flame-panel.ts` — The flame lab's tuning panel.
 - `webgpu/game-state-panels.ts` — PANELS slice of the GameContext decomposition.

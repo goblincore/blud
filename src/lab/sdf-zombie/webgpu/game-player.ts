@@ -40,9 +40,13 @@ export const PLAYER = {
   radius: 0.32,
   height: 1.75,
   eye: 1.62,
-  walkSpeed: 3.4,
-  accel: 40,
-  airAccel: 8,
+  /** m/s (owner 2026-10-27: "make default player movement faster": 3.4 -> 4.4, +29%). */
+  walkSpeed: 4.4,
+  /** Ground and air acceleration, m/s^2, raised WITH walkSpeed (40 -> 52, 8 -> 10.4) so the time to reach full
+   *  speed (0.085 s on the ground) and the air control's share of it feel the same. Friction is a rate (1/s), so
+   *  the stop takes as long as before and only covers more ground. */
+  accel: 52,
+  airAccel: 10.4,
   friction: 10,
   gravity: -18,
   jumpSpeed: 6.0,
@@ -220,7 +224,7 @@ export function stepPlayer(
 
   const accel = s.grounded ? PLAYER.accel : PLAYER.airAccel;
   // The sided wall push (resolveSegments) is only reliable while one step stays well under
-  // PLAYER.radius (walk speed gives 0.113 m); faster horizontal motion (knockback) needs sub-stepping.
+  // PLAYER.radius (walk speed gives 0.147 m at the 1/30 s clamp); faster horizontal motion (knockback) needs sub-stepping.
   s.vel[0] = clamp(s.vel[0] + clamp(nx * target - s.vel[0], -accel * dtc, accel * dtc), -60, 60);
   s.vel[2] = clamp(s.vel[2] + clamp(nz * target - s.vel[2], -accel * dtc, accel * dtc), -60, 60);
   if (s.grounded && wishLen < 1e-6) {

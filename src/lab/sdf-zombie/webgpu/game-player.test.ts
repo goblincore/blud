@@ -173,3 +173,20 @@ describe('stepPlayer airScale (bullet time shootdodge hang)', () => {
     expect(jump(0.4).travelled).toBeGreaterThan(jump(1).travelled * 2);
   });
 });
+
+describe('walk speed (owner 2026-10-27: "make default player movement faster")', () => {
+  it('cruises at 4.4 m/s (was 3.4), reaching it in about 0.085 s as before', () => {
+    expect(PLAYER.walkSpeed).toBe(4.4);
+    const s = fresh();
+    let frames = 0;
+    while (Math.hypot(s.vel[0], s.vel[2]) < PLAYER.walkSpeed - 1e-9 && frames < 600) {
+      stepPlayer(s, { x: 0, z: 1, jump: false }, 1 / 60, []);
+      frames++;
+    }
+    expect(frames / 60).toBeCloseTo(PLAYER.walkSpeed / PLAYER.accel, 1);
+    expect(PLAYER.walkSpeed / PLAYER.accel).toBeCloseTo(3.4 / 40, 2);   // 0.0846 s vs 0.085 s
+    const x0 = s.pos[2];
+    for (let i = 0; i < 60; i++) stepPlayer(s, { x: 0, z: 1, jump: false }, 1 / 60, []);
+    expect(x0 - s.pos[2]).toBeCloseTo(4.4, 6);
+  });
+});

@@ -126,15 +126,21 @@ export function tick(ctx: GameContext, dt: number) {
   // feel's view springs — run on the unscaled step. The demo recorder stores
   // the scaled dt (a replay stays deterministic).
   dt *= ctx.weapon.flail?.timeScale(dt) ?? 1;
-  // BULLET TIME (bullet-time.ts, Q): the WORLD runs on `dt`, the PLAYER —
-  // motion, aim, the view-model, firing and reload — on `pdt`, both scaled
-  // from `rdt`, the real step (the ramp eases on it). The recorder stores
-  // `rdt` (the toggle replays from the recorded keys, so the replay re-derives
-  // the scales).
+  // BULLET TIME (bullet-time.ts, Q): the WORLD runs on `dt`; the PLAYER on
+  // four steps of its own — `moveDt` (walking, autopilot timers, the walk
+  // bob), `aimDt` (the view-model's catch-up, the free-aim turn, hit
+  // feedback), `fireDt` (cooldown, flash, recoil, weapon switch, melee) and
+  // `reloadDt` (the shotgun reload, the launcher) — all scaled from `rdt`,
+  // the real step (the ramp eases on it). The recorder stores `rdt` (the
+  // toggle replays from the recorded keys, so the replay re-derives the
+  // scales; a replay under a retuned BULLET_TIME differs, like any tuning).
   const rdt = dt;
   dt *= stepBulletTime(ctx.player.bulletTime, rdt);
   const btScales = scalesAt(ctx.player.bulletTime.intensity);
-  const pdt = rdt * btScales.player;
+  const moveDt = rdt * btScales.move;
+  const aimDt = rdt * btScales.aim;
+  const fireDt = rdt * btScales.fire;
+  const reloadDt = rdt * btScales.reload;
   // The sim clock advances ONLY here, from the step's own dt — never from
   // wall time. This is the single source of "how much simulated time has
   // passed", so every dwell/timer that reads it is reproducible under a
@@ -195,7 +201,7 @@ export function tick(ctx: GameContext, dt: number) {
       ctx.player.autopilot = null;
       input = { x: 0, z: 0, jump: false };
     } else if (ctx.player.strafeT > 0) {
-      ctx.player.strafeT -= pdt;
+      ctx.player.strafeT -= moveDt;
       input = { x: ctx.player.strafeDir, z: 0.2, jump: false };
     } else {
       ctx.player.player.yaw = Math.atan2(dx, -dz);
@@ -203,7 +209,7 @@ export function tick(ctx: GameContext, dt: number) {
     }
     if (ctx.player.lastWalkPos
       && Math.hypot(ctx.player.player.pos[0] - ctx.player.lastWalkPos[0], ctx.player.player.pos[2] - ctx.player.lastWalkPos[1]) < 0.02) {
-      ctx.player.stuckT += pdt;
+      ctx.player.stuckT += moveDt;
       if (ctx.player.stuckT > 0.5) {
         // Strafe AWAY from whatever is ahead: nearest zombie within 1.2 m
         // in front picks the side; walls just get the fallback flip.
@@ -239,7 +245,7 @@ export function tick(ctx: GameContext, dt: number) {
   const preStep = [...ctx.player.player.pos] as Vec3;
   // Bullet time's shootdodge hang: the jump eases from the walk's pace into the apex hang (BULLET_TIME.airScale)
   // and back out for the landing (airScaleAt).
-  stepPlayer(ctx.player.player, input, pdt, [...ctx.world.colliders, ...zombieBoxes], ctx.world.level.ground,
+  stepPlayer(ctx.player.player, input, moveDt, [...ctx.world.colliders, ...zombieBoxes], ctx.world.level.ground,
     airScaleAt(ctx.player.bulletTime.intensity, ctx.player.player.vel[1], ctx.player.player.grounded, PLAYER.jumpSpeed));
   // This tick's shots left the muzzle where last frame's camera put it; the
   // camera follows the step, so the shots must too (carryFreshShots).
@@ -530,12 +536,12 @@ export function tick(ctx: GameContext, dt: number) {
   // detached pieces fly ballistically through the shared chunk path.
   // ---------------------------------------------------------------
   ctx.telemetry.telemetry.lap('region', 'tick:weapon-rig-reload');
-  ctx.weapon.cooldown = Math.max(0, ctx.weapon.cooldown - pdt);
-  ctx.weapon.flare?.tickCooldown(pdt);
-  ctx.weapon.rod?.tick(pdt);
-  ctx.weapon.axe?.tick(pdt);
-  ctx.weapon.launcher?.tick(pdt);
-  ctx.weapon.recoilPitch *= Math.exp(-9 * pdt);
+  ctx.weapon.cooldown = Math.max(0, ctx.weapon.cooldown - fireDt);
+  ctx.weapon.flare?.tickCooldown(fireDt);
+  ctx.weapon.rod?.tick(fireDt);
+  ctx.weapon.axe?.tick(fireDt);
+  ctx.weapon.launcher?.tick(reloadDt);   // its cycle is mostly the reload (bullet time reloadScale)
+  ctx.weapon.recoilPitch *= Math.exp(-9 * fireDt);
   // ——— FREE AIM ————————————————————————————————————————————————————
   // The reticle only turns the camera once it is shoved past the dead zone;
   // inside it, aiming is free and the world stays put. While strafing the
@@ -545,7 +551,7 @@ export function tick(ctx: GameContext, dt: number) {
   // walk-bob block below from this frame's displacement, so it lags one frame,
   // far inside its own smoothing.
   if (ctx.player.freeAimOn) {
-    const turn = turnFromAim(ctx.weapon.aim, pdt, ctx.player.strafeAmount);
+    const turn = turnFromAim(ctx.weapon.aim, aimDt, ctx.player.strafeAmount);
     ctx.player.player.yaw += turn.yaw;
     ctx.player.player.pitch = Math.min(PLAYER.pitchLimit,
       Math.max(-PLAYER.pitchLimit, ctx.player.player.pitch + turn.pitch));
@@ -558,16 +564,16 @@ export function tick(ctx: GameContext, dt: number) {
     const shot = shotAim(ctx.weapon.aim, ctx.player.strafeAmount);
     const vf = viewmodelFrustum(aimFrustum(ctx), ctx.weapon.fovRig?.scale.x ?? 1);
     const w = ctx.player.freeAimOn ? weaponAngles(shot, vf) : { yawDeg: 0, pitchDeg: 0 };
-    ctx.weapon.yawDeg = approachAngle(ctx.weapon.yawDeg, w.yawDeg, pdt);
-    ctx.weapon.pitchDeg = approachAngle(ctx.weapon.pitchDeg, w.pitchDeg, pdt);
+    ctx.weapon.yawDeg = approachAngle(ctx.weapon.yawDeg, w.yawDeg, aimDt);
+    ctx.weapon.pitchDeg = approachAngle(ctx.weapon.pitchDeg, w.pitchDeg, aimDt);
     // ...and the weapon CARRIES across the frame as well as turning. Rotation
     // alone pins the grip near screen centre at every reticle position --
     // that is what pivoting about the grip means -- so the gun read as bolted
     // to the camera with a hinged barrel (owner report). approachAngle is a
     // plain exponential catch-up, so it smooths metres as happily as degrees.
     const s = ctx.player.freeAimOn ? weaponSlide(shot) : { x: 0, y: 0 };
-    ctx.weapon.slideXm = approachAngle(ctx.weapon.slideXm, s.x, pdt);
-    ctx.weapon.slideYm = approachAngle(ctx.weapon.slideYm, s.y, pdt);
+    ctx.weapon.slideXm = approachAngle(ctx.weapon.slideXm, s.x, aimDt);
+    ctx.weapon.slideYm = approachAngle(ctx.weapon.slideYm, s.y, aimDt);
   }
   // WALK BOB, driven by distance rather than time so it stays locked to the
   // stride when the player speeds up, slows down or stops.
@@ -576,11 +582,11 @@ export function tick(ctx: GameContext, dt: number) {
     const dx = pos[0] - ctx.player.prevPlayerPos[0], dz = pos[2] - ctx.player.prevPlayerPos[2];
     const step = Math.hypot(dx, dz);
     ctx.player.strafeAmount = approachStrafe(ctx.player.strafeAmount,
-      strafeSpeed01(dx, dz, ctx.player.player.yaw, pdt, PLAYER.walkSpeed), pdt);
+      strafeSpeed01(dx, dz, ctx.player.player.yaw, moveDt, PLAYER.walkSpeed), moveDt);
     ctx.player.prevPlayerPos = [pos[0], pos[1], pos[2]];
     ctx.player.bobDistance += step;
-    const speed01 = pdt > 0 ? Math.min(1, step / pdt / PLAYER.walkSpeed) : 0;
-    ctx.player.bobAmount = approachBob(ctx.player.bobAmount, speed01, pdt);
+    const speed01 = moveDt > 0 ? Math.min(1, step / moveDt / PLAYER.walkSpeed) : 0;
+    ctx.player.bobAmount = approachBob(ctx.player.bobAmount, speed01, moveDt);
   }
   if (ctx.weapon.aimRig) {
     const b = bobPose(ctx.player.bobDistance, ctx.player.bobAmount);
@@ -610,9 +616,9 @@ export function tick(ctx: GameContext, dt: number) {
   // (the holster travel is a local transform on gunRig/bundleRig, so it does
   // not care where the rig is — but the burst sprites the dynamite spawns are
   // world-space and want the frame's final camera).
-  stepWeaponSlots(ctx, pdt);
+  stepWeaponSlots(ctx, fireDt);
   // The flail, after the rig AND the holster are placed (game-flail.ts).
-  ctx.weapon.flail?.tick(pdt);
+  ctx.weapon.flail?.tick(fireDt);
   // The head damage model after the flail (actors stepped earlier this frame,
   // so the dangling eye follows this frame's pose).
   ctx.weapon.headDamage?.tick(dt);
@@ -652,8 +658,8 @@ export function tick(ctx: GameContext, dt: number) {
     }
   }
 
-  ctx.weapon.flashAge += pdt;
-  ctx.weapon.fireAge += pdt;
+  ctx.weapon.flashAge += fireDt;
+  ctx.weapon.fireAge += fireDt;
   // The flame jets are posed below, after the view-model matrices are current.
   stepFlashLight(ctx);
 
@@ -676,10 +682,10 @@ export function tick(ctx: GameContext, dt: number) {
   // THE VIEW-MODEL POSE: rest + reload delta + recoil delta, composed once so
   // a reload during recoil reads as both rather than one clobbering the other.
   const reloading = ctx.weapon.reloadAge <= RELOAD.totalSec;
-  if (reloading) ctx.weapon.reloadAge += pdt * ctx.weapon.reloadSpeed;
+  if (reloading) ctx.weapon.reloadAge += reloadDt * ctx.weapon.reloadSpeed;
   const rp = reloading ? reloadPose(ctx.weapon.reloadAge) : { roll: 0, pitch: 0, dy: 0, dz: 0, hinge: 0 };
   // One frame late: the flash frame holds the gun where it fired (recoilAge).
-  const rc = fireRecoil(recoilAge(ctx.weapon.fireAge, pdt), ctx.weapon.fireBarrels);
+  const rc = fireRecoil(recoilAge(ctx.weapon.fireAge, fireDt), ctx.weapon.fireBarrels);
   if (ctx.weapon.gunGroup) {
     ctx.weapon.gunGroup.rotation.z = THREE.MathUtils.degToRad(GUN_REST.rollDeg + rp.roll + rc.roll);
     ctx.weapon.gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg + rp.pitch + rc.pitch);
@@ -1358,7 +1364,7 @@ export function tick(ctx: GameContext, dt: number) {
   // Melee hit feedback: the shake offsets the eye (and so the look target,
   // which is taken from `eye` below: the view shakes, it does not swivel);
   // the flash drives the overlay.
-  ctx.player.hitFeedback = stepHitFeedback(ctx.player.hitFeedback, pdt);
+  ctx.player.hitFeedback = stepHitFeedback(ctx.player.hitFeedback, aimDt);
   // Bullet time's looks: the projectiles' air wakes (after every projectile stepped), the gore boost, the vignette.
   stepBulletTimeFx(ctx);
   if (ctx.player.hitFlashEl) ctx.player.hitFlashEl.style.opacity = String(ctx.player.hitFeedback.flash * 0.55);

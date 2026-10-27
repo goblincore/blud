@@ -253,15 +253,35 @@ describe('bobPose', () => {
   it('scales with the speed envelope', () => {
     expect(Math.abs(bobPose(0.3, 0.5).x)).toBeLessThan(Math.abs(bobPose(0.3, 1).x));
   });
-});
 
-describe('approachBob', () => {
-  it('ramps in and out rather than snapping', () => {
-    expect(approachBob(0, 1, 1 / 60)).toBeGreaterThan(0);
-    expect(approachBob(0, 1, 1 / 60)).toBeLessThan(1);
-    let v = 1;
-    for (let i = 0; i < 120; i++) v = approachBob(v, 0, 1 / 60);
-    expect(v).toBeLessThan(0.01);
+  it('has a long stride: a 1.4 m step, one lateral cycle per 2.8 m (owner 2026-10-27: "spastic")', () => {
+    expect(1 / BOB.cyclesPerMetre).toBeCloseTo(2.8, 9);
+    // A dip every 1.4 m: y returns to its rest at half the lateral period.
+    expect(bobPose(1.4, 1).y).toBeCloseTo(0, 9);
+    expect(bobPose(0.7, 1).y).toBeCloseTo(-BOB.amountY, 9);
+  });
+
+  it('has no cusp at the footfall: the vertical slope is continuous through the top of each dip', () => {
+    // Old -|sin| flipped its slope at every rest crossing; -sin^2 has zero slope there.
+    const h = 1e-4;
+    for (const d of [0, 1.4, 2.8]) {
+      const left = (bobPose(d, 1).y - bobPose(d - h, 1).y) / h;
+      const right = (bobPose(d + h, 1).y - bobPose(d, 1).y) / h;
+      expect(Math.abs(left - right)).toBeLessThan(1e-4);
+    }
+  });
+
+  it('is gentle: a few mm of dip, under a degree of roll', () => {
+    expect(BOB.amountY).toBeLessThanOrEqual(0.008);
+    expect(BOB.amountX).toBeLessThanOrEqual(0.012);
+    expect(BOB.amountRollDeg).toBeLessThan(1);
+  });
+
+  it('fades in with zero slope: the envelope goes through a smoothstep', () => {
+    // At a 2% envelope the swing is far below 2% of full (smoothstep(0.02) = 0.0012).
+    const d = 0.7;   // lateral peak
+    expect(Math.abs(bobPose(d, 0.02).x)).toBeLessThan(Math.abs(bobPose(d, 1).x) * 0.002);
+    expect(bobPose(d, 0.5).x).toBeCloseTo(bobPose(d, 1).x * 0.5, 9);   // smoothstep(0.5) = 0.5
   });
 });
 

@@ -222,6 +222,8 @@ import { createShutterPanel, shutterPanelHost, type ShutterPanel } from './shutt
 import { connectionBlobsForSim } from './blood-connections';
 import { createImpactSplashLayer, type ImpactSplashLayer } from './impact-splash';
 import { createGooPanel, type GooPanel } from './goo-panel';
+import { createBulletTimePanel } from './bullet-time-panel';
+import { applyBulletTimeTuning, bulletTimeFromParams } from '../bullet-time';
 import { createVhsPanel, type VhsPanel } from './vhs-panel';
 import { createLightLayersPanel } from './light-layers-panel';
 import { listLook } from './light-list';
@@ -514,6 +516,12 @@ async function main() {
     ?? (Date.now() & 0x7fffffff);
   setRngSeed(ctx.demo.seed);
   console.info(`[sdf-game] demo seed ${ctx.demo.seed}${ctx.boot.seedSearch.has('seed') ? ' (?seed=)' : ' (random)'}`);
+  // BULLET TIME knobs from the URL (?bt_move=0.66 &c., bullet-time.ts BULLET_TIME_PARAMS), validated like the
+  // __sdfGame.bulletTime({...}) seam; a refused one is logged rather than silently dropped.
+  {
+    const bt = applyBulletTimeTuning(bulletTimeFromParams(ctx.boot.seedSearch));
+    if (bt.rejected.length) console.warn(`[sdf-game] bullet time params refused: ${bt.rejected.join('; ')}`);
+  }
 
   // LOADING SCREEN (spike program). The boot compiles for seconds before the
   // game is playable — WebGPU init, the TSL graph, the weapon GLB, and since
@@ -5459,6 +5467,10 @@ async function main() {
   });
   ctx.panels.lightLayersPanel = createLightLayersPanel();
   ctx.panels.lightLayersPanel.setVisible(true);
+  // BULLET TIME (bullet-time-panel.ts): the mode's time scales as sliders, beside LIGHT LAYERS. Visible+collapsed
+  // like its siblings; __sdfGame.bulletTimePanel(false) dismisses it.
+  ctx.panels.bulletTimePanel = createBulletTimePanel();
+  ctx.panels.bulletTimePanel.setVisible(true);
   // The lab's droplet renderer, game-tuned: depth-WRITING cutout droplets
   // (the SDF composite's depth test then occludes droplets both ways — see
   // BloodViewOpts.dropletDepthWrite) at sim size (the lab's 0.45 is close-

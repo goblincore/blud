@@ -106,6 +106,7 @@ export function applyInputEdges(ctx: GameContext, next: Set<string>): void {
     ctx.panels.lightLayersPanel?.setVisible(!ctx.panels.hidden);
     ctx.panels.dynamitePanel?.setVisible(!ctx.panels.hidden);
     ctx.panels.shutterPanel?.setVisible(!ctx.panels.hidden);
+    ctx.panels.bulletTimePanel?.setVisible(!ctx.panels.hidden);
   }
   // Launcher R demonstrates a live-round reload; its reserve is unlimited.
   // Shotgun R still requires a partial finite magazine.

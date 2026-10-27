@@ -150,6 +150,10 @@ export function createMiscSeams(ctx: GameContext) {
       ctx.panels.lightLayersPanel?.setVisible(on);
       return ctx.panels.lightLayersPanel?.shell.visible ?? false;
     },
+    bulletTimePanel(on: boolean) {
+      ctx.panels.bulletTimePanel?.setVisible(on);
+      return ctx.panels.bulletTimePanel?.visible ?? false;
+    },
     vhsPanel(on: boolean) {
       ctx.panels.vhsPanel?.setVisible(on);
       return ctx.panels.vhsPanel?.visible ?? false;

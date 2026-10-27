@@ -13,6 +13,7 @@ import { type DeferredDebugView } from './deferred-layer';
 import { hashFrame } from './demo-hash';
 import { setPassLabelObserver } from './gpu-pass-timing';
 import { sectorOcclusion } from './actor-sight';
+import { applyBulletTimeTuning } from '../bullet-time';
 import type { SectorGround } from './sector-ground';
 import { type GameDeferredRendererDiagnostics, type GameSurfaceHash } from './game-deferred-renderer';
 
@@ -320,8 +321,21 @@ export function createBootSeams(ctx: GameContext) {
     gpuDiagnostics: () => ctx.boot.handle.gpuDiagnostics,
     loopRunning: () => ctx.boot.handle.loopRunning,
     uptime: () => (performance.now() - ctx.boot.time) / 1000,
-    /** BULLET TIME (bullet-time.ts; Q in game): the toggle, the eased intensity and the live droplet count. */
-    bulletTime: () => ({ ...ctx.player.bulletTime, droplets: ctx.vfx.bloodSim.droplets.length, pellets: ctx.weapon.pellets.map(p => p.pos) }),
+    /** BULLET TIME (bullet-time.ts; Q in game): the toggle, the eased intensity, the live droplet count, and the
+     *  live TUNING. Pass a partial to retune it (validated: a finite number inside BULLET_TIME_RANGES, else listed
+     *  in `rejected` and left alone; `reset: true` restores the defaults):
+     *    __sdfGame.bulletTime({ moveScale: 0.66, reloadScale: 0.6 })
+     *    __sdfGame.bulletTime({ reset: true })
+     *  Knobs: worldScale moveScale aimScale fireScale reloadScale shotScale airScale rampSec wakeStrength ownWakeMul.
+     *  The same knobs boot from ?bt_move= ?bt_aim= ?bt_fire= ?bt_reload= ?bt_shot= ?bt_world= ?bt_air= ?bt_ramp=. */
+    bulletTime: (partial?: Record<string, unknown>) => {
+      const { tuning, rejected } = applyBulletTimeTuning(partial);
+      if (partial) ctx.panels.bulletTimePanel?.refresh();
+      return {
+        ...ctx.player.bulletTime, droplets: ctx.vfx.bloodSim.droplets.length, pellets: ctx.weapon.pellets.map(p => p.pos),
+        tuning, ...(rejected.length ? { rejected } : {}),
+      };
+    },
     setBulletTime: (on: boolean) => { ctx.player.bulletTime.on = on; return { ...ctx.player.bulletTime }; },
     /**
      * THE SURFACE 'bodies' COMPOSITES INTO, read back (2026-09-10).
