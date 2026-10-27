@@ -65,7 +65,7 @@ describe("gloss suppresses the flesh's own noise (hard-surface task 1)", () => {
     // task-3 merge: calcNormal's amp is melt's vec4 (x silhouette, y/z/w
     // melt) — the kill applies to .x only, melt passes through untouched.
     expect(SHADE_BODY).toContain(
-      'calcNormal(p, data, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg');
+      'calcNormal(p, data, vec4<f32>(marchCfg.z * (1.0 - max(max(gloss, metal), cloth)), 0.0, 0.0, 0.0), woundCfg');
   });
 
   it('scales the micro-detail perturbation by (1 - max(gloss, metal)), still inside its amplitude guard', () => {
@@ -111,7 +111,10 @@ describe('metal modifier (hard-surface task 2)', () => {
     // parse-gated on color=, so an unpainted pixel can never change the
     // answer. One load, not a repeat.
     expect(SHADE_BODY).toContain('var metal = 0.0;');
-    expect((SHADE_BODY.match(new RegExp(esc(SHAPE_LOAD), 'g')) ?? []).length).toBe(1);
+    // ONE in the post-hit material read. (The walk has its own, the CLOTH ACCEPT's: one read on a sample about to
+    // accept, before any hit exists — it cannot share this one.)
+    const post = SHADE_BODY.slice(SHADE_BODY.indexOf('var gloss = 0.0;'));
+    expect((post.match(new RegExp(esc(SHAPE_LOAD), 'g')) ?? []).length).toBe(1);
     expect(SHADE_BODY.indexOf('var metal = 0.0;'))
       .toBeLessThan(SHADE_BODY.indexOf('calcNormal(p,'));
     expect(SHADE_BODY.indexOf(SHAPE_LOAD))
@@ -119,11 +122,11 @@ describe('metal modifier (hard-surface task 2)', () => {
     expect(SHADE_BODY).toContain('if ((i32(PS.y) & 16) != 0)');
   });
 
-  it('implies task 1 noise suppression with NO gloss set: both sites use max(gloss, metal)', () => {
+  it('implies task 1 noise suppression with NO gloss set: both sites use max(gloss, metal) (cloth joins it at the silhouette site)', () => {
     // Pinned in the gloss describe above with the same strings; this test
     // makes the METAL half of the max explicit, so dropping metal from
     // either application site fails HERE as well as there.
-    expect(SHADE_BODY).toContain('marchCfg.z * (1.0 - max(gloss, metal))');
+    expect(SHADE_BODY).toContain('marchCfg.z * (1.0 - max(max(gloss, metal), cloth))');
     expect(SHADE_BODY).toContain('let detailAmp = surfCfg2.y * (1.0 - max(gloss, metal));');
   });
 
@@ -247,5 +250,24 @@ describe('per-prim glow= in primClip.w (hard-surface task 3)', () => {
     // painted)` kill line — would be the resurrected sunglasses rule wearing
     // a different hat (this exact mutation was run and killed).
     expect((MARCH_TREE_SRC.match(/primGlow =/g) ?? []).length).toBe(3);
+  });
+});
+
+describe('cloth (SDF-cloth look, 2026-10-26)', () => {
+  const SHADE_BODY = MARCH_BODY;
+  it('a painted SHELL prim is cloth, read off the shape texel the painted branch already loads', () => {
+    expect(SHADE_BODY).toContain('if ((i32(PS.y) & 4) != 0) { cloth = 1.0; }');
+  });
+  it('cloth drops the silhouette noise, the scatter and most of the wet, and adds wrap and sheen', () => {
+    expect(SHADE_BODY).toContain('marchCfg.z * (1.0 - max(max(gloss, metal), cloth))');
+    expect(SHADE_BODY).toContain('* (1.0 - cm) * (1.0 - cloth)');
+    expect(SHADE_BODY).toContain('wet = wet * mix(1.0, 0.12, cloth');
+    expect(SHADE_BODY).toContain('if (cloth > 0.0) { diff = mix(diff,');
+    expect(SHADE_BODY).toContain('let sheen = pow(1.0 - max(dot(n, V), 0.0), 3.0)');
+  });
+  it('folds are shading-only, round the hit shell\'s REST axis, and darken their floors in the paint', () => {
+    expect(SHADE_BODY).toContain('if (cloth > 0.0 && hitBest >= 0) {');
+    expect(SHADE_BODY).toContain('let walk = length(gWindDrift.xz);');
+    expect(SHADE_BODY).toContain('* (1.0 - 0.7 * clothValley) * (1.0 - 0.75 * clothInside)');
   });
 });

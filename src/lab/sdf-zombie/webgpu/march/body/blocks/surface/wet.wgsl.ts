@@ -54,4 +54,7 @@ export const WET_BLOCK = /* wgsl */ `  // Wounds are wetter than the surrounding
   // The legacy shine exponent, named so the lighting tail and the deferred
   // surface output share one definition: the surface's roughness inverts the
   // shared light pass's exponent mapping against exactly this value.
+  // CLOTH is matte: its wet highlight drops to 12%, except inside a hole (the reveal ramp of PAINT_CHAR), where
+  // the flesh under it keeps its own.
+  if (cloth > 0.0) { wet = wet * mix(1.0, 0.12, cloth * (1.0 - smoothstep(0.30, 0.42, wm))); }
   let specPow = mix(mix(128.0, 4.0, surfCfg.y), 220.0, gloss);`;

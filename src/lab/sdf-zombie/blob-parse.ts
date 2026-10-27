@@ -516,6 +516,7 @@ function parseBodyLine(l: BlobLine, s: ParseState, into: BlobPart[]): void {
     // ShellParams.
     warpAmp: numArg(l, 'warp', 0),
     warpFreq: parseWarpFreq(l),
+    ruffle: numArg(l, 'ruffle', 0),
     clipNormal: parseVec3Arg(l, 'clip', strArg(l, 'clip')),
     clipOffset: numArg(l, 'clipd', 0),
     rim: numArg(l, 'rim', 0),
@@ -530,6 +531,8 @@ function parseBodyLine(l: BlobLine, s: ParseState, into: BlobPart[]): void {
     // prim with `color=ff2200 glow=0.9` glows red because it IS red. Packed
     // into primClip.w — see pack.ts.
     glow: parseGlowArg(l, strArg(l, 'color') !== null),
+    // `shroud=` — a hood's inside goes dark (PrimDef.shroud). Shell only, checked below.
+    shroud: strArg(l, 'shroud') === null ? null : numArg(l, 'shroud'),
     // `metal` — a bare word like `chamfer`/`box`, gated on paint exactly as
     // `gloss=` is. Marks the painted surface as METAL at shading time: the
     // shader suppresses its diffuse to a small floor and tints the specular
@@ -582,6 +585,12 @@ function parseBodyLine(l: BlobLine, s: ParseState, into: BlobPart[]): void {
       throw new BlobError('shell needs clipd=<offset>', l.line, l.indent + 1);
     if (strArg(l, 'rim') === null)
       throw new BlobError('shell needs rim=<rounding radius>', l.line, l.indent + 1);
+  }
+  if (part.shroud !== null) {
+    if (kind !== 'shell' || strArg(l, 'tip') !== null)
+      throw new BlobError('shroud= darkens the inside of a hood: it needs a ball shell (no tip=)', l.line, l.indent + 1);
+    if (part.shroud < 0 || part.shroud > 1)
+      throw new BlobError(`shroud= is 0..1, got ${part.shroud}`, l.line, l.indent + 1);
   }
 
   if (part.side !== null && limb !== 'arm' && limb !== 'leg')

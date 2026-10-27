@@ -89,7 +89,8 @@ import { parseBlob } from '../blob-parse';
 import { MOTION_TUNING } from '../motion';
 import { createCharacterView, compileCharacterSheet, bodyBuildCacheStats } from './character-view';
 import { createCharacterEffects } from './character-effects';
-import { characterEntry, characterNames } from '../character-registry';
+import { CHARACTERS, characterEntry, characterNames } from '../character-registry';
+import { applyClothQuery } from './bench-cloth';
 import { rotateYaw } from '../gait';
 import { makeSoldierMind, makeWarbullMind, makeSwordMind } from './enemy-mind';
 import { hitFeedback, stepHitFeedback } from '../player-hit-feedback';
@@ -3038,6 +3039,8 @@ async function main() {
       ctx.world.levelNodeMaterials.push(nm);
     }
   }
+  // ?cloth=<variant>: the SDF-cloth cost spike's garments on the zombie (bench-cloth.ts). Dev only.
+  applyClothQuery(location.search, CHARACTERS.zombie as { src: string });
   ctx.boot.spawnOverride = ((): string | null => {
     const v = new URLSearchParams(location.search).get('spawn');
     return v && characterNames().includes(v) ? v : null;

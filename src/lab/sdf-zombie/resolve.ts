@@ -110,6 +110,7 @@ export function placePrims(
       ...(p.color === undefined ? {} : { color: p.color }),
       ...(p.gloss === undefined ? {} : { gloss: p.gloss }),
       ...(p.glow === undefined ? {} : { glow: p.glow }),
+      ...(p.shroud === undefined ? {} : { shroud: p.shroud }),
       ...(p.metal === undefined ? {} : { metal: p.metal }),
       ...(p.fabric === undefined ? {} : { fabric: p.fabric }),
       ...(p.core ? { core: true } : {}),

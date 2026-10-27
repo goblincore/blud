@@ -9,7 +9,7 @@ const FULL_PRIM: Required<PrimDef> = {
   bone: 'spine', src: 7, at: 0.5, capTo: 0.9, radius: 0.10, radiusB: 0.05, scale: [1, 2, 3], blendK: 0.02,
   blendProfile: 'chamfer', bend: [0.01, 0.02, 0.03], limb: 'torso', mirror: true, side: 'l', op: 'add',
   grooveDepth: 0.004, grooveWidth: 0.005, offset: [0.1, 0.2, 0.3], tip: [0.4, 0.5, 0.6], mirrorOffset: true,
-  color: [0.1, 0.2, 0.3], gloss: 0.5, metal: true, fabric: true, glow: 0.3, core: true, rigid: true, when: 'dead',
+  color: [0.1, 0.2, 0.3], gloss: 0.5, metal: true, fabric: true, glow: 0.3, shroud: 0.5, core: true, rigid: true, when: 'dead',
   shell: { thickness: 0.002, clipNormal: [0, 1, 0], clipOffset: 0.03, rim: 0.004, warpAmp: 0.01, warpFreq: [20, 0, 40] },
   box: { round: 0.25 }, strand: { count: 5, wave: 0.2, cycles: 2, fat: 0.5 },
   morphs: [{ channel: 'smile', sign: 1, move: [0.01, 0.02, 0.03], tip: [0.04, 0.05, 0.06], bend: [0.001, 0.002, 0.003], radius: 1.2, scale: [1.1, 1, 0.9], blend: 2 }],

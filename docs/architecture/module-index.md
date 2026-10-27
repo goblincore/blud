@@ -35,7 +35,7 @@ Each line is the first sentence of the module's header comment.
 
 | Area | Modules | What is there |
 | --- | --- | --- |
-| [webgpu/march/](#webgpumarch) | 56 | The SDF march shader, split by stage (WGSL). |
+| [webgpu/march/](#webgpumarch) | 57 | The SDF march shader, split by stage (WGSL). |
 | [webgpu/earlyz/](#webgpuearlyz) | 10 | Early-Z depth prepass for the march. |
 | [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 27 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
 | [webgpu/upscale/](#webgpuupscale) | 8 | Upscaling of the low-res march target. |
@@ -56,8 +56,8 @@ Each line is the first sentence of the module's header comment.
 | [Actors and crowd (render)](#actors-and-crowd-render) | 19 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
-| [Bench, demo and telemetry](#bench-demo-and-telemetry) | 7 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 46 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [Bench, demo and telemetry](#bench-demo-and-telemetry) | 8 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
+| [SDF march renderer](#sdf-march-renderer) | 47 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 39 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
@@ -65,7 +65,7 @@ Each line is the first sentence of the module's header comment.
 | [AI and actors (logic)](#ai-and-actors-logic) | 11 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 10 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
-| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 14 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
+| [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 15 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
 
 ## webgpu/march/
 
@@ -126,6 +126,7 @@ The SDF march shader, split by stage (WGSL).
 - `webgpu/march/melt.ts` — Face-melt and melt-skin tuning constants — split out of march.wgsl.ts (phase 1, move-only).
 - `webgpu/march/primitives.wgsl.ts` — SDF primitives, fold operators and the detail field — split out of march.wgsl.ts (phase 1, move-only).
 - `webgpu/march/raymask-flag.ts` — COMPILE-TIME switch for the per-ray primitive mask PROBE (2026-10-08).
+- `webgpu/march/shade-bound-flag.ts` — COMPILE-TIME switch for the POST-HIT UPPER-BOUND CULL (SDF-cloth cost spike, 2026-10-26; docs/dev-notes/2026-10-26-sdf-cloth-cost/).
 - `webgpu/march/shade-helpers.wgsl.ts` — Small shading helpers — texel fetch, soft shoulder, flicker and the level-only shadow lookup — split out of march.wgsl.ts (phase 1, move-only).
 
 ## webgpu/earlyz/
@@ -597,6 +598,7 @@ AA, glow, VHS, shutter blur, fisheye.
 
 Benchmarks, demo record/replay, frame hashes, GPU timing.
 
+- `webgpu/bench-cloth.ts` — THE SDF-CLOTH COST SPIKE (2026-10-26, docs/dev-notes/2026-10-26-sdf-cloth-cost/).
 - `webgpu/bench-stats.ts` — Pure frame-time accumulator for the bench page.
 - `webgpu/demo-hash.ts` — THE FRAME HASH, in-page half.
 - `webgpu/demo-recorder.ts` — THE INPUT RECORDER/PLAYER (deterministic demo recordings stage 3, 2026-09-14).
@@ -611,6 +613,7 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 
 - `webgpu/arena-cycle.ts` — The TEST ARENA's character cycling (game-arena.ts), pure: which registry characters it steps through, and the next one from the current.
 - `webgpu/body-normal-load.ts` — Load a character's BODY NORMAL MAP (character-registry.ts `bodyNormal`; spec docs/superpowers/specs/2026-10-21-body-normal-map-design.md) and turn it…
+- `webgpu/cloth-proxy.ts` — THE RASTERISED CLOTH PROXY (SDF-cloth cost spike, option 1, 2026-10-26; docs/dev-notes/2026-10-26-sdf-cloth-cost/).
 - `webgpu/curl-volume-node.ts` — THE SHARED CURL VOLUME, TSL SIDE (extracted from flame-cards.ts for the explosion-curl task).
 - `webgpu/curl-volume.ts` — CURL-NOISE VOLUME (flame-polish plan task 2, 2026-09-18): a small seeded 64^3 RGBA8 3D texture whose RGB is a divergence-free vector field and whose…
 - `webgpu/emergence-camera.ts` — THE EMERGENCE'S CAMERAS IN THE FLAT, and the view the player takes over at the end (plan 2026-10-16-emergence-in-the-flat Task 7; spec…
@@ -829,6 +832,7 @@ What fits no area above: the original WebGL lab shader, resolution scaling, samp
 
 - `adaptive-scale.ts` — Dynamic resolution for the SDF layer: keep the frame inside a budget by trading raymarch resolution, which is the one lever whose cost is exactly…
 - `bullet-time.ts` — BULLET TIME (owner 2026-10-25: "like the matrix — you move normal speed but everything else slows down").
+- `cloth-sway.ts` — CLOTH SWAY (2026-10-26; eased 2026-10-27).
 - `curl-sample.ts` — CPU SIDE OF THE SHARED CURL VOLUME (2026-09-18 blood-curl-spike): a pure, THREE-FREE trilinear sampler over the packed `Uint8Array` from…
 - `depth-diff.ts` — Depth diff — comparing the INSIDE of the outline: per-pixel surface depth of the compiled body against the reference mesh, where both agree the…
 - `expression-library.ts` — Which expression clips (and which tuning) each character has, by the name the lab and the game use for it.

@@ -348,6 +348,25 @@ only if an idea below earns it.
   / -34% zombie prim evals, pixel-identical). Findings + next steps: [PERF.md](../../docs/dev-notes/2026-09-23-cultist/PERF.md). Original plan:
   cut hidden flesh under the robe, merge robe shells, consider baking the hands (owner: no digit-level damage needed).
   Owner open to a mesh/baked robe if SDF can't get near ~1.5x a zombie.
+- [x] **SDF-cloth cost spike (2026-10-26)**: [notes](../../docs/dev-notes/2026-10-26-sdf-cloth-cost/NOTES.md). Counters, game close-up,
+  zombie = 1.00: paint or flesh-OFFSET trousers 1.00-1.01x, five shell trousers 1.48x, the cultist's robe 2.07x (arena 1.30x).
+  The robe's cost is STEPS near its silhouette, not prims. Landed: taper-aware outer-hull chain (-7% robe close-up).
+- [x] **Rasterised cloth proxy** (`cloth-proxy.ts`): each shell's own fitted mesh in the outer hull instead of spheres.
+  Robe close-up -21% -> **1.64x** a zombie (1.55x without `warp=`), arena 1.18x. `?clothproxy=0` for A/B.
+- [x] **Cloth that reads as cloth** (owner: the robe "moves and looks like SDF flesh"): painted shells now shade as
+  fabric (no scatter/wet/skin noise, wrap + sheen, dye mottle), shading-only pleats round each shell's axis, and
+  walking drifts the folds (`CLOTH_WALK_DRIFT`). Zero march cost. [Notes](../../docs/dev-notes/2026-10-26-sdf-cloth-cost/NOTES.md).
+- [x] **Cultist hood as cloth** (owner: "drape on the head ... not a hard helmet"): a back drape onto the shoulders,
+  a slumped shell peak (the solid one caused the "onion" rings in the opening), dark linings, thinner sheets, and a
+  cloth-only tight accept for real-thickness edges. Robe zombie 1.70x a zombie close-up.
+- [ ] Next for cloth: a bending hem (`hem2`/`hem3` chain) instead of one rigid cone; folds that answer turning; a
+  per-prim cuff (hem lip from the flesh offset); `?shadebound` after an owner look at its outliers.
+- [x] **Analytic normals working again** (dead since 2026-09-29: the zombie's tapered foot bar failed `ngBody` on
+  every pixel). Tapers, shells and chamfers now have gradients, and skipped groups no longer veto. Close-up prim
+  work −31% bare zombie, −25% robe, −29% trousers; arena −13 to −15%. [Notes](../../docs/dev-notes/2026-10-26-sdf-cloth-cost/NOTES.md),
+  follow-up 4. Still on the taps: strands, hem rims.
+- [x] Analytic gradients for bends (coneBend) and boxes (2026-10-27, follow-up 4b): the soldier has no reason-1
+  pixels left. The saving is small (−1 to −2%), because only 5% of its hit pixels were failing.
 - [ ] **Cloth feel**: hood and robe read stiff (owner). Options: more pendulum points (hem flare ring, hood tail),
   travelling warp waves driven by velocity, or a prebaked cloth sim. Robe distortion on the death throw.
 - [ ] **Hip fire**: the cultist fires from the shoulder; owner wants a random mix of hip and shoulder bursts.

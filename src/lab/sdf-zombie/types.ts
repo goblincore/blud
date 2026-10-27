@@ -43,6 +43,14 @@ export interface ShellParams {
    *  to a constant, which turns the lumps into vertical folds — that one
    *  degree of freedom is the difference between cloth and a lumpy shell. */
   warpFreq?: Vec3;
+  /**
+   * RUFFLE (cultist hood, 2026-10-27). Metres the cut edge wanders INTO the sheet, on the warp's lattice
+   * (`warpFreq`, body-anchored, drifting as the body walks): 0..ruffle deeper than the clip plane. A plane through an
+   * ellipsoid is an exact ellipse, and the owner read the hood's opening as "a thick egg"; a ragged, moving edge reads
+   * as fabric. Only ever removes sheet, so the hull, the cloth proxies and every bound fitted to the plain clip hold.
+   * Packs as hasClip = 1 + ruffle (ROW_PRIM_SHELL.w). 0 = the plain cut.
+   */
+  ruffle?: number;
 }
 
 /**
@@ -283,6 +291,14 @@ export interface PrimDef {
    */
   glow?: number;
   /**
+   * SHROUD, 0..1 (cultist hood, 2026-10-27): this shell is a hood, and what sits deep inside it is in its shadow.
+   * The game's main light is the player's torch, from the camera, so a hood can never cast a shadow onto the face
+   * it holds; this is that shadow, authored. Every hit point inside the shell's closed ellipsoid and behind its clip
+   * plane darkens by up to this much, deeper = darker, the lining included (glow is emission and stays). Only on a
+   * ball shell (no tip). Packed into the OTHER prims' ROW_PRIM_STRAND lanes (pack.ts), dead with the shell.
+   */
+  shroud?: number;
+  /**
    * Marks this primitive as the limb's STRUCTURAL MASS for the fuse probe
    * (clusterCore). Without it the fattest prim in the cluster is taken,
    * which is wrong as soon as a shoe or a sleeve is fatter than the bone it
@@ -444,6 +460,8 @@ export interface Primitive {
   gloss?: number;
   /** See PrimDef.glow. Carried through mirror, resolve and the rig untouched. */
   glow?: number;
+  /** See PrimDef.shroud. Carried through mirror, resolve and the rig untouched. */
+  shroud?: number;
   /** See PrimDef.metal. Carried through mirror, resolve and the rig untouched. */
   metal?: boolean;
   /** See PrimDef.fabric. Carried through mirror, resolve and the rig untouched. */

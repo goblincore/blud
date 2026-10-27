@@ -5,7 +5,7 @@
 // cloaked zombie figure, basically like the cultists in Blood") — so these
 // are STRUCTURAL PINS, each naming a decision from the .blob header:
 //
-//   * the costume is SHELLS: skirt, capelet, hood, two bell cuffs;
+//   * the costume is SHELLS: skirt, capelet, hood, the hood's drape, two bell cuffs;
 //   * the hood rides the rigid head, and its face opening turns with it;
 //   * the skirt rides the `hem` pendulum as ONE piece (`rigid`), not an ankle;
 //   * the pendulum SWINGS under the real motion pipeline and never becomes
@@ -49,9 +49,9 @@ describe('cultist — build', () => {
     expect(characterEntry('cultist').name).toBe('cultist');
   });
 
-  it('is dressed in SHELLS: skirt, capelet, hood and a mirrored pair of cuffs', () => {
+  it('is dressed in SHELLS: skirt, capelet, hood, the hood\'s drape and a mirrored pair of cuffs', () => {
     const s = shells().map(({ p }) => `${p.limb}:${p.bone}`).sort();
-    expect(s).toEqual(['armL:foreArm.l', 'armR:foreArm.r', 'head:skull', 'torso:hem', 'torso:spine']);
+    expect(s).toEqual(['armL:foreArm.l', 'armR:foreArm.r', 'head:skull', 'head:skull', 'torso:hem', 'torso:neck', 'torso:spine']);
   });
 
   it('has exactly two glowing eyes', () => {
