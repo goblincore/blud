@@ -360,9 +360,19 @@ describe('shellGradient', () => {
   });
 
   it('differentiates the rounded rim at the hem', () => {
-    // Both the sheet and the plane are 10 mm inside, so the rounding (rim - |(d, plane)|) is the surface term.
+    // Both the sheet and the plane are 10 mm inside, within the 20 mm rim: the rounded corner's quarter circle.
     const s = { ...skirt, warpAmp: 0, thickness: 0.014, rim: 0.02 };
     const p: V3 = [0.074, -0.37, 0.0185];
+    const x = shellGradient(capsuleGradient(p, tube), p, s);
+    expect(x.reason).toBe('ok');
+    expect(x.d).toBeCloseTo(scalar(p, s), 12);
+    expectV3Close(x.g, finiteGradient(q => scalar(q, s), p, 1e-6), 5);
+  });
+
+  it('the rounded corner meets each face smoothly, and rounds the edge rather than grooving it', () => {
+    // Just past the corner region on the sheet's side (plane + rim slightly negative): the face, with no kink flagged.
+    const s = { ...skirt, warpAmp: 0, thickness: 0.014, rim: 0.02 };
+    const p: V3 = [0.074, -0.355, 0.0185];
     const x = shellGradient(capsuleGradient(p, tube), p, s);
     expect(x.reason).toBe('ok');
     expect(x.d).toBeCloseTo(scalar(p, s), 12);

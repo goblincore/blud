@@ -424,7 +424,7 @@ const NG_SHAPE_ORIENTED = /* wgsl */ `fn ngShapeOriented(
   return vec4<f32>(local.x, ngQRot(quat, local.yzw));
 }`;
 
-// sdShell with its gradient: sign(base) x grad(base) for the sheet, max with the clip plane, the rounded rim, all
+// sdShell with its gradient: sign(base) x grad(base) for the sheet, the rounded intersection with the clip plane, all
 // over the warp's Lipschitz factor. The warp's derivative goes through noiseLocal's body frame (a yaw, then the
 // transpose back). Each switch is a kink; a stencil within reach of one that decides the value is reason 3.
 const NG_SHELL = /* wgsl */ `fn ngShell(dBase: vec4<f32>, p: vec3<f32>, thick: f32, rim: f32, clipO: f32, hasClip: f32, clipN: vec3<f32>, warpA: f32, warpF: vec3<f32>, drift: vec3<f32>) -> vec4<f32> {
@@ -446,18 +446,22 @@ const NG_SHELL = /* wgsl */ `fn ngShell(dBase: vec4<f32>, p: vec3<f32>, thick: f
   if (abs(base.x) <= lip * R && gNgReason == 0) { gNgReason = 3; }
   let d = vec4<f32>(abs(base.x) - thick, select(-base.yzw, base.yzw, base.x >= 0.0));
   if (hasClip < 0.5) { return d / lip; }
+  // The rounded intersection (sdShell, 2026-10-27): the quarter circle where both shifted values are positive,
+  // that face where one is, the hard max where neither is. The circle meets each face with the face's gradient, so
+  // the kinks are the tie ray (u = v <= 0) and its end, a sharp corner's apex at rim 0.
   let plane = vec4<f32>(dot(p, clipN) - clipO, clipN);
   let reach = 2.0 * (lip + length(clipN)) * R;
-  var m = select(plane, d, d.x >= plane.x);
-  let len = length(vec2(d.x, plane.x));
-  if (len < 1e-9) {
-    if (gNgReason == 0) { gNgReason = 2; }
-    return vec4<f32>(m.x / lip, 0.0, 0.0, 0.0);
-  }
-  let rimT = vec4<f32>(rim - len, -(d.x * d.yzw + plane.x * clipN) / len);
-  if (abs(m.x - rimT.x) <= reach && gNgReason == 0) { gNgReason = 3; }
-  if (rimT.x > m.x) { m = rimT; }
-  else if (abs(d.x - plane.x) <= reach && gNgReason == 0) { gNgReason = 3; }
+  let u = d.x + rim;
+  let v = plane.x + rim;
+  let nearKink = select(length(vec2(u, v)) <= reach, abs(u - v) <= reach, u + v <= 0.0);
+  if (nearKink && gNgReason == 0) { gNgReason = 3; }
+  var m: vec4<f32>;
+  if (u > 0.0 && v > 0.0) {
+    let len = length(vec2(u, v));
+    m = vec4<f32>(len - rim, (u * d.yzw + v * clipN) / len);
+  } else if (u > 0.0) { m = d; }
+  else if (v > 0.0) { m = plane; }
+  else { m = select(plane, d, d.x >= plane.x); }
   return m / lip;
 }`;
 

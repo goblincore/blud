@@ -251,9 +251,8 @@ export interface ShellInput {
 export const NG_STENCIL_R = Math.sqrt(3) * 0.0015;
 
 /** Value and gradient of the production shell (sdShellWrap / sdShell) taken off a closed base field and its gradient.
- * Its three switches (the sheet's crease mid-sheet, the clip plane, the rounded rim) are kinks: within the stencil
- * ball of one, finite differences straddle two gradients, so the analytic one is not certified there
- * ('hard-boundary'). The warp is a product of sines, differentiated through noiseLocal's affine body frame. */
+ * Its kinks (the sheet's crease mid-sheet, the hard sheet/plane tie inside the rounded corner, a corner sharper than
+ * the stencil) are 'hard-boundary': within the stencil ball of one, finite differences straddle two gradients. The warp is a product of sines, differentiated through noiseLocal's affine body frame. */
 export function shellGradient(base: Dg, p: V3, s: ShellInput): Dg {
   assertDg('shell base', base);
   const R = NG_STENCIL_R;
@@ -285,16 +284,22 @@ export function shellGradient(base: Dg, p: V3, s: ShellInput): Dg {
   const sg = bd >= 0 ? 1 : -1;
   const d: Dg = { d: Math.abs(bd) - s.thickness, g: [sg * bg[0], sg * bg[1], sg * bg[2]], reason };
   const n = s.clipNormal;
-  const plane: Dg = { d: n[0] * p[0] + n[1] * p[1] + n[2] * p[2] - s.clipOffset, g: n, reason: 'ok' };
-  // Each switch is checked only where it decides the value: the sheet/plane edge only where the rounding does not win.
+  const dPlane = n[0] * p[0] + n[1] * p[1] + n[2] * p[2] - s.clipOffset;
+  // The rounded intersection min(-rim, max(sheet, plane)) + |max((sheet, plane) + rim, 0)|. In the corner (both
+  // shifted values positive) it is the quarter circle, whose gradient is the weighted sum below; with one positive
+  // it is that face; with neither, the hard max. Only that last region's tie, and a corner sharper than the stencil
+  // (rim near 0), are kinks: the circle meets each face with the face's own gradient.
   const reach = 2 * (lip + Math.hypot(...n)) * R;
-  let m = d.d >= plane.d ? d : plane;
-  const len = Math.hypot(d.d, plane.d);
-  if (len === 0) return { d: m.d / lip, g: ZERO, reason: 'degenerate' };
-  const rimD = s.rim - len;
-  flag(Math.abs(m.d - rimD) <= reach);
-  if (rimD > m.d) m = { d: rimD, g: [0, 1, 2].map(i => -(d.d * d.g[i]! + plane.d * n[i]!) / len) as unknown as V3, reason };
-  else flag(Math.abs(d.d - plane.d) <= reach);
+  const u = d.d + s.rim, v = dPlane + s.rim;
+  // Within reach of the tie ray (u = v <= 0) or its end at the origin, which is the apex of a corner at rim 0.
+  flag(u + v <= 0 ? Math.abs(u - v) <= reach : Math.hypot(u, v) <= reach);
+  let m: Dg;
+  if (u > 0 && v > 0) {
+    const len = Math.hypot(u, v);
+    m = { d: len - s.rim, g: [0, 1, 2].map(i => (u * d.g[i]! + v * n[i]!) / len) as unknown as V3, reason };
+  } else if (u > 0) m = d;
+  else if (v > 0) m = { d: dPlane, g: n, reason };
+  else m = d.d >= dPlane ? d : { d: dPlane, g: n, reason };
   return { d: m.d / lip, g: [m.g[0] / lip, m.g[1] / lip, m.g[2] / lip], reason };
 }
 

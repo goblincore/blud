@@ -584,3 +584,11 @@ The fix is the standard rounded intersection, `min(-rim, max) + length(max(vec2(
 which gives a convex bullnose and leaves both flat faces where they were. It is never below the hard cut, so the
 hull and the cloth proxies still contain it. `shell.test.ts` now checks that the edge is monotonic, a test the old
 formula fails. This fixes every shell edge in the cast (hems, cuffs, capelets), not only the hood.
+
+The analytic shell gradient (`ngShell`, `shellGradient`) follows the new rim (2026-10-27, on PR #86):
+- In the corner, where sheet + rim and plane + rim are both positive, the gradient is the quarter circle's, the two
+  gradients weighted by those values.
+- Where one of the two is positive, it is that face's. Where neither is, it is the hard max's.
+- The circle meets each face with the face's own gradient, so the only kinks left are the hard tie (sheet = plane,
+  both at or below -rim) and its end, which is a sharp corner's apex at rim 0. The old rim term was a kink of its own.
+- Robe close-up: 850 hit pixels fall back at a kink (reason 3) and none as unsupported. The bare zombie is unchanged.
