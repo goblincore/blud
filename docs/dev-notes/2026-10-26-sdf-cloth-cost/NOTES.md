@@ -437,6 +437,42 @@ Mode-12 reasons on hit pixels, after:
 
 ![bare zombie close-up: on, off, shaded diff x8, normal angle x40](ng-onoff-zombie.png)
 
+### Follow-up 4b (2026-10-27): bends and boxes
+
+The soldiers were the last body on the taps. Their bent limbs (coneBend) and machined boxes set reason 1.
+
+- **`ngBend`** repeats coneBend's search verbatim, so the value matches the fold's, and keeps the minimising t.
+  - The field is a minimum over t, so at t* the gradient is the unit vector from P(t*) to q. This holds at an end
+    too, because the interval does not move with q.
+  - Its one kink is the medial crease inside a bend: a second basin of G within the stencil's reach, past a hump.
+    The shader looks for it at coneBend's seeds. The CPU mirror (`bentConeGradient`) uses a dense grid.
+- **`ngBox`** is the rounded box, with its gradient taken through dw/dq: the projector off the axis while the
+  clamped t is interior, and the identity past an end. Reason 3 covers two kinks:
+  - two faces tied within the stencil, inside or at an edge the rounding leaves sharp;
+  - either end's plane, where the box's gradient has an axial part.
+- `ngShape` / `ngShapeOriented` choose the field: box, then bend, then taper, in sdPrim's order. `ngGroup` now
+  refuses only strands.
+
+Measured with the same driver, plus a new `soldier` stage (room 6's nearest soldier at 1.3 m). `REASONS=1` now also
+prints the angle between the analytic and 4-tap normals:
+
+| `?ngcount` | before | after | reasons after (hit px) | vs 4-tap: median / p99 / max |
+| --- | --- | --- | --- | --- |
+| arena (6 zombies, 2 soldiers) | 0.46M | 0.45M | 0: 6056, 4: 656 (was 1: 620) | 0.30° / 2.1° / 10.3° |
+| soldier close-up | 5.10M | 5.08M | 0: 51316, 4: 7792 (was 1: 2796) | 0.18° / 1.2° / 11.0° |
+| zombie close-up | 2.23M | 2.23M | unchanged | 0.31° / 1.6° / 6.8° |
+
+- **Reason 1 is gone** from every scene, and nothing new lands on reason 3.
+- **The saving is small:** −1 to −2%, because only 5% of the soldier's hit pixels were failing. They are pixels
+  near a bent prim or a box. The other 95% were already analytic. ngBend costs about what coneBend does, so a
+  converted pixel saves the four taps' other prims, not the bend.
+- **Shaded** (clocks pinned):
+  - Soldier close-up: 104 texels moved, mean 1.0/255, max 8/255.
+  - Zombie close-up: unchanged.
+  - Arena: 9 texels moved over 8/255, all on a distant soldier's emissive and metal boxes (HDR values, so /255
+    overstates them). Those boxes are corners rounded to about the stencil's size, where the 1.5 mm taps blur a
+    normal the analytic gradient keeps. That is also where the 10-11° maxima are.
+
 ## Recommendation
 
 1. **Zombie trousers: keep paint (#82), or move to the offset form if the legs should read thicker.** The offset form
@@ -472,5 +508,5 @@ Mode-12 reasons on hit pixels, after:
   `TIMING=1` on the bench driver. The game driver also has `NG=0` and `REASONS=1`, and pins the light clocks under
   `DUMP=1`.
 - `src/lab/sdf-zombie/webgpu/normal-gradient.wgsl.ts`: the analytic normal (follow-up 4: `ngCone`, `ngShell`,
-  `ngSminChamfer`, `ngExcluded`, `ngGroup`). Its CPU mirror and finite-difference tests are
+  `ngSminChamfer`, `ngExcluded`, `ngGroup`; 4b: `ngBend`, `ngBox`, `ngShape`, `ngShapeOriented`). Its CPU mirror and finite-difference tests are
   `normal-gradient-reference.ts` (+ test).

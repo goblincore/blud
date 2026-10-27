@@ -14,10 +14,10 @@ export function classifyNormalSupport(body: Body): { commonFlesh: boolean; reaso
     if (!c.alive) continue;
     for (const p of body.prims.slice(c.start, c.start + c.count)) {
       if (p.dead) continue;
-      // Tapers, shells and chamfer blends have analytic gradients (ngCone, ngShell, ngSminChamfer); bends, boxes
-      // and strands do not.
+      // Tapers, bends, boxes, shells and chamfer blends have analytic gradients (ngCone, ngBend, ngBox, ngShell,
+      // ngSminChamfer); strands do not.
       const supported = (!p.op || p.op === 'add') &&
-        p.bend === undefined && !p.box && !p.strand && p.scale.every(v => Number.isFinite(v) && v > 0);
+        !p.strand && p.scale.every(v => Number.isFinite(v) && v > 0);
       commonFlesh ||= supported;
       unsupported ||= !supported;
     }

@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { qFromAxisAngle, qRotate } from '../vec';
+import { bendCtrl, qFromAxisAngle, qRotate } from '../vec';
 import type { Primitive } from '../types';
 import { sdPrimitive, sdShellWrap, sminChamfer, smax, smin } from '../validate';
 import {
   capsuleGradient,
   chamferMinGradient,
+  bentConeGradient,
+  boxGradient,
   roundConeGradient,
+  type BentInput,
+  type BoxInput,
   shellGradient,
   type ConeInput,
   type ShellInput,
@@ -396,5 +400,60 @@ describe('chamferMinGradient', () => {
     const a = (b - 4 * k) / (Math.SQRT2 - 1);
     const x = chamferMinGradient({ d: a, g: [1, 0, 0], reason: 'ok' }, { d: b, g: [0, 1, 0], reason: 'ok' }, k);
     expect(x.reason).toBe('hard-boundary');
+  });
+});
+
+describe('bentConeGradient', () => {
+  const bent = (a: V3, b: V3, bend: V3, r: number, r2: number, scale: V3): { s: BentInput; prim: Primitive } => ({
+    s: { a, b, c: bendCtrl(a, b, bend) as V3, r, r2, scale },
+    prim: { a, b, bend, radius: r, radiusB: r2, scale, blendK: 0, limb: 'torso', cluster: 0 },
+  });
+  // A soldier-ish bent forearm (tapered, anisotropic) and a strong untapered arc.
+  const arm = bent([0, 0, 0], [0.02, -0.4, 0.05], [0.08, 0, 0.03], 0.05, 0.04, [1.1, 1, 0.95]);
+  const arc = bent([-0.2, 0, 0], [0.2, 0, 0], [0, 0.3, 0], 0.03, 0.03, [1, 1, 1]);
+
+  it.each([
+    ['the outer side', arm, [0.14, -0.2, 0.06]],
+    ['the inner side', arm, [0.0, -0.2, 0.0]],
+    ['past b', arm, [0.03, -0.48, 0.07]],
+    ['behind a', arm, [-0.01, 0.07, 0.0]],
+    ['above the arc', arc, [0.05, 0.22, 0.02]],
+  ] as const)('matches the production scalar and its central derivative on %s', (_name, c, p) => {
+    const x = bentConeGradient(p, c.s);
+    expect(x.reason).toBe('ok');
+    expect(x.d).toBeCloseTo(sdPrimitive(p, c.prim), 9);
+    expectV3Close(x.g, finiteGradient(q => sdPrimitive(q, c.prim), p, 1e-5), 5);
+  });
+
+  it('refuses to certify the medial crease inside a bend', () => {
+    // Below the arc's centre of curvature on its symmetry plane, two arms of the curve are equally near.
+    expect(bentConeGradient([0, -0.01, 0], arc.s).reason).toBe('hard-boundary');
+  });
+});
+
+describe('boxGradient', () => {
+  // A machined plate swept along a diagonal (so the projector matters), anisotropic.
+  const s: BoxInput = { a: [0, 0, 0], b: [0.05, 0.3, 0.02], r: 0.06, round: 0.2, scale: [1.1, 1, 0.9] };
+  const prim: Primitive = { a: s.a, b: s.b, radius: s.r, scale: s.scale, box: { round: s.round }, blendK: 0, limb: 'torso', cluster: 0 };
+
+  it.each([
+    ['a face mid-sweep', [0.1, 0.15, 0.01]],
+    ['a rounded edge', [0.095, 0.12, 0.07]],
+    ['past b', [0.06, 0.4, 0.03]],
+    ['behind a', [0.01, -0.09, -0.01]],
+    ['inside, near a face', [0.075, 0.16, 0.0]],
+  ] as const)('matches the production scalar and its central derivative on %s', (_name, p) => {
+    const x = boxGradient(p, s);
+    expect(x.reason).toBe('ok');
+    expect(x.d).toBeCloseTo(sdPrimitive(p, prim), 12);
+    expectV3Close(x.g, finiteGradient(q => sdPrimitive(q, prim), p, 1e-6), 6);
+  });
+
+  it('refuses to certify two tied faces and the plane at either end', () => {
+    const straight: BoxInput = { ...s, b: [0, 0.3, 0], scale: [1, 1, 1] };
+    expect(boxGradient([0.03, 0.15, 0.03], straight).reason).toBe('hard-boundary');
+    // On the swept box's end plane at b, beside it: the box's x face has an axial part along the diagonal.
+    const atB: V3 = [0.05 + 0.069, 0.3 - 0.0115, 0.02];
+    expect(boxGradient(atB, { ...s, scale: [1, 1, 1] }).reason).toBe('hard-boundary');
   });
 });

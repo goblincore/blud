@@ -268,16 +268,142 @@ const NG_CONE = /* wgsl */ `fn ngCone(
   return vec4<f32>(d, (v / vLen) * invScale * minScale);
 }`;
 
-const NG_CONE_ORIENTED = /* wgsl */ `fn ngConeOriented(
+// BEND AND BOX (2026-10-27): coneBend and sdPrim's box branch with their gradients, mirrored by bentConeGradient and
+// boxGradient in normal-gradient-reference.ts. Before these the soldiers (bent limbs, machined boxes) failed every
+// hit pixel. The bend repeats coneBend's search verbatim (so the value is the fold's) and keeps its t: at the
+// minimiser the gradient is the unit vector from the curve point to q. A second basin of G within the stencil's
+// reach, past a hump, is the medial crease inside a bend (reason 3); the seeds stand in for the reference's grid.
+const NG_BEND = /* wgsl */ `fn ngBezG(q: vec3<f32>, a: vec3<f32>, e1: vec3<f32>, e2: vec3<f32>, r1: f32, rb: f32, t: f32) -> f32 {
+  return length(q - (a + e1 * t + e2 * (t * t))) - (r1 + (rb - r1) * t);
+}
+fn ngBend(p: vec3<f32>, a: vec3<f32>, b: vec3<f32>, c: vec3<f32>, r1: f32, r2: f32, scale: vec3<f32>) -> vec4<f32> {
+  if (any(scale <= vec3<f32>(0.0))) {
+    if (gNgReason == 0) { gNgReason = 1; }
+    return vec4<f32>(0.0);
+  }
+  let invScale = 1.0 / scale;
+  let q = p * invScale;
+  let aa = a * invScale;
+  let bq = b * invScale;
+  let cq = c * invScale;
+  let e2 = aa - 2.0 * cq + bq;
+  if (dot(e2, e2) < 1e-12 || dot(bq - aa, bq - aa) < 1e-12) { return ngCone(p, a, b, r1, r2, scale); }
+  let minScale = min(scale.x, min(scale.y, scale.z));
+  let rb = select(r2, r1, r2 < 0.0);
+  let e1 = (cq - aa) * 2.0;
+  let cand = sdBezierT(q, aa, cq, bq);
+  var best = 1e9;
+  var bestT = 0.0;
+  var ts = array<f32, 9>(cand.x, cand.y, cand.z, 0.0, 0.25, 0.5, 0.75, 1.0, 1.0);
+  for (var i = 0; i < 9; i = i + 1) {
+    if (f32(i) >= cand.w && i < 3) { continue; }
+    let v = ngBezG(q, aa, e1, e2, r1, rb, ts[i]);
+    if (v < best) { best = v; bestT = ts[i]; }
+  }
+  for (var round = 0; round < 2; round = round + 1) {
+    let step = select(0.125, 0.03125, round >= 1);
+    for (var s = -1; s <= 1; s = s + 1) {
+      let t = clamp(bestT + f32(s) * step, 0.0, 1.0);
+      let v = ngBezG(q, aa, e1, e2, r1, rb, t);
+      if (v < best) { best = v; bestT = t; }
+    }
+  }
+  let nD = q - (aa + e1 * bestT + e2 * (bestT * bestT));
+  let nP = e1 + e2 * (2.0 * bestT);
+  let nF2 = dot(nP, nP) - 2.0 * dot(nD, e2);
+  let nT = select(bestT, clamp(bestT + dot(nD, nP) / nF2, 0.0, 1.0), nF2 > 0.0);
+  let nV = ngBezG(q, aa, e1, e2, r1, rb, nT);
+  if (nV < best) { best = nV; bestT = nT; }
+  let wD = q - (aa + e1 * bestT + e2 * (bestT * bestT));
+  let wP = e1 + e2 * (2.0 * bestT);
+  let wL = max(length(wD), 1e-9);
+  let wDp = dot(wD, wP);
+  let wG2 = (dot(wP, wP) - 2.0 * dot(wD, e2)) / wL - wDp * wDp / (wL * wL * wL);
+  let wT = select(bestT, clamp(bestT - (-wDp / wL - (rb - r1)) / wG2, 0.0, 1.0), wG2 > 0.0);
+  let wV = ngBezG(q, aa, e1, e2, r1, rb, wT);
+  if (wV < best) { best = wV; bestT = wT; }
+  let reach = 2.0 * 0.002598076211 * max(invScale.x, max(invScale.y, invScale.z));
+  for (var i = 0; i < 8; i = i + 1) {
+    if (f32(i) >= cand.w && i < 3) { continue; }
+    let tc = ts[i];
+    if (abs(tc - bestT) < 0.02) { continue; }
+    let gc = ngBezG(q, aa, e1, e2, r1, rb, tc);
+    if (gc - best > reach) { continue; }
+    if (ngBezG(q, aa, e1, e2, r1, rb, (tc + bestT) * 0.5) > gc + 1e-7 && gNgReason == 0) { gNgReason = 3; }
+  }
+  let v = q - (aa + e1 * bestT + e2 * (bestT * bestT));
+  let vLen = length(v);
+  if (vLen < 1e-9) {
+    if (gNgReason == 0) { gNgReason = 2; }
+    return vec4<f32>(best * minScale, 0.0, 0.0, 0.0);
+  }
+  return vec4<f32>(best * minScale, (v / vLen) * invScale * minScale);
+}`;
+
+// The rounded box through dw/dq: the projector off the axis while the clamped t is interior, the identity past an
+// end. Two faces tied within the stencil (inside, or at an edge the rounding leaves sharp), and either end's plane
+// where the box's gradient has an axial part, are kinks.
+const NG_BOX = /* wgsl */ `fn ngBox(p: vec3<f32>, a: vec3<f32>, b: vec3<f32>, r: f32, round: f32, scale: vec3<f32>) -> vec4<f32> {
+  if (any(scale <= vec3<f32>(0.0))) {
+    if (gNgReason == 0) { gNgReason = 1; }
+    return vec4<f32>(0.0);
+  }
+  let invScale = 1.0 / scale;
+  let q = p * invScale;
+  let aa = a * invScale;
+  let ab = b * invScale - aa;
+  let ab2 = dot(ab, ab);
+  let raw = select(dot(q - aa, ab) / ab2, 0.0, ab2 == 0.0);
+  let w = q - (aa + ab * clamp(raw, 0.0, 1.0));
+  let e = r * (1.0 - round);
+  let qv = abs(w) - vec3<f32>(e);
+  let mx = max(qv.x, max(qv.y, qv.z));
+  let mn = min(qv.x, min(qv.y, qv.z));
+  let m = max(qv, vec3<f32>(0.0));
+  let minScale = min(scale.x, min(scale.y, scale.z));
+  let d = (length(m) + min(mx, 0.0) - r * round) * minScale;
+  let Rq = 0.002598076211 * max(invScale.x, max(invScale.y, invScale.z));
+  if (mx - (qv.x + qv.y + qv.z - mx - mn) <= 2.0 * Rq && mx <= 2.0 * Rq && gNgReason == 0) { gNgReason = 3; }
+  var gw: vec3<f32>;
+  if (mx > 0.0) {
+    gw = sign(w) * m / length(m);
+  } else {
+    gw = sign(w) * select(select(vec3<f32>(0.0, 0.0, 1.0), vec3<f32>(0.0, 1.0, 0.0), qv.y == mx), vec3<f32>(1.0, 0.0, 0.0), qv.x == mx);
+    if (dot(gw, gw) < 0.5) {
+      if (gNgReason == 0) { gNgReason = 2; }
+      return vec4<f32>(d, 0.0, 0.0, 0.0);
+    }
+  }
+  if (ab2 > 0.0) {
+    let axial = dot(gw, ab) / ab2;
+    let abl = sqrt(ab2);
+    if (abs(axial) * abl > 1e-6 && (abs(raw) * abl <= Rq || abs(raw - 1.0) * abl <= Rq) && gNgReason == 0) { gNgReason = 3; }
+    if (raw > 0.0 && raw < 1.0) { gw = gw - ab * axial; }
+  }
+  return vec4<f32>(d, gw * invScale * minScale);
+}`;
+
+// Which field a prim is: box (bit 8) before bend (bit 2) before taper, sdPrim's order. c is the bend row's control
+// point, round the bend row's w (a box's corner fraction: bend and box never coexist).
+const NG_SHAPE = /* wgsl */ `fn ngShape(p: vec3<f32>, a: vec3<f32>, b: vec3<f32>, c: vec3<f32>, r1: f32, r2: f32, scale: vec3<f32>, prof: i32, round: f32) -> vec4<f32> {
+  if ((prof & 8) != 0) { return ngBox(p, a, b, r1, round, scale); }
+  if ((prof & 2) != 0) { return ngBend(p, a, b, c, r1, r2, scale); }
+  return ngCone(p, a, b, r1, r2, scale);
+}`;
+
+// sdPrimO's frame: p and the prim's three points ride the conjugate about the midpoint; the gradient rotates back.
+const NG_SHAPE_ORIENTED = /* wgsl */ `fn ngShapeOriented(
   p: vec3<f32>,
   a: vec3<f32>,
   b: vec3<f32>,
+  c: vec3<f32>,
   r1: f32,
   r2: f32,
   scale: vec3<f32>,
-  quat: vec4<f32>
+  quat: vec4<f32>,
+  prof: i32,
+  round: f32
 ) -> vec4<f32> {
-  if (r2 < 0.0) { return ngCapsuleOriented(p, a, b, r1, scale, quat); }
   let quatLen2 = dot(quat, quat);
   if (abs(quatLen2 - 1.0) > 1e-3) {
     if (gNgReason == 0) { gNgReason = 1; }
@@ -285,13 +411,16 @@ const NG_CONE_ORIENTED = /* wgsl */ `fn ngConeOriented(
   }
   let mid = (a + b) * 0.5;
   let invQuat = vec4<f32>(-quat.xyz, quat.w);
-  let local = ngCone(
+  let local = ngShape(
     mid + ngQRot(invQuat, p - mid),
     mid + ngQRot(invQuat, a - mid),
     mid + ngQRot(invQuat, b - mid),
+    mid + ngQRot(invQuat, c - mid),
     r1,
     r2,
-    scale);
+    scale,
+    prof,
+    round);
   return vec4<f32>(local.x, ngQRot(quat, local.yzw));
 }`;
 
@@ -402,25 +531,28 @@ const NG_GROUP = /* wgsl */ `fn ngGroup(dIn: vec4<f32>, p: vec3<f32>, data: text
     var prof = 0;
     if ((flags & 2) != 0) {
       let T = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHAPE} + band), 0);
-      // Taper (T.x >= 0), chamfer (bit 1), shell (bit 4) and metal (bit 16,
-      // no geometric effect) have gradients here. Bend (2), box (8) and
-      // strand (32) are unsupported in the intact phase.
-      if ((i32(T.y) & 42) != 0) { gNgReason = 1; return d; }
+      // Taper (T.x >= 0), chamfer (bit 1), bend (2), shell (4), box (8) and
+      // metal (16, no geometric effect) have gradients here. Strand (32) is
+      // unsupported in the intact phase.
+      if ((i32(T.y) & 32) != 0) { gNgReason = 1; return d; }
       r2 = T.x;
       prof = i32(T.y);
     }
     let A = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_A} + band), 0);
     let B = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_B} + band), 0);
+    // The bend row: a bent prim's control point, a box's corner fraction (w).
+    var bend = vec4<f32>(0.0);
+    if ((prof & 10) != 0) { bend = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_BEND} + band), 0); }
     // A prim the running fold cannot feel (outside smin's 4k reach, over the
     // whole stencil) may report a kink or a degenerate point without
     // failing the pixel: its gradient never reaches the result.
     let savedReason = gNgReason;
-    var dg = ngCone(p, A.xyz, B.xyz, A.w, r2, S.xyz);
-    if ((flags & 1) != 0) {
-      let O = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_QUAT} + band), 0);
-      // Production leaves near-identity quaternions untouched too.
-      if (abs(1.0 - O.w) > 1e-6) { dg = ngConeOriented(p, A.xyz, B.xyz, A.w, r2, S.xyz, O); }
-    }
+    var O = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+    if ((flags & 1) != 0) { O = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_QUAT} + band), 0); }
+    var dg: vec4<f32>;
+    // Production leaves near-identity quaternions untouched too.
+    if (abs(1.0 - O.w) > 1e-6) { dg = ngShapeOriented(p, A.xyz, B.xyz, bend.xyz, A.w, r2, S.xyz, O, prof, bend.w); }
+    else { dg = ngShape(p, A.xyz, B.xyz, bend.xyz, A.w, r2, S.xyz, prof, bend.w); }
     if ((prof & 4) != 0) {
       let S2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHELL} + band), 0);
       let C2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_CLIP} + band), 0);
@@ -715,7 +847,7 @@ const NG_DETAIL = /* wgsl */ `fn ngDetail(p: vec3<f32>, data: texture_2d<f32>, o
   return (k1 * h1 + k2 * h2 + k3 * h3 + k4 * h4) / (4.0 * 0.0015);
 }`;
 
-export const NORMAL_GRADIENT_GAME_HELPERS = [NG_CONE, NG_CONE_ORIENTED, NG_SHELL, NG_SMIN_CHAMFER, NG_EXCLUDED, NG_GROUP, NG_WOUND_LIP, NG_WOUNDS, NG_INTERNAL_LOWER, NG_BONES, NG_BODY, NG_DETAIL] as const;
+export const NORMAL_GRADIENT_GAME_HELPERS = [NG_CONE, NG_BEND, NG_BOX, NG_SHAPE, NG_SHAPE_ORIENTED, NG_SHELL, NG_SMIN_CHAMFER, NG_EXCLUDED, NG_GROUP, NG_WOUND_LIP, NG_WOUNDS, NG_INTERNAL_LOWER, NG_BONES, NG_BODY, NG_DETAIL] as const;
 
 /** Diagnostic point entry reuses the complete production scalar and gradient
  * helper chains. It never runs in a game material or timed beauty pass. */

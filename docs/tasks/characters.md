@@ -361,8 +361,9 @@ only if an idea below earns it.
 - [x] **Analytic normals working again** (dead since 2026-09-29: the zombie's tapered foot bar failed `ngBody` on
   every pixel). Tapers, shells and chamfers now have gradients, and skipped groups no longer veto. Close-up prim
   work −31% bare zombie, −25% robe, −29% trousers; arena −13 to −15%. [Notes](../../docs/dev-notes/2026-10-26-sdf-cloth-cost/NOTES.md),
-  follow-up 4. Still on the taps: bends, boxes, strands (the soldier), hem rims.
-- [ ] Analytic gradients for bends (coneBend) and boxes, so the soldier and the bent-horn cast go analytic too.
+  follow-up 4. Still on the taps: strands, hem rims.
+- [x] Analytic gradients for bends (coneBend) and boxes (2026-10-27, follow-up 4b): the soldier has no reason-1
+  pixels left. The saving is small (−1 to −2%), because only 5% of its hit pixels were failing.
 - [ ] **Cloth feel**: hood and robe read stiff (owner). Options: more pendulum points (hem flare ring, hood tail),
   travelling warp waves driven by velocity, or a prebaked cloth sim. Robe distortion on the death throw.
 - [ ] **Hip fire**: the cultist fires from the shoulder; owner wants a random mix of hip and shoulder bursts.

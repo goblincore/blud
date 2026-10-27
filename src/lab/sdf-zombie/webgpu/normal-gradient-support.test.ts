@@ -9,16 +9,17 @@ describe('normal support summary and stencil ownership', () => {
     expect(classifyNormalSupport(body([p], [{ ...p, op:'bone', bend:[.1,0,0], radiusB:.1 }]))).toEqual({ commonFlesh:true, reasons:[] });
   });
   it('reports wholly unsupported actors and inactive actors', () => {
-    expect(classifyNormalSupport(body([{ ...p, box:{ round:.1 } }]))).toEqual({ commonFlesh:false, reasons:['unsupported'] });
+    expect(classifyNormalSupport(body([{ ...p, strand:{} as never }]))).toEqual({ commonFlesh:false, reasons:['unsupported'] });
     expect(classifyNormalSupport(body([{ ...p, dead:true }]))).toEqual({ commonFlesh:false, reasons:['inactive'] });
   });
-  it('supports tapers, shells and chamfer blends', () => {
+  it('supports tapers, bends, boxes, shells and chamfer blends', () => {
+    expect(classifyNormalSupport(body([{ ...p, box:{ round:.1 } }, { ...p, bend:[.1,0,0] }]))).toEqual({ commonFlesh:true, reasons:[] });
     const shell = { thickness: .006, clipNormal: [0, -1, 0] as const, clipOffset: .4, rim: .004 };
     expect(classifyNormalSupport(body([p, { ...p, radiusB: .1 }, { ...p, shell }, { ...p, blendProfile: 'chamfer' }])))
       .toEqual({ commonFlesh:true, reasons:[] });
   });
   it('retains intact eligibility in a mixed supported/unsupported body', () => {
-    expect(classifyNormalSupport(body([p, { ...p, bend:[.1,0,0] }]))).toEqual({ commonFlesh:true, reasons:['unsupported'] });
+    expect(classifyNormalSupport(body([p, { ...p, strand:{} as never }]))).toEqual({ commonFlesh:true, reasons:['unsupported'] });
   });
   it('certifies only competitors beyond both Lipschitz neighborhoods', () => {
     const r = Math.sqrt(3) * .0015;

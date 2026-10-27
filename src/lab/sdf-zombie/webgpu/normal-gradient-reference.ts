@@ -131,6 +131,110 @@ export function roundConeGradient(p: V3, s: ConeInput): Dg {
   return toWorld(d, [x[0] * c + ba[0] * rr * il2, x[1] * c + ba[1] * rr * il2, x[2] * c + ba[2] * rr * il2], 'ok');
 }
 
+/** A bent prim: the quadratic Bezier a -> c -> b, `c` the resolved control point in world (bendCtrl). */
+export interface BentInput extends ConeInput {
+  c: V3;
+}
+
+/** Value and unnormalized gradient of the production bent cone (coneBend; sdBentCone in validate.ts). The field is
+ * min over t of G(t) = |q - P(t)| - r(t), so at the minimiser t* (interior or an end: the interval does not move
+ * with q) the gradient is the unit vector from P(t*) to q. A second basin of G within the stencil's reach is the
+ * medial crease on a bend's inner side ('hard-boundary'). t* comes from a dense grid and Newton in f64. */
+export function bentConeGradient(p: V3, s: BentInput): Dg {
+  assertFinite('bent input', [...p, ...s.a, ...s.b, ...s.c, s.r, s.r2, ...s.scale]);
+  if (s.scale.some(x => x <= 0)) throw new RangeError('bent scale must be positive');
+  const inv: V3 = [1 / s.scale[0], 1 / s.scale[1], 1 / s.scale[2]];
+  const sc = (v: V3): V3 => [v[0] * inv[0], v[1] * inv[1], v[2] * inv[2]];
+  const q = sc(p), a = sc(s.a), b = sc(s.b), c = sc(s.c);
+  const e2: V3 = [a[0] - 2 * c[0] + b[0], a[1] - 2 * c[1] + b[1], a[2] - 2 * c[2] + b[2]];
+  const ab2 = (b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2 + (b[2] - a[2]) ** 2;
+  if (Math.hypot(...e2) ** 2 < 1e-12 || ab2 < 1e-12) return roundConeGradient(p, s);
+  const e1: V3 = [2 * (c[0] - a[0]), 2 * (c[1] - a[1]), 2 * (c[2] - a[2])];
+  const at = (t: number): V3 => [a[0] + e1[0] * t + e2[0] * t * t, a[1] + e1[1] * t + e2[1] * t * t, a[2] + e1[2] * t + e2[2] * t * t];
+  const G = (t: number): number => { const P = at(t); return Math.hypot(q[0] - P[0], q[1] - P[1], q[2] - P[2]) - (s.r + (s.r2 - s.r) * t); };
+  const N = 2000;
+  const gs = Array.from({ length: N + 1 }, (_, i) => G(i / N));
+  let k = 0;
+  for (let i = 1; i <= N; i++) if (gs[i]! < gs[k]!) k = i;
+  // Golden-section on the bracketing cells: G is smooth there, and f64 takes it to the f32 field's own precision.
+  let lo = Math.max(0, (k - 1) / N), hi = Math.min(1, (k + 1) / N);
+  for (let it = 0; it < 80; it++) {
+    const m1 = lo + (hi - lo) * 0.381966, m2 = hi - (hi - lo) * 0.381966;
+    if (G(m1) < G(m2)) hi = m2; else lo = m1;
+  }
+  const t = (lo + hi) / 2;
+  const minScale = Math.min(...s.scale);
+  const d = G(t) * minScale;
+  // Another local minimum of the grid, separated from t* by a hump, within the stencil's reach: the crease.
+  const Rq = NG_STENCIL_R * Math.max(...inv);
+  let reason: NgReason = 'ok';
+  for (let i = 0; i <= N; i++) {
+    if (Math.abs(i - k) < 2) continue;
+    const left = i === 0 || gs[i]! <= gs[i - 1]!, right = i === N || gs[i]! <= gs[i + 1]!;
+    if (!left || !right || gs[i]! - gs[k]! > 2 * Rq) continue;
+    const lo2 = Math.min(i, k), hi2 = Math.max(i, k);
+    let hump = -Infinity;
+    for (let j = lo2; j <= hi2; j++) hump = Math.max(hump, gs[j]!);
+    if (hump > gs[i]! + 1e-9) reason = 'hard-boundary';
+  }
+  const P = at(t);
+  const v: V3 = [q[0] - P[0], q[1] - P[1], q[2] - P[2]];
+  const vl = Math.hypot(...v);
+  if (vl === 0) return { d, g: ZERO, reason: 'degenerate' };
+  return { d, g: [v[0] / vl * inv[0] * minScale, v[1] / vl * inv[1] * minScale, v[2] / vl * inv[2] * minScale], reason };
+}
+
+/** A box prim: a rounded cube of half-extent `r` (scale-divided frame) swept along a -> b, `round` its fraction. */
+export interface BoxInput extends CapsuleInput {
+  round: number;
+}
+
+/** Value and unnormalized gradient of the production swept box (sdPrim's box branch). With w = q - closest(q), the
+ * rounded box's gradient goes through dw/dq: the projector off the axis while the clamped t is interior, the
+ * identity past either end. Two switches are kinks: two faces tied (inside, or outside within the stencil of an edge
+ * the rounding leaves sharp), and either end's plane where the box's gradient has an axial part. */
+export function boxGradient(p: V3, s: BoxInput): Dg {
+  assertFinite('box input', [...p, ...s.a, ...s.b, s.r, s.round, ...s.scale]);
+  if (s.scale.some(x => x <= 0)) throw new RangeError('box scale must be positive');
+  const inv: V3 = [1 / s.scale[0], 1 / s.scale[1], 1 / s.scale[2]];
+  const q: V3 = [p[0] * inv[0], p[1] * inv[1], p[2] * inv[2]];
+  const a: V3 = [s.a[0] * inv[0], s.a[1] * inv[1], s.a[2] * inv[2]];
+  const b: V3 = [s.b[0] * inv[0], s.b[1] * inv[1], s.b[2] * inv[2]];
+  const ab: V3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  const ab2 = ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2;
+  const raw = ab2 === 0 ? 0 : ((q[0] - a[0]) * ab[0] + (q[1] - a[1]) * ab[1] + (q[2] - a[2]) * ab[2]) / ab2;
+  const t = Math.max(0, Math.min(1, raw));
+  const w: V3 = [q[0] - a[0] - ab[0] * t, q[1] - a[1] - ab[1] * t, q[2] - a[2] - ab[2] * t];
+  const e = s.r * (1 - s.round);
+  const qv: V3 = [Math.abs(w[0]) - e, Math.abs(w[1]) - e, Math.abs(w[2]) - e];
+  const mx = Math.max(...qv);
+  const m: V3 = [Math.max(qv[0], 0), Math.max(qv[1], 0), Math.max(qv[2], 0)];
+  const minScale = Math.min(...s.scale);
+  const d = (Math.hypot(...m) + Math.min(mx, 0) - s.r * s.round) * minScale;
+  const Rq = NG_STENCIL_R * Math.max(...inv);
+  let reason: NgReason = 'ok';
+  const sorted = [...qv].sort((x, y) => y - x);
+  if (sorted[0]! - sorted[1]! <= 2 * Rq && sorted[0]! <= 2 * Rq) reason = 'hard-boundary';
+  let gw: V3;
+  if (mx > 0) {
+    const ml = Math.hypot(...m);
+    gw = [Math.sign(w[0]) * m[0] / ml, Math.sign(w[1]) * m[1] / ml, Math.sign(w[2]) * m[2] / ml];
+  } else {
+    const i = qv.indexOf(mx);
+    if (w[i] === 0) return { d, g: ZERO, reason: 'degenerate' };
+    const axis: [number, number, number] = [0, 0, 0];
+    axis[i] = Math.sign(w[i]!);
+    gw = axis;
+  }
+  if (ab2 > 0) {
+    const axial = (gw[0] * ab[0] + gw[1] * ab[1] + gw[2] * ab[2]) / ab2;
+    const abl = Math.sqrt(ab2);
+    if (Math.abs(axial) * abl > 1e-6 && (Math.abs(raw) * abl <= Rq || Math.abs(raw - 1) * abl <= Rq) && reason === 'ok') reason = 'hard-boundary';
+    if (raw > 0 && raw < 1) gw = [gw[0] - ab[0] * axial, gw[1] - ab[1] * axial, gw[2] - ab[2] * axial];
+  }
+  return { d, g: [gw[0] * inv[0] * minScale, gw[1] * inv[1] * minScale, gw[2] * inv[2] * minScale], reason };
+}
+
 /** A shell prim's sheet parameters (ShellParams, plus the wind drift and body anchor the fold reads). */
 export interface ShellInput {
   thickness: number;

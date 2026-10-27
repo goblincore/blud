@@ -5,6 +5,7 @@
 // registry entry) on the game page as it ships (crowd march, hulls, kit occluder), frozen and seeded:
 //   arena   the bare page's arena (room 6: six zombies, two soldiers), the view teleport() leaves.
 //   close   room 4's nearest zombie, the eye CLOSE_D m in front of its chest.
+//   soldier room 6's nearest soldier, framed the same way (bent limbs and boxes: the analytic normal's bend/box path).
 // Per boot and stage: THE CENSUS (debug modes 13 and 14 read off the float march target: steps and prim evaluations,
 // deterministic) and __sdfGame.timeDraws(N) (fenced still frames, CPU + GPU; ROUNDS boots per variant, the variants
 // rotated, the 1-minute load average logged beside each). Timing is not trustworthy above a load of ~6.
@@ -94,11 +95,12 @@ async function stage(name) {
     await evaluate("(() => { __sdfGame.freeze(true); __sdfGame.teleport(6); for (let i = 0; i < 30; i++) __sdfGame.step(1, 0); return 1; })()");
     return;
   }
-  await evaluate("(() => { __sdfGame.freeze(true); __sdfGame.teleport(4); __sdfGame.step(1, 0); return 1; })()");
+  const [room, kind] = name === "soldier" ? [6, "soldier"] : [4, "zombie"];
+  await evaluate(`(() => { __sdfGame.freeze(true); __sdfGame.teleport(${room}); __sdfGame.step(1, 0); return 1; })()`);
   const pose = await evaluate("__sdfGame.pose()");
-  const zs = (await evaluate("__sdfGame.actorList()")).filter((a) => a.kind === "zombie" && a.room === 4);
+  const zs = (await evaluate("__sdfGame.actorList()")).filter((a) => a.kind === kind && a.room === room);
   const z = zs.sort((a, b) => Math.hypot(a.pos[0] - pose.pos[0], a.pos[2] - pose.pos[2]) - Math.hypot(b.pos[0] - pose.pos[0], b.pos[2] - pose.pos[2]))[0];
-  if (!z) die("no zombie in room 4");
+  if (!z) die(`no ${kind} in room ${room}`);
   const torso = await evaluate(`__sdfGame.actorLimbCenter(${z.id}, "torso")`);
   const t = [torso[0], torso[1] - 0.15, torso[2]];
   const fx = Math.sin(z.yaw), fz = -Math.cos(z.yaw);
@@ -153,8 +155,13 @@ for (let round = 0; round < ROUNDS; round++) {
           // Debug mode 12: g = the analytic normal's reason per hit pixel (0 = analytic used; 1 = unsupported prim).
           const h = await evaluate(`(async () => { __sdfGame.setMarchDebugMode(12); await __sdfGameDebug.readMarchTarget(); const r = await __sdfGameDebug.readMarchTarget(); __sdfGame.setMarchDebugMode(0); await __sdfGameDebug.readMarchTarget();
             const f = new Float32Array(Uint8Array.from(atob(r.rgba32f), (c) => c.charCodeAt(0)).buffer); const hist = {};
-            for (let i = 0; i < f.length; i += 4) { if (!(f[i + 3] < 1)) continue; const k = Math.round(f[i + 1]); hist[k] = (hist[k] ?? 0) + 1; } return hist; })()`);
-          console.log(`  ${st} ${variant} analytic-normal reasons ${JSON.stringify(h)}`);
+            const ang = [];
+            for (let i = 0; i < f.length; i += 4) { if (!(f[i + 3] < 1)) continue; const k = Math.round(f[i + 1]); hist[k] = (hist[k] ?? 0) + 1;
+              if (k === 0) ang.push(Math.acos(Math.min(1, Math.max(-1, f[i + 2]))) * 180 / Math.PI); }
+            ang.sort((x, y) => x - y); const q = (u) => ang.length ? +ang[Math.min(ang.length - 1, Math.floor(u * ang.length))].toFixed(2) : null;
+            return { hist, angleDeg: { median: q(0.5), p99: q(0.99), max: q(1) } }; })()`);
+          // angleDeg: on reason-0 pixels, the angle between the analytic normal and the 4-tap one (mode 12's b).
+          console.log(`  ${st} ${variant} analytic-normal reasons ${JSON.stringify(h.hist)} vs 4-tap ${JSON.stringify(h.angleDeg)}`);
         }
         const shot = await S.send("Page.captureScreenshot", { format: "png" });
         writeFileSync(`${OUT}/${st}-${variant}.png`, Buffer.from(shot.result.data, "base64"));
