@@ -7,6 +7,7 @@
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
+import { FLOAT_TUNING } from './floater-move';
 import { setChunkListGain } from './chunk-light-pick';
 import { roomIdAt } from './game-level-rooms';
 import { CHUNK_OBJECT_LIGHT, type ChunkObjectLight } from './baked-chunks';
@@ -530,6 +531,18 @@ export function createWorldSeams(ctx: GameContext) {
       }
       return { feet: [feet[0], feet[1], feet[2]], bodyLowest: body, hullLowest: hull, hullSpheres: hullN };
     },
+    /** Floaters (floater-move.ts): each one's id, feet (rig floor) position, float state and the real
+     *  floor / ceiling under it. [] when none. */
+    /** Read or tune the floaters' height behaviour live (floater-move.ts FLOAT_TUNING): cruiseFrac,
+     *  cruiseMaxM, engageM, closeM, descendMps, ... Returns the values now in force. */
+    floatTuning: (patch?: Partial<typeof FLOAT_TUNING>) => ({ ...Object.assign(FLOAT_TUNING, patch ?? {}) }),
+    floaters: () => ctx.world.actors.flatMap(a => {
+      const f = a.floatState();
+      if (!f) return [];
+      const p = a.pose().pos;
+      return [{ id: a.id, pos: [p[0], p[1], p[2]], ...f,
+        floor: ctx.world.level.ground.floorAt(p[0], p[2]), ceil: ctx.world.level.ground.ceilAt(p[0], p[2]) }];
+    }),
     actorLimbCentre: (id: number, limb: string) => {
       const a = ctx.world.actors.find(q => q.id === id);
       const ps = a?.drawnBody().prims.filter(p => p.limb === limb && !p.dead && p.op !== 'sub') ?? [];

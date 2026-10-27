@@ -771,7 +771,10 @@ const floorsCheck = async (what) => {
   // The floor a body stands on is the disc floor under it (floorUnder at SECTOR_BODY_RADIUS_M 0.34, the rule
   // game-actor.ts uses since plan 3b Task 6): a body whose disc overlaps a lip up to a step high stands on the lip, so
   // the centre's floorAt can read a step lower. Judge against the disc floor (the JSON-built ground's floorUnder).
-  const list = await evaluate('__sdfGame.actorList().map((a) => ({ id: a.id, kind: a.kind, pos: a.pos, g: __sdfGame.ground(a.pos[0], a.pos[2]), under: __eg.ground.floorUnder(a.pos[0], a.pos[2], 0.34), low: __sdfGame.actorGround(a.id).bodyLowest }))');
+  const all = await evaluate('__sdfGame.actorList().map((a) => ({ id: a.id, kind: a.kind, pos: a.pos, g: __sdfGame.ground(a.pos[0], a.pos[2]), under: __eg.ground.floorUnder(a.pos[0], a.pos[2], 0.34), low: __sdfGame.actorGround(a.id).bodyLowest }))');
+  // FLOATERS (floater-move.ts, the teratoma; 2026-10-27) ride their float altitude, not the floor: judged in 5.3b.
+  const floaterIds = new Set((await evaluate('__sdfGame.floaters ? __sdfGame.floaters() : []')).filter((f) => !f.down).map((f) => f.id));
+  const list = all.filter((a) => !floaterIds.has(a.id));
   for (const a of list) a.f = a.under;
   const bad = list.filter((a) => !Number.isFinite(a.g.floor) || !Number.isFinite(a.f) || Math.abs(a.pos[1] - a.f) > 0.08);
   if (bad.length) fail(`enemies ${what}: ${bad.length} off their floor: ${JSON.stringify(bad.slice(0, 4).map((a) => ({ id: a.id, pos: a.pos.map((v) => +v.toFixed(2)), floorUnder: a.f, centreFloor: a.g.floor })))}`);
@@ -782,7 +785,7 @@ const floorsCheck = async (what) => {
   const lowBad = list.filter((a) => Number.isFinite(a.low - a.f) && (a.low - a.f < BODY_LOW_BAND[0] || a.low - a.f > BODY_LOW_BAND[1]));
   if (lowBad.length) fail(`enemies ${what}: ${lowBad.length} posed bodies sunk or floating (lowest − floor outside ${BODY_LOW_BAND.join('..')} m): ${JSON.stringify(lowBad.slice(0, 4).map((a) => ({ id: a.id, kind: a.kind, gap: +(a.low - a.f).toFixed(3), floor: a.f })))}`);
   const floors = [...new Set(list.map((a) => a.f))].sort((a, b) => a - b);
-  pass(`enemies ${what}: ${list.length} on their floors (disc floor; ${onLip} on a lip above the centre's floor; worst feet gap ${worst.toFixed(3)} m; floors ${floors.join(', ')}; posed body lowest − floor ${Math.min(...low).toFixed(2)}..${Math.max(...low).toFixed(2)} m over ${low.length}, band ${BODY_LOW_BAND.join('..')})`);
+  pass(`enemies ${what}: ${list.length} on their floors (${floaterIds.size} floaters judged apart; disc floor; ${onLip} on a lip above the centre's floor; worst feet gap ${worst.toFixed(3)} m; floors ${floors.join(', ')}; posed body lowest − floor ${Math.min(...low).toFixed(2)}..${Math.max(...low).toFixed(2)} m over ${low.length}, band ${BODY_LOW_BAND.join('..')})`);
   return list;
 };
 await evaluate('__sdfGame.setPose(0, 0, 0, 0, 0)');
@@ -806,6 +809,36 @@ const moved = at20.map((a) => { const b = at3.find((q) => q.id === a.id); return
 if (!(walked.sim >= 17)) fail(`enemies walk: the sim clock advanced only ${fmtT(walked)}`);
 if (!(moved[0].far > 2)) fail(`enemies walk: none got > 2 m from its spot in ${fmtT(walked)} (farthest ${moved[0].far.toFixed(2)} m, actor ${moved[0].id})`);
 pass(`enemies walk: ${moved.filter((m) => m.far > 2).length} got > 2 m from their 3 s spot in ${fmtT(walked)} (farthest ${moved[0].far.toFixed(2)} m, actor ${moved[0].id}; end to end most ${Math.max(...moved.map((m) => m.d)).toFixed(2)} m)`);
+// 5.3b FLOATERS (floater-move.ts, the teratoma; E1M1 overrides 2026-10-27): every floater spawn floats (the live
+// floaters equal the level's teratoma spawns), idle each one cruises well clear of the floor under it and under its
+// ceiling, and with the player in sight on the pool's north rim they glide toward the player and come DOWN, none stuck.
+const FLOAT_KINDS = ['teratoma'];
+const wantFloat = (raw.spawns ?? []).filter((s) => FLOAT_KINDS.includes(s.kind)).length;
+const floatNow = async () => evaluate('__sdfGame.floaters().map((f) => ({ id: f.id, pos: f.pos, altitude: f.altitude, mode: f.mode, down: f.down, floor: f.floor, ceil: f.ceil, low: __sdfGame.actorGround(f.id).bodyLowest }))');
+const f0 = await floatNow();
+if (f0.length !== wantFloat) fail(`floaters: ${f0.length} floating, the level has ${wantFloat} ${FLOAT_KINDS.join('/')} spawns`);
+if (wantFloat) {
+  // Idle (the player parked at the start, 20+ m away): the posed body's lowest point >= 1 m over the real floor,
+  // its rig floor + the body's top (2.1 m) under the ceiling.
+  const idleBad = f0.filter((f) => f.down || f.mode !== 'idle' || !(f.low - f.floor >= 1.0) || !(f.pos[1] + 2.1 <= f.ceil + 0.05));
+  if (idleBad.length) fail(`floaters idle: not cruising clear of floor and ceiling: ${JSON.stringify(idleBad.map((f) => ({ id: f.id, mode: f.mode, gap: +(f.low - f.floor).toFixed(2), alt: +f.altitude.toFixed(2), floor: f.floor, ceil: f.ceil })))}`);
+  pass(`floaters idle: ${f0.length} cruising (body lowest − floor ${f0.map((f) => (f.low - f.floor).toFixed(2)).join(', ')} m; floors ${f0.map((f) => f.floor).join(', ')})`);
+  const [px, pz] = process.env.DOOM_FLOAT_POSE ? JSON.parse(process.env.DOOM_FLOAT_POSE) : [24, -21.5];
+  const pf = (await evaluate(`__sdfGame.ground(${px}, ${pz})`)).floor;
+  await evaluate(`__sdfGame.setPose(${px}, ${pz}, ${Math.PI}, 0, ${pf})`);
+  const t = await simWait(10);
+  const f1 = await floatNow();
+  const rows = f1.map((f) => {
+    const b = f0.find((q) => q.id === f.id);
+    return { id: f.id, mode: f.mode, d0: Math.hypot(b.pos[0] - px, b.pos[2] - pz), d1: Math.hypot(f.pos[0] - px, f.pos[2] - pz),
+      moved: Math.hypot(f.pos[0] - b.pos[0], f.pos[2] - b.pos[2]), centre0: b.pos[1] + 1.45, centre1: f.pos[1] + 1.45, gap: f.low - f.floor, ceilGap: f.ceil - (f.pos[1] + 2.1) };
+  });
+  const line = rows.map((r) => `${r.id} ${r.mode}: ${r.d0.toFixed(1)} -> ${r.d1.toFixed(1)} m from the player, centre ${r.centre0.toFixed(2)} -> ${r.centre1.toFixed(2)} (player eye ${(pf + 1.6).toFixed(2)}), clear of floor ${r.gap.toFixed(2)} m`).join('; ');
+  const bad = rows.filter((r) => r.mode !== 'chase' || !(r.d1 < r.d0 - 1.5) || !(r.centre1 < r.centre0 - 0.3) || !(r.gap > 0.2) || !(r.ceilGap > -0.05));
+  if (bad.length) fail(`floaters chase (${fmtT(t)}): ${line}`);
+  pass(`floaters chase (${fmtT(t)}): ${line}`);
+  await evaluate('__sdfGame.setPose(0, 0, 0, 0, 0)');
+}
 // 5.4b ROUNDS STOP AT WALLS: stand in a soldier's sight (god mode) for 8 s and follow every enemy round frame by frame.
 // The player ducks behind the wall as each volley leaves (the sampler's dodge), so the rounds miss and fly on
 // into the walls behind the open pose: they must stop there, not step through.

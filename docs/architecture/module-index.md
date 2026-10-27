@@ -57,7 +57,7 @@ Each line is the first sentence of the module's header comment.
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 12 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 7 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 49 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [SDF march renderer](#sdf-march-renderer) | 50 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 39 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
@@ -641,6 +641,7 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 - `webgpu/emergence-timeline.ts` — THE SCREEN EMERGENCE's cue curves (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md, section 5): from a time `t` in…
 - `webgpu/emitter-glow.wgsl.ts` — EMITTER GLOW (hand-off item 2g, part A): the animated self-light of the four emitter panel kinds, drawn in the fragment shader on the sim clock.
 - `webgpu/field-render.ts` — INTERLACED FIELD RENDERING — the pure math.
+- `webgpu/floater-move.ts` — FLOATERS ON SECTOR LEVELS (the teratoma; owner 2026-10-27: "replicate the logic from Doom for their wandering").
 - `webgpu/fog-range.ts` — fogRange: the scene fog's near/far for a level — the ambient rig's own range on room levels, a longer, thinner veil on sector levels, then URL…
 - `webgpu/goblin-puppet.ts` — THE GOBLIN PUPPET (emergence in the Flat, plan Task 4; spec docs/superpowers/specs/2026-10-16-emergence-in-the-flat-design.md): the SDF goblin of the…
 - `webgpu/hazard-floor.ts` — HURT FLOORS (spec 2026-10-24 §8): standing on a hurt sector deals whole points of damage once a second, the first after half a second (Doom hits…

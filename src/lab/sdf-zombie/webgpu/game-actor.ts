@@ -46,6 +46,7 @@ import { posedDetachedChunk } from '../detached-pose';
 import { cutLimbs, cutChains, chainOrder, jointPoint } from '../connectivity';
 import type { LimbId, Primitive, Vec3 } from '../types';
 import { SECTOR_BODY_RADIUS_M, SECTOR_STEP_M } from './sector-def';
+import { createFloater, type FloaterSpace } from './floater-move';
 import {
   woundFromPellet, woundFromSlug,
 } from './game-weapon';
@@ -313,6 +314,8 @@ export function pickAvoidSide(
 
 export interface ZombieActor {
   readonly id: number;
+  /** A floater's float state (floater-move.ts; sector levels), else null. */
+  floatState(): { altitude: number; mode: 'idle' | 'chase'; dir: number; down: boolean } | null;
   corpseBakeEligible(): boolean;
   /** Run 5b: the refine twin is drawn only for a standing body inside the band —
    *  collapsing, settled and baked bodies never refine. */
@@ -614,6 +617,12 @@ export function createZombieActor(opts: {
    *  floors or ceilings (sector-ray.ts sectorSightBlocker). A ranged mind with no encounter order
    *  then sees from 1.4 m over its floor to 1.4 m over the player's, through open sector space. */
   sectorSight?: (a: Vec3, b: Vec3) => boolean;
+  /** SECTOR levels only, with `ground`: this body FLOATS (the teratoma; floater-move.ts, Doom's MF_FLOAT).
+   *  Its motion floor is its float altitude, not the floor under it: idle it cruises high and wanders on
+   *  chase-dir legs, chasing it glides down toward the player; moves are refused only where the body does
+   *  not fit (walls, low openings), never for a step or a drop. `navigation` should be this space's. Dead
+   *  (collapsed, doomed), it falls to the real floor. */
+  floater?: FloaterSpace;
   id: number;
   room: number;
   body: BuildResult;
@@ -689,10 +698,16 @@ export function createZombieActor(opts: {
   // sector navigation stands it on), so it falls only once clear of a ledge, and a rise over
   // SECTOR_STEP_M (a wall) never lifts it. A ground without floorUnder reads the floor at the centre.
   // Mid-fall, a lip the disc touches is no landing: fallFloorAt (the centre floor) is.
-  const motionFloor = ground ? (ground.floorUnder
+  const floater = opts.floater && ground ? createFloater(opts.floater, opts.start, opts.seed) : null;
+  /** A floater stops floating once it is dead: from then on it falls to, and lies on, the real floor. */
+  let floaterDown = false;
+  const floating = (): boolean => floater !== null && !floaterDown;
+  const motionFloor = floater ? (x: number, z: number) => (floaterDown ? ground!.floorAt(x, z) : floater.altitude)
+    : ground ? (ground.floorUnder
     ? (x: number, z: number) => ground.floorUnder!(x, z, SECTOR_BODY_RADIUS_M)
     : (x: number, z: number) => ground.floorAt(x, z)) : undefined;
-  const floorAt = ground && motionFloor ? {
+  // A floater has no step rule (it floats to fit) and no lip to fall past: floorAt alone.
+  const floorAt = floater ? { floorAt: motionFloor! } : ground && motionFloor ? {
     floorAt: motionFloor,
     maxStepUp: SECTOR_STEP_M,
     fallFloorAt: (x: number, z: number) => ground.floorAt(x, z),
@@ -1535,6 +1550,22 @@ export function createZombieActor(opts: {
       if (forceCollapseNext) { signals.forcedCollapse = true; forceCollapseFed = true; }
       // A dying soft target keeps no agenda (the same override as `doomed`).
       if (softKilled) think = { ...think, target: null, halt: true, attack: null, fire: false, contact: false };
+      // FLOATERS (floater-move.ts): the float altitude follows the state (cruise idle, down to the player
+      // chasing); idle, the body wanders Doom's chase-dir legs instead of holding still.
+      if (floater) {
+        floaterDown ||= doomed || softKilled || (lastFrame?.collapsed ?? false);
+        if (!floaterDown) {
+          const pl = encounterOrder ? encounterOrder.player : brainPlayer;
+          const seen = pl !== null && (encounterOrder ? encounterOrder.visible : rangedSight(pl));
+          const feetY = pl ? pl.y ?? ground!.floorAt(pl.x, pl.z) : NaN;
+          floater.step(sdt, { pos: state.wander.pos, seen, player: pl ? { x: pl.x, z: pl.z, feetY } : null });
+          if (floater.mode === 'idle' && !burnPanic) {
+            const leg = floater.legTarget(state.wander.pos, sdt);
+            think = { ...think, target: leg, halt: leg === null };
+            if (leg) state = { ...state, wander: { ...state.wander, target: leg, idle: 0 } };
+          }
+        }
+      }
       if (think.halt && (soldierDamage || !mind.meleeCapable)) {
         state = { ...state, wander: { ...state.wander, target: null, speed: 0, idle: 0 } };
       }
@@ -1645,7 +1676,7 @@ export function createZombieActor(opts: {
       // navigation refuses would hover, its drop undone every frame.
       const correctFrame = (to: Vec3) => {
         let pos = to;
-        if (motionFloor && ((state.floorVel ?? 0) < 0 || state.wander.pos[1] < to[1])) {
+        if (motionFloor && !floating() && ((state.floorVel ?? 0) < 0 || state.wander.pos[1] < to[1])) {
           const feet = state.wander.pos[1];
           // The floor there as motion's fall reads it: the disc floor, unless that is a lip it
           // cannot step onto, then the floor under the centre.
@@ -1665,7 +1696,11 @@ export function createZombieActor(opts: {
         state = { ...state, lastShift: translate(state.lastShift),
           wander: { ...state.wander, pos }, ...(dy !== 0 ? { floorY: state.floorY + dy } : {}) };
       };
-      if (opts.navigation && !opts.navigation.canTravel(beforeMove,state.wander.pos)) {
+      if (floating()) {
+        // Doom's P_TryMove for MF_FLOAT: refused where the body does not fit; it floats toward the fit
+        // (floater.tryMove sets that target) and goes on, so the chase keeps its target.
+        if (!floater!.tryMove(beforeMove, state.wander.pos)) correctFrame([beforeMove[0], state.wander.pos[1], beforeMove[2]]);
+      } else if (opts.navigation && !opts.navigation.canTravel(beforeMove,state.wander.pos)) {
         correctFrame(beforeMove);
         state={...state,wander:{...state.wander,speed:0,target:null}};
       }
@@ -2443,6 +2478,7 @@ export function createZombieActor(opts: {
     visualWounds: () => torsoWounds?.visual(posed) ?? (soldierDamage ? soldierVisualWounds(woundRing.all()) : woundRing.all()),
     advanceWoundPreview,
     stampWorldOf: (w: Wound) => woundRing.stampWorldOf(w),
+    floatState: () => floater ? { altitude: floater.altitude, mode: floater.mode, dir: floater.dir, down: floaterDown } : null,
     debug: () => lastDebug ?? {
       holdSecs: mind.debug().holdSecs, knockV, phase: 'standing', meter: 0,
       blend: 0, speed: 0,

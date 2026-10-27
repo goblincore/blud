@@ -7,8 +7,10 @@
 //
 // Plan: docs/superpowers/plans/2026-09-17-game-main-decomposition.md
 
+import { FLOATER_BODIES, createFloaterSpace, type FloaterBody, type FloaterSpace } from './floater-move';
 import { sectorSightBlocker } from './sector-ray';
 import type { SectorGround } from './sector-ground';
+import type { SectorMap } from './sector-def';
 import type { GameContext } from './game-context';
 import * as THREE from 'three/webgpu';
 import { burstVolume, spawnImpactGout } from '../blood-sim';
@@ -385,9 +387,14 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
   }
   const zombieId = ctx.boot.nextId++;
   rigGroup.userData.gameActorId = zombieId;
+  // A FLOATER on a sector level (floater-move.ts, Doom's MF_FLOAT): it routes over the floater space's
+  // grid (walls and low openings only) and floats; room levels keep the ground body.
+  const floatSpace = sectorGround && ctx.world.level.def?.sectors && FLOATER_BODIES[name]
+    ? floaterSpaceFor(ctx, ctx.world.level.def.sectors, sectorGround as SectorGround, FLOATER_BODIES[name]!) : null;
   const actor = createZombieActor({
     id: zombieId, room: room.id, body: placed, view, character, characterName: name, start,
     ...(sectorGround ? { ground: sectorGround } : {}),
+    ...(floatSpace ? { floater: floatSpace } : {}),
     ...(sectorGround && ctx.world.level.def?.sectors
       ? { sectorSight: sectorSightBlocker(ctx.world.level.def.sectors, sectorGround as SectorGround) } : {}),
     boundedWounds: ctx.vfx.boundedWoundPreview,
@@ -483,7 +490,7 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
     seed: 1337 + ctx.boot.nextId * 101,
     bounds: wanderBounds(room),
     furniture: roomFurniture,
-    navigation: ctx.world.encounterNav,
+    navigation: floatSpace ? floatSpace.navigation : ctx.world.encounterNav,
     onSever: (piece, stumpWound) => ctx.boot.onSeverDispatch?.(actor, piece, stumpWound),
     // A melee hit on the player. There is no player health, so a hit is
     // FEEDBACK only: the red flash, the camera shake and the counter
@@ -555,6 +562,21 @@ export function spawnEnemy(ctx: GameContext, name: string, room: RoomDef, spawnA
   ctx.world.encounterHomes.set(actor.id,[...start] as Vec3);
   if (characterEntry(name).profile.melee) ctx.world.loop?.biteExempt.add(actor.id);   // its own mind reports contact
   return actor;
+}
+
+/** One floater space per sector map and body (its grid takes a few hundred ms: built at the first spawn). */
+const floaterSpaces = new WeakMap<SectorMap, Map<FloaterBody, FloaterSpace>>();
+function floaterSpaceFor(ctx: GameContext, map: SectorMap, ground: SectorGround, body: FloaterBody): FloaterSpace {
+  let byBody = floaterSpaces.get(map);
+  if (!byBody) floaterSpaces.set(map, byBody = new Map());
+  let space = byBody.get(body);
+  if (!space) {
+    const t0 = performance.now();
+    space = createFloaterSpace(map, ground, ctx.world.level.rooms, ctx.world.level.staticColliders, body);
+    console.info(`[floater-nav] built in ${(performance.now() - t0).toFixed(1)} ms`);
+    byBody.set(body, space);
+  }
+  return space;
 }
 
 export function spawnAll(ctx: GameContext, errs: string[]): void {
