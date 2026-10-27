@@ -18,7 +18,7 @@ exports[`packBody byte pin > clown.blob packs the pinned bytes 1`] = `"8ec4d3949
 
 exports[`packBody byte pin > clown-alt.blob packs the pinned bytes 1`] = `"8ec4d3949e16bc59"`;
 
-exports[`packBody byte pin > cultist.blob packs the pinned bytes 1`] = `"b85fe2a9d76afc21"`;
+exports[`packBody byte pin > cultist.blob packs the pinned bytes 1`] = `"eac687b324715b40"`;
 
 exports[`packBody byte pin > cultist-cowled.blob packs the pinned bytes 1`] = `"e337e1e693a6ae46"`;
 

@@ -7,6 +7,7 @@
 import { BEAM_WHITE_CLIP, BEAM_WHITE_LUM } from '../../../../light-shade';
 import { SKIN_POST, SKIN_PRE } from './skin-detail-proto';
 import { SPLIT_GLISTEN_BLOCK } from './split-glisten.wgsl';
+import { ROW_PRIM_A, ROW_PRIM_CLIP, ROW_PRIM_QUAT, ROW_PRIM_SCALE, ROW_PRIM_SHELL, ROW_PRIM_STRAND } from '../../../layout';
 
 /** A WGSL f32 literal (always a decimal point). */
 const f = (x: number): string => (Number.isInteger(x) ? x.toFixed(1) : String(x));
@@ -122,7 +123,34 @@ export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A
   // regressions -- the zombie sits at 1.18x face/torso, contrast sd 41.4.
   fleshLit = mix(fleshLit,
                  albedo * (amb + 0.30 * lightCfg.x * keyColor),
-                 faceFlat * 0.85);${SKIN_PRE}
+                 faceFlat * 0.85);
+  // SHROUD (cultist hood, 2026-10-27; PrimDef.shroud). The owner wanted "a loose hood that shrouds the face in
+  // darkness". The main light is the player's torch, from the camera, so the hood can never shadow the face it holds;
+  // this is that shadow, authored. A prim of a hooded body carries the hood's index in its strand lanes (pack.ts,
+  // x = -(index + 1), y = strength; a real strand count is never negative). Depth is measured behind the hood's
+  // opening plane: the brim itself stays lit and the face 6-10 cm back is fully dark. Points outside the hood's ellipsoid
+  // (the chest, the capelet) are untouched; on the hood itself only the lining darkens. Glow is added after
+  // fleshLit, so the eyes still burn in the dark. One texel per hit pixel; five more only on a hooded body.
+  if (hitBest >= 0) {
+    let SR = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_STRAND} + gBand), 0);
+    if (SR.x < -0.5) {
+      let h = i32(-SR.x) - 1;
+      let HA = textureLoad(data, vec2<i32>(h, ${ROW_PRIM_A} + gBand), 0);
+      let HS = textureLoad(data, vec2<i32>(h, ${ROW_PRIM_SCALE} + gBand), 0);
+      let HQ = textureLoad(data, vec2<i32>(h, ${ROW_PRIM_QUAT} + gBand), 0);
+      let HSh = textureLoad(data, vec2<i32>(h, ${ROW_PRIM_SHELL} + gBand), 0);
+      let HC = textureLoad(data, vec2<i32>(h, ${ROW_PRIM_CLIP} + gBand), 0);
+      var hv = p - HA.xyz;
+      if (abs(1.0 - HQ.w) > 1e-6) { let hu = -HQ.xyz; let ht = 2.0 * cross(hu, hv); hv = hv + ht * HQ.w + cross(hu, ht); }
+      let he = length(hv / (HA.w * HS.xyz));
+      // The lining darkens within 3 cm of the edge (it faces the torch head-on just inside the opening and read as a
+      // pale ring at the face's 6 cm ramp); what the hood holds, over 6.
+      let depth = HSh.z - dot(p, HC.xyz);
+      let shroud = SR.y * select(smoothstep(-0.01, 0.06, depth) * (1.0 - smoothstep(0.92, 1.0, he)),
+                                 smoothstep(0.0, 0.03, depth) * clothInside, hitBest == h);
+      fleshLit = fleshLit * (1.0 - shroud);
+    }
+  }${SKIN_PRE}
   if ((spotCfg.x > 0.0 || lightListCfg.x > 0.0) && spotCfg2.y > 0.0) {
     let knee = clamp(1.0 - spotCfg2.y, 0.05, 0.99);
     let shoulder = vec3<f32>(softShoulder(fleshLit.x, knee),

@@ -592,3 +592,42 @@ The analytic shell gradient (`ngShell`, `shellGradient`) follows the new rim (20
 - The circle meets each face with the face's own gradient, so the only kinks left are the hard tie (sheet = plane,
   both at or below -rim) and its end, which is a sharp corner's apex at rim 0. The old rim term was a kink of its own.
 - Robe close-up: 850 hit pixels fall back at a kink (reason 3) and none as unsupported. The bare zombie is unchanged.
+
+## 2026-10-27: a loose hood that shrouds the face
+
+**The owner:** with the edge smooth, the hood read as "a thick glove around the head with a hole cut for the face".
+They pictured "a loose hood that shrouds the face in darkness".
+
+![before (top) and after (bottom): front, three-quarter, side at 1.3 m](hood-loose-before-after.png)
+
+There were two causes. One was geometry and one was light:
+
+- **The opening sat at the face.**
+  - The hood's cut was at z ≈ 0.17 at eye height. The face front is at 0.16 to 0.20, so the face filled the hole.
+  - Fix: the sheet now stands off the head:
+    - r 0.150 → 0.170;
+    - wide 0.95 → 1.00;
+    - deep 1.18 → 1.40;
+    - centre 4 cm forward.
+  - The opening keeps its lean and moved about 10 cm out (`clipd` -0.4339 → -0.342), so the face sits 7 to 10 cm
+    back inside a cowl.
+- **Nothing could make that inside dark.**
+  - The main light is the player's torch, at the camera, so a hood can never shadow the face it holds.
+    `?selfshadow=1` (a walk toward the key light) changed nothing visible.
+  - Fix: **`shroud=0..1`**, a new setting for a ball shell (`types.ts` PrimDef.shroud). It is that shadow, authored.
+  - Packing (`pack.ts`): every flesh prim of the body carries the hood's index and strength in its
+    `ROW_PRIM_STRAND` lanes. Those lanes are free on any prim without profile bit 32. A dead (dropped) hood writes
+    nothing.
+  - Shading (`compose.wgsl.ts` SHROUD): a hit point inside the hood's ellipsoid darkens with its depth behind the
+    opening plane.
+    - What the hood holds darkens over 6 cm.
+    - The lining darkens over 3 cm; at 6 cm it read as a pale ring.
+  - Glow is added after `fleshLit`, so the eyes still burn in the dark.
+  - Cost: one texel per hit pixel on every body, and five more on a hooded one. The march is untouched.
+
+**A rig side effect.** The arm keep-out capsule round the head (`rig-bind.ts` buildHeadKeepOut) is sized from the
+head's biggest prims, which included the hood. The looser hood grew it about 9 cm, and the throw-back's flung arm no
+longer got behind the chest (`game-actor-cultist.test.ts`). A `shroud=` hood is loose cloth, so it no longer sizes the
+keep-out. Fitted head shells (the bride, `cultist-cowled`) still do, so neither of them moves.
+
+`cultist-cowled` keeps its tighter hood and gets no shroud.

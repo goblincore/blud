@@ -275,6 +275,14 @@ export interface PrimDef {
    */
   glow?: number;
   /**
+   * SHROUD, 0..1 (cultist hood, 2026-10-27): this shell is a hood, and what sits deep inside it is in its shadow.
+   * The game's main light is the player's torch, from the camera, so a hood can never cast a shadow onto the face
+   * it holds; this is that shadow, authored. Every hit point inside the shell's closed ellipsoid and behind its clip
+   * plane darkens by up to this much, deeper = darker, the lining included (glow is emission and stays). Only on a
+   * ball shell (no tip). Packed into the OTHER prims' ROW_PRIM_STRAND lanes (pack.ts), dead with the shell.
+   */
+  shroud?: number;
+  /**
    * Marks this primitive as the limb's STRUCTURAL MASS for the fuse probe
    * (clusterCore). Without it the fattest prim in the cluster is taken,
    * which is wrong as soon as a shoe or a sleeve is fatter than the bone it
@@ -436,6 +444,8 @@ export interface Primitive {
   gloss?: number;
   /** See PrimDef.glow. Carried through mirror, resolve and the rig untouched. */
   glow?: number;
+  /** See PrimDef.shroud. Carried through mirror, resolve and the rig untouched. */
+  shroud?: number;
   /** See PrimDef.metal. Carried through mirror, resolve and the rig untouched. */
   metal?: boolean;
   /** Rigid-segment id for inside-flesh prims (bones/organs), assigned by

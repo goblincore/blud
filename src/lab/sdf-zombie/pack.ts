@@ -357,6 +357,15 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {},
     // Cull margin is a distance: always the magnitude, never the sign.
     if (p.blendK > maxBlendK) maxBlendK = p.blendK;
   });
+  // SHROUD (cultist hood, 2026-10-27; PrimDef.shroud): every flesh prim of a hooded body points at the hood, so a
+  // hit pixel on the face can find the shell whose inside darkens it. x = -(hood index + 1), y = strength. The
+  // lanes are ROW_PRIM_STRAND's, free on every prim without profile bit 32 (every strand read is gated on it): a
+  // strand prim keeps its own parameters and is never shrouded. A dead hood (dropped, shot off) writes nothing.
+  const hood = body.prims.findIndex(p => (p.shroud ?? 0) > 0 && !p.dead && !!p.shell);
+  if (hood >= 0) {
+    const k = body.prims[hood]!.shroud!;
+    body.prims.forEach((p, i) => { if (p.strand === undefined) put4(primStrand, i * PRIM_STRIDE, -(hood + 1), k, 0, 0); });
+  }
 
   // BONE rows (wound pass r2): written AFTER the flesh, at indices
   // [prims.length, prims.length + boneCount), never inside a cluster or group

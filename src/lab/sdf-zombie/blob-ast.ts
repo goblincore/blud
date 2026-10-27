@@ -118,6 +118,8 @@ export interface BlobPart {
   /** `glow=0..1`. Emissive strength; the COLOUR is the prim's own `color=`
    *  (hard-surface design C — no new colour field). null = not emissive. */
   glow: number | null;
+  /** `shroud=0..1` on a ball shell: how dark its inside goes (PrimDef.shroud). null = not a hood. */
+  shroud: number | null;
   /**
    * The bare word `metal`: this painted prim shades as METAL — the shader
    * drops its diffuse to a small floor and tints the specular by the prim's
