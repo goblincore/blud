@@ -591,7 +591,15 @@ export const SD_SHELL = /* wgsl */ `fn sdShell(dBase: f32, p: vec3<f32>, thick: 
   }
   let d = abs(base) - thick;
   if (hasClip < 0.5) { return d / lip; }
-  let dPlane = dot(p, clipN) - clipO;
+  var dPlane = dot(p, clipN) - clipO;
+  // RUFFLE (hasClip - 1, metres): the cut edge wanders INTO the sheet by 0..ruffle, so the opening is ragged rather
+  // than a plane through an ellipsoid (an egg). Only ever cuts deeper, so every bound fitted to the plain clip holds.
+  let ruffle = hasClip - 1.0;
+  if (ruffle > 0.0 && fLen != 0.0) {
+    let q = noiseLocal(p - drift, gBodyAnchor);
+    dPlane = dPlane + ruffle * (0.5 + 0.25 * sin(warpF.x * q.x + 0.7) + 0.25 * sin(warpF.y * q.y + warpF.z * q.z + 2.1));
+    lip = max(lip, 1.0 + 0.25 * ruffle * (abs(warpF.x) + length(warpF.yz)));
+  }
   return (min(-rim, max(d, dPlane)) + length(max(vec2(d + rim, dPlane + rim), vec2(0.0)))) / lip;
 }`;
 

@@ -508,6 +508,7 @@ function parseBodyLine(l: BlobLine, s: ParseState, into: BlobPart[]): void {
     // ShellParams.
     warpAmp: numArg(l, 'warp', 0),
     warpFreq: parseWarpFreq(l),
+    ruffle: numArg(l, 'ruffle', 0),
     clipNormal: parseVec3Arg(l, 'clip', strArg(l, 'clip')),
     clipOffset: numArg(l, 'clipd', 0),
     rim: numArg(l, 'rim', 0),

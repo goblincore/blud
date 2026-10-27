@@ -21,6 +21,15 @@ describe('shroud= on the cultist hood', () => {
     expect(() => parseBlob(cultistSrc.replace(hoodLine, hoodLine.replace(/^(\s*)shell /, '$1blob ')))).toThrow(BlobError);
   });
 
+  it('ruffle= needs a shell and a warpFreq= lattice, and packs as hasClip = 1 + ruffle', () => {
+    expect(hoodLine).toMatch(/ ruffle=[\d.]+/);
+    expect(() => build(cultistSrc.replace(hoodLine, hoodLine.replace(/ warp=\S+ warpFreq=\S+/, '')))).toThrow(BlobError);
+    expect(() => build(cultistSrc.replace(hoodLine, hoodLine.replace(/ ruffle=[\d.]+/, ' ruffle=-0.01')))).toThrow(BlobError);
+    const b = build(cultistSrc);
+    const h = b.prims.findIndex(p => (p.shroud ?? 0) > 0);
+    expect(packBody(b).primShell[h * PRIM_STRIDE + 3]).toBeCloseTo(1 + b.prims[h]!.shell!.ruffle!, 6);
+  });
+
   it('every flesh prim points at the hood: x = -(index + 1), y = strength', () => {
     const b = build(cultistSrc);
     const h = b.prims.findIndex(p => (p.shroud ?? 0) > 0);

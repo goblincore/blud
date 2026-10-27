@@ -344,7 +344,7 @@ describe('shellGradient', () => {
   };
   const scalar = (p: V3, s: ShellInput): number => sdShellWrap(
     capsuleGradient(p, tube).d, p, s.thickness, s.clipNormal, s.clipOffset, s.rim,
-    s.warpAmp, s.warpFreq, s.warpDrift, s.bodyAnchor);
+    s.warpAmp, s.warpFreq, s.warpDrift, s.bodyAnchor, s.ruffle);
 
   it.each([
     ['outside the sheet', [0.081, -0.2, 0.01]],
@@ -377,6 +377,27 @@ describe('shellGradient', () => {
     expect(x.reason).toBe('ok');
     expect(x.d).toBeCloseTo(scalar(p, s), 12);
     expectV3Close(x.g, finiteGradient(q => scalar(q, s), p, 1e-6), 5);
+  });
+
+  it.each([
+    ['past the ragged edge', [0.074, -0.40, 0.0185]],
+    ['in its rounded corner', [0.074, -0.37, 0.0185]],
+  ] as const)('differentiates the ruffled cut %s', (_name, p) => {
+    // ruffle= (the cultist's hood): the clip plane wanders 0..ruffle into the sheet on the warp lattice.
+    const s = { ...skirt, warpAmp: 0, thickness: 0.014, rim: 0.02, ruffle: 0.03 };
+    const x = shellGradient(capsuleGradient(p, tube), p, s);
+    expect(x.reason).toBe('ok');
+    expect(x.d).toBeCloseTo(scalar(p, s), 12);
+    expectV3Close(x.g, finiteGradient(q => scalar(q, s), p, 1e-6), 5);
+  });
+
+  it('a ruffle only cuts: nothing outside the plain sheet is inside the ruffled one', () => {
+    let seed = 7;
+    const rnd = (): number => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    for (let i = 0; i < 2000; i++) {
+      const p: V3 = [rnd() * 0.2 - 0.1, -rnd() * 0.5, rnd() * 0.2 - 0.1];
+      if (scalar(p, skirt) > 0) expect(scalar(p, { ...skirt, ruffle: 0.04 })).toBeGreaterThan(0);
+    }
   });
 
   it('refuses to certify a stencil that straddles the crease or the clip edge', () => {

@@ -245,6 +245,8 @@ export interface ShellInput {
   warpFreq?: V3;
   warpDrift?: V3;
   bodyAnchor?: V3;
+  /** ShellParams.ruffle: the cut edge's wander into the sheet, metres. */
+  ruffle?: number;
 }
 
 /** The stencil ball's radius: calcNormal's tetrahedral taps sit sqrt(3) * 1.5 mm from the hit. */
@@ -283,8 +285,22 @@ export function shellGradient(base: Dg, p: V3, s: ShellInput): Dg {
   flag(Math.abs(bd) <= lip * R);
   const sg = bd >= 0 ? 1 : -1;
   const d: Dg = { d: Math.abs(bd) - s.thickness, g: [sg * bg[0], sg * bg[1], sg * bg[2]], reason };
-  const n = s.clipNormal;
-  const dPlane = n[0] * p[0] + n[1] * p[1] + n[2] * p[2] - s.clipOffset;
+  let n: V3 = s.clipNormal;
+  let dPlane = n[0] * p[0] + n[1] * p[1] + n[2] * p[2] - s.clipOffset;
+  // RUFFLE (sdShell): the cut wanders 0..ruffle into the sheet on the warp's lattice.
+  const E = s.ruffle ?? 0;
+  if (E > 0 && fLen !== 0) {
+    const drift = s.warpDrift ?? ZERO;
+    const anchor = s.bodyAnchor ?? ZERO;
+    const lx = p[0] - drift[0] - anchor[0], dy = p[1] - drift[1], lz = p[2] - drift[2] - anchor[2];
+    const ch = Math.cos(anchor[1]), sh = Math.sin(anchor[1]);
+    const qx = lx * ch - lz * sh, qy = dy, qz = lx * sh + lz * ch;
+    const a = F[0] * qx + 0.7, b = F[1] * qy + F[2] * qz + 2.1;
+    const gq: V3 = [0.25 * E * F[0] * Math.cos(a), 0.25 * E * F[1] * Math.cos(b), 0.25 * E * F[2] * Math.cos(b)];
+    dPlane += E * (0.5 + 0.25 * Math.sin(a) + 0.25 * Math.sin(b));
+    n = [n[0] + gq[0] * ch + gq[2] * sh, n[1] + gq[1], n[2] - gq[0] * sh + gq[2] * ch];
+    lip = Math.max(lip, 1 + 0.25 * E * (Math.abs(F[0]) + Math.hypot(F[1], F[2])));
+  }
   // The rounded intersection min(-rim, max(sheet, plane)) + |max((sheet, plane) + rim, 0)|. In the corner (both
   // shifted values positive) it is the quarter circle, whose gradient is the weighted sum below; with one positive
   // it is that face; with neither, the hard max. Only that last region's tie, and a corner sharper than the stencil

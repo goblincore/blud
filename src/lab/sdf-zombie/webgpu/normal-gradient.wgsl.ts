@@ -449,8 +449,20 @@ const NG_SHELL = /* wgsl */ `fn ngShell(dBase: vec4<f32>, p: vec3<f32>, thick: f
   // The rounded intersection (sdShell, 2026-10-27): the quarter circle where both shifted values are positive,
   // that face where one is, the hard max where neither is. The circle meets each face with the face's gradient, so
   // the kinks are the tie ray (u = v <= 0) and its end, a sharp corner's apex at rim 0.
-  let plane = vec4<f32>(dot(p, clipN) - clipO, clipN);
-  let reach = 2.0 * (lip + length(clipN)) * R;
+  var plane = vec4<f32>(dot(p, clipN) - clipO, clipN);
+  // RUFFLE (sdShell): the cut wanders 0..ruffle into the sheet, differentiated through noiseLocal like the warp.
+  let ruffle = hasClip - 1.0;
+  if (ruffle > 0.0 && fLen != 0.0) {
+    let q = noiseLocal(p - drift, gBodyAnchor);
+    let a = warpF.x * q.x + 0.7;
+    let b = warpF.y * q.y + warpF.z * q.z + 2.1;
+    let gq = 0.25 * ruffle * vec3<f32>(warpF.x * cos(a), warpF.y * cos(b), warpF.z * cos(b));
+    let ch = cos(gBodyAnchor.y);
+    let sh = sin(gBodyAnchor.y);
+    plane = vec4<f32>(plane.x + ruffle * (0.5 + 0.25 * sin(a) + 0.25 * sin(b)), plane.yzw + vec3<f32>(gq.x * ch + gq.z * sh, gq.y, gq.z * ch - gq.x * sh));
+    lip = max(lip, 1.0 + 0.25 * ruffle * (abs(warpF.x) + length(warpF.yz)));
+  }
+  let reach = 2.0 * (lip + length(plane.yzw)) * R;
   let u = d.x + rim;
   let v = plane.x + rim;
   let nearKink = select(length(vec2(u, v)) <= reach, abs(u - v) <= reach, u + v <= 0.0);
@@ -458,7 +470,7 @@ const NG_SHELL = /* wgsl */ `fn ngShell(dBase: vec4<f32>, p: vec3<f32>, thick: f
   var m: vec4<f32>;
   if (u > 0.0 && v > 0.0) {
     let len = length(vec2(u, v));
-    m = vec4<f32>(len - rim, (u * d.yzw + v * clipN) / len);
+    m = vec4<f32>(len - rim, (u * d.yzw + v * plane.yzw) / len);
   } else if (u > 0.0) { m = d; }
   else if (v > 0.0) { m = plane; }
   else { m = select(plane, d, d.x >= plane.x); }

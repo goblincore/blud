@@ -143,11 +143,13 @@ export const COMPOSE_BLOCK = /* wgsl */ `  // HIGHLIGHT SHOULDER (spotCfg2.y). A
       var hv = p - HA.xyz;
       if (abs(1.0 - HQ.w) > 1e-6) { let hu = -HQ.xyz; let ht = 2.0 * cross(hu, hv); hv = hv + ht * HQ.w + cross(hu, ht); }
       let he = length(hv / (HA.w * HS.xyz));
-      // The lining darkens within 3 cm of the edge (it faces the torch head-on just inside the opening and read as a
-      // pale ring at the face's 6 cm ramp); what the hood holds, over 6.
+      // The lining is dark wherever it faces inward, right up to the hem: any ramp in from the edge read as the
+      // WALL of the hood (a lit band 3 cm wide, "a thick egg", owner 2026-10-27), and at a 3/4 view the far side's
+      // lining showed as a pale crescent. The hem's rolled bead stays lit, so the edge reads as one thin sheet.
+      // What the hood holds darkens over 6 cm behind the opening.
       let depth = HSh.z - dot(p, HC.xyz);
-      let shroud = SR.y * select(smoothstep(-0.01, 0.06, depth) * (1.0 - smoothstep(0.92, 1.0, he)),
-                                 smoothstep(0.0, 0.03, depth) * clothInside, hitBest == h);
+      let shroud = SR.y * select(smoothstep(-0.04, 0.04, depth) * (1.0 - smoothstep(0.92, 1.0, he)),
+                                 clothInside, hitBest == h);
       fleshLit = fleshLit * (1.0 - shroud);
     }
   }${SKIN_PRE}

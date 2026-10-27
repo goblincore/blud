@@ -43,6 +43,14 @@ export interface ShellParams {
    *  to a constant, which turns the lumps into vertical folds — that one
    *  degree of freedom is the difference between cloth and a lumpy shell. */
   warpFreq?: Vec3;
+  /**
+   * RUFFLE (cultist hood, 2026-10-27). Metres the cut edge wanders INTO the sheet, on the warp's lattice
+   * (`warpFreq`, body-anchored, drifting as the body walks): 0..ruffle deeper than the clip plane. A plane through an
+   * ellipsoid is an exact ellipse, and the owner read the hood's opening as "a thick egg"; a ragged, moving edge reads
+   * as fabric. Only ever removes sheet, so the hull, the cloth proxies and every bound fitted to the plain clip hold.
+   * Packs as hasClip = 1 + ruffle (ROW_PRIM_SHELL.w). 0 = the plain cut.
+   */
+  ruffle?: number;
 }
 
 /**

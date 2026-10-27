@@ -124,11 +124,13 @@ export const SHADING_NORMAL_BLOCK = /* wgsl */ `  // Silhouette noise into the n
     let fv = normalize(cross(uR, fref));
     let th = atan2(dot(rad, cross(uR, fv)), dot(rad, fv));
     let walk = length(gWindDrift.xz);
-    let phase = ${CLOTH_FOLDS.toFixed(1)} * th + 1.4 * sin(s * 5.0 + th * 2.0) + 1.2 * s * sin(s * 7.0 - walk * 9.0);
     // A ball's folds gather just behind its opening (forward along uR), calm at the rim itself (they striped the cut
     // edge) and fading toward the back, where they would all meet at the pole in a starburst; an axis shell's
-    // deepen toward its open end.
+    // deepen toward its open end. A ball has no s along its folds, so they wander and wave over along instead (with
+    // s fixed they ran dead straight back from the hood's opening: ruled stripes down its sides).
     let along = dot(anchor - rA, uR);
+    let sw = select(s, 0.6 + 4.0 * along, ball);
+    let phase = ${CLOTH_FOLDS.toFixed(1)} * th + 1.4 * sin(sw * 5.0 + th * 2.0) + 1.2 * sw * sin(sw * 7.0 - walk * 9.0);
     let depth = select(smoothstep(0.05, 0.9, s), smoothstep(-0.12, 0.02, along) * (1.0 - smoothstep(0.06, 0.13, along)), ball) * ${CLOTH_FOLD_TILT};
     // The lining: radially out from the posed axis (a cone) or the centre (a ball).
     let rw = select(p - wA - wAx * dot(p - wA, wAx), p - wA, ball);

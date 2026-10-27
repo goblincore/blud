@@ -20,7 +20,7 @@ export const BONE_UNITS = {
 } as const satisfies Record<keyof BoneDef, FieldUnit>;
 
 export const SHELL_UNITS = {
-  thickness: 'length', clipNormal: 'same', clipOffset: 'length', rim: 'length', warpAmp: 'length', warpFreq: 'perLength',
+  thickness: 'length', clipNormal: 'same', clipOffset: 'length', rim: 'length', warpAmp: 'length', warpFreq: 'perLength', ruffle: 'length',
 } as const satisfies Record<keyof ShellParams, FieldUnit>;
 
 /** A face morph (morph.ts, goblin expressions): its moves are metres, its radius/scale/blend terms are factors. */

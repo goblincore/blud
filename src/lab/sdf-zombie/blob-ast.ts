@@ -108,6 +108,8 @@ export interface BlobPart {
   /** Wrinkle amplitude (metres) and frequency (rad/m); 0 = smooth. */
   warpAmp?: number;
   warpFreq?: readonly [number, number, number] | null;
+  /** `ruffle=` metres: the shell's cut edge wanders this far into the sheet (ShellParams.ruffle); 0 = plain. */
+  ruffle?: number;
   clipNormal: readonly [number, number, number] | null;
   clipOffset: number;
   rim: number;

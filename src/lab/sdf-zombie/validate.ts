@@ -210,7 +210,7 @@ export function sdPrimitive(p: Vec3, prim: Primitive): number {
   // plane with a rounded rim — the exact construction sdShellWrap below. Only
   // when the prim carries `shell` params; every other prim keeps the bare
   // capsule field bit-identical, which is what the zombie pin demands.
-  if (prim.shell) return sdShellWrap(base, p, prim.shell.thickness, prim.shell.clipNormal, prim.shell.clipOffset, prim.shell.rim, prim.shell.warpAmp, prim.shell.warpFreq);
+  if (prim.shell) return sdShellWrap(base, p, prim.shell.thickness, prim.shell.clipNormal, prim.shell.clipOffset, prim.shell.rim, prim.shell.warpAmp, prim.shell.warpFreq, ZERO3, ZERO3, prim.shell.ruffle);
   return base;
 }
 
@@ -248,7 +248,7 @@ const ZERO3: Vec3 = [0, 0, 0];
 export function sdShellWrap(
   dBase: number, p: Vec3, thickness: number,
   clipNormal: Vec3, clipOffset: number, rim: number,
-  warpAmp = 0, warpFreq: Vec3 = ZERO3, warpDrift: Vec3 = ZERO3, bodyAnchor: Vec3 = ZERO3,
+  warpAmp = 0, warpFreq: Vec3 = ZERO3, warpDrift: Vec3 = ZERO3, bodyAnchor: Vec3 = ZERO3, ruffle = 0,
 ): number {
   // WRINKLES. Three sines with offset phases so the pattern does not repeat
   // visibly along any axis, added to the BASE distance before the sheet is
@@ -301,7 +301,17 @@ export function sdShellWrap(
     lip = 1 + Math.abs(warpAmp) * fLen;
   }
   const d = Math.abs(base) - thickness;
-  const dPlane = clipNormal[0] * p[0] + clipNormal[1] * p[1] + clipNormal[2] * p[2] - clipOffset;
+  let dPlane = clipNormal[0] * p[0] + clipNormal[1] * p[1] + clipNormal[2] * p[2] - clipOffset;
+  // RUFFLE (ShellParams.ruffle): the cut wanders 0..ruffle INTO the sheet on the warp's lattice, so the opening is
+  // ragged. Only ever cuts deeper, so bounds fitted to the plain clip still hold.
+  if (ruffle > 0 && fLen !== 0) {
+    const dx = p[0] - warpDrift[0], dy = p[1] - warpDrift[1], dz = p[2] - warpDrift[2];
+    const lx = dx - bodyAnchor[0], lz = dz - bodyAnchor[2];
+    const ch = Math.cos(bodyAnchor[1]), sh = Math.sin(bodyAnchor[1]);
+    const qx = lx * ch - lz * sh, qy = dy, qz = lx * sh + lz * ch;
+    dPlane += ruffle * (0.5 + 0.25 * Math.sin(warpFreq[0] * qx + 0.7) + 0.25 * Math.sin(warpFreq[1] * qy + warpFreq[2] * qz + 2.1));
+    lip = Math.max(lip, 1 + 0.25 * ruffle * (Math.abs(warpFreq[0]) + Math.hypot(warpFreq[1], warpFreq[2])));
+  }
   return (Math.min(-rim, Math.max(d, dPlane)) + Math.hypot(Math.max(d + rim, 0), Math.max(dPlane + rim, 0))) / lip;
 }
 

@@ -51,7 +51,7 @@ export interface PackedBody {
    *  an unpainted body packs as all zeros — bit-identical data rows for
    *  every character authored before colour existed. */
   primColor: Float32Array;
-  /** x = half-thickness, y = rim radius, z = clip offset, w = hasClip (0/1).
+  /** x = half-thickness, y = rim radius, z = clip offset, w = hasClip (0 none, else 1 + ShellParams.ruffle).
    *  Only read by prims folded as a shell (profile bit 2). */
   primShell: Float32Array;
   /** xyz = the clip plane's unit normal; w = per-prim emissive `glow=` 0..1
@@ -296,7 +296,7 @@ export function writePrimRows(rows: PrimRows, p: Primitive, i: number, w: number
   // above), and a glowing shell — a lit cable run authored as a sheet —
   // must glow exactly like a glowing capsule. (hard-surface task 3.)
   const sh = p.shell;
-  if (sh) put4(primShell, o, sh.thickness, sh.rim, sh.clipOffset, 1); else put4(primShell, o, 0, 0, 0, 0);
+  if (sh) put4(primShell, o, sh.thickness, sh.rim, sh.clipOffset, 1 + (sh.ruffle ?? 0)); else put4(primShell, o, 0, 0, 0, 0);
   if (sh) put4(primClip, o, sh.clipNormal[0], sh.clipNormal[1], sh.clipNormal[2], p.glow ?? 0);
   else put4(primClip, o, 0, 0, 0, p.glow ?? 0);
   // WRINKLES. Its own row, for the reason ROW_PRIM_WARP's doc gives. Zeros

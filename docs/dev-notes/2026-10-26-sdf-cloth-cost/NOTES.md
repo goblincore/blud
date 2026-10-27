@@ -631,3 +631,29 @@ longer got behind the chest (`game-actor-cultist.test.ts`). A `shroud=` hood is 
 keep-out. Fitted head shells (the bride, `cultist-cowled`) still do, so neither of them moves.
 
 `cultist-cowled` keeps its tighter hood and gets no shroud.
+
+## 2026-10-27: a thin, ragged hood
+
+The owner, on the loose hood: still "a thick egg", "perfectly oval", "the beveled edge", and at a 3/4 view the dark
+did not fill the cowl. They wanted it irregular, thin and moving.
+
+![before/after](hood-thin-before-after.png)
+
+- **The bevel was the lining, lit.** The shroud let the inside of the hood stay lit for 3 cm in from the edge. That
+  band read as the wall of a thick shell, and from a 3/4 view the far side's lining showed as a pale crescent. The
+  lining is now dark wherever it faces inward, right up to the hem; only the rolled bead stays lit.
+- **The egg is a plane through an ellipsoid**, which is an exact ellipse. A new shell setting, `ruffle=`, lets the cut
+  wander up to that many metres into the sheet on the warp's body-anchored lattice (`warpFreq`). It only ever cuts
+  deeper, so the hull and the cloth proxies, fitted to the plain clip, still contain it. It packs into the shell row's
+  `hasClip` lane as `1 + ruffle`, so no new row and every other shell is bit-identical. The GPU field, the analytic
+  normal, the CPU field and the CPU gradient reference all carry it; the reference test checks the gradient against
+  finite differences and that it never adds sheet.
+- **Thinner:** a 7 mm sheet (thick 0.0035, rim 0.003), with `warp=0.006` slumping it.
+- **Movement:** the ruffle and the warp share the lattice that falls back as the body walks and turns
+  (`CLOTH_WALK_DRIFT`, `CLOTH_TURN_DRIFT`), so the edge and the folds shift as he moves. Standing still they hold.
+- **The fold shading on a ball shell** ran dead straight back from the opening (ruled stripes down the hood's sides):
+  with no position along the fold, the wander term was a constant. It now wanders over the distance along the axis.
+- **Face:** the shroud ramp starts 4 cm in front of the opening plane, so the chin and teeth go dark too.
+
+Not measured: the march cost. The ruffle's Lipschitz factor on the hood is about 1.7 (steps near the hood are that
+much shorter).
