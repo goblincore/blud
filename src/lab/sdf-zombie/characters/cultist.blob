@@ -162,7 +162,13 @@ body
   # ragged and lopsided; warp=0.006 at (30,7,24) slumps the sheet itself. Both
   # ride the body-anchored lattice, which falls back as he walks and turns:
   # the edge and the folds shift as cloth would. Standing still, they hold.
-  shell head on skull at=0.45 offset=(0,0.035,0.010) r=0.170 wide=1.00 tall=1.30 deep=1.40 thick=0.0035 clip=(0,-0.35,0.9368) clipd=-0.342 rim=0.003 blend=0.006 color=6e5c40 shroud=0.85 warp=0.006 warpFreq=(30,7,24) ruffle=0.060 when=alive
+  # FIT PASS (owner 2026-10-27: "a bit big ... I can see the full top of his
+  # head inside", and "giant egg head from afar"). r 0.170 -> 0.158, wide
+  # 1.00 -> 0.95, tall 1.30 -> 1.05, centre 3 cm down (offset y 0.035 ->
+  # 0.005): the crown falls 1.93 -> ~1.85, a few cm over the (now shorter,
+  # face headHeight 1.14 -> 1.02) skull. deep 1.40 -> 1.45 keeps the opening
+  # standing off the face. The peak came down with it.
+  shell head on skull at=0.45 offset=(0,0.005,0.010) r=0.158 wide=0.95 tall=1.05 deep=1.45 thick=0.0035 clip=(0,-0.35,0.9368) clipd=-0.342 rim=0.003 blend=0.006 color=6e5c40 shroud=0.85 warp=0.006 warpFreq=(30,7,24) ruffle=0.060 when=alive
   # THE DRAPE: the hood's back falling onto the shoulders, so from behind
   # the silhouette runs from the crown to the capelet instead of a ball on a
   # neck. NOT rigid on purpose: its top end binds to the head's joint and its
@@ -185,8 +191,9 @@ body
   # hood's inside, and through the face opening its flesh-shaded base stacked
   # against the lining and the rim — the "onion" rings. A shell cut at
   # y 1.91 (just under the hood's outer crown, y ~1.93) keeps only the part
-  # standing out of the hood.
-  shell head on skull at=0.90 offset=(0,0.100,-0.085) tip=(0,0.070,-0.140) bend=(0,0.030,0) r=0.066 r2=0.006 thick=0.005 clip=(0,-1,0) clipd=-1.910 rim=0.004 blend=0.030 color=6e5c40 when=alive
+  # standing out of the hood. FIT PASS: the crown fell ~8.6 cm, so the
+  # peak's root (offset y 0.100 -> 0.014) and cut (-1.910 -> -1.830) followed.
+  shell head on skull at=0.90 offset=(0,0.014,-0.085) tip=(0,0.070,-0.140) bend=(0,0.030,0) r=0.066 r2=0.006 thick=0.005 clip=(0,-1,0) clipd=-1.830 rim=0.004 blend=0.030 color=6e5c40 when=alive
   # HOOD DOWN (owner playtest 2026-09-24: a shot should drop the hood, not
   # carve it, "his head would be completely exposed"). The two lines above
   # are `when=alive`; these are `when=dead` — hidden until he dies, then the
@@ -261,7 +268,8 @@ bones
 face
   headRadius 0.112
   headWidth  0.72
-  headHeight 1.14
+  # 1.14 -> 1.02 (owner 2026-10-27: a tall head under the hood read as an egg).
+  headHeight 1.02
   headDepth  0.88
   jawWidth   0.86
   jawHeight  0.92

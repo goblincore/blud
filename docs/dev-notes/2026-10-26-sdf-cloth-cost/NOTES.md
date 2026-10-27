@@ -657,3 +657,11 @@ did not fill the cowl. They wanted it irregular, thin and moving.
 
 Not measured: the march cost. The ruffle's Lipschitz factor on the hood is about 1.7 (steps near the hood are that
 much shorter).
+
+## 2026-10-27: the hood fitted, the head shorter
+
+The owner: the hood was "a bit big", the top of his head showed inside it, and from afar he read as a "giant egg
+head". The hood is smaller and lower (crown ~1.93 -> ~1.85 m), the face block's `headHeight` went 1.14 -> 1.02, and
+the peak came down with the crown.
+
+![before/after](hood-fit-before-after.png)
