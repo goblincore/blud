@@ -1,0 +1,183 @@
+// arena-cost.mjs — the march census of ONE character in the test arena (docs/dev-notes/2026-10-27-skeleton-cloak-cost/).
+// A fork of scripts/cloth-cost-game.mjs: same census, but the page is `?level=arena&spawn=<character>` and the stages
+// are distances from that one enemy. VARIANTS are `<character>` or `<character>+<extra query>` (e.g. cultist+clothonly=1).
+//   close  the eye CLOSE_D m in front of the enemy's chest;  far  the eye FAR_D m in front (arena distance);
+//   back   the eye CLOSE_D m behind him.
+//   head   the eye CLOSE_D m in front of his head (the hood and the face inside it).
+// Frozen and seeded, as the arena ships (hulls, kit occluder).
+// Per boot and stage: THE CENSUS (debug modes 13 and 14 read off the float march target: steps and prim evaluations,
+// deterministic) and __sdfGame.timeDraws(N) (fenced still frames, CPU + GPU; ROUNDS boots per variant, the variants
+// rotated, the 1-minute load average logged beside each). Timing is not trustworthy above a load of ~6.
+//
+// Usage (bash; servers from scripts/lab-servers.sh):
+//   bash -c 'export LAB_TMP=.lab-tmp LAB_VITE_PORT=5282 LAB_CDP_PORT=9282; . scripts/lab-servers.sh;
+//     trap lab_servers_down EXIT; lab_servers_up; node docs/dev-notes/2026-10-27-skeleton-cloak-cost/arena-cost.mjs 5282 9282'
+// Env: VARIANTS (zombie,cultist,cultist+clothonly=1)  STAGES (close,far,back,head)  ROUNDS (1)  N (0 = no timing)  CLOSE_D (1.3)  FAR_D (6)
+//      DUMP=1 (raw mode-13 and shaded texels per stage and variant, light clocks pinned)  QS (extra page flags)
+//      NG=0 (analytic normal off)  REASONS=1 (its mode-12 reason histogram)  OUT (.lab-tmp/arena-cost)
+import { execFileSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { loadavg } from "node:os";
+
+const VITE = Number(process.argv[2] ?? 5282);
+const CDP = Number(process.argv[3] ?? 9282);
+const VARIANTS = (process.env.VARIANTS ?? "zombie,cultist,cultist+clothonly=1").split(",");
+const STAGES = (process.env.STAGES ?? "close,far,back,head").split(",");
+const FAR_D = Number(process.env.FAR_D ?? 6);
+const ROUNDS = Number(process.env.ROUNDS ?? 1);
+const N = Number(process.env.N ?? 0);
+const CLOSE_D = Number(process.env.CLOSE_D ?? 1.3);
+const QS = process.env.QS ? `&${process.env.QS}` : "";
+const OUT = process.env.OUT ?? ".lab-tmp/arena-cost";
+const W = 1280, H = 800, EYE_H = 1.62;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const die = (m) => { console.error(`FAIL: ${m}`); process.exit(1); };
+mkdirSync(OUT, { recursive: true });
+
+let S = null;
+async function openSession() {
+  const tab = await (await fetch(`http://localhost:${CDP}/json/new?about:blank`, { method: "PUT" })).json();
+  const ws = new WebSocket(tab.webSocketDebuggerUrl);
+  await new Promise((ok, err) => { ws.onopen = ok; ws.onerror = err; });
+  const s = { tab, ws, seq: 0, pending: new Map(), console: [] };
+  ws.onmessage = (ev) => {
+    const m = JSON.parse(ev.data);
+    if (m.id && s.pending.has(m.id)) { s.pending.get(m.id)(m); s.pending.delete(m.id); return; }
+    if (m.method === "Runtime.exceptionThrown") s.console.push(`exception: ${JSON.stringify(m.params.exceptionDetails).slice(0, 300)}`);
+  };
+  s.send = (method, params = {}) => new Promise((res) => { const id = ++s.seq; s.pending.set(id, res); ws.send(JSON.stringify({ id, method, params })); });
+  S = s;
+  await s.send("Page.enable"); await s.send("Runtime.enable");
+  await fetch(`http://localhost:${CDP}/json/activate/${tab.id}`);
+  await s.send("Page.bringToFront");
+  await s.send("Emulation.setDeviceMetricsOverride", { width: W, height: H, deviceScaleFactor: 1, mobile: false });
+}
+function closeSession() {
+  if (!S) return;
+  try { S.ws.close(); } catch { /* gone */ }
+  try { execFileSync("curl", ["-s", "-m", "2", `http://localhost:${CDP}/json/close/${S.tab.id}`], { stdio: "ignore" }); } catch { /* gone */ }
+  S = null;
+}
+process.on("exit", closeSession);
+for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(sig, () => { closeSession(); process.exit(130); });
+const evaluate = async (expression, ms = 600000) => {
+  const r = await Promise.race([
+    S.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true }),
+    new Promise((_, rej) => setTimeout(() => rej(new Error(`timeout: ${expression.slice(0, 100)}`)), ms)),
+  ]);
+  if (r.result?.exceptionDetails) throw new Error(`page threw in ${expression.slice(0, 100)}: ${JSON.stringify(r.result.exceptionDetails).slice(0, 500)}`);
+  return r.result?.result?.value;
+};
+
+/** The frame-cost.mjs boot: the game page, frozen and seeded, the background warm (crowd march, gibs) done. */
+async function boot(variant) {
+  await openSession();
+  const [who, extra] = variant.split("+");
+  await S.send("Page.navigate", { url: `http://localhost:${VITE}/sdf-game.html?level=arena&spawn=${who}&seed=1&loader=0&frozen=1${extra ? `&${extra}` : ""}${QS}` });
+  let backend = null;
+  for (let i = 0; i < 240 && !backend; i++) { await sleep(500); try { backend = await evaluate("typeof window.__sdfGame === \"object\" ? window.__sdfGame.backend : null"); } catch { backend = null; } }
+  if (backend !== "webgpu") die(`backend ${backend}, expected webgpu (${S.console.slice(-2).join(" | ")})`);
+  for (let i = 0; i < 480; i++) { if (await evaluate("window.__warmGate ? window.__warmGate.phase : \"ready\"") === "ready") break; await sleep(500); }
+  await evaluate("__sdfGame.setLoopRunning(false)");
+  let wb = null;
+  for (let i = 0; i < 800; i++) { wb = await evaluate("__sdfGame.warmBackground()"); if (wb.gib !== "compiling" && wb.crowd !== "compiling") break; await sleep(500); if (i % 10 === 0) await evaluate("__sdfGame.step(1, 0)"); }
+  // The census needs no gibs: a gib warm that times out under load is logged, not fatal.
+  if (wb?.crowd === "failed" || wb?.crowd === "compiling") die(`the background warm is ${JSON.stringify(wb)}`);
+  if (wb?.gib !== "ready") console.log(`  (gib warm ${wb?.gib}; census goes on)`);
+  await evaluate("__sdfGame.installDebugProbe()");
+  // DUMP=1 compares SHADED pixels across boots, and the practical lamps flicker on the wall clock: two frames of the
+  // same build differed by up to 7/255 until both clocks were pinned (an on/off A/B then sits at 0.1/255).
+  if (process.env.DUMP === "1") await evaluate("(() => { __sdfGame.setDemoHold(true); __sdfGame.setLightClockFrozen(true); return 1; })()");
+  // NG=0: the analytic normal off (every hit takes the finite-difference normal).
+  if (process.env.NG === "0") await evaluate("__sdfGame.setNormalGradient(0)");
+}
+
+async function stage(name) {
+  const D = name === "far" ? FAR_D : CLOSE_D;
+  // The arena enemy's yaw points AWAY from the -sin/cos frame room 4's zombies use: -1 puts the eye at his face.
+  const side = name === "back" ? 1 : -1;
+  await evaluate("(() => { __sdfGame.freeze(true); __sdfGame.step(1, 0); return 1; })()");
+  const z = (await evaluate("__sdfGame.actorList()"))[0];
+  if (!z) die("no enemy in the arena");
+  const limb = name === "head" ? "head" : "torso";
+  const c = await evaluate(`__sdfGame.actorLimbCenter(${z.id}, "${limb}")`);
+  const t = limb === "head" ? c : [c[0], c[1] - 0.15, c[2]];
+  const fx = side * Math.sin(z.yaw), fz = -side * Math.cos(z.yaw);
+  const hz = Math.sqrt(Math.max(0.01, D * D - (t[1] - EYE_H) ** 2));
+  await evaluate(`__sdfGame.placePlayer({ x: ${t[0] + fx * hz}, z: ${t[2] + fz * hz}, yaw: ${Math.atan2(-fx, fz)}, pitch: ${Math.atan2(t[1] - EYE_H, hz)} })`);
+  await evaluate("(() => { for (let i = 0; i < 30; i++) __sdfGame.step(1, 0); return 1; })()");
+}
+
+/** Modes 13 (the walk, misses included) and 14 (the whole pixel, hits only), summed in the page. */
+const census = () => evaluate(`(async () => {
+  const sum = async (mode) => {
+    __sdfGame.setMarchDebugMode(mode);
+    await __sdfGameDebug.readMarchTarget();
+    const r = await __sdfGameDebug.readMarchTarget();
+    const f = new Float32Array(Uint8Array.from(atob(r.rgba32f), (c) => c.charCodeAt(0)).buffer);
+    let marched = 0, hits = 0, steps = 0, prims = 0, hitPrims = 0;
+    for (let i = 0; i < f.length; i += 4) {
+      const b = f[i + 2];
+      if (!(b >= 0.5)) continue;
+      marched++; prims += f[i]; steps += b % 1000;
+      if (b >= 1000) { hits++; hitPrims += f[i]; }
+    }
+    return { marched, hits, steps, prims, hitPrims };
+  };
+  const walk = await sum(13), all = await sum(14);
+  __sdfGame.setMarchDebugMode(0);
+  await __sdfGameDebug.readMarchTarget();
+  return { walk, all };
+})()`);
+
+const result = { when: new Date().toISOString(), n: N, closeD: CLOSE_D, qs: QS, census: {}, timing: {} };
+for (let round = 0; round < ROUNDS; round++) {
+  const order = VARIANTS.slice(round % VARIANTS.length).concat(VARIANTS.slice(0, round % VARIANTS.length));
+  for (const variant of order) {
+    await boot(variant);
+    for (const st of STAGES) {
+      await stage(st);
+      const key = `${st}/${variant}`;
+      if (!result.census[key]) {
+        const c = await census();
+        const w = c.walk, a = c.all;
+        result.census[key] = { ...c, totalPrims: w.prims + a.prims - w.hitPrims };
+        if (process.env.DUMP === "1") {
+          // The walk's raw texels (mode 13), de-padded, for a per-texel diff between variants.
+          const d = await evaluate(`(async () => { __sdfGame.setMarchDebugMode(13); await __sdfGameDebug.readMarchTarget(); const r = await __sdfGameDebug.readMarchTarget(); __sdfGame.setMarchDebugMode(0); await __sdfGameDebug.readMarchTarget(); return r; })()`);
+          writeFileSync(`${OUT}/${st}-${variant.replace(/[+=]/g, "_")}.w${d.w}h${d.h}.f32`, Buffer.from(d.rgba32f, "base64"));
+          // And the SHADED march target (mode 0), for a pixel diff of a shading change.
+          const c0 = await evaluate(`(async () => { __sdfGame.setMarchDebugMode(0); await __sdfGameDebug.readMarchTarget(); return __sdfGameDebug.readMarchTarget(); })()`);
+          writeFileSync(`${OUT}/${st}-${variant.replace(/[+=]/g, "_")}.shaded.f32`, Buffer.from(c0.rgba32f, "base64"));
+        }
+        if (process.env.REASONS === "1") {
+          // Debug mode 12: g = the analytic normal's reason per hit pixel (0 = analytic used; 1 = unsupported prim).
+          const h = await evaluate(`(async () => { __sdfGame.setMarchDebugMode(12); await __sdfGameDebug.readMarchTarget(); const r = await __sdfGameDebug.readMarchTarget(); __sdfGame.setMarchDebugMode(0); await __sdfGameDebug.readMarchTarget();
+            const f = new Float32Array(Uint8Array.from(atob(r.rgba32f), (c) => c.charCodeAt(0)).buffer); const hist = {};
+            const ang = [];
+            for (let i = 0; i < f.length; i += 4) { if (!(f[i + 3] < 1)) continue; const k = Math.round(f[i + 1]); hist[k] = (hist[k] ?? 0) + 1;
+              if (k === 0) ang.push(Math.acos(Math.min(1, Math.max(-1, f[i + 2]))) * 180 / Math.PI); }
+            ang.sort((x, y) => x - y); const q = (u) => ang.length ? +ang[Math.min(ang.length - 1, Math.floor(u * ang.length))].toFixed(2) : null;
+            return { hist, angleDeg: { median: q(0.5), p99: q(0.99), max: q(1) } }; })()`);
+          // angleDeg: on reason-0 pixels, the angle between the analytic normal and the 4-tap one (mode 12's b).
+          console.log(`  ${st} ${variant} analytic-normal reasons ${JSON.stringify(h.hist)} vs 4-tap ${JSON.stringify(h.angleDeg)}`);
+        }
+        const shot = await S.send("Page.captureScreenshot", { format: "png" });
+        writeFileSync(`${OUT}/${st}-${variant.replace(/[+=]/g, "_")}.png`, Buffer.from(shot.result.data, "base64"));
+        console.log(`${st.padEnd(5)} ${variant.padEnd(20)} marched ${String(w.marched).padStart(7)} hit ${String(w.hits).padStart(6)}`
+          + ` steps ${(w.steps / 1e6).toFixed(2)}M (${(w.steps / w.marched).toFixed(1)}/px) walk ${(w.prims / 1e6).toFixed(2)}M`
+          + ` shade ${((a.prims - w.hitPrims) / 1e6).toFixed(2)}M total ${(result.census[key].totalPrims / 1e6).toFixed(2)}M`);
+      }
+      if (!N) continue;
+      const load0 = loadavg()[0];
+      const ms = await evaluate(`__sdfGame.timeDraws(${N})`);
+      (result.timing[key] ??= []).push({ ms, load0, load1: loadavg()[0] });
+      console.log(`  round ${round} ${key.padEnd(16)} ${ms.toFixed(2)} ms  load ${load0.toFixed(1)} -> ${loadavg()[0].toFixed(1)}`);
+    }
+    if (S.console.length) die(`${variant}: ${S.console.join(" | ")}`);
+    closeSession();
+  }
+}
+writeFileSync(`${OUT}/result.json`, JSON.stringify(result, null, 2));
+console.log(`wrote ${OUT}/result.json`);
+process.exit(0);
