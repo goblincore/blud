@@ -133,6 +133,74 @@ optimize, like not rendering or updating enemies that aren't visible", designed 
   director still run for every body (director 0.2–0.75 ms at 101); three's per-object render (~4–6 ms) is now the
   biggest CPU item for what IS visible (batch level meshes further, or instance pickups).
 
+**Level batching: three's per-object cost (2026-10-28, 07b721be, 495744f4).** Owner goal: after the zone cull three's
+per-object render (~4–6 ms) was the biggest CPU item; cut draws and per-object work without changing the look, as prep
+for MAP28. `?batch=0` restores the old per-object path; `__sdfGame.setLevelBatch(on)` switches it in a booted level
+(in-boot A/B; casing pools stay plain meshes either way).
+- Measured first with a new seam `drawsByObject(n, detail)` (every object three renders, by name and camera, loop
+  stopped). E1M1 main-camera objects per frame, start/pool/court/west: 140 / 197–212 / 203–212 / 190–196. Of these:
+  **32 were the 16 soldiers' spent-casing pools** (two InstancedMeshes each, count 0, drawn every frame before anyone
+  fired; each its own build: three keys an InstancedMesh by uuid), ~50 the player's arms and gun (constant), 25–51 sector
+  batches (already one per zone, role, kind), up to 23 pickups (17–23 in the open rooms), 3–9 barrel drums and lids
+  (+ the scorch pool and the gun's own two `barrel` parts), 4–8 door leaves and frames, 1 glow floor, ~10 kit pieces.
+  `?stress=100` 237 / 373–379 / 379–384 / 305–310 (130 casing pools).
+- **Pickups** (`game-level-batch.ts`, pure core `level-batch.ts`): one plain Mesh per item type on an
+  InstancedBufferGeometry with the matrix as named attributes (skeleton-spike/segment-instance.ts, so a batch builds once
+  and no InstancedMesh uuid trap), lit by the scene's list like before (pickups were never room-lit, so the item is the
+  whole key). Each pickup keeps its logical mesh (spin, cd tilt, the debris seam); each frame after the zone cull the
+  shown rows (not taken, in a sector of the camera flood — the same per-sector placement the cull used) are packed to the
+  front, instance count = shown. frustumCulled false (instances everywhere), so the batch draws from frame 1 and builds
+  at boot; the level pre-warm skips it. E1M1: 53 pickups → 3 batches (health 44, shells 8, shotgun 1).
+- **Casing pools** (`shotgun-casings.ts`): plain meshes on materials shared by every pool of a hull colour; an empty pool
+  leaves the render once it has been drawn (built) once. Boot pipelines 304 → 274.
+- **Barrels** (`game-barrel-view.ts` BarrelBatches): per zone, every intact drum (own dents) and lid merged into one mesh
+  each on the zone's shared materials and light list, rebuilt without a drum on its blast (same layout, no new build);
+  stubs unchanged; named `barrels-<part>-zone-<n>` so the zone cull takes them by zone (barrels were placed by sector).
+  E1M1: 6 barrels in 3 zones → 2 draws per seen zone.
+- **Static matrices**: sector-level level-group objects get matrixAutoUpdate off once (`freezeLevelMatrices`; doors slide
+  in the vertex shader). Matrix walk: noise-level here (~0.1 ms of 0.6–0.9 normal; 2.4 → 1.7 ms at stress start, mostly
+  the casings), kept as structure for MAP28's bigger level group.
+- **Not done, on purpose:** door frames (each side's material carries its door's lamp-status uniform, ≤ 2 doors a zone
+  on E1M1: ≤ 2 draws), sector batches (already one per zone/role/kind; merging kinds needs texture arrays), glow floors
+  (one mesh per kind already), scorches (one InstancedMesh already).
+- **BundleGroup spike: dropped.** three r186 `BundleGroup` (static) freezes its render list until `needsUpdate`: no
+  per-object frustum culling (had to turn it off: more vertex work) and every zone-cull change re-records the whole
+  bundle; in the cached path three still runs each object's node and binding refresh per frame (only encoding is saved),
+  and bundles execute at the end of the pass. Spike (82 zone batches in one bundle, in-boot alternation, 3 pairs): draw
+  CPU −0.4..−1.1 ms at start/west, ±0 at pool/court (noise ±1 ms); frozen shots equal. Not worth the caveats.
+- A/B, in-boot alternation (`setLevelBatch`), 2 boots × 4 pairs per spot, medians (ranges over boots), off → on. The
+  machine was under heavy outside load (load average 13–670 during the runs), so the frame-split ms are noisy; the CPU
+  profile of three's `_renderObjects` (inclusive, per frame, 3 pairs, 200 µs sampling) is the cleaner read:
+
+  | E1M1 | main draws | objects walked | draw CPU ms | tick ms | three renderObjects ms |
+  |---|---|---|---|---|---|
+  | start | 140 → 107 | 1789 → 1724 | 5.2–9.4 → 5.2–8.8 | 2.7–4.7 → 2.6–4.9 | 2.70 → 2.52 |
+  | pool | 201–212 → 159–168 | 1789 → 1724 | 17.5–22.0 → 14.2–22.4 | 10.5–15.9 → 10.9–16.4 | 3.97 → 3.63 |
+  | court | 203–210 → 159–182 | 1768 → 1703 | 13.4–16.7 → 12.8–15.3 | 7.7–9.2 → 7.2–8.7 | 3.89 → 3.77 |
+  | west | 190–196 → 136–145 | 1772 → 1707 | 6.7–9.6 → 6.5–10.1 | 2.9–4.1 → 2.8–4.4 | 3.12 → 3.12 |
+  | **stress (131)** start | 237 → 108 | 5175 → 5110 | 9.9–16.0 → 8.1–15.1 | 8.7–14.6 → 7.7–14.4 | 4.27 → 3.22 |
+  | stress pool | 373–379 → 242–247 | 5175 → 5110 | 22.6–29.9 → 20.2–24.2 | 38–40 → 27–39 | 7.44 → 5.16 |
+  | stress court | 379–384 → 238–244 | 5155 → 5090 | 20.3–25.7 → 22.4–25.4 | 23–29 → 30–37 | 11.7 → 16.6 (noise) |
+  | stress west | 305–310 → 158–165 | 5158 → 5093 | 9.9–10.2 → 9.3–14.5 | 9.4–9.5 → 8.7–14.3 | 4.86 → 5.29 (noise) |
+
+  Honest read: draws drop 20–30 % (normal) and 35–55 % (stress), but the objects removed were cheap ones (empty instanced
+  pools, octahedra): three's per-object loop gains ~0.1–0.35 ms normal and ~1–2 ms at stress start/pool. Tick is
+  unchanged (combat noise at pool/court).
+- Correctness: frozen same-pose shots on vs off (`?nospawn&vhs=off`, pickup spin pinned with `setPickupSpin`) at 7 views
+  (the 4 spots, a pool look-down, two barrel views): 0 px over 24 at every view, mean diff equal to the on-vs-on noise;
+  after a b50 → b48 chain the stubs, scorches and the rebuilt merge (b49) match batch=0 too. Pickup p13: health 40 → 65,
+  health batch 25 → 24 drawn from the same pose, taken 1. Barrels: b50 hit → b48 chained, zone 12 merge 3 → 1 drums,
+  both stubs shown. door-4 opens 0 → 1 in ~1 s. Zone cull at start: 61 of 114 placed meshes culled. 12-zone tour
+  (`pipelinelog`): the same 11 new pipelines (explosion FX) batch on and off, 0 level builds on first sight.
+- Seams: `drawsByObject(n, detail)`, `levelBatch()` (on, pickups members/taken/drawn, barrel merges, casing pools shown),
+  `setLevelBatch(on)`, `setPickupSpin(yaw)`. Probes `batch/` in the session scratchpad (`m.mjs`, `alt.mjs`, `profalt.mjs`,
+  `shots.mjs` + `diff.py`, `func.mjs`).
+- **Left for MAP28:** the player's arms and gun are now the biggest bucket (~50 objects every frame: 24 bracer spikes,
+  the gun's parts) — merging static same-material parts per bone at load would cut ~30; kits (~10 pieces a visible
+  enemy); sector batches grow with zones × kinds (finer zones for the cull multiply them: weigh the two together, or
+  texture-array the kinds); per-door frames if MAP28 packs doors into one zone; three's per-object node/binding refresh
+  is the floor (~15–20 µs an object here).
+
 In flight at compaction (background agents in this session; their results arrive after compaction):
 - World-scale agent: comparison shots + doom gate rerun + diagnosis of the gate failure
   "rounds: 1 round steps went through sector geometry" seen after B1 (cause unknown: real regression or classifier).

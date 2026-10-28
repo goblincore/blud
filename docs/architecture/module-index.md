@@ -46,13 +46,13 @@ Each line is the first sentence of the module's header comment.
 | [Dev panels](#dev-panels) | 12 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
 | [Game: debug seams](#game-debug-seams) | 26 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 89 | Gameplay features wired into the game loop. |
+| [Game: feature modules](#game-feature-modules) | 90 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
-| [Levels and world](#levels-and-world) | 48 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
+| [Levels and world](#levels-and-world) | 49 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
 | [Actors and crowd (render)](#actors-and-crowd-render) | 19 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 14 | AA, glow, VHS, shutter blur, fisheye. |
@@ -365,6 +365,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-kit-prewarm.ts` — KIT PRE-WARM: every cast kit mesh is drawn once, one build a step, before the player first sees it (teratoma first-sight hitch, 2026-10-28).
 - `webgpu/game-launcher-view.ts` — Opt-in FPV art prototype.
 - `webgpu/game-level-art.ts` — LEVEL ART in the game (mesh key spec §5): fetch and parse <id>.art.glb, then attach every mesh to the level group tagged with its room, so the…
+- `webgpu/game-level-batch.ts` — LEVEL BATCHING, THE RENDERER SIDE (draw-count pass, 2026-10-28; the pure core is level-batch.ts): pickup batches and the static level matrices.
 - `webgpu/game-level-lights.ts` — Level lighting helpers: hemisphere light intensity, accent rooms, the scene lights for a room, and refreshing the level lights.
 - `webgpu/game-level-prewarm.ts` — LEVEL PRE-WARM: every level mesh is drawn once, one material build a step, nearest the player first, before the player first sees it (E1M1…
 - `webgpu/game-level-rooms.ts` — Runtime helpers for the active level (Level Format v1 — spec docs/superpowers/specs/2026-09-23-level-format-design.md).
@@ -543,6 +544,7 @@ Level definitions, kits, the train, the disco, the egg, sky, encounters.
 - `webgpu/kit-occluder.ts` — KIT OCCLUSION (owner, 2026-10-26: "not render the flesh if clothes is over it, also a performance enhancer").
 - `webgpu/kit-overlay.ts` — The POLYGON half of a character: armour, clothing, and hard props, authored in WAM (a text→glTF mesh compiler) and laid over the raymarched flesh.
 - `webgpu/level-art.ts` — LEVEL ART (the mesh key, spec 2026-09-24-level-mesh-key-design.md) as pure decisions: where a level's art file lives, which room lights a mesh, the…
+- `webgpu/level-batch.ts` — LEVEL BATCHING, THE PURE CORE (draw-count pass, 2026-10-28).
 - `webgpu/level-def.ts` — LEVEL FORMAT v1 — types and the generation rules.
 - `webgpu/level-events.ts` — LEVEL EVENTS. Triggers fire string events when the player walks in; gates open on events; a small vocabulary of events turns into commands the game…
 - `webgpu/level-ground.ts` — THE GROUND a body stands on (spec 2026-10-24-doom-sector-levels-design.md §6.1): the floor and ceiling under a point and the wall lines that block a…
