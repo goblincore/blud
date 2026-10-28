@@ -45,19 +45,19 @@ Each line is the first sentence of the module's header comment.
 | [Entrypoints and labs](#entrypoints-and-labs) | 20 | One module per HTML page; see the entrypoint table above. |
 | [Dev panels](#dev-panels) | 12 | Tuning panels for the labs and the game. |
 | [Game: context and state](#game-context-and-state) | 21 | The GameContext and its state slices (ECS resources to be). All game state lives here. |
-| [Game: debug seams](#game-debug-seams) | 25 | `window.__sdfGame` members, read by the gate and capture scripts. |
-| [Game: feature modules](#game-feature-modules) | 87 | Gameplay features wired into the game loop. |
+| [Game: debug seams](#game-debug-seams) | 26 | `window.__sdfGame` members, read by the gate and capture scripts. |
+| [Game: feature modules](#game-feature-modules) | 88 | Gameplay features wired into the game loop. |
 | [Weapons and viewmodel (render)](#weapons-and-viewmodel-render) | 23 | Weapon strikes, muzzle flash, held props, first-person view. |
 | [Gibs and chunks (render)](#gibs-and-chunks-render) | 21 | Gib assets, baked chunks, gib sprites. |
 | [Blood, goo and splashes (render)](#blood-goo-and-splashes-render) | 9 | Blood views, the goo layer, impact splashes. |
 | [Fire and explosions (render)](#fire-and-explosions-render) | 15 | Burning bodies, fire volumes, flames, explosion VFX. |
 | [Lighting and probes (render)](#lighting-and-probes-render) | 20 | Light lists, profiles, layers, probe grids, outdoor light. |
-| [Levels and world](#levels-and-world) | 46 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
+| [Levels and world](#levels-and-world) | 47 | Level definitions, kits, the train, the disco, the egg, sky, encounters. |
 | [Actors and crowd (render)](#actors-and-crowd-render) | 19 | Per-actor GPU records, crowd atlas, character views, wounds on screen. |
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 14 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 8 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 53 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [SDF march renderer](#sdf-march-renderer) | 54 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 39 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
@@ -292,6 +292,7 @@ The GameContext and its state slices (ECS resources to be). All game state lives
 - `webgpu/game-seams-debris.ts` — Debris seams (plan docs/superpowers/plans/2026-10-25-sector-levels-3b-debris-and-barrels.md Task 9): where every loose piece a fight leaves behind…
 - `webgpu/game-seams-debug-probe.ts` — Debug probe and world inspection seams, lifted verbatim out of the window.__sdfGame object literal in game-main.ts.
 - `webgpu/game-seams-demo-step.ts` — The window.__sdfGame demo recording, demo info, manual stepping, bodies-on-screen and demo-hold members.
+- `webgpu/game-seams-doors.ts` — Door seams (game-doors.ts): the level's doors as plain data, forcing one open or shut, the phase-change log, and `doorRay` — the same sector ray…
 - `webgpu/game-seams-dynamite.ts` — Dynamite/explosion seams: the panel's tuning surface and the wound-only diagnostic detonation (the real `detonate`/`overcook` stay in game-main.ts's…
 - `webgpu/game-seams-earlyz.ts` — EARLY-Z console/capture seam (spec 2026-10-01): plain data only.
 - `webgpu/game-seams-fire.ts` — Fire/burn seams: the flare test harness plus every burn/fire-technique tuning readback.
@@ -342,6 +343,7 @@ Gameplay features wired into the game loop.
 - `webgpu/game-demo-replay.ts` — Demo replay: applying a recording's boot flags, the replay driver that owns the sim clock, and demo synthesis.
 - `webgpu/game-demo-save.ts` — Demo recording stop: ends the recorder and saves the demo file to the dev server.
 - `webgpu/game-disco.ts` — THE BOILER ROOM DISCO BALL in the game (spec 2026-09-27-disco-ball-design.md): the ball gets a mirror-tile material (hand-written WGSL,…
+- `webgpu/game-doors.ts` — DOORS IN PLAY (owner design 2026-10-28): the level's door entities (sector-def.ts SectorDoorDef) on ctx.world.doors.
 - `webgpu/game-dynamic-light.ts` — DYNAMIC LIGHT in the game (docs/superpowers/specs/2026-09-26-night-train-dynamic-light-design.md): every level lamp follows its mood and scripted…
 - `webgpu/game-dynamite-step.ts` — The dynamite per-tick step: fuse and flight, overcooking in the hand, and detonateAt (blast damage, kick, gibs, light).
 - `webgpu/game-dynamite-throw.ts` — Dynamite bundle helpers: taking the prop, throwing it, hit tests against bodies, and the explosion light.
@@ -550,6 +552,7 @@ Level definitions, kits, the train, the disco, the egg, sky, encounters.
 - `webgpu/sector-bounce.ts` — GLOW BOUNCE (hand-off 2026-10-24 item 2b): the green a nukage pool (lava, acid) throws on the room round it, baked once per vertex at mesh build.
 - `webgpu/sector-debris.ts` — THE SECTOR DEBRIS GROUND (plan 2026-10-25-sector-levels-3b Task 1): DebrisGround for a sector level.
 - `webgpu/sector-def.ts` — SECTOR LEVELS — types and the movement limits.
+- `webgpu/sector-doors.ts` — SECTOR DOORS (owner design 2026-10-28): sci-fi doors whose two leaves split sideways into the jambs, opening by themselves for the player and for…
 - `webgpu/sector-edges.ts` — SECTOR EDGES — the one rule for a sector's directed boundary, shared by the parser (closure, winding), the loop builder and the point-in-sector test…
 - `webgpu/sector-emitters.ts` — EMITTER LIGHT (hand-off item 2g, part B1): the self-lit walls and ceilings (screen banks, the viewscreen, fluorescents, exit signs) as LIGHT SOURCES.
 - `webgpu/sector-geometry.ts` — SECTOR GEOMETRY as plain data (spec 2026-10-24-doom-sector-levels-design.md §6.4): each sector's boundary as loops (outer polygons and their holes)…
@@ -645,6 +648,7 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 - `webgpu/cloth-proxy.ts` — THE RASTERISED CLOTH PROXY (SDF-cloth cost spike, option 1, 2026-10-26; docs/dev-notes/2026-10-26-sdf-cloth-cost/).
 - `webgpu/curl-volume-node.ts` — THE SHARED CURL VOLUME, TSL SIDE (extracted from flame-cards.ts for the explosion-curl task).
 - `webgpu/curl-volume.ts` — CURL-NOISE VOLUME (flame-polish plan task 2, 2026-09-18): a small seeded 64^3 RGBA8 3D texture whose RGB is a divergence-free vector field and whose…
+- `webgpu/door-leaf-geometry.ts` — THE DOOR LEAVES' MESH DATA (game-doors.ts draws them): a split door (sector-doors.ts) has two leaves, slabs that fill the doorway between its faces…
 - `webgpu/emergence-camera.ts` — THE EMERGENCE'S CAMERAS IN THE FLAT, and the view the player takes over at the end (plan 2026-10-16-emergence-in-the-flat Task 7; spec…
 - `webgpu/emergence-expressions.ts` — THE GOBLIN'S FACE through the emergence (spec docs/superpowers/specs/2026-10-16-emergence-in-the-flat-design.md): which of the goblin's expression…
 - `webgpu/emergence-field.ts` — THE SCREEN EMERGENCE's field, CPU twin (spec docs/superpowers/specs/2026-10-11-screen-emergence-lab-spike-design.md, section 4).

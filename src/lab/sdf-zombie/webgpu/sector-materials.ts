@@ -101,6 +101,9 @@ export const SURFACE_LOOKS: Readonly<Record<SurfaceKind, SurfaceLook>> = {
     emit: { gain: 'fluoroGain', floor: 0.5 }, fit: { u: 1, v: 2, cu: 0.25, cv: 0.5 } },
   exitSign: { tileM: 1, roughness: 1, metalness: 0.1, normalScale: 1.0, gain: 1.0, glow: 0,
     emit: { gain: 'signGain', floor: 0.8 }, fit: { u: 1, v: 0.5, cu: 1, cv: 1 } },
+  // The sliding door leaf (game-doors.ts): no wall family maps to it; one map per leaf (tileM unused).
+  // Metal: the scratches catch the torch as steel, not as a pale dielectric veil.
+  slideDoor: { tileM: 4, roughness: 1, metalness: 0.45, normalScale: 0.9, gain: 0.85, glow: 0 },
 };
 
 /** The emitter gains' defaults (owner-tunable). */

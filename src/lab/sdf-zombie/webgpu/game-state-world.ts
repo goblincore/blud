@@ -29,6 +29,7 @@ import type { EmergenceRuntime } from './game-emergence';
 import type { SequenceRuntime } from './game-sequence';
 import type { SectorFxRuntime } from './game-sector-light';
 import type { GameBarrels } from './game-barrels';
+import type { GameDoors } from './game-doors';
 import type * as THREE from 'three/webgpu';
 import type { Vec3 } from '../types';
 import type { ActiveLevel } from './active-level';
@@ -90,6 +91,8 @@ export interface WorldState {
   sectorFx: SectorFxRuntime | null;
   /** Sector levels (plan 3b): the level's barrels, or null. */
   barrels: GameBarrels | null;
+  /** Sector levels: the level's doors (game-doors.ts), or null without any. */
+  doors: GameDoors | null;
   /** Collision boxes for the level — the same list the player and gibs clamp
    *  against, split around every doorway so pieces can sail out of doors. */
   colliders: Aabb[];
@@ -159,6 +162,7 @@ export function makeWorldState(): WorldState {
     sequence: null,
     sectorFx: null,
     barrels: null,
+    doors: null,
     colliders: [],
     actors: [],
     frustum: unbuilt<THREE.Frustum>(),
@@ -202,6 +206,7 @@ export const WORLD_BINDINGS = {
   sequence: 'world.sequence',
   sectorFx: 'world.sectorFx',
   barrels: 'world.barrels',
+  doors: 'world.doors',
   colliders: 'world.colliders',
   actors: 'world.actors',
   frustum: 'world.frustum',

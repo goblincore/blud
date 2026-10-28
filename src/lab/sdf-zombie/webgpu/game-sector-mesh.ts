@@ -146,7 +146,7 @@ function worldTiled(base: THREE.MeshStandardMaterial): THREE.MeshStandardMateria
 const panelCache = new Map<PanelKind, PanelTextureSet>();
 const PANEL_SEEDS: Record<PanelKind, number> = {
   techPanel: 101, metalSheet: 103, door: 107, rustBrick: 109, lightPanel: 113, concreteSlab: 127, metalPlate: 131, floorTile: 137,
-  screenBank: 139, viewscreen: 149, fluorescent: 151, exitSign: 157,
+  screenBank: 139, viewscreen: 149, fluorescent: 151, exitSign: 157, slideDoor: 163,
 };
 interface PanelJob { kind: PanelKind; set: PanelTextureSet }
 let pendingJobs: PanelJob[] = [];
@@ -290,6 +290,19 @@ function sectorMaterial(src: SurfaceSource, color: readonly [number, number, num
     ? lit.add(texture(src.glowMap).rgb.mul(panelGlow.mul(src.look.glow)).mul(max(lvl, GRIME.glowFloor)))
     : lit;
   return nm;
+}
+
+/** A panel kind's own sector node material (the walls' recipe: textures, grime, the sector term `albedo ×
+ *  level[sectorIndex]`, the bakes) for a mesh outside the batches — the door leaves (game-doors.ts). The mesh must
+ *  carry the batch attributes: sectorIndex, mottleUv, glowBounce, emitScreen, emitFS. Its textures are the page's
+ *  shared set for the kind; the material is the mesh's own (the light-list loop reuses a node material as is). */
+export function panelSurfaceMaterial(kind: PanelKind, color: readonly [number, number, number], fx: SectorFxRuntime): MeshStandardNodeMaterial {
+  const look = SURFACE_LOOKS[kind];
+  const t = panelSet(kind);
+  flushPanelJobs();
+  const base = new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normalMap,
+    roughness: look.roughness, metalness: look.metalness, normalScale: new THREE.Vector2(look.normalScale, look.normalScale) });
+  return sectorMaterial({ base, look, glowMap: t.emissiveMap, roughness: t.roughness, emit: null }, color, fx, false, null);
 }
 
 /** Add the sector level's meshes: stone to the level group, glow floors to the scene. Creates the

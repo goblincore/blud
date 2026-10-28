@@ -1,7 +1,8 @@
 // src/game/level/panel-textures.ts
 //
 // PROCEDURAL INDUSTRIAL SURFACES for sector levels (the Doom-derived maps): tech panels, metal sheet,
-// door steel, rusted brick, a lit grid panel, concrete slabs, diamond plate and floor tiles. The same
+// door steel, rusted brick, a lit grid panel, concrete slabs, diamond plate and floor tiles, and the
+// sliding door leaf (one leaf per map, not tiled). The same
 // recipe as stone-textures.ts — a height field, its central-difference normal map, an sRGB albedo and
 // a roughness map — generated, never shipped as art (no WAD or extracted texture is involved).
 //
@@ -30,10 +31,11 @@ const PX_PER_M = PANEL_SIZE / PANEL_TILE_M;
 export type PanelKind =
   | 'techPanel' | 'metalSheet' | 'door' | 'rustBrick' | 'lightPanel'
   | 'concreteSlab' | 'metalPlate' | 'floorTile'
-  | 'screenBank' | 'viewscreen' | 'fluorescent' | 'exitSign';
+  | 'screenBank' | 'viewscreen' | 'fluorescent' | 'exitSign'
+  | 'slideDoor';
 export const PANEL_KINDS: readonly PanelKind[] = [
   'techPanel', 'metalSheet', 'door', 'rustBrick', 'lightPanel', 'concreteSlab', 'metalPlate', 'floorTile',
-  'screenBank', 'viewscreen', 'fluorescent', 'exitSign',
+  'screenBank', 'viewscreen', 'fluorescent', 'exitSign', 'slideDoor',
 ];
 /** The self-lit kinds whose glow is ANIMATED in the shader (webgpu/emitter-glow.wgsl.ts): their
  *  `emissive` map is a LINEAR mask (R and G channels per kind, emitter-layout.ts), not a colour. */
@@ -248,6 +250,74 @@ const door: Shader = (x, y, seed, o) => {
   const k = base * (0.95 + 0.3 * sc + 0.15 * bolt) * (1 - 0.55 * grime) * (1 - 0.35 * band);
   o.h = height; o.r = 98 * k; o.g = 98 * k; o.b = 102 * k;
   o.rough = clamp01(0.38 - 0.16 * sc + 0.4 * grime + 0.2 * band); o.e = 0;
+};
+
+/** A sliding door LEAF (webgpu/game-doors.ts lays one leaf over the whole map: x from its jamb, 0, to
+ *  its leading edge, N; y from the floor up): a raised bolted frame, a ribbed kick plate, a big
+ *  recessed panel crossed by a raised diagonal brace, a vent band near the top, and on the leading
+ *  edge worn yellow-and-black hazard stripes (the one warm note). Heavily scratched, brushed steel.
+ *  Every border bevels down to one edge height, so the wrap is quiet (the map is used once, not tiled). */
+const slideDoor: Shader = (x, y, seed, o) => {
+  const F = 28, LEAD = 44, EDGE_H = 0.42;
+  const lead = x >= N - LEAD;
+  const border = Math.min(x + 0.5, N - 0.5 - x, y + 0.5, N - 0.5 - y);   // px to the map's edge
+  const bevel = smooth(0, 4, border);
+  let height: number, shade = 1, rough = 0.46;
+  let tint: [number, number, number] = [96, 99, 104];
+  let bolt = 0;
+  if (lead) {
+    // Hazard stripes at 45°, the paint worn through to steel where the edge takes the knocks.
+    const stripe = ((((x + y) % 64) + 64) % 64) < 32;
+    const wear = clamp01((tfbm(x, y, seed + 61, 32) - 0.38) * 3 + 0.5 * scratches(x, y, seed + 63, 16, 0.9));
+    const paint: [number, number, number] = stripe ? [146, 114, 34] : [30, 29, 28];
+    tint = [paint[0] * (1 - wear) + tint[0] * wear, paint[1] * (1 - wear) + tint[1] * wear, paint[2] * (1 - wear) + tint[2] * wear];
+    const ridge = smooth(N - LEAD, N - LEAD + 4, x);
+    height = 0.66 * ridge + 0.3 * (1 - ridge);
+    rough = 0.5 - 0.15 * wear;
+  } else {
+    const fe = Math.min(x, y, N - 1 - y);                                     // px into the frame
+    if (fe < F) {
+      height = 0.7;                                                            // a flat raised frame
+      shade = 0.82;
+      // Bolts down the frame's middle every 48 px.
+      const along = fe === x ? y : x;
+      bolt = dome(fe, ((along % 48) + 48) % 48, F / 2, 24, 3.6);
+      height += 0.2 * bolt;
+      rough = 0.42;
+    } else {
+      const ix = x - F, iy = y - F, iw = N - LEAD - F, ih = N - 2 * F;
+      const inner = Math.min(ix, iy, iw - ix, ih - iy);
+      const seamIn = seam(inner, 2, 3);
+      if (iy < 96) {                                                           // ribbed kick plate
+        const rib = (iy % 12);
+        height = 0.5 + 0.12 * (smooth(2, 4, rib) * (1 - smooth(8, 10, rib)));
+        shade = 0.9; rough = 0.46;
+      } else if (iy > ih - 92 && iy < ih - 20 && ix > 24 && ix < iw - 24) {      // a vent band
+        const sl = (iy % 10);
+        const slat = smooth(2, 4, sl) * (1 - smooth(7, 9, sl));
+        height = 0.22 + 0.3 * slat;
+        shade = 0.4 + 0.55 * slat; rough = 0.7;
+      } else {
+        height = 0.36;                                                         // the recessed main panel
+        // The raised diagonal brace from the kick plate's jamb corner up to the vent's leading corner.
+        const ax = 0, ay = 96, bx = iw, by = ih - 92;
+        const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy);
+        const d = Math.abs((ix - ax) * dy - (iy - ay) * dx) / len;
+        const brace = 1 - smooth(14, 18, d);
+        height += 0.26 * brace;
+        shade = 0.95 + 0.08 * brace;
+      }
+      height = height * seamIn + 0.2 * (1 - seamIn);
+    }
+  }
+  const sc = scratches(x, y, seed + 21, 32, 0.85), sc2 = scratches(x, y, seed + 23, 64, 0.6);
+  const brush = tstreak(x, y, seed + 11, 64, 2);                               // brushed across, as a leaf is
+  const grime = clamp01(tfbm(x, y, seed + 31, 64) * 1.1 - 0.4 + tstreak(x, y, seed + 41, 8, 128) * 0.35 - 0.1);
+  height += 0.01 * (brush - 0.5);
+  height = EDGE_H + (height - EDGE_H) * bevel;
+  const k = shade * (0.92 + 0.12 * brush + 0.35 * sc + 0.25 * sc2 + 0.12 * bolt) * (1 - 0.5 * grime);
+  o.h = height; o.r = tint[0] * k; o.g = tint[1] * k; o.b = tint[2] * k;
+  o.rough = clamp01(rough - 0.18 * (sc + sc2) + 0.35 * grime); o.e = 0;
 };
 
 /** Rusted brick: 0.5 × 0.25 m bricks, staggered, dark mortar, brick-to-brick brown/rust variation,
@@ -522,12 +592,13 @@ const exitSign: Shader = (x, y, seed, o) => {
 
 const SHADERS: Record<PanelKind, Shader> = {
   techPanel, metalSheet, door, rustBrick, lightPanel, concreteSlab, metalPlate, floorTile, screenBank, viewscreen, fluorescent, exitSign,
+  slideDoor,
 };
 /** Height → normal gain per kind. Stone's is 3 × normalStrength over a field that is pebbled
  *  everywhere; these fields are flatter between their features, so the gain is higher. */
 const NORMAL_GAIN: Record<PanelKind, number> = {
   techPanel: 5, metalSheet: 5, door: 5, rustBrick: 4.5, lightPanel: 4.5, concreteSlab: 4.5, metalPlate: 4.5, floorTile: 4.5,
-  screenBank: 4.5, viewscreen: 4.5, fluorescent: 4, exitSign: 4,
+  screenBank: 4.5, viewscreen: 4.5, fluorescent: 4, exitSign: 4, slideDoor: 5,
 };
 
 /** The grime pass applied after each kind's own shader (generatePanel):
@@ -553,6 +624,8 @@ const GRIME: Record<PanelKind, Grime> = {
   viewscreen:   { relief: 1.4, grain: 0.04, dent: 0.03, gouge: 0.04, chip: 0.15, ao: 0.6,  drip: 0.35, rust: 0.12, oil: 0,    dust: 0.2,  mottle: 0.3,  wet: 0 },
   fluorescent:  { relief: 1.2, grain: 0.03, dent: 0.03, gouge: 0.02, chip: 0.1,  ao: 0.5,  drip: 0.3,  rust: 0.1,  oil: 0,    dust: 0.25, mottle: 0.3,  wet: 0 },
   exitSign:     { relief: 1.2, grain: 0.04, dent: 0.03, gouge: 0.03, chip: 0.1,  ao: 0.5,  drip: 0.3,  rust: 0.1,  oil: 0,    dust: 0.2,  mottle: 0.25, wet: 0 },
+  // The door leaf: scratched and dented, rust only in the recesses, grime drips from the vent.
+  slideDoor:    { relief: 1.5, grain: 0.025, dent: 0.05, gouge: 0.12, chip: 0.3,  ao: 0.65, drip: 0.55, rust: 0.3,  oil: 0,    dust: 0.25, mottle: 0.35, wet: 0.2 },
 };
 const RUST_SRGB = [92, 54, 34] as const;
 

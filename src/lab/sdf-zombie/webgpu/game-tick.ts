@@ -260,6 +260,9 @@ export function tick(ctx: GameContext, dt: number) {
   carryFreshShots(ctx.weapon.pellets, [
     ctx.player.player.pos[0] - preStep[0], ctx.player.player.pos[1] - preStep[1], ctx.player.player.pos[2] - preStep[2],
   ]);
+  // DOORS (sector levels): after the player's step (its motion triggers them), before the actors step (their travel
+  // reads this tick's leaves). A handful of doors, a few dot products each.
+  ctx.world.doors?.step(dt);
 
   // Damage transitions use their own clock; frozen pose captures must
   // still show a newly selected preset. Refresh exclusions as it grows.

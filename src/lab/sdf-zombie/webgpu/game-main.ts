@@ -105,6 +105,10 @@ import { wanderBounds, type RoomDef } from './game-level';
 import { ENGINE_CAPABILITIES, authoredLevel, missingCapabilities, ringLevel, sectorActiveLevel } from './active-level';
 import { parseLevel } from './sector-json';
 import { addSectorMeshes } from './game-sector-mesh';
+import { createGameDoors } from './game-doors';
+import { doorTravel } from './sector-doors';
+import { SECTOR_BODY_RADIUS_M } from './sector-def';
+import { createDoorSeams } from './game-seams-doors';
 import { emitterAccent } from './game-sector-light';
 import { standingFloor } from './level-ground';
 import { levelCeilingM, roomIdAt as levelRoomIdAt, roomSpawnPoints } from './game-level-rooms';
@@ -790,6 +794,8 @@ async function main() {
   // assigned (below), so it is lit exactly like the walls.
   // Sector levels (spec 2026-10-24 §6.4): floors, ceilings and walls from the sectors.
   if (ctx.world.level.def?.sectors) addSectorMeshes(ctx, ctx.world.level.def.sectors);
+  // Doors (sector levels with `doors`): their leaves join the level group here, so the light-list loop lights them.
+  if (ctx.world.level.def?.sectors) ctx.world.doors = createGameDoors(ctx);
   // Barrels (plan 3b): sector levels only. Their meshes join the level group here so the light-list loop below lights
   // them like the walls; their boxes join ctx.world.colliders (the same array) before anything moves.
   if (ctx.world.level.def?.barrels?.length) ctx.world.barrels = createBarrelRuntime(ctx, ctx.world.level.def.barrels);
@@ -6000,6 +6006,7 @@ async function main() {
     createDynamiteSeams(ctx),
     createDebrisSeams(ctx),
     createBarrelSeams(ctx),
+    createDoorSeams(ctx),
     createMarchDebugSeams(ctx),
     createEarlyzSeams(ctx),
     createMiscSeams(ctx),
@@ -6204,6 +6211,11 @@ function buildEncounter(ctx: GameContext): void {
       // a destroyed drum's cells stay blocked until reload (plan 3b, a known gap).
       [...ctx.world.level.staticColliders, ...(ctx.world.level.def?.barrels ?? []).map(barrelBox)]);
     console.info(`[sector-nav] built in ${(performance.now() - navStart).toFixed(1)} ms (${sectorMap.sectors.length} sectors, ${sectorMap.lines.length} lines)`);
+    // Doors: the grid routes through doorways; a body's travel is held at a door's leaves, and a refused step near
+    // one asks it to open (sector-doors.ts doorTravel). ctx.world.doors is read lazily (built with the meshes).
+    const nav = ctx.world.encounterNav;
+    if (sectorGround.doors.defs.length > 0)
+      ctx.world.encounterNav = { ...nav, canTravel: doorTravel(sectorGround.doors, nav.canTravel, SECTOR_BODY_RADIUS_M, d => ctx.world.doors?.request(d)) };
     ctx.world.encounter = createEncounterDirector(ctx.world.encounterNav, ctx.world.colliders, sectorSightBlocker(sectorMap, sectorGround));
     // The render culls (march + visual set) see through the same geometry (actor-sight.ts).
     ctx.world.sightOccluder = sectorOcclusion(sectorMap, sectorGround);
