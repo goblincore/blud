@@ -451,6 +451,14 @@ only if an idea below earns it.
   the leaf's rim-hinged flap piece) read as wiggling orange tubes on the zombie, "quite creepy", so they are off there and
   can be the signature of a new creature. See [build notes](../dev-notes/2026-10-02-head-burst/NOTES.md).
 
+## The fat zombie (2026-10-27)
+
+- [x] **`zombie-fat`**: `zombie.blob`'s skeleton and bones, fat flesh (gut over the belt, thick neck and jowls, fat limbs).
+  The zombie's kit refit to its probed skin, its own baked map, `kin: 'zombie'` so every zombie gameplay path applies,
+  `ZOMBIE_FAT_PROFILE` (0.95 m/s). [Dev note](../dev-notes/2026-10-27-zombie-fat/notes.md).
+- [x] **In the crowds**: `zombie-variants.ts` turns 25% of `zombie` spawn slots fat by a hash of the spawn id; `?spawn=` wins.
+- [ ] Owner look in game. Follow #82's trouser change if it lands.
+
 ## The zombie refinement (2026-10-26)
 
 Owner: seeing detailed grabber hands on the plain zombie, bring the whole zombie up to the newer creatures' standard.

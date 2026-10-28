@@ -10,7 +10,7 @@
 #   morgue    a toe tag on the right big toe, a torn sheet over one shoulder and round the hips (wants
 #             `zombie-detail-gen.ts --incision` for its Y-incision)
 #
-#   /opt/homebrew/bin/blender -b -noaudio -P assets-source/zombie-kit/make_kit.py [-- <variant|none>]
+#   /opt/homebrew/bin/blender -b -noaudio -P assets-source/zombie-kit/make_kit.py [-- <variant|none>] [--body <name>]
 #   npx tsx scripts/blender-kit.ts zombie assets-source/zombie-kit/zombie-parts.glb
 #
 # TRIANGLES: the zombie is the crowd enemy, so every part is decimated to a small budget (the look-dev's were twice
@@ -25,13 +25,19 @@ from mathutils import Vector, Quaternion, Matrix
 HERE = os.path.dirname(os.path.abspath(__file__))
 argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 VARIANT = argv[0] if argv and not argv[0].startswith('--') else 'labourer'
-OUT_GLB = os.path.join(HERE, 'zombie-parts.glb' if VARIANT == 'labourer' else f'zombie-{VARIANT}-parts.glb')
+# --body <name>: REFIT the kit to another body on the zombie's skeleton (the fat zombie, zombie-fat.blob): the same
+# parts laid on that body's probed skin (surface-<name>.json from `npx tsx scripts/zombie-surface.ts <name>`), written
+# to <name>-parts.glb for `npx tsx scripts/blender-kit.ts <name> assets-source/zombie-kit/<name>-parts.glb`.
+BODY = argv[argv.index('--body') + 1] if '--body' in argv else 'zombie'
+OUT_GLB = os.path.join(HERE, (f'{BODY}-parts.glb' if BODY != 'zombie' else 'zombie-parts.glb') if VARIANT == 'labourer'
+                       else f'{BODY}-{VARIANT}-parts.glb')
 
 for o in list(bpy.data.objects):
     bpy.data.objects.remove(o, do_unlink=True)
 mech = bpy.data.collections.get('mech') or bpy.data.collections.new('mech')
 if mech.name not in bpy.context.scene.collection.children: bpy.context.scene.collection.children.link(mech)
-G = {'__name__': '__kit__', 'KIT_DIR': HERE}
+BELT_DIP = 0.09 if BODY == 'zombie-fat' else 0.0   # labourer(): how far the belt's front drops (metres)
+G = {'__name__': '__kit__', 'KIT_DIR': HERE, 'SURFACE_FILE': 'surface.json' if BODY == 'zombie' else f'surface-{BODY}.json'}
 exec(open(os.path.join(HERE, '../twinhead-kit/kit_sculpt.py')).read(), G)
 exec(open(os.path.join(HERE, 'zombie_common.py')).read(), G)
 globals().update({k: v for k, v in G.items() if not k.startswith('__')})
@@ -385,15 +391,19 @@ def labourer():
     # spine masses at y 1.03-1.06) and the boots.
     clear_work()
     BELT_Y = 1.045
-    strip('belt', [(BELT_Y + 0.003 * math.cos(math.radians(a)), a) for a in range(0, 360, 10)], 0.040, 0.006, n=72,
-          closed=True, out=0.007)
+    # The FAT body (--body zombie-fat): the belt DIPS in front, under the overhanging gut (whose skin is widest at
+    # y ~1.10 and tucks back by 0.95), instead of cinching it round the middle. At the back and sides it stays put.
+    dip = (lambda a: BELT_DIP * max(0.0, math.cos(math.radians(a))) ** 2)
+    strip('belt', [(BELT_Y + 0.003 * math.cos(math.radians(a)) - dip(a), a) for a in range(0, 360, 10)], 0.040, 0.006,
+          n=72, closed=True, out=0.007)
     # the free end of the strap, past the buckle, lying on the belt
-    strip('tail', [(BELT_Y - 0.002, 4), (BELT_Y - 0.004, -12), (BELT_Y - 0.010, -24)], 0.034, 0.005, n=12, out=0.012)
+    strip('tail', [(BELT_Y - 0.002 - dip(4), 4), (BELT_Y - 0.004 - dip(-12), -12), (BELT_Y - 0.010 - dip(-24), -24)],
+          0.034, 0.005, n=12, out=0.012)
     finish('pelvis|belt', 'pelvis|belt', 'leather', 900, voxel=0.0016, noise=0.0006, smooth=(0.5, 2),
            base=(0.22, 0.12, 0.06), rust=(0.08, 0.05, 0.03), rust_amt=0.6, seed=28)
     # the buckle: a heavy iron frame, its prong, at the front just off the fly
     clear_work()
-    c = B(torso_pt(BELT_Y, 8, 0.016)); nrm = bv(*Vector((math.sin(math.radians(8)), 0, math.cos(math.radians(8))))).normalized()
+    c = B(torso_pt(BELT_Y - dip(8), 8, 0.016)); nrm = bv(*Vector((math.sin(math.radians(8)), 0, math.cos(math.radians(8))))).normalized()
     up = Vector((0, 0, 1)); side = up.cross(nrm).normalized()
     frame = [c + side * x + up * y for x, y in ((-0.026, -0.027), (0.026, -0.027), (0.026, 0.027), (-0.026, 0.027), (-0.026, -0.027))]
     tube('buckle', frame, [0.0042] * len(frame), segs=8)

@@ -30,6 +30,11 @@
   hands, iron wrist shackles, a tapered forearm, painted `fabric` trousers with baked folds, a belt and boots (`assets-source/zombie-kit/make_kit.py`, 12.8k tris).
   [Characters](docs/tasks/characters.md#the-zombie-refinement-2026-10-26). Open: the owner's in-game look; moving shins and feet to mesh.
 
+- [~] **Fat zombies mixed into the crowds** (2026-10-27; branch `claude/zombie-fat`, on top of #82). `zombie-fat`: the
+  zombie's skeleton and gait under a bloated body, the zombie's kit refit to it (`make_kit.py --body zombie-fat`), its own body map
+  (`zombie-detail-gen.ts --fat`). A quarter of `zombie` spawn slots, picked by spawn id (`zombie-variants.ts`): 5 of Night Train's 23.
+  [Dev note](docs/dev-notes/2026-10-27-zombie-fat/notes.md). Open: the owner's look.
+
 - [~] **Enemy test arena built 2026-10-23; owner look pending.** `npm run dev:arena` (`/sdf-game.html?level=arena&spawn=<character>`): one big lit room, one enemy 7 m out, god mode, every weapon, infinite ammo. `` ` `` respawns it fresh, `-`/`=` step through the registry's characters, a label names it. `"arena": true` in a level turns this on (`game-arena.ts`, `level-json.ts`); `__sdfGame.arena(step)` for scripts. Input waits for the ~30 s warm-up after boot.
 
 **The goblin's face moves** (owner, 2026-10-13) — [characters](docs/tasks/characters.md)

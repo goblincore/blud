@@ -62,7 +62,7 @@ Each line is the first sentence of the module's header comment.
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
 | [Gibs and gore (logic)](#gibs-and-gore-logic) | 13 | Gib parts, launch, tearing, entrails, strands. |
-| [AI and actors (logic)](#ai-and-actors-logic) | 11 | Brains, the soldier, crowd logic. |
+| [AI and actors (logic)](#ai-and-actors-logic) | 12 | Brains, the soldier, crowd logic. |
 | [Weapons and FPV (logic)](#weapons-and-fpv-logic) | 10 | First-person mode, dynamite flight, explosions, rockets, bile, tracers. |
 | [Blood and lighting probes (logic)](#blood-and-lighting-probes-logic) | 9 | Blood simulation, probe grids, ambient. |
 | [Shared helpers and the WebGL lab](#shared-helpers-and-the-webgl-lab) | 15 | What fits no area above: the original WebGL lab shader, resolution scaling, samplers. |
@@ -795,6 +795,7 @@ Brains, the soldier, crowd logic.
 - `soldier-stagger.ts` — Soldier stagger state: hit-reaction levels, their durations and travel, and the per-frame stagger step.
 - `soldier-wounds.ts` — Soldier visual wounds: turns the wound list into the craters the shader draws, with the ragged-crater toggle.
 - `status-lights.ts` — The warbull's BLINKING LIGHTS as plain data (spec 2026-09-27-warbull- design.md, "Blinking lights").
+- `zombie-variants.ts` — WHICH ZOMBIE a zombie spawn slot gets.
 - `zombie.ts` — The WebGL ZombieView (a ShaderMaterial raymarch of one body) and ChunkView (a gib chunk view), with their uniform upload.
 
 ## Weapons and FPV (logic)

@@ -651,3 +651,21 @@ The crowd enemy got the default pipeline as a refinement pass rather than a new 
 - **Bake trap (fixed):** `bakeBodies` now builds flesh only (`fleshFromBlob`). With bones, a body that has a `bones` block
   plus a big `.detail` spent minutes deriving and containment-checking a bone per detail prim before the GPU started. And
   a worktree whose `node_modules` predates the `webgpu` package falls back to the CPU bake: run `npm install`.
+
+## A body variant on the same rig (the fat zombie, 2026-10-27)
+
+- **A variant is its own `.blob`, never an edit of the base.** `zombie.blob` is a test fixture held in parity with
+  `body.ts`; the fat zombie copies its skeleton and `bones` block verbatim (`zombie-fat-blob.test.ts` pins both) and
+  changes flesh only, so the gait, rig and kit bones carry over untouched.
+- **Refit the kit, don't copy it.** The kit scripts take a body: `zombie-surface.ts <name>` writes
+  `surface-<name>.json`, `make_kit.py --body <name>` lays the same parts on that skin. Keep the parts' anchors (the wrist
+  radius here) the same in the variant and the hands and cuffs fit with no new code. One knob per real difference (the
+  belt's `BELT_DIP`, under the gut).
+- **Fat relief is broad and soft**: ridges 14-18 mm wide at 3-6 mm proud with wide blends; bone relief is the opposite.
+  A navel cannot be carved into a map that only adds, so it is the rim of one (a ring of small lumps).
+- **Gameplay keyed on a name needs a kin flag.** The zombie's head split, pop and face were `name === 'zombie'`; a
+  variant gets them through `CharacterEntry.kin` / `isZombieKin`, not by repeating names.
+- **Mixing by hash of the spawn id** (`zombie-variants.ts`) keeps a level's cast stable between loads and tests.
+- **CPU bake fallback**: `bake-body-normal` said "no WebGPU adapter" because this worktree's `node_modules` predated the
+  `webgpu` package. `npm install` took the bake from >10 minutes on the CPU to 1.8 s.
+

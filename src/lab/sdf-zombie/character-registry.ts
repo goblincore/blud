@@ -16,6 +16,7 @@
 // fixes is a character that EXISTS as a .blob and was never registered.
 import type { BodyNormalSpec } from './webgpu/body-normal-load';
 import zombieBlobSrc from './characters/zombie.blob?raw';
+import zombieFatBlobSrc from './characters/zombie-fat.blob?raw';
 import goblinBlobSrc from './characters/goblin.blob?raw';
 import goblinHomeBlobSrc from './characters/goblin-home.blob?raw';
 import goblinCinematicBlobSrc from './characters/goblin-cinematic.blob?raw';
@@ -61,7 +62,7 @@ import cultistCowledBlobSrc from './characters/cultist-cowled.blob?raw';
 import brideBlobSrc from './characters/bride.blob?raw';
 import venusBlobSrc from './characters/venus.blob?raw';
 import {
-  ZOMBIE_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, BUTCHER_PROFILE, FLAYER_PROFILE, DEADEYE_PROFILE, GOREHOUND_PROFILE, GUTCRAWLER_PROFILE, GIBBET_PROFILE, CHAIR_PROFILE, GAMER_PROFILE, motionProfileFor, type MotionProfile,
+  ZOMBIE_PROFILE, ZOMBIE_FAT_PROFILE, SOLDIER_PROFILE, JUGGERNAUT_PROFILE, WARBULL_PROFILE, TWINHEAD_PROFILE, BUTCHER_PROFILE, FLAYER_PROFILE, DEADEYE_PROFILE, GOREHOUND_PROFILE, GUTCRAWLER_PROFILE, GIBBET_PROFILE, CHAIR_PROFILE, GAMER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
 
 /** A face sheet's texture and its crop. `mean` is the level the shader
@@ -109,6 +110,9 @@ export interface CharacterEntry {
   /** A baked BODY NORMAL MAP (scripts/bake-body-normal.ts; webgpu/body-normal-load.ts): the torso relief the
    *  march does not carry as prims. Absent = none, and the body shades exactly as it did before maps existed. */
   bodyNormal?: BodyNormalSpec;
+  /** A VARIANT BODY of another character that plays as it in every gameplay path keyed by name (isZombieKin): the
+   *  fat zombie is `kin: 'zombie'` and gets the zombie's panel flesh, face sheet and head pop. Absent: itself only. */
+  kin?: 'zombie';
   /** The motion profile this character moves with. Profiles live in
    *  motion-profile.ts; this records WHICH one. Characters without a bespoke
    *  profile get motionProfileFor(name) — the zombie default. */
@@ -179,6 +183,20 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // Collarbones, ribs through slack skin, gut folds, spine and veins (characters/zombie.detail, baked; never marched).
     bodyNormal: { url: '/assets/lab/zombie-body-n.png', meta: '/assets/lab/zombie-body-n.json', strength: 1 },
     profile: ZOMBIE_PROFILE,
+  },
+  // The FAT zombie (zombie-fat.blob's header): the plain zombie's skeleton, gait and face sheet under a bloated body. It
+  // plays as a zombie (isZombieKin) and crowds mix it in (zombie-variants.ts).
+  'zombie-fat': {
+    name: 'zombie-fat', src: zombieFatBlobSrc, face: ZOMBIE_FLAT, kin: 'zombie',
+    // The zombie's kit REFIT to this skin (make_kit.py --body zombie-fat): the same hands, shackles, belt and boots,
+    // laid on the fat body's probed surface (surface-zombie-fat.json), so they come off the same way.
+    kit: '/assets/lab/zombie-fat-kit.gltf',
+    kitHands: { bones: ['foreArm.l', 'foreArm.r'], materials: ['zombieskin', 'zombienail'], drop: 0.075, radius: 0.08 },
+    kitBreakables: [{ bone: 'pelvis', materials: ['leather', 'rustplate'] },
+      { bone: 'foreArm.l', materials: ['rustplate'] }, { bone: 'foreArm.r', materials: ['rustplate'] }],
+    // No ribs or knuckles: gut creases, a navel, love handles, back rolls and stretch marks (zombie-detail-gen.ts --fat).
+    bodyNormal: { url: '/assets/lab/zombie-fat-body-n.png', meta: '/assets/lab/zombie-fat-body-n.json', strength: 1 },
+    profile: ZOMBIE_FAT_PROFILE,
   },
   goblin: {
     name: 'goblin', src: goblinBlobSrc,
@@ -601,4 +619,10 @@ export function characterEntry(name: string): CharacterEntry {
     );
   }
   return e;
+}
+
+/** True for the zombie and every body that plays as it (CharacterEntry.kin): the zombie-only paths in the game
+ *  (panel flesh, the generated face sheet, the head burst and pop) are keyed on this, not on the name. */
+export function isZombieKin(name: string): boolean {
+  return name === 'zombie' || CHARACTERS[name]?.kin === 'zombie';
 }

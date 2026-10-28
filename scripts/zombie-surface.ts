@@ -3,7 +3,8 @@
 // Probe zombie.blob's skin for the Blender kit (assets-source/zombie-kit/): straps, cuffs, trousers and boots are
 // laid on the PROBED skin, not round a bone (biomech-style.md, "Lay the kit on the PROBED skin").
 //
-//   npx tsx scripts/zombie-surface.ts [name]  ->  assets-source/zombie-kit/surface.json
+//   npx tsx scripts/zombie-surface.ts [name]  ->  assets-source/zombie-kit/surface.json (surface-<name>.json for any
+//   other body: the fat zombie's refit kit reads surface-zombie-fat.json, make_kit.py --body zombie-fat)
 //
 // torso: rings[y] of skin points at 6 deg steps (0 = +z front, +90 = the body's left, +x).
 // limbs: per bone, rings at t steps of 0.04 of skin RADII round the bone at 15 deg steps in the bake's frame
@@ -135,6 +136,6 @@ for (const b of ['upperArm', 'foreArm', 'thigh', 'shin', 'foot']) for (const sd 
   limbs[name] = { head: head.map(r4) as V, tail: tail.map(r4) as V, t: T, ph: PH, r: R };
 }
 
-const path = resolve(ROOT, 'assets-source/zombie-kit/surface.json');
+const path = resolve(ROOT, `assets-source/zombie-kit/${NAME === 'zombie' ? 'surface' : `surface-${NAME}`}.json`);
 writeFileSync(path, JSON.stringify({ name: NAME, torso, limbs }) + '\n');
 console.log(`zombie-surface: ${path} (${torso.length} torso rings, ${Object.keys(limbs).length} limbs, envelope of ${poses.length} poses)`);

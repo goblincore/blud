@@ -177,6 +177,14 @@ export const ZOMBIE_PROFILE: MotionProfile = {
   armStyle: 'reach',
 };
 
+/** The FAT zombie (zombie-fat.blob): the zombie's shamble on the same skeleton, carried slower — 0.95 m/s against
+ *  1.15, so a mixed crowd strings out and the fat ones arrive last (the juggernaut's ~0.9 is the cast's slowest). */
+export const ZOMBIE_FAT_PROFILE: MotionProfile = {
+  ...ZOMBIE_PROFILE,
+  name: 'zombie-fat',
+  cruise: 0.95,
+};
+
 export const SOLDIER_PROFILE: MotionProfile = {
   name: 'soldier',
   family: 'soldier',
@@ -624,6 +632,7 @@ export const GOBLIN_PROFILE: MotionProfile = {
 
 const BY_NAME: Record<string, MotionProfile> = {
   zombie: ZOMBIE_PROFILE,
+  'zombie-fat': ZOMBIE_FAT_PROFILE,
   goblin: GOBLIN_PROFILE,
   // The goblin with the face rig (goblin expressions Task 13): the same body below the neck, so the same gait and gun.
   'goblin-cinematic': GOBLIN_PROFILE,

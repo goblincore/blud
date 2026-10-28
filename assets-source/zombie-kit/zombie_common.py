@@ -7,7 +7,8 @@
 import bpy, bmesh, json, math, os, random
 from mathutils import Vector, Matrix
 
-SURF = json.load(open(os.path.join(KIT_DIR, 'surface.json')))
+# The body the kit is laid on: the zombie's surface.json, or a variant's own probe (make_kit.py --body zombie-fat).
+SURF = json.load(open(os.path.join(KIT_DIR, globals().get('SURFACE_FILE', 'surface.json'))))
 _TOR = SURF['torso']
 _TY = [r['y'] for r in _TOR]
 LIMB = SURF['limbs']

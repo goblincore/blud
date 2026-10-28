@@ -380,6 +380,15 @@ describe('only the zombie: the character, not the motion profile', () => {
       expect(g.leaf.last(g.a.id), character).not.toBeNull();
     }
   });
+  it('the fat zombie is zombie kin: a precise slug to its head is judged, and it splits', () => {
+    const f = fixture({ character: 'zombie-fat' });
+    expect(f.a.characterName()).toBe('zombie-fat');
+    const at = f.on(FRONT);
+    if (!onHeadPrim(f.a.posed().prims, at)) throw new Error('fixture: the round missed the fat zombie\'s head');
+    f.leaf.hit(f.a, at, FRONT, f.aimed(FRONT), 'slug');
+    expect(f.leaf.last(f.a.id)).not.toBeNull();
+    expect(f.split.force(f.a.id, 'middle', 0, 0, 0.8)).toBe(true);
+  });
   it('the split leaf refuses every one of them, so a slug cannot pop what cannot be split', () => {
     for (const character of ['female', 'clown', 'bonewalker']) {
       const f = fixture({ character });
@@ -677,11 +686,12 @@ describe('the wiring', () => {
   });
   it('the actor is told which character it is, and the zombie\'s pop is wired by that name', () => {
     expect(spawnSrc).toContain('characterName: name,');
-    expect(spawnSrc).toContain("...(name === 'zombie' ? {\n      onDecapitate:");
+    // By KIN, not the bare name: the fat zombie (CharacterEntry.kin) is wired the zombie's way.
+    expect(spawnSrc).toContain("...(isZombieKin(name) ? {\n      onDecapitate:");
   });
   it('the zombie is spawned with the pop and with the decapitation rule', () => {
     expect(spawnSrc).toContain('onDecapitate: ({ weapon }');
     expect(spawnSrc).toContain('decapitationRule(weapon)');
-    expect(spawnSrc).toContain("characterEntry(name).profile.soft || name === 'zombie'");
+    expect(spawnSrc).toContain("characterEntry(name).profile.soft || isZombieKin(name)");
   });
 });

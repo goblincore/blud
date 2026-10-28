@@ -7,7 +7,11 @@
 //   npx tsx scripts/zombie-detail-gen.ts [name] [--incision] && npx tsx scripts/bake-body-normal.ts <name> 512 256 \
 //     --limb upperArm.l:0:1:0.12:96 --limb foreArm.l:0:1:0.10:96 --limb upperArm.r:0:1:0.12:96 --limb foreArm.r:0:1:0.10:96 \\
 //     --limb thigh.l:0:1:0.14:96 --limb thigh.r:0:1:0.14:96
-//   name defaults to `zombie`; --incision adds the morgue's Y-incision and its stitches.
+//   The fat zombie bakes with wider limb cylinders (bake-args.json `zombie-fat`: arms 0.14/0.11, thighs 0.16).
+//   name defaults to `zombie`; --incision adds the morgue's Y-incision and its stitches; --fat is the FAT zombie's
+//   torso (zombie-fat.blob; on by default for that name): no bone shows through, so the collarbones, ribs, sternum,
+//   spine knuckles and shoulder blades go, and the fat's own relief takes their place — a deep crease under the
+//   overhanging gut, a navel, rolls on the flanks and the lower back, a fold under each sagging breast, stretch marks.
 //
 // THE TEMPLATE is scripts/flayer-detail-gen.ts (skin probes, the varicose recipe in biomech-style.md). The zombie's
 // skeleton is NOT the butcher's (its spine runs y 1.06 -> 1.40, the chest top ~1.45, the gut sags to y 0.86), so
@@ -32,6 +36,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const NAME = args.find(a => !a.startsWith('--')) ?? 'zombie';
 const INCISION = args.includes('--incision');
+const FAT = args.includes('--fat') || NAME === 'zombie-fat';
 const src = readFileSync(resolve(ROOT, `src/lab/sdf-zombie/characters/${NAME}.blob`), 'utf8');
 const doc = parseBlob(src);
 const built = buildBody(compileBlob(doc, compileFace(doc)));
@@ -101,6 +106,7 @@ out.push(
   `# the bake (${NAME}-body-n.png); they are never raymarched. Every element is placed on the probed skin.`,
 );
 
+if (!FAT) {
 section('collarbones: a ridge from the sternal notch out to each shoulder, the hollow above it left alone');
 for (const s of [1, -1]) ridge([[1.448, s * 6], [1.452, s * 28], [1.440, s * 52], [1.418, s * 74]], 0.009, 0.0045, 0.004, 0.007);
 lump(1.432, 0, 0.010, 0.002, 0.004);   // the manubrium's knob between them
@@ -119,6 +125,33 @@ ridge([[1.43, 0], [1.38, 0], [1.32, 0]], 0.007, 0.0022, 0.004);
 section('gut: a slack fold over the sag, above the belt');
 // Short, soft and broken: a fold right round the front read as a belt in the first bake.
 for (const s of [1, -1]) ridge([[1.075 - 0.006, s * 14], [1.075 - 0.002, s * 33], [1.075 + 0.007, s * 52]], 0.013, 0.0025, 0.010);
+} else {
+// THE FAT ZOMBIE'S TORSO. Heights are re-probed off zombie-fat.blob (scripts/zombie-surface.ts zombie-fat): the gut
+// is widest at y ~1.10 (0.245 m out in front) and tucks back to 0.224 by y 1.00, so its underside crease runs just
+// above the kit belt (y 1.025-1.065) in front and climbs round the flanks, where the belly meets the hips.
+// Fat relief is BROAD and SOFT: wide ridges at low height and a wide blend, never the crisp bars bone wants.
+section('fat: a fold under each sagging breast, curving up into the armpit');
+for (const s of [1, -1]) ridge([[1.31, s * 6], [1.295, s * 26], [1.305, s * 50], [1.335, s * 72]], 0.016, 0.0045, 0.012);
+
+section('fat: the gut — the deep crease under its overhang, a navel, a soft roll across its top');
+for (const s of [1, -1]) ridge([[1.035, s * 2], [1.040, s * 24], [1.055, s * 48], [1.080, s * 72], [1.110, s * 92]], 0.018, 0.006, 0.014);
+// The navel cannot be carved (the map only adds), so it is the RIM of one: a ring of small lumps round a pit.
+for (let a = 0; a < 360; a += 45) lump(1.12 + 0.010 * Math.cos(a * Math.PI / 180), 2.6 * Math.sin(a * Math.PI / 180), 0.006, 0.0022, 0.004);
+for (const s of [1, -1]) ridge([[1.225, s * 4], [1.218, s * 28], [1.228, s * 54]], 0.014, 0.0025, 0.012);
+
+section('fat: love handles — two rolls on each flank, and the rolls across the lower back');
+for (const s of [1, -1]) for (const [k, y] of [1.085, 1.13].entries())
+  ridge([[y + 0.010, s * 70], [y, s * 95], [y - 0.004, s * 125], [y + 0.004, s * 150]], 0.017 - 0.003 * k, 0.0055, 0.014);
+for (const y of [1.10, 1.15, 1.20]) ridge([[y, 140], [y - 0.006, 165], [y - 0.008, 180], [y - 0.006, -165], [y, -140]], 0.014, 0.0035, 0.012);
+
+section('fat: stretch marks — short pale welts fanning down the sides of the gut');
+let sseed = 911;
+const srnd = () => ((sseed = (sseed * 16807) % 2147483647) / 2147483647);
+for (const s of [1, -1]) for (let k = 0; k < 7; k++) {
+  const y = 1.07 + srnd() * 0.12, th = 50 + srnd() * 30;
+  ridge([[y + 0.022, s * (th - 4)], [y, s * th], [y - 0.022, s * (th + 3)]], 0.0028, 0.0010, 0.0016);
+}
+}
 
 // ---------------------------------------------------------------- the trousers (below the waist)
 // The labourer's trousers are PAINT on the pelvis mass and the thighs (zombie.blob); their cloth is relief here, under
@@ -138,11 +171,16 @@ for (const s of [1, -1]) {
     ridge([[0.915 + 0.018 * k, s * 6], [0.925 + 0.020 * k, s * 22], [0.945 + 0.022 * k, s * 40]], 0.007, 0.0028, 0.006);
 }
 
+if (!FAT) {
 section('back: the spinous processes as knuckles, the erectors either side, the shoulder blades');
 for (let y = 1.07; y <= 1.43; y += 0.033) lump(y, 180, 0.010, 0.0045, 0.003);
 for (const s of [1, -1]) ridge([[1.00, s * 166], [1.10, s * 165], [1.22, s * 166], [1.34, s * 168]], 0.018, 0.0045, 0.008);
 for (const s of [1, -1]) ridge([[1.43, s * 150], [1.38, s * 140], [1.30, s * 132]], 0.013, 0.006, 0.004);
 for (const s of [1, -1]) ridge([[1.43, s * 150], [1.42, s * 128], [1.40, s * 112]], 0.010, 0.0045, 0.004);   // the spine of the scapula
+} else {
+section('back: the fat zombie\'s spine is a soft furrow between two broad pads, not knuckles');
+for (const s of [1, -1]) ridge([[1.10, s * 168], [1.22, s * 167], [1.36, s * 168]], 0.024, 0.0040, 0.014);
+}
 
 section('armpits: a fold where the arm meets the chest');
 for (const s of [1, -1]) ridge([[1.40, s * 62], [1.36, s * 80], [1.32, s * 92]], 0.010, 0.004, 0.006);

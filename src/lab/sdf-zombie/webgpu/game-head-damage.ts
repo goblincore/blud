@@ -84,6 +84,7 @@ import { headAlive } from './flame-anchors';
 import { rngStreams } from './rng';
 import { mulberry32 } from '../melt-bones';
 import { FLESH_BITS, fleshBitCount, fleshBits, fleshBitsOn, fleshRand, swingBlow } from '../flesh-bits';
+import { isZombieKin } from '../character-registry';
 
 /** The leaf's numbers (spec §5, §6, §15). */
 export const HEAD_LEAF = {
@@ -686,7 +687,7 @@ export function createHeadDamage(ctx: GameContext, deps: HeadDamageDeps): HeadDa
   }
 
   function burst(a: ZombieActor, point: Vec3, dir: Vec3, shot?: ShotProvenance, kind: 'pellet' | 'slug' = 'slug'): boolean {
-    if (!burstTuning.on || (kind !== 'slug' && !burstTuning.anyWeapon) || a.characterName() !== 'zombie') return false;
+    if (!burstTuning.on || (kind !== 'slug' && !burstTuning.anyWeapon) || !isZombieKin(a.characterName())) return false;
     if (deps.splitOpen?.(a)) return false;
     const posed = a.posed();
     if (!headAlive(posed) || !onHeadPrim(posed.prims, point)) return false;

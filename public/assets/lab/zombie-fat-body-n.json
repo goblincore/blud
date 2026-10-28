@@ -1,0 +1,134 @@
+{
+  "generator": "scripts/bake-body-normal.ts",
+  "character": "zombie-fat",
+  "width": 512,
+  "height": 833,
+  "version": 2,
+  "yMin": 0.832,
+  "yMax": 1.4981,
+  "axisX": 0,
+  "axisZ": 0.0387,
+  "regions": [
+    {
+      "label": "torso",
+      "kind": "torso",
+      "head": [
+        0,
+        1.4981,
+        0.0387
+      ],
+      "tail": [
+        0,
+        0.832,
+        0.0387
+      ],
+      "rMax": 0,
+      "row0": 1,
+      "rows": 256
+    },
+    {
+      "label": "upperArm.l",
+      "kind": "limb",
+      "head": [
+        0.2,
+        1.3976,
+        0.0405
+      ],
+      "tail": [
+        0.2862,
+        1.1102,
+        0.0405
+      ],
+      "rMax": 0.14,
+      "row0": 257,
+      "rows": 96
+    },
+    {
+      "label": "foreArm.l",
+      "kind": "limb",
+      "head": [
+        0.2862,
+        1.1102,
+        0.0405
+      ],
+      "tail": [
+        0.3011,
+        0.8121,
+        0.0703
+      ],
+      "rMax": 0.11,
+      "row0": 353,
+      "rows": 96
+    },
+    {
+      "label": "upperArm.r",
+      "kind": "limb",
+      "head": [
+        -0.2,
+        1.3976,
+        0.0405
+      ],
+      "tail": [
+        -0.2862,
+        1.1102,
+        0.0405
+      ],
+      "rMax": 0.14,
+      "row0": 449,
+      "rows": 96
+    },
+    {
+      "label": "foreArm.r",
+      "kind": "limb",
+      "head": [
+        -0.2862,
+        1.1102,
+        0.0405
+      ],
+      "tail": [
+        -0.3011,
+        0.8121,
+        0.0703
+      ],
+      "rMax": 0.11,
+      "row0": 545,
+      "rows": 96
+    },
+    {
+      "label": "thigh.l",
+      "kind": "limb",
+      "head": [
+        0.1,
+        1.06,
+        0
+      ],
+      "tail": [
+        0.1,
+        0.6,
+        0
+      ],
+      "rMax": 0.16,
+      "row0": 641,
+      "rows": 96
+    },
+    {
+      "label": "thigh.r",
+      "kind": "limb",
+      "head": [
+        -0.1,
+        1.06,
+        0
+      ],
+      "tail": [
+        -0.1,
+        0.6,
+        0
+      ],
+      "rMax": 0.16,
+      "row0": 737,
+      "rows": 96
+    }
+  ],
+  "backend": "gpu",
+  "adapter": "apple metal-3 apple-m3 (Metal driver on macOS Version 27.0.1 (Build 26A434))"
+}

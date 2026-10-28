@@ -15,5 +15,6 @@
   "teratoma": ["512", "256"],
   "twinhead": ["512", "256", "--limb", "upperarm.l:0:1:0.17:96", "--limb", "forearm.l:0:0.5:0.13:48", "--limb", "upperarm.r:0:1:0.17:96", "--limb", "forearm.r:0:0.5:0.13:48"],
   "venus": ["512", "256", "--limb", "upperarm.l:0:1:0.15:96", "--limb", "upperarm.r:0:1:0.15:96", "--limb", "thigh.l:0:1:0.20:128", "--limb", "thigh.r:0:1:0.20:128"],
+  "zombie-fat": ["512", "256", "--limb", "upperArm.l:0:1:0.14:96", "--limb", "foreArm.l:0:1:0.11:96", "--limb", "upperArm.r:0:1:0.14:96", "--limb", "foreArm.r:0:1:0.11:96", "--limb", "thigh.l:0:1:0.16:96", "--limb", "thigh.r:0:1:0.16:96"],
   "zombie": ["512", "256", "--limb", "upperArm.l:0:1:0.12:96", "--limb", "foreArm.l:0:1:0.10:96", "--limb", "upperArm.r:0:1:0.12:96", "--limb", "foreArm.r:0:1:0.10:96", "--limb", "thigh.l:0:1:0.14:96", "--limb", "thigh.r:0:1:0.14:96"]
 }
