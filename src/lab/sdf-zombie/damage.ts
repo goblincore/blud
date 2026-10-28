@@ -42,7 +42,9 @@ export interface ShotAim { eye: Vec3; dir: Vec3 }
 /** Gameplay provenance is independent of visual crater calibre. A slug carries the aim it was fired with
  *  (head-burst.ts headShotRule judges the shot's precision on it); one with none was not aimed by a crosshair. */
 export type ShotProvenance =
-  | { weapon: 'shotgun'; shotId: number; barrels: 1 | 2; barrel: 0 | 1 }
+  | { weapon: 'shotgun'; shotId: number; barrels: 1 | 2; barrel: 0 | 1;
+      /** Where the volley left the muzzle: the PLAYER's volleys only (pellet-falloff.ts measures range from it). */
+      origin?: Vec3 }
   | { weapon: 'slug'; shotId?: number; aim?: ShotAim }
   | { weapon: 'explosion' };
 
@@ -55,6 +57,9 @@ export interface Wound {
    *  crater: a new one with the same headRegion replaces its predecessor in place. */
   headRegion?: string;
   shot?: ShotProvenance;
+  /** Collapse-meter weight of this wound (collapse.ts stepCollapse multiplies its gain by it). Unset = 1. A far pellet
+   *  of the player's shotgun carries its range falloff here (pellet-falloff.ts). */
+  meterScale?: number;
   /** Exposed stump decoration, not another projectile injury. */
   injuryIgnored?: boolean;
   /** Index into the built primitive array — the primitive this wound rides. */

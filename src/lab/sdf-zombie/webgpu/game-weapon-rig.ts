@@ -506,7 +506,11 @@ export function fire(ctx: GameContext, barrels: 1 | 2): boolean {
   // spawnPellets spreads around `dir`; convergence just re-centres the cone.
   // One `misc` draw per volley is the pellet seed (mulberry32 inside). The player's volley flies flatter, faster
   // and denser than an enemy's (PLAYER_GRAPESHOT); enemy volleys keep GRAPESHOT's dodgeable band.
-  ctx.weapon.pellets.push(...spawnPellets(muz, dir, barrels, seedFromUnit(rngStreams.misc()), PLAYER_GRAPESHOT));
+  const volley = spawnPellets(muz, dir, barrels, seedFromUnit(rngStreams.misc()), PLAYER_GRAPESHOT);
+  // Where the volley left: the range falloff measures from here at impact (pellet-falloff.ts). The player's only.
+  const origin: Vec3 = [muz[0], muz[1], muz[2]];
+  for (const p of volley) if (p.shot?.weapon === 'shotgun') p.shot.origin = origin;
+  ctx.weapon.pellets.push(...volley);
   return true;
 }
 

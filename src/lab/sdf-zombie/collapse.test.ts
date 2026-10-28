@@ -12,6 +12,7 @@ import {
   relaxRopeConstraints,
   stepCollapse,
   toughnessFor,
+  woundMeterScale,
   type CollapseSignal,
   type CollapseState,
   type CollapseStep,
@@ -27,6 +28,7 @@ import { makeChunk, stepChunk } from './gib-chunks';
 import type { RigPoint } from './rig';
 import type { LimbId } from './types';
 import { len, sub } from './vec';
+import { PELLET_FALLOFF_DEFAULTS, pelletFalloffAt, pelletFalloffWound } from './pellet-falloff';
 import { TERATOMA_PROFILE, ZOMBIE_PROFILE, motionProfileFor } from './motion-profile';
 
 const T = COLLAPSE_TUNING;
@@ -468,5 +470,27 @@ describe('per-character toughness (MotionProfile.toughness)', () => {
     expect(ZOMBIE_PROFILE.toughness).toBeUndefined();
     expect(motionProfileFor('soldier').toughness).toBeUndefined();
     expect(motionProfileFor('teratoma').toughness).toBe(TERATOMA_PROFILE.toughness);
+  });
+});
+
+describe('pellet range falloff on the meter (Wound.meterScale, pellet-falloff.ts)', () => {
+  const at = (distM: number, toughness?: Parameters<typeof toughnessFor>[0]): number => {
+    const w = pelletFalloffWound(wound('pellet'), pelletFalloffAt([0, 1.5, 0], [0, 1.5, -distM], PELLET_FALLOFF_DEFAULTS), PELLET_FALLOFF_DEFAULTS);
+    return stepCollapse(makeCollapseState(), { ...sig({ wounds: [w] }), ...(toughness ? { toughness } : {}) }, DT).state.meter;
+  };
+  it('inside fullM a pellet weighs exactly what it did (close-range kills unchanged)', () => {
+    expect(at(3)).toBe(WOUND_PROFILES.pellet.radius * T.meterRadiusWeight);
+    expect(at(5)).toBe(WOUND_PROFILES.pellet.radius * T.meterRadiusWeight);
+    expect(at(3, TERATOMA_PROFILE.toughness)).toBe(WOUND_PROFILES.pellet.radius * T.meterRadiusWeight / 4.5);
+  });
+  it('past farM it weighs minFactor, with the toughness divisor on top', () => {
+    expect(at(25)).toBeCloseTo(WOUND_PROFILES.pellet.radius * 0.3, 12);
+    expect(at(25, TERATOMA_PROFILE.toughness)).toBeCloseTo(WOUND_PROFILES.pellet.radius * 0.3 / 4.5, 12);
+  });
+  it('a junk meterScale counts as 1', () => {
+    expect(woundMeterScale({})).toBe(1);
+    expect(woundMeterScale({ meterScale: NaN })).toBe(1);
+    expect(woundMeterScale({ meterScale: -1 })).toBe(1);
+    expect(woundMeterScale({ meterScale: 0 })).toBe(0);
   });
 });

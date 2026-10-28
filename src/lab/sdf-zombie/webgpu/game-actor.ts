@@ -60,6 +60,7 @@ import { rotateYaw } from '../gait';
 import { BRAIN_TUNING, type BrainPlayer } from '../brain';
 import { makeZombieMind, type EnemyMind } from './enemy-mind';
 import { mergeMaxRadiusFor, scaleGunCrater, type GoreTuning } from '../gore-tuning';
+import { pelletFalloffAt, pelletFalloffWound } from '../pellet-falloff';
 import { isGoreBody, isSoldierFamily, wantsTorsoGuards, type MotionProfile } from '../motion-profile';
 import { BARREL_REST, INDEX_REST, barrelsDriven, stepBarrelIndex, stepBarrelSpin, type BarrelIndex, type BarrelSpin } from '../barrel-spin';
 import { lightsModeFor, statusLights, type StatusLights } from '../status-lights';
@@ -1936,6 +1937,8 @@ export function createZombieActor(opts: {
     // and the blood below keep the world hit.
     const u = unwarpHit(posed, hitWorld);
     const wound = scaleGunCrater(woundFromPellet(posed.prims, u.hit, bodyYaw, u.field), opts.profile?.gore);
+    // RANGE FALLOFF (pellet-falloff.ts): the player's pellets weigh less, bite smaller and sever less past fullM.
+    pelletFalloffWound(wound, pelletFalloffAt(shot?.weapon === 'shotgun' ? shot.origin : undefined, hitWorld));
     wound.shot = shot;
     gunWetLip(wound, 'pellet');
     headLip(wound);

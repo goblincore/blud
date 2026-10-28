@@ -21,9 +21,19 @@ import { predictSlugHitNow } from './game-hit-trace';
 import { spawnSlug } from './game-weapon';
 import type { Vec3 } from '../types';
 import { gunWetLipOn, setGunWetLip } from '../torn-lips';
+import { pelletFalloff, pelletFalloffFromParams, resetPelletFalloff, setPelletFalloff, type PelletFalloffTuning } from '../pellet-falloff';
 
 export function createWeaponAimSeams(ctx: GameContext) {
+  // The pellet range falloff's URL params (`pelletFalloff=0`, `pelletFull`, `pelletFar`, `pelletMin`), read once at boot.
+  if (typeof location !== 'undefined') setPelletFalloff(pelletFalloffFromParams(new URLSearchParams(location.search)));
   return {
+    /** PELLET RANGE FALLOFF (pellet-falloff.ts): merge a partial tuning ({ on, fullM, farM, minFactor, craterMin,
+     *  severMin }) and return the live one; `'reset'` restores the defaults; `{ at: m }` adds the factor at that range. */
+    pelletFalloff: (p: (Partial<PelletFalloffTuning> & { at?: number }) | 'reset' = {}) => {
+      const t = p === 'reset' ? resetPelletFalloff() : setPelletFalloff(p);
+      const at = p === 'reset' ? undefined : p.at;
+      return at !== undefined ? { ...t, at, factor: pelletFalloff(at) } : t;
+    },
     // ---------------------------------------------------------------
     // GRAPESHOT — the weapon surface. fire(1|2) bypasses pointer lock so
     // the headless driver can shoot; aim with setPose(yaw, pitch).

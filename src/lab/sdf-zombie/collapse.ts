@@ -110,6 +110,13 @@ export function toughnessFor(t: CollapseToughness | null | undefined, kind: keyo
   return k !== undefined && Number.isFinite(k) && k > 0 ? k : 1;
 }
 
+/** A wound's own meter weight (Wound.meterScale: a far pellet's range falloff, pellet-falloff.ts): unset, negative or
+ *  non-finite = 1. */
+export function woundMeterScale(w: Pick<Wound, 'meterScale'>): number {
+  const k = w.meterScale;
+  return k !== undefined && Number.isFinite(k) && k >= 0 ? k : 1;
+}
+
 /** Currently missing limbs — from the body's cluster alive flags. */
 export interface MissingLimbs {
   legL: boolean;
@@ -191,7 +198,7 @@ export function stepCollapse(state: CollapseState, sig: CollapseSignal, dt: numb
 
   let meter = clamp01(state.meter);
   const tough = sig.toughness;
-  for (const w of sig.wounds) meter = clamp01(meter + WOUND_PROFILES[w.type].radius * T.meterRadiusWeight / toughnessFor(tough, w.type));
+  for (const w of sig.wounds) meter = clamp01(meter + WOUND_PROFILES[w.type].radius * T.meterRadiusWeight * woundMeterScale(w) / toughnessFor(tough, w.type));
   for (const limb of sig.severed) meter = clamp01(meter + T.severedLimbWeight / toughnessFor(tough, 'sever'));
 
   let { phase, fallAge } = state;
