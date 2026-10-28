@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/webgpu/door-leaf-geometry.ts
 //
 // THE DOOR LEAVES' MESH DATA (game-doors.ts draws them): a split door (sector-doors.ts) has two leaves,
-// slabs that fill the doorway between its faces (inset LEAF_INSET_M from each face plane, so they
+// slabs that fill the doorway between its faces (inset LEAF_INSET_M from each face plane, or more when recessed, so they
 // never fight the room walls the faces continue) from the sector floor to just under the lintel. Shut
 // they meet on the centre; open each has slid width / 2 into its jamb. The shader moves them: every
 // vertex carries `slide`, its leaf's full travel (metres, along a -> b), scaled by the door's open
@@ -39,12 +39,13 @@ export interface LeafMeshData {
 
 type V3 = [number, number, number];
 
-/** Side `side`'s mesh data for door `def` standing on `floor`. */
-export function doorLeafMesh(def: SectorDoorDef, side: 0 | 1, floor: number, faceSigns: readonly [number, number]): LeafMeshData {
+/** Side `side`'s mesh data for door `def` standing on `floor`, each leaf face `inset` inside its face plane
+ *  (LEAF_INSET_M flush; the recess cue sets more, door-frame-geometry.ts leafInset). */
+export function doorLeafMesh(def: SectorDoorDef, side: 0 | 1, floor: number, faceSigns: readonly [number, number], inset = LEAF_INSET_M): LeafMeshData {
   const W = def.width;
   const tx = (def.b[0] - def.a[0]) / W, tz = (def.b[1] - def.a[1]) / W;
   const nx = -tz, nz = tx;                                   // left of a -> b
-  const halfD = Math.max(0.01, def.depth / 2 - LEAF_INSET_M);
+  const halfD = Math.max(0.01, def.depth / 2 - inset);
   const y0 = floor, y1 = floor + def.height - LEAF_TOP_GAP_M;
   const out: LeafMeshData = { position: [], normal: [], uv: [], mottleUv: [], slide: [], count: 0 };
   const at = (u: number, w: number, y: number): V3 => [def.a[0] + tx * u * W + nx * w, y, def.a[1] + tz * u * W + nz * w];

@@ -57,7 +57,7 @@ Each line is the first sentence of the module's header comment.
 | [Deferred renderer (paused)](#deferred-renderer-paused) | 6 | Opt-in deferred path; paused by the owner, not pursued. |
 | [Post-processing](#post-processing) | 14 | AA, glow, VHS, shutter blur, fisheye. |
 | [Bench, demo and telemetry](#bench-demo-and-telemetry) | 8 | Benchmarks, demo record/replay, frame hashes, GPU timing. |
-| [SDF march renderer](#sdf-march-renderer) | 54 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
+| [SDF march renderer](#sdf-march-renderer) | 55 | The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulation. |
 | [Character authoring](#character-authoring) | 39 | The `.blob` language, body building, validation, silhouette fitting. |
 | [Rig, pose and motion](#rig-pose-and-motion) | 26 | Rigs, poses, IK, gait, motion profiles, hands. |
 | [Damage, wounds and heads](#damage-wounds-and-heads) | 24 | Wound fields, severing, head damage and the head split, death states, melting, burning. |
@@ -648,6 +648,7 @@ The SDF layer, hulls and shells, tile culling, surface nets, temporal accumulati
 - `webgpu/cloth-proxy.ts` — THE RASTERISED CLOTH PROXY (SDF-cloth cost spike, option 1, 2026-10-26; docs/dev-notes/2026-10-26-sdf-cloth-cost/).
 - `webgpu/curl-volume-node.ts` — THE SHARED CURL VOLUME, TSL SIDE (extracted from flame-cards.ts for the explosion-curl task).
 - `webgpu/curl-volume.ts` — CURL-NOISE VOLUME (flame-polish plan task 2, 2026-09-18): a small seeded 64^3 RGBA8 3D texture whose RGB is a divergence-free vector field and whose…
+- `webgpu/door-frame-geometry.ts` — DOOR READABILITY CUES (owner playtest 2026-10-28: the shut doors "sometimes just look like wall panels" under fog and the flashlight).
 - `webgpu/door-leaf-geometry.ts` — THE DOOR LEAVES' MESH DATA (game-doors.ts draws them): a split door (sector-doors.ts) has two leaves, slabs that fill the doorway between its faces…
 - `webgpu/emergence-camera.ts` — THE EMERGENCE'S CAMERAS IN THE FLAT, and the view the player takes over at the end (plan 2026-10-16-emergence-in-the-flat Task 7; spec…
 - `webgpu/emergence-expressions.ts` — THE GOBLIN'S FACE through the emergence (spec docs/superpowers/specs/2026-10-16-emergence-in-the-flat-design.md): which of the goblin's expression…
