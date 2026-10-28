@@ -96,6 +96,20 @@ export const COLLAPSE_TUNING = {
   splay: 1.6,
 } as const;
 
+/** PER-CHARACTER TOUGHNESS (owner 2026-10-27, on the teratoma: "too easy to kill — they should be beefier and take
+ *  more hits"). A DIVISOR on what each kind of hit adds to the meter: 2 means twice the hits to reach the threshold.
+ *  `pellet` is a shotgun pellet's wound, `blast` a slug's wound (it stamps the blast profile) and every direct meter
+ *  credit (an explosion that does not gib, a melee head hit), `burn` a burn, `sever` a limb shot off. Absent (or a
+ *  kind absent) = 1, the shared rule exactly. The meter, the threshold and the gib rule (explosion-aoe.ts, damage vs
+ *  GIB_THRESHOLD, which never reads the meter) are untouched, so a tough body still gibs to a close blast. */
+export type CollapseToughness = Partial<Record<Wound['type'] | 'sever', number>>;
+
+/** The divisor for one kind of hit: the profile's, else 1. A non-positive or non-finite value is ignored (1). */
+export function toughnessFor(t: CollapseToughness | null | undefined, kind: keyof CollapseToughness): number {
+  const k = t?.[kind];
+  return k !== undefined && Number.isFinite(k) && k > 0 ? k : 1;
+}
+
 /** Currently missing limbs — from the body's cluster alive flags. */
 export interface MissingLimbs {
   legL: boolean;
@@ -139,6 +153,8 @@ export interface CollapseSignal {
   /** The body's rope set (collapseRopes output), echoed in the step while
    *  collapsed so the wiring can feed it to stepRig/relaxRopeConstraints. */
   ropes: readonly RopeLimit[];
+  /** The body's toughness (MotionProfile.toughness): divides each wound's and sever's meter gain. Absent = 1. */
+  toughness?: CollapseToughness;
 }
 
 /** One collapse step — the mode + data the wiring turns into a physical fall. */
@@ -174,8 +190,9 @@ export function stepCollapse(state: CollapseState, sig: CollapseSignal, dt: numb
   const T = COLLAPSE_TUNING;
 
   let meter = clamp01(state.meter);
-  for (const w of sig.wounds) meter = clamp01(meter + WOUND_PROFILES[w.type].radius * T.meterRadiusWeight);
-  for (const limb of sig.severed) meter = clamp01(meter + T.severedLimbWeight);
+  const tough = sig.toughness;
+  for (const w of sig.wounds) meter = clamp01(meter + WOUND_PROFILES[w.type].radius * T.meterRadiusWeight / toughnessFor(tough, w.type));
+  for (const limb of sig.severed) meter = clamp01(meter + T.severedLimbWeight / toughnessFor(tough, 'sever'));
 
   let { phase, fallAge } = state;
 

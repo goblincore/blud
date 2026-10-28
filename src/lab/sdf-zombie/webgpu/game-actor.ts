@@ -28,7 +28,7 @@ import {
   type RuptureFrame, type RupturePlan, type TearState, type TearTuning,
 } from '../gib-tear';
 import { constrainRigBends, stepRig } from '../rig';
-import { relaxRopeConstraints } from '../collapse';
+import { relaxRopeConstraints, toughnessFor } from '../collapse';
 import { addSpin, deathThrowVelocities, launchPoints, planDeath, type DeathPlan } from '../soft-death';
 import { applyDeathState, hasDeathState } from '../death-state';
 import { inflateHead, SWELL_SEC } from '../head-pop';
@@ -59,7 +59,7 @@ import { makeRng, headingDir, type Rng, type WanderBounds } from '../wander';
 import { rotateYaw } from '../gait';
 import { BRAIN_TUNING, type BrainPlayer } from '../brain';
 import { makeZombieMind, type EnemyMind } from './enemy-mind';
-import { scaleGunCrater, type GoreTuning } from '../gore-tuning';
+import { mergeMaxRadiusFor, scaleGunCrater, type GoreTuning } from '../gore-tuning';
 import { isGoreBody, isSoldierFamily, wantsTorsoGuards, type MotionProfile } from '../motion-profile';
 import { BARREL_REST, INDEX_REST, barrelsDriven, stepBarrelIndex, stepBarrelSpin, type BarrelIndex, type BarrelSpin } from '../barrel-spin';
 import { lightsModeFor, statusLights, type StatusLights } from '../status-lights';
@@ -890,6 +890,7 @@ export function createZombieActor(opts: {
    *  One implementation, whoever owns it: the drift this refactor exists to
    *  kill came from two hand-written copies of the same sequence. */
   const woundRing = opts.character?.wounds ?? createWoundRing();
+  woundRing.setMergeMaxRadius(mergeMaxRadiusFor(opts.profile?.gore));
   // Visual slots evict at MAX_WOUNDS; injury must not heal when a crater
   // disappears. Live regional histories stop growing after severing/death.
   const soldierWounds: Wound[] = soldierDamage ? [...woundRing.all()] : [];
@@ -2034,10 +2035,12 @@ export function createZombieActor(opts: {
     if (torsoWounds) for (const w of blastWounds) torsoWounds.record(w, current);
 
     // (2) The meter, credited directly — see the doc block.
+    //     A tough body (MotionProfile.toughness) takes it at its blast divisor, as stepCollapse takes a slug's wound.
     if (meterCredit > 0 && state.collapse.phase === 'standing') {
+      const credit = meterCredit / toughnessFor(opts.profile?.toughness, 'blast');
       state = {
         ...state,
-        collapse: { ...state.collapse, meter: Math.min(1, state.collapse.meter + meterCredit) },
+        collapse: { ...state.collapse, meter: Math.min(1, state.collapse.meter + credit) },
       };
     }
 

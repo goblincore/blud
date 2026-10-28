@@ -642,6 +642,7 @@ export function stepMotion(
     forced: sig.forcedCollapse || (isSoldierFamily(profile)
       && (!sig.headAlive || sig.downed || sig.missing.legL || sig.missing.legR)),
     ropes: joints.ropes,
+    toughness: profile.toughness,
   }, dt);
   const collapsed = collapse.phase !== 'standing';
 

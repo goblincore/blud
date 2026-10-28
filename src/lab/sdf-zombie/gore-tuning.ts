@@ -16,7 +16,7 @@
 // Absent = the shared look exactly: every number below multiplies or adds nothing for a profile without `gore`.
 // Pure: no THREE, no game state; randomness comes in as a function.
 import type { DensityPack } from './blood-sim';
-import type { Wound } from './damage';
+import { MERGE, type Wound } from './damage';
 
 export type GunHitKind = 'pellet' | 'slug';
 
@@ -42,6 +42,16 @@ export function scaleGunCrater(wound: Wound, gore: GoreTuning | null | undefined
   wound.radius *= gore.craterScale;
   if (wound.carveDepth !== undefined && wound.carveDepth >= old * 0.98) wound.carveDepth = wound.radius;
   return wound;
+}
+
+/** The wound ring's overflow-merge cap for this body (damage.ts pushWound): MERGE.maxRadius scaled by craterScale, so a
+ *  body whose craters are scaled keeps the same headroom to fold old craters into bigger ones. At the shared cap a
+ *  teratoma pellet crater (0.055 x 2.2 = 0.121 m) had almost none: once the 32 slots filled (the 2nd double volley)
+ *  most overflow craters were EVICTED, and the ball's visible damage stopped growing (arena, 2026-10-27: crater area
+ *  +64% on volley 2, +3% on volley 3). */
+export function mergeMaxRadiusFor(gore: GoreTuning | null | undefined): number {
+  const k = gore?.craterScale;
+  return k !== undefined && Number.isFinite(k) && k > 0 ? MERGE.maxRadius * k : MERGE.maxRadius;
 }
 
 /** The impact gout's pack for a hit kind, or undefined (the shared gout). */

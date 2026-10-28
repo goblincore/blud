@@ -11,6 +11,7 @@ import {
   makeCollapseState,
   relaxRopeConstraints,
   stepCollapse,
+  toughnessFor,
   type CollapseSignal,
   type CollapseState,
   type CollapseStep,
@@ -26,6 +27,7 @@ import { makeChunk, stepChunk } from './gib-chunks';
 import type { RigPoint } from './rig';
 import type { LimbId } from './types';
 import { len, sub } from './vec';
+import { TERATOMA_PROFILE, ZOMBIE_PROFILE, motionProfileFor } from './motion-profile';
 
 const T = COLLAPSE_TUNING;
 const DT = 1 / 60;
@@ -425,5 +427,46 @@ describe('collapse — determinism', () => {
     const forced = stepCollapse(makeCollapseState(), sig({ forced: true }), 0);
     expect(forced.phase).toBe('falling');
     expect(forced.state.fallAge).toBe(0);
+  });
+});
+
+describe('per-character toughness (MotionProfile.toughness)', () => {
+  /** Volleys of `n` wounds of `type` until the body leaves 'standing' (Infinity past 200). */
+  function volleysToDrop(type: WoundType, n: number, toughness?: Parameters<typeof toughnessFor>[0]): number {
+    let st = makeCollapseState();
+    for (let v = 1; v <= 200; v++) {
+      st = stepCollapse(st, { ...sig({ wounds: Array.from({ length: n }, () => wound(type)) }), ...(toughness ? { toughness } : {}) }, DT).state;
+      if (st.phase !== 'standing') return v;
+    }
+    return Infinity;
+  }
+
+  it('absent toughness is the shared rule: a 20-pellet double drops a zombie, a slug wound needs 7', () => {
+    expect(volleysToDrop('pellet', 20)).toBe(1);
+    expect(volleysToDrop('pellet', 10)).toBe(2);
+    expect(volleysToDrop('blast', 1)).toBe(7);
+  });
+
+  it('the teratoma takes 4 point-blank doubles, 7 single barrels and 11 slugs', () => {
+    const t = TERATOMA_PROFILE.toughness;
+    expect(volleysToDrop('pellet', 20, t)).toBe(4);
+    expect(volleysToDrop('pellet', 10, t)).toBe(7);
+    expect(volleysToDrop('blast', 1, t)).toBe(11);
+  });
+
+  it('divides sever weight by its own kind and ignores junk divisors', () => {
+    const s = stepCollapse(makeCollapseState(), { ...sig({ severed: ['armL'] }), toughness: { sever: 3 } }, DT);
+    expect(s.state.meter).toBeCloseTo(T.severedLimbWeight / 3, 9);
+    expect(toughnessFor({ pellet: 0 }, 'pellet')).toBe(1);
+    expect(toughnessFor({ pellet: -2 }, 'pellet')).toBe(1);
+    expect(toughnessFor({ pellet: NaN }, 'pellet')).toBe(1);
+    expect(toughnessFor(undefined, 'blast')).toBe(1);
+    expect(toughnessFor({ pellet: 4 }, 'blast')).toBe(1);
+  });
+
+  it('only the teratoma opts in: every other profile keeps the shared meter', () => {
+    expect(ZOMBIE_PROFILE.toughness).toBeUndefined();
+    expect(motionProfileFor('soldier').toughness).toBeUndefined();
+    expect(motionProfileFor('teratoma').toughness).toBe(TERATOMA_PROFILE.toughness);
   });
 });

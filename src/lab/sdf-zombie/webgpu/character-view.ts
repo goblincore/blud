@@ -50,7 +50,7 @@ import { createEjectionCycle, createShotgunCasings } from './shotgun-casings';
 import { CUT } from '../cut-wound';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
 import {
-  MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundDirToWorld, woundWorldPos,
+  MAX_WOUNDS, MERGE, pushWound, WOUND_PROFILES, woundCarveNormal, woundDirToWorld, woundWorldPos,
   type Wound, type WoundType,
 } from '../damage';
 import { isSoldierFamily } from '../motion-profile';
@@ -392,11 +392,16 @@ export interface WoundRing {
   ): void;
   /** Replace the ring wholesale — the sever path rebuilds it. */
   set(wounds: Wound[]): void;
+  /** The radius past which an overflow merge evicts instead (damage.ts pushWound; MERGE.maxRadius until set). A body
+   *  whose gun craters are scaled up (MotionProfile.gore.craterScale, the teratoma) sets it scaled the same, or its
+   *  ring fills after two volleys and every further crater evicts an old one instead of deepening the damage. */
+  setMergeMaxRadius(r: number): void;
 }
 
 export function createWoundRing(): WoundRing {
   let wounds: Wound[] = [];
   let nextEventId = 1;
+  let mergeMax: number = MERGE.maxRadius;
   const stampWorld = new WeakMap<Wound, Vec3>();
   const identify = (w: Wound) => {
     if (w.eventId === undefined) w.eventId = nextEventId++;
@@ -406,15 +411,16 @@ export function createWoundRing(): WoundRing {
   return {
     all: () => wounds,
     stamp(wound, posed, bodyYaw) {
-      identify(wound); wounds = pushWound(wounds, wound, MAX_WOUNDS);
+      identify(wound); wounds = pushWound(wounds, wound, MAX_WOUNDS, mergeMax);
       stampWorld.set(wound, woundWorldPos(posed.prims, wound, bodyYaw));
       return wound;
     },
     stampBundle(ws) {
-      for (const w of ws) wounds = pushWound(wounds, identify(w), MAX_WOUNDS);
+      for (const w of ws) wounds = pushWound(wounds, identify(w), MAX_WOUNDS, mergeMax);
     },
     stampWorldOf: (w) => stampWorld.get(w) ?? null,
     set(next) { wounds = next.map(identify); },
+    setMergeMaxRadius(r) { mergeMax = Number.isFinite(r) && r > 0 ? r : MERGE.maxRadius; },
     refresh(gpu, posed, bodyYaw, visual, xf) {
       const rows = visual ?? wounds;
       if ((!visual && wounds.length === 0) || typeof gpu.setWounds !== 'function') return;

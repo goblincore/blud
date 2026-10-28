@@ -780,7 +780,7 @@ const headTagged = (x: Wound): boolean => x.headSlot !== undefined || x.headRegi
 /** The oldest wound at index `victim` folded into its nearest same-prim crater neighbour (the survivor becomes the minimal
  *  sphere enclosing both), or null when none is in reach, or the enclosing sphere would pass MERGE.maxRadius (the caller
  *  then evicts, as before: a merge never shrinks below what covers both). */
-function mergeVictim(next: Wound[], victim: number): Wound[] | null {
+function mergeVictim(next: Wound[], victim: number, maxRadius: number = MERGE.maxRadius): Wound[] | null {
   const v = next[victim]!;
   if (v.shape === 'cut' || v.decal || headTagged(v)) return null;
   let best = -1, bd = Infinity;
@@ -803,7 +803,7 @@ function mergeVictim(next: Wound[], victim: number): Wound[] | null {
     const t = (radius - ro) / bd; // bd > 0 here: bd = 0 takes the containment branch
     local = [o.local[0] + (v.local[0] - o.local[0]) * t, o.local[1] + (v.local[1] - o.local[1]) * t, o.local[2] + (v.local[2] - o.local[2]) * t];
   }
-  if (radius > MERGE.maxRadius) return null;
+  if (radius > maxRadius) return null;
   const merged: Wound = { ...o, local, radius };
   if (v.carveDepth !== undefined || o.carveDepth !== undefined) merged.carveDepth = Math.max(v.carveDepth ?? 0, o.carveDepth ?? 0);
   // A merge never raises the sever calibre: always explicit, so connectivity never falls back to the grown radius. A
@@ -821,9 +821,10 @@ function mergeVictim(next: Wound[], victim: number): Wound[] | null {
  *  one's index. Head craters keep their own MAX_HEAD_WOUNDS slots (oldest 'face' crater evicted first),
  *  and the total cap takes the oldest wound that is not a 'keep' head crater: it is MERGED into its nearest
  *  same-prim crater when one is in reach (MERGE; head-tagged wounds, cuts and decals never merge), and only
- *  evicted when none is. When that oldest wound is a CUT, the oldest crater that can merge is folded instead,
+ *  evicted when none is (`mergeMaxRadius`, default MERGE.maxRadius, caps the merged crater: a body whose gun craters
+ *  are scaled up, gore-tuning.ts craterScale, scales it with them). When that oldest wound is a CUT, the oldest crater that can merge is folded instead,
  *  and the cut is evicted only when no crater can. A merged survivor is a NEW Wound object. */
-export function pushWound(ring: Wound[], wound: Wound, cap: number): Wound[] {
+export function pushWound(ring: Wound[], wound: Wound, cap: number, mergeMaxRadius: number = MERGE.maxRadius): Wound[] {
   if (wound.headRegion !== undefined) {
     const prev = ring.findIndex(x => x.headRegion === wound.headRegion);
     if (prev >= 0) {
@@ -844,13 +845,13 @@ export function pushWound(ring: Wound[], wound: Wound, cap: number): Wound[] {
   while (out.length > cap) {
     const i = out.findIndex(x => x.headSlot !== 'keep');
     const victim = i < 0 ? 0 : i;
-    let merged = mergeVictim(out, victim);
+    let merged = mergeVictim(out, victim, mergeMaxRadius);
     // A CUT never merges, so as the victim it would simply be evicted: a rod release stamps up to 3, and ~11 sweeps fill
     // the ring. Fold the oldest crater that CAN merge first (oldest first; mergeVictim keeps its own guards: same prim, in
     // reach, never a cut, decal or head-tagged crater), so old slashes outlive craters that still have room to merge. Only
     // when nothing can merge is the oldest evicted, as before.
     if (!merged && out[victim]!.shape === 'cut') {
-      for (let j = 0; j < out.length && !merged; j++) if (j !== victim) merged = mergeVictim(out, j);
+      for (let j = 0; j < out.length && !merged; j++) if (j !== victim) merged = mergeVictim(out, j, mergeMaxRadius);
     }
     if (merged) out = merged;
     else out.splice(victim, 1);
