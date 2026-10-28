@@ -28,34 +28,54 @@
 // EMITTERS (hand-off item 2g, part A): screen banks, the viewscreen, fluorescents and exit signs add an
 // ANIMATED glow (emitter-glow.wgsl.ts on the sim clock, masked by the kind's glow map) × the kind's gain
 // seam × max(level / full, k): it follows its sector's light partly and stays lit in the dark. Their
-// walls fit whole cells (sector-materials.ts wallFit). `?emitters=0` draws the old kinds.
+// walls fit whole cells (sector-materials.ts wallFit), fluorescent ceilings whole troffers over their
+// polygon's box (flatFit). `?emitters=0` draws the old kinds.
+//
+// EMITTER BOUNCE (item 2g, part B1): every vertex also carries the emitters' baked bounce
+// (sector-emitters.ts) in two attributes split by gain class, `emitScreen` (RGB) and `emitFS`
+// (fluorescent, sign scalars of FLUORO_RGB and SIGN_RGB), added to the emissive as albedo ×
+// emitBounceGain × (emitScreen × screenGain + FLUORO_RGB × fluoro × fluoroGain + SIGN_RGB × sign × signGain).
+// Lines and walls near emitters are refined like those near pools.
 
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
 import { attribute, exp, float, fwidth, materialColor, max, min, positionWorld, texture, uniform, uniformArray, uv, vec3, vec4, wgslFn } from 'three/tsl';
 import { blankPanel, fillPanel, generatePanel, mottleTexture, panelTextures, wrapPanel, type PanelKind, type PanelMaps, type PanelTextureSet } from '../../../game/level/panel-textures';
 import { runPool, type PoolWorker } from './panel-pool';
-import { emittersOn, isStone, lineSeedTiles, sectorMaterialsOn, surfaceKind, SURFACE_LOOKS, wallFit, wallU, type SurfaceKind, type SurfaceLook } from './sector-materials';
+import { emittersOn, flatFit, isStone, lineSeedTiles, polyBox, sectorMaterialsOn, surfaceKind, SURFACE_LOOKS, wallFit, wallU, type SurfaceKind, type SurfaceLook } from './sector-materials';
+import { createEmitterBounce, emitterReach, emitterSurfaces, type EmitBake, type EmitterBounce } from './sector-emitters';
+import { FLUORO_RGB, SIGN_RGB } from '../../../game/level/emitter-layout';
 import { EM_HASH, EM_RAND, EMITTER_FN, type EmitterKind } from './emitter-glow.wgsl';
 import type { GameContext } from './game-context';
 import { createSectorFx, CEIL_WHISPER, type SectorFxRuntime } from './game-sector-light';
 import { reducedFlashes } from './lamp-moods';
 import { SKY_MATERIAL, type GlowKind, type SectorMap, type XZ } from './sector-def';
-import { createGlowBounce, glowSources, nearGlow, refineNearGlow, wallRows, wallStrip, type GlowBounce, type RGB } from './sector-bounce';
+import { BOUNCE_CUTOFF_M, createGlowBounce, glowSources, nearAny, refineFaces, refineNear, wallRows, wallStrip, type GlowBounce, type Reach, type RGB } from './sector-bounce';
 import { sectorPolygons, wallQuads } from './sector-geometry';
 import { GLOW_KIND_INDEX, SECTOR_GLOW, SECTOR_GLOW_HASH, SECTOR_GLOW_NOISE } from './sector-glow.wgsl';
 
+/** Flats get interior vertices (refineFaces) this close to an emitter's box, at most this far apart:
+ *  where the bake changes fastest (E1M1: 4855 triangles plain, ~ +40 % with these). */
+const FLAT_REFINE_REACH_M = 4;
+const FLAT_REFINE_M = 2.5;
 /** Glow floors sit this far above the sector floor, so they never z-fight a neighbour's riser edge. */
 const GLOW_LIFT_M = 0.002;
 type Role = 'floor' | 'ceil' | 'wall';
 
 const bounceScratch: RGB = [0, 0, 0];
-/** Baked bounces by position and normal: the mesh is unindexed, so a vertex recurs in every triangle round it. */
-type BounceCache = Map<string, readonly [number, number, number]>;
+const emitScratch: EmitBake = [0, 0, 0, 0, 0];
+const NO_BAKE: readonly number[] = [0, 0, 0, 0, 0, 0, 0, 0];
+/** Baked bounces by position and normal: the mesh is unindexed, so a vertex recurs in every triangle round it.
+ *  Eight floats: the pools' RGB, then the emitters' screen RGB, fluorescent, sign. */
+type BounceCache = Map<string, readonly number[]>;
+/** Bake cost, logged once per level build ([sector-bounce]). */
+const bakeStats = { ms: 0, vertices: 0 };
 
 class Batch {
   pos: number[] = []; uv: number[] = []; muv: number[] = []; nrm: number[] = []; sec: number[] = []; bnc: number[] = [];
-  constructor(private readonly bounce: GlowBounce | null, private readonly cache: BounceCache = new Map()) {}
+  esc: number[] = []; efs: number[] = [];
+  constructor(private readonly bounce: GlowBounce | null, private readonly cache: BounceCache = new Map(),
+    private readonly emit: EmitterBounce | null = null) {}
   /** One triangle of sector `sector`; flipped if its normal disagrees with `want`. Each vertex's glow
    *  bounce is baked with its ray starting inside its own sector: off a wall along the wall's normal,
    *  off a floor or ceiling toward the triangle's centre. */
@@ -69,15 +89,22 @@ class Batch {
     for (const i of order) {
       const q = p[i]!;
       this.pos.push(...q); this.uv.push(...uv[i]!); this.muv.push(...muv[i]!); this.nrm.push(...want); this.sec.push(sector);
-      if (this.bounce) {
+      let g = NO_BAKE;
+      if (this.bounce || this.emit) {
         const key = `${q[0]},${q[1]},${q[2]},${want[0]},${want[1]},${want[2]}`;
-        let g = this.cache.get(key);
-        if (!g) {
-          const r = this.bounce.at([q[0]!, q[1]!, q[2]!], want, wall ? [want[0], want[2]] : [cx - q[0]!, cz - q[2]!], bounceScratch);
-          this.cache.set(key, (g = [r[0], r[1], r[2]]));
+        const hit = this.cache.get(key);
+        if (hit) g = hit;
+        else {
+          const t0 = performance.now();
+          const p3: [number, number, number] = [q[0]!, q[1]!, q[2]!];
+          const into: XZ = wall ? [want[0], want[2]] : [cx - q[0]!, cz - q[2]!];
+          const r = this.bounce ? this.bounce.at(p3, want, into, bounceScratch) : [0, 0, 0];
+          const e = this.emit ? this.emit.at(p3, want, into, emitScratch) : emitScratch.fill(0);
+          this.cache.set(key, (g = [r[0]!, r[1]!, r[2]!, e[0], e[1], e[2], e[3], e[4]]));
+          bakeStats.ms += performance.now() - t0; bakeStats.vertices++;
         }
-        this.bnc.push(g[0], g[1], g[2]);
-      } else this.bnc.push(0, 0, 0);
+      }
+      this.bnc.push(g[0]!, g[1]!, g[2]!); this.esc.push(g[3]!, g[4]!, g[5]!); this.efs.push(g[6]!, g[7]!);
     }
   }
   geometry(): THREE.BufferGeometry {
@@ -89,6 +116,8 @@ class Batch {
     g.setAttribute('mottleUv', new THREE.Float32BufferAttribute(this.muv, 2));
     g.setAttribute('sectorIndex', new THREE.Float32BufferAttribute(this.sec, 1));
     g.setAttribute('glowBounce', new THREE.Float32BufferAttribute(this.bnc, 3));
+    g.setAttribute('emitScreen', new THREE.Float32BufferAttribute(this.esc, 3));
+    g.setAttribute('emitFS', new THREE.Float32BufferAttribute(this.efs, 2));
     g.computeBoundingSphere();
     return g;
   }
@@ -222,6 +251,12 @@ function sectorMaterial(src: SurfaceSource, color: readonly [number, number, num
   const base = ceil ? vec3(...color).mul(fx.ceilWhisper) : vec3(0);
   // The pools' baked bounce (sector-bounce.ts), scaled with the pools' own brightness (glowGain).
   const bounce = attribute('glowBounce', 'vec3').mul(fx.bounceGain.mul(fx.glowGain));
+  // The emitters' baked bounce (sector-emitters.ts) under their own gain seams and emitBounceGain.
+  const fs = attribute('emitFS', 'vec2');
+  const emitBounce = attribute('emitScreen', 'vec3').mul(fx.emitGains.screenGain)
+    .add(vec3(...FLUORO_RGB).mul(fs.x.mul(fx.emitGains.fluoroGain)))
+    .add(vec3(...SIGN_RGB).mul(fs.y.mul(fx.emitGains.signGain)))
+    .mul(fx.emitBounceGain);
   let albedo = materialColor.rgb;
   if (src.roughness) {
     // GRIME (panel kinds only): a large mottle breaks the 4 m repeat in albedo and roughness, and walls
@@ -237,7 +272,7 @@ function sectorMaterial(src: SurfaceSource, color: readonly [number, number, num
     nm.colorNode = vec4(albedo, 1);
     nm.roughnessNode = texture(src.roughness).r.mul(src.look.roughness).mul(m.mul(GRIME.roughHi - GRIME.roughLo).add(GRIME.roughLo)).clamp(0.04, 1);
   }
-  const lit = albedo.mul(vec3(lvl).add(bounce)).add(base);
+  const lit = albedo.mul(vec3(lvl).add(bounce).add(emitBounce)).add(base);
   if (src.emit && src.glowMap && src.look.emit) {
     // An emitter: the animated glow (sim clock, per-sector seed, calm under ?flashes=reduced), its gain
     // seam, and max(level / full, k) so it stays lit in a dark sector and dims with a flickering one.
@@ -266,15 +301,24 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
   // The bounce rays test the real lines; the mesh uses the refined copy (same sectors, more vertices).
   const sources = glowSources(map);
   const bounce = sources.length > 0 ? createGlowBounce(map, sources) : null;
-  const meshMap = refineNearGlow(map, sources);
-  const cache: BounceCache = new Map();
   const matsOn = sectorMaterialsOn(search);
   const emitOn = emittersOn(search);
+  // The emitters as light sources (none with ?emitters=0 or ?sectormat=0: the old kinds do not glow).
+  const tEmit = performance.now();
+  const emitSurfs = emitterSurfaces(map, emitOn && matsOn);
+  const emitBounce = emitSurfs.length > 0 ? createEmitterBounce(emitSurfs) : null;
+  const emitSurfMs = performance.now() - tEmit;
+  const emitReach = emitterReach(emitSurfs);
+  const flatReach = emitReach.map(r => ({ ...r, reach: FLAT_REFINE_REACH_M }));
+  const reach: Reach[] = [...sources.map(s => ({ min: s.min, max: s.max, reach: BOUNCE_CUTOFF_M })), ...emitReach];
+  const meshMap = refineNear(map, reach);
+  const cache: BounceCache = new Map();
+  bakeStats.ms = 0; bakeStats.vertices = 0;
   const batches = new Map<string, Batch>();
   const batch = (zone: number, role: Role, kind: SurfaceKind) => {
     const key = `${zone}:${role}:${kind}`;
     let b = batches.get(key);
-    if (!b) batches.set(key, (b = new Batch(bounce, cache)));
+    if (!b) batches.set(key, (b = new Batch(bounce, cache, emitBounce)));
     return b;
   };
   const glowBatches = new Map<GlowKind, Batch>();
@@ -288,19 +332,26 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
     const s = map.sectors[poly.sector]!;
     const contour = poly.outer.map(([x, z]) => new THREE.Vector2(x, z));
     const holes = poly.holes.map(h => h.map(([x, z]) => new THREE.Vector2(x, z)));
-    const pts: XZ[] = [...poly.outer, ...poly.holes.flat()];
-    const faces = THREE.ShapeUtils.triangulateShape(contour, holes);
+    // Near an emitter the flat's triangles get interior vertices (refineFaces), so the floor in front of
+    // a screen wall can catch its bake (a vertex at the wall's foot lies in its plane and catches none).
+    const flat = refineFaces([...poly.outer, ...poly.holes.flat()], THREE.ShapeUtils.triangulateShape(contour, holes),
+      FLAT_REFINE_M, (x, z) => nearAny(flatReach, x, z));
+    const pts = flat.pts, faces = flat.faces;
     const faces3: [Role, number, [number, number, number]][] = [['floor', s.floor, [0, 1, 0]], ['ceil', s.ceil, [0, -1, 0]]];
     for (const [role, y0, want] of faces3) {
       if (role === 'ceil' && s.materials.ceil === SKY_MATERIAL) continue;
       const glow = role === 'floor' && s.glow !== null;
       const kind = surfaceKind(role === 'floor' ? s.materials.floor : s.materials.ceil, role, matsOn, emitOn);
-      const tile = SURFACE_LOOKS[kind].tileM;
+      const look = SURFACE_LOOKS[kind];
+      const tile = look.tileM;
       const b = glow ? glowBatch(s.glow!) : batch(s.zone, role, kind);
       const y = glow ? y0 + GLOW_LIFT_M : y0;
+      // A fitted flat (a fluorescent ceiling): whole troffers over the polygon's box; the grime keeps world uv.
+      const box = look.fit && role === 'ceil' ? polyBox(poly.outer) : null;
+      const fuv = (i: number): number[] => box ? flatFit(look.fit!, pts[i]![0], pts[i]![1], box) : [pts[i]![0] / tile, pts[i]![1] / tile];
       for (const f of faces) {
         const p = f.map(i => [pts[i]![0], y, pts[i]![1]]);
-        b.tri(p, f.map(i => [pts[i]![0] / tile, pts[i]![1] / tile]), want, poly.sector);
+        b.tri(p, f.map(fuv), want, poly.sector, false, f.map(i => [pts[i]![0] / tile, pts[i]![1] / tile]));
       }
     }
   }
@@ -320,7 +371,7 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
     const [m0, m1] = wallU('techPanel', q.a, q.along, dx, dz, len, tile);   // the world-projected u, for the mottle
     const b = batch(zone, 'wall', kind);
     // Each vertical edge is cut by its own end (nearGlow), so walls meeting at a corner cut it alike.
-    const cuts = (p: XZ) => (bounce && nearGlow(sources, p[0], p[1]) ? wallRows(q.y0, q.y1) : [q.y0, q.y1]);
+    const cuts = (p: XZ) => (nearAny(reach, p[0], p[1]) ? wallRows(q.y0, q.y1) : [q.y0, q.y1]);
     const cols = [cuts(q.a), cuts(q.b)] as const;
     const ends = [q.a, q.b] as const, us = [u0, u1] as const, ms = [m0, m1] as const;
     const wuv = (side: number, y: number): number[] => fit
@@ -372,6 +423,10 @@ export function addSectorMeshes(ctx: GameContext, map: SectorMap): number {
   }
 
   flushPanelJobs();
+  let tris = 0;
+  for (const b of batches.values()) tris += b.pos.length / 9;
+  console.info(`[sector-bounce] ${emitSurfs.length} emitter surfaces (${emitSurfs.reduce((n, e) => n + e.patches.length, 0)} patches, ${emitSurfMs.toFixed(0)} ms), `
+    + `${bakeStats.vertices} vertices baked in ${bakeStats.ms.toFixed(0)} ms, ${tris} triangles, ${meshMap.lines.length} lines (map ${map.lines.length})`);
 
   if (glowBatches.size > 0) {
     // WGSL has no nested fn: the noise helpers ride along as includes (game-void.ts's pattern).

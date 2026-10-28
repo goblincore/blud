@@ -13,7 +13,7 @@ import { roomIdAt } from './game-level-rooms';
 import { CHUNK_OBJECT_LIGHT, type ChunkObjectLight } from './baked-chunks';
 import { forEachDrawnChunkMesh, type ChunkMeshSource } from './game-chunk-bake';
 import type { GameContext } from './game-context';
-import { setSectorLightConfig, type SectorLightPatch } from './game-sector-light';
+import { setEmitterLightGain, setSectorLightConfig, type SectorLightPatch } from './game-sector-light';
 import { sectorInteriorPoint } from './sector-geometry';
 import * as THREE from 'three/webgpu';
 import { ATTACK_TUNING, type SwingVariant } from '../attack';
@@ -684,8 +684,28 @@ export function createWorldSeams(ctx: GameContext) {
       geometry: ctx.world.level.def?.sectors ? 'sectors' : 'rooms',
     }),
     /** Sector light (spec 2026-10-24 §7): read or patch the curve, the on/off toggle, the pool glowGain and the glow bounceGain. */
-    sectorLight: (patch?: SectorLightPatch) =>
-      ctx.world.sectorFx ? setSectorLightConfig(ctx.world.sectorFx, patch ?? {}) : null,
+    sectorLight: (patch?: SectorLightPatch & { emitLightGain?: number }) =>
+      ctx.world.sectorFx ? { ...setSectorLightConfig(ctx.world.sectorFx, patch ?? {}),
+        emitLightGain: setEmitterLightGain(ctx.world.light?.lamps ?? [], patch?.emitLightGain, new URLSearchParams(location.search)) } : null,
+    /** The sector meshes' baked bounces (item 2g B1): triangles, and per attribute the max and the mean
+     *  over vertices (glowBounce RGB; emitScreen RGB; emitFS fluoro, sign). */
+    sectorBake: () => {
+      const acc: Record<string, { max: number[]; sum: number[] }> = {};
+      let tris = 0, verts = 0;
+      for (const o of ctx.world.levelGroup.children) {
+        const g = (o as { geometry?: { attributes: Record<string, { array: ArrayLike<number>; itemSize: number }> } }).geometry;
+        if (!o.name.startsWith('sector-') || !g) continue;
+        const n = g.attributes.position!.array.length / 3;
+        tris += n / 3; verts += n;
+        for (const k of ['glowBounce', 'emitScreen', 'emitFS']) {
+          const a = g.attributes[k];
+          if (!a) continue;
+          const e = (acc[k] ??= { max: new Array(a.itemSize).fill(0), sum: new Array(a.itemSize).fill(0) });
+          for (let i = 0; i < a.array.length; i++) { const c = i % a.itemSize; e.max[c] = Math.max(e.max[c]!, a.array[i]!); e.sum[c]! += a.array[i]!; }
+        }
+      }
+      return { tris, verts, ...Object.fromEntries(Object.entries(acc).map(([k, e]) => [k, { max: e.max, mean: e.sum.map(s => s / Math.max(1, verts)) }])) };
+    },
     /** The sector level's level-group meshes by name (sector-<role>[-<kind>]-zone-<n>), or [] on a room level. */
     sectorMeshes: () => ctx.world.levelGroup.children.filter(o => o.name.startsWith('sector-')).map(o => o.name),
     /** A point well inside the first hurt sector (gates): [x, floorY, z] and the sector, or null. */

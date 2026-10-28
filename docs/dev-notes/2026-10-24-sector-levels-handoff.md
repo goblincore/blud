@@ -99,6 +99,34 @@ Experiment: rebuild Doom E1M1's layout from `doomu.wad` in our look and play it.
    plus real coloured converter lights for the strongest emitters (screen banks, fluorescent ceilings over
    alcoves) so bodies are lit; (3) tuning sheet (computer room, alcove, fluorescent corridor), brightness
    seams. Limit: lights still don't cross zones (cross-zone lights follow-up).
+   **Part B1 done 2026-10-27 (the emitters light the room).** Colour is one source now: the shader's per-panel
+   colours (amber/green screens, LED hues, planets, troffer tint, sign red) live in `emitter-layout.ts` and are
+   interpolated into the WGSL, with CPU means (`screenCellMean`, `viewscreenMean`, `fluoroCellMean`, `signMean`;
+   mask covers pinned against the generated masks by `emitter-masks.test.ts`). `sector-emitters.ts`
+   `emitterSurfaces(map)` lists every emitter wall quad / fluorescent ceiling (area, normal, kind, sector, seed,
+   mean colour × the floor-limited sector factor, ≤ 2 m patches); `createEmitterBounce` bakes a disc-like area
+   light per patch (A·cosθe·facing / (πd² + A), 8 m cutoff, 2.5D line of sight, art weights screens 4× / signs 2×)
+   into two vertex attributes per gain class (`emitScreen` RGB × screenGain; `emitFS` fluoro / sign scalars ×
+   fluoroGain / signGain), all × `emitBounceGain` (default 30; `?emitbounce=`, `__sdfGame.sectorLight({ emitBounceGain })`).
+   Lines and walls near emitters are refined like pools'; flats near them get interior vertices (`refineFaces`,
+   longest-edge bisection, boundary never split: a floor vertex at a wall's foot lies in its plane and catches
+   nothing). E1M1: 4855 → 18367 triangles, bake 36–90 ms (load-dependent), 262 patches on 55 surfaces; no new
+   draw calls (same meshes). The converter places cheap coloured lights (`mood: "glow"`, a new steady cheap-tier
+   mood) for the strongest emitters: teal-green before screen banks, dim blue at the viewscreens, cold white under
+   fluorescent ceilings, a small red at the exit sign; ≤ 12, ≤ 4 per zone, in the zone of the sector they stand in
+   (E1M1: 12, list 25 of 32). `?emitlights=0`, `?emitlightgain=`, `sectorLight({ emitLightGain })`. Also: LED blinks
+   freeze under `?flashes=reduced`, the glow clock wraps at 3600 s (f32), fluorescent ceilings fit whole troffers
+   over their polygon's box (a slanted edge still cuts cells), LITEBLU* is a light panel.
+   Sheet: `LAB_TMP=.lab-tmp bash scripts/sdf-game-doom-emitlight.sh` + `python3 scripts/sdf-game-doom-emitlight-sheet.py`
+   → `.lab-tmp/doom/emitters-light-sheet.png` (B1 off / ½ / default / 2×, torch on and off). Honest read: walls next
+   to the banks go green (computer room wall over the banks, torch off: 8.6/10.2/7.6 → 17.3/21.8/14.9 RGB, G/R 1.19 →
+   1.26), but the room's floors turn COLD (fluorescent ceilings and the teal light: floor under the south screens
+   B/R 1.09 → 1.30), so the computer room reads lit, more by its troffers than its screens. Bodies take an emitter
+   light as their key when it is nearest (the old presenting-lamp path ignores power): the alcove flayers shift a
+   little cold (B/R 0.87 → 0.90) and read ~14 % DARKER (the key now comes from the troffer light overhead). The exit
+   sign's red barely shows (G/R 1.15 → 1.11 on the passage wall): its strips outshine it. Limits: lights don't cross
+   zones; a sector's flicker / strobe does not move the baked bounce.
+   **Part B2 (next):** light shafts and dust motes under the fluorescents / in front of the screens.
 3. **Plan 3a** — enemies on sector floors (motion `floorY`), navigation over sectors, sight and shots vs
    sector walls, pickups, exit as a walk-in trigger (E is slug mode; no use key yet).
    **Done 2026-10-25** ([notes](2026-10-24-sector-levels-3a/NOTES.md)): 29 enemies on their floors, sector
@@ -121,7 +149,7 @@ Experiment: rebuild Doom E1M1's layout from `doomu.wad` in our look and play it.
   gitignored: `python3 scripts/levels/doom_map.py "$HOME/MIYOO BACKUP/Roms/PORTS/Games/Doom (PrBoom)/doom/doomu.wad" E1M1 --svg .lab-tmp/doom`.
 - Gate: `LAB_TMP=.lab-tmp SHOTS=1 bash scripts/sdf-game-doom-gate.sh` (`DOOM_GATE_ONLY_FIXTURE=1` for the
   committed fixture only). Frame budget fails randomly under high machine load (other sessions).
-- Tuning seams: `__sdfGame.sectorLight({ max, gamma, on, glowGain, bounceGain })` (`?bouncegain=`), `hazardPoint()`, `health()`, `ground(x, z)`.
+- Tuning seams: `__sdfGame.sectorLight({ max, gamma, on, glowGain, bounceGain, screenGain, fluoroGain, signGain, emitBounceGain, emitLightGain })` (`?bouncegain=`, `?emitbounce=`, `?emitlightgain=`, `?emitlights=0`), `sectorBake()`, `hazardPoint()`, `health()`, `ground(x, z)`.
 
 ## Working method used
 Subagent per task; one reviewer per task doing spec compliance then code quality; fixes back to the

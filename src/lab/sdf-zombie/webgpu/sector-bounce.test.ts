@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  BOUNCE_CUTOFF_M, bounceFalloff, createGlowBounce, glowSources, nearestOnPool, nearGlow, REFINE_MAX_M, refineNearGlow, wallRows, wallStrip,
+  BOUNCE_CUTOFF_M, bounceFalloff, createGlowBounce, glowSources, nearestOnPool, nearGlow, REFINE_MAX_M, refineFaces, refineNearGlow, wallRows, wallStrip,
 } from './sector-bounce';
 import type { SectorDef, SectorMap } from './sector-def';
 import { loopArea, sectorPolygons, wallQuads } from './sector-geometry';
@@ -197,5 +197,40 @@ describe('occlusion by lips, closed doors, soffits and tall risers', () => {
     const m = twoRooms();
     const deep: SectorMap = { ...m, sectors: [sector(2.5, 6), sector(-0.5, 6, 'nukage'), sector(2.5, 6)] };
     expect(createGlowBounce(deep).at([0, 2.6, 5], [1, 0, 0], [1, 0])).toEqual([0, 0, 0]);
+  });
+});
+
+describe('refineFaces (flats near emitters, item 2g B1)', () => {
+  const pts: [number, number][] = [[0, 0], [10, 0], [10, 10], [0, 10]];
+  const faces = [[0, 1, 2], [0, 2, 3]];
+  const edgeLens = (p: readonly (readonly number[])[], f: readonly (readonly number[])[]) => {
+    const owners = new Map<string, number>();
+    for (const t of f) for (let e = 0; e < 3; e++) { const a = t[e]!, b = t[(e + 1) % 3]!; const k = a < b ? `${a},${b}` : `${b},${a}`; owners.set(k, (owners.get(k) ?? 0) + 1); }
+    return [...owners].map(([k, n]) => { const [a, b] = k.split(',').map(Number); return { n, len: Math.hypot(p[a!]![0]! - p[b!]![0]!, p[a!]![1]! - p[b!]![1]!) }; });
+  };
+  const area = (p: readonly (readonly number[])[], f: readonly (readonly number[])[]) =>
+    f.reduce((s, [a, b, c]) => s + Math.abs((p[b!]![0]! - p[a!]![0]!) * (p[c!]![1]! - p[a!]![1]!) - (p[c!]![0]! - p[a!]![0]!) * (p[b!]![1]! - p[a!]![1]!)) / 2, 0);
+  it('with a cut boundary (refineNear\'s pieces) every edge ends up at most maxLen; area kept; no T-junctions', () => {
+    // The square's sides already in 2 m pieces, as refineNear leaves lines near an emitter.
+    const ring: [number, number][] = [];
+    for (let i = 0; i < 5; i++) ring.push([i * 2, 0]);
+    for (let i = 0; i < 5; i++) ring.push([10, i * 2]);
+    for (let i = 0; i < 5; i++) ring.push([10 - i * 2, 10]);
+    for (let i = 0; i < 5; i++) ring.push([0, 10 - i * 2]);
+    const fan = ring.slice(1, -1).map((_, i) => [0, i + 1, i + 2]);
+    const r = refineFaces(ring, fan, 2.5, () => true);
+    expect(r.faces.length).toBeGreaterThan(fan.length);
+    expect(area(r.pts, r.faces)).toBeCloseTo(100, 6);
+    for (const e of edgeLens(r.pts, r.faces)) { expect(e.n).toBeLessThanOrEqual(2); expect(e.len).toBeLessThanOrEqual(2.5 + 1e-9); }
+    expect(edgeLens(r.pts, r.faces).filter(e => e.n === 1)).toHaveLength(20);   // the boundary pieces, unsplit
+  });
+  it('terminates on a long boundary edge (that triangle just stops)', () => {
+    const r = refineFaces(pts, faces, 3, () => true);
+    expect(area(r.pts, r.faces)).toBeCloseTo(100, 6);
+    expect(edgeLens(r.pts, r.faces).filter(e => e.n === 1).map(e => e.len).sort()).toEqual([10, 10, 10, 10]);
+  });
+  it('leaves triangles far from emitters alone', () => {
+    const r = refineFaces(pts, faces, 3, () => false);
+    expect(r.faces).toEqual(faces);
   });
 });

@@ -336,3 +336,41 @@ def test_a_barrel_outside_every_sector_counts_in_no_sector(tmp_path):
 def test_a_wad_with_no_barrels_has_no_barrels_key(tmp_path):
     out, stats = convert_row(tmp_path, (0, 128, "FLOOR4_8", "CEIL3_5", 160, 0), 0, 0)
     assert "barrels" not in out and stats["barrels"] == 0
+
+
+def test_liteblu_is_a_light_panel_not_a_troffer():
+    from doom_tables import material_for_texture
+    assert material_for_texture("LITEBLU1") == "light-panel" and material_for_texture("LITEBLU4") == "light-panel"
+    assert material_for_texture("LITE3") == "fluorescent"
+
+
+def _convert_bytes(tmp_path, data: bytes) -> dict:
+    wad = tmp_path / "x.wad"
+    wad.write_bytes(data)
+    return doom_map.convert(wad, "E1M1", units_per_m=32)[0]
+
+
+def test_no_emitters_no_emitter_lights(tmp_path):
+    assert not [li for li in convert(tmp_path)["lights"] if li.get("mood") == "glow"]
+
+
+def test_screen_bank_walls_get_a_cheap_teal_light_in_front_of_them(tmp_path):
+    out = _convert_bytes(tmp_path, build_wad().replace(name8("STARTAN3"), name8("COMPUTE2")))
+    glow = [li for li in out["lights"] if li.get("mood") == "glow"]
+    assert len(glow) == 1
+    li = glow[0]
+    assert li["color"] == doom_map.EMITTER_LIGHTS["screen-bank"]["color"] and li["fixture"] == "none"
+    assert _inside(out, li["pos"][0], li["pos"][2], 0)
+    a = out["sectors"][0]
+    assert a["floor"] + 0.5 <= li["pos"][1] <= a["floor"] + doom_map.EMITTER_LIGHT_MAX_Y_M
+    assert li["power"] <= doom_map.EMITTER_LIGHTS["screen-bank"]["cap"]
+
+
+def test_a_fluorescent_ceiling_gets_a_cold_light_under_it(tmp_path):
+    out = _convert_bytes(tmp_path, build_wad().replace(name8("CEIL3_5"), name8("TLITE6_5")))
+    glow = [li for li in out["lights"] if li.get("mood") == "glow"]
+    assert len(glow) == 1
+    li = glow[0]
+    assert li["color"] == doom_map.EMITTER_LIGHTS["fluorescent"]["color"]
+    assert li["pos"][1] == round(out["sectors"][0]["ceil"] - doom_map.CEIL_DROP_M, 3)
+    assert _inside(out, li["pos"][0], li["pos"][2], 0)

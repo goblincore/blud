@@ -72,7 +72,11 @@ export interface GlowSource {
 
 export const OCC_STRIDE = 7;
 
-const boxNear = (min: XZ, max: XZ, a: XZ, b: XZ, r: number): boolean =>
+/** An x/z box and how far past it a source reaches (pools BOUNCE_CUTOFF_M, emitters sector-emitters.ts
+ *  EMIT_CUTOFF_M): what refineNear splits lines and nearAny cuts walls in height for. */
+export interface Reach { min: XZ; max: XZ; reach: number }
+
+export const boxNear = (min: XZ, max: XZ, a: XZ, b: XZ, r: number): boolean =>
   Math.max(a[0], b[0]) >= min[0] - r && Math.min(a[0], b[0]) <= max[0] + r
   && Math.max(a[1], b[1]) >= min[1] - r && Math.min(a[1], b[1]) <= max[1] + r;
 
@@ -207,13 +211,18 @@ export function createGlowBounce(map: SectorMap, sources: readonly GlowSource[] 
  *  original line, so the sectors on both sides share them. For meshing only: the ground and the
  *  collision keep the original map. */
 export function refineNearGlow(map: SectorMap, sources: readonly GlowSource[] = glowSources(map), maxLen = REFINE_MAX_M): SectorMap {
-  if (sources.length === 0) return map;
+  return refineNear(map, sources.map(s => ({ min: s.min, max: s.max, reach: BOUNCE_CUTOFF_M })), maxLen);
+}
+
+/** refineNearGlow for any sources: lines within `reach` of a box are split into pieces of at most `maxLen`. */
+export function refineNear(map: SectorMap, boxes: readonly Reach[], maxLen = REFINE_MAX_M): SectorMap {
+  if (boxes.length === 0) return map;
   const vertices: XZ[] = [...map.vertices];
   const lines: SectorLine[] = [];
   for (const l of map.lines) {
     const a = map.vertices[l.v[0]]!, b = map.vertices[l.v[1]]!;
     const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    const near = sources.some(s => boxNear(s.min, s.max, a, b, BOUNCE_CUTOFF_M));
+    const near = boxes.some(s => boxNear(s.min, s.max, a, b, s.reach));
     const n = near ? Math.ceil(len / maxLen - 1e-9) : 1;
     if (n <= 1) { lines.push(l); continue; }
     let prev = l.v[0];
@@ -238,11 +247,30 @@ export function wallRows(y0: number, y1: number, step = WALL_ROW_M): number[] {
 
 /** Is (x, z) within the cutoff of any pool's box? (Where walls get cut in height.) */
 export function nearGlow(sources: readonly GlowSource[], x: number, z: number): boolean {
-  for (const s of sources) {
+  return nearAny(sources.map(s => ({ min: s.min, max: s.max, reach: BOUNCE_CUTOFF_M })), x, z);
+}
+/** Is (x, z) within the reach of any box? */
+export function nearAny(boxes: readonly Reach[], x: number, z: number): boolean {
+  for (const s of boxes) {
     const dx = Math.max(s.min[0] - x, 0, x - s.max[0]), dz = Math.max(s.min[1] - z, 0, z - s.max[1]);
-    if (dx * dx + dz * dz < BOUNCE_CUTOFF_M * BOUNCE_CUTOFF_M) return true;
+    if (dx * dx + dz * dz < s.reach * s.reach) return true;
   }
   return false;
+}
+
+/** The lines within `reach` of a box that can block light, packed OCC_STRIDE floats each for rayClear
+ *  (as glowSources packs them, without a pool's own-rim allowance): a one-sided wall is solid, a
+ *  two-sided line open between its higher floor and its lower ceiling. */
+export function occludersNear(map: SectorMap, min: XZ, max: XZ, reach: number): Float64Array {
+  const occ: number[] = [];
+  for (const l of map.lines) {
+    if (l.front === l.back) continue;
+    const a = map.vertices[l.v[0]]!, b = map.vertices[l.v[1]]!;
+    if (!boxNear(min, max, a, b, reach)) continue;
+    const f = map.sectors[l.front]!, k = l.back >= 0 ? map.sectors[l.back]! : null;
+    occ.push(a[0], a[1], b[0] - a[0], b[1] - a[1], k ? Math.max(f.floor, k.floor) - 1e-3 : 0, k ? Math.min(f.ceil, k.ceil) + 1e-3 : 0, k ? 0 : 1);
+  }
+  return Float64Array.from(occ);
 }
 
 /** A wall quad's triangles when its two vertical edges are cut at different heights (`left` at its
@@ -259,4 +287,52 @@ export function wallStrip(left: readonly number[], right: readonly number[]): [n
     else { out.push([[0, i], [1, j], [1, j + 1]]); j++; }
   }
   return out;
+}
+
+/** Longest-edge bisection of a polygon's triangles (indices into `pts`) whose centre `near` accepts:
+ *  each pass splits every such triangle's longest edge at its midpoint, when it is longer than
+ *  `maxLen` and INTERIOR (shared by two triangles), in both triangles (conforming: no T-junctions).
+ *  Boundary edges are never split (the walls meet them; refineNear already cut them near emitters),
+ *  so a triangle whose longest edge is the boundary stops there. A flat gets interior vertices for a
+ *  bake to vary across. Returns new points and faces. */
+export function refineFaces(pts0: readonly XZ[], faces0: readonly (readonly number[])[], maxLen: number,
+  near: (x: number, z: number) => boolean, maxPasses = 12): { pts: XZ[]; faces: [number, number, number][] } {
+  const pts: XZ[] = [...pts0];
+  let faces: [number, number, number][] = faces0.map(f => [f[0]!, f[1]!, f[2]!]);
+  const key = (a: number, b: number) => (a < b ? a * 1048576 + b : b * 1048576 + a);
+  const len2 = (a: number, b: number) => { const p = pts[a]!, q = pts[b]!; return (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2; };
+  for (let pass = 0; pass < maxPasses; pass++) {
+    const owners = new Map<number, number>();
+    for (const f of faces) for (let e = 0; e < 3; e++) { const k = key(f[e]!, f[(e + 1) % 3]!); owners.set(k, (owners.get(k) ?? 0) + 1); }
+    const mid = new Map<number, number>();
+    for (const f of faces) {
+      const cx = (pts[f[0]]![0] + pts[f[1]]![0] + pts[f[2]]![0]) / 3, cz = (pts[f[0]]![1] + pts[f[1]]![1] + pts[f[2]]![1]) / 3;
+      if (!near(cx, cz)) continue;
+      // Longest-edge bisection: split the triangle's longest edge, and only when it is interior (a
+      // triangle whose longest edge is the boundary stays: splitting its others never shortens that).
+      let best = 0;
+      for (let e = 1; e < 3; e++) if (len2(f[e]!, f[(e + 1) % 3]!) > len2(f[best]!, f[(best + 1) % 3]!)) best = e;
+      if (len2(f[best]!, f[(best + 1) % 3]!) <= maxLen * maxLen || owners.get(key(f[best]!, f[(best + 1) % 3]!)) !== 2) continue;
+      const a = f[best]!, b = f[(best + 1) % 3]!, k = key(a, b);
+      if (!mid.has(k)) { pts.push([(pts[a]![0] + pts[b]![0]) / 2, (pts[a]![1] + pts[b]![1]) / 2]); mid.set(k, pts.length - 1); }
+    }
+    if (mid.size === 0) break;
+    const next: [number, number, number][] = [];
+    for (const f of faces) {
+      const m = [0, 1, 2].map(e => mid.get(key(f[e]!, f[(e + 1) % 3]!)) ?? -1);
+      const n = m.filter(v => v >= 0).length;
+      if (n === 0) { next.push(f); continue; }
+      // Rotate so the split edges come first: edge 0 (a, b) split; with two, edges 0 and 1.
+      let r = 0;
+      if (n === 1) r = m.findIndex(v => v >= 0);
+      else if (n === 2) r = m[0]! >= 0 && m[1]! >= 0 ? 0 : m[1]! >= 0 && m[2]! >= 0 ? 1 : 2;
+      const [a, b, c] = [f[r]!, f[(r + 1) % 3]!, f[(r + 2) % 3]!];
+      const [m0, m1, m2] = [m[r]!, m[(r + 1) % 3]!, m[(r + 2) % 3]!];
+      if (n === 1) next.push([a, m0, c], [m0, b, c]);
+      else if (n === 2) next.push([m0, b, m1], [a, m0, m1], [a, m1, c]);
+      else next.push([a, m0, m2], [m0, b, m1], [m2, m1, c], [m0, m1, m2]);
+    }
+    faces = next;
+  }
+  return { pts, faces };
 }

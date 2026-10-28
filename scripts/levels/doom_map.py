@@ -29,7 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import doom_overrides  # noqa: E402
 from doom_tables import (  # noqa: E402
-    DOOR_SPECIALS, EXIT_SPECIALS, FLOOR_LOWER_SPECIALS, GLOW_MATERIALS, MULTIPLAYER_ONLY, REMOTE_DOOR_SPECIALS,
+    DOOR_SPECIALS, EMITTER_FAMILIES, EXIT_SPECIALS, FLOOR_LOWER_SPECIALS, GLOW_MATERIALS, MULTIPLAYER_ONLY, REMOTE_DOOR_SPECIALS,
     SKILL_BITS, THING_BARRELS, THING_PICKUPS, THING_SPAWNS, ZOMBIEMAN, ZOMBIEMAN_VARIANTS,
     material_for_flat, material_for_texture, sector_special,
 )
@@ -45,6 +45,26 @@ MAX_LIGHTS = 10
 MAX_POOL_LIGHTS = 8             # pool lights do not count toward MAX_LIGHTS
 POOL_MIN_M2 = 4.0
 POOL_COLOURS = {"nukage": [0.35, 1.0, 0.3], "lava": [1.0, 0.45, 0.12], "acid": [0.75, 1.0, 0.25]}
+# Emitter lights (hand-off item 2g, part B1): the strongest self-lit surfaces get a real coloured light
+# in the zone of the sector they face into, so bodies are lit by them. Cheap tier (mood "glow",
+# level-tier.ts isLevelCheap): the list node shades it for the level, ~free next to a full-tier light.
+# Per family: colour, power = min(cap, base + per_m2 * area), the smallest area that earns one, how far
+# out from the wall it stands (a ceiling's hangs CEIL_DROP_M under it), and a ranking weight.
+# The colours follow emitter-layout.ts: screens 60 % green / 40 % amber, lit as a teal-green (the amber
+# share would make it yellow-green; teal reads as screens on a body),
+# the viewscreen's dark glass a dim blue, troffers FLUORO_RGB, signs SIGN_RGB.
+EMITTER_LIGHTS = {
+    "screen-bank": {"color": [0.35, 1.0, 0.5], "base": 3.0, "per_m2": 0.06, "cap": 10.0, "min_m2": 6.0, "out_m": 1.0, "weight": 1.0},
+    "viewscreen": {"color": [0.35, 0.55, 1.0], "base": 1.0, "per_m2": 0.03, "cap": 4.0, "min_m2": 16.0, "out_m": 1.2, "weight": 0.5},
+    "fluorescent": {"color": [0.8, 0.9, 1.0], "base": 2.5, "per_m2": 0.15, "cap": 8.0, "min_m2": 6.0, "out_m": 0.8, "weight": 1.0},
+    "exit-sign": {"color": [1.0, 0.12, 0.06], "base": 1.5, "per_m2": 0.0, "cap": 1.5, "min_m2": 0.5, "out_m": 0.5, "weight": 30.0},
+}
+MAX_EMITTER_LIGHTS = 12          # not counted toward MAX_LIGHTS (the shared list holds 32, light-list.ts LIST_CAP)
+MAX_EMITTER_LIGHTS_PER_ZONE = 4  # a zone's cheap list loops over at most 8 (level-tier.ts LEVEL_PICKS), pools included
+EMITTER_LIGHT_SPACING_M = 6.0    # two lights of one family stand at least this far apart
+EMITTER_LIGHT_MIN_GAP_M = 2.5    # and any two emitter lights this far (the alcove's screens and strips: one light)
+CEIL_DROP_M = 0.35
+EMITTER_LIGHT_MAX_Y_M = 2.4
 EXIT_DEPTH_M = 0.8               # the exit trigger reaches this far in front of the switch line
 EXIT_HEIGHT_M = 2.0
 
@@ -440,6 +460,9 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = 32, skill: int =
                            "mood": "fire", "fixture": "none"})
             break
     pool_lights = sum(1 for li in lights if li.get("mood") == "fire")
+    verts_m = [[X(x), Z(y)] for x, y in verts]
+    emitter_lights = _emitter_lights(out_sectors, out_lines, verts_m, sector_segs, bbox, area)
+    lights.extend(emitter_lights)
 
     # Things: monsters, pickups and barrels at their sector's floor; ids from the THINGS index, so stable.
     skill_bit = SKILL_BITS[skill]
@@ -481,7 +504,6 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = 32, skill: int =
     override_spawns = []
     if overrides is not None:
         used = {s["id"] for s in spawns} | {p["id"] for p in pickups} | {b["id"] for b in barrels}
-        verts_m = [[X(x), Z(y)] for x, y in verts]
         override_spawns = doom_overrides.apply_spawns(overrides, spawns, used, verts_m, out_lines, out_sectors, sector_segs)
 
     # The exit: walking into the switch ends the level. A box on the line's front side (left of
@@ -523,10 +545,111 @@ def convert(wad_path: Path, map_name: str, units_per_m: float = 32, skill: int =
         return out
 
     stats = {"dropped_zero_length_lines": dropped, "doors_opened": sorted(doors), "floors_lowered": sorted(lowered), "pool_lights": pool_lights,
+             "emitter_lights": len(emitter_lights),
              "spawns_by_kind": count(spawns, "kind"), "pickups_by_item": count(pickups, "item"), "skipped_types": skipped, "barrels": len(barrels),
              "in_no_sector": in_no_sector, "not_this_skill": not_this_skill, "multiplayer_only": multiplayer_only,
              "override_sectors": sector_patches, "override_spawns": override_spawns}
     return level, stats
+
+
+def _emitter_walls(out_sectors, out_lines, verts_m):
+    """Every emitter wall quad as (family, sector, a, b, y0, y1), a -> b with the sector on the left: the
+    Python copy of sector-geometry.ts wallQuads' parts and families (a part's own family, else the sector's
+    materials.wall). Keep the two in step."""
+    out = []
+    for ln in out_lines:
+        va, vb = verts_m[ln["v"][0]], verts_m[ln["v"][1]]
+        walls = ln.get("walls", {})
+
+        def push(y0, y1, sec, part):
+            if y1 - y0 < 1e-4:
+                return
+            front = sec == ln["front"]
+            fam = walls.get("front" if front else "back", {}).get(part, out_sectors[sec]["materials"]["wall"])
+            if fam in EMITTER_FAMILIES:
+                out.append((fam, sec, va if front else vb, vb if front else va, y0, y1))
+        f = out_sectors[ln["front"]]
+        back = ln.get("back", -1)
+        if back < 0:
+            push(f["floor"], f["ceil"], ln["front"], "mid")
+            continue
+        if back == ln["front"]:
+            continue
+        k = out_sectors[back]
+        if f["floor"] != k["floor"]:
+            push(min(f["floor"], k["floor"]), max(f["floor"], k["floor"]), ln["front"] if f["floor"] < k["floor"] else back, "lower")
+        if f["ceil"] != k["ceil"] and not (f["materials"]["ceil"] == "sky" and k["materials"]["ceil"] == "sky"):
+            push(min(f["ceil"], k["ceil"]), max(f["ceil"], k["ceil"]), ln["front"] if f["ceil"] > k["ceil"] else back, "upper")
+    return out
+
+
+def _emitter_lights(out_sectors, out_lines, verts_m, sector_segs, bbox, area) -> list[dict]:
+    """Cheap coloured lights for the strongest emitter surfaces (EMITTER_LIGHTS): one candidate per
+    (sector, family) of wall quads, standing out_m in front of their area-weighted middle at their mean
+    height, and one per fluorescent ceiling, CEIL_DROP_M under it; ranked by area x weight, at most
+    MAX_EMITTER_LIGHTS, MAX_EMITTER_LIGHTS_PER_ZONE per zone, EMITTER_LIGHT_SPACING_M apart per family."""
+    groups: dict[tuple[int, str], list] = {}
+    for fam, sec, a, b, y0, y1 in _emitter_walls(out_sectors, out_lines, verts_m):
+        groups.setdefault((sec, fam), []).append((a, b, y0, y1))
+    cands = []
+    for (sec, fam), quads in groups.items():
+        spec = EMITTER_LIGHTS[fam]
+        tot = cx = cz = cy = nx = nz = 0.0
+        for a, b, y0, y1 in quads:
+            dx, dz = b[0] - a[0], b[1] - a[1]
+            ln = math.hypot(dx, dz)
+            w = ln * (y1 - y0)
+            tot += w
+            cx += w * (a[0] + b[0]) / 2
+            cz += w * (a[1] + b[1]) / 2
+            cy += w * (y0 + y1) / 2
+            nx += w * -dz / ln
+            nz += w * dx / ln
+        if tot < spec["min_m2"]:
+            continue
+        cx, cz, cy = cx / tot, cz / tot, cy / tot
+        nl = math.hypot(nx, nz)
+        s = out_sectors[sec]
+        pt = None
+        # Out from the walls along their mean normal (none for a room lined with them: the middle itself).
+        for k in ((1.0, 0.6, 0.3, 0.0) if nl > 1e-6 else (0.0,)):
+            px = cx + (nx / nl * spec["out_m"] * k if nl > 1e-6 else 0.0)
+            pz = cz + (nz / nl * spec["out_m"] * k if nl > 1e-6 else 0.0)
+            if _inside(px, pz, sector_segs[sec]):
+                pt = (px, pz)
+                break
+        if pt is None:
+            pt = _fill_point(sector_segs[sec], bbox[sec]) if area[sec] > 0 else None
+        if pt is None:
+            continue
+        # At the surfaces' mean height, but no higher than EMITTER_LIGHT_MAX_Y_M over the floor: the light is for bodies.
+        y = min(s["ceil"] - 0.3, s["floor"] + EMITTER_LIGHT_MAX_Y_M, max(s["floor"] + 0.5, cy))
+        cands.append((tot * spec["weight"], sec, fam, tot, (pt[0], y, pt[1])))
+    for sec, s in enumerate(out_sectors):
+        if s["materials"]["ceil"] != "fluorescent" or area[sec] < EMITTER_LIGHTS["fluorescent"]["min_m2"]:
+            continue
+        pt = _fill_point(sector_segs[sec], bbox[sec])
+        if pt is None:
+            continue
+        cands.append((area[sec] * EMITTER_LIGHTS["fluorescent"]["weight"], sec, "fluorescent", area[sec], (pt[0], s["ceil"] - CEIL_DROP_M, pt[1])))
+    cands.sort(key=lambda c: (-c[0], c[1], c[2]))
+    picked: list[dict] = []
+    per_zone: dict[int, int] = {}
+    placed: list[tuple[str, tuple]] = []
+    for _, sec, fam, tot, pos in cands:
+        if len(picked) >= MAX_EMITTER_LIGHTS:
+            break
+        zone = out_sectors[sec]["zone"]
+        if per_zone.get(zone, 0) >= MAX_EMITTER_LIGHTS_PER_ZONE:
+            continue
+        if any(math.hypot(p[0] - pos[0], p[2] - pos[2]) < (EMITTER_LIGHT_SPACING_M if f == fam else EMITTER_LIGHT_MIN_GAP_M) for f, p in placed):
+            continue
+        spec = EMITTER_LIGHTS[fam]
+        picked.append({"pos": [round(pos[0], 3), round(pos[1], 3), round(pos[2], 3)], "color": list(spec["color"]),
+                       "power": round(min(spec["cap"], spec["base"] + spec["per_m2"] * tot), 2), "mood": "glow", "fixture": "none"})
+        per_zone[zone] = per_zone.get(zone, 0) + 1
+        placed.append((fam, pos))
+    return picked
 
 
 def _line_walls(ln, sides, out_sectors) -> dict:
@@ -606,7 +729,7 @@ def main() -> None:
     path.write_text(json.dumps(level, indent=1))
     zones = len({s["zone"] for s in level["sectors"]})
     doors = sum(1 for ln in level["lines"] if "door" in ln)
-    print(f"{path}: {len(level['sectors'])} sectors, {len(level['lines'])} lines, {zones} zones, {doors} door lines, {len(level['lights'])} lights ({stats['pool_lights']} pool)"
+    print(f"{path}: {len(level['sectors'])} sectors, {len(level['lines'])} lines, {zones} zones, {doors} door lines, {len(level['lights'])} lights ({stats['pool_lights']} pool, {stats['emitter_lights']} emitter)"
           + (f", dropped {dropped} zero-length lines" if dropped else ""))
     print(f"things: spawns {stats['spawns_by_kind']}, pickups {stats['pickups_by_item']}, {stats['barrels']} barrels, {len(level['triggers'])} exit triggers"
           + (f" {[[t['min'], t['max']] for t in level['triggers']]}" if level["triggers"] else "")

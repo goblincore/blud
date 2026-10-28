@@ -105,6 +105,7 @@ import { wanderBounds, type RoomDef } from './game-level';
 import { ENGINE_CAPABILITIES, authoredLevel, missingCapabilities, ringLevel, sectorActiveLevel } from './active-level';
 import { parseLevel } from './sector-json';
 import { addSectorMeshes } from './game-sector-mesh';
+import { emitterAccent } from './game-sector-light';
 import { standingFloor } from './level-ground';
 import { levelCeilingM, roomIdAt as levelRoomIdAt, roomSpawnPoints } from './game-level-rooms';
 import { chunkListGainNow, chunkPickBody } from './chunk-light-pick';
@@ -873,7 +874,10 @@ async function main() {
   }
   ctx.lighting.flickerLights = [];
   for (const r of ctx.world.level.rooms) {
-    for (const a of r.accents) {
+    for (const a0 of r.accents) {
+      // Emitter-surface lights (glow mood, item 2g B1): ?emitlights=0 drops them, ?emitlightgain= scales them.
+      const a = emitterAccent(a0, location.search);
+      if (!a) continue;
       const pl = new THREE.PointLight(
         new THREE.Color(a.color[0], a.color[1], a.color[2]), a.power);
       pl.position.set(a.pos[0], a.pos[1], a.pos[2]);
