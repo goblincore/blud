@@ -12,7 +12,7 @@
 //   * ADRENALINE (adrenaline.ts), the automatic rush: its trigger, and the screen-edge distortion that shows the
 //     state (post-aa.ts setAdrenalineEdge -> post-adrenaline-edge.wgsl.ts), following the eased rush level.
 import { goreBoostAt, pickWakes, type WakeSource } from '../bullet-time';
-import { ADRENALINE, adrenalineEdgeAt, triggerAdrenaline } from '../adrenaline';
+import { ADRENALINE, adrenalineBorderAt, adrenalineDrive, adrenalineEdgeAt, triggerAdrenaline } from '../adrenaline';
 import { reducedFlashes } from './lamp-moods';
 import { simTimeMs } from './sim-clock';
 import { type GameContext } from './game-context';
@@ -31,7 +31,11 @@ const CALM = typeof location !== 'undefined' && reducedFlashes(new URLSearchPara
 
 export function stepBulletTimeFx(ctx: GameContext): void {
   // The ripple drifts on the SIM clock (slowed with the world it belongs to; a frozen capture holds it).
-  ctx.render.postAa?.setAdrenalineEdge(adrenalineEdgeAt(ctx.player.adrenaline.level), simTimeMs() / 1000, !CALM);
+  // Low health (adrenaline.ts danger) strengthens it and grows the red border in (its pulse held still under CALM).
+  const adr = ctx.player.adrenaline, drive = adrenalineDrive(adr);
+  ctx.render.postAa?.setAdrenalineEdge(adrenalineEdgeAt(drive, ADRENALINE, adr.danger), simTimeMs() / 1000, !CALM);
+  const border = adrenalineBorderAt(drive, adr.danger, adr.pulse, CALM);
+  ctx.render.postAa?.setAdrenalineBorder(border.strength, border.width);
   stepWakeAndVignette(ctx);
 }
 

@@ -58,7 +58,7 @@ import { CHAMBER_DEPTH_M, LOAD_STAGE_GAP_M, RECOIL, RELOAD, SHELL_LEN_M, ejected
 import { stepVoid } from './game-void';
 import { stepBulletTimeFx, triggerAdrenalineRush } from './game-bullet-time';
 import { airScaleAt, scalesAt, stepBulletTime } from '../bullet-time';
-import { adrenalineScalesAt, combineScales, stepAdrenaline } from '../adrenaline';
+import { ADRENALINE, adrenalineDrive, adrenalineScalesAt, combineScales, stepAdrenaline } from '../adrenaline';
 import { carryFreshShots, expired, segmentBoxHit, segmentPointDistance, stepProjectiles, traceProjectile } from './game-weapon';
 import { aimArms, aimFrustum, boreFrameInRig, breechInRig, hideTracer, newTracerView, placeTracer, stepWeaponSlots } from './game-weapon-rig';
 import { woundStreamId } from './game-wound-streams';
@@ -139,9 +139,11 @@ export function tick(ctx: GameContext, dt: number) {
   const rdt = dt;
   // ADRENALINE (adrenaline.ts): the automatic rush a player hit on an enemy sets off (triggered below, in the pellet
   // loop, and by a flail strike). Stepped on the same real dt; per channel the slower of it and bullet time wins.
-  stepAdrenaline(ctx.player.adrenaline, rdt, ctx.player.bulletTime.on);
+  // Low health deepens it (adrenaline.ts lowHealthDanger: 35 HP normal .. 20 HP world 0.2), slewed on the same dt.
+  const adr = ctx.player.adrenaline;
+  stepAdrenaline(adr, rdt, ctx.player.bulletTime.on, ADRENALINE, ctx.world.loop?.vitals.health ?? Infinity);
   const btScales = combineScales(stepBulletTime(ctx.player.bulletTime, rdt),
-    scalesAt(ctx.player.bulletTime.intensity), adrenalineScalesAt(ctx.player.adrenaline.level));
+    scalesAt(ctx.player.bulletTime.intensity), adrenalineScalesAt(adrenalineDrive(adr), ADRENALINE, adr.danger));
   dt *= btScales.world;
   const moveDt = rdt * btScales.move;
   const aimDt = rdt * btScales.aim;

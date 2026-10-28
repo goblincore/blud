@@ -290,6 +290,15 @@ export function createLoopSeams(ctx: GameContext) {
       damagePlayer(ctx, amount, kind);
       return ctx.world.loop ? { ...ctx.world.loop.vitals } : null;
     },
+    /** Set the player's health outright (clamped to 1..maxHealth, alive; works under god mode): probes of
+     *  health-dependent tuning such as adrenaline.ts's low-health deepening. Returns the vitals, null before the loop. */
+    setHealth: (hp: number) => {
+      const rt = ctx.world.loop;
+      if (!rt || !Number.isFinite(hp)) return null;
+      rt.vitals = { ...rt.vitals, health: Math.max(1, Math.min(VITALS.maxHealth, Math.round(hp))), dead: false };
+      updateStatus(ctx);
+      return { ...rt.vitals };
+    },
     inventory: () => {
       const inv = ctx.world.loop?.inventory;
       return inv ? { ...inv, weapons: [...inv.weapons], cds: [...inv.cds], shells: ctx.weapon.shells } : null;

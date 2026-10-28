@@ -6,9 +6,10 @@
 // darkening / desaturation — all on an EDGE MASK that is exactly 0 over the middle of the screen, so the
 // crosshair and whatever it sits on stay clean.
 //
-// a = (amount, time, ripple, 0): amount is adrenaline.ts adrenalineEdgeAt (edgeFx x the eased rush level); time is
-// seconds for the ripple's drift; ripple is 1, or 0 under ?flashes=reduced (the warp stays, static, no motion).
-// amount 0 returns everything untouched — the blit's all-off path is the shipped one.
+// a = (amount, time, ripple, 0): amount is adrenaline.ts adrenalineEdgeAt (edgeFx x the eased rush level, stronger
+// at low health); time is seconds for the ripple's drift; ripple is 1, or 0 under ?flashes=reduced (the warp stays,
+// static, no motion). amount 0 returns everything untouched — the blit's all-off path is the shipped one. The
+// low-health RED BORDER layered over it is post-adrenaline-border.wgsl.ts.
 
 /** Edge mask: 0 inside this fraction of the centre-to-corner distance, rising to 1 at the corners. */
 export const ADRENALINE_EDGE_INNER = 0.38;

@@ -96,6 +96,7 @@ import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, texture3D, storage, uv, vec2, vec4, uniform } from 'three/tsl';
 import { FLASH_GRADE_WGSL } from './post-flash-grade.wgsl';
 import { ADRENALINE_EDGE_WGSL } from './post-adrenaline-edge.wgsl';
+import { ADRENALINE_BORDER_WGSL } from './post-adrenaline-border.wgsl';
 import { CONTRAST_DEFAULT, CONTRAST_PIVOT_DEFAULT, CONTRAST_WGSL } from './post-contrast.wgsl';
 import { layerOn } from './light-layers';
 import { computeRenderSize, canvasCssSize } from './lab-renderer';
@@ -623,6 +624,9 @@ export interface PostAa {
   /** The ADRENALINE screen-edge distortion at the final blit (post-adrenaline-edge.wgsl.ts): `amount` 0 off .. 1,
    *  `timeSec` drifts its ripple, `ripple` false (?flashes=reduced) keeps the warp static. */
   setAdrenalineEdge(amount: number, timeSec: number, ripple: boolean): void;
+  /** The low-health RED BORDER over it (post-adrenaline-border.wgsl.ts; adrenaline.ts adrenalineBorderAt):
+   *  `strength` 0 off .. 1 at the edge, `width` how far in it fades (fraction of screen height). */
+  setAdrenalineBorder(strength: number, width: number): void;
   /** The lightning grade at the final blit: flash (the strike), grade (with its afterglow), punch, crush. */
   setFlashGrade(flash: number, grade: number, punch: number, crush: number): void;
   /** The final S-curve (post-contrast.wgsl.ts): strength 0 off .. 1, and optionally its display-space pivot. Returns k. */
@@ -1392,7 +1396,11 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   }) as unknown as Swizzled;
   // The lightning grade (post-flash-grade.wgsl.ts): (flash, grade, punch, crush); 0,0 is inert.
   const uFlashGrade = uniform(new THREE.Vector4(0, 0, 0, 0));
-  const flashGraded = wgslFn(FLASH_GRADE_WGSL)({ c: blitOut.xyz as never, g: uFlashGrade }) as unknown as Swizzled;
+  // The low-health RED BORDER (post-adrenaline-border.wgsl.ts): (strength, width, aspect, 0), layered over the
+  // adrenaline edge distortion; strength 0 is inert.
+  const uAdrenalineBorder = uniform(new THREE.Vector4(0, 0, 1, 0));
+  const bordered = wgslFn(ADRENALINE_BORDER_WGSL)({ c: blitOut.xyz as never, uv: uv(), b: uAdrenalineBorder }) as unknown as Swizzled;
+  const flashGraded = wgslFn(FLASH_GRADE_WGSL)({ c: bordered.xyz as never, g: uFlashGrade }) as unknown as Swizzled;
   // The final S-curve (post-contrast.wgsl.ts), after the lightning grade; 0 is inert.
   const uContrast = uniform(layerOn('sCurve') ? CONTRAST_DEFAULT : 0);   // LIGHT LAYERS 'final S-curve'
   const uContrastPivot = uniform(CONTRAST_PIVOT_DEFAULT);
@@ -1925,6 +1933,11 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     },
     setAdrenalineEdge(amount: number, timeSec: number, ripple: boolean) {
       uAdrenalineEdge.value.set(Number.isFinite(amount) ? Math.min(1, Math.max(0, amount)) : 0, timeSec % 1000, ripple ? 1 : 0, 0);
+    },
+    setAdrenalineBorder(strength: number, width: number) {
+      const u = (x: number) => (Number.isFinite(x) ? Math.min(1, Math.max(0, x)) : 0);
+      const d = uBlitDst.value;
+      uAdrenalineBorder.value.set(u(strength), u(width), d.x / Math.max(1, d.y), 0);
     },
     setSscsFrame(camera: THREE.PerspectiveCamera, lightPos: THREE.Vector3) {
       _sscsView.copy(camera.matrixWorld).invert();

@@ -14,7 +14,10 @@ import { hashFrame } from './demo-hash';
 import { setPassLabelObserver } from './gpu-pass-timing';
 import { sectorOcclusion } from './actor-sight';
 import { applyBulletTimeTuning } from '../bullet-time';
-import { adrenalineEdgeAt, adrenalinePhase, adrenalineScalesAt, applyAdrenalineTuning } from '../adrenaline';
+import {
+  adrenalineBorderAt, adrenalineDrive, adrenalineEdgeAt, adrenalinePhase, adrenalineScalesAt, applyAdrenalineTuning,
+  lowHealthDanger,
+} from '../adrenaline';
 import type { SectorGround } from './sector-ground';
 import { type GameDeferredRendererDiagnostics, type GameSurfaceHash } from './game-deferred-renderer';
 
@@ -343,14 +346,24 @@ export function createBootSeams(ctx: GameContext) {
      *  (phase, level, sinceHit, triggers), this tick's scales and edge FX amount, and the live tuning. Pass a partial
      *  to retune it, validated as bulletTime's (`reset: true` restores the defaults):
      *    __sdfGame.adrenaline({ worldScale: 0.45, sustainSec: 10 })   __sdfGame.adrenaline({ on: false })
-     *  Knobs: on flail (true/false) worldScale playerScale shotScale rampInSec sustainSec rampOutSec edgeFx.
-     *  URL: ?adrenaline=0 ?adr_flail=0 ?adr_world= ?adr_player= ?adr_shot= ?adr_in= ?adr_sustain= ?adr_out= ?adr_fx=. */
+     *  Knobs: on flail lowHealthAlways (true/false) worldScale playerScale shotScale rampInSec sustainSec rampOutSec
+     *  edgeFx, and LOW HEALTH's lowHealthStart lowHealthFull lowHealthWorldScale lowHealthPlayerScale
+     *  lowHealthSlewSec lowHealthEdgeFx lowHealthBorder lowHealthBorderWidth lowHealthPulseHz. `danger` is the slewed
+     *  low-health amount (`dangerTarget` the current health's), `drive` the level the scales follow, `border` the
+     *  red border's {strength, width} this frame (pulse included; ?flashes=reduced not).
+     *  URL: ?adrenaline=0 ?adr_flail=0 ?adr_world= ?adr_player= ?adr_shot= ?adr_in= ?adr_sustain= ?adr_out= ?adr_fx=
+     *  ?adr_low_always=0|1 ?adr_low_start= ?adr_low_full= ?adr_low_world= ?adr_low_player= ?adr_low_slew=
+     *  ?adr_low_fx= ?adr_low_border= ?adr_low_width= ?adr_low_pulse=. */
     adrenaline: (partial?: Record<string, unknown>) => {
       const { tuning, rejected } = applyAdrenalineTuning(partial);
       if (partial) ctx.panels.bulletTimePanel?.refresh();
+      const adr = ctx.player.adrenaline, drive = adrenalineDrive(adr);
+      const health = ctx.world.loop?.vitals.health ?? null;
       return {
-        ...ctx.player.adrenaline, phase: adrenalinePhase(ctx.player.adrenaline, ctx.player.bulletTime.on),
-        scales: adrenalineScalesAt(ctx.player.adrenaline.level), edge: adrenalineEdgeAt(ctx.player.adrenaline.level),
+        ...adr, phase: adrenalinePhase(adr, ctx.player.bulletTime.on), drive, health,
+        dangerTarget: lowHealthDanger(health ?? Infinity),
+        scales: adrenalineScalesAt(drive, undefined, adr.danger), edge: adrenalineEdgeAt(drive, undefined, adr.danger),
+        border: adrenalineBorderAt(drive, adr.danger, adr.pulse, false),
         tuning, ...(rejected.length ? { rejected } : {}),
       };
     },

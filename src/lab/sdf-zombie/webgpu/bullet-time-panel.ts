@@ -60,6 +60,16 @@ const ADR_HINTS: Record<AdrenalineKnob | typeof ADRENALINE_SWITCHES[number], str
   sustainSec: 'Real seconds after the LAST enemy hit before it fades; every hit restarts it.',
   rampOutSec: 'Real seconds to glide back to normal time (decelerating).',
   edgeFx: 'Strength of the screen-edge distortion at full rush (0 = none).',
+  lowHealthAlways: 'Low health slows time on its own, with no enemy hit (off: it only deepens a rush).',
+  lowHealthStart: 'Health at and above which the rush is its normal depth.',
+  lowHealthFull: 'Health at and below which the rush is fully deepened.',
+  lowHealthWorldScale: 'The world fully in at low health (never below explicit bullet time\'s 0.2).',
+  lowHealthPlayerScale: 'The player fully in at low health.',
+  lowHealthSlewSec: 'Real seconds to ease fully in or out of the low-health depth after a health change.',
+  lowHealthEdgeFx: 'Edge distortion strength fully in at low health.',
+  lowHealthBorder: 'The red border\'s opacity at the screen edge, fully in at low health (0 = none).',
+  lowHealthBorderWidth: 'How far the red border fades inward at full low health (fraction of screen height).',
+  lowHealthPulseHz: 'The red border\'s slow pulse, cycles per real second (0 = steady).',
 };
 
 function stepFor(span: number): number {
