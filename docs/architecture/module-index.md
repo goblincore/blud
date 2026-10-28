@@ -39,7 +39,7 @@ Each line is the first sentence of the module's header comment.
 | [webgpu/earlyz/](#webgpuearlyz) | 10 | Early-Z depth prepass for the march. |
 | [webgpu/skeleton-spike/](#webgpuskeleton-spike) | 27 | Mesh skeletons, skulls and organs drawn under the SDF flesh (shipped, despite the name). |
 | [webgpu/upscale/](#webgpuupscale) | 8 | Upscaling of the low-res march target. |
-| [characters/](#characters) | 3 | Character bodies: `.blob` sources, generators and per-character data. |
+| [characters/](#characters) | 4 | Character bodies: `.blob` sources, generators and per-character data. |
 | [shared-wounds/](#shared-wounds) | 4 | Shared wound-field probe page. |
 | [gait-curves/](#gait-curves) | 2 | Baked gait curve data. |
 | [Entrypoints and labs](#entrypoints-and-labs) | 20 | One module per HTML page; see the entrypoint table above. |
@@ -196,6 +196,7 @@ Character bodies: `.blob` sources, generators and per-character data.
 - `characters/goblin-expressions.ts` — The goblin's expressions (expression pass, spec docs/superpowers/specs/2026-10-13-goblin-expressions-design.md): the tuning table that maps channels…
 - `characters/goblin-head-profile.ts` — The goblin head's REST profile as seven reach probes, measured 2026-10-13 on the head BEFORE the jaw split (expression pass,…
 - `characters/goblin-poses.ts` — The goblin's authored poses and clips (goblin refinement phase 4b, spec docs/superpowers/specs/2026-10-03-goblin-pose-layer-design.md).
+- `characters/zombie-labourer.ts` — The rotting labourer's TROUSERS AS SDF CLOTH (owner, 2026-10-27: try real cloth over the painted legs before going to machine legs).
 
 ## shared-wounds/
 

@@ -15,7 +15,7 @@
 // fall back gracefully, which is what hasCharacter() is for. The bug this
 // fixes is a character that EXISTS as a .blob and was never registered.
 import type { BodyNormalSpec } from './webgpu/body-normal-load';
-import zombieBlobSrc from './characters/zombie.blob?raw';
+import { ZOMBIE_LABOURER_SRC } from './characters/zombie-labourer';
 import goblinBlobSrc from './characters/goblin.blob?raw';
 import goblinHomeBlobSrc from './characters/goblin-home.blob?raw';
 import goblinCinematicBlobSrc from './characters/goblin-cinematic.blob?raw';
@@ -166,9 +166,10 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   // The rotting labourer (owner's pick, 2026-10-26 look-dev: docs/dev-notes/2026-10-26-zombie-refine-lookdev/). Its kit
   // (assets-source/zombie-kit/make_kit.py): the grabber HANDS, polygon flesh on each forearm drawn in the game with the
   // flesh shader's lighting (kit-flesh.ts), iron wrist shackles over the hand seam, a belt and work boots. The trousers
-  // are PAINT on the flesh (zombie.blob `fabric`), their folds in the body map. The .blob keeps a wrist knob.
+  // are SDF `shell` cloth over legs painted the same denim (characters/zombie-labourer.ts splices them into zombie.blob,
+  // which stays the plain fixture body). The .blob keeps a wrist knob.
   zombie: {
-    name: 'zombie', src: zombieBlobSrc, face: ZOMBIE_FLAT,
+    name: 'zombie', src: ZOMBIE_LABOURER_SRC, face: ZOMBIE_FLAT,
     kit: '/assets/lab/zombie-kit.gltf',
     // The grabber hands come off whole: palm ~7.5 cm past the wrist knob (make_kit.py HANG 0.072 x 1.2 scale less the
     // knob's offset), and a sphere that takes the splayed fingers.

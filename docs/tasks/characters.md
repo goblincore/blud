@@ -482,6 +482,13 @@ Branch `claude/zombie-refine-468259`, on top of the hands PR goblincore/blud#75.
   the pelvis, each wrist's iron cuff). A round meeting one before any flesh knocks it off whole as a mesh gib along the
   shot (`kit-sever.ts kitPieceHit`: the segment in the bone's rest frame against its triangles; `game-kit-riders.ts
   kitPieceShot`). Seams: `aimAt`, `meshGibCount`, `slugFrom` (an exact line).
+- [x] **SDF-cloth trousers (owner, 2026-10-27: try real cloth before machine legs):** five `shell`s, the cloth spike's
+  recipe (a seat, a tube per thigh, a tube per shin, 12 mm off the flesh; arena ~1.16x a bare zombie). The thigh tube runs
+  straight to the knee and the shin tube tapers from there, tucked into the boots (hem y 0.235, inside the shaft). Light
+  `warp=` folds. The flesh under them stays painted denim, and the shins are painted too. `zombie.blob` stays the plain
+  fixture body: `characters/zombie-labourer.ts` splices the block in for the registry's zombie
+  ([lab](../dev-notes/2026-10-26-zombie-refine-lookdev/zombie-trousers-lab.png),
+  [game](../dev-notes/2026-10-26-zombie-refine-lookdev/zombie-trousers-ingame.png)). If they don't hold up, machine legs next.
 - [ ] **Owner's in-game look** ([in-game frames](../dev-notes/2026-10-26-zombie-refine-lookdev/zombie-labourer-ingame.png)).
 - [ ] **Shins and feet to mesh** (owner's idea, to save prims): the boots and trousers now hide the foot prims and most of the
   shin, so the 4 foot prims a side could go, but the foot prims carry the `toe` rig points, gait pins, gib assets and the

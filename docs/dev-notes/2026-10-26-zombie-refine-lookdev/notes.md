@@ -15,3 +15,9 @@ pipeline (baked map + Blender kit):
 Rebuild: `npx tsx scripts/zombie-surface.ts`, then `blender -b -noaudio -P assets-source/zombie-kit/make_kit.py [-- asylum|morgue]`,
 then `npx tsx scripts/blender-kit.ts zombie assets-source/zombie-kit/zombie-parts.glb`. The map:
 `npx tsx scripts/zombie-detail-gen.ts` and the `zombie` line of `scripts/body-normal-bake/bake-args.json`.
+
+## Update 2026-10-27: SDF-cloth trousers
+
+The owner wanted to try real cloth before machine legs. `characters/zombie-labourer.ts` splices five `shell`s into zombie.blob
+for the game's zombie (zombie.blob itself stays the fixture body): `zombie-trousers-lab.png` (lab, rest pose, before the
+knee-blend and fold tweak) and `zombie-trousers-ingame.png` (arena, walking).

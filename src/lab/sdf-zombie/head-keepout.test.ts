@@ -38,7 +38,8 @@ describe('head keep-out at rest', () => {
 
   it('the zombie gets a guard sphere per torso ellipsoid, each watching both arms', () => {
     const bound = bindRig(buildCharacterBody(characterEntry('zombie'), [0, 0, 0], []));
-    expect(bound.rig.torsoGuards).toHaveLength(4);
+    // four flesh masses, plus the labourer trousers' seat shell (characters/zombie-labourer.ts): the hands stay off the cloth too
+    expect(bound.rig.torsoGuards).toHaveLength(5);
     for (const g of bound.rig.torsoGuards!) expect(g.limbs).toHaveLength(4);   // upper + fore, both sides
   });
 
